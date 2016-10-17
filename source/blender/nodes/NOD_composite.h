@@ -83,6 +83,7 @@ void register_node_type_cmp_dilateerode(void);
 void register_node_type_cmp_inpaint(void);
 void register_node_type_cmp_despeckle(void);
 void register_node_type_cmp_defocus(void);
+void register_node_type_cmp_motionblur3d(void);
 
 void register_node_type_cmp_valtorgb(void);
 void register_node_type_cmp_rgbtobw(void);
@@ -126,6 +127,7 @@ void register_node_type_cmp_glare(void);
 void register_node_type_cmp_tonemap(void);
 void register_node_type_cmp_lensdist(void);
 void register_node_type_cmp_sunbeams(void);
+void register_node_type_cmp_motionblur2d(void);
 
 void register_node_type_cmp_colorcorrection(void);
 void register_node_type_cmp_boxmask(void);

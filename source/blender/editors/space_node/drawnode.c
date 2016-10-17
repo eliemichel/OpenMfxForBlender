@@ -2500,6 +2500,20 @@ static void node_composit_buts_sunbeams(uiLayout *layout, bContext *UNUSED(C), P
 	uiItemR(layout, ptr, "ray_length", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
 }
 
+static void node_composit_buts_motionblur2d(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+	bNode *node = ptr->data;
+	NodeMotionBlur2D *data = node->storage;
+	
+	uiItemR(layout, ptr, "fat_mode", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+	uiItemR(layout, ptr, "amount", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+	uiItemR(layout, ptr, "multisample", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+	
+		if (!data->fat_mode) {
+			uiItemR(layout, ptr, "fill_alpha_holes", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+		}
+}
+
 /* only once called */
 static void node_composit_set_butfunc(bNodeType *ntype)
 {
@@ -2729,6 +2743,9 @@ static void node_composit_set_butfunc(bNodeType *ntype)
 			break;
 		case CMP_NODE_SUNBEAMS:
 			ntype->draw_buttons = node_composit_buts_sunbeams;
+			break;
+		case CMP_NODE_MOTIONBLUR2D:
+			ntype->draw_buttons = node_composit_buts_motionblur2d;
 			break;
 	}
 }

@@ -359,6 +359,7 @@ compositor_node_categories = [
         NodeItem("CompositorNodeDBlur"),
         NodeItem("CompositorNodePixelate"),
         NodeItem("CompositorNodeSunBeams"),
+        NodeItem("CompositorNodeMotionBlur2D"),
         ]),
     CompositorNodeCategory("CMP_OP_VECTOR", "Vector", items=[
         NodeItem("CompositorNodeNormal"),
