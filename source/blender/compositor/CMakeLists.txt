@@ -275,6 +275,10 @@ set(SRC
 	nodes/COM_VectorBlurNode.h
 	operations/COM_VectorBlurOperation.cpp
 	operations/COM_VectorBlurOperation.h
+	nodes/COM_MotionBlur2DNode.cpp
+	nodes/COM_MotionBlur2DNode.h
+	operations/COM_MotionBlur2DOperation.cpp
+	operations/COM_MotionBlur2DOperation.h
 
 	nodes/COM_FilterNode.cpp
 	nodes/COM_FilterNode.h

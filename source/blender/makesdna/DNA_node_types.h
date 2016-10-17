@@ -887,6 +887,16 @@ typedef struct NodeSunBeams {
 	float ray_length;
 } NodeSunBeams;
 
+typedef struct NodeMotionBlur2D {
+	int fat_mode;
+	float amount;
+	int multisample;
+	short blur_forwards;
+	short blur_backwards;
+	short fill_alpha_holes;
+	char pad[2];
+} NodeMotionBlur2D;
+
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL		0
 #define NODE_SCRIPT_EXTERNAL		1
