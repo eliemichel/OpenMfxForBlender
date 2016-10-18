@@ -203,7 +203,8 @@ void BlenderSync::sync_data(BL::RenderSettings& b_render,
 	sync_shaders();
 	sync_images();
 	sync_curve_settings();
-
+    sync_light_linking();
+    
 	mesh_synced.clear(); /* use for objects and motion sync */
 
 	if(scene->need_motion() == Scene::MOTION_PASS ||

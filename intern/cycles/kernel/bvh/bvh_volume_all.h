@@ -45,7 +45,8 @@ uint BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
                                  const Ray *ray,
                                  Intersection *isect_array,
                                  const uint max_hits,
-                                 const uint visibility)
+                                 const uint visibility,
+                                 uint shadow_linking)
 {
 	/* todo:
 	 * - test if pushing distance on the stack helps (for non shadow rays)
@@ -192,6 +193,10 @@ uint BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 							/* intersect ray against primitive */
 							for(; prim_addr < prim_addr2; prim_addr++) {
 								kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+
+                                if (!object_in_shadow_linking(kg,visibility,object,prim_addr,shadow_linking))
+                                    continue;
+
 								/* only primitives from volume object */
 								uint tri_object = (object == OBJECT_NONE)? kernel_tex_fetch(__prim_object, prim_addr): object;
 								int object_flag = kernel_tex_fetch(__object_flag, tri_object);
@@ -236,6 +241,10 @@ uint BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 							/* intersect ray against primitive */
 							for(; prim_addr < prim_addr2; prim_addr++) {
 								kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+
+                                if (!object_in_shadow_linking(kg,visibility,object,prim_addr,shadow_linking))
+                                    continue;
+
 								/* only primitives from volume object */
 								uint tri_object = (object == OBJECT_NONE)? kernel_tex_fetch(__prim_object, prim_addr): object;
 								int object_flag = kernel_tex_fetch(__object_flag, tri_object);
@@ -388,7 +397,8 @@ ccl_device_inline uint BVH_FUNCTION_NAME(KernelGlobals *kg,
                                          const Ray *ray,
                                          Intersection *isect_array,
                                          const uint max_hits,
-                                         const uint visibility)
+                                         const uint visibility,
+                                         uint shadow_linking)
 {
 #ifdef __QBVH__
 	if(kernel_data.bvh.use_qbvh) {
@@ -396,7 +406,8 @@ ccl_device_inline uint BVH_FUNCTION_NAME(KernelGlobals *kg,
 		                                    ray,
 		                                    isect_array,
 		                                    max_hits,
-		                                    visibility);
+		                                    visibility,
+                                            shadow_linking);
 	}
 	else
 #endif
@@ -406,7 +417,8 @@ ccl_device_inline uint BVH_FUNCTION_NAME(KernelGlobals *kg,
 		                                   ray,
 		                                   isect_array,
 		                                   max_hits,
-		                                   visibility);
+		                                   visibility,
+                                           shadow_linking);
 	}
 }
 
