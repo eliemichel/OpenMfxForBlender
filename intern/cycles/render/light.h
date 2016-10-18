@@ -65,6 +65,9 @@ public:
 	bool is_portal;
 	bool is_enabled;
 
+    uint light_linking, light_linking_prev;
+    uint shadow_linking, shadow_linking_prev;
+
 	Shader *shader;
 	int samples;
 	int max_bounces;

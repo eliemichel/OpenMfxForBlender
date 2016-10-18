@@ -196,12 +196,18 @@ class OBJECT_PT_groups(ObjectButtonsPanel, Panel):
 
                 split = col.box().split()
 
-                col = split.column()
-                col.prop(group, "layers", text="Dupli Visibility")
+                col2 = split.column()
+                col2.prop(group, "layers", text="Dupli Visibility")
 
-                col = split.column()
-                col.prop(group, "dupli_offset", text="")
+                col2 = split.column()
+                col2.prop(group, "dupli_offset", text="")
 
+                if bpy.context.scene.render.engine == 'CYCLES':
+                    split = col.box().split()
+                    
+                    col3 = split.column()
+                    col3.prop(group, "light_linking", text="Light Linking")
+                    col3.prop(group, "shadow_linking", text="Shadow Linking")
 
 class OBJECT_PT_display(ObjectButtonsPanel, Panel):
     bl_label = "Display"

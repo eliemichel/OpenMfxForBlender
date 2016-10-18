@@ -1046,7 +1046,8 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
 	                                           &volume_ray,
 	                                           hits,
 	                                           2*VOLUME_STACK_SIZE,
-	                                           visibility);
+	                                           visibility,
+                                               0x00000000/*TODO:shadow_linking*/);
 	if(num_hits > 0) {
 		int enclosed_volumes[VOLUME_STACK_SIZE];
 		Intersection *isect = hits;
@@ -1095,7 +1096,7 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
 	      step < 2 * VOLUME_STACK_SIZE)
 	{
 		Intersection isect;
-		if(!scene_intersect_volume(kg, &volume_ray, &isect, visibility)) {
+		if(!scene_intersect_volume(kg, &volume_ray, &isect, visibility, 0x00000000/*TODO:shadow_linking*/)) {
 			break;
 		}
 
@@ -1216,7 +1217,8 @@ ccl_device void kernel_volume_stack_update_for_subsurface(KernelGlobals *kg,
 	                                           &volume_ray,
 	                                           hits,
 	                                           2*VOLUME_STACK_SIZE,
-	                                           PATH_RAY_ALL_VISIBILITY);
+	                                           PATH_RAY_ALL_VISIBILITY,
+                                               0x00000000/*TODO:shadow_linking*/);
 	if(num_hits > 0) {
 		Intersection *isect = hits;
 
@@ -1235,7 +1237,8 @@ ccl_device void kernel_volume_stack_update_for_subsurface(KernelGlobals *kg,
 	      scene_intersect_volume(kg,
 	                             &volume_ray,
 	                             &isect,
-	                             PATH_RAY_ALL_VISIBILITY))
+	                             PATH_RAY_ALL_VISIBILITY,
+                                 0x00000000/*TODO:shadow_linking*/))
 	{
 		shader_setup_from_ray(kg, stack_sd, &isect, &volume_ray);
 		kernel_volume_stack_enter_exit(kg, stack_sd, stack);

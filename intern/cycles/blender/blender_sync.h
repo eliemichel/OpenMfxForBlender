@@ -107,6 +107,7 @@ private:
 	void sync_world(bool update_all);
 	void sync_shaders();
 	void sync_curve_settings();
+    void sync_light_linking();
 
 	void sync_nodes(Shader *shader, BL::ShaderNodeTree& b_ntree);
 	Mesh *sync_mesh(BL::Object& b_ob, bool object_updated, bool hide_tris);
