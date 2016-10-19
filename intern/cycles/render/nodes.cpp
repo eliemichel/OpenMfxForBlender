@@ -4535,6 +4535,7 @@ NODE_DEFINE(OutputNode)
 	NodeType* type = NodeType::add("output", create, NodeType::SHADER);
 
 	SOCKET_IN_CLOSURE(surface, "Surface");
+	SOCKET_IN_CLOSURE(ao_surface, "AOSurface");
 	SOCKET_IN_CLOSURE(volume, "Volume");
 	SOCKET_IN_FLOAT(displacement, "Displacement", 0.0f);
 	SOCKET_IN_NORMAL(normal, "Normal", make_float3(0.0f, 0.0f, 0.0f));
@@ -5119,13 +5120,6 @@ void SetNormalNode::compile(OSLCompiler& compiler)
 OSLNode::OSLNode()
 : ShaderNode(new NodeType(NodeType::SHADER))
 {
-	//size_t num_inputs = 5;
-	//OSLNode* oslnode = OSLNode::create(num_inputs);
-	//oslnode->add_input((ustring)"Surface", SocketType::Type::CLOSURE);
-	//oslnode->add_input((ustring)"Volume", SocketType::Type::CLOSURE);
-	//oslnode->add_input((ustring)"AOSurface", SocketType::Type::CLOSURE);
-	//oslnode->add_input((ustring)"Displacement", SocketType::Type::FLOAT);
-	//oslnode->add_input((ustring)"Normal", SocketType::Type::NORMAL);
 	special_type = SHADER_SPECIAL_TYPE_SCRIPT;
 }
 
