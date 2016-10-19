@@ -436,7 +436,7 @@ void SVMCompiler::generate_node(ShaderNode *node, ShaderNodeSet& done)
 	stack_clear_users(node, done);
 	stack_clear_temporary(node);
 
-	if(current_type == SHADER_TYPE_SURFACE) {
+	if(current_type == SHADER_TYPE_SURFACE || current_type == SHADER_TYPE_AO_SURFACE) {
 		if(node->has_spatial_varying())
 			current_shader->has_surface_spatial_varying = true;
 	}
@@ -706,6 +706,9 @@ void SVMCompiler::compile_type(Shader *shader, ShaderGraph *graph, ShaderType ty
 		case SHADER_TYPE_SURFACE:
 			clin = node->input("Surface");
 			break;
+		case SHADER_TYPE_AO_SURFACE:
+			clin = node->input("AOSurface");
+			break;
 		case SHADER_TYPE_VOLUME:
 			clin = node->input("Volume");
 			break;
@@ -747,6 +750,10 @@ void SVMCompiler::compile_type(Shader *shader, ShaderGraph *graph, ShaderType ty
 				case SHADER_TYPE_SURFACE: /* generate surface shader */		
 					generate = true;
 					shader->has_surface = true;
+					break;
+				case SHADER_TYPE_AO_SURFACE: /* generate surface shader */
+					generate = true;
+					shader->has_ao_surface = true;
 					break;
 				case SHADER_TYPE_VOLUME: /* generate volume shader */
 					generate = true;
@@ -829,6 +836,7 @@ void SVMCompiler::compile(Scene *scene,
 	current_shader = shader;
 
 	shader->has_surface = false;
+	shader->has_ao_surface = false;
 	shader->has_surface_emission = false;
 	shader->has_surface_transparent = false;
 	shader->has_surface_bssrdf = false;
@@ -876,11 +884,22 @@ void SVMCompiler::compile(Scene *scene,
 	/* generate displacement shader */
 	{
 		scoped_timer timer((summary != NULL)? &summary->time_generate_displacement: NULL);
-		compile_type(shader, shader->graph, SHADER_TYPE_DISPLACEMENT);
-		svm_nodes[index].w = svm_nodes.size();
-		svm_nodes.insert(svm_nodes.end(),
-		                 current_svm_nodes.begin(),
-		                 current_svm_nodes.end());
+		
+		/* Choose between displacement and AO Surface */
+		ShaderInput *clin = node->input("AOSurface");
+		if (clin->link) {
+            compile_type(shader, shader->graph, SHADER_TYPE_AO_SURFACE);
+            svm_nodes[index].w = svm_nodes.size();
+            svm_nodes.insert(svm_nodes.end(),
+                             current_svm_nodes.begin(),
+                             current_svm_nodes.end());
+        } else {
+            compile_type(shader, shader->graph, SHADER_TYPE_DISPLACEMENT);
+            svm_nodes[index].w = svm_nodes.size();
+            svm_nodes.insert(svm_nodes.end(),
+                             current_svm_nodes.begin(),
+                             current_svm_nodes.end());
+        }
 	}
 
 	/* Fill in summary information. */

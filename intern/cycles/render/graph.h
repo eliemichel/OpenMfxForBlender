@@ -96,6 +96,7 @@ public:
 	ShaderNode *parent;
 	ShaderOutput *link;
 	int stack_offset; /* for SVM compiler */
+	float3 value;
 };
 
 /* Output

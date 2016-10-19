@@ -330,11 +330,15 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 				light_ray.dP = sd->dP;
 				light_ray.dD = differential3_zero();
 
+				ShaderData sd_ao = *sd;
+				shader_setup_from_ao_env(kg, &sd_ao, &light_ray);
+				float3 ao_env = shader_eval_ao_env(kg, &sd_ao, state, 0, SHADER_CONTEXT_MAIN);
+
 				if(!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow)) {
 					path_radiance_accum_ao(L,
 					                       throughput,
 					                       ao_alpha,
-					                       ao_bsdf,
+					                       ao_bsdf * ao_env,
 					                       ao_shadow,
 					                       state->bounce);
 				}
@@ -429,8 +433,12 @@ ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
 		light_ray.dP = ccl_fetch(sd, dP);
 		light_ray.dD = differential3_zero();
 
+		ShaderData sd_ao = *sd;
+		shader_setup_from_ao_env(kg, &sd_ao, &light_ray);
+		float3 ao_env = shader_eval_ao_env(kg, &sd_ao, state, 0, SHADER_CONTEXT_MAIN);
+
 		if(!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow))
-			path_radiance_accum_ao(L, throughput, ao_alpha, ao_bsdf, ao_shadow, state->bounce);
+			path_radiance_accum_ao(L, throughput, ao_alpha, ao_bsdf * ao_env, ao_shadow, state->bounce);
 	}
 }
 
