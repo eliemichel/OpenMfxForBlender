@@ -49,6 +49,7 @@ ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
                                                      float difl,
                                                      float extmax
 #endif
+                                                     , uint shadow_linking
                                                      )
 {
 	/* todo:
@@ -237,6 +238,10 @@ ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 							for(; prim_addr < prim_addr2; prim_addr++) {
 								BVH_DEBUG_NEXT_STEP();
 								kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+
+                                if (!object_in_shadow_linking(kg,visibility,object,prim_addr,shadow_linking))
+                                    continue;
+
 								if(triangle_intersect(kg,
 								                      &isect_precalc,
 								                      isect,
@@ -266,6 +271,10 @@ ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 							for(; prim_addr < prim_addr2; prim_addr++) {
 								BVH_DEBUG_NEXT_STEP();
 								kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+
+                                if (!object_in_shadow_linking(kg,visibility,object,prim_addr,shadow_linking))
+                                    continue;
+
 								if(motion_triangle_intersect(kg,
 								                             isect,
 								                             P,
@@ -298,6 +307,10 @@ ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 							for(; prim_addr < prim_addr2; prim_addr++) {
 								BVH_DEBUG_NEXT_STEP();
 								kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+
+                                if (!object_in_shadow_linking(kg,visibility,object,prim_addr,shadow_linking))
+                                    continue;
+
 								bool hit;
 								if(kernel_data.curve.curveflags & CURVE_KN_INTERPOLATE) {
 									hit = bvh_cardinal_curve_intersect(kg,
@@ -428,6 +441,7 @@ ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
                                          float difl,
                                          float extmax
 #endif
+                                         , uint shadow_linking
                                          )
 {
 #ifdef __QBVH__
@@ -441,6 +455,7 @@ ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
 		                                    difl,
 		                                    extmax
 #endif
+                                            , shadow_linking
 		                                    );
 	}
 	else
@@ -456,6 +471,7 @@ ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
 		                                   difl,
 		                                   extmax
 #endif
+                                           , shadow_linking
 		                                   );
 	}
 }

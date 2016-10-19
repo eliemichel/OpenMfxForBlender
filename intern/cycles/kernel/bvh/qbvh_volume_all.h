@@ -33,7 +33,8 @@ ccl_device uint BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
                                              const Ray *ray,
                                              Intersection *isect_array,
                                              const uint max_hits,
-                                             const uint visibility)
+                                             const uint visibility,
+                                             uint shadow_linking)
 {
 	/* TODO(sergey):
 	 * - Test if pushing distance on the stack helps.
@@ -265,6 +266,10 @@ ccl_device uint BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 						case PRIMITIVE_TRIANGLE: {
 							for(; prim_addr < prim_addr2; prim_addr++) {
 								kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+
+                                if (!object_in_shadow_linking(kg,visibility,object,prim_addr,shadow_linking))
+                                    continue;
+
 								/* Only primitives from volume object. */
 								uint tri_object = (object == OBJECT_NONE)? kernel_tex_fetch(__prim_object, prim_addr): object;
 								int object_flag = kernel_tex_fetch(__object_flag, tri_object);
@@ -303,6 +308,10 @@ ccl_device uint BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 						case PRIMITIVE_MOTION_TRIANGLE: {
 							for(; prim_addr < prim_addr2; prim_addr++) {
 								kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+
+                                if (!object_in_shadow_linking(kg,visibility,object,prim_addr,shadow_linking))
+                                    continue;
+
 								/* Only primitives from volume object. */
 								uint tri_object = (object == OBJECT_NONE)? kernel_tex_fetch(__prim_object, prim_addr): object;
 								int object_flag = kernel_tex_fetch(__object_flag, tri_object);

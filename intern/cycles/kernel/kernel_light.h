@@ -842,6 +842,14 @@ ccl_device bool light_select_reached_max_bounces(KernelGlobals *kg, int index, i
 	return (bounce > __float_as_int(data4.x));
 }
 
+ccl_device bool light_in_light_linking(KernelGlobals *kg, int index, unsigned int light_linking)
+{
+	float4 data5 = kernel_tex_fetch(__light_data, index*LIGHT_SIZE + 5);
+	unsigned int light_light_linking = __float_as_uint(data5.y);
+
+    return ((light_linking & light_light_linking) != 0) || (light_linking == 0x00000000 && light_light_linking == 0x00FFFFFF);
+}
+
 ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       float randt,
                                       float randu,
@@ -849,6 +857,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
                                       float time,
                                       float3 P,
                                       int bounce,
+                                      uint light_linking,
                                       LightSample *ls)
 {
 	/* sample index */
@@ -873,6 +882,11 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 		int lamp = -prim-1;
 
 		if(UNLIKELY(light_select_reached_max_bounces(kg, lamp, bounce))) {
+			return false;
+		}
+
+        if (!light_in_light_linking(kg, lamp, light_linking)) {
+            ls->pdf = 0.0f;
 			return false;
 		}
 
