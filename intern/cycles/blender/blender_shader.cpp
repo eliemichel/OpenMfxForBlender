@@ -1229,7 +1229,18 @@ void BlenderSync::sync_world(bool update_all)
 			graph->add(background);
 
 			ShaderNode *out = graph->output();
-			graph->connect(background->output("Background"), out->input("Surface"));
+			//graph->connect(background->output("Background"), out->input("Surface"));
+
+			/* Surface */
+			ShaderNode* closure = graph->add(new BackgroundNode());
+			closure->input("Color")->value = get_float3(b_world.horizon_color());
+			graph->connect(closure->output("Background"), out->input("Surface"));
+
+			/* AOSurface */
+			closure = graph->add(new BackgroundNode());
+			closure->input("Color")->value = make_float3(1.0f, 1.0f, 1.0f);
+			graph->connect(closure->output("Background"), out->input("AOSurface"));
+			
 		}
 
 		if(b_world) {

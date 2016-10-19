@@ -4563,6 +4563,8 @@ void OutputNode::compile(OSLCompiler& compiler)
 {
 	if(compiler.output_type() == SHADER_TYPE_SURFACE)
 		compiler.add(this, "node_output_surface");
+	else if(compiler.output_type() == SHADER_TYPE_AO_SURFACE)
+		compiler.add(this, "node_output_surface");
 	else if(compiler.output_type() == SHADER_TYPE_VOLUME)
 		compiler.add(this, "node_output_volume");
 	else if(compiler.output_type() == SHADER_TYPE_DISPLACEMENT)
@@ -5117,6 +5119,13 @@ void SetNormalNode::compile(OSLCompiler& compiler)
 OSLNode::OSLNode()
 : ShaderNode(new NodeType(NodeType::SHADER))
 {
+	//size_t num_inputs = 5;
+	//OSLNode* oslnode = OSLNode::create(num_inputs);
+	//oslnode->add_input((ustring)"Surface", SocketType::Type::CLOSURE);
+	//oslnode->add_input((ustring)"Volume", SocketType::Type::CLOSURE);
+	//oslnode->add_input((ustring)"AOSurface", SocketType::Type::CLOSURE);
+	//oslnode->add_input((ustring)"Displacement", SocketType::Type::FLOAT);
+	//oslnode->add_input((ustring)"Normal", SocketType::Type::NORMAL);
 	special_type = SHADER_SPECIAL_TYPE_SCRIPT;
 }
 

@@ -115,6 +115,9 @@ void OSLShaderManager::device_update(Device *device, DeviceScene *dscene, Scene 
 	og->background_state = og->surface_state[background_id & SHADER_MASK];
 	og->use = true;
 
+	int ao_env_id = scene->shader_manager->get_shader_id(scene->default_background);
+	og->ao_env_state = og->surface_state[ao_env_id & SHADER_MASK];
+
 	foreach(Shader *shader, scene->shaders)
 		shader->need_update = false;
 
@@ -157,6 +160,7 @@ void OSLShaderManager::device_free(Device *device, DeviceScene *dscene, Scene *s
 	og->volume_state.clear();
 	og->displacement_state.clear();
 	og->background_state.reset();
+	og->ao_env_state.reset();
 }
 
 void OSLShaderManager::texture_system_init()
@@ -605,6 +609,8 @@ bool OSLCompiler::node_skip_input(ShaderNode *node, ShaderInput *input)
 	if(node->special_type == SHADER_SPECIAL_TYPE_OUTPUT) {
 		if(input->name() == "Surface" && current_type != SHADER_TYPE_SURFACE)
 			return true;
+		if(input->name() == "AOSurface" && current_type != SHADER_TYPE_AO_SURFACE)
+			return true;
 		if(input->name() == "Volume" && current_type != SHADER_TYPE_VOLUME)
 			return true;
 		if(input->name() == "Displacement" && current_type != SHADER_TYPE_DISPLACEMENT)
@@ -678,7 +684,9 @@ void OSLCompiler::add(ShaderNode *node, const char *name, bool isfilepath)
 
 	/* create shader of the appropriate type. OSL only distinguishes between "surface"
 	 * and "displacement" atm */
-	if(current_type == SHADER_TYPE_SURFACE)
+	if (current_type == SHADER_TYPE_SURFACE)
+		ss->Shader("surface", name, id(node).c_str());
+	else if (current_type == SHADER_TYPE_AO_SURFACE)
 		ss->Shader("surface", name, id(node).c_str());
 	else if(current_type == SHADER_TYPE_VOLUME)
 		ss->Shader("surface", name, id(node).c_str());
@@ -708,7 +716,7 @@ void OSLCompiler::add(ShaderNode *node, const char *name, bool isfilepath)
 	/* test if we shader contains specific closures */
 	OSLShaderInfo *info = ((OSLShaderManager*)manager)->shader_loaded_info(name);
 
-	if(current_type == SHADER_TYPE_SURFACE) {
+	if(current_type == SHADER_TYPE_SURFACE || current_type == SHADER_TYPE_AO_SURFACE) {
 		if(info) {
 			if(info->has_surface_emission)
 				current_shader->has_surface_emission = true;
@@ -1015,7 +1023,7 @@ void OSLCompiler::generate_nodes(const ShaderNodeSet& nodes)
 					node->compile(*this);
 					done.insert(node);
 
-					if(current_type == SHADER_TYPE_SURFACE) {
+					if(current_type == SHADER_TYPE_SURFACE || current_type == SHADER_TYPE_AO_SURFACE) {
 						if(node->has_surface_emission())
 							current_shader->has_surface_emission = true;
 						if(node->has_surface_transparent())
@@ -1060,6 +1068,12 @@ OSL::ShaderGroupRef OSLCompiler::compile_type(Shader *shader, ShaderGraph *graph
 	else if(type == SHADER_TYPE_BUMP) {
 		/* generate bump shader */
 		find_dependencies(dependencies, output->input("Normal"));
+		generate_nodes(dependencies);
+		output->compile(*this);
+	}
+	else if(type == SHADER_TYPE_AO_SURFACE) {
+		/* generate surface shader */
+		find_dependencies(dependencies, output->input("AOSurface"));
 		generate_nodes(dependencies);
 		output->compile(*this);
 	}
@@ -1137,6 +1151,15 @@ void OSLCompiler::compile(Scene *scene, OSLGlobals *og, Shader *shader)
 			shader->osl_surface_bump_ref = OSL::ShaderGroupRef();
 		}
 
+		/* generate ao surface shader */
+		if (shader->used && graph && output->input("AOSurface")->link) {
+			shader->osl_ao_surface_ref = compile_type(shader, shader->graph, SHADER_TYPE_AO_SURFACE);
+			shader->has_ao_surface = true;
+		}
+		else {
+			shader->osl_ao_surface_ref = OSL::ShadingAttribStateRef();
+		}
+
 		/* generate volume shader */
 		if(shader->used && graph && output->input("Volume")->link) {
 			shader->osl_volume_ref = compile_type(shader, shader->graph, SHADER_TYPE_VOLUME);
@@ -1156,6 +1179,7 @@ void OSLCompiler::compile(Scene *scene, OSLGlobals *og, Shader *shader)
 
 	/* push state to array for lookup */
 	og->surface_state.push_back(shader->osl_surface_ref);
+	og->surface_state.push_back(shader->osl_ao_surface_ref);
 	og->volume_state.push_back(shader->osl_volume_ref);
 	og->displacement_state.push_back(shader->osl_displacement_ref);
 	og->bump_state.push_back(shader->osl_surface_bump_ref);

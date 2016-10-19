@@ -329,12 +329,15 @@ void ShaderGraph::finalize(Scene *scene,
 			bump_from_displacement(bump_in_object_space);
 
 		ShaderInput *surface_in = output()->input("Surface");
+		ShaderInput *ao_surface_in = output()->input("AOSurface");
 		ShaderInput *volume_in = output()->input("Volume");
 
 		/* todo: make this work when surface and volume closures are tangled up */
 
 		if(surface_in->link)
 			transform_multi_closure(surface_in->link->parent, NULL, false);
+		if (ao_surface_in->link)
+			transform_multi_closure(ao_surface_in->link->parent, NULL, false);
 		if(volume_in->link)
 			transform_multi_closure(volume_in->link->parent, NULL, true);
 

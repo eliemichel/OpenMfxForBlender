@@ -65,8 +65,7 @@ void Background::device_update(Device *device, DeviceScene *dscene, Scene *scene
 	Shader *bg_shader = shader;
 
 	if(use_shader) {
-		if(!bg_shader)
-			bg_shader = scene->default_background;
+		bg_shader = scene->default_background;
 	}
 	else
 		bg_shader = scene->default_empty;
