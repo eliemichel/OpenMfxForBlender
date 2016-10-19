@@ -887,7 +887,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
 
         if (!light_in_light_linking(kg, lamp, light_linking)) {
             ls->pdf = 0.0f;
-			return;
+			return false;
 		}
 
 		return lamp_light_sample(kg, lamp, randu, randv, P, ls);
