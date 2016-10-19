@@ -202,7 +202,7 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 			case NODE_SHADER_JUMP: {
 				if(type == SHADER_TYPE_SURFACE) offset = node.y;
 				else if(type == SHADER_TYPE_VOLUME) offset = node.z;
-				else if(type == SHADER_TYPE_DISPLACEMENT) offset = node.w;
+				else if(type == SHADER_TYPE_DISPLACEMENT || type == SHADER_TYPE_AO_SURFACE) offset = node.w;
 				else return;
 				break;
 			}
