@@ -861,20 +861,14 @@ void SVMCompiler::compile(Scene *scene,
 	/* generate surface shader */
 	{
 		scoped_timer timer((summary != NULL)? &summary->time_generate_surface: NULL);
-		/* Choose between displacement and AO Surface */
-		ShaderInput *clin = node->input("AOSurface");
-		if (clin->link) {
-			compile_type(shader, shader->graph, SHADER_TYPE_AO_SURFACE);
-			svm_nodes[index * 2 + 0].w = svm_nodes.size();
-			svm_nodes[index * 2 + 1].w = svm_nodes.size();
-			svm_nodes.insert(svm_nodes.end(), svm_nodes.begin(), svm_nodes.end());
+		compile_type(shader, shader->graph, SHADER_TYPE_SURFACE);
+		/* only set jump offset if there's no bump shader, as the bump shader will fall thru to this one if it exists */
+		if(shader->displacement_method == DISPLACE_TRUE || !shader->graph_bump) {
+			svm_nodes[index].y = svm_nodes.size();
 		}
-		else {
-			compile_type(shader, shader->graph, SHADER_TYPE_DISPLACEMENT);
-			svm_nodes[index * 2 + 0].w = svm_nodes.size();
-			svm_nodes[index * 2 + 1].w = svm_nodes.size();
-			svm_nodes.insert(svm_nodes.end(), svm_nodes.begin(), svm_nodes.end());
-		}
+		svm_nodes.insert(svm_nodes.end(),
+		                 current_svm_nodes.begin(),
+		                 current_svm_nodes.end());
 	}
 
 	/* generate volume shader */
@@ -890,11 +884,22 @@ void SVMCompiler::compile(Scene *scene,
 	/* generate displacement shader */
 	{
 		scoped_timer timer((summary != NULL)? &summary->time_generate_displacement: NULL);
-		compile_type(shader, shader->graph, SHADER_TYPE_DISPLACEMENT);
-		svm_nodes[index].w = svm_nodes.size();
-		svm_nodes.insert(svm_nodes.end(),
-		                 current_svm_nodes.begin(),
-		                 current_svm_nodes.end());
+		
+		/* Choose between displacement and AO Surface */
+		ShaderInput *clin = node->input("AOSurface");
+		if (clin->link) {
+            compile_type(shader, shader->graph, SHADER_TYPE_AO_SURFACE);
+            svm_nodes[index].w = svm_nodes.size();
+            svm_nodes.insert(svm_nodes.end(),
+                             current_svm_nodes.begin(),
+                             current_svm_nodes.end());
+        } else {
+            compile_type(shader, shader->graph, SHADER_TYPE_DISPLACEMENT);
+            svm_nodes[index].w = svm_nodes.size();
+            svm_nodes.insert(svm_nodes.end(),
+                             current_svm_nodes.begin(),
+                             current_svm_nodes.end());
+        }
 	}
 
 	/* Fill in summary information. */

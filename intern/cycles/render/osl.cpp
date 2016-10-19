@@ -1157,7 +1157,7 @@ void OSLCompiler::compile(Scene *scene, OSLGlobals *og, Shader *shader)
 			shader->has_ao_surface = true;
 		}
 		else {
-			shader->osl_ao_surface_ref = OSL::ShadingAttribStateRef();
+			shader->osl_ao_surface_ref = OSL::ShaderGroupRef();
 		}
 
 		/* generate volume shader */

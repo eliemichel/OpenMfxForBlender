@@ -66,9 +66,9 @@ void Background::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
 	if(use_shader) {
 		bg_shader = scene->default_background;
-	}
-	else
+	} else {
 		bg_shader = scene->default_empty;
+    }
 
 	/* set shader index and transparent option */
 	KernelBackground *kbackground = &dscene->data.background;
