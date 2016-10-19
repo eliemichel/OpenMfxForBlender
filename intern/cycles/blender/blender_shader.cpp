@@ -1190,6 +1190,10 @@ void BlenderSync::sync_materials(bool update_all)
 			shader->heterogeneous_volume = !get_boolean(cmat, "homogeneous_volume");
 			shader->volume_sampling_method = get_volume_sampling(cmat);
 			shader->volume_interpolation_method = get_volume_interpolation(cmat);
+			shader->use_uniform_alpha = get_boolean(cmat, "use_uniform_alpha");
+			shader->self_only = get_boolean(cmat, "self_only");
+			shader->ao_alpha = get_float(cmat, "ao_alpha");
+			shader->shadow_alpha = get_float(cmat, "shadow_alpha");
 			shader->displacement_method = (experimental) ? get_displacement_method(cmat) : DISPLACE_BUMP;
 
 			shader->set_graph(graph);
