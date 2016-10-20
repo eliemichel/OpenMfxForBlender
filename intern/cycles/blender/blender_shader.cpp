@@ -1196,6 +1196,15 @@ void BlenderSync::sync_materials(bool update_all)
 			shader->shadow_alpha = get_float(cmat, "shadow_alpha");
 			shader->displacement_method = (experimental) ? get_displacement_method(cmat) : DISPLACE_BUMP;
 
+			shader->override_samples = get_boolean(cmat, "override_samples");
+			shader->diffuse_samples = get_int(cmat, "diffuse_samples");
+			shader->glossy_samples = get_int(cmat, "glossy_samples");
+			shader->transmission_samples = get_int(cmat, "transmission_samples");
+			shader->override_bounces = get_boolean(cmat, "override_bounces");
+			shader->diffuse_bounces = get_int(cmat, "diffuse_bounces");
+			shader->glossy_bounces = get_int(cmat, "glossy_bounces");
+			shader->transmission_bounces = get_int(cmat, "transmission_bounces");
+
 			shader->set_graph(graph);
 			shader->tag_update(scene);
 		}

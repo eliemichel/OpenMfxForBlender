@@ -111,7 +111,15 @@ ccl_device_noinline void shader_setup_from_ray(KernelGlobals *kg,
 
 	ccl_fetch(sd, I) = -ray->D;
 
-	ccl_fetch(sd, flag) |= kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK)*SHADER_SIZE);
+	ccl_fetch(sd, flag) |= kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10);
+	ccl_fetch(sd, ao_alpha) = __uint_as_float(kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 2));
+	ccl_fetch(sd, shadow_alpha) = __uint_as_float(kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 3));
+	ccl_fetch(sd, diffuse_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 4);
+	ccl_fetch(sd, glossy_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 5);
+	ccl_fetch(sd, transmission_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 6);
+	ccl_fetch(sd, diffuse_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 7);
+	ccl_fetch(sd, glossy_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 8);
+	ccl_fetch(sd, transmission_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 9);
 
 #ifdef __INSTANCING__
 	if(isect->object != OBJECT_NONE) {
@@ -195,7 +203,15 @@ void shader_setup_from_subsurface(
 		motion_triangle_shader_setup(kg, sd, isect, ray, true);
 	}
 
-	sd->flag |= kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK)*SHADER_SIZE);
+	sd->flag |= kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10);
+	sd->ao_alpha = __uint_as_float(kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 2));
+	sd->shadow_alpha = __uint_as_float(kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 3));
+	sd->diffuse_samples = kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 4);
+	sd->glossy_samples = kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 5);
+	sd->transmission_samples = kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 6);
+	sd->diffuse_bounces = kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 7);
+	sd->glossy_bounces = kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 8);
+	sd->transmission_bounces = kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 9);
 
 #  ifdef __INSTANCING__
 	if(isect->object != OBJECT_NONE) {
@@ -264,7 +280,17 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 #endif
 	ccl_fetch(sd, ray_length) = t;
 
-	ccl_fetch(sd, flag) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK)*SHADER_SIZE);
+	ccl_fetch(sd, flag) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10);
+	ccl_fetch(sd, flag) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10);
+	ccl_fetch(sd, ao_alpha) = __uint_as_float(kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 2));
+	ccl_fetch(sd, shadow_alpha) = __uint_as_float(kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 3));
+	ccl_fetch(sd, diffuse_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 4);
+	ccl_fetch(sd, glossy_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 5);
+	ccl_fetch(sd, transmission_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 6);
+	ccl_fetch(sd, diffuse_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 7);
+	ccl_fetch(sd, glossy_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 8);
+	ccl_fetch(sd, transmission_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 9);
+
 	if(ccl_fetch(sd, object) != OBJECT_NONE) {
 		ccl_fetch(sd, flag) |= kernel_tex_fetch(__object_flag, ccl_fetch(sd, object));
 
@@ -370,7 +396,16 @@ ccl_device_inline void shader_setup_from_background(KernelGlobals *kg, ShaderDat
 	ccl_fetch(sd, Ng) = -ray->D;
 	ccl_fetch(sd, I) = -ray->D;
 	ccl_fetch(sd, shader) = kernel_data.background.surface_shader;
-	ccl_fetch(sd, flag) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK)*SHADER_SIZE);
+	ccl_fetch(sd, flag) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10);
+	ccl_fetch(sd, ao_alpha) = __uint_as_float(kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 2));
+	ccl_fetch(sd, shadow_alpha) = __uint_as_float(kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 3));
+	ccl_fetch(sd, diffuse_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 4);
+	ccl_fetch(sd, glossy_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 5);
+	ccl_fetch(sd, transmission_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 6);
+	ccl_fetch(sd, diffuse_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 7);
+	ccl_fetch(sd, glossy_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 8);
+	ccl_fetch(sd, transmission_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 9);
+
 #ifdef __OBJECT_MOTION__
 	ccl_fetch(sd, time) = ray->time;
 #endif
@@ -1027,7 +1062,16 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
 		sd->shader = stack[i].shader;
 
 		sd->flag &= ~(SD_SHADER_FLAGS|SD_OBJECT_FLAGS);
-		sd->flag |= kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK)*SHADER_SIZE);
+		sd->flag |= kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10);
+		sd->ao_alpha = __uint_as_float(kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 2));
+		sd->shadow_alpha = __uint_as_float(kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 3));
+
+		sd->diffuse_samples = kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 4);
+		sd->glossy_samples = kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 5);
+		sd->transmission_samples = kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 6);
+		sd->diffuse_bounces = kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 7);
+		sd->glossy_bounces = kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 8);
+		sd->transmission_bounces = kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * 10 + 9);
 
 		if(sd->object != OBJECT_NONE) {
 			sd->flag |= kernel_tex_fetch(__object_flag, sd->object);
@@ -1100,9 +1144,9 @@ ccl_device bool shader_transparent_shadow(KernelGlobals *kg, Intersection *isect
 		shader = __float_as_int(str.z);
 	}
 #endif
-	int flag = kernel_tex_fetch(__shader_flag, (shader & SHADER_MASK)*SHADER_SIZE);
+	int flag = kernel_tex_fetch(__shader_flag, (shader & SHADER_MASK)*10);
 
-	return (flag & SD_HAS_TRANSPARENT_SHADOW) != 0;
+	return (flag & (SD_HAS_TRANSPARENT_SHADOW | SD_USE_UNIFORM_ALPHA)) != 0;
 }
 #endif
 

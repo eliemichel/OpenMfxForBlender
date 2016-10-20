@@ -55,9 +55,16 @@ ccl_device_inline void kernel_branched_path_ao(KernelGlobals *kg,
 			light_ray.dP = ccl_fetch(sd, dP);
 			light_ray.dD = differential3_zero();
 
-            uint shadow_linking = object_shadow_linking(kg, ccl_fetch(sd, object));
-			if(!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow, shadow_linking))
+   //         uint shadow_linking = object_shadow_linking(kg, ccl_fetch(sd, object));
+			//if(!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow, shadow_linking))
+			//	path_radiance_accum_ao(L, throughput*num_samples_inv, ao_alpha, ao_bsdf, ao_shadow, state->bounce);
+
+			state->flag |= PATH_RAY_AO;
+			uint shadow_linking = object_shadow_linking(kg, sd->object);
+			if (!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow, shadow_linking))
 				path_radiance_accum_ao(L, throughput*num_samples_inv, ao_alpha, ao_bsdf, ao_shadow, state->bounce);
+			}
+			state->flag &= ~PATH_RAY_AO;
 		}
 	}
 }
@@ -79,14 +86,14 @@ ccl_device_noinline void kernel_branched_path_surface_indirect_light(KernelGloba
 
 		int num_samples;
 
-		if(CLOSURE_IS_BSDF_DIFFUSE(sc->type))
-			num_samples = kernel_data.integrator.diffuse_samples;
-		else if(CLOSURE_IS_BSDF_BSSRDF(sc->type))
+		if (CLOSURE_IS_BSDF_DIFFUSE(sc->type))
+			num_samples = (ccl_fetch(sd, flag) & SD_OVERRIDE_SAMPLES) ? ccl_fetch(sd, diffuse_samples) : kernel_data.integrator.diffuse_samples;
+		else if (CLOSURE_IS_BSDF_BSSRDF(sc->type))
 			num_samples = 1;
-		else if(CLOSURE_IS_BSDF_GLOSSY(sc->type))
-			num_samples = kernel_data.integrator.glossy_samples;
+		else if (CLOSURE_IS_BSDF_GLOSSY(sc->type))
+			num_samples = (ccl_fetch(sd, flag) & SD_OVERRIDE_SAMPLES) ? ccl_fetch(sd, glossy_samples) : kernel_data.integrator.glossy_samples;
 		else
-			num_samples = kernel_data.integrator.transmission_samples;
+			num_samples = (ccl_fetch(sd, flag) & SD_OVERRIDE_SAMPLES) ? ccl_fetch(sd, transmission_samples) : kernel_data.integrator.transmission_samples;
 
 		num_samples = ceil_to_int(num_samples_adjust*num_samples);
 
@@ -514,7 +521,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 			/* path termination. this is a strange place to put the termination, it's
 			 * mainly due to the mixed in MIS that we use. gives too many unneeded
 			 * shader evaluations, only need emission if we are going to terminate */
-			float probability = path_state_terminate_probability(kg, &state, throughput);
+			float probability = path_state_terminate_probability(kg, &state, &sd, throughput);
 
 			if(probability == 0.0f) {
 				break;

@@ -115,7 +115,7 @@ ccl_device_inline bool shadow_blocked(KernelGlobals *kg, ShaderData *shadow_sd, 
 				shader_setup_from_ray(kg, shadow_sd, isect, ray);
 
 				/* attenuation from transparent surface */
-				if(!(shadow_sd->flag & SD_HAS_ONLY_VOLUME)) {
+				if (!(shadow_sd->flag & SD_HAS_ONLY_VOLUME)) {
 					path_state_modify_bounce(state, true);
 					shader_eval_surface(kg, shadow_sd, NULL, state, 0.0f, PATH_RAY_SHADOW, SHADER_CONTEXT_SHADOW);
 					path_state_modify_bounce(state, false);
@@ -185,6 +185,7 @@ ccl_device_noinline bool shadow_blocked(KernelGlobals *kg,
                                         ccl_addr_space PathState *state,
                                         ccl_addr_space Ray *ray_input,
                                         float3 *shadow,
+										ShaderData* source_sd,
                                         uint shadow_linking)
 {
 	*shadow = make_float3(1.0f, 1.0f, 1.0f);

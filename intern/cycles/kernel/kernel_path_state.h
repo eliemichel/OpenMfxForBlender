@@ -140,7 +140,7 @@ ccl_device_inline uint path_state_ray_visibility(KernelGlobals *kg, PathState *s
 	return flag;
 }
 
-ccl_device_inline float path_state_terminate_probability(KernelGlobals *kg, ccl_addr_space PathState *state, const float3 throughput)
+ccl_device_inline float path_state_terminate_probability(KernelGlobals *kg, ccl_addr_space PathState *state, ShaderData *sd, const float3 throughput)
 {
 	if(state->flag & PATH_RAY_TRANSPARENT) {
 		/* transparent rays treated separately */
@@ -150,14 +150,25 @@ ccl_device_inline float path_state_terminate_probability(KernelGlobals *kg, ccl_
 			return 1.0f;
 	}
 	else {
+		int max_diffuse_bounce, max_glossy_bounce, max_transmission_bounce;
+		if (ccl_fetch(sd, flag) & SD_OVERRIDE_BOUNCES) {
+			max_diffuse_bounce = ccl_fetch(sd, diffuse_bounces);
+			max_glossy_bounce = ccl_fetch(sd, glossy_bounces);
+			max_transmission_bounce = ccl_fetch(sd, transmission_bounces);
+		}
+		else {
+			max_diffuse_bounce = kernel_data.integrator.max_diffuse_bounce;
+			max_glossy_bounce = kernel_data.integrator.max_glossy_bounce;
+			max_transmission_bounce = kernel_data.integrator.max_transmission_bounce;
+		}
 		/* other rays */
 		if((state->bounce >= kernel_data.integrator.max_bounce) ||
-		   (state->diffuse_bounce >= kernel_data.integrator.max_diffuse_bounce) ||
-		   (state->glossy_bounce >= kernel_data.integrator.max_glossy_bounce) ||
+			(state->diffuse_bounce >= max_diffuse_bounce) ||
+			(state->glossy_bounce >= max_glossy_bounce) ||
 #ifdef __VOLUME__
 		   (state->volume_bounce >= kernel_data.integrator.max_volume_bounce) ||
 #endif
-		   (state->transmission_bounce >= kernel_data.integrator.max_transmission_bounce))
+		   (state->transmission_bounce >= max_transmission_bounce))
 		{
 			return 0.0f;
 		}

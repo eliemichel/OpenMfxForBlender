@@ -824,6 +824,53 @@ class CyclesMaterialSettings(bpy.types.PropertyGroup):
                 default='BUMP',
                 )
 
+        cls.override_samples = BoolProperty(
+                name="Override Samples",
+                description="Override of sampling settings for this material",
+                default=False,
+                )
+        cls.diffuse_samples = IntProperty(
+                name="Diffuse Samples",
+                description="Max number of Diffuse Samples",
+                min=0, max=1024,
+                default=8,
+                )
+        cls.glossy_samples = IntProperty(
+                name="Glossy Samples",
+                description="Max number of Glossy Samples",
+                min=0, max=1024,
+                default=8,
+                )
+        cls.transmission_samples = IntProperty(
+                name="Transmission Samples",
+                description="Max number of Transmission Samples",
+                min=0, max=1024,
+                default=8,
+                )
+        cls.override_bounces = BoolProperty(
+                name="Override Light Paths",
+                description="Override of light paths settings for this material",
+                default=False,
+                )
+        cls.diffuse_bounces = IntProperty(
+                name="Diffuse Bounces",
+                description="Max number of Diffuse Bounces",
+                min=0, max=1024,
+                default=8,
+                )
+        cls.glossy_bounces = IntProperty(
+                name="Glossy Bounces",
+                description="Max number of Glossy Bounces",
+                min=0, max=1024,
+                default=8,
+                )
+        cls.transmission_bounces = IntProperty(
+                name="Transmission Bounces",
+                description="Max number of Transmission Bounces",
+                min=0, max=1024,
+                default=8,
+                )
+
     @classmethod
     def unregister(cls):
         del bpy.types.Material.cycles
