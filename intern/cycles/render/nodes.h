@@ -106,6 +106,21 @@ public:
 	}
 };
 
+class CurveTextureNode : public ImageSlotTextureNode {
+public:
+	SHADER_NODE_NO_CLONE_CLASS(CurveTextureNode)
+	~CurveTextureNode();
+	ShaderNode *clone() const;
+	virtual int get_group() { return NODE_GROUP_LEVEL_2; }
+
+	ImageManager *image_manager;
+	void *builtin_data;
+	string filename;
+    std::vector<float4> points;
+
+    // TODO: TEXCURVE
+};
+
 class EnvironmentTextureNode : public ImageSlotTextureNode {
 public:
 	SHADER_NODE_NO_CLONE_CLASS(EnvironmentTextureNode)

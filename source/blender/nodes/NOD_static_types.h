@@ -118,6 +118,7 @@ DefNode( ShaderNode,     SH_NODE_TEX_CHECKER,        def_sh_tex_checker,     "TE
 DefNode( ShaderNode,     SH_NODE_TEX_BRICK,          def_sh_tex_brick,       "TEX_BRICK",          TexBrick,         "Brick Texture",     ""       )
 DefNode( ShaderNode,     SH_NODE_TEX_POINTDENSITY,   def_sh_tex_pointdensity,"TEX_POINTDENSITY",   TexPointDensity,  "Point Density",     ""       )
 DefNode( ShaderNode,     SH_NODE_TEX_COORD,          def_sh_tex_coord,       "TEX_COORD",          TexCoord,         "Texture Coordinate",""       )
+DefNode( ShaderNode,     SH_NODE_TEX_CURVE,          def_sh_tex_curve,       "TEX_CURVE",          TexCurve,         "Curve Texture",     ""       )
 DefNode( ShaderNode,     SH_NODE_VECT_TRANSFORM,     def_sh_vect_transform,  "VECT_TRANSFORM",     VectorTransform,  "Vector Transform",  ""       )
 DefNode( ShaderNode,     SH_NODE_SEPHSV,             0,                      "SEPHSV",             SeparateHSV,      "Separate HSV",      ""       )
 DefNode( ShaderNode,     SH_NODE_COMBHSV,            0,                      "COMBHSV",            CombineHSV,       "Combine HSV",       ""       )

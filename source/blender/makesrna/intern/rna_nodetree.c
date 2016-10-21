@@ -3971,6 +3971,28 @@ static void def_sh_tex_coord(StructRNA *srna)
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 }
 
+static void def_sh_tex_curve(StructRNA *srna)
+{
+    // TODO: TEXCURVE
+
+	PropertyRNA *prop;
+
+	RNA_def_struct_sdna_from(srna, "NodeTexCurve", "storage");
+	def_sh_tex(srna);
+
+	prop = RNA_def_property(srna, "object", PROP_POINTER, PROP_NONE);
+	RNA_def_property_pointer_sdna(prop, NULL, "object");
+	RNA_def_property_struct_type(prop, "Object");
+	RNA_def_property_flag(prop, PROP_EDITABLE);
+	RNA_def_property_ui_text(prop, "Object", "Use this curve object for rendering to texture");
+	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+
+//	prop = RNA_def_property(srna, "from_dupli", PROP_BOOLEAN, PROP_NONE);
+//	RNA_def_property_boolean_sdna(prop, NULL, "custom1", 1);
+//	RNA_def_property_ui_text(prop, "From Dupli", "Use the parent of the dupli object if possible");
+//	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+}
+
 static void def_sh_vect_transform(StructRNA *srna)
 {
 	static EnumPropertyItem prop_vect_type_items[] = {

@@ -195,6 +195,7 @@ set(SRC
 	shader/nodes/node_shader_tex_brick.c
 	shader/nodes/node_shader_tex_checker.c
 	shader/nodes/node_shader_tex_coord.c
+	shader/nodes/node_shader_tex_curve.c
 	shader/nodes/node_shader_tex_environment.c
 	shader/nodes/node_shader_tex_gradient.c
 	shader/nodes/node_shader_tex_image.c

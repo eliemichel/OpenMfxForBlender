@@ -323,6 +323,7 @@ typedef struct ColorMapping {
 #define TEX_POINTDENSITY	14
 #define TEX_VOXELDATA		15
 #define TEX_OCEAN		16
+#define TEX_CURVE       17
 
 /* musgrave stype */
 #define TEX_MFRACTAL		0

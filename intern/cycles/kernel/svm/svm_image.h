@@ -495,5 +495,62 @@ ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, floa
 		stack_store_float(stack, alpha_offset, f.w);
 }
 
+ccl_device float sign (float3 p1, float4 p2, float4 p3)
+{
+    return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+}
+
+ccl_device bool point_in_triangle (float3 pt, float4 v1, float4 v2, float4 v3)
+{
+    bool b1, b2, b3;
+
+    b1 = sign(pt, v1, v2) < 0.0f;
+    b2 = sign(pt, v2, v3) < 0.0f;
+    b3 = sign(pt, v3, v1) < 0.0f;
+
+    return ((b1 == b2) && (b2 == b3));
+}
+ 
+ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
+{
+    // TODO: TEXCURVE
+    uint co_offset, fill_in_offset, background_in_offset, out_offset;
+    uint slot = node.y;
+    decode_node_uchar4(node.z, &co_offset, &fill_in_offset, &background_in_offset, &out_offset);
+
+    float3 co = stack_load_float3(stack, co_offset);
+    float3 fill_color = stack_load_float3(stack, fill_in_offset);
+    float3 background_color = stack_load_float3(stack, background_in_offset);
+
+    uint width = kernel_tex_image_width(slot);
+    bool inside = false;
+
+    for (int t = 0; t < width; t+=3) {
+        float4 p1 = svm_image_texture(kg, slot, (float)(t+0)/width, 0.0, false, true);
+        float4 p2 = svm_image_texture(kg, slot, (float)(t+1)/width, 0.0, false, true);
+        float4 p3 = svm_image_texture(kg, slot, (float)(t+2)/width, 0.0, false, true);
+
+        if (p1 == p2 || p2 == p3 || p1 == p3) {
+            continue;
+        }
+
+        if (point_in_triangle(co,p1,p2,p3)) {
+            inside = true;
+            break;
+        }
+    }
+
+    float4 f;
+
+    if (inside) {
+        f = make_float4(fill_color.x, fill_color.y, fill_color.z, 1.0);
+    } else {
+        f = make_float4(background_color.x, background_color.y, background_color.z, 1.0);
+    }
+
+	if(stack_valid(out_offset))
+		stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
+}
+
 CCL_NAMESPACE_END
 
