@@ -195,7 +195,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 								/* only primitives from volume object */
 								uint tri_object = (object == OBJECT_NONE)? kernel_tex_fetch(__prim_object, prim_addr): object;
 								int object_flag = kernel_tex_fetch(__object_flag, tri_object);
-								if((object_flag & SD_OBJECT_HAS_VOLUME) == 0) {
+								if ((object_flag & SD_OBJECT_OBJECT_HAS_VOLUME) == 0) {
 									continue;
 								}
 								triangle_intersect(kg,
@@ -220,7 +220,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 								/* only primitives from volume object */
 								uint tri_object = (object == OBJECT_NONE)? kernel_tex_fetch(__prim_object, prim_addr): object;
 								int object_flag = kernel_tex_fetch(__object_flag, tri_object);
-								if((object_flag & SD_OBJECT_HAS_VOLUME) == 0) {
+								if ((object_flag & SD_OBJECT_OBJECT_HAS_VOLUME) == 0) {
 									continue;
 								}
 								motion_triangle_intersect(kg,
@@ -246,7 +246,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 					object = kernel_tex_fetch(__prim_object, -prim_addr-1);
 					int object_flag = kernel_tex_fetch(__object_flag, object);
 
-					if(object_flag & SD_OBJECT_HAS_VOLUME) {
+					if (object_flag & SD_OBJECT_OBJECT_HAS_VOLUME) {
 
 #  if BVH_FEATURE(BVH_MOTION)
 						bvh_instance_motion_push(kg, object, ray, &P, &dir, &idir, &isect->t, &ob_itfm);

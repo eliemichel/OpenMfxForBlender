@@ -115,7 +115,7 @@ ccl_device_inline bool shadow_blocked(KernelGlobals *kg, ShaderData *shadow_sd, 
 				shader_setup_from_ray(kg, shadow_sd, isect, ray);
 
 				/* attenuation from transparent surface */
-				if (!(shadow_sd->flag & SD_HAS_ONLY_VOLUME)) {
+				if (!(shadow_sd->shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
 					path_state_modify_bounce(state, true);
 					shader_eval_surface(kg, shadow_sd, NULL, state, 0.0f, PATH_RAY_SHADOW, SHADER_CONTEXT_SHADOW);
 					path_state_modify_bounce(state, false);
@@ -227,8 +227,9 @@ ccl_device_noinline bool shadow_blocked(KernelGlobals *kg,
 				{
 #ifdef __VOLUME__
 					/* attenuation for last line segment towards light */
-					if(ps.volume_stack[0].shader != SHADER_NONE)
+					if(ps.volume_stack[0].shader != SHADER_NONE) {
 						kernel_volume_shadow(kg, shadow_sd, &ps, ray, &throughput);
+					}
 #endif
 
 					*shadow *= throughput;

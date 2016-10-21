@@ -51,7 +51,7 @@ ccl_device_noinline float3 direct_emissive_eval(KernelGlobals *kg,
 	}
 	else
 #endif
-	if(shader_flag & SD_HAS_CONSTANT_EMISSION)
+	if(shader_flag & SD_SHADER_HAS_CONSTANT_EMISSION)
 	{
 		eval.x = __int_as_float(kernel_tex_fetch(__shader_flag, (ls->shader & SHADER_MASK)*SHADER_SIZE + 2));
 		eval.y = __int_as_float(kernel_tex_fetch(__shader_flag, (ls->shader & SHADER_MASK)*SHADER_SIZE + 3));
@@ -76,7 +76,7 @@ ccl_device_noinline float3 direct_emissive_eval(KernelGlobals *kg,
 		path_state_modify_bounce(state, false);
 
 		/* evaluate emissive closure */
-		if(ccl_fetch(emission_sd, flag) & SD_EMISSION)
+		if(ccl_fetch(emission_sd, runtime_flag) & SD_RUNTIME_EMISSION)
 			eval = shader_emissive_eval(kg, emission_sd);
 		else
 			eval = make_float3(0.0f, 0.0f, 0.0f);
@@ -193,7 +193,7 @@ ccl_device_noinline float3 indirect_primitive_emission(KernelGlobals *kg, Shader
 	float3 L = shader_emissive_eval(kg, sd);
 
 #ifdef __HAIR__
-	if(!(path_flag & PATH_RAY_MIS_SKIP) && (ccl_fetch(sd, flag) & SD_USE_MIS) && (ccl_fetch(sd, type) & PRIMITIVE_ALL_TRIANGLE))
+	if(!(path_flag & PATH_RAY_MIS_SKIP) && (ccl_fetch(sd, shader_flag) & SD_SHADER_USE_MIS) && (ccl_fetch(sd, type) & PRIMITIVE_ALL_TRIANGLE))
 #else
 	if(!(path_flag & PATH_RAY_MIS_SKIP) && (ccl_fetch(sd, flag) & SD_USE_MIS))
 #endif

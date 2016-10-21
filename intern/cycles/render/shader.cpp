@@ -426,58 +426,58 @@ void ShaderManager::device_update_common(Device *device,
 		uint flag = 0;
 
 		if(shader->use_mis)
-			flag |= SD_USE_MIS;
+			flag |= SD_SHADER_USE_MIS;
 		if(shader->has_surface_transparent && shader->use_transparent_shadow)
-			flag |= SD_HAS_TRANSPARENT_SHADOW;
+			flag |= SD_SHADER_HAS_TRANSPARENT_SHADOW;
 		if(shader->has_volume) {
-			flag |= SD_HAS_VOLUME;
+			flag |= SD_SHADER_HAS_VOLUME;
 			has_volumes = true;
 
 			/* in this case we can assume transparent surface */
 			if(!shader->has_surface)
-				flag |= SD_HAS_ONLY_VOLUME;
+				flag |= SD_SHADER_HAS_ONLY_VOLUME;
 
 			/* todo: this could check more fine grained, to skip useless volumes
 			 * enclosed inside an opaque bsdf.
 			 */
-			flag |= SD_HAS_TRANSPARENT_SHADOW;
+			flag |= SD_SHADER_HAS_TRANSPARENT_SHADOW;
 		}
 		if(shader->heterogeneous_volume && shader->has_volume_spatial_varying)
-			flag |= SD_HETEROGENEOUS_VOLUME;
+			flag |= SD_SHADER_HETEROGENEOUS_VOLUME;
 		if(shader->has_bssrdf_bump)
-			flag |= SD_HAS_BSSRDF_BUMP;
+			flag |= SD_SHADER_HAS_BSSRDF_BUMP;
 		if(shader->volume_sampling_method == VOLUME_SAMPLING_EQUIANGULAR)
-			flag |= SD_VOLUME_EQUIANGULAR;
+			flag |= SD_SHADER_VOLUME_EQUIANGULAR;
 		if(shader->volume_sampling_method == VOLUME_SAMPLING_MULTIPLE_IMPORTANCE)
-			flag |= SD_VOLUME_MIS;
+			flag |= SD_SHADER_VOLUME_MIS;
 		if(shader->volume_interpolation_method == VOLUME_INTERPOLATION_CUBIC)
-			flag |= SD_VOLUME_CUBIC;
+			flag |= SD_SHADER_VOLUME_CUBIC;
 		if(shader->graph_bump)
-			flag |= SD_HAS_BUMP;
+			flag |= SD_SHADER_HAS_BUMP;
 		if(shader->displacement_method != DISPLACE_BUMP)
-			flag |= SD_HAS_DISPLACEMENT;
+			flag |= SD_SHADER_HAS_DISPLACEMENT;
 
 		/* shader with bump mapping */
 		if(shader->displacement_method != DISPLACE_TRUE && shader->graph_bump)
-			flag |= SD_HAS_BSSRDF_BUMP;
+			flag |= SD_SHADER_HAS_BSSRDF_BUMP;
 
 		/* constant emission check */
 		float3 constant_emission = make_float3(0.0f, 0.0f, 0.0f);
 		if(shader->is_constant_emission(&constant_emission))
-			flag |= SD_HAS_CONSTANT_EMISSION;
+			flag |= SD_SHADER_HAS_CONSTANT_EMISSION;
 
 		if(shader->use_uniform_alpha) {
-			flag |= SD_USE_UNIFORM_ALPHA;
-			flag |= SD_HAS_TRANSPARENT_SHADOW;
+			flag |= SD_SHADER_USE_UNIFORM_ALPHA;
+			flag |= SD_SHADER_HAS_TRANSPARENT_SHADOW;
 		}
 		if(shader->self_only)
-			flag |= SD_USE_UNIFORM_ALPHA_SELF_ONLY;
+			flag |= SD_SHADER_USE_UNIFORM_ALPHA_SELF_ONLY;
 
 		if(shader->override_samples)
-			flag |= SD_OVERRIDE_SAMPLES;
+			flag |= SD_SHADER_OVERRIDE_SAMPLES;
 
 		if(shader->override_bounces)
-			flag |= SD_OVERRIDE_BOUNCES;
+			flag |= SD_SHADER_OVERRIDE_BOUNCES;
 
 		/* regular shader */
 		shader_flag[i++] = flag;
@@ -494,7 +494,7 @@ void ShaderManager::device_update_common(Device *device,
 		shader_flag[i++] = __float_as_int(constant_emission.y);
 		shader_flag[i++] = __float_as_int(constant_emission.z);
 
-		has_transparent_shadow |= (flag & SD_HAS_TRANSPARENT_SHADOW) != 0;
+		has_transparent_shadow |= (flag & SD_SHADER_HAS_TRANSPARENT_SHADOW) != 0;
 	}
 
 	device->tex_alloc("__shader_flag", dscene->shader_flag);

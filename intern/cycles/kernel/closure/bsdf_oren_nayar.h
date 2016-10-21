@@ -54,7 +54,7 @@ ccl_device int bsdf_oren_nayar_setup(OrenNayarBsdf *bsdf)
 	bsdf->a = 1.0f * div;
 	bsdf->b = sigma * div;
 
-	return SD_BSDF|SD_BSDF_HAS_EVAL;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL;
 }
 
 ccl_device bool bsdf_oren_nayar_merge(const ShaderClosure *a, const ShaderClosure *b)

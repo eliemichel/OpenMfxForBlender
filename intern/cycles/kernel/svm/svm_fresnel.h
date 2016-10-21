@@ -26,7 +26,7 @@ ccl_device void svm_node_fresnel(ShaderData *sd, float *stack, uint ior_offset, 
 	float3 normal_in = stack_valid(normal_offset)? stack_load_float3(stack, normal_offset): ccl_fetch(sd, N);
 	
 	eta = fmaxf(eta, 1e-5f);
-	eta = (ccl_fetch(sd, flag) & SD_BACKFACING)? 1.0f/eta: eta;
+	eta = (ccl_fetch(sd, runtime_flag) & SD_RUNTIME_BACKFACING)? 1.0f/eta: eta;
 
 	float f = fresnel_dielectric_cos(dot(ccl_fetch(sd, I), normal_in), eta);
 
@@ -50,7 +50,7 @@ ccl_device void svm_node_layer_weight(ShaderData *sd, float *stack, uint4 node)
 
 	if(type == NODE_LAYER_WEIGHT_FRESNEL) {
 		float eta = fmaxf(1.0f - blend, 1e-5f);
-		eta = (ccl_fetch(sd, flag) & SD_BACKFACING)? eta: 1.0f/eta;
+		eta = (ccl_fetch(sd, runtime_flag) & SD_RUNTIME_BACKFACING)? eta: 1.0f/eta;
 
 		f = fresnel_dielectric_cos(dot(ccl_fetch(sd, I), normal_in), eta);
 	}

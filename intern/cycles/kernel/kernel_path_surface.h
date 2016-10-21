@@ -25,7 +25,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(KernelGlobal
 {
 #ifdef __EMISSION__
 	/* sample illumination from lights to find path contribution */
-	if(!(ccl_fetch(sd, flag) & SD_BSDF_HAS_EVAL))
+	if(!(ccl_fetch(sd, runtime_flag) & SD_RUNTIME_BSDF_HAS_EVAL))
 		return;
 
 	Ray light_ray;
@@ -195,7 +195,7 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg, ccl_
 	PathRadiance *L, uint light_linking, uint shadow_linking)
 {
 #ifdef __EMISSION__
-	if(!(kernel_data.integrator.use_direct_light && (ccl_fetch(sd, flag) & SD_BSDF_HAS_EVAL)))
+	if(!(kernel_data.integrator.use_direct_light && (ccl_fetch(sd, runtime_flag) & SD_RUNTIME_BSDF_HAS_EVAL)))
 		return;
 
 	/* sample illumination from lights to find path contribution */
@@ -237,7 +237,7 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
                                            ccl_addr_space Ray *ray)
 {
 	/* no BSDF? we can stop here */
-	if(ccl_fetch(sd, flag) & SD_BSDF) {
+	if(ccl_fetch(sd, runtime_flag) & SD_RUNTIME_BSDF) {
 		/* sample BSDF */
 		float bsdf_pdf;
 		BsdfEval bsdf_eval;
@@ -290,7 +290,7 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 		return true;
 	}
 #ifdef __VOLUME__
-	else if(ccl_fetch(sd, flag) & SD_HAS_ONLY_VOLUME) {
+	else if(ccl_fetch(sd, shader_flag) & SD_SHADER_HAS_ONLY_VOLUME) {
 		/* no surface shader but have a volume shader? act transparent */
 
 		/* update path state, count as transparent */

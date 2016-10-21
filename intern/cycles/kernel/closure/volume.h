@@ -42,7 +42,7 @@ ccl_device int volume_henyey_greenstein_setup(HenyeyGreensteinVolume *volume)
 	/* clamp anisotropy to avoid delta function */
 	volume->g = signf(volume->g) * min(fabsf(volume->g), 1.0f - 1e-3f);
 
-	return SD_SCATTER;
+	return SD_RUNTIME_SCATTER;
 }
 
 ccl_device bool volume_henyey_greenstein_merge(const ShaderClosure *a, const ShaderClosure *b)
@@ -116,7 +116,7 @@ ccl_device int volume_absorption_setup(ShaderClosure *sc)
 {
 	sc->type = CLOSURE_VOLUME_ABSORPTION_ID;
 
-	return SD_ABSORPTION;
+	return SD_RUNTIME_ABSORPTION;
 }
 
 /* VOLUME CLOSURE */

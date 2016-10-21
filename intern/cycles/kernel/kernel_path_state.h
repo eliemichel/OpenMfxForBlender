@@ -151,7 +151,7 @@ ccl_device_inline float path_state_terminate_probability(KernelGlobals *kg, ccl_
 	}
 	else {
 		int max_diffuse_bounce, max_glossy_bounce, max_transmission_bounce;
-		if (ccl_fetch(sd, flag) & SD_OVERRIDE_BOUNCES) {
+		if (ccl_fetch(sd, shader_flag) & SD_SHADER_OVERRIDE_BOUNCES) {
 			max_diffuse_bounce = ccl_fetch(sd, diffuse_bounces);
 			max_glossy_bounce = ccl_fetch(sd, glossy_bounces);
 			max_transmission_bounce = ccl_fetch(sd, transmission_bounces);
