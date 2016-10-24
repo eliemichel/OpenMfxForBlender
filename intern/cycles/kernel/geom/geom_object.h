@@ -309,7 +309,7 @@ ccl_device_inline uint object_patch_map_offset(KernelGlobals *kg, int object)
 
 ccl_device int shader_pass_id(KernelGlobals *kg, const ShaderData *sd)
 {
-	return kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK)*10 + 1);
+	return kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK)*SHADER_SIZE + 1);
 }
 
 /* Light Linking bitmask of object */

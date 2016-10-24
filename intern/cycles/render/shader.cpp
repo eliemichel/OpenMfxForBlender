@@ -416,7 +416,7 @@ void ShaderManager::device_update_common(Device *device,
 	if(scene->shaders.size() == 0)
 		return;
 
-	uint shader_flag_size = scene->shaders.size()*20;
+	uint shader_flag_size = scene->shaders.size()*SHADER_SIZE;
 	uint *shader_flag = dscene->shader_flag.resize(shader_flag_size);
 	uint i = 0;
 	bool has_volumes = false;
@@ -479,20 +479,20 @@ void ShaderManager::device_update_common(Device *device,
 		if(shader->override_bounces)
 			flag |= SD_SHADER_OVERRIDE_BOUNCES;
 
-		/* regular shader */
-		shader_flag[i++] = flag;
-		shader_flag[i++] = shader->pass_id;
-		shader_flag[i++] = __float_as_uint(shader->ao_alpha);
-		shader_flag[i++] = __float_as_uint(shader->shadow_alpha);
-		shader_flag[i++] = shader->diffuse_samples;
-		shader_flag[i++] = shader->glossy_samples;
-		shader_flag[i++] = shader->transmission_samples;
-		shader_flag[i++] = shader->diffuse_bounces;
-		shader_flag[i++] = shader->glossy_bounces;
-		shader_flag[i++] = shader->transmission_bounces;
-		shader_flag[i++] = __float_as_int(constant_emission.x);
-		shader_flag[i++] = __float_as_int(constant_emission.y);
-		shader_flag[i++] = __float_as_int(constant_emission.z);
+		/* regular shader */										// Offset
+		shader_flag[i++] = flag;									// 0
+		shader_flag[i++] = shader->pass_id;							// 1
+		shader_flag[i++] = __float_as_uint(shader->ao_alpha);		// 2 
+		shader_flag[i++] = __float_as_uint(shader->shadow_alpha);	// 3
+		shader_flag[i++] = shader->diffuse_samples;					// 4
+		shader_flag[i++] = shader->glossy_samples;					// 5
+		shader_flag[i++] = shader->transmission_samples;			// 6
+		shader_flag[i++] = shader->diffuse_bounces;					// 7
+		shader_flag[i++] = shader->glossy_bounces;					// 8
+		shader_flag[i++] = shader->transmission_bounces;			// 9
+		shader_flag[i++] = __float_as_int(constant_emission.x);		// 10
+		shader_flag[i++] = __float_as_int(constant_emission.y);		// 11
+		shader_flag[i++] = __float_as_int(constant_emission.z);		// 12
 
 		has_transparent_shadow |= (flag & SD_SHADER_HAS_TRANSPARENT_SHADOW) != 0;
 	}

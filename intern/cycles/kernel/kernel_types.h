@@ -42,7 +42,7 @@ CCL_NAMESPACE_BEGIN
 #define RAMP_TABLE_SIZE		256
 #define SHUTTER_TABLE_SIZE		256
 #define PARTICLE_SIZE 		5
-#define SHADER_SIZE		5
+#define SHADER_SIZE		13
 
 #define BSSRDF_MIN_RADIUS			1e-8f
 #define BSSRDF_MAX_HITS				4
@@ -785,9 +785,9 @@ typedef ccl_addr_space struct ShaderData {
 	ccl_soa_member(int, shader);
 	/* booleans describing shader, see ShaderDataRuntimeFlag, 
 	 * ShaderDataShaderFlag, ShaderDataObjecyFlag */
-	ccl_soa_member(short, runtime_flag);
-	ccl_soa_member(short, shader_flag);
-	ccl_soa_member(short, object_flag);
+	ccl_soa_member(int, runtime_flag);
+	ccl_soa_member(int, shader_flag);
+	ccl_soa_member(int, object_flag);
 
 	/* alpha overrides */
 	ccl_soa_member(float, ao_alpha);
