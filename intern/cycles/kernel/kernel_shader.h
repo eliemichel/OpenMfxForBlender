@@ -280,15 +280,15 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 #endif
 	ccl_fetch(sd, ray_length) = t;
 
-	ccl_fetch(sd, shader_flag) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 1);
-	ccl_fetch(sd, ao_alpha) = __uint_as_float(kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 2));
-	ccl_fetch(sd, shadow_alpha) = __uint_as_float(kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 3));
-	ccl_fetch(sd, diffuse_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 4);
-	ccl_fetch(sd, glossy_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 5);
-	ccl_fetch(sd, transmission_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 6);
-	ccl_fetch(sd, diffuse_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 7);
-	ccl_fetch(sd, glossy_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 8);
-	ccl_fetch(sd, transmission_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * 10 + 9);
+	ccl_fetch(sd, shader_flag) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE);
+	ccl_fetch(sd, ao_alpha) = __uint_as_float(kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE + 2));
+	ccl_fetch(sd, shadow_alpha) = __uint_as_float(kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE + 3));
+	ccl_fetch(sd, diffuse_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE + 4);
+	ccl_fetch(sd, glossy_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE + 5);
+	ccl_fetch(sd, transmission_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE + 6);
+	ccl_fetch(sd, diffuse_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE + 7);
+	ccl_fetch(sd, glossy_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE + 8);
+	ccl_fetch(sd, transmission_bounces) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE + 9);
 
 	if(ccl_fetch(sd, object) != OBJECT_NONE) {
 		ccl_fetch(sd, object_flag) |= kernel_tex_fetch(__object_flag, ccl_fetch(sd, object));
