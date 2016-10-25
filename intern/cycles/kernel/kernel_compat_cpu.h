@@ -528,8 +528,6 @@ typedef texture_image<half4> texture_image_half4;
 #define kernel_tex_image_interp(tex,x,y) kernel_tex_image_interp_impl(kg,tex,x,y)
 #define kernel_tex_image_interp_3d(tex, x, y, z) kernel_tex_image_interp_3d_impl(kg,tex,x,y,z)
 #define kernel_tex_image_interp_3d_ex(tex, x, y, z, interpolation) kernel_tex_image_interp_3d_ex_impl(kg,tex, x, y, z, interpolation)
-#define kernel_tex_image_width(tex) ((tex < MAX_FLOAT_IMAGES) ? kg->texture_float_images[tex].width : kg->texture_byte_images[tex - MAX_FLOAT_IMAGES].width)
-#define kernel_tex_image_height(tex) ((tex < MAX_FLOAT_IMAGES) ? kg->texture_float_images[tex].height : kg->texture_byte_images[tex - MAX_FLOAT_IMAGES].height)
 
 #define kernel_data (kg->__data)
 

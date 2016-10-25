@@ -684,7 +684,8 @@ static ShaderNode *add_node(Scene *scene,
 
             scene->image_manager->tag_reload_image(tex->filename,
                                                    tex->builtin_data,
-                                                   INTERPOLATION_CLOSEST);
+                                                   INTERPOLATION_CLOSEST,
+                                                   EXTENSION_EXTEND);
         }
 
 		get_tex_mapping(&tex->tex_mapping, b_curve_node.texture_mapping());

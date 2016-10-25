@@ -410,16 +410,24 @@ void ImageTextureNode::compile(OSLCompiler& compiler)
 
 /* Curve Texture */
 
+NODE_DEFINE(CurveTextureNode)
+{
+	NodeType* type = NodeType::add("curve_texture", create, NodeType::SHADER);
+
+    SOCKET_IN_POINT(vector, "Vector", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_TEXTURE_UV);
+    SOCKET_IN_COLOR(fill_color, "FillColor", make_float3(1.0f, 1.0f, 1.0f));
+    SOCKET_IN_COLOR(background_color, "BackgroundColor", make_float3(0.0f, 0.0f, 0.0f));
+    SOCKET_OUT_COLOR(color, "Color");
+
+	return type;
+}
+
+
 CurveTextureNode::CurveTextureNode()
-: ImageSlotTextureNode("curve_texture")
+: ImageSlotTextureNode(node_type)
 {
 	image_manager = NULL;
 	slot = -1;
-
-	add_input("Vector", SHADER_SOCKET_POINT, ShaderInput::TEXTURE_UV);
-	add_input("FillColor", SHADER_SOCKET_COLOR);
-	add_input("BackgroundColor", SHADER_SOCKET_COLOR);
-	add_output("Color", SHADER_SOCKET_COLOR);
 
     // TODO: TEXCURVE
 }
@@ -462,7 +470,9 @@ void CurveTextureNode::compile(SVMCompiler& compiler)
     bool linear;
     slot = image_manager->add_image(filename, builtin_data,
                                     true, 0, is_float_bool, linear,
-                                    INTERPOLATION_CLOSEST, true);
+                                    INTERPOLATION_CLOSEST,
+                                    EXTENSION_EXTEND,
+                                    true);
 
     compiler.add_node(NODE_TEX_CURVE,
                 slot,
