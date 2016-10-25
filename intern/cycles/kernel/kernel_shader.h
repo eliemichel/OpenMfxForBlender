@@ -1066,6 +1066,7 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
 
 		sd->object_flag &= ~SD_OBJECT_FLAGS;
 		sd->shader_flag &= ~SD_SHADER_FLAGS;
+		sd->runtime_flag &= ~SD_RUNTIME_CLOSURE_FLAGS;
 		sd->shader_flag  |= kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * SHADER_SIZE);
 		sd->ao_alpha = __uint_as_float(kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * SHADER_SIZE + 2));
 		sd->shadow_alpha = __uint_as_float(kernel_tex_fetch(__shader_flag, (sd->shader & SHADER_MASK) * SHADER_SIZE + 3));
