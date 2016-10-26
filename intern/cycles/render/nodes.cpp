@@ -4535,6 +4535,7 @@ NODE_DEFINE(OutputNode)
 	NodeType* type = NodeType::add("output", create, NodeType::SHADER);
 
 	SOCKET_IN_CLOSURE(surface, "Surface");
+	SOCKET_IN_CLOSURE(ao_surface, "AOSurface");
 	SOCKET_IN_CLOSURE(volume, "Volume");
 	SOCKET_IN_FLOAT(displacement, "Displacement", 0.0f);
 	SOCKET_IN_NORMAL(normal, "Normal", make_float3(0.0f, 0.0f, 0.0f));
@@ -4562,6 +4563,8 @@ void OutputNode::compile(SVMCompiler& compiler)
 void OutputNode::compile(OSLCompiler& compiler)
 {
 	if(compiler.output_type() == SHADER_TYPE_SURFACE)
+		compiler.add(this, "node_output_surface");
+	else if(compiler.output_type() == SHADER_TYPE_AO_SURFACE)
 		compiler.add(this, "node_output_surface");
 	else if(compiler.output_type() == SHADER_TYPE_VOLUME)
 		compiler.add(this, "node_output_volume");

@@ -183,6 +183,7 @@ Shader::Shader()
 	transmission_bounces = 0;
 
 	has_surface = false;
+	has_ao_surface = false;
 	has_surface_transparent = false;
 	has_surface_emission = false;
 	has_surface_bssrdf = false;
@@ -274,6 +275,7 @@ void Shader::tag_update(Scene *scene)
 	OutputNode *output = graph->output();
 	bool prev_has_volume = has_volume;
 	has_surface = has_surface || output->input("Surface")->link;
+	has_ao_surface = has_ao_surface || output->input("AOSurface")->link;
 	has_volume = has_volume || output->input("Volume")->link;
 	has_displacement = has_displacement || output->input("Displacement")->link;
 
@@ -434,7 +436,7 @@ void ShaderManager::device_update_common(Device *device,
 			has_volumes = true;
 
 			/* in this case we can assume transparent surface */
-			if(!shader->has_surface)
+			if (!shader->has_surface && !shader->has_ao_surface)
 				flag |= SD_SHADER_HAS_ONLY_VOLUME;
 
 			/* todo: this could check more fine grained, to skip useless volumes

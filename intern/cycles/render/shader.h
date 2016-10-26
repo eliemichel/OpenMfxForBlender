@@ -124,6 +124,7 @@ public:
 
 	/* information about shader after compiling */
 	bool has_surface;
+	bool has_ao_surface;
 	bool has_surface_emission;
 	bool has_surface_transparent;
 	bool has_volume;
@@ -148,6 +149,7 @@ public:
 #ifdef WITH_OSL
 	/* osl shading state references */
 	OSL::ShaderGroupRef osl_surface_ref;
+	OSL::ShaderGroupRef osl_ao_surface_ref;
 	OSL::ShaderGroupRef osl_surface_bump_ref;
 	OSL::ShaderGroupRef osl_volume_ref;
 	OSL::ShaderGroupRef osl_displacement_ref;

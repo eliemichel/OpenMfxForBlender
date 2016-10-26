@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011-2013 Blender Foundation
  *
@@ -378,6 +379,7 @@ typedef enum NodeTexVoxelSpace {
 
 typedef enum ShaderType {
 	SHADER_TYPE_SURFACE,
+	SHADER_TYPE_AO_SURFACE,
 	SHADER_TYPE_VOLUME,
 	SHADER_TYPE_DISPLACEMENT,
 	SHADER_TYPE_BUMP,
