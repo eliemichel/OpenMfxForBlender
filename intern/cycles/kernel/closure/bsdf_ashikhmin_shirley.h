@@ -37,7 +37,7 @@ ccl_device int bsdf_ashikhmin_shirley_setup(MicrofacetBsdf *bsdf)
 	bsdf->alpha_y = bsdf->alpha_x;
 
 	bsdf->type = CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ID;
-	return SD_BSDF|SD_BSDF_HAS_EVAL;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL;
 }
 
 ccl_device int bsdf_ashikhmin_shirley_aniso_setup(MicrofacetBsdf *bsdf)
@@ -46,7 +46,7 @@ ccl_device int bsdf_ashikhmin_shirley_aniso_setup(MicrofacetBsdf *bsdf)
 	bsdf->alpha_y = clamp(bsdf->alpha_y, 1e-4f, 1.0f);
 
 	bsdf->type = CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ANISO_ID;
-	return SD_BSDF|SD_BSDF_HAS_EVAL;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL;
 }
 
 ccl_device void bsdf_ashikhmin_shirley_blur(ShaderClosure *sc, float roughness)

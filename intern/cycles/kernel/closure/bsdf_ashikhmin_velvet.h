@@ -50,7 +50,7 @@ ccl_device int bsdf_ashikhmin_velvet_setup(VelvetBsdf *bsdf)
 	
 	bsdf->type = CLOSURE_BSDF_ASHIKHMIN_VELVET_ID;
 
-	return SD_BSDF|SD_BSDF_HAS_EVAL;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL;
 }
 
 ccl_device bool bsdf_ashikhmin_velvet_merge(const ShaderClosure *a, const ShaderClosure *b)

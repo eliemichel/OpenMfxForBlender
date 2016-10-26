@@ -987,6 +987,7 @@ class CyclesWorld_PT_volume(CyclesButtonsPanel, Panel):
 class CyclesWorld_PT_ambient_occlusion(CyclesButtonsPanel, Panel):
     bl_label = "Ambient Occlusion"
     bl_context = "world"
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -1230,8 +1231,35 @@ class CyclesMaterial_PT_settings(CyclesButtonsPanel, Panel):
         col.prop(mat, "specular_color", text="")
         col.prop(mat, "specular_hardness", text="Hardness")
 
+        layout.separator()
+        split = layout.split()
+
+        col = split.column(align=True)
+        col.label(text="Uniform Alpha:")
+        col.prop(cmat, "use_uniform_alpha")
+        col.prop(cmat, "self_only")
+        col.prop(cmat, "ao_alpha", text="AO Alpha")
+        col.prop(cmat, "shadow_alpha", text="Shadow Alpha")
+
         col.separator()
         col.prop(mat, "pass_index")
+
+        layout.separator()
+        split = layout.split()
+        
+        # Calculate sample values
+        if use_branched_path(context):
+            col = split.column(align=True)
+            col.prop(cmat, "override_samples")
+            col.prop(cmat, "diffuse_samples", text="Diffuse")
+            col.prop(cmat, "glossy_samples", text="Glossy")
+            col.prop(cmat, "transmission_samples", text="Transmission")
+            
+        col = split.column(align=True)
+        col.prop(cmat, "override_bounces")
+        col.prop(cmat, "diffuse_bounces", text="Diffuse")
+        col.prop(cmat, "glossy_bounces", text="Glossy")
+        col.prop(cmat, "transmission_bounces", text="Transmission")
 
 
 class CyclesTexture_PT_context(CyclesButtonsPanel, Panel):

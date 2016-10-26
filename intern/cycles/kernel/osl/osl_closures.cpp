@@ -308,7 +308,7 @@ public:
 	void setup(ShaderData *sd, int path_flag, float3 weight)
 	{
 		MicrofacetBsdf *bsdf = alloc(sd, path_flag, weight);
-		sd->flag |= (bsdf) ? bsdf_microfacet_multi_ggx_setup(bsdf) : 0;
+		sd->runtime_flag |= (bsdf) ? bsdf_microfacet_multi_ggx_setup(bsdf) : 0;
 	}
 };
 
@@ -330,7 +330,7 @@ public:
 	void setup(ShaderData *sd, int path_flag, float3 weight)
 	{
 		MicrofacetBsdf *bsdf = alloc(sd, path_flag, weight);
-		sd->flag |= (bsdf) ? bsdf_microfacet_multi_ggx_aniso_setup(bsdf) : 0;
+		sd->runtime_flag |= (bsdf) ? bsdf_microfacet_multi_ggx_aniso_setup(bsdf) : 0;
 	}
 };
 
@@ -356,7 +356,7 @@ public:
 	void setup(ShaderData *sd, int path_flag, float3 weight)
 	{
 		MicrofacetBsdf *bsdf = alloc(sd, path_flag, weight);
-		sd->flag |= (bsdf) ? bsdf_microfacet_multi_ggx_glass_setup(bsdf) : 0;
+		sd->runtime_flag |= (bsdf) ? bsdf_microfacet_multi_ggx_glass_setup(bsdf) : 0;
 	}
 };
 

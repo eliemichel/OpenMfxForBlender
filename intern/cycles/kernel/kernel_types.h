@@ -42,7 +42,7 @@ CCL_NAMESPACE_BEGIN
 #define RAMP_TABLE_SIZE		256
 #define SHUTTER_TABLE_SIZE		256
 #define PARTICLE_SIZE 		5
-#define SHADER_SIZE		5
+#define SHADER_SIZE		13
 
 #define BSSRDF_MIN_RADIUS			1e-8f
 #define BSSRDF_MAX_HITS				4
@@ -284,19 +284,20 @@ enum PathRayFlag {
 
 	PATH_RAY_SHADOW_OPAQUE = 128,
 	PATH_RAY_SHADOW_TRANSPARENT = 256,
-	PATH_RAY_SHADOW = (PATH_RAY_SHADOW_OPAQUE|PATH_RAY_SHADOW_TRANSPARENT),
+	PATH_RAY_SHADOW = (PATH_RAY_SHADOW_OPAQUE | PATH_RAY_SHADOW_TRANSPARENT),
 
 	PATH_RAY_CURVE = 512, /* visibility flag to define curve segments */
 	PATH_RAY_VOLUME_SCATTER = 1024, /* volume scattering */
+	PATH_RAY_AO = 2048,
 
 	/* Special flag to tag unaligned BVH nodes. */
-	PATH_RAY_NODE_UNALIGNED = 2048,
+	PATH_RAY_NODE_UNALIGNED = 4096,
 
-	PATH_RAY_ALL_VISIBILITY = (1|2|4|8|16|32|64|128|256|512|1024|2048),
+	PATH_RAY_ALL_VISIBILITY = (1|2|4|8|16|32|64|128|256|512|1024|2048|4096),
 
-	PATH_RAY_MIS_SKIP = 4096,
-	PATH_RAY_DIFFUSE_ANCESTOR = 8192,
-	PATH_RAY_SINGLE_PASS_DONE = 16384,
+	PATH_RAY_MIS_SKIP = 8192,
+	PATH_RAY_DIFFUSE_ANCESTOR = 16384,
+	PATH_RAY_SINGLE_PASS_DONE = 32768,
 };
 
 /* Closure Label */
@@ -686,55 +687,67 @@ typedef enum ShaderContext {
  * Main shader state at a point on the surface or in a volume. All coordinates
  * are in world space. */
 
-enum ShaderDataFlag {
+enum ShaderDataRuntimeFlag {
 	/* runtime flags */
-	SD_BACKFACING      = (1 << 0),   /* backside of surface? */
-	SD_EMISSION        = (1 << 1),   /* have emissive closure? */
-	SD_BSDF            = (1 << 2),   /* have bsdf closure? */
-	SD_BSDF_HAS_EVAL   = (1 << 3),   /* have non-singular bsdf closure? */
-	SD_BSSRDF          = (1 << 4),   /* have bssrdf */
-	SD_HOLDOUT         = (1 << 5),   /* have holdout closure? */
-	SD_ABSORPTION      = (1 << 6),   /* have volume absorption closure? */
-	SD_SCATTER         = (1 << 7),   /* have volume phase closure? */
-	SD_AO              = (1 << 8),   /* have ao closure? */
-	SD_TRANSPARENT     = (1 << 9),  /* have transparent closure? */
-	SD_BSDF_NEEDS_LCG  = (1 << 10),
+	SD_RUNTIME_BACKFACING		= (1 << 0),   /* backside of surface? */
+	SD_RUNTIME_EMISSION			= (1 << 1),   /* have emissive closure? */
+	SD_RUNTIME_BSDF				= (1 << 2),   /* have bsdf closure? */
+	SD_RUNTIME_BSDF_HAS_EVAL	= (1 << 3),   /* have non-singular bsdf closure? */
+	SD_RUNTIME_BSSRDF			= (1 << 4),   /* have bssrdf */
+	SD_RUNTIME_HOLDOUT			= (1 << 5),   /* have holdout closure? */
+	SD_RUNTIME_ABSORPTION		= (1 << 6),   /* have volume absorption closure? */
+	SD_RUNTIME_SCATTER			= (1 << 7),   /* have volume phase closure? */
+	SD_RUNTIME_AO				= (1 << 8),   /* have ao closure? */
+	SD_RUNTIME_TRANSPARENT		= (1 << 9),   /* have transparent closure? */
+	SD_RUNTIME_BSDF_NEEDS_LCG   = (1 << 10),
 
-	SD_CLOSURE_FLAGS = (SD_EMISSION|SD_BSDF|SD_BSDF_HAS_EVAL|SD_BSSRDF|
-	                    SD_HOLDOUT|SD_ABSORPTION|SD_SCATTER|SD_AO|
-	                    SD_BSDF_NEEDS_LCG),
+	SD_RUNTIME_CLOSURE_FLAGS = (SD_RUNTIME_BACKFACING | SD_RUNTIME_EMISSION | SD_RUNTIME_BSDF | 
+								SD_RUNTIME_BSDF_HAS_EVAL | SD_RUNTIME_BSSRDF | SD_RUNTIME_HOLDOUT | 
+								SD_RUNTIME_ABSORPTION | SD_RUNTIME_SCATTER | SD_RUNTIME_AO | SD_RUNTIME_TRANSPARENT |
+								SD_RUNTIME_BSDF_NEEDS_LCG)
+};
+
+enum ShaderDataShaderFlag {
 
 	/* shader flags */
-	SD_USE_MIS                = (1 << 12),  /* direct light sample */
-	SD_HAS_TRANSPARENT_SHADOW = (1 << 13),  /* has transparent shadow */
-	SD_HAS_VOLUME             = (1 << 14),  /* has volume shader */
-	SD_HAS_ONLY_VOLUME        = (1 << 15),  /* has only volume shader, no surface */
-	SD_HETEROGENEOUS_VOLUME   = (1 << 16),  /* has heterogeneous volume */
-	SD_HAS_BSSRDF_BUMP        = (1 << 17),  /* bssrdf normal uses bump */
-	SD_VOLUME_EQUIANGULAR     = (1 << 18),  /* use equiangular sampling */
-	SD_VOLUME_MIS             = (1 << 19),  /* use multiple importance sampling */
-	SD_VOLUME_CUBIC           = (1 << 20),  /* use cubic interpolation for voxels */
-	SD_HAS_BUMP               = (1 << 21),  /* has data connected to the displacement input */
-	SD_HAS_DISPLACEMENT       = (1 << 22),  /* has true displacement */
-	SD_HAS_CONSTANT_EMISSION  = (1 << 23),  /* has constant emission (value stored in __shader_flag) */
+	SD_SHADER_USE_MIS					  = (1 << 0),  /* direct light sample */
+	SD_SHADER_HAS_TRANSPARENT_SHADOW	  = (1 << 1),  /* has transparent shadow */
+	SD_SHADER_HAS_VOLUME				  = (1 << 2),  /* has volume shader */
+	SD_SHADER_HAS_ONLY_VOLUME			  = (1 << 3),  /* has only volume shader, no surface */
+	SD_SHADER_HETEROGENEOUS_VOLUME		  = (1 << 4),  /* has heterogeneous volume */
+	SD_SHADER_HAS_BSSRDF_BUMP			  = (1 << 5),  /* bssrdf normal uses bump */
+	SD_SHADER_VOLUME_EQUIANGULAR		  = (1 << 6),  /* use equiangular sampling */
+	SD_SHADER_VOLUME_MIS				  = (1 << 7),  /* use multiple importance sampling */
+	SD_SHADER_VOLUME_CUBIC				  = (1 << 8),  /* use cubic interpolation for voxels */
+	SD_SHADER_HAS_BUMP					  = (1 << 9),  /* has data connected to the displacement input */
+	SD_SHADER_HAS_DISPLACEMENT			  = (1 << 10), /* has true displacement */
+	SD_SHADER_HAS_CONSTANT_EMISSION		  = (1 << 11), /* has constant emission (value stored in __shader_flag) */
+	SD_SHADER_USE_UNIFORM_ALPHA			  = (1 << 12), /* uses a uniform alpha instead of evaluating shaders */
+	SD_SHADER_USE_UNIFORM_ALPHA_SELF_ONLY = (1 << 13), /* uniform alpha only affect shading self */
+	SD_SHADER_OVERRIDE_SAMPLES			  = (1 << 14), /* override samples */
+	SD_SHADER_OVERRIDE_BOUNCES			  = (1 << 15), /* override bounces*/
 
-	SD_SHADER_FLAGS = (SD_USE_MIS|SD_HAS_TRANSPARENT_SHADOW|SD_HAS_VOLUME|
-	                   SD_HAS_ONLY_VOLUME|SD_HETEROGENEOUS_VOLUME|
-	                   SD_HAS_BSSRDF_BUMP|SD_VOLUME_EQUIANGULAR|SD_VOLUME_MIS|
-	                   SD_VOLUME_CUBIC|SD_HAS_BUMP|SD_HAS_DISPLACEMENT|SD_HAS_CONSTANT_EMISSION),
+	SD_SHADER_FLAGS = (SD_SHADER_USE_MIS | SD_SHADER_HAS_TRANSPARENT_SHADOW | SD_SHADER_HAS_VOLUME |
+					   SD_SHADER_HAS_ONLY_VOLUME | SD_SHADER_HETEROGENEOUS_VOLUME |
+					   SD_SHADER_HAS_BSSRDF_BUMP | SD_SHADER_VOLUME_EQUIANGULAR | SD_SHADER_VOLUME_MIS |
+					   SD_SHADER_VOLUME_CUBIC | SD_SHADER_HAS_BUMP | SD_SHADER_HAS_DISPLACEMENT | 
+					   SD_SHADER_HAS_CONSTANT_EMISSION | SD_SHADER_USE_UNIFORM_ALPHA |
+					   SD_SHADER_USE_UNIFORM_ALPHA_SELF_ONLY | SD_SHADER_OVERRIDE_SAMPLES | SD_SHADER_OVERRIDE_BOUNCES)
+};
 
+enum ShaderDataObjectFlagss {
 	/* object flags */
-	SD_HOLDOUT_MASK             = (1 << 24),  /* holdout for camera rays */
-	SD_OBJECT_MOTION            = (1 << 25),  /* has object motion blur */
-	SD_TRANSFORM_APPLIED        = (1 << 26),  /* vertices have transform applied */
-	SD_NEGATIVE_SCALE_APPLIED   = (1 << 27),  /* vertices have negative scale applied */
-	SD_OBJECT_HAS_VOLUME        = (1 << 28),  /* object has a volume shader */
-	SD_OBJECT_INTERSECTS_VOLUME = (1 << 29),  /* object intersects AABB of an object with volume shader */
-	SD_OBJECT_HAS_VERTEX_MOTION = (1 << 30),  /* has position for motion vertices */
+	SD_OBJECT_HOLDOUT_MASK             = (1 << 0),  /* holdout for camera rays */
+	SD_OBJECT_OBJECT_MOTION			   = (1 << 1),  /* has object motion blur */
+	SD_OBJECT_TRANSFORM_APPLIED		   = (1 << 2),  /* vertices have transform applied */
+	SD_OBJECT_NEGATIVE_SCALE_APPLIED   = (1 << 3),  /* vertices have negative scale applied */
+	SD_OBJECT_OBJECT_HAS_VOLUME		   = (1 << 4),  /* object has a volume shader */
+	SD_OBJECT_OBJECT_INTERSECTS_VOLUME = (1 << 5),  /* object intersects AABB of an object with volume shader */
+	SD_OBJECT_OBJECT_HAS_VERTEX_MOTION = (1 << 6),  /* has position for motion vertices */
 
-	SD_OBJECT_FLAGS = (SD_HOLDOUT_MASK|SD_OBJECT_MOTION|SD_TRANSFORM_APPLIED|
-	                   SD_NEGATIVE_SCALE_APPLIED|SD_OBJECT_HAS_VOLUME|
-	                   SD_OBJECT_INTERSECTS_VOLUME)
+	SD_OBJECT_FLAGS = (SD_OBJECT_HOLDOUT_MASK | SD_OBJECT_OBJECT_MOTION | SD_OBJECT_TRANSFORM_APPLIED |
+					   SD_OBJECT_NEGATIVE_SCALE_APPLIED | SD_OBJECT_OBJECT_HAS_VOLUME | SD_OBJECT_OBJECT_INTERSECTS_VOLUME |
+					   SD_OBJECT_OBJECT_HAS_VERTEX_MOTION)
 };
 
 #ifdef __SPLIT_KERNEL__
@@ -770,8 +783,25 @@ typedef ccl_addr_space struct ShaderData {
 	ccl_soa_member(float3, I);
 	/* shader id */
 	ccl_soa_member(int, shader);
-	/* booleans describing shader, see ShaderDataFlag */
-	ccl_soa_member(int, flag);
+	/* booleans describing shader, see ShaderDataRuntimeFlag, 
+	 * ShaderDataShaderFlag, ShaderDataObjecyFlag */
+	ccl_soa_member(int, runtime_flag);
+	ccl_soa_member(int, shader_flag);
+	ccl_soa_member(int, object_flag);
+
+	/* alpha overrides */
+	ccl_soa_member(float, ao_alpha);
+	ccl_soa_member(float, shadow_alpha);
+
+	/* Sampling overrides */
+	ccl_soa_member(int, diffuse_samples);
+	ccl_soa_member(int, glossy_samples);
+	ccl_soa_member(int, transmission_samples);
+
+	/* Bounce overrides */
+	ccl_soa_member(int, diffuse_bounces);
+	ccl_soa_member(int, glossy_bounces);
+	ccl_soa_member(int, transmission_bounces);
 
 	/* primitive id if there is one, ~0 otherwise */
 	ccl_soa_member(int, prim);

@@ -67,7 +67,7 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 		}
 
 		/* sample emission */
-		if((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
+		if((pass_filter & BAKE_FILTER_EMISSION) && (sd->runtime_flag & SD_RUNTIME_EMISSION)) {
 			float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf);
 			path_radiance_accum_emission(&L_sample, throughput, emission, state.bounce);
 		}
@@ -76,7 +76,7 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 
 #ifdef __SUBSURFACE__
 		/* sample subsurface scattering */
-		if((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->flag & SD_BSSRDF)) {
+		if((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->runtime_flag & SD_RUNTIME_BSSRDF)) {
 			/* when mixing BSSRDF and BSDF closures we should skip BSDF lighting if scattering was successful */
 			SubsurfaceIndirectRays ss_indirect;
 			kernel_path_subsurface_init_indirect(&ss_indirect);
@@ -146,14 +146,14 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 		}
 
 		/* sample emission */
-		if((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
+		if((pass_filter & BAKE_FILTER_EMISSION) && (sd->runtime_flag & SD_RUNTIME_EMISSION)) {
 			float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf);
 			path_radiance_accum_emission(&L_sample, throughput, emission, state.bounce);
 		}
 
 #ifdef __SUBSURFACE__
 		/* sample subsurface scattering */
-		if((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->flag & SD_BSSRDF)) {
+		if((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->runtime_flag & SD_RUNTIME_BSSRDF)) {
 			/* when mixing BSSRDF and BSDF closures we should skip BSDF lighting if scattering was successful */
 			kernel_branched_path_subsurface_scatter(kg, sd, &indirect_sd,
 				&emission_sd, &L_sample, &state, &rng, &ray, throughput);
@@ -332,7 +332,7 @@ ccl_device void kernel_bake_evaluate(KernelGlobals *kg, ccl_global uint4 *input,
 	                         P, Ng, Ng,
 	                         shader, object, prim,
 	                         u, v, 1.0f, 0.5f,
-	                         !(kernel_tex_fetch(__object_flag, object) & SD_TRANSFORM_APPLIED));
+	                         !(kernel_tex_fetch(__object_flag, object) & SD_OBJECT_TRANSFORM_APPLIED));
 	sd.I = sd.N;
 
 	/* update differentials */
@@ -351,7 +351,7 @@ ccl_device void kernel_bake_evaluate(KernelGlobals *kg, ccl_global uint4 *input,
 		/* data passes */
 		case SHADER_EVAL_NORMAL:
 		{
-			if((sd.flag & SD_HAS_BUMP)) {
+			if ((sd.shader_flag & SD_SHADER_HAS_BUMP)) {
 				shader_eval_surface(kg, &sd, &rng, &state, 0.f, 0, SHADER_CONTEXT_MAIN);
 			}
 

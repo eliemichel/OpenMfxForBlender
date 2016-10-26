@@ -287,7 +287,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 							int flag = kernel_tex_fetch(__shader_flag, (shader & SHADER_MASK)*SHADER_SIZE);
 
 							/* if no transparent shadows, all light is blocked */
-							if(!(flag & SD_HAS_TRANSPARENT_SHADOW)) {
+							if (!(flag & (SD_SHADER_HAS_TRANSPARENT_SHADOW | SD_SHADER_USE_UNIFORM_ALPHA))) {
 								return true;
 							}
 							/* if maximum number of hits reached, block all light */

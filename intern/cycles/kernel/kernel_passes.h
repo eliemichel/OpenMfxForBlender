@@ -75,7 +75,7 @@ ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg, ccl_global fl
 		return;
 	
 	if(!(path_flag & PATH_RAY_SINGLE_PASS_DONE)) {
-		if(!(ccl_fetch(sd, flag) & SD_TRANSPARENT) ||
+		if(!(ccl_fetch(sd, runtime_flag) & SD_RUNTIME_TRANSPARENT) ||
 		   kernel_data.film.pass_alpha_threshold == 0.0f ||
 		   average(shader_bsdf_alpha(kg, sd)) >= kernel_data.film.pass_alpha_threshold)
 		{

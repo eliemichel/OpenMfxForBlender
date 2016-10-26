@@ -167,6 +167,21 @@ Shader::Shader()
 	graph = NULL;
 	graph_bump = NULL;
 
+	use_uniform_alpha = false;
+	self_only = true;
+	ao_alpha = 1.0;
+	shadow_alpha = 1.0;
+
+	override_samples = false;
+	diffuse_samples = 0;
+	glossy_samples = 0;
+	transmission_samples = 0;
+	
+	override_bounces = false;
+	diffuse_bounces = 0;
+	glossy_bounces = 0;
+	transmission_bounces = 0;
+
 	has_surface = false;
 	has_ao_surface = false;
 	has_surface_transparent = false;
@@ -413,54 +428,75 @@ void ShaderManager::device_update_common(Device *device,
 		uint flag = 0;
 
 		if(shader->use_mis)
-			flag |= SD_USE_MIS;
+			flag |= SD_SHADER_USE_MIS;
 		if(shader->has_surface_transparent && shader->use_transparent_shadow)
-			flag |= SD_HAS_TRANSPARENT_SHADOW;
+			flag |= SD_SHADER_HAS_TRANSPARENT_SHADOW;
 		if(shader->has_volume) {
-			flag |= SD_HAS_VOLUME;
+			flag |= SD_SHADER_HAS_VOLUME;
 			has_volumes = true;
 
 			/* in this case we can assume transparent surface */
-			if(!shader->has_surface && !shader->has_ao_surface)
-				flag |= SD_HAS_ONLY_VOLUME;
+			if (!shader->has_surface && !shader->has_ao_surface)
+				flag |= SD_SHADER_HAS_ONLY_VOLUME;
 
 			/* todo: this could check more fine grained, to skip useless volumes
 			 * enclosed inside an opaque bsdf.
 			 */
-			flag |= SD_HAS_TRANSPARENT_SHADOW;
+			flag |= SD_SHADER_HAS_TRANSPARENT_SHADOW;
 		}
 		if(shader->heterogeneous_volume && shader->has_volume_spatial_varying)
-			flag |= SD_HETEROGENEOUS_VOLUME;
+			flag |= SD_SHADER_HETEROGENEOUS_VOLUME;
 		if(shader->has_bssrdf_bump)
-			flag |= SD_HAS_BSSRDF_BUMP;
+			flag |= SD_SHADER_HAS_BSSRDF_BUMP;
 		if(shader->volume_sampling_method == VOLUME_SAMPLING_EQUIANGULAR)
-			flag |= SD_VOLUME_EQUIANGULAR;
+			flag |= SD_SHADER_VOLUME_EQUIANGULAR;
 		if(shader->volume_sampling_method == VOLUME_SAMPLING_MULTIPLE_IMPORTANCE)
-			flag |= SD_VOLUME_MIS;
+			flag |= SD_SHADER_VOLUME_MIS;
 		if(shader->volume_interpolation_method == VOLUME_INTERPOLATION_CUBIC)
-			flag |= SD_VOLUME_CUBIC;
+			flag |= SD_SHADER_VOLUME_CUBIC;
 		if(shader->graph_bump)
-			flag |= SD_HAS_BUMP;
+			flag |= SD_SHADER_HAS_BUMP;
 		if(shader->displacement_method != DISPLACE_BUMP)
-			flag |= SD_HAS_DISPLACEMENT;
+			flag |= SD_SHADER_HAS_DISPLACEMENT;
 
 		/* shader with bump mapping */
 		if(shader->displacement_method != DISPLACE_TRUE && shader->graph_bump)
-			flag |= SD_HAS_BSSRDF_BUMP;
+			flag |= SD_SHADER_HAS_BSSRDF_BUMP;
 
 		/* constant emission check */
 		float3 constant_emission = make_float3(0.0f, 0.0f, 0.0f);
 		if(shader->is_constant_emission(&constant_emission))
-			flag |= SD_HAS_CONSTANT_EMISSION;
+			flag |= SD_SHADER_HAS_CONSTANT_EMISSION;
 
-		/* regular shader */
-		shader_flag[i++] = flag;
-		shader_flag[i++] = shader->pass_id;
-		shader_flag[i++] = __float_as_int(constant_emission.x);
-		shader_flag[i++] = __float_as_int(constant_emission.y);
-		shader_flag[i++] = __float_as_int(constant_emission.z);
+		if(shader->use_uniform_alpha) {
+			flag |= SD_SHADER_USE_UNIFORM_ALPHA;
+			flag |= SD_SHADER_HAS_TRANSPARENT_SHADOW;
+		}
+		if(shader->self_only)
+			flag |= SD_SHADER_USE_UNIFORM_ALPHA_SELF_ONLY;
 
-		has_transparent_shadow |= (flag & SD_HAS_TRANSPARENT_SHADOW) != 0;
+		if(shader->override_samples)
+			flag |= SD_SHADER_OVERRIDE_SAMPLES;
+
+		if(shader->override_bounces)
+			flag |= SD_SHADER_OVERRIDE_BOUNCES;
+
+		/* regular shader */										// Offset
+		shader_flag[i++] = flag;									// 0
+		shader_flag[i++] = shader->pass_id;							// 1
+		shader_flag[i++] = __float_as_uint(shader->ao_alpha);		// 2 
+		shader_flag[i++] = __float_as_uint(shader->shadow_alpha);	// 3
+		shader_flag[i++] = shader->diffuse_samples;					// 4
+		shader_flag[i++] = shader->glossy_samples;					// 5
+		shader_flag[i++] = shader->transmission_samples;			// 6
+		shader_flag[i++] = shader->diffuse_bounces;					// 7
+		shader_flag[i++] = shader->glossy_bounces;					// 8
+		shader_flag[i++] = shader->transmission_bounces;			// 9
+		shader_flag[i++] = __float_as_int(constant_emission.x);		// 10
+		shader_flag[i++] = __float_as_int(constant_emission.y);		// 11
+		shader_flag[i++] = __float_as_int(constant_emission.z);		// 12
+
+		has_transparent_shadow |= (flag & SD_SHADER_HAS_TRANSPARENT_SHADOW) != 0;
 	}
 
 	device->tex_alloc("__shader_flag", dscene->shader_flag);

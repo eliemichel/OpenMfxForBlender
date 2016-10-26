@@ -55,13 +55,15 @@ ccl_device_inline void kernel_branched_path_ao(KernelGlobals *kg,
 			light_ray.dP = ccl_fetch(sd, dP);
 			light_ray.dD = differential3_zero();
 
+			state->flag |= PATH_RAY_AO;
 			ShaderData sd_ao = *sd;
 			shader_setup_from_ao_env(kg, &sd_ao, &light_ray);
 			float3 ao_env = shader_eval_ao_env(kg, &sd_ao, state, 0, SHADER_CONTEXT_MAIN);
 
-            		uint shadow_linking = object_shadow_linking(kg, ccl_fetch(sd, object));
+            uint shadow_linking = object_shadow_linking(kg, ccl_fetch(sd, object));
 			if(!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow, shadow_linking))
 				path_radiance_accum_ao(L, throughput*num_samples_inv, ao_alpha, ao_bsdf * ao_env, ao_shadow, state->bounce);
+			state->flag &= ~PATH_RAY_AO;
 		}
 	}
 }
@@ -83,14 +85,14 @@ ccl_device_noinline void kernel_branched_path_surface_indirect_light(KernelGloba
 
 		int num_samples;
 
-		if(CLOSURE_IS_BSDF_DIFFUSE(sc->type))
-			num_samples = kernel_data.integrator.diffuse_samples;
-		else if(CLOSURE_IS_BSDF_BSSRDF(sc->type))
+		if (CLOSURE_IS_BSDF_DIFFUSE(sc->type))
+			num_samples = (ccl_fetch(sd, shader_flag) & SD_SHADER_OVERRIDE_SAMPLES) ? ccl_fetch(sd, diffuse_samples) : kernel_data.integrator.diffuse_samples;
+		else if (CLOSURE_IS_BSDF_BSSRDF(sc->type))
 			num_samples = 1;
-		else if(CLOSURE_IS_BSDF_GLOSSY(sc->type))
-			num_samples = kernel_data.integrator.glossy_samples;
+		else if (CLOSURE_IS_BSDF_GLOSSY(sc->type))
+			num_samples = (ccl_fetch(sd, shader_flag) & SD_SHADER_OVERRIDE_SAMPLES) ? ccl_fetch(sd, glossy_samples) : kernel_data.integrator.glossy_samples;
 		else
-			num_samples = kernel_data.integrator.transmission_samples;
+			num_samples = (ccl_fetch(sd, shader_flag) & SD_SHADER_OVERRIDE_SAMPLES) ? ccl_fetch(sd, transmission_samples) : kernel_data.integrator.transmission_samples;
 
 		num_samples = ceil_to_int(num_samples_adjust*num_samples);
 
@@ -174,7 +176,7 @@ ccl_device void kernel_branched_path_subsurface_scatter(KernelGlobals *kg,
 #ifdef __VOLUME__
 			Ray volume_ray = *ray;
 			bool need_update_volume_stack = kernel_data.integrator.use_volumes &&
-			                                ccl_fetch(sd, flag) & SD_OBJECT_INTERSECTS_VOLUME;
+			                                ccl_fetch(sd, object_flag) & SD_OBJECT_OBJECT_INTERSECTS_VOLUME;
 #endif
 
 			/* compute lighting with the BSDF closure */
@@ -324,7 +326,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 				&volume_ray, &sd, &volume_segment, heterogeneous);
 
 			/* direct light sampling */
-			if(volume_segment.closure_flag & SD_SCATTER) {
+			if(volume_segment.closure_flag & SD_RUNTIME_SCATTER) {
 				volume_segment.sampling_method = volume_stack_sampling_method(kg, state.volume_stack);
 
 				int all = kernel_data.integrator.sample_all_lights_direct;
@@ -393,7 +395,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 			}
 
 			/* emission and transmittance */
-			if(volume_segment.closure_flag & SD_EMISSION)
+			if(volume_segment.closure_flag & SD_RUNTIME_EMISSION)
 				path_radiance_accum_emission(&L, throughput, volume_segment.accum_emission, state.bounce);
 			throughput *= volume_segment.accum_transmittance;
 
@@ -484,11 +486,11 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 		/* holdout */
 #ifdef __HOLDOUT__
-		if(sd.flag & (SD_HOLDOUT|SD_HOLDOUT_MASK)) {
+		if((sd.runtime_flag & SD_RUNTIME_HOLDOUT) | (sd.object_flag & SD_OBJECT_HOLDOUT_MASK)) {
 			if(kernel_data.background.transparent) {
 				float3 holdout_weight;
 				
-				if(sd.flag & SD_HOLDOUT_MASK)
+				if(sd.object_flag & SD_OBJECT_HOLDOUT_MASK)
 					holdout_weight = make_float3(1.0f, 1.0f, 1.0f);
 				else
 					holdout_weight = shader_holdout_eval(kg, &sd);
@@ -497,7 +499,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 				L_transparent += average(holdout_weight*throughput);
 			}
 
-			if(sd.flag & SD_HOLDOUT_MASK)
+			if(sd.object_flag & SD_OBJECT_HOLDOUT_MASK)
 				break;
 		}
 #endif
@@ -507,7 +509,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 #ifdef __EMISSION__
 		/* emission */
-		if(sd.flag & SD_EMISSION) {
+		if(sd.runtime_flag & SD_RUNTIME_EMISSION) {
 			float3 emission = indirect_primitive_emission(kg, &sd, isect.t, state.flag, state.ray_pdf);
 			path_radiance_accum_emission(&L, throughput, emission, state.bounce);
 		}
@@ -518,7 +520,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 			/* path termination. this is a strange place to put the termination, it's
 			 * mainly due to the mixed in MIS that we use. gives too many unneeded
 			 * shader evaluations, only need emission if we are going to terminate */
-			float probability = path_state_terminate_probability(kg, &state, throughput);
+			float probability = path_state_terminate_probability(kg, &state, &sd, throughput);
 
 			if(probability == 0.0f) {
 				break;
@@ -535,20 +537,20 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 #ifdef __AO__
 		/* ambient occlusion */
-		if(kernel_data.integrator.use_ambient_occlusion || (sd.flag & SD_AO)) {
+		if(kernel_data.integrator.use_ambient_occlusion || (sd.runtime_flag & SD_RUNTIME_AO)) {
 			kernel_branched_path_ao(kg, &sd, &emission_sd, &L, &state, rng, throughput);
 		}
 #endif
 
 #ifdef __SUBSURFACE__
 		/* bssrdf scatter to a different location on the same object */
-		if(sd.flag & SD_BSSRDF) {
+		if(sd.runtime_flag & SD_RUNTIME_BSSRDF) {
 			kernel_branched_path_subsurface_scatter(kg, &sd, &indirect_sd, &emission_sd,
 			                                        &L, &state, rng, &ray, throughput);
 		}
 #endif
 
-		if(!(sd.flag & SD_HAS_ONLY_VOLUME)) {
+		if(!(sd.shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
 			PathState hit_state = state;
 
             uint light_linking = object_light_linking(kg, sd.object);

@@ -100,7 +100,7 @@ ccl_device_inline Transform object_fetch_transform_motion_test(KernelGlobals *kg
 {
 	int object_flag = kernel_tex_fetch(__object_flag, object);
 
-	if(object_flag & SD_OBJECT_MOTION) {
+	if(object_flag & SD_OBJECT_OBJECT_MOTION) {
 		/* if we do motion blur */
 		Transform tfm = object_fetch_transform_motion(kg, object, time);
 

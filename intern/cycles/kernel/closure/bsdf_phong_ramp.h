@@ -63,7 +63,7 @@ ccl_device int bsdf_phong_ramp_setup(PhongRampBsdf *bsdf)
 {
 	bsdf->type = CLOSURE_BSDF_PHONG_RAMP_ID;
 	bsdf->exponent = max(bsdf->exponent, 0.0f);
-	return SD_BSDF|SD_BSDF_HAS_EVAL;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL;
 }
 
 ccl_device float3 bsdf_phong_ramp_eval_reflect(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf)

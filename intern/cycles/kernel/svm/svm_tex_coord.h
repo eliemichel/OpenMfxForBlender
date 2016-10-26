@@ -277,7 +277,7 @@ ccl_device void svm_node_normal_map(KernelGlobals *kg, ShaderData *sd, float *st
 	float3 color = stack_load_float3(stack, color_offset);
 	color = 2.0f*make_float3(color.x - 0.5f, color.y - 0.5f, color.z - 0.5f);
 
-	bool is_backfacing = (ccl_fetch(sd, flag) & SD_BACKFACING) != 0;
+	bool is_backfacing = (ccl_fetch(sd, runtime_flag) & SD_RUNTIME_BACKFACING) != 0;
 	float3 N;
 
 	if(space == NODE_NORMAL_MAP_TANGENT) {

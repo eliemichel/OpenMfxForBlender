@@ -45,7 +45,7 @@ typedef ccl_addr_space struct DiffuseBsdf {
 ccl_device int bsdf_diffuse_setup(DiffuseBsdf *bsdf)
 {
 	bsdf->type = CLOSURE_BSDF_DIFFUSE_ID;
-	return SD_BSDF|SD_BSDF_HAS_EVAL;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL;
 }
 
 ccl_device bool bsdf_diffuse_merge(const ShaderClosure *a, const ShaderClosure *b)
@@ -98,7 +98,7 @@ ccl_device int bsdf_diffuse_sample(const ShaderClosure *sc, float3 Ng, float3 I,
 ccl_device int bsdf_translucent_setup(DiffuseBsdf *bsdf)
 {
 	bsdf->type = CLOSURE_BSDF_TRANSLUCENT_ID;
-	return SD_BSDF|SD_BSDF_HAS_EVAL;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL;
 }
 
 ccl_device float3 bsdf_translucent_eval_reflect(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf)

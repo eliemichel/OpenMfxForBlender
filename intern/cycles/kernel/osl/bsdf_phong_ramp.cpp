@@ -61,7 +61,7 @@ public:
 				for(int i = 0; i < 8; i++)
 					bsdf->colors[i] = TO_FLOAT3(colors[i]);
 
-				sd->flag |= bsdf_phong_ramp_setup(bsdf);
+				sd->runtime_flag |= bsdf_phong_ramp_setup(bsdf);
 			}
 		}
 	}

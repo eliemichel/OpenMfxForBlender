@@ -142,7 +142,7 @@ ccl_device_inline float3 subsurface_scatter_eval(ShaderData *sd,
 /* replace closures with a single diffuse bsdf closure after scatter step */
 ccl_device void subsurface_scatter_setup_diffuse_bsdf(ShaderData *sd, float3 weight, bool hit, float3 N)
 {
-	sd->flag &= ~SD_CLOSURE_FLAGS;
+	sd->runtime_flag &= ~SD_RUNTIME_CLOSURE_FLAGS;
 	sd->randb_closure = 0.0f;
 	sd->num_closure = 0;
 	sd->num_closure_extra = 0;
@@ -152,7 +152,7 @@ ccl_device void subsurface_scatter_setup_diffuse_bsdf(ShaderData *sd, float3 wei
 
 		if(bsdf) {
 			bsdf->N = N;
-			sd->flag |= bsdf_diffuse_setup(bsdf);
+			sd->runtime_flag |= bsdf_diffuse_setup(bsdf);
 
 			/* replace CLOSURE_BSDF_DIFFUSE_ID with this special ID so render passes
 			 * can recognize it as not being a regular diffuse closure */
@@ -195,7 +195,7 @@ ccl_device void subsurface_color_bump_blur(KernelGlobals *kg,
 	float3 out_color = shader_bssrdf_sum(sd, NULL, &texture_blur);
 
 	/* do we have bump mapping? */
-	bool bump = (sd->flag & SD_HAS_BSSRDF_BUMP) != 0;
+	bool bump = (sd->shader_flag & SD_SHADER_HAS_BSSRDF_BUMP) != 0;
 
 	if(bump || texture_blur > 0.0f) {
 		/* average color and normal at incoming point */

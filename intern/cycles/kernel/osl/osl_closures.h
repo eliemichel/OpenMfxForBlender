@@ -113,7 +113,7 @@ public: \
 	{ \
 	    if(!skip(sd, path_flag, TYPE)) { \
 			structname *bsdf = (structname*)bsdf_alloc_osl(sd, sizeof(structname), weight, &params); \
-			sd->flag |= (bsdf) ? bsdf_##lower##_setup(bsdf) : 0; \
+			sd->runtime_flag |= (bsdf) ? bsdf_##lower##_setup(bsdf) : 0; \
 		} \
 	} \
 }; \
@@ -144,7 +144,7 @@ public: \
 	void setup(ShaderData *sd, int path_flag, float3 weight) \
 	{ \
 	    structname *volume = (structname*)bsdf_alloc_osl(sd, sizeof(structname), weight, &params); \
-		sd->flag |= (volume) ? volume_##lower##_setup(volume) : 0; \
+		sd->runtime_flag |= (volume) ? volume_##lower##_setup(volume) : 0; \
 	} \
 }; \
 \

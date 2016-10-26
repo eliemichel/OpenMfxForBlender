@@ -115,7 +115,7 @@ static void shaderdata_to_shaderglobals(KernelGlobals *kg, ShaderData *sd, PathS
 
 	/* booleans */
 	globals->raytype = path_flag;
-	globals->backfacing = (sd->flag & SD_BACKFACING);
+	globals->backfacing = (sd->runtime_flag & SD_RUNTIME_BACKFACING);
 
 	/* shader data to be used in services callbacks */
 	globals->renderstate = sd; 
@@ -192,7 +192,7 @@ void OSLShader::eval_surface(KernelGlobals *kg, ShaderData *sd, PathState *state
 		float3 dPdy = sd->dP.dy;
 
 		/* set state as if undisplaced */
-		if(sd->flag & SD_HAS_DISPLACEMENT) {
+		if (sd->shader_flag & SD_SHADER_HAS_DISPLACEMENT) {
 			float data[9];
 			bool found = kg->osl->services->get_attribute(sd, true, OSLRenderServices::u_empty, TypeDesc::TypeVector,
 			                                              OSLRenderServices::u_geom_undisplaced, data);

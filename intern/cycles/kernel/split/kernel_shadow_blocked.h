@@ -71,10 +71,10 @@ ccl_device void kernel_shadow_blocked(
 
 		float3 shadow;
 		update_path_radiance = !(shadow_blocked(kg,
-		                                        kg->sd_input,
-		                                        state,
-		                                        light_ray_global,
-		                                        &shadow));
+			kg->sd_input,
+			state,
+			light_ray_global,
+			&shadow));
 
 		/* We use light_ray_global's P and t to store shadow and
 		 * update_path_radiance.
