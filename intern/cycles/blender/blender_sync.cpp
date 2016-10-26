@@ -203,7 +203,6 @@ void BlenderSync::sync_data(BL::RenderSettings& b_render,
 	sync_shaders();
 	sync_images();
 	sync_curve_settings();
-    sync_light_linking();
     
 	mesh_synced.clear(); /* use for objects and motion sync */
 
@@ -220,6 +219,8 @@ void BlenderSync::sync_data(BL::RenderSettings& b_render,
 	            python_thread_state);
 
 	mesh_synced.clear();
+
+	sync_light_linking();
 }
 
 /* Integrator */
