@@ -142,7 +142,7 @@ ccl_device_inline float3 subsurface_scatter_eval(ShaderData *sd,
 /* replace closures with a single diffuse bsdf closure after scatter step */
 ccl_device void subsurface_scatter_setup_diffuse_bsdf(ShaderData *sd, float3 weight, bool hit, float3 N)
 {
-	sd->flag &= ~SD_CLOSURE_FLAGS;
+	sd->runtime_flag &= ~SD_RUNTIME_CLOSURE_FLAGS;
 	sd->randb_closure = 0.0f;
 	sd->num_closure = 0;
 	sd->num_closure_extra = 0;
@@ -152,7 +152,7 @@ ccl_device void subsurface_scatter_setup_diffuse_bsdf(ShaderData *sd, float3 wei
 
 		if(bsdf) {
 			bsdf->N = N;
-			sd->flag |= bsdf_diffuse_setup(bsdf);
+			sd->runtime_flag |= bsdf_diffuse_setup(bsdf);
 
 			/* replace CLOSURE_BSDF_DIFFUSE_ID with this special ID so render passes
 			 * can recognize it as not being a regular diffuse closure */
@@ -195,7 +195,7 @@ ccl_device void subsurface_color_bump_blur(KernelGlobals *kg,
 	float3 out_color = shader_bssrdf_sum(sd, NULL, &texture_blur);
 
 	/* do we have bump mapping? */
-	bool bump = (sd->flag & SD_HAS_BSSRDF_BUMP) != 0;
+	bool bump = (sd->shader_flag & SD_SHADER_HAS_BSSRDF_BUMP) != 0;
 
 	if(bump || texture_blur > 0.0f) {
 		/* average color and normal at incoming point */
@@ -292,7 +292,8 @@ ccl_device_inline int subsurface_scatter_multi_intersect(
 	                           ss_isect,
 	                           sd->object,
 	                           lcg_state,
-	                           BSSRDF_MAX_HITS);
+	                           BSSRDF_MAX_HITS,
+                               0x00000000 /*TODO: What goes here*/);
 	int num_eval_hits = min(ss_isect->num_hits, BSSRDF_MAX_HITS);
 
 	for(int hit = 0; hit < num_eval_hits; hit++) {
@@ -432,7 +433,7 @@ ccl_device void subsurface_scatter_step(KernelGlobals *kg, ShaderData *sd, PathS
 	/* intersect with the same object. if multiple intersections are
 	 * found it will randomly pick one of them */
 	SubsurfaceIntersection ss_isect;
-	scene_intersect_subsurface(kg, &ray, &ss_isect, sd->object, lcg_state, 1);
+	scene_intersect_subsurface(kg, &ray, &ss_isect, sd->object, lcg_state, 1, 0x00000000 /*TODO: What goes here*/);
 
 	/* evaluate bssrdf */
 	if(ss_isect.num_hits > 0) {

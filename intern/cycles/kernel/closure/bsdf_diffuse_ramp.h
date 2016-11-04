@@ -61,7 +61,7 @@ ccl_device float3 bsdf_diffuse_ramp_get_color(const float3 colors[8], float pos)
 ccl_device int bsdf_diffuse_ramp_setup(DiffuseRampBsdf *bsdf)
 {
 	bsdf->type = CLOSURE_BSDF_DIFFUSE_RAMP_ID;
-	return SD_BSDF|SD_BSDF_HAS_EVAL;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL;
 }
 
 ccl_device void bsdf_diffuse_ramp_blur(ShaderClosure *sc, float roughness)

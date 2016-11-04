@@ -42,6 +42,7 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
                                              float difl,
                                              float extmax
 #endif
+                                             ,uint shadow_linking
                                              )
 {
 	/* TODO(sergey):
@@ -329,6 +330,10 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 							for(; prim_addr < prim_addr2; prim_addr++) {
 								BVH_DEBUG_NEXT_STEP();
 								kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+
+                                if (!object_in_shadow_linking(kg,visibility,object,prim_addr,shadow_linking))
+                                    continue;
+
 								if(triangle_intersect(kg,
 								                      &isect_precalc,
 								                      isect,
@@ -350,6 +355,10 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 							for(; prim_addr < prim_addr2; prim_addr++) {
 								BVH_DEBUG_NEXT_STEP();
 								kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+
+                                if (!object_in_shadow_linking(kg,visibility,object,prim_addr,shadow_linking))
+                                    continue;
+
 								if(motion_triangle_intersect(kg,
 								                             isect,
 								                             P,
@@ -374,6 +383,10 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 							for(; prim_addr < prim_addr2; prim_addr++) {
 								BVH_DEBUG_NEXT_STEP();
 								kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+
+                                if (!object_in_shadow_linking(kg,visibility,object,prim_addr,shadow_linking))
+                                    continue;
+
 								bool hit;
 								if(kernel_data.curve.curveflags & CURVE_KN_INTERPOLATE) {
 									hit = bvh_cardinal_curve_intersect(kg,

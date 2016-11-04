@@ -46,7 +46,8 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
                                  const Ray *ray,
                                  Intersection *isect_array,
                                  const uint max_hits,
-                                 uint *num_hits)
+                                 uint *num_hits,
+                                 uint shadow_linking)
 {
 	/* todo:
 	 * - likely and unlikely for if() statements
@@ -189,6 +190,11 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 					while(prim_addr < prim_addr2) {
 						kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
 
+                        if (!object_in_shadow_linking(kg,PATH_RAY_ALL_VISIBILITY,object,prim_addr,shadow_linking)) {
+                            prim_addr++;
+                            continue;
+                        }
+
 						bool hit;
 
 						/* todo: specialized intersect functions which don't fill in
@@ -281,7 +287,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 							int flag = kernel_tex_fetch(__shader_flag, (shader & SHADER_MASK)*SHADER_SIZE);
 
 							/* if no transparent shadows, all light is blocked */
-							if(!(flag & SD_HAS_TRANSPARENT_SHADOW)) {
+							if (!(flag & (SD_SHADER_HAS_TRANSPARENT_SHADOW | SD_SHADER_USE_UNIFORM_ALPHA))) {
 								return true;
 							}
 							/* if maximum number of hits reached, block all light */
@@ -400,7 +406,8 @@ ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
                                          const Ray *ray,
                                          Intersection *isect_array,
                                          const uint max_hits,
-                                         uint *num_hits)
+                                         uint *num_hits,
+                                         uint shadow_linking)
 {
 #ifdef __QBVH__
 	if(kernel_data.bvh.use_qbvh) {
@@ -408,7 +415,8 @@ ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
 		                                    ray,
 		                                    isect_array,
 		                                    max_hits,
-		                                    num_hits);
+		                                    num_hits,
+                                            shadow_linking);
 	}
 	else
 #endif
@@ -418,7 +426,8 @@ ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
 		                                   ray,
 		                                   isect_array,
 		                                   max_hits,
-		                                   num_hits);
+		                                   num_hits,
+                                           shadow_linking);
 	}
 }
 

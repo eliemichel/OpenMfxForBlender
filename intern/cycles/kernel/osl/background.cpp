@@ -69,7 +69,7 @@ public:
 	void setup(ShaderData *sd, int /* path_flag */, float3 weight)
 	{
 		closure_alloc(sd, sizeof(ShaderClosure), CLOSURE_HOLDOUT_ID, weight);
-		sd->flag |= SD_HOLDOUT;
+		sd->runtime_flag |= SD_RUNTIME_HOLDOUT;
 	}
 };
 
@@ -84,7 +84,7 @@ public:
 	void setup(ShaderData *sd, int /* path_flag */, float3 weight)
 	{
 		closure_alloc(sd, sizeof(ShaderClosure), CLOSURE_AMBIENT_OCCLUSION_ID, weight);
-		sd->flag |= SD_AO;
+		sd->runtime_flag |= SD_RUNTIME_AO;
 	}
 };
 

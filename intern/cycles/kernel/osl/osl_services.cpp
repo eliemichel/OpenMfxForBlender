@@ -686,7 +686,7 @@ bool OSLRenderServices::get_object_standard_attribute(KernelGlobals *kg, ShaderD
 		else
 			motion_triangle_vertices(kg, sd->object, sd->prim, sd->time, P);
 
-		if(!(sd->flag & SD_TRANSFORM_APPLIED)) {
+		if(!(sd->object_flag & SD_OBJECT_TRANSFORM_APPLIED)) {
 			object_position_transform(kg, sd, &P[0]);
 			object_position_transform(kg, sd, &P[1]);
 			object_position_transform(kg, sd, &P[2]);
@@ -1153,7 +1153,7 @@ bool OSLRenderServices::trace(TraceOpt &options, OSL::ShaderGlobals *sg,
 	tracedata->sd.osl_globals = sd->osl_globals;
 
 	/* raytrace */
-	return scene_intersect(sd->osl_globals, ray, PATH_RAY_ALL_VISIBILITY, &tracedata->isect, NULL, 0.0f, 0.0f);
+	return scene_intersect(sd->osl_globals, ray, PATH_RAY_ALL_VISIBILITY, &tracedata->isect, NULL, 0.0f, 0.0f, 0x00000000/*TODO: what goes here*/);
 }
 
 

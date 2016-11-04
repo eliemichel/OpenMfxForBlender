@@ -40,7 +40,7 @@ CCL_NAMESPACE_BEGIN
 ccl_device int bsdf_refraction_setup(MicrofacetBsdf *bsdf)
 {
 	bsdf->type = CLOSURE_BSDF_REFRACTION_ID;
-	return SD_BSDF;
+	return SD_RUNTIME_BSDF;
 }
 
 ccl_device float3 bsdf_refraction_eval_reflect(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf)

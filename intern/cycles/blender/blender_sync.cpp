@@ -203,7 +203,7 @@ void BlenderSync::sync_data(BL::RenderSettings& b_render,
 	sync_shaders();
 	sync_images();
 	sync_curve_settings();
-
+    
 	mesh_synced.clear(); /* use for objects and motion sync */
 
 	if(scene->need_motion() == Scene::MOTION_PASS ||
@@ -219,6 +219,8 @@ void BlenderSync::sync_data(BL::RenderSettings& b_render,
 	            python_thread_state);
 
 	mesh_synced.clear();
+
+	sync_light_linking();
 }
 
 /* Integrator */

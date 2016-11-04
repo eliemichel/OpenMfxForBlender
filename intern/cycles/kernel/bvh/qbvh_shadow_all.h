@@ -34,7 +34,8 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
                                              const Ray *ray,
                                              Intersection *isect_array,
                                              const uint max_hits,
-                                             uint *num_hits)
+                                             uint *num_hits,
+                                             uint shadow_linking)
 {
 	/* TODO(sergey):
 	*  - Test if pushing distance on the stack helps.
@@ -265,6 +266,9 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 					while(prim_addr < prim_addr2) {
 						kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
 
+                        if (!object_in_shadow_linking(kg,PATH_RAY_ALL_VISIBILITY,object,prim_addr,shadow_linking))
+                            continue;
+
 						bool hit;
 
 						/* todo: specialized intersect functions which don't fill in
@@ -357,7 +361,7 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 							int flag = kernel_tex_fetch(__shader_flag, (shader & SHADER_MASK)*SHADER_SIZE);
 
 							/* if no transparent shadows, all light is blocked */
-							if(!(flag & SD_HAS_TRANSPARENT_SHADOW)) {
+							if (!(flag & (SD_SHADER_HAS_TRANSPARENT_SHADOW | SD_SHADER_USE_UNIFORM_ALPHA))) {
 								return true;
 							}
 							/* if maximum number of hits reached, block all light */

@@ -62,6 +62,11 @@ Object::Object()
 	motion.mid = transform_empty();
 	motion.post = transform_empty();
 	use_motion = false;
+
+    light_linking = 0;
+    light_linking_prev = 0;
+    shadow_linking = 0;
+    shadow_linking_prev = 0;
 }
 
 Object::~Object()
@@ -375,7 +380,7 @@ void ObjectManager::device_update_object_transform(UpdateObejctTransformState *s
 			mtfm.post = mtfm.post * itfm;
 		}
 		else {
-			flag |= SD_OBJECT_HAS_VERTEX_MOTION;
+			flag |= SD_OBJECT_OBJECT_HAS_VERTEX_MOTION;
 		}
 
 		memcpy(&objects_vector[object_index*OBJECT_VECTOR_SIZE+0], &mtfm.pre, sizeof(float4)*3);
@@ -389,7 +394,7 @@ void ObjectManager::device_update_object_transform(UpdateObejctTransformState *s
 
 			transform_motion_decompose(&decomp, &ob->motion, &ob->tfm);
 			memcpy(&objects[offset], &decomp, sizeof(float4)*8);
-			flag |= SD_OBJECT_MOTION;
+			flag |= SD_OBJECT_OBJECT_MOTION;
 			state->have_motion = true;
 		}
 	}
@@ -407,10 +412,11 @@ void ObjectManager::device_update_object_transform(UpdateObejctTransformState *s
 
 	objects[offset+9] = make_float4(ob->dupli_generated[0], ob->dupli_generated[1], ob->dupli_generated[2], __int_as_float(numkeys));
 	objects[offset+10] = make_float4(ob->dupli_uv[0], ob->dupli_uv[1], __int_as_float(numsteps), __int_as_float(numverts));
+    objects[offset+11] = make_float4(__uint_as_float(ob->light_linking), __uint_as_float(ob->shadow_linking), 0.0f, 0.0f);
 
 	/* Object flag. */
 	if(ob->use_holdout) {
-		flag |= SD_HOLDOUT_MASK;
+		flag |= SD_OBJECT_HOLDOUT_MASK;
 	}
 	state->object_flag[object_index] = flag;
 
@@ -592,10 +598,10 @@ void ObjectManager::device_update_flags(Device *device,
 	int object_index = 0;
 	foreach(Object *object, scene->objects) {
 		if(object->mesh->has_volume) {
-			object_flag[object_index] |= SD_OBJECT_HAS_VOLUME;
+			object_flag[object_index] |= SD_OBJECT_OBJECT_HAS_VOLUME;
 		}
 		else {
-			object_flag[object_index] &= ~SD_OBJECT_HAS_VOLUME;
+			object_flag[object_index] &= ~SD_OBJECT_OBJECT_HAS_VOLUME;
 		}
 
 		if(bounds_valid) {
@@ -604,7 +610,7 @@ void ObjectManager::device_update_flags(Device *device,
 					continue;
 				}
 				if(object->bounds.intersects(volume_object->bounds)) {
-					object_flag[object_index] |= SD_OBJECT_INTERSECTS_VOLUME;
+					object_flag[object_index] |= SD_OBJECT_OBJECT_INTERSECTS_VOLUME;
 					break;
 				}
 			}
@@ -613,7 +619,7 @@ void ObjectManager::device_update_flags(Device *device,
 			/* Not really valid, but can't make more reliable in the case
 			 * of bounds not being up to date.
 			 */
-			object_flag[object_index] |= SD_OBJECT_INTERSECTS_VOLUME;
+			object_flag[object_index] |= SD_OBJECT_OBJECT_INTERSECTS_VOLUME;
 		}
 		++object_index;
 	}
@@ -715,9 +721,9 @@ void ObjectManager::apply_static_transforms(DeviceScene *dscene, Scene *scene, u
 					if(progress.get_cancel()) return;
 				}
 
-				object_flag[i] |= SD_TRANSFORM_APPLIED;
+				object_flag[i] |= SD_OBJECT_TRANSFORM_APPLIED;
 				if(object->mesh->transform_negative_scaled)
-					object_flag[i] |= SD_NEGATIVE_SCALE_APPLIED;
+					object_flag[i] |= SD_OBJECT_NEGATIVE_SCALE_APPLIED;
 			}
 			else
 				have_instancing = true;

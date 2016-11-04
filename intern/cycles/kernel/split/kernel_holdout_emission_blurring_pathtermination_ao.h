@@ -199,7 +199,7 @@ ccl_device void kernel_holdout_emission_blurring_pathtermination_ao(
 		 * mainly due to the mixed in MIS that we use. gives too many unneeded
 		 * shader evaluations, only need emission if we are going to terminate.
 		 */
-		float probability = path_state_terminate_probability(kg, state, throughput);
+		float probability = path_state_terminate_probability(kg, state, sd, throughput);
 
 		if(probability == 0.0f) {
 			ASSIGN_RAY_STATE(ray_state, ray_index, RAY_UPDATE_BUFFER);

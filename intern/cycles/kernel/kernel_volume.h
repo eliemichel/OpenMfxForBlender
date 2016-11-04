@@ -45,7 +45,7 @@ ccl_device_inline bool volume_shader_extinction_sample(KernelGlobals *kg,
 	sd->P = P;
 	shader_eval_volume(kg, sd, state, state->volume_stack, PATH_RAY_SHADOW, SHADER_CONTEXT_SHADOW);
 
-	if(!(sd->flag & (SD_ABSORPTION|SD_SCATTER)))
+	if(!(sd->runtime_flag & (SD_RUNTIME_ABSORPTION|SD_RUNTIME_SCATTER)))
 		return false;
 
 	float3 sigma_t = make_float3(0.0f, 0.0f, 0.0f);
@@ -71,7 +71,7 @@ ccl_device_inline bool volume_shader_sample(KernelGlobals *kg,
 	sd->P = P;
 	shader_eval_volume(kg, sd, state, state->volume_stack, state->flag, SHADER_CONTEXT_VOLUME);
 
-	if(!(sd->flag & (SD_ABSORPTION|SD_SCATTER|SD_EMISSION)))
+	if (!(sd->shader_flag & (SD_RUNTIME_ABSORPTION | SD_RUNTIME_SCATTER | SD_RUNTIME_EMISSION)))
 		return false;
 	
 	coeff->sigma_a = make_float3(0.0f, 0.0f, 0.0f);
@@ -90,12 +90,12 @@ ccl_device_inline bool volume_shader_sample(KernelGlobals *kg,
 	}
 
 	/* when at the max number of bounces, treat scattering as absorption */
-	if(sd->flag & SD_SCATTER) {
+	if (sd->runtime_flag & SD_RUNTIME_SCATTER) {
 		if(state->volume_bounce >= kernel_data.integrator.max_volume_bounce) {
 			coeff->sigma_a += coeff->sigma_s;
 			coeff->sigma_s = make_float3(0.0f, 0.0f, 0.0f);
-			sd->flag &= ~SD_SCATTER;
-			sd->flag |= SD_ABSORPTION;
+			sd->runtime_flag &= ~SD_RUNTIME_SCATTER;
+			sd->runtime_flag |= SD_RUNTIME_ABSORPTION;
 		}
 	}
 
@@ -117,7 +117,7 @@ ccl_device bool volume_stack_is_heterogeneous(KernelGlobals *kg, VolumeStack *st
 	for(int i = 0; stack[i].shader != SHADER_NONE; i++) {
 		int shader_flag = kernel_tex_fetch(__shader_flag, (stack[i].shader & SHADER_MASK)*SHADER_SIZE);
 
-		if(shader_flag & SD_HETEROGENEOUS_VOLUME)
+		if (shader_flag & SD_SHADER_HETEROGENEOUS_VOLUME)
 			return true;
 	}
 
@@ -134,18 +134,18 @@ ccl_device int volume_stack_sampling_method(KernelGlobals *kg, VolumeStack *stac
 	for(int i = 0; stack[i].shader != SHADER_NONE; i++) {
 		int shader_flag = kernel_tex_fetch(__shader_flag, (stack[i].shader & SHADER_MASK)*SHADER_SIZE);
 
-		if(shader_flag & SD_VOLUME_MIS) {
-			return SD_VOLUME_MIS;
+		if (shader_flag & SD_SHADER_VOLUME_MIS) {
+			return SD_SHADER_VOLUME_MIS;
 		}
-		else if(shader_flag & SD_VOLUME_EQUIANGULAR) {
+		else if (shader_flag & SD_SHADER_VOLUME_EQUIANGULAR) {
 			if(method == 0)
-				return SD_VOLUME_MIS;
+				return SD_SHADER_VOLUME_MIS;
 
-			method = SD_VOLUME_EQUIANGULAR;
+			method = SD_SHADER_VOLUME_EQUIANGULAR;
 		}
 		else {
-			if(method == SD_VOLUME_EQUIANGULAR)
-				return SD_VOLUME_MIS;
+			if (method == SD_SHADER_VOLUME_EQUIANGULAR)
+				return SD_SHADER_VOLUME_MIS;
 
 			method = 0;
 		}
@@ -311,7 +311,7 @@ ccl_device float3 kernel_volume_emission_integrate(VolumeShaderCoefficients *coe
 	 * todo: we should use an epsilon to avoid precision issues near zero sigma_t */
 	float3 emission = coeff->emission;
 
-	if(closure_flag & SD_ABSORPTION) {
+	if(closure_flag & SD_RUNTIME_ABSORPTION) {
 		float3 sigma_t = coeff->sigma_a + coeff->sigma_s;
 
 		emission.x *= (sigma_t.x > 0.0f)? (1.0f - transmittance.x)/sigma_t.x: t;
@@ -337,13 +337,13 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_homogeneous(KernelGloba
 	if(!volume_shader_sample(kg, sd, state, ray->P, &coeff))
 		return VOLUME_PATH_MISSED;
 
-	int closure_flag = sd->flag;
+	int closure_flag = sd->runtime_flag;
 	float t = ray->t;
 	float3 new_tp;
 
 #ifdef __VOLUME_SCATTER__
 	/* randomly scatter, and if we do t is shortened */
-	if(closure_flag & SD_SCATTER) {
+	if(closure_flag & SD_RUNTIME_SCATTER) {
 		/* extinction coefficient */
 		float3 sigma_t = coeff.sigma_a + coeff.sigma_s;
 
@@ -397,14 +397,14 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_homogeneous(KernelGloba
 	}
 	else 
 #endif
-	if(closure_flag & SD_ABSORPTION) {
+	if(closure_flag & SD_RUNTIME_ABSORPTION) {
 		/* absorption only, no sampling needed */
 		float3 transmittance = volume_color_transmittance(coeff.sigma_a, t);
 		new_tp = *throughput * transmittance;
 	}
 
 	/* integrate emission attenuated by extinction */
-	if(L && (closure_flag & SD_EMISSION)) {
+	if(L && (closure_flag & SD_RUNTIME_EMISSION)) {
 		float3 sigma_t = coeff.sigma_a + coeff.sigma_s;
 		float3 transmittance = volume_color_transmittance(sigma_t, ray->t);
 		float3 emission = kernel_volume_emission_integrate(&coeff, closure_flag, transmittance, ray->t);
@@ -412,7 +412,7 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_homogeneous(KernelGloba
 	}
 
 	/* modify throughput */
-	if(closure_flag & (SD_ABSORPTION|SD_SCATTER)) {
+	if (closure_flag & (SD_RUNTIME_ABSORPTION | SD_RUNTIME_SCATTER)) {
 		*throughput = new_tp;
 
 		/* prepare to scatter to new direction */
@@ -468,14 +468,14 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_heterogeneous_distance(
 
 		/* compute segment */
 		if(volume_shader_sample(kg, sd, state, new_P, &coeff)) {
-			int closure_flag = sd->flag;
+			int closure_flag = sd->runtime_flag;
 			float3 new_tp;
 			float3 transmittance;
 			bool scatter = false;
 
 			/* distance sampling */
 #ifdef __VOLUME_SCATTER__
-			if((closure_flag & SD_SCATTER) || (has_scatter && (closure_flag & SD_ABSORPTION))) {
+			if ((closure_flag & SD_RUNTIME_SCATTER) || (has_scatter && (closure_flag & SD_RUNTIME_ABSORPTION))) {
 				has_scatter = true;
 
 				float3 sigma_t = coeff.sigma_a + coeff.sigma_s;
@@ -512,7 +512,7 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_heterogeneous_distance(
 			}
 			else 
 #endif
-			if(closure_flag & SD_ABSORPTION) {
+				if (closure_flag & SD_RUNTIME_ABSORPTION) {
 				/* absorption only, no sampling needed */
 				float3 sigma_a = coeff.sigma_a;
 
@@ -521,13 +521,13 @@ ccl_device VolumeIntegrateResult kernel_volume_integrate_heterogeneous_distance(
 			}
 
 			/* integrate emission attenuated by absorption */
-			if(L && (closure_flag & SD_EMISSION)) {
+			if (L && (closure_flag & SD_RUNTIME_EMISSION)) {
 				float3 emission = kernel_volume_emission_integrate(&coeff, closure_flag, transmittance, dt);
 				path_radiance_accum_emission(L, tp, emission, state->bounce);
 			}
 
 			/* modify throughput */
-			if(closure_flag & (SD_ABSORPTION|SD_SCATTER)) {
+			if (closure_flag & (SD_RUNTIME_ABSORPTION | SD_RUNTIME_SCATTER)) {
 				tp = new_tp;
 
 				/* stop if nearly all light blocked */
@@ -698,14 +698,14 @@ ccl_device void kernel_volume_decoupled_record(KernelGlobals *kg, PathState *sta
 
 		/* compute segment */
 		if(volume_shader_sample(kg, sd, state, new_P, &coeff)) {
-			int closure_flag = sd->flag;
+			int closure_flag = sd->runtime_flag;
 			float3 sigma_t = coeff.sigma_a + coeff.sigma_s;
 
 			/* compute accumulated transmittance */
 			float3 transmittance = volume_color_transmittance(sigma_t, dt);
 
 			/* compute emission attenuated by absorption */
-			if(closure_flag & SD_EMISSION) {
+			if (closure_flag & SD_RUNTIME_EMISSION) {
 				float3 emission = kernel_volume_emission_integrate(&coeff, closure_flag, transmittance, dt);
 				accum_emission += accum_transmittance * emission;
 			}
@@ -829,7 +829,7 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(
 	bool use_mis = false;
 
 	if(segment->sampling_method && light_P) {
-		if(segment->sampling_method == SD_VOLUME_MIS) {
+		if(segment->sampling_method == SD_SHADER_VOLUME_MIS) {
 			/* multiple importance sample: randomly pick between
 			 * equiangular and distance sampling strategy */
 			if(xi < 0.5f) {
@@ -1046,7 +1046,8 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
 	                                           &volume_ray,
 	                                           hits,
 	                                           2*VOLUME_STACK_SIZE,
-	                                           visibility);
+	                                           visibility,
+                                               0x00000000/*TODO:shadow_linking*/);
 	if(num_hits > 0) {
 		int enclosed_volumes[VOLUME_STACK_SIZE];
 		Intersection *isect = hits;
@@ -1055,7 +1056,7 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
 
 		for(uint hit = 0; hit < num_hits; ++hit, ++isect) {
 			shader_setup_from_ray(kg, stack_sd, isect, &volume_ray);
-			if(stack_sd->flag & SD_BACKFACING) {
+			if(stack_sd->runtime_flag & SD_RUNTIME_BACKFACING) {
 				bool need_add = true;
 				for(int i = 0; i < enclosed_index && need_add; ++i) {
 					/* If ray exited the volume and never entered to that volume
@@ -1095,7 +1096,7 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
 	      step < 2 * VOLUME_STACK_SIZE)
 	{
 		Intersection isect;
-		if(!scene_intersect_volume(kg, &volume_ray, &isect, visibility)) {
+		if(!scene_intersect_volume(kg, &volume_ray, &isect, visibility, 0x00000000/*TODO:shadow_linking*/)) {
 			break;
 		}
 
@@ -1161,10 +1162,10 @@ ccl_device void kernel_volume_stack_enter_exit(KernelGlobals *kg, ShaderData *sd
 	 * world shader to work inside them. excluding it by default is problematic
 	 * because non-volume objects can't be assumed to be closed manifolds */
 
-	if(!(sd->flag & SD_HAS_VOLUME))
+	if(!(sd->shader_flag & SD_SHADER_HAS_VOLUME))
 		return;
 	
-	if(sd->flag & SD_BACKFACING) {
+	if(sd->runtime_flag & SD_RUNTIME_BACKFACING) {
 		/* exit volume object: remove from stack */
 		for(int i = 0; stack[i].shader != SHADER_NONE; i++) {
 			if(stack[i].object == sd->object) {
@@ -1216,7 +1217,8 @@ ccl_device void kernel_volume_stack_update_for_subsurface(KernelGlobals *kg,
 	                                           &volume_ray,
 	                                           hits,
 	                                           2*VOLUME_STACK_SIZE,
-	                                           PATH_RAY_ALL_VISIBILITY);
+	                                           PATH_RAY_ALL_VISIBILITY,
+                                               0x00000000/*TODO:shadow_linking*/);
 	if(num_hits > 0) {
 		Intersection *isect = hits;
 
@@ -1235,7 +1237,8 @@ ccl_device void kernel_volume_stack_update_for_subsurface(KernelGlobals *kg,
 	      scene_intersect_volume(kg,
 	                             &volume_ray,
 	                             &isect,
-	                             PATH_RAY_ALL_VISIBILITY))
+	                             PATH_RAY_ALL_VISIBILITY,
+                                 0x00000000/*TODO:shadow_linking*/))
 	{
 		shader_setup_from_ray(kg, stack_sd, &isect, &volume_ray);
 		kernel_volume_stack_enter_exit(kg, stack_sd, stack);

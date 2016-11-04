@@ -51,7 +51,7 @@ ccl_device int bsdf_diffuse_toon_setup(ToonBsdf *bsdf)
 	bsdf->size = saturate(bsdf->size);
 	bsdf->smooth = saturate(bsdf->smooth);
 
-	return SD_BSDF|SD_BSDF_HAS_EVAL;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL;
 }
 
 ccl_device bool bsdf_toon_merge(const ShaderClosure *a, const ShaderClosure *b)
@@ -143,7 +143,7 @@ ccl_device int bsdf_glossy_toon_setup(ToonBsdf *bsdf)
 	bsdf->size = saturate(bsdf->size);
 	bsdf->smooth = saturate(bsdf->smooth);
 
-	return SD_BSDF|SD_BSDF_HAS_EVAL;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL;
 }
 
 ccl_device float3 bsdf_glossy_toon_eval_reflect(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf)

@@ -770,6 +770,20 @@ class CyclesMaterialSettings(bpy.types.PropertyGroup):
                 default='MULTIPLE_IMPORTANCE',
                 )
 
+        cls.ao_factor = FloatProperty(
+                name="Factor",
+                description="",
+                min=0.0, max=1.0,
+                default=1.0,
+                )
+
+        cls.shadow_factor = FloatProperty(
+                name="Shadow Factor",
+                description="",
+                min=0.0, max=1.0,
+                default=1.0,
+                )
+
         cls.volume_interpolation = EnumProperty(
                 name="Volume Interpolation",
                 description="Interpolation method to use for smoke/fire volumes",
@@ -777,11 +791,84 @@ class CyclesMaterialSettings(bpy.types.PropertyGroup):
                 default='LINEAR',
                 )
 
+        cls.use_uniform_alpha = BoolProperty(
+                name="Use Uniform Alpha",
+                description="Assumes a constant alpha when tracing instead of evaluating shaders. Requires transparent shadows turned on",
+                default=False,
+                )
+
+        cls.self_only = BoolProperty(
+                name="Self Only",
+                description="Uses constant alphas only when self shadowing and self ao",
+                default=True,
+                )
+
+        cls.ao_alpha = FloatProperty(
+                name="AO Alpha",
+                description="",
+                min=0.0, max=1.0,
+                default=1.0,
+                )
+
+        cls.shadow_alpha = FloatProperty(
+                name="Shadow Aplha",
+                description="",
+                min=0.0, max=1.0,
+                default=1.0,
+                )
+
         cls.displacement_method = EnumProperty(
                 name="Displacement Method",
                 description="Method to use for the displacement",
                 items=enum_displacement_methods,
                 default='BUMP',
+                )
+
+        cls.override_samples = BoolProperty(
+                name="Override Samples",
+                description="Override of sampling settings for this material",
+                default=False,
+                )
+        cls.diffuse_samples = IntProperty(
+                name="Diffuse Samples",
+                description="Max number of Diffuse Samples",
+                min=0, max=1024,
+                default=8,
+                )
+        cls.glossy_samples = IntProperty(
+                name="Glossy Samples",
+                description="Max number of Glossy Samples",
+                min=0, max=1024,
+                default=8,
+                )
+        cls.transmission_samples = IntProperty(
+                name="Transmission Samples",
+                description="Max number of Transmission Samples",
+                min=0, max=1024,
+                default=8,
+                )
+        cls.override_bounces = BoolProperty(
+                name="Override Light Paths",
+                description="Override of light paths settings for this material",
+                default=False,
+                )
+        cls.diffuse_bounces = IntProperty(
+                name="Diffuse Bounces",
+                description="Max number of Diffuse Bounces",
+                min=0, max=1024,
+                default=8,
+                )
+        cls.glossy_bounces = IntProperty(
+                name="Glossy Bounces",
+                description="Max number of Glossy Bounces",
+                min=0, max=1024,
+                default=8,
+                )
+        cls.transmission_bounces = IntProperty(
+                name="Transmission Bounces",
+                description="Max number of Transmission Bounces",
+                min=0, max=1024,
+                default=8,
                 )
 
     @classmethod

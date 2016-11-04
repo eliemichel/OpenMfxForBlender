@@ -38,7 +38,7 @@ CCL_NAMESPACE_BEGIN
 ccl_device int bsdf_transparent_setup(ShaderClosure *sc)
 {
 	sc->type = CLOSURE_BSDF_TRANSPARENT_ID;
-	return SD_BSDF|SD_TRANSPARENT;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_TRANSPARENT;
 }
 
 ccl_device float3 bsdf_transparent_eval_reflect(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf)

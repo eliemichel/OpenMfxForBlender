@@ -67,7 +67,7 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 		}
 
 		/* sample emission */
-		if((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
+		if((pass_filter & BAKE_FILTER_EMISSION) && (sd->runtime_flag & SD_RUNTIME_EMISSION)) {
 			float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf);
 			path_radiance_accum_emission(&L_sample, throughput, emission, state.bounce);
 		}
@@ -76,7 +76,7 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 
 #ifdef __SUBSURFACE__
 		/* sample subsurface scattering */
-		if((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->flag & SD_BSSRDF)) {
+		if((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->runtime_flag & SD_RUNTIME_BSSRDF)) {
 			/* when mixing BSSRDF and BSDF closures we should skip BSDF lighting if scattering was successful */
 			SubsurfaceIndirectRays ss_indirect;
 			kernel_path_subsurface_init_indirect(&ss_indirect);
@@ -97,6 +97,8 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 					                                      &ray,
 					                                      &L_sample,
 					                                      &throughput);
+
+                    uint light_linking = object_light_linking(kg, sd->object);
 					kernel_path_indirect(kg,
 					                     &indirect_sd,
 					                     &emission_sd,
@@ -105,7 +107,8 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 					                     throughput,
 					                     state.num_samples,
 					                     &state,
-					                     &L_sample);
+					                     &L_sample,
+                                         light_linking);
 					kernel_path_subsurface_accum_indirect(&ss_indirect, &L_sample);
 				}
 				is_sss_sample = true;
@@ -115,14 +118,17 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 
 		/* sample light and BSDF */
 		if(!is_sss_sample && (pass_filter & (BAKE_FILTER_DIRECT | BAKE_FILTER_INDIRECT))) {
-			kernel_path_surface_connect_light(kg, &rng, sd, &emission_sd, throughput, &state, &L_sample);
+            uint light_linking = object_light_linking(kg, sd->object);
+            uint shadow_linking = object_shadow_linking(kg, sd->object);
+
+			kernel_path_surface_connect_light(kg, &rng, sd, &emission_sd, throughput, &state, &L_sample, light_linking, shadow_linking);
 
 			if(kernel_path_surface_bounce(kg, &rng, sd, &throughput, &state, &L_sample, &ray)) {
 #ifdef __LAMP_MIS__
 				state.ray_t = 0.0f;
 #endif
 				/* compute indirect light */
-				kernel_path_indirect(kg, &indirect_sd, &emission_sd, &rng, &ray, throughput, 1, &state, &L_sample);
+				kernel_path_indirect(kg, &indirect_sd, &emission_sd, &rng, &ray, throughput, 1, &state, &L_sample, light_linking);
 
 				/* sum and reset indirect light pass variables for the next samples */
 				path_radiance_sum_indirect(&L_sample);
@@ -140,34 +146,40 @@ ccl_device_inline void compute_light_pass(KernelGlobals *kg,
 		}
 
 		/* sample emission */
-		if((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
+		if((pass_filter & BAKE_FILTER_EMISSION) && (sd->runtime_flag & SD_RUNTIME_EMISSION)) {
 			float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf);
 			path_radiance_accum_emission(&L_sample, throughput, emission, state.bounce);
 		}
 
 #ifdef __SUBSURFACE__
 		/* sample subsurface scattering */
-		if((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->flag & SD_BSSRDF)) {
+		if((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->runtime_flag & SD_RUNTIME_BSSRDF)) {
 			/* when mixing BSSRDF and BSDF closures we should skip BSDF lighting if scattering was successful */
 			kernel_branched_path_subsurface_scatter(kg, sd, &indirect_sd,
 				&emission_sd, &L_sample, &state, &rng, &ray, throughput);
 		}
 #endif
 
+
 		/* sample light and BSDF */
 		if(pass_filter & (BAKE_FILTER_DIRECT | BAKE_FILTER_INDIRECT)) {
+            uint light_linking = object_light_linking(kg, sd->object);
+
 #if defined(__EMISSION__)
 			/* direct light */
 			if(kernel_data.integrator.use_direct_light) {
 				int all = kernel_data.integrator.sample_all_lights_direct;
+
+                uint shadow_linking = object_shadow_linking(kg, sd->object);
+
 				kernel_branched_path_surface_connect_light(kg, &rng,
-					sd, &emission_sd, &state, throughput, 1.0f, &L_sample, all);
+					sd, &emission_sd, &state, throughput, 1.0f, &L_sample, all, light_linking, shadow_linking);
 			}
 #endif
 
 			/* indirect light */
 			kernel_branched_path_surface_indirect_light(kg, &rng,
-				sd, &indirect_sd, &emission_sd, throughput, 1.0f, &state, &L_sample);
+				sd, &indirect_sd, &emission_sd, throughput, 1.0f, &state, &L_sample, light_linking);
 		}
 	}
 #endif
@@ -320,7 +332,7 @@ ccl_device void kernel_bake_evaluate(KernelGlobals *kg, ccl_global uint4 *input,
 	                         P, Ng, Ng,
 	                         shader, object, prim,
 	                         u, v, 1.0f, 0.5f,
-	                         !(kernel_tex_fetch(__object_flag, object) & SD_TRANSFORM_APPLIED));
+	                         !(kernel_tex_fetch(__object_flag, object) & SD_OBJECT_TRANSFORM_APPLIED));
 	sd.I = sd.N;
 
 	/* update differentials */
@@ -339,7 +351,7 @@ ccl_device void kernel_bake_evaluate(KernelGlobals *kg, ccl_global uint4 *input,
 		/* data passes */
 		case SHADER_EVAL_NORMAL:
 		{
-			if((sd.flag & SD_HAS_BUMP)) {
+			if ((sd.shader_flag & SD_SHADER_HAS_BUMP)) {
 				shader_eval_surface(kg, &sd, &rng, &state, 0.f, 0, SHADER_CONTEXT_MAIN);
 			}
 

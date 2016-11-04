@@ -348,7 +348,7 @@ ccl_device int bsdf_microfacet_multi_ggx_common_setup(MicrofacetBsdf *bsdf)
 
 	bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID;
 
-	return SD_BSDF|SD_BSDF_HAS_EVAL|SD_BSDF_NEEDS_LCG;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL | SD_RUNTIME_BSDF_NEEDS_LCG;
 }
 
 ccl_device int bsdf_microfacet_multi_ggx_aniso_setup(MicrofacetBsdf *bsdf)
@@ -447,7 +447,7 @@ ccl_device int bsdf_microfacet_multi_ggx_glass_setup(MicrofacetBsdf *bsdf)
 
 	bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID;
 
-	return SD_BSDF|SD_BSDF_HAS_EVAL|SD_BSDF_NEEDS_LCG;
+	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL | SD_RUNTIME_BSDF_NEEDS_LCG;
 }
 
 ccl_device float3 bsdf_microfacet_multi_ggx_glass_eval_transmit(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf, ccl_addr_space uint *lcg_state) {

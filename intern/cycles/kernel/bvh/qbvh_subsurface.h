@@ -33,7 +33,8 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
                                              SubsurfaceIntersection *ss_isect,
                                              int subsurface_object,
                                              uint *lcg_state,
-                                             int max_hits)
+                                             int max_hits,
+                                             uint shadow_linking)
 {
 	/* TODO(sergey):
 	 * - Test if pushing distance on the stack helps (for non shadow rays).
@@ -61,7 +62,7 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 	ss_isect->num_hits = 0;
 
 	const int object_flag = kernel_tex_fetch(__object_flag, subsurface_object);
-	if(!(object_flag & SD_TRANSFORM_APPLIED)) {
+	if(!(object_flag & SD_OBJECT_TRANSFORM_APPLIED)) {
 #if BVH_FEATURE(BVH_MOTION)
 		Transform ob_itfm;
 		bvh_instance_motion_push(kg,
@@ -253,6 +254,10 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 						/* Intersect ray against primitive, */
 						for(; prim_addr < prim_addr2; prim_addr++) {
 							kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+
+//                            if (!object_in_shadow_linking(kg,visibility,object,prim_addr,shadow_linking))
+//                                continue;
+
 							triangle_intersect_subsurface(kg,
 							                              &isect_precalc,
 							                              ss_isect,
@@ -270,6 +275,10 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 						/* Intersect ray against primitive. */
 						for(; prim_addr < prim_addr2; prim_addr++) {
 							kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+
+//                            if (!object_in_shadow_linking(kg,visibility,object,prim_addr,shadow_linking))
+//                                continue;
+
 							motion_triangle_intersect_subsurface(kg,
 							                                     ss_isect,
 							                                     P,
