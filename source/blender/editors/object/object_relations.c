@@ -1575,7 +1575,7 @@ static int make_links_data_exec(bContext *C, wmOperator *op)
 							Material *ma = give_current_material(ob_src, a + 1);
 							assign_material(ob_dst, ma, a + 1, BKE_MAT_ASSIGN_USERPREF); /* also works with ma==NULL */
 						}
-						DAG_id_tag_update(&ob_dst->id, 0);
+						DAG_id_tag_update(&ob_dst->id, OB_RECALC_DATA);
 						break;
 					case MAKE_LINKS_ANIMDATA:
 						BKE_animdata_copy_id((ID *)ob_dst, (ID *)ob_src, false);
@@ -1740,10 +1740,16 @@ static void single_object_users(Main *bmain, Scene *scene, View3D *v3d, const in
 
 	clear_sca_new_poins();  /* sensor/contr/act */
 
-	/* newid may still have some trash from Outliner tree building,
-	 * so clear that first to avoid errors [#26002] */
-	for (ob = bmain->object.first; ob; ob = ob->id.next)
-		ob->id.newid = NULL;
+	/* newid may still have some trash from Outliner tree building, so clear that first to avoid errors, see T26002.
+	 * We have to clear whole datablocks, not only Object one may be accessed here, see T49905. */
+	ListBase *lbarray[MAX_LIBARRAY];
+	int a = set_listbasepointers(bmain, lbarray);
+	while (a--) {
+		ListBase *lb = lbarray[a];
+		for (ID *id = lb->first; id; id = id->next) {
+			id->newid = NULL;
+		}
+	}
 
 	/* duplicate (must set newid) */
 	for (base = FIRSTBASE; base; base = base->next) {
@@ -2235,7 +2241,7 @@ static int make_local_exec(bContext *C, wmOperator *op)
 			           "Orphan library objects added to the current scene to avoid loss");
 		}
 
-		BKE_library_make_local(bmain, NULL, false, false); /* NULL is all libs */
+		BKE_library_make_local(bmain, NULL, NULL, false, false); /* NULL is all libs */
 		WM_event_add_notifier(C, NC_WINDOW, NULL);
 		return OPERATOR_FINISHED;
 	}

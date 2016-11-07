@@ -799,7 +799,7 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(
 	float3 *throughput, float rphase, float rscatter,
 	const VolumeSegment *segment, const float3 *light_P, bool probalistic_scatter)
 {
-	kernel_assert(segment->closure_flag & SD_SCATTER);
+	kernel_assert(segment->closure_flag & SD_RUNTIME_SCATTER);
 
 	/* pick random color channel, we use the Veach one-sample
 	 * model with balance heuristic for the channels */

@@ -258,7 +258,7 @@ vector<float> Object::motion_times()
 bool Object::is_traceable()
 {
 	/* Mesh itself can be empty,can skip all such objects. */
-	if (!bounds.valid() || bounds.size() == make_float3(0.0f, 0.0f, 0.0f)) {
+	if(!bounds.valid() || bounds.size() == make_float3(0.0f, 0.0f, 0.0f)) {
 		return false;
 	}
 	/* TODO(sergey): Check for mesh vertices/curves. visibility flags. */
@@ -630,8 +630,9 @@ void ObjectManager::device_update_flags(Device *device,
 
 void ObjectManager::device_update_patch_map_offsets(Device *device, DeviceScene *dscene, Scene *scene)
 {
-	if (scene->objects.size() == 0)
+	if(scene->objects.size() == 0) {
 		return;
+	}
 
 	uint4* objects = (uint4*)dscene->objects.get_data();
 

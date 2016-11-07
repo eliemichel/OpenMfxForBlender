@@ -73,6 +73,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
+#include "BLI_ghash.h"
 #include "BLI_linklist.h"
 #include "BLI_memarena.h"
 
@@ -1640,7 +1641,8 @@ void BKE_main_id_clear_newpoins(Main *bmain)
  * We'll probably need at some point a true dependency graph between datablocks, but for now this should work
  * good enough (performances is not a critical point here anyway).
  */
-void BKE_library_make_local(Main *bmain, const Library *lib, const bool untagged_only, const bool set_fake)
+void BKE_library_make_local(
+        Main *bmain, const Library *lib, GHash *old_to_new_ids, const bool untagged_only, const bool set_fake)
 {
 	ListBase *lbarray[MAX_LIBARRAY];
 	ID *id, *id_next;
@@ -1712,6 +1714,9 @@ void BKE_library_make_local(Main *bmain, const Library *lib, const bool untagged
 		BLI_assert(id->lib != NULL);
 
 		BKE_libblock_remap(bmain, id, id->newid, ID_REMAP_SKIP_INDIRECT_USAGE);
+		if (old_to_new_ids) {
+			BLI_ghash_insert(old_to_new_ids, id, id->newid);
+		}
 	}
 
 	/* Third step: remove datablocks that have been copied to be localized and are no more used in the end...
@@ -1773,7 +1778,8 @@ void BKE_library_make_local(Main *bmain, const Library *lib, const bool untagged
 					it->link = NULL;
 					do_loop = true;
 				}
-				else {  /* Only used by linked data, potential candidate to ugly lib-only dependency cycles... */
+				/* Only used by linked data, potential candidate to ugly lib-only dependency cycles... */
+				else if ((id->tag & LIB_TAG_DOIT) == 0) {  /* Check TAG_DOIT to avoid adding same ID several times... */
 					/* Note that we store the node, not directly ID pointer, that way if it->link is set to NULL
 					 * later we can skip it in lib-dependency cycles search later. */
 					BLI_linklist_prepend_arena(&linked_loop_candidates, it, linklist_mem);
@@ -1816,6 +1822,7 @@ void BKE_library_make_local(Main *bmain, const Library *lib, const bool untagged
 			BKE_libblock_unlink(bmain, id, false, false);
 			BKE_libblock_free(bmain, id);
 #endif
+			((LinkNode *)it->link)->link = NULL;  /* Not strictly necessary, but safer (see T49903)... */
 			it->link = NULL;
 		}
 	}

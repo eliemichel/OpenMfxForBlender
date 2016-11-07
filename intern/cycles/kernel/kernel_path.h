@@ -53,6 +53,52 @@
 
 CCL_NAMESPACE_BEGIN
 
+ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
+                                        ShaderData *sd,
+                                        ShaderData *emission_sd,
+                                        PathRadiance *L,
+                                        PathState *state,
+                                        RNG *rng,
+                                        float3 throughput,
+                                        float3 ao_alpha)
+{
+	/* todo: solve correlation */
+	float bsdf_u, bsdf_v;
+
+	path_state_rng_2D(kg, rng, state, PRNG_BSDF_U, &bsdf_u, &bsdf_v);
+
+	float ao_factor = kernel_data.background.ao_factor;
+	float3 ao_N;
+	float3 ao_bsdf = shader_bsdf_ao(kg, sd, ao_factor, &ao_N);
+	float3 ao_D;
+	float ao_pdf;
+
+	sample_cos_hemisphere(ao_N, bsdf_u, bsdf_v, &ao_D, &ao_pdf);
+
+	if(dot(ccl_fetch(sd, Ng), ao_D) > 0.0f && ao_pdf != 0.0f) {
+		Ray light_ray;
+		float3 ao_shadow;
+
+		light_ray.P = ray_offset(ccl_fetch(sd, P), ccl_fetch(sd, Ng));
+		light_ray.D = ao_D;
+		light_ray.t = kernel_data.background.ao_distance;
+#ifdef __OBJECT_MOTION__
+		light_ray.time = ccl_fetch(sd, time);
+#endif
+		light_ray.dP = ccl_fetch(sd, dP);
+		light_ray.dD = differential3_zero();
+
+        state->flag |= PATH_RAY_AO;
+
+        uint shadow_linking = object_shadow_linking(kg, sd->object);
+		if(!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow, shadow_linking)) {
+			path_radiance_accum_ao(L, throughput, ao_alpha, ao_bsdf, ao_shadow, state->bounce);
+		}
+
+        state->flag &= ~PATH_RAY_AO;
+	}
+}
+
 ccl_device void kernel_path_indirect(KernelGlobals *kg,
                                      ShaderData *sd,
                                      ShaderData *emission_sd,
@@ -317,40 +363,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 #ifdef __AO__
 		/* ambient occlusion */
 		if(kernel_data.integrator.use_ambient_occlusion || (sd->runtime_flag & SD_RUNTIME_AO)) {
-			float bsdf_u, bsdf_v;
-			path_state_rng_2D(kg, rng, state, PRNG_BSDF_U, &bsdf_u, &bsdf_v);
-
-			float ao_factor = kernel_data.background.ao_factor;
-			float3 ao_N;
-			float3 ao_bsdf = shader_bsdf_ao(kg, sd, ao_factor, &ao_N);
-			float3 ao_D;
-			float ao_pdf;
-			float3 ao_alpha = make_float3(0.0f, 0.0f, 0.0f);
-
-			sample_cos_hemisphere(ao_N, bsdf_u, bsdf_v, &ao_D, &ao_pdf);
-
-			if(dot(sd->Ng, ao_D) > 0.0f && ao_pdf != 0.0f) {
-				Ray light_ray;
-				float3 ao_shadow;
-
-				light_ray.P = ray_offset(sd->P, sd->Ng);
-				light_ray.D = ao_D;
-				light_ray.t = kernel_data.background.ao_distance;
-#  ifdef __OBJECT_MOTION__
-				light_ray.time = sd->time;
-#  endif
-				light_ray.dP = sd->dP;
-				light_ray.dD = differential3_zero();
-
-				state->flag |= PATH_RAY_AO;
-
-				uint shadow_linking = object_shadow_linking(kg, sd->object);
-				if (!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow, shadow_linking)) {
-					path_radiance_accum_ao(L, throughput, ao_alpha, ao_bsdf, ao_shadow, state->bounce);
-				}
-					state->flag &= ~PATH_RAY_AO;
-
-			}
+			kernel_path_ao(kg, sd, emission_sd, L, state, rng, throughput, make_float3(0.0f, 0.0f, 0.0f));
 		}
 #endif
 
@@ -409,53 +422,6 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 
 		if(!kernel_path_surface_bounce(kg, rng, sd, &throughput, state, L, ray))
 			break;
-	}
-}
-
-ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
-                                        ShaderData *sd,
-                                        ShaderData *emission_sd,
-                                        PathRadiance *L,
-                                        PathState *state,
-                                        RNG *rng,
-                                        float3 throughput)
-{
-	/* todo: solve correlation */
-	float bsdf_u, bsdf_v;
-
-	path_state_rng_2D(kg, rng, state, PRNG_BSDF_U, &bsdf_u, &bsdf_v);
-
-	float ao_factor = kernel_data.background.ao_factor;
-	float3 ao_N;
-	float3 ao_bsdf = shader_bsdf_ao(kg, sd, ao_factor, &ao_N);
-	float3 ao_D;
-	float ao_pdf;
-	float3 ao_alpha = shader_bsdf_alpha(kg, sd);
-
-	sample_cos_hemisphere(ao_N, bsdf_u, bsdf_v, &ao_D, &ao_pdf);
-
-	if(dot(ccl_fetch(sd, Ng), ao_D) > 0.0f && ao_pdf != 0.0f) {
-		Ray light_ray;
-		float3 ao_shadow;
-
-		light_ray.P = ray_offset(ccl_fetch(sd, P), ccl_fetch(sd, Ng));
-		light_ray.D = ao_D;
-		light_ray.t = kernel_data.background.ao_distance;
-#ifdef __OBJECT_MOTION__
-		light_ray.time = ccl_fetch(sd, time);
-#endif
-		light_ray.dP = ccl_fetch(sd, dP);
-		light_ray.dD = differential3_zero();
-
-		state->flag |= PATH_RAY_AO;
-		ShaderData sd_ao = *sd;
-		shader_setup_from_ao_env(kg, &sd_ao, &light_ray);
-		float3 ao_env = shader_eval_ao_env(kg, &sd_ao, state, 0, SHADER_CONTEXT_MAIN);
-
-        uint shadow_linking = object_shadow_linking(kg, sd->object);
-		if(!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow, shadow_linking))
-			path_radiance_accum_ao(L, throughput, ao_alpha, ao_bsdf * ao_env, ao_shadow, state->bounce);
-		state->flag &= ~PATH_RAY_AO;
 	}
 }
 
@@ -884,7 +850,6 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 		}
 		else if(probability != 1.0f) {
 			float terminate = path_state_rng_1D_for_decision(kg, rng, &state, PRNG_TERMINATE);
-
 			if(terminate >= probability)
 				break;
 
@@ -894,7 +859,7 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 #ifdef __AO__
 		/* ambient occlusion */
 		if(kernel_data.integrator.use_ambient_occlusion || (sd.runtime_flag & SD_RUNTIME_AO)) {
-			kernel_path_ao(kg, &sd, &emission_sd, &L, &state, rng, throughput);
+			kernel_path_ao(kg, &sd, &emission_sd, &L, &state, rng, throughput, shader_bsdf_alpha(kg, &sd));
 		}
 #endif
 

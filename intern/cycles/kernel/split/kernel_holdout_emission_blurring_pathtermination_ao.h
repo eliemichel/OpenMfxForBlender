@@ -224,7 +224,7 @@ ccl_device void kernel_holdout_emission_blurring_pathtermination_ao(
 	if(IS_STATE(ray_state, ray_index, RAY_ACTIVE)) {
 		/* ambient occlusion */
 		if(kernel_data.integrator.use_ambient_occlusion ||
-		   (ccl_fetch(sd, flag) & SD_AO))
+		   (ccl_fetch(sd, runtime_flag) & SD_RUNTIME_AO))
 		{
 			/* todo: solve correlation */
 			float bsdf_u, bsdf_v;
