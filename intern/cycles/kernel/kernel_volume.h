@@ -71,7 +71,7 @@ ccl_device_inline bool volume_shader_sample(KernelGlobals *kg,
 	sd->P = P;
 	shader_eval_volume(kg, sd, state, state->volume_stack, state->flag, SHADER_CONTEXT_VOLUME);
 
-	if (!(sd->shader_flag & (SD_RUNTIME_ABSORPTION | SD_RUNTIME_SCATTER | SD_RUNTIME_EMISSION)))
+	if (!(sd->runtime_flag & (SD_RUNTIME_ABSORPTION | SD_RUNTIME_SCATTER | SD_RUNTIME_EMISSION)))
 		return false;
 	
 	coeff->sigma_a = make_float3(0.0f, 0.0f, 0.0f);
@@ -799,7 +799,7 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(
 	float3 *throughput, float rphase, float rscatter,
 	const VolumeSegment *segment, const float3 *light_P, bool probalistic_scatter)
 {
-	kernel_assert(segment->closure_flag & SD_SCATTER);
+	kernel_assert(segment->closure_flag & SD_RUNTIME_SCATTER);
 
 	/* pick random color channel, we use the Veach one-sample
 	 * model with balance heuristic for the channels */

@@ -233,6 +233,9 @@ bool OpenCLDeviceBase::load_kernels(const DeviceRequestedFeatures& requested_fea
 #else
 	foreach(OpenCLProgram *program, programs) {
 		program->load();
+		if(!program->is_loaded()) {
+			return false;
+		}
 	}
 #endif
 
@@ -406,7 +409,7 @@ void OpenCLDeviceBase::enqueue_kernel(cl_kernel kernel, size_t w, size_t h)
 	 * much work per pixel (if we don't check global ID on Y axis) or will
 	 * be checking for global ID to always have Y of 0.
 	 */
-	if (h == 1) {
+	if(h == 1) {
 		global_size[h] = 1;
 	}
 

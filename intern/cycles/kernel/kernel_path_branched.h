@@ -486,7 +486,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 		/* holdout */
 #ifdef __HOLDOUT__
-		if((sd.runtime_flag & SD_RUNTIME_HOLDOUT) | (sd.object_flag & SD_OBJECT_HOLDOUT_MASK)) {
+		if((sd.runtime_flag & SD_RUNTIME_HOLDOUT) || (sd.object_flag & SD_OBJECT_HOLDOUT_MASK)) {
 			if(kernel_data.background.transparent) {
 				float3 holdout_weight;
 				

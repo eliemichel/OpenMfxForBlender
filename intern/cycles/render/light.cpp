@@ -126,6 +126,8 @@ NODE_DEFINE(Light)
 	SOCKET_FLOAT(spot_angle, "Spot Angle", M_PI_4_F);
 	SOCKET_FLOAT(spot_smooth, "Spot Smooth", 0.0f);
 
+	SOCKET_TRANSFORM(tfm, "Transform", transform_identity());
+
 	SOCKET_BOOLEAN(cast_shadow, "Cast Shadow", true);
 	SOCKET_BOOLEAN(use_mis, "Use Mis", false);
 	SOCKET_BOOLEAN(use_diffuse, "Use Diffuse", true);
@@ -682,7 +684,6 @@ void LightManager::device_update_points(Device *device,
 			light_data[light_index*LIGHT_SIZE + 1] = make_float4(__int_as_float(shader_id), radius, invarea, 0.0f);
 			light_data[light_index*LIGHT_SIZE + 2] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 			light_data[light_index*LIGHT_SIZE + 3] = make_float4(samples, 0.0f, 0.0f, 0.0f);
-			light_data[light_index*LIGHT_SIZE + 5] = make_float4(light_linking, shadow_linking, 0.0f, 0.0f);
 		}
 		else if(light->type == LIGHT_DISTANT) {
 			shader_id &= ~SHADER_AREA_LIGHT;
@@ -703,7 +704,6 @@ void LightManager::device_update_points(Device *device,
 			light_data[light_index*LIGHT_SIZE + 1] = make_float4(__int_as_float(shader_id), radius, cosangle, invarea);
 			light_data[light_index*LIGHT_SIZE + 2] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 			light_data[light_index*LIGHT_SIZE + 3] = make_float4(samples, 0.0f, 0.0f, 0.0f);
-			light_data[light_index*LIGHT_SIZE + 5] = make_float4(light_linking, shadow_linking, 0.0f, 0.0f);
 		}
 		else if(light->type == LIGHT_BACKGROUND) {
 			uint visibility = scene->background->visibility;
@@ -732,7 +732,6 @@ void LightManager::device_update_points(Device *device,
 			light_data[light_index*LIGHT_SIZE + 1] = make_float4(__int_as_float(shader_id), 0.0f, 0.0f, 0.0f);
 			light_data[light_index*LIGHT_SIZE + 2] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 			light_data[light_index*LIGHT_SIZE + 3] = make_float4(samples, 0.0f, 0.0f, 0.0f);
-			light_data[light_index*LIGHT_SIZE + 5] = make_float4(light_linking, shadow_linking, 0.0f, 0.0f);
 		}
 		else if(light->type == LIGHT_AREA) {
 			float3 axisu = light->axisu*(light->sizeu*light->size);
@@ -750,7 +749,6 @@ void LightManager::device_update_points(Device *device,
 			light_data[light_index*LIGHT_SIZE + 1] = make_float4(__int_as_float(shader_id), axisu.x, axisu.y, axisu.z);
 			light_data[light_index*LIGHT_SIZE + 2] = make_float4(invarea, axisv.x, axisv.y, axisv.z);
 			light_data[light_index*LIGHT_SIZE + 3] = make_float4(samples, dir.x, dir.y, dir.z);
-			light_data[light_index*LIGHT_SIZE + 5] = make_float4(light_linking, shadow_linking, 0.0f, 0.0f);
 		}
 		else if(light->type == LIGHT_SPOT) {
 			shader_id &= ~SHADER_AREA_LIGHT;
@@ -770,10 +768,15 @@ void LightManager::device_update_points(Device *device,
 			light_data[light_index*LIGHT_SIZE + 1] = make_float4(__int_as_float(shader_id), radius, invarea, spot_angle);
 			light_data[light_index*LIGHT_SIZE + 2] = make_float4(spot_smooth, dir.x, dir.y, dir.z);
 			light_data[light_index*LIGHT_SIZE + 3] = make_float4(samples, 0.0f, 0.0f, 0.0f);
-			light_data[light_index*LIGHT_SIZE + 5] = make_float4(light_linking, shadow_linking, 0.0f, 0.0f);
 		}
 
 		light_data[light_index*LIGHT_SIZE + 4] = make_float4(max_bounces, 0.0f, 0.0f, 0.0f);
+        light_data[light_index*LIGHT_SIZE + 5] = make_float4(light_linking, shadow_linking, 0.0f, 0.0f);
+
+		Transform tfm = light->tfm;
+		Transform itfm = transform_inverse(tfm);
+		memcpy(&light_data[light_index*LIGHT_SIZE + 6], &tfm, sizeof(float4)*3);
+		memcpy(&light_data[light_index*LIGHT_SIZE + 9], &itfm, sizeof(float4)*3);
 
 		light_index++;
 	}
@@ -804,6 +807,11 @@ void LightManager::device_update_points(Device *device,
 		light_data[light_index*LIGHT_SIZE + 3] = make_float4(-1, dir.x, dir.y, dir.z);
 		light_data[light_index*LIGHT_SIZE + 4] = make_float4(-1, 0.0f, 0.0f, 0.0f);
         light_data[light_index*LIGHT_SIZE + 5] = make_float4(light_linking, shadow_linking, 0.0f, 0.0f);
+
+		Transform tfm = light->tfm;
+		Transform itfm = transform_inverse(tfm);
+		memcpy(&light_data[light_index*LIGHT_SIZE + 6], &tfm, sizeof(float4)*3);
+		memcpy(&light_data[light_index*LIGHT_SIZE + 9], &itfm, sizeof(float4)*3);
 
 		light_index++;
 	}
