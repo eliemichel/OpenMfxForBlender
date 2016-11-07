@@ -799,7 +799,7 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 
 		/* holdout */
 #ifdef __HOLDOUT__
-		if(((sd.runtime_flag & SD_RUNTIME_HOLDOUT) | (sd.object_flag & SD_OBJECT_HOLDOUT_MASK)) && (state.flag & PATH_RAY_CAMERA)) {
+		if(((sd.runtime_flag & SD_RUNTIME_HOLDOUT) || (sd.object_flag & SD_OBJECT_HOLDOUT_MASK)) && (state.flag & PATH_RAY_CAMERA)) {
 			if(kernel_data.background.transparent) {
 				float3 holdout_weight;
 				

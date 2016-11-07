@@ -373,7 +373,7 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg, ShaderData *sd, float *
 		case CLOSURE_BSDF_HAIR_TRANSMISSION_ID: {
 			float3 weight = ccl_fetch(sd, svm_closure_weight) * mix_weight;
 			
-			if (ccl_fetch(sd, runtime_flag) & SD_RUNTIME_BACKFACING && ccl_fetch(sd, type) & PRIMITIVE_ALL_CURVE) {
+			if ((ccl_fetch(sd, runtime_flag) & SD_RUNTIME_BACKFACING) && (ccl_fetch(sd, type) & PRIMITIVE_ALL_CURVE)) {
 				ShaderClosure *bsdf = bsdf_alloc(sd, sizeof(ShaderClosure), weight);
 
 				if(bsdf) {

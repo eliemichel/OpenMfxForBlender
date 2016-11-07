@@ -160,7 +160,6 @@ CCL_NAMESPACE_BEGIN
 #  define __OBJECT_MOTION__
 #  define __HAIR__
 #  define __BAKING__
-#  define __LIGHT_LINKING__
 #endif
 
 #ifdef WITH_CYCLES_DEBUG
