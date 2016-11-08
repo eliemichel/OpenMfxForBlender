@@ -53,9 +53,9 @@ ccl_device_noinline float3 direct_emissive_eval(KernelGlobals *kg,
 #endif
 	if(shader_flag & SD_SHADER_HAS_CONSTANT_EMISSION)
 	{
-		eval.x = __int_as_float(kernel_tex_fetch(__shader_flag, (ls->shader & SHADER_MASK)*SHADER_SIZE + 2));
-		eval.y = __int_as_float(kernel_tex_fetch(__shader_flag, (ls->shader & SHADER_MASK)*SHADER_SIZE + 3));
-		eval.z = __int_as_float(kernel_tex_fetch(__shader_flag, (ls->shader & SHADER_MASK)*SHADER_SIZE + 4));
+		eval.x = __int_as_float(kernel_tex_fetch(__shader_flag, (ls->shader & SHADER_MASK)*SHADER_SIZE + 10));
+		eval.y = __int_as_float(kernel_tex_fetch(__shader_flag, (ls->shader & SHADER_MASK)*SHADER_SIZE + 11));
+		eval.z = __int_as_float(kernel_tex_fetch(__shader_flag, (ls->shader & SHADER_MASK)*SHADER_SIZE + 12));
 		if((ls->prim != PRIM_NONE) && dot(ls->Ng, I) < 0.0f) {
 			ls->Ng = -ls->Ng;
 		}

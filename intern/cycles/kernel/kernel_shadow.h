@@ -112,7 +112,7 @@ ccl_device_inline bool shadow_blocked(KernelGlobals *kg, ShaderData *shadow_sd, 
 #endif
 
 				/* setup shader data at surface */
-				ShaderData sd;
+				/*ShaderData sd;*/
 				shader_setup_from_ray(kg, shadow_sd, isect, ray);
 				/*shader_setup_from_ray(kg, &sd, isect, ray);*/
 
