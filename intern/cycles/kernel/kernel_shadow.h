@@ -113,25 +113,41 @@ ccl_device_inline bool shadow_blocked(KernelGlobals *kg, ShaderData *shadow_sd, 
 
 				/* setup shader data at surface */
 				ShaderData sd;
-				//shader_setup_from_ray(kg, shadow_sd, isect, ray);
-				shader_setup_from_ray(kg, &sd, isect, ray);
+				shader_setup_from_ray(kg, shadow_sd, isect, ray);
+				/*shader_setup_from_ray(kg, &sd, isect, ray);*/
 
 				/* attenuation from transparent surface */
-				if (!(sd.shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
-					if ((sd.shader_flag & SD_SHADER_USE_UNIFORM_ALPHA) && (!(sd.shader_flag & SD_SHADER_USE_UNIFORM_ALPHA_SELF_ONLY) || (sd.shader == shadow_sd->shader))) {
+				if (!(shadow_sd->shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
+					if ((shadow_sd->shader_flag & SD_SHADER_USE_UNIFORM_ALPHA) && (!(shadow_sd->shader_flag & SD_SHADER_USE_UNIFORM_ALPHA_SELF_ONLY))) {
 						if (state->flag & PATH_RAY_AO)
-							throughput *= (1.0f - sd.ao_alpha);
+							throughput *= (1.0f - shadow_sd->ao_alpha);
 						else
-							throughput *= (1.0f - sd.shadow_alpha);
+							throughput *= (1.0f - shadow_sd->shadow_alpha);
 					}
 					else {
 						path_state_modify_bounce(state, true);
-						shader_eval_surface(kg, &sd, NULL, state, 0.0f, PATH_RAY_SHADOW, SHADER_CONTEXT_SHADOW);
+						shader_eval_surface(kg, shadow_sd, NULL, state, 0.0f, PATH_RAY_SHADOW, SHADER_CONTEXT_SHADOW);
 						path_state_modify_bounce(state, false);
 
-						throughput *= shader_bsdf_transparency(kg, &sd);
+						throughput *= shader_bsdf_transparency(kg, shadow_sd);
 					}
 				}
+
+				//if (!(/*shadow_sd->*/sd.shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
+				//	if ((/*shadow_sd->*/sd.shader_flag & SD_SHADER_USE_UNIFORM_ALPHA) && (!(/*shadow_sd->*/sd.shader_flag & SD_SHADER_USE_UNIFORM_ALPHA_SELF_ONLY) || (sd.shader == shadow_sd->shader))) {
+				//		if (state->flag & PATH_RAY_AO)
+				//			throughput *= (1.0f - /*shadow_sd->*/sd.ao_alpha);
+				//		else
+				//			throughput *= (1.0f - /*shadow_sd->*/sd.shadow_alpha);
+				//	}
+				//	else {
+				//		path_state_modify_bounce(state, true);
+				//		shader_eval_surface(kg, &sd/*shadow_sd*/, NULL, state, 0.0f, PATH_RAY_SHADOW, SHADER_CONTEXT_SHADOW);
+				//		path_state_modify_bounce(state, false);
+
+				//		throughput *= shader_bsdf_transparency(kg, &sd/*shadow_sd*/);
+				//	}
+				//}
 
 				/* stop if all light is blocked */
 				if(is_zero(throughput)) {
@@ -139,15 +155,15 @@ ccl_device_inline bool shadow_blocked(KernelGlobals *kg, ShaderData *shadow_sd, 
 				}
 
 				/* move ray forward */
-				//ray->P = shadow_sd->P;
-				ray->P = sd.P;
+				ray->P = shadow_sd->P;
+				//ray->P = sd.P;
 				if(ray->t != FLT_MAX) {
 					ray->D = normalize_len(Pend - ray->P, &ray->t);
 				}
 
 #ifdef __VOLUME__
 				/* exit/enter volume */
-				kernel_volume_stack_enter_exit(kg, &sd, ps.volume_stack);
+				kernel_volume_stack_enter_exit(kg, shadow_sd, ps.volume_stack);
 #endif
 
 				bounce++;
