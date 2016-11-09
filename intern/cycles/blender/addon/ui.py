@@ -1227,6 +1227,9 @@ class CyclesMaterial_PT_settings(CyclesButtonsPanel, Panel):
         col.label("Viewport Alpha:")
         col.prop(mat.game_settings, "alpha_blend", text="")
 
+        col.separator()
+        col.prop(mat, "pass_index")
+
         col = split.column(align=True)
         col.label("Viewport Specular:")
         col.prop(mat, "specular_color", text="")
@@ -1242,8 +1245,6 @@ class CyclesMaterial_PT_settings(CyclesButtonsPanel, Panel):
         col.prop(cmat, "ao_alpha", text="AO Alpha")
         col.prop(cmat, "shadow_alpha", text="Shadow Alpha")
 
-        col.separator()
-        col.prop(mat, "pass_index")
 
         layout.separator()
         split = layout.split()
