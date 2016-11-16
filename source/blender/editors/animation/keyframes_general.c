@@ -115,6 +115,10 @@ bool delete_fcurve_keys(FCurve *fcu)
 	/* Delete selected BezTriples */
 	for (i = 0; i < fcu->totvert; i++) {
 		if (fcu->bezt[i].f2 & SELECT) {
+			fcu->bezt[i - 1].h1 = HD_AUTO_ANIM;
+			fcu->bezt[i - 1].h2 = HD_AUTO_ANIM;
+			fcu->bezt[i + 1].h1 = HD_AUTO_ANIM;
+			fcu->bezt[i + 1].h2 = HD_AUTO_ANIM;
 			memmove(&fcu->bezt[i], &fcu->bezt[i + 1], sizeof(BezTriple) * (fcu->totvert - i - 1));
 			fcu->totvert--;
 			i--;
