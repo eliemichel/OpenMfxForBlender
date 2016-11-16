@@ -383,24 +383,53 @@ int insert_bezt_fcurve(FCurve *fcu, const BezTriple *bezt, short flag)
 	return i;
 }
 
+static float get_parameterization(float x, const BezTriple *prev, const BezTriple *next)
+{
+	float min_t = 0.0F;
+	float max_t = 1.0F;
+	float t = 0.5F;
+
+	for (int i = 0; i < 20; ++i) {
+		t = (min_t + max_t) * 0.5F;
+
+		float mt = 1.0F - t;
+		float mt2 = mt*mt;
+		float mt3 = mt*mt2;
+
+		float t2 = t*t;
+		float t3 = t2*t;
+
+		float xt = mt3 * prev->vec[1][0] +
+			3.0F * mt2 * t * prev->vec[2][0] +
+			3.0F * mt * t2 * next->vec[0][0] +
+			t3 * next->vec[1][0];
+
+		if (xt < x)         min_t = t;
+		else if (xt > x)    max_t = t;
+		else break;
+	}
+
+	return t;
+}
+
 /**
- * This function is a wrapper for insert_bezt_fcurve_internal(), and should be used when
- * adding a new keyframe to a curve, when the keyframe doesn't exist anywhere else yet. 
- * It returns the index at which the keyframe was added.
- *
- * \param keyframe_type: The type of keyframe (eBezTriple_KeyframeTypes)
- * \param flag: Optional flags (eInsertKeyFlags) for controlling how keys get added 
- *              and/or whether updates get done
- */
+* This function is a wrapper for insert_bezt_fcurve_internal(), and should be used when
+* adding a new keyframe to a curve, when the keyframe doesn't exist anywhere else yet.
+* It returns the index at which the keyframe was added.
+*
+* \param keyframe_type: The type of keyframe (eBezTriple_KeyframeTypes)
+* \param flag: Optional flags (eInsertKeyFlags) for controlling how keys get added
+*              and/or whether updates get done
+*/
 int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short flag)
 {
-	BezTriple beztr = {{{0}}};
+	BezTriple beztr = { { { 0 } } };
 	unsigned int oldTot = fcu->totvert;
 	int a;
-	
-	/* set all three points, for nicer start position 
-	 * NOTE: +/- 1 on vec.x for left and right handles is so that 'free' handles work ok...
-	 */
+
+	/* set all three points, for nicer start position
+	* NOTE: +/- 1 on vec.x for left and right handles is so that 'free' handles work ok...
+	*/
 	beztr.vec[0][0] = x - 1.0f;
 	beztr.vec[0][1] = y;
 	beztr.vec[1][0] = x;
@@ -408,23 +437,23 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 	beztr.vec[2][0] = x + 1.0f;
 	beztr.vec[2][1] = y;
 	beztr.f1 = beztr.f2 = beztr.f3 = SELECT;
-	
+
 	/* set default handle types and interpolation mode */
 	if (flag & INSERTKEY_NO_USERPREF) {
 		/* for Py-API, we want scripts to have predictable behaviour,
-		 * hence the option to not depend on the userpref defaults
-		 */
+		* hence the option to not depend on the userpref defaults
+		*/
 		beztr.h1 = beztr.h2 = HD_AUTO_ANIM;
 		beztr.ipo = BEZT_IPO_BEZ;
 	}
 	else {
 		/* for UI usage - defaults should come from the userprefs and/or toolsettings */
 		beztr.h1 = beztr.h2 = U.keyhandles_new; /* use default handle type here */
-		
+
 		/* use default interpolation mode, with exceptions for int/discrete values */
 		beztr.ipo = U.ipo_new;
 	}
-	
+
 	/* interpolation type used is constrained by the type of values the curve can take */
 	if (fcu->flag & FCURVE_DISCRETE_VALUES) {
 		beztr.ipo = BEZT_IPO_CONST;
@@ -432,59 +461,137 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 	else if ((beztr.ipo == BEZT_IPO_BEZ) && (fcu->flag & FCURVE_INT_VALUES)) {
 		beztr.ipo = BEZT_IPO_LIN;
 	}
-	
+
 	/* set keyframe type value (supplied), which should come from the scene settings in most cases */
 	BEZKEYTYPE(&beztr) = keyframe_type;
-	
+
 	/* set default values for "easing" interpolation mode settings
-	 * NOTE: Even if these modes aren't currently used, if users switch
-	 *       to these later, we want these to work in a sane way out of
-	 *       the box.
-	 */
+	* NOTE: Even if these modes aren't currently used, if users switch
+	*       to these later, we want these to work in a sane way out of
+	*       the box.
+	*/
 	beztr.back = 1.70158f;     /* "back" easing - this value used to be used when overshoot=0, but that        */
-	                           /*                 introduced discontinuities in how the param worked           */
-	
+	/*                 introduced discontinuities in how the param worked           */
+
 	beztr.amplitude = 0.8f;    /* "elastic" easing - values here were hand-optimised for a default duration of */
 	beztr.period = 4.1f;       /*                    ~10 frames (typical mograph motion length)                */
-	
+
 	/* add temp beztriple to keyframes */
 	a = insert_bezt_fcurve(fcu, &beztr, flag);
-	
-	/* what if 'a' is a negative index? 
-	 * for now, just exit to prevent any segfaults
-	 */
+
+	/* what if 'a' is a negative index?
+	* for now, just exit to prevent any segfaults
+	*/
 	if (a < 0) return -1;
-	
-	/* don't recalculate handles if fast is set
-	 *	- this is a hack to make importers faster
-	 *	- we may calculate twice (due to autohandle needing to be calculated twice)
-	 */
-	if ((flag & INSERTKEY_FAST) == 0) 
-		calchandles_fcurve(fcu);
-	
-	/* set handletype and interpolation */
-	if ((fcu->totvert > 2) && (flag & INSERTKEY_REPLACE) == 0) {
-		BezTriple *bezt = (fcu->bezt + a);
-		
-		/* set interpolation from previous (if available), but only if we didn't just replace some keyframe 
-		 *  - replacement is indicated by no-change in number of verts
-		 *	- when replacing, the user may have specified some interpolation that should be kept
-		 */
-		if (fcu->totvert > oldTot) {
-			if (a > 0) 
-				bezt->ipo = (bezt - 1)->ipo;
-			else if (a < fcu->totvert - 1)
-				bezt->ipo = (bezt + 1)->ipo;
-		}
-			
+
+	BezTriple *prev = ((a - 1) >= 0) ? &fcu->bezt[a - 1] : NULL;
+	BezTriple *bezt = &fcu->bezt[a];
+	BezTriple *next = ((a + 1) < fcu->totvert) ? &fcu->bezt[a + 1] : NULL;
+
+
+	if (prev && next && prev->h2 != HD_VECT && next->h1 != HD_VECT && (prev->ipo == BEZT_IPO_BEZ)) {
+		const float *P0 = prev->vec[1];
+		const float *P1 = prev->vec[2];
+		const float *P2 = next->vec[0];
+		const float *P3 = next->vec[1];
+
+
+		float temp[2], P0_1[2], P1_2[2], P2_3[2];
+		float P01_12[2], P12_23[2];
+		float P0112_1223[2];
+
+		//float t = (bezt->vec[1][0] - P0[0])/(P3[0] - P0[0]);
+		float t = get_parameterization(bezt->vec[1][0], prev, next);
+		float one_minus_t = 1.0F - t;
+
+		mul_v2_v2fl(P0_1, P0, one_minus_t);
+		mul_v2_v2fl(temp, P1, t);
+		add_v2_v2v2(P0_1, P0_1, temp);
+
+		mul_v2_v2fl(P1_2, P1, one_minus_t);
+		mul_v2_v2fl(temp, P2, t);
+		add_v2_v2v2(P1_2, P1_2, temp);
+
+		mul_v2_v2fl(P2_3, P2, one_minus_t);
+		mul_v2_v2fl(temp, P3, t);
+		add_v2_v2v2(P2_3, P2_3, temp);
+
+		mul_v2_v2fl(P01_12, P0_1, one_minus_t);
+		mul_v2_v2fl(temp, P1_2, t);
+		add_v2_v2v2(P01_12, P01_12, temp);
+
+		mul_v2_v2fl(P12_23, P1_2, one_minus_t);
+		mul_v2_v2fl(temp, P2_3, t);
+		add_v2_v2v2(P12_23, P12_23, temp);
+
+		mul_v2_v2fl(P0112_1223, P01_12, one_minus_t);
+		mul_v2_v2fl(temp, P12_23, t);
+		add_v2_v2v2(P0112_1223, P0112_1223, temp);
+
+		prev->h1 = HD_FREE;
+		prev->h2 = HD_FREE;
+		next->h1 = HD_FREE;
+		next->h2 = HD_FREE;
+		bezt->h1 = HD_FREE;
+		bezt->h2 = HD_FREE;
+
+		// Update prev, current, and next curves
+		copy_v2_v2(prev->vec[2], P0_1);
+
+		copy_v2_v2(bezt->vec[0], P01_12);
+		copy_v2_v2(bezt->vec[1], P0112_1223);
+		copy_v2_v2(bezt->vec[2], P12_23);
+
+		copy_v2_v2(next->vec[0], P2_3);
+
+		prev->h1 = HD_ALIGN;
+		prev->h2 = HD_ALIGN;
+		next->h1 = HD_ALIGN;
+		next->h2 = HD_ALIGN;
+		bezt->h1 = HD_ALIGN;
+		bezt->h2 = HD_ALIGN;
+
 		/* don't recalculate handles if fast is set
-		 *	- this is a hack to make importers faster
-		 *	- we may calculate twice (due to autohandle needing to be calculated twice)
-		 */
-		if ((flag & INSERTKEY_FAST) == 0) 
+		* - this is a hack to make importers faster
+		* - we may calculate twice (due to autohandle needing to be calculated twice)
+		*/
+		if ((flag & INSERTKEY_FAST) == 0)
 			calchandles_fcurve(fcu);
+
 	}
-	
+	else
+	{
+		/* don't recalculate handles if fast is set
+		* - this is a hack to make importers faster
+		* - we may calculate twice (due to autohandle needing to be calculated twice)
+		*/
+		if ((flag & INSERTKEY_FAST) == 0)
+			calchandles_fcurve(fcu);
+
+		/* set handletype and interpolation */
+		if ((fcu->totvert > 2) && (flag & INSERTKEY_REPLACE) == 0) {
+			BezTriple *bezt = (fcu->bezt + a);
+
+			/* set interpolation from previous (if available), but only if we didn't just replace some keyframe
+			*  - replacement is indicated by no-change in number of verts
+			* - when replacing, the user may have specified some interpolation that should be kept
+			*/
+			if (fcu->totvert > oldTot) {
+				if (a > 0)
+					bezt->ipo = (bezt - 1)->ipo;
+				else if (a < fcu->totvert - 1)
+					bezt->ipo = (bezt + 1)->ipo;
+			}
+
+			/* don't recalculate handles if fast is set
+			* - this is a hack to make importers faster
+			* - we may calculate twice (due to autohandle needing to be calculated twice)
+			*/
+			if ((flag & INSERTKEY_FAST) == 0)
+				calchandles_fcurve(fcu);
+		}
+	}
+
 	/* return the index at which the keyframe was added */
 	return a;
 }
