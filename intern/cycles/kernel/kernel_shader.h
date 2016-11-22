@@ -111,7 +111,7 @@ ccl_device_noinline void shader_setup_from_ray(KernelGlobals *kg,
 
 	ccl_fetch(sd, I) = -ray->D;
 
-	ccl_fetch(sd, shader_flag) |= kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE);
+	ccl_fetch(sd, shader_flag) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE);
 	ccl_fetch(sd, ao_alpha) = __uint_as_float(kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE + 2));
 	ccl_fetch(sd, shadow_alpha) = __uint_as_float(kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE + 3));
 	ccl_fetch(sd, diffuse_samples) = kernel_tex_fetch(__shader_flag, (ccl_fetch(sd, shader) & SHADER_MASK) * SHADER_SIZE + 4);
@@ -137,7 +137,7 @@ ccl_device_noinline void shader_setup_from_ray(KernelGlobals *kg,
 	bool backfacing = (dot(ccl_fetch(sd, Ng), ccl_fetch(sd, I)) < 0.0f);
 
 	if(backfacing) {
-		ccl_fetch(sd, runtime_flag) |= SD_RUNTIME_BACKFACING;
+		ccl_fetch(sd, runtime_flag) = SD_RUNTIME_BACKFACING;
 		ccl_fetch(sd, Ng) = -ccl_fetch(sd, Ng);
 		ccl_fetch(sd, N) = -ccl_fetch(sd, N);
 #ifdef __DPDU__
