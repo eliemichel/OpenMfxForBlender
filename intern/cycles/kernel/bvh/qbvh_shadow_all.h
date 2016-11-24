@@ -265,8 +265,10 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 					while(prim_addr < prim_addr2) {
 						kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
 
-                        if (!object_in_shadow_linking(kg,PATH_RAY_ALL_VISIBILITY,object,prim_addr,shadow_linking))
+                        if (!object_in_shadow_linking(kg,PATH_RAY_ALL_VISIBILITY,object,prim_addr,shadow_linking)) {
+                            prim_addr++;
                             continue;
+                        }
 
 						bool hit;
 
