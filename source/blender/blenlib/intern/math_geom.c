@@ -51,6 +51,16 @@ void cent_quad_v3(float cent[3], const float v1[3], const float v2[3], const flo
 	cent[2] = 0.25f * (v1[2] + v2[2] + v3[2] + v4[2]);
 }
 
+void cent_poly_v3(float cent[3], const float verts[][3], unsigned int nr)
+{
+	unsigned int i;
+	zero_v3(cent);
+
+	for (i = 0; i < nr; i++) {
+		madd_v3_v3fl(cent, verts[i], 1.0f / (float)nr);
+	}
+}
+
 void cross_tri_v3(float n[3], const float v1[3], const float v2[3], const float v3[3])
 {
 	float n1[3], n2[3];
