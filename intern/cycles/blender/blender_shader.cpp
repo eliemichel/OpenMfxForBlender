@@ -1243,7 +1243,7 @@ void BlenderSync::sync_world(bool update_all)
 			graph->add(background);
 
 			ShaderNode *out = graph->output();
-			//graph->connect(background->output("Background"), out->input("Surface"));
+			graph->connect(background->output("Background"), out->input("Surface"));
 
 			/* Surface */
 			ShaderNode* closure = graph->add(new BackgroundNode());
