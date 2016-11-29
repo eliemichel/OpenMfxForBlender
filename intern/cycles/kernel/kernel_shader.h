@@ -977,7 +977,7 @@ ccl_device float3 shader_eval_ao_env(KernelGlobals *kg, ShaderData *sd,
 
 		/* If there's no shader input, default white */
 		if (num_closure == 0) {
-			return make_float3(0.0f, 0.0f, 0.0f);
+			return make_float3(1.0f, 1.0f, 1.0f);
 
 		}
 		else {
