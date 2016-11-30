@@ -118,6 +118,10 @@ public:
 	string filename;
     std::vector<float4> points;
 
+    float3 vector;
+    float3 fill_color;
+    float3 background_color;
+
     // TODO: TEXCURVE
 };
 

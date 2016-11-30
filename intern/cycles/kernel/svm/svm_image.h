@@ -514,42 +514,49 @@ ccl_device bool point_in_triangle (float3 pt, float4 v1, float4 v2, float4 v3)
 ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
 {
     // TODO: TEXCURVE
+
     uint co_offset, fill_in_offset, background_in_offset, out_offset;
-    uint slot = node.y;
     decode_node_uchar4(node.z, &co_offset, &fill_in_offset, &background_in_offset, &out_offset);
 
-    float3 co = stack_load_float3(stack, co_offset);
-    float3 fill_color = stack_load_float3(stack, fill_in_offset);
-    float3 background_color = stack_load_float3(stack, background_in_offset);
-
-	uint4 info = kernel_tex_fetch(__tex_image_packed_info, slot);
-	uint width = info.x;
-//	uint height = info.y;
-//	uint offset = info.z;
-
-    bool inside = false;
-
-    for (int t = 0; t < width; t+=3) {
-        float4 p1 = svm_image_texture(kg, slot, (float)(t+0)/width, 0.0, false, true);
-        float4 p2 = svm_image_texture(kg, slot, (float)(t+1)/width, 0.0, false, true);
-        float4 p3 = svm_image_texture(kg, slot, (float)(t+2)/width, 0.0, false, true);
-
-        if (p1 == p2 || p2 == p3 || p1 == p3) {
-            continue;
-        }
-
-        if (point_in_triangle(co,p1,p2,p3)) {
-            inside = true;
-            break;
-        }
-    }
+    uint slot = node.y;
 
     float4 f;
-
-    if (inside) {
-        f = make_float4(fill_color.x, fill_color.y, fill_color.z, 1.0);
-    } else {
+    if (slot == (uint) -1) {
+        float3 background_color = stack_load_float3(stack, background_in_offset);
         f = make_float4(background_color.x, background_color.y, background_color.z, 1.0);
+    } else {
+
+        float3 co = stack_load_float3(stack, co_offset);
+        float3 fill_color = stack_load_float3(stack, fill_in_offset);
+        float3 background_color = stack_load_float3(stack, background_in_offset);
+
+        uint4 info = kernel_tex_fetch(__tex_image_packed_info, slot);
+        uint width = info.x;
+    //	uint height = info.y;
+    //	uint offset = info.z;
+
+        bool inside = false;
+
+        for (int t = 0; t < width; t+=3) {
+            float4 p1 = svm_image_texture(kg, slot, (float)(t+0)/width, 0.0, false, true);
+            float4 p2 = svm_image_texture(kg, slot, (float)(t+1)/width, 0.0, false, true);
+            float4 p3 = svm_image_texture(kg, slot, (float)(t+2)/width, 0.0, false, true);
+
+            if (p1 == p2 || p2 == p3 || p1 == p3) {
+                continue;
+            }
+
+            if (point_in_triangle(co,p1,p2,p3)) {
+                inside = true;
+                break;
+            }
+        }
+
+        if (inside) {
+            f = make_float4(fill_color.x, fill_color.y, fill_color.z, 1.0);
+        } else {
+            f = make_float4(background_color.x, background_color.y, background_color.z, 1.0);
+        }
     }
 
 	if(stack_valid(out_offset))

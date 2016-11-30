@@ -427,6 +427,7 @@ CurveTextureNode::CurveTextureNode()
 : ImageSlotTextureNode(node_type)
 {
 	image_manager = NULL;
+    builtin_data = NULL;
 	slot = -1;
 
     // TODO: TEXCURVE
@@ -449,38 +450,65 @@ void CurveTextureNode::compile(SVMCompiler& compiler)
 	ShaderInput *vector_in = input("Vector");
 	ShaderInput *fill_color_in = input("FillColor");
 	ShaderInput *background_color_in = input("BackgroundColor");
+
 	ShaderOutput *color_out = output("Color");
 
-	if(!color_out->links.empty())
-		compiler.stack_assign(color_out);
-    compiler.stack_assign(fill_color_in);
-    compiler.stack_assign(background_color_in);
-    compiler.stack_assign(vector_in);
-
-    int vector_offset = vector_in->stack_offset;
-
-    if(!tex_mapping.skip()) {
-        vector_offset = compiler.stack_find_offset(SHADER_SOCKET_VECTOR);
-        tex_mapping.compile(compiler, vector_in->stack_offset, vector_offset);
-    }
+	int vector_offset = tex_mapping.compile_begin(compiler, vector_in);
 
     // Build the image
-	image_manager = compiler.image_manager;
-    bool is_float_bool;
-    bool linear;
-    slot = image_manager->add_image(filename, builtin_data,
-                                    true, 0, is_float_bool, linear,
-                                    INTERPOLATION_CLOSEST,
-                                    EXTENSION_EXTEND,
-                                    true);
+    if (builtin_data) {
+        image_manager = compiler.image_manager;
+        bool is_float_bool, linear;
+        slot = image_manager->add_image(filename, builtin_data,
+                                        true, 0, is_float_bool, linear,
+                                        INTERPOLATION_CLOSEST,
+                                        EXTENSION_EXTEND,
+                                        true);
+    }
 
-    compiler.add_node(NODE_TEX_CURVE,
-                slot,
-				compiler.encode_uchar4(vector_offset, fill_color_in->stack_offset, background_color_in->stack_offset, color_out->stack_offset),
-                0);
+	compiler.add_node(NODE_TEX_CURVE,
+        slot,
+		compiler.encode_uchar4(
+			vector_offset,
+			compiler.stack_assign(fill_color_in),
+			compiler.stack_assign(background_color_in),
+			compiler.stack_assign(color_out)
+		)
+    );
 
-    if(vector_offset != vector_in->stack_offset)
-        compiler.stack_clear_offset(vector_in->type, vector_offset);
+	tex_mapping.compile_end(compiler, vector_in, vector_offset);
+
+
+//	if(!color_out->links.empty())
+//		compiler.stack_assign(color_out);
+//    compiler.stack_assign(fill_color_in);
+//    compiler.stack_assign(background_color_in);
+//    compiler.stack_assign(vector_in);
+//
+//    int vector_offset = vector_in->stack_offset;
+//
+//    if(!tex_mapping.skip()) {
+//        vector_offset = compiler.stack_find_offset(SocketType::VECTOR);
+//        tex_mapping.compile(compiler, vector_in->stack_offset, vector_offset);
+//    }
+//
+//    // Build the image
+//	image_manager = compiler.image_manager;
+//    bool is_float_bool;
+//    bool linear;
+//    slot = image_manager->add_image(filename, builtin_data,
+//                                    true, 0, is_float_bool, linear,
+//                                    INTERPOLATION_CLOSEST,
+//                                    EXTENSION_EXTEND,
+//                                    true);
+//
+//    compiler.add_node(NODE_TEX_CURVE,
+//                slot,
+//				compiler.encode_uchar4(vector_offset, fill_color_in->stack_offset, background_color_in->stack_offset, color_out->stack_offset),
+//                0);
+//
+//    if(vector_offset != vector_in->stack_offset)
+//        compiler.stack_clear_offset(vector_in->type(), vector_offset);
 
 }
 

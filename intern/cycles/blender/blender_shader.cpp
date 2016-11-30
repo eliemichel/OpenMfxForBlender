@@ -688,7 +688,8 @@ static ShaderNode *add_node(Scene *scene,
                                                    EXTENSION_EXTEND);
         }
 
-		get_tex_mapping(&tex->tex_mapping, b_curve_node.texture_mapping());
+		BL::TexMapping b_texture_mapping(b_curve_node.texture_mapping());
+		get_tex_mapping(&tex->tex_mapping, b_texture_mapping);
 		node = tex;
     }
 	else if(b_node.is_a(&RNA_ShaderNodeTexEnvironment)) {
