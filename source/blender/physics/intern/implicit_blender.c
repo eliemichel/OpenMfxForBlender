@@ -1583,44 +1583,30 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, floa
                                          float r_f[3], float r_dfdx[3][3], float r_dfdv[3][3])
 {
 	float extent[3], length, dir[3], vel[3];
-	
+
 	// calculate elonglation
 	spring_length(data, i, j, extent, dir, &length, vel);
 
-	/* This code computes not only the force, but also its derivative.
-	   Zero derivative effectively disables the spring for the implicit solver.
-	   Thus length > restlen makes cloth unconstrained at the start of simulation. */
-	if ((length >= restlen && length > 0) || no_compress) {
-		float stretch_force, f[3], dfdx[3][3], dfdv[3][3];
-		
-		stretch_force = stiffness * (length - restlen);
-		if (clamp_force > 0.0f && stretch_force > clamp_force) {
-			stretch_force = clamp_force;
-		}
-		mul_v3_v3fl(f, dir, stretch_force);
-		
-		// Ascher & Boxman, p.21: Damping only during elonglation
-		// something wrong with it...
-		madd_v3_v3fl(f, dir, damping * dot_v3v3(vel, dir));
-		
-		dfdx_spring(dfdx, dir, length, restlen, stiffness);
-		dfdv_damp(dfdv, dir, damping);
-		
-		apply_spring(data, i, j, f, dfdx, dfdv);
-		
-		if (r_f) copy_v3_v3(r_f, f);
-		if (r_dfdx) copy_m3_m3(r_dfdx, dfdx);
-		if (r_dfdv) copy_m3_m3(r_dfdv, dfdv);
-		
-		return true;
+	float stretch_force, f[3], dfdx[3][3], dfdv[3][3];
+
+	stretch_force = stiffness * (length - restlen);
+	if (clamp_force > 0.0f && stretch_force > clamp_force) {
+		stretch_force = clamp_force;
 	}
-	else {
-		if (r_f) zero_v3(r_f);
-		if (r_dfdx) zero_m3(r_dfdx);
-		if (r_dfdv) zero_m3(r_dfdv);
-		
-		return false;
-	}
+	mul_v3_v3fl(f, dir, stretch_force);
+
+	madd_v3_v3fl(f, dir, damping * dot_v3v3(vel, dir));
+
+	dfdx_spring(dfdx, dir, length, restlen, stiffness);
+	dfdv_damp(dfdv, dir, damping);
+
+	apply_spring(data, i, j, f, dfdx, dfdv);
+
+	if (r_f) copy_v3_v3(r_f, f);
+	if (r_dfdx) copy_m3_m3(r_dfdx, dfdx);
+	if (r_dfdv) copy_m3_m3(r_dfdv, dfdv);
+
+	return true;
 }
 
 /* See "Stable but Responsive Cloth" (Choi, Ko 2005) */
