@@ -349,7 +349,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 	s->flags &= ~CLOTH_SPRING_FLAG_NEEDED;
 	
 	// calculate force of structural + shear springs
-	if ((s->type & CLOTH_SPRING_TYPE_STRUCTURAL) || (s->type & CLOTH_SPRING_TYPE_SHEAR) || (s->type & CLOTH_SPRING_TYPE_SEWING) ) {
+	if ((s->type & CLOTH_SPRING_TYPE_STRUCTURAL) || (s->type & CLOTH_SPRING_TYPE_SEWING) ) {
 #ifdef CLOTH_FORCE_SPRING_STRUCTURAL
 		float k, scaling;
 		
@@ -366,6 +366,18 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		else {
 			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, parms->Cdis, no_compress, 0.0f, s->f, s->dfdx, s->dfdv);
 		}
+#endif
+	}
+	else if (s->type & CLOTH_SPRING_TYPE_SHEAR) {
+#ifdef CLOTH_FORCE_SPRING_SHEAR
+		float k, scaling;
+
+		s->flags |= CLOTH_SPRING_FLAG_NEEDED;
+
+		scaling = parms->shear + s->stiffness * fabsf(parms->max_shear - parms->shear);
+		k = scaling / (parms->avg_spring_len + FLT_EPSILON);
+
+		BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, parms->Cdis, no_compress, 0.0f, s->f, s->dfdx, s->dfdv);
 #endif
 	}
 	else if (s->type & CLOTH_SPRING_TYPE_GOAL) {

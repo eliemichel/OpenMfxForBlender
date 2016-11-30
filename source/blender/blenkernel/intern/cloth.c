@@ -82,7 +82,8 @@ void cloth_init(ClothModifierData *clmd )
 	clmd->sim_parms->gravity[2] = -9.81;
 	clmd->sim_parms->structural = 15.0;
 	clmd->sim_parms->max_struct = 15.0;
-	clmd->sim_parms->shear = 15.0;
+	clmd->sim_parms->shear = 5.0;
+	clmd->sim_parms->max_shear = 5.0;
 	clmd->sim_parms->bending = 0.5;
 	clmd->sim_parms->max_bend = 0.5;
 	clmd->sim_parms->bending_damping = 0.5;
@@ -726,6 +727,9 @@ static void cloth_apply_vgroup ( ClothModifierData *clmd, DerivedMesh *dm )
 					if (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_SCALING ) {
 						if ( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_struct-1)) {
 							verts->struct_stiff = dvert->dw [j].weight;
+						}
+
+						if ( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_shear-1)) {
 							verts->shear_stiff = dvert->dw [j].weight;
 						}
 						
