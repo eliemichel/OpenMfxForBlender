@@ -87,7 +87,8 @@ void cloth_init(ClothModifierData *clmd )
 	clmd->sim_parms->bending = 0.5;
 	clmd->sim_parms->max_bend = 0.5;
 	clmd->sim_parms->bending_damping = 0.5;
-	clmd->sim_parms->Cdis = 5.0; 
+	clmd->sim_parms->struct_damp = 5.0;
+	clmd->sim_parms->shear_damp = 5.0;
 	clmd->sim_parms->Cvi = 1.0;
 	clmd->sim_parms->mass = 0.3f;
 	clmd->sim_parms->stepsPerFrame = 5;

@@ -93,7 +93,8 @@ class PHYSICS_PT_cloth(PhysicButtonsPanel, Panel):
         col = split.column()
 
         col.label(text="Damping:")
-        col.prop(cloth, "spring_damping", text="Spring")
+        col.prop(cloth, "structural_damping", text="Structural")
+        col.prop(cloth, "shear_damping", text="Shear")
         col.prop(cloth, "air_damping", text="Air")
         col.prop(cloth, "vel_damping", text="Velocity")
 

@@ -550,10 +550,17 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	
-	prop = RNA_def_property(srna, "spring_damping", PROP_FLOAT, PROP_NONE);
-	RNA_def_property_float_sdna(prop, NULL, "Cdis");
+	prop = RNA_def_property(srna, "structural_damping", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "struct_damp");
 	RNA_def_property_range(prop, 0.0f, 50.0f);
-	RNA_def_property_ui_text(prop, "Spring Damping",
+	RNA_def_property_ui_text(prop, "Structural Spring Damping",
+	                         "Damping of cloth velocity (higher = more smooth, less jiggling)");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "shear_damping", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "shear_damp");
+	RNA_def_property_range(prop, 0.0f, 50.0f);
+	RNA_def_property_ui_text(prop, "Shear Spring Damping",
 	                         "Damping of cloth velocity (higher = more smooth, less jiggling)");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 	

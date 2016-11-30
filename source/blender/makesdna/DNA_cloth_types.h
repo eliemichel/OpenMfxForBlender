@@ -49,7 +49,8 @@
 typedef struct ClothSimSettings {
 	struct	LinkNode *cache; /* UNUSED atm */
 	float 	mingoal; 	/* see SB */
-	float	Cdis;		/* Mechanical damping of springs.		*/
+	float	struct_damp;	/* Mechanical damping of structural springs. */
+	float	shear_damp;	/* Mechanical damping of structural springs. */
 	float	Cvi;		/* Viscous/fluid damping.			*/
 	float	gravity[3];	/* Gravity/external force vector.		*/
 	float	dt;		/* This is the duration of our time step, computed.	*/
@@ -100,7 +101,7 @@ typedef struct ClothSimSettings {
 	short	presets; /* used for presets on GUI */
 	short 	reset;
 
-	char pad0[2];
+	char pad0[6];
 	struct EffectorWeights *effector_weights;
 } ClothSimSettings;
 
