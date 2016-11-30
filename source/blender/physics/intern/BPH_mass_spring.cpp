@@ -355,8 +355,10 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		
 		s->flags |= CLOTH_SPRING_FLAG_NEEDED;
 		
+		// TODO: Scaling should be relative to half the area of the adjacent faces instead of length (except for sewing)
+		// Note that this scaling is only valid when coupled with proper mass distribution
 		scaling = parms->structural + s->stiffness * fabsf(parms->max_struct - parms->structural);
-		k = scaling / (parms->avg_spring_len + FLT_EPSILON);
+		k = scaling / (s->restlen + FLT_EPSILON);
 		
 		if (s->type & CLOTH_SPRING_TYPE_SEWING) {
 			// TODO: verify, half verified (couldn't see error)
@@ -375,7 +377,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		s->flags |= CLOTH_SPRING_FLAG_NEEDED;
 
 		scaling = parms->shear + s->stiffness * fabsf(parms->max_shear - parms->shear);
-		k = scaling / (parms->avg_spring_len + FLT_EPSILON);
+		k = scaling / (s->restlen + FLT_EPSILON);
 
 		BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, parms->Cdis, no_compress, 0.0f, s->f, s->dfdx, s->dfdv);
 #endif
