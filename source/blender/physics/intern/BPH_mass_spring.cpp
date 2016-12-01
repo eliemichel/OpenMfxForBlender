@@ -351,22 +351,28 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 	// calculate force of structural + shear springs
 	if ((s->type & CLOTH_SPRING_TYPE_STRUCTURAL) || (s->type & CLOTH_SPRING_TYPE_SEWING) ) {
 #ifdef CLOTH_FORCE_SPRING_STRUCTURAL
-		float k, scaling;
+		float k_tension, k_compression, scaling_tension, scaling_compression;
 		
 		s->flags |= CLOTH_SPRING_FLAG_NEEDED;
 		
 		// TODO: Scaling should be relative to half the area of the adjacent faces instead of length (except for sewing)
 		// Note that this scaling is only valid when coupled with proper mass distribution
-		scaling = parms->structural + s->stiffness * fabsf(parms->max_struct - parms->structural);
-		k = scaling / (s->restlen + FLT_EPSILON);
+		scaling_tension = parms->tension + s->stiffness * fabsf(parms->max_tension - parms->tension);
+		scaling_compression = parms->compression + s->stiffness * fabsf(parms->max_compression - parms->compression); // TODO: Unnecessary for sewing
+		k_tension = scaling_tension / (s->restlen + FLT_EPSILON);
+		k_compression = scaling_compression / (s->restlen + FLT_EPSILON);
 		
 		if (s->type & CLOTH_SPRING_TYPE_SEWING) {
 			// TODO: verify, half verified (couldn't see error)
 			// sewing springs usually have a large distance at first so clamp the force so we don't get tunnelling through colission objects
-			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, parms->struct_damp, no_compress, parms->max_sewing, s->f, s->dfdx, s->dfdv);
+			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k_tension, k_compression,
+			                                    parms->tension_damp, parms->compression_damp,
+			                                    no_compress, parms->max_sewing, s->f, s->dfdx, s->dfdv);
 		}
 		else {
-			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, parms->struct_damp, no_compress, 0.0f, s->f, s->dfdx, s->dfdv);
+			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k_tension, k_compression,
+			                                    parms->tension_damp, parms->compression_damp,
+			                                    no_compress, 0.0f, s->f, s->dfdx, s->dfdv);
 		}
 #endif
 	}
@@ -379,7 +385,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		scaling = parms->shear + s->stiffness * fabsf(parms->max_shear - parms->shear);
 		k = scaling / (s->restlen + FLT_EPSILON);
 
-		BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, parms->shear_damp, no_compress, 0.0f, s->f, s->dfdx, s->dfdv);
+		BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, 0.0f, parms->shear_damp, 0.0f, no_compress, 0.0f, s->f, s->dfdx, s->dfdv);
 #endif
 	}
 	else if (s->type & CLOTH_SPRING_TYPE_GOAL) {
@@ -394,7 +400,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		interp_v3_v3v3(goal_x, verts[s->ij].xold, verts[s->ij].xconst, time / parms->time_scale);
 		sub_v3_v3v3(goal_v, verts[s->ij].xconst, verts[s->ij].xold); // distance covered over dt==1
 		
-		scaling = parms->goalspring + s->stiffness * fabsf(parms->max_struct - parms->goalspring);
+		scaling = parms->goalspring + s->stiffness * fabsf(parms->max_tension - parms->goalspring);
 		k = verts[s->ij].goal * scaling / (parms->avg_spring_len + FLT_EPSILON);
 		
 		BPH_mass_spring_force_spring_goal(data, s->ij, goal_x, goal_v, k, parms->goalfrict * 0.01f, s->f, s->dfdx, s->dfdv);

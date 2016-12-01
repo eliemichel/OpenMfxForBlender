@@ -49,17 +49,20 @@
 typedef struct ClothSimSettings {
 	struct	LinkNode *cache; /* UNUSED atm */
 	float 	mingoal; 	/* see SB */
-	float	struct_damp;	/* Mechanical damping of structural springs. */
+	float	tension_damp;	/* Mechanical damping of structural springs. */
+	float	compression_damp;	/* Mechanical damping of structural springs. */
 	float	shear_damp;	/* Mechanical damping of structural springs. */
 	float	Cvi;		/* Viscous/fluid damping.			*/
 	float	gravity[3];	/* Gravity/external force vector.		*/
 	float	dt;		/* This is the duration of our time step, computed.	*/
 	float	mass;		/* The mass of the entire cloth.		*/
-	float	structural;	/* Structural spring stiffness.			*/
+	float	tension;	/* Tension spring stiffness.			*/
+	float	compression;	/* Compression spring stiffness.			*/
 	float	shear;		/* Shear spring stiffness.			*/
 	float	bending;	/* Flexion spring stiffness.			*/
 	float	max_bend; 	/* max bending scaling value, min is "bending" */
-	float	max_struct; 	/* max structural scaling value, min is "structural" */
+	float	max_tension; 	/* max structural scaling value, min is "structural" */
+	float	max_compression; 	/* max structural scaling value, min is "structural" */
 	float	max_shear; 	/* max shear scaling value */
 	float	max_sewing; 	/* max sewing force */
 	float 	avg_spring_len; /* used for normalized springs */
@@ -101,7 +104,7 @@ typedef struct ClothSimSettings {
 	short	presets; /* used for presets on GUI */
 	short 	reset;
 
-	char pad0[6];
+	char pad0[2];
 	struct EffectorWeights *effector_weights;
 } ClothSimSettings;
 

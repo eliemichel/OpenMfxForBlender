@@ -115,8 +115,8 @@ void BPH_mass_spring_force_edge_wind(struct Implicit_Data *data, int v1, int v2,
 void BPH_mass_spring_force_vertex_wind(struct Implicit_Data *data, int v, float radius, const float (*winvec)[3]);
 /* Linear spring force between two points */
 bool BPH_mass_spring_force_spring_linear(struct Implicit_Data *data, int i, int j, float restlen,
-                                         float stiffness, float damping, bool no_compress, float clamp_force,
-                                         float r_f[3], float r_dfdx[3][3], float r_dfdv[3][3]);
+                                         float tension, float compression, float damp_tension, float damp_compression,
+					 bool no_compress, float clamp_force, float r_f[3], float r_dfdx[3][3], float r_dfdv[3][3]);
 /* Bending force, forming a triangle at the base of two structural springs */
 bool BPH_mass_spring_force_spring_bending(struct Implicit_Data *data, int i, int j, float restlen,
                                           float kb, float cb,

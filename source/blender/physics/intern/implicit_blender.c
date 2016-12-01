@@ -1579,13 +1579,27 @@ BLI_INLINE void apply_spring(Implicit_Data *data, int i, int j, const float f[3]
 }
 
 bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, float restlen,
-                                         float stiffness, float damping, bool no_compress, float clamp_force,
-                                         float r_f[3], float r_dfdx[3][3], float r_dfdv[3][3])
+                                         float tension, float compression, float damp_tension, float damp_compression,
+                                         bool no_compress, float clamp_force, float r_f[3], float r_dfdx[3][3], float r_dfdv[3][3])
 {
 	float extent[3], length, dir[3], vel[3];
+	float stiffness, damping;
 
 	// calculate elonglation
 	spring_length(data, i, j, extent, dir, &length, vel);
+	
+	if (length > restlen) {
+		stiffness = tension;
+		damping = damp_tension;
+	}
+	else if (length < restlen) {
+		stiffness = compression;
+		damping = damp_compression;
+	}
+	else {
+		stiffness = (tension + compression) / 2;
+		damping = (damp_tension + damp_compression) / 2;
+	}
 
 	float stretch_force, f[3], dfdx[3][3], dfdv[3][3];
 

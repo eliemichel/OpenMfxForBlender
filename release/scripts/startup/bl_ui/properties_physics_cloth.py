@@ -86,14 +86,16 @@ class PHYSICS_PT_cloth(PhysicButtonsPanel, Panel):
 
         col.label(text="Material:")
         col.prop(cloth, "mass")
-        col.prop(cloth, "structural_stiffness", text="Structural")
+        col.prop(cloth, "tension_stiffness", text="Tension")
+        col.prop(cloth, "compression_stiffness", text="Compression")
         col.prop(cloth, "shear_stiffness", text="Shear")
         col.prop(cloth, "bending_stiffness", text="Bending")
 
         col = split.column()
 
         col.label(text="Damping:")
-        col.prop(cloth, "structural_damping", text="Structural")
+        col.prop(cloth, "tension_damping", text="Tension")
+        col.prop(cloth, "compression_damping", text="Compression")
         col.prop(cloth, "shear_damping", text="Shear")
         col.prop(cloth, "air_damping", text="Air")
         col.prop(cloth, "vel_damping", text="Velocity")
@@ -205,8 +207,11 @@ class PHYSICS_PT_cloth_stiffness(PhysicButtonsPanel, Panel):
         row = layout.row()
         row.label(text="Structural Stiffness:")
         row.prop_search(cloth, "vertex_group_structural_stiffness", ob, "vertex_groups", text="")
-        row.prop(cloth, "structural_stiffness_max", text="Max")
+        row.prop(cloth, "tension_stiffness_max", text="Tension")
 
+        row = layout.row()
+        row.prop(cloth, "compression_stiffness_max", text="Compression")
+        
         row = layout.row()
         row.label(text="Shear Stiffness:")
         row.prop_search(cloth, "vertex_group_shear_stiffness", ob, "vertex_groups", text="")
