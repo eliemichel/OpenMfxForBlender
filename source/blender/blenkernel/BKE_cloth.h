@@ -132,20 +132,15 @@ ClothVertex;
 typedef struct ClothSpring {
 	int	ij;		/* Pij from the paper, one end of the spring.	*/
 	int	kl;		/* Pkl from the paper, one end of the spring.	*/
-	int mn;
+	int mn;		/* Something related to angular hair springs. */
 	float	restlen;	/* The original length of the spring.	*/
 	int	type;		/* types defined in BKE_cloth.h ("springType") */
 	int	flags; 		/* defined in BKE_cloth.h, e.g. deactivated due to tearing */
-	float dfdx[3][3];
-	float dfdv[3][3];
-	float f[3];
 	float 	stiffness;	/* stiffness factor from the vertex groups */
-	float editrestlen;
 	
 	/* angular bending spring target and derivatives */
 	float target[3];
-}
-ClothSpring;
+} ClothSpring;
 
 // some macro enhancements for vector treatment
 #define VECADDADD(v1,v2,v3) 	{*(v1)+= *(v2) + *(v3); *(v1+1)+= *(v2+1) + *(v3+1); *(v1+2)+= *(v2+2) + *(v3+2);}

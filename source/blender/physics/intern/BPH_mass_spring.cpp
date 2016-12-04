@@ -342,10 +342,6 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 	
 	bool no_compress = parms->flags & CLOTH_SIMSETTINGS_FLAG_NO_SPRING_COMPRESS;
 	
-	zero_v3(s->f);
-	zero_m3(s->dfdx);
-	zero_m3(s->dfdv);
-	
 	s->flags &= ~CLOTH_SPRING_FLAG_NEEDED;
 	
 	// calculate force of structural + shear springs
@@ -367,12 +363,12 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 			// sewing springs usually have a large distance at first so clamp the force so we don't get tunnelling through colission objects
 			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k_tension, k_compression,
 			                                    parms->tension_damp, parms->compression_damp,
-			                                    no_compress, parms->max_sewing, s->f, s->dfdx, s->dfdv);
+			                                    no_compress, parms->max_sewing);
 		}
 		else {
 			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k_tension, k_compression,
 			                                    parms->tension_damp, parms->compression_damp,
-			                                    no_compress, 0.0f, s->f, s->dfdx, s->dfdv);
+			                                    no_compress, 0.0f);
 		}
 #endif
 	}
@@ -385,7 +381,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		scaling = parms->shear + s->stiffness * fabsf(parms->max_shear - parms->shear);
 		k = scaling / (s->restlen + FLT_EPSILON);
 
-		BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, 0.0f, parms->shear_damp, 0.0f, no_compress, 0.0f, s->f, s->dfdx, s->dfdv);
+		BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, 0.0f, parms->shear_damp, 0.0f, no_compress, 0.0f);
 #endif
 	}
 	else if (s->type & CLOTH_SPRING_TYPE_GOAL) {
@@ -403,7 +399,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		scaling = parms->goalspring + s->stiffness * fabsf(parms->max_tension - parms->goalspring);
 		k = verts[s->ij].goal * scaling / (parms->avg_spring_len + FLT_EPSILON);
 		
-		BPH_mass_spring_force_spring_goal(data, s->ij, goal_x, goal_v, k, parms->goalfrict * 0.01f, s->f, s->dfdx, s->dfdv);
+		BPH_mass_spring_force_spring_goal(data, s->ij, goal_x, goal_v, k, parms->goalfrict * 0.01f);
 #endif
 	}
 	else if (s->type & CLOTH_SPRING_TYPE_BENDING) {  /* calculate force of bending springs */
@@ -418,7 +414,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		// Fix for [#45084] for cloth stiffness must have cb proportional to kb
 		cb = kb * parms->bending_damping;
 		
-		BPH_mass_spring_force_spring_bending(data, s->ij, s->kl, s->restlen, kb, cb, s->f, s->dfdx, s->dfdv);
+		BPH_mass_spring_force_spring_bending(data, s->ij, s->kl, s->restlen, kb, cb);
 #endif
 	}
 	else if (s->type & CLOTH_SPRING_TYPE_BENDING_ANG) {
