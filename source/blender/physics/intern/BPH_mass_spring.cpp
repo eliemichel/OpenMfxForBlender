@@ -348,6 +348,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 	if ((s->type & CLOTH_SPRING_TYPE_STRUCTURAL) || (s->type & CLOTH_SPRING_TYPE_SEWING) ) {
 #ifdef CLOTH_FORCE_SPRING_STRUCTURAL
 		float k_tension, k_compression, scaling_tension, scaling_compression;
+		float d_tension, d_compression;
 
 		s->flags |= CLOTH_SPRING_FLAG_NEEDED;
 
@@ -358,11 +359,12 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		if (s->type & CLOTH_SPRING_TYPE_SEWING) {
 			// Multiply by some arbitrary large value, just so zero-length (sewing) springs have enough force.
 			k_tension = scaling_tension * 10000;
+			d_tension = parms->tension_damp * 10000;
 
 			// TODO: verify, half verified (couldn't see error)
 			// sewing springs usually have a large distance at first so clamp the force so we don't get tunnelling through colission objects
 			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k_tension, 0,
-			                                    parms->tension_damp, 0, no_compress, parms->max_sewing);
+			                                    d_tension, 0, no_compress, parms->max_sewing);
 		}
 		else {
 			scaling_compression = parms->compression + s->stiffness * fabsf(parms->max_compression - parms->compression);
@@ -370,32 +372,40 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 			if (s->restlen > ALMOST_ZERO) {
 				k_tension = scaling_tension / s->restlen;
 				k_compression = scaling_compression / s->restlen;
+				d_tension = parms->tension_damp / s->restlen;
+				d_compression = parms->compression_damp / s->restlen;
 			}
 			else {
 				// Multiply by some arbitrary large value, just so zero-length springs have enough force.
 				k_tension = scaling_tension * 10000;
 				k_compression = 0; // No compression for zero-length springs
+				d_tension = parms->tension_damp * 1000;
+				d_compression = 0;
 			}
 
 			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k_tension, k_compression,
-			                                    parms->tension_damp, parms->compression_damp, no_compress, 0.0f);
+			                                    d_tension, d_compression, no_compress, 0.0f);
 		}
 #endif
 	}
 	else if (s->type & CLOTH_SPRING_TYPE_SHEAR) {
 #ifdef CLOTH_FORCE_SPRING_SHEAR
-		float k, scaling;
+		float k, d, scaling;
 
 		s->flags |= CLOTH_SPRING_FLAG_NEEDED;
 
 		scaling = parms->shear + s->stiffness * fabsf(parms->max_shear - parms->shear);
 
-		if (s->restlen > ALMOST_ZERO)
+		if (s->restlen > ALMOST_ZERO) {
 			k = scaling / s->restlen;
-		else
+			d = parms->shear_damp / s->restlen;
+		}
+		else {
 			k = scaling * 10000;
+			d = parms->shear_damp * 10000;
+		}
 
-		BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, 0.0f, parms->shear_damp, 0.0f, no_compress, 0.0f);
+		BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, 0.0f, d, 0.0f, no_compress, 0.0f);
 #endif
 	}
 	else if (s->type & CLOTH_SPRING_TYPE_GOAL) {
