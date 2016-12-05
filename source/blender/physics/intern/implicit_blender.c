@@ -1583,35 +1583,40 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, floa
                                          bool no_compress, float clamp_force)
 {
 	float extent[3], length, dir[3], vel[3];
-	float stiffness, damping;
+	float f[3], dfdx[3][3], dfdv[3][3];
+	float damping = 0;
 
-	// calculate elonglation
+	/* calculate elonglation */
 	spring_length(data, i, j, extent, dir, &length, vel);
-	
-	if (length > restlen) {
-		stiffness = tension;
+
+	/* Calculate tension forces */
+	if (length >= restlen) {
+		float stretch_force;
 		damping = damp_tension;
+
+		stretch_force = tension * (length - restlen);
+		if (clamp_force > 0.0f && stretch_force > clamp_force) {
+			stretch_force = clamp_force;
+		}
+		mul_v3_v3fl(f, dir, stretch_force);
+
+		dfdx_spring(dfdx, dir, length, restlen, tension);
 	}
-	else if (length < restlen) {
-		stiffness = compression;
+
+	/* Calculate compression forces */
+	else if (!no_compress) {
+		float kb = compression;
+		float cb = kb; /* cb equal to kb seems to work, but a factor can be added if necessary */
 		damping = damp_compression;
-	}
-	else {
-		stiffness = (tension + compression) / 2;
-		damping = (damp_tension + damp_compression) / 2;
+
+		mul_v3_v3fl(f, dir, fbstar(length, restlen, kb, cb));
+
+		outerproduct(dfdx, dir, dir);
+		mul_m3_fl(dfdx, fbstar_jacobi(length, restlen, kb, cb));
 	}
 
-	float stretch_force, f[3], dfdx[3][3], dfdv[3][3];
-
-	stretch_force = stiffness * (length - restlen);
-	if (clamp_force > 0.0f && stretch_force > clamp_force) {
-		stretch_force = clamp_force;
-	}
-	mul_v3_v3fl(f, dir, stretch_force);
-
+	/* Calculate damping forces */
 	madd_v3_v3fl(f, dir, damping * dot_v3v3(vel, dir));
-
-	dfdx_spring(dfdx, dir, length, restlen, stiffness);
 	dfdv_damp(dfdv, dir, damping);
 
 	apply_spring(data, i, j, f, dfdx, dfdv);
