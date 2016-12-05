@@ -412,6 +412,58 @@ static float get_parameterization(float x, const BezTriple *prev, const BezTripl
 	return t;
 }
 
+static float** de_castlejau_algorithm(const BezTriple *bezt, const BezTriple *prev, const BezTriple *next, float** P)
+{
+	float temp[2], P0_1[2], P1_2[2], P2_3[2];
+	float P01_12[2], P12_23[2];
+	float P0112_1223[2];
+
+	if (prev && next && prev->h2 != HD_VECT && next->h1 != HD_VECT && (prev->ipo == BEZT_IPO_BEZ))
+	{
+		const float *P0 = prev->vec[1];
+		const float *P1 = prev->vec[2];
+		const float *P2 = next->vec[0];
+		const float *P3 = next->vec[1];
+
+		float t = get_parameterization(bezt->vec[1][0], prev, next);
+		float one_minus_t = 1.0F - t;
+
+		mul_v2_v2fl(P0_1, P0, one_minus_t);
+		mul_v2_v2fl(temp, P1, t);
+		add_v2_v2v2(P0_1, P0_1, temp);
+
+		mul_v2_v2fl(P1_2, P1, one_minus_t);
+		mul_v2_v2fl(temp, P2, t);
+		add_v2_v2v2(P1_2, P1_2, temp);
+
+		mul_v2_v2fl(P2_3, P2, one_minus_t);
+		mul_v2_v2fl(temp, P3, t);
+		add_v2_v2v2(P2_3, P2_3, temp);
+
+		mul_v2_v2fl(P01_12, P0_1, one_minus_t);
+		mul_v2_v2fl(temp, P1_2, t);
+		add_v2_v2v2(P01_12, P01_12, temp);
+
+		mul_v2_v2fl(P12_23, P1_2, one_minus_t);
+		mul_v2_v2fl(temp, P2_3, t);
+		add_v2_v2v2(P12_23, P12_23, temp);
+
+		mul_v2_v2fl(P0112_1223, P01_12, one_minus_t);
+		mul_v2_v2fl(temp, P12_23, t);
+		add_v2_v2v2(P0112_1223, P0112_1223, temp);
+
+		memcpy(P[0], P0_1,       sizeof(P0_1));
+		memcpy(P[1], P2_3,		 sizeof(P0_1));
+		memcpy(P[2], P01_12,	 sizeof(P0_1));
+		memcpy(P[3], P12_23,	 sizeof(P0_1));
+		memcpy(P[4], P0112_1223, sizeof(P0_1));
+
+		return P;
+	}
+	return NULL;
+
+}
+
 /**
 * This function is a wrapper for insert_bezt_fcurve_internal(), and should be used when
 * adding a new keyframe to a curve, when the keyframe doesn't exist anywhere else yet.
@@ -487,62 +539,28 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 	BezTriple *prev = ((a - 1) >= 0) ? &fcu->bezt[a - 1] : NULL;
 	BezTriple *bezt = &fcu->bezt[a];
 	BezTriple *next = ((a + 1) < fcu->totvert) ? &fcu->bezt[a + 1] : NULL;
+	
+
+	float** P = (float**)malloc(5*sizeof(float*));
+	for (int i = 0; i < 5; i++)
+	{
+		P[i] = (float*)malloc(2 * sizeof(float));
+	}
+	P = de_castlejau_algorithm(bezt, prev, next, P);
+
+	float y_diff = (float)fabs((double)(y - P[4][1]));
+	float epsilon = 0.1;
 
 
-	if (prev && next && prev->h2 != HD_VECT && next->h1 != HD_VECT && (prev->ipo == BEZT_IPO_BEZ)) {
-		const float *P0 = prev->vec[1];
-		const float *P1 = prev->vec[2];
-		const float *P2 = next->vec[0];
-		const float *P3 = next->vec[1];
+	if (P && (y_diff <= epsilon)) {
 
+		copy_v2_v2(prev->vec[2], P[0]); // P0_12
 
-		float temp[2], P0_1[2], P1_2[2], P2_3[2];
-		float P01_12[2], P12_23[2];
-		float P0112_1223[2];
+		copy_v2_v2(bezt->vec[0], P[2]); // P01_12
+		copy_v2_v2(bezt->vec[1], P[4]); // P0112_1223
+		copy_v2_v2(bezt->vec[2], P[3]); // P12_23
 
-		//float t = (bezt->vec[1][0] - P0[0])/(P3[0] - P0[0]);
-		float t = get_parameterization(bezt->vec[1][0], prev, next);
-		float one_minus_t = 1.0F - t;
-
-		mul_v2_v2fl(P0_1, P0, one_minus_t);
-		mul_v2_v2fl(temp, P1, t);
-		add_v2_v2v2(P0_1, P0_1, temp);
-
-		mul_v2_v2fl(P1_2, P1, one_minus_t);
-		mul_v2_v2fl(temp, P2, t);
-		add_v2_v2v2(P1_2, P1_2, temp);
-
-		mul_v2_v2fl(P2_3, P2, one_minus_t);
-		mul_v2_v2fl(temp, P3, t);
-		add_v2_v2v2(P2_3, P2_3, temp);
-
-		mul_v2_v2fl(P01_12, P0_1, one_minus_t);
-		mul_v2_v2fl(temp, P1_2, t);
-		add_v2_v2v2(P01_12, P01_12, temp);
-
-		mul_v2_v2fl(P12_23, P1_2, one_minus_t);
-		mul_v2_v2fl(temp, P2_3, t);
-		add_v2_v2v2(P12_23, P12_23, temp);
-
-		mul_v2_v2fl(P0112_1223, P01_12, one_minus_t);
-		mul_v2_v2fl(temp, P12_23, t);
-		add_v2_v2v2(P0112_1223, P0112_1223, temp);
-
-		prev->h1 = HD_FREE;
-		prev->h2 = HD_FREE;
-		next->h1 = HD_FREE;
-		next->h2 = HD_FREE;
-		bezt->h1 = HD_FREE;
-		bezt->h2 = HD_FREE;
-
-		// Update prev, current, and next curves
-		copy_v2_v2(prev->vec[2], P0_1);
-
-		copy_v2_v2(bezt->vec[0], P01_12);
-		copy_v2_v2(bezt->vec[1], P0112_1223);
-		copy_v2_v2(bezt->vec[2], P12_23);
-
-		copy_v2_v2(next->vec[0], P2_3);
+		copy_v2_v2(next->vec[0], P[1]); // P2_3
 
 		prev->h1 = HD_ALIGN;
 		prev->h2 = HD_ALIGN;
@@ -591,6 +609,12 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 				calchandles_fcurve(fcu);
 		}
 	}
+
+	for (int i = 0; i < 5; i++)
+	{
+		free(P[i]);
+	}
+	free(P);
 
 	/* return the index at which the keyframe was added */
 	return a;
