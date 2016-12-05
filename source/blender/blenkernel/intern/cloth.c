@@ -1042,7 +1042,7 @@ static void cloth_hair_update_bending_targets(ClothModifierData *clmd)
 		ClothHairData *hair_ij, *hair_kl;
 		bool is_root = spring->kl != prev_mn;
 		
-		if (spring->type != CLOTH_SPRING_TYPE_BENDING_ANG) {
+		if (spring->type != CLOTH_SPRING_TYPE_BENDING_HAIR) {
 			continue;
 		}
 		
@@ -1117,7 +1117,7 @@ static void cloth_hair_update_bending_rest_targets(ClothModifierData *clmd)
 		ClothHairData *hair_ij, *hair_kl;
 		bool is_root = spring->kl != prev_mn;
 		
-		if (spring->type != CLOTH_SPRING_TYPE_BENDING_ANG) {
+		if (spring->type != CLOTH_SPRING_TYPE_BENDING_HAIR) {
 			continue;
 		}
 		
@@ -1168,7 +1168,7 @@ static void cloth_update_springs( ClothModifierData *clmd )
 		else if (spring->type == CLOTH_SPRING_TYPE_BENDING) {
 			spring->stiffness = (cloth->verts[spring->kl].bend_stiff + cloth->verts[spring->ij].bend_stiff) / 2.0f;
 		}
-		else if (spring->type == CLOTH_SPRING_TYPE_BENDING_ANG) {
+		else if (spring->type == CLOTH_SPRING_TYPE_BENDING_HAIR) {
 			ClothVertex *v1 = &cloth->verts[spring->ij];
 			ClothVertex *v2 = &cloth->verts[spring->kl];
 			if (clmd->hairdata) {
@@ -1471,7 +1471,7 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 					spring->kl = tspring->ij;
 					spring->mn = tspring->kl;
 					spring->restlen = len_v3v3(cloth->verts[spring->kl].xrest, cloth->verts[spring->ij].xrest);
-					spring->type = CLOTH_SPRING_TYPE_BENDING_ANG;
+					spring->type = CLOTH_SPRING_TYPE_BENDING_HAIR;
 					spring->stiffness = (cloth->verts[spring->kl].bend_stiff + cloth->verts[spring->ij].bend_stiff) / 2.0f;
 					bend_springs++;
 					

@@ -64,7 +64,7 @@ static int cloth_count_nondiag_blocks(Cloth *cloth)
 	for (link = cloth->springs; link; link = link->next) {
 		ClothSpring *spring = (ClothSpring *)link->link;
 		switch (spring->type) {
-			case CLOTH_SPRING_TYPE_BENDING_ANG:
+			case CLOTH_SPRING_TYPE_BENDING_HAIR:
 				/* angular bending combines 3 vertices */
 				nondiag += 3;
 				break;
@@ -441,7 +441,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		BPH_mass_spring_force_spring_bending(data, s->ij, s->kl, s->restlen, kb, cb);
 #endif
 	}
-	else if (s->type & CLOTH_SPRING_TYPE_BENDING_ANG) {
+	else if (s->type & CLOTH_SPRING_TYPE_BENDING_HAIR) {
 #ifdef CLOTH_FORCE_SPRING_BEND
 		float kb, cb, scaling;
 		
@@ -458,7 +458,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		cb = kb * parms->bending_damping;
 		
 		/* XXX assuming same restlen for ij and jk segments here, this can be done correctly for hair later */
-		BPH_mass_spring_force_spring_bending_angular(data, s->ij, s->kl, s->mn, s->target, kb, cb);
+		BPH_mass_spring_force_spring_bending_hair(data, s->ij, s->kl, s->mn, s->target, kb, cb);
 		
 #if 0
 		{

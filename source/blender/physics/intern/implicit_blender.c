@@ -1676,7 +1676,7 @@ BLI_INLINE void spring_grad_dir(Implicit_Data *data, int i, int j, float edge[3]
 	}
 }
 
-BLI_INLINE void spring_angbend_forces(Implicit_Data *data, int i, int j, int k,
+BLI_INLINE void spring_hairbend_forces(Implicit_Data *data, int i, int j, int k,
                                       const float goal[3],
                                       float stiffness, float damping,
                                       int q, const float dx[3], const float dv[3],
@@ -1725,7 +1725,7 @@ BLI_INLINE void spring_angbend_forces(Implicit_Data *data, int i, int j, int k,
 }
 
 /* Finite Differences method for estimating the jacobian of the force */
-BLI_INLINE void spring_angbend_estimate_dfdx(Implicit_Data *data, int i, int j, int k,
+BLI_INLINE void spring_hairbend_estimate_dfdx(Implicit_Data *data, int i, int j, int k,
                                              const float goal[3],
                                              float stiffness, float damping,
                                              int q, float dfdx[3][3])
@@ -1744,11 +1744,11 @@ BLI_INLINE void spring_angbend_estimate_dfdx(Implicit_Data *data, int i, int j, 
 	/* XXX TODO offset targets to account for position dependency */
 	
 	for (a = 0; a < 3; ++a) {
-		spring_angbend_forces(data, i, j, k, goal, stiffness, damping,
+		spring_hairbend_forces(data, i, j, k, goal, stiffness, damping,
 		                      q, dvec_pos[a], dvec_null[a], f);
 		copy_v3_v3(dfdx[a], f);
 		
-		spring_angbend_forces(data, i, j, k, goal, stiffness, damping,
+		spring_hairbend_forces(data, i, j, k, goal, stiffness, damping,
 		                      q, dvec_neg[a], dvec_null[a], f);
 		sub_v3_v3(dfdx[a], f);
 		
@@ -1759,7 +1759,7 @@ BLI_INLINE void spring_angbend_estimate_dfdx(Implicit_Data *data, int i, int j, 
 }
 
 /* Finite Differences method for estimating the jacobian of the force */
-BLI_INLINE void spring_angbend_estimate_dfdv(Implicit_Data *data, int i, int j, int k,
+BLI_INLINE void spring_hairbend_estimate_dfdv(Implicit_Data *data, int i, int j, int k,
                                              const float goal[3],
                                              float stiffness, float damping,
                                              int q, float dfdv[3][3])
@@ -1778,11 +1778,11 @@ BLI_INLINE void spring_angbend_estimate_dfdv(Implicit_Data *data, int i, int j, 
 	/* XXX TODO offset targets to account for position dependency */
 	
 	for (a = 0; a < 3; ++a) {
-		spring_angbend_forces(data, i, j, k, goal, stiffness, damping,
+		spring_hairbend_forces(data, i, j, k, goal, stiffness, damping,
 		                      q, dvec_null[a], dvec_pos[a], f);
 		copy_v3_v3(dfdv[a], f);
 		
-		spring_angbend_forces(data, i, j, k, goal, stiffness, damping,
+		spring_hairbend_forces(data, i, j, k, goal, stiffness, damping,
 		                      q, dvec_null[a], dvec_neg[a], f);
 		sub_v3_v3(dfdv[a], f);
 		
@@ -1795,7 +1795,7 @@ BLI_INLINE void spring_angbend_estimate_dfdv(Implicit_Data *data, int i, int j, 
 /* Angular spring that pulls the vertex toward the local target
  * See "Artistic Simulation of Curly Hair" (Pixar technical memo #12-03a)
  */
-bool BPH_mass_spring_force_spring_bending_angular(Implicit_Data *data, int i, int j, int k,
+bool BPH_mass_spring_force_spring_bending_hair(Implicit_Data *data, int i, int j, int k,
                                                   const float target[3], float stiffness, float damping)
 {
 	float goal[3];
@@ -1811,18 +1811,18 @@ bool BPH_mass_spring_force_spring_bending_angular(Implicit_Data *data, int i, in
 	
 	world_to_root_v3(data, j, goal, target);
 	
-	spring_angbend_forces(data, i, j, k, goal, stiffness, damping, k, vecnull, vecnull, fk);
+	spring_hairbend_forces(data, i, j, k, goal, stiffness, damping, k, vecnull, vecnull, fk);
 	negate_v3_v3(fj, fk); /* counterforce */
 	
-	spring_angbend_estimate_dfdx(data, i, j, k, goal, stiffness, damping, i, dfk_dxi);
-	spring_angbend_estimate_dfdx(data, i, j, k, goal, stiffness, damping, j, dfk_dxj);
-	spring_angbend_estimate_dfdx(data, i, j, k, goal, stiffness, damping, k, dfk_dxk);
+	spring_hairbend_estimate_dfdx(data, i, j, k, goal, stiffness, damping, i, dfk_dxi);
+	spring_hairbend_estimate_dfdx(data, i, j, k, goal, stiffness, damping, j, dfk_dxj);
+	spring_hairbend_estimate_dfdx(data, i, j, k, goal, stiffness, damping, k, dfk_dxk);
 	copy_m3_m3(dfj_dxi, dfk_dxi); negate_m3(dfj_dxi);
 	copy_m3_m3(dfj_dxj, dfk_dxj); negate_m3(dfj_dxj);
 	
-	spring_angbend_estimate_dfdv(data, i, j, k, goal, stiffness, damping, i, dfk_dvi);
-	spring_angbend_estimate_dfdv(data, i, j, k, goal, stiffness, damping, j, dfk_dvj);
-	spring_angbend_estimate_dfdv(data, i, j, k, goal, stiffness, damping, k, dfk_dvk);
+	spring_hairbend_estimate_dfdv(data, i, j, k, goal, stiffness, damping, i, dfk_dvi);
+	spring_hairbend_estimate_dfdv(data, i, j, k, goal, stiffness, damping, j, dfk_dvj);
+	spring_hairbend_estimate_dfdv(data, i, j, k, goal, stiffness, damping, k, dfk_dvk);
 	copy_m3_m3(dfj_dvi, dfk_dvi); negate_m3(dfj_dvi);
 	copy_m3_m3(dfj_dvj, dfk_dvj); negate_m3(dfj_dvj);
 	
