@@ -530,11 +530,7 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
         float3 fill_color = stack_load_float3(stack, fill_in_offset);
         float3 background_color = stack_load_float3(stack, background_in_offset);
 
-        uint4 info = kernel_tex_fetch(__tex_image_packed_info, slot);
-        uint width = info.x;
-    //	uint height = info.y;
-    //	uint offset = info.z;
-
+        uint width = kg->texture_float4_images[slot].width;
         bool inside = false;
 
         for (int t = 0; t < width; t+=3) {

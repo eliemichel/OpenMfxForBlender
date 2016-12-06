@@ -674,6 +674,10 @@ static ShaderNode *add_node(Scene *scene,
             int scene_frame = b_scene.frame_current();
             tex->filename = "Curve@" + string_printf("%d", scene_frame);    // TODO: Make more unique??!!
             tex->points = CurveToFilledTriangles(cu);
+            printf("Num pts %d\n", (int) tex->points.size());
+            for (int n = 0; n < tex->points.size(); ++n) {
+                printf("%f %f\n", tex->points[n].x, tex->points[n].y);
+            }
 
             ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
             ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));
@@ -682,10 +686,13 @@ static ShaderNode *add_node(Scene *scene,
 
             tex->builtin_data = image;
 
-            scene->image_manager->tag_reload_image(tex->filename,
-                                                   tex->builtin_data,
-                                                   INTERPOLATION_CLOSEST,
-                                                   EXTENSION_EXTEND);
+            bool is_float_bool, linear;
+            tex->slot = scene->image_manager->add_image(tex->filename, tex->builtin_data,
+                                                        true, 0, is_float_bool, linear,
+                                                        INTERPOLATION_CLOSEST,
+                                                        EXTENSION_CLIP,
+                                                        true);
+
         }
 
 		BL::TexMapping b_texture_mapping(b_curve_node.texture_mapping());
