@@ -495,20 +495,22 @@ ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, floa
 		stack_store_float(stack, alpha_offset, f.w);
 }
 
-ccl_device float sign (float3 p1, float4 p2, float4 p3)
-{
-    return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
-}
+ccl_device float minimum_distance(float2 v, float2 w, float2 p) {
+    // Return minimum distance between line segment vw and point p
+    float2 diff = v - w;
+    float l2 = diff.x * diff.x + diff.y * diff.y;  // i.e. |w-v|^2 -  avoid a sqrt
 
-ccl_device bool point_in_triangle (float3 pt, float4 v1, float4 v2, float4 v3)
-{
-    bool b1, b2, b3;
+    if (l2 == 0.0)
+        return len(p - v);   // v == w case
 
-    b1 = sign(pt, v1, v2) < 0.0f;
-    b2 = sign(pt, v2, v3) < 0.0f;
-    b3 = sign(pt, v3, v1) < 0.0f;
+    // Consider the line extending the segment, parameterized as v + t (w - v).
+    // We find projection of point p onto the line. 
+    // It falls where t = [(p-v) . (w-v)] / |w-v|^2
+    // We clamp t from [0,1] to handle points outside the segment vw.
+    float t = max(0.0F, min(1.0F, dot(p-v, w-v) / l2));
+    float2 projection = v + t * (w - v);  // Projection falls on the segment
 
-    return ((b1 == b2) && (b2 == b3));
+    return len(p - projection);
 }
  
 ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
@@ -533,16 +535,20 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
         uint width = kg->texture_float4_images[slot].width;
         bool inside = false;
 
-        for (int t = 0; t < width; t+=3) {
-            float4 p1 = svm_image_texture(kg, slot, (float)(t+0)/width, 0.0, false, true);
-            float4 p2 = svm_image_texture(kg, slot, (float)(t+1)/width, 0.0, false, true);
-            float4 p3 = svm_image_texture(kg, slot, (float)(t+2)/width, 0.0, false, true);
+        for (int t = 0; t < width; ++t) {
+            int t_next = (t+1)%width;
+            float4 ls0 = svm_image_texture(kg, slot, (float)t/width, 0.0, false, true);
+            float4 ls1 = svm_image_texture(kg, slot, (float)t_next/width, 0.0, false, true);
 
-            if (p1 == p2 || p2 == p3 || p1 == p3) {
-                continue;
-            }
+            float2 p0,p1,co2;
+            p0.x = ls0.x;
+            p0.y = ls0.y;
+            p1.x = ls1.x;
+            p1.y = ls1.y;
+            co2.x = co.x;
+            co2.y = co.y;
 
-            if (point_in_triangle(co,p1,p2,p3)) {
+            if (minimum_distance(p0, p1, co2) < 0.01) {
                 inside = true;
                 break;
             }

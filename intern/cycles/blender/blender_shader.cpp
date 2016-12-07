@@ -34,7 +34,7 @@ typedef map<void*, ShaderInput*> PtrInputMap;
 typedef map<void*, ShaderOutput*> PtrOutputMap;
 typedef map<std::string, ConvertNode*> ProxyMap;
 
-std::vector<float4> CurveToFilledTriangles(Curve *cu);
+std::vector<float4> CurveToLineSegments(Curve *cu);
 
 /* Hacks to hook into Blender API
  * todo: clean this up ... */
@@ -670,28 +670,30 @@ static ShaderNode *add_node(Scene *scene,
             ::Object *ob = (::Object *) b_curve.ptr.data;
             ::Curve *cu = (::Curve*) ob->data;
 
-            // Build a texture with triangles
-            int scene_frame = b_scene.frame_current();
-            tex->filename = "Curve@" + string_printf("%d", scene_frame);    // TODO: Make more unique??!!
-            tex->points = CurveToFilledTriangles(cu);
-            printf("Num pts %d\n", (int) tex->points.size());
-            for (int n = 0; n < tex->points.size(); ++n) {
-                printf("%f %f\n", tex->points[n].x, tex->points[n].y);
+            if (cu) {
+                // Build a texture with triangles
+                int scene_frame = b_scene.frame_current();
+                tex->filename = "Curve@" + string_printf("%d", scene_frame);    // TODO: Make more unique??!!
+                tex->points = CurveToLineSegments(cu);
+                printf("Num pts %d\n", (int) tex->points.size());
+                for (int n = 0; n < tex->points.size(); ++n) {
+                    printf("%f\t%f\t%f\t%f\n", tex->points[n].x, tex->points[n].y, tex->points[n].z, tex->points[n].w);
+                }
+
+                ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
+                ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));
+                Image *image = BKE_image_add_from_imbuf(ibuf, tex->filename.c_str());
+                IMB_freeImBuf(ibuf);
+
+                tex->builtin_data = image;
+
+                bool is_float_bool, linear;
+                tex->slot = scene->image_manager->add_image(tex->filename, tex->builtin_data,
+                                                            true, 0, is_float_bool, linear,
+                                                            INTERPOLATION_CLOSEST,
+                                                            EXTENSION_CLIP,
+                                                            false);
             }
-
-            ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
-            ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));
-            Image *image = BKE_image_add_from_imbuf(ibuf, tex->filename.c_str());
-            IMB_freeImBuf(ibuf);
-
-            tex->builtin_data = image;
-
-            bool is_float_bool, linear;
-            tex->slot = scene->image_manager->add_image(tex->filename, tex->builtin_data,
-                                                        true, 0, is_float_bool, linear,
-                                                        INTERPOLATION_CLOSEST,
-                                                        EXTENSION_CLIP,
-                                                        true);
 
         }
 

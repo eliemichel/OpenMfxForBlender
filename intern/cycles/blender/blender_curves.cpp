@@ -786,19 +786,16 @@ void copy_v3_v3(float r[3], const float a[3])
 	r[2] = a[2];
 }
 
-std::vector<float4> CurveToFilledTriangles(Curve *cu) {
-
-    //
+std::vector<float4> CurveToLineSegments(Curve *cu)
+{
     // Curve to points
-    //
-
 	Nurb *nu;
 	BezTriple *bezt, *prevbezt;
 	BPoint *bp;
 	int a, len, resolu;
 
     ListBase *nubase = BKE_curve_nurbs_get(cu);
-    std::vector<float3> points;
+    std::vector<float> points;
 
 	nu = (Nurb *) nubase->first;
 	while (nu) {
@@ -834,21 +831,25 @@ std::vector<float4> CurveToFilledTriangles(Curve *cu) {
 					bezt++;
 				}
 
-                points.resize(len + 1);
+                points.resize( (len + 1) * 3 );
                 float *data = (float*) &points[0];
+
+                int type;   // 0 poly, 1 segm
 
 				/* check that (len != 2) so we don't immediately loop back on ourselves */
 				if (nu->flagu & CU_NURB_CYCLIC && (len != 2)) {
 					a = nu->pntsu;
+                    type = 0;
 				} else {
 					a = nu->pntsu - 1;
+                    type = 1;
 				}
 
 				prevbezt = nu->bezt;
 				bezt = prevbezt + 1;
 
 				while (a--) {
-					if (a == 0)
+					if (a == 0 && type == 0)
 						bezt = nu->bezt;
 
 					if (prevbezt->h2 == HD_VECT && bezt->h1 == HD_VECT) {
@@ -868,7 +869,7 @@ std::vector<float4> CurveToFilledTriangles(Curve *cu) {
 						data += 3 * resolu;
 					}
 
-					if (a == 0) {
+					if (a == 0 && type == 1) {
 						copy_v3_v3(data, bezt->vec[1]);
 					}
 
@@ -899,33 +900,18 @@ std::vector<float4> CurveToFilledTriangles(Curve *cu) {
 		nu = nu->next;
 	}
 
-    //
-    // Triangulate
-    //
-
-    std::vector<carve::triangulate::tri_idx> triangles;
-    std::vector<carve::geom::vector<2> > poly_2d;
-    poly_2d.reserve(points.size());
-
-    // Project points
-    for (auto &p : points) {
-        carve::geom::vector<2> projected_p;
-
-        projected_p.x = p.x;
-        projected_p.y = p.z;
-
-        poly_2d.push_back(projected_p);
-    }
-
-    carve::triangulate::triangulate(poly_2d, triangles);
-    //carve::triangulate::improve(poly_2d, triangles);
-
-    // Convert to points
+    // Line segments
     std::vector<float4> tri_points;
-    for (auto &t : triangles) {
-        tri_points.push_back(make_float4(poly_2d[t.a].x, poly_2d[t.a].y, 0.0F, 0.0F));
-        tri_points.push_back(make_float4(poly_2d[t.b].x, poly_2d[t.b].y, 0.0F, 0.0F));
-        tri_points.push_back(make_float4(poly_2d[t.c].x, poly_2d[t.c].y, 0.0F, 0.0F));
+    for (int i = 0; i < (points.size()/3); ++i) {
+        int i_next = (i+1)%(points.size()/3);
+
+        float4 ls;
+        ls.x = points[i*3+0];
+        ls.y = points[i*3+1];
+        ls.z = points[i_next*3+0];
+        ls.w = points[i_next*3+1];
+
+        tri_points.push_back(ls);
     }
 
     return tri_points;
