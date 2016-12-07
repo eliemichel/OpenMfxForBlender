@@ -319,6 +319,172 @@ bool MotionBlur2DOperation::deepSamplesSortFn(DeepSample *a, DeepSample *b) {
 	return a->depth < b->depth;
 }
 
+void MotionBlur2DOperation::estimate_color_at_pixel(int x, int y, MemoryBuffer *color, MemoryBuffer *objid, float *out_color)
+{
+	int index_col = INDEX_COL(x, y);
+	float *color_pixel = color->getBuffer() + index_col;
+
+	if (color_pixel[3] < 1.0F) {
+		out_color[0] = color_pixel[0];
+		out_color[1] = color_pixel[1];
+		out_color[2] = color_pixel[2];
+		out_color[3] = color_pixel[3];
+		return;
+	}
+
+
+	const int KERNEL_SIZE = 2; // "Radius" from center pixel. Must be 2 or greater
+
+	int x_min = std::max(0, x - KERNEL_SIZE);
+	int x_max = std::min((int)getWidth() - 1, x + KERNEL_SIZE);
+	int y_min = std::max(0, y - KERNEL_SIZE);
+	int y_max = std::min((int)getHeight() - 1, y + KERNEL_SIZE);
+
+	// Get object ID for the pixel we are interested in
+	int index_val = INDEX_VAL(x, y);
+	float *objid_pixel = objid->getBuffer() + index_val;
+
+	bool is_inside = true;
+
+	// Check if we are in the middle of the object
+	for (int yw = y_min; yw <= y_max; ++yw) {
+		for (int xw = x_min; xw <= x_max; ++xw) {
+			if (xw == x && yw == y)
+				continue;
+
+			int index_val = INDEX_VAL(xw, yw);
+			float *objidi_pixel = objid->getBuffer() + index_val;
+
+			if (*objidi_pixel != *objid_pixel) {
+				is_inside = false;
+				goto end_loop1;
+			}
+		}
+	}
+end_loop1:
+
+	if (is_inside) {
+		out_color[0] = color_pixel[0];
+		out_color[1] = color_pixel[1];
+		out_color[2] = color_pixel[2];
+		out_color[3] = color_pixel[3];
+		return;
+	}
+
+	// Scan the immediate surrounding pixels for all pixels with the same ID and not next to
+	// pixel with a different ID
+	float avg_color[4] = { 0.0F, 0.0F, 0.0F, 0.0F };
+	float num_avg_color = 0.0F;
+
+	float other_avg_color[4] = { 0.0F, 0.0F, 0.0F, 0.0F };
+	float other_num_avg_color = 0.0F;
+
+	for (int yw = y_min; yw <= y_max; ++yw) {
+		for (int xw = x_min; xw <= x_max; ++xw) {
+			if (xw == x && yw == y)
+				continue;
+
+			// Reject any pixels on the edge of two objects
+			int xi_min = std::max(0, xw - KERNEL_SIZE);
+			int xi_max = std::min((int)getWidth() - 1, xw + KERNEL_SIZE);
+			int yi_min = std::max(0, yw - KERNEL_SIZE);
+			int yi_max = std::min((int)getHeight() - 1, yw + KERNEL_SIZE);
+
+			int index_col;
+			float *color_pixel;
+
+			// Index for search
+			int indexw_val = INDEX_VAL(xw, yw);
+			float *objidw_pixel = objid->getBuffer() + indexw_val;
+
+			for (int yiw = yi_min; yiw <= yi_max; ++yiw) {
+				for (int xiw = xi_min; xiw <= xi_max; ++xiw) {
+					int indexi_val = INDEX_VAL(xiw, yiw);
+					float *objidi_pixel = objid->getBuffer() + indexi_val;
+
+					if (*objidi_pixel != *objid_pixel)
+						goto end_loop2;
+				}
+			}
+
+			index_col = INDEX_COL(xw, yw);
+			color_pixel = color->getBuffer() + index_col;
+
+			if (*objidw_pixel == *objid_pixel) {
+				avg_color[0] += color_pixel[0];
+				avg_color[1] += color_pixel[1];
+				avg_color[2] += color_pixel[2];
+				avg_color[3] += color_pixel[3];
+				num_avg_color += 1.0F;
+			}
+			else {
+				other_avg_color[0] += color_pixel[0];
+				other_avg_color[1] += color_pixel[1];
+				other_avg_color[2] += color_pixel[2];
+				other_avg_color[3] += color_pixel[3];
+				other_num_avg_color += 1.0F;
+			}
+		end_loop2:
+			;
+		}
+	}
+
+	// If we didn't find any other pixels, give up
+	if (num_avg_color == 0.0F || other_num_avg_color == 0.0F) {
+		out_color[0] = color_pixel[0];
+		out_color[1] = color_pixel[1];
+		out_color[2] = color_pixel[2];
+		out_color[3] = color_pixel[3];
+	}
+
+	//    // Now we have an estimated color. Lets try to estimate the alpha value of the sample.
+	//    avg_color[0] = avg_color[0] / num_avg_color;
+	//    avg_color[1] = avg_color[1] / num_avg_color;
+	//    avg_color[2] = avg_color[2] / num_avg_color;
+	//
+	//    other_avg_color[0] = other_avg_color[0] / other_num_avg_color;
+	//    other_avg_color[1] = other_avg_color[1] / other_num_avg_color;
+	//    other_avg_color[2] = other_avg_color[2] / other_num_avg_color;
+	//
+	//    // Prevent division by zero, give up
+	//    if (avg_color[0] == other_avg_color[0] &&
+	//        avg_color[0] == other_avg_color[0] &&
+	//        avg_color[0] == other_avg_color[0]) {
+	//
+	//        out_color[0] = color_pixel[0];
+	//        out_color[1] = color_pixel[1];
+	//        out_color[2] = color_pixel[2];
+	//        out_color[3] = color_pixel[3];
+	//    }
+	//
+	//    // Estimate alphas for each channel and average
+	//    float a0 = (color_pixel[0] - other_avg_color[0]) / (avg_color[0] - other_avg_color[0]);
+	//    float a1 = (color_pixel[1] - other_avg_color[1]) / (avg_color[1] - other_avg_color[1]);
+	//    float a2 = (color_pixel[2] - other_avg_color[2]) / (avg_color[2] - other_avg_color[2]);
+	//
+	//    out_color[3] = (a0 + a1 + a2) / 3.0F;
+	//    out_color[3] = std::max(std::min(1.0F, out_color[3]), 0.0F);    // Clamp 0-1
+	//
+
+	// Final value
+	if (num_avg_color > 0) {
+		out_color[0] = avg_color[0] / num_avg_color;
+		out_color[1] = avg_color[1] / num_avg_color;
+		out_color[2] = avg_color[2] / num_avg_color;
+		out_color[3] = avg_color[3] / num_avg_color;
+	}
+	else {
+		int index_col = INDEX_COL(x, y);
+		float *color_pixel = color->getBuffer() + index_col;
+
+		out_color[0] = color_pixel[0];
+		out_color[1] = color_pixel[1];
+		out_color[2] = color_pixel[2];
+		out_color[3] = color_pixel[3];
+	}
+
+}
+
 void MotionBlur2DOperation::generateMotionBlurDeep(float *data, MemoryBuffer *color, MemoryBuffer *speed, MemoryBuffer *depth, MemoryBuffer *objid)
 {
 	// Fast sample allocators
@@ -359,6 +525,8 @@ void MotionBlur2DOperation::generateMotionBlurDeep(float *data, MemoryBuffer *co
 			int ym = y / multisample;
 
 			// Record sample
+			//            float color_pixel[4];
+			//            estimate_color_at_pixel(xm, ym, color, objid, color_pixel);
 			int index_col = INDEX_COL(xm, ym);
 			float *color_pixel = color->getBuffer() + index_col;
 
@@ -417,34 +585,35 @@ void MotionBlur2DOperation::generateMotionBlurDeep(float *data, MemoryBuffer *co
 				int xs = line_samples[s].x;
 				int ys = line_samples[s].y;
 
-				// Alpha ramp
-				float alpha;
-				if (num_line_samples > 2) {
-					// Triangle ramp
-					alpha = (float)s / (float)(num_line_samples - 1);
-					alpha = (alpha < 0.5f) ? (alpha*2.0f) : (1.0f - (alpha - 0.5f)*2.0f);
-					alpha *= color_pixel[3];
-				}
-				else if (num_line_samples == 2) {
-					alpha = (s == 0) ? color_pixel[3] : 0.0F;
-				}
-				else {
-					alpha = color_pixel[3];
-				}
-
-				// Lower alpha for thinner objects outside of the object
-				int indexi_val = INDEX_VAL(xs, ys);
-				float *objidi_pixel = objid->getBuffer() + indexi_val;
-				if (*objidi_pixel != *objid_pixel) {
-					alpha *= inside_alpha;
-				}
-
 				// If outside image, ignore
 				if (xs < 0 || xs >= width_multisample || ys < 0 || ys >= height_multisample) {
 					// Do nothing
 
 				}
 				else {
+
+					// Alpha ramp
+					float alpha;
+					if (num_line_samples > 2) {
+						// Triangle ramp
+						alpha = (float)s / (float)(num_line_samples - 1);
+						alpha = (alpha < 0.5f) ? (alpha*2.0f) : (1.0f - (alpha - 0.5f)*2.0f);
+						alpha *= color_pixel[3];
+					}
+					else if (num_line_samples == 2) {
+						alpha = (s == 0) ? color_pixel[3] : 0.0F;
+					}
+					else {
+						alpha = color_pixel[3];
+					}
+
+					// Lower alpha for thinner objects outside of the object
+					int indexi_val = INDEX_VAL(xs, ys);
+					float *objidi_pixel = objid->getBuffer() + indexi_val;
+					if (*objidi_pixel != *objid_pixel) {
+						alpha *= inside_alpha;
+					}
+
 					int xm_s = xs / multisample;
 					int ym_s = ys / multisample;
 

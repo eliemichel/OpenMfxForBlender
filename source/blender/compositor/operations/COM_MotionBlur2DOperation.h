@@ -77,6 +77,7 @@ public:
 	void *initializeTileData(rcti *rect);
 
 	void line(int x0, int y0, int x1, int y1, Sample *samples, int *num_samples);
+	void estimate_color_at_pixel(int x, int y, MemoryBuffer *color, MemoryBuffer *objid, float *out_color);
 
 	void generateMotionBlur(float *data, MemoryBuffer *inputImage, MemoryBuffer *inputSpeed);
 	void generateMotionBlurDeep(float *data, MemoryBuffer *color, MemoryBuffer *speed, MemoryBuffer *depth, MemoryBuffer *objid);
