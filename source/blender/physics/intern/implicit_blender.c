@@ -41,6 +41,7 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_texture_types.h"
 
+#include "BLI_alloca.h"
 #include "BLI_math.h"
 #include "BLI_linklist.h"
 #include "BLI_utildefines.h"
@@ -1651,6 +1652,116 @@ bool BPH_mass_spring_force_spring_bending(Implicit_Data *data, int i, int j, flo
 	else {
 		return false;
 	}
+}
+
+BLI_INLINE bool spring_angle(Implicit_Data *data, int i, int j, int *i_a, int *i_b, int len_a, int len_b,
+                             float r_dir_a[3], float r_dir_b[3],
+                             float *r_angle, float r_vel_a[3], float r_vel_b[3])
+{
+	float co_i[3], co_j[3], co_a[3], co_b[3];
+	float tmp1[3], tmp2[3], vec_e[3];
+	float sin, cos;
+	float (*array_a)[3] = BLI_array_alloca(array_a, len_a);
+	float (*array_b)[3] = BLI_array_alloca(array_b, len_b);
+	int x;
+
+	/* assign poly vert coords to arrays */
+	for (x = 0; x < len_a; x++) {
+		copy_v3_v3(array_a[x], data->X[i_a[x]]);
+	}
+
+	for (x = 0; x < len_b; x++) {
+		copy_v3_v3(array_b[x], data->X[i_b[x]]);
+	}
+
+	/* get edge vert coords and poly centroid coords. */
+	copy_v3_v3(co_i, data->X[i]);
+	copy_v3_v3(co_j, data->X[j]);
+	cent_poly_v3(co_a, array_a, len_a);
+	cent_poly_v3(co_b, array_b, len_b);
+
+	/* find dir for poly a */
+	sub_v3_v3v3(tmp1, co_j, co_a);
+	sub_v3_v3v3(tmp2, co_i, co_a);
+
+	cross_v3_v3v3(r_dir_a, tmp1, tmp2);
+	normalize_v3(r_dir_a);
+
+	/* find dir for poly b */
+	sub_v3_v3v3(tmp1, co_i, co_b);
+	sub_v3_v3v3(tmp2, co_j, co_b);
+
+	cross_v3_v3v3(r_dir_b, tmp1, tmp2);
+	normalize_v3(r_dir_b);
+
+	/* find edge direction */
+	sub_v3_v3v3(vec_e, co_i, co_j);
+	normalize_v3(vec_e);
+
+	/* calculate angle between polys */
+	cos = dot_v3v3(r_dir_a, r_dir_b);
+
+	cross_v3_v3v3(tmp1, r_dir_a, r_dir_b);
+	sin = dot_v3v3(tmp1, vec_e);
+
+	*r_angle = atan2(sin, cos);
+
+	/* assign poly vert velocities to arrays */
+	for (x = 0; x < len_a; x++) {
+		copy_v3_v3(array_a[x], data->V[i_a[x]]);
+	}
+
+	for (x = 0; x < len_b; x++) {
+		copy_v3_v3(array_b[x], data->V[i_b[x]]);
+	}
+
+	/* calculate poly centroid velocities */
+	cent_poly_v3(r_vel_a, array_a, len_a);
+	cent_poly_v3(r_vel_b, array_b, len_b);
+
+	/* edge velocity, to remove rigid body velocity component from centroid velocities */
+	add_v3_v3v3(tmp1, data->V[i], data->V[j]);
+	mul_v3_fl(tmp1, 0.5f);
+
+	sub_v3_v3(r_vel_a, tmp1);
+	sub_v3_v3(r_vel_b, tmp1);
+
+	return true;
+}
+
+bool BPH_mass_spring_force_spring_angular(Implicit_Data *data, int i, int j, int *i_a, int *i_b, int len_a, int len_b,
+                                          float restang, float stiffness, float damping)
+{
+	float angle, dir_a[3], dir_b[3], vel_a[3], vel_b[3];
+	float f_a[3], f_b[3], f_e[3];
+	float force;
+	int x;
+
+	spring_angle(data, i, j, i_a, i_b, len_a, len_b,
+	             dir_a, dir_b, &angle, vel_a, vel_b);
+
+	force = stiffness * (angle - restang);
+
+	mul_v3_v3fl(f_a, dir_a, force / len_a);
+	mul_v3_v3fl(f_b, dir_b, force / len_b);
+
+	for (x = 0; x < len_a; x++) {
+		add_v3_v3(data->F[i_a[x]], f_a);
+	}
+
+	for (x = 0; x < len_b; x++) {
+		add_v3_v3(data->F[i_b[x]], f_b);
+	}
+
+	mul_v3_v3fl(f_a, dir_a, force * 0.5f);
+	mul_v3_v3fl(f_b, dir_b, force * 0.5f);
+
+	add_v3_v3v3(f_e, f_a, f_b);
+
+	sub_v3_v3(data->F[i], f_e);
+	sub_v3_v3(data->F[j], f_e);
+
+	return true;
 }
 
 /* Jacobian of a direction vector.

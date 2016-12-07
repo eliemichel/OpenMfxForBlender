@@ -132,8 +132,13 @@ ClothVertex;
 typedef struct ClothSpring {
 	int	ij;		/* Pij from the paper, one end of the spring.	*/
 	int	kl;		/* Pkl from the paper, one end of the spring.	*/
-	int mn;		/* Something related to angular hair springs. */
-	float	restlen;	/* The original length of the spring.	*/
+	int mn;		/* For hair springs: third vertex index; For bending springs: edge index */
+	int *pa;	/* array of vert indices for poly a (for bending springs) */
+	int *pb;	/* array of vert indices for poly b (for bending springs) */
+	int la;		/* length of *pa */
+	int lb;		/* length of *pb */
+	float restlen;	/* The original length of the spring */
+	float restang;	/* The original angle of the bending springs */
 	int	type;		/* types defined in BKE_cloth.h ("springType") */
 	int	flags; 		/* defined in BKE_cloth.h, e.g. deactivated due to tearing */
 	float 	stiffness;	/* stiffness factor from the vertex groups */
