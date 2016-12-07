@@ -566,7 +566,10 @@ void MotionBlur2DOperation::generateMotionBlurDeep(float *data, MemoryBuffer *co
 
 				}
 				else {
-					int indexi_val = INDEX_VAL(xs, ys);
+					int xm_s = xs / multisample;
+					int ym_s = ys / multisample;
+
+					int indexi_val = INDEX_VAL(xm_s, ym_s);
 					float *objidi_pixel = objid->getBuffer() + indexi_val;
 
 					if (*objidi_pixel == *objid_pixel) {
@@ -607,15 +610,15 @@ void MotionBlur2DOperation::generateMotionBlurDeep(float *data, MemoryBuffer *co
 						alpha = color_pixel[3];
 					}
 
+					int xm_s = xs / multisample;
+					int ym_s = ys / multisample;
+
 					// Lower alpha for thinner objects outside of the object
-					int indexi_val = INDEX_VAL(xs, ys);
+					int indexi_val = INDEX_VAL(xm_s, ym_s);
 					float *objidi_pixel = objid->getBuffer() + indexi_val;
 					if (*objidi_pixel != *objid_pixel) {
 						alpha *= inside_alpha;
 					}
-
-					int xm_s = xs / multisample;
-					int ym_s = ys / multisample;
 
 					// Record sample
 					DeepSamplePixel &pixel_samples = *(deep_samples + INDEX_VAL(xm_s, ym_s));
