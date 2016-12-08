@@ -452,10 +452,10 @@ static float** de_castlejau_algorithm(const BezTriple *bezt, const BezTriple *pr
 		mul_v2_v2fl(temp, P12_23, t);
 		add_v2_v2v2(P0112_1223, P0112_1223, temp);
 
-		memcpy(P[0], P0_1,       sizeof(P0_1));
-		memcpy(P[1], P2_3,		 sizeof(P0_1));
-		memcpy(P[2], P01_12,	 sizeof(P0_1));
-		memcpy(P[3], P12_23,	 sizeof(P0_1));
+		memcpy(P[0], P0_1, sizeof(P0_1));
+		memcpy(P[1], P2_3, sizeof(P0_1));
+		memcpy(P[2], P01_12, sizeof(P0_1));
+		memcpy(P[3], P12_23, sizeof(P0_1));
 		memcpy(P[4], P0112_1223, sizeof(P0_1));
 
 		return P;
@@ -539,20 +539,24 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 	BezTriple *prev = ((a - 1) >= 0) ? &fcu->bezt[a - 1] : NULL;
 	BezTriple *bezt = &fcu->bezt[a];
 	BezTriple *next = ((a + 1) < fcu->totvert) ? &fcu->bezt[a + 1] : NULL;
-	
 
-	float** P = (float**)malloc(5*sizeof(float*));
+
+	float** P = (float**)malloc(5 * sizeof(float*));
 	for (int i = 0; i < 5; i++)
 	{
 		P[i] = (float*)malloc(2 * sizeof(float));
 	}
 	P = de_castlejau_algorithm(bezt, prev, next, P);
+	float y_diff = -1;
 
-	float y_diff = (float)fabs((double)(y - P[4][1]));
+	if (P)
+	{
+		y_diff = (float)fabs((double)(y - P[4][1]));
+	}
 	float epsilon = 0.1;
 
 
-	if (P && (y_diff <= epsilon)) {
+	if (y_diff > 0 && (y_diff <= epsilon)) {
 
 		copy_v2_v2(prev->vec[2], P[0]); // P0_12
 
@@ -609,12 +613,14 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 				calchandles_fcurve(fcu);
 		}
 	}
-
-	for (int i = 0; i < 5; i++)
+	if (P)
 	{
-		free(P[i]);
+		for (int i = 0; i < 5; i++)
+		{
+			free(P[i]);
+		}
+		free(P);
 	}
-	free(P);
 
 	/* return the index at which the keyframe was added */
 	return a;
