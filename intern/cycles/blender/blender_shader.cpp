@@ -661,7 +661,6 @@ static ShaderNode *add_node(Scene *scene,
 		node = image;
 	}
 	else if(b_node.is_a(&RNA_ShaderNodeTexCurve)) {
-        // TODO: TEXCURVE
 		BL::ShaderNodeTexCurve b_curve_node(b_node);
         BL::Curve b_curve(b_curve_node.object());
 		CurveTextureNode *tex = new CurveTextureNode();

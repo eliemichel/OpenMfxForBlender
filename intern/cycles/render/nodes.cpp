@@ -432,8 +432,6 @@ CurveTextureNode::CurveTextureNode()
 	image_manager = NULL;
     builtin_data = NULL;
 	slot = -1;
-
-    // TODO: TEXCURVE
 }
 
 CurveTextureNode::~CurveTextureNode()

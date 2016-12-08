@@ -3078,12 +3078,11 @@ static void direct_link_nodetree(FileData *fd, bNodeTree *ntree)
 					NodeShaderTexPointDensity *npd = (NodeShaderTexPointDensity *) node->storage;
 					memset(&npd->pd, 0, sizeof(npd->pd));
 				}
+                else if (node->type == SH_NODE_TEX_CURVE) {
+                    NodeTexCurve *ntc = (NodeTexCurve*)node->storage;
+                    ntc->object = newlibadr(fd, ntree->id.lib, ntc->object);
+                }
 			}
-            else if (node->type == SH_NODE_TEX_CURVE) {
-                // TODO: TEXCURVE
-                NodeTexCurve *ntc = (NodeTexCurve*)node->storage;
-                ntc->object = newlibadr(fd, ntree->id.lib, ntc->object);
-            }
 			else if (ntree->type==NTREE_COMPOSIT) {
 				if (ELEM(node->type, CMP_NODE_TIME, CMP_NODE_CURVE_VEC, CMP_NODE_CURVE_RGB, CMP_NODE_HUECORRECT))
 					direct_link_curvemapping(fd, node->storage);

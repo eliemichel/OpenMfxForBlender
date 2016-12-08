@@ -125,8 +125,6 @@ public:
     float3 curve_location;
     float3 curve_scale;
     float line_thickness;
-
-    // TODO: TEXCURVE
 };
 
 class EnvironmentTextureNode : public ImageSlotTextureNode {

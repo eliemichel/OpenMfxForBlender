@@ -515,8 +515,6 @@ ccl_device float minimum_distance(float2 v, float2 w, float2 p) {
  
 ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
 {
-    // TODO: TEXCURVE
-
     uint co_offset, fill_in_offset, background_in_offset, out_offset;
     uint curve_thickness_offset, curve_location_offset, curve_scale_offset;
 
