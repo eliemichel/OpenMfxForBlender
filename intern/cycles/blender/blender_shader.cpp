@@ -670,15 +670,11 @@ static ShaderNode *add_node(Scene *scene,
             ::Object *ob = (::Object *) b_curve.ptr.data;
             ::Curve *cu = (::Curve*) ob->data;
 
-            if (cu) {
+            if (ob && cu) {
                 // Build a texture with triangles
                 int scene_frame = b_scene.frame_current();
-                tex->filename = "Curve@" + string_printf("%d", scene_frame);    // TODO: Make more unique??!!
+                tex->filename = b_curve.name() + "Curve@" + string_printf("%d", scene_frame);
                 tex->points = CurveToLineSegments(cu);
-                printf("Num pts %d\n", (int) tex->points.size());
-                for (int n = 0; n < tex->points.size(); ++n) {
-                    printf("%f\t%f\t%f\t%f\n", tex->points[n].x, tex->points[n].y, tex->points[n].z, tex->points[n].w);
-                }
 
                 ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
                 ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));

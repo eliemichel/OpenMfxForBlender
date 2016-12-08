@@ -30,9 +30,12 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_tex_curve_in[] = {
-	{	SOCK_VECTOR, 1, N_("Vector"),           0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
-	{ 	SOCK_RGBA, 1, 	N_("BackgroundColor"),  0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
-	{ 	SOCK_RGBA, 1, 	N_("FillColor"), 		1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f},
+	{	SOCK_VECTOR, 1, N_("Vector"),          0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
+	{	SOCK_FLOAT, 1,  N_("LineThickness"),   0.01f,0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+	{	SOCK_VECTOR, 1, N_("CurveLocation"),   0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+	{	SOCK_VECTOR, 1, N_("CurveScale"),      1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f},
+	{ 	SOCK_RGBA, 1, 	N_("BackgroundColor"), 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+	{ 	SOCK_RGBA, 1, 	N_("FillColor"), 	   1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f},
 	{	-1, 0, ""	}
 };
 

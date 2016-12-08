@@ -3974,6 +3974,7 @@ static void def_sh_tex_coord(StructRNA *srna)
 static void def_sh_tex_curve(StructRNA *srna)
 {
     // TODO: TEXCURVE
+	//static float default_1[3] = {1.f, 1.f, 1.f};
 
 	PropertyRNA *prop;
 
@@ -3987,6 +3988,26 @@ static void def_sh_tex_curve(StructRNA *srna)
 	RNA_def_property_ui_text(prop, "Object", "Use this curve object for rendering to texture");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 
+//	prop = RNA_def_property(srna, "curve_thickness", PROP_FLOAT, PROP_NONE);
+//	RNA_def_property_float_sdna(prop, NULL, "curve_thickness");
+//	RNA_def_property_range(prop, 0.001, 1.0);
+//	RNA_def_property_ui_text(prop, "Line Thickness", "Line thickness");
+//	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+//
+//	prop = RNA_def_property(srna, "curve_translation", PROP_FLOAT, PROP_TRANSLATION);
+//	RNA_def_property_float_sdna(prop, NULL, "curve_loc");
+//	RNA_def_property_flag(prop, PROP_EDITABLE);
+//	RNA_def_property_ui_text(prop, "Curve Location", "");
+//	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+//
+//	prop = RNA_def_property(srna, "curve_scale", PROP_FLOAT, PROP_XYZ);
+//	RNA_def_property_flag(prop, PROP_EDITABLE);
+//	RNA_def_property_flag(prop, PROP_PROPORTIONAL);
+//	RNA_def_property_float_sdna(prop, NULL, "curve_size");
+//	RNA_def_property_float_array_default(prop, default_1);
+//	RNA_def_property_ui_text(prop, "Curve Scale", "");
+//	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+//
 //	prop = RNA_def_property(srna, "from_dupli", PROP_BOOLEAN, PROP_NONE);
 //	RNA_def_property_boolean_sdna(prop, NULL, "custom1", 1);
 //	RNA_def_property_ui_text(prop, "From Dupli", "Use the parent of the dupli object if possible");

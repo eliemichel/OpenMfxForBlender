@@ -518,7 +518,10 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
     // TODO: TEXCURVE
 
     uint co_offset, fill_in_offset, background_in_offset, out_offset;
+    uint curve_thickness_offset, curve_location_offset, curve_scale_offset;
+
     decode_node_uchar4(node.z, &co_offset, &fill_in_offset, &background_in_offset, &out_offset);
+    decode_node_uchar4(node.w, &curve_thickness_offset, &curve_location_offset, &curve_scale_offset, NULL);
 
     uint slot = node.y;
 
@@ -531,6 +534,9 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
         float3 co = stack_load_float3(stack, co_offset);
         float3 fill_color = stack_load_float3(stack, fill_in_offset);
         float3 background_color = stack_load_float3(stack, background_in_offset);
+        float curve_thickness = stack_load_float(stack, curve_thickness_offset);
+        float3 curve_location = stack_load_float3(stack, curve_location_offset);
+        float3 curve_scale = stack_load_float3(stack, curve_scale_offset);
 
         uint width = kg->texture_float4_images[slot].width;
         bool inside = false;
@@ -541,14 +547,14 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
             float4 ls1 = svm_image_texture(kg, slot, (float)t_next/width, 0.0, false, true);
 
             float2 p0,p1,co2;
-            p0.x = ls0.x;
-            p0.y = ls0.y;
-            p1.x = ls1.x;
-            p1.y = ls1.y;
+            p0.x = ls0.x * curve_scale.x + curve_location.x;
+            p0.y = ls0.y * curve_scale.y + curve_location.y;
+            p1.x = ls1.x * curve_scale.x + curve_location.x;
+            p1.y = ls1.y * curve_scale.y + curve_location.y;
             co2.x = co.x;
             co2.y = co.y;
 
-            if (minimum_distance(p0, p1, co2) < 0.01) {
+            if (minimum_distance(p0, p1, co2) < curve_thickness) {
                 inside = true;
                 break;
             }
