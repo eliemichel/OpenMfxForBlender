@@ -142,7 +142,6 @@ set(SRC_SVM_HEADERS
 	svm/svm_noise.h
 	svm/svm_noisetex.h
 	svm/svm_normal.h
-	svm/svm_poly.h
 	svm/svm_ramp.h
 	svm/svm_ramp_util.h
 	svm/svm_sepcomb_hsv.h

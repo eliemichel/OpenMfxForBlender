@@ -166,7 +166,6 @@ CCL_NAMESPACE_END
 #include "svm_magic.h"
 #include "svm_mapping.h"
 #include "svm_normal.h"
-#include "svm_poly.h"
 #include "svm_wave.h"
 #include "svm_math.h"
 #include "svm_mix.h"
