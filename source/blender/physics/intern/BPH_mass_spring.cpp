@@ -453,7 +453,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		kb = scaling / (20.0f * (parms->avg_spring_len + FLT_EPSILON));
 		
 		// Fix for [#45084] for cloth stiffness must have cb proportional to kb
-		cb = kb * parms->bending_damping;
+		cb = kb * 0.5f; // this was multiplied by a constant parms->bending_damping, which is no longer constant
 		
 		/* XXX assuming same restlen for ij and jk segments here, this can be done correctly for hair later */
 		BPH_mass_spring_force_spring_bending_hair(data, s->ij, s->kl, s->mn, s->target, kb, cb);

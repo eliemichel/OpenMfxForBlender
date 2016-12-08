@@ -97,6 +97,7 @@ class PHYSICS_PT_cloth(PhysicButtonsPanel, Panel):
         col.prop(cloth, "tension_damping", text="Tension")
         col.prop(cloth, "compression_damping", text="Compression")
         col.prop(cloth, "shear_damping", text="Shear")
+        col.prop(cloth, "bending_damping", text="Bending")
         col.prop(cloth, "air_damping", text="Air")
         col.prop(cloth, "vel_damping", text="Velocity")
 

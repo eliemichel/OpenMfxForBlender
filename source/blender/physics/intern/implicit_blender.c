@@ -1742,7 +1742,11 @@ bool BPH_mass_spring_force_spring_angular(Implicit_Data *data, int i, int j, int
 	spring_angle(data, i, j, i_a, i_b, len_a, len_b,
 	             dir_a, dir_b, &angle, vel_a, vel_b);
 
+	/* spring force */
 	force = stiffness * (angle - restang);
+
+	/* damping force */
+	force += -damping * (dot_v3v3(vel_a, dir_a) + dot_v3v3(vel_b, dir_b));
 
 	mul_v3_v3fl(f_a, dir_a, force / len_a);
 	mul_v3_v3fl(f_b, dir_b, force / len_b);
