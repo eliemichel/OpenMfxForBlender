@@ -1605,6 +1605,7 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, floa
 	}
 
 	/* Calculate compression forces */
+	/* this is based on the Choi and Ko bending model, which works surprisingly well for compression */
 	else if (!no_compress) {
 		float kb = compression;
 		float cb = kb; /* cb equal to kb seems to work, but a factor can be added if necessary */
@@ -1729,6 +1730,7 @@ BLI_INLINE bool spring_angle(Implicit_Data *data, int i, int j, int *i_a, int *i
 	return true;
 }
 
+/* Angular springs roughly based on the bending model proposed by Baraff and Witkin in "Large Steps in Cloth Simulation" */
 bool BPH_mass_spring_force_spring_angular(Implicit_Data *data, int i, int j, int *i_a, int *i_b, int len_a, int len_b,
                                           float restang, float stiffness, float damping)
 {
