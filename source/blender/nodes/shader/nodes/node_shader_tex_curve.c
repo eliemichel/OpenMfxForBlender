@@ -53,16 +53,6 @@ static void node_shader_init_tex_curve(bNodeTree *UNUSED(ntree), bNode *node)
 	node->storage = tex;
 }
 
-//static int node_shader_gpu_tex_curve(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
-//{
-//	if (!in[0].link)
-//		in[0].link = GPU_attribute(CD_ORCO, "");
-//
-//	node_shader_gpu_tex_mapping(mat, node, in, out);
-//
-//	return GPU_stack_link(mat, "node_tex_curve", in, out);
-//}
-
 /* node type definition */
 void register_node_type_sh_tex_curve(void)
 {
@@ -74,7 +64,6 @@ void register_node_type_sh_tex_curve(void)
 	node_type_size_preset(&ntype, NODE_SIZE_MIDDLE);
 	node_type_init(&ntype, node_shader_init_tex_curve);
 	node_type_storage(&ntype, "NodeTexCurve", node_free_standard_storage, node_copy_standard_storage);
-//	node_type_gpu(&ntype, node_shader_gpu_tex_curve);
 
 	nodeRegisterType(&ntype);
 }

@@ -475,11 +475,6 @@ static char *rna_OceanTex_path(PointerRNA *UNUSED(ptr))
 	return BLI_sprintfN("ocean");
 }
 
-static char *rna_CurveTex_path(PointerRNA *UNUSED(ptr))
-{
-	return BLI_sprintfN("curve");
-}
-
 #else
 
 static void rna_def_texmapping(BlenderRNA *brna)
