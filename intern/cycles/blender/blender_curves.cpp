@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#include <carve/triangulator.hpp>
-
 #include "attribute.h"
 #include "camera.h"
 #include "curves.h"

@@ -15,7 +15,6 @@ set(INC
 	../../../source/blender/blenlib
 	../../../source/blender/blenkernel
 	../../../source/blender/imbuf
-	../../../extern/carve/include
 	${CMAKE_BINARY_DIR}/source/blender/makesrna/intern
 )
 
