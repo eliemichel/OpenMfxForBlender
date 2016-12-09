@@ -408,6 +408,90 @@ void ImageTextureNode::compile(OSLCompiler& compiler)
 	compiler.add(this, "node_image_texture");
 }
 
+/* Curve Texture */
+
+NODE_DEFINE(CurveTextureNode)
+{
+	NodeType* type = NodeType::add("curve_texture", create, NodeType::SHADER);
+
+	SOCKET_IN_POINT(vector, "Vector", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_TEXTURE_GENERATED);
+	SOCKET_IN_POINT(curve_location, "CurveLocation", make_float3(0.0f, 0.0f, 0.0f));
+	SOCKET_IN_POINT(curve_scale, "CurveScale", make_float3(1.0f, 1.0f, 1.0f));
+	SOCKET_IN_FLOAT(line_thickness, "LineThickness", 0.01f);
+    SOCKET_IN_COLOR(fill_color, "FillColor", make_float3(1.0f, 1.0f, 1.0f));
+    SOCKET_IN_COLOR(background_color, "BackgroundColor", make_float3(0.0f, 0.0f, 0.0f));
+    SOCKET_OUT_COLOR(color, "Color");
+
+	return type;
+}
+
+
+CurveTextureNode::CurveTextureNode()
+: ImageSlotTextureNode(node_type)
+{
+	image_manager = NULL;
+    builtin_data = NULL;
+	slot = -1;
+}
+
+CurveTextureNode::~CurveTextureNode()
+{
+// 	if(image_manager)
+// 		image_manager->remove_image(filename, builtin_data, interpolation);
+}
+
+ShaderNode *CurveTextureNode::clone() const
+{
+	CurveTextureNode *node = new CurveTextureNode(*this);
+	return node;
+}
+
+void CurveTextureNode::compile(SVMCompiler& compiler)
+{
+	ShaderInput *vector_in = input("Vector");
+	ShaderInput *fill_color_in = input("FillColor");
+	ShaderInput *background_color_in = input("BackgroundColor");
+
+	ShaderInput *line_thickness_in = input("LineThickness");
+	ShaderInput *curve_location_in = input("CurveLocation");
+	ShaderInput *curve_scale_in = input("CurveScale");
+
+	ShaderOutput *color_out = output("Color");
+
+	int vector_offset = tex_mapping.compile_begin(compiler, vector_in);
+
+    // Build the image
+    if (builtin_data) {
+        image_manager = compiler.image_manager;
+
+        image_manager->tag_reload_image(filename,
+                                       builtin_data,
+                                       INTERPOLATION_CLOSEST,
+                                       EXTENSION_CLIP);
+    }
+
+	compiler.add_node(NODE_TEX_CURVE,
+        slot,
+		compiler.encode_uchar4(
+			vector_offset,
+			compiler.stack_assign(fill_color_in),
+			compiler.stack_assign(background_color_in),
+			compiler.stack_assign(color_out)
+		),
+		compiler.encode_uchar4(
+			compiler.stack_assign(line_thickness_in),
+			compiler.stack_assign(curve_location_in),
+			compiler.stack_assign(curve_scale_in)
+        )
+    );
+
+	tex_mapping.compile_end(compiler, vector_in, vector_offset);
+}
+
+void CurveTextureNode::compile(OSLCompiler& compiler)
+{
+}
+
 /* Environment Texture */
 
 NODE_DEFINE(EnvironmentTextureNode)

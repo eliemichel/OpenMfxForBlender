@@ -35,6 +35,15 @@ typedef map<void*, ShaderInput*> PtrInputMap;
 typedef map<void*, ShaderOutput*> PtrOutputMap;
 typedef map<string, ConvertNode*> ProxyMap;
 
+std::vector<float4> CurveToLineSegments(Curve *cu);
+
+/* Hacks to hook into Blender API
+ * todo: clean this up ... */
+
+extern "C" {
+struct Image *BKE_image_add_from_imbuf(struct ImBuf *ibuf, const char *name);
+}
+
 /* Find */
 
 void BlenderSync::find_shader(BL::ID& id,
@@ -652,6 +661,42 @@ static ShaderNode *add_node(Scene *scene,
 		get_tex_mapping(&image->tex_mapping, b_texture_mapping);
 		node = image;
 	}
+	else if(b_node.is_a(&RNA_ShaderNodeTexCurve)) {
+		BL::ShaderNodeTexCurve b_curve_node(b_node);
+        BL::Curve b_curve(b_curve_node.object());
+		CurveTextureNode *tex = new CurveTextureNode();
+
+        if (b_curve) {
+            ::Object *ob = (::Object *) b_curve.ptr.data;
+            ::Curve *cu = (::Curve*) ob->data;
+
+            if (ob && cu) {
+                // Build a texture with triangles
+                int scene_frame = b_scene.frame_current();
+                tex->filename = b_curve.name() + "Curve@" + string_printf("%d", scene_frame);
+                tex->points = CurveToLineSegments(cu);
+
+                ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
+                ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));
+                Image *image = BKE_image_add_from_imbuf(ibuf, tex->filename.c_str());
+                IMB_freeImBuf(ibuf);
+
+                tex->builtin_data = image;
+
+                bool is_float_bool, linear;
+                tex->slot = scene->image_manager->add_image(tex->filename, tex->builtin_data,
+                                                            true, 0, is_float_bool, linear,
+                                                            INTERPOLATION_CLOSEST,
+                                                            EXTENSION_CLIP,
+                                                            false);
+            }
+
+        }
+
+		BL::TexMapping b_texture_mapping(b_curve_node.texture_mapping());
+		get_tex_mapping(&tex->tex_mapping, b_texture_mapping);
+		node = tex;
+    }
 	else if(b_node.is_a(&RNA_ShaderNodeTexEnvironment)) {
 		BL::ShaderNodeTexEnvironment b_env_node(b_node);
 		BL::Image b_image(b_env_node.image());

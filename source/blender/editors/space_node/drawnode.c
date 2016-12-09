@@ -1002,6 +1002,11 @@ static void node_shader_buts_tex_coord(uiLayout *layout, bContext *UNUSED(C), Po
 	uiItemR(layout, ptr, "from_dupli", 0, NULL, 0);
 }
 
+static void node_shader_buts_tex_curve(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+	uiItemR(layout, ptr, "object", 0, NULL, 0);
+}
+
 static void node_shader_buts_bump(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
 	uiItemR(layout, ptr, "invert", 0, NULL, 0);
@@ -1221,6 +1226,9 @@ static void node_shader_set_butfunc(bNodeType *ntype)
 			break;
 		case SH_NODE_TEX_COORD:
 			ntype->draw_buttons = node_shader_buts_tex_coord;
+			break;
+		case SH_NODE_TEX_CURVE:
+			ntype->draw_buttons = node_shader_buts_tex_curve;
 			break;
 		case SH_NODE_BUMP:
 			ntype->draw_buttons = node_shader_buts_bump;

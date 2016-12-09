@@ -13,6 +13,8 @@ set(INC
 	../../../source/blender/makesdna
 	../../../source/blender/makesrna
 	../../../source/blender/blenlib
+	../../../source/blender/blenkernel
+	../../../source/blender/imbuf
 	${CMAKE_BINARY_DIR}/source/blender/makesrna/intern
 )
 
@@ -64,7 +66,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND NOT ${CMAKE_C_COMPILER_VERSION} VERSI
 	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -gline-tables-only")
 endif()
 
-add_dependencies(bf_intern_cycles bf_rna)
+add_dependencies(bf_intern_cycles bf_rna bf_blenkernel bf_imbuf)
 
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${ADDON_FILES}" ${CYCLES_INSTALL_PATH})
 
