@@ -125,4 +125,12 @@ void BKE_deform_split_prefix(const char string[MAX_VGROUP_NAME], char base[MAX_V
 void BKE_deform_flip_side_name(char name[MAX_VGROUP_NAME], const char from_name[MAX_VGROUP_NAME],
                                const bool strip_number);
 
+float BKE_defvert_combined_weight(const Object *object, const struct MDeformVert *dvert, const int mode);
+
+/* combined weight mode */
+enum {
+	DVERT_COMBINED_MODE_ADD = 0,
+	DVERT_COMBINED_MODE_MIX = 1,
+};
+
 #endif  /* __BKE_DEFORM_H__ */

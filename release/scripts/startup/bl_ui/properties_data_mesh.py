@@ -68,9 +68,14 @@ class MESH_UL_vgroups(UIList):
         # assert(isinstance(item, bpy.types.VertexGroup))
         vgroup = item
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            layout.prop(vgroup, "name", text="", emboss=False, icon_value=icon)
+            split = layout.split(0.66, False)
+            split.prop(vgroup, "name", text="", emboss=False, icon_value=icon)
+
+            row = split.row(align=True)
+            row.prop(vgroup, "influence", text="", emboss=False)
+
             icon = 'LOCKED' if vgroup.lock_weight else 'UNLOCKED'
-            layout.prop(vgroup, "lock_weight", text="", icon=icon, emboss=False)
+            row.prop(vgroup, "lock_weight", text="", icon=icon, emboss=False)
         elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
@@ -225,6 +230,10 @@ class DATA_PT_vertex_groups(MeshButtonsPanel, Panel):
             sub.operator("object.vertex_group_deselect", text="Deselect")
 
             layout.prop(context.tool_settings, "vertex_group_weight", text="Weight")
+
+        row = layout.row()
+        row.active = ob.mode != 'EDIT'
+        row.prop(group, "influence")
 
 
 class DATA_PT_shape_keys(MeshButtonsPanel, Panel):

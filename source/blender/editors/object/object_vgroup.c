@@ -937,6 +937,60 @@ float ED_vgroup_vert_weight(Object *ob, bDeformGroup *dg, int vertnum)
 	return get_vert_def_nr(ob, def_nr, vertnum);
 }
 
+float ED_vgroup_combined_vert_weight(const Object *ob, const int vertnum, const int mode)
+{
+	MDeformVert *dv = NULL;
+
+	/* get the deform vertices corresponding to the vertnum */
+	if (ob->type == OB_MESH) {
+		Mesh *me = ob->data;
+
+		if (me->edit_btmesh) {
+			BMEditMesh *em = me->edit_btmesh;
+			const int cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
+			/* warning, this lookup is _not_ fast */
+
+			if (cd_dvert_offset != -1 && vertnum < em->bm->totvert) {
+				BMVert *eve;
+				BM_mesh_elem_table_ensure(em->bm, BM_VERT);
+				eve = BM_vert_at_index(em->bm, vertnum);
+				dv = BM_ELEM_CD_GET_VOID_P(eve, cd_dvert_offset);
+			}
+			else {
+				return -1.0f;
+			}
+		}
+		else {
+			if (vertnum < me->totvert) {
+				if (me->dvert) {
+					dv = &me->dvert[vertnum];
+				}
+			}
+			else {
+				return -1.0f;
+			}
+		}
+	}
+	else if (ob->type == OB_LATTICE) {
+		Lattice *lt = vgroup_edit_lattice((Object *)ob);
+
+		if (vertnum < lt->pntsu * lt->pntsv * lt->pntsw) {
+			if (lt->dvert) {
+				dv = &lt->dvert[vertnum];
+			}
+		}
+		else {
+			return -1.0f;
+		}
+	}
+
+	if (dv) {
+		return BKE_defvert_combined_weight(ob, dv, mode);
+	}
+
+	return 0.0f;
+}
+
 void ED_vgroup_select_by_name(Object *ob, const char *name)
 {   /* note: ob->actdef==0 signals on painting to create a new one, if a bone in posemode is selected */
 	ob->actdef = defgroup_name_index(ob, name) + 1;
