@@ -363,8 +363,8 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 
 			// TODO: verify, half verified (couldn't see error)
 			// sewing springs usually have a large distance at first so clamp the force so we don't get tunnelling through colission objects
-			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k_tension, 0,
-			                                    d_tension, 0, no_compress, parms->max_sewing);
+			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k_tension, 0.0f,
+			                                    d_tension, 0.0f, no_compress, parms->max_sewing);
 		}
 		else {
 			scaling_compression = parms->compression + s->stiffness * fabsf(parms->max_compression - parms->compression);
@@ -379,7 +379,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 				// Multiply by some arbitrary large value, just so zero-length springs have enough force.
 				k_tension = scaling_tension * 10000;
 				k_compression = 0; // No compression for zero-length springs
-				d_tension = parms->tension_damp * 1000;
+				d_tension = parms->tension_damp * 10000;
 				d_compression = 0;
 			}
 
@@ -405,7 +405,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 			d = parms->shear_damp * 10000;
 		}
 
-		BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, 0.0f, d, 0.0f, no_compress, 0.0f);
+		BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, k, 0.0f, d, 0.0f, true, 0.0f);
 #endif
 	}
 	else if (s->type & CLOTH_SPRING_TYPE_GOAL) {

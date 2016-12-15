@@ -1616,6 +1616,10 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, floa
 		outerproduct(dfdx, dir, dir);
 		mul_m3_fl(dfdx, fbstar_jacobi(length, restlen, kb, cb));
 	}
+	else {
+		zero_v3(f);
+		zero_m3(dfdx);
+	}
 
 	/* Calculate damping forces */
 	madd_v3_v3fl(f, dir, damping * dot_v3v3(vel, dir));
