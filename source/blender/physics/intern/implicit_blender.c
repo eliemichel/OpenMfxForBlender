@@ -1579,13 +1579,16 @@ BLI_INLINE void apply_spring(Implicit_Data *data, int i, int j, const float f[3]
 	sub_m3_m3m3(data->dFdV[block_ij].m, data->dFdV[block_ij].m, dfdv);
 }
 
-bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, float restlen,
+bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, float restlenorig, float *lenfact,
                                          float tension, float compression, float damp_tension, float damp_compression,
-                                         bool no_compress, float clamp_force)
+                                         bool no_compress, float clamp_force, float plasticity, float yield_fact)
 {
 	float extent[3], length, dir[3], vel[3];
 	float f[3], dfdx[3][3], dfdv[3][3];
 	float damping = 0;
+	float restlen;
+
+	restlen = (*lenfact) * restlenorig;
 
 	/* calculate elonglation */
 	spring_length(data, i, j, extent, dir, &length, vel);
@@ -1596,12 +1599,19 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, floa
 		damping = damp_tension;
 
 		stretch_force = tension * (length - restlen);
+
 		if (clamp_force > 0.0f && stretch_force > clamp_force) {
 			stretch_force = clamp_force;
 		}
 		mul_v3_v3fl(f, dir, stretch_force);
 
 		dfdx_spring(dfdx, dir, length, restlen, tension);
+
+		/* compute plasticity offset factor */
+		if (length > restlen * yield_fact) {
+			restlen += ((length / yield_fact) - restlen) * plasticity;
+			*lenfact = restlen / restlenorig;
+		}
 	}
 
 	/* Calculate compression forces */
@@ -1615,6 +1625,12 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, floa
 
 		outerproduct(dfdx, dir, dir);
 		mul_m3_fl(dfdx, fbstar_jacobi(length, restlen, kb, cb));
+
+		/* compute plasticity offset factor */
+		if (length < restlen / yield_fact) {
+			restlen -= (restlen - (length * yield_fact)) * plasticity;
+			*lenfact = restlen / restlenorig;
+		}
 	}
 	else {
 		zero_v3(f);

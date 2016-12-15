@@ -82,6 +82,10 @@ typedef struct ClothSimSettings {
 	float	vel_damping; /* damp the velocity to speed up getting to the resting position */
 	float	shrink_min;  /* min amount to shrink cloth by 0.0f (no shrink) - 1.0f (shrink to nothing) */
 	float	shrink_max;  /* max amount to shrink cloth by 0.0f (no shrink) - 1.0f (shrink to nothing) */
+	float	struct_plasticity;	/* Factor of how much the rest length will change after reaching yield point (0-1) */
+	float	struct_yield_fact;	/* Factor of how much length has to change before plastic behavior kicks in (1-inf) */
+	float	bend_plasticity;	/* Factor of how much the rest angle will change after reaching yield point (0-1) */
+	float	bend_yield_fact;	/* How much angle has to change as a factor of a full circle before plastic behavior kicks in (0-1) */
 	
 	/* XXX various hair stuff
 	 * should really be separate, this struct is a horrible mess already
