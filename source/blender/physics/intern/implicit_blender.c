@@ -1752,18 +1752,36 @@ BLI_INLINE bool spring_angle(Implicit_Data *data, int i, int j, int *i_a, int *i
 
 /* Angular springs roughly based on the bending model proposed by Baraff and Witkin in "Large Steps in Cloth Simulation" */
 bool BPH_mass_spring_force_spring_angular(Implicit_Data *data, int i, int j, int *i_a, int *i_b, int len_a, int len_b,
-                                          float restang, float stiffness, float damping)
+                                          float restangorig, float *angoffset, float stiffness, float damping,
+                                          float plasticity, float yield_ang)
 {
 	float angle, dir_a[3], dir_b[3], vel_a[3], vel_b[3];
 	float f_a[3], f_b[3], f_e[3];
 	float force;
+	float restang;
 	int x;
+
+	restang = restangorig + *angoffset;
 
 	spring_angle(data, i, j, i_a, i_b, len_a, len_b,
 	             dir_a, dir_b, &angle, vel_a, vel_b);
 
 	/* spring force */
 	force = stiffness * (angle - restang);
+
+	/* compute plasticity offset */
+	if (angle > restang) {
+		if (angle - restang > yield_ang) {
+			restang += (angle - restang - yield_ang) * plasticity;
+			*angoffset = restang - restangorig;
+		}
+	}
+	else if (angle < restang) {
+		if (restang - angle > yield_ang) {
+			restang -= (restang - angle - yield_ang) * plasticity;
+			*angoffset = restang - restangorig;
+		}
+	}
 
 	/* damping force */
 	force += -damping * (dot_v3v3(vel_a, dir_a) + dot_v3v3(vel_b, dir_b));

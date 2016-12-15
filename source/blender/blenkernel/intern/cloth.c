@@ -1634,6 +1634,7 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 						spring->lenfact = 1.0f;
 
 						spring->restang = spring_angle(cloth->verts, spring->ij, spring->kl, spring->pa, spring->pb, spring->la, spring->lb);
+						spring->angoffset = 0.0f;
 
 						spring->stiffness = (cloth->verts[spring->ij].bend_stiff + cloth->verts[spring->kl].bend_stiff) / 2.0f;
 

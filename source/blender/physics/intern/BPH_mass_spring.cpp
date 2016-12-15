@@ -434,10 +434,10 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		s->flags |= CLOTH_SPRING_FLAG_NEEDED;
 		
 		scaling = parms->bending + s->stiffness * fabsf(parms->max_bend - parms->bending);
-		k = scaling * s->restlen * 0.1f; /* multiplying by 0.1, just to scale the forces to more reasonable values */
+		k = scaling * s->restlen * s->lenfact * 0.1f; /* multiplying by 0.1, just to scale the forces to more reasonable values */
 		
-		BPH_mass_spring_force_spring_angular(data, s->ij, s->kl, s->pa, s->pb, s->la, s->lb,
-                                             s->restang, k, parms->bending_damping);
+		BPH_mass_spring_force_spring_angular(data, s->ij, s->kl, s->pa, s->pb, s->la, s->lb, s->restang, &s->angoffset,
+		                                     k, parms->bending_damping, parms->bend_plasticity, parms->bend_yield_fact * M_PI * 2);
 #endif
 	}
 	else if (s->type & CLOTH_SPRING_TYPE_BENDING_HAIR) {

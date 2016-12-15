@@ -119,7 +119,8 @@ bool BPH_mass_spring_force_spring_linear(struct Implicit_Data *data, int i, int 
 					 bool no_compress, float clamp_force, float plasticity, float yield_fact);
 /* Angular spring force between two polygons */
 bool BPH_mass_spring_force_spring_angular(struct Implicit_Data *data, int i, int j, int *i_a, int *i_b, int len_a, int len_b,
-                                          float restang, float stiffness, float damping);
+                                          float restangorig, float *angoffset, float stiffness, float damping,
+					  float plasticity, float yield_ang);
 /* Bending force, forming a triangle at the base of two structural springs */
 bool BPH_mass_spring_force_spring_bending(struct Implicit_Data *data, int i, int j, float restlen,
                                           float kb, float cb);
