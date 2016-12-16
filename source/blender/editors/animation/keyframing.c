@@ -383,11 +383,11 @@ int insert_bezt_fcurve(FCurve *fcu, const BezTriple *bezt, short flag)
 	return i;
 }
 
-static float get_parameterization(float x, const BezTriple *prev, const BezTriple *next)
+static float get_parameterization_on_x(float x, const BezTriple *prev, const BezTriple *next)
 {
 	float min_t = 0.0F;
 	float max_t = 1.0F;
-	float t = 0.5F;
+	float t;
 
 	for (int i = 0; i < 20; ++i) {
 		t = (min_t + max_t) * 0.5F;
@@ -412,9 +412,47 @@ static float get_parameterization(float x, const BezTriple *prev, const BezTripl
 	return t;
 }
 
+static float get_parameterization_on_y(float y, const BezTriple *prev, const BezTriple *next)
+{
+	float min_t = 0.0F;
+	float max_t = 1.0F;
+	float t;
+
+	for (int i = 0; i < 20; ++i) {
+		t = (min_t + max_t) * 0.5F;
+
+		float mt = 1.0F - t;
+		float mt2 = mt*mt;
+		float mt3 = mt*mt2;
+
+		float t2 = t*t;
+		float t3 = t2*t;
+
+		float yt = mt3 * prev->vec[1][1] +
+			3.0F * mt2 * t * prev->vec[2][1] +
+			3.0F * mt * t2 * next->vec[0][1] +
+			t3 * next->vec[1][1];
+
+		if (y - prev->vec[1][1] >= 0)
+		{
+			if (yt < y)         min_t = t;
+			else if (yt > y)    max_t = t;
+			else break;
+		}
+		else
+		{
+			if (yt < y)         max_t = t;
+			else if (yt > y)    min_t = t;
+			else break;
+		}
+	}
+
+	return t;
+}
+
 static float** de_castlejau_algorithm(const BezTriple *bezt, const BezTriple *prev, const BezTriple *next, float** P)
 {
-	float temp[2], P0_1[2], P1_2[2], P2_3[2];
+	float P0_1[2], P1_2[2], P2_3[2];
 	float P01_12[2], P12_23[2];
 	float P0112_1223[2];
 
@@ -425,38 +463,25 @@ static float** de_castlejau_algorithm(const BezTriple *bezt, const BezTriple *pr
 		const float *P2 = next->vec[0];
 		const float *P3 = next->vec[1];
 
-		float t = get_parameterization(bezt->vec[1][0], prev, next);
-		float one_minus_t = 1.0F - t;
+		float xt = get_parameterization_on_x(bezt->vec[1][0], prev, next);
+		float yt = get_parameterization_on_y(bezt->vec[1][1], prev, next);
 
-		mul_v2_v2fl(P0_1, P0, one_minus_t);
-		mul_v2_v2fl(temp, P1, t);
-		add_v2_v2v2(P0_1, P0_1, temp);
 
-		mul_v2_v2fl(P1_2, P1, one_minus_t);
-		mul_v2_v2fl(temp, P2, t);
-		add_v2_v2v2(P1_2, P1_2, temp);
+		inter_v2_v2fl(P0_1, P0, P1, xt, yt);
+		inter_v2_v2fl(P1_2, P1, P2, xt, yt);
+		inter_v2_v2fl(P2_3, P2, P3, xt, yt);
 
-		mul_v2_v2fl(P2_3, P2, one_minus_t);
-		mul_v2_v2fl(temp, P3, t);
-		add_v2_v2v2(P2_3, P2_3, temp);
+		inter_v2_v2fl(P01_12, P0_1, P1_2, xt, yt);
+		inter_v2_v2fl(P12_23, P1_2, P2_3, xt, yt);
 
-		mul_v2_v2fl(P01_12, P0_1, one_minus_t);
-		mul_v2_v2fl(temp, P1_2, t);
-		add_v2_v2v2(P01_12, P01_12, temp);
+		inter_v2_v2fl(P0112_1223, P01_12, P12_23, xt, yt);
 
-		mul_v2_v2fl(P12_23, P1_2, one_minus_t);
-		mul_v2_v2fl(temp, P2_3, t);
-		add_v2_v2v2(P12_23, P12_23, temp);
-
-		mul_v2_v2fl(P0112_1223, P01_12, one_minus_t);
-		mul_v2_v2fl(temp, P12_23, t);
-		add_v2_v2v2(P0112_1223, P0112_1223, temp);
-
-		memcpy(P[0], P0_1, sizeof(P0_1));
-		memcpy(P[1], P2_3, sizeof(P0_1));
-		memcpy(P[2], P01_12, sizeof(P0_1));
-		memcpy(P[3], P12_23, sizeof(P0_1));
+		memcpy(P[0], P0_1,		 sizeof(P0_1));
+		memcpy(P[1], P2_3,		 sizeof(P0_1));
+		memcpy(P[2], P01_12,	 sizeof(P0_1));
+		memcpy(P[3], P12_23,	 sizeof(P0_1));
 		memcpy(P[4], P0112_1223, sizeof(P0_1));
+		
 
 		return P;
 	}
@@ -551,12 +576,12 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 
 	if (P)
 	{
-		y_diff = (float)fabs((double)(y - P[4][1]));
+		y_diff = (float)fabs((double)(fabs(y) - fabs(P[4][1])));
 	}
 	float epsilon = 0.1;
 
 
-	if (y_diff > 0 && (y_diff <= epsilon)) {
+	if (y_diff >= 0 && (y_diff <= epsilon)) {
 
 		copy_v2_v2(prev->vec[2], P[0]); // P0_12
 

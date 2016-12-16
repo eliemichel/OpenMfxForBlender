@@ -454,6 +454,12 @@ MINLINE void mul_v4_v4fl(float r[4], const float a[4], float f)
 	r[3] = a[3] * f;
 }
 
+MINLINE void inter_v2_v2fl(float r[2], float a[2], float b[2], float xt, float yt)
+{
+	r[0] = a[0] * (1.0F - xt) + b[0] * xt;
+	r[1] = a[1] * (1.0F - yt) + b[1] * yt;
+}
+
 /**
  * Avoid doing:
  *
