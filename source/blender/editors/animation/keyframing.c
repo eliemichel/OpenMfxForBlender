@@ -382,6 +382,12 @@ int insert_bezt_fcurve(FCurve *fcu, const BezTriple *bezt, short flag)
 	 */
 	return i;
 }
+/* ************************************************************************************** */
+/* PARAMETERIZATION FUNCTIONS */
+/*
+ * Both get_parameterization_on_x and get_parameterization_on_y obtain the locations of the parametric
+ * variables relative to the position of the x and y coordinates respectively.
+ */
 
 static float get_parameterization_on_x(float x, const BezTriple *prev, const BezTriple *next)
 {
@@ -449,15 +455,25 @@ static float get_parameterization_on_y(float y, const BezTriple *prev, const Bez
 
 	return t;
 }
-
-static float** de_castlejau_algorithm(const BezTriple *bezt, const BezTriple *prev, const BezTriple *next, float** P)
+/*
+ * The main bezier splitting algorithm that computes the proper position of the newly formed bezier triple
+ * and the locations of the previous and next triple.
+ * \param bezt: The new formed bezier triple that will constitute the new keyframe on the graph editor.
+ * \param prev: The keyframe that is prior to the 'bezt' triple.
+ * \param next: The keyframe that follows the 'bezt' triple.
+ * \param P: A 5x2 multidimensional array that will hold the new coordinates for bezt, prev, and next.
+ */
+void de_castlejau_algorithm(BezTriple *bezt, BezTriple *prev, BezTriple *next, float P[][2])
 {
+
 	float P0_1[2], P1_2[2], P2_3[2];
 	float P01_12[2], P12_23[2];
 	float P0112_1223[2];
 
 	if (prev && next && prev->h2 != HD_VECT && next->h1 != HD_VECT && (prev->ipo == BEZT_IPO_BEZ))
 	{
+		correct_bezpart(prev->vec[1], prev->vec[2], next->vec[0], next->vec[1]); // fixes handles
+
 		const float *P0 = prev->vec[1];
 		const float *P1 = prev->vec[2];
 		const float *P2 = next->vec[0];
@@ -482,11 +498,7 @@ static float** de_castlejau_algorithm(const BezTriple *bezt, const BezTriple *pr
 		memcpy(P[3], P12_23,	 sizeof(P0_1));
 		memcpy(P[4], P0112_1223, sizeof(P0_1));
 		
-
-		return P;
 	}
-	return NULL;
-
 }
 
 /**
@@ -565,13 +577,8 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 	BezTriple *bezt = &fcu->bezt[a];
 	BezTriple *next = ((a + 1) < fcu->totvert) ? &fcu->bezt[a + 1] : NULL;
 
-
-	float** P = (float**)malloc(5 * sizeof(float*));
-	for (int i = 0; i < 5; i++)
-	{
-		P[i] = (float*)malloc(2 * sizeof(float));
-	}
-	P = de_castlejau_algorithm(bezt, prev, next, P);
+	float P[5][2];
+	de_castlejau_algorithm(bezt, prev, next, P);
 	float y_diff = -1;
 
 	if (P)
@@ -638,15 +645,6 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 				calchandles_fcurve(fcu);
 		}
 	}
-	if (P)
-	{
-		for (int i = 0; i < 5; i++)
-		{
-			free(P[i]);
-		}
-		free(P);
-	}
-
 	/* return the index at which the keyframe was added */
 	return a;
 }
