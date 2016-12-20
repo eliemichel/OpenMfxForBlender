@@ -450,14 +450,17 @@ static float get_parameterization_on_y(float y, const BezTriple *prev, const Bez
 	return t;
 }
 
-static float** de_castlejau_algorithm(const BezTriple *bezt, const BezTriple *prev, const BezTriple *next, float** P)
+static float** de_castlejau_algorithm(BezTriple *bezt, BezTriple *prev, BezTriple *next, float** P)
 {
+
 	float P0_1[2], P1_2[2], P2_3[2];
 	float P01_12[2], P12_23[2];
 	float P0112_1223[2];
 
 	if (prev && next && prev->h2 != HD_VECT && next->h1 != HD_VECT && (prev->ipo == BEZT_IPO_BEZ))
 	{
+		correct_bezpart(prev->vec[1], prev->vec[2], next->vec[0], next->vec[1]);
+
 		const float *P0 = prev->vec[1];
 		const float *P1 = prev->vec[2];
 		const float *P2 = next->vec[0];
@@ -564,7 +567,6 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 	BezTriple *prev = ((a - 1) >= 0) ? &fcu->bezt[a - 1] : NULL;
 	BezTriple *bezt = &fcu->bezt[a];
 	BezTriple *next = ((a + 1) < fcu->totvert) ? &fcu->bezt[a + 1] : NULL;
-
 
 	float** P = (float**)malloc(5 * sizeof(float*));
 	for (int i = 0; i < 5; i++)
