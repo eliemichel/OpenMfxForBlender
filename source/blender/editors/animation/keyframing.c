@@ -456,16 +456,17 @@ static float get_parameterization_on_y(float y, const BezTriple *prev, const Bez
 	return t;
 }
 /*
- * The main bezier splitting algorithm that computes the proper position of the newly formed bezier triple
- * and the locations of the previous and next triple.
+ * The main bezier splitting algorithm that computes the proper position of the newly formed bezier triple.
+ * It uses a Castlejau splitting algorithms to place the new keyframe with newly changed coordinates in the
+ * prev and next triple so that the fcurve is not deformed.
  * \param bezt: The new formed bezier triple that will constitute the new keyframe on the graph editor.
  * \param prev: The keyframe that is prior to the 'bezt' triple.
  * \param next: The keyframe that follows the 'bezt' triple.
  * \param P: A 5x2 multidimensional array that will hold the new coordinates for bezt, prev, and next.
  */
-void de_castlejau_algorithm(BezTriple *bezt, BezTriple *prev, BezTriple *next, float P[][2])
+bool compute_keyframe(BezTriple *bezt, BezTriple *prev, BezTriple *next, float P[][2])
 {
-
+	bool found = false;
 	float P0_1[2], P1_2[2], P2_3[2];
 	float P01_12[2], P12_23[2];
 	float P0112_1223[2];
@@ -497,8 +498,12 @@ void de_castlejau_algorithm(BezTriple *bezt, BezTriple *prev, BezTriple *next, f
 		memcpy(P[2], P01_12,	 sizeof(P0_1));
 		memcpy(P[3], P12_23,	 sizeof(P0_1));
 		memcpy(P[4], P0112_1223, sizeof(P0_1));
+
+		found = true;
 		
 	}
+	return found;
+
 }
 
 /**
@@ -578,10 +583,10 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 	BezTriple *next = ((a + 1) < fcu->totvert) ? &fcu->bezt[a + 1] : NULL;
 
 	float P[5][2];
-	de_castlejau_algorithm(bezt, prev, next, P);
+	bool found = compute_keyframe(bezt, prev, next, P);
 	float y_diff = -1;
 
-	if (P)
+	if (found)
 	{
 		y_diff = (float)fabs((double)(fabs(y) - fabs(P[4][1])));
 	}
