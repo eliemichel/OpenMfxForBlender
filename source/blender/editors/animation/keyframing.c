@@ -466,7 +466,7 @@ static float get_parameterization_on_y(float y, const BezTriple *prev, const Bez
  */
 bool compute_keyframe(BezTriple *bezt, BezTriple *prev, BezTriple *next, float P[][2])
 {
-	bool found = False;
+	bool found = false;
 	float P0_1[2], P1_2[2], P2_3[2];
 	float P01_12[2], P12_23[2];
 	float P0112_1223[2];
@@ -499,7 +499,7 @@ bool compute_keyframe(BezTriple *bezt, BezTriple *prev, BezTriple *next, float P
 		memcpy(P[3], P12_23,	 sizeof(P0_1));
 		memcpy(P[4], P0112_1223, sizeof(P0_1));
 
-		found = True;
+		found = true;
 		
 	}
 	return found;
