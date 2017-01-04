@@ -1044,6 +1044,58 @@ static void cloth_free_errorsprings(Cloth *cloth, LinkNodePair *edgelist)
 	}
 }
 
+BLI_INLINE float spring_angle(ClothVertex *verts, int i, int j, int *i_a, int *i_b, int len_a, int len_b)
+{
+	float co_i[3], co_j[3], co_a[3], co_b[3];
+	float dir_a[3], dir_b[3];
+	float tmp1[3], tmp2[3], vec_e[3];
+	float sin, cos;
+	float (*array_a)[3] = BLI_array_alloca(array_a, len_a);
+	float (*array_b)[3] = BLI_array_alloca(array_b, len_b);
+	int x;
+
+	/* assign poly vert coords to arrays */
+	for (x = 0; x < len_a; x++) {
+		copy_v3_v3(array_a[x], verts[i_a[x]].xrest);
+	}
+
+	for (x = 0; x < len_b; x++) {
+		copy_v3_v3(array_b[x], verts[i_b[x]].xrest);
+	}
+
+	/* get edge vert coords and poly centroid coords. */
+	copy_v3_v3(co_i, verts[i].xrest);
+	copy_v3_v3(co_j, verts[j].xrest);
+	cent_poly_v3(co_a, array_a, len_a);
+	cent_poly_v3(co_b, array_b, len_b);
+
+	/* find dir for poly a */
+	sub_v3_v3v3(tmp1, co_j, co_a);
+	sub_v3_v3v3(tmp2, co_i, co_a);
+
+	cross_v3_v3v3(dir_a, tmp1, tmp2);
+	normalize_v3(dir_a);
+
+	/* find dir for poly b */
+	sub_v3_v3v3(tmp1, co_i, co_b);
+	sub_v3_v3v3(tmp2, co_j, co_b);
+
+	cross_v3_v3v3(dir_b, tmp1, tmp2);
+	normalize_v3(dir_b);
+
+	/* find parallel and perpendicular directions to edge */
+	sub_v3_v3v3(vec_e, co_i, co_j);
+	normalize_v3(vec_e);
+
+	/* calculate angle between polys */
+	cos = dot_v3v3(dir_a, dir_b);
+
+	cross_v3_v3v3(tmp1, dir_a, dir_b);
+	sin = dot_v3v3(tmp1, vec_e);
+
+	return atan2(sin, cos);
+}
+
 static void cloth_hair_update_bending_targets(ClothModifierData *clmd)
 {
 	Cloth *cloth = clmd->clothObject;
@@ -1258,12 +1310,18 @@ static void cloth_update_spring_lengths( ClothModifierData *clmd, DerivedMesh *d
 		ClothSpring *spring = search->link;
 
 		if ( spring->type != CLOTH_SPRING_TYPE_SEWING ) {
-			if ( spring->type & (CLOTH_SPRING_TYPE_STRUCTURAL | CLOTH_SPRING_TYPE_SHEAR | CLOTH_SPRING_TYPE_BENDING) )
+			if ( spring->type & (CLOTH_SPRING_TYPE_STRUCTURAL | CLOTH_SPRING_TYPE_SHEAR | CLOTH_SPRING_TYPE_BENDING) ) {
 				shrink_factor = cloth_shrink_factor(clmd, cloth->verts, spring->ij, spring->kl);
-			else
+			}
+			else {
 				shrink_factor = 1.0f;
+			}
 
 			spring->restlen = len_v3v3(cloth->verts[spring->kl].xrest, cloth->verts[spring->ij].xrest) * shrink_factor;
+
+			if ( spring->type == CLOTH_SPRING_TYPE_BENDING ) {
+				spring->restang = spring_angle(cloth->verts, spring->ij, spring->kl, spring->pa, spring->pb, spring->la, spring->lb);
+			}
 		}
 
 		if ( spring->type == CLOTH_SPRING_TYPE_STRUCTURAL ) {
@@ -1276,12 +1334,14 @@ static void cloth_update_spring_lengths( ClothModifierData *clmd, DerivedMesh *d
 		search = search->next;
 	}
 
-	if (struct_springs > 0)
+	if (struct_springs > 0) {
 		clmd->sim_parms->avg_spring_len /= struct_springs;
+	}
 
 	for (i = 0; i < mvert_num; i++) {
-		if (cloth->verts[i].spring_count > 0)
+		if (cloth->verts[i].spring_count > 0) {
 			cloth->verts[i].avg_spring_len = cloth->verts[i].avg_spring_len * 0.49f / ((float)cloth->verts[i].spring_count);
+		}
 	}
 }
 
@@ -1318,58 +1378,6 @@ void cloth_parallel_transport_hair_frame(float mat[3][3], const float dir_old[3]
 	
 	/* rotate the frame */
 	mul_m3_m3m3(mat, rot, mat);
-}
-
-BLI_INLINE float spring_angle(ClothVertex *verts, int i, int j, int *i_a, int *i_b, int len_a, int len_b)
-{
-	float co_i[3], co_j[3], co_a[3], co_b[3];
-	float dir_a[3], dir_b[3];
-	float tmp1[3], tmp2[3], vec_e[3];
-	float sin, cos;
-	float (*array_a)[3] = BLI_array_alloca(array_a, len_a);
-	float (*array_b)[3] = BLI_array_alloca(array_b, len_b);
-	int x;
-
-	/* assign poly vert coords to arrays */
-	for (x = 0; x < len_a; x++) {
-		copy_v3_v3(array_a[x], verts[i_a[x]].xrest);
-	}
-
-	for (x = 0; x < len_b; x++) {
-		copy_v3_v3(array_b[x], verts[i_b[x]].xrest);
-	}
-
-	/* get edge vert coords and poly centroid coords. */
-	copy_v3_v3(co_i, verts[i].xrest);
-	copy_v3_v3(co_j, verts[j].xrest);
-	cent_poly_v3(co_a, array_a, len_a);
-	cent_poly_v3(co_b, array_b, len_b);
-
-	/* find dir for poly a */
-	sub_v3_v3v3(tmp1, co_j, co_a);
-	sub_v3_v3v3(tmp2, co_i, co_a);
-
-	cross_v3_v3v3(dir_a, tmp1, tmp2);
-	normalize_v3(dir_a);
-
-	/* find dir for poly b */
-	sub_v3_v3v3(tmp1, co_i, co_b);
-	sub_v3_v3v3(tmp2, co_j, co_b);
-
-	cross_v3_v3v3(dir_b, tmp1, tmp2);
-	normalize_v3(dir_b);
-
-	/* find parallel and perpendicular directions to edge */
-	sub_v3_v3v3(vec_e, co_i, co_j);
-	normalize_v3(vec_e);
-
-	/* calculate angle between polys */
-	cos = dot_v3v3(dir_a, dir_b);
-
-	cross_v3_v3v3(tmp1, dir_a, dir_b);
-	sin = dot_v3v3(tmp1, vec_e);
-
-	return atan2(sin, cos);
 }
 
 /* add a shear and a bend spring between two verts within a poly */
