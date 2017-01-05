@@ -1386,7 +1386,7 @@ BLI_INLINE bool add_shear_bend_spring(ClothModifierData *clmd, LinkNodePair *edg
 {
 	Cloth *cloth = clmd->clothObject;
 	ClothSpring *spring;
-	MLoop *tmp_loop;
+	const MLoop *tmp_loop;
 	float shrink_factor;
 	int x, y;
 
@@ -1483,7 +1483,6 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 	const MPoly *mpoly = dm->getPolyArray(dm);
 	const MLoop *mloop = dm->getLoopArray(dm);
 	const MLoop *ml;
-	int index2 = 0; // our second vertex index
 	LinkNodePair *edgelist;
 	EdgeSet *edgeset = NULL;
 	LinkNode *search = NULL, *search2 = NULL;
@@ -1616,7 +1615,7 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 					}
 					/* Create spring, because this is the second poly to use this edge */
 					else {
-						MLoop *tmp_loop;
+						const MLoop *tmp_loop;
 
 						spring = MEM_callocN(sizeof(ClothSpring), "cloth spring");
 
