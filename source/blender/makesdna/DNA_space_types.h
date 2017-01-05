@@ -371,6 +371,8 @@ typedef enum eGraphEdit_Flag {
 	/* normalize curves on display */
 	SIPO_NORMALIZE            = (1 << 14),
 	SIPO_NORMALIZE_FREEZE     = (1 << 15),
+	/* auto deselect keyframes when selecting new objects */
+	SIPO_AUTODESELECT_KEYS	  = (1 << 16),
 } eGraphEdit_Flag;
 
 /* SpaceIpo->mode (Graph Editor Mode) */
