@@ -1395,8 +1395,7 @@ BLI_INLINE bool add_shear_bend_spring(ClothModifierData *clmd, LinkNodePair *edg
 	spring = (ClothSpring *)MEM_callocN(sizeof(ClothSpring), "cloth spring");
 
 	if (!spring) {
-		cloth_free_errorsprings(cloth, edgelist);
-		return 0;
+		return false;
 	}
 
 	spring_verts_ordered_set(
@@ -1426,8 +1425,7 @@ BLI_INLINE bool add_shear_bend_spring(ClothModifierData *clmd, LinkNodePair *edg
 	spring = MEM_callocN(sizeof(ClothSpring), "cloth spring");
 
 	if (!spring) {
-		cloth_free_errorsprings(cloth, edgelist);
-		return 0;
+		return false;
 	}
 
 	spring->type = CLOTH_SPRING_TYPE_BENDING;
@@ -1466,7 +1464,7 @@ BLI_INLINE bool add_shear_bend_spring(ClothModifierData *clmd, LinkNodePair *edg
 
 	BLI_linklist_prepend(&cloth->springs, spring);
 
-	return 1;
+	return true;
 }
 
 static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
@@ -1572,6 +1570,7 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 							bend_springs++;
 						}
 						else {
+							MEM_freeN(spring_ref);
 							cloth_free_errorsprings(cloth, edgelist);
 							return 0;
 						}
@@ -1583,6 +1582,7 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 							bend_springs++;
 						}
 						else {
+							MEM_freeN(spring_ref);
 							cloth_free_errorsprings(cloth, edgelist);
 							return 0;
 						}
@@ -1620,6 +1620,7 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 						spring = MEM_callocN(sizeof(ClothSpring), "cloth spring");
 
 						if (!spring) {
+							MEM_freeN(spring_ref);
 							cloth_free_errorsprings(cloth, edgelist);
 							return 0;
 						}
