@@ -666,6 +666,8 @@ static ShaderNode *add_node(Scene *scene,
         BL::Curve b_curve(b_curve_node.object());
 		CurveTextureNode *tex = new CurveTextureNode();
 
+        tex->curve_type = b_curve_node.curve_type();
+
         if (b_curve) {
             ::Object *ob = (::Object *) b_curve.ptr.data;
             ::Curve *cu = (::Curve*) ob->data;

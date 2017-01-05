@@ -124,6 +124,7 @@ public:
     float3 background_color;
     float3 curve_location;
     float3 curve_scale;
+    int curve_type;
     float line_thickness;
 };
 

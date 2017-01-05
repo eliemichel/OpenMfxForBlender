@@ -375,9 +375,10 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 {
     uint co_offset, fill_in_offset, background_in_offset, out_offset;
     uint curve_thickness_offset, curve_location_offset, curve_scale_offset;
+    uint curve_type;
 
     decode_node_uchar4(node.z, &co_offset, &fill_in_offset, &background_in_offset, &out_offset);
-    decode_node_uchar4(node.w, &curve_thickness_offset, &curve_location_offset, &curve_scale_offset, NULL);
+    decode_node_uchar4(node.w, &curve_thickness_offset, &curve_location_offset, &curve_scale_offset, &curve_type);
 
     uint slot = node.y;
 
@@ -395,7 +396,8 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
         float3 curve_scale = stack_load_float3(stack, curve_scale_offset);
 
         uint width = kg->texture_float4_images[slot].width;
-        bool inside = false;
+
+        float grad = 1.0;
 
         for (int t = 0; t < width; ++t) {
             int t_next = (t+1)%width;
@@ -410,17 +412,60 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
             co2.x = co.x;
             co2.y = co.y;
 
-            if (minimum_distance(p0, p1, co2) < curve_thickness) {
-                inside = true;
-                break;
+            // Line
+            if (curve_type == 0) {
+
+                if (minimum_distance(p0, p1, co2) < curve_thickness) {
+                    grad = 0.0;
+                    break;
+                }
+
+            // Fill
+            } else if (curve_type == 1) {
+                float x_min,x_max;
+                float y_min,y_max;
+
+                if (p0.y < p1.y) {
+                    y_min = p0.y;
+                    y_max = p1.y;
+                    x_min = p0.x;
+                    x_max = p1.x;
+                } else if (p0.y > p1.y) {
+                    y_min = p1.y;
+                    y_max = p0.y;
+                    x_min = p1.x;
+                    x_max = p0.x;
+                } else {
+                    continue;
+                }
+
+                if (co2.y < y_min || co2.y > y_max)
+                    continue;
+
+                float ty = (co2.y - y_min) / (y_max - y_min);
+                float x = x_min + (x_max - x_min) * ty;
+
+                if (x < co2.x) {
+                    grad = !grad;
+                }
+
+            // Grad
+            } else {
+
+                float d = minimum_distance(p0, p1, co2);
+                if (d < curve_thickness) {
+                    grad = min(grad, d/curve_thickness);
+                }
+
             }
+
         }
 
-        if (inside) {
-            f = make_float4(fill_color.x, fill_color.y, fill_color.z, 1.0);
-        } else {
-            f = make_float4(background_color.x, background_color.y, background_color.z, 1.0);
-        }
+        f = make_float4((1.0-grad) * fill_color.x + grad * background_color.x,
+                        (1.0-grad) * fill_color.y + grad * background_color.y,
+                        (1.0-grad) * fill_color.z + grad * background_color.z,
+                        1.0);
+
     }
 
 	if(stack_valid(out_offset))

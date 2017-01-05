@@ -481,7 +481,8 @@ void CurveTextureNode::compile(SVMCompiler& compiler)
 		compiler.encode_uchar4(
 			compiler.stack_assign(line_thickness_in),
 			compiler.stack_assign(curve_location_in),
-			compiler.stack_assign(curve_scale_in)
+			compiler.stack_assign(curve_scale_in),
+			curve_type
         )
     );
 
