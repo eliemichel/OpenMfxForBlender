@@ -1381,7 +1381,8 @@ void cloth_parallel_transport_hair_frame(float mat[3][3], const float dir_old[3]
 }
 
 /* add a shear and a bend spring between two verts within a poly */
-BLI_INLINE bool add_shear_bend_spring(ClothModifierData *clmd, LinkNodePair *edgelist, const MLoop *mloop, const MPoly *mpoly, int i, int j, int k)
+BLI_INLINE bool add_shear_bend_spring(ClothModifierData *clmd, LinkNodePair *edgelist, BendSpringRef *spring_ref,
+                                      const MLoop *mloop, const MPoly *mpoly, int i, int j, int k)
 {
 	Cloth *cloth = clmd->clothObject;
 	ClothSpring *spring;
@@ -1413,6 +1414,12 @@ BLI_INLINE bool add_shear_bend_spring(ClothModifierData *clmd, LinkNodePair *edg
 	BLI_linklist_append(&edgelist[spring->kl], spring);
 
 	BLI_linklist_prepend(&cloth->springs, spring);
+
+	spring = cloth->springs->next->link;
+
+	if (spring->type == CLOTH_SPRING_TYPE_BENDING && spring->mn != -1) {
+		spring_ref[spring->mn].spring = &cloth->springs->next;
+	}
 
 	/* bending spring */
 
@@ -1561,7 +1568,7 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 			if (mpoly[i].totloop > 3) {
 				for (j = 1; j < mpoly[i].totloop - 1; j++) {
 					if (j > 1) {
-						if (add_shear_bend_spring(clmd, edgelist, mloop, mpoly, i, 0, j)) {
+						if (add_shear_bend_spring(clmd, edgelist, spring_ref, mloop, mpoly, i, 0, j)) {
 							shear_springs++;
 							bend_springs++;
 						}
@@ -1572,7 +1579,7 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 					}
 
 					for (k = j + 2; k < mpoly[i].totloop; k++) {
-						if (add_shear_bend_spring(clmd, edgelist, mloop, mpoly, i, j, k)) {
+						if (add_shear_bend_spring(clmd, edgelist, spring_ref, mloop, mpoly, i, j, k)) {
 							shear_springs++;
 							bend_springs++;
 						}
@@ -1592,6 +1599,11 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 				if (curr_ref->set == 1) {
 					/* Remove spring, because this is the third poly to use this edge */
 					if (curr_ref->spring) {
+						spring = (*curr_ref->spring)->next->link;
+
+						if (spring->type == CLOTH_SPRING_TYPE_BENDING && spring->mn != -1)
+							spring_ref[spring->mn].spring = curr_ref->spring;
+
 						spring = BLI_linklist_pop(curr_ref->spring);
 						curr_ref->spring = NULL;
 
@@ -1652,7 +1664,7 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 
 						curr_ref->spring = &cloth->springs;
 
-						spring = (ClothSpring *) cloth->springs->next->link;
+						spring = cloth->springs->next->link;
 
 						if (spring->type == CLOTH_SPRING_TYPE_BENDING && spring->mn != -1)
 							spring_ref[spring->mn].spring = &cloth->springs->next;
