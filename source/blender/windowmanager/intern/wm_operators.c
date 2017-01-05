@@ -1737,19 +1737,22 @@ static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(ar
 
 #ifdef WITH_BUILDINFO
 	int label_delta = 0;
-	int hash_width, date_width;
+	int hash_width, date_width, vers_width;
 	char date_buf[128] = "\0";
 	char hash_buf[128] = "\0";
+	char vers_buf[128] = "\0";
 	extern unsigned long build_commit_timestamp;
 	extern char build_hash[], build_commit_date[], build_commit_time[], build_branch[];
 
 	/* Builds made from tag only shows tag sha */
 	BLI_snprintf(hash_buf, sizeof(hash_buf), "Hash: %s", build_hash);
 	BLI_snprintf(date_buf, sizeof(date_buf), "Date: %s %s", build_commit_date, build_commit_time);
+	BLI_snprintf(vers_buf, sizeof(vers_buf), "Studio Version: %s", "v1.09");
 	
 	BLF_size(style->widgetlabel.uifont_id, style->widgetlabel.points, U.pixelsize * U.dpi);
 	hash_width = (int)BLF_width(style->widgetlabel.uifont_id, hash_buf, sizeof(hash_buf)) + U.widget_unit;
 	date_width = (int)BLF_width(style->widgetlabel.uifont_id, date_buf, sizeof(date_buf)) + U.widget_unit;
+	vers_width = (int)BLF_width(style->widgetlabel.uifont_id, vers_buf, sizeof(vers_buf)) + U.widget_unit;
 #endif  /* WITH_BUILDINFO */
 
 #ifndef WITH_HEADLESS
@@ -1804,6 +1807,8 @@ static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(ar
 		label_delta = 12;
 	}
 	uiDefBut(block, UI_BTYPE_LABEL, 0, hash_buf, U.pixelsize * 494 - hash_width, U.pixelsize * (270 - label_delta), hash_width, UI_UNIT_Y, NULL, 0, 0, 0, 0, NULL);
+	label_delta = 24;
+	uiDefBut(block, UI_BTYPE_LABEL, 0, vers_buf, U.pixelsize * 494 - vers_width, U.pixelsize * (270 - label_delta), vers_width, UI_UNIT_Y, NULL, 0, 0, 0, 0, NULL);
 
 	if (!STREQ(build_branch, "master")) {
 		char branch_buf[128] = "\0";
