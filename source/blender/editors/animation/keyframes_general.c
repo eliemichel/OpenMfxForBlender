@@ -115,31 +115,30 @@ bool delete_fcurve_keys(FCurve *fcu)
 	/* Delete selected BezTriples */
 	for (i = 0; i < fcu->totvert; i++) {
 		if (fcu->bezt[i].f2 & SELECT) {
-			// Proper deletion based on 
-		    // http://stackoverflow.com/questions/8687648/how-to-remove-a-node-of-a-bezier-curve-so-that-the-shape-of-the-curve-does-not-c#9068155
+			if (((fcu->totvert) > 2) && 
+				((fcu->bezt[i].vec[2][1] >= fcu->bezt[i - 1].vec[2][1] && fcu->bezt[i].vec[2][1] <= fcu->bezt[i + 1].vec[2][1]) || 
+				 (fcu->bezt[i].vec[2][1] <= fcu->bezt[i - 1].vec[2][1] && fcu->bezt[i].vec[2][1] >= fcu->bezt[i + 1].vec[2][1]))){
+				// Proper deletion based on 
+				// http://stackoverflow.com/questions/8687648/how-to-remove-a-node-of-a-bezier-curve-so-that-the-shape-of-the-curve-does-not-c#9068155
 
-			float* Q0 = fcu->bezt[i].vec[1]; // P3 = Q0
-			float* Q1 = fcu->bezt[i].vec[2];
-			float* Q2 = fcu->bezt[i + 1].vec[0];
-			float* Q3 = fcu->bezt[i + 1].vec[1];
-			float* P0 = fcu->bezt[i - 1].vec[1];
-			float* P1 = fcu->bezt[i - 1].vec[2];
-			float* P2 = fcu->bezt[i].vec[0];
+				float* Q0 = fcu->bezt[i].vec[1]; // P3 = Q0
+				float* Q1 = fcu->bezt[i].vec[2];
+				float* Q2 = fcu->bezt[i + 1].vec[0];
+				float* Q3 = fcu->bezt[i + 1].vec[1];
+				float* P0 = fcu->bezt[i - 1].vec[1];
+				float* P1 = fcu->bezt[i - 1].vec[2];
+				float* P2 = fcu->bezt[i].vec[0];
 
-			// Average t case
-			float tx = (Q0[0] - P2[0]) / (Q1[0] - P2[0]);
-			float ty = (Q0[1] - P2[1]) / (Q1[1] - P2[1]);
-			float t = (tx + ty) / 2;
+				// Average t case
+				float tx = (Q0[0] - P2[0]) / (Q1[0] - P2[0]);
+				float ty = (Q0[1] - P2[1]) / (Q1[1] - P2[1]);
+				float t = (tx + ty) / 2;
 
-			// another t
-			float tx2 = (Q1[0] - Q0[0]) / (Q1[0] - P2[0]);
-			float ty2 = (Q1[1] - Q0[1]) / (Q1[1] - P2[1]);
-			float t2 = (tx2 + ty2) / 2;
-
-			fcu->bezt[i - 1].vec[2][0] = (P1[0] - P0[0] * (1 - t)) / t;
-			fcu->bezt[i - 1].vec[2][1] = (P1[1] - P0[1] * (1 - t)) / t;
-			fcu->bezt[i + 1].vec[0][0] = (Q2[0] - Q3[0] * t) / (1 - t);
-			fcu->bezt[i + 1].vec[0][1] = (Q2[1] - Q3[1] * t) / (1 - t);
+				fcu->bezt[i - 1].vec[2][0] = (P1[0] - P0[0] * (1 - t)) / t;
+				fcu->bezt[i - 1].vec[2][1] = (P1[1] - P0[1] * (1 - t)) / t;
+				fcu->bezt[i + 1].vec[0][0] = (Q2[0] - Q3[0] * t) / (1 - t);
+				fcu->bezt[i + 1].vec[0][1] = (Q2[1] - Q3[1] * t) / (1 - t);
+			}
 
 			memmove(&fcu->bezt[i], &fcu->bezt[i + 1], sizeof(BezTriple) * (fcu->totvert - i - 1));
 

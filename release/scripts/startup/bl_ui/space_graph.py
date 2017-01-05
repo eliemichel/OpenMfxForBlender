@@ -110,6 +110,7 @@ class GRAPH_MT_view(Menu):
         layout.separator()
 
         layout.prop(st, "show_handles")
+        layout.prop(st, "auto_deselect_keys")
 
         layout.prop(st, "use_only_selected_curves_handles")
         layout.prop(st, "use_only_selected_keyframe_handles")
