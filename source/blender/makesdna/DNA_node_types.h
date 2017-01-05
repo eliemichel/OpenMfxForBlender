@@ -750,6 +750,8 @@ typedef struct NodeTexBrick {
 typedef struct NodeTexCurve {
 	NodeTexBase base;
 	struct Object *object;
+	int curve_type;
+    int pad;
 } NodeTexCurve;
 
 typedef struct NodeTexEnvironment {
@@ -1038,6 +1040,11 @@ typedef struct NodeMotionBlur2D {
 #define SHD_NORMAL_MAP_WORLD			2
 #define SHD_NORMAL_MAP_BLENDER_OBJECT	3
 #define SHD_NORMAL_MAP_BLENDER_WORLD	4
+
+/* curve draw mode */
+#define SHD_CURVE_TYPE_LINE 0
+#define SHD_CURVE_TYPE_FILL 1
+#define SHD_CURVE_TYPE_GRAD 2
 
 /* math node clamp */
 #define SHD_MATH_CLAMP		1

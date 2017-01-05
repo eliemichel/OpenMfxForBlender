@@ -3973,7 +3973,12 @@ static void def_sh_tex_coord(StructRNA *srna)
 
 static void def_sh_tex_curve(StructRNA *srna)
 {
-	//static float default_1[3] = {1.f, 1.f, 1.f};
+	static EnumPropertyItem prop_curve_type_items[] = {
+		{SHD_CURVE_TYPE_LINE,  "LINE",   0, "Line",    "Line"},
+		{SHD_CURVE_TYPE_FILL,  "FILL",   0, "Fill",    "Fill"},
+		{SHD_CURVE_TYPE_GRAD,  "GRAD",   0, "Gradient","Gradient"},
+		{0, NULL, 0, NULL, NULL}
+	};
 
 	PropertyRNA *prop;
 
@@ -3986,6 +3991,12 @@ static void def_sh_tex_curve(StructRNA *srna)
 	RNA_def_property_flag(prop, PROP_EDITABLE);
 	RNA_def_property_ui_text(prop, "Object", "Use this curve object for rendering to texture");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+
+	prop = RNA_def_property(srna, "curve_type", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, prop_curve_type_items);
+	RNA_def_property_ui_text(prop, "Curve Type", "Curve Draw Type");
+	RNA_def_property_update(prop, 0, "rna_Node_update");
+
 }
 
 static void def_sh_vect_transform(StructRNA *srna)

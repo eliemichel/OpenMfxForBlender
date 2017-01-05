@@ -1005,6 +1005,7 @@ static void node_shader_buts_tex_coord(uiLayout *layout, bContext *UNUSED(C), Po
 static void node_shader_buts_tex_curve(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
 	uiItemR(layout, ptr, "object", 0, NULL, 0);
+	uiItemR(layout, ptr, "curve_type", 0, NULL, 0);
 }
 
 static void node_shader_buts_bump(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
