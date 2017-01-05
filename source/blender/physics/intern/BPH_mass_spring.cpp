@@ -288,7 +288,7 @@ static int UNUSED_FUNCTION(cloth_calc_helper_forces)(Object *UNUSED(ob), ClothMo
 			float len, c, l, vec[3];
 			
 			spring = (ClothSpring *)node->link;
-			if (spring->type != CLOTH_SPRING_TYPE_STRUCTURAL && spring->type != CLOTH_SPRING_TYPE_SHEAR) 
+			if (!(spring->type & (CLOTH_SPRING_TYPE_STRUCTURAL | CLOTH_SPRING_TYPE_SHEAR)))
 				continue;
 			
 			v1 = spring->ij; v2 = spring->kl;
@@ -343,9 +343,23 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 	bool no_compress = parms->flags & CLOTH_SIMSETTINGS_FLAG_NO_SPRING_COMPRESS;
 	
 	s->flags &= ~CLOTH_SPRING_FLAG_NEEDED;
-	
+
+	if (s->type & CLOTH_SPRING_TYPE_BENDING) {  /* calculate force of bending springs */
+#ifdef CLOTH_FORCE_SPRING_BEND
+		float k, scaling;
+
+		s->flags |= CLOTH_SPRING_FLAG_NEEDED;
+
+		scaling = parms->bending + s->ang_stiffness * fabsf(parms->max_bend - parms->bending);
+		k = scaling * s->restlen * s->lenfact * 0.1f; /* multiplying by 0.1, just to scale the forces to more reasonable values */
+
+		BPH_mass_spring_force_spring_angular(data, s->ij, s->kl, s->pa, s->pb, s->la, s->lb, s->restang, &s->angoffset,
+		                                     k, parms->bending_damping, bend_plast, parms->bend_yield_fact * M_PI * 2);
+#endif
+	}
+
 	// calculate force of structural + shear springs
-	if ((s->type & CLOTH_SPRING_TYPE_STRUCTURAL) || (s->type & CLOTH_SPRING_TYPE_SEWING) ) {
+	if ( s->type & (CLOTH_SPRING_TYPE_STRUCTURAL | CLOTH_SPRING_TYPE_SEWING) ) {
 #ifdef CLOTH_FORCE_SPRING_STRUCTURAL
 		float k_tension, k_compression, scaling_tension, scaling_compression;
 		float d_tension, d_compression;
@@ -354,7 +368,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 
 		// TODO: Scaling should be relative to half the area of the adjacent faces instead of length (except for sewing)
 		// Note that this scaling is only valid when coupled with proper mass distribution
-		scaling_tension = parms->tension + s->stiffness * fabsf(parms->max_tension - parms->tension);
+		scaling_tension = parms->tension + s->lin_stiffness * fabsf(parms->max_tension - parms->tension);
 
 		if (s->type & CLOTH_SPRING_TYPE_SEWING) {
 			// Multiply by some arbitrary large value, just so zero-length (sewing) springs have enough force.
@@ -367,7 +381,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 			                                    d_tension, 0.0f, no_compress, parms->max_sewing, 0.0f, 1.0f);
 		}
 		else {
-			scaling_compression = parms->compression + s->stiffness * fabsf(parms->max_compression - parms->compression);
+			scaling_compression = parms->compression + s->lin_stiffness * fabsf(parms->max_compression - parms->compression);
 
 			if (s->restlen * s->lenfact > ALMOST_ZERO) {
 				k_tension = scaling_tension / (s->restlen * s->lenfact);
@@ -394,7 +408,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 
 		s->flags |= CLOTH_SPRING_FLAG_NEEDED;
 
-		scaling = parms->shear + s->stiffness * fabsf(parms->max_shear - parms->shear);
+		scaling = parms->shear + s->lin_stiffness * fabsf(parms->max_shear - parms->shear);
 
 		if (s->restlen * s->lenfact > ALMOST_ZERO) {
 			k = scaling / (s->restlen * s->lenfact);
@@ -421,23 +435,10 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		interp_v3_v3v3(goal_x, verts[s->ij].xold, verts[s->ij].xconst, time / parms->time_scale);
 		sub_v3_v3v3(goal_v, verts[s->ij].xconst, verts[s->ij].xold); // distance covered over dt==1
 		
-		scaling = parms->goalspring + s->stiffness * fabsf(parms->max_tension - parms->goalspring);
+		scaling = parms->goalspring + s->lin_stiffness * fabsf(parms->max_tension - parms->goalspring);
 		k = verts[s->ij].goal * scaling / (parms->avg_spring_len + FLT_EPSILON);
 		
 		BPH_mass_spring_force_spring_goal(data, s->ij, goal_x, goal_v, k, parms->goalfrict * 0.01f);
-#endif
-	}
-	else if (s->type & CLOTH_SPRING_TYPE_BENDING) {  /* calculate force of bending springs */
-#ifdef CLOTH_FORCE_SPRING_BEND
-		float k, scaling;
-		
-		s->flags |= CLOTH_SPRING_FLAG_NEEDED;
-		
-		scaling = parms->bending + s->stiffness * fabsf(parms->max_bend - parms->bending);
-		k = scaling * s->restlen * s->lenfact * 0.1f; /* multiplying by 0.1, just to scale the forces to more reasonable values */
-		
-		BPH_mass_spring_force_spring_angular(data, s->ij, s->kl, s->pa, s->pb, s->la, s->lb, s->restang, &s->angoffset,
-		                                     k, parms->bending_damping, bend_plast, parms->bend_yield_fact * M_PI * 2);
 #endif
 	}
 	else if (s->type & CLOTH_SPRING_TYPE_BENDING_HAIR) {
@@ -450,7 +451,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		 * this is crap, but needed due to cloth/hair mixing ...
 		 * max_bend factor is not even used for hair, so ...
 		 */
-		scaling = s->stiffness * parms->bending;
+		scaling = s->lin_stiffness * parms->bending;
 		kb = scaling / (20.0f * (parms->avg_spring_len + FLT_EPSILON));
 		
 		// Fix for [#45084] for cloth stiffness must have cb proportional to kb
@@ -552,7 +553,7 @@ static void cloth_calc_force(ClothModifierData *clmd, float UNUSED(frame), ListB
 			
 			for (LinkNode *link = cloth->springs; link; link = link->next) {
 				ClothSpring *spring = (ClothSpring *)link->link;
-				if (spring->type == CLOTH_SPRING_TYPE_STRUCTURAL) {
+				if (spring->type & CLOTH_SPRING_TYPE_STRUCTURAL) {
 					if (hairdata) {
 						hair_ij = &hairdata[spring->ij];
 						hair_kl = &hairdata[spring->kl];
@@ -639,7 +640,7 @@ BLI_INLINE LinkNode *hair_spring_next(LinkNode *spring_link)
 	LinkNode *next = spring_link->next;
 	if (next) {
 		ClothSpring *next_spring = (ClothSpring *)next->link;
-		if (next_spring->type == CLOTH_SPRING_TYPE_STRUCTURAL && next_spring->kl == spring->ij)
+		if (next_spring->type & CLOTH_SPRING_TYPE_STRUCTURAL && next_spring->kl == spring->ij)
 			return next;
 	}
 	return NULL;
@@ -748,7 +749,7 @@ static void cloth_continuum_fill_grid(HairGrid *grid, Cloth *cloth)
 	link = cloth->springs;
 	while (link) {
 		ClothSpring *spring = (ClothSpring *)link->link;
-		if (spring->type == CLOTH_SPRING_TYPE_STRUCTURAL)
+		if (spring->type & CLOTH_SPRING_TYPE_STRUCTURAL)
 			link = cloth_continuum_add_hair_segments(grid, cell_scale, cell_offset, cloth, link);
 		else
 			link = link->next;

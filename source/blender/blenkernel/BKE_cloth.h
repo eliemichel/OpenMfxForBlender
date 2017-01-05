@@ -143,7 +143,8 @@ typedef struct ClothSpring {
 	float angoffset;	/* Offset of restang used for plasticity */
 	int	type;		/* types defined in BKE_cloth.h ("springType") */
 	int	flags; 		/* defined in BKE_cloth.h, e.g. deactivated due to tearing */
-	float 	stiffness;	/* stiffness factor from the vertex groups */
+	float lin_stiffness;	/* linear stiffness factor from the vertex groups */
+	float ang_stiffness;	/* angular stiffness factor from the vertex groups */
 	
 	/* angular bending spring target and derivatives */
 	float target[3];
