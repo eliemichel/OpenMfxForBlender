@@ -1581,7 +1581,7 @@ BLI_INLINE void apply_spring(Implicit_Data *data, int i, int j, const float f[3]
 
 bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, float restlenorig, float *lenfact,
                                          float tension, float compression, float damp_tension, float damp_compression,
-                                         bool no_compress, float clamp_force, float plasticity, float yield_fact)
+                                         bool no_compress, float clamp_force, float plasticity, float yield_fact, bool do_plast)
 {
 	float extent[3], length, dir[3], vel[3];
 	float f[3], dfdx[3][3], dfdv[3][3];
@@ -1608,7 +1608,7 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, floa
 		dfdx_spring(dfdx, dir, length, restlen, tension);
 
 		/* compute plasticity offset factor */
-		if (length > restlen * yield_fact) {
+		if (do_plast && length > restlen * yield_fact) {
 			restlen += ((length / yield_fact) - restlen) * plasticity;
 			*lenfact = restlen / restlenorig;
 		}
@@ -1627,7 +1627,7 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, floa
 		mul_m3_fl(dfdx, fbstar_jacobi(length, restlen, kb, cb));
 
 		/* compute plasticity offset factor */
-		if (length < restlen / yield_fact) {
+		if (do_plast && length < restlen / yield_fact) {
 			restlen -= (restlen - (length * yield_fact)) * plasticity;
 			*lenfact = restlen / restlenorig;
 		}
@@ -1639,7 +1639,7 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, floa
 		/* compute plasticity offset factor */
 		/* plasticity has to be computed even for non-compressive springs in a compression condition,
 		 * otherwise issues occur where shearing gets unconstrained when cloth undergoes compression */
-		if (length < restlen / yield_fact) {
+		if (do_plast && length < restlen / yield_fact) {
 			restlen -= (restlen - (length * yield_fact)) * plasticity;
 			*lenfact = restlen / restlenorig;
 		}
@@ -1761,7 +1761,7 @@ BLI_INLINE bool spring_angle(Implicit_Data *data, int i, int j, int *i_a, int *i
 /* Angular springs roughly based on the bending model proposed by Baraff and Witkin in "Large Steps in Cloth Simulation" */
 bool BPH_mass_spring_force_spring_angular(Implicit_Data *data, int i, int j, int *i_a, int *i_b, int len_a, int len_b,
                                           float restangorig, float *angoffset, float stiffness, float damping,
-                                          float plasticity, float yield_ang)
+                                          float plasticity, float yield_ang, bool do_plast)
 {
 	float angle, dir_a[3], dir_b[3], vel_a[3], vel_b[3];
 	float f_a[3], f_b[3], f_e[3];
@@ -1778,16 +1778,18 @@ bool BPH_mass_spring_force_spring_angular(Implicit_Data *data, int i, int j, int
 	force = stiffness * (angle - restang);
 
 	/* compute plasticity offset */
-	if (angle > restang) {
-		if (angle - restang > yield_ang) {
-			restang += (angle - restang - yield_ang) * plasticity;
-			*angoffset = restang - restangorig;
+	if (do_plast) {
+		if (angle > restang) {
+			if (angle - restang > yield_ang) {
+				restang += (angle - restang - yield_ang) * plasticity;
+				*angoffset = restang - restangorig;
+			}
 		}
-	}
-	else if (angle < restang) {
-		if (restang - angle > yield_ang) {
-			restang -= (restang - angle - yield_ang) * plasticity;
-			*angoffset = restang - restangorig;
+		else if (angle < restang) {
+			if (restang - angle > yield_ang) {
+				restang -= (restang - angle - yield_ang) * plasticity;
+				*angoffset = restang - restangorig;
+			}
 		}
 	}
 

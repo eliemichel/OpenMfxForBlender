@@ -333,7 +333,8 @@ static int UNUSED_FUNCTION(cloth_calc_helper_forces)(Object *UNUSED(ob), ClothMo
 	return 1;
 }
 
-BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s, float time, float struct_plast, float bend_plast)
+BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s, float time,
+                                        float struct_plast, float bend_plast, bool collision_pass)
 {
 	Cloth *cloth = clmd->clothObject;
 	ClothSimSettings *parms = clmd->sim_parms;
@@ -355,7 +356,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 
 		BPH_mass_spring_force_spring_angular(data, s->ij, s->kl, s->pa, s->pb, s->la, s->lb,
 		                                     s->restang * (1.0f - parms->rest_planar_fact), &s->angoffset, k,
-		                                     parms->bending_damping, bend_plast, parms->bend_yield_fact * M_PI * 2);
+		                                     parms->bending_damping, bend_plast, parms->bend_yield_fact * M_PI * 2, !collision_pass);
 #endif
 	}
 
@@ -379,7 +380,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 			// TODO: verify, half verified (couldn't see error)
 			// sewing springs usually have a large distance at first so clamp the force so we don't get tunnelling through colission objects
 			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, &s->lenfact, k_tension, 0.0f,
-			                                    d_tension, 0.0f, no_compress, parms->max_sewing, 0.0f, 1.0f);
+			                                    d_tension, 0.0f, no_compress, parms->max_sewing, 0.0f, 1.0f, !collision_pass);
 		}
 		else {
 			scaling_compression = parms->compression + s->lin_stiffness * fabsf(parms->max_compression - parms->compression);
@@ -399,7 +400,8 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 			}
 
 			BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, &s->lenfact, k_tension, k_compression,
-			                                    d_tension, d_compression, no_compress, 0.0f, struct_plast, parms->struct_yield_fact);
+			                                    d_tension, d_compression, no_compress, 0.0f,
+			                                    struct_plast, parms->struct_yield_fact, !collision_pass);
 		}
 #endif
 	}
@@ -421,7 +423,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 		}
 
 		BPH_mass_spring_force_spring_linear(data, s->ij, s->kl, s->restlen, &s->lenfact, k, 0.0f, d, 0.0f, true, 0.0f,
-		                                    struct_plast, parms->struct_yield_fact);
+		                                    struct_plast, parms->struct_yield_fact, !collision_pass);
 #endif
 	}
 	else if (s->type & CLOTH_SPRING_TYPE_GOAL) {
@@ -497,7 +499,7 @@ static void hair_get_boundbox(ClothModifierData *clmd, float gmin[3], float gmax
 	}
 }
 
-static void cloth_calc_force(ClothModifierData *clmd, float UNUSED(frame), ListBase *effectors, float time)
+static void cloth_calc_force(ClothModifierData *clmd, float UNUSED(frame), ListBase *effectors, float time, bool collision_pass)
 {
 	/* Collect forces and derivatives:  F, dFdX, dFdV */
 	Cloth *cloth = clmd->clothObject;
@@ -619,7 +621,7 @@ static void cloth_calc_force(ClothModifierData *clmd, float UNUSED(frame), ListB
 		ClothSpring *spring = (ClothSpring *)link->link;
 		// only handle active springs
 		if (!(spring->flags & CLOTH_SPRING_FLAG_DEACTIVATE))
-			cloth_calc_spring_force(clmd, spring, time, struct_plast, bend_plast);
+			cloth_calc_spring_force(clmd, spring, time, struct_plast, bend_plast, collision_pass);
 	}
 }
 
@@ -996,7 +998,7 @@ static void cloth_collision_solve_extra(Object *ob, ClothModifierData *clmd, Lis
 		BPH_mass_spring_clear_forces(id);
 		
 		// calculate forces
-		cloth_calc_force(clmd, frame, effectors, step);
+		cloth_calc_force(clmd, frame, effectors, step, true);
 		
 		// calculate new velocity and position
 		BPH_mass_spring_solve_velocities(id, dt, &result);
@@ -1124,7 +1126,7 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 		}
 		
 		// calculate forces
-		cloth_calc_force(clmd, frame, effectors, step);
+		cloth_calc_force(clmd, frame, effectors, step, false);
 		
 		// calculate new velocity and position
 		BPH_mass_spring_solve_velocities(id, dt, &result);
