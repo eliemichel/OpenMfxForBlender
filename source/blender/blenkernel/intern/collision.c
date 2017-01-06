@@ -770,7 +770,7 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 
 		/* verts come from clmd */
 		for (i = 0; i < mvert_num; i++) {
-			if ( clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_GOAL ) {
+			if ( clmd->sim_parms->vgroup_mass>0 ) {
 				if ( verts [i].flags & CLOTH_VERT_FLAG_PINNED ) {
 					continue;
 				}
@@ -813,7 +813,7 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 	
 						mindistance = clmd->coll_parms->selfepsilon* ( cloth->verts[i].avg_spring_len + cloth->verts[j].avg_spring_len );
 	
-						if ( clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_GOAL ) {
+						if ( clmd->sim_parms->vgroup_mass>0 ) {
 							if ( ( cloth->verts [i].flags & CLOTH_VERT_FLAG_PINNED ) &&
 							     ( cloth->verts [j].flags & CLOTH_VERT_FLAG_PINNED ) )
 							{
@@ -1297,7 +1297,7 @@ int cloth_points_objcollision(Object *ob, ClothModifierData *clmd, float step, f
 
 		// verts come from clmd
 		for (i = 0; i < mvert_num; i++) {
-			if ( clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_GOAL ) {
+			if ( clmd->sim_parms->vgroup_mass>0 ) {
 				if ( verts [i].flags & CLOTH_VERT_FLAG_PINNED ) {
 					continue;
 				}
@@ -1421,7 +1421,7 @@ void cloth_find_point_contacts(Object *ob, ClothModifierData *clmd, float step, 
 	
 	// verts come from clmd
 	for (i = 0; i < mvert_num; i++) {
-		if (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_GOAL) {
+		if ( clmd->sim_parms->vgroup_mass>0 ) {
 			if (verts [i].flags & CLOTH_VERT_FLAG_PINNED) {
 				continue;
 			}

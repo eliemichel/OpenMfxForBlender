@@ -152,11 +152,9 @@ class PHYSICS_PT_cloth(PhysicButtonsPanel, Panel):
 
         col = split.column()
 
-        col.prop(cloth, "use_pin_cloth", text="Pinning:")
-        sub = col.column()
-        sub.active = cloth.use_pin_cloth
-        sub.prop_search(cloth, "vertex_group_mass", ob, "vertex_groups", text="")
-        sub.prop(cloth, "pin_stiffness", text="Stiffness")
+        col.label("Pinning:")
+        col.prop_search(cloth, "vertex_group_mass", ob, "vertex_groups", text="")
+        col.prop(cloth, "pin_stiffness", text="Stiffness")
 
         # Disabled for now
         """

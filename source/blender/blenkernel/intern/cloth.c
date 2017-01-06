@@ -684,15 +684,14 @@ static void cloth_to_object (Object *ob,  ClothModifierData *clmd, float (*verte
 
 int cloth_uses_vgroup(ClothModifierData *clmd)
 {
-	return (((clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_SCALING ) || 
-		(clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_GOAL ) ||
+	return ((((clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_SCALING ) ||
 		(clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_SEW) ||
 		(clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_SELF)) && 
-		((clmd->sim_parms->vgroup_mass>0) || 
-		(clmd->sim_parms->vgroup_struct>0)||
+		((clmd->sim_parms->vgroup_struct>0)||
 		(clmd->sim_parms->vgroup_bend>0)  ||
 		(clmd->sim_parms->vgroup_shrink>0) ||
-		(clmd->coll_parms->vgroup_selfcol>0)));
+		(clmd->coll_parms->vgroup_selfcol>0))) ||
+		(clmd->sim_parms->vgroup_mass>0));
 }
 
 /**
@@ -722,7 +721,7 @@ static void cloth_apply_vgroup ( ClothModifierData *clmd, DerivedMesh *dm )
 		for (i = 0; i < mvert_num; i++, verts++) {
 
 			/* Reset Goal values to standard */
-			if ( clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_GOAL )
+			if ( clmd->sim_parms->vgroup_mass>0 )
 				verts->goal= clmd->sim_parms->defgoal;
 			else
 				verts->goal= 0.0f;
@@ -737,7 +736,7 @@ static void cloth_apply_vgroup ( ClothModifierData *clmd, DerivedMesh *dm )
 			dvert = dm->getVertData ( dm, i, CD_MDEFORMVERT );
 			if ( dvert ) {
 				for ( j = 0; j < dvert->totweight; j++ ) {
-					if (( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_mass-1)) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_GOAL )) {
+					if ( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_mass-1)) {
 						verts->goal = dvert->dw [j].weight;
 
 						/* goalfac= 1.0f; */ /* UNUSED */
@@ -870,7 +869,7 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 		verts->mass = clmd->sim_parms->mass; 
 		verts->impulse_count = 0;
 
-		if ( clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_GOAL )
+		if ( clmd->sim_parms->vgroup_mass>0 )
 			verts->goal= clmd->sim_parms->defgoal;
 		else
 			verts->goal= 0.0f;

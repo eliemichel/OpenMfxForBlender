@@ -979,7 +979,7 @@ static void cloth_collision_solve_extra(Object *ob, ClothModifierData *clmd, Lis
 		
 			float newv[3];
 			
-			if ((clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_GOAL) && (verts [i].flags & CLOTH_VERT_FLAG_PINNED))
+			if ((clmd->sim_parms->vgroup_mass>0) && (verts [i].flags & CLOTH_VERT_FLAG_PINNED))
 				continue;
 			
 			BPH_mass_spring_set_new_position(id, i, verts[i].tx);
@@ -1074,7 +1074,7 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 		clmd->solver_result = (ClothSolverResult *)MEM_callocN(sizeof(ClothSolverResult), "cloth solver result");
 	cloth_clear_result(clmd);
 	
-	if (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_GOAL) { /* do goal stuff */
+	if (clmd->sim_parms->vgroup_mass>0) { /* do goal stuff */
 		for (i = 0; i < mvert_num; i++) {
 			// update velocities with constrained velocities from pinned verts
 			if (verts[i].flags & CLOTH_VERT_FLAG_PINNED) {
@@ -1146,7 +1146,7 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 		
 		/* move pinned verts to correct position */
 		for (i = 0; i < mvert_num; i++) {
-			if (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_GOAL) {
+			if (clmd->sim_parms->vgroup_mass>0) {
 				if (verts[i].flags & CLOTH_VERT_FLAG_PINNED) {
 					float x[3];
 					/* divide by time_scale to prevent pinned vertices' delta locations from being multiplied */
