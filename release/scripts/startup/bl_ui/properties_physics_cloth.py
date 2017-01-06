@@ -105,6 +105,7 @@ class PHYSICS_PT_cloth(PhysicButtonsPanel, Panel):
         layout.prop(cloth, "structural_yield_factor")
         layout.prop(cloth, "bending_plasticity")
         layout.prop(cloth, "bending_yield_factor")
+        layout.prop(cloth, "rest_planarity_factor")
 
         split = layout.split()
 

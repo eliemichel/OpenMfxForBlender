@@ -86,6 +86,7 @@ typedef struct ClothSimSettings {
 	float	struct_yield_fact;	/* Factor of how much length has to change before plastic behavior kicks in (1-inf) */
 	float	bend_plasticity;	/* Factor of how much the rest angle will change after reaching yield point (0-1) */
 	float	bend_yield_fact;	/* How much angle has to change as a factor of a full circle before plastic behavior kicks in (0-1) */
+	float	rest_planar_fact;	/* Factor of how planar rest angles should be, 0 means the original angle, and 1 means totally flat */
 	
 	/* XXX various hair stuff
 	 * should really be separate, this struct is a horrible mess already
@@ -108,7 +109,7 @@ typedef struct ClothSimSettings {
 	short	presets; /* used for presets on GUI */
 	short 	reset;
 
-	char pad0[2];
+	char pad0[6];
 	struct EffectorWeights *effector_weights;
 } ClothSimSettings;
 

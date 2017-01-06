@@ -660,6 +660,12 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Bending Yield Factor", "How much cloth has to bend before plasticity takes effect");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
+	prop = RNA_def_property(srna, "rest_planarity_factor", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "rest_planar_fact");
+	RNA_def_property_range(prop, 0.0f, 1.0f);
+	RNA_def_property_ui_text(prop, "Rest Planarity Factor", "How planar the rest shape should be, 0 is the original shape, and 1 is totally flat");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
 	prop = RNA_def_property(srna, "sewing_force_max", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "max_sewing");
 	RNA_def_property_range(prop, 0.0f, 10000.0f);
