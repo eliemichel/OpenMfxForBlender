@@ -62,7 +62,7 @@ class PHYSICS_PT_cloth(PhysicButtonsPanel, Panel):
 
         layout.active = cloth_panel_enabled(md)
 
-        split = layout.split(percentage=0.25)
+        split = layout.split(percentage=0.3)
 
         split.label(text="Presets:")
         sub = split.row(align=True)
@@ -70,42 +70,83 @@ class PHYSICS_PT_cloth(PhysicButtonsPanel, Panel):
         sub.operator("cloth.preset_add", text="", icon='ZOOMIN')
         sub.operator("cloth.preset_add", text="", icon='ZOOMOUT').remove_active = True
 
-        split = layout.split(percentage=0.25)
+        col = layout.column()
 
+        split = col.split(percentage=0.3)
         split.label(text="Quality:")
         split.prop(cloth, "quality", text="Steps")
 
-        split = layout.split(percentage=0.25)
-
+        split = col.split(percentage=0.3)
         split.label(text="Speed:")
         split.prop(cloth, "time_scale", text="Multiplier")
 
-        split = layout.split()
+        layout.separator()
 
-        col = split.column()
+        layout.label("Material Properties:")
 
-        col.label(text="Material:")
-        col.prop(cloth, "mass")
-        col.prop(cloth, "tension_stiffness", text="Tension")
-        col.prop(cloth, "compression_stiffness", text="Compression")
-        col.prop(cloth, "shear_stiffness", text="Shear")
-        col.prop(cloth, "bending_stiffness", text="Bending")
+        col = layout.column()
 
-        col = split.column()
+        split = col.split(percentage=0.3)
+        split.label("Mass:")
+        split.prop(cloth, "mass", text="")
 
-        col.label(text="Damping:")
-        col.prop(cloth, "tension_damping", text="Tension")
-        col.prop(cloth, "compression_damping", text="Compression")
-        col.prop(cloth, "shear_damping", text="Shear")
-        col.prop(cloth, "bending_damping", text="Bending")
-        col.prop(cloth, "air_damping", text="Air")
-        col.prop(cloth, "vel_damping", text="Velocity")
+        split = col.split(percentage=0.3)
+        split.label("Air Viscosity:")
+        split.prop(cloth, "air_damping", text="")
 
-        layout.prop(cloth, "structural_plasticity")
-        layout.prop(cloth, "structural_yield_factor")
-        layout.prop(cloth, "bending_plasticity")
-        layout.prop(cloth, "bending_yield_factor")
-        layout.prop(cloth, "rest_planarity_factor")
+        col = layout.column()
+
+        split = col.split(percentage=0.3)
+        split.separator()
+
+        row = split.row(align=True)
+        row.label("Stiffness:")
+        row.label("Damping:")
+
+        split = col.split(percentage=0.3)
+        split.label("Tension:")
+        row = split.row(align=True)
+        row.prop(cloth, "tension_stiffness", text="")
+        row.prop(cloth, "tension_damping", text="")
+
+        split = col.split(percentage=0.3)
+        split.label("Compression:")
+        row = split.row(align=True)
+        row.prop(cloth, "compression_stiffness", text="")
+        row.prop(cloth, "compression_damping", text="")
+
+        split = col.split(percentage=0.3)
+        split.label("Shear:")
+        row = split.row(align=True)
+        row.prop(cloth, "shear_stiffness", text="")
+        row.prop(cloth, "shear_damping", text="")
+
+        split = col.split(percentage=0.3)
+        split.label("Bending:")
+        row = split.row(align=True)
+        row.prop(cloth, "bending_stiffness", text="")
+        row.prop(cloth, "bending_damping", text="")
+
+        split = col.split(percentage=0.3)
+        split.separator()
+
+        row = split.row(align=True)
+        row.label("Plasticity:")
+        row.label("Threshold:")
+
+        split = col.split(percentage=0.3)
+        split.label("Structural:")
+        row = split.row(align=True)
+        row.prop(cloth, "structural_plasticity", text="")
+        row.prop(cloth, "structural_yield_factor", text="")
+
+        split = col.split(percentage=0.3)
+        split.label("Bending:")
+        row = split.row(align=True)
+        row.prop(cloth, "bending_plasticity", text="")
+        row.prop(cloth, "bending_yield_factor", text="")
+
+        layout.separator()
 
         split = layout.split()
 

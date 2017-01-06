@@ -31,6 +31,8 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
+#include "BLI_math_base.h"
+
 #include "RNA_define.h"
 
 #include "rna_internal.h"
@@ -575,29 +577,26 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "tension_damping", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "tension_damp");
 	RNA_def_property_range(prop, 0.0f, 50.0f);
-	RNA_def_property_ui_text(prop, "Tension Spring Damping",
-	                         "Damping of cloth velocity (higher = more smooth, less jiggling)");
+	RNA_def_property_ui_text(prop, "Tension Spring Damping", "Amount of damping in stretching behavior");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 	
 	prop = RNA_def_property(srna, "compression_damping", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "compression_damp");
 	RNA_def_property_range(prop, 0.0f, 50.0f);
-	RNA_def_property_ui_text(prop, "Compression Spring Damping",
-	                         "Damping of cloth velocity (higher = more smooth, less jiggling)");
+	RNA_def_property_ui_text(prop, "Compression Spring Damping", "Amount of damping in compression behavior");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "shear_damping", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "shear_damp");
 	RNA_def_property_range(prop, 0.0f, 50.0f);
-	RNA_def_property_ui_text(prop, "Shear Spring Damping",
-	                         "Damping of cloth velocity (higher = more smooth, less jiggling)");
+	RNA_def_property_ui_text(prop, "Shear Spring Damping", "Amount of damping in shearing behavior");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 	
 	prop = RNA_def_property(srna, "tension_stiffness", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "tension");
 	RNA_def_property_range(prop, 0.0f, 10000.0f);
 	RNA_def_property_float_funcs(prop, NULL, "rna_ClothSettings_tension_set", NULL);
-	RNA_def_property_ui_text(prop, "Tension Stiffness", "Tension stiffness of structure");
+	RNA_def_property_ui_text(prop, "Tension Stiffness", "How much the material resists stretching");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "tension_stiffness_max", PROP_FLOAT, PROP_NONE);
@@ -611,7 +610,7 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_float_sdna(prop, NULL, "compression");
 	RNA_def_property_range(prop, 0.0f, 10000.0f);
 	RNA_def_property_float_funcs(prop, NULL, "rna_ClothSettings_compression_set", NULL);
-	RNA_def_property_ui_text(prop, "Compression Stiffness", "Compression stiffness of structure");
+	RNA_def_property_ui_text(prop, "Compression Stiffness", "How much the material resists compression");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "compression_stiffness_max", PROP_FLOAT, PROP_NONE);
@@ -625,7 +624,7 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_float_sdna(prop, NULL, "shear");
 	RNA_def_property_range(prop, 0.0f, 10000.0f);
 	RNA_def_property_float_funcs(prop, NULL, "rna_ClothSettings_shear_set", NULL);
-	RNA_def_property_ui_text(prop, "Shear Stiffness", "Shear spring stiffness");
+	RNA_def_property_ui_text(prop, "Shear Stiffness", "How much the material resists shearing");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "shear_stiffness_max", PROP_FLOAT, PROP_NONE);
@@ -638,26 +637,26 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "structural_plasticity", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "struct_plasticity");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
-	RNA_def_property_ui_text(prop, "Structural Plasticity", "How much cloth should retain in plane deformations after reaching yield point");
+	RNA_def_property_ui_text(prop, "Structural Plasticity", "Rate at which the material should retain in-plane deformations");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "structural_yield_factor", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "struct_yield_fact");
 	RNA_def_property_range(prop, 1.0f, 100.0f);
 	RNA_def_property_ui_range(prop, 1.0f, 2.0f, 10, 3);
-	RNA_def_property_ui_text(prop, "Structural Yield Factor", "How much cloth has to deform in plane before plasticity takes effect");
+	RNA_def_property_ui_text(prop, "Structural Yield Factor", "How much cloth has to deform in-plane before plasticity takes effect (factor of rest state)");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "bending_plasticity", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "bend_plasticity");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
-	RNA_def_property_ui_text(prop, "Bending Plasticity", "How much cloth should retain bending deformations after reaching yield point");
+	RNA_def_property_ui_text(prop, "Bending Plasticity", "Rate at which the material should retain out-of-plane deformations");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
-	prop = RNA_def_property(srna, "bending_yield_factor", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "bending_yield_factor", PROP_FLOAT, PROP_ANGLE);
 	RNA_def_property_float_sdna(prop, NULL, "bend_yield_fact");
-	RNA_def_property_range(prop, 0.0f, 1.0f);
-	RNA_def_property_ui_text(prop, "Bending Yield Factor", "How much cloth has to bend before plasticity takes effect");
+	RNA_def_property_range(prop, 0.0f, M_PI * 2.0f);
+	RNA_def_property_ui_text(prop, "Bending Yield Factor", "How much cloth has to bend before plasticity takes effect (degrees)");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "rest_planarity_factor", PROP_FLOAT, PROP_NONE);
@@ -693,8 +692,7 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_float_sdna(prop, NULL, "bending");
 	RNA_def_property_range(prop, 0.0f, 10000.0f);
 	RNA_def_property_float_funcs(prop, NULL, "rna_ClothSettings_bending_set", NULL);
-	RNA_def_property_ui_text(prop, "Bending Stiffness",
-	                         "Wrinkle coefficient (higher = less smaller but more big wrinkles)");
+	RNA_def_property_ui_text(prop, "Bending Stiffness", "How much the material resists bending");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "bending_stiffness_max", PROP_FLOAT, PROP_NONE);
@@ -707,8 +705,7 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "bending_damping", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "bending_damping");
 	RNA_def_property_range(prop, 0.0f, 1000.0f);
-	RNA_def_property_ui_text(prop, "Bending Spring Damping",
-	                         "Damping of bending motion");
+	RNA_def_property_ui_text(prop, "Bending Spring Damping", "Amount of damping in bending behavior");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "use_sewing_springs", PROP_BOOLEAN, PROP_NONE);
