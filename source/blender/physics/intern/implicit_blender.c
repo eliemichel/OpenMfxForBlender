@@ -1635,6 +1635,14 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, floa
 	else {
 		zero_v3(f);
 		zero_m3(dfdx);
+
+		/* compute plasticity offset factor */
+		/* plasticity has to be computed even for non-compressive springs in a compression condition,
+		 * otherwise issues occur where shearing gets unconstrained when cloth undergoes compression */
+		if (length < restlen / yield_fact) {
+			restlen -= (restlen - (length * yield_fact)) * plasticity;
+			*lenfact = restlen / restlenorig;
+		}
 	}
 
 	/* Calculate damping forces */
