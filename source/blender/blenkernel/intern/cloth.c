@@ -393,8 +393,11 @@ static int do_step_cloth(Object *ob, ClothModifierData *clmd, DerivedMesh *resul
 	/* Support for dynamic vertex groups, changing from frame to frame */
 	cloth_apply_vgroup ( clmd, result );
 
-	if ( clmd->sim_parms->flags & (CLOTH_SIMSETTINGS_FLAG_SEW | CLOTH_SIMSETTINGS_FLAG_DYNAMIC_BASEMESH) )
+	if ((clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_DYNAMIC_BASEMESH) ||
+	    (clmd->sim_parms->vgroup_shrink > 0) || (clmd->sim_parms->shrink_min > 0.0f))
+	{
 		cloth_update_spring_lengths ( clmd, result );
+	}
 
 	cloth_update_springs( clmd );
 	
@@ -684,13 +687,10 @@ static void cloth_to_object (Object *ob,  ClothModifierData *clmd, float (*verte
 
 int cloth_uses_vgroup(ClothModifierData *clmd)
 {
-	return ((((clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_SCALING ) ||
-		(clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_SEW) ||
-		(clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_SELF)) && 
-		((clmd->sim_parms->vgroup_struct>0)||
-		(clmd->sim_parms->vgroup_bend>0)  ||
+	return (((clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_SELF) && (clmd->coll_parms->vgroup_selfcol>0)) ||
+		(clmd->sim_parms->vgroup_struct>0)||
+		(clmd->sim_parms->vgroup_bend>0) ||
 		(clmd->sim_parms->vgroup_shrink>0) ||
-		(clmd->coll_parms->vgroup_selfcol>0))) ||
 		(clmd->sim_parms->vgroup_mass>0));
 }
 
@@ -770,12 +770,10 @@ static void cloth_apply_vgroup ( ClothModifierData *clmd, DerivedMesh *dm )
 							}
 						}
 					}
-					if ( clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_SEW ) {
-						if (clmd->sim_parms->vgroup_shrink > 0) {
-							if (dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_shrink - 1)) {
-								/* used for linear interpolation between min and max shrink factor based on weight */
-								verts->shrink_factor = dvert->dw[j].weight;
-							}
+					if (clmd->sim_parms->vgroup_shrink > 0) {
+						if (dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_shrink - 1)) {
+							/* used for linear interpolation between min and max shrink factor based on weight */
+							verts->shrink_factor = dvert->dw[j].weight;
 						}
 					}
 				}
@@ -786,20 +784,16 @@ static void cloth_apply_vgroup ( ClothModifierData *clmd, DerivedMesh *dm )
 
 static float cloth_shrink_factor(ClothModifierData *clmd, ClothVertex *verts, int i1, int i2)
 {
-	if ( clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_SEW ) {
-		/* linear interpolation between min and max shrink factor based on weight */
-		float base = 1.0f - clmd->sim_parms->shrink_min;
-		float delta = clmd->sim_parms->shrink_min - clmd->sim_parms->shrink_max;
+	/* linear interpolation between min and max shrink factor based on weight */
+	float base = 1.0f - clmd->sim_parms->shrink_min;
+	float delta = clmd->sim_parms->shrink_min - clmd->sim_parms->shrink_max;
 
-		float k1 = base + delta * verts[i1].shrink_factor;
-		float k2 = base + delta * verts[i2].shrink_factor;
+	float k1 = base + delta * verts[i1].shrink_factor;
+	float k2 = base + delta * verts[i2].shrink_factor;
 
-		/* Use geometrical mean to average two factors since it behaves better
-		   for diagonals when a rectangle transforms into a trapezoid. */
-		return sqrtf(k1 * k2);
-	}
-	else
-		return 1.0f;
+	/* Use geometrical mean to average two factors since it behaves better
+	   for diagonals when a rectangle transforms into a trapezoid. */
+	return sqrtf(k1 * k2);
 }
 
 static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *dm, float UNUSED(framenr), int first)
