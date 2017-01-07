@@ -540,14 +540,14 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Shrink Vertex Group", "Vertex Group for shrinking cloth");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
-	prop = RNA_def_property(srna, "shrink_min", PROP_FLOAT, PROP_NONE);
-	RNA_def_property_float_sdna(prop, NULL, "shrink_min");
+	prop = RNA_def_property(srna, "shrinking", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "shrink");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
-	RNA_def_property_ui_text(prop, "Shrink Factor Min", "Min amount to shrink cloth by");
+	RNA_def_property_ui_text(prop, "Shrink Factor", "Factor by which to shrink cloth");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
-	prop = RNA_def_property(srna, "shrink_max", PROP_FLOAT, PROP_NONE);
-	RNA_def_property_float_sdna(prop, NULL, "shrink_max");
+	prop = RNA_def_property(srna, "shrinking_max", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "max_shrink");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
 	RNA_def_property_ui_text(prop, "Shrink Factor Max", "Max amount to shrink cloth by");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
@@ -718,7 +718,7 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_struct_type(prop, "ShapeKey");
 	RNA_def_property_pointer_funcs(prop, "rna_ClothSettings_rest_shape_key_get",
 	                               "rna_ClothSettings_rest_shape_key_set", NULL, NULL);
-	RNA_def_property_ui_text(prop, "Rest Shape Key", "Shape key to use the rest spring lengths from");
+	RNA_def_property_ui_text(prop, "Rest Shape Key", "Shape key to use as rest shape");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "use_dynamic_mesh", PROP_BOOLEAN, PROP_NONE);

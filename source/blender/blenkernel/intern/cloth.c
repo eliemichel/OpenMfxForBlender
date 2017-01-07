@@ -106,7 +106,8 @@ void cloth_init(ClothModifierData *clmd )
 	clmd->sim_parms->maxspringlen = 10;
 	clmd->sim_parms->vgroup_mass = 0;
 	clmd->sim_parms->vgroup_shrink = 0;
-	clmd->sim_parms->shrink_min = 0.0f; /* min amount the fabric will shrink by 0.0 = no shrinking, 1.0 = shrink to nothing*/
+	clmd->sim_parms->shrink = 0.0f; /* min amount the fabric will shrink by 0.0 = no shrinking, 1.0 = shrink to nothing*/
+	clmd->sim_parms->max_shrink = 0.0f;
 	clmd->sim_parms->avg_spring_len = 0.0;
 	clmd->sim_parms->presets = 2; /* cotton as start setting */
 	clmd->sim_parms->timescale = 1.0f; /* speed factor, describes how fast cloth moves */
@@ -394,7 +395,7 @@ static int do_step_cloth(Object *ob, ClothModifierData *clmd, DerivedMesh *resul
 	cloth_apply_vgroup ( clmd, result );
 
 	if ((clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_DYNAMIC_BASEMESH) ||
-	    (clmd->sim_parms->vgroup_shrink > 0) || (clmd->sim_parms->shrink_min > 0.0f))
+	    (clmd->sim_parms->vgroup_shrink > 0) || (clmd->sim_parms->shrink > 0.0f))
 	{
 		cloth_update_spring_lengths ( clmd, result );
 	}
@@ -783,8 +784,8 @@ static void cloth_apply_vgroup ( ClothModifierData *clmd, DerivedMesh *dm )
 static float cloth_shrink_factor(ClothModifierData *clmd, ClothVertex *verts, int i1, int i2)
 {
 	/* linear interpolation between min and max shrink factor based on weight */
-	float base = 1.0f - clmd->sim_parms->shrink_min;
-	float delta = clmd->sim_parms->shrink_min - clmd->sim_parms->shrink_max;
+	float base = 1.0f - clmd->sim_parms->shrink;
+	float delta = clmd->sim_parms->shrink - clmd->sim_parms->max_shrink;
 
 	float k1 = base + delta * verts[i1].shrink_factor;
 	float k2 = base + delta * verts[i2].shrink_factor;

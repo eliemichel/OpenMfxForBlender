@@ -80,8 +80,8 @@ typedef struct ClothSimSettings {
 	float	density_strength;	/* influence of hair density */
 	float	collider_friction; /* friction with colliders */
 	float	vel_damping; /* damp the velocity to speed up getting to the resting position */
-	float	shrink_min;  /* min amount to shrink cloth by 0.0f (no shrink) - 1.0f (shrink to nothing) */
-	float	shrink_max;  /* max amount to shrink cloth by 0.0f (no shrink) - 1.0f (shrink to nothing) */
+	float	shrink;  /* min amount to shrink cloth by 0.0f (no shrink) - 1.0f (shrink to nothing) */
+	float	max_shrink;  /* max amount to shrink cloth by 0.0f (no shrink) - 1.0f (shrink to nothing) */
 	float	struct_plasticity;	/* Factor of how much the rest length will change after reaching yield point (0-1) */
 	float	struct_yield_fact;	/* Factor of how much length has to change before plastic behavior kicks in (1-inf) */
 	float	bend_plasticity;	/* Factor of how much the rest angle will change after reaching yield point (0-1) */
