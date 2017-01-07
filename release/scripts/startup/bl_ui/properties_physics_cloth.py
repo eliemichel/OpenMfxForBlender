@@ -267,8 +267,8 @@ class PHYSICS_PT_cloth_collision(PhysicButtonsPanel, Panel):
         sub.prop_search(cloth, "vertex_group_self_collisions", ob, "vertex_groups", text="Vertex Group")
 
 
-class PHYSICS_PT_cloth_stiffness(PhysicButtonsPanel, Panel):
-    bl_label = "Cloth Stiffness Scaling"
+class PHYSICS_PT_cloth_scaling(PhysicButtonsPanel, Panel):
+    bl_label = "Cloth Property Scaling"
     bl_options = {'DEFAULT_CLOSED'}
     COMPAT_ENGINES = {'BLENDER_RENDER'}
 
@@ -282,22 +282,43 @@ class PHYSICS_PT_cloth_stiffness(PhysicButtonsPanel, Panel):
         layout.active = cloth_panel_enabled(md)
 
         row = layout.row()
-        row.label(text="Structural Stiffness:")
-        row.prop_search(cloth, "vertex_group_structural_stiffness", ob, "vertex_groups", text="")
-        row.prop(cloth, "tension_stiffness_max", text="Tension")
 
-        row = layout.row()
-        row.prop(cloth, "compression_stiffness_max", text="Compression")
-        
-        row = layout.row()
-        row.label(text="Shear Stiffness:")
-        row.prop_search(cloth, "vertex_group_shear_stiffness", ob, "vertex_groups", text="")
-        row.prop(cloth, "shear_stiffness_max", text="Max")
+        col = row.column(align=True)
+        col.label(text="Structural Stiffness:")
+        col.label(text="Tension:")
+        col.label(text="Compression:")
 
-        row = layout.row()
-        row.label(text="Bending Stiffness:")
-        row.prop_search(cloth, "vertex_group_bending", ob, "vertex_groups", text="")
-        row.prop(cloth, "bending_stiffness_max", text="Max")
+        col = row.column(align=True)
+        col.prop_search(cloth, "vertex_group_structural_stiffness", ob, "vertex_groups", text="")
+
+        sub = col.column(align=True)
+        sub.active = cloth.vertex_group_structural_stiffness != ""
+        sub.prop(cloth, "tension_stiffness_max", text="Max")
+        sub.prop(cloth, "compression_stiffness_max", text="Max")
+
+        split = layout.split(percentage=0.25, align=True)
+        split.label(text="Shear:")
+        split.prop_search(cloth, "vertex_group_shear_stiffness", ob, "vertex_groups", text="")
+
+        sub = split.row(align=True)
+        sub.active = cloth.vertex_group_shear_stiffness != ""
+        sub.prop(cloth, "shear_stiffness_max", text="Max")
+
+        split = layout.split(percentage=0.25, align=True)
+        split.label("Bending:")
+        split.prop_search(cloth, "vertex_group_bending", ob, "vertex_groups", text="")
+
+        sub = split.row(align=True)
+        sub.active = cloth.vertex_group_bending != ""
+        sub.prop(cloth, "bending_stiffness_max", text="Max")
+
+        split = layout.split(percentage=0.25, align=True)
+        split.label("Shrinking:")
+        split.prop_search(cloth, "vertex_group_shrink", ob, "vertex_groups", text="")
+
+        sub = split.row(align=True)
+        sub.active = cloth.vertex_group_shrink != ""
+        sub.prop(cloth, "shrinking_max", text="Max")
 
 
 class PHYSICS_PT_cloth_field_weights(PhysicButtonsPanel, Panel):
