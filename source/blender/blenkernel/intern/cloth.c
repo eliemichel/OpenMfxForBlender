@@ -749,18 +749,16 @@ static void cloth_apply_vgroup ( ClothModifierData *clmd, DerivedMesh *dm )
 							verts->flags |= CLOTH_VERT_FLAG_PINNED;
 					}
 					
-					if (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_SCALING ) {
-						if ( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_struct-1)) {
-							verts->struct_stiff = dvert->dw [j].weight;
-						}
+					if ( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_struct-1)) {
+						verts->struct_stiff = dvert->dw [j].weight;
+					}
 
-						if ( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_shear-1)) {
-							verts->shear_stiff = dvert->dw [j].weight;
-						}
-						
-						if ( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_bend-1)) {
-							verts->bend_stiff = dvert->dw [j].weight;
-						}
+					if ( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_shear-1)) {
+						verts->shear_stiff = dvert->dw [j].weight;
+					}
+
+					if ( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_bend-1)) {
+						verts->bend_stiff = dvert->dw [j].weight;
 					}
 
 					if (clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_SELF ) {

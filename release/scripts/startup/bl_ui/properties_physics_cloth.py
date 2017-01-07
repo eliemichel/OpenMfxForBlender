@@ -235,12 +235,6 @@ class PHYSICS_PT_cloth_stiffness(PhysicButtonsPanel, Panel):
     bl_options = {'DEFAULT_CLOSED'}
     COMPAT_ENGINES = {'BLENDER_RENDER'}
 
-    def draw_header(self, context):
-        cloth = context.cloth.settings
-
-        self.layout.active = cloth_panel_enabled(context.cloth)
-        self.layout.prop(cloth, "use_stiffness_scale", text="")
-
     def draw(self, context):
         layout = self.layout
 
@@ -248,7 +242,7 @@ class PHYSICS_PT_cloth_stiffness(PhysicButtonsPanel, Panel):
         ob = context.object
         cloth = context.cloth.settings
 
-        layout.active = (cloth.use_stiffness_scale and cloth_panel_enabled(md))
+        layout.active = cloth_panel_enabled(md)
 
         row = layout.row()
         row.label(text="Structural Stiffness:")
