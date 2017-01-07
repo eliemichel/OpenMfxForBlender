@@ -941,7 +941,7 @@ static void cloth_collision_solve_extra(Object *ob, ClothModifierData *clmd, Lis
 	bool do_extra_solve;
 	int i;
 	
-	if (!(clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_ENABLED))
+	if (!(clmd->coll_parms->flags & (CLOTH_COLLSETTINGS_FLAG_ENABLED | CLOTH_COLLSETTINGS_FLAG_SELF)))
 		return;
 	if (!clmd->clothObject->bvhtree)
 		return;

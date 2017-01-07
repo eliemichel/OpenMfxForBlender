@@ -195,12 +195,6 @@ class PHYSICS_PT_cloth_collision(PhysicButtonsPanel, Panel):
     bl_options = {'DEFAULT_CLOSED'}
     COMPAT_ENGINES = {'BLENDER_RENDER'}
 
-    def draw_header(self, context):
-        cloth = context.cloth.collision_settings
-
-        self.layout.active = cloth_panel_enabled(context.cloth)
-        self.layout.prop(cloth, "use_collision", text="")
-
     def draw(self, context):
         layout = self.layout
 
@@ -208,26 +202,46 @@ class PHYSICS_PT_cloth_collision(PhysicButtonsPanel, Panel):
         md = context.cloth
         ob = context.object
 
-        layout.active = cloth.use_collision and cloth_panel_enabled(md)
+        layout.active = cloth_panel_enabled(md)
 
         split = layout.split()
 
         col = split.column()
-        col.prop(cloth, "collision_quality", text="Quality")
-        col.prop(cloth, "distance_min", slider=True, text="Distance")
-        col.prop(cloth, "repel_force", slider=True, text="Repel")
-        col.prop(cloth, "distance_repel", slider=True, text="Repel Distance")
-        col.prop(cloth, "friction")
+        col.prop(cloth, "use_collision", text="Object Collision:")
+
+        sub = col.column()
+        sub.active = cloth.use_collision
+        sub.prop(cloth, "friction")
+        sub.prop(cloth, "repel_force", slider=True, text="Repel")
 
         col = split.column()
-        col.prop(cloth, "use_self_collision", text="Self Collision")
-        sub = col.column()
+        col.active = cloth.use_collision
+        col.prop(cloth, "collision_quality", text="Quality")
+        col.prop(cloth, "distance_min", slider=True, text="Distance")
+        col.prop(cloth, "distance_repel", slider=True, text="Repel Distance")
+
+        sub = layout.column()
+        sub.active = cloth.use_collision
+        sub.prop(cloth, "group")
+
+        layout.separator()
+
+        col = layout.column()
+
+        split = col.split()
+
+        split.prop(cloth, "use_self_collision", text="Self Collision:")
+        sub = split.column()
         sub.active = cloth.use_self_collision
         sub.prop(cloth, "self_collision_quality", text="Quality")
-        sub.prop(cloth, "self_distance_min", slider=True, text="Distance")
-        sub.prop_search(cloth, "vertex_group_self_collisions", ob, "vertex_groups", text="")
 
-        layout.prop(cloth, "group")
+        sub = col.column()
+        sub.active = cloth.use_self_collision
+        sub.prop(cloth, "self_distance_min", slider=True, text="Distance")
+
+        sub = layout.column()
+        sub.active = cloth.use_self_collision
+        sub.prop_search(cloth, "vertex_group_self_collisions", ob, "vertex_groups", text="Vertex Group")
 
 
 class PHYSICS_PT_cloth_stiffness(PhysicButtonsPanel, Panel):
