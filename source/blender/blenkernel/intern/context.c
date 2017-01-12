@@ -637,6 +637,32 @@ ScrArea *CTX_wm_area(const bContext *C)
 	return ctx_wm_python_context_get(C, "area", &RNA_Area, C->wm.area);
 }
 
+/* Allows work to be done in different contexts */
+void CTX_wm_switch_area(bContext *C, Object* obac, const char* dest)
+{
+	if (obac == NULL || strcmp(C->data.scene->basact->object->id.name, obac->id.name) != 0)
+	{
+		bContext* copyC = CTX_copy(C);
+
+		if (strcmp(copyC->wm.area->type->name, dest) != 0)
+		{
+			while (copyC->wm.area->prev != NULL)
+			{
+				copyC->wm.area = copyC->wm.area->prev;
+			}
+
+			while (strcmp(copyC->wm.area->type->name, dest) != 0 && (copyC->wm.area->next != NULL))
+			{
+				copyC->wm.area = copyC->wm.area->next;
+			}
+
+		}
+		if (strcmp(copyC->wm.area->type->name, dest) == 0)
+			C->wm.area = copyC->wm.area;
+		CTX_free(copyC);
+	}
+}
+
 SpaceLink *CTX_wm_space_data(const bContext *C)
 {
 	ScrArea *sa = CTX_wm_area(C);

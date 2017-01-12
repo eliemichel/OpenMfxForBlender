@@ -39,6 +39,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
 #include "DNA_world_types.h"
+#include "DNA_anim_types.h"
 
 #include "BLI_utildefines.h"
 #include "BLI_listbase.h"
@@ -55,6 +56,7 @@
 #include "ED_screen.h"
 #include "ED_sequencer.h"
 #include "ED_util.h"
+#include "ED_anim_api.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -990,6 +992,7 @@ static bool do_outliner_item_activate(bContext *C, Scene *scene, ARegion *ar, Sp
 int outliner_item_do_activate(bContext *C, int x, int y, bool extend, bool recursive)
 {
 	Scene *scene = CTX_data_scene(C);
+	Object *obac = CTX_data_active_object(C);
 	ARegion *ar = CTX_wm_region(C);
 	SpaceOops *soops = CTX_wm_space_outliner(C);
 	TreeElement *te;
@@ -1032,6 +1035,37 @@ int outliner_item_do_activate(bContext *C, int x, int y, bool extend, bool recur
 	
 	ED_region_tag_redraw(ar);
 
+	/* Allows for a context switch so that if the SIPO_AUTODESELECT_KEYS is on then
+	* the keyframes will be deselected.
+	*/
+	bAnimContext ac;
+	ListBase anim_data = { NULL, NULL };
+	int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
+	CTX_wm_switch_area(C, obac, "Graph");
+	ANIM_animdata_get_context(C, &ac);
+	ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
+
+	SpaceIpo *sipo = (SpaceIpo *)ac.sl;
+	bAnimListElem *ale;
+
+	if (sipo->flag & SIPO_AUTODESELECT_KEYS) {
+		for (ale = anim_data.first; ale; ale = ale->next)
+		{
+			FCurve *fcu = (FCurve *)ale->key_data;
+
+			for (int i = 0; i < fcu->totvert; i++)
+			{
+				if (fcu->bezt[i].f1 || fcu->bezt[i].f2 || fcu->bezt[i].f3)
+				{
+					fcu->bezt[i].f1 = 0;
+					fcu->bezt[i].f2 = 0;
+					fcu->bezt[i].f3 = 0;
+				}
+			}
+		}
+	}
+	CTX_wm_switch_area(C, obac, "Outliner");
+
 	return OPERATOR_FINISHED;
 }
 
@@ -1042,6 +1076,7 @@ static int outliner_item_activate(bContext *C, wmOperator *op, const wmEvent *ev
 	bool recursive = RNA_boolean_get(op->ptr, "recursive");
 	int x = event->mval[0];
 	int y = event->mval[1];
+
 	return outliner_item_do_activate(C, x, y, extend, recursive);
 }
 
