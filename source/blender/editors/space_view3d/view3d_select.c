@@ -44,6 +44,9 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_tracking_types.h"
+#include "DNA_windowmanager_types.h"
+#include "DNA_space_types.h"
+#include "DNA_anim_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -91,6 +94,7 @@
 #include "ED_screen.h"
 #include "ED_sculpt.h"
 #include "ED_mball.h"
+#include "ED_anim_api.h"
 
 #include "UI_interface.h"
 
@@ -2318,6 +2322,38 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
 	/* passthrough allows tweaks
 	 * FINISHED to signal one operator worked
 	 * */
+
+	/* Allows for a context switch so that if the SIPO_AUTODESELECT_KEYS is on then
+	 * the keyframes will be deselected.
+	 */
+	bAnimContext ac;
+	ListBase anim_data = { NULL, NULL };
+	int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
+	CTX_wm_switch_area(C, obact, "Graph");
+	ANIM_animdata_get_context(C, &ac);
+	ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
+	 
+	SpaceIpo *sipo = (SpaceIpo *)ac.sl;
+	bAnimListElem *ale;
+
+	if (sipo->flag & SIPO_AUTODESELECT_KEYS) {
+		for (ale = anim_data.first; ale; ale = ale->next)
+		{
+			FCurve *fcu = (FCurve *)ale->key_data;
+
+			for (int i = 0; i < fcu->totvert; i++)
+			{
+				if (fcu->bezt[i].f1 || fcu->bezt[i].f2 || fcu->bezt[i].f3)
+				{
+					fcu->bezt[i].f1 = 0;
+					fcu->bezt[i].f2 = 0;
+					fcu->bezt[i].f3 = 0;
+				}
+			}
+		}
+	}
+	CTX_wm_switch_area(C, obact, "View3D");
+
 	if (retval)
 		return OPERATOR_PASS_THROUGH | OPERATOR_FINISHED;
 	else
@@ -2351,9 +2387,9 @@ void VIEW3D_OT_select(wmOperatorType *ot)
 	/* properties */
 	WM_operator_properties_mouse_select(ot);
 
-	RNA_def_boolean(ot->srna, "center", 0, "Center", "Use the object center when selecting, in editmode used to extend object selection");
+	RNA_def_boolean(ot->srna, "center",    0, "Center", "Use the object center when selecting, in editmode used to extend object selection");
 	RNA_def_boolean(ot->srna, "enumerate", 0, "Enumerate", "List objects under the mouse (object mode only)");
-	RNA_def_boolean(ot->srna, "object", 0, "Object", "Use object selection (editmode only)");
+	RNA_def_boolean(ot->srna, "object",    0, "Object", "Use object selection (editmode only)");
 
 	prop = RNA_def_int_vector(ot->srna, "location", 2, NULL, INT_MIN, INT_MAX, "Location", "Mouse location", INT_MIN, INT_MAX);
 	RNA_def_property_flag(prop, PROP_HIDDEN);

@@ -517,6 +517,17 @@ bool compute_keyframe(BezTriple *bezt, BezTriple *prev, BezTriple *next, float P
 */
 int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short flag)
 {
+	bool replace = false;
+	for (int i = 0; i < fcu->totvert; i++)
+	{
+		if (roundf(fcu->bezt[i].vec[1][0]) == x)
+		{
+			replace = true;
+			break;
+		}
+	}
+
+
 	BezTriple beztr = { { { 0 } } };
 	unsigned int oldTot = fcu->totvert;
 	int a;
@@ -583,17 +594,19 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 	BezTriple *next = ((a + 1) < fcu->totvert) ? &fcu->bezt[a + 1] : NULL;
 
 	float P[5][2];
-	bool found = compute_keyframe(bezt, prev, next, P);
+	bool found = false;
+	if (!replace)
+		found = compute_keyframe(bezt, prev, next, P);
 	float y_diff = -1;
 
 	if (found)
 	{
 		y_diff = (float)fabs((double)(fabs(y) - fabs(P[4][1])));
 	}
-	float epsilon = 0.1;
+	float epsilon = 0.01;
 
 
-	if (y_diff >= 0 && (y_diff <= epsilon)) {
+	if (y_diff >= 0 && (y_diff <= epsilon) && !replace) {
 
 		copy_v2_v2(prev->vec[2], P[0]); // P0_12
 
