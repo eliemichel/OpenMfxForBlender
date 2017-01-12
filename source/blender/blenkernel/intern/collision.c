@@ -307,7 +307,10 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 			/* Apply velocity stopping impulse
 			 * I_c = m * v_N / 2.0
 			 * no 2.0 * magrelVel normally, but looks nicer DG */
-			impulse =  magrelVel / ( 1.0 + w1*w1 + w2*w2 + w3*w3 );
+			/*impulse =  magrelVel / ( 1.0 + w1*w1 + w2*w2 + w3*w3 );*/
+
+			/* Impulse shoud be uniform throughout polygon, the scaling used above was wrong */
+			impulse =  magrelVel;
 
 			VECADDMUL ( i1, collpair->normal, w1 * impulse );
 			cloth1->verts[collpair->ap1].impulse_count++;
