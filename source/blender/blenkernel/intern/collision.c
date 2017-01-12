@@ -893,7 +893,7 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 	if (collobjs)
 		MEM_freeN(collobjs);
 
-	return 1|MIN2 ( ret, 1 );
+	return MIN2 ( ret, 1 );
 }
 
 BLI_INLINE void max_v3_v3v3(float r[3], const float a[3], const float b[3])

@@ -988,12 +988,12 @@ static void cloth_collision_solve_extra(Object *ob, ClothModifierData *clmd, Lis
 		}
 	}
 	
-	// X = Xnew;
-	BPH_mass_spring_apply_result(id);
-	
 	if (do_extra_solve) {
 		ImplicitSolverResult result;
 		
+		// X = Xnew;
+		BPH_mass_spring_apply_result(id);
+
 		/* initialize forces to zero */
 		BPH_mass_spring_clear_forces(id);
 		
@@ -1005,8 +1005,6 @@ static void cloth_collision_solve_extra(Object *ob, ClothModifierData *clmd, Lis
 //		cloth_record_result(clmd, &result, clmd->sim_parms->stepsPerFrame);
 		
 		/* note: positions are advanced only once in the main solver step! */
-		
-		BPH_mass_spring_apply_result(id);
 	}
 }
 
