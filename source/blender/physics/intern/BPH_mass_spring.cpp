@@ -952,6 +952,7 @@ static void cloth_collision_solve_extra(Object *ob, ClothModifierData *clmd, Lis
 		
 		sub_v3_v3v3(verts[i].tv, verts[i].tx, verts[i].txold);
 		copy_v3_v3(verts[i].v, verts[i].tv);
+		zero_v3(verts[i].dcvel);
 	}
 	
 #if 0 /* unused */
@@ -964,47 +965,52 @@ static void cloth_collision_solve_extra(Object *ob, ClothModifierData *clmd, Lis
 	// TODO: check if "step" or "step+dt" is correct - dg
 	do_extra_solve = cloth_bvh_objcollision(ob, clmd, step / clmd->sim_parms->timescale, dt / clmd->sim_parms->timescale);
 	
-	// copy corrected positions back to simulation
-	for (i = 0; i < mvert_num; i++) {
-		float curx[3];
-		BPH_mass_spring_get_position(id, i, curx);
-		// correct velocity again, just to be sure we had to change it due to adaptive collisions
-		sub_v3_v3v3(verts[i].tv, verts[i].tx, curx);
-	}
-	
 	if (do_extra_solve) {
+		ImplicitSolverResult result;
 //		cloth_calc_helper_forces(ob, clmd, initial_cos, step/clmd->sim_parms->timescale, dt/clmd->sim_parms->timescale);
 		
 		for (i = 0; i < mvert_num; i++) {
-		
-			float newv[3];
-			
 			if ((clmd->sim_parms->vgroup_mass>0) && (verts [i].flags & CLOTH_VERT_FLAG_PINNED))
 				continue;
-			
-			BPH_mass_spring_set_new_position(id, i, verts[i].tx);
-			mul_v3_v3fl(newv, verts[i].tv, spf);
-			BPH_mass_spring_set_new_velocity(id, i, newv);
+
+			/* Update position, based on old position, only applying delta caused by collision responce */
+			add_v3_v3v3(verts[i].tx, verts[i].txold, verts[i].dcvel);
+			BPH_mass_spring_set_position(id, i, verts[i].tx);
+
+			/* Update velocity, based on old velocity, only applying delta caused by collision responce */
+			BPH_mass_spring_get_velocity(id, i, verts[i].tv);
+			madd_v3_v3fl(verts[i].tv, verts[i].dcvel, spf);
+			BPH_mass_spring_set_velocity(id, i, verts[i].tv);
 		}
-	}
-	
-	if (do_extra_solve) {
-		ImplicitSolverResult result;
-		
-		// X = Xnew;
-		BPH_mass_spring_apply_result(id);
 
 		/* initialize forces to zero */
 		BPH_mass_spring_clear_forces(id);
 		
-		// calculate forces
+		/* calculate forces */
 		cloth_calc_force(clmd, frame, effectors, step, true);
 		
-		// calculate new velocity and position
+		/* solve new velocities */
 		BPH_mass_spring_solve_velocities(id, dt, &result);
 //		cloth_record_result(clmd, &result, clmd->sim_parms->stepsPerFrame);
-		
-		/* note: positions are advanced only once in the main solver step! */
+
+		for (i = 0; i < mvert_num; i++) {
+			float prex[3];
+
+			/* Get position calculated in pre-collision solve */
+			BPH_mass_spring_get_new_position(id, i, prex);
+
+			/* Solve new possition from old position and velocity solved after collision responce */
+			BPH_mass_spring_get_position(id, i, verts[i].tx);
+			BPH_mass_spring_get_new_velocity(id, i, verts[i].tv);
+			madd_v3_v3fl(verts[i].tx, verts[i].tv, dt);
+
+			/* Apply the average position between pre-collision and post-collision solves,
+			 * this is by no means a physically based operation, but it make resting contacts much more stable
+			 * than if the post-collision positions were fully applied.
+			 * Note that the velocities are nonetheless fully post-collision solved (done above). */
+			mid_v3_v3v3(verts[i].tx, prex, verts[i].tx);
+			BPH_mass_spring_set_new_position(id, i, verts[i].tx);
+		}
 	}
 }
 

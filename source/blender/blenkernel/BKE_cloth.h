@@ -116,6 +116,7 @@ typedef struct ClothVertex {
 	float 	goal;		/* goal, from SB			*/
 	float	impulse[3];	/* used in collision.c */
 	float	xrest[3];   /* rest position of the vertex */
+	float	dcvel[3];	/* delta velocities to be applied by collision responce */
 	unsigned int impulse_count; /* same as above */
 	float 	avg_spring_len; /* average length of connected springs */
 	float 	struct_stiff;

@@ -662,6 +662,7 @@ static int cloth_bvh_objcollisions_resolve ( ClothModifierData * clmd, Collision
 					if (verts[i].impulse_count) {
 						// VECADDMUL ( verts[i].tv, verts[i].impulse, 1.0f / verts[i].impulse_count );
 						VECADD ( verts[i].tv, verts[i].tv, verts[i].impulse);
+						VECADD ( verts[i].dcvel, verts[i].dcvel, verts[i].impulse);
 						zero_v3(verts[i].impulse);
 						verts[i].impulse_count = 0;
 
