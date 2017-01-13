@@ -449,7 +449,6 @@ void clothModifier_do(ClothModifierData *clmd, Scene *scene, Object *ob, Derived
 
 	/* simulation is only active during a specific period */
 	if (framenr < startframe) {
-		BKE_ptcache_invalidate(cache);
 		return;
 	}
 	else if (framenr > endframe) {
@@ -460,17 +459,20 @@ void clothModifier_do(ClothModifierData *clmd, Scene *scene, Object *ob, Derived
 	if (!do_init_cloth(ob, clmd, dm, framenr))
 		return;
 
-	if (framenr == startframe) {
+	if (framenr == startframe && ((cache->flag & PTCACHE_OUTDATED) || (cache->last_exact < startframe))) {
 		BKE_ptcache_id_reset(scene, &pid, PTCACHE_RESET_OUTDATED);
 		do_init_cloth(ob, clmd, dm, framenr);
 		BKE_ptcache_validate(cache, framenr);
 		cache->flag &= ~PTCACHE_REDO_NEEDED;
 		clmd->clothObject->last_frame= framenr;
+		BKE_ptcache_write(&pid, startframe);
 		return;
 	}
 
 	/* try to read from cache */
-	bool can_simulate = (framenr == clmd->clothObject->last_frame+1) && !(cache->flag & PTCACHE_BAKED);
+	bool can_simulate = (framenr == clmd->clothObject->last_frame + 1) &&
+	                    (framenr == cache->last_exact + 1) &&
+	                    !(cache->flag & PTCACHE_BAKED);
 
 	cache_result = BKE_ptcache_read(&pid, (float)framenr+scene->r.subframe, can_simulate);
 
@@ -499,10 +501,6 @@ void clothModifier_do(ClothModifierData *clmd, Scene *scene, Object *ob, Derived
 
 	if (!can_simulate)
 		return;
-
-	/* if on second frame, write cache for first frame */
-	if (cache->simframe == startframe && (cache->flag & PTCACHE_OUTDATED || cache->last_exact==0))
-		BKE_ptcache_write(&pid, startframe);
 
 	clmd->sim_parms->timescale *= framenr - cache->simframe;
 
