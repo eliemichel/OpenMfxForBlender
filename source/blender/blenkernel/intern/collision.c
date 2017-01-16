@@ -298,7 +298,11 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 			if ( magtangent > ALMOST_ZERO ) {
 				normalize_v3(vrel_t_pre);
 
-				impulse = magtangent / ( 1.0f + w1*w1 + w2*w2 + w3*w3 ); /* 2.0 * */
+				/*impulse = magtangent / ( 1.0f + w1*w1 + w2*w2 + w3*w3 );  2.0 * */
+
+				/* Impulse shoud be uniform throughout polygon, the scaling used above was wrong */
+				impulse = magtangent / 1.5;
+
 				VECADDMUL ( i1, vrel_t_pre, w1 * impulse );
 				VECADDMUL ( i2, vrel_t_pre, w2 * impulse );
 				VECADDMUL ( i3, vrel_t_pre, w3 * impulse );
@@ -310,7 +314,7 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 			/*impulse =  magrelVel / ( 1.0 + w1*w1 + w2*w2 + w3*w3 );*/
 
 			/* Impulse shoud be uniform throughout polygon, the scaling used above was wrong */
-			impulse =  magrelVel;
+			impulse =  magrelVel / 1.5f;
 
 			VECADDMUL ( i1, collpair->normal, w1 * impulse );
 			cloth1->verts[collpair->ap1].impulse_count++;
@@ -338,7 +342,11 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 					repulse = min_ff( repulse, 5.0*impulse );
 				repulse = max_ff(impulse, repulse);
 
-				impulse = repulse / ( 1.0f + w1*w1 + w2*w2 + w3*w3 ); /* original 2.0 / 0.25 */
+				/*impulse = repulse / ( 1.0f + w1*w1 + w2*w2 + w3*w3 ); original 2.0 / 0.25 */
+
+				/* Impulse shoud be uniform throughout polygon, the scaling used above was wrong */
+				impulse = repulse / 1.5f;
+
 				VECADDMUL ( i1, collpair->normal,  impulse );
 				VECADDMUL ( i2, collpair->normal,  impulse );
 				VECADDMUL ( i3, collpair->normal,  impulse );
@@ -359,7 +367,10 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 				/* stay on the safe side and clamp repulse */
 				float repulse = d*1.0f/spf;
 
-				float impulse = repulse / ( 3.0f * ( 1.0f + w1*w1 + w2*w2 + w3*w3 )); /* original 2.0 / 0.25 */
+				/*float impulse = repulse / ( 3.0f * ( 1.0f + w1*w1 + w2*w2 + w3*w3 )); original 2.0 / 0.25 */
+
+				/* Impulse shoud be uniform throughout polygon, the scaling used above was wrong */
+				float impulse = repulse / 4.5f;
 
 				VECADDMUL ( i1, collpair->normal,  impulse );
 				VECADDMUL ( i2, collpair->normal,  impulse );
