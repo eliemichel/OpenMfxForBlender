@@ -103,6 +103,17 @@ void delete_fcurve_key(FCurve *fcu, int index, bool do_recalc)
 		calchandles_fcurve(fcu);
 }
 
+/* Checks if all keys are selected in an fcurve */
+bool check_if_all_keys_sel(FCurve *fcu)
+{
+	for (int i = 0; i < fcu->totvert; i++)
+	{
+		if (!(fcu->bezt[i].f2 & SELECT))
+			return false;
+	}
+	return true;
+}
+
 /* Delete selected keyframes in given F-Curve */
 bool delete_fcurve_keys(FCurve *fcu)
 {
@@ -112,46 +123,59 @@ bool delete_fcurve_keys(FCurve *fcu)
 	if (fcu->bezt == NULL) /* ignore baked curves */
 		return false;
 
-	/* Delete selected BezTriples */
-	for (i = 0; i < fcu->totvert; i++) {
-
-		float* Q0 = fcu->bezt[i].vec[1]; // P3 = Q0
-		float* Q1 = fcu->bezt[i].vec[2];
-		float* Q2 = fcu->bezt[i + 1].vec[0];
-		float* Q3 = fcu->bezt[i + 1].vec[1];
-		float* P0 = fcu->bezt[i - 1].vec[1];
-		float* P1 = fcu->bezt[i - 1].vec[2];
-		float* P2 = fcu->bezt[i].vec[0];
-
-		float epsilon = 0.001;
-
-		if (fcu->bezt[i].f2 & SELECT) {
-			if (((fcu->totvert) > 2) && 
-				((fcu->bezt[i].vec[2][1] >= fcu->bezt[i - 1].vec[2][1] && fcu->bezt[i].vec[2][1] <= fcu->bezt[i + 1].vec[2][1]) || 
-				 (fcu->bezt[i].vec[2][1] <= fcu->bezt[i - 1].vec[2][1] && fcu->bezt[i].vec[2][1] >= fcu->bezt[i + 1].vec[2][1])) &&
-				 (fabsf(Q1[1] - P2[1]) >= epsilon)){
-				// Proper deletion based on 
-				// http://stackoverflow.com/questions/8687648/how-to-remove-a-node-of-a-bezier-curve-so-that-the-shape-of-the-curve-does-not-c#9068155
-
-				// Average t case
-				float tx = (Q0[0] - P2[0]) / (Q1[0] - P2[0]);
-				float ty = (Q0[1] - P2[1]) / (Q1[1] - P2[1]);
-				float t = (tx + ty) / 2;
-
-				fcu->bezt[i - 1].vec[2][0] = (P1[0] - P0[0] * (1 - t)) / t;
-				fcu->bezt[i - 1].vec[2][1] = (P1[1] - P0[1] * (1 - t)) / t;
-				fcu->bezt[i + 1].vec[0][0] = (Q2[0] - Q3[0] * t) / (1 - t);
-				fcu->bezt[i + 1].vec[0][1] = (Q2[1] - Q3[1] * t) / (1 - t);
-			}
+	if (check_if_all_keys_sel(fcu))
+	{
+		for (i = 0; i < fcu->totvert; i++) {
 
 			memmove(&fcu->bezt[i], &fcu->bezt[i + 1], sizeof(BezTriple) * (fcu->totvert - i - 1));
-
-
 			fcu->totvert--;
 			i--;
 			changed = true;
 		}
 	}
+	else {
+		/* Delete selected BezTriples */
+		for (i = 0; i < fcu->totvert; i++) {
+
+			float* Q0 = fcu->bezt[i].vec[1]; // P3 = Q0
+			float* Q1 = fcu->bezt[i].vec[2];
+			float* Q2 = fcu->bezt[i + 1].vec[0];
+			float* Q3 = fcu->bezt[i + 1].vec[1];
+			float* P0 = fcu->bezt[i - 1].vec[1];
+			float* P1 = fcu->bezt[i - 1].vec[2];
+			float* P2 = fcu->bezt[i].vec[0];
+
+			float epsilon = 0.001;
+
+			if (fcu->bezt[i].f2 & SELECT) {
+				if (((fcu->totvert) > 2) && (i > 0 && i < fcu->totvert-1) &&
+					((fcu->bezt[i].vec[2][1] >= fcu->bezt[i - 1].vec[2][1] && fcu->bezt[i].vec[2][1] <= fcu->bezt[i + 1].vec[2][1]) || 
+					 (fcu->bezt[i].vec[2][1] <= fcu->bezt[i - 1].vec[2][1] && fcu->bezt[i].vec[2][1] >= fcu->bezt[i + 1].vec[2][1])) &&
+					 (fabsf(Q1[1] - P2[1]) >= epsilon)){
+					// Proper deletion based on 
+					// http://stackoverflow.com/questions/8687648/how-to-remove-a-node-of-a-bezier-curve-so-that-the-shape-of-the-curve-does-not-c#9068155
+
+					// Average t case
+					float tx = (Q0[0] - P2[0]) / (Q1[0] - P2[0]);
+					float ty = (Q0[1] - P2[1]) / (Q1[1] - P2[1]);
+					float t = (tx + ty) / 2;
+
+					fcu->bezt[i - 1].vec[2][0] = (P1[0] - P0[0] * (1 - t)) / t;
+					fcu->bezt[i - 1].vec[2][1] = (P1[1] - P0[1] * (1 - t)) / t;
+					fcu->bezt[i + 1].vec[0][0] = (Q2[0] - Q3[0] * t) / (1 - t);
+					fcu->bezt[i + 1].vec[0][1] = (Q2[1] - Q3[1] * t) / (1 - t);
+				}
+
+				memmove(&fcu->bezt[i], &fcu->bezt[i + 1], sizeof(BezTriple) * (fcu->totvert - i - 1));
+
+
+				fcu->totvert--;
+				i--;
+				changed = true;
+			}
+		}
+	}
+
 	
 	/* Free the array of BezTriples if there are not keyframes */
 	if (fcu->totvert == 0)

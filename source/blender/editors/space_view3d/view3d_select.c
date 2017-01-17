@@ -2265,6 +2265,8 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
 {
 	Object *obedit = CTX_data_edit_object(C);
 	Object *obact = CTX_data_active_object(C);
+	bPoseChannel *in_pose = CTX_data_active_pose_bone(C);
+
 	bool extend = RNA_boolean_get(op->ptr, "extend");
 	bool deselect = RNA_boolean_get(op->ptr, "deselect");
 	bool toggle = RNA_boolean_get(op->ptr, "toggle");
@@ -2326,33 +2328,42 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
 	/* Allows for a context switch so that if the SIPO_AUTODESELECT_KEYS is on then
 	 * the keyframes will be deselected.
 	 */
-	bAnimContext ac;
-	ListBase anim_data = { NULL, NULL };
-	int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
-	CTX_wm_switch_area(C, obact, "Graph");
-	ANIM_animdata_get_context(C, &ac);
-	ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
+	bPoseChannel *fin_pose = CTX_data_active_pose_bone(C);
+	Object *new_obact = CTX_data_active_object(C);
+
+
+
+	if (strcmp(obact->id.name, new_obact->id.name) != 0 || ((in_pose) && (strcmp(in_pose->name, fin_pose->name) != 0))) {
+		int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
+		bAnimContext ac;
+		ListBase anim_data = { NULL, NULL };
+		CTX_wm_switch_area(C, "Graph");
+		ANIM_animdata_get_context(C, &ac);
+		ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 	 
-	SpaceIpo *sipo = (SpaceIpo *)ac.sl;
-	bAnimListElem *ale;
+		SpaceIpo *sipo = (SpaceIpo *)ac.sl;
+		bAnimListElem *ale;
 
-	if (sipo->flag & SIPO_AUTODESELECT_KEYS) {
-		for (ale = anim_data.first; ale; ale = ale->next)
-		{
-			FCurve *fcu = (FCurve *)ale->key_data;
-
-			for (int i = 0; i < fcu->totvert; i++)
+		if (sipo->flag & SIPO_AUTODESELECT_KEYS) {
+			for (ale = anim_data.first; ale; ale = ale->next)
 			{
-				if (fcu->bezt[i].f1 || fcu->bezt[i].f2 || fcu->bezt[i].f3)
+				FCurve *fcu = (FCurve *)ale->key_data;
+
+				for (int i = 0; i < fcu->totvert; i++)
 				{
-					fcu->bezt[i].f1 = 0;
-					fcu->bezt[i].f2 = 0;
-					fcu->bezt[i].f3 = 0;
+					if (fcu->bezt[i].f1 || fcu->bezt[i].f2 || fcu->bezt[i].f3)
+					{
+						fcu->bezt[i].f1 = 0;
+						fcu->bezt[i].f2 = 0;
+						fcu->bezt[i].f3 = 0;
+					}
 				}
 			}
 		}
+		CTX_wm_switch_area(C, "View3D");
 	}
-	CTX_wm_switch_area(C, obact, "View3D");
+
+
 
 	if (retval)
 		return OPERATOR_PASS_THROUGH | OPERATOR_FINISHED;

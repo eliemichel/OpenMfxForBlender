@@ -30,6 +30,7 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "DNA_armature_types.h"
 #include "DNA_group_types.h"
@@ -992,11 +993,13 @@ static bool do_outliner_item_activate(bContext *C, Scene *scene, ARegion *ar, Sp
 int outliner_item_do_activate(bContext *C, int x, int y, bool extend, bool recursive)
 {
 	Scene *scene = CTX_data_scene(C);
-	Object *obac = CTX_data_active_object(C);
 	ARegion *ar = CTX_wm_region(C);
 	SpaceOops *soops = CTX_wm_space_outliner(C);
 	TreeElement *te;
 	float fmval[2];
+
+	Object *obact = CTX_data_active_object(C);
+	bPoseChannel *in_pose = CTX_data_active_pose_bone(C);
 
 	UI_view2d_region_to_view(&ar->v2d, x, y, &fmval[0], &fmval[1]);
 
@@ -1038,33 +1041,38 @@ int outliner_item_do_activate(bContext *C, int x, int y, bool extend, bool recur
 	/* Allows for a context switch so that if the SIPO_AUTODESELECT_KEYS is on then
 	* the keyframes will be deselected.
 	*/
-	bAnimContext ac;
-	ListBase anim_data = { NULL, NULL };
-	int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
-	CTX_wm_switch_area(C, obac, "Graph");
-	ANIM_animdata_get_context(C, &ac);
-	ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
+	bPoseChannel *fin_pose = CTX_data_active_pose_bone(C);
+	Object *new_obact = CTX_data_active_object(C);
 
-	SpaceIpo *sipo = (SpaceIpo *)ac.sl;
-	bAnimListElem *ale;
+	if (strcmp(obact->id.name, new_obact->id.name) != 0 || ((in_pose && fin_pose) && (strcmp(in_pose->name, fin_pose->name) != 0))) {
+		int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
+		bAnimContext ac;
+		ListBase anim_data = { NULL, NULL };
+		CTX_wm_switch_area(C, "Graph");
+		ANIM_animdata_get_context(C, &ac);
+		ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
-	if (sipo->flag & SIPO_AUTODESELECT_KEYS) {
-		for (ale = anim_data.first; ale; ale = ale->next)
-		{
-			FCurve *fcu = (FCurve *)ale->key_data;
+		SpaceIpo *sipo = (SpaceIpo *)ac.sl;
+		bAnimListElem *ale;
 
-			for (int i = 0; i < fcu->totvert; i++)
+		if (sipo->flag & SIPO_AUTODESELECT_KEYS) {
+			for (ale = anim_data.first; ale; ale = ale->next)
 			{
-				if (fcu->bezt[i].f1 || fcu->bezt[i].f2 || fcu->bezt[i].f3)
+				FCurve *fcu = (FCurve *)ale->key_data;
+
+				for (int i = 0; i < fcu->totvert; i++)
 				{
-					fcu->bezt[i].f1 = 0;
-					fcu->bezt[i].f2 = 0;
-					fcu->bezt[i].f3 = 0;
+					if (fcu->bezt[i].f1 || fcu->bezt[i].f2 || fcu->bezt[i].f3)
+					{
+						fcu->bezt[i].f1 = 0;
+						fcu->bezt[i].f2 = 0;
+						fcu->bezt[i].f3 = 0;
+					}
 				}
 			}
 		}
+		CTX_wm_switch_area(C, "View3D");
 	}
-	CTX_wm_switch_area(C, obac, "Outliner");
 
 	return OPERATOR_FINISHED;
 }
