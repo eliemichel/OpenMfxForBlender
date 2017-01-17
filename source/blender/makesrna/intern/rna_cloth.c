@@ -842,6 +842,11 @@ static void rna_def_cloth_collision_settings(BlenderRNA *brna)
 	                         "How many collision iterations should be done. (higher is better quality but slower)");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
+	prop = RNA_def_property(srna, "use_normal", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", CLOTH_COLLSETTINGS_FLAG_USE_NORMAL);
+	RNA_def_property_ui_text(prop, "Single Sided", "Collision acts with respect to the collider normals (improves penetration recovery)");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
 	/* self collision */
 
 	prop = RNA_def_property(srna, "use_self_collision", PROP_BOOLEAN, PROP_NONE);

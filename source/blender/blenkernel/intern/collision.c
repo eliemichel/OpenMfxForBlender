@@ -234,6 +234,8 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 	float v1[3], v2[3], relativeVelocity[3];
 	float magrelVel;
 	float epsilon2 = BLI_bvhtree_get_epsilon ( collmd->bvhtree );
+	float collider_norm[3];
+	bool backside;
 
 	cloth1 = clmd->clothObject;
 
@@ -262,6 +264,16 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 			collmd->current_x[collpair->bp3].co,
 			&u1, &u2, &u3 );
 
+		/* compute collision normal */
+		if (clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_USE_NORMAL) {
+			normal_tri_v3(collider_norm, collmd->current_x[collpair->bp1].co, collmd->current_x[collpair->bp2].co, collmd->current_x[collpair->bp3].co);
+			backside = dot_v3v3(collider_norm, collpair->normal) < 0.0f;
+		}
+		else {
+			copy_v3_v3(collider_norm, collpair->normal);
+			backside = false;
+		}
+
 		/* Calculate relative "velocity". */
 		collision_interpolateOnTriangle ( v1, cloth1->verts[collpair->ap1].tv, cloth1->verts[collpair->ap2].tv, cloth1->verts[collpair->ap3].tv, w1, w2, w3 );
 
@@ -270,7 +282,7 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 		sub_v3_v3v3(relativeVelocity, v2, v1);
 
 		/* Calculate the normal component of the relative velocity (actually only the magnitude - the direction is stored in 'normal'). */
-		magrelVel = dot_v3v3(relativeVelocity, collpair->normal);
+		magrelVel = dot_v3v3(relativeVelocity, collider_norm);
 
 		/* printf("magrelVel: %f\n", magrelVel); */
 
@@ -286,7 +298,7 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 			float temp[3], spf;
 
 			/* calculate tangential velocity */
-			copy_v3_v3 ( temp, collpair->normal );
+			copy_v3_v3 ( temp, collider_norm );
 			mul_v3_fl(temp, magrelVel);
 			sub_v3_v3v3(vrel_t_pre, relativeVelocity, temp);
 
@@ -316,14 +328,38 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 			/* Impulse shoud be uniform throughout polygon, the scaling used above was wrong */
 			impulse =  magrelVel / 1.5f;
 
-			VECADDMUL ( i1, collpair->normal, w1 * impulse );
-			cloth1->verts[collpair->ap1].impulse_count++;
+			if (backside) {
+				float pt_relvel[3];
+				float pt_magvel;
 
-			VECADDMUL ( i2, collpair->normal, w2 * impulse );
-			cloth1->verts[collpair->ap2].impulse_count++;
+				sub_v3_v3v3(pt_relvel, collmd->current_v[collpair->bp1].co, cloth1->verts[collpair->ap1].tv);
+				pt_magvel = dot_v3v3(pt_relvel, collider_norm);
 
-			VECADDMUL ( i3, collpair->normal, w3 * impulse );
-			cloth1->verts[collpair->ap3].impulse_count++;
+				VECADDMUL ( i1, collider_norm, pt_magvel * 0.25f );
+				cloth1->verts[collpair->ap1].impulse_count++;
+
+				sub_v3_v3v3(pt_relvel, collmd->current_v[collpair->bp2].co, cloth1->verts[collpair->ap2].tv);
+				pt_magvel = dot_v3v3(pt_relvel, collider_norm);
+
+				VECADDMUL ( i2, collider_norm, pt_magvel * 0.25f );
+				cloth1->verts[collpair->ap2].impulse_count++;
+
+				sub_v3_v3v3(pt_relvel, collmd->current_v[collpair->bp3].co, cloth1->verts[collpair->ap3].tv);
+				pt_magvel = dot_v3v3(pt_relvel, collider_norm);
+
+				VECADDMUL ( i3, collider_norm, pt_magvel * 0.25f );
+				cloth1->verts[collpair->ap3].impulse_count++;
+			}
+			else {
+				VECADDMUL ( i1, collider_norm, w1 * impulse );
+				cloth1->verts[collpair->ap1].impulse_count++;
+
+				VECADDMUL ( i2, collider_norm, w2 * impulse );
+				cloth1->verts[collpair->ap2].impulse_count++;
+
+				VECADDMUL ( i3, collider_norm, w3 * impulse );
+				cloth1->verts[collpair->ap3].impulse_count++;
+			}
 
 			/* Apply repulse impulse if distance too short
 			 * I_r = -min(dt*kd, m(0, 1d/dt - v_n))
@@ -333,7 +369,13 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 			 * DG TODO: Fix usage of dt here! */
 			spf = (float)clmd->sim_parms->stepsPerFrame / clmd->sim_parms->timescale;
 
-			d = clmd->coll_parms->epsilon*8.0f/9.0f + epsilon2*8.0f/9.0f - collpair->distance;
+			if (backside) {
+				d = clmd->coll_parms->epsilon*8.0f/9.0f + epsilon2*8.0f/9.0f;
+			}
+			else {
+				d = clmd->coll_parms->epsilon*8.0f/9.0f + epsilon2*8.0f/9.0f - collpair->distance;
+			}
+
 			if ( ( magrelVel < 0.1f*d*spf ) && ( d > ALMOST_ZERO ) ) {
 				repulse = MIN2 ( d*1.0f/spf, 0.1f*d*spf - magrelVel );
 
@@ -347,9 +389,9 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 				/* Impulse shoud be uniform throughout polygon, the scaling used above was wrong */
 				impulse = repulse / 1.5f;
 
-				VECADDMUL ( i1, collpair->normal,  impulse );
-				VECADDMUL ( i2, collpair->normal,  impulse );
-				VECADDMUL ( i3, collpair->normal,  impulse );
+				VECADDMUL ( i1, collider_norm,  impulse );
+				VECADDMUL ( i2, collider_norm,  impulse );
+				VECADDMUL ( i3, collider_norm,  impulse );
 			}
 
 			result = 1;
@@ -361,8 +403,15 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 			 * v += impulse; x_new = x + v;
 			 * We don't use dt!! */
 			float spf = (float)clmd->sim_parms->stepsPerFrame / clmd->sim_parms->timescale;
+			float d;
 
-			float d = clmd->coll_parms->epsilon*8.0f/9.0f + epsilon2*8.0f/9.0f - (float)collpair->distance;
+			if (backside) {
+				d = clmd->coll_parms->epsilon*8.0f/9.0f + epsilon2*8.0f/9.0f;
+			}
+			else {
+				d = clmd->coll_parms->epsilon*8.0f/9.0f + epsilon2*8.0f/9.0f - (float)collpair->distance;
+			}
+
 			if ( d > ALMOST_ZERO) {
 				/* stay on the safe side and clamp repulse */
 				float repulse = d*1.0f/spf;
@@ -372,9 +421,9 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 				/* Impulse shoud be uniform throughout polygon, the scaling used above was wrong */
 				float impulse = repulse / 4.5f;
 
-				VECADDMUL ( i1, collpair->normal,  impulse );
-				VECADDMUL ( i2, collpair->normal,  impulse );
-				VECADDMUL ( i3, collpair->normal,  impulse );
+				VECADDMUL ( i1, collider_norm,  impulse );
+				VECADDMUL ( i2, collider_norm,  impulse );
+				VECADDMUL ( i3, collider_norm,  impulse );
 
 				cloth1->verts[collpair->ap1].impulse_count++;
 				cloth1->verts[collpair->ap2].impulse_count++;
