@@ -488,7 +488,7 @@ static CollPair* cloth_collision(ModifierData *md1, ModifierData *md2,
 #ifdef WITH_BULLET
 		// calc distance + normal
 		distance = plNearestPoints (
-			verts1[collpair->ap1].txold, verts1[collpair->ap2].txold, verts1[collpair->ap3].txold, collmd->current_x[collpair->bp1].co, collmd->current_x[collpair->bp2].co, collmd->current_x[collpair->bp3].co, collpair->pa, collpair->pb, collpair->vector );
+			verts1[collpair->ap1].tx, verts1[collpair->ap2].tx, verts1[collpair->ap3].tx, collmd->current_x[collpair->bp1].co, collmd->current_x[collpair->bp2].co, collmd->current_x[collpair->bp3].co, collpair->pa, collpair->pb, collpair->vector );
 #else
 		// just be sure that we don't add anything
 		distance = 2.0 * (double)( epsilon1 + epsilon2 + ALMOST_ZERO );
