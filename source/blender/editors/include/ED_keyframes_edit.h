@@ -282,6 +282,7 @@ bool keyframe_region_circle_test(
 /* Destructive Editing API (keyframes_general.c) */
 
 void delete_fcurve_key(struct FCurve *fcu, int index, bool do_recalc);
+bool check_if_all_keys_sel(struct Fcurve *fcu);
 bool delete_fcurve_keys(struct FCurve *fcu);
 void clear_fcurve_keys(struct FCurve *fcu);
 void duplicate_fcurve_keys(struct FCurve *fcu);

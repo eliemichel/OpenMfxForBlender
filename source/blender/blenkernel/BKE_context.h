@@ -146,7 +146,7 @@ struct ScrArea *CTX_wm_area(const bContext *C);
 struct SpaceLink *CTX_wm_space_data(const bContext *C);
 struct ARegion *CTX_wm_region(const bContext *C);
 void *CTX_wm_region_data(const bContext *C);
-void CTX_wm_switch_area(bContext *C, Object *obac, const char* dest);
+void CTX_wm_switch_area(bContext *C, const char* dest);
 struct ARegion *CTX_wm_menu(const bContext *C);
 struct ReportList *CTX_wm_reports(const bContext *C);
 
