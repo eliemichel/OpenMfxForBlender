@@ -382,7 +382,6 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 				/* stay on the safe side and clamp repulse */
 				if ( impulse > ALMOST_ZERO )
 					repulse = min_ff( repulse, 5.0*impulse );
-				repulse = max_ff(impulse, repulse);
 
 				/*impulse = repulse / ( 1.0f + w1*w1 + w2*w2 + w3*w3 ); original 2.0 / 0.25 */
 
@@ -421,9 +420,16 @@ static int cloth_collision_response_static ( ClothModifierData *clmd, CollisionM
 				/* Impulse shoud be uniform throughout polygon, the scaling used above was wrong */
 				float impulse = repulse / 4.5f;
 
-				VECADDMUL ( i1, collider_norm,  impulse );
-				VECADDMUL ( i2, collider_norm,  impulse );
-				VECADDMUL ( i3, collider_norm,  impulse );
+				if (backside) {
+					VECADDMUL ( i1, collider_norm,  impulse );
+					VECADDMUL ( i2, collider_norm,  impulse );
+					VECADDMUL ( i3, collider_norm,  impulse );
+				}
+				else {
+					VECADDMUL ( i1, collider_norm, w1 * impulse );
+					VECADDMUL ( i2, collider_norm, w2 * impulse );
+					VECADDMUL ( i3, collider_norm, w3 * impulse );
+				}
 
 				cloth1->verts[collpair->ap1].impulse_count++;
 				cloth1->verts[collpair->ap2].impulse_count++;
