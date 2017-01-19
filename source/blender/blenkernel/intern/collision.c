@@ -1384,7 +1384,7 @@ void cloth_find_point_contacts(Object *ob, ClothModifierData *clmd, float step, 
 	////////////////////////////////////////////////////////////
 	
 	// create temporary cloth points bvh
-	cloth_bvh = BLI_bvhtree_new(mvert_num, max_ff(clmd->coll_parms->epsilon, clmd->coll_parms->distance_repel), 4, 6);
+	cloth_bvh = BLI_bvhtree_new(mvert_num, clmd->coll_parms->epsilon, 4, 6);
 	/* fill tree */
 	for (i = 0; i < mvert_num; i++) {
 		float co[6];
