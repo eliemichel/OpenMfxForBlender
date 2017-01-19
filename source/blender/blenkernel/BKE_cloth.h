@@ -237,7 +237,7 @@ void clothModifier_do (struct ClothModifierData *clmd, struct Scene *scene, stru
 int cloth_uses_vgroup(struct ClothModifierData *clmd);
 
 // needed for collision.c
-void bvhtree_update_from_cloth(struct ClothModifierData *clmd, bool moving);
+void bvhtree_update_from_cloth(struct ClothModifierData *clmd, bool moving, bool self);
 void bvhselftree_update_from_cloth(struct ClothModifierData *clmd, bool moving);
 
 // needed for button_object.c

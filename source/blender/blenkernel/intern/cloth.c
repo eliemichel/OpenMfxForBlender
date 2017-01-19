@@ -233,14 +233,21 @@ static BVHTree *bvhtree_build_from_cloth (ClothModifierData *clmd, float epsilon
 	return bvhtree;
 }
 
-void bvhtree_update_from_cloth(ClothModifierData *clmd, bool moving)
+void bvhtree_update_from_cloth(ClothModifierData *clmd, bool moving, bool self)
 {	
 	unsigned int i = 0;
 	Cloth *cloth = clmd->clothObject;
-	BVHTree *bvhtree = cloth->bvhtree;
+	BVHTree *bvhtree;
 	ClothVertex *verts = cloth->verts;
 	const MVertTri *vt;
-	
+
+	if (self) {
+		bvhtree = cloth->bvhselftree;
+	}
+	else {
+		bvhtree = cloth->bvhtree;
+	}
+
 	if (!bvhtree)
 		return;
 	
@@ -907,7 +914,7 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 		maxdist = MAX2(maxdist, clmd->coll_parms->selfepsilon* ( cloth->verts[i].avg_spring_len*2.0f));
 	}
 	
-	clmd->clothObject->bvhselftree = bvhselftree_build_from_cloth ( clmd, maxdist );
+	clmd->clothObject->bvhselftree = bvhtree_build_from_cloth ( clmd, clmd->coll_parms->epsilon );
 
 	return 1;
 }
