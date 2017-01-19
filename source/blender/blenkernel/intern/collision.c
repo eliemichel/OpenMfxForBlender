@@ -523,7 +523,7 @@ static int cloth_selfcollision_response_static (ClothModifierData *clmd, CollPai
 
 			/* Decrease in magnitude of relative tangential velocity due to coulomb friction
 			 * in original formula "magrelVel" should be the "change of relative velocity in normal direction" */
-			magtangent = min_ff(clmd->coll_parms->friction * 0.01f * magrelVel, len_v3(vrel_t_pre));
+			magtangent = min_ff(clmd->coll_parms->self_friction * 0.01f * magrelVel, len_v3(vrel_t_pre));
 
 			/* Apply friction impulse. */
 			if ( magtangent > ALMOST_ZERO ) {

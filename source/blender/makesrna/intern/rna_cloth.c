@@ -847,7 +847,7 @@ static void rna_def_cloth_collision_settings(BlenderRNA *brna)
 	
 	prop = RNA_def_property(srna, "self_friction", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_range(prop, 0.0f, 80.0f);
-	RNA_def_property_ui_text(prop, "Self Friction", "Friction/damping with self contact");
+	RNA_def_property_ui_text(prop, "Self Friction", "Friction with self contact");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "group", PROP_POINTER, PROP_NONE);
