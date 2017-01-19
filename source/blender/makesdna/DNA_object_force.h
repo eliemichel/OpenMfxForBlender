@@ -99,6 +99,9 @@ typedef struct PartDeflect {
 	float pdef_sbift;	/* inner face thickness for softbody deflection */
 	float pdef_sboft;	/* outer face thickness for softbody deflection */
 
+	float pdef_cfrict;	/* Friction of cloth collisions */
+	char pad[4];
+
 	/* guide curve, same as for particle child effects */
 	float clump_fac, clump_pow;
 	float kink_freq, kink_shape, kink_amp, free_end;

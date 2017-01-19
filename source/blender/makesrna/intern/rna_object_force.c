@@ -986,6 +986,12 @@ static void rna_def_collision(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Absorption",
 	                         "How much of effector force gets lost during collision with this object (in percent)");
 	RNA_def_property_update(prop, 0, "rna_CollisionSettings_update");
+
+	prop = RNA_def_property(srna, "cloth_friction", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "pdef_cfrict");
+	RNA_def_property_range(prop, 0.0f, 80.0f);
+	RNA_def_property_ui_text(prop, "Friction", "Friction for cloth collisions");
+	RNA_def_property_update(prop, 0, "rna_CollisionSettings_update");
 }
 
 static void rna_def_effector_weight(BlenderRNA *brna)
