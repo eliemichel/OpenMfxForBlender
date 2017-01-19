@@ -125,7 +125,7 @@ void cloth_init(ClothModifierData *clmd )
 	clmd->coll_parms->epsilon = 0.015f;
 	clmd->coll_parms->flags = CLOTH_COLLSETTINGS_FLAG_ENABLED;
 	clmd->coll_parms->collision_list = NULL;
-	clmd->coll_parms->selfepsilon = 0.75;
+	clmd->coll_parms->selfepsilon = 0.015;
 	clmd->coll_parms->vgroup_selfcol = 0;
 
 	/* These defaults are copied from softbody.c's
@@ -913,7 +913,7 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 		maxdist = MAX2(maxdist, clmd->coll_parms->selfepsilon* ( cloth->verts[i].avg_spring_len*2.0f));
 	}
 	
-	clmd->clothObject->bvhselftree = bvhtree_build_from_cloth ( clmd, clmd->coll_parms->epsilon );
+	clmd->clothObject->bvhselftree = bvhtree_build_from_cloth ( clmd, clmd->coll_parms->selfepsilon );
 
 	return 1;
 }

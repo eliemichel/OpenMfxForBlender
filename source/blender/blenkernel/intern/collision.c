@@ -564,7 +564,7 @@ static int cloth_selfcollision_response_static (ClothModifierData *clmd, CollPai
 			 * DG TODO: Fix usage of dt here! */
 			spf = (float)clmd->sim_parms->stepsPerFrame / clmd->sim_parms->timescale;
 
-			d = clmd->coll_parms->epsilon*8.0f/9.0f * 2.0f - collpair->distance;
+			d = clmd->coll_parms->selfepsilon * 8.0f / 9.0f * 2.0f - collpair->distance;
 
 			if ( ( magrelVel < 0.1f*d*spf ) && ( d > ALMOST_ZERO ) ) {
 				repulse = MIN2 ( d*1.0f/spf, 0.1f*d*spf - magrelVel );
@@ -595,7 +595,7 @@ static int cloth_selfcollision_response_static (ClothModifierData *clmd, CollPai
 			float spf = (float)clmd->sim_parms->stepsPerFrame / clmd->sim_parms->timescale;
 			float d;
 
-			d = clmd->coll_parms->epsilon*8.0f/9.0f * 2.0f - (float)collpair->distance;
+			d = clmd->coll_parms->selfepsilon * 8.0f / 9.0f * 2.0f - (float)collpair->distance;
 
 			if ( d > ALMOST_ZERO) {
 				/* stay on the safe side and clamp repulse */
@@ -736,7 +736,7 @@ static CollPair* cloth_selfcollision(ModifierData *md1, BVHTreeOverlap *overlap,
 	const MVertTri *tri_a, *tri_b;
 	ClothVertex *verts1 = clmd->clothObject->verts;
 	double distance = 0;
-	float epsilon = clmd->coll_parms->epsilon;
+	float epsilon = clmd->coll_parms->selfepsilon;
 
 	tri_a = &clmd->clothObject->tri[overlap->indexA];
 	tri_b = &clmd->clothObject->tri[overlap->indexB];

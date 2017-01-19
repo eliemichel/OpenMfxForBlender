@@ -841,8 +841,8 @@ static void rna_def_cloth_collision_settings(BlenderRNA *brna)
 	
 	prop = RNA_def_property(srna, "self_distance_min", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "selfepsilon");
-	RNA_def_property_range(prop, 0.5f, 1.0f);
-	RNA_def_property_ui_text(prop, "Self Minimum Distance", "0.5 means no distance at all, 1.0 is maximum distance");
+	RNA_def_property_range(prop, 0.001f, 0.1f);
+	RNA_def_property_ui_text(prop, "Self Minimum Distance", "Minimum distance between cloth faces before collision response takes in");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 	
 	prop = RNA_def_property(srna, "self_friction", PROP_FLOAT, PROP_NONE);
