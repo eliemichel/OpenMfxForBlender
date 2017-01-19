@@ -125,7 +125,6 @@ void cloth_init(ClothModifierData *clmd )
 	clmd->coll_parms->epsilon = 0.015f;
 	clmd->coll_parms->flags = CLOTH_COLLSETTINGS_FLAG_ENABLED;
 	clmd->coll_parms->collision_list = NULL;
-	clmd->coll_parms->self_loop_count = 1.0;
 	clmd->coll_parms->selfepsilon = 0.75;
 	clmd->coll_parms->vgroup_selfcol = 0;
 

@@ -1122,52 +1122,44 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 			MEM_freeN(collisions_index);
 		}
 
-		rounds++;
-
 		////////////////////////////////////////////////////////////
 		// Test on selfcollisions
 		////////////////////////////////////////////////////////////
 		if ( clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_SELF ) {
-			/* TODO: This self col stuff is already inside the main col loop,
-			 * this inner loop deticated to self col should either just be removed (i.e. run only once),
-			 * or moved to outside of the main col loop (to be evaluated later...) */
-			for (l = 0; l < (unsigned int)clmd->coll_parms->self_loop_count; l++) {
-				/* TODO: add coll quality rounds again */
-				BVHTreeOverlap *overlap = NULL;
-				unsigned int result = 0;
-				CollPair **collisions, **collisions_index;
+			BVHTreeOverlap *overlap = NULL;
+			unsigned int result = 0;
+			CollPair **collisions, **collisions_index;
 
-				collisions = MEM_callocN(sizeof(CollPair *), "CollPair");
-				collisions_index = MEM_callocN(sizeof(CollPair *), "CollPair");
-	
-				// collisions = 1;
-				verts = cloth->verts; // needed for openMP
-	
-				/* numfaces = cloth->numfaces; */ /* UNUSED */
-				mvert_num = cloth->mvert_num;
-	
-				verts = cloth->verts;
+			collisions = MEM_callocN(sizeof(CollPair *), "CollPair");
+			collisions_index = MEM_callocN(sizeof(CollPair *), "CollPair");
 
-				if ( cloth->bvhselftree ) {
-					// search for overlapping collision pairs
-					overlap = BLI_bvhtree_overlap(cloth->bvhselftree, cloth->bvhselftree, &result, NULL, NULL);
+			// collisions = 1;
+			verts = cloth->verts; // needed for openMP
 
-					if (result && overlap) {
-						cloth_bvh_selfcollisions_nearcheck (clmd, collisions, collisions_index, result, overlap);
+			/* numfaces = cloth->numfaces; */ /* UNUSED */
+			mvert_num = cloth->mvert_num;
 
-						ret += cloth_bvh_selfcollisions_resolve ( clmd, *collisions,  *collisions_index);
-						ret2 += ret;
-					}
+			verts = cloth->verts;
 
-					if ( overlap )
-						MEM_freeN ( overlap );
+			if ( cloth->bvhselftree ) {
+				// search for overlapping collision pairs
+				overlap = BLI_bvhtree_overlap(cloth->bvhselftree, cloth->bvhselftree, &result, NULL, NULL);
+
+				if (result && overlap) {
+					cloth_bvh_selfcollisions_nearcheck (clmd, collisions, collisions_index, result, overlap);
+
+					ret += cloth_bvh_selfcollisions_resolve ( clmd, *collisions,  *collisions_index);
+					ret2 += ret;
 				}
 
-				if ( *collisions ) MEM_freeN ( *collisions );
-
-				MEM_freeN(collisions);
-				MEM_freeN(collisions_index);
+				if ( overlap )
+					MEM_freeN ( overlap );
 			}
+
+			if ( *collisions ) MEM_freeN ( *collisions );
+
+			MEM_freeN(collisions);
+			MEM_freeN(collisions_index);
 		}
 
 		if (clmd->coll_parms->flags & (CLOTH_COLLSETTINGS_FLAG_ENABLED | CLOTH_COLLSETTINGS_FLAG_SELF)) {
@@ -1181,6 +1173,8 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 				VECADD ( verts[i].tx, verts[i].txold, verts[i].tv );
 			}
 		}
+
+		rounds++;
 	}
 	while ( ret2 && ( clmd->coll_parms->loop_count>rounds ) );
 	

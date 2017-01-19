@@ -254,9 +254,6 @@ class PHYSICS_PT_cloth_collision(PhysicButtonsPanel, Panel):
         split = col.split()
 
         split.prop(cloth, "use_self_collision", text="Self Collision:")
-        sub = split.column()
-        sub.active = cloth.use_self_collision
-        sub.prop(cloth, "self_collision_quality", text="Quality")
 
         sub = col.column()
         sub.active = cloth.use_self_collision
