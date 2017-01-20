@@ -749,6 +749,12 @@ static CollPair* cloth_selfcollision(ModifierData *md1, BVHTreeOverlap *overlap,
 		}
 	}
 
+	if (((verts1[tri_a->tri[0]].flags & verts1[tri_a->tri[1]].flags & verts1[tri_a->tri[2]].flags) |
+	     (verts1[tri_b->tri[0]].flags & verts1[tri_b->tri[1]].flags & verts1[tri_b->tri[2]].flags)) & CLOTH_VERT_FLAG_NOSELFCOLL)
+	{
+		return collpair;
+	}
+
 	/* fill face_a */
 	collpair->ap1 = tri_a->tri[0];
 	collpair->ap2 = tri_a->tri[1];
