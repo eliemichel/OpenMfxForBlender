@@ -499,10 +499,6 @@ void cloth_free_modifier(ClothModifierData *clmd )
 		// we save our faces for collision objects
 		if (cloth->tri)
 			MEM_freeN(cloth->tri);
-
-		if (cloth->edgeset)
-			BLI_edgeset_free(cloth->edgeset);
-		
 		
 		/*
 		if (clmd->clothObject->facemarks)
@@ -570,10 +566,6 @@ void cloth_free_modifier_extern(ClothModifierData *clmd )
 		// we save our faces for collision objects
 		if (cloth->tri)
 			MEM_freeN(cloth->tri);
-
-		if (cloth->edgeset)
-			BLI_edgeset_free(cloth->edgeset);
-
 
 		/*
 		if (clmd->clothObject->facemarks)
@@ -742,7 +734,6 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 		clmd->clothObject->old_solver_type = 255;
 		// clmd->clothObject->old_collision_type = 255;
 		cloth = clmd->clothObject;
-		clmd->clothObject->edgeset = NULL;
 	}
 	else if (!clmd->clothObject) {
 		modifier_setError(&(clmd->modifier), "Out of memory on allocating clmd->clothObject");
@@ -950,11 +941,6 @@ static void cloth_free_errorsprings(Cloth *cloth, LinkNodePair *edgelist)
 	}
 
 	cloth_free_edgelist(edgelist, cloth->mvert_num);
-	
-	if (cloth->edgeset) {
-		BLI_edgeset_free(cloth->edgeset);
-		cloth->edgeset = NULL;
-	}
 }
 
 BLI_INLINE float spring_angle(ClothVertex *verts, int i, int j, int *i_a, int *i_b, int len_a, int len_b)
@@ -1383,7 +1369,6 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 	const MLoop *mloop = dm->getLoopArray(dm);
 	const MLoop *ml;
 	LinkNodePair *edgelist;
-	EdgeSet *edgeset = NULL;
 	LinkNode *search = NULL, *search2 = NULL;
 	BendSpringRef *spring_ref;
 	BendSpringRef *curr_ref;
@@ -1392,13 +1377,11 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 	if ( numedges==0 )
 		return 0;
 
-	/* NOTE: handling ownership of springs and edgeset is quite sloppy
+	/* NOTE: handling ownership of springs is quite sloppy
 	 * currently they are never initialized but assert just to be sure */
 	BLI_assert(cloth->springs == NULL);
-	BLI_assert(cloth->edgeset == NULL);
 
 	cloth->springs = NULL;
-	cloth->edgeset = NULL;
 
 	spring_ref = MEM_callocN(sizeof(*spring_ref) * numedges, "temp bend spring reference");
 
@@ -1605,20 +1588,6 @@ static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm )
 	}
 
 	MEM_freeN(spring_ref);
-
-	edgeset = BLI_edgeset_new_ex(__func__, numedges);
-	cloth->edgeset = edgeset;
-
-	for (i = 0; i < numedges; i++) { /* struct springs */
-		BLI_edgeset_add(edgeset, medge[i].v1, medge[i].v2);
-	}
-
-	for (i = 0; i < numpolys; i++) { /* edge springs */
-		if (mpoly[i].totloop == 4) {
-			BLI_edgeset_add(edgeset, mloop[mpoly[i].loopstart + 0].v, mloop[mpoly[i].loopstart + 2].v);
-			BLI_edgeset_add(edgeset, mloop[mpoly[i].loopstart + 1].v, mloop[mpoly[i].loopstart + 3].v);
-		}
-	}
 	
 	cloth->numsprings = struct_springs + shear_springs + bend_springs;
 	
