@@ -240,8 +240,6 @@ class PHYSICS_PT_cloth_collision(PhysicButtonsPanel, Panel):
         sub.prop(cloth, "distance_min", slider=True, text="Distance")
         sub.prop(cloth, "group")
 
-        sub.prop(cloth, "use_normal")
-
         layout.separator()
 
         col = layout.column()

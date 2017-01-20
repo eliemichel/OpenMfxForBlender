@@ -992,6 +992,11 @@ static void rna_def_collision(BlenderRNA *brna)
 	RNA_def_property_range(prop, 0.0f, 80.0f);
 	RNA_def_property_ui_text(prop, "Friction", "Friction for cloth collisions");
 	RNA_def_property_update(prop, 0, "rna_CollisionSettings_update");
+
+	prop = RNA_def_property(srna, "use_normal", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag", PFIELD_CLOTH_USE_NORMAL);
+	RNA_def_property_ui_text(prop, "Single Sided", "Cloth collision acts with respect to the collider normals (improves penetration recovery)");
+	RNA_def_property_update(prop, 0, "rna_CollisionSettings_update");
 }
 
 static void rna_def_effector_weight(BlenderRNA *brna)

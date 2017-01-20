@@ -226,8 +226,8 @@ DO_INLINE void collision_interpolateOnTriangle ( float to[3], float v1[3], float
 	VECADDMUL(to, v3, w3);
 }
 
-static int cloth_collision_response_static (ClothModifierData *clmd, CollisionModifierData *collmd,
-                                            CollPair *collpair, CollPair *collision_end, float friction)
+static int cloth_collision_response_static (ClothModifierData *clmd, CollisionModifierData *collmd, Object *collob,
+                                            CollPair *collpair, CollPair *collision_end)
 {
 	int result = 0;
 	Cloth *cloth1;
@@ -266,7 +266,7 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 			&u1, &u2, &u3 );
 
 		/* compute collision normal */
-		if (clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_USE_NORMAL) {
+		if (collob->pd->flag & PFIELD_CLOTH_USE_NORMAL) {
 			normal_tri_v3(collider_norm, collmd->current_x[collpair->bp1].co, collmd->current_x[collpair->bp2].co, collmd->current_x[collpair->bp3].co);
 			backside = dot_v3v3(collider_norm, collpair->normal) < 0.0f;
 		}
@@ -305,7 +305,7 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 
 			/* Decrease in magnitude of relative tangential velocity due to coulomb friction
 			 * in original formula "magrelVel" should be the "change of relative velocity in normal direction" */
-			magtangent = min_ff(friction * 0.01f * magrelVel, len_v3(vrel_t_pre));
+			magtangent = min_ff(collob->pd->pdef_cfrict * 0.01f * magrelVel, len_v3(vrel_t_pre));
 
 			/* Apply friction impulse. */
 			if ( magtangent > ALMOST_ZERO ) {
@@ -947,8 +947,8 @@ static void cloth_bvh_selfcollisions_nearcheck (ClothModifierData * clmd, CollPa
 	}
 }
 
-static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, CollisionModifierData *collmd,
-                                            CollPair *collisions, CollPair *collisions_index, float friction)
+static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, CollisionModifierData *collmd, Object *collob,
+                                            CollPair *collisions, CollPair *collisions_index)
 {
 	Cloth *cloth = clmd->clothObject;
 	int i=0, j = 0, /*numfaces = 0, */ mvert_num = 0;
@@ -965,7 +965,7 @@ static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, CollisionM
 		result = 0;
 
 		if ( collmd->bvhtree ) {
-			result += cloth_collision_response_static (clmd, collmd, collisions, collisions_index, friction);
+			result += cloth_collision_response_static(clmd, collmd, collob, collisions, collisions_index);
 
 			// apply impulses in parallel
 			if (result) {
@@ -1106,7 +1106,7 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 						&collisions_index[i], result, overlap, dt/(float)clmd->coll_parms->loop_count);
 
 					// resolve nearby collisions
-					ret += cloth_bvh_objcollisions_resolve ( clmd, collmd, collisions[i],  collisions_index[i], collob->pd->pdef_cfrict);
+					ret += cloth_bvh_objcollisions_resolve(clmd, collmd, collob, collisions[i],  collisions_index[i]);
 					ret2 += ret;
 				}
 

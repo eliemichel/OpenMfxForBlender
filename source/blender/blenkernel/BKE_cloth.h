@@ -180,7 +180,6 @@ typedef enum {
 typedef enum {
 	CLOTH_COLLSETTINGS_FLAG_ENABLED = ( 1 << 1 ), /* enables cloth - object collisions */
 	CLOTH_COLLSETTINGS_FLAG_SELF = ( 1 << 2 ), /* enables selfcollisions */
-	CLOTH_COLLSETTINGS_FLAG_USE_NORMAL = ( 1 << 3 ), /* enable collision side detection based on normal */
 } CLOTH_COLLISIONSETTINGS_FLAGS;
 
 /* Spring types as defined in the paper.*/
