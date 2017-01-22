@@ -43,7 +43,6 @@
 #include "BLI_utildefines.h"
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
-#include "BLI_edgehash.h"
 
 #include "BKE_cloth.h"
 #include "BKE_effect.h"
@@ -333,19 +332,19 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 				float pt_relvel[3];
 				float pt_magvel;
 
-				sub_v3_v3v3(pt_relvel, collmd->current_v[collpair->bp1].co, cloth1->verts[collpair->ap1].tv);
+				sub_v3_v3v3(pt_relvel, v2, cloth1->verts[collpair->ap1].tv);
 				pt_magvel = dot_v3v3(pt_relvel, collider_norm);
 
 				VECADDMUL ( i1, collider_norm, pt_magvel * 0.25f );
 				cloth1->verts[collpair->ap1].impulse_count++;
 
-				sub_v3_v3v3(pt_relvel, collmd->current_v[collpair->bp2].co, cloth1->verts[collpair->ap2].tv);
+				sub_v3_v3v3(pt_relvel, v2, cloth1->verts[collpair->ap2].tv);
 				pt_magvel = dot_v3v3(pt_relvel, collider_norm);
 
 				VECADDMUL ( i2, collider_norm, pt_magvel * 0.25f );
 				cloth1->verts[collpair->ap2].impulse_count++;
 
-				sub_v3_v3v3(pt_relvel, collmd->current_v[collpair->bp3].co, cloth1->verts[collpair->ap3].tv);
+				sub_v3_v3v3(pt_relvel, v2, cloth1->verts[collpair->ap3].tv);
 				pt_magvel = dot_v3v3(pt_relvel, collider_norm);
 
 				VECADDMUL ( i3, collider_norm, pt_magvel * 0.25f );
