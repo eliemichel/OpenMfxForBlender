@@ -217,6 +217,7 @@ void MotionBlur2DOperation::generateMotionBlur(float *data, MemoryBuffer *color,
 					data_pixel[1] += color_pixel[1] * weight;
 					data_pixel[2] += color_pixel[2] * weight;
 					data_pixel[3] += color_pixel[3] * weight;
+
 				}
 			}
 
