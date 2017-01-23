@@ -290,7 +290,7 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 		 * TODO */
 
 		/* If v_n_mag < 0 the edges are approaching each other. */
-		if ( magrelVel > ALMOST_ZERO ) {
+		if ( magrelVel > 0.0f ) {
 			/* Calculate Impulse magnitude to stop all motion in normal direction. */
 			float magtangent = 0, repulse = 0, d = 0;
 			double impulse = 0.0;
@@ -442,6 +442,10 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 		if (result) {
 			int i = 0;
 
+			/* This is a terrible approach to eliminating duplicate collision impulses, and fails as soon as impulses are not
+			 * axis aligned, or have opposite directions. Instead of this, the impulses should be clustered by direction,
+			 * and the dominant impulse magnitude from each cluster should contribute to the total impulse, in the direction
+			 * if the weighted average of the cluster's directions by their magnitudes. */
 			for (i = 0; i < 3; i++) {
 				if (cloth1->verts[collpair->ap1].impulse_count > 0 && ABS(cloth1->verts[collpair->ap1].impulse[i]) < ABS(i1[i]))
 					cloth1->verts[collpair->ap1].impulse[i] = i1[i];
@@ -508,7 +512,7 @@ static int cloth_selfcollision_response_static (ClothModifierData *clmd, CollPai
 		 * this has to be done after voronoi mass distribution is implemented */
 
 		/* If v_n_mag < 0 the edges are approaching each other. */
-		if ( magrelVel > ALMOST_ZERO ) {
+		if ( magrelVel > 0.0f ) {
 			/* Calculate Impulse magnitude to stop all motion in normal direction. */
 			float magtangent = 0, repulse = 0, d = 0;
 			double impulse = 0.0;
