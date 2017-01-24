@@ -1613,7 +1613,7 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, floa
 		dfdx_spring(dfdx, dir, length, restlen, tension);
 
 		/* compute plasticity offset factor */
-		if (do_plast && length > restlen * yield_fact) {
+		if (do_plast && (restlenorig > 0.0f) && (length > restlen * yield_fact)) {
 			restlen += ((length / yield_fact) - restlen) * plasticity;
 			*lenfact = restlen / restlenorig;
 		}
@@ -1632,7 +1632,7 @@ bool BPH_mass_spring_force_spring_linear(Implicit_Data *data, int i, int j, floa
 		mul_m3_fl(dfdx, fbstar_jacobi(length, restlen, kb, cb));
 
 		/* compute plasticity offset factor */
-		if (do_plast && length < restlen / yield_fact) {
+		if (do_plast && (restlenorig > 0.0f) && length < restlen / yield_fact) {
 			restlen -= (restlen - (length * yield_fact)) * plasticity;
 			*lenfact = restlen / restlenorig;
 		}
@@ -1783,7 +1783,7 @@ bool BPH_mass_spring_force_spring_angular(Implicit_Data *data, int i, int j, int
 	force = stiffness * (angle - restang);
 
 	/* compute plasticity offset */
-	if (do_plast) {
+	if (do_plast && (restangorig > 0.0f)) {
 		if (angle > restang) {
 			if (angle - restang > yield_ang) {
 				restang += (angle - restang - yield_ang) * plasticity;
