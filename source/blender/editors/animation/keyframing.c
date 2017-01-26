@@ -467,9 +467,9 @@ static float get_parameterization_on_y(float y, const BezTriple *prev, const Bez
 bool compute_keyframe(BezTriple *bezt, BezTriple *prev, BezTriple *next, float P[][2])
 {
 	bool found = false;
-	float P0_1[2], P1_2[2], P2_3[2];
-	float P01_12[2], P12_23[2];
-	float P0112_1223[2];
+	const float P0_1[2], P1_2[2], P2_3[2];
+	const float P01_12[2], P12_23[2];
+	const float P0112_1223[2];
 
 	if (prev && next && prev->h2 != HD_VECT && next->h1 != HD_VECT && (prev->ipo == BEZT_IPO_BEZ))
 	{
@@ -611,7 +611,6 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 		copy_v2_v2(prev->vec[2], P[0]); // P0_12
 
 		copy_v2_v2(bezt->vec[0], P[2]); // P01_12
-		copy_v2_v2(bezt->vec[1], P[4]); // P0112_1223
 		copy_v2_v2(bezt->vec[2], P[3]); // P12_23
 
 		copy_v2_v2(next->vec[0], P[1]); // P2_3
@@ -629,6 +628,22 @@ int insert_vert_fcurve(FCurve *fcu, float x, float y, char keyframe_type, short 
 		*/
 		if ((flag & INSERTKEY_FAST) == 0)
 			calchandles_fcurve(fcu);
+
+		/* set handletype and interpolation */
+		if ((fcu->totvert > 2) && (flag & INSERTKEY_REPLACE) == 0) {
+			BezTriple *bezt = (fcu->bezt + a);
+
+			/* set interpolation from previous (if available), but only if we didn't just replace some keyframe
+			*  - replacement is indicated by no-change in number of verts
+			* - when replacing, the user may have specified some interpolation that should be kept
+			*/
+			if (fcu->totvert > oldTot) {
+				if (a > 0)
+					bezt->ipo = (bezt - 1)->ipo;
+				else if (a < fcu->totvert - 1)
+					bezt->ipo = (bezt + 1)->ipo;
+			}
+		}
 
 	}
 	else
