@@ -255,6 +255,14 @@ void MotionBlur2DOperation::generateMotionBlur(float *data, MemoryBuffer *color,
 				float *data_pixel = data + index;
 				float *mask_pixel = mask + index;
 
+				if (data_pixel[3] > 1.0) {
+					float normal = sqrtf(data_pixel[0] * data_pixel[0] + data_pixel[1] * data_pixel[1] + data_pixel[2] * data_pixel[2] + data_pixel[3] * data_pixel[3]);
+					data_pixel[0] *= (1.0f / normal);
+					data_pixel[1] *= (1.0f / normal);
+					data_pixel[2] *= (1.0f / normal);
+					data_pixel[3] *= (1.0f / normal);
+				}
+
 				// The differences in alpha channels masked by the original alpha channel
 				float fill_alpha = max(mask_pixel[3] - min(data_pixel[3], 1.0f), 0.0f) * color_pixel[3];
 
@@ -281,6 +289,7 @@ void MotionBlur2DOperation::generateMotionBlur(float *data, MemoryBuffer *color,
 				data_pixel[1] *= f;
 				data_pixel[2] *= f;
 				data_pixel[3] *= f;
+
 #endif
 
 			}
