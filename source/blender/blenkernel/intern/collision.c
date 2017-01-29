@@ -252,9 +252,9 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 
 		/* compute barycentric coordinates for both collision points */
 		collision_compute_barycentric ( collpair->pa,
-			cloth1->verts[collpair->ap1].txold,
-			cloth1->verts[collpair->ap2].txold,
-			cloth1->verts[collpair->ap3].txold,
+			cloth1->verts[collpair->ap1].tx,
+			cloth1->verts[collpair->ap2].tx,
+			cloth1->verts[collpair->ap3].tx,
 			&w1, &w2, &w3 );
 
 		/* was: txold */
