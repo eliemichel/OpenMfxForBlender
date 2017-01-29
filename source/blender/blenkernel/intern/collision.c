@@ -1064,7 +1064,7 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 	////////////////////////////////////////////////////////////
 
 	if (clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_ENABLED) {
-		bvhtree_update_from_cloth(clmd, 1, false); // 0 means STATIC, 1 means MOVING (see later in this function)
+		bvhtree_update_from_cloth(clmd, false, false);
 		collobjs = get_collisionobjects(clmd->scene, ob, clmd->coll_parms->group, &numcollobj, eModifierType_Collision);
 		
 		if (!collobjs)
@@ -1084,7 +1084,7 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 	}
 
 	if (clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_SELF) {
-		bvhtree_update_from_cloth(clmd, 1, true); // 0 means STATIC, 1 means MOVING (see later in this function)
+		bvhtree_update_from_cloth(clmd, false, true);
 	}
 
 	do {

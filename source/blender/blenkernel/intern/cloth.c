@@ -220,12 +220,12 @@ void bvhtree_update_from_cloth(ClothModifierData *clmd, bool moving, bool self)
 			float co[3][3], co_moving[3][3];
 			bool ret;
 
-			copy_v3_v3(co[0], verts[vt->tri[0]].txold);
-			copy_v3_v3(co[1], verts[vt->tri[1]].txold);
-			copy_v3_v3(co[2], verts[vt->tri[2]].txold);
-
 			/* copy new locations into array */
 			if (moving) {
+				copy_v3_v3(co[0], verts[vt->tri[0]].txold);
+				copy_v3_v3(co[1], verts[vt->tri[1]].txold);
+				copy_v3_v3(co[2], verts[vt->tri[2]].txold);
+
 				/* update moving positions */
 				copy_v3_v3(co_moving[0], verts[vt->tri[0]].tx);
 				copy_v3_v3(co_moving[1], verts[vt->tri[1]].tx);
@@ -234,6 +234,10 @@ void bvhtree_update_from_cloth(ClothModifierData *clmd, bool moving, bool self)
 				ret = BLI_bvhtree_update_node(bvhtree, i, co[0], co_moving[0], 3);
 			}
 			else {
+				copy_v3_v3(co[0], verts[vt->tri[0]].tx);
+				copy_v3_v3(co[1], verts[vt->tri[1]].tx);
+				copy_v3_v3(co[2], verts[vt->tri[2]].tx);
+
 				ret = BLI_bvhtree_update_node(bvhtree, i, co[0], NULL, 3);
 			}
 			
