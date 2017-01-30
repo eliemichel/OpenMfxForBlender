@@ -95,6 +95,7 @@ void BPH_mass_spring_add_constraint_ndof1(struct Implicit_Data *data, int index,
 void BPH_mass_spring_add_constraint_ndof2(struct Implicit_Data *data, int index, const float c1[3], const float dV[3]);
 
 bool BPH_mass_spring_solve_velocities(struct Implicit_Data *data, float dt, struct ImplicitSolverResult *result);
+void BPH_mass_spring_solve_velocities_inertial(struct Implicit_Data *data);
 bool BPH_mass_spring_solve_positions(struct Implicit_Data *data, float dt);
 void BPH_mass_spring_apply_result(struct Implicit_Data *data);
 

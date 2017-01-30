@@ -1134,6 +1134,11 @@ bool BPH_mass_spring_solve_velocities(Implicit_Data *data, float dt, ImplicitSol
 	return result->status == BPH_SOLVER_SUCCESS;
 }
 
+void BPH_mass_spring_solve_velocities_inertial(Implicit_Data *data)
+{
+	cp_lfvector(data->Vnew, data->V, data->M[0].vcount);
+}
+
 bool BPH_mass_spring_solve_positions(Implicit_Data *data, float dt)
 {
 	int numverts = data->M[0].vcount;
