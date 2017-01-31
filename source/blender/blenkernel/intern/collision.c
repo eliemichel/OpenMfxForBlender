@@ -189,9 +189,8 @@ static void free_impulse_clusters(ImpulseCluster *clusters)
 }
 
 /* This allows inserting impulses one by one into the cluster array, and immediately computing the clustering,
- * but might cause incorrect clustering because of not knowing all impulses beforehand.
- * TODO: Evaluate if this is good enough, as it is far cheaper than the actual hclust below. */
-#if 0
+ * but the clustering isn't exact, because of not knowing all impulses beforehand.
+ * Seems to be good enough however, and is much faster than the true hclust below... */
 static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const float impulse[3], const float clustang)
 {
 	ImpulseCluster **imp;
@@ -237,8 +236,8 @@ static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const flo
 		*clusters = tmp;
 	}
 }
-#endif
 
+#if 0
 static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const float impulse[3])
 {
 	ImpulseCluster *tmp;
@@ -312,6 +311,18 @@ static void compute_dominant_impulses(ImpulseCluster **clusters, float impulse[3
 	while (merge) {
 		merge = join_closest_impulse_clusters(clusters, clustang);
 	}
+
+	zero_v3(impulse);
+
+	for (tmp = *clusters; tmp; tmp = tmp->next) {
+		madd_v3_v3fl(impulse, tmp->dir, tmp->dominant_mag);
+	}
+}
+#endif
+
+static void compute_dominant_impulses(ImpulseCluster **clusters, float impulse[3])
+{
+	ImpulseCluster *tmp;
 
 	zero_v3(impulse);
 
@@ -591,15 +602,15 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 
 		if (result) {
 			if (cloth1->verts[collpair->ap1].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap1], i1);
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap1], i1, M_PI / 20);
 			}
 
 			if (cloth1->verts[collpair->ap2].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap2], i2);
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap2], i2, M_PI / 20);
 			}
 
 			if (cloth1->verts[collpair->ap3].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap3], i3);
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap3], i3, M_PI / 20);
 			}
 		}
 	}
@@ -1129,7 +1140,7 @@ static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, CollisionM
 				for (i = 0; i < mvert_num; i++) {
 					// calculate "velocities" (just xnew = xold + v; no dt in v)
 					if (verts[i].impulse_count) {
-						compute_dominant_impulses(&vert_imp_clusters[i], verts[i].impulse, M_PI / 20);
+						compute_dominant_impulses(&vert_imp_clusters[i], verts[i].impulse);
 						free_impulse_clusters(vert_imp_clusters[i]);
 						vert_imp_clusters[i] = NULL;
 
