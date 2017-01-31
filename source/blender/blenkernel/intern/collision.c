@@ -194,7 +194,7 @@ static void free_impulse_clusters(ImpulseCluster *clusters)
 static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const float impulse[3], const float clustang)
 {
 	ImpulseCluster **imp;
-	ImpulseCluster **close;
+	ImpulseCluster **close = NULL;
 	float dir[3];
 	float mag;
 	float minang = FLT_MAX;
@@ -223,7 +223,9 @@ static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const flo
 		(*close)->dominant_mag = max_ff((*close)->dominant_mag, mag);
 
 		/* Interpolate direction */
-		interp_v3_v3v3_slerp((*close)->dir, (*close)->dir, dir, mag / (*close)->totmag);
+		if(!interp_v3_v3v3_slerp((*close)->dir, (*close)->dir, dir, mag / (*close)->totmag)) {
+			BLI_assert(false);
+		}
 	}
 	else {
 		ImpulseCluster *tmp = MEM_mallocN(sizeof(*tmp), "cloth_collision_impulse_cluster");
@@ -617,7 +619,8 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 	return result;
 }
 
-static int cloth_selfcollision_response_static (ClothModifierData *clmd, CollPair *collpair, CollPair *collision_end)
+static int cloth_selfcollision_response_static(ClothModifierData *clmd, CollPair *collpair, CollPair *collision_end,
+                                               ImpulseCluster **vert_imp_clusters)
 {
 	int result = 0;
 	Cloth *cloth1;
@@ -728,15 +731,14 @@ static int cloth_selfcollision_response_static (ClothModifierData *clmd, CollPai
 			if ( ( magrelVel < 0.1f*d*spf ) && ( d > ALMOST_ZERO ) ) {
 				repulse = MIN2 ( d*1.0f/spf, 0.1f*d*spf - magrelVel );
 
-				/* stay on the safe side and clamp repulse */
-				/*if ( impulse > ALMOST_ZERO )
-					repulse = min_ff( repulse, 2.0*impulse );*/
-				repulse = min_ff(impulse, repulse);
+				if ( impulse > ALMOST_ZERO )
+					repulse = min_ff( repulse, 5.0*impulse );
+				repulse = max_ff(impulse, repulse);
 
 				/*impulse = repulse / ( 1.0f + w1*w1 + w2*w2 + w3*w3 ); original 2.0 / 0.25 */
 
 				/* Impulse should be uniform throughout polygon, the scaling used above was wrong */
-				impulse = repulse; /* TODO: This might have to be divided by two for self col (to be evaluated) */
+				impulse = repulse  / 1.5f; /* TODO: This might have to be divided by two for self col (to be evaluated) */
 
 				VECADDMUL ( i1, collpair->normal, w1 * impulse );
 				VECADDMUL ( i2, collpair->normal, w2 * impulse );
@@ -778,17 +780,16 @@ static int cloth_selfcollision_response_static (ClothModifierData *clmd, CollPai
 		}
 
 		if (result) {
-			int i = 0;
+			if (cloth1->verts[collpair->ap1].impulse_count > 0) {
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap1], i1, M_PI / 20);
+			}
 
-			for (i = 0; i < 3; i++) {
-				if (cloth1->verts[collpair->ap1].impulse_count > 0 && ABS(cloth1->verts[collpair->ap1].impulse[i]) < ABS(i1[i]))
-					cloth1->verts[collpair->ap1].impulse[i] = i1[i];
+			if (cloth1->verts[collpair->ap2].impulse_count > 0) {
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap2], i2, M_PI / 20);
+			}
 
-				if (cloth1->verts[collpair->ap2].impulse_count > 0 && ABS(cloth1->verts[collpair->ap2].impulse[i]) < ABS(i2[i]))
-					cloth1->verts[collpair->ap2].impulse[i] = i2[i];
-
-				if (cloth1->verts[collpair->ap3].impulse_count > 0 && ABS(cloth1->verts[collpair->ap3].impulse[i]) < ABS(i3[i]))
-					cloth1->verts[collpair->ap3].impulse[i] = i3[i];
+			if (cloth1->verts[collpair->ap3].impulse_count > 0) {
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap3], i3, M_PI / 20);
 			}
 		}
 	}
@@ -1170,25 +1171,31 @@ static int cloth_bvh_selfcollisions_resolve (ClothModifierData * clmd, CollPair 
 	Cloth *cloth = clmd->clothObject;
 	int i=0, j = 0, /*numfaces = 0, */ mvert_num = 0;
 	ClothVertex *verts = NULL;
+	ImpulseCluster **vert_imp_clusters;
 	int ret = 0;
 	int result = 0;
 
 	mvert_num = clmd->clothObject->mvert_num;
 	verts = cloth->verts;
 
+	vert_imp_clusters = MEM_callocN(sizeof(*vert_imp_clusters) * mvert_num, "vert_impulse_clusters");
+
 	for ( j = 0; j < 2; j++ ) { /* 5 is just a value that ensures convergence */
 		result = 0;
 
-		result += cloth_selfcollision_response_static ( clmd, collisions, collisions_index );
+		result += cloth_selfcollision_response_static (clmd, collisions, collisions_index, vert_imp_clusters);
 
 		// apply impulses in parallel
 		if (result) {
 			for (i = 0; i < mvert_num; i++) {
 				// calculate "velocities" (just xnew = xold + v; no dt in v)
 				if (verts[i].impulse_count) {
-					// VECADDMUL ( verts[i].tv, verts[i].impulse, 1.0f / verts[i].impulse_count );
-					VECADD ( verts[i].tv, verts[i].tv, verts[i].impulse);
-					VECADD ( verts[i].dcvel, verts[i].dcvel, verts[i].impulse);
+					compute_dominant_impulses(&vert_imp_clusters[i], verts[i].impulse);
+					free_impulse_clusters(vert_imp_clusters[i]);
+					vert_imp_clusters[i] = NULL;
+
+					madd_v3_v3v3fl(verts[i].tv, verts[i].tv, verts[i].impulse, 0.5f);
+					madd_v3_v3v3fl(verts[i].dcvel, verts[i].dcvel, verts[i].impulse, 0.5f);
 					zero_v3(verts[i].impulse);
 					verts[i].impulse_count = 0;
 
@@ -1201,6 +1208,9 @@ static int cloth_bvh_selfcollisions_resolve (ClothModifierData * clmd, CollPair 
 			break;
 		}
 	}
+
+	MEM_freeN(vert_imp_clusters);
+
 	return ret;
 }
 
@@ -1302,7 +1312,8 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 		if ( clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_SELF ) {
 			BVHTreeOverlap *overlap = NULL;
 			unsigned int result = 0;
-			CollPair *collisions, *collisions_index;
+			CollPair *collisions = NULL;
+			CollPair *collisions_index;
 
 			// collisions = 1;
 			verts = cloth->verts; // needed for openMP
