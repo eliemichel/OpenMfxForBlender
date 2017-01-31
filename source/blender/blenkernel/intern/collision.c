@@ -457,7 +457,7 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 			float magtangent = 0, repulse = 0, d = 0;
 			double impulse = 0.0;
 			float vrel_t_pre[3];
-			float temp[3], spf;
+			float temp[3], time_multiplier;
 
 			/* calculate tangential velocity */
 			copy_v3_v3 ( temp, collider_norm );
@@ -529,7 +529,7 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 			 * v += impulse; x_new = x + v;
 			 * We don't use dt!!
 			 * DG TODO: Fix usage of dt here! */
-			spf = (float)clmd->sim_parms->stepsPerFrame / clmd->sim_parms->timescale;
+			time_multiplier = 1.0f / (clmd->sim_parms->dt * clmd->sim_parms->timescale);
 
 			if (backside) {
 				d = clmd->coll_parms->epsilon*8.0f/9.0f + epsilon2*8.0f/9.0f;
@@ -538,8 +538,8 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 				d = clmd->coll_parms->epsilon*8.0f/9.0f + epsilon2*8.0f/9.0f - collpair->distance;
 			}
 
-			if ( ( magrelVel < 0.1f*d*spf ) && ( d > ALMOST_ZERO ) ) {
-				repulse = MIN2 ( d*1.0f/spf, 0.1f*d*spf - magrelVel );
+			if ( ( magrelVel < 0.1f*d*time_multiplier ) && ( d > ALMOST_ZERO ) ) {
+				repulse = MIN2 ( d*1.0f/time_multiplier, 0.1f*d*time_multiplier - magrelVel );
 
 				/* stay on the safe side and clamp repulse */
 				if ( impulse > ALMOST_ZERO )
@@ -564,7 +564,7 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 			 * DG: this formula ineeds to be changed for this code since we apply impulses/repulses like this:
 			 * v += impulse; x_new = x + v;
 			 * We don't use dt!! */
-			float spf = (float)clmd->sim_parms->stepsPerFrame / clmd->sim_parms->timescale;
+			float time_multiplier = 1.0f / (clmd->sim_parms->dt * clmd->sim_parms->timescale);
 			float d;
 
 			if (backside) {
@@ -576,7 +576,7 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 
 			if ( d > ALMOST_ZERO) {
 				/* stay on the safe side and clamp repulse */
-				float repulse = d*1.0f/spf;
+				float repulse = d*1.0f/time_multiplier;
 
 				/*float impulse = repulse / ( 3.0f * ( 1.0f + w1*w1 + w2*w2 + w3*w3 )); original 2.0 / 0.25 */
 
@@ -676,7 +676,7 @@ static int cloth_selfcollision_response_static(ClothModifierData *clmd, CollPair
 			float magtangent = 0, repulse = 0, d = 0;
 			double impulse = 0.0;
 			float vrel_t_pre[3];
-			float temp[3], spf;
+			float temp[3], time_multiplier;
 
 			/* calculate tangential velocity */
 			copy_v3_v3 ( temp, collpair->normal );
@@ -724,12 +724,12 @@ static int cloth_selfcollision_response_static(ClothModifierData *clmd, CollPair
 			 * v += impulse; x_new = x + v;
 			 * We don't use dt!!
 			 * DG TODO: Fix usage of dt here! */
-			spf = (float)clmd->sim_parms->stepsPerFrame / clmd->sim_parms->timescale;
+			time_multiplier = 1.0f / (clmd->sim_parms->dt * clmd->sim_parms->timescale);
 
 			d = clmd->coll_parms->selfepsilon * 8.0f / 9.0f * 2.0f - collpair->distance;
 
-			if ( ( magrelVel < 0.1f*d*spf ) && ( d > ALMOST_ZERO ) ) {
-				repulse = MIN2 ( d*1.0f/spf, 0.1f*d*spf - magrelVel );
+			if ( ( magrelVel < 0.1f*d*time_multiplier ) && ( d > ALMOST_ZERO ) ) {
+				repulse = MIN2 ( d*1.0f/time_multiplier, 0.1f*d*time_multiplier - magrelVel );
 
 				if ( impulse > ALMOST_ZERO )
 					repulse = min_ff( repulse, 5.0*impulse );
@@ -753,14 +753,14 @@ static int cloth_selfcollision_response_static(ClothModifierData *clmd, CollPair
 			 * DG: this formula ineeds to be changed for this code since we apply impulses/repulses like this:
 			 * v += impulse; x_new = x + v;
 			 * We don't use dt!! */
-			float spf = (float)clmd->sim_parms->stepsPerFrame / clmd->sim_parms->timescale;
+			float time_multiplier = 1.0f / (clmd->sim_parms->dt * clmd->sim_parms->timescale);
 			float d;
 
 			d = clmd->coll_parms->selfepsilon * 8.0f / 9.0f * 2.0f - (float)collpair->distance;
 
 			if ( d > ALMOST_ZERO) {
 				/* stay on the safe side and clamp repulse */
-				float repulse = d*1.0f/spf;
+				float repulse = d*1.0f/time_multiplier;
 
 				/*float impulse = repulse / ( 3.0f * ( 1.0f + w1*w1 + w2*w2 + w3*w3 )); original 2.0 / 0.25 */
 

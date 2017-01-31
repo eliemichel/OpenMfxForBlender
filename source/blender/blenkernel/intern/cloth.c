@@ -287,6 +287,7 @@ static int do_init_cloth(Object *ob, ClothModifierData *clmd, DerivedMesh *resul
 		BKE_cloth_solver_set_positions(clmd);
 
 		clmd->clothObject->last_frame= MINFRAME-1;
+		clmd->sim_parms->dt = 1.0f / clmd->sim_parms->stepsPerFrame;
 	}
 
 	return 1;
@@ -374,9 +375,6 @@ void clothModifier_do(ClothModifierData *clmd, Scene *scene, Object *ob, Derived
 		cache->last_exact= 0;
 		cache->flag &= ~PTCACHE_REDO_NEEDED;
 	}
-	
-	// unused in the moment, calculated separately in implicit.c
-	clmd->sim_parms->dt = clmd->sim_parms->timescale / clmd->sim_parms->stepsPerFrame;
 
 	/* simulation is only active during a specific period */
 	if (framenr < startframe) {

@@ -607,13 +607,13 @@ static void cloth_calc_force(ClothModifierData *clmd, float UNUSED(frame), ListB
 	struct_plast = clmd->sim_parms->struct_plasticity;
 
 	if (!(struct_plast < FLT_EPSILON || 1.0f - struct_plast < FLT_EPSILON)) {
-		struct_plast = 1.0f - powf(1.0f - struct_plast, 1.0f / clmd->sim_parms->stepsPerFrame);
+		struct_plast = 1.0f - powf(1.0f - struct_plast, clmd->sim_parms->dt);
 	}
 
 	bend_plast = clmd->sim_parms->bend_plasticity;
 
 	if (!(bend_plast < FLT_EPSILON || 1.0f - bend_plast < FLT_EPSILON)) {
-		bend_plast = 1.0f - powf(1.0f - bend_plast, 1.0f / clmd->sim_parms->stepsPerFrame);
+		bend_plast = 1.0f - powf(1.0f - bend_plast, clmd->sim_parms->dt);
 	}
 
 	// calculate spring forces
@@ -933,7 +933,7 @@ static void cloth_solve_collisions(Object *ob, ClothModifierData *clmd, float st
 	Implicit_Data *id = cloth->implicit;
 	ClothVertex *verts = cloth->verts;
 	int mvert_num = cloth->mvert_num;
-	const float spf = (float)clmd->sim_parms->stepsPerFrame / clmd->sim_parms->timescale;
+	const float time_multiplier = 1.0f / (clmd->sim_parms->dt * clmd->sim_parms->timescale);
 	int i;
 	
 	if (!(clmd->coll_parms->flags & (CLOTH_COLLSETTINGS_FLAG_ENABLED | CLOTH_COLLSETTINGS_FLAG_SELF)))
@@ -951,7 +951,6 @@ static void cloth_solve_collisions(Object *ob, ClothModifierData *clmd, float st
 		BPH_mass_spring_get_new_position(id, i, verts[i].tx);
 		
 		sub_v3_v3v3(verts[i].tv, verts[i].tx, verts[i].txold);
-		copy_v3_v3(verts[i].v, verts[i].tv);
 		zero_v3(verts[i].dcvel);
 	}
 	
@@ -969,7 +968,7 @@ static void cloth_solve_collisions(Object *ob, ClothModifierData *clmd, float st
 
 			/* Update velocity, based on old velocity, only applying delta caused by collision responce */
 			BPH_mass_spring_get_velocity(id, i, verts[i].tv);
-			madd_v3_v3fl(verts[i].tv, verts[i].dcvel, spf);
+			madd_v3_v3fl(verts[i].tv, verts[i].dcvel, time_multiplier);
 			BPH_mass_spring_set_velocity(id, i, verts[i].tv);
 		}
 	}
@@ -985,7 +984,7 @@ static void cloth_clear_result(ClothModifierData *clmd)
 	sres->avg_iterations = 0.0f;
 }
 
-static void cloth_record_result(ClothModifierData *clmd, ImplicitSolverResult *result, int steps)
+static void cloth_record_result(ClothModifierData *clmd, ImplicitSolverResult *result, float dt)
 {
 	ClothSolverResult *sres = clmd->solver_result;
 	
@@ -994,22 +993,22 @@ static void cloth_record_result(ClothModifierData *clmd, ImplicitSolverResult *r
 		if (result->status == BPH_SOLVER_SUCCESS) {
 			sres->min_error = min_ff(sres->min_error, result->error);
 			sres->max_error = max_ff(sres->max_error, result->error);
-			sres->avg_error += result->error / (float)steps;
+			sres->avg_error += result->error * dt;
 		}
 		
 		sres->min_iterations = min_ii(sres->min_iterations, result->iterations);
 		sres->max_iterations = max_ii(sres->max_iterations, result->iterations);
-		sres->avg_iterations += (float)result->iterations / (float)steps;
+		sres->avg_iterations += (float)result->iterations * dt;
 	}
 	else {
 		/* error only makes sense for successful iterations */
 		if (result->status == BPH_SOLVER_SUCCESS) {
 			sres->min_error = sres->max_error = result->error;
-			sres->avg_error += result->error / (float)steps;
+			sres->avg_error += result->error * dt;
 		}
 		
 		sres->min_iterations = sres->max_iterations  = result->iterations;
-		sres->avg_iterations += (float)result->iterations / (float)steps;
+		sres->avg_iterations += (float)result->iterations * dt;
 	}
 	
 	sres->status |= result->status;
@@ -1028,7 +1027,7 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 	Cloth *cloth = clmd->clothObject;
 	ClothVertex *verts = cloth->verts/*, *cv*/;
 	unsigned int mvert_num = cloth->mvert_num;
-	float dt = clmd->sim_parms->timescale / clmd->sim_parms->stepsPerFrame;
+	float dt = clmd->sim_parms->dt * clmd->sim_parms->timescale;
 	Implicit_Data *id = cloth->implicit;
 	ColliderContacts *contacts = NULL;
 	int totcolliders = 0;
@@ -1052,16 +1051,9 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 			}
 		}
 	}
-	
+
 	while (step < tf) {
 		ImplicitSolverResult result;
-		
-		/* copy velocities for collision */
-		for (i = 0; i < mvert_num; i++) {
-			BPH_mass_spring_get_motion_state(id, i, NULL, verts[i].tv);
-			copy_v3_v3(verts[i].v, verts[i].tv);
-
-		}
 		
 		if (is_hair) {
 			/* determine contact points */
@@ -1101,7 +1093,7 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 		
 		// calculate new velocity and position
 		BPH_mass_spring_solve_velocities(id, dt, &result);
-		cloth_record_result(clmd, &result, clmd->sim_parms->stepsPerFrame);
+		cloth_record_result(clmd, &result, dt);
 		
 		if (is_hair) {
 			cloth_continuum_step(clmd, dt);
