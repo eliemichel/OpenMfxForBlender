@@ -2333,7 +2333,7 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
 
 
 
-	if ((obact && new_obact) && strcmp(obact->id.name, new_obact->id.name) != 0 || ((in_pose) && (strcmp(in_pose->name, fin_pose->name) != 0))) {
+	if ((obact && new_obact) && (strcmp(obact->id.name, new_obact->id.name) != 0 || ((in_pose && fin_pose) && (strcmp(in_pose->name, fin_pose->name) != 0)))) {
 		int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
 		bAnimContext ac;
 		ListBase anim_data = { NULL, NULL };
