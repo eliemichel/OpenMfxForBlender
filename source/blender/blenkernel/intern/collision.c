@@ -59,6 +59,12 @@
 #include "eltopo-capi.h"
 #endif
 
+typedef struct ImpulseCluster {
+	struct ImpulseCluster *next;
+	float dir[3];
+	float totmag;
+	float dominant_mag;
+} ImpulseCluster;
 
 /***********************************
 Collision modifier code start
@@ -171,6 +177,149 @@ void bvhtree_update_from_mvert(
 Collision modifier code end
 ***********************************/
 
+static void free_impulse_clusters(ImpulseCluster *clusters)
+{
+	while (clusters) {
+		ImpulseCluster *next = clusters->next;
+
+		MEM_freeN(clusters);
+
+		clusters = next;
+	}
+}
+
+/* This allows inserting impulses one by one into the cluster array, and immediately computing the clustering,
+ * but might cause incorrect clustering because of not knowing all impulses beforehand.
+ * TODO: Evaluate if this is good enough, as it is far cheaper than the actual hclust below. */
+#if 0
+static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const float impulse[3], const float clustang)
+{
+	ImpulseCluster **imp;
+	ImpulseCluster **close;
+	float dir[3];
+	float mag;
+	float minang = FLT_MAX;
+	float ang;
+
+	mag = normalize_v3_v3(dir, impulse);
+
+	if (mag < FLT_EPSILON) {
+		return;
+	}
+
+	for (imp = clusters; *imp; imp = &(*imp)->next) {
+		ang = angle_normalized_v3v3((*imp)->dir, dir);
+
+		if (ang < minang) {
+			minang = ang;
+			close = imp;
+		}
+	}
+
+	if (minang < clustang) {
+		/* Set total magnitude */
+		(*close)->totmag += mag;
+
+		/* Set dominant magnitude */
+		(*close)->dominant_mag = max_ff((*close)->dominant_mag, mag);
+
+		/* Interpolate direction */
+		interp_v3_v3v3_slerp((*close)->dir, (*close)->dir, dir, mag / (*close)->totmag);
+	}
+	else {
+		ImpulseCluster *tmp = MEM_mallocN(sizeof(*tmp), "cloth_collision_impulse_cluster");
+
+		tmp->next = *clusters;
+		copy_v3_v3(tmp->dir, dir);
+		tmp->totmag = mag;
+		tmp->dominant_mag = mag;
+
+		*clusters = tmp;
+	}
+}
+#endif
+
+static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const float impulse[3])
+{
+	ImpulseCluster *tmp;
+	float dir[3];
+	float mag;
+
+	mag = normalize_v3_v3(dir, impulse);
+
+	if (mag < FLT_EPSILON) {
+		return;
+	}
+
+	tmp = MEM_mallocN(sizeof(*tmp), "cloth_collision_impulse_cluster");
+
+	copy_v3_v3(tmp->dir, dir);
+	tmp->totmag = mag;
+	tmp->dominant_mag = mag;
+
+	tmp->next = *clusters;
+	*clusters = tmp;
+}
+
+BLI_INLINE bool join_closest_impulse_clusters(ImpulseCluster **clusters, const float clustang)
+{
+	ImpulseCluster **imp1, **imp2;
+	ImpulseCluster **close1, **close2;
+	float minang = FLT_MAX;
+	float ang;
+
+	for (imp1 = clusters; *imp1; imp1 = &(*imp1)->next) {
+		for (imp2 = &(*imp1)->next; *imp2; imp2 = &(*imp2)->next) {
+			ang = angle_normalized_v3v3((*imp1)->dir, (*imp2)->dir);
+
+			if (ang < minang) {
+				minang = ang;
+				close1 = imp1;
+				close2 = imp2;
+			}
+		}
+	}
+
+	if (minang < clustang) {
+		ImpulseCluster *tmp;
+
+		/* Set total magnitude */
+		(*close1)->totmag += (*close2)->totmag;
+
+		/* Set dominant magnitude */
+		(*close1)->dominant_mag = max_ff((*close1)->dominant_mag, (*close2)->dominant_mag);
+
+		/* Interpolate direction */
+		interp_v3_v3v3_slerp((*close1)->dir, (*close1)->dir, (*close2)->dir, (*close2)->totmag / (*close1)->totmag);
+
+		/* Remove merged cluster */
+		tmp = (*close2)->next;
+		MEM_freeN(*close2);
+		*close2 = tmp;
+
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
+static void compute_dominant_impulses(ImpulseCluster **clusters, float impulse[3], const float clustang)
+{
+	ImpulseCluster *tmp;
+	bool merge = true;
+
+	while (merge) {
+		merge = join_closest_impulse_clusters(clusters, clustang);
+	}
+
+	zero_v3(impulse);
+
+	for (tmp = *clusters; tmp; tmp = tmp->next) {
+		madd_v3_v3fl(impulse, tmp->dir, tmp->dominant_mag);
+	}
+}
+
 // w3 is not perfect
 static void collision_compute_barycentric ( float pv[3], float p1[3], float p2[3], float p3[3], float *w1, float *w2, float *w3 )
 {
@@ -226,7 +375,7 @@ DO_INLINE void collision_interpolateOnTriangle ( float to[3], float v1[3], float
 }
 
 static int cloth_collision_response_static (ClothModifierData *clmd, CollisionModifierData *collmd, Object *collob,
-                                            CollPair *collpair, CollPair *collision_end)
+                                            CollPair *collpair, CollPair *collision_end, ImpulseCluster **vert_imp_clusters)
 {
 	int result = 0;
 	Cloth *cloth1;
@@ -441,21 +590,16 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 		}
 
 		if (result) {
-			int i = 0;
+			if (cloth1->verts[collpair->ap1].impulse_count > 0) {
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap1], i1);
+			}
 
-			/* This is a terrible approach to eliminating duplicate collision impulses, and fails as soon as impulses are not
-			 * axis aligned, or have opposite directions. Instead of this, the impulses should be clustered by direction,
-			 * and the dominant impulse magnitude from each cluster should contribute to the total impulse, in the direction
-			 * if the weighted average of the cluster's directions by their magnitudes. */
-			for (i = 0; i < 3; i++) {
-				if (cloth1->verts[collpair->ap1].impulse_count > 0 && ABS(cloth1->verts[collpair->ap1].impulse[i]) < ABS(i1[i]))
-					cloth1->verts[collpair->ap1].impulse[i] = i1[i];
+			if (cloth1->verts[collpair->ap2].impulse_count > 0) {
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap2], i2);
+			}
 
-				if (cloth1->verts[collpair->ap2].impulse_count > 0 && ABS(cloth1->verts[collpair->ap2].impulse[i]) < ABS(i2[i]))
-					cloth1->verts[collpair->ap2].impulse[i] = i2[i];
-
-				if (cloth1->verts[collpair->ap3].impulse_count > 0 && ABS(cloth1->verts[collpair->ap3].impulse[i]) < ABS(i3[i]))
-					cloth1->verts[collpair->ap3].impulse[i] = i3[i];
+			if (cloth1->verts[collpair->ap3].impulse_count > 0) {
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap3], i3);
 			}
 		}
 	}
@@ -963,28 +1107,34 @@ static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, CollisionM
 	Cloth *cloth = clmd->clothObject;
 	int i=0, j = 0, /*numfaces = 0, */ mvert_num = 0;
 	ClothVertex *verts = NULL;
+	ImpulseCluster **vert_imp_clusters;
 	int ret = 0;
 	int result = 0;
 
 	mvert_num = clmd->clothObject->mvert_num;
 	verts = cloth->verts;
-	
+
+	vert_imp_clusters = MEM_callocN(sizeof(*vert_imp_clusters) * mvert_num, "vert_impulse_clusters");
+
 	// process all collisions (calculate impulses, TODO: also repulses if distance too short)
 	result = 1;
 	for ( j = 0; j < 2; j++ ) { /* 5 is just a value that ensures convergence */
 		result = 0;
 
 		if ( collmd->bvhtree ) {
-			result += cloth_collision_response_static(clmd, collmd, collob, collisions, collisions_index);
+			result += cloth_collision_response_static(clmd, collmd, collob, collisions, collisions_index, vert_imp_clusters);
 
 			// apply impulses in parallel
 			if (result) {
 				for (i = 0; i < mvert_num; i++) {
 					// calculate "velocities" (just xnew = xold + v; no dt in v)
 					if (verts[i].impulse_count) {
-						// VECADDMUL ( verts[i].tv, verts[i].impulse, 1.0f / verts[i].impulse_count );
-						VECADD ( verts[i].tv, verts[i].tv, verts[i].impulse);
-						VECADD ( verts[i].dcvel, verts[i].dcvel, verts[i].impulse);
+						compute_dominant_impulses(&vert_imp_clusters[i], verts[i].impulse, M_PI / 20);
+						free_impulse_clusters(vert_imp_clusters[i]);
+						vert_imp_clusters[i] = NULL;
+
+						madd_v3_v3v3fl(verts[i].tv, verts[i].tv, verts[i].impulse, 0.5f);
+						madd_v3_v3v3fl(verts[i].dcvel, verts[i].dcvel, verts[i].impulse, 0.5f);
 						zero_v3(verts[i].impulse);
 						verts[i].impulse_count = 0;
 
@@ -998,6 +1148,9 @@ static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, CollisionM
 			break;
 		}
 	}
+
+	MEM_freeN(vert_imp_clusters);
+
 	return ret;
 }
 
