@@ -1044,7 +1044,7 @@ int outliner_item_do_activate(bContext *C, int x, int y, bool extend, bool recur
 	bPoseChannel *fin_pose = CTX_data_active_pose_bone(C);
 	Object *new_obact = CTX_data_active_object(C);
 
-	if ((obact && new_obact) && strcmp(obact->id.name, new_obact->id.name) != 0 || ((in_pose && fin_pose) && (strcmp(in_pose->name, fin_pose->name) != 0))) {
+	if ((obact && new_obact) && (strcmp(obact->id.name, new_obact->id.name) != 0 || ((in_pose && fin_pose) && (strcmp(in_pose->name, fin_pose->name) != 0)))) {
 		int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
 		bAnimContext ac;
 		ListBase anim_data = { NULL, NULL };
@@ -1071,7 +1071,7 @@ int outliner_item_do_activate(bContext *C, int x, int y, bool extend, bool recur
 				}
 			}
 		}
-		CTX_wm_switch_area(C, "View3D");
+		CTX_wm_switch_area(C, "Outliner");
 	}
 
 	return OPERATOR_FINISHED;
