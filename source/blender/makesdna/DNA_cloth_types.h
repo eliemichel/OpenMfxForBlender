@@ -111,6 +111,12 @@ typedef struct ClothSimSettings {
 
 	char pad0[6];
 	struct EffectorWeights *effector_weights;
+
+	/* Adaptive subframe stuff */
+	int max_subframes;
+	float max_vel;
+	float adjustment_factor;
+	char pad1[4];
 } ClothSimSettings;
 
 

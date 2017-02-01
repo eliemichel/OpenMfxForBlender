@@ -197,6 +197,28 @@ static void rna_ClothSettings_max_shrink_set(struct PointerRNA *ptr, float value
 	settings->max_shrink = value;
 }
 
+static void rna_ClothSettings_subframes_set(struct PointerRNA *ptr, float value)
+{
+	ClothSimSettings *settings = (ClothSimSettings *)ptr->data;
+
+	settings->stepsPerFrame = value;
+
+	/* check for max clipping */
+	if (value > settings->max_subframes)
+		settings->max_subframes = value;
+}
+
+static void rna_ClothSettings_max_subframes_set(struct PointerRNA *ptr, int value)
+{
+	ClothSimSettings *settings = (ClothSimSettings *)ptr->data;
+
+	/* check for clipping */
+	if (value < settings->stepsPerFrame)
+		value = settings->stepsPerFrame;
+
+	settings->max_subframes = value;
+}
+
 static void rna_ClothSettings_mass_vgroup_get(PointerRNA *ptr, char *value)
 {
 	ClothSimSettings *sim = (ClothSimSettings *)ptr->data;
@@ -545,6 +567,7 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_int_sdna(prop, NULL, "stepsPerFrame");
 	RNA_def_property_range(prop, 1, INT_MAX);
 	RNA_def_property_ui_range(prop, 1, 80, 1, -1);
+	RNA_def_property_int_funcs(prop, NULL, "rna_ClothSettings_subframes_set", NULL);
 	RNA_def_property_ui_text(prop, "Quality",
 	                         "Quality of the simulation in steps per frame (higher is better quality but slower)");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
@@ -581,6 +604,33 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_range(prop, 0.0001f, 10000.0f);
 	RNA_def_property_float_default(prop, 0.1f);
 	RNA_def_property_ui_text(prop, "Voxel Grid Cell Size", "Size of the voxel grid cells for interaction effects");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	/* Adaptive subframes */
+	prop = RNA_def_property(srna, "use_adaptive_subframes", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES);
+	RNA_def_property_ui_text(prop, "Use Adaptive Subframes", "Adapt subframes to the cloth velocity");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "max_sub_steps", PROP_INT, PROP_NONE);
+	RNA_def_property_int_sdna(prop, NULL, "max_subframes");
+	RNA_def_property_range(prop, 1, INT_MAX);
+	RNA_def_property_ui_range(prop, 1, 80, 1, -1);
+	RNA_def_property_int_funcs(prop, NULL, "rna_ClothSettings_max_subframes_set", NULL);
+	RNA_def_property_ui_text(prop, "Max Subframes", "Maximum number of subframes to use with adaptive subframes");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "max_velocity", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "max_vel");
+	RNA_def_property_range(prop, 0.001f, 1.0f);
+	RNA_def_property_ui_text(prop, "Maximum Velocity", "Maximum velocity before increasing subframes");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "adjustment_factor", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "adjustment_factor");
+	RNA_def_property_range(prop, 0.1f, 1.0f);
+	RNA_def_property_ui_text(prop, "Adjustment Factor", "Factor of the velocity to adjust subframes by (lower means more subframes)");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	/* springs */

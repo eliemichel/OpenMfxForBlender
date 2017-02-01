@@ -313,6 +313,29 @@ class PHYSICS_PT_cloth_scaling(PhysicButtonsPanel, Panel):
         sub.prop(cloth, "shrinking_max", text="Max")
 
 
+class PHYSICS_PT_cloth_adaptive_subframes(PhysicButtonsPanel, Panel):
+    bl_label = "Cloth Adaptive Subframes"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'BLENDER_RENDER'}
+
+    def draw(self, context):
+        layout = self.layout
+
+        md = context.cloth
+        cloth = context.cloth.settings
+
+        layout.active = cloth_panel_enabled(md)
+
+        layout.prop(cloth, "use_adaptive_subframes")
+
+        col = layout.column()
+        col.active = cloth.use_adaptive_subframes
+
+        col.prop(cloth, "max_sub_steps")
+        col.prop(cloth, "max_velocity")
+        col.prop(cloth, "adjustment_factor")
+
+
 class PHYSICS_PT_cloth_field_weights(PhysicButtonsPanel, Panel):
     bl_label = "Cloth Field Weights"
     bl_options = {'DEFAULT_CLOSED'}

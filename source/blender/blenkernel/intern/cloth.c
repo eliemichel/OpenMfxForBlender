@@ -118,6 +118,11 @@ void cloth_init(ClothModifierData *clmd )
 	clmd->sim_parms->struct_yield_fact = 1.0f;
 	clmd->sim_parms->bend_plasticity = 0.0f;
 	clmd->sim_parms->bend_yield_fact = 0.0f;
+
+	/* Adaptive subframes */
+	clmd->sim_parms->max_subframes = 50;
+	clmd->sim_parms->max_vel = 0.04f;
+	clmd->sim_parms->adjustment_factor = 0.8f;
 	
 	clmd->coll_parms->self_friction = 5.0;
 	clmd->coll_parms->friction = 5.0;

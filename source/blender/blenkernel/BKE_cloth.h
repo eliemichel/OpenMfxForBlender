@@ -111,6 +111,7 @@ typedef struct ClothVertex {
 	float	tx[3];		/* temporary position */
 	float 	txold[3];	/* temporary old position */
 	float 	tv[3];		/* temporary "velocity", mostly used as tv = tx-txold */
+	float	tvold[3];
 	float 	mass;		/* mass / weight of the vertex		*/
 	float 	goal;		/* goal, from SB			*/
 	float	impulse[3];	/* used in collision.c */
@@ -167,6 +168,7 @@ typedef struct ClothSpring {
 /* SIMULATION FLAGS: goal flags,.. */
 /* These are the bits used in SimSettings.flags. */
 typedef enum {
+	CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES = (1 << 0), /* use velocity based adaptive subframes*/
 	CLOTH_SIMSETTINGS_FLAG_COLLOBJ = ( 1 << 2 ),// object is only collision object, no cloth simulation is done
 	CLOTH_SIMSETTINGS_FLAG_TEARING = ( 1 << 4 ),// true if tearing is enabled
 	CLOTH_SIMSETTINGS_FLAG_CCACHE_EDIT = (1 << 12),	/* edit cache in editmode */
