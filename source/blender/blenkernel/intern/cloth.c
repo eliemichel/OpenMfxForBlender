@@ -123,6 +123,8 @@ void cloth_init(ClothModifierData *clmd )
 	clmd->sim_parms->max_subframes = 50;
 	clmd->sim_parms->max_vel = 0.04f;
 	clmd->sim_parms->adjustment_factor = 0.8f;
+	clmd->sim_parms->max_imp = 0.04f;
+	clmd->sim_parms->imp_adj_factor = 0.8f;
 	
 	clmd->coll_parms->self_friction = 5.0;
 	clmd->coll_parms->friction = 5.0;

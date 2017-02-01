@@ -928,19 +928,21 @@ static void cloth_calc_volume_force(ClothModifierData *clmd)
 }
 #endif
 
-static void cloth_solve_collisions(Object *ob, ClothModifierData *clmd, float step, float dt)
+static float cloth_solve_collisions(Object *ob, ClothModifierData *clmd, float step, float dt)
 {
 	Cloth *cloth = clmd->clothObject;
 	Implicit_Data *id = cloth->implicit;
 	ClothVertex *verts = cloth->verts;
+	float impulse;
+	float max_impulse = 0.0f;
 	int mvert_num = cloth->mvert_num;
 	const float time_multiplier = 1.0f / (clmd->sim_parms->dt * clmd->sim_parms->timescale);
 	int i;
 	
 	if (!(clmd->coll_parms->flags & (CLOTH_COLLSETTINGS_FLAG_ENABLED | CLOTH_COLLSETTINGS_FLAG_SELF)))
-		return;
+		return 0.0f;
 	if (!clmd->clothObject->bvhtree)
-		return;
+		return 0.0f;
 
 	/* do inertial solve */
 	BPH_mass_spring_solve_velocities_inertial(id);
@@ -963,6 +965,11 @@ static void cloth_solve_collisions(Object *ob, ClothModifierData *clmd, float st
 			if ((clmd->sim_parms->vgroup_mass>0) && (verts [i].flags & CLOTH_VERT_FLAG_PINNED))
 				continue;
 
+			impulse = len_v3(verts[i].dcvel);
+			if (impulse > max_impulse) {
+				max_impulse = impulse;
+			}
+
 			/* Update position, based on old position, only applying delta caused by collision responce */
 			add_v3_v3v3(verts[i].tx, verts[i].txold, verts[i].dcvel);
 			BPH_mass_spring_set_position(id, i, verts[i].tx);
@@ -973,6 +980,8 @@ static void cloth_solve_collisions(Object *ob, ClothModifierData *clmd, float st
 			BPH_mass_spring_set_velocity(id, i, verts[i].tv);
 		}
 	}
+
+	return max_impulse;
 }
 
 static void cloth_clear_result(ClothModifierData *clmd)
@@ -1033,7 +1042,9 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 	int totcolliders = 0;
 	float max_vel;
 	float vel;
+	float max_impulse = 0.0f;
 	float tmp_vec[3];
+	float adapt_fact;
 	
 	BKE_sim_debug_data_clear_category("collision");
 	
@@ -1059,6 +1070,7 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 		ImplicitSolverResult result;
 		float dt = clmd->sim_parms->dt * clmd->sim_parms->timescale;
 		max_vel = 0.0f;
+		adapt_fact = FLT_MAX;
 
 		if (step + dt > tf) {
 			dt = tf - step;
@@ -1094,7 +1106,7 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 		
 		// calculate collision impulses
 		if (!is_hair) {
-			cloth_solve_collisions(ob, clmd, step, dt);
+			max_impulse = cloth_solve_collisions(ob, clmd, step, dt);
 		}
 
 		// calculate forces
@@ -1117,18 +1129,46 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 		}
 
 		/* Adaptive step calculation */
-		if (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES) {
-			clmd->sim_parms->dt *= clmd->sim_parms->max_vel / max_vel * clmd->sim_parms->adjustment_factor;
+		if (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL) {
+			if (max_vel < FLT_EPSILON) {
+				adapt_fact = FLT_MAX;
+			}
+			else {
+				adapt_fact = clmd->sim_parms->max_vel / max_vel * clmd->sim_parms->adjustment_factor;
+			}
+		}
+
+		if (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP) {
+			float tmp_fact;
+
+			if (max_impulse < FLT_EPSILON) {
+				tmp_fact = FLT_MAX;
+			}
+			else {
+				tmp_fact = clmd->sim_parms->max_imp / max_impulse * clmd->sim_parms->imp_adj_factor;
+			}
+
+			if (tmp_fact < adapt_fact) {
+				adapt_fact = tmp_fact;
+			}
+		}
+
+		if (clmd->sim_parms->flags & (CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL | CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP)) {
+			clmd->sim_parms->dt *= adapt_fact;
 			clmd->sim_parms->dt = min_ff(1.0f / clmd->sim_parms->stepsPerFrame, clmd->sim_parms->dt);
 
 			if ((clmd->sim_parms->max_subframes > 0) && ((1.0f / clmd->sim_parms->max_subframes) > clmd->sim_parms->dt)) {
 				clmd->sim_parms->dt = 1.0f / clmd->sim_parms->max_subframes;
 			}
 			else {
-				if (max_vel > clmd->sim_parms->max_vel) {
+				if (((max_vel > clmd->sim_parms->max_vel) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL)) ||
+				    ((max_impulse > clmd->sim_parms->max_imp) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP)))
+				{
 					for (i = 0; i < mvert_num; i++) {
 						BPH_mass_spring_set_motion_state(id, i, verts[i].txold, verts[i].tvold);
 					}
+
+					printf("Resetting\n");
 
 					continue;
 				}

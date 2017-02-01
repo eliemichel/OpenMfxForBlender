@@ -608,8 +608,14 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 
 	/* Adaptive subframes */
 	prop = RNA_def_property(srna, "use_adaptive_subframes", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "flags", CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES);
-	RNA_def_property_ui_text(prop, "Use Adaptive Subframes", "Adapt subframes to the cloth velocity");
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL);
+	RNA_def_property_ui_text(prop, "Use Adaptive Velocity Subframes", "Adapt subframes to the cloth velocity");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "use_impulse_adaptive_subframes", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP);
+	RNA_def_property_ui_text(prop, "Use Adaptive Impulse Subframes", "Adapt subframes to the cloth collision impulses");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
@@ -631,6 +637,18 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_float_sdna(prop, NULL, "adjustment_factor");
 	RNA_def_property_range(prop, 0.1f, 1.0f);
 	RNA_def_property_ui_text(prop, "Adjustment Factor", "Factor of the velocity to adjust subframes by (lower means more subframes)");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "max_impulse", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "max_imp");
+	RNA_def_property_range(prop, 0.001f, 1.0f);
+	RNA_def_property_ui_text(prop, "Maximum Collision Impulse", "Maximum collision impulse before increasing subframes");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "impulse_adjustment_factor", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "imp_adj_factor");
+	RNA_def_property_range(prop, 0.1f, 1.0f);
+	RNA_def_property_ui_text(prop, "Adjustment Factor", "Factor of the impulse to adjust subframes by (lower means more subframes)");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	/* springs */

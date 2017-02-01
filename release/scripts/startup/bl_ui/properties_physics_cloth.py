@@ -326,14 +326,24 @@ class PHYSICS_PT_cloth_adaptive_subframes(PhysicButtonsPanel, Panel):
 
         layout.active = cloth_panel_enabled(md)
 
+        layout.prop(cloth, "max_sub_steps")
+        layout.separator()
+
         layout.prop(cloth, "use_adaptive_subframes")
 
         col = layout.column()
         col.active = cloth.use_adaptive_subframes
 
-        col.prop(cloth, "max_sub_steps")
         col.prop(cloth, "max_velocity")
         col.prop(cloth, "adjustment_factor")
+
+        layout.prop(cloth, "use_impulse_adaptive_subframes")
+
+        col = layout.column()
+        col.active = cloth.use_impulse_adaptive_subframes
+
+        col.prop(cloth, "max_impulse")
+        col.prop(cloth, "impulse_adjustment_factor")
 
 
 class PHYSICS_PT_cloth_field_weights(PhysicButtonsPanel, Panel):

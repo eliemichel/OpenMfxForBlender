@@ -116,6 +116,8 @@ typedef struct ClothSimSettings {
 	int max_subframes;
 	float max_vel;
 	float adjustment_factor;
+	float max_imp;
+	float imp_adj_factor;
 	char pad1[4];
 } ClothSimSettings;
 

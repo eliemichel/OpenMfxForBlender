@@ -168,7 +168,8 @@ typedef struct ClothSpring {
 /* SIMULATION FLAGS: goal flags,.. */
 /* These are the bits used in SimSettings.flags. */
 typedef enum {
-	CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES = (1 << 0), /* use velocity based adaptive subframes*/
+	CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL = (1 << 0), /* use velocity based adaptive subframes*/
+	CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP = (1 << 1), /* use velocity based adaptive subframes*/
 	CLOTH_SIMSETTINGS_FLAG_COLLOBJ = ( 1 << 2 ),// object is only collision object, no cloth simulation is done
 	CLOTH_SIMSETTINGS_FLAG_TEARING = ( 1 << 4 ),// true if tearing is enabled
 	CLOTH_SIMSETTINGS_FLAG_CCACHE_EDIT = (1 << 12),	/* edit cache in editmode */
