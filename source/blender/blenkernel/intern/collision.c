@@ -1113,8 +1113,8 @@ static void cloth_bvh_selfcollisions_nearcheck (ClothModifierData * clmd, CollPa
 	}
 }
 
-static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, CollisionModifierData *collmd, Object *collob,
-                                            CollPair *collisions, CollPair *collisions_index)
+static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, Object **collobjs, CollPair **collisions,
+                                            CollPair **collisions_index, const unsigned int numcollobj)
 {
 	Cloth *cloth = clmd->clothObject;
 	int i=0, j = 0, /*numfaces = 0, */ mvert_num = 0;
@@ -1133,30 +1133,34 @@ static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, CollisionM
 	for ( j = 0; j < 2; j++ ) { /* 5 is just a value that ensures convergence */
 		result = 0;
 
-		if ( collmd->bvhtree ) {
-			result += cloth_collision_response_static(clmd, collmd, collob, collisions, collisions_index, vert_imp_clusters);
+		for (i = 0; i < numcollobj; i++) {
+			Object *collob= collobjs[i];
+			CollisionModifierData *collmd = (CollisionModifierData *)modifiers_findByType(collob, eModifierType_Collision);
 
-			// apply impulses in parallel
-			if (result) {
-				for (i = 0; i < mvert_num; i++) {
-					// calculate "velocities" (just xnew = xold + v; no dt in v)
-					if (verts[i].impulse_count) {
-						compute_dominant_impulses(&vert_imp_clusters[i], verts[i].impulse);
-						free_impulse_clusters(vert_imp_clusters[i]);
-						vert_imp_clusters[i] = NULL;
-
-						madd_v3_v3v3fl(verts[i].tv, verts[i].tv, verts[i].impulse, 0.5f);
-						madd_v3_v3v3fl(verts[i].dcvel, verts[i].dcvel, verts[i].impulse, 0.5f);
-						zero_v3(verts[i].impulse);
-						verts[i].impulse_count = 0;
-
-						ret++;
-					}
-				}
+			if ( collmd->bvhtree ) {
+				result += cloth_collision_response_static(clmd, collmd, collob, collisions[i], collisions_index[i], vert_imp_clusters);
 			}
 		}
 
-		if (!result) {
+		// apply impulses in parallel
+		if (result) {
+			for (i = 0; i < mvert_num; i++) {
+				// calculate "velocities" (just xnew = xold + v; no dt in v)
+				if (verts[i].impulse_count) {
+					compute_dominant_impulses(&vert_imp_clusters[i], verts[i].impulse);
+					free_impulse_clusters(vert_imp_clusters[i]);
+					vert_imp_clusters[i] = NULL;
+
+					madd_v3_v3v3fl(verts[i].tv, verts[i].tv, verts[i].impulse, 0.5f);
+					madd_v3_v3v3fl(verts[i].dcvel, verts[i].dcvel, verts[i].impulse, 0.5f);
+					zero_v3(verts[i].impulse);
+					verts[i].impulse_count = 0;
+
+					ret++;
+				}
+			}
+		}
+		else {
 			break;
 		}
 	}
@@ -1288,15 +1292,14 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 					/* check if collisions really happen (costly near check) */
 					cloth_bvh_objcollisions_nearcheck ( clmd, collmd, &collisions[i],
 						&collisions_index[i], result, overlap, dt/(float)clmd->coll_parms->loop_count);
-
-					// resolve nearby collisions
-					ret += cloth_bvh_objcollisions_resolve(clmd, collmd, collob, collisions[i],  collisions_index[i]);
-					ret2 += ret;
 				}
 
 				if ( overlap )
 					MEM_freeN ( overlap );
 			}
+
+			ret += cloth_bvh_objcollisions_resolve(clmd, collobjs, collisions,  collisions_index, numcollobj);
+			ret2 += ret;
 
 			for (i = 0; i < numcollobj; i++) {
 				if ( collisions[i] ) MEM_freeN ( collisions[i] );
