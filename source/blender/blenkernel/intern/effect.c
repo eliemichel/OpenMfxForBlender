@@ -127,7 +127,7 @@ PartDeflect *object_add_collision_fields(int type)
 			pd->f_flow = 1.0f;
 			break;
 	}
-	pd->flag = PFIELD_DO_LOCATION|PFIELD_DO_ROTATION|PFIELD_CLOTH_USE_NORMAL;
+	pd->flag = PFIELD_DO_LOCATION|PFIELD_DO_ROTATION|PFIELD_CLOTH_USE_CULLING;
 
 	return pd;
 }

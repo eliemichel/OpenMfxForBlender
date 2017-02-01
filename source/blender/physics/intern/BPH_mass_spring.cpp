@@ -1168,8 +1168,6 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 						BPH_mass_spring_set_motion_state(id, i, verts[i].txold, verts[i].tvold);
 					}
 
-					printf("Resetting\n");
-
 					continue;
 				}
 			}

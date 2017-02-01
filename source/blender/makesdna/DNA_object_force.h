@@ -375,7 +375,8 @@ typedef struct SoftBody {
 #define PFIELD_DO_ROTATION		(1<<15)
 #define PFIELD_GUIDE_PATH_WEIGHT (1<<16)	/* apply curve weights */
 #define PFIELD_SMOKE_DENSITY    (1<<17)		/* multiply smoke force by density */
-#define PFIELD_CLOTH_USE_NORMAL (1<<18)		/* enable cloth collision side detection based on normal */
+#define PFIELD_CLOTH_USE_CULLING (1<<18)		/* enable cloth collision side detection based on normal */
+#define PFIELD_CLOTH_USE_NORMAL (1<<19)		/* replace collision direction with collider normal */
 
 /* pd->falloff */
 #define PFIELD_FALL_SPHERE		0

@@ -430,10 +430,28 @@ static int cloth_collision_response_static (ClothModifierData *clmd, CollisionMo
 		if (collob->pd->flag & PFIELD_CLOTH_USE_NORMAL) {
 			normal_tri_v3(collider_norm, collmd->current_x[collpair->bp1].co, collmd->current_x[collpair->bp2].co, collmd->current_x[collpair->bp3].co);
 			backside = dot_v3v3(collider_norm, collpair->normal) < 0.0f;
+
+			if (!(collob->pd->flag & PFIELD_CLOTH_USE_CULLING) && backside) {
+				negate_v3(collider_norm);
+				backside = false;
+			}
 		}
 		else {
 			copy_v3_v3(collider_norm, collpair->normal);
-			backside = false;
+
+			if (collob->pd->flag & PFIELD_CLOTH_USE_CULLING) {
+				float tmp_norm[3];
+
+				normal_tri_v3(tmp_norm, collmd->current_x[collpair->bp1].co, collmd->current_x[collpair->bp2].co, collmd->current_x[collpair->bp3].co);
+				backside = dot_v3v3(collider_norm, tmp_norm) < 0.0f;
+
+				if (backside) {
+					negate_v3(collider_norm);
+				}
+			}
+			else {
+				backside = false;
+			}
 		}
 
 		/* Calculate relative "velocity". */
