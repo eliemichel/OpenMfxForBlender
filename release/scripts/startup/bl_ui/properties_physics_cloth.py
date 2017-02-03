@@ -233,7 +233,14 @@ class PHYSICS_PT_cloth_collision(PhysicButtonsPanel, Panel):
 
         col = layout.column()
 
-        col.prop(cloth, "use_collision", text="Object Collision:")
+        split = col.split()
+
+        sub = split.column()
+        sub.prop(cloth, "use_collision", text="Object Collision:")
+
+        sub = split.column()
+        sub.active = cloth.use_collision
+        sub.prop(cloth, "collision_response_quality")
 
         sub = col.column()
         sub.active = cloth.use_collision
@@ -251,10 +258,11 @@ class PHYSICS_PT_cloth_collision(PhysicButtonsPanel, Panel):
 
         sub = split.column()
         sub.active = cloth.use_self_collision
-        sub.prop(cloth, "self_friction", text="Friction")
+        sub.prop(cloth, "selfcollision_response_quality")
 
         sub = col.column()
         sub.active = cloth.use_self_collision
+        sub.prop(cloth, "self_friction", text="Friction")
         sub.prop(cloth, "self_distance_min", slider=True, text="Distance")
         sub.prop_search(cloth, "vertex_group_self_collisions", ob, "vertex_groups", text="Vertex Group")
 

@@ -892,7 +892,15 @@ static void rna_def_cloth_collision_settings(BlenderRNA *brna)
 	RNA_def_property_range(prop, 1, SHRT_MAX);
 	RNA_def_property_ui_range(prop, 1, 20, 1, -1);
 	RNA_def_property_ui_text(prop, "Collision Quality",
-	                         "How many collision iterations should be done. (higher is better quality but slower)");
+	                         "How many collision iterations should be done. (higher is smoother quality but slower)");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "collision_response_quality", PROP_INT, PROP_NONE);
+	RNA_def_property_int_sdna(prop, NULL, "objcol_resp_iter");
+	RNA_def_property_range(prop, 1, SHRT_MAX);
+	RNA_def_property_ui_range(prop, 1, 20, 1, -1);
+	RNA_def_property_ui_text(prop, "Response Quality",
+	                         "How many object collision response iterations should be done. (higher is smoother but slower)");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	/* self collision */
@@ -923,6 +931,14 @@ static void rna_def_cloth_collision_settings(BlenderRNA *brna)
 	                              "rna_CollSettings_selfcol_vgroup_set");
 	RNA_def_property_ui_text(prop, "Selfcollision Vertex Group",
 	                         "Vertex group to define vertices which are not used during self collisions");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "selfcollision_response_quality", PROP_INT, PROP_NONE);
+	RNA_def_property_int_sdna(prop, NULL, "selfcol_resp_iter");
+	RNA_def_property_range(prop, 1, SHRT_MAX);
+	RNA_def_property_ui_range(prop, 1, 20, 1, -1);
+	RNA_def_property_ui_text(prop, "Response Quality",
+	                         "How many self collision response iterations should be done. (higher is better quality but slower)");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 }
 

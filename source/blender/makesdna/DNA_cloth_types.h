@@ -134,7 +134,9 @@ typedef struct ClothCollSettings {
 	short pad[3];
 	struct Group *group;	/* Only use colliders from this group of objects */
 	short	vgroup_selfcol; /* vgroup to paint which vertices are used for self collisions */
-	short pad2[3];
+	short objcol_resp_iter;	/* Iterations for object collision response */
+	short selfcol_resp_iter;	/* Iterations for self collision response */
+	short pad2;
 } ClothCollSettings;
 
 

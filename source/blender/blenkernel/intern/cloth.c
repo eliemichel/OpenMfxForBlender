@@ -134,6 +134,8 @@ void cloth_init(ClothModifierData *clmd )
 	clmd->coll_parms->collision_list = NULL;
 	clmd->coll_parms->selfepsilon = 0.015;
 	clmd->coll_parms->vgroup_selfcol = 0;
+	clmd->coll_parms->objcol_resp_iter = 2;
+	clmd->coll_parms->selfcol_resp_iter = 3;
 
 	/* These defaults are copied from softbody.c's
 	 * softbody_calc_forces() function.

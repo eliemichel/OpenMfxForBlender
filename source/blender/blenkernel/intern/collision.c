@@ -1138,6 +1138,8 @@ static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, Object **c
 	int i=0, j = 0, /*numfaces = 0, */ mvert_num = 0;
 	ClothVertex *verts = NULL;
 	ImpulseCluster **vert_imp_clusters;
+	int iter = clmd->coll_parms->objcol_resp_iter;
+	float influence = 1.0f / iter;
 	int ret = 0;
 	int result = 0;
 
@@ -1148,7 +1150,7 @@ static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, Object **c
 
 	// process all collisions (calculate impulses, TODO: also repulses if distance too short)
 	result = 1;
-	for ( j = 0; j < 2; j++ ) { /* 5 is just a value that ensures convergence */
+	for ( j = 0; j < iter; j++ ) { /* 5 is just a value that ensures convergence */
 		result = 0;
 
 		for (i = 0; i < numcollobj; i++) {
@@ -1169,8 +1171,8 @@ static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, Object **c
 					free_impulse_clusters(vert_imp_clusters[i]);
 					vert_imp_clusters[i] = NULL;
 
-					madd_v3_v3v3fl(verts[i].tv, verts[i].tv, verts[i].impulse, 0.5f);
-					madd_v3_v3v3fl(verts[i].dcvel, verts[i].dcvel, verts[i].impulse, 0.5f);
+					madd_v3_v3v3fl(verts[i].tv, verts[i].tv, verts[i].impulse, influence);
+					madd_v3_v3v3fl(verts[i].dcvel, verts[i].dcvel, verts[i].impulse, influence);
 					zero_v3(verts[i].impulse);
 					verts[i].impulse_count = 0;
 
@@ -1194,6 +1196,8 @@ static int cloth_bvh_selfcollisions_resolve (ClothModifierData * clmd, CollPair 
 	int i=0, j = 0, /*numfaces = 0, */ mvert_num = 0;
 	ClothVertex *verts = NULL;
 	ImpulseCluster **vert_imp_clusters;
+	int iter = clmd->coll_parms->selfcol_resp_iter;
+	float influence = 1.0f / iter;
 	int ret = 0;
 	int result = 0;
 
@@ -1202,7 +1206,7 @@ static int cloth_bvh_selfcollisions_resolve (ClothModifierData * clmd, CollPair 
 
 	vert_imp_clusters = MEM_callocN(sizeof(*vert_imp_clusters) * mvert_num, "vert_impulse_clusters");
 
-	for ( j = 0; j < 2; j++ ) { /* 5 is just a value that ensures convergence */
+	for ( j = 0; j < iter; j++ ) { /* 5 is just a value that ensures convergence */
 		result = 0;
 
 		result += cloth_selfcollision_response_static (clmd, collisions, collisions_index, vert_imp_clusters);
@@ -1216,8 +1220,8 @@ static int cloth_bvh_selfcollisions_resolve (ClothModifierData * clmd, CollPair 
 					free_impulse_clusters(vert_imp_clusters[i]);
 					vert_imp_clusters[i] = NULL;
 
-					madd_v3_v3v3fl(verts[i].tv, verts[i].tv, verts[i].impulse, 0.5f);
-					madd_v3_v3v3fl(verts[i].dcvel, verts[i].dcvel, verts[i].impulse, 0.5f);
+					madd_v3_v3v3fl(verts[i].tv, verts[i].tv, verts[i].impulse, influence);
+					madd_v3_v3v3fl(verts[i].dcvel, verts[i].dcvel, verts[i].impulse, influence);
 					zero_v3(verts[i].impulse);
 					verts[i].impulse_count = 0;
 
