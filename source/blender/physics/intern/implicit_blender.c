@@ -1788,7 +1788,7 @@ bool BPH_mass_spring_force_spring_angular(Implicit_Data *data, int i, int j, int
 	force = stiffness * (angle - restang);
 
 	/* compute plasticity offset */
-	if (do_plast && (restangorig > 0.0f)) {
+	if (do_plast) {
 		if (angle > restang) {
 			if (angle - restang > yield_ang) {
 				restang += (angle - restang - yield_ang) * plasticity;
