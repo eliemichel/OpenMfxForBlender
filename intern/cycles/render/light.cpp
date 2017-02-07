@@ -781,7 +781,7 @@ void LightManager::device_update_points(Device *device,
 
 		tfm = light->tfm;
 		itfm = transform_inverse(tfm);
-		memcpy(&light_data[light_index*LIGHT_SIZE + 5], &tfm, sizeof(float4)*3);
+		//memcpy(&light_data[light_index*LIGHT_SIZE + 5], &tfm, sizeof(float4)*3);
 		memcpy(&light_data[light_index*LIGHT_SIZE + 8], &itfm, sizeof(float4)*3);
 
 		light_index++;
@@ -821,7 +821,7 @@ void LightManager::device_update_points(Device *device,
 
 		tfm = light->tfm;
 		itfm = transform_inverse(tfm);
-		memcpy(&light_data[light_index*LIGHT_SIZE + 5], &tfm, sizeof(float4)*3);
+		//memcpy(&light_data[light_index*LIGHT_SIZE + 5], &tfm, sizeof(float4)*3);
 		memcpy(&light_data[light_index*LIGHT_SIZE + 8], &itfm, sizeof(float4)*3);
 
 		light_index++;
