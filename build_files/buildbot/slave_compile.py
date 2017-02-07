@@ -72,10 +72,8 @@ if 'cmake' in builder:
         # Set up OSX architecture
         if builder.endswith('x86_64_10_6_cmake'):
             cmake_extra_options.append('-DCMAKE_OSX_ARCHITECTURES:STRING=x86_64')
-        cmake_extra_options.append('-DCUDA_NVCC_EXECUTABLE=/usr/local/cuda8-hack/bin/nvcc')
         cmake_extra_options.append('-DWITH_CODEC_QUICKTIME=OFF')
         cmake_extra_options.append('-DCMAKE_OSX_DEPLOYMENT_TARGET=10.6')
-        build_cubins = False
 
 
     elif builder.startswith('win'):
@@ -183,10 +181,8 @@ if 'cmake' in builder:
             print('Condifuration FAILED!')
             sys.exit(retcode)
 
-        if 'win32' in builder:
-            command = ['msbuild', 'INSTALL.vcxproj', '/Property:PlatformToolset=v120_xp', '/p:Configuration=Release']
-        elif 'win64' in builder:
-            command = ['msbuild', 'INSTALL.vcxproj', '/p:Configuration=Release']
+        if 'win32' in builder or 'win64' in builder:
+            command = ['cmake', '--build', '.', '--target', target_name, '--config', 'Release']
         else:
             command = target_chroot_prefix + ['make', '-s', '-j2', target_name]
 

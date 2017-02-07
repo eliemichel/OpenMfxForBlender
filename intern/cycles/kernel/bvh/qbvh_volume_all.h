@@ -355,7 +355,6 @@ ccl_device uint BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 					int object_flag = kernel_tex_fetch(__object_flag, object);
 
 					if (object_flag & SD_OBJECT_OBJECT_HAS_VOLUME) {
-
 #  if BVH_FEATURE(BVH_MOTION)
 						bvh_instance_motion_push(kg, object, ray, &P, &dir, &idir, &isect_t, &ob_itfm);
 #  else

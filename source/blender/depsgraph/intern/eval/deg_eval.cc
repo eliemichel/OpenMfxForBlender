@@ -53,6 +53,7 @@ extern "C" {
 #include "intern/nodes/deg_node_component.h"
 #include "intern/nodes/deg_node_operation.h"
 #include "intern/depsgraph.h"
+#include "intern/depsgraph_intern.h"
 #include "util/deg_util_foreach.h"
 
 /* Unfinished and unused, and takes quite some pre-processing time. */
@@ -152,7 +153,7 @@ static void deg_task_run_func(TaskPool *pool,
 				}
 				if ((rel->flag & DEPSREL_FLAG_CYCLIC) == 0) {
 					BLI_assert(child->num_links_pending > 0);
-					atomic_sub_uint32(&child->num_links_pending, 1);
+					atomic_sub_and_fetch_uint32(&child->num_links_pending, 1);
 				}
 				if (child->num_links_pending == 0) {
 					bool is_scheduled = atomic_fetch_and_or_uint8(
@@ -287,7 +288,7 @@ static void schedule_node(TaskPool *pool, Depsgraph *graph, unsigned int layers,
 	{
 		if (dec_parents) {
 			BLI_assert(node->num_links_pending > 0);
-			atomic_sub_uint32(&node->num_links_pending, 1);
+			atomic_sub_and_fetch_uint32(&node->num_links_pending, 1);
 		}
 
 		if (node->num_links_pending == 0) {
@@ -304,7 +305,7 @@ static void schedule_node(TaskPool *pool, Depsgraph *graph, unsigned int layers,
 					                               deg_task_run_func,
 					                               node,
 					                               false,
-					                               TASK_PRIORITY_LOW,
+					                               TASK_PRIORITY_HIGH,
 					                               thread_id);
 				}
 			}
@@ -361,6 +362,11 @@ void deg_evaluate_on_refresh(EvaluationContext *eval_ctx,
 	if (BLI_gset_size(graph->entry_tags) == 0) {
 		return;
 	}
+
+	DEG_DEBUG_PRINTF("%s: layers:%u, graph->layers:%u\n",
+	                 __func__,
+	                 layers,
+	                 graph->layers);
 
 	/* Set time for the current graph evaluation context. */
 	TimeSourceDepsNode *time_src = graph->find_time_source();

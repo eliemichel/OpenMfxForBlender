@@ -2463,6 +2463,10 @@ static void draw_ghost_poses_range(Scene *scene, View3D *v3d, ARegion *ar, Base 
 	if (end <= start)
 		return;
 	
+	/* prevent infinite loops if this is set to 0 - T49527 */
+	if (arm->ghostsize < 1)
+		arm->ghostsize = 1;
+	
 	stepsize = (float)(arm->ghostsize);
 	range = (float)(end - start);
 	
@@ -2608,7 +2612,11 @@ static void draw_ghost_poses(Scene *scene, View3D *v3d, ARegion *ar, Base *base)
 	calc_action_range(adt->action, &start, &end, 0);
 	if (start == end)
 		return;
-
+	
+	/* prevent infinite loops if this is set to 0 - T49527 */
+	if (arm->ghostsize < 1)
+		arm->ghostsize = 1;
+	
 	stepsize = (float)(arm->ghostsize);
 	range = (float)(arm->ghostep) * stepsize + 0.5f;   /* plus half to make the for loop end correct */
 	
@@ -2723,6 +2731,11 @@ bool draw_armature(Scene *scene, View3D *v3d, ARegion *ar, Base *base,
 	else {
 		/*	Draw Pose */
 		if (ob->pose && ob->pose->chanbase.first) {
+			/* We can't safely draw non-updated pose, might contain NULL bone pointers... */
+			if (ob->pose->flag & POSE_RECALC) {
+				BKE_pose_rebuild(ob, arm);
+			}
+
 			/* drawing posemode selection indices or colors only in these cases */
 			if (!(base->flag & OB_FROMDUPLI)) {
 				if (G.f & G_PICKSEL) {

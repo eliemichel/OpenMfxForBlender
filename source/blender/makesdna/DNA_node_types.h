@@ -595,6 +595,7 @@ typedef struct NodeBilateralBlurData {
 	short iter, pad;
 } NodeBilateralBlurData;
 
+/* NOTE: Only for do-version code. */
 typedef struct NodeHueSat {
 	float hue, sat, val;
 } NodeHueSat;
@@ -818,7 +819,10 @@ typedef struct NodeShaderTexPointDensity {
 	short color_source;
 	short ob_color_source;
 	char vertex_attribute_name[64]; /* vertex attribute layer for color source, MAX_CUSTOMDATA_LAYER_NAME */
+	/* Used at runtime only by sampling RNA API. */
 	PointDensity pd;
+	int cached_resolution;
+	int pad2;
 } NodeShaderTexPointDensity;
 
 /* TEX_output */

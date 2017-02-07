@@ -46,10 +46,11 @@
 #include "DNA_world_types.h"
 #include "DNA_linestyle_types.h"
 
-#include "BLI_string.h"
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_path_util.h"
+#include "BLI_string.h"
+#include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
@@ -736,11 +737,14 @@ void nodeRemoveAllSockets(bNodeTree *ntree, bNode *node)
 		node_socket_free(ntree, sock, node);
 		MEM_freeN(sock);
 	}
+	BLI_listbase_clear(&node->inputs);
+
 	for (sock = node->outputs.first; sock; sock = sock_next) {
 		sock_next = sock->next;
 		node_socket_free(ntree, sock, node);
 		MEM_freeN(sock);
 	}
+	BLI_listbase_clear(&node->outputs);
 	
 	node->update |= NODE_UPDATE;
 }
@@ -1302,33 +1306,6 @@ bNodeTree *ntreeCopyTree_ex(bNodeTree *ntree, Main *bmain, const bool do_id_user
 bNodeTree *ntreeCopyTree(Main *bmain, bNodeTree *ntree)
 {
 	return ntreeCopyTree_ex(ntree, bmain, true);
-}
-
-/* use when duplicating scenes */
-void ntreeSwitchID_ex(bNodeTree *ntree, ID *id_from, ID *id_to, const bool do_id_user)
-{
-	bNode *node;
-
-	if (id_from == id_to) {
-		/* should never happen but may as well skip if it does */
-		return;
-	}
-
-	/* for scene duplication only */
-	for (node = ntree->nodes.first; node; node = node->next) {
-		if (node->id == id_from) {
-			if (do_id_user) {
-				id_us_min(id_from);
-				id_us_plus(id_to);
-			}
-
-			node->id = id_to;
-		}
-	}
-}
-void ntreeSwitchID(bNodeTree *ntree, ID *id_from, ID *id_to)
-{
-	ntreeSwitchID_ex(ntree, id_from, id_to, true);
 }
 
 void ntreeUserIncrefID(bNodeTree *ntree)

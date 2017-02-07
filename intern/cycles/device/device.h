@@ -49,7 +49,7 @@ class DeviceInfo {
 public:
 	DeviceType type;
 	string description;
-	string id;
+	string id; /* used for user preferences, should stay fixed with changing hardware config */
 	int num;
 	bool display_device;
 	bool advanced_shading;
@@ -68,6 +68,12 @@ public:
 		pack_images = false;
 		has_bindless_textures = false;
 		use_split_kernel = false;
+	}
+
+	bool operator==(const DeviceInfo &info) {
+		/* Multiple Devices with the same ID would be very bad. */
+		assert(id != info.id || (type == info.type && num == info.num && description == info.description));
+		return id == info.id;
 	}
 };
 
@@ -111,6 +117,9 @@ public:
 
 	/* Use OpenSubdiv patch evaluation */
 	bool use_patch_evaluation;
+	
+	/* Use Transparent shadows */
+	bool use_transparent;
 
 	DeviceRequestedFeatures()
 	{
@@ -127,6 +136,7 @@ public:
 		use_volume = false;
 		use_integrator_branched = false;
 		use_patch_evaluation = false;
+		use_transparent = false;
 	}
 
 	bool modified(const DeviceRequestedFeatures& requested_features)
@@ -142,7 +152,8 @@ public:
 		         use_subsurface == requested_features.use_subsurface &&
 		         use_volume == requested_features.use_volume &&
 		         use_integrator_branched == requested_features.use_integrator_branched &&
-		         use_patch_evaluation == requested_features.use_patch_evaluation);
+		         use_patch_evaluation == requested_features.use_patch_evaluation &&
+		         use_transparent == requested_features.use_transparent);
 	}
 
 	/* Convert the requested features structure to a build options,
@@ -183,6 +194,9 @@ public:
 		if(!use_patch_evaluation) {
 			build_options += " -D__NO_PATCH_EVAL__";
 		}
+		if(!use_transparent) {
+			build_options += " -D__NO_TRANSPARENT__";
+		}
 		return build_options;
 	}
 };
@@ -214,6 +228,7 @@ public:
 	DeviceInfo info;
 	virtual const string& error_message() { return error_msg; }
 	bool have_error() { return !error_message().empty(); }
+	virtual bool show_samples() const { return false; }
 
 	/* statistics */
 	Stats &stats;
@@ -282,6 +297,7 @@ public:
 	static vector<DeviceType>& available_types();
 	static vector<DeviceInfo>& available_devices();
 	static string device_capabilities();
+	static DeviceInfo get_multi_device(vector<DeviceInfo> subdevices);
 
 	/* Tag devices lists for update. */
 	static void tag_update();

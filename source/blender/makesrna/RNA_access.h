@@ -262,6 +262,7 @@ extern StructRNA RNA_GPencilLayer;
 extern StructRNA RNA_GPencilPalette;
 extern StructRNA RNA_GPencilPaletteColor;
 extern StructRNA RNA_GPencilBrush;
+extern StructRNA RNA_GPencilInterpolateSettings;
 extern StructRNA RNA_GPencilStroke;
 extern StructRNA RNA_GPencilStrokePoint;
 extern StructRNA RNA_GPencilSculptSettings;
@@ -793,6 +794,7 @@ PropertyType RNA_property_type(PropertyRNA *prop);
 PropertySubType RNA_property_subtype(PropertyRNA *prop);
 PropertyUnit RNA_property_unit(PropertyRNA *prop);
 int RNA_property_flag(PropertyRNA *prop);
+bool RNA_property_builtin(PropertyRNA *prop);
 void *RNA_property_py_data_get(PropertyRNA *prop);
 
 int  RNA_property_array_length(PointerRNA *ptr, PropertyRNA *prop);
@@ -1141,6 +1143,8 @@ PropertyRNA *RNA_function_find_parameter(PointerRNA *ptr, FunctionRNA *func, con
 const struct ListBase *RNA_function_defined_parameters(FunctionRNA *func);
 
 /* Utility */
+
+int RNA_parameter_flag(PropertyRNA *prop);
 
 ParameterList *RNA_parameter_list_create(ParameterList *parms, PointerRNA *ptr, FunctionRNA *func);
 void RNA_parameter_list_free(ParameterList *parms);

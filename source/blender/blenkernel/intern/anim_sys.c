@@ -43,6 +43,7 @@
 #include "BLI_alloca.h"
 #include "BLI_dynstr.h"
 #include "BLI_listbase.h"
+#include "BLI_string_utils.h"
 
 #include "BLT_translation.h"
 
@@ -308,17 +309,19 @@ bool BKE_animdata_copy_id(ID *id_to, ID *id_from, const bool do_action)
 	return true;
 }
 
-void BKE_animdata_copy_id_action(ID *id)
+void BKE_animdata_copy_id_action(ID *id, const bool set_newid)
 {
 	AnimData *adt = BKE_animdata_from_id(id);
 	if (adt) {
 		if (adt->action) {
 			id_us_min((ID *)adt->action);
-			adt->action = BKE_action_copy(G.main, adt->action);
+			adt->action = set_newid ? ID_NEW_SET(adt->action, BKE_action_copy(G.main, adt->action)) :
+			                          BKE_action_copy(G.main, adt->action);
 		}
 		if (adt->tmpact) {
 			id_us_min((ID *)adt->tmpact);
-			adt->tmpact = BKE_action_copy(G.main, adt->tmpact);
+			adt->tmpact = set_newid ? ID_NEW_SET(adt->tmpact, BKE_action_copy(G.main, adt->tmpact)) :
+			                          BKE_action_copy(G.main, adt->tmpact);
 		}
 	}
 }
@@ -1657,7 +1660,7 @@ static bool animsys_write_rna_setting(PathResolvedRNA *anim_rna, const float val
 		/* for cases like duplifarmes it's only a temporary so don't
 		 * notify anyone of updates */
 		if (!(id->tag & LIB_TAG_ANIM_NO_RECALC)) {
-			id->tag |= LIB_TAG_ID_RECALC;
+			BKE_id_tag_set_atomic(id, LIB_TAG_ID_RECALC);
 			DAG_id_type_tag(G.main, GS(id->name));
 		}
 	}

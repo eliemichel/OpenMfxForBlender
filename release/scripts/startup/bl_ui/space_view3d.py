@@ -710,6 +710,7 @@ class VIEW3D_MT_select_particle(Menu):
         layout = self.layout
 
         layout.operator("view3d.select_border")
+        layout.operator("view3d.select_circle")
 
         layout.separator()
 
@@ -1345,9 +1346,9 @@ class VIEW3D_MT_object_clear(Menu):
     def draw(self, context):
         layout = self.layout
 
-        layout.operator("object.location_clear", text="Location")
-        layout.operator("object.rotation_clear", text="Rotation")
-        layout.operator("object.scale_clear", text="Scale")
+        layout.operator("object.location_clear", text="Location").clear_delta = False
+        layout.operator("object.rotation_clear", text="Rotation").clear_delta = False
+        layout.operator("object.scale_clear", text="Scale").clear_delta = False
         layout.operator("object.origin_clear", text="Origin")
 
 
@@ -2477,6 +2478,10 @@ class VIEW3D_MT_edit_mesh_vertices(Menu):
         layout.menu("VIEW3D_MT_vertex_group")
         layout.menu("VIEW3D_MT_hook")
 
+        layout.separator()
+
+        layout.operator("object.vertex_parent_set")
+
 
 class VIEW3D_MT_edit_mesh_edges(Menu):
     bl_label = "Edges"
@@ -2731,6 +2736,10 @@ class VIEW3D_MT_edit_curve_ctrlpoints(Menu):
 
         layout.menu("VIEW3D_MT_hook")
 
+        layout.separator()
+
+        layout.operator("object.vertex_parent_set")
+
 
 class VIEW3D_MT_edit_curve_segments(Menu):
     bl_label = "Segments"
@@ -2893,6 +2902,10 @@ class VIEW3D_MT_edit_lattice(Menu):
 
         layout.separator()
 
+        layout.operator("object.vertex_parent_set")
+
+        layout.separator()
+
         layout.menu("VIEW3D_MT_edit_proportional")
 
 
@@ -3040,11 +3053,18 @@ class VIEW3D_MT_edit_gpencil(Menu):
         layout.separator()
 
         layout.menu("VIEW3D_MT_object_animation")   # NOTE: provides keyingset access...
+        layout.menu("VIEW3D_MT_edit_gpencil_interpolate")
 
         layout.separator()
 
         layout.menu("VIEW3D_MT_edit_gpencil_delete")
         layout.operator("gpencil.duplicate_move", text="Duplicate")
+        layout.operator("gpencil.stroke_subdivide", text="Subdivide")
+
+        layout.separator()
+
+        layout.operator_menu_enum("gpencil.stroke_join", "type", text="Join...")
+        layout.operator("gpencil.stroke_flip", text="Flip Direction")
 
         layout.separator()
 
@@ -3064,6 +3084,11 @@ class VIEW3D_MT_edit_gpencil(Menu):
         layout.separator()
 
         layout.operator_menu_enum("gpencil.move_to_layer", "layer", text="Move to Layer")
+        layout.operator("gpencil.stroke_change_color", text="Move to Color")
+        layout.operator_menu_enum("gpencil.stroke_arrange", "direction", text="Arrange Strokes...")
+
+        layout.separator()
+
         layout.operator_menu_enum("gpencil.convert", "type", text="Convert to Geometry...")
 
 
@@ -3083,6 +3108,20 @@ class VIEW3D_MT_edit_gpencil_transform(Menu):
         layout.operator("transform.shear", text="Shear")
         layout.operator("transform.tosphere", text="To Sphere")
         layout.operator("transform.transform", text="Shrink Fatten").mode = 'GPENCIL_SHRINKFATTEN'
+
+        layout.separator()
+
+        layout.operator("gpencil.reproject")
+
+
+class VIEW3D_MT_edit_gpencil_interpolate(Menu):
+    bl_label = "Interpolate"
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.operator("gpencil.interpolate", text="Interpolate")
+        layout.operator("gpencil.interpolate_sequence", text="Sequence")
 
 
 # ********** Panel **********

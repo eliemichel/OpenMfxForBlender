@@ -238,7 +238,7 @@ static void mesh_calc_normals_poly_accum_task_cb(void *userdata, const int pidx)
 
 			/* accumulate */
 			for (int k = 3; k--; ) {
-				atomic_add_fl(&vnors[ml[i].v][k], pnor[k] * fac);
+				atomic_add_and_fetch_fl(&vnors[ml[i].v][k], pnor[k] * fac);
 			}
 			prev_edge = cur_edge;
 		}
@@ -1909,19 +1909,19 @@ void BKE_mesh_calc_poly_center(
         const MVert *mvarray, float r_cent[3])
 {
 	if (mpoly->totloop == 3) {
-		cent_tri_v3(r_cent,
-		            mvarray[loopstart[0].v].co,
-		            mvarray[loopstart[1].v].co,
-		            mvarray[loopstart[2].v].co
-		            );
+		mid_v3_v3v3v3(r_cent,
+		              mvarray[loopstart[0].v].co,
+		              mvarray[loopstart[1].v].co,
+		              mvarray[loopstart[2].v].co
+		              );
 	}
 	else if (mpoly->totloop == 4) {
-		cent_quad_v3(r_cent,
-		             mvarray[loopstart[0].v].co,
-		             mvarray[loopstart[1].v].co,
-		             mvarray[loopstart[2].v].co,
-		             mvarray[loopstart[3].v].co
-		             );
+		mid_v3_v3v3v3v3(r_cent,
+		                mvarray[loopstart[0].v].co,
+		                mvarray[loopstart[1].v].co,
+		                mvarray[loopstart[2].v].co,
+		                mvarray[loopstart[3].v].co
+		                );
 	}
 	else {
 		mesh_calc_ngon_center(mpoly, loopstart, mvarray, r_cent);
@@ -1978,7 +1978,7 @@ static float mesh_calc_poly_planar_area_centroid(
 		tri_area = area_tri_signed_v3(v1, v2, v3, normal);
 		total_area += tri_area;
 
-		cent_tri_v3(tri_cent, v1, v2, v3);
+		mid_v3_v3v3v3(tri_cent, v1, v2, v3);
 		madd_v3_v3fl(r_cent, tri_cent, tri_area);
 
 		copy_v3_v3(v2, v3);

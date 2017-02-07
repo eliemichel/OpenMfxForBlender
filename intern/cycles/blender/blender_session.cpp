@@ -32,6 +32,7 @@
 #include "util_color.h"
 #include "util_foreach.h"
 #include "util_function.h"
+#include "util_hash.h"
 #include "util_logging.h"
 #include "util_progress.h"
 #include "util_time.h"
@@ -125,8 +126,8 @@ void BlenderSession::create_session()
 
 	/* setup callbacks for builtin image support */
 	scene->image_manager->builtin_image_info_cb = function_bind(&BlenderSession::builtin_image_info, this, _1, _2, _3, _4, _5, _6, _7);
-	scene->image_manager->builtin_image_pixels_cb = function_bind(&BlenderSession::builtin_image_pixels, this, _1, _2, _3);
-	scene->image_manager->builtin_image_float_pixels_cb = function_bind(&BlenderSession::builtin_image_float_pixels, this, _1, _2, _3);
+	scene->image_manager->builtin_image_pixels_cb = function_bind(&BlenderSession::builtin_image_pixels, this, _1, _2, _3, _4);
+	scene->image_manager->builtin_image_float_pixels_cb = function_bind(&BlenderSession::builtin_image_float_pixels, this, _1, _2, _3, _4);
 
 	/* create session */
 	session = new Session(session_params);
@@ -304,12 +305,16 @@ static PassType get_pass_type(BL::RenderPass& b_pass)
 #ifdef WITH_CYCLES_DEBUG
 		case BL::RenderPass::type_DEBUG:
 		{
-			if(b_pass.debug_type() == BL::RenderPass::debug_type_BVH_TRAVERSAL_STEPS)
-				return PASS_BVH_TRAVERSAL_STEPS;
-			if(b_pass.debug_type() == BL::RenderPass::debug_type_BVH_TRAVERSED_INSTANCES)
-				return PASS_BVH_TRAVERSED_INSTANCES;
-			if(b_pass.debug_type() == BL::RenderPass::debug_type_RAY_BOUNCES)
-				return PASS_RAY_BOUNCES;
+			switch(b_pass.debug_type()) {
+				case BL::RenderPass::debug_type_BVH_TRAVERSED_NODES:
+					return PASS_BVH_TRAVERSED_NODES;
+				case BL::RenderPass::debug_type_BVH_TRAVERSED_INSTANCES:
+					return PASS_BVH_TRAVERSED_INSTANCES;
+				case BL::RenderPass::debug_type_BVH_INTERSECTIONS:
+					return PASS_BVH_INTERSECTIONS;
+				case BL::RenderPass::debug_type_RAY_BOUNCES:
+					return PASS_RAY_BOUNCES;
+			}
 			break;
 		}
 #endif
@@ -498,7 +503,8 @@ void BlenderSession::render()
 		scene->film->tag_update(scene);
 		scene->integrator->tag_update(scene);
 
-		for(b_rr.views.begin(b_view_iter); b_view_iter != b_rr.views.end(); ++b_view_iter) {
+		int view_index = 0;
+		for(b_rr.views.begin(b_view_iter); b_view_iter != b_rr.views.end(); ++b_view_iter, ++view_index) {
 			b_rview_name = b_view_iter->name();
 
 			/* set the current view */
@@ -513,6 +519,12 @@ void BlenderSession::render()
 			                width, height,
 			                &python_thread_state,
 			                b_rlay_name.c_str());
+
+			/* Make sure all views have different noise patterns. - hardcoded value just to make it random */
+			if(view_index != 0) {
+				scene->integrator->seed += hash_int_2d(scene->integrator->seed, hash_int(view_index * 0xdeadbeef));
+				scene->integrator->tag_update(scene);
+			}
 
 			/* Update number of samples per layer. */
 			int samples = sync->get_layer_samples();
@@ -572,7 +584,7 @@ static void populate_bake_data(BakeData *data, const
 	BL::BakePixel bp = pixel_array;
 
 	int i;
-	for(i=0; i < num_pixels; i++) {
+	for(i = 0; i < num_pixels; i++) {
 		if(bp.object_id() == object_id) {
 			data->set(i, bp.primitive_id(), bp.uv(), bp.du_dx(), bp.du_dy(), bp.dv_dx(), bp.dv_dy());
 		} else {
@@ -922,38 +934,13 @@ void BlenderSession::get_status(string& status, string& substatus)
 
 void BlenderSession::get_progress(float& progress, double& total_time, double& render_time)
 {
-	double tile_time;
-	int tile, sample, samples_per_tile;
-	int tile_total = session->tile_manager.state.num_tiles;
-	int samples = session->tile_manager.state.sample + 1;
-	int total_samples = session->tile_manager.get_num_effective_samples();
-
-	session->progress.get_tile(tile, total_time, render_time, tile_time);
-
-	sample = session->progress.get_sample();
-	samples_per_tile = session->tile_manager.get_num_effective_samples();
-
-	if(background && samples_per_tile && tile_total)
-		progress = ((float)sample / (float)(tile_total * samples_per_tile));
-	else if(!background && samples > 0 && total_samples != INT_MAX)
-		progress = ((float)samples) / total_samples;
-	else
-		progress = 0.0;
+	session->progress.get_time(total_time, render_time);
+	progress = session->progress.get_progress();
 }
 
 void BlenderSession::update_bake_progress()
 {
-	float progress;
-	int sample, samples_per_task, parts_total;
-
-	sample = session->progress.get_sample();
-	samples_per_task = scene->bake_manager->num_samples;
-	parts_total = scene->bake_manager->num_parts;
-
-	if(samples_per_task)
-		progress = ((float)sample / (float)(parts_total * samples_per_task));
-	else
-		progress = 0.0;
+	float progress = session->progress.get_progress();
 
 	if(progress != last_progress) {
 		b_engine.update_progress(progress);
@@ -1072,7 +1059,13 @@ int BlenderSession::builtin_image_frame(const string &builtin_name)
 	return atoi(builtin_name.substr(last + 1, builtin_name.size() - last - 1).c_str());
 }
 
-void BlenderSession::builtin_image_info(const string &builtin_name, void *builtin_data, bool &is_float, int &width, int &height, int &depth, int &channels)
+void BlenderSession::builtin_image_info(const string &builtin_name,
+                                        void *builtin_data,
+                                        bool &is_float,
+                                        int &width,
+                                        int &height,
+                                        int &depth,
+                                        int &channels)
 {
 	/* empty image */
 	is_float = false;
@@ -1150,60 +1143,67 @@ void BlenderSession::builtin_image_info(const string &builtin_name, void *builti
 	}
 }
 
-bool BlenderSession::builtin_image_pixels(const string &builtin_name, void *builtin_data, unsigned char *pixels)
+bool BlenderSession::builtin_image_pixels(const string &builtin_name,
+                                          void *builtin_data,
+                                          unsigned char *pixels,
+                                          const size_t pixels_size)
 {
-	if(!builtin_data)
+	if(!builtin_data) {
 		return false;
+	}
 
-	int frame = builtin_image_frame(builtin_name);
+	const int frame = builtin_image_frame(builtin_name);
 
 	PointerRNA ptr;
 	RNA_id_pointer_create((ID*)builtin_data, &ptr);
 	BL::Image b_image(ptr);
 
-	int width = b_image.size()[0];
-	int height = b_image.size()[1];
-	int channels = b_image.channels();
+	const int width = b_image.size()[0];
+	const int height = b_image.size()[1];
+	const int channels = b_image.channels();
 
-	unsigned char *image_pixels;
-	image_pixels = image_get_pixels_for_frame(b_image, frame);
-	size_t num_pixels = ((size_t)width) * height;
+	unsigned char *image_pixels = image_get_pixels_for_frame(b_image, frame);
+	const size_t num_pixels = ((size_t)width) * height;
 
-	if(image_pixels) {
-		memcpy(pixels, image_pixels, num_pixels * channels * sizeof(unsigned char));
+	if(image_pixels && num_pixels * channels == pixels_size) {
+		memcpy(pixels, image_pixels, pixels_size * sizeof(unsigned char));
 		MEM_freeN(image_pixels);
 	}
 	else {
 		if(channels == 1) {
-			memset(pixels, 0, num_pixels * sizeof(unsigned char));
+			memset(pixels, 0, pixels_size * sizeof(unsigned char));
 		}
 		else {
+			const size_t num_pixels_safe = pixels_size / channels;
 			unsigned char *cp = pixels;
-			for(size_t i = 0; i < num_pixels; i++, cp += channels) {
+			for(size_t i = 0; i < num_pixels_safe; i++, cp += channels) {
 				cp[0] = 255;
 				cp[1] = 0;
 				cp[2] = 255;
-				if(channels == 4)
+				if(channels == 4) {
 					cp[3] = 255;
+				}
 			}
 		}
 	}
-
-	/* premultiply, byte images are always straight for blender */
+	/* Premultiply, byte images are always straight for Blender. */
 	unsigned char *cp = pixels;
 	for(size_t i = 0; i < num_pixels; i++, cp += channels) {
 		cp[0] = (cp[0] * cp[3]) >> 8;
 		cp[1] = (cp[1] * cp[3]) >> 8;
 		cp[2] = (cp[2] * cp[3]) >> 8;
 	}
-
 	return true;
 }
 
-bool BlenderSession::builtin_image_float_pixels(const string &builtin_name, void *builtin_data, float *pixels)
+bool BlenderSession::builtin_image_float_pixels(const string &builtin_name,
+                                                void *builtin_data,
+                                                float *pixels,
+                                                const size_t pixels_size)
 {
-	if(!builtin_data)
+	if(!builtin_data) {
 		return false;
+	}
 
 	PointerRNA ptr;
 	RNA_id_pointer_create((ID*)builtin_data, &ptr);
@@ -1214,16 +1214,16 @@ bool BlenderSession::builtin_image_float_pixels(const string &builtin_name, void
 		BL::Image b_image(b_id);
 		int frame = builtin_image_frame(builtin_name);
 
-		int width = b_image.size()[0];
-		int height = b_image.size()[1];
-		int channels = b_image.channels();
+		const int width = b_image.size()[0];
+		const int height = b_image.size()[1];
+		const int channels = b_image.channels();
 
 		float *image_pixels;
 		image_pixels = image_get_float_pixels_for_frame(b_image, frame);
-		size_t num_pixels = ((size_t)width) * height;
+		const size_t num_pixels = ((size_t)width) * height;
 
-		if(image_pixels) {
-			memcpy(pixels, image_pixels, num_pixels * channels * sizeof(float));
+		if(image_pixels && num_pixels * channels == pixels_size) {
+			memcpy(pixels, image_pixels, pixels_size * sizeof(float));
 			MEM_freeN(image_pixels);
 		}
 		else {
@@ -1231,13 +1231,15 @@ bool BlenderSession::builtin_image_float_pixels(const string &builtin_name, void
 				memset(pixels, 0, num_pixels * sizeof(float));
 			}
 			else {
+				const size_t num_pixels_safe = pixels_size / channels;
 				float *fp = pixels;
-				for(int i = 0; i < num_pixels; i++, fp += channels) {
+				for(int i = 0; i < num_pixels_safe; i++, fp += channels) {
 					fp[0] = 1.0f;
 					fp[1] = 0.0f;
 					fp[2] = 1.0f;
-					if(channels == 4)
+					if(channels == 4) {
 						fp[3] = 1.0f;
+					}
 				}
 			}
 		}
@@ -1249,8 +1251,9 @@ bool BlenderSession::builtin_image_float_pixels(const string &builtin_name, void
 		BL::Object b_ob(b_id);
 		BL::SmokeDomainSettings b_domain = object_smoke_domain_find(b_ob);
 
-		if(!b_domain)
+		if(!b_domain) {
 			return false;
+		}
 
 		int3 resolution = get_int3(b_domain.domain_resolution());
 		int length, amplify = (b_domain.use_high_resolution())? b_domain.amplify() + 1: 1;
@@ -1262,10 +1265,10 @@ bool BlenderSession::builtin_image_float_pixels(const string &builtin_name, void
 			amplify = 1;
 		}
 
-		int width = resolution.x * amplify;
-		int height = resolution.y * amplify;
-		int depth = resolution.z * amplify;
-		size_t num_pixels = ((size_t)width) * height * depth;
+		const int width = resolution.x * amplify;
+		const int height = resolution.y * amplify;
+		const int depth = resolution.z * amplify;
+		const size_t num_pixels = ((size_t)width) * height * depth;
 
 		if(builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_DENSITY)) {
 			SmokeDomainSettings_density_grid_get_length(&b_domain.ptr, &length);
@@ -1348,6 +1351,9 @@ void BlenderSession::update_resumable_tile_manager(int num_samples)
 
 	VLOG(1) << "Samples range start is " << range_start_sample << ", "
 	        << "number of samples to render is " << range_num_samples;
+
+	scene->integrator->start_sample = range_start_sample;
+	scene->integrator->tag_update(scene);
 
 	session->tile_manager.range_start_sample = range_start_sample;
 	session->tile_manager.range_num_samples = range_num_samples;

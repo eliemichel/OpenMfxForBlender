@@ -172,6 +172,24 @@ def custom_bake_remap(scene):
 
 @persistent
 def do_versions(self):
+    if bpy.context.user_preferences.version <= (2, 78, 1):
+        prop = bpy.context.user_preferences.addons[__package__].preferences
+        system = bpy.context.user_preferences.system
+        if not prop.is_property_set("compute_device_type"):
+            # Device might not currently be available so this can fail
+            try:
+                if system.legacy_compute_device_type == 1:
+                    prop.compute_device_type = 'OPENCL'
+                elif system.legacy_compute_device_type == 2:
+                    prop.compute_device_type = 'CUDA'
+                else:
+                    prop.compute_device_type = 'NONE'
+            except:
+                pass
+
+            # Init device list for UI
+            prop.get_devices()
+
     # We don't modify startup file because it assumes to
     # have all the default values only.
     if not bpy.data.is_saved:
@@ -278,3 +296,9 @@ def do_versions(self):
                     cscene.pixel_filter_type = cscene.filter_type
                 if cscene.filter_type == 'BLACKMAN_HARRIS':
                     cscene.filter_type = 'GAUSSIAN'
+
+    if bpy.data.version <= (2, 78, 2):
+        for scene in bpy.data.scenes:
+            cscene = scene.cycles
+            if not cscene.is_property_set("light_sampling_threshold"):
+                cscene.light_sampling_threshold = 0.0

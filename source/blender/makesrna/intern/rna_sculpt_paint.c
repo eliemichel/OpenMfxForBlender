@@ -600,10 +600,12 @@ static void rna_def_sculpt(BlenderRNA  *brna)
 	RNA_def_property_ui_text(prop, "Detail Percentage", "Maximum edge length for dynamic topology sculpting (in brush percenage)");
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
-	prop = RNA_def_property(srna, "constant_detail", PROP_FLOAT, PROP_PERCENTAGE);
-	RNA_def_property_range(prop, 0.001, 10000.0);
-	RNA_def_property_ui_range(prop, 0.1, 100.0, 10, 2);
-	RNA_def_property_ui_text(prop, "Detail Size", "Maximum edge length for dynamic topology sculpting (as percentage of blender unit)");
+	prop = RNA_def_property(srna, "constant_detail_resolution", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "constant_detail");
+	RNA_def_property_range(prop, 0.0001, FLT_MAX);
+	RNA_def_property_ui_range(prop, 0.001, 1000.0, 10, 2);
+	RNA_def_property_ui_text(prop, "Resolution", "Maximum edge length for dynamic topology sculpting (as divisor "
+	                         "of blender unit - higher value means smaller edge length)");
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "use_smooth_shading", PROP_BOOLEAN, PROP_NONE);
@@ -1045,15 +1047,6 @@ static void rna_def_gpencil_sculpt(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Affect Thickness", "The brush affects the thickness of the point");
 	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
-	prop = RNA_def_property(srna, "interpolate_all_layers", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_BRUSHEDIT_FLAG_INTERPOLATE_ALL_LAYERS);
-	RNA_def_property_ui_text(prop, "Interpolate All Layers", "Interpolate all layers, not only active");
-	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
-
-	prop = RNA_def_property(srna, "interpolate_selected_only", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_BRUSHEDIT_FLAG_INTERPOLATE_ONLY_SELECTED);
-	RNA_def_property_ui_text(prop, "Interpolate Selected Strokes", "Interpolate only selected strokes in the original frame");
-	RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
 	prop = RNA_def_property(srna, "selection_alpha", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "alpha");
