@@ -497,6 +497,7 @@ bool compute_keyframe(BezTriple *bezt, BezTriple *prev, BezTriple *next, float P
 		memcpy(P[1], P2_3,		 sizeof(P0_1));
 		memcpy(P[2], P01_12,	 sizeof(P0_1));
 		memcpy(P[3], P12_23,	 sizeof(P0_1));
+		memcpy(P[4], P0112_1223, sizeof(P0_1));
 
 		found = true;
 		

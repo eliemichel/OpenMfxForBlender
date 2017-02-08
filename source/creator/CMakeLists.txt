@@ -713,10 +713,7 @@ elseif(WIN32)
 			)
 
 			if(WITH_PYTHON_INSTALL_NUMPY)
-				set(PYTHON_NUMPY_VERSION 1.9)
-				if(MSVC_VERSION EQUAL 1900)
-					set(PYTHON_NUMPY_VERSION 1.11)
-				endif()
+				set(PYTHON_NUMPY_VERSION 1.10)
 				add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages
 					COMMAND ${CMAKE_COMMAND} -E
 					        make_directory ${CMAKE_CURRENT_BINARY_DIR}/${BLENDER_VERSION}/python/lib/site-packages)
@@ -830,11 +827,12 @@ elseif(WIN32)
 		else()
 			install(
 				FILES
-					${LIBDIR}/ffmpeg/lib/avcodec-55.dll
-					${LIBDIR}/ffmpeg/lib/avformat-55.dll
-					${LIBDIR}/ffmpeg/lib/avdevice-55.dll
-					${LIBDIR}/ffmpeg/lib/avutil-52.dll
-					${LIBDIR}/ffmpeg/lib/swscale-2.dll
+					${LIBDIR}/ffmpeg/lib/avcodec-57.dll
+					${LIBDIR}/ffmpeg/lib/avformat-57.dll
+					${LIBDIR}/ffmpeg/lib/avdevice-57.dll
+					${LIBDIR}/ffmpeg/lib/avutil-55.dll
+					${LIBDIR}/ffmpeg/lib/swscale-4.dll
+					${LIBDIR}/ffmpeg/lib/swresample-2.dll
 				DESTINATION "."
 			)
 		endif()
@@ -1153,13 +1151,12 @@ if(WIN32 AND NOT WITH_PYTHON_MODULE)
 		COMPONENT Blender
 		DESTINATION "."
 	)
-
+	if(CMAKE_CL_64)
+		set(_WIN_PLATFORM x64)
+	else()
+		set(_WIN_PLATFORM x86)
+	endif()
 	if(MSVC12_REDIST_DIR)
-		if(CMAKE_CL_64)
-			set(_WIN_PLATFORM x64)
-		else()
-			set(_WIN_PLATFORM x86)
-		endif()
 		install(
 			FILES
 				${MSVC12_REDIST_DIR}/${_WIN_PLATFORM}/Microsoft.VC120.CRT/msvcp120.dll
@@ -1169,6 +1166,53 @@ if(WIN32 AND NOT WITH_PYTHON_MODULE)
 		if(WITH_OPENMP)
 			install(
 				FILES ${MSVC12_REDIST_DIR}/${_WIN_PLATFORM}/Microsoft.VC120.OpenMP/vcomp120.dll
+				DESTINATION "."
+			)
+		endif()
+	endif()
+	
+	if(MSVC14_REDIST_DIR)
+		set(KITSDIRx86 "$ENV{${ProgramFilesX86_NAME}}/Windows Kits/10/")
+		set(KITSDIR "$ENV{ProgramFiles}/Windows Kits/10/")
+		if(IS_DIRECTORY ${KITSDIR})
+			set(KITSPATH "${KITSDIR}/Redist/ucrt/DLLs/${_WIN_PLATFORM}")
+		else()
+			if(IS_DIRECTORY ${KITSDIRx86})
+				set(KITSPATH "${KITSDIRx86}/Redist/ucrt/DLLs/${_WIN_PLATFORM}")
+			else()
+				message(FATAL_ERROR "Windows 10 SDK directory not found")
+			endif()
+		endif()
+		FILE(TO_CMAKE_PATH  ${KITSPATH} KITSPATH)
+		install(
+			FILES
+				${KITSPATH}/api-ms-win-core-file-l1-2-0.dll
+				${KITSPATH}/api-ms-win-core-file-l2-1-0.dll
+				${KITSPATH}/api-ms-win-core-localization-l1-2-0.dll
+				${KITSPATH}/api-ms-win-core-processthreads-l1-1-0.dll
+				${KITSPATH}/api-ms-win-core-processthreads-l1-1-1.dll
+				${KITSPATH}/api-ms-win-core-synch-l1-1-0.dll
+				${KITSPATH}/api-ms-win-core-synch-l1-2-0.dll
+				${KITSPATH}/api-ms-win-core-timezone-l1-1-0.dll
+				${KITSPATH}/api-ms-win-crt-conio-l1-1-0.dll
+				${KITSPATH}/api-ms-win-crt-convert-l1-1-0.dll
+				${KITSPATH}/api-ms-win-crt-environment-l1-1-0.dll
+				${KITSPATH}/api-ms-win-crt-filesystem-l1-1-0.dll
+				${KITSPATH}/api-ms-win-crt-heap-l1-1-0.dll
+				${KITSPATH}/api-ms-win-crt-locale-l1-1-0.dll
+				${KITSPATH}/api-ms-win-crt-math-l1-1-0.dll
+				${KITSPATH}/api-ms-win-crt-process-l1-1-0.dll
+				${KITSPATH}/api-ms-win-crt-runtime-l1-1-0.dll
+				${KITSPATH}/api-ms-win-crt-stdio-l1-1-0.dll
+				${KITSPATH}/api-ms-win-crt-string-l1-1-0.dll
+				${KITSPATH}/api-ms-win-crt-time-l1-1-0.dll
+				${KITSPATH}/ucrtbase.dll
+				${MSVC14_REDIST_DIR}/${_WIN_PLATFORM}/Microsoft.VC140.CRT/vcruntime140.dll
+			DESTINATION "."
+		)
+		if(WITH_OPENMP)
+			install(
+				FILES ${MSVC14_REDIST_DIR}/${_WIN_PLATFORM}/Microsoft.VC140.OpenMP/vcomp140.dll
 				DESTINATION "."
 			)
 		endif()

@@ -50,6 +50,7 @@
 #include "BLI_math.h"
 #include "BLI_listbase.h"
 #include "BLI_linklist.h"
+#include "BLI_path_util.h"
 #include "BLI_string.h"
 #include "BLI_string_utf8.h"
 #include "BLI_string_cursor_utf8.h"
@@ -2563,6 +2564,18 @@ void ui_but_text_password_hide(char password_str[UI_MAX_PASSWORD_STR], uiBut *bu
 	}
 }
 
+static void ui_but_text_clear(bContext *C, uiBut *but, uiHandleButtonData *data)
+{
+	/* most likely NULL, but let's check, and give it temp zero string */
+	if (!data->str) {
+		data->str = MEM_callocN(1, "temp str");
+	}
+	data->str[0] = 0;
+
+	ui_apply_but_TEX(C, but, data);
+	button_activate_state(C, but, BUTTON_STATE_EXIT);
+}
+
 
 /* ************* in-button text selection/editing ************* */
 
@@ -2950,7 +2963,7 @@ static bool ui_textedit_copypaste(uiBut *but, uiHandleButtonData *data, const in
 
 		if (pbuf) {
 			if (ui_but_is_utf8(but)) {
-				buf_len -= BLI_utf8_invalid_strip(pbuf, buf_len);
+				buf_len -= BLI_utf8_invalid_strip(pbuf, (size_t)buf_len);
 			}
 
 			ui_textedit_insert_buf(but, data, pbuf, buf_len);
@@ -3067,7 +3080,7 @@ static void ui_textedit_begin(bContext *C, uiBut *but, uiHandleButtonData *data)
 		data->str = ui_but_string_get_dynamic(but, &data->maxlen);
 	}
 
-	if (ui_but_is_float(but) && !ui_but_is_unit(but)) {
+	if (ui_but_is_float(but) && !ui_but_is_unit(but) && !ui_but_anim_expression_get(but, NULL, 0)) {
 		BLI_str_rstrip_float_zero(data->str, '\0');
 	}
 
@@ -3842,6 +3855,21 @@ static int ui_do_but_KEYEVT(
 	return WM_UI_HANDLER_CONTINUE;
 }
 
+static bool ui_but_is_mouse_over_icon_extra(const ARegion *region, uiBut *but, const int mouse_xy[2])
+{
+	int x = mouse_xy[0], y = mouse_xy[1];
+	rcti icon_rect;
+
+	BLI_assert(ui_but_icon_extra_get(but) != UI_BUT_ICONEXTRA_NONE);
+
+	ui_window_to_block(region, but->block, &x, &y);
+
+	BLI_rcti_rctf_copy(&icon_rect, &but->rect);
+	icon_rect.xmin = icon_rect.xmax - (BLI_rcti_size_y(&icon_rect));
+
+	return BLI_rcti_isect_pt(&icon_rect, x, y);
+}
+
 static int ui_do_but_TEX(
         bContext *C, uiBlock *block, uiBut *but,
         uiHandleButtonData *data, const wmEvent *event)
@@ -3855,7 +3883,14 @@ static int ui_do_but_TEX(
 				/* pass */
 			}
 			else {
-				button_activate_state(C, but, BUTTON_STATE_TEXT_EDITING);
+				const bool has_icon_extra = ui_but_icon_extra_get(but) == UI_BUT_ICONEXTRA_CLEAR;
+
+				if (has_icon_extra && ui_but_is_mouse_over_icon_extra(data->region, but, &event->x)) {
+					ui_but_text_clear(C, but, data);
+				}
+				else {
+					button_activate_state(C, but, BUTTON_STATE_TEXT_EDITING);
+				}
 				return WM_UI_HANDLER_BREAK;
 			}
 		}
@@ -3876,47 +3911,29 @@ static int ui_do_but_SEARCH_UNLINK(
         bContext *C, uiBlock *block, uiBut *but,
         uiHandleButtonData *data, const wmEvent *event)
 {
-	uiButExtraIconType extra_icon_type;
+	const uiButExtraIconType extra_icon_type = ui_but_icon_extra_get(but);
+	const bool has_icon_extra = (extra_icon_type != UI_BUT_ICONEXTRA_NONE);
 
 	/* unlink icon is on right */
 	if ((ELEM(event->type, LEFTMOUSE, EVT_BUT_OPEN, PADENTER, RETKEY)) &&
-	    ((extra_icon_type = ui_but_icon_extra_get(but)) != UI_BUT_ICONEXTRA_NONE))
+	    (has_icon_extra == true) &&
+	    (ui_but_is_mouse_over_icon_extra(data->region, but, &event->x) == true))
 	{
-		ARegion *ar = data->region;
-		rcti rect;
-		int x = event->x, y = event->y;
-		
-		ui_window_to_block(ar, but->block, &x, &y);
-		
-		BLI_rcti_rctf_copy(&rect, &but->rect);
-		
-		rect.xmin = rect.xmax - (BLI_rcti_size_y(&rect));
-		/* handle click on unlink/eyedropper icon */
-		if (BLI_rcti_isect_pt(&rect, x, y)) {
-			/* doing this on KM_PRESS calls eyedropper after clicking unlink icon */
-			if (event->val == KM_RELEASE) {
-				/* unlink */
-				if (extra_icon_type == UI_BUT_ICONEXTRA_UNLINK) {
-					/* most likely NULL, but let's check, and give it temp zero string */
-					if (data->str == NULL) {
-						data->str = MEM_callocN(1, "temp str");
-					}
-					data->str[0] = 0;
-
-					ui_apply_but_TEX(C, but, data);
-					button_activate_state(C, but, BUTTON_STATE_EXIT);
-				}
-				/* eyedropper */
-				else if (extra_icon_type == UI_BUT_ICONEXTRA_EYEDROPPER) {
-					WM_operator_name_call(C, "UI_OT_eyedropper_id", WM_OP_INVOKE_DEFAULT, NULL);
-				}
-				else {
-					BLI_assert(0);
-				}
+		/* doing this on KM_PRESS calls eyedropper after clicking unlink icon */
+		if (event->val == KM_RELEASE) {
+			/* unlink */
+			if (extra_icon_type == UI_BUT_ICONEXTRA_CLEAR) {
+				ui_but_text_clear(C, but, data);
 			}
-
-			return WM_UI_HANDLER_BREAK;
+			/* eyedropper */
+			else if (extra_icon_type == UI_BUT_ICONEXTRA_EYEDROPPER) {
+				WM_operator_name_call(C, "UI_OT_eyedropper_id", WM_OP_INVOKE_DEFAULT, NULL);
+			}
+			else {
+				BLI_assert(0);
+			}
 		}
+		return WM_UI_HANDLER_BREAK;
 	}
 	return ui_do_but_TEX(C, block, but, data, event);
 }
@@ -6687,6 +6704,36 @@ void ui_panel_menu(bContext *C, ARegion *ar, Panel *pa)
 	UI_popup_menu_end(C, pup);
 }
 
+static void ui_but_menu_add_path_operators(uiLayout *layout, PointerRNA *ptr, PropertyRNA *prop)
+{
+	const PropertySubType subtype = RNA_property_subtype(prop);
+	wmOperatorType *ot = WM_operatortype_find("WM_OT_path_open", true);
+	char filepath[FILE_MAX];
+	char dir[FILE_MAXDIR];
+	char file[FILE_MAXFILE];
+	PointerRNA props_ptr;
+
+	BLI_assert(ELEM(subtype, PROP_FILEPATH, PROP_DIRPATH));
+	UNUSED_VARS_NDEBUG(subtype);
+
+	RNA_property_string_get(ptr, prop, filepath);
+	BLI_split_dirfile(filepath, dir, file, sizeof(dir), sizeof(file));
+
+	if (file[0]) {
+		BLI_assert(subtype == PROP_FILEPATH);
+
+		props_ptr = uiItemFullO_ptr(
+		                layout, ot, CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Open File Externally"),
+		                ICON_NONE, NULL, WM_OP_INVOKE_DEFAULT, UI_ITEM_O_RETURN_PROPS);
+		RNA_string_set(&props_ptr, "filepath", filepath);
+	}
+
+	props_ptr = uiItemFullO_ptr(
+	                layout, ot, CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Open Location Externally"),
+	                ICON_NONE, NULL, WM_OP_INVOKE_DEFAULT, UI_ITEM_O_RETURN_PROPS);
+	RNA_string_set(&props_ptr, "filepath", dir);
+}
+
 static bool ui_but_menu(bContext *C, uiBut *but)
 {
 	uiPopupMenu *pup;
@@ -6715,6 +6762,8 @@ static bool ui_but_menu(bContext *C, uiBut *but)
 	if (but->rnapoin.data && but->rnaprop) {
 		PointerRNA *ptr = &but->rnapoin;
 		PropertyRNA *prop = but->rnaprop;
+		const PropertyType type = RNA_property_type(prop);
+		const PropertySubType subtype = RNA_property_subtype(prop);
 		bool is_anim = RNA_property_animateable(ptr, prop);
 		bool is_editable = RNA_property_editable(ptr, prop);
 		/*bool is_idprop = RNA_property_is_idprop(prop);*/ /* XXX does not work as expected, not strictly needed */
@@ -6885,6 +6934,11 @@ static bool ui_but_menu(bContext *C, uiBut *but)
 		        ICON_NONE, "UI_OT_copy_data_path_button");
 
 		uiItemS(layout);
+
+		if (type == PROP_STRING && ELEM(subtype, PROP_FILEPATH, PROP_DIRPATH)) {
+			ui_but_menu_add_path_operators(layout, ptr, prop);
+			uiItemS(layout);
+		}
 	}
 
 	/* Operator buttons */
@@ -7091,7 +7145,7 @@ static int ui_do_button(bContext *C, uiBlock *block, uiBut *but, const wmEvent *
 		case UI_BTYPE_TEXT:
 		case UI_BTYPE_SEARCH_MENU:
 			if ((but->type == UI_BTYPE_SEARCH_MENU) &&
-			    (but->flag & UI_BUT_SEARCH_UNLINK))
+			    (but->flag & UI_BUT_VALUE_CLEAR))
 			{
 				retval = ui_do_but_SEARCH_UNLINK(C, block, but, data, event);
 				if (retval & WM_UI_HANDLER_BREAK) {

@@ -2064,11 +2064,13 @@ static float lamp_get_data_internal(ShadeInput *shi, GroupObject *go, float col[
 		if (lar->mode & LA_SHAD_TEX)
 			do_lamp_tex(lar, lv, shi, shadow, LA_SHAD_TEX);
 
-		lamp_get_shadow(lar, shi, inp, shadfac, shi->depth);
+		if (R.r.mode & R_SHADOW) {
+			lamp_get_shadow(lar, shi, inp, shadfac, shi->depth);
 
-		shadow[0] = 1.0f - ((1.0f - shadfac[0] * shadfac[3]) * (1.0f - shadow[0]));
-		shadow[1] = 1.0f - ((1.0f - shadfac[1] * shadfac[3]) * (1.0f - shadow[1]));
-		shadow[2] = 1.0f - ((1.0f - shadfac[2] * shadfac[3]) * (1.0f - shadow[2]));
+			shadow[0] = 1.0f - ((1.0f - shadfac[0] * shadfac[3]) * (1.0f - shadow[0]));
+			shadow[1] = 1.0f - ((1.0f - shadfac[1] * shadfac[3]) * (1.0f - shadow[1]));
+			shadow[2] = 1.0f - ((1.0f - shadfac[2] * shadfac[3]) * (1.0f - shadow[2]));
+		}
 	}
 
 	return visifac;
@@ -2148,4 +2150,25 @@ const float (*RE_render_current_get_matrix(int matrix_id))[4]
 			return (const float(*)[4])R.viewinv;
 	}
 	return NULL;
+}
+
+float RE_fresnel_dielectric(float incoming[3], float normal[3], float eta)
+{
+	/* compute fresnel reflectance without explicitly computing
+	 * the refracted direction */
+	float c = fabs(dot_v3v3(incoming, normal));
+	float g = eta * eta - 1.0 + c * c;
+	float result;
+
+	if (g > 0.0) {
+		g = sqrtf(g);
+		float A = (g - c) / (g + c);
+		float B = (c * (g + c) - 1.0) / (c * (g - c) + 1.0);
+		result = 0.5 * A * A * (1.0 + B * B);
+	}
+	else {
+		result = 1.0;  /* TIR (no refracted component) */
+	}
+
+	return result;
 }

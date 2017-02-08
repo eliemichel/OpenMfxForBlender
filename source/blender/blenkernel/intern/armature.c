@@ -87,6 +87,7 @@ bArmature *BKE_armature_add(Main *bmain, const char *name)
 	arm->deformflag = ARM_DEF_VGROUP | ARM_DEF_ENVELOPE;
 	arm->flag = ARM_COL_CUSTOM; /* custom bone-group colors */
 	arm->layer = 1;
+	arm->ghostsize = 1;
 	return arm;
 }
 
@@ -1794,6 +1795,7 @@ static void pose_proxy_synchronize(Object *ob, Object *from, int layer_protected
 			
 			/* copy posechannel to temp, but restore important pointers */
 			pchanw = *pchanp;
+			pchanw.bone = pchan->bone;
 			pchanw.prev = pchan->prev;
 			pchanw.next = pchan->next;
 			pchanw.parent = pchan->parent;
@@ -1916,7 +1918,7 @@ void BKE_pose_clear_pointers(bPose *pose)
 
 /* only after leave editmode, duplicating, validating older files, library syncing */
 /* NOTE: pose->flag is set for it */
-void BKE_pose_rebuild(Object *ob, bArmature *arm)
+void BKE_pose_rebuild_ex(Object *ob, bArmature *arm, const bool sort_bones)
 {
 	Bone *bone;
 	bPose *pose;
@@ -1963,14 +1965,20 @@ void BKE_pose_rebuild(Object *ob, bArmature *arm)
 #ifdef WITH_LEGACY_DEPSGRAPH
 	/* the sorting */
 	/* Sorting for new dependnecy graph is done on the scene graph level. */
-	if (counter > 1)
+	if (counter > 1 && sort_bones) {
 		DAG_pose_sort(ob);
+	}
 #endif
 
 	ob->pose->flag &= ~POSE_RECALC;
 	ob->pose->flag |= POSE_WAS_REBUILT;
 
 	BKE_pose_channels_hash_make(ob->pose);
+}
+
+void BKE_pose_rebuild(Object *ob, bArmature *arm)
+{
+	BKE_pose_rebuild_ex(ob, arm, true);
 }
 
 /* ********************** THE POSE SOLVER ******************* */

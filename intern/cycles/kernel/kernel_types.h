@@ -37,7 +37,7 @@ CCL_NAMESPACE_BEGIN
 /* constants */
 #define OBJECT_SIZE 		12
 #define OBJECT_VECTOR_SIZE	6
-#define LIGHT_SIZE		12
+#define LIGHT_SIZE		13
 #define FILTER_TABLE_SIZE	1024
 #define RAMP_TABLE_SIZE		256
 #define SHUTTER_TABLE_SIZE		256
@@ -192,6 +192,9 @@ CCL_NAMESPACE_BEGIN
 #ifdef __NO_PATCH_EVAL__
 #  undef __PATCH_EVAL__
 #endif
+#ifdef __NO_TRANSPARENT__
+#  undef __TRANSPARENT_SHADOWS__
+#endif
 
 /* Random Numbers */
 
@@ -343,9 +346,10 @@ typedef enum PassType {
 	PASS_SUBSURFACE_COLOR = (1 << 24),
 	PASS_LIGHT = (1 << 25), /* no real pass, used to force use_light_pass */
 #ifdef __KERNEL_DEBUG__
-	PASS_BVH_TRAVERSAL_STEPS = (1 << 26),
+	PASS_BVH_TRAVERSED_NODES = (1 << 26),
 	PASS_BVH_TRAVERSED_INSTANCES = (1 << 27),
-	PASS_RAY_BOUNCES = (1 << 28),
+	PASS_BVH_INTERSECTIONS = (1 << 28),
+	PASS_RAY_BOUNCES = (1 << 29),
 #endif
 } PassType;
 
@@ -540,35 +544,38 @@ typedef ccl_addr_space struct Intersection {
 	int type;
 
 #ifdef __KERNEL_DEBUG__
-	int num_traversal_steps;
+	int num_traversed_nodes;
 	int num_traversed_instances;
+	int num_intersections;
 #endif
 } Intersection;
 
 /* Primitives */
 
 typedef enum PrimitiveType {
-	PRIMITIVE_NONE = 0,
-	PRIMITIVE_TRIANGLE = 1,
-	PRIMITIVE_MOTION_TRIANGLE = 2,
-	PRIMITIVE_CURVE = 4,
-	PRIMITIVE_MOTION_CURVE = 8,
-	/* Lamp primitive is not included below on purpose, since it is no real traceable primitive */
-	PRIMITIVE_LAMP = 16,
+	PRIMITIVE_NONE            = 0,
+	PRIMITIVE_TRIANGLE        = (1 << 0),
+	PRIMITIVE_MOTION_TRIANGLE = (1 << 1),
+	PRIMITIVE_CURVE           = (1 << 2),
+	PRIMITIVE_MOTION_CURVE    = (1 << 3),
+	/* Lamp primitive is not included below on purpose,
+	 * since it is no real traceable primitive.
+	 */
+	PRIMITIVE_LAMP            = (1 << 4),
 
 	PRIMITIVE_ALL_TRIANGLE = (PRIMITIVE_TRIANGLE|PRIMITIVE_MOTION_TRIANGLE),
 	PRIMITIVE_ALL_CURVE = (PRIMITIVE_CURVE|PRIMITIVE_MOTION_CURVE),
 	PRIMITIVE_ALL_MOTION = (PRIMITIVE_MOTION_TRIANGLE|PRIMITIVE_MOTION_CURVE),
 	PRIMITIVE_ALL = (PRIMITIVE_ALL_TRIANGLE|PRIMITIVE_ALL_CURVE),
 
-	/* Total number of different primitives.
+	/* Total number of different traceable primitives.
 	 * NOTE: This is an actual value, not a bitflag.
 	 */
 	PRIMITIVE_NUM_TOTAL = 4,
 } PrimitiveType;
 
-#define PRIMITIVE_PACK_SEGMENT(type, segment) ((segment << 16) | type)
-#define PRIMITIVE_UNPACK_SEGMENT(type) (type >> 16)
+#define PRIMITIVE_PACK_SEGMENT(type, segment) ((segment << PRIMITIVE_NUM_TOTAL) | (type))
+#define PRIMITIVE_UNPACK_SEGMENT(type) (type >> PRIMITIVE_NUM_TOTAL)
 
 /* Attributes */
 
@@ -686,7 +693,8 @@ typedef enum ShaderContext {
 /* Shader Data
  *
  * Main shader state at a point on the surface or in a volume. All coordinates
- * are in world space. */
+ * are in world space.
+ */
 
 enum ShaderDataRuntimeFlag {
 	/* runtime flags */
@@ -736,7 +744,7 @@ enum ShaderDataShaderFlag {
 					   SD_SHADER_USE_UNIFORM_ALPHA_SELF_ONLY | SD_SHADER_OVERRIDE_SAMPLES | SD_SHADER_OVERRIDE_BOUNCES)
 };
 
-enum ShaderDataObjectFlagss {
+enum ShaderDataObjectFlag {
 	/* object flags */
 	SD_OBJECT_HOLDOUT_MASK             = (1 << 0),  /* holdout for camera rays */
 	SD_OBJECT_OBJECT_MOTION			   = (1 << 1),  /* has object motion blur */
@@ -749,6 +757,7 @@ enum ShaderDataObjectFlagss {
 	SD_OBJECT_FLAGS = (SD_OBJECT_HOLDOUT_MASK | SD_OBJECT_OBJECT_MOTION | SD_OBJECT_TRANSFORM_APPLIED |
 					   SD_OBJECT_NEGATIVE_SCALE_APPLIED | SD_OBJECT_OBJECT_HAS_VOLUME | SD_OBJECT_OBJECT_INTERSECTS_VOLUME |
 					   SD_OBJECT_OBJECT_HAS_VERTEX_MOTION)
+
 };
 
 #ifdef __SPLIT_KERNEL__
@@ -784,6 +793,7 @@ typedef ccl_addr_space struct ShaderData {
 	ccl_soa_member(float3, I);
 	/* shader id */
 	ccl_soa_member(int, shader);
+
 	/* booleans describing shader, see ShaderDataRuntimeFlag, 
 	 * ShaderDataShaderFlag, ShaderDataObjecyFlag */
 	ccl_soa_member(int, runtime_flag);
@@ -1065,10 +1075,10 @@ typedef struct KernelFilm {
 	float mist_falloff;
 
 #ifdef __KERNEL_DEBUG__
-	int pass_bvh_traversal_steps;
+	int pass_bvh_traversed_nodes;
 	int pass_bvh_traversed_instances;
+	int pass_bvh_intersections;
 	int pass_ray_bounces;
-	int pass_pad3;
 #endif
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
@@ -1111,6 +1121,8 @@ typedef struct KernelIntegrator {
 	int max_glossy_bounce;
 	int max_transmission_bounce;
 	int max_volume_bounce;
+
+	int ao_bounces;
 
 	/* transparent */
 	int transparent_min_bounce;
@@ -1155,7 +1167,8 @@ typedef struct KernelIntegrator {
 
 	float light_inv_rr_threshold;
 
-	int pad1;
+	int start_sample;
+	int pad1, pad2, pad3;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 
@@ -1213,10 +1226,9 @@ static_assert_align(KernelData, 16);
  * really important here.
  */
 typedef ccl_addr_space struct DebugData {
-	// Total number of BVH node traversal steps and primitives intersections
-	// for the camera rays.
-	int num_bvh_traversal_steps;
+	int num_bvh_traversed_nodes;
 	int num_bvh_traversed_instances;
+	int num_bvh_intersections;
 	int num_ray_bounces;
 } DebugData;
 #endif

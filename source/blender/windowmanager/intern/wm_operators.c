@@ -1747,7 +1747,7 @@ static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(ar
 	/* Builds made from tag only shows tag sha */
 	BLI_snprintf(hash_buf, sizeof(hash_buf), "Hash: %s", build_hash);
 	BLI_snprintf(date_buf, sizeof(date_buf), "Date: %s %s", build_commit_date, build_commit_time);
-	BLI_snprintf(vers_buf, sizeof(vers_buf), "Studio Version: %s", "v1.13e");
+	BLI_snprintf(vers_buf, sizeof(vers_buf), "Studio Version: %s", "v1.14");
 	
 	BLF_size(style->widgetlabel.uifont_id, style->widgetlabel.points, U.pixelsize * U.dpi);
 	hash_width = (int)BLF_width(style->widgetlabel.uifont_id, hash_buf, sizeof(hash_buf)) + U.widget_unit;
@@ -1851,7 +1851,7 @@ static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(ar
 	             BLENDER_VERSION / 100, BLENDER_VERSION % 100);
 	uiItemStringO(col, IFACE_("Release Log"), ICON_URL, "WM_OT_url_open", "url", url);
 	uiItemStringO(col, IFACE_("Manual"), ICON_URL, "WM_OT_url_open", "url",
-	              "http://www.blender.org/manual");
+	              "https://docs.blender.org/manual/en/dev/");
 	uiItemStringO(col, IFACE_("Blender Website"), ICON_URL, "WM_OT_url_open", "url", "http://www.blender.org");
 	if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "release")) {
 		BLI_snprintf(url, sizeof(url), "http://www.blender.org/documentation/blender_python_api_%d_%d"
@@ -3915,8 +3915,12 @@ static void previews_id_ensure(bContext *C, Scene *scene, ID *id)
 	}
 }
 
-static int previews_id_ensure_callback(void *userdata, ID *UNUSED(self_id), ID **idptr, int UNUSED(cd_flag))
+static int previews_id_ensure_callback(void *userdata, ID *UNUSED(self_id), ID **idptr, int cb_flag)
 {
+	if (cb_flag & IDWALK_CB_PRIVATE) {
+		return IDWALK_RET_NOP;
+	}
+
 	PreviewsIDEnsureData *data = userdata;
 	ID *id = *idptr;
 
@@ -3949,7 +3953,7 @@ static int previews_ensure_exec(bContext *C, wmOperator *UNUSED(op))
 		preview_id_data.scene = scene;
 		id = (ID *)scene;
 
-		BKE_library_foreach_ID_link(id, previews_id_ensure_callback, &preview_id_data, IDWALK_RECURSE);
+		BKE_library_foreach_ID_link(NULL, id, previews_id_ensure_callback, &preview_id_data, IDWALK_RECURSE);
 	}
 
 	/* Check a last time for ID not used (fake users only, in theory), and
@@ -4563,4 +4567,3 @@ EnumPropertyItem *RNA_mask_local_itemf(bContext *C, PointerRNA *ptr, PropertyRNA
 {
 	return rna_id_itemf(C, ptr, r_free, C ? (ID *)CTX_data_main(C)->mask.first : NULL, true);
 }
-

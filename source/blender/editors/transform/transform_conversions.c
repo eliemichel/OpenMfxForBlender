@@ -2393,7 +2393,12 @@ static void createTransEditVerts(TransInfo *t)
 		editmesh_set_connectivity_distance(em->bm, mtx, dists);
 	}
 
-	if (t->around == V3D_AROUND_LOCAL_ORIGINS) {
+	/* Only in case of rotation and resize, we want the elements of the edited
+	 * object to behave as groups whose pivot are the individual origins
+	 *
+	 * TODO: use island_info to detect the closest point when the "Snap Target"
+	 * in Blender UI is "Closest" */
+	if ((t->around == V3D_AROUND_LOCAL_ORIGINS) && (t->mode != TFM_TRANSLATION)) {
 		island_info = editmesh_islands_info_calc(em, &island_info_tot, &island_vert_map);
 	}
 
@@ -5583,7 +5588,7 @@ void autokeyframe_ob_cb_func(bContext *C, Scene *scene, View3D *v3d, Object *ob,
 			if (tmode == TFM_TRANSLATION) {
 				do_loc = true;
 			}
-			else if (tmode == TFM_ROTATION) {
+			else if (ELEM(tmode, TFM_ROTATION, TFM_TRACKBALL)) {
 				if (v3d->around == V3D_AROUND_ACTIVE) {
 					if (ob != OBACT)
 						do_loc = true;
@@ -5728,7 +5733,7 @@ void autokeyframe_pose_cb_func(bContext *C, Scene *scene, View3D *v3d, Object *o
 						else
 							do_loc = true;
 					}
-					else if (tmode == TFM_ROTATION) {
+					else if (ELEM(tmode, TFM_ROTATION, TFM_TRACKBALL)) {
 						if (ELEM(v3d->around, V3D_AROUND_CURSOR, V3D_AROUND_ACTIVE))
 							do_loc = true;
 							

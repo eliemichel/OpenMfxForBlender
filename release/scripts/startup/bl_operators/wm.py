@@ -656,11 +656,6 @@ doc_id = StringProperty(
         options={'HIDDEN'},
         )
 
-doc_new = StringProperty(
-        name="Edit Description",
-        maxlen=1024,
-        )
-
 data_path_iter = StringProperty(
         description="The data path relative to the context, must point to an iterable")
 
@@ -935,16 +930,23 @@ def _wm_doc_get_id(doc_id, do_url=True, url_prefix=""):
 
                 # detect if this is a inherited member and use that name instead
                 rna_parent = rna_class.bl_rna
-                rna_prop = rna_parent.properties[class_prop]
-                rna_parent = rna_parent.base
-                while rna_parent and rna_prop == rna_parent.properties.get(class_prop):
-                    class_name = rna_parent.identifier
+                rna_prop = rna_parent.properties.get(class_prop)
+                if rna_prop:
                     rna_parent = rna_parent.base
+                    while rna_parent and rna_prop == rna_parent.properties.get(class_prop):
+                        class_name = rna_parent.identifier
+                        rna_parent = rna_parent.base
 
-                if do_url:
-                    url = ("%s/bpy.types.%s.html#bpy.types.%s.%s" % (url_prefix, class_name, class_name, class_prop))
+                    if do_url:
+                        url = ("%s/bpy.types.%s.html#bpy.types.%s.%s" % (url_prefix, class_name, class_name, class_prop))
+                    else:
+                        rna = ("bpy.types.%s.%s" % (class_name, class_prop))
                 else:
-                    rna = ("bpy.types.%s.%s" % (class_name, class_prop))
+                    # We assume this is custom property, only try to generate generic url/rna_id...
+                    if do_url:
+                        url = ("%s/bpy.types.bpy_struct.html#bpy.types.bpy_struct.items" % (url_prefix,))
+                    else:
+                        rna = "bpy.types.bpy_struct"
 
     return url if do_url else rna
 
@@ -2161,5 +2163,34 @@ class WM_OT_addon_expand(Operator):
         if mod is not None:
             info = addon_utils.module_bl_info(mod)
             info["show_expanded"] = not info["show_expanded"]
+
+        return {'FINISHED'}
+
+class WM_OT_addon_userpref_show(Operator):
+    "Show add-on user preferences"
+    bl_idname = "wm.addon_userpref_show"
+    bl_label = ""
+    bl_options = {'INTERNAL'}
+
+    module = StringProperty(
+            name="Module",
+            description="Module name of the add-on to expand",
+            )
+
+    def execute(self, context):
+        import addon_utils
+
+        module_name = self.module
+
+        modules = addon_utils.modules(refresh=False)
+        mod = addon_utils.addons_fake_modules.get(module_name)
+        if mod is not None:
+            info = addon_utils.module_bl_info(mod)
+            info["show_expanded"] = True
+
+            bpy.context.user_preferences.active_section = 'ADDONS'
+            context.window_manager.addon_filter = 'All'
+            context.window_manager.addon_search = info["name"]
+            bpy.ops.screen.userpref_show('INVOKE_DEFAULT')
 
         return {'FINISHED'}

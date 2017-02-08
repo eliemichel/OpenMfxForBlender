@@ -44,6 +44,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
+#include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
 #include "BLI_ghash.h"
 
@@ -433,8 +434,8 @@ bPoseChannel *BKE_pose_channel_verify(bPose *pose, const char *name)
 	
 	chan->scaleIn = chan->scaleOut = 1.0f;
 	
-	chan->limitmin[0] = chan->limitmin[1] = chan->limitmin[2] = -180.0f;
-	chan->limitmax[0] = chan->limitmax[1] = chan->limitmax[2] = 180.0f;
+	chan->limitmin[0] = chan->limitmin[1] = chan->limitmin[2] = -M_PI;
+	chan->limitmax[0] = chan->limitmax[1] = chan->limitmax[2] = M_PI;
 	chan->stiffness[0] = chan->stiffness[1] = chan->stiffness[2] = 0.0f;
 	chan->ikrotweight = chan->iklinweight = 0.0f;
 	unit_m4(chan->constinv);
@@ -494,7 +495,7 @@ bPoseChannel *BKE_pose_channel_get_mirrored(const bPose *pose, const char *name)
 {
 	char name_flip[MAXBONENAME];
 
-	BKE_deform_flip_side_name(name_flip, name, false);
+	BLI_string_flip_side_name(name_flip, name, false, sizeof(name_flip));
 
 	if (!STREQ(name_flip, name)) {
 		return BKE_pose_channel_find_name(pose, name_flip);

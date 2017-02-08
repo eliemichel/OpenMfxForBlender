@@ -188,7 +188,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 
 					/* primitive intersection */
 					while(prim_addr < prim_addr2) {
-						kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
+						kernel_assert((kernel_tex_fetch(__prim_type, prim_addr) & PRIMITIVE_ALL) == p_type);
 
                         if (!object_in_shadow_linking(kg,PATH_RAY_ALL_VISIBILITY,object,prim_addr,shadow_linking)) {
                             prim_addr++;
@@ -228,6 +228,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 #if BVH_FEATURE(BVH_HAIR)
 							case PRIMITIVE_CURVE:
 							case PRIMITIVE_MOTION_CURVE: {
+								const uint curve_type = kernel_tex_fetch(__prim_type, prim_addr);
 								if(kernel_data.curve.curveflags & CURVE_KN_INTERPOLATE) {
 									hit = bvh_cardinal_curve_intersect(kg,
 									                                   isect_array,
@@ -237,7 +238,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 									                                   object,
 									                                   prim_addr,
 									                                   ray->time,
-									                                   type,
+									                                   curve_type,
 									                                   NULL,
 									                                   0, 0);
 								}
@@ -250,7 +251,7 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 									                          object,
 									                          prim_addr,
 									                          ray->time,
-									                          type,
+									                          curve_type,
 									                          NULL,
 									                          0, 0);
 								}

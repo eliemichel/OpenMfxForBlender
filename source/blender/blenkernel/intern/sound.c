@@ -167,6 +167,10 @@ static const char *force_device = NULL;
 #ifdef WITH_JACK
 static void sound_sync_callback(void *data, int mode, float time)
 {
+	// Ugly: Blender doesn't like it when the animation is played back during rendering
+	if (G.is_rendering)
+		return;
+
 	struct Main *bmain = (struct Main *)data;
 	struct Scene *scene;
 
@@ -251,7 +255,8 @@ void BKE_sound_init(struct Main *bmain)
 void BKE_sound_init_main(struct Main *bmain)
 {
 #ifdef WITH_JACK
-	AUD_setSynchronizerCallback(sound_sync_callback, bmain);
+	if (sound_device)
+		AUD_setSynchronizerCallback(sound_sync_callback, bmain);
 #else
 	(void)bmain; /* unused */
 #endif
@@ -449,6 +454,16 @@ void BKE_sound_destroy_scene(struct Scene *scene)
 		AUD_destroySet(scene->speaker_handles);
 }
 
+void BKE_sound_reset_scene_specs(struct Scene *scene)
+{
+	AUD_Specs specs;
+
+	specs.channels = AUD_Device_getChannels(sound_device);
+	specs.rate = AUD_Device_getRate(sound_device);
+
+	AUD_Sequence_setSpecs(scene->sound_scene, specs);
+}
+
 void BKE_sound_mute_scene(struct Scene *scene, int muted)
 {
 	if (scene->sound_scene)
@@ -575,15 +590,10 @@ void BKE_sound_update_sequencer(struct Main *main, bSound *sound)
 
 static void sound_start_play_scene(struct Scene *scene)
 {
-	AUD_Specs specs;
-
 	if (scene->playback_handle)
 		AUD_Handle_stop(scene->playback_handle);
 
-	specs.channels = AUD_Device_getChannels(sound_device);
-	specs.rate = AUD_Device_getRate(sound_device);
-
-	AUD_Sequence_setSpecs(scene->sound_scene, specs);
+	BKE_sound_reset_scene_specs(scene);
 
 	if ((scene->playback_handle = AUD_Device_play(sound_device, scene->sound_scene, 1)))
 		AUD_Handle_setLoopCount(scene->playback_handle, -1);
@@ -692,6 +702,10 @@ void BKE_sound_seek_scene(struct Main *bmain, struct Scene *scene)
 
 float BKE_sound_sync_scene(struct Scene *scene)
 {
+	// Ugly: Blender doesn't like it when the animation is played back during rendering
+	if (G.is_rendering)
+		return NAN_FLT;
+
 	if (scene->playback_handle) {
 		if (scene->audio.flag & AUDIO_SYNC)
 			return AUD_getSynchronizerPosition(scene->playback_handle);
@@ -703,6 +717,10 @@ float BKE_sound_sync_scene(struct Scene *scene)
 
 int BKE_sound_scene_playing(struct Scene *scene)
 {
+	// Ugly: Blender doesn't like it when the animation is played back during rendering
+	if (G.is_rendering)
+		return -1;
+
 	if (scene->audio.flag & AUDIO_SYNC)
 		return AUD_isSynchronizerPlaying();
 	else
@@ -897,6 +915,7 @@ void BKE_sound_delete_cache(struct bSound *UNUSED(sound)) {}
 void BKE_sound_load(struct Main *UNUSED(bmain), struct bSound *UNUSED(sound)) {}
 void BKE_sound_create_scene(struct Scene *UNUSED(scene)) {}
 void BKE_sound_destroy_scene(struct Scene *UNUSED(scene)) {}
+void BKE_sound_reset_scene_specs(struct Scene *UNUSED(scene)) {}
 void BKE_sound_mute_scene(struct Scene *UNUSED(scene), int UNUSED(muted)) {}
 void *BKE_sound_scene_add_scene_sound(struct Scene *UNUSED(scene), struct Sequence *UNUSED(sequence),
                                       int UNUSED(startframe), int UNUSED(endframe), int UNUSED(frameskip)) { return NULL; }

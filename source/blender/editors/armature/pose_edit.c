@@ -593,20 +593,24 @@ static int pose_flip_names_exec(bContext *C, wmOperator *UNUSED(op))
 {
 	Object *ob = BKE_object_pose_armature_get(CTX_data_active_object(C));
 	bArmature *arm;
-	
+
 	/* paranoia checks */
 	if (ELEM(NULL, ob, ob->pose)) 
 		return OPERATOR_CANCELLED;
+
 	arm = ob->data;
-	
-	/* loop through selected bones, auto-naming them */
+
+	ListBase bones_names = {NULL};
+
 	CTX_DATA_BEGIN (C, bPoseChannel *, pchan, selected_pose_bones)
 	{
-		char name_flip[MAXBONENAME];
-		BKE_deform_flip_side_name(name_flip, pchan->name, true);
-		ED_armature_bone_rename(arm, pchan->name, name_flip);
+		BLI_addtail(&bones_names, BLI_genericNodeN(pchan->name));
 	}
 	CTX_DATA_END;
+
+	ED_armature_bones_flip_names(arm, &bones_names);
+
+	BLI_freelistN(&bones_names);
 	
 	/* since we renamed stuff... */
 	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
@@ -626,7 +630,7 @@ void POSE_OT_flip_names(wmOperatorType *ot)
 	
 	/* api callbacks */
 	ot->exec = pose_flip_names_exec;
-	ot->poll = ED_operator_posemode;
+	ot->poll = ED_operator_posemode_local;
 	
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

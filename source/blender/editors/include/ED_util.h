@@ -52,12 +52,15 @@ void    ED_OT_flush_edits(struct wmOperatorType *ot);
 /* undo.c */
 void    ED_undo_push(struct bContext *C, const char *str);
 void    ED_undo_push_op(struct bContext *C, struct wmOperator *op);
+void    ED_undo_grouped_push(struct bContext *C, const char *str);
+void    ED_undo_grouped_push_op(struct bContext *C, struct wmOperator *op);
 void    ED_undo_pop_op(struct bContext *C, struct wmOperator *op);
 void    ED_undo_pop(struct bContext *C);
 void    ED_undo_redo(struct bContext *C);
 void    ED_OT_undo(struct wmOperatorType *ot);
 void    ED_OT_undo_push(struct wmOperatorType *ot);
 void    ED_OT_redo(struct wmOperatorType *ot);
+void    ED_OT_undo_redo(struct wmOperatorType *ot);
 void    ED_OT_undo_history(struct wmOperatorType *ot);
 
 int     ED_undo_operator_repeat(struct bContext *C, struct wmOperator *op);
