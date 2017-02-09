@@ -105,7 +105,7 @@ void delete_fcurve_key(FCurve *fcu, int index, bool do_recalc)
 }
 
 /* Checks if all keys are selected in an fcurve */
-bool check_if_all_keys_sel(FCurve *fcu)
+bool check_if_all_keys_sel(struct FCurve *fcu)
 {
 	for (int i = 0; i < fcu->totvert; i++)
 	{
