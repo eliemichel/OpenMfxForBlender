@@ -1146,19 +1146,12 @@ void OSLCompiler::compile(Scene *scene, OSLGlobals *og, Shader *shader)
 				shader->osl_surface_bump_ref = OSL::ShaderGroupRef();
 
 			shader->has_surface = true;
-		}
-		else {
+		} else if (shader->used && graph && output->input("AOSurface")->link) {
+			shader->osl_surface_ref = compile_type(shader, shader->graph, SHADER_TYPE_AO_SURFACE);
+			shader->has_surface = true;
+		} else {
 			shader->osl_surface_ref = OSL::ShaderGroupRef();
 			shader->osl_surface_bump_ref = OSL::ShaderGroupRef();
-		}
-
-		/* generate ao surface shader */
-		if (shader->used && graph && output->input("AOSurface")->link) {
-			shader->osl_ao_surface_ref = compile_type(shader, shader->graph, SHADER_TYPE_AO_SURFACE);
-			shader->has_ao_surface = true;
-		}
-		else {
-			shader->osl_ao_surface_ref = OSL::ShaderGroupRef();
 		}
 
 		/* generate volume shader */
@@ -1180,7 +1173,6 @@ void OSLCompiler::compile(Scene *scene, OSLGlobals *og, Shader *shader)
 
 	/* push state to array for lookup */
 	og->surface_state.push_back(shader->osl_surface_ref);
-	og->surface_state.push_back(shader->osl_ao_surface_ref);
 	og->volume_state.push_back(shader->osl_volume_ref);
 	og->displacement_state.push_back(shader->osl_displacement_ref);
 	og->bump_state.push_back(shader->osl_surface_bump_ref);

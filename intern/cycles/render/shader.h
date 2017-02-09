@@ -149,7 +149,6 @@ public:
 #ifdef WITH_OSL
 	/* osl shading state references */
 	OSL::ShaderGroupRef osl_surface_ref;
-	OSL::ShaderGroupRef osl_ao_surface_ref;
 	OSL::ShaderGroupRef osl_surface_bump_ref;
 	OSL::ShaderGroupRef osl_volume_ref;
 	OSL::ShaderGroupRef osl_displacement_ref;
