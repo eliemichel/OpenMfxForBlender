@@ -1700,8 +1700,8 @@ BLI_INLINE bool spring_angle(Implicit_Data *data, int i, int j, int *i_a, int *i
 	float co_i[3], co_j[3], co_a[3], co_b[3];
 	float tmp1[3], tmp2[3], vec_e[3];
 	float sin, cos;
-	float (*array_a)[3] = BLI_array_alloca(array_a, len_a);
-	float (*array_b)[3] = BLI_array_alloca(array_b, len_b);
+	float (*array_a)[3] = MEM_mallocN(sizeof(*array_a) * len_a, "spring angle poly a");
+	float (*array_b)[3] = MEM_mallocN(sizeof(*array_b) * len_b, "spring angle poly b");
 	int x;
 
 	/* assign poly vert coords to arrays */
@@ -1764,6 +1764,9 @@ BLI_INLINE bool spring_angle(Implicit_Data *data, int i, int j, int *i_a, int *i
 
 	sub_v3_v3(r_vel_a, tmp1);
 	sub_v3_v3(r_vel_b, tmp1);
+
+	MEM_freeN(array_a);
+	MEM_freeN(array_b);
 
 	return true;
 }

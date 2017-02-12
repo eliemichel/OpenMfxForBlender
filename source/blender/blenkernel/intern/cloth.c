@@ -960,24 +960,25 @@ BLI_INLINE float spring_angle(ClothVertex *verts, int i, int j, int *i_a, int *i
 	float dir_a[3], dir_b[3];
 	float tmp1[3], tmp2[3], vec_e[3];
 	float sin, cos;
-	float (*array_a)[3] = BLI_array_alloca(array_a, len_a);
-	float (*array_b)[3] = BLI_array_alloca(array_b, len_b);
+	float fact_a = 1.0f / len_a;
+	float fact_b = 1.0f / len_b;
 	int x;
+
+	zero_v3(co_a);
+	zero_v3(co_b);
 
 	/* assign poly vert coords to arrays */
 	for (x = 0; x < len_a; x++) {
-		copy_v3_v3(array_a[x], verts[i_a[x]].xrest);
+		madd_v3_v3fl(co_a, verts[i_a[x]].xrest, fact_a);
 	}
 
 	for (x = 0; x < len_b; x++) {
-		copy_v3_v3(array_b[x], verts[i_b[x]].xrest);
+		madd_v3_v3fl(co_b, verts[i_b[x]].xrest, fact_b);
 	}
 
 	/* get edge vert coords and poly centroid coords. */
 	copy_v3_v3(co_i, verts[i].xrest);
 	copy_v3_v3(co_j, verts[j].xrest);
-	cent_poly_v3(co_a, array_a, len_a);
-	cent_poly_v3(co_b, array_b, len_b);
 
 	/* find dir for poly a */
 	sub_v3_v3v3(tmp1, co_j, co_a);
