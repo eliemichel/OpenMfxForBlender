@@ -395,13 +395,13 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
         float3 curve_location = stack_load_float3(stack, curve_location_offset);
         float3 curve_scale = stack_load_float3(stack, curve_scale_offset);
 
-        uint width = kg->texture_float4_images[slot].width;
+		uint width = 49; /* THIS IS TEMPORARY!!! */
 
         float grad = 1.0;
 
         for (int t = 0; t < width; ++t) {
             int t_next = (t+1)%width;
-            float4 ls0 = svm_image_texture(kg, slot, (float)t/width, 0.0, false, true);
+            float4 ls0 = svm_image_texture(kg, slot, (float)t/width,	  0.0, false, true);
             float4 ls1 = svm_image_texture(kg, slot, (float)t_next/width, 0.0, false, true);
 
             float2 p0,p1,co2;

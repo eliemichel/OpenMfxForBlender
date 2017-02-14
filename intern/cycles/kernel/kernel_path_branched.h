@@ -407,6 +407,10 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 			/* free cached steps */
 			kernel_volume_decoupled_free(kg, &volume_segment);
 #else
+
+			uint light_linking = object_light_linking(kg, sd.object);
+			uint shadow_linking = object_shadow_linking(kg, sd.object);
+
 			/* GPU: no decoupled ray marching, scatter probalistically */
 			int num_samples = kernel_data.integrator.volume_samples;
 			float num_samples_inv = 1.0f/num_samples;
@@ -447,7 +451,8 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 						                     tp,
 						                     num_samples,
 						                     &ps,
-						                     &L);
+						                     &L,
+											 light_linking);
 
 						/* for render passes, sum and reset indirect light pass variables
 						 * for the next samples */
