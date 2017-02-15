@@ -212,7 +212,6 @@ ccl_device_noinline bool shadow_blocked(KernelGlobals *kg,
                                         ccl_addr_space PathState *state,
                                         ccl_addr_space Ray *ray_input,
                                         float3 *shadow,
-										ShaderData* source_sd,
                                         uint shadow_linking)
 {
 	*shadow = make_float3(1.0f, 1.0f, 1.0f);
@@ -277,12 +276,15 @@ ccl_device_noinline bool shadow_blocked(KernelGlobals *kg,
 				}
 #endif
 
+				ShaderData *sd;
+				shader_setup_from_ray(kg, sd, isect, ray);
+
 				/* setup shader data at surface */
-				shader_setup_from_ray(kg, shadow_sd, isect, ray);
+				//shader_setup_from_ray(kg, shadow_sd, isect, ray);
 
 				/* attenuation from transparent surface */
-				if(!(ccl_fetch(shadow_sd, flag) & SD_HAS_ONLY_VOLUME)) {
-					if ( (ccl_fetch(shadow_sd, flag) & SD_SHADER_USE_UNIFORM_ALPHA) && (!(ccl_fetch(shadow_sd, flag) & SD_SHADER_USE_UNIFORM_ALPHA_SELF_ONLY) || (ccl_fetch(shadow_sd, shader) == ccl_fetch(source_sd, shader)))) {
+				if(!(ccl_fetch(shadow_sd, shader_flag) & SD_SHADER_HAS_ONLY_VOLUME)) {
+					if ( (ccl_fetch(shadow_sd,shader_flag) & SD_SHADER_USE_UNIFORM_ALPHA) && (!(ccl_fetch(shadow_sd, shader_flag) & SD_SHADER_USE_UNIFORM_ALPHA_SELF_ONLY) || (ccl_fetch(shadow_sd, shader) == ccl_fetch(sd, shader)))) {
 						if(state->flag & PATH_RAY_AO)
 							throughput *= (1.0f - ccl_fetch(shadow_sd, ao_alpha));
 						else
