@@ -44,6 +44,7 @@
 #include "BKE_cdderivedmesh.h"
 #include "BKE_cloth.h"
 #include "BKE_editmesh.h"
+#include "BKE_deform.h"
 #include "BKE_effect.h"
 #include "BKE_global.h"
 #include "BKE_modifier.h"
@@ -63,7 +64,7 @@ static void cloth_update_springs( ClothModifierData *clmd );
 static void cloth_update_verts( Object *ob, ClothModifierData *clmd, DerivedMesh *dm );
 static void cloth_update_spring_lengths( ClothModifierData *clmd, DerivedMesh *dm );
 static int cloth_build_springs ( ClothModifierData *clmd, DerivedMesh *dm );
-static void cloth_apply_vgroup ( ClothModifierData *clmd, DerivedMesh *dm );
+static void cloth_apply_vgroup ( ClothModifierData *clmd, DerivedMesh *dm, Object *ob );
 
 typedef struct BendSpringRef {
 	int index, polys;
@@ -334,7 +335,7 @@ static int do_step_cloth(Object *ob, ClothModifierData *clmd, DerivedMesh *resul
 		cloth_update_verts ( ob, clmd, result );
 
 	/* Support for dynamic vertex groups, changing from frame to frame */
-	cloth_apply_vgroup ( clmd, result );
+	cloth_apply_vgroup(clmd, result, ob);
 
 	if ((clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_DYNAMIC_BASEMESH) ||
 	    (clmd->sim_parms->vgroup_shrink > 0) || (clmd->sim_parms->shrink > 0.0f))
@@ -652,7 +653,8 @@ int cloth_uses_vgroup(ClothModifierData *clmd)
 		(clmd->sim_parms->vgroup_struct>0)||
 		(clmd->sim_parms->vgroup_bend>0) ||
 		(clmd->sim_parms->vgroup_shrink>0) ||
-		(clmd->sim_parms->vgroup_mass>0));
+		(clmd->sim_parms->vgroup_mass>0) ||
+		(clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_COMB_GOAL));
 }
 
 /**
@@ -660,7 +662,7 @@ int cloth_uses_vgroup(ClothModifierData *clmd)
  *
  **/
 /* can be optimized to do all groups in one loop */
-static void cloth_apply_vgroup ( ClothModifierData *clmd, DerivedMesh *dm )
+static void cloth_apply_vgroup(ClothModifierData *clmd, DerivedMesh *dm, Object *ob)
 {
 	int i = 0;
 	int j = 0;
@@ -695,9 +697,21 @@ static void cloth_apply_vgroup ( ClothModifierData *clmd, DerivedMesh *dm )
 			verts->flags &= ~CLOTH_VERT_FLAG_NOSELFCOLL;
 
 			dvert = dm->getVertData ( dm, i, CD_MDEFORMVERT );
+
 			if ( dvert ) {
+				if (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_COMB_GOAL)
+				{
+					verts->goal = BKE_defvert_combined_weight(ob, dvert, DVERT_COMBINED_MODE_ADD);
+
+					verts->goal  = pow4f(verts->goal);
+					if ( verts->goal >= SOFTGOALSNAP )
+						verts->flags |= CLOTH_VERT_FLAG_PINNED;
+				}
+
 				for ( j = 0; j < dvert->totweight; j++ ) {
-					if ( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_mass-1)) {
+					if ((dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_mass-1)) &&
+					    !(clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_COMB_GOAL))
+					{
 						verts->goal = dvert->dw [j].weight;
 
 						/* goalfac= 1.0f; */ /* UNUSED */
@@ -861,7 +875,7 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 	
 	// apply / set vertex groups
 	// has to be happen before springs are build!
-	cloth_apply_vgroup (clmd, dm);
+	cloth_apply_vgroup(clmd, dm, ob);
 
 	if ( !cloth_build_springs ( clmd, dm ) ) {
 		cloth_free_modifier ( clmd );

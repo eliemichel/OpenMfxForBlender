@@ -1051,7 +1051,11 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 
 	init_vel = ((clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_INIT_VEL) && (frame == (clmd->point_cache->startframe + 1)));
 
-	if ((clmd->sim_parms->vgroup_mass > 0) || init_vel) { /* do goal and velocity stuff */
+	/* do goal and velocity stuff */
+	if ((clmd->sim_parms->vgroup_mass > 0) ||
+	    (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_COMB_GOAL) ||
+	    init_vel)
+	{
 		for (i = 0; i < mvert_num; i++) {
 			// update velocities with constrained velocities from pinned verts
 			if ((verts[i].flags & CLOTH_VERT_FLAG_PINNED) || init_vel) {
@@ -1176,7 +1180,9 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 		
 		/* move pinned verts to correct position */
 		for (i = 0; i < mvert_num; i++) {
-			if (clmd->sim_parms->vgroup_mass>0) {
+			if ((clmd->sim_parms->vgroup_mass > 0) ||
+			    (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_COMB_GOAL))
+			{
 				if (verts[i].flags & CLOTH_VERT_FLAG_PINNED) {
 					float x[3];
 					/* divide by time_scale to prevent pinned vertices' delta locations from being multiplied */

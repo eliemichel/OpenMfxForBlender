@@ -568,6 +568,12 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	                         "(1.0 = no damping, 0.0 = fully dampened)");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
+	prop = RNA_def_property(srna, "use_combined_pin_cloth", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", CLOTH_SIMSETTINGS_FLAG_COMB_GOAL);
+	RNA_def_property_ui_text(prop, "Combined Weights", "Use combined interpolated weights for cloth pinning");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+
 	prop = RNA_def_property(srna, "pin_stiffness", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "goalspring");
 	RNA_def_property_range(prop, 0.0f, 50.0);

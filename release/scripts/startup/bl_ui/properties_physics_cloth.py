@@ -185,15 +185,23 @@ class PHYSICS_PT_cloth_shape(PhysicButtonsPanel, Panel):
 
         layout.active = cloth_panel_enabled(md)
 
-        split = layout.split(percentage=0.3, align=True)
+        col = layout.column()
+        split = col.split(percentage=0.3, align=True)
 
         split.label("Pinning:")
 
-        split.prop_search(cloth, "vertex_group_mass", ob, "vertex_groups", text="")
+        sub1 = split.row(align=True)
+        sub1.active = not cloth.use_combined_pin_cloth
 
-        sub = split.row(align=True)
-        sub.active = cloth.vertex_group_mass != ""
-        sub.prop(cloth, "pin_stiffness", text="Stiffness")
+        sub1.prop_search(cloth, "vertex_group_mass", ob, "vertex_groups", text="")
+
+        sub2 = sub1.row(align=True)
+        sub2.active = cloth.vertex_group_mass != ""
+        sub2.prop(cloth, "pin_stiffness", text="Stiffness")
+
+        col.prop(cloth, "use_combined_pin_cloth")
+
+        layout.separator()
 
         split = layout.split(percentage=0.3)
         split.prop(cloth, "use_sewing_springs", text="Sewing:")
