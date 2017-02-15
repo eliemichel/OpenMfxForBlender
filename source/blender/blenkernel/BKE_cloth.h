@@ -245,9 +245,6 @@ void bvhselftree_update_from_cloth(struct ClothModifierData *clmd, bool moving);
 // needed for button_object.c
 void cloth_clear_cache (struct Object *ob, struct ClothModifierData *clmd, float framenr );
 
-// needed for cloth.c
-int cloth_add_spring (struct ClothModifierData *clmd, unsigned int indexA, unsigned int indexB, float restlength, int spring_type);
-
 void cloth_parallel_transport_hair_frame(float mat[3][3], const float dir_old[3], const float dir_new[3]);
 
 bool is_basemesh_valid(struct Object *ob, struct Object *basemesh, struct ClothModifierData *clmd);

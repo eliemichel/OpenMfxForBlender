@@ -763,7 +763,6 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 	ClothVertex *verts = NULL;
 	float (*shapekey_rest)[3] = NULL;
 	float tnull[3] = {0, 0, 0};
-	Cloth *cloth = NULL;
 
 	// If we have a clothObject, free it. 
 	if ( clmd->clothObject != NULL ) {
@@ -777,7 +776,6 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 	if ( clmd->clothObject ) {
 		clmd->clothObject->old_solver_type = 255;
 		// clmd->clothObject->old_collision_type = 255;
-		cloth = clmd->clothObject;
 	}
 	else if (!clmd->clothObject) {
 		modifier_setError(&(clmd->modifier), "Out of memory on allocating clmd->clothObject");
@@ -872,12 +870,6 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 		return 0;
 	}
 	
-	for ( i = 0; i < dm->getNumVerts(dm); i++) {
-		if ((!(cloth->verts[i].flags & CLOTH_VERT_FLAG_PINNED)) && (cloth->verts[i].goal > ALMOST_ZERO)) {
-			cloth_add_spring (clmd, i, i, 0.0, CLOTH_SPRING_TYPE_GOAL);
-		}
-	}
-	
 	// init our solver
 	BPH_cloth_solver_init(ob, clmd);
 	
@@ -945,7 +937,8 @@ BLI_INLINE void spring_verts_ordered_set(ClothSpring *spring, int v0, int v1)
 
 // be careful: implicit solver has to be resettet when using this one!
 // --> only for implicit handling of this spring!
-int cloth_add_spring(ClothModifierData *clmd, unsigned int indexA, unsigned int indexB, float restlength, int spring_type)
+#if 0 // Unused for now, but might come in handy when implementing something with dynamic spring count
+static int cloth_add_spring(ClothModifierData *clmd, unsigned int indexA, unsigned int indexB, float restlength, int spring_type)
 {
 	Cloth *cloth = clmd->clothObject;
 	ClothSpring *spring = NULL;
@@ -973,6 +966,7 @@ int cloth_add_spring(ClothModifierData *clmd, unsigned int indexA, unsigned int 
 	}
 	return 0;
 }
+#endif
 
 static void cloth_free_edgelist(LinkNodePair *edgelist, unsigned int mvert_num)
 {
