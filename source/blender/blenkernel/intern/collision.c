@@ -193,8 +193,8 @@ static void free_impulse_clusters(ImpulseCluster *clusters)
  * Seems to be good enough however, and is much faster than the true hclust below... */
 static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const float impulse[3], const float clustang)
 {
-	ImpulseCluster **imp;
-	ImpulseCluster **close = NULL;
+	ImpulseCluster *imp;
+	ImpulseCluster *close = NULL;
 	float dir[3];
 	float mag;
 	float minang = FLT_MAX;
@@ -206,8 +206,8 @@ static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const flo
 		return;
 	}
 
-	for (imp = clusters; *imp; imp = &(*imp)->next) {
-		ang = angle_normalized_v3v3((*imp)->dir, dir);
+	for (imp = *clusters; imp; imp = imp->next) {
+		ang = angle_normalized_v3v3(imp->dir, dir);
 
 		if (ang < minang) {
 			minang = ang;
@@ -217,13 +217,13 @@ static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const flo
 
 	if (minang < clustang) {
 		/* Set total magnitude */
-		(*close)->totmag += mag;
+		close->totmag += mag;
 
 		/* Set dominant magnitude */
-		(*close)->dominant_mag = max_ff((*close)->dominant_mag, mag);
+		close->dominant_mag = max_ff(close->dominant_mag, mag);
 
 		/* Interpolate direction */
-		if(!interp_v3_v3v3_slerp((*close)->dir, (*close)->dir, dir, mag / (*close)->totmag)) {
+		if(!interp_v3_v3v3_slerp(close->dir, close->dir, dir, mag / close->totmag)) {
 			BLI_assert(false);
 		}
 	}
