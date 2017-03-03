@@ -673,7 +673,7 @@ static int calc_manipulator_stats(const bContext *C)
 
 				}
 			}
-			case V3D_MANIP_CUSTOM:
+			case V3D_MANIP_MULTI_TRANSF:
 			{
 				v3d->twtype = V3D_MANIP_TRANSLATE | V3D_MANIP_ROTATE | V3D_MANIP_SCALE;
 				char types_trans[] = {v3d->twtrans, v3d->twrots, v3d->twscale};
@@ -801,13 +801,13 @@ static void test_manipulator_axis(const bContext *C)
 	    (MAN_TRANS_Y | MAN_SCALE_Y),
 	    (MAN_TRANS_Z | MAN_SCALE_Z)};
 
-	if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+	if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 		ED_view3d_global_to_vector(rv3d, rv3d->twmat[3], view_vec);
 	else
 		ED_view3d_global_to_vector(rv3d, rv3d->twmattrans[3], view_vec);
 
 	for (i = 0; i < 3; i++) {
-		if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+		if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 			normalize_v3_v3(axis_vec, rv3d->twmat[i]);
 		else
 			normalize_v3_v3(axis_vec, rv3d->twmattrans[i]);
@@ -1100,7 +1100,7 @@ static void draw_manipulator_rotate(
         View3D *v3d, RegionView3D *rv3d, const int drawflags, const int combo,
         const bool is_moving, const bool is_picksel)
 {
-	if (v3d->twmode == V3D_MANIP_CUSTOM && v3d->twrots == V3D_MANIP_NONE)
+	if (v3d->twmode == V3D_MANIP_MULTI_TRANSF && v3d->twrots == V3D_MANIP_NONE)
 		return;
 
 	double plane[4];
@@ -1120,12 +1120,12 @@ static void draw_manipulator_rotate(
 	unit_m4(unitmat);
 
 	/* prepare for screen aligned draw */
-	if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+	if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 		size = len_v3(rv3d->twmat[0]);
 	else
 		size = len_v3(rv3d->twmatrots[0]);
 	glPushMatrix();
-	if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+	if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 		glTranslate3fv(rv3d->twmat[3]);
 	else
 		glTranslate3fv(rv3d->twmatrots[3]);
@@ -1175,14 +1175,14 @@ static void draw_manipulator_rotate(
 	}
 	glPopMatrix();
 
-	if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+	if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 		ortho = is_orthogonal_m4(rv3d->twmat);
 	else
 		ortho = is_orthogonal_m4(rv3d->twmatrots);
 
 	/* apply the transform delta */
 	if (is_moving) {
-		if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+		if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 			copy_m4_m4(matt, rv3d->twmat); // to copy the parts outside of [3][3]
 		else
 			copy_m4_m4(matt, rv3d->twmatrots); // to copy the parts outside of [3][3]
@@ -1194,7 +1194,7 @@ static void draw_manipulator_rotate(
 	}
 	else {
 		if (ortho) {
-			if (!(v3d->twmode == V3D_MANIP_CUSTOM)) {
+			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF)) {
 				glFrontFace(is_negative_m4(rv3d->twmat) ? GL_CW : GL_CCW);
 				glMultMatrixf(rv3d->twmat);
 			}
@@ -1212,7 +1212,7 @@ static void draw_manipulator_rotate(
 			if ((combo & V3D_MANIP_SCALE) == 0) {
 				/* axis */
 				if ((drawflags & MAN_ROT_X) || (is_moving && (drawflags & MAN_ROT_Z))) {
-					if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+					if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 						preOrthoFront(ortho, rv3d->twmat, 2);
 					else
 						preOrthoFront(ortho, rv3d->twmatrots, 2);
@@ -1224,7 +1224,7 @@ static void draw_manipulator_rotate(
 					postOrtho(ortho);
 				}
 				if ((drawflags & MAN_ROT_Y) || (is_moving && (drawflags & MAN_ROT_X))) {
-					if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+					if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 						preOrthoFront(ortho, rv3d->twmat, 0);
 					else
 						preOrthoFront(ortho, rv3d->twmatrots, 0);
@@ -1236,7 +1236,7 @@ static void draw_manipulator_rotate(
 					postOrtho(ortho);
 				}
 				if ((drawflags & MAN_ROT_Z) || (is_moving && (drawflags & MAN_ROT_Y))) {
-					if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+					if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 						preOrthoFront(ortho, rv3d->twmat, 1);
 					else
 						preOrthoFront(ortho, rv3d->twmatrots, 1);
@@ -1288,7 +1288,7 @@ static void draw_manipulator_rotate(
 
 		/* Z circle */
 		if (drawflags & MAN_ROT_Z) {
-			if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				preOrthoFront(ortho, rv3d->twmat, 2);
 			else
 				preOrthoFront(ortho, rv3d->twmatrots, 2);
@@ -1299,7 +1299,7 @@ static void draw_manipulator_rotate(
 		}
 		/* X circle */
 		if (drawflags & MAN_ROT_X) {
-			if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				preOrthoFront(ortho, rv3d->twmat, 0);
 			else
 				preOrthoFront(ortho, rv3d->twmatrots, 0);
@@ -1312,7 +1312,7 @@ static void draw_manipulator_rotate(
 		}
 		/* Y circle */
 		if (drawflags & MAN_ROT_Y) {
-			if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				preOrthoFront(ortho, rv3d->twmat, 1);
 			else
 				preOrthoFront(ortho, rv3d->twmatrots, 1);
@@ -1331,7 +1331,7 @@ static void draw_manipulator_rotate(
 
 		/* Z handle on X axis */
 		if (drawflags & MAN_ROT_Z) {
-			if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				preOrthoFront(ortho, rv3d->twmat, 2);
 			else
 				preOrthoFront(ortho, rv3d->twmatrots, 2);
@@ -1347,7 +1347,7 @@ static void draw_manipulator_rotate(
 
 		/* Y handle on X axis */
 		if (drawflags & MAN_ROT_Y) {
-			if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				preOrthoFront(ortho, rv3d->twmat, 1);
 			else
 				preOrthoFront(ortho, rv3d->twmatrots, 1);
@@ -1365,7 +1365,7 @@ static void draw_manipulator_rotate(
 
 		/* X handle on Z axis */
 		if (drawflags & MAN_ROT_X) {
-			if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				preOrthoFront(ortho, rv3d->twmat, 0);
 			else
 				preOrthoFront(ortho, rv3d->twmatrots, 0);
@@ -1455,7 +1455,7 @@ static void draw_manipulator_scale(
         View3D *v3d, RegionView3D *rv3d, const int drawflags, const int combo, const int colcode,
         const bool is_moving, const bool is_picksel)
 {
-	if (v3d->twmode == V3D_MANIP_CUSTOM && v3d->twscale == V3D_MANIP_NONE)
+	if (v3d->twmode == V3D_MANIP_MULTI_TRANSF && v3d->twscale == V3D_MANIP_NONE)
 		return;
 	float cywid = 0.25f * 0.01f * (float)U.tw_handlesize;
 	float cusize = cywid * 0.75f, dz;
@@ -1465,7 +1465,7 @@ static void draw_manipulator_scale(
 	/* when called while moving in mixed mode, do not draw when... */
 	if ((drawflags & MAN_SCALE_C) == 0) return;
 
-	if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+	if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 		manipulator_axis_order(rv3d, axis_order);
 	else
 		manipulator_axis_order_custom(rv3d, rv3d->twmatscale, axis_order);
@@ -1482,7 +1482,7 @@ static void draw_manipulator_scale(
 		else manipulator_setcolor(v3d, 'C', colcode, 255);
 
 		glPushMatrix();
-		if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+		if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 			size = screen_aligned(rv3d, rv3d->twmat);
 		else
 			size = screen_aligned(rv3d, rv3d->twmatscale);
@@ -1498,7 +1498,7 @@ static void draw_manipulator_scale(
 
 	if (is_moving) {
 		float matt[4][4];
-		if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+		if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 			copy_m4_m4(matt, rv3d->twmat); // to copy the parts outside of [3][3]
 		else
 			copy_m4_m4(matt, rv3d->twmatscale); // to copy the parts outside of [3][3]
@@ -1507,7 +1507,7 @@ static void draw_manipulator_scale(
 		glFrontFace(is_negative_m4(matt) ? GL_CW : GL_CCW);
 	}
 	else {
-		if (!(v3d->twmode == V3D_MANIP_CUSTOM)) {
+		if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF)) {
 			glMultMatrixf(rv3d->twmat);
 			glFrontFace(is_negative_m4(rv3d->twmat) ? GL_CW : GL_CCW);
 		}
@@ -1611,7 +1611,7 @@ static void draw_manipulator_translate(
         View3D *v3d, RegionView3D *rv3d, int drawflags, int combo, int colcode,
         const bool UNUSED(is_moving), const bool is_picksel)
 {
-	if (v3d->twmode == V3D_MANIP_CUSTOM && v3d->twtrans == V3D_MANIP_NONE)
+	if (v3d->twmode == V3D_MANIP_MULTI_TRANSF && v3d->twtrans == V3D_MANIP_NONE)
 		return;
 	GLUquadricObj *qobj;
 	float cylen = 0.01f * (float)U.tw_handlesize;
@@ -1624,7 +1624,7 @@ static void draw_manipulator_translate(
 	/* when called while moving in mixed mode, do not draw when... */
 	if ((drawflags & MAN_TRANS_C) == 0) return;
 
-	if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+	if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 		manipulator_axis_order(rv3d, axis_order);
 	else
 		manipulator_axis_order_custom(rv3d, rv3d->twmattrans, axis_order);
@@ -1637,7 +1637,7 @@ static void draw_manipulator_translate(
 	else manipulator_setcolor(v3d, 'C', colcode, 255);
 
 	glPushMatrix();
-	if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+	if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 		size = screen_aligned(rv3d, rv3d->twmat);
 	else
 		size = screen_aligned(rv3d, rv3d->twmattrans);
@@ -1647,7 +1647,7 @@ static void draw_manipulator_translate(
 	glPopMatrix();
 
 	/* and now apply matrix, we move to local matrix drawing */
-	if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+	if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 		glMultMatrixf(rv3d->twmat);
 	else
 		glMultMatrixf(rv3d->twmattrans);
@@ -1728,14 +1728,14 @@ static void draw_manipulator_rotate_cyl(
 	/* skip drawing if all axes are locked */
 	if (manipulator_rotate_is_visible(drawflags) == false) return;
 
-	if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+	if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 		manipulator_axis_order(rv3d, axis_order);
 	else
 		manipulator_axis_order_custom(rv3d, rv3d->twmatrots, axis_order);
 
 	/* prepare for screen aligned draw */
 	glPushMatrix();
-	if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+	if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 		size = screen_aligned(rv3d, rv3d->twmat);
 	else
 		size = screen_aligned(rv3d, rv3d->twmatrots);
@@ -1771,7 +1771,7 @@ static void draw_manipulator_rotate_cyl(
 	/* apply the transform delta */
 	if (is_moving) {
 		float matt[4][4];
-		if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+		if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 			copy_m4_m4(matt, rv3d->twmat); // to copy the parts outside of [3][3]
 		else
 			copy_m4_m4(matt, rv3d->twmatrots); // to copy the parts outside of [3][3]
@@ -1781,13 +1781,13 @@ static void draw_manipulator_rotate_cyl(
 		glMultMatrixf(matt);
 	}
 	else {
-		if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+		if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 			glMultMatrixf(rv3d->twmat);
 		else
 			glMultMatrixf(rv3d->twmatrots);
 	}
 
-	if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+	if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 		glFrontFace(is_negative_m4(rv3d->twmat) ? GL_CW : GL_CCW);
 	else
 		glFrontFace(is_negative_m4(rv3d->twmatrots) ? GL_CW : GL_CCW);
@@ -1892,7 +1892,7 @@ void BIF_draw_manipulator(const bContext *C)
 				    ((gpd == NULL) || !(gpd->flag & GP_DATA_STROKE_EDITMODE)) &&
 				    (ob && !(ob->mode & OB_MODE_POSE)))
 				{
-					if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+					if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 						copy_v3_v3(rv3d->twmat[3], ob->obmat[3]);
 					else {
 						copy_v3_v3(rv3d->twmattrans[3], ob->obmat[3]);
@@ -1901,7 +1901,7 @@ void BIF_draw_manipulator(const bContext *C)
 					}
 				}
 				else {
-					if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+					if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 						mid_v3_v3v3(rv3d->twmat[3], scene->twmin, scene->twmax);
 					else {
 						mid_v3_v3v3(rv3d->twmattrans[3], scene->twmin, scene->twmax);
@@ -1913,7 +1913,7 @@ void BIF_draw_manipulator(const bContext *C)
 			}
 			case V3D_AROUND_LOCAL_ORIGINS:
 			case V3D_AROUND_CENTER_MEAN:
-				if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+				if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 					copy_v3_v3(rv3d->twmat[3], scene->twcent);
 				else {
 					copy_v3_v3(rv3d->twmattrans[3], scene->twcent);
@@ -1922,7 +1922,7 @@ void BIF_draw_manipulator(const bContext *C)
 				}
 				break;
 			case V3D_AROUND_CURSOR:
-				if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+				if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 					copy_v3_v3(rv3d->twmat[3], ED_view3d_cursor3d_get(scene, v3d));
 				else {
 					copy_v3_v3(rv3d->twmattrans[3], ED_view3d_cursor3d_get(scene, v3d));
@@ -1931,7 +1931,7 @@ void BIF_draw_manipulator(const bContext *C)
 				}
 				break;
 		}
-		if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+		if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 			mul_mat3_m4_fl(rv3d->twmat, ED_view3d_pixel_size(rv3d, rv3d->twmat[3]) * U.tw_size);
 		else {
 			mul_mat3_m4_fl(rv3d->twmattrans, ED_view3d_pixel_size(rv3d, rv3d->twmattrans[3]) * U.tw_size);
@@ -1956,33 +1956,33 @@ void BIF_draw_manipulator(const bContext *C)
 		if (v3d->twtype & V3D_MANIP_ROTATE) {
 			if (G.debug_value == 3) {
 				if (G.moving & (G_TRANSFORM_OBJ | G_TRANSFORM_EDIT)) {
-					if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+					if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 						draw_manipulator_rotate_cyl(v3d, rv3d, drawflags, v3d->twtype, MAN_MOVECOL, true, is_picksel);
 					else
 						draw_manipulator_rotate_cyl(v3d, rv3d, drawflags, V3D_MANIP_ROTATE, MAN_MOVECOL, true, is_picksel);
 				}
 				else {
-					if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+					if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 						draw_manipulator_rotate_cyl(v3d, rv3d, drawflags, v3d->twtype, MAN_RGB, false, is_picksel);
 					else
 						draw_manipulator_rotate_cyl(v3d, rv3d, drawflags, V3D_MANIP_ROTATE, MAN_RGB, false, is_picksel);
 				}
 			}
 			else {
-				if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+				if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 					draw_manipulator_rotate(v3d, rv3d, drawflags, v3d->twtype, false, is_picksel);
 				else
 					draw_manipulator_rotate(v3d, rv3d, drawflags, V3D_MANIP_ROTATE, false, is_picksel);
 			}
 		}
 		if (v3d->twtype & V3D_MANIP_SCALE) {
-			if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				draw_manipulator_scale(v3d, rv3d, drawflags, v3d->twtype, MAN_RGB, false, is_picksel);
 			else
 				draw_manipulator_scale(v3d, rv3d, drawflags, V3D_MANIP_SCALE, MAN_RGB, false, is_picksel);
 		}
 		if (v3d->twtype & V3D_MANIP_TRANSLATE) {
-			if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				draw_manipulator_translate(v3d, rv3d, drawflags, v3d->twtype, MAN_RGB, false, is_picksel);
 			else
 				draw_manipulator_translate(v3d, rv3d, drawflags, V3D_MANIP_TRANSLATE, MAN_RGB, false, is_picksel);
@@ -2029,20 +2029,20 @@ static int manipulator_selectbuf(ScrArea *sa, ARegion *ar, const int mval[2], fl
 	if (v3d->twtype & V3D_MANIP_ROTATE) {
 		if (G.debug_value == 3) draw_manipulator_rotate_cyl(v3d, rv3d, MAN_ROT_C & rv3d->twdrawflag, v3d->twtype, MAN_RGB, false, is_picksel);
 		else { 
-			if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				draw_manipulator_rotate(v3d, rv3d, MAN_ROT_C & rv3d->twdrawflag, v3d->twtype, false, is_picksel); 
 			else
 				draw_manipulator_rotate(v3d, rv3d, MAN_ROT_C & rv3d->twdrawflag, V3D_MANIP_ROTATE, false, is_picksel);
 		}
 	}
 	if (v3d->twtype & V3D_MANIP_SCALE) {
-		if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+		if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 			draw_manipulator_scale(v3d, rv3d, MAN_SCALE_C & rv3d->twdrawflag, v3d->twtype, MAN_RGB, false, is_picksel);
 		else
 			draw_manipulator_scale(v3d, rv3d, MAN_SCALE_C & rv3d->twdrawflag, V3D_MANIP_SCALE, MAN_RGB, false, is_picksel);
 	}
 	if (v3d->twtype & V3D_MANIP_TRANSLATE) {
-		if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+		if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 			draw_manipulator_translate(v3d, rv3d, MAN_TRANS_C & rv3d->twdrawflag, v3d->twtype, MAN_RGB, false, is_picksel);
 		else
 			draw_manipulator_translate(v3d, rv3d, MAN_TRANS_C & rv3d->twdrawflag, V3D_MANIP_TRANSLATE, MAN_RGB, false, is_picksel);
@@ -2057,20 +2057,20 @@ static int manipulator_selectbuf(ScrArea *sa, ARegion *ar, const int mval[2], fl
 		if (v3d->twtype & V3D_MANIP_ROTATE) {
 			if (G.debug_value == 3) draw_manipulator_rotate_cyl(v3d, rv3d, MAN_ROT_C & rv3d->twdrawflag, v3d->twtype, MAN_RGB, false, is_picksel);
 			else { 
-				if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+				if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 					draw_manipulator_rotate(v3d, rv3d, MAN_ROT_C & rv3d->twdrawflag, v3d->twtype, false, is_picksel); 
 				else
 					draw_manipulator_rotate(v3d, rv3d, MAN_ROT_C & rv3d->twdrawflag, V3D_MANIP_ROTATE, false, is_picksel);
 			}
 		}
 		if (v3d->twtype & V3D_MANIP_SCALE) {
-			if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				draw_manipulator_scale(v3d, rv3d, MAN_SCALE_C & rv3d->twdrawflag, v3d->twtype, MAN_RGB, false, is_picksel);
 			else
 				draw_manipulator_scale(v3d, rv3d, MAN_SCALE_C & rv3d->twdrawflag, V3D_MANIP_SCALE, MAN_RGB, false, is_picksel);
 		}
 		if (v3d->twtype & V3D_MANIP_TRANSLATE) {
-			if (!(v3d->twmode == V3D_MANIP_CUSTOM))
+			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				draw_manipulator_translate(v3d, rv3d, MAN_TRANS_C & rv3d->twdrawflag, v3d->twtype, MAN_RGB, false, is_picksel);
 			else
 				draw_manipulator_translate(v3d, rv3d, MAN_TRANS_C & rv3d->twdrawflag, V3D_MANIP_TRANSLATE, MAN_RGB, false, is_picksel);
