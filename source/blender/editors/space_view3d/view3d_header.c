@@ -365,7 +365,14 @@ void uiTemplateHeader3D(uiLayout *layout, struct bContext *C)
 		row = uiLayoutRow(layout, true);
 		uiItemR(row, &v3dptr, "show_manipulator", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
 		if (v3d->twflag & V3D_USE_MANIPULATOR) {
-			uiItemR(row, &v3dptr, "transform_manipulators", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
+			if (v3d->twmode == V3D_MANIP_CUSTOM)
+			{
+				uiItemR(row, &v3dptr, "custom_translate_manipulators", 0, "", ICON_NONE);
+				uiItemR(row, &v3dptr, "custom_rotate_manipulators", 0, "", ICON_NONE);
+				uiItemR(row, &v3dptr, "custom_scale_manipulators", 0, "", ICON_NONE);
+			}
+			else
+				uiItemR(row, &v3dptr, "transform_manipulators", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
 		}
 		uiItemR(row, &v3dptr, "transform_orientation", 0, "", ICON_NONE);
 	}

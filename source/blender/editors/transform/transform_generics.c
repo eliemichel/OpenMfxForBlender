@@ -1235,6 +1235,11 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 		}
 
 		t->current_orientation = v3d->twmode;
+		if (v3d->twmode == V3D_MANIP_CUSTOM) {
+			t->current_translation = v3d->twtrans;
+			t->current_rotation = v3d->twrots;
+			t->current_scale = v3d->twscale;
+		}
 
 		/* exceptional case */
 		if (t->around == V3D_AROUND_LOCAL_ORIGINS) {
@@ -1328,7 +1333,15 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 		t->current_orientation = RNA_property_enum_get(op->ptr, prop);
 
 		if (t->current_orientation >= V3D_MANIP_CUSTOM + BIF_countTransformOrientation(C)) {
-			t->current_orientation = V3D_MANIP_GLOBAL;
+			//t->current_orientation = V3D_MANIP_GLOBAL; // Temp
+			View3D *v3d = sa->spacedata.first;
+			if (t->current_orientation == V3D_MANIP_CUSTOM) {
+				t->current_translation = v3d->twtrans;
+				t->current_rotation = v3d->twrots;
+				t->current_scale = v3d->twscale;
+			}
+			else
+				t->current_orientation = V3D_MANIP_GLOBAL;
 		}
 	}
 	

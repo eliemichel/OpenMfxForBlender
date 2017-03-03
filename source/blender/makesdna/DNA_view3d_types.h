@@ -113,6 +113,9 @@ typedef struct RegionView3D {
 
 	/* transform widget matrix */
 	float twmat[4][4];
+	float twmattrans[4][4];
+	float twmatrots[4][4];
+	float twmatscale[4][4];
 
 	float viewquat[4];			/* view rotation, must be kept normalized */
 	float dist;					/* distance from 'ofs' along -viewinv[2] vector, where result is negative as is 'ofs' */
@@ -244,6 +247,10 @@ typedef struct View3D {
 	short prev_drawtype;
 	short pad1;
 	float pad2;
+
+	/* Flags for setting up custom manipulators */
+	char twtrans, twrots, twscale;
+	char pad5[5];
 } View3D;
 
 
@@ -361,12 +368,16 @@ enum {
 #define V3D_MANIP_NORMAL		2
 #define V3D_MANIP_VIEW			3
 #define V3D_MANIP_GIMBAL		4
-#define V3D_MANIP_CUSTOM		5 /* anything of value 5 or higher is custom */
+#define V3D_MANIP_NONE			5 /* special value that hides a manipulator - will only appear in custom */
+#define V3D_MANIP_PARENT		6
+#define V3D_MANIP_MULTI_TRANSF	7 /* This will replace CUSTOM so that users can make their own custom orientations */
+#define V3D_MANIP_CUSTOM		8 /* anything of value 8 or higher is custom */
 
 /* View3d->twflag */
    /* USE = user setting, DRAW = based on selection */
 #define V3D_USE_MANIPULATOR		1
 #define V3D_DRAW_MANIPULATOR	2
+#define V3D_USE_CUSTOM_MANIP	4
 /* #define V3D_CALC_MANIPULATOR	4 */ /*UNUSED*/
 
 /* BGPic->flag */

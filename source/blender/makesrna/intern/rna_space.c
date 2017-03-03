@@ -123,6 +123,42 @@ static EnumPropertyItem stereo3d_eye_items[] = {
 };
 #endif
 
+static EnumPropertyItem translate_items_full[] = {
+	{ V3D_MANIP_GLOBAL, "GLOBAL", ICON_MAN_TRANS, "Global", "Align the transformation axes to world space" },
+	{ V3D_MANIP_LOCAL,  "LOCAL",  ICON_MAN_TRANS, "Local", "Align the transformation axes to the selected objects' local space" },
+	{ V3D_MANIP_NORMAL, "NORMAL", ICON_MAN_TRANS, "Normal",
+	"Align the transformation axes to average normal of selected elements "
+	"(bone Y axis for pose mode)" },
+	{ V3D_MANIP_GIMBAL, "GIMBAL", ICON_MAN_TRANS, "Gimbal", "Align each axis to the Euler rotation axis as used for input" },
+	{ V3D_MANIP_VIEW,   "VIEW",   ICON_MAN_TRANS, "View", "Align the transformation axes to the window" },
+    { V3D_MANIP_NONE,   "NONE",	  ICON_MAN_TRANS, "None", "This will hide this particular axis"},
+	{0, NULL, 0, NULL, NULL}
+};
+
+static EnumPropertyItem rotate_items_full[] = {
+	{ V3D_MANIP_GLOBAL, "GLOBAL", ICON_MAN_ROT, "Global", "Align the transformation axes to world space" },
+	{ V3D_MANIP_LOCAL, "LOCAL",   ICON_MAN_ROT, "Local", "Align the transformation axes to the selected objects' local space" },
+	{ V3D_MANIP_NORMAL, "NORMAL", ICON_MAN_ROT, "Normal",
+	"Align the transformation axes to average normal of selected elements "
+	"(bone Y axis for pose mode)" },
+	{ V3D_MANIP_GIMBAL, "GIMBAL", ICON_MAN_ROT, "Gimbal", "Align each axis to the Euler rotation axis as used for input" },
+	{ V3D_MANIP_VIEW, "VIEW",     ICON_MAN_ROT, "View", "Align the transformation axes to the window" },
+	{ V3D_MANIP_NONE, "NONE",	  ICON_MAN_ROT, "None", "This will hide this particular axis" },
+	{ 0, NULL, 0, NULL, NULL }
+};
+
+static EnumPropertyItem scale_items_full[] = {
+	{ V3D_MANIP_GLOBAL, "GLOBAL", ICON_MAN_SCALE, "Global", "Align the transformation axes to world space" },
+	{ V3D_MANIP_LOCAL, "LOCAL",   ICON_MAN_SCALE, "Local", "Align the transformation axes to the selected objects' local space" },
+	{ V3D_MANIP_NORMAL, "NORMAL", ICON_MAN_SCALE, "Normal",
+	"Align the transformation axes to average normal of selected elements "
+	"(bone Y axis for pose mode)" },
+	{ V3D_MANIP_GIMBAL, "GIMBAL", ICON_MAN_SCALE, "Gimbal", "Align each axis to the Euler rotation axis as used for input" },
+	{ V3D_MANIP_VIEW, "VIEW",     ICON_MAN_SCALE, "View", "Align the transformation axes to the window" },
+	{ V3D_MANIP_NONE, "NONE",	  ICON_MAN_SCALE, "None", "This will hide this particular axis" },
+	{ 0, NULL, 0, NULL, NULL }
+};
+
 static EnumPropertyItem pivot_items_full[] = {
 	{V3D_AROUND_CENTER_BOUNDS, "BOUNDING_BOX_CENTER", ICON_ROTATE, "Bounding Box Center",
 	             "Pivot around bounding box center of selected object(s)"},
@@ -155,8 +191,10 @@ static EnumPropertyItem transform_orientation_items[] = {
 	                   "Align the transformation axes to average normal of selected elements "
 	                   "(bone Y axis for pose mode)"},
 	{V3D_MANIP_GIMBAL, "GIMBAL", 0, "Gimbal", "Align each axis to the Euler rotation axis as used for input"},
-	{V3D_MANIP_VIEW, "VIEW", 0, "View", "Align the transformation axes to the window"},
-	// {V3D_MANIP_CUSTOM, "CUSTOM", 0, "Custom", "Use a custom transform orientation"},
+	{V3D_MANIP_VIEW,   "VIEW", 0, "View", "Align the transformation axes to the window"},
+	{V3D_MANIP_PARENT, "PARENT", 0, "Parent", "Align the transformation axes to the parent's axes (or global if it is the top of the hierarchy)"},
+	{V3D_MANIP_MULTI_TRANSF, "MULTITRANSFORM", 0, "Multiple", "Set different orientations to different transformation manipulators"},
+	{V3D_MANIP_CUSTOM, "CUSTOM", 0, "Custom", "Use a custom transform orientation"},
 	{0, NULL, 0, NULL, NULL}
 };
 
@@ -410,9 +448,9 @@ static PointerRNA rna_CurrentOrientation_get(PointerRNA *ptr)
 
 	if (v3d->twmode < V3D_MANIP_CUSTOM)
 		return rna_pointer_inherit_refine(ptr, &RNA_TransformOrientation, NULL);
-	else
+	else 
 		return rna_pointer_inherit_refine(ptr, &RNA_TransformOrientation,
-		                                  BLI_findlink(&scene->transform_spaces, v3d->twmode - V3D_MANIP_CUSTOM));
+										  BLI_findlink(&scene->transform_spaces, v3d->twmode - V3D_MANIP_CUSTOM));
 }
 
 EnumPropertyItem *rna_TransformOrientation_itemf(bContext *C, PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
@@ -425,6 +463,120 @@ EnumPropertyItem *rna_TransformOrientation_itemf(bContext *C, PointerRNA *ptr, P
 	int i = V3D_MANIP_CUSTOM, totitem = 0;
 
 	RNA_enum_items_add(&item, &totitem, transform_orientation_items);
+
+	if (ptr->type == &RNA_SpaceView3D)
+		scene = ((bScreen *)ptr->id.data)->scene;
+	else
+		scene = CTX_data_scene(C);  /* can't use scene from ptr->id.data because that enum is also used by operators */
+
+	if (scene) {
+		transform_spaces = &scene->transform_spaces;
+		ts = transform_spaces->first;
+	}
+
+	if (ts) {
+		RNA_enum_item_add_separator(&item, &totitem);
+
+		for (; ts; ts = ts->next) {
+			tmp.identifier = ts->name;
+			tmp.name = ts->name;
+			tmp.value = i++;
+			RNA_enum_item_add(&item, &totitem, &tmp);
+		}
+	}
+
+	RNA_enum_item_end(&item, &totitem);
+	*r_free = true;
+
+	return item;
+}
+
+EnumPropertyItem *rna_TransformTranslate_itemf(bContext *C, PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
+{
+	Scene *scene = NULL;
+	ListBase *transform_spaces;
+	TransformOrientation *ts = NULL;
+	EnumPropertyItem tmp = { 0, "", 0, "", "" };
+	EnumPropertyItem *item = NULL;
+	int i = 0, totitem = 0;
+
+	RNA_enum_items_add(&item, &totitem, translate_items_full);
+
+	if (ptr->type == &RNA_SpaceView3D)
+		scene = ((bScreen *)ptr->id.data)->scene;
+	else
+		scene = CTX_data_scene(C);  /* can't use scene from ptr->id.data because that enum is also used by operators */
+
+	if (scene) {
+		transform_spaces = &scene->transform_spaces;
+		ts = transform_spaces->first;
+	}
+
+	if (ts) {
+		RNA_enum_item_add_separator(&item, &totitem);
+
+		for (; ts; ts = ts->next) {
+			tmp.identifier = ts->name;
+			tmp.name = ts->name;
+			tmp.value = i++;
+			RNA_enum_item_add(&item, &totitem, &tmp);
+		}
+	}
+
+	RNA_enum_item_end(&item, &totitem);
+	*r_free = true;
+
+	return item;
+}
+
+EnumPropertyItem *rna_TransformRotation_itemf(bContext *C, PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
+{
+	Scene *scene = NULL;
+	ListBase *transform_spaces;
+	TransformOrientation *ts = NULL;
+	EnumPropertyItem tmp = { 0, "", 0, "", "" };
+	EnumPropertyItem *item = NULL;
+	int i = 0, totitem = 0;
+
+	RNA_enum_items_add(&item, &totitem, rotate_items_full);
+
+	if (ptr->type == &RNA_SpaceView3D)
+		scene = ((bScreen *)ptr->id.data)->scene;
+	else
+		scene = CTX_data_scene(C);  /* can't use scene from ptr->id.data because that enum is also used by operators */
+
+	if (scene) {
+		transform_spaces = &scene->transform_spaces;
+		ts = transform_spaces->first;
+	}
+
+	if (ts) {
+		RNA_enum_item_add_separator(&item, &totitem);
+
+		for (; ts; ts = ts->next) {
+			tmp.identifier = ts->name;
+			tmp.name = ts->name;
+			tmp.value = i++;
+			RNA_enum_item_add(&item, &totitem, &tmp);
+		}
+	}
+
+	RNA_enum_item_end(&item, &totitem);
+	*r_free = true;
+
+	return item;
+}
+
+EnumPropertyItem *rna_TransformScale_itemf(bContext *C, PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
+{
+	Scene *scene = NULL;
+	ListBase *transform_spaces;
+	TransformOrientation *ts = NULL;
+	EnumPropertyItem tmp = { 0, "", 0, "", "" };
+	EnumPropertyItem *item = NULL;
+	int i = 0, totitem = 0;
+
+	RNA_enum_items_add(&item, &totitem, scale_items_full);
 
 	if (ptr->type == &RNA_SpaceView3D)
 		scene = ((bScreen *)ptr->id.data)->scene;
@@ -2639,6 +2791,27 @@ static void rna_def_space_view3d(BlenderRNA *brna)
 	RNA_def_property_enum_items(prop, manipulators_items);
 	RNA_def_property_flag(prop, PROP_ENUM_FLAG);
 	RNA_def_property_ui_text(prop, "Transform Manipulators", "Transformation manipulators");
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+	prop = RNA_def_property(srna, "custom_translate_manipulators", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_sdna(prop, NULL, "twtrans");
+	RNA_def_property_enum_items(prop, translate_items_full);
+	RNA_def_property_enum_funcs(prop, NULL, NULL, "rna_TransformTranslate_itemf");
+	RNA_def_property_ui_text(prop, "Custom Translate Manipulators", "Custom Translate");
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+	prop = RNA_def_property(srna, "custom_rotate_manipulators", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_sdna(prop, NULL, "twrots");
+	RNA_def_property_enum_items(prop, rotate_items_full);
+	RNA_def_property_enum_funcs(prop, NULL, NULL, "rna_TransformRotation_itemf");
+	RNA_def_property_ui_text(prop, "Custom Rotation Manipulators", "Custom Rotation");
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+	prop = RNA_def_property(srna, "custom_scale_manipulators", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_sdna(prop, NULL, "twscale");
+	RNA_def_property_enum_items(prop, scale_items_full);
+	RNA_def_property_enum_funcs(prop, NULL, NULL, "rna_TransformScale_itemf");
+	RNA_def_property_ui_text(prop, "Custom Scale Manipulators", "Custom Scale");
 	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 	
 	prop = RNA_def_property(srna, "transform_orientation", PROP_ENUM, PROP_NONE);
