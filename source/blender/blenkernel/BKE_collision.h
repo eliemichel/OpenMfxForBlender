@@ -72,7 +72,7 @@ typedef enum {
 typedef struct CollPair {
 	unsigned int face1; // cloth face
 	unsigned int face2; // object face
-	double distance; // magnitude of vector
+	float distance;
 	float normal[3];
 	float vector[3]; // unnormalized collision vector: p2-p1
 	float pa[3], pb[3]; // collision point p1 on face1, p2 on face2
