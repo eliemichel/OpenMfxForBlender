@@ -273,6 +273,9 @@ static float compute_collision_point(float a1[3], float a2[3], float a3[3], floa
 			}
 		}
 	}
+	else if (use_normal) {
+		normal_tri_v3(normal, b[0], b[1], b[2]);
+	}
 
 	if (isect_count == 1) {
 		/* Edge intersection */
@@ -280,6 +283,10 @@ static float compute_collision_point(float a1[3], float a2[3], float a3[3], floa
 		copy_v3_v3(r_b, isect_b);
 
 		sub_v3_v3v3(r_vec, r_b, r_a);
+
+		if (use_normal) {
+			copy_v3_v3(r_vec, normal);
+		}
 
 		return 0.0f;
 	}
@@ -344,6 +351,15 @@ static float compute_collision_point(float a1[3], float a2[3], float a3[3], floa
 		if (found) {
 			sub_v3_v3v3(r_vec, r_b, r_a);
 
+			if (use_normal) {
+				if (dot_v3v3(normal, r_vec) >= 0.0f) {
+					copy_v3_v3(r_vec, normal);
+				}
+				else {
+					negate_v3_v3(r_vec, normal);
+				}
+			}
+
 			return 0.0f;
 		}
 	}
@@ -397,7 +413,18 @@ static float compute_collision_point(float a1[3], float a2[3], float a3[3], floa
 		dist = 0.0f;
 	}
 
-	if (culling && (dot_v3v3(r_vec, normal) < 0.0f)) {
+	if (culling && use_normal) {
+		copy_v3_v3(r_vec, normal);
+	}
+	else if (use_normal) {
+		if (dot_v3v3(normal, r_vec) >= 0.0f) {
+			copy_v3_v3(r_vec, normal);
+		}
+		else {
+			negate_v3_v3(r_vec, normal);
+		}
+	}
+	else if (culling && (dot_v3v3(r_vec, normal) < 0.0f)) {
 		return FLT_MAX;
 	}
 
