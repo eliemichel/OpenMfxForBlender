@@ -593,6 +593,17 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 				unit_m3(omtx);
 			}
 			break;
+
+		case V3D_MANIP_PARENT:
+			BLI_strncpy(t->spacename, IFACE_("parent"), sizeof(t->spacename));
+
+			if (ob) {
+				copy_m3_m4(omtx, ob->parent->obmat);
+				normalize_m3(omtx);
+			}
+			else
+				unit_m3(omtx);
+			break;
 		case V3D_MANIP_NONE:
 			break;
 		
