@@ -667,6 +667,16 @@ static int calc_manipulator_stats(const bContext *C)
 				if (!(ob->parent))
 					break;
 				else {
+					if (ob->mode & OB_MODE_POSE) {
+						/* each bone moves on its own local axis, but  to avoid confusion,
+						* use the active pones axis for display [#33575], this works as expected on a single bone
+						* and users who select many bones will understand whats going on and what local means
+						* when they start transforming */
+						float mat[3][3];
+						ED_getTransformOrientationMatrix(C, mat, v3d->around);
+						copy_m4_m3(rv3d->twmat, mat);
+						break;
+					}
 					copy_m4_m4(rv3d->twmat, ob->parent->obmat);
 					normalize_m4(rv3d->twmat);
 					break;
@@ -1959,33 +1969,33 @@ void BIF_draw_manipulator(const bContext *C)
 					if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 						draw_manipulator_rotate_cyl(v3d, rv3d, drawflags, v3d->twtype, MAN_MOVECOL, true, is_picksel);
 					else
-						draw_manipulator_rotate_cyl(v3d, rv3d, drawflags, V3D_MANIP_ROTATE, MAN_MOVECOL, true, is_picksel);
+						draw_manipulator_rotate_cyl(v3d, rv3d, drawflags, (v3d->twtrans!=5) | (v3d->twrots!=5)*2 | (v3d->twscale!=5)*4, MAN_MOVECOL, true, is_picksel);
 				}
 				else {
 					if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 						draw_manipulator_rotate_cyl(v3d, rv3d, drawflags, v3d->twtype, MAN_RGB, false, is_picksel);
 					else
-						draw_manipulator_rotate_cyl(v3d, rv3d, drawflags, V3D_MANIP_ROTATE, MAN_RGB, false, is_picksel);
+						draw_manipulator_rotate_cyl(v3d, rv3d, drawflags, (v3d->twtrans != 5) | (v3d->twrots != 5) * 2 | (v3d->twscale != 5) * 4, MAN_RGB, false, is_picksel);
 				}
 			}
 			else {
 				if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 					draw_manipulator_rotate(v3d, rv3d, drawflags, v3d->twtype, false, is_picksel);
 				else
-					draw_manipulator_rotate(v3d, rv3d, drawflags, V3D_MANIP_ROTATE, false, is_picksel);
+					draw_manipulator_rotate(v3d, rv3d, drawflags, (v3d->twtrans != 5) | (v3d->twrots != 5) * 2 | (v3d->twscale != 5) * 4, false, is_picksel);
 			}
 		}
 		if (v3d->twtype & V3D_MANIP_SCALE) {
 			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				draw_manipulator_scale(v3d, rv3d, drawflags, v3d->twtype, MAN_RGB, false, is_picksel);
 			else
-				draw_manipulator_scale(v3d, rv3d, drawflags, V3D_MANIP_SCALE, MAN_RGB, false, is_picksel);
+				draw_manipulator_scale(v3d, rv3d, drawflags, (v3d->twtrans != 5) | (v3d->twrots != 5) * 2 | (v3d->twscale != 5) * 4, MAN_RGB, false, is_picksel);
 		}
 		if (v3d->twtype & V3D_MANIP_TRANSLATE) {
 			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				draw_manipulator_translate(v3d, rv3d, drawflags, v3d->twtype, MAN_RGB, false, is_picksel);
 			else
-				draw_manipulator_translate(v3d, rv3d, drawflags, V3D_MANIP_TRANSLATE, MAN_RGB, false, is_picksel);
+				draw_manipulator_translate(v3d, rv3d, drawflags, (v3d->twtrans != 5) | (v3d->twrots != 5) * 2 | (v3d->twscale != 5) * 4, MAN_RGB, false, is_picksel);
 		}
 
 		glDisable(GL_BLEND);
@@ -2032,20 +2042,20 @@ static int manipulator_selectbuf(ScrArea *sa, ARegion *ar, const int mval[2], fl
 			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				draw_manipulator_rotate(v3d, rv3d, MAN_ROT_C & rv3d->twdrawflag, v3d->twtype, false, is_picksel); 
 			else
-				draw_manipulator_rotate(v3d, rv3d, MAN_ROT_C & rv3d->twdrawflag, V3D_MANIP_ROTATE, false, is_picksel);
+				draw_manipulator_rotate(v3d, rv3d, MAN_ROT_C & rv3d->twdrawflag, (v3d->twtrans != 5) | (v3d->twrots != 5) * 2 | (v3d->twscale != 5) * 4, false, is_picksel);
 		}
 	}
 	if (v3d->twtype & V3D_MANIP_SCALE) {
 		if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 			draw_manipulator_scale(v3d, rv3d, MAN_SCALE_C & rv3d->twdrawflag, v3d->twtype, MAN_RGB, false, is_picksel);
 		else
-			draw_manipulator_scale(v3d, rv3d, MAN_SCALE_C & rv3d->twdrawflag, V3D_MANIP_SCALE, MAN_RGB, false, is_picksel);
+			draw_manipulator_scale(v3d, rv3d, MAN_SCALE_C & rv3d->twdrawflag, (v3d->twtrans != 5) | (v3d->twrots != 5) * 2 | (v3d->twscale != 5) * 4, MAN_RGB, false, is_picksel);
 	}
 	if (v3d->twtype & V3D_MANIP_TRANSLATE) {
 		if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 			draw_manipulator_translate(v3d, rv3d, MAN_TRANS_C & rv3d->twdrawflag, v3d->twtype, MAN_RGB, false, is_picksel);
 		else
-			draw_manipulator_translate(v3d, rv3d, MAN_TRANS_C & rv3d->twdrawflag, V3D_MANIP_TRANSLATE, MAN_RGB, false, is_picksel);
+			draw_manipulator_translate(v3d, rv3d, MAN_TRANS_C & rv3d->twdrawflag, (v3d->twtrans != 5) | (v3d->twrots != 5) * 2 | (v3d->twscale != 5) * 4, MAN_RGB, false, is_picksel);
 	}
 
 	hits = GPU_select_end();
@@ -2060,20 +2070,20 @@ static int manipulator_selectbuf(ScrArea *sa, ARegion *ar, const int mval[2], fl
 				if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 					draw_manipulator_rotate(v3d, rv3d, MAN_ROT_C & rv3d->twdrawflag, v3d->twtype, false, is_picksel); 
 				else
-					draw_manipulator_rotate(v3d, rv3d, MAN_ROT_C & rv3d->twdrawflag, V3D_MANIP_ROTATE, false, is_picksel);
+					draw_manipulator_rotate(v3d, rv3d, MAN_ROT_C & rv3d->twdrawflag, (v3d->twtrans != 5) | (v3d->twrots != 5) * 2 | (v3d->twscale != 5) * 4, false, is_picksel);
 			}
 		}
 		if (v3d->twtype & V3D_MANIP_SCALE) {
 			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				draw_manipulator_scale(v3d, rv3d, MAN_SCALE_C & rv3d->twdrawflag, v3d->twtype, MAN_RGB, false, is_picksel);
 			else
-				draw_manipulator_scale(v3d, rv3d, MAN_SCALE_C & rv3d->twdrawflag, V3D_MANIP_SCALE, MAN_RGB, false, is_picksel);
+				draw_manipulator_scale(v3d, rv3d, MAN_SCALE_C & rv3d->twdrawflag, (v3d->twtrans != 5) | (v3d->twrots != 5) * 2 | (v3d->twscale != 5) * 4, MAN_RGB, false, is_picksel);
 		}
 		if (v3d->twtype & V3D_MANIP_TRANSLATE) {
 			if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 				draw_manipulator_translate(v3d, rv3d, MAN_TRANS_C & rv3d->twdrawflag, v3d->twtype, MAN_RGB, false, is_picksel);
 			else
-				draw_manipulator_translate(v3d, rv3d, MAN_TRANS_C & rv3d->twdrawflag, V3D_MANIP_TRANSLATE, MAN_RGB, false, is_picksel);
+				draw_manipulator_translate(v3d, rv3d, MAN_TRANS_C & rv3d->twdrawflag, (v3d->twtrans != 5) | (v3d->twrots != 5) * 2 | (v3d->twscale != 5) * 4, MAN_RGB, false, is_picksel);
 		}
 
 		GPU_select_end();

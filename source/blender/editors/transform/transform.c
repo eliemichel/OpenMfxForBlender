@@ -2394,7 +2394,6 @@ bool initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 			if (!(t->current_orientation == V3D_MANIP_MULTI_TRANSF))
 				setUserConstraint(t, t->current_orientation, t->con.mode, "%s");
 			else {
-				//setUserConstraint(t, t->current_translation, t->con.mode, "%s");
 				switch (t->mode)
 				{
 				case 1:
@@ -2407,9 +2406,6 @@ bool initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 					setUserConstraintCustom(t, t->current_scale, t->con.mode, t->scale_spacemtx, "%s");
 					break;
 				}
-				//setUserConstraintCustom(t, t->current_translation, t->con.mode, t->trans_spacemtx, "%s");
-				//setUserConstraintCustom(t, t->current_rotation, t->con.mode, t->rots_spacemtx, "%s");
-				//setUserConstraintCustom(t, t->current_scale, t->con.mode, t->scale_spacemtx, "%s");
 			}
 		}
 	}
