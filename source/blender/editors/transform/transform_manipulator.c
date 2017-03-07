@@ -664,10 +664,11 @@ static int calc_manipulator_stats(const bContext *C)
 			}
 			case V3D_MANIP_PARENT:
 			{
-				if (!(ob->parent))
+				bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+				if (!(ob->parent) && !(posebone))
 					break;
 				else {
-					if (ob->mode & OB_MODE_POSE) {
+					if ((ob->mode & OB_MODE_POSE) && ob->parent) {
 						/* each bone moves on its own local axis, but  to avoid confusion,
 						* use the active pones axis for display [#33575], this works as expected on a single bone
 						* and users who select many bones will understand whats going on and what local means
@@ -677,6 +678,16 @@ static int calc_manipulator_stats(const bContext *C)
 						copy_m4_m3(rv3d->twmat, mat);
 						break;
 					}
+					if (posebone) {
+						if (posebone->parent) {
+							copy_m4_m4(rv3d->twmat, posebone->parent->pose_mat);
+							normalize_m4(rv3d->twmat);
+							break;
+						}
+						break;
+
+					}
+
 					copy_m4_m4(rv3d->twmat, ob->parent->obmat);
 					normalize_m4(rv3d->twmat);
 					break;
@@ -771,6 +782,62 @@ static int calc_manipulator_stats(const bContext *C)
 							if (i == 2)
 								copy_m4_m3(rv3d->twmatscale, mat);
 							break;
+						}
+						case V3D_MANIP_PARENT:
+						{
+							bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+							if (!(ob->parent) && !(posebone))
+								break;
+							else {
+								if ((ob->mode & OB_MODE_POSE) && ob->parent) {
+									/* each bone moves on its own local axis, but  to avoid confusion,
+									* use the active pones axis for display [#33575], this works as expected on a single bone
+									* and users who select many bones will understand whats going on and what local means
+									* when they start transforming */
+									float mat[3][3];
+									ED_getTransformOrientationMatrix(C, mat, v3d->around);
+									if (i == 0)
+										copy_m4_m3(rv3d->twmattrans, mat);
+									if (i == 1)
+										copy_m4_m3(rv3d->twmatrots, mat);
+									if (i == 2)
+										copy_m4_m3(rv3d->twmatscale, mat);
+									break;
+								}
+								if (posebone) {
+									if (posebone->parent) {
+										if (i == 0) {
+											copy_m4_m4(rv3d->twmattrans, posebone->parent->pose_mat);
+											normalize_m4(rv3d->twmattrans);
+										}
+										if (i == 1) {
+											copy_m4_m4(rv3d->twmatrots, posebone->parent->pose_mat);
+											normalize_m4(rv3d->twmatrots);
+										}
+										if (i == 2) {
+											copy_m4_m4(rv3d->twmatscale, posebone->parent->pose_mat);
+											normalize_m4(rv3d->twmatscale);
+										}
+										break;
+									}
+									break;
+
+								}
+								if (i == 0) {
+									copy_m4_m4(rv3d->twmattrans, ob->parent->obmat);
+									normalize_m4(rv3d->twmattrans);
+								}
+								if (i == 1) {
+									copy_m4_m4(rv3d->twmatrots, ob->parent->obmat);
+									normalize_m4(rv3d->twmatrots);
+								}
+								if (i == 2) {
+									copy_m4_m4(rv3d->twmatscale, ob->parent->obmat);
+									normalize_m4(rv3d->twmatscale);
+								}
+								break;
+
+							}
 						}
 						case V3D_MANIP_NONE:
 						{

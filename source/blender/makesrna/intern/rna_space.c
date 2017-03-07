@@ -131,6 +131,7 @@ static EnumPropertyItem translate_items_full[] = {
 	"(bone Y axis for pose mode)" },
 	{ V3D_MANIP_GIMBAL, "GIMBAL", ICON_MAN_TRANS, "Gimbal", "Align each axis to the Euler rotation axis as used for input" },
 	{ V3D_MANIP_VIEW,   "VIEW",   ICON_MAN_TRANS, "View", "Align the transformation axes to the window" },
+	{ V3D_MANIP_PARENT, "PARENT", ICON_MAN_TRANS, "Parent", "Align the transformation axes to the parent's axes (or global if it is the top of the hierarchy)" },
     { V3D_MANIP_NONE,   "NONE",	  ICON_MAN_TRANS, "None", "This will hide this particular axis"},
 	{0, NULL, 0, NULL, NULL}
 };

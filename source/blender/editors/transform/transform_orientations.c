@@ -458,6 +458,7 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 {
 	Object *ob = CTX_data_active_object(C);
 	Object *obedit = CTX_data_active_object(C);
+	bPoseChannel *posebone = CTX_data_active_pose_bone(C);
 
 	switch (t->current_orientation) {
 		case V3D_MANIP_GLOBAL:
@@ -512,12 +513,19 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 			break;
 
 		case V3D_MANIP_PARENT:
-			if (!(ob->parent))
+			if (!(ob->parent) && !(posebone))
 				break;
 			else {
 				BLI_strncpy(t->spacename, IFACE_("local child"), sizeof(t->spacename));
-				if (ob) {
+				if (ob && ob->parent) {
 					copy_m3_m4(t->spacemtx, ob->parent->obmat);
+					normalize_m3(t->spacemtx);
+				}
+				else if (posebone)
+				{
+					if (!(posebone->parent))
+						break;
+					copy_m3_m4(t->spacemtx, posebone->parent->pose_mat);
 					normalize_m3(t->spacemtx);
 				}
 				else {
@@ -542,6 +550,7 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 {
 	Object *ob = CTX_data_active_object(C);
 	Object *obedit = CTX_data_active_object(C);
+	bPoseChannel *posebone = CTX_data_active_pose_bone(C);
 
 	switch (manipulator_orientation) 
 	{
@@ -597,8 +606,12 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 		case V3D_MANIP_PARENT:
 			BLI_strncpy(t->spacename, IFACE_("parent"), sizeof(t->spacename));
 
-			if (ob) {
+			if (ob && ob->parent) {
 				copy_m3_m4(omtx, ob->parent->obmat);
+				normalize_m3(omtx);
+			}
+			else if (posebone) {
+				copy_m3_m4(omtx, posebone->parent->pose_mat);
 				normalize_m3(omtx);
 			}
 			else
