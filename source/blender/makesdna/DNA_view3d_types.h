@@ -113,6 +113,7 @@ typedef struct RegionView3D {
 
 	/* transform widget matrix */
 	float twmat[4][4];
+	/* transform widget matrix for the multi orientation */
 	float twmattrans[4][4];
 	float twmatrots[4][4];
 	float twmatscale[4][4];
@@ -248,7 +249,7 @@ typedef struct View3D {
 	short pad1;
 	float pad2;
 
-	/* Flags for setting up custom manipulators */
+	/* Flags for setting up multi manipulators */
 	char twtrans, twrots, twscale;
 	char pad5[5];
 } View3D;

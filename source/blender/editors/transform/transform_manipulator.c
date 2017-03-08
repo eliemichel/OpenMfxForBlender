@@ -662,8 +662,13 @@ static int calc_manipulator_stats(const bContext *C)
 				copy_m4_m3(rv3d->twmat, mat);
 				break;
 			}
+			/* The parent orientation behaves like the local orientation of its parent 
+			 * on child objects/bones. If the entity is not parented to anything it behaves
+			 * like a global orientation
+			 */
 			case V3D_MANIP_PARENT:
 			{
+				/* This is for making sure both objects and pose bones work in the parent orientation */
 				bPoseChannel *posebone = CTX_data_active_pose_bone(C);
 				if (!(ob->parent) && !(posebone))
 					break;
@@ -696,11 +701,16 @@ static int calc_manipulator_stats(const bContext *C)
 			}
 			case V3D_MANIP_MULTI_TRANSF:
 			{
+				/* Set up the twtype so that all transformations are automatically set */
 				v3d->twtype = V3D_MANIP_TRANSLATE | V3D_MANIP_ROTATE | V3D_MANIP_SCALE;
-				char types_trans[] = {v3d->twtrans, v3d->twrots, v3d->twscale};
+				char types_tranf[] = {v3d->twtrans, v3d->twrots, v3d->twscale};
+				float *mtx_tranf[3];
+				mtx_tranf[0] = rv3d->twmattrans;
+				mtx_tranf[1] = rv3d->twmatrots;
+				mtx_tranf[2] = rv3d->twmatscale;
 				for (int i = 0; i < 3; i++)
 				{
-					switch (types_trans[i]) 
+					switch (types_tranf[i]) 
 					{
 						case V3D_MANIP_GLOBAL:
 						{
@@ -710,12 +720,7 @@ static int calc_manipulator_stats(const bContext *C)
 						{
 							float mat[3][3];
 							if (gimbal_axis(ob, mat)) {
-								if (i == 0)
-									copy_m4_m3(rv3d->twmattrans, mat);
-								if (i == 1)
-									copy_m4_m3(rv3d->twmatrots, mat);
-								if (i == 2)
-									copy_m4_m3(rv3d->twmatscale, mat);
+								copy_m4_m3(mtx_tranf[i], mat);
 								break;
 							}
 							/* if not gimbal, fall through to normal */
@@ -726,12 +731,7 @@ static int calc_manipulator_stats(const bContext *C)
 							if (obedit || ob->mode & OB_MODE_POSE) {
 								float mat[3][3];
 								ED_getTransformOrientationMatrix(C, mat, v3d->around);
-								if (i == 0)
-									copy_m4_m3(rv3d->twmattrans, mat);
-								if (i == 1)
-									copy_m4_m3(rv3d->twmatrots, mat);
-								if (i == 2)
-									copy_m4_m3(rv3d->twmatscale, mat);
+								copy_m4_m3(mtx_tranf[i], mat);
 								break;
 							}
 							/* no break we define 'normal' as 'local' in Object mode */
@@ -746,28 +746,11 @@ static int calc_manipulator_stats(const bContext *C)
 								* when they start transforming */
 								float mat[3][3];
 								ED_getTransformOrientationMatrix(C, mat, v3d->around);
-								if (i == 0)
-									copy_m4_m3(rv3d->twmattrans, mat);
-								if (i == 1)
-									copy_m4_m3(rv3d->twmatrots, mat);
-								if (i == 2)
-									copy_m4_m3(rv3d->twmatscale, mat);
+								copy_m4_m3(mtx_tranf[i], mat);
 								break;
 							}
-							//copy_m4_m4(rv3d->twmat, ob->obmat);
-							if (i == 0){
-								copy_m4_m4(rv3d->twmattrans, ob->obmat);
-								normalize_m4(rv3d->twmattrans);
-							}
-							if (i == 1) {
-								copy_m4_m4(rv3d->twmatrots, ob->obmat);
-                                 normalize_m4(rv3d->twmatrots);
-							}
-							if (i == 2) {
-								copy_m4_m4(rv3d->twmatscale, ob->obmat);
-                                normalize_m4(rv3d->twmatscale);
-							}
-							//normalize_m4(rv3d->twmat);
+							copy_m4_m4(mtx_tranf[i], ob->obmat);
+							normalize_m4(mtx_tranf[i]);
 							break;
 						}
 						case V3D_MANIP_VIEW:
@@ -775,12 +758,7 @@ static int calc_manipulator_stats(const bContext *C)
 							float mat[3][3];
 							copy_m3_m4(mat, rv3d->viewinv);
 							normalize_m3(mat);
-							if (i == 0)
-								copy_m4_m3(rv3d->twmattrans, mat);
-							if (i == 1)
-								copy_m4_m3(rv3d->twmatrots, mat);
-							if (i == 2)
-								copy_m4_m3(rv3d->twmatscale, mat);
+							copy_m4_m3(mtx_tranf[i], mat);
 							break;
 						}
 						case V3D_MANIP_PARENT:
@@ -796,52 +774,23 @@ static int calc_manipulator_stats(const bContext *C)
 									* when they start transforming */
 									float mat[3][3];
 									ED_getTransformOrientationMatrix(C, mat, v3d->around);
-									if (i == 0)
-										copy_m4_m3(rv3d->twmattrans, mat);
-									if (i == 1)
-										copy_m4_m3(rv3d->twmatrots, mat);
-									if (i == 2)
-										copy_m4_m3(rv3d->twmatscale, mat);
+									copy_m4_m3(mtx_tranf[i], mat);
 									break;
 								}
 								if (posebone) {
 									if (posebone->parent) {
-										if (i == 0) {
-											copy_m4_m4(rv3d->twmattrans, posebone->parent->pose_mat);
-											normalize_m4(rv3d->twmattrans);
-										}
-										if (i == 1) {
-											copy_m4_m4(rv3d->twmatrots, posebone->parent->pose_mat);
-											normalize_m4(rv3d->twmatrots);
-										}
-										if (i == 2) {
-											copy_m4_m4(rv3d->twmatscale, posebone->parent->pose_mat);
-											normalize_m4(rv3d->twmatscale);
-										}
+										copy_m4_m4(mtx_tranf[i], posebone->parent->pose_mat);
+										normalize_m4(mtx_tranf[i]);
 										break;
 									}
 									break;
 
 								}
-								if (i == 0) {
-									copy_m4_m4(rv3d->twmattrans, ob->parent->obmat);
-									normalize_m4(rv3d->twmattrans);
-								}
-								if (i == 1) {
-									copy_m4_m4(rv3d->twmatrots, ob->parent->obmat);
-									normalize_m4(rv3d->twmatrots);
-								}
-								if (i == 2) {
-									copy_m4_m4(rv3d->twmatscale, ob->parent->obmat);
-									normalize_m4(rv3d->twmatscale);
-								}
+								copy_m4_m4(mtx_tranf[i], ob->parent->obmat);
+								normalize_m4(mtx_tranf[i]);
 								break;
 
 							}
-						}
-						case V3D_MANIP_NONE:
-						{
-							break;
 						}
 					}
 				}

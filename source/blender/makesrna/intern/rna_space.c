@@ -195,7 +195,7 @@ static EnumPropertyItem transform_orientation_items[] = {
 	{V3D_MANIP_VIEW,   "VIEW", 0, "View", "Align the transformation axes to the window"},
 	{V3D_MANIP_PARENT, "PARENT", 0, "Parent", "Align the transformation axes to the parent's axes (or global if it is the top of the hierarchy)"},
 	{V3D_MANIP_MULTI_TRANSF, "MULTITRANSFORM", 0, "Multiple", "Set different orientations to different transformation manipulators"},
-	{V3D_MANIP_CUSTOM, "CUSTOM", 0, "Custom", "Use a custom transform orientation"},
+	//{V3D_MANIP_CUSTOM, "CUSTOM", 0, "Custom", "Use a custom transform orientation"},
 	{0, NULL, 0, NULL, NULL}
 };
 
