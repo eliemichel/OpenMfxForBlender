@@ -617,8 +617,6 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 			else
 				unit_m3(omtx);
 			break;
-		case V3D_MANIP_NONE:
-			break;
 		
 		default:
 			if (applyTransformOrientation(C, omtx, t->spacename, t->current_orientation - V3D_MANIP_CUSTOM)) {
