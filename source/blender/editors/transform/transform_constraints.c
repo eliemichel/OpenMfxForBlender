@@ -698,7 +698,7 @@ void setUserConstraint(TransInfo *t, short orientation, int mode, const char fte
 }
 
 /*
-* CUSTOM!!!!!!!!!!!!!!!!!!!!!
+* Set the constraint according to the user defined custom orientation
 *
 * ftext is a format string passed to BLI_snprintf. It will add the name of
 * the orientation where %s is (logically).
