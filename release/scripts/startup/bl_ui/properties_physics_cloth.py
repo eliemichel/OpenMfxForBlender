@@ -203,13 +203,17 @@ class PHYSICS_PT_cloth_shape(PhysicButtonsPanel, Panel):
         row.prop(cloth, "shrinking", text="Shrinking")
         row.prop(cloth, "rest_planarity_factor", text="Flattening")
 
-        layout.prop(cloth, "use_dynamic_mesh", text="Dynamic Mesh")
+        row = layout.row()
+        sub = row.column()
+        sub.alert = not cloth.is_basemesh_target_valid
+        sub.prop(cloth, "basemesh_target")
+        row.prop(cloth, "use_dynamic_mesh", text="Dynamic Mesh")
 
         key = ob.data.shape_keys
 
         if key:
             sub = layout.column()
-            sub.active = not cloth.use_dynamic_mesh
+            sub.active = (not cloth.use_dynamic_mesh) and (cloth.basemesh_target is None)
             sub.prop_search(cloth, "rest_shape_key", key, "key_blocks")
 
 

@@ -43,6 +43,7 @@
 
 #include "BKE_cdderivedmesh.h"
 #include "BKE_cloth.h"
+#include "BKE_editmesh.h"
 #include "BKE_effect.h"
 #include "BKE_global.h"
 #include "BKE_modifier.h"
@@ -587,6 +588,37 @@ void cloth_free_modifier_extern(ClothModifierData *clmd )
 	}
 }
 
+bool is_basemesh_valid(Object *ob, Object *basemesh, ClothModifierData *clmd)
+{
+	DerivedMesh *basedm;
+	ModifierData *md;
+
+	if (!basemesh || (ob == basemesh)) {
+		return true;
+	}
+	else if (basemesh->type != OB_MESH) {
+		return false;
+	}
+
+	if (clmd) {
+		md = (ModifierData *)clmd;
+	}
+	else {
+		md = modifiers_findByType(ob, eModifierType_Cloth);
+		clmd = (ClothModifierData *)md;
+	}
+
+	if (basemesh == md->scene->obedit) {
+		BMEditMesh *em = BKE_editmesh_from_object(basemesh);
+		basedm = em->derivedFinal;
+	}
+	else {
+		basedm = basemesh->derivedFinal;
+	}
+
+	return clmd->clothObject->mvert_num == basedm->getNumVerts(basedm);
+}
+
 /******************************************************************************
  *
  * Internal functions.
@@ -727,6 +759,7 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 {
 	int i = 0;
 	MVert *mvert = NULL;
+	MVert *basevert = NULL;
 	ClothVertex *verts = NULL;
 	float (*shapekey_rest)[3] = NULL;
 	float tnull[3] = {0, 0, 0};
@@ -762,10 +795,27 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 	clmd->clothObject->springs = NULL;
 	clmd->clothObject->numsprings = -1;
 
-	if ( clmd->sim_parms->shapekey_rest && !(clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_DYNAMIC_BASEMESH ) )
-		shapekey_rest = dm->getVertDataArray ( dm, CD_CLOTH_ORCO );
+	if (clmd->sim_parms->basemesh_target) {
+		if ((clmd->sim_parms->basemesh_target != ob) && is_basemesh_valid(ob, clmd->sim_parms->basemesh_target, clmd)) {
+			ModifierData *md = (ModifierData *)clmd;
+			DerivedMesh *basedm;
 
-	mvert = dm->getVertArray (dm);
+			if (clmd->sim_parms->basemesh_target == md->scene->obedit) {
+				BMEditMesh *em = BKE_editmesh_from_object(clmd->sim_parms->basemesh_target);
+				basedm = em->derivedFinal;
+			}
+			else {
+				basedm = clmd->sim_parms->basemesh_target->derivedFinal;
+			}
+
+			basevert = basedm->getVertArray(basedm);
+		}
+	}
+	else if (clmd->sim_parms->shapekey_rest && !(clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_DYNAMIC_BASEMESH)) {
+		shapekey_rest = dm->getVertDataArray ( dm, CD_CLOTH_ORCO );
+	}
+
+	mvert = dm->getVertArray(dm);
 
 	verts = clmd->clothObject->verts;
 
@@ -776,12 +826,17 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 
 			mul_m4_v3(ob->obmat, verts->x);
 
-			if ( shapekey_rest ) {
+			if (basevert) {
+				copy_v3_v3(verts->xrest, basevert[i].co);
+				mul_m4_v3(clmd->sim_parms->basemesh_target->obmat, verts->xrest);
+			}
+			else if (shapekey_rest) {
 				copy_v3_v3(verts->xrest, shapekey_rest[i]);
 				mul_m4_v3(ob->obmat, verts->xrest);
 			}
-			else
+			else {
 				copy_v3_v3(verts->xrest, verts->x);
+			}
 		}
 		
 		/* no GUI interface yet */
@@ -1189,11 +1244,29 @@ static void cloth_update_springs( ClothModifierData *clmd )
 }
 
 /* Update rest verts, for dynamically deformable cloth */
-static void cloth_update_verts( Object *ob, ClothModifierData *clmd, DerivedMesh *dm )
+static void cloth_update_verts(Object *ob, ClothModifierData *clmd, DerivedMesh *dm)
 {
 	unsigned int i = 0;
-	MVert *mvert = dm->getVertArray (dm);
+	MVert *mvert;
 	ClothVertex *verts = clmd->clothObject->verts;
+
+	if (clmd->sim_parms->basemesh_target && (clmd->sim_parms->basemesh_target != ob) &&
+	    is_basemesh_valid(ob, clmd->sim_parms->basemesh_target, clmd))
+	{
+		ModifierData *md = (ModifierData *)clmd;
+
+		ob = clmd->sim_parms->basemesh_target;
+
+		if (ob == md->scene->obedit) {
+			BMEditMesh *em = BKE_editmesh_from_object(ob);
+			dm = em->derivedFinal;
+		}
+		else {
+			dm = ob->derivedFinal;
+		}
+	}
+
+	mvert = dm->getVertArray(dm);
 
 	/* vertex count is already ensured to match */
 	for ( i = 0; i < dm->getNumVerts(dm); i++, verts++ ) {

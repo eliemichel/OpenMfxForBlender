@@ -249,6 +249,8 @@ int cloth_add_spring (struct ClothModifierData *clmd, unsigned int indexA, unsig
 
 void cloth_parallel_transport_hair_frame(float mat[3][3], const float dir_old[3], const float dir_new[3]);
 
+bool is_basemesh_valid(struct Object *ob, struct Object *basemesh, struct ClothModifierData *clmd);
+
 ////////////////////////////////////////////////
 
 #endif

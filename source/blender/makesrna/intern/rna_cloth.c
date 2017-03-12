@@ -37,6 +37,7 @@
 
 #include "rna_internal.h"
 
+#include "BKE_cdderivedmesh.h"
 #include "BKE_cloth.h"
 #include "BKE_modifier.h"
 
@@ -390,6 +391,28 @@ static char *rna_ClothCollisionSettings_path(PointerRNA *ptr)
 	else {
 		return NULL;
 	}
+}
+
+static void rna_ClothSettings_besemesh_target_set(PointerRNA *ptr, PointerRNA value)
+{
+	Object *target = (Object *)value.data;
+	ClothSimSettings *sim = (ClothSimSettings *)ptr->data;
+
+	if (is_basemesh_valid((Object *)ptr->id.data, target, NULL)) {
+		sim->basemesh_target = target;
+	}
+}
+
+static int rna_ClothSettings_besemesh_target_poll(PointerRNA *ptr, PointerRNA value)
+{
+	return is_basemesh_valid((Object *)ptr->id.data, (Object *)value.data, NULL);
+}
+
+static int rna_ClothSettings_besemesh_target_valid_get(PointerRNA *ptr)
+{
+	ClothSimSettings *sim = (ClothSimSettings *)ptr->data;
+
+	return is_basemesh_valid((Object *)ptr->id.data, sim->basemesh_target, NULL);
 }
 
 #else
@@ -818,6 +841,17 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Dynamic Base Mesh", "Make simulation respect deformations in the base mesh");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+
+	prop = RNA_def_property(srna, "basemesh_target", PROP_POINTER, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Basemesh", "Object mesh to use as rest shape");
+	RNA_def_property_pointer_funcs(prop, NULL, "rna_ClothSettings_besemesh_target_set", NULL, "rna_ClothSettings_besemesh_target_poll");
+	RNA_def_property_flag(prop, PROP_EDITABLE);
+	RNA_def_property_update(prop, 0, "rna_cloth_dependency_update");
+
+	prop = RNA_def_property(srna, "is_basemesh_target_valid", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_funcs(prop, "rna_ClothSettings_besemesh_target_valid_get", NULL);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+	RNA_def_property_ui_text(prop, "Basemesh Valid", "True if the set basemesh is valid");
 
 	/* unused */
 

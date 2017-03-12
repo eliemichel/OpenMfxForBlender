@@ -119,6 +119,8 @@ typedef struct ClothSimSettings {
 	float max_imp;
 	float imp_adj_factor;
 	char pad1[4];
+
+	struct Object *basemesh_target;	/* object to use for dynamic basemesh */
 } ClothSimSettings;
 
 
