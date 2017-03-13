@@ -146,6 +146,9 @@ class PHYSICS_PT_cloth(PhysicButtonsPanel, Panel):
         row.prop(cloth, "bending_plasticity", text="")
         row.prop(cloth, "bending_yield_factor", text="")
 
+        layout.separator()
+        layout.prop(cloth, "use_initial_velocity")
+
         # Disabled for now
         """
         if cloth.vertex_group_mass:

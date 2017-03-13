@@ -171,6 +171,7 @@ typedef enum {
 	CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL = (1 << 0), /* use velocity based adaptive subframes*/
 	CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP = (1 << 1), /* use velocity based adaptive subframes*/
 	CLOTH_SIMSETTINGS_FLAG_COLLOBJ = ( 1 << 2 ),// object is only collision object, no cloth simulation is done
+	CLOTH_SIMSETTINGS_FLAG_INIT_VEL = ( 1 << 3 ), /* initialize cloth velocity from animation */
 	CLOTH_SIMSETTINGS_FLAG_TEARING = ( 1 << 4 ),// true if tearing is enabled
 	CLOTH_SIMSETTINGS_FLAG_CCACHE_EDIT = (1 << 12),	/* edit cache in editmode */
 	CLOTH_SIMSETTINGS_FLAG_NO_SPRING_COMPRESS = (1 << 13), /* don't allow spring compression */

@@ -1045,17 +1045,20 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 	float max_impulse = 0.0f;
 	float tmp_vec[3];
 	float adapt_fact;
+	bool init_vel;
 	
 	BKE_sim_debug_data_clear_category("collision");
 	
 	if (!clmd->solver_result)
 		clmd->solver_result = (ClothSolverResult *)MEM_callocN(sizeof(ClothSolverResult), "cloth solver result");
 	cloth_clear_result(clmd);
-	
-	if (clmd->sim_parms->vgroup_mass>0) { /* do goal stuff */
+
+	init_vel = ((clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_INIT_VEL) && (frame == (clmd->point_cache->startframe + 1)));
+
+	if ((clmd->sim_parms->vgroup_mass > 0) || init_vel) { /* do goal and velocity stuff */
 		for (i = 0; i < mvert_num; i++) {
 			// update velocities with constrained velocities from pinned verts
-			if (verts[i].flags & CLOTH_VERT_FLAG_PINNED) {
+			if ((verts[i].flags & CLOTH_VERT_FLAG_PINNED) || init_vel) {
 				float v[3];
 				sub_v3_v3v3(v, verts[i].xconst, verts[i].xold);
 				// mul_v3_fl(v, clmd->sim_parms->stepsPerFrame);
