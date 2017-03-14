@@ -59,6 +59,8 @@
 #include "BKE_editmesh.h"
 #include "BKE_lattice.h"
 #include "BKE_gpencil.h"
+#include "BKE_object.h"
+#include "BKE_scene.h"
 
 #include "BIF_gl.h"
 
@@ -668,36 +670,98 @@ static int calc_manipulator_stats(const bContext *C)
 			 */
 			case V3D_MANIP_PARENT:
 			{
-				/* This is for making sure both objects and pose bones work in the parent orientation */
-				bPoseChannel *posebone = CTX_data_active_pose_bone(C);
-				if (!(ob->parent) && !(posebone))
+				if (ob->mode & OB_MODE_POSE) {
+					float mat[3][3];
+					ED_getTransformOrientationMatrix(C, mat, v3d->around);
+					copy_m4_m3(rv3d->twmat, mat);
 					break;
-				else {
-					if ((ob->mode & OB_MODE_POSE) && ob->parent) {
-						/* each bone moves on its own local axis, but  to avoid confusion,
-						* use the active pones axis for display [#33575], this works as expected on a single bone
-						* and users who select many bones will understand whats going on and what local means
-						* when they start transforming */
-						float mat[3][3];
-						ED_getTransformOrientationMatrix(C, mat, v3d->around);
-						copy_m4_m3(rv3d->twmat, mat);
-						break;
-					}
-					if (posebone) {
-						if (posebone->parent) {
-							copy_m4_m4(rv3d->twmat, posebone->parent->pose_mat);
-							normalize_m4(rv3d->twmat);
-							break;
-						}
-						break;
-
-					}
-
-					copy_m4_m4(rv3d->twmat, ob->parent->obmat);
-					normalize_m4(rv3d->twmat);
-					break;
-
 				}
+				if (is_zero_v3(ob->rot))
+					copy_m4_m4(rv3d->twmat, ob->obmat);
+				else {
+					float mfm[4][4]; // My final Matrix
+
+					float rmat[3][3];
+					float smat[3][3];
+					float mat[3][3];
+
+					float eul[3] = { 0.0f, 0.0f, 0.0f };
+					float loc[3] = { 0.0f, 0.0f, 0.0f };
+					float scl[3] = { 1.0f, 1.0f, 1.0f };
+
+					/* Make Scale       1,1,1 */
+					float vec[3];
+					mul_v3_v3v3(vec, scl, scl);
+					size_to_mat3(smat, vec);
+
+					/* Make Rotation    0,0,0 */
+					eulO_to_mat3(rmat, eul, 1);
+					mul_m3_m3m3(mat, rmat, smat);
+
+					/* Transform matrix M */
+					copy_m4_m3(mfm, mat);
+					add_v3_v3v3(mfm[3], loc, loc);
+					if (ob->parent) {
+						float totmat[4][4];
+						float tmat[4][4];
+						copy_m4_m4(totmat, ob->parent->obmat);
+
+						mul_m4_m4m4(tmat, totmat, ob->parentinv);
+						mul_m4_m4m4(mfm, tmat, mfm);
+
+					}
+					if (ob->mode & OB_MODE_POSE)
+						copy_m4_m3(rv3d->twmat, mfm);
+					else
+						copy_m4_m4(rv3d->twmat, mfm);
+				}
+				normalize_m4(rv3d->twmat);
+				break;
+
+				///* This is for making sure both objects and pose bones work in the parent orientation */
+				//bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+				//if (!(ob->parent) && !(posebone))
+				//	break;
+				//else {
+				//	if ((ob->mode & OB_MODE_POSE) && ob->parent) {
+				//		/* each bone moves on its own local axis, but  to avoid confusion,
+				//		* use the active pones axis for display [#33575], this works as expected on a single bone
+				//		* and users who select many bones will understand whats going on and what local means
+				//		* when they start transforming */
+				//		float mat[3][3];
+				//		ED_getTransformOrientationMatrix(C, mat, v3d->around);
+				//		copy_m4_m3(rv3d->twmat, mat);
+				//		break;
+				//	}
+				//	if (posebone) {
+				//		if (posebone->parent) {
+				//			if (is_zero_v3(posebone->eul)) {
+				//				//copy_m4_m4(rv3d->twmat, posebone->parent->pose_mat);
+				//				float mat[3][3];
+				//				ED_getTransformOrientationMatrix(C, mat, v3d->around);
+				//				copy_m4_m3(rv3d->twmat, mat);
+				//			}
+				//			else
+				//			{
+				//				float temp_eul[3] = { 0.0f, 0.0f, 0.0f };
+				//				float revRot[3][3];
+				//				/*copy_v3_v3(temp_eul, posebone->eul);
+				//				negate_v3(temp_eul);*/
+				//				eulO_to_mat3(revRot, temp_eul, posebone->rotmode);
+				//				mul_m4_m4m3(rv3d->twmat, posebone->pose_mat, revRot);
+				//			}
+				//			normalize_m4(rv3d->twmat);
+				//			break;
+				//		}
+				//		break;
+
+				//	}
+
+				//	copy_m4_m4(rv3d->twmat, ob->parent->obmat);
+				//	normalize_m4(rv3d->twmat);
+				//	break;
+
+				//}
 			}
 			case V3D_MANIP_MULTI_TRANSF:
 			{

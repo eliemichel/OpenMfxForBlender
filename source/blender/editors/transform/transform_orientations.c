@@ -52,6 +52,8 @@
 #include "BKE_report.h"
 #include "BKE_main.h"
 #include "BKE_screen.h"
+#include "BKE_object.h"
+#include "BKE_scene.h"
 
 #include "BLT_translation.h"
 
@@ -484,7 +486,6 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 
 		case V3D_MANIP_LOCAL:
 			BLI_strncpy(t->spacename, IFACE_("local"), sizeof(t->spacename));
-		
 			if (ob) {
 				copy_m3_m4(t->spacemtx, ob->obmat);
 				normalize_m3(t->spacemtx);
@@ -513,25 +514,80 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 			break;
 
 		case V3D_MANIP_PARENT:
-			if (!(ob->parent) && !(posebone))
-				break;
-			else {
-				BLI_strncpy(t->spacename, IFACE_("local child"), sizeof(t->spacename));
-				if (ob && ob->parent) {
-					copy_m3_m4(t->spacemtx, ob->parent->obmat);
-					normalize_m3(t->spacemtx);
-				}
-				else if (posebone)
-				{
-					if (!(posebone->parent))
-						break;
-					copy_m3_m4(t->spacemtx, posebone->parent->pose_mat);
-					normalize_m3(t->spacemtx);
-				}
+			BLI_strncpy(t->spacename, IFACE_("local child"), sizeof(t->spacename));
+			if (ob)
+			{
+				if (is_zero_v3(ob->rot))
+					copy_m3_m4(t->spacemtx, ob->obmat);
 				else {
-					unit_m3(t->spacemtx);
+					float mfm[4][4]; // My final Matrix
+
+					float rmat[3][3];
+					float smat[3][3];
+					float mat[3][3];
+
+					float eul[3] = { 0.0f, 0.0f, 0.0f };
+					float loc[3] = { 0.0f, 0.0f, 0.0f };
+					float scl[3] = { 1.0f, 1.0f, 1.0f };
+
+					/* Make Scale       1,1,1 */
+					float vec[3];
+					mul_v3_v3v3(vec, scl, scl);
+					size_to_mat3(smat, vec);
+
+					/* Make Rotation    0,0,0 */
+					eulO_to_mat3(rmat, eul, 1);
+					mul_m3_m3m3(mat, rmat, smat);
+
+					/* Transform matrix M */
+					copy_m4_m3(mfm, mat);
+					add_v3_v3v3(mfm[3], loc, loc);
+					if (ob->parent) {
+						float totmat[4][4];
+						float tmat[4][4];
+						copy_m4_m4(totmat, ob->parent->obmat);
+
+						mul_m4_m4m4(tmat, totmat, ob->parentinv);
+						mul_m4_m4m4(mfm, tmat, mfm);
+
+					}
+
+					copy_m3_m4(t->spacemtx, mfm);
+
 				}
+				normalize_m3(t->spacemtx);
 			}
+			//if (!(ob->parent) && !(posebone))
+			//	break;
+			//else {
+				//if (ob && ob->parent) {
+				//	copy_m3_m4(t->spacemtx, ob->parent->obmat);
+				//	normalize_m3(t->spacemtx);
+				//}
+				//else if (posebone)
+				//{
+				//	if (!(posebone->parent))
+				//		break;
+				//	if (is_zero_v3(posebone->eul)) {
+				//		//copy_m3_m4(t->spacemtx, posebone->parent->pose_mat);
+				//		copy_m3_m4(t->spacemtx, posebone->parent->pose_mat);
+				//	}
+				//	else
+				//	{
+				//		float temp_eul[3];
+				//		float revRot[3][3];
+				//		copy_v3_v3(temp_eul, posebone->eul);
+				//		negate_v3(temp_eul);
+				//		eulO_to_mat3(revRot, temp_eul, posebone->rotmode);
+				//		mul_m4_m4m3(t->spacemtx, posebone->pose_mat, revRot);
+				//		
+				//	}
+				//	normalize_m3(t->spacemtx);
+				//}
+			else {
+				unit_m3(t->spacemtx);
+			}
+			//}
 			break;
 
 		default: /* V3D_MANIP_CUSTOM */
@@ -1183,8 +1239,13 @@ void ED_getTransformOrientationMatrix(const bContext *C, float orientation_mat[3
 	float plane[3] = {0.0, 0.0, 0.0};
 
 	int type;
-
-	type = getTransformOrientation_ex(C, normal, plane, around);
+	ScrArea *sa = CTX_wm_area(C);
+	View3D *v3d = sa->spacedata.first;
+	
+	if (!(v3d->twmode == V3D_MANIP_PARENT))
+		type = getTransformOrientation_ex(C, normal, plane, around);
+	else
+		type = 3;
 
 	switch (type) {
 		case ORIENTATION_NORMAL:
