@@ -335,6 +335,14 @@ class PHYSICS_PT_cloth_scaling(PhysicButtonsPanel, Panel):
         sub.active = cloth.vertex_group_shrink != ""
         sub.prop(cloth, "shrinking_max", text="Max")
 
+        split = layout.split(percentage=0.25, align=True)
+        split.label("Flattening:")
+        split.prop_search(cloth, "vertex_group_planarity", ob, "vertex_groups", text="")
+
+        sub = split.row(align=True)
+        sub.active = cloth.vertex_group_planarity != ""
+        sub.prop(cloth, "planarity_factor_max", text="Max")
+
 
 class PHYSICS_PT_cloth_adaptive_subframes(PhysicButtonsPanel, Panel):
     bl_label = "Cloth Adaptive Subframes"

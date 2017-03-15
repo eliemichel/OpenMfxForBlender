@@ -122,6 +122,7 @@ typedef struct ClothVertex {
 	float 	struct_stiff;
 	float	bend_stiff;
 	float 	shear_stiff;
+	float	planarity;
 	int 	spring_count; /* how many springs attached? */
 	float	shrink_factor; /* how much to shrink this cloth */
 }
@@ -146,6 +147,7 @@ typedef struct ClothSpring {
 	int	flags; 		/* defined in BKE_cloth.h, e.g. deactivated due to tearing */
 	float lin_stiffness;	/* linear stiffness factor from the vertex groups */
 	float ang_stiffness;	/* angular stiffness factor from the vertex groups */
+	float planarity;
 	
 	/* angular bending spring target and derivatives */
 	float target[3];

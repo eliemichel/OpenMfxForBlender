@@ -654,6 +654,7 @@ int cloth_uses_vgroup(ClothModifierData *clmd)
 		(clmd->sim_parms->vgroup_bend>0) ||
 		(clmd->sim_parms->vgroup_shrink>0) ||
 		(clmd->sim_parms->vgroup_mass>0) ||
+		(clmd->sim_parms->vgroup_planar>0) ||
 		(clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_COMB_GOAL));
 }
 
@@ -734,6 +735,10 @@ static void cloth_apply_vgroup(ClothModifierData *clmd, DerivedMesh *dm, Object 
 
 					if ( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_bend-1)) {
 						verts->bend_stiff = dvert->dw [j].weight;
+					}
+
+					if ( dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_planar - 1)) {
+						verts->planarity = dvert->dw[j].weight;
 					}
 
 					if (clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_SELF ) {
@@ -1213,6 +1218,7 @@ static void cloth_update_springs( ClothModifierData *clmd )
 
 		if (spring->type & CLOTH_SPRING_TYPE_BENDING) {
 			spring->ang_stiffness = (cloth->verts[spring->kl].bend_stiff + cloth->verts[spring->ij].bend_stiff) / 2.0f;
+			spring->planarity = (cloth->verts[spring->kl].planarity + cloth->verts[spring->ij].planarity) / 2.0f;
 		}
 
 		if (spring->type & CLOTH_SPRING_TYPE_STRUCTURAL) {

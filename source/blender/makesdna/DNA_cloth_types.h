@@ -87,13 +87,13 @@ typedef struct ClothSimSettings {
 	float	bend_plasticity;	/* Factor of how much the rest angle will change after reaching yield point (0-1) */
 	float	bend_yield_fact;	/* How much angle has to change as a factor of a full circle before plastic behavior kicks in (0-1) */
 	float	rest_planar_fact;	/* Factor of how planar rest angles should be, 0 means the original angle, and 1 means totally flat */
+	float	max_planarity;
 	
 	/* XXX various hair stuff
 	 * should really be separate, this struct is a horrible mess already
 	 */
 	float	bending_damping;	/* damping of bending springs */
 	float	voxel_cell_size;    /* size of voxel grid cells for continuum dynamics */
-	int		pad;
 
 	int 	stepsPerFrame;	/* Number of time steps per frame.		*/
 	int	flags;		/* flags, see CSIMSETT_FLAGS enum above.	*/
@@ -105,11 +105,12 @@ typedef struct ClothSimSettings {
 	short	vgroup_struct;  /* vertex group for scaling structural stiffness */
 	short	vgroup_shear;  /* vertex group for scaling structural stiffness */
 	short	vgroup_shrink;  /* vertex group for shrinking cloth */
+	short	vgroup_planar;  /* vertex group for shrinking cloth */
 	short	shapekey_rest;  /* vertex group for scaling structural stiffness */
 	short	presets; /* used for presets on GUI */
 	short 	reset;
 
-	char pad0[6];
+	char pad0[4];
 	struct EffectorWeights *effector_weights;
 
 	/* Adaptive subframe stuff */

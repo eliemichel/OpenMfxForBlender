@@ -186,6 +186,28 @@ static void rna_ClothSettings_max_shrink_set(struct PointerRNA *ptr, float value
 	settings->max_shrink = value;
 }
 
+static void rna_ClothSettings_planarity_set(struct PointerRNA *ptr, float value)
+{
+	ClothSimSettings *settings = (ClothSimSettings *)ptr->data;
+
+	settings->rest_planar_fact = value;
+
+	/* check for max clipping */
+	if (value > settings->max_planarity)
+		settings->max_planarity = value;
+}
+
+static void rna_ClothSettings_max_planarity_set(struct PointerRNA *ptr, float value)
+{
+	ClothSimSettings *settings = (ClothSimSettings *)ptr->data;
+
+	/* check for clipping */
+	if (value < settings->rest_planar_fact)
+		value = settings->rest_planar_fact;
+
+	settings->max_planarity = value;
+}
+
 static void rna_ClothSettings_subframes_set(struct PointerRNA *ptr, float value)
 {
 	ClothSimSettings *settings = (ClothSimSettings *)ptr->data;
@@ -298,6 +320,23 @@ static void rna_ClothSettings_bend_vgroup_set(PointerRNA *ptr, const char *value
 	rna_object_vgroup_name_index_set(ptr, value, &sim->vgroup_bend);
 }
 
+static void rna_ClothSettings_planar_vgroup_get(PointerRNA *ptr, char *value)
+{
+	ClothSimSettings *sim = (ClothSimSettings *)ptr->data;
+	rna_object_vgroup_name_index_get(ptr, value, sim->vgroup_planar);
+}
+
+static int rna_ClothSettings_planar_vgroup_length(PointerRNA *ptr)
+{
+	ClothSimSettings *sim = (ClothSimSettings *)ptr->data;
+	return rna_object_vgroup_name_index_length(ptr, sim->vgroup_planar);
+}
+
+static void rna_ClothSettings_planar_vgroup_set(PointerRNA *ptr, const char *value)
+{
+	ClothSimSettings *sim = (ClothSimSettings *)ptr->data;
+	rna_object_vgroup_name_index_set(ptr, value, &sim->vgroup_planar);
+}
 
 static void rna_CollSettings_selfcol_vgroup_get(PointerRNA *ptr, char *value)
 {
@@ -758,7 +797,15 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "rest_planarity_factor", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "rest_planar_fact");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
+	RNA_def_property_float_funcs(prop, NULL, "rna_ClothSettings_planarity_set", NULL);
 	RNA_def_property_ui_text(prop, "Rest Planarity Factor", "How planar the rest shape should be, 0 is the original shape, and 1 is totally flat");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "planarity_factor_max", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "max_planarity");
+	RNA_def_property_range(prop, 0.0f, 1.0f);
+	RNA_def_property_float_funcs(prop, NULL, "rna_ClothSettings_max_planarity_set", NULL);
+	RNA_def_property_ui_text(prop, "Rest Planarity Maximum", "Maximum rest planarity factor value");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "sewing_force_max", PROP_FLOAT, PROP_NONE);
@@ -815,6 +862,12 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	                              "rna_ClothSettings_bend_vgroup_set");
 	RNA_def_property_ui_text(prop, "Bending Stiffness Vertex Group",
 	                         "Vertex group for fine control over bending stiffness");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "vertex_group_planarity", PROP_STRING, PROP_NONE);
+	RNA_def_property_string_funcs(prop, "rna_ClothSettings_planar_vgroup_get", "rna_ClothSettings_planar_vgroup_length",
+	                              "rna_ClothSettings_planar_vgroup_set");
+	RNA_def_property_ui_text(prop, "Planarity Scaling Vertex Group", "Vertex group for fine control over rest planarity");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "effector_weights", PROP_POINTER, PROP_NONE);

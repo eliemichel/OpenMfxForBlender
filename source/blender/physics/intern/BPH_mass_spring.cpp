@@ -347,15 +347,17 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s,
 
 	if (s->type & CLOTH_SPRING_TYPE_BENDING) {  /* calculate force of bending springs */
 #ifdef CLOTH_FORCE_SPRING_BEND
-		float k, scaling;
+		float k, scaling, planarity;
 
 		s->flags |= CLOTH_SPRING_FLAG_NEEDED;
 
 		scaling = parms->bending + s->ang_stiffness * fabsf(parms->max_bend - parms->bending);
 		k = scaling * s->restlen * s->lenfact * 0.1f; /* multiplying by 0.1, just to scale the forces to more reasonable values */
 
+		planarity = parms->rest_planar_fact + s->planarity * fabsf(parms->max_planarity - parms->rest_planar_fact);
+
 		BPH_mass_spring_force_spring_angular(data, s->ij, s->kl, s->pa, s->pb, s->la, s->lb,
-		                                     s->restang * (1.0f - parms->rest_planar_fact), &s->angoffset, k,
+		                                     s->restang * (1.0f - planarity), &s->angoffset, k,
 		                                     parms->bending_damping, bend_plast, parms->bend_yield_fact, !collision_pass);
 #endif
 	}
