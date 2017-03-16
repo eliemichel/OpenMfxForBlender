@@ -364,15 +364,15 @@ enum {
 #define V3D_MANIP_SCALE			4
 
 /* View3d->twmode */
-#define V3D_MANIP_GLOBAL		0
-#define V3D_MANIP_LOCAL			1
-#define V3D_MANIP_NORMAL		2
-#define V3D_MANIP_VIEW			3
-#define V3D_MANIP_GIMBAL		4
-#define V3D_MANIP_NONE			5 /* special value that hides a manipulator - will only appear in custom */
-#define V3D_MANIP_PARENT		6
-#define V3D_MANIP_MULTI_TRANSF	7 /* This will replace CUSTOM so that users can make their own custom orientations */
-#define V3D_MANIP_CUSTOM		8 /* anything of value 8 or higher is custom */
+#define V3D_MANIP_GLOBAL				0
+#define V3D_MANIP_LOCAL					1
+#define V3D_MANIP_NORMAL				2
+#define V3D_MANIP_VIEW					3
+#define V3D_MANIP_GIMBAL				4
+#define V3D_MANIP_NONE					5 /* special value that hides a manipulator - will only appear in custom */
+#define V3D_MANIP_ALONG_ROTATION		6
+#define V3D_MANIP_MULTI_TRANSF			7 /* This will replace CUSTOM so that users can make their own custom orientations */
+#define V3D_MANIP_CUSTOM				8 /* anything of value 8 or higher is custom */
 
 /* View3d->twflag */
    /* USE = user setting, DRAW = based on selection */

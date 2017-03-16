@@ -514,7 +514,7 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 			}
 			break;
 
-		case V3D_MANIP_PARENT:
+		case V3D_MANIP_ALONG_ROTATION:
 			BLI_strncpy(t->spacename, IFACE_("local child"), sizeof(t->spacename));
 			if (ob)
 			{
@@ -718,7 +718,7 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 			}
 			break;
 
-		case V3D_MANIP_PARENT:
+		case V3D_MANIP_ALONG_ROTATION:
 			BLI_strncpy(t->spacename, IFACE_("parent"), sizeof(t->spacename));
 
 			if (ob && ob->parent) {
