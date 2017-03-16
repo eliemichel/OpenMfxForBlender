@@ -46,6 +46,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_curve.h"
 #include "BKE_context.h"
 #include "BKE_editmesh.h"
@@ -517,8 +518,66 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 			BLI_strncpy(t->spacename, IFACE_("local child"), sizeof(t->spacename));
 			if (ob)
 			{
-				if (is_zero_v3(ob->rot))
+				if (ob->mode & OB_MODE_POSE) {
+					bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+					bPoseChannel *parchan = posebone->parent;
+					if (!parchan)
+					{
+						copy_m3_m4(t->spacemtx, ob->obmat);
+						normalize_m3(t->spacemtx);
+						break;
+					}
+
+					float chan_mat[4][4];
+					const float size[3] = { 1.0f, 1.0f, 1.0f };
+					const float rots[3] = { 0.0f, 0.0f, 0.0f };
+					const float locs[3] = { 0.0f, 0.0f, 0.0f };
+					float smat[3][3];
+					float rmat[3][3];
+					float tmat[3][3];
+					float imat[3][3], mat[3][3];
+					float vec[3];
+					float bone_length;
+
+					/* get scaling matrix */
+					size_to_mat3(smat, size);
+
+					/* get rotation matrix */
+					eulO_to_mat3(rmat, rots, 6);
+
+					/* calculate matrix of the bone (as 3x3 matrix, but then copy the 4x4) */
+					mul_m3_m3m3(tmat, rmat, smat);
+					copy_m4_m3(chan_mat, tmat);
+					copy_v3_v3(chan_mat[3], locs);
+
+					/* solving for bone_mat */
+					float bone_mat[3][3];
+					float offs_bone[4][4];
+					float rotscale_mat[4][4];
+					float loc_mat[4][4];
+					sub_v3_v3v3(vec, posebone->bone->tail, posebone->bone->head);
+					bone_length = len_v3(vec);
+					vec_roll_to_mat3(vec, posebone->bone->roll, bone_mat);
+
+					copy_m4_m3(offs_bone, bone_mat);
+					copy_v3_v3(offs_bone[3], posebone->bone->head);
+					offs_bone[3][1] += posebone->bone->parent->length;
+					mul_m4_m4m4(rotscale_mat, parchan->pose_mat, offs_bone);
+					copy_m4_m4(loc_mat, rotscale_mat);
+
+					/* Trying to get pose_mat*/
+					float pose_mat[4][4];
+					mul_m4_m4m4(pose_mat, rotscale_mat, chan_mat);
+					mul_v3_m4v3(pose_mat[3], loc_mat, chan_mat[3]);
+
+					// mat is the [pose_mat]3x3 submatrix
+					copy_m3_m4(mat, pose_mat);
+					copy_m3_m3(t->spacemtx, mat);
+					break;
+				}
+				if (is_zero_v3(ob->rot)) {
 					copy_m3_m4(t->spacemtx, ob->obmat);
+				}
 				else {
 					float mfm[4][4]; // My final Matrix
 
@@ -1175,6 +1234,7 @@ int getTransformOrientation_ex(const bContext *C, float normal[3], float plane[3
 					if (pchan->bone && pchan->bone->flag & BONE_TRANSFORM) {
 						add_v3_v3(normal, pchan->pose_mat[2]);
 						add_v3_v3(plane, pchan->pose_mat[1]);
+						
 					}
 				}
 				ok = true;
@@ -1242,10 +1302,7 @@ void ED_getTransformOrientationMatrix(const bContext *C, float orientation_mat[3
 	ScrArea *sa = CTX_wm_area(C);
 	View3D *v3d = sa->spacedata.first;
 	
-	if (!(v3d->twmode == V3D_MANIP_PARENT))
-		type = getTransformOrientation_ex(C, normal, plane, around);
-	else
-		type = 3;
+	type = getTransformOrientation_ex(C, normal, plane, around);
 
 	switch (type) {
 		case ORIENTATION_NORMAL:
