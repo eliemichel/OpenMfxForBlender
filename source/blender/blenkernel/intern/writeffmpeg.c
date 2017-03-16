@@ -444,7 +444,7 @@ static void set_ffmpeg_property_option(AVCodecContext *c, IDProperty *prop, AVDi
 	param = strchr(name, ':');
 
 	if (param) {
-		*param++ = 0;
+		*param++ = '\0';
 	}
 
 	switch (prop->type) {
@@ -568,7 +568,8 @@ static AVStream *alloc_video_stream(FFMpegContext *context, RenderData *rd, int 
 
 	if (context->ffmpeg_crf >= 0) {
 		ffmpeg_dict_set_int(&opts, "crf", context->ffmpeg_crf);
-	} else {
+	}
+	else {
 		c->bit_rate = context->ffmpeg_video_bitrate * 1000;
 		c->rc_max_rate = rd->ffcodecdata.rc_max_rate * 1000;
 		c->rc_min_rate = rd->ffcodecdata.rc_min_rate * 1000;
@@ -576,8 +577,8 @@ static AVStream *alloc_video_stream(FFMpegContext *context, RenderData *rd, int 
 	}
 
 	if (context->ffmpeg_preset) {
-		char const * preset_name;
-		switch(context->ffmpeg_preset) {
+		char const *preset_name;
+		switch (context->ffmpeg_preset) {
 			case FFM_PRESET_ULTRAFAST: preset_name = "ultrafast"; break;
 			case FFM_PRESET_SUPERFAST: preset_name = "superfast"; break;
 			case FFM_PRESET_VERYFAST: preset_name = "veryfast"; break;
@@ -1114,7 +1115,7 @@ static void ffmpeg_filepath_get(FFMpegContext *context, char *string, RenderData
 
 	BLI_make_existing_file(string);
 
-	autosplit[0] = 0;
+	autosplit[0] = '\0';
 
 	if ((rd->ffcodecdata.flags & FFMPEG_AUTOSPLIT_OUTPUT) != 0) {
 		if (context) {
@@ -1137,7 +1138,7 @@ static void ffmpeg_filepath_get(FFMpegContext *context, char *string, RenderData
 			strcat(string, *exts);
 		}
 		else {
-			*(string + strlen(string) - strlen(*fe)) = 0;
+			*(string + strlen(string) - strlen(*fe)) = '\0';
 			strcat(string, autosplit);
 			strcat(string, *fe);
 		}
@@ -1267,7 +1268,7 @@ static void end_ffmpeg_impl(FFMpegContext *context, int is_autosplit)
 	if (is_autosplit == false) {
 		if (context->audio_mixdown_device) {
 			AUD_Device_free(context->audio_mixdown_device);
-			context->audio_mixdown_device = 0;
+			context->audio_mixdown_device = NULL;
 		}
 	}
 #endif
@@ -1283,50 +1284,50 @@ static void end_ffmpeg_impl(FFMpegContext *context, int is_autosplit)
 	
 	/* Close the video codec */
 
-	if (context->video_stream && context->video_stream->codec) {
+	if (context->video_stream != NULL && context->video_stream->codec != NULL) {
 		avcodec_close(context->video_stream->codec);
 		PRINT("zero video stream %p\n", context->video_stream);
-		context->video_stream = 0;
+		context->video_stream = NULL;
 	}
 
-	if (context->audio_stream && context->audio_stream->codec) {
+	if (context->audio_stream != NULL && context->audio_stream->codec != NULL) {
 		avcodec_close(context->audio_stream->codec);
-		context->audio_stream = 0;
+		context->audio_stream = NULL;
 	}
 
 	/* free the temp buffer */
-	if (context->current_frame) {
+	if (context->current_frame != NULL) {
 		delete_picture(context->current_frame);
-		context->current_frame = 0;
+		context->current_frame = NULL;
 	}
-	if (context->outfile && context->outfile->oformat) {
+	if (context->outfile != NULL && context->outfile->oformat) {
 		if (!(context->outfile->oformat->flags & AVFMT_NOFILE)) {
 			avio_close(context->outfile->pb);
 		}
 	}
-	if (context->outfile) {
+	if (context->outfile != NULL) {
 		avformat_free_context(context->outfile);
-		context->outfile = 0;
+		context->outfile = NULL;
 	}
-	if (context->audio_input_buffer) {
+	if (context->audio_input_buffer != NULL) {
 		av_free(context->audio_input_buffer);
-		context->audio_input_buffer = 0;
+		context->audio_input_buffer = NULL;
 	}
 #ifndef FFMPEG_HAVE_ENCODE_AUDIO2
-	if (context->audio_output_buffer) {
+	if (context->audio_output_buffer != NULL) {
 		av_free(context->audio_output_buffer);
-		context->audio_output_buffer = 0;
+		context->audio_output_buffer = NULL;
 	}
 #endif
 
-	if (context->audio_deinterleave_buffer) {
+	if (context->audio_deinterleave_buffer != NULL) {
 		av_free(context->audio_deinterleave_buffer);
-		context->audio_deinterleave_buffer = 0;
+		context->audio_deinterleave_buffer = NULL;
 	}
 
-	if (context->img_convert_ctx) {
+	if (context->img_convert_ctx != NULL) {
 		sws_freeContext(context->img_convert_ctx);
-		context->img_convert_ctx = 0;
+		context->img_convert_ctx = NULL;
 	}
 }
 
@@ -1425,8 +1426,8 @@ static IDProperty *BKE_ffmpeg_property_add(RenderData *rd, const char *type, con
 int BKE_ffmpeg_property_add_string(RenderData *rd, const char *type, const char *str)
 {
 	AVCodecContext c;
-	const AVOption *o = 0;
-	const AVOption *p = 0;
+	const AVOption *o = NULL;
+	const AVOption *p = NULL;
 	char name_[128];
 	char *name;
 	char *param;
@@ -1445,7 +1446,7 @@ int BKE_ffmpeg_property_add_string(RenderData *rd, const char *type, const char 
 		param = strchr(name, ' ');
 	}
 	if (param) {
-		*param++ = 0;
+		*param++ = '\0';
 		while (*param == ' ') param++;
 	}
 	

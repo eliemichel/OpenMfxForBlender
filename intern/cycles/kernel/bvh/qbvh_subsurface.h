@@ -61,19 +61,19 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 	ss_isect->num_hits = 0;
 
 	const int object_flag = kernel_tex_fetch(__object_flag, subsurface_object);
-	if(!(object_flag & SD_TRANSFORM_APPLIED)) {
+	if(!(object_flag & SD_OBJECT_TRANSFORM_APPLIED)) {
 #if BVH_FEATURE(BVH_MOTION)
 		Transform ob_itfm;
-		bvh_instance_motion_push(kg,
-		                         subsurface_object,
-		                         ray,
-		                         &P,
-		                         &dir,
-		                         &idir,
-		                         &isect_t,
-		                         &ob_itfm);
+		isect_t = bvh_instance_motion_push(kg,
+		                                   subsurface_object,
+		                                   ray,
+		                                   &P,
+		                                   &dir,
+		                                   &idir,
+		                                   isect_t,
+		                                   &ob_itfm);
 #else
-		bvh_instance_push(kg, subsurface_object, ray, &P, &dir, &idir, &isect_t);
+		isect_t = bvh_instance_push(kg, subsurface_object, ray, &P, &dir, &idir, isect_t);
 #endif
 		object = subsurface_object;
 	}

@@ -647,6 +647,10 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
 	} (void)0
 #define VERT_ORIG_GET(_v)  \
 	(const float *)BLI_ghash_lookup_default(vert_coords, (_v), (_v)->co)
+	/* memory for the coords isn't given back to the arena,
+	 * acceptable in this case since it runs a fixed number of times. */
+#define VERT_ORIG_REMOVE(_v)  \
+	BLI_ghash_remove(vert_coords, (_v), NULL, NULL)
 
 
 	for (i = 0, es = edge_info; i < edge_info_len; i++, es++) {
@@ -659,7 +663,7 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
 
 		/* run the separate arg */
 		if (!BM_edge_is_boundary(es->e_old)) {
-			bmesh_edge_separate(bm, es->e_old, es->l, false);
+			bmesh_kernel_edge_separate(bm, es->e_old, es->l, false);
 		}
 
 		/* calc edge-split info */
@@ -738,7 +742,7 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
 				/* disable touching twice, this _will_ happen if the flags not disabled */
 				BM_elem_flag_disable(v, BM_ELEM_TAG);
 
-				bmesh_vert_separate(bm, v, &vout, &r_vout_len, false);
+				bmesh_kernel_vert_separate(bm, v, &vout, &r_vout_len, false);
 				v = NULL; /* don't use again */
 
 				/* in some cases the edge doesn't split off */
@@ -972,7 +976,11 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
 								v_glue = v_split;
 							}
 							else {
-								BM_vert_splice(bm, v_glue, v_split);
+								if (BM_vert_splice(bm, v_glue, v_split)) {
+									if (use_vert_coords_orig) {
+										VERT_ORIG_REMOVE(v_split);
+									}
+								}
 							}
 						}
 					}

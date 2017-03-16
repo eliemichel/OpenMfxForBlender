@@ -1716,8 +1716,8 @@ BLI_INLINE bool spring_angle(Implicit_Data *data, int i, int j, int *i_a, int *i
 	/* get edge vert coords and poly centroid coords. */
 	copy_v3_v3(co_i, data->X[i]);
 	copy_v3_v3(co_j, data->X[j]);
-	cent_poly_v3(co_a, array_a, len_a);
-	cent_poly_v3(co_b, array_b, len_b);
+	mid_v3_v3_array(co_a, array_a, len_a);
+	mid_v3_v3_array(co_b, array_b, len_b);
 
 	/* find dir for poly a */
 	sub_v3_v3v3(tmp1, co_j, co_a);
@@ -1755,8 +1755,8 @@ BLI_INLINE bool spring_angle(Implicit_Data *data, int i, int j, int *i_a, int *i
 	}
 
 	/* calculate poly centroid velocities */
-	cent_poly_v3(r_vel_a, array_a, len_a);
-	cent_poly_v3(r_vel_b, array_b, len_b);
+	mid_v3_v3_array(r_vel_a, array_a, len_a);
+	mid_v3_v3_array(r_vel_b, array_b, len_b);
 
 	/* edge velocity, to remove rigid body velocity component from centroid velocities */
 	add_v3_v3v3(tmp1, data->V[i], data->V[j]);

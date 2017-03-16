@@ -98,12 +98,12 @@ ModifierData *ED_object_modifier_add(ReportList *reports, Main *bmain, Scene *sc
 	ModifierData *md = NULL, *new_md = NULL;
 	const ModifierTypeInfo *mti = modifierType_getInfo(type);
 	
-	/* only geometry objects should be able to get modifiers [#25291] */
-	if (!ELEM(ob->type, OB_MESH, OB_CURVE, OB_SURF, OB_FONT, OB_LATTICE)) {
+	/* Check compatibility of modifier [T25291, T50373]. */
+	if (!BKE_object_support_modifier_type_check(ob, type)) {
 		BKE_reportf(reports, RPT_WARNING, "Modifiers cannot be added to object '%s'", ob->id.name + 2);
 		return NULL;
 	}
-	
+
 	if (mti->flags & eModifierTypeFlag_Single) {
 		if (modifiers_findByType(ob, type)) {
 			BKE_report(reports, RPT_WARNING, "Only one modifier of this type is allowed");
@@ -2290,6 +2290,59 @@ void OBJECT_OT_laplaciandeform_bind(wmOperatorType *ot)
 	ot->invoke = laplaciandeform_bind_invoke;
 	ot->exec = laplaciandeform_bind_exec;
 	
+	/* flags */
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
+	edit_modifier_properties(ot);
+}
+
+/************************ sdef bind operator *********************/
+
+static int surfacedeform_bind_poll(bContext *C)
+{
+	return edit_modifier_poll_generic(C, &RNA_SurfaceDeformModifier, 0);
+}
+
+static int surfacedeform_bind_exec(bContext *C, wmOperator *op)
+{
+	Object *ob = ED_object_active_context(C);
+	SurfaceDeformModifierData *smd = (SurfaceDeformModifierData *)edit_modifier_property_get(op, ob, eModifierType_SurfaceDeform);
+
+	if (!smd)
+		return OPERATOR_CANCELLED;
+
+	if (smd->flags & MOD_SDEF_BIND) {
+		smd->flags &= ~MOD_SDEF_BIND;
+	}
+	else if (smd->target) {
+		smd->flags |= MOD_SDEF_BIND;
+	}
+
+	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
+
+	return OPERATOR_FINISHED;
+}
+
+static int surfacedeform_bind_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
+{
+	if (edit_modifier_invoke_properties(C, op))
+		return surfacedeform_bind_exec(C, op);
+	else
+		return OPERATOR_CANCELLED;
+}
+
+void OBJECT_OT_surfacedeform_bind(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Surface Deform Bind";
+	ot->description = "Bind mesh to target in surface deform modifier";
+	ot->idname = "OBJECT_OT_surfacedeform_bind";
+
+	/* api callbacks */
+	ot->poll = surfacedeform_bind_poll;
+	ot->invoke = surfacedeform_bind_invoke;
+	ot->exec = surfacedeform_bind_exec;
+
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 	edit_modifier_properties(ot);

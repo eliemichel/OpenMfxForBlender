@@ -587,7 +587,7 @@ static void compensate_rotation_center(const int size, float aspect,
 
 	copy_v2_v2(intended_pivot, pivot);
 	copy_v2_v2(rotated_pivot, pivot);
-	rotate_m2(rotation_mat, +angle);
+	angle_to_mat2(rotation_mat, +angle);
 	sub_v2_v2(rotated_pivot, origin);
 	mul_m2v2(rotation_mat, rotated_pivot);
 	mul_v2_fl(rotated_pivot, scale);
@@ -755,7 +755,8 @@ static void average_marker_positions(StabContext *ctx, int framenr, float r_ref_
 	if (ok) {
 		r_ref_pos[0] /= weight_sum;
 		r_ref_pos[1] /= weight_sum;
-	} else {
+	}
+	else {
 		/* No usable tracking data on any track on this frame.
 		 * Use data from neighbouring frames to extrapolate...
 		 */
@@ -784,7 +785,8 @@ static void average_marker_positions(StabContext *ctx, int framenr, float r_ref_
 			 * Also default to this frame when we're in a gap */
 			average_marker_positions(ctx, next_lower, r_ref_pos);
 
-		} else if (next_higher < MAXFRAME) {
+		}
+		else if (next_higher < MAXFRAME) {
 			average_marker_positions(ctx, next_higher, r_ref_pos);
 		}
 		use_values_from_fcurves(ctx, false);
@@ -967,7 +969,7 @@ static void initialize_track_for_stabilization(StabContext *ctx,
 
 	pos[0] *= aspect;
 	angle = average_angle - atan2f(pos[1],pos[0]);
-	rotate_m2(local_data->stabilization_rotation_base, angle);
+	angle_to_mat2(local_data->stabilization_rotation_base, angle);
 
 	/* Per track baseline value for zoom. */
 	len = len_v2(pos) + SCALE_ERROR_LIMIT_BIAS;
@@ -1167,7 +1169,8 @@ static void stabilization_calculate_data(StabContext *ctx,
 
 	if (ctx->stab->flag & TRACKING_STABILIZE_SCALE) {
 		*r_scale = expf(scale_step * scaleinf);  /* Averaged in log scale */
-	} else {
+	}
+	else {
 		*r_scale = 1.0f;
 	}
 
@@ -1180,8 +1183,8 @@ static void stabilization_calculate_data(StabContext *ctx,
 	 */
 	get_animated_target_pos(ctx, framenr, target_pos);
 	sub_v2_v2(r_translation, target_pos);
-	*r_angle -= get_animated_target_rot(ctx,framenr);
-	target_scale = get_animated_target_scale(ctx,framenr);
+	*r_angle -= get_animated_target_rot(ctx, framenr);
+	target_scale = get_animated_target_scale(ctx, framenr);
 	if (target_scale != 0.0f) {
 		*r_scale /= target_scale;
 		/* target_scale is an expected/intended reference zoom value */

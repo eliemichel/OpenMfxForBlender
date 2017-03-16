@@ -29,7 +29,7 @@ class Scene;
 
 class Integrator : public Node {
 public:
-	NODE_DECLARE;
+	NODE_DECLARE
 
 	int min_bounce;
 	int max_bounce;
@@ -42,6 +42,8 @@ public:
 	int transparent_min_bounce;
 	int transparent_max_bounce;
 	bool transparent_shadows;
+
+	int ao_bounces;
 
 	int volume_max_steps;
 	float volume_step_size;
@@ -64,6 +66,7 @@ public:
 	int mesh_light_samples;
 	int subsurface_samples;
 	int volume_samples;
+	int start_sample;
 
 	bool sample_all_lights_direct;
 	bool sample_all_lights_indirect;

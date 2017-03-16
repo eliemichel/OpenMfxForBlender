@@ -27,6 +27,7 @@
 
 #include "util_sky_model.h"
 #include "util_foreach.h"
+#include "util_logging.h"
 #include "util_transform.h"
 
 CCL_NAMESPACE_BEGIN
@@ -263,7 +264,8 @@ ImageTextureNode::~ImageTextureNode()
 		image_manager->remove_image(filename.string(),
 		                            builtin_data,
 		                            interpolation,
-		                            extension);
+		                            extension,
+		                            use_alpha);
 	}
 }
 
@@ -462,7 +464,8 @@ EnvironmentTextureNode::~EnvironmentTextureNode()
 		image_manager->remove_image(filename.string(),
 		                            builtin_data,
 		                            interpolation,
-		                            EXTENSION_REPEAT);
+		                            EXTENSION_REPEAT,
+		                            use_alpha);
 	}
 }
 
@@ -1381,7 +1384,8 @@ PointDensityTextureNode::~PointDensityTextureNode()
 		image_manager->remove_image(filename.string(),
 		                            builtin_data,
 		                            interpolation,
-		                            EXTENSION_CLIP);
+		                            EXTENSION_CLIP,
+		                            true);
 	}
 }
 
@@ -1442,14 +1446,14 @@ void PointDensityTextureNode::compile(SVMCompiler& compiler)
 		else {
 			if(use_density) {
 				compiler.add_node(NODE_VALUE_F,
-								  __float_as_int(0.0f),
-								  compiler.stack_assign(density_out));
+				                  __float_as_int(0.0f),
+				                  compiler.stack_assign(density_out));
 			}
 			if(use_color) {
 				compiler.add_node(NODE_VALUE_V, compiler.stack_assign(color_out));
 				compiler.add_node(NODE_VALUE_V, make_float3(TEX_IMAGE_MISSING_R,
-															TEX_IMAGE_MISSING_G,
-															TEX_IMAGE_MISSING_B));
+				                                            TEX_IMAGE_MISSING_G,
+				                                            TEX_IMAGE_MISSING_B));
 			}
 		}
 	}
@@ -1928,21 +1932,38 @@ GlossyBsdfNode::GlossyBsdfNode()
 void GlossyBsdfNode::simplify_settings(Scene *scene)
 {
 	if(distribution_orig == NBUILTIN_CLOSURES) {
+		roughness_orig = roughness;
 		distribution_orig = distribution;
 	}
+	else {
+		/* By default we use original values, so we don't worry about restoring
+		 * defaults later one and can only do override when needed.
+		 */
+		roughness = roughness_orig;
+		distribution = distribution_orig;
+	}
 	Integrator *integrator = scene->integrator;
+	ShaderInput *roughness_input = input("Roughness");
 	if(integrator->filter_glossy == 0.0f) {
 		/* Fallback to Sharp closure for Roughness close to 0.
 		 * Note: Keep the epsilon in sync with kernel!
 		 */
-		ShaderInput *roughness_input = input("Roughness");
 		if(!roughness_input->link && roughness <= 1e-4f) {
+			VLOG(1) << "Using sharp glossy BSDF.";
 			distribution = CLOSURE_BSDF_REFLECTION_ID;
 		}
 	}
 	else {
-		/* Rollback to original distribution when filter glossy is used. */
-		distribution = distribution_orig;
+		/* If filter glossy is used we replace Sharp glossy with GGX so we can
+		 * benefit from closure blur to remove unwanted noise.
+		 */
+		if(roughness_input->link == NULL &&
+		   distribution == CLOSURE_BSDF_REFLECTION_ID)
+		{
+			VLOG(1) << "Using GGX glossy with filter glossy.";
+			distribution = CLOSURE_BSDF_MICROFACET_GGX_ID;
+			roughness = 0.0f;
+		}
 	}
 	closure = distribution;
 }
@@ -1950,7 +1971,8 @@ void GlossyBsdfNode::simplify_settings(Scene *scene)
 bool GlossyBsdfNode::has_integrator_dependency()
 {
 	ShaderInput *roughness_input = input("Roughness");
-	return !roughness_input->link && roughness <= 1e-4f;
+	return !roughness_input->link &&
+	       (distribution == CLOSURE_BSDF_REFLECTION_ID || roughness <= 1e-4f);
 }
 
 void GlossyBsdfNode::compile(SVMCompiler& compiler)
@@ -2005,21 +2027,38 @@ GlassBsdfNode::GlassBsdfNode()
 void GlassBsdfNode::simplify_settings(Scene *scene)
 {
 	if(distribution_orig == NBUILTIN_CLOSURES) {
+		roughness_orig = roughness;
 		distribution_orig = distribution;
 	}
+	else {
+		/* By default we use original values, so we don't worry about restoring
+		 * defaults later one and can only do override when needed.
+		 */
+		roughness = roughness_orig;
+		distribution = distribution_orig;
+	}
 	Integrator *integrator = scene->integrator;
+	ShaderInput *roughness_input = input("Roughness");
 	if(integrator->filter_glossy == 0.0f) {
 		/* Fallback to Sharp closure for Roughness close to 0.
 		 * Note: Keep the epsilon in sync with kernel!
 		 */
-		ShaderInput *roughness_input = input("Roughness");
 		if(!roughness_input->link && roughness <= 1e-4f) {
+			VLOG(1) << "Using sharp glass BSDF.";
 			distribution = CLOSURE_BSDF_SHARP_GLASS_ID;
 		}
 	}
 	else {
-		/* Rollback to original distribution when filter glossy is used. */
-		distribution = distribution_orig;
+		/* If filter glossy is used we replace Sharp glossy with GGX so we can
+		 * benefit from closure blur to remove unwanted noise.
+		 */
+		if(roughness_input->link == NULL &&
+		   distribution == CLOSURE_BSDF_SHARP_GLASS_ID)
+		{
+			VLOG(1) << "Using GGX glass with filter glossy.";
+			distribution = CLOSURE_BSDF_MICROFACET_GGX_GLASS_ID;
+			roughness = 0.0f;
+		}
 	}
 	closure = distribution;
 }
@@ -2027,7 +2066,8 @@ void GlassBsdfNode::simplify_settings(Scene *scene)
 bool GlassBsdfNode::has_integrator_dependency()
 {
 	ShaderInput *roughness_input = input("Roughness");
-	return !roughness_input->link && roughness <= 1e-4f;
+	return !roughness_input->link &&
+	       (distribution == CLOSURE_BSDF_SHARP_GLASS_ID || roughness <= 1e-4f);
 }
 
 void GlassBsdfNode::compile(SVMCompiler& compiler)
@@ -2082,21 +2122,38 @@ RefractionBsdfNode::RefractionBsdfNode()
 void RefractionBsdfNode::simplify_settings(Scene *scene)
 {
 	if(distribution_orig == NBUILTIN_CLOSURES) {
+		roughness_orig = roughness;
 		distribution_orig = distribution;
 	}
+	else {
+		/* By default we use original values, so we don't worry about restoring
+		 * defaults later one and can only do override when needed.
+		 */
+		roughness = roughness_orig;
+		distribution = distribution_orig;
+	}
 	Integrator *integrator = scene->integrator;
+	ShaderInput *roughness_input = input("Roughness");
 	if(integrator->filter_glossy == 0.0f) {
 		/* Fallback to Sharp closure for Roughness close to 0.
 		 * Note: Keep the epsilon in sync with kernel!
 		 */
-		ShaderInput *roughness_input = input("Roughness");
 		if(!roughness_input->link && roughness <= 1e-4f) {
+			VLOG(1) << "Using sharp refraction BSDF.";
 			distribution = CLOSURE_BSDF_REFRACTION_ID;
 		}
 	}
 	else {
-		/* Rollback to original distribution when filter glossy is used. */
-		distribution = distribution_orig;
+		/* If filter glossy is used we replace Sharp glossy with GGX so we can
+		 * benefit from closure blur to remove unwanted noise.
+		 */
+		if(roughness_input->link == NULL &&
+		   distribution == CLOSURE_BSDF_REFRACTION_ID)
+		{
+			VLOG(1) << "Using GGX refraction with filter glossy.";
+			distribution = CLOSURE_BSDF_MICROFACET_GGX_REFRACTION_ID;
+			roughness = 0.0f;
+		}
 	}
 	closure = distribution;
 }
@@ -2104,7 +2161,8 @@ void RefractionBsdfNode::simplify_settings(Scene *scene)
 bool RefractionBsdfNode::has_integrator_dependency()
 {
 	ShaderInput *roughness_input = input("Roughness");
-	return !roughness_input->link && roughness <= 1e-4f;
+	return !roughness_input->link &&
+	       (distribution == CLOSURE_BSDF_REFRACTION_ID || roughness <= 1e-4f);
 }
 
 void RefractionBsdfNode::compile(SVMCompiler& compiler)
@@ -2421,7 +2479,7 @@ void BackgroundNode::compile(SVMCompiler& compiler)
 	if(color_in->link || strength_in->link) {
 		compiler.add_node(NODE_EMISSION_WEIGHT,
 		                  compiler.stack_assign(color_in),
-						  compiler.stack_assign(strength_in));
+		                  compiler.stack_assign(strength_in));
 	}
 	else
 		compiler.add_node(NODE_CLOSURE_SET_WEIGHT, color*strength);
@@ -3027,6 +3085,8 @@ NODE_DEFINE(LightPathNode)
 	SOCKET_OUT_FLOAT(is_volume_scatter_ray, "Is Volume Scatter Ray");
 	SOCKET_OUT_FLOAT(ray_length, "Ray Length");
 	SOCKET_OUT_FLOAT(ray_depth, "Ray Depth");
+	SOCKET_OUT_FLOAT(diffuse_depth, "Diffuse Depth");
+	SOCKET_OUT_FLOAT(glossy_depth, "Glossy Depth");
 	SOCKET_OUT_FLOAT(transparent_depth, "Transparent Depth");
 	SOCKET_OUT_FLOAT(transmission_depth, "Transmission Depth");
 
@@ -3091,6 +3151,16 @@ void LightPathNode::compile(SVMCompiler& compiler)
 	out = output("Ray Depth");
 	if(!out->links.empty()) {
 		compiler.add_node(NODE_LIGHT_PATH, NODE_LP_ray_depth, compiler.stack_assign(out));
+	}
+
+	out = output("Diffuse Depth");
+	if(!out->links.empty()) {
+		compiler.add_node(NODE_LIGHT_PATH, NODE_LP_ray_diffuse, compiler.stack_assign(out));
+	}
+
+	out = output("Glossy Depth");
+	if(!out->links.empty()) {
+		compiler.add_node(NODE_LIGHT_PATH, NODE_LP_ray_glossy, compiler.stack_assign(out));
 	}
 
 	out = output("Transparent Depth");

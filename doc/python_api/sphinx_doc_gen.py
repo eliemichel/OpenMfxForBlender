@@ -427,9 +427,9 @@ if BLENDER_REVISION != "Unknown":
     BLENDER_VERSION_DOTS += " " + BLENDER_REVISION          # '2.62.1 SHA1'
 
 BLENDER_VERSION_PATH = "_".join(blender_version_strings)    # '2_62_1'
-if bpy.app.version_cycle == "release":
-    BLENDER_VERSION_PATH = "%s%s_release" % ("_".join(blender_version_strings[:2]),
-                                             bpy.app.version_char)   # '2_62_release'
+if bpy.app.version_cycle in {"rc", "release"}:
+    # '2_62a_release'
+    BLENDER_VERSION_PATH = "%s%s_release" % ("_".join(blender_version_strings[:2]), bpy.app.version_char)
 
 # --------------------------DOWNLOADABLE FILES----------------------------------
 
@@ -1565,9 +1565,9 @@ def pyrna2sphinx(basepath):
 
     # operators
     def write_ops():
-        API_BASEURL = "https://developer.blender.org/diffusion/B/browse/master/release/scripts/ "
-        API_BASEURL_ADDON = "https://developer.blender.org/diffusion/BA/"
-        API_BASEURL_ADDON_CONTRIB = "https://developer.blender.org/diffusion/BAC/"
+        API_BASEURL = "https://developer.blender.org/diffusion/B/browse/master/release/scripts "
+        API_BASEURL_ADDON = "https://developer.blender.org/diffusion/BA"
+        API_BASEURL_ADDON_CONTRIB = "https://developer.blender.org/diffusion/BAC"
 
         op_modules = {}
         for op in ops.values():
@@ -1632,13 +1632,9 @@ def write_sphinx_conf_py(basepath):
     file = open(filepath, "w", encoding="utf-8")
     fw = file.write
 
-    fw("import sys, os\n")
-    fw("\n")
-    fw("extensions = ['sphinx.ext.intersphinx']\n")
-    fw("\n")
-    fw("intersphinx_mapping = {'blender_manual': ('https://www.blender.org/manual/', None)}\n")
-    fw("\n")
-
+    fw("import sys, os\n\n")
+    fw("extensions = ['sphinx.ext.intersphinx']\n\n")
+    fw("intersphinx_mapping = {'blender_manual': ('https://docs.blender.org/manual/en/dev/', None)}\n\n")
     fw("project = 'Blender'\n")
     # fw("master_doc = 'index'\n")
     fw("copyright = u'Blender Foundation'\n")
@@ -1655,12 +1651,16 @@ def write_sphinx_conf_py(basepath):
 
     # not helpful since the source is generated, adds to upload size.
     fw("html_copy_source = False\n")
+    fw("html_show_sphinx = False\n")
     fw("html_split_index = True\n")
     fw("\n")
 
     # needed for latex, pdf gen
+    fw("latex_elements = {\n")
+    fw("  'papersize': 'a4paper',\n")
+    fw("}\n\n")
+
     fw("latex_documents = [ ('contents', 'contents.tex', 'Blender Index', 'Blender Foundation', 'manual'), ]\n")
-    fw("latex_paper_size = 'a4paper'\n")
     file.close()
 
 

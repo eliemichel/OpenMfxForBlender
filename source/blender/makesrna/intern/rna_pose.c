@@ -40,6 +40,7 @@
 #include "DNA_scene_types.h"
 
 #include "BLI_math.h"
+#include "BLI_string_utils.h"
 
 #include "BLT_translation.h"
 
@@ -523,12 +524,15 @@ static void rna_PoseChannel_active_constraint_set(PointerRNA *ptr, PointerRNA va
 	BKE_constraints_active_set(&pchan->constraints, (bConstraint *)value.data);
 }
 
-static bConstraint *rna_PoseChannel_constraints_new(bPoseChannel *pchan, int type)
+static bConstraint *rna_PoseChannel_constraints_new(ID *id, bPoseChannel *pchan, Main *main, int type)
 {
-	/*WM_main_add_notifier(NC_OBJECT|ND_CONSTRAINT|NA_ADDED, object); */
-	/* TODO, pass object also */
-	/* TODO, new pose bones don't have updated draw flags */
-	return BKE_constraint_add_for_pose(NULL, pchan, NULL, type);
+	Object *ob = (Object *)id;
+	bConstraint *new_con = BKE_constraint_add_for_pose(ob, pchan, NULL, type);
+
+	ED_object_constraint_dependency_tag_update(main, ob, new_con);
+	WM_main_add_notifier(NC_OBJECT | ND_CONSTRAINT | NA_ADDED, id);
+
+	return new_con;
 }
 
 static void rna_PoseChannel_constraints_remove(ID *id, bPoseChannel *pchan, ReportList *reports, PointerRNA *con_ptr)
@@ -763,20 +767,21 @@ static void rna_def_pose_channel_constraints(BlenderRNA *brna, PropertyRNA *cpro
 	/* Constraint collection */
 	func = RNA_def_function(srna, "new", "rna_PoseChannel_constraints_new");
 	RNA_def_function_ui_description(func, "Add a constraint to this object");
+	RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_SELF_ID); /* ID and Main needed for refresh */
 	/* return type */
 	parm = RNA_def_pointer(func, "constraint", "Constraint", "", "New constraint");
 	RNA_def_function_return(func, parm);
 	/* constraint to add */
 	parm = RNA_def_enum(func, "type", rna_enum_constraint_type_items, 1, "", "Constraint type to add");
-	RNA_def_property_flag(parm, PROP_REQUIRED);
+	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
 	func = RNA_def_function(srna, "remove", "rna_PoseChannel_constraints_remove");
 	RNA_def_function_ui_description(func, "Remove a constraint from this object");
 	RNA_def_function_flag(func, FUNC_USE_REPORTS | FUNC_USE_SELF_ID); /* ID needed for refresh */
 	/* constraint to remove */
 	parm = RNA_def_pointer(func, "constraint", "Constraint", "", "Removed constraint");
-	RNA_def_property_flag(parm, PROP_REQUIRED | PROP_NEVER_NULL | PROP_RNAPTR);
-	RNA_def_property_clear_flag(parm, PROP_THICK_WRAP);
+	RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
+	RNA_def_parameter_clear_flags(parm, PROP_THICK_WRAP, 0);
 }
 
 static void rna_def_pose_channel(BlenderRNA *brna)
@@ -1359,8 +1364,8 @@ static void rna_def_bone_groups(BlenderRNA *brna, PropertyRNA *cprop)
 	RNA_def_function_flag(func, FUNC_USE_REPORTS | FUNC_USE_SELF_ID); /* ID needed for refresh */
 	/* bone group to remove */
 	parm = RNA_def_pointer(func, "group", "BoneGroup", "", "Removed bone group");
-	RNA_def_property_flag(parm, PROP_REQUIRED | PROP_NEVER_NULL | PROP_RNAPTR);
-	RNA_def_property_clear_flag(parm, PROP_THICK_WRAP);
+	RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
+	RNA_def_parameter_clear_flags(parm, PROP_THICK_WRAP, 0);
 
 	prop = RNA_def_property(srna, "active", PROP_POINTER, PROP_NONE);
 	RNA_def_property_struct_type(prop, "BoneGroup");

@@ -89,6 +89,14 @@ public:
 		return error_msg;
 	}
 
+	virtual bool show_samples() const
+	{
+		if(devices.size() > 1) {
+			return false;
+		}
+		return devices.front().device->show_samples();
+	}
+
 	bool load_kernels(const DeviceRequestedFeatures& requested_features)
 	{
 		foreach(SubDevice& sub, devices)
@@ -98,11 +106,11 @@ public:
 		return true;
 	}
 
-	void mem_alloc(device_memory& mem, MemoryType type)
+	void mem_alloc(const char *name, device_memory& mem, MemoryType type)
 	{
 		foreach(SubDevice& sub, devices) {
 			mem.device_pointer = 0;
-			sub.device->mem_alloc(mem, type);
+			sub.device->mem_alloc(name, mem, type);
 			sub.ptr_map[unique_ptr] = mem.device_pointer;
 		}
 
@@ -154,6 +162,7 @@ public:
 	void mem_free(device_memory& mem)
 	{
 		device_ptr tmp = mem.device_pointer;
+		stats.mem_free(mem.device_size);
 
 		foreach(SubDevice& sub, devices) {
 			mem.device_pointer = sub.ptr_map[tmp];
@@ -162,7 +171,6 @@ public:
 		}
 
 		mem.device_pointer = 0;
-		stats.mem_free(mem.device_size);
 	}
 
 	void const_copy_to(const char *name, void *host, size_t size)
@@ -194,6 +202,7 @@ public:
 	void tex_free(device_memory& mem)
 	{
 		device_ptr tmp = mem.device_pointer;
+		stats.mem_free(mem.device_size);
 
 		foreach(SubDevice& sub, devices) {
 			mem.device_pointer = sub.ptr_map[tmp];
@@ -202,7 +211,6 @@ public:
 		}
 
 		mem.device_pointer = 0;
-		stats.mem_free(mem.device_size);
 	}
 
 	void pixels_alloc(device_memory& mem)

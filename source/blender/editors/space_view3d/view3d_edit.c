@@ -90,19 +90,6 @@ bool ED_view3d_offset_lock_check(const  View3D *v3d, const  RegionView3D *rv3d)
 	return (rv3d->persp != RV3D_CAMOB) && (v3d->ob_centre_cursor || v3d->ob_centre);
 }
 
-static bool view3d_operator_offset_lock_check(bContext *C, wmOperator *op)
-{
-	View3D *v3d = CTX_wm_view3d(C);
-	RegionView3D *rv3d = CTX_wm_region_view3d(C);
-	if (ED_view3d_offset_lock_check(v3d, rv3d)) {
-		BKE_report(op->reports, RPT_WARNING, "View offset is locked");
-		return true;
-	}
-	else {
-		return false;
-	}
-}
-
 /* ********************** view3d_edit: view manipulations ********************* */
 
 /**
@@ -566,22 +553,20 @@ typedef struct ViewOpsData {
 
 static void calctrackballvec(const rcti *rect, int mx, int my, float vec[3])
 {
-	float x, y, radius, d, z, t;
-
-	radius = TRACKBALLSIZE;
+	const float radius = TRACKBALLSIZE;
+	const float t = radius / (float)M_SQRT2;
+	float x, y, z, d;
 
 	/* normalize x and y */
 	x = BLI_rcti_cent_x(rect) - mx;
 	x /= (float)(BLI_rcti_size_x(rect) / 4);
 	y = BLI_rcti_cent_y(rect) - my;
 	y /= (float)(BLI_rcti_size_y(rect) / 2);
-
 	d = sqrtf(x * x + y * y);
-	if (d < radius * (float)M_SQRT1_2) { /* Inside sphere */
+	if (d < t) { /* Inside sphere */
 		z = sqrtf(radius * radius - d * d);
 	}
 	else { /* On hyperbola */
-		t = radius / (float)M_SQRT2;
 		z = t * t / d;
 	}
 
@@ -789,7 +774,7 @@ static void viewops_data_create_ex(bContext *C, wmOperator *op, const wmEvent *e
 				    (float)vod->ar->winx / 2.0f,
 				    (float)vod->ar->winy / 2.0f};
 
-				ED_view3d_win_to_3d(vod->ar, vod->dyn_ofs, mval_ar_mid, rv3d->ofs);
+				ED_view3d_win_to_3d(vod->v3d, vod->ar, vod->dyn_ofs, mval_ar_mid, rv3d->ofs);
 				negate_v3(rv3d->ofs);
 			}
 			negate_v3(vod->dyn_ofs);
@@ -2598,6 +2583,19 @@ void VIEW3D_OT_zoom(wmOperatorType *ot)
 
 
 /* ************************ viewdolly ******************************** */
+static bool viewdolly_offset_lock_check(bContext *C, wmOperator *op)
+{
+	View3D *v3d = CTX_wm_view3d(C);
+	RegionView3D *rv3d = CTX_wm_region_view3d(C);
+	if (ED_view3d_offset_lock_check(v3d, rv3d)) {
+		BKE_report(op->reports, RPT_WARNING, "Cannot dolly when the view offset is locked");
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
 static void view_dolly_mouseloc(ARegion *ar, float orig_ofs[3], float dvec[3], float dfac)
 {
 	RegionView3D *rv3d = ar->regiondata;
@@ -2748,7 +2746,7 @@ static int viewdolly_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	ViewOpsData *vod;
 
-	if (view3d_operator_offset_lock_check(C, op))
+	if (viewdolly_offset_lock_check(C, op))
 		return OPERATOR_CANCELLED;
 
 	/* makes op->customdata */
@@ -3289,7 +3287,7 @@ static int viewcenter_pick_invoke(bContext *C, wmOperator *op, const wmEvent *ev
 		else {
 			/* fallback to simple pan */
 			negate_v3_v3(new_ofs, rv3d->ofs);
-			ED_view3d_win_to_3d_int(ar, new_ofs, event->mval, new_ofs);
+			ED_view3d_win_to_3d_int(v3d, ar, new_ofs, event->mval, new_ofs);
 		}
 		negate_v3(new_ofs);
 		ED_view3d_smooth_view(
@@ -4066,6 +4064,9 @@ static int vieworbit_exec(bContext *C, wmOperator *op)
 
 			mul_qt_qtqt(quat_new, rv3d->viewquat, quat_mul);
 
+			/* avoid precision loss over time */
+			normalize_qt(quat_new);
+
 			if (view_opposite != RV3D_VIEW_USER) {
 				rv3d->view = view_opposite;
 				/* avoid float in-precision, just get a new orientation */
@@ -4132,6 +4133,10 @@ static void view_roll_angle(ARegion *ar, float quat[4], const float orig_quat[4]
 	axis_angle_normalized_to_quat(quat_mul, dvec, angle);
 
 	mul_qt_qtqt(quat, orig_quat, quat_mul);
+
+	/* avoid precision loss over time */
+	normalize_qt(quat);
+
 	rv3d->view = RV3D_VIEW_USER;
 }
 
@@ -4359,41 +4364,24 @@ static EnumPropertyItem prop_view_pan_items[] = {
 	{0, NULL, 0, NULL, NULL}
 };
 
-static int viewpan_exec(bContext *C, wmOperator *op)
+static int viewpan_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-	ScrArea *sa = CTX_wm_area(C);
-	ARegion *ar = CTX_wm_region(C);
-	View3D *v3d = CTX_wm_view3d(C);
-	RegionView3D *rv3d = CTX_wm_region_view3d(C);
-	float vec[3];
-	const float co_zero[3] = {0.0f};
-	float mval_f[2] = {0.0f, 0.0f};
-	float zfac;
-	int pandir;
+	int x = 0, y = 0;
+	int pandir = RNA_enum_get(op->ptr, "type");
 
-	if (view3d_operator_offset_lock_check(C, op))
-		return OPERATOR_CANCELLED;
+	if      (pandir == V3D_VIEW_PANRIGHT)  { x = -32; }
+	else if (pandir == V3D_VIEW_PANLEFT)   { x =  32; }
+	else if (pandir == V3D_VIEW_PANUP)     { y = -25; }
+	else if (pandir == V3D_VIEW_PANDOWN)   { y =  25; }
 
-	pandir = RNA_enum_get(op->ptr, "type");
+	viewops_data_alloc(C, op);
+	viewops_data_create(C, op, event);
+	ViewOpsData *vod = op->customdata;
 
-	ED_view3d_camera_lock_init(v3d, rv3d);
+	viewmove_apply(vod, vod->oldx + x, vod->oldy + y);
 
-	zfac = ED_view3d_calc_zfac(rv3d, co_zero, NULL);
-	if      (pandir == V3D_VIEW_PANRIGHT)  { mval_f[0] = -32.0f; }
-	else if (pandir == V3D_VIEW_PANLEFT)   { mval_f[0] =  32.0f; }
-	else if (pandir == V3D_VIEW_PANUP)     { mval_f[1] = -25.0f; }
-	else if (pandir == V3D_VIEW_PANDOWN)   { mval_f[1] =  25.0f; }
-	ED_view3d_win_to_delta(ar, mval_f, vec, zfac);
-	add_v3_v3(rv3d->ofs, vec);
-
-	if (rv3d->viewlock & RV3D_BOXVIEW)
-		view3d_boxview_sync(sa, ar);
-
-	ED_view3d_depth_tag_update(rv3d);
-
-	ED_view3d_camera_lock_sync(v3d, rv3d);
-
-	ED_region_tag_redraw(ar);
+	ED_view3d_depth_tag_update(vod->rv3d);
+	viewops_data_free(C, op);
 
 	return OPERATOR_FINISHED;
 }
@@ -4406,7 +4394,7 @@ void VIEW3D_OT_view_pan(wmOperatorType *ot)
 	ot->idname = "VIEW3D_OT_view_pan";
 
 	/* api callbacks */
-	ot->exec = viewpan_exec;
+	ot->invoke = viewpan_invoke;
 	ot->poll = ED_operator_region_view3d_active;
 
 	/* flags */
@@ -4708,7 +4696,7 @@ void ED_view3d_cursor3d_position(bContext *C, float fp[3], const int mval[2])
 	if (depth_used == false) {
 		float depth_pt[3];
 		copy_v3_v3(depth_pt, fp);
-		ED_view3d_win_to_3d_int(ar, depth_pt, mval, fp);
+		ED_view3d_win_to_3d_int(v3d, ar, depth_pt, mval, fp);
 	}
 }
 
@@ -4782,13 +4770,10 @@ static int manipulator_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	if (!(v3d->twflag & V3D_USE_MANIPULATOR)) return OPERATOR_PASS_THROUGH;
 	if (!(v3d->twflag & V3D_DRAW_MANIPULATOR)) return OPERATOR_PASS_THROUGH;
 
-	/* only no modifier or shift */
-	if (event->keymodifier != 0 && event->keymodifier != KM_SHIFT) return OPERATOR_PASS_THROUGH;
-
 	/* note; otherwise opengl won't work */
 	view3d_operator_needs_opengl(C);
 
-	if (0 == BIF_do_manipulator(C, event, op))
+	if (BIF_do_manipulator(C, event, op) == 0)
 		return OPERATOR_PASS_THROUGH;
 
 	return OPERATOR_FINISHED;
@@ -4796,6 +4781,7 @@ static int manipulator_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 void VIEW3D_OT_manipulator(wmOperatorType *ot)
 {
+	PropertyRNA *prop;
 
 	/* identifiers */
 	ot->name = "3D Manipulator";
@@ -4809,6 +4795,10 @@ void VIEW3D_OT_manipulator(wmOperatorType *ot)
 
 	/* properties to pass to transform */
 	Transform_Properties(ot, P_CONSTRAINT);
+
+	prop = RNA_def_boolean(ot->srna, "use_planar_constraint", false, "Planar Constraint", "Limit the transformation to the "
+	                       "two axes that have not been clicked (translate/scale only)");
+	RNA_def_property_flag(prop, PROP_SKIP_SAVE | PROP_HIDDEN);
 }
 
 static int enable_manipulator_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
@@ -4897,11 +4887,7 @@ static float view_autodist_depth_margin(ARegion *ar, const int mval[2], int marg
 		rect.ymax = mval[1] + 1;
 	}
 	else {
-		rect.xmax = mval[0] + margin;
-		rect.ymax = mval[1] + margin;
-
-		rect.xmin = mval[0] - margin;
-		rect.ymin = mval[1] - margin;
+		BLI_rcti_init_pt_radius(&rect, mval, margin);
 	}
 
 	view3d_update_depths_rect(ar, &depth_temp, &rect);
@@ -4957,7 +4943,7 @@ bool ED_view3d_autodist(
 	}
 
 	if (fallback_depth_pt) {
-		ED_view3d_win_to_3d_int(ar, fallback_depth_pt, mval, mouse_worldloc);
+		ED_view3d_win_to_3d_int(v3d, ar, fallback_depth_pt, mval, mouse_worldloc);
 		return true;
 	}
 	else {

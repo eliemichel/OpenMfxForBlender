@@ -44,10 +44,6 @@ extern "C" {
 
 /********************************** Polygons *********************************/
 
-void cent_tri_v3(float r[3], const float a[3], const float b[3], const float c[3]);
-void cent_quad_v3(float r[3], const float a[3], const float b[3], const float c[3], const float d[3]);
-void cent_poly_v3(float cent[3], const float verts[][3], unsigned int nr);
-
 float normal_tri_v3(float r[3], const float a[3], const float b[3], const float c[3]);
 float normal_quad_v3(float r[3], const float a[3], const float b[3], const float c[3], const float d[3]);
 float normal_poly_v3(float r[3], const float verts[][3], unsigned int nr);
@@ -297,23 +293,10 @@ void isect_ray_aabb_v3_precalc(
 bool isect_ray_aabb_v3(
         const struct IsectRayAABB_Precalc *data,
         const float bb_min[3], const float bb_max[3], float *tmin);
-
-struct NearestRayToAABB_Precalc {
-	float ray_origin[3];
-	float ray_direction[3];
-	float ray_inv_dir[3];
-	float cdot_axis[3];
-	float idiag_sq[3];
-	bool sign[3];
-};
-
-void dist_squared_ray_to_aabb_v3_precalc(
-        struct NearestRayToAABB_Precalc *data,
-        const float ray_origin[3], const float ray_direction[3]);
-float dist_squared_ray_to_aabb_v3(
-        const struct NearestRayToAABB_Precalc *data,
+bool isect_ray_aabb_v3_simple(
+        const float orig[3], const float dir[3],
         const float bb_min[3], const float bb_max[3],
-        bool r_axis_closest[3]);
+        float *tmin, float *tmax);
 
 /* other */
 bool isect_sweeping_sphere_tri_v3(const float p1[3], const float p2[3], const float radius,
@@ -329,10 +312,8 @@ bool clip_segment_v3_plane_n(
 bool point_in_slice_seg(float p[3], float l1[3], float l2[3]);
 
 /****************************** Interpolation ********************************/
-
-/* tri or quad, d can be NULL */
-void interp_weights_face_v3(float w[4],
-                            const float a[3], const float b[3], const float c[3], const float d[3], const float p[3]);
+void interp_weights_tri_v3(float w[3], const float a[3], const float b[3], const float c[3], const float p[3]);
+void interp_weights_quad_v3(float w[4], const float a[3], const float b[3], const float c[3], const float d[3], const float p[3]);
 void interp_weights_poly_v3(float w[], float v[][3], const int n, const float co[3]);
 void interp_weights_poly_v2(float w[], float v[][2], const int n, const float co[2]);
 
@@ -397,6 +378,8 @@ void box_minmax_bounds_m4(float min[3], float max[3],
 
 void map_to_tube(float *r_u, float *r_v, const float x, const float y, const float z);
 void map_to_sphere(float *r_u, float *r_v, const float x, const float y, const float z);
+void map_to_plane_v2_v3v3(float r_co[2], const float co[3], const float no[3]);
+void map_to_plane_axis_angle_v2_v3v3fl(float r_co[2], const float co[3], const float axis[3], const float angle);
 
 /********************************** Normals **********************************/
 

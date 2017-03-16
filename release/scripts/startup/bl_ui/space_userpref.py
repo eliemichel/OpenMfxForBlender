@@ -453,6 +453,7 @@ class USERPREF_PT_system(Panel):
         col.separator()
         col.label(text="Selection")
         col.prop(system, "select_method", text="")
+        col.prop(system, "use_select_pick_depth")
 
         col.separator()
 
@@ -1180,11 +1181,18 @@ class USERPREF_PT_input(Panel):
             col.separator()
             col.label(text="NDOF Device:")
             sub = col.column(align=True)
-            sub.prop(inputs, "ndof_sensitivity", text="NDOF Sensitivity")
-            sub.prop(inputs, "ndof_orbit_sensitivity", text="NDOF Orbit Sensitivity")
-            sub.prop(inputs, "ndof_deadzone", text="NDOF Deadzone")
+            sub.prop(inputs, "ndof_sensitivity", text="Pan Sensitivity")
+            sub.prop(inputs, "ndof_orbit_sensitivity", text="Orbit Sensitivity")
+            sub.prop(inputs, "ndof_deadzone", text="Deadzone")
+
+            sub.separator()
+            col.label(text="Navigation Style:")
             sub = col.column(align=True)
             sub.row().prop(inputs, "ndof_view_navigate_method", expand=True)
+
+            sub.separator()
+            col.label(text="Rotation Style:")
+            sub = col.column(align=True)
             sub.row().prop(inputs, "ndof_view_rotate_method", expand=True)
 
         row.separator()
@@ -1236,7 +1244,7 @@ class USERPREF_MT_addons_online_resources(Menu):
                 "wm.url_open", text="API Concepts", icon='URL',
                 ).url = bpy.types.WM_OT_doc_view._prefix + "/info_quickstart.html"
         layout.operator("wm.url_open", text="Add-on Tutorial", icon='URL',
-                ).url = "http://www.blender.org/api/blender_python_api_current/info_tutorial_addon.html"
+                ).url = bpy.types.WM_OT_doc_view._prefix + "/info_tutorial_addon.html"
 
 
 class USERPREF_PT_addons(Panel):
@@ -1310,11 +1318,18 @@ class USERPREF_PT_addons(Panel):
 
         # set in addon_utils.modules_refresh()
         if addon_utils.error_duplicates:
-            self.draw_error(col,
-                            "Multiple addons using the same name found!\n"
-                            "likely a problem with the script search path.\n"
-                            "(see console for details)",
-                            )
+            box = col.box()
+            row = box.row()
+            row.label("Multiple addons with the same name found!")
+            row.label(icon='ERROR')
+            box.label("Please delete one of each pair:")
+            for (addon_name, addon_file, addon_path) in addon_utils.error_duplicates:
+                box.separator()
+                sub_col = box.column(align=True)
+                sub_col.label(addon_name + ":")
+                sub_col.label("    " + addon_file)
+                sub_col.label("    " + addon_path)
+
 
         if addon_utils.error_encoding:
             self.draw_error(col,

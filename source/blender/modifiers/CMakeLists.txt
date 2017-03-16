@@ -93,6 +93,7 @@ set(SRC
 	intern/MOD_solidify.c
 	intern/MOD_subsurf.c
 	intern/MOD_surface.c
+	intern/MOD_surfacedeform.c
 	intern/MOD_triangulate.c
 	intern/MOD_util.c
 	intern/MOD_uvwarp.c
@@ -112,6 +113,10 @@ set(SRC
 	intern/MOD_util.h
 	intern/MOD_weightvg_util.h
 )
+
+if(WITH_LEGACY_DEPSGRAPH)
+	add_definitions(-DWITH_LEGACY_DEPSGRAPH)
+endif()
 
 if(WITH_ALEMBIC)
 	add_definitions(-DWITH_ALEMBIC)

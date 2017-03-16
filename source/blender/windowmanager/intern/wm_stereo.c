@@ -77,7 +77,7 @@ static void wm_method_draw_stereo3d_pageflip(wmWindow *win)
 		else //STEREO_RIGHT_ID
 			glDrawBuffer(GL_BACK_RIGHT);
 
-		wm_triple_draw_textures(win, drawdata->triple, 1.0f);
+		wm_triple_draw_textures(win, drawdata->triple, 1.0f, false);
 	}
 
 	glDrawBuffer(GL_BACK);
@@ -120,7 +120,7 @@ static void wm_method_draw_stereo3d_interlace(wmWindow *win)
 				break;
 		}
 
-		wm_triple_draw_textures(win, drawdata->triple, 1.0f);
+		wm_triple_draw_textures(win, drawdata->triple, 1.0f, true);
 		GPU_basic_shader_bind(GPU_SHADER_USE_COLOR);
 	}
 	interlace_prev_type = interlace_type;
@@ -157,7 +157,7 @@ static void wm_method_draw_stereo3d_anaglyph(wmWindow *win)
 				break;
 		}
 
-		wm_triple_draw_textures(win, drawdata->triple, 1.0f);
+		wm_triple_draw_textures(win, drawdata->triple, 1.0f, false);
 
 		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	}
@@ -343,6 +343,32 @@ bool WM_stereo3d_enabled(wmWindow *win, bool skip_stereo3d_check)
 	}
 
 	return true;
+}
+
+/**
+ * If needed, this adjusts \a r_mouse_xy so that drawn cursor and handled mouse position are matching visually.
+*/
+void wm_stereo3d_mouse_offset_apply(wmWindow *win, int *r_mouse_xy)
+{
+	if (!WM_stereo3d_enabled(win, false))
+		return;
+
+	if (win->stereo3d_format->display_mode == S3D_DISPLAY_SIDEBYSIDE) {
+		const int half_x = win->sizex / 2;
+		/* right half of the screen */
+		if (r_mouse_xy[0] > half_x) {
+			r_mouse_xy[0] -= half_x;
+		}
+		r_mouse_xy[0] *= 2;
+	}
+	else if (win->stereo3d_format->display_mode == S3D_DISPLAY_TOPBOTTOM) {
+		const int half_y = win->sizey / 2;
+		/* upper half of the screen */
+		if (r_mouse_xy[1] > half_y) {
+			r_mouse_xy[1] -= half_y;
+		}
+		r_mouse_xy[1] *= 2;
+	}
 }
 
 /************************** Stereo 3D operator **********************************/

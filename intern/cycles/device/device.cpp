@@ -64,6 +64,8 @@ std::ostream& operator <<(std::ostream &os,
 	   << string_from_bool(requested_features.use_integrator_branched) << std::endl;
 	os << "Use Patch Evaluation: "
 	   << string_from_bool(requested_features.use_patch_evaluation) << std::endl;
+	os << "Use Transparent Shadows: "
+	   << string_from_bool(requested_features.use_transparent) << std::endl;
 	return os;
 }
 
@@ -78,7 +80,7 @@ Device::~Device()
 
 void Device::pixels_alloc(device_memory& mem)
 {
-	mem_alloc(mem, MEM_READ_WRITE);
+	mem_alloc("pixels", mem, MEM_READ_WRITE);
 }
 
 void Device::pixels_copy_from(device_memory& mem, int y, int w, int h)

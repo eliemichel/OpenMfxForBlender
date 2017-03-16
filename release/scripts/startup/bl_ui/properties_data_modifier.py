@@ -146,6 +146,10 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.row().prop(md, "offset_type", expand=True)
 
     def BOOLEAN(self, layout, ob, md):
+        if not bpy.app.build_options.mod_boolean:
+            layout.label("Built without Boolean modifier")
+            return
+
         split = layout.split()
 
         col = split.column()
@@ -947,6 +951,23 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
     def SURFACE(self, layout, ob, md):
         layout.label(text="Settings are inside the Physics tab")
 
+    def SURFACE_DEFORM(self, layout, ob, md):
+        col = layout.column()
+        col.active = not md.is_bound
+
+        col.prop(md, "target")
+        col.prop(md, "falloff")
+
+        layout.separator()
+
+        col = layout.column()
+        col.active = md.target is not None
+
+        if md.is_bound:
+            col.operator("object.surfacedeform_bind", text="Unbind")
+        else:
+            col.operator("object.surfacedeform_bind", text="Bind")
+
     def UV_PROJECT(self, layout, ob, md):
         split = layout.split()
 
@@ -1077,6 +1098,10 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "narrowness", slider=True)
 
     def REMESH(self, layout, ob, md):
+        if not bpy.app.build_options.mod_remesh:
+            layout.label("Built without Remesh modifier")
+            return
+
         layout.prop(md, "mode")
 
         row = layout.row()
@@ -1312,7 +1337,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row.prop(md, "thickness_vertex_group", text="Factor")
 
         col.prop(md, "use_crease", text="Crease Edges")
-        col.prop(md, "crease_weight", text="Crease Weight")
+        row = col.row()
+        row.active = md.use_crease
+        row.prop(md, "crease_weight", text="Crease Weight")
 
         col = split.column()
 

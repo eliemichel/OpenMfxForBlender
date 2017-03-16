@@ -137,6 +137,10 @@ public:
 	/* Current resumable chunk index to render. */
 	static int current_resumable_chunk;
 
+	/* Alternative to single-chunk rendering to render a range of chunks. */
+	static int start_resumable_chunk;
+	static int end_resumable_chunk;
+
 protected:
 	void do_write_update_render_result(BL::RenderResult& b_rr,
 	                                   BL::RenderLayer& b_rlay,
@@ -145,9 +149,21 @@ protected:
 	void do_write_update_render_tile(RenderTile& rtile, bool do_update_only);
 
 	int builtin_image_frame(const string &builtin_name);
-	void builtin_image_info(const string &builtin_name, void *builtin_data, bool &is_float, int &width, int &height, int &depth, int &channels);
-	bool builtin_image_pixels(const string &builtin_name, void *builtin_data, unsigned char *pixels);
-	bool builtin_image_float_pixels(const string &builtin_name, void *builtin_data, float *pixels);
+	void builtin_image_info(const string &builtin_name,
+	                        void *builtin_data,
+	                        bool &is_float,
+	                        int &width,
+	                        int &height,
+	                        int &depth,
+	                        int &channels);
+	bool builtin_image_pixels(const string &builtin_name,
+	                          void *builtin_data,
+	                          unsigned char *pixels,
+	                          const size_t pixels_size);
+	bool builtin_image_float_pixels(const string &builtin_name,
+	                                void *builtin_data,
+	                                float *pixels,
+	                                const size_t pixels_size);
 
 	/* Update tile manager to reflect resumable render settings. */
 	void update_resumable_tile_manager(int num_samples);

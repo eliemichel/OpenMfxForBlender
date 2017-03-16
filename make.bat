@@ -5,8 +5,8 @@ REM This is for users who like to configure & build Blender with a single comman
 setlocal ENABLEEXTENSIONS
 set BLENDER_DIR=%~dp0
 set BLENDER_DIR_NOSPACES=%BLENDER_DIR: =%
-if not "%BLENDER_DIR%"=="%BLENDER_DIR_NOSPACES%" ( 
-	echo There are spaces detected in the build path "%BLENDER_DIR%", this is currently not supported, exiting.... 
+if not "%BLENDER_DIR%"=="%BLENDER_DIR_NOSPACES%" (
+	echo There are spaces detected in the build path "%BLENDER_DIR%", this is currently not supported, exiting....
 	goto EOF
 )
 set BUILD_DIR=%BLENDER_DIR%..\build_windows
@@ -22,7 +22,7 @@ set MUST_CLEAN=
 set NOBUILD=
 set TARGET=
 set WINDOWS_ARCH=
-
+set TESTS_CMAKE_ARGS=
 :argv_loop
 if NOT "%1" == "" (
 
@@ -35,6 +35,8 @@ if NOT "%1" == "" (
 	if "%1" == "debug" (
 		set BUILD_TYPE=Debug
 	REM Build Configurations
+	) else if "%1" == "with_tests" (
+		set TESTS_CMAKE_ARGS=-DWITH_GTESTS=On
 	) else if "%1" == "full" (
 		set TARGET=Full
 		set BUILD_CMAKE_ARGS=%BUILD_CMAKE_ARGS% ^
@@ -77,7 +79,7 @@ if NOT "%1" == "" (
 	set NOBUILD=1
 	)	else if "%1" == "showhash" (
 		for /f "delims=" %%i in ('git rev-parse HEAD') do echo Branch_hash=%%i
-		cd release/datafiles/locale 
+		cd release/datafiles/locale
 		for /f "delims=" %%i in ('git rev-parse HEAD') do echo Locale_hash=%%i
 		cd %~dp0
 		cd release/scripts/addons
@@ -129,17 +131,14 @@ if "%BUILD_ARCH%"=="x64" (
 )
 
 
-set BUILD_DIR=%BUILD_DIR%_%TARGET%_%BUILD_ARCH%_vc%BUILD_VS_VER%_%BUILD_TYPE%
-
-
 if "%target%"=="Release" (
-		rem for vc12 check for both cuda 7.5 and 8 
+		rem for vc12 check for both cuda 7.5 and 8
 		if "%CUDA_PATH%"=="" (
 			echo Cuda Not found, aborting!
 			goto EOF
 		)
 		set BUILD_CMAKE_ARGS=%BUILD_CMAKE_ARGS% ^
-		-C"%BLENDER_DIR%\build_files\cmake\config\blender_release.cmake" 
+		-C"%BLENDER_DIR%\build_files\cmake\config\blender_release.cmake"
 )
 
 :DetectMSVC
@@ -158,7 +157,7 @@ if DEFINED MSVC_VC_DIR goto msvc_detect_finally
 if DEFINED MSVC_VC_DIR call "%MSVC_VC_DIR%\vcvarsall.bat"
 if DEFINED MSVC_VC_DIR goto sanity_checks
 
-rem MSVC Build environment 2017 and up. 
+rem MSVC Build environment 2017 and up.
 for /F "usebackq skip=2 tokens=1-2*" %%A IN (`REG QUERY "HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\Microsoft\VisualStudio\SXS\VS7" /v %BUILD_VS_VER%.0 2^>nul`) DO set MSVC_VS_DIR=%%C
 if DEFINED MSVC_VS_DIR goto msvc_detect_finally_2017
 REM Check 32 bits
@@ -173,7 +172,7 @@ where /Q msbuild
 if %ERRORLEVEL% NEQ 0 (
 	if "%BUILD_VS_VER%"=="12" (
 		rem vs12 not found, try vs14
-		echo Visual Studio 2012 not found, trying Visual Studio 2015.
+		echo Visual Studio 2013 not found, trying Visual Studio 2015.
 		set BUILD_VS_VER=14
 		set BUILD_VS_YEAR=2015
 		goto DetectMSVC
@@ -184,6 +183,11 @@ if %ERRORLEVEL% NEQ 0 (
 		goto EOF
 	)
 )
+
+
+set BUILD_DIR=%BUILD_DIR%_%TARGET%_%BUILD_ARCH%_vc%BUILD_VS_VER%_%BUILD_TYPE%
+
+
 where /Q cmake
 if %ERRORLEVEL% NEQ 0 (
 	echo Error: "CMake" command not in the PATH.
@@ -198,11 +202,11 @@ if NOT EXIST %BLENDER_DIR%..\lib\nul (
 if "%TARGET%"=="" (
 	echo Error: Convenience target not set
 	echo This is required for building, aborting!
-	echo . 
+	echo .
 	goto HELP
 )
 
-set BUILD_CMAKE_ARGS=%BUILD_CMAKE_ARGS% -G "Visual Studio %BUILD_VS_VER% %BUILD_VS_YEAR%%WINDOWS_ARCH%"
+set BUILD_CMAKE_ARGS=%BUILD_CMAKE_ARGS% -G "Visual Studio %BUILD_VS_VER% %BUILD_VS_YEAR%%WINDOWS_ARCH%" %TESTS_CMAKE_ARGS%
 if NOT EXIST %BUILD_DIR%\nul (
 	mkdir %BUILD_DIR%
 )
@@ -262,15 +266,15 @@ echo.
 echo At any point you can optionally modify your build configuration by editing:
 echo "%BUILD_DIR%\CMakeCache.txt", then run "make" again to build with the changes applied.
 echo.
-echo Blender successfully built, run from: "%BUILD_DIR%\bin\%BUILD_TYPE%"
+echo Blender successfully built, run from: "%BUILD_DIR%\bin\%BUILD_TYPE%\blender.exe"
 echo.
 goto EOF
 :HELP
 		echo.
 		echo Convenience targets
-		echo - release ^(identical to the offical blender.org builds^)
+		echo - release ^(identical to the official blender.org builds^)
 		echo - full ^(same as release minus the cuda kernels^)
-		echo - lite 
+		echo - lite
 		echo - headless
 		echo - cycles
 		echo - bpy
@@ -282,13 +286,13 @@ goto EOF
 		echo - showhash ^(Show git hashes of source tree^)
 		echo.
 		echo Configuration options
+		echo - with_tests ^(enable building unit tests^)
 		echo - debug ^(Build an unoptimized debuggable build^)
 		echo - packagename [newname] ^(override default cpack package name^)
-		echo - x86 ^(override host autodetect and build 32 bit code^)
-		echo - x64 ^(override host autodetect and build 64 bit code^)
+		echo - x86 ^(override host auto-detect and build 32 bit code^)
+		echo - x64 ^(override host auto-detect and build 64 bit code^)
 		echo - 2013 ^(build with visual studio 2013^)
 		echo - 2015 ^(build with visual studio 2015^) [EXPERIMENTAL]
 		echo.
 
 :EOF
-

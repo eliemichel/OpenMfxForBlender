@@ -39,6 +39,7 @@
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
 #include "BLI_ghash.h"
+#include "BLI_string_utils.h"
 
 #include "BKE_action.h"
 #include "BKE_constraint.h"
@@ -231,7 +232,7 @@ static int armature_click_extrude_invoke(bContext *C, wmOperator *op, const wmEv
 	copy_v3_v3(oldcurs, fp);
 
 	VECCOPY2D(mval_f, event->mval);
-	ED_view3d_win_to_3d(ar, fp, mval_f, tvec);
+	ED_view3d_win_to_3d(v3d, ar, fp, mval_f, tvec);
 	copy_v3_v3(fp, tvec);
 
 	/* extrude to the where new cursor is and store the operation result */
@@ -619,9 +620,9 @@ static int armature_symmetrize_exec(bContext *C, wmOperator *op)
 		if (EBONE_VISIBLE(arm, ebone_iter) &&
 		    (ebone_iter->flag & BONE_SELECTED))
 		{
-			char name_flip[MAX_VGROUP_NAME];
+			char name_flip[MAXBONENAME];
 
-			BKE_deform_flip_side_name(name_flip, ebone_iter->name, false);
+			BLI_string_flip_side_name(name_flip, ebone_iter->name, false, sizeof(name_flip));
 
 			if (STREQ(name_flip, ebone_iter->name)) {
 				/* if the name matches, we don't have the potential to be mirrored, just skip */
@@ -679,9 +680,9 @@ static int armature_symmetrize_exec(bContext *C, wmOperator *op)
 		    /* will be set if the mirror bone already exists (no need to make a new one) */
 		    (ebone_iter->temp.ebone == NULL))
 		{
-			char name_flip[MAX_VGROUP_NAME];
+			char name_flip[MAXBONENAME];
 
-			BKE_deform_flip_side_name(name_flip, ebone_iter->name, false);
+			BLI_string_flip_side_name(name_flip, ebone_iter->name, false, sizeof(name_flip));
 
 			/* bones must have a side-suffix */
 			if (!STREQ(name_flip, ebone_iter->name)) {

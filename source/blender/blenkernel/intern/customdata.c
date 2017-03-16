@@ -45,8 +45,9 @@
 #include "DNA_ID.h"
 
 #include "BLI_utildefines.h"
-#include "BLI_string.h"
 #include "BLI_path_util.h"
+#include "BLI_string.h"
+#include "BLI_string_utils.h"
 #include "BLI_math.h"
 #include "BLI_math_color_blend.h"
 #include "BLI_mempool.h"
@@ -2594,7 +2595,7 @@ bool CustomData_from_bmeshpoly_test(CustomData *fdata, CustomData *pdata, Custom
 	if (!LAYER_CMP(ldata, CD_TANGENT, fdata, CD_TANGENT))
 		return false;
 
-#undef TEST_RET
+#undef LAYER_CMP
 
 	/* if no layers are on either CustomData's,
 	 * then there was nothing to do... */

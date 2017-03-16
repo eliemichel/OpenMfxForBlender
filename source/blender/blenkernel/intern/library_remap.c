@@ -158,6 +158,10 @@ enum {
 
 static int foreach_libblock_remap_callback(void *user_data, ID *id_self, ID **id_p, int cb_flag)
 {
+	if (cb_flag & IDWALK_CB_PRIVATE) {
+		return IDWALK_RET_NOP;
+	}
+
 	IDRemap *id_remap_data = user_data;
 	ID *old_id = id_remap_data->old_id;
 	ID *new_id = id_remap_data->new_id;
@@ -169,14 +173,15 @@ static int foreach_libblock_remap_callback(void *user_data, ID *id_self, ID **id
 	}
 
 	if (*id_p && (*id_p == old_id)) {
-		const bool is_indirect = (cb_flag & IDWALK_INDIRECT_USAGE) != 0;
+		const bool is_indirect = (cb_flag & IDWALK_CB_INDIRECT_USAGE) != 0;
 		const bool skip_indirect = (id_remap_data->flag & ID_REMAP_SKIP_INDIRECT_USAGE) != 0;
 		/* Note: proxy usage implies LIB_TAG_EXTERN, so on this aspect it is direct,
 		 *       on the other hand since they get reset to lib data on file open/reload it is indirect too...
 		 *       Edit Mode is also a 'skip direct' case. */
 		const bool is_obj = (GS(id->name) == ID_OB);
+		const bool is_obj_proxy = (is_obj && (((Object *)id)->proxy || ((Object *)id)->proxy_group));
 		const bool is_obj_editmode = (is_obj && BKE_object_is_in_editmode((Object *)id));
-		const bool is_never_null = ((cb_flag & IDWALK_NEVER_NULL) && (new_id == NULL) &&
+		const bool is_never_null = ((cb_flag & IDWALK_CB_NEVER_NULL) && (new_id == NULL) &&
 		                            (id_remap_data->flag & ID_REMAP_FORCE_NEVER_NULL_USAGE) == 0);
 		const bool skip_never_null = (id_remap_data->flag & ID_REMAP_SKIP_NEVER_NULL_USAGE) != 0;
 
@@ -185,7 +190,7 @@ static int foreach_libblock_remap_callback(void *user_data, ID *id_self, ID **id
 		       id->name, old_id->name, old_id, new_id ? new_id->name : "<NONE>", new_id, skip_indirect);
 #endif
 
-		if ((id_remap_data->flag & ID_REMAP_FLAG_NEVER_NULL_USAGE) && (cb_flag & IDWALK_NEVER_NULL)) {
+		if ((id_remap_data->flag & ID_REMAP_FLAG_NEVER_NULL_USAGE) && (cb_flag & IDWALK_CB_NEVER_NULL)) {
 			id->tag |= LIB_TAG_DOIT;
 		}
 
@@ -203,10 +208,10 @@ static int foreach_libblock_remap_callback(void *user_data, ID *id_self, ID **id
 			else {
 				BLI_assert(0);
 			}
-			if (cb_flag & IDWALK_USER) {
+			if (cb_flag & IDWALK_CB_USER) {
 				id_remap_data->skipped_refcounted++;
 			}
-			else if (cb_flag & IDWALK_USER_ONE) {
+			else if (cb_flag & IDWALK_CB_USER_ONE) {
 				/* No need to count number of times this happens, just a flag is enough. */
 				id_remap_data->status |= ID_REMAP_IS_USER_ONE_SKIPPED;
 			}
@@ -216,18 +221,18 @@ static int foreach_libblock_remap_callback(void *user_data, ID *id_self, ID **id
 				*id_p = new_id;
 				DAG_id_tag_update_ex(id_remap_data->bmain, id_self, OB_RECALC_OB | OB_RECALC_DATA | OB_RECALC_TIME);
 			}
-			if (cb_flag & IDWALK_USER) {
+			if (cb_flag & IDWALK_CB_USER) {
 				id_us_min(old_id);
 				/* We do not want to handle LIB_TAG_INDIRECT/LIB_TAG_EXTERN here. */
 				if (new_id)
 					new_id->us++;
 			}
-			else if (cb_flag & IDWALK_USER_ONE) {
+			else if (cb_flag & IDWALK_CB_USER_ONE) {
 				id_us_ensure_real(new_id);
 				/* We cannot affect old_id->us directly, LIB_TAG_EXTRAUSER(_SET) are assumed to be set as needed,
 				 * that extra user is processed in final handling... */
 			}
-			if (!is_indirect) {
+			if (!is_indirect || is_obj_proxy) {
 				id_remap_data->status |= ID_REMAP_IS_LINKED_DIRECT;
 			}
 		}
@@ -434,7 +439,7 @@ ATTR_NONNULL(1) static void libblock_remap_data(
 #endif
 		r_id_remap_data->id = id;
 		libblock_remap_data_preprocess(r_id_remap_data);
-		BKE_library_foreach_ID_link(id, foreach_libblock_remap_callback, (void *)r_id_remap_data, IDWALK_NOP);
+		BKE_library_foreach_ID_link(NULL, id, foreach_libblock_remap_callback, (void *)r_id_remap_data, IDWALK_NOP);
 	}
 	else {
 		i = set_listbasepointers(bmain, lb_array);
@@ -456,7 +461,7 @@ ATTR_NONNULL(1) static void libblock_remap_data(
 				r_id_remap_data->id = id_curr;
 				libblock_remap_data_preprocess(r_id_remap_data);
 				BKE_library_foreach_ID_link(
-				            id_curr, foreach_libblock_remap_callback, (void *)r_id_remap_data, IDWALK_NOP);
+				            NULL, id_curr, foreach_libblock_remap_callback, (void *)r_id_remap_data, IDWALK_NOP);
 			}
 		}
 	}
@@ -522,8 +527,7 @@ void BKE_libblock_remap_locked(
 	 * been incremented for that, we have to decrease once more its user count... unless we had to skip
 	 * some 'user_one' cases. */
 	if ((old_id->tag & LIB_TAG_EXTRAUSER_SET) && !(id_remap_data.status & ID_REMAP_IS_USER_ONE_SKIPPED)) {
-		id_us_min(old_id);
-		old_id->tag &= ~LIB_TAG_EXTRAUSER_SET;
+		id_us_clear_real(old_id);
 	}
 
 	BLI_assert(old_id->us - skipped_refcounted >= 0);
@@ -563,8 +567,14 @@ void BKE_libblock_remap_locked(
 		default:
 			break;
 	}
+
 	/* Node trees may virtually use any kind of data-block... */
+	/* XXX Yuck!!!! nodetree update can do pretty much any thing when talking about py nodes,
+	 *     including creating new data-blocks (see T50385), so we need to unlock main here. :(
+	 *     Why can't we have re-entrent locks? */
+	BKE_main_unlock(bmain);
 	libblock_remap_data_postprocess_nodetree_update(bmain, new_id);
+	BKE_main_lock(bmain);
 
 	/* Full rebuild of DAG! */
 	DAG_relations_tag_update(bmain);
@@ -678,6 +688,39 @@ void BKE_libblock_relink_ex(
 		default:
 			break;
 	}
+}
+
+static int id_relink_to_newid_looper(void *UNUSED(user_data), ID *UNUSED(self_id), ID **id_pointer, const int cb_flag)
+{
+	if (cb_flag & IDWALK_CB_PRIVATE) {
+		return IDWALK_RET_NOP;
+	}
+
+	ID *id = *id_pointer;
+	if (id) {
+		/* See: NEW_ID macro */
+		if (id->newid) {
+			BKE_library_update_ID_link_user(id->newid, id, cb_flag);
+			*id_pointer = id->newid;
+		}
+		else if (id->tag & LIB_TAG_NEW) {
+			id->tag &= ~LIB_TAG_NEW;
+			BKE_libblock_relink_to_newid(id);
+		}
+	}
+	return IDWALK_RET_NOP;
+}
+
+/** Similar to libblock_relink_ex, but is remapping IDs to their newid value if non-NULL, in given \a id.
+ *
+ * Very specific usage, not sure we'll keep it on the long run, currently only used in Object duplication code...
+ */
+void BKE_libblock_relink_to_newid(ID *id)
+{
+	if (ID_IS_LINKED_DATABLOCK(id))
+		return;
+
+	BKE_library_foreach_ID_link(NULL, id, id_relink_to_newid_looper, NULL, 0);
 }
 
 void BKE_libblock_free_data(Main *UNUSED(bmain), ID *id)
@@ -854,9 +897,10 @@ void BKE_libblock_free_us(Main *bmain, void *idv)      /* test users */
 	 *     Since only 'user_one' usage of objects is groups, and only 'real user' usage of objects is scenes,
 	 *     removing that 'user_one' tag when there is no more real (scene) users of an object ensures it gets
 	 *     fully unlinked.
+	 *     But only for local objects, not linked ones!
 	 *     Otherwise, there is no real way to get rid of an object anymore - better handling of this is TODO.
 	 */
-	if ((GS(id->name) == ID_OB) && (id->us == 1)) {
+	if ((GS(id->name) == ID_OB) && (id->us == 1) && (id->lib == NULL)) {
 		id_us_clear_real(id);
 	}
 

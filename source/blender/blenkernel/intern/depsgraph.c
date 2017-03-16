@@ -544,10 +544,16 @@ static void build_dag_object(DagForest *dag, DagNode *scenenode, Main *bmain, Sc
 									if (ct->tar->type == OB_MESH)
 										node3->customdata_mask |= CD_MASK_MDEFORMVERT;
 								}
-								else if (ELEM(con->type, CONSTRAINT_TYPE_FOLLOWPATH, CONSTRAINT_TYPE_CLAMPTO, CONSTRAINT_TYPE_SPLINEIK))
+								else if (ELEM(con->type, CONSTRAINT_TYPE_FOLLOWPATH,
+								                         CONSTRAINT_TYPE_CLAMPTO,
+								                         CONSTRAINT_TYPE_SPLINEIK,
+								                         CONSTRAINT_TYPE_SHRINKWRAP))
+								{
 									dag_add_relation(dag, node3, node, DAG_RL_DATA_DATA | DAG_RL_OB_DATA, cti->name);
-								else
+								}
+								else {
 									dag_add_relation(dag, node3, node, DAG_RL_OB_DATA, cti->name);
+								}
 							}
 						}
 						
@@ -800,6 +806,10 @@ static void build_dag_object(DagForest *dag, DagNode *scenenode, Main *bmain, Sc
 				/* Actual code uses get_collider_cache */
 				dag_add_collision_relations(dag, scene, ob, node, part->collision_group, ob->lay, eModifierType_Collision, NULL, true, "Particle Collision");
 			}
+			else if ((psys->flag & PSYS_HAIR_DYNAMICS) && psys->clmd && psys->clmd->coll_parms) {
+				/* Hair uses cloth simulation, i.e. get_collision_objects */
+				dag_add_collision_relations(dag, scene, ob, node, psys->clmd->coll_parms->group, ob->lay | scene->lay, eModifierType_Collision, NULL, true, "Hair Collision");
+			}
 
 			dag_add_forcefield_relations(dag, scene, ob, node, part->effector_weights, part->type == PART_HAIR, 0, "Particle Force Field");
 
@@ -877,8 +887,12 @@ static void build_dag_object(DagForest *dag, DagNode *scenenode, Main *bmain, Sc
 						if (obt->type == OB_MESH)
 							node2->customdata_mask |= CD_MASK_MDEFORMVERT;
 					}
-					else
+					else if (cti->type == CONSTRAINT_TYPE_SHRINKWRAP) {
+						dag_add_relation(dag, node2, node, DAG_RL_DATA_DATA | DAG_RL_OB_DATA, cti->name);
+					}
+					else {
 						dag_add_relation(dag, node2, node, DAG_RL_OB_OB, cti->name);
+					}
 				}
 				addtoroot = 0;
 			}
@@ -1428,7 +1442,6 @@ static void scene_sort_groups(Main *bmain, Scene *sce)
 	/* test; are group objects all in this scene? */
 	for (ob = bmain->object.first; ob; ob = ob->id.next) {
 		ob->id.tag &= ~LIB_TAG_DOIT;
-		ob->id.newid = NULL; /* newid abuse for GroupObject */
 	}
 	for (base = sce->base.first; base; base = base->next)
 		base->object->id.tag |= LIB_TAG_DOIT;
@@ -1458,6 +1471,11 @@ static void scene_sort_groups(Main *bmain, Scene *sce)
 			/* copy the newly sorted listbase */
 			group->gobject = listb;
 		}
+	}
+
+	/* newid abused for GroupObject, cleanup. */
+	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+		ob->id.newid = NULL;
 	}
 }
 
@@ -2555,7 +2573,7 @@ void DAG_on_visible_update(Main *bmain, const bool do_time)
 }
 
 static void dag_id_flush_update__isDependentTexture(
-        void *userData, Object *UNUSED(ob), ID **idpoin, int UNUSED(cd_flag))
+        void *userData, Object *UNUSED(ob), ID **idpoin, int UNUSED(cb_flag))
 {
 	struct { ID *id; bool is_dependent; } *data = userData;
 	

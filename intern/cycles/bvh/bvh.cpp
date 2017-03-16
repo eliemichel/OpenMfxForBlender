@@ -81,6 +81,7 @@ void BVH::build(Progress& progress)
 	                   pack.prim_type,
 	                   pack.prim_index,
 	                   pack.prim_object,
+	                   pack.prim_time,
 	                   params,
 	                   progress);
 	BVHNode *root = bvh_build.run();
@@ -256,6 +257,10 @@ void BVH::pack_instances(size_t nodes_size, size_t leaf_nodes_size)
 	pack.leaf_nodes.resize(leaf_nodes_size);
 	pack.object_node.resize(objects.size());
 
+	if(params.num_motion_curve_steps > 0 || params.num_motion_triangle_steps > 0) {
+		pack.prim_time.resize(prim_index_size);
+	}
+
 	int *pack_prim_index = (pack.prim_index.size())? &pack.prim_index[0]: NULL;
 	int *pack_prim_type = (pack.prim_type.size())? &pack.prim_type[0]: NULL;
 	int *pack_prim_object = (pack.prim_object.size())? &pack.prim_object[0]: NULL;
@@ -264,6 +269,7 @@ void BVH::pack_instances(size_t nodes_size, size_t leaf_nodes_size)
 	uint *pack_prim_tri_index = (pack.prim_tri_index.size())? &pack.prim_tri_index[0]: NULL;
 	int4 *pack_nodes = (pack.nodes.size())? &pack.nodes[0]: NULL;
 	int4 *pack_leaf_nodes = (pack.leaf_nodes.size())? &pack.leaf_nodes[0]: NULL;
+	float2 *pack_prim_time = (pack.prim_time.size())? &pack.prim_time[0]: NULL;
 
 	/* merge */
 	foreach(Object *ob, objects) {
@@ -309,6 +315,7 @@ void BVH::pack_instances(size_t nodes_size, size_t leaf_nodes_size)
 			int *bvh_prim_type = &bvh->pack.prim_type[0];
 			uint *bvh_prim_visibility = &bvh->pack.prim_visibility[0];
 			uint *bvh_prim_tri_index = &bvh->pack.prim_tri_index[0];
+			float2 *bvh_prim_time = bvh->pack.prim_time.size()? &bvh->pack.prim_time[0]: NULL;
 
 			for(size_t i = 0; i < bvh_prim_index_size; i++) {
 				if(bvh->pack.prim_type[i] & PRIMITIVE_ALL_CURVE) {
@@ -324,6 +331,9 @@ void BVH::pack_instances(size_t nodes_size, size_t leaf_nodes_size)
 				pack_prim_type[pack_prim_index_offset] = bvh_prim_type[i];
 				pack_prim_visibility[pack_prim_index_offset] = bvh_prim_visibility[i];
 				pack_prim_object[pack_prim_index_offset] = 0;  // unused for instances
+				if(bvh_prim_time != NULL) {
+					pack_prim_time[pack_prim_index_offset] = bvh_prim_time[i];
+				}
 				pack_prim_index_offset++;
 			}
 		}
@@ -845,6 +855,8 @@ void QBVH::pack_aligned_inner(const BVHStackEntry& e,
 	                  bounds,
 	                  child,
 	                  e.node->m_visibility,
+	                  e.node->m_time_from,
+	                  e.node->m_time_to,
 	                  num);
 }
 
@@ -852,12 +864,17 @@ void QBVH::pack_aligned_node(int idx,
                              const BoundBox *bounds,
                              const int *child,
                              const uint visibility,
+                             const float time_from,
+                             const float time_to,
                              const int num)
 {
 	float4 data[BVH_QNODE_SIZE];
 	memset(data, 0, sizeof(data));
 
 	data[0].x = __uint_as_float(visibility & ~PATH_RAY_NODE_UNALIGNED);
+	data[0].y = time_from;
+	data[0].z = time_to;
+
 	for(int i = 0; i < num; i++) {
 		float3 bb_min = bounds[i].min;
 		float3 bb_max = bounds[i].max;
@@ -908,6 +925,8 @@ void QBVH::pack_unaligned_inner(const BVHStackEntry& e,
 	                    bounds,
 	                    child,
 	                    e.node->m_visibility,
+	                    e.node->m_time_from,
+	                    e.node->m_time_to,
 	                    num);
 }
 
@@ -916,12 +935,16 @@ void QBVH::pack_unaligned_node(int idx,
                                const BoundBox *bounds,
                                const int *child,
                                const uint visibility,
+                               const float time_from,
+                               const float time_to,
                                const int num)
 {
 	float4 data[BVH_UNALIGNED_QNODE_SIZE];
 	memset(data, 0, sizeof(data));
 
 	data[0].x = __uint_as_float(visibility | PATH_RAY_NODE_UNALIGNED);
+	data[0].y = time_from;
+	data[0].z = time_to;
 
 	for(int i = 0; i < num; i++) {
 		Transform space = BVHUnaligned::compute_node_transform(
@@ -1207,6 +1230,8 @@ void QBVH::refit_node(int idx, bool leaf, BoundBox& bbox, uint& visibility)
 			                    child_bbox,
 			                    &c[0],
 			                    visibility,
+			                    0.0f,
+			                    1.0f,
 			                    4);
 		}
 		else {
@@ -1214,6 +1239,8 @@ void QBVH::refit_node(int idx, bool leaf, BoundBox& bbox, uint& visibility)
 			                  child_bbox,
 			                  &c[0],
 			                  visibility,
+			                  0.0f,
+			                  1.0f,
 			                  4);
 		}
 	}

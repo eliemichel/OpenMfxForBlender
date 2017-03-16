@@ -101,7 +101,7 @@ static void foreachObjectLink(
 {
 	BooleanModifierData *bmd = (BooleanModifierData *) md;
 
-	walk(userData, ob, &bmd->object, IDWALK_NOP);
+	walk(userData, ob, &bmd->object, IDWALK_CB_NOP);
 }
 
 static void updateDepgraph(ModifierData *md, DagForest *forest,
@@ -319,6 +319,7 @@ static DerivedMesh *applyModifier_bmesh(
 				        use_separate,
 				        use_dissolve,
 				        use_island_connect,
+				        false,
 				        bmd->operation,
 				        bmd->double_threshold);
 

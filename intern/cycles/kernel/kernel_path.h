@@ -46,6 +46,7 @@
 #include "kernel_path_common.h"
 #include "kernel_path_surface.h"
 #include "kernel_path_volume.h"
+#include "kernel_path_subsurface.h"
 
 #ifdef __KERNEL_DEBUG__
 #  include "kernel_debug.h"
@@ -75,17 +76,17 @@ ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
 
 	sample_cos_hemisphere(ao_N, bsdf_u, bsdf_v, &ao_D, &ao_pdf);
 
-	if(dot(ccl_fetch(sd, Ng), ao_D) > 0.0f && ao_pdf != 0.0f) {
+	if(dot(sd->Ng, ao_D) > 0.0f && ao_pdf != 0.0f) {
 		Ray light_ray;
 		float3 ao_shadow;
 
-		light_ray.P = ray_offset(ccl_fetch(sd, P), ccl_fetch(sd, Ng));
+		light_ray.P = ray_offset(sd->P, sd->Ng);
 		light_ray.D = ao_D;
 		light_ray.t = kernel_data.background.ao_distance;
 #ifdef __OBJECT_MOTION__
-		light_ray.time = ccl_fetch(sd, time);
+		light_ray.time = sd->time;
 #endif  /* __OBJECT_MOTION__ */
-		light_ray.dP = ccl_fetch(sd, dP);
+		light_ray.dP = sd->dP;
 		light_ray.dD = differential3_zero();
 
 		if(!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow)) {
@@ -109,6 +110,10 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 		/* intersect scene */
 		Intersection isect;
 		uint visibility = path_state_ray_visibility(kg, state);
+		if(state->bounce > kernel_data.integrator.ao_bounces) {
+			visibility = PATH_RAY_SHADOW;
+			ray->t = kernel_data.background.ao_distance;
+		}
 		bool hit = scene_intersect(kg,
 		                           *ray,
 		                           visibility,
@@ -141,6 +146,10 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 #endif  /* __LAMP_MIS__ */
 
 #ifdef __VOLUME__
+		/* Sanitize volume stack. */
+		if(!hit) {
+			kernel_volume_clean_stack(kg, state->volume_stack);
+		}
 		/* volume attenuation, emission, scatter */
 		if(state->volume_stack[0].shader != SHADER_NONE) {
 			Ray volume_ray = *ray;
@@ -288,6 +297,9 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 
 			break;
 		}
+		else if(state->bounce > kernel_data.integrator.ao_bounces) {
+			break;
+		}
 
 		/* setup shading */
 		shader_setup_from_ray(kg,
@@ -402,172 +414,6 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 	}
 }
 
-#ifdef __SUBSURFACE__
-#  ifndef __KERNEL_CUDA__
-ccl_device
-#  else
-ccl_device_inline
-#  endif
-bool kernel_path_subsurface_scatter(
-        KernelGlobals *kg,
-        ShaderData *sd,
-        ShaderData *emission_sd,
-        PathRadiance *L,
-        PathState *state,
-        RNG *rng,
-        Ray *ray,
-        float3 *throughput,
-        SubsurfaceIndirectRays *ss_indirect)
-{
-	float bssrdf_probability;
-	ShaderClosure *sc = subsurface_scatter_pick_closure(kg, sd, &bssrdf_probability);
-
-	/* modify throughput for picking bssrdf or bsdf */
-	*throughput *= bssrdf_probability;
-
-	/* do bssrdf scatter step if we picked a bssrdf closure */
-	if(sc) {
-		/* We should never have two consecutive BSSRDF bounces,
-		 * the second one should be converted to a diffuse BSDF to
-		 * avoid this.
-		 */
-		kernel_assert(!ss_indirect->tracing);
-
-		uint lcg_state = lcg_state_init(rng, state, 0x68bc21eb);
-
-		SubsurfaceIntersection ss_isect;
-		float bssrdf_u, bssrdf_v;
-		path_state_rng_2D(kg, rng, state, PRNG_BSDF_U, &bssrdf_u, &bssrdf_v);
-		int num_hits = subsurface_scatter_multi_intersect(kg,
-		                                                  &ss_isect,
-		                                                  sd,
-		                                                  sc,
-		                                                  &lcg_state,
-		                                                  bssrdf_u, bssrdf_v,
-		                                                  false);
-#  ifdef __VOLUME__
-		ss_indirect->need_update_volume_stack =
-		        kernel_data.integrator.use_volumes &&
-		        ccl_fetch(sd, flag) & SD_OBJECT_INTERSECTS_VOLUME;
-#  endif  /* __VOLUME__ */
-
-		/* compute lighting with the BSDF closure */
-		for(int hit = 0; hit < num_hits; hit++) {
-			/* NOTE: We reuse the existing ShaderData, we assume the path
-			 * integration loop stops when this function returns true.
-			 */
-			subsurface_scatter_multi_setup(kg,
-			                               &ss_isect,
-			                               hit,
-			                               sd,
-			                               state,
-			                               state->flag,
-			                               sc,
-			                               false);
-
-			PathState *hit_state = &ss_indirect->state[ss_indirect->num_rays];
-			Ray *hit_ray = &ss_indirect->rays[ss_indirect->num_rays];
-			float3 *hit_tp = &ss_indirect->throughputs[ss_indirect->num_rays];
-			PathRadiance *hit_L = &ss_indirect->L[ss_indirect->num_rays];
-
-			*hit_state = *state;
-			*hit_ray = *ray;
-			*hit_tp = *throughput;
-
-			hit_state->rng_offset += PRNG_BOUNCE_NUM;
-
-			path_radiance_init(hit_L, kernel_data.film.use_light_pass);
-			hit_L->direct_throughput = L->direct_throughput;
-			path_radiance_copy_indirect(hit_L, L);
-
-			kernel_path_surface_connect_light(kg, rng, sd, emission_sd, *hit_tp, state, hit_L);
-
-			if(kernel_path_surface_bounce(kg,
-			                              rng,
-			                              sd,
-			                              hit_tp,
-			                              hit_state,
-			                              hit_L,
-			                              hit_ray))
-			{
-#  ifdef __LAMP_MIS__
-				hit_state->ray_t = 0.0f;
-#  endif  /* __LAMP_MIS__ */
-
-#  ifdef __VOLUME__
-				if(ss_indirect->need_update_volume_stack) {
-					Ray volume_ray = *ray;
-					/* Setup ray from previous surface point to the new one. */
-					volume_ray.D = normalize_len(hit_ray->P - volume_ray.P,
-					                             &volume_ray.t);
-
-					kernel_volume_stack_update_for_subsurface(
-					    kg,
-					    emission_sd,
-					    &volume_ray,
-					    hit_state->volume_stack);
-				}
-#  endif  /* __VOLUME__ */
-				path_radiance_reset_indirect(L);
-				ss_indirect->num_rays++;
-			}
-			else {
-				path_radiance_accum_sample(L, hit_L, 1);
-			}
-		}
-		return true;
-	}
-	return false;
-}
-
-ccl_device_inline void kernel_path_subsurface_init_indirect(
-        SubsurfaceIndirectRays *ss_indirect)
-{
-	ss_indirect->tracing = false;
-	ss_indirect->num_rays = 0;
-}
-
-ccl_device void kernel_path_subsurface_accum_indirect(
-        SubsurfaceIndirectRays *ss_indirect,
-        PathRadiance *L)
-{
-	if(ss_indirect->tracing) {
-		path_radiance_sum_indirect(L);
-		path_radiance_accum_sample(&ss_indirect->direct_L, L, 1);
-		if(ss_indirect->num_rays == 0) {
-			*L = ss_indirect->direct_L;
-		}
-	}
-}
-
-ccl_device void kernel_path_subsurface_setup_indirect(
-        KernelGlobals *kg,
-        SubsurfaceIndirectRays *ss_indirect,
-        PathState *state,
-        Ray *ray,
-        PathRadiance *L,
-        float3 *throughput)
-{
-	if(!ss_indirect->tracing) {
-		ss_indirect->direct_L = *L;
-	}
-	ss_indirect->tracing = true;
-
-	/* Setup state, ray and throughput for indirect SSS rays. */
-	ss_indirect->num_rays--;
-
-	Ray *indirect_ray = &ss_indirect->rays[ss_indirect->num_rays];
-	PathRadiance *indirect_L = &ss_indirect->L[ss_indirect->num_rays];
-
-	*state = ss_indirect->state[ss_indirect->num_rays];
-	*ray = *indirect_ray;
-	*L = *indirect_L;
-	*throughput = ss_indirect->throughputs[ss_indirect->num_rays];
-
-	state->rng_offset += ss_indirect->num_rays * PRNG_BOUNCE_NUM;
-}
-
-#endif  /* __SUBSURFACE__ */
 
 ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
                                                RNG *rng,
@@ -623,6 +469,11 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 			lcg_state = lcg_state_init(rng, &state, 0x51633e2d);
 		}
 
+		if(state.bounce > kernel_data.integrator.ao_bounces) {
+			visibility = PATH_RAY_SHADOW;
+			ray.t = kernel_data.background.ao_distance;
+		}
+
 		bool hit = scene_intersect(kg, ray, visibility, &isect, &lcg_state, difl, extmax);
 #else
 		bool hit = scene_intersect(kg, ray, visibility, &isect, NULL, 0.0f, 0.0f);
@@ -630,8 +481,9 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 
 #ifdef __KERNEL_DEBUG__
 		if(state.flag & PATH_RAY_CAMERA) {
-			debug_data.num_bvh_traversal_steps += isect.num_traversal_steps;
+			debug_data.num_bvh_traversed_nodes += isect.num_traversed_nodes;
 			debug_data.num_bvh_traversed_instances += isect.num_traversed_instances;
+			debug_data.num_bvh_intersections += isect.num_intersections;
 		}
 		debug_data.num_ray_bounces++;
 #endif  /* __KERNEL_DEBUG__ */
@@ -658,6 +510,10 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 #endif  /* __LAMP_MIS__ */
 
 #ifdef __VOLUME__
+		/* Sanitize volume stack. */
+		if(!hit) {
+			kernel_volume_clean_stack(kg, state.volume_stack);
+		}
 		/* volume attenuation, emission, scatter */
 		if(state.volume_stack[0].shader != SHADER_NONE) {
 			Ray volume_ray = ray;
@@ -760,6 +616,9 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 
 			break;
 		}
+		else if(state.bounce > kernel_data.integrator.ao_bounces) {
+			break;
+		}
 
 		/* setup shading */
 		shader_setup_from_ray(kg, &sd, &isect, &ray);
@@ -768,21 +627,25 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 
 		/* holdout */
 #ifdef __HOLDOUT__
-		if((sd.flag & (SD_HOLDOUT|SD_HOLDOUT_MASK)) && (state.flag & PATH_RAY_CAMERA)) {
+		if(((sd.flag & SD_HOLDOUT) ||
+		    (sd.object_flag & SD_OBJECT_HOLDOUT_MASK)) &&
+		   (state.flag & PATH_RAY_CAMERA))
+		{
 			if(kernel_data.background.transparent) {
 				float3 holdout_weight;
-				
-				if(sd.flag & SD_HOLDOUT_MASK)
+				if(sd.object_flag & SD_OBJECT_HOLDOUT_MASK) {
 					holdout_weight = make_float3(1.0f, 1.0f, 1.0f);
-				else
+				}
+				else {
 					holdout_weight = shader_holdout_eval(kg, &sd);
-
+				}
 				/* any throughput is ok, should all be identical here */
 				L_transparent += average(holdout_weight*throughput);
 			}
 
-			if(sd.flag & SD_HOLDOUT_MASK)
+			if(sd.object_flag & SD_OBJECT_HOLDOUT_MASK) {
 				break;
+			}
 		}
 #endif  /* __HOLDOUT__ */
 

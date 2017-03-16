@@ -117,6 +117,9 @@ public:
 
 	/* Use OpenSubdiv patch evaluation */
 	bool use_patch_evaluation;
+	
+	/* Use Transparent shadows */
+	bool use_transparent;
 
 	DeviceRequestedFeatures()
 	{
@@ -133,6 +136,7 @@ public:
 		use_volume = false;
 		use_integrator_branched = false;
 		use_patch_evaluation = false;
+		use_transparent = false;
 	}
 
 	bool modified(const DeviceRequestedFeatures& requested_features)
@@ -148,7 +152,8 @@ public:
 		         use_subsurface == requested_features.use_subsurface &&
 		         use_volume == requested_features.use_volume &&
 		         use_integrator_branched == requested_features.use_integrator_branched &&
-		         use_patch_evaluation == requested_features.use_patch_evaluation);
+		         use_patch_evaluation == requested_features.use_patch_evaluation &&
+		         use_transparent == requested_features.use_transparent);
 	}
 
 	/* Convert the requested features structure to a build options,
@@ -189,6 +194,9 @@ public:
 		if(!use_patch_evaluation) {
 			build_options += " -D__NO_PATCH_EVAL__";
 		}
+		if(!use_transparent && !use_volume) {
+			build_options += " -D__NO_TRANSPARENT__";
+		}
 		return build_options;
 	}
 };
@@ -220,12 +228,21 @@ public:
 	DeviceInfo info;
 	virtual const string& error_message() { return error_msg; }
 	bool have_error() { return !error_message().empty(); }
+	virtual void set_error(const string& error)
+	{
+		if(!have_error()) {
+			error_msg = error;
+		}
+		fprintf(stderr, "%s\n", error.c_str());
+		fflush(stderr);
+	}
+	virtual bool show_samples() const { return false; }
 
 	/* statistics */
 	Stats &stats;
 
 	/* regular memory */
-	virtual void mem_alloc(device_memory& mem, MemoryType type) = 0;
+	virtual void mem_alloc(const char *name, device_memory& mem, MemoryType type) = 0;
 	virtual void mem_copy_to(device_memory& mem) = 0;
 	virtual void mem_copy_from(device_memory& mem,
 		int y, int w, int h, int elem) = 0;

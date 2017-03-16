@@ -821,10 +821,9 @@ static float calc_overlap(StrokeCache *cache, const char symm, const char axis, 
 	flip_v3_v3(mirror, cache->true_location, symm);
 
 	if (axis != 0) {
-		float mat[4][4];
-		unit_m4(mat);
-		rotate_m4(mat, axis, angle);
-		mul_m4_v3(mat, mirror);
+		float mat[3][3];
+		axis_angle_to_mat3_single(mat, axis, angle);
+		mul_m3_v3(mat, mirror);
 	}
 
 	/* distsq = len_squared_v3v3(mirror, cache->traced_location); */
@@ -4188,7 +4187,7 @@ static void sculpt_update_brush_delta(UnifiedPaintSettings *ups, Object *ob, Bru
 
 		/* compute 3d coordinate at same z from original location + mouse */
 		mul_v3_m4v3(loc, ob->obmat, cache->orig_grab_location);
-		ED_view3d_win_to_3d(cache->vc->ar, loc, mouse, grab_location);
+		ED_view3d_win_to_3d(cache->vc->v3d, cache->vc->ar, loc, mouse, grab_location);
 
 		/* compute delta to move verts by */
 		if (!cache->first_time) {
@@ -5362,8 +5361,12 @@ static int sculpt_mode_toggle_exec(bContext *C, wmOperator *op)
 		if (mmd)
 			multires_force_update(ob);
 
-		if (flush_recalc || (ob->sculpt && ob->sculpt->bm))
+		/* Always for now, so leaving sculpt mode always ensures scene is in
+		 * a consistent state.
+		 */
+		if (true || flush_recalc || (ob->sculpt && ob->sculpt->bm)) {
 			DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+		}
 
 		if (me->flag & ME_SCULPT_DYNAMIC_TOPOLOGY) {
 			/* Dynamic topology must be disabled before exiting sculpt
@@ -5694,11 +5697,11 @@ static int sculpt_set_detail_size_exec(bContext *C, wmOperator *UNUSED(op))
 	WM_operator_properties_create_ptr(&props_ptr, ot);
 
 	if (sd->flags & SCULPT_DYNTOPO_DETAIL_CONSTANT) {
-		set_brush_rc_props(&props_ptr, "sculpt", "constant_detail", NULL, 0);
-		RNA_string_set(&props_ptr, "data_path_primary", "tool_settings.sculpt.constant_detail");
+		set_brush_rc_props(&props_ptr, "sculpt", "constant_detail_resolution", NULL, 0);
+		RNA_string_set(&props_ptr, "data_path_primary", "tool_settings.sculpt.constant_detail_resolution");
 	}
 	else if (sd->flags & SCULPT_DYNTOPO_DETAIL_BRUSH) {
-		set_brush_rc_props(&props_ptr, "sculpt", "constant_detail", NULL, 0);
+		set_brush_rc_props(&props_ptr, "sculpt", "constant_detail_resolution", NULL, 0);
 		RNA_string_set(&props_ptr, "data_path_primary", "tool_settings.sculpt.detail_percent");
 	}
 	else {

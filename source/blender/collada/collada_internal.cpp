@@ -33,11 +33,8 @@
 
 UnitConverter::UnitConverter() : unit(), up_axis(COLLADAFW::FileInfo::Z_UP)
 {
-	unit_m4(x_up_mat4);
-	rotate_m4(x_up_mat4, 'Y', -0.5 * M_PI);
-
-	unit_m4(y_up_mat4);
-	rotate_m4(y_up_mat4, 'X', 0.5 * M_PI);
+	axis_angle_to_mat4_single(x_up_mat4, 'Y', -0.5 * M_PI);
+	axis_angle_to_mat4_single(y_up_mat4, 'X', 0.5 * M_PI);
 
 	unit_m4(z_up_mat4);
 	unit_m4(scale_mat4);
@@ -344,7 +341,12 @@ std::string get_light_id(Object *ob)
 
 std::string get_joint_id(Bone *bone, Object *ob_arm)
 {
-	return translate_id(/*id_name(ob_arm) + "_" +*/ bone->name);
+	return translate_id(id_name(ob_arm) + "_" + bone->name);
+}
+
+std::string get_joint_sid(Bone *bone, Object *ob_arm)
+{
+	return translate_id(bone->name);
 }
 
 std::string get_camera_id(Object *ob)

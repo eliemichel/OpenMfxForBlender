@@ -351,6 +351,22 @@ void BLI_rcti_init(rcti *rect, int xmin, int xmax, int ymin, int ymax)
 	}
 }
 
+void BLI_rctf_init_pt_radius(rctf *rect, const float xy[2], float size)
+{
+	rect->xmin = xy[0] - size;
+	rect->xmax = xy[0] + size;
+	rect->ymin = xy[1] - size;
+	rect->ymax = xy[1] + size;
+}
+
+void BLI_rcti_init_pt_radius(rcti *rect, const int xy[2], int size)
+{
+	rect->xmin = xy[0] - size;
+	rect->xmax = xy[0] + size;
+	rect->ymin = xy[1] - size;
+	rect->ymax = xy[1] + size;
+}
+
 void BLI_rcti_init_minmax(rcti *rect)
 {
 	rect->xmin = rect->ymin = INT_MAX;
@@ -420,20 +436,16 @@ void BLI_rctf_recenter(rctf *rect, float x, float y)
 /* change width & height around the central location */
 void BLI_rcti_resize(rcti *rect, int x, int y)
 {
-	rect->xmin = rect->xmax = BLI_rcti_cent_x(rect);
-	rect->ymin = rect->ymax = BLI_rcti_cent_y(rect);
-	rect->xmin -= x / 2;
-	rect->ymin -= y / 2;
+	rect->xmin = BLI_rcti_cent_x(rect) - (x / 2);
+	rect->ymin = BLI_rcti_cent_y(rect) - (y / 2);
 	rect->xmax = rect->xmin + x;
 	rect->ymax = rect->ymin + y;
 }
 
 void BLI_rctf_resize(rctf *rect, float x, float y)
 {
-	rect->xmin = rect->xmax = BLI_rctf_cent_x(rect);
-	rect->ymin = rect->ymax = BLI_rctf_cent_y(rect);
-	rect->xmin -= x * 0.5f;
-	rect->ymin -= y * 0.5f;
+	rect->xmin = BLI_rctf_cent_x(rect) - (x * 0.5f);
+	rect->ymin = BLI_rctf_cent_y(rect) - (y * 0.5f);
 	rect->xmax = rect->xmin + x;
 	rect->ymax = rect->ymin + y;
 }

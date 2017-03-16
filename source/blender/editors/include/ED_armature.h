@@ -130,8 +130,9 @@ void ED_armature_ebone_listbase_temp_clear(struct ListBase *lb);
 void ED_armature_deselect_all(struct Object *obedit);
 void ED_armature_deselect_all_visible(struct Object *obedit);
 
-int ED_do_pose_selectbuffer(struct Scene *scene, struct Base *base, unsigned int *buffer,
-                            short hits, bool extend, bool deselect, bool toggle, bool do_nearest);
+bool ED_do_pose_selectbuffer(
+        struct Scene *scene, struct Base *base, const unsigned int *buffer, short hits,
+        bool extend, bool deselect, bool toggle, bool do_nearest);
 bool ED_armature_select_pick(struct bContext *C, const int mval[2], bool extend, bool deselect, bool toggle);
 int join_armature_exec(struct bContext *C, struct wmOperator *op);
 struct Bone *get_indexed_bone(struct Object *ob, int index);
@@ -171,6 +172,7 @@ void create_vgroups_from_armature(struct ReportList *reports, struct Scene *scen
 /* if bone is already in list, pass it as param to ignore it */
 void unique_editbone_name(struct ListBase *ebones, char *name, EditBone *bone);
 void ED_armature_bone_rename(struct bArmature *arm, const char *oldnamep, const char *newnamep);
+void ED_armature_bones_flip_names(struct bArmature *arm, struct ListBase *bones_names);
 
 void undo_push_armature(struct bContext *C, const char *name);
 

@@ -344,13 +344,11 @@ ccl_device uint BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 					/* Instance push. */
 					object = kernel_tex_fetch(__prim_object, -prim_addr-1);
 					int object_flag = kernel_tex_fetch(__object_flag, object);
-
 					if(object_flag & SD_OBJECT_HAS_VOLUME) {
-
 #  if BVH_FEATURE(BVH_MOTION)
-						bvh_instance_motion_push(kg, object, ray, &P, &dir, &idir, &isect_t, &ob_itfm);
+						isect_t = bvh_instance_motion_push(kg, object, ray, &P, &dir, &idir, isect_t, &ob_itfm);
 #  else
-						bvh_instance_push(kg, object, ray, &P, &dir, &idir, &isect_t);
+						isect_t = bvh_instance_push(kg, object, ray, &P, &dir, &idir, isect_t);
 #  endif
 
 						qbvh_near_far_idx_calc(idir,
@@ -408,11 +406,10 @@ ccl_device uint BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 				}
 			}
 			else {
-				float ignore_t = FLT_MAX;
 #  if BVH_FEATURE(BVH_MOTION)
-				bvh_instance_motion_pop(kg, object, ray, &P, &dir, &idir, &ignore_t, &ob_itfm);
+				bvh_instance_motion_pop(kg, object, ray, &P, &dir, &idir, FLT_MAX, &ob_itfm);
 #  else
-				bvh_instance_pop(kg, object, ray, &P, &dir, &idir, &ignore_t);
+				bvh_instance_pop(kg, object, ray, &P, &dir, &idir, FLT_MAX);
 #  endif
 			}
 

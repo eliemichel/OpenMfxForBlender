@@ -97,14 +97,14 @@ Imath::Box3d AbcObjectWriter::bounds()
 		return Imath::Box3d();
 	}
 
-	/* Convert Z-up to Y-up. */
+	/* Convert Z-up to Y-up. This also changes which vector goes into which min/max property. */
 	this->m_bounds.min.x = bb->vec[0][0];
 	this->m_bounds.min.y = bb->vec[0][2];
-	this->m_bounds.min.z = -bb->vec[0][1];
+	this->m_bounds.min.z = -bb->vec[6][1];
 
 	this->m_bounds.max.x = bb->vec[6][0];
 	this->m_bounds.max.y = bb->vec[6][2];
-	this->m_bounds.max.z = -bb->vec[6][1];
+	this->m_bounds.max.z = -bb->vec[0][1];
 
 	return this->m_bounds;
 }
@@ -170,13 +170,13 @@ static Imath::M44d blend_matrices(const Imath::M44d &m0, const Imath::M44d &m1, 
 
 	for (int i = 0; i < 4; ++i) {
 		for (int j = 0; j < 4; ++j) {
-			mat0[i][j] = m0[i][j];
+			mat0[i][j] = static_cast<float>(m0[i][j]);
 		}
 	}
 
 	for (int i = 0; i < 4; ++i) {
 		for (int j = 0; j < 4; ++j) {
-			mat1[i][j] = m1[i][j];
+			mat1[i][j] = static_cast<float>(m1[i][j]);
 		}
 	}
 

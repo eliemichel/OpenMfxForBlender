@@ -19,6 +19,7 @@
 
 #include "mesh.h"
 
+#include "util_algorithm.h"
 #include "util_map.h"
 #include "util_path.h"
 #include "util_set.h"
@@ -48,12 +49,12 @@ static inline BL::Mesh object_to_mesh(BL::BlendData& data,
                                       bool apply_modifiers,
                                       bool render,
                                       bool calc_undeformed,
-                                      bool subdivision)
+                                      Mesh::SubdivisionType subdivision_type)
 {
 	bool subsurf_mod_show_render;
 	bool subsurf_mod_show_viewport;
 
-	if(subdivision) {
+	if(subdivision_type != Mesh::SUBDIVISION_NONE) {
 		BL::Modifier subsurf_mod = object.modifiers[object.modifiers.length()-1];
 
 		subsurf_mod_show_render = subsurf_mod.show_render();
@@ -65,7 +66,7 @@ static inline BL::Mesh object_to_mesh(BL::BlendData& data,
 
 	BL::Mesh me = data.meshes.new_from_object(scene, object, apply_modifiers, (render)? 2: 1, false, calc_undeformed);
 
-	if(subdivision) {
+	if(subdivision_type != Mesh::SUBDIVISION_NONE) {
 		BL::Modifier subsurf_mod = object.modifiers[object.modifiers.length()-1];
 
 		subsurf_mod.show_render(subsurf_mod_show_render);
@@ -74,9 +75,14 @@ static inline BL::Mesh object_to_mesh(BL::BlendData& data,
 
 	if((bool)me) {
 		if(me.use_auto_smooth()) {
-			me.calc_normals_split();
+			if(subdivision_type == Mesh::SUBDIVISION_CATMULL_CLARK) {
+				me.calc_normals_split();
+			}
+			else {
+				me.split_faces(false);
+			}
 		}
-		if(!subdivision) {
+		if(subdivision_type == Mesh::SUBDIVISION_NONE) {
 			me.calc_tessface(true);
 		}
 	}
@@ -779,6 +785,35 @@ struct ParticleSystemKey {
 
 		return false;
 	}
+};
+
+class EdgeMap {
+public:
+	EdgeMap() {
+	}
+
+	void clear() {
+		edges_.clear();
+	}
+
+	void insert(int v0, int v1) {
+		get_sorted_verts(v0, v1);
+		edges_.insert(std::pair<int, int>(v0, v1));
+	}
+
+	bool exists(int v0, int v1) {
+		get_sorted_verts(v0, v1);
+		return edges_.find(std::pair<int, int>(v0, v1)) != edges_.end();
+	}
+
+protected:
+	void get_sorted_verts(int& v0, int& v1) {
+		if(v0 > v1) {
+			swap(v0, v1);
+		}
+	}
+
+	set< std::pair<int, int> > edges_;
 };
 
 CCL_NAMESPACE_END

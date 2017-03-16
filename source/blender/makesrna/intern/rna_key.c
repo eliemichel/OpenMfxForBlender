@@ -33,6 +33,7 @@
 #include "DNA_lattice_types.h"
 #include "DNA_mesh_types.h"
 
+#include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
@@ -748,7 +749,7 @@ static void rna_def_keyblock(BlenderRNA *brna)
 	RNA_def_function_ui_description(func, "Compute local space vertices' normals for this shape key");
 	RNA_def_function_flag(func, FUNC_USE_SELF_ID);
 	parm = RNA_def_property(func, "normals", PROP_FLOAT, /* PROP_DIRECTION */ PROP_NONE);
-	RNA_def_property_flag(parm, PROP_DYNAMIC | PROP_OUTPUT);
+	RNA_def_parameter_flags(parm, PROP_DYNAMIC, PARM_OUTPUT);
 	RNA_def_property_multi_array(parm, 2, NULL);
 	RNA_def_property_range(parm, -1.0f, 1.0f);
 	RNA_def_property_dynamic_array_funcs(parm, "rna_KeyBlock_normals_vert_len");
@@ -757,7 +758,7 @@ static void rna_def_keyblock(BlenderRNA *brna)
 	RNA_def_function_ui_description(func, "Compute local space faces' normals for this shape key");
 	RNA_def_function_flag(func, FUNC_USE_SELF_ID);
 	parm = RNA_def_property(func, "normals", PROP_FLOAT, /* PROP_DIRECTION */ PROP_NONE);
-	RNA_def_property_flag(parm, PROP_DYNAMIC | PROP_OUTPUT);
+	RNA_def_parameter_flags(parm, PROP_DYNAMIC, PARM_OUTPUT);
 	RNA_def_property_multi_array(parm, 2, NULL);
 	RNA_def_property_range(parm, -1.0f, 1.0f);
 	RNA_def_property_dynamic_array_funcs(parm, "rna_KeyBlock_normals_poly_len");
@@ -766,7 +767,7 @@ static void rna_def_keyblock(BlenderRNA *brna)
 	RNA_def_function_ui_description(func, "Compute local space face corners' normals for this shape key");
 	RNA_def_function_flag(func, FUNC_USE_SELF_ID);
 	parm = RNA_def_property(func, "normals", PROP_FLOAT, /* PROP_DIRECTION */ PROP_NONE);
-	RNA_def_property_flag(parm, PROP_DYNAMIC | PROP_OUTPUT);
+	RNA_def_parameter_flags(parm, PROP_DYNAMIC, PARM_OUTPUT);
 	RNA_def_property_multi_array(parm, 2, NULL);
 	RNA_def_property_range(parm, -1.0f, 1.0f);
 	RNA_def_property_dynamic_array_funcs(parm, "rna_KeyBlock_normals_loop_len");

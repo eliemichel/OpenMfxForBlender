@@ -42,7 +42,7 @@
 #include "BLI_math.h"
 #include "BLI_kdopbvh.h"
 #include "BLI_utildefines.h"
-
+#include "BLI_string_utils.h"
 #include "BLT_translation.h"
 
 #include "DNA_armature_types.h"
@@ -4404,6 +4404,7 @@ static void transformcache_free(bConstraint *con)
 #ifdef WITH_ALEMBIC
 		CacheReader_free(data->reader);
 #endif
+		data->reader = NULL;
 	}
 }
 

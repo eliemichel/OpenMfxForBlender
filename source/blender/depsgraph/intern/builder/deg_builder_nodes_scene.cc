@@ -65,20 +65,6 @@ namespace DEG {
 
 void DepsgraphNodeBuilder::build_scene(Main *bmain, Scene *scene)
 {
-	/* LIB_TAG_DOIT is used to indicate whether node for given ID was already
-	 * created or not. This flag is being set in add_id_node(), so functions
-	 * shouldn't bother with setting it, they only might query this flag when
-	 * needed.
-	 */
-	BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, false);
-	/* XXX nested node trees are not included in tag-clearing above,
-	 * so we need to do this manually.
-	 */
-	FOREACH_NODETREE(bmain, nodetree, id) {
-		if (id != (ID *)nodetree)
-			nodetree->id.tag &= ~LIB_TAG_DOIT;
-	} FOREACH_NODETREE_END
-
 	/* scene ID block */
 	add_id_node(&scene->id);
 
@@ -95,21 +81,7 @@ void DepsgraphNodeBuilder::build_scene(Main *bmain, Scene *scene)
 	/* scene objects */
 	LINKLIST_FOREACH (Base *, base, &scene->base) {
 		Object *ob = base->object;
-
-		/* object itself */
 		build_object(scene, base, ob);
-
-		/* object that this is a proxy for */
-		// XXX: the way that proxies work needs to be completely reviewed!
-		if (ob->proxy) {
-			ob->proxy->proxy_from = ob;
-			build_object(scene, base, ob->proxy);
-		}
-
-		/* Object dupligroup. */
-		if (ob->dup_group) {
-			build_group(scene, base, ob->dup_group);
-		}
 	}
 
 	/* rigidbody */

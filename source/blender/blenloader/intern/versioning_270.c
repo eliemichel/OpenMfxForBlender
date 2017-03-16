@@ -34,6 +34,7 @@
 /* allow readfile to use deprecated functionality */
 #define DNA_DEPRECATED_ALLOW
 
+#include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_brush_types.h"
 #include "DNA_camera_types.h"
@@ -46,6 +47,7 @@
 #include "DNA_screen_types.h"
 #include "DNA_object_force.h"
 #include "DNA_object_types.h"
+#include "DNA_mask_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_particle_types.h"
@@ -57,9 +59,11 @@
 
 #include "DNA_genfile.h"
 
+#include "BKE_animsys.h"
 #include "BKE_colortools.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
+#include "BKE_mask.h"
 #include "BKE_modifier.h"
 #include "BKE_node.h"
 #include "BKE_scene.h"
@@ -73,6 +77,9 @@
 #include "BLI_string.h"
 
 #include "BLO_readfile.h"
+
+#include "NOD_common.h"
+#include "NOD_socket.h"
 
 #include "readfile.h"
 
@@ -191,6 +198,54 @@ static void do_version_bones_super_bbone(ListBase *lb)
 		
 		do_version_bones_super_bbone(&bone->childbase);
 	}
+}
+
+/* TODO(sergey): Consider making it somewhat more generic function in BLI_anim.h. */
+static void anim_change_prop_name(FCurve *fcu,
+                                  const char *prefix,
+                                  const char *old_prop_name,
+                                  const char *new_prop_name)
+{
+	const char *old_path = BLI_sprintfN("%s.%s", prefix, old_prop_name);
+	if (STREQ(fcu->rna_path, old_path)) {
+		MEM_freeN(fcu->rna_path);
+		fcu->rna_path = BLI_sprintfN("%s.%s", prefix, new_prop_name);
+	}
+	MEM_freeN((char *)old_path);
+}
+
+static void do_version_hue_sat_node(bNodeTree *ntree, bNode *node)
+{
+	if (node->storage == NULL) {
+		return;
+	}
+
+	/* Make sure new sockets are properly created. */
+	node_verify_socket_templates(ntree, node);
+	/* Convert value from old storage to new sockets. */
+	NodeHueSat *nhs = node->storage;
+	bNodeSocket *hue = nodeFindSocket(node, SOCK_IN, "Hue"),
+	            *saturation = nodeFindSocket(node, SOCK_IN, "Saturation"),
+	            *value = nodeFindSocket(node, SOCK_IN, "Value");
+	((bNodeSocketValueFloat *)hue->default_value)->value = nhs->hue;
+	((bNodeSocketValueFloat *)saturation->default_value)->value = nhs->sat;
+	((bNodeSocketValueFloat *)value->default_value)->value = nhs->val;
+	/* Take care of possible animation. */
+	AnimData *adt = BKE_animdata_from_id(&ntree->id);
+	if (adt != NULL && adt->action != NULL) {
+		const char *prefix = BLI_sprintfN("nodes[\"%s\"]", node->name);
+		for (FCurve *fcu = adt->action->curves.first; fcu != NULL; fcu = fcu->next) {
+			if (STRPREFIX(fcu->rna_path, prefix)) {
+				anim_change_prop_name(fcu, prefix, "color_hue", "inputs[1].default_value");
+				anim_change_prop_name(fcu, prefix, "color_saturation", "inputs[2].default_value");
+				anim_change_prop_name(fcu, prefix, "color_value", "inputs[3].default_value");
+			}
+		}
+		MEM_freeN((char *)prefix);
+	}
+	/* Free storage, it is no longer used. */
+	MEM_freeN(node->storage);
+	node->storage = NULL;
 }
 
 void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *main)
@@ -1472,5 +1527,104 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *main)
 		for (Brush *br = main->brush.first; br; br = br->id.next) {
 			br->fill_threshold /= sqrt_3;
 		}
+
+		/* Custom motion paths */
+		if (!DNA_struct_elem_find(fd->filesdna, "bMotionPath", "int", "line_thickness")) {
+			Object *ob;
+			for (ob = main->object.first; ob; ob = ob->id.next) {
+				bMotionPath *mpath;
+				bPoseChannel *pchan;
+				mpath = ob->mpath;
+				if (mpath) {
+					mpath->color[0] = 1.0f;
+					mpath->color[1] = 0.0f;
+					mpath->color[2] = 0.0f;
+					mpath->line_thickness = 1;
+					mpath->flag |= MOTIONPATH_FLAG_LINES;
+				}
+				/* bones motion path */
+				if (ob->pose) {
+					for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
+						mpath = pchan->mpath;
+						if (mpath) {
+							mpath->color[0] = 1.0f;
+							mpath->color[1] = 0.0f;
+							mpath->color[2] = 0.0f;
+							mpath->line_thickness = 1;
+							mpath->flag |= MOTIONPATH_FLAG_LINES;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/* To be added to next subversion bump! */
+	{
+		/* Mask primitive adding code was not initializing correctly id_type of its points' parent. */
+		for (Mask *mask = main->mask.first; mask; mask = mask->id.next) {
+			for (MaskLayer *mlayer = mask->masklayers.first; mlayer; mlayer = mlayer->next) {
+				for (MaskSpline *mspline = mlayer->splines.first; mspline; mspline = mspline->next) {
+					int i = 0;
+					for (MaskSplinePoint *mspoint = mspline->points; i < mspline->tot_point; mspoint++, i++) {
+						if (mspoint->parent.id_type == 0) {
+							BKE_mask_parent_init(&mspoint->parent);
+						}
+					}
+				}
+			}
+		}
+
+		/* Fix for T50736, Glare comp node using same var for two different things. */
+		if (!DNA_struct_elem_find(fd->filesdna, "NodeGlare", "char", "star_45")) {
+			FOREACH_NODETREE(main, ntree, id) {
+				if (ntree->type == NTREE_COMPOSIT) {
+					ntreeSetTypes(NULL, ntree);
+					for (bNode *node = ntree->nodes.first; node; node = node->next) {
+						if (node->type == CMP_NODE_GLARE) {
+							NodeGlare *ndg = node->storage;
+							switch (ndg->type) {
+								case 2:  /* Grrrr! magic numbers :( */
+									ndg->streaks = ndg->angle;
+									break;
+								case 0:
+									ndg->star_45 = ndg->angle != 0;
+									break;
+								default:
+									break;
+							}
+						}
+					}
+				}
+			} FOREACH_NODETREE_END
+		}
+
+		if (!DNA_struct_elem_find(fd->filesdna, "SurfaceDeformModifierData", "float", "mat[4][4]")) {
+			for (Object *ob = main->object.first; ob; ob = ob->id.next) {
+				for (ModifierData *md = ob->modifiers.first; md; md = md->next) {
+					if (md->type == eModifierType_SurfaceDeform) {
+						SurfaceDeformModifierData *smd = (SurfaceDeformModifierData *)md;
+						unit_m4(smd->mat);
+					}
+				}
+			}
+		}
+	}
+}
+
+void do_versions_after_linking_270(Main *main)
+{
+	/* To be added to next subversion bump! */
+	{
+		FOREACH_NODETREE(main, ntree, id) {
+			if (ntree->type == NTREE_COMPOSIT) {
+				ntreeSetTypes(NULL, ntree);
+				for (bNode *node = ntree->nodes.first; node; node = node->next) {
+					if (node->type == CMP_NODE_HUE_SAT) {
+						do_version_hue_sat_node(ntree, node);
+					}
+				}
+			}
+		} FOREACH_NODETREE_END
 	}
 }

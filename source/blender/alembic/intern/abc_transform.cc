@@ -92,8 +92,7 @@ void AbcTransformWriter::do_write()
 	/* Only apply rotation to root camera, parenting will propagate it. */
 	if (m_object->type == OB_CAMERA && !has_parent_camera(m_object)) {
 		float rot_mat[4][4];
-		unit_m4(rot_mat);
-		rotate_m4(rot_mat, 'X', -M_PI_2);
+		axis_angle_to_mat4_single(rot_mat, 'X', -M_PI_2);
 		mul_m4_m4m4(mat, mat, rot_mat);
 	}
 
@@ -123,7 +122,7 @@ Imath::Box3d AbcTransformWriter::bounds()
 	return Imath::transform(bounds, m_matrix);
 }
 
-bool AbcTransformWriter::hasAnimation(Object */*ob*/) const
+bool AbcTransformWriter::hasAnimation(Object * /*ob*/) const
 {
 	/* TODO(kevin): implement this. */
 	return true;
@@ -147,6 +146,6 @@ bool AbcEmptyReader::valid() const
 
 void AbcEmptyReader::readObjectData(Main *bmain, float /*time*/)
 {
-	m_object = BKE_object_add_only_object(bmain, OB_EMPTY, m_object_name.c_str());
+	m_object = BKE_object_add_only_object(bmain, OB_EMPTY, m_data_name.c_str());
 	m_object->data = NULL;
 }

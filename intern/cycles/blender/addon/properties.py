@@ -288,7 +288,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
                 description="Probabilistically terminate light samples when the light contribution is below this threshold (more noise but faster rendering). "
                             "Zero disables the test and never ignores lights",
                 min=0.0, max=1.0,
-                default=0.05,
+                default=0.01,
                 )
 
         cls.caustics_reflective = BoolProperty(
@@ -528,6 +528,12 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
                 description="Use special type BVH optimized for hair (uses more ram but renders faster)",
                 default=True,
                 )
+        cls.debug_bvh_time_steps = IntProperty(
+                name="BVH Time Steps",
+                description="Split BVH primitives by this number of time steps to speed up render time in cost of memory",
+                default=0,
+                min=0, max=16,
+                )
         cls.tile_order = EnumProperty(
                 name="Tile Order",
                 description="Tile order for rendering",
@@ -632,6 +638,20 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
             items=enum_texture_limit
             )
 
+        cls.ao_bounces = IntProperty(
+            name="AO Bounces",
+            default=0,
+            description="Approximate indirect light with background tinted ambient occlusion at the specified bounce, 0 disables this feature",
+            min=0, max=1024,
+            )
+
+        cls.ao_bounces_render = IntProperty(
+            name="AO Bounces Render",
+            default=0,
+            description="Approximate indirect light with background tinted ambient occlusion at the specified bounce, 0 disables this feature",
+            min=0, max=1024,
+            )
+
         # Various fine-tuning debug flags
 
         def devices_update_callback(self, context):
@@ -645,8 +665,10 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         cls.debug_use_cpu_sse3 = BoolProperty(name="SSE3", default=True)
         cls.debug_use_cpu_sse2 = BoolProperty(name="SSE2", default=True)
         cls.debug_use_qbvh = BoolProperty(name="QBVH", default=True)
+        cls.debug_use_cpu_split_kernel = BoolProperty(name="Split Kernel", default=False)
 
         cls.debug_use_cuda_adaptive_compile = BoolProperty(name="Adaptive Compile", default=False)
+        cls.debug_use_cuda_split_kernel = BoolProperty(name="Split Kernel", default=False)
 
         cls.debug_opencl_kernel_type = EnumProperty(
             name="OpenCL Kernel Type",
@@ -672,6 +694,8 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
                 ),
             update=devices_update_callback
             )
+
+        cls.debug_opencl_kernel_single_program = BoolProperty(name="Single Program", default=False, update=devices_update_callback);
 
         cls.debug_use_opencl_debug = BoolProperty(name="Debug OpenCL", default=False)
 

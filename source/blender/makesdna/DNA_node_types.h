@@ -595,6 +595,7 @@ typedef struct NodeBilateralBlurData {
 	short iter, pad;
 } NodeBilateralBlurData;
 
+/* NOTE: Only for do-version code. */
 typedef struct NodeHueSat {
 	float hue, sat, val;
 } NodeHueSat;
@@ -667,7 +668,8 @@ typedef struct NodeScriptDict {
 /* qdn: glare node */
 typedef struct NodeGlare {
 	char quality, type, iter;
-	char angle, pad_c1, size, pad[2];
+	/* XXX angle is only kept for backward/forward compatibility, was used for two different things, see T50736. */
+	char angle DNA_DEPRECATED, pad_c1, size, star_45, streaks;
 	float colmod, mix, threshold, fade;
 	float angle_ofs, pad_f1;
 } NodeGlare;
@@ -811,7 +813,10 @@ typedef struct NodeShaderTexPointDensity {
 	short color_source;
 	short ob_color_source;
 	char vertex_attribute_name[64]; /* vertex attribute layer for color source, MAX_CUSTOMDATA_LAYER_NAME */
+	/* Used at runtime only by sampling RNA API. */
 	PointDensity pd;
+	int cached_resolution;
+	int pad2;
 } NodeShaderTexPointDensity;
 
 /* TEX_output */

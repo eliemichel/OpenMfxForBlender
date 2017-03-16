@@ -40,6 +40,7 @@
 
 #include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
 #include "BLI_mempool.h"
 
@@ -1125,6 +1126,7 @@ static void tselem_draw_icon(uiBlock *block, int xmax, float x, float y, TreeSto
 					case eModifierType_Cast:
 						UI_icon_draw(x, y, ICON_MOD_CAST); break;
 					case eModifierType_MeshDeform:
+					case eModifierType_SurfaceDeform:
 						UI_icon_draw(x, y, ICON_MOD_MESHDEFORM); break;
 					case eModifierType_Bevel:
 						UI_icon_draw(x, y, ICON_MOD_BEVEL); break;

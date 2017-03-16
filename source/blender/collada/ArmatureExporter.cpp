@@ -69,17 +69,21 @@ void ArmatureExporter::add_armature_bones(Object *ob_arm, Scene *sce,
 	// write bone nodes
 
 	bArmature * armature = (bArmature *)ob_arm->data;
-	ED_armature_to_edit(armature);
+	bool is_edited = armature->edbo != NULL;
 
-	bArmature *arm = (bArmature *)ob_arm->data;
-	for (Bone *bone = (Bone *)arm->bonebase.first; bone; bone = bone->next) {
+	if (!is_edited)
+		ED_armature_to_edit(armature);
+
+	for (Bone *bone = (Bone *)armature->bonebase.first; bone; bone = bone->next) {
 		// start from root bones
 		if (!bone->parent)
 			add_bone_node(bone, ob_arm, sce, se, child_objects);
 	}
 
-	ED_armature_from_edit(armature);
-	ED_armature_edit_free(armature);
+	if (!is_edited) {
+		ED_armature_from_edit(armature);
+		ED_armature_edit_free(armature);
+	}
 }
 
 void ArmatureExporter::write_bone_URLs(COLLADASW::InstanceController &ins, Object *ob_arm, Bone *bone)
@@ -151,11 +155,6 @@ void ArmatureExporter::find_objects_using_armature(Object *ob_arm, std::vector<O
 	}
 }
 #endif
-
-std::string ArmatureExporter::get_joint_sid(Bone *bone, Object *ob_arm)
-{
-	return get_joint_id(bone, ob_arm);
-}
 
 // parent_mat is armature-space
 void ArmatureExporter::add_bone_node(Bone *bone, Object *ob_arm, Scene *sce,

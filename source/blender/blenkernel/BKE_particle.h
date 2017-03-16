@@ -207,7 +207,7 @@ typedef struct ParticleCollisionElement {
 typedef struct ParticleCollision {
 	struct Object *current;
 	struct Object *hit;
-	struct Object *skip[PARTICLE_COLLISION_MAX_COLLISIONS+1];
+	struct Object *skip[PARTICLE_COLLISION_MAX_COLLISIONS + 1];
 	struct Object *emitter;
 
 	struct CollisionModifierData *md; // collision modifier for current object;
@@ -384,7 +384,7 @@ void psys_get_birth_coords(struct ParticleSimulationData *sim, struct ParticleDa
 void particle_system_update(struct Scene *scene, struct Object *ob, struct ParticleSystem *psys, const bool use_render_params);
 
 /* Callback format for performing operations on ID-pointers for particle systems */
-typedef void (*ParticleSystemIDFunc)(struct ParticleSystem *psys, struct ID **idpoin, void *userdata, int cd_flag);
+typedef void (*ParticleSystemIDFunc)(struct ParticleSystem *psys, struct ID **idpoin, void *userdata, int cb_flag);
 
 void BKE_particlesystem_id_loop(struct ParticleSystem *psys, ParticleSystemIDFunc func, void *userdata);
 

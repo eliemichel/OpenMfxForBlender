@@ -438,7 +438,7 @@ static void arg_py_context_restore(
  *   see: `doc/manpage/blender.1.py`
  * - Parsed and extracted for the manual,
  *   which converts our ad-hoc formatting to reStructuredText.
- *   see: http://www.blender.org/manual/advanced/command_line.html
+ *   see: https://docs.blender.org/manual/en/dev/advanced/command_line.html
  *
  * \{ */
 
@@ -554,6 +554,7 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
 	BLI_argsPrintArgDoc(ba, "--debug-gpumem");
 	BLI_argsPrintArgDoc(ba, "--debug-wm");
 	BLI_argsPrintArgDoc(ba, "--debug-all");
+	BLI_argsPrintArgDoc(ba, "--debug-io");
 
 	printf("\n");
 	BLI_argsPrintArgDoc(ba, "--debug-fpe");
@@ -585,14 +586,14 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
 	BLI_argsPrintArgDoc(ba, "--");
 
 	printf("\n");
-	printf("Other Options:\n");
-	BLI_argsPrintOtherDoc(ba);
-
-	/* keep last args */
-	printf("\n");
 	printf("Experimental Features:\n");
 	BLI_argsPrintArgDoc(ba, "--enable-new-depsgraph");
 	BLI_argsPrintArgDoc(ba, "--enable-new-basic-shader-glsl");
+
+	/* Other options _must_ be last (anything not handled will show here) */
+	printf("\n");
+	printf("Other Options:\n");
+	BLI_argsPrintOtherDoc(ba);
 
 	printf("\n");
 	printf("Argument Parsing:\n");
@@ -753,6 +754,14 @@ static const char arg_handle_debug_mode_generic_set_doc_gpumem[] =
 static int arg_handle_debug_mode_generic_set(int UNUSED(argc), const char **UNUSED(argv), void *data)
 {
 	G.debug |= GET_INT_FROM_POINTER(data);
+	return 0;
+}
+
+static const char arg_handle_debug_mode_io_doc[] =
+"\n\tEnable debug messages for I/O (collada, ...)";
+static int arg_handle_debug_mode_io(int UNUSED(argc), const char **UNUSED(argv), void *UNUSED(data))
+{
+	G.debug |= G_DEBUG_IO;
 	return 0;
 }
 
@@ -937,7 +946,7 @@ static int arg_handle_native_pixels_set(int UNUSED(argc), const char **UNUSED(ar
 }
 
 static const char arg_handle_with_borders_doc[] =
-"\n\tForce opening without borders"
+"\n\tForce opening with borders"
 ;
 static int arg_handle_with_borders(int UNUSED(argc), const char **UNUSED(argv), void *UNUSED(data))
 {
@@ -1355,7 +1364,7 @@ static int arg_handle_render_frame(int argc, const char **argv, void *data)
 
 			re = RE_NewRender(scene->id.name);
 			BLI_begin_threaded_malloc();
-			BKE_reports_init(&reports, RPT_PRINT);
+			BKE_reports_init(&reports, RPT_STORE);
 
 			RE_SetReports(re, &reports);
 			for (int i = 0; i < frames_range_len; i++) {
@@ -1370,6 +1379,7 @@ static int arg_handle_render_frame(int argc, const char **argv, void *data)
 				}
 			}
 			RE_SetReports(re, NULL);
+			BKE_reports_clear(&reports);
 			BLI_end_threaded_malloc();
 			MEM_freeN(frame_range_arr);
 			return 1;
@@ -1397,10 +1407,11 @@ static int arg_handle_render_animation(int UNUSED(argc), const char **UNUSED(arg
 		Render *re = RE_NewRender(scene->id.name);
 		ReportList reports;
 		BLI_begin_threaded_malloc();
-		BKE_reports_init(&reports, RPT_PRINT);
+		BKE_reports_init(&reports, RPT_STORE);
 		RE_SetReports(re, &reports);
 		RE_BlenderAnim(re, bmain, scene, NULL, scene->lay, scene->r.sfra, scene->r.efra, scene->r.frame_step);
 		RE_SetReports(re, NULL);
+		BKE_reports_clear(&reports);
 		BLI_end_threaded_malloc();
 	}
 	else {
@@ -1805,6 +1816,8 @@ void main_args_setup(bContext *C, bArgs *ba, SYS_SystemHandle *syshandle)
 	            CB_EX(arg_handle_debug_mode_generic_set, wm), (void *)G_DEBUG_WM);
 	BLI_argsAdd(ba, 1, NULL, "--debug-all", CB(arg_handle_debug_mode_all), NULL);
 
+	BLI_argsAdd(ba, 1, NULL, "--debug-io", CB(arg_handle_debug_mode_io), NULL);
+
 	BLI_argsAdd(ba, 1, NULL, "--debug-fpe",
 	            CB(arg_handle_debug_fpe_set), NULL);
 
@@ -1875,7 +1888,7 @@ void main_args_setup(bContext *C, bArgs *ba, SYS_SystemHandle *syshandle)
 	BLI_argsAdd(ba, 4, "-E", "--engine", CB(arg_handle_engine_set), C);
 
 	BLI_argsAdd(ba, 4, "-F", "--render-format", CB(arg_handle_image_type_set), C);
-	BLI_argsAdd(ba, 4, "-t", "--threads", CB(arg_handle_threads_set), NULL);
+	BLI_argsAdd(ba, 1, "-t", "--threads", CB(arg_handle_threads_set), NULL);
 	BLI_argsAdd(ba, 4, "-x", "--use-extension", CB(arg_handle_extension_set), C);
 
 #undef CB
