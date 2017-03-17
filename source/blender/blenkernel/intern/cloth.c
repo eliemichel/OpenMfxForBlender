@@ -609,13 +609,7 @@ bool is_basemesh_valid(Object *ob, Object *basemesh, ClothModifierData *clmd)
 		clmd = (ClothModifierData *)md;
 	}
 
-	if (basemesh == md->scene->obedit) {
-		BMEditMesh *em = BKE_editmesh_from_object(basemesh);
-		basedm = em->derivedFinal;
-	}
-	else {
-		basedm = basemesh->derivedFinal;
-	}
+	basedm = mesh_get_derived_final(md->scene, basemesh, 0);
 
 	return clmd->clothObject->mvert_num == basedm->getNumVerts(basedm);
 }
