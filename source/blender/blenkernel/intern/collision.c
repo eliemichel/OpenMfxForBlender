@@ -70,7 +70,7 @@ Collision modifier code start
 /* step is limited from 0 (frame start position) to 1 (frame end position) */
 void collision_move_object(CollisionModifierData *collmd, float step, float prevstep)
 {
-	float tv[3] = {0, 0, 0};
+	float oldx[3];
 	unsigned int i = 0;
 
 	/* the collider doesn't move this frame */
@@ -83,15 +83,14 @@ void collision_move_object(CollisionModifierData *collmd, float step, float prev
 	}
 
 	for (i = 0; i < collmd->mvert_num; i++) {
-		sub_v3_v3v3(tv, collmd->xnew[i].co, collmd->x[i].co);
-		VECADDS(collmd->current_x[i].co, collmd->x[i].co, tv, prevstep);
-		VECADDS(collmd->current_xnew[i].co, collmd->x[i].co, tv, step);
-		sub_v3_v3v3(collmd->current_v[i].co, collmd->current_xnew[i].co, collmd->current_x[i].co);
+		interp_v3_v3v3(oldx, collmd->x[i].co, collmd->xnew[i].co, prevstep);
+		interp_v3_v3v3(collmd->current_x[i].co, collmd->x[i].co, collmd->xnew[i].co, step);
+		sub_v3_v3v3(collmd->current_v[i].co, collmd->current_x[i].co, oldx);
 	}
 
 	bvhtree_update_from_mvert(
-	        collmd->bvhtree, collmd->current_x, collmd->current_xnew,
-	        collmd->tri, collmd->tri_num, true);
+	        collmd->bvhtree, collmd->current_x, NULL,
+	        collmd->tri, collmd->tri_num, false);
 }
 
 BVHTree *bvhtree_build_from_mvert(
