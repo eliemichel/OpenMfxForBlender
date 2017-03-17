@@ -131,7 +131,7 @@ static EnumPropertyItem translate_items_full[] = {
 	"(bone Y axis for pose mode)" },
 	{ V3D_MANIP_GIMBAL, "GIMBAL", ICON_MAN_TRANS, "Gimbal", "Align each axis to the Euler rotation axis as used for input" },
 	{ V3D_MANIP_VIEW,   "VIEW",   ICON_MAN_TRANS, "View", "Align the transformation axes to the window" },
-	{ V3D_MANIP_ALONG_ROTATION, "ALONGROTATION", ICON_MAN_TRANS, "Along Rotation", "The axis is independent to the orientation of the selected entity, i.e., "
+	{ V3D_MANIP_AXIAL, "AXIAL", ICON_MAN_TRANS, "Axial", "The axis is independent to the orientation of the selected entity, i.e., "
 	"When dragging individual axis it will always drag along one axis at a time."},
     { V3D_MANIP_NONE,   "NONE",	  ICON_MAN_TRANS, "None", "This will hide this particular axis"},
 	{0, NULL, 0, NULL, NULL}
@@ -194,7 +194,7 @@ static EnumPropertyItem transform_orientation_items[] = {
 	                   "(bone Y axis for pose mode)"},
 	{V3D_MANIP_GIMBAL, "GIMBAL", 0, "Gimbal", "Align each axis to the Euler rotation axis as used for input"},
 	{V3D_MANIP_VIEW,   "VIEW", 0, "View", "Align the transformation axes to the window"},
-	{ V3D_MANIP_ALONG_ROTATION, "ALONGROTATION", 0, "Along Rotation", "The axis is independent to the orientation of the selected entity, i.e., "
+	{ V3D_MANIP_AXIAL, "AXIAL", 0, "Axial", "The axis is independent to the orientation of the selected entity, i.e., "
 	"When dragging individual axis it will always drag along one axis at a time." },
 	{V3D_MANIP_MULTI_TRANSF, "MULTITRANSFORM", 0, "Multiple", "Set different orientations to different transformation manipulators"},
 	//{V3D_MANIP_CUSTOM, "CUSTOM", 0, "Custom", "Use a custom transform orientation"},

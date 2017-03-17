@@ -767,7 +767,7 @@ static int calc_manipulator_stats(const bContext *C)
 			 * on child objects/bones. If the entity is not parented to anything it behaves
 			 * like a global orientation
 			 */
-			case V3D_MANIP_ALONG_ROTATION:
+			case V3D_MANIP_AXIAL:
 			{
 				// Checking that we are in pose mode - particularly important for rigs
 				if (ob->mode & OB_MODE_POSE) {
@@ -863,7 +863,7 @@ static int calc_manipulator_stats(const bContext *C)
 							copy_m4_m3(mtx_tranf[i], mat);
 							break;
 						}
-						case V3D_MANIP_ALONG_ROTATION:
+						case V3D_MANIP_AXIAL:
 						{
 							if (ob->mode & OB_MODE_POSE) {
 								bPoseChannel *posebone = CTX_data_active_pose_bone(C);

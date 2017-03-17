@@ -683,8 +683,8 @@ void setUserConstraint(TransInfo *t, short orientation, int mode, const char fte
 			BLI_snprintf(text, sizeof(text), ftext, IFACE_("gimbal"));
 			setConstraint(t, t->spacemtx, mode, text);
 			break;
-		case V3D_MANIP_ALONG_ROTATION:
-			BLI_snprintf(text, sizeof(text), ftext, IFACE_("parent local"));
+		case V3D_MANIP_AXIAL:
+			BLI_snprintf(text, sizeof(text), ftext, IFACE_("axial"));
 			setConstraint(t, t->spacemtx, mode, text);
 			break;
 		default: /* V3D_MANIP_CUSTOM */

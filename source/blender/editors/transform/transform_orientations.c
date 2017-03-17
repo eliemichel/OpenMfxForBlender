@@ -514,7 +514,7 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 			}
 			break;
 
-		case V3D_MANIP_ALONG_ROTATION:
+		case V3D_MANIP_AXIAL:
 			BLI_strncpy(t->spacename, IFACE_("along axis"), sizeof(t->spacename));
 			if (ob)
 			{
@@ -547,9 +547,8 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 				normalize_m3(t->spacemtx);
 				break;
 			}
-			else {
+			else
 				unit_m3(t->spacemtx);
-			}
 			break;
 
 		default: /* V3D_MANIP_CUSTOM */
@@ -621,7 +620,7 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 			}
 			break;
 
-		case V3D_MANIP_ALONG_ROTATION:
+		case V3D_MANIP_AXIAL:
 			BLI_strncpy(t->spacename, IFACE_("along axis"), sizeof(t->spacename));
 			if (ob)
 			{
@@ -654,23 +653,9 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 				normalize_m3(omtx);
 				break;
 			}
-			else {
-				unit_m3(omtx);
-			}
-			break;
-
-
-			/*if (ob && ob->parent) {
-				copy_m3_m4(omtx, ob->parent->obmat);
-				normalize_m3(omtx);
-			}
-			else if (posebone) {
-				copy_m3_m4(omtx, posebone->parent->pose_mat);
-				normalize_m3(omtx);
-			}
 			else
 				unit_m3(omtx);
-			break;*/
+			break;
 		
 		default:
 			if (applyTransformOrientation(C, omtx, t->spacename, t->current_orientation - V3D_MANIP_CUSTOM)) {
