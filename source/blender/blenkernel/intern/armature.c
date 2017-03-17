@@ -2435,3 +2435,60 @@ bPoseChannel *BKE_armature_splineik_solver_find_root(
 	}
 	return rootchan;
 }
+
+/**************** CUSTOM FUNCTION ****************/
+/*
+* Takes in an empty matrix and puts in the matrix with all the constraints
+* This matrix represents what the pose bone would be if it had no transformations.
+* @mat			A matrix that will be passed by pointer that will hold the final matrix.
+* @posebone	A bPoseChannel structure that is required for part of the calculation. This is passed by pointer.
+*/
+void BKE_pose_computing_pchan_rest(bPoseChannel *pchan, float mat[3][3])
+{
+	bPoseChannel *parchan = pchan->parent;
+
+	// Setting up matrices and vectors for final computation
+	float chan_mat[4][4];
+	const float size[3] = { 1.0f, 1.0f, 1.0f };
+	const float rots[3] = { 0.0f, 0.0f, 0.0f };
+	const float locs[3] = { 0.0f, 0.0f, 0.0f };
+	float smat[3][3];
+	float rmat[3][3];
+	float tmat[3][3];
+	float imat[3][3];
+	float vec[3];
+	float bone_length;
+
+	/* get scaling matrix for pose bone */
+	size_to_mat3(smat, size);
+
+	/* get rotation matrix for pose bone*/
+	eulO_to_mat3(rmat, rots, 6);
+
+	/* Deriving pose bone chan_mat matrix - This is the matrix that represent the local/size/rot of the bone before deformers */
+	mul_m3_m3m3(tmat, rmat, smat);
+	copy_m4_m3(chan_mat, tmat);
+	copy_v3_v3(chan_mat[3], locs);
+
+	/* Deriving bone's bone_mat matrix - This rotation derived from head/tail/roll */
+	float bone_mat[3][3];
+	float offs_bone[4][4];
+	float rotscale_mat[4][4];
+	float loc_mat[4][4];
+	sub_v3_v3v3(vec, pchan->bone->tail, pchan->bone->head);
+	vec_roll_to_mat3(vec, pchan->bone->roll, bone_mat);
+
+
+	/* Deriving pose_mat - constraints accumulate here. in the end, pose_mat = bone->arm_mat * chan_mat */
+	copy_m4_m3(offs_bone, bone_mat);
+	copy_v3_v3(offs_bone[3], pchan->bone->head);
+	offs_bone[3][1] += pchan->bone->parent->length;
+	mul_m4_m4m4(rotscale_mat, parchan->pose_mat, offs_bone);
+	copy_m4_m4(loc_mat, rotscale_mat);
+	float pose_mat[4][4];
+	mul_m4_m4m4(pose_mat, rotscale_mat, chan_mat);
+	mul_v3_m4v3(pose_mat[3], loc_mat, chan_mat[3]);
+
+	// mat is the [pose_mat]3x3 submatrix
+	copy_m3_m4(mat, pose_mat);
+}

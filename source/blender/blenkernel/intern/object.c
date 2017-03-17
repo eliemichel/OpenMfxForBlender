@@ -3732,3 +3732,46 @@ bool BKE_object_modifier_update_subframe(Scene *scene, Object *ob, bool update_m
 
 	return false;
 }
+
+/************************* CUSTOM FUNCTIONS *************************/
+
+/*
+* This takes an empty matrix and an object and puts in values of the oriented object in rest position
+*
+* @mfm The final matrix that will hold the location/scale/rotation matrix assuming rest position. Passed by pointer.
+* @ob	The selected active object. Passed by pointer.
+*/
+void BKE_object_computing_obmat_rest(struct Object *ob, float mfm[4][4])
+{
+	// Setting up basic arrays and matrices to be used for the final computation
+	float rmat[3][3];
+	float smat[3][3];
+	float mat[3][3];
+	float eul[3] = { 0.0f, 0.0f, 0.0f };
+	float loc[3] = { 0.0f, 0.0f, 0.0f };
+	float scl[3] = { 1.0f, 1.0f, 1.0f };
+
+	// Make Scale matrix assuming a unit size
+	float vec[3];
+	mul_v3_v3v3(vec, scl, scl);
+	size_to_mat3(smat, vec);
+
+	// Make Rotation matrix assuming no rotation
+	eulO_to_mat3(rmat, eul, 1);
+
+	// Calculating matrix that is a composite of the rotation and scale matrix
+	mul_m3_m3m3(mat, rmat, smat);
+
+	/* Transform matrix M - deals with the case that the object has a parent. */
+	copy_m4_m3(mfm, mat);
+	add_v3_v3v3(mfm[3], loc, loc);
+	if (ob->parent) {
+		float totmat[4][4];
+		float tmat[4][4];
+		copy_m4_m4(totmat, ob->parent->obmat);
+
+		mul_m4_m4m4(tmat, totmat, ob->parentinv);
+		mul_m4_m4m4(mfm, tmat, mfm);
+
+	}
+}

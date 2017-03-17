@@ -267,10 +267,17 @@ bool gimbal_axis(Object *ob, float gmat[3][3])
 	return 0;
 }
 
+/*
+ * Takes in an empty matrix and puts in the matrix with all the constraints
+ * This matrix represents what the pose bone would be if it had no transformations. 
+ * @mat			A matrix that will be passed by pointer that will hold the final matrix.
+ * @posebone	A bPoseChannel structure that is required for part of the calculation. This is passed by pointer.
+ */
 static void along_axis_rotation_for_poses(float mat[3][3], bPoseChannel *posebone)
 {
 	bPoseChannel *parchan = posebone->parent;
 
+	// Setting up matrices and vectors for final computation
 	float chan_mat[4][4];
 	const float size[3] = { 1.0f, 1.0f, 1.0f };
 	const float rots[3] = { 0.0f, 0.0f, 0.0f };
@@ -282,18 +289,18 @@ static void along_axis_rotation_for_poses(float mat[3][3], bPoseChannel *posebon
 	float vec[3];
 	float bone_length;
 
-	/* get scaling matrix */
+	/* get scaling matrix for pose bone */
 	size_to_mat3(smat, size);
 
-	/* get rotation matrix */
+	/* get rotation matrix for pose bone*/
 	eulO_to_mat3(rmat, rots, 6);
 
-	/* calculate matrix of the bone (as 3x3 matrix, but then copy the 4x4) */
+	/* Deriving pose bone chan_mat matrix - This is the matrix that represent the local/size/rot of the bone before deformers */
 	mul_m3_m3m3(tmat, rmat, smat);
 	copy_m4_m3(chan_mat, tmat);
 	copy_v3_v3(chan_mat[3], locs);
 
-	/* solving for bone_mat */
+	/* Deriving bone's bone_mat matrix - This rotation derived from head/tail/roll */
 	float bone_mat[3][3];
 	float offs_bone[4][4];
 	float rotscale_mat[4][4];
@@ -301,13 +308,13 @@ static void along_axis_rotation_for_poses(float mat[3][3], bPoseChannel *posebon
 	sub_v3_v3v3(vec, posebone->bone->tail, posebone->bone->head);
 	vec_roll_to_mat3(vec, posebone->bone->roll, bone_mat);
 
+
+	/* Deriving pose_mat - constraints accumulate here. in the end, pose_mat = bone->arm_mat * chan_mat */
 	copy_m4_m3(offs_bone, bone_mat);
 	copy_v3_v3(offs_bone[3], posebone->bone->head);
 	offs_bone[3][1] += posebone->bone->parent->length;
 	mul_m4_m4m4(rotscale_mat, parchan->pose_mat, offs_bone);
 	copy_m4_m4(loc_mat, rotscale_mat);
-
-	/* Trying to get pose_mat*/
 	float pose_mat[4][4];
 	mul_m4_m4m4(pose_mat, rotscale_mat, chan_mat);
 	mul_v3_m4v3(pose_mat[3], loc_mat, chan_mat[3]);
@@ -316,26 +323,34 @@ static void along_axis_rotation_for_poses(float mat[3][3], bPoseChannel *posebon
 	copy_m3_m4(mat, pose_mat);
 }
 
+/*
+ * This takes an empty matrix and an object and puts in values of the oriented object in rest position
+ * 
+ * @mfm The final matrix that will hold the location/scale/rotation matrix assuming rest position. Passed by pointer.
+ * @ob	The selected active object. Passed by pointer.
+ */
 static void along_axis_rotation_for_objects(float mfm[4][4], Object *ob)
 {
+	// Setting up basic arrays and matrices to be used for the final computation
 	float rmat[3][3];
 	float smat[3][3];
 	float mat[3][3];
-
 	float eul[3] = { 0.0f, 0.0f, 0.0f };
 	float loc[3] = { 0.0f, 0.0f, 0.0f };
 	float scl[3] = { 1.0f, 1.0f, 1.0f };
 
-	/* Make Scale       1,1,1 */
+	// Make Scale matrix assuming a unit size
 	float vec[3];
 	mul_v3_v3v3(vec, scl, scl);
 	size_to_mat3(smat, vec);
 
-	/* Make Rotation    0,0,0 */
+	// Make Rotation matrix assuming no rotation
 	eulO_to_mat3(rmat, eul, 1);
+
+	// Calculating matrix that is a composite of the rotation and scale matrix
 	mul_m3_m3m3(mat, rmat, smat);
 
-	/* Transform matrix M */
+	/* Transform matrix M - deals with the case that the object has a parent. */
 	copy_m4_m3(mfm, mat);
 	add_v3_v3v3(mfm[3], loc, loc);
 	if (ob->parent) {
@@ -754,30 +769,38 @@ static int calc_manipulator_stats(const bContext *C)
 			 */
 			case V3D_MANIP_ALONG_ROTATION:
 			{
+				// Checking that we are in pose mode - particularly important for rigs
 				if (ob->mode & OB_MODE_POSE) {
 					bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+
+					// For god node (bottom of hierarchy)
 					if (!posebone->parent)
 					{
+						// Works like local
 						copy_m4_m4(rv3d->twmat, ob->obmat);
 						normalize_m4(rv3d->twmat);
 						break;
 					}
 
-					float mat[3][3];
-					along_axis_rotation_for_poses(mat, posebone);
+					float mat[3][3]; // Final matrix that will be put in twmat for the region view
+					BKE_pose_computing_pchan_rest(posebone, mat);
 					copy_m4_m3(rv3d->twmat, mat);
 					break;
 				}
+
+				// This is for regular non-rig objects 
 				if (is_zero_v3(ob->rot))
 					copy_m4_m4(rv3d->twmat, ob->obmat);
 				else {
 					float mfm[4][4]; // My final Matrix
-					along_axis_rotation_for_objects(mfm, ob);
+					BKE_object_computing_obmat_rest(ob, mfm);
 					copy_m4_m4(rv3d->twmat, mfm);
 				}
 				normalize_m4(rv3d->twmat);
 				break;
 			}
+
+			// V3D_MANIP_MULTI_TRANSF - allows for users to set different orientations to different transformations simulataneously 
 			case V3D_MANIP_MULTI_TRANSF:
 			{
 				/* Set up the twtype so that all transformations are automatically set */
@@ -842,34 +865,29 @@ static int calc_manipulator_stats(const bContext *C)
 						}
 						case V3D_MANIP_ALONG_ROTATION:
 						{
-							//bPoseChannel *posebone = CTX_data_active_pose_bone(C);
-							//if (!(ob->parent) && !(posebone))
-							//	break;
-							//else {
-							//	if ((ob->mode & OB_MODE_POSE) && ob->parent) {
-							//		/* each bone moves on its own local axis, but  to avoid confusion,
-							//		* use the active pones axis for display [#33575], this works as expected on a single bone
-							//		* and users who select many bones will understand whats going on and what local means
-							//		* when they start transforming */
-							//		float mat[3][3];
-							//		ED_getTransformOrientationMatrix(C, mat, v3d->around);
-							//		copy_m4_m3(mtx_tranf[i], mat);
-							//		break;
-							//	}
-							//	if (posebone) {
-							//		if (posebone->parent) {
-							//			copy_m4_m4(mtx_tranf[i], posebone->parent->pose_mat);
-							//			normalize_m4(mtx_tranf[i]);
-							//			break;
-							//		}
-							//		break;
+							if (ob->mode & OB_MODE_POSE) {
+								bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+								if (!posebone->parent)
+								{
+									copy_m4_m4(mtx_tranf[i], ob->obmat);
+									normalize_m4(mtx_tranf[i]);
+									break;
+								}
 
-							//	}
-							//	copy_m4_m4(mtx_tranf[i], ob->parent->obmat);
-							//	normalize_m4(mtx_tranf[i]);
-							//	break;
-
-							//}
+								float mat[3][3];
+								BKE_pose_computing_pchan_rest(posebone, mat);
+								copy_m4_m3(mtx_tranf[i], mat);
+								break;
+							}
+							if (is_zero_v3(ob->rot))
+								copy_m4_m4(mtx_tranf[i], ob->obmat);
+							else {
+								float mfm[4][4]; // My final Matrix
+								BKE_object_computing_obmat_rest(ob, mfm);
+								copy_m4_m4(mtx_tranf[i], mfm);
+							}
+							normalize_m4(mtx_tranf[i]);
+							break;
 						}
 					}
 				}

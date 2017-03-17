@@ -515,138 +515,41 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 			break;
 
 		case V3D_MANIP_ALONG_ROTATION:
-			BLI_strncpy(t->spacename, IFACE_("local child"), sizeof(t->spacename));
+			BLI_strncpy(t->spacename, IFACE_("along axis"), sizeof(t->spacename));
 			if (ob)
 			{
 				if (ob->mode & OB_MODE_POSE) {
 					bPoseChannel *posebone = CTX_data_active_pose_bone(C);
-					bPoseChannel *parchan = posebone->parent;
-					if (!parchan)
+
+					// For god node (bottom of hierarchy)
+					if (!posebone->parent)
 					{
+						// Works like local
 						copy_m3_m4(t->spacemtx, ob->obmat);
 						normalize_m3(t->spacemtx);
 						break;
 					}
 
-					float chan_mat[4][4];
-					const float size[3] = { 1.0f, 1.0f, 1.0f };
-					const float rots[3] = { 0.0f, 0.0f, 0.0f };
-					const float locs[3] = { 0.0f, 0.0f, 0.0f };
-					float smat[3][3];
-					float rmat[3][3];
-					float tmat[3][3];
-					float imat[3][3], mat[3][3];
-					float vec[3];
-					float bone_length;
-
-					/* get scaling matrix */
-					size_to_mat3(smat, size);
-
-					/* get rotation matrix */
-					eulO_to_mat3(rmat, rots, 6);
-
-					/* calculate matrix of the bone (as 3x3 matrix, but then copy the 4x4) */
-					mul_m3_m3m3(tmat, rmat, smat);
-					copy_m4_m3(chan_mat, tmat);
-					copy_v3_v3(chan_mat[3], locs);
-
-					/* solving for bone_mat */
-					float bone_mat[3][3];
-					float offs_bone[4][4];
-					float rotscale_mat[4][4];
-					float loc_mat[4][4];
-					sub_v3_v3v3(vec, posebone->bone->tail, posebone->bone->head);
-					bone_length = len_v3(vec);
-					vec_roll_to_mat3(vec, posebone->bone->roll, bone_mat);
-
-					copy_m4_m3(offs_bone, bone_mat);
-					copy_v3_v3(offs_bone[3], posebone->bone->head);
-					offs_bone[3][1] += posebone->bone->parent->length;
-					mul_m4_m4m4(rotscale_mat, parchan->pose_mat, offs_bone);
-					copy_m4_m4(loc_mat, rotscale_mat);
-
-					/* Trying to get pose_mat*/
-					float pose_mat[4][4];
-					mul_m4_m4m4(pose_mat, rotscale_mat, chan_mat);
-					mul_v3_m4v3(pose_mat[3], loc_mat, chan_mat[3]);
-
-					// mat is the [pose_mat]3x3 submatrix
-					copy_m3_m4(mat, pose_mat);
+					float mat[3][3]; // Final matrix that will be put in twmat for the region view
+					BKE_pose_computing_pchan_rest(posebone, mat);
 					copy_m3_m3(t->spacemtx, mat);
 					break;
 				}
-				if (is_zero_v3(ob->rot)) {
+
+				// This is for regular non-rig objects 
+				if (is_zero_v3(ob->rot))
 					copy_m3_m4(t->spacemtx, ob->obmat);
-				}
 				else {
 					float mfm[4][4]; // My final Matrix
-
-					float rmat[3][3];
-					float smat[3][3];
-					float mat[3][3];
-
-					float eul[3] = { 0.0f, 0.0f, 0.0f };
-					float loc[3] = { 0.0f, 0.0f, 0.0f };
-					float scl[3] = { 1.0f, 1.0f, 1.0f };
-
-					/* Make Scale       1,1,1 */
-					float vec[3];
-					mul_v3_v3v3(vec, scl, scl);
-					size_to_mat3(smat, vec);
-
-					/* Make Rotation    0,0,0 */
-					eulO_to_mat3(rmat, eul, 1);
-					mul_m3_m3m3(mat, rmat, smat);
-
-					/* Transform matrix M */
-					copy_m4_m3(mfm, mat);
-					add_v3_v3v3(mfm[3], loc, loc);
-					if (ob->parent) {
-						float totmat[4][4];
-						float tmat[4][4];
-						copy_m4_m4(totmat, ob->parent->obmat);
-
-						mul_m4_m4m4(tmat, totmat, ob->parentinv);
-						mul_m4_m4m4(mfm, tmat, mfm);
-
-					}
-
+					BKE_object_computing_obmat_rest(ob, mfm);
 					copy_m3_m4(t->spacemtx, mfm);
-
 				}
 				normalize_m3(t->spacemtx);
+				break;
 			}
-			//if (!(ob->parent) && !(posebone))
-			//	break;
-			//else {
-				//if (ob && ob->parent) {
-				//	copy_m3_m4(t->spacemtx, ob->parent->obmat);
-				//	normalize_m3(t->spacemtx);
-				//}
-				//else if (posebone)
-				//{
-				//	if (!(posebone->parent))
-				//		break;
-				//	if (is_zero_v3(posebone->eul)) {
-				//		//copy_m3_m4(t->spacemtx, posebone->parent->pose_mat);
-				//		copy_m3_m4(t->spacemtx, posebone->parent->pose_mat);
-				//	}
-				//	else
-				//	{
-				//		float temp_eul[3];
-				//		float revRot[3][3];
-				//		copy_v3_v3(temp_eul, posebone->eul);
-				//		negate_v3(temp_eul);
-				//		eulO_to_mat3(revRot, temp_eul, posebone->rotmode);
-				//		mul_m4_m4m3(t->spacemtx, posebone->pose_mat, revRot);
-				//		
-				//	}
-				//	normalize_m3(t->spacemtx);
-				//}
 			else {
 				unit_m3(t->spacemtx);
 			}
-			//}
 			break;
 
 		default: /* V3D_MANIP_CUSTOM */
@@ -719,9 +622,45 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 			break;
 
 		case V3D_MANIP_ALONG_ROTATION:
-			BLI_strncpy(t->spacename, IFACE_("parent"), sizeof(t->spacename));
+			BLI_strncpy(t->spacename, IFACE_("along axis"), sizeof(t->spacename));
+			if (ob)
+			{
+				if (ob->mode & OB_MODE_POSE) {
+					bPoseChannel *posebone = CTX_data_active_pose_bone(C);
 
-			if (ob && ob->parent) {
+					// For god node (bottom of hierarchy)
+					if (!posebone->parent)
+					{
+						// Works like local
+						copy_m3_m4(omtx, ob->obmat);
+						normalize_m3(omtx);
+						break;
+					}
+
+					float mat[3][3]; // Final matrix that will be put in twmat for the region view
+					BKE_pose_computing_pchan_rest(posebone, mat);
+					copy_m3_m3(omtx, mat);
+					break;
+				}
+
+				// This is for regular non-rig objects 
+				if (is_zero_v3(ob->rot))
+					copy_m3_m4(omtx, ob->obmat);
+				else {
+					float mfm[4][4]; // My final Matrix
+					BKE_object_computing_obmat_rest(ob, mfm);
+					copy_m3_m4(omtx, mfm);
+				}
+				normalize_m3(omtx);
+				break;
+			}
+			else {
+				unit_m3(omtx);
+			}
+			break;
+
+
+			/*if (ob && ob->parent) {
 				copy_m3_m4(omtx, ob->parent->obmat);
 				normalize_m3(omtx);
 			}
@@ -731,7 +670,7 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 			}
 			else
 				unit_m3(omtx);
-			break;
+			break;*/
 		
 		default:
 			if (applyTransformOrientation(C, omtx, t->spacename, t->current_orientation - V3D_MANIP_CUSTOM)) {

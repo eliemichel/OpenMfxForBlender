@@ -123,6 +123,8 @@ void BKE_pchan_apply_mat4(struct bPoseChannel *pchan, float mat[4][4], bool use_
 void BKE_pchan_to_mat4(struct bPoseChannel *pchan, float chan_mat[4][4]);
 void BKE_pchan_calc_mat(struct bPoseChannel *pchan);
 
+void BKE_pose_computing_pchan_rest(struct bPoseChannel *pchan, float mat[3][3]);
+
 /* Get the "pchan to pose" transform matrix. These matrices apply the effects of
  * HINGE/NO_SCALE/NO_LOCAL_LOCATION options over the pchan loc/rot/scale transformations. */
 void BKE_pchan_to_pose_mat(struct bPoseChannel *pchan, float rotscale_mat[4][4], float loc_mat[4][4]);
