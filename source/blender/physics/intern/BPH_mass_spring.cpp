@@ -1079,13 +1079,18 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 		ImplicitSolverResult result;
 		float dt = max_ff((clmd->sim_parms->dt * clmd->sim_parms->timescale * cloth->adapt_fact),
 		                  (1.0f / clmd->sim_parms->max_subframes));
+		bool is_max;
+
 		max_vel = 0.0f;
 		max_elong = 0.0f;
 		adapt_fact = FLT_MAX;
 
 		if (step + dt > tf) {
 			dt = tf - step;
+			is_max = true;
 		}
+
+		is_max = is_max || ((clmd->sim_parms->max_subframes > 0) && ((1.0f / clmd->sim_parms->max_subframes) > dt));
 
 		if (is_hair) {
 			/* determine contact points */
@@ -1181,7 +1186,9 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 		}
 
 		if ((clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_COMPENSATE_INSTABILITY) && (max_elong > 2.0f)) {
-			cloth->adapt_fact *= 0.5f;
+			if (!is_max) {
+				cloth->adapt_fact *= 0.5f;
+			}
 		}
 		else {
 			cloth->adapt_fact *= 1.1;
@@ -1190,18 +1197,20 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 
 		if ((clmd->sim_parms->flags & (CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL |
 		                               CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP |
-		                               CLOTH_SIMSETTINGS_FLAG_COMPENSATE_INSTABILITY))) {
+		                               CLOTH_SIMSETTINGS_FLAG_COMPENSATE_INSTABILITY)))
+		{
 			clmd->sim_parms->dt *= adapt_fact;
 			clmd->sim_parms->dt = min_ff(1.0f / clmd->sim_parms->stepsPerFrame, clmd->sim_parms->dt);
 
 			if ((clmd->sim_parms->max_subframes > 0) && ((1.0f / clmd->sim_parms->max_subframes) > clmd->sim_parms->dt)) {
 				clmd->sim_parms->dt = 1.0f / clmd->sim_parms->max_subframes;
 			}
-			else {
-				if (((max_vel > clmd->sim_parms->max_vel) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL)) ||
-				    ((max_impulse > clmd->sim_parms->max_imp) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP)) ||
-				    ((max_elong > 2.0f) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_COMPENSATE_INSTABILITY)))
-				{
+
+			if (((max_vel > clmd->sim_parms->max_vel) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL)) ||
+				((max_impulse > clmd->sim_parms->max_imp) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP)) ||
+				((max_elong > 2.0f) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_COMPENSATE_INSTABILITY)))
+			{
+				if (!is_max) {
 					for (i = 0; i < mvert_num; i++) {
 						BPH_mass_spring_set_motion_state(id, i, verts[i].txold, verts[i].tvold);
 					}
