@@ -231,9 +231,10 @@ class DATA_PT_vertex_groups(MeshButtonsPanel, Panel):
 
             layout.prop(context.tool_settings, "vertex_group_weight", text="Weight")
 
-        row = layout.row()
-        row.active = ob.mode != 'EDIT'
-        row.prop(group, "influence")
+        if group:
+            row = layout.row()
+            row.active = ob.mode != 'EDIT'
+            row.prop(group, "influence")
 
 
 class DATA_PT_shape_keys(MeshButtonsPanel, Panel):
