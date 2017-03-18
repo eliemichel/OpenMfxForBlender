@@ -132,6 +132,8 @@ typedef struct ClothCollSettings {
 	float	friction;		/* Friction/damping applied on contact with other object.*/
 	float	damping;	/* Collision restitution on contact with other object.*/
 	float 	selfepsilon; 		/* for selfcollision */
+	float	clamp;		/* Impulse clamp for object collisions */
+	float	self_clamp;	/* Impulse clamp for self collisions */
 	int	flags;			/* collision flags defined in BKE_cloth.h */
 	short	loop_count;		/* How many iterations for the collision loop.		*/
 	short pad[3];

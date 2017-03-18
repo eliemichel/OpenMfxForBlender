@@ -444,7 +444,7 @@ static void free_impulse_clusters(ImpulseCluster *clusters)
 /* This allows inserting impulses one by one into the cluster array, and immediately computing the clustering,
  * but the clustering isn't exact, because of not knowing all impulses beforehand.
  * Seems to be good enough however, and is much faster than the true hclust below... */
-static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const float impulse[3], const float clustang)
+static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const float impulse[3], const float clustang, const float clamp)
 {
 	ImpulseCluster *imp;
 	ImpulseCluster *close = NULL;
@@ -455,7 +455,7 @@ static void insert_impulse_in_cluster_array(ImpulseCluster **clusters, const flo
 
 	mag = normalize_v3_v3(dir, impulse);
 
-	if (mag < FLT_EPSILON) {
+	if ((mag < FLT_EPSILON) || (mag > clamp)) {
 		return;
 	}
 
@@ -640,8 +640,8 @@ DO_INLINE void collision_interpolateOnTriangle (float to[3], float v1[3], float 
 	VECADDMUL(to, v3, w3);
 }
 
-static int cloth_collision_response_static(ClothModifierData *clmd, CollisionModifierData *collmd, Object *collob,
-                                           CollPair *collpair, CollPair *collision_end, ImpulseCluster **vert_imp_clusters)
+static int cloth_collision_response_static(ClothModifierData *clmd, CollisionModifierData *collmd, Object *collob, CollPair *collpair,
+                                           CollPair *collision_end, ImpulseCluster **vert_imp_clusters, const float dt)
 {
 	int result = 0;
 	Cloth *cloth1;
@@ -792,15 +792,15 @@ static int cloth_collision_response_static(ClothModifierData *clmd, CollisionMod
 
 		if (result) {
 			if (cloth1->verts[collpair->ap1].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap1], i1, M_PI / 20);
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap1], i1, (M_PI / 20), (clmd->coll_parms->clamp * dt));
 			}
 
 			if (cloth1->verts[collpair->ap2].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap2], i2, M_PI / 20);
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap2], i2, (M_PI / 20), (clmd->coll_parms->clamp * dt));
 			}
 
 			if (cloth1->verts[collpair->ap3].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap3], i3, M_PI / 20);
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap3], i3, (M_PI / 20), (clmd->coll_parms->clamp * dt));
 			}
 		}
 	}
@@ -809,7 +809,7 @@ static int cloth_collision_response_static(ClothModifierData *clmd, CollisionMod
 }
 
 static int cloth_selfcollision_response_static(ClothModifierData *clmd, CollPair *collpair, CollPair *collision_end,
-                                               ImpulseCluster **vert_imp_clusters)
+                                               ImpulseCluster **vert_imp_clusters, const float dt)
 {
 	int result = 0;
 	Cloth *cloth1;
@@ -960,15 +960,15 @@ static int cloth_selfcollision_response_static(ClothModifierData *clmd, CollPair
 
 		if (result) {
 			if (cloth1->verts[collpair->ap1].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap1], i1, M_PI / 20);
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap1], i1, (M_PI / 20), (clmd->coll_parms->self_clamp * dt));
 			}
 
 			if (cloth1->verts[collpair->ap2].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap2], i2, M_PI / 20);
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap2], i2, (M_PI / 20), (clmd->coll_parms->self_clamp * dt));
 			}
 
 			if (cloth1->verts[collpair->ap3].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap3], i3, M_PI / 20);
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap3], i3, (M_PI / 20), (clmd->coll_parms->self_clamp * dt));
 			}
 		}
 	}
@@ -1252,7 +1252,7 @@ static void cloth_bvh_selfcollisions_nearcheck(ClothModifierData * clmd, CollPai
 }
 
 static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, Object **collobjs, CollPair **collisions,
-                                            CollPair **collisions_index, const unsigned int numcollobj)
+                                            CollPair **collisions_index, const unsigned int numcollobj, const float dt)
 {
 	Cloth *cloth = clmd->clothObject;
 	int i = 0, j = 0, mvert_num = 0;
@@ -1278,7 +1278,7 @@ static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, Object **c
 			CollisionModifierData *collmd = (CollisionModifierData *)modifiers_findByType(collob, eModifierType_Collision);
 
 			if ( collmd->bvhtree ) {
-				result += cloth_collision_response_static(clmd, collmd, collob, collisions[i], collisions_index[i], vert_imp_clusters);
+				result += cloth_collision_response_static(clmd, collmd, collob, collisions[i], collisions_index[i], vert_imp_clusters, dt);
 			}
 		}
 
@@ -1310,7 +1310,7 @@ static int cloth_bvh_objcollisions_resolve (ClothModifierData * clmd, Object **c
 	return ret;
 }
 
-static int cloth_bvh_selfcollisions_resolve(ClothModifierData * clmd, CollPair *collisions, CollPair *collisions_index)
+static int cloth_bvh_selfcollisions_resolve(ClothModifierData * clmd, CollPair *collisions, CollPair *collisions_index, const float dt)
 {
 	Cloth *cloth = clmd->clothObject;
 	int i = 0, j = 0, mvert_num = 0;
@@ -1329,7 +1329,7 @@ static int cloth_bvh_selfcollisions_resolve(ClothModifierData * clmd, CollPair *
 	for (j = 0; j < iter; j++) { /* 5 is just a value that ensures convergence */
 		result = 0;
 
-		result += cloth_selfcollision_response_static (clmd, collisions, collisions_index, vert_imp_clusters);
+		result += cloth_selfcollision_response_static (clmd, collisions, collisions_index, vert_imp_clusters, dt);
 
 		// apply impulses in parallel
 		if (result) {
@@ -1439,7 +1439,7 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 				MEM_SAFE_FREE(overlap);
 			}
 
-			ret += cloth_bvh_objcollisions_resolve(clmd, collobjs, collisions,  collisions_index, numcollobj);
+			ret += cloth_bvh_objcollisions_resolve(clmd, collobjs, collisions,  collisions_index, numcollobj, dt);
 			ret2 += ret;
 
 			for (i = 0; i < numcollobj; i++) {
@@ -1474,7 +1474,7 @@ int cloth_bvh_objcollision(Object *ob, ClothModifierData *clmd, float step, floa
 				if (result && overlap) {
 					cloth_bvh_selfcollisions_nearcheck (clmd, &collisions, &collisions_index, result, overlap);
 
-					ret += cloth_bvh_selfcollisions_resolve ( clmd, collisions,  collisions_index);
+					ret += cloth_bvh_selfcollisions_resolve ( clmd, collisions,  collisions_index, dt);
 					ret2 += ret;
 				}
 

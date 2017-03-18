@@ -996,6 +996,12 @@ static void rna_def_cloth_collision_settings(BlenderRNA *brna)
 	                         "How many object collision response iterations should be done. (higher is smoother but slower)");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
+	prop = RNA_def_property(srna, "impulse_clamp", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "clamp");
+	RNA_def_property_range(prop, 0.0f, 100.0f);
+	RNA_def_property_ui_text(prop, "Impulse Clamping", "Don't use collision impulses above this magnitude (0.0 to disable clamping)");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
 	/* self collision */
 
 	prop = RNA_def_property(srna, "use_self_collision", PROP_BOOLEAN, PROP_NONE);
@@ -1032,6 +1038,12 @@ static void rna_def_cloth_collision_settings(BlenderRNA *brna)
 	RNA_def_property_ui_range(prop, 1, 20, 1, -1);
 	RNA_def_property_ui_text(prop, "Response Quality",
 	                         "How many self collision response iterations should be done. (higher is better quality but slower)");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "self_impulse_clamp", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "self_clamp");
+	RNA_def_property_range(prop, 0.0f, 100.0f);
+	RNA_def_property_ui_text(prop, "Impulse Clamping", "Don't use self collision impulses above this magnitude (0.0 to disable clamping)");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 }
 

@@ -260,6 +260,7 @@ class PHYSICS_PT_cloth_collision(PhysicButtonsPanel, Panel):
         sub = col.column()
         sub.active = cloth.use_collision
         sub.prop(cloth, "distance_min", slider=True, text="Distance")
+        sub.prop(cloth, "impulse_clamp")
         sub.prop(cloth, "group")
 
         layout.separator()
@@ -279,6 +280,7 @@ class PHYSICS_PT_cloth_collision(PhysicButtonsPanel, Panel):
         sub.active = cloth.use_self_collision
         sub.prop(cloth, "self_friction", text="Friction")
         sub.prop(cloth, "self_distance_min", slider=True, text="Distance")
+        sub.prop(cloth, "self_impulse_clamp")
         sub.prop_search(cloth, "vertex_group_self_collisions", ob, "vertex_groups", text="Vertex Group")
 
 
