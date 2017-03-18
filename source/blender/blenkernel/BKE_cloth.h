@@ -96,7 +96,8 @@ typedef struct Cloth {
 	struct BVHTree 		*bvhselftree;			/* collision tree for this cloth object */
 	struct MVertTri		*tri;
 	struct Implicit_Data	*implicit; 		/* our implicit solver connects to this pointer */
-	int last_frame, pad4;
+	int last_frame;
+	float adapt_fact;	/* Stability dt compensation factor */
 } Cloth;
 
 /**
@@ -176,6 +177,7 @@ typedef enum {
 	CLOTH_SIMSETTINGS_FLAG_INIT_VEL = ( 1 << 3 ), /* initialize cloth velocity from animation */
 	CLOTH_SIMSETTINGS_FLAG_TEARING = ( 1 << 4 ),// true if tearing is enabled
 	CLOTH_SIMSETTINGS_FLAG_COMB_GOAL = (1 << 5), // combined weights for goal
+	CLOTH_SIMSETTINGS_FLAG_COMPENSATE_INSTABILITY = (1 << 6), /* Compensate instability by increasing subframes */
 	CLOTH_SIMSETTINGS_FLAG_CCACHE_EDIT = (1 << 12),	/* edit cache in editmode */
 	CLOTH_SIMSETTINGS_FLAG_NO_SPRING_COMPRESS = (1 << 13), /* don't allow spring compression */
 	CLOTH_SIMSETTINGS_FLAG_SEW = (1 << 14), /* pull ends of loose edges together */

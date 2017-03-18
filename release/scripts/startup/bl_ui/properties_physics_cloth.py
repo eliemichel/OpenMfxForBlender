@@ -376,6 +376,8 @@ class PHYSICS_PT_cloth_adaptive_subframes(PhysicButtonsPanel, Panel):
         col.prop(cloth, "max_impulse")
         col.prop(cloth, "impulse_adjustment_factor")
 
+        layout.prop(cloth, "compensate_instability")
+
 
 class PHYSICS_PT_cloth_field_weights(PhysicButtonsPanel, Panel):
     bl_label = "Cloth Field Weights"

@@ -906,6 +906,12 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
+	prop = RNA_def_property(srna, "compensate_instability", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", CLOTH_SIMSETTINGS_FLAG_COMPENSATE_INSTABILITY);
+	RNA_def_property_ui_text(prop, "Compensate Instability", "Compensate instability by increasing subframes");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+
 	/* unused */
 
 	/* unused still */

@@ -298,6 +298,7 @@ static int do_init_cloth(Object *ob, ClothModifierData *clmd, DerivedMesh *resul
 		BKE_cloth_solver_set_positions(clmd);
 
 		clmd->clothObject->last_frame= MINFRAME-1;
+		clmd->clothObject->adapt_fact = 1.0f;
 		clmd->sim_parms->dt = 1.0f / clmd->sim_parms->stepsPerFrame;
 	}
 

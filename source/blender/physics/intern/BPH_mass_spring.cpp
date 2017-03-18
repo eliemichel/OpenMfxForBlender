@@ -1038,7 +1038,7 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 	Implicit_Data *id = cloth->implicit;
 	ColliderContacts *contacts = NULL;
 	int totcolliders = 0;
-	float max_vel;
+	float max_vel, max_elong;
 	float vel;
 	float max_impulse = 0.0f;
 	float tmp_vec[3];
@@ -1067,14 +1067,20 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 				/* divide by time_scale to prevent constrained velocities from being multiplied */
 				mul_v3_fl(v, 1.0f / clmd->sim_parms->time_scale);
 				BPH_mass_spring_set_velocity(id, i, v);
+
+				if (init_vel) {
+					copy_v3_v3(verts[i].tvold, v);
+				}
 			}
 		}
 	}
 
 	while (step < tf) {
 		ImplicitSolverResult result;
-		float dt = clmd->sim_parms->dt * clmd->sim_parms->timescale;
+		float dt = max_ff((clmd->sim_parms->dt * clmd->sim_parms->timescale * cloth->adapt_fact),
+		                  (1.0f / clmd->sim_parms->max_subframes));
 		max_vel = 0.0f;
+		max_elong = 0.0f;
 		adapt_fact = FLT_MAX;
 
 		if (step + dt > tf) {
@@ -1133,6 +1139,22 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 			max_vel = max_ff(max_vel, vel);
 		}
 
+		for (LinkNode *link = cloth->springs; link; link = link->next) {
+			ClothSpring *spring = (ClothSpring *)link->link;
+			if (!(spring->flags & CLOTH_SPRING_FLAG_DEACTIVATE) && (spring->type & CLOTH_SPRING_TYPE_STRUCTURAL)) {
+				float tmp1[3], tmp2[3], len_old, len_new;
+
+				len_old = len_v3v3(verts[spring->ij].txold, verts[spring->kl].txold);
+
+				BPH_mass_spring_get_new_position(id, spring->ij, tmp1);
+				BPH_mass_spring_get_new_position(id, spring->kl, tmp2);
+
+				len_new = len_v3v3(tmp1, tmp2);
+
+				max_elong = max_ff(max_elong, (len_new / len_old));
+			}
+		}
+
 		/* Adaptive step calculation */
 		if (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL) {
 			if (max_vel < FLT_EPSILON) {
@@ -1158,7 +1180,17 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 			}
 		}
 
-		if (clmd->sim_parms->flags & (CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL | CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP)) {
+		if ((clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_COMPENSATE_INSTABILITY) && (max_elong > 2.0f)) {
+			cloth->adapt_fact *= 0.5f;
+		}
+		else {
+			cloth->adapt_fact *= 1.1;
+			cloth->adapt_fact = min_ff(cloth->adapt_fact, 1.0f);
+		}
+
+		if ((clmd->sim_parms->flags & (CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL |
+		                               CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP |
+		                               CLOTH_SIMSETTINGS_FLAG_COMPENSATE_INSTABILITY))) {
 			clmd->sim_parms->dt *= adapt_fact;
 			clmd->sim_parms->dt = min_ff(1.0f / clmd->sim_parms->stepsPerFrame, clmd->sim_parms->dt);
 
@@ -1167,7 +1199,8 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 			}
 			else {
 				if (((max_vel > clmd->sim_parms->max_vel) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL)) ||
-				    ((max_impulse > clmd->sim_parms->max_imp) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP)))
+				    ((max_impulse > clmd->sim_parms->max_imp) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP)) ||
+				    ((max_elong > 2.0f) && (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_COMPENSATE_INSTABILITY)))
 				{
 					for (i = 0; i < mvert_num; i++) {
 						BPH_mass_spring_set_motion_state(id, i, verts[i].txold, verts[i].tvold);
