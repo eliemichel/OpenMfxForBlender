@@ -791,16 +791,25 @@ static int cloth_collision_response_static(ClothModifierData *clmd, CollisionMod
 		}
 
 		if (result) {
+			float clamp;
+
+			if (clmd->coll_parms->self_clamp > 0.0f) {
+				clamp = clmd->coll_parms->clamp * dt;
+			}
+			else {
+				clamp = FLT_MAX;
+			}
+
 			if (cloth1->verts[collpair->ap1].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap1], i1, (M_PI / 20), (clmd->coll_parms->clamp * dt));
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap1], i1, (M_PI / 20), clamp);
 			}
 
 			if (cloth1->verts[collpair->ap2].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap2], i2, (M_PI / 20), (clmd->coll_parms->clamp * dt));
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap2], i2, (M_PI / 20), clamp);
 			}
 
 			if (cloth1->verts[collpair->ap3].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap3], i3, (M_PI / 20), (clmd->coll_parms->clamp * dt));
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap3], i3, (M_PI / 20), clamp);
 			}
 		}
 	}
@@ -959,16 +968,25 @@ static int cloth_selfcollision_response_static(ClothModifierData *clmd, CollPair
 		}
 
 		if (result) {
+			float clamp;
+
+			if (clmd->coll_parms->self_clamp > 0.0f) {
+				clamp = clmd->coll_parms->self_clamp * dt;
+			}
+			else {
+				clamp = FLT_MAX;
+			}
+
 			if (cloth1->verts[collpair->ap1].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap1], i1, (M_PI / 20), (clmd->coll_parms->self_clamp * dt));
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap1], i1, (M_PI / 20), clamp);
 			}
 
 			if (cloth1->verts[collpair->ap2].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap2], i2, (M_PI / 20), (clmd->coll_parms->self_clamp * dt));
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap2], i2, (M_PI / 20), clamp);
 			}
 
 			if (cloth1->verts[collpair->ap3].impulse_count > 0) {
-				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap3], i3, (M_PI / 20), (clmd->coll_parms->self_clamp * dt));
+				insert_impulse_in_cluster_array(&vert_imp_clusters[collpair->ap3], i3, (M_PI / 20), clamp);
 			}
 		}
 	}
