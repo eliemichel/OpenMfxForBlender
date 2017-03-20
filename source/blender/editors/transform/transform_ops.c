@@ -1186,6 +1186,10 @@ void transform_keymap_for_space(wmKeyConfig *keyconf, wmKeyMap *keymap, int spac
 
 			WM_keymap_add_item(keymap, "TRANSFORM_OT_select_orientation", SPACEKEY, KM_PRESS, KM_ALT, 0);
 
+			WM_keymap_add_item(keymap, "TRANSFORM_OT_select_translate_orientation", QKEY, KM_PRESS, KM_ALT, 0);
+			WM_keymap_add_item(keymap, "TRANSFORM_OT_select_rotation_orientation", WKEY, KM_PRESS, KM_ALT, 0);
+			WM_keymap_add_item(keymap, "TRANSFORM_OT_select_scale_orientation", EKEY, KM_PRESS, KM_ALT, 0);
+
 			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_create_orientation", SPACEKEY, KM_PRESS, KM_CTRL | KM_ALT, 0);
 			RNA_boolean_set(kmi->ptr, "use", true);
 

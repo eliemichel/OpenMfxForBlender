@@ -392,7 +392,6 @@ void BIF_selectTransformOrientationCustomValue(bContext *C, int orientation, int
 {
 	View3D *v3d = CTX_wm_view3d(C);
 	if (v3d) /* currently using generic poll */ {
-		v3d->twmode = orientation;
 		if (type_transform == V3D_MANIP_TRANSLATE)
 			v3d->twtrans = sub_orientation;
 		else if (type_transform == V3D_MANIP_ROTATE)
