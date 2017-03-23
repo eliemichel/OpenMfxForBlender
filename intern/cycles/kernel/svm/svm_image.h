@@ -353,123 +353,123 @@ ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, floa
 		stack_store_float(stack, alpha_offset, f.w);
 }
 
-ccl_device float minimum_distance(float2 v, float2 w, float2 p) {
-    // Return minimum distance between line segment vw and point p
-    float2 diff = v - w;
-    float l2 = diff.x * diff.x + diff.y * diff.y;  // i.e. |w-v|^2 -  avoid a sqrt
-
-    if (l2 == 0.0)
-        return len(p - v);   // v == w case
-
-    // Consider the line extending the segment, parameterized as v + t (w - v).
-    // We find projection of point p onto the line. 
-    // It falls where t = [(p-v) . (w-v)] / |w-v|^2
-    // We clamp t from [0,1] to handle points outside the segment vw.
-    float t = max(0.0F, min(1.0F, dot(p-v, w-v) / l2));
-    float2 projection = v + t * (w - v);  // Projection falls on the segment
-
-    return len(p - projection);
-}
+//ccl_device float minimum_distance(float2 v, float2 w, float2 p) {
+//    // Return minimum distance between line segment vw and point p
+//    float2 diff = v - w;
+//    float l2 = diff.x * diff.x + diff.y * diff.y;  // i.e. |w-v|^2 -  avoid a sqrt
+//
+//    if (l2 == 0.0)
+//        return len(p - v);   // v == w case
+//
+//    // Consider the line extending the segment, parameterized as v + t (w - v).
+//    // We find projection of point p onto the line. 
+//    // It falls where t = [(p-v) . (w-v)] / |w-v|^2
+//    // We clamp t from [0,1] to handle points outside the segment vw.
+//    float t = max(0.0F, min(1.0F, dot(p-v, w-v) / l2));
+//    float2 projection = v + t * (w - v);  // Projection falls on the segment
+//
+//    return len(p - projection);
+//}
  
 ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
 {
-    uint co_offset, fill_in_offset, background_in_offset, out_offset;
-    uint curve_thickness_offset, curve_location_offset, curve_scale_offset;
-    uint curve_type;
+ //   uint co_offset, fill_in_offset, background_in_offset, out_offset;
+ //   uint curve_thickness_offset, curve_location_offset, curve_scale_offset;
+ //   uint curve_type;
 
-    decode_node_uchar4(node.z, &co_offset, &fill_in_offset, &background_in_offset, &out_offset);
-    decode_node_uchar4(node.w, &curve_thickness_offset, &curve_location_offset, &curve_scale_offset, &curve_type);
+ //   decode_node_uchar4(node.z, &co_offset, &fill_in_offset, &background_in_offset, &out_offset);
+ //   decode_node_uchar4(node.w, &curve_thickness_offset, &curve_location_offset, &curve_scale_offset, &curve_type);
 
-    uint slot = node.y;
+ //   uint slot = node.y;
 
-    float4 f;
-    if (slot == (uint) -1) {
-        float3 background_color = stack_load_float3(stack, background_in_offset);
-        f = make_float4(background_color.x, background_color.y, background_color.z, 1.0);
-    } else {
+ //   float4 f;
+ //   if (slot == (uint) -1) {
+ //       float3 background_color = stack_load_float3(stack, background_in_offset);
+ //       f = make_float4(background_color.x, background_color.y, background_color.z, 1.0);
+ //   } else {
 
-        float3 co = stack_load_float3(stack, co_offset);
-        float3 fill_color = stack_load_float3(stack, fill_in_offset);
-        float3 background_color = stack_load_float3(stack, background_in_offset);
-        float curve_thickness = stack_load_float(stack, curve_thickness_offset);
-        float3 curve_location = stack_load_float3(stack, curve_location_offset);
-        float3 curve_scale = stack_load_float3(stack, curve_scale_offset);
+ //       float3 co = stack_load_float3(stack, co_offset);
+ //       float3 fill_color = stack_load_float3(stack, fill_in_offset);
+ //       float3 background_color = stack_load_float3(stack, background_in_offset);
+ //       float curve_thickness = stack_load_float(stack, curve_thickness_offset);
+ //       float3 curve_location = stack_load_float3(stack, curve_location_offset);
+ //       float3 curve_scale = stack_load_float3(stack, curve_scale_offset);
 
-		uint width = 49; /* THIS IS TEMPORARY!!! */
+	//	uint width = 49; /* THIS IS TEMPORARY!!! */
 
-        float grad = 1.0;
+ //       float grad = 1.0;
 
-        for (int t = 0; t < width; ++t) {
-            int t_next = (t+1)%width;
-            float4 ls0 = svm_image_texture(kg, slot, (float)t/width,	  0.0, false, true);
-            float4 ls1 = svm_image_texture(kg, slot, (float)t_next/width, 0.0, false, true);
+ //       for (int t = 0; t < width; ++t) {
+ //           int t_next = (t+1)%width;
+ //           float4 ls0 = svm_image_texture(kg, slot, (float)t/width,	  0.0, false, true);
+ //           float4 ls1 = svm_image_texture(kg, slot, (float)t_next/width, 0.0, false, true);
 
-            float2 p0,p1,co2;
-            p0.x = ls0.x * curve_scale.x + curve_location.x;
-            p0.y = ls0.y * curve_scale.y + curve_location.y;
-            p1.x = ls1.x * curve_scale.x + curve_location.x;
-            p1.y = ls1.y * curve_scale.y + curve_location.y;
-            co2.x = co.x;
-            co2.y = co.y;
+ //           float2 p0,p1,co2;
+ //           p0.x = ls0.x * curve_scale.x + curve_location.x;
+ //           p0.y = ls0.y * curve_scale.y + curve_location.y;
+ //           p1.x = ls1.x * curve_scale.x + curve_location.x;
+ //           p1.y = ls1.y * curve_scale.y + curve_location.y;
+ //           co2.x = co.x;
+ //           co2.y = co.y;
 
-            // Line
-            if (curve_type == 0) {
+ //           // Line
+ //           if (curve_type == 0) {
 
-                if (minimum_distance(p0, p1, co2) < curve_thickness) {
-                    grad = 0.0;
-                    break;
-                }
+ //               if (minimum_distance(p0, p1, co2) < curve_thickness) {
+ //                   grad = 0.0;
+ //                   break;
+ //               }
 
-            // Fill
-            } else if (curve_type == 1) {
-                float x_min,x_max;
-                float y_min,y_max;
+ //           // Fill
+ //           } else if (curve_type == 1) {
+ //               float x_min,x_max;
+ //               float y_min,y_max;
 
-                if (p0.y < p1.y) {
-                    y_min = p0.y;
-                    y_max = p1.y;
-                    x_min = p0.x;
-                    x_max = p1.x;
-                } else if (p0.y > p1.y) {
-                    y_min = p1.y;
-                    y_max = p0.y;
-                    x_min = p1.x;
-                    x_max = p0.x;
-                } else {
-                    continue;
-                }
+ //               if (p0.y < p1.y) {
+ //                   y_min = p0.y;
+ //                   y_max = p1.y;
+ //                   x_min = p0.x;
+ //                   x_max = p1.x;
+ //               } else if (p0.y > p1.y) {
+ //                   y_min = p1.y;
+ //                   y_max = p0.y;
+ //                   x_min = p1.x;
+ //                   x_max = p0.x;
+ //               } else {
+ //                   continue;
+ //               }
 
-                if (co2.y < y_min || co2.y > y_max)
-                    continue;
+ //               if (co2.y < y_min || co2.y > y_max)
+ //                   continue;
 
-                float ty = (co2.y - y_min) / (y_max - y_min);
-                float x = x_min + (x_max - x_min) * ty;
+ //               float ty = (co2.y - y_min) / (y_max - y_min);
+ //               float x = x_min + (x_max - x_min) * ty;
 
-                if (x < co2.x) {
-                    grad = !grad;
-                }
+ //               if (x < co2.x) {
+ //                   grad = !grad;
+ //               }
 
-            // Grad
-            } else {
+ //           // Grad
+ //           } else {
 
-                float d = minimum_distance(p0, p1, co2);
-                if (d < curve_thickness) {
-                    grad = min(grad, d/curve_thickness);
-                }
+ //               float d = minimum_distance(p0, p1, co2);
+ //               if (d < curve_thickness) {
+ //                   grad = min(grad, d/curve_thickness);
+ //               }
 
-            }
+ //           }
 
-        }
+ //       }
 
-        f = make_float4((1.0-grad) * fill_color.x + grad * background_color.x,
-                        (1.0-grad) * fill_color.y + grad * background_color.y,
-                        (1.0-grad) * fill_color.z + grad * background_color.z,
-                        1.0);
+ //       f = make_float4((1.0-grad) * fill_color.x + grad * background_color.x,
+ //                       (1.0-grad) * fill_color.y + grad * background_color.y,
+ //                       (1.0-grad) * fill_color.z + grad * background_color.z,
+ //                       1.0);
 
-    }
+ //   }
 
-	if(stack_valid(out_offset))
-		stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
+	//if(stack_valid(out_offset))
+	//	stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
 }
 
 CCL_NAMESPACE_END
