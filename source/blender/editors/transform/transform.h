@@ -480,6 +480,7 @@ typedef struct TransInfo {
 	void		*draw_handle_pixel;
 	void		*draw_handle_cursor;
 
+	// These three member variables for setting up the multi transformations
 	short current_translation, current_rotation, current_scale;
 	short pad;
 

@@ -1984,6 +1984,7 @@ void BIF_draw_manipulator(const bContext *C)
 					if (!(v3d->twmode == V3D_MANIP_MULTI_TRANSF))
 						draw_manipulator_rotate_cyl(v3d, rv3d, drawflags, v3d->twtype, MAN_MOVECOL, true, is_picksel);
 					else
+						// The fourth variable is responsible for making sure all the transformations are drawn
 						draw_manipulator_rotate_cyl(v3d, rv3d, drawflags, (v3d->twtrans!=5) | (v3d->twrots!=5)*2 | (v3d->twscale!=5)*4, MAN_MOVECOL, true, is_picksel);
 				}
 				else {

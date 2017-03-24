@@ -369,9 +369,9 @@ enum {
 #define V3D_MANIP_NORMAL				2
 #define V3D_MANIP_VIEW					3
 #define V3D_MANIP_GIMBAL				4
-#define V3D_MANIP_NONE					5 /* special value that hides a manipulator - will only appear in custom */
-#define V3D_MANIP_AXIAL					6
-#define V3D_MANIP_MULTI_TRANSF			7 /* This will replace CUSTOM so that users can make their own custom orientations */
+#define V3D_MANIP_NONE					5 /* special value that hides a manipulator - will only appear in multi */
+#define V3D_MANIP_AXIAL					6 /* an orientation where the local manipulator's arrows are aligned with its axis */
+#define V3D_MANIP_MULTI_TRANSF			7 /* Allow users to customize their local manipulator */
 #define V3D_MANIP_CUSTOM				8 /* anything of value 8 or higher is custom */
 
 /* View3d->twflag */

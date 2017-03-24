@@ -365,6 +365,7 @@ void uiTemplateHeader3D(uiLayout *layout, struct bContext *C)
 		row = uiLayoutRow(layout, true);
 		uiItemR(row, &v3dptr, "show_manipulator", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
 		if (v3d->twflag & V3D_USE_MANIPULATOR) {
+			// If the user select the Multi orientation it shows the three drop down menus
 			if (v3d->twmode == V3D_MANIP_MULTI_TRANSF)
 			{
 				uiItemR(row, &v3dptr, "custom_translate_manipulators", 0, "", ICON_NONE);

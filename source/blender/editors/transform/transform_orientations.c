@@ -388,6 +388,7 @@ void BIF_selectTransformOrientationValue(bContext *C, int orientation)
 		v3d->twmode = orientation;
 }
 
+// This is important for the shortcut when selecting seperate transformations
 void BIF_selectTransformOrientationCustomValue(bContext *C, int orientation, int type_transform, int sub_orientation)
 {
 	View3D *v3d = CTX_wm_view3d(C);

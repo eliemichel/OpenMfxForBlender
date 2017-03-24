@@ -1235,6 +1235,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 		}
 
 		t->current_orientation = v3d->twmode;
+		// when v3d->twmode is multi, set the current values for the translate/scale/rotation
 		if (v3d->twmode == V3D_MANIP_MULTI_TRANSF) {
 			t->current_translation = v3d->twtrans;
 			t->current_rotation = v3d->twrots;
@@ -1333,7 +1334,6 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 		t->current_orientation = RNA_property_enum_get(op->ptr, prop);
 
 		if (t->current_orientation >= V3D_MANIP_MULTI_TRANSF + BIF_countTransformOrientation(C)) {
-			//t->current_orientation = V3D_MANIP_GLOBAL; // Temp
 			View3D *v3d = sa->spacedata.first;
 			if (t->current_orientation == V3D_MANIP_MULTI_TRANSF) {
 				t->current_translation = v3d->twtrans;
