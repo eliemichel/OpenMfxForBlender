@@ -691,8 +691,9 @@ static int calc_manipulator_stats(const bContext *C)
 				}
 
 				// This is for regular non-rig objects 
-				if (is_zero_v3(ob->rot))
+				if (is_zero_v3(ob->rot)) {
 					copy_m4_m4(rv3d->twmat, ob->obmat);
+				}
 				else {
 					float mfm[4][4]; // My final Matrix
 					BKE_object_computing_obmat_rest(ob, mfm);
@@ -769,8 +770,7 @@ static int calc_manipulator_stats(const bContext *C)
 						{
 							if (ob->mode & OB_MODE_POSE) {
 								bPoseChannel *posebone = CTX_data_active_pose_bone(C);
-								if (!posebone->parent)
-								{
+								if (!posebone->parent) {
 									copy_m4_m4(mtx_tranf[i], ob->obmat);
 									normalize_m4(mtx_tranf[i]);
 									break;
@@ -781,8 +781,9 @@ static int calc_manipulator_stats(const bContext *C)
 								copy_m4_m3(mtx_tranf[i], mat);
 								break;
 							}
-							if (is_zero_v3(ob->rot))
+							if (is_zero_v3(ob->rot)) {
 								copy_m4_m4(mtx_tranf[i], ob->obmat);
+							}
 							else {
 								float mfm[4][4]; // My final Matrix
 								BKE_object_computing_obmat_rest(ob, mfm);

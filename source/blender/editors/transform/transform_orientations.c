@@ -628,8 +628,7 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 					bPoseChannel *posebone = CTX_data_active_pose_bone(C);
 
 					// For god node (bottom of hierarchy)
-					if (!posebone->parent)
-					{
+					if (!posebone->parent) {
 						// Works like local
 						copy_m3_m4(omtx, ob->obmat);
 						normalize_m3(omtx);
@@ -643,8 +642,9 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 				}
 
 				// This is for regular non-rig objects 
-				if (is_zero_v3(ob->rot))
+				if (is_zero_v3(ob->rot)) {
 					copy_m3_m4(omtx, ob->obmat);
+				}
 				else {
 					float mfm[4][4]; // My final Matrix
 					BKE_object_computing_obmat_rest(ob, mfm);
@@ -653,8 +653,9 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 				normalize_m3(omtx);
 				break;
 			}
-			else
+			else {
 				unit_m3(omtx);
+			}
 			break;
 		
 		default:

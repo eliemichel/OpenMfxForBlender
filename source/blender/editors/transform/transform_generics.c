@@ -1311,10 +1311,12 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 		t->view = &ar->v2d;
 		t->around = sclip->around;
 
-		if (ED_space_clip_check_show_trackedit(sclip))
+		if (ED_space_clip_check_show_trackedit(sclip)) {
 			t->options |= CTX_MOVIECLIP;
-		else if (ED_space_clip_check_show_maskedit(sclip))
+		}
+		else if (ED_space_clip_check_show_maskedit(sclip)) {
 			t->options |= CTX_MASK;
+		}
 	}
 	else {
 		if (ar) {
@@ -1340,8 +1342,9 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 				t->current_rotation = v3d->twrots;
 				t->current_scale = v3d->twscale;
 			}
-			else
+			else {
 				t->current_orientation = V3D_MANIP_GLOBAL;
+			}
 		}
 	}
 	
