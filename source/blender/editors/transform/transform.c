@@ -943,27 +943,51 @@ static void transform_event_xyz_constraint(TransInfo *t, short key_type, char cm
 							setUserConstraint(t, orientation, constraint_axis, msg2);
 						else
 						{
-							//setUserConstraint(t, t->current_translation, constraint_axis, msg2);
-							setUserConstraintCustom(t, t->current_translation, constraint_axis, t->trans_spacemtx, msg2);
-							setUserConstraintCustom(t, t->current_rotation, constraint_axis, t->rots_spacemtx, msg2);
-							setUserConstraintCustom(t, t->current_scale, constraint_axis, t->scale_spacemtx, msg2);
+							switch (t->mode)
+							{
+							case 1:
+								setUserConstraintCustom(t, t->current_translation, constraint_axis, t->trans_spacemtx, msg2);
+								break;
+							case 2:
+								setUserConstraintCustom(t, t->current_rotation, constraint_axis, t->rots_spacemtx, msg2);
+								break;
+							case 3:
+								setUserConstraintCustom(t, t->current_scale, constraint_axis, t->scale_spacemtx, msg2);
+								break;
+							}
+							//setUserConstraintCustom(t, t->current_translation, constraint_axis, t->trans_spacemtx, msg2);
+							//setUserConstraintCustom(t, t->current_rotation, constraint_axis, t->rots_spacemtx, msg2);
+							//setUserConstraintCustom(t, t->current_scale, constraint_axis, t->scale_spacemtx, msg2);
 						}
 					else if (t->modifiers & MOD_CONSTRAINT_PLANE)
 						if (!(orientation == V3D_MANIP_MULTI_TRANSF))
 							setUserConstraint(t, orientation, constraint_axis, msg3);
 						else
 						{
-							//setUserConstraint(t, t->current_translation, constraint_axis, msg3);
-							setUserConstraintCustom(t, t->current_translation, constraint_axis, t->trans_spacemtx, msg3);
-							setUserConstraintCustom(t, t->current_rotation, constraint_axis, t->rots_spacemtx, msg3);
-							setUserConstraintCustom(t, t->current_scale, constraint_axis, t->scale_spacemtx, msg3);
+							switch (t->mode)
+							{
+							case 1:
+								setUserConstraintCustom(t, t->current_translation, constraint_axis, t->trans_spacemtx, msg3);
+								break;
+							case 2:
+								setUserConstraintCustom(t, t->current_rotation, constraint_axis, t->rots_spacemtx, msg3);
+								break;
+							case 3:
+								setUserConstraintCustom(t, t->current_scale, constraint_axis, t->scale_spacemtx, msg3);
+								break;
+							}
+							
+							//setUserConstraintCustom(t, t->current_translation, constraint_axis, t->trans_spacemtx, msg3);
+							//setUserConstraintCustom(t, t->current_rotation, constraint_axis, t->rots_spacemtx, msg3);
+							//setUserConstraintCustom(t, t->current_scale, constraint_axis, t->scale_spacemtx, msg3);
 						}
 				}
 			}
 			else {
-				if (!(t->modifiers & MOD_CONSTRAINT_PLANE))
+				if (!(t->modifiers & MOD_CONSTRAINT_PLANE)) {
 					setUserConstraint(t, V3D_MANIP_GLOBAL, constraint_axis, msg2);
-				else if (t->modifiers & MOD_CONSTRAINT_PLANE) {
+				}
+				else if (t->modifiers & MOD_CONSTRAINT_PLANE) { 
 					setUserConstraint(t, V3D_MANIP_GLOBAL, constraint_plane, msg3);
 				}
 			}

@@ -737,11 +737,14 @@ void setUserConstraintCustom(TransInfo *t, short orientation, int mode, float om
 		BLI_snprintf(text, sizeof(text), ftext, IFACE_("gimbal"));
 		setConstraint(t, omx, mode, text);
 		break;
+	case V3D_MANIP_AXIAL:
+		BLI_snprintf(text, sizeof(text), ftext, IFACE_("axial"));
+		setConstraint(t, omx, mode, text);
+		break;
 	default: /* V3D_MANIP_CUSTOM */
 		BLI_snprintf(text, sizeof(text), ftext, t->spacename);
 		setConstraint(t, omx, mode, text);
 	}
-
 	t->con.orientation = orientation;
 
 	t->con.mode |= CON_USER;
