@@ -2512,6 +2512,11 @@ static void node_composit_buts_motionblur2d(uiLayout *layout, bContext *UNUSED(C
 		}
 }
 
+static void node_composit_buts_cryptomatte(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+	uiItemR(layout, ptr, "index", 0, NULL, ICON_NONE);
+}
+
 /* only once called */
 static void node_composit_set_butfunc(bNodeType *ntype)
 {
@@ -2741,6 +2746,9 @@ static void node_composit_set_butfunc(bNodeType *ntype)
 			break;
 		case CMP_NODE_MOTIONBLUR2D:
 			ntype->draw_buttons = node_composit_buts_motionblur2d;
+			break;
+		case CMP_NODE_CRYPTOMATTE:
+			ntype->draw_buttons = node_composit_buts_cryptomatte;
 			break;
 	}
 }

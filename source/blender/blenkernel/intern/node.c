@@ -3487,6 +3487,7 @@ static void registerCompositNodes(void)
 	register_node_type_cmp_doubleedgemask();
 	register_node_type_cmp_keyingscreen();
 	register_node_type_cmp_keying();
+	register_node_type_cmp_cryptomatte();
 
 	register_node_type_cmp_translate();
 	register_node_type_cmp_rotate();
