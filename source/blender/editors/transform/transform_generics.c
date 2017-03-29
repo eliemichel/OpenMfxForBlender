@@ -1235,6 +1235,12 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 		}
 
 		t->current_orientation = v3d->twmode;
+		// when v3d->twmode is multi, set the current values for the translate/scale/rotation
+		if (v3d->twmode == V3D_MANIP_MULTI_TRANSF) {
+			t->current_translation = v3d->twtrans;
+			t->current_rotation = v3d->twrots;
+			t->current_scale = v3d->twscale;
+		}
 
 		/* exceptional case */
 		if (t->around == V3D_AROUND_LOCAL_ORIGINS) {
@@ -1305,10 +1311,12 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 		t->view = &ar->v2d;
 		t->around = sclip->around;
 
-		if (ED_space_clip_check_show_trackedit(sclip))
+		if (ED_space_clip_check_show_trackedit(sclip)) {
 			t->options |= CTX_MOVIECLIP;
-		else if (ED_space_clip_check_show_maskedit(sclip))
+		}
+		else if (ED_space_clip_check_show_maskedit(sclip)) {
 			t->options |= CTX_MASK;
+		}
 	}
 	else {
 		if (ar) {
@@ -1327,8 +1335,16 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 	{
 		t->current_orientation = RNA_property_enum_get(op->ptr, prop);
 
-		if (t->current_orientation >= V3D_MANIP_CUSTOM + BIF_countTransformOrientation(C)) {
-			t->current_orientation = V3D_MANIP_GLOBAL;
+		if (t->current_orientation >= V3D_MANIP_MULTI_TRANSF + BIF_countTransformOrientation(C)) {
+			View3D *v3d = sa->spacedata.first;
+			if (t->current_orientation == V3D_MANIP_MULTI_TRANSF) {
+				t->current_translation = v3d->twtrans;
+				t->current_rotation = v3d->twrots;
+				t->current_scale = v3d->twscale;
+			}
+			else {
+				t->current_orientation = V3D_MANIP_GLOBAL;
+			}
 		}
 	}
 	

@@ -46,12 +46,15 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_curve.h"
 #include "BKE_context.h"
 #include "BKE_editmesh.h"
 #include "BKE_report.h"
 #include "BKE_main.h"
 #include "BKE_screen.h"
+#include "BKE_object.h"
+#include "BKE_scene.h"
 
 #include "BLT_translation.h"
 
@@ -385,6 +388,22 @@ void BIF_selectTransformOrientationValue(bContext *C, int orientation)
 		v3d->twmode = orientation;
 }
 
+// This is important for the shortcut when selecting seperate transformations
+void BIF_selectTransformOrientationCustomValue(bContext *C, int orientation, int type_transform, int sub_orientation)
+{
+	View3D *v3d = CTX_wm_view3d(C);
+	if (v3d) /* currently using generic poll */ {
+		if (type_transform == V3D_MANIP_TRANSLATE)
+			v3d->twtrans = sub_orientation;
+		else if (type_transform == V3D_MANIP_ROTATE)
+			v3d->twrots = sub_orientation;
+		else if (type_transform == V3D_MANIP_SCALE)
+			v3d->twscale = sub_orientation;
+		
+	}
+
+}
+
 int BIF_countTransformOrientation(const bContext *C)
 {
 	ListBase *transform_spaces = &CTX_data_scene(C)->transform_spaces;
@@ -442,6 +461,7 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 {
 	Object *ob = CTX_data_active_object(C);
 	Object *obedit = CTX_data_active_object(C);
+	bPoseChannel *posebone = CTX_data_active_pose_bone(C);
 
 	switch (t->current_orientation) {
 		case V3D_MANIP_GLOBAL:
@@ -456,6 +476,7 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 				break;
 			}
 			/* fall-through */  /* no gimbal fallthrough to normal */
+
 		case V3D_MANIP_NORMAL:
 			if (obedit || (ob && ob->mode & OB_MODE_POSE)) {
 				BLI_strncpy(t->spacename, IFACE_("normal"), sizeof(t->spacename));
@@ -463,9 +484,9 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 				break;
 			}
 			/* fall-through */  /* we define 'normal' as 'local' in Object mode */
+
 		case V3D_MANIP_LOCAL:
 			BLI_strncpy(t->spacename, IFACE_("local"), sizeof(t->spacename));
-		
 			if (ob) {
 				copy_m3_m4(t->spacemtx, ob->obmat);
 				normalize_m3(t->spacemtx);
@@ -492,12 +513,158 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 				unit_m3(t->spacemtx);
 			}
 			break;
+
+		case V3D_MANIP_AXIAL:
+			BLI_strncpy(t->spacename, IFACE_("along axis"), sizeof(t->spacename));
+			if (ob)
+			{
+				if (ob->mode & OB_MODE_POSE) {
+					bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+
+					// For god node (bottom of hierarchy)
+					if (!posebone->parent)
+					{
+						// Works like local
+						copy_m3_m4(t->spacemtx, ob->obmat);
+						normalize_m3(t->spacemtx);
+						break;
+					}
+
+					float mat[3][3]; // Final matrix that will be put in twmat for the region view
+					BKE_pose_computing_pchan_rest(posebone, mat);
+					copy_m3_m3(t->spacemtx, mat);
+					break;
+				}
+
+				// This is for regular non-rig objects 
+				if (is_zero_v3(ob->rot))
+					copy_m3_m4(t->spacemtx, ob->obmat);
+				else {
+					float mfm[4][4]; // My final Matrix
+					BKE_object_computing_obmat_rest(ob, mfm);
+					copy_m3_m4(t->spacemtx, mfm);
+				}
+				normalize_m3(t->spacemtx);
+				break;
+			}
+			else
+				unit_m3(t->spacemtx);
+			break;
+
 		default: /* V3D_MANIP_CUSTOM */
 			if (applyTransformOrientation(C, t->spacemtx, t->spacename, t->current_orientation - V3D_MANIP_CUSTOM)) {
+				BLI_strncpy(t->spacename, IFACE_("custom"), sizeof(t->spacename));
 				/* pass */
 			}
 			else {
 				unit_m3(t->spacemtx);
+			}
+			break;
+	}
+}
+
+void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator_orientation, float omtx[3][3])
+{
+	Object *ob = CTX_data_active_object(C);
+	Object *obedit = CTX_data_active_object(C);
+	bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+
+	switch (manipulator_orientation) 
+	{
+		case V3D_MANIP_GLOBAL:
+			unit_m3(omtx);
+			BLI_strncpy(t->spacename, IFACE_("global"), sizeof(t->spacename));
+			break;
+		
+		case V3D_MANIP_GIMBAL:
+			unit_m3(omtx);
+			if (gimbal_axis(ob, omtx)) {
+				BLI_strncpy(t->spacename, IFACE_("gimbal"), sizeof(t->spacename));
+				break;
+			}
+			/* fall-through */  /* no gimbal fallthrough to normal */
+		case V3D_MANIP_NORMAL:
+			if (obedit || (ob && ob->mode & OB_MODE_POSE)) {
+				BLI_strncpy(t->spacename, IFACE_("normal"), sizeof(t->spacename));
+				ED_getTransformOrientationMatrix(C, omtx, t->around);
+				break;
+			}
+			/* fall-through */  /* we define 'normal' as 'local' in Object mode */
+		case V3D_MANIP_LOCAL:
+			BLI_strncpy(t->spacename, IFACE_("local"), sizeof(t->spacename));
+		
+			if (ob) {
+				copy_m3_m4(omtx, ob->obmat);
+				normalize_m3(omtx);
+			}
+			else {
+				unit_m3(omtx);
+			}
+		
+			break;
+		
+		case V3D_MANIP_VIEW:
+			if ((t->spacetype == SPACE_VIEW3D) &&
+				(t->ar->regiontype == RGN_TYPE_WINDOW))
+			{
+				RegionView3D *rv3d = t->ar->regiondata;
+				float mat[3][3];
+		
+				BLI_strncpy(t->spacename, IFACE_("view"), sizeof(t->spacename));
+				copy_m3_m4(mat, rv3d->viewinv);
+				normalize_m3(mat);
+				copy_m3_m3(omtx, mat);
+			}
+			else {
+				unit_m3(omtx);
+			}
+			break;
+
+		case V3D_MANIP_AXIAL:
+			BLI_strncpy(t->spacename, IFACE_("along axis"), sizeof(t->spacename));
+			if (ob)
+			{
+				if (ob->mode & OB_MODE_POSE) {
+					bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+
+					// For god node (bottom of hierarchy)
+					if (!posebone->parent) {
+						// Works like local
+						copy_m3_m4(omtx, ob->obmat);
+						normalize_m3(omtx);
+						break;
+					}
+
+					float mat[3][3]; // Final matrix that will be put in twmat for the region view
+					BKE_pose_computing_pchan_rest(posebone, mat);
+					copy_m3_m3(omtx, mat);
+					break;
+				}
+
+				// This is for regular non-rig objects 
+				if (is_zero_v3(ob->rot)) {
+					copy_m3_m4(omtx, ob->obmat);
+				}
+				else {
+					float mfm[4][4]; // My final Matrix
+					BKE_object_computing_obmat_rest(ob, mfm);
+					copy_m3_m4(omtx, mfm);
+				}
+				normalize_m3(omtx);
+				break;
+			}
+			else {
+				unit_m3(omtx);
+			}
+			break;
+		
+		default:
+			if (applyTransformOrientation(C, omtx, t->spacename, t->current_orientation - V3D_MANIP_CUSTOM)) {
+				BLI_strncpy(t->spacename, IFACE_("custom"), sizeof(t->spacename));
+				/* pass */
+			}
+			else {
+				unit_m3(omtx);
 			}
 			break;
 	}
@@ -992,6 +1159,7 @@ int getTransformOrientation_ex(const bContext *C, float normal[3], float plane[3
 					if (pchan->bone && pchan->bone->flag & BONE_TRANSFORM) {
 						add_v3_v3(normal, pchan->pose_mat[2]);
 						add_v3_v3(plane, pchan->pose_mat[1]);
+						
 					}
 				}
 				ok = true;
@@ -1056,7 +1224,9 @@ void ED_getTransformOrientationMatrix(const bContext *C, float orientation_mat[3
 	float plane[3] = {0.0, 0.0, 0.0};
 
 	int type;
-
+	ScrArea *sa = CTX_wm_area(C);
+	View3D *v3d = sa->spacedata.first;
+	
 	type = getTransformOrientation_ex(C, normal, plane, around);
 
 	switch (type) {

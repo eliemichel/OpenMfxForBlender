@@ -268,9 +268,9 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 			case NODE_TEX_IMAGE:
 				svm_node_tex_image(kg, sd, stack, node);
 				break;
-            case NODE_TEX_CURVE:
-				svm_node_tex_curve(kg, sd, stack, node);
-				break;
+    //        case NODE_TEX_CURVE:
+				//svm_node_tex_curve(kg, sd, stack, node);
+				//break;
 			case NODE_TEX_IMAGE_BOX:
 				svm_node_tex_image_box(kg, sd, stack, node);
 				break;

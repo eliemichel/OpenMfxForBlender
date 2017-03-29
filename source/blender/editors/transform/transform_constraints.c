@@ -683,12 +683,68 @@ void setUserConstraint(TransInfo *t, short orientation, int mode, const char fte
 			BLI_snprintf(text, sizeof(text), ftext, IFACE_("gimbal"));
 			setConstraint(t, t->spacemtx, mode, text);
 			break;
+		case V3D_MANIP_AXIAL:
+			BLI_snprintf(text, sizeof(text), ftext, IFACE_("axial"));
+			setConstraint(t, t->spacemtx, mode, text);
+			break;
 		default: /* V3D_MANIP_CUSTOM */
 			BLI_snprintf(text, sizeof(text), ftext, t->spacename);
 			setConstraint(t, t->spacemtx, mode, text);
-			break;
 	}
 
+	t->con.orientation = orientation;
+
+	t->con.mode |= CON_USER;
+}
+
+/*
+* Set the constraint according to the user defined custom orientation
+*
+* ftext is a format string passed to BLI_snprintf. It will add the name of
+* the orientation where %s is (logically).
+*/
+void setUserConstraintCustom(TransInfo *t, short orientation, int mode, float omx[3][3], const char ftext[])
+{
+	char text[40];
+
+	switch (orientation) {
+	case V3D_MANIP_GLOBAL:
+	{
+		float mtx[3][3];
+		BLI_snprintf(text, sizeof(text), ftext, IFACE_("global"));
+		unit_m3(mtx);
+		setConstraint(t, mtx, mode, text);
+		break;
+	}
+	case V3D_MANIP_LOCAL:
+		BLI_snprintf(text, sizeof(text), ftext, IFACE_("local"));
+		setLocalConstraint(t, mode, text);
+		break;
+	case V3D_MANIP_NORMAL:
+		BLI_snprintf(text, sizeof(text), ftext, IFACE_("normal"));
+		if (checkUseAxisMatrix(t)) {
+			setAxisMatrixConstraint(t, mode, text);
+		}
+		else {
+			setConstraint(t, omx, mode, text);
+		}
+		break;
+	case V3D_MANIP_VIEW:
+		BLI_snprintf(text, sizeof(text), ftext, IFACE_("view"));
+		setConstraint(t, omx, mode, text);
+		break;
+	case V3D_MANIP_GIMBAL:
+		BLI_snprintf(text, sizeof(text), ftext, IFACE_("gimbal"));
+		setConstraint(t, omx, mode, text);
+		break;
+	case V3D_MANIP_AXIAL:
+		BLI_snprintf(text, sizeof(text), ftext, IFACE_("axial"));
+		setConstraint(t, omx, mode, text);
+		break;
+	default: /* V3D_MANIP_CUSTOM */
+		BLI_snprintf(text, sizeof(text), ftext, t->spacename);
+		setConstraint(t, omx, mode, text);
+	}
 	t->con.orientation = orientation;
 
 	t->con.mode |= CON_USER;

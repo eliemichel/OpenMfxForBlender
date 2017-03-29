@@ -421,6 +421,9 @@ typedef struct TransInfo {
 	float		mat[3][3];		/* rot/rescale, to show for widget   	*/
 
 	float		spacemtx[3][3];	/* orientation matrix of the current space	*/
+	float		trans_spacemtx[3][3]; /* orientation matrix of the current translation space */
+	float		rots_spacemtx[3][3]; /* orientation matrix of the current translation space */
+	float		scale_spacemtx[3][3]; /* orientation matrix of the current translation space */
 	char		spacename[64];	/* name of the current space, MAX_NAME		*/
 
 	struct Object *poseobj;		/* if t->flag & T_POSE, this denotes pose object */
@@ -476,6 +479,11 @@ typedef struct TransInfo {
 	void		*draw_handle_view;
 	void		*draw_handle_pixel;
 	void		*draw_handle_cursor;
+
+	// These three member variables for setting up the multi transformations
+	short current_translation, current_rotation, current_scale;
+	short pad;
+
 } TransInfo;
 
 
@@ -661,6 +669,7 @@ void setConstraint(TransInfo *t, float space[3][3], int mode, const char text[])
 void setAxisMatrixConstraint(TransInfo *t, int mode, const char text[]);
 void setLocalConstraint(TransInfo *t, int mode, const char text[]);
 void setUserConstraint(TransInfo *t, short orientation, int mode, const char text[]);
+void setUserConstraintCustom(TransInfo *t, short orientation, int mode, float omx[3][3], const char ftext[]);
 
 void constraintNumInput(TransInfo *t, float vec[3]);
 
@@ -777,6 +786,7 @@ void transform_data_ext_rotate(TransData *td, float mat[3][3], bool use_drot);
 /*********************** Transform Orientations ******************************/
 
 void initTransformOrientation(struct bContext *C, TransInfo *t);
+void initTransformOrientationCustom(struct bContext *C, TransInfo *t, short manipulator_orientation, float omtx[3][3]);
 
 /* Those two fill in mat and return non-zero on success */
 bool createSpaceNormal(float mat[3][3], const float normal[3]);

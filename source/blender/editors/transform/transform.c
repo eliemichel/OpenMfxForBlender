@@ -937,17 +937,59 @@ static void transform_event_xyz_constraint(TransInfo *t, short key_type, char cm
 				else {
 					short orientation = (t->current_orientation != V3D_MANIP_GLOBAL ?
 					                     t->current_orientation : V3D_MANIP_LOCAL);
+
 					if (!(t->modifiers & MOD_CONSTRAINT_PLANE))
-						setUserConstraint(t, orientation, constraint_axis, msg2);
+						if (!(orientation == V3D_MANIP_MULTI_TRANSF))
+							setUserConstraint(t, orientation, constraint_axis, msg2);
+						else
+						{
+							switch (t->mode)
+							{
+							case 1:
+								setUserConstraintCustom(t, t->current_translation, constraint_axis, t->trans_spacemtx, msg2);
+								break;
+							case 2:
+								setUserConstraintCustom(t, t->current_rotation, constraint_axis, t->rots_spacemtx, msg2);
+								break;
+							case 3:
+								setUserConstraintCustom(t, t->current_scale, constraint_axis, t->scale_spacemtx, msg2);
+								break;
+							}
+							//setUserConstraintCustom(t, t->current_translation, constraint_axis, t->trans_spacemtx, msg2);
+							//setUserConstraintCustom(t, t->current_rotation, constraint_axis, t->rots_spacemtx, msg2);
+							//setUserConstraintCustom(t, t->current_scale, constraint_axis, t->scale_spacemtx, msg2);
+						}
 					else if (t->modifiers & MOD_CONSTRAINT_PLANE)
-						setUserConstraint(t, orientation, constraint_plane, msg3);
+						if (!(orientation == V3D_MANIP_MULTI_TRANSF))
+							setUserConstraint(t, orientation, constraint_axis, msg3);
+						else
+						{
+							switch (t->mode)
+							{
+							case 1:
+								setUserConstraintCustom(t, t->current_translation, constraint_axis, t->trans_spacemtx, msg3);
+								break;
+							case 2:
+								setUserConstraintCustom(t, t->current_rotation, constraint_axis, t->rots_spacemtx, msg3);
+								break;
+							case 3:
+								setUserConstraintCustom(t, t->current_scale, constraint_axis, t->scale_spacemtx, msg3);
+								break;
+							}
+							
+							//setUserConstraintCustom(t, t->current_translation, constraint_axis, t->trans_spacemtx, msg3);
+							//setUserConstraintCustom(t, t->current_rotation, constraint_axis, t->rots_spacemtx, msg3);
+							//setUserConstraintCustom(t, t->current_scale, constraint_axis, t->scale_spacemtx, msg3);
+						}
 				}
 			}
 			else {
-				if (!(t->modifiers & MOD_CONSTRAINT_PLANE))
+				if (!(t->modifiers & MOD_CONSTRAINT_PLANE)) {
 					setUserConstraint(t, V3D_MANIP_GLOBAL, constraint_axis, msg2);
-				else if (t->modifiers & MOD_CONSTRAINT_PLANE)
+				}
+				else if (t->modifiers & MOD_CONSTRAINT_PLANE) { 
 					setUserConstraint(t, V3D_MANIP_GLOBAL, constraint_plane, msg3);
+				}
 			}
 		}
 		t->redraw |= TREDRAW_HARD;
@@ -1150,7 +1192,13 @@ int transformEvent(TransInfo *t, const wmEvent *event)
 						stopConstraint(t);
 					}
 					else {
-						setUserConstraint(t, t->current_orientation, (CON_AXIS1 | CON_AXIS2), IFACE_("locking %s X"));
+						if (!(t->current_orientation == V3D_MANIP_MULTI_TRANSF))
+							setUserConstraint(t, t->current_orientation, (CON_AXIS1 | CON_AXIS2), IFACE_("locking %s X"));
+						else {
+							setUserConstraint(t, t->current_translation, (CON_AXIS1 | CON_AXIS2), IFACE_("locking %s X"));
+							setUserConstraint(t, t->current_rotation, (CON_AXIS1 | CON_AXIS2), IFACE_("locking %s X"));
+							setUserConstraint(t, t->current_scale, (CON_AXIS1 | CON_AXIS2), IFACE_("locking %s X"));
+						}
 					}
 					t->redraw |= TREDRAW_HARD;
 					handled = true;
@@ -1162,7 +1210,13 @@ int transformEvent(TransInfo *t, const wmEvent *event)
 						stopConstraint(t);
 					}
 					else {
-						setUserConstraint(t, t->current_orientation, (CON_AXIS0 | CON_AXIS2), IFACE_("locking %s Y"));
+						if (!(t->current_orientation == V3D_MANIP_MULTI_TRANSF))
+							setUserConstraint(t, t->current_orientation, (CON_AXIS0 | CON_AXIS2), IFACE_("locking %s Y"));
+						else {
+							setUserConstraint(t, t->current_translation, (CON_AXIS0 | CON_AXIS2), IFACE_("locking %s Y"));
+							setUserConstraint(t, t->current_rotation, (CON_AXIS0 | CON_AXIS2), IFACE_("locking %s Y"));
+							setUserConstraint(t, t->current_scale, (CON_AXIS0 | CON_AXIS2), IFACE_("locking %s Y"));
+						}
 					}
 					t->redraw |= TREDRAW_HARD;
 					handled = true;
@@ -1174,7 +1228,13 @@ int transformEvent(TransInfo *t, const wmEvent *event)
 						stopConstraint(t);
 					}
 					else {
-						setUserConstraint(t, t->current_orientation, (CON_AXIS0 | CON_AXIS1), IFACE_("locking %s Z"));
+						if (!(t->current_orientation == V3D_MANIP_MULTI_TRANSF))
+							setUserConstraint(t, t->current_orientation, (CON_AXIS0 | CON_AXIS1), IFACE_("locking %s Z"));
+						else {
+							setUserConstraint(t, t->current_translation, (CON_AXIS0 | CON_AXIS1), IFACE_("locking %s Z"));
+							setUserConstraint(t, t->current_rotation, (CON_AXIS0 | CON_AXIS1), IFACE_("locking %s Z"));
+							setUserConstraint(t, t->current_scale, (CON_AXIS0 | CON_AXIS1), IFACE_("locking %s Z"));
+						}
 					}
 					t->redraw |= TREDRAW_HARD;
 					handled = true;
@@ -2010,7 +2070,14 @@ void saveTransform(bContext *C, TransInfo *t, wmOperator *op)
 			RNA_enum_set(op->ptr, "constraint_orientation", t->con.orientation);
 		}
 		else {
-			RNA_enum_set(op->ptr, "constraint_orientation", t->current_orientation);
+			if (!(t->current_orientation==V3D_MANIP_MULTI_TRANSF))
+				RNA_enum_set(op->ptr, "constraint_orientation", t->current_orientation);
+			else
+			{
+				RNA_enum_set(op->ptr, "translate_orientation", t->current_translation);
+				RNA_enum_set(op->ptr, "rotation_orientation", t->current_rotation);
+				RNA_enum_set(op->ptr, "scale_orientation", t->current_scale);
+			}
 		}
 
 		if (t->con.mode & CON_APPLY) {
@@ -2093,9 +2160,18 @@ bool initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 	}
 
 	unit_m3(t->spacemtx);
+	unit_m3(t->trans_spacemtx);
+	unit_m3(t->rots_spacemtx);
+	unit_m3(t->scale_spacemtx);
 
 	initTransInfo(C, t, op, event);
-	initTransformOrientation(C, t);
+	if (!(t->current_orientation == V3D_MANIP_MULTI_TRANSF))
+		initTransformOrientation(C, t);
+	else {
+		initTransformOrientationCustom(C, t, t->current_translation, t->trans_spacemtx);
+		initTransformOrientationCustom(C, t, t->current_rotation, t->rots_spacemtx);
+		initTransformOrientationCustom(C, t, t->current_scale, t->scale_spacemtx);
+	}
 
 	if (t->spacetype == SPACE_VIEW3D) {
 		t->draw_handle_apply = ED_region_draw_cb_activate(t->ar->type, drawTransformApply, t, REGION_DRAW_PRE_VIEW);
@@ -2339,8 +2415,22 @@ bool initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 			if (constraint_axis[2]) {
 				t->con.mode |= CON_AXIS2;
 			}
-
-			setUserConstraint(t, t->current_orientation, t->con.mode, "%s");
+			if (!(t->current_orientation == V3D_MANIP_MULTI_TRANSF))
+				setUserConstraint(t, t->current_orientation, t->con.mode, "%s");
+			else {
+				switch (t->mode)
+				{
+				case 1:
+					setUserConstraintCustom(t, t->current_translation, t->con.mode, t->trans_spacemtx, "%s");
+					break;
+				case 2:
+					setUserConstraintCustom(t, t->current_rotation, t->con.mode, t->rots_spacemtx, "%s");
+					break;
+				case 3:
+					setUserConstraintCustom(t, t->current_scale, t->con.mode, t->scale_spacemtx, "%s");
+					break;
+				}
+			}
 		}
 	}
 

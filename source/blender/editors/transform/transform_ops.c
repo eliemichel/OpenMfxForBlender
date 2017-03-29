@@ -169,6 +169,45 @@ static int select_orientation_exec(bContext *C, wmOperator *op)
 	return OPERATOR_FINISHED;
 }
 
+/* custom invoke for translation */
+static int select_translate_orientation_exec(bContext *C, wmOperator *op)
+{
+	int orientation = RNA_enum_get(op->ptr, "orientation");
+	int sub_orientation = RNA_enum_get(op->ptr, "translate_orientation");
+
+	BIF_selectTransformOrientationCustomValue(C, orientation, V3D_MANIP_TRANSLATE, sub_orientation);
+
+	WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, CTX_wm_view3d(C));
+
+	return OPERATOR_FINISHED;
+}
+
+/* custom invoke for rotation */
+static int select_rotation_orientation_exec(bContext *C, wmOperator *op)
+{
+	int orientation = RNA_enum_get(op->ptr, "orientation");
+	int sub_orientation = RNA_enum_get(op->ptr, "rotation_orientation");
+
+	BIF_selectTransformOrientationCustomValue(C, orientation, V3D_MANIP_ROTATE, sub_orientation);
+
+	WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, CTX_wm_view3d(C));
+
+	return OPERATOR_FINISHED;
+}
+
+/* custom invoke for scale */
+static int select_scale_orientation_exec(bContext *C, wmOperator *op)
+{
+	int orientation = RNA_enum_get(op->ptr, "orientation");
+	int sub_orientation = RNA_enum_get(op->ptr, "scale_orientation");
+
+	BIF_selectTransformOrientationCustomValue(C, orientation, V3D_MANIP_SCALE, sub_orientation);
+
+	WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, CTX_wm_view3d(C));
+
+	return OPERATOR_FINISHED;
+}
+
 static int select_orientation_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
 {
 	uiPopupMenu *pup;
@@ -177,6 +216,48 @@ static int select_orientation_invoke(bContext *C, wmOperator *UNUSED(op), const 
 	pup = UI_popup_menu_begin(C, IFACE_("Orientation"), ICON_NONE);
 	layout = UI_popup_menu_layout(pup);
 	uiItemsEnumO(layout, "TRANSFORM_OT_select_orientation", "orientation");
+	UI_popup_menu_end(C, pup);
+
+	return OPERATOR_INTERFACE;
+}
+
+/* my custom invoke */
+static int select_translate_orientation_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
+{
+	uiPopupMenu *pup;
+	uiLayout *layout;
+
+	pup = UI_popup_menu_begin(C, IFACE_("Translate Orientation"), ICON_NONE);
+	layout = UI_popup_menu_layout(pup);
+	uiItemsEnumO(layout, "TRANSFORM_OT_select_translate_orientation", "translate_orientation");
+	UI_popup_menu_end(C, pup);
+
+	return OPERATOR_INTERFACE;
+}
+
+/* my custom invoke */
+static int select_rotation_orientation_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
+{
+	uiPopupMenu *pup;
+	uiLayout *layout;
+
+	pup = UI_popup_menu_begin(C, IFACE_("Rotation Orientation"), ICON_NONE);
+	layout = UI_popup_menu_layout(pup);
+	uiItemsEnumO(layout, "TRANSFORM_OT_select_rotation_orientation", "rotation_orientation");
+	UI_popup_menu_end(C, pup);
+
+	return OPERATOR_INTERFACE;
+}
+
+/* my custom invoke */
+static int select_scale_orientation_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
+{
+	uiPopupMenu *pup;
+	uiLayout *layout;
+
+	pup = UI_popup_menu_begin(C, IFACE_("Scale Orientation"), ICON_NONE);
+	layout = UI_popup_menu_layout(pup);
+	uiItemsEnumO(layout, "TRANSFORM_OT_select_scale_orientation", "scale_orientation");
 	UI_popup_menu_end(C, pup);
 
 	return OPERATOR_INTERFACE;
@@ -200,6 +281,66 @@ static void TRANSFORM_OT_select_orientation(struct wmOperatorType *ot)
 	prop = RNA_def_property(ot->srna, "orientation", PROP_ENUM, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Orientation", "Transformation orientation");
 	RNA_def_enum_funcs(prop, rna_TransformOrientation_itemf);
+}
+
+static void TRANSFORM_OT_select_translate_orientation(struct wmOperatorType *ot)
+{
+	PropertyRNA *prop;
+
+	/* identifiers */
+	ot->name = "Select Translate Orientation";
+	ot->description = "Select translate transformation orientation";
+	ot->idname = "TRANSFORM_OT_select_translate_orientation";
+	ot->flag = OPTYPE_UNDO;
+
+	/* api callbacks */
+	ot->invoke = select_translate_orientation_invoke;
+	ot->exec = select_translate_orientation_exec;
+	ot->poll = ED_operator_view3d_active;
+
+	prop = RNA_def_property(ot->srna, "translate_orientation", PROP_ENUM, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Translate Orientation", "Translate transformation orientation");
+	RNA_def_enum_funcs(prop, rna_TransformTranslate_itemf);
+}
+
+static void TRANSFORM_OT_select_rotation_orientation(struct wmOperatorType *ot)
+{
+	PropertyRNA *prop;
+
+	/* identifiers */
+	ot->name = "Select Rotation Orientation";
+	ot->description = "Select rotation transformation orientation";
+	ot->idname = "TRANSFORM_OT_select_rotation_orientation";
+	ot->flag = OPTYPE_UNDO;
+
+	/* api callbacks */
+	ot->invoke = select_rotation_orientation_invoke;
+	ot->exec = select_rotation_orientation_exec;
+	ot->poll = ED_operator_view3d_active;
+
+	prop = RNA_def_property(ot->srna, "rotation_orientation", PROP_ENUM, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Rotation Orientation", "Rotation transformation orientation");
+	RNA_def_enum_funcs(prop, rna_TransformRotation_itemf);
+}
+
+static void TRANSFORM_OT_select_scale_orientation(struct wmOperatorType *ot)
+{
+	PropertyRNA *prop;
+
+	/* identifiers */
+	ot->name = "Select Scale Orientation";
+	ot->description = "Select Scale transformation orientation";
+	ot->idname = "TRANSFORM_OT_select_scale_orientation";
+	ot->flag = OPTYPE_UNDO;
+
+	/* api callbacks */
+	ot->invoke = select_scale_orientation_invoke;
+	ot->exec = select_scale_orientation_exec;
+	ot->poll = ED_operator_view3d_active;
+
+	prop = RNA_def_property(ot->srna, "scale_orientation", PROP_ENUM, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Scale Orientation", "Scale transformation orientation");
+	RNA_def_enum_funcs(prop, rna_TransformScale_itemf);
 }
 
 
@@ -1002,6 +1143,9 @@ void transform_operatortypes(void)
 	WM_operatortype_append(TRANSFORM_OT_transform);
 
 	WM_operatortype_append(TRANSFORM_OT_select_orientation);
+	WM_operatortype_append(TRANSFORM_OT_select_translate_orientation);
+	WM_operatortype_append(TRANSFORM_OT_select_rotation_orientation);
+	WM_operatortype_append(TRANSFORM_OT_select_scale_orientation);
 	WM_operatortype_append(TRANSFORM_OT_create_orientation);
 	WM_operatortype_append(TRANSFORM_OT_delete_orientation);
 }
@@ -1041,6 +1185,10 @@ void transform_keymap_for_space(wmKeyConfig *keyconf, wmKeyMap *keymap, int spac
 			WM_keymap_add_item(keymap, OP_SHEAR, SKEY, KM_PRESS, KM_ALT | KM_CTRL | KM_SHIFT, 0);
 
 			WM_keymap_add_item(keymap, "TRANSFORM_OT_select_orientation", SPACEKEY, KM_PRESS, KM_ALT, 0);
+
+			WM_keymap_add_item(keymap, "TRANSFORM_OT_select_translate_orientation", QKEY, KM_PRESS, KM_ALT, 0);
+			WM_keymap_add_item(keymap, "TRANSFORM_OT_select_rotation_orientation", WKEY, KM_PRESS, KM_ALT, 0);
+			WM_keymap_add_item(keymap, "TRANSFORM_OT_select_scale_orientation", EKEY, KM_PRESS, KM_ALT, 0);
 
 			kmi = WM_keymap_add_item(keymap, "TRANSFORM_OT_create_orientation", SPACEKEY, KM_PRESS, KM_CTRL | KM_ALT, 0);
 			RNA_boolean_set(kmi->ptr, "use", true);
