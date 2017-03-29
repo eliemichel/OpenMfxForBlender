@@ -6813,11 +6813,11 @@ static void def_cmp_motionblur2d(StructRNA *srna)
 static void def_cmp_cryptomatte(StructRNA *srna)
 {
 	PropertyRNA *prop;
-
-	prop = RNA_def_property(srna, "index", PROP_INT, PROP_NONE);
-	RNA_def_property_int_sdna(prop, NULL, "custom1");
-	RNA_def_property_range(prop, 0, 32767);
-	RNA_def_property_ui_text(prop, "ID", "ID for which the mask is generated");
+	
+	RNA_def_struct_sdna_from(srna, "NodeCryptomatte", "storage");
+	prop = RNA_def_property(srna, "matte_id", PROP_STRING, PROP_NONE);
+	RNA_def_property_string_sdna(prop, NULL, "matte_id");
+	RNA_def_property_ui_text(prop, "Matte List", "");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 }
 

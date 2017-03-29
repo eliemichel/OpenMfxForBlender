@@ -47,7 +47,8 @@ static bNodeSocketTemplate outputs[] = {
 
 static void init(bNodeTree *UNUSED(ntree), bNode *node)
 {
-	node->custom1 = 0;
+	NodeCryptomatte *user = MEM_callocN(sizeof(NodeCryptomatte), "cryptomatte user");
+	node->storage = user;
 }
 
 void register_node_type_cmp_cryptomatte(void)
@@ -57,6 +58,6 @@ void register_node_type_cmp_cryptomatte(void)
 	cmp_node_type_base(&ntype, CMP_NODE_CRYPTOMATTE, "Cryptomatte", NODE_CLASS_CONVERTOR, 0);
 	node_type_socket_templates(&ntype, inputs, outputs);
 	node_type_init(&ntype, init);
-
+	node_type_storage(&ntype, "NodeCryptomatte", node_free_standard_storage, node_copy_standard_storage);
 	nodeRegisterType(&ntype);
 }

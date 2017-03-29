@@ -909,6 +909,10 @@ typedef struct NodeMotionBlur2D {
 	char pad[2];
 } NodeMotionBlur2D;
 
+typedef struct NodeCryptomatte {
+	char matte_id[1024];
+} NodeCryptomatte;
+
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL		0
 #define NODE_SCRIPT_EXTERNAL		1

@@ -15,7 +15,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: Lukas Stockner
+ * Contributor: Lukas Stockner, Stefan Werner
  */
 
 #include "COM_CryptomatteOperation.h"
@@ -36,18 +36,27 @@ void CryptomatteOperation::initExecution()
 		inputs[i] = this->getInputSocketReader(i);
 }
 
+void CryptomatteOperation::addObjectIndex(float objectIndex)
+{
+	m_objectIndex.push_back(objectIndex);
+}
+
 void CryptomatteOperation::executePixel(float output[4],
                                    int x,
                                    int y,
                                    void *data)
 {
 	float input[4];
+	output[0] = 0.0f;
 	for(int i = 0; i < 6; i++) {
 		inputs[i]->read(input, x, y, data);
-		if(floorf(input[0] + 0.5f) == m_objectIndex) {
-			output[0] = input[1];
-			return;
+		for(float f : m_objectIndex) {
+			if (f == input[0]) {
+				output[0] += input[1];
+			}
+			if (f == input[2]) {
+				output[0] += input[3];
+			}
 		}
 	}
-	output[0] = 0.0f;
 }

@@ -2514,7 +2514,7 @@ static void node_composit_buts_motionblur2d(uiLayout *layout, bContext *UNUSED(C
 
 static void node_composit_buts_cryptomatte(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
-	uiItemR(layout, ptr, "index", 0, NULL, ICON_NONE);
+	uiItemR(layout, ptr, "matte_id", 0, NULL, ICON_NONE);
 }
 
 /* only once called */

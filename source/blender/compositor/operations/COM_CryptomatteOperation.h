@@ -15,7 +15,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: Lukas Stockner
+ * Contributor: Lukas Stockner, Stefan Werner
  */
 
 #ifndef _COM_CryptomatteOperation_h
@@ -25,7 +25,7 @@
 
 class CryptomatteOperation : public NodeOperation {
 private:
-	float m_objectIndex;
+	std::vector<float> m_objectIndex;
 public:
 	SocketReader *inputs[6];
 
@@ -34,7 +34,7 @@ public:
 	void initExecution();
 	void executePixel(float output[4], int x, int y, void *data);
 
-	void setObjectIndex(float objectIndex) { this->m_objectIndex = floorf(objectIndex + 0.5f); }
+	void addObjectIndex(float objectIndex);
 
 };
 #endif
