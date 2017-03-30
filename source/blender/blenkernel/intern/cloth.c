@@ -349,7 +349,7 @@ static int do_step_cloth(Object *ob, ClothModifierData *clmd, DerivedMesh *resul
 	// TIMEIT_START(cloth_step)
 
 	/* call the solver. */
-	ret = BPH_cloth_solve(ob, framenr, clmd, effectors);
+	ret = BPH_cloth_solve(ob, framenr, clmd, effectors, result);
 
 	// TIMEIT_END(cloth_step)
 
@@ -833,6 +833,12 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 
 	// set initial values
 	for ( i = 0; i < dm->getNumVerts(dm); i++, verts++ ) {
+		if (clmd->sim_parms->vgroup_trouble > 0) {
+			MDeformVert *dvert = (MDeformVert *)dm->getVertData(dm, i, CD_MDEFORMVERT);
+			MDeformWeight *weight = defvert_verify_index(dvert, (clmd->sim_parms->vgroup_trouble - 1));
+			weight->weight = 0.0f;
+		}
+
 		if (first) {
 			copy_v3_v3(verts->x, mvert[i].co);
 
@@ -871,6 +877,8 @@ static int cloth_from_object(Object *ob, ClothModifierData *clmd, DerivedMesh *d
 
 		verts->impulse_count = 0;
 		copy_v3_v3 ( verts->impulse, tnull );
+
+		verts->col_trouble = 0.0f;
 	}
 	
 	// apply / set vertex groups

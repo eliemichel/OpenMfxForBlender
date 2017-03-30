@@ -149,6 +149,9 @@ class PHYSICS_PT_cloth(PhysicButtonsPanel, Panel):
         layout.separator()
         layout.prop(cloth, "use_initial_velocity")
 
+        layout.separator()
+        layout.prop_search(cloth, "vertex_group_trouble", ob, "vertex_groups")
+
         # Disabled for now
         """
         if cloth.vertex_group_mass:

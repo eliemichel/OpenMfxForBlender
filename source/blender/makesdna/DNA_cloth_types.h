@@ -106,11 +106,12 @@ typedef struct ClothSimSettings {
 	short	vgroup_shear;  /* vertex group for scaling structural stiffness */
 	short	vgroup_shrink;  /* vertex group for shrinking cloth */
 	short	vgroup_planar;  /* vertex group for shrinking cloth */
+	short	vgroup_trouble;	/* cloth trouble is written to this group */
 	short	shapekey_rest;  /* vertex group for scaling structural stiffness */
 	short	presets; /* used for presets on GUI */
 	short 	reset;
 
-	char pad0[4];
+	char pad0[2];
 	struct EffectorWeights *effector_weights;
 
 	/* Adaptive subframe stuff */
