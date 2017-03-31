@@ -182,6 +182,77 @@ static inline float hash_to_float(uint32_t hash) {
 	return f;
 }
 
+extern "C" void cryptomatte_add(NodeCryptomatte* n, float f)
+{
+	static char number[64];
+	std::snprintf(number, sizeof(number), "<%.9g>", f);
+	if(::strnlen(n->matte_id, sizeof(n->matte_id)) == 0)
+	{
+		std::strncpy(n->matte_id, number, sizeof(n->matte_id));
+		return;
+	}
+	
+	// search if we already have the number
+	std::istringstream ss(n->matte_id);
+	while( ss.good() )
+	{
+		std::string token;
+		getline(ss, token, ',');
+		size_t first = token.find_first_not_of(' ');
+		size_t last = token.find_last_not_of(' ');
+		token = token.substr(first, (last-first+1));
+		if (*token.begin() == '<' && *(--token.end()) == '>') {
+			if(f == atof(token.substr(1, token.length()-2).c_str()))
+				return;
+		} else {
+			uint32_t hash = 0;
+			MurmurHash3_x86_32(token.c_str(), token.length(), 0, &hash);
+			if (f == hash_to_float(hash))
+				return;
+		}
+	}
+	strlcat(n->matte_id, ", ", sizeof(n->matte_id));
+	strlcat(n->matte_id, number, sizeof(n->matte_id));
+}
+
+extern "C" void cryptomatte_remove(NodeCryptomatte*n, float f)
+{
+	if(::strnlen(n->matte_id, sizeof(n->matte_id)) == 0)
+	{
+		// empty string, nothing to remove
+		return;
+	}
+
+	std::istringstream ss(n->matte_id);
+	std::ostringstream os;
+	bool first_string = true;
+	while( ss.good() )
+	{
+		std::string token;
+		getline(ss, token, ',');
+		size_t first = token.find_first_not_of(' ');
+		size_t last = token.find_last_not_of(' ');
+		token = token.substr(first, (last-first+1));
+		if (*token.begin() == '<' && *(--token.end()) == '>') {
+			float fx = atof(token.substr(1, token.length()-2).c_str());
+			if(f == fx)
+				continue;
+		} else {
+			uint32_t hash = 0;
+			MurmurHash3_x86_32(token.c_str(), token.length(), 0, &hash);
+			if (f == hash_to_float(hash))
+				continue;
+		}
+		if(!first_string) {
+			os << ", ";
+		} else {
+			first_string = false;
+		}
+		os << token;
+	}
+	strlcpy(n->matte_id, os.str().c_str(), sizeof(n->matte_id));
+}
+
 void CryptomatteNode::convertToOperations(NodeConverter &converter, const CompositorContext &/*context*/) const
 {
 	CryptomatteOperation *operation = new CryptomatteOperation();
@@ -193,15 +264,20 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 		if(!input.empty()) {
 			// split the string by commas, ignoring white space
 			std::istringstream ss(input);
-			std::string token;
-			size_t pos=-1;
-			while(ss>>token) {
-				while((pos=token.rfind(',')) != std::string::npos) {
-					token.erase(pos, 1);
+			while( ss.good() )
+			{
+				std::string token;
+				getline(ss, token, ',');
+				size_t first = token.find_first_not_of(' ');
+				size_t last = token.find_last_not_of(' ');
+				token = token.substr(first, (last-first+1));
+				if (*token.begin() == '<' && *(--token.end()) == '>')
+					operation->addObjectIndex(atof(token.substr(1, token.length()-2).c_str()));
+				else {
+					uint32_t hash = 0;
+					MurmurHash3_x86_32(token.c_str(), token.length(), 0, &hash);
+					operation->addObjectIndex(hash_to_float(hash));
 				}
-				uint32_t hash = 0;
-				MurmurHash3_x86_32(token.c_str(), token.length(), 0, &hash);
-				operation->addObjectIndex(hash_to_float(hash));
 			}
 		}
 	}

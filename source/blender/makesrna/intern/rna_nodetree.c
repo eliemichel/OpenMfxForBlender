@@ -2846,6 +2846,19 @@ static void rna_NodeColorBalance_update_cdl(Main *bmain, Scene *scene, PointerRN
 	rna_Node_update(bmain, scene, ptr);
 }
 
+static void rna_NodeCryptomatte_update_add(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+	ntreeCompositCryptomatteSyncFromAdd(ptr->id.data, ptr->data);
+	rna_Node_update(bmain, scene, ptr);
+}
+
+static void rna_NodeCryptomatte_update_remove(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+	ntreeCompositCryptomatteSyncFromRemove(ptr->id.data, ptr->data);
+	rna_Node_update(bmain, scene, ptr);
+}
+
+
 /* ******** Node Socket Types ******** */
 
 static PointerRNA rna_NodeOutputFile_slot_layer_get(CollectionPropertyIterator *iter)
@@ -6813,12 +6826,29 @@ static void def_cmp_motionblur2d(StructRNA *srna)
 static void def_cmp_cryptomatte(StructRNA *srna)
 {
 	PropertyRNA *prop;
+	static float default_1[3] = {1.f, 1.f, 1.f};
 	
 	RNA_def_struct_sdna_from(srna, "NodeCryptomatte", "storage");
 	prop = RNA_def_property(srna, "matte_id", PROP_STRING, PROP_NONE);
 	RNA_def_property_string_sdna(prop, NULL, "matte_id");
 	RNA_def_property_ui_text(prop, "Matte List", "");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+	
+	prop = RNA_def_property(srna, "add", PROP_FLOAT, PROP_COLOR);
+	RNA_def_property_float_sdna(prop, NULL, "add");
+	RNA_def_property_array(prop, 3);
+	RNA_def_property_float_array_default(prop, default_1);
+	RNA_def_property_ui_range(prop, 0, 2, 0.1, 3);
+	RNA_def_property_ui_text(prop, "Add", "Add to matte");
+	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeCryptomatte_update_add");
+	
+	prop = RNA_def_property(srna, "remove", PROP_FLOAT, PROP_COLOR);
+	RNA_def_property_float_sdna(prop, NULL, "remove");
+	RNA_def_property_array(prop, 3);
+	RNA_def_property_float_array_default(prop, default_1);
+	RNA_def_property_ui_range(prop, 0, 2, 0.1, 3);
+	RNA_def_property_ui_text(prop, "Remove", "Remove from matte");
+	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeCryptomatte_update_remove");
 }
 
 /* -- Texture Nodes --------------------------------------------------------- */

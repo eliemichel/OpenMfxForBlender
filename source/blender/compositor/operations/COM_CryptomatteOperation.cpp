@@ -24,10 +24,10 @@ CryptomatteOperation::CryptomatteOperation() : NodeOperation()
 {
 	for(int i = 0; i < 6; i++) {
 		inputs[i] = NULL;
-	        this->addInputSocket(COM_DT_COLOR);
+		this->addInputSocket(COM_DT_COLOR);
 	}
-        this->addOutputSocket(COM_DT_VALUE);
-        this->setComplex(true);
+	this->addOutputSocket(COM_DT_COLOR);
+	this->setComplex(true);
 }
 
 void CryptomatteOperation::initExecution()
@@ -38,7 +38,8 @@ void CryptomatteOperation::initExecution()
 
 void CryptomatteOperation::addObjectIndex(float objectIndex)
 {
-	m_objectIndex.push_back(objectIndex);
+	if(objectIndex != 0.f)
+		m_objectIndex.push_back(objectIndex);
 }
 
 void CryptomatteOperation::executePixel(float output[4],
@@ -47,16 +48,22 @@ void CryptomatteOperation::executePixel(float output[4],
                                    void *data)
 {
 	float input[4];
-	output[0] = 0.0f;
+	output[0] = output[1] = output[2] = output[3] = 0.0f;
 	for(int i = 0; i < 6; i++) {
 		inputs[i]->read(input, x, y, data);
+		if (i == 0) {
+			// write the frontmost object as false color for picking
+			output[0] = input[0] >= 0.f ? input[0] : 0.f;
+			output[1] = input[0] < 0.f ? -input[0] : 0.f;
+			uint32_t m3hash;
+			::memcpy(&m3hash, &input[0], 4);
+			output[2] = ((float) ((m3hash << 16)) / (float) UINT32_MAX);
+		}
 		for(float f : m_objectIndex) {
-			if (f == input[0]) {
-				output[0] += input[1];
-			}
-			if (f == input[2]) {
-				output[0] += input[3];
-			}
+			if (f == input[0])
+				output[3] += input[1];
+			if (f == input[2])
+				output[3] += input[3];
 		}
 	}
 }

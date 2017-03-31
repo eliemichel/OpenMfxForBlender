@@ -31,6 +31,10 @@
 
 #include "node_composite_util.h"
 
+// I can't be bothered to do string operations without std::string
+extern void cryptomatte_add(NodeCryptomatte* n, float f);
+extern void cryptomatte_remove(NodeCryptomatte*n, float f);
+
 static bNodeSocketTemplate inputs[] = {
 	{	SOCK_RGBA, 1, N_("Pass 1"),			0.0f, 0.0f, 0.0f, 1.0f},
 	{	SOCK_RGBA, 1, N_("Pass 2"),			0.0f, 0.0f, 0.0f, 1.0f},
@@ -41,9 +45,30 @@ static bNodeSocketTemplate inputs[] = {
 	{	-1, 0, ""	}
 };
 static bNodeSocketTemplate outputs[] = {
-	{	SOCK_FLOAT, 0, N_("Mask")},
+	{	SOCK_RGBA, 0, N_("Mask")},
 	{	-1, 0, ""	}
 };
+
+void ntreeCompositCryptomatteSyncFromAdd(bNodeTree *UNUSED(ntree), bNode *node)
+{
+	NodeCryptomatte *n = node->storage;
+	if(n->add[0] != 0.f || n->add[1] != 0.f) {
+		cryptomatte_add(n, n->add[0] > n->add[1] ? n->add[0] : -n->add[1]);
+		n->add[0] = 0.f;
+		n->add[1] = 0.f;
+	}
+}
+
+void ntreeCompositCryptomatteSyncFromRemove(bNodeTree *UNUSED(ntree), bNode *node)
+{
+	NodeCryptomatte *n = node->storage;
+	if(n->remove[0] != 0.f || n->remove[1] != 0.f) {
+		cryptomatte_remove(n, n->remove[0] > n->remove[1] ? n->remove[0] : -n->remove[1]);
+		n->remove[0] = 0.f;
+		n->remove[1] = 0.f;
+	}
+}
+
 
 static void init(bNodeTree *UNUSED(ntree), bNode *node)
 {

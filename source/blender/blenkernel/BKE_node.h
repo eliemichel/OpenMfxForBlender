@@ -991,6 +991,9 @@ void ntreeCompositOutputFileUniqueLayer(struct ListBase *list, struct bNodeSocke
 void ntreeCompositColorBalanceSyncFromLGG(bNodeTree *ntree, bNode *node);
 void ntreeCompositColorBalanceSyncFromCDL(bNodeTree *ntree, bNode *node);
 
+void ntreeCompositCryptomatteSyncFromAdd(bNodeTree *ntree, bNode *node);
+void ntreeCompositCryptomatteSyncFromRemove(bNodeTree *ntree, bNode *node);
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
