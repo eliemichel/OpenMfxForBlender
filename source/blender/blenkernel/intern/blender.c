@@ -100,6 +100,18 @@ void BKE_blender_free(void)
 	free_nodesystem();
 }
 
+void BKE_blender_version_string(char *version_str, size_t maxncpy, short version, short subversion, bool v_prefix, bool include_subversion)
+{
+	const char *prefix = v_prefix ? "v" : "";
+
+	if (include_subversion && subversion > 0) {
+		BLI_snprintf(version_str, maxncpy, "%s%d.%02d.%d", prefix, version / 100, version % 100, subversion);
+	}
+	else {
+		BLI_snprintf(version_str, maxncpy, "%s%d.%02d", prefix, version / 100, version % 100);
+	}
+}
+
 void BKE_blender_globals_init(void)
 {
 	memset(&G, 0, sizeof(Global));
@@ -110,10 +122,7 @@ void BKE_blender_globals_init(void)
 
 	strcpy(G.ima, "//");
 
-	if (BLENDER_SUBVERSION)
-		BLI_snprintf(versionstr, sizeof(versionstr), "v%d.%02d.%d", BLENDER_VERSION / 100, BLENDER_VERSION % 100, BLENDER_SUBVERSION);
-	else
-		BLI_snprintf(versionstr, sizeof(versionstr), "v%d.%02d", BLENDER_VERSION / 100, BLENDER_VERSION % 100);
+	BKE_blender_version_string(versionstr, sizeof(versionstr), BLENDER_VERSION, BLENDER_SUBVERSION, true, true);
 
 #ifndef WITH_PYTHON_SECURITY /* default */
 	G.f |= G_SCRIPT_AUTOEXEC;
@@ -141,20 +150,25 @@ static void keymap_item_free(wmKeyMapItem *kmi)
 		MEM_freeN(kmi->ptr);
 }
 
+void BKE_blender_userdef_set_data(UserDef *userdef)
+{
+	/* only here free userdef themes... */
+	BKE_blender_userdef_free_data(&U);
+	U = *userdef;
+}
+
 /**
  * When loading a new userdef from file,
  * or when exiting Blender.
  */
-void BKE_blender_userdef_free(void)
+void BKE_blender_userdef_free_data(UserDef *userdef)
 {
-	wmKeyMap *km;
-	wmKeyMapItem *kmi;
-	wmKeyMapDiffItem *kmdi;
-	bAddon *addon, *addon_next;
-	uiFont *font;
+#define U _invalid_access_ /* ensure no accidental global access */
+#ifdef U  /* quiet warning */
+#endif
 
-	for (km = U.user_keymaps.first; km; km = km->next) {
-		for (kmdi = km->diff_items.first; kmdi; kmdi = kmdi->next) {
+	for (wmKeyMap *km = userdef->user_keymaps.first; km; km = km->next) {
+		for (wmKeyMapDiffItem *kmdi = km->diff_items.first; kmdi; kmdi = kmdi->next) {
 			if (kmdi->add_item) {
 				keymap_item_free(kmdi->add_item);
 				MEM_freeN(kmdi->add_item);
@@ -165,14 +179,15 @@ void BKE_blender_userdef_free(void)
 			}
 		}
 
-		for (kmi = km->items.first; kmi; kmi = kmi->next)
+		for (wmKeyMapItem *kmi = km->items.first; kmi; kmi = kmi->next) {
 			keymap_item_free(kmi);
+		}
 
 		BLI_freelistN(&km->diff_items);
 		BLI_freelistN(&km->items);
 	}
-	
-	for (addon = U.addons.first; addon; addon = addon_next) {
+
+	for (bAddon *addon = userdef->addons.first, *addon_next; addon; addon = addon_next) {
 		addon_next = addon->next;
 		if (addon->prop) {
 			IDP_FreeProperty(addon->prop);
@@ -181,18 +196,20 @@ void BKE_blender_userdef_free(void)
 		MEM_freeN(addon);
 	}
 
-	for (font = U.uifonts.first; font; font = font->next) {
+	for (uiFont *font = userdef->uifonts.first; font; font = font->next) {
 		BLF_unload_id(font->blf_id);
 	}
 
 	BLF_default_set(-1);
 
-	BLI_freelistN(&U.autoexec_paths);
+	BLI_freelistN(&userdef->autoexec_paths);
 
-	BLI_freelistN(&U.uistyles);
-	BLI_freelistN(&U.uifonts);
-	BLI_freelistN(&U.themes);
-	BLI_freelistN(&U.user_keymaps);
+	BLI_freelistN(&userdef->uistyles);
+	BLI_freelistN(&userdef->uifonts);
+	BLI_freelistN(&userdef->themes);
+	BLI_freelistN(&userdef->user_keymaps);
+
+#undef U
 }
 
 /**
@@ -234,7 +251,7 @@ int BKE_blender_test_break(void)
  * \note Don't use MEM_mallocN so functions can be registered at any time.
  * \{ */
 
-struct AtExitData {
+static struct AtExitData {
 	struct AtExitData *next;
 
 	void (*func)(void *user_data);

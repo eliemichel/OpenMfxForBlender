@@ -46,6 +46,7 @@
 #include "kernel_path_common.h"
 #include "kernel_path_surface.h"
 #include "kernel_path_volume.h"
+//#include "kernel_path_subsurface.h"
 
 #ifdef __KERNEL_DEBUG__
 #  include "kernel_debug.h"
@@ -75,11 +76,11 @@ ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
 
 	sample_cos_hemisphere(ao_N, bsdf_u, bsdf_v, &ao_D, &ao_pdf);
 
-	if(dot(ccl_fetch(sd, Ng), ao_D) > 0.0f && ao_pdf != 0.0f) {
+	if(dot(sd->Ng, ao_D) > 0.0f && ao_pdf != 0.0f) {
 		Ray light_ray;
 		float3 ao_shadow;
 
-		light_ray.P = ray_offset(ccl_fetch(sd, P), ccl_fetch(sd, Ng));
+		light_ray.P = ray_offset(sd->P, sd->Ng);
 		light_ray.D = ao_D;
 		light_ray.t = kernel_data.background.ao_distance;
 #ifdef __OBJECT_MOTION__

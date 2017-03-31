@@ -128,6 +128,12 @@ static void updateDepgraph(ModifierData *md, DagForest *forest,
 #ifdef WITH_LEGACY_DEPSGRAPH
 		dag_add_collision_relations(forest, scene, ob, obNode, clmd->coll_parms->group, ob->lay|scene->lay, eModifierType_Collision, NULL, true, "Cloth Collision");
 		dag_add_forcefield_relations(forest, scene, ob, obNode, clmd->sim_parms->effector_weights, true, 0, "Cloth Field");
+
+		if (clmd->sim_parms->basemesh_target && (clmd->sim_parms->basemesh_target != ob)) {
+			DagNode *curNode = dag_get_node(forest, clmd->sim_parms->basemesh_target);
+
+			dag_add_relation(forest, curNode, obNode, (DAG_RL_DATA_DATA | DAG_RL_OB_DATA), "Cloth Base Mesh Target");
+		}
 #else
 	(void)forest;
 	(void)scene;
@@ -149,6 +155,11 @@ static void updateDepsgraph(ModifierData *md,
 		DEG_add_collision_relations(node, scene, ob, clmd->coll_parms->group, ob->lay|scene->lay, eModifierType_Collision, NULL, true, "Cloth Collision");
 
 		DEG_add_forcefield_relations(node, scene, ob, clmd->sim_parms->effector_weights, true, 0, "Cloth Field");
+
+		if (clmd->sim_parms->basemesh_target && (clmd->sim_parms->basemesh_target != ob)) {
+			DEG_add_object_relation(node, clmd->sim_parms->basemesh_target, DEG_OB_COMP_TRANSFORM, "Cloth Base Mesh Target");
+			DEG_add_object_relation(node, clmd->sim_parms->basemesh_target, DEG_OB_COMP_GEOMETRY, "Cloth Base Mesh Target");
+		}
 	}
 }
 
@@ -239,6 +250,10 @@ static void foreachIDLink(ModifierData *md, Object *ob,
 
 	if (clmd->sim_parms && clmd->sim_parms->effector_weights) {
 		walk(userData, ob, (ID **)&clmd->sim_parms->effector_weights->group, IDWALK_CB_NOP);
+	}
+
+	if (clmd->sim_parms && clmd->sim_parms->basemesh_target) {
+		walk(userData, ob, (ID **)&clmd->sim_parms->basemesh_target, IDWALK_NOP);
 	}
 }
 

@@ -222,6 +222,11 @@ class PHYSICS_PT_collision(PhysicButtonsPanel, Panel):
             sub.prop(settings, "thickness_outer", text="Outer", slider=True)
             sub.prop(settings, "thickness_inner", text="Inner", slider=True)
 
+            col.prop(settings, "use_culling")
+            col.prop(settings, "use_normal")
+
+            col.prop(settings, "cloth_friction")
+
             col.label(text="Soft Body Damping:")
             col.prop(settings, "damping", text="Factor", slider=True)
 

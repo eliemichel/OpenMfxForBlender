@@ -411,7 +411,7 @@ public:
 	bool has_integrator_dependency();
 	ClosureType get_closure_type() { return distribution; }
 
-	float roughness;
+	float roughness, roughness_orig;
 	ClosureType distribution, distribution_orig;
 };
 
@@ -423,7 +423,7 @@ public:
 	bool has_integrator_dependency();
 	ClosureType get_closure_type() { return distribution; }
 
-	float roughness, IOR;
+	float roughness, roughness_orig, IOR;
 	ClosureType distribution, distribution_orig;
 };
 
@@ -435,7 +435,7 @@ public:
 	bool has_integrator_dependency();
 	ClosureType get_closure_type() { return distribution; }
 
-	float roughness, IOR;
+	float roughness, roughness_orig, IOR;
 	ClosureType distribution, distribution_orig;
 };
 

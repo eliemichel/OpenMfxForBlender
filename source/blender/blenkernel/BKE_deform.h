@@ -116,4 +116,12 @@ void BKE_defvert_extract_vgroup_to_polyweights(
         struct MDeformVert *dvert, const int defgroup, const int num_verts, struct MLoop *loops, const int num_loops,
         struct MPoly *polys, const int num_polys, float *r_weights, const bool invert_vgroup);
 
+float BKE_defvert_combined_weight(const Object *object, const struct MDeformVert *dvert, const int mode);
+
+/* combined weight mode */
+enum {
+	DVERT_COMBINED_MODE_ADD = 0,
+	DVERT_COMBINED_MODE_MIX = 1,
+};
+
 #endif  /* __BKE_DEFORM_H__ */

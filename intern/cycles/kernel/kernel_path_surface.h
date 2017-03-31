@@ -16,7 +16,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-#if defined(__BRANCHED_PATH__) || defined(__SUBSURFACE__)
+#if (defined(__BRANCHED_PATH__) || defined(__SUBSURFACE__)) && !defined(__SPLIT_KERNEL__)
 
 /* branched path tracing: connect path directly to position on one or more lights and add it to L */
 ccl_device_noinline void kernel_branched_path_surface_connect_light(KernelGlobals *kg, RNG *rng,
@@ -33,7 +33,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(KernelGlobal
 	bool is_lamp;
 
 #  ifdef __OBJECT_MOTION__
-	light_ray.time = ccl_fetch(sd, time);
+	light_ray.time = sd->time;
 #  endif
 
 	if(sample_all_lights) {
@@ -55,7 +55,7 @@ ccl_device_noinline void kernel_branched_path_surface_connect_light(KernelGlobal
 				float terminate = path_branched_rng_light_termination(kg, &lamp_rng, state, j, num_samples);
 
 				LightSample ls;
-				if(lamp_light_sample(kg, i, light_u, light_v, ccl_fetch(sd, P), &ls)) {
+				if(lamp_light_sample(kg, i, light_u, light_v, sd->P, &ls)) {
 					/* The sampling probability returned by lamp_light_sample assumes that all lights were sampled.
 					 * However, this code only samples lamps, so if the scene also had mesh lights, the real probability is twice as high. */
 					if(kernel_data.integrator.pdf_triangles != 0.0f)
@@ -159,15 +159,15 @@ ccl_device bool kernel_branched_path_surface_bounce(KernelGlobals *kg, RNG *rng,
 	path_state_next(kg, state, label);
 
 	/* setup ray */
-	ray->P = ray_offset(ccl_fetch(sd, P), (label & LABEL_TRANSMIT)? -ccl_fetch(sd, Ng): ccl_fetch(sd, Ng));
+	ray->P = ray_offset(sd->P, (label & LABEL_TRANSMIT)? -sd->Ng: sd->Ng);
 	ray->D = normalize(bsdf_omega_in);
 	ray->t = FLT_MAX;
 #ifdef __RAY_DIFFERENTIALS__
-	ray->dP = ccl_fetch(sd, dP);
+	ray->dP = sd->dP;
 	ray->dD = bsdf_domega_in;
 #endif
 #ifdef __OBJECT_MOTION__
-	ray->time = ccl_fetch(sd, time);
+	ray->time = sd->time;
 #endif
 
 #ifdef __VOLUME__
@@ -191,11 +191,16 @@ ccl_device bool kernel_branched_path_surface_bounce(KernelGlobals *kg, RNG *rng,
 
 #endif
 
-#ifndef __SPLIT_KERNEL__
 /* path tracing: connect path directly to position on a light and add it to L */
-ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg, ccl_addr_space RNG *rng,
-	ShaderData *sd, ShaderData *emission_sd, float3 throughput, ccl_addr_space PathState *state,
-	PathRadiance *L, uint light_linking, uint shadow_linking)
+ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
+														 ccl_addr_space RNG *rng,
+														 ShaderData *sd, 
+														 ShaderData *emission_sd, 
+														 float3 throughput, 
+														 ccl_addr_space PathState *state,
+														 PathRadiance *L, 
+														 uint light_linking, 
+														 uint shadow_linking)
 {
 #ifdef __EMISSION__
 	if(!(kernel_data.integrator.use_direct_light && (ccl_fetch(sd, runtime_flag) & SD_RUNTIME_BSDF_HAS_EVAL)))
@@ -211,7 +216,7 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg, ccl_
 	bool is_lamp;
 
 #ifdef __OBJECT_MOTION__
-	light_ray.time = ccl_fetch(sd, time);
+	light_ray.time = sd->time;
 #endif
 
 	LightSample ls;
@@ -229,7 +234,6 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg, ccl_
 	}
 #endif
 }
-#endif
 
 /* path tracing: bounce off or through surface to with new direction stored in ray */
 ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
@@ -273,16 +277,16 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 		path_state_next(kg, state, label);
 
 		/* setup ray */
-		ray->P = ray_offset(ccl_fetch(sd, P), (label & LABEL_TRANSMIT)? -ccl_fetch(sd, Ng): ccl_fetch(sd, Ng));
+		ray->P = ray_offset(sd->P, (label & LABEL_TRANSMIT)? -sd->Ng: sd->Ng);
 		ray->D = normalize(bsdf_omega_in);
 
 		if(state->bounce == 0)
-			ray->t -= ccl_fetch(sd, ray_length); /* clipping works through transparent */
+			ray->t -= sd->ray_length; /* clipping works through transparent */
 		else
 			ray->t = FLT_MAX;
 
 #ifdef __RAY_DIFFERENTIALS__
-		ray->dP = ccl_fetch(sd, dP);
+		ray->dP = sd->dP;
 		ray->dD = bsdf_domega_in;
 #endif
 
@@ -301,14 +305,14 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 		path_state_next(kg, state, LABEL_TRANSPARENT);
 
 		if(state->bounce == 0)
-			ray->t -= ccl_fetch(sd, ray_length); /* clipping works through transparent */
+			ray->t -= sd->ray_length; /* clipping works through transparent */
 		else
 			ray->t = FLT_MAX;
 
 		/* setup ray position, direction stays unchanged */
-		ray->P = ray_offset(ccl_fetch(sd, P), -ccl_fetch(sd, Ng));
+		ray->P = ray_offset(sd->P, -sd->Ng);
 #ifdef __RAY_DIFFERENTIALS__
-		ray->dP = ccl_fetch(sd, dP);
+		ray->dP = sd->dP;
 #endif
 
 		/* enter/exit volume */

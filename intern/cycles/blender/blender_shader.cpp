@@ -618,7 +618,8 @@ static ShaderNode *add_node(Scene *scene,
 			bool is_builtin = b_image.packed_file() ||
 			                  b_image.source() == BL::Image::source_GENERATED ||
 			                  b_image.source() == BL::Image::source_MOVIE ||
-			                  b_engine.is_preview();
+			                  (b_engine.is_preview() &&
+			                   b_image.source() != BL::Image::source_SEQUENCE);
 
 			if(is_builtin) {
 				/* for builtin images we're using image datablock name to find an image to
@@ -708,7 +709,8 @@ static ShaderNode *add_node(Scene *scene,
 			bool is_builtin = b_image.packed_file() ||
 			                  b_image.source() == BL::Image::source_GENERATED ||
 			                  b_image.source() == BL::Image::source_MOVIE ||
-			                  b_engine.is_preview();
+			                  (b_engine.is_preview() &&
+			                   b_image.source() != BL::Image::source_SEQUENCE);
 
 			if(is_builtin) {
 				int scene_frame = b_scene.frame_current();

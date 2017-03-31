@@ -96,8 +96,8 @@ typedef struct Cloth {
 	struct BVHTree 		*bvhselftree;			/* collision tree for this cloth object */
 	struct MVertTri		*tri;
 	struct Implicit_Data	*implicit; 		/* our implicit solver connects to this pointer */
-	struct EdgeSet	 	*edgeset; 		/* used for selfcollisions */
-	int last_frame, pad4;
+	int last_frame;
+	float adapt_fact;	/* Stability dt compensation factor */
 } Cloth;
 
 /**
@@ -112,15 +112,18 @@ typedef struct ClothVertex {
 	float	tx[3];		/* temporary position */
 	float 	txold[3];	/* temporary old position */
 	float 	tv[3];		/* temporary "velocity", mostly used as tv = tx-txold */
+	float	tvold[3];
 	float 	mass;		/* mass / weight of the vertex		*/
 	float 	goal;		/* goal, from SB			*/
 	float	impulse[3];	/* used in collision.c */
 	float	xrest[3];   /* rest position of the vertex */
+	float	dcvel[3];	/* delta velocities to be applied by collision responce */
 	unsigned int impulse_count; /* same as above */
 	float 	avg_spring_len; /* average length of connected springs */
 	float 	struct_stiff;
 	float	bend_stiff;
 	float 	shear_stiff;
+	float	planarity;
 	int 	spring_count; /* how many springs attached? */
 	float	shrink_factor; /* how much to shrink this cloth */
 }
@@ -132,20 +135,24 @@ ClothVertex;
 typedef struct ClothSpring {
 	int	ij;		/* Pij from the paper, one end of the spring.	*/
 	int	kl;		/* Pkl from the paper, one end of the spring.	*/
-	int mn;
-	float	restlen;	/* The original length of the spring.	*/
+	int mn;		/* For hair springs: third vertex index; For bending springs: edge index */
+	int *pa;	/* array of vert indices for poly a (for bending springs) */
+	int *pb;	/* array of vert indices for poly b (for bending springs) */
+	int la;		/* length of *pa */
+	int lb;		/* length of *pb */
+	float restlen;	/* The original length of the spring */
+	float restang;	/* The original angle of the bending springs */
+	float lenfact;	/* Factor of restlen used for plasticity */
+	float angoffset;	/* Offset of restang used for plasticity */
 	int	type;		/* types defined in BKE_cloth.h ("springType") */
 	int	flags; 		/* defined in BKE_cloth.h, e.g. deactivated due to tearing */
-	float dfdx[3][3];
-	float dfdv[3][3];
-	float f[3];
-	float 	stiffness;	/* stiffness factor from the vertex groups */
-	float editrestlen;
+	float lin_stiffness;	/* linear stiffness factor from the vertex groups */
+	float ang_stiffness;	/* angular stiffness factor from the vertex groups */
+	float planarity;
 	
 	/* angular bending spring target and derivatives */
 	float target[3];
-}
-ClothSpring;
+} ClothSpring;
 
 // some macro enhancements for vector treatment
 #define VECADDADD(v1,v2,v3) 	{*(v1)+= *(v2) + *(v3); *(v1+1)+= *(v2+1) + *(v3+1); *(v1+2)+= *(v2+2) + *(v3+2);}
@@ -164,10 +171,13 @@ ClothSpring;
 /* SIMULATION FLAGS: goal flags,.. */
 /* These are the bits used in SimSettings.flags. */
 typedef enum {
+	CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_VEL = (1 << 0), /* use velocity based adaptive subframes*/
+	CLOTH_SIMSETTINGS_FLAG_ADAPTIVE_SUBFRAMES_IMP = (1 << 1), /* use velocity based adaptive subframes*/
 	CLOTH_SIMSETTINGS_FLAG_COLLOBJ = ( 1 << 2 ),// object is only collision object, no cloth simulation is done
-	CLOTH_SIMSETTINGS_FLAG_GOAL = ( 1 << 3 ), 	// we have goals enabled
+	CLOTH_SIMSETTINGS_FLAG_INIT_VEL = ( 1 << 3 ), /* initialize cloth velocity from animation */
 	CLOTH_SIMSETTINGS_FLAG_TEARING = ( 1 << 4 ),// true if tearing is enabled
-	CLOTH_SIMSETTINGS_FLAG_SCALING = ( 1 << 8 ), /* is advanced scaling active? */
+	CLOTH_SIMSETTINGS_FLAG_COMB_GOAL = (1 << 5), // combined weights for goal
+	CLOTH_SIMSETTINGS_FLAG_COMPENSATE_INSTABILITY = (1 << 6), /* Compensate instability by increasing subframes */
 	CLOTH_SIMSETTINGS_FLAG_CCACHE_EDIT = (1 << 12),	/* edit cache in editmode */
 	CLOTH_SIMSETTINGS_FLAG_NO_SPRING_COMPRESS = (1 << 13), /* don't allow spring compression */
 	CLOTH_SIMSETTINGS_FLAG_SEW = (1 << 14), /* pull ends of loose edges together */
@@ -187,7 +197,7 @@ typedef enum {
 	CLOTH_SPRING_TYPE_BENDING     = (1 << 3),
 	CLOTH_SPRING_TYPE_GOAL        = (1 << 4),
 	CLOTH_SPRING_TYPE_SEWING      = (1 << 5),
-	CLOTH_SPRING_TYPE_BENDING_ANG = (1 << 6),
+	CLOTH_SPRING_TYPE_BENDING_HAIR = (1 << 6),
 } CLOTH_SPRING_TYPES;
 
 /* SPRING FLAGS */
@@ -234,16 +244,15 @@ void clothModifier_do (struct ClothModifierData *clmd, struct Scene *scene, stru
 int cloth_uses_vgroup(struct ClothModifierData *clmd);
 
 // needed for collision.c
-void bvhtree_update_from_cloth(struct ClothModifierData *clmd, bool moving);
+void bvhtree_update_from_cloth(struct ClothModifierData *clmd, bool moving, bool self);
 void bvhselftree_update_from_cloth(struct ClothModifierData *clmd, bool moving);
 
 // needed for button_object.c
 void cloth_clear_cache (struct Object *ob, struct ClothModifierData *clmd, float framenr );
 
-// needed for cloth.c
-int cloth_add_spring (struct ClothModifierData *clmd, unsigned int indexA, unsigned int indexB, float restlength, int spring_type);
-
 void cloth_parallel_transport_hair_frame(float mat[3][3], const float dir_old[3], const float dir_new[3]);
+
+bool is_basemesh_valid(struct Object *ob, struct Object *basemesh, struct ClothModifierData *clmd);
 
 ////////////////////////////////////////////////
 

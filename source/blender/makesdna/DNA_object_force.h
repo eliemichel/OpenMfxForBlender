@@ -99,6 +99,9 @@ typedef struct PartDeflect {
 	float pdef_sbift;	/* inner face thickness for softbody deflection */
 	float pdef_sboft;	/* outer face thickness for softbody deflection */
 
+	float pdef_cfrict;	/* Friction of cloth collisions */
+	char pad[4];
+
 	/* guide curve, same as for particle child effects */
 	float clump_fac, clump_pow;
 	float kink_freq, kink_shape, kink_amp, free_end;
@@ -372,6 +375,9 @@ typedef struct SoftBody {
 #define PFIELD_DO_ROTATION		(1<<15)
 #define PFIELD_GUIDE_PATH_WEIGHT (1<<16)	/* apply curve weights */
 #define PFIELD_SMOKE_DENSITY    (1<<17)		/* multiply smoke force by density */
+#define PFIELD_GRAVITATION		(1<<18)             /* used for (simple) force */
+#define PFIELD_CLOTH_USE_CULLING (1<<19)		/* enable cloth collision side detection based on normal */
+#define PFIELD_CLOTH_USE_NORMAL (1<<12)		/* replace collision direction with collider normal */
 
 /* pd->falloff */
 #define PFIELD_FALL_SPHERE		0

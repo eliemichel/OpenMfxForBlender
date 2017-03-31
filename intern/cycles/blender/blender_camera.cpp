@@ -853,4 +853,3 @@ BufferParams BlenderSync::get_buffer_params(BL::RenderSettings& b_render,
 }
 
 CCL_NAMESPACE_END
-

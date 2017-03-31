@@ -363,9 +363,9 @@ ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 					object = kernel_tex_fetch(__prim_object, -prim_addr-1);
 
 #  if BVH_FEATURE(BVH_MOTION)
-					bvh_instance_motion_push(kg, object, ray, &P, &dir, &idir, &isect->t, &ob_itfm);
+					isect->t = bvh_instance_motion_push(kg, object, ray, &P, &dir, &idir, isect->t, &ob_itfm);
 #  else
-					bvh_instance_push(kg, object, ray, &P, &dir, &idir, &isect->t);
+					isect->t = bvh_instance_push(kg, object, ray, &P, &dir, &idir, isect->t);
 #  endif
 					triangle_intersect_precalc(dir, &isect_precalc);
 
@@ -400,9 +400,9 @@ ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 
 			/* instance pop */
 #  if BVH_FEATURE(BVH_MOTION)
-			bvh_instance_motion_pop(kg, object, ray, &P, &dir, &idir, &isect->t, &ob_itfm);
+			isect->t = bvh_instance_motion_pop(kg, object, ray, &P, &dir, &idir, isect->t, &ob_itfm);
 #  else
-			bvh_instance_pop(kg, object, ray, &P, &dir, &idir, &isect->t);
+			isect->t = bvh_instance_pop(kg, object, ray, &P, &dir, &idir, isect->t);
 #  endif
 			triangle_intersect_precalc(dir, &isect_precalc);
 

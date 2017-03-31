@@ -70,6 +70,8 @@ bDeformGroup *BKE_defgroup_new(Object *ob, const char *name)
 
 	BLI_strncpy(defgroup->name, name, sizeof(defgroup->name));
 
+	defgroup->influence = 0.0f;
+
 	BLI_addtail(&ob->defbase, defgroup);
 	defgroup_unique_name(defgroup, ob);
 
@@ -1276,3 +1278,35 @@ bool data_transfer_layersmapping_vgroups(
 }
 
 /** \} */
+
+/**
+ * \return The interpolated weight of all vertex groups for a given vertex.
+ */
+float BKE_defvert_combined_weight(const Object *object, const MDeformVert *dvert, const int mode)
+{
+	bDeformGroup *dg;
+	float tot_weight = 0;
+	float tot_influence = 0;
+	int i = 0;
+
+	if (mode == DVERT_COMBINED_MODE_ADD) {
+		for (; i < dvert->totweight; i++) {
+			dg = BLI_findlink(&object->defbase, dvert->dw[i].def_nr);
+			tot_weight += dvert->dw[i].weight * dg->influence;
+		}
+
+		return min_ff(tot_weight, 1.0f);
+	}
+	else if (mode == DVERT_COMBINED_MODE_MIX) {
+		for (dg = object->defbase.first; dg; dg = dg->next, i++) {
+			if (dg->influence > 0) {
+				tot_weight += defvert_find_weight(dvert, i) * dg->influence;
+				tot_influence += dg->influence;
+			}
+		}
+
+		return tot_influence > 0 ? tot_weight / tot_influence : 0.0f;
+	}
+
+	return 0.0f;
+}

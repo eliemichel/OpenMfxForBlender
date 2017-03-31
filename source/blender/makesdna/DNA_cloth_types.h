@@ -49,17 +49,21 @@
 typedef struct ClothSimSettings {
 	struct	LinkNode *cache; /* UNUSED atm */
 	float 	mingoal; 	/* see SB */
-	float	Cdis;		/* Mechanical damping of springs.		*/
+	float	tension_damp;	/* Mechanical damping of structural springs. */
+	float	compression_damp;	/* Mechanical damping of structural springs. */
+	float	shear_damp;	/* Mechanical damping of structural springs. */
 	float	Cvi;		/* Viscous/fluid damping.			*/
 	float	gravity[3];	/* Gravity/external force vector.		*/
 	float	dt;		/* This is the duration of our time step, computed.	*/
 	float	mass;		/* The mass of the entire cloth.		*/
-	float	structural;	/* Structural spring stiffness.			*/
+	float	tension;	/* Tension spring stiffness.			*/
+	float	compression;	/* Compression spring stiffness.			*/
 	float	shear;		/* Shear spring stiffness.			*/
 	float	bending;	/* Flexion spring stiffness.			*/
 	float	max_bend; 	/* max bending scaling value, min is "bending" */
-	float	max_struct; 	/* max structural scaling value, min is "structural" */
-	float	max_shear; 	/* max shear scaling value, UNUSED */
+	float	max_tension; 	/* max structural scaling value, min is "structural" */
+	float	max_compression; 	/* max structural scaling value, min is "structural" */
+	float	max_shear; 	/* max shear scaling value */
 	float	max_sewing; 	/* max sewing force */
 	float 	avg_spring_len; /* used for normalized springs */
 	float 	timescale; /* parameter how fast cloth runs */
@@ -76,15 +80,20 @@ typedef struct ClothSimSettings {
 	float	density_strength;	/* influence of hair density */
 	float	collider_friction; /* friction with colliders */
 	float	vel_damping; /* damp the velocity to speed up getting to the resting position */
-	float	shrink_min;  /* min amount to shrink cloth by 0.0f (no shrink) - 1.0f (shrink to nothing) */
-	float	shrink_max;  /* max amount to shrink cloth by 0.0f (no shrink) - 1.0f (shrink to nothing) */
+	float	shrink;  /* min amount to shrink cloth by 0.0f (no shrink) - 1.0f (shrink to nothing) */
+	float	max_shrink;  /* max amount to shrink cloth by 0.0f (no shrink) - 1.0f (shrink to nothing) */
+	float	struct_plasticity;	/* Factor of how much the rest length will change after reaching yield point (0-1) */
+	float	struct_yield_fact;	/* Factor of how much length has to change before plastic behavior kicks in (1-inf) */
+	float	bend_plasticity;	/* Factor of how much the rest angle will change after reaching yield point (0-1) */
+	float	bend_yield_fact;	/* How much angle has to change as a factor of a full circle before plastic behavior kicks in (0-1) */
+	float	rest_planar_fact;	/* Factor of how planar rest angles should be, 0 means the original angle, and 1 means totally flat */
+	float	max_planarity;
 	
 	/* XXX various hair stuff
 	 * should really be separate, this struct is a horrible mess already
 	 */
 	float	bending_damping;	/* damping of bending springs */
 	float	voxel_cell_size;    /* size of voxel grid cells for continuum dynamics */
-	int		pad;
 
 	int 	stepsPerFrame;	/* Number of time steps per frame.		*/
 	int	flags;		/* flags, see CSIMSETT_FLAGS enum above.	*/
@@ -94,13 +103,25 @@ typedef struct ClothSimSettings {
 	short	vgroup_bend;	/* vertex group for scaling bending stiffness */
 	short	vgroup_mass;	/* optional vertexgroup name for assigning weight.*/
 	short	vgroup_struct;  /* vertex group for scaling structural stiffness */
+	short	vgroup_shear;  /* vertex group for scaling structural stiffness */
 	short	vgroup_shrink;  /* vertex group for shrinking cloth */
+	short	vgroup_planar;  /* vertex group for shrinking cloth */
 	short	shapekey_rest;  /* vertex group for scaling structural stiffness */
 	short	presets; /* used for presets on GUI */
 	short 	reset;
 
 	char pad0[4];
 	struct EffectorWeights *effector_weights;
+
+	/* Adaptive subframe stuff */
+	int max_subframes;
+	float max_vel;
+	float adjustment_factor;
+	float max_imp;
+	float imp_adj_factor;
+	char pad1[4];
+
+	struct Object *basemesh_target;	/* object to use for dynamic basemesh */
 } ClothSimSettings;
 
 
@@ -111,14 +132,16 @@ typedef struct ClothCollSettings {
 	float	friction;		/* Friction/damping applied on contact with other object.*/
 	float	damping;	/* Collision restitution on contact with other object.*/
 	float 	selfepsilon; 		/* for selfcollision */
-	float repel_force, distance_repel;
+	float	clamp;		/* Impulse clamp for object collisions */
+	float	self_clamp;	/* Impulse clamp for self collisions */
 	int	flags;			/* collision flags defined in BKE_cloth.h */
-	short	self_loop_count;	/* How many iterations for the selfcollision loop	*/
 	short	loop_count;		/* How many iterations for the collision loop.		*/
-	int pad;
+	short pad[3];
 	struct Group *group;	/* Only use colliders from this group of objects */
 	short	vgroup_selfcol; /* vgroup to paint which vertices are used for self collisions */
-	short pad2[3];
+	short objcol_resp_iter;	/* Iterations for object collision response */
+	short selfcol_resp_iter;	/* Iterations for self collision response */
+	short pad2;
 } ClothCollSettings;
 
 

@@ -42,11 +42,11 @@ ccl_device_inline void kernel_branched_path_ao(KernelGlobals *kg,
 
 		sample_cos_hemisphere(ao_N, bsdf_u, bsdf_v, &ao_D, &ao_pdf);
 
-		if(dot(ccl_fetch(sd, Ng), ao_D) > 0.0f && ao_pdf != 0.0f) {
+		if(dot(sd->Ng, ao_D) > 0.0f && ao_pdf != 0.0f) {
 			Ray light_ray;
 			float3 ao_shadow;
 
-			light_ray.P = ray_offset(ccl_fetch(sd, P), ccl_fetch(sd, Ng));
+			light_ray.P = ray_offset(sd->P, sd->Ng);
 			light_ray.D = ao_D;
 			light_ray.t = kernel_data.background.ao_distance;
 #ifdef __OBJECT_MOTION__
@@ -74,7 +74,7 @@ ccl_device_noinline void kernel_branched_path_surface_indirect_light(KernelGloba
 	RNG *rng, ShaderData *sd, ShaderData *indirect_sd, ShaderData *emission_sd,
 	float3 throughput, float num_samples_adjust, PathState *state, PathRadiance *L, uint light_linking)
 {
-	for(int i = 0; i < ccl_fetch(sd, num_closure); i++) {
+	for (int i = 0; i < ccl_fetch(sd, num_closure); i++) {
 		const ShaderClosure *sc = &ccl_fetch(sd, closure)[i];
 
 		if(!CLOSURE_IS_BSDF(sc->type))
@@ -148,8 +148,8 @@ ccl_device void kernel_branched_path_subsurface_scatter(KernelGlobals *kg,
                                                         Ray *ray,
                                                         float3 throughput)
 {
-	for(int i = 0; i < ccl_fetch(sd, num_closure); i++) {
-		ShaderClosure *sc = &ccl_fetch(sd, closure)[i];
+	for(int i = 0; i < sd->num_closure; i++) {
+		ShaderClosure *sc = &sd->closure[i];
 
 		if(!CLOSURE_IS_BSSRDF(sc->type))
 			continue;

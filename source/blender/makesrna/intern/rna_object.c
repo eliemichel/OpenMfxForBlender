@@ -47,6 +47,7 @@
 #include "BKE_editmesh.h"
 #include "BKE_group.h" /* needed for BKE_group_object_exists() */
 #include "BKE_object_deform.h"
+#include "BKE_deform.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -953,6 +954,11 @@ static char *rna_MaterialSlot_path(PointerRNA *ptr)
 	return BLI_sprintfN("material_slots[%d]", index);
 }
 
+static char *rna_VertexGroup_path(PointerRNA *ptr)
+{
+	return BLI_sprintfN("vertex_groups[%d]", rna_VertexGroup_index_get(ptr));
+}
+
 /* why does this have to be so complicated?, can't all this crap be
  * moved to in BGE conversion function? - Campbell *
  *
@@ -1321,8 +1327,12 @@ static void rna_Object_active_constraint_set(PointerRNA *ptr, PointerRNA value)
 
 static bConstraint *rna_Object_constraints_new(Object *object, int type)
 {
+	bConstraint *new_con = BKE_constraint_add_for_object(object, NULL, type);
+
+	ED_object_constraint_tag_update(object, new_con);
 	WM_main_add_notifier(NC_OBJECT | ND_CONSTRAINT | NA_ADDED, object);
-	return BKE_constraint_add_for_object(object, NULL, type);
+
+	return new_con;
 }
 
 static void rna_Object_constraints_remove(Object *object, ReportList *reports, PointerRNA *con_ptr)
@@ -1418,6 +1428,17 @@ static void rna_Object_vgroup_clear(Object *ob)
 	BKE_object_defgroup_remove_all(ob);
 
 	WM_main_add_notifier(NC_OBJECT | ND_DRAW, ob);
+}
+
+static float rna_Object_combined_vgroup_weight(Object *ob, ReportList *reports, int index, int mode)
+{
+	float weight = ED_vgroup_combined_vert_weight(ob, index, mode);
+
+	if (weight < 0) {
+		BKE_report(reports, RPT_ERROR, "Vertex index not in range");
+	}
+
+	return weight;
 }
 
 static void rna_VertexGroup_vertex_add(ID *id, bDeformGroup *def, ReportList *reports, int index_len,
@@ -1553,6 +1574,14 @@ static void rna_def_vertex_group(BlenderRNA *brna)
 	RNA_def_property_int_funcs(prop, "rna_VertexGroup_index_get", NULL, NULL);
 	RNA_def_property_ui_text(prop, "Index", "Index number of the vertex group");
 
+	prop = RNA_def_property(srna, "influence", PROP_FLOAT, PROP_FACTOR);
+	RNA_def_property_float_sdna(prop, NULL, "influence");
+	RNA_def_property_range(prop, 0.0f, 1.0f);
+	RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.1f, 3);
+	RNA_def_property_ui_text(prop, "Influence", "Influence of the vertex group on the combined group");
+	RNA_def_property_update(prop, NC_GEOM | ND_DATA | NA_RENAME, "rna_Object_internal_update_data");
+	RNA_def_property_flag(prop, PROP_ANIMATABLE);
+
 	func = RNA_def_function(srna, "add", "rna_VertexGroup_vertex_add");
 	RNA_def_function_ui_description(func, "Add vertices to the group");
 	RNA_def_function_flag(func, FUNC_USE_REPORTS | FUNC_USE_SELF_ID);
@@ -1578,6 +1607,8 @@ static void rna_def_vertex_group(BlenderRNA *brna)
 	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 	parm = RNA_def_float(func, "weight", 0, 0.0f, 1.0f, "", "Vertex weight", 0.0f, 1.0f);
 	RNA_def_function_return(func, parm);
+
+	RNA_def_struct_path_func(srna, "rna_VertexGroup_path");
 }
 
 static void rna_def_material_slot(BlenderRNA *brna)
@@ -2068,6 +2099,12 @@ static void rna_def_object_vertex_groups(BlenderRNA *brna, PropertyRNA *cprop)
 	FunctionRNA *func;
 	PropertyRNA *parm;
 
+	static EnumPropertyItem combined_vertex_group_mode[] = {
+		{DVERT_COMBINED_MODE_ADD, "ADD", 0, "Add", "Add"},
+		{DVERT_COMBINED_MODE_MIX, "MIX", 0, "Mix", "Mix"},
+		{0, NULL, 0, NULL, NULL}
+	};
+
 	RNA_def_property_srna(cprop, "VertexGroups");
 	srna = RNA_def_struct(brna, "VertexGroups", NULL);
 	RNA_def_struct_sdna(srna, "Object");
@@ -2105,6 +2142,15 @@ static void rna_def_object_vertex_groups(BlenderRNA *brna, PropertyRNA *cprop)
 
 	func = RNA_def_function(srna, "clear", "rna_Object_vgroup_clear");
 	RNA_def_function_ui_description(func, "Delete all vertex groups from object");
+
+	func = RNA_def_function(srna, "combined_weight", "rna_Object_combined_vgroup_weight");
+	RNA_def_function_ui_description(func, "Get combined interpolated weight for vertex");
+	RNA_def_function_flag(func, FUNC_USE_REPORTS);
+	parm = RNA_def_int(func, "index", 0, 0, INT_MAX, "Index", "The index of the vertex", 0, INT_MAX);
+	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+	parm = RNA_def_enum(func, "mode", combined_vertex_group_mode, 0, "", "Weight interpolation mode");
+	parm = RNA_def_float(func, "weight", 0, 0.0f, 1.0f, "", "Vertex weight", 0.0f, 1.0f);
+	RNA_def_function_return(func, parm);
 }
 
 
