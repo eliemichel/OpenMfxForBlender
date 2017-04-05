@@ -567,15 +567,15 @@ void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 			Pass::add(PASS_RAY_BOUNCES, passes);
 		}
 #endif
-		RNA_BEGIN(&b_scene.ptr, aov, "aov_list") {
-			string id = get_string(aov, "name");
-			AOV renderAOV;
-			renderAOV.name = id.c_str();
-			renderAOV.index = 9999;
-			renderAOV.is_color = true;
-			b_engine.add_pass((string("AOV ") + id).c_str(), 3, "RGB", b_srlay.name().c_str());
-			passes.add(renderAOV);
+		RNA_BEGIN(&crp, b_aov, "aovs") {
+			bool is_color = RNA_enum_get(&b_aov, "type");
+			string name = get_string(b_aov, "name");
+			AOV aov = {ustring(name), 9999, is_color};
+			passes.add(aov);
+			string passname = string_printf("AOV %s", name.c_str());
+			b_engine.add_pass(passname.c_str(), is_color? 3: 1, is_color? "RGB": "X", b_srlay.name().c_str());
 		} RNA_END
+		
 	}
 
 	scene->film->pass_alpha_threshold = b_srlay.pass_alpha_threshold();

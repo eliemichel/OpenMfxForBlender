@@ -490,6 +490,41 @@ class CyclesRender_PT_performance(CyclesButtonsPanel, Panel):
         row.active = not cscene.debug_use_spatial_splits
         row.prop(cscene, "debug_bvh_time_steps")
 
+class CyclesRender_AOV_add(bpy.types.Operator):
+    """Add an AOV pass"""
+    bl_idname="scenerenderlayer.aov_add"
+    bl_label="Add AOV"
+
+    def execute(self, context):
+        scene = context.scene
+        rd = scene.render
+        rl = rd.layers.active
+        crl = rl.cycles
+
+        crl.aovs.add()
+        return {'FINISHED'}
+
+class CyclesRender_AOV_delete(bpy.types.Operator):
+    """Delete an AOV pass"""
+    bl_idname="scenerenderlayer.aov_delete"
+    bl_label="Delete AOV"
+
+    def execute(self, context):
+        scene = context.scene
+        rd = scene.render
+        rl = rd.layers.active
+        crl = rl.cycles
+
+        crl.aovs.remove(crl.active_aov)
+        return {'FINISHED'}
+
+class CyclesAOVList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        row = layout.row()
+        row.label("", icon='RENDER_RESULT')
+        split = row.split(percentage=0.65, align=True)
+        split.prop(item, "name", text="")
+        split.prop(item, "type", text="")
 
 class CyclesRender_PT_layer_options(CyclesButtonsPanel, Panel):
     bl_label = "Layer"
@@ -594,11 +629,13 @@ class CyclesRender_PT_layer_passes(CyclesButtonsPanel, Panel):
           col.prop(crl, "pass_debug_bvh_intersections")
           col.prop(crl, "pass_debug_ray_bounces")
 
+        layout.label("AOVs:")
+        crl = rl.cycles
         row = layout.row()
-        row.template_list("CYCLES_aovs", "name", scene, "aov_list", scene, "aov_index", rows=2)
-        col = row.column(align=True)
-        col.operator("aov_list.new_item", icon='ZOOMIN', text="")
-        col.operator("aov_list.delete_item", icon='ZOOMOUT', text="")
+        row.template_list("CyclesAOVList", "", crl, "aovs", crl, "active_aov")
+        sub = row.column(align=True)
+        sub.operator("scenerenderlayer.aov_add", icon='ZOOMIN', text="")
+        sub.operator("scenerenderlayer.aov_delete", icon='ZOOMOUT', text="")
 
 class CyclesRender_PT_views(CyclesButtonsPanel, Panel):
     bl_label = "Views"

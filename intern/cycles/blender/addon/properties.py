@@ -140,6 +140,11 @@ enum_texture_limit = (
     ('8192', "8192", "Limit texture size to 8192 pixels", 7),
     )
 
+enum_aov_types = (
+    ('VALUE', "Value", "Write a Value pass", 0),
+    ('COLOR', "Color", "Write a color pass", 1),
+    )
+
 class CyclesRenderSettings(bpy.types.PropertyGroup):
     @classmethod
     def register(cls):
@@ -1243,6 +1248,12 @@ class CyclesCurveRenderSettings(bpy.types.PropertyGroup):
     def unregister(cls):
         del bpy.types.Scene.cycles_curves
 
+class CyclesAOVSettings(bpy.types.PropertyGroup):
+    @classmethod
+    def register(cls):
+        cls.name = StringProperty(name="Name")
+        cls.type = EnumProperty(name="Type", items=enum_aov_types, default='COLOR')
+
 class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
     @classmethod
     def register(cls):
@@ -1271,6 +1282,8 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
                 description="Store Debug Ray Bounces pass",
                 default=False,
                 )
+        cls.aovs = bpy.props.CollectionProperty(type=CyclesAOVSettings)
+        cls.active_aov = IntProperty(default=0)
 
     @classmethod
     def unregister(cls):
@@ -1434,6 +1447,7 @@ def register():
     bpy.utils.register_class(CyclesCurveSettings)
     bpy.utils.register_class(CyclesDeviceSettings)
     bpy.utils.register_class(CyclesPreferences)
+    bpy.utils.register_class(CyclesAOVSettings)
     bpy.utils.register_class(CyclesRenderLayerSettings)
 
 
@@ -1450,4 +1464,5 @@ def unregister():
     bpy.utils.unregister_class(CyclesCurveSettings)
     bpy.utils.unregister_class(CyclesDeviceSettings)
     bpy.utils.unregister_class(CyclesPreferences)
+    bpy.utils.unregister_class(CyclesAOVSettings)
     bpy.utils.unregister_class(CyclesRenderLayerSettings)
