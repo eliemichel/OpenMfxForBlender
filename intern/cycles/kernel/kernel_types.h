@@ -351,6 +351,8 @@ typedef enum PassType {
 	PASS_BVH_INTERSECTIONS = (1 << 28),
 	PASS_RAY_BOUNCES = (1 << 29),
 #endif
+	PASS_AOV_COLOR = (1 << 30), /* virtual passes */
+	PASS_AOV_VALUE = (1 << 31),
 } PassType;
 
 #define PASS_ALL (~0)
@@ -908,6 +910,8 @@ typedef struct PathState {
 	float ray_t;       /* accumulated distance through transparent surfaces */
 #endif
 
+	int written_aovs;
+
 	/* volume rendering */
 #ifdef __VOLUME__
 	int volume_bounce;
@@ -1074,6 +1078,8 @@ typedef struct KernelFilm {
 	float mist_inv_depth;
 	float mist_falloff;
 
+	int pass_aov[32];
+	
 #ifdef __KERNEL_DEBUG__
 	int pass_bvh_traversed_nodes;
 	int pass_bvh_traversed_instances;

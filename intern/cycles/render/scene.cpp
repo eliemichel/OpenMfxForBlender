@@ -257,7 +257,7 @@ Scene::MotionType Scene::need_motion(bool advanced_shading)
 {
 	if(integrator->motion_blur)
 		return (advanced_shading)? MOTION_BLUR: MOTION_NONE;
-	else if(Pass::contains(film->passes, PASS_MOTION))
+	else if(film->passes.contains(PASS_MOTION))
 		return MOTION_PASS;
 	else
 		return MOTION_NONE;
@@ -274,7 +274,7 @@ float Scene::motion_shutter_time()
 bool Scene::need_global_attribute(AttributeStandard std)
 {
 	if(std == ATTR_STD_UV)
-		return Pass::contains(film->passes, PASS_UV);
+		return film->passes.contains(PASS_UV);
 	else if(std == ATTR_STD_MOTION_VERTEX_POSITION)
 		return need_motion() != MOTION_NONE;
 	else if(std == ATTR_STD_MOTION_VERTEX_NORMAL)

@@ -852,6 +852,12 @@ static ShaderNode *add_node(Scene *scene,
 		uvm->from_dupli = b_uvmap_node.from_dupli();
 		node = uvm;
 	}
+	else if(b_node.is_a(&RNA_ShaderNodeAOVOutput)) {
+		BL::ShaderNodeAOVOutput b_aovout_node(b_node);
+		AOVOutputNode *aov = new AOVOutputNode();
+		aov->name = ustring(b_aovout_node.aov());
+		node = aov;
+	}
 	else if(b_node.is_a(&RNA_ShaderNodeTexPointDensity)) {
 		BL::ShaderNodeTexPointDensity b_point_density_node(b_node);
 		PointDensityTextureNode *point_density = new PointDensityTextureNode();

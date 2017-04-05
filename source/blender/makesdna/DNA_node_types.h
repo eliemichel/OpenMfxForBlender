@@ -893,6 +893,10 @@ typedef struct NodeShaderUVMap {
 	char uv_map[64];
 } NodeShaderUVMap;
 
+typedef struct NodeShaderAOVOutput {
+	char aov[64];
+} NodeShaderAOVOutput;
+
 typedef struct NodeSunBeams {
 	float source[2];
 

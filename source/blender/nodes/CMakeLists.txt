@@ -146,6 +146,7 @@ set(SRC
 	shader/nodes/node_shader_mixRgb.c
 	shader/nodes/node_shader_normal.c
 	shader/nodes/node_shader_output.c
+	shader/nodes/node_shader_aov_output.c
 	shader/nodes/node_shader_rgb.c
 	shader/nodes/node_shader_sepcombRGB.c
 	shader/nodes/node_shader_sepcombHSV.c

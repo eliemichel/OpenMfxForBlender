@@ -42,7 +42,8 @@ BufferParams::BufferParams()
 	full_width = 0;
 	full_height = 0;
 
-	Pass::add(PASS_COMBINED, passes);
+	aov_color_passes = 0;
+	aov_value_passes = 0;
 }
 
 void BufferParams::get_offset_stride(int& offset, int& stride)
@@ -59,17 +60,7 @@ bool BufferParams::modified(const BufferParams& params)
 		&& height == params.height
 		&& full_width == params.full_width
 		&& full_height == params.full_height
-		&& Pass::equals(passes, params.passes));
-}
-
-int BufferParams::get_passes_size()
-{
-	int size = 0;
-
-	for(size_t i = 0; i < passes.size(); i++)
-		size += passes[i].components;
-	
-	return align_up(size, 4);
+		&& passes.modified(params.passes));
 }
 
 /* Render Buffer Task */
@@ -128,7 +119,7 @@ void RenderBuffers::reset(Device *device, BufferParams& params_)
 	device_free();
 	
 	/* allocate buffer */
-	buffer.resize(params.width*params.height*params.get_passes_size());
+	buffer.resize(params.width*params.height*params.passes.get_size());
 	device->mem_alloc(buffer, MEM_READ_WRITE);
 	device->mem_zero(buffer);
 
@@ -143,7 +134,45 @@ bool RenderBuffers::copy_from_device()
 	if(!buffer.device_pointer)
 		return false;
 
-	device->mem_copy_from(buffer, 0, params.width, params.height, params.get_passes_size()*sizeof(float));
+	device->mem_copy_from(buffer, 0, params.width, params.height, params.passes.get_size()*sizeof(float));
+
+	return true;
+}
+
+bool RenderBuffers::get_aov_rect(ustring name, float exposure, int sample, int components, float *pixels)
+{
+	int aov_offset = 0;
+
+	AOV *aov = params.passes.get_aov(name, aov_offset);
+
+	if(!aov) {
+		return false;
+	}
+
+	float *in = (float*)buffer.data_pointer + aov_offset;
+	int pass_stride = params.passes.get_size();
+
+	float scale = (aov->is_color)? exposure/sample: 1.0f/(float)sample; /* TODO has_exposure */
+
+	int size = params.width*params.height;
+
+	if(components == 1) {
+		assert(!aov->is_color);
+		for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
+			float f = *in;
+			pixels[0] = f*scale;
+		}
+	}
+	else {
+		assert(components == 3 && aov->is_color);
+		for(int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
+			float3 f = make_float3(in[0], in[1], in[2]);
+
+			pixels[0] = f.x*scale;
+			pixels[1] = f.y*scale;
+			pixels[2] = f.z*scale;
+		}
+	}
 
 	return true;
 }
@@ -152,161 +181,143 @@ bool RenderBuffers::get_pass_rect(PassType type, float exposure, int sample, int
 {
 	int pass_offset = 0;
 
-	for(size_t j = 0; j < params.passes.size(); j++) {
-		Pass& pass = params.passes[j];
-
-		if(pass.type != type) {
-			pass_offset += pass.components;
-			continue;
-		}
-
-		float *in = (float*)buffer.data_pointer + pass_offset;
-		int pass_stride = params.get_passes_size();
-
-		float scale = (pass.filter)? 1.0f/(float)sample: 1.0f;
-		float scale_exposure = (pass.exposure)? scale*exposure: scale;
-
-		int size = params.width*params.height;
-
-		if(components == 1) {
-			assert(pass.components == components);
-
-			/* scalar */
-			if(type == PASS_DEPTH) {
-				for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
-					float f = *in;
-					pixels[0] = (f == 0.0f)? 1e10f: f*scale_exposure;
-				}
-			}
-			else if(type == PASS_MIST) {
-				for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
-					float f = *in;
-					pixels[0] = saturate(f*scale_exposure);
-				}
-			}
-#ifdef WITH_CYCLES_DEBUG
-			else if(type == PASS_BVH_TRAVERSED_NODES ||
-			        type == PASS_BVH_TRAVERSED_INSTANCES ||
-			        type == PASS_BVH_INTERSECTIONS ||
-			        type == PASS_RAY_BOUNCES)
-			{
-				for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
-					float f = *in;
-					pixels[0] = f*scale;
-				}
-			}
-#endif
-			else {
-				for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
-					float f = *in;
-					pixels[0] = f*scale_exposure;
-				}
-			}
-		}
-		else if(components == 3) {
-			assert(pass.components == 4);
-
-			/* RGBA */
-			if(type == PASS_SHADOW) {
-				for(int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
-					float4 f = make_float4(in[0], in[1], in[2], in[3]);
-					float invw = (f.w > 0.0f)? 1.0f/f.w: 1.0f;
-
-					pixels[0] = f.x*invw;
-					pixels[1] = f.y*invw;
-					pixels[2] = f.z*invw;
-				}
-			}
-			else if(pass.divide_type != PASS_NONE) {
-				/* RGB lighting passes that need to divide out color */
-				pass_offset = 0;
-				for(size_t k = 0; k < params.passes.size(); k++) {
-					Pass& color_pass = params.passes[k];
-					if(color_pass.type == pass.divide_type)
-						break;
-					pass_offset += color_pass.components;
-				}
-
-				float *in_divide = (float*)buffer.data_pointer + pass_offset;
-
-				for(int i = 0; i < size; i++, in += pass_stride, in_divide += pass_stride, pixels += 3) {
-					float3 f = make_float3(in[0], in[1], in[2]);
-					float3 f_divide = make_float3(in_divide[0], in_divide[1], in_divide[2]);
-
-					f = safe_divide_even_color(f*exposure, f_divide);
-
-					pixels[0] = f.x;
-					pixels[1] = f.y;
-					pixels[2] = f.z;
-				}
-			}
-			else {
-				/* RGB/vector */
-				for(int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
-					float3 f = make_float3(in[0], in[1], in[2]);
-
-					pixels[0] = f.x*scale_exposure;
-					pixels[1] = f.y*scale_exposure;
-					pixels[2] = f.z*scale_exposure;
-				}
-			}
-		}
-		else if(components == 4) {
-			assert(pass.components == components);
-
-			/* RGBA */
-			if(type == PASS_SHADOW) {
-				for(int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
-					float4 f = make_float4(in[0], in[1], in[2], in[3]);
-					float invw = (f.w > 0.0f)? 1.0f/f.w: 1.0f;
-
-					pixels[0] = f.x*invw;
-					pixels[1] = f.y*invw;
-					pixels[2] = f.z*invw;
-					pixels[3] = 1.0f;
-				}
-			}
-			else if(type == PASS_MOTION) {
-				/* need to normalize by number of samples accumulated for motion */
-				pass_offset = 0;
-				for(size_t k = 0; k < params.passes.size(); k++) {
-					Pass& color_pass = params.passes[k];
-					if(color_pass.type == PASS_MOTION_WEIGHT)
-						break;
-					pass_offset += color_pass.components;
-				}
-
-				float *in_weight = (float*)buffer.data_pointer + pass_offset;
-
-				for(int i = 0; i < size; i++, in += pass_stride, in_weight += pass_stride, pixels += 4) {
-					float4 f = make_float4(in[0], in[1], in[2], in[3]);
-					float w = in_weight[0];
-					float invw = (w > 0.0f)? 1.0f/w: 0.0f;
-
-					pixels[0] = f.x*invw;
-					pixels[1] = f.y*invw;
-					pixels[2] = f.z*invw;
-					pixels[3] = f.w*invw;
-				}
-			}
-			else {
-				for(int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
-					float4 f = make_float4(in[0], in[1], in[2], in[3]);
-
-					pixels[0] = f.x*scale_exposure;
-					pixels[1] = f.y*scale_exposure;
-					pixels[2] = f.z*scale_exposure;
-
-					/* clamp since alpha might be > 1.0 due to russian roulette */
-					pixels[3] = saturate(f.w*scale);
-				}
-			}
-		}
-
-		return true;
+	Pass *pass = params.passes.get_pass(type, pass_offset);
+	if (!pass) {
+		return false;
 	}
-
-	return false;
+	
+	float *in = (float*)buffer.data_pointer + pass_offset;
+	int pass_stride = params.passes.get_size();
+	
+	float scale = (pass->filter)? 1.0f/(float)sample: 1.0f;
+	float scale_exposure = (pass->exposure)? scale*exposure: scale;
+	
+	int size = params.width*params.height;
+	
+	if(components == 1) {
+		assert(pass->components == components);
+		
+		/* scalar */
+		if(type == PASS_DEPTH) {
+			for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
+				float f = *in;
+				pixels[0] = (f == 0.0f)? 1e10f: f*scale_exposure;
+			}
+		}
+		else if(type == PASS_MIST) {
+			for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
+				float f = *in;
+				pixels[0] = saturate(f*scale_exposure);
+			}
+		}
+#ifdef WITH_CYCLES_DEBUG
+		else if(type == PASS_BVH_TRAVERSED_NODES ||
+				type == PASS_BVH_TRAVERSED_INSTANCES ||
+				type == PASS_BVH_INTERSECTIONS ||
+				type == PASS_RAY_BOUNCES)
+		{
+			for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
+				float f = *in;
+				pixels[0] = f*scale;
+			}
+		}
+#endif
+		else {
+			for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
+				float f = *in;
+				pixels[0] = f*scale_exposure;
+			}
+		}
+	}
+	else if(components == 3) {
+		assert(pass->components == 4);
+		
+		/* RGBA */
+		if(type == PASS_SHADOW) {
+			for(int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
+				float4 f = make_float4(in[0], in[1], in[2], in[3]);
+				float invw = (f.w > 0.0f)? 1.0f/f.w: 1.0f;
+				
+				pixels[0] = f.x*invw;
+				pixels[1] = f.y*invw;
+				pixels[2] = f.z*invw;
+			}
+		}
+		else if(pass->divide_type != PASS_NONE) {
+			/* RGB lighting passes that need to divide out color */
+			params.passes.get_pass(pass->divide_type, pass_offset);
+			
+			float *in_divide = (float*)buffer.data_pointer + pass_offset;
+			
+			for(int i = 0; i < size; i++, in += pass_stride, in_divide += pass_stride, pixels += 3) {
+				float3 f = make_float3(in[0], in[1], in[2]);
+				float3 f_divide = make_float3(in_divide[0], in_divide[1], in_divide[2]);
+				
+				f = safe_divide_even_color(f*exposure, f_divide);
+				
+				pixels[0] = f.x;
+				pixels[1] = f.y;
+				pixels[2] = f.z;
+			}
+		}
+		else {
+			/* RGB/vector */
+			for(int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
+				float3 f = make_float3(in[0], in[1], in[2]);
+				
+				pixels[0] = f.x*scale_exposure;
+				pixels[1] = f.y*scale_exposure;
+				pixels[2] = f.z*scale_exposure;
+			}
+		}
+	}
+	else if(components == 4) {
+		assert(pass->components == components);
+		
+		/* RGBA */
+		if(type == PASS_SHADOW) {
+			for(int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
+				float4 f = make_float4(in[0], in[1], in[2], in[3]);
+				float invw = (f.w > 0.0f)? 1.0f/f.w: 1.0f;
+				
+				pixels[0] = f.x*invw;
+				pixels[1] = f.y*invw;
+				pixels[2] = f.z*invw;
+				pixels[3] = 1.0f;
+			}
+		}			else if(type == PASS_MOTION) {
+			/* need to normalize by number of samples accumulated for motion */
+			
+			params.passes.get_pass(PASS_MOTION_WEIGHT, pass_offset);
+			
+			float *in_weight = (float*)buffer.data_pointer + pass_offset;
+			
+			for(int i = 0; i < size; i++, in += pass_stride, in_weight += pass_stride, pixels += 4) {
+				float4 f = make_float4(in[0], in[1], in[2], in[3]);
+				float w = in_weight[0];
+				float invw = (w > 0.0f)? 1.0f/w: 0.0f;
+				
+				pixels[0] = f.x*invw;
+				pixels[1] = f.y*invw;
+				pixels[2] = f.z*invw;
+				pixels[3] = f.w*invw;
+			}
+		}
+		else {
+			for(int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
+				float4 f = make_float4(in[0], in[1], in[2], in[3]);
+				
+				pixels[0] = f.x*scale_exposure;
+				pixels[1] = f.y*scale_exposure;
+				pixels[2] = f.z*scale_exposure;
+				
+				/* clamp since alpha might be > 1.0 due to russian roulette */
+				pixels[3] = saturate(f.w*scale);
+			}
+		}
+	}
+	
+	return true;
 }
 
 /* Display Buffer */

@@ -1098,6 +1098,11 @@ static void node_shader_buts_hair(uiLayout *layout, bContext *UNUSED(C), Pointer
 	uiItemR(layout, ptr, "component", 0, "", ICON_NONE);
 }
 
+static void node_shader_buts_aov_output(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+	uiItemR(layout, ptr, "aov", 0, "", ICON_NONE);
+}
+
 static void node_shader_buts_script(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
 	uiLayout *row;
@@ -1269,6 +1274,9 @@ static void node_shader_set_butfunc(bNodeType *ntype)
 			break;
 		case SH_NODE_OUTPUT_LINESTYLE:
 			ntype->draw_buttons = node_buts_output_linestyle;
+			break;
+		case SH_NODE_AOV_OUTPUT:
+			ntype->draw_buttons = node_shader_buts_aov_output;
 			break;
 	}
 }

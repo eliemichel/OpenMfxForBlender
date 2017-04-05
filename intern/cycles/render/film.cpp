@@ -39,7 +39,18 @@ static bool compare_pass_order(const Pass& a, const Pass& b)
 	return (a.components > b.components);
 }
 
-void Pass::add(PassType type, array<Pass>& passes)
+PassSettings::PassSettings()
+{
+	add(PASS_COMBINED);
+}
+
+void PassSettings::add(AOV aov)
+{
+	aovs.push_back_slow(aov);
+	add(aov.is_color? PASS_AOV_COLOR : PASS_AOV_VALUE);
+}
+
+void PassSettings::add(PassType type)
 {
 	for(size_t i = 0; i < passes.size(); i++)
 		if(passes[i].type == type)
@@ -51,10 +62,12 @@ void Pass::add(PassType type, array<Pass>& passes)
 	pass.filter = true;
 	pass.exposure = false;
 	pass.divide_type = PASS_NONE;
+	pass.is_virtual = false;
 
 	switch(type) {
 		case PASS_NONE:
 			pass.components = 0;
+			pass.is_virtual = true;
 			break;
 		case PASS_COMBINED:
 			pass.components = 4;
@@ -152,6 +165,7 @@ void Pass::add(PassType type, array<Pass>& passes)
 			 * determined way.
 			 */
 			pass.components = 0;
+			pass.is_virtual = true;
 			break;
 #ifdef WITH_CYCLES_DEBUG
 		case PASS_BVH_TRAVERSED_NODES:
@@ -162,6 +176,14 @@ void Pass::add(PassType type, array<Pass>& passes)
 			pass.exposure = false;
 			break;
 #endif
+		case PASS_AOV_COLOR:
+			pass.components = 4;
+			pass.is_virtual = true;
+			break;
+		case PASS_AOV_VALUE:
+			pass.components = 1;
+			pass.is_virtual = true;
+			break;
 	}
 
 	passes.push_back_slow(pass);
@@ -171,28 +193,102 @@ void Pass::add(PassType type, array<Pass>& passes)
 	sort(&passes[0], &passes[0] + passes.size(), compare_pass_order);
 
 	if(pass.divide_type != PASS_NONE)
-		Pass::add(pass.divide_type, passes);
+		add(pass.divide_type);
 }
 
-bool Pass::equals(const array<Pass>& A, const array<Pass>& B)
-{
-	if(A.size() != B.size())
-		return false;
-	
-	for(int i = 0; i < A.size(); i++)
-		if(A[i].type != B[i].type)
-			return false;
-	
-	return true;
-}
-
-bool Pass::contains(const array<Pass>& passes, PassType type)
+bool PassSettings::contains(PassType type) const
 {
 	for(size_t i = 0; i < passes.size(); i++)
 		if(passes[i].type == type)
 			return true;
 	
 	return false;
+}
+
+bool PassSettings::modified(const PassSettings& other) const
+{
+	return !(passes == other.passes &&
+	         aovs == other.aovs);
+}
+
+int PassSettings::get_size() const
+{
+	int size = 0;
+
+	for(size_t i = 0; i < passes.size(); i++) {
+		if(!passes[i].is_virtual) {
+			size += passes[i].components;
+		}
+	}
+
+	for(size_t i = 0; i < aovs.size(); i++) {
+		size += aovs[i].is_color? 4 : 1;
+	}
+
+	return align_up(size, 4);
+}
+
+Pass* PassSettings::get_pass(PassType type, int &offset)
+{
+	offset = 0;
+
+	for(int i = 0; i < passes.size(); i++) {
+		Pass *pass = &passes[i];
+		if(pass->type == type) {
+			return pass;
+		}
+		if(!passes[i].is_virtual) {
+			offset += pass->components;
+		}
+		else if(passes[i].type == PASS_AOV_COLOR) {
+			for(size_t i = 0; i < aovs.size(); i++) {
+				if(aovs[i].is_color) {
+					offset += 4;
+				}
+			}
+		}
+		else if(passes[i].type == PASS_AOV_VALUE) {
+			for(size_t i = 0; i < aovs.size(); i++) {
+				if(!aovs[i].is_color) {
+					offset += 1;
+				}
+			}
+		}
+	}
+
+	return NULL;
+}
+
+AOV* PassSettings::get_aov(ustring name, int &offset)
+{
+	AOV *aov = NULL;
+
+	for(size_t i = 0; i < aovs.size(); i++) {
+		if(aovs[i].name == name) {
+			aov = &aovs[i];
+			break;
+		}
+	}
+
+	if(!aov) {
+		return NULL;
+	}
+
+	/* Get offset to AOVs of this type. */
+	get_pass(aov->is_color? PASS_AOV_COLOR : PASS_AOV_VALUE, offset);
+
+	for(size_t i = 0; i < aovs.size(); i++) {
+		if(aovs[i].name == name) {
+			aov->index = i;
+			return aov;
+		}
+		else if(aovs[i].is_color == aov->is_color) {
+			offset += aov->is_color? 4 : 1;
+		}
+	}
+
+	assert(false);
+	return aov;
 }
 
 /* Pixel Filter */
@@ -285,8 +381,6 @@ NODE_DEFINE(Film)
 Film::Film()
 : Node(node_type)
 {
-	Pass::add(PASS_COMBINED, passes);
-
 	use_light_visibility = false;
 	filter_table_offset = TABLE_OFFSET_INVALID;
 
@@ -312,8 +406,8 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 	kfilm->pass_stride = 0;
 	kfilm->use_light_pass = use_light_visibility || use_sample_clamp;
 
-	for(size_t i = 0; i < passes.size(); i++) {
-		Pass& pass = passes[i];
+	for(size_t i = 0; i < passes.passes.size(); i++) {
+		Pass& pass = passes.passes[i];
 		kfilm->pass_flag |= pass.type;
 
 		switch(pass.type) {
@@ -429,12 +523,30 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 				kfilm->pass_ray_bounces = kfilm->pass_stride;
 				break;
 #endif
+			case PASS_AOV_COLOR:
+				for(int j = 0; j < passes.aovs.size(); j++) {
+					if(passes.aovs[j].is_color) {
+						kfilm->pass_aov[j] = kfilm->pass_stride | (1 << 31);
+						kfilm->pass_stride += 4;
+					}
+				}
+				break;
+			case PASS_AOV_VALUE:
+				for(int j = 0; j < passes.aovs.size(); j++) {
+					if(!passes.aovs[j].is_color) {
+						kfilm->pass_aov[j] = kfilm->pass_stride & ~(1 << 31);
+						kfilm->pass_stride += 1;
+					}
+				}
+				break;
 
 			case PASS_NONE:
 				break;
 		}
 
-		kfilm->pass_stride += pass.components;
+		if(!pass.is_virtual) {
+			kfilm->pass_stride += pass.components;
+		}
 	}
 
 	kfilm->pass_stride = align_up(kfilm->pass_stride, 4);
@@ -463,18 +575,18 @@ void Film::device_free(Device * /*device*/,
 
 bool Film::modified(const Film& film)
 {
-	return !Node::equals(film) || !Pass::equals(passes, film.passes);
+	return !Node::equals(film) || passes.modified(film.passes);
 }
 
-void Film::tag_passes_update(Scene *scene, const array<Pass>& passes_)
+void Film::tag_passes_update(Scene *scene, const PassSettings& passes_)
 {
-	if(Pass::contains(passes, PASS_UV) != Pass::contains(passes_, PASS_UV)) {
+	if(passes.contains(PASS_UV) != passes_.contains(PASS_UV)) {
 		scene->mesh_manager->tag_update(scene);
 
 		foreach(Shader *shader, scene->shaders)
 			shader->need_update_attributes = true;
 	}
-	else if(Pass::contains(passes, PASS_MOTION) != Pass::contains(passes_, PASS_MOTION))
+	else if(passes.contains(PASS_MOTION) != passes_.contains(PASS_MOTION))
 		scene->mesh_manager->tag_update(scene);
 
 	passes = passes_;

@@ -3487,6 +3487,17 @@ static void def_sh_output(StructRNA *srna)
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 }
 
+static void def_sh_aov_output(StructRNA *srna)
+{
+	PropertyRNA *prop;
+
+	RNA_def_struct_sdna_from(srna, "NodeShaderAOVOutput", "storage");
+
+	prop = RNA_def_property(srna, "aov", PROP_STRING, PROP_NONE);
+	RNA_def_property_ui_text(prop, "AOV", "Name of the AOV that this output writes to");
+	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+}
+
 static void def_sh_output_linestyle(StructRNA *srna)
 {
 	def_sh_output(srna);

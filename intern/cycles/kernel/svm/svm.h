@@ -182,6 +182,7 @@ CCL_NAMESPACE_END
 #include "svm_vector_transform.h"
 #include "svm_voxel.h"
 #include "svm_bump.h"
+#include "svm_aov.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -189,7 +190,7 @@ CCL_NAMESPACE_BEGIN
 #define NODES_FEATURE(feature) ((__NODES_FEATURES__ & (feature)) != 0)
 
 /* Main Interpreter Loop */
-ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_addr_space PathState *state, ShaderType type, int path_flag)
+ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_addr_space PathState *state, ShaderType type, int path_flag, ccl_global float *buffer, int sample)
 {
 	float stack[SVM_STACK_SIZE];
 	int offset = ccl_fetch(sd, shader) & SHADER_MASK;
@@ -456,6 +457,17 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 				break;
 			case NODE_BLACKBODY:
 				svm_node_blackbody(kg, sd, stack, node.y, node.z);
+				break;
+			case NODE_AOV_WRITE_FLOAT3:
+				svm_node_aov_write_float3(kg, state, stack, node.y, node.z, buffer, sample);
+				break;
+			case NODE_AOV_WRITE_FLOAT:
+				svm_node_aov_write_float(kg, state, stack, node.y, node.z, buffer, sample);
+				break;
+			case NODE_END_IF_NO_AOVS:
+				if(state->written_aovs == ~0) {
+					return;
+				}
 				break;
 #  endif  /* __EXTRA_NODES__ */
 #  if NODES_FEATURE(NODE_FEATURE_VOLUME)

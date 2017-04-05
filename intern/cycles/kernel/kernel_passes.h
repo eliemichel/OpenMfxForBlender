@@ -109,6 +109,20 @@ ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg, ccl_global fl
 				kernel_write_pass_float(buffer + kernel_data.film.pass_motion_weight, sample, 1.0f);
 			}
 
+			for(int i = 0; kernel_data.film.pass_aov[i]; i++) {
+				if((state->written_aovs & (1 << i)) == 0) {
+					bool is_color = (kernel_data.film.pass_aov[i] & (1 << 31));
+					int pass_offset = (kernel_data.film.pass_aov[i] & ~(1 << 31));
+					if(is_color) {
+						kernel_write_pass_float3(buffer + pass_offset, sample, make_float3(0.0f, 0.0f, 0.0f));
+					}
+					else {
+						kernel_write_pass_float(buffer + pass_offset, sample, 0.0f);
+					}
+				}
+			}
+			state->written_aovs = ~0;
+
 			state->flag |= PATH_RAY_SINGLE_PASS_DONE;
 		}
 	}

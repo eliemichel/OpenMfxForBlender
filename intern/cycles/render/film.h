@@ -38,17 +38,52 @@ typedef enum FilterType {
 	FILTER_NUM_TYPES,
 } FilterType;
 
-class Pass {
+template<typename T>
+bool operator==(const array<T>& A, const array<T>& B)
+{
+	if(A.size() != B.size())
+		return false;
+
+	for(int i = 0; i < A.size(); i++)
+		if(A[i].type != B[i].type)
+			return false;
+}
+
+struct Pass {
 public:
 	PassType type;
 	int components;
 	bool filter;
 	bool exposure;
 	PassType divide_type;
+	bool is_virtual;
+};
 
-	static void add(PassType type, array<Pass>& passes);
-	static bool equals(const array<Pass>& A, const array<Pass>& B);
-	static bool contains(const array<Pass>& passes, PassType);
+struct AOV {
+public:
+	ustring name;
+	int index;
+	bool is_color;
+};
+
+class PassSettings {
+public:
+	PassSettings();
+	bool modified(const PassSettings& other) const;
+
+	int get_size() const;
+	Pass* get_pass(PassType type, int &offset);
+	AOV* get_aov(ustring name, int &offset);
+
+	bool contains(PassType type) const;
+	void add(PassType type);
+	void add(AOV aov);
+
+protected:
+	array<Pass> passes;
+	array<AOV> aovs;
+
+	friend class Film;
 };
 
 class Film : public Node {
@@ -56,7 +91,7 @@ public:
 	NODE_DECLARE;
 
 	float exposure;
-	array<Pass> passes;
+	PassSettings passes;
 	float pass_alpha_threshold;
 
 	FilterType filter_type;
@@ -79,7 +114,7 @@ public:
 	void device_free(Device *device, DeviceScene *dscene, Scene *scene);
 
 	bool modified(const Film& film);
-	void tag_passes_update(Scene *scene, const array<Pass>& passes_);
+	void tag_passes_update(Scene *scene, const PassSettings& passes);
 	void tag_update(Scene *scene);
 };
 

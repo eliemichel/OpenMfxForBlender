@@ -482,7 +482,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 #ifdef __BACKGROUND__
 			/* sample background shader */
-			float3 L_background = indirect_background(kg, &emission_sd, &state, &ray);
+			float3 L_background = indirect_background(kg, &emission_sd, &state, &ray, buffer, sample);
 			path_radiance_accum_background(&L, throughput, L_background, state.bounce);
 #endif  /* __BACKGROUND__ */
 
@@ -491,7 +491,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 		/* setup shading */
 		shader_setup_from_ray(kg, &sd, &isect, &ray);
-		shader_eval_surface(kg, &sd, rng, &state, 0.0f, state.flag, SHADER_CONTEXT_MAIN);
+		shader_eval_surface(kg, &sd, rng, &state, 0.0f, state.flag, SHADER_CONTEXT_MAIN, buffer, sample);
 		shader_merge_closures(&sd);
 
 		/* holdout */

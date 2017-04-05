@@ -302,7 +302,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 		if(!hit) {
 #ifdef __BACKGROUND__
 			/* sample background shader */
-			float3 L_background = indirect_background(kg, emission_sd, state, ray);
+			float3 L_background = indirect_background(kg, emission_sd, state, ray, NULL, 0);
 			path_radiance_accum_background(L,
 			                               throughput,
 			                               L_background,
@@ -321,7 +321,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 		                      &isect,
 		                      ray);
 		float rbsdf = path_state_rng_1D_for_decision(kg, rng, state, PRNG_BSDF);
-		shader_eval_surface(kg, sd, rng, state, rbsdf, state->flag, SHADER_CONTEXT_INDIRECT);
+		shader_eval_surface(kg, sd, rng, state, rbsdf, state->flag, SHADER_CONTEXT_INDIRECT, NULL, 0);
 #ifdef __BRANCHED_PATH__
 		shader_merge_closures(sd);
 #endif  /* __BRANCHED_PATH__ */
@@ -800,7 +800,7 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 
 #ifdef __BACKGROUND__
 			/* sample background shader */
-			float3 L_background = indirect_background(kg, &emission_sd, &state, &ray);
+			float3 L_background = indirect_background(kg, &emission_sd, &state, &ray, buffer, sample);
 			path_radiance_accum_background(&L, throughput, L_background, state.bounce);
 #endif  /* __BACKGROUND__ */
 
@@ -813,7 +813,7 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 		/* setup shading */
 		shader_setup_from_ray(kg, &sd, &isect, &ray);
 		float rbsdf = path_state_rng_1D_for_decision(kg, rng, &state, PRNG_BSDF);
-		shader_eval_surface(kg, &sd, rng, &state, rbsdf, state.flag, SHADER_CONTEXT_MAIN);
+		shader_eval_surface(kg, &sd, rng, &state, rbsdf, state.flag, SHADER_CONTEXT_MAIN, buffer, sample);
 
 		/* holdout */
 #ifdef __HOLDOUT__

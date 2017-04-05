@@ -671,6 +671,11 @@ void ShaderGraph::clean(Scene *scene)
 	
 	/* break cycles */
 	break_cycles(output(), visited, on_stack);
+	foreach(ShaderNode *node, nodes) {
+		if(node->special_type == SHADER_SPECIAL_TYPE_AOV_OUTPUT) {
+			break_cycles(node, visited, on_stack);
+		}
+	}
 
 	/* disconnect unused nodes */
 	foreach(ShaderNode *node, nodes) {

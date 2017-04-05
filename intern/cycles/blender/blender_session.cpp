@@ -393,19 +393,9 @@ void BlenderSession::render()
 
 		BL::RenderLayer b_rlay = *b_single_rlay;
 
-		/* add passes */
-		array<Pass> passes;
-		if(session_params.device.advanced_shading) {
-			passes = sync->sync_render_passes(b_rlay, *b_layer_iter);
-		}
-		else {
-			Pass::add(PASS_COMBINED, passes);
-		}
+		sync->sync_film(b_rlay, *b_layer_iter, session_params.device.advanced_shading);
 
-		buffer_params.passes = passes;
-		scene->film->pass_alpha_threshold = b_layer_iter->pass_alpha_threshold();
-		scene->film->tag_passes_update(scene, passes);
-		scene->film->tag_update(scene);
+		buffer_params.passes = scene->film->passes;
 		scene->integrator->tag_update(scene);
 
 		int view_index = 0;
@@ -553,7 +543,7 @@ void BlenderSession::bake(BL::Object& b_object,
 
 	if(shader_type == SHADER_EVAL_UV) {
 		/* force UV to be available */
-		Pass::add(PASS_UV, scene->film->passes);
+		scene->film->passes.add(PASS_UV);
 	}
 
 	int bake_pass_filter = bake_pass_filter_get(pass_filter);
@@ -561,7 +551,7 @@ void BlenderSession::bake(BL::Object& b_object,
 
 	/* force use_light_pass to be true if we bake more than just colors */
 	if(bake_pass_filter & ~BAKE_FILTER_COLOR) {
-		Pass::add(PASS_LIGHT, scene->film->passes);
+		scene->film->passes.add(PASS_LIGHT);
 	}
 
 	/* create device and update scene */
@@ -662,7 +652,9 @@ void BlenderSession::do_write_update_render_result(BL::RenderResult& b_rr,
 				/* copy pixels */
 				read = buffers->get_pass_rect(pass_type, exposure, sample, components, &pixels[0]);
 			}
-
+			else if(b_pass.name().substr(0, 4) == "AOV ") {
+				read = buffers->get_aov_rect(ustring(b_pass.name().substr(4)), exposure, sample, components, &pixels[0]);
+			}
 			if(!read) {
 				memset(&pixels[0], 0, pixels.size()*sizeof(float));
 			}

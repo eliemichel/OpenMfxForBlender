@@ -41,6 +41,8 @@ ccl_device_inline void path_state_init(KernelGlobals *kg,
 	state->ray_t = 0.0f;
 #endif
 
+	state->written_aovs = 0;
+
 #ifdef __VOLUME__
 	state->volume_bounce = 0;
 
