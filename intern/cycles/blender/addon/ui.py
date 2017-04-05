@@ -17,6 +17,7 @@
 # <pep8 compliant>
 
 import bpy
+from bpy.types import UIList
 
 from bpy.types import (
         Panel,
@@ -24,6 +25,59 @@ from bpy.types import (
         Operator,
         )
 
+class CYCLES_aov(bpy.types.PropertyGroup):
+	name = bpy.props.StringProperty(name="Name", description="A name for this AOV", default="Untitled")
+
+class CYCLES_OT_NewItem(bpy.types.Operator):
+    """ Add a new item to the list """
+    bl_idname = "aov_list.new_item"
+    bl_label = "Add a new item"
+				
+    def execute(self, context):
+        context.scene.aov_list.add()
+        context.scene.aov_index = len(context.scene.aov_list) - 1
+        item = context.scene.aov_list[context.scene.aov_index]
+        count = 1
+        base_name = item.name
+        name = base_name
+        while context.scene.aov_list.get(name):
+            name = "%s.%03d" % (base_name, count)
+            count += 1
+        item.name = name
+        return{'FINISHED'}
+
+class CYCLES_OT_DeleteItem(bpy.types.Operator):
+    """ Delete the selected item from the list """
+		
+    bl_idname = "aov_list.delete_item"
+    bl_label = "Deletes an item"
+				
+    @classmethod
+    def poll(self, context):
+        """ Enable if there's something in the list """
+        return len(context.scene.aov_list) > 0
+
+    def execute(self, context):
+        list = context.scene.aov_list
+        index = context.scene.aov_index
+
+        list.remove(index)
+
+        if index > 0:
+            index = index - 1
+	
+        return{'FINISHED'}
+
+class CYCLES_aovs(UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        view = item
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            layout.prop(view, "name", text="", index=index, icon_value=icon, emboss=False)
+            #layout.prop(view, "use", text="", index=index)
+
+        elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label("", icon_value=icon + (not view.use))
 
 class CYCLES_MT_sampling_presets(Menu):
     bl_label = "Sampling Presets"
@@ -540,6 +594,11 @@ class CyclesRender_PT_layer_passes(CyclesButtonsPanel, Panel):
           col.prop(crl, "pass_debug_bvh_intersections")
           col.prop(crl, "pass_debug_ray_bounces")
 
+        row = layout.row()
+        row.template_list("CYCLES_aovs", "name", scene, "aov_list", scene, "aov_index", rows=2)
+        col = row.column(align=True)
+        col.operator("aov_list.new_item", icon='ZOOMIN', text="")
+        col.operator("aov_list.delete_item", icon='ZOOMOUT', text="")
 
 class CyclesRender_PT_views(CyclesButtonsPanel, Panel):
     bl_label = "Views"
