@@ -98,6 +98,7 @@ typedef struct Cloth {
 	struct Implicit_Data	*implicit; 		/* our implicit solver connects to this pointer */
 	int last_frame;
 	float adapt_fact;	/* Stability dt compensation factor */
+	float max_col_trouble;
 } Cloth;
 
 /**
@@ -126,6 +127,7 @@ typedef struct ClothVertex {
 	float	planarity;
 	int 	spring_count; /* how many springs attached? */
 	float	shrink_factor; /* how much to shrink this cloth */
+	float	col_trouble;
 }
 ClothVertex;
 

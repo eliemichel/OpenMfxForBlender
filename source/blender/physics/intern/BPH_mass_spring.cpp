@@ -45,6 +45,8 @@ extern "C" {
 
 #include "BKE_cloth.h"
 #include "BKE_collision.h"
+#include "BKE_deform.h"
+#include "BKE_DerivedMesh.h"
 #include "BKE_effect.h"
 }
 
@@ -926,7 +928,7 @@ static void cloth_calc_volume_force(ClothModifierData *clmd)
 }
 #endif
 
-static float cloth_solve_collisions(Object *ob, ClothModifierData *clmd, float step, float dt)
+static float cloth_solve_collisions(Object *ob, ClothModifierData *clmd, float step, float dt, float *impulses)
 {
 	Cloth *cloth = clmd->clothObject;
 	Implicit_Data *id = cloth->implicit;
@@ -964,6 +966,8 @@ static float cloth_solve_collisions(Object *ob, ClothModifierData *clmd, float s
 				continue;
 
 			impulse = len_v3(verts[i].dcvel);
+			impulses[i] = impulse;
+
 			if (impulse > max_impulse) {
 				max_impulse = impulse;
 			}
@@ -1022,7 +1026,7 @@ static void cloth_record_result(ClothModifierData *clmd, ImplicitSolverResult *r
 	sres->status |= result->status;
 }
 
-int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *effectors)
+int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *effectors, DerivedMesh *dm)
 {
 	/* Hair currently is a cloth sim in disguise ...
 	 * Collision detection and volumetrics work differently then.
@@ -1044,6 +1048,7 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 	float tmp_vec[3];
 	float adapt_fact;
 	bool init_vel;
+	float *impulses = (float *)MEM_mallocN(sizeof(*impulses) * mvert_num, "impulse_magnitude_array");
 	
 	BKE_sim_debug_data_clear_category("collision");
 	
@@ -1122,7 +1127,7 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 		
 		// calculate collision impulses
 		if (!is_hair) {
-			max_impulse = cloth_solve_collisions(ob, clmd, step, dt);
+			max_impulse = cloth_solve_collisions(ob, clmd, step, dt, impulses);
 		}
 
 		// calculate forces
@@ -1139,6 +1144,18 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 		BPH_mass_spring_solve_positions(id, dt);
 
 		for (i = 0; i < mvert_num; i++) {
+			if (clmd->sim_parms->vgroup_trouble > 0) {
+				cloth->max_col_trouble = max_ff(cloth->max_col_trouble, max_impulse);
+
+				MDeformVert *dvert = (MDeformVert *)dm->getVertData(dm, i, CD_MDEFORMVERT);
+				MDeformWeight *weight = defvert_verify_index(dvert, (clmd->sim_parms->vgroup_trouble - 1));
+				if (cloth->max_col_trouble > 0.0f) {
+					verts[i].col_trouble = max_ff(verts[i].col_trouble, impulses[i]);
+
+					weight->weight = verts[i].col_trouble / cloth->max_col_trouble;
+				}
+			}
+
 			BPH_mass_spring_get_new_position(id, i, tmp_vec);
 			vel = len_v3v3(tmp_vec, verts[i].txold);
 			max_vel = max_ff(max_vel, vel);
@@ -1245,7 +1262,9 @@ int BPH_cloth_solve(Object *ob, float frame, ClothModifierData *clmd, ListBase *
 
 		step += dt;
 	}
-	
+
+	MEM_freeN(impulses);
+
 	/* copy results back to cloth data */
 	for (i = 0; i < mvert_num; i++) {
 		BPH_mass_spring_get_motion_state(id, i, verts[i].x, verts[i].v);

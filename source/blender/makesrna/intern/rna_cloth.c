@@ -338,6 +338,24 @@ static void rna_ClothSettings_planar_vgroup_set(PointerRNA *ptr, const char *val
 	rna_object_vgroup_name_index_set(ptr, value, &sim->vgroup_planar);
 }
 
+static void rna_ClothSettings_trouble_vgroup_get(PointerRNA *ptr, char *value)
+{
+	ClothSimSettings *sim = (ClothSimSettings *)ptr->data;
+	rna_object_vgroup_name_index_get(ptr, value, sim->vgroup_trouble);
+}
+
+static int rna_ClothSettings_trouble_vgroup_length(PointerRNA *ptr)
+{
+	ClothSimSettings *sim = (ClothSimSettings *)ptr->data;
+	return rna_object_vgroup_name_index_length(ptr, sim->vgroup_trouble);
+}
+
+static void rna_ClothSettings_trouble_vgroup_set(PointerRNA *ptr, const char *value)
+{
+	ClothSimSettings *sim = (ClothSimSettings *)ptr->data;
+	rna_object_vgroup_name_index_set(ptr, value, &sim->vgroup_trouble);
+}
+
 static void rna_CollSettings_selfcol_vgroup_get(PointerRNA *ptr, char *value)
 {
 	ClothCollSettings *coll = (ClothCollSettings *)ptr->data;
@@ -868,6 +886,12 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 	RNA_def_property_string_funcs(prop, "rna_ClothSettings_planar_vgroup_get", "rna_ClothSettings_planar_vgroup_length",
 	                              "rna_ClothSettings_planar_vgroup_set");
 	RNA_def_property_ui_text(prop, "Planarity Scaling Vertex Group", "Vertex group for fine control over rest planarity");
+	RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+	prop = RNA_def_property(srna, "vertex_group_trouble", PROP_STRING, PROP_NONE);
+	RNA_def_property_string_funcs(prop, "rna_ClothSettings_trouble_vgroup_get", "rna_ClothSettings_trouble_vgroup_length",
+	                              "rna_ClothSettings_trouble_vgroup_set");
+	RNA_def_property_ui_text(prop, "Trouble Vertex Group", "Vertex group to which troublesome things are written");
 	RNA_def_property_update(prop, 0, "rna_cloth_update");
 
 	prop = RNA_def_property(srna, "effector_weights", PROP_POINTER, PROP_NONE);
