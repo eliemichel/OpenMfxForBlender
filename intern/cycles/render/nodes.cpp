@@ -4709,7 +4709,7 @@ void AOVOutputNode::compile(SVMCompiler& compiler)
 		return;
 	}
 
-	if(aov->is_color) {
+	if(aov->type != AOV_FLOAT) {
 		compiler.add_node(NODE_AOV_WRITE_FLOAT3, compiler.stack_assign(input("Color")), aov->index);
 	}
 	else {
@@ -4728,7 +4728,7 @@ void AOVOutputNode::compile(OSLCompiler& compiler)
 
 	compiler.parameter("index", aov->index);
 
-	if(aov->is_color) {
+	if(aov->type != AOV_FLOAT) {
 		compiler.add(this, "node_write_aov_float3");
 	}
 	else {

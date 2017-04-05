@@ -567,10 +567,19 @@ void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 			Pass::add(PASS_RAY_BOUNCES, passes);
 		}
 #endif
+		/* make Crypto passes appear before user defined AOVs
+		 * that way, their indices are known */
+		if(get_boolean(crp, "use_pass_crypto_object")) {
+			AOV aov = {ustring("Cryptomatte Object ID"), 9999, AOV_CRYPTOMATTE};
+			passes.add(aov);
+			b_engine.add_pass( "AOV Cryptomatte Object ID", 4, "RGBA", b_srlay.name().c_str());
+			scene->film->use_cryptomatte = true;
+		}
+		
 		RNA_BEGIN(&crp, b_aov, "aovs") {
 			bool is_color = RNA_enum_get(&b_aov, "type");
 			string name = get_string(b_aov, "name");
-			AOV aov = {ustring(name), 9999, is_color};
+			AOV aov = {ustring(name), 9999, is_color ? AOV_RGB : AOV_FLOAT};
 			passes.add(aov);
 			string passname = string_printf("AOV %s", name.c_str());
 			b_engine.add_pass(passname.c_str(), is_color? 3: 1, is_color? "RGB": "X", b_srlay.name().c_str());

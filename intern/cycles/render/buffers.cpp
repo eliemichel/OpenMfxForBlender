@@ -152,26 +152,42 @@ bool RenderBuffers::get_aov_rect(ustring name, float exposure, int sample, int c
 	float *in = (float*)buffer.data_pointer + aov_offset;
 	int pass_stride = params.passes.get_size();
 
-	float scale = (aov->is_color)? exposure/sample: 1.0f/(float)sample; /* TODO has_exposure */
+	float scale = (aov->type == AOV_RGB) ? exposure/sample : 1.0f/(float)sample; /* TODO has_exposure */
 
 	int size = params.width*params.height;
 
-	if(components == 1) {
-		assert(!aov->is_color);
-		for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
-			float f = *in;
-			pixels[0] = f*scale;
-		}
-	}
-	else {
-		assert(components == 3 && aov->is_color);
-		for(int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
-			float3 f = make_float3(in[0], in[1], in[2]);
-
-			pixels[0] = f.x*scale;
-			pixels[1] = f.y*scale;
-			pixels[2] = f.z*scale;
-		}
+	switch(components) {
+		case 1:
+			assert(aov->type == AOV_FLOAT);
+			for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
+				float f = *in;
+				pixels[0] = f*scale;
+			}
+			break;
+		case 3:
+			assert(aov->type == AOV_RGB);
+			for(int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
+				float3 f = make_float3(in[0], in[1], in[2]);
+				
+				pixels[0] = f.x*scale;
+				pixels[1] = f.y*scale;
+				pixels[2] = f.z*scale;
+			}
+			break;
+		case 4:
+			assert(aov->type == AOV_CRYPTOMATTE);
+			for(int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
+				float4 f = make_float4(in[0], in[1], in[2], in[3]);
+				
+				pixels[0] = f.x;/*scale*/;
+				pixels[1] = f.y*scale;
+				pixels[2] = f.z;/*scale*/;
+				pixels[3] = f.w*scale;
+			}
+			break;
+		default:
+			assert(0);
+			return false;
 	}
 
 	return true;

@@ -47,7 +47,7 @@ PassSettings::PassSettings()
 void PassSettings::add(AOV aov)
 {
 	aovs.push_back_slow(aov);
-	add(aov.is_color? PASS_AOV_COLOR : PASS_AOV_VALUE);
+	add(aov.type != AOV_FLOAT ? PASS_AOV_COLOR : PASS_AOV_VALUE);
 }
 
 void PassSettings::add(PassType type)
@@ -222,7 +222,7 @@ int PassSettings::get_size() const
 	}
 
 	for(size_t i = 0; i < aovs.size(); i++) {
-		size += aovs[i].is_color? 4 : 1;
+		size += aovs[i].type != AOV_FLOAT ? 4 : 1;
 	}
 
 	return align_up(size, 4);
@@ -242,14 +242,14 @@ Pass* PassSettings::get_pass(PassType type, int &offset)
 		}
 		else if(passes[i].type == PASS_AOV_COLOR) {
 			for(size_t i = 0; i < aovs.size(); i++) {
-				if(aovs[i].is_color) {
+				if(aovs[i].type != AOV_FLOAT) {
 					offset += 4;
 				}
 			}
 		}
 		else if(passes[i].type == PASS_AOV_VALUE) {
 			for(size_t i = 0; i < aovs.size(); i++) {
-				if(!aovs[i].is_color) {
+				if(!aovs[i].type == AOV_FLOAT) {
 					offset += 1;
 				}
 			}
@@ -275,15 +275,15 @@ AOV* PassSettings::get_aov(ustring name, int &offset)
 	}
 
 	/* Get offset to AOVs of this type. */
-	get_pass(aov->is_color? PASS_AOV_COLOR : PASS_AOV_VALUE, offset);
+	get_pass(aov->type != AOV_FLOAT ? PASS_AOV_COLOR : PASS_AOV_VALUE, offset);
 
 	for(size_t i = 0; i < aovs.size(); i++) {
 		if(aovs[i].name == name) {
 			aov->index = i;
 			return aov;
 		}
-		else if(aovs[i].is_color == aov->is_color) {
-			offset += aov->is_color? 4 : 1;
+		else if(aovs[i].type == aov->type) {
+			offset += aov->type != AOV_FLOAT ? 4 : 1;
 		}
 	}
 
@@ -375,6 +375,8 @@ NODE_DEFINE(Film)
 
 	SOCKET_BOOLEAN(use_sample_clamp, "Use Sample Clamp", false);
 
+	SOCKET_INT(object_id_slots, "Object ID Slots", 0);
+	
 	return type;
 }
 
@@ -525,7 +527,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 #endif
 			case PASS_AOV_COLOR:
 				for(int j = 0; j < passes.aovs.size(); j++) {
-					if(passes.aovs[j].is_color) {
+					if(passes.aovs[j].type != AOV_FLOAT) {
 						kfilm->pass_aov[j] = kfilm->pass_stride | (1 << 31);
 						kfilm->pass_stride += 4;
 					}
@@ -533,7 +535,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 				break;
 			case PASS_AOV_VALUE:
 				for(int j = 0; j < passes.aovs.size(); j++) {
-					if(!passes.aovs[j].is_color) {
+					if(!passes.aovs[j].type == AOV_FLOAT) {
 						kfilm->pass_aov[j] = kfilm->pass_stride & ~(1 << 31);
 						kfilm->pass_stride += 1;
 					}
@@ -563,6 +565,8 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 	kfilm->mist_inv_depth = (mist_depth > 0.0f)? 1.0f/mist_depth: 0.0f;
 	kfilm->mist_falloff = mist_falloff;
 
+	kfilm->use_cryptomatte = use_cryptomatte;
+	
 	need_update = false;
 }
 

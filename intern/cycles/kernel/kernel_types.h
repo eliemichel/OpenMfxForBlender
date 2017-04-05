@@ -43,6 +43,7 @@ CCL_NAMESPACE_BEGIN
 #define SHUTTER_TABLE_SIZE		256
 #define PARTICLE_SIZE 		5
 #define SHADER_SIZE		13
+#define ID_SLOT_SIZE	2
 
 #define BSSRDF_MIN_RADIUS			1e-8f
 #define BSSRDF_MAX_HITS				4
@@ -53,6 +54,7 @@ CCL_NAMESPACE_BEGIN
 #define OBJECT_NONE				(~0)
 #define PRIM_NONE				(~0)
 #define LAMP_NONE				(~0)
+#define ID_NONE					(0.0f)
 
 #define VOLUME_STACK_SIZE		16
 
@@ -912,6 +914,8 @@ typedef struct PathState {
 
 	int written_aovs;
 
+	float matte_weight;
+	
 	/* volume rendering */
 #ifdef __VOLUME__
 	int volume_bounce;
@@ -1071,7 +1075,7 @@ typedef struct KernelFilm {
 	int pass_shadow;
 	float pass_shadow_scale;
 	int filter_table_offset;
-	int pass_pad2;
+	int use_cryptomatte;
 
 	int pass_mist;
 	float mist_start;

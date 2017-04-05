@@ -59,6 +59,9 @@ static inline uint hash_string(const char *str)
 
 	return i;
 }
+
+
+
 #endif
 
 CCL_NAMESPACE_END

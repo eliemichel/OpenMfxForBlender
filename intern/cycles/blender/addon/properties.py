@@ -1284,6 +1284,11 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
                 )
         cls.aovs = bpy.props.CollectionProperty(type=CyclesAOVSettings)
         cls.active_aov = IntProperty(default=0)
+        cls.use_pass_crypto_object = BoolProperty(
+                name="CryptoMatte Object",
+                description="CryptoMatte Object pass",
+                default=False,
+                )
 
     @classmethod
     def unregister(cls):

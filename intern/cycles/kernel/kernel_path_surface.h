@@ -261,14 +261,18 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 		path_radiance_bsdf_bounce(L, throughput, &bsdf_eval, bsdf_pdf, state->bounce, label);
 
 		/* set labels */
-		if(!(label & LABEL_TRANSPARENT)) {
+		if(label & LABEL_TRANSPARENT) {
+			state->matte_weight *= average(shader_bsdf_transparency(kg, sd));
+		}
+		else {
 			state->ray_pdf = bsdf_pdf;
 #ifdef __LAMP_MIS__
 			state->ray_t = 0.0f;
 #endif
 			state->min_ray_pdf = fminf(bsdf_pdf, state->min_ray_pdf);
 		}
-
+		state->matte_weight = 0.0f;
+		
 		/* update path state */
 		path_state_next(kg, state, label);
 

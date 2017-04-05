@@ -59,11 +59,17 @@ public:
 	bool is_virtual;
 };
 
+typedef enum AOVType {
+	AOV_FLOAT,
+	AOV_RGB,
+	AOV_CRYPTOMATTE
+} AOVType;
+
 struct AOV {
 public:
 	ustring name;
 	int index;
-	bool is_color;
+	AOVType type;
 };
 
 class PassSettings {
@@ -104,9 +110,25 @@ public:
 
 	bool use_light_visibility;
 	bool use_sample_clamp;
+	bool use_cryptomatte;
 
 	bool need_update;
-
+	
+	/* These options determine how many slots are allocated for storing ID information.
+	 *
+	 * The ID system works by storing IDs and associated weights, where the weights are determined from
+	 * how many samples have encountered that ID and their non-transparent contribution.
+	 *
+	 * In theory, to always get the correct result after sorting by weight, it would be neccessary to store
+	 * either every sample and its ID-weight-pairs or the weight of every ID for every pixel. However, that's far too much data.
+	 *
+	 * So, we just allocate a limited amount of slots which are filled in first-come-first-serve order.
+	 * The assumption here is that if an ID is encountered after X others (where X is the number of slots),
+	 * it wouldn't be among the Y IDs with the highest weight (the ones that the user gets in the end) anyways.
+	 *
+	 * So, a larger ratio between X and Y makes it more certain to get the true weights, while increasing memory usage. */
+	int object_id_slots;
+	
 	Film();
 	~Film();
 
