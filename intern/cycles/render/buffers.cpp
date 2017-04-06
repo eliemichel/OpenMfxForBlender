@@ -179,10 +179,11 @@ bool RenderBuffers::get_aov_rect(ustring name, float exposure, int sample, int c
 			for(int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
 				float4 f = make_float4(in[0], in[1], in[2], in[3]);
 				
-				pixels[0] = f.x;/*scale*/;
-				pixels[1] = f.y*scale;
-				pixels[2] = f.z;/*scale*/;
-				pixels[3] = f.w*scale;
+				/* cryptomatte simple sorting for two layers */
+				pixels[0] = f.y > f.w ? f.x : f.z;
+				pixels[1] = (f.y > f.w ? f.y : f.w)*scale;
+				pixels[2] = f.y > f.w ? f.z : f.x;
+				pixels[3] = (f.y > f.w ? f.w : f.y)*scale;;
 			}
 			break;
 		default:
