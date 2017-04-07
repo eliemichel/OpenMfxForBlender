@@ -53,10 +53,10 @@ void CryptomatteOperation::executePixel(float output[4],
 		inputs[i]->read(input, x, y, data);
 		if (i == 0) {
 			// write the frontmost object as false color for picking
-			output[0] = input[0] >= 0.f ? input[0] : 0.f;
-			output[1] = input[0] < 0.f ? -input[0] : 0.f;
+			output[0] = input[0];
 			uint32_t m3hash;
 			::memcpy(&m3hash, &input[0], 4);
+			output[1] = ((float) ((m3hash << 8)) / (float) UINT32_MAX);
 			output[2] = ((float) ((m3hash << 16)) / (float) UINT32_MAX);
 		}
 		for(float f : m_objectIndex) {

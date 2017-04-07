@@ -52,20 +52,22 @@ static bNodeSocketTemplate outputs[] = {
 void ntreeCompositCryptomatteSyncFromAdd(bNodeTree *UNUSED(ntree), bNode *node)
 {
 	NodeCryptomatte *n = node->storage;
-	if(n->add[0] != 0.f || n->add[1] != 0.f) {
-		cryptomatte_add(n, n->add[0] > n->add[1] ? n->add[0] : -n->add[1]);
+	if(n->add[0] != 0.f) {
+		cryptomatte_add(n, n->add[0]);
 		n->add[0] = 0.f;
 		n->add[1] = 0.f;
+		n->add[2] = 0.f;
 	}
 }
 
 void ntreeCompositCryptomatteSyncFromRemove(bNodeTree *UNUSED(ntree), bNode *node)
 {
 	NodeCryptomatte *n = node->storage;
-	if(n->remove[0] != 0.f || n->remove[1] != 0.f) {
-		cryptomatte_remove(n, n->remove[0] > n->remove[1] ? n->remove[0] : -n->remove[1]);
+	if(n->remove[0] != 0.f) {
+		cryptomatte_remove(n, n->remove[0]);
 		n->remove[0] = 0.f;
 		n->remove[1] = 0.f;
+		n->remove[2] = 0.f;
 	}
 }
 
