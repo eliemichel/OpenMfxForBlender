@@ -225,7 +225,7 @@ static bool eyedropper_init(bContext *C, wmOperator *op)
 		return false;
 	}
 
-	if (RNA_property_subtype(eye->prop) != PROP_COLOR) {
+	if (RNA_property_subtype(eye->prop) == PROP_COLOR) {
 		const char *display_device;
 		float col[4];
 
@@ -235,7 +235,7 @@ static bool eyedropper_init(bContext *C, wmOperator *op)
 		/* store inital color */
 		RNA_property_float_get_array(&eye->ptr, eye->prop, col);
 		if (eye->display) {
-			IMB_colormanagement_display_to_scene_linear_v3(col, eye->display);
+			IMB_colormanagement_scene_linear_to_display_v3(col, eye->display);
 		}
 		copy_v3_v3(eye->init_col, col);
 	}
@@ -266,8 +266,6 @@ static void eyedropper_color_sample_fl(bContext *C, Eyedropper *UNUSED(eye), int
 	/* we could use some clever */
 	wmWindow *win = CTX_wm_window(C);
 	ScrArea *sa = BKE_screen_find_area_xy(win->screen, SPACE_TYPE_ANY, mx, my);
-	const char *display_device = CTX_data_scene(C)->display_settings.display_device;
-	struct ColorManagedDisplay *display = IMB_colormanagement_display_get_named(display_device);
 
 	if (sa) {
 		if (sa->spacetype == SPACE_IMAGE) {
@@ -277,7 +275,7 @@ static void eyedropper_color_sample_fl(bContext *C, Eyedropper *UNUSED(eye), int
 				int mval[2] = {mx - ar->winrct.xmin,
 				               my - ar->winrct.ymin};
 
-				if (ED_space_image_color_sample(sima, ar, mval, r_col)) {
+				if (ED_space_image_color_sample(CTX_data_scene(C), sima, ar, mval, r_col)) {
 					return;
 				}
 			}
@@ -289,7 +287,7 @@ static void eyedropper_color_sample_fl(bContext *C, Eyedropper *UNUSED(eye), int
 				int mval[2] = {mx - ar->winrct.xmin,
 				               my - ar->winrct.ymin};
 
-				if (ED_space_node_color_sample(snode, ar, mval, r_col)) {
+				if (ED_space_node_color_sample(CTX_data_scene(C), snode, ar, mval, r_col)) {
 					return;
 				}
 			}
@@ -301,7 +299,7 @@ static void eyedropper_color_sample_fl(bContext *C, Eyedropper *UNUSED(eye), int
 				int mval[2] = {mx - ar->winrct.xmin,
 				               my - ar->winrct.ymin};
 
-				if (ED_space_clip_color_sample(sc, ar, mval, r_col)) {
+				if (ED_space_clip_color_sample(CTX_data_scene(C), sc, ar, mval, r_col)) {
 					return;
 				}
 			}
@@ -312,8 +310,6 @@ static void eyedropper_color_sample_fl(bContext *C, Eyedropper *UNUSED(eye), int
 	glReadBuffer(GL_FRONT);
 	glReadPixels(mx, my, 1, 1, GL_RGB, GL_FLOAT, r_col);
 	glReadBuffer(GL_BACK);
-	
-	IMB_colormanagement_display_to_scene_linear_v3(r_col, display);
 }
 
 /* sets the sample color RGB, maintaining A */
@@ -324,10 +320,10 @@ static void eyedropper_color_set(bContext *C, Eyedropper *eye, const float col[3
 	/* to maintain alpha */
 	RNA_property_float_get_array(&eye->ptr, eye->prop, col_conv);
 
-	/* convert from linear rgb space to display space */
+	/* convert from display space to linear rgb space */
 	if (eye->display) {
 		copy_v3_v3(col_conv, col);
-		IMB_colormanagement_scene_linear_to_display_v3(col_conv, eye->display);
+		IMB_colormanagement_display_to_scene_linear_v3(col_conv, eye->display);
 	}
 	else {
 		copy_v3_v3(col_conv, col);
@@ -458,7 +454,7 @@ static int eyedropper_poll(bContext *C)
 	uiBut *but;
 
 	/* Only color buttons */
-	if (1 || (CTX_wm_window(C) != NULL) &&
+	if ((CTX_wm_window(C) != NULL) &&
 	    (but = UI_context_active_but_prop_get(C, &ptr, &prop, &index_dummy)) &&
 	    (but->type == UI_BTYPE_COLOR))
 	{
