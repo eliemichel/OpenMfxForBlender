@@ -428,7 +428,7 @@ bool ED_space_node_color_sample(SpaceNode *snode, ARegion *ar, int mval[2], floa
 	float fx, fy, bufx, bufy;
 	bool ret = false;
 
-	if (STREQ(snode->tree_idname, ntreeType_Composite->idname) || (snode->flag & SNODE_BACKDRAW) == 0) {
+	if (!ED_node_is_compositor(snode) || (snode->flag & SNODE_BACKDRAW) == 0) {
 		/* use viewer image for color sampling only if we're in compositor tree
 		 * with backdrop enabled
 		 */
