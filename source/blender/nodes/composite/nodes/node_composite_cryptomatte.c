@@ -36,6 +36,7 @@ extern void cryptomatte_add(NodeCryptomatte* n, float f);
 extern void cryptomatte_remove(NodeCryptomatte*n, float f);
 
 static bNodeSocketTemplate inputs[] = {
+	{	SOCK_RGBA, 1, N_("Image"),			1.0f, 1.0f, 1.0f, 1.0f},
 	{	SOCK_RGBA, 1, N_("Pass 1"),			0.0f, 0.0f, 0.0f, 1.0f},
 	{	SOCK_RGBA, 1, N_("Pass 2"),			0.0f, 0.0f, 0.0f, 1.0f},
 	{	SOCK_RGBA, 1, N_("Pass 3"),			0.0f, 0.0f, 0.0f, 1.0f},
@@ -45,7 +46,9 @@ static bNodeSocketTemplate inputs[] = {
 	{	-1, 0, ""	}
 };
 static bNodeSocketTemplate outputs[] = {
-	{	SOCK_RGBA, 0, N_("Mask")},
+	{	SOCK_RGBA,	0, N_("Image")},
+	{	SOCK_FLOAT, 0, N_("Matte")},
+	{	SOCK_RGBA,	0, N_("CryptoPick")},
 	{	-1, 0, ""	}
 };
 

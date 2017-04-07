@@ -22,6 +22,8 @@
 
 #include "COM_CryptomatteNode.h"
 #include "COM_CryptomatteOperation.h"
+#include "COM_SetAlphaOperation.h"
+#include "COM_ConvertOperation.h"
 #include <iterator>
 
 CryptomatteNode::CryptomatteNode(bNode *editorNode) : Node(editorNode)
@@ -255,9 +257,13 @@ extern "C" void cryptomatte_remove(NodeCryptomatte*n, float f)
 
 void CryptomatteNode::convertToOperations(NodeConverter &converter, const CompositorContext &/*context*/) const
 {
-	CryptomatteOperation *operation = new CryptomatteOperation();
+	NodeInput *inputSocketImage = this->getInputSocket(0);
+	NodeOutput *outputSocketImage = this->getOutputSocket(0);
+	NodeOutput *outputSocketMatte = this->getOutputSocket(1);
+	NodeOutput *outputCryptoPick = this->getOutputSocket(2);
 	
 	bNode *node = this->getbNode();
+	CryptomatteOperation *operation = new CryptomatteOperation();
 	NodeCryptomatte *cryptoMatteSettings = (NodeCryptomatte *)node->storage;
 	if(cryptoMatteSettings) {
 		std::string input = cryptoMatteSettings->matte_id;
@@ -283,9 +289,22 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 	}
 	
 	converter.addOperation(operation);
-	NodeOutput *outputSocket = this->getOutputSocket(0);
 	
 	for(int i = 0; i < 6; i++)
-		converter.mapInputSocket(this->getInputSocket(i), operation->getInputSocket(i));
-	converter.mapOutputSocket(outputSocket, operation->getOutputSocket(0));
+		converter.mapInputSocket(this->getInputSocket(i+1), operation->getInputSocket(i));
+	
+	SeparateChannelOperation *separateOperation = new SeparateChannelOperation;
+	separateOperation->setChannel(3);
+	converter.addOperation(separateOperation);
+	
+	SetAlphaOperation *operationAlpha = new SetAlphaOperation();
+	converter.addOperation(operationAlpha);
+	
+	converter.mapInputSocket(inputSocketImage, operationAlpha->getInputSocket(0));
+	converter.mapOutputSocket(outputSocketMatte, separateOperation->getOutputSocket(0));
+	converter.mapOutputSocket(outputSocketImage, operationAlpha->getOutputSocket(0));
+	converter.mapOutputSocket(outputCryptoPick, operation->getOutputSocket(0));
+	
+	converter.addLink(operation->getOutputSocket(0), separateOperation->getInputSocket(0));
+	converter.addLink(separateOperation->getOutputSocket(0), operationAlpha->getInputSocket(1));
 }
