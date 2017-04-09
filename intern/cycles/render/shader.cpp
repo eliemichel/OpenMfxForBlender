@@ -30,6 +30,7 @@
 #include "tables.h"
 
 #include "util_foreach.h"
+#include "util_murmurhash.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -481,6 +482,9 @@ void ShaderManager::device_update_common(Device *device,
 		if(shader->override_bounces)
 			flag |= SD_SHADER_OVERRIDE_BOUNCES;
 
+		uint32_t cryptomatte_id = 0;
+		MurmurHash3_x86_32(shader->name.c_str(), shader->name.length(), 0, &cryptomatte_id);
+		
 		/* regular shader */										// Offset
 		shader_flag[i++] = flag;									// 0
 		shader_flag[i++] = shader->pass_id;							// 1
@@ -495,6 +499,7 @@ void ShaderManager::device_update_common(Device *device,
 		shader_flag[i++] = __float_as_int(constant_emission.x);		// 10
 		shader_flag[i++] = __float_as_int(constant_emission.y);		// 11
 		shader_flag[i++] = __float_as_int(constant_emission.z);		// 12
+		shader_flag[i++] = __float_as_int(hash_to_float(cryptomatte_id));			// 13
 
 		has_transparent_shadow |= (flag & SD_SHADER_HAS_TRANSPARENT_SHADOW) != 0;
 	}

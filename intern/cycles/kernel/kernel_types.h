@@ -42,7 +42,7 @@ CCL_NAMESPACE_BEGIN
 #define RAMP_TABLE_SIZE		256
 #define SHUTTER_TABLE_SIZE		256
 #define PARTICLE_SIZE 		5
-#define SHADER_SIZE		13
+#define SHADER_SIZE		14
 #define ID_SLOT_SIZE	2
 
 #define BSSRDF_MIN_RADIUS			1e-8f
@@ -358,6 +358,12 @@ typedef enum PassType {
 } PassType;
 
 #define PASS_ALL (~0)
+
+typedef enum CryptomatteType {
+	CRYPT_NONE = 0,
+	CRYPT_OBJECT = (1 << 0),
+	CRYPT_MATERIAL = (1 << 1),
+} CryptomatteType;
 
 typedef enum BakePassFilter {
 	BAKE_FILTER_NONE = 0,

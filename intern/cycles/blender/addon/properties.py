@@ -1289,7 +1289,11 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
                 description="CryptoMatte Object pass",
                 default=False,
                 )
-
+        cls.use_pass_crypto_material = BoolProperty(
+                name="CryptoMatte Material",
+                description="CryptoMatte Material pass",
+                default=False,
+                )
     @classmethod
     def unregister(cls):
         del bpy.types.SceneRenderLayer.cycles

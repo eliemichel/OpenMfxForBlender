@@ -164,7 +164,8 @@ ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg, ccl_global fl
 	}
 	
 	// TODO: Write cryptomatte AOV
-	if(kernel_data.film.use_cryptomatte) {
+	int aov_count = 0;
+	if(kernel_data.film.use_cryptomatte & CRYPT_OBJECT) {
 		float matte_weight = state->matte_weight * (1.0f - average(shader_bsdf_transparency(kg, sd)));
 		bool initialize_slots = (sample == 0) && (state->transparent_bounce == 0);
 		float id = object_cryptomatte_id(kg, ccl_fetch(sd, object));
@@ -172,6 +173,17 @@ ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg, ccl_global fl
 		kernel_assert(kernel_data.film.pass_aov[0] & (1 << 31));
 		kernel_write_id_slots(buffer + pass_offset, 2, id, matte_weight, initialize_slots);
 		state->written_aovs |= (1 << 0);
+		aov_count++;
+	}
+	if(kernel_data.film.use_cryptomatte & CRYPT_MATERIAL) {
+		float matte_weight = state->matte_weight * (1.0f - average(shader_bsdf_transparency(kg, sd)));
+		bool initialize_slots = (sample == 0) && (state->transparent_bounce == 0);
+		float id = shader_cryptomatte_id(kg, ccl_fetch(sd, shader));
+		int pass_offset = (kernel_data.film.pass_aov[aov_count] & ~(1 << 31));
+		kernel_assert(kernel_data.film.pass_aov[aov_count] & (1 << 31));
+		kernel_write_id_slots(buffer + pass_offset, 2, id, matte_weight, initialize_slots);
+		state->written_aovs |= (1 << aov_count);
+		aov_count++;
 	}
 	// end TODO
 	

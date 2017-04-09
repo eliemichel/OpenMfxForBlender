@@ -249,7 +249,7 @@ Pass* PassSettings::get_pass(PassType type, int &offset)
 		}
 		else if(passes[i].type == PASS_AOV_VALUE) {
 			for(size_t i = 0; i < aovs.size(); i++) {
-				if(!aovs[i].type == AOV_FLOAT) {
+				if(aovs[i].type == AOV_FLOAT) {
 					offset += 1;
 				}
 			}
@@ -385,7 +385,8 @@ Film::Film()
 {
 	use_light_visibility = false;
 	filter_table_offset = TABLE_OFFSET_INVALID;
-
+	use_cryptomatte = CRYPT_NONE;
+	
 	need_update = true;
 }
 
@@ -535,7 +536,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 				break;
 			case PASS_AOV_VALUE:
 				for(int j = 0; j < passes.aovs.size(); j++) {
-					if(!passes.aovs[j].type == AOV_FLOAT) {
+					if(passes.aovs[j].type == AOV_FLOAT) {
 						kfilm->pass_aov[j] = kfilm->pass_stride & ~(1 << 31);
 						kfilm->pass_stride += 1;
 					}

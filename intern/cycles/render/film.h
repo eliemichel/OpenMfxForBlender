@@ -110,7 +110,7 @@ public:
 
 	bool use_light_visibility;
 	bool use_sample_clamp;
-	bool use_cryptomatte;
+	int use_cryptomatte;
 
 	bool need_update;
 	

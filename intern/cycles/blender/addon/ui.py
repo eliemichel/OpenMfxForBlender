@@ -629,17 +629,19 @@ class CyclesRender_PT_layer_passes(CyclesButtonsPanel, Panel):
           col.prop(crl, "pass_debug_bvh_intersections")
           col.prop(crl, "pass_debug_ray_bounces")
 
+        crl = rl.cycles
+        layout.label("Cryptomatte:")
+        row = layout.row(align=True)
+        row.prop(crl, "use_pass_crypto_object", text="Object", toggle=True)
+        row.prop(crl, "use_pass_crypto_material", text="Material", toggle=True)
 
         layout.label("AOVs:")
-        crl = rl.cycles
         row = layout.row()
         row.template_list("CyclesAOVList", "", crl, "aovs", crl, "active_aov")
         sub = row.column(align=True)
         sub.operator("scenerenderlayer.aov_add", icon='ZOOMIN', text="")
         sub.operator("scenerenderlayer.aov_delete", icon='ZOOMOUT', text="")
-			
-        row = layout.row()
-        row.prop(crl, "use_pass_crypto_object")
+		
 
 class CyclesRender_PT_views(CyclesButtonsPanel, Panel):
     bl_label = "Views"

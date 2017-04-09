@@ -572,8 +572,15 @@ void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 		if(get_boolean(crp, "use_pass_crypto_object")) {
 			AOV aov = {ustring("Cryptomatte Object ID"), 9999, AOV_CRYPTOMATTE};
 			passes.add(aov);
-			b_engine.add_pass( "AOV Cryptomatte Object ID", 4, "RGBA", b_srlay.name().c_str());
-			scene->film->use_cryptomatte = true;
+			b_engine.add_pass("AOV Cryptomatte Object ID", 4, "RGBA", b_srlay.name().c_str());
+			scene->film->use_cryptomatte |= CRYPT_OBJECT;
+		}
+		
+		if(get_boolean(crp, "use_pass_crypto_material")) {
+			AOV aov = {ustring("Cryptomatte Material ID"), 9999, AOV_CRYPTOMATTE};
+			passes.add(aov);
+			b_engine.add_pass("AOV Cryptomatte Material ID", 4, "RGBA", b_srlay.name().c_str());
+			scene->film->use_cryptomatte |= CRYPT_MATERIAL;
 		}
 		
 		RNA_BEGIN(&crp, b_aov, "aovs") {
