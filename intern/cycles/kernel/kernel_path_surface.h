@@ -270,8 +270,8 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 			state->ray_t = 0.0f;
 #endif
 			state->min_ray_pdf = fminf(bsdf_pdf, state->min_ray_pdf);
+			state->matte_weight = 0.0f;
 		}
-		state->matte_weight = 0.0f;
 		
 		/* update path state */
 		path_state_next(kg, state, label);
