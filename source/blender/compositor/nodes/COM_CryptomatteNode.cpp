@@ -205,7 +205,7 @@ extern "C" void cryptomatte_add(NodeCryptomatte* n, float f)
 		size_t last = token.find_last_not_of(' ');
 		token = token.substr(first, (last-first+1));
 		if (*token.begin() == '<' && *(--token.end()) == '>') {
-			if(f == atof(token.substr(1, token.length()-2).c_str()))
+			if(std::string(number) == token)
 				return;
 		} else {
 			uint32_t hash = 0;
