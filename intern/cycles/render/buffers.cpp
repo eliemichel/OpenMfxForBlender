@@ -183,7 +183,7 @@ bool RenderBuffers::get_aov_rect(ustring name, float exposure, int sample, int c
 				pixels[0] = f.y > f.w ? f.x : f.z;
 				pixels[1] = (f.y > f.w ? f.y : f.w)*scale;
 				pixels[2] = f.y > f.w ? f.z : f.x;
-				pixels[3] = (f.y > f.w ? f.w : f.y)*scale;;
+				pixels[3] = (f.y > f.w ? f.w : f.y)*scale;
 			}
 			break;
 		default:

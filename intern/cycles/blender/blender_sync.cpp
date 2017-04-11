@@ -569,17 +569,29 @@ void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 #endif
 		/* make Crypto passes appear before user defined AOVs
 		 * that way, their indices are known */
+		
+		int crypto_depth = std::min(16, get_int(crp, "pass_crypto_depth")) / 2;
+		scene->film->use_cryptomatte = crypto_depth;
+		
 		if(get_boolean(crp, "use_pass_crypto_object")) {
-			AOV aov = {ustring("Cryptomatte Object ID"), 9999, AOV_CRYPTOMATTE};
-			passes.add(aov);
-			b_engine.add_pass("AOV Cryptomatte Object ID", 4, "RGBA", b_srlay.name().c_str());
+			for(int i = 0; i < crypto_depth; ++i) {
+				string passname = string_printf("uCryptoObject%02d", i);
+				AOV aov = {ustring(passname), 9999, AOV_CRYPTOMATTE};
+				passes.add(aov);
+				passname = "AOV " + passname;
+				b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str());
+			}
 			scene->film->use_cryptomatte |= CRYPT_OBJECT;
 		}
 		
 		if(get_boolean(crp, "use_pass_crypto_material")) {
-			AOV aov = {ustring("Cryptomatte Material ID"), 9999, AOV_CRYPTOMATTE};
-			passes.add(aov);
-			b_engine.add_pass("AOV Cryptomatte Material ID", 4, "RGBA", b_srlay.name().c_str());
+			for(int i = 0; i < crypto_depth; ++i) {
+				string passname = string_printf("uCryptoMaterial%02d", i);
+				AOV aov = {ustring(passname), 9999, AOV_CRYPTOMATTE};
+				passes.add(aov);
+				passname = "AOV " + passname;
+				b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str());
+			}
 			scene->film->use_cryptomatte |= CRYPT_MATERIAL;
 		}
 		

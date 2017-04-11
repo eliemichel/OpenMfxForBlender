@@ -361,8 +361,8 @@ typedef enum PassType {
 
 typedef enum CryptomatteType {
 	CRYPT_NONE = 0,
-	CRYPT_OBJECT = (1 << 0),
-	CRYPT_MATERIAL = (1 << 1),
+	CRYPT_OBJECT = (1 << 31),
+	CRYPT_MATERIAL = (1 << 30),
 } CryptomatteType;
 
 typedef enum BakePassFilter {
@@ -1081,7 +1081,7 @@ typedef struct KernelFilm {
 	int pass_shadow;
 	float pass_shadow_scale;
 	int filter_table_offset;
-	int use_cryptomatte;
+	unsigned int use_cryptomatte;
 
 	int pass_mist;
 	float mist_start;
