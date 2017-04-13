@@ -37,8 +37,8 @@ class AbcTransformWriter : public AbcObjectWriter {
 	Alembic::Abc::M44d m_matrix;
 
 	bool m_is_animated;
-	Object *m_parent;
 	bool m_visible;
+	bool m_inherits_xform;
 
 public:
 	AbcTransformWriter(Object *ob,
@@ -49,7 +49,6 @@ public:
 
 	Alembic::AbcGeom::OXform &alembicXform() { return m_xform;}
 	virtual Imath::Box3d bounds();
-	void setParent(Object *p) { m_parent = p; }
 
 private:
 	virtual void do_write();

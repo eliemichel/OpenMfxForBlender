@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-#include "bvh_build.h"
-#include "bvh_split.h"
-#include "bvh_sort.h"
+#include "bvh/bvh_split.h"
 
-#include "mesh.h"
-#include "object.h"
+#include "bvh/bvh_build.h"
+#include "bvh/bvh_sort.h"
 
-#include "util_algorithm.h"
+#include "render/mesh.h"
+#include "render/object.h"
+
+#include "util/util_algorithm.h"
 
 CCL_NAMESPACE_BEGIN
 

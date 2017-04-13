@@ -973,7 +973,7 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd, float (*vertexCos)
 	adj_result = buildAdjacencyMap(mpoly, medge, mloop, tnumpoly, tnumedges, vert_edges, adj_array, edge_polys);
 
 	if (adj_result == MOD_SDEF_BIND_RESULT_NONMANY_ERR) {
-		modifier_setError((ModifierData *)smd, "Target has edges with more than two polys");
+		modifier_setError((ModifierData *)smd, "Target has edges with more than two polygons");
 		freeAdjacencyMap(vert_edges, adj_array, edge_polys);
 		free_bvhtree_from_mesh(&treeData);
 		MEM_freeN(smd->verts);
@@ -1019,11 +1019,11 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd, float (*vertexCos)
 		freeData((ModifierData *)smd);
 	}
 	else if (data.success == MOD_SDEF_BIND_RESULT_NONMANY_ERR) {
-		modifier_setError((ModifierData *)smd, "Target has edges with more than two polys");
+		modifier_setError((ModifierData *)smd, "Target has edges with more than two polygons");
 		freeData((ModifierData *)smd);
 	}
 	else if (data.success == MOD_SDEF_BIND_RESULT_CONCAVE_ERR) {
-		modifier_setError((ModifierData *)smd, "Target contains concave polys");
+		modifier_setError((ModifierData *)smd, "Target contains concave polygons");
 		freeData((ModifierData *)smd);
 	}
 	else if (data.success == MOD_SDEF_BIND_RESULT_OVERLAP_ERR) {
@@ -1035,7 +1035,7 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd, float (*vertexCos)
 		 * to explain this whith a reasonably sized message.
 		 * Though it shouldn't really matter all that much,
 		 * because this is very unlikely to occur */
-		modifier_setError((ModifierData *)smd, "Target contains invalid polys");
+		modifier_setError((ModifierData *)smd, "Target contains invalid polygons");
 		freeData((ModifierData *)smd);
 	}
 
@@ -1120,6 +1120,11 @@ static void surfacedeformModifier_do(ModifierData *md, float (*vertexCos)[3], un
 		tdm = smd->target->derivedFinal;
 	}
 
+	if (!tdm) {
+		modifier_setError(md, "No valid target mesh");
+		return;
+	}
+
 	tnumverts = tdm->getNumVerts(tdm);
 	tnumpoly = tdm->getNumPolys(tdm);
 
@@ -1139,12 +1144,10 @@ static void surfacedeformModifier_do(ModifierData *md, float (*vertexCos)[3], un
 	/* Poly count checks */
 	if (smd->numverts != numverts) {
 		modifier_setError(md, "Verts changed from %u to %u", smd->numverts, numverts);
-		tdm->release(tdm);
 		return;
 	}
 	else if (smd->numpoly != tnumpoly) {
 		modifier_setError(md, "Target polygons changed from %u to %u", smd->numpoly, tnumpoly);
-		tdm->release(tdm);
 		return;
 	}
 
@@ -1170,8 +1173,6 @@ static void surfacedeformModifier_do(ModifierData *md, float (*vertexCos)[3], un
 
 		MEM_freeN(data.targetCos);
 	}
-
-	tdm->release(tdm);
 }
 
 static void deformVerts(ModifierData *md, Object *ob,
