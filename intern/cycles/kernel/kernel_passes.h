@@ -173,7 +173,7 @@ ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg, ccl_global fl
 		kernel_assert(kernel_data.film.pass_aov[0] & (1 << 31));
 		kernel_write_id_slots(buffer + pass_offset, kernel_data.film.use_cryptomatte & 255, id, matte_weight, initialize_slots);
 		state->written_aovs |= (1 << 0);
-		aov_count++;
+		aov_count += kernel_data.film.use_cryptomatte & 255;
 	}
 	if(kernel_data.film.use_cryptomatte & CRYPT_MATERIAL) {
 		float matte_weight = state->matte_weight * (1.0f - average(shader_bsdf_transparency(kg, sd)));
@@ -183,7 +183,7 @@ ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg, ccl_global fl
 		kernel_assert(kernel_data.film.pass_aov[aov_count] & (1 << 31));
 		kernel_write_id_slots(buffer + pass_offset, kernel_data.film.use_cryptomatte & 255, id, matte_weight, initialize_slots);
 		state->written_aovs |= (1 << aov_count);
-		aov_count++;
+		aov_count += kernel_data.film.use_cryptomatte & 255;
 	}
 	// end TODO
 	

@@ -1081,7 +1081,7 @@ typedef struct KernelFilm {
 	int pass_shadow;
 	float pass_shadow_scale;
 	int filter_table_offset;
-	unsigned int use_cryptomatte;
+	int use_cryptomatte;
 
 	int pass_mist;
 	float mist_start;
