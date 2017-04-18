@@ -20,26 +20,28 @@
 
 #include "COM_CryptomatteOperation.h"
 
-CryptomatteOperation::CryptomatteOperation() : NodeOperation()
+CryptomatteOperation::CryptomatteOperation(size_t num_inputs) : NodeOperation()
 {
-	for(int i = 0; i < 6; i++) {
-		inputs[i] = NULL;
+	for(size_t i = 0; i < num_inputs; i++) {
 		this->addInputSocket(COM_DT_COLOR);
 	}
+	inputs.resize(num_inputs);
 	this->addOutputSocket(COM_DT_COLOR);
 	this->setComplex(true);
 }
 
 void CryptomatteOperation::initExecution()
 {
-	for(int i = 0; i < 6; i++)
+	for (size_t i = 0; i < inputs.size(); i++) {
 		inputs[i] = this->getInputSocketReader(i);
+	}
 }
 
 void CryptomatteOperation::addObjectIndex(float objectIndex)
 {
-	if(objectIndex != 0.f)
+	if (objectIndex != 0.f) {
 		m_objectIndex.push_back(objectIndex);
+	}
 }
 
 void CryptomatteOperation::executePixel(float output[4],
@@ -49,7 +51,7 @@ void CryptomatteOperation::executePixel(float output[4],
 {
 	float input[4];
 	output[0] = output[1] = output[2] = output[3] = 0.0f;
-	for(int i = 0; i < 6; i++) {
+	for (size_t i = 0; i < inputs.size(); i++) {
 		inputs[i]->read(input, x, y, data);
 		if (i == 0) {
 			// write the frontmost object as false color for picking

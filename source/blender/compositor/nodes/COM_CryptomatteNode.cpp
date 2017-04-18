@@ -265,24 +265,24 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 	NodeOutput *outputSocketImage = this->getOutputSocket(0);
 	NodeOutput *outputSocketMatte = this->getOutputSocket(1);
 	NodeOutput *outputCryptoPick = this->getOutputSocket(2);
-	
+
 	bNode *node = this->getbNode();
-	CryptomatteOperation *operation = new CryptomatteOperation();
 	NodeCryptomatte *cryptoMatteSettings = (NodeCryptomatte *)node->storage;
-	if(cryptoMatteSettings) {
+	CryptomatteOperation *operation = new CryptomatteOperation(cryptoMatteSettings->num_inputs);
+	if (cryptoMatteSettings) {
 		std::string input = cryptoMatteSettings->matte_id;
-		if(!input.empty()) {
+		if (!input.empty()) {
 			// split the string by commas, ignoring white space
 			std::istringstream ss(input);
-			while( ss.good() )
+			while (ss.good())
 			{
 				std::string token;
 				getline(ss, token, ',');
 				size_t first = token.find_first_not_of(' ');
 				size_t last = token.find_last_not_of(' ');
-				token = token.substr(first, (last-first+1));
+				token = token.substr(first, (last - first + 1));
 				if (*token.begin() == '<' && *(--token.end()) == '>')
-					operation->addObjectIndex(atof(token.substr(1, token.length()-2).c_str()));
+					operation->addObjectIndex(atof(token.substr(1, token.length() - 2).c_str()));
 				else {
 					uint32_t hash = 0;
 					MurmurHash3_x86_32(token.c_str(), token.length(), 0, &hash);
@@ -291,11 +291,12 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 			}
 		}
 	}
-	
+
 	converter.addOperation(operation);
-	
-	for(int i = 0; i < 6; i++)
-		converter.mapInputSocket(this->getInputSocket(i+1), operation->getInputSocket(i));
+
+	for (int i = 0; i < cryptoMatteSettings->num_inputs; i++) {
+		converter.mapInputSocket(this->getInputSocket(i + 1), operation->getInputSocket(i));
+	}
 	
 	SeparateChannelOperation *separateOperation = new SeparateChannelOperation;
 	separateOperation->setChannel(3);

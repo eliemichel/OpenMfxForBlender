@@ -27,9 +27,9 @@ class CryptomatteOperation : public NodeOperation {
 private:
 	std::vector<float> m_objectIndex;
 public:
-	SocketReader *inputs[6];
+	std::vector<SocketReader *> inputs;
 
-	CryptomatteOperation();
+	CryptomatteOperation(size_t num_inputs = 6);
 
 	void initExecution();
 	void executePixel(float output[4], int x, int y, void *data);

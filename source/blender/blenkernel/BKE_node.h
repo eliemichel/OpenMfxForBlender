@@ -994,6 +994,8 @@ void ntreeCompositColorBalanceSyncFromCDL(bNodeTree *ntree, bNode *node);
 
 void ntreeCompositCryptomatteSyncFromAdd(bNodeTree *ntree, bNode *node);
 void ntreeCompositCryptomatteSyncFromRemove(bNodeTree *ntree, bNode *node);
+struct bNodeSocket *ntreeCompositCryptomatteAddSocket(struct bNodeTree *ntree, struct bNode *node);
+int ntreeCompositCryptomatteRemoveSocket(struct bNodeTree *ntree, struct bNode *node);
 
 /** \} */
 

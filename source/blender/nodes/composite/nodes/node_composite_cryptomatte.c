@@ -20,7 +20,7 @@
  *
  * The Original Code is: all of this file.
  *
- * Contributor(s): Lukas Stockner
+ * Contributor(s): Lukas Stockner, Stefan Werner
  *
  * ***** END GPL LICENSE BLOCK *****
  */
@@ -39,10 +39,6 @@ static bNodeSocketTemplate inputs[] = {
 	{	SOCK_RGBA, 1, N_("Image"),			1.0f, 1.0f, 1.0f, 1.0f},
 	{	SOCK_RGBA, 1, N_("Pass 1"),			0.0f, 0.0f, 0.0f, 1.0f},
 	{	SOCK_RGBA, 1, N_("Pass 2"),			0.0f, 0.0f, 0.0f, 1.0f},
-	{	SOCK_RGBA, 1, N_("Pass 3"),			0.0f, 0.0f, 0.0f, 1.0f},
-	{	SOCK_RGBA, 1, N_("Pass 4"),			0.0f, 0.0f, 0.0f, 1.0f},
-	{	SOCK_RGBA, 1, N_("Pass 5"),			0.0f, 0.0f, 0.0f, 1.0f},
-	{	SOCK_RGBA, 1, N_("Pass 6"),			0.0f, 0.0f, 0.0f, 1.0f},
 	{	-1, 0, ""	}
 };
 static bNodeSocketTemplate outputs[] = {
@@ -74,10 +70,32 @@ void ntreeCompositCryptomatteSyncFromRemove(bNodeTree *UNUSED(ntree), bNode *nod
 	}
 }
 
+bNodeSocket *ntreeCompositCryptomatteAddSocket(bNodeTree *ntree, bNode *node)
+{
+	NodeCryptomatte *n = node->storage;
+	char sockname[32];
+	n->num_inputs++;
+	BLI_snprintf(sockname, sizeof(sockname), "Pass %d", n->num_inputs);
+	bNodeSocket *sock = nodeAddStaticSocket(ntree, node, SOCK_IN, SOCK_RGBA, PROP_NONE, NULL, sockname);
+	return sock;
+}
+
+int ntreeCompositCryptomatteRemoveSocket(bNodeTree *ntree, bNode *node)
+{
+	NodeCryptomatte *n = node->storage;
+	if (n->num_inputs < 2) {
+		return 0;
+	}
+	bNodeSocket *sock = node->inputs.last;
+	nodeRemoveSocket(ntree, node, sock);
+	n->num_inputs--;
+	return 1;
+}
 
 static void init(bNodeTree *UNUSED(ntree), bNode *node)
 {
 	NodeCryptomatte *user = MEM_callocN(sizeof(NodeCryptomatte), "cryptomatte user");
+	user->num_inputs = 2;
 	node->storage = user;
 }
 
