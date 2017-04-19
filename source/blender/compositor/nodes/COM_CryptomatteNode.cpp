@@ -268,7 +268,8 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 
 	bNode *node = this->getbNode();
 	NodeCryptomatte *cryptoMatteSettings = (NodeCryptomatte *)node->storage;
-	CryptomatteOperation *operation = new CryptomatteOperation(cryptoMatteSettings->num_inputs);
+
+	CryptomatteOperation *operation = new CryptomatteOperation(getNumberOfInputSockets()-1);
 	if (cryptoMatteSettings) {
 		std::string input = cryptoMatteSettings->matte_id;
 		if (!input.empty()) {
@@ -294,7 +295,7 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 
 	converter.addOperation(operation);
 
-	for (int i = 0; i < cryptoMatteSettings->num_inputs; i++) {
+	for (int i = 0; i < getNumberOfInputSockets()-1; i++) {
 		converter.mapInputSocket(this->getInputSocket(i + 1), operation->getInputSocket(i));
 	}
 	

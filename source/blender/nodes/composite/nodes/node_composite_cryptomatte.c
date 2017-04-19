@@ -92,11 +92,17 @@ int ntreeCompositCryptomatteRemoveSocket(bNodeTree *ntree, bNode *node)
 	return 1;
 }
 
-static void init(bNodeTree *UNUSED(ntree), bNode *node)
+static void init(bNodeTree *ntree, bNode *node)
 {
 	NodeCryptomatte *user = MEM_callocN(sizeof(NodeCryptomatte), "cryptomatte user");
-	user->num_inputs = 2;
 	node->storage = user;
+
+
+	bNodeSocket *sock = nodeAddStaticSocket(ntree, node, SOCK_IN, SOCK_RGBA, PROP_NONE, "image", "Image");
+
+	/* add two inputs by default */
+	ntreeCompositCryptomatteAddSocket(ntree, node);
+	ntreeCompositCryptomatteAddSocket(ntree, node);
 }
 
 void register_node_type_cmp_cryptomatte(void)
@@ -104,7 +110,8 @@ void register_node_type_cmp_cryptomatte(void)
 	static bNodeType ntype;
 
 	cmp_node_type_base(&ntype, CMP_NODE_CRYPTOMATTE, "Cryptomatte", NODE_CLASS_CONVERTOR, 0);
-	node_type_socket_templates(&ntype, inputs, outputs);
+	//node_type_socket_templates(&ntype, inputs, outputs);
+	node_type_socket_templates(&ntype, NULL, outputs);
 	node_type_init(&ntype, init);
 	node_type_storage(&ntype, "NodeCryptomatte", node_free_standard_storage, node_copy_standard_storage);
 	nodeRegisterType(&ntype);
