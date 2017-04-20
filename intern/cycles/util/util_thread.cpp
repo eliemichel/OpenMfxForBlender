@@ -26,7 +26,28 @@ thread::thread(function<void(void)> run_cb, int group)
     joined_(false),
 	group_(group)
 {
+#ifdef __APPLE__
+	#define REQUIRED_STACK_SIZE  2*1024*1024
+	
+	pthread_attr_t 	stackSizeAttribute;
+	size_t			stackSize = 0;
+	
+	/*  Initialize the attribute */
+	pthread_attr_init (&stackSizeAttribute);
+	
+	/* Get the default value */
+	pthread_attr_getstacksize(&stackSizeAttribute, &stackSize);
+	
+	/* If the default size does not fit our needs, set the attribute with our required value */
+	if (stackSize < REQUIRED_STACK_SIZE)
+	{
+		pthread_attr_setstacksize (&stackSizeAttribute, REQUIRED_STACK_SIZE);
+	}
+	
+	pthread_create(&pthread_id_, &stackSizeAttribute, run, (void*)this);
+#else
 	pthread_create(&pthread_id_, NULL, run, (void*)this);
+#endif
 }
 
 thread::~thread()
