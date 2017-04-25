@@ -2538,7 +2538,7 @@ static void node_composit_buts_cryptomatte(uiLayout *layout, bContext *UNUSED(C)
 	uiItemR(row, ptr, "remove", 0, NULL, ICON_NONE);
 }
 
-static void node_composit_buts_cryptomatte_ex(uiLayout *layout, bContext *C, PointerRNA *ptr)
+static void node_composit_buts_cryptomatte_ex(uiLayout *layout, bContext *UNUSED(C), PointerRNA *UNUSED(ptr))
 {
 	uiItemO(layout, IFACE_("Add Input"), ICON_ZOOMIN, "NODE_OT_cryptomatte_add_socket");
 	uiItemO(layout, IFACE_("Remove Input"), ICON_ZOOMOUT, "NODE_OT_cryptomatte_remove_socket");

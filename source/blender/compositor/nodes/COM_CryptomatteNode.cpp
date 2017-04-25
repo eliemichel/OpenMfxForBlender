@@ -188,10 +188,10 @@ static inline float hash_to_float(uint32_t hash) {
 extern "C" void cryptomatte_add(NodeCryptomatte* n, float f)
 {
 	static char number[64];
-	std::snprintf(number, sizeof(number), "<%.9g>", f);
-	if(::strnlen(n->matte_id, sizeof(n->matte_id)) == 0)
+	BLI_snprintf(number, sizeof(number), "<%.9g>", f);
+	if(BLI_strnlen(n->matte_id, sizeof(n->matte_id)) == 0)
 	{
-		std::strncpy(n->matte_id, number, sizeof(n->matte_id));
+		BLI_strncpy(n->matte_id, number, sizeof(n->matte_id));
 		return;
 	}
 	

@@ -39,7 +39,7 @@ void CryptomatteOperation::initExecution()
 
 void CryptomatteOperation::addObjectIndex(float objectIndex)
 {
-	if (objectIndex != 0.f) {
+	if (objectIndex != 0.0f) {
 		m_objectIndex.push_back(objectIndex);
 	}
 }
@@ -62,10 +62,12 @@ void CryptomatteOperation::executePixel(float output[4],
 			output[2] = ((float) ((m3hash << 16)) / (float) UINT32_MAX);
 		}
 		for(float f : m_objectIndex) {
-			if (f == input[0])
+			if (f == input[0]) {
 				output[3] += input[1];
-			if (f == input[2])
+			}
+			if (f == input[2]) {
 				output[3] += input[3];
+			}
 		}
 	}
 }
