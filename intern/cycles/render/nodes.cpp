@@ -362,9 +362,9 @@ void ImageTextureNode::compile(OSLCompiler& compiler)
 	image_manager = compiler.image_manager;
 	if(is_float == -1) {
 		if(builtin_data == NULL) {
-			ImageManager::ImageDataType type;
+			ImageDataType type;
 			type = image_manager->get_image_metadata(filename.string(), NULL, is_linear);
-			if(type == ImageManager::IMAGE_DATA_TYPE_FLOAT || type == ImageManager::IMAGE_DATA_TYPE_FLOAT4)
+			if(type == IMAGE_DATA_TYPE_FLOAT || type == IMAGE_DATA_TYPE_FLOAT4)
 				is_float = 1;
 		}
 		else {
@@ -635,9 +635,9 @@ void EnvironmentTextureNode::compile(OSLCompiler& compiler)
 	image_manager = compiler.image_manager;
 	if(is_float == -1) {
 		if(builtin_data == NULL) {
-			ImageManager::ImageDataType type;
+			ImageDataType type;
 			type = image_manager->get_image_metadata(filename.string(), NULL, is_linear);
-			if(type == ImageManager::IMAGE_DATA_TYPE_FLOAT || type == ImageManager::IMAGE_DATA_TYPE_FLOAT4)
+			if(type == IMAGE_DATA_TYPE_FLOAT || type == IMAGE_DATA_TYPE_FLOAT4)
 				is_float = 1;
 		}
 		else {
