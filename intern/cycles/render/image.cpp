@@ -51,10 +51,12 @@ ImageManager::ImageManager(const DeviceInfo& info)
 	/* Set image limits */
 	max_num_images = TEX_NUM_MAX;
 	has_half_images = true;
+	cuda_fermi_limits = false;
 	
 	if(device_type == DEVICE_CUDA) {
 		if(!info.has_bindless_textures) {
-			max_num_images = TEX_NUM_MAX_CUDA_LEGACY;
+			cuda_fermi_limits = true;
+			has_half_images = false;
 		}
 	}
 	else if(device_type == DEVICE_OPENCL) {
@@ -185,16 +187,39 @@ ImageDataType ImageManager::get_image_metadata(const string& filename,
 
 /* The lower three bits of a device texture slot number indicate its type.
  * These functions convert the slot ids from ImageManager "images" ones
- * to device ones and vice versa. */
+ * to device ones and vice versa.
+ *
+ * There are special cases for CUDA Fermi, since there we have only 90 image texture
+ * slots available and shold keep the flattended numbers in the 0-89 range.
+ */
 int ImageManager::type_index_to_flattened_slot(int slot, ImageDataType type)
 {
+	if (cuda_fermi_limits) {
+		if (type == IMAGE_DATA_TYPE_BYTE4) {
+			return slot + 5;
+		}
+		else {
+			return slot;
+		}
+	}
+
 	return (slot << 3) | (type);
 }
 
 int ImageManager::flattened_slot_to_type_index(int flat_slot, ImageDataType *type)
 {
+	if (cuda_fermi_limits) {
+		if (flat_slot >= 4) {
+			*type = IMAGE_DATA_TYPE_BYTE4;
+			return flat_slot - 5;
+		}
+		else {
+			*type = IMAGE_DATA_TYPE_FLOAT4;
+			return flat_slot;
+		}
+	}
+
 	*type = static_cast<ImageDataType>(flat_slot & 0x7);
-	
 	return flat_slot >> 3;
 }
 
@@ -255,6 +280,13 @@ int ImageManager::add_image(const string& filename,
 		type = IMAGE_DATA_TYPE_FLOAT;
 	}
 
+	if (type == IMAGE_DATA_TYPE_FLOAT && cuda_fermi_limits) {
+		type = IMAGE_DATA_TYPE_FLOAT4;
+	}
+	else if (type == IMAGE_DATA_TYPE_BYTE && cuda_fermi_limits) {
+		type = IMAGE_DATA_TYPE_BYTE4;
+	}
+
 	/* Fnd existing image. */
 	for(slot = 0; slot < images[type].size(); slot++) {
 		img = images[type][slot];
@@ -283,14 +315,25 @@ int ImageManager::add_image(const string& filename,
 			break;
 	}
 
-	if(max_num_images > -1) {
+	/* Count if we're over the limit */
+	if (cuda_fermi_limits) {
+		if (tex_num_images[IMAGE_DATA_TYPE_BYTE4] == TEX_NUM_BYTE4_CUDA
+			|| tex_num_images[IMAGE_DATA_TYPE_FLOAT4] == TEX_NUM_FLOAT4_CUDA)
+		{
+			printf("ImageManager::add_image: Reached %s image limit (%d), skipping '%s'\n",
+				name_from_type(type).c_str(), tex_num_images[type], filename.c_str());
+			return -1;
+		}
+	}
+	else {
+		/* Very unlikely, since max_num_images is insanely big. But better safe than sorry. */
 		int tex_count = 0;
-		for(int type = 0; type < IMAGE_DATA_NUM_TYPES; type++) {
+		for (int type = 0; type < IMAGE_DATA_NUM_TYPES; type++) {
 			tex_count += tex_num_images[type];
 		}
 		if (tex_count > max_num_images) {
-			printf("ImageManager::add_image: Reached %s image limit (%d), skipping '%s'\n",
-				   name_from_type(type).c_str(), max_num_images, filename.c_str());
+			printf("ImageManager::add_image: Reached image limit (%d), skipping '%s'\n",
+				max_num_images, filename.c_str());
 			return -1;
 		}
 	}
@@ -609,7 +652,7 @@ void ImageManager::device_load_image(Device *device,
 	/* Slot assignment */
 	int flat_slot = type_index_to_flattened_slot(slot, type);
 
-	string name = string_printf("__tex_image_%s_%04d", name_from_type(type).c_str(), flat_slot);
+	string name = string_printf("__tex_image_%s_%03d", name_from_type(type).c_str(), flat_slot);
 
 	if(type == IMAGE_DATA_TYPE_FLOAT4) {
 		if(dscene->tex_float4_image[slot] == NULL)

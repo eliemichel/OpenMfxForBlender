@@ -54,7 +54,7 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 	 * also note that cuda has a textures limit (128 for Fermi, 256 for Kepler),
 	 * and we cannot use all since we still need some for other storage */
 
-	switch(kernel_tex_index(id)) {
+	switch(id) {
 		case 0: r = kernel_tex_image_interp(__tex_image_float4_000, x, y); break;
 		case 1: r = kernel_tex_image_interp(__tex_image_float4_001, x, y); break;
 		case 2: r = kernel_tex_image_interp(__tex_image_float4_002, x, y); break;
