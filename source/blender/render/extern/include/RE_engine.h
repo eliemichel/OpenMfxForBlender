@@ -96,6 +96,7 @@ typedef struct RenderEngineType {
 	void (*view_draw)(struct RenderEngine *engine, const struct bContext *context);
 
 	void (*update_script_node)(struct RenderEngine *engine, struct bNodeTree *ntree, struct bNode *node);
+	void (*update_render_passes)(struct RenderEngine *engine, struct Scene *scene, struct SceneRenderLayer *srl);
 
 	/* RNA integration */
 	ExtensionRNA ext;
@@ -159,6 +160,9 @@ int RE_engine_render(struct Render *re, int do_all);
 bool RE_engine_is_external(struct Render *re);
 
 void RE_engine_frame_set(struct RenderEngine *engine, int frame, float subframe);
+
+void RE_engine_register_pass(struct RenderEngine *engine, struct Scene *scene, struct SceneRenderLayer *srl,
+                             const char *name, int channels, const char *chanid, int type);
 
 /* Engine Types */
 

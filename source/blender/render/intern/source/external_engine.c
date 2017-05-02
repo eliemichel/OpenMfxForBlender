@@ -62,13 +62,14 @@
 #include "renderpipeline.h"
 #include "render_types.h"
 #include "render_result.h"
+#include "rendercore.h"
 
 /* Render Engine Types */
 
 static RenderEngineType internal_render_type = {
 	NULL, NULL,
 	"BLENDER_RENDER", N_("Blender Render"), RE_INTERNAL,
-	NULL, NULL, NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, NULL, NULL, render_internal_update_passes,
 	{NULL, NULL, NULL}
 };
 
@@ -77,7 +78,7 @@ static RenderEngineType internal_render_type = {
 static RenderEngineType internal_game_type = {
 	NULL, NULL,
 	"BLENDER_GAME", N_("Blender Game"), RE_INTERNAL | RE_GAME,
-	NULL, NULL, NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	{NULL, NULL, NULL}
 };
 
@@ -760,3 +761,14 @@ int RE_engine_render(Render *re, int do_all)
 	return 1;
 }
 
+void RE_engine_register_pass(struct RenderEngine *engine, struct Scene *scene, struct SceneRenderLayer *srl,
+                             const char *name, int channels, const char *chanid, int type)
+{
+	if (!scene || !srl || !engine) {
+		return;
+	}
+
+	if (scene->nodetree) {
+		ntreeCompositRegisterPass(scene->nodetree, scene, srl, name, type);
+	}
+}
