@@ -239,63 +239,6 @@ void BlenderSession::free_session()
 	delete session;
 }
 
-static map<string, PassType> init_pass_mapping()
-{
-	map<string, PassType> mapping;
-
-#define MAP_PASS(BPASS, CPASS) mapping.insert(std::pair<string, PassType>(BPASS, CPASS));
-	/* NOTE: Keep in sync with defined names from DNA_scene_types.h */
-	MAP_PASS("Combined", PASS_COMBINED);
-	MAP_PASS("Depth", PASS_DEPTH);
-	MAP_PASS("Mist", PASS_MIST);
-	MAP_PASS("Normal", PASS_NORMAL);
-	MAP_PASS("IndexOB", PASS_OBJECT_ID);
-	MAP_PASS("UV", PASS_UV);
-	MAP_PASS("Vector", PASS_MOTION);
-	MAP_PASS("IndexMA", PASS_MATERIAL_ID);
-
-	MAP_PASS("DiffDir", PASS_DIFFUSE_DIRECT);
-	MAP_PASS("GlossDir", PASS_GLOSSY_DIRECT);
-	MAP_PASS("TransDir", PASS_TRANSMISSION_DIRECT);
-	MAP_PASS("SubsurfaceDir", PASS_SUBSURFACE_DIRECT);
-
-	MAP_PASS("DiffInd", PASS_DIFFUSE_INDIRECT);
-	MAP_PASS("GlossInd", PASS_GLOSSY_INDIRECT);
-	MAP_PASS("TransInd", PASS_TRANSMISSION_INDIRECT);
-	MAP_PASS("SubsurfaceInd", PASS_SUBSURFACE_INDIRECT);
-
-	MAP_PASS("DiffCol", PASS_DIFFUSE_COLOR);
-	MAP_PASS("GlossCol", PASS_GLOSSY_COLOR);
-	MAP_PASS("TransCol", PASS_TRANSMISSION_COLOR);
-	MAP_PASS("SubsurfaceCol", PASS_SUBSURFACE_COLOR);
-
-	MAP_PASS("Emit", PASS_EMISSION);
-	MAP_PASS("Env", PASS_BACKGROUND);
-	MAP_PASS("AO", PASS_AO);
-	MAP_PASS("Shadow", PASS_SHADOW);
-
-#ifdef __KERNEL_DEBUG__
-	MAP_PASS("Debug BVH Traversed Nodes", PASS_BVH_TRAVERSED_NODES);
-	MAP_PASS("Debug BVH Traversed Instances", PASS_BVH_TRAVERSED_INSTANCES);
-	MAP_PASS("Debug BVH Intersections", PASS_BVH_INTERSECTIONS);
-	MAP_PASS("Debug Ray Bounces", PASS_RAY_BOUNCES);
-#endif
-#undef MAP_PASS
-
-	return mapping;
-}
-map<string, PassType> pass_mapping = init_pass_mapping();
-
-static PassType get_pass_type(BL::RenderPass& b_pass)
-{
-	string name = b_pass.name();
-	if (pass_mapping.count(name)) {
-		return pass_mapping[name];
-	}
-
-	return PASS_NONE;
-}
-
 static ShaderEvalType get_shader_type(const string& pass_type)
 {
 	const char *shader_type = pass_type.c_str();
@@ -452,22 +395,11 @@ void BlenderSession::render()
 
 		/* add passes */
 		array<Pass> passes;
-		Pass::add(PASS_COMBINED, passes);
-
 		if(session_params.device.advanced_shading) {
-
-			/* loop over passes */
-			BL::RenderLayer::passes_iterator b_pass_iter;
-
-			for(b_rlay.passes.begin(b_pass_iter); b_pass_iter != b_rlay.passes.end(); ++b_pass_iter) {
-				BL::RenderPass b_pass(*b_pass_iter);
-				PassType pass_type = get_pass_type(b_pass);
-
-				if(pass_type == PASS_MOTION && scene->integrator->motion_blur)
-					continue;
-				if(pass_type != PASS_NONE)
-					Pass::add(pass_type, passes);
-			}
+			passes = sync->sync_render_passes(b_rlay, *b_layer_iter);
+		}
+		else {
+			Pass::add(PASS_COMBINED, passes);
 		}
 
 		buffer_params.passes = passes;
@@ -722,7 +654,7 @@ void BlenderSession::do_write_update_render_result(BL::RenderResult& b_rr,
 			BL::RenderPass b_pass(*b_iter);
 
 			/* find matching pass type */
-			PassType pass_type = get_pass_type(b_pass);
+			PassType pass_type = BlenderSync::get_pass_type(b_pass);
 			int components = b_pass.channels();
 
 			bool read = false;

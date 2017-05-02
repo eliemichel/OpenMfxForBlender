@@ -462,6 +462,60 @@ RenderResult *render_result_new(Render *re, rcti *partrct, int crop, int savebuf
 	return rr;
 }
 
+void render_result_clone_passes(Render *re, RenderResult *rr, const char *viewname)
+{
+	RenderLayer *rl;
+	RenderPass *main_rp;
+
+	for (rl = rr->layers.first; rl; rl = rl->next) {
+		RenderLayer *main_rl = BLI_findstring(&re->result->layers, rl->name, offsetof(RenderLayer, name));
+		if (!main_rl) {
+			continue;
+		}
+
+		for (main_rp = main_rl->passes.first; main_rp; main_rp = main_rp->next) {
+			if (viewname && viewname[0] && !STREQ(main_rp->view, viewname)) {
+				continue;
+			}
+
+			/* Compare fullname to make sure that the view also is equal. */
+			RenderPass *rp = BLI_findstring(&rl->passes, main_rp->fullname, offsetof(RenderPass, fullname));
+			if (!rp) {
+				render_layer_add_pass(rr, rl, main_rp->channels, main_rp->name, main_rp->view, main_rp->chan_id);
+			}
+		}
+	}
+}
+
+void render_result_add_pass(RenderResult *rr, const char *name, int channels, const char *chan_id, const char *layername, const char *viewname)
+{
+	RenderLayer *rl;
+	RenderPass *rp;
+	RenderView *rv;
+
+	for (rl = rr->layers.first; rl; rl = rl->next) {
+		if (layername && layername[0] && !STREQ(rl->name, layername)) {
+			continue;
+		}
+
+		for (rv = rr->views.first; rv; rv = rv->next) {
+			const char *view = rv->name;
+
+			if (viewname && viewname[0] && !STREQ(view, viewname)) continue;
+
+			/* Ensure that the pass doesn't exist yet. */
+			for (rp = rl->passes.first; rp; rp = rp->next) {
+				if (!STREQ(rp->name, name)) continue;
+				if (!STREQ(rp->view, view)) continue;
+			}
+
+			if (!rp) {
+				render_layer_add_pass(rr, rl, channels, name, view, chan_id);
+			}
+		}
+	}
+}
+
 /* allocate osa new results for samples */
 RenderResult *render_result_new_full_sample(Render *re, ListBase *lb, rcti *partrct, int crop, int savebuffers, const char *viewname)
 {

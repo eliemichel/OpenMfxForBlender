@@ -6101,6 +6101,11 @@ static void direct_link_scene(FileData *fd, Scene *sce)
 	link_list(fd, &(sce->r.layers));
 	link_list(fd, &(sce->r.views));
 
+
+	for (srl = sce->r.layers.first; srl; srl = srl->next) {
+		srl->prop = newdataadr(fd, srl->prop);
+		IDP_DirectLinkGroup_OrFree(&srl->prop, (fd->flags & FD_FLAGS_SWITCH_ENDIAN), fd);
+	}
 	for (srl = sce->r.layers.first; srl; srl = srl->next) {
 		link_list(fd, &(srl->freestyleConfig.modules));
 	}

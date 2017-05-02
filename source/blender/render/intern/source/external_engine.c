@@ -213,6 +213,8 @@ RenderResult *RE_engine_begin_result(RenderEngine *engine, int x, int y, int w, 
 
 	/* can be NULL if we CLAMP the width or height to 0 */
 	if (result) {
+		render_result_clone_passes(re, result, viewname);
+
 		RenderPart *pa;
 
 		/* Copy EXR tile settings, so pipeline knows whether this is a result
@@ -244,6 +246,17 @@ void RE_engine_update_result(RenderEngine *engine, RenderResult *result)
 		result->renlay = result->layers.first; /* weak, draws first layer always */
 		re->display_update(re->duh, result, NULL);
 	}
+}
+
+void RE_engine_add_pass(RenderEngine *engine, const char *name, int channels, const char *chan_id, const char *layername)
+{
+	Render *re = engine->re;
+
+	if (!re || !re->result) {
+		return;
+	}
+
+	render_result_add_pass(re->result, name, channels, chan_id, layername, NULL);
 }
 
 void RE_engine_end_result(RenderEngine *engine, RenderResult *result, int cancel, int merge_results)
@@ -762,9 +775,11 @@ int RE_engine_render(Render *re, int do_all)
 }
 
 void RE_engine_register_pass(struct RenderEngine *engine, struct Scene *scene, struct SceneRenderLayer *srl,
-                             const char *name, int channels, const char *chanid, int type)
+                             const char *name, int UNUSED(channels), const char *UNUSED(chanid), int type)
 {
-	if (!scene || !srl || !engine) {
+	/* The channel information is currently not used, but is part of the API in case it's needed in the future. */
+
+	if (!(scene && srl && engine)) {
 		return;
 	}
 

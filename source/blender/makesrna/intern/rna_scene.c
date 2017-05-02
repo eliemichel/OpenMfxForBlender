@@ -448,6 +448,7 @@ EnumPropertyItem rna_enum_gpencil_interpolation_mode_items[] = {
 #include "BKE_colortools.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_idprop.h"
 #include "BKE_image.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
@@ -1585,6 +1586,18 @@ static void rna_Scene_use_view_map_cache_update(Main *UNUSED(bmain), Scene *UNUS
 #ifdef WITH_FREESTYLE
 	FRS_free_view_map_cache();
 #endif
+}
+
+static IDProperty *rna_SceneRenderLayer_idprops(PointerRNA *ptr, bool create)
+{
+	SceneRenderLayer *srl = (SceneRenderLayer *)ptr->data;
+
+	if (create && !srl->prop) {
+		IDPropertyTemplate val = {0};
+		srl->prop = IDP_New(IDP_GROUP, &val, "SceneRenderLayer ID properties");
+	}
+
+	return srl->prop;
 }
 
 static void rna_SceneRenderLayer_name_set(PointerRNA *ptr, const char *value)
@@ -5064,6 +5077,7 @@ static void rna_def_scene_render_layer(BlenderRNA *brna)
 	RNA_def_struct_ui_text(srna, "Scene Render Layer", "Render layer");
 	RNA_def_struct_ui_icon(srna, ICON_RENDERLAYERS);
 	RNA_def_struct_path_func(srna, "rna_SceneRenderLayer_path");
+	RNA_def_struct_idprops_func(srna, "rna_SceneRenderLayer_idprops");
 
 	rna_def_render_layer_common(srna, 1);
 

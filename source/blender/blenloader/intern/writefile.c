@@ -2816,6 +2816,9 @@ static void write_scenes(WriteData *wd, ListBase *scebase)
 
 		for (srl = sce->r.layers.first; srl; srl = srl->next) {
 			writestruct(wd, DATA, SceneRenderLayer, 1, srl);
+			if (srl->prop) {
+				IDP_WriteProperty(srl->prop, wd);
+			}
 			for (fmc = srl->freestyleConfig.modules.first; fmc; fmc = fmc->next) {
 				writestruct(wd, DATA, FreestyleModuleConfig, 1, fmc);
 			}
