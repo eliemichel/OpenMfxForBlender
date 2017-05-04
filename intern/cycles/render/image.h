@@ -70,6 +70,7 @@ public:
 	void device_free_builtin(Device *device, DeviceScene *dscene);
 
 	void set_oiio_texture_system(void *texture_system);
+	const string get_mip_map_path(const string& filename);
 	void set_pack_images(bool pack_images_);
 	bool set_animation_frame_update(int frame);
 

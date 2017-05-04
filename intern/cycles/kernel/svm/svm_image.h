@@ -47,7 +47,7 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 		OIIO::TextureOpt options;
 		options.swrap = options.twrap = OIIO::TextureOpt::WrapPeriodic;
 		options.interpmode = OIIO::TextureOpt::InterpBilinear;
-		options.mipmode = OIIO::TextureOpt::MipModeNoMIP;
+		options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
 		if(kg->oiio->tex_paths[id]) {
 			bool success = kg->oiio->tex_sys->texture(kg->oiio->tex_paths[id], kg->oiio->tex_sys->get_perthread_info(), options, x, 1.0f - y, 0.0f, 0.0f, 0.0f, 0.0f, 3, (float*)&r);
 			if(!success) {

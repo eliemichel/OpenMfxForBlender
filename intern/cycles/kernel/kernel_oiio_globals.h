@@ -19,6 +19,7 @@
 
 #include <OpenImageIO/texture.h>
 #include "util_vector.h"
+#include "util_thread.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -26,6 +27,7 @@ struct OIIOGlobals
 {
 public:
 	OIIO::TextureSystem *tex_sys;
+	thread_mutex tex_paths_mutex;
 	vector<OIIO::TextureSystem::TextureHandle*> tex_paths;
 };
 
