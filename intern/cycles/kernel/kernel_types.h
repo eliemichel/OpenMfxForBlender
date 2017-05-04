@@ -67,6 +67,7 @@ CCL_NAMESPACE_BEGIN
 #  ifdef WITH_OSL
 #    define __OSL__
 #  endif
+#  define __OIIO__
 #  define __SUBSURFACE__
 #  define __CMJ__
 #  define __VOLUME__

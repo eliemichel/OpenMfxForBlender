@@ -414,6 +414,16 @@ class CyclesRender_PT_performance(CyclesButtonsPanel, Panel):
         subsub = sub.column(align=True)
         subsub.prop(rd, "use_save_buffers")
 
+        sub.separator()
+        sub.label(text="Texture Cache:")
+        sub.prop(cscene, "texture_cache_size")
+        sub.prop(cscene, "texture_auto_convert")
+        sub.prop(cscene, "texture_accept_unmipped")
+        sub.prop(cscene, "texture_accept_untiled")
+        sub.prop(cscene, "texture_auto_mip")
+        sub.prop(cscene, "texture_auto_tile")
+        sub.prop(cscene, "texture_tile_size")
+
         col = split.column(align=True)
 
         col.label(text="Viewport:")

@@ -530,6 +530,14 @@ SceneParams BlenderSync::get_scene_params(BL::Scene& b_scene,
 		params.texture_limit = 0;
 	}
 
+	params.texture_cache_size = RNA_int_get(&cscene, "texture_cache_size");
+	params.texture_auto_convert = RNA_int_get(&cscene, "texture_auto_convert");
+	params.texture_accept_unmipped = RNA_int_get(&cscene, "texture_accept_unmipped");
+	params.texture_accept_untiled = RNA_int_get(&cscene, "texture_accept_untiled");
+	params.texture_tile_size = RNA_int_get(&cscene, "texture_tile_size");
+	params.texture_auto_mip = RNA_int_get(&cscene, "texture_auto_mip");
+	params.texture_auto_tile = RNA_int_get(&cscene, "texture_auto_tile");
+	
 #if !(defined(__GNUC__) && (defined(i386) || defined(_M_IX86)))
 	if(is_cpu) {
 		params.use_qbvh = DebugFlags().cpu.qbvh && system_cpu_support_sse2();

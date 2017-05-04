@@ -31,7 +31,14 @@
 
 #include "util_foreach.h"
 
+#include <OpenImageIO/texture.h>
+
 CCL_NAMESPACE_BEGIN
+
+/* Shared Texture System */
+OIIO::TextureSystem *ShaderManager::ts_shared = NULL;
+int ShaderManager::ts_shared_users = 0;
+thread_mutex ShaderManager::ts_shared_mutex;
 
 vector<float> ShaderManager::beckmann_table;
 
@@ -412,6 +419,17 @@ void ShaderManager::device_update_common(Device *device,
                                          Scene *scene,
                                          Progress& /*progress*/)
 {
+	if(scene->params.shadingsystem == SHADINGSYSTEM_OSL || scene->params.texture_cache_size > 0) {
+		/* set texture system */
+		scene->image_manager->set_oiio_texture_system((void*)ts);
+		/* update attributes from scene parms */
+		ts_shared->attribute("autotile", scene->params.texture_auto_tile ? scene->params.texture_tile_size : 0);
+		ts_shared->attribute("automip", scene->params.texture_auto_mip ? 1 : 0);
+		ts_shared->attribute("accept_unmipped", scene->params.texture_accept_unmipped ? 1 : 0);
+		ts_shared->attribute("accept_untiled", scene->params.texture_accept_untiled ? 1 : 0);
+		ts_shared->attribute("max_memory_MB", scene->params.texture_cache_size > 0 ? (float)scene->params.texture_cache_size : 16384.0f);
+	}
+	
 	device->tex_free(dscene->shader_flag);
 	dscene->shader_flag.clear();
 
@@ -646,6 +664,42 @@ void ShaderManager::get_requested_features(Scene *scene,
 void ShaderManager::free_memory()
 {
 	beckmann_table.free_memory();
+}
+
+
+void ShaderManager::texture_system_init()
+{
+	/* create texture system, shared between different renders to reduce memory usage */
+	thread_scoped_lock lock(ts_shared_mutex);
+	
+	if(ts_shared_users == 0) {
+		ts_shared = TextureSystem::create(true);
+		
+		ts_shared->attribute("automip",  1);
+		ts_shared->attribute("autotile", 64);
+		ts_shared->attribute("gray_to_rgb", 1);
+		
+		/* effectively unlimited for now, until we support proper mipmap lookups */
+		ts_shared->attribute("max_memory_MB", 16384);
+	}
+	
+	ts = ts_shared;
+	ts_shared_users++;
+}
+
+void ShaderManager::texture_system_free()
+{
+	/* shared texture system decrease users and destroy if no longer used */
+	thread_scoped_lock lock(ts_shared_mutex);
+	ts_shared_users--;
+	
+	if(ts_shared_users == 0) {
+		ts_shared->invalidate_all(true);
+		TextureSystem::destroy(ts_shared);
+		ts_shared = NULL;
+	}
+	
+	ts = NULL;
 }
 
 CCL_NAMESPACE_END

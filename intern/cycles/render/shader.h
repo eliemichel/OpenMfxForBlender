@@ -220,6 +220,15 @@ protected:
 
 	void get_requested_graph_features(ShaderGraph *graph,
 	                                  DeviceRequestedFeatures *requested_features);
+	
+	
+	void texture_system_init();
+	void texture_system_free();
+
+	OIIO::TextureSystem *ts;
+	static OIIO::TextureSystem *ts_shared;
+	static thread_mutex ts_shared_mutex;
+	static int ts_shared_users;
 };
 
 CCL_NAMESPACE_END

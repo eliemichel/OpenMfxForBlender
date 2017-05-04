@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#ifdef __OIIO__
+#  include "kernel_oiio_globals.h"
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 /* Float4 textures on various devices. */
@@ -35,10 +39,24 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 #  ifdef __KERNEL_SSE2__
 	ssef r_ssef;
 	float4 &r = (float4 &)r_ssef;
-	r = kernel_tex_image_interp(id, x, y);
 #  else
-	float4 r = kernel_tex_image_interp(id, x, y);
+	float4 r;
 #  endif
+#  ifdef __OIIO__
+	if(kg->oiio && kg->oiio->tex_paths.size() > id) {
+		OIIO::TextureOpt options;
+		options.swrap = options.twrap = OIIO::TextureOpt::WrapPeriodic;
+		options.interpmode = OIIO::TextureOpt::InterpBilinear;
+		options.interpmode = OIIO::TextureOpt::MipModeNoMIP;
+		if(kg->oiio->tex_paths[id]) {
+			bool success = kg->oiio->tex_sys->texture(kg->oiio->tex_paths[id], kg->oiio->tex_sys->get_perthread_info(), options, x, 1.0f - y, 0.0f, 0.0f, 0.0f, 0.0f, 3, (float*)&r);
+			if(!success) {
+				(void) kg->oiio->tex_sys->geterror();
+			}
+		}
+	} else
+#  endif
+	r = kernel_tex_image_interp(id, x, y);
 #elif defined(__KERNEL_OPENCL__)
 	float4 r = kernel_tex_image_interp(kg, id, x, y);
 #else

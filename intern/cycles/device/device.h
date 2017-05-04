@@ -263,6 +263,9 @@ public:
 
 	/* open shading language, only for CPU device */
 	virtual void *osl_memory() { return NULL; }
+	
+	/* open image io, only for CPU device */
+	virtual void *oiio_memory() { return NULL; }
 
 	/* load/compile kernels, must be called before adding tasks */ 
 	virtual bool load_kernels(

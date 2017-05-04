@@ -34,6 +34,9 @@ struct OSLGlobals;
 struct OSLThreadData;
 struct OSLShadingSystem;
 #  endif
+#  ifdef __OIIO__
+struct OIIOGlobals;
+#  endif
 
 struct Intersection;
 struct VolumeStep;
@@ -60,6 +63,10 @@ typedef struct KernelGlobals {
 	OSLThreadData *osl_tdata;
 #  endif
 
+#  ifdef __OIIO__
+	OIIOGlobals *oiio;
+#  endif
+	
 	/* **** Run-time data ****  */
 
 	/* Heap-allocated storage for transparent shadows intersections. */

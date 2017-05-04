@@ -147,6 +147,13 @@ public:
 	bool use_qbvh;
 	bool persistent_data;
 	int texture_limit;
+	int texture_cache_size;
+	bool texture_auto_convert;
+	bool texture_accept_unmipped;
+	bool texture_accept_untiled;
+	bool texture_auto_tile;
+	bool texture_auto_mip;
+	int texture_tile_size;
 
 	SceneParams()
 	{
@@ -158,6 +165,13 @@ public:
 		use_qbvh = false;
 		persistent_data = false;
 		texture_limit = 0;
+		texture_cache_size = 1024;
+		texture_auto_convert = true;
+		texture_accept_unmipped = true;
+		texture_accept_untiled = true;
+		texture_auto_tile = true;
+		texture_auto_mip = true;
+		texture_tile_size = 64;
 	}
 
 	bool modified(const SceneParams& params)
@@ -168,7 +182,14 @@ public:
 		&& num_bvh_time_steps == params.num_bvh_time_steps
 		&& use_qbvh == params.use_qbvh
 		&& persistent_data == params.persistent_data
-		&& texture_limit == params.texture_limit); }
+		&& texture_limit == params.texture_limit)
+		&& texture_cache_size == params.texture_cache_size
+		&& texture_auto_convert == params.texture_auto_convert
+		&& texture_accept_unmipped == params.texture_accept_unmipped
+		&& texture_accept_untiled == params.texture_accept_untiled
+		&& texture_auto_tile == params.texture_auto_tile
+		&& texture_auto_mip == params.texture_auto_mip
+		&& texture_tile_size == params.texture_tile_size; }
 };
 
 /* Scene */
