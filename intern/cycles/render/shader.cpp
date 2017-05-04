@@ -30,7 +30,7 @@
 #include "tables.h"
 
 #include "util_foreach.h"
-
+#include "kernel_oiio_globals.h"
 #include <OpenImageIO/texture.h>
 
 CCL_NAMESPACE_BEGIN
@@ -422,12 +422,16 @@ void ShaderManager::device_update_common(Device *device,
 	if(scene->params.shadingsystem == SHADINGSYSTEM_OSL || scene->params.texture_cache_size > 0) {
 		/* set texture system */
 		scene->image_manager->set_oiio_texture_system((void*)ts);
-		/* update attributes from scene parms */
-		ts_shared->attribute("autotile", scene->params.texture_auto_tile ? scene->params.texture_tile_size : 0);
-		ts_shared->attribute("automip", scene->params.texture_auto_mip ? 1 : 0);
-		ts_shared->attribute("accept_unmipped", scene->params.texture_accept_unmipped ? 1 : 0);
-		ts_shared->attribute("accept_untiled", scene->params.texture_accept_untiled ? 1 : 0);
-		ts_shared->attribute("max_memory_MB", scene->params.texture_cache_size > 0 ? (float)scene->params.texture_cache_size : 16384.0f);
+		OIIOGlobals *oiio_globals = (OIIOGlobals*)device->oiio_memory();
+		if(oiio_globals) {
+			/* update attributes from scene parms */
+			ts_shared->attribute("autotile", scene->params.texture_auto_tile ? scene->params.texture_tile_size : 0);
+			ts_shared->attribute("automip", scene->params.texture_auto_mip ? 1 : 0);
+			ts_shared->attribute("accept_unmipped", scene->params.texture_accept_unmipped ? 1 : 0);
+			ts_shared->attribute("accept_untiled", scene->params.texture_accept_untiled ? 1 : 0);
+			ts_shared->attribute("max_memory_MB", scene->params.texture_cache_size > 0 ? (float)scene->params.texture_cache_size : 16384.0f);
+			oiio_globals->tex_sys = ts;
+		}
 	}
 	
 	device->tex_free(dscene->shader_flag);
@@ -666,7 +670,6 @@ void ShaderManager::free_memory()
 	beckmann_table.free_memory();
 }
 
-
 void ShaderManager::texture_system_init()
 {
 	/* create texture system, shared between different renders to reduce memory usage */
@@ -695,6 +698,7 @@ void ShaderManager::texture_system_free()
 	
 	if(ts_shared_users == 0) {
 		ts_shared->invalidate_all(true);
+		std::cout << ts_shared->getstats() << std::endl;
 		TextureSystem::destroy(ts_shared);
 		ts_shared = NULL;
 	}

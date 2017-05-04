@@ -643,7 +643,10 @@ void ImageManager::device_load_image(Device *device,
 		return;
 
 	Image *img = images[type][slot];
-
+	if(!img) {
+		return;
+	}
+	
 	if(oiio_texture_system && !img->builtin_data) {
 		if(scene->params.texture_auto_convert) {
 			make_tx(img, progress);
@@ -655,14 +658,14 @@ void ImageManager::device_load_image(Device *device,
 				oiio->tex_paths.resize(flat_slot+1);
 			}
 			OIIO::TextureSystem *tex_sys = (OIIO::TextureSystem*)oiio_texture_system;
-			OIIO::TextureSystem::TextureHandle *handle = tex_sys->get_texture_handle(OIIO::ustring(images[type][slot]->filename.c_str()));
+			OIIO::TextureSystem::TextureHandle *handle = tex_sys->get_texture_handle(OIIO::ustring(img->filename.c_str()));
 			oiio->tex_paths[flat_slot] = handle;
 		}
 		img->need_load = false;
 		return;
 	}
 
-	string filename = path_filename(images[type][slot]->filename);
+	string filename = path_filename(img->filename);
 	progress->set_status("Updating Images", "Loading " + filename);
 
 	const int texture_limit = scene->params.texture_limit;
