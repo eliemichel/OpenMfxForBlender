@@ -419,7 +419,7 @@ void ShaderManager::device_update_common(Device *device,
                                          Scene *scene,
                                          Progress& /*progress*/)
 {
-	if(scene->params.shadingsystem == SHADINGSYSTEM_OSL || scene->params.texture_cache_size > 0) {
+	if(device->info.type == DEVICE_CPU && (scene->params.shadingsystem == SHADINGSYSTEM_OSL || scene->params.texture_cache_size > 0)) {
 		/* set texture system */
 		scene->image_manager->set_oiio_texture_system((void*)ts);
 		OIIOGlobals *oiio_globals = (OIIOGlobals*)device->oiio_memory();
