@@ -217,3 +217,16 @@ def register_passes(engine, scene, srl):
     if srl.use_pass_subsurface_color:      engine.register_pass(scene, srl,  "SubsurfaceCol", 3, "RGB",  'COLOR')
     if srl.use_pass_emit:                  engine.register_pass(scene, srl,  "Emit",          3, "RGB",  'COLOR')
     if srl.use_pass_environment:           engine.register_pass(scene, srl,  "Env",           3, "RGB",  'COLOR')
+
+    for aov in srl.cycles.aovs:
+        if(aov.type == 'COLOR'):
+            engine.register_pass(scene, srl, aov.name, 3, "RGB", 'COLOR')
+        else:
+            engine.register_pass(scene, srl, aov.name, 1, "X", 'VALUE')
+
+    if(srl.cycles.use_pass_crypto_object):
+        for i in range(0, srl.cycles.pass_crypto_depth, 2):
+            engine.register_pass(scene, srl, "AOV uCryptoObject" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
+    if(srl.cycles.use_pass_crypto_material):
+        for i in range(0, srl.cycles.pass_crypto_depth, 2):
+            engine.register_pass(scene, srl, "AOV uCryptoMaterial" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
