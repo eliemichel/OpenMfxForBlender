@@ -667,11 +667,14 @@ void ImageManager::device_load_image(Device *device,
 	if(!img) {
 		return;
 	}
-	
+
 	if(oiio_texture_system && !img->builtin_data) {
+		/* Generate a mip mapped tile image file */
 		if(scene->params.texture_auto_convert) {
 			make_tx(img, progress);
 		}
+		/* When using OIIO directly from SVM, store the TextureHandle
+		 * in an array for quicker lookup at shading time */
 		OIIOGlobals *oiio = (OIIOGlobals*)device->oiio_memory();
 		if(oiio) {
 			thread_scoped_lock lock(oiio->tex_paths_mutex);
@@ -681,7 +684,11 @@ void ImageManager::device_load_image(Device *device,
 			}
 			OIIO::TextureSystem *tex_sys = (OIIO::TextureSystem*)oiio_texture_system;
 			OIIO::TextureSystem::TextureHandle *handle = tex_sys->get_texture_handle(OIIO::ustring(img->filename.c_str()));
-			oiio->tex_paths[flat_slot] = handle;
+			if(tex_sys->good(handle)) {
+				oiio->tex_paths[flat_slot] = handle;
+			} else {
+				oiio->tex_paths[flat_slot] = NULL;
+			}
 		}
 		img->need_load = false;
 		return;
@@ -1282,21 +1289,13 @@ bool ImageManager::make_tx(Image *image, Progress *progress)
 	progress->set_status("Updating Images", "Converting " + image->filename);
 	
 	ImageSpec config;
-	config.tile_width = 64;
-	config.tile_height = 64;
-	
-	ImageCache *ic = ImageCache::create();
-	ic->attribute("forcefloat", 1);
-	ic->attribute("max_memory_MB", 1024.0f);
-	
+	config.attribute("maketx:filtername", "lanczos3");
+
 	bool ok = ImageBufAlgo::make_texture(ImageBufAlgo::MakeTxTexture, image->filename, tx_name, config);
 	if(ok) {
 		image->filename = tx_name;
-	} else {
-		std::cout << ic->geterror() << std::endl;
 	}
-	ic->reset_stats();
-	ImageCache::destroy(ic);
+
 	return true;
 }
 
