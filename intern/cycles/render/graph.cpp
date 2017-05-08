@@ -325,6 +325,7 @@ void ShaderGraph::finalize(Scene *scene,
 		default_inputs(do_osl);
 		clean(scene);
 		refine_bump_nodes();
+		add_differentials();
 
 		if(do_bump)
 			bump_from_displacement(bump_in_object_space);
@@ -807,6 +808,53 @@ void ShaderGraph::refine_bump_nodes()
 			 * we re-connected this input to samplecenter, so lets disconnect it
 			 * from bump input */
 			disconnect(bump_input);
+		}
+	}
+}
+
+void ShaderGraph::add_differentials()
+{
+	/* we transverse the node graph looking for texture nodes, when we find them,
+	 * we copy the sub-graph defined from "Vector"
+	 * input to the inputs "Vector_dx" and "Vector_dy" */
+	
+	foreach(ShaderNode *node, nodes) {
+		if(node->special_type == SHADER_SPECIAL_TYPE_IMAGE_SLOT && node->input("Vector")->link
+		   && node->input("Vector_dx") && node->input("Vector_dy")) {
+			ShaderInput *vector_input = node->input("Vector");
+			ShaderNodeSet nodes_vector;
+
+			/* make 2 extra copies of the subgraph defined in Vector input */
+			ShaderNodeMap nodes_dx;
+			ShaderNodeMap nodes_dy;
+
+			/* find dependencies for the given input */
+			find_dependencies(nodes_vector, vector_input);
+
+			copy_nodes(nodes_vector, nodes_dx);
+			copy_nodes(nodes_vector, nodes_dy);
+
+			/* mark nodes to indicate they are used for differential computation, so
+			 that any texture coordinates are shifted by dx/dy when sampling */
+			foreach(ShaderNode *node, nodes_vector)
+				node->bump = SHADER_BUMP_CENTER;
+			foreach(NodePair& pair, nodes_dx)
+				pair.second->bump = SHADER_BUMP_DX;
+			foreach(NodePair& pair, nodes_dy)
+				pair.second->bump = SHADER_BUMP_DY;
+
+			ShaderOutput *out = vector_input->link;
+			ShaderOutput *out_dx = nodes_dx[out->parent]->output(out->name());
+			ShaderOutput *out_dy = nodes_dy[out->parent]->output(out->name());
+
+			connect(out_dx, node->input("Vector_dx"));
+			connect(out_dy, node->input("Vector_dy"));
+
+			/* add generated nodes */
+			foreach(NodePair& pair, nodes_dx)
+				add(pair.second);
+			foreach(NodePair& pair, nodes_dy)
+				add(pair.second);
 		}
 	}
 }

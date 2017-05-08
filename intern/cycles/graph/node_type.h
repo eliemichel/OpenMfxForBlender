@@ -78,7 +78,9 @@ struct SocketType
 		LINK_NORMAL            = (1 << 7),
 		LINK_POSITION          = (1 << 8),
 		LINK_TANGENT           = (1 << 9),
-		DEFAULT_LINK_MASK      = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9)
+		LINK_TEXTURE_DX        = (1 << 10),
+		LINK_TEXTURE_DY        = (1 << 11),
+		DEFAULT_LINK_MASK      = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11)
 	};
 
 	ustring name;

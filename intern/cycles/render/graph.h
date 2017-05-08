@@ -276,6 +276,7 @@ protected:
 	void break_cycles(ShaderNode *node, vector<bool>& visited, vector<bool>& on_stack);
 	void bump_from_displacement(bool use_object_space);
 	void refine_bump_nodes();
+	void add_differentials();
 	void default_inputs(bool do_osl);
 	void transform_multi_closure(ShaderNode *node, ShaderOutput *weight_out, bool volume);
 

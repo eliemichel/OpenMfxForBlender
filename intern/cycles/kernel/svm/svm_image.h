@@ -33,7 +33,7 @@ CCL_NAMESPACE_BEGIN
 #  define TEX_NUM_FLOAT4_IMAGES	TEX_NUM_FLOAT4_OPENCL
 #endif
 
-ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y, uint srgb, uint use_alpha)
+ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y, differential ds, differential dt, uint srgb, uint use_alpha, bool fast_lookup)
 {
 #ifdef __KERNEL_CPU__
 #  ifdef __KERNEL_SSE2__
@@ -46,10 +46,21 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 	if(kg->oiio && kg->oiio->tex_paths.size() > id) {
 		OIIO::TextureOpt options;
 		options.swrap = options.twrap = OIIO::TextureOpt::WrapPeriodic;
+#if 0
 		options.interpmode = OIIO::TextureOpt::InterpBilinear;
-		options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
+		options.mipmode = OIIO::TextureOpt::MipModeNoMIP;
+#else
+		if(fast_lookup) {
+			options.interpmode = OIIO::TextureOpt::InterpClosest;
+			options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
+		}
+		else {
+			options.interpmode = OIIO::TextureOpt::InterpSmartBicubic;
+			options.mipmode = OIIO::TextureOpt::MipModeAniso;
+		}
+#endif
 		if(kg->oiio->tex_paths[id]) {
-			bool success = kg->oiio->tex_sys->texture(kg->oiio->tex_paths[id], kg->oiio->tex_sys->get_perthread_info(), options, x, 1.0f - y, 0.0f, 0.0f, 0.0f, 0.0f, 3, (float*)&r);
+			bool success = kg->oiio->tex_sys->texture(kg->oiio->tex_paths[id], kg->oiio->tex_sys->get_perthread_info(), options, x, 1.0f - y, ds.dx, ds.dy, dt.dx, dt.dy, 3, (float*)&r);
 			if(!success) {
 				(void) kg->oiio->tex_sys->geterror();
 			}
@@ -224,28 +235,49 @@ ccl_device_inline float3 texco_remap_square(float3 co)
 	return (co - make_float3(0.5f, 0.5f, 0.5f)) * 2.0f;
 }
 
-ccl_device void svm_node_tex_image(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
+ccl_device void svm_node_tex_image(KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node)
 {
 	uint id = node.y;
 	uint co_offset, out_offset, alpha_offset, srgb;
+	uint projection, dx_offset, dy_offset;
 
 	decode_node_uchar4(node.z, &co_offset, &out_offset, &alpha_offset, &srgb);
+	decode_node_uchar4(node.w, &projection, &dx_offset, &dy_offset, NULL);
 
 	float3 co = stack_load_float3(stack, co_offset);
 	float2 tex_co;
 	uint use_alpha = stack_valid(alpha_offset);
-	if(node.w == NODE_IMAGE_PROJ_SPHERE) {
+	if(projection == NODE_IMAGE_PROJ_SPHERE) {
 		co = texco_remap_square(co);
 		tex_co = map_to_sphere(co);
 	}
-	else if(node.w == NODE_IMAGE_PROJ_TUBE) {
+	else if(projection == NODE_IMAGE_PROJ_TUBE) {
 		co = texco_remap_square(co);
 		tex_co = map_to_tube(co);
 	}
 	else {
 		tex_co = make_float2(co.x, co.y);
 	}
-	float4 f = svm_image_texture(kg, id, tex_co.x, tex_co.y, srgb, use_alpha);
+
+	bool fast_lookup = path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | PATH_RAY_AO);
+
+	differential ds, dt;
+#ifdef __KERNEL_CPU__
+	if(stack_valid(dx_offset) && stack_valid(dy_offset)) {
+		float3 dx = stack_load_float3(stack, dx_offset);
+		float3 dy = stack_load_float3(stack, dy_offset);
+		ds.dx = fabsf(dx.x - tex_co.x);
+		ds.dy = fabsf(dy.x - tex_co.x);
+		dt.dx = fabsf(dx.y - tex_co.y);
+		dt.dy = fabsf(dy.y - tex_co.y);
+	}
+	else
+#endif
+	{
+		ds = differential_zero();
+		dt = differential_zero();
+	}
+	float4 f = svm_image_texture(kg, id, tex_co.x, tex_co.y, ds, dt, srgb, use_alpha, fast_lookup);
 
 	if(stack_valid(out_offset))
 		stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
@@ -331,12 +363,15 @@ ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float 
 	float4 f = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 	uint use_alpha = stack_valid(alpha_offset);
 
+	differential ds = differential_zero();
+	differential dt = differential_zero();
+
 	if(weight.x > 0.0f)
-		f += weight.x*svm_image_texture(kg, id, co.y, co.z, srgb, use_alpha);
+		f += weight.x*svm_image_texture(kg, id, co.y, co.z, ds, dt, srgb, use_alpha, false);
 	if(weight.y > 0.0f)
-		f += weight.y*svm_image_texture(kg, id, co.x, co.z, srgb, use_alpha);
+		f += weight.y*svm_image_texture(kg, id, co.x, co.z, ds, dt, srgb, use_alpha, false);
 	if(weight.z > 0.0f)
-		f += weight.z*svm_image_texture(kg, id, co.y, co.x, srgb, use_alpha);
+		f += weight.z*svm_image_texture(kg, id, co.y, co.x, ds, dt, srgb, use_alpha, false);
 
 	if(stack_valid(out_offset))
 		stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
@@ -363,7 +398,7 @@ ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, floa
 		uv = direction_to_mirrorball(co);
 
 	uint use_alpha = stack_valid(alpha_offset);
-	float4 f = svm_image_texture(kg, id, uv.x, uv.y, srgb, use_alpha);
+	float4 f = svm_image_texture(kg, id, uv.x, uv.y, differential_zero(), differential_zero(), srgb, use_alpha, false);
 
 	if(stack_valid(out_offset))
 		stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));

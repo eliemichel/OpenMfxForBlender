@@ -699,6 +699,7 @@ void ShaderManager::texture_system_free()
 	if(ts_shared_users == 0) {
 		ts_shared->invalidate_all(true);
 		std::cout << ts_shared->getstats() << std::endl;
+		ts_shared->reset_stats();
 		TextureSystem::destroy(ts_shared);
 		ts_shared = NULL;
 	}
