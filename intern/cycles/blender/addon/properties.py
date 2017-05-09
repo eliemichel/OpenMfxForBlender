@@ -641,44 +641,44 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         cls.texture_cache_size = IntProperty(
             name="Texture Cache Size (MB)",
             default=0,
-            description="The size of the OpenImageIO texture cache in MB. A value of 0 turns off texture caching. Typical values are in the range of 100s of MB.",
+            description="The size of the OpenImageIO texture cache in MB. A value of 0 turns off texture caching. Typical values are in the range of 100s of MB",
             min=0
         )
 
         cls.texture_auto_convert = BoolProperty(
             name="Auto Convert Textures",
             default=True,
-            description="Automatically convert textures to .tx files for optimal texture cache performance."
+            description="Automatically convert textures to .tx files for optimal texture cache performance"
         )
 
         cls.texture_accept_unmipped = BoolProperty(
             name="Accept Unmipped",
             default=True,
-            description="Texture cached rendering without mip mapping is very expensive. Uncheck to prevent Cycles from using textures that are not mip mapped."
+            description="Texture cached rendering without mip mapping is very expensive. Uncheck to prevent Cycles from using textures that are not mip mapped"
         )
 
         cls.texture_accept_untiled = BoolProperty(
             name="Accept Untiled",
             default=True,
-            description="Texture cached rendering without tiled textures is very expensive. Uncheck to prevent Cycles from using textures that are not tiled."
+            description="Texture cached rendering without tiled textures is very expensive. Uncheck to prevent Cycles from using textures that are not tiled"
         )
 
         cls.texture_auto_tile = BoolProperty(
             name="Auto Tile",
             default=True,
-            description="On the fly creation of tiled versions of textures that are not tiled. This can increase render time but helps reduce memory usage."
+            description="On the fly creation of tiled versions of textures that are not tiled. This can increase render time but helps reduce memory usage"
         )
 
         cls.texture_auto_mip = BoolProperty(
             name="Auto Mip",
             default=True,
-            description="On the fly creation of mip maps of textures that are not mip mapped. This can increase render time but helps reduce memory usage."
+            description="On the fly creation of mip maps of textures that are not mip mapped. This can increase render time but helps reduce memory usage"
         )
  
         cls.texture_tile_size = IntProperty(
             name="Tile Size",
             default=64,
-            description="The size of tiles that Cycles uses for auto tiling."
+            description="The size of tiles that Cycles uses for auto tiling"
         )
 
         cls.ao_bounces = IntProperty(
