@@ -836,12 +836,28 @@ void ShaderGraph::add_differentials()
 
 			/* mark nodes to indicate they are used for differential computation, so
 			 that any texture coordinates are shifted by dx/dy when sampling */
+
+			ShaderBump new_bump = node->bump;
 			foreach(ShaderNode *node, nodes_vector)
-				node->bump = SHADER_BUMP_CENTER;
+				node->bump = new_bump;
+
+			if(node->bump == SHADER_BUMP_DX) {
+				new_bump = SHADER_BUMP_CENTER;
+			}
+			else {
+				new_bump = SHADER_BUMP_DX;
+			}
 			foreach(NodePair& pair, nodes_dx)
-				pair.second->bump = SHADER_BUMP_DX;
+				pair.second->bump = new_bump;
+
+			if(node->bump == SHADER_BUMP_DY) {
+				new_bump = SHADER_BUMP_CENTER;
+			}
+			else {
+				new_bump = SHADER_BUMP_DY;
+			}
 			foreach(NodePair& pair, nodes_dy)
-				pair.second->bump = SHADER_BUMP_DY;
+				pair.second->bump = new_bump;
 
 			ShaderOutput *out = vector_input->link;
 			ShaderOutput *out_dx = nodes_dx[out->parent]->output(out->name());
