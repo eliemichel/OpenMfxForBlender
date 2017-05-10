@@ -67,6 +67,7 @@ CCL_NAMESPACE_BEGIN
 #  ifdef WITH_OSL
 #    define __OSL__
 #  endif
+#  define __DNDU__
 #  define __OIIO__
 #  define __SUBSURFACE__
 #  define __CMJ__
@@ -848,6 +849,11 @@ typedef ccl_addr_space struct ShaderData {
 	 * not readily suitable as a tangent for shading on triangles. */
 	ccl_soa_member(float3, dPdu);
 	ccl_soa_member(float3, dPdv);
+#endif
+#ifdef __DNDU__
+	/* differential of N w.r.t. parametric coordinates. */
+	ccl_soa_member(float3, dNdu);
+	ccl_soa_member(float3, dNdv);
 #endif
 
 #ifdef __OBJECT_MOTION__

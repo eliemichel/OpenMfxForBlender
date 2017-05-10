@@ -53,7 +53,7 @@ ccl_device float3 bsdf_reflection_eval_transmit(const ShaderClosure *sc, const f
 	return make_float3(0.0f, 0.0f, 0.0f);
 }
 
-ccl_device int bsdf_reflection_sample(const ShaderClosure *sc, float3 Ng, float3 I, float3 dIdx, float3 dIdy, float randu, float randv, float3 *eval, float3 *omega_in, float3 *domega_in_dx, float3 *domega_in_dy, float *pdf)
+ccl_device int bsdf_reflection_sample(const ShaderClosure *sc, float3 Ng, float3 I, float3 dIdx, float3 dIdy, float randu, float randv, float3 *eval, float3 *omega_in, float3 *domega_in_dx, float3 *domega_in_dy, float *pdf, const ShaderData *sd)
 {
 	const MicrofacetBsdf *bsdf = (const MicrofacetBsdf*)sc;
 	float3 N = bsdf->N;
@@ -64,8 +64,20 @@ ccl_device int bsdf_reflection_sample(const ShaderClosure *sc, float3 Ng, float3
 		*omega_in = (2 * cosNO) * N - I;
 		if(dot(Ng, *omega_in) > 0) {
 #ifdef __RAY_DIFFERENTIALS__
-			*domega_in_dx = 2 * dot(N, dIdx) * N - dIdx;
-			*domega_in_dy = 2 * dot(N, dIdy) * N - dIdy;
+#ifdef __DNDU__
+			/* as described in pbrt */
+			float3 dndx = sd->dNdu * sd->du.dx + sd->dNdv * sd->dv.dx;
+			float3 dndy = sd->dNdu * sd->du.dy + sd->dNdv * sd->dv.dy;
+			float3 dwodx = -dIdx;
+			float3 dwody = -dIdy;
+			float dDNdx = dot(dwodx, N) + dot(I, dndx);
+			float dDNdy = dot(dwody, N) + dot(I, dndy);
+			*domega_in_dx = dwodx + 2.f * (dot(I, N) * dndx + dDNdx * N);
+			*domega_in_dy = dwody + 2.f * (dot(I, N) * dndy + dDNdy * N);
+#else
+			*domega_in_dx = 2.0f * dot(N, dIdx) * N - dIdx;
+			*domega_in_dy = 2.0f * dot(N, dIdy) * N - dIdy;
+#endif
 #endif
 			/* Some high number for MIS. */
 			*pdf = 1e6f;

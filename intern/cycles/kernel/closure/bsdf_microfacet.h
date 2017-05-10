@@ -445,7 +445,7 @@ ccl_device float3 bsdf_microfacet_ggx_eval_transmit(const ShaderClosure *sc, con
 	return make_float3(out, out, out);
 }
 
-ccl_device int bsdf_microfacet_ggx_sample(KernelGlobals *kg, const ShaderClosure *sc, float3 Ng, float3 I, float3 dIdx, float3 dIdy, float randu, float randv, float3 *eval, float3 *omega_in, float3 *domega_in_dx, float3 *domega_in_dy, float *pdf)
+ccl_device int bsdf_microfacet_ggx_sample(KernelGlobals *kg, const ShaderClosure *sc, float3 Ng, float3 I, float3 dIdx, float3 dIdy, float randu, float randv, float3 *eval, float3 *omega_in, float3 *domega_in_dx, float3 *domega_in_dy, float *pdf, const ShaderData *sd)
 {
 	const MicrofacetBsdf *bsdf = (const MicrofacetBsdf*)sc;
 	float alpha_x = bsdf->alpha_x;
@@ -545,10 +545,22 @@ ccl_device int bsdf_microfacet_ggx_sample(KernelGlobals *kg, const ShaderClosure
 					}
 
 #ifdef __RAY_DIFFERENTIALS__
+#ifdef __DNDU__
+					float3 dndx = sd->dNdu * sd->du.dx + sd->dNdv * sd->dv.dx;
+					float3 dndy = sd->dNdu * sd->du.dy + sd->dNdv * sd->dv.dy;
+					float3 dwodx = -dIdx;
+					float3 dwody = -dIdy;
+					float dDNdx = dot(dwodx, N) + dot(I, dndx);
+					float dDNdy = dot(dwody, N) + dot(I, dndy);
+					*domega_in_dx = dwodx + 2.f * (dot(I, N) * dndx + dDNdx * N);
+					*domega_in_dy = dwody + 2.f * (dot(I, N) * dndy + dDNdy * N);
+#else
 					*domega_in_dx = (2.0f * dot(m, dIdx)) * m - dIdx;
 					*domega_in_dy = (2.0f * dot(m, dIdy)) * m - dIdy;
-					*domega_in_dx *= 10.0f;
-					*domega_in_dy *= 10.0f;
+#endif
+					const float softness = min(alpha_x, alpha_y) * 10.0f;
+					*domega_in_dx *= (1.0f + softness);
+					*domega_in_dy *= (1.0f + softness);
 #endif
 				}
 			}
@@ -821,7 +833,7 @@ ccl_device float3 bsdf_microfacet_beckmann_eval_transmit(const ShaderClosure *sc
 	return make_float3(out, out, out);
 }
 
-ccl_device int bsdf_microfacet_beckmann_sample(KernelGlobals *kg, const ShaderClosure *sc, float3 Ng, float3 I, float3 dIdx, float3 dIdy, float randu, float randv, float3 *eval, float3 *omega_in, float3 *domega_in_dx, float3 *domega_in_dy, float *pdf)
+ccl_device int bsdf_microfacet_beckmann_sample(KernelGlobals *kg, const ShaderClosure *sc, float3 Ng, float3 I, float3 dIdx, float3 dIdy, float randu, float randv, float3 *eval, float3 *omega_in, float3 *domega_in_dx, float3 *domega_in_dy, float *pdf, const ShaderData *sd)
 {
 	const MicrofacetBsdf *bsdf = (const MicrofacetBsdf*)sc;
 	float alpha_x = bsdf->alpha_x;
@@ -913,10 +925,22 @@ ccl_device int bsdf_microfacet_beckmann_sample(KernelGlobals *kg, const ShaderCl
 					}
 
 #ifdef __RAY_DIFFERENTIALS__
-					*domega_in_dx = (2 * dot(m, dIdx)) * m - dIdx;
-					*domega_in_dy = (2 * dot(m, dIdy)) * m - dIdy;
-					*domega_in_dx *= 10;
-					*domega_in_dy *= 10;
+#ifdef __DNDU__
+					float3 dndx = sd->dNdu * sd->du.dx + sd->dNdv * sd->dv.dx;
+					float3 dndy = sd->dNdu * sd->du.dy + sd->dNdv * sd->dv.dy;
+					float3 dwodx = -dIdx;
+					float3 dwody = -dIdy;
+					float dDNdx = dot(dwodx, N) + dot(I, dndx);
+					float dDNdy = dot(dwody, N) + dot(I, dndy);
+					*domega_in_dx = dwodx + 2.f * (dot(I, N) * dndx + dDNdx * N);
+					*domega_in_dy = dwody + 2.f * (dot(I, N) * dndy + dDNdy * N);
+#else
+					*domega_in_dx = (2.0f * dot(m, dIdx)) * m - dIdx;
+					*domega_in_dy = (2.0f * dot(m, dIdy)) * m - dIdy;
+#endif
+					const float softness = min(alpha_x, alpha_y) * 10.0f;
+					*domega_in_dx *= (1.0f + softness);
+					*domega_in_dy *= (1.0f + softness);
 #endif
 				}
 			}
