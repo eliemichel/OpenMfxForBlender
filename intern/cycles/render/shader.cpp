@@ -425,11 +425,11 @@ void ShaderManager::device_update_common(Device *device,
 		OIIOGlobals *oiio_globals = (OIIOGlobals*)device->oiio_memory();
 		if(oiio_globals) {
 			/* update attributes from scene parms */
-			ts_shared->attribute("autotile", scene->params.texture_auto_tile ? scene->params.texture_tile_size : 0);
-			ts_shared->attribute("automip", scene->params.texture_auto_mip ? 1 : 0);
-			ts_shared->attribute("accept_unmipped", scene->params.texture_accept_unmipped ? 1 : 0);
-			ts_shared->attribute("accept_untiled", scene->params.texture_accept_untiled ? 1 : 0);
-			ts_shared->attribute("max_memory_MB", scene->params.texture_cache_size > 0 ? (float)scene->params.texture_cache_size : 16384.0f);
+			ts->attribute("autotile", scene->params.texture_auto_tile ? scene->params.texture_tile_size : 0);
+			ts->attribute("automip", scene->params.texture_auto_mip ? 1 : 0);
+			ts->attribute("accept_unmipped", scene->params.texture_accept_unmipped ? 1 : 0);
+			ts->attribute("accept_untiled", scene->params.texture_accept_untiled ? 1 : 0);
+			ts->attribute("max_memory_MB", scene->params.texture_cache_size > 0 ? (float)scene->params.texture_cache_size : 16384.0f);
 			oiio_globals->tex_sys = ts;
 		}
 	}
@@ -672,38 +672,17 @@ void ShaderManager::free_memory()
 
 void ShaderManager::texture_system_init()
 {
-	/* create texture system, shared between different renders to reduce memory usage */
-	thread_scoped_lock lock(ts_shared_mutex);
-	
-	if(ts_shared_users == 0) {
-		ts_shared = TextureSystem::create(true);
-		
-		ts_shared->attribute("automip",  1);
-		ts_shared->attribute("autotile", 64);
-		ts_shared->attribute("gray_to_rgb", 1);
-		
-		/* effectively unlimited for now, until we support proper mipmap lookups */
-		ts_shared->attribute("max_memory_MB", 16384);
-	}
-	
-	ts = ts_shared;
-	ts_shared_users++;
+	ts = TextureSystem::create(true);
+	ts->attribute("gray_to_rgb", 1);
 }
 
 void ShaderManager::texture_system_free()
 {
-	/* shared texture system decrease users and destroy if no longer used */
-	thread_scoped_lock lock(ts_shared_mutex);
-	ts_shared_users--;
-	
-	if(ts_shared_users == 0) {
-		ts_shared->invalidate_all(true);
-		std::cout << ts_shared->getstats() << std::endl;
-		ts_shared->reset_stats();
-		TextureSystem::destroy(ts_shared);
-		ts_shared = NULL;
-	}
-	
+	std::cout << ts->getstats(2) << std::endl;
+	ts->reset_stats();
+	ts->invalidate_all(true);
+	ts->clear();
+	TextureSystem::destroy(ts);
 	ts = NULL;
 }
 

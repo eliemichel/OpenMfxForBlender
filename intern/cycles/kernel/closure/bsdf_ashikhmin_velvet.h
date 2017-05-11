@@ -144,8 +144,10 @@ ccl_device int bsdf_ashikhmin_velvet_sample(const ShaderClosure *sc, float3 Ng, 
 
 #ifdef __RAY_DIFFERENTIALS__
 			// TODO: find a better approximation for the retroreflective bounce
-			*domega_in_dx = (2 * dot(N, dIdx)) * N - dIdx;
-			*domega_in_dy = (2 * dot(N, dIdy)) * N - dIdy;
+			*domega_in_dx = (2.0f * dot(N, dIdx)) * N - dIdx;
+			*domega_in_dy = (2.0f * dot(N, dIdy)) * N - dIdy;
+			*domega_in_dx *= 125.0f;
+			*domega_in_dy *= 125.0f;
 #endif
 		}
 		else
