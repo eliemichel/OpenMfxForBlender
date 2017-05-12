@@ -85,8 +85,14 @@ ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
 #ifdef __OBJECT_MOTION__
 		light_ray.time = ccl_fetch(sd, time);
 #endif
+#ifdef __RAY_DIFFERENTIALS__
 		light_ray.dP = ccl_fetch(sd, dP);
-		light_ray.dD = differential3_zero();
+		/* This is how pbrt v3 implements differentials for diffuse bounces */
+		float3 a, b;
+		make_orthonormals(ao_D, &a, &b);
+		light_ray.dD.dx = normalize(ao_D + 0.1f * a);
+		light_ray.dD.dy = normalize(ao_D + 0.1f * b);
+#endif
 
         state->flag |= PATH_RAY_AO;
 
