@@ -281,6 +281,7 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
                                                 const float3 P,
                                                 const float3 Ng,
                                                 const float3 I,
+												const differential3 *dI,
                                                 int shader, int object, int prim,
                                                 float u, float v, float t,
                                                 float time,
@@ -412,10 +413,17 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 
 #ifdef __RAY_DIFFERENTIALS__
 	/* no ray differentials here yet */
-	ccl_fetch(sd, dP) = differential3_zero();
-	ccl_fetch(sd, dI) = differential3_zero();
-	ccl_fetch(sd, du) = differential_zero();
-	ccl_fetch(sd, dv) = differential_zero();
+	if(dI) {
+		ccl_fetch(sd, dI) = *dI;
+		differential_transfer(&ccl_fetch(sd, dP), differential3_zero(), I, *dI, Ng, t);
+		differential_dudv(&ccl_fetch(sd, du), &ccl_fetch(sd, dv), ccl_fetch(sd, dPdu), ccl_fetch(sd, dPdv), ccl_fetch(sd, dP), ccl_fetch(sd, Ng));
+	}
+	else {
+		ccl_fetch(sd, dP) = differential3_zero();
+		ccl_fetch(sd, dI) = differential3_zero();
+		ccl_fetch(sd, du) = differential_zero();
+		ccl_fetch(sd, dv) = differential_zero();
+	}
 #endif
 }
 
@@ -433,7 +441,7 @@ ccl_device void shader_setup_from_displace(KernelGlobals *kg, ShaderData *sd,
 	shader |= SHADER_SMOOTH_NORMAL;
 
 	shader_setup_from_sample(kg, sd,
-	                         P, Ng, I,
+	                         P, Ng, I, NULL,
 	                         shader, object, prim,
 	                         u, v, 0.0f, 0.5f,
 	                         !(kernel_tex_fetch(__object_flag, object) & SD_OBJECT_TRANSFORM_APPLIED),

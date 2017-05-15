@@ -378,7 +378,7 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 				break;
 #  ifdef __TEXTURES__
 			case NODE_TEX_ENVIRONMENT:
-				svm_node_tex_environment(kg, sd, stack, node);
+				svm_node_tex_environment(kg, sd, path_flag, stack, node);
 				break;
 			case NODE_TEX_SKY:
 				svm_node_tex_sky(kg, sd, stack, node, &offset);

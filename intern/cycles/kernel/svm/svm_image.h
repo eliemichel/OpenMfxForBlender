@@ -43,29 +43,23 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 	float4 r;
 #  endif
 #  ifdef __OIIO__
-	if(kg->oiio && kg->oiio->tex_paths.size() > id) {
+	if(kg->oiio && kg->oiio->tex_paths.size() > id && kg->oiio->tex_paths[id]) {
 		OIIO::TextureOpt options;
 		options.swrap = options.twrap = OIIO::TextureOpt::WrapPeriodic;
-#if 0
-		options.interpmode = OIIO::TextureOpt::InterpBilinear;
-		options.mipmode = OIIO::TextureOpt::MipModeNoMIP;
-#else
 		if(fast_lookup) {
 			options.interpmode = OIIO::TextureOpt::InterpClosest;
 			options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
 		}
 		else {
-			options.interpmode = OIIO::TextureOpt::InterpSmartBicubic;
+			options.interpmode = OIIO::TextureOpt::InterpBilinear;
 			options.mipmode = OIIO::TextureOpt::MipModeAniso;
 		}
-#endif
-		if(kg->oiio->tex_paths[id]) {
-			bool success = kg->oiio->tex_sys->texture(kg->oiio->tex_paths[id], kg->oiio->tex_sys->get_perthread_info(), options, x, 1.0f - y, ds.dx, ds.dy, dt.dx, dt.dy, 3, (float*)&r);
-			if(!success) {
-				(void) kg->oiio->tex_sys->geterror();
-			}
+		bool success = kg->oiio->tex_sys->texture(kg->oiio->tex_paths[id], kg->oiio->tex_sys->get_perthread_info(), options, x, 1.0f - y, ds.dx, ds.dy, dt.dx, dt.dy, 3, (float*)&r);
+		if(!success) {
+			(void) kg->oiio->tex_sys->geterror();
 		}
-	} else
+	}
+	else
 #  endif
 	r = kernel_tex_image_interp(id, x, y);
 #elif defined(__KERNEL_OPENCL__)
@@ -379,7 +373,7 @@ ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float 
 		stack_store_float(stack, alpha_offset, f.w);
 }
 
-ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
+ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node)
 {
 	uint id = node.y;
 	uint co_offset, out_offset, alpha_offset, srgb;
@@ -397,8 +391,9 @@ ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, floa
 	else
 		uv = direction_to_mirrorball(co);
 
+	bool fast_lookup = path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | PATH_RAY_AO);
 	uint use_alpha = stack_valid(alpha_offset);
-	float4 f = svm_image_texture(kg, id, uv.x, uv.y, differential_zero(), differential_zero(), srgb, use_alpha, false);
+	float4 f = svm_image_texture(kg, id, uv.x, uv.y, differential_zero(), differential_zero(), srgb, use_alpha, fast_lookup);
 
 	if(stack_valid(out_offset))
 		stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
