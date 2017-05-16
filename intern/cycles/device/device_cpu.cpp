@@ -410,6 +410,7 @@ public:
 #ifdef WITH_OSL
 		OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
 #endif
+
 		void(*shader_kernel)(KernelGlobals*, uint4*, float4*, float*, int, int, int, int, int);
 
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX2
@@ -516,6 +517,10 @@ protected:
 #ifdef WITH_OSL
 		OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
 #endif
+		if(kg.oiio && kg.oiio->tex_sys) {
+			kg.oiio_tdata = kg.oiio->tex_sys->get_perthread_info();
+		}
+
 		return kg;
 	}
 

@@ -43,18 +43,19 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 	float4 r;
 #  endif
 #  ifdef __OIIO__
-	if(kg->oiio && kg->oiio->tex_paths.size() > id && kg->oiio->tex_paths[id]) {
+	if(kg->oiio && kg->oiio->textures.size() > id && kg->oiio->textures[id].handle) {
 		OIIO::TextureOpt options;
-		options.swrap = options.twrap = OIIO::TextureOpt::WrapPeriodic;
+		options.swrap = options.twrap = kg->oiio->textures[id].extension;
+
 		if(fast_lookup) {
 			options.interpmode = OIIO::TextureOpt::InterpClosest;
 			options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
 		}
 		else {
-			options.interpmode = OIIO::TextureOpt::InterpBilinear;
+			options.interpmode = kg->oiio->textures[id].interpolation;
 			options.mipmode = OIIO::TextureOpt::MipModeAniso;
 		}
-		bool success = kg->oiio->tex_sys->texture(kg->oiio->tex_paths[id], kg->oiio->tex_sys->get_perthread_info(), options, x, 1.0f - y, ds.dx, ds.dy, dt.dx, dt.dy, 3, (float*)&r);
+		bool success = kg->oiio->tex_sys->texture(kg->oiio->textures[id].handle, (OIIO::TextureSystem::Perthread*)kg->oiio_tdata, options, x, 1.0f - y, ds.dx, ds.dy, dt.dx, dt.dy, 3, (float*)&r);
 		if(!success) {
 			(void) kg->oiio->tex_sys->geterror();
 		}
@@ -253,7 +254,7 @@ ccl_device void svm_node_tex_image(KernelGlobals *kg, ShaderData *sd, int path_f
 		tex_co = make_float2(co.x, co.y);
 	}
 
-	bool fast_lookup = path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | PATH_RAY_AO);
+	bool fast_lookup = path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | PATH_RAY_AO | PATH_RAY_GLOSSY);
 
 	differential ds, dt;
 #ifdef __KERNEL_CPU__

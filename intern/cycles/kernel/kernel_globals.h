@@ -65,8 +65,9 @@ typedef struct KernelGlobals {
 
 #  ifdef __OIIO__
 	OIIOGlobals *oiio;
+	void* oiio_tdata;
 #  endif
-	
+
 	/* **** Run-time data ****  */
 
 	/* Heap-allocated storage for transparent shadows intersections. */

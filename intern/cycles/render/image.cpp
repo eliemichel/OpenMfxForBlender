@@ -679,15 +679,43 @@ void ImageManager::device_load_image(Device *device,
 		if(oiio) {
 			thread_scoped_lock lock(oiio->tex_paths_mutex);
 			int flat_slot = type_index_to_flattened_slot(slot, type);
-			if (oiio->tex_paths.size() <= flat_slot) {
-				oiio->tex_paths.resize(flat_slot+1);
+			if (oiio->textures.size() <= flat_slot) {
+				oiio->textures.resize(flat_slot+1);
 			}
 			OIIO::TextureSystem *tex_sys = (OIIO::TextureSystem*)oiio_texture_system;
 			OIIO::TextureSystem::TextureHandle *handle = tex_sys->get_texture_handle(OIIO::ustring(img->filename.c_str()));
 			if(tex_sys->good(handle)) {
-				oiio->tex_paths[flat_slot] = handle;
+				oiio->textures[flat_slot].handle = handle;
+				switch(img->interpolation) {
+					case INTERPOLATION_SMART:
+						oiio->textures[flat_slot].interpolation = OIIO::TextureOpt::InterpSmartBicubic;
+						break;
+					case INTERPOLATION_CUBIC:
+						oiio->textures[flat_slot].interpolation = OIIO::TextureOpt::InterpBicubic;
+						break;
+					case INTERPOLATION_LINEAR:
+						oiio->textures[flat_slot].interpolation = OIIO::TextureOpt::InterpBilinear;
+						break;
+					case INTERPOLATION_NONE:
+					case INTERPOLATION_CLOSEST:
+					default:
+						oiio->textures[flat_slot].interpolation = OIIO::TextureOpt::InterpClosest;
+						break;
+				}
+				switch(img->extension) {
+					case EXTENSION_CLIP:
+						oiio->textures[flat_slot].extension = OIIO::TextureOpt::WrapBlack;
+						break;
+					case EXTENSION_EXTEND:
+						oiio->textures[flat_slot].extension = OIIO::TextureOpt::WrapClamp;
+						break;
+					case EXTENSION_REPEAT:
+					default:
+						oiio->textures[flat_slot].extension = OIIO::TextureOpt::WrapPeriodic;
+						break;
+				}
 			} else {
-				oiio->tex_paths[flat_slot] = NULL;
+				oiio->textures[flat_slot].handle = NULL;
 			}
 		}
 		img->need_load = false;
@@ -895,7 +923,7 @@ void ImageManager::device_free_image(Device *device, DeviceScene *dscene, ImageD
 	if(img) {
 		if(oiio_texture_system && !img->builtin_data) {
 			ustring filename(images[type][slot]->filename);
-			((OIIO::TextureSystem*)oiio_texture_system)->invalidate(filename);
+		//	((OIIO::TextureSystem*)oiio_texture_system)->invalidate(filename);
 		}
 		else {
 			device_memory *tex_img = NULL;

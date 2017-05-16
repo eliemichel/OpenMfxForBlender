@@ -23,12 +23,18 @@
 
 CCL_NAMESPACE_BEGIN
 
+struct OIIOTexture
+{
+	OIIO::TextureSystem::TextureHandle* handle;
+	OIIO::TextureOpt::InterpMode interpolation;
+	OIIO::TextureOpt::Wrap extension;
+};
+
 struct OIIOGlobals
 {
-public:
 	OIIO::TextureSystem *tex_sys;
 	thread_mutex tex_paths_mutex;
-	vector<OIIO::TextureSystem::TextureHandle*> tex_paths;
+	vector<OIIOTexture> textures;
 };
 
 CCL_NAMESPACE_END
