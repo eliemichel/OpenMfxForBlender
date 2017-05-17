@@ -250,7 +250,6 @@ DefNode( TextureNode,    TEX_NODE_PROC+TEX_MUSGRAVE, 0,                   "TEX_M
 DefNode( TextureNode,    TEX_NODE_PROC+TEX_NOISE, 0,                      "TEX_NOISE",      TexNoise,         "Noise",             ""              )
 DefNode( TextureNode,    TEX_NODE_PROC+TEX_STUCCI, 0,                     "TEX_STUCCI",     TexStucci,        "Stucci",            ""              )
 DefNode( TextureNode,    TEX_NODE_PROC+TEX_DISTNOISE, 0,                  "TEX_DISTNOISE",  TexDistNoise,     "Distorted Noise",   ""              )
-DefNode( TextureNode,    TEX_NODE_PROC+TEX_CURVE, 0,                      "TEX_CURVE",      TexCurve,         "Curve Texture",     ""              )
 
 
 /* undefine macros */
