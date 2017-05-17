@@ -675,7 +675,7 @@ static int calc_manipulator_stats(const bContext *C)
 				if (ob->mode & OB_MODE_POSE) {
 					bPoseChannel *posebone = CTX_data_active_pose_bone(C);
 					if (!(posebone)) {
-						return;
+						break;
 					}
 
 					// For god node (bottom of hierarchy)
@@ -774,7 +774,7 @@ static int calc_manipulator_stats(const bContext *C)
 							if (ob->mode & OB_MODE_POSE) {
 								bPoseChannel *posebone = CTX_data_active_pose_bone(C);
 								if (!(posebone)) {
-									return;
+									break;
 								}
 								if (!posebone->parent) {
 									copy_m4_m4(mtx_tranf[i], ob->obmat);
