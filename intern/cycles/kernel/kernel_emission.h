@@ -101,18 +101,17 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 		return false;
 
 	differential3 dD;
-
-	/* todo: implement */
 	differential3 dN;
+#ifdef __DNDU__
 	dN.dx = sd->dNdu;
 	dN.dy = sd->dNdv;
-
+#else
+	dN = differential3_zero();
+#endif
 	/* This is how differentials are calculated for a perfect specular reflection.
 	 * This is not the exact value that we should be getting here,
 	 * but it's still better than using zero differentials. */
 	differential_reflect(&dD, sd->I, &sd->dI, sd->N, &dN);
-	dD.dx *= -10.0f;
-	dD.dy *= -10.0f;
 
 	/* evaluate closure */
 

@@ -239,8 +239,8 @@ NODE_DEFINE(ImageTextureNode)
 	SOCKET_FLOAT(projection_blend, "Projection Blend", 0.0f);
 
 	SOCKET_IN_POINT(vector, "Vector", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_TEXTURE_UV);
-	SOCKET_IN_POINT(vector_dx, "Vector_dx", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_TEXTURE_DX);
-	SOCKET_IN_POINT(vector_dy, "Vector_dy", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_TEXTURE_DY);
+	SOCKET_IN_POINT(vector_dx, "Vector_dx", make_float3(0.0f, 0.0f, 0.0f));
+	SOCKET_IN_POINT(vector_dy, "Vector_dy", make_float3(0.0f, 0.0f, 0.0f));
 
 	SOCKET_OUT_COLOR(color, "Color");
 	SOCKET_OUT_FLOAT(alpha, "Alpha");
@@ -313,7 +313,8 @@ void ImageTextureNode::compile(SVMCompiler& compiler)
 		                                is_linear,
 		                                interpolation,
 		                                extension,
-		                                use_alpha);
+		                                use_alpha,
+                                        color_space == NODE_COLOR_SPACE_COLOR);
 		is_float = (int)is_float_bool;
 	}
 
@@ -385,7 +386,8 @@ void ImageTextureNode::compile(OSLCompiler& compiler)
 			                                is_linear,
 			                                interpolation,
 			                                extension,
-			                                use_alpha);
+			                                use_alpha,
+                                            color_space == NODE_COLOR_SPACE_COLOR);
 			is_float = (int)is_float_bool;
 		}
 	}
@@ -531,7 +533,9 @@ NODE_DEFINE(EnvironmentTextureNode)
 	projection_enum.insert("mirror_ball", NODE_ENVIRONMENT_MIRROR_BALL);
 	SOCKET_ENUM(projection, "Projection", projection_enum, NODE_ENVIRONMENT_EQUIRECTANGULAR);
 
-	SOCKET_IN_POINT(vector, "Vector", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_POSITION);
+	SOCKET_IN_POINT(vector, "Vector", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_POSITION)
+	SOCKET_IN_POINT(vector_dx, "Vector_dx", make_float3(0.0f, 0.0f, 0.0f));
+	SOCKET_IN_POINT(vector_dy, "Vector_dy", make_float3(0.0f, 0.0f, 0.0f));
 
 	SOCKET_OUT_COLOR(color, "Color");
 	SOCKET_OUT_FLOAT(alpha, "Alpha");
@@ -588,6 +592,8 @@ void EnvironmentTextureNode::compile(SVMCompiler& compiler)
 	ShaderInput *vector_in = input("Vector");
 	ShaderOutput *color_out = output("Color");
 	ShaderOutput *alpha_out = output("Alpha");
+	ShaderInput *vector_dx = input("Vector_dx");
+	ShaderInput *vector_dy = input("Vector_dy");
 
 	image_manager = compiler.image_manager;
 	if(slot == -1) {
@@ -600,7 +606,8 @@ void EnvironmentTextureNode::compile(SVMCompiler& compiler)
 		                                is_linear,
 		                                interpolation,
 		                                EXTENSION_REPEAT,
-		                                use_alpha);
+		                                use_alpha,
+                                        color_space == NODE_COLOR_SPACE_COLOR);
 		is_float = (int)is_float_bool;
 	}
 
@@ -615,7 +622,11 @@ void EnvironmentTextureNode::compile(SVMCompiler& compiler)
 				compiler.stack_assign_if_linked(color_out),
 				compiler.stack_assign_if_linked(alpha_out),
 				srgb),
-			projection);
+			compiler.encode_uchar4(
+				projection,
+				compiler.stack_assign(vector_dx),
+				compiler.stack_assign(vector_dy),
+				0));
 	
 		tex_mapping.compile_end(compiler, vector_in, vector_offset);
 	}
@@ -659,7 +670,8 @@ void EnvironmentTextureNode::compile(OSLCompiler& compiler)
 			                                is_linear,
 			                                interpolation,
 			                                EXTENSION_REPEAT,
-			                                use_alpha);
+			                                use_alpha,
+                                            color_space == NODE_COLOR_SPACE_COLOR);
 			is_float = (int)is_float_bool;
 		}
 	}
@@ -1515,7 +1527,7 @@ void PointDensityTextureNode::compile(SVMCompiler& compiler)
 			                                is_float, is_linear,
 			                                interpolation,
 			                                EXTENSION_CLIP,
-			                                true);
+			                                true, false);
 		}
 
 		if(slot != -1) {
@@ -1567,7 +1579,7 @@ void PointDensityTextureNode::compile(OSLCompiler& compiler)
 			                                is_float, is_linear,
 			                                interpolation,
 			                                EXTENSION_CLIP,
-			                                true);
+			                                true, false);
 		}
 
 		if(slot != -1) {

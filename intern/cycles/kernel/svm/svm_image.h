@@ -46,18 +46,24 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 	if(kg->oiio && kg->oiio->textures.size() > id && kg->oiio->textures[id].handle) {
 		OIIO::TextureOpt options;
 		options.swrap = options.twrap = kg->oiio->textures[id].extension;
+		options.anisotropic = 8;
 
 		if(fast_lookup) {
 			options.interpmode = OIIO::TextureOpt::InterpClosest;
 			options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
+			//if(path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR))
+			//	options.sblur = options.tblur = 1.f/64.f;
 		}
 		else {
 			options.interpmode = kg->oiio->textures[id].interpolation;
 			options.mipmode = OIIO::TextureOpt::MipModeAniso;
 		}
-		bool success = kg->oiio->tex_sys->texture(kg->oiio->textures[id].handle, (OIIO::TextureSystem::Perthread*)kg->oiio_tdata, options, x, 1.0f - y, ds.dx, ds.dy, dt.dx, dt.dy, 3, (float*)&r);
+		bool success = kg->oiio->tex_sys->texture(kg->oiio->textures[id].handle, (OIIO::TextureSystem::Perthread*)kg->oiio_tdata, options, x, 1.0f - y, ds.dx, ds.dy, dt.dx, dt.dy, 4, (float*)&r);
 		if(!success) {
 			(void) kg->oiio->tex_sys->geterror();
+		} else {
+			/* Texture cache is always linear */
+			srgb = 0;
 		}
 	}
 	else
@@ -261,10 +267,27 @@ ccl_device void svm_node_tex_image(KernelGlobals *kg, ShaderData *sd, int path_f
 	if(stack_valid(dx_offset) && stack_valid(dy_offset)) {
 		float3 dx = stack_load_float3(stack, dx_offset);
 		float3 dy = stack_load_float3(stack, dy_offset);
-		ds.dx = fabsf(dx.x - tex_co.x);
-		ds.dy = fabsf(dy.x - tex_co.x);
-		dt.dx = fabsf(dx.y - tex_co.y);
-		dt.dy = fabsf(dy.y - tex_co.y);
+		float2 tex_co_dx, tex_co_dy;
+		if(projection == NODE_IMAGE_PROJ_SPHERE) {
+			dx = texco_remap_square(dx);
+			tex_co_dx = map_to_sphere(dx);
+			dy = texco_remap_square(dy);
+			tex_co_dy = map_to_sphere(dy);
+		}
+		else if(projection == NODE_IMAGE_PROJ_TUBE) {
+			dx = texco_remap_square(dx);
+			tex_co_dx = map_to_tube(dx);
+			dy = texco_remap_square(dy);
+			tex_co_dy = map_to_tube(dy);
+		}
+		else {
+			tex_co_dx = make_float2(dx.x, dx.y);
+			tex_co_dy = make_float2(dy.x, dy.y);
+		}
+		ds.dx = tex_co_dx.x - tex_co.x;
+		ds.dy = tex_co_dy.x - tex_co.x;
+		dt.dx = tex_co_dx.y - tex_co.y;
+		dt.dy = tex_co_dy.y - tex_co.y;
 	}
 	else
 #endif
@@ -378,23 +401,65 @@ ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, int 
 {
 	uint id = node.y;
 	uint co_offset, out_offset, alpha_offset, srgb;
-	uint projection = node.w;
+	uint projection, dx_offset, dy_offset;
 
 	decode_node_uchar4(node.z, &co_offset, &out_offset, &alpha_offset, &srgb);
+	decode_node_uchar4(node.w, &projection, &dx_offset, &dy_offset, NULL);
+
+	uint use_alpha = stack_valid(alpha_offset);
+	float4 f;
 
 	float3 co = stack_load_float3(stack, co_offset);
 	float2 uv;
 
 	co = normalize(co);
-	
+	bool fast_lookup = path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | PATH_RAY_AO | PATH_RAY_GLOSSY);
+#ifdef __OIIO__
+	float3 dRdx, dRdy;
+	if(stack_valid(dx_offset) && stack_valid(dy_offset)) {
+		dRdx = co - normalize(stack_load_float3(stack, dx_offset));
+		dRdy = co - normalize(stack_load_float3(stack, dy_offset));
+	}
+	else
+	{
+		dRdx = make_float3(0.0f, 0.0f, 0.0f);
+		dRdy = make_float3(0.0f, 0.0f, 0.0f);
+	}
+	if(kg->oiio && kg->oiio->textures.size() > id && kg->oiio->textures[id].handle && projection == 0) {
+		OIIO::TextureOpt options;
+		options.swrap = options.twrap = kg->oiio->textures[id].extension;
+		options.anisotropic = 8;
+
+		if(fast_lookup) {
+			options.interpmode = OIIO::TextureOpt::InterpClosest;
+			options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
+	//		if(path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR))
+	//		   options.sblur = options.tblur = 1.f/64.f;
+		}
+		else {
+			options.interpmode = kg->oiio->textures[id].interpolation;
+			options.mipmode = OIIO::TextureOpt::MipModeTrilinear;
+		}
+		bool success = kg->oiio->tex_sys->environment (kg->oiio->textures[id].handle, (OIIO::TextureSystem::Perthread*)kg->oiio_tdata, options,
+													   Imath::V3f(co.x, -co.y, co.z), Imath::V3f(dRdx.x, -dRdx.y, dRdx.z),
+													   Imath::V3f(dRdy.x, -dRdy.y, dRdy.z), use_alpha ? 4 : 3, (float*)&f);
+
+		if(!success) {
+			(void) kg->oiio->tex_sys->geterror();
+		}
+	}
+	else {
+#endif
+
 	if(projection == 0)
 		uv = direction_to_equirectangular(co);
 	else
 		uv = direction_to_mirrorball(co);
 
-	bool fast_lookup = path_flag & (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | PATH_RAY_AO);
-	uint use_alpha = stack_valid(alpha_offset);
-	float4 f = svm_image_texture(kg, id, uv.x, uv.y, differential_zero(), differential_zero(), srgb, use_alpha, fast_lookup);
+	f = svm_image_texture(kg, id, uv.x, uv.y, differential_zero(), differential_zero(), srgb, use_alpha, fast_lookup);
+#ifdef __OIIO__
+	}
+#endif
 
 	if(stack_valid(out_offset))
 		stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));

@@ -308,7 +308,8 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
 	        is_linear,
 	        INTERPOLATION_LINEAR,
 	        EXTENSION_CLIP,
-	        true);
+	        true,
+            false);
 }
 
 static void create_mesh_volume_attributes(Scene *scene,

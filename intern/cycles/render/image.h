@@ -45,7 +45,8 @@ public:
 	              bool& is_linear,
 	              InterpolationType interpolation,
 	              ExtensionType extension,
-	              bool use_alpha);
+	              bool use_alpha,
+				  bool srgb);
 	void remove_image(int flat_slot);
 	void remove_image(const string& filename,
 	                  void *builtin_data,
@@ -103,6 +104,7 @@ public:
 		bool use_alpha;
 		bool need_load;
 		bool animated;
+		bool srgb;
 		float frame;
 		InterpolationType interpolation;
 		ExtensionType extension;

@@ -674,6 +674,10 @@ void ShaderManager::texture_system_init()
 {
 	ts = TextureSystem::create(true);
 	ts->attribute("gray_to_rgb", 1);
+	/* these seem to do nothing */
+	ts->attribute("latlong_up", "z");
+	//ts->attribute("flip_t", 1);
+	ts->attribute("forcefloat", 1);
 }
 
 void ShaderManager::texture_system_free()
@@ -681,7 +685,6 @@ void ShaderManager::texture_system_free()
 	std::cout << ts->getstats(2) << std::endl;
 	ts->reset_stats();
 	ts->invalidate_all(true);
-	ts->clear();
 	TextureSystem::destroy(ts);
 	ts = NULL;
 }
