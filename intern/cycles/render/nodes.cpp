@@ -344,7 +344,10 @@ void ImageTextureNode::compile(SVMCompiler& compiler)
 					compiler.stack_assign_if_linked(color_out),
 					compiler.stack_assign_if_linked(alpha_out),
 					srgb),
-				__float_as_int(projection_blend));
+				compiler.encode_uchar4(compiler.stack_assign(vector_dx),
+					compiler.stack_assign(vector_dy),
+					0, 0));
+			compiler.add_node(__float_as_int(projection_blend), 0, 0, 0);
 		}
 
 		tex_mapping.compile_end(compiler, vector_in, vector_offset);
