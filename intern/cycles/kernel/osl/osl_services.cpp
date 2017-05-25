@@ -51,6 +51,7 @@
 
 #include "kernel_projection.h"
 #include "kernel_accumulate.h"
+#include "kernel_light.h"
 #include "kernel_shader.h"
 
 #ifdef WITH_PTEX

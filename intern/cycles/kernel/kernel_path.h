@@ -28,8 +28,8 @@
 #include "bvh/bvh.h"
 
 #include "kernel_accumulate.h"
-#include "kernel_shader.h"
 #include "kernel_light.h"
+#include "kernel_shader.h"
 #include "kernel_passes.h"
 
 #ifdef __SUBSURFACE__

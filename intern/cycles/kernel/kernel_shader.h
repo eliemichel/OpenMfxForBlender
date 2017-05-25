@@ -381,6 +381,15 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 #  endif
 #endif
 	}
+	if(ccl_fetch(sd, type) & PRIMITIVE_LAMP) {
+#ifdef __DPDU__
+		lamp_light_dPdudv(kg, lamp, ccl_fetch(sd, u), ccl_fetch(sd, v), &ccl_fetch(sd, dPdu), &ccl_fetch(sd, dPdv));
+#endif
+#ifdef __DNDU__
+		ccl_fetch(sd, dNdu) = make_float3(0.0f, 0.0f, 0.0f);
+		ccl_fetch(sd, dNdv) = make_float3(0.0f, 0.0f, 0.0f);
+#endif
+	}
 	else {
 #ifdef __DPDU__
 		ccl_fetch(sd, dPdu) = make_float3(0.0f, 0.0f, 0.0f);
@@ -412,7 +421,6 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 	}
 
 #ifdef __RAY_DIFFERENTIALS__
-	/* no ray differentials here yet */
 	if(dI) {
 		ccl_fetch(sd, dI) = *dI;
 		differential_transfer(&ccl_fetch(sd, dP), differential3_zero(), I, *dI, Ng, t);
