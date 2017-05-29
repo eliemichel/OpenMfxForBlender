@@ -395,7 +395,7 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
         float3 curve_location = stack_load_float3(stack, curve_location_offset);
         float3 curve_scale = stack_load_float3(stack, curve_scale_offset);
 
-		uint width = kg->texture_float4_images[slot/8].width;//uint width = 49; /* THIS IS TEMPORARY!!! */
+		uint width = kg->texture_float4_images[slot>>3].width;//uint width = 49; /* THIS IS TEMPORARY!!! */
 
         float grad = 1.0;
 

@@ -113,6 +113,9 @@ public:
 	ShaderNode *clone() const;
 	virtual int get_group() { return NODE_GROUP_LEVEL_2; }
 
+	//bool has_spatial_varying() { return true; }
+	bool has_object_dependency() { return true; }
+
 	ImageManager *image_manager;
 	void *builtin_data;
 	string filename;
