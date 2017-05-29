@@ -705,7 +705,9 @@ static void ExportCurveSegmentsMotion(Mesh *mesh, ParticleCurveData *CData, int 
 					mP[key].w = mesh->curve_radius[key];
 				}
 			}
-		}
+		} else {
+            VLOG(1) << "Motion found.";
+        }
 	}
 }
 
