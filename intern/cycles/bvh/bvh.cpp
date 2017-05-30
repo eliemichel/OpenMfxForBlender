@@ -35,6 +35,10 @@
 #include "util_types.h"
 #include "util_math.h"
 
+#ifdef WITH_EMBREE
+#  include "bvh_embree.h"
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 /* Pack Utility */
@@ -64,6 +68,10 @@ BVH::BVH(const BVHParams& params_, const vector<Object*>& objects_)
 
 BVH *BVH::create(const BVHParams& params, const vector<Object*>& objects)
 {
+#ifdef WITH_EMBREE
+	if(params.use_bvh_embree)
+		return new BVHEmbree(params, objects);
+#endif
 	if(params.use_qbvh)
 		return new QBVH(params, objects);
 	else

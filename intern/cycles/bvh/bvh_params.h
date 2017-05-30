@@ -72,6 +72,8 @@ public:
 	/* Same as above, but for triangle primitives. */
 	int num_motion_triangle_steps;
 
+	bool use_bvh_embree;
+
 	/* fixed parameters */
 	enum {
 		MAX_DEPTH = 64,

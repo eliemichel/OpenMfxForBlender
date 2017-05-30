@@ -534,6 +534,11 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
                 default=0,
                 min=0, max=16,
                 )
+        cls.use_bvh_embree = BoolProperty(
+                name="Use embree",
+                description="Use embree as ray accelerator",
+                default=False,
+                )
         cls.tile_order = EnumProperty(
                 name="Tile Order",
                 description="Tile order for rendering",
