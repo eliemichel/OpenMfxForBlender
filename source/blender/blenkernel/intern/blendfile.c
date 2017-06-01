@@ -356,8 +356,10 @@ int BKE_blendfile_read(
 	BlendFileData *bfd;
 	int retval = BKE_BLENDFILE_READ_OK;
 
-	if (strstr(filepath, BLENDER_STARTUP_FILE) == NULL) /* don't print user-pref loading */
-		printf("read blend: %s\n", filepath);
+	/* don't print user-pref loading */
+	if (strstr(filepath, BLENDER_STARTUP_FILE) == NULL) {
+		printf("Read blend: %s\n", filepath);
+	}
 
 	bfd = BLO_read_from_file(filepath, reports, skip_flags);
 	if (bfd) {
@@ -422,6 +424,32 @@ bool BKE_blendfile_read_from_memfile(
 	}
 
 	return (bfd != NULL);
+}
+
+/**
+ * Utility to make a file 'empty' used for startup to optionally give an empty file.
+ * Handy for tests.
+ */
+void BKE_blendfile_read_make_empty(bContext *C)
+{
+	Main *bmain = CTX_data_main(C);
+
+	ListBase *lbarray[MAX_LIBARRAY];
+	ID *id;
+	int a;
+
+	a = set_listbasepointers(bmain, lbarray);
+	while (a--) {
+		id = lbarray[a]->first;
+		if (id != NULL) {
+			if (ELEM(GS(id->name), ID_SCE, ID_SCR, ID_WM)) {
+				continue;
+			}
+			while ((id = lbarray[a]->first)) {
+				BKE_libblock_delete(bmain, id);
+			}
+		}
+	}
 }
 
 /* only read the userdef from a .blend */

@@ -96,9 +96,6 @@ ccl_device uint BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 	                       &near_x, &near_y, &near_z,
 	                       &far_x, &far_y, &far_z);
 
-	IsectPrecalc isect_precalc;
-	triangle_intersect_precalc(dir, &isect_precalc);
-
 	/* Traversal loop. */
 	do {
 		do {
@@ -276,7 +273,7 @@ ccl_device uint BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 									continue;
 								}
 								/* Intersect ray against primitive. */
-								hit = triangle_intersect(kg, &isect_precalc, isect_array, P, visibility, object, prim_addr);
+								hit = triangle_intersect(kg, isect_array, P, dir, visibility, object, prim_addr);
 								if(hit) {
 									/* Move on to next entry in intersections array. */
 									isect_array++;
@@ -377,7 +374,6 @@ ccl_device uint BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 						org4 = sse3f(ssef(P.x), ssef(P.y), ssef(P.z));
 #  endif
 
-						triangle_intersect_precalc(dir, &isect_precalc);
 						num_hits_in_instance = 0;
 						isect_array->t = isect_t;
 
@@ -441,8 +437,6 @@ ccl_device uint BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 #  if BVH_FEATURE(BVH_HAIR) || !defined(__KERNEL_AVX2__)
 			org4 = sse3f(ssef(P.x), ssef(P.y), ssef(P.z));
 #  endif
-
-			triangle_intersect_precalc(dir, &isect_precalc);
 
 			object = OBJECT_NONE;
 			node_addr = traversal_stack[stack_ptr].addr;

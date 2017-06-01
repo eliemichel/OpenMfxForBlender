@@ -50,11 +50,13 @@
 #include "../generic/py_capi_utils.h"
 
 /* initial definition of callback slots we'll probably have more than 1 */
-#define BPY_DATA_CB_SLOT_SIZE 3
-
-#define BPY_DATA_CB_SLOT_UPDATE 0
-#define BPY_DATA_CB_SLOT_GET 1
-#define BPY_DATA_CB_SLOT_SET 2
+enum {
+	BPY_DATA_CB_SLOT_UPDATE     = 0,
+	BPY_DATA_CB_SLOT_GET        = 1,
+	BPY_DATA_CB_SLOT_SET        = 2,
+	BPY_DATA_CB_SLOT_POLL       = 3,
+	BPY_DATA_CB_SLOT_SIZE       = 4,
+};
 
 extern BPy_StructRNA *bpy_context_module;
 
@@ -71,6 +73,9 @@ static EnumPropertyItem property_flag_items[] = {
 "   :arg options: Enumerator in ['HIDDEN', 'SKIP_SAVE', 'ANIMATABLE', 'LIBRARY_EDITABLE', 'PROPORTIONAL'," \
                                 "'TEXTEDIT_UPDATE'].\n" \
 "   :type options: set\n" \
+"   :arg poll: function to be called to determine whether an item is valid for this property.\n" \
+"              The function must take 2 values (self,object) and return Bool.\n" \
+"   :type poll: function\n" \
 
 static EnumPropertyItem property_flag_enum_items[] = {
 	{PROP_HIDDEN, "HIDDEN", 0, "Hidden", ""},
@@ -230,7 +235,7 @@ static PyObject *bpy_prop_deferred_return(PyObject *func, PyObject *kw)
 static void bpy_prop_update_cb(struct bContext *C, struct PointerRNA *ptr, struct PropertyRNA *prop)
 {
 	PyGILState_STATE gilstate;
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -279,7 +284,7 @@ static void bpy_prop_update_cb(struct bContext *C, struct PointerRNA *ptr, struc
 
 static int bpy_prop_boolean_get_cb(struct PointerRNA *ptr, struct PropertyRNA *prop)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -337,7 +342,7 @@ static int bpy_prop_boolean_get_cb(struct PointerRNA *ptr, struct PropertyRNA *p
 
 static void bpy_prop_boolean_set_cb(struct PointerRNA *ptr, struct PropertyRNA *prop, int value)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -389,9 +394,54 @@ static void bpy_prop_boolean_set_cb(struct PointerRNA *ptr, struct PropertyRNA *
 	}
 }
 
+static int bpy_prop_poll_cb(struct PointerRNA *self, PointerRNA candidate, struct PropertyRNA *prop)
+{
+	PyObject *py_self;
+	PyObject *py_candidate;
+	PyObject *py_func;
+	PyObject **py_data = RNA_property_py_data_get(prop);
+	PyObject *args;
+	PyObject *ret;
+	bool result;
+	const int is_write_ok = pyrna_write_check();
+	PyGILState_STATE gilstate = PyGILState_Ensure();
+
+	BLI_assert(self != NULL);
+
+	py_self = pyrna_struct_as_instance(self);
+	py_candidate = pyrna_struct_as_instance(&candidate);
+	py_func = py_data[BPY_DATA_CB_SLOT_POLL];
+
+	if (!is_write_ok)
+		pyrna_write_set(true);
+
+	args = PyTuple_New(2);
+	PyTuple_SET_ITEM(args, 0, py_self);
+	PyTuple_SET_ITEM(args, 1, py_candidate);
+
+	ret = PyObject_CallObject(py_func, args);
+
+	Py_DECREF(args);
+
+	if (ret == NULL) {
+		printf_func_error(py_func);
+		result = false;
+	}
+	else {
+		result = PyObject_IsTrue(ret);
+		Py_DECREF(ret);
+	}
+
+	PyGILState_Release(gilstate);
+	if (!is_write_ok)
+		pyrna_write_set(false);
+
+	return result;
+}
+
 static void bpy_prop_boolean_array_get_cb(struct PointerRNA *ptr, struct PropertyRNA *prop, int *values)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -452,7 +502,7 @@ static void bpy_prop_boolean_array_get_cb(struct PointerRNA *ptr, struct Propert
 
 static void bpy_prop_boolean_array_set_cb(struct PointerRNA *ptr, struct PropertyRNA *prop, const int *values)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -513,7 +563,7 @@ static void bpy_prop_boolean_array_set_cb(struct PointerRNA *ptr, struct Propert
 
 static int bpy_prop_int_get_cb(struct PointerRNA *ptr, struct PropertyRNA *prop)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -571,7 +621,7 @@ static int bpy_prop_int_get_cb(struct PointerRNA *ptr, struct PropertyRNA *prop)
 
 static void bpy_prop_int_set_cb(struct PointerRNA *ptr, struct PropertyRNA *prop, int value)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -625,7 +675,7 @@ static void bpy_prop_int_set_cb(struct PointerRNA *ptr, struct PropertyRNA *prop
 
 static void bpy_prop_int_array_get_cb(struct PointerRNA *ptr, struct PropertyRNA *prop, int *values)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -686,7 +736,7 @@ static void bpy_prop_int_array_get_cb(struct PointerRNA *ptr, struct PropertyRNA
 
 static void bpy_prop_int_array_set_cb(struct PointerRNA *ptr, struct PropertyRNA *prop, const int *values)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -747,7 +797,7 @@ static void bpy_prop_int_array_set_cb(struct PointerRNA *ptr, struct PropertyRNA
 
 static float bpy_prop_float_get_cb(struct PointerRNA *ptr, struct PropertyRNA *prop)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -805,7 +855,7 @@ static float bpy_prop_float_get_cb(struct PointerRNA *ptr, struct PropertyRNA *p
 
 static void bpy_prop_float_set_cb(struct PointerRNA *ptr, struct PropertyRNA *prop, float value)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -859,7 +909,7 @@ static void bpy_prop_float_set_cb(struct PointerRNA *ptr, struct PropertyRNA *pr
 
 static void bpy_prop_float_array_get_cb(struct PointerRNA *ptr, struct PropertyRNA *prop, float *values)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -920,7 +970,7 @@ static void bpy_prop_float_array_get_cb(struct PointerRNA *ptr, struct PropertyR
 
 static void bpy_prop_float_array_set_cb(struct PointerRNA *ptr, struct PropertyRNA *prop, const float *values)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -981,7 +1031,7 @@ static void bpy_prop_float_array_set_cb(struct PointerRNA *ptr, struct PropertyR
 
 static void bpy_prop_string_get_cb(struct PointerRNA *ptr, struct PropertyRNA *prop, char *value)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -1040,7 +1090,7 @@ static void bpy_prop_string_get_cb(struct PointerRNA *ptr, struct PropertyRNA *p
 
 static int bpy_prop_string_length_cb(struct PointerRNA *ptr, struct PropertyRNA *prop)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -1102,7 +1152,7 @@ static int bpy_prop_string_length_cb(struct PointerRNA *ptr, struct PropertyRNA 
 
 static void bpy_prop_string_set_cb(struct PointerRNA *ptr, struct PropertyRNA *prop, const char *value)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -1163,7 +1213,7 @@ static void bpy_prop_string_set_cb(struct PointerRNA *ptr, struct PropertyRNA *p
 
 static int bpy_prop_enum_get_cb(struct PointerRNA *ptr, struct PropertyRNA *prop)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -1221,7 +1271,7 @@ static int bpy_prop_enum_get_cb(struct PointerRNA *ptr, struct PropertyRNA *prop
 
 static void bpy_prop_enum_set_cb(struct PointerRNA *ptr, struct PropertyRNA *prop, int value)
 {
-	PyObject **py_data = (PyObject **)RNA_property_py_data_get(prop);
+	PyObject **py_data = RNA_property_py_data_get(prop);
 	PyObject *py_func;
 	PyObject *args;
 	PyObject *self;
@@ -1598,6 +1648,16 @@ static void bpy_prop_callback_assign_update(struct PropertyRNA *prop, PyObject *
 	}
 }
 
+static void bpy_prop_callback_assign_pointer(struct PropertyRNA *prop, PyObject *poll_cb)
+{
+	if (poll_cb && poll_cb != Py_None) {
+		PyObject **py_data = bpy_prop_py_data_get(prop);
+
+		RNA_def_property_poll_runtime(prop, (void *) bpy_prop_poll_cb);
+		py_data[BPY_DATA_CB_SLOT_POLL] = poll_cb;
+	}
+}
+
 static void bpy_prop_callback_assign_boolean(struct PropertyRNA *prop, PyObject *get_cb, PyObject *set_cb)
 {
 	BooleanPropertyGetFunc rna_get_cb = NULL;
@@ -1904,7 +1964,7 @@ static void bpy_prop_callback_assign_enum(struct PropertyRNA *prop, PyObject *ge
 "   :type set: function\n" \
 
 #define BPY_PROPDEF_TYPE_DOC \
-"   :arg type: A subclass of :class:`bpy.types.PropertyGroup`.\n" \
+"   :arg type: A subclass of :class:`bpy.types.PropertyGroup` or :class:`bpy.types.ID`.\n" \
 "   :type type: class\n" \
 
 #if 0
@@ -2772,7 +2832,7 @@ static PyObject *BPy_EnumProperty(PyObject *self, PyObject *args, PyObject *kw)
 	Py_RETURN_NONE;
 }
 
-static StructRNA *pointer_type_from_py(PyObject *value, const char *error_prefix)
+StructRNA *pointer_type_from_py(PyObject *value, const char *error_prefix)
 {
 	StructRNA *srna;
 
@@ -2782,22 +2842,15 @@ static StructRNA *pointer_type_from_py(PyObject *value, const char *error_prefix
 			PyObject *msg = PyC_ExceptionBuffer();
 			const char *msg_char = _PyUnicode_AsString(msg);
 			PyErr_Format(PyExc_TypeError,
-			             "%.200s expected an RNA type derived from PropertyGroup, failed with: %s",
+			             "%.200s expected an RNA type, failed with: %s",
 			             error_prefix, msg_char);
 			Py_DECREF(msg);
 		}
 		else {
 			PyErr_Format(PyExc_TypeError,
-			             "%.200s expected an RNA type derived from PropertyGroup, failed with type '%s'",
+			             "%.200s expected an RNA type, failed with type '%s'",
 			             error_prefix, Py_TYPE(value)->tp_name);
 		}
-		return NULL;
-	}
-
-	if (!RNA_struct_is_a(srna, &RNA_PropertyGroup)) {
-		PyErr_Format(PyExc_TypeError,
-		             "%.200s expected an RNA type derived from PropertyGroup",
-		             error_prefix);
 		return NULL;
 	}
 
@@ -2809,7 +2862,8 @@ PyDoc_STRVAR(BPy_PointerProperty_doc,
                               "name=\"\", "
                               "description=\"\", "
                               "options={'ANIMATABLE'}, "
-                              "update=None)\n"
+                              "update=None,\n"
+                              "poll=None)\n"
 "\n"
 "   Returns a new pointer property definition.\n"
 "\n"
@@ -2819,14 +2873,14 @@ BPY_PROPDEF_DESC_DOC
 BPY_PROPDEF_OPTIONS_DOC
 BPY_PROPDEF_UPDATE_DOC
 );
-static PyObject *BPy_PointerProperty(PyObject *self, PyObject *args, PyObject *kw)
+PyObject *BPy_PointerProperty(PyObject *self, PyObject *args, PyObject *kw)
 {
 	StructRNA *srna;
 
 	BPY_PROPDEF_HEAD(PointerProperty);
 
 	if (srna) {
-		static const char *kwlist[] = {"attr", "type", "name", "description", "options", "update", NULL};
+		static const char *kwlist[] = {"attr", "type", "name", "description", "options", "poll", "update", NULL};
 		const char *id = NULL, *name = NULL, *description = "";
 		int id_len;
 		PropertyRNA *prop;
@@ -2834,33 +2888,47 @@ static PyObject *BPy_PointerProperty(PyObject *self, PyObject *args, PyObject *k
 		PyObject *type = Py_None;
 		PyObject *pyopts = NULL;
 		int opts = 0;
-		PyObject *update_cb = NULL;
+		PyObject *update_cb = NULL, *poll_cb = NULL;
 
 		if (!PyArg_ParseTupleAndKeywords(args, kw,
-		                                 "s#O|ssO!O:PointerProperty",
+		                                 "s#O|ssO!OOO:PointerProperty",
 		                                 (char **)kwlist, &id, &id_len,
 		                                 &type, &name, &description,
 		                                 &PySet_Type, &pyopts,
-		                                 &update_cb))
+		                                 &poll_cb, &update_cb))
 		{
 			return NULL;
 		}
 
 		BPY_PROPDEF_CHECK(PointerProperty, property_flag_items);
 
-		ptype = pointer_type_from_py(type, "PointerProperty(...):");
+		ptype = pointer_type_from_py(type, "PointerProperty(...)");
 		if (!ptype)
 			return NULL;
-
+		if (!RNA_struct_is_a(ptype, &RNA_PropertyGroup) && !RNA_struct_is_ID(ptype)) {
+			PyErr_Format(PyExc_TypeError,
+			             "PointerProperty(...) expected an RNA type derived from %.200s or %.200s",
+			             RNA_struct_ui_name(&RNA_ID), RNA_struct_ui_name(&RNA_PropertyGroup));
+			return NULL;
+		}
 		if (bpy_prop_callback_check(update_cb, "update", 2) == -1) {
 			return NULL;
 		}
-
+		if (bpy_prop_callback_check(poll_cb, "poll", 2) == -1) {
+			return NULL;
+		}
 		prop = RNA_def_pointer_runtime(srna, id, ptype, name ? name : id, description);
 		if (pyopts) {
 			bpy_prop_assign_flag(prop, opts);
 		}
+
+		if (RNA_struct_idprops_contains_datablock(ptype)) {
+			if (RNA_struct_is_a(srna, &RNA_PropertyGroup)) {
+				RNA_def_struct_flag(srna, STRUCT_CONTAINS_DATABLOCK_IDPROPERTIES);
+			}
+		}
 		bpy_prop_callback_assign_update(prop, update_cb);
+		bpy_prop_callback_assign_pointer(prop, poll_cb);
 		RNA_def_property_duplicate_pointers(srna, prop);
 	}
 	Py_RETURN_NONE;
@@ -2879,7 +2947,7 @@ BPY_PROPDEF_NAME_DOC
 BPY_PROPDEF_DESC_DOC
 BPY_PROPDEF_OPTIONS_DOC
 );
-static PyObject *BPy_CollectionProperty(PyObject *self, PyObject *args, PyObject *kw)
+PyObject *BPy_CollectionProperty(PyObject *self, PyObject *args, PyObject *kw)
 {
 	StructRNA *srna;
 
@@ -2910,9 +2978,22 @@ static PyObject *BPy_CollectionProperty(PyObject *self, PyObject *args, PyObject
 		if (!ptype)
 			return NULL;
 
+		if (!RNA_struct_is_a(ptype, &RNA_PropertyGroup)) {
+			PyErr_Format(PyExc_TypeError,
+				"CollectionProperty(...) expected an RNA type derived from %.200s",
+				RNA_struct_ui_name(&RNA_ID), RNA_struct_ui_name(&RNA_PropertyGroup));
+			return NULL;
+		}
+
 		prop = RNA_def_collection_runtime(srna, id, ptype, name ? name : id, description);
 		if (pyopts) {
 			bpy_prop_assign_flag(prop, opts);
+		}
+
+		if (RNA_struct_idprops_contains_datablock(ptype)) {
+			if (RNA_struct_is_a(srna, &RNA_PropertyGroup)) {
+				RNA_def_struct_flag(srna, STRUCT_CONTAINS_DATABLOCK_IDPROPERTIES);
+			}
 		}
 		RNA_def_property_duplicate_pointers(srna, prop);
 	}

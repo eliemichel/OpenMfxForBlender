@@ -18,7 +18,7 @@
  */
 
 #ifdef __QBVH__
-#  include "qbvh_shadow_all.h"
+#  include "kernel/bvh/qbvh_shadow_all.h"
 #endif
 
 #if BVH_FEATURE(BVH_HAIR)
@@ -45,6 +45,7 @@ ccl_device_inline
 bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
                                  const Ray *ray,
                                  Intersection *isect_array,
+                                 const int skip_object,
                                  const uint max_hits,
                                  uint *num_hits,
                                  uint shadow_linking)
@@ -100,9 +101,6 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 
 	gen_idirsplat_swap(pn, shuf_identity, shuf_swap, idir, idirsplat, shufflexyz);
 #endif  /* __KERNEL_SSE2__ */
-
-	IsectPrecalc isect_precalc;
-	triangle_intersect_precalc(dir, &isect_precalc);
 
 	/* traversal loop */
 	do {
@@ -204,9 +202,9 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 						switch(p_type) {
 							case PRIMITIVE_TRIANGLE: {
 								hit = triangle_intersect(kg,
-								                         &isect_precalc,
 								                         isect_array,
 								                         P,
+								                         dir,
 								                         PATH_RAY_SHADOW,
 								                         object,
 								                         prim_addr);
@@ -320,7 +318,6 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 					isect_t = bvh_instance_push(kg, object, ray, &P, &dir, &idir, isect_t);
 #  endif
 
-					triangle_intersect_precalc(dir, &isect_precalc);
 					num_hits_in_instance = 0;
 					isect_array->t = isect_t;
 
@@ -360,8 +357,6 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 				bvh_instance_pop_factor(kg, object, ray, &P, &dir, &idir, &t_fac);
 #  endif
 
-				triangle_intersect_precalc(dir, &isect_precalc);
-
 				/* scale isect->t to adjust for instancing */
 				for(int i = 0; i < num_hits_in_instance; i++) {
 					(isect_array-i-1)->t *= t_fac;
@@ -373,7 +368,6 @@ bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 #  else
 				bvh_instance_pop(kg, object, ray, &P, &dir, &idir, FLT_MAX);
 #  endif
-				triangle_intersect_precalc(dir, &isect_precalc);
 			}
 
 			isect_t = tmax;
@@ -414,6 +408,7 @@ ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
 		                                    ray,
 		                                    isect_array,
 		                                    max_hits,
+											0,
 		                                    num_hits,
                                             shadow_linking);
 	}
@@ -424,6 +419,7 @@ ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
 		return BVH_FUNCTION_FULL_NAME(BVH)(kg,
 		                                   ray,
 		                                   isect_array,
+										   0,
 		                                   max_hits,
 		                                   num_hits,
                                            shadow_linking);

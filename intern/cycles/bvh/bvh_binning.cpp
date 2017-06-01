@@ -17,13 +17,13 @@
 
 //#define __KERNEL_SSE__
 
+#include "bvh/bvh_binning.h"
+
 #include <stdlib.h>
 
-#include "bvh_binning.h"
-
-#include "util_algorithm.h"
-#include "util_boundbox.h"
-#include "util_types.h"
+#include "util/util_algorithm.h"
+#include "util/util_boundbox.h"
+#include "util/util_types.h"
 
 CCL_NAMESPACE_BEGIN
 

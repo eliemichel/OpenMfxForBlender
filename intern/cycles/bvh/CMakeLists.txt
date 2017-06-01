@@ -1,12 +1,6 @@
 
 set(INC
-	.
-	../graph
-	../kernel
-	../kernel/svm
-	../render
-	../util
-	../device
+	..
 )
 
 set(INC_SYS
@@ -14,6 +8,8 @@ set(INC_SYS
 
 set(SRC
 	bvh.cpp
+	bvh2.cpp
+	bvh4.cpp
 	bvh_binning.cpp
 	bvh_build.cpp
 	bvh_node.cpp
@@ -24,6 +20,8 @@ set(SRC
 
 set(SRC_HEADERS
 	bvh.h
+	bvh2.h
+	bvh4.h
 	bvh_binning.h
 	bvh_build.h
 	bvh_node.h

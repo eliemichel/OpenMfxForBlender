@@ -62,9 +62,9 @@ AbcTransformWriter::AbcTransformWriter(Object *ob,
                                        unsigned int time_sampling,
                                        ExportSettings &settings)
     : AbcObjectWriter(NULL, ob, time_sampling, settings, parent)
+    , m_proxy_from(NULL)
 {
 	m_is_animated = hasAnimation(m_object);
-	m_parent = NULL;
 
 	if (!m_is_animated) {
 		time_sampling = 0;
@@ -72,6 +72,9 @@ AbcTransformWriter::AbcTransformWriter(Object *ob,
 
 	m_xform = OXform(abc_parent, get_id_name(m_object), time_sampling);
 	m_schema = m_xform.getSchema();
+
+	/* Blender objects can't have a parent without inheriting the transform. */
+	m_inherits_xform = parent != NULL;
 }
 
 void AbcTransformWriter::do_write()
@@ -86,27 +89,29 @@ void AbcTransformWriter::do_write()
 		return;
 	}
 
-	float mat[4][4];
-	create_transform_matrix(m_object, mat);
+	float yup_mat[4][4];
+	create_transform_matrix(m_object, yup_mat,
+	                        m_inherits_xform ? ABC_MATRIX_LOCAL : ABC_MATRIX_WORLD,
+	                        m_proxy_from);
 
 	/* Only apply rotation to root camera, parenting will propagate it. */
-	if (m_object->type == OB_CAMERA && !has_parent_camera(m_object)) {
+	if (m_object->type == OB_CAMERA && (!m_inherits_xform || !has_parent_camera(m_object))) {
 		float rot_mat[4][4];
 		axis_angle_to_mat4_single(rot_mat, 'X', -M_PI_2);
-		mul_m4_m4m4(mat, mat, rot_mat);
+		mul_m4_m4m4(yup_mat, yup_mat, rot_mat);
 	}
 
-	if (!m_object->parent) {
+	if (!m_object->parent || !m_inherits_xform) {
 		/* Only apply scaling to root objects, parenting will propagate it. */
 		float scale_mat[4][4];
 		scale_m4_fl(scale_mat, m_settings.global_scale);
-		mul_m4_m4m4(mat, mat, scale_mat);
-		mul_v3_fl(mat[3], m_settings.global_scale);
+		scale_mat[3][3] = m_settings.global_scale;  /* also scale translation */
+		mul_m4_m4m4(yup_mat, yup_mat, scale_mat);
 	}
 
-	m_matrix = convert_matrix(mat);
-
+	m_matrix = convert_matrix(yup_mat);
 	m_sample.setMatrix(m_matrix);
+	m_sample.setInheritsXforms(m_inherits_xform);
 	m_schema.set(m_sample);
 }
 
@@ -133,6 +138,10 @@ bool AbcTransformWriter::hasAnimation(Object * /*ob*/) const
 AbcEmptyReader::AbcEmptyReader(const Alembic::Abc::IObject &object, ImportSettings &settings)
     : AbcObjectReader(object, settings)
 {
+	/* Empties have no data. It makes the import of Alembic files easier to
+	 * understand when we name the empty after its name in Alembic. */
+	m_object_name = object.getName();
+
 	Alembic::AbcGeom::IXform xform(object, Alembic::AbcGeom::kWrapExisting);
 	m_schema = xform.getSchema();
 
@@ -146,6 +155,7 @@ bool AbcEmptyReader::valid() const
 
 void AbcEmptyReader::readObjectData(Main *bmain, float /*time*/)
 {
-	m_object = BKE_object_add_only_object(bmain, OB_EMPTY, m_data_name.c_str());
+	m_object = BKE_object_add_only_object(bmain, OB_EMPTY,
+	                                      m_object_name.c_str());
 	m_object->data = NULL;
 }

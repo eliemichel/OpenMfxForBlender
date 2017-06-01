@@ -14,20 +14,23 @@
  * limitations under the License.
  */
 
-#include "background.h"
-#include "graph.h"
-#include "light.h"
-#include "nodes.h"
-#include "osl.h"
-#include "scene.h"
-#include "shader.h"
+#include "render/background.h"
+#include "render/graph.h"
+#include "render/light.h"
+#include "render/nodes.h"
+#include "render/osl.h"
+#include "render/scene.h"
+#include "render/shader.h"
 
-#include "blender_texture.h"
-#include "blender_sync.h"
-#include "blender_util.h"
+#include "blender/blender_texture.h"
+#include "blender/blender_sync.h"
+#include "blender/blender_util.h"
 
-#include "util_debug.h"
-#include "util_string.h"
+#include "util/util_debug.h"
+#include "util/util_foreach.h"
+#include "util/util_string.h"
+#include "util/util_set.h"
+#include "util/util_task.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -526,6 +529,19 @@ static ShaderNode *add_node(Scene *scene,
 				break;
 		}
 		node = hair;
+	}
+	else if(b_node.is_a(&RNA_ShaderNodeBsdfPrincipled)) {
+		BL::ShaderNodeBsdfPrincipled b_principled_node(b_node);
+		PrincipledBsdfNode *principled = new PrincipledBsdfNode();
+		switch (b_principled_node.distribution()) {
+			case BL::ShaderNodeBsdfPrincipled::distribution_GGX:
+				principled->distribution = CLOSURE_BSDF_MICROFACET_GGX_GLASS_ID;
+				break;
+			case BL::ShaderNodeBsdfPrincipled::distribution_MULTI_GGX:
+				principled->distribution = CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID;
+				break;
+		}
+		node = principled;
 	}
 	else if(b_node.is_a(&RNA_ShaderNodeBsdfTranslucent)) {
 		node = new TranslucentBsdfNode();
@@ -1208,6 +1224,9 @@ void BlenderSync::sync_materials(bool update_all)
 	/* material loop */
 	BL::BlendData::materials_iterator b_mat;
 
+	TaskPool pool;
+	set<Shader*> updated_shaders;
+
 	for(b_data.materials.begin(b_mat); b_mat != b_data.materials.end(); ++b_mat) {
 		Shader *shader;
 
@@ -1256,8 +1275,36 @@ void BlenderSync::sync_materials(bool update_all)
 			shader->transmission_bounces = get_int(cmat, "transmission_bounces");
 
 			shader->set_graph(graph);
-			shader->tag_update(scene);
+
+			/* By simplifying the shader graph as soon as possible, some
+			 * redundant shader nodes might be removed which prevents loading
+			 * unnecessary attributes later.
+			 *
+			 * However, since graph simplification also accounts for e.g. mix
+			 * weight, this would cause frequent expensive resyncs in interactive
+			 * sessions, so for those sessions optimization is only performed
+			 * right before compiling.
+			 */
+			if(!preview) {
+				pool.push(function_bind(&ShaderGraph::simplify, graph, scene));
+				/* NOTE: Update shaders out of the threads since those routines
+				 * are accessing and writing to a global context.
+				 */
+				updated_shaders.insert(shader);
+			}
+			else {
+				/* NOTE: Update tagging can access links which are being
+				 * optimized out.
+				 */
+				shader->tag_update(scene);
+			}
 		}
+	}
+
+	pool.wait_work();
+
+	foreach(Shader *shader, updated_shaders) {
+		shader->tag_update(scene);
 	}
 }
 

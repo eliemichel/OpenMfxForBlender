@@ -140,7 +140,7 @@ ccl_device_inline float3 subsurface_scatter_eval(ShaderData *sd,
 }
 
 /* replace closures with a single diffuse bsdf closure after scatter step */
-ccl_device void subsurface_scatter_setup_diffuse_bsdf(ShaderData *sd, float3 weight, bool hit, float3 N)
+ccl_device void subsurface_scatter_setup_diffuse_bsdf(ShaderData *sd, ShaderClosure *sc, float3 weight, bool hit, float3 N)
 {
 	sd->runtime_flag &= ~SD_RUNTIME_CLOSURE_FLAGS;
 	sd->randb_closure = 0.0f;
@@ -148,15 +148,31 @@ ccl_device void subsurface_scatter_setup_diffuse_bsdf(ShaderData *sd, float3 wei
 	sd->num_closure_extra = 0;
 
 	if(hit) {
-		DiffuseBsdf *bsdf = (DiffuseBsdf*)bsdf_alloc(sd, sizeof(DiffuseBsdf), weight);
+		Bssrdf *bssrdf = (Bssrdf *)sc;
+		if(bssrdf->type == CLOSURE_BSSRDF_PRINCIPLED_ID) {
+			PrincipledDiffuseBsdf *bsdf = (PrincipledDiffuseBsdf*)bsdf_alloc(sd, sizeof(PrincipledDiffuseBsdf), weight);
+
+			if(bsdf) {
+				bsdf->N = N;
+				bsdf->roughness = bssrdf->roughness;
+				sd->runtime_flag |= bsdf_principled_diffuse_setup(bsdf);
+
+				/* replace CLOSURE_BSDF_PRINCIPLED_DIFFUSE_ID with this special ID so render passes
+				* can recognize it as not being a regular Disney principled diffuse closure */
+				bsdf->type = CLOSURE_BSDF_BSSRDF_PRINCIPLED_ID;
+			}
+		}
+		else if(CLOSURE_IS_BSSRDF(bssrdf->type)) {
+			DiffuseBsdf *bsdf = (DiffuseBsdf*)bsdf_alloc(sd, sizeof(DiffuseBsdf), weight);
 
 		if(bsdf) {
 			bsdf->N = N;
 			sd->runtime_flag |= bsdf_diffuse_setup(bsdf);
 
-			/* replace CLOSURE_BSDF_DIFFUSE_ID with this special ID so render passes
-			 * can recognize it as not being a regular diffuse closure */
-			bsdf->type = CLOSURE_BSDF_BSSRDF_ID;
+				/* replace CLOSURE_BSDF_DIFFUSE_ID with this special ID so render passes
+				* can recognize it as not being a regular diffuse closure */
+				bsdf->type = CLOSURE_BSDF_BSSRDF_ID;
+			}
 		}
 	}
 }
@@ -223,7 +239,7 @@ ccl_device_inline int subsurface_scatter_multi_intersect(
         SubsurfaceIntersection *ss_isect,
         ShaderData *sd,
         ShaderClosure *sc,
-        uint *lcg_state,
+        RNG *lcg_state,
         float disk_u,
         float disk_v,
         bool all)
@@ -293,7 +309,7 @@ ccl_device_inline int subsurface_scatter_multi_intersect(
 	/* intersect with the same object. if multiple intersections are found it
 	 * will use at most BSSRDF_MAX_HITS hits, a random subset of all hits */
 	scene_intersect_subsurface(kg,
-	                           ray,
+	                           *ray,
 	                           ss_isect,
 	                           sd->object,
 	                           lcg_state,
@@ -389,7 +405,7 @@ ccl_device_noinline void subsurface_scatter_multi_setup(
 	subsurface_color_bump_blur(kg, sd, state, state_flag, &weight, &N);
 
 	/* Setup diffuse BSDF. */
-	subsurface_scatter_setup_diffuse_bsdf(sd, weight, true, N);
+	subsurface_scatter_setup_diffuse_bsdf(sd, sc, weight, true, N);
 }
 
 #ifndef __SPLIT_KERNEL__
@@ -449,7 +465,7 @@ ccl_device void subsurface_scatter_step(KernelGlobals *kg, ShaderData *sd, PathS
 	/* intersect with the same object. if multiple intersections are
 	 * found it will randomly pick one of them */
 	SubsurfaceIntersection ss_isect;
-	scene_intersect_subsurface(kg, &ray, &ss_isect, sd->object, lcg_state, 1, 0x00000000 /*TODO: What goes here*/);
+	scene_intersect_subsurface(kg, ray, &ss_isect, sd->object, lcg_state, 1, 0x00000000 /*TODO: What goes here*/);
 
 	/* evaluate bssrdf */
 	if(ss_isect.num_hits > 0) {
@@ -480,7 +496,7 @@ ccl_device void subsurface_scatter_step(KernelGlobals *kg, ShaderData *sd, PathS
 	subsurface_color_bump_blur(kg, sd, state, state_flag, &eval, &N);
 
 	/* setup diffuse bsdf */
-	subsurface_scatter_setup_diffuse_bsdf(sd, eval, (ss_isect.num_hits > 0), N);
+	subsurface_scatter_setup_diffuse_bsdf(sd, sc, eval, (ss_isect.num_hits > 0), N);
 }
 #endif /* ! __SPLIT_KERNEL__ */
 

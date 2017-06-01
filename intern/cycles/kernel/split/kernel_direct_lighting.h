@@ -79,15 +79,15 @@ ccl_device void kernel_direct_lighting(KernelGlobals *kg,
 
 		/* direct lighting */
 #ifdef __EMISSION__
+		RNG rng = kernel_split_state.rng[ray_index];
 		if((kernel_data.integrator.use_direct_light &&
 			(sd->runtime_flag & SD_RUNTIME_BSDF_HAS_EVAL)))
 		{
 			/* Sample illumination from lights to find path contribution. */
-			ccl_global RNG* rng = &kernel_split_state.rng[ray_index];
-			float light_t = path_state_rng_1D(kg, rng, state, PRNG_LIGHT);
+			float light_t = path_state_rng_1D(kg, &rng, state, PRNG_LIGHT);
 			float light_u, light_v;
-			path_state_rng_2D(kg, rng, state, PRNG_LIGHT_U, &light_u, &light_v);
-			float terminate = path_state_rng_light_termination(kg, rng, state);
+			path_state_rng_2D(kg, &rng, state, PRNG_LIGHT_U, &light_u, &light_v);
+			float terminate = path_state_rng_light_termination(kg, &rng, state);
 
 			LightSample ls;
 			if(light_sample(kg,
@@ -99,9 +99,9 @@ ccl_device void kernel_direct_lighting(KernelGlobals *kg,
 			                &ls)) {
 
 				Ray light_ray;
-#ifdef __OBJECT_MOTION__
+#  ifdef __OBJECT_MOTION__
 				light_ray.time = sd->time;
-#endif
+#  endif
 
 				BsdfEval L_light;
 				bool is_lamp;
@@ -118,6 +118,7 @@ ccl_device void kernel_direct_lighting(KernelGlobals *kg,
 				}
 			}
 		}
+		kernel_split_state.rng[ray_index] = rng;
 #endif  /* __EMISSION__ */
 	}
 

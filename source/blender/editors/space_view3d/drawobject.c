@@ -1824,16 +1824,16 @@ static void drawcamera_volume(float near_plane[4][3], float far_plane[4][3], con
 
 	glBegin(mode);
 	glVertex3fv(near_plane[2]);
-	glVertex3fv(near_plane[1]);
-	glVertex3fv(far_plane[1]);
 	glVertex3fv(far_plane[2]);
+	glVertex3fv(far_plane[3]);
+	glVertex3fv(near_plane[3]);
 	glEnd();
 
 	glBegin(mode);
-	glVertex3fv(far_plane[0]);
-	glVertex3fv(near_plane[0]);
-	glVertex3fv(near_plane[3]);
 	glVertex3fv(far_plane[3]);
+	glVertex3fv(near_plane[3]);
+	glVertex3fv(near_plane[0]);
+	glVertex3fv(far_plane[0]);
 	glEnd();
 }
 
@@ -4212,7 +4212,6 @@ static void draw_mesh_fancy(Scene *scene, ARegion *ar, View3D *v3d, RegionView3D
 	
 	if (is_obact && BKE_paint_select_vert_test(ob)) {
 		const bool use_depth = (v3d->flag & V3D_ZBUF_SELECT) != 0;
-		glColor3f(0.0f, 0.0f, 0.0f);
 		glPointSize(UI_GetThemeValuef(TH_VERTEX_SIZE));
 
 		if (!use_depth) glDisable(GL_DEPTH_TEST);
@@ -6420,18 +6419,15 @@ static void draw_editnurb(
 				vec_a[0] = fac;
 				vec_a[1] = 0.0f;
 				vec_a[2] = 0.0f;
-
-				vec_b[0] = -fac;
-				vec_b[1] = 0.0f;
-				vec_b[2] = 0.0f;
 				
 				mul_qt_v3(bevp->quat, vec_a);
-				mul_qt_v3(bevp->quat, vec_b);
+				madd_v3_v3fl(vec_a, bevp->dir, -fac);
+
+				reflect_v3_v3v3(vec_b, vec_a, bevp->dir);
+				negate_v3(vec_b);
+
 				add_v3_v3(vec_a, bevp->vec);
 				add_v3_v3(vec_b, bevp->vec);
-
-				madd_v3_v3fl(vec_a, bevp->dir, -fac);
-				madd_v3_v3fl(vec_b, bevp->dir, -fac);
 
 				glBegin(GL_LINE_STRIP);
 				glVertex3fv(vec_a);

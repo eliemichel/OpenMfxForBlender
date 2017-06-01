@@ -18,10 +18,10 @@
 #ifndef __BVH_BINNING_H__
 #define __BVH_BINNING_H__
 
-#include "bvh_params.h"
-#include "bvh_unaligned.h"
+#include "bvh/bvh_params.h"
+#include "bvh/bvh_unaligned.h"
 
-#include "util_types.h"
+#include "util/util_types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -111,5 +111,4 @@ protected:
 
 CCL_NAMESPACE_END
 
-#endif
-
+#endif  /* __BVH_BINNING_H__ */
