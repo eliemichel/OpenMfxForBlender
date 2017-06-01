@@ -520,6 +520,9 @@ void initTransformOrientation(bContext *C, TransInfo *t)
 			{
 				if (ob->mode & OB_MODE_POSE) {
 					bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+					if (!(posebone)) {
+						return;
+					}
 
 					// For god node (bottom of hierarchy)
 					if (!posebone->parent)
@@ -626,6 +629,9 @@ void initTransformOrientationCustom(bContext *C, TransInfo *t, short manipulator
 			{
 				if (ob->mode & OB_MODE_POSE) {
 					bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+					if (!(posebone)) {
+						return;
+					}
 
 					// For god node (bottom of hierarchy)
 					if (!posebone->parent) {

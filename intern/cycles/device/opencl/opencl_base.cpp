@@ -325,61 +325,10 @@ void OpenCLDeviceBase::mem_copy_from(device_memory& mem, int y, int w, int h, in
 void OpenCLDeviceBase::mem_zero(device_memory& mem)
 {
 	if(mem.device_pointer) {
-		if(base_program.is_loaded()) {
-			cl_kernel ckZeroBuffer = base_program(ustring("zero_buffer"));
-
-			size_t global_size[] = {1024, 1024};
-			size_t num_threads = global_size[0] * global_size[1];
-
-			cl_mem d_buffer = CL_MEM_PTR(mem.device_pointer);
-			cl_ulong d_offset = 0;
-			cl_ulong d_size = 0;
-
-			while(d_offset < mem.memory_size()) {
-				d_size = std::min<cl_ulong>(num_threads*sizeof(float4), mem.memory_size() - d_offset);
-
-				kernel_set_args(ckZeroBuffer, 0, d_buffer, d_size, d_offset);
-
-				ciErr = clEnqueueNDRangeKernel(cqCommandQueue,
-				                               ckZeroBuffer,
-				                               2,
-				                               NULL,
-				                               global_size,
-				                               NULL,
-				                               0,
-				                               NULL,
-				                               NULL);
-				opencl_assert_err(ciErr, "clEnqueueNDRangeKernel");
-
-				d_offset += d_size;
-			}
-		}
-
 		if(mem.data_pointer) {
 			memset((void*)mem.data_pointer, 0, mem.memory_size());
 		}
-
-		if(!base_program.is_loaded()) {
-			void* zero = (void*)mem.data_pointer;
-
-			if(!mem.data_pointer) {
-				zero = util_aligned_malloc(mem.memory_size(), 16);
-				memset(zero, 0, mem.memory_size());
-			}
-
-			opencl_assert(clEnqueueWriteBuffer(cqCommandQueue,
-			                                   CL_MEM_PTR(mem.device_pointer),
-			                                   CL_TRUE,
-			                                   0,
-			                                   mem.memory_size(),
-			                                   zero,
-			                                   0,
-			                                   NULL, NULL));
-
-			if(!mem.data_pointer) {
-				util_aligned_free(zero);
-			}
-		}
+		mem_copy_to(mem);
 	}
 }
 

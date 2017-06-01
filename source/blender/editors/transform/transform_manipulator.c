@@ -670,6 +670,9 @@ static int calc_manipulator_stats(const bContext *C)
 				// Checking that we are in pose mode - particularly important for rigs
 				if (ob->mode & OB_MODE_POSE) {
 					bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+					if (!(posebone)) {
+						return;
+					}
 
 					// For god node (bottom of hierarchy)
 					if (!posebone->parent)
@@ -766,6 +769,9 @@ static int calc_manipulator_stats(const bContext *C)
 						{
 							if (ob->mode & OB_MODE_POSE) {
 								bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+								if (!(posebone)) {
+									return;
+								}
 								if (!posebone->parent) {
 									copy_m4_m4(mtx_tranf[i], ob->obmat);
 									normalize_m4(mtx_tranf[i]);
