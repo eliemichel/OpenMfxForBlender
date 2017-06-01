@@ -127,6 +127,12 @@ if(CYCLES_STANDALONE_REPOSITORY)
 	set(BOOST_DEFINITIONS "-DBOOST_ALL_NO_LIB")
 
 	####
+	# embree
+	if(WITH_CYCLES_EMBREE)
+		find_package(embree 2.16.1 REQUIRED)
+	endif()
+
+	####
 	# Logging
 	if(WITH_CYCLES_LOGGING)
 		find_package(Glog REQUIRED)

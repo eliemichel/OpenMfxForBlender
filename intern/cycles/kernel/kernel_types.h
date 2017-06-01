@@ -25,6 +25,11 @@
 #  define __KERNEL_CPU__
 #endif
 
+#if defined(__KERNEL_CPU__) && defined(WITH_EMBREE)
+#include "embree2/rtcore.h"
+#include "embree2/rtcore_scene.h"
+#endif
+
 /* TODO(sergey): This is only to make it possible to include this header
  * from outside of the kernel. but this could be done somewhat cleaner?
  */
@@ -74,6 +79,9 @@ CCL_NAMESPACE_BEGIN
 #  define __VOLUME_SCATTER__
 #  define __SHADOW_RECORD_ALL__
 #  define __VOLUME_RECORD_ALL__
+#  ifdef WITH_EMBREE
+#    define __EMBREE__
+#  endif
 #endif  /* __KERNEL_CPU__ */
 
 #ifdef __KERNEL_CUDA__
@@ -1180,7 +1188,11 @@ typedef struct KernelBVH {
 	int have_curves;
 	int have_instancing;
 	int use_qbvh;
+#ifdef __EMBREE__
+	RTCScene scene;
+#else
 	int pad1, pad2;
+#endif
 } KernelBVH;
 static_assert_align(KernelBVH, 16);
 

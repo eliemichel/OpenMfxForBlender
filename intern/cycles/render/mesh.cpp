@@ -39,6 +39,7 @@
 #include "util_set.h"
 
 #ifdef WITH_EMBREE
+#	include "bvh_embree.h"
 #	include "embree2/rtcore.h"
 #	include "embree2/rtcore_scene.h"
 #	include "embree2/rtcore_builder.h"
@@ -1884,6 +1885,14 @@ void MeshManager::device_update_bvh(Device *device, DeviceScene *dscene, Scene *
 
 	dscene->data.bvh.root = pack.root_index;
 	dscene->data.bvh.use_qbvh = scene->params.use_qbvh;
+
+#ifdef WITH_EMBREE
+	if(pack.root_index == BVH_CUSTOM) {
+		dscene->data.bvh.scene = ((BVHEmbree*)bvh)->scene;
+	} else {
+		dscene->data.bvh.scene = NULL;
+	}
+#endif
 }
 
 void MeshManager::device_update_flags(Device * /*device*/,

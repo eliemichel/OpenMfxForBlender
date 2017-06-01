@@ -43,6 +43,8 @@ class Progress;
 #define BVH_UNALIGNED_NODE_SIZE 7
 #define BVH_UNALIGNED_QNODE_SIZE 14
 
+#define BVH_CUSTOM -1
+
 /* Packed BVH
  *
  * BVH stored as it will be used for traversal on the rendering device. */
@@ -90,7 +92,7 @@ public:
 	static BVH *create(const BVHParams& params, const vector<Object*>& objects);
 	virtual ~BVH() {}
 
-	void build(Progress& progress);
+	virtual void build(Progress& progress);
 	void refit(Progress& progress);
 
 protected:

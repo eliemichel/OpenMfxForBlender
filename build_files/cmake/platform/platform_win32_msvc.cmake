@@ -416,6 +416,10 @@ if(WITH_OPENCOLORIO)
 	set(OPENCOLORIO_DEFINITIONS)
 endif()
 
+if(WITH_CYCLES_EMBREE)
+	find_package(embree 2.16.1 REQUIRED)
+endif()
+
 if(WITH_OPENVDB)
 	set(BLOSC_LIBRARIES optimized ${LIBDIR}/blosc/lib/libblosc.lib debug ${LIBDIR}/blosc/lib/libblosc_d.lib)
 	set(TBB_LIBRARIES optimized ${LIBDIR}/tbb/lib/tbb.lib debug ${LIBDIR}/tbb/lib/tbb_debug.lib)
