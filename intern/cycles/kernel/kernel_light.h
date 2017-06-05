@@ -780,7 +780,7 @@ ccl_device void lamp_light_dPdudv(KernelGlobals *kg, int lamp, float u, float v,
 	case LIGHT_DISTANT:
 	case LIGHT_SPOT:
 	default:
-		// todo
+		// TODO (Stefan)
 		*dPdu = make_float3(0.0f, 0.0f, 0.0f);
 		*dPdv = make_float3(0.0f, 0.0f, 0.0f);
 		break;
