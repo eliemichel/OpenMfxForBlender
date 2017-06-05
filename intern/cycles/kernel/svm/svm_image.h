@@ -303,7 +303,7 @@ ccl_device void svm_node_tex_image(KernelGlobals *kg, ShaderData *sd, int path_f
 		stack_store_float(stack, alpha_offset, f.w);
 }
 
-ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
+ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, int *offset)
 {
 	/* get object space normal */
 	float3 N = ccl_fetch(sd, N);
@@ -318,6 +318,11 @@ ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float 
 
 	N /= (N.x + N.y + N.z);
 
+	uint co_offset, out_offset, alpha_offset, srgb;
+	uint dx_offset, dy_offset;
+	decode_node_uchar4(node.z, &co_offset, &out_offset, &alpha_offset, &srgb);
+	decode_node_uchar4(node.w, &dx_offset, &dy_offset, NULL, NULL);
+
 	/* basic idea is to think of this as a triangle, each corner representing
 	 * one of the 3 faces of the cube. in the corners we have single textures,
 	 * in between we blend between two textures, and in the middle we a blend
@@ -329,7 +334,8 @@ ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float 
 	 * 7 zones, with an if() test for each zone */
 
 	float3 weight = make_float3(0.0f, 0.0f, 0.0f);
-	float blend = __int_as_float(node.w);
+	float4 blend4 = read_node_float(kg, offset);
+	float blend = blend4.x;
 	float limit = 0.5f*(1.0f + blend);
 
 	/* first test for corners with single texture */
@@ -372,9 +378,6 @@ ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float 
 	}
 
 	/* now fetch textures */
-	uint co_offset, out_offset, alpha_offset, srgb;
-	decode_node_uchar4(node.z, &co_offset, &out_offset, &alpha_offset, &srgb);
-
 	float3 co = stack_load_float3(stack, co_offset);
 	uint id = node.y;
 
@@ -384,12 +387,42 @@ ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float 
 	differential ds = differential_zero();
 	differential dt = differential_zero();
 
-	if(weight.x > 0.0f)
+#ifdef __KERNEL_CPU__
+	float3 offset_x = make_float3(0.0f, 0.0f, 0.0f);
+	float3 offset_y = make_float3(0.0f, 0.0f, 0.0f);
+	if(stack_valid(dx_offset) && stack_valid(dy_offset)) {
+		offset_x = stack_load_float3(stack, dx_offset);
+		offset_y = stack_load_float3(stack, dy_offset);
+	}
+#endif
+
+	if(weight.x > 0.0f) {
+#ifdef __KERNEL_CPU__
+		ds.dx = co.y - offset_x.y;
+		ds.dy = co.y - offset_y.y;
+		dt.dx = co.z - offset_x.z;
+		dt.dy = co.z - offset_y.z;
+#endif
 		f += weight.x*svm_image_texture(kg, id, co.y, co.z, ds, dt, srgb, use_alpha, false);
-	if(weight.y > 0.0f)
+	}
+	if(weight.y > 0.0f) {
+#ifdef __KERNEL_CPU__
+		ds.dx = co.x - offset_x.x;
+		ds.dy = co.x - offset_y.x;
+		dt.dx = co.z - offset_x.z;
+		dt.dy = co.z - offset_y.z;
+#endif
 		f += weight.y*svm_image_texture(kg, id, co.x, co.z, ds, dt, srgb, use_alpha, false);
-	if(weight.z > 0.0f)
+	}
+	if(weight.z > 0.0f) {
+#ifdef __KERNEL_CPU__
+		ds.dx = co.y - offset_x.y;
+		ds.dy = co.y - offset_y.y;
+		dt.dx = co.x - offset_x.x;
+		dt.dy = co.x - offset_y.x;
+#endif
 		f += weight.z*svm_image_texture(kg, id, co.y, co.x, ds, dt, srgb, use_alpha, false);
+	}
 
 	if(stack_valid(out_offset))
 		stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
