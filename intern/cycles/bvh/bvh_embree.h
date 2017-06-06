@@ -47,11 +47,13 @@ protected:
 	virtual void pack_nodes(const BVHNode *root);
 	virtual void refit_nodes();
 
-	unsigned add_reference_mesh(Mesh *mesh, int i);
-	unsigned add_reference_object(Object *ob, int i);
-	unsigned add_reference_curves(Mesh *mesh, int i);
-	unsigned add_reference_triangles(Mesh *mesh, int i);
+	unsigned add_mesh(Mesh *mesh, int i);
+	unsigned add_instance(Object *ob, int i);
+	unsigned add_curves(Mesh *mesh, int i);
+	unsigned add_triangles(Mesh *mesh, int i);
 private:
+	void delete_rtcScene();
+
 	static RTCDevice rtc_shared_device;
 	static int rtc_shared_users;
 	static thread_mutex rtc_shared_mutex;

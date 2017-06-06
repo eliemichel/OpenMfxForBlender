@@ -26,8 +26,7 @@
  * with CPU/CUDA/OpenCL. */
 
 #ifdef __EMBREE__
-#include "embree2/rtcore_ray.h"
-#include "embree2/rtcore_scene.h"
+#include "bvh/bvh_embree_traversal.h"
 #endif
 
 CCL_NAMESPACE_BEGIN
@@ -192,10 +191,12 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
 			isect->v = rtc_ray.u;
 			isect->t = rtc_ray.tfar;
 			if(rtc_ray.instID != RTC_INVALID_GEOMETRY_ID) {
-				isect->prim = rtc_ray.primID + (intptr_t)rtcGetUserData(kernel_data.bvh.scene, rtc_ray.instID);
-				isect->object = rtc_ray.instID;
+//				isect->prim = rtc_ray.primID + (intptr_t)rtcGetUserData(kernel_data.bvh.scene, rtc_ray.geomID);
+				isect->prim = rtc_ray.primID + kernel_tex_fetch(__object_node, rtc_ray.instID/2);
+				isect->object = rtc_ray.instID/2;
 			} else {
 				isect->prim = rtc_ray.primID + (intptr_t)rtcGetUserData(kernel_data.bvh.scene, rtc_ray.geomID);
+//				isect->prim = rtc_ray.primID + kernel_tex_fetch(__object_node, rtc_ray.geomID/2);
 				isect->object = OBJECT_NONE;
 			}
 			isect->type = kernel_tex_fetch(__prim_type, isect->prim);
