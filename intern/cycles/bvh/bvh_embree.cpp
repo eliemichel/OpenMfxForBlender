@@ -116,6 +116,22 @@ void cclFilterFunc(void* userDataPtr, RTCRay& ray_)
 		ray.geomID = RTC_INVALID_GEOMETRY_ID;
 		return;
 	} else if(ray.type == CCLRay::RAY_VOLUME_ALL) {
+		// append the intersection to the end of the array
+		if(ray.num_hits < ray.max_hits) {
+			Intersection *isect = &ray.isect_s[ray.num_hits];
+			ray.num_hits++;
+			ray.isect_to_ccl(isect);
+			int prim = kernel_tex_fetch(__prim_index, isect->prim);
+			/* only primitives from volume object */
+			uint tri_object = kernel_tex_fetch(__prim_object, isect->prim);
+			int object_flag = kernel_tex_fetch(__object_flag, tri_object);
+			if((object_flag & SD_OBJECT_OBJECT_HAS_VOLUME) == 0) {
+				ray.num_hits--;
+			}
+			/* this tells embree to continue tracing */
+			ray.geomID = RTC_INVALID_GEOMETRY_ID;
+			return;
+		}
 		return;
 	}
 

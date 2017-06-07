@@ -268,7 +268,7 @@ ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg, const Ra
 		rtc_ray.isect_s = isect;
 		rtc_ray.max_hits = max_hits;
 		rtc_ray.num_hits = 0;
-		rtcIntersect(kernel_data.bvh.scene, rtc_ray);
+		rtcOccluded(kernel_data.bvh.scene, rtc_ray);
 		if(rtc_ray.num_hits > 0) {
 			*num_hits = rtc_ray.num_hits;
 			return (rtc_ray.geomID != RTC_INVALID_GEOMETRY_ID);
@@ -338,6 +338,16 @@ ccl_device_intersect uint scene_intersect_volume_all(KernelGlobals *kg,
                                                      const uint visibility,
                                                      uint shadow_linking)
 {
+#ifdef __EMBREE__
+	if(kernel_data.bvh.scene) {
+		CCLRay rtc_ray(*ray, kg, visibility, CCLRay::RAY_VOLUME_ALL);
+		rtc_ray.isect_s = isect;
+		rtc_ray.max_hits = max_hits;
+		rtc_ray.num_hits = 0;
+		rtcOccluded(kernel_data.bvh.scene, rtc_ray);
+		return rtc_ray.num_hits;
+	}
+#endif
 #  ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 		return bvh_intersect_volume_all_motion(kg, ray, isect, max_hits, visibility, shadow_linking);
