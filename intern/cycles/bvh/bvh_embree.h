@@ -47,7 +47,7 @@ protected:
 	virtual void pack_nodes(const BVHNode *root);
 	virtual void refit_nodes();
 
-	unsigned add_mesh(Mesh *mesh, int i);
+	unsigned add_object(Object *ob, int i);
 	unsigned add_instance(Object *ob, int i);
 	unsigned add_curves(Mesh *mesh, int i);
 	unsigned add_triangles(Mesh *mesh, int i);

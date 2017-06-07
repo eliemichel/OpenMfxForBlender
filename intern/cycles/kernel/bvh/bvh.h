@@ -173,38 +173,15 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
 {
 #ifdef __EMBREE__
 	if(kernel_data.bvh.scene) {
-		RTCRay rtc_ray;
-		rtc_ray.org[0] = ray.P.x;
-		rtc_ray.org[1] = ray.P.y;
-		rtc_ray.org[2] = ray.P.z;
-		rtc_ray.dir[0] = ray.D.x;
-		rtc_ray.dir[1] = ray.D.y;
-		rtc_ray.dir[2] = ray.D.z;
-		rtc_ray.tnear = 0.0f;
-		rtc_ray.tfar = ray.t;
-		rtc_ray.time = ray.time;
-		rtc_ray.mask = -1;
-		rtc_ray.geomID = rtc_ray.primID = rtc_ray.instID = RTC_INVALID_GEOMETRY_ID;
+		CCLRay rtc_ray(ray, kg, visibility, CCLRay::RAY_REGULAR);
 		rtcIntersect(kernel_data.bvh.scene, rtc_ray);
 		if(rtc_ray.geomID != RTC_INVALID_GEOMETRY_ID && rtc_ray.primID != RTC_INVALID_GEOMETRY_ID) {
-			isect->u = 1.0f - rtc_ray.v - rtc_ray.u;
-			isect->v = rtc_ray.u;
-			isect->t = rtc_ray.tfar;
-			if(rtc_ray.instID != RTC_INVALID_GEOMETRY_ID) {
-//				isect->prim = rtc_ray.primID + (intptr_t)rtcGetUserData(kernel_data.bvh.scene, rtc_ray.geomID);
-				isect->prim = rtc_ray.primID + kernel_tex_fetch(__object_node, rtc_ray.instID/2);
-				isect->object = rtc_ray.instID/2;
-			} else {
-				isect->prim = rtc_ray.primID + (intptr_t)rtcGetUserData(kernel_data.bvh.scene, rtc_ray.geomID);
-//				isect->prim = rtc_ray.primID + kernel_tex_fetch(__object_node, rtc_ray.geomID/2);
-				isect->object = OBJECT_NONE;
-			}
-			isect->type = kernel_tex_fetch(__prim_type, isect->prim);
+			rtc_ray.isect_to_ccl(isect);
 			return true;
 		}
 		return false;
 	}
-#endif
+#endif /* __EMBREE__ */
 #ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 #  ifdef __HAIR__
@@ -249,6 +226,18 @@ ccl_device_intersect void scene_intersect_subsurface(KernelGlobals *kg,
                                                      int max_hits,
                                                      uint shadow_linking)
 {
+#ifdef __EMBREE__
+	if(kernel_data.bvh.scene) {
+		CCLRay rtc_ray(*ray, kg, PATH_RAY_ALL_VISIBILITY, CCLRay::RAY_SSS);
+		rtc_ray.lcg_state = lcg_state;
+		rtc_ray.max_hits = max_hits;
+		rtc_ray.ss_isect = ss_isect;
+		ss_isect->num_hits = 0;
+		rtc_ray.sss_object_id = subsurface_object;
+		rtcOccluded(kernel_data.bvh.scene, rtc_ray);
+		return;
+	}
+#endif /* __EMBREE__ */
 #ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 		return bvh_intersect_subsurface_motion(kg,
@@ -275,32 +264,14 @@ ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg, const Ra
 {
 #ifdef __EMBREE__
 	if(kernel_data.bvh.scene) {
-		RTCRay rtc_ray;
-		rtc_ray.org[0] = ray->P.x;
-		rtc_ray.org[1] = ray->P.y;
-		rtc_ray.org[2] = ray->P.z;
-		rtc_ray.dir[0] = ray->D.x;
-		rtc_ray.dir[1] = ray->D.y;
-		rtc_ray.dir[2] = ray->D.z;
-		rtc_ray.tnear = 0.0f;
-		rtc_ray.tfar = ray->t;
-		rtc_ray.time = ray->time;
-		rtc_ray.mask = -1;
-		rtc_ray.geomID = rtc_ray.primID = rtc_ray.instID = RTC_INVALID_GEOMETRY_ID;
+		CCLRay rtc_ray(*ray, kg, PATH_RAY_SHADOW, CCLRay::RAY_SHADOW_ALL);
+		rtc_ray.isect_s = isect;
+		rtc_ray.max_hits = max_hits;
+		rtc_ray.num_hits = 0;
 		rtcIntersect(kernel_data.bvh.scene, rtc_ray);
-		if(rtc_ray.geomID != RTC_INVALID_GEOMETRY_ID && rtc_ray.primID != RTC_INVALID_GEOMETRY_ID) {
-			isect->u = 1.0f - rtc_ray.v - rtc_ray.u;
-			isect->v = rtc_ray.u;
-			isect->t = rtc_ray.tfar;
-			if(rtc_ray.instID != RTC_INVALID_GEOMETRY_ID) {
-				isect->prim = rtc_ray.primID + (intptr_t)rtcGetUserData(kernel_data.bvh.scene, rtc_ray.instID);
-			} else {
-				isect->prim = rtc_ray.primID; //+ (intptr_t)rtcGetUserData(kernel_data.bvh.scene, rtc_ray.geomID);
-			}
-			isect->object = kernel_tex_fetch(__prim_object, isect->prim);
-			isect->type = kernel_tex_fetch(__prim_type, isect->prim);
-			*num_hits = 1;
-			return true;
+		if(rtc_ray.num_hits > 0) {
+			*num_hits = rtc_ray.num_hits;
+			return (rtc_ray.geomID != RTC_INVALID_GEOMETRY_ID);
 		}
 		*num_hits = 0;
 		return false;
