@@ -80,6 +80,13 @@ void rtc_filter_func(void* userDataPtr, RTCRay& ray_)
 		return;
 	}
 	else if(ray.type == CCLRay::RAY_SSS) {
+		/* only accept hits from the same object */
+		if(ray.instID/2 != ray.sss_object_id) {
+			/* this tells embree to continue tracing */
+			ray.geomID = RTC_INVALID_GEOMETRY_ID;
+			return;
+		}
+
 		/* see triangle_intersect_subsurface() for the native equivalent */
 		for(int i = min(ray.max_hits, ray.ss_isect->num_hits) - 1; i >= 0; --i) {
 			if(ray.ss_isect->hits[i].t == ray.tfar) {
@@ -290,7 +297,6 @@ unsigned BVHEmbree::add_object(Object *ob, int i)
 		size_t prim_offset = pack.prim_index.size();
 		geom_id = add_triangles(mesh, i);
 		rtcSetUserData(scene, geom_id, (void*)prim_offset);
-		rtcSetIntersectionFilterFunction(scene, geom_id, rtc_filter_func);
 		rtcSetOcclusionFilterFunction(scene, geom_id, rtc_filter_func);
 		rtcSetMask(scene, geom_id, ob->visibility);
 	}
@@ -298,7 +304,6 @@ unsigned BVHEmbree::add_object(Object *ob, int i)
 		size_t prim_offset = pack.prim_index.size();
 		geom_id = add_curves(mesh, i);
 		rtcSetUserData(scene, geom_id, (void*)prim_offset);
-		rtcSetIntersectionFilterFunction(scene, geom_id, rtc_filter_func);
 		rtcSetOcclusionFilterFunction(scene, geom_id, rtc_filter_func);
 		rtcSetMask(scene, geom_id, ob->visibility);
 	}
@@ -433,12 +438,6 @@ unsigned BVHEmbree::add_curves(Mesh *mesh, int i)
 	}
 
 	const size_t num_keys = mesh->curve_keys.size();
-	unsigned geom_id = rtcNewLineSegments2(scene,
-												 RTC_GEOMETRY_STATIC,
-												 num_segments,
-												 num_keys,
-												 num_motion_steps,
-												 i*2+1);
 
 	/* Make room for Cycles specific data */
 	pack.prim_object.reserve(pack.prim_object.size() + num_segments);
@@ -446,7 +445,16 @@ unsigned BVHEmbree::add_curves(Mesh *mesh, int i)
 	pack.prim_index.reserve(pack.prim_index.size() + num_segments);
 	pack.prim_tri_index.reserve(pack.prim_index.size() + num_segments);
 
-	/* Split the Cycles curves into embree curve segments, each with 4 CVs */
+#if 0 /* line segments */
+	unsigned geom_id = rtcNewLineSegments2(scene,
+												 RTC_GEOMETRY_STATIC,
+												 num_segments,
+												 num_keys,
+												 num_motion_steps,
+												 i*2+1);
+
+
+	/* Split the Cycles curves into embree line segments, each with 2 CVs */
 	void* raw_buffer = rtcMapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
 	unsigned *rtc_indices = (unsigned*) raw_buffer;
 	size_t rtc_index = 0;
@@ -465,7 +473,36 @@ unsigned BVHEmbree::add_curves(Mesh *mesh, int i)
 		}
 	}
 	rtcUnmapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
+#else
+	/* curve segments */
+	unsigned geom_id = rtcNewBSplineHairGeometry2(scene,
+												 RTC_GEOMETRY_STATIC,
+												 num_segments,
+												 num_keys + 2 * num_curves,
+												 num_motion_steps,
+												 i*2+1);
 
+
+	/* Split the Cycles curves into embree line segments, each with 2 CVs */
+	void* raw_buffer = rtcMapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
+	unsigned *rtc_indices = (unsigned*) raw_buffer;
+	size_t rtc_index = 0;
+	for(size_t j = 0; j < num_curves; j++) {
+		Mesh::Curve c = mesh->get_curve(j);
+		for(size_t k = 0; k < c.num_segments(); k++) {
+			rtc_indices[rtc_index] = c.first_key + k;
+
+			/* Cycles specific data */
+			pack.prim_object.push_back_reserved(i);
+			pack.prim_type.push_back_reserved(PRIMITIVE_PACK_SEGMENT(num_motion_steps > 1 ? PRIMITIVE_MOTION_CURVE : PRIMITIVE_CURVE, k));
+			pack.prim_index.push_back_reserved(j);
+			pack.prim_tri_index.push_back_reserved(rtc_index);
+
+			rtc_index++;
+		}
+	}
+	rtcUnmapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
+#endif
 	/* Copy the CV data to embree */
 	int t_mid = (num_motion_steps - 1) / 2;
 	const float *curve_radius = &mesh->curve_radius[0];
@@ -486,6 +523,11 @@ unsigned BVHEmbree::add_curves(Mesh *mesh, int i)
 #endif
 			raw_buffer = rtcMapBuffer(scene, geom_id, buffer_type);
 			float *rtc_verts = (float*) raw_buffer;
+			rtc_verts[0] = verts[0].x;
+			rtc_verts[1] = verts[0].y;
+			rtc_verts[2] = verts[0].z;
+			rtc_verts[3] = curve_radius[0];
+			rtc_verts += 4;
 			for(size_t j = 0; j < num_keys; j++) {
 				rtc_verts[0] = verts[j].x;
 				rtc_verts[1] = verts[j].y;
@@ -493,6 +535,10 @@ unsigned BVHEmbree::add_curves(Mesh *mesh, int i)
 				rtc_verts[3] = curve_radius[j];
 				rtc_verts += 4;
 			}
+			rtc_verts[0] = verts[num_keys-1].x;
+			rtc_verts[1] = verts[num_keys-1].y;
+			rtc_verts[2] = verts[num_keys-1].z;
+			rtc_verts[3] = curve_radius[num_keys-1];
 			rtcUnmapBuffer(scene, geom_id, buffer_type);
 		}
 	}

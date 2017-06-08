@@ -173,6 +173,7 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
 {
 #ifdef __EMBREE__
 	if(kernel_data.bvh.scene) {
+		isect->t = ray.t;
 		CCLRay rtc_ray(ray, kg, visibility, CCLRay::RAY_REGULAR);
 		rtcIntersect(kernel_data.bvh.scene, rtc_ray);
 		if(rtc_ray.geomID != RTC_INVALID_GEOMETRY_ID && rtc_ray.primID != RTC_INVALID_GEOMETRY_ID) {
