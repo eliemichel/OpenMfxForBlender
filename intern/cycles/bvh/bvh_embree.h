@@ -36,9 +36,11 @@ class Mesh;
 class BVHEmbree : public BVH
 {
 public:
-	void build(Progress& progress);
+	void build(Progress& progress, Stats *stats);
 	virtual ~BVHEmbree();
 	RTCScene scene;
+
+	void mem_monitor(ssize_t mem);
 protected:
 	/* constructor */
 	friend class BVH;
@@ -51,12 +53,16 @@ protected:
 	unsigned add_instance(Object *ob, int i);
 	unsigned add_curves(Mesh *mesh, int i);
 	unsigned add_triangles(Mesh *mesh, int i);
+
+	ssize_t mem_used;
 private:
 	void delete_rtcScene();
 
 	static RTCDevice rtc_shared_device;
 	static int rtc_shared_users;
 	static thread_mutex rtc_shared_mutex;
+
+	Stats *stats;
 };
 
 CCL_NAMESPACE_END

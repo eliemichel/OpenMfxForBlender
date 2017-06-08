@@ -46,7 +46,7 @@ CCL_NAMESPACE_BEGIN
  * Cycles' own BVH does that directly inside the traversal calls.
  */
 
-void cclFilterFunc(void* userDataPtr, RTCRay& ray_)
+void rtc_filter_func(void* userDataPtr, RTCRay& ray_)
 {
 	CCLRay &ray = (CCLRay&)ray_;
 	KernelGlobals *kg = ray.kg;
@@ -134,9 +134,34 @@ void cclFilterFunc(void* userDataPtr, RTCRay& ray_)
 		}
 		return;
 	}
-
  	return;
- }
+}
+
+bool rtc_memory_monitor_func(void* userPtr, const ssize_t bytes, const bool post)
+{
+	BVHEmbree *bvh = (BVHEmbree*)userPtr;
+	if(bvh) {
+		bvh->mem_monitor(bytes);
+	}
+	return true;
+}
+
+static double progress_start_time = 0.0f;
+
+bool rtc_progress_func(void* user_ptr, const double n)
+{
+	Progress *progress = (Progress*)user_ptr;
+
+	if(time_dt() - progress_start_time < 0.25)
+		return true;
+
+	string msg = string_printf("Building BVH %.0f%%", n * 100.0);
+
+	progress->set_substatus(msg);
+	progress_start_time = time_dt();
+
+	return !progress->get_cancel();
+}
 
 /* This is to have a shared device between all BVH instances */
 RTCDevice BVHEmbree::rtc_shared_device = NULL;
@@ -144,7 +169,7 @@ int BVHEmbree::rtc_shared_users = 0;
 thread_mutex BVHEmbree::rtc_shared_mutex;
 
 BVHEmbree::BVHEmbree(const BVHParams& params_, const vector<Object*>& objects_)
-: BVH(params_, objects_), scene(NULL)
+: BVH(params_, objects_), scene(NULL), mem_used(0), stats(NULL)
 {
 	_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
 	_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
@@ -153,6 +178,8 @@ BVHEmbree::BVHEmbree(const BVHParams& params_, const vector<Object*>& objects_)
 		rtc_shared_device = rtcNewDevice("verbose=1");
 	}
 	rtc_shared_users++;
+
+	rtcDeviceSetMemoryMonitorFunction2(rtc_shared_device, rtc_memory_monitor_func, this);
 
 	/* BVH_CUSTOM as root index signals to the rest of the code that this is not Cycle's own BVH */
 	pack.root_index = BVH_CUSTOM;
@@ -177,8 +204,22 @@ void BVHEmbree::delete_rtcScene()
 	}
 }
 
-void BVHEmbree::build(Progress& progress)
+void BVHEmbree::mem_monitor(ssize_t bytes)
 {
+	if(stats) {
+		if(bytes > 0) {
+			stats->mem_alloc(bytes);
+		} else {
+			stats->mem_free(-bytes);
+		}
+	}
+	mem_used += bytes;
+}
+
+void BVHEmbree::build(Progress& progress, Stats *stats_)
+{
+	stats = stats_;
+
 	progress.set_substatus("Building BVH");
 
 	if (scene) {
@@ -186,7 +227,11 @@ void BVHEmbree::build(Progress& progress)
 		scene = NULL;
 	}
 
-	scene = rtcDeviceNewScene(rtc_shared_device, RTC_SCENE_STATIC|RTC_SCENE_INCOHERENT|RTC_SCENE_HIGH_QUALITY|RTC_SCENE_ROBUST, RTC_INTERSECT1);
+	RTCSceneFlags flags = RTC_SCENE_STATIC|RTC_SCENE_INCOHERENT|RTC_SCENE_ROBUST;
+	if(params.use_spatial_split) {
+		flags = flags|RTC_SCENE_HIGH_QUALITY;
+	}
+	scene = rtcDeviceNewScene(rtc_shared_device, flags, RTC_INTERSECT1);
 
 	int i = 0;
 
@@ -216,21 +261,25 @@ void BVHEmbree::build(Progress& progress)
 
 	if(progress.get_cancel()) {
 		delete_rtcScene();
+		stats = NULL;
 		return;
 	}
 
-	progress.set_substatus("Building embree acceleration structure");
+	rtcSetProgressMonitorFunction(scene, rtc_progress_func, &progress);
 	rtcCommit(scene);
 
 	pack_primitives();
 
 	if(progress.get_cancel()) {
 		delete_rtcScene();
+		stats = NULL;
 		return;
 	}
 
 	progress.set_substatus("Packing geometry");
 	pack_nodes(NULL);
+
+	stats = NULL;
 }
 
 unsigned BVHEmbree::add_object(Object *ob, int i)
@@ -241,16 +290,16 @@ unsigned BVHEmbree::add_object(Object *ob, int i)
 		size_t prim_offset = pack.prim_index.size();
 		geom_id = add_triangles(mesh, i);
 		rtcSetUserData(scene, geom_id, (void*)prim_offset);
-		rtcSetIntersectionFilterFunction(scene, geom_id, cclFilterFunc);
-		rtcSetOcclusionFilterFunction(scene, geom_id, cclFilterFunc);
+		rtcSetIntersectionFilterFunction(scene, geom_id, rtc_filter_func);
+		rtcSetOcclusionFilterFunction(scene, geom_id, rtc_filter_func);
 		rtcSetMask(scene, geom_id, ob->visibility);
 	}
 	if(params.primitive_mask & PRIMITIVE_ALL_CURVE && mesh->num_curves() > 0) {
 		size_t prim_offset = pack.prim_index.size();
 		geom_id = add_curves(mesh, i);
 		rtcSetUserData(scene, geom_id, (void*)prim_offset);
-		rtcSetIntersectionFilterFunction(scene, geom_id, cclFilterFunc);
-		rtcSetOcclusionFilterFunction(scene, geom_id, cclFilterFunc);
+		rtcSetIntersectionFilterFunction(scene, geom_id, rtc_filter_func);
+		rtcSetOcclusionFilterFunction(scene, geom_id, rtc_filter_func);
 		rtcSetMask(scene, geom_id, ob->visibility);
 	}
 	return geom_id;
@@ -532,7 +581,9 @@ void BVHEmbree::pack_nodes(const BVHNode *root)
 			continue;
 		}
 
-		BVH *bvh = mesh->bvh;
+		BVHEmbree *bvh = (BVHEmbree*)mesh->bvh;
+
+		mem_monitor(bvh->mem_used);
 
 		int mesh_tri_offset = mesh->tri_offset;
 		int mesh_curve_offset = mesh->curve_offset;

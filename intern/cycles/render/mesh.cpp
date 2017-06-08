@@ -1837,7 +1837,7 @@ void MeshManager::device_update_bvh(Device *device, DeviceScene *dscene, Scene *
 
 	delete bvh;
 	bvh = BVH::create(bparams, scene->objects);
-	bvh->build(progress);
+	bvh->build(progress, &device->stats);
 
 	if(progress.get_cancel()) return;
 

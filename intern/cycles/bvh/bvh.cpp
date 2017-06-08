@@ -80,7 +80,7 @@ BVH *BVH::create(const BVHParams& params, const vector<Object*>& objects)
 
 /* Building */
 
-void BVH::build(Progress& progress)
+void BVH::build(Progress& progress, Stats*)
 {
 	progress.set_substatus("Building BVH");
 

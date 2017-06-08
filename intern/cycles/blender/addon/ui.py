@@ -430,9 +430,7 @@ class CyclesRender_PT_performance(CyclesButtonsPanel, Panel):
 
         col.label(text="Acceleration structure:")
         col.prop(cscene, "use_bvh_embree")
-        row = col.row()
-        row.active = not cscene.use_bvh_embree
-        row.prop(cscene, "debug_use_spatial_splits")
+        col.prop(cscene, "debug_use_spatial_splits")
         row = col.row()
         row.active = not cscene.use_bvh_embree
         row.prop(cscene, "debug_use_hair_bvh")
