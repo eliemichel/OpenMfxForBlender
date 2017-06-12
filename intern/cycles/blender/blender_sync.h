@@ -103,6 +103,8 @@ public:
 	                                      Camera *cam,
 	                                      int width, int height);
 
+	bool BKE_object_is_modified(BL::Object& b_ob);
+
 private:
 	/* sync */
 	void sync_lamps(bool update_all);
@@ -158,9 +160,17 @@ private:
 	/* Images. */
 	void sync_images();
 
+    /* Shaders */
+    void add_nodes( Scene *scene,
+                    BL::RenderEngine& b_engine,
+                    BL::BlendData& b_data,
+                    BL::Scene& b_scene,
+                    const bool background,
+                    ShaderGraph *graph,
+                    BL::ShaderNodeTree& b_ntree);
+
 	/* util */
 	void find_shader(BL::ID& id, vector<Shader*>& used_shaders, Shader *default_shader);
-	bool BKE_object_is_modified(BL::Object& b_ob);
 	bool object_is_mesh(BL::Object& b_ob);
 	bool object_is_light(BL::Object& b_ob);
 
@@ -169,11 +179,14 @@ private:
 	BL::BlendData b_data;
 	BL::Scene b_scene;
 
+public:
 	id_map<void*, Shader> shader_map;
 	id_map<ObjectKey, Object> object_map;
 	id_map<void*, Mesh> mesh_map;
 	id_map<ObjectKey, Light> light_map;
 	id_map<ParticleSystemKey, ParticleSystem> particle_system_map;
+
+private:
 	set<Mesh*> mesh_synced;
 	set<Mesh*> mesh_motion_synced;
 	set<float> motion_times;

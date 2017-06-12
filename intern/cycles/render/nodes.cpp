@@ -436,8 +436,8 @@ CurveTextureNode::CurveTextureNode()
 
 CurveTextureNode::~CurveTextureNode()
 {
-// 	if(image_manager)
-// 		image_manager->remove_image(filename, builtin_data, interpolation);
+ 	if(image_manager && slot >= 0)
+ 		image_manager->remove_image(slot);
 }
 
 ShaderNode *CurveTextureNode::clone() const

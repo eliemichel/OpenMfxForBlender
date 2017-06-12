@@ -35,7 +35,7 @@ typedef map<void*, ShaderInput*> PtrInputMap;
 typedef map<void*, ShaderOutput*> PtrOutputMap;
 typedef map<string, ConvertNode*> ProxyMap;
 
-std::vector<float4> CurveToLineSegments(Curve *cu);
+std::vector<float4> CurveToLineSegments(Mesh* mesh);
 
 /* Hacks to hook into Blender API
  * todo: clean this up ... */
@@ -244,7 +244,8 @@ static bool is_output_node(BL::Node& b_node)
 		    || b_node.is_a(&RNA_ShaderNodeOutputLamp));
 }
 
-static ShaderNode *add_node(Scene *scene,
+static ShaderNode *add_node(BlenderSync &sync,
+                            Scene *scene,
                             BL::RenderEngine& b_engine,
                             BL::BlendData& b_data,
                             BL::Scene& b_scene,
@@ -673,24 +674,34 @@ static ShaderNode *add_node(Scene *scene,
             ::Curve *cu = (::Curve*) ob->data;
 
             if (ob && cu) {
-                // Build a texture with triangles
-                int scene_frame = b_scene.frame_current();
-                tex->filename = b_curve.name() + "Curve@" + string_printf("%d", scene_frame);
-                tex->points = CurveToLineSegments(cu);
 
-                ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
-                ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));
-                Image *image = BKE_image_add_from_imbuf(ibuf, tex->filename.c_str());
-                IMB_freeImBuf(ibuf);
+                BL::Object b_ob = b_curve_node.object();
+                BL::ID key = (sync.BKE_object_is_modified(b_ob))? b_ob: b_curve_node.object().data();
+                Mesh* mesh = sync.mesh_map.find(key);
 
-                tex->builtin_data = image;
+                if (mesh) {
+                    // Build a texture with triangles
+                    int scene_frame = b_scene.frame_current();
+                    tex->filename = b_curve.name() + "Curve@" + string_printf("%d", scene_frame);
+                    tex->points = CurveToLineSegments(mesh);
 
-                bool is_float_bool, linear;
-                tex->slot = scene->image_manager->add_image(tex->filename, tex->builtin_data,
-                                                            true, 0, is_float_bool, linear,
-                                                            INTERPOLATION_CLOSEST,
-                                                            EXTENSION_CLIP,
-                                                            false);
+                    ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
+                    ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));
+                    Image *image = BKE_image_add_from_imbuf(ibuf, tex->filename.c_str());
+                    IMB_freeImBuf(ibuf);
+
+                    tex->builtin_data = image;
+
+                    if (tex->slot >= 0)
+                        scene->image_manager->remove_image(tex->slot);
+
+                    bool is_float_bool, linear;
+                    tex->slot = scene->image_manager->add_image(tex->filename, tex->builtin_data,
+                                                                true, 0, is_float_bool, linear,
+                                                                INTERPOLATION_CLOSEST,
+                                                                EXTENSION_CLIP,
+                                                                false);
+                }
             }
 
         }
@@ -975,15 +986,16 @@ static ShaderOutput *node_find_output_by_name(ShaderNode *node,
 	return node->output(name.c_str());
 }
 
-static void add_nodes(Scene *scene,
-                      BL::RenderEngine& b_engine,
-                      BL::BlendData& b_data,
-                      BL::Scene& b_scene,
-                      const bool background,
-                      ShaderGraph *graph,
-                      BL::ShaderNodeTree& b_ntree,
-                      const ProxyMap &proxy_input_map,
-                      const ProxyMap &proxy_output_map)
+static void add_nodes_recursive(  BlenderSync &sync,
+                        Scene *scene,
+                        BL::RenderEngine& b_engine,
+                        BL::BlendData& b_data,
+                        BL::Scene& b_scene,
+                        const bool background,
+                        ShaderGraph *graph,
+                        BL::ShaderNodeTree& b_ntree,
+                        const ProxyMap &proxy_input_map,
+                        const ProxyMap &proxy_output_map)
 {
 	/* add nodes */
 	BL::ShaderNodeTree::nodes_iterator b_node;
@@ -1065,7 +1077,8 @@ static void add_nodes(Scene *scene,
 			}
 			
 			if(b_group_ntree) {
-				add_nodes(scene,
+				add_nodes_recursive(sync,
+                          scene,
 				          b_engine,
 				          b_data,
 				          b_scene,
@@ -1114,7 +1127,8 @@ static void add_nodes(Scene *scene,
 			}
 			else {
 				BL::ShaderNode b_shader_node(*b_node);
-				node = add_node(scene,
+				node = add_node(sync,
+                                scene,
 				                b_engine,
 				                b_data,
 				                b_scene,
@@ -1177,16 +1191,17 @@ static void add_nodes(Scene *scene,
 	}
 }
 
-static void add_nodes(Scene *scene,
-                      BL::RenderEngine& b_engine,
-                      BL::BlendData& b_data,
-                      BL::Scene& b_scene,
-                      const bool background,
-                      ShaderGraph *graph,
-                      BL::ShaderNodeTree& b_ntree)
+void BlenderSync::add_nodes(Scene *scene,
+                            BL::RenderEngine& b_engine,
+                            BL::BlendData& b_data,
+                            BL::Scene& b_scene,
+                            const bool background,
+                            ShaderGraph *graph,
+                            BL::ShaderNodeTree& b_ntree)
 {
 	static const ProxyMap empty_proxy_map;
-	add_nodes(scene,
+	add_nodes_recursive(*this,
+              scene,
 	          b_engine,
 	          b_data,
 	          b_scene,
