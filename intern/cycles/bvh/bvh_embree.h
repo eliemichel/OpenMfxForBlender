@@ -57,6 +57,8 @@ protected:
 	ssize_t mem_used;
 private:
 	void delete_rtcScene();
+	void update_tri_vertex_buffer(unsigned geom_id, const Mesh* mesh);
+	void update_curve_vertex_buffer(unsigned geom_id, const Mesh* mesh);
 
 	static RTCDevice rtc_shared_device;
 	static int rtc_shared_users;
