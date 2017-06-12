@@ -407,8 +407,8 @@ ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
 		return BVH_FUNCTION_FULL_NAME(QBVH)(kg,
 		                                    ray,
 		                                    isect_array,
-		                                    max_hits,
 											0,
+		                                    max_hits,
 		                                    num_hits,
                                             shadow_linking);
 	}
