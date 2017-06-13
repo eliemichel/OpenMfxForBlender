@@ -28,6 +28,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* This is to have a shared device between all BVH instances */
 RTCDevice BVHEmbree::rtc_shared_device = NULL;
 int BVHEmbree::rtc_shared_users = 0;
 thread_mutex BVHEmbree::rtc_shared_mutex;
@@ -41,6 +42,7 @@ BVHEmbree::BVHEmbree(const BVHParams& params_, const vector<Object*>& objects_)
 	}
 	rtc_shared_users++;
 
+	/* BVH_CUSTOM as root index signals to the rest of the code that this is not Cycle's own BVH */
 	pack.root_index = BVH_CUSTOM;
 }
 
@@ -70,21 +72,25 @@ void BVHEmbree::build(Progress& progress)
 
 	int i = 0;
 
-	pack.object_node.resize(objects.size());
+	pack.object_node.clear();
 
 	foreach(Object *ob, objects) {
+		unsigned geom_id;
+
 		if(params.top_level) {
 			if(!ob->is_traceable()) {
 				++i;
 				continue;
 			}
 			if(!ob->mesh->is_instanced())
-				add_reference_mesh(ob->mesh, i);
+				geom_id = add_reference_mesh(ob->mesh, i);
 			else
-				add_reference_object(ob, i);
+				geom_id = add_reference_object(ob, i);
+
+			rtcSetUserData(scene, geom_id, (void*)ob->mesh->tri_offset);
 		}
 		else
-			add_reference_mesh(ob->mesh, i);
+			geom_id = add_reference_mesh(ob->mesh, i);
 
 		i++;
 
@@ -112,41 +118,54 @@ void BVHEmbree::build(Progress& progress)
 	//root->deleteSubtree();
 }
 
-void BVHEmbree::add_reference_mesh(Mesh *mesh, int i)
+unsigned BVHEmbree::add_reference_mesh(Mesh *mesh, int i)
 {
+	unsigned geom_id = 0;
 	if(params.primitive_mask & PRIMITIVE_ALL_TRIANGLE) {
-		add_reference_triangles(mesh, i);
+		geom_id = add_reference_triangles(mesh, i);
 	}
-	if(params.primitive_mask & PRIMITIVE_ALL_CURVE) {
-		add_reference_curves(mesh, i);
+	if(params.primitive_mask & PRIMITIVE_ALL_CURVE && mesh->num_curves()) {
+		geom_id = add_reference_curves(mesh, i);
 	}
+//	assert(0);
+	return geom_id;
 }
 
-void BVHEmbree::add_reference_object(Object *ob, int i)
+unsigned BVHEmbree::add_reference_object(Object *ob, int i)
 {
 	if(!ob || !ob->mesh) {
-		return;
+		assert(0);
+		return 0;
 	}
 	BVHEmbree *instance_bvh = (BVHEmbree*)(ob->mesh->bvh);
-	unsigned geom_id = rtcNewInstance2(scene, instance_bvh->scene);
-	rtcSetTransform2(scene, geom_id, RTC_MATRIX_ROW_MAJOR, (const float*)&ob->tfm);
 
-	size_t start = 0;
-	if(i > 0) {
-		start = pack.object_node[i-1];
+	const size_t num_motion_steps = ob->use_motion ? 3 : 1;
+	unsigned geom_id = rtcNewInstance2(scene, instance_bvh->scene, num_motion_steps);
+
+	if(ob->use_motion) {
+		rtcSetTransform2(scene, geom_id, RTC_MATRIX_ROW_MAJOR, (const float*)&ob->motion.pre, 0);
+		rtcSetTransform2(scene, geom_id, RTC_MATRIX_ROW_MAJOR, (const float*)&ob->tfm, 1);
+		rtcSetTransform2(scene, geom_id, RTC_MATRIX_ROW_MAJOR, (const float*)&ob->motion.post, 2);
+	} else {
+		rtcSetTransform2(scene, geom_id, RTC_MATRIX_ROW_MAJOR, (const float*)&ob->tfm);
 	}
-	if(i < pack.object_node.size()) {
-		pack.object_node[i] = start;
-	}
+
+	return geom_id;
 }
 
-void BVHEmbree::add_reference_triangles(Mesh *mesh, int i)
+unsigned BVHEmbree::add_reference_triangles(Mesh *mesh, int i)
 {
 	const Attribute *attr_mP = NULL;
 	size_t num_motion_steps = 1;
+	size_t t_mid = 0;
 	if(mesh->has_motion_blur()) {
 		attr_mP = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
 		num_motion_steps = mesh->motion_steps;
+		t_mid = (num_motion_steps - 1) / 2;
+		if(num_motion_steps > RTC_MAX_TIME_STEPS) {
+			assert(0);
+			num_motion_steps = RTC_MAX_TIME_STEPS;
+		}
 	}
 
 	const size_t num_triangles = mesh->num_triangles();
@@ -155,9 +174,12 @@ void BVHEmbree::add_reference_triangles(Mesh *mesh, int i)
 						RTC_GEOMETRY_DEFORMABLE,
 						num_triangles,
 						num_verts,
-						num_motion_steps,
-						i);
+						num_motion_steps);
 
+#if 0
+	// embree and Cycles use the same memory layout, so we can conveniently use the rtcSetBuffer2 calls
+	//rtcSetBuffer2(scene, geom_id, RTC_INDEX_BUFFER, &mesh->triangles[0], 0, sizeof(int) * 3);
+#else
 	void* raw_buffer = rtcMapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
 	unsigned *rtc_indices = (unsigned*) raw_buffer;
 	for(size_t j = 0; j < num_triangles; j++) {
@@ -167,8 +189,8 @@ void BVHEmbree::add_reference_triangles(Mesh *mesh, int i)
 		rtc_indices[j*3+2] = t.v[2];
 	}
 	rtcUnmapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
+#endif
 
-	int t_mid = (num_motion_steps - 1) / 2;
 	for(int t = 0; t < num_motion_steps; t++) {
 		RTCBufferType buffer_type = (RTCBufferType)(RTC_VERTEX_BUFFER+t);
 		const float3 *verts;
@@ -178,6 +200,9 @@ void BVHEmbree::add_reference_triangles(Mesh *mesh, int i)
 			int t_ = (t > t_mid) ? (t - 1) : t;
 			verts = &attr_mP->data_float3()[t_ * num_verts];
 		}
+#if 0
+		rtcSetBuffer(scene, geom_id, buffer_type, verts, 0, sizeof(float3));
+#else
 		raw_buffer = rtcMapBuffer(scene, geom_id, buffer_type);
 		float *rtc_verts = (float*) raw_buffer;
 		for(size_t j = 0; j < num_verts; j++) {
@@ -188,53 +213,116 @@ void BVHEmbree::add_reference_triangles(Mesh *mesh, int i)
 			rtc_verts += 4;
 		}
 		rtcUnmapBuffer(scene, geom_id, buffer_type);
+#endif
 	}
 
-	size_t start = 0;
-	if(i > 0) {
-		start = pack.object_node[i-1];
-	}
-	if(i < pack.object_node.size()) {
-		pack.object_node[i] = start + num_triangles;
-	}
-
-	pack.prim_object.resize(pack.prim_object.size() + num_triangles);
-	pack.prim_type.resize(pack.prim_type.size() + num_triangles);
-	pack.prim_index.resize(pack.prim_index.size() + num_triangles);
-	pack.prim_tri_index.resize(pack.prim_index.size() + num_triangles);
+	pack.prim_object.reserve(pack.prim_object.size() + num_triangles);
+	pack.prim_type.reserve(pack.prim_type.size() + num_triangles);
+	pack.prim_index.reserve(pack.prim_index.size() + num_triangles);
+	pack.prim_tri_index.reserve(pack.prim_index.size() + num_triangles);
 	for(size_t j = 0; j < num_triangles; j++) {
-		pack.prim_object[start + j] = geom_id;
-		pack.prim_type[start + j] = PRIMITIVE_TRIANGLE;
-		pack.prim_index[start + j] = j;
-		pack.prim_tri_index[start + j] = j;
+		pack.prim_object.push_back_reserved(i);
+		pack.prim_type.push_back_reserved(PRIMITIVE_TRIANGLE);
+		pack.prim_index.push_back_reserved(j);
+		pack.prim_tri_index.push_back_reserved(j);
 	}
+
+	return geom_id;
 }
 
-void BVHEmbree::add_reference_curves(Mesh *mesh, int i)
+unsigned BVHEmbree::add_reference_curves(Mesh *mesh, int i)
 {
-	// TODO Stefan
+	const Attribute *attr_mP = NULL;
+	size_t num_motion_steps = 1;
+	if(mesh->has_motion_blur()) {
+		attr_mP = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
+		num_motion_steps = mesh->motion_steps;
+	}
+
+	const size_t num_curves = mesh->num_curves();
+	size_t num_segments = 0;
+	for(size_t j = 0; j < num_curves; j++) {
+		Mesh::Curve c = mesh->get_curve(j);
+		num_segments += c.num_segments();
+	}
+	const size_t num_keys = mesh->curve_keys.size();
+	unsigned geom_id = rtcNewBezierHairGeometry2(scene,
+												 RTC_GEOMETRY_DEFORMABLE,
+												 num_curves,
+												 num_keys,
+												 num_motion_steps);
+
+	void* raw_buffer = rtcMapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
+	unsigned *rtc_indices = (unsigned*) raw_buffer;
+	size_t rtc_index = 0;
+	for(size_t j = 0; j < num_curves; j++) {
+		Mesh::Curve c = mesh->get_curve(j);
+				rtc_indices[rtc_index] = max(c.first_key - 1,c.first_key);
+				rtc_index++;
+	}
+	rtcUnmapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
+
+	int t_mid = (num_motion_steps - 1) / 2;
+	const float *curve_radius = &mesh->curve_radius[0];
+	for(int t = 0; t < num_motion_steps; t++) {
+		RTCBufferType buffer_type = (RTCBufferType)(RTC_VERTEX_BUFFER+t);
+		const float3 *verts;
+		if(t == t_mid) {
+			verts = &mesh->curve_keys[0];
+		} else {
+			int t_ = (t > t_mid) ? (t - 1) : t;
+			verts = &attr_mP->data_float3()[t_ * num_keys];
+		}
+		raw_buffer = rtcMapBuffer(scene, geom_id, buffer_type);
+		float *rtc_verts = (float*) raw_buffer;
+		for(size_t j = 0; j < num_keys; j++) {
+			rtc_verts[0] = verts[j].x;
+			rtc_verts[1] = verts[j].y;
+			rtc_verts[2] = verts[j].z;
+			rtc_verts[3] = curve_radius[j];
+			rtc_verts += 4;
+		}
+		rtcUnmapBuffer(scene, geom_id, buffer_type);
+	}
+
+	pack.prim_object.reserve(pack.prim_object.size() + num_curves);
+	pack.prim_type.reserve(pack.prim_type.size() + num_curves);
+	pack.prim_index.reserve(pack.prim_index.size() + num_curves);
+	pack.prim_tri_index.reserve(pack.prim_index.size() + num_curves);
+	for(size_t j = 0; j < num_curves; j++) {
+		pack.prim_object.push_back_reserved(i);
+		pack.prim_type.push_back_reserved(PRIMITIVE_CURVE);
+		pack.prim_index.push_back_reserved(j);
+		pack.prim_tri_index.push_back_reserved(j);
+	}
+	
+	return geom_id;
 }
  
 void BVHEmbree::pack_nodes(const BVHNode *root)
 {
-	if(params.top_level) {
-		for(size_t i = 0; i < pack.prim_index.size(); i++) {
-			if(pack.prim_index[i] != -1) {
-				if(pack.prim_type[i] & PRIMITIVE_ALL_CURVE)
-					pack.prim_index[i] += objects[pack.prim_object[i]]->mesh->curve_offset;
-				else
-					pack.prim_index[i] += objects[pack.prim_object[i]]->mesh->tri_offset;
-			}
+	if(!params.top_level) {
+		return;
+	}
+
+	for(size_t i = 0; i < pack.prim_index.size(); i++) {
+		if(pack.prim_index[i] != -1) {
+			if(pack.prim_type[i] & PRIMITIVE_ALL_CURVE)
+				pack.prim_index[i] += objects[pack.prim_object[i]]->mesh->curve_offset;
+			else
+				pack.prim_index[i] += objects[pack.prim_object[i]]->mesh->tri_offset;
 		}
 	}
+
+	size_t prim_offset = pack.prim_index.size();
 
 	/* reserve */
 	size_t prim_index_size = pack.prim_index.size();
 	size_t prim_tri_verts_size = pack.prim_tri_verts.size();
 
-//	size_t pack_prim_index_offset = prim_index_size;
-//	size_t pack_prim_tri_verts_offset = prim_tri_verts_size;
-//	size_t object_offset = 0;
+	size_t pack_prim_index_offset = prim_index_size;
+	size_t pack_prim_tri_verts_offset = prim_tri_verts_size;
+	size_t object_offset = 0;
 
 	map<Mesh*, int> mesh_map;
 
@@ -253,8 +341,96 @@ void BVHEmbree::pack_nodes(const BVHNode *root)
 
 	mesh_map.clear();
 
+	pack.prim_index.resize(prim_index_size);
+	pack.prim_type.resize(prim_index_size);
+	pack.prim_object.resize(prim_index_size);
+	pack.prim_visibility.resize(prim_index_size);
+	pack.prim_tri_verts.resize(prim_tri_verts_size);
+	pack.prim_tri_index.resize(prim_index_size);
+	pack.object_node.resize(objects.size());
+
+	int *pack_prim_index = (pack.prim_index.size())? &pack.prim_index[0]: NULL;
+	int *pack_prim_type = (pack.prim_type.size())? &pack.prim_type[0]: NULL;
+	int *pack_prim_object = (pack.prim_object.size())? &pack.prim_object[0]: NULL;
+	uint *pack_prim_visibility = (pack.prim_visibility.size())? &pack.prim_visibility[0]: NULL;
+	float4 *pack_prim_tri_verts = (pack.prim_tri_verts.size())? &pack.prim_tri_verts[0]: NULL;
+	uint *pack_prim_tri_index = (pack.prim_tri_index.size())? &pack.prim_tri_index[0]: NULL;
+
+	/* merge */
+	foreach(Object *ob, objects) {
+		Mesh *mesh = ob->mesh;
+
+		/* We assume that if mesh doesn't need own BVH it was already included
+		 * into a top-level BVH and no packing here is needed.
+		 */
+		if(!mesh->need_build_bvh()) {
+			pack.object_node[object_offset++] = 0;
+			continue;
+		}
+
+		/* if mesh already added once, don't add it again, but used set
+		 * node offset for this object */
+		map<Mesh*, int>::iterator it = mesh_map.find(mesh);
+
+		if(mesh_map.find(mesh) != mesh_map.end()) {
+			int noffset = it->second;
+			pack.object_node[object_offset++] = noffset;
+			continue;
+		}
+
+		BVH *bvh = mesh->bvh;
+
+		int mesh_tri_offset = mesh->tri_offset;
+		int mesh_curve_offset = mesh->curve_offset;
+
+		/* fill in node indexes for instances */
+		if(bvh->pack.root_index == -1)
+			pack.object_node[object_offset++] = 0;//todo (Stefan)
+		else
+			pack.object_node[object_offset++] = 0; // todo (Stefan)
+
+		mesh_map[mesh] = pack.object_node[object_offset-1];
+
+		/* merge primitive, object and triangle indexes */
+		if(bvh->pack.prim_index.size()) {
+			size_t bvh_prim_index_size = bvh->pack.prim_index.size();
+			int *bvh_prim_index = &bvh->pack.prim_index[0];
+			int *bvh_prim_type = &bvh->pack.prim_type[0];
+			uint *bvh_prim_visibility = &bvh->pack.prim_visibility[0];
+			uint *bvh_prim_tri_index = &bvh->pack.prim_tri_index[0];
+
+			for(size_t i = 0; i < bvh_prim_index_size; i++) {
+				if(bvh->pack.prim_type[i] & PRIMITIVE_ALL_CURVE) {
+					pack_prim_index[pack_prim_index_offset] = bvh_prim_index[i] + mesh_curve_offset;
+					pack_prim_tri_index[pack_prim_index_offset] = -1;
+				}
+				else {
+					pack_prim_index[pack_prim_index_offset] = bvh_prim_index[i] + mesh_tri_offset;
+					pack_prim_tri_index[pack_prim_index_offset] =
+					bvh_prim_tri_index[i] + pack_prim_tri_verts_offset;
+				}
+
+				pack_prim_type[pack_prim_index_offset] = bvh_prim_type[i];
+				pack_prim_visibility[pack_prim_index_offset] = bvh_prim_visibility[i];
+				pack_prim_object[pack_prim_index_offset] = 0;  // unused for instances
+
+				pack_prim_index_offset++;
+			}
+		}
+
+		/* Merge triangle vertices data. */
+		if(bvh->pack.prim_tri_verts.size()) {
+			const size_t prim_tri_size = bvh->pack.prim_tri_verts.size();
+			memcpy(pack_prim_tri_verts + pack_prim_tri_verts_offset,
+				   &bvh->pack.prim_tri_verts[0],
+				   prim_tri_size*sizeof(float4));
+			pack_prim_tri_verts_offset += prim_tri_size;
+		}
+
+		prim_offset += bvh->pack.prim_index.size();
+	}
+
 	// TODO Stefan
-	// probably lots more to do here
 }
 
 void BVHEmbree::refit_nodes()

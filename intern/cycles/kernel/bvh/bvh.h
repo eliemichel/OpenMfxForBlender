@@ -185,19 +185,20 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
 		rtc_ray.tfar = ray.t;
 		rtc_ray.time = ray.time;
 		rtc_ray.mask = -1;
-		rtc_ray.geomID = rtc_ray.primID = RTC_INVALID_GEOMETRY_ID;
+		rtc_ray.geomID = rtc_ray.primID = rtc_ray.instID = RTC_INVALID_GEOMETRY_ID;
 		rtcIntersect(kernel_data.bvh.scene, rtc_ray);
 		if(rtc_ray.geomID != RTC_INVALID_GEOMETRY_ID && rtc_ray.primID != RTC_INVALID_GEOMETRY_ID) {
 			isect->u = 1.0f - rtc_ray.v - rtc_ray.u;
 			isect->v = rtc_ray.u;
 			isect->t = rtc_ray.tfar;
-			if(rtc_ray.geomID > 0) {
-				isect->prim = rtc_ray.primID + kernel_tex_fetch(__object_node, rtc_ray.geomID -1);
+			if(rtc_ray.instID != RTC_INVALID_GEOMETRY_ID) {
+				isect->prim = rtc_ray.primID + (intptr_t)rtcGetUserData(kernel_data.bvh.scene, rtc_ray.instID);
+				isect->object = rtc_ray.instID;
 			} else {
-				isect->prim = rtc_ray.primID;
+				isect->prim = rtc_ray.primID + (intptr_t)rtcGetUserData(kernel_data.bvh.scene, rtc_ray.geomID);
+				isect->object = OBJECT_NONE;
 			}
-			isect->object = rtc_ray.geomID;
-			isect->type = PRIMITIVE_TRIANGLE;
+			isect->type = kernel_tex_fetch(__prim_type, isect->prim);
 			return true;
 		}
 		return false;
@@ -284,22 +285,23 @@ ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg, const Ra
 		rtc_ray.tfar = ray->t;
 		rtc_ray.time = ray->time;
 		rtc_ray.mask = -1;
-		rtc_ray.geomID = rtc_ray.primID = RTC_INVALID_GEOMETRY_ID;
+		rtc_ray.geomID = rtc_ray.primID = rtc_ray.instID = RTC_INVALID_GEOMETRY_ID;
 		rtcIntersect(kernel_data.bvh.scene, rtc_ray);
 		if(rtc_ray.geomID != RTC_INVALID_GEOMETRY_ID && rtc_ray.primID != RTC_INVALID_GEOMETRY_ID) {
 			isect->u = 1.0f - rtc_ray.v - rtc_ray.u;
 			isect->v = rtc_ray.u;
 			isect->t = rtc_ray.tfar;
-			if(rtc_ray.geomID > 0) {
-				isect->prim = rtc_ray.primID + kernel_tex_fetch(__object_node, rtc_ray.geomID -1);
+			if(rtc_ray.instID != RTC_INVALID_GEOMETRY_ID) {
+				isect->prim = rtc_ray.primID + (intptr_t)rtcGetUserData(kernel_data.bvh.scene, rtc_ray.instID);
 			} else {
-				isect->prim = rtc_ray.primID;
+				isect->prim = rtc_ray.primID; //+ (intptr_t)rtcGetUserData(kernel_data.bvh.scene, rtc_ray.geomID);
 			}
-			isect->object = rtc_ray.geomID;
-			isect->type = PRIMITIVE_TRIANGLE;
+			isect->object = kernel_tex_fetch(__prim_object, isect->prim);
+			isect->type = kernel_tex_fetch(__prim_type, isect->prim);
 			*num_hits = 1;
 			return true;
 		}
+		*num_hits = 0;
 		return false;
 	}
 #endif
