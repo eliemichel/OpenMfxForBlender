@@ -452,6 +452,12 @@ static int eyedropper_exec(bContext *C, wmOperator *op)
 
 static int eyedropper_poll(bContext *C)
 {
+#if 1
+	// this is how this function was until sep 2016 -
+	// the now added check breaks the eye dropper button for cryptomattes
+	if (!CTX_wm_window(C)) return 0;
+	else return 1;
+#else
 	PointerRNA ptr;
 	PropertyRNA *prop;
 	int index_dummy;
@@ -466,6 +472,7 @@ static int eyedropper_poll(bContext *C)
 	}
 
 	return 0;
+#endif
 }
 
 void UI_OT_eyedropper_color(wmOperatorType *ot)
