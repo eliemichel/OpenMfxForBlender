@@ -1248,11 +1248,17 @@ class CyclesCurveRenderSettings(bpy.types.PropertyGroup):
     def unregister(cls):
         del bpy.types.Scene.cycles_curves
 
+def update_render_passes(self, context):
+        scene = context.scene
+        rd = scene.render
+        rl = rd.layers.active
+        rl.update_render_passes()
+
 class CyclesAOVSettings(bpy.types.PropertyGroup):
     @classmethod
     def register(cls):
-        cls.name = StringProperty(name="Name")
-        cls.type = EnumProperty(name="Type", items=enum_aov_types, default='COLOR')
+        cls.name = StringProperty(name="Name", update=update_render_passes)
+        cls.type = EnumProperty(name="Type", update=update_render_passes, items=enum_aov_types, default='COLOR')
 
 class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
     @classmethod
@@ -1266,21 +1272,25 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
                 name="Debug BVH Traversed Nodes",
                 description="Store Debug BVH Traversed Nodes pass",
                 default=False,
+                update=update_render_passes,
                 )
         cls.pass_debug_bvh_traversed_instances = BoolProperty(
                 name="Debug BVH Traversed Instances",
                 description="Store Debug BVH Traversed Instances pass",
                 default=False,
+                update=update_render_passes,
                 )
         cls.pass_debug_bvh_intersections = BoolProperty(
                 name="Debug BVH Intersections",
                 description="Store Debug BVH Intersections",
                 default=False,
+                update=update_render_passes,
                 )
         cls.pass_debug_ray_bounces = BoolProperty(
                 name="Debug Ray Bounces",
                 description="Store Debug Ray Bounces pass",
                 default=False,
+                update=update_render_passes,
                 )
         cls.aovs = bpy.props.CollectionProperty(type=CyclesAOVSettings)
         cls.active_aov = IntProperty(default=0)
@@ -1288,16 +1298,19 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
                 name="CryptoMatte Object",
                 description="CryptoMatte Object pass",
                 default=False,
+                update=update_render_passes,
                 )
         cls.use_pass_crypto_material = BoolProperty(
                 name="CryptoMatte Material",
                 description="CryptoMatte Material pass",
                 default=False,
+                update=update_render_passes,
                 )
         cls.pass_crypto_depth = IntProperty(
                 name="CryptoMatte Depth",
                 description="CryptoMatte Depth",
                 default=4, min=2, max=16, step=2,
+                update=update_render_passes,
                 )
     @classmethod
     def unregister(cls):

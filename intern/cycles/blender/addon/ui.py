@@ -502,6 +502,8 @@ class CyclesRender_AOV_add(bpy.types.Operator):
         crl = rl.cycles
 
         crl.aovs.add()
+
+        rl.update_render_passes()
         return {'FINISHED'}
 
 class CyclesRender_AOV_delete(bpy.types.Operator):
@@ -516,6 +518,8 @@ class CyclesRender_AOV_delete(bpy.types.Operator):
         crl = rl.cycles
 
         crl.aovs.remove(crl.active_aov)
+
+        rl.update_render_passes()
         return {'FINISHED'}
 
 class CyclesAOVList(bpy.types.UIList):
