@@ -118,6 +118,7 @@ public:
 
 	ImageManager *image_manager;
 	void *builtin_data;
+    int width;
 	string filename;
     std::vector<float4> points;
     

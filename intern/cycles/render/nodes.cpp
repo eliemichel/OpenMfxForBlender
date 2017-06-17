@@ -414,12 +414,15 @@ NODE_DEFINE(CurveTextureNode)
 {
 	NodeType* type = NodeType::add("curve_texture", create, NodeType::SHADER);
 
-	SOCKET_IN_POINT(vector, "Vector", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_TEXTURE_GENERATED);
+	TEXTURE_MAPPING_DEFINE(CurveTextureNode);
+
 	SOCKET_IN_POINT(curve_location, "CurveLocation", make_float3(0.0f, 0.0f, 0.0f));
 	SOCKET_IN_POINT(curve_scale, "CurveScale", make_float3(1.0f, 1.0f, 1.0f));
 	SOCKET_IN_FLOAT(line_thickness, "LineThickness", 0.01f);
     SOCKET_IN_COLOR(fill_color, "FillColor", make_float3(1.0f, 1.0f, 1.0f));
     SOCKET_IN_COLOR(background_color, "BackgroundColor", make_float3(0.0f, 0.0f, 0.0f));
+	SOCKET_IN_POINT(vector, "Vector", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_TEXTURE_GENERATED);
+
     SOCKET_OUT_COLOR(color, "Color");
 
 	return type;
@@ -432,6 +435,7 @@ CurveTextureNode::CurveTextureNode()
 	image_manager = NULL;
     builtin_data = NULL;
 	slot = -1;
+    width = 0;
 }
 
 CurveTextureNode::~CurveTextureNode()
@@ -485,6 +489,7 @@ void CurveTextureNode::compile(SVMCompiler& compiler)
 			curve_type
         )
     );
+	compiler.add_node(width,0,0,0);
 
 	tex_mapping.compile_end(compiler, vector_in, vector_offset);
 }

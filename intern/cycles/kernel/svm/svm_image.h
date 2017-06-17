@@ -371,7 +371,7 @@ ccl_device float minimum_distance(float2 v, float2 w, float2 p) {
     return len(p - projection);
 }
 
-ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
+ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, int *offset)
 {
     uint co_offset, fill_in_offset, background_in_offset, out_offset;
     uint curve_thickness_offset, curve_location_offset, curve_scale_offset;
@@ -379,11 +379,14 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 
     decode_node_uchar4(node.z, &co_offset, &fill_in_offset, &background_in_offset, &out_offset);
     decode_node_uchar4(node.w, &curve_thickness_offset, &curve_location_offset, &curve_scale_offset, &curve_type);
-
     uint slot = node.y;
 
+	uint4 node2 = read_node(kg, offset);
+	int width = node2.x;
+
+
     float4 f;
-    if (slot == (uint) -1) {
+    if (slot == (uint) -1 || width <= 0) {
         float3 background_color = stack_load_float3(stack, background_in_offset);
         f = make_float4(background_color.x, background_color.y, background_color.z, 1.0);
     } else {
@@ -395,14 +398,27 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
         float3 curve_location = stack_load_float3(stack, curve_location_offset);
         float3 curve_scale = stack_load_float3(stack, curve_scale_offset);
 
-		uint width = kg->texture_float4_images[slot>>3].width;//uint width = 49; /* THIS IS TEMPORARY!!! */
-
         float grad = 1.0;
+
+//        static bool display = false;
+//        if (display) {
+//            std::cout << "Slot: " << slot << std::endl;
+//            std::cout << " co: " << co.x << " " << co.y << " " << co.z << std::endl;
+//            std::cout << " fill_color: " << fill_color.x << " " << fill_color.y << " " << fill_color.z << std::endl;
+//            std::cout << " background_color: " << background_color.x << " " << background_color.y << " " << background_color.z << std::endl;
+//            std::cout << " curve_thickness: " << curve_thickness << std::endl;
+//            std::cout << " curve_location: " << curve_location.x << " " << curve_location.y << " " << curve_location.z << std::endl;
+//            std::cout << " curve_scale: " << curve_scale.x << " " << curve_scale.y << " " << curve_scale.z << std::endl;
+//        }
 
         for (int t = 0; t < width; ++t) {
             int t_next = (t+1)%width;
             float4 ls0 = svm_image_texture(kg, slot, (float)t/width,	  0.0, false, true);
             float4 ls1 = svm_image_texture(kg, slot, (float)t_next/width, 0.0, false, true);
+
+//            if (display) {
+//                std::cout << " ls0: " << ls0.x << "," << ls0.y << " ls1: " << ls1.x << "," << ls1.y << std::endl;
+//            }
 
             float2 p0,p1,co2;
             p0.x = ls0.x * curve_scale.x + curve_location.x;
@@ -417,6 +433,11 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 
                 if (minimum_distance(p0, p1, co2) < curve_thickness) {
                     grad = 0.0;
+
+//                    if (display) {
+//                        std::cout << "Found curve" << std::endl;
+//                    }
+
                     break;
                 }
 

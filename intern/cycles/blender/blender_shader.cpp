@@ -691,9 +691,10 @@ static ShaderNode *add_node(BlenderSync &sync,
                     IMB_freeImBuf(ibuf);
 
                     tex->builtin_data = image;
+                    tex->width = tex->points.size();
 
-                    if (tex->slot >= 0)
-                        scene->image_manager->remove_image(tex->slot);
+//                    if (tex->slot >= 0)
+//                        scene->image_manager->remove_image(tex->slot);
 
                     bool is_float_bool, linear;
                     tex->slot = scene->image_manager->add_image(tex->filename, tex->builtin_data,
