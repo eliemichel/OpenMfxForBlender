@@ -867,6 +867,9 @@ void ImageManager::device_free_image(Device *device, DeviceScene *dscene, ImageD
 			device_memory *tex_img = NULL;
 			switch(type) {
 				case IMAGE_DATA_TYPE_FLOAT4:
+					if (dscene->tex_float4_image.size() == 0) {
+						break;
+					}
 					tex_img = dscene->tex_float4_image[slot];
 					dscene->tex_float4_image[slot] = NULL;
 					break;
@@ -879,8 +882,11 @@ void ImageManager::device_free_image(Device *device, DeviceScene *dscene, ImageD
 					dscene->tex_byte_image[slot]= NULL;
 					break;
 				case IMAGE_DATA_TYPE_BYTE4:
+					if (dscene->tex_byte4_image.size() == 0) {
+						break;
+					}
 					tex_img = dscene->tex_byte4_image[slot];
-					dscene->tex_byte4_image[slot]= NULL;
+					dscene->tex_byte4_image[slot] = NULL;
 					break;
 				case IMAGE_DATA_TYPE_HALF:
 					tex_img = dscene->tex_half_image[slot];
