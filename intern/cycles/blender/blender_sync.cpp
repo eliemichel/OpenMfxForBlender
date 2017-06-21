@@ -213,6 +213,7 @@ void BlenderSync::sync_data(BL::RenderSettings& b_render,
 		sync_objects(b_v3d);
 	}
 
+    sync_recalc();
 	sync_shaders();
 
 	sync_motion(b_render,

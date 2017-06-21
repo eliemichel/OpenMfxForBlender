@@ -162,6 +162,7 @@ private:
 
     /* Shaders */
     void add_nodes( Scene *scene,
+                    Shader *shader,
                     BL::RenderEngine& b_engine,
                     BL::BlendData& b_data,
                     BL::Scene& b_scene,

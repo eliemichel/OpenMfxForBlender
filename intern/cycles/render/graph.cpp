@@ -594,6 +594,11 @@ void ShaderGraph::deduplicate_nodes()
 				}
 			}
 		}
+        /* Skip nodes with object deps */
+        if (node->has_object_dependency()) {
+			continue;
+        }
+
 		/* Only need to care about nodes that are actually used */
 		if(!has_output_links) {
 			continue;

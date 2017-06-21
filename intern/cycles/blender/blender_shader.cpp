@@ -245,6 +245,7 @@ static bool is_output_node(BL::Node& b_node)
 }
 
 static ShaderNode *add_node(BlenderSync &sync,
+                            Shader *shader,
                             Scene *scene,
                             BL::RenderEngine& b_engine,
                             BL::BlendData& b_data,
@@ -667,6 +668,8 @@ static ShaderNode *add_node(BlenderSync &sync,
         BL::Curve b_curve(b_curve_node.object());
 		CurveTextureNode *tex = new CurveTextureNode();
 
+        shader->has_object_dependency = true;
+
         tex->curve_type = b_curve_node.curve_type();
 
         if (b_curve) {
@@ -988,6 +991,7 @@ static ShaderOutput *node_find_output_by_name(ShaderNode *node,
 }
 
 static void add_nodes_recursive(  BlenderSync &sync,
+                        Shader *shader,
                         Scene *scene,
                         BL::RenderEngine& b_engine,
                         BL::BlendData& b_data,
@@ -1079,6 +1083,7 @@ static void add_nodes_recursive(  BlenderSync &sync,
 			
 			if(b_group_ntree) {
 				add_nodes_recursive(sync,
+                          shader,
                           scene,
 				          b_engine,
 				          b_data,
@@ -1129,6 +1134,7 @@ static void add_nodes_recursive(  BlenderSync &sync,
 			else {
 				BL::ShaderNode b_shader_node(*b_node);
 				node = add_node(sync,
+                                shader,
                                 scene,
 				                b_engine,
 				                b_data,
@@ -1193,6 +1199,7 @@ static void add_nodes_recursive(  BlenderSync &sync,
 }
 
 void BlenderSync::add_nodes(Scene *scene,
+                            Shader *shader,
                             BL::RenderEngine& b_engine,
                             BL::BlendData& b_data,
                             BL::Scene& b_scene,
@@ -1202,6 +1209,7 @@ void BlenderSync::add_nodes(Scene *scene,
 {
 	static const ProxyMap empty_proxy_map;
 	add_nodes_recursive(*this,
+              shader,
               scene,
 	          b_engine,
 	          b_data,
@@ -1236,7 +1244,7 @@ void BlenderSync::sync_materials(bool update_all)
 			if(b_mat->use_nodes() && b_mat->node_tree()) {
 				BL::ShaderNodeTree b_ntree(b_mat->node_tree());
 
-				add_nodes(scene, b_engine, b_data, b_scene, !preview, graph, b_ntree);
+				add_nodes(scene, shader, b_engine, b_data, b_scene, !preview, graph, b_ntree);
 			}
 			else {
 				DiffuseBsdfNode *diffuse = new DiffuseBsdfNode();
@@ -1292,7 +1300,7 @@ void BlenderSync::sync_world(bool update_all)
 		if(b_world && b_world.use_nodes() && b_world.node_tree()) {
 			BL::ShaderNodeTree b_ntree(b_world.node_tree());
 
-			add_nodes(scene, b_engine, b_data, b_scene, !preview, graph, b_ntree);
+			add_nodes(scene, shader, b_engine, b_data, b_scene, !preview, graph, b_ntree);
 
 			/* volume */
 			PointerRNA cworld = RNA_pointer_get(&b_world.ptr, "cycles");
@@ -1393,7 +1401,7 @@ void BlenderSync::sync_lamps(bool update_all)
 
 				BL::ShaderNodeTree b_ntree(b_lamp->node_tree());
 
-				add_nodes(scene, b_engine, b_data, b_scene, !preview, graph, b_ntree);
+				add_nodes(scene, shader, b_engine, b_data, b_scene, !preview, graph, b_ntree);
 			}
 			else {
 				float strength = 1.0f;
