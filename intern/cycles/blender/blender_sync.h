@@ -69,6 +69,7 @@ public:
 	~BlenderSync();
 
 	/* sync */
+	bool sync_recalc_materials();
 	bool sync_recalc();
 	void sync_data(BL::RenderSettings& b_render,
 	               BL::SpaceView3D& b_v3d,
