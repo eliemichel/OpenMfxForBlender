@@ -95,6 +95,8 @@ bool BlenderSync::sync_recalc_materials()
 			}
 		}
 	}
+
+    return shader_map.has_recalc();
 }
 
 bool BlenderSync::sync_recalc()
