@@ -55,6 +55,9 @@ protected:
 	unsigned add_triangles(Mesh *mesh, int i);
 
 	ssize_t mem_used;
+
+	void add_delayed_delete_scene(RTCScene scene) { delayed_delete_scenes.push_back(scene); }
+	BVHEmbree *top_level;
 private:
 	void delete_rtcScene();
 	void update_tri_vertex_buffer(unsigned geom_id, const Mesh* mesh);
@@ -65,6 +68,7 @@ private:
 	static thread_mutex rtc_shared_mutex;
 
 	Stats *stats;
+	vector<RTCScene> delayed_delete_scenes;
 };
 
 CCL_NAMESPACE_END

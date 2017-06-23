@@ -180,7 +180,7 @@ int BVHEmbree::rtc_shared_users = 0;
 thread_mutex BVHEmbree::rtc_shared_mutex;
 
 BVHEmbree::BVHEmbree(const BVHParams& params_, const vector<Object*>& objects_)
-: BVH(params_, objects_), scene(NULL), mem_used(0), stats(NULL)
+: BVH(params_, objects_), scene(NULL), mem_used(0), stats(NULL), top_level(NULL)
 {
 	_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
 	_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
@@ -210,7 +210,20 @@ BVHEmbree::~BVHEmbree()
 void BVHEmbree::delete_rtcScene()
 {
 	if(scene) {
-		rtcDeleteScene(scene);
+		/* When this BVH is used as an instance in a top level BVH, don't delete now
+		 * Let the top_level BVH know that it should delete it later */
+		if(top_level) {
+			top_level->add_delayed_delete_scene(scene);
+		}
+		else {
+			rtcDeleteScene(scene);
+			if(delayed_delete_scenes.size()) {
+				foreach(RTCScene s, delayed_delete_scenes) {
+					rtcDeleteScene(s);
+				}
+			}
+			delayed_delete_scenes.clear();
+		}
 		scene = NULL;
 	}
 }
@@ -321,6 +334,10 @@ unsigned BVHEmbree::add_instance(Object *ob, int i)
 		return RTC_INVALID_GEOMETRY_ID;
 	}
 	BVHEmbree *instance_bvh = (BVHEmbree*)(ob->mesh->bvh);
+
+	if(instance_bvh->top_level != this) {
+		instance_bvh->top_level = this;
+	}
 
 	const size_t num_motion_steps = ob->use_motion ? 3 : 1;
 	unsigned geom_id = rtcNewInstance3(scene, instance_bvh->scene, num_motion_steps, i*2);
