@@ -133,7 +133,6 @@ void rtc_filter_func(void* userDataPtr, RTCRay& ray_)
 			Intersection *isect = &ray.isect_s[ray.num_hits];
 			ray.num_hits++;
 			ray.isect_to_ccl(isect);
-			int prim = kernel_tex_fetch(__prim_index, isect->prim);
 			/* only primitives from volume object */
 			uint tri_object = kernel_tex_fetch(__prim_object, isect->prim);
 			int object_flag = kernel_tex_fetch(__object_flag, tri_object);

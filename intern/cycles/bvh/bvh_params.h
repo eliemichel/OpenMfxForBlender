@@ -102,6 +102,7 @@ public:
 		top_level = false;
 		use_qbvh = false;
 		use_unaligned_nodes = false;
+		use_bvh_embree = false;
 
 		primitive_mask = PRIMITIVE_ALL;
 

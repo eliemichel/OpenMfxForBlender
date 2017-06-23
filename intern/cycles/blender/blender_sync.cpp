@@ -510,7 +510,12 @@ SceneParams BlenderSync::get_scene_params(BL::Scene& b_scene,
 	params.use_bvh_spatial_split = RNA_boolean_get(&cscene, "debug_use_spatial_splits");
 	params.use_bvh_unaligned_nodes = RNA_boolean_get(&cscene, "debug_use_hair_bvh");
 	params.num_bvh_time_steps = RNA_int_get(&cscene, "debug_bvh_time_steps");
-	params.use_bvh_embree = RNA_int_get(&cscene, "use_bvh_embree");
+	if(is_cpu) {
+		params.use_bvh_embree = RNA_int_get(&cscene, "use_bvh_embree");
+	}
+	else {
+		params.use_bvh_embree = false;
+	}
 
 	if(background && params.shadingsystem != SHADINGSYSTEM_OSL)
 		params.persistent_data = r.use_persistent_data();
