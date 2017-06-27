@@ -51,7 +51,9 @@ CCL_NAMESPACE_BEGIN
  * Cycles' own BVH does that directly inside the traversal calls.
  */
 
-void rtc_filter_func(void* userDataPtr, RTCRay& ray_)
+
+void rtc_filter_func(void*, RTCRay& ray_);
+void rtc_filter_func(void*, RTCRay& ray_)
 {
 	CCLRay &ray = (CCLRay&)ray_;
 	KernelGlobals *kg = ray.kg;
@@ -147,8 +149,8 @@ void rtc_filter_func(void* userDataPtr, RTCRay& ray_)
 	}
  	return;
 }
-
-bool rtc_memory_monitor_func(void* userPtr, const ssize_t bytes, const bool post)
+bool rtc_memory_monitor_func(void* userPtr, const ssize_t bytes, const bool post);
+bool rtc_memory_monitor_func(void* userPtr, const ssize_t bytes, const bool)
 {
 	BVHEmbree *bvh = (BVHEmbree*)userPtr;
 	if(bvh) {
@@ -159,6 +161,7 @@ bool rtc_memory_monitor_func(void* userPtr, const ssize_t bytes, const bool post
 
 static double progress_start_time = 0.0f;
 
+bool rtc_progress_func(void* user_ptr, const double n);
 bool rtc_progress_func(void* user_ptr, const double n)
 {
 	Progress *progress = (Progress*)user_ptr;
@@ -180,7 +183,7 @@ int BVHEmbree::rtc_shared_users = 0;
 thread_mutex BVHEmbree::rtc_shared_mutex;
 
 BVHEmbree::BVHEmbree(const BVHParams& params_, const vector<Object*>& objects_)
-: BVH(params_, objects_), scene(NULL), mem_used(0), stats(NULL), top_level(NULL)
+: BVH(params_, objects_), scene(NULL), mem_used(0), top_level(NULL), stats(NULL)
 {
 	_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
 	_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
@@ -262,24 +265,22 @@ void BVHEmbree::build(Progress& progress, Stats *stats_)
 	pack.object_node.clear();
 
 	foreach(Object *ob, objects) {
-		unsigned geom_id;
-
 		if(params.top_level) {
 			if(!ob->is_traceable()) {
 				++i;
 				continue;
 			}
-			if(!ob->mesh->is_instanced())
-				geom_id = add_object(ob, i);
-			else
-				geom_id = add_instance(ob, i);
-
+			if(!ob->mesh->is_instanced()) {
+				add_object(ob, i);
+			}
+			else {
+				add_instance(ob, i);
+			}
 		}
-		else
-			geom_id = add_object(ob, i);
-
-		i++;
-
+		else {
+			add_object(ob, i);
+		}
+		++i;
 		if(progress.get_cancel()) return;
 	}
 
@@ -610,7 +611,7 @@ unsigned BVHEmbree::add_curves(Mesh *mesh, int i)
 	return geom_id;
 }
  
-void BVHEmbree::pack_nodes(const BVHNode *root)
+void BVHEmbree::pack_nodes(const BVHNode *)
 {
 	if(!params.top_level) {
 		return;
