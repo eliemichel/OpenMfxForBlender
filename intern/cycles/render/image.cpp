@@ -29,7 +29,7 @@
 #endif
 
 #include "kernel_oiio_globals.h"
-#include <OpenImageIO/ImageBufAlgo.h>
+#include <OpenImageIO/imagebufalgo.h>
 
 CCL_NAMESPACE_BEGIN
 

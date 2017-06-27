@@ -23,6 +23,8 @@
 #  include <OSL/oslexec.h>
 #endif
 
+#include <OpenImageIO/texture.h>
+
 #include "attribute.h"
 #include "kernel_types.h"
 

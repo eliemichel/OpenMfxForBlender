@@ -31,7 +31,6 @@
 
 #include "util_foreach.h"
 #include "kernel_oiio_globals.h"
-#include <OpenImageIO/texture.h>
 
 CCL_NAMESPACE_BEGIN
 
