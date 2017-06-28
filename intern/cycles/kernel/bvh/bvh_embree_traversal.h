@@ -38,9 +38,9 @@ struct RTCORE_ALIGN(16) CCLRay : public RTCRay {
 	// for SSS Rays:
 	ccl::SubsurfaceIntersection *ss_isect;
 	int sss_object_id;
-	uint *lcg_state;
+	ccl::uint *lcg_state;
 
-	CCLRay(const ccl::Ray& ray, ccl::KernelGlobals *kg_, const uint visibility, RayType type_)
+	CCLRay(const ccl::Ray& ray, ccl::KernelGlobals *kg_, const ccl::uint visibility, RayType type_)
 	{
 		org[0] = ray.P.x;
 		org[1] = ray.P.y;
