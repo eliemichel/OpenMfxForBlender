@@ -701,6 +701,9 @@ void ImageManager::device_load_image(Device *device,
 		}
 	}
 	else if(type == IMAGE_DATA_TYPE_FLOAT) {
+		if (slot >= dscene->tex_float_image.size()) {
+			return;
+		}
 		if(dscene->tex_float_image[slot] == NULL)
 			dscene->tex_float_image[slot] = new device_vector<float>();
 		device_vector<float>& tex_img = *dscene->tex_float_image[slot];
@@ -730,6 +733,9 @@ void ImageManager::device_load_image(Device *device,
 		}
 	}
 	else if(type == IMAGE_DATA_TYPE_BYTE4) {
+		if (slot >= dscene->tex_byte4_image.size()) {
+			return;
+		}
 		if(dscene->tex_byte4_image[slot] == NULL)
 			dscene->tex_byte4_image[slot] = new device_vector<uchar4>();
 		device_vector<uchar4>& tex_img = *dscene->tex_byte4_image[slot];
@@ -761,7 +767,10 @@ void ImageManager::device_load_image(Device *device,
 			                  img->extension);
 		}
 	}
-	else if(type == IMAGE_DATA_TYPE_BYTE){
+	else if(type == IMAGE_DATA_TYPE_BYTE) {
+		if (slot >= dscene->tex_byte_image.size()) {
+			return;
+		}
 		if(dscene->tex_byte_image[slot] == NULL)
 			dscene->tex_byte_image[slot] = new device_vector<uchar>();
 		device_vector<uchar>& tex_img = *dscene->tex_byte_image[slot];
@@ -790,6 +799,9 @@ void ImageManager::device_load_image(Device *device,
 		}
 	}
 	else if(type == IMAGE_DATA_TYPE_HALF4){
+		if (slot >= dscene->tex_half4_image.size()) {
+			return;
+		}
 		if(dscene->tex_half4_image[slot] == NULL)
 			dscene->tex_half4_image[slot] = new device_vector<half4>();
 		device_vector<half4>& tex_img = *dscene->tex_half4_image[slot];
@@ -821,6 +833,9 @@ void ImageManager::device_load_image(Device *device,
 		}
 	}
 	else if(type == IMAGE_DATA_TYPE_HALF){
+		if (slot >= dscene->tex_half_image.size()) {
+			return;
+		}
 		if(dscene->tex_half_image[slot] == NULL)
 			dscene->tex_half_image[slot] = new device_vector<half>();
 		device_vector<half>& tex_img = *dscene->tex_half_image[slot];
