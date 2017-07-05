@@ -57,6 +57,7 @@ public:
 	                      ExtensionType extension);
 	ImageDataType get_image_metadata(const string& filename, void *builtin_data, bool& is_linear);
 
+	void device_prepare_update(DeviceScene *dscene);
 	void device_update(Device *device,
 	                   DeviceScene *dscene,
 	                   Scene *scene,
