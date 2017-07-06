@@ -429,6 +429,9 @@ void ShaderManager::device_update_common(Device *device,
 			ts->attribute("accept_unmipped", scene->params.texture_accept_unmipped ? 1 : 0);
 			ts->attribute("accept_untiled", scene->params.texture_accept_untiled ? 1 : 0);
 			ts->attribute("max_memory_MB", scene->params.texture_cache_size > 0 ? (float)scene->params.texture_cache_size : 16384.0f);
+			ts->attribute("latlong_up", "z");
+			ts->attribute("flip_t", 1);
+			ts->attribute("max_tile_channels", 1);
 			oiio_globals->tex_sys = ts;
 		}
 	}

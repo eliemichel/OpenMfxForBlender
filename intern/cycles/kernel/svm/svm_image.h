@@ -53,14 +53,15 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 		if(path_flag & NEAREST_LOOKUP_PATHS) {
 			options.interpmode = OIIO::TextureOpt::InterpClosest;
 			options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
-			if(path_flag & BLUR_LOOKUP_PATHS)
+			if(path_flag & BLUR_LOOKUP_PATHS) {
 				options.sblur = options.tblur = 1.f/64.f;
+			}
 		}
 		else {
 			options.interpmode = kg->oiio->textures[id].interpolation;
 			options.mipmode = OIIO::TextureOpt::MipModeAniso;
 		}
-		bool success = kg->oiio->tex_sys->texture(kg->oiio->textures[id].handle, (OIIO::TextureSystem::Perthread*)kg->oiio_tdata, options, x, 1.0f - y, ds.dx, ds.dy, dt.dx, dt.dy, 4, (float*)&r);
+		bool success = kg->oiio->tex_sys->texture(kg->oiio->textures[id].handle, (OIIO::TextureSystem::Perthread*)kg->oiio_tdata, options, x, y, ds.dx, ds.dy, dt.dx, dt.dy, 4, (float*)&r);
 		if(!success) {
 			(void) kg->oiio->tex_sys->geterror();
 		} else {

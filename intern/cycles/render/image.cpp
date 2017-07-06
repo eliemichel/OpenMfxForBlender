@@ -1320,6 +1320,10 @@ bool ImageManager::make_tx(Image *image, Progress *progress)
 	
 	ImageSpec config;
 	config.attribute("maketx:filtername", "lanczos3");
+	config.attribute("maketx:opaque_detect", 1);
+	config.attribute("maketx:highlightcomp", 1);
+	config.attribute("maketx:updatemode", 1);
+	config.attribute("maketx:oiio_options", 1);
 	if(image->srgb) {
 		config.attribute("maketx:incolorspace", "sRGB");
 		config.attribute("maketx:outcolorspace", "linear");
