@@ -72,8 +72,8 @@ ExportSettings::ExportSettings()
     , renderable_only(false)
     , frame_start(1)
     , frame_end(1)
-    , frame_step_xform(1)
-    , frame_step_shape(1)
+    , frame_samples_xform(1)
+    , frame_samples_shape(1)
     , shutter_open(0.0)
     , shutter_close(1.0)
     , global_scale(1.0f)
@@ -108,7 +108,7 @@ static bool object_is_smoke_sim(Object *ob)
 	return false;
 }
 
-static bool object_is_shape(Object *ob)
+static bool object_type_is_exportable(Object *ob)
 {
 	switch (ob->type) {
 		case OB_MESH:
@@ -117,6 +117,7 @@ static bool object_is_shape(Object *ob)
 			}
 
 			return true;
+		case OB_EMPTY:
 		case OB_CURVE:
 		case OB_SURF:
 		case OB_CAMERA:
@@ -188,60 +189,55 @@ AbcExporter::~AbcExporter()
 	delete m_writer;
 }
 
-void AbcExporter::getShutterSamples(double step, bool time_relative,
+void AbcExporter::getShutterSamples(unsigned int nr_of_samples, 
+									bool time_relative,
                                     std::vector<double> &samples)
 {
+	Scene *scene = m_scene; /* for use in the FPS macro */
 	samples.clear();
 
-	const double time_factor = time_relative ? m_scene->r.frs_sec : 1.0;
-	const double shutter_open = m_settings.shutter_open;
-	const double shutter_close = m_settings.shutter_close;
+	unsigned int frame_offset = time_relative ? m_settings.frame_start : 0;
+	double time_factor = time_relative ? FPS : 1.0;
+	double shutter_open = m_settings.shutter_open;
+	double shutter_close = m_settings.shutter_close;
+	double time_inc = (shutter_close - shutter_open) / nr_of_samples;
 
 	/* sample all frame */
-	if (shutter_open == 0.0 && shutter_close == 1.0) {
-		for (double t = 0.0; t < 1.0; t += step) {
-			samples.push_back((t + m_settings.frame_start) / time_factor);
-		}
-	}
-	else {
-		/* sample between shutter open & close */
-		const int nsamples = static_cast<int>(std::max((1.0 / step) - 1.0, 1.0));
-		const double time_inc = (shutter_close - shutter_open) / nsamples;
-
-		for (double t = shutter_open; t <= shutter_close; t += time_inc) {
-			samples.push_back((t + m_settings.frame_start) / time_factor);
-		}
+	for (int sample = 0; sample < nr_of_samples; ++sample) {
+		double sample_time = shutter_open + time_inc * sample;
+		double time = (frame_offset + sample_time) / time_factor;
+		samples.push_back(time);
 	}
 }
 
 Alembic::Abc::TimeSamplingPtr AbcExporter::createTimeSampling(double step)
 {
-	TimeSamplingPtr time_sampling;
 	std::vector<double> samples;
 
 	if (m_settings.frame_start == m_settings.frame_end) {
-		time_sampling.reset(new Alembic::Abc::TimeSampling());
-		return time_sampling;
+		return TimeSamplingPtr(new Alembic::Abc::TimeSampling());
 	}
 
 	getShutterSamples(step, true, samples);
 
-	Alembic::Abc::TimeSamplingType ts(static_cast<uint32_t>(samples.size()), 1.0 / m_scene->r.frs_sec);
-	time_sampling.reset(new Alembic::Abc::TimeSampling(ts, samples));
+	Alembic::Abc::TimeSamplingType ts(
+		static_cast<uint32_t>(samples.size()), 
+		1.0 / m_scene->r.frs_sec);
 
-	return time_sampling;
+	return TimeSamplingPtr(new Alembic::Abc::TimeSampling(ts, samples));
 }
 
-void AbcExporter::getFrameSet(double step, std::set<double> &frames)
+void AbcExporter::getFrameSet(unsigned int nr_of_samples, 
+							  std::set<double> &frames)
 {
 	frames.clear();
 
 	std::vector<double> shutter_samples;
 
-	getShutterSamples(step, false, shutter_samples);
+	getShutterSamples(nr_of_samples, false, shutter_samples);
 
 	for (double frame = m_settings.frame_start; frame <= m_settings.frame_end; frame += 1.0) {
-		for (int j = 0, e = shutter_samples.size(); j < e; ++j) {
+		for (size_t j = 0; j < nr_of_samples; ++j) {
 			frames.insert(frame + shutter_samples[j]);
 		}
 	}
@@ -273,20 +269,20 @@ void AbcExporter::operator()(Main *bmain, float &progress, bool &was_canceled)
 
 	/* Create time samplings for transforms and shapes. */
 
-	TimeSamplingPtr trans_time = createTimeSampling(m_settings.frame_step_xform);
+	TimeSamplingPtr trans_time = createTimeSampling(m_settings.frame_samples_xform);
 
 	m_trans_sampling_index = m_writer->archive().addTimeSampling(*trans_time);
 
 	TimeSamplingPtr shape_time;
 
-	if ((m_settings.frame_step_shape == m_settings.frame_step_xform) ||
+	if ((m_settings.frame_samples_shape == m_settings.frame_samples_xform) ||
 	    (m_settings.frame_start == m_settings.frame_end))
 	{
 		shape_time = trans_time;
 		m_shape_sampling_index = m_trans_sampling_index;
 	}
 	else {
-		shape_time = createTimeSampling(m_settings.frame_step_shape);
+		shape_time = createTimeSampling(m_settings.frame_samples_shape);
 		m_shape_sampling_index = m_writer->archive().addTimeSampling(*shape_time);
 	}
 
@@ -298,13 +294,12 @@ void AbcExporter::operator()(Main *bmain, float &progress, bool &was_canceled)
 	/* Make a list of frames to export. */
 
 	std::set<double> xform_frames;
-	getFrameSet(m_settings.frame_step_xform, xform_frames);
+	getFrameSet(m_settings.frame_samples_xform, xform_frames);
 
 	std::set<double> shape_frames;
-	getFrameSet(m_settings.frame_step_shape, shape_frames);
+	getFrameSet(m_settings.frame_samples_shape, shape_frames);
 
 	/* Merge all frames needed. */
-
 	std::set<double> frames(xform_frames);
 	frames.insert(shape_frames.begin(), shape_frames.end());
 
@@ -327,7 +322,7 @@ void AbcExporter::operator()(Main *bmain, float &progress, bool &was_canceled)
 		const double frame = *begin;
 
 		/* 'frame' is offset by start frame, so need to cancel the offset. */
-		setCurrentFrame(bmain, frame - m_settings.frame_start);
+		setCurrentFrame(bmain, frame);
 
 		if (shape_frames.count(frame) != 0) {
 			for (int i = 0, e = m_shapes.size(); i != e; ++i) {
@@ -387,7 +382,7 @@ void AbcExporter::exploreTransform(EvaluationContext *eval_ctx, Object *ob, Obje
 		return;
 	}
 
-	if (object_is_shape(ob)) {
+	if (object_type_is_exportable(ob)) {
 		createTransformWriter(ob, parent, dupliObParent);
 	}
 
@@ -552,7 +547,7 @@ void AbcExporter::createParticleSystemsWriters(Object *ob, AbcTransformWriter *x
 
 void AbcExporter::createShapeWriter(Object *ob, Object *dupliObParent)
 {
-	if (!object_is_shape(ob)) {
+	if (!object_type_is_exportable(ob)) {
 		return;
 	}
 
@@ -579,7 +574,7 @@ void AbcExporter::createShapeWriter(Object *ob, Object *dupliObParent)
 		{
 			Mesh *me = static_cast<Mesh *>(ob->data);
 
-			if (!me || me->totvert == 0) {
+			if (!me) {
 				return;
 			}
 

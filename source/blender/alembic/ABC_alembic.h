@@ -47,8 +47,8 @@ struct AlembicExportParams {
 	double frame_start;
 	double frame_end;
 
-	double frame_step_xform;
-	double frame_step_shape;
+	unsigned int frame_samples_xform;
+	unsigned int frame_samples_shape;
 
 	double shutter_open;
 	double shutter_close;
@@ -121,6 +121,7 @@ struct DerivedMesh *ABC_read_mesh(struct CacheReader *reader,
                                   const char **err_str,
                                   int flags);
 
+void CacheReader_incref(struct CacheReader *reader);
 void CacheReader_free(struct CacheReader *reader);
 
 struct CacheReader *CacheReader_open_alembic_object(struct AbcArchiveHandle *handle,

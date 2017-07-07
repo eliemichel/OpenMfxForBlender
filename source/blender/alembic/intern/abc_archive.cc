@@ -24,9 +24,15 @@
 
 #include "abc_archive.h"
 
+extern "C"
+{
+	#include "BKE_blender_version.h"
+}
+
 #ifdef WIN32
 #  include "utfconv.h"
 #endif
+#include <fstream>
 
 using Alembic::Abc::Exception;
 using Alembic::Abc::ErrorHandler;
@@ -63,6 +69,26 @@ static IArchive open_archive(const std::string &filename,
 			return IArchive();
 		}
 #else
+		/* Inspect the file to see whether it's really a HDF5 file. */
+		char header[4];  /* char(0x89) + "HDF" */
+		std::ifstream the_file(filename.c_str(), std::ios::in | std::ios::binary);
+		if (!the_file) {
+			std::cerr << "Unable to open " << filename << std::endl;
+		}
+		else if (!the_file.read(header, sizeof(header))) {
+			std::cerr << "Unable to read from " << filename << std::endl;
+		}
+		else if (strncmp(header + 1, "HDF", 3)) {
+			std::cerr << filename << " has an unknown file format, unable to read." << std::endl;
+		}
+		else {
+			is_hdf5 = true;
+			std::cerr << filename << " is in the obsolete HDF5 format, unable to read." << std::endl;
+		}
+
+		if (the_file.is_open()) {
+			the_file.close();
+		}
 		return IArchive();
 #endif
 	}
@@ -83,14 +109,18 @@ ArchiveReader::ArchiveReader(const char *filename)
 
 	m_streams.push_back(&m_infile);
 
-	bool is_hdf5;
-	m_archive = open_archive(filename, m_streams, is_hdf5);
+	m_archive = open_archive(filename, m_streams, m_is_hdf5);
 
 	/* We can't open an HDF5 file from a stream, so close it. */
-	if (is_hdf5) {
+	if (m_is_hdf5) {
 		m_infile.close();
 		m_streams.clear();
 	}
+}
+
+bool ArchiveReader::is_hdf5() const
+{
+	return m_is_hdf5;
 }
 
 bool ArchiveReader::valid() const
@@ -115,6 +145,7 @@ static OArchive create_archive(std::ostream *ostream,
 {
 	md.set(Alembic::Abc::kApplicationNameKey, "Blender");
 	md.set(Alembic::Abc::kUserDescriptionKey, scene_name);
+	md.set("blender_version", versionstr);
 
 	time_t raw_time;
 	time(&raw_time);

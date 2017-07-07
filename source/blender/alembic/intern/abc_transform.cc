@@ -36,6 +36,7 @@ extern "C" {
 
 using Alembic::AbcGeom::OObject;
 using Alembic::AbcGeom::OXform;
+using Alembic::Abc::ISampleSelector;
 
 /* ************************************************************************** */
 
@@ -107,6 +108,7 @@ void AbcTransformWriter::do_write()
 		scale_m4_fl(scale_mat, m_settings.global_scale);
 		scale_mat[3][3] = m_settings.global_scale;  /* also scale translation */
 		mul_m4_m4m4(yup_mat, yup_mat, scale_mat);
+		yup_mat[3][3] /= m_settings.global_scale; /* normalise the homogenous component */
 	}
 
 	m_matrix = convert_matrix(yup_mat);
@@ -153,7 +155,24 @@ bool AbcEmptyReader::valid() const
 	return m_schema.valid();
 }
 
-void AbcEmptyReader::readObjectData(Main *bmain, float /*time*/)
+bool AbcEmptyReader::accepts_object_type(const Alembic::AbcCoreAbstract::ObjectHeader &alembic_header,
+	const Object *const ob,
+	const char **err_str) const
+{
+	if (!Alembic::AbcGeom::IXform::matches(alembic_header)) {
+		*err_str = "Object type mismatch, Alembic object path pointed to XForm when importing, but not any more.";
+		return false;
+	}
+
+	if (ob->type != OB_EMPTY) {
+		*err_str = "Object type mismatch, Alembic object path points to XForm.";
+		return false;
+	}
+
+	return true;
+}
+
+void AbcEmptyReader::readObjectData(Main *bmain, const ISampleSelector &UNUSED(sample_sel))
 {
 	m_object = BKE_object_add_only_object(bmain, OB_EMPTY,
 	                                      m_object_name.c_str());

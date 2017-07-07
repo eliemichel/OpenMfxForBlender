@@ -64,11 +64,11 @@ AbcObjectWriter::AbcObjectWriter(Scene *scene,
                                  uint32_t time_sampling,
                                  ExportSettings &settings,
                                  AbcObjectWriter *parent)
-    : m_object(ob)
-    , m_settings(settings)
-    , m_scene(scene)
-    , m_time_sampling(time_sampling)
-    , m_first_frame(true)
+: m_object(ob)
+, m_settings(settings)
+, m_scene(scene)
+, m_time_sampling(time_sampling)
+, m_first_frame(true)
 {
 	m_name = get_id_name(m_object) + "Shape";
 
@@ -118,16 +118,16 @@ void AbcObjectWriter::write()
 /* ************************************************************************** */
 
 AbcObjectReader::AbcObjectReader(const IObject &object, ImportSettings &settings)
-    : m_name("")
-    , m_object_name("")
-    , m_data_name("")
-    , m_object(NULL)
-    , m_iobject(object)
-    , m_settings(&settings)
-    , m_min_time(std::numeric_limits<chrono_t>::max())
-    , m_max_time(std::numeric_limits<chrono_t>::min())
-    , m_refcount(0)
-    , parent_reader(NULL)
+	: m_name("")
+	, m_object_name("")
+	, m_data_name("")
+	, m_object(NULL)
+	, m_iobject(object)
+	, m_settings(&settings)
+	, m_min_time(std::numeric_limits<chrono_t>::max())
+	, m_max_time(std::numeric_limits<chrono_t>::min())
+	, m_refcount(0)
+	, parent_reader(NULL)
 {
 	m_name = object.getFullName();
 	std::vector<std::string> parts;
@@ -158,6 +158,14 @@ Object *AbcObjectReader::object() const
 void AbcObjectReader::object(Object *ob)
 {
 	m_object = ob;
+}
+
+DerivedMesh *AbcObjectReader::read_derivedmesh(DerivedMesh *dm,
+											   const Alembic::Abc::ISampleSelector &UNUSED(sample_sel),
+											   int UNUSED(read_flag),
+											   const char **UNUSED(err_str))
+{
+	return dm;
 }
 
 static Imath::M44d blend_matrices(const Imath::M44d &m0, const Imath::M44d &m1, const float weight)
@@ -362,4 +370,5 @@ void AbcObjectReader::incref()
 void AbcObjectReader::decref()
 {
 	--m_refcount;
+	BLI_assert(m_refcount >= 0);
 }
