@@ -28,6 +28,7 @@
 
 #include "util_debug.h"
 #include "util_string.h"
+#include "util_hash.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -683,9 +684,16 @@ static ShaderNode *add_node(BlenderSync &sync,
                 Mesh* mesh = sync.mesh_map.find(key);
 
                 if (mesh) {
+
+                    // Hash points
+                    uint hash = 0;
+                    for (auto i = tex->points.begin(); i != tex->points.end(); ++i) {
+                        hash ^= hash_int_2d(__float_as_uint(i->x),__float_as_uint(i->y));
+                    }
+
                     // Build a texture with triangles
                     int scene_frame = b_scene.frame_current();
-                    tex->filename = b_curve.name() + "Curve@" + string_printf("%d", scene_frame);
+                    tex->filename = b_curve.name() + "Curve@" + string_printf("%d-%d", scene_frame, hash);
                     tex->points = CurveToLineSegments(mesh);
 
                     ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
