@@ -685,6 +685,8 @@ static ShaderNode *add_node(BlenderSync &sync,
 
                 if (mesh) {
 
+                    tex->points = CurveToLineSegments(mesh);
+
                     // Hash points
                     uint hash = 0;
                     for (auto i = tex->points.begin(); i != tex->points.end(); ++i) {
@@ -694,7 +696,6 @@ static ShaderNode *add_node(BlenderSync &sync,
                     // Build a texture with triangles
                     int scene_frame = b_scene.frame_current();
                     tex->filename = b_curve.name() + "Curve@" + string_printf("%d-%d", scene_frame, hash);
-                    tex->points = CurveToLineSegments(mesh);
 
                     ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
                     ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));
