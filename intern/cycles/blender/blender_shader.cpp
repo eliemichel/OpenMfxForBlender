@@ -43,6 +43,8 @@ std::vector<float4> CurveToLineSegments(Mesh* mesh);
 
 extern "C" {
 struct Image *BKE_image_add_from_imbuf(struct ImBuf *ibuf, const char *name);
+void BKE_image_free(struct Image *image);
+void BKE_libblock_free_ex(Main *bmain, void *idv, const bool do_id_user, const bool do_ui_user);
 }
 
 /* Find */
@@ -651,6 +653,7 @@ static ShaderNode *add_node(BlenderSync &sync,
 				scene->image_manager->tag_reload_image(
 				        image->filename.string(),
 				        image->builtin_data,
+                        boost::shared_ptr<uint8_t>(),
 				        get_image_interpolation(b_image_node),
 				        get_image_extension(b_image_node));
 			}
@@ -686,6 +689,7 @@ static ShaderNode *add_node(BlenderSync &sync,
                 if (mesh) {
 
                     tex->points = CurveToLineSegments(mesh);
+                    tex->width = tex->points.size();
 
                     // Hash points
                     uint hash = 0;
@@ -694,22 +698,34 @@ static ShaderNode *add_node(BlenderSync &sync,
                     }
 
                     // Build a texture with triangles
+
+//                    // Cleanup old data
+//                    if (tex->slot >= 0) {
+//                        scene->image_manager->remove_image(tex->slot);
+//                    }
+
                     int scene_frame = b_scene.frame_current();
                     tex->filename = b_curve.name() + "Curve@" + string_printf("%d-%d", scene_frame, hash);
 
-                    ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
-                    ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));
-                    Image *image = BKE_image_add_from_imbuf(ibuf, tex->filename.c_str());
-                    IMB_freeImBuf(ibuf);
 
-                    tex->builtin_data = image;
-                    tex->width = tex->points.size();
+                    ImageManager::InternalImageHeader header;
+                    header.width = tex->width;
+                    header.height = 1;
 
-                    if (tex->slot >= 0)
-                        scene->image_manager->remove_image(tex->slot);
+//                    ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
+//                    ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));
+//                    Image *image = BKE_image_add_from_imbuf(ibuf, tex->filename.c_str());
+//                    IMB_freeImBuf(ibuf);    // Drop reference to ibuf so that the image owns it
+
+                    uint data_size = sizeof(ImageManager::InternalImageHeader) + tex->points.size() * sizeof(float4);
+                    tex->generated_data = boost::shared_ptr<uint8_t>(new uint8_t[data_size]);
+
+                    // Build cycles internal texture
+                    ::memcpy(tex->generated_data.get(), &header, sizeof(header));
+                    ::memcpy(tex->generated_data.get() + sizeof(header), tex->points.data(), tex->points.size() * sizeof(float4));
 
                     bool is_float_bool, linear;
-                    tex->slot = scene->image_manager->add_image(tex->filename, tex->builtin_data,
+                    tex->slot = scene->image_manager->add_image(tex->filename, NULL, tex->generated_data,
                                                                 true, 0, is_float_bool, linear,
                                                                 INTERPOLATION_CLOSEST,
                                                                 EXTENSION_CLIP,
@@ -756,6 +772,7 @@ static ShaderNode *add_node(BlenderSync &sync,
 				scene->image_manager->tag_reload_image(
 				        env->filename.string(),
 				        env->builtin_data,
+                        boost::shared_ptr<uint8_t>(),
 				        get_image_interpolation(b_env_node),
 				        EXTENSION_REPEAT);
 			}
@@ -893,6 +910,7 @@ static ShaderNode *add_node(BlenderSync &sync,
 			scene->image_manager->tag_reload_image(
 			        point_density->filename.string(),
 			        point_density->builtin_data,
+                    boost::shared_ptr<uint8_t>(),
 			        point_density->interpolation,
 			        EXTENSION_CLIP);
 		}

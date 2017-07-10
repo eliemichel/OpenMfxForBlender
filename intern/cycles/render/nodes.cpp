@@ -29,6 +29,9 @@
 #include "util_foreach.h"
 #include "util_transform.h"
 
+/* Hacks to hook into Blender API
+ * todo: clean this up ... */
+
 CCL_NAMESPACE_BEGIN
 
 /* Texture Mapping */
@@ -262,6 +265,7 @@ ImageTextureNode::~ImageTextureNode()
 	if(image_manager) {
 		image_manager->remove_image(filename.string(),
 		                            builtin_data,
+                                    boost::shared_ptr<uint8_t>(),
 		                            interpolation,
 		                            extension);
 	}
@@ -303,6 +307,7 @@ void ImageTextureNode::compile(SVMCompiler& compiler)
 		bool is_float_bool;
 		slot = image_manager->add_image(filename.string(),
 		                                builtin_data,
+                                        boost::shared_ptr<uint8_t>(),
 		                                animated,
 		                                0,
 		                                is_float_bool,
@@ -363,7 +368,7 @@ void ImageTextureNode::compile(OSLCompiler& compiler)
 	if(is_float == -1) {
 		if(builtin_data == NULL) {
 			ImageDataType type;
-			type = image_manager->get_image_metadata(filename.string(), NULL, is_linear);
+			type = image_manager->get_image_metadata(filename.string(), NULL, boost::shared_ptr<uint8_t>(), is_linear);
 			if(type == IMAGE_DATA_TYPE_FLOAT || type == IMAGE_DATA_TYPE_FLOAT4)
 				is_float = 1;
 		}
@@ -371,6 +376,7 @@ void ImageTextureNode::compile(OSLCompiler& compiler)
 			bool is_float_bool;
 			slot = image_manager->add_image(filename.string(),
 			                                builtin_data,
+                                            boost::shared_ptr<uint8_t>(),
 			                                animated,
 			                                0,
 			                                is_float_bool,
@@ -433,7 +439,6 @@ CurveTextureNode::CurveTextureNode()
 : ImageSlotTextureNode(node_type)
 {
 	image_manager = NULL;
-    builtin_data = NULL;
 	slot = -1;
     width = 0;
 }
@@ -465,11 +470,12 @@ void CurveTextureNode::compile(SVMCompiler& compiler)
 	int vector_offset = tex_mapping.compile_begin(compiler, vector_in);
 
     // Build the image
-    if (builtin_data) {
+    if (generated_data) {
         image_manager = compiler.image_manager;
 
         image_manager->tag_reload_image(filename,
-                                       builtin_data,
+                                       NULL,
+                                       generated_data,
                                        INTERPOLATION_CLOSEST,
                                        EXTENSION_CLIP);
     }
@@ -551,6 +557,7 @@ EnvironmentTextureNode::~EnvironmentTextureNode()
 	if(image_manager) {
 		image_manager->remove_image(filename.string(),
 		                            builtin_data,
+                                    boost::shared_ptr<uint8_t>(),
 		                            interpolation,
 		                            EXTENSION_REPEAT);
 	}
@@ -590,6 +597,7 @@ void EnvironmentTextureNode::compile(SVMCompiler& compiler)
 		bool is_float_bool;
 		slot = image_manager->add_image(filename.string(),
 		                                builtin_data,
+                                        boost::shared_ptr<uint8_t>(),
 		                                animated,
 		                                0,
 		                                is_float_bool,
@@ -641,7 +649,7 @@ void EnvironmentTextureNode::compile(OSLCompiler& compiler)
 	if(is_float == -1) {
 		if(builtin_data == NULL) {
 			ImageDataType type;
-			type = image_manager->get_image_metadata(filename.string(), NULL, is_linear);
+			type = image_manager->get_image_metadata(filename.string(), NULL, boost::shared_ptr<uint8_t>(), is_linear);
 			if(type == IMAGE_DATA_TYPE_FLOAT || type == IMAGE_DATA_TYPE_FLOAT4)
 				is_float = 1;
 		}
@@ -649,6 +657,7 @@ void EnvironmentTextureNode::compile(OSLCompiler& compiler)
 			bool is_float_bool;
 			slot = image_manager->add_image(filename.string(),
 			                                builtin_data,
+                                            boost::shared_ptr<uint8_t>(),
 			                                animated,
 			                                0,
 			                                is_float_bool,
@@ -1470,6 +1479,7 @@ PointDensityTextureNode::~PointDensityTextureNode()
 	if(image_manager) {
 		image_manager->remove_image(filename.string(),
 		                            builtin_data,
+                                    boost::shared_ptr<uint8_t>(),
 		                            interpolation,
 		                            EXTENSION_CLIP);
 	}
@@ -1506,7 +1516,7 @@ void PointDensityTextureNode::compile(SVMCompiler& compiler)
 	if(use_density || use_color) {
 		if(slot == -1) {
 			bool is_float, is_linear;
-			slot = image_manager->add_image(filename.string(), builtin_data,
+			slot = image_manager->add_image(filename.string(), builtin_data, boost::shared_ptr<uint8_t>(),
 			                                false, 0,
 			                                is_float, is_linear,
 			                                interpolation,
@@ -1558,7 +1568,7 @@ void PointDensityTextureNode::compile(OSLCompiler& compiler)
 	if(use_density || use_color) {
 		if(slot == -1) {
 			bool is_float, is_linear;
-			slot = image_manager->add_image(filename.string(), builtin_data,
+			slot = image_manager->add_image(filename.string(), builtin_data, boost::shared_ptr<uint8_t>(),
 			                                false, 0,
 			                                is_float, is_linear,
 			                                interpolation,

@@ -104,11 +104,20 @@ bool ImageManager::set_animation_frame_update(int frame)
 
 ImageDataType ImageManager::get_image_metadata(const string& filename,
                                                              void *builtin_data,
+                                                             shared_ptr<uint8_t> generated_data,
                                                              bool& is_linear)
 {
 	bool is_float = false, is_half = false;
 	is_linear = false;
 	int channels = 4;
+
+    if (generated_data) {
+        is_float = true;
+        is_half = false;
+        is_linear = true;
+        channels = 4;
+        return IMAGE_DATA_TYPE_FLOAT4;
+    }
 
 	if(builtin_data) {
 		if(builtin_image_info_cb) {
@@ -242,17 +251,20 @@ string ImageManager::name_from_type(int type)
 static bool image_equals(ImageManager::Image *image,
                          const string& filename,
                          void *builtin_data,
+                         boost::shared_ptr<uint8_t> generated_data,
                          InterpolationType interpolation,
                          ExtensionType extension)
 {
 	return image->filename == filename &&
 		   image->builtin_data == builtin_data &&
+		   image->generated_data == generated_data &&
 		   image->interpolation == interpolation &&
 		   image->extension == extension;
 }
 
 int ImageManager::add_image(const string& filename,
                             void *builtin_data,
+                            boost::shared_ptr<uint8_t> generated_data,
                             bool animated,
                             float frame,
                             bool& is_float,
@@ -264,7 +276,7 @@ int ImageManager::add_image(const string& filename,
 	Image *img;
 	size_t slot;
 
-	ImageDataType type = get_image_metadata(filename, builtin_data, is_linear);
+	ImageDataType type = get_image_metadata(filename, builtin_data, generated_data, is_linear);
 
 	thread_scoped_lock device_lock(device_mutex);
 
@@ -293,6 +305,7 @@ int ImageManager::add_image(const string& filename,
 		if(img && image_equals(img,
 		                       filename,
 		                       builtin_data,
+                               generated_data,
 		                       interpolation,
 		                       extension))
 		{
@@ -346,6 +359,7 @@ int ImageManager::add_image(const string& filename,
 	img = new Image();
 	img->filename = filename;
 	img->builtin_data = builtin_data;
+    img->generated_data = generated_data;
 	img->need_load = true;
 	img->animated = animated;
 	img->frame = frame;
@@ -383,6 +397,7 @@ void ImageManager::remove_image(int flat_slot)
 
 void ImageManager::remove_image(const string& filename,
                                 void *builtin_data,
+                                boost::shared_ptr<uint8_t> generated_data,
                                 InterpolationType interpolation,
                                 ExtensionType extension)
 {
@@ -393,6 +408,7 @@ void ImageManager::remove_image(const string& filename,
 			if(images[type][slot] && image_equals(images[type][slot],
 			                                      filename,
 			                                      builtin_data,
+                                                  generated_data,
 			                                      interpolation,
 			                                      extension))
 			{
@@ -409,6 +425,7 @@ void ImageManager::remove_image(const string& filename,
  */
 void ImageManager::tag_reload_image(const string& filename,
                                     void *builtin_data,
+                                    shared_ptr<uint8_t> generated_data,
                                     InterpolationType interpolation,
                                     ExtensionType extension)
 {
@@ -417,6 +434,7 @@ void ImageManager::tag_reload_image(const string& filename,
 			if(images[type][slot] && image_equals(images[type][slot],
 			                                      filename,
 			                                      builtin_data,
+                                                  generated_data,
 			                                      interpolation,
 			                                      extension))
 			{
@@ -432,7 +450,7 @@ bool ImageManager::file_load_image_generic(Image *img, ImageInput **in, int &wid
 	if(img->filename == "")
 		return false;
 
-	if(!img->builtin_data) {
+	if(!img->builtin_data && !img->generated_data) {
 		/* load image from file through OIIO */
 		*in = ImageInput::create(img->filename);
 
@@ -457,12 +475,22 @@ bool ImageManager::file_load_image_generic(Image *img, ImageInput **in, int &wid
 		components = spec.nchannels;
 	}
 	else {
-		/* load image using builtin images callbacks */
-		if(!builtin_image_info_cb || !builtin_image_pixels_cb)
-			return false;
 
-		bool is_float;
-		builtin_image_info_cb(img->filename, img->builtin_data, is_float, width, height, depth, components);
+        if (img->generated_data) {
+            InternalImageHeader *header = (InternalImageHeader*) img->generated_data.get();
+            width = header->width;
+            height = header->height;
+            depth = 1;
+            components = 4;
+
+        } else {
+            /* load image using builtin images callbacks */
+            if(!builtin_image_info_cb || !builtin_image_pixels_cb)
+                return false;
+
+            bool is_float;
+            builtin_image_info_cb(img->filename, img->builtin_data, is_float, width, height, depth, components);
+        }
 	}
 
 	/* we only handle certain number of components */
@@ -539,7 +567,11 @@ bool ImageManager::file_load_image(Image *img,
 		delete in;
 	}
 	else {
-		if(FileFormat == TypeDesc::FLOAT) {
+        if (img->generated_data) {
+            InternalImageHeader *header = (InternalImageHeader*) img->generated_data.get();
+            ::memcpy(&pixels[0], (uint8_t*) img->generated_data.get() + sizeof(InternalImageHeader), header->width * header->height * sizeof(float4));
+
+        } else if(FileFormat == TypeDesc::FLOAT) {
 			builtin_image_float_pixels_cb(img->filename,
 			                              img->builtin_data,
 			                              (float*)&pixels[0],
