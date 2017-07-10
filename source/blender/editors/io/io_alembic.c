@@ -416,9 +416,20 @@ static int get_sequence_len(char *filename, int *ofs)
 	}
 
 	char path[FILE_MAX];
+	BLI_path_abs(filename, G.main->name);
 	BLI_split_dir_part(filename, path, FILE_MAX);
 
+	if (path[0] == '\0') {
+		/* the filename has no path, so just use the blend file path. */
+		BLI_split_dir_part(G.main->name, path, FILE_MAX);
+	}
+
 	DIR *dir = opendir(path);
+	if (dir == NULL) {
+		fprintf(stderr, "Error opening direction  '%s': %s\n",
+			path, errno ? strerror(errno) : "unknown error");
+		return -1;
+	}
 
 	const char *ext = ".abc";
 	const char *basename = BLI_path_basename(filename);
