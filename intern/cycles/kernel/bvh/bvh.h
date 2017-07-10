@@ -27,43 +27,43 @@
 
 CCL_NAMESPACE_BEGIN
 
-#include "bvh_types.h"
+#include "kernel/bvh/bvh_types.h"
 
 /* Common QBVH functions. */
 #ifdef __QBVH__
-#  include "qbvh_nodes.h"
+#  include "kernel/bvh/qbvh_nodes.h"
 #endif
 
 /* Regular BVH traversal */
 
-#include "bvh_nodes.h"
+#include "kernel/bvh/bvh_nodes.h"
 
 #define BVH_FUNCTION_NAME bvh_intersect
 #define BVH_FUNCTION_FEATURES 0
-#include "bvh_traversal.h"
+#include "kernel/bvh/bvh_traversal.h"
 
 #if defined(__INSTANCING__)
 #  define BVH_FUNCTION_NAME bvh_intersect_instancing
 #  define BVH_FUNCTION_FEATURES BVH_INSTANCING
-#  include "bvh_traversal.h"
+#  include "kernel/bvh/bvh_traversal.h"
 #endif
 
 #if defined(__HAIR__)
 #  define BVH_FUNCTION_NAME bvh_intersect_hair
 #  define BVH_FUNCTION_FEATURES BVH_INSTANCING|BVH_HAIR|BVH_HAIR_MINIMUM_WIDTH
-#  include "bvh_traversal.h"
+#  include "kernel/bvh/bvh_traversal.h"
 #endif
 
 #if defined(__OBJECT_MOTION__)
 #  define BVH_FUNCTION_NAME bvh_intersect_motion
 #  define BVH_FUNCTION_FEATURES BVH_INSTANCING|BVH_MOTION
-#  include "bvh_traversal.h"
+#  include "kernel/bvh/bvh_traversal.h"
 #endif
 
 #if defined(__HAIR__) && defined(__OBJECT_MOTION__)
 #  define BVH_FUNCTION_NAME bvh_intersect_hair_motion
 #  define BVH_FUNCTION_FEATURES BVH_INSTANCING|BVH_HAIR|BVH_HAIR_MINIMUM_WIDTH|BVH_MOTION
-#  include "bvh_traversal.h"
+#  include "kernel/bvh/bvh_traversal.h"
 #endif
 
 /* Subsurface scattering BVH traversal */
@@ -71,12 +71,12 @@ CCL_NAMESPACE_BEGIN
 #if defined(__SUBSURFACE__)
 #  define BVH_FUNCTION_NAME bvh_intersect_subsurface
 #  define BVH_FUNCTION_FEATURES BVH_HAIR
-#  include "bvh_subsurface.h"
+#  include "kernel/bvh/bvh_subsurface.h"
 
 #  if defined(__OBJECT_MOTION__)
 #    define BVH_FUNCTION_NAME bvh_intersect_subsurface_motion
 #    define BVH_FUNCTION_FEATURES BVH_MOTION|BVH_HAIR
-#    include "bvh_subsurface.h"
+#    include "kernel/bvh/bvh_subsurface.h"
 #  endif
 #endif  /* __SUBSURFACE__ */
 
@@ -85,18 +85,18 @@ CCL_NAMESPACE_BEGIN
 #if defined(__VOLUME__)
 #  define BVH_FUNCTION_NAME bvh_intersect_volume
 #  define BVH_FUNCTION_FEATURES BVH_HAIR
-#  include "bvh_volume.h"
+#  include "kernel/bvh/bvh_volume.h"
 
 #  if defined(__INSTANCING__)
 #    define BVH_FUNCTION_NAME bvh_intersect_volume_instancing
 #    define BVH_FUNCTION_FEATURES BVH_INSTANCING|BVH_HAIR
-#    include "bvh_volume.h"
+#    include "kernel/bvh/bvh_volume.h"
 #  endif
 
 #  if defined(__OBJECT_MOTION__)
 #    define BVH_FUNCTION_NAME bvh_intersect_volume_motion
 #    define BVH_FUNCTION_FEATURES BVH_INSTANCING|BVH_MOTION|BVH_HAIR
-#    include "bvh_volume.h"
+#    include "kernel/bvh/bvh_volume.h"
 #  endif
 #endif  /* __VOLUME__ */
 
@@ -105,30 +105,30 @@ CCL_NAMESPACE_BEGIN
 #if defined(__SHADOW_RECORD_ALL__)
 #  define BVH_FUNCTION_NAME bvh_intersect_shadow_all
 #  define BVH_FUNCTION_FEATURES 0
-#  include "bvh_shadow_all.h"
+#  include "kernel/bvh/bvh_shadow_all.h"
 
 #  if defined(__INSTANCING__)
 #    define BVH_FUNCTION_NAME bvh_intersect_shadow_all_instancing
 #    define BVH_FUNCTION_FEATURES BVH_INSTANCING
-#    include "bvh_shadow_all.h"
+#    include "kernel/bvh/bvh_shadow_all.h"
 #  endif
 
 #  if defined(__HAIR__)
 #    define BVH_FUNCTION_NAME bvh_intersect_shadow_all_hair
 #    define BVH_FUNCTION_FEATURES BVH_INSTANCING|BVH_HAIR
-#    include "bvh_shadow_all.h"
+#    include "kernel/bvh/bvh_shadow_all.h"
 #  endif
 
 #  if defined(__OBJECT_MOTION__)
 #    define BVH_FUNCTION_NAME bvh_intersect_shadow_all_motion
 #    define BVH_FUNCTION_FEATURES BVH_INSTANCING|BVH_MOTION
-#    include "bvh_shadow_all.h"
+#    include "kernel/bvh/bvh_shadow_all.h"
 #  endif
 
 #  if defined(__HAIR__) && defined(__OBJECT_MOTION__)
 #    define BVH_FUNCTION_NAME bvh_intersect_shadow_all_hair_motion
 #    define BVH_FUNCTION_FEATURES BVH_INSTANCING|BVH_HAIR|BVH_MOTION
-#    include "bvh_shadow_all.h"
+#    include "kernel/bvh/bvh_shadow_all.h"
 #  endif
 #endif  /* __SHADOW_RECORD_ALL__ */
 
@@ -137,18 +137,18 @@ CCL_NAMESPACE_BEGIN
 #if defined(__VOLUME_RECORD_ALL__)
 #  define BVH_FUNCTION_NAME bvh_intersect_volume_all
 #  define BVH_FUNCTION_FEATURES BVH_HAIR
-#  include "bvh_volume_all.h"
+#  include "kernel/bvh/bvh_volume_all.h"
 
 #  if defined(__INSTANCING__)
 #    define BVH_FUNCTION_NAME bvh_intersect_volume_all_instancing
 #    define BVH_FUNCTION_FEATURES BVH_INSTANCING|BVH_HAIR
-#    include "bvh_volume_all.h"
+#    include "kernel/bvh/bvh_volume_all.h"
 #  endif
 
 #  if defined(__OBJECT_MOTION__)
 #    define BVH_FUNCTION_NAME bvh_intersect_volume_all_motion
 #    define BVH_FUNCTION_FEATURES BVH_INSTANCING|BVH_MOTION|BVH_HAIR
-#    include "bvh_volume_all.h"
+#    include "kernel/bvh/bvh_volume_all.h"
 #  endif
 #endif  /* __VOLUME_RECORD_ALL__ */
 
@@ -203,8 +203,9 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
 }
 
 #ifdef __SUBSURFACE__
+/* Note: ray is passed by value to work around a possible CUDA compiler bug. */
 ccl_device_intersect void scene_intersect_subsurface(KernelGlobals *kg,
-                                                     const Ray *ray,
+                                                     const Ray ray,
                                                      SubsurfaceIntersection *ss_isect,
                                                      int subsurface_object,
                                                      uint *lcg_state,
@@ -214,7 +215,7 @@ ccl_device_intersect void scene_intersect_subsurface(KernelGlobals *kg,
 #ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 		return bvh_intersect_subsurface_motion(kg,
-		                                       ray,
+		                                       &ray,
 		                                       ss_isect,
 		                                       subsurface_object,
 		                                       lcg_state,
@@ -223,7 +224,7 @@ ccl_device_intersect void scene_intersect_subsurface(KernelGlobals *kg,
 	}
 #endif /* __OBJECT_MOTION__ */
 	return bvh_intersect_subsurface(kg,
-	                                ray,
+	                                &ray,
 	                                ss_isect,
 	                                subsurface_object,
 	                                lcg_state,
@@ -363,7 +364,7 @@ ccl_device_inline float3 ray_offset(float3 P, float3 Ng)
 #endif
 }
 
-#if defined(__SHADOW_RECORD_ALL__) || defined (__VOLUME_RECORD_ALL__)
+#if defined(__VOLUME_RECORD_ALL__) || (defined(__SHADOW_RECORD_ALL__) /*&& defined(__KERNEL_CPU__)*/)
 /* ToDo: Move to another file? */
 ccl_device int intersections_compare(const void *a, const void *b)
 {
@@ -379,5 +380,28 @@ ccl_device int intersections_compare(const void *a, const void *b)
 }
 #endif
 
-CCL_NAMESPACE_END
+#if defined(__SHADOW_RECORD_ALL__)
+ccl_device_inline void sort_intersections(Intersection *hits, uint num_hits)
+{
+#ifdef __KERNEL_GPU__
+	/* Use bubble sort which has more friendly memory pattern on GPU. */
+	bool swapped;
+	do {
+		swapped = false;
+		for(int j = 0; j < num_hits - 1; ++j) {
+			if(hits[j].t > hits[j + 1].t) {
+				struct Intersection tmp = hits[j];
+				hits[j] = hits[j + 1];
+				hits[j + 1] = tmp;
+				swapped = true;
+			}
+		}
+		--num_hits;
+	} while(swapped);
+#else
+	qsort(hits, num_hits, sizeof(Intersection), intersections_compare);
+#endif
+}
+#endif  /* __SHADOW_RECORD_ALL__ | __VOLUME_RECORD_ALL__ */
 
+CCL_NAMESPACE_END

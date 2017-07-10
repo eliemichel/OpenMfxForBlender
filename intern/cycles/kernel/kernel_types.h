@@ -17,9 +17,9 @@
 #ifndef __KERNEL_TYPES_H__
 #define __KERNEL_TYPES_H__
 
-#include "kernel_math.h"
-#include "svm/svm_types.h"
-#include "util_static_assert.h"
+#include "kernel/kernel_math.h"
+#include "kernel/svm/svm_types.h"
+#include "util/util_static_assert.h"
 
 #ifndef __KERNEL_GPU__
 #  define __KERNEL_CPU__
@@ -56,6 +56,14 @@ CCL_NAMESPACE_BEGIN
 
 #define VOLUME_STACK_SIZE		16
 
+#define WORK_POOL_SIZE_GPU 64
+#define WORK_POOL_SIZE_CPU 1
+#ifdef __KERNEL_GPU__
+#  define WORK_POOL_SIZE WORK_POOL_SIZE_GPU
+#else
+#  define WORK_POOL_SIZE WORK_POOL_SIZE_CPU
+#endif
+
 /* device capabilities */
 #ifdef __KERNEL_CPU__
 #  ifdef __KERNEL_SSE2__
@@ -63,27 +71,34 @@ CCL_NAMESPACE_BEGIN
 #  endif
 #  define __KERNEL_SHADING__
 #  define __KERNEL_ADV_SHADING__
-#  define __BRANCHED_PATH__
+#  ifndef __SPLIT_KERNEL__
+#    define __BRANCHED_PATH__
+#  endif
 #  ifdef WITH_OSL
 #    define __OSL__
 #  endif
 #  define __SUBSURFACE__
 #  define __CMJ__
 #  define __VOLUME__
-#  define __VOLUME_DECOUPLED__
 #  define __VOLUME_SCATTER__
 #  define __SHADOW_RECORD_ALL__
-#  define __VOLUME_RECORD_ALL__
+#  ifndef __SPLIT_KERNEL__
+#    define __VOLUME_DECOUPLED__
+#    define __VOLUME_RECORD_ALL__
+#  endif
 #endif  /* __KERNEL_CPU__ */
 
 #ifdef __KERNEL_CUDA__
 #  define __KERNEL_SHADING__
 #  define __KERNEL_ADV_SHADING__
-#  define __BRANCHED_PATH__
 #  define __VOLUME__
 #  define __VOLUME_SCATTER__
 #  define __SUBSURFACE__
-#  define __CMJ__
+#  define __SHADOW_RECORD_ALL__
+#  ifndef __SPLIT_KERNEL__
+#    define __BRANCHED_PATH__
+#    define __CMJ__
+#  endif
 #endif  /* __KERNEL_CUDA__ */
 
 #ifdef __KERNEL_OPENCL__
@@ -93,6 +108,10 @@ CCL_NAMESPACE_BEGIN
 #  ifdef __KERNEL_OPENCL_NVIDIA__
 #    define __KERNEL_SHADING__
 #    define __KERNEL_ADV_SHADING__
+#    define __SUBSURFACE__
+#    define __VOLUME__
+#    define __VOLUME_SCATTER__
+#    define __SHADOW_RECORD_ALL__
 #    ifdef __KERNEL_EXPERIMENTAL__
 #      define __CMJ__
 #    endif
@@ -114,6 +133,10 @@ CCL_NAMESPACE_BEGIN
 #    define __CL_USE_NATIVE__
 #    define __KERNEL_SHADING__
 #    define __KERNEL_ADV_SHADING__
+#    define __SUBSURFACE__
+#    define __VOLUME__
+#    define __VOLUME_SCATTER__
+#    define __SHADOW_RECORD_ALL__
 #  endif  /* __KERNEL_OPENCL_AMD__ */
 
 #  ifdef __KERNEL_OPENCL_INTEL_CPU__
@@ -140,6 +163,7 @@ CCL_NAMESPACE_BEGIN
 #define __INTERSECTION_REFINE__
 #define __CLAMP_SAMPLE__
 #define __PATCH_EVAL__
+#define __SHADOW_TRICKS__
 
 #ifdef __KERNEL_SHADING__
 #  define __SVM__
@@ -194,6 +218,9 @@ CCL_NAMESPACE_BEGIN
 #endif
 #ifdef __NO_TRANSPARENT__
 #  undef __TRANSPARENT_SHADOWS__
+#endif
+#ifdef __NO_SHADOW_TRICKS__
+#undef __SHADOW_TRICKS__
 #endif
 
 /* Random Numbers */
@@ -300,6 +327,8 @@ enum PathRayFlag {
 	PATH_RAY_MIS_SKIP = 8192,
 	PATH_RAY_DIFFUSE_ANCESTOR = 16384,
 	PATH_RAY_SINGLE_PASS_DONE = 32768,
+	PATH_RAY_SHADOW_CATCHER_ONLY = 65536,
+	PATH_RAY_SHADOW_CATCHER = 131072,
 };
 
 /* Closure Label */
@@ -429,6 +458,20 @@ typedef ccl_addr_space struct PathRadiance {
 	float4 shadow;
 	float mist;
 #endif
+
+#ifdef __SHADOW_TRICKS__
+	/* Total light reachable across the path, ignoring shadow blocked queries. */
+	float3 path_total;
+	/* Total light reachable across the path with shadow blocked queries
+	 * applied here.
+	 *
+	 * Dividing this figure by path_total will give estimate of shadow pass.
+	 */
+	float3 path_total_shaded;
+
+	/* Color of the background on which shadow is alpha-overed. */
+	float3 shadow_color;
+#endif
 } PathRadiance;
 
 typedef struct BsdfEval {
@@ -443,6 +486,9 @@ typedef struct BsdfEval {
 	float3 transparent;
 	float3 subsurface;
 	float3 scatter;
+#endif
+#ifdef __SHADOW_TRICKS__
+	float3 sum_no_mis;
 #endif
 } BsdfEval;
 
@@ -537,7 +583,7 @@ typedef struct Ray {
 
 /* Intersection */
 
-typedef ccl_addr_space struct Intersection {
+typedef struct Intersection {
 	float t, u, v;
 	int prim;
 	int object;
@@ -753,44 +799,45 @@ enum ShaderDataObjectFlag {
 	SD_OBJECT_OBJECT_HAS_VOLUME		   = (1 << 4),  /* object has a volume shader */
 	SD_OBJECT_OBJECT_INTERSECTS_VOLUME = (1 << 5),  /* object intersects AABB of an object with volume shader */
 	SD_OBJECT_OBJECT_HAS_VERTEX_MOTION = (1 << 6),  /* has position for motion vertices */
+	SD_OBJECT_OBJECT_SHADOW_CATCHER	   = (1 << 7),  /* object is used to catch shadows */
 
 	SD_OBJECT_FLAGS = (SD_OBJECT_HOLDOUT_MASK | SD_OBJECT_OBJECT_MOTION | SD_OBJECT_TRANSFORM_APPLIED |
 					   SD_OBJECT_NEGATIVE_SCALE_APPLIED | SD_OBJECT_OBJECT_HAS_VOLUME | SD_OBJECT_OBJECT_INTERSECTS_VOLUME |
-					   SD_OBJECT_OBJECT_HAS_VERTEX_MOTION)
+					   SD_OBJECT_OBJECT_HAS_VERTEX_MOTION | SD_OBJECT_OBJECT_SHADOW_CATCHER)
 
 };
 
-#ifdef __SPLIT_KERNEL__
-#  define SD_THREAD (get_global_id(1) * get_global_size(0) + get_global_id(0))
-#  if !defined(__SPLIT_KERNEL_SOA__)
-     /* ShaderData is stored as an Array-of-Structures */
-#    define ccl_soa_member(type, name) type soa_##name
-#    define ccl_fetch(s, t) (s[SD_THREAD].soa_##t)
-#    define ccl_fetch_array(s, t, index) (&s[SD_THREAD].soa_##t[index])
-#  else
-     /* ShaderData is stored as an Structure-of-Arrays */
-#    define SD_GLOBAL_SIZE (get_global_size(0) * get_global_size(1))
-#    define SD_FIELD_SIZE(t) sizeof(((struct ShaderData*)0)->t)
-#    define SD_OFFSETOF(t) ((char*)(&((struct ShaderData*)0)->t) - (char*)0)
-#    define ccl_soa_member(type, name) type soa_##name
-#    define ccl_fetch(s, t) (((ShaderData*)((ccl_addr_space char*)s + SD_GLOBAL_SIZE * SD_OFFSETOF(soa_##t) +  SD_FIELD_SIZE(soa_##t) * SD_THREAD - SD_OFFSETOF(soa_##t)))->soa_##t)
-#    define ccl_fetch_array(s, t, index) (&ccl_fetch(s, t)[index])
-#  endif
-#else
+//#ifdef __SPLIT_KERNEL__
+//#  define SD_THREAD (get_global_id(1) * get_global_size(0) + get_global_id(0))
+//#  if !defined(__SPLIT_KERNEL_SOA__)
+///* ShaderData is stored as an Array-of-Structures */
+//#    define ccl_soa_member(type, name) type soa_##name
+//#    define ccl_fetch(s, t) (s[SD_THREAD].soa_##t)
+//#    define ccl_fetch_array(s, t, index) (&s[SD_THREAD].soa_##t[index])
+//#  else
+///* ShaderData is stored as an Structure-of-Arrays */
+//#    define SD_GLOBAL_SIZE (get_global_size(0) * get_global_size(1))
+//#    define SD_FIELD_SIZE(t) sizeof(((struct ShaderData*)0)->t)
+//#    define SD_OFFSETOF(t) ((char*)(&((struct ShaderData*)0)->t) - (char*)0)
+//#    define ccl_soa_member(type, name) type soa_##name
+//#    define ccl_fetch(s, t) (((ShaderData*)((ccl_addr_space char*)s + SD_GLOBAL_SIZE * SD_OFFSETOF(soa_##t) +  SD_FIELD_SIZE(soa_##t) * SD_THREAD - SD_OFFSETOF(soa_##t)))->soa_##t)
+//#    define ccl_fetch_array(s, t, index) (&ccl_fetch(s, t)[index])
+//#  endif
+//#else
 #  define ccl_soa_member(type, name) type name
 #  define ccl_fetch(s, t) (s->t)
 #  define ccl_fetch_array(s, t, index) (&s->t[index])
-#endif
+//#endif
 
 typedef ccl_addr_space struct ShaderData {
 	/* position */
-	ccl_soa_member(float3, P);
+	float3 P;
 	/* smooth normal for shading */
-	ccl_soa_member(float3, N);
+	float3 N;
 	/* true geometric normal */
-	ccl_soa_member(float3, Ng);
+	float3 Ng;
 	/* view/incoming direction */
-	ccl_soa_member(float3, I);
+	float3 I;
 	/* shader id */
 	ccl_soa_member(int, shader);
 
@@ -825,7 +872,7 @@ typedef ccl_addr_space struct ShaderData {
 	ccl_soa_member(float, u);
 	ccl_soa_member(float, v);
 	/* object id if there is one, ~0 otherwise */
-	ccl_soa_member(int, object);
+	int object;
 
 	/* motion blur sample time */
 	ccl_soa_member(float, time);
@@ -835,40 +882,40 @@ typedef ccl_addr_space struct ShaderData {
 
 #ifdef __RAY_DIFFERENTIALS__
 	/* differential of P. these are orthogonal to Ng, not N */
-	ccl_soa_member(differential3, dP);
+	differential3 dP;
 	/* differential of I */
-	ccl_soa_member(differential3, dI);
+	differential3 dI;
 	/* differential of u, v */
-	ccl_soa_member(differential, du);
-	ccl_soa_member(differential, dv);
+	differential du;
+	differential dv;
 #endif
 #ifdef __DPDU__
 	/* differential of P w.r.t. parametric coordinates. note that dPdu is
 	 * not readily suitable as a tangent for shading on triangles. */
-	ccl_soa_member(float3, dPdu);
-	ccl_soa_member(float3, dPdv);
+	float3 dPdu;
+	float3 dPdv;
 #endif
 
 #ifdef __OBJECT_MOTION__
 	/* object <-> world space transformations, cached to avoid
 	 * re-interpolating them constantly for shading */
-	ccl_soa_member(Transform, ob_tfm);
-	ccl_soa_member(Transform, ob_itfm);
+	Transform ob_tfm;
+	Transform ob_itfm;
 #endif
 
 	/* Closure data, we store a fixed array of closures */
-	ccl_soa_member(struct ShaderClosure, closure[MAX_CLOSURE]);
-	ccl_soa_member(int, num_closure);
-	ccl_soa_member(int, num_closure_extra);
-	ccl_soa_member(float, randb_closure);
-	ccl_soa_member(float3, svm_closure_weight);
+	struct ShaderClosure closure[MAX_CLOSURE];
+	int num_closure;
+	int num_closure_extra;
+	float randb_closure;
+	float3 svm_closure_weight;
 
 	/* LCG state for closures that require additional random numbers. */
-	ccl_soa_member(uint, lcg_state);
+	uint lcg_state;
 
 	/* ray start position, only set for backgrounds */
-	ccl_soa_member(float3, ray_P);
-	ccl_soa_member(differential3, ray_dP);
+	float3 ray_P;
+	differential3 ray_dP;
 
 #ifdef __OSL__
 	struct KernelGlobals *osl_globals;
@@ -914,12 +961,16 @@ typedef struct PathState {
 	RNG rng_congruential;
 	VolumeStack volume_stack[VOLUME_STACK_SIZE];
 #endif
+
+#ifdef __SHADOW_TRICKS__
+	int catcher_object;
+#endif
 } PathState;
 
 /* Subsurface */
 
 /* Struct to gather multiple SSS hits. */
-struct SubsurfaceIntersection
+typedef struct SubsurfaceIntersection
 {
 	Ray ray;
 	float3 weight[BSSRDF_MAX_HITS];
@@ -927,10 +978,10 @@ struct SubsurfaceIntersection
 	int num_hits;
 	struct Intersection hits[BSSRDF_MAX_HITS];
 	float3 Ng[BSSRDF_MAX_HITS];
-};
+} SubsurfaceIntersection;
 
 /* Struct to gather SSS indirect rays and delay tracing them. */
-struct SubsurfaceIndirectRays
+typedef struct SubsurfaceIndirectRays
 {
 	bool need_update_volume_stack;
 	bool tracing;
@@ -941,7 +992,7 @@ struct SubsurfaceIndirectRays
 	struct Ray rays[BSSRDF_MAX_HITS];
 	float3 throughputs[BSSRDF_MAX_HITS];
 	struct PathRadiance L[BSSRDF_MAX_HITS];
-};
+} SubsurfaceIndirectRays;
 
 /* Constant Kernel Data
  *
@@ -1180,7 +1231,8 @@ typedef struct KernelBVH {
 	int have_curves;
 	int have_instancing;
 	int use_qbvh;
-	int pad1, pad2;
+	int use_bvh_steps;
+	int pad1;
 } KernelBVH;
 static_assert_align(KernelBVH, 16);
 
@@ -1275,20 +1327,19 @@ enum QueueNumber {
 #define RAY_STATE_MASK 0x007
 #define RAY_FLAG_MASK 0x0F8
 enum RayState {
+	RAY_INVALID = 0,
 	/* Denotes ray is actively involved in path-iteration. */
-	RAY_ACTIVE = 0,
+	RAY_ACTIVE,
 	/* Denotes ray has completed processing all samples and is inactive. */
-	RAY_INACTIVE = 1,
+	RAY_INACTIVE,
 	/* Denoted ray has exited path-iteration and needs to update output buffer. */
-	RAY_UPDATE_BUFFER = 2,
+	RAY_UPDATE_BUFFER,
 	/* Donotes ray has hit background */
-	RAY_HIT_BACKGROUND = 3,
+	RAY_HIT_BACKGROUND,
 	/* Denotes ray has to be regenerated */
-	RAY_TO_REGENERATE = 4,
+	RAY_TO_REGENERATE,
 	/* Denotes ray has been regenerated */
-	RAY_REGENERATED = 5,
-	/* Denotes ray should skip direct lighting */
-	RAY_SKIP_DL = 6,
+	RAY_REGENERATED,
 	/* Flag's ray has to execute shadow blocked function in AO part */
 	RAY_SHADOW_RAY_CAST_AO = 16,
 	/* Flag's ray has to execute shadow blocked function in direct lighting part. */

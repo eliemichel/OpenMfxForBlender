@@ -33,12 +33,13 @@
 #include <cuda.h>
 #include <cuda_fp16.h>
 #include <float.h>
+#include <stdint.h>
 
 /* Qualifier wrappers for different names on different devices */
 
 #define ccl_device  __device__ __inline__
 #  define ccl_device_forceinline  __device__ __forceinline__
-#if (__KERNEL_CUDA_VERSION__ == 80) && (__CUDA_ARCH__ < 500)
+#if __CUDA_ARCH__ < 500
 #  define ccl_device_inline  __device__ __forceinline__
 #else
 #  define ccl_device_inline  __device__ __inline__
@@ -46,6 +47,9 @@
 #define ccl_device_noinline  __device__ __noinline__
 #define ccl_global
 #define ccl_constant
+#define ccl_local __shared__
+#define ccl_local_param
+#define ccl_private
 #define ccl_may_alias
 #define ccl_addr_space
 #define ccl_restrict __restrict__
@@ -57,8 +61,54 @@
 
 /* Types */
 
-#include "util_half.h"
-#include "util_types.h"
+#include "util/util_half.h"
+#include "util/util_types.h"
+
+/* Work item functions */
+
+ccl_device_inline uint ccl_local_id(uint d)
+{
+	switch(d) {
+		case 0: return threadIdx.x;
+		case 1: return threadIdx.y;
+		case 2: return threadIdx.z;
+		default: return 0;
+	}
+}
+
+#define ccl_global_id(d) (ccl_group_id(d) * ccl_local_size(d) + ccl_local_id(d))
+
+ccl_device_inline uint ccl_local_size(uint d)
+{
+	switch(d) {
+		case 0: return blockDim.x;
+		case 1: return blockDim.y;
+		case 2: return blockDim.z;
+		default: return 0;
+	}
+}
+
+#define ccl_global_size(d) (ccl_num_groups(d) * ccl_local_size(d))
+
+ccl_device_inline uint ccl_group_id(uint d)
+{
+	switch(d) {
+		case 0: return blockIdx.x;
+		case 1: return blockIdx.y;
+		case 2: return blockIdx.z;
+		default: return 0;
+	}
+}
+
+ccl_device_inline uint ccl_num_groups(uint d)
+{
+	switch(d) {
+		case 0: return gridDim.x;
+		case 1: return gridDim.y;
+		case 2: return gridDim.z;
+		default: return 0;
+	}
+}
 
 /* Textures */
 

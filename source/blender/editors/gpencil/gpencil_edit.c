@@ -74,7 +74,6 @@
 #include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
-#include "ED_screen.h"
 #include "ED_space_api.h"
 
 #include "gpencil_intern.h"
@@ -953,6 +952,9 @@ static int gp_dissolve_selected_points(bContext *C)
 			/* skip strokes that are invalid for current view */
 			if (ED_gpencil_stroke_can_use(C, gps) == false)
 				continue;
+			/* check if the color is editable */
+			if (ED_gpencil_stroke_color_use(gpl, gps) == false)
+				continue;
 			
 			if (gps->flag & GP_STROKE_SELECT) {
 				bGPDspoint *pt;
@@ -1165,6 +1167,9 @@ static int gp_delete_selected_points(bContext *C)
 			/* skip strokes that are invalid for current view */
 			if (ED_gpencil_stroke_can_use(C, gps) == false)
 				continue;
+			/* check if the color is editable */
+			if (ED_gpencil_stroke_color_use(gpl, gps) == false)
+				continue;
 			
 			
 			if (gps->flag & GP_STROKE_SELECT) {
@@ -1204,7 +1209,7 @@ static int gp_delete_exec(bContext *C, wmOperator *op)
 		case GP_DELETEOP_POINTS:	/* selected points (breaks the stroke into segments) */
 			result = gp_delete_selected_points(C);
 			break;
-
+		
 		case GP_DELETEOP_FRAME:		/* active frame */
 			result = gp_actframe_delete_exec(C, op);
 			break;
@@ -2121,10 +2126,10 @@ static int gp_count_subdivision_cuts(bGPDstroke *gps)
 	int totnewpoints = 0;
 	for (i = 0, pt = gps->points; i < gps->totpoints && pt; i++, pt++) {
 		if (pt->flag & GP_SPOINT_SELECT) {
-			if (i + 1 < gps->totpoints){
+			if (i + 1 < gps->totpoints) {
 				if (gps->points[i + 1].flag & GP_SPOINT_SELECT) {
 					++totnewpoints;
-				};
+				}
 			}
 		}
 	}
@@ -2179,7 +2184,7 @@ static int gp_stroke_subdivide_exec(bContext *C, wmOperator *op)
 
 					/* if next point is selected add a half way point */
 					if (pt->flag & GP_SPOINT_SELECT) {
-						if (i + 1 < oldtotpoints){
+						if (i + 1 < oldtotpoints) {
 							if (temp_points[i + 1].flag & GP_SPOINT_SELECT) {
 								pt_final = &gps->points[i2];
 								/* Interpolate all values */
@@ -2191,7 +2196,7 @@ static int gp_stroke_subdivide_exec(bContext *C, wmOperator *op)
 								pt_final->time = interpf(pt->time, next->time, 0.5f);
 								pt_final->flag |= GP_SPOINT_SELECT;
 								++i2;
-							};
+							}
 						}
 					}
 				}

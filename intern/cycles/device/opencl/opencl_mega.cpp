@@ -16,15 +16,15 @@
 
 #ifdef WITH_OPENCL
 
-#include "opencl.h"
+#include "device/opencl/opencl.h"
 
-#include "buffers.h"
+#include "render/buffers.h"
 
-#include "kernel_types.h"
+#include "kernel/kernel_types.h"
 
-#include "util_md5.h"
-#include "util_path.h"
-#include "util_time.h"
+#include "util/util_md5.h"
+#include "util/util_path.h"
+#include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -43,11 +43,12 @@ public:
 		return true;
 	}
 
-	virtual void load_kernels(const DeviceRequestedFeatures& /*requested_features*/,
+	virtual bool load_kernels(const DeviceRequestedFeatures& /*requested_features*/,
 	                          vector<OpenCLProgram*> &programs)
 	{
 		path_trace_program.add_kernel(ustring("path_trace"));
 		programs.push_back(&path_trace_program);
+		return true;
 	}
 
 	~OpenCLDeviceMegaKernel()
@@ -83,7 +84,7 @@ public:
 
 #define KERNEL_TEX(type, ttype, name) \
 		set_kernel_arg_mem(ckPathTraceKernel, &start_arg_index, #name);
-#include "kernel_textures.h"
+#include "kernel/kernel_textures.h"
 #undef KERNEL_TEX
 
 		start_arg_index += kernel_set_args(ckPathTraceKernel,

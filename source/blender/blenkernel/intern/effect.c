@@ -106,6 +106,7 @@ PartDeflect *object_add_collision_fields(int type)
 	pd->pdef_sbdamp = 0.1f;
 	pd->pdef_sbift  = 0.2f;
 	pd->pdef_sboft  = 0.02f;
+	pd->pdef_cfrict = 5.0f;
 	pd->seed = ((unsigned int)(ceil(PIL_check_seconds_timer()))+1) % 128;
 	pd->f_strength = 1.0f;
 	pd->f_damp = 1.0f;
@@ -126,7 +127,7 @@ PartDeflect *object_add_collision_fields(int type)
 			pd->f_flow = 1.0f;
 			break;
 	}
-	pd->flag = PFIELD_DO_LOCATION|PFIELD_DO_ROTATION;
+	pd->flag = PFIELD_DO_LOCATION|PFIELD_DO_ROTATION|PFIELD_CLOTH_USE_CULLING;
 
 	return pd;
 }
@@ -848,6 +849,14 @@ static void do_physical_effector(EffectorCache *eff, EffectorData *efd, Effected
 			break;
 		case PFIELD_FORCE:
 			normalize_v3(force);
+			if (pd->flag & PFIELD_GRAVITATION){ /* Option: Multiply by 1/distance^2 */
+				if (efd->distance < FLT_EPSILON){
+					strength = 0.0f;
+				}
+				else {
+					strength *= powf(efd->distance, -2.0f);
+				}
+			}
 			mul_v3_fl(force, strength * efd->falloff);
 			break;
 		case PFIELD_VORTEX:

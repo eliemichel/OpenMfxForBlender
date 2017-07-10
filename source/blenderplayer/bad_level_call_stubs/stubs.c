@@ -199,6 +199,7 @@ extern bool pyrna_id_FromPyObject(struct PyObject *obj, struct ID **id);
 extern const char *BPY_app_translations_py_pgettext(const char *msgctxt, const char *msgid);
 extern const char *BPY_app_translations_py_pgettext(const char *msgctxt, const char *msgid);
 extern struct PyObject *pyrna_id_CreatePyObject(struct ID *id);
+extern bool pyrna_id_CheckPyObject(struct PyObject *obj);
 /* bpy_interface.c */
 bool BPY_string_is_keyword(const char *str) { return false; }
 
@@ -273,6 +274,8 @@ struct Object *RE_GetCamera(struct Render *re) RET_NULL
 float RE_lamp_get_data(struct ShadeInput *shi, struct Object *lamp_obj, float col[4], float lv[3], float *dist, float shadow[4]) RET_ZERO
 const float (*RE_object_instance_get_matrix(struct ObjectInstanceRen *obi, int matrix_id))[4] RET_NULL
 const float (*RE_render_current_get_matrix(int matrix_id))[4] RET_NULL
+float RE_object_instance_get_object_pass_index(struct ObjectInstanceRen *obi) RET_ZERO
+float RE_object_instance_get_random_id(struct ObjectInstanceRen *obi) RET_ZERO
 
 /* blenkernel */
 bool BKE_paint_proj_mesh_data_check(struct Scene *scene, struct Object *ob, bool *uvs, bool *mat, bool *tex, bool *stencil) RET_ZERO
@@ -306,6 +309,7 @@ int WM_operator_confirm(struct bContext *C, struct wmOperator *op, const struct 
 struct MenuType *WM_menutype_find(const char *idname, bool quiet) RET_NULL
 void WM_operator_stack_clear(struct wmWindowManager *wm) RET_NONE
 void WM_operator_handlers_clear(wmWindowManager *wm, struct wmOperatorType *ot) RET_NONE
+bool WM_operator_is_repeat(const struct bContext *C, const struct wmOperator *op) RET_ZERO;
 
 void WM_autosave_init(wmWindowManager *wm) RET_NONE
 void WM_jobs_kill_all_except(struct wmWindowManager *wm, void *owner) RET_NONE
@@ -525,6 +529,7 @@ void ED_object_constraint_tag_update(struct Object *ob, struct bConstraint *con)
 void ED_vgroup_vert_add(struct Object *ob, struct bDeformGroup *dg, int vertnum, float weight, int assignmode) RET_NONE
 void ED_vgroup_vert_remove(struct Object *ob, struct bDeformGroup *dg, int vertnum) RET_NONE
 float ED_vgroup_vert_weight(struct Object *ob, struct bDeformGroup *dg, int vertnum) RET_ZERO
+float ED_vgroup_combined_vert_weight(const struct Object *ob, const int vertnum, const int mode) RET_ZERO
 int ED_mesh_mirror_topo_table(struct Object *ob, struct DerivedMesh *dm, char mode) RET_ZERO
 int ED_mesh_mirror_spatial_table(struct Object *ob, struct BMEditMesh *em, struct DerivedMesh *dm, const float co[3], char mode) RET_ZERO
 
@@ -736,7 +741,9 @@ int collada_export(struct Scene *sce,
                    int use_blender_profile,
                    int sort_by_name,
                    BC_export_transformation_type export_transformation_type,
-                   int open_sim) RET_ZERO
+                   int open_sim,
+                   int limit_precision,
+                   int keep_bind_info) RET_ZERO
 
 void ED_mesh_calc_tessface(struct Mesh *mesh, bool free_mpoly) RET_NONE
 
@@ -752,6 +759,7 @@ void BPY_pyconstraint_exec(struct bPythonConstraint *con, struct bConstraintOb *
 void macro_wrapper(struct wmOperatorType *ot, void *userdata) RET_NONE
 bool pyrna_id_FromPyObject(struct PyObject *obj, struct ID **id) RET_ZERO
 struct PyObject *pyrna_id_CreatePyObject(struct ID *id) RET_NULL
+bool pyrna_id_CheckPyObject(struct PyObject *obj) RET_ZERO
 void BPY_context_update(struct bContext *C) RET_NONE
 const char *BPY_app_translations_py_pgettext(const char *msgctxt, const char *msgid) RET_ARG(msgid)
 
