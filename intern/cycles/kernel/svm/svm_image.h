@@ -50,7 +50,7 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 		options.swrap = options.twrap = kg->oiio->textures[id].extension;
 		options.anisotropic = 8;
 		
-		if(path_flag & NEAREST_LOOKUP_PATHS) {
+		if(path_flag & NEAREST_LOOKUP_PATHS && !(path_flag & PATH_RAY_SINGULAR)) {
 			options.interpmode = OIIO::TextureOpt::InterpClosest;
 			options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
 		}
@@ -472,7 +472,7 @@ ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, int 
 		options.swrap = options.twrap = kg->oiio->textures[id].extension;
 		options.anisotropic = 8;
 
-		if(path_flag & NEAREST_LOOKUP_PATHS) {
+		if(path_flag & NEAREST_LOOKUP_PATHS && !(path_flag & PATH_RAY_SINGULAR)) {
 			options.interpmode = OIIO::TextureOpt::InterpClosest;
 			options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
 		}
