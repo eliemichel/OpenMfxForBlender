@@ -17,7 +17,7 @@
 #ifdef __OIIO__
 #  include "kernel_oiio_globals.h"
 #  define NEAREST_LOOKUP_PATHS (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | PATH_RAY_AO | PATH_RAY_GLOSSY)
-#  define BLUR_LOOKUP_PATHS (PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_AO)
+#  define DIFFUSE_BLUR_PATHS (PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_AO)
 #endif
 
 CCL_NAMESPACE_BEGIN
@@ -53,14 +53,23 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 		if(path_flag & NEAREST_LOOKUP_PATHS) {
 			options.interpmode = OIIO::TextureOpt::InterpClosest;
 			options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
-			if(path_flag & BLUR_LOOKUP_PATHS) {
-				options.sblur = options.tblur = 1.f/64.f;
-			}
 		}
 		else {
 			options.interpmode = kg->oiio->textures[id].interpolation;
 			options.mipmode = OIIO::TextureOpt::MipModeAniso;
 		}
+		
+		
+		if(path_flag & DIFFUSE_BLUR_PATHS) {
+			options.sblur = options.tblur = kg->oiio->diffuse_blur;
+		}
+		else if(path_flag & PATH_RAY_GLOSSY) {
+			options.sblur = options.tblur = kg->oiio->glossy_blur;
+		}
+		else {
+			options.sblur = options.tblur = 0.0f;
+		}
+		
 		bool success = kg->oiio->tex_sys->texture(kg->oiio->textures[id].handle, (OIIO::TextureSystem::Perthread*)kg->oiio_tdata, options, x, y, ds.dx, ds.dy, dt.dx, dt.dy, 4, (float*)&r);
 		if(!success) {
 			(void) kg->oiio->tex_sys->geterror();
@@ -466,13 +475,21 @@ ccl_device void svm_node_tex_environment(KernelGlobals *kg, ShaderData *sd, int 
 		if(path_flag & NEAREST_LOOKUP_PATHS) {
 			options.interpmode = OIIO::TextureOpt::InterpClosest;
 			options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
-			if(path_flag & BLUR_LOOKUP_PATHS)
-			   options.sblur = options.tblur = 1.f/64.f;
 		}
 		else {
 			options.interpmode = kg->oiio->textures[id].interpolation;
 			options.mipmode = OIIO::TextureOpt::MipModeTrilinear;
 		}
+		
+		if(path_flag & DIFFUSE_BLUR_PATHS) {
+			options.sblur = options.tblur = kg->oiio->diffuse_blur;
+		} else if(path_flag & PATH_RAY_GLOSSY) {
+			options.sblur = options.tblur = kg->oiio->glossy_blur;
+		}
+		else {
+			options.sblur = options.tblur = 0.0f;
+		}
+		
 		bool success = kg->oiio->tex_sys->environment (kg->oiio->textures[id].handle, (OIIO::TextureSystem::Perthread*)kg->oiio_tdata, options,
 													   Imath::V3f(co.x, -co.y, co.z), Imath::V3f(dRdx.x, -dRdx.y, dRdx.z),
 													   Imath::V3f(dRdy.x, -dRdy.y, dRdy.z), use_alpha ? 4 : 3, (float*)&f);

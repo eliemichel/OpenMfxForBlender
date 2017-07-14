@@ -423,6 +423,8 @@ class CyclesRender_PT_performance(CyclesButtonsPanel, Panel):
         sub.prop(cscene, "texture_auto_mip")
         sub.prop(cscene, "texture_auto_tile")
         sub.prop(cscene, "texture_tile_size")
+        sub.prop(cscene, "texture_blur_diffuse")
+        sub.prop(cscene, "texture_blur_glossy")
 
         col = split.column(align=True)
 

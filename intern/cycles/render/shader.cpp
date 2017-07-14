@@ -418,21 +418,23 @@ void ShaderManager::device_update_common(Device *device,
                                          Scene *scene,
                                          Progress& /*progress*/)
 {
-	if(device->info.type == DEVICE_CPU && (scene->params.shadingsystem == SHADINGSYSTEM_OSL || scene->params.texture_cache_size > 0)) {
+	if(device->info.type == DEVICE_CPU && (scene->params.shadingsystem == SHADINGSYSTEM_OSL || scene->params.texture.cache_size > 0)) {
 		/* set texture system */
 		scene->image_manager->set_oiio_texture_system((void*)ts);
 		OIIOGlobals *oiio_globals = (OIIOGlobals*)device->oiio_memory();
 		if(oiio_globals) {
 			/* update attributes from scene parms */
-			ts->attribute("autotile", scene->params.texture_auto_tile ? scene->params.texture_tile_size : 0);
-			ts->attribute("automip", scene->params.texture_auto_mip ? 1 : 0);
-			ts->attribute("accept_unmipped", scene->params.texture_accept_unmipped ? 1 : 0);
-			ts->attribute("accept_untiled", scene->params.texture_accept_untiled ? 1 : 0);
-			ts->attribute("max_memory_MB", scene->params.texture_cache_size > 0 ? (float)scene->params.texture_cache_size : 16384.0f);
+			ts->attribute("autotile", scene->params.texture.auto_tile ? scene->params.texture.tile_size : 0);
+			ts->attribute("automip", scene->params.texture.auto_mip ? 1 : 0);
+			ts->attribute("accept_unmipped", scene->params.texture.accept_unmipped ? 1 : 0);
+			ts->attribute("accept_untiled", scene->params.texture.accept_untiled ? 1 : 0);
+			ts->attribute("max_memory_MB", scene->params.texture.cache_size > 0 ? (float)scene->params.texture.cache_size : 16384.0f);
 			ts->attribute("latlong_up", "z");
 			ts->attribute("flip_t", 1);
 			ts->attribute("max_tile_channels", 1);
 			oiio_globals->tex_sys = ts;
+			oiio_globals->diffuse_blur = scene->params.texture.diffuse_blur;
+			oiio_globals->glossy_blur = scene->params.texture.glossy_blur;
 		}
 	}
 	

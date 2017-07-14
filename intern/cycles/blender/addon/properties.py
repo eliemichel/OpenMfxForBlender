@@ -681,6 +681,20 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
             description="The size of tiles that Cycles uses for auto tiling"
         )
 
+        cls.texture_blur_diffuse = FloatProperty(
+            name="Diffuse Blur",
+            default=0.0156,
+            description="The amount of texture blur applied to diffuse bounces",
+            min = 0.0, max = 1.0
+        )
+
+        cls.texture_blur_glossy = FloatProperty(
+            name="Glossy Blur",
+            default=0.0,
+            description="The amount of texture blur applied to diffuse bounces",
+            min = 0.0, max = 1.0
+        )
+
         cls.ao_bounces = IntProperty(
             name="AO Bounces",
             default=0,

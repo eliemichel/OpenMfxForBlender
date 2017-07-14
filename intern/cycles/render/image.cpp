@@ -672,7 +672,7 @@ void ImageManager::device_load_image(Device *device,
 
 	if(oiio_texture_system && !img->builtin_data) {
 		/* Generate a mip mapped tile image file */
-		if(scene->params.texture_auto_convert) {
+		if(scene->params.texture.auto_convert) {
 			make_tx(img, progress);
 		}
 		/* When using OIIO directly from SVM, store the TextureHandle
