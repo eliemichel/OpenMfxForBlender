@@ -123,8 +123,8 @@ ccl_device_noinline void motion_triangle_shader_setup(KernelGlobals *kg,
 	}
 #ifdef __DNDU__
 	else {
-		ccl_fetch(sd, dNdu) = make_float3(0.0f, 0.0f, 0.0f);
-		ccl_fetch(sd, dNdv) = make_float3(0.0f, 0.0f, 0.0f);
+		ccl_fetch(sd, dNdx) = make_float3(0.0f, 0.0f, 0.0f);
+		ccl_fetch(sd, dNdy) = make_float3(0.0f, 0.0f, 0.0f);
 	}
 #endif
 }

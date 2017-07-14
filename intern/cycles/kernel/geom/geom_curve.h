@@ -1070,8 +1070,8 @@ ccl_device_inline float3 bvh_curve_refine(KernelGlobals *kg, ShaderData *sd, con
 #ifdef __DNDU__
 	/* dNdu/dNdv */
 	/* TODO */
-	ccl_fetch(sd, dNdu) = make_float3(0.0f, 0.0f, 0.0f);
-	ccl_fetch(sd, dNdv) = make_float3(0.0f, 0.0f, 0.0f);
+	ccl_fetch(sd, dNdx) = make_float3(0.0f, 0.0f, 0.0f);
+	ccl_fetch(sd, dNdy) = make_float3(0.0f, 0.0f, 0.0f);
 #endif
 
 	if(isect->object != OBJECT_NONE) {

@@ -66,14 +66,12 @@ ccl_device int bsdf_reflection_sample(const ShaderClosure *sc, float3 Ng, float3
 #ifdef __RAY_DIFFERENTIALS__
 #ifdef __DNDU__
 			/* as described in pbrt */
-			float3 dndx = sd->dNdu * sd->du.dx + sd->dNdv * sd->dv.dx;
-			float3 dndy = sd->dNdu * sd->du.dy + sd->dNdv * sd->dv.dy;
 			float3 dwodx = -dIdx;
 			float3 dwody = -dIdy;
-			float dDNdx = dot(dwodx, N) + dot(I, dndx);
-			float dDNdy = dot(dwody, N) + dot(I, dndy);
-			*domega_in_dx = dwodx + 2.f * (dot(I, N) * dndx + dDNdx * N);
-			*domega_in_dy = dwody + 2.f * (dot(I, N) * dndy + dDNdy * N);
+			float dDNdx = dot(dwodx, N) + dot(I, ccl_fetch(sd, dNdx));
+			float dDNdy = dot(dwody, N) + dot(I, ccl_fetch(sd, dNdy));
+			*domega_in_dx = dwodx + 2.f * (dot(I, N) * ccl_fetch(sd, dNdx) + dDNdx * N);
+			*domega_in_dy = dwody + 2.f * (dot(I, N) * ccl_fetch(sd, dNdy) + dDNdy * N);
 #else
 			*domega_in_dx = 2.0f * dot(N, dIdx) * N - dIdx;
 			*domega_in_dy = 2.0f * dot(N, dIdy) * N - dIdy;

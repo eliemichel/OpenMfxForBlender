@@ -851,9 +851,9 @@ typedef ccl_addr_space struct ShaderData {
 	ccl_soa_member(float3, dPdv);
 #endif
 #ifdef __DNDU__
-	/* differential of N w.r.t. parametric coordinates. */
-	ccl_soa_member(float3, dNdu);
-	ccl_soa_member(float3, dNdv);
+	/* differential of N w.r.t. x and y. */
+	ccl_soa_member(float3, dNdx);
+	ccl_soa_member(float3, dNdy);
 #endif
 
 #ifdef __OBJECT_MOTION__

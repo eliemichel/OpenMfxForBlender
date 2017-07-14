@@ -104,10 +104,6 @@ ccl_device_noinline void shader_setup_from_ray(KernelGlobals *kg,
 		/* dPdu/dPdv */
 		triangle_dPdudv(kg, ccl_fetch(sd, prim), &ccl_fetch(sd, dPdu), &ccl_fetch(sd, dPdv));
 #endif
-#ifdef __DNDU__
-		/* dNdu/dNdv */
-		triangle_dNdudv(kg, ccl_fetch(sd, prim), &ccl_fetch(sd, dNdu), &ccl_fetch(sd, dNdv));
-#endif
 	}
 	else {
 		/* motion triangle */
@@ -135,10 +131,6 @@ ccl_device_noinline void shader_setup_from_ray(KernelGlobals *kg,
 		object_dir_transform_auto(kg, sd, &ccl_fetch(sd, dPdu));
 		object_dir_transform_auto(kg, sd, &ccl_fetch(sd, dPdv));
 #  endif
-#  ifdef __DNDU__
-		object_dir_transform_auto(kg, sd, &ccl_fetch(sd, dNdu));
-		object_dir_transform_auto(kg, sd, &ccl_fetch(sd, dNdv));
-#  endif
 	}
 #endif
 
@@ -153,10 +145,6 @@ ccl_device_noinline void shader_setup_from_ray(KernelGlobals *kg,
 		ccl_fetch(sd, dPdu) = -ccl_fetch(sd, dPdu);
 		ccl_fetch(sd, dPdv) = -ccl_fetch(sd, dPdv);
 #endif
-#ifdef __DNDU__
-		ccl_fetch(sd, dPdu) = -ccl_fetch(sd, dNdu);
-		ccl_fetch(sd, dPdv) = -ccl_fetch(sd, dNdv);
-#endif
 	}
 
 #ifdef __RAY_DIFFERENTIALS__
@@ -164,6 +152,34 @@ ccl_device_noinline void shader_setup_from_ray(KernelGlobals *kg,
 	differential_transfer(&ccl_fetch(sd, dP), ray->dP, ray->D, ray->dD, ccl_fetch(sd, Ng), isect->t);
 	differential_incoming(&ccl_fetch(sd, dI), ray->dD);
 	differential_dudv(&ccl_fetch(sd, du), &ccl_fetch(sd, dv), ccl_fetch(sd, dPdu), ccl_fetch(sd, dPdv), ccl_fetch(sd, dP), ccl_fetch(sd, Ng));
+#  ifdef __DNDU__
+	if(ccl_fetch(sd, type) & PRIMITIVE_TRIANGLE) {
+		/* dNdu/dNdv */
+		float3 dNdu, dNdv;
+		triangle_dNdudv(kg, ccl_fetch(sd, prim), &dNdu, &dNdv);
+		ccl_fetch(sd, dNdx) = dNdu * ccl_fetch(sd, du.dx) + dNdv * ccl_fetch(sd, dv.dx);
+		ccl_fetch(sd, dNdy) = dNdu * ccl_fetch(sd, du.dy) + dNdv * ccl_fetch(sd, dv.dy);
+		
+		
+		/* backfacing test */
+		bool backfacing = (dot(ccl_fetch(sd, Ng), ccl_fetch(sd, I)) < 0.0f);
+		if(backfacing) {
+			ccl_fetch(sd, dNdx) = -ccl_fetch(sd, dNdx);
+			ccl_fetch(sd, dNdy) = -ccl_fetch(sd, dNdy);
+		}
+#    ifdef __INSTANCING__
+		if(isect->object != OBJECT_NONE) {
+			/* instance transform */
+			object_dir_transform_auto(kg, sd, &ccl_fetch(sd, dNdx));
+			object_dir_transform_auto(kg, sd, &ccl_fetch(sd, dNdy));
+		}
+#    endif /* __INSTANCING__ */
+	}
+	else {
+		ccl_fetch(sd, dNdx) = make_float3(0.0f, 0.0f, 0.0f);
+		ccl_fetch(sd, dNdy) = make_float3(0.0f, 0.0f, 0.0f);
+	}
+#  endif /* __DNDU__ */
 #endif
 }
 
@@ -213,7 +229,10 @@ void shader_setup_from_subsurface(
 #  endif
 #  ifdef __DNDU__
 		/* dNdu/dNdv */
-		triangle_dNdudv(kg, sd->prim, &sd->dNdu, &sd->dNdv);
+		float3 dNdu, dNdv;
+		triangle_dNdudv(kg, ccl_fetch(sd, prim), &dNdu, &dNdv);
+		ccl_fetch(sd, dNdx) = dNdu * ccl_fetch(sd, du.dx) + dNdv * ccl_fetch(sd, dv.dx);
+		ccl_fetch(sd, dNdy) = dNdu * ccl_fetch(sd, du.dy) + dNdv * ccl_fetch(sd, dv.dy);
 #  endif
 	}
 	else {
@@ -241,8 +260,8 @@ void shader_setup_from_subsurface(
 		object_dir_transform(kg, sd, &sd->dPdv);
 #    endif
 #    ifdef __DNDU__
-		object_dir_transform(kg, sd, &sd->dNdu);
-		object_dir_transform(kg, sd, &sd->dNdv);
+		object_dir_transform(kg, sd, &sd->dNdx);
+		object_dir_transform(kg, sd, &sd->dNdy);
 #    endif
 	}
 #  endif
@@ -257,8 +276,8 @@ void shader_setup_from_subsurface(
 		sd->dPdv = -sd->dPdv;
 #  endif
 #  ifdef __DNDU__
-		sd->dNdu = -sd->dNdu;
-		sd->dNdv = -sd->dNdv;
+		sd->dNdx = -sd->dNdx;
+		sd->dNdy = -sd->dNdy;
 #  endif
 	}
 
@@ -371,12 +390,15 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 #  endif
 #endif		/* dPdu/dPdv */
 #ifdef __DNDU__
-		triangle_dNdudv(kg, ccl_fetch(sd, prim), &ccl_fetch(sd, dNdu), &ccl_fetch(sd, dNdv));
+		float3 dNdu, dNdv;
+		triangle_dNdudv(kg, ccl_fetch(sd, prim), &dNdu, &dNdv);
+		ccl_fetch(sd, dNdx) = dNdu * ccl_fetch(sd, du.dx) + dNdv * ccl_fetch(sd, dv.dx);
+		ccl_fetch(sd, dNdy) = dNdu * ccl_fetch(sd, du.dy) + dNdv * ccl_fetch(sd, dv.dy);
 
 #  ifdef __INSTANCING__
 		if(!(ccl_fetch(sd, object_flag) & SD_OBJECT_TRANSFORM_APPLIED)) {
-			object_normal_transform_auto(kg, sd, &ccl_fetch(sd, dNdu));
-			object_normal_transform_auto(kg, sd, &ccl_fetch(sd, dNdv));
+			object_normal_transform_auto(kg, sd, &ccl_fetch(sd, dNdx));
+			object_normal_transform_auto(kg, sd, &ccl_fetch(sd, dNdy));
 		}
 #  endif
 #endif
@@ -386,8 +408,8 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 		lamp_light_dPdudv(kg, lamp, ccl_fetch(sd, u), ccl_fetch(sd, v), &ccl_fetch(sd, dPdu), &ccl_fetch(sd, dPdv));
 #endif
 #ifdef __DNDU__
-		ccl_fetch(sd, dNdu) = make_float3(0.0f, 0.0f, 0.0f);
-		ccl_fetch(sd, dNdv) = make_float3(0.0f, 0.0f, 0.0f);
+		ccl_fetch(sd, dNdx) = make_float3(0.0f, 0.0f, 0.0f);
+		ccl_fetch(sd, dNdy) = make_float3(0.0f, 0.0f, 0.0f);
 #endif
 	}
 	else {
@@ -396,8 +418,8 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 		ccl_fetch(sd, dPdv) = make_float3(0.0f, 0.0f, 0.0f);
 #endif
 #ifdef __DNDU__
-		ccl_fetch(sd, dNdu) = make_float3(0.0f, 0.0f, 0.0f);
-		ccl_fetch(sd, dNdv) = make_float3(0.0f, 0.0f, 0.0f);
+		ccl_fetch(sd, dNdx) = make_float3(0.0f, 0.0f, 0.0f);
+		ccl_fetch(sd, dNdy) = make_float3(0.0f, 0.0f, 0.0f);
 #endif
 	}
 
@@ -414,8 +436,8 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 			ccl_fetch(sd, dPdv) = -ccl_fetch(sd, dPdv);
 #endif
 #ifdef __DNDU__
-			ccl_fetch(sd, dNdu) = -ccl_fetch(sd, dNdu);
-			ccl_fetch(sd, dNdv) = -ccl_fetch(sd, dNdv);
+			ccl_fetch(sd, dNdx) = -ccl_fetch(sd, dNdx);
+			ccl_fetch(sd, dNdy) = -ccl_fetch(sd, dNdy);
 #endif
 		}
 	}
@@ -500,8 +522,8 @@ ccl_device_inline void shader_setup_from_background(KernelGlobals *kg, ShaderDat
 #endif
 #ifdef __DNDU__
 	/* dNdu/dNdv */
-	ccl_fetch(sd, dNdu) = make_float3(0.0f, 0.0f, 0.0f);
-	ccl_fetch(sd, dNdv) = make_float3(0.0f, 0.0f, 0.0f);
+	ccl_fetch(sd, dNdx) = make_float3(0.0f, 0.0f, 0.0f);
+	ccl_fetch(sd, dNdy) = make_float3(0.0f, 0.0f, 0.0f);
 #endif
 
 #ifdef __RAY_DIFFERENTIALS__
@@ -555,8 +577,8 @@ ccl_device_inline void shader_setup_from_volume(KernelGlobals *kg, ShaderData *s
 #endif
 #ifdef __DNDU__
 	/* dNdu/dNdv */
-	sd->dNdu = make_float3(0.0f, 0.0f, 0.0f);
-	sd->dNdv = make_float3(0.0f, 0.0f, 0.0f);
+	sd->dNdx = make_float3(0.0f, 0.0f, 0.0f);
+	sd->dNdy = make_float3(0.0f, 0.0f, 0.0f);
 #endif
 
 #ifdef __RAY_DIFFERENTIALS__

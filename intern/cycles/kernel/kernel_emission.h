@@ -103,8 +103,8 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 	differential3 dD;
 	differential3 dN;
 #ifdef __DNDU__
-	dN.dx = sd->dNdu;
-	dN.dy = sd->dNdv;
+	dN.dx = sd->dNdx;
+	dN.dy = sd->dNdy;
 #else
 	dN = differential3_zero();
 #endif
