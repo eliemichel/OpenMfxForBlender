@@ -198,7 +198,7 @@ typedef struct Material {
 	short pad4[3];
 
 	/* multiple tangent (Normal Map node) */
-	char nmap_tangent_names[9][64]; /* [MAX_MTFACE+1][MAX_NAME]; +1 for empty name */
+	char nmap_tangent_names[17][64]; /* [MAX_MTFACE+1][MAX_NAME]; +1 for empty name */
 	int nmap_tangent_names_count, pad5;
 
 	struct TexPaintSlot *texpaintslot; /* cached slot for painting. Make sure to recalculate before use
