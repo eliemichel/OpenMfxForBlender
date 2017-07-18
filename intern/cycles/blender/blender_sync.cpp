@@ -594,6 +594,10 @@ void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 			}
 			scene->film->use_cryptomatte |= CRYPT_MATERIAL;
 		}
+
+		if(get_boolean(crp, "pass_crypto_accurate")) {
+			scene->film->use_cryptomatte |= CRYPT_ACCURATE;
+		}
 		
 		RNA_BEGIN(&crp, b_aov, "aovs") {
 			bool is_color = RNA_enum_get(&b_aov, "type");

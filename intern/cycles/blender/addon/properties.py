@@ -1312,6 +1312,12 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
                 default=4, min=2, max=16, step=2,
                 update=update_render_passes,
                 )
+        cls.pass_crypto_accurate = BoolProperty(
+                name="CryptoMatte Accurate",
+                description="Gernate a more accurate CryptoMatte pass, CPU only, may render slower and use more memory",
+                default=True,
+                update=update_render_passes,
+                )
     @classmethod
     def unregister(cls):
         del bpy.types.SceneRenderLayer.cycles

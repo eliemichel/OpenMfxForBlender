@@ -23,6 +23,7 @@ set(SRC
 	buffers.cpp
 	camera.cpp
 	constant_fold.cpp
+	coverage.cpp
 	film.cpp
 	graph.cpp
 	image.cpp
@@ -52,6 +53,7 @@ set(SRC_HEADERS
 	buffers.h
 	camera.h
 	constant_fold.h
+	coverage.h
 	film.h
 	graph.h
 	image.h
