@@ -120,6 +120,7 @@ wmKeyMap *eyedropper_modal_keymap(wmKeyConfig *keyconf)
 	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_id");
 	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_depth");
 	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_driver");
+	WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_color_separate");
 
 	return keymap;
 }
@@ -450,14 +451,14 @@ static int eyedropper_exec(bContext *C, wmOperator *op)
 	}
 }
 
-static int eyedropper_poll(bContext *C)
+static int eyedropper_separate(bContext *C)
 {
-#if 1
-	// this is how this function was until sep 2016 -
-	// the now added check breaks the eye dropper button for cryptomattes
 	if (!CTX_wm_window(C)) return 0;
 	else return 1;
-#else
+}
+
+static int eyedropper_poll(bContext *C)
+{
 	PointerRNA ptr;
 	PropertyRNA *prop;
 	int index_dummy;
@@ -472,7 +473,6 @@ static int eyedropper_poll(bContext *C)
 	}
 
 	return 0;
-#endif
 }
 
 void UI_OT_eyedropper_color(wmOperatorType *ot)
@@ -494,6 +494,27 @@ void UI_OT_eyedropper_color(wmOperatorType *ot)
 
 	/* properties */
 }
+
+void UI_OT_eyedropper_color_separate(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Eyedropper";
+	ot->idname = "UI_OT_eyedropper_color_separate";
+	ot->description = "Sample a color from the Blender Window to store in a property";
+
+	/* api callbacks */
+	ot->invoke = eyedropper_invoke;
+	ot->modal = eyedropper_modal;
+	ot->cancel = eyedropper_cancel;
+	ot->exec = eyedropper_exec;
+	ot->poll = eyedropper_separate;
+
+	/* flags */
+	ot->flag = OPTYPE_BLOCKING | OPTYPE_INTERNAL;
+
+	/* properties */
+}
+
 
 /** \} */
 
