@@ -17,13 +17,13 @@
 #ifndef __CAMERA_H__
 #define __CAMERA_H__
 
-#include "kernel_types.h"
+#include "kernel/kernel_types.h"
 
-#include "node.h"
+#include "graph/node.h"
 
-#include "util_boundbox.h"
-#include "util_transform.h"
-#include "util_types.h"
+#include "util/util_boundbox.h"
+#include "util/util_transform.h"
+#include "util/util_types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -39,7 +39,7 @@ class Scene;
 
 class Camera : public Node {
 public:
-	NODE_DECLARE;
+	NODE_DECLARE
 
 	/* Specifies an offset for the shutter's time interval. */
 	enum MotionPosition {

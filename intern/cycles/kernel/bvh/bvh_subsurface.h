@@ -18,7 +18,7 @@
  */
 
 #ifdef __QBVH__
-#  include "qbvh_subsurface.h"
+#  include "kernel/bvh/qbvh_subsurface.h"
 #endif
 
 #if BVH_FEATURE(BVH_HAIR)
@@ -76,16 +76,16 @@ void BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 	if (!(object_flag & SD_OBJECT_TRANSFORM_APPLIED)) {
 #if BVH_FEATURE(BVH_MOTION)
 		Transform ob_itfm;
-		bvh_instance_motion_push(kg,
-		                         subsurface_object,
-		                         ray,
-		                         &P,
-		                         &dir,
-		                         &idir,
-		                         &isect_t,
-		                         &ob_itfm);
+		isect_t = bvh_instance_motion_push(kg,
+		                                   subsurface_object,
+		                                   ray,
+		                                   &P,
+		                                   &dir,
+		                                   &idir,
+		                                   isect_t,
+		                                   &ob_itfm);
 #else
-		bvh_instance_push(kg, subsurface_object, ray, &P, &dir, &idir, &isect_t);
+		isect_t = bvh_instance_push(kg, subsurface_object, ray, &P, &dir, &idir, isect_t);
 #endif
 		object = subsurface_object;
 	}
@@ -109,9 +109,6 @@ void BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 
 	gen_idirsplat_swap(pn, shuf_identity, shuf_swap, idir, idirsplat, shufflexyz);
 #endif
-
-	IsectPrecalc isect_precalc;
-	triangle_intersect_precalc(dir, &isect_precalc);
 
 	/* traversal loop */
 	do {
@@ -202,9 +199,9 @@ void BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 //                                continue;
 
 							triangle_intersect_subsurface(kg,
-							                              &isect_precalc,
 							                              ss_isect,
 							                              P,
+							                              dir,
 							                              object,
 							                              prim_addr,
 							                              isect_t,

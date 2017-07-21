@@ -18,7 +18,7 @@
 #
 # ***** END GPL LICENSE BLOCK *****
 
-# --env-system-scripts allows to run without the install target. 
+# --env-system-scripts allows to run without the install target.
 
 # Use '--write-blend=/tmp/test.blend' to view output
 
@@ -47,9 +47,10 @@ else()
 	set(TEST_BLENDER_EXE ${EXECUTABLE_OUTPUT_PATH}/blender)
 endif()
 
-# for testing with valgrind prefix: valgrind --track-origins=yes --error-limit=no 
+# for testing with valgrind prefix: valgrind --track-origins=yes --error-limit=no
 set(TEST_BLENDER_EXE_BARE ${TEST_BLENDER_EXE})
-set(TEST_BLENDER_EXE ${TEST_BLENDER_EXE} --background -noaudio --factory-startup --env-system-scripts ${CMAKE_SOURCE_DIR}/release/scripts)
+set(TEST_BLENDER_EXE_PARAMS --background -noaudio --factory-startup --env-system-scripts ${CMAKE_SOURCE_DIR}/release/scripts)
+set(TEST_BLENDER_EX ${TEST_BLENDER_EXE} ${TEST_BLENDER_EXE_PARAMS})
 
 
 # ------------------------------------------------------------------------------
@@ -83,9 +84,16 @@ add_test(script_pyapi_bpy_utils_units ${TEST_BLENDER_EXE}
 	--python ${CMAKE_CURRENT_LIST_DIR}/bl_pyapi_bpy_utils_units.py
 )
 
-# test running mathutils testing script
 add_test(script_pyapi_mathutils ${TEST_BLENDER_EXE}
 	--python ${CMAKE_CURRENT_LIST_DIR}/bl_pyapi_mathutils.py
+)
+
+add_test(script_pyapi_idprop ${TEST_BLENDER_EXE}
+	--python ${CMAKE_CURRENT_LIST_DIR}/bl_pyapi_idprop.py
+)
+
+add_test(script_pyapi_idprop_datablock ${TEST_BLENDER_EXE}
+	--python ${CMAKE_CURRENT_LIST_DIR}/bl_pyapi_idprop_datablock.py
 )
 
 # ------------------------------------------------------------------------------
@@ -93,6 +101,11 @@ add_test(script_pyapi_mathutils ${TEST_BLENDER_EXE}
 add_test(bevel ${TEST_BLENDER_EXE}
 	${TEST_SRC_DIR}/modeling/bevel_regression.blend
 	--python-text run_tests
+)
+
+add_test(split_faces ${TEST_BLENDER_EXE}
+    ${TEST_SRC_DIR}/modeling/split_faces_test.blend
+    --python-text run_tests
 )
 
 # ------------------------------------------------------------------------------
@@ -417,11 +430,55 @@ if(WITH_CYCLES)
 					-idiff "${OPENIMAGEIO_IDIFF}"
 				)
 			endif()
-		endmacro()	
+		endmacro()
+		if(WITH_OPENGL_TESTS)
+			add_cycles_render_test(opengl)
+		endif()
+		add_cycles_render_test(image)
+		add_cycles_render_test(mblur)
 		add_cycles_render_test(reports)
 		add_cycles_render_test(render)
 		add_cycles_render_test(shader)
 	else()
 		MESSAGE(STATUS "Disabling Cycles tests because tests folder does not exist")
+	endif()
+endif()
+
+if(WITH_ALEMBIC AND NOT APPLE)
+	find_package_wrapper(Alembic)
+	if(NOT ALEMBIC_FOUND)
+		message(FATAL_ERROR "Alembic is enabled but cannot be found")
+	endif()
+	get_filename_component(real_include_dir ${ALEMBIC_INCLUDE_DIR} REALPATH)
+	get_filename_component(ALEMBIC_ROOT_DIR ${real_include_dir} DIRECTORY)
+
+	if(MSVC)
+		add_test(NAME alembic_tests
+			COMMAND
+				"$<TARGET_FILE_DIR:blender>/${BLENDER_VERSION_MAJOR}.${BLENDER_VERSION_MINOR}/python/bin/python$<$<CONFIG:Debug>:_d>"
+				${CMAKE_CURRENT_LIST_DIR}/alembic_tests.py
+			--blender "$<TEST_FILE:blender>"
+			--testdir "${TEST_SRC_DIR}/alembic"
+			--alembic-root "${ALEMBIC_ROOT_DIR}"
+		)
+		add_test(NAME script_alembic_import 
+            COMMAND 
+            "$<TARGET_FILE:blender>" ${TEST_BLENDER_EXE_PARAMS} 
+        --python ${CMAKE_CURRENT_LIST_DIR}/bl_alembic_import_test.py
+        --
+        --testdir "${TEST_SRC_DIR}/alembic"
+        )
+	else()
+		add_test(alembic_tests
+			${CMAKE_CURRENT_LIST_DIR}/alembic_tests.py
+			--blender "${TEST_BLENDER_EXE_BARE}"
+			--testdir "${TEST_SRC_DIR}/alembic"
+			--alembic-root "${ALEMBIC_ROOT_DIR}"
+		)
+		add_test(script_alembic_import ${TEST_BLENDER_EXE}
+        	--python ${CMAKE_CURRENT_LIST_DIR}/bl_alembic_import_test.py
+        	--
+        	--testdir "${TEST_SRC_DIR}/alembic"
+        )
 	endif()
 endif()

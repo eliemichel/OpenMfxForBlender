@@ -16,27 +16,26 @@
 
 #ifdef WITH_EMBREE
 
-#include "bvh_embree.h"
+#include "bvh/bvh_embree.h"
 
-#include "util_types.h"
-#include "mesh.h"
-#include "object.h"
-#include "util_progress.h"
-#include "util_foreach.h"
+#include "render/mesh.h"
+#include "render/object.h"
+#include "util/util_progress.h"
+#include "util/util_foreach.h"
 
 #include "embree2/rtcore_geometry.h"
 
 /* kernel includes are necessary so that the filter function for embree can access the packed BVH */
-#include "kernel_compat_cpu.h"
-//#include "split/kernel_split_data_types.h"
-#include "kernel_globals.h"
-#include "kernel_random.h"
-#include "bvh/bvh_embree_traversal.h"
+#include "kernel/kernel_compat_cpu.h"
+#include "kernel/split/kernel_split_data_types.h"
+#include "kernel/kernel_globals.h"
+#include "kernel/kernel_random.h"
+#include "kernel/bvh/bvh_embree_traversal.h"
 
 #include "xmmintrin.h"
 #include "pmmintrin.h"
 
-/* this doesn't work with refitting unforutnately
+/* this doesn't work with refitting unfortunately
  * #define EMBREE_SHARED_MEM 1
  */
 

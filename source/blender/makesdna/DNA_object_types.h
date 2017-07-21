@@ -63,7 +63,8 @@ typedef struct bDeformGroup {
 	struct bDeformGroup *next, *prev;
 	char name[64];	/* MAX_VGROUP_NAME */
 	/* need this flag for locking weights */
-	char flag, pad[7];
+	char flag, pad[3];
+	float influence;
 } bDeformGroup;
 #define MAX_VGROUP_NAME 64
 
@@ -335,6 +336,8 @@ typedef struct DupliObject {
 
 	/* particle this dupli was generated from */
 	struct ParticleSystem *particle_system;
+	unsigned int random_id;
+	unsigned int pad;
 } DupliObject;
 
 /* **************** OBJECT ********************* */

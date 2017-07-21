@@ -22,9 +22,9 @@
 #include "bvh.h"
 #include "bvh_params.h"
 
-#include "util_types.h"
-#include "util_vector.h"
-#include "util_thread.h"
+#include "util/util_types.h"
+#include "util/util_vector.h"
+#include "util/util_thread.h"
 
 #include "embree2/rtcore.h"
 #include "embree2/rtcore_scene.h"

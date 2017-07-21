@@ -21,6 +21,7 @@
  */
 
 #include "../ABC_alembic.h"
+#include <boost/foreach.hpp>
 
 #include <Alembic/AbcMaterial/IMaterial.h>
 
@@ -120,91 +121,62 @@ ABC_INLINE AbcArchiveHandle *handle_from_archive(ArchiveReader *archive)
 
 /* NOTE: this function is similar to visit_objects below, need to keep them in
  * sync. */
-static void gather_objects_paths(const IObject &object, ListBase *object_paths)
+static bool gather_objects_paths(const IObject &object, ListBase *object_paths)
 {
 	if (!object.valid()) {
-		return;
+		return false;
 	}
 
-	for (int i = 0; i < object.getNumChildren(); ++i) {
-		IObject child = object.getChild(i);
 
-		if (!child.valid()) {
-			continue;
-		}
+	size_t children_claiming_this_object = 0;
+	size_t num_children = object.getNumChildren();
 
-		bool get_path = false;
+	for (size_t i = 0; i < num_children; ++i) {
+		bool child_claims_this_object = gather_objects_paths(object.getChild(i), object_paths);
+		children_claiming_this_object += child_claims_this_object ? 1 : 0;
+	}
 
-		const MetaData &md = child.getMetaData();
+	const MetaData &md = object.getMetaData();
+	bool get_path = false;
+	bool parent_is_part_of_this_object = false;
 
-		if (IXform::matches(md)) {
-			/* Check whether or not this object is a Maya locator, which is
-			 * similar to empties used as parent object in Blender. */
-			if (has_property(child.getProperties(), "locator")) {
-				get_path = true;
-			}
-			else {
-				/* Avoid creating an empty object if the child of this transform
-				 * is not a transform (that is an empty). */
-				if (child.getNumChildren() == 1) {
-					if (IXform::matches(child.getChild(0).getMetaData())) {
-						get_path = true;
-					}
-#if 0
-					else {
-						std::cerr << "Skipping " << child.getFullName() << '\n';
-					}
-#endif
-				}
-				else {
-					get_path = true;
-				}
-			}
-		}
-		else if (IPolyMesh::matches(md)) {
-			get_path = true;
-		}
-		else if (ISubD::matches(md)) {
-			get_path = true;
-		}
-		else if (INuPatch::matches(md)) {
-#ifdef USE_NURBS
-			get_path = true;
-#endif
-		}
-		else if (ICamera::matches(md)) {
-			get_path = true;
-		}
-		else if (IPoints::matches(md)) {
-			get_path = true;
-		}
-		else if (IMaterial::matches(md)) {
-			/* Pass for now. */
-		}
-		else if (ILight::matches(md)) {
-			/* Pass for now. */
-		}
-		else if (IFaceSet::matches(md)) {
-			/* Pass, those are handled in the mesh reader. */
-		}
-		else if (ICurves::matches(md)) {
+	if (!object.getParent()) {
+		/* The root itself is not an object we should import. */
+	}
+	else if (IXform::matches(md)) {
+		if (has_property(object.getProperties(), "locator")) {
 			get_path = true;
 		}
 		else {
-			assert(false);
+			get_path = children_claiming_this_object == 0;
 		}
 
-		if (get_path) {
-			AlembicObjectPath *abc_path = static_cast<AlembicObjectPath *>(
-			                                  MEM_callocN(sizeof(AlembicObjectPath), "AlembicObjectPath"));
-
-			BLI_strncpy(abc_path->path, child.getFullName().c_str(), PATH_MAX);
-
-			BLI_addtail(object_paths, abc_path);
-		}
-
-		gather_objects_paths(child, object_paths);
+		/* Transforms are never "data" for their parent. */
+		parent_is_part_of_this_object = false;
 	}
+	else {
+		/* These types are "data" for their parent. */
+		get_path =
+		        IPolyMesh::matches(md) ||
+		        ISubD::matches(md) ||
+#ifdef USE_NURBS
+		        INuPatch::matches(md) ||
+#endif
+		        ICamera::matches(md) ||
+		        IPoints::matches(md) ||
+		        ICurves::matches(md);
+		parent_is_part_of_this_object = get_path;
+	}
+
+	if (get_path) {
+		void *abc_path_void = MEM_callocN(sizeof(AlembicObjectPath), "AlembicObjectPath");
+		AlembicObjectPath *abc_path = static_cast<AlembicObjectPath *>(abc_path_void);
+
+		BLI_strncpy(abc_path->path, object.getFullName().c_str(), PATH_MAX);
+		BLI_addtail(object_paths, abc_path);
+	}
+
+	return parent_is_part_of_this_object;
 }
 
 AbcArchiveHandle *ABC_create_handle(const char *filename, ListBase *object_paths)
@@ -266,6 +238,7 @@ struct ExportJobData {
 	float *progress;
 
 	bool was_canceled;
+	bool export_ok;
 };
 
 static void export_startjob(void *customdata, short *stop, short *do_update, float *progress)
@@ -299,12 +272,14 @@ static void export_startjob(void *customdata, short *stop, short *do_update, flo
 			BKE_scene_update_for_newframe(data->bmain->eval_ctx, data->bmain,
 			                              scene, scene->lay);
 		}
+
+		data->export_ok = !data->was_canceled;
 	}
 	catch (const std::exception &e) {
-		std::cerr << "Abc Export error: " << e.what() << '\n';
+		ABC_LOG(data->settings.logger) << "Abc Export error: " << e.what() << '\n';
 	}
 	catch (...) {
-		std::cerr << "Abc Export error\n";
+		ABC_LOG(data->settings.logger) << "Abc Export: unknown error...\n";
 	}
 }
 
@@ -316,26 +291,49 @@ static void export_endjob(void *customdata)
 		BLI_delete(data->filename, false, false);
 	}
 
+	if (!data->settings.logger.empty()) {
+		std::cerr << data->settings.logger;
+		WM_report(RPT_ERROR, "Errors occured during the export, look in the console to know more...");
+	}
+
 	G.is_rendering = false;
 	BKE_spacedata_draw_locks(false);
 }
 
-void ABC_export(
+bool ABC_export(
         Scene *scene,
         bContext *C,
         const char *filepath,
-        const struct AlembicExportParams *params)
+        const struct AlembicExportParams *params,
+        bool as_background_job)
 {
 	ExportJobData *job = static_cast<ExportJobData *>(MEM_mallocN(sizeof(ExportJobData), "ExportJobData"));
 	job->scene = scene;
 	job->bmain = CTX_data_main(C);
+	job->export_ok = false;
 	BLI_strncpy(job->filename, filepath, 1024);
 
+	/* Alright, alright, alright....
+	 *
+	 * ExportJobData contains an ExportSettings containing a SimpleLogger.
+	 *
+	 * Since ExportJobData is a C-style struct dynamically allocated with
+	 * MEM_mallocN (see above), its construtor is never called, therefore the
+	 * ExportSettings constructor is not called which implies that the
+	 * SimpleLogger one is not called either. SimpleLogger in turn does not call
+	 * the constructor of its data members which ultimately means that its
+	 * std::ostringstream member has a NULL pointer. To be able to properly use
+	 * the stream's operator<<, the pointer needs to be set, therefore we have
+	 * to properly construct everything. And this is done using the placement
+	 * new operator as here below. It seems hackish, but I'm too lazy to
+	 * do bigger refactor and maybe there is a better way which does not involve
+	 * hardcore refactoring. */
+	new (&job->settings) ExportSettings();
 	job->settings.scene = job->scene;
 	job->settings.frame_start = params->frame_start;
 	job->settings.frame_end = params->frame_end;
-	job->settings.frame_step_xform = params->frame_step_xform;
-	job->settings.frame_step_shape = params->frame_step_shape;
+	job->settings.frame_samples_xform = params->frame_samples_xform;
+	job->settings.frame_samples_shape = params->frame_samples_shape;
 	job->settings.shutter_open = params->shutter_open;
 	job->settings.shutter_close = params->shutter_close;
 	job->settings.selected_only = params->selected_only;
@@ -343,6 +341,8 @@ void ABC_export(
 	job->settings.export_normals = params->normals;
 	job->settings.export_uvs = params->uvs;
 	job->settings.export_vcols = params->vcolors;
+	job->settings.export_hair = params->export_hair;
+	job->settings.export_particles = params->export_particles;
 	job->settings.apply_subdiv = params->apply_subdiv;
 	job->settings.flatten_hierarchy = params->flatten_hierarchy;
 	job->settings.visible_layers_only = params->visible_layers_only;
@@ -359,136 +359,247 @@ void ABC_export(
 		std::swap(job->settings.frame_start, job->settings.frame_end);
 	}
 
-	wmJob *wm_job = WM_jobs_get(CTX_wm_manager(C),
-	                            CTX_wm_window(C),
-	                            job->scene,
-	                            "Alembic Export",
-	                            WM_JOB_PROGRESS,
-	                            WM_JOB_TYPE_ALEMBIC);
+	bool export_ok = false;
+	if (as_background_job) {
+		wmJob *wm_job = WM_jobs_get(CTX_wm_manager(C),
+		                            CTX_wm_window(C),
+		                            job->scene,
+		                            "Alembic Export",
+		                            WM_JOB_PROGRESS,
+		                            WM_JOB_TYPE_ALEMBIC);
 
-	/* setup job */
-	WM_jobs_customdata_set(wm_job, job, MEM_freeN);
-	WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_FRAME, NC_SCENE | ND_FRAME);
-	WM_jobs_callbacks(wm_job, export_startjob, NULL, NULL, export_endjob);
+		/* setup job */
+		WM_jobs_customdata_set(wm_job, job, MEM_freeN);
+		WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_FRAME, NC_SCENE | ND_FRAME);
+		WM_jobs_callbacks(wm_job, export_startjob, NULL, NULL, export_endjob);
 
-	WM_jobs_start(CTX_wm_manager(C), wm_job);
+		WM_jobs_start(CTX_wm_manager(C), wm_job);
+	}
+	else {
+		/* Fake a job context, so that we don't need NULL pointer checks while exporting. */
+		short stop = 0, do_update = 0;
+		float progress = 0.f;
+
+		export_startjob(job, &stop, &do_update, &progress);
+		export_endjob(job);
+		export_ok = job->export_ok;
+
+		MEM_freeN(job);
+	}
+
+	return export_ok;
 }
 
 /* ********************** Import file ********************** */
 
-static void visit_object(const IObject &object,
-                         std::vector<AbcObjectReader *> &readers,
-                         GHash *parent_map,
-                         ImportSettings &settings)
+/**
+ * Generates an AbcObjectReader for this Alembic object and its children.
+ *
+ * \param object The Alembic IObject to visit.
+ * \param readers The created AbcObjectReader * will be appended to this vector.
+ * \param settings Import settings, not used directly but passed to the
+ *                 AbcObjectReader subclass constructors.
+ * \param r_assign_as_parent Return parameter, contains a list of reader
+ *                 pointers, whose parent pointer should still be set.
+ *                 This is filled when this call to visit_object() didn't create
+ *                 a reader that should be the parent.
+ * \return A pair of boolean and reader pointer. The boolean indicates whether
+ *         this IObject claims its parent as part of the same object
+ *         (for example an IPolyMesh object would claim its parent, as the mesh
+ *         is interpreted as the object's data, and the parent IXform as its
+ *         Blender object). The pointer is the AbcObjectReader that represents
+ *         the IObject parameter.
+ *
+ * NOTE: this function is similar to gather_object_paths above, need to keep
+ * them in sync. */
+static std::pair<bool, AbcObjectReader *> visit_object(
+        const IObject &object,
+        AbcObjectReader::ptr_vector &readers,
+        ImportSettings &settings,
+        AbcObjectReader::ptr_vector &r_assign_as_parent)
 {
+	const std::string & full_name = object.getFullName();
+
 	if (!object.valid()) {
-		return;
+		std::cerr << "  - "
+		          << full_name
+		          << ": object is invalid, skipping it and all its children.\n";
+		return std::make_pair(false, static_cast<AbcObjectReader *>(NULL));
 	}
 
-	for (int i = 0; i < object.getNumChildren(); ++i) {
-		IObject child = object.getChild(i);
+	/* The interpretation of data by the children determine the role of this
+	 * object. This is especially important for Xform objects, as they can be
+	 * either part of a Blender object or a Blender object (Empty) themselves.
+	 */
+	size_t children_claiming_this_object = 0;
+	size_t num_children = object.getNumChildren();
+	AbcObjectReader::ptr_vector claiming_child_readers;
+	AbcObjectReader::ptr_vector nonclaiming_child_readers;
+	AbcObjectReader::ptr_vector assign_as_parent;
+	for (size_t i = 0; i < num_children; ++i) {
+		const IObject ichild = object.getChild(i);
 
-		if (!child.valid()) {
-			continue;
-		}
+		/* TODO: When we only support C++11, use std::tie() instead. */
+		std::pair<bool, AbcObjectReader *> child_result;
+		child_result = visit_object(ichild, readers, settings, assign_as_parent);
 
-		AbcObjectReader *reader = NULL;
+		bool child_claims_this_object = child_result.first;
+		AbcObjectReader *child_reader = child_result.second;
 
-		const MetaData &md = child.getMetaData();
-
-		if (IXform::matches(md)) {
-			bool create_xform = false;
-
-			/* Check whether or not this object is a Maya locator, which is
-			 * similar to empties used as parent object in Blender. */
-			if (has_property(child.getProperties(), "locator")) {
-				create_xform = true;
-			}
-			else {
-				/* Avoid creating an empty object if the child of this transform
-				 * is not a transform (that is an empty). */
-				if (child.getNumChildren() == 1) {
-					if (IXform::matches(child.getChild(0).getMetaData())) {
-						create_xform = true;
-					}
-#if 0
-					else {
-						std::cerr << "Skipping " << child.getFullName() << '\n';
-					}
-#endif
-				}
-				else {
-					create_xform = true;
-				}
-			}
-
-			if (create_xform) {
-				reader = new AbcEmptyReader(child, settings);
-			}
-		}
-		else if (IPolyMesh::matches(md)) {
-			reader = new AbcMeshReader(child, settings);
-		}
-		else if (ISubD::matches(md)) {
-			reader = new AbcSubDReader(child, settings);
-		}
-		else if (INuPatch::matches(md)) {
-#ifdef USE_NURBS
-			/* TODO(kevin): importing cyclic NURBS from other software crashes
-			 * at the moment. This is due to the fact that NURBS in other
-			 * software have duplicated points which causes buffer overflows in
-			 * Blender. Need to figure out exactly how these points are
-			 * duplicated, in all cases (cyclic U, cyclic V, and cyclic UV).
-			 * Until this is fixed, disabling NURBS reading. */
-			reader = new AbcNurbsReader(child, settings);
-#endif
-		}
-		else if (ICamera::matches(md)) {
-			reader = new AbcCameraReader(child, settings);
-		}
-		else if (IPoints::matches(md)) {
-			reader = new AbcPointsReader(child, settings);
-		}
-		else if (IMaterial::matches(md)) {
-			/* Pass for now. */
-		}
-		else if (ILight::matches(md)) {
-			/* Pass for now. */
-		}
-		else if (IFaceSet::matches(md)) {
-			/* Pass, those are handled in the mesh reader. */
-		}
-		else if (ICurves::matches(md)) {
-			reader = new AbcCurveReader(child, settings);
+		if (child_reader == NULL) {
+			BLI_assert(!child_claims_this_object);
 		}
 		else {
-			assert(false);
+			if (child_claims_this_object) {
+				claiming_child_readers.push_back(child_reader);
+			} else {
+				nonclaiming_child_readers.push_back(child_reader);
+			}
 		}
 
-		if (reader) {
-			readers.push_back(reader);
-			reader->incref();
-
-			AlembicObjectPath *abc_path = static_cast<AlembicObjectPath *>(
-			                                  MEM_callocN(sizeof(AlembicObjectPath), "AlembicObjectPath"));
-
-			BLI_strncpy(abc_path->path, child.getFullName().c_str(), PATH_MAX);
-
-			BLI_addtail(&settings.cache_file->object_paths, abc_path);
-
-			/* Cast to `void *` explicitly to avoid compiler errors because it
-			 * is a `const char *` which the compiler cast to `const void *`
-			 * instead of the expected `void *`. */
-			BLI_ghash_insert(parent_map, (void *)child.getFullName().c_str(), reader);
-		}
-
-		visit_object(child, readers, parent_map, settings);
+		children_claiming_this_object += child_claims_this_object ? 1 : 0;
 	}
+	BLI_assert(children_claiming_this_object == claiming_child_readers.size());
+
+	AbcObjectReader *reader = NULL;
+	const MetaData &md = object.getMetaData();
+	bool parent_is_part_of_this_object = false;
+
+	if (!object.getParent()) {
+		/* The root itself is not an object we should import. */
+	}
+	else if (IXform::matches(md)) {
+		bool create_empty;
+
+		/* An xform can either be a Blender Object (if it contains a mesh, for
+		 * example), but it can also be an Empty. Its correct translation to
+		 * Blender's data model depends on its children. */
+
+		/* Check whether or not this object is a Maya locator, which is
+		 * similar to empties used as parent object in Blender. */
+		if (has_property(object.getProperties(), "locator")) {
+			create_empty = true;
+		}
+		else {
+			create_empty = claiming_child_readers.empty();
+		}
+
+		if (create_empty) {
+			reader = new AbcEmptyReader(object, settings);
+		}
+	}
+	else if (IPolyMesh::matches(md)) {
+		reader = new AbcMeshReader(object, settings);
+		parent_is_part_of_this_object = true;
+	}
+	else if (ISubD::matches(md)) {
+		reader = new AbcSubDReader(object, settings);
+		parent_is_part_of_this_object = true;
+	}
+	else if (INuPatch::matches(md)) {
+#ifdef USE_NURBS
+		/* TODO(kevin): importing cyclic NURBS from other software crashes
+		 * at the moment. This is due to the fact that NURBS in other
+		 * software have duplicated points which causes buffer overflows in
+		 * Blender. Need to figure out exactly how these points are
+		 * duplicated, in all cases (cyclic U, cyclic V, and cyclic UV).
+		 * Until this is fixed, disabling NURBS reading. */
+		reader = new AbcNurbsReader(object, settings);
+		parent_is_part_of_this_object = true;
+#endif
+	}
+	else if (ICamera::matches(md)) {
+		reader = new AbcCameraReader(object, settings);
+		parent_is_part_of_this_object = true;
+	}
+	else if (IPoints::matches(md)) {
+		reader = new AbcPointsReader(object, settings);
+		parent_is_part_of_this_object = true;
+	}
+	else if (IMaterial::matches(md)) {
+		/* Pass for now. */
+	}
+	else if (ILight::matches(md)) {
+		/* Pass for now. */
+	}
+	else if (IFaceSet::matches(md)) {
+		/* Pass, those are handled in the mesh reader. */
+	}
+	else if (ICurves::matches(md)) {
+		reader = new AbcCurveReader(object, settings);
+		parent_is_part_of_this_object = true;
+	}
+	else {
+		std::cerr << "Alembic object " << full_name
+		          << " is of unsupported schema type '"
+		          << object.getMetaData().get("schemaObjTitle") << "'"
+		          << std::endl;
+	}
+
+	if (reader) {
+		/* We have created a reader, which should imply that this object is
+		 * not claimed as part of any child Alembic object. */
+		BLI_assert(claiming_child_readers.empty());
+
+		readers.push_back(reader);
+		reader->incref();
+
+		AlembicObjectPath *abc_path = static_cast<AlembicObjectPath *>(
+		                                  MEM_callocN(sizeof(AlembicObjectPath), "AlembicObjectPath"));
+		BLI_strncpy(abc_path->path, full_name.c_str(), PATH_MAX);
+		BLI_addtail(&settings.cache_file->object_paths, abc_path);
+
+		/* We can now assign this reader as parent for our children. */
+		if (nonclaiming_child_readers.size() + assign_as_parent.size() > 0) {
+			/* TODO: When we only support C++11, use for (a: b) instead. */
+			BOOST_FOREACH(AbcObjectReader *child_reader, nonclaiming_child_readers) {
+				child_reader->parent_reader = reader;
+			}
+			BOOST_FOREACH(AbcObjectReader *child_reader, assign_as_parent) {
+				child_reader->parent_reader = reader;
+			}
+		}
+	}
+	else if (object.getParent()) {
+		if (claiming_child_readers.size() > 0) {
+			/* The first claiming child will serve just fine as parent to
+			 * our non-claiming children. Since all claiming children share
+			 * the same XForm, it doesn't really matter which one we pick. */
+			AbcObjectReader *claiming_child = claiming_child_readers[0];
+			BOOST_FOREACH(AbcObjectReader *child_reader, nonclaiming_child_readers) {
+				child_reader->parent_reader = claiming_child;
+			}
+			BOOST_FOREACH(AbcObjectReader *child_reader, assign_as_parent) {
+				child_reader->parent_reader = claiming_child;
+			}
+			/* Claiming children should have our parent set as their parent. */
+			BOOST_FOREACH(AbcObjectReader *child_reader, claiming_child_readers) {
+				r_assign_as_parent.push_back(child_reader);
+			}
+		}
+		else {
+			/* This object isn't claimed by any child, and didn't produce
+			 * a reader. Odd situation, could be the top Alembic object, or
+			 * an unsupported Alembic schema. Delegate to our parent. */
+			BOOST_FOREACH(AbcObjectReader *child_reader, claiming_child_readers) {
+				r_assign_as_parent.push_back(child_reader);
+			}
+			BOOST_FOREACH(AbcObjectReader *child_reader, nonclaiming_child_readers) {
+				r_assign_as_parent.push_back(child_reader);
+			}
+			BOOST_FOREACH(AbcObjectReader *child_reader, assign_as_parent) {
+				r_assign_as_parent.push_back(child_reader);
+			}
+		}
+	}
+
+	return std::make_pair(parent_is_part_of_this_object, reader);
 }
 
 enum {
 	ABC_NO_ERROR = 0,
 	ABC_ARCHIVE_FAIL,
+	ABC_UNSUPPORTED_HDF5,
 };
 
 struct ImportJobData {
@@ -498,7 +609,6 @@ struct ImportJobData {
 	char filename[1024];
 	ImportSettings settings;
 
-	GHash *parent_map;
 	std::vector<AbcObjectReader *> readers;
 
 	short *stop;
@@ -507,6 +617,7 @@ struct ImportJobData {
 
 	char error_code;
 	bool was_cancelled;
+	bool import_ok;
 };
 
 ABC_INLINE bool is_mesh_and_strands(const IObject &object)
@@ -542,6 +653,8 @@ ABC_INLINE bool is_mesh_and_strands(const IObject &object)
 
 static void import_startjob(void *user_data, short *stop, short *do_update, float *progress)
 {
+	SCOPE_TIMER("Alembic import, objects reading and creation");
+
 	ImportJobData *data = static_cast<ImportJobData *>(user_data);
 
 	data->stop = stop;
@@ -551,8 +664,12 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
 	ArchiveReader *archive = new ArchiveReader(data->filename);
 
 	if (!archive->valid()) {
-		delete archive;
+#ifndef WITH_ALEMBIC_HDF5
+		data->error_code = archive->is_hdf5() ? ABC_UNSUPPORTED_HDF5 : ABC_ARCHIVE_FAIL;
+#else
 		data->error_code = ABC_ARCHIVE_FAIL;
+#endif
+		delete archive;
 		return;
 	}
 
@@ -573,11 +690,12 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
 	*data->do_update = true;
 	*data->progress = 0.05f;
 
-	data->parent_map = BLI_ghash_str_new("alembic parent ghash");
-
 	/* Parse Alembic Archive. */
+	AbcObjectReader::ptr_vector assign_as_parent;
+	visit_object(archive->getTop(), data->readers, data->settings, assign_as_parent);
 
-	visit_object(archive->getTop(), data->readers, data->parent_map, data->settings);
+	/* There shouldn't be any orphans. */
+	BLI_assert(assign_as_parent.size() == 0);
 
 	if (G.is_break) {
 		data->was_cancelled = true;
@@ -595,19 +713,23 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
 	chrono_t min_time = std::numeric_limits<chrono_t>::max();
 	chrono_t max_time = std::numeric_limits<chrono_t>::min();
 
+	ISampleSelector sample_sel(0.0f);
 	std::vector<AbcObjectReader *>::iterator iter;
 	for (iter = data->readers.begin(); iter != data->readers.end(); ++iter) {
 		AbcObjectReader *reader = *iter;
 
 		if (reader->valid()) {
-			reader->readObjectData(data->bmain, 0.0f);
-			reader->readObjectMatrix(0.0f);
+			reader->readObjectData(data->bmain, sample_sel);
 
 			min_time = std::min(min_time, reader->minTime());
 			max_time = std::max(max_time, reader->maxTime());
 		}
+		else {
+			std::cerr << "Object " << reader->name() << " in Alembic file "
+			          << data->filename << " is invalid.\n";
+		}
 
-		*data->progress = 0.1f + 0.6f * (++i / size);
+		*data->progress = 0.1f + 0.3f * (++i / size);
 		*data->do_update = true;
 
 		if (G.is_break) {
@@ -620,50 +742,36 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
 		Scene *scene = data->scene;
 
 		if (data->settings.is_sequence) {
-			SFRA = data->settings.offset;
+			SFRA = data->settings.sequence_offset;
 			EFRA = SFRA + (data->settings.sequence_len - 1);
 			CFRA = SFRA;
 		}
 		else if (min_time < max_time) {
-			SFRA = static_cast<int>(min_time * FPS);
-			EFRA = static_cast<int>(max_time * FPS);
+			SFRA = static_cast<int>(round(min_time * FPS));
+			EFRA = static_cast<int>(round(max_time * FPS));
 			CFRA = SFRA;
 		}
 	}
 
-	/* Setup parentship. */
-
-	i = 0;
+	/* Setup parenthood. */
 	for (iter = data->readers.begin(); iter != data->readers.end(); ++iter) {
 		const AbcObjectReader *reader = *iter;
-		const AbcObjectReader *parent_reader = NULL;
-		const IObject &iobject = reader->iobject();
+		const AbcObjectReader *parent_reader = reader->parent_reader;
+		Object *ob = reader->object();
 
-		IObject parent = iobject.getParent();
-
-		if (!IXform::matches(iobject.getHeader())) {
-			/* In the case of an non XForm node, the parent is the transform
-			 * matrix of the data itself, so we get the its grand parent.
-			 */
-
-			/* Special case with object only containing a mesh and some strands,
-			 * we want both objects to be parented to the same object. */
-			if (!is_mesh_and_strands(parent)) {
-				parent = parent.getParent();
-			}
+		if (parent_reader == NULL) {
+			ob->parent = NULL;
 		}
-
-		parent_reader = reinterpret_cast<AbcObjectReader *>(
-		                    BLI_ghash_lookup(data->parent_map, parent.getFullName().c_str()));
-
-		if (parent_reader) {
-			Object *parent = parent_reader->object();
-
-			if (parent != NULL && reader->object() != parent) {
-				Object *ob = reader->object();
-				ob->parent = parent;
-			}
+		else {
+			ob->parent = parent_reader->object();
 		}
+	}
+
+	/* Setup transformations and constraints. */
+	i = 0;
+	for (iter = data->readers.begin(); iter != data->readers.end(); ++iter) {
+		AbcObjectReader *reader = *iter;
+		reader->setupObjectTransform(0.0f);
 
 		*data->progress = 0.7f + 0.3f * (++i / size);
 		*data->do_update = true;
@@ -677,6 +785,8 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
 
 static void import_endjob(void *user_data)
 {
+	SCOPE_TIMER("Alembic import, cleanup");
+
 	ImportJobData *data = static_cast<ImportJobData *>(user_data);
 
 	std::vector<AbcObjectReader *>::iterator iter;
@@ -686,23 +796,25 @@ static void import_endjob(void *user_data)
 		for (iter = data->readers.begin(); iter != data->readers.end(); ++iter) {
 			Object *ob = (*iter)->object();
 
-			if (ob->data) {
-				BKE_libblock_free_us(data->bmain, ob->data);
-				ob->data = NULL;
-			}
+			/* It's possible that cancellation occured between the creation of
+			 * the reader and the creation of the Blender object. */
+			if (ob == NULL) continue;
 
 			BKE_libblock_free_us(data->bmain, ob);
 		}
 	}
 	else {
 		/* Add object to scene. */
+		Base *base;
+
 		BKE_scene_base_deselect_all(data->scene);
 
 		for (iter = data->readers.begin(); iter != data->readers.end(); ++iter) {
 			Object *ob = (*iter)->object();
 			ob->lay = data->scene->lay;
 
-			BKE_scene_base_add(data->scene, ob);
+			base = BKE_scene_base_add(data->scene, ob);
+			BKE_scene_base_select(data->scene, base);
 
 			DAG_id_tag_update_ex(data->bmain, &ob->id, OB_RECALC_OB | OB_RECALC_DATA | OB_RECALC_TIME);
 		}
@@ -719,16 +831,16 @@ static void import_endjob(void *user_data)
 		}
 	}
 
-	if (data->parent_map) {
-		BLI_ghash_free(data->parent_map, NULL, NULL);
-	}
-
 	switch (data->error_code) {
 		default:
 		case ABC_NO_ERROR:
+			data->import_ok = !data->was_cancelled;
 			break;
 		case ABC_ARCHIVE_FAIL:
 			WM_report(RPT_ERROR, "Could not open Alembic archive for reading! See console for detail.");
+			break;
+		case ABC_UNSUPPORTED_HDF5:
+			WM_report(RPT_ERROR, "Alembic archive in obsolete HDF5 format is not supported.");
 			break;
 	}
 
@@ -741,40 +853,58 @@ static void import_freejob(void *user_data)
 	delete data;
 }
 
-void ABC_import(bContext *C, const char *filepath, float scale, bool is_sequence, bool set_frame_range, int sequence_len, int offset, bool validate_meshes)
+bool ABC_import(bContext *C, const char *filepath, float scale, bool is_sequence,
+                bool set_frame_range, int sequence_len, int offset,
+                bool validate_meshes, bool as_background_job)
 {
 	/* Using new here since MEM_* funcs do not call ctor to properly initialize
 	 * data. */
 	ImportJobData *job = new ImportJobData();
 	job->bmain = CTX_data_main(C);
 	job->scene = CTX_data_scene(C);
+	job->import_ok = false;
 	BLI_strncpy(job->filename, filepath, 1024);
 
 	job->settings.scale = scale;
 	job->settings.is_sequence = is_sequence;
 	job->settings.set_frame_range = set_frame_range;
 	job->settings.sequence_len = sequence_len;
-	job->settings.offset = offset;
+	job->settings.sequence_offset = offset;
 	job->settings.validate_meshes = validate_meshes;
-	job->parent_map = NULL;
 	job->error_code = ABC_NO_ERROR;
 	job->was_cancelled = false;
 
 	G.is_break = false;
 
-	wmJob *wm_job = WM_jobs_get(CTX_wm_manager(C),
-	                            CTX_wm_window(C),
-	                            job->scene,
-	                            "Alembic Import",
-	                            WM_JOB_PROGRESS,
-	                            WM_JOB_TYPE_ALEMBIC);
+	bool import_ok = false;
+	if (as_background_job) {
+		wmJob *wm_job = WM_jobs_get(CTX_wm_manager(C),
+									CTX_wm_window(C),
+									job->scene,
+									"Alembic Import",
+									WM_JOB_PROGRESS,
+									WM_JOB_TYPE_ALEMBIC);
 
-	/* setup job */
-	WM_jobs_customdata_set(wm_job, job, import_freejob);
-	WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_FRAME, NC_SCENE | ND_FRAME);
-	WM_jobs_callbacks(wm_job, import_startjob, NULL, NULL, import_endjob);
+		/* setup job */
+		WM_jobs_customdata_set(wm_job, job, import_freejob);
+		WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_FRAME, NC_SCENE | ND_FRAME);
+		WM_jobs_callbacks(wm_job, import_startjob, NULL, NULL, import_endjob);
 
-	WM_jobs_start(CTX_wm_manager(C), wm_job);
+		WM_jobs_start(CTX_wm_manager(C), wm_job);
+	}
+	else {
+		/* Fake a job context, so that we don't need NULL pointer checks while importing. */
+		short stop = 0, do_update = 0;
+		float progress = 0.f;
+
+		import_startjob(job, &stop, &do_update, &progress);
+		import_endjob(job);
+		import_ok = job->import_ok;
+
+		import_freejob(job);
+	}
+
+	return import_ok;
 }
 
 /* ************************************************************************** */
@@ -809,42 +939,14 @@ DerivedMesh *ABC_read_mesh(CacheReader *reader,
 	}
 
 	const ObjectHeader &header = iobject.getHeader();
-
-	if (IPolyMesh::matches(header)) {
-		if (ob->type != OB_MESH) {
-			*err_str = "Object type mismatch: object path points to a mesh!";
-			return NULL;
-		}
-
-		return abc_reader->read_derivedmesh(dm, time, read_flag, err_str);
+	if (!abc_reader->accepts_object_type(header, ob, err_str)) {
+		/* err_str is set by acceptsObjectsType() */
+		return NULL;
 	}
-	else if (ISubD::matches(header)) {
-		if (ob->type != OB_MESH) {
-			*err_str = "Object type mismatch: object path points to a subdivision mesh!";
-			return NULL;
-		}
-
-		return abc_reader->read_derivedmesh(dm, time, read_flag, err_str);
-	}
-	else if (IPoints::matches(header)) {
-		if (ob->type != OB_MESH) {
-			*err_str = "Object type mismatch: object path points to a point cloud (requires a mesh object)!";
-			return NULL;
-		}
-
-		return abc_reader->read_derivedmesh(dm, time, read_flag, err_str);
-	}
-	else if (ICurves::matches(header)) {
-		if (ob->type != OB_CURVE) {
-			*err_str = "Object type mismatch: object path points to a curve!";
-			return NULL;
-		}
-
-		return abc_reader->read_derivedmesh(dm, time, read_flag, err_str);
-	}
-
-	*err_str = "Unsupported object type: verify object path"; // or poke developer
-	return NULL;
+	/* kFloorIndex is used to be compatible with non-interpolating 
+	 * properties; they use the floor. */
+	ISampleSelector sample_sel(time, ISampleSelector::kFloorIndex);
+	return abc_reader->read_derivedmesh(dm, sample_sel, read_flag, err_str);
 }
 
 /* ************************************************************************** */
@@ -857,6 +959,12 @@ void CacheReader_free(CacheReader *reader)
 	if (abc_reader->refcount() == 0) {
 		delete abc_reader;
 	}
+}
+
+void CacheReader_incref(CacheReader *reader)
+{
+	AbcObjectReader *abc_reader = reinterpret_cast<AbcObjectReader *>(reader);
+	abc_reader->incref();
 }
 
 CacheReader *CacheReader_open_alembic_object(AbcArchiveHandle *handle, CacheReader *reader, Object *object, const char *object_path)

@@ -153,7 +153,7 @@ void AbcNurbsWriter::do_write()
 		const BPoint *bp = nu->bp;
 
 		for (int i = 0; i < size; ++i, ++bp) {
-			copy_zup_yup(positions[i].getValue(), bp->vec);
+			copy_yup_from_zup(positions[i].getValue(), bp->vec);
 			weights[i] = bp->vec[3];
 		}
 
@@ -239,7 +239,7 @@ static bool set_knots(const FloatArraySamplePtr &knots, float *&nu_knots)
 	return true;
 }
 
-void AbcNurbsReader::readObjectData(Main *bmain, float time)
+void AbcNurbsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelector &sample_sel)
 {
 	Curve *cu = static_cast<Curve *>(BKE_curve_add(bmain, "abc_curve", OB_SURF));
 	cu->actvert = CU_ACT_NONE;
@@ -253,7 +253,6 @@ void AbcNurbsReader::readObjectData(Main *bmain, float time)
 		nu->resolu = cu->resolu;
 		nu->resolv = cu->resolv;
 
-		const ISampleSelector sample_sel(time);
 		const INuPatchSchema &schema = it->first;
 		const INuPatchSchema::Sample smp = schema.getValue(sample_sel);
 
@@ -281,7 +280,7 @@ void AbcNurbsReader::readObjectData(Main *bmain, float time)
 				posw_in = (*weights)[i];
 			}
 
-			copy_yup_zup(bp->vec, pos_in.getValue());
+			copy_zup_from_yup(bp->vec, pos_in.getValue());
 			bp->vec[3] = posw_in;
 			bp->f1 = SELECT;
 			bp->radius = 1.0f;

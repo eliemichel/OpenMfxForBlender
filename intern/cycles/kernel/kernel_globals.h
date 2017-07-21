@@ -1,20 +1,22 @@
 /*
- * Copyright 2011-2013 Blender Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+* Copyright 2011-2013 Blender Foundation
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
 
 /* Constant Globals */
+#ifndef __KERNEL_GLOBALS_H__
+#define __KERNEL_GLOBALS_H__
 
 #ifdef __KERNEL_CPU__
 #include <vector>
@@ -23,9 +25,9 @@
 CCL_NAMESPACE_BEGIN
 
 /* On the CPU, we pass along the struct KernelGlobals to nearly everywhere in
- * the kernel, to access constant data. These are all stored as "textures", but
- * these are really just standard arrays. We can't use actually globals because
- * multiple renders may be running inside the same process. */
+* the kernel, to access constant data. These are all stored as "textures", but
+* these are really just standard arrays. We can't use actually globals because
+* multiple renders may be running inside the same process. */
 
 #ifdef __KERNEL_CPU__
 
@@ -54,7 +56,7 @@ typedef struct KernelGlobals {
 
 #  ifdef __OSL__
 	/* On the CPU, we also have the OSL globals here. Most data structures are shared
-	 * with SVM, the difference is in the shaders and object/mesh attributes. */
+	* with SVM, the difference is in the shaders and object/mesh attributes. */
 	OSLGlobals *osl;
 	OSLShadingSystem *osl_ss;
 	OSLThreadData *osl_tdata;
@@ -68,14 +70,21 @@ typedef struct KernelGlobals {
 	/* Storage for decoupled volume steps. */
 	VolumeStep *decoupled_volume_steps[2];
 	int decoupled_volume_steps_index;
+
+	/* split kernel */
+	SplitData split_data;
+	SplitParams split_param_data;
+
+	int2 global_size;
+	int2 global_id;
 } KernelGlobals;
 
 #endif  /* __KERNEL_CPU__ */
 
 /* For CUDA, constant memory textures must be globals, so we can't put them
- * into a struct. As a result we don't actually use this struct and use actual
- * globals and simply pass along a NULL pointer everywhere, which we hope gets
- * optimized out. */
+* into a struct. As a result we don't actually use this struct and use actual
+* globals and simply pass along a NULL pointer everywhere, which we hope gets
+* optimized out. */
 
 #ifdef __KERNEL_CUDA__
 
@@ -115,14 +124,14 @@ typedef ccl_addr_space struct KernelGlobals {
 
 ccl_device float lookup_table_read(KernelGlobals *kg, float x, int offset, int size)
 {
-	x = saturate(x)*(size-1);
+	x = saturate(x)*(size - 1);
 
-	int index = min(float_to_int(x), size-1);
-	int nindex = min(index+1, size-1);
+	int index = min(float_to_int(x), size - 1);
+	int nindex = min(index + 1, size - 1);
 	float t = x - index;
 
 	float data0 = kernel_tex_fetch(__lookup_table, index + offset);
-	if(t == 0.0f)
+	if (t == 0.0f)
 		return data0;
 
 	float data1 = kernel_tex_fetch(__lookup_table, nindex + offset);
@@ -131,14 +140,14 @@ ccl_device float lookup_table_read(KernelGlobals *kg, float x, int offset, int s
 
 ccl_device float lookup_table_read_2D(KernelGlobals *kg, float x, float y, int offset, int xsize, int ysize)
 {
-	y = saturate(y)*(ysize-1);
+	y = saturate(y)*(ysize - 1);
 
-	int index = min(float_to_int(y), ysize-1);
-	int nindex = min(index+1, ysize-1);
+	int index = min(float_to_int(y), ysize - 1);
+	int nindex = min(index + 1, ysize - 1);
 	float t = y - index;
 
 	float data0 = lookup_table_read(kg, x, offset + xsize*index, xsize);
-	if(t == 0.0f)
+	if (t == 0.0f)
 		return data0;
 
 	float data1 = lookup_table_read(kg, x, offset + xsize*nindex, xsize);
@@ -147,3 +156,4 @@ ccl_device float lookup_table_read_2D(KernelGlobals *kg, float x, float y, int o
 
 CCL_NAMESPACE_END
 
+#endif

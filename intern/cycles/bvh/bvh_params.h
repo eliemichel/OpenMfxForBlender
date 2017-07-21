@@ -18,9 +18,9 @@
 #ifndef __BVH_PARAMS_H__
 #define __BVH_PARAMS_H__
 
-#include "util_boundbox.h"
+#include "util/util_boundbox.h"
 
-#include "kernel_types.h"
+#include "kernel/kernel_types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -107,6 +107,7 @@ public:
 		primitive_mask = PRIMITIVE_ALL;
 
 		num_motion_curve_steps = 0;
+		num_motion_triangle_steps = 0;
 	}
 
 	/* SAH costs */
@@ -248,4 +249,3 @@ struct BVHSpatialStorage {
 CCL_NAMESPACE_END
 
 #endif /* __BVH_PARAMS_H__ */
-
