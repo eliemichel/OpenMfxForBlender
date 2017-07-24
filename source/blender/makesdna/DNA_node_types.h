@@ -750,7 +750,7 @@ typedef struct NodeTexBrick {
 
 typedef struct NodeTexCurve {
 	NodeTexBase base;
-	struct Object *object;
+	struct Object *object;  // Not used
 	int curve_type;
     int pad;
 } NodeTexCurve;
