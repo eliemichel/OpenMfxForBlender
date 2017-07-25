@@ -19,23 +19,23 @@
 
 #ifdef WITH_OSL
 /* So no context pollution happens from indirectly included windows.h */
-#  include "util_windows.h"
+#  include "util/util_windows.h"
 #  include <OSL/oslexec.h>
 #endif
 
 #include <OpenImageIO/texture.h>
 
-#include "attribute.h"
-#include "kernel_types.h"
+#include "render/attribute.h"
+#include "kernel/kernel_types.h"
 
-#include "node.h"
+#include "graph/node.h"
 
-#include "util_map.h"
-#include "util_param.h"
-#include "util_string.h"
-#include "util_thread.h"
-#include "util_types.h"
-#include "kernel_oiio_globals.h"
+#include "util/util_map.h"
+#include "util/util_param.h"
+#include "util/util_string.h"
+#include "util/util_thread.h"
+#include "util/util_types.h"
+#include "kernel/kernel_oiio_globals.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -85,7 +85,7 @@ enum DisplacementMethod {
 
 class Shader : public Node {
 public:
-	NODE_DECLARE;
+	NODE_DECLARE
 
 	int pass_id;
 
@@ -224,7 +224,6 @@ protected:
 	void get_requested_graph_features(ShaderGraph *graph,
 	                                  DeviceRequestedFeatures *requested_features);
 	
-	
 	void texture_system_init();
 	void texture_system_free();
 
@@ -232,6 +231,8 @@ protected:
 	static OIIO::TextureSystem *ts_shared;
 	static thread_mutex ts_shared_mutex;
 	static int ts_shared_users;
+
+	thread_spin_lock attribute_lock_;
 };
 
 CCL_NAMESPACE_END

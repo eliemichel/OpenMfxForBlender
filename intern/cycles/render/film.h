@@ -17,12 +17,12 @@
 #ifndef __FILM_H__
 #define __FILM_H__
 
-#include "util_string.h"
-#include "util_vector.h"
+#include "util/util_string.h"
+#include "util/util_vector.h"
 
-#include "kernel_types.h"
+#include "kernel/kernel_types.h"
 
-#include "node.h"
+#include "graph/node.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -53,7 +53,7 @@ public:
 
 class Film : public Node {
 public:
-	NODE_DECLARE;
+	NODE_DECLARE
 
 	float exposure;
 	array<Pass> passes;

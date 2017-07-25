@@ -16,15 +16,15 @@
 
 #ifdef WITH_OPENCL
 
-#include "opencl.h"
+#include "device/opencl/opencl.h"
 
-#include "kernel_types.h"
+#include "kernel/kernel_types.h"
 
-#include "util_foreach.h"
-#include "util_logging.h"
-#include "util_md5.h"
-#include "util_path.h"
-#include "util_time.h"
+#include "util/util_foreach.h"
+#include "util/util_logging.h"
+#include "util/util_md5.h"
+#include "util/util_path.h"
+#include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -82,9 +82,10 @@ OpenCLDeviceBase::OpenCLDeviceBase(DeviceInfo& info, Stats &stats, bool backgrou
 	cpPlatform = platform_device.platform_id;
 	cdDevice = platform_device.device_id;
 	platform_name = platform_device.platform_name;
+	device_name = platform_device.device_name;
 	VLOG(2) << "Creating new Cycles device for OpenCL platform "
 	        << platform_name << ", device "
-	        << platform_device.device_name << ".";
+	        << device_name << ".";
 
 	{
 		/* try to use cached context */
@@ -113,12 +114,16 @@ OpenCLDeviceBase::OpenCLDeviceBase(DeviceInfo& info, Stats &stats, bool backgrou
 	}
 
 	cqCommandQueue = clCreateCommandQueue(cxContext, cdDevice, 0, &ciErr);
-	if(opencl_error(ciErr))
+	if(opencl_error(ciErr)) {
+		opencl_error("OpenCL: Error creating command queue");
 		return;
+	}
 
 	null_mem = (device_ptr)clCreateBuffer(cxContext, CL_MEM_READ_ONLY, 1, NULL, &ciErr);
-	if(opencl_error(ciErr))
+	if(opencl_error(ciErr)) {
+		opencl_error("OpenCL: Error creating memory buffer for NULL");
 		return;
+	}
 
 	fprintf(stderr, "Device init success\n");
 	device_initialized = true;
@@ -147,10 +152,8 @@ OpenCLDeviceBase::~OpenCLDeviceBase()
 void CL_CALLBACK OpenCLDeviceBase::context_notify_callback(const char *err_info,
 	const void * /*private_info*/, size_t /*cb*/, void *user_data)
 {
-	char name[256];
-	clGetDeviceInfo((cl_device_id)user_data, CL_DEVICE_NAME, sizeof(name), &name, NULL);
-
-	fprintf(stderr, "OpenCL error (%s): %s\n", name, err_info);
+	string device_name = OpenCLInfo::get_device_name((cl_device_id)user_data);
+	fprintf(stderr, "OpenCL error (%s): %s\n", device_name.c_str(), err_info);
 }
 
 bool OpenCLDeviceBase::opencl_version_check()
@@ -191,6 +194,8 @@ string OpenCLDeviceBase::device_md5_hash(string kernel_custom_build_options)
 
 bool OpenCLDeviceBase::load_kernels(const DeviceRequestedFeatures& requested_features)
 {
+	VLOG(2) << "Loading kernels for platform " << platform_name
+	        << ", device " << device_name << ".";
 	/* Verify if device was initialized. */
 	if(!device_initialized) {
 		fprintf(stderr, "OpenCL: failed to initialize device.\n");
@@ -206,11 +211,14 @@ bool OpenCLDeviceBase::load_kernels(const DeviceRequestedFeatures& requested_fea
 	base_program.add_kernel(ustring("convert_to_half_float"));
 	base_program.add_kernel(ustring("shader"));
 	base_program.add_kernel(ustring("bake"));
+	base_program.add_kernel(ustring("zero_buffer"));
 
 	vector<OpenCLProgram*> programs;
 	programs.push_back(&base_program);
 	/* Call actual class to fill the vector with its programs. */
-	load_kernels(requested_features, programs);
+	if(!load_kernels(requested_features, programs)) {
+		return false;
+	}
 
 	/* Parallel compilation is supported by Cycles, but currently all OpenCL frameworks
 	 * serialize the calls internally, so it's not much use right now.
@@ -242,8 +250,14 @@ bool OpenCLDeviceBase::load_kernels(const DeviceRequestedFeatures& requested_fea
 	return true;
 }
 
-void OpenCLDeviceBase::mem_alloc(device_memory& mem, MemoryType type)
+void OpenCLDeviceBase::mem_alloc(const char *name, device_memory& mem, MemoryType type)
 {
+	if(name) {
+		VLOG(1) << "Buffer allocate: " << name << ", "
+			    << string_human_readable_number(mem.memory_size()) << " bytes. ("
+			    << string_human_readable_size(mem.memory_size()) << ")";
+	}
+
 	size_t size = mem.memory_size();
 
 	cl_mem_flags mem_flag;
@@ -339,7 +353,7 @@ void OpenCLDeviceBase::const_copy_to(const char *name, void *host, size_t size)
 		device_vector<uchar> *data = new device_vector<uchar>();
 		data->copy((uchar*)host, size);
 
-		mem_alloc(*data, MEM_READ_ONLY);
+		mem_alloc(name, *data, MEM_READ_ONLY);
 		i = const_mem_map.insert(ConstMemMap::value_type(name, data)).first;
 	}
 	else {
@@ -358,7 +372,7 @@ void OpenCLDeviceBase::tex_alloc(const char *name,
 	VLOG(1) << "Texture allocate: " << name << ", "
 	        << string_human_readable_number(mem.memory_size()) << " bytes. ("
 	        << string_human_readable_size(mem.memory_size()) << ")";
-	mem_alloc(mem, MEM_READ_ONLY);
+	mem_alloc(NULL, mem, MEM_READ_ONLY);
 	mem_copy_to(mem);
 	assert(mem_map.find(name) == mem_map.end());
 	mem_map.insert(MemMap::value_type(name, mem.device_pointer));
@@ -462,7 +476,7 @@ void OpenCLDeviceBase::film_convert(DeviceTask& task, device_ptr buffer, device_
 
 #define KERNEL_TEX(type, ttype, name) \
 set_kernel_arg_mem(ckFilmConvertKernel, &start_arg_index, #name);
-#include "kernel_textures.h"
+#include "kernel/kernel_textures.h"
 #undef KERNEL_TEX
 
 	start_arg_index += kernel_set_args(ckFilmConvertKernel,
@@ -513,7 +527,7 @@ void OpenCLDeviceBase::shader(DeviceTask& task)
 
 #define KERNEL_TEX(type, ttype, name) \
 	set_kernel_arg_mem(kernel, &start_arg_index, #name);
-#include "kernel_textures.h"
+#include "kernel/kernel_textures.h"
 #undef KERNEL_TEX
 
 	start_arg_index += kernel_set_args(kernel,

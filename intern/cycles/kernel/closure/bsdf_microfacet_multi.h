@@ -43,7 +43,7 @@ ccl_device_forceinline float D_ggx_aniso(const float3 wm, const float2 alpha)
 ccl_device_forceinline float2 mf_sampleP22_11(const float cosI, const float2 randU)
 {
 	if(cosI > 0.9999f || cosI < 1e-6f) {
-		const float r = sqrtf(randU.x / (1.0f - randU.x));
+		const float r = sqrtf(randU.x / max(1.0f - randU.x, 1e-7f));
 		const float phi = M_2PI_F * randU.y;
 		return make_float2(r*cosf(phi), r*sinf(phi));
 	}
@@ -83,7 +83,7 @@ ccl_device_forceinline float3 mf_sample_vndf(const float3 wi, const float2 alpha
 	const float3 wi_11 = normalize(make_float3(alpha.x*wi.x, alpha.y*wi.y, wi.z));
 	const float2 slope_11 = mf_sampleP22_11(wi_11.z, randU);
 
-	const float2 cossin_phi = normalize(make_float2(wi_11.x, wi_11.y));
+	const float3 cossin_phi = safe_normalize(make_float3(wi_11.x, wi_11.y, 0.0f));
 	const float slope_x = alpha.x*(cossin_phi.x * slope_11.x - cossin_phi.y * slope_11.y);
 	const float slope_y = alpha.y*(cossin_phi.y * slope_11.x + cossin_phi.x * slope_11.y);
 
@@ -313,18 +313,18 @@ ccl_device_forceinline float mf_glass_pdf(const float3 wi, const float3 wo, cons
 
 #define MF_PHASE_FUNCTION glass
 #define MF_MULTI_GLASS
-#include "bsdf_microfacet_multi_impl.h"
+#include "kernel/closure/bsdf_microfacet_multi_impl.h"
 
 /* The diffuse phase function is not implemented as a node yet. */
 #if 0
 #define MF_PHASE_FUNCTION diffuse
 #define MF_MULTI_DIFFUSE
-#include "bsdf_microfacet_multi_impl.h"
+#include "kernel/closure/bsdf_microfacet_multi_impl.h"
 #endif
 
 #define MF_PHASE_FUNCTION glossy
 #define MF_MULTI_GLOSSY
-#include "bsdf_microfacet_multi_impl.h"
+#include "kernel/closure/bsdf_microfacet_multi_impl.h"
 
 ccl_device void bsdf_microfacet_multi_ggx_blur(ShaderClosure *sc, float roughness)
 {
@@ -345,8 +345,9 @@ ccl_device int bsdf_microfacet_multi_ggx_common_setup(MicrofacetBsdf *bsdf)
 	bsdf->extra->color.x = saturate(bsdf->extra->color.x);
 	bsdf->extra->color.y = saturate(bsdf->extra->color.y);
 	bsdf->extra->color.z = saturate(bsdf->extra->color.z);
-
-	bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID;
+	bsdf->extra->cspec0.x = saturate(bsdf->extra->cspec0.x);
+	bsdf->extra->cspec0.y = saturate(bsdf->extra->cspec0.y);
+	bsdf->extra->cspec0.z = saturate(bsdf->extra->cspec0.z);
 
 	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL | SD_RUNTIME_BSDF_NEEDS_LCG;
 }
@@ -356,12 +357,44 @@ ccl_device int bsdf_microfacet_multi_ggx_aniso_setup(MicrofacetBsdf *bsdf)
 	if(is_zero(bsdf->T))
 		bsdf->T = make_float3(1.0f, 0.0f, 0.0f);
 
+	bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID;
+
+	return bsdf_microfacet_multi_ggx_common_setup(bsdf);
+}
+
+ccl_device int bsdf_microfacet_multi_ggx_aniso_fresnel_setup(MicrofacetBsdf *bsdf)
+{
+	if(is_zero(bsdf->T))
+		bsdf->T = make_float3(1.0f, 0.0f, 0.0f);
+
+	bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_FRESNEL_ID;
+
 	return bsdf_microfacet_multi_ggx_common_setup(bsdf);
 }
 
 ccl_device int bsdf_microfacet_multi_ggx_setup(MicrofacetBsdf *bsdf)
 {
 	bsdf->alpha_y = bsdf->alpha_x;
+
+	bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID;
+
+	return bsdf_microfacet_multi_ggx_common_setup(bsdf);
+}
+
+ccl_device int bsdf_microfacet_multi_ggx_fresnel_setup(MicrofacetBsdf *bsdf)
+{
+	bsdf->alpha_y = bsdf->alpha_x;
+
+	bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_FRESNEL_ID;
+
+	return bsdf_microfacet_multi_ggx_common_setup(bsdf);
+}
+
+ccl_device int bsdf_microfacet_multi_ggx_refraction_setup(MicrofacetBsdf *bsdf)
+{
+	bsdf->alpha_y = bsdf->alpha_x;
+
+	bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID;
 
 	return bsdf_microfacet_multi_ggx_common_setup(bsdf);
 }
@@ -378,6 +411,8 @@ ccl_device float3 bsdf_microfacet_multi_ggx_eval_reflect(const ShaderClosure *sc
 		return make_float3(0.0f, 0.0f, 0.0f);
 	}
 
+	bool use_fresnel = (bsdf->type == CLOSURE_BSDF_MICROFACET_MULTI_GGX_FRESNEL_ID);
+
 	bool is_aniso = (bsdf->alpha_x != bsdf->alpha_y);
 	float3 X, Y, Z;
 	Z = bsdf->N;
@@ -393,7 +428,7 @@ ccl_device float3 bsdf_microfacet_multi_ggx_eval_reflect(const ShaderClosure *sc
 		*pdf = mf_ggx_aniso_pdf(localI, localO, make_float2(bsdf->alpha_x, bsdf->alpha_y));
 	else
 		*pdf = mf_ggx_pdf(localI, localO, bsdf->alpha_x);
-	return mf_eval_glossy(localI, localO, true, bsdf->extra->color, bsdf->alpha_x, bsdf->alpha_y, lcg_state, NULL, NULL);
+	return mf_eval_glossy(localI, localO, true, bsdf->extra->color, bsdf->alpha_x, bsdf->alpha_y, lcg_state, NULL, NULL, bsdf->ior, use_fresnel, bsdf->extra->cspec0);
 }
 
 ccl_device int bsdf_microfacet_multi_ggx_sample(KernelGlobals *kg, const ShaderClosure *sc, float3 Ng, float3 I, float3 dIdx, float3 dIdy, float randu, float randv, float3 *eval, float3 *omega_in, float3 *domega_in_dx, float3 *domega_in_dy, float *pdf, ccl_addr_space uint *lcg_state)
@@ -410,6 +445,8 @@ ccl_device int bsdf_microfacet_multi_ggx_sample(KernelGlobals *kg, const ShaderC
 		return LABEL_REFLECT|LABEL_SINGULAR;
 	}
 
+	bool use_fresnel = (bsdf->type == CLOSURE_BSDF_MICROFACET_MULTI_GGX_FRESNEL_ID);
+
 	bool is_aniso = (bsdf->alpha_x != bsdf->alpha_y);
 	if(is_aniso)
 		make_orthonormals_tangent(Z, bsdf->T, &X, &Y);
@@ -419,7 +456,7 @@ ccl_device int bsdf_microfacet_multi_ggx_sample(KernelGlobals *kg, const ShaderC
 	float3 localI = make_float3(dot(I, X), dot(I, Y), dot(I, Z));
 	float3 localO;
 
-	*eval = mf_sample_glossy(localI, &localO, bsdf->extra->color, bsdf->alpha_x, bsdf->alpha_y, lcg_state, NULL, NULL);
+	*eval = mf_sample_glossy(localI, &localO, bsdf->extra->color, bsdf->alpha_x, bsdf->alpha_y, lcg_state, NULL, NULL, bsdf->ior, use_fresnel, bsdf->extra->cspec0);
 	if(is_aniso)
 		*pdf = mf_ggx_aniso_pdf(localI, localO, make_float2(bsdf->alpha_x, bsdf->alpha_y));
 	else
@@ -452,6 +489,23 @@ ccl_device int bsdf_microfacet_multi_ggx_glass_setup(MicrofacetBsdf *bsdf)
 	return SD_RUNTIME_BSDF | SD_RUNTIME_BSDF_HAS_EVAL | SD_RUNTIME_BSDF_NEEDS_LCG;
 }
 
+ccl_device int bsdf_microfacet_multi_ggx_glass_fresnel_setup(MicrofacetBsdf *bsdf)
+{
+	bsdf->alpha_x = clamp(bsdf->alpha_x, 1e-4f, 1.0f);
+	bsdf->alpha_y = bsdf->alpha_x;
+	bsdf->ior = max(0.0f, bsdf->ior);
+	bsdf->extra->color.x = saturate(bsdf->extra->color.x);
+	bsdf->extra->color.y = saturate(bsdf->extra->color.y);
+	bsdf->extra->color.z = saturate(bsdf->extra->color.z);
+	bsdf->extra->cspec0.x = saturate(bsdf->extra->cspec0.x);
+	bsdf->extra->cspec0.y = saturate(bsdf->extra->cspec0.y);
+	bsdf->extra->cspec0.z = saturate(bsdf->extra->cspec0.z);
+
+	bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_FRESNEL_ID;
+
+	return SD_RUNTIME_BSDF|SD_RUNTIME_BSDF_HAS_EVAL|SD_RUNTIME_BSDF_NEEDS_LCG;
+}
+
 ccl_device float3 bsdf_microfacet_multi_ggx_glass_eval_transmit(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf, ccl_addr_space uint *lcg_state) {
 	const MicrofacetBsdf *bsdf = (const MicrofacetBsdf*)sc;
 
@@ -467,7 +521,7 @@ ccl_device float3 bsdf_microfacet_multi_ggx_glass_eval_transmit(const ShaderClos
 	float3 localO = make_float3(dot(omega_in, X), dot(omega_in, Y), dot(omega_in, Z));
 
 	*pdf = mf_glass_pdf(localI, localO, bsdf->alpha_x, bsdf->ior);
-	return mf_eval_glass(localI, localO, false, bsdf->extra->color, bsdf->alpha_x, bsdf->alpha_y, lcg_state, bsdf->ior);
+	return mf_eval_glass(localI, localO, false, bsdf->extra->color, bsdf->alpha_x, bsdf->alpha_y, lcg_state, bsdf->ior, false, bsdf->extra->color);
 }
 
 ccl_device float3 bsdf_microfacet_multi_ggx_glass_eval_reflect(const ShaderClosure *sc, const float3 I, const float3 omega_in, float *pdf, ccl_addr_space uint *lcg_state) {
@@ -477,6 +531,8 @@ ccl_device float3 bsdf_microfacet_multi_ggx_glass_eval_reflect(const ShaderClosu
 		return make_float3(0.0f, 0.0f, 0.0f);
 	}
 
+	bool use_fresnel = (bsdf->type == CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_FRESNEL_ID);
+
 	float3 X, Y, Z;
 	Z = bsdf->N;
 	make_orthonormals(Z, &X, &Y);
@@ -485,7 +541,7 @@ ccl_device float3 bsdf_microfacet_multi_ggx_glass_eval_reflect(const ShaderClosu
 	float3 localO = make_float3(dot(omega_in, X), dot(omega_in, Y), dot(omega_in, Z));
 
 	*pdf = mf_glass_pdf(localI, localO, bsdf->alpha_x, bsdf->ior);
-	return mf_eval_glass(localI, localO, true, bsdf->extra->color, bsdf->alpha_x, bsdf->alpha_y, lcg_state, bsdf->ior);
+	return mf_eval_glass(localI, localO, true, bsdf->extra->color, bsdf->alpha_x, bsdf->alpha_y, lcg_state, bsdf->ior, use_fresnel, bsdf->extra->cspec0);
 }
 
 ccl_device int bsdf_microfacet_multi_ggx_glass_sample(KernelGlobals *kg, const ShaderClosure *sc, float3 Ng, float3 I, float3 dIdx, float3 dIdy, float randu, float randv, float3 *eval, float3 *omega_in, float3 *domega_in_dx, float3 *domega_in_dy, float *pdf, ccl_addr_space uint *lcg_state)
@@ -527,12 +583,14 @@ ccl_device int bsdf_microfacet_multi_ggx_glass_sample(KernelGlobals *kg, const S
 		}
 	}
 
+	bool use_fresnel = (bsdf->type == CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_FRESNEL_ID);
+
 	make_orthonormals(Z, &X, &Y);
 
 	float3 localI = make_float3(dot(I, X), dot(I, Y), dot(I, Z));
 	float3 localO;
 
-	*eval = mf_sample_glass(localI, &localO, bsdf->extra->color, bsdf->alpha_x, bsdf->alpha_y, lcg_state, bsdf->ior);
+	*eval = mf_sample_glass(localI, &localO, bsdf->extra->color, bsdf->alpha_x, bsdf->alpha_y, lcg_state, bsdf->ior, use_fresnel, bsdf->extra->cspec0);
 	*pdf = mf_glass_pdf(localI, localO, bsdf->alpha_x, bsdf->ior);
 	*eval *= *pdf;
 

@@ -21,12 +21,12 @@
 import bpy
 from bpy.types import Operator
 from bpy.props import (
-        StringProperty,
-        BoolProperty,
-        IntProperty,
-        FloatProperty,
-        EnumProperty,
-        )
+    StringProperty,
+    BoolProperty,
+    IntProperty,
+    FloatProperty,
+    EnumProperty,
+)
 
 from bpy.app.translations import pgettext_tip as tip_
 
@@ -128,6 +128,20 @@ def execute_context_assign(self, context):
         exec("context.%s = self.value" % data_path)
 
     return operator_path_undo_return(context, data_path)
+
+
+def module_filesystem_remove(path_base, module_name):
+    import os
+    module_name = os.path.splitext(module_name)[0]
+    for f in os.listdir(path_base):
+        f_base = os.path.splitext(f)[0]
+        if f_base == module_name:
+            f_full = os.path.join(path_base, f)
+
+            if os.path.isdir(f_full):
+                os.rmdir(f_full)
+            else:
+                os.remove(f_full)
 
 
 class BRUSH_OT_active_index_set(Operator):
@@ -831,7 +845,7 @@ class WM_OT_context_modal_mouse(Operator):
 
 
 class WM_OT_url_open(Operator):
-    "Open a website in the web-browser"
+    """Open a website in the web-browser"""
     bl_idname = "wm.url_open"
     bl_label = ""
     bl_options = {'INTERNAL'}
@@ -848,7 +862,7 @@ class WM_OT_url_open(Operator):
 
 
 class WM_OT_path_open(Operator):
-    "Open a path in a file browser"
+    """Open a path in a file browser"""
     bl_idname = "wm.path_open"
     bl_label = ""
     bl_options = {'INTERNAL'}
@@ -907,7 +921,10 @@ def _wm_doc_get_id(doc_id, do_url=True, url_prefix=""):
         # an operator (common case - just button referencing an op)
         if hasattr(bpy.types, class_name.upper() + "_OT_" + class_prop):
             if do_url:
-                url = ("%s/bpy.ops.%s.html#bpy.ops.%s.%s" % (url_prefix, class_name, class_name, class_prop))
+                url = (
+                    "%s/bpy.ops.%s.html#bpy.ops.%s.%s" %
+                    (url_prefix, class_name, class_name, class_prop)
+                )
             else:
                 rna = "bpy.ops.%s.%s" % (class_name, class_prop)
         else:
@@ -922,7 +939,10 @@ def _wm_doc_get_id(doc_id, do_url=True, url_prefix=""):
                 class_name, class_prop = class_name.split("_OT_", 1)
                 class_name = class_name.lower()
                 if do_url:
-                    url = ("%s/bpy.ops.%s.html#bpy.ops.%s.%s" % (url_prefix, class_name, class_name, class_prop))
+                    url = (
+                        "%s/bpy.ops.%s.html#bpy.ops.%s.%s" %
+                        (url_prefix, class_name, class_name, class_prop)
+                    )
                 else:
                     rna = "bpy.ops.%s.%s" % (class_name, class_prop)
             else:
@@ -938,9 +958,12 @@ def _wm_doc_get_id(doc_id, do_url=True, url_prefix=""):
                         rna_parent = rna_parent.base
 
                     if do_url:
-                        url = ("%s/bpy.types.%s.html#bpy.types.%s.%s" % (url_prefix, class_name, class_name, class_prop))
+                        url = (
+                            "%s/bpy.types.%s.html#bpy.types.%s.%s" %
+                            (url_prefix, class_name, class_name, class_prop)
+                        )
                     else:
-                        rna = ("bpy.types.%s.%s" % (class_name, class_prop))
+                        rna = "bpy.types.%s.%s" % (class_name, class_prop)
                 else:
                     # We assume this is custom property, only try to generate generic url/rna_id...
                     if do_url:
@@ -1008,11 +1031,9 @@ class WM_OT_doc_view(Operator):
 
     doc_id = doc_id
     if bpy.app.version_cycle == "release":
-        _prefix = ("https://www.blender.org/api/blender_python_api_%s%s_release" %
-                   ("_".join(str(v) for v in bpy.app.version[:2]), bpy.app.version_char))
+        _prefix = ("https://docs.blender.org/api/blender_python_api_current")
     else:
-        _prefix = ("https://www.blender.org/api/blender_python_api_%s" %
-                   "_".join(str(v) for v in bpy.app.version))
+        _prefix = ("https://docs.blender.org/api/blender_python_api_master")
 
     def execute(self, context):
         url = _wm_doc_get_id(self.doc_id, do_url=True, url_prefix=self._prefix)
@@ -1089,10 +1110,10 @@ class WM_OT_properties_edit(Operator):
 
     def execute(self, context):
         from rna_prop_ui import (
-                rna_idprop_ui_prop_get,
-                rna_idprop_ui_prop_clear,
-                rna_idprop_ui_prop_update,
-                )
+            rna_idprop_ui_prop_get,
+            rna_idprop_ui_prop_clear,
+            rna_idprop_ui_prop_update,
+        )
 
         data_path = self.data_path
         value = self.value
@@ -1269,9 +1290,9 @@ class WM_OT_properties_add(Operator):
 
     def execute(self, context):
         from rna_prop_ui import (
-                rna_idprop_ui_prop_get,
-                rna_idprop_ui_prop_update,
-                )
+            rna_idprop_ui_prop_get,
+            rna_idprop_ui_prop_update,
+        )
 
         data_path = self.data_path
         item = eval("context.%s" % data_path)
@@ -1286,10 +1307,10 @@ class WM_OT_properties_add(Operator):
 
             return prop_new
 
-        prop = unique_name(
-                {*item.keys(),
-                 *type(item).bl_rna.properties.keys(),
-                 })
+        prop = unique_name({
+            *item.keys(),
+            *type(item).bl_rna.properties.keys(),
+        })
 
         item[prop] = 1.0
         rna_idprop_ui_prop_update(item, prop)
@@ -1303,7 +1324,7 @@ class WM_OT_properties_add(Operator):
 
 
 class WM_OT_properties_context_change(Operator):
-    "Jump to a different tab inside the properties editor"
+    """Jump to a different tab inside the properties editor"""
     bl_idname = "wm.properties_context_change"
     bl_label = ""
     bl_options = {'INTERNAL'}
@@ -1329,9 +1350,9 @@ class WM_OT_properties_remove(Operator):
 
     def execute(self, context):
         from rna_prop_ui import (
-                rna_idprop_ui_prop_clear,
-                rna_idprop_ui_prop_update,
-                )
+            rna_idprop_ui_prop_clear,
+            rna_idprop_ui_prop_update,
+        )
         data_path = self.data_path
         item = eval("context.%s" % data_path)
         prop = self.property
@@ -1369,7 +1390,10 @@ class WM_OT_appconfig_default(Operator):
         filepath = os.path.join(bpy.utils.preset_paths("interaction")[0], "blender.py")
 
         if os.path.exists(filepath):
-            bpy.ops.script.execute_preset(filepath=filepath, menu_idname="USERPREF_MT_interaction_presets")
+            bpy.ops.script.execute_preset(
+                filepath=filepath,
+                menu_idname="USERPREF_MT_interaction_presets",
+            )
 
         return {'FINISHED'}
 
@@ -1389,7 +1413,10 @@ class WM_OT_appconfig_activate(Operator):
         filepath = self.filepath.replace("keyconfig", "interaction")
 
         if os.path.exists(filepath):
-            bpy.ops.script.execute_preset(filepath=filepath, menu_idname="USERPREF_MT_interaction_presets")
+            bpy.ops.script.execute_preset(
+                filepath=filepath,
+                menu_idname="USERPREF_MT_interaction_presets",
+            )
 
         return {'FINISHED'}
 
@@ -1494,7 +1521,7 @@ class WM_OT_blenderplayer_start(Operator):
             "-g", "show_profile", "=", "%d" % gs.show_framerate_profile,
             "-g", "show_properties", "=", "%d" % gs.show_debug_properties,
             "-g", "ignore_deprecation_warnings", "=", "%d" % (not gs.use_deprecation_warnings),
-            ])
+        ])
 
         # finish the call with the path to the blend file
         args.append(filepath)
@@ -1505,7 +1532,7 @@ class WM_OT_blenderplayer_start(Operator):
 
 
 class WM_OT_keyconfig_test(Operator):
-    "Test key-config for conflicts"
+    """Test key-config for conflicts"""
     bl_idname = "wm.keyconfig_test"
     bl_label = "Test Key Configuration for Conflicts"
 
@@ -1522,7 +1549,7 @@ class WM_OT_keyconfig_test(Operator):
 
 
 class WM_OT_keyconfig_import(Operator):
-    "Import key configuration from a python script"
+    """Import key configuration from a python script"""
     bl_idname = "wm.keyconfig_import"
     bl_label = "Import Key Configuration..."
 
@@ -1589,7 +1616,7 @@ class WM_OT_keyconfig_import(Operator):
 
 
 class WM_OT_keyconfig_export(Operator):
-    "Export key configuration to a python script"
+    """Export key configuration to a python script"""
     bl_idname = "wm.keyconfig_export"
     bl_label = "Export Key Configuration..."
 
@@ -1624,10 +1651,11 @@ class WM_OT_keyconfig_export(Operator):
 
         wm = context.window_manager
 
-        keyconfig_utils.keyconfig_export(wm,
-                                         wm.keyconfigs.active,
-                                         self.filepath,
-                                         )
+        keyconfig_utils.keyconfig_export(
+            wm,
+            wm.keyconfigs.active,
+            self.filepath,
+        )
 
         return {'FINISHED'}
 
@@ -1638,7 +1666,7 @@ class WM_OT_keyconfig_export(Operator):
 
 
 class WM_OT_keymap_restore(Operator):
-    "Restore key map(s)"
+    """Restore key map(s)"""
     bl_idname = "wm.keymap_restore"
     bl_label = "Restore Key Map(s)"
 
@@ -1661,7 +1689,7 @@ class WM_OT_keymap_restore(Operator):
 
 
 class WM_OT_keyitem_restore(Operator):
-    "Restore key map item"
+    """Restore key map item"""
     bl_idname = "wm.keyitem_restore"
     bl_label = "Restore Key Map Item"
 
@@ -1686,7 +1714,7 @@ class WM_OT_keyitem_restore(Operator):
 
 
 class WM_OT_keyitem_add(Operator):
-    "Add key map item"
+    """Add key map item"""
     bl_idname = "wm.keyitem_add"
     bl_label = "Add Key Map Item"
 
@@ -1708,7 +1736,7 @@ class WM_OT_keyitem_add(Operator):
 
 
 class WM_OT_keyitem_remove(Operator):
-    "Remove key map item"
+    """Remove key map item"""
     bl_idname = "wm.keyitem_remove"
     bl_label = "Remove Key Map Item"
 
@@ -1729,7 +1757,7 @@ class WM_OT_keyitem_remove(Operator):
 
 
 class WM_OT_keyconfig_remove(Operator):
-    "Remove key config"
+    """Remove key config"""
     bl_idname = "wm.keyconfig_remove"
     bl_label = "Remove Key Config"
 
@@ -1747,6 +1775,7 @@ class WM_OT_keyconfig_remove(Operator):
 
 
 class WM_OT_operator_cheat_sheet(Operator):
+    """List all the Operators in a text-block, useful for scripting"""
     bl_idname = "wm.operator_cheat_sheet"
     bl_label = "Operator Cheat Sheet"
 
@@ -1775,7 +1804,7 @@ class WM_OT_operator_cheat_sheet(Operator):
 # Add-on Operators
 
 class WM_OT_addon_enable(Operator):
-    "Enable an add-on"
+    """Enable an add-on"""
     bl_idname = "wm.addon_enable"
     bl_label = "Enable Add-on"
 
@@ -1819,7 +1848,7 @@ class WM_OT_addon_enable(Operator):
 
 
 class WM_OT_addon_disable(Operator):
-    "Disable an add-on"
+    """Disable an add-on"""
     bl_idname = "wm.addon_disable"
     bl_label = "Disable Add-on"
 
@@ -1848,7 +1877,7 @@ class WM_OT_addon_disable(Operator):
 
 
 class WM_OT_theme_install(Operator):
-    "Load and apply a Blender XML theme file"
+    """Load and apply a Blender XML theme file"""
     bl_idname = "wm.theme_install"
     bl_label = "Install Theme..."
 
@@ -1892,7 +1921,10 @@ class WM_OT_theme_install(Operator):
 
         try:
             shutil.copyfile(xmlfile, path_dest)
-            bpy.ops.script.execute_preset(filepath=path_dest, menu_idname="USERPREF_MT_interface_theme_presets")
+            bpy.ops.script.execute_preset(
+                filepath=path_dest,
+                menu_idname="USERPREF_MT_interface_theme_presets",
+            )
 
         except:
             traceback.print_exc()
@@ -1907,7 +1939,7 @@ class WM_OT_theme_install(Operator):
 
 
 class WM_OT_addon_refresh(Operator):
-    "Scan add-on directories for new modules"
+    """Scan add-on directories for new modules"""
     bl_idname = "wm.addon_refresh"
     bl_label = "Refresh"
 
@@ -1919,10 +1951,12 @@ class WM_OT_addon_refresh(Operator):
         return {'FINISHED'}
 
 
+# Note: shares some logic with WM_OT_app_template_install
+# but not enough to de-duplicate. Fixed here may apply to both.
 class WM_OT_addon_install(Operator):
-    "Install an add-on"
+    """Install an add-on"""
     bl_idname = "wm.addon_install"
-    bl_label = "Install from File..."
+    bl_label = "Install Add-on from File..."
 
     overwrite = BoolProperty(
             name="Overwrite",
@@ -1952,20 +1986,6 @@ class WM_OT_addon_install(Operator):
             default="*.py;*.zip",
             options={'HIDDEN'},
             )
-
-    @staticmethod
-    def _module_remove(path_addons, module):
-        import os
-        module = os.path.splitext(module)[0]
-        for f in os.listdir(path_addons):
-            f_base = os.path.splitext(f)[0]
-            if f_base == module:
-                f_full = os.path.join(path_addons, f)
-
-                if os.path.isdir(f_full):
-                    os.rmdir(f_full)
-                else:
-                    os.remove(f_full)
 
     def execute(self, context):
         import addon_utils
@@ -2019,7 +2039,7 @@ class WM_OT_addon_install(Operator):
 
             if self.overwrite:
                 for f in file_to_extract.namelist():
-                    WM_OT_addon_install._module_remove(path_addons, f)
+                    module_filesystem_remove(path_addons, f)
             else:
                 for f in file_to_extract.namelist():
                     path_dest = os.path.join(path_addons, os.path.basename(f))
@@ -2037,7 +2057,7 @@ class WM_OT_addon_install(Operator):
             path_dest = os.path.join(path_addons, os.path.basename(pyfile))
 
             if self.overwrite:
-                WM_OT_addon_install._module_remove(path_addons, os.path.basename(pyfile))
+                module_filesystem_remove(path_addons, os.path.basename(pyfile))
             elif os.path.exists(path_dest):
                 self.report({'WARNING'}, "File already installed to %r\n" % path_dest)
                 return {'CANCELLED'}
@@ -2072,7 +2092,10 @@ class WM_OT_addon_install(Operator):
         bpy.utils.refresh_script_paths()
 
         # print message
-        msg = tip_("Modules Installed from %r into %r (%s)") % (pyfile, path_addons, ", ".join(sorted(addons_new)))
+        msg = (
+            tip_("Modules Installed (%s) from %r into %r") %
+            (", ".join(sorted(addons_new)), pyfile, path_addons)
+        )
         print(msg)
         self.report({'INFO'}, msg)
 
@@ -2085,7 +2108,7 @@ class WM_OT_addon_install(Operator):
 
 
 class WM_OT_addon_remove(Operator):
-    "Delete the add-on from the file system"
+    """Delete the add-on from the file system"""
     bl_idname = "wm.addon_remove"
     bl_label = "Remove Add-on"
 
@@ -2144,7 +2167,7 @@ class WM_OT_addon_remove(Operator):
 
 
 class WM_OT_addon_expand(Operator):
-    "Display information and preferences for this add-on"
+    """Display information and preferences for this add-on"""
     bl_idname = "wm.addon_expand"
     bl_label = ""
     bl_options = {'INTERNAL'}
@@ -2166,8 +2189,9 @@ class WM_OT_addon_expand(Operator):
 
         return {'FINISHED'}
 
+
 class WM_OT_addon_userpref_show(Operator):
-    "Show add-on user preferences"
+    """Show add-on user preferences"""
     bl_idname = "wm.addon_userpref_show"
     bl_label = ""
     bl_options = {'INTERNAL'}
@@ -2194,3 +2218,160 @@ class WM_OT_addon_userpref_show(Operator):
             bpy.ops.screen.userpref_show('INVOKE_DEFAULT')
 
         return {'FINISHED'}
+
+
+# Note: shares some logic with WM_OT_addon_install
+# but not enough to de-duplicate. Fixes here may apply to both.
+class WM_OT_app_template_install(Operator):
+    """Install an application-template"""
+    bl_idname = "wm.app_template_install"
+    bl_label = "Install Template from File..."
+
+    overwrite = BoolProperty(
+            name="Overwrite",
+            description="Remove existing template with the same ID",
+            default=True,
+            )
+
+    filepath = StringProperty(
+            subtype='FILE_PATH',
+            )
+    filter_folder = BoolProperty(
+            name="Filter folders",
+            default=True,
+            options={'HIDDEN'},
+            )
+    filter_glob = StringProperty(
+            default="*.zip",
+            options={'HIDDEN'},
+            )
+
+    def execute(self, context):
+        import traceback
+        import zipfile
+        import shutil
+        import os
+
+        filepath = self.filepath
+
+        path_app_templates = bpy.utils.user_resource(
+            'SCRIPTS', os.path.join("startup", "bl_app_templates_user"),
+            create=True,
+        )
+
+        if not path_app_templates:
+            self.report({'ERROR'}, "Failed to get add-ons path")
+            return {'CANCELLED'}
+
+        if not os.path.isdir(path_app_templates):
+            try:
+                os.makedirs(path_app_templates, exist_ok=True)
+            except:
+                traceback.print_exc()
+
+        app_templates_old = set(os.listdir(path_app_templates))
+
+        # check to see if the file is in compressed format (.zip)
+        if zipfile.is_zipfile(filepath):
+            try:
+                file_to_extract = zipfile.ZipFile(filepath, 'r')
+            except:
+                traceback.print_exc()
+                return {'CANCELLED'}
+
+            if self.overwrite:
+                for f in file_to_extract.namelist():
+                    module_filesystem_remove(path_app_templates, f)
+            else:
+                for f in file_to_extract.namelist():
+                    path_dest = os.path.join(path_app_templates, os.path.basename(f))
+                    if os.path.exists(path_dest):
+                        self.report({'WARNING'}, "File already installed to %r\n" % path_dest)
+                        return {'CANCELLED'}
+
+            try:  # extract the file to "bl_app_templates_user"
+                file_to_extract.extractall(path_app_templates)
+            except:
+                traceback.print_exc()
+                return {'CANCELLED'}
+
+        else:
+            # Only support installing zipfiles
+            self.report({'WARNING'}, "Expected a zip-file %r\n" % filepath)
+            return {'CANCELLED'}
+
+        app_templates_new = set(os.listdir(path_app_templates)) - app_templates_old
+
+        # in case a new module path was created to install this addon.
+        bpy.utils.refresh_script_paths()
+
+        # print message
+        msg = (
+            tip_("Template Installed (%s) from %r into %r") %
+            (", ".join(sorted(app_templates_new)), filepath, path_app_templates)
+        )
+        print(msg)
+        self.report({'INFO'}, msg)
+
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        wm.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+
+classes = (
+    BRUSH_OT_active_index_set,
+    WM_OT_addon_disable,
+    WM_OT_addon_enable,
+    WM_OT_addon_expand,
+    WM_OT_addon_install,
+    WM_OT_addon_refresh,
+    WM_OT_addon_remove,
+    WM_OT_addon_userpref_show,
+    WM_OT_app_template_install,
+    WM_OT_appconfig_activate,
+    WM_OT_appconfig_default,
+    WM_OT_blenderplayer_start,
+    WM_OT_context_collection_boolean_set,
+    WM_OT_context_cycle_array,
+    WM_OT_context_cycle_enum,
+    WM_OT_context_cycle_int,
+    WM_OT_context_menu_enum,
+    WM_OT_context_modal_mouse,
+    WM_OT_context_pie_enum,
+    WM_OT_context_scale_float,
+    WM_OT_context_scale_int,
+    WM_OT_context_set_boolean,
+    WM_OT_context_set_enum,
+    WM_OT_context_set_float,
+    WM_OT_context_set_id,
+    WM_OT_context_set_int,
+    WM_OT_context_set_string,
+    WM_OT_context_set_value,
+    WM_OT_context_toggle,
+    WM_OT_context_toggle_enum,
+    WM_OT_copy_prev_settings,
+    WM_OT_doc_view,
+    WM_OT_doc_view_manual,
+    WM_OT_keyconfig_activate,
+    WM_OT_keyconfig_export,
+    WM_OT_keyconfig_import,
+    WM_OT_keyconfig_remove,
+    WM_OT_keyconfig_test,
+    WM_OT_keyitem_add,
+    WM_OT_keyitem_remove,
+    WM_OT_keyitem_restore,
+    WM_OT_keymap_restore,
+    WM_OT_operator_cheat_sheet,
+    WM_OT_operator_pie_enum,
+    WM_OT_path_open,
+    WM_OT_properties_add,
+    WM_OT_properties_context_change,
+    WM_OT_properties_edit,
+    WM_OT_properties_remove,
+    WM_OT_sysinfo,
+    WM_OT_theme_install,
+    WM_OT_url_open,
+)

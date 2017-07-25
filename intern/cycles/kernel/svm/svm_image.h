@@ -15,7 +15,7 @@
  */
 
 #ifdef __OIIO__
-#  include "kernel_oiio_globals.h"
+#  include "kernel/kernel_oiio_globals.h"
 #  define NEAREST_LOOKUP_PATHS (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | PATH_RAY_AO | PATH_RAY_GLOSSY)
 #  define DIFFUSE_BLUR_PATHS (PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_AO)
 #endif
@@ -186,7 +186,6 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 		case 86: r = kernel_tex_image_interp(__tex_image_byte4_086, x, y); break;
 		case 87: r = kernel_tex_image_interp(__tex_image_byte4_087, x, y); break;
 		case 88: r = kernel_tex_image_interp(__tex_image_byte4_088, x, y); break;
-		case 89: r = kernel_tex_image_interp(__tex_image_byte4_089, x, y); break;
 		default:
 			kernel_assert(0);
 			return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -316,9 +315,9 @@ ccl_device void svm_node_tex_image(KernelGlobals *kg, ShaderData *sd, int path_f
 ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, int *offset)
 {
 	/* get object space normal */
-	float3 N = ccl_fetch(sd, N);
+	float3 N = sd->N;
 
-	N = ccl_fetch(sd, N);
+	N = sd->N;
 	object_inverse_normal_transform(kg, sd, &N);
 
 	/* project from direction vector to barycentric coordinates in triangles */

@@ -50,6 +50,7 @@ extern "C" {
 #define CLOTH_FORCE_GRAVITY
 #define CLOTH_FORCE_DRAG
 #define CLOTH_FORCE_SPRING_STRUCTURAL
+#define CLOTH_FORCE_SPRING_SHEAR
 #define CLOTH_FORCE_SPRING_BEND
 #define CLOTH_FORCE_SPRING_GOAL
 #define CLOTH_FORCE_EFFECTORS
@@ -80,6 +81,7 @@ void BPH_mass_spring_set_position(struct Implicit_Data *data, int index, const f
 void BPH_mass_spring_set_velocity(struct Implicit_Data *data, int index, const float v[3]);
 void BPH_mass_spring_get_motion_state(struct Implicit_Data *data, int index, float x[3], float v[3]);
 void BPH_mass_spring_get_position(struct Implicit_Data *data, int index, float x[3]);
+void BPH_mass_spring_get_velocity(struct Implicit_Data *data, int index, float v[3]);
 
 /* access to modified motion state during solver step */
 void BPH_mass_spring_get_new_position(struct Implicit_Data *data, int index, float x[3]);
@@ -93,6 +95,7 @@ void BPH_mass_spring_add_constraint_ndof1(struct Implicit_Data *data, int index,
 void BPH_mass_spring_add_constraint_ndof2(struct Implicit_Data *data, int index, const float c1[3], const float dV[3]);
 
 bool BPH_mass_spring_solve_velocities(struct Implicit_Data *data, float dt, struct ImplicitSolverResult *result);
+void BPH_mass_spring_solve_velocities_inertial(struct Implicit_Data *data);
 bool BPH_mass_spring_solve_positions(struct Implicit_Data *data, float dt);
 void BPH_mass_spring_apply_result(struct Implicit_Data *data);
 
@@ -113,20 +116,22 @@ void BPH_mass_spring_force_edge_wind(struct Implicit_Data *data, int v1, int v2,
 /* Wind force, acting on a vertex */
 void BPH_mass_spring_force_vertex_wind(struct Implicit_Data *data, int v, float radius, const float (*winvec)[3]);
 /* Linear spring force between two points */
-bool BPH_mass_spring_force_spring_linear(struct Implicit_Data *data, int i, int j, float restlen,
-                                         float stiffness, float damping, bool no_compress, float clamp_force,
-                                         float r_f[3], float r_dfdx[3][3], float r_dfdv[3][3]);
+bool BPH_mass_spring_force_spring_linear(struct Implicit_Data *data, int i, int j, float restlen, float *lenfact,
+                                         float tension, float compression, float damp_tension, float damp_compression,
+					 bool no_compress, float clamp_force, float plasticity, float yield_fact, bool do_plast);
+/* Angular spring force between two polygons */
+bool BPH_mass_spring_force_spring_angular(struct Implicit_Data *data, int i, int j, int *i_a, int *i_b, int len_a, int len_b,
+                                          float restangorig, float *angoffset, float stiffness, float damping,
+					  float plasticity, float yield_ang, bool do_plast);
 /* Bending force, forming a triangle at the base of two structural springs */
 bool BPH_mass_spring_force_spring_bending(struct Implicit_Data *data, int i, int j, float restlen,
-                                          float kb, float cb,
-                                          float r_f[3], float r_dfdx[3][3], float r_dfdv[3][3]);
+                                          float kb, float cb);
 /* Angular bending force based on local target vectors */
-bool BPH_mass_spring_force_spring_bending_angular(struct Implicit_Data *data, int i, int j, int k,
+bool BPH_mass_spring_force_spring_bending_hair(struct Implicit_Data *data, int i, int j, int k,
                                                   const float target[3], float stiffness, float damping);
 /* Global goal spring */
 bool BPH_mass_spring_force_spring_goal(struct Implicit_Data *data, int i, const float goal_x[3], const float goal_v[3],
-                                       float stiffness, float damping,
-                                       float r_f[3], float r_dfdx[3][3], float r_dfdv[3][3]);
+                                       float stiffness, float damping);
 
 /* ======== Hair Volumetric Forces ======== */
 

@@ -18,8 +18,8 @@
 #define __KERNEL_OIIO_GLOBALS_H__
 
 #include <OpenImageIO/texture.h>
-#include "util_vector.h"
-#include "util_thread.h"
+#include "util/util_vector.h"
+#include "util/util_thread.h"
 
 CCL_NAMESPACE_BEGIN
 

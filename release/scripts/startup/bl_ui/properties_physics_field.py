@@ -222,11 +222,24 @@ class PHYSICS_PT_collision(PhysicButtonsPanel, Panel):
             sub.prop(settings, "thickness_outer", text="Outer", slider=True)
             sub.prop(settings, "thickness_inner", text="Inner", slider=True)
 
+            col.prop(settings, "use_culling")
+            col.prop(settings, "use_normal")
+
+            col.prop(settings, "cloth_friction")
+
             col.label(text="Soft Body Damping:")
             col.prop(settings, "damping", text="Factor", slider=True)
 
             col.label(text="Force Fields:")
             col.prop(settings, "absorption", text="Absorption")
 
+
+classes = (
+    PHYSICS_PT_field,
+    PHYSICS_PT_collision,
+)
+
 if __name__ == "__main__":  # only for live edit.
-    bpy.utils.register_module(__name__)
+    from bpy.utils import register_class
+    for cls in classes:
+        register_class(cls)

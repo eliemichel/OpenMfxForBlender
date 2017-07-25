@@ -986,6 +986,22 @@ static void rna_def_collision(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Absorption",
 	                         "How much of effector force gets lost during collision with this object (in percent)");
 	RNA_def_property_update(prop, 0, "rna_CollisionSettings_update");
+
+	prop = RNA_def_property(srna, "cloth_friction", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "pdef_cfrict");
+	RNA_def_property_range(prop, 0.0f, 80.0f);
+	RNA_def_property_ui_text(prop, "Friction", "Friction for cloth collisions");
+	RNA_def_property_update(prop, 0, "rna_CollisionSettings_update");
+
+	prop = RNA_def_property(srna, "use_culling", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag", PFIELD_CLOTH_USE_CULLING);
+	RNA_def_property_ui_text(prop, "Single Sided", "Cloth collision acts with respect to the collider normals (improves penetration recovery)");
+	RNA_def_property_update(prop, 0, "rna_CollisionSettings_update");
+
+	prop = RNA_def_property(srna, "use_normal", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag", PFIELD_CLOTH_USE_NORMAL);
+	RNA_def_property_ui_text(prop, "Override Normals", "Cloth collision impulses act in the direction of the collider normals (might improve some cases)");
+	RNA_def_property_update(prop, 0, "rna_CollisionSettings_update");
 }
 
 static void rna_def_effector_weight(BlenderRNA *brna)
@@ -1275,7 +1291,7 @@ static void rna_def_field(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "falloff_power", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "f_power");
 	RNA_def_property_range(prop, 0.0f, 10.0f);
-	RNA_def_property_ui_text(prop, "Falloff Power", "Falloff power (real gravitational falloff = 2)");
+	RNA_def_property_ui_text(prop, "Falloff Power", "");
 	RNA_def_property_update(prop, 0, "rna_FieldSettings_update");
 	
 	prop = RNA_def_property(srna, "distance_min", PROP_FLOAT, PROP_NONE);
@@ -1394,6 +1410,11 @@ static void rna_def_field(BlenderRNA *brna)
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", PFIELD_SMOKE_DENSITY);
 	RNA_def_property_ui_text(prop, "Apply Density", "Adjust force strength based on smoke density");
 	RNA_def_property_update(prop, 0, "rna_FieldSettings_update");
+	prop = RNA_def_property(srna, "use_gravity_falloff", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag", PFIELD_GRAVITATION);
+	RNA_def_property_ui_text(prop, "Gravity Falloff", "Multiply force by 1/distance²");
+	RNA_def_property_update(prop, 0, "rna_FieldSettings_update");
+
 	
 	/* Pointer */
 	

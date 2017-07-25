@@ -42,10 +42,11 @@ class GRAPH_HT_header(Header):
 
         dopesheet_filter(layout, context)
 
-        layout.prop(st, "use_normalization", text="Normalize")
-        row = layout.row()
-        row.active = st.use_normalization
-        row.prop(st, "use_auto_normalization", text="Auto")
+        row = layout.row(align=True)
+        row.prop(st, "use_normalization", icon='NORMALIZE_FCURVES', text="Normalize", toggle=True)
+        sub = row.row(align=True)
+        sub.active = st.use_normalization
+        sub.prop(st, "use_auto_normalization", icon='FILE_REFRESH', text="", toggle=True)
 
         row = layout.row(align=True)
 
@@ -299,6 +300,19 @@ class GRAPH_MT_delete(Menu):
         layout.operator("graph.clean").channels = False
         layout.operator("graph.clean", text="Clean Channels").channels = True
 
+classes = (
+    GRAPH_HT_header,
+    GRAPH_MT_editor_menus,
+    GRAPH_MT_view,
+    GRAPH_MT_select,
+    GRAPH_MT_marker,
+    GRAPH_MT_channel,
+    GRAPH_MT_key,
+    GRAPH_MT_key_transform,
+    GRAPH_MT_delete,
+)
 
 if __name__ == "__main__":  # only for live edit.
-    bpy.utils.register_module(__name__)
+    from bpy.utils import register_class
+    for cls in classes:
+        register_class(cls)
