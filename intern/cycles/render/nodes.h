@@ -22,6 +22,8 @@
 
 #include "util/util_string.h"
 
+#include <boost/shared_ptr.hpp>
+
 CCL_NAMESPACE_BEGIN
 
 class ImageManager;
@@ -113,10 +115,14 @@ public:
 	ShaderNode *clone() const;
 	virtual int get_group() { return NODE_GROUP_LEVEL_2; }
 
+	//bool has_spatial_varying() { return true; }
+	bool has_object_dependency() { return true; }
+
 	ImageManager *image_manager;
-	void *builtin_data;
+	boost::shared_ptr<uint8_t> generated_data;
 	string filename;
     std::vector<float4> points;
+    int width;
     
     float curve_thickness;
     float3 vector;
