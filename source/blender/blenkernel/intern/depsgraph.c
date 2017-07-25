@@ -544,10 +544,16 @@ static void build_dag_object(DagForest *dag, DagNode *scenenode, Main *bmain, Sc
 									if (ct->tar->type == OB_MESH)
 										node3->customdata_mask |= CD_MASK_MDEFORMVERT;
 								}
-								else if (ELEM(con->type, CONSTRAINT_TYPE_FOLLOWPATH, CONSTRAINT_TYPE_CLAMPTO, CONSTRAINT_TYPE_SPLINEIK))
+								else if (ELEM(con->type, CONSTRAINT_TYPE_FOLLOWPATH,
+								                         CONSTRAINT_TYPE_CLAMPTO,
+								                         CONSTRAINT_TYPE_SPLINEIK,
+								                         CONSTRAINT_TYPE_SHRINKWRAP))
+								{
 									dag_add_relation(dag, node3, node, DAG_RL_DATA_DATA | DAG_RL_OB_DATA, cti->name);
-								else
+								}
+								else {
 									dag_add_relation(dag, node3, node, DAG_RL_OB_DATA, cti->name);
+								}
 							}
 						}
 						
@@ -881,8 +887,12 @@ static void build_dag_object(DagForest *dag, DagNode *scenenode, Main *bmain, Sc
 						if (obt->type == OB_MESH)
 							node2->customdata_mask |= CD_MASK_MDEFORMVERT;
 					}
-					else
+					else if (cti->type == CONSTRAINT_TYPE_SHRINKWRAP) {
+						dag_add_relation(dag, node2, node, DAG_RL_DATA_DATA | DAG_RL_OB_DATA, cti->name);
+					}
+					else {
 						dag_add_relation(dag, node2, node, DAG_RL_OB_OB, cti->name);
+					}
 				}
 				addtoroot = 0;
 			}
@@ -3043,7 +3053,7 @@ void DAG_id_type_tag(Main *bmain, short idtype)
 		DAG_id_type_tag(bmain, ID_SCE);
 	}
 
-	bmain->id_tag_update[BKE_idcode_to_index(idtype)] = 1;
+	atomic_fetch_and_or_uint8((uint8_t*)&bmain->id_tag_update[BKE_idcode_to_index(idtype)], 1);
 }
 
 int DAG_id_type_tagged(Main *bmain, short idtype)

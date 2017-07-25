@@ -147,21 +147,17 @@ static void protectflag_to_drawflags(short protectflag, short *drawflags)
 }
 
 /* for pose mode */
-static void stats_pose(Scene *scene, RegionView3D *rv3d, bPoseChannel *pchan)
+static void protectflag_to_drawflags_pchan(RegionView3D *rv3d, const bPoseChannel *pchan)
 {
-	Bone *bone = pchan->bone;
-
-	if (bone) {
-		calc_tw_center(scene, pchan->pose_head);
-		protectflag_to_drawflags(pchan->protectflag, &rv3d->twdrawflag);
-	}
+	protectflag_to_drawflags(pchan->protectflag, &rv3d->twdrawflag);
 }
 
 /* for editmode*/
-static void stats_editbone(RegionView3D *rv3d, EditBone *ebo)
+static void protectflag_to_drawflags_ebone(RegionView3D *rv3d, const EditBone *ebo)
 {
-	if (ebo->flag & BONE_EDITMODE_LOCKED)
+	if (ebo->flag & BONE_EDITMODE_LOCKED) {
 		protectflag_to_drawflags(OB_LOCK_LOC | OB_LOCK_ROT | OB_LOCK_SCALE, &rv3d->twdrawflag);
+	}
 }
 
 /* could move into BLI_math however this is only useful for display/editing purposes */
@@ -196,72 +192,70 @@ static void axis_angle_to_gimbal_axis(float gmat[3][3], const float axis[3], con
 }
 
 
-static int test_rotmode_euler(short rotmode)
+static bool test_rotmode_euler(short rotmode)
 {
 	return (ELEM(rotmode, ROT_MODE_AXISANGLE, ROT_MODE_QUAT)) ? 0 : 1;
 }
 
 bool gimbal_axis(Object *ob, float gmat[3][3])
 {
-	if (ob) {
-		if (ob->mode & OB_MODE_POSE) {
-			bPoseChannel *pchan = BKE_pose_channel_active(ob);
+	if (ob->mode & OB_MODE_POSE) {
+		bPoseChannel *pchan = BKE_pose_channel_active(ob);
 
-			if (pchan) {
-				float mat[3][3], tmat[3][3], obmat[3][3];
-				if (test_rotmode_euler(pchan->rotmode)) {
-					eulO_to_gimbal_axis(mat, pchan->eul, pchan->rotmode);
-				}
-				else if (pchan->rotmode == ROT_MODE_AXISANGLE) {
-					axis_angle_to_gimbal_axis(mat, pchan->rotAxis, pchan->rotAngle);
-				}
-				else { /* quat */
-					return 0;
-				}
-
-
-				/* apply bone transformation */
-				mul_m3_m3m3(tmat, pchan->bone->bone_mat, mat);
-
-				if (pchan->parent) {
-					float parent_mat[3][3];
-
-					copy_m3_m4(parent_mat, pchan->parent->pose_mat);
-					mul_m3_m3m3(mat, parent_mat, tmat);
-
-					/* needed if object transformation isn't identity */
-					copy_m3_m4(obmat, ob->obmat);
-					mul_m3_m3m3(gmat, obmat, mat);
-				}
-				else {
-					/* needed if object transformation isn't identity */
-					copy_m3_m4(obmat, ob->obmat);
-					mul_m3_m3m3(gmat, obmat, tmat);
-				}
-
-				normalize_m3(gmat);
-				return 1;
+		if (pchan) {
+			float mat[3][3], tmat[3][3], obmat[3][3];
+			if (test_rotmode_euler(pchan->rotmode)) {
+				eulO_to_gimbal_axis(mat, pchan->eul, pchan->rotmode);
 			}
-		}
-		else {
-			if (test_rotmode_euler(ob->rotmode)) {
-				eulO_to_gimbal_axis(gmat, ob->rot, ob->rotmode);
-			}
-			else if (ob->rotmode == ROT_MODE_AXISANGLE) {
-				axis_angle_to_gimbal_axis(gmat, ob->rotAxis, ob->rotAngle);
+			else if (pchan->rotmode == ROT_MODE_AXISANGLE) {
+				axis_angle_to_gimbal_axis(mat, pchan->rotAxis, pchan->rotAngle);
 			}
 			else { /* quat */
 				return 0;
 			}
 
-			if (ob->parent) {
+
+			/* apply bone transformation */
+			mul_m3_m3m3(tmat, pchan->bone->bone_mat, mat);
+
+			if (pchan->parent) {
 				float parent_mat[3][3];
-				copy_m3_m4(parent_mat, ob->parent->obmat);
-				normalize_m3(parent_mat);
-				mul_m3_m3m3(gmat, parent_mat, gmat);
+
+				copy_m3_m4(parent_mat, pchan->parent->pose_mat);
+				mul_m3_m3m3(mat, parent_mat, tmat);
+
+				/* needed if object transformation isn't identity */
+				copy_m3_m4(obmat, ob->obmat);
+				mul_m3_m3m3(gmat, obmat, mat);
 			}
+			else {
+				/* needed if object transformation isn't identity */
+				copy_m3_m4(obmat, ob->obmat);
+				mul_m3_m3m3(gmat, obmat, tmat);
+			}
+
+			normalize_m3(gmat);
 			return 1;
 		}
+	}
+	else {
+		if (test_rotmode_euler(ob->rotmode)) {
+			eulO_to_gimbal_axis(gmat, ob->rot, ob->rotmode);
+		}
+		else if (ob->rotmode == ROT_MODE_AXISANGLE) {
+			axis_angle_to_gimbal_axis(gmat, ob->rotAxis, ob->rotAngle);
+		}
+		else { /* quat */
+			return 0;
+		}
+
+		if (ob->parent) {
+			float parent_mat[3][3];
+			copy_m3_m4(parent_mat, ob->parent->obmat);
+			normalize_m3(parent_mat);
+			mul_m3_m3m3(gmat, parent_mat, gmat);
+		}
+		return 1;
 	}
 
 	return 0;
@@ -391,7 +385,7 @@ static int calc_manipulator_stats(const bContext *C)
 					calc_tw_center(scene, ebo->head);
 					totsel++;
 				}
-				stats_editbone(rv3d, ebo);
+				protectflag_to_drawflags_ebone(rv3d, ebo);
 			}
 			else {
 				for (ebo = arm->edbo->first; ebo; ebo = ebo->next) {
@@ -411,7 +405,7 @@ static int calc_manipulator_stats(const bContext *C)
 							totsel++;
 						}
 						if (ebo->flag & BONE_SELECTED) {
-							stats_editbone(rv3d, ebo);
+							protectflag_to_drawflags_ebone(rv3d, ebo);
 						}
 					}
 				}
@@ -536,7 +530,8 @@ static int calc_manipulator_stats(const bContext *C)
 			/* doesn't check selection or visibility intentionally */
 			Bone *bone = pchan->bone;
 			if (bone) {
-				stats_pose(scene, rv3d, pchan);
+				calc_tw_center(scene, pchan->pose_head);
+				protectflag_to_drawflags_pchan(rv3d, pchan);
 				totsel = 1;
 				ok = true;
 			}
@@ -549,7 +544,8 @@ static int calc_manipulator_stats(const bContext *C)
 				for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
 					Bone *bone = pchan->bone;
 					if (bone && (bone->flag & BONE_TRANSFORM)) {
-						stats_pose(scene, rv3d, pchan);
+						calc_tw_center(scene, pchan->pose_head);
+						protectflag_to_drawflags_pchan(rv3d, pchan);
 					}
 				}
 				ok = true;
@@ -2029,14 +2025,14 @@ static int manipulator_selectbuf(ScrArea *sa, ARegion *ar, const int mval[2], fl
 {
 	View3D *v3d = sa->spacedata.first;
 	RegionView3D *rv3d = ar->regiondata;
-	rctf rect, selrect;
+	rcti rect;
 	GLuint buffer[64];      // max 4 items per select, so large enuf
 	short hits;
 	const bool is_picksel = true;
 	const bool do_passes = GPU_select_query_check_active();
 
 	/* XXX check a bit later on this... (ton) */
-	extern void view3d_winmatrix_set(ARegion *ar, View3D *v3d, rctf *rect);
+	extern void view3d_winmatrix_set(ARegion *ar, View3D *v3d, const rcti *rect);
 
 	/* when looking through a selected camera, the manipulator can be at the
 	 * exact same position as the view, skip so we don't break selection */
@@ -2048,15 +2044,13 @@ static int manipulator_selectbuf(ScrArea *sa, ARegion *ar, const int mval[2], fl
 	rect.ymin = mval[1] - hotspot;
 	rect.ymax = mval[1] + hotspot;
 
-	selrect = rect;
-
 	view3d_winmatrix_set(ar, v3d, &rect);
 	mul_m4_m4m4(rv3d->persmat, rv3d->winmat, rv3d->viewmat);
 
 	if (do_passes)
-		GPU_select_begin(buffer, 64, &selrect, GPU_SELECT_NEAREST_FIRST_PASS, 0);
+		GPU_select_begin(buffer, 64, &rect, GPU_SELECT_NEAREST_FIRST_PASS, 0);
 	else
-		GPU_select_begin(buffer, 64, &selrect, GPU_SELECT_ALL, 0);
+		GPU_select_begin(buffer, 64, &rect, GPU_SELECT_ALL, 0);
 
 	/* do the drawing */
 	if (v3d->twtype & V3D_MANIP_ROTATE) {
@@ -2084,7 +2078,7 @@ static int manipulator_selectbuf(ScrArea *sa, ARegion *ar, const int mval[2], fl
 	hits = GPU_select_end();
 
 	if (do_passes) {
-		GPU_select_begin(buffer, 64, &selrect, GPU_SELECT_NEAREST_SECOND_PASS, hits);
+		GPU_select_begin(buffer, 64, &rect, GPU_SELECT_NEAREST_SECOND_PASS, hits);
 
 		/* do the drawing */
 		if (v3d->twtype & V3D_MANIP_ROTATE) {
@@ -2157,6 +2151,23 @@ static int manipulator_selectbuf(ScrArea *sa, ARegion *ar, const int mval[2], fl
 	return 0;
 }
 
+static const char *manipulator_get_operator_name(int man_val)
+{
+	if (man_val & MAN_TRANS_C) {
+		return "TRANSFORM_OT_translate";
+	}
+	else if (man_val == MAN_ROT_T) {
+		return "TRANSFORM_OT_trackball";
+	}
+	else if (man_val & MAN_ROT_C) {
+		return "TRANSFORM_OT_rotate";
+	}
+	else if (man_val & MAN_SCALE_C) {
+		return "TRANSFORM_OT_resize";
+	}
+
+	return NULL;
+}
 
 /* return 0; nothing happened */
 int BIF_do_manipulator(bContext *C, const struct wmEvent *event, wmOperator *op)
@@ -2177,10 +2188,23 @@ int BIF_do_manipulator(bContext *C, const struct wmEvent *event, wmOperator *op)
 	// find the hotspots first test narrow hotspot
 	val = manipulator_selectbuf(sa, ar, event->mval, 0.5f * (float)U.tw_hotspot);
 	if (val) {
+		wmOperatorType *ot;
+		PointerRNA props_ptr;
+		PropertyRNA *prop;
+		const char *opname;
 
 		// drawflags still global, for drawing call above
 		drawflags = manipulator_selectbuf(sa, ar, event->mval, 0.2f * (float)U.tw_hotspot);
 		if (drawflags == 0) drawflags = val;
+
+		/* Planar constraint doesn't make sense for rotation, give other keymaps a chance */
+		if ((drawflags & MAN_ROT_C) && use_planar) {
+			return 0;
+		}
+
+		opname = manipulator_get_operator_name(drawflags);
+		ot = WM_operatortype_find(opname, true);
+		WM_operator_properties_create_ptr(&props_ptr, ot);
 
 		if (drawflags & MAN_TRANS_C) {
 			switch (drawflags) {
@@ -2211,8 +2235,7 @@ int BIF_do_manipulator(bContext *C, const struct wmEvent *event, wmOperator *op)
 						constraint_axis[2] = 1;
 					break;
 			}
-			RNA_boolean_set_array(op->ptr, "constraint_axis", constraint_axis);
-			WM_operator_name_call(C, "TRANSFORM_OT_translate", WM_OP_INVOKE_DEFAULT, op->ptr);
+			RNA_boolean_set_array(&props_ptr, "constraint_axis", constraint_axis);
 		}
 		else if (drawflags & MAN_SCALE_C) {
 			switch (drawflags) {
@@ -2241,22 +2264,10 @@ int BIF_do_manipulator(bContext *C, const struct wmEvent *event, wmOperator *op)
 						constraint_axis[2] = 1;
 					break;
 			}
-			RNA_boolean_set_array(op->ptr, "constraint_axis", constraint_axis);
-			WM_operator_name_call(C, "TRANSFORM_OT_resize", WM_OP_INVOKE_DEFAULT, op->ptr);
+			RNA_boolean_set_array(&props_ptr, "constraint_axis", constraint_axis);
 		}
-		else if (drawflags == MAN_ROT_T) { /* trackball need special case, init is different */
-			/* Do not pass op->ptr!!! trackball has no "constraint" properties!
-			 * See [#34621], it's a miracle it did not cause more problems!!! */
-			/* However, we need to copy the "release_confirm" property, but only if defined, see T41112. */
-			PointerRNA props_ptr;
-			PropertyRNA *prop;
-			wmOperatorType *ot = WM_operatortype_find("TRANSFORM_OT_trackball", true);
-			WM_operator_properties_create_ptr(&props_ptr, ot);
-			if ((prop = RNA_struct_find_property(op->ptr, "release_confirm")) && RNA_property_is_set(op->ptr, prop)) {
-				RNA_property_boolean_set(&props_ptr, prop, RNA_property_boolean_get(op->ptr, prop));
-			}
-			WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &props_ptr);
-			WM_operator_properties_free(&props_ptr);
+		else if (drawflags == MAN_ROT_T) {
+			/* pass */
 		}
 		else if (drawflags & MAN_ROT_C) {
 			switch (drawflags) {
@@ -2270,9 +2281,25 @@ int BIF_do_manipulator(bContext *C, const struct wmEvent *event, wmOperator *op)
 					constraint_axis[2] = 1;
 					break;
 			}
-			RNA_boolean_set_array(op->ptr, "constraint_axis", constraint_axis);
-			WM_operator_name_call(C, "TRANSFORM_OT_rotate", WM_OP_INVOKE_DEFAULT, op->ptr);
+			RNA_boolean_set_array(&props_ptr, "constraint_axis", constraint_axis);
 		}
+
+		/* pass operator properties on to transform operators */
+		prop = RNA_struct_find_property(op->ptr, "use_accurate");
+		if (RNA_property_is_set(op->ptr, prop)) {
+			RNA_property_boolean_set(&props_ptr, prop, RNA_property_boolean_get(op->ptr, prop));
+		}
+		prop = RNA_struct_find_property(op->ptr, "release_confirm");
+		if (RNA_property_is_set(op->ptr, prop)) {
+			RNA_property_boolean_set(&props_ptr, prop, RNA_property_boolean_get(op->ptr, prop));
+		}
+		prop = RNA_struct_find_property(op->ptr, "constraint_orientation");
+		if (RNA_property_is_set(op->ptr, prop)) {
+			RNA_property_enum_set(&props_ptr, prop, RNA_property_enum_get(op->ptr, prop));
+		}
+
+		WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &props_ptr);
+		WM_operator_properties_free(&props_ptr);
 	}
 	/* after transform, restore drawflags */
 	drawflags = 0xFFFF;

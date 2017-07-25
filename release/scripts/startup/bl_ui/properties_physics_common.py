@@ -274,6 +274,8 @@ def basic_force_field_settings_ui(self, context, field):
         col.prop(field, "use_global_coords", text="Global")
     elif field.type == 'HARMONIC':
         col.prop(field, "use_multiple_springs")
+    if field.type == 'FORCE':
+        col.prop(field, "use_gravity_falloff",  text="Gravitation")
 
     split = layout.split()
 
@@ -316,5 +318,12 @@ def basic_force_field_falloff_ui(self, context, field):
     sub.active = field.use_max_distance
     sub.prop(field, "distance_max", text="Maximum")
 
+
+classes = (
+    PHYSICS_PT_add,
+)
+
 if __name__ == "__main__":  # only for live edit.
-    bpy.utils.register_module(__name__)
+    from bpy.utils import register_class
+    for cls in classes:
+        register_class(cls)

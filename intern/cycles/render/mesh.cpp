@@ -14,29 +14,29 @@
  * limitations under the License.
  */
 
-#include "bvh.h"
-#include "bvh_build.h"
+#include "bvh/bvh.h"
+#include "bvh/bvh_build.h"
 
-#include "camera.h"
-#include "curves.h"
-#include "device.h"
-#include "graph.h"
-#include "shader.h"
-#include "light.h"
-#include "mesh.h"
-#include "nodes.h"
-#include "object.h"
-#include "scene.h"
+#include "render/camera.h"
+#include "render/curves.h"
+#include "device/device.h"
+#include "render/graph.h"
+#include "render/shader.h"
+#include "render/light.h"
+#include "render/mesh.h"
+#include "render/nodes.h"
+#include "render/object.h"
+#include "render/scene.h"
 
-#include "osl_globals.h"
+#include "kernel/osl/osl_globals.h"
 
-#include "subd_split.h"
-#include "subd_patch_table.h"
+#include "subd/subd_split.h"
+#include "subd/subd_patch_table.h"
 
-#include "util_foreach.h"
-#include "util_logging.h"
-#include "util_progress.h"
-#include "util_set.h"
+#include "util/util_foreach.h"
+#include "util/util_logging.h"
+#include "util/util_progress.h"
+#include "util/util_set.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -1873,9 +1873,14 @@ void MeshManager::device_update_bvh(Device *device, DeviceScene *dscene, Scene *
 		dscene->prim_object.reference((uint*)&pack.prim_object[0], pack.prim_object.size());
 		device->tex_alloc("__prim_object", dscene->prim_object);
 	}
+	if(pack.prim_time.size()) {
+		dscene->prim_time.reference((float2*)&pack.prim_time[0], pack.prim_time.size());
+		device->tex_alloc("__prim_time", dscene->prim_time);
+	}
 
 	dscene->data.bvh.root = pack.root_index;
 	dscene->data.bvh.use_qbvh = scene->params.use_qbvh;
+	dscene->data.bvh.use_bvh_steps = (scene->params.num_bvh_time_steps != 0);
 }
 
 void MeshManager::device_update_flags(Device * /*device*/,
@@ -1939,6 +1944,7 @@ void MeshManager::device_update_displacement_images(Device *device,
 			}
 		}
 	}
+	image_manager->device_prepare_update(dscene);
 	foreach(int slot, bump_images) {
 		pool.push(function_bind(&ImageManager::device_update_slot,
 		                        image_manager,
@@ -2152,6 +2158,7 @@ void MeshManager::device_free(Device *device, DeviceScene *dscene)
 	device->tex_free(dscene->prim_visibility);
 	device->tex_free(dscene->prim_index);
 	device->tex_free(dscene->prim_object);
+	device->tex_free(dscene->prim_time);
 	device->tex_free(dscene->tri_shader);
 	device->tex_free(dscene->tri_vnormal);
 	device->tex_free(dscene->tri_vindex);
@@ -2173,6 +2180,7 @@ void MeshManager::device_free(Device *device, DeviceScene *dscene)
 	dscene->prim_visibility.clear();
 	dscene->prim_index.clear();
 	dscene->prim_object.clear();
+	dscene->prim_time.clear();
 	dscene->tri_shader.clear();
 	dscene->tri_vnormal.clear();
 	dscene->tri_vindex.clear();

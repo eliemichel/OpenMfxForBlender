@@ -2995,6 +2995,15 @@ static void rna_ShaderNodeScript_update(Main *bmain, Scene *scene, PointerRNA *p
 	ED_node_tag_update_nodetree(bmain, ntree, node);
 }
 
+static void rna_ShaderNodePrincipled_update(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+	bNodeTree *ntree = (bNodeTree *)ptr->id.data;
+	bNode *node = (bNode *)ptr->data;
+
+	nodeUpdate(ntree, node);
+	rna_Node_update(bmain, scene, ptr);
+}
+
 static void rna_ShaderNodeSubsurface_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
 	bNodeTree *ntree = (bNodeTree *)ptr->id.data;
@@ -3254,6 +3263,12 @@ static EnumPropertyItem node_script_mode_items[] = {
 	{0, NULL, 0, NULL, NULL}
 };
 
+static EnumPropertyItem node_principled_distribution_items[] = {
+	{ SHD_GLOSSY_GGX, "GGX", 0, "GGX", "" },
+	{ SHD_GLOSSY_MULTI_GGX, "MULTI_GGX", 0, "Multiscatter GGX", "" },
+	{ 0, NULL, 0, NULL, NULL }
+};
+
 /* -- Common nodes ---------------------------------------------------------- */
 
 static void def_group_input(StructRNA *srna)
@@ -3327,6 +3342,7 @@ static void def_frame(StructRNA *srna)
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 
 	RNA_def_struct_sdna_from(srna, "NodeFrame", "storage");
+	RNA_def_struct_translation_context(srna, BLT_I18NCONTEXT_ID_NODETREE);
 	
 	prop = RNA_def_property(srna, "shrink", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", NODE_FRAME_SHRINK);
@@ -4213,6 +4229,17 @@ static void def_glass(StructRNA *srna)
 	RNA_def_property_enum_items(prop, node_glass_items);
 	RNA_def_property_ui_text(prop, "Distribution", "");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+}
+
+static void def_principled(StructRNA *srna)
+{
+	PropertyRNA *prop;
+
+	prop = RNA_def_property(srna, "distribution", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_sdna(prop, NULL, "custom1");
+	RNA_def_property_enum_items(prop, node_principled_distribution_items);
+	RNA_def_property_ui_text(prop, "Distribution", "");
+	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_ShaderNodePrincipled_update");
 }
 
 static void def_refraction(StructRNA *srna)
@@ -5749,8 +5776,8 @@ static void def_cmp_glare(StructRNA *srna)
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 	
 	prop = RNA_def_property(srna, "streaks", PROP_INT, PROP_NONE);
-	RNA_def_property_int_sdna(prop, NULL, "angle");
-	RNA_def_property_range(prop, 2, 16);
+	RNA_def_property_int_sdna(prop, NULL, "streaks");
+	RNA_def_property_range(prop, 1, 16);
 	RNA_def_property_ui_text(prop, "Streaks", "Total number of streaks");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 	
@@ -5767,7 +5794,7 @@ static void def_cmp_glare(StructRNA *srna)
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 	
 	prop = RNA_def_property(srna, "use_rotate_45", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "angle", 0);
+	RNA_def_property_boolean_sdna(prop, NULL, "star_45", 0);
 	RNA_def_property_ui_text(prop, "Rotate 45", "Simple star filter: add 45 degree rotation offset");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 	

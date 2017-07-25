@@ -595,6 +595,7 @@ function(SETUP_BLENDER_SORTED_LIBS)
 		bf_freestyle
 		bf_ikplugin
 		bf_modifiers
+		bf_alembic
 		bf_bmesh
 		bf_gpu
 		bf_blenloader
@@ -613,7 +614,6 @@ function(SETUP_BLENDER_SORTED_LIBS)
 		bf_imbuf_openimageio
 		bf_imbuf_dds
 		bf_collada
-		bf_alembic
 		bf_intern_elbeem
 		bf_intern_memutil
 		bf_intern_guardedalloc
@@ -1574,24 +1574,24 @@ macro(openmp_delayload
 endmacro()
 
 MACRO(WINDOWS_SIGN_TARGET target)
-	if (WITH_WINDOWS_CODESIGN)
-		if (!SIGNTOOL_EXE)
+	if(WITH_WINDOWS_CODESIGN)
+		if(!SIGNTOOL_EXE)
 			error("Codesigning is enabled, but signtool is not found")
 		else()
-			if (WINDOWS_CODESIGN_PFX_PASSWORD)
+			if(WINDOWS_CODESIGN_PFX_PASSWORD)
 				set(CODESIGNPASSWORD /p ${WINDOWS_CODESIGN_PFX_PASSWORD})
 			else()
-				if ($ENV{PFXPASSWORD})
+				if($ENV{PFXPASSWORD})
 					set(CODESIGNPASSWORD /p $ENV{PFXPASSWORD})
 				else()
-					message( FATAL_ERROR "WITH_WINDOWS_CODESIGN is on but WINDOWS_CODESIGN_PFX_PASSWORD not set, and environment variable PFXPASSWORD not found, unable to sign code.")
+					message(FATAL_ERROR "WITH_WINDOWS_CODESIGN is on but WINDOWS_CODESIGN_PFX_PASSWORD not set, and environment variable PFXPASSWORD not found, unable to sign code.")
 				endif()
 			endif()
 			add_custom_command(TARGET ${target}
-						POST_BUILD
-						COMMAND ${SIGNTOOL_EXE} sign /f ${WINDOWS_CODESIGN_PFX} ${CODESIGNPASSWORD} $<TARGET_FILE:${target}>
-						VERBATIM
-				)
+				POST_BUILD
+				COMMAND ${SIGNTOOL_EXE} sign /f ${WINDOWS_CODESIGN_PFX} ${CODESIGNPASSWORD} $<TARGET_FILE:${target}>
+				VERBATIM
+			)
 		endif()
 	endif()
 ENDMACRO()

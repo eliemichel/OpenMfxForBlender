@@ -569,6 +569,14 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "use_mirror_u", text="U")
         col.prop(md, "use_mirror_v", text="V")
 
+        col = layout.column(align=True)
+
+        if md.use_mirror_u:
+            col.prop(md, "mirror_offset_u")
+
+        if md.use_mirror_v:
+            col.prop(md, "mirror_offset_v")
+
         col = layout.column()
 
         if md.use_mirror_merge is True:
@@ -951,6 +959,23 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
     def SURFACE(self, layout, ob, md):
         layout.label(text="Settings are inside the Physics tab")
 
+    def SURFACE_DEFORM(self, layout, ob, md):
+        col = layout.column()
+        col.active = not md.is_bound
+
+        col.prop(md, "target")
+        col.prop(md, "falloff")
+
+        layout.separator()
+
+        col = layout.column()
+
+        if md.is_bound:
+            col.operator("object.surfacedeform_bind", text="Unbind")
+        else:
+            col.active = md.target is not None
+            col.operator("object.surfacedeform_bind", text="Bind")
+
     def UV_PROJECT(self, layout, ob, md):
         split = layout.split()
 
@@ -1320,7 +1345,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row.prop(md, "thickness_vertex_group", text="Factor")
 
         col.prop(md, "use_crease", text="Crease Edges")
-        col.prop(md, "crease_weight", text="Crease Weight")
+        row = col.row()
+        row.active = md.use_crease
+        row.prop(md, "crease_weight", text="Crease Weight")
 
         col = split.column()
 
@@ -1503,5 +1530,11 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             layout.operator("object.correctivesmooth_bind", text="Unbind" if is_bind else "Bind")
 
 
+classes = (
+    DATA_PT_modifiers,
+)
+
 if __name__ == "__main__":  # only for live edit.
-    bpy.utils.register_module(__name__)
+    from bpy.utils import register_class
+    for cls in classes:
+        register_class(cls)

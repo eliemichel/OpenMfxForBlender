@@ -257,6 +257,7 @@ void                 ED_vgroup_mirror(struct Object *ob,
 void                 ED_vgroup_vert_add(struct Object *ob, struct bDeformGroup *dg, int vertnum,  float weight, int assignmode);
 void                 ED_vgroup_vert_remove(struct Object *ob, struct bDeformGroup *dg, int vertnum);
 float                ED_vgroup_vert_weight(struct Object *ob, struct bDeformGroup *dg, int vertnum);
+float                ED_vgroup_combined_vert_weight(const struct Object *ob, const int vertnum, const int mode);
 void                 ED_vgroup_vert_active_mirror(struct Object *ob, int def_nr);
 
 

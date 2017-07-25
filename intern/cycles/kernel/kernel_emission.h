@@ -67,7 +67,7 @@ ccl_device_noinline float3 direct_emissive_eval(KernelGlobals *kg,
 		                         ls->shader, ls->object, ls->prim,
 		                         ls->u, ls->v, t, time, false, ls->lamp);
 
-		ls->Ng = ccl_fetch(emission_sd, Ng);
+		ls->Ng = emission_sd->Ng;
 
 		/* no path flag, we're evaluating this for all closures. that's weak but
 		 * we'd have to do multiple evaluations otherwise */
@@ -112,7 +112,7 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 	                                         -ls->D,
 	                                         dD,
 	                                         ls->t,
-	                                         ccl_fetch(sd, time));
+	                                         sd->time);
 
 	if(is_zero(light_eval))
 		return false;
@@ -120,7 +120,7 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 	/* evaluate BSDF at shading point */
 
 #ifdef __VOLUME__
-	if(ccl_fetch(sd, prim) != PRIM_NONE)
+	if(sd->prim != PRIM_NONE)
 		shader_bsdf_eval(kg, sd, ls->D, eval, ls->pdf, ls->shader & SHADER_USE_MIS);
 	else {
 		float bsdf_pdf;
@@ -156,8 +156,13 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 	if(bsdf_eval_is_zero(eval))
 		return false;
 
-	if(kernel_data.integrator.light_inv_rr_threshold > 0.0f) {
-		float probability = max3(bsdf_eval_sum(eval)) * kernel_data.integrator.light_inv_rr_threshold;
+	if(kernel_data.integrator.light_inv_rr_threshold > 0.0f
+#ifdef __SHADOW_TRICKS__
+	   && (state->flag & PATH_RAY_SHADOW_CATCHER) == 0
+#endif
+	  )
+	{
+		float probability = max3(fabs(bsdf_eval_sum(eval))) * kernel_data.integrator.light_inv_rr_threshold;
 		if(probability < 1.0f) {
 			if(rand_terminate >= probability) {
 				return false;
@@ -168,8 +173,8 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 
 	if(ls->shader & SHADER_CAST_SHADOW) {
 		/* setup ray */
-		bool transmit = (dot(ccl_fetch(sd, Ng), ls->D) < 0.0f);
-		ray->P = ray_offset(ccl_fetch(sd, P), (transmit)? -ccl_fetch(sd, Ng): ccl_fetch(sd, Ng));
+		bool transmit = (dot(sd->Ng, ls->D) < 0.0f);
+		ray->P = ray_offset(sd->P, (transmit)? -sd->Ng: sd->Ng);
 
 		if(ls->t == FLT_MAX) {
 			/* distant light */
@@ -182,7 +187,7 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 			ray->D = normalize_len(ray->D, &ray->t);
 		}
 
-		ray->dP = ccl_fetch(sd, dP);
+		ray->dP = sd->dP;
 		ray->dD = differential3_zero();
 	}
 	else {
@@ -206,12 +211,12 @@ ccl_device_noinline float3 indirect_primitive_emission(KernelGlobals *kg, Shader
 #ifdef __HAIR__
 	if(!(path_flag & PATH_RAY_MIS_SKIP) && (ccl_fetch(sd, shader_flag) & SD_SHADER_USE_MIS) && (ccl_fetch(sd, type) & PRIMITIVE_ALL_TRIANGLE))
 #else
-	if(!(path_flag & PATH_RAY_MIS_SKIP) && (ccl_fetch(sd, flag) & SD_USE_MIS))
+	if(!(path_flag & PATH_RAY_MIS_SKIP) && (ccl_fetch(sd, shader_flag) & SD_SHADER_USE_MIS))
 #endif
 	{
 		/* multiple importance sampling, get triangle light pdf,
 		 * and compute weight with respect to BSDF pdf */
-		float pdf = triangle_light_pdf(kg, ccl_fetch(sd, Ng), ccl_fetch(sd, I), t);
+		float pdf = triangle_light_pdf(kg, sd->Ng, sd->I, t);
 		float mis_weight = power_heuristic(bsdf_pdf, pdf);
 
 		return L*mis_weight;

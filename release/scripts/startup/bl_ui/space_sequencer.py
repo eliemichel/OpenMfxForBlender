@@ -652,17 +652,39 @@ class SEQUENCER_PT_effect(SequencerButtonsPanel, Panel):
             col.prop(strip, "rotation_start", text="Rotation")
 
         elif strip.type == 'MULTICAM':
-            layout.prop(strip, "multicam_source")
+            col = layout.column(align=True)
+            strip_channel = strip.channel
 
-            row = layout.row(align=True)
-            sub = row.row(align=True)
-            sub.scale_x = 2.0
+            col.prop(strip, "multicam_source", text="Source Channel")
 
-            sub.operator("screen.animation_play", text="", icon='PAUSE' if context.screen.is_animation_playing else 'PLAY')
+            # The multicam strip needs at least 2 strips to be useful
+            if strip_channel > 2:
+                BT_ROW = 4
 
-            row.label("Cut To")
-            for i in range(1, strip.channel):
-                row.operator("sequencer.cut_multicam", text="%d" % i).camera = i
+                col.label("Cut To:")
+                row = col.row()
+
+                for i in range(1, strip_channel):
+                    if (i % BT_ROW) == 1:
+                        row = col.row(align=True)
+
+                    # Workaround - .enabled has to have a separate UI block to work
+                    if i == strip.multicam_source:
+                        sub = row.row(align=True)
+                        sub.enabled = False
+                        sub.operator("sequencer.cut_multicam", text="%d" % i).camera = i
+                    else:
+                        sub_1 = row.row(align=True)
+                        sub_1.enabled = True
+                        sub_1.operator("sequencer.cut_multicam", text="%d" % i).camera = i
+
+                if strip.channel > BT_ROW and (strip_channel - 1) % BT_ROW:
+                    for i in range(strip.channel, strip_channel + ((BT_ROW + 1 - strip_channel) % BT_ROW)):
+                        row.label("")
+            else:
+                col.separator()
+                col.label(text="Two or more channels are needed below this strip", icon="INFO")
+
 
         elif strip.type == 'TEXT':
             col = layout.column()
@@ -1217,5 +1239,37 @@ class SEQUENCER_PT_custom_props(SequencerButtonsPanel, PropertyPanel, Panel):
     bl_category = "Strip"
 
 
+classes = (
+    SEQUENCER_HT_header,
+    SEQUENCER_MT_editor_menus,
+    SEQUENCER_MT_view,
+    SEQUENCER_MT_view_toggle,
+    SEQUENCER_MT_select,
+    SEQUENCER_MT_marker,
+    SEQUENCER_MT_change,
+    SEQUENCER_MT_frame,
+    SEQUENCER_MT_add,
+    SEQUENCER_MT_add_effect,
+    SEQUENCER_MT_strip,
+    SEQUENCER_PT_edit,
+    SEQUENCER_PT_effect,
+    SEQUENCER_PT_input,
+    SEQUENCER_PT_sound,
+    SEQUENCER_PT_scene,
+    SEQUENCER_PT_mask,
+    SEQUENCER_PT_filter,
+    SEQUENCER_PT_proxy,
+    SEQUENCER_PT_preview,
+    SEQUENCER_PT_view,
+    SEQUENCER_PT_view_safe_areas,
+    SEQUENCER_PT_modifiers,
+    SEQUENCER_PT_grease_pencil,
+    SEQUENCER_PT_grease_pencil_palettecolor,
+    SEQUENCER_PT_grease_pencil_tools,
+    SEQUENCER_PT_custom_props,
+)
+
 if __name__ == "__main__":  # only for live edit.
-    bpy.utils.register_module(__name__)
+    from bpy.utils import register_class
+    for cls in classes:
+        register_class(cls)

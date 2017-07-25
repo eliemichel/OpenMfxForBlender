@@ -169,12 +169,15 @@ void ED_fsmenu_entry_set_path(struct FSMenuEntry *fsentry, const char *path)
 
 static void fsmenu_entry_generate_name(struct FSMenuEntry *fsentry, char *name, size_t name_size)
 {
-	char temp[FILE_MAX];
+	int offset = 0;
+	int len = name_size;
 
-	BLI_strncpy(temp, fsentry->path, FILE_MAX);
-	BLI_add_slash(temp);
-	BLI_getlastdir(temp, name, name_size);
-	BLI_del_slash(name);
+	if (BLI_path_name_at_index(fsentry->path, -1, &offset, &len)) {
+		/* use as size */
+		len += 1;
+	}
+
+	BLI_strncpy(name, &fsentry->path[offset], MIN2(len, name_size));
 	if (!name[0]) {
 		name[0] = '/';
 		name[1] = '\0';
@@ -537,28 +540,22 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
 		/* Finally get user favorite places */
 		if (read_bookmarks) {
 			UInt32 seed;
-			OSErr err = noErr;
-			CFArrayRef pathesArray;
-			LSSharedFileListRef list;
-			LSSharedFileListItemRef itemRef;
-			CFIndex i, pathesCount;
-			CFURLRef cfURL = NULL;
-			CFStringRef pathString = NULL;
-			list = LSSharedFileListCreate(NULL, kLSSharedFileListFavoriteItems, NULL);
-			pathesArray = LSSharedFileListCopySnapshot(list, &seed);
-			pathesCount = CFArrayGetCount(pathesArray);
+			LSSharedFileListRef list = LSSharedFileListCreate(NULL, kLSSharedFileListFavoriteItems, NULL);
+			CFArrayRef pathesArray = LSSharedFileListCopySnapshot(list, &seed);
+			CFIndex pathesCount = CFArrayGetCount(pathesArray);
 			
-			for (i = 0; i < pathesCount; i++) {
-				itemRef = (LSSharedFileListItemRef)CFArrayGetValueAtIndex(pathesArray, i);
+			for (CFIndex i = 0; i < pathesCount; i++) {
+				LSSharedFileListItemRef itemRef = (LSSharedFileListItemRef)CFArrayGetValueAtIndex(pathesArray, i);
 				
-				err = LSSharedFileListItemResolve(itemRef, 
-				                                  kLSSharedFileListNoUserInteraction |
-				                                  kLSSharedFileListDoNotMountVolumes,
-				                                  &cfURL, NULL);
-				if (err != noErr)
+				CFURLRef cfURL = NULL;
+				OSErr err = LSSharedFileListItemResolve(itemRef, 
+				                                        kLSSharedFileListNoUserInteraction |
+				                                        kLSSharedFileListDoNotMountVolumes,
+				                                        &cfURL, NULL);
+				if (err != noErr || !cfURL)
 					continue;
 				
-				pathString = CFURLCopyFileSystemPath(cfURL, kCFURLPOSIXPathStyle);
+				CFStringRef pathString = CFURLCopyFileSystemPath(cfURL, kCFURLPOSIXPathStyle);
 				
 				if (pathString == NULL || !CFStringGetCString(pathString, line, sizeof(line), kCFStringEncodingUTF8))
 					continue;

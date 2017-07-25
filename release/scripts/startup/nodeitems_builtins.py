@@ -19,7 +19,11 @@
 # <pep8 compliant>
 import bpy
 import nodeitems_utils
-from nodeitems_utils import NodeCategory, NodeItem, NodeItemCustom
+from nodeitems_utils import (
+    NodeCategory,
+    NodeItem,
+    NodeItemCustom,
+)
 
 
 # Subclasses for standard node types
@@ -153,6 +157,7 @@ shader_node_categories = [
         NodeItem("ShaderNodeGeometry"),
         NodeItem("ShaderNodeExtendedMaterial"),
         NodeItem("ShaderNodeParticleInfo"),
+        NodeItem("ShaderNodeObjectInfo"),
         NodeItem("NodeGroupInput", poll=group_input_output_item_poll),
         ]),
     ShaderOldNodeCategory("SH_OUTPUT", "Output", items=[
@@ -221,6 +226,7 @@ shader_node_categories = [
         NodeItem("ShaderNodeMixShader"),
         NodeItem("ShaderNodeAddShader"),
         NodeItem("ShaderNodeBsdfDiffuse", poll=object_shader_nodes_poll),
+        NodeItem("ShaderNodeBsdfPrincipled", poll=object_shader_nodes_poll),
         NodeItem("ShaderNodeBsdfGlossy", poll=object_shader_nodes_poll),
         NodeItem("ShaderNodeBsdfTransparent", poll=object_shader_nodes_poll),
         NodeItem("ShaderNodeBsdfRefraction", poll=object_shader_nodes_poll),

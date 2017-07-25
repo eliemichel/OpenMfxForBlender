@@ -42,11 +42,11 @@ ccl_device_inline void kernel_branched_path_ao(KernelGlobals *kg,
 
 		sample_cos_hemisphere(ao_N, bsdf_u, bsdf_v, &ao_D, &ao_pdf);
 
-		if(dot(ccl_fetch(sd, Ng), ao_D) > 0.0f && ao_pdf != 0.0f) {
+		if(dot(sd->Ng, ao_D) > 0.0f && ao_pdf != 0.0f) {
 			Ray light_ray;
 			float3 ao_shadow;
 
-			light_ray.P = ray_offset(ccl_fetch(sd, P), ccl_fetch(sd, Ng));
+			light_ray.P = ray_offset(sd->P, sd->Ng);
 			light_ray.D = ao_D;
 			light_ray.t = kernel_data.background.ao_distance;
 #ifdef __OBJECT_MOTION__
@@ -74,7 +74,7 @@ ccl_device_noinline void kernel_branched_path_surface_indirect_light(KernelGloba
 	RNG *rng, ShaderData *sd, ShaderData *indirect_sd, ShaderData *emission_sd,
 	float3 throughput, float num_samples_adjust, PathState *state, PathRadiance *L, uint light_linking)
 {
-	for(int i = 0; i < ccl_fetch(sd, num_closure); i++) {
+	for (int i = 0; i < ccl_fetch(sd, num_closure); i++) {
 		const ShaderClosure *sc = &ccl_fetch(sd, closure)[i];
 
 		if(!CLOSURE_IS_BSDF(sc->type))
@@ -148,14 +148,14 @@ ccl_device void kernel_branched_path_subsurface_scatter(KernelGlobals *kg,
                                                         Ray *ray,
                                                         float3 throughput)
 {
-	for(int i = 0; i < ccl_fetch(sd, num_closure); i++) {
-		ShaderClosure *sc = &ccl_fetch(sd, closure)[i];
+	for(int i = 0; i < sd->num_closure; i++) {
+		ShaderClosure *sc = &sd->closure[i];
 
 		if(!CLOSURE_IS_BSSRDF(sc->type))
 			continue;
 
 		/* set up random number generator */
-		uint lcg_state = lcg_state_init(rng, state, 0x68bc21eb);
+		uint lcg_state = lcg_state_init(rng, state->rng_offset, state->sample, 0x68bc21eb);
 		int num_samples = kernel_data.integrator.subsurface_samples;
 		float num_samples_inv = 1.0f/num_samples;
 		RNG bssrdf_rng = cmj_hash(*rng, i);
@@ -216,7 +216,8 @@ ccl_device void kernel_branched_path_subsurface_scatter(KernelGlobals *kg,
 #ifdef __EMISSION__
 				/* direct light */
 				if(kernel_data.integrator.use_direct_light) {
-					int all = kernel_data.integrator.sample_all_lights_direct;
+					int all = (kernel_data.integrator.sample_all_lights_direct) ||
+					          (state->flag & PATH_RAY_SHADOW_CATCHER);
 					kernel_branched_path_surface_connect_light(
 					        kg,
 					        rng,
@@ -293,7 +294,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 			}
 
 			extmax = kernel_data.curve.maximum_width;
-			lcg_state = lcg_state_init(rng, &state, 0x51633e2d);
+			lcg_state = lcg_state_init(rng, state.rng_offset, state.sample, 0x51633e2d);
 		}
 
 		bool hit = scene_intersect(kg, ray, visibility, &isect, &lcg_state, difl, extmax, 0x00000000 /*TODO: What goes here*/);
@@ -483,7 +484,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 #ifdef __BACKGROUND__
 			/* sample background shader */
 			float3 L_background = indirect_background(kg, &emission_sd, &state, &ray);
-			path_radiance_accum_background(&L, throughput, L_background, state.bounce);
+			path_radiance_accum_background(&L, &state, throughput, L_background);
 #endif  /* __BACKGROUND__ */
 
 			break;
@@ -493,6 +494,21 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 		shader_setup_from_ray(kg, &sd, &isect, &ray);
 		shader_eval_surface(kg, &sd, rng, &state, 0.0f, state.flag, SHADER_CONTEXT_MAIN);
 		shader_merge_closures(&sd);
+
+#ifdef __SHADOW_TRICKS__
+		if((sd.object_flag & SD_OBJECT_OBJECT_SHADOW_CATCHER)) {
+			if(state.flag & PATH_RAY_CAMERA) {
+				state.flag |= (PATH_RAY_SHADOW_CATCHER | PATH_RAY_SHADOW_CATCHER_ONLY);
+				state.catcher_object = sd.object;
+				if(!kernel_data.background.transparent) {
+					L.shadow_color = indirect_background(kg, &emission_sd, &state, &ray);
+				}
+			}
+		}
+		else {
+			state.flag &= ~PATH_RAY_SHADOW_CATCHER_ONLY;
+		}
+#endif  /* __SHADOW_TRICKS__ */
 
 		/* holdout */
 #ifdef __HOLDOUT__
@@ -611,7 +627,16 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 #endif  /* __VOLUME__ */
 	}
 
-	float3 L_sum = path_radiance_clamp_and_sum(kg, &L);
+	float3 L_sum;
+#ifdef __SHADOW_TRICKS__
+	if(state.flag & PATH_RAY_SHADOW_CATCHER) {
+		L_sum = path_radiance_sum_shadowcatcher(kg, &L, &L_transparent);
+	}
+	else
+#endif  /* __SHADOW_TRICKS__ */
+	{
+		L_sum = path_radiance_clamp_and_sum(kg, &L);
+	}
 
 	kernel_write_light_passes(kg, buffer, &L, sample);
 

@@ -32,15 +32,15 @@ extern "C" {
     #include "IMB_imbuf_types.h"
 }
 
-#include "blender_util.h"
+#include "blender/blender_util.h"
 
-#include "scene.h"
-#include "session.h"
+#include "render/scene.h"
+#include "render/session.h"
 
-#include "util_map.h"
-#include "util_set.h"
-#include "util_transform.h"
-#include "util_vector.h"
+#include "util/util_map.h"
+#include "util/util_set.h"
+#include "util/util_transform.h"
+#include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
 

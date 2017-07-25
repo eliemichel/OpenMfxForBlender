@@ -65,16 +65,16 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 	if(!(object_flag & SD_OBJECT_TRANSFORM_APPLIED)) {
 #if BVH_FEATURE(BVH_MOTION)
 		Transform ob_itfm;
-		bvh_instance_motion_push(kg,
-		                         subsurface_object,
-		                         ray,
-		                         &P,
-		                         &dir,
-		                         &idir,
-		                         &isect_t,
-		                         &ob_itfm);
+		isect_t = bvh_instance_motion_push(kg,
+		                                   subsurface_object,
+		                                   ray,
+		                                   &P,
+		                                   &dir,
+		                                   &idir,
+		                                   isect_t,
+		                                   &ob_itfm);
 #else
-		bvh_instance_push(kg, subsurface_object, ray, &P, &dir, &idir, &isect_t);
+		isect_t = bvh_instance_push(kg, subsurface_object, ray, &P, &dir, &idir, isect_t);
 #endif
 		object = subsurface_object;
 	}
@@ -105,9 +105,6 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 	qbvh_near_far_idx_calc(idir,
 	                       &near_x, &near_y, &near_z,
 	                       &far_x, &far_y, &far_z);
-
-	IsectPrecalc isect_precalc;
-	triangle_intersect_precalc(dir, &isect_precalc);
 
 	/* Traversal loop. */
 	do {
@@ -258,9 +255,9 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 //                                continue;
 
 							triangle_intersect_subsurface(kg,
-							                              &isect_precalc,
 							                              ss_isect,
 							                              P,
+							                              dir,
 							                              object,
 							                              prim_addr,
 							                              isect_t,

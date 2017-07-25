@@ -22,12 +22,12 @@ from mathutils import Vector
 import bpy
 from bpy.types import Operator
 from bpy.props import (
-        BoolProperty,
-        EnumProperty,
-        IntProperty,
-        FloatProperty,
-        FloatVectorProperty,
-        )
+    BoolProperty,
+    EnumProperty,
+    IntProperty,
+    FloatProperty,
+    FloatVectorProperty,
+)
 
 
 def object_ensure_material(obj, mat_name):
@@ -319,7 +319,7 @@ class QuickSmoke(Operator):
 
     def execute(self, context):
         if not bpy.app.build_options.mod_smoke:
-            self.report({'ERROR'}, "Build without Smoke modifier support")
+            self.report({'ERROR'}, "Built without Smoke modifier support")
             return {'CANCELLED'}
 
         fake_context = context.copy()
@@ -568,7 +568,7 @@ class QuickFluid(Operator):
 
     def execute(self, context):
         if not bpy.app.build_options.mod_fluid:
-            self.report({'ERROR'}, "Build without Fluid modifier support")
+            self.report({'ERROR'}, "Built without Fluid modifier support")
             return {'CANCELLED'}
 
         fake_context = context.copy()
@@ -645,3 +645,11 @@ class QuickFluid(Operator):
             bpy.ops.fluid.bake('INVOKE_DEFAULT')
 
         return {'FINISHED'}
+
+
+classes = (
+    QuickExplode,
+    QuickFluid,
+    QuickFur,
+    QuickSmoke,
+)

@@ -68,9 +68,14 @@ class MESH_UL_vgroups(UIList):
         # assert(isinstance(item, bpy.types.VertexGroup))
         vgroup = item
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            layout.prop(vgroup, "name", text="", emboss=False, icon_value=icon)
+            split = layout.split(0.66, False)
+            split.prop(vgroup, "name", text="", emboss=False, icon_value=icon)
+
+            row = split.row(align=True)
+            row.prop(vgroup, "influence", text="", emboss=False)
+
             icon = 'LOCKED' if vgroup.lock_weight else 'UNLOCKED'
-            layout.prop(vgroup, "lock_weight", text="", icon=icon, emboss=False)
+            row.prop(vgroup, "lock_weight", text="", icon=icon, emboss=False)
         elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
@@ -225,6 +230,11 @@ class DATA_PT_vertex_groups(MeshButtonsPanel, Panel):
             sub.operator("object.vertex_group_deselect", text="Deselect")
 
             layout.prop(context.tool_settings, "vertex_group_weight", text="Weight")
+
+        if group:
+            row = layout.row()
+            row.active = ob.mode != 'EDIT'
+            row.prop(group, "influence")
 
 
 class DATA_PT_shape_keys(MeshButtonsPanel, Panel):
@@ -392,5 +402,24 @@ class DATA_PT_custom_props_mesh(MeshButtonsPanel, PropertyPanel, Panel):
     _property_type = bpy.types.Mesh
 
 
+classes = (
+    MESH_MT_vertex_group_specials,
+    MESH_MT_shape_key_specials,
+    MESH_UL_vgroups,
+    MESH_UL_shape_keys,
+    MESH_UL_uvmaps_vcols,
+    DATA_PT_context_mesh,
+    DATA_PT_normals,
+    DATA_PT_texture_space,
+    DATA_PT_vertex_groups,
+    DATA_PT_shape_keys,
+    DATA_PT_uv_texture,
+    DATA_PT_vertex_colors,
+    DATA_PT_customdata,
+    DATA_PT_custom_props_mesh,
+)
+
 if __name__ == "__main__":  # only for live edit.
-    bpy.utils.register_module(__name__)
+    from bpy.utils import register_class
+    for cls in classes:
+        register_class(cls)

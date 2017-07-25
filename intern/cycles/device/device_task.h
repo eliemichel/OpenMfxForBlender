@@ -17,11 +17,11 @@
 #ifndef __DEVICE_TASK_H__
 #define __DEVICE_TASK_H__
 
-#include "device_memory.h"
+#include "device/device_memory.h"
 
-#include "util_function.h"
-#include "util_list.h"
-#include "util_task.h"
+#include "util/util_function.h"
+#include "util/util_list.h"
+#include "util/util_task.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -50,6 +50,8 @@ public:
 	int shader_eval_type;
 	int shader_filter;
 	int shader_x, shader_w;
+
+	int passes_size;
 
 	explicit DeviceTask(Type type = PATH_TRACE);
 
