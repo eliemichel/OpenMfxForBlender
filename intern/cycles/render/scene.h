@@ -158,6 +158,7 @@ public:
 		use_bvh_unaligned_nodes = true;
 		num_bvh_time_steps = 0;
 		use_qbvh = false;
+		use_bvh_embree = false;
 		persistent_data = false;
 		texture_limit = 0;
 	}

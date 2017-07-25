@@ -213,12 +213,8 @@ ccl_device_noinline bool shadow_blocked(KernelGlobals *kg,
 	Ray *ray = ray_input;
 #endif
 
-#ifdef __SPLIT_KERNEL__
-	Intersection *isect = &kernel_split_state->isect_shadow[SD_THREAD];
-#else
 	Intersection isect_object;
 	Intersection *isect = &isect_object;
-#endif
 
 	bool blocked = scene_intersect(kg, *ray, PATH_RAY_SHADOW_OPAQUE, isect, NULL, 0.0f, 0.0f, shadow_linking);
 

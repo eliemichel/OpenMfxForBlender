@@ -86,6 +86,7 @@ CCL_NAMESPACE_BEGIN
 #  define __CMJ__
 #  define __VOLUME__
 #  define __VOLUME_SCATTER__
+#  define __SHADOW_RECORD_ALL__
 #  define __VOLUME_RECORD_ALL__
 #  ifdef WITH_EMBREE
 #    define __EMBREE__
