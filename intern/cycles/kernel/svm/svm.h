@@ -266,13 +266,13 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 #  endif  /* NODES_FEATURE(NODE_FEATURE_BUMP) */
 #  ifdef __TEXTURES__
 			case NODE_TEX_IMAGE:
-				svm_node_tex_image(kg, sd, stack, node);
+				svm_node_tex_image(kg, sd, path_flag, stack, node);
 				break;
     //        case NODE_TEX_CURVE:
 				//svm_node_tex_curve(kg, sd, stack, node);
 				//break;
 			case NODE_TEX_IMAGE_BOX:
-				svm_node_tex_image_box(kg, sd, stack, node);
+				svm_node_tex_image_box(kg, sd, stack, node, &offset);
 				break;
 			case NODE_TEX_NOISE:
 				svm_node_tex_noise(kg, sd, stack, node, &offset);
@@ -378,7 +378,7 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 				break;
 #  ifdef __TEXTURES__
 			case NODE_TEX_ENVIRONMENT:
-				svm_node_tex_environment(kg, sd, stack, node);
+				svm_node_tex_environment(kg, sd, path_flag, stack, node);
 				break;
 			case NODE_TEX_SKY:
 				svm_node_tex_sky(kg, sd, stack, node, &offset);

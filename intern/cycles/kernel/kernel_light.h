@@ -761,6 +761,32 @@ ccl_device bool lamp_light_eval(KernelGlobals *kg, int lamp, float3 P, float3 D,
 	return true;
 }
 
+ccl_device void lamp_light_dPdudv(KernelGlobals *kg, int lamp, float u, float v, float3 *dPdu, float3 *dPdv )
+{
+	float4 data0 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 0);
+	float4 data1 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 1);
+
+	LightType type = (LightType)__float_as_int(data0.x);
+	switch(type)
+	{
+	case LIGHT_AREA: {
+		float4 data2 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 2);
+		float4 data3 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 3);
+		*dPdu = make_float3(data1.y, data1.z, data1.w);
+		*dPdv = make_float3(data2.y, data2.z, data2.w);
+ 		break;
+	}
+	case LIGHT_POINT:
+	case LIGHT_DISTANT:
+	case LIGHT_SPOT:
+	default:
+		// TODO (Stefan)
+		*dPdu = make_float3(0.0f, 0.0f, 0.0f);
+		*dPdv = make_float3(0.0f, 0.0f, 0.0f);
+		break;
+	}
+}
+
 /* Triangle Light */
 
 ccl_device void object_transform_light_sample(KernelGlobals *kg, LightSample *ls, int object, float time)

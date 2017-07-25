@@ -52,6 +52,7 @@
 
 #include "kernel/kernel_projection.h"
 #include "kernel/kernel_accumulate.h"
+#include "kernel/kernel_light.h"
 #include "kernel/kernel_shader.h"
 
 #ifdef WITH_PTEX

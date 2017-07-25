@@ -330,7 +330,7 @@ ccl_device void kernel_bake_evaluate(KernelGlobals *kg, ccl_global uint4 *input,
 	PathRadiance L;
 
 	shader_setup_from_sample(kg, &sd,
-	                         P, Ng, Ng,
+	                         P, Ng, Ng, NULL,
 	                         shader, object, prim,
 	                         u, v, 1.0f, 0.5f,
 	                         !(kernel_tex_fetch(__object_flag, object) & SD_OBJECT_TRANSFORM_APPLIED),

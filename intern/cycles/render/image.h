@@ -45,7 +45,8 @@ public:
 	              bool& is_linear,
 	              InterpolationType interpolation,
 	              ExtensionType extension,
-	              bool use_alpha);
+	              bool use_alpha,
+				  bool srgb);
 	void remove_image(int flat_slot);
 	void remove_image(const string& filename,
 	                  void *builtin_data,
@@ -70,7 +71,8 @@ public:
 	void device_free(Device *device, DeviceScene *dscene);
 	void device_free_builtin(Device *device, DeviceScene *dscene);
 
-	void set_osl_texture_system(void *texture_system);
+	void set_oiio_texture_system(void *texture_system);
+	const string get_mip_map_path(const string& filename);
 	void set_pack_images(bool pack_images_);
 	bool set_animation_frame_update(int frame);
 
@@ -103,6 +105,7 @@ public:
 		bool use_alpha;
 		bool need_load;
 		bool animated;
+		bool srgb;
 		float frame;
 		InterpolationType interpolation;
 		ExtensionType extension;
@@ -120,7 +123,7 @@ private:
 	int animation_frame;
 
 	vector<Image*> images[IMAGE_DATA_NUM_TYPES];
-	void *osl_texture_system;
+	void *oiio_texture_system;
 	bool pack_images;
 
 	bool file_load_image_generic(Image *img, ImageInput **in, int &width, int &height, int &depth, int &components);
@@ -153,6 +156,8 @@ private:
 	void device_pack_images(Device *device,
 	                        DeviceScene *dscene,
 	                        Progress& progess);
+	
+	bool make_tx(Image *image, Progress *progress);
 };
 
 CCL_NAMESPACE_END

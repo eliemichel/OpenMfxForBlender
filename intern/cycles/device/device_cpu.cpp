@@ -24,6 +24,8 @@
 #  include <OSL/oslexec.h>
 #endif
 
+#include "kernel/kernel_oiio_globals.h"
+
 #include "device/device.h"
 #include "device/device_intern.h"
 #include "device/device_split_kernel.h"
@@ -145,6 +147,7 @@ public:
 #ifdef WITH_OSL
 	OSLGlobals osl_globals;
 #endif
+	OIIOGlobals oiio_globals;
 
 	bool use_split_kernel;
 
@@ -157,7 +160,9 @@ public:
 #ifdef WITH_OSL
 		kernel_globals.osl = &osl_globals;
 #endif
-
+		oiio_globals.tex_sys = NULL;
+		kernel_globals.oiio = &oiio_globals;
+		
 		/* do now to avoid thread issues */
 		system_cpu_support_sse2();
 		system_cpu_support_sse3();
@@ -225,6 +230,7 @@ public:
 	~CPUDevice()
 	{
 		task_pool.stop();
+		kernel_globals.oiio = NULL;
 	}
 
 	virtual bool show_samples() const
@@ -324,6 +330,11 @@ public:
 #endif
 	}
 
+	void *oiio_memory()
+	{
+		return &oiio_globals;
+	}
+	
 	void thread_run(DeviceTask *task)
 	{
 		if(task->type == DeviceTask::PATH_TRACE) {
@@ -569,6 +580,13 @@ public:
 #ifdef WITH_OSL
 		OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
 #endif
+		if(kg.oiio && kg.oiio->tex_sys) {
+			kg.oiio_tdata = kg.oiio->tex_sys->get_perthread_info();
+		}
+		else {
+			kg.oiio_tdata = NULL;
+		}
+
 		void(*shader_kernel)(KernelGlobals*, uint4*, float4*, float*, int, int, int, int, int);
 
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX2
@@ -675,6 +693,10 @@ protected:
 #ifdef WITH_OSL
 		OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
 #endif
+		if(kg.oiio && kg.oiio->tex_sys) {
+			kg.oiio_tdata = kg.oiio->tex_sys->get_perthread_info();
+		}
+
 		return kg;
 	}
 

@@ -707,7 +707,7 @@ static ShaderNode *add_node(Scene *scene,
                                                             true, 0, is_float_bool, linear,
                                                             INTERPOLATION_CLOSEST,
                                                             EXTENSION_CLIP,
-                                                            false);
+                                                            false, true);
             }
 
         }

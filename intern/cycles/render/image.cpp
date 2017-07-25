@@ -28,13 +28,16 @@
 #include <OSL/oslexec.h>
 #endif
 
+#include "kernel/kernel_oiio_globals.h"
+#include <OpenImageIO/imagebufalgo.h>
+
 CCL_NAMESPACE_BEGIN
 
 ImageManager::ImageManager(const DeviceInfo& info)
 {
 	need_update = true;
 	pack_images = false;
-	osl_texture_system = NULL;
+	oiio_texture_system = NULL;
 	animation_frame = 0;
 
 	/* In case of multiple devices used we need to know type of an actual
@@ -81,9 +84,9 @@ void ImageManager::set_pack_images(bool pack_images_)
 	pack_images = pack_images_;
 }
 
-void ImageManager::set_osl_texture_system(void *texture_system)
+void ImageManager::set_oiio_texture_system(void *texture_system)
 {
-	osl_texture_system = texture_system;
+	oiio_texture_system = texture_system;
 }
 
 bool ImageManager::set_animation_frame_update(int frame)
@@ -195,6 +198,27 @@ ImageDataType ImageManager::get_image_metadata(const string& filename,
 	}
 }
 
+const string ImageManager::get_mip_map_path(const string& filename)
+{
+	if(!path_exists(filename)) {
+		return "";
+	}
+	
+	string::size_type idx = filename.rfind('.');
+	if(idx != string::npos) {
+		std::string extension = filename.substr(idx+1);
+		if(extension == "tx") {
+			return filename;
+		}
+	}
+	
+	string tx_name = filename + ".tx";
+	if(path_exists(tx_name)) {
+		return tx_name;
+	}
+	return "";
+}
+
 /* The lower three bits of a device texture slot number indicate its type.
  * These functions convert the slot ids from ImageManager "images" ones
  * to device ones and vice versa.
@@ -269,7 +293,8 @@ int ImageManager::add_image(const string& filename,
                             bool& is_linear,
                             InterpolationType interpolation,
                             ExtensionType extension,
-                            bool use_alpha)
+                            bool use_alpha,
+                            bool srgb)
 {
 	Image *img;
 	size_t slot;
@@ -362,6 +387,7 @@ int ImageManager::add_image(const string& filename,
 	img->extension = extension;
 	img->users = 1;
 	img->use_alpha = use_alpha;
+	img->srgb = srgb && (!is_linear);
 
 	images[type][slot] = img;
 	
@@ -654,11 +680,65 @@ void ImageManager::device_load_image(Device *device,
 		return;
 
 	Image *img = images[type][slot];
-
-	if(osl_texture_system && !img->builtin_data)
+	if(!img) {
 		return;
+	}
 
-	string filename = path_filename(images[type][slot]->filename);
+	if(oiio_texture_system && !img->builtin_data) {
+		/* Generate a mip mapped tile image file */
+		if(scene->params.texture.auto_convert) {
+			make_tx(img, progress);
+		}
+		/* When using OIIO directly from SVM, store the TextureHandle
+		 * in an array for quicker lookup at shading time */
+		OIIOGlobals *oiio = (OIIOGlobals*)device->oiio_memory();
+		if(oiio) {
+			thread_scoped_lock lock(oiio->tex_paths_mutex);
+			int flat_slot = type_index_to_flattened_slot(slot, type);
+			if (oiio->textures.size() <= flat_slot) {
+				oiio->textures.resize(flat_slot+1);
+			}
+			OIIO::TextureSystem *tex_sys = (OIIO::TextureSystem*)oiio_texture_system;
+			OIIO::TextureSystem::TextureHandle *handle = tex_sys->get_texture_handle(OIIO::ustring(img->filename.c_str()));
+			if(tex_sys->good(handle)) {
+				oiio->textures[flat_slot].handle = handle;
+				switch(img->interpolation) {
+					case INTERPOLATION_SMART:
+						oiio->textures[flat_slot].interpolation = OIIO::TextureOpt::InterpSmartBicubic;
+						break;
+					case INTERPOLATION_CUBIC:
+						oiio->textures[flat_slot].interpolation = OIIO::TextureOpt::InterpBicubic;
+						break;
+					case INTERPOLATION_LINEAR:
+						oiio->textures[flat_slot].interpolation = OIIO::TextureOpt::InterpBilinear;
+						break;
+					case INTERPOLATION_NONE:
+					case INTERPOLATION_CLOSEST:
+					default:
+						oiio->textures[flat_slot].interpolation = OIIO::TextureOpt::InterpClosest;
+						break;
+				}
+				switch(img->extension) {
+					case EXTENSION_CLIP:
+						oiio->textures[flat_slot].extension = OIIO::TextureOpt::WrapBlack;
+						break;
+					case EXTENSION_EXTEND:
+						oiio->textures[flat_slot].extension = OIIO::TextureOpt::WrapClamp;
+						break;
+					case EXTENSION_REPEAT:
+					default:
+						oiio->textures[flat_slot].extension = OIIO::TextureOpt::WrapPeriodic;
+						break;
+				}
+			} else {
+				oiio->textures[flat_slot].handle = NULL;
+			}
+		}
+		img->need_load = false;
+		return;
+	}
+
+	string filename = path_filename(img->filename);
 	progress->set_status("Updating Images", "Loading " + filename);
 
 	const int texture_limit = scene->params.texture_limit;
@@ -872,11 +952,9 @@ void ImageManager::device_free_image(Device *device, DeviceScene *dscene, ImageD
 	Image *img = images[type][slot];
 
 	if(img) {
-		if(osl_texture_system && !img->builtin_data) {
-#ifdef WITH_OSL
+		if(oiio_texture_system && !img->builtin_data) {
 			ustring filename(images[type][slot]->filename);
-			((OSL::TextureSystem*)osl_texture_system)->invalidate(filename);
-#endif
+		//	((OIIO::TextureSystem*)oiio_texture_system)->invalidate(filename);
 		}
 		else {
 			device_memory *tex_img = NULL;
@@ -997,15 +1075,14 @@ void ImageManager::device_update(Device *device,
 				device_free_image(device, dscene, (ImageDataType)type, slot);
 			}
 			else if(images[type][slot]->need_load) {
-				if(!osl_texture_system || images[type][slot]->builtin_data)
-					pool.push(function_bind(&ImageManager::device_load_image,
-					                        this,
-					                        device,
-					                        dscene,
-					                        scene,
-					                        (ImageDataType)type,
-					                        slot,
-					                        &progress));
+				pool.push(function_bind(&ImageManager::device_load_image,
+										this,
+										device,
+										dscene,
+										scene,
+										(ImageDataType)type,
+										slot,
+										&progress));
 			}
 		}
 	}
@@ -1034,13 +1111,12 @@ void ImageManager::device_update_slot(Device *device,
 		device_free_image(device, dscene, type, slot);
 	}
 	else if(image->need_load) {
-		if(!osl_texture_system || image->builtin_data)
-			device_load_image(device,
-			                  dscene,
-			                  scene,
-			                  type,
-			                  slot,
-			                  progress);
+		device_load_image(device,
+						  dscene,
+						  scene,
+						  type,
+						  slot,
+						  progress);
 	}
 }
 
@@ -1274,6 +1350,47 @@ void ImageManager::device_free(Device *device, DeviceScene *dscene)
 	dscene->tex_image_byte_packed.clear();
 	dscene->tex_image_float_packed.clear();
 	dscene->tex_image_packed_info.clear();
+}
+
+bool ImageManager::make_tx(Image *image, Progress *progress)
+{
+	if(!path_exists(image->filename)) {
+		return false;
+	}
+	
+	string::size_type idx = image->filename.rfind('.');
+	if(idx != string::npos) {
+		std::string extension = image->filename.substr(idx+1);
+		if(extension == "tx") {
+			return true;
+		}
+	}
+	
+	string tx_name = image->filename + ".tx";
+	if(path_exists(tx_name)) {
+		image->filename = tx_name;
+		return true;
+	}
+	
+	progress->set_status("Updating Images", "Converting " + image->filename);
+	
+	ImageSpec config;
+	config.attribute("maketx:filtername", "lanczos3");
+	config.attribute("maketx:opaque_detect", 1);
+	config.attribute("maketx:highlightcomp", 1);
+	config.attribute("maketx:updatemode", 1);
+	config.attribute("maketx:oiio_options", 1);
+	if(image->srgb) {
+		config.attribute("maketx:incolorspace", "sRGB");
+		config.attribute("maketx:outcolorspace", "linear");
+	}
+
+	bool ok = ImageBufAlgo::make_texture(ImageBufAlgo::MakeTxTexture, image->filename, tx_name, config);
+	if(ok) {
+		image->filename = tx_name;
+	}
+
+	return true;
 }
 
 CCL_NAMESPACE_END

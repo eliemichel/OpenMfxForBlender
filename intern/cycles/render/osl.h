@@ -91,21 +91,13 @@ public:
 	                  const std::string& bytecode = "");
 
 protected:
-	void texture_system_init();
-	void texture_system_free();
-
 	void shading_system_init();
 	void shading_system_free();
 
 	OSL::ShadingSystem *ss;
-	OSL::TextureSystem *ts;
 	OSLRenderServices *services;
 	OSL::ErrorHandler errhandler;
 	map<string, OSLShaderInfo> loaded_shaders;
-
-	static OSL::TextureSystem *ts_shared;
-	static thread_mutex ts_shared_mutex;
-	static int ts_shared_users;
 
 	static OSL::ShadingSystem *ss_shared;
 	static OSLRenderServices *services_shared;

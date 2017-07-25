@@ -125,6 +125,8 @@ ccl_device int bsdf_diffuse_toon_sample(const ShaderClosure *sc, float3 Ng, floa
 			// TODO: find a better approximation for the bounce
 			*domega_in_dx = (2.0f * dot(bsdf->N, dIdx)) * bsdf->N - dIdx;
 			*domega_in_dy = (2.0f * dot(bsdf->N, dIdy)) * bsdf->N - dIdy;
+			*domega_in_dx *= 125.0f;
+			*domega_in_dy *= 125.0f;
 #endif
 		}
 		else
@@ -200,8 +202,10 @@ ccl_device int bsdf_glossy_toon_sample(const ShaderClosure *sc, float3 Ng, float
 				*eval = *pdf * bsdf_toon_get_intensity(max_angle, smooth, angle);
 
 #ifdef __RAY_DIFFERENTIALS__
-				*domega_in_dx = (2 * dot(bsdf->N, dIdx)) * bsdf->N - dIdx;
-				*domega_in_dy = (2 * dot(bsdf->N, dIdy)) * bsdf->N - dIdy;
+				*domega_in_dx = (2.0f * dot(bsdf->N, dIdx)) * bsdf->N - dIdx;
+				*domega_in_dy = (2.0f * dot(bsdf->N, dIdy)) * bsdf->N - dIdy;
+				*domega_in_dx *= 10.0f;
+				*domega_in_dy *= 10.0f;
 #endif
 			}
 			else
