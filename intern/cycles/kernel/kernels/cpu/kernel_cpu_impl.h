@@ -20,17 +20,44 @@
  * simply includes this file without worry of copying actual implementation over.
  */
 
-#include "kernel_compat_cpu.h"
-#include "kernel_math.h"
-#include "kernel_types.h"
-#include "kernel_globals.h"
-#include "kernel_cpu_image.h"
-#include "kernel_film.h"
-#include "kernel_path.h"
-#include "kernel_path_branched.h"
-#include "kernel_bake.h"
+#include "kernel/kernel_compat_cpu.h"
+
+#ifndef __SPLIT_KERNEL__
+#  include "kernel/kernel_math.h"
+#  include "kernel/kernel_types.h"
+
+#  include "kernel/split/kernel_split_data.h"
+#  include "kernel/kernel_globals.h"
+
+#  include "kernel/kernels/cpu/kernel_cpu_image.h"
+#  include "kernel/kernel_film.h"
+#  include "kernel/kernel_path.h"
+#  include "kernel/kernel_path_branched.h"
+#  include "kernel/kernel_bake.h"
+#else
+#  include "kernel/split/kernel_split_common.h"
+
+#  include "kernel/split/kernel_data_init.h"
+#  include "kernel/split/kernel_path_init.h"
+#  include "kernel/split/kernel_scene_intersect.h"
+#  include "kernel/split/kernel_lamp_emission.h"
+#  include "kernel/split/kernel_do_volume.h"
+#  include "kernel/split/kernel_queue_enqueue.h"
+#  include "kernel/split/kernel_indirect_background.h"
+#  include "kernel/split/kernel_shader_eval.h"
+#  include "kernel/split/kernel_holdout_emission_blurring_pathtermination_ao.h"
+#  include "kernel/split/kernel_subsurface_scatter.h"
+#  include "kernel/split/kernel_direct_lighting.h"
+#  include "kernel/split/kernel_shadow_blocked_ao.h"
+#  include "kernel/split/kernel_shadow_blocked_dl.h"
+#  include "kernel/split/kernel_next_iteration_setup.h"
+#  include "kernel/split/kernel_indirect_subsurface.h"
+#  include "kernel/split/kernel_buffer_update.h"
+#endif
 
 CCL_NAMESPACE_BEGIN
+
+#ifndef __SPLIT_KERNEL__
 
 /* Path Tracing */
 
@@ -130,5 +157,73 @@ void KERNEL_FUNCTION_FULL_NAME(shader)(KernelGlobals *kg,
 		                       sample);
 	}
 }
+
+#else  /* __SPLIT_KERNEL__ */
+
+/* Split Kernel Path Tracing */
+
+#define DEFINE_SPLIT_KERNEL_FUNCTION(name) \
+	void KERNEL_FUNCTION_FULL_NAME(name)(KernelGlobals *kg, KernelData* /*data*/) \
+	{ \
+		kernel_##name(kg); \
+	}
+
+#define DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(name, type) \
+	void KERNEL_FUNCTION_FULL_NAME(name)(KernelGlobals *kg, KernelData* /*data*/) \
+	{ \
+		ccl_local type locals; \
+		kernel_##name(kg, &locals); \
+	}
+
+DEFINE_SPLIT_KERNEL_FUNCTION(path_init)
+DEFINE_SPLIT_KERNEL_FUNCTION(scene_intersect)
+DEFINE_SPLIT_KERNEL_FUNCTION(lamp_emission)
+DEFINE_SPLIT_KERNEL_FUNCTION(do_volume)
+DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(queue_enqueue, QueueEnqueueLocals)
+DEFINE_SPLIT_KERNEL_FUNCTION(indirect_background)
+DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(shader_eval, uint)
+DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(holdout_emission_blurring_pathtermination_ao, BackgroundAOLocals)
+DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(subsurface_scatter, uint)
+DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(direct_lighting, uint)
+DEFINE_SPLIT_KERNEL_FUNCTION(shadow_blocked_ao)
+DEFINE_SPLIT_KERNEL_FUNCTION(shadow_blocked_dl)
+DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(next_iteration_setup, uint)
+DEFINE_SPLIT_KERNEL_FUNCTION(indirect_subsurface)
+DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(buffer_update, uint)
+
+void KERNEL_FUNCTION_FULL_NAME(register_functions)(void(*reg)(const char* name, void* func))
+{
+#define REGISTER_NAME_STRING(name) #name
+#define REGISTER_EVAL_NAME(name) REGISTER_NAME_STRING(name)
+#define REGISTER(name) reg(REGISTER_EVAL_NAME(KERNEL_FUNCTION_FULL_NAME(name)), (void*)KERNEL_FUNCTION_FULL_NAME(name));
+
+	REGISTER(path_trace);
+	REGISTER(convert_to_byte);
+	REGISTER(convert_to_half_float);
+	REGISTER(shader);
+
+	REGISTER(data_init);
+	REGISTER(path_init);
+	REGISTER(scene_intersect);
+	REGISTER(lamp_emission);
+	REGISTER(do_volume);
+	REGISTER(queue_enqueue);
+	REGISTER(indirect_background);
+	REGISTER(shader_eval);
+	REGISTER(holdout_emission_blurring_pathtermination_ao);
+	REGISTER(subsurface_scatter);
+	REGISTER(direct_lighting);
+	REGISTER(shadow_blocked_ao);
+	REGISTER(shadow_blocked_dl);
+	REGISTER(next_iteration_setup);
+	REGISTER(indirect_subsurface);
+	REGISTER(buffer_update);
+
+#undef REGISTER
+#undef REGISTER_EVAL_NAME
+#undef REGISTER_NAME_STRING
+}
+
+#endif  /* __SPLIT_KERNEL__ */
 
 CCL_NAMESPACE_END

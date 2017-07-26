@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-#include "attribute.h"
-#include "graph.h"
-#include "nodes.h"
-#include "shader.h"
-#include "constant_fold.h"
+#include "render/attribute.h"
+#include "render/graph.h"
+#include "render/nodes.h"
+#include "render/scene.h"
+#include "render/shader.h"
+#include "render/constant_fold.h"
 
-#include "util_algorithm.h"
-#include "util_debug.h"
-#include "util_foreach.h"
-#include "util_queue.h"
-#include "util_logging.h"
+#include "util/util_algorithm.h"
+#include "util/util_debug.h"
+#include "util/util_foreach.h"
+#include "util/util_queue.h"
+#include "util/util_logging.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -195,6 +196,7 @@ bool ShaderNode::equals(const ShaderNode& other)
 ShaderGraph::ShaderGraph()
 {
 	finalized = false;
+	simplified = false;
 	num_node_ids = 0;
 	add(new OutputNode());
 }
@@ -207,6 +209,8 @@ ShaderGraph::~ShaderGraph()
 ShaderNode *ShaderGraph::add(ShaderNode *node)
 {
 	assert(!finalized);
+	simplified = false;
+
 	node->id = num_node_ids++;
 	nodes.push_back(node);
 	return node;
@@ -233,6 +237,8 @@ ShaderGraph *ShaderGraph::copy()
 	newgraph->clear_nodes();
 	foreach(ShaderNode *node, nodes)
 		newgraph->add(nodes_copy[node]);
+
+	newgraph->simplified = simplified;
 
 	return newgraph;
 }
@@ -273,6 +279,7 @@ void ShaderGraph::connect(ShaderOutput *from, ShaderInput *to)
 void ShaderGraph::disconnect(ShaderOutput *from)
 {
 	assert(!finalized);
+	simplified = false;
 
 	foreach(ShaderInput *sock, from->links) {
 		sock->link = NULL;
@@ -285,6 +292,7 @@ void ShaderGraph::disconnect(ShaderInput *to)
 {
 	assert(!finalized);
 	assert(to->link);
+	simplified = false;
 
 	ShaderOutput *from = to->link;
 
@@ -294,6 +302,8 @@ void ShaderGraph::disconnect(ShaderInput *to)
 
 void ShaderGraph::relink(ShaderNode *node, ShaderOutput *from, ShaderOutput *to)
 {
+	simplified = false;
+
 	/* Copy because disconnect modifies this list */
 	vector<ShaderInput*> outputs = from->links;
 
@@ -310,9 +320,19 @@ void ShaderGraph::relink(ShaderNode *node, ShaderOutput *from, ShaderOutput *to)
 	}
 }
 
+void ShaderGraph::simplify(Scene *scene)
+{
+	if(!simplified) {
+		default_inputs(scene->shader_manager->use_osl());
+		clean(scene);
+		refine_bump_nodes();
+
+		simplified = true;
+	}
+}
+
 void ShaderGraph::finalize(Scene *scene,
                            bool do_bump,
-                           bool do_osl,
                            bool do_simplify,
                            bool bump_in_object_space)
 {
@@ -322,9 +342,7 @@ void ShaderGraph::finalize(Scene *scene,
 	 * modified afterwards. */
 
 	if(!finalized) {
-		default_inputs(do_osl);
-		clean(scene);
-		refine_bump_nodes();
+		simplify(scene);
 
 		if(do_bump)
 			bump_from_displacement(bump_in_object_space);
@@ -408,7 +426,8 @@ void ShaderGraph::copy_nodes(ShaderNodeSet& nodes, ShaderNodeMap& nnodemap)
 /* Graph simplification */
 /* ******************** */
 
-/* Step 1: Remove proxy nodes.
+/* Remove proxy nodes.
+ *
  * These only exists temporarily when exporting groups, and we must remove them
  * early so that node->attributes() and default links do not see them.
  */
@@ -478,7 +497,8 @@ void ShaderGraph::remove_proxy_nodes()
 	}
 }
 
-/* Step 2: Constant folding.
+/* Constant folding.
+ *
  * Try to constant fold some nodes, and pipe result directly to
  * the input socket of connected nodes.
  */
@@ -539,7 +559,7 @@ void ShaderGraph::constant_fold()
 	}
 }
 
-/* Step 3: Simplification. */
+/* Simplification. */
 void ShaderGraph::simplify_settings(Scene *scene)
 {
 	foreach(ShaderNode *node, nodes) {
@@ -547,7 +567,7 @@ void ShaderGraph::simplify_settings(Scene *scene)
 	}
 }
 
-/* Step 4: Deduplicate nodes with same settings. */
+/* Deduplicate nodes with same settings. */
 void ShaderGraph::deduplicate_nodes()
 {
 	/* NOTES:
@@ -594,6 +614,11 @@ void ShaderGraph::deduplicate_nodes()
 				}
 			}
 		}
+        /* Skip nodes with object deps */
+        if (node->has_object_dependency()) {
+			continue;
+        }
+
 		/* Only need to care about nodes that are actually used */
 		if(!has_output_links) {
 			continue;
@@ -620,6 +645,48 @@ void ShaderGraph::deduplicate_nodes()
 
 	if(num_deduplicated > 0) {
 		VLOG(1) << "Deduplicated " << num_deduplicated << " nodes.";
+	}
+}
+
+/* Check whether volume output has meaningful nodes, otherwise
+ * disconnect the output.
+ */
+void ShaderGraph::verify_volume_output()
+{
+	/* Check whether we can optimize the whole volume graph out. */
+	ShaderInput *volume_in = output()->input("Volume");
+	if(volume_in->link == NULL) {
+		return;
+	}
+	bool has_valid_volume = false;
+	ShaderNodeSet scheduled;
+	queue<ShaderNode*> traverse_queue;
+	/* Schedule volume output. */
+	traverse_queue.push(volume_in->link->parent);
+	scheduled.insert(volume_in->link->parent);
+	/* Traverse down the tree. */
+	while(!traverse_queue.empty()) {
+		ShaderNode *node = traverse_queue.front();
+		traverse_queue.pop();
+		/* Node is fully valid for volume, can't optimize anything out. */
+		if(node->has_volume_support()) {
+			has_valid_volume = true;
+			break;
+		}
+		foreach(ShaderInput *input, node->inputs) {
+			if(input->link == NULL) {
+				continue;
+			}
+			if(scheduled.find(input->link->parent) != scheduled.end()) {
+				continue;
+			}
+			traverse_queue.push(input->link->parent);
+			scheduled.insert(input->link->parent);
+		}
+	}
+	if(!has_valid_volume) {
+		VLOG(1) << "Disconnect meaningless volume output.";
+		disconnect(volume_in->link);
 	}
 }
 
@@ -651,16 +718,11 @@ void ShaderGraph::clean(Scene *scene)
 {
 	/* Graph simplification */
 
-	/* 1: Remove proxy nodes was already done. */
-
-	/* 2: Constant folding. */
+	/* NOTE: Remove proxy nodes was already done. */
 	constant_fold();
-
-	/* 3: Simplification. */
 	simplify_settings(scene);
-
-	/* 4: De-duplication. */
 	deduplicate_nodes();
+	verify_volume_output();
 
 	/* we do two things here: find cycles and break them, and remove unused
 	 * nodes that don't feed into the output. how cycles are broken is
@@ -982,6 +1044,9 @@ int ShaderGraph::get_num_closures()
 		}
 		else if(CLOSURE_IS_BSDF_MULTISCATTER(closure_type)) {
 			num_closures += 2;
+		}
+		else if(CLOSURE_IS_PRINCIPLED(closure_type)) {
+			num_closures += 8;
 		}
 		else {
 			++num_closures;

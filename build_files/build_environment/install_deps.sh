@@ -322,8 +322,8 @@ OPENEXR_FORCE_REBUILD=false
 OPENEXR_SKIP=false
 _with_built_openexr=false
 
-OIIO_VERSION="1.7.8"
-OIIO_VERSION_MIN="1.6.0"
+OIIO_VERSION="1.7.13"
+OIIO_VERSION_MIN="1.7.13"
 OIIO_VERSION_MAX="1.9.0"  # UNKNOWN currently # Not supported by current OSL...
 OIIO_FORCE_BUILD=false
 OIIO_FORCE_REBUILD=false
@@ -360,7 +360,7 @@ OPENVDB_FORCE_REBUILD=false
 OPENVDB_SKIP=false
 
 # Alembic needs to be compiled for now
-ALEMBIC_VERSION="1.6.0"
+ALEMBIC_VERSION="1.7.1"
 ALEMBIC_VERSION_MIN=$ALEMBIC_VERSION
 ALEMBIC_FORCE_BUILD=false
 ALEMBIC_FORCE_REBUILD=false
@@ -2236,9 +2236,6 @@ compile_ALEMBIC() {
     return
   fi
 
-  compile_HDF5
-  PRINT ""
-
   # To be changed each time we make edits that would modify the compiled result!
   alembic_magic=2
   _init_alembic
@@ -2266,8 +2263,16 @@ compile_ALEMBIC() {
 
     cmake_d="-D CMAKE_INSTALL_PREFIX=$_inst"
 
+    # Without Boost or TR1, Alembic requires C++11.
+    if [ "$USE_CXX11" != true ]; then
+      cmake_d="$cmake_d -D ALEMBIC_LIB_USES_BOOST=ON"
+      cmake_d="$cmake_d -D ALEMBIC_LIB_USES_TR1=OFF"
+    fi
+
     if [ -d $INST/boost ]; then
-      cmake_d="$cmake_d -D BOOST_ROOT=$INST/boost"
+      if [ -d $INST/boost ]; then
+        cmake_d="$cmake_d -D BOOST_ROOT=$INST/boost"
+      fi
       cmake_d="$cmake_d -D USE_STATIC_BOOST=ON"
     else
       cmake_d="$cmake_d -D USE_STATIC_BOOST=OFF"
@@ -2285,8 +2290,6 @@ compile_ALEMBIC() {
       cmake_d="$cmake_d -D USE_STATIC_HDF5=OFF"
       cmake_d="$cmake_d -D ALEMBIC_ILMBASE_LINK_STATIC=OFF"
       cmake_d="$cmake_d -D ALEMBIC_SHARED_LIBS=OFF"
-      cmake_d="$cmake_d -D ALEMBIC_LIB_USES_BOOST=ON"
-      cmake_d="$cmake_d -D ALEMBIC_LIB_USES_TR1=OFF"
       INFO "ILMBASE_ROOT=$INST/openexr"
     fi
 
@@ -2598,7 +2601,6 @@ install_DEB() {
   fi
 
   # These libs should always be available in debian/ubuntu official repository...
-  OPENJPEG_DEV="libopenjpeg-dev"
   VORBIS_DEV="libvorbis-dev"
   OGG_DEV="libogg-dev"
   THEORA_DEV="libtheora-dev"
@@ -2606,15 +2608,23 @@ install_DEB() {
   _packages="gawk cmake cmake-curses-gui build-essential libjpeg-dev libpng-dev libtiff-dev \
              git libfreetype6-dev libx11-dev flex bison libtbb-dev libxxf86vm-dev \
              libxcursor-dev libxi-dev wget libsqlite3-dev libxrandr-dev libxinerama-dev \
-             libbz2-dev libncurses5-dev libssl-dev liblzma-dev libreadline-dev $OPENJPEG_DEV \
+             libbz2-dev libncurses5-dev libssl-dev liblzma-dev libreadline-dev \
              libopenal-dev libglew-dev yasm $THEORA_DEV $VORBIS_DEV $OGG_DEV \
              libsdl1.2-dev libfftw3-dev patch bzip2 libxml2-dev libtinyxml-dev libjemalloc-dev"
              # libglewmx-dev  (broken in deb testing currently...)
 
-  OPENJPEG_USE=true
   VORBIS_USE=true
   OGG_USE=true
   THEORA_USE=true
+
+  PRINT ""
+  # New Ubuntu crap (17.04 and more) have no openjpeg lib!
+  OPENJPEG_DEV="libopenjpeg-dev"
+  check_package_DEB $OPENJPEG_DEV
+  if [ $? -eq 0 ]; then
+    _packages="$_packages $OPENJPEG_DEV"
+    OPENJPEG_USE=true
+  fi
 
   PRINT ""
   # Some not-so-old distro (ubuntu 12.4) do not have it, do not fail in this case, just warn.
@@ -2777,7 +2787,7 @@ install_DEB() {
 
       boost_version=$(echo `get_package_version_DEB libboost-dev` | sed -r 's/^([0-9]+\.[0-9]+).*/\1/')
 
-      install_packages_DEB libboost-{filesystem,iostreams,locale,regex,system,thread,wave}$boost_version-dev
+      install_packages_DEB libboost-{filesystem,iostreams,locale,regex,system,thread,wave,program-options}$boost_version-dev
       clean_Boost
     else
       compile_Boost
@@ -4252,7 +4262,7 @@ print_info() {
     PRINT "  $_3"
     _buildargs="$_buildargs $_1 $_2 $_3"
     if [ -d $INST/osl ]; then
-      _1="-D CYCLES_OSL=$INST/osl"
+      _1="-D OSL_ROOT_DIR=$INST/osl"
       PRINT "  $_1"
       _buildargs="$_buildargs $_1"
     fi

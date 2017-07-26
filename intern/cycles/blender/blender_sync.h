@@ -32,15 +32,15 @@ extern "C" {
     #include "IMB_imbuf_types.h"
 }
 
-#include "blender_util.h"
+#include "blender/blender_util.h"
 
-#include "scene.h"
-#include "session.h"
+#include "render/scene.h"
+#include "render/session.h"
 
-#include "util_map.h"
-#include "util_set.h"
-#include "util_transform.h"
-#include "util_vector.h"
+#include "util/util_map.h"
+#include "util/util_set.h"
+#include "util/util_transform.h"
+#include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -69,6 +69,7 @@ public:
 	~BlenderSync();
 
 	/* sync */
+	bool sync_recalc_materials();
 	bool sync_recalc();
 	void sync_data(BL::RenderSettings& b_render,
 	               BL::SpaceView3D& b_v3d,
@@ -102,6 +103,8 @@ public:
 	                                      BL::RegionView3D& b_rv3d,
 	                                      Camera *cam,
 	                                      int width, int height);
+
+	bool BKE_object_is_modified(BL::Object& b_ob);
 
 private:
 	/* sync */
@@ -158,9 +161,18 @@ private:
 	/* Images. */
 	void sync_images();
 
+    /* Shaders */
+    void add_nodes( Scene *scene,
+                    Shader *shader,
+                    BL::RenderEngine& b_engine,
+                    BL::BlendData& b_data,
+                    BL::Scene& b_scene,
+                    const bool background,
+                    ShaderGraph *graph,
+                    BL::ShaderNodeTree& b_ntree);
+
 	/* util */
 	void find_shader(BL::ID& id, vector<Shader*>& used_shaders, Shader *default_shader);
-	bool BKE_object_is_modified(BL::Object& b_ob);
 	bool object_is_mesh(BL::Object& b_ob);
 	bool object_is_light(BL::Object& b_ob);
 
@@ -169,11 +181,14 @@ private:
 	BL::BlendData b_data;
 	BL::Scene b_scene;
 
+public:
 	id_map<void*, Shader> shader_map;
 	id_map<ObjectKey, Object> object_map;
 	id_map<void*, Mesh> mesh_map;
 	id_map<ObjectKey, Light> light_map;
 	id_map<ParticleSystemKey, ParticleSystem> particle_system_map;
+
+private:
 	set<Mesh*> mesh_synced;
 	set<Mesh*> mesh_motion_synced;
 	set<float> motion_times;

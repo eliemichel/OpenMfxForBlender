@@ -28,15 +28,15 @@ if "bpy" in locals():
 import bpy
 from bpy.types import Operator
 from bpy.props import (
-        IntProperty,
-        BoolProperty,
-        EnumProperty,
-        StringProperty,
-        )
+    IntProperty,
+    BoolProperty,
+    EnumProperty,
+    StringProperty,
+)
 
 
 class ANIM_OT_keying_set_export(Operator):
-    "Export Keying Set to a python script"
+    """Export Keying Set to a python script"""
     bl_idname = "anim.keying_set_export"
     bl_label = "Export Keying Set..."
 
@@ -102,43 +102,41 @@ class ANIM_OT_keying_set_export(Operator):
             if ksp.id in id_to_paths_cache:
                 continue
 
-            """
-            - idtype_list is used to get the list of id-datablocks from
-              bpy.data.* since this info isn't available elsewhere
-            - id.bl_rna.name gives a name suitable for UI,
-              with a capitalised first letter, but we need
-              the plural form that's all lower case
-            - special handling is needed for "nested" ID-blocks
-              (e.g. nodetree in Material)
-            """
+            # - idtype_list is used to get the list of id-datablocks from
+            #   bpy.data.* since this info isn't available elsewhere
+            # - id.bl_rna.name gives a name suitable for UI,
+            #   with a capitalised first letter, but we need
+            #   the plural form that's all lower case
+            # - special handling is needed for "nested" ID-blocks
+            #   (e.g. nodetree in Material)
             if ksp.id.bl_rna.identifier.startswith("ShaderNodeTree"):
                 # Find material or lamp using this node tree...
                 id_bpy_path = "bpy.data.nodes[\"%s\"]"
                 found = False
-                
+
                 for mat in bpy.data.materials:
                     if mat.node_tree == ksp.id:
                         id_bpy_path = "bpy.data.materials[\"%s\"].node_tree" % (mat.name)
                         found = True
-                        break;
-                        
+                        break
+
                 if not found:
                     for lamp in bpy.data.lamps:
                         if lamp.node_tree == ksp.id:
                             id_bpy_path = "bpy.data.lamps[\"%s\"].node_tree" % (lamp.name)
                             found = True
-                            break;
-                    
+                            break
+
                 if not found:
-                    self.report({'WARN'}, "Could not find material or lamp using Shader Node Tree - %s" % (ksp.id))                    
+                    self.report({'WARN'}, "Could not find material or lamp using Shader Node Tree - %s" % (ksp.id))
             elif ksp.id.bl_rna.identifier.startswith("CompositorNodeTree"):
                 # Find compositor nodetree using this node tree...
                 for scene in bpy.data.scenes:
                     if scene.node_tree == ksp.id:
                         id_bpy_path = "bpy.data.scenes[\"%s\"].node_tree" % (scene.name)
-                        break;
+                        break
                 else:
-                    self.report({'WARN'}, "Could not find scene using Compositor Node Tree - %s" % (ksp.id)) 
+                    self.report({'WARN'}, "Could not find scene using Compositor Node Tree - %s" % (ksp.id))
             else:
                 idtype_list = ksp.id.bl_rna.name.lower() + "s"
                 id_bpy_path = "bpy.data.%s[\"%s\"]" % (idtype_list, ksp.id.name)
@@ -302,9 +300,11 @@ class ClearUselessActions(Operator):
     bl_label = "Clear Useless Actions"
     bl_options = {'REGISTER', 'UNDO'}
 
-    only_unused = BoolProperty(name="Only Unused",
+    only_unused = BoolProperty(
+            name="Only Unused",
             description="Only unused (Fake User only) actions get considered",
-            default=True)
+            default=True,
+            )
 
     @classmethod
     def poll(cls, context):
@@ -393,7 +393,7 @@ class UpdateAnimatedTransformConstraint(Operator):
                     except:
                         pass
                     ret = (data, new_path)
-                    #print(ret)
+                    # print(ret)
 
             return ret
 
@@ -412,3 +412,11 @@ class UpdateAnimatedTransformConstraint(Operator):
             text.from_string(log)
             self.report({'INFO'}, "Complete report available on '%s' text datablock" % text.name)
         return {'FINISHED'}
+
+
+classes = (
+    ANIM_OT_keying_set_export,
+    BakeAction,
+    ClearUselessActions,
+    UpdateAnimatedTransformConstraint,
+)

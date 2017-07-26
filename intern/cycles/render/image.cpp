@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-#include "device.h"
-#include "image.h"
-#include "scene.h"
+#include "device/device.h"
+#include "render/image.h"
+#include "render/scene.h"
 
-#include "util_foreach.h"
-#include "util_logging.h"
-#include "util_path.h"
-#include "util_progress.h"
-#include "util_texture.h"
+#include "util/util_foreach.h"
+#include "util/util_logging.h"
+#include "util/util_path.h"
+#include "util/util_progress.h"
+#include "util/util_texture.h"
 
 #ifdef WITH_OSL
 #include <OSL/oslexec.h>
@@ -104,11 +104,20 @@ bool ImageManager::set_animation_frame_update(int frame)
 
 ImageDataType ImageManager::get_image_metadata(const string& filename,
                                                              void *builtin_data,
+                                                             shared_ptr<uint8_t> generated_data,
                                                              bool& is_linear)
 {
 	bool is_float = false, is_half = false;
 	is_linear = false;
 	int channels = 4;
+
+    if (generated_data) {
+        is_float = true;
+        is_half = false;
+        is_linear = true;
+        channels = 4;
+        return IMAGE_DATA_TYPE_FLOAT4;
+    }
 
 	if(builtin_data) {
 		if(builtin_image_info_cb) {
@@ -123,6 +132,16 @@ ImageDataType ImageManager::get_image_metadata(const string& filename,
 		else {
 			return (channels > 1) ? IMAGE_DATA_TYPE_BYTE4 : IMAGE_DATA_TYPE_BYTE;
 		}
+	}
+
+	/* Perform preliminary checks, with meaningful logging. */
+	if(!path_exists(filename)) {
+		VLOG(1) << "File '" << filename << "' does not exist.";
+		return IMAGE_DATA_TYPE_BYTE4;
+	}
+	if(path_is_directory(filename)) {
+		VLOG(1) << "File '" << filename << "' is a directory, can't use as image.";
+		return IMAGE_DATA_TYPE_BYTE4;
 	}
 
 	ImageInput *in = ImageInput::create(filename);
@@ -242,17 +261,20 @@ string ImageManager::name_from_type(int type)
 static bool image_equals(ImageManager::Image *image,
                          const string& filename,
                          void *builtin_data,
+                         boost::shared_ptr<uint8_t> generated_data,
                          InterpolationType interpolation,
                          ExtensionType extension)
 {
 	return image->filename == filename &&
 		   image->builtin_data == builtin_data &&
+		   image->generated_data == generated_data &&
 		   image->interpolation == interpolation &&
 		   image->extension == extension;
 }
 
 int ImageManager::add_image(const string& filename,
                             void *builtin_data,
+                            boost::shared_ptr<uint8_t> generated_data,
                             bool animated,
                             float frame,
                             bool& is_float,
@@ -264,13 +286,12 @@ int ImageManager::add_image(const string& filename,
 	Image *img;
 	size_t slot;
 
-	ImageDataType type = get_image_metadata(filename, builtin_data, is_linear);
+	ImageDataType type = get_image_metadata(filename, builtin_data, generated_data, is_linear);
 
 	thread_scoped_lock device_lock(device_mutex);
 
-	/* Do we have a float? */
-	if(type == IMAGE_DATA_TYPE_FLOAT || type == IMAGE_DATA_TYPE_FLOAT4)
-		is_float = true;
+	/* Check whether it's a float texture. */
+	is_float = (type == IMAGE_DATA_TYPE_FLOAT || type == IMAGE_DATA_TYPE_FLOAT4);
 
 	/* No half on OpenCL, use available slots */
 	if(type == IMAGE_DATA_TYPE_HALF4 && !has_half_images) {
@@ -293,6 +314,7 @@ int ImageManager::add_image(const string& filename,
 		if(img && image_equals(img,
 		                       filename,
 		                       builtin_data,
+                               generated_data,
 		                       interpolation,
 		                       extension))
 		{
@@ -346,6 +368,7 @@ int ImageManager::add_image(const string& filename,
 	img = new Image();
 	img->filename = filename;
 	img->builtin_data = builtin_data;
+    img->generated_data = generated_data;
 	img->need_load = true;
 	img->animated = animated;
 	img->frame = frame;
@@ -383,6 +406,7 @@ void ImageManager::remove_image(int flat_slot)
 
 void ImageManager::remove_image(const string& filename,
                                 void *builtin_data,
+                                boost::shared_ptr<uint8_t> generated_data,
                                 InterpolationType interpolation,
                                 ExtensionType extension)
 {
@@ -393,6 +417,7 @@ void ImageManager::remove_image(const string& filename,
 			if(images[type][slot] && image_equals(images[type][slot],
 			                                      filename,
 			                                      builtin_data,
+                                                  generated_data,
 			                                      interpolation,
 			                                      extension))
 			{
@@ -409,6 +434,7 @@ void ImageManager::remove_image(const string& filename,
  */
 void ImageManager::tag_reload_image(const string& filename,
                                     void *builtin_data,
+                                    shared_ptr<uint8_t> generated_data,
                                     InterpolationType interpolation,
                                     ExtensionType extension)
 {
@@ -417,6 +443,7 @@ void ImageManager::tag_reload_image(const string& filename,
 			if(images[type][slot] && image_equals(images[type][slot],
 			                                      filename,
 			                                      builtin_data,
+                                                  generated_data,
 			                                      interpolation,
 			                                      extension))
 			{
@@ -432,7 +459,12 @@ bool ImageManager::file_load_image_generic(Image *img, ImageInput **in, int &wid
 	if(img->filename == "")
 		return false;
 
-	if(!img->builtin_data) {
+	if(!img->builtin_data && !img->generated_data) {
+		/* NOTE: Error logging is done in meta data acquisition. */
+		if(!path_exists(img->filename) || path_is_directory(img->filename)) {
+			return false;
+		}
+
 		/* load image from file through OIIO */
 		*in = ImageInput::create(img->filename);
 
@@ -457,12 +489,22 @@ bool ImageManager::file_load_image_generic(Image *img, ImageInput **in, int &wid
 		components = spec.nchannels;
 	}
 	else {
-		/* load image using builtin images callbacks */
-		if(!builtin_image_info_cb || !builtin_image_pixels_cb)
-			return false;
 
-		bool is_float;
-		builtin_image_info_cb(img->filename, img->builtin_data, is_float, width, height, depth, components);
+        if (img->generated_data) {
+            InternalImageHeader *header = (InternalImageHeader*) img->generated_data.get();
+            width = header->width;
+            height = header->height;
+            depth = 1;
+            components = 4;
+
+        } else {
+            /* load image using builtin images callbacks */
+            if(!builtin_image_info_cb || !builtin_image_pixels_cb)
+                return false;
+
+            bool is_float;
+            builtin_image_info_cb(img->filename, img->builtin_data, is_float, width, height, depth, components);
+        }
 	}
 
 	/* we only handle certain number of components */
@@ -539,7 +581,11 @@ bool ImageManager::file_load_image(Image *img,
 		delete in;
 	}
 	else {
-		if(FileFormat == TypeDesc::FLOAT) {
+        if (img->generated_data) {
+            InternalImageHeader *header = (InternalImageHeader*) img->generated_data.get();
+            ::memcpy(&pixels[0], (uint8_t*) img->generated_data.get() + sizeof(InternalImageHeader), header->width * header->height * sizeof(float4));
+
+        } else if(FileFormat == TypeDesc::FLOAT) {
 			builtin_image_float_pixels_cb(img->filename,
 			                              img->builtin_data,
 			                              (float*)&pixels[0],
@@ -687,6 +733,9 @@ void ImageManager::device_load_image(Device *device,
 		}
 	}
 	else if(type == IMAGE_DATA_TYPE_FLOAT) {
+		if (slot >= dscene->tex_float_image.size()) {
+			return;
+		}
 		if(dscene->tex_float_image[slot] == NULL)
 			dscene->tex_float_image[slot] = new device_vector<float>();
 		device_vector<float>& tex_img = *dscene->tex_float_image[slot];
@@ -716,6 +765,9 @@ void ImageManager::device_load_image(Device *device,
 		}
 	}
 	else if(type == IMAGE_DATA_TYPE_BYTE4) {
+		if (slot >= dscene->tex_byte4_image.size()) {
+			return;
+		}
 		if(dscene->tex_byte4_image[slot] == NULL)
 			dscene->tex_byte4_image[slot] = new device_vector<uchar4>();
 		device_vector<uchar4>& tex_img = *dscene->tex_byte4_image[slot];
@@ -747,7 +799,10 @@ void ImageManager::device_load_image(Device *device,
 			                  img->extension);
 		}
 	}
-	else if(type == IMAGE_DATA_TYPE_BYTE){
+	else if(type == IMAGE_DATA_TYPE_BYTE) {
+		if (slot >= dscene->tex_byte_image.size()) {
+			return;
+		}
 		if(dscene->tex_byte_image[slot] == NULL)
 			dscene->tex_byte_image[slot] = new device_vector<uchar>();
 		device_vector<uchar>& tex_img = *dscene->tex_byte_image[slot];
@@ -776,6 +831,9 @@ void ImageManager::device_load_image(Device *device,
 		}
 	}
 	else if(type == IMAGE_DATA_TYPE_HALF4){
+		if (slot >= dscene->tex_half4_image.size()) {
+			return;
+		}
 		if(dscene->tex_half4_image[slot] == NULL)
 			dscene->tex_half4_image[slot] = new device_vector<half4>();
 		device_vector<half4>& tex_img = *dscene->tex_half4_image[slot];
@@ -807,6 +865,9 @@ void ImageManager::device_load_image(Device *device,
 		}
 	}
 	else if(type == IMAGE_DATA_TYPE_HALF){
+		if (slot >= dscene->tex_half_image.size()) {
+			return;
+		}
 		if(dscene->tex_half_image[slot] == NULL)
 			dscene->tex_half_image[slot] = new device_vector<half>();
 		device_vector<half>& tex_img = *dscene->tex_half_image[slot];
@@ -878,7 +939,7 @@ void ImageManager::device_free_image(Device *device, DeviceScene *dscene, ImageD
 						break;
 					}
 					tex_img = dscene->tex_byte4_image[slot];
-					dscene->tex_byte4_image[slot]= NULL;
+					dscene->tex_byte4_image[slot] = NULL;
 					break;
 				case IMAGE_DATA_TYPE_HALF:
 					if(slot >= dscene->tex_half_image.size()) {
@@ -914,16 +975,8 @@ void ImageManager::device_free_image(Device *device, DeviceScene *dscene, ImageD
 	}
 }
 
-void ImageManager::device_update(Device *device,
-                                 DeviceScene *dscene,
-                                 Scene *scene,
-                                 Progress& progress)
+void ImageManager::device_prepare_update(DeviceScene *dscene)
 {
-	if(!need_update)
-		return;
-
-	TaskPool pool;
-
 	for(int type = 0; type < IMAGE_DATA_NUM_TYPES; type++) {
 		switch(type) {
 			case IMAGE_DATA_TYPE_BYTE4:
@@ -951,6 +1004,23 @@ void ImageManager::device_update(Device *device,
 					dscene->tex_half_image.resize(tex_num_images[IMAGE_DATA_TYPE_HALF]);
 				break;
 		}
+	}
+}
+
+void ImageManager::device_update(Device *device,
+								 DeviceScene *dscene,
+								 Scene *scene,
+								 Progress& progress)
+{
+	if(!need_update) {
+		return;
+	}
+
+	/* Make sure arrays are proper size. */
+	device_prepare_update(dscene);
+
+	TaskPool pool;
+	for(int type = 0; type < IMAGE_DATA_NUM_TYPES; type++) {
 		for(size_t slot = 0; slot < images[type].size(); slot++) {
 			if(!images[type][slot])
 				continue;

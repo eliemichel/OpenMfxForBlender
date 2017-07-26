@@ -20,36 +20,124 @@
 /* So ImathMath is included before our kernel_cpu_compat. */
 #ifdef WITH_OSL
 /* So no context pollution happens from indirectly included windows.h */
-#  include "util_windows.h"
+#  include "util/util_windows.h"
 #  include <OSL/oslexec.h>
 #endif
 
-#include "device.h"
-#include "device_intern.h"
+#include "device/device.h"
+#include "device/device_intern.h"
+#include "device/device_split_kernel.h"
 
-#include "kernel.h"
-#include "kernel_compat_cpu.h"
-#include "kernel_types.h"
-#include "kernel_globals.h"
+#include "kernel/kernel.h"
+#include "kernel/kernel_compat_cpu.h"
+#include "kernel/kernel_types.h"
+#include "kernel/split/kernel_split_data.h"
+#include "kernel/kernel_globals.h"
 
-#include "osl_shader.h"
-#include "osl_globals.h"
+#include "kernel/osl/osl_shader.h"
+#include "kernel/osl/osl_globals.h"
 
-#include "buffers.h"
+#include "render/buffers.h"
 
-#include "util_debug.h"
-#include "util_foreach.h"
-#include "util_function.h"
-#include "util_logging.h"
-#include "util_opengl.h"
-#include "util_progress.h"
-#include "util_system.h"
-#include "util_thread.h"
+#include "util/util_debug.h"
+#include "util/util_foreach.h"
+#include "util/util_function.h"
+#include "util/util_logging.h"
+#include "util/util_map.h"
+#include "util/util_opengl.h"
+#include "util/util_progress.h"
+#include "util/util_system.h"
+#include "util/util_thread.h"
 
 CCL_NAMESPACE_BEGIN
 
+class CPUDevice;
+
+class CPUSplitKernel : public DeviceSplitKernel {
+	CPUDevice *device;
+public:
+	explicit CPUSplitKernel(CPUDevice *device);
+
+	virtual bool enqueue_split_kernel_data_init(const KernelDimensions& dim,
+	                                            RenderTile& rtile,
+	                                            int num_global_elements,
+	                                            device_memory& kernel_globals,
+	                                            device_memory& kernel_data_,
+	                                            device_memory& split_data,
+	                                            device_memory& ray_state,
+	                                            device_memory& queue_index,
+	                                            device_memory& use_queues_flag,
+	                                            device_memory& work_pool_wgs);
+
+	virtual SplitKernelFunction* get_split_kernel_function(string kernel_name, const DeviceRequestedFeatures&);
+	virtual int2 split_kernel_local_size();
+	virtual int2 split_kernel_global_size(device_memory& kg, device_memory& data, DeviceTask *task);
+	virtual uint64_t state_buffer_size(device_memory& kg, device_memory& data, size_t num_threads);
+};
+
 class CPUDevice : public Device
 {
+	static unordered_map<string, void*> kernel_functions;
+
+	static void register_kernel_function(const char* name, void* func)
+	{
+		kernel_functions[name] = func;
+	}
+
+	static const char* get_arch_name()
+	{
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX2
+		if(system_cpu_support_avx2()) {
+			return "cpu_avx2";
+		}
+		else
+#endif
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX
+		if(system_cpu_support_avx()) {
+			return "cpu_avx";
+		}
+		else
+#endif
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE41
+		if(system_cpu_support_sse41()) {
+			return "cpu_sse41";
+		}
+		else
+#endif
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE3
+		if(system_cpu_support_sse3()) {
+			return "cpu_sse3";
+		}
+		else
+#endif
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE2
+		if(system_cpu_support_sse2()) {
+			return "cpu_sse2";
+		}
+		else
+#endif
+		{
+			return "cpu";
+		}
+	}
+
+	template<typename F>
+	static F get_kernel_function(string name)
+	{
+		name = string("kernel_") + get_arch_name() + "_" + name;
+
+		unordered_map<string, void*>::iterator it = kernel_functions.find(name);
+
+		if(it == kernel_functions.end()) {
+			assert(!"kernel function not found");
+			return NULL;
+		}
+
+		return (F)it->second;
+	}
+
+	friend class CPUSplitKernel;
+
 public:
 	TaskPool task_pool;
 	KernelGlobals kernel_globals;
@@ -57,10 +145,15 @@ public:
 #ifdef WITH_OSL
 	OSLGlobals osl_globals;
 #endif
+
+	bool use_split_kernel;
+
+	DeviceRequestedFeatures requested_features;
 	
 	CPUDevice(DeviceInfo& info, Stats &stats, bool background)
 	: Device(info, stats, background)
 	{
+
 #ifdef WITH_OSL
 		kernel_globals.osl = &osl_globals;
 #endif
@@ -105,6 +198,28 @@ public:
 		{
 			VLOG(1) << "Will be using regular kernels.";
 		}
+
+		use_split_kernel = DebugFlags().cpu.split_kernel;
+		if(use_split_kernel) {
+			VLOG(1) << "Will be using split kernel.";
+		}
+
+		kernel_cpu_register_functions(register_kernel_function);
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE2
+		kernel_cpu_sse2_register_functions(register_kernel_function);
+#endif
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE3
+		kernel_cpu_sse3_register_functions(register_kernel_function);
+#endif
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE41
+		kernel_cpu_sse41_register_functions(register_kernel_function);
+#endif
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX
+		kernel_cpu_avx_register_functions(register_kernel_function);
+#endif
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX2
+		kernel_cpu_avx2_register_functions(register_kernel_function);
+#endif
 	}
 
 	~CPUDevice()
@@ -117,8 +232,14 @@ public:
 		return (TaskScheduler::num_threads() == 1);
 	}
 
-	void mem_alloc(device_memory& mem, MemoryType /*type*/)
+	void mem_alloc(const char *name, device_memory& mem, MemoryType /*type*/)
 	{
+		if(name) {
+			VLOG(1) << "Buffer allocate: " << name << ", "
+			        << string_human_readable_number(mem.memory_size()) << " bytes. ("
+			        << string_human_readable_size(mem.memory_size()) << ")";
+		}
+
 		mem.device_pointer = mem.data_pointer;
 
 		if(!mem.device_pointer) {
@@ -205,8 +326,14 @@ public:
 
 	void thread_run(DeviceTask *task)
 	{
-		if(task->type == DeviceTask::PATH_TRACE)
-			thread_path_trace(*task);
+		if(task->type == DeviceTask::PATH_TRACE) {
+			if(!use_split_kernel) {
+				thread_path_trace(*task);
+			}
+			else {
+				thread_path_trace_split(*task);
+			}
+		}
 		else if(task->type == DeviceTask::FILM_CONVERT)
 			thread_film_convert(*task);
 		else if(task->type == DeviceTask::SHADER)
@@ -267,7 +394,7 @@ public:
 		{
 			path_trace_kernel = kernel_cpu_path_trace;
 		}
-		
+
 		while(task.acquire_tile(this, tile)) {
 			float *render_buffer = (float*)tile.buffer;
 			uint *rng_state = (uint*)tile.rng_state;
@@ -301,6 +428,49 @@ public:
 		}
 
 		thread_kernel_globals_free(&kg);
+	}
+
+	void thread_path_trace_split(DeviceTask& task)
+	{
+		if(task_pool.canceled()) {
+			if(task.need_finish_queue == false)
+				return;
+		}
+
+		RenderTile tile;
+
+		CPUSplitKernel split_kernel(this);
+
+		/* allocate buffer for kernel globals */
+		device_memory kgbuffer;
+		kgbuffer.resize(sizeof(KernelGlobals));
+		mem_alloc("kernel_globals", kgbuffer, MEM_READ_WRITE);
+
+		KernelGlobals *kg = (KernelGlobals*)kgbuffer.device_pointer;
+		*kg = thread_kernel_globals_init();
+
+		requested_features.max_closure = MAX_CLOSURE;
+		if(!split_kernel.load_kernels(requested_features)) {
+			thread_kernel_globals_free((KernelGlobals*)kgbuffer.device_pointer);
+			mem_free(kgbuffer);
+
+			return;
+		}
+
+		while(task.acquire_tile(this, tile)) {
+			device_memory data;
+			split_kernel.path_trace(&task, tile, kgbuffer, data);
+
+			task.release_tile(tile);
+
+			if(task_pool.canceled()) {
+				if(task.need_finish_queue == false)
+					break;
+			}
+		}
+
+		thread_kernel_globals_free((KernelGlobals*)kgbuffer.device_pointer);
+		mem_free(kgbuffer);
 	}
 
 	void thread_film_convert(DeviceTask& task)
@@ -510,6 +680,10 @@ protected:
 
 	inline void thread_kernel_globals_free(KernelGlobals *kg)
 	{
+		if(kg == NULL) {
+			return;
+		}
+
 		if(kg->transparent_shadow_intersections != NULL) {
 			free(kg->transparent_shadow_intersections);
 		}
@@ -524,7 +698,174 @@ protected:
 		OSLShader::thread_free(kg);
 #endif
 	}
+
+	virtual bool load_kernels(DeviceRequestedFeatures& requested_features_) {
+		requested_features = requested_features_;
+
+		return true;
+	}
 };
+
+/* split kernel */
+
+class CPUSplitKernelFunction : public SplitKernelFunction {
+public:
+	CPUDevice* device;
+	void (*func)(KernelGlobals *kg, KernelData *data);
+
+	CPUSplitKernelFunction(CPUDevice* device) : device(device), func(NULL) {}
+	~CPUSplitKernelFunction() {}
+
+	virtual bool enqueue(const KernelDimensions& dim, device_memory& kernel_globals, device_memory& data)
+	{
+		if(!func) {
+			return false;
+		}
+
+		KernelGlobals *kg = (KernelGlobals*)kernel_globals.device_pointer;
+		kg->global_size = make_int2(dim.global_size[0], dim.global_size[1]);
+
+		for(int y = 0; y < dim.global_size[1]; y++) {
+			for(int x = 0; x < dim.global_size[0]; x++) {
+				kg->global_id = make_int2(x, y);
+
+				func(kg, (KernelData*)data.device_pointer);
+			}
+		}
+
+		return true;
+	}
+};
+
+CPUSplitKernel::CPUSplitKernel(CPUDevice *device) : DeviceSplitKernel(device), device(device)
+{
+}
+
+bool CPUSplitKernel::enqueue_split_kernel_data_init(const KernelDimensions& dim,
+                                                    RenderTile& rtile,
+                                                    int num_global_elements,
+                                                    device_memory& kernel_globals,
+                                                    device_memory& data,
+                                                    device_memory& split_data,
+                                                    device_memory& ray_state,
+                                                    device_memory& queue_index,
+                                                    device_memory& use_queues_flags,
+                                                    device_memory& work_pool_wgs)
+{
+	typedef void(*data_init_t)(KernelGlobals *kg,
+	                           ccl_constant KernelData *data,
+	                           ccl_global void *split_data_buffer,
+	                           int num_elements,
+	                           ccl_global char *ray_state,
+	                           ccl_global uint *rng_state,
+	                           int start_sample,
+	                           int end_sample,
+	                           int sx, int sy, int sw, int sh, int offset, int stride,
+	                           ccl_global int *Queue_index,
+	                           int queuesize,
+	                           ccl_global char *use_queues_flag,
+	                           ccl_global unsigned int *work_pool_wgs,
+	                           unsigned int num_samples,
+	                           ccl_global float *buffer);
+
+	data_init_t data_init;
+
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX2
+	if(system_cpu_support_avx2()) {
+		data_init = kernel_cpu_avx2_data_init;
+	}
+	else
+#endif
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX
+	if(system_cpu_support_avx()) {
+		data_init = kernel_cpu_avx_data_init;
+	}
+	else
+#endif
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE41
+	if(system_cpu_support_sse41()) {
+		data_init = kernel_cpu_sse41_data_init;
+	}
+	else
+#endif
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE3
+	if(system_cpu_support_sse3()) {
+		data_init = kernel_cpu_sse3_data_init;
+	}
+	else
+#endif
+#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE2
+	if(system_cpu_support_sse2()) {
+		data_init = kernel_cpu_sse2_data_init;
+	}
+	else
+#endif
+	{
+		data_init = kernel_cpu_data_init;
+	}
+
+	KernelGlobals *kg = (KernelGlobals*)kernel_globals.device_pointer;
+	kg->global_size = make_int2(dim.global_size[0], dim.global_size[1]);
+
+	for(int y = 0; y < dim.global_size[1]; y++) {
+		for(int x = 0; x < dim.global_size[0]; x++) {
+			kg->global_id = make_int2(x, y);
+
+			data_init((KernelGlobals*)kernel_globals.device_pointer,
+			          (KernelData*)data.device_pointer,
+			          (void*)split_data.device_pointer,
+			          num_global_elements,
+			          (char*)ray_state.device_pointer,
+			          (uint*)rtile.rng_state,
+			          rtile.start_sample,
+			          rtile.start_sample + rtile.num_samples,
+			          rtile.x,
+			          rtile.y,
+			          rtile.w,
+			          rtile.h,
+			          rtile.offset,
+			          rtile.stride,
+			          (int*)queue_index.device_pointer,
+			          dim.global_size[0] * dim.global_size[1],
+			          (char*)use_queues_flags.device_pointer,
+			          (uint*)work_pool_wgs.device_pointer,
+			          rtile.num_samples,
+			          (float*)rtile.buffer);
+		}
+	}
+
+	return true;
+}
+
+SplitKernelFunction* CPUSplitKernel::get_split_kernel_function(string kernel_name, const DeviceRequestedFeatures&)
+{
+	CPUSplitKernelFunction *kernel = new CPUSplitKernelFunction(device);
+
+	kernel->func = device->get_kernel_function<void(*)(KernelGlobals*, KernelData*)>(kernel_name);
+	if(!kernel->func) {
+		delete kernel;
+		return NULL;
+	}
+
+	return kernel;
+}
+
+int2 CPUSplitKernel::split_kernel_local_size()
+{
+	return make_int2(1, 1);
+}
+
+int2 CPUSplitKernel::split_kernel_global_size(device_memory& /*kg*/, device_memory& /*data*/, DeviceTask * /*task*/) {
+	return make_int2(1, 1);
+}
+
+uint64_t CPUSplitKernel::state_buffer_size(device_memory& kernel_globals, device_memory& /*data*/, size_t num_threads) {
+	KernelGlobals *kg = (KernelGlobals*)kernel_globals.device_pointer;
+
+	return split_data_buffer_size(kg, num_threads);
+}
+
+unordered_map<string, void*> CPUDevice::kernel_functions;
 
 Device *device_cpu_create(DeviceInfo& info, Stats &stats, bool background)
 {

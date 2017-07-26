@@ -16,17 +16,17 @@
 
 #include <stdlib.h>
 
-#include "buffers.h"
-#include "device.h"
+#include "render/buffers.h"
+#include "device/device.h"
 
-#include "util_debug.h"
-#include "util_foreach.h"
-#include "util_hash.h"
-#include "util_image.h"
-#include "util_math.h"
-#include "util_opengl.h"
-#include "util_time.h"
-#include "util_types.h"
+#include "util/util_debug.h"
+#include "util/util_foreach.h"
+#include "util/util_hash.h"
+#include "util/util_image.h"
+#include "util/util_math.h"
+#include "util/util_opengl.h"
+#include "util/util_time.h"
+#include "util/util_types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -129,13 +129,13 @@ void RenderBuffers::reset(Device *device, BufferParams& params_)
 	
 	/* allocate buffer */
 	buffer.resize(params.width*params.height*params.get_passes_size());
-	device->mem_alloc(buffer, MEM_READ_WRITE);
+	device->mem_alloc("render_buffer", buffer, MEM_READ_WRITE);
 	device->mem_zero(buffer);
 
 	/* allocate rng state */
 	rng_state.resize(params.width, params.height);
 
-	device->mem_alloc(rng_state, MEM_READ_WRITE);
+	device->mem_alloc("rng_state", rng_state, MEM_READ_WRITE);
 }
 
 bool RenderBuffers::copy_from_device()

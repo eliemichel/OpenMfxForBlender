@@ -17,24 +17,24 @@
 #include <string.h>
 #include <limits.h>
 
-#include "buffers.h"
-#include "camera.h"
-#include "device.h"
-#include "graph.h"
-#include "integrator.h"
-#include "mesh.h"
-#include "object.h"
-#include "scene.h"
-#include "session.h"
-#include "bake.h"
+#include "render/buffers.h"
+#include "render/camera.h"
+#include "device/device.h"
+#include "render/graph.h"
+#include "render/integrator.h"
+#include "render/mesh.h"
+#include "render/object.h"
+#include "render/scene.h"
+#include "render/session.h"
+#include "render/bake.h"
 
-#include "util_foreach.h"
-#include "util_function.h"
-#include "util_logging.h"
-#include "util_math.h"
-#include "util_opengl.h"
-#include "util_task.h"
-#include "util_time.h"
+#include "util/util_foreach.h"
+#include "util/util_function.h"
+#include "util/util_logging.h"
+#include "util/util_math.h"
+#include "util/util_opengl.h"
+#include "util/util_task.h"
+#include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -230,7 +230,9 @@ void Session::run_gpu()
 				while(1) {
 					scoped_timer pause_timer;
 					pause_cond.wait(pause_lock);
-					progress.add_skip_time(pause_timer, params.background);
+					if(pause) {
+						progress.add_skip_time(pause_timer, params.background);
+					}
 
 					update_status_time(pause, no_tiles);
 					progress.set_update();
@@ -520,7 +522,9 @@ void Session::run_cpu()
 				while(1) {
 					scoped_timer pause_timer;
 					pause_cond.wait(pause_lock);
-					progress.add_skip_time(pause_timer, params.background);
+					if(pause) {
+						progress.add_skip_time(pause_timer, params.background);
+					}
 
 					update_status_time(pause, no_tiles);
 					progress.set_update();
@@ -633,6 +637,9 @@ DeviceRequestedFeatures Session::get_requested_device_features()
 			requested_features.use_patch_evaluation = true;
 		}
 #endif
+		if(object->is_shadow_catcher) {
+			requested_features.use_shadow_tricks = true;
+		}
 	}
 
 	BakeManager *bake_manager = scene->bake_manager;
@@ -650,6 +657,8 @@ void Session::load_kernels()
 	if(!kernels_loaded) {
 		progress.set_status("Loading render kernels (may take a few minutes the first time)");
 
+		scoped_timer timer;
+
 		DeviceRequestedFeatures requested_features = get_requested_device_features();
 		VLOG(2) << "Requested features:\n" << requested_features;
 		if(!device->load_kernels(requested_features)) {
@@ -662,6 +671,9 @@ void Session::load_kernels()
 			progress.set_update();
 			return;
 		}
+
+		progress.add_skip_time(timer, false);
+		VLOG(1) << "Total time spent loading kernels: " << time_dt() - timer.get_start();
 
 		kernels_loaded = true;
 	}
@@ -824,7 +836,7 @@ void Session::update_status_time(bool show_pause, bool show_done)
 	int progressive_sample = tile_manager.state.sample;
 	int num_samples = tile_manager.get_num_effective_samples();
 
-	int tile = tile_manager.state.num_rendered_tiles;
+	int tile = progress.get_finished_tiles();
 	int num_tiles = tile_manager.state.num_tiles;
 
 	/* update status */
@@ -832,7 +844,7 @@ void Session::update_status_time(bool show_pause, bool show_done)
 
 	if(!params.progressive) {
 		const bool is_cpu = params.device.type == DEVICE_CPU;
-		const bool is_last_tile = (progress.get_finished_tiles() + 1) == num_tiles;
+		const bool is_last_tile = (tile + 1) == num_tiles;
 
 		substatus = string_printf("Path Tracing Tile %d/%d", tile, num_tiles);
 
@@ -883,6 +895,7 @@ void Session::path_trace()
 	task.need_finish_queue = params.progressive_refine;
 	task.integrator_branched = scene->integrator->method == Integrator::BRANCHED_PATH;
 	task.requested_tile_size = params.tile_size;
+	task.passes_size = tile_manager.params.get_passes_size();
 
 	device->task_add(task);
 }

@@ -112,7 +112,7 @@ static void get_vertices(DerivedMesh *dm, std::vector<Imath::V3f> &points)
 	MVert *verts = dm->getVertArray(dm);
 
 	for (int i = 0, e = dm->getNumVerts(dm); i < e; ++i) {
-		copy_zup_yup(points[i].getValue(), verts[i].co);
+		copy_yup_from_zup(points[i].getValue(), verts[i].co);
 	}
 }
 
@@ -182,7 +182,7 @@ static void get_vertex_normals(DerivedMesh *dm, std::vector<Imath::V3f> &normals
 
 	for (int i = 0, e = dm->getNumVerts(dm); i < e; ++i) {
 		normal_short_to_float_v3(no, verts[i].no);
-		copy_zup_yup(normals[i].getValue(), no);
+		copy_yup_from_zup(normals[i].getValue(), no);
 	}
 }
 
@@ -211,7 +211,7 @@ static void get_loop_normals(DerivedMesh *dm, std::vector<Imath::V3f> &normals)
 
 			for (int j = 0; j < mp->totloop; --ml, ++j, ++loop_index) {
 				const int index = ml->v;
-				copy_zup_yup(normals[loop_index].getValue(), lnors[index]);
+				copy_yup_from_zup(normals[loop_index].getValue(), lnors[index]);
 			}
 		}
 	}
@@ -226,14 +226,14 @@ static void get_loop_normals(DerivedMesh *dm, std::vector<Imath::V3f> &normals)
 				BKE_mesh_calc_poly_normal(mp, ml - (mp->totloop - 1), verts, no);
 
 				for (int j = 0; j < mp->totloop; --ml, ++j, ++loop_index) {
-					copy_zup_yup(normals[loop_index].getValue(), no);
+					copy_yup_from_zup(normals[loop_index].getValue(), no);
 				}
 			}
 			else {
 				/* Smooth shaded, use individual vert normals. */
 				for (int j = 0; j < mp->totloop; --ml, ++j, ++loop_index) {
 					normal_short_to_float_v3(no, verts[ml->v].no);
-					copy_zup_yup(normals[loop_index].getValue(), no);
+					copy_yup_from_zup(normals[loop_index].getValue(), no);
 				}
 			}
 		}
@@ -355,7 +355,7 @@ bool AbcMeshWriter::isAnimated() const
 		md = md->next;
 	}
 
-	return false;
+	return me->adt != NULL;
 }
 
 void AbcMeshWriter::do_write()
@@ -590,7 +590,7 @@ void AbcMeshWriter::getVelocities(DerivedMesh *dm, std::vector<Imath::V3f> &vels
 		float *mesh_vels = reinterpret_cast<float *>(fss->meshVelocities);
 
 		for (int i = 0; i < totverts; ++i) {
-			copy_zup_yup(vels[i].getValue(), mesh_vels);
+			copy_yup_from_zup(vels[i].getValue(), mesh_vels);
 			mesh_vels += 3;
 		}
 	}
@@ -691,7 +691,7 @@ static void assign_materials(Main *bmain, Object *ob, const std::map<std::string
 				assigned_name = mat_iter->second;
 			}
 
-			assign_material(ob, assigned_name, it->second, BKE_MAT_ASSIGN_OBJECT);
+			assign_material(ob, assigned_name, it->second, BKE_MAT_ASSIGN_OBDATA);
 		}
 	}
 }
@@ -726,7 +726,7 @@ static void read_mverts_interp(MVert *mverts, const P3fArraySamplePtr &positions
 		const Imath::V3f &ceil_pos = (*ceil_positions)[i];
 
 		interp_v3_v3v3(tmp, floor_pos.getValue(), ceil_pos.getValue(), weight);
-		copy_yup_zup(mvert.co, tmp);
+		copy_zup_from_yup(mvert.co, tmp);
 
 		mvert.bweight = 0;
 	}
@@ -755,7 +755,7 @@ void read_mverts(MVert *mverts, const P3fArraySamplePtr &positions, const N3fArr
 		MVert &mvert = mverts[i];
 		Imath::V3f pos_in = (*positions)[i];
 
-		copy_yup_zup(mvert.co, pos_in.getValue());
+		copy_zup_from_yup(mvert.co, pos_in.getValue());
 
 		mvert.bweight = 0;
 
@@ -765,7 +765,7 @@ void read_mverts(MVert *mverts, const P3fArraySamplePtr &positions, const N3fArr
 			short no[3];
 			normal_float_to_short_v3(no, nor_in.getValue());
 
-			copy_yup_zup(mvert.no, no);
+			copy_zup_from_yup(mvert.no, no);
 		}
 	}
 }
@@ -897,19 +897,31 @@ static void *add_customdata_cb(void *user_data, const char *name, int data_type)
 {
 	DerivedMesh *dm = static_cast<DerivedMesh *>(user_data);
 	CustomDataType cd_data_type = static_cast<CustomDataType>(data_type);
-	void *cd_ptr = NULL;
+	void *cd_ptr;
+	CustomData *loopdata;
+	int numloops;
 
-	if (ELEM(cd_data_type, CD_MLOOPUV, CD_MLOOPCOL)) {
-		cd_ptr = CustomData_get_layer_named(dm->getLoopDataLayout(dm), cd_data_type, name);
+	/* unsupported custom data type -- don't do anything. */
+	if (!ELEM(cd_data_type, CD_MLOOPUV, CD_MLOOPCOL)) {
+		return NULL;
+	}
 
-		if (cd_ptr == NULL) {
-			cd_ptr = CustomData_add_layer_named(dm->getLoopDataLayout(dm),
-			                                    cd_data_type,
-			                                    CD_DEFAULT,
-			                                    NULL,
-			                                    dm->getNumLoops(dm),
-			                                    name);
-		}
+	loopdata = dm->getLoopDataLayout(dm);
+	cd_ptr = CustomData_get_layer_named(loopdata, cd_data_type, name);
+	if (cd_ptr != NULL) {
+		/* layer already exists, so just return it. */
+		return cd_ptr;
+	}
+
+	/* create a new layer, taking care to construct the hopefully-soon-to-be-removed
+	 * CD_MTEXPOLY layer too, with the same name. */
+	numloops = dm->getNumLoops(dm);
+	cd_ptr = CustomData_add_layer_named(loopdata, cd_data_type, CD_DEFAULT,
+	                                    NULL, numloops, name);
+	if (cd_data_type == CD_MLOOPUV) {
+		CustomData_add_layer_named(dm->getPolyDataLayout(dm),
+		                           CD_MTEXPOLY, CD_DEFAULT,
+		                           NULL, numloops, name);
 	}
 
 	return cd_ptr;
@@ -1009,17 +1021,15 @@ bool AbcMeshReader::valid() const
 	return m_schema.valid();
 }
 
-void AbcMeshReader::readObjectData(Main *bmain, float time)
+void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelector &sample_sel)
 {
 	Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
 	m_object = BKE_object_add_only_object(bmain, OB_MESH, m_object_name.c_str());
 	m_object->data = mesh;
 
-	const ISampleSelector sample_sel(time);
-
 	DerivedMesh *dm = CDDM_from_mesh(mesh);
-	DerivedMesh *ndm = this->read_derivedmesh(dm, time, MOD_MESHSEQ_READ_ALL, NULL);
+	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
 
 	if (ndm != dm) {
 		dm->release(dm);
@@ -1038,9 +1048,28 @@ void AbcMeshReader::readObjectData(Main *bmain, float time)
 	}
 }
 
-DerivedMesh *AbcMeshReader::read_derivedmesh(DerivedMesh *dm, const float time, int read_flag, const char **err_str)
+bool AbcMeshReader::accepts_object_type(const Alembic::AbcCoreAbstract::ObjectHeader &alembic_header,
+	const Object *const ob,
+	const char **err_str) const
 {
-	ISampleSelector sample_sel(time);
+	if (!Alembic::AbcGeom::IPolyMesh::matches(alembic_header)) {
+		*err_str = "Object type mismatch, Alembic object path pointed to PolyMesh when importing, but not any more.";
+		return false;
+	}
+
+	if (ob->type != OB_MESH) {
+		*err_str = "Object type mismatch, Alembic object path points to PolyMesh.";
+		return false;
+	}
+
+	return true;
+}
+
+DerivedMesh *AbcMeshReader::read_derivedmesh(DerivedMesh *dm, 
+											 const ISampleSelector &sample_sel, 
+											 int read_flag, 
+											 const char **err_str)
+{
 	const IPolyMeshSchema::Sample sample = m_schema.getValue(sample_sel);
 
 	const P3fArraySamplePtr &positions = sample.getPositions();
@@ -1080,7 +1109,7 @@ DerivedMesh *AbcMeshReader::read_derivedmesh(DerivedMesh *dm, const float time, 
 	}
 
 	CDStreamConfig config = get_config(new_dm ? new_dm : dm);
-	config.time = time;
+	config.time = sample_sel.getRequestedTime();
 
 	bool do_normals = false;
 	read_mesh_sample(&settings, m_schema, sample_sel, config, do_normals);
@@ -1227,7 +1256,24 @@ bool AbcSubDReader::valid() const
 	return m_schema.valid();
 }
 
-void AbcSubDReader::readObjectData(Main *bmain, float time)
+bool AbcSubDReader::accepts_object_type(const Alembic::AbcCoreAbstract::ObjectHeader &alembic_header,
+	const Object *const ob,
+	const char **err_str) const
+{
+	if (!Alembic::AbcGeom::ISubD::matches(alembic_header)) {
+		*err_str = "Object type mismatch, Alembic object path pointed to SubD when importing, but not any more.";
+		return false;
+	}
+
+	if (ob->type != OB_MESH) {
+		*err_str = "Object type mismatch, Alembic object path points to SubD.";
+		return false;
+	}
+
+	return true;
+}
+
+void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelector &sample_sel)
 {
 	Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
@@ -1235,7 +1281,7 @@ void AbcSubDReader::readObjectData(Main *bmain, float time)
 	m_object->data = mesh;
 
 	DerivedMesh *dm = CDDM_from_mesh(mesh);
-	DerivedMesh *ndm = this->read_derivedmesh(dm, time, MOD_MESHSEQ_READ_ALL, NULL);
+	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
 
 	if (ndm != dm) {
 		dm->release(dm);
@@ -1243,7 +1289,6 @@ void AbcSubDReader::readObjectData(Main *bmain, float time)
 
 	DM_to_mesh(ndm, mesh, m_object, CD_MASK_MESH, true);
 
-	const ISampleSelector sample_sel(time);
 	const ISubDSchema::Sample sample = m_schema.getValue(sample_sel);
 	Int32ArraySamplePtr indices = sample.getCreaseIndices();
 	Alembic::Abc::FloatArraySamplePtr sharpnesses = sample.getCreaseSharpnesses();
@@ -1274,9 +1319,11 @@ void AbcSubDReader::readObjectData(Main *bmain, float time)
 	}
 }
 
-DerivedMesh *AbcSubDReader::read_derivedmesh(DerivedMesh *dm, const float time, int read_flag, const char **err_str)
+DerivedMesh *AbcSubDReader::read_derivedmesh(DerivedMesh *dm, 
+											 const ISampleSelector &sample_sel, 
+											 int read_flag, 
+											 const char **err_str)
 {
-	ISampleSelector sample_sel(time);
 	const ISubDSchema::Sample sample = m_schema.getValue(sample_sel);
 
 	const P3fArraySamplePtr &positions = sample.getPositions();
@@ -1316,7 +1363,7 @@ DerivedMesh *AbcSubDReader::read_derivedmesh(DerivedMesh *dm, const float time, 
 
 	/* Only read point data when streaming meshes, unless we need to create new ones. */
 	CDStreamConfig config = get_config(new_dm ? new_dm : dm);
-	config.time = time;
+	config.time = sample_sel.getRequestedTime();
 	read_subd_sample(&settings, m_schema, sample_sel, config);
 
 	if (new_dm) {

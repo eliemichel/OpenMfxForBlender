@@ -19,7 +19,8 @@
 
 /* CPU Kernel Interface */
 
-#include "util_types.h"
+#include "util/util_types.h"
+#include "kernel/kernel_types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -28,6 +29,7 @@ CCL_NAMESPACE_BEGIN
 #define KERNEL_FUNCTION_FULL_NAME(name) KERNEL_NAME_EVAL(KERNEL_ARCH, name)
 
 struct KernelGlobals;
+struct KernelData;
 
 KernelGlobals *kernel_globals_create();
 void kernel_globals_free(KernelGlobals *kg);
@@ -46,31 +48,31 @@ void kernel_tex_copy(KernelGlobals *kg,
                      ExtensionType extension = EXTENSION_REPEAT);
 
 #define KERNEL_ARCH cpu
-#include "kernels/cpu/kernel_cpu.h"
+#include "kernel/kernels/cpu/kernel_cpu.h"
 
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE2
 #  define KERNEL_ARCH cpu_sse2
-#  include "kernels/cpu/kernel_cpu.h"
+#  include "kernel/kernels/cpu/kernel_cpu.h"
 #endif  /* WITH_CYCLES_OPTIMIZED_KERNEL_SSE2 */
 
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE3
 #  define KERNEL_ARCH cpu_sse3
-#  include "kernels/cpu/kernel_cpu.h"
+#  include "kernel/kernels/cpu/kernel_cpu.h"
 #endif  /* WITH_CYCLES_OPTIMIZED_KERNEL_SSE2 */
 
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE41
 #  define KERNEL_ARCH cpu_sse41
-#  include "kernels/cpu/kernel_cpu.h"
+#  include "kernel/kernels/cpu/kernel_cpu.h"
 #endif  /* WITH_CYCLES_OPTIMIZED_KERNEL_SSE41 */
 
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX
 #  define KERNEL_ARCH cpu_avx
-#  include "kernels/cpu/kernel_cpu.h"
+#  include "kernel/kernels/cpu/kernel_cpu.h"
 #endif  /* WITH_CYCLES_OPTIMIZED_KERNEL_AVX */
 
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX2
 #  define KERNEL_ARCH cpu_avx2
-#  include "kernels/cpu/kernel_cpu.h"
+#  include "kernel/kernels/cpu/kernel_cpu.h"
 #endif  /* WITH_CYCLES_OPTIMIZED_KERNEL_AVX2 */
 
 CCL_NAMESPACE_END

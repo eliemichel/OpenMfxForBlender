@@ -17,13 +17,15 @@
 #ifndef __IMAGE_H__
 #define __IMAGE_H__
 
-#include "device.h"
-#include "device_memory.h"
+#include "device/device.h"
+#include "device/device_memory.h"
 
-#include "util_image.h"
-#include "util_string.h"
-#include "util_thread.h"
-#include "util_vector.h"
+#include "util/util_image.h"
+#include "util/util_string.h"
+#include "util/util_thread.h"
+#include "util/util_vector.h"
+
+#include <boost/shared_ptr.hpp>
 
 CCL_NAMESPACE_BEGIN
 
@@ -39,6 +41,7 @@ public:
 
 	int add_image(const string& filename,
 	              void *builtin_data,
+                  boost::shared_ptr<uint8_t> generated_data,
 	              bool animated,
 	              float frame,
 	              bool& is_float,
@@ -49,14 +52,17 @@ public:
 	void remove_image(int flat_slot);
 	void remove_image(const string& filename,
 	                  void *builtin_data,
+                      boost::shared_ptr<uint8_t> generated_data,
 	                  InterpolationType interpolation,
 	                  ExtensionType extension);
 	void tag_reload_image(const string& filename,
 	                      void *builtin_data,
+                          boost::shared_ptr<uint8_t> generated_data,
 	                      InterpolationType interpolation,
 	                      ExtensionType extension);
-	ImageDataType get_image_metadata(const string& filename, void *builtin_data, bool& is_linear);
+	ImageDataType get_image_metadata(const string& filename, void *builtin_data, boost::shared_ptr<uint8_t> generated_data, bool& is_linear);
 
+	void device_prepare_update(DeviceScene *dscene);
 	void device_update(Device *device,
 	                   DeviceScene *dscene,
 	                   Scene *scene,
@@ -98,7 +104,7 @@ public:
 	struct Image {
 		string filename;
 		void *builtin_data;
-
+        boost::shared_ptr<uint8_t> generated_data;
 		bool use_alpha;
 		bool need_load;
 		bool animated;
@@ -108,6 +114,11 @@ public:
 
 		int users;
 	};
+
+    struct InternalImageHeader {
+        int width;
+        int height;
+    };
 
 private:
 	int tex_num_images[IMAGE_DATA_NUM_TYPES];
