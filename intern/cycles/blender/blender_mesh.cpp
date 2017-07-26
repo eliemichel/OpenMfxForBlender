@@ -303,6 +303,7 @@ static void create_mesh_volume_attribute(BL::Object& b_ob,
 	volume_data->slot = image_manager->add_image(
 	        Attribute::standard_name(std),
 	        b_ob.ptr.data,
+            boost::shared_ptr<uint8_t>(),
 	        animated,
 	        frame,
 	        is_float,

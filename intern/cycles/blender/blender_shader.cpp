@@ -31,6 +31,7 @@
 #include "util/util_string.h"
 #include "util/util_set.h"
 #include "util/util_task.h"
+#include "util/util_hash.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -38,13 +39,15 @@ typedef map<void*, ShaderInput*> PtrInputMap;
 typedef map<void*, ShaderOutput*> PtrOutputMap;
 typedef map<string, ConvertNode*> ProxyMap;
 
-std::vector<float4> CurveToLineSegments(Curve *cu);
+std::vector<float4> CurveToLineSegments(Mesh* mesh);
 
 /* Hacks to hook into Blender API
  * todo: clean this up ... */
 
 extern "C" {
 struct Image *BKE_image_add_from_imbuf(struct ImBuf *ibuf, const char *name);
+void BKE_image_free(struct Image *image);
+void BKE_libblock_free_ex(Main *bmain, void *idv, const bool do_id_user, const bool do_ui_user);
 }
 
 /* Find */
@@ -247,7 +250,9 @@ static bool is_output_node(BL::Node& b_node)
 		    || b_node.is_a(&RNA_ShaderNodeOutputLamp));
 }
 
-static ShaderNode *add_node(Scene *scene,
+static ShaderNode *add_node(BlenderSync &sync,
+                            Shader *shader,
+                            Scene *scene,
                             BL::RenderEngine& b_engine,
                             BL::BlendData& b_data,
                             BL::Scene& b_scene,
@@ -665,6 +670,7 @@ static ShaderNode *add_node(Scene *scene,
 				scene->image_manager->tag_reload_image(
 				        image->filename.string(),
 				        image->builtin_data,
+                        boost::shared_ptr<uint8_t>(),
 				        get_image_interpolation(b_image_node),
 				        get_image_extension(b_image_node));
 			}
@@ -683,6 +689,8 @@ static ShaderNode *add_node(Scene *scene,
         BL::Curve b_curve(b_curve_node.object());
 		CurveTextureNode *tex = new CurveTextureNode();
 
+        shader->has_object_dependency = true;
+
         tex->curve_type = b_curve_node.curve_type();
 
         if (b_curve) {
@@ -690,24 +698,55 @@ static ShaderNode *add_node(Scene *scene,
             ::Curve *cu = (::Curve*) ob->data;
 
             if (ob && cu) {
-                // Build a texture with triangles
-                int scene_frame = b_scene.frame_current();
-                tex->filename = b_curve.name() + "Curve@" + string_printf("%d", scene_frame);
-                tex->points = CurveToLineSegments(cu);
+                BL::Object b_ob = b_curve_node.object();
+                BL::ID key = (sync.BKE_object_is_modified(b_ob))? b_ob: b_curve_node.object().data();
+                Mesh* mesh = sync.mesh_map.find(key);
 
-                ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
-                ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));
-                Image *image = BKE_image_add_from_imbuf(ibuf, tex->filename.c_str());
-                IMB_freeImBuf(ibuf);
+                if (mesh) {
 
-                tex->builtin_data = image;
+                    tex->points = CurveToLineSegments(mesh);
+                    tex->width = tex->points.size();
 
-                bool is_float_bool, linear;
-                tex->slot = scene->image_manager->add_image(tex->filename, tex->builtin_data,
-                                                            true, 0, is_float_bool, linear,
-                                                            INTERPOLATION_CLOSEST,
-                                                            EXTENSION_CLIP,
-                                                            false, true);
+                    // Hash points
+                    uint hash = 0;
+                    for (auto i = tex->points.begin(); i != tex->points.end(); ++i) {
+                        hash ^= hash_int_2d(__float_as_uint(i->x),__float_as_uint(i->y));
+                    }
+
+                    // Build a texture with triangles
+
+//                    // Cleanup old data
+//                    if (tex->slot >= 0) {
+//                        scene->image_manager->remove_image(tex->slot);
+//                    }
+
+                    int scene_frame = b_scene.frame_current();
+                    tex->filename = b_curve.name() + "Curve@" + string_printf("%d-%d", scene_frame, hash);
+
+
+                    ImageManager::InternalImageHeader header;
+                    header.width = tex->width;
+                    header.height = 1;
+
+//                    ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
+//                    ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));
+//                    Image *image = BKE_image_add_from_imbuf(ibuf, tex->filename.c_str());
+//                    IMB_freeImBuf(ibuf);    // Drop reference to ibuf so that the image owns it
+
+                    uint data_size = sizeof(ImageManager::InternalImageHeader) + tex->points.size() * sizeof(float4);
+                    tex->generated_data = boost::shared_ptr<uint8_t>(new uint8_t[data_size]);
+
+                    // Build cycles internal texture
+                    ::memcpy(tex->generated_data.get(), &header, sizeof(header));
+                    ::memcpy(tex->generated_data.get() + sizeof(header), tex->points.data(), tex->points.size() * sizeof(float4));
+
+                    bool is_float_bool, linear;
+                    tex->slot = scene->image_manager->add_image(tex->filename, NULL, tex->generated_data,
+                                                                true, 0, is_float_bool, linear,
+                                                                INTERPOLATION_CLOSEST,
+                                                                EXTENSION_CLIP,
+                                                                false, true);
+                }
             }
 
         }
@@ -750,6 +789,7 @@ static ShaderNode *add_node(Scene *scene,
 				scene->image_manager->tag_reload_image(
 				        env->filename.string(),
 				        env->builtin_data,
+                        boost::shared_ptr<uint8_t>(),
 				        get_image_interpolation(b_env_node),
 				        EXTENSION_REPEAT);
 			}
@@ -887,6 +927,7 @@ static ShaderNode *add_node(Scene *scene,
 			scene->image_manager->tag_reload_image(
 			        point_density->filename.string(),
 			        point_density->builtin_data,
+                    boost::shared_ptr<uint8_t>(),
 			        point_density->interpolation,
 			        EXTENSION_CLIP);
 		}
@@ -993,15 +1034,17 @@ static ShaderOutput *node_find_output_by_name(ShaderNode *node,
 	return node->output(name.c_str());
 }
 
-static void add_nodes(Scene *scene,
-                      BL::RenderEngine& b_engine,
-                      BL::BlendData& b_data,
-                      BL::Scene& b_scene,
-                      const bool background,
-                      ShaderGraph *graph,
-                      BL::ShaderNodeTree& b_ntree,
-                      const ProxyMap &proxy_input_map,
-                      const ProxyMap &proxy_output_map)
+static void add_nodes_recursive(  BlenderSync &sync,
+                        Shader *shader,
+                        Scene *scene,
+                        BL::RenderEngine& b_engine,
+                        BL::BlendData& b_data,
+                        BL::Scene& b_scene,
+                        const bool background,
+                        ShaderGraph *graph,
+                        BL::ShaderNodeTree& b_ntree,
+                        const ProxyMap &proxy_input_map,
+                        const ProxyMap &proxy_output_map)
 {
 	/* add nodes */
 	BL::ShaderNodeTree::nodes_iterator b_node;
@@ -1083,7 +1126,9 @@ static void add_nodes(Scene *scene,
 			}
 			
 			if(b_group_ntree) {
-				add_nodes(scene,
+				add_nodes_recursive(sync,
+                          shader,
+                          scene,
 				          b_engine,
 				          b_data,
 				          b_scene,
@@ -1132,7 +1177,9 @@ static void add_nodes(Scene *scene,
 			}
 			else {
 				BL::ShaderNode b_shader_node(*b_node);
-				node = add_node(scene,
+				node = add_node(sync,
+                                shader,
+                                scene,
 				                b_engine,
 				                b_data,
 				                b_scene,
@@ -1195,16 +1242,19 @@ static void add_nodes(Scene *scene,
 	}
 }
 
-static void add_nodes(Scene *scene,
-                      BL::RenderEngine& b_engine,
-                      BL::BlendData& b_data,
-                      BL::Scene& b_scene,
-                      const bool background,
-                      ShaderGraph *graph,
-                      BL::ShaderNodeTree& b_ntree)
+void BlenderSync::add_nodes(Scene *scene,
+                            Shader *shader,
+                            BL::RenderEngine& b_engine,
+                            BL::BlendData& b_data,
+                            BL::Scene& b_scene,
+                            const bool background,
+                            ShaderGraph *graph,
+                            BL::ShaderNodeTree& b_ntree)
 {
 	static const ProxyMap empty_proxy_map;
-	add_nodes(scene,
+	add_nodes_recursive(*this,
+              shader,
+              scene,
 	          b_engine,
 	          b_data,
 	          b_scene,
@@ -1241,7 +1291,7 @@ void BlenderSync::sync_materials(bool update_all)
 			if(b_mat->use_nodes() && b_mat->node_tree()) {
 				BL::ShaderNodeTree b_ntree(b_mat->node_tree());
 
-				add_nodes(scene, b_engine, b_data, b_scene, !preview, graph, b_ntree);
+				add_nodes(scene, shader, b_engine, b_data, b_scene, !preview, graph, b_ntree);
 			}
 			else {
 				DiffuseBsdfNode *diffuse = new DiffuseBsdfNode();
@@ -1325,7 +1375,7 @@ void BlenderSync::sync_world(bool update_all)
 		if(b_world && b_world.use_nodes() && b_world.node_tree()) {
 			BL::ShaderNodeTree b_ntree(b_world.node_tree());
 
-			add_nodes(scene, b_engine, b_data, b_scene, !preview, graph, b_ntree);
+			add_nodes(scene, shader, b_engine, b_data, b_scene, !preview, graph, b_ntree);
 
 			/* volume */
 			PointerRNA cworld = RNA_pointer_get(&b_world.ptr, "cycles");
@@ -1426,7 +1476,7 @@ void BlenderSync::sync_lamps(bool update_all)
 
 				BL::ShaderNodeTree b_ntree(b_lamp->node_tree());
 
-				add_nodes(scene, b_engine, b_data, b_scene, !preview, graph, b_ntree);
+				add_nodes(scene, shader, b_engine, b_data, b_scene, !preview, graph, b_ntree);
 			}
 			else {
 				float strength = 1.0f;
