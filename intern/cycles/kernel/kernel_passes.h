@@ -60,6 +60,42 @@ ccl_device_inline void kernel_write_pass_float4(ccl_global float *buffer, int sa
 #endif  /* __SPLIT_KERNEL__ */
 }
 
+ccl_device_inline void kernel_write_id_slots(ccl_global float *buffer, int num_slots, float id, float weight, bool init)
+{
+	kernel_assert(id != ID_NONE);
+	
+	if(weight == 0.0f) {
+		return;
+	}
+	
+	if(init) {
+		for(int slot = 0; slot < num_slots; slot++) {
+			buffer[slot*ID_SLOT_SIZE + 0] = ID_NONE;
+			buffer[slot*ID_SLOT_SIZE + 1] = 0.0f;
+		}
+	} else {
+		init = false;
+	}
+	
+	for(int slot = 0; slot < num_slots; slot++) {
+		float *slot_id = (&buffer[slot*ID_SLOT_SIZE + 0]);
+		float *slot_weight = &buffer[slot*ID_SLOT_SIZE + 1];
+		
+		/* If the loop reaches an empty slot, the ID isn't in any slot yet - so add it! */
+		if(*slot_weight == 0.0f) {
+			kernel_assert(*slot_id == ID_NONE);
+			*slot_id = id;
+			*slot_weight = weight;
+			break;
+		}
+		/* If there already is a slot for that ID, add the weight. */
+		else if(*slot_id == id) {
+			*slot_weight += weight;
+			break;
+		}
+	}
+}
+
 ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg, ccl_global float *buffer, PathRadiance *L,
 	ShaderData *sd, int sample, ccl_addr_space PathState *state, float3 throughput)
 {
@@ -108,11 +144,78 @@ ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg, ccl_global fl
 				kernel_write_pass_float4(buffer + kernel_data.film.pass_motion, sample, speed);
 				kernel_write_pass_float(buffer + kernel_data.film.pass_motion_weight, sample, 1.0f);
 			}
+			
+			for(int i = 1; kernel_data.film.pass_aov[i]; i++) {
+				if((state->written_aovs & (1 << i)) == 0) {
+					bool is_color = (kernel_data.film.pass_aov[i] & (1 << 31));
+					int pass_offset = (kernel_data.film.pass_aov[i] & ~(1 << 31));
+					if(is_color) {
+						kernel_write_pass_float3(buffer + pass_offset, sample, make_float3(0.0f, 0.0f, 0.0f));
+					}
+					else {
+						kernel_write_pass_float(buffer + pass_offset, sample, 0.0f);
+					}
+				}
+			}
+			state->written_aovs = ~0;
 
 			state->flag |= PATH_RAY_SINGLE_PASS_DONE;
 		}
 	}
 
+	int aov_count = 0;
+
+	if(kernel_data.film.use_cryptomatte & CRYPT_OBJECT) {
+		float matte_weight = state->matte_weight * (1.0f - average(shader_bsdf_transparency(kg, sd)));
+		if(matte_weight > 0.0f) {
+			float id = object_cryptomatte_id(kg, ccl_fetch(sd, object));
+	#ifdef __KERNEL_CPU__
+			if(kg->coverage_object) {
+				if((sample == 0) && (state->transparent_bounce == 0)) {
+					(*kg->coverage_object)[id] = matte_weight;
+				} else {
+					(*kg->coverage_object)[id] += matte_weight;
+				}
+			}
+			else {
+	#endif /* __KERNEL_CPU__ */
+				bool initialize_slots = (sample == 0) && (state->transparent_bounce == 0);
+				int pass_offset = (kernel_data.film.pass_aov[0] & ~(1 << 31));
+				kernel_assert(kernel_data.film.pass_aov[0] & (1 << 31));
+				kernel_write_id_slots(buffer + pass_offset, 2 * (kernel_data.film.use_cryptomatte & 255), id, matte_weight, initialize_slots);
+				state->written_aovs |= (1 << 0);
+				aov_count += kernel_data.film.use_cryptomatte & 255;
+	#ifdef __KERNEL_CPU__
+			}
+	#endif /* __KERNEL_CPU__ */
+		}
+	}
+	if(kernel_data.film.use_cryptomatte & CRYPT_MATERIAL) {
+		float matte_weight = state->matte_weight * (1.0f - average(shader_bsdf_transparency(kg, sd)));
+		if(matte_weight > 0.0f) {
+			float id = shader_cryptomatte_id(kg, ccl_fetch(sd, shader));
+	#ifdef __KERNEL_CPU__
+			if(kg->coverage_material) {
+				if((sample == 0) && (state->transparent_bounce == 0)) {
+					(*kg->coverage_material)[id] = matte_weight;
+				} else {
+					(*kg->coverage_material)[id] += matte_weight;
+				}
+			}
+			else {
+	#endif /* __KERNEL_CPU__ */
+				bool initialize_slots = (sample == 0) && (state->transparent_bounce == 0);
+				int pass_offset = (kernel_data.film.pass_aov[aov_count] & ~(1 << 31));
+				kernel_assert(kernel_data.film.pass_aov[aov_count] & (1 << 31));
+				kernel_write_id_slots(buffer + pass_offset, 2 * (kernel_data.film.use_cryptomatte & 255), id, matte_weight, initialize_slots);
+				state->written_aovs |= (1 << aov_count);
+				aov_count += kernel_data.film.use_cryptomatte & 255;
+	#ifdef __KERNEL_CPU__
+			}
+	#endif /* __KERNEL_CPU__ */
+		}
+	}
+	
 	if(flag & (PASS_DIFFUSE_INDIRECT|PASS_DIFFUSE_COLOR|PASS_DIFFUSE_DIRECT))
 		L->color_diffuse += shader_bsdf_diffuse(kg, sd)*throughput;
 	if(flag & (PASS_GLOSSY_INDIRECT|PASS_GLOSSY_COLOR|PASS_GLOSSY_DIRECT))

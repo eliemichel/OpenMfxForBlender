@@ -2738,7 +2738,6 @@ void BKE_image_signal(Image *ima, ImageUser *iuser, int signal)
 	}
 }
 
-#define PASSTYPE_UNSET -1
 /* return renderpass for a given pass index and active view */
 /* fallback to available if there are missing passes for active view */
 static RenderPass *image_render_pass_get(RenderLayer *rl, const int pass, const int view, int *r_passindex)
@@ -2747,7 +2746,7 @@ static RenderPass *image_render_pass_get(RenderLayer *rl, const int pass, const 
 	RenderPass *rpass;
 
 	int rp_index = 0;
-	int rp_passtype = PASSTYPE_UNSET;
+	const char *rp_name = "";
 
 	for (rpass = rl->passes.first; rpass; rpass = rpass->next, rp_index++) {
 		if (rp_index == pass) {
@@ -2757,12 +2756,12 @@ static RenderPass *image_render_pass_get(RenderLayer *rl, const int pass, const 
 				break;
 			}
 			else {
-				rp_passtype = rpass->passtype;
+				rp_name = rpass->name;
 			}
 		}
 		/* multiview */
-		else if ((rp_passtype != PASSTYPE_UNSET) &&
-		         (rpass->passtype == rp_passtype) &&
+		else if (rp_name[0] &&
+		         STREQ(rpass->name, rp_name) &&
 		         (rpass->view_id == view))
 		{
 			rpass_ret = rpass;
@@ -2782,7 +2781,6 @@ static RenderPass *image_render_pass_get(RenderLayer *rl, const int pass, const 
 
 	return rpass_ret;
 }
-#undef PASSTYPE_UNSET
 
 /* if layer or pass changes, we need an index for the imbufs list */
 /* note it is called for rendered results, but it doesnt use the index! */
@@ -3752,7 +3750,7 @@ static ImBuf *image_get_render_result(Image *ima, ImageUser *iuser, void **r_loc
 			}
 
 			for (rpass = rl->passes.first; rpass; rpass = rpass->next)
-				if (rpass->passtype == SCE_PASS_Z)
+				if (STREQ(rpass->name, RE_PASSNAME_Z) && rpass->view_id == actview)
 					rectz = rpass->rect;
 		}
 	}

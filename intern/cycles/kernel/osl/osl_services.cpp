@@ -54,6 +54,7 @@
 #include "kernel/kernel_accumulate.h"
 #include "kernel/kernel_light.h"
 #include "kernel/kernel_shader.h"
+#include "kernel/kernel_passes.h"
 
 #ifdef WITH_PTEX
 #  include <Ptexture.h>

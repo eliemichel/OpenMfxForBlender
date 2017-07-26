@@ -69,7 +69,7 @@ ccl_device void kernel_indirect_background(KernelGlobals *kg)
 		if(IS_STATE(ray_state, ray_index, RAY_HIT_BACKGROUND)) {
 #ifdef __BACKGROUND__
 			/* sample background shader */
-			float3 L_background = indirect_background(kg, &kernel_split_state.sd_DL_shadow[ray_index], state, ray);
+			float3 L_background = indirect_background(kg, &kernel_split_state.sd_DL_shadow[ray_index], state, ray, NULL, 0);
 			path_radiance_accum_background(L, state, (*throughput), L_background);
 #endif
 			ASSIGN_RAY_STATE(ray_state, ray_index, RAY_UPDATE_BUFFER);

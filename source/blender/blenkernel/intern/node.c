@@ -3533,6 +3533,7 @@ static void registerCompositNodes(void)
 	register_node_type_cmp_doubleedgemask();
 	register_node_type_cmp_keyingscreen();
 	register_node_type_cmp_keying();
+	register_node_type_cmp_cryptomatte();
 
 	register_node_type_cmp_translate();
 	register_node_type_cmp_rotate();
@@ -3600,6 +3601,7 @@ static void registerShaderNodes(void)
 	register_node_type_sh_sepxyz();
 	register_node_type_sh_combxyz();
 	register_node_type_sh_hue_sat();
+	register_node_type_sh_aov_output();
 
 	register_node_type_sh_attribute();
 	register_node_type_sh_geometry();

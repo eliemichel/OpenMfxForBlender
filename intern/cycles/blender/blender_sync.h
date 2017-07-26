@@ -78,6 +78,9 @@ public:
 	               void **python_thread_state,
 	               const char *layer = 0);
 	void sync_render_layers(BL::SpaceView3D& b_v3d, const char *layer);
+	void sync_film(BL::RenderLayer& b_rlay,
+	               BL::SceneRenderLayer& b_srlay,
+	               bool advanced_shading);
 	void sync_integrator();
 	void sync_camera(BL::RenderSettings& b_render,
 	                 BL::Object& b_override,
@@ -104,6 +107,7 @@ public:
 	                                      Camera *cam,
 	                                      int width, int height);
 
+	static PassType get_pass_type(BL::RenderPass& b_pass);
 	bool BKE_object_is_modified(BL::Object& b_ob);
 
 private:

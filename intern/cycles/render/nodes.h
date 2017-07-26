@@ -192,6 +192,19 @@ public:
 	virtual bool equals(const ShaderNode& /*other*/) { return false; }
 };
 
+class AOVOutputNode : public ShaderNode {
+public:
+	SHADER_NODE_CLASS(AOVOutputNode)
+
+	float value;
+	float3 color;
+
+	ustring name;
+
+	/* Don't allow output node de-duplication. */
+	virtual bool equals(const ShaderNode& /*other*/) { return false; }
+};
+
 class GradientTextureNode : public TextureNode {
 public:
 	SHADER_NODE_CLASS(GradientTextureNode)

@@ -788,6 +788,7 @@ struct ShadeResult;
 #define SH_NODE_TEX_POINTDENSITY		192
 #define SH_NODE_TEX_CURVE               193
 #define SH_NODE_BSDF_PRINCIPLED         194
+#define SH_NODE_AOV_OUTPUT				195
 
 /* custom defines options for Material node */
 #define SH_NODE_MAT_DIFF   1
@@ -940,6 +941,7 @@ void            ntreeGPUMaterialNodes(struct bNodeTree *ntree, struct GPUMateria
 #define CMP_NODE_PLANETRACKDEFORM	320
 #define CMP_NODE_CORNERPIN          321
 #define CMP_NODE_SWITCH_VIEW    322
+#define CMP_NODE_CRYPTOMATTE	323
 
 /* channel toggles */
 #define CMP_CHAN_RGB		1
@@ -976,7 +978,8 @@ void ntreeCompositExecTree(struct Scene *scene, struct bNodeTree *ntree, struct 
 void ntreeCompositTagRender(struct Scene *sce);
 int ntreeCompositTagAnimated(struct bNodeTree *ntree);
 void ntreeCompositTagGenerators(struct bNodeTree *ntree);
-void ntreeCompositForceHidden(struct bNodeTree *ntree);
+void ntreeCompositUpdateRLayers(struct bNodeTree *ntree);
+void ntreeCompositRegisterPass(struct bNodeTree *ntree, struct Scene *scene, struct SceneRenderLayer *srl, const char *name, int type);
 void ntreeCompositClearTags(struct bNodeTree *ntree);
 
 struct bNodeSocket *ntreeCompositOutputFileAddSocket(struct bNodeTree *ntree, struct bNode *node,
@@ -990,6 +993,11 @@ void ntreeCompositOutputFileUniqueLayer(struct ListBase *list, struct bNodeSocke
 
 void ntreeCompositColorBalanceSyncFromLGG(bNodeTree *ntree, bNode *node);
 void ntreeCompositColorBalanceSyncFromCDL(bNodeTree *ntree, bNode *node);
+
+void ntreeCompositCryptomatteSyncFromAdd(bNodeTree *ntree, bNode *node);
+void ntreeCompositCryptomatteSyncFromRemove(bNodeTree *ntree, bNode *node);
+struct bNodeSocket *ntreeCompositCryptomatteAddSocket(struct bNodeTree *ntree, struct bNode *node);
+int ntreeCompositCryptomatteRemoveSocket(struct bNodeTree *ntree, struct bNode *node);
 
 /** \} */
 

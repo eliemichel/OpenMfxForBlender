@@ -59,6 +59,7 @@ set(SRC
 	composite/nodes/node_composite_composite.c
 	composite/nodes/node_composite_cornerpin.c
 	composite/nodes/node_composite_crop.c
+	composite/nodes/node_composite_cryptomatte.c
 	composite/nodes/node_composite_curves.c
 	composite/nodes/node_composite_despeckle.c
 	composite/nodes/node_composite_doubleEdgeMask.c
@@ -145,6 +146,7 @@ set(SRC
 	shader/nodes/node_shader_mixRgb.c
 	shader/nodes/node_shader_normal.c
 	shader/nodes/node_shader_output.c
+	shader/nodes/node_shader_aov_output.c
 	shader/nodes/node_shader_rgb.c
 	shader/nodes/node_shader_sepcombRGB.c
 	shader/nodes/node_shader_sepcombHSV.c
@@ -289,10 +291,6 @@ add_definitions(${GL_DEFINITIONS})
 
 if(WITH_FREESTYLE)
 	add_definitions(-DWITH_FREESTYLE)
-endif()
-
-if(WITH_CYCLES AND WITH_CYCLES_DEBUG)
-	add_definitions(-DWITH_CYCLES_DEBUG)
 endif()
 
 blender_add_lib(bf_nodes "${SRC}" "${INC}" "${INC_SYS}")

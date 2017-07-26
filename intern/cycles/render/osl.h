@@ -35,6 +35,7 @@ CCL_NAMESPACE_BEGIN
 
 class Device;
 class DeviceScene;
+class Film;
 class ImageManager;
 class OSLRenderServices;
 struct OSLGlobals;
@@ -112,7 +113,7 @@ protected:
 
 class OSLCompiler {
 public:
-	OSLCompiler(void *manager, void *shadingsys, ImageManager *image_manager);
+	OSLCompiler(void *manager, void *shadingsys, ImageManager *image_manager, Film *film);
 	void compile(Scene *scene, OSLGlobals *og, Shader *shader);
 
 	void add(ShaderNode *node, const char *name, bool isfilepath = false);
@@ -136,6 +137,7 @@ public:
 
 	bool background;
 	ImageManager *image_manager;
+	Film *film;
 
 private:
 #ifdef WITH_OSL

@@ -489,7 +489,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 #ifdef __BACKGROUND__
 			/* sample background shader */
-			float3 L_background = indirect_background(kg, &emission_sd, &state, &ray);
+			float3 L_background = indirect_background(kg, &emission_sd, &state, &ray, buffer, sample);
 			path_radiance_accum_background(&L, &state, throughput, L_background);
 #endif  /* __BACKGROUND__ */
 
@@ -498,7 +498,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 		/* setup shading */
 		shader_setup_from_ray(kg, &sd, &isect, &ray);
-		shader_eval_surface(kg, &sd, rng, &state, 0.0f, state.flag, SHADER_CONTEXT_MAIN);
+		shader_eval_surface(kg, &sd, rng, &state, 0.0f, state.flag, SHADER_CONTEXT_MAIN, buffer, sample);
 		shader_merge_closures(&sd);
 
 #ifdef __SHADOW_TRICKS__
@@ -507,7 +507,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 				state.flag |= (PATH_RAY_SHADOW_CATCHER | PATH_RAY_SHADOW_CATCHER_ONLY);
 				state.catcher_object = sd.object;
 				if(!kernel_data.background.transparent) {
-					L.shadow_color = indirect_background(kg, &emission_sd, &state, &ray);
+					L.shadow_color = indirect_background(kg, &emission_sd, &state, &ray, buffer, sample);
 				}
 			}
 		}
@@ -607,10 +607,13 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 				&sd, &indirect_sd, &emission_sd, throughput, 1.0f, &hit_state, &L, light_linking);
 
 			/* continue in case of transparency */
-			throughput *= shader_bsdf_transparency(kg, &sd);
+			float3 transparency = shader_bsdf_transparency(kg, &sd);
+			throughput *= transparency;
 
 			if(is_zero(throughput))
 				break;
+			
+			state.matte_weight *= average(transparency);
 		}
 
 		/* Update Path State */

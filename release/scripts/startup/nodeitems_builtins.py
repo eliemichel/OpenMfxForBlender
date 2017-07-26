@@ -218,6 +218,7 @@ shader_node_categories = [
     ShaderNewNodeCategory("SH_NEW_OUTPUT", "Output", items=[
         NodeItem("ShaderNodeOutputMaterial", poll=object_shader_nodes_poll),
         NodeItem("ShaderNodeOutputLamp", poll=object_shader_nodes_poll),
+        NodeItem("ShaderNodeAOVOutput", poll=object_shader_nodes_poll),
         NodeItem("ShaderNodeOutputWorld", poll=world_shader_nodes_poll),
         NodeItem("ShaderNodeOutputLineStyle", poll=line_style_shader_nodes_poll),
         NodeItem("NodeGroupOutput", poll=group_input_output_item_poll),
@@ -390,6 +391,7 @@ compositor_node_categories = [
         NodeItem("CompositorNodeChromaMatte"),
         NodeItem("CompositorNodeColorMatte"),
         NodeItem("CompositorNodeDoubleEdgeMask"),
+        NodeItem("CompositorNodeCryptomatte"),
         ]),
     CompositorNodeCategory("CMP_DISTORT", "Distort", items=[
         NodeItem("CompositorNodeScale"),
