@@ -17,9 +17,9 @@
 #ifndef __BACKGROUND_H__
 #define __BACKGROUND_H__
 
-#include "node.h"
+#include "graph/node.h"
 
-#include "util_types.h"
+#include "util/util_types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -30,7 +30,7 @@ class Shader;
 
 class Background : public Node {
 public:
-	NODE_DECLARE;
+	NODE_DECLARE
 
 	float ao_factor;
 	float ao_distance;

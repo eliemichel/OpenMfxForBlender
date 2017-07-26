@@ -143,7 +143,6 @@ endif()
 		ge_logic_network 
 		ge_logic_ngnetwork 
 		ge_logic_loopbacknetwork 
-		extern_bullet 
 		bf_intern_guardedalloc 
 		bf_intern_memutil 
 		bf_python_ext
@@ -179,6 +178,7 @@ endif()
 		extern_glog
 		extern_gflags
 		extern_sdlew
+		extern_bullet
 	)
 
 	if(WITH_MOD_CLOTH_ELTOPO)

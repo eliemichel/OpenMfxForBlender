@@ -17,17 +17,17 @@
 #ifndef __GRAPH_H__
 #define __GRAPH_H__
 
-#include "node.h"
-#include "node_type.h"
+#include "graph/node.h"
+#include "graph/node_type.h"
 
-#include "kernel_types.h"
+#include "kernel/kernel_types.h"
 
-#include "util_list.h"
-#include "util_map.h"
-#include "util_param.h"
-#include "util_set.h"
-#include "util_types.h"
-#include "util_vector.h"
+#include "util/util_list.h"
+#include "util/util_map.h"
+#include "util/util_param.h"
+#include "util/util_set.h"
+#include "util/util_types.h"
+#include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -157,7 +157,7 @@ public:
 	virtual bool has_spatial_varying() { return false; }
 	virtual bool has_object_dependency() { return false; }
 	virtual bool has_integrator_dependency() { return false; }
-
+	virtual bool has_volume_support() { return false; }
 	vector<ShaderInput*> inputs;
 	vector<ShaderOutput*> outputs;
 
@@ -203,14 +203,14 @@ public:
 /* Node definition utility macros */
 
 #define SHADER_NODE_CLASS(type) \
-	NODE_DECLARE; \
+	NODE_DECLARE \
 	type(); \
 	virtual ShaderNode *clone() const { return new type(*this); } \
 	virtual void compile(SVMCompiler& compiler); \
 	virtual void compile(OSLCompiler& compiler); \
 
 #define SHADER_NODE_NO_CLONE_CLASS(type) \
-	NODE_DECLARE; \
+	NODE_DECLARE \
 	type(); \
 	virtual void compile(SVMCompiler& compiler); \
 	virtual void compile(OSLCompiler& compiler); \
@@ -242,6 +242,7 @@ public:
 	list<ShaderNode*> nodes;
 	size_t num_node_ids;
 	bool finalized;
+	bool simplified;
 
 	ShaderGraph();
 	~ShaderGraph();
@@ -257,9 +258,9 @@ public:
 	void relink(ShaderNode *node, ShaderOutput *from, ShaderOutput *to);
 
 	void remove_proxy_nodes();
+	void simplify(Scene *scene);
 	void finalize(Scene *scene,
 	              bool do_bump = false,
-	              bool do_osl = false,
 	              bool do_simplify = false,
 	              bool bump_in_object_space = false);
 
@@ -285,6 +286,7 @@ protected:
 	void constant_fold();
 	void simplify_settings(Scene *scene);
 	void deduplicate_nodes();
+	void verify_volume_output();
 };
 
 CCL_NAMESPACE_END

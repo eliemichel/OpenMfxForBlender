@@ -208,6 +208,8 @@ static void rna_Scene_alembic_export(
         int renderable_only,
         int face_sets,
         int use_subdiv_schema,
+        int export_hair,
+        int export_particles,
         int compression_type,
         int packuv,
         float scale,
@@ -225,8 +227,8 @@ static void rna_Scene_alembic_export(
 	    .frame_start = frame_start,
 	    .frame_end = frame_end,
 
-	    .frame_step_xform = 1.0 / (double)xform_samples,
-	    .frame_step_shape = 1.0 / (double)geom_samples,
+	    .frame_samples_xform = xform_samples,
+	    .frame_samples_shape = geom_samples,
 
 	    .shutter_open = shutter_open,
 	    .shutter_close = shutter_close,
@@ -241,16 +243,18 @@ static void rna_Scene_alembic_export(
 	    .renderable_only = renderable_only,
 	    .face_sets = face_sets,
 	    .use_subdiv_schema = use_subdiv_schema,
+	    .export_hair = export_hair,
+	    .export_particles = export_particles,
 	    .compression_type = compression_type,
 	    .packuv = packuv,
-		.triangulate = triangulate,
-		.quad_method = quad_method,
-		.ngon_method = ngon_method,
+	    .triangulate = triangulate,
+	    .quad_method = quad_method,
+	    .ngon_method = ngon_method,
 
 	    .global_scale = scale,
 	};
 
-	ABC_export(scene, C, filepath, &params);
+	ABC_export(scene, C, filepath, &params, true);
 
 #ifdef WITH_PYTHON
 	BPy_END_ALLOW_THREADS;
@@ -263,34 +267,57 @@ static void rna_Scene_alembic_export(
 /* don't remove this, as COLLADA exporting cannot be done through operators in render() callback. */
 #include "../../collada/collada.h"
 
+/* Note: This definition must match to the generated function call */
 static void rna_Scene_collada_export(
         Scene *scene,
-        const char *filepath,
+        const char *filepath, 
         int apply_modifiers,
-        int export_mesh_type,
 
+        int export_mesh_type,
         int selected,
         int include_children,
         int include_armatures,
         int include_shapekeys,
         int deform_bones_only,
-
         int active_uv_only,
         int include_uv_textures,
         int include_material_textures,
         int use_texture_copies,
-
-        int use_ngons,
+        int triangulate,
         int use_object_instantiation,
         int use_blender_profile,
         int sort_by_name,
+        int export_transformation_type,
         int open_sim,
-        int export_transformation_type)
+        int limit_precision,
+        int keep_bind_info)
 {
-	collada_export(scene, filepath, apply_modifiers, export_mesh_type, selected,
-	               include_children, include_armatures, include_shapekeys, deform_bones_only,
-	               active_uv_only, include_uv_textures, include_material_textures,
-	               use_texture_copies, use_ngons, use_object_instantiation, use_blender_profile, sort_by_name, export_transformation_type, open_sim);
+	collada_export(scene,
+		filepath,
+
+		apply_modifiers,
+		export_mesh_type,
+
+		selected,
+		include_children,
+		include_armatures,
+		include_shapekeys,
+		deform_bones_only,
+
+		active_uv_only,
+		include_uv_textures,
+		include_material_textures,
+		use_texture_copies,
+
+		triangulate,
+		use_object_instantiation,
+		use_blender_profile,
+		sort_by_name,
+
+		export_transformation_type,
+		open_sim,
+		limit_precision,
+		keep_bind_info);
 }
 
 #endif
@@ -354,35 +381,67 @@ void RNA_api_scene(StructRNA *srna)
 	parm = RNA_def_string(func, "filepath", NULL, FILE_MAX, "File Path", "File path to write Collada file");
 	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 	RNA_def_property_subtype(parm, PROP_FILEPATH); /* allow non utf8 */
-	RNA_def_boolean(func, "apply_modifiers", 0, "Apply Modifiers", "Apply modifiers");
+
+	RNA_def_boolean(func, "apply_modifiers", false,
+	                "Apply Modifiers", "Apply modifiers to exported mesh (non destructive))");
+
 	RNA_def_int(func, "export_mesh_type", 0, INT_MIN, INT_MAX,
 	            "Resolution", "Modifier resolution for export", INT_MIN, INT_MAX);
-	RNA_def_boolean(func, "selected", 0, "Selection Only", "Export only selected elements");
-	RNA_def_boolean(func, "include_children", 0, "Include Children", "Export all children of selected objects (even if not selected)");
-	RNA_def_boolean(func, "include_armatures", 0, "Include Armatures", "Export related armatures (even if not selected)");
-	RNA_def_boolean(func, "include_shapekeys", 0, "Include Shape Keys", "Export all Shape Keys from Mesh Objects");
-	RNA_def_boolean(func, "deform_bones_only", 0, "Deform Bones only", "Only export deforming bones with armatures");
 
-	RNA_def_boolean(func, "active_uv_only", 0, "Active UV Layer only", "Export only the active UV Layer");
-	RNA_def_boolean(func, "include_uv_textures", 0, "Include UV Textures", "Export textures assigned to the object UV maps");
-	RNA_def_boolean(func, "include_material_textures", 0, "Include Material Textures", "Export textures assigned to the object Materials");
-	RNA_def_boolean(func, "use_texture_copies", 0, "copy", "Copy textures to same folder where the .dae file is exported");
+	RNA_def_boolean(func, "selected", false, "Selection Only", "Export only selected elements");
 
-	RNA_def_boolean(func, "use_ngons", 1, "Use NGons", "Keep NGons in Export");
-	RNA_def_boolean(func, "use_object_instantiation", 1, "Use Object Instances", "Instantiate multiple Objects from same Data");
-	RNA_def_boolean(func, "use_blender_profile", 1, "Use Blender Profile", "Export additional Blender specific information (for material, shaders, bones, etc.)");
-	RNA_def_boolean(func, "sort_by_name", 0, "Sort by Object name", "Sort exported data by Object name");
-	RNA_def_boolean(func, "open_sim", 0, "Export for SL/OpenSim", "Compatibility mode for SL, OpenSim and similar online worlds");
+	RNA_def_boolean(func, "include_children", false,
+	                "Include Children", "Export all children of selected objects (even if not selected)");
+
+	RNA_def_boolean(func, "include_armatures", false,
+	                "Include Armatures", "Export related armatures (even if not selected)");
+
+	RNA_def_boolean(func, "include_shapekeys", true, "Include Shape Keys", "Export all Shape Keys from Mesh Objects");
+
+	RNA_def_boolean(func, "deform_bones_only", false,
+	                "Deform Bones only", "Only export deforming bones with armatures");
+
+	RNA_def_boolean(func, "active_uv_only", false, "Only Selected UV Map", "Export only the selected UV Map");
+
+	RNA_def_boolean(func, "include_uv_textures", false,
+	                "Include UV Textures", "Export textures assigned to the object UV Maps");
+
+	RNA_def_boolean(func, "include_material_textures", false,
+	                "Include Material Textures", "Export textures assigned to the object Materials");
+
+	RNA_def_boolean(func, "use_texture_copies", true,
+	                "Copy", "Copy textures to same folder where the .dae file is exported");
+
+	RNA_def_boolean(func, "triangulate", true, "Triangulate", "Export Polygons (Quads & NGons) as Triangles");
+
+	RNA_def_boolean(func, "use_object_instantiation", true,
+	                "Use Object Instances", "Instantiate multiple Objects from same Data");
+
+	RNA_def_boolean(func, "use_blender_profile", true, "Use Blender Profile",
+	                "Export additional Blender specific information (for material, shaders, bones, etc.)");
+
+	RNA_def_boolean(func, "sort_by_name", false, "Sort by Object name", "Sort exported data by Object name");
 
 	RNA_def_int(func, "export_transformation_type", 0, INT_MIN, INT_MAX,
-	            "Transformation", "Transformation type for translation, scale and rotation", INT_MIN, INT_MAX);
+	            "Transform", "Transformation type for translation, scale and rotation", INT_MIN, INT_MAX);
 
-	RNA_def_function_ui_description(func, "Export to collada file");
+	RNA_def_boolean(func, "open_sim", false,
+	                "Export to SL/OpenSim", "Compatibility mode for SL, OpenSim and other compatible online worlds");
+
+	RNA_def_boolean(func, "limit_precision", false,
+	                "Limit Precision",
+	                "Reduce the precision of the exported data to 6 digits");
+
+	RNA_def_boolean(func, "keep_bind_info", false,
+	                "Keep Bind Info",
+	                "Store bind pose information in custom bone properties for later use during Collada export");
+
 #endif
 
 #ifdef WITH_ALEMBIC
+	/* XXX Deprecated, will be removed in 2.8 in favour of calling the export operator. */
 	func = RNA_def_function(srna, "alembic_export", "rna_Scene_alembic_export");
-	RNA_def_function_ui_description(func, "Export to Alembic file");
+	RNA_def_function_ui_description(func, "Export to Alembic file (deprecated, use the Alembic export operator)");
 
 	parm = RNA_def_string(func, "filepath", NULL, FILE_MAX, "File Path", "File path to write Alembic file");
 	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
@@ -404,6 +463,8 @@ void RNA_api_scene(StructRNA *srna)
 	RNA_def_boolean(func, "renderable_only"	, 0, "Renderable objects only", "Export only objects marked renderable in the outliner");
 	RNA_def_boolean(func, "face_sets"	, 0, "Facesets", "Export face sets");
 	RNA_def_boolean(func, "subdiv_schema", 0, "Use Alembic subdivision Schema", "Use Alembic subdivision Schema");
+	RNA_def_boolean(func, "export_hair", 1, "Export Hair", "Exports hair particle systems as animated curves");
+	RNA_def_boolean(func, "export_particles", 1, "Export Particles", "Exports non-hair particle systems");
 	RNA_def_enum(func, "compression_type", rna_enum_abc_compression_items, 0, "Compression", "");
 	RNA_def_boolean(func, "packuv"		, 0, "Export with packed UV islands", "Export with packed UV islands");
 	RNA_def_float(func, "scale", 1.0f, 0.0001f, 1000.0f, "Scale", "Value by which to enlarge or shrink the objects with respect to the world's origin", 0.0001f, 1000.0f);

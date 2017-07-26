@@ -15,29 +15,29 @@
  */
 
 #ifdef __OSL__
-#  include "osl_shader.h"
+#  include "kernel/osl/osl_shader.h"
 #endif
 
-#include "kernel_random.h"
-#include "kernel_projection.h"
-#include "kernel_montecarlo.h"
-#include "kernel_differential.h"
-#include "kernel_camera.h"
+#include "kernel/kernel_random.h"
+#include "kernel/kernel_projection.h"
+#include "kernel/kernel_montecarlo.h"
+#include "kernel/kernel_differential.h"
+#include "kernel/kernel_camera.h"
 
-#include "geom/geom.h"
-#include "bvh/bvh.h"
+#include "kernel/geom/geom.h"
+#include "kernel/bvh/bvh.h"
 
-#include "kernel_accumulate.h"
-#include "kernel_shader.h"
-#include "kernel_light.h"
-#include "kernel_passes.h"
+#include "kernel/kernel_accumulate.h"
+#include "kernel/kernel_shader.h"
+#include "kernel/kernel_light.h"
+#include "kernel/kernel_passes.h"
 
 #ifdef __SUBSURFACE__
-#  include "kernel_subsurface.h"
+#  include "kernel/kernel_subsurface.h"
 #endif
 
 #ifdef __VOLUME__
-#  include "kernel_volume.h"
+#  include "kernel/kernel_volume.h"
 #endif
 
 #include "kernel_path_state.h"
@@ -46,9 +46,10 @@
 #include "kernel_path_common.h"
 #include "kernel_path_surface.h"
 #include "kernel_path_volume.h"
+//#include "kernel_path_subsurface.h"
 
 #ifdef __KERNEL_DEBUG__
-#  include "kernel_debug.h"
+#  include "kernel/kernel_debug.h"
 #endif
 
 CCL_NAMESPACE_BEGIN
@@ -75,11 +76,11 @@ ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
 
 	sample_cos_hemisphere(ao_N, bsdf_u, bsdf_v, &ao_D, &ao_pdf);
 
-	if(dot(ccl_fetch(sd, Ng), ao_D) > 0.0f && ao_pdf != 0.0f) {
+	if(dot(sd->Ng, ao_D) > 0.0f && ao_pdf != 0.0f) {
 		Ray light_ray;
 		float3 ao_shadow;
 
-		light_ray.P = ray_offset(ccl_fetch(sd, P), ccl_fetch(sd, Ng));
+		light_ray.P = ray_offset(sd->P, sd->Ng);
 		light_ray.D = ao_D;
 		light_ray.t = kernel_data.background.ao_distance;
 #ifdef __OBJECT_MOTION__
@@ -304,9 +305,9 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 			/* sample background shader */
 			float3 L_background = indirect_background(kg, emission_sd, state, ray, NULL, 0);
 			path_radiance_accum_background(L,
+			                               state,
 			                               throughput,
-			                               L_background,
-			                               state->bounce);
+			                               L_background);
 #endif  /* __BACKGROUND__ */
 
 			break;
@@ -325,6 +326,12 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 #ifdef __BRANCHED_PATH__
 		shader_merge_closures(sd);
 #endif  /* __BRANCHED_PATH__ */
+
+#ifdef __SHADOW_TRICKS__
+		if(!(sd->object_flag & SD_OBJECT_OBJECT_SHADOW_CATCHER)) {
+			state->flag &= ~PATH_RAY_SHADOW_CATCHER_ONLY;
+		}
+#endif  /* __SHADOW_TRICKS__ */
 
 		/* blurring of bsdf after bounces, for rays that have a small likelihood
 		 * of following this particular path (diffuse, rough glossy) */
@@ -389,7 +396,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 
 			/* do bssrdf scatter step if we picked a bssrdf closure */
 			if(sc) {
-				uint lcg_state = lcg_state_init(rng, state, 0x68bc21eb);
+				uint lcg_state = lcg_state_init(rng, state->rng_offset, state->sample, 0x68bc21eb);
 
 				float bssrdf_u, bssrdf_v;
 				path_state_rng_2D(kg,
@@ -466,7 +473,7 @@ bool kernel_path_subsurface_scatter(
 		 */
 		kernel_assert(!ss_indirect->tracing);
 
-		uint lcg_state = lcg_state_init(rng, state, 0x68bc21eb);
+		uint lcg_state = lcg_state_init(rng, state->rng_offset, state->sample, 0x68bc21eb);
 
 		SubsurfaceIntersection ss_isect;
 		float bssrdf_u, bssrdf_v;
@@ -655,7 +662,7 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 			}
 
 			extmax = kernel_data.curve.maximum_width;
-			lcg_state = lcg_state_init(rng, &state, 0x51633e2d);
+			lcg_state = lcg_state_init(rng, state.rng_offset, state.sample, 0x51633e2d);
 		}
 
 		bool hit = scene_intersect(kg, ray, visibility, &isect, &lcg_state, difl, extmax, 0x00000000/*TODO:What goes here*/);
@@ -801,7 +808,7 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 #ifdef __BACKGROUND__
 			/* sample background shader */
 			float3 L_background = indirect_background(kg, &emission_sd, &state, &ray, buffer, sample);
-			path_radiance_accum_background(&L, throughput, L_background, state.bounce);
+			path_radiance_accum_background(&L, &state, throughput, L_background);
 #endif  /* __BACKGROUND__ */
 
 			break;
@@ -814,6 +821,21 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 		shader_setup_from_ray(kg, &sd, &isect, &ray);
 		float rbsdf = path_state_rng_1D_for_decision(kg, rng, &state, PRNG_BSDF);
 		shader_eval_surface(kg, &sd, rng, &state, rbsdf, state.flag, SHADER_CONTEXT_MAIN, buffer, sample);
+
+#ifdef __SHADOW_TRICKS__
+		if((sd.object_flag & SD_OBJECT_OBJECT_SHADOW_CATCHER)) {
+			if(state.flag & PATH_RAY_CAMERA) {
+				state.flag |= (PATH_RAY_SHADOW_CATCHER | PATH_RAY_SHADOW_CATCHER_ONLY);
+				state.catcher_object = sd.object;
+				if(!kernel_data.background.transparent) {
+					L.shadow_color = indirect_background(kg, &emission_sd, &state, &ray, buffer, sample);
+				}
+			}
+		}
+		else {
+			state.flag &= ~PATH_RAY_SHADOW_CATCHER_ONLY;
+		}
+#endif  /* __SHADOW_TRICKS__ */
 
 		/* holdout */
 #ifdef __HOLDOUT__
@@ -933,7 +955,16 @@ ccl_device_inline float4 kernel_path_integrate(KernelGlobals *kg,
 	}
 #endif  /* __SUBSURFACE__ */
 
-	float3 L_sum = path_radiance_clamp_and_sum(kg, &L);
+	float3 L_sum;
+#ifdef __SHADOW_TRICKS__
+	if(state.flag & PATH_RAY_SHADOW_CATCHER) {
+		L_sum = path_radiance_sum_shadowcatcher(kg, &L, &L_transparent);
+	}
+	else
+#endif  /* __SHADOW_TRICKS__ */
+	{
+		L_sum = path_radiance_clamp_and_sum(kg, &L);
+	}
 
 	kernel_write_light_passes(kg, buffer, &L, sample);
 

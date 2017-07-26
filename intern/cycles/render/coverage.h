@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include "util_map.h"
-#include "util_vector.h"
-#include "buffers.h"
+#include "util/util_map.h"
+#include "util/util_vector.h"
+#include "render/buffers.h"
 
 #ifndef __COVERAGE_H__
 #define __COVERAGE_H__

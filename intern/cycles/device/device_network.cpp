@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-#include "device.h"
-#include "device_intern.h"
-#include "device_network.h"
+#include "device/device.h"
+#include "device/device_intern.h"
+#include "device/device_network.h"
 
-#include "util_foreach.h"
-#include "util_logging.h"
+#include "util/util_foreach.h"
+#include "util/util_logging.h"
 
 #if defined(WITH_NETWORK)
 
@@ -87,8 +87,14 @@ public:
 		snd.write();
 	}
 
-	void mem_alloc(device_memory& mem, MemoryType type)
+	void mem_alloc(const char *name, device_memory& mem, MemoryType type)
 	{
+		if(name) {
+			VLOG(1) << "Buffer allocate: " << name << ", "
+				    << string_human_readable_number(mem.memory_size()) << " bytes. ("
+				    << string_human_readable_size(mem.memory_size()) << ")";
+		}
+
 		thread_scoped_lock lock(rpc_lock);
 
 		mem.device_pointer = ++mem_counter;
@@ -481,7 +487,7 @@ protected:
 				mem.data_pointer = 0;
 
 			/* perform the allocation on the actual device */
-			device->mem_alloc(mem, type);
+			device->mem_alloc(NULL, mem, type);
 
 			/* store a mapping to/from client_pointer and real device pointer */
 			pointer_mapping_insert(client_pointer, mem.device_pointer);

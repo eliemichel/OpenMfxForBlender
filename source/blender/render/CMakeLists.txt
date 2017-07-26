@@ -36,6 +36,7 @@ set(INC
 	../makesrna
 	../nodes
 	../physics
+	../../../intern/atomic
 	../../../intern/guardedalloc
 	../../../intern/mikktspace
 	../../../intern/smoke/extern

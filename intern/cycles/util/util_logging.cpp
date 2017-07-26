@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include <util_logging.h>
+#include "util/util_logging.h"
 
-#include "util_math.h"
+#include "util/util_math.h"
 
 #include <stdio.h>
 #ifdef _MSC_VER
@@ -66,6 +66,15 @@ void util_logging_verbosity_set(int verbosity)
 #else
 	(void) verbosity;
 #endif
+}
+
+std::ostream& operator <<(std::ostream &os,
+                          const int2 &value)
+{
+	os << "(" << value.x
+	   << ", " << value.y
+	   << ")";
+	return os;
 }
 
 std::ostream& operator <<(std::ostream &os,

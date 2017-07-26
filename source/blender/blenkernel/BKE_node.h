@@ -49,7 +49,7 @@
 #include "RNA_types.h"
 
 /* not very important, but the stack solver likes to know a maximum */
-#define MAX_SOCKET	64
+#define MAX_SOCKET	512
 
 struct bContext;
 struct bNode;
@@ -349,6 +349,7 @@ struct bNode     *ntreeFindType(const struct bNodeTree *ntree, int type);
 bool              ntreeHasType(const struct bNodeTree *ntree, int type);
 bool              ntreeHasTree(const struct bNodeTree *ntree, const struct bNodeTree *lookup);
 void              ntreeUpdateTree(struct Main *main, struct bNodeTree *ntree);
+void			  ntreeUpdateTreeDelete(struct Main *main, struct bNodeTree *ntree);
 /* XXX Currently each tree update call does call to ntreeVerifyNodes too.
  * Some day this should be replaced by a decent depsgraph automatism!
  */
@@ -786,7 +787,8 @@ struct ShadeResult;
 #define SH_NODE_UVALONGSTROKE			191
 #define SH_NODE_TEX_POINTDENSITY		192
 #define SH_NODE_TEX_CURVE               193
-#define SH_NODE_AOV_OUTPUT				194
+#define SH_NODE_BSDF_PRINCIPLED         194
+#define SH_NODE_AOV_OUTPUT				195
 
 /* custom defines options for Material node */
 #define SH_NODE_MAT_DIFF   1

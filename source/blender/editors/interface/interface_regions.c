@@ -811,11 +811,11 @@ int UI_searchbox_size_x(void)
 	return 12 * UI_UNIT_X;
 }
 
-int UI_search_items_find_index(uiSearchItems *items, const char *name)
+int UI_search_items_find_index(uiSearchItems *items, const char *name, const size_t offset)
 {
 	int i;
 	for (i = 0; i < items->totitem; i++) {
-		if (STREQ(name, items->names[i])) {
+		if (STREQ(name, items->names[i] + offset)) {
 			return i;
 		}
 	}
@@ -894,7 +894,7 @@ static void ui_searchbox_butrect(rcti *r_rect, uiSearchboxData *data, int itemnr
 int ui_searchbox_find_index(ARegion *ar, const char *name)
 {
 	uiSearchboxData *data = ar->regiondata;
-	return UI_search_items_find_index(&data->items, name);
+	return UI_search_items_find_index(&data->items, name, 0);
 }
 
 /* x and y in screencoords */
@@ -1420,14 +1420,14 @@ void ui_searchbox_free(bContext *C, ARegion *ar)
 
 /* sets red alert if button holds a string it can't find */
 /* XXX weak: search_func adds all partial matches... */
-void ui_but_search_refresh(uiBut *but)
+void ui_but_search_refresh(uiBut *but, const bool is_template_ID)
 {
 	uiSearchItems *items;
 	int x1;
 
-	/* possibly very large lists (such as ID datablocks) only
-	 * only validate string RNA buts (not pointers) */
-	if (but->rnaprop && RNA_property_type(but->rnaprop) != PROP_STRING) {
+	/* possibly very large lists (such as ID datablocks),
+	 * only validate string and pointer RNA buts */
+	if (but->rnaprop && !ELEM(RNA_property_type(but->rnaprop), PROP_STRING, PROP_POINTER)) {
 		return;
 	}
 
@@ -1447,7 +1447,8 @@ void ui_but_search_refresh(uiBut *but)
 		UI_but_flag_enable(but, UI_BUT_REDALERT);
 	}
 	else if (items->more == 0) {
-		if (UI_search_items_find_index(items, but->drawstr) == -1) {
+		const size_t offset = is_template_ID ? 3 : 0;
+		if (UI_search_items_find_index(items, but->drawstr, offset) == -1) {
 			UI_but_flag_enable(but, UI_BUT_REDALERT);
 		}
 	}
@@ -1690,6 +1691,28 @@ static void ui_block_region_draw(const bContext *C, ARegion *ar)
 
 	for (block = ar->uiblocks.first; block; block = block->next)
 		UI_block_draw(C, block);
+}
+
+/**
+ * Use to refresh centered popups on screen resizing (for splash).
+ */
+static void ui_block_region_popup_window_listener(
+        bScreen *UNUSED(sc), ScrArea *UNUSED(sa), ARegion *ar, wmNotifier *wmn)
+{
+	switch (wmn->category) {
+		case NC_WINDOW:
+		{
+			switch (wmn->action) {
+				case NA_EDITED:
+				{
+					/* window resize */
+					ED_region_tag_refresh_ui(ar);
+					break;
+				}
+			}
+			break;
+		}
+	}
 }
 
 static void ui_popup_block_clip(wmWindow *window, uiBlock *block)
@@ -2002,6 +2025,11 @@ uiPopupBlockHandle *ui_popup_block_create(
 
 	block = ui_popup_block_refresh(C, handle, butregion, but);
 	handle = block->handle;
+
+	/* keep centered on window resizing */
+	if ((block->bounds_type == UI_BLOCK_BOUNDS_POPUP_CENTER) && handle->can_refresh) {
+		type.listener = ui_block_region_popup_window_listener;
+	}
 
 	return handle;
 }
@@ -3285,7 +3313,7 @@ void UI_popup_block_invoke(bContext *C, uiBlockCreateFunc func, void *arg)
 	UI_popup_block_invoke_ex(C, func, arg, NULL, WM_OP_INVOKE_DEFAULT);
 }
 
-void UI_popup_block_ex(bContext *C, uiBlockCreateFunc func, uiBlockHandleFunc popup_func, uiBlockCancelFunc cancel_func, void *arg)
+void UI_popup_block_ex(bContext *C, uiBlockCreateFunc func, uiBlockHandleFunc popup_func, uiBlockCancelFunc cancel_func, void *arg, wmOperator *op)
 {
 	wmWindow *window = CTX_wm_window(C);
 	uiPopupBlockHandle *handle;
@@ -3294,6 +3322,7 @@ void UI_popup_block_ex(bContext *C, uiBlockCreateFunc func, uiBlockHandleFunc po
 	handle->popup = true;
 	handle->retvalue = 1;
 
+	handle->popup_op = op;
 	handle->popup_arg = arg;
 	handle->popup_func = popup_func;
 	handle->cancel_func = cancel_func;

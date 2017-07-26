@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-#include "kernel_compat_cpu.h"
-#include "kernel_types.h"
-#include "kernel_globals.h"
-#include "util_vector.h"
-#include "coverage.h"
+#include "kernel/kernel_compat_cpu.h"
+#include "kernel/kernel_types.h"
+#include "kernel/split/kernel_split_data_types.h"
+#include "kernel/kernel_globals.h"
+#include "util/util_vector.h"
+#include "render/coverage.h"
 
 CCL_NAMESPACE_BEGIN
 

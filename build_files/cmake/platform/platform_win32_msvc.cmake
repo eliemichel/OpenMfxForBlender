@@ -33,8 +33,14 @@ endmacro()
 macro(windows_find_package package_name
 	)
 	if(WITH_WINDOWS_FIND_MODULES)
-		find_package( ${package_name})
+		find_package(${package_name})
 	endif(WITH_WINDOWS_FIND_MODULES)
+endmacro()
+
+macro(find_package_wrapper)
+	if(WITH_WINDOWS_FIND_MODULES)
+		find_package(${ARGV})
+	endif()
 endmacro()
 
 add_definitions(-DWIN32)
@@ -432,6 +438,7 @@ if(WITH_ALEMBIC)
 	set(ALEMBIC_INCLUDE_DIRS ${ALEMBIC_INCLUDE_DIR})
 	set(ALEMBIC_LIBPATH ${ALEMBIC}/lib)
 	set(ALEMBIC_LIBRARIES optimized alembic debug alembic_d)
+	set(ALEMBIC_FOUND 1)
 endif()
 
 if(WITH_MOD_CLOTH_ELTOPO)

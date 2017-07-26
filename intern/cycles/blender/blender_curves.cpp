@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-#include "attribute.h"
-#include "camera.h"
-#include "curves.h"
-#include "mesh.h"
-#include "object.h"
-#include "scene.h"
+#include "render/attribute.h"
+#include "render/camera.h"
+#include "render/curves.h"
+#include "render/mesh.h"
+#include "render/object.h"
+#include "render/scene.h"
 
-#include "blender_sync.h"
-#include "blender_util.h"
+#include "blender/blender_sync.h"
+#include "blender/blender_util.h"
 
-#include "util_foreach.h"
-#include "util_logging.h"
+#include "util/util_foreach.h"
+#include "util/util_logging.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -126,6 +126,8 @@ static bool ObtainCacheParticleData(Mesh *mesh,
 
 	BL::Object::modifiers_iterator b_mod;
 	for(b_ob->modifiers.begin(b_mod); b_mod != b_ob->modifiers.end(); ++b_mod) {
+        auto b_mod_type = b_mod->type();
+
 		if((b_mod->type() == b_mod->type_PARTICLE_SYSTEM) && (background ? b_mod->show_render() : b_mod->show_viewport())) {
 			BL::ParticleSystemModifier psmd((const PointerRNA)b_mod->ptr);
 			BL::ParticleSystem b_psys((const PointerRNA)psmd.particle_system().ptr);
@@ -411,6 +413,7 @@ static void ExportCurveTrianglePlanes(Mesh *mesh, ParticleCurveData *CData,
 		}
 	}
 
+	mesh->resize_mesh(mesh->verts.size(), mesh->triangles.size());
 	mesh->attributes.remove(ATTR_STD_VERTEX_NORMAL);
 	mesh->attributes.remove(ATTR_STD_FACE_NORMAL);
 	mesh->add_face_normals();
@@ -434,8 +437,8 @@ static void ExportCurveTriangleGeometry(Mesh *mesh,
 			if(CData->curve_keynum[curve] <= 1 || CData->curve_length[curve] == 0.0f)
 				continue;
 
-			numverts += (CData->curve_keynum[curve] - 2)*2*resolution + resolution;
-			numtris += (CData->curve_keynum[curve] - 2)*resolution;
+			numverts += (CData->curve_keynum[curve] - 1)*resolution + resolution;
+			numtris += (CData->curve_keynum[curve] - 1)*2*resolution;
 		}
 	}
 
@@ -545,6 +548,7 @@ static void ExportCurveTriangleGeometry(Mesh *mesh,
 		}
 	}
 
+	mesh->resize_mesh(mesh->verts.size(), mesh->triangles.size());
 	mesh->attributes.remove(ATTR_STD_VERTEX_NORMAL);
 	mesh->attributes.remove(ATTR_STD_FACE_NORMAL);
 	mesh->add_face_normals();
@@ -705,7 +709,9 @@ static void ExportCurveSegmentsMotion(Mesh *mesh, ParticleCurveData *CData, int 
 					mP[key].w = mesh->curve_radius[key];
 				}
 			}
-		}
+		} else {
+            VLOG(1) << "Motion found.";
+        }
 	}
 }
 
@@ -801,130 +807,133 @@ void copy_v3_v3(float r[3], const float a[3])
 	r[2] = a[2];
 }
 
-std::vector<float4> CurveToLineSegments(Curve *cu)
+std::vector<float4> CurveToLineSegments(Mesh* mesh)
 {
-    // Curve to points
-	Nurb *nu;
-	BezTriple *bezt, *prevbezt;
-	BPoint *bp;
-	int a, len, resolu;
 
-    ListBase *nubase = BKE_curve_nurbs_get(cu);
-    std::vector<float> points;
+//    // Curve to points
+//	Nurb *nu;
+//	BezTriple *bezt, *prevbezt;
+//	BPoint *bp;
+//	int a, len, resolu;
+//
+//    ListBase *nubase = BKE_curve_nurbs_get(cu);
+//    std::vector<float> points;
+//
+//	nu = (Nurb *) nubase->first;
+//	while (nu) {
+//		if (nu->hide == 0) {
+//			if (cu->resolu_ren != 0)
+//				resolu = cu->resolu_ren;
+//			else
+//				resolu = nu->resolu;
+//
+//			if (!BKE_nurb_check_valid_u(nu)) {
+//				/* pass */
+//			} else if (nu->type == CU_BEZIER) {
+//				/* count */
+//				len = 0;
+//				a = nu->pntsu - 1;
+//				if (nu->flagu & CU_NURB_CYCLIC) a++;
+//
+//				prevbezt = nu->bezt;
+//				bezt = prevbezt + 1;
+//				while (a--) {
+//					if (a == 0 && (nu->flagu & CU_NURB_CYCLIC))
+//						bezt = nu->bezt;
+//
+//					if (prevbezt->h2 == HD_VECT && bezt->h1 == HD_VECT)
+//						len++;
+//					else
+//						len += resolu;
+//
+//					if (a == 0 && (nu->flagu & CU_NURB_CYCLIC) == 0)
+//						len++;
+//
+//					prevbezt = bezt;
+//					bezt++;
+//				}
+//
+//                points.resize( (len + 1) * 3 );
+//                float *data = (float*) &points[0];
+//
+//                int type;   // 0 poly, 1 segm
+//
+//				/* check that (len != 2) so we don't immediately loop back on ourselves */
+//				if (nu->flagu & CU_NURB_CYCLIC && (len != 2)) {
+//					a = nu->pntsu;
+//                    type = 0;
+//				} else {
+//					a = nu->pntsu - 1;
+//                    type = 1;
+//				}
+//
+//				prevbezt = nu->bezt;
+//				bezt = prevbezt + 1;
+//
+//				while (a--) {
+//					if (a == 0 && type == 0)
+//						bezt = nu->bezt;
+//
+//					if (prevbezt->h2 == HD_VECT && bezt->h1 == HD_VECT) {
+//						copy_v3_v3(data, prevbezt->vec[1]);
+//						data += 3;
+//					}
+//					else {
+//						int j;
+//						for (j = 0; j < 3; j++) {
+//							BKE_curve_forward_diff_bezier(prevbezt->vec[1][j],
+//							                              prevbezt->vec[2][j],
+//							                              bezt->vec[0][j],
+//							                              bezt->vec[1][j],
+//							                              data + j, resolu, 3 * sizeof(float));
+//						}
+//
+//						data += 3 * resolu;
+//					}
+//
+//					if (a == 0 && type == 1) {
+//						copy_v3_v3(data, bezt->vec[1]);
+//					}
+//
+//					prevbezt = bezt;
+//					bezt++;
+//				}
+//			}
+//			else if (nu->type == CU_NURBS) {
+//				len = (resolu * SEGMENTSU(nu));
+//                points.resize(len);
+//
+//				BKE_nurb_makeCurve(nu, (float*) &points[0], NULL, NULL, NULL, resolu, 3 * sizeof(float));
+//			}
+//			else if (nu->type == CU_POLY) {
+//				len = nu->pntsu;
+//                points.reserve(len);
+//                float *data = (float*) &points[0];
+//
+//				a = len;
+//				bp = nu->bp;
+//				while (a--) {
+//					copy_v3_v3(data, bp->vec);
+//					bp++;
+//					data += 3;
+//				}
+//			}
+//		}
+//		nu = nu->next;
+//	}
 
-	nu = (Nurb *) nubase->first;
-	while (nu) {
-		if (nu->hide == 0) {
-			if (cu->resolu_ren != 0)
-				resolu = cu->resolu_ren;
-			else
-				resolu = nu->resolu;
-
-			if (!BKE_nurb_check_valid_u(nu)) {
-				/* pass */
-			} else if (nu->type == CU_BEZIER) {
-				/* count */
-				len = 0;
-				a = nu->pntsu - 1;
-				if (nu->flagu & CU_NURB_CYCLIC) a++;
-
-				prevbezt = nu->bezt;
-				bezt = prevbezt + 1;
-				while (a--) {
-					if (a == 0 && (nu->flagu & CU_NURB_CYCLIC))
-						bezt = nu->bezt;
-
-					if (prevbezt->h2 == HD_VECT && bezt->h1 == HD_VECT)
-						len++;
-					else
-						len += resolu;
-
-					if (a == 0 && (nu->flagu & CU_NURB_CYCLIC) == 0)
-						len++;
-
-					prevbezt = bezt;
-					bezt++;
-				}
-
-                points.resize( (len + 1) * 3 );
-                float *data = (float*) &points[0];
-
-                int type;   // 0 poly, 1 segm
-
-				/* check that (len != 2) so we don't immediately loop back on ourselves */
-				if (nu->flagu & CU_NURB_CYCLIC && (len != 2)) {
-					a = nu->pntsu;
-                    type = 0;
-				} else {
-					a = nu->pntsu - 1;
-                    type = 1;
-				}
-
-				prevbezt = nu->bezt;
-				bezt = prevbezt + 1;
-
-				while (a--) {
-					if (a == 0 && type == 0)
-						bezt = nu->bezt;
-
-					if (prevbezt->h2 == HD_VECT && bezt->h1 == HD_VECT) {
-						copy_v3_v3(data, prevbezt->vec[1]);
-						data += 3;
-					}
-					else {
-						int j;
-						for (j = 0; j < 3; j++) {
-							BKE_curve_forward_diff_bezier(prevbezt->vec[1][j],
-							                              prevbezt->vec[2][j],
-							                              bezt->vec[0][j],
-							                              bezt->vec[1][j],
-							                              data + j, resolu, 3 * sizeof(float));
-						}
-
-						data += 3 * resolu;
-					}
-
-					if (a == 0 && type == 1) {
-						copy_v3_v3(data, bezt->vec[1]);
-					}
-
-					prevbezt = bezt;
-					bezt++;
-				}
-			}
-			else if (nu->type == CU_NURBS) {
-				len = (resolu * SEGMENTSU(nu));
-                points.resize(len);
-
-				BKE_nurb_makeCurve(nu, (float*) &points[0], NULL, NULL, NULL, resolu, 3 * sizeof(float));
-			}
-			else if (nu->type == CU_POLY) {
-				len = nu->pntsu;
-                points.reserve(len);
-                float *data = (float*) &points[0];
-
-				a = len;
-				bp = nu->bp;
-				while (a--) {
-					copy_v3_v3(data, bp->vec);
-					bp++;
-					data += 3;
-				}
-			}
-		}
-		nu = nu->next;
-	}
+    array<float3> verts = mesh->verts;
 
     // Line segments
     std::vector<float4> tri_points;
-    for (int i = 0; i < (points.size()/3); ++i) {
-        int i_next = (i+1)%(points.size()/3);
+    for (int i = 0; i < verts.size(); ++i) {
+        int i_next = (i+1)%verts.size();
 
         float4 ls;
-        ls.x = points[i*3+0];
-        ls.y = points[i*3+1];
-        ls.z = points[i_next*3+0];
-        ls.w = points[i_next*3+1];
+        ls.x = verts[i].x;
+        ls.y = verts[i].y;
+        ls.z = verts[i_next].x;
+        ls.w = verts[i_next].y;
 
         tri_points.push_back(ls);
     }
@@ -1030,7 +1039,7 @@ void BlenderSync::sync_curves(Mesh *mesh,
 	}
 
 	/* obtain general settings */
-	bool use_curves = scene->curve_system_manager->use_curves;
+	const bool use_curves = scene->curve_system_manager->use_curves;
 
 	if(!(use_curves && b_ob.mode() != b_ob.mode_PARTICLE_EDIT)) {
 		if(!motion)
@@ -1038,11 +1047,11 @@ void BlenderSync::sync_curves(Mesh *mesh,
 		return;
 	}
 
-	int primitive = scene->curve_system_manager->primitive;
-	int triangle_method = scene->curve_system_manager->triangle_method;
-	int resolution = scene->curve_system_manager->resolution;
-	size_t vert_num = mesh->verts.size();
-	size_t tri_num = mesh->num_triangles();
+	const int primitive = scene->curve_system_manager->primitive;
+	const int triangle_method = scene->curve_system_manager->triangle_method;
+	const int resolution = scene->curve_system_manager->resolution;
+	const size_t vert_num = mesh->verts.size();
+	const size_t tri_num = mesh->num_triangles();
 	int used_res = 1;
 
 	/* extract particle hair data - should be combined with connecting to mesh later*/
