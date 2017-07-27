@@ -1892,7 +1892,7 @@ void MeshManager::device_update_bvh(Device *device, DeviceScene *dscene, Scene *
 	dscene->data.bvh.use_bvh_steps = (scene->params.num_bvh_time_steps != 0);
 
 #ifdef WITH_EMBREE
-	if(pack.root_index == BVH_CUSTOM) {
+	if(bparams.use_bvh_embree) {
 		dscene->data.bvh.scene = ((BVHEmbree*)bvh)->scene;
 	} else {
 		dscene->data.bvh.scene = NULL;
