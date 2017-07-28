@@ -716,8 +716,9 @@ ccl_device int bsdf_microfacet_ggx_sample(KernelGlobals *kg, const ShaderClosure
 #ifdef __RAY_DIFFERENTIALS__
 				*domega_in_dx = dTdx;
 				*domega_in_dy = dTdy;
-				*domega_in_dx *= 10.0f;
-				*domega_in_dy *= 10.0f;
+				const float softness = min(alpha_x, alpha_y) * 10.0f;
+				*domega_in_dx *= (1.0f + softness);
+				*domega_in_dy *= (1.0f + softness);
 #endif
 
 				if(alpha_x*alpha_y <= 1e-7f || fabsf(m_eta - 1.0f) < 1e-4f) {
@@ -1094,8 +1095,9 @@ ccl_device int bsdf_microfacet_beckmann_sample(KernelGlobals *kg, const ShaderCl
 #ifdef __RAY_DIFFERENTIALS__
 				*domega_in_dx = dTdx;
 				*domega_in_dy = dTdy;
-				*domega_in_dx *= 10;
-				*domega_in_dy *= 10;
+				const float softness = min(alpha_x, alpha_y) * 10.0f;
+				*domega_in_dx *= (1.0f + softness);
+				*domega_in_dy *= (1.0f + softness);
 #endif
 
 				if(alpha_x*alpha_y <= 1e-7f || fabsf(m_eta - 1.0f) < 1e-4f) {
