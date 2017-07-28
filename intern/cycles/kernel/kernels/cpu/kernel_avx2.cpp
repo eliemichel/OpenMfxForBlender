@@ -29,13 +29,9 @@
 #  define __KERNEL_AVX2__
 #endif
 
-<<<<<<< HEAD
 #define OIIO_NO_AVX 1
 
-#include "util_optimization.h"
-=======
 #include "util/util_optimization.h"
->>>>>>> 40d459674a6c0d75ff5ff25fc5697b6a83840617
 
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX2
 #  include "kernel/kernel.h"
