@@ -467,8 +467,9 @@ ccl_device int bsdf_microfacet_multi_ggx_sample(KernelGlobals *kg, const ShaderC
 #ifdef __RAY_DIFFERENTIALS__
 	*domega_in_dx = (2.0f * dot(Z, dIdx)) * Z - dIdx;
 	*domega_in_dy = (2.0f * dot(Z, dIdy)) * Z - dIdy;
-	*domega_in_dx *= 10.0f;
-	*domega_in_dy *= 10.0f;
+	const float softness = min(bsdf->alpha_x, bsdf->alpha_y) * 10.0f;
+	*domega_in_dx *= (1.0f + softness);
+	*domega_in_dy *= (1.0f + softness);
 #endif
 	return LABEL_REFLECT|LABEL_GLOSSY;
 }
@@ -544,7 +545,7 @@ ccl_device float3 bsdf_microfacet_multi_ggx_glass_eval_reflect(const ShaderClosu
 	return mf_eval_glass(localI, localO, true, bsdf->extra->color, bsdf->alpha_x, bsdf->alpha_y, lcg_state, bsdf->ior, use_fresnel, bsdf->extra->cspec0);
 }
 
-ccl_device int bsdf_microfacet_multi_ggx_glass_sample(KernelGlobals *kg, const ShaderClosure *sc, float3 Ng, float3 I, float3 dIdx, float3 dIdy, float randu, float randv, float3 *eval, float3 *omega_in, float3 *domega_in_dx, float3 *domega_in_dy, float *pdf, ccl_addr_space uint *lcg_state)
+ccl_device int bsdf_microfacet_multi_ggx_glass_sample(KernelGlobals *kg, const ShaderClosure *sc, float3 Ng, float3 I, float3 dIdx, float3 dIdy, float randu, float randv, float3 *eval, float3 *omega_in, float3 *domega_in_dx, float3 *domega_in_dy, float *pdf, ccl_addr_space uint *lcg_state, const ShaderData *sd)
 {
 	const MicrofacetBsdf *bsdf = (const MicrofacetBsdf*)sc;
 
@@ -559,6 +560,9 @@ ccl_device int bsdf_microfacet_multi_ggx_glass_sample(KernelGlobals *kg, const S
 		bool inside;
 		float fresnel = fresnel_dielectric(bsdf->ior, Z, I, &R, &T,
 #ifdef __RAY_DIFFERENTIALS__
+#  ifdef __DNDU__
+				sd->dNdx,  sd->dNdy,
+#  endif
 		                dIdx, dIdy, &dRdx, &dRdy, &dTdx, &dTdy,
 #endif
 		                &inside);
@@ -599,6 +603,9 @@ ccl_device int bsdf_microfacet_multi_ggx_glass_sample(KernelGlobals *kg, const S
 #ifdef __RAY_DIFFERENTIALS__
 		*domega_in_dx = (2 * dot(Z, dIdx)) * Z - dIdx;
 		*domega_in_dy = (2 * dot(Z, dIdy)) * Z - dIdy;
+		const float softness = min(bsdf->alpha_x, bsdf->alpha_y) * 10.0f;
+		*domega_in_dx *= (1.0f + softness);
+		*domega_in_dy *= (1.0f + softness);
 #endif
 		return LABEL_REFLECT|LABEL_GLOSSY;
 	}
@@ -608,6 +615,9 @@ ccl_device int bsdf_microfacet_multi_ggx_glass_sample(KernelGlobals *kg, const S
 		float dnp = max(sqrtf(1.0f - (bsdf->ior * bsdf->ior * (1.0f - cosI*cosI))), 1e-7f);
 		*domega_in_dx = -(bsdf->ior * dIdx) + ((bsdf->ior - bsdf->ior * bsdf->ior * cosI / dnp) * dot(dIdx, Z)) * Z;
 		*domega_in_dy = -(bsdf->ior * dIdy) + ((bsdf->ior - bsdf->ior * bsdf->ior * cosI / dnp) * dot(dIdy, Z)) * Z;
+		const float softness = min(bsdf->alpha_x, bsdf->alpha_y) * 10.0f;
+		*domega_in_dx *= (1.0f + softness);
+		*domega_in_dy *= (1.0f + softness);
 #endif
 
 		return LABEL_TRANSMIT|LABEL_GLOSSY;

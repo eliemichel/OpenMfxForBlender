@@ -677,10 +677,10 @@ ccl_device int bsdf_microfacet_ggx_sample(KernelGlobals *kg, const ShaderClosure
 #ifdef __DNDU__
 					float3 dwodx = -dIdx;
 					float3 dwody = -dIdy;
-					float dDNdx = dot(dwodx, N) + dot(I, ccl_fetch(sd, dNdx));
-					float dDNdy = dot(dwody, N) + dot(I, ccl_fetch(sd, dNdy));
-					*domega_in_dx = dwodx + 2.f * (dot(I, N) * ccl_fetch(sd, dNdx) + dDNdx * N);
-					*domega_in_dy = dwody + 2.f * (dot(I, N) * ccl_fetch(sd, dNdy) + dDNdy * N);
+					float dDNdx = dot(dwodx, N) + dot(I, sd->dNdx);
+					float dDNdy = dot(dwody, N) + dot(I, sd->dNdy);
+					*domega_in_dx = dwodx + 2.0f * (dot(I, N) * sd->dNdx + dDNdx * N);
+					*domega_in_dy = dwody + 2.0f * (dot(I, N) * sd->dNdy + dDNdy * N);
 #else
 					*domega_in_dx = (2.0f * dot(m, dIdx)) * m - dIdx;
 					*domega_in_dy = (2.0f * dot(m, dIdy)) * m - dIdy;
@@ -706,6 +706,9 @@ ccl_device int bsdf_microfacet_ggx_sample(KernelGlobals *kg, const ShaderClosure
 
 			fresnel = fresnel_dielectric(m_eta, m, I, &R, &T,
 #ifdef __RAY_DIFFERENTIALS__
+#  ifdef __DNDU__
+				sd->dNdx,  sd->dNdy,
+#  endif
 				dIdx, dIdy, &dRdx, &dRdy, &dTdx, &dTdy,
 #endif
 				&inside);
@@ -1085,6 +1088,9 @@ ccl_device int bsdf_microfacet_beckmann_sample(KernelGlobals *kg, const ShaderCl
 
 			fresnel = fresnel_dielectric(m_eta, m, I, &R, &T,
 #ifdef __RAY_DIFFERENTIALS__
+#  ifdef __DNDU__
+				sd->dNdx,  sd->dNdy,
+#  endif
 				dIdx, dIdy, &dRdx, &dRdy, &dTdx, &dTdy,
 #endif
 				&inside);

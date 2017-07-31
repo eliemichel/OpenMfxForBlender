@@ -81,7 +81,7 @@ ccl_device_forceinline int bsdf_sample(KernelGlobals *kg,
 			break;
 		case CLOSURE_BSDF_REFRACTION_ID:
 			label = bsdf_refraction_sample(sc, sd->Ng, sd->I, sd->dI.dx, sd->dI.dy, randu, randv,
-				eval, omega_in, &domega_in->dx, &domega_in->dy, pdf);
+				eval, omega_in, &domega_in->dx, &domega_in->dy, pdf, sd);
 			break;
 		case CLOSURE_BSDF_TRANSPARENT_ID:
 			label = bsdf_transparent_sample(sc, sd->Ng, sd->I, sd->dI.dx, sd->dI.dy, randu, randv,
@@ -104,7 +104,7 @@ ccl_device_forceinline int bsdf_sample(KernelGlobals *kg,
 		case CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID:
 		case CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_FRESNEL_ID:
 			label = bsdf_microfacet_multi_ggx_glass_sample(kg, sc, sd->Ng, sd->I, sd->dI.dx, sd->dI.dy, randu, randv,
-			        eval, omega_in,  &domega_in->dx, &domega_in->dy, pdf, &sd->lcg_state);
+			        eval, omega_in,  &domega_in->dx, &domega_in->dy, pdf, &sd->lcg_state, sd);
 			break;
 		case CLOSURE_BSDF_MICROFACET_BECKMANN_ID:
 		case CLOSURE_BSDF_MICROFACET_BECKMANN_ANISO_ID:
