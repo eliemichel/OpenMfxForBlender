@@ -212,10 +212,11 @@ const string ImageManager::get_mip_map_path(const string& filename)
 		}
 	}
 	
-	string tx_name = filename + ".tx";
+	string tx_name = filename.substr(0, idx) + ".tx";
 	if(path_exists(tx_name)) {
 		return tx_name;
 	}
+
 	return "";
 }
 
