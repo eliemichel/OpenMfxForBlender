@@ -113,6 +113,8 @@ public:
 		int users;
 	};
 
+	static bool make_tx(const string& filename, const string& outputfilename, bool srgb);
+
 private:
 	int tex_num_images[IMAGE_DATA_NUM_TYPES];
 	int max_num_images;

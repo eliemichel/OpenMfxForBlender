@@ -1352,6 +1352,22 @@ void ImageManager::device_free(Device *device, DeviceScene *dscene)
 	dscene->tex_image_packed_info.clear();
 }
 
+bool ImageManager::make_tx(const string &filename, const string &outputfilename, bool srgb)
+{
+	ImageSpec config;
+	config.attribute("maketx:filtername", "lanczos3");
+	config.attribute("maketx:opaque_detect", 1);
+	config.attribute("maketx:highlightcomp", 1);
+	config.attribute("maketx:updatemode", 1);
+	config.attribute("maketx:oiio_options", 1);
+	if(srgb) {
+		config.attribute("maketx:incolorspace", "sRGB");
+		config.attribute("maketx:outcolorspace", "linear");
+	}
+
+	return ImageBufAlgo::make_texture(ImageBufAlgo::MakeTxTexture, filename, outputfilename, config);
+}
+
 bool ImageManager::make_tx(Image *image, Progress *progress)
 {
 	if(!path_exists(image->filename)) {
@@ -1366,7 +1382,7 @@ bool ImageManager::make_tx(Image *image, Progress *progress)
 		}
 	}
 	
-	string tx_name = image->filename + ".tx";
+	string tx_name = image->filename.substr(0, idx) + ".tx";
 	if(path_exists(tx_name)) {
 		image->filename = tx_name;
 		return true;
@@ -1374,18 +1390,7 @@ bool ImageManager::make_tx(Image *image, Progress *progress)
 	
 	progress->set_status("Updating Images", "Converting " + image->filename);
 	
-	ImageSpec config;
-	config.attribute("maketx:filtername", "lanczos3");
-	config.attribute("maketx:opaque_detect", 1);
-	config.attribute("maketx:highlightcomp", 1);
-	config.attribute("maketx:updatemode", 1);
-	config.attribute("maketx:oiio_options", 1);
-	if(image->srgb) {
-		config.attribute("maketx:incolorspace", "sRGB");
-		config.attribute("maketx:outcolorspace", "linear");
-	}
-
-	bool ok = ImageBufAlgo::make_texture(ImageBufAlgo::MakeTxTexture, image->filename, tx_name, config);
+	bool ok = make_tx(image->filename, tx_name, image->srgb);
 	if(ok) {
 		image->filename = tx_name;
 	}
