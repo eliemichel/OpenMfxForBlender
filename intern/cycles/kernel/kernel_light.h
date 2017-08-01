@@ -771,7 +771,6 @@ ccl_device void lamp_light_dPdudv(KernelGlobals *kg, int lamp, float u, float v,
 	{
 	case LIGHT_AREA: {
 		float4 data2 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 2);
-		float4 data3 = kernel_tex_fetch(__light_data, lamp*LIGHT_SIZE + 3);
 		*dPdu = make_float3(data1.y, data1.z, data1.w);
 		*dPdv = make_float3(data2.y, data2.z, data2.w);
  		break;

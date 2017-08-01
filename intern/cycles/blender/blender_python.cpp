@@ -591,6 +591,21 @@ static PyObject *osl_compile_func(PyObject * /*self*/, PyObject *args)
 }
 #endif
 
+static PyObject *oiio_make_tx(PyObject * /*self*/, PyObject *args)
+{
+	const char *inputfile = NULL, *outputfile = NULL;
+	int srgb = 1;
+
+	if(!PyArg_ParseTuple(args, "ssp", &inputfile, &outputfile, &srgb))
+		return NULL;
+	
+	/* return */
+	if(!ImageManager::make_tx(inputfile, outputfile, srgb))
+		Py_RETURN_FALSE;
+
+	Py_RETURN_TRUE;
+}
+
 static PyObject *system_info_func(PyObject * /*self*/, PyObject * /*value*/)
 {
 	string system_info = Device::device_capabilities();
@@ -754,6 +769,7 @@ static PyMethodDef methods[] = {
 	{"osl_update_node", osl_update_node_func, METH_VARARGS, ""},
 	{"osl_compile", osl_compile_func, METH_VARARGS, ""},
 #endif
+	{"oiio_make_tx", oiio_make_tx, METH_VARARGS, ""},
 	{"available_devices", available_devices_func, METH_NOARGS, ""},
 	{"system_info", system_info_func, METH_NOARGS, ""},
 #ifdef WITH_OPENCL
