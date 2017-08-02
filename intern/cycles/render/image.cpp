@@ -104,7 +104,7 @@ bool ImageManager::set_animation_frame_update(int frame)
 
 ImageDataType ImageManager::get_image_metadata(const string& filename,
                                                              void *builtin_data,
-                                                             shared_ptr<uint8_t> generated_data,
+															 boost::shared_ptr<uint8_t> generated_data,
                                                              bool& is_linear)
 {
 	bool is_float = false, is_half = false;
@@ -434,7 +434,7 @@ void ImageManager::remove_image(const string& filename,
  */
 void ImageManager::tag_reload_image(const string& filename,
                                     void *builtin_data,
-                                    shared_ptr<uint8_t> generated_data,
+									boost::shared_ptr<uint8_t> generated_data,
                                     InterpolationType interpolation,
                                     ExtensionType extension)
 {
