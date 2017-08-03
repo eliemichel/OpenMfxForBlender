@@ -932,8 +932,19 @@ void ShaderGraph::add_differentials()
 			ShaderOutput *out_dx = nodes_dx[out->parent]->output(out->name());
 			ShaderOutput *out_dy = nodes_dy[out->parent]->output(out->name());
 
-			connect(out_dx, node->input("Vector_dx"));
-			connect(out_dy, node->input("Vector_dy"));
+			/* Insert mapping nodes that are duplicates of what's inside the image node.
+			 * This is somewhat wasteful, it would be better to have a MappingNode
+			 * that does three transforms at a time. */
+			MappingNode *mapping1 = new MappingNode;
+			MappingNode *mapping2 = new MappingNode;
+			mapping1->tex_mapping = ((ImageTextureNode*)node)->tex_mapping;
+			mapping2->tex_mapping = ((ImageTextureNode*)node)->tex_mapping;
+			add(mapping1);
+			add(mapping2);
+			connect(out_dx, mapping1->input("Vector"));
+			connect(out_dy, mapping2->input("Vector"));
+			connect(mapping1->output("Vector"), node->input("Vector_dx"));
+			connect(mapping2->output("Vector"), node->input("Vector_dy"));
 
 			/* add generated nodes */
 			foreach(NodePair& pair, nodes_dx)

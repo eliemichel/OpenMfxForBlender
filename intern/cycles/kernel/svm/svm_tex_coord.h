@@ -130,6 +130,9 @@ ccl_device void svm_node_tex_coord_bump_dx(KernelGlobals *kg,
 		}
 		case NODE_TEXCO_NORMAL: {
 			data = sd->N;
+#  ifdef __DNDU__
+			data = sd->N + sd->dNdx;
+#  endif
 			object_inverse_normal_transform(kg, sd, &data);
 			break;
 		}
@@ -214,6 +217,9 @@ ccl_device void svm_node_tex_coord_bump_dy(KernelGlobals *kg,
 		}
 		case NODE_TEXCO_NORMAL: {
 			data = sd->N;
+#  ifdef __DNDU__
+			data = sd->N + sd->dNdy;
+#  endif
 			object_inverse_normal_transform(kg, sd, &data);
 			break;
 		}

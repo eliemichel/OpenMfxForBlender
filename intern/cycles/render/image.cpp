@@ -1393,6 +1393,7 @@ bool ImageManager::make_tx(const string &filename, const string &outputfilename,
 	config.attribute("maketx:highlightcomp", 1);
 	config.attribute("maketx:updatemode", 1);
 	config.attribute("maketx:oiio_options", 1);
+	//config.attribute("maketx:updatemode", 1);
 	if(srgb) {
 		config.attribute("maketx:incolorspace", "sRGB");
 		config.attribute("maketx:outcolorspace", "linear");
