@@ -271,6 +271,9 @@ ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg, const Ra
 		rtc_ray.max_hits = max_hits;
 		rtc_ray.num_hits = 0;
 		rtcOccluded(kernel_data.bvh.scene, rtc_ray);
+		if(rtc_ray.num_hits > max_hits) {
+			return true;
+		}
 		if(rtc_ray.num_hits > 0) {
 			*num_hits = rtc_ray.num_hits;
 			return (rtc_ray.geomID != RTC_INVALID_GEOMETRY_ID);
