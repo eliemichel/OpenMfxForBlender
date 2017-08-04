@@ -28,6 +28,7 @@ struct OIIOTexture
 	OIIO::TextureSystem::TextureHandle* handle;
 	OIIO::TextureOpt::InterpMode interpolation;
 	OIIO::TextureOpt::Wrap extension;
+	bool is_linear;
 };
 
 struct OIIOGlobals

@@ -169,7 +169,7 @@ private:
 	                        DeviceScene *dscene,
 	                        Progress& progess);
 	
-	bool make_tx(Image *image, Progress *progress);
+	bool get_tx(Image *image, Progress *progress, bool auto_convert);
 };
 
 CCL_NAMESPACE_END

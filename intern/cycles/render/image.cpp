@@ -718,10 +718,10 @@ void ImageManager::device_load_image(Device *device,
 	}
 
 	if(oiio_texture_system && !img->builtin_data) {
-		/* Generate a mip mapped tile image file */
-		if(scene->params.texture.auto_convert) {
-			make_tx(img, progress);
-		}
+		/* Get or generate a mip mapped tile image file.
+		 * If we have a mip map, assume it's linear, not sRGB. */
+		bool have_mip = get_tx(img, progress, scene->params.texture.auto_convert);
+
 		/* When using OIIO directly from SVM, store the TextureHandle
 		 * in an array for quicker lookup at shading time */
 		OIIOGlobals *oiio = (OIIOGlobals*)device->oiio_memory();
@@ -763,6 +763,7 @@ void ImageManager::device_load_image(Device *device,
 						oiio->textures[flat_slot].extension = OIIO::TextureOpt::WrapPeriodic;
 						break;
 				}
+				oiio->textures[flat_slot].is_linear = have_mip;
 			} else {
 				oiio->textures[flat_slot].handle = NULL;
 			}
@@ -1393,7 +1394,8 @@ bool ImageManager::make_tx(const string &filename, const string &outputfilename,
 	config.attribute("maketx:highlightcomp", 1);
 	config.attribute("maketx:updatemode", 1);
 	config.attribute("maketx:oiio_options", 1);
-	//config.attribute("maketx:updatemode", 1);
+	config.attribute("maketx:updatemode", 1);
+	/* Convert textures to linear color space before mip mapping. */
 	if(srgb) {
 		config.attribute("maketx:incolorspace", "sRGB");
 		config.attribute("maketx:outcolorspace", "linear");
@@ -1402,7 +1404,7 @@ bool ImageManager::make_tx(const string &filename, const string &outputfilename,
 	return ImageBufAlgo::make_texture(ImageBufAlgo::MakeTxTexture, filename, outputfilename, config);
 }
 
-bool ImageManager::make_tx(Image *image, Progress *progress)
+bool ImageManager::get_tx(Image *image, Progress *progress, bool auto_convert)
 {
 	if(!path_exists(image->filename)) {
 		return false;
@@ -1422,14 +1424,16 @@ bool ImageManager::make_tx(Image *image, Progress *progress)
 		return true;
 	}
 	
-	progress->set_status("Updating Images", "Converting " + image->filename);
+	if(auto_convert) {
+		progress->set_status("Updating Images", "Converting " + image->filename);
 	
-	bool ok = make_tx(image->filename, tx_name, image->srgb);
-	if(ok) {
-		image->filename = tx_name;
+		bool ok = make_tx(image->filename, tx_name, image->srgb);
+		if(ok) {
+			image->filename = tx_name;
+		return true;
+		}
 	}
-
-	return true;
+	return false;
 }
 
 CCL_NAMESPACE_END
