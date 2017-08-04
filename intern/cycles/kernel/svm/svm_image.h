@@ -49,6 +49,8 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 		OIIO::TextureOpt options;
 		options.swrap = options.twrap = kg->oiio->textures[id].extension;
 		options.anisotropic = 8;
+		float missingcolor[4] = {TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A};
+		options.missingcolor = missingcolor;
 		
 		if(path_flag & NEAREST_LOOKUP_PATHS && !(path_flag & PATH_RAY_SINGULAR)) {
 			options.interpmode = OIIO::TextureOpt::InterpClosest;
@@ -57,8 +59,7 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 		else {
 			options.interpmode = kg->oiio->textures[id].interpolation;
 			options.mipmode = OIIO::TextureOpt::MipModeAniso;
-		}
-		
+		}		
 		
 		if(path_flag & DIFFUSE_BLUR_PATHS) {
 			options.sblur = options.tblur = kg->oiio->diffuse_blur;
@@ -74,8 +75,8 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg, int id, float x, float y,
 		if(!success) {
 			(void) kg->oiio->tex_sys->geterror();
 		} else {
-			/* Texture cache is always linear */
-			srgb = 0;
+			/* Mip maps are always linear. */
+			srgb = !kg->oiio->textures[id].is_linear;
 		}
 	}
 	else
