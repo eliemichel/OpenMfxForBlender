@@ -344,12 +344,15 @@ void ShaderGraph::finalize(Scene *scene,
 	if(!finalized) {
 		clean(scene);
 		refine_bump_nodes();
-		add_differentials();
 		simplify(scene);
 
 		if(do_bump)
 			bump_from_displacement(bump_in_object_space);
-
+		
+		/* This must be after all bump nodes are created,
+		 * so that bump map lookups can be mip mapped too. */
+		add_differentials();
+		
 		ShaderInput *surface_in = output()->input("Surface");
 		ShaderInput *ao_surface_in = output()->input("AOSurface");
 		ShaderInput *volume_in = output()->input("Volume");
