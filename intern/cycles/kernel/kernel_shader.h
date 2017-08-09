@@ -403,7 +403,7 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 #  endif
 #endif
 	}
-	if(ccl_fetch(sd, type) & PRIMITIVE_LAMP) {
+	else if(ccl_fetch(sd, type) & PRIMITIVE_LAMP) {
 #ifdef __DPDU__
 		lamp_light_dPdudv(kg, lamp, ccl_fetch(sd, u), ccl_fetch(sd, v), &ccl_fetch(sd, dPdu), &ccl_fetch(sd, dPdv));
 #endif
@@ -445,7 +445,7 @@ ccl_device_inline void shader_setup_from_sample(KernelGlobals *kg,
 #ifdef __RAY_DIFFERENTIALS__
 	if(dI) {
 		ccl_fetch(sd, dI) = *dI;
-		differential_transfer(&ccl_fetch(sd, dP), differential3_zero(), I, *dI, Ng, t);
+		differential_transfer(&ccl_fetch(sd, dP), ccl_fetch(sd, dP), I, *dI, Ng, t);
 		differential_dudv(&ccl_fetch(sd, du), &ccl_fetch(sd, dv), ccl_fetch(sd, dPdu), ccl_fetch(sd, dPdv), ccl_fetch(sd, dP), ccl_fetch(sd, Ng));
 	}
 	else {
@@ -466,12 +466,16 @@ ccl_device void shader_setup_from_displace(KernelGlobals *kg, ShaderData *sd,
 	int shader;
 
 	triangle_point_normal(kg, object, prim, u, v, &P, &Ng, &shader);
+	triangle_dPdudv(kg, prim, &sd->dP.dx, &sd->dP.dy);
 
 	/* force smooth shading for displacement */
 	shader |= SHADER_SMOOTH_NORMAL;
 
+	I = -Ng;
+	differential3 dI = differential3_zero();
+
 	shader_setup_from_sample(kg, sd,
-	                         P, Ng, I, NULL,
+	                         P, Ng, I, &dI,
 	                         shader, object, prim,
 	                         u, v, 0.0f, 0.5f,
 	                         !(kernel_tex_fetch(__object_flag, object) & SD_OBJECT_TRANSFORM_APPLIED),
