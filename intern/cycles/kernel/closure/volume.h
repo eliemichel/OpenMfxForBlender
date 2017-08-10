@@ -102,9 +102,10 @@ ccl_device int volume_henyey_greenstein_sample(const ShaderClosure *sc, float3 I
 	*eval = make_float3(*pdf, *pdf, *pdf); /* perfect importance sampling */
 
 #ifdef __RAY_DIFFERENTIALS__
-	/* todo: implement ray differential estimation */
-	*domega_in_dx = make_float3(0.0f, 0.0f, 0.0f);
-	*domega_in_dy = make_float3(0.0f, 0.0f, 0.0f);
+	make_orthonormals(-I-dIdx, &T, &B);
+	*domega_in_dx = sin_theta * cos_phi * T + sin_theta * sin_phi * B + cos_theta * (-I-dIdx) - *omega_in;
+	make_orthonormals(-I-dIdy, &T, &B);
+	*domega_in_dy = sin_theta * cos_phi * T + sin_theta * sin_phi * B + cos_theta * (-I-dIdy) - *omega_in ;
 #endif
 
 	return LABEL_VOLUME_SCATTER;
