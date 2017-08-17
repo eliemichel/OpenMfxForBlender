@@ -61,7 +61,7 @@ static inline void kernel_write_id_slots(float *buffer, int num_slots, float id,
 
 static bool crypomatte_comp(const std::pair<float, float>& i, const std::pair<float, float> j) { return i.first > j.first; }
 
-void flatten_coverage(KernelGlobals *kg, vector<map<float, float> > & coverage, const RenderTile &tile)
+int flatten_coverage(KernelGlobals *kg, vector<map<float, float> > & coverage, const RenderTile &tile, const int aov_index)
 {
 	/* sort the coverage map and write it to the output */
 	int index = 0;
@@ -90,13 +90,15 @@ void flatten_coverage(KernelGlobals *kg, vector<map<float, float> > & coverage, 
 				}
 				int limit = min(num_slots, sorted_pixel.size());
 				for(int i = 0; i < limit; i++) {
-					int pass_offset = (kg->__data.film.pass_aov[0] & ~(1 << 31));
+					int pass_offset = (kg->__data.film.pass_aov[aov_index] & ~(1 << 31));
 					kernel_write_id_slots(buffer + pass_offset, 2 * (kg->__data.film.use_cryptomatte & 255), sorted_pixel[i].second, sorted_pixel[i].first, i == 0);
 				}
 			}
 			index++;
 		}
 	}
+
+	return kernel_data.film.use_cryptomatte & 255;
 }
 
 CCL_NAMESPACE_END
