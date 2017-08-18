@@ -25,7 +25,7 @@ CCL_NAMESPACE_BEGIN
 
 struct KernelGlobals;
 
-void flatten_coverage(KernelGlobals *kg, vector<map<float, float> >&coverage, const RenderTile &tile);
+int flatten_coverage(KernelGlobals *kg, vector<map<float, float> >&coverage, const RenderTile &tile, const int aov_index);
 
 CCL_NAMESPACE_END
 

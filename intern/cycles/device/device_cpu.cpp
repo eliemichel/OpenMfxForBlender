@@ -454,12 +454,13 @@ public:
 				tile.sample = sample + 1;
 
 				if(tile.sample == end_sample) {
+					int aov_index = 0;
 					if(kg.__data.film.use_cryptomatte & CRYPT_ACCURATE) {
 						if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT) {
-							flatten_coverage(&kg, coverage_object, tile);
+							aov_index += flatten_coverage(&kg, coverage_object, tile, aov_index);
 						}
 						if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
-							flatten_coverage(&kg, coverage_material, tile);
+							aov_index += flatten_coverage(&kg, coverage_material, tile, aov_index);
 						}
 					}
 				}

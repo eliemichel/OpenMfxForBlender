@@ -461,7 +461,7 @@ void ImageManager::remove_image(const string& filename,
  */
 void ImageManager::tag_reload_image(const string& filename,
                                     void *builtin_data,
-                                    boost::shared_ptr<uint8_t> generated_data,
+									boost::shared_ptr<uint8_t> generated_data,
                                     InterpolationType interpolation,
                                     ExtensionType extension)
 {
