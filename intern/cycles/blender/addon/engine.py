@@ -205,3 +205,43 @@ def with_network():
 def system_info():
     import _cycles
     return _cycles.system_info()
+
+def register_passes(engine, scene, srl):
+    engine.register_pass(scene, srl, "Combined", 4, "RGBA", 'COLOR')
+
+    if srl.use_pass_z:                     engine.register_pass(scene, srl,  "Depth",         1, "Z",    'VALUE')
+    if srl.use_pass_mist:                  engine.register_pass(scene, srl,  "Mist",          1, "Z",    'VALUE')
+    if srl.use_pass_normal:                engine.register_pass(scene, srl,  "Normal",        3, "XYZ",  'VECTOR')
+    if srl.use_pass_vector:                engine.register_pass(scene, srl,  "Vector",        4, "XYZW", 'VECTOR')
+    if srl.use_pass_uv:                    engine.register_pass(scene, srl,  "UV",            3, "UVA",  'VECTOR')
+    if srl.use_pass_object_index:          engine.register_pass(scene, srl,  "IndexOB",       1, "X",    'VALUE')
+    if srl.use_pass_material_index:        engine.register_pass(scene, srl,  "IndexMA",       1, "X",    'VALUE')
+    if srl.use_pass_shadow:                engine.register_pass(scene, srl,  "Shadow",        3, "RGB",  'COLOR')
+    if srl.use_pass_ambient_occlusion:     engine.register_pass(scene, srl,  "AO",            3, "RGB",  'COLOR')
+    if srl.use_pass_diffuse_direct:        engine.register_pass(scene, srl,  "DiffDir",       3, "RGB",  'COLOR')
+    if srl.use_pass_diffuse_indirect:      engine.register_pass(scene, srl,  "DiffInd",       3, "RGB",  'COLOR')
+    if srl.use_pass_diffuse_color:         engine.register_pass(scene, srl,  "DiffCol",       3, "RGB",  'COLOR')
+    if srl.use_pass_glossy_direct:         engine.register_pass(scene, srl,  "GlossDir",      3, "RGB",  'COLOR')
+    if srl.use_pass_glossy_indirect:       engine.register_pass(scene, srl,  "GlossInd",      3, "RGB",  'COLOR')
+    if srl.use_pass_glossy_color:          engine.register_pass(scene, srl,  "GlossCol",      3, "RGB",  'COLOR')
+    if srl.use_pass_transmission_direct:   engine.register_pass(scene, srl,  "TransDir",      3, "RGB",  'COLOR')
+    if srl.use_pass_transmission_indirect: engine.register_pass(scene, srl,  "TransInd",      3, "RGB",  'COLOR')
+    if srl.use_pass_transmission_color:    engine.register_pass(scene, srl,  "TransCol",      3, "RGB",  'COLOR')
+    if srl.use_pass_subsurface_direct:     engine.register_pass(scene, srl,  "SubsurfaceDir", 3, "RGB",  'COLOR')
+    if srl.use_pass_subsurface_indirect:   engine.register_pass(scene, srl,  "SubsurfaceInd", 3, "RGB",  'COLOR')
+    if srl.use_pass_subsurface_color:      engine.register_pass(scene, srl,  "SubsurfaceCol", 3, "RGB",  'COLOR')
+    if srl.use_pass_emit:                  engine.register_pass(scene, srl,  "Emit",          3, "RGB",  'COLOR')
+    if srl.use_pass_environment:           engine.register_pass(scene, srl,  "Env",           3, "RGB",  'COLOR')
+
+    for aov in srl.cycles.aovs:
+        if(aov.type == 'COLOR'):
+            engine.register_pass(scene, srl, aov.name, 3, "RGB", 'COLOR')
+        else:
+            engine.register_pass(scene, srl, aov.name, 1, "X", 'VALUE')
+
+    if(srl.cycles.use_pass_crypto_object):
+        for i in range(0, srl.cycles.pass_crypto_depth, 2):
+            engine.register_pass(scene, srl, "AOV uCryptoObject" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
+    if(srl.cycles.use_pass_crypto_material):
+        for i in range(0, srl.cycles.pass_crypto_depth, 2):
+            engine.register_pass(scene, srl, "AOV uCryptoMaterial" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')

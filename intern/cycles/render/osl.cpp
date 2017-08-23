@@ -98,7 +98,7 @@ void OSLShaderManager::device_update(Device *device, DeviceScene *dscene, Scene 
 		 * compile shaders alternating */
 		thread_scoped_lock lock(ss_mutex);
 
-		OSLCompiler compiler((void*)this, (void*)ss, scene->image_manager);
+		OSLCompiler compiler((void*)this, (void*)ss, scene->image_manager, scene->film);
 		compiler.background = (shader == scene->default_background);
 		compiler.compile(scene, og, shader);
 
@@ -541,11 +541,12 @@ OSLNode *OSLShaderManager::osl_node(const std::string& filepath,
 
 /* Graph Compiler */
 
-OSLCompiler::OSLCompiler(void *manager_, void *shadingsys_, ImageManager *image_manager_)
+OSLCompiler::OSLCompiler(void *manager_, void *shadingsys_, ImageManager *image_manager_, Film *film_)
 {
 	manager = manager_;
 	shadingsys = shadingsys_;
 	image_manager = image_manager_;
+	film = film_;
 	current_type = SHADER_TYPE_SURFACE;
 	current_shader = NULL;
 	background = false;

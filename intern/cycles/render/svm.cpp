@@ -59,7 +59,7 @@ void SVMShaderManager::device_update_shader(Scene *scene,
 	svm_nodes.push_back(make_int4(NODE_SHADER_JUMP, 0, 0, 0));
 
 	SVMCompiler::Summary summary;
-	SVMCompiler compiler(scene->shader_manager, scene->image_manager);
+	SVMCompiler compiler(scene->shader_manager, scene->image_manager, scene->film);
 	compiler.background = (shader == scene->default_background);
 	compiler.compile(scene, shader, svm_nodes, 0, &summary);
 
@@ -156,10 +156,11 @@ void SVMShaderManager::device_free(Device *device, DeviceScene *dscene, Scene *s
 
 /* Graph Compiler */
 
-SVMCompiler::SVMCompiler(ShaderManager *shader_manager_, ImageManager *image_manager_)
+SVMCompiler::SVMCompiler(ShaderManager *shader_manager_, ImageManager *image_manager_, Film *film_)
 {
 	shader_manager = shader_manager_;
 	image_manager = image_manager_;
+	film = film_;
 	max_stack_use = 0;
 	current_type = SHADER_TYPE_SURFACE;
 	current_shader = NULL;
@@ -543,6 +544,25 @@ void SVMCompiler::generated_shared_closure_nodes(ShaderNode *root_node,
 	}
 }
 
+void SVMCompiler::generate_aov_node(ShaderNode *node,
+                                    CompilerState *state)
+{
+	/* execute dependencies for node */
+	foreach(ShaderInput *in, node->inputs) {
+		if(!node_skip_input(node, in) && in->link) {
+			ShaderNodeSet dependencies;
+			find_dependencies(dependencies, state->nodes_done, in);
+			generate_svm_nodes(dependencies, state);
+		}
+	}
+
+	/* compile node itself */
+	generate_node(node, state->nodes_done);
+
+	state->nodes_done.insert(node);
+	state->nodes_done_flag[node->id] = true;
+}
+
 void SVMCompiler::generate_multi_closure(ShaderNode *root_node,
                                          ShaderNode *node,
                                          CompilerState *state)
@@ -743,6 +763,7 @@ void SVMCompiler::compile_type(Shader *shader, ShaderGraph *graph, ShaderType ty
 	}
 
 	if(shader->used) {
+		CompilerState state(graph);
 		if(clin->link) {
 			bool generate = false;
 			
@@ -771,7 +792,6 @@ void SVMCompiler::compile_type(Shader *shader, ShaderGraph *graph, ShaderType ty
 			}
 
 			if(generate) {
-				CompilerState state(graph);
 				generate_multi_closure(clin->link->parent,
 				                       clin->link->parent,
 				                       &state);
@@ -780,6 +800,22 @@ void SVMCompiler::compile_type(Shader *shader, ShaderGraph *graph, ShaderType ty
 
 		/* compile output node */
 		node->compile(*this);
+
+		/* Compile AOV outputs if this is the surface pass. */
+		if(type == SHADER_TYPE_SURFACE) {
+			vector<ShaderNode*> aov_outputs;
+			foreach(ShaderNode *node_iter, graph->nodes) {
+				if(node_iter->special_type == SHADER_SPECIAL_TYPE_AOV_OUTPUT) {
+					aov_outputs.push_back(node_iter);
+				}
+			}
+			if(aov_outputs.size()) {
+				add_node(NODE_END_IF_NO_AOVS, 0, 0, 0);
+				foreach(ShaderNode *aov_node, aov_outputs) {
+					generate_aov_node(aov_node, &state);
+				}
+			}
+		}
 	}
 
 	/* add node to restore state after bump shader has finished */

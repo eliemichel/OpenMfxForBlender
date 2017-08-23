@@ -1098,6 +1098,11 @@ static void node_shader_buts_hair(uiLayout *layout, bContext *UNUSED(C), Pointer
 	uiItemR(layout, ptr, "component", 0, "", ICON_NONE);
 }
 
+static void node_shader_buts_aov_output(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+	uiItemR(layout, ptr, "aov", 0, "", ICON_NONE);
+}
+
 static void node_shader_buts_script(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
 	uiLayout *row;
@@ -1270,6 +1275,9 @@ static void node_shader_set_butfunc(bNodeType *ntype)
 			break;
 		case SH_NODE_OUTPUT_LINESTYLE:
 			ntype->draw_buttons = node_buts_output_linestyle;
+			break;
+		case SH_NODE_AOV_OUTPUT:
+			ntype->draw_buttons = node_shader_buts_aov_output;
 			break;
 	}
 }
@@ -2501,6 +2509,19 @@ static void node_composit_buts_motionblur2d(uiLayout *layout, bContext *UNUSED(C
 		}
 }
 
+static void node_composit_buts_cryptomatte(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+	uiItemR(layout, ptr, "matte_id", 0, NULL, ICON_NONE);
+	uiTemplateEyedropper(layout, ptr, "add");
+	uiTemplateEyedropper(layout, ptr, "remove");
+}
+
+static void node_composit_buts_cryptomatte_ex(uiLayout *layout, bContext *UNUSED(C), PointerRNA *UNUSED(ptr))
+{
+	uiItemO(layout, IFACE_("Add Input"), ICON_ZOOMIN, "NODE_OT_cryptomatte_add_socket");
+	uiItemO(layout, IFACE_("Remove Input"), ICON_ZOOMOUT, "NODE_OT_cryptomatte_remove_socket");
+}
+
 /* only once called */
 static void node_composit_set_butfunc(bNodeType *ntype)
 {
@@ -2730,6 +2751,10 @@ static void node_composit_set_butfunc(bNodeType *ntype)
 			break;
 		case CMP_NODE_MOTIONBLUR2D:
 			ntype->draw_buttons = node_composit_buts_motionblur2d;
+			break;
+		case CMP_NODE_CRYPTOMATTE:
+			ntype->draw_buttons = node_composit_buts_cryptomatte;
+			ntype->draw_buttons_ex = node_composit_buts_cryptomatte_ex;
 			break;
 	}
 }
@@ -3095,6 +3120,7 @@ static void std_node_socket_draw(bContext *C, uiLayout *layout, PointerRNA *ptr,
 	bNode *node = node_ptr->data;
 	bNodeSocket *sock = ptr->data;
 	int type = sock->typeinfo->type;
+	bool connected_to_virtual = (sock->link && (sock->link->fromsock->flag & SOCK_VIRTUAL));
 	/*int subtype = sock->typeinfo->subtype;*/
 	
 	/* XXX not nice, eventually give this node its own socket type ... */
@@ -3102,8 +3128,8 @@ static void std_node_socket_draw(bContext *C, uiLayout *layout, PointerRNA *ptr,
 		node_file_output_socket_draw(C, layout, ptr, node_ptr);
 		return;
 	}
-	
-	if ((sock->in_out == SOCK_OUT) || (sock->flag & SOCK_IN_USE) || (sock->flag & SOCK_HIDE_VALUE)) {
+
+	if ((sock->in_out == SOCK_OUT) || ((sock->flag & SOCK_IN_USE) && !connected_to_virtual) || (sock->flag & SOCK_HIDE_VALUE)) {
 		node_socket_button_label(C, layout, ptr, node_ptr, text);
 		return;
 	}
@@ -3616,6 +3642,7 @@ void node_draw_link(View2D *v2d, SpaceNode *snode, bNodeLink *link)
 {
 	bool do_shaded = false;
 	bool do_triple = false;
+	bool do_dashed = false;
 	int th_col1 = TH_WIRE_INNER, th_col2 = TH_WIRE_INNER, th_col3 = TH_WIRE;
 	
 	if (link->fromsock == NULL && link->tosock == NULL)
@@ -3632,7 +3659,9 @@ void node_draw_link(View2D *v2d, SpaceNode *snode, bNodeLink *link)
 			return;
 		if (link->fromsock->flag & SOCK_UNAVAIL)
 			return;
-		
+		if ((link->fromsock->flag & SOCK_VIRTUAL) || (link->fromsock->flag & SOCK_VIRTUAL))
+			do_dashed = true;
+
 		if (link->flag & NODE_LINK_VALID) {
 			/* special indicated link, on drop-node */
 			if (link->flag & NODE_LINKFLAG_HILITE) {
@@ -3652,8 +3681,10 @@ void node_draw_link(View2D *v2d, SpaceNode *snode, bNodeLink *link)
 			th_col1 = TH_REDALERT;
 		}
 	}
-	
+
+	if (do_dashed) setlinestyle(3);
 	node_draw_link_bezier(v2d, snode, link, th_col1, do_shaded, th_col2, do_triple, th_col3);
+	if (do_dashed) setlinestyle(0);
 //	node_draw_link_straight(v2d, snode, link, th_col1, do_shaded, th_col2, do_triple, th_col3);
 }
 

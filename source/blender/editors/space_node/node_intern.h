@@ -220,6 +220,9 @@ void NODE_OT_shader_script_update(struct wmOperatorType *ot);
 void NODE_OT_viewer_border(struct wmOperatorType *ot);
 void NODE_OT_clear_viewer_border(struct wmOperatorType *ot);
 
+void NODE_OT_cryptomatte_add_socket(struct wmOperatorType *ot);
+void NODE_OT_cryptomatte_remove_socket(struct wmOperatorType *ot);
+
 extern const char *node_context_dir[];
 
 // XXXXXX

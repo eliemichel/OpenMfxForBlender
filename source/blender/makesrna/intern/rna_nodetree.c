@@ -64,6 +64,8 @@
 
 #include "RE_render_ext.h"
 
+#include "NOD_composite.h"
+
 EnumPropertyItem rna_enum_node_socket_in_out_items[] = {
 	{ SOCK_IN, "IN", 0, "Input", "" },
 	{ SOCK_OUT, "OUT", 0, "Output", "" },
@@ -2608,7 +2610,7 @@ static void rna_Node_image_layer_update(Main *bmain, Scene *scene, PointerRNA *p
 	rna_Node_update(bmain, scene, ptr);
 
 	if (scene->nodetree != NULL) {
-		ntreeCompositForceHidden(scene->nodetree);
+		ntreeCompositUpdateRLayers(scene->nodetree);
 	}
 }
 
@@ -2747,7 +2749,7 @@ static void rna_Node_scene_layer_update(Main *bmain, Scene *scene, PointerRNA *p
 {
 	rna_Node_update(bmain, scene, ptr);
 	if (scene->nodetree != NULL) {
-		ntreeCompositForceHidden(scene->nodetree);
+		ntreeCompositUpdateRLayers(scene->nodetree);
 	}
 }
 
@@ -2843,6 +2845,19 @@ static void rna_NodeColorBalance_update_cdl(Main *bmain, Scene *scene, PointerRN
 	ntreeCompositColorBalanceSyncFromCDL(ptr->id.data, ptr->data);
 	rna_Node_update(bmain, scene, ptr);
 }
+
+static void rna_NodeCryptomatte_update_add(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+	ntreeCompositCryptomatteSyncFromAdd(ptr->id.data, ptr->data);
+	rna_Node_update(bmain, scene, ptr);
+}
+
+static void rna_NodeCryptomatte_update_remove(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+	ntreeCompositCryptomatteSyncFromRemove(ptr->id.data, ptr->data);
+	rna_Node_update(bmain, scene, ptr);
+}
+
 
 /* ******** Node Socket Types ******** */
 
@@ -3485,6 +3500,17 @@ static void def_sh_output(StructRNA *srna)
 	prop = RNA_def_property(srna, "is_active_output", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", NODE_DO_OUTPUT);
 	RNA_def_property_ui_text(prop, "Active Output", "True if this node is used as the active output");
+	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+}
+
+static void def_sh_aov_output(StructRNA *srna)
+{
+	PropertyRNA *prop;
+
+	RNA_def_struct_sdna_from(srna, "NodeShaderAOVOutput", "storage");
+
+	prop = RNA_def_property(srna, "aov", PROP_STRING, PROP_NONE);
+	RNA_def_property_ui_text(prop, "AOV", "Name of the AOV that this output writes to");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 }
 
@@ -4824,7 +4850,7 @@ static void def_cmp_render_layers(StructRNA *srna)
 	RNA_def_property_struct_type(prop, "Scene");
 	RNA_def_property_flag(prop, PROP_EDITABLE);
 	RNA_def_property_ui_text(prop, "Scene", "");
-	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_scene_layer_update");
 	
 	prop = RNA_def_property(srna, "layer", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "custom1");
@@ -6835,6 +6861,35 @@ static void def_cmp_motionblur2d(StructRNA *srna)
 
 }
 
+static void def_cmp_cryptomatte(StructRNA *srna)
+{
+	PropertyRNA *prop;
+	static float default_1[3] = {1.f, 1.f, 1.f};
+	
+	RNA_def_struct_sdna_from(srna, "NodeCryptomatte", "storage");
+	prop = RNA_def_property(srna, "matte_id", PROP_STRING, PROP_NONE);
+	RNA_def_property_string_sdna(prop, NULL, "matte_id");
+	RNA_def_property_ui_text(prop, "Matte List", "");
+	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+	
+	prop = RNA_def_property(srna, "add", PROP_FLOAT, PROP_COLOR);
+	RNA_def_property_float_sdna(prop, NULL, "add");
+	RNA_def_property_array(prop, 3);
+	RNA_def_property_float_array_default(prop, default_1);
+	RNA_def_property_range(prop,  -FLT_MAX, FLT_MAX);
+	RNA_def_property_ui_range(prop, 0, 2, 0.1, 3);
+	RNA_def_property_ui_text(prop, "Add", "Add to matte");
+	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeCryptomatte_update_add");
+	
+	prop = RNA_def_property(srna, "remove", PROP_FLOAT, PROP_COLOR);
+	RNA_def_property_float_sdna(prop, NULL, "remove");
+	RNA_def_property_array(prop, 3);
+	RNA_def_property_float_array_default(prop, default_1);
+	RNA_def_property_range(prop,  -FLT_MAX, FLT_MAX);
+	RNA_def_property_ui_range(prop, 0, 2, 0.1, 3);
+	RNA_def_property_ui_text(prop, "Remove", "Remove from matte");
+	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeCryptomatte_update_remove");
+}
 
 /* -- Texture Nodes --------------------------------------------------------- */
 
@@ -6979,6 +7034,11 @@ static void rna_def_node_socket(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "enabled", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", SOCK_UNAVAIL);
 	RNA_def_property_ui_text(prop, "Enabled", "Enable the socket");
+	RNA_def_property_update(prop, NC_NODE | ND_DISPLAY, NULL);
+
+	prop = RNA_def_property(srna, "is_virtual", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag", SOCK_VIRTUAL);
+	RNA_def_property_ui_text(prop, "Virtual", "Socket is Virtual");
 	RNA_def_property_update(prop, NC_NODE | ND_DISPLAY, NULL);
 
 	prop = RNA_def_property(srna, "link_limit", PROP_INT, PROP_NONE);

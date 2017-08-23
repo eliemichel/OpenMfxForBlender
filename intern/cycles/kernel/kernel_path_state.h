@@ -40,6 +40,8 @@ ccl_device_inline void path_state_init(KernelGlobals *kg,
 #ifdef __LAMP_MIS__
 	state->ray_t = 0.0f;
 #endif
+	state->matte_weight = 1.0f;
+	state->written_aovs = 0;
 
 #ifdef __VOLUME__
 	state->volume_bounce = 0;

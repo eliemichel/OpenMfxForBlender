@@ -536,6 +536,7 @@ extern StructRNA RNA_ShaderNodeMixRGB;
 extern StructRNA RNA_ShaderNodeNormal;
 extern StructRNA RNA_ShaderNodeGamma;
 extern StructRNA RNA_ShaderNodeOutput;
+extern StructRNA RNA_ShaderNodeAOVOutput;
 extern StructRNA RNA_ShaderNodeScript;
 extern StructRNA RNA_ShaderNodeRGB;
 extern StructRNA RNA_ShaderNodeRGBCurve;

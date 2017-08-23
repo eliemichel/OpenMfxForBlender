@@ -55,6 +55,7 @@ extern "C" {
 #include "COM_Converter.h"
 #include "COM_CornerPinNode.h"
 #include "COM_CropNode.h"
+#include "COM_CryptomatteNode.h"
 #include "COM_DefocusNode.h"
 #include "COM_DespeckleNode.h"
 #include "COM_DifferenceMatteNode.h"
@@ -409,6 +410,9 @@ Node *Converter::convert(bNode *b_node)
 			break;
 		case CMP_NODE_MOTIONBLUR2D:
 			node = new MotionBlur2DNode(b_node);
+			break;
+		case CMP_NODE_CRYPTOMATTE:
+			node = new CryptomatteNode(b_node);
 			break;
 	}
 	return node;
