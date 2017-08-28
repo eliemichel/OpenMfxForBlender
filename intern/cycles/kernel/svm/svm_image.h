@@ -522,7 +522,7 @@ ccl_device float minimum_distance(float2 v, float2 w, float2 p) {
     float2 diff = v - w;
     float l2 = diff.x * diff.x + diff.y * diff.y;  // i.e. |w-v|^2 -  avoid a sqrt
 
-    if (l2 == 0.0)
+    if (l2 == 0.0f)
         return len(p - v);   // v == w case
 
     // Consider the line extending the segment, parameterized as v + t (w - v).
@@ -562,7 +562,7 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
         float3 curve_location = stack_load_float3(stack, curve_location_offset);
         float3 curve_scale = stack_load_float3(stack, curve_scale_offset);
 
-        float grad = 1.0;
+        float grad = 1.0f;
 
 //        static bool display = false;
 //        if (display) {
@@ -596,7 +596,7 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
             if (curve_type == 0) {
 
                 if (minimum_distance(p0, p1, co2) < curve_thickness) {
-                    grad = 0.0;
+                    grad = 0.0f;
 
 //                    if (display) {
 //                        std::cout << "Found curve" << std::endl;
@@ -646,10 +646,10 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 
         }
 
-        f = make_float4((1.0-grad) * fill_color.x + grad * background_color.x,
-                        (1.0-grad) * fill_color.y + grad * background_color.y,
-                        (1.0-grad) * fill_color.z + grad * background_color.z,
-                        1.0);
+        f = make_float4((1.0f-grad) * fill_color.x + grad * background_color.x,
+                        (1.0f-grad) * fill_color.y + grad * background_color.y,
+                        (1.0f-grad) * fill_color.z + grad * background_color.z,
+                        1.0f);
 
     }
 
