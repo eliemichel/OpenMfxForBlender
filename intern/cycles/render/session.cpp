@@ -895,7 +895,7 @@ void Session::path_trace()
 	task.need_finish_queue = params.progressive_refine;
 	task.integrator_branched = scene->integrator->method == Integrator::BRANCHED_PATH;
 	task.requested_tile_size = params.tile_size;
-	task.passes_size = tile_manager.params.get_passes_size();
+	task.passes_size = tile_manager.params.passes.get_size();
 
 	device->task_add(task);
 }

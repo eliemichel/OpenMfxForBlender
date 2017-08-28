@@ -49,6 +49,8 @@
 #include "util/util_system.h"
 #include "util/util_thread.h"
 
+#include "render/coverage.h"
+
 CCL_NAMESPACE_BEGIN
 
 class CPUDevice;
@@ -395,7 +397,23 @@ public:
 			path_trace_kernel = kernel_cpu_path_trace;
 		}
 
+		/* cryptomatte data. This needs a better place than here. */
+		vector<map<float, float> >coverage_object;
+		vector<map<float, float> >coverage_material;
+
+		kg.coverage_object = kg.coverage_material = NULL;
+
 		while(task.acquire_tile(this, tile)) {
+			if(kg.__data.film.use_cryptomatte & CRYPT_ACCURATE) {
+				if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT) {
+					coverage_object.clear();
+					coverage_object.resize(tile.w * tile.h);
+				}
+				if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
+					coverage_material.clear();
+					coverage_material.resize(tile.w * tile.h);
+				}
+			}
 			float *render_buffer = (float*)tile.buffer;
 			uint *rng_state = (uint*)tile.rng_state;
 			int start_sample = tile.start_sample;
@@ -409,12 +427,32 @@ public:
 
 				for(int y = tile.y; y < tile.y + tile.h; y++) {
 					for(int x = tile.x; x < tile.x + tile.w; x++) {
+						if(kg.__data.film.use_cryptomatte & CRYPT_ACCURATE) {
+							if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT) {
+								kg.coverage_object = &coverage_object[tile.w * (y - tile.y) + x - tile.x];
+							}
+							if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
+								kg.coverage_material = &coverage_material[tile.w * (y - tile.y) + x - tile.x];
+							}
+						}
 						path_trace_kernel(&kg, render_buffer, rng_state,
 						                  sample, x, y, tile.offset, tile.stride);
 					}
 				}
 
 				tile.sample = sample + 1;
+
+				if(tile.sample == end_sample) {
+					int aov_index = 0;
+					if(kg.__data.film.use_cryptomatte & CRYPT_ACCURATE) {
+						if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT) {
+							aov_index += flatten_coverage(&kg, coverage_object, tile, aov_index);
+						}
+						if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
+							aov_index += flatten_coverage(&kg, coverage_material, tile, aov_index);
+						}
+					}
+				}
 
 				task.update_progress(&tile, tile.w*tile.h);
 			}

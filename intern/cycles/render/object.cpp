@@ -28,6 +28,7 @@
 #include "util/util_map.h"
 #include "util/util_progress.h"
 #include "util/util_vector.h"
+#include "util/util_murmurhash.h"
 
 #include "subd/subd_patch_table.h"
 
@@ -414,7 +415,12 @@ void ObjectManager::device_update_object_transform(UpdateObejctTransformState *s
 
 	objects[offset+9] = make_float4(ob->dupli_generated[0], ob->dupli_generated[1], ob->dupli_generated[2], __int_as_float(numkeys));
 	objects[offset+10] = make_float4(ob->dupli_uv[0], ob->dupli_uv[1], __int_as_float(numsteps), __int_as_float(numverts));
-    objects[offset+11] = make_float4(__uint_as_float(ob->light_linking), __uint_as_float(ob->shadow_linking), 0.0f, 0.0f);
+	
+	/* light linking and cyrptomatte */
+	uint32_t hash;
+	MurmurHash3_x86_32(ob->name.c_str(), ob->name.length(), 0, &hash);
+	
+    objects[offset+11] = make_float4(__uint_as_float(ob->light_linking), __uint_as_float(ob->shadow_linking), hash_to_float(hash), 0.0f);
 
 	/* Object flag. */
 	if(ob->use_holdout) {

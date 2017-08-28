@@ -128,7 +128,7 @@ ccl_device void kernel_holdout_emission_blurring_pathtermination_ao(
 				if(!kernel_data.background.transparent) {
 					PathRadiance *L = &kernel_split_state.path_radiance[ray_index];
 					ccl_global Ray *ray = &kernel_split_state.ray[ray_index];
-					L->shadow_color = indirect_background(kg, &kernel_split_state.sd_DL_shadow[ray_index], state, ray);
+					L->shadow_color = indirect_background(kg, &kernel_split_state.sd_DL_shadow[ray_index], state, ray, buffer, sample);
 				}
 			}
 		}

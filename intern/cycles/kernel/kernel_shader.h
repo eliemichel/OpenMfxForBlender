@@ -906,7 +906,7 @@ ccl_device float3 shader_holdout_eval(KernelGlobals *kg, ShaderData *sd)
 /* Surface Evaluation */
 
 ccl_device void shader_eval_surface(KernelGlobals *kg, ShaderData *sd, RNG *rng,
-	ccl_addr_space PathState *state, float randb, int path_flag, ShaderContext ctx)
+	ccl_addr_space PathState *state, float randb, int path_flag, ShaderContext ctx, ccl_global float *buffer, int sample)
 {
 	sd->num_closure = 0;
 	sd->num_closure_extra = 0;
@@ -919,7 +919,7 @@ ccl_device void shader_eval_surface(KernelGlobals *kg, ShaderData *sd, RNG *rng,
 #endif
 	{
 #ifdef __SVM__
-		svm_eval_nodes(kg, sd, state, SHADER_TYPE_SURFACE, path_flag);
+		svm_eval_nodes(kg, sd, state, SHADER_TYPE_SURFACE, path_flag, buffer, sample);
 #else
 		DiffuseBsdf *bsdf = (DiffuseBsdf*)bsdf_alloc(sd,
 		                                             sizeof(DiffuseBsdf),
@@ -937,7 +937,7 @@ ccl_device void shader_eval_surface(KernelGlobals *kg, ShaderData *sd, RNG *rng,
 /* Background Evaluation */
 
 ccl_device float3 shader_eval_background(KernelGlobals *kg, ShaderData *sd,
-	ccl_addr_space PathState *state, int path_flag, ShaderContext ctx)
+	ccl_addr_space PathState *state, int path_flag, ShaderContext ctx, float *buffer, int sample)
 {
 	sd->num_closure = 0;
 	sd->num_closure_extra = 0;
@@ -951,7 +951,7 @@ ccl_device float3 shader_eval_background(KernelGlobals *kg, ShaderData *sd,
 	else
 #endif
 	{
-		svm_eval_nodes(kg, sd, state, SHADER_TYPE_SURFACE, path_flag);
+		svm_eval_nodes(kg, sd, state, SHADER_TYPE_SURFACE, path_flag, buffer, sample);
 	}
 
 	float3 eval = make_float3(0.0f, 0.0f, 0.0f);
@@ -985,7 +985,7 @@ ccl_device float3 shader_eval_ao_env(KernelGlobals *kg, ShaderData *sd,
 #endif
 	{
 #ifdef __SVM__
-		svm_eval_nodes(kg, sd, state, SHADER_TYPE_AO_SURFACE, path_flag);
+		svm_eval_nodes(kg, sd, state, SHADER_TYPE_AO_SURFACE, path_flag, NULL, 0);
 		int num_closure = ccl_fetch(sd, num_closure);
 
 		/* If there's no shader input, default white */
@@ -1172,7 +1172,7 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
 		else
 #  endif
 		{
-			svm_eval_nodes(kg, sd, state, SHADER_TYPE_VOLUME, path_flag);
+			svm_eval_nodes(kg, sd, state, SHADER_TYPE_VOLUME, path_flag, NULL, 0);
 		}
 #endif
 
@@ -1200,7 +1200,7 @@ ccl_device void shader_eval_displacement(KernelGlobals *kg, ShaderData *sd, ccl_
 	else
 #  endif
 	{
-		svm_eval_nodes(kg, sd, state, SHADER_TYPE_DISPLACEMENT, 0);
+		svm_eval_nodes(kg, sd, state, SHADER_TYPE_DISPLACEMENT, 0, NULL, 0);
 	}
 #endif
 }
@@ -1229,6 +1229,11 @@ ccl_device bool shader_transparent_shadow(KernelGlobals *kg, Intersection *isect
 	return (flag & (SD_SHADER_HAS_TRANSPARENT_SHADOW | SD_SHADER_USE_UNIFORM_ALPHA)) != 0;
 }
 #endif
+
+ccl_device float shader_cryptomatte_id(KernelGlobals *kg, int shader)
+{
+	return __int_as_float(kernel_tex_fetch(__shader_flag, (shader & SHADER_MASK) * SHADER_SIZE + 13));
+}
 
 CCL_NAMESPACE_END
 

@@ -20,6 +20,8 @@
 
 #ifdef __KERNEL_CPU__
 #include <vector>
+#include "util/util_vector.h"
+#include "util/util_map.h"
 #endif
 
 CCL_NAMESPACE_BEGIN
@@ -70,6 +72,10 @@ typedef struct KernelGlobals {
 	/* Storage for decoupled volume steps. */
 	VolumeStep *decoupled_volume_steps[2];
 	int decoupled_volume_steps_index;
+
+	/* A buffer for storing per-pixel coverage for Cryptomatte. */
+	map<float, float> *coverage_object;
+	map<float, float> *coverage_material;
 
 	/* split kernel */
 	SplitData split_data;

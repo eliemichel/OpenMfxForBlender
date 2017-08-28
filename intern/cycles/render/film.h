@@ -38,17 +38,58 @@ typedef enum FilterType {
 	FILTER_NUM_TYPES,
 } FilterType;
 
-class Pass {
+template<typename T>
+bool operator==(const array<T>& A, const array<T>& B)
+{
+	if(A.size() != B.size())
+		return false;
+
+	for(int i = 0; i < A.size(); i++)
+		if(A[i].type != B[i].type)
+			return false;
+}
+
+struct Pass {
 public:
 	PassType type;
 	int components;
 	bool filter;
 	bool exposure;
 	PassType divide_type;
+	bool is_virtual;
+};
 
-	static void add(PassType type, array<Pass>& passes);
-	static bool equals(const array<Pass>& A, const array<Pass>& B);
-	static bool contains(const array<Pass>& passes, PassType);
+typedef enum AOVType {
+	AOV_FLOAT,
+	AOV_RGB,
+	AOV_CRYPTOMATTE
+} AOVType;
+
+struct AOV {
+public:
+	ustring name;
+	int index;
+	AOVType type;
+};
+
+class PassSettings {
+public:
+	PassSettings();
+	bool modified(const PassSettings& other) const;
+
+	int get_size() const;
+	Pass* get_pass(PassType type, int &offset);
+	AOV* get_aov(ustring name, int &offset);
+
+	bool contains(PassType type) const;
+	void add(PassType type);
+	void add(AOV aov);
+
+protected:
+	array<Pass> passes;
+	array<AOV> aovs;
+
+	friend class Film;
 };
 
 class Film : public Node {
@@ -56,7 +97,7 @@ public:
 	NODE_DECLARE
 
 	float exposure;
-	array<Pass> passes;
+	PassSettings passes;
 	float pass_alpha_threshold;
 
 	FilterType filter_type;
@@ -69,9 +110,25 @@ public:
 
 	bool use_light_visibility;
 	bool use_sample_clamp;
+	int use_cryptomatte;
 
 	bool need_update;
-
+	
+	/* These options determine how many slots are allocated for storing ID information.
+	 *
+	 * The ID system works by storing IDs and associated weights, where the weights are determined from
+	 * how many samples have encountered that ID and their non-transparent contribution.
+	 *
+	 * In theory, to always get the correct result after sorting by weight, it would be neccessary to store
+	 * either every sample and its ID-weight-pairs or the weight of every ID for every pixel. However, that's far too much data.
+	 *
+	 * So, we just allocate a limited amount of slots which are filled in first-come-first-serve order.
+	 * The assumption here is that if an ID is encountered after X others (where X is the number of slots),
+	 * it wouldn't be among the Y IDs with the highest weight (the ones that the user gets in the end) anyways.
+	 *
+	 * So, a larger ratio between X and Y makes it more certain to get the true weights, while increasing memory usage. */
+	int object_id_slots;
+	
 	Film();
 	~Film();
 
@@ -79,7 +136,7 @@ public:
 	void device_free(Device *device, DeviceScene *dscene, Scene *scene);
 
 	bool modified(const Film& film);
-	void tag_passes_update(Scene *scene, const array<Pass>& passes_);
+	void tag_passes_update(Scene *scene, const PassSettings& passes);
 	void tag_update(Scene *scene);
 };
 
