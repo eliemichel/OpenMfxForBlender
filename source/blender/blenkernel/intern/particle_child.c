@@ -354,7 +354,7 @@ void psys_apply_child_modifiers(ParticleThreadContext *ctx, struct ListBase *mod
 	}
 
 	{
-		const float step_length = 1.0f / (float)(totkeys - 1);
+		const float step_length = max_length / (float)(totkeys - 1);
 		
 		float cur_length = 0.0f;
 		
