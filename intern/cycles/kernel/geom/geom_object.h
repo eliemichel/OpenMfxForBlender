@@ -363,6 +363,17 @@ ccl_device_inline float object_cryptomatte_id(KernelGlobals *kg, int object)
 	return f.z;
 }
 
+ccl_device_inline float object_cryptomatte_asset_id(KernelGlobals *kg, int object)
+{
+	if(object == OBJECT_NONE)
+		return 0;
+
+	int offset = object*OBJECT_SIZE + OBJECT_LIGHT_LINKING;
+	float4 f = kernel_tex_fetch(__objects, offset);
+	return f.w;
+}
+
+
 ccl_device bool object_in_shadow_linking(KernelGlobals *kg, int visibility, int object, int triAddr, unsigned int shadow_linking)
 {
     /* ignore objects when shadow linking is used */

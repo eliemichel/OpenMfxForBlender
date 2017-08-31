@@ -417,10 +417,12 @@ void ObjectManager::device_update_object_transform(UpdateObejctTransformState *s
 	objects[offset+10] = make_float4(ob->dupli_uv[0], ob->dupli_uv[1], __int_as_float(numsteps), __int_as_float(numverts));
 	
 	/* light linking and cyrptomatte */
-	uint32_t hash;
-	MurmurHash3_x86_32(ob->name.c_str(), ob->name.length(), 0, &hash);
+	uint32_t hash_name, hash_asset;
+	MurmurHash3_x86_32(ob->name.c_str(), ob->name.length(), 0, &hash_name);
+	MurmurHash3_x86_32(ob->asset_name.c_str(), ob->asset_name.length(), 0, &hash_asset);
 	
-    objects[offset+11] = make_float4(__uint_as_float(ob->light_linking), __uint_as_float(ob->shadow_linking), hash_to_float(hash), 0.0f);
+    objects[offset+11] = make_float4(__uint_as_float(ob->light_linking), __uint_as_float(ob->shadow_linking),
+									 hash_to_float(hash_name), hash_to_float(hash_asset));
 
 	/* Object flag. */
 	if(ob->use_holdout) {

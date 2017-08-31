@@ -392,7 +392,8 @@ typedef enum CryptomatteType {
 	CRYPT_NONE = 0,
 	CRYPT_OBJECT = (1 << 31),
 	CRYPT_MATERIAL = (1 << 30),
-	CRYPT_ACCURATE = (1 << 29),
+	CRYPT_ASSET = (1 << 29),
+	CRYPT_ACCURATE = (1 << 28),
 } CryptomatteType;
 
 typedef enum BakePassFilter {

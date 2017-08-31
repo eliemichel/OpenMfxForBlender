@@ -637,6 +637,7 @@ class CyclesRender_PT_layer_passes(CyclesButtonsPanel, Panel):
         row = layout.row(align=True)
         row.prop(crl, "use_pass_crypto_object", text="Object", toggle=True)
         row.prop(crl, "use_pass_crypto_material", text="Material", toggle=True)
+        row.prop(crl, "use_pass_crypto_asset", text="Asset", toggle=True)
         row = layout.row(align=True)
         row.active = use_cpu(context)
         row.prop(crl, "pass_crypto_accurate", text="Accurate Mode")

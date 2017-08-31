@@ -400,6 +400,7 @@ public:
 		/* cryptomatte data. This needs a better place than here. */
 		vector<map<float, float> >coverage_object;
 		vector<map<float, float> >coverage_material;
+		vector<map<float, float> >coverage_asset;
 
 		kg.coverage_object = kg.coverage_material = NULL;
 
@@ -412,6 +413,10 @@ public:
 				if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
 					coverage_material.clear();
 					coverage_material.resize(tile.w * tile.h);
+				}
+				if(kg.__data.film.use_cryptomatte & CRYPT_ASSET) {
+					coverage_asset.clear();
+					coverage_asset.resize(tile.w * tile.h);
 				}
 			}
 			float *render_buffer = (float*)tile.buffer;
@@ -434,6 +439,9 @@ public:
 							if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
 								kg.coverage_material = &coverage_material[tile.w * (y - tile.y) + x - tile.x];
 							}
+							if(kg.__data.film.use_cryptomatte & CRYPT_ASSET) {
+								kg.coverage_asset = &coverage_asset[tile.w * (y - tile.y) + x - tile.x];
+							}
 						}
 						path_trace_kernel(&kg, render_buffer, rng_state,
 						                  sample, x, y, tile.offset, tile.stride);
@@ -450,6 +458,9 @@ public:
 						}
 						if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
 							aov_index += flatten_coverage(&kg, coverage_material, tile, aov_index);
+						}
+						if(kg.__data.film.use_cryptomatte & CRYPT_ASSET) {
+							aov_index += flatten_coverage(&kg, coverage_asset, tile, aov_index);
 						}
 					}
 				}

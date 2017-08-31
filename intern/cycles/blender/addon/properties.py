@@ -1316,6 +1316,12 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
                 default=False,
                 update=update_render_passes,
                 )
+        cls.use_pass_crypto_asset = BoolProperty(
+                name="CryptoMatte Asset",
+                description="CryptoMatte Asset pass",
+                default=False,
+                update=update_render_passes,
+                )
         cls.pass_crypto_depth = IntProperty(
                 name="CryptoMatte Depth",
                 description="CryptoMatte Depth",

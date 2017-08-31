@@ -76,6 +76,7 @@ typedef struct KernelGlobals {
 	/* A buffer for storing per-pixel coverage for Cryptomatte. */
 	map<float, float> *coverage_object;
 	map<float, float> *coverage_material;
+	map<float, float> *coverage_asset;
 
 	/* split kernel */
 	SplitData split_data;
