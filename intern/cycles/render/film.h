@@ -49,7 +49,7 @@ bool operator==(const array<T>& A, const array<T>& B)
 			return false;
 }
 
-struct Pass {
+class Pass {
 public:
 	PassType type;
 	int components;
@@ -57,6 +57,11 @@ public:
 	bool exposure;
 	PassType divide_type;
 	bool is_virtual;
+	bool operator==(const Pass& other) const
+	{
+		return type == other.type && components == other.components && filter == other.filter
+		&& exposure == other.exposure && divide_type == other.divide_type && is_virtual == other.is_virtual;
+	}
 };
 
 typedef enum AOVType {
@@ -65,11 +70,15 @@ typedef enum AOVType {
 	AOV_CRYPTOMATTE
 } AOVType;
 
-struct AOV {
+class AOV {
 public:
 	ustring name;
 	int index;
 	AOVType type;
+	bool operator==(const AOV& other) const
+	{
+		return index == other.index && type == other.type && name == other.name;
+	}
 };
 
 class PassSettings {
