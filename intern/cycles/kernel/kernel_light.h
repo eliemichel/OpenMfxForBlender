@@ -1051,7 +1051,7 @@ ccl_device bool light_select_reached_max_bounces(KernelGlobals *kg, int index, i
 ccl_device bool light_in_light_linking(KernelGlobals *kg, int index, unsigned int light_linking)
 {
 	float4 data5 = kernel_tex_fetch(__light_data, index*LIGHT_SIZE + 5);
-	unsigned int light_light_linking = __float_as_uint(data5.y);
+	unsigned int light_light_linking = __float_as_uint(data5.x);
 
     return ((light_linking & light_light_linking) != 0) || (light_linking == 0x00000000 && light_light_linking == 0x00FFFFFF);
 }
