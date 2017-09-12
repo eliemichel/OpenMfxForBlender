@@ -1125,6 +1125,11 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row.active = md.use_remove_disconnected
         row.prop(md, "threshold")
 
+    def SCALING( self, layout, ob, md ):
+        col = layout.column()
+        col.prop( md, "scaleui", text='Scale Amount' )
+
+
     @staticmethod
     def vertex_weight_mask(layout, ob, md):
         layout.label(text="Influence/Mask Options:")
