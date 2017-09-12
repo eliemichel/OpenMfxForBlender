@@ -4184,6 +4184,7 @@ void particle_system_update(Scene *scene, Object *ob, ParticleSystem *psys, cons
 	}
 
 	/* execute drivers only, as animation has already been done */
+	BKE_animsys_evaluate_animdata(scene, &ob->id, ob->adt, cfra, ADT_RECALC_DRIVERS);
 	BKE_animsys_evaluate_animdata(scene, &part->id, part->adt, cfra, ADT_RECALC_DRIVERS);
 
 	/* to verify if we need to restore object afterwards */
