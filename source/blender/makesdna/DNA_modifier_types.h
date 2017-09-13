@@ -250,6 +250,11 @@ typedef struct ArrayModifierData {
 	int flags;
 	/* the number of duplicates to generate for MOD_ARR_FIXEDCOUNT */
 	int count;
+
+	/* Materials */
+	int random_materials;
+	int random_seed;
+
 } ArrayModifierData;
 
 /* ArrayModifierData->fit_type */

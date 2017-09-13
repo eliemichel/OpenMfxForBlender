@@ -2095,6 +2095,17 @@ static void rna_def_modifier_array(BlenderRNA *brna)
 	RNA_def_property_pointer_funcs(prop, NULL, "rna_ArrayModifier_end_cap_set", NULL, "rna_Mesh_object_poll");
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
 	RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
+
+	/* Materials */
+	prop = RNA_def_property(srna, "use_random_materials", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "random_materials", 0);
+	RNA_def_property_ui_text(prop, "Use Random Materials", "Randomizes materials on duplicates.");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "random_seed", PROP_INT, PROP_NONE);
+	RNA_def_property_int_sdna(prop, NULL, "random_seed");
+	RNA_def_property_ui_text(prop, "Random Seed", "Seed used to randomize materials");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
 static void rna_def_modifier_edgesplit(BlenderRNA *brna)

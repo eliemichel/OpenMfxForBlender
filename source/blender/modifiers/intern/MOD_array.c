@@ -755,6 +755,8 @@ static DerivedMesh *arrayModifier_doArray(
 		MEM_freeN(full_doubles_map);
 	}
 
+	printf( "+ Total materials: %d.\n", dm->totmat );
+
 	/* In case org dm has dirty normals, or we made some merging, mark normals as dirty in new dm!
 	 * TODO: we may need to set other dirty flags as well?
 	 */

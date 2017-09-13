@@ -120,6 +120,17 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "start_cap")
         layout.prop(md, "end_cap")
 
+        layout.separator()
+        sub = layout.split()
+        sub.prop( md, "use_random_materials" )
+        if ob.data and ob.data.materials:
+            sub.label( 'Material Count: {}'.format(len(ob.data.materials)) )
+
+        layout.separator()
+        sub = layout.column()
+        sub.enabled = md.use_random_materials
+        sub.prop( md, "random_seed" )
+
     def BEVEL(self, layout, ob, md):
         split = layout.split()
 
