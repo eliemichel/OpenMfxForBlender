@@ -46,12 +46,24 @@
 
 CCL_NAMESPACE_BEGIN
 
+static bool rtc_shadow_linking(CCLRay &ray)
+{
+	if(ray.mask & PATH_RAY_SHADOW) {
+		Intersection isect;
+		ray.isect_to_ccl(&isect);
+		if (!object_in_shadow_linking(ray.kg, ray.mask, isect.object, isect.prim, ray.shadow_linking)) {
+			ray.geomID = RTC_INVALID_GEOMETRY_ID;
+			return false;
+		}
+	}
+	return true;
+}
+
 /* This gets called by embree at every valid ray/object intersection.
  * Things like recording subsurface or shadow hits for later evaluation
  * as well as filtering for volume objects happen here.
  * Cycles' own BVH does that directly inside the traversal calls.
  */
-
 
 void rtc_filter_func(void*, RTCRay& ray_);
 void rtc_filter_func(void*, RTCRay& ray_)
@@ -60,6 +72,9 @@ void rtc_filter_func(void*, RTCRay& ray_)
 	KernelGlobals *kg = ray.kg;
 
 	if(ray.type == CCLRay::RAY_REGULAR) {
+		if(!rtc_shadow_linking(ray)) {
+			ray.geomID = RTC_INVALID_GEOMETRY_ID;
+		}
 		return;
 	}
 	else if(ray.type == CCLRay::RAY_SHADOW_ALL) {
@@ -100,6 +115,10 @@ void rtc_filter_func(void*, RTCRay& ray_)
 		return;
 	}
 	else if(ray.type == CCLRay::RAY_SSS) {
+		if(!rtc_shadow_linking(ray)) {
+			ray.geomID = RTC_INVALID_GEOMETRY_ID;
+			return;
+		}
 		/* only accept hits from the same object and triangles */
 		if(ray.instID/2 != ray.sss_object_id || ray.geomID & 1) {
 			/* this tells embree to continue tracing */
@@ -145,6 +164,10 @@ void rtc_filter_func(void*, RTCRay& ray_)
 	} else if(ray.type == CCLRay::RAY_VOLUME_ALL) {
 		// append the intersection to the end of the array
 		if(ray.num_hits < ray.max_hits) {
+			if(!rtc_shadow_linking(ray)) {
+				ray.geomID = RTC_INVALID_GEOMETRY_ID;
+				return;
+			}
 			Intersection *isect = &ray.isect_s[ray.num_hits];
 			ray.num_hits++;
 			ray.isect_to_ccl(isect);
@@ -356,6 +379,7 @@ unsigned BVHEmbree::add_object(Object *ob, int i)
 		geom_id = add_triangles(mesh, i);
 		rtcSetUserData(scene, geom_id, (void*)prim_offset);
 		rtcSetOcclusionFilterFunction(scene, geom_id, rtc_filter_func);
+		rtcSetIntersectionFilterFunction(scene, geom_id, rtc_filter_func);
 		rtcSetMask(scene, geom_id, ob->visibility);
 	}
 	if(params.primitive_mask & PRIMITIVE_ALL_CURVE && mesh->num_curves() > 0) {
@@ -363,6 +387,7 @@ unsigned BVHEmbree::add_object(Object *ob, int i)
 		geom_id = add_curves(mesh, i);
 		rtcSetUserData(scene, geom_id, (void*)prim_offset);
 		rtcSetOcclusionFilterFunction(scene, geom_id, rtc_filter_func);
+		rtcSetIntersectionFilterFunction(scene, geom_id, rtc_filter_func);
 		rtcSetMask(scene, geom_id, ob->visibility);
 	}
 	return geom_id;
