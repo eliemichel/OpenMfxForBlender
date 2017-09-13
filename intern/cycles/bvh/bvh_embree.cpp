@@ -22,6 +22,7 @@
 #include "render/object.h"
 #include "util/util_progress.h"
 #include "util/util_foreach.h"
+#include "util/util_logging.h"
 
 #include "embree2/rtcore_geometry.h"
 
@@ -197,6 +198,33 @@ BVHEmbree::BVHEmbree(const BVHParams& params_, const vector<Object*>& objects_)
 	thread_scoped_lock lock(rtc_shared_mutex);
 	if(rtc_shared_users == 0) {
 		rtc_shared_device = rtcNewDevice("verbose=1");
+
+		/* Check here if Embree was built with the correct flags. */
+		ssize_t ret = rtcDeviceGetParameter1i(rtc_shared_device, RTC_CONFIG_RAY_MASK);
+		if(ret != 1) {
+			assert(0);
+			VLOG(1) << "Embree is compiled without the EMBREE_RAY_MASK flag. Ray visiblity will not work.";
+		}
+		ret = rtcDeviceGetParameter1i(rtc_shared_device, RTC_CONFIG_INTERSECTION_FILTER);
+		if(ret != 1) {
+			assert(0);
+			VLOG(1) << "Embree is compiled without the EMBREE_INTERSECTION_FILTER flag. Renders may not look as expected.";
+		}
+		ret = rtcDeviceGetParameter1i(rtc_shared_device, RTC_CONFIG_LINE_GEOMETRY);
+		if(ret != 1) {
+			assert(0);
+			VLOG(1) << "Embree is compiled without the EMBREE_GEOMETRY_LINES flag. Hair primitives will not be rendered.";
+		}
+		ret = rtcDeviceGetParameter1i(rtc_shared_device, RTC_CONFIG_TRIANGLE_GEOMETRY);
+		if(ret != 1) {
+			assert(0);
+			VLOG(1) << "Embree is compiled without the EMBREE_GEOMETRY_TRIANGLES flag. Triangle primitives will not be rendered.";
+		}
+		ret = rtcDeviceGetParameter1i(rtc_shared_device, RTC_CONFIG_BACKFACE_CULLING);
+		if(ret != 0) {
+			assert(0);
+			VLOG(1) << "Embree is compiled with the EMBREE_BACKFACE_CULLING flag. Renders may not look as expected.";
+		}
 	}
 	rtc_shared_users++;
 
