@@ -174,7 +174,7 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
 #ifdef __EMBREE__
 	if(kernel_data.bvh.scene) {
 		isect->t = ray.t;
-		CCLRay rtc_ray(ray, kg, visibility, CCLRay::RAY_REGULAR);
+		CCLRay rtc_ray(ray, kg, visibility, CCLRay::RAY_REGULAR, shadow_linking);
 		rtcIntersect(kernel_data.bvh.scene, rtc_ray);
 		if(rtc_ray.geomID != RTC_INVALID_GEOMETRY_ID && rtc_ray.primID != RTC_INVALID_GEOMETRY_ID) {
 			rtc_ray.isect_to_ccl(isect);
@@ -230,7 +230,7 @@ ccl_device_intersect void scene_intersect_subsurface(KernelGlobals *kg,
 {
 #ifdef __EMBREE__
 	if(kernel_data.bvh.scene) {
-		CCLRay rtc_ray(ray, kg, PATH_RAY_ALL_VISIBILITY, CCLRay::RAY_SSS);
+		CCLRay rtc_ray(ray, kg, PATH_RAY_ALL_VISIBILITY, CCLRay::RAY_SSS, shadow_linking);
 		rtc_ray.lcg_state = lcg_state;
 		rtc_ray.max_hits = max_hits;
 		rtc_ray.ss_isect = ss_isect;
@@ -266,7 +266,7 @@ ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg, const Ra
 {
 #ifdef __EMBREE__
 	if(kernel_data.bvh.scene) {
-		CCLRay rtc_ray(*ray, kg, PATH_RAY_SHADOW, CCLRay::RAY_SHADOW_ALL);
+		CCLRay rtc_ray(*ray, kg, PATH_RAY_SHADOW, CCLRay::RAY_SHADOW_ALL, shadow_linking);
 		rtc_ray.isect_s = isect;
 		rtc_ray.max_hits = max_hits;
 		rtc_ray.num_hits = 0;
@@ -345,7 +345,7 @@ ccl_device_intersect uint scene_intersect_volume_all(KernelGlobals *kg,
 {
 #ifdef __EMBREE__
 	if(kernel_data.bvh.scene) {
-		CCLRay rtc_ray(*ray, kg, visibility, CCLRay::RAY_VOLUME_ALL);
+		CCLRay rtc_ray(*ray, kg, visibility, CCLRay::RAY_VOLUME_ALL, shadow_linking);
 		rtc_ray.isect_s = isect;
 		rtc_ray.max_hits = max_hits;
 		rtc_ray.num_hits = 0;

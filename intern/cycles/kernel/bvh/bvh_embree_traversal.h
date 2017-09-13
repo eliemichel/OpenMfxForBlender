@@ -29,6 +29,7 @@ struct RTCORE_ALIGN(16) CCLRay : public RTCRay {
 	// cycles extensions:
 	ccl::KernelGlobals *kg;
 	RayType type;
+	ccl::uint shadow_linking;
 
 	// for shadow rays
 	ccl::Intersection *isect_s;
@@ -40,7 +41,7 @@ struct RTCORE_ALIGN(16) CCLRay : public RTCRay {
 	int sss_object_id;
 	ccl::uint *lcg_state;
 
-	CCLRay(const ccl::Ray& ray, ccl::KernelGlobals *kg_, const ccl::uint visibility, RayType type_)
+	CCLRay(const ccl::Ray& ray, ccl::KernelGlobals *kg_, const ccl::uint visibility, RayType type_, const ccl::uint shadow_linking_)
 	{
 		org[0] = ray.P.x;
 		org[1] = ray.P.y;
@@ -56,6 +57,7 @@ struct RTCORE_ALIGN(16) CCLRay : public RTCRay {
 
 		kg = kg_;
 		type = type_;
+		shadow_linking = shadow_linking_;
 		max_hits = 1;
 		num_hits = 0;
 		isect_s = NULL;

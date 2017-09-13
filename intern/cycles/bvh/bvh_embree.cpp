@@ -32,6 +32,7 @@
 #include "kernel/kernel_globals.h"
 #include "kernel/kernel_random.h"
 #include "kernel/bvh/bvh_embree_traversal.h"
+#include "kernel/geom/geom_object.h"
 
 #include "xmmintrin.h"
 #include "pmmintrin.h"
@@ -65,9 +66,13 @@ void rtc_filter_func(void*, RTCRay& ray_)
 		// append the intersection to the end of the array
 		if(ray.num_hits < ray.max_hits) {
 			Intersection *isect = &ray.isect_s[ray.num_hits];
-			ray.num_hits++;
 			ray.isect_to_ccl(isect);
+			if (!object_in_shadow_linking(kg, PATH_RAY_ALL_VISIBILITY, isect->object, isect->prim, ray.shadow_linking)) {
+				ray.geomID = RTC_INVALID_GEOMETRY_ID;
+				return;
+			}
 			int prim = kernel_tex_fetch(__prim_index, isect->prim);
+			ray.num_hits++;
 			int shader = 0;
 			if(kernel_tex_fetch(__prim_type, isect->prim) & PRIMITIVE_ALL_TRIANGLE)
 			{
