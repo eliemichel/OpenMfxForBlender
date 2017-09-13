@@ -120,6 +120,8 @@ EnumPropertyItem rna_enum_object_modifier_type_items[] = {
 	{eModifierType_Smoke, "SMOKE", ICON_MOD_SMOKE, "Smoke", ""},
 	{eModifierType_Softbody, "SOFT_BODY", ICON_MOD_SOFT, "Soft Body", ""},
 	{eModifierType_Surface, "SURFACE", ICON_MOD_PHYSICS, "Surface", ""},
+	{0, "", 0, N_("Tangent"), ""},
+	{eModifierType_Scaling, "SCALING", ICON_MAN_SCALE, "Scaling the mesh", ""},
 	{0, NULL, 0, NULL, NULL}
 };
 
@@ -411,6 +413,8 @@ static StructRNA *rna_Modifier_refine(struct PointerRNA *ptr)
 			return &RNA_MeshSequenceCacheModifier;
 		case eModifierType_SurfaceDeform:
 			return &RNA_SurfaceDeformModifier;
+		case eModifierType_Scaling:
+			return &RNA_ScalingModifier;
 		/* Default */
 		case eModifierType_None:
 		case eModifierType_ShapeKey:
@@ -2091,6 +2095,17 @@ static void rna_def_modifier_array(BlenderRNA *brna)
 	RNA_def_property_pointer_funcs(prop, NULL, "rna_ArrayModifier_end_cap_set", NULL, "rna_Mesh_object_poll");
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
 	RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
+
+	/* Materials */
+	prop = RNA_def_property(srna, "use_random_materials", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "random_materials", 0);
+	RNA_def_property_ui_text(prop, "Use Random Materials", "Randomizes materials on duplicates.");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "random_seed", PROP_INT, PROP_NONE);
+	RNA_def_property_int_sdna(prop, NULL, "random_seed");
+	RNA_def_property_ui_text(prop, "Random Seed", "Seed used to randomize materials");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
 static void rna_def_modifier_edgesplit(BlenderRNA *brna)
@@ -4752,6 +4767,29 @@ static void rna_def_modifier_surfacedeform(BlenderRNA *brna)
 	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 }
 
+static void rna_def_modifier_scaling(BlenderRNA *brna)
+{
+	StructRNA *srna;
+	PropertyRNA *prop;
+ 
+	srna = RNA_def_struct(brna, "ScalingModifier", "Modifier");
+	RNA_def_struct_ui_text(srna, "Scaling Modifier", "Scaling effect modifier");
+	RNA_def_struct_sdna(srna, "ScalingModifierData");
+	RNA_def_struct_ui_icon(srna, ICON_MAN_SCALE);
+ 
+	/* scaleui: name for "properties_data_modifier.py"*/
+	prop = RNA_def_property(srna, "scaleui", PROP_FLOAT, PROP_NONE); 
+ 
+	/*scale: name for "DNA_modifier_types.h"*/
+	RNA_def_property_float_sdna(prop, NULL, "scale");
+ 
+	RNA_def_property_range(prop, -FLT_MAX, FLT_MAX);
+	RNA_def_property_ui_range(prop, -100, 100, 1, 3);
+	RNA_def_property_ui_text(prop, "Scale", "Scale factor");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+ 
+}
+
 void RNA_def_modifier(BlenderRNA *brna)
 {
 	StructRNA *srna;
@@ -4870,6 +4908,8 @@ void RNA_def_modifier(BlenderRNA *brna)
 	rna_def_modifier_normaledit(brna);
 	rna_def_modifier_meshseqcache(brna);
 	rna_def_modifier_surfacedeform(brna);
+
+	rna_def_modifier_scaling(brna);
 }
 
 #endif
