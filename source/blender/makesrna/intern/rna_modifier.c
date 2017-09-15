@@ -120,8 +120,6 @@ EnumPropertyItem rna_enum_object_modifier_type_items[] = {
 	{eModifierType_Smoke, "SMOKE", ICON_MOD_SMOKE, "Smoke", ""},
 	{eModifierType_Softbody, "SOFT_BODY", ICON_MOD_SOFT, "Soft Body", ""},
 	{eModifierType_Surface, "SURFACE", ICON_MOD_PHYSICS, "Surface", ""},
-	{0, "", 0, N_("Tangent"), ""},
-	{eModifierType_Scaling, "SCALING", ICON_MAN_SCALE, "Scaling the mesh", ""},
 	{0, NULL, 0, NULL, NULL}
 };
 
@@ -413,8 +411,6 @@ static StructRNA *rna_Modifier_refine(struct PointerRNA *ptr)
 			return &RNA_MeshSequenceCacheModifier;
 		case eModifierType_SurfaceDeform:
 			return &RNA_SurfaceDeformModifier;
-		case eModifierType_Scaling:
-			return &RNA_ScalingModifier;
 		/* Default */
 		case eModifierType_None:
 		case eModifierType_ShapeKey:
@@ -1996,6 +1992,17 @@ static void rna_def_modifier_array(BlenderRNA *brna)
 		{0, NULL, 0, NULL, NULL}
 	};
 
+	static EnumPropertyItem prop_random_type_items[] = {
+		// don't need this in the interface, I think
+		// {MOD_ARR_MATERIAL_FIXED, "FIXED", 0, "Fixed Assignment", 
+		// 					"Assigns Material zero to all polygons"},
+		{MOD_ARR_MATERIAL_LOOP, "LOOP", 0, "Loop",
+		                    "Loops through the available Materials in order"},
+		{MOD_ARR_MATERIAL_RANDOM, "RANDOM", 0, "Random",
+							"Randomizes Material assignments"},
+		{0, NULL, 0, NULL, NULL}
+	};
+
 	srna = RNA_def_struct(brna, "ArrayModifier", "Modifier");
 	RNA_def_struct_ui_text(srna, "Array Modifier", "Array duplication modifier");
 	RNA_def_struct_sdna(srna, "ArrayModifierData");
@@ -2012,21 +2019,21 @@ static void rna_def_modifier_array(BlenderRNA *brna)
 	RNA_def_property_ui_range(prop, 1, 1000, 1, -1);
 	RNA_def_property_ui_text(prop, "Count",  "Number of duplicates to make");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
-
+	
 	prop = RNA_def_property(srna, "fit_length", PROP_FLOAT, PROP_DISTANCE);
 	RNA_def_property_float_sdna(prop, NULL, "length");
 	RNA_def_property_range(prop, 0, INT_MAX);
 	RNA_def_property_ui_range(prop, 0, 10000, 10, 2);
 	RNA_def_property_ui_text(prop, "Length", "Length to fit array within");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
-
+	
 	prop = RNA_def_property(srna, "curve", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "curve_ob");
 	RNA_def_property_ui_text(prop, "Curve", "Curve object to fit array length to");
 	RNA_def_property_pointer_funcs(prop, NULL, "rna_ArrayModifier_curve_ob_set", NULL, "rna_Curve_object_poll");
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
 	RNA_def_property_update(prop, 0, "rna_ArrayModifier_dependency_update");
-
+	
 	/* Offset parameters */
 	prop = RNA_def_property(srna, "use_constant_offset", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "offset_type", MOD_ARR_OFF_CONST);
@@ -2038,48 +2045,48 @@ static void rna_def_modifier_array(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Constant Offset Displacement", "Value for the distance between arrayed items");
 	RNA_def_property_ui_range(prop, -FLT_MAX, FLT_MAX, 1, RNA_TRANSLATION_PREC_DEFAULT);
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
-
+	
 	prop = RNA_def_property(srna, "use_relative_offset", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "offset_type", MOD_ARR_OFF_RELATIVE);
 	RNA_def_property_ui_text(prop, "Relative Offset", "Add an offset relative to the object's bounding box");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
-
+	
 	/* PROP_TRANSLATION causes units to be used which we don't want */
 	prop = RNA_def_property(srna, "relative_offset_displace", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "scale");
 	RNA_def_property_ui_text(prop, "Relative Offset Displacement",
-	                         "The size of the geometry will determine the distance between arrayed items");
+	"The size of the geometry will determine the distance between arrayed items");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
-
+	
 	/* Vertex merging parameters */
 	prop = RNA_def_property(srna, "use_merge_vertices", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_ARR_MERGE);
 	RNA_def_property_ui_text(prop, "Merge Vertices", "Merge vertices in adjacent duplicates");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
-
+	
 	prop = RNA_def_property(srna, "use_merge_vertices_cap", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_ARR_MERGEFINAL);
 	RNA_def_property_ui_text(prop, "Merge Vertices", "Merge vertices in first and last duplicates");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
-
+	
 	prop = RNA_def_property(srna, "merge_threshold", PROP_FLOAT, PROP_DISTANCE);
 	RNA_def_property_float_sdna(prop, NULL, "merge_dist");
 	RNA_def_property_range(prop, 0, FLT_MAX);
 	RNA_def_property_ui_range(prop, 0, 1, 1, 4);
 	RNA_def_property_ui_text(prop, "Merge Distance", "Limit below which to merge vertices");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
-
+	
 	/* Offset object */
 	prop = RNA_def_property(srna, "use_object_offset", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "offset_type", MOD_ARR_OFF_OBJ);
 	RNA_def_property_ui_text(prop, "Object Offset", "Add another object's transformation to the total offset");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
-
+	
 	prop = RNA_def_property(srna, "offset_object", PROP_POINTER, PROP_NONE);
 	RNA_def_property_pointer_sdna(prop, NULL, "offset_ob");
 	RNA_def_property_ui_text(prop, "Object Offset",
-	                         "Use the location and rotation of another object to determine the distance and "
-	                         "rotational change between arrayed items");
+	"Use the location and rotation of another object to determine the distance and "
+	"rotational change between arrayed items");
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
 	RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 	
@@ -2089,27 +2096,41 @@ static void rna_def_modifier_array(BlenderRNA *brna)
 	RNA_def_property_pointer_funcs(prop, NULL, "rna_ArrayModifier_start_cap_set", NULL, "rna_Mesh_object_poll");
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
-
+	
 	prop = RNA_def_property(srna, "end_cap", PROP_POINTER, PROP_NONE);
 	RNA_def_property_ui_text(prop, "End Cap", "Mesh object to use as an end cap");
 	RNA_def_property_pointer_funcs(prop, NULL, "rna_ArrayModifier_end_cap_set", NULL, "rna_Mesh_object_poll");
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
 	RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
-
+	
 	/* Materials */
 	prop = RNA_def_property(srna, "use_random_materials", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "random_materials", 0);
-	RNA_def_property_ui_text(prop, "Use Random Materials", "Randomizes materials on duplicates.");
+	RNA_def_property_boolean_sdna(prop, NULL, "use_random_materials", 0);
+	RNA_def_property_ui_text(prop, "Use Random Materials", "Randomizes materials on duplicates");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
-
+	
 	prop = RNA_def_property(srna, "random_seed", PROP_INT, PROP_NONE);
 	RNA_def_property_int_sdna(prop, NULL, "random_seed");
+	RNA_def_property_range(prop, 0, 9999);
+	RNA_def_property_ui_range(prop, 0, 256, 1, 1);
 	RNA_def_property_ui_text(prop, "Random Seed", "Seed used to randomize materials");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	
+	prop = RNA_def_property(srna, "random_type", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, prop_random_type_items);
+	RNA_def_property_enum_sdna( prop, NULL, "random_type" );
+	RNA_def_property_ui_text(prop, "Random Type", "Type of Material Assignment");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "loop_offset", PROP_INT, PROP_NONE);
+	RNA_def_property_int_sdna( prop, NULL, "loop_offset" );
+	RNA_def_property_range(prop, 0, 9999);
+	RNA_def_property_ui_range(prop, 0, 256, 1, 1);
+	RNA_def_property_ui_text(prop, "Loop Offset", "Offset value for loop mode");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
-static void rna_def_modifier_edgesplit(BlenderRNA *brna)
-{
+static void rna_def_modifier_edgesplit(BlenderRNA *brna) {
 	StructRNA *srna;
 	PropertyRNA *prop;
 
@@ -4767,29 +4788,6 @@ static void rna_def_modifier_surfacedeform(BlenderRNA *brna)
 	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 }
 
-static void rna_def_modifier_scaling(BlenderRNA *brna)
-{
-	StructRNA *srna;
-	PropertyRNA *prop;
- 
-	srna = RNA_def_struct(brna, "ScalingModifier", "Modifier");
-	RNA_def_struct_ui_text(srna, "Scaling Modifier", "Scaling effect modifier");
-	RNA_def_struct_sdna(srna, "ScalingModifierData");
-	RNA_def_struct_ui_icon(srna, ICON_MAN_SCALE);
- 
-	/* scaleui: name for "properties_data_modifier.py"*/
-	prop = RNA_def_property(srna, "scaleui", PROP_FLOAT, PROP_NONE); 
- 
-	/*scale: name for "DNA_modifier_types.h"*/
-	RNA_def_property_float_sdna(prop, NULL, "scale");
- 
-	RNA_def_property_range(prop, -FLT_MAX, FLT_MAX);
-	RNA_def_property_ui_range(prop, -100, 100, 1, 3);
-	RNA_def_property_ui_text(prop, "Scale", "Scale factor");
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
- 
-}
-
 void RNA_def_modifier(BlenderRNA *brna)
 {
 	StructRNA *srna;
@@ -4908,8 +4906,6 @@ void RNA_def_modifier(BlenderRNA *brna)
 	rna_def_modifier_normaledit(brna);
 	rna_def_modifier_meshseqcache(brna);
 	rna_def_modifier_surfacedeform(brna);
-
-	rna_def_modifier_scaling(brna);
 }
 
 #endif

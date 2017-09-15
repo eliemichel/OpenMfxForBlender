@@ -51,9 +51,13 @@
 #include "BKE_library_query.h"
 #include "BKE_modifier.h"
 
+#include "BLI_rand.h"
+
 #include "MOD_util.h"
 
+#include "bmesh.h"
 #include "depsgraph_private.h"
+
 
 /* Due to cyclic dependencies it's possible that curve used for
  * deformation here is not evaluated at the time of evaluating
@@ -68,24 +72,32 @@ static void initData(ModifierData *md)
 	/* default to 2 duplicates distributed along the x-axis by an
 	 * offset of 1 object-width
 	 */
-	amd->start_cap = amd->end_cap = amd->curve_ob = amd->offset_ob = NULL;
-	amd->count = 2;
-	zero_v3(amd->offset);
-	amd->scale[0] = 1;
-	amd->scale[1] = amd->scale[2] = 0;
-	amd->length = 0;
-	amd->merge_dist = 0.01;
-	amd->fit_type = MOD_ARR_FIXEDCOUNT;
+	amd->start_cap   = amd->end_cap  
+					 = amd->curve_ob 
+					 = amd->offset_ob = NULL;
+	amd->count       = 2;
+	amd->scale[0]    = 1;
+	amd->scale[1]    = amd->scale[2] = 0;
+	amd->length      = 0;
+	amd->merge_dist  = 0.01;
+	amd->fit_type    = MOD_ARR_FIXEDCOUNT;
 	amd->offset_type = MOD_ARR_OFF_RELATIVE;
-	amd->flags = 0;
+	amd->flags       = 0;
+
+	zero_v3(amd->offset);
+
+	amd->use_random_materials = false;
+	amd->random_seed          = 0;
+	amd->random_type          = MOD_ARR_MATERIAL_RANDOM;
 }
 
 static void copyData(ModifierData *md, ModifierData *target)
 {
-#if 0
-	ArrayModifierData *amd = (ArrayModifierData *) md;
-	ArrayModifierData *tamd = (ArrayModifierData *) target;
-#endif
+    /*
+    ArrayModifierData *source_array = (ArrayModifierData *) md;
+	ArrayModifierData *target_array = (ArrayModifierData *) target;
+    */
+     
 	modifier_copyData_generic(md, target);
 }
 
@@ -406,6 +418,26 @@ static void dm_merge_transform(
 	}
 }
 
+BLI_INLINE int get_random_material( RNG *rng, int index, int random_type, int material_count ) {
+
+	// if (material_count < 2):
+	// 	return 0;
+
+	switch (random_type) {
+		case MOD_ARR_MATERIAL_LOOP:
+			return index % material_count;
+			break;
+			
+		case MOD_ARR_MATERIAL_RANDOM:
+			return BLI_rng_get_int(rng) % material_count;
+			break;
+			
+		default:
+			return 0;
+			break;
+	}
+}
+
 static DerivedMesh *arrayModifier_doArray(
         ArrayModifierData *amd,
         Scene *scene, Object *ob, DerivedMesh *dm,
@@ -429,9 +461,19 @@ static DerivedMesh *arrayModifier_doArray(
 	int *full_doubles_map = NULL;
 	int tot_doubles;
 
-	const bool use_merge = (amd->flags & MOD_ARR_MERGE) != 0;
-	const bool use_recalc_normals = (dm->dirty & DM_DIRTY_NORMALS) || use_merge;
-	const bool use_offset_ob = ((amd->offset_type & MOD_ARR_OFF_OBJ) && amd->offset_ob);
+	const bool use_merge            = (amd->flags & MOD_ARR_MERGE) != 0;
+	const bool use_recalc_normals   = (dm->dirty & DM_DIRTY_NORMALS) || use_merge;
+	const bool use_offset_ob        = ((amd->offset_type & MOD_ARR_OFF_OBJ) && amd->offset_ob);
+
+	/* material stuff */
+	const int material_count        = ob->totcol;
+	const int seed                  = amd->random_seed;
+	const int random_type           = amd->random_type;
+	const bool use_random_materials = (bool)amd->use_random_materials && (bool)material_count;
+	const int loop_offset           = amd->random_type == MOD_ARR_MATERIAL_LOOP ? amd->loop_offset : 0;
+    
+	RNG *rng                        = BLI_rng_new_srandom( seed );
+	struct BMesh *bm                = NULL;
 
 	int start_cap_nverts = 0, start_cap_nedges = 0, start_cap_npolys = 0, start_cap_nloops = 0;
 	int end_cap_nverts = 0, end_cap_nedges = 0, end_cap_npolys = 0, end_cap_nloops = 0;
@@ -457,6 +499,7 @@ static DerivedMesh *arrayModifier_doArray(
 			start_cap_npolys = start_cap_dm->getNumPolys(start_cap_dm);
 		}
 	}
+
 	if (amd->end_cap && amd->end_cap != ob && amd->end_cap->type == OB_MESH) {
 		end_cap_dm = get_dm_for_modifier(amd->end_cap, flag);
 		if (end_cap_dm) {
@@ -679,6 +722,33 @@ static DerivedMesh *arrayModifier_doArray(
 		        amd->merge_dist);
 	}
 
+	/* materials assignment */
+	if (use_random_materials) {
+		bm = DM_to_bmesh( result, false );
+		BMFace *efa;
+		BMIter iter;
+
+		unsigned int chunk_index  = 0;
+		unsigned int poly_index   = 0;
+		unsigned int total_polys  = 0;
+		int material_index        = get_random_material( rng, chunk_index+loop_offset, random_type, material_count );
+
+		BM_ITER_MESH (efa, &iter, bm, BM_FACES_OF_MESH) {
+			if (poly_index == chunk_npolys) {
+				chunk_index += 1;
+				total_polys += poly_index;
+				poly_index = 0;
+				material_index = get_random_material( rng, chunk_index+loop_offset, random_type, material_count );
+			}
+
+			efa->mat_nr = material_index;
+			poly_index += 1;
+		}
+
+		result = CDDM_from_bmesh( bm, true );
+		BM_mesh_free(bm);
+	}
+
 	/* start capping */
 	if (start_cap_dm) {
 		float start_offset[4][4];
@@ -755,7 +825,7 @@ static DerivedMesh *arrayModifier_doArray(
 		MEM_freeN(full_doubles_map);
 	}
 
-	printf( "+ Total materials: %d.\n", dm->totmat );
+	BLI_rng_free( rng );
 
 	/* In case org dm has dirty normals, or we made some merging, mark normals as dirty in new dm!
 	 * TODO: we may need to set other dirty flags as well?
@@ -797,7 +867,7 @@ ModifierTypeInfo modifierType_Array = {
 	/* applyModifierEM */   NULL,
 	/* initData */          initData,
 	/* requiredDataMask */  NULL,
-	/* freeData */          NULL,
+    /* freeData */          NULL,
 	/* isDisabled */        NULL,
 	/* updateDepgraph */    updateDepgraph,
 	/* updateDepsgraph */   updateDepsgraph,

@@ -122,14 +122,21 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         layout.separator()
         sub = layout.split()
+
+        material_count = len(ob.data.materials) if (ob.data and ob.data.materials) else 0
+
         sub.prop( md, "use_random_materials" )
-        if ob.data and ob.data.materials:
-            sub.label( 'Material Count: {}'.format(len(ob.data.materials)) )
+        sub.label( 'Material Count: {}'.format(material_count) )
 
         layout.separator()
         sub = layout.column()
-        sub.enabled = md.use_random_materials
-        sub.prop( md, "random_seed" )
+        sub.enabled = bool( md.use_random_materials and material_count )
+        sub.prop( md, "random_type" )
+
+        if md.random_type == 'RANDOM':
+            sub.prop( md, "random_seed" )
+        elif md.random_type == 'LOOP':
+            sub.prop( md, "loop_offset" )
 
     def BEVEL(self, layout, ob, md):
         split = layout.split()
@@ -1135,10 +1142,6 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row = layout.row()
         row.active = md.use_remove_disconnected
         row.prop(md, "threshold")
-
-    def SCALING( self, layout, ob, md ):
-        col = layout.column()
-        col.prop( md, "scaleui", text='Scale Amount' )
 
 
     @staticmethod
