@@ -207,8 +207,24 @@ bool PassSettings::contains(PassType type) const
 
 bool PassSettings::modified(const PassSettings& other) const
 {
-	return !(passes == other.passes &&
-	         aovs == other.aovs);
+	if(aovs.size() != other.aovs.size()
+	   || passes.size() != other.passes.size()) {
+		return true;
+	}
+
+	for(size_t i = 0; i < aovs.size(); i++) {
+		if(!(aovs[i] == other.aovs[i])) {
+			return true;
+		}
+	}
+
+	for(size_t i = 0; i < passes.size(); i++) {
+		if(!(passes[i] == other.passes[i])) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 int PassSettings::get_size() const

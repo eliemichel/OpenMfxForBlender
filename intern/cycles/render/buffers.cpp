@@ -60,7 +60,7 @@ bool BufferParams::modified(const BufferParams& params)
 		&& height == params.height
 		&& full_width == params.full_width
 		&& full_height == params.full_height
-		&& passes.modified(params.passes));
+		&& !passes.modified(params.passes));
 }
 
 /* Render Buffer Task */
