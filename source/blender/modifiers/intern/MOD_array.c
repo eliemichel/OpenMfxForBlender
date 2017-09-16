@@ -419,23 +419,29 @@ static void dm_merge_transform(
 }
 
 BLI_INLINE int get_random_material( RNG *rng, int index, int random_type, int material_count ) {
+    int result = 0;
 
-	// if (material_count < 2):
-	// 	return 0;
-
+    if (material_count < 2)
+        return result;
+    
 	switch (random_type) {
 		case MOD_ARR_MATERIAL_LOOP:
-			return index % material_count;
+			result = index % material_count;
 			break;
 			
 		case MOD_ARR_MATERIAL_RANDOM:
-			return BLI_rng_get_int(rng) % material_count;
+			result = BLI_rng_get_int(rng) % material_count;
 			break;
 			
 		default:
-			return 0;
 			break;
 	}
+    
+    while ( result < 0 ) {
+        result += material_count;
+    }
+
+    return result;
 }
 
 static DerivedMesh *arrayModifier_doArray(
@@ -472,7 +478,7 @@ static DerivedMesh *arrayModifier_doArray(
 	const bool use_random_materials = (bool)amd->use_random_materials && (bool)material_count;
 	const int loop_offset           = amd->random_type == MOD_ARR_MATERIAL_LOOP ? amd->loop_offset : 0;
     
-	RNG *rng                        = BLI_rng_new_srandom( seed );
+	RNG *rng;
 	struct BMesh *bm                = NULL;
 
 	int start_cap_nverts = 0, start_cap_nedges = 0, start_cap_npolys = 0, start_cap_nloops = 0;
@@ -722,33 +728,6 @@ static DerivedMesh *arrayModifier_doArray(
 		        amd->merge_dist);
 	}
 
-	/* materials assignment */
-	if (use_random_materials) {
-		bm = DM_to_bmesh( result, false );
-		BMFace *efa;
-		BMIter iter;
-
-		unsigned int chunk_index  = 0;
-		unsigned int poly_index   = 0;
-		unsigned int total_polys  = 0;
-		int material_index        = get_random_material( rng, chunk_index+loop_offset, random_type, material_count );
-
-		BM_ITER_MESH (efa, &iter, bm, BM_FACES_OF_MESH) {
-			if (poly_index == chunk_npolys) {
-				chunk_index += 1;
-				total_polys += poly_index;
-				poly_index = 0;
-				material_index = get_random_material( rng, chunk_index+loop_offset, random_type, material_count );
-			}
-
-			efa->mat_nr = material_index;
-			poly_index += 1;
-		}
-
-		result = CDDM_from_bmesh( bm, true );
-		BM_mesh_free(bm);
-	}
-
 	/* start capping */
 	if (start_cap_dm) {
 		float start_offset[4][4];
@@ -799,6 +778,53 @@ static DerivedMesh *arrayModifier_doArray(
 	}
 	/* done capping */
 
+	/* materials assignment */
+	if (use_random_materials) {
+		bm = DM_to_bmesh( result, false );
+		BMFace *efa;
+		BMIter iter;
+
+		rng = BLI_rng_new_srandom( seed );
+
+		unsigned int chunk_index  = 0;
+		unsigned int poly_index   = 0;
+		unsigned int total_polys  = 0;
+		const unsigned int total_polys_minus_caps = chunk_npolys * count;
+		const unsigned int total_polys_plus_start = chunk_npolys * count + start_cap_npolys;
+    
+        const int real_count = count + 2;
+        int all_materials[real_count];
+
+        for ( i = 0; i < count+2; i++ ) {
+            all_materials[i] = get_random_material( rng, i-loop_offset, random_type, material_count );
+        }
+
+		BM_ITER_MESH (efa, &iter, bm, BM_FACES_OF_MESH) {
+			if (total_polys < total_polys_minus_caps) {
+				efa->mat_nr = all_materials[chunk_index+1];
+				poly_index  += 1;
+                total_polys += 1;
+
+			} else if (total_polys < total_polys_plus_start && start_cap_dm) {
+                efa->mat_nr = all_materials[0];
+				total_polys += 1;
+
+			} else if (total_polys >= total_polys_plus_start && end_cap_dm) {
+				efa->mat_nr = all_materials[real_count-1];
+				total_polys += 1;
+			}
+            
+            if (poly_index == chunk_npolys) {
+                chunk_index += 1;
+                poly_index = 0;
+            }
+		}
+
+		result = CDDM_from_bmesh( bm, true );
+		BM_mesh_free(bm);
+		BLI_rng_free( rng );		
+	}
+	
 	/* Handle merging */
 	tot_doubles = 0;
 	if (use_merge) {
@@ -824,8 +850,6 @@ static DerivedMesh *arrayModifier_doArray(
 		}
 		MEM_freeN(full_doubles_map);
 	}
-
-	BLI_rng_free( rng );
 
 	/* In case org dm has dirty normals, or we made some merging, mark normals as dirty in new dm!
 	 * TODO: we may need to set other dirty flags as well?
