@@ -793,9 +793,10 @@ static DerivedMesh *arrayModifier_doArray(
 		const unsigned int total_polys_plus_start = chunk_npolys * count + start_cap_npolys;
     
         const int real_count = count + 2;
-        int all_materials[real_count];
+        int *all_materials = MEM_mallocN( sizeof(int)*real_count, "ArrayModifier::MaterialRandom" );
+		BLI_assert( all_materials != NULL );
 
-        for ( i = 0; i < count+2; i++ ) {
+        for ( i = 0; i < real_count; i++ ) {
             all_materials[i] = get_random_material( rng, i-loop_offset, random_type, material_count );
         }
 
@@ -822,7 +823,8 @@ static DerivedMesh *arrayModifier_doArray(
 
 		result = CDDM_from_bmesh( bm, true );
 		BM_mesh_free(bm);
-		BLI_rng_free( rng );		
+		BLI_rng_free( rng );
+		MEM_SAFE_FREE( all_materials );
 	}
 	
 	/* Handle merging */
