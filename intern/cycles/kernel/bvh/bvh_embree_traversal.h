@@ -69,11 +69,8 @@ struct RTCORE_ALIGN(16) CCLRay : public RTCRay {
 	void isect_to_ccl(ccl::Intersection *isect)
 	{
 		const bool is_hair = geomID & 1;
-		isect->u = 1.0f - v - u;
+		isect->u = is_hair ? u : 1.0f - v - u;
 		isect->v = u;
-		if(is_hair) {
-		//	isect->v = 0.0f;// hair
-		}
 		isect->t = tfar;
 		if(instID != RTC_INVALID_GEOMETRY_ID) {
 			RTCScene inst_scene = (RTCScene)rtcGetUserData(kernel_data.bvh.scene, instID);
