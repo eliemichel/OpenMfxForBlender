@@ -683,6 +683,7 @@ static void ExportCurveSegmentsMotion(Mesh *mesh, ParticleCurveData *CData, int 
 	float4 *mP = attr_mP->data_float4() + time_index*numkeys;
 	bool have_motion = false;
 	int i = 0;
+	int num_curves = 0;
 
 	for(int sys = 0; sys < CData->psys_firstcurve.size(); sys++) {
 		if(CData->psys_curvenum[sys] == 0)
@@ -691,10 +692,10 @@ static void ExportCurveSegmentsMotion(Mesh *mesh, ParticleCurveData *CData, int 
 		for(int curve = CData->psys_firstcurve[sys]; curve < CData->psys_firstcurve[sys] + CData->psys_curvenum[sys]; curve++) {
 			if(CData->curve_keynum[curve] <= 1 || CData->curve_length[curve] == 0.0f)
 				continue;
-			
+
 			/* Curve lengths may not match! Curves can be clipped. */
-			int curve_key_end = (curve+1 < (int)mesh->curve_first_key.size() ? mesh->curve_first_key[curve+1] : (int)mesh->curve_keys.size());
-			int center_curve_len = curve_key_end - mesh->curve_first_key[curve];
+			int curve_key_end = (num_curves+1 < (int)mesh->curve_first_key.size() ? mesh->curve_first_key[num_curves+1] : (int)mesh->curve_keys.size());
+			int center_curve_len = curve_key_end - mesh->curve_first_key[num_curves];
 			int diff = CData->curve_keynum[curve] - center_curve_len;
 
 			if(diff == 0) {
@@ -725,6 +726,7 @@ static void ExportCurveSegmentsMotion(Mesh *mesh, ParticleCurveData *CData, int 
 				}
 				have_motion = true;
 			}
+			num_curves++;
 		}
 	}
 
