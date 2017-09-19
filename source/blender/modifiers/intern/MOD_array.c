@@ -477,7 +477,7 @@ static DerivedMesh *arrayModifier_doArray(
 	const int random_type           = amd->random_type;
 	const bool use_random_materials = (bool)amd->use_random_materials && (bool)material_count;
 	const int loop_offset           = amd->random_type == MOD_ARR_MATERIAL_LOOP ? amd->loop_offset : 0;
-    
+	
 	RNG *rng;
 	struct BMesh *bm                = NULL;
 
@@ -780,18 +780,10 @@ static DerivedMesh *arrayModifier_doArray(
 
 	/* materials assignment */
 	if (use_random_materials) {
-		bm = DM_to_bmesh( result, false );
-		BMFace *efa;
-		BMIter iter;
-
 		rng = BLI_rng_new_srandom( seed );
 
-		unsigned int chunk_index  = 0;
-		unsigned int poly_index   = 0;
-		unsigned int total_polys  = 0;
-		const unsigned int total_polys_minus_caps = chunk_npolys * count;
-		const unsigned int total_polys_plus_start = chunk_npolys * count + start_cap_npolys;
-    
+		int chunk_index  = 0;
+
         const int real_count = count + 2;
         int *all_materials = MEM_mallocN( sizeof(int)*real_count, "ArrayModifier::MaterialRandom" );
 		BLI_assert( all_materials != NULL );
@@ -800,33 +792,35 @@ static DerivedMesh *arrayModifier_doArray(
             all_materials[i] = get_random_material( rng, i-loop_offset, random_type, material_count );
         }
 
-		BM_ITER_MESH (efa, &iter, bm, BM_FACES_OF_MESH) {
-			if (total_polys < total_polys_minus_caps) {
-				efa->mat_nr = all_materials[chunk_index+1];
-				poly_index  += 1;
-                total_polys += 1;
+		mp = CDDM_get_polys(result);
 
-			} else if (total_polys < total_polys_plus_start && start_cap_dm) {
-                efa->mat_nr = all_materials[0];
-				total_polys += 1;
-
-			} else if (total_polys >= total_polys_plus_start && end_cap_dm) {
-				efa->mat_nr = all_materials[real_count-1];
-				total_polys += 1;
+		for (chunk_index = 0; chunk_index < count; chunk_index++ ) {
+			int base_index = chunk_index * chunk_npolys;
+			for ( int p = 0; p < chunk_npolys; p++ ) {
+				mp[base_index+p].mat_nr = all_materials[chunk_index+1];
 			}
-            
-            if (poly_index == chunk_npolys) {
-                chunk_index += 1;
-                poly_index = 0;
-            }
 		}
 
-		result = CDDM_from_bmesh( bm, true );
-		BM_mesh_free(bm);
+		int base_index = count * chunk_npolys;
+		if (start_cap_dm) {
+			for ( i = 0; i < start_cap_npolys; i++ ) {
+				mp[base_index+i].mat_nr = all_materials[0];
+			}
+		}
+
+		base_index += start_cap_npolys;
+		if (end_cap_dm) {
+			for ( i = 0; i < start_cap_npolys; i++ ) {
+				mp[base_index+i].mat_nr = all_materials[real_count-1];
+			}
+		}
+		
+		// result = CDDM_from_bmesh( bm, true );
+		// BM_mesh_free(bm);
 		BLI_rng_free( rng );
 		MEM_SAFE_FREE( all_materials );
 	}
-	
+
 	/* Handle merging */
 	tot_doubles = 0;
 	if (use_merge) {
