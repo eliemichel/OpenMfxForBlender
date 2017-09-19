@@ -562,6 +562,7 @@ extern StructRNA RNA_SmokeDomainSettings;
 extern StructRNA RNA_SmokeFlowSettings;
 extern StructRNA RNA_SmokeModifier;
 extern StructRNA RNA_SmoothModifier;
+extern StructRNA RNA_SnapModifier;
 extern StructRNA RNA_SoftBodyModifier;
 extern StructRNA RNA_SoftBodySettings;
 extern StructRNA RNA_SolidifyModifier;
@@ -708,9 +709,6 @@ extern StructRNA RNA_WorldMistSettings;
 extern StructRNA RNA_WorldTextureSlot;
 extern StructRNA RNA_XnorController;
 extern StructRNA RNA_XorController;
-
-extern StructRNA RNA_ScalingModifier;
-
 
 /* Pointer
  *

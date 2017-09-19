@@ -87,7 +87,7 @@ typedef enum ModifierType {
 	eModifierType_CorrectiveSmooth  = 51,
 	eModifierType_MeshSequenceCache = 52,
 	eModifierType_SurfaceDeform     = 53,
-	eModifierType_Scaling           = 54,
+	eModifierType_Snap              = 54,
 	NUM_MODIFIER_TYPES
 } ModifierType;
 
@@ -250,11 +250,6 @@ typedef struct ArrayModifierData {
 	int flags;
 	/* the number of duplicates to generate for MOD_ARR_FIXEDCOUNT */
 	int count;
-
-	/* Materials */
-	int random_materials;
-	int random_seed;
-
 } ArrayModifierData;
 
 /* ArrayModifierData->fit_type */
@@ -1621,13 +1616,15 @@ enum {
 #define MOD_MESHSEQ_READ_ALL \
 	(MOD_MESHSEQ_READ_VERT | MOD_MESHSEQ_READ_POLY | MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)
 
-/* Scaling modifier tutorial */
+/* Snap Modifier */
 
-typedef struct ScalingModifierData {
+typedef struct SnapModifierData {
 	ModifierData modifier;
-	float scale;
+	char vertex_group[64];
+	struct Object *target;	/* bind target object */
+	float blend;
 	int pad;
-} ScalingModifierData;
+} SnapModifierData;
 
 
 #endif  /* __DNA_MODIFIER_TYPES_H__ */

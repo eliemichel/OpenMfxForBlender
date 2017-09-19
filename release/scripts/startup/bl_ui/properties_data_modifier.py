@@ -1136,9 +1136,11 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row.active = md.use_remove_disconnected
         row.prop(md, "threshold")
 
-    def SCALING( self, layout, ob, md ):
+    def SNAP( self, layout, ob, md ):
         col = layout.column()
-        col.prop( md, "scaleui", text='Scale Amount' )
+        col.prop(md, "target", text="")
+        col.prop( md, "blend", text='Blend Amount' )
+        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
 
 
     @staticmethod

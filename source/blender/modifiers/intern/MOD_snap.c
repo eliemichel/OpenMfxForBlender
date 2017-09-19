@@ -23,68 +23,132 @@
  * ***** END GPL LICENSE BLOCK *****
  *
  */
- 
-/** \file blender/modifiers/intern/MOD_scaling.c
+
+/** \file blender/modifiers/intern/MOD_Snap.c
  *  \ingroup modifiers
  */
- 
- 
- #include "DNA_meshdata_types.h"
- 
+
+
+#include "DNA_meshdata_types.h"
+
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 #include "BLI_string.h"
- 
+
 #include "MEM_guardedalloc.h"
- 
+
 #include "BKE_cdderivedmesh.h"
+#include "BKE_library_query.h"
 #include "BKE_particle.h"
 #include "BKE_deform.h"
- 
+
 #include "MOD_modifiertypes.h"
 #include "MOD_util.h"
- 
- 
+
+#include "depsgraph_private.h"
+
 static void initData(ModifierData *md)
 {
-	ScalingModifierData *smd = (ScalingModifierData *) md;
-	smd->scale = 1.0f;
+	SnapModifierData *smd = (SnapModifierData *) md;
+	smd->blend = 1.0f;
+	smd->target = NULL;
+	smd->vertex_group[0] = 0;
 }
  
 static void copyData(ModifierData *md, ModifierData *target)
 {
-	ScalingModifierData *smd = (ScalingModifierData *) md;
-	ScalingModifierData *tsmd = (ScalingModifierData *) target;
-	tsmd->scale = smd->scale;
+	/*
+	SnapModifierData *smd = (SnapModifierData *) md;
+	SnapModifierData *tsmd = (SnapModifierData *) target;
+	*/
+	modifier_copyData_generic(md, target);
 }
  
 static int isDisabled(ModifierData *md, int UNUSED(useRenderParams))
 {
-	ScalingModifierData *smd = (ScalingModifierData *) md;
-	/* disable if modifier is 1.0 for scale*/
-	if (smd->scale == 1.0f) return 1;
-	return 0;
+	/* disable if modifier there is no connected target object*/
+	SnapModifierData *smd = (SnapModifierData *)md;
+	return (smd->target == NULL);
 }
- 
+
 static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
 {
-	ScalingModifierData *smd = (ScalingModifierData *)md;
+	SnapModifierData *enmd = (SnapModifierData *)md;
 	CustomDataMask dataMask = 0;
+
+	/* Ask for vertexgroups if we need them. */
+	if (enmd->vertex_group[0]) {
+		dataMask |= ( CD_MASK_MDEFORMVERT );
+	}
+
 	return dataMask;
 }
- 
-static void ScalingModifier_do(
-        ScalingModifierData *smd, Object *ob, DerivedMesh *dm,
+
+static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+{
+	SnapModifierData *smd = (SnapModifierData *)md;
+
+	walk( userData, ob, &smd->target, IDWALK_NOP );
+}
+
+static void updateDepgraph(ModifierData *md, DagForest *forest,
+	struct Main *UNUSED(bmain),
+	struct Scene *UNUSED(scene),
+	Object *UNUSED(ob),
+	DagNode *obNode)
+{
+	SnapModifierData *smd = (SnapModifierData *)md;
+
+	if (smd->target) {
+		DagNode *curNode = dag_get_node(forest, smd->target);
+
+		dag_add_relation(forest, curNode, obNode,
+				DAG_RL_DATA_DATA, "Surface Deform Modifier");
+	}
+}
+
+static void updateDepsgraph(ModifierData *md,
+	struct Main *UNUSED(bmain),
+	struct Scene *UNUSED(scene),
+	Object *UNUSED(ob),
+	struct DepsNodeHandle *node)
+{
+	SnapModifierData *smd = (SnapModifierData *)md;
+	if (smd->target != NULL) {
+		DEG_add_object_relation(node, smd->target,
+				DEG_OB_COMP_GEOMETRY, "Surface Deform Modifier");
+	}
+}
+
+static void SnapModifier_do(
+        SnapModifierData *smd, Object *ob, DerivedMesh *dm,
         float (*vertexCos)[3], int numVerts)
 {
 	int i;
-	float scale;
-	scale = smd->scale;
+	struct Object *target = smd->target;
+	DerivedMesh   *target_dm = NULL;
+	float blend = smd->blend;
+
+	if ( blend == 0.0 || target == NULL )
+		return;
  
+	if ( !(target && target != ob && target->type == OB_MESH) ) {
+		return;
+	}
+
+	target_dm = get_dm_for_modifier( target, MOD_APPLY_RENDER );
+	if (!target_dm) {
+		return;
+	}
+
 	for (i = 0; i < numVerts; i++) {
-		vertexCos[i][0] = vertexCos[i][0] * scale;
-		vertexCos[i][1] = vertexCos[i][1] * scale;
-		vertexCos[i][2] = vertexCos[i][2] * scale;
+		vertexCos[i][0] = vertexCos[i][0] * blend;
+		vertexCos[i][1] = vertexCos[i][1] * blend;
+		vertexCos[i][2] = vertexCos[i][2] * blend;
+	}
+
+	if (target_dm) {
+		target_dm->release(target_dm);
 	}
 }
  
@@ -93,7 +157,7 @@ static void deformVerts(ModifierData *md, Object *ob, DerivedMesh *derivedData,
 {
 	DerivedMesh *dm = get_dm(ob, NULL, derivedData, NULL, false, false);
  
-	ScalingModifier_do((ScalingModifierData *)md, ob, dm,
+	SnapModifier_do((SnapModifierData *)md, ob, dm,
 	                  vertexCos, numVerts);
  
 	if (dm != derivedData)
@@ -106,7 +170,7 @@ static void deformVertsEM(
 {
 	DerivedMesh *dm = get_dm(ob, editData, derivedData, NULL, false, false );
  
-	ScalingModifier_do((ScalingModifierData *)md, ob, dm,
+	SnapModifier_do((SnapModifierData *)md, ob, dm,
 	                  vertexCos, numVerts);
  
 	if (dm != derivedData)
@@ -114,10 +178,10 @@ static void deformVertsEM(
 }
  
  
-ModifierTypeInfo modifierType_Scaling = {
-	/* name */              "Scaling",
-	/* structName */        "ScalingModifierData",
-	/* structSize */        sizeof(ScalingModifierData),
+ModifierTypeInfo modifierType_Snap = {
+	/* name */              "Snap",
+	/* structName */        "SnapModifierData",
+	/* structSize */        sizeof(SnapModifierData),
 	/* type */              eModifierTypeType_OnlyDeform,
 	/* flags */             eModifierTypeFlag_AcceptsMesh |
 	                        eModifierTypeFlag_SupportsEditmode,
@@ -133,10 +197,11 @@ ModifierTypeInfo modifierType_Scaling = {
 	/* requiredDataMask */  requiredDataMask,
 	/* freeData */          NULL,
 	/* isDisabled */        isDisabled,
-	/* updateDepgraph */    NULL,
+	/* updateDepgraph */    updateDepgraph,
+	/* updateDepsgraph */   updateDepsgraph,
 	/* dependsOnTime */     NULL,
-	/* dependsOnNormals */	NULL,
-	/* foreachObjectLink */ NULL,
+	/* dependsOnNormals */  NULL,
+	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
 };
