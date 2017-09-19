@@ -55,7 +55,6 @@
 
 #include "MOD_util.h"
 
-#include "bmesh.h"
 #include "depsgraph_private.h"
 
 
@@ -479,7 +478,6 @@ static DerivedMesh *arrayModifier_doArray(
 	const int loop_offset           = amd->random_type == MOD_ARR_MATERIAL_LOOP ? amd->loop_offset : 0;
 	
 	RNG *rng;
-	struct BMesh *bm                = NULL;
 
 	int start_cap_nverts = 0, start_cap_nedges = 0, start_cap_npolys = 0, start_cap_nloops = 0;
 	int end_cap_nverts = 0, end_cap_nedges = 0, end_cap_npolys = 0, end_cap_nloops = 0;
@@ -815,8 +813,6 @@ static DerivedMesh *arrayModifier_doArray(
 			}
 		}
 		
-		// result = CDDM_from_bmesh( bm, true );
-		// BM_mesh_free(bm);
 		BLI_rng_free( rng );
 		MEM_SAFE_FREE( all_materials );
 	}

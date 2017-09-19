@@ -87,8 +87,6 @@ extern ModifierTypeInfo modifierType_CorrectiveSmooth;
 extern ModifierTypeInfo modifierType_MeshSequenceCache;
 extern ModifierTypeInfo modifierType_SurfaceDeform;
 
-extern ModifierTypeInfo modifierType_Scaling;
-
 /* MOD_util.c */
 void modifier_type_init(ModifierTypeInfo *types[]);
 
