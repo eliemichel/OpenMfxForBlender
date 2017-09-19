@@ -471,11 +471,18 @@ ccl_device void shader_setup_from_displace(KernelGlobals *kg, ShaderData *sd,
 	/* force smooth shading for displacement */
 	shader |= SHADER_SMOOTH_NORMAL;
 
+#if 0
+	/* TODO Stefan - need differentials here that don't break the unfiltered case */
 	I = -Ng;
 	differential3 dI = differential3_zero();
 
 	shader_setup_from_sample(kg, sd,
 	                         P, Ng, I, &dI,
+#else
+	
+	shader_setup_from_sample(kg, sd,
+	                         P, Ng, I, NULL,
+#endif
 	                         shader, object, prim,
 	                         u, v, 0.0f, 0.5f,
 	                         !(kernel_tex_fetch(__object_flag, object) & SD_OBJECT_TRANSFORM_APPLIED),
