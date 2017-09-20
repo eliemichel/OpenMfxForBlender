@@ -87,7 +87,7 @@ typedef enum ModifierType {
 	eModifierType_CorrectiveSmooth  = 51,
 	eModifierType_MeshSequenceCache = 52,
 	eModifierType_SurfaceDeform     = 53,
-	eModifierType_Snap              = 54,
+	eModifierType_VertexSnap        = 54,
 	NUM_MODIFIER_TYPES
 } ModifierType;
 
@@ -1616,15 +1616,20 @@ enum {
 #define MOD_MESHSEQ_READ_ALL \
 	(MOD_MESHSEQ_READ_VERT | MOD_MESHSEQ_READ_POLY | MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)
 
-/* Snap Modifier */
+/* Vertex Snap Modifier */
 
-typedef struct SnapModifierData {
+typedef struct VertexSnapModifierData {
 	ModifierData modifier;
 	char vertex_group[64];
 	struct Object *target;	/* bind target object */
 	float blend;
-	int pad;
-} SnapModifierData;
+	int deform_space;
+} VertexSnapModifierData;
+
+enum {
+	MOD_VSNAP_LOCAL = 0,
+	MOD_VSNAP_WORLD = 1
+};
 
 
 #endif  /* __DNA_MODIFIER_TYPES_H__ */

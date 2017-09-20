@@ -120,17 +120,6 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "start_cap")
         layout.prop(md, "end_cap")
 
-        layout.separator()
-        sub = layout.split()
-        sub.prop( md, "use_random_materials" )
-        if ob.data and ob.data.materials:
-            sub.label( 'Material Count: {}'.format(len(ob.data.materials)) )
-
-        layout.separator()
-        sub = layout.column()
-        sub.enabled = md.use_random_materials
-        sub.prop( md, "random_seed" )
-
     def BEVEL(self, layout, ob, md):
         split = layout.split()
 
@@ -1136,10 +1125,11 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row.active = md.use_remove_disconnected
         row.prop(md, "threshold")
 
-    def SNAP( self, layout, ob, md ):
+    def VERTEXSNAP( self, layout, ob, md ):
         col = layout.column()
-        col.prop(md, "target", text="")
-        col.prop( md, "blend", text='Blend Amount' )
+        col.prop( md, "target", text="")
+        col.prop( md, "blend",  text='Blend Amount' )
+        col.prop( md, "deform_space" )
         col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
 
 

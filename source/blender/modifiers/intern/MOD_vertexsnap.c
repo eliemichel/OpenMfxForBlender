@@ -49,7 +49,7 @@
 
 static void initData(ModifierData *md)
 {
-	SnapModifierData *smd = (SnapModifierData *) md;
+	VertexSnapModifierData *smd = (VertexSnapModifierData *) md;
 	smd->blend = 1.0f;
 	smd->target = NULL;
 	smd->vertex_group[0] = 0;
@@ -58,8 +58,8 @@ static void initData(ModifierData *md)
 static void copyData(ModifierData *md, ModifierData *target)
 {
 	/*
-	SnapModifierData *smd = (SnapModifierData *) md;
-	SnapModifierData *tsmd = (SnapModifierData *) target;
+	VertexSnapModifierData *smd = (VertexSnapModifierData *) md;
+	VertexSnapModifierData *tsmd = (VertexSnapModifierData *) target;
 	*/
 	modifier_copyData_generic(md, target);
 }
@@ -67,13 +67,13 @@ static void copyData(ModifierData *md, ModifierData *target)
 static int isDisabled(ModifierData *md, int UNUSED(useRenderParams))
 {
 	/* disable if modifier there is no connected target object*/
-	SnapModifierData *smd = (SnapModifierData *)md;
+	VertexSnapModifierData *smd = (VertexSnapModifierData *)md;
 	return (smd->target == NULL);
 }
 
 static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
 {
-	SnapModifierData *enmd = (SnapModifierData *)md;
+	VertexSnapModifierData *enmd = (VertexSnapModifierData *)md;
 	CustomDataMask dataMask = 0;
 
 	/* Ask for vertexgroups if we need them. */
@@ -86,7 +86,7 @@ static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
 
 static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
 {
-	SnapModifierData *smd = (SnapModifierData *)md;
+	VertexSnapModifierData *smd = (VertexSnapModifierData *)md;
 
 	walk( userData, ob, &smd->target, IDWALK_NOP );
 }
@@ -97,7 +97,7 @@ static void updateDepgraph(ModifierData *md, DagForest *forest,
 	Object *UNUSED(ob),
 	DagNode *obNode)
 {
-	SnapModifierData *smd = (SnapModifierData *)md;
+	VertexSnapModifierData *smd = (VertexSnapModifierData *)md;
 
 	if (smd->target) {
 		DagNode *curNode = dag_get_node(forest, smd->target);
@@ -113,7 +113,7 @@ static void updateDepsgraph(ModifierData *md,
 	Object *UNUSED(ob),
 	struct DepsNodeHandle *node)
 {
-	SnapModifierData *smd = (SnapModifierData *)md;
+	VertexSnapModifierData *smd = (VertexSnapModifierData *)md;
 	if (smd->target != NULL) {
 		DEG_add_object_relation(node, smd->target,
 				DEG_OB_COMP_GEOMETRY, "Surface Deform Modifier");
@@ -121,17 +121,23 @@ static void updateDepsgraph(ModifierData *md,
 }
 
 static void SnapModifier_do(
-        SnapModifierData *smd, Object *ob, DerivedMesh *dm,
+        VertexSnapModifierData *vmd, Object *ob, DerivedMesh *dm,
         float (*vertexCos)[3], int numVerts)
 {
-	int i;
-	struct Object *target = smd->target;
-	DerivedMesh   *target_dm = NULL;
-	float blend = smd->blend;
+	int i, index;
+	struct Object *target       = vmd->target;
+	DerivedMesh   *target_dm    = NULL;
+	MVert         *target_verts = NULL;
+	MDeformVert   *dverts       = NULL;
+	int deform_group_index      = -1;
+	int vertex_count            = numVerts;
+	int target_vertex_count     = 0;
+	
+	float blend = vmd->blend;
 
 	if ( blend == 0.0 || target == NULL )
 		return;
- 
+
 	if ( !(target && target != ob && target->type == OB_MESH) ) {
 		return;
 	}
@@ -141,11 +147,32 @@ static void SnapModifier_do(
 		return;
 	}
 
-	for (i = 0; i < numVerts; i++) {
-		vertexCos[i][0] = vertexCos[i][0] * blend;
-		vertexCos[i][1] = vertexCos[i][1] * blend;
-		vertexCos[i][2] = vertexCos[i][2] * blend;
+	target_vertex_count = target_dm->getNumVerts( target_dm );
+	if (vertex_count < target_vertex_count) {
+		vertex_count = target_vertex_count;
 	}
+
+	target_verts = CDDM_get_verts( target_dm );
+	modifier_get_vgroup( ob, dm, vmd->vertex_group, &dverts, &deform_group_index );
+
+	for ( int index=0; index < vertex_count; index++ ) {
+		float final_blend = blend;
+		if (dverts) {
+			final_blend *= defvert_find_weight( &dverts[index], deform_group_index);
+		}
+
+		if ( final_blend ) {
+			float co_tmp[3];
+			// mul_v3_m4v3(co_tmp, hd->mat, co);
+			interp_v3_v3v3( vertexCos[index], vertexCos[index], target_verts[index].co, final_blend );
+		}
+	}
+
+	// for (i = 0; i < numVerts; i++) {
+	// 	vertexCos[i][0] = vertexCos[i][0] * blend;
+	// 	vertexCos[i][1] = vertexCos[i][1] * blend;
+	// 	vertexCos[i][2] = vertexCos[i][2] * blend;
+	// }
 
 	if (target_dm) {
 		target_dm->release(target_dm);
@@ -157,7 +184,7 @@ static void deformVerts(ModifierData *md, Object *ob, DerivedMesh *derivedData,
 {
 	DerivedMesh *dm = get_dm(ob, NULL, derivedData, NULL, false, false);
  
-	SnapModifier_do((SnapModifierData *)md, ob, dm,
+	SnapModifier_do((VertexSnapModifierData *)md, ob, dm,
 	                  vertexCos, numVerts);
  
 	if (dm != derivedData)
@@ -170,7 +197,7 @@ static void deformVertsEM(
 {
 	DerivedMesh *dm = get_dm(ob, editData, derivedData, NULL, false, false );
  
-	SnapModifier_do((SnapModifierData *)md, ob, dm,
+	SnapModifier_do((VertexSnapModifierData *)md, ob, dm,
 	                  vertexCos, numVerts);
  
 	if (dm != derivedData)
@@ -178,10 +205,10 @@ static void deformVertsEM(
 }
  
  
-ModifierTypeInfo modifierType_Snap = {
-	/* name */              "Snap",
-	/* structName */        "SnapModifierData",
-	/* structSize */        sizeof(SnapModifierData),
+ModifierTypeInfo modifierType_VertexSnap = {
+	/* name */              "VertexSnap",
+	/* structName */        "VertexSnapModifierData",
+	/* structSize */        sizeof(VertexSnapModifierData),
 	/* type */              eModifierTypeType_OnlyDeform,
 	/* flags */             eModifierTypeFlag_AcceptsMesh |
 	                        eModifierTypeFlag_SupportsEditmode,
