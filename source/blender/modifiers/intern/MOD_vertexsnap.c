@@ -37,6 +37,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BKE_action.h"
 #include "BKE_cdderivedmesh.h"
 #include "BKE_library_query.h"
 #include "BKE_particle.h"
@@ -49,17 +50,18 @@
 
 static void initData(ModifierData *md)
 {
-	VertexSnapModifierData *smd = (VertexSnapModifierData *) md;
-	smd->blend = 1.0f;
-	smd->target = NULL;
-	smd->vertex_group[0] = 0;
+	VertexSnapModifierData *vmd = (VertexSnapModifierData *) md;
+	vmd->blend = 1.0f;
+	vmd->target = NULL;
+	vmd->vertex_group[0] = 0;
+	vmd->deform_space = MOD_VSNAP_LOCAL;
 }
  
 static void copyData(ModifierData *md, ModifierData *target)
 {
 	/*
-	VertexSnapModifierData *smd = (VertexSnapModifierData *) md;
-	VertexSnapModifierData *tsmd = (VertexSnapModifierData *) target;
+	VertexSnapModifierData *vmd = (VertexSnapModifierData *) md;
+	VertexSnapModifierData *tvmd = (VertexSnapModifierData *) target;
 	*/
 	modifier_copyData_generic(md, target);
 }
@@ -67,8 +69,11 @@ static void copyData(ModifierData *md, ModifierData *target)
 static int isDisabled(ModifierData *md, int UNUSED(useRenderParams))
 {
 	/* disable if modifier there is no connected target object*/
-	VertexSnapModifierData *smd = (VertexSnapModifierData *)md;
-	return (smd->target == NULL);
+	VertexSnapModifierData *vmd = (VertexSnapModifierData *)md;
+	return (
+		vmd->target       == NULL    && 
+		vmd->target->type != OB_MESH
+	);
 }
 
 static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
@@ -86,9 +91,9 @@ static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
 
 static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
 {
-	VertexSnapModifierData *smd = (VertexSnapModifierData *)md;
+	VertexSnapModifierData *vmd = (VertexSnapModifierData *)md;
 
-	walk( userData, ob, &smd->target, IDWALK_NOP );
+	walk( userData, ob, &vmd->target, IDWALK_NOP );
 }
 
 static void updateDepgraph(ModifierData *md, DagForest *forest,
@@ -97,27 +102,32 @@ static void updateDepgraph(ModifierData *md, DagForest *forest,
 	Object *UNUSED(ob),
 	DagNode *obNode)
 {
-	VertexSnapModifierData *smd = (VertexSnapModifierData *)md;
+	VertexSnapModifierData *vmd = (VertexSnapModifierData *)md;
 
-	if (smd->target) {
-		DagNode *curNode = dag_get_node(forest, smd->target);
+	if (vmd->target) {
+		DagNode *curNode = dag_get_node(forest, vmd->target);
 
 		dag_add_relation(forest, curNode, obNode,
-				DAG_RL_DATA_DATA, "Surface Deform Modifier");
+				DAG_RL_OB_DATA | DAG_RL_DATA_DATA, "Surface Deform Modifier");
 	}
 }
 
 static void updateDepsgraph(ModifierData *md,
 	struct Main *UNUSED(bmain),
 	struct Scene *UNUSED(scene),
-	Object *UNUSED(ob),
+	Object *ob,
 	struct DepsNodeHandle *node)
 {
-	VertexSnapModifierData *smd = (VertexSnapModifierData *)md;
-	if (smd->target != NULL) {
-		DEG_add_object_relation(node, smd->target,
+	VertexSnapModifierData *vmd = (VertexSnapModifierData *)md;
+	if (vmd->target != NULL) {
+		DEG_add_object_relation(node, vmd->target,
 				DEG_OB_COMP_GEOMETRY, "Surface Deform Modifier");
+		DEG_add_object_relation(node, vmd->target,
+				DEG_OB_COMP_TRANSFORM, "Surface Deform Modifier");
 	}
+
+	// make sure we're linked to our own transform
+	DEG_add_object_relation(node, ob, DEG_OB_COMP_TRANSFORM, "Surface Deform Modifier");
 }
 
 static void SnapModifier_do(
@@ -132,8 +142,9 @@ static void SnapModifier_do(
 	int deform_group_index      = -1;
 	int vertex_count            = numVerts;
 	int target_vertex_count     = 0;
-	
+
 	float blend = vmd->blend;
+	float final_blend;
 
 	if ( blend == 0.0 || target == NULL )
 		return;
@@ -155,24 +166,41 @@ static void SnapModifier_do(
 	target_verts = CDDM_get_verts( target_dm );
 	modifier_get_vgroup( ob, dm, vmd->vertex_group, &dverts, &deform_group_index );
 
-	for ( int index=0; index < vertex_count; index++ ) {
-		float final_blend = blend;
-		if (dverts) {
-			final_blend *= defvert_find_weight( &dverts[index], deform_group_index);
-		}
+	if ( vmd->deform_space == MOD_VSNAP_WORLD ) {
+		invert_m4_m4( ob->imat,     ob->obmat );
+		invert_m4_m4( target->imat, target->obmat );
 
-		if ( final_blend ) {
-			float co_tmp[3];
-			// mul_v3_m4v3(co_tmp, hd->mat, co);
-			interp_v3_v3v3( vertexCos[index], vertexCos[index], target_verts[index].co, final_blend );
+		for ( int index=0; index < vertex_count; index++ ) {
+			float final_blend = blend;
+			if (dverts) {
+				final_blend *= defvert_find_weight( &dverts[index], deform_group_index);
+			}
+
+			if ( final_blend ) {
+				float object_co[3];
+				float target_co[3];
+				mul_v3_m4v3( object_co, ob->obmat,     vertexCos[index] );
+				mul_v3_m4v3( target_co, target->obmat, target_verts[index].co );
+				interp_v3_v3v3( object_co, object_co, target_co, final_blend );
+				
+				// in world space we need the world position of the target, but
+				// we need to remove the world matrix of the deforming object
+				// after doing the lerp
+				mul_v3_m4v3( vertexCos[index], ob->imat, object_co );
+			}
 		}
+	} else {
+		for ( int index=0; index < vertex_count; index++ ) {
+			float final_blend = blend;
+			if (dverts) {
+				final_blend *= defvert_find_weight( &dverts[index], deform_group_index);
+			}
+
+			if ( final_blend ) {
+				interp_v3_v3v3( vertexCos[index], vertexCos[index], target_verts[index].co, final_blend );
+			}
+		}		
 	}
-
-	// for (i = 0; i < numVerts; i++) {
-	// 	vertexCos[i][0] = vertexCos[i][0] * blend;
-	// 	vertexCos[i][1] = vertexCos[i][1] * blend;
-	// 	vertexCos[i][2] = vertexCos[i][2] * blend;
-	// }
 
 	if (target_dm) {
 		target_dm->release(target_dm);
