@@ -48,6 +48,14 @@
 
 #include "depsgraph_private.h"
 
+// #define DEBUG_TIME 1
+
+#include "PIL_time.h"
+#ifdef DEBUG_TIME
+	#include "PIL_time_utildefines.h"
+#endif
+
+
 static void initData(ModifierData *md)
 {
 	VertexSnapModifierData *vmd = (VertexSnapModifierData *) md;
@@ -56,7 +64,7 @@ static void initData(ModifierData *md)
 	vmd->vertex_group[0] = 0;
 	vmd->deform_space = MOD_VSNAP_LOCAL;
 }
- 
+
 static void copyData(ModifierData *md, ModifierData *target)
 {
 	/*
@@ -130,7 +138,7 @@ static void updateDepsgraph(ModifierData *md,
 	DEG_add_object_relation(node, ob, DEG_OB_COMP_TRANSFORM, "Surface Deform Modifier");
 }
 
-static void SnapModifier_do(
+static void VertexSnapModifier_do(
         VertexSnapModifierData *vmd, Object *ob, DerivedMesh *dm,
         float (*vertexCos)[3], int numVerts)
 {
@@ -144,7 +152,10 @@ static void SnapModifier_do(
 	int target_vertex_count     = 0;
 
 	float blend = vmd->blend;
-	float final_blend;
+
+	#ifdef DEBUG_TIME
+		TIMEIT_START( vertex_snap_modifier ); 
+	#endif
 
 	if ( blend == 0.0 || target == NULL )
 		return;
@@ -170,7 +181,7 @@ static void SnapModifier_do(
 		invert_m4_m4( ob->imat,     ob->obmat );
 		invert_m4_m4( target->imat, target->obmat );
 
-		for ( int index=0; index < vertex_count; index++ ) {
+		for ( index=0; index < vertex_count; index++ ) {
 			float final_blend = blend;
 			if (dverts) {
 				final_blend *= defvert_find_weight( &dverts[index], deform_group_index);
@@ -179,18 +190,19 @@ static void SnapModifier_do(
 			if ( final_blend ) {
 				float object_co[3];
 				float target_co[3];
+
+				// calculate lerp in world space
 				mul_v3_m4v3( object_co, ob->obmat,     vertexCos[index] );
 				mul_v3_m4v3( target_co, target->obmat, target_verts[index].co );
 				interp_v3_v3v3( object_co, object_co, target_co, final_blend );
 				
-				// in world space we need the world position of the target, but
-				// we need to remove the world matrix of the deforming object
+				// remove the world matrix of the deforming object
 				// after doing the lerp
 				mul_v3_m4v3( vertexCos[index], ob->imat, object_co );
 			}
 		}
 	} else {
-		for ( int index=0; index < vertex_count; index++ ) {
+		for ( index=0; index < vertex_count; index++ ) {
 			float final_blend = blend;
 			if (dverts) {
 				final_blend *= defvert_find_weight( &dverts[index], deform_group_index);
@@ -205,14 +217,18 @@ static void SnapModifier_do(
 	if (target_dm) {
 		target_dm->release(target_dm);
 	}
+
+	#ifdef DEBUG_TIME
+		TIMEIT_END( vertex_snap_modifier );
+	#endif
 }
- 
+
 static void deformVerts(ModifierData *md, Object *ob, DerivedMesh *derivedData,
                         float (*vertexCos)[3], int numVerts, ModifierApplyFlag UNUSED(flag))
 {
 	DerivedMesh *dm = get_dm(ob, NULL, derivedData, NULL, false, false);
  
-	SnapModifier_do((VertexSnapModifierData *)md, ob, dm,
+	VertexSnapModifier_do((VertexSnapModifierData *)md, ob, dm,
 	                  vertexCos, numVerts);
  
 	if (dm != derivedData)
@@ -225,7 +241,7 @@ static void deformVertsEM(
 {
 	DerivedMesh *dm = get_dm(ob, editData, derivedData, NULL, false, false );
  
-	SnapModifier_do((VertexSnapModifierData *)md, ob, dm,
+	VertexSnapModifier_do((VertexSnapModifierData *)md, ob, dm,
 	                  vertexCos, numVerts);
  
 	if (dm != derivedData)
