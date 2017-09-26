@@ -115,10 +115,6 @@ void rtc_filter_func(void*, RTCRay& ray_)
 		return;
 	}
 	else if(ray.type == CCLRay::RAY_SSS) {
-		if(!rtc_shadow_linking(ray)) {
-			ray.geomID = RTC_INVALID_GEOMETRY_ID;
-			return;
-		}
 		/* only accept hits from the same object and triangles */
 		if(ray.instID/2 != ray.sss_object_id || ray.geomID & 1) {
 			/* this tells embree to continue tracing */
@@ -317,7 +313,7 @@ void BVHEmbree::build(Progress& progress, Stats *stats_)
 		scene = NULL;
 	}
 
-	RTCSceneFlags flags = RTC_SCENE_DYNAMIC|RTC_SCENE_COMPACT|RTC_SCENE_HIGH_QUALITY|RTC_SCENE_ROBUST;
+	RTCSceneFlags flags = RTC_SCENE_DYNAMIC|RTC_SCENE_COMPACT|RTC_SCENE_ROBUST;
 	if(params.use_spatial_split) {
 		flags = flags|RTC_SCENE_HIGH_QUALITY;
 	}
