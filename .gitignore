@@ -1,5 +1,6 @@
 # generic files to ignore
 .*
+*.bat
 
 # python temp paths
 __pycache__/
@@ -39,3 +40,4 @@ Desktop.ini
 /doc/python_api/rst/op_prop.png
 /doc/python_api/rst/run_script.png
 /doc/python_api/rst/spacebar.png
+source/array_random.patch
