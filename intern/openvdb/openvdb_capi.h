@@ -82,6 +82,8 @@ void OpenVDB_import_grid_vec(
         float **data_x, float **data_y, float **data_z,
         const int res[3]);
 
+void OpenVDB_print_grids(struct OpenVDBReader *reader);
+
 struct OpenVDBWriter *OpenVDBWriter_create(void);
 void OpenVDBWriter_free(struct OpenVDBWriter *writer);
 void OpenVDBWriter_set_flags(struct OpenVDBWriter *writer, const int flag, const bool half);

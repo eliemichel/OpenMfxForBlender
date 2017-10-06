@@ -39,6 +39,10 @@
 
 #include "io_openvdb.h"
 
+#ifdef WITH_OPENVDB
+#include "openvdb_capi.h"
+#endif
+
 static void wm_openvdb_import_draw(bContext *UNUSED(C), wmOperator *op)
 {
 	PointerRNA ptr;
@@ -56,6 +60,11 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
 
 	char filename[FILE_MAX];
 	RNA_string_get(op->ptr, "filepath", filename);
+
+	struct OpenVDBReader *reader = OpenVDBReader_create();
+	OpenVDBReader_open(reader, filename);
+
+	OpenVDB_print_grids(reader);
 
 	return OPERATOR_FINISHED;
 }

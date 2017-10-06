@@ -50,6 +50,7 @@ public:
 	bool hasGrid(const openvdb::Name &name) const;
 	openvdb::GridBase::Ptr getGrid(const openvdb::Name &name) const;
 	size_t numGrids() const;
+	void printGrids();
 };
 
 #endif /* __OPENVDB_READER_H__ */

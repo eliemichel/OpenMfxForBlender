@@ -127,6 +127,13 @@ size_t OpenVDBReader::numGrids() const
 	return m_file->getGrids()->size();
 }
 
+void OpenVDBReader::printGrids()
+{
+	for (openvdb::io::File::NameIterator nameIter = m_file->beginName(); nameIter != m_file->endName(); ++nameIter) {
+		std::cout << nameIter.gridName() << std::endl;
+	}
+}
+
 void OpenVDBReader::cleanupFile()
 {
 	if (m_file) {

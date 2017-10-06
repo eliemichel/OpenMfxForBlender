@@ -139,6 +139,11 @@ void OpenVDB_import_grid_vec(
 	internal::OpenVDB_import_grid_vector(reader, name, data_x, data_y, data_z, res);
 }
 
+void OpenVDB_print_grids(OpenVDBReader *reader)
+{
+	reader->printGrids();
+}
+
 OpenVDBWriter *OpenVDBWriter_create()
 {
 	return new OpenVDBWriter();

@@ -30,6 +30,7 @@ set(INC
 	../../collada
 	../../alembic
 	../../../../intern/guardedalloc
+	../../../../intern/openvdb
 )
 
 set(INC_SYS
