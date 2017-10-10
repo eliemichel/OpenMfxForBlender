@@ -251,10 +251,15 @@ typedef struct ArrayModifierData {
 	int count;
 
 	/* Materials */
-	int use_random_materials;
-	int random_seed;
-	int random_type;
-	int loop_offset;
+	int   advanced_settings;
+	int   random_seed;
+	int   random_material_type;
+	int   loop_offset;
+	float random_location[3];
+	float random_rotation[3];
+	float random_scale[3];
+
+	int padding;
 
 } ArrayModifierData;
 
@@ -265,6 +270,14 @@ enum {
 	MOD_ARR_MATERIAL_LOOP = 1,
 	// randomize material assignments
 	MOD_ARR_MATERIAL_RANDOM = 2,
+};
+
+enum {
+	MOD_ARR_ENABLE_ADVANCED  = (1 << 0),
+	MOD_ARR_ENABLE_MATERIALS = (1 << 1),
+	MOD_ARR_TRANS_LOCATION   = (1 << 2),
+	MOD_ARR_TRANS_ROTATION   = (1 << 3),
+	MOD_ARR_TRANS_SCALE      = (1 << 4),
 };
 
 

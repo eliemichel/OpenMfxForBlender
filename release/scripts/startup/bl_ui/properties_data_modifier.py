@@ -121,22 +121,49 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "end_cap")
 
         layout.separator()
-        sub = layout.split()
+        sub = layout.row()
 
         material_count = len(ob.data.materials) if (ob.data and ob.data.materials) else 0
 
-        sub.prop( md, "use_random_materials" )
-        sub.label( 'Material Count: {}'.format(material_count) )
+        sub.prop( md, "use_advanced_settings" )
 
-        layout.separator()
-        sub = layout.column()
-        sub.enabled = bool( md.use_random_materials and material_count )
-        sub.prop( md, "random_type" )
+        if md.use_advanced_settings:
+            sub.separator()
+            adv = layout.box()
 
-        if md.random_type == 'RANDOM':
-            sub.prop( md, "random_seed" )
-        elif md.random_type == 'LOOP':
-            sub.prop( md, "loop_offset" )
+            # mats = adv.row()
+            split = adv.split( 0.5 )
+            split.prop( md, "use_random_materials" )
+            split.label( 'Material Count: {}'.format(material_count) )
+
+            if md.use_random_materials:
+                mat_settings = adv.column()
+                mat_settings.enabled = bool( material_count )
+                mat_settings.prop( md, "random_material_type" )
+
+                if md.random_material_type == 'RANDOM':
+                    mat_settings.prop( md, "random_seed" )
+                elif md.random_material_type == 'LOOP':
+                    mat_settings.prop( md, "loop_offset" )
+
+            subrow = adv.row( align=True )
+            subrow.prop( md, "use_random_location" )
+            subrow.prop( md, "use_random_rotation" )
+            subrow.prop( md, "use_random_scale" )
+
+            subrow = adv.row( align=True )
+
+            if md.use_random_location:
+                col = subrow.column( align=True )
+                col.prop( md, "random_location" )
+
+            if md.use_random_rotation:
+                col = subrow.column( align=True )
+                col.prop( md, "random_rotation" )
+
+            if md.use_random_scale:
+                col = subrow.column( align=True )
+                col.prop( md, "random_scale" )
 
     def BEVEL(self, layout, ob, md):
         split = layout.split()

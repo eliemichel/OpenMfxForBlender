@@ -2103,10 +2103,10 @@ static void rna_def_modifier_array(BlenderRNA *brna)
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
 	RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 	
-	/* Materials */
-	prop = RNA_def_property(srna, "use_random_materials", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "use_random_materials", 0);
-	RNA_def_property_ui_text(prop, "Use Random Materials", "Randomizes materials on duplicates");
+	/* Advanced Settings */
+	prop = RNA_def_property(srna, "use_advanced_settings", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "advanced_settings", MOD_ARR_ENABLE_ADVANCED);
+	RNA_def_property_ui_text(prop, "Enable Advanced Settings", "Enabled advanced settings");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 	
 	prop = RNA_def_property(srna, "random_seed", PROP_INT, PROP_NONE);
@@ -2116,10 +2116,10 @@ static void rna_def_modifier_array(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Random Seed", "Seed used to randomize materials");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 	
-	prop = RNA_def_property(srna, "random_type", PROP_ENUM, PROP_NONE);
+	prop = RNA_def_property(srna, "random_material_type", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_items(prop, prop_random_type_items);
-	RNA_def_property_enum_sdna( prop, NULL, "random_type" );
-	RNA_def_property_ui_text(prop, "Random Type", "Type of Material Assignment");
+	RNA_def_property_enum_sdna( prop, NULL, "random_material_type" );
+	RNA_def_property_ui_text(prop, "Random Material Type", "Type of Material Assignment");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
 	prop = RNA_def_property(srna, "loop_offset", PROP_INT, PROP_NONE);
@@ -2127,6 +2127,44 @@ static void rna_def_modifier_array(BlenderRNA *brna)
 	RNA_def_property_range(prop, 0, 9999);
 	RNA_def_property_ui_range(prop, 0, 256, 1, 1);
 	RNA_def_property_ui_text(prop, "Loop Offset", "Offset value for loop mode");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "random_location", PROP_FLOAT, PROP_TRANSLATION);
+	RNA_def_property_float_sdna(prop, NULL, "random_location");
+	RNA_def_property_ui_text(prop, "Random Location", "Amount to add to the location of each copy");
+	RNA_def_property_ui_range(prop, -FLT_MAX, FLT_MAX, 0.0f, RNA_TRANSLATION_PREC_DEFAULT);
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	
+	prop = RNA_def_property(srna, "random_rotation", PROP_FLOAT, PROP_EULER);
+	RNA_def_property_float_sdna(prop, NULL, "random_rotation");
+	RNA_def_property_ui_text(prop, "Random Rotation", "Amount to add to the rotation of each copy");
+	RNA_def_property_ui_range(prop, -360.0f, 360.0f, 0.0f, RNA_TRANSLATION_PREC_DEFAULT);
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	
+	prop = RNA_def_property(srna, "random_scale", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "random_scale");
+	RNA_def_property_ui_text(prop, "Random Scale", "Amount to add to the scale of each copy");
+	RNA_def_property_ui_range(prop, -FLT_MAX, FLT_MAX, 0.0f, RNA_TRANSLATION_PREC_DEFAULT);
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	
+	prop = RNA_def_property(srna, "use_random_location", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "advanced_settings", MOD_ARR_TRANS_LOCATION);
+	RNA_def_property_ui_text(prop, "Random Location", "Add random values to location");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "use_random_rotation", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "advanced_settings", MOD_ARR_TRANS_ROTATION);
+	RNA_def_property_ui_text(prop, "Random Rotation", "Add random values to rotation");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "use_random_scale", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "advanced_settings", MOD_ARR_TRANS_SCALE);
+	RNA_def_property_ui_text(prop, "Random Scale", "Add random values to scale");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "use_random_materials", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "advanced_settings", MOD_ARR_ENABLE_MATERIALS);
+	RNA_def_property_ui_text(prop, "Random Materials", "Assign random materials to copies");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 

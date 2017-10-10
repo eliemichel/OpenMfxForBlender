@@ -85,9 +85,13 @@ static void initData(ModifierData *md)
 
 	zero_v3(amd->offset);
 
-	amd->use_random_materials = false;
-	amd->random_seed          = 0;
-	amd->random_type          = MOD_ARR_MATERIAL_RANDOM;
+	amd->advanced_settings = 0;
+	amd->random_seed       = 0;
+	amd->random_material_type       = MOD_ARR_MATERIAL_RANDOM;
+	
+	zero_v3(amd->random_location);
+	zero_v3(amd->random_rotation);
+	zero_v3(amd->random_scale);
 }
 
 static void copyData(ModifierData *md, ModifierData *target)
@@ -473,19 +477,25 @@ static DerivedMesh *arrayModifier_doArray(
 	/* material stuff */
 	const int material_count        = ob->totcol;
 	const int seed                  = amd->random_seed;
-	const int random_type           = amd->random_type;
-	const bool use_random_materials = (bool)amd->use_random_materials && (bool)material_count;
-	const int loop_offset           = amd->random_type == MOD_ARR_MATERIAL_LOOP ? amd->loop_offset : 0;
+	const int random_material_type  = amd->random_material_type;
+	const bool enable_advanced      = (bool)(amd->advanced_settings & MOD_ARR_ENABLE_ADVANCED);
+	const bool enable_materials     = (bool)(amd->advanced_settings & MOD_ARR_ENABLE_MATERIALS) & enable_advanced;
+	const bool enable_location      = (bool)(amd->advanced_settings & MOD_ARR_TRANS_LOCATION) & enable_advanced;
+	const bool enable_rotation      = (bool)(amd->advanced_settings & MOD_ARR_TRANS_ROTATION) & enable_advanced;
+	const bool enable_scale         = (bool)(amd->advanced_settings & MOD_ARR_TRANS_SCALE) & enable_advanced;
+	const bool use_random_materials = enable_advanced && (bool)material_count;
+	const int loop_offset           = amd->random_material_type == MOD_ARR_MATERIAL_LOOP ? amd->loop_offset : 0;
 	
-	RNG *rng;
-
 	int start_cap_nverts = 0, start_cap_nedges = 0, start_cap_npolys = 0, start_cap_nloops = 0;
 	int end_cap_nverts = 0, end_cap_nedges = 0, end_cap_npolys = 0, end_cap_nloops = 0;
 	int result_nverts = 0, result_nedges = 0, result_npolys = 0, result_nloops = 0;
 	int chunk_nverts, chunk_nedges, chunk_nloops, chunk_npolys;
 	int first_chunk_start, first_chunk_nverts, last_chunk_start, last_chunk_nverts;
-
+	
 	DerivedMesh *result, *start_cap_dm = NULL, *end_cap_dm = NULL;
+	
+	
+	RNG *rng = BLI_rng_new_srandom( seed );
 
 	chunk_nverts = dm->getNumVerts(dm);
 	chunk_nedges = dm->getNumEdges(dm);
@@ -777,44 +787,45 @@ static DerivedMesh *arrayModifier_doArray(
 	/* done capping */
 
 	/* materials assignment */
-	if (use_random_materials) {
-		rng = BLI_rng_new_srandom( seed );
-
-		int chunk_index  = 0;
-
-        const int real_count = count + 2;
-        int *all_materials = MEM_mallocN( sizeof(int)*real_count, "ArrayModifier::MaterialRandom" );
-		BLI_assert( all_materials != NULL );
-
-        for ( i = 0; i < real_count; i++ ) {
-            all_materials[i] = get_random_material( rng, i-loop_offset, random_type, material_count );
-        }
-
-		mp = CDDM_get_polys(result);
-
-		for (chunk_index = 0; chunk_index < count; chunk_index++ ) {
-			int base_index = chunk_index * chunk_npolys;
-			for ( int p = 0; p < chunk_npolys; p++ ) {
-				mp[base_index+p].mat_nr = all_materials[chunk_index+1];
+	if (enable_advanced) {
+		if (enable_materials) {
+			int chunk_index  = 0;
+	
+			const int real_count = count + 2;
+			int *all_materials = MEM_mallocN( sizeof(int)*real_count, "ArrayModifier::MaterialRandom" );
+			BLI_assert( all_materials != NULL );
+	
+			for ( i = 0; i < real_count; i++ ) {
+				all_materials[i] = get_random_material( rng, i-loop_offset, random_material_type, material_count );
 			}
+	
+			mp = CDDM_get_polys(result);
+	
+			for (chunk_index = 0; chunk_index < count; chunk_index++ ) {
+				int base_index = chunk_index * chunk_npolys;
+				for ( int p = 0; p < chunk_npolys; p++ ) {
+					mp[base_index+p].mat_nr = all_materials[chunk_index+1];
+				}
+			}
+	
+			int base_index = count * chunk_npolys;
+			if (start_cap_dm) {
+				for ( i = 0; i < start_cap_npolys; i++ ) {
+					mp[base_index+i].mat_nr = all_materials[0];
+				}
+			}
+	
+			base_index += start_cap_npolys;
+			if (end_cap_dm) {
+				for ( i = 0; i < start_cap_npolys; i++ ) {
+					mp[base_index+i].mat_nr = all_materials[real_count-1];
+				}
+			}
+			
+			MEM_SAFE_FREE( all_materials );
 		}
 
-		int base_index = count * chunk_npolys;
-		if (start_cap_dm) {
-			for ( i = 0; i < start_cap_npolys; i++ ) {
-				mp[base_index+i].mat_nr = all_materials[0];
-			}
-		}
-
-		base_index += start_cap_npolys;
-		if (end_cap_dm) {
-			for ( i = 0; i < start_cap_npolys; i++ ) {
-				mp[base_index+i].mat_nr = all_materials[real_count-1];
-			}
-		}
-		
 		BLI_rng_free( rng );
-		MEM_SAFE_FREE( all_materials );
 	}
 
 	/* Handle merging */
