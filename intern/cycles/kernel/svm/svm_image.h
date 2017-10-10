@@ -380,8 +380,8 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
     decode_node_uchar4(node.w, &curve_thickness_offset, &curve_location_offset, &curve_scale_offset, &curve_type);
     uint slot = node.y;
 
-	uint4 node2 = read_node(kg, offset);
-	int width = node2.x;
+    uint4 node2 = read_node(kg, offset);
+    int width = node2.x;
 
 
     float4 f;
@@ -412,7 +412,7 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 
         for (int t = 0; t < width; ++t) {
             int t_next = (t+1)%width;
-            float4 ls0 = svm_image_texture(kg, slot, (float)t/width,	  0.0, false, true);
+            float4 ls0 = svm_image_texture(kg, slot, (float)t/width,      0.0, false, true);
             float4 ls1 = svm_image_texture(kg, slot, (float)t_next/width, 0.0, false, true);
 
 //            if (display) {
@@ -429,6 +429,29 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 
             // Line
             if (curve_type == 0) {
+                float xmin, xmax;
+                if (p0.x < p1.x) {
+                    xmin = p0.x - curve_thickness;
+                    xmax = p1.x + curve_thickness;
+                } else {
+                    xmin = p1.x - curve_thickness;
+                    xmax = p0.x + curve_thickness;
+                }
+                
+                if (co2.x < xmin)   continue;
+                if (co2.x > xmax)   continue;
+
+                float ymin, ymax;
+                if (p0.y < p1.y) {
+                    ymin = p0.y - curve_thickness;
+                    ymax = p1.y + curve_thickness;
+                } else {
+                    ymin = p1.y - curve_thickness;
+                    ymax = p0.y + curve_thickness;
+                }
+                
+                if (co2.y < ymin)   continue;
+                if (co2.y > ymax)   continue;
 
                 if (minimum_distance(p0, p1, co2) < curve_thickness) {
                     grad = 0.0f;
@@ -471,6 +494,30 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 
             // Grad
             } else {
+            
+                float xmin, xmax;
+                if (p0.x < p1.x) {
+                    xmin = p0.x - curve_thickness;
+                    xmax = p1.x + curve_thickness;
+                } else {
+                    xmin = p1.x - curve_thickness;
+                    xmax = p0.x + curve_thickness;
+                }
+                
+                if (co2.x < xmin)   continue;
+                if (co2.x > xmax)   continue;
+
+                float ymin, ymax;
+                if (p0.y < p1.y) {
+                    ymin = p0.y - curve_thickness;
+                    ymax = p1.y + curve_thickness;
+                } else {
+                    ymin = p1.y - curve_thickness;
+                    ymax = p0.y + curve_thickness;
+                }
+                
+                if (co2.y < ymin)   continue;
+                if (co2.y > ymax)   continue;
 
                 float d = minimum_distance(p0, p1, co2);
                 if (d < curve_thickness) {
@@ -488,8 +535,8 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 
     }
 
-	if(stack_valid(out_offset))
-		stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
+    if(stack_valid(out_offset))
+        stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
 }
 
 CCL_NAMESPACE_END
