@@ -131,6 +131,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             sub.separator()
             adv = layout.box()
 
+            adv.prop( md, "random_seed" )
+
             # mats = adv.row()
             split = adv.split( 0.5 )
             split.prop( md, "use_random_materials" )
@@ -140,11 +142,11 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
                 mat_settings = adv.column()
                 mat_settings.enabled = bool( material_count )
                 mat_settings.prop( md, "random_material_type" )
+                mat_settings.prop( md, "random_material_no_duplicates")
 
-                if md.random_material_type == 'RANDOM':
-                    mat_settings.prop( md, "random_seed" )
-                elif md.random_material_type == 'LOOP':
-                    mat_settings.prop( md, "loop_offset" )
+                col = mat_settings.column( align=True )
+                col.enabled = (md.random_material_type == 'LOOP')
+                col.prop( md, "loop_offset" )
 
             subrow = adv.row( align=True )
             subrow.prop( md, "use_random_location", text='Location' )
@@ -156,17 +158,17 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             col = subrow.column( align=True )
             col.enabled = md.use_random_location
             col.prop( md, "random_location", text='' )
+            col.prop( md, "cumulative_location" )
 
             col = subrow.column( align=True )
             col.enabled = md.use_random_rotation
             col.prop( md, "random_rotation", text='' )
+            col.prop( md, "cumulative_rotation" )
 
             col = subrow.column( align=True )
             col.enabled = md.use_random_scale
             col.prop( md, "random_scale", text='' )
-
-            row = adv.row( align=True )
-            row.prop( md, "cumulative_random_transform", text="Cumulative Random Transform")
+            col.prop( md, "cumulative_scale" )
 
     def BEVEL(self, layout, ob, md):
         split = layout.split()

@@ -2167,10 +2167,26 @@ static void rna_def_modifier_array(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Random Materials", "Assign random materials to copies");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
-	prop = RNA_def_property(srna, "cumulative_random_transform", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_boolean_sdna(prop, NULL, "advanced_settings", MOD_ARR_TRANS_CUMULATIVE);
-	RNA_def_property_ui_text(prop, "Cumulative", "Is Random Transform cumulative per copy?");
+	prop = RNA_def_property(srna, "random_material_no_duplicates", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "advanced_settings", MOD_ARR_MATERIAL_NODUPES);
+	RNA_def_property_ui_text(prop, "No Duplicate Materials", "If enabled, a random material will not appear twice in a row");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "cumulative_location", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "advanced_settings", MOD_ARR_TRANS_CUMULATIVE_LOC);
+	RNA_def_property_ui_text(prop, "Cumulative", "Is random location cumulative per copy?");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "cumulative_rotation", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "advanced_settings", MOD_ARR_TRANS_CUMULATIVE_ROT);
+	RNA_def_property_ui_text(prop, "Cumulative", "Is random rotation cumulative per copy?");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "cumulative_scale", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "advanced_settings", MOD_ARR_TRANS_CUMULATIVE_SCL);
+	RNA_def_property_ui_text(prop, "Cumulative", "Is random scale cumulative per copy?");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
 }
 
 static void rna_def_modifier_edgesplit(BlenderRNA *brna) {

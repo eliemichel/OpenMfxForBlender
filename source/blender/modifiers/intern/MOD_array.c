@@ -453,6 +453,81 @@ BLI_INLINE float fast_abs( const float value ) {
 	return result;
 }
 
+BLI_INLINE void calculate_random_matrices(
+		const ArrayModifierData *amd, RNG *rng,
+		float *random_offset,
+		float *random_offset_cumulative )
+{
+	const bool enable_location     = (bool)(amd->advanced_settings & MOD_ARR_TRANS_LOCATION);
+	const bool enable_rotation     = (bool)(amd->advanced_settings & MOD_ARR_TRANS_ROTATION);
+	const bool enable_scale        = (bool)(amd->advanced_settings & MOD_ARR_TRANS_SCALE);
+	const bool cumulative_location = (bool)(amd->advanced_settings & MOD_ARR_TRANS_CUMULATIVE_LOC);
+	const bool cumulative_rotation = (bool)(amd->advanced_settings & MOD_ARR_TRANS_CUMULATIVE_ROT);
+	const bool cumulative_scale    = (bool)(amd->advanced_settings & MOD_ARR_TRANS_CUMULATIVE_SCL);
+
+	float r_loc[3];
+	float r_rot[3];
+	float r_scale[3];
+
+	int i;
+
+	unit_m4( random_offset );
+	unit_m4( random_offset_cumulative );
+
+	// because I want the random numbers for everything to be 
+	// consistent for the same seed value, generate the random
+	// values for all 9 numbers even if they won't get used
+
+	for ( i = 0; i < 3; i++ ) {
+		r_loc[i]   = BLI_rng_get_float( rng ) * amd->random_location[i] * 2.0f - amd->random_location[i];
+		if (cumulative_location) {
+			r_loc[i] = fast_abs( r_loc[i] );
+		}
+		r_rot[i]   = BLI_rng_get_float( rng ) * amd->random_rotation[i] * 2.0f - amd->random_rotation[i];
+		// using absolute scale only because when you go negative the normals flip
+		r_scale[i] = fast_abs( BLI_rng_get_float( rng ) * amd->random_scale[i]    * 2.0f - amd->random_scale[i] + 1.0f );
+	}
+
+	if ( enable_rotation ) {
+		if (cumulative_rotation) {
+			eulO_to_mat4( (float **)random_offset_cumulative, r_rot, ROT_MODE_XYZ );
+		}
+		else {
+			eulO_to_mat4( (float **)random_offset, r_rot, ROT_MODE_XYZ );
+		}
+	}	
+
+	if ( enable_scale ) {
+		float *target = NULL;
+		if (cumulative_scale) {
+			target = random_offset_cumulative;
+		} else {
+			target = random_offset;
+		}
+		
+		for( i=0; i < 3; i++ ) {
+			// this line is incorrect because of the column ordering
+			// mul_v3_fl( random_offset[i], r_scale[i] );
+			target[i]   *= r_scale[i];
+			target[4+i] *= r_scale[i];
+			target[8+i] *= r_scale[i]; 
+		}
+	}
+
+	if ( enable_location ) {
+		float *loc_pointer = NULL;
+		if (cumulative_location) {
+			loc_pointer = random_offset_cumulative + 12;
+		}
+		else {
+			loc_pointer = random_offset + 12;
+		}
+		loc_pointer[0] = r_loc[0];
+		loc_pointer[1] = r_loc[1];
+		loc_pointer[2] = r_loc[2];
+	}
+}
+
 
 static DerivedMesh *arrayModifier_doArray(
         ArrayModifierData *amd,
@@ -482,23 +557,21 @@ static DerivedMesh *arrayModifier_doArray(
 	const bool use_offset_ob        = ((amd->offset_type & MOD_ARR_OFF_OBJ) && amd->offset_ob);
 
 	/* material stuff */
-	const int material_count        = ob->totcol;
-	const int seed                  = amd->random_seed;
-	const int random_material_type  = amd->random_material_type;
+	const int  material_count       = ob->totcol;
+	const int  seed                 = amd->random_seed;
+	const int  random_material_type = amd->random_material_type;
 	const bool enable_advanced      = (bool)(amd->advanced_settings & MOD_ARR_ENABLE_ADVANCED);
 	const bool enable_materials     = (bool)(amd->advanced_settings & MOD_ARR_ENABLE_MATERIALS) & enable_advanced;
 	const bool enable_location      = (bool)(amd->advanced_settings & MOD_ARR_TRANS_LOCATION) & enable_advanced;
 	const bool enable_rotation      = (bool)(amd->advanced_settings & MOD_ARR_TRANS_ROTATION) & enable_advanced;
 	const bool enable_scale         = (bool)(amd->advanced_settings & MOD_ARR_TRANS_SCALE) & enable_advanced;
-	const bool random_cumulative    = (bool)(amd->advanced_settings & MOD_ARR_TRANS_CUMULATIVE);
 	const bool use_random_materials = enable_advanced && (bool)material_count;
-	const int loop_offset           = amd->random_material_type == MOD_ARR_MATERIAL_LOOP ? amd->loop_offset : 0;
+	const int  loop_offset          = amd->random_material_type == MOD_ARR_MATERIAL_LOOP ? amd->loop_offset : 0;
+
+	const bool random_materials_no_duplicates = (bool)(amd->advanced_settings & MOD_ARR_MATERIAL_NODUPES);
 	
 	float random_offset[4][4];
-	float random_temp[4][4];
-	float r_loc[3];
-	float r_rot[3];
-	float r_scale[3];
+	float random_offset_cumulative[4][4];
 
 	int start_cap_nverts = 0, start_cap_nedges = 0, start_cap_npolys = 0, start_cap_nloops = 0;
 	int end_cap_nverts = 0, end_cap_nedges = 0, end_cap_npolys = 0, end_cap_nloops = 0;
@@ -508,9 +581,6 @@ static DerivedMesh *arrayModifier_doArray(
 	
 	DerivedMesh *result, *start_cap_dm = NULL, *end_cap_dm = NULL;
 	
-	
-	RNG *rng = BLI_rng_new_srandom( seed );
-
 	chunk_nverts = dm->getNumVerts(dm);
 	chunk_nedges = dm->getNumEdges(dm);
 	chunk_nloops = dm->getNumLoops(dm);
@@ -604,6 +674,25 @@ static DerivedMesh *arrayModifier_doArray(
 	if (count < 1)
 		count = 1;
 
+	// for predictability, randomize the materials early
+	RNG *rng = BLI_rng_new_srandom( seed );
+	const int real_count = count + 2;
+	int *all_materials = MEM_mallocN( sizeof(int)*real_count, "ArrayModifier::MaterialRandom" );
+	BLI_assert( all_materials != NULL );
+
+	int extra_index = 0;
+	
+	for ( i = 0; i < real_count; i++ ) {
+		all_materials[i] = get_random_material( rng, i-loop_offset + extra_index, random_material_type, material_count );
+		if ( (i > 0) && random_materials_no_duplicates ) {
+			// feature request: prevent materials coming up twice or more in a row
+			while (all_materials[i] == all_materials[i-1]) {
+				extra_index += 1;
+				all_materials[i] = get_random_material( rng, i-loop_offset + extra_index, random_material_type, material_count );
+			}
+		}
+	}
+
 	/* The number of verts, edges, loops, polys, before eventually merging doubles */
 	result_nverts = chunk_nverts * count + start_cap_nverts + end_cap_nverts;
 	result_nedges = chunk_nedges * count + start_cap_nedges + end_cap_nedges;
@@ -645,6 +734,24 @@ static DerivedMesh *arrayModifier_doArray(
 	first_chunk_nverts = chunk_nverts;
 
 	unit_m4(current_offset);
+	unit_m4(random_offset);
+	unit_m4(random_offset_cumulative);
+
+	// reset the seed for stability when reducing the count
+	BLI_rng_srandom( rng, seed );
+
+	// apply randomness to the initial clone
+	if ( enable_advanced ) {
+		calculate_random_matrices( amd, rng, random_offset, random_offset_cumulative );
+		mv = result_dm_verts;
+
+		for (i = 0; i < chunk_nverts; i++, mv++) {
+			mul_m4_v3( random_offset,            mv->co );
+			mul_m4_v3( random_offset_cumulative, mv->co );
+		}
+	}
+
+	mul_m4_m4m4( current_offset, current_offset, random_offset_cumulative );
 
 	for (c = 1; c < count; c++) {
 		/* copy customdata to new geometry */
@@ -659,50 +766,15 @@ static DerivedMesh *arrayModifier_doArray(
 		/* recalculate cumulative offset here */
 		mul_m4_m4m4(current_offset, current_offset, offset);
 
-		// apply random offsets here as needed
+		// apply random offsets here as needed 
 		if ( enable_advanced ) {
-			unit_m4( random_offset );
-
-			// because I want the random numbers for everything to be 
-			// consistent for the same seed value, generate the random
-			// values for all 9 numbers even if they won't get used
-
-			for ( i = 0; i < 3; i++ ) {
-				r_loc[i]   = BLI_rng_get_float( rng ) * amd->random_location[i] * 2.0f - amd->random_location[i];
-				if (random_cumulative) {
-					
-				}
-				r_rot[i]   = BLI_rng_get_float( rng ) * amd->random_rotation[i] * 2.0f - amd->random_rotation[i];
-				// using absolute scale only because when you go negative the normals flip
-				r_scale[i] = fast_abs( BLI_rng_get_float( rng ) * amd->random_scale[i]    * 2.0f - amd->random_scale[i] + 1.0f );
-			}
-
-			if ( enable_rotation ) {
-				eulO_to_mat4( random_offset, r_rot, ROT_MODE_XYZ );
-			}	
-
-			if ( enable_scale ) {
-				for( i=0; i < 3; i++ ) {
-					// this line is incorrect because of the column ordering
-					// mul_v3_fl( random_offset[i], r_scale[i] );
-					random_offset[0][i] *= r_scale[i];
-					random_offset[1][i] *= r_scale[i];
-					random_offset[2][i] *= r_scale[i];
-				}
-			}
-			
-			if ( enable_location ) {
-				copy_v3_v3( random_offset[3], r_loc );
-			}
-
-			if ( random_cumulative ) {
-				mul_m4_m4m4( current_offset, current_offset, random_offset );
-			}
+			calculate_random_matrices( amd, rng, random_offset, random_offset_cumulative );
+			mul_m4_m4m4( current_offset, current_offset, random_offset_cumulative );
 		}
 
 		/* apply offset to all new verts */
 		for (i = 0; i < chunk_nverts; i++, mv++, mv_prev++) {
-			if ( enable_advanced && (!random_cumulative) ) {
+			if ( enable_advanced ) {
 				mul_m4_v3( random_offset, mv->co );
 			}
 			mul_m4_v3(current_offset, mv->co);
@@ -846,45 +918,30 @@ static DerivedMesh *arrayModifier_doArray(
 	/* done capping */
 
 	/* materials assignment */
-	if (enable_advanced) {
-		if (enable_materials) {
-			int chunk_index  = 0;
-	
-			const int real_count = count + 2;
-			int *all_materials = MEM_mallocN( sizeof(int)*real_count, "ArrayModifier::MaterialRandom" );
-			BLI_assert( all_materials != NULL );
-	
-			for ( i = 0; i < real_count; i++ ) {
-				all_materials[i] = get_random_material( rng, i-loop_offset, random_material_type, material_count );
+	if (enable_materials) {
+		int chunk_index  = 0;
+		mp = CDDM_get_polys(result);
+
+		for (chunk_index = 0; chunk_index < count; chunk_index++ ) {
+			int base_index = chunk_index * chunk_npolys;
+			for ( int p = 0; p < chunk_npolys; p++ ) {
+				mp[base_index+p].mat_nr = all_materials[chunk_index+1];
 			}
-	
-			mp = CDDM_get_polys(result);
-	
-			for (chunk_index = 0; chunk_index < count; chunk_index++ ) {
-				int base_index = chunk_index * chunk_npolys;
-				for ( int p = 0; p < chunk_npolys; p++ ) {
-					mp[base_index+p].mat_nr = all_materials[chunk_index+1];
-				}
-			}
-	
-			int base_index = count * chunk_npolys;
-			if (start_cap_dm) {
-				for ( i = 0; i < start_cap_npolys; i++ ) {
-					mp[base_index+i].mat_nr = all_materials[0];
-				}
-			}
-	
-			base_index += start_cap_npolys;
-			if (end_cap_dm) {
-				for ( i = 0; i < end_cap_npolys; i++ ) {
-					mp[base_index+i].mat_nr = all_materials[real_count-1];
-				}
-			}
-			
-			MEM_SAFE_FREE( all_materials );
 		}
 
-		BLI_rng_free( rng );
+		int base_index = count * chunk_npolys;
+		if (start_cap_dm) {
+			for ( i = 0; i < start_cap_npolys; i++ ) {
+				mp[base_index+i].mat_nr = all_materials[0];
+			}
+		}
+
+		base_index += start_cap_npolys;
+		if (end_cap_dm) {
+			for ( i = 0; i < end_cap_npolys; i++ ) {
+				mp[base_index+i].mat_nr = all_materials[real_count-1];
+			}
+		}
 	}
 
 	/* Handle merging */
@@ -919,6 +976,9 @@ static DerivedMesh *arrayModifier_doArray(
 	if (use_recalc_normals) {
 		result->dirty |= DM_DIRTY_NORMALS;
 	}
+
+	BLI_rng_free( rng );
+	MEM_SAFE_FREE( all_materials );
 
 	return result;
 }
