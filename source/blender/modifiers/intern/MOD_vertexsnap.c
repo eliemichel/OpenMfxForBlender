@@ -78,10 +78,14 @@ static int isDisabled(ModifierData *md, int UNUSED(useRenderParams))
 {
 	/* disable if modifier there is no connected target object*/
 	VertexSnapModifierData *vmd = (VertexSnapModifierData *)md;
-	return (
-		vmd->target       == NULL    && 
-		vmd->target->type != OB_MESH
-	);
+	
+	if ( vmd->target ) {
+		if ( vmd->target->type == OB_MESH ) {
+			return 0;
+		}
+	}
+
+	return 1;
 }
 
 static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
@@ -170,8 +174,11 @@ static void VertexSnapModifier_do(
 	}
 
 	target_vertex_count = target_dm->getNumVerts( target_dm );
-	if (vertex_count < target_vertex_count) {
-		vertex_count = target_vertex_count;
+	if (vertex_count != target_vertex_count) {
+		if (target_dm) {
+			target_dm->release(target_dm);
+		}
+		return;
 	}
 
 	target_verts = CDDM_get_verts( target_dm );
