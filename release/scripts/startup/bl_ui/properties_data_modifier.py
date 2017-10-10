@@ -147,23 +147,26 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
                     mat_settings.prop( md, "loop_offset" )
 
             subrow = adv.row( align=True )
-            subrow.prop( md, "use_random_location" )
-            subrow.prop( md, "use_random_rotation" )
-            subrow.prop( md, "use_random_scale" )
+            subrow.prop( md, "use_random_location", text='Location' )
+            subrow.prop( md, "use_random_rotation", text='Rotation' )
+            subrow.prop( md, "use_random_scale", text='Scale' )
 
-            subrow = adv.row( align=True )
+            subrow = adv.row()
 
-            if md.use_random_location:
-                col = subrow.column( align=True )
-                col.prop( md, "random_location" )
+            col = subrow.column( align=True )
+            col.enabled = md.use_random_location
+            col.prop( md, "random_location", text='' )
 
-            if md.use_random_rotation:
-                col = subrow.column( align=True )
-                col.prop( md, "random_rotation" )
+            col = subrow.column( align=True )
+            col.enabled = md.use_random_rotation
+            col.prop( md, "random_rotation", text='' )
 
-            if md.use_random_scale:
-                col = subrow.column( align=True )
-                col.prop( md, "random_scale" )
+            col = subrow.column( align=True )
+            col.enabled = md.use_random_scale
+            col.prop( md, "random_scale", text='' )
+
+            row = adv.row( align=True )
+            row.prop( md, "cumulative_random_transform", text="Cumulative Random Transform")
 
     def BEVEL(self, layout, ob, md):
         split = layout.split()

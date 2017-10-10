@@ -87,7 +87,7 @@ static void initData(ModifierData *md)
 
 	amd->advanced_settings = 0;
 	amd->random_seed       = 0;
-	amd->random_material_type       = MOD_ARR_MATERIAL_RANDOM;
+	amd->random_material_type = MOD_ARR_MATERIAL_RANDOM;
 	
 	zero_v3(amd->random_location);
 	zero_v3(amd->random_rotation);
@@ -447,6 +447,13 @@ BLI_INLINE int get_random_material( RNG *rng, int index, int random_type, int ma
     return result;
 }
 
+BLI_INLINE float fast_abs( const float value ) {
+	float result = value;
+	*((uint32_t *)&result) &= 0xffffffff >> 1;
+	return result;
+}
+
+
 static DerivedMesh *arrayModifier_doArray(
         ArrayModifierData *amd,
         Scene *scene, Object *ob, DerivedMesh *dm,
@@ -483,9 +490,16 @@ static DerivedMesh *arrayModifier_doArray(
 	const bool enable_location      = (bool)(amd->advanced_settings & MOD_ARR_TRANS_LOCATION) & enable_advanced;
 	const bool enable_rotation      = (bool)(amd->advanced_settings & MOD_ARR_TRANS_ROTATION) & enable_advanced;
 	const bool enable_scale         = (bool)(amd->advanced_settings & MOD_ARR_TRANS_SCALE) & enable_advanced;
+	const bool random_cumulative    = (bool)(amd->advanced_settings & MOD_ARR_TRANS_CUMULATIVE);
 	const bool use_random_materials = enable_advanced && (bool)material_count;
 	const int loop_offset           = amd->random_material_type == MOD_ARR_MATERIAL_LOOP ? amd->loop_offset : 0;
 	
+	float random_offset[4][4];
+	float random_temp[4][4];
+	float r_loc[3];
+	float r_rot[3];
+	float r_scale[3];
+
 	int start_cap_nverts = 0, start_cap_nedges = 0, start_cap_npolys = 0, start_cap_nloops = 0;
 	int end_cap_nverts = 0, end_cap_nedges = 0, end_cap_npolys = 0, end_cap_nloops = 0;
 	int result_nverts = 0, result_nedges = 0, result_npolys = 0, result_nloops = 0;
@@ -631,6 +645,7 @@ static DerivedMesh *arrayModifier_doArray(
 	first_chunk_nverts = chunk_nverts;
 
 	unit_m4(current_offset);
+
 	for (c = 1; c < count; c++) {
 		/* copy customdata to new geometry */
 		DM_copy_vert_data(result, result, 0, c * chunk_nverts, chunk_nverts);
@@ -644,8 +659,52 @@ static DerivedMesh *arrayModifier_doArray(
 		/* recalculate cumulative offset here */
 		mul_m4_m4m4(current_offset, current_offset, offset);
 
+		// apply random offsets here as needed
+		if ( enable_advanced ) {
+			unit_m4( random_offset );
+
+			// because I want the random numbers for everything to be 
+			// consistent for the same seed value, generate the random
+			// values for all 9 numbers even if they won't get used
+
+			for ( i = 0; i < 3; i++ ) {
+				r_loc[i]   = BLI_rng_get_float( rng ) * amd->random_location[i] * 2.0f - amd->random_location[i];
+				if (random_cumulative) {
+					
+				}
+				r_rot[i]   = BLI_rng_get_float( rng ) * amd->random_rotation[i] * 2.0f - amd->random_rotation[i];
+				// using absolute scale only because when you go negative the normals flip
+				r_scale[i] = fast_abs( BLI_rng_get_float( rng ) * amd->random_scale[i]    * 2.0f - amd->random_scale[i] + 1.0f );
+			}
+
+			if ( enable_rotation ) {
+				eulO_to_mat4( random_offset, r_rot, ROT_MODE_XYZ );
+			}	
+
+			if ( enable_scale ) {
+				for( i=0; i < 3; i++ ) {
+					// this line is incorrect because of the column ordering
+					// mul_v3_fl( random_offset[i], r_scale[i] );
+					random_offset[0][i] *= r_scale[i];
+					random_offset[1][i] *= r_scale[i];
+					random_offset[2][i] *= r_scale[i];
+				}
+			}
+			
+			if ( enable_location ) {
+				copy_v3_v3( random_offset[3], r_loc );
+			}
+
+			if ( random_cumulative ) {
+				mul_m4_m4m4( current_offset, current_offset, random_offset );
+			}
+		}
+
 		/* apply offset to all new verts */
 		for (i = 0; i < chunk_nverts; i++, mv++, mv_prev++) {
+			if ( enable_advanced && (!random_cumulative) ) {
+				mul_m4_v3( random_offset, mv->co );
+			}
 			mul_m4_v3(current_offset, mv->co);
 
 			/* We have to correct normals too, if we do not tag them as dirty! */
@@ -817,7 +876,7 @@ static DerivedMesh *arrayModifier_doArray(
 	
 			base_index += start_cap_npolys;
 			if (end_cap_dm) {
-				for ( i = 0; i < start_cap_npolys; i++ ) {
+				for ( i = 0; i < end_cap_npolys; i++ ) {
 					mp[base_index+i].mat_nr = all_materials[real_count-1];
 				}
 			}

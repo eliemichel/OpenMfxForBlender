@@ -278,6 +278,7 @@ enum {
 	MOD_ARR_TRANS_LOCATION   = (1 << 2),
 	MOD_ARR_TRANS_ROTATION   = (1 << 3),
 	MOD_ARR_TRANS_SCALE      = (1 << 4),
+	MOD_ARR_TRANS_CUMULATIVE = (1 << 5),
 };
 
 

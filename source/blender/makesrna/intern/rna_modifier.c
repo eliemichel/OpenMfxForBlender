@@ -2129,7 +2129,7 @@ static void rna_def_modifier_array(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Loop Offset", "Offset value for loop mode");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
-	prop = RNA_def_property(srna, "random_location", PROP_FLOAT, PROP_TRANSLATION);
+	prop = RNA_def_property(srna, "random_location", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "random_location");
 	RNA_def_property_ui_text(prop, "Random Location", "Amount to add to the location of each copy");
 	RNA_def_property_ui_range(prop, -FLT_MAX, FLT_MAX, 0.0f, RNA_TRANSLATION_PREC_DEFAULT);
@@ -2165,6 +2165,11 @@ static void rna_def_modifier_array(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "use_random_materials", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "advanced_settings", MOD_ARR_ENABLE_MATERIALS);
 	RNA_def_property_ui_text(prop, "Random Materials", "Assign random materials to copies");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "cumulative_random_transform", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "advanced_settings", MOD_ARR_TRANS_CUMULATIVE);
+	RNA_def_property_ui_text(prop, "Cumulative", "Is Random Transform cumulative per copy?");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
