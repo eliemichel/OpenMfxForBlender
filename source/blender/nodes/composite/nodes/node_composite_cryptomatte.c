@@ -55,12 +55,12 @@
 
 #define	FORCE_INLINE inline __attribute__((always_inline))
 
-inline uint32_t rotl32 ( uint32_t x, int8_t r )
+static inline uint32_t rotl32 ( uint32_t x, int8_t r )
 {
 	return (x << r) | (x >> (32 - r));
 }
 
-inline uint64_t rotl64 ( uint64_t x, int8_t r )
+static inline uint64_t rotl64 ( uint64_t x, int8_t r )
 {
 	return (x << r) | (x >> (64 - r));
 }
@@ -161,6 +161,14 @@ static void MurmurHash3_x86_32 ( const void * key, int len,
 	*(uint32_t*)out = h1;
 }
 
+#ifndef max
+  #define max(a,b) (((a) > (b)) ? (a) : (b))
+#endif
+
+#ifndef min
+  #define min(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+
 /* this is taken from the cryptomatte specification 1.0 */
 
 static inline float hash_to_float(uint32_t hash) {
@@ -177,7 +185,7 @@ static inline float hash_to_float(uint32_t hash) {
 	return f;
 }
 
-extern void cryptomatte_add(NodeCryptomatte* n, float f)
+static void cryptomatte_add(NodeCryptomatte* n, float f)
 {
 	/* Turn the number into a string. */
 	static char number[32];
@@ -192,7 +200,6 @@ extern void cryptomatte_add(NodeCryptomatte* n, float f)
 	/* Search if we already have the number. */
 	size_t start = 0;
 	const size_t end = strlen(n->matte_id);
-	const size_t number_len = strlen(number);
 	size_t token_len = 0;
 	while(start < end) {
 		/* Ignore leading whitespace. */
@@ -236,7 +243,7 @@ extern void cryptomatte_add(NodeCryptomatte* n, float f)
 	MEM_freeN(temp_str);
 }
 
-void cryptomatte_remove(NodeCryptomatte*n, float f)
+static void cryptomatte_remove(NodeCryptomatte*n, float f)
 {
 	if(strnlen(n->matte_id, sizeof(n->matte_id)) == 0)
 	{
@@ -257,7 +264,6 @@ void cryptomatte_remove(NodeCryptomatte*n, float f)
 	/* Search if we already have the number. */
 	size_t start = 0;
 	const size_t end = strlen(n->matte_id);
-	const size_t number_len = strlen(number);
 	size_t token_len = 0;
 	while (start < end) {
 		bool skip = false;
