@@ -87,6 +87,7 @@ typedef enum ModifierType {
 	eModifierType_CorrectiveSmooth  = 51,
 	eModifierType_MeshSequenceCache = 52,
 	eModifierType_SurfaceDeform     = 53,
+	eModifierType_OpenVDB	        = 54,
 	NUM_MODIFIER_TYPES
 } ModifierType;
 
@@ -1611,6 +1612,16 @@ enum {
 	MOD_SDEF_MODE_NGON = 1,
 	MOD_SDEF_MODE_CENTROID = 2,
 };
+
+typedef struct OpenVDBModifierData {
+	ModifierData modifier;
+
+	char filepath[1024];  /* FILE_MAX */
+	char density[64];
+	char flame[64];
+
+	SmokeModifierData *smoke;
+} OpenVDBModifierData;
 
 #define MOD_MESHSEQ_READ_ALL \
 	(MOD_MESHSEQ_READ_VERT | MOD_MESHSEQ_READ_POLY | MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)
