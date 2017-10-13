@@ -604,7 +604,7 @@ void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 				AOV aov = {ustring(passname), 9999, AOV_CRYPTOMATTE};
 				passes.add(aov);
 				passname = "AOV " + passname;
-				b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str());
+				b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str(), 2);
 			}
 			scene->film->use_cryptomatte |= CRYPT_OBJECT;
 		}
@@ -615,7 +615,7 @@ void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 				AOV aov = {ustring(passname), 9999, AOV_CRYPTOMATTE};
 				passes.add(aov);
 				passname = "AOV " + passname;
-				b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str());
+				b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str(), 2);
 			}
 			scene->film->use_cryptomatte |= CRYPT_MATERIAL;
 		}
@@ -640,7 +640,7 @@ void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 			AOV aov = {ustring(name), 9999, is_color ? AOV_RGB : AOV_FLOAT};
 			passes.add(aov);
 			string passname = string_printf("AOV %s", name.c_str());
-			b_engine.add_pass(passname.c_str(), is_color? 3: 1, is_color? "RGB": "X", b_srlay.name().c_str());
+			b_engine.add_pass(passname.c_str(), is_color? 3: 1, is_color? "RGB": "X", b_srlay.name().c_str(), 0);
 		} RNA_END
 		
 	}
