@@ -626,7 +626,7 @@ void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 				AOV aov = {ustring(passname), 9999, AOV_CRYPTOMATTE};
 				passes.add(aov);
 				passname = "AOV " + passname;
-				b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str());
+				b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str(), 2);
 			}
 			scene->film->use_cryptomatte |= CRYPT_ASSET;
 		}
