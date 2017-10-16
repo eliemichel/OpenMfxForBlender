@@ -449,30 +449,13 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 
             // Fill
             } else if (curve_type == 1) {
-                float x_min,x_max;
-                float y_min,y_max;
-
-                if (p0.y < p1.y) {
-                    y_min = p0.y;
-                    y_max = p1.y;
-                    x_min = p0.x;
-                    x_max = p1.x;
-                } else if (p0.y > p1.y) {
-                    y_min = p1.y;
-                    y_max = p0.y;
-                    x_min = p1.x;
-                    x_max = p0.x;
-                } else {
-                    continue;
-                }
-
-                if (co2.y < y_min || co2.y > y_max)
+                if (co2.x < p0.x || co2.x >= p1.x)
                     continue;
 
-                float ty = (co2.y - y_min) / (y_max - y_min);
-                float x = x_min + (x_max - x_min) * ty;
+                float tx = (co2.x - p0.x) / (p1.x - p0.x);
+                float y = p0.y + (p1.y - p0.y) * tx;
 
-                if (x < co2.x) {
+                if (y < co2.y) {
                     grad = !grad;
                 }
 
