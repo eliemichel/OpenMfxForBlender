@@ -475,7 +475,7 @@ void smokeModifier_free(SmokeModifierData *smd)
 	}
 }
 
-void smokeModifier_createType(struct SmokeModifierData *smd)
+void smokeModifier_createType(SmokeModifierData *smd)
 {
 	if (smd)
 	{
