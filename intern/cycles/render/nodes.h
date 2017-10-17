@@ -122,8 +122,10 @@ public:
 	ImageManager *image_manager;
 	boost::shared_ptr<uint8_t> generated_data;
 	string filename;
-    std::vector<float4> points;
+    std::vector<float4> segments;
+    std::vector<float4> extents;
     int width;
+    int height;
     
     float curve_thickness;
     float3 vector;

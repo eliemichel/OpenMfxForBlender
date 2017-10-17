@@ -545,8 +545,8 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
     decode_node_uchar4(node.w, &curve_thickness_offset, &curve_location_offset, &curve_scale_offset, &curve_type);
     uint slot = node.y;
 
-	uint4 node2 = read_node(kg, offset);
-	int width = node2.x;
+    uint4 node2 = read_node(kg, offset);
+    int width = node2.x;
 
 
     float4 f;
@@ -564,79 +564,69 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 
         float grad = 1.0f;
 
-//        static bool display = false;
-//        if (display) {
-//            std::cout << "Slot: " << slot << std::endl;
-//            std::cout << " co: " << co.x << " " << co.y << " " << co.z << std::endl;
-//            std::cout << " fill_color: " << fill_color.x << " " << fill_color.y << " " << fill_color.z << std::endl;
-//            std::cout << " background_color: " << background_color.x << " " << background_color.y << " " << background_color.z << std::endl;
-//            std::cout << " curve_thickness: " << curve_thickness << std::endl;
-//            std::cout << " curve_location: " << curve_location.x << " " << curve_location.y << " " << curve_location.z << std::endl;
-//            std::cout << " curve_scale: " << curve_scale.x << " " << curve_scale.y << " " << curve_scale.z << std::endl;
-//        }
+        // Binary search line segments
+        int min_xi = 0;
+        int max_xi = width-1;
+        int min_xr = 0;
+        int max_xr = width-1;
+        
+        float cox = (co.x - curve_location.x) / curve_scale.x;
+        
+        while (true) {
+            int c_xi = (min_xi + max_xi) / 2;
+            
+            // Are we done?
+            if (max_xi == c_xi || min_xi == c_xi)
+                break;
 
-        for (int t = 0; t < width; ++t) {
-            int t_next = (t+1)%width;
-            float4 ls0 = svm_image_texture(kg, slot, (float)t/width,	  0.0, differential_zero(), differential_zero(), false, true, 0);
-            float4 ls1 = svm_image_texture(kg, slot, (float)t_next/width, 0.0, differential_zero(), differential_zero(), false, true, 0);
+            float4 c_ex = svm_image_texture(kg, slot, (float)c_xi/width, 0.75, differential_zero(), differential_zero(), false, false, 0);
 
-//            if (display) {
-//                std::cout << " ls0: " << ls0.x << "," << ls0.y << " ls1: " << ls1.x << "," << ls1.y << std::endl;
-//            }
+            // Narrow the range
+            if (cox <= c_ex.x) {
+                max_xi = c_xi;
+                max_xr = __float_as_int(c_ex.z);
+            } else {
+                min_xi = c_xi;
+                min_xr = __float_as_int(c_ex.y);
+            }
+        }
+        
+        kernel_assert(min_xr >= 0 && min_xr < width);
+        kernel_assert(max_xr >= 0 && max_xr < width);
+        
+        for (int t = min_xr; t <= max_xr; ++t) {
+            float4 ls0 = svm_image_texture(kg, slot, (float)t/width, 0.75, differential_zero(), differential_zero(), false, false, 0);
 
             float2 p0,p1,co2;
             p0.x = ls0.x * curve_scale.x + curve_location.x;
             p0.y = ls0.y * curve_scale.y + curve_location.y;
-            p1.x = ls1.x * curve_scale.x + curve_location.x;
-            p1.y = ls1.y * curve_scale.y + curve_location.y;
+            p1.x = ls0.z * curve_scale.x + curve_location.x;
+            p1.y = ls0.w * curve_scale.y + curve_location.y;
             co2.x = co.x;
             co2.y = co.y;
 
             // Line
             if (curve_type == 0) {
-
                 if (minimum_distance(p0, p1, co2) < curve_thickness) {
                     grad = 0.0f;
-
-//                    if (display) {
-//                        std::cout << "Found curve" << std::endl;
-//                    }
-
                     break;
                 }
 
             // Fill
             } else if (curve_type == 1) {
-                float x_min,x_max;
-                float y_min,y_max;
-
-                if (p0.y < p1.y) {
-                    y_min = p0.y;
-                    y_max = p1.y;
-                    x_min = p0.x;
-                    x_max = p1.x;
-                } else if (p0.y > p1.y) {
-                    y_min = p1.y;
-                    y_max = p0.y;
-                    x_min = p1.x;
-                    x_max = p0.x;
-                } else {
-                    continue;
-                }
-
-                if (co2.y < y_min || co2.y > y_max)
+                if (co2.x < p0.x || co2.x >= p1.x)
                     continue;
 
-                float ty = (co2.y - y_min) / (y_max - y_min);
-                float x = x_min + (x_max - x_min) * ty;
+                float tx = (co2.x - p0.x) / (p1.x - p0.x);
+                float y = p0.y + (p1.y - p0.y) * tx;
 
-                if (x < co2.x) {
+                if (y < co2.y) {
                     grad = !grad;
                 }
 
             // Grad
             } else {
-
+            
                 float d = minimum_distance(p0, p1, co2);
                 if (d < curve_thickness) {
                     grad = min(grad, d/curve_thickness);
@@ -653,8 +643,8 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 
     }
 
-	if(stack_valid(out_offset))
-		stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
+    if(stack_valid(out_offset))
+        stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
 }
 
 CCL_NAMESPACE_END

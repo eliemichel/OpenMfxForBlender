@@ -118,37 +118,56 @@ static ExtensionType get_image_extension(NodeType& b_node)
 
 static BL::NodeSocket get_node_output(BL::Node& b_node, const string& name)
 {
-	BL::Node::outputs_iterator b_out;
+    BL::Node::outputs_iterator b_out;
 
-	for(b_node.outputs.begin(b_out); b_out != b_node.outputs.end(); ++b_out)
-		if(b_out->name() == name)
-			return *b_out;
+    for(b_node.outputs.begin(b_out); b_out != b_node.outputs.end(); ++b_out)
+        if(b_out->name() == name)
+            return *b_out;
 
-	assert(0);
+    assert(0);
 
-	return *b_out;
+    return *b_out;
+}
+
+static BL::NodeSocket get_node_input(BL::Node& b_node, const string& name)
+{
+    BL::Node::inputs_iterator b_in;
+
+    for(b_node.inputs.begin(b_in); b_in != b_node.inputs.end(); ++b_in)
+        if(b_in->name() == name)
+            return *b_in;
+
+    assert(0);
+
+    return *b_in;
 }
 
 static float3 get_node_output_rgba(BL::Node& b_node, const string& name)
 {
-	BL::NodeSocket b_sock = get_node_output(b_node, name);
-	float value[4];
-	RNA_float_get_array(&b_sock.ptr, "default_value", value);
-	return make_float3(value[0], value[1], value[2]);
+    BL::NodeSocket b_sock = get_node_output(b_node, name);
+    float value[4];
+    RNA_float_get_array(&b_sock.ptr, "default_value", value);
+    return make_float3(value[0], value[1], value[2]);
 }
 
 static float get_node_output_value(BL::Node& b_node, const string& name)
 {
-	BL::NodeSocket b_sock = get_node_output(b_node, name);
-	return RNA_float_get(&b_sock.ptr, "default_value");
+    BL::NodeSocket b_sock = get_node_output(b_node, name);
+    return RNA_float_get(&b_sock.ptr, "default_value");
 }
 
 static float3 get_node_output_vector(BL::Node& b_node, const string& name)
 {
-	BL::NodeSocket b_sock = get_node_output(b_node, name);
-	float value[3];
-	RNA_float_get_array(&b_sock.ptr, "default_value", value);
-	return make_float3(value[0], value[1], value[2]);
+    BL::NodeSocket b_sock = get_node_output(b_node, name);
+    float value[3];
+    RNA_float_get_array(&b_sock.ptr, "default_value", value);
+    return make_float3(value[0], value[1], value[2]);
+}
+
+static float get_node_input_value(BL::Node& b_node, const string& name)
+{
+    BL::NodeSocket b_sock = get_node_input(b_node, name);
+    return RNA_float_get(&b_sock.ptr, "default_value");
 }
 
 static SocketType::Type convert_socket_type(BL::NodeSocket& b_socket)
@@ -684,79 +703,120 @@ static ShaderNode *add_node(BlenderSync &sync,
 		get_tex_mapping(&image->tex_mapping, b_texture_mapping);
 		node = image;
 	}
-	else if(b_node.is_a(&RNA_ShaderNodeTexCurve)) {
-		BL::ShaderNodeTexCurve b_curve_node(b_node);
+    else if(b_node.is_a(&RNA_ShaderNodeTexCurve)) {
+        BL::ShaderNodeTexCurve b_curve_node(b_node);
         BL::Curve b_curve(b_curve_node.object());
-		CurveTextureNode *tex = new CurveTextureNode();
+        CurveTextureNode *tex = new CurveTextureNode();
 
         shader->has_object_dependency = true;
 
         tex->curve_type = b_curve_node.curve_type();
-
+    
         if (b_curve) {
             ::Object *ob = (::Object *) b_curve.ptr.data;
             ::Curve *cu = (::Curve*) ob->data;
 
             if (ob && cu) {
+
                 BL::Object b_ob = b_curve_node.object();
                 BL::ID key = (sync.BKE_object_is_modified(b_ob))? b_ob: b_curve_node.object().data();
                 Mesh* mesh = sync.mesh_map.find(key);
 
                 if (mesh) {
 
-                    tex->points = CurveToLineSegments(mesh);
-                    tex->width = tex->points.size();
+                    float line_thickness = get_node_input_value(b_node, "LineThickness");
+
+                    tex->segments = CurveToLineSegments(mesh);
+                    tex->extents.resize(tex->segments.size());
+                    
+                    // Order line segment vertices
+                    for (int i = 0; i < tex->segments.size(); ++i) {
+                        float4 &ls = tex->segments[i];
+                        if (ls.x > ls.z) {
+                            std::swap(ls.x,ls.z);
+                            std::swap(ls.y,ls.w);
+                        }
+                    }
+                    
+                    // Order line segments based on centers
+                    struct LSSorter {
+                        static bool doit (const float4 &a, const float4 &b) {
+                            float aa = (a.x + a.z) * 0.5F;
+                            float bb = (b.x + b.z) * 0.5F;
+                            return aa < bb;
+                        }
+                    };
+                    std::sort(tex->segments.begin(), tex->segments.end(), &LSSorter::doit);
+                    
+                    // Build extents list
+                    for (int i = 0; i < tex->segments.size(); ++i) {
+                        float4 &ls1 = tex->segments[i];
+                        float center = (ls1.x + ls1.z) * 0.5F;
+                        
+                        int min_xi = std::numeric_limits<int>::max();
+                        int max_xi = std::numeric_limits<int>::min();
+                        
+                        for (int j = 0; j < tex->segments.size(); ++j) {
+                            float4 &ls2 = tex->segments[j];
+                            
+                            if ( (ls2.x - line_thickness) <= center && (ls2.z + line_thickness) >= center) {
+                                min_xi = std::min(min_xi,j);
+                                max_xi = std::max(max_xi,j);
+                            }
+                        }
+                        
+                        tex->extents[i] = make_float4(center, __int_as_float(min_xi), __int_as_float(max_xi), 1.0F);
+                    }
+                    
+                    
+                    tex->width = tex->segments.size();
+                    tex->height = 2;
 
                     // Hash points
                     uint hash = 0;
-                    for (auto i = tex->points.begin(); i != tex->points.end(); ++i) {
+                    for (auto i = tex->segments.begin(); i != tex->segments.end(); ++i) {
                         hash ^= hash_int_2d(__float_as_uint(i->x),__float_as_uint(i->y));
                     }
 
                     // Build a texture with triangles
 
-//                    // Cleanup old data
-//                    if (tex->slot >= 0) {
-//                        scene->image_manager->remove_image(tex->slot);
-//                    }
-
                     int scene_frame = b_scene.frame_current();
                     tex->filename = b_curve.name() + "Curve@" + string_printf("%d-%d", scene_frame, hash);
 
-
                     ImageManager::InternalImageHeader header;
                     header.width = tex->width;
-                    header.height = 1;
+                    header.height = 2;
 
-//                    ImBuf *ibuf = IMB_allocImBuf(tex->points.size(), 1, 32, IB_rectfloat);
-//                    ::memcpy(ibuf->rect_float, &(tex->points[0]), tex->points.size() * sizeof(float4));
-//                    Image *image = BKE_image_add_from_imbuf(ibuf, tex->filename.c_str());
-//                    IMB_freeImBuf(ibuf);    // Drop reference to ibuf so that the image owns it
-
-                    uint data_size = sizeof(ImageManager::InternalImageHeader) + tex->points.size() * sizeof(float4);
+                    uint data_size = sizeof(ImageManager::InternalImageHeader) +
+                                     tex->segments.size() * sizeof(float4) +
+                                     tex->extents.size() * sizeof(float4);
                     tex->generated_data = boost::shared_ptr<uint8_t>(new uint8_t[data_size]);
 
                     // Build cycles internal texture
-                    ::memcpy(tex->generated_data.get(), &header, sizeof(header));
-                    ::memcpy(tex->generated_data.get() + sizeof(header), tex->points.data(), tex->points.size() * sizeof(float4));
+                    ::memcpy(tex->generated_data.get(),
+                             &header, sizeof(header));
+                    ::memcpy(tex->generated_data.get() + sizeof(header),
+                             tex->segments.data(), tex->segments.size() * sizeof(float4));
+                    ::memcpy(tex->generated_data.get() + sizeof(header) + tex->segments.size() * sizeof(float4),
+                             tex->extents.data(), tex->extents.size() * sizeof(float4));
 
                     bool is_float_bool, linear;
                     tex->slot = scene->image_manager->add_image(tex->filename, NULL, tex->generated_data,
                                                                 true, 0, is_float_bool, linear,
                                                                 INTERPOLATION_CLOSEST,
                                                                 EXTENSION_CLIP,
-                                                                false, true);
+                                                                true, false);
                 }
             }
 
         }
 
-		BL::TexMapping b_texture_mapping(b_curve_node.texture_mapping());
-		get_tex_mapping(&tex->tex_mapping, b_texture_mapping);
-		node = tex;
+        BL::TexMapping b_texture_mapping(b_curve_node.texture_mapping());
+        get_tex_mapping(&tex->tex_mapping, b_texture_mapping);
+        node = tex;
     }
-	else if(b_node.is_a(&RNA_ShaderNodeTexEnvironment)) {
-		BL::ShaderNodeTexEnvironment b_env_node(b_node);
+    else if(b_node.is_a(&RNA_ShaderNodeTexEnvironment)) {
+        BL::ShaderNodeTexEnvironment b_env_node(b_node);
 		BL::Image b_image(b_env_node.image());
 		BL::ImageUser b_image_user(b_env_node.image_user());
 		EnvironmentTextureNode *env = new EnvironmentTextureNode();
