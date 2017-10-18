@@ -579,7 +579,7 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
             if (max_xi == c_xi || min_xi == c_xi)
                 break;
 
-            float4 c_ex = svm_image_texture(kg, slot, (float)c_xi/width, 0.75, differential_zero(), differential_zero(), false, false, 0);
+            float4 c_ex = svm_image_texture(kg, slot, (float)c_xi/width, 0.75F, differential_zero(), differential_zero(), false, false, 0);
 
             // Narrow the range
             if (cox <= c_ex.x) {
@@ -595,7 +595,7 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
         kernel_assert(max_xr >= 0 && max_xr < width);
         
         for (int t = min_xr; t <= max_xr; ++t) {
-            float4 ls0 = svm_image_texture(kg, slot, (float)t/width, 0.25, differential_zero(), differential_zero(), false, false, 0);
+            float4 ls0 = svm_image_texture(kg, slot, (float)t/width, 0.25F, differential_zero(), differential_zero(), false, false, 0);
 
             float2 p0,p1,co2;
             p0.x = ls0.x * curve_scale.x + curve_location.x;
