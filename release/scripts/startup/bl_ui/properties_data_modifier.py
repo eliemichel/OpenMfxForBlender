@@ -706,7 +706,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
     def OPENVDB(self, layout, ob, md):
         layout.prop(md, "filepath")
         layout.prop(md, "density")
+        layout.prop(md, "heat")
         layout.prop(md, "flame")
+        layout.prop(md, "color")
 
     def PARTICLE_INSTANCE(self, layout, ob, md):
         layout.prop(md, "object")

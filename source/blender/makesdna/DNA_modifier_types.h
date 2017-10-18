@@ -1618,7 +1618,9 @@ typedef struct OpenVDBModifierData {
 
 	char filepath[1024];  /* FILE_MAX */
 	char density[64];
+	char heat[64];
 	char flame[64];
+	char color[64];
 
 	SmokeModifierData *smoke;
 } OpenVDBModifierData;

@@ -4773,8 +4773,16 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Density Grid", "Name of the grid to be used for density");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
+	prop = RNA_def_property(srna, "heat", PROP_STRING, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Heat Grid", "Name of the grid to be used for heat");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
 	prop = RNA_def_property(srna, "flame", PROP_STRING, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Flame Grid", "Name of the grid to be used for flame");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "color", PROP_STRING, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Color Grid", "Name of the grid to be used for color");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
