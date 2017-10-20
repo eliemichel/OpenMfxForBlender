@@ -33,7 +33,8 @@ enum ObjectTransform {
 	OBJECT_TRANSFORM_MOTION_POST = 4,
 	OBJECT_PROPERTIES = 8,
 	OBJECT_DUPLI = 9,
-    OBJECT_LIGHT_LINKING = 11
+    OBJECT_LIGHT_LINKING = 11,
+	OBJECT_CRYPTOMATTE = 12,
 };
 
 enum ObjectVectorTransform {
@@ -353,26 +354,35 @@ ccl_device_inline unsigned int object_shadow_linking(KernelGlobals *kg, int obje
 	return __float_as_uint(f.y);
 }
 
-ccl_device_inline float object_cryptomatte_id(KernelGlobals *kg, int object)
+ccl_device_inline float object_cryptomatte_name(KernelGlobals *kg, int object)
 {
 	if(object == OBJECT_NONE)
 		return 0;
 	
-	int offset = object*OBJECT_SIZE + OBJECT_LIGHT_LINKING;
+	int offset = object*OBJECT_SIZE + OBJECT_CRYPTOMATTE;
 	float4 f = kernel_tex_fetch(__objects, offset);
-	return f.z;
+	return f.x;
 }
 
-ccl_device_inline float object_cryptomatte_asset_id(KernelGlobals *kg, int object)
+ccl_device_inline float object_cryptomatte_asset_name(KernelGlobals *kg, int object)
 {
 	if(object == OBJECT_NONE)
 		return 0;
 
-	int offset = object*OBJECT_SIZE + OBJECT_LIGHT_LINKING;
+	int offset = object*OBJECT_SIZE + OBJECT_CRYPTOMATTE;
 	float4 f = kernel_tex_fetch(__objects, offset);
-	return f.w;
+	return f.y;
 }
 
+ccl_device_inline float object_cryptomatte_pass(KernelGlobals *kg, int object)
+{
+	if(object == OBJECT_NONE)
+		return 0;
+
+	int offset = object*OBJECT_SIZE + OBJECT_CRYPTOMATTE;
+	float4 f = kernel_tex_fetch(__objects, offset);
+	return f.z;
+}
 
 ccl_device bool object_in_shadow_linking(KernelGlobals *kg, int visibility, int object, int triAddr, unsigned int shadow_linking)
 {

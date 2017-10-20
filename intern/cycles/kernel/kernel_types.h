@@ -35,14 +35,14 @@
 CCL_NAMESPACE_BEGIN
 
 /* constants */
-#define OBJECT_SIZE 		12
+#define OBJECT_SIZE 		13
 #define OBJECT_VECTOR_SIZE	6
 #define LIGHT_SIZE		13
 #define FILTER_TABLE_SIZE	1024
 #define RAMP_TABLE_SIZE		256
 #define SHUTTER_TABLE_SIZE		256
 #define PARTICLE_SIZE 		5
-#define SHADER_SIZE		14
+#define SHADER_SIZE		15
 #define ID_SLOT_SIZE	2
 
 #define BSSRDF_MIN_RADIUS			1e-8f
@@ -391,9 +391,11 @@ typedef enum PassType {
 typedef enum CryptomatteType {
 	CRYPT_NONE = 0,
 	CRYPT_OBJECT = (1 << 31),
-	CRYPT_MATERIAL = (1 << 30),
-	CRYPT_ASSET = (1 << 29),
-	CRYPT_ACCURATE = (1 << 28),
+	CRYPT_OBJECT_PASS_INDEX = (1 << 30),
+	CRYPT_MATERIAL = (1 << 29),
+	CRYPT_MATERIAL_PASS_INDEX = (1 << 28),
+	CRYPT_ASSET = (1 << 27),
+	CRYPT_ACCURATE = (1 << 26),
 } CryptomatteType;
 
 typedef enum BakePassFilter {

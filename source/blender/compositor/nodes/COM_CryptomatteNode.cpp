@@ -198,6 +198,9 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 				getline(ss, token, ',');
 				size_t first = token.find_first_not_of(' ');
 				size_t last = token.find_last_not_of(' ');
+				if (first == std::string::npos || last == std::string::npos) {
+					break;
+				}
 				token = token.substr(first, (last - first + 1));
 				if (*token.begin() == '<' && *(--token.end()) == '>')
 					operation->addObjectIndex(atof(token.substr(1, token.length() - 2).c_str()));

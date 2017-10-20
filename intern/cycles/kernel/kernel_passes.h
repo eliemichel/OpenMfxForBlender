@@ -165,79 +165,115 @@ ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg, ccl_global fl
 
 	int aov_count = 0;
 
-	if(kernel_data.film.use_cryptomatte & CRYPT_OBJECT) {
+	if(kernel_data.film.use_cryptomatte) {
 		float matte_weight = state->matte_weight * (1.0f - average(shader_bsdf_transparency(kg, sd)));
+		bool initialize_slots = (sample == 0) && (state->transparent_bounce == 0);
 		if(matte_weight > 0.0f) {
-			float id = object_cryptomatte_id(kg, ccl_fetch(sd, object));
-	#ifdef __KERNEL_CPU__
-			if(kg->coverage_object) {
-				if((sample == 0) && (state->transparent_bounce == 0)) {
-					(*kg->coverage_object)[id] = matte_weight;
-				} else {
-					(*kg->coverage_object)[id] += matte_weight;
+			if(kernel_data.film.use_cryptomatte & CRYPT_OBJECT) {
+				float id = object_cryptomatte_name(kg, ccl_fetch(sd, object));
+		#ifdef __KERNEL_CPU__
+				if(kg->coverage_object) {
+					if(initialize_slots) {
+						(*kg->coverage_object)[id] = matte_weight;
+					} else {
+						(*kg->coverage_object)[id] += matte_weight;
+					}
 				}
-			}
-			else {
-	#endif /* __KERNEL_CPU__ */
-				bool initialize_slots = (sample == 0) && (state->transparent_bounce == 0);
-				int pass_offset = (kernel_data.film.pass_aov[0] & ~(1 << 31));
-				kernel_assert(kernel_data.film.pass_aov[0] & (1 << 31));
-				kernel_write_id_slots(buffer + pass_offset, 2 * (kernel_data.film.use_cryptomatte & 255), id, matte_weight, initialize_slots);
-				state->written_aovs |= (1 << 0);
-				aov_count += kernel_data.film.use_cryptomatte & 255;
-	#ifdef __KERNEL_CPU__
-			}
-	#endif /* __KERNEL_CPU__ */
-		}
-	}
-	if(kernel_data.film.use_cryptomatte & CRYPT_MATERIAL) {
-		float matte_weight = state->matte_weight * (1.0f - average(shader_bsdf_transparency(kg, sd)));
-		if(matte_weight > 0.0f) {
-			float id = shader_cryptomatte_id(kg, ccl_fetch(sd, shader));
-	#ifdef __KERNEL_CPU__
-			if(kg->coverage_material) {
-				if((sample == 0) && (state->transparent_bounce == 0)) {
-					(*kg->coverage_material)[id] = matte_weight;
-				} else {
-					(*kg->coverage_material)[id] += matte_weight;
+				else {
+		#endif /* __KERNEL_CPU__ */
+					int pass_offset = (kernel_data.film.pass_aov[0] & ~(1 << 31));
+					kernel_assert(kernel_data.film.pass_aov[0] & (1 << 31));
+					kernel_write_id_slots(buffer + pass_offset, 2 * (kernel_data.film.use_cryptomatte & 255), id, matte_weight, initialize_slots);
+					state->written_aovs |= (1 << 0);
+					aov_count += kernel_data.film.use_cryptomatte & 255;
+		#ifdef __KERNEL_CPU__
 				}
+		#endif /* __KERNEL_CPU__ */
 			}
-			else {
-	#endif /* __KERNEL_CPU__ */
-				bool initialize_slots = (sample == 0) && (state->transparent_bounce == 0);
-				int pass_offset = (kernel_data.film.pass_aov[aov_count] & ~(1 << 31));
-				kernel_assert(kernel_data.film.pass_aov[aov_count] & (1 << 31));
-				kernel_write_id_slots(buffer + pass_offset, 2 * (kernel_data.film.use_cryptomatte & 255), id, matte_weight, initialize_slots);
-				state->written_aovs |= (1 << aov_count);
-				aov_count += kernel_data.film.use_cryptomatte & 255;
-	#ifdef __KERNEL_CPU__
-			}
-	#endif /* __KERNEL_CPU__ */
-		}
-	}
-	if(kernel_data.film.use_cryptomatte & CRYPT_ASSET) {
-		float matte_weight = state->matte_weight * (1.0f - average(shader_bsdf_transparency(kg, sd)));
-		if(matte_weight > 0.0f) {
-			float id = object_cryptomatte_asset_id(kg, ccl_fetch(sd, object));
+			if(kernel_data.film.use_cryptomatte & CRYPT_OBJECT_PASS_INDEX) {
+				float id = object_cryptomatte_pass(kg, ccl_fetch(sd, object));
 #ifdef __KERNEL_CPU__
-			if(kg->coverage_asset) {
-				if((sample == 0) && (state->transparent_bounce == 0)) {
-					(*kg->coverage_asset)[id] = matte_weight;
-				} else {
-					(*kg->coverage_asset)[id] += matte_weight;
+				if(kg->coverage_object_index) {
+					if(initialize_slots) {
+						(*kg->coverage_object_index)[id] = matte_weight;
+					} else {
+						(*kg->coverage_object_index)[id] += matte_weight;
+					}
 				}
-			}
-			else {
+				else {
 #endif /* __KERNEL_CPU__ */
-				bool initialize_slots = (sample == 0) && (state->transparent_bounce == 0);
-				int pass_offset = (kernel_data.film.pass_aov[aov_count] & ~(1 << 31));
-				kernel_assert(kernel_data.film.pass_aov[aov_count] & (1 << 31));
-				kernel_write_id_slots(buffer + pass_offset, 2 * (kernel_data.film.use_cryptomatte & 255), id, matte_weight, initialize_slots);
-				state->written_aovs |= (1 << aov_count);
-				aov_count += kernel_data.film.use_cryptomatte & 255;
+					int pass_offset = (kernel_data.film.pass_aov[0] & ~(1 << 31));
+					kernel_assert(kernel_data.film.pass_aov[0] & (1 << 31));
+					kernel_write_id_slots(buffer + pass_offset, 2 * (kernel_data.film.use_cryptomatte & 255), id, matte_weight, initialize_slots);
+					state->written_aovs |= (1 << 0);
+					aov_count += kernel_data.film.use_cryptomatte & 255;
 #ifdef __KERNEL_CPU__
-			}
+				}
 #endif /* __KERNEL_CPU__ */
+			}
+			if(kernel_data.film.use_cryptomatte & CRYPT_MATERIAL) {
+				float id = shader_cryptomatte_name(kg, ccl_fetch(sd, shader));
+		#ifdef __KERNEL_CPU__
+				if(kg->coverage_material) {
+					if(initialize_slots) {
+						(*kg->coverage_material)[id] = matte_weight;
+					} else {
+						(*kg->coverage_material)[id] += matte_weight;
+					}
+				}
+				else {
+		#endif /* __KERNEL_CPU__ */
+					int pass_offset = (kernel_data.film.pass_aov[aov_count] & ~(1 << 31));
+					kernel_assert(kernel_data.film.pass_aov[aov_count] & (1 << 31));
+					kernel_write_id_slots(buffer + pass_offset, 2 * (kernel_data.film.use_cryptomatte & 255), id, matte_weight, initialize_slots);
+					state->written_aovs |= (1 << aov_count);
+					aov_count += kernel_data.film.use_cryptomatte & 255;
+		#ifdef __KERNEL_CPU__
+				}
+		#endif /* __KERNEL_CPU__ */
+			}
+			if(kernel_data.film.use_cryptomatte & CRYPT_MATERIAL_PASS_INDEX) {
+				float id = shader_cryptomatte_pass(kg, ccl_fetch(sd, shader));
+#ifdef __KERNEL_CPU__
+				if(kg->coverage_material_index) {
+					if(initialize_slots) {
+						(*kg->coverage_material_index)[id] = matte_weight;
+					} else {
+						(*kg->coverage_material_index)[id] += matte_weight;
+					}
+				}
+				else {
+#endif /* __KERNEL_CPU__ */
+					int pass_offset = (kernel_data.film.pass_aov[aov_count] & ~(1 << 31));
+					kernel_assert(kernel_data.film.pass_aov[aov_count] & (1 << 31));
+					kernel_write_id_slots(buffer + pass_offset, 2 * (kernel_data.film.use_cryptomatte & 255), id, matte_weight, initialize_slots);
+					state->written_aovs |= (1 << aov_count);
+					aov_count += kernel_data.film.use_cryptomatte & 255;
+#ifdef __KERNEL_CPU__
+				}
+#endif /* __KERNEL_CPU__ */
+			}
+			if(kernel_data.film.use_cryptomatte & CRYPT_ASSET) {
+				float id = object_cryptomatte_asset_name(kg, ccl_fetch(sd, object));
+#ifdef __KERNEL_CPU__
+				if(kg->coverage_asset) {
+					if(initialize_slots) {
+						(*kg->coverage_asset)[id] = matte_weight;
+					} else {
+						(*kg->coverage_asset)[id] += matte_weight;
+					}
+				}
+				else {
+#endif /* __KERNEL_CPU__ */
+					int pass_offset = (kernel_data.film.pass_aov[aov_count] & ~(1 << 31));
+					kernel_assert(kernel_data.film.pass_aov[aov_count] & (1 << 31));
+					kernel_write_id_slots(buffer + pass_offset, 2 * (kernel_data.film.use_cryptomatte & 255), id, matte_weight, initialize_slots);
+					state->written_aovs |= (1 << aov_count);
+					aov_count += kernel_data.film.use_cryptomatte & 255;
+#ifdef __KERNEL_CPU__
+				}
+#endif /* __KERNEL_CPU__ */
+			}
 		}
 	}
 
