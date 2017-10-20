@@ -175,6 +175,9 @@ private:
                     ShaderGraph *graph,
                     BL::ShaderNodeTree& b_ntree);
 
+	/* Cryptomatte */
+	void add_cryptomatte_pass(int crypto_depth, const char *name, PassSettings& passes, BL::SceneRenderLayer& b_srlay);
+
 	/* util */
 	void find_shader(BL::ID& id, vector<Shader*>& used_shaders, Shader *default_shader);
 	bool object_is_mesh(BL::Object& b_ob);

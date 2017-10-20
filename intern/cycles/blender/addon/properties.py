@@ -1310,9 +1310,27 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
                 default=False,
                 update=update_render_passes,
                 )
+        cls.use_pass_crypto_object_index = BoolProperty(
+                name="CryptoMatte Object Index",
+                description="CryptoMatte Object pass index",
+                default=False,
+                update=update_render_passes,
+                )
         cls.use_pass_crypto_material = BoolProperty(
                 name="CryptoMatte Material",
                 description="CryptoMatte Material pass",
+                default=False,
+                update=update_render_passes,
+                )
+        cls.use_pass_crypto_material_index = BoolProperty(
+                name="CryptoMatte Material Index",
+                description="CryptoMatte Material pass index",
+                default=False,
+                update=update_render_passes,
+                )
+        cls.use_pass_crypto_asset = BoolProperty(
+                name="CryptoMatte Asset",
+                description="CryptoMatte Asset pass",
                 default=False,
                 update=update_render_passes,
                 )
