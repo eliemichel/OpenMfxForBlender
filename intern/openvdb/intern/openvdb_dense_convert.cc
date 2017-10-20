@@ -165,4 +165,19 @@ void OpenVDB_import_grid_vector(
 	}
 }
 
+openvdb::CoordBBox OpenVDB_get_grid_bounds(
+        OpenVDBReader *reader,
+        const openvdb::Name &name)
+{
+	using namespace openvdb;
+
+	if (!reader->hasGrid(name)) {
+		return CoordBBox();
+	}
+
+	GridBase::Ptr grid = reader->getGrid(name);
+
+	return grid->evalActiveVoxelBoundingBox();
+}
+
 }  /* namespace internal */

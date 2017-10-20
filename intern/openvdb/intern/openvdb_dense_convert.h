@@ -126,6 +126,10 @@ void OpenVDB_import_grid_vector(
         float **data_x, float **data_y, float **data_z,
         const int res[3]);
 
+openvdb::CoordBBox OpenVDB_get_grid_bounds(
+        OpenVDBReader *reader,
+        const openvdb::Name &name);
+
 }  /* namespace internal */
 
 #endif /* __OPENVDB_DENSE_CONVERT_H__ */

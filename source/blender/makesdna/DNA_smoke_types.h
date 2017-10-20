@@ -217,6 +217,8 @@ typedef struct SmokeDomainSettings {
 	char use_coba;
 	char coba_field;  /* simulation field used for the color mapping */
 	char pad2;
+
+	struct OpenVDBModifierData *vdb;
 } SmokeDomainSettings;
 
 

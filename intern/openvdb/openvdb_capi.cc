@@ -139,6 +139,53 @@ void OpenVDB_import_grid_vec(
 	internal::OpenVDB_import_grid_vector(reader, name, data_x, data_y, data_z, res);
 }
 
+bool OpenVDB_has_grid(OpenVDBReader *reader, const char *name)
+{
+	return reader->hasGrid(name);
+}
+
+void OpenVDB_get_bbox(
+        struct OpenVDBReader *reader,
+        char *density, char *heat,
+        char *flame, char *color,
+        int r_res_min[3],
+        int r_res_max[3],
+        int r_res[3])
+{
+	using openvdb::CoordBBox;
+	using openvdb::Coord;
+
+	CoordBBox bbox = internal::OpenVDB_get_grid_bounds(reader, density);
+	Coord coord;
+
+	if (heat) {
+		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, heat));
+	}
+
+	if (flame) {
+		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, flame));
+	}
+
+	if (color) {
+		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, color));
+	}
+
+	coord = bbox.getStart();
+	r_res_min[0] = coord[0];
+	r_res_min[1] = coord[1];
+	r_res_min[2] = coord[2];
+
+	coord = bbox.getEnd();
+	r_res_max[0] = coord[0];
+	r_res_max[1] = coord[1];
+	r_res_max[2] = coord[2];
+
+	coord = bbox.dim();
+	r_res[0] = coord[0];
+	r_res[1] = coord[1];
+	r_res[2] = coord[2];
+}
+
 void OpenVDB_print_grids(OpenVDBReader *reader)
 {
 	reader->printGrids();

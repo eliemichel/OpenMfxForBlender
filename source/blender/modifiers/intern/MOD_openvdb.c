@@ -30,6 +30,7 @@
 #include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_smoke_types.h"
 
 #include "BLI_utildefines.h"
 #include "BLI_string.h"
@@ -42,6 +43,7 @@
 #include "BKE_mesh.h"
 #include "BKE_main.h"
 #include "BKE_smoke.h"
+#include "BKE_pointcache.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -55,6 +57,9 @@ static void initData(ModifierData *md)
 	smd->type = MOD_SMOKE_TYPE_DOMAIN;
 
 	smokeModifier_createType(smd);
+
+	smd->domain->cache_file_format = PTCACHE_FILE_OPENVDB_EXTERN;
+	smd->domain->vdb = vdbmd;
 
 	vdbmd->smoke = smd;
 }
