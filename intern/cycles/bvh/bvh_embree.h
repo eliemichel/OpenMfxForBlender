@@ -69,6 +69,8 @@ private:
 
 	Stats *stats;
 	vector<RTCScene> delayed_delete_scenes;
+	int curve_subdivisions;
+	bool use_curves, use_ribbons, dynamic_scene;
 };
 
 CCL_NAMESPACE_END

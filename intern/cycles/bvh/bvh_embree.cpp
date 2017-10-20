@@ -41,9 +41,6 @@
  * #define EMBREE_SHARED_MEM 1
  */
 
-/* this should eventually come from render settings. */
-//#define HAIR_CURVES
-
 CCL_NAMESPACE_BEGIN
 
 static bool rtc_shadow_linking(CCLRay &ray)
@@ -70,6 +67,14 @@ void rtc_filter_func(void*, RTCRay& ray_)
 {
 	CCLRay &ray = (CCLRay&)ray_;
 	KernelGlobals *kg = ray.kg;
+
+	/* For all ray types: check if there is backfacing hair to ignore */
+	if(!(kernel_data.curve.curveflags & CURVE_KN_BACKFACING) && !(kernel_data.curve.curveflags & CURVE_KN_RIBBONS) && ray.geomID & 1) {
+		if(dot(make_float3(ray.dir[0], ray.dir[1], ray.dir[2]), make_float3(ray.Ng[0], ray.Ng[1], ray.Ng[2])) > 0.0f) {
+			ray.geomID = RTC_INVALID_GEOMETRY_ID;
+			return;
+		}
+	}
 
 	if(ray.type == CCLRay::RAY_REGULAR) {
 		if(!rtc_shadow_linking(ray)) {
@@ -215,7 +220,9 @@ int BVHEmbree::rtc_shared_users = 0;
 thread_mutex BVHEmbree::rtc_shared_mutex;
 
 BVHEmbree::BVHEmbree(const BVHParams& params_, const vector<Object*>& objects_)
-: BVH(params_, objects_), scene(NULL), mem_used(0), top_level(NULL), stats(NULL)
+: BVH(params_, objects_), scene(NULL), mem_used(0), top_level(NULL), stats(NULL),
+  use_curves(params_.curve_flags & CURVE_KN_INTERPOLATE), use_ribbons(params.curve_flags & CURVE_KN_RIBBONS),
+  curve_subdivisions(params.curve_subdivisions)
 {
 	_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
 	_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
@@ -237,7 +244,12 @@ BVHEmbree::BVHEmbree(const BVHParams& params_, const vector<Object*>& objects_)
 		ret = rtcDeviceGetParameter1i(rtc_shared_device, RTC_CONFIG_LINE_GEOMETRY);
 		if(ret != 1) {
 			assert(0);
-			VLOG(1) << "Embree is compiled without the EMBREE_GEOMETRY_LINES flag. Hair primitives will not be rendered.";
+			VLOG(1) << "Embree is compiled without the EMBREE_GEOMETRY_LINES flag. Line primitives will not be rendered.";
+		}
+		ret = rtcDeviceGetParameter1i(rtc_shared_device, RTC_CONFIG_HAIR_GEOMETRY);
+		if(ret != 1) {
+			assert(0);
+			VLOG(1) << "Embree is compiled without the EMBREE_GEOMETRY_HAIR flag. Hair primitives will not be rendered.";
 		}
 		ret = rtcDeviceGetParameter1i(rtc_shared_device, RTC_CONFIG_TRIANGLE_GEOMETRY);
 		if(ret != 1) {
@@ -313,9 +325,9 @@ void BVHEmbree::build(Progress& progress, Stats *stats_)
 		scene = NULL;
 	}
 
-	RTCSceneFlags flags = RTC_SCENE_DYNAMIC|RTC_SCENE_COMPACT|RTC_SCENE_ROBUST;
+	RTCSceneFlags flags = (params.bvh_type == SceneParams::BVH_DYNAMIC ? RTC_SCENE_DYNAMIC : RTC_SCENE_STATIC) | RTC_SCENE_INCOHERENT | RTC_SCENE_ROBUST;
 	if(params.use_spatial_split) {
-		flags = flags|RTC_SCENE_HIGH_QUALITY;
+		flags = flags | RTC_SCENE_HIGH_QUALITY;
 	}
 	scene = rtcDeviceNewScene(rtc_shared_device, flags, RTC_INTERSECT1);
 
@@ -440,7 +452,7 @@ unsigned BVHEmbree::add_triangles(Mesh *mesh, int i)
 	const size_t num_triangles = mesh->num_triangles();
 	const size_t num_verts = mesh->verts.size();
 	unsigned geom_id = rtcNewTriangleMesh2(scene,
-						RTC_GEOMETRY_DEFORMABLE,
+						params.bvh_type == SceneParams::BVH_DYNAMIC ? RTC_GEOMETRY_DEFORMABLE : RTC_GEOMETRY_STATIC,
 						num_triangles,
 						num_verts,
 						num_motion_steps,
@@ -509,15 +521,18 @@ void BVHEmbree::update_tri_vertex_buffer(unsigned geom_id, const Mesh* mesh)
 		rtcSetBuffer(scene, geom_id, buffer_type, verts, 0, sizeof(float3));
 #else
 		void *raw_buffer = rtcMapBuffer(scene, geom_id, buffer_type);
-		float *rtc_verts = (float*) raw_buffer;
-		for(size_t j = 0; j < num_verts; j++) {
-			rtc_verts[0] = verts[j].x;
-			rtc_verts[1] = verts[j].y;
-			rtc_verts[2] = verts[j].z;
-			rtc_verts[3] = 0.0f;
-			rtc_verts += 4;
+		assert(raw_buffer);
+		if(raw_buffer) {
+			float *rtc_verts = (float*) raw_buffer;
+			for(size_t j = 0; j < num_verts; j++) {
+				rtc_verts[0] = verts[j].x;
+				rtc_verts[1] = verts[j].y;
+				rtc_verts[2] = verts[j].z;
+				rtc_verts[3] = 0.0f;
+				rtc_verts += 4;
+			}
+			rtcUnmapBuffer(scene, geom_id, buffer_type);
 		}
-		rtcUnmapBuffer(scene, geom_id, buffer_type);
 #endif
 	}
 }
@@ -548,34 +563,52 @@ void BVHEmbree::update_curve_vertex_buffer(unsigned geom_id, const Mesh* mesh)
 			verts = &attr_mP->data_float3()[t_ * num_keys];
 		}
 
-#ifdef EMBREE_SHARED_MEM
-		if(t != t_mid) {
-			rtcSetBuffer(scene, geom_id, buffer_type, verts, 0, sizeof(float4));
-		} else
-#endif
-		{
-			void *raw_buffer = rtcMapBuffer(scene, geom_id, buffer_type);
-			float *rtc_verts = (float*) raw_buffer;
-#ifdef HAIR_CURVES
-			rtc_verts[0] = verts[0].x;
-			rtc_verts[1] = verts[0].y;
-			rtc_verts[2] = verts[0].z;
-			rtc_verts[3] = curve_radius[0];
-			rtc_verts += 4;
-#endif
-			for(size_t j = 0; j < num_keys; j++) {
-				rtc_verts[0] = verts[j].x;
-				rtc_verts[1] = verts[j].y;
-				rtc_verts[2] = verts[j].z;
-				rtc_verts[3] = curve_radius[j];
-				rtc_verts += 4;
+		void *raw_buffer = rtcMapBuffer(scene, geom_id, buffer_type);
+		assert(raw_buffer);
+		if(raw_buffer) {
+			float4 *rtc_verts = (float4*) raw_buffer;
+			if(use_curves) {
+				const size_t num_curves = mesh->num_curves();
+				for(size_t j = 0; j < num_curves; j++) {
+					Mesh::Curve c = mesh->get_curve(j);
+					if(c.num_segments() > 0) {
+						/* Create Embree's cubic splines that equal the cardinal splines that cycles uses */
+						//static float fc = 1.0f / ((0.29f - 1.0f) * 6.0f);
+						constexpr float fc = -0.2347417840375f;
+						rtc_verts[0] = float3_to_float4(verts[0]);
+						rtc_verts[0].w = curve_radius[0];
+						rtc_verts[1] = float3_to_float4(-fc * (verts[1] - verts[0]) + verts[0]);
+						rtc_verts[1].w = lerp(curve_radius[0], curve_radius[1], 0.33f);
+						size_t idx = 2;
+						size_t k = 1;
+						for(;k < c.num_segments(); k++) {
+							const float3 d = (verts[k+1] - verts[k-1]);
+							rtc_verts[k*3-1] = float3_to_float4(fc * d + verts[k]);
+							rtc_verts[k*3-1].w = lerp(curve_radius[k-1], curve_radius[k], 0.66f);
+							rtc_verts[k*3] = float3_to_float4(verts[k]);
+							rtc_verts[k*3].w = curve_radius[k];
+							rtc_verts[k*3+1] = float3_to_float4(-fc * d + verts[k]);
+							rtc_verts[k*3+1].w = lerp(curve_radius[k], curve_radius[k+1], 0.33f);
+						}
+						rtc_verts[k*3-1] = float3_to_float4(fc * (verts[k] - verts[k-1]) + verts[k]);
+						rtc_verts[k*3-1].w = lerp(curve_radius[k-1], curve_radius[k], 0.66f);
+						rtc_verts[k*3] = float3_to_float4(verts[k]);
+						rtc_verts[k*3].w = curve_radius[k];
+						rtc_verts += c.num_segments()*3+1;
+						verts += c.num_keys;
+						curve_radius += c.num_keys;
+					}
+					else {
+						assert(0);
+					}
+				}
 			}
-#ifdef HAIR_CURVES
-			rtc_verts[0] = verts[num_keys-1].x;
-			rtc_verts[1] = verts[num_keys-1].y;
-			rtc_verts[2] = verts[num_keys-1].z;
-			rtc_verts[3] = curve_radius[num_keys-1];
-#endif
+			else {
+				for(size_t j = 0; j < num_keys; j++) {
+					rtc_verts[j] = float3_to_float4(verts[j]);
+					rtc_verts[j].w = curve_radius[j];
+				}
+			}
 			rtcUnmapBuffer(scene, geom_id, buffer_type);
 		}
 	}
@@ -593,13 +626,18 @@ unsigned BVHEmbree::add_curves(Mesh *mesh, int i)
 	}
 
 	const size_t num_curves = mesh->num_curves();
+	size_t num_keys = 0;
 	size_t num_segments = 0;
 	for(size_t j = 0; j < num_curves; j++) {
 		Mesh::Curve c = mesh->get_curve(j);
-		num_segments += c.num_segments();
+		if(c.num_segments() > 0) {
+			num_segments += c.num_segments();
+			num_keys += use_curves ? (c.num_segments() * 3 + 1) : c.num_keys;
+		}
+		else {
+			assert(0);
+		}
 	}
-
-	const size_t num_keys = mesh->curve_keys.size();
 
 	/* Make room for Cycles specific data */
 	pack.prim_object.reserve(pack.prim_object.size() + num_segments);
@@ -607,65 +645,77 @@ unsigned BVHEmbree::add_curves(Mesh *mesh, int i)
 	pack.prim_index.reserve(pack.prim_index.size() + num_segments);
 	pack.prim_tri_index.reserve(pack.prim_index.size() + num_segments);
 
-#ifndef HAIR_CURVES /* line segments */
-	unsigned geom_id = rtcNewLineSegments2(scene,
-												 RTC_GEOMETRY_DEFORMABLE,
+	unsigned geom_id;
+	if(use_curves) {
+		/* curve segments */
+		if(use_ribbons) {
+			geom_id = rtcNewBezierHairGeometry2(scene,
+												 params.bvh_type == SceneParams::BVH_DYNAMIC ? RTC_GEOMETRY_DEFORMABLE : RTC_GEOMETRY_STATIC,
 												 num_segments,
 												 num_keys,
 												 num_motion_steps,
 												 i*2+1);
-
-
-	/* Split the Cycles curves into embree line segments, each with 2 CVs */
-	void* raw_buffer = rtcMapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
-	unsigned *rtc_indices = (unsigned*) raw_buffer;
-	size_t rtc_index = 0;
-	for(size_t j = 0; j < num_curves; j++) {
-		Mesh::Curve c = mesh->get_curve(j);
-		for(size_t k = 0; k < c.num_segments(); k++) {
-			rtc_indices[rtc_index] = c.first_key + k;
-
-			/* Cycles specific data */
-			pack.prim_object.push_back_reserved(i);
-			pack.prim_type.push_back_reserved(PRIMITIVE_PACK_SEGMENT(num_motion_steps > 1 ? PRIMITIVE_MOTION_CURVE : PRIMITIVE_CURVE, k));
-			pack.prim_index.push_back_reserved(j);
-			pack.prim_tri_index.push_back_reserved(rtc_index);
-
-			rtc_index++;
 		}
-	}
-	rtcUnmapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
-#else
-	/* curve segments */
-	num_segments = num_segments / 2;
-	unsigned geom_id = rtcNewBezierHairGeometry2(scene,
-												 RTC_GEOMETRY_DEFORMABLE,
+		else {
+			geom_id = rtcNewBezierCurveGeometry2(scene,
+												 params.bvh_type == SceneParams::BVH_DYNAMIC ? RTC_GEOMETRY_DEFORMABLE : RTC_GEOMETRY_STATIC,
 												 num_segments,
-												 num_keys + 2 * num_curves,
+												 num_keys,
 												 num_motion_steps,
 												 i*2+1);
-
-
-	/* Split the Cycles curves into embree hair segments, each with 4 CVs */
-	void* raw_buffer = rtcMapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
-	unsigned *rtc_indices = (unsigned*) raw_buffer;
-	size_t rtc_index = 0;
-	for(size_t j = 0; j < num_curves; j++) {
-		Mesh::Curve c = mesh->get_curve(j);
-		for(size_t k = 0; k < c.num_segments(); k+=3) {
-			rtc_indices[rtc_index] = c.first_key + k;
-
-			/* Cycles specific data */
-			pack.prim_object.push_back_reserved(i);
-			pack.prim_type.push_back_reserved(PRIMITIVE_PACK_SEGMENT(num_motion_steps > 1 ? PRIMITIVE_MOTION_CURVE : PRIMITIVE_CURVE, k));
-			pack.prim_index.push_back_reserved(j);
-			pack.prim_tri_index.push_back_reserved(rtc_index);
-
-			rtc_index++;
 		}
+		rtcSetTessellationRate(scene, geom_id, curve_subdivisions);
+
+		/* Split the Cycles curves into embree hair segments, each with 4 CVs */
+		void* raw_buffer = rtcMapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
+		unsigned *rtc_indices = (unsigned*) raw_buffer;
+		size_t rtc_index = 0;
+		size_t curve_start = 0;
+		for(size_t j = 0; j < num_curves; j++) {
+			Mesh::Curve c = mesh->get_curve(j);
+			for(size_t k = 0; k < c.num_segments(); k++) {
+				rtc_indices[rtc_index] = curve_start;
+				curve_start += 3;
+				/* Cycles specific data */
+				pack.prim_object.push_back_reserved(i);
+				pack.prim_type.push_back_reserved(PRIMITIVE_PACK_SEGMENT(num_motion_steps > 1 ? PRIMITIVE_MOTION_CURVE : PRIMITIVE_CURVE, k));
+				pack.prim_index.push_back_reserved(j);
+				pack.prim_tri_index.push_back_reserved(rtc_index);
+
+				rtc_index++;
+			}
+			curve_start+=1;
+		}
+		rtcUnmapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
 	}
-	rtcUnmapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
-#endif
+	else {
+		geom_id = rtcNewLineSegments2(scene,
+													 params.bvh_type == SceneParams::BVH_DYNAMIC ? RTC_GEOMETRY_DEFORMABLE : RTC_GEOMETRY_STATIC,
+													 num_segments,
+													 num_keys,
+													 num_motion_steps,
+													 i*2+1);
+
+
+		/* Split the Cycles curves into embree line segments, each with 2 CVs */
+		void* raw_buffer = rtcMapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
+		unsigned *rtc_indices = (unsigned*) raw_buffer;
+		size_t rtc_index = 0;
+		for(size_t j = 0; j < num_curves; j++) {
+			Mesh::Curve c = mesh->get_curve(j);
+			for(size_t k = 0; k < c.num_segments(); k++) {
+				rtc_indices[rtc_index] = c.first_key + k;
+				/* Cycles specific data */
+				pack.prim_object.push_back_reserved(i);
+				pack.prim_type.push_back_reserved(PRIMITIVE_PACK_SEGMENT(num_motion_steps > 1 ? PRIMITIVE_MOTION_CURVE : PRIMITIVE_CURVE, k));
+				pack.prim_index.push_back_reserved(j);
+				pack.prim_tri_index.push_back_reserved(rtc_index);
+
+				rtc_index++;
+			}
+		}
+		rtcUnmapBuffer(scene, geom_id, RTC_INDEX_BUFFER);
+	}
 
 	update_curve_vertex_buffer(geom_id, mesh);
 
