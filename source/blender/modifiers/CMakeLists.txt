@@ -38,6 +38,7 @@ set(INC
 	../../../intern/elbeem/extern
 	../../../intern/guardedalloc
 	../../../intern/eigen
+	../../../intern/openvdb
 )
 
 set(INC_SYS

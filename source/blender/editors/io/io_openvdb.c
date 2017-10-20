@@ -51,7 +51,7 @@ static void wm_openvdb_import_draw(bContext *UNUSED(C), wmOperator *op)
 	//ui_openvdb_import_settings(op->layout, &ptr);
 }
 
-static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
+static int wm_openvdb_import_exec(bContext *UNUSED(C), wmOperator *op)
 {
 	if (!RNA_struct_property_is_set(op->ptr, "filepath")) {
 		BKE_report(op->reports, RPT_ERROR, "No filename given");

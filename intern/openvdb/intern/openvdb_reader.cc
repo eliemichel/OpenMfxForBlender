@@ -134,6 +134,11 @@ void OpenVDBReader::printGrids()
 	}
 }
 
+openvdb::io::File::NameIterator OpenVDBReader::getNameIter()
+{
+	return m_file->beginName();
+}
+
 void OpenVDBReader::cleanupFile()
 {
 	if (m_file) {

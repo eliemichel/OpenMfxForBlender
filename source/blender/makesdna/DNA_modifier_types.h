@@ -1617,10 +1617,15 @@ typedef struct OpenVDBModifierData {
 	ModifierData modifier;
 
 	char filepath[1024];  /* FILE_MAX */
+	char (*grids)[64];
 	char density[64];
 	char heat[64];
 	char flame[64];
 	char color[64];
+
+	int numgrids;
+
+	int pad;
 
 	SmokeModifierData *smoke;
 } OpenVDBModifierData;

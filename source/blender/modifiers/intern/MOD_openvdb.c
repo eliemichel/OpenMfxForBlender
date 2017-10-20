@@ -32,6 +32,7 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_smoke_types.h"
 
+#include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 #include "BLI_string.h"
 #include "BLI_path_util.h"
@@ -49,6 +50,8 @@
 
 #include "MOD_modifiertypes.h"
 
+#include "openvdb_capi.h"
+
 static void initData(ModifierData *md)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
@@ -62,6 +65,8 @@ static void initData(ModifierData *md)
 	smd->domain->vdb = vdbmd;
 
 	vdbmd->smoke = smd;
+	vdbmd->grids = NULL;
+	vdbmd->numgrids = 0;
 }
 
 static void copyData(ModifierData *md, ModifierData *target)
@@ -91,6 +96,18 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 	ModifierData *smd = (ModifierData *)vdbmd->smoke;
 
 	smd->scene = md->scene;
+
+	MEM_SAFE_FREE(vdbmd->grids);
+	vdbmd->numgrids = 0;
+
+	if (BLI_exists(vdbmd->filepath)) {
+		struct OpenVDBReader *reader = OpenVDBReader_create();
+		OpenVDBReader_open(reader, vdbmd->filepath);
+
+		vdbmd->numgrids = OpenVDB_get_name_array(reader, (char***)&vdbmd->grids);
+
+		OpenVDBReader_free(reader);
+	}
 
 	return modwrap_applyModifier(smd, ob, dm, flag);
 }
