@@ -410,9 +410,13 @@ public:
 
 		/* cryptomatte data. This needs a better place than here. */
 		vector<map<float, float> >coverage_object;
+		vector<map<float, float> >coverage_object_index;
 		vector<map<float, float> >coverage_material;
+		vector<map<float, float> >coverage_material_index;
+		vector<map<float, float> >coverage_asset;
 
-		kg.coverage_object = kg.coverage_material = NULL;
+		kg.coverage_object = kg.coverage_material = kg.coverage_asset = NULL;
+		kg.coverage_object_index = kg.coverage_material_index = NULL;
 
 		while(task.acquire_tile(this, tile)) {
 			if(kg.__data.film.use_cryptomatte & CRYPT_ACCURATE) {
@@ -420,9 +424,21 @@ public:
 					coverage_object.clear();
 					coverage_object.resize(tile.w * tile.h);
 				}
+				if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT_PASS_INDEX) {
+					coverage_object_index.clear();
+					coverage_object_index.resize(tile.w * tile.h);
+				}
 				if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
 					coverage_material.clear();
 					coverage_material.resize(tile.w * tile.h);
+				}
+				if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL_PASS_INDEX) {
+					coverage_material_index.clear();
+					coverage_material_index.resize(tile.w * tile.h);
+				}
+				if(kg.__data.film.use_cryptomatte & CRYPT_ASSET) {
+					coverage_asset.clear();
+					coverage_asset.resize(tile.w * tile.h);
 				}
 			}
 			float *render_buffer = (float*)tile.buffer;
@@ -442,8 +458,17 @@ public:
 							if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT) {
 								kg.coverage_object = &coverage_object[tile.w * (y - tile.y) + x - tile.x];
 							}
+							if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT_PASS_INDEX) {
+								kg.coverage_object_index = &coverage_object_index[tile.w * (y - tile.y) + x - tile.x];
+							}
 							if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
 								kg.coverage_material = &coverage_material[tile.w * (y - tile.y) + x - tile.x];
+							}
+							if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL_PASS_INDEX) {
+								kg.coverage_material_index = &coverage_material_index[tile.w * (y - tile.y) + x - tile.x];
+							}
+							if(kg.__data.film.use_cryptomatte & CRYPT_ASSET) {
+								kg.coverage_asset = &coverage_asset[tile.w * (y - tile.y) + x - tile.x];
 							}
 						}
 						path_trace_kernel(&kg, render_buffer, rng_state,
@@ -459,8 +484,17 @@ public:
 						if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT) {
 							aov_index += flatten_coverage(&kg, coverage_object, tile, aov_index);
 						}
+						if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT_PASS_INDEX) {
+							aov_index += flatten_coverage(&kg, coverage_object_index, tile, aov_index);
+						}
 						if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
 							aov_index += flatten_coverage(&kg, coverage_material, tile, aov_index);
+						}
+						if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL_PASS_INDEX) {
+							aov_index += flatten_coverage(&kg, coverage_material_index, tile, aov_index);
+						}
+						if(kg.__data.film.use_cryptomatte & CRYPT_ASSET) {
+							aov_index += flatten_coverage(&kg, coverage_asset, tile, aov_index);
 						}
 					}
 				}

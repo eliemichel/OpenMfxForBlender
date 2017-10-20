@@ -553,6 +553,17 @@ PassType BlenderSync::get_pass_type(BL::RenderPass& b_pass)
 	return PASS_NONE;
 }
 
+void BlenderSync::add_cryptomatte_pass(int crypto_depth, const char *name, PassSettings& passes, BL::SceneRenderLayer& b_srlay)
+{
+	for(int i = 0; i < crypto_depth; ++i) {
+		string passname = string_printf("uCrypto%s%02d", name, i);
+		AOV aov = {ustring(passname), 9999, AOV_CRYPTOMATTE};
+		passes.add(aov);
+		passname = "AOV " + passname;
+		b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str(), 2);
+	}
+}
+
 void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 	                        BL::SceneRenderLayer& b_srlay,
 	                        bool advanced_shading)
@@ -599,27 +610,29 @@ void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 		scene->film->use_cryptomatte = crypto_depth;
 		
 		if(get_boolean(crp, "use_pass_crypto_object")) {
-			for(int i = 0; i < crypto_depth; ++i) {
-				string passname = string_printf("uCryptoObject%02d", i);
-				AOV aov = {ustring(passname), 9999, AOV_CRYPTOMATTE};
-				passes.add(aov);
-				passname = "AOV " + passname;
-				b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str());
-			}
+			add_cryptomatte_pass(crypto_depth, "Object", passes, b_srlay);
 			scene->film->use_cryptomatte |= CRYPT_OBJECT;
+		}
+
+		if(get_boolean(crp, "use_pass_crypto_object_index")) {
+			add_cryptomatte_pass(crypto_depth, "ObjectIndex", passes, b_srlay);
+			scene->film->use_cryptomatte |= CRYPT_OBJECT_PASS_INDEX;
 		}
 		
 		if(get_boolean(crp, "use_pass_crypto_material")) {
-			for(int i = 0; i < crypto_depth; ++i) {
-				string passname = string_printf("uCryptoMaterial%02d", i);
-				AOV aov = {ustring(passname), 9999, AOV_CRYPTOMATTE};
-				passes.add(aov);
-				passname = "AOV " + passname;
-				b_engine.add_pass(passname.c_str(), 4, "RGBA", b_srlay.name().c_str());
-			}
+			add_cryptomatte_pass(crypto_depth, "Material", passes, b_srlay);
 			scene->film->use_cryptomatte |= CRYPT_MATERIAL;
 		}
 
+		if(get_boolean(crp, "use_pass_crypto_material_index")) {
+			add_cryptomatte_pass(crypto_depth, "MaterialIndex", passes, b_srlay);
+			scene->film->use_cryptomatte |= CRYPT_MATERIAL_PASS_INDEX;
+		}
+
+		if(get_boolean(crp, "use_pass_crypto_asset")) {
+			add_cryptomatte_pass(crypto_depth, "Asset", passes, b_srlay);
+			scene->film->use_cryptomatte |= CRYPT_ASSET;
+		}
 		if(get_boolean(crp, "pass_crypto_accurate")) {
 			scene->film->use_cryptomatte |= CRYPT_ACCURATE;
 		}
@@ -630,7 +643,7 @@ void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 			AOV aov = {ustring(name), 9999, is_color ? AOV_RGB : AOV_FLOAT};
 			passes.add(aov);
 			string passname = string_printf("AOV %s", name.c_str());
-			b_engine.add_pass(passname.c_str(), is_color? 3: 1, is_color? "RGB": "X", b_srlay.name().c_str());
+			b_engine.add_pass(passname.c_str(), is_color? 3: 1, is_color? "RGB": "X", b_srlay.name().c_str(), 0);
 		} RNA_END
 		
 	}

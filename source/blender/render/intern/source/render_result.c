@@ -199,7 +199,7 @@ static void set_pass_full_name(char *fullname, const char *name, int channel, co
 
 /********************************** New **************************************/
 
-static RenderPass *render_layer_add_pass(RenderResult *rr, RenderLayer *rl, int channels, const char *name, const char *viewname, const char *chan_id)
+static RenderPass *render_layer_add_pass(RenderResult *rr, RenderLayer *rl, int channels, const char *name, const char *viewname, const char *chan_id, int pixel_type)
 {
 	const int view_id = BLI_findstringindex(&rr->views, viewname, offsetof(RenderView, name));
 	RenderPass *rpass = MEM_callocN(sizeof(RenderPass), name);
@@ -209,6 +209,7 @@ static RenderPass *render_layer_add_pass(RenderResult *rr, RenderLayer *rl, int 
 	rpass->rectx = rl->rectx;
 	rpass->recty = rl->recty;
 	rpass->view_id = view_id;
+	rpass->pixel_type = pixel_type;
 
 	BLI_strncpy(rpass->name, name, sizeof(rpass->name));
 	BLI_strncpy(rpass->chan_id, chan_id, sizeof(rpass->chan_id));
@@ -252,7 +253,7 @@ static RenderPass *render_layer_add_pass(RenderResult *rr, RenderLayer *rl, int 
 /* wrapper called from render_opengl */
 RenderPass *gp_add_pass(RenderResult *rr, RenderLayer *rl, int channels, const char *name, const char *viewname)
 {
-	return render_layer_add_pass(rr, rl, channels, name, viewname, "RGBA");
+	return render_layer_add_pass(rr, rl, channels, name, viewname, "RGBA", RE_PIXEL_TYPE_ANY);
 }
 
 /* called by main render as well for parts */
@@ -346,14 +347,14 @@ RenderResult *render_result_new(Render *re, rcti *partrct, int crop, int savebuf
 
 #define RENDER_LAYER_ADD_PASS_SAFE(rr, rl, channels, name, viewname, chan_id) \
 			do { \
-				if (render_layer_add_pass(rr, rl, channels, name, viewname, chan_id) == NULL) { \
+				if (render_layer_add_pass(rr, rl, channels, name, viewname, chan_id, RE_PIXEL_TYPE_ANY) == NULL) { \
 					render_result_free(rr); \
 					return NULL; \
 				} \
 			} while (false)
 
 			/* a renderlayer should always have a Combined pass*/
-			render_layer_add_pass(rr, rl, 4, "Combined", view, "RGBA");
+			render_layer_add_pass(rr, rl, 4, "Combined", view, "RGBA", RE_PIXEL_TYPE_ANY);
 
 			if (srl->passflag  & SCE_PASS_Z)
 				RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 1, RE_PASSNAME_Z, view, "Z");
@@ -443,7 +444,7 @@ RenderResult *render_result_new(Render *re, rcti *partrct, int crop, int savebuf
 				IMB_exr_add_view(rl->exrhandle, view);
 
 			/* a renderlayer should always have a Combined pass */
-			render_layer_add_pass(rr, rl, 4, RE_PASSNAME_COMBINED, view, "RGBA");
+			render_layer_add_pass(rr, rl, 4, RE_PASSNAME_COMBINED, view, "RGBA", RE_PIXEL_TYPE_ANY);
 		}
 
 		/* note, this has to be in sync with scene.c */
@@ -481,13 +482,13 @@ void render_result_clone_passes(Render *re, RenderResult *rr, const char *viewna
 			/* Compare fullname to make sure that the view also is equal. */
 			RenderPass *rp = BLI_findstring(&rl->passes, main_rp->fullname, offsetof(RenderPass, fullname));
 			if (!rp) {
-				render_layer_add_pass(rr, rl, main_rp->channels, main_rp->name, main_rp->view, main_rp->chan_id);
+				render_layer_add_pass(rr, rl, main_rp->channels, main_rp->name, main_rp->view, main_rp->chan_id, main_rp->pixel_type);
 			}
 		}
 	}
 }
 
-void render_result_add_pass(RenderResult *rr, const char *name, int channels, const char *chan_id, const char *layername, const char *viewname)
+void render_result_add_pass(RenderResult *rr, const char *name, int channels, const char *chan_id, const char *layername, const char *viewname, int pixel_type)
 {
 	RenderLayer *rl;
 	RenderPass *rp;
@@ -510,7 +511,7 @@ void render_result_add_pass(RenderResult *rr, const char *name, int channels, co
 			}
 
 			if (!rp) {
-				render_layer_add_pass(rr, rl, channels, name, view, chan_id);
+				render_layer_add_pass(rr, rl, channels, name, view, chan_id, pixel_type);
 			}
 		}
 	}
@@ -910,10 +911,17 @@ bool RE_WriteRenderResult(ReportList *reports, RenderResult *rr, const char *fil
 				}
 
 				for (a = 0; a < xstride; a++) {
+					bool use_pass_half_float = use_half_float;
+					if (STREQ(rpass->name, RE_PASSNAME_Z)) {
+						use_pass_half_float = false;
+					}
+					else if(rpass->pixel_type != RE_PIXEL_TYPE_ANY) {
+						use_pass_half_float = rpass->pixel_type == RE_PIXEL_TYPE_HALF;
+					}
 					set_pass_name(passname, rpass->name, a, rpass->chan_id);
 					IMB_exr_add_channel(exrhandle, rl->name, passname, chan_view,
 					                    xstride, xstride * width, rpass->rect + a,
-					                    STREQ(rpass->name, RE_PASSNAME_Z) ? false : use_half_float);
+					                    use_pass_half_float);
 				}
 			}
 		}

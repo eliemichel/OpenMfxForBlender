@@ -450,6 +450,13 @@ static void rna_def_render_engine(BlenderRNA *brna)
 	        {0, NULL, 0, NULL, NULL}
 	};
 
+	static EnumPropertyItem render_pixel_type_items[] = {
+		{RE_PIXEL_TYPE_ANY,   "ANY",     0,    "Any",    ""},
+		{RE_PIXEL_TYPE_HALF,  "HALF",    0,    "Half",    ""},
+		{RE_PIXEL_TYPE_FLOAT, "FLOAT",   0,    "Float",   ""},
+		{0, NULL, 0, NULL, NULL}
+	};
+
 	srna = RNA_def_struct(brna, "RenderEngine", NULL);
 	RNA_def_struct_sdna(srna, "RenderEngine");
 	RNA_def_struct_ui_text(srna, "Render Engine", "Render engine");
@@ -560,6 +567,8 @@ static void rna_def_render_engine(BlenderRNA *brna)
 	parm = RNA_def_string(func, "chan_id", NULL, 0, "Channel IDs", "Channel names, one character per channel");
 	RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 	RNA_def_string(func, "layer", NULL, 0, "Layer", "Single layer to add render pass to");  /* NULL ok here */
+	prop = RNA_def_enum(func, "type", render_pixel_type_items, RE_PIXEL_TYPE_ANY, "Pixel Type", "");
+	RNA_def_parameter_flags(parm, 0, PARM_PYFUNC_OPTIONAL);
 
 
 	func = RNA_def_function(srna, "test_break", "RE_engine_test_break");
