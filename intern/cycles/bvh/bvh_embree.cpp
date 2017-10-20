@@ -574,7 +574,7 @@ void BVHEmbree::update_curve_vertex_buffer(unsigned geom_id, const Mesh* mesh)
 					if(c.num_segments() > 0) {
 						/* Create Embree's cubic splines that equal the cardinal splines that cycles uses */
 						//static float fc = 1.0f / ((0.29f - 1.0f) * 6.0f);
-						constexpr float fc = -0.2347417840375f;
+						const float fc = -0.2347417840375f;
 						rtc_verts[0] = float3_to_float4(verts[0]);
 						rtc_verts[0].w = curve_radius[0];
 						rtc_verts[1] = float3_to_float4(-fc * (verts[1] - verts[0]) + verts[0]);
