@@ -1625,10 +1625,20 @@ typedef struct OpenVDBModifierData {
 
 	int numgrids;
 
-	int pad;
+	short up_axis;
+	short front_axis;
 
 	SmokeModifierData *smoke;
 } OpenVDBModifierData;
+
+enum {
+	MOD_OVDB_AXIS_X     = 0,
+	MOD_OVDB_AXIS_Y     = 1,
+	MOD_OVDB_AXIS_Z     = 2,
+	MOD_OVDB_AXIS_MIN_X = 3,
+	MOD_OVDB_AXIS_MIN_Y = 4,
+	MOD_OVDB_AXIS_MIN_Z = 5,
+};
 
 #define MOD_MESHSEQ_READ_ALL \
 	(MOD_MESHSEQ_READ_VERT | MOD_MESHSEQ_READ_POLY | MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)

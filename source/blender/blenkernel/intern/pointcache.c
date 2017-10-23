@@ -1191,6 +1191,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	                 cache_fields & SM_ACTIVE_HEAT ? vdbmd->heat : NULL,
 	                 cache_fields & SM_ACTIVE_FIRE ? vdbmd->flame : NULL,
 	                 cache_fields & SM_ACTIVE_COLORS ? vdbmd->color : NULL,
+	                 vdbmd->up_axis, vdbmd->front_axis,
 	                 sds->res_min, sds->res_max, sds->base_res);
 
 #if 0
@@ -1240,18 +1241,18 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 
 		//OpenVDB_import_grid_fl(reader, "shadow", &sds->shadow, sds->res);
 
-		OpenVDB_import_grid_fl(reader, vdbmd->density, &dens, sds->res);
+		OpenVDB_import_grid_fl_extern(reader, vdbmd->density, &dens, sds->res, vdbmd->up_axis, vdbmd->front_axis);
 
 		if (cache_fields & SM_ACTIVE_HEAT) {
-			OpenVDB_import_grid_fl(reader, vdbmd->heat, &heat, sds->res);
+			OpenVDB_import_grid_fl_extern(reader, vdbmd->heat, &heat, sds->res, vdbmd->up_axis, vdbmd->front_axis);
 		}
 
 		if (cache_fields & SM_ACTIVE_FIRE) {
-			OpenVDB_import_grid_fl(reader, vdbmd->flame, &flame, sds->res);
+			OpenVDB_import_grid_fl_extern(reader, vdbmd->flame, &flame, sds->res, vdbmd->up_axis, vdbmd->front_axis);
 		}
 
 		if (cache_fields & SM_ACTIVE_COLORS) {
-			OpenVDB_import_grid_vec(reader, vdbmd->color, &r, &g, &b, sds->res);
+			OpenVDB_import_grid_vec_extern(reader, vdbmd->color, &r, &g, &b, sds->res);
 		}
 	}
 

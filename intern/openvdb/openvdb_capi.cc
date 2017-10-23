@@ -120,6 +120,16 @@ void OpenVDB_import_grid_fl(
 	internal::OpenVDB_import_grid<openvdb::FloatGrid>(reader, name, data, res);
 }
 
+void OpenVDB_import_grid_fl_extern(
+        OpenVDBReader *reader,
+        const char *name, float **data,
+        const int res[3], short up, short front)
+{
+	Timer(__func__);
+
+	internal::OpenVDB_import_grid_extern<openvdb::FloatGrid>(reader, name, data, res, up, front);
+}
+
 void OpenVDB_import_grid_ch(
         OpenVDBReader *reader,
         const char *name, unsigned char **data,
@@ -139,6 +149,17 @@ void OpenVDB_import_grid_vec(
 	internal::OpenVDB_import_grid_vector(reader, name, data_x, data_y, data_z, res);
 }
 
+void OpenVDB_import_grid_vec_extern(
+        struct OpenVDBReader *reader,
+        const char *name,
+        float **data_x, float **data_y, float **data_z,
+        const int res[3])
+{
+	Timer(__func__);
+
+	internal::OpenVDB_import_grid_vector_extern(reader, name, data_x, data_y, data_z, res);
+}
+
 bool OpenVDB_has_grid(OpenVDBReader *reader, const char *name)
 {
 	return reader->hasGrid(name);
@@ -148,12 +169,19 @@ void OpenVDB_get_bbox(
         struct OpenVDBReader *reader,
         char *density, char *heat,
         char *flame, char *color,
+        short up, short front,
         int r_res_min[3],
         int r_res_max[3],
         int r_res[3])
 {
 	using openvdb::CoordBBox;
 	using openvdb::Coord;
+
+	short right;
+
+	up %= 3;
+	front %= 3;
+	right = 3 - (up + front);
 
 	CoordBBox bbox = internal::OpenVDB_get_grid_bounds(reader, density);
 	Coord coord;
@@ -171,19 +199,19 @@ void OpenVDB_get_bbox(
 	}
 
 	coord = bbox.getStart();
-	r_res_min[0] = coord[0];
-	r_res_min[1] = coord[1];
-	r_res_min[2] = coord[2];
+	r_res_min[0] = coord[right];
+	r_res_min[1] = coord[front];
+	r_res_min[2] = coord[up];
 
 	coord = bbox.getEnd();
-	r_res_max[0] = coord[0];
-	r_res_max[1] = coord[1];
-	r_res_max[2] = coord[2];
+	r_res_max[0] = coord[right];
+	r_res_max[1] = coord[front];
+	r_res_max[2] = coord[up];
 
 	coord = bbox.dim();
-	r_res[0] = coord[0];
-	r_res[1] = coord[1];
-	r_res[2] = coord[2];
+	r_res[0] = coord[right];
+	r_res[1] = coord[front];
+	r_res[2] = coord[up];
 }
 
 void OpenVDB_print_grids(OpenVDBReader *reader)

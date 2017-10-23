@@ -709,6 +709,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "heat")
         layout.prop(md, "flame")
         layout.prop(md, "color")
+        layout.prop(md, "up_axis")
+        layout.prop(md, "front_axis")
 
     def PARTICLE_INSTANCE(self, layout, ob, md):
         layout.prop(md, "object")

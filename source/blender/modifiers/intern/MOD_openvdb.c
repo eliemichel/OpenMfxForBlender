@@ -67,6 +67,9 @@ static void initData(ModifierData *md)
 	vdbmd->smoke = smd;
 	vdbmd->grids = NULL;
 	vdbmd->numgrids = 0;
+
+	vdbmd->up_axis = MOD_OVDB_AXIS_Z;
+	vdbmd->front_axis = MOD_OVDB_AXIS_MIN_Y;
 }
 
 static void copyData(ModifierData *md, ModifierData *target)
@@ -81,11 +84,10 @@ static bool dependsOnTime(ModifierData *UNUSED(md))
 
 static bool isDisabled(ModifierData *md, int UNUSED(useRenderParams))
 {
-	return false;
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *) md;
 
 	/* leave it up to the modifier to check the file is valid on calculation */
-	return vdbmd->filepath[0] == '\0';
+	return (vdbmd->filepath[0] == '\0') || (vdbmd->up_axis % 3 == vdbmd->front_axis % 3);
 }
 
 static DerivedMesh *applyModifier(ModifierData *md, Object *ob,

@@ -109,6 +109,53 @@ void OpenVDB_import_grid(
 	}
 }
 
+template <typename GridType, typename T>
+void OpenVDB_import_grid_extern(
+        OpenVDBReader *reader,
+        const openvdb::Name &name,
+        T **data,
+        const int res[3],
+        short up, short front)
+{
+	using namespace openvdb;
+
+	if (!reader->hasGrid(name)) {
+		std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", name.c_str());
+		memset(*data, 0, sizeof(T) * res[0] * res[1] * res[2]);
+		return;
+	}
+
+	typename GridType::Ptr grid = gridPtrCast<GridType>(reader->getGrid(name));
+	typename GridType::ConstAccessor acc = grid->getConstAccessor();
+
+	bool inv_z = up >= 3;
+	bool inv_y = front < 3;
+	up %= 3;
+	front %= 3;
+	short right = 3 - (up + front);
+	bool inv_x = !(inv_z == inv_y);
+
+	if (up < front) {
+		inv_x = !inv_x;
+	}
+
+	if (abs(up - front) == 2) {
+		inv_x = !inv_x;
+	}
+
+	math::Coord xyz;
+	int &x = xyz[right], &y = xyz[front], &z = xyz[up];
+
+	size_t index = 0;
+	for (z = inv_z ? (res[2] - 1) : 0; inv_z ? (z >= 0) : (z < res[2]); inv_z ? --z : ++z) {
+		for (y = inv_y ? (res[1] - 1) : 0; inv_y ? (y >= 0) : (y < res[1]); inv_y ? --y : ++y) {
+			for (x = inv_x ? (res[0] - 1) : 0; inv_x ? (x >= 0) : (x < res[0]); inv_x ? --x : ++x, ++index) {
+				(*data)[index] = acc.getValue(xyz);
+			}
+		}
+	}
+}
+
 openvdb::GridBase *OpenVDB_export_vector_grid(
         OpenVDBWriter *writer,
         const openvdb::Name &name,
@@ -121,6 +168,12 @@ openvdb::GridBase *OpenVDB_export_vector_grid(
 
 
 void OpenVDB_import_grid_vector(
+        OpenVDBReader *reader,
+        const openvdb::Name &name,
+        float **data_x, float **data_y, float **data_z,
+        const int res[3]);
+
+void OpenVDB_import_grid_vector_extern(
         OpenVDBReader *reader,
         const openvdb::Name &name,
         float **data_x, float **data_y, float **data_z,

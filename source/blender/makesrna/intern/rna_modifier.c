@@ -4874,6 +4874,16 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 		{0, NULL, 0, NULL, NULL}
 	};
 
+	static EnumPropertyItem axis_items[] = {
+	    {MOD_OVDB_AXIS_X, "X", 0, "X", ""},
+	    {MOD_OVDB_AXIS_Y, "Y", 0, "Y", ""},
+	    {MOD_OVDB_AXIS_Z, "Z", 0, "Z", ""},
+	    {MOD_OVDB_AXIS_MIN_X, "MIN_X", 0, "-X", ""},
+	    {MOD_OVDB_AXIS_MIN_Y, "MIN_Y", 0, "-Y", ""},
+	    {MOD_OVDB_AXIS_MIN_Z, "MIN_Z", 0, "-Z", ""},
+		{0, NULL, 0, NULL, NULL}
+	};
+
 	srna = RNA_def_struct(brna, "OpenVDBModifier", "Modifier");
 	RNA_def_struct_ui_text(srna, "OpenVDB Modifier", "");
 	RNA_def_struct_sdna(srna, "OpenVDBModifierData");
@@ -4913,6 +4923,16 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	                            "rna_OpenVDBModifier_grid_itemf");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_ui_text(prop, "Color Grid", "Name of the grid to be used for color");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "up_axis", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, axis_items);
+	RNA_def_property_ui_text(prop, "Up Axis", "Axis to point upwards");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "front_axis", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, axis_items);
+	RNA_def_property_ui_text(prop, "Forward Axis", "Axis to point forwards");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 

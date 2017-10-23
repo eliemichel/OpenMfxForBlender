@@ -165,6 +165,40 @@ void OpenVDB_import_grid_vector(
 	}
 }
 
+void OpenVDB_import_grid_vector_extern(
+        OpenVDBReader *reader,
+        const openvdb::Name &name,
+        float **data_x, float **data_y, float **data_z,
+        const int res[3])
+{
+	using namespace openvdb;
+
+	if (!reader->hasGrid(name)) {
+		std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", name.c_str());
+		memset(*data_x, 0, sizeof(float) * res[0] * res[1] * res[2]);
+		memset(*data_y, 0, sizeof(float) * res[0] * res[1] * res[2]);
+		memset(*data_z, 0, sizeof(float) * res[0] * res[1] * res[2]);
+		return;
+	}
+
+	Vec3SGrid::Ptr vgrid = gridPtrCast<Vec3SGrid>(reader->getGrid(name));
+	Vec3SGrid::ConstAccessor acc = vgrid->getConstAccessor();
+	math::Coord xyz;
+	int &x = xyz[0], &y = xyz[1], &z = xyz[2];
+
+	size_t index = 0;
+	for (z = 0; z < res[2]; ++z) {
+		for (y = 0; y < res[1]; ++y) {
+			for (x = 0; x < res[0]; ++x, ++index) {
+				math::Vec3s value = acc.getValue(xyz);
+				(*data_x)[index] = value.x();
+				(*data_y)[index] = value.y();
+				(*data_z)[index] = value.z();
+			}
+		}
+	}
+}
+
 openvdb::CoordBBox OpenVDB_get_grid_bounds(
         OpenVDBReader *reader,
         const openvdb::Name &name)
