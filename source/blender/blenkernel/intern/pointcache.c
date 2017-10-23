@@ -1160,6 +1160,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	SmokeModifierData *smd = (SmokeModifierData *)smoke_v;
 
 	if (!smd) {
+		OpenVDBReader_free(reader);
 		return 0;
 	}
 
@@ -1171,6 +1172,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	bool reallocate = false;
 
 	if (!OpenVDB_has_grid(reader, vdbmd->density)) {
+		OpenVDBReader_free(reader);
 		return 0;
 	}
 
