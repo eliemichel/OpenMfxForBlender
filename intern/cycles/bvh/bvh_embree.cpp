@@ -69,7 +69,9 @@ void rtc_filter_func(void*, RTCRay& ray_)
 	KernelGlobals *kg = ray.kg;
 
 	/* For all ray types: check if there is backfacing hair to ignore */
-	if(!(kernel_data.curve.curveflags & CURVE_KN_BACKFACING) && !(kernel_data.curve.curveflags & CURVE_KN_RIBBONS) && ray.geomID & 1) {
+	if((kernel_data.curve.curveflags & CURVE_KN_INTERPOLATE)
+		&& !(kernel_data.curve.curveflags & CURVE_KN_BACKFACING)
+		&& !(kernel_data.curve.curveflags & CURVE_KN_RIBBONS) && ray.geomID & 1) {
 		if(dot(make_float3(ray.dir[0], ray.dir[1], ray.dir[2]), make_float3(ray.Ng[0], ray.Ng[1], ray.Ng[2])) > 0.0f) {
 			ray.geomID = RTC_INVALID_GEOMETRY_ID;
 			return;
