@@ -325,7 +325,7 @@ void BVHEmbree::build(Progress& progress, Stats *stats_)
 		scene = NULL;
 	}
 
-	RTCSceneFlags flags = (params.bvh_type == SceneParams::BVH_DYNAMIC ? RTC_SCENE_DYNAMIC : RTC_SCENE_STATIC) | RTC_SCENE_INCOHERENT | RTC_SCENE_ROBUST;
+	RTCSceneFlags flags = (params.bvh_type == SceneParams::BVH_DYNAMIC ? RTC_SCENE_DYNAMIC : RTC_SCENE_STATIC) | RTC_SCENE_COMPACT | RTC_SCENE_ROBUST;
 	if(params.use_spatial_split) {
 		flags = flags | RTC_SCENE_HIGH_QUALITY;
 	}
