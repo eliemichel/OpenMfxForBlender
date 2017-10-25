@@ -219,19 +219,20 @@ void OpenVDB_print_grids(OpenVDBReader *reader)
 	reader->printGrids();
 }
 
-int OpenVDB_get_name_array(OpenVDBReader *reader, char ***r_names)
+int OpenVDB_get_num_grids(struct OpenVDBReader *reader)
+{
+	return reader->numGrids();
+}
+
+void OpenVDB_fill_name_array(OpenVDBReader *reader, char **r_names)
 {
 	int num = reader->numGrids();
 	openvdb::io::File::NameIterator name_iter = reader->getNameIter();
-	char (*names)[64] = (char (*)[64])malloc(sizeof(*names) * num);
+	char (*names)[64] = (char (*)[64])r_names;
 
 	for (int i = 0; i < num; i++, ++name_iter) {
 		strncpy(names[i], name_iter.gridName().c_str(), 64);
 	}
-
-	*r_names = (char **)names;
-
-	return num;
 }
 
 OpenVDBWriter *OpenVDBWriter_create()
