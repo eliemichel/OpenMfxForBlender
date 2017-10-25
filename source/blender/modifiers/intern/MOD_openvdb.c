@@ -72,6 +72,16 @@ static void initData(ModifierData *md)
 	vdbmd->front_axis = MOD_OVDB_AXIS_MIN_Y;
 }
 
+static void freeData(ModifierData *md)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+	SmokeModifierData *smd = vdbmd->smoke;
+
+	MEM_SAFE_FREE(vdbmd->grids);
+
+	modifier_free((ModifierData *)smd);
+}
+
 static void copyData(ModifierData *md, ModifierData *target)
 {
 	modifier_copyData_generic(md, target);
@@ -137,7 +147,7 @@ ModifierTypeInfo modifierType_OpenVDB = {
 	/* applyModifierEM */   NULL,
 	/* initData */          initData,
 	/* requiredDataMask */  NULL,
-	/* freeData */          NULL,
+	/* freeData */          freeData,
 	/* isDisabled */        isDisabled,
 	/* updateDepgraph */    NULL,
 	/* updateDepsgraph */   NULL,
