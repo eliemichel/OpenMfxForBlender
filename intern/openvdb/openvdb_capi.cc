@@ -219,6 +219,11 @@ void OpenVDB_print_grids(OpenVDBReader *reader)
 	reader->printGrids();
 }
 
+void OpenVDB_print_metadata_names(OpenVDBReader *reader)
+{
+	reader->printMetadataNames();
+}
+
 int OpenVDB_get_num_grids(struct OpenVDBReader *reader)
 {
 	return reader->numGrids();

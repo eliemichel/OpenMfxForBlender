@@ -51,6 +51,7 @@ public:
 	openvdb::GridBase::Ptr getGrid(const openvdb::Name &name) const;
 	size_t numGrids() const;
 	void printGrids();
+	void printMetadataNames();
 	openvdb::io::File::NameIterator getNameIter();
 };
 

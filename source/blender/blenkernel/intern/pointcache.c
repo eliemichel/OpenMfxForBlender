@@ -1164,6 +1164,8 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		return 0;
 	}
 
+	OpenVDB_print_metadata_names(reader);
+
 	SmokeDomainSettings *sds = smd->domain;
 	OpenVDBModifierData *vdbmd = sds->vdb;
 
