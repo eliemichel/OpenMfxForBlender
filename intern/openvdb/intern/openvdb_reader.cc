@@ -141,6 +141,15 @@ void OpenVDBReader::printMetadataNames()
 	}
 }
 
+void OpenVDBReader::printGridMetadataNames(const openvdb::Name &name)
+{
+	typename openvdb::GridBase::Ptr grid = this->getGrid(name);
+
+	for (openvdb::MetaMap::MetaIterator metaIter = grid->beginMeta(); metaIter != grid->endMeta(); ++metaIter) {
+		std::cout << metaIter->first << std::endl;
+	}
+}
+
 openvdb::io::File::NameIterator OpenVDBReader::getNameIter()
 {
 	return m_file->beginName();

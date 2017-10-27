@@ -1164,8 +1164,6 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		return 0;
 	}
 
-	OpenVDB_print_metadata_names(reader);
-
 	SmokeDomainSettings *sds = smd->domain;
 	OpenVDBModifierData *vdbmd = sds->vdb;
 
@@ -1189,6 +1187,14 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	if (OpenVDB_has_grid(reader, vdbmd->color)) {
 		cache_fields |= SM_ACTIVE_COLORS;
 	}
+
+	printf("File metadata!!!\n");
+
+	OpenVDB_print_metadata_names(reader);
+
+	printf("\nGrid metadata!!!\n");
+
+	OpenVDB_print_grid_metadata_names(reader, vdbmd->density);
 
 	OpenVDB_get_bbox(reader,
 	                 vdbmd->density,
