@@ -558,7 +558,7 @@ void BVHEmbree::update_curve_vertex_buffer(unsigned geom_id, const Mesh* mesh)
 	for(int t = 0; t < num_motion_steps; t++) {
 		RTCBufferType buffer_type = (RTCBufferType)(RTC_VERTEX_BUFFER+t);
 		const float3 *verts;
-		if(t == t_mid) {
+		if(t == t_mid || attr_mP == NULL) {
 			verts = &mesh->curve_keys[0];
 		} else {
 			int t_ = (t > t_mid) ? (t - 1) : t;
@@ -574,31 +574,29 @@ void BVHEmbree::update_curve_vertex_buffer(unsigned geom_id, const Mesh* mesh)
 				for(size_t j = 0; j < num_curves; j++) {
 					Mesh::Curve c = mesh->get_curve(j);
 					if(c.num_segments() > 0) {
+						const int& fk = c.first_key;
 						/* Create Embree's cubic splines that equal the cardinal splines that cycles uses */
 						//static float fc = 1.0f / ((0.29f - 1.0f) * 6.0f);
 						const float fc = -0.2347417840375f;
-						rtc_verts[0] = float3_to_float4(verts[0]);
-						rtc_verts[0].w = curve_radius[0];
-						rtc_verts[1] = float3_to_float4(-fc * (verts[1] - verts[0]) + verts[0]);
-						rtc_verts[1].w = lerp(curve_radius[0], curve_radius[1], 0.33f);
-						size_t idx = 2;
+						rtc_verts[0] = float3_to_float4(verts[fk]);
+						rtc_verts[0].w = curve_radius[fk];
+						rtc_verts[1] = float3_to_float4(-fc * (verts[fk+1] - verts[fk]) + verts[fk]);
+						rtc_verts[1].w = lerp(curve_radius[fk], curve_radius[fk+1], 0.33f);
 						size_t k = 1;
 						for(;k < c.num_segments(); k++) {
-							const float3 d = (verts[k+1] - verts[k-1]);
-							rtc_verts[k*3-1] = float3_to_float4(fc * d + verts[k]);
-							rtc_verts[k*3-1].w = lerp(curve_radius[k-1], curve_radius[k], 0.66f);
-							rtc_verts[k*3] = float3_to_float4(verts[k]);
-							rtc_verts[k*3].w = curve_radius[k];
-							rtc_verts[k*3+1] = float3_to_float4(-fc * d + verts[k]);
-							rtc_verts[k*3+1].w = lerp(curve_radius[k], curve_radius[k+1], 0.33f);
+							const float3 d = (verts[fk+k+1] - verts[fk+k-1]);
+							rtc_verts[k*3-1] = float3_to_float4(fc * d + verts[fk+k]);
+							rtc_verts[k*3-1].w = lerp(curve_radius[fk+k-1], curve_radius[fk+k], 0.66f);
+							rtc_verts[k*3] = float3_to_float4(verts[fk+k]);
+							rtc_verts[k*3].w = curve_radius[fk+k];
+							rtc_verts[k*3+1] = float3_to_float4(-fc * d + verts[fk+k]);
+							rtc_verts[k*3+1].w = lerp(curve_radius[fk+k], curve_radius[fk+k+1], 0.33f);
 						}
-						rtc_verts[k*3-1] = float3_to_float4(fc * (verts[k] - verts[k-1]) + verts[k]);
-						rtc_verts[k*3-1].w = lerp(curve_radius[k-1], curve_radius[k], 0.66f);
-						rtc_verts[k*3] = float3_to_float4(verts[k]);
-						rtc_verts[k*3].w = curve_radius[k];
+						rtc_verts[k*3-1] = float3_to_float4(fc * (verts[fk+k] - verts[fk+k-1]) + verts[fk+k]);
+						rtc_verts[k*3-1].w = lerp(curve_radius[fk+k-1], curve_radius[fk+k], 0.66f);
+						rtc_verts[k*3] = float3_to_float4(verts[fk+k]);
+						rtc_verts[k*3].w = curve_radius[fk+k];
 						rtc_verts += c.num_segments()*3+1;
-						verts += c.num_keys;
-						curve_radius += c.num_keys;
 					}
 					else {
 						assert(0);
