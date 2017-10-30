@@ -123,11 +123,12 @@ void OpenVDB_import_grid_fl(
 void OpenVDB_import_grid_fl_extern(
         OpenVDBReader *reader,
         const char *name, float **data,
-        const int res[3], short up, short front)
+        const int res_min[3], const int res[3],
+        short up, short front)
 {
 	Timer(__func__);
 
-	internal::OpenVDB_import_grid_extern<openvdb::FloatGrid>(reader, name, data, res, up, front);
+	internal::OpenVDB_import_grid_extern<openvdb::FloatGrid>(reader, name, data, res_min, res, up, front);
 }
 
 void OpenVDB_import_grid_ch(

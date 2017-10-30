@@ -114,6 +114,7 @@ void OpenVDB_import_grid_extern(
         OpenVDBReader *reader,
         const openvdb::Name &name,
         T **data,
+        const int res_min[3],
         const int res[3],
         short up, short front)
 {
@@ -127,6 +128,9 @@ void OpenVDB_import_grid_extern(
 
 	typename GridType::Ptr grid = gridPtrCast<GridType>(reader->getGrid(name));
 	typename GridType::ConstAccessor acc = grid->getConstAccessor();
+	CoordBBox bbox = grid->evalActiveVoxelBoundingBox();
+	Coord grid_min = bbox.getStart();
+	Coord grid_max = bbox.getEnd();
 
 	bool inv_z = up >= 3;
 	bool inv_y = front < 3;
@@ -146,11 +150,25 @@ void OpenVDB_import_grid_extern(
 	math::Coord xyz;
 	int &x = xyz[right], &y = xyz[front], &z = xyz[up];
 
-	size_t index = 0;
-	for (z = inv_z ? (res[2] - 1) : 0; inv_z ? (z >= 0) : (z < res[2]); inv_z ? --z : ++z) {
-		for (y = inv_y ? (res[1] - 1) : 0; inv_y ? (y >= 0) : (y < res[1]); inv_y ? --y : ++y) {
-			for (x = inv_x ? (res[0] - 1) : 0; inv_x ? (x >= 0) : (x < res[0]); inv_x ? --x : ++x, ++index) {
-				(*data)[index] = acc.getValue(xyz);
+	for (z = inv_z ? (grid_max[up] - 1) : grid_min[up];
+	     inv_z ? (z >= grid_min[up]) : (z < grid_max[up]);
+	     inv_z ? --z : ++z)
+	{
+		for (y = inv_y ? (grid_max[front] - 1) : grid_min[front];
+		     inv_y ? (y >= grid_min[front]) : (y < grid_max[front]);
+		     inv_y ? --y : ++y)
+		{
+			for (x = inv_x ? (grid_max[right] - 1) : grid_min[right];
+			     inv_x ? (x >= grid_min[right]) : (x < grid_max[right]);
+			     inv_x ? --x : ++x)
+			{
+				int x_local = x - res_min[0];
+				int y_local = y - res_min[1];
+				int z_local = z - res_min[2];
+
+				int coord_local = (z_local * (res[0] * res[1])) + (y_local * res[0]) + x_local;
+
+				(*data)[coord_local] = acc.getValue(xyz);
 			}
 		}
 	}
