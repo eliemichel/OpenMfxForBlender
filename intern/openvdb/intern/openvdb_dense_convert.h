@@ -183,6 +183,11 @@ openvdb::CoordBBox OpenVDB_get_grid_bounds(
         OpenVDBReader *reader,
         const openvdb::Name &name);
 
+openvdb::BBoxd OpenVDB_get_grid_bounds_f(
+        OpenVDBReader *reader,
+        const openvdb::Name &name,
+        const openvdb::CoordBBox &bbox);
+
 }  /* namespace internal */
 
 #endif /* __OPENVDB_DENSE_CONVERT_H__ */
