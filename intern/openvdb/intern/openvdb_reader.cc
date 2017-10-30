@@ -143,11 +143,21 @@ void OpenVDBReader::printMetadataNames()
 
 void OpenVDBReader::printGridMetadataNames(const openvdb::Name &name)
 {
-	typename openvdb::GridBase::Ptr grid = this->getGrid(name);
+	openvdb::GridBase::Ptr grid = this->getGrid(name);
 
 	for (openvdb::MetaMap::MetaIterator metaIter = grid->beginMeta(); metaIter != grid->endMeta(); ++metaIter) {
 		std::cout << metaIter->first << std::endl;
 	}
+}
+
+void OpenVDBReader::printGridTransform(const openvdb::Name &name)
+{
+	openvdb::GridBase::Ptr grid = this->getGrid(name);
+	openvdb::math::Transform::Ptr trans = grid->transformPtr();
+
+	openvdb::Vec3d voxel = trans->voxelSize();
+
+	printf("Voxel: %.6f, %.6f, %.6f\n", voxel[0], voxel[1], voxel[2]);
 }
 
 openvdb::io::File::NameIterator OpenVDBReader::getNameIter()

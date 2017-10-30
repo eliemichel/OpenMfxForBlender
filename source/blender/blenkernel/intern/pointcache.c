@@ -1196,6 +1196,8 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 
 	OpenVDB_print_grid_metadata_names(reader, vdbmd->density);
 
+	OpenVDB_print_grid_transform(reader, vdbmd->density);
+
 	OpenVDB_get_bbox(reader,
 	                 vdbmd->density,
 	                 cache_fields & SM_ACTIVE_HEAT ? vdbmd->heat : NULL,

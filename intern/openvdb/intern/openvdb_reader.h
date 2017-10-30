@@ -53,6 +53,7 @@ public:
 	void printGrids();
 	void printMetadataNames();
 	void printGridMetadataNames(const openvdb::Name &name);
+	void printGridTransform(const openvdb::Name &name);
 	openvdb::io::File::NameIterator getNameIter();
 };
 
