@@ -1198,13 +1198,19 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 
 	OpenVDB_print_grid_transform(reader, vdbmd->density);
 
-	OpenVDB_get_bbox(reader,
-	                 vdbmd->density,
-	                 cache_fields & SM_ACTIVE_HEAT ? vdbmd->heat : NULL,
-	                 cache_fields & SM_ACTIVE_FIRE ? vdbmd->flame : NULL,
-	                 cache_fields & SM_ACTIVE_COLORS ? vdbmd->color : NULL,
-	                 vdbmd->up_axis, vdbmd->front_axis,
-	                 sds->res_min, sds->res_max, sds->base_res);
+	if (!OpenVDB_get_bbox(reader,
+	                      vdbmd->density,
+	                      cache_fields & SM_ACTIVE_HEAT ? vdbmd->heat : NULL,
+	                      cache_fields & SM_ACTIVE_FIRE ? vdbmd->flame : NULL,
+	                      cache_fields & SM_ACTIVE_COLORS ? vdbmd->color : NULL,
+	                      vdbmd->up_axis, vdbmd->front_axis,
+	                      sds->res_min, sds->res_max, sds->base_res,
+	                      sds->p0, sds->p1, sds->cell_size))
+	{
+		modifier_setError((ModifierData *)vdbmd, "Grids have different transformations");
+	}
+
+	sub_v3_v3v3(sds->global_size, sds->p1, sds->p0);
 
 #if 0
 	OpenVDBReader_get_meta_v3_int(reader, "blender/smoke/min_resolution", sds->res_min);
@@ -1239,7 +1245,8 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	/* reallocate fluid if needed*/
 	if (reallocate) {
 		sds->active_fields = cache_fields;
-		sds->dx = 1.0f / MAX3(sds->res[0], sds->res[1], sds->res[2]);
+		sds->maxres = MAX3(sds->res[0], sds->res[1], sds->res[2]);
+		sds->dx = 1.0f / sds->maxres;
 		smoke_reallocate_fluid(sds, sds->dx, sds->res, 1);
 		sds->total_cells = sds->res[0] * sds->res[1] * sds->res[2];
 	}

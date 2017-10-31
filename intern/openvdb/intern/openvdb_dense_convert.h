@@ -201,10 +201,9 @@ openvdb::CoordBBox OpenVDB_get_grid_bounds(
         OpenVDBReader *reader,
         const openvdb::Name &name);
 
-openvdb::BBoxd OpenVDB_get_grid_bounds_f(
+openvdb::math::Transform::Ptr OpenVDB_get_grid_transform(
         OpenVDBReader *reader,
-        const openvdb::Name &name,
-        const openvdb::CoordBBox &bbox);
+        const openvdb::Name &name);
 
 }  /* namespace internal */
 

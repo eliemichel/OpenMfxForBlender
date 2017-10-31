@@ -63,6 +63,7 @@ static void initData(ModifierData *md)
 
 	smd->domain->cache_file_format = PTCACHE_FILE_OPENVDB_EXTERN;
 	smd->domain->vdb = vdbmd;
+	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
 
 	vdbmd->smoke = smd;
 	vdbmd->grids = NULL;

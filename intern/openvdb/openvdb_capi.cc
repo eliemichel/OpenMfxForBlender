@@ -166,37 +166,59 @@ bool OpenVDB_has_grid(OpenVDBReader *reader, const char *name)
 	return reader->hasGrid(name);
 }
 
-void OpenVDB_get_bbox(
+int OpenVDB_get_bbox(
         struct OpenVDBReader *reader,
         char *density, char *heat,
         char *flame, char *color,
         short up, short front,
         int r_res_min[3],
         int r_res_max[3],
-        int r_res[3])
+        int r_res[3],
+        float r_bbox_min[3],
+        float r_bbox_max[3],
+        float r_voxel_size[3])
 {
 	using openvdb::CoordBBox;
 	using openvdb::Coord;
+	using openvdb::math::Transform;
+	using openvdb::BBoxd;
 
 	short right;
+
+	int validity = GRID_TRANSFORM_VALID;
 
 	up %= 3;
 	front %= 3;
 	right = 3 - (up + front);
 
 	CoordBBox bbox = internal::OpenVDB_get_grid_bounds(reader, density);
+	Transform::Ptr trans = internal::OpenVDB_get_grid_transform(reader, density);
 	Coord coord;
+	BBoxd bboxf;
+	openvdb::Vec3d coordf;
 
 	if (heat) {
 		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, heat));
+
+		if (trans != internal::OpenVDB_get_grid_transform(reader, heat)) {
+			validity = GRID_TRANSFORM_INVALID;
+		}
 	}
 
 	if (flame) {
 		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, flame));
+
+		if (trans != internal::OpenVDB_get_grid_transform(reader, flame)) {
+			validity = GRID_TRANSFORM_INVALID;
+		}
 	}
 
 	if (color) {
 		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, color));
+
+		if (trans != internal::OpenVDB_get_grid_transform(reader, flame)) {
+			validity = GRID_TRANSFORM_INVALID;
+		}
 	}
 
 	coord = bbox.getStart();
@@ -213,6 +235,27 @@ void OpenVDB_get_bbox(
 	r_res[0] = coord[right];
 	r_res[1] = coord[front];
 	r_res[2] = coord[up];
+
+	coord = Coord(0);
+	bbox = CoordBBox(coord, bbox.getEnd());
+	bboxf = trans->indexToWorld(bbox);
+
+	coordf = bboxf.min();
+	r_bbox_min[0] = coordf[right];
+	r_bbox_min[1] = coordf[front];
+	r_bbox_min[2] = coordf[up];
+
+	coordf = bboxf.max();
+	r_bbox_max[0] = coordf[right];
+	r_bbox_max[1] = coordf[front];
+	r_bbox_max[2] = coordf[up];
+
+	coordf = trans->voxelSize();
+	r_voxel_size[0] = coordf[right];
+	r_voxel_size[1] = coordf[front];
+	r_voxel_size[2] = coordf[up];
+
+	return validity;
 }
 
 void OpenVDB_print_grids(OpenVDBReader *reader)

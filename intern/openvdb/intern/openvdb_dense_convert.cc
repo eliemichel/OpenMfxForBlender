@@ -214,21 +214,18 @@ openvdb::CoordBBox OpenVDB_get_grid_bounds(
 	return grid->evalActiveVoxelBoundingBox();
 }
 
-openvdb::BBoxd OpenVDB_get_grid_bounds_f(
+openvdb::math::Transform::Ptr OpenVDB_get_grid_transform(
         OpenVDBReader *reader,
-        const openvdb::Name &name,
-        const openvdb::CoordBBox &bbox)
+        const openvdb::Name &name)
 {
 	using namespace openvdb;
 
 	if (!reader->hasGrid(name)) {
-		return BBoxd();
+		return NULL;
 	}
 
 	GridBase::Ptr grid = reader->getGrid(name);
-	math::Transform::Ptr trans = grid->transformPtr();
-
-	return trans->indexToWorld(bbox);
+	return grid->transformPtr();
 }
 
 }  /* namespace internal */
