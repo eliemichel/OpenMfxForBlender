@@ -63,7 +63,6 @@ static void initData(ModifierData *md)
 
 	smd->domain->cache_file_format = PTCACHE_FILE_OPENVDB_EXTERN;
 	smd->domain->vdb = vdbmd;
-	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
 
 	vdbmd->smoke = smd;
 	vdbmd->grids = NULL;
@@ -106,9 +105,10 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
                                   ModifierApplyFlag flag)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData*) md;
-	ModifierData *smd = (ModifierData *)vdbmd->smoke;
+	SmokeModifierData *smd = vdbmd->smoke;
+	DerivedMesh *r_dm;
 
-	smd->scene = md->scene;
+	((ModifierData *)smd)->scene = md->scene;
 
 	MEM_SAFE_FREE(vdbmd->grids);
 	vdbmd->numgrids = 0;
@@ -126,7 +126,13 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 		OpenVDBReader_free(reader);
 	}
 
-	return modwrap_applyModifier(smd, ob, dm, flag);
+	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
+
+	r_dm = modwrap_applyModifier((ModifierData *)smd, ob, dm, flag);
+
+	smd->domain->flags &= ~MOD_SMOKE_ADAPTIVE_DOMAIN;
+
+	return r_dm;
 }
 
 
