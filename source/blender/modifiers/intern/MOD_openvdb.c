@@ -128,6 +128,9 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 
 	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
 
+	invert_m4_m4(smd->domain->imat, ob->obmat);
+	copy_m4_m4(smd->domain->obmat, ob->obmat);
+
 	r_dm = modwrap_applyModifier((ModifierData *)smd, ob, dm, flag);
 
 	smd->domain->flags &= ~MOD_SMOKE_ADAPTIVE_DOMAIN;
