@@ -4937,6 +4937,10 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 
 	prop = RNA_def_property(srna, "smoke", PROP_POINTER, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Smoke", "");
+
+	prop = RNA_def_property(srna, "frame_offset", PROP_INT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Frame Offset", "Offset frame number to read from cache");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
 void RNA_def_modifier(BlenderRNA *brna)
