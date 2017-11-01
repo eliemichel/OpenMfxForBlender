@@ -1202,6 +1202,15 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 
 	sub_v3_v3v3(sds->global_size, sds->p1, sds->p0);
 
+	if ((sds->res_max[0] <= sds->res_min[0]) ||
+	    (sds->res_max[1] <= sds->res_min[1]) ||
+	    (sds->res_max[2] <= sds->res_min[2]))
+	{
+		OpenVDBReader_free(reader);
+		sds->total_cells = 1;
+		return 0;
+	}
+
 #if 0
 	OpenVDBReader_get_meta_v3_int(reader, "blender/smoke/min_resolution", sds->res_min);
 	OpenVDBReader_get_meta_v3_int(reader, "blender/smoke/max_resolution", sds->res_max);
