@@ -110,6 +110,8 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 
 	((ModifierData *)smd)->scene = md->scene;
 
+	ob->dt = OB_WIRE;
+
 	MEM_SAFE_FREE(vdbmd->grids);
 	vdbmd->numgrids = 0;
 
