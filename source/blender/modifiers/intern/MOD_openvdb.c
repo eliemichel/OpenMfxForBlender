@@ -104,6 +104,7 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
                                   DerivedMesh *dm,
                                   ModifierApplyFlag flag)
 {
+#ifdef WITH_OPENVDB
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData*) md;
 	SmokeModifierData *smd = vdbmd->smoke;
 	DerivedMesh *r_dm;
@@ -138,6 +139,10 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 	smd->domain->flags &= ~MOD_SMOKE_ADAPTIVE_DOMAIN;
 
 	return r_dm;
+#else
+	UNUSED_VARS(md, ob, flag);
+	return dm;
+#endif
 }
 
 
