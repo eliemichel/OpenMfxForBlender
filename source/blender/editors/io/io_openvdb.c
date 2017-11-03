@@ -13,11 +13,15 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_space_types.h"
+#include "DNA_mesh_types.h"
 
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
+#include "BKE_mesh.h"
+#include "BKE_object.h"
+#include "BKE_modifier.h"
 
 #include "BLI_listbase.h"
 #include "BLI_math_vector.h"
@@ -51,20 +55,32 @@ static void wm_openvdb_import_draw(bContext *UNUSED(C), wmOperator *op)
 	//ui_openvdb_import_settings(op->layout, &ptr);
 }
 
-static int wm_openvdb_import_exec(bContext *UNUSED(C), wmOperator *op)
+static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
 {
 	if (!RNA_struct_property_is_set(op->ptr, "filepath")) {
 		BKE_report(op->reports, RPT_ERROR, "No filename given");
 		return OPERATOR_CANCELLED;
 	}
 
-	char filename[FILE_MAX];
-	RNA_string_get(op->ptr, "filepath", filename);
+	Main *bmain = CTX_data_main(C);
+	Scene *scene = CTX_data_scene(C);
+	char filepath[FILE_MAX];
+	char filename[64];
+	char cachename[64];
+	RNA_string_get(op->ptr, "filepath", filepath);
 
-	struct OpenVDBReader *reader = OpenVDBReader_create();
-	OpenVDBReader_open(reader, filename);
+	BLI_split_file_part(filepath, filename, 64);
+	BLI_stringdec(filename, cachename, NULL, NULL);
 
-	OpenVDB_print_grids(reader);
+	Mesh *mesh = BKE_mesh_add(bmain, cachename);
+	Object *ob = BKE_object_add(bmain, scene, OB_MESH, cachename);
+	ob->data = mesh;
+
+	ModifierData *md = modifier_new(eModifierType_OpenVDB);
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+	BLI_addtail(&ob->modifiers, md);
+
+	BLI_strncpy(vdbmd->filepath, filepath, 1024);
 
 	return OPERATOR_FINISHED;
 }
