@@ -108,6 +108,7 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData*) md;
 	SmokeModifierData *smd = vdbmd->smoke;
 	DerivedMesh *r_dm;
+	char filepath[1024];
 
 	((ModifierData *)smd)->scene = md->scene;
 
@@ -116,9 +117,12 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 	MEM_SAFE_FREE(vdbmd->grids);
 	vdbmd->numgrids = 0;
 
-	if (BLI_exists(vdbmd->filepath)) {
+	BLI_strncpy(filepath, vdbmd->filepath, sizeof(filepath));
+	BLI_path_abs(filepath, ID_BLEND_PATH(G.main, (ID *)ob));
+
+	if (BLI_exists(filepath)) {
 		struct OpenVDBReader *reader = OpenVDBReader_create();
-		OpenVDBReader_open(reader, vdbmd->filepath);
+		OpenVDBReader_open(reader, filepath);
 
 		vdbmd->numgrids = OpenVDB_get_num_grids(reader);
 

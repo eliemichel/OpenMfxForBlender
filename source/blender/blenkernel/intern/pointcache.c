@@ -2008,6 +2008,8 @@ static int ptcache_filename(PTCacheID *pid, char *filename, int cfra, short do_p
 
 static void openvdb_filepath(PTCacheID *pid, char *filepath, int cfra)
 {
+	Library *lib = (pid->ob) ? pid->ob->id.lib : NULL;
+	const char *blendfilename= (lib && (pid->cache->flag & PTCACHE_IGNORE_LIBPATH)==0) ? lib->filepath: G.main->name;
 	SmokeModifierData *smd = (SmokeModifierData *)pid->calldata;
 	SmokeDomainSettings *sds = smd->domain;
 	OpenVDBModifierData *vdbmd = sds->vdb;
@@ -2016,6 +2018,10 @@ static void openvdb_filepath(PTCacheID *pid, char *filepath, int cfra)
 
 	BLI_stringdec(vdbmd->filepath, head, tail, &numlen);
 	BLI_stringenc(filepath, head, tail, numlen, cfra + vdbmd->frame_offset);
+
+	if (BLI_path_is_rel(filepath)) {
+		BLI_path_abs(filepath, blendfilename);
+	}
 }
 
 /* youll need to close yourself after! */
