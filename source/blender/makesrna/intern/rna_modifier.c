@@ -1164,7 +1164,7 @@ static int rna_OpenVDBModifier_density_grid_get(PointerRNA *ptr)
 
 	for (int i = 0; i < vdbmd->numgrids; i++) {
 		if (STREQ(vdbmd->density, vdbmd->grids[i])) {
-			return i;
+			return i + 1;
 		}
 	}
 
@@ -1175,8 +1175,13 @@ static void rna_OpenVDBModifier_density_grid_set(PointerRNA *ptr, int value)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 
-	if (value < vdbmd->numgrids) {
-		BLI_strncpy_utf8(vdbmd->density, vdbmd->grids[value], sizeof(vdbmd->density));
+	if (value == 0) {
+		vdbmd->density[0] = "\0";
+		return;
+	}
+
+	if (value <= vdbmd->numgrids) {
+		BLI_strncpy_utf8(vdbmd->density, vdbmd->grids[value - 1], sizeof(vdbmd->density));
 	}
 }
 
@@ -1186,7 +1191,7 @@ static int rna_OpenVDBModifier_heat_grid_get(PointerRNA *ptr)
 
 	for (int i = 0; i < vdbmd->numgrids; i++) {
 		if (STREQ(vdbmd->heat, vdbmd->grids[i])) {
-			return i;
+			return i + 1;
 		}
 	}
 
@@ -1197,8 +1202,13 @@ static void rna_OpenVDBModifier_heat_grid_set(PointerRNA *ptr, int value)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 
-	if (value < vdbmd->numgrids) {
-		BLI_strncpy_utf8(vdbmd->heat, vdbmd->grids[value], sizeof(vdbmd->heat));
+	if (value == 0) {
+		vdbmd->heat[0] = "\0";
+		return;
+	}
+
+	if (value <= vdbmd->numgrids) {
+		BLI_strncpy_utf8(vdbmd->heat, vdbmd->grids[value - 1], sizeof(vdbmd->heat));
 	}
 }
 
@@ -1208,7 +1218,7 @@ static int rna_OpenVDBModifier_flame_grid_get(PointerRNA *ptr)
 
 	for (int i = 0; i < vdbmd->numgrids; i++) {
 		if (STREQ(vdbmd->flame, vdbmd->grids[i])) {
-			return i;
+			return i + 1;
 		}
 	}
 
@@ -1219,8 +1229,13 @@ static void rna_OpenVDBModifier_flame_grid_set(PointerRNA *ptr, int value)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 
-	if (value < vdbmd->numgrids) {
-		BLI_strncpy_utf8(vdbmd->flame, vdbmd->grids[value], sizeof(vdbmd->flame));
+	if (value == 0) {
+		vdbmd->flame[0] = "\0";
+		return;
+	}
+
+	if (value <= vdbmd->numgrids) {
+		BLI_strncpy_utf8(vdbmd->flame, vdbmd->grids[value - 1], sizeof(vdbmd->flame));
 	}
 }
 
@@ -1230,7 +1245,7 @@ static int rna_OpenVDBModifier_color_grid_get(PointerRNA *ptr)
 
 	for (int i = 0; i < vdbmd->numgrids; i++) {
 		if (STREQ(vdbmd->color, vdbmd->grids[i])) {
-			return i;
+			return i + 1;
 		}
 	}
 
@@ -1241,8 +1256,13 @@ static void rna_OpenVDBModifier_color_grid_set(PointerRNA *ptr, int value)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 
-	if (value < vdbmd->numgrids) {
-		BLI_strncpy_utf8(vdbmd->color, vdbmd->grids[value], sizeof(vdbmd->color));
+	if (value == 0) {
+		vdbmd->color[0] = "\0";
+		return;
+	}
+
+	if (value <= vdbmd->numgrids) {
+		BLI_strncpy_utf8(vdbmd->color, vdbmd->grids[value - 1], sizeof(vdbmd->color));
 	}
 }
 
@@ -1251,11 +1271,15 @@ static EnumPropertyItem *rna_OpenVDBModifier_grid_itemf(
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 	EnumPropertyItem *item = NULL;
-	EnumPropertyItem tmp = {0, "", 0, "", ""};
+	EnumPropertyItem tmp = {0, "NONE", 0, "None", "Don't use any grid"};
 	int totitem = 0;
 
+	RNA_enum_item_add(&item, &totitem, &tmp);
+
+	tmp.description = "";
+
 	for (int i = 0; i < vdbmd->numgrids; i++) {
-		tmp.value = i;
+		tmp.value = i + 1;
 		tmp.identifier = vdbmd->grids[i];
 		tmp.name = vdbmd->grids[i];
 		RNA_enum_item_add(&item, &totitem, &tmp);
