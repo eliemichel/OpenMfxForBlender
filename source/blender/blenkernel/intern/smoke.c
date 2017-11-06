@@ -2749,8 +2749,14 @@ static void smokeModifier_process(SmokeModifierData *smd, Scene *scene, Object *
 			cache->flag &= ~PTCACHE_REDO_NEEDED;
 		}
 
-		if (!smd->domain->fluid && (framenr != startframe) && (smd->domain->flags & MOD_SMOKE_FILE_LOAD) == 0 && (cache->flag & PTCACHE_BAKED) == 0)
+		if (!smd->domain->fluid &&
+		    (framenr != startframe) &&
+		    (smd->domain->flags & MOD_SMOKE_FILE_LOAD) == 0 &&
+		    (cache->flag & PTCACHE_BAKED) == 0 &&
+		    (sds->cache_file_format != PTCACHE_FILE_OPENVDB_EXTERN))
+		{
 			return;
+		}
 
 		smd->domain->flags &= ~MOD_SMOKE_FILE_LOAD;
 		CLAMP(framenr, startframe, endframe);

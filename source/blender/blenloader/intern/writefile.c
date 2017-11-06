@@ -1687,6 +1687,42 @@ static void write_defgroups(WriteData *wd, ListBase *defbase)
 	}
 }
 
+static void write_smoke_modifier(WriteData *wd, SmokeModifierData *smd)
+{
+	if (smd->type & MOD_SMOKE_TYPE_DOMAIN) {
+		if (smd->domain) {
+			write_pointcaches(wd, &(smd->domain->ptcaches[0]));
+
+			/* create fake pointcache so that old blender versions can read it */
+			smd->domain->point_cache[1] = BKE_ptcache_add(&smd->domain->ptcaches[1]);
+			smd->domain->point_cache[1]->flag |= PTCACHE_DISK_CACHE | PTCACHE_FAKE_SMOKE;
+			smd->domain->point_cache[1]->step = 1;
+
+			write_pointcaches(wd, &(smd->domain->ptcaches[1]));
+
+			if (smd->domain->coba) {
+				writestruct(wd, DATA, ColorBand, 1, smd->domain->coba);
+			}
+		}
+
+		writestruct(wd, DATA, SmokeDomainSettings, 1, smd->domain);
+
+		if (smd->domain) {
+			/* cleanup the fake pointcache */
+			BKE_ptcache_free_list(&smd->domain->ptcaches[1]);
+			smd->domain->point_cache[1] = NULL;
+
+			writestruct(wd, DATA, EffectorWeights, 1, smd->domain->effector_weights);
+		}
+	}
+	else if (smd->type & MOD_SMOKE_TYPE_FLOW) {
+		writestruct(wd, DATA, SmokeFlowSettings, 1, smd->flow);
+	}
+	else if (smd->type & MOD_SMOKE_TYPE_COLL) {
+		writestruct(wd, DATA, SmokeCollSettings, 1, smd->coll);
+	}
+}
+
 static void write_modifiers(WriteData *wd, ListBase *modbase)
 {
 	ModifierData *md;
@@ -1721,40 +1757,7 @@ static void write_modifiers(WriteData *wd, ListBase *modbase)
 			write_pointcaches(wd, &clmd->ptcaches);
 		}
 		else if (md->type == eModifierType_Smoke) {
-			SmokeModifierData *smd = (SmokeModifierData *)md;
-
-			if (smd->type & MOD_SMOKE_TYPE_DOMAIN) {
-				if (smd->domain) {
-					write_pointcaches(wd, &(smd->domain->ptcaches[0]));
-
-					/* create fake pointcache so that old blender versions can read it */
-					smd->domain->point_cache[1] = BKE_ptcache_add(&smd->domain->ptcaches[1]);
-					smd->domain->point_cache[1]->flag |= PTCACHE_DISK_CACHE | PTCACHE_FAKE_SMOKE;
-					smd->domain->point_cache[1]->step = 1;
-
-					write_pointcaches(wd, &(smd->domain->ptcaches[1]));
-
-					if (smd->domain->coba) {
-						writestruct(wd, DATA, ColorBand, 1, smd->domain->coba);
-					}
-				}
-
-				writestruct(wd, DATA, SmokeDomainSettings, 1, smd->domain);
-
-				if (smd->domain) {
-					/* cleanup the fake pointcache */
-					BKE_ptcache_free_list(&smd->domain->ptcaches[1]);
-					smd->domain->point_cache[1] = NULL;
-
-					writestruct(wd, DATA, EffectorWeights, 1, smd->domain->effector_weights);
-				}
-			}
-			else if (smd->type & MOD_SMOKE_TYPE_FLOW) {
-				writestruct(wd, DATA, SmokeFlowSettings, 1, smd->flow);
-			}
-			else if (smd->type & MOD_SMOKE_TYPE_COLL) {
-				writestruct(wd, DATA, SmokeCollSettings, 1, smd->coll);
-			}
+			write_smoke_modifier(wd, (SmokeModifierData *)md);
 		}
 		else if (md->type == eModifierType_Fluidsim) {
 			FluidsimModifierData *fluidmd = (FluidsimModifierData *)md;
@@ -1857,6 +1860,15 @@ static void write_modifiers(WriteData *wd, ListBase *modbase)
 						}
 					}
 				}
+			}
+		}
+		else if (md->type == eModifierType_OpenVDB) {
+			OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+
+			if (vdbmd->smoke) {
+				writestruct(wd, DATA, SmokeModifierData, 1, vdbmd->smoke);
+
+				write_smoke_modifier(wd, vdbmd->smoke);
 			}
 		}
 	}

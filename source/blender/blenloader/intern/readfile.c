@@ -5069,6 +5069,74 @@ static void direct_link_pose(FileData *fd, bPose *pose)
 	}
 }
 
+static void direct_link_smoke_modifier(FileData *fd, SmokeModifierData *smd)
+{
+	if (smd->type == MOD_SMOKE_TYPE_DOMAIN) {
+		smd->flow = NULL;
+		smd->coll = NULL;
+		smd->domain = newdataadr(fd, smd->domain);
+		smd->domain->smd = smd;
+
+		smd->domain->fluid = NULL;
+		smd->domain->fluid_mutex = BLI_rw_mutex_alloc();
+		smd->domain->wt = NULL;
+		smd->domain->shadow = NULL;
+		smd->domain->tex = NULL;
+		smd->domain->tex_shadow = NULL;
+		smd->domain->tex_wt = NULL;
+		smd->domain->coba = newdataadr(fd, smd->domain->coba);
+
+		smd->domain->effector_weights = newdataadr(fd, smd->domain->effector_weights);
+		if (!smd->domain->effector_weights)
+			smd->domain->effector_weights = BKE_add_effector_weights(NULL);
+
+		direct_link_pointcache_list(fd, &(smd->domain->ptcaches[0]), &(smd->domain->point_cache[0]), 1);
+
+		/* Smoke uses only one cache from now on, so store pointer convert */
+		if (smd->domain->ptcaches[1].first || smd->domain->point_cache[1]) {
+			if (smd->domain->point_cache[1]) {
+				PointCache *cache = newdataadr(fd, smd->domain->point_cache[1]);
+				if (cache->flag & PTCACHE_FAKE_SMOKE) {
+					/* Smoke was already saved in "new format" and this cache is a fake one. */
+				}
+				else {
+					printf("High resolution smoke cache not available due to pointcache update. Please reset the simulation.\n");
+				}
+				BKE_ptcache_free(cache);
+			}
+			BLI_listbase_clear(&smd->domain->ptcaches[1]);
+			smd->domain->point_cache[1] = NULL;
+		}
+	}
+	else if (smd->type == MOD_SMOKE_TYPE_FLOW) {
+		smd->domain = NULL;
+		smd->coll = NULL;
+		smd->flow = newdataadr(fd, smd->flow);
+		smd->flow->smd = smd;
+		smd->flow->dm = NULL;
+		smd->flow->verts_old = NULL;
+		smd->flow->numverts = 0;
+		smd->flow->psys = newdataadr(fd, smd->flow->psys);
+	}
+	else if (smd->type == MOD_SMOKE_TYPE_COLL) {
+		smd->flow = NULL;
+		smd->domain = NULL;
+		smd->coll = newdataadr(fd, smd->coll);
+		if (smd->coll) {
+			smd->coll->smd = smd;
+			smd->coll->verts_old = NULL;
+			smd->coll->numverts = 0;
+			smd->coll->dm = NULL;
+		}
+		else {
+			smd->type = 0;
+			smd->flow = NULL;
+			smd->domain = NULL;
+			smd->coll = NULL;
+		}
+	}
+}
+
 static void direct_link_modifiers(FileData *fd, ListBase *lb)
 {
 	ModifierData *md;
@@ -5129,72 +5197,7 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb)
 			}
 		}
 		else if (md->type == eModifierType_Smoke) {
-			SmokeModifierData *smd = (SmokeModifierData *)md;
-			
-			if (smd->type == MOD_SMOKE_TYPE_DOMAIN) {
-				smd->flow = NULL;
-				smd->coll = NULL;
-				smd->domain = newdataadr(fd, smd->domain);
-				smd->domain->smd = smd;
-				
-				smd->domain->fluid = NULL;
-				smd->domain->fluid_mutex = BLI_rw_mutex_alloc();
-				smd->domain->wt = NULL;
-				smd->domain->shadow = NULL;
-				smd->domain->tex = NULL;
-				smd->domain->tex_shadow = NULL;
-				smd->domain->tex_wt = NULL;
-				smd->domain->coba = newdataadr(fd, smd->domain->coba);
-				
-				smd->domain->effector_weights = newdataadr(fd, smd->domain->effector_weights);
-				if (!smd->domain->effector_weights)
-					smd->domain->effector_weights = BKE_add_effector_weights(NULL);
-				
-				direct_link_pointcache_list(fd, &(smd->domain->ptcaches[0]), &(smd->domain->point_cache[0]), 1);
-				
-				/* Smoke uses only one cache from now on, so store pointer convert */
-				if (smd->domain->ptcaches[1].first || smd->domain->point_cache[1]) {
-					if (smd->domain->point_cache[1]) {
-						PointCache *cache = newdataadr(fd, smd->domain->point_cache[1]);
-						if (cache->flag & PTCACHE_FAKE_SMOKE) {
-							/* Smoke was already saved in "new format" and this cache is a fake one. */
-						}
-						else {
-							printf("High resolution smoke cache not available due to pointcache update. Please reset the simulation.\n");
-						}
-						BKE_ptcache_free(cache);
-					}
-					BLI_listbase_clear(&smd->domain->ptcaches[1]);
-					smd->domain->point_cache[1] = NULL;
-				}
-			}
-			else if (smd->type == MOD_SMOKE_TYPE_FLOW) {
-				smd->domain = NULL;
-				smd->coll = NULL;
-				smd->flow = newdataadr(fd, smd->flow);
-				smd->flow->smd = smd;
-				smd->flow->dm = NULL;
-				smd->flow->verts_old = NULL;
-				smd->flow->numverts = 0;
-				smd->flow->psys = newdataadr(fd, smd->flow->psys);
-			}
-			else if (smd->type == MOD_SMOKE_TYPE_COLL) {
-				smd->flow = NULL;
-				smd->domain = NULL;
-				smd->coll = newdataadr(fd, smd->coll);
-				if (smd->coll) {
-					smd->coll->smd = smd;
-					smd->coll->verts_old = NULL;
-					smd->coll->numverts = 0;
-					smd->coll->dm = NULL;
-				}
-				else {
-					smd->type = 0;
-					smd->flow = NULL;
-					smd->domain = NULL;
-					smd->coll = NULL;
-				}
-			}
+			direct_link_smoke_modifier(fd, (SmokeModifierData *)md);
 		}
 		else if (md->type == eModifierType_DynamicPaint) {
 			DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
@@ -5389,6 +5392,15 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb)
 					}
 				}
 			}
+		}
+		else if (md->type == eModifierType_OpenVDB) {
+			OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+
+			vdbmd->smoke = newdataadr(fd, vdbmd->smoke);
+			direct_link_smoke_modifier(fd, vdbmd->smoke);
+
+			vdbmd->grids = NULL;
+			vdbmd->numgrids = 0;
 		}
 	}
 }
