@@ -424,6 +424,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 	kfilm->pass_flag = 0;
 	kfilm->pass_stride = 0;
 	kfilm->use_light_pass = use_light_visibility || use_sample_clamp;
+	::memset(kfilm->pass_aov, 0, sizeof(kfilm->pass_aov));
 
 	for(size_t i = 0; i < passes.passes.size(); i++) {
 		Pass& pass = passes.passes[i];
