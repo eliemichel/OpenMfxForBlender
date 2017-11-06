@@ -201,7 +201,7 @@ int OpenVDB_get_bbox(
 	if (heat) {
 		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, heat));
 
-		if (trans != internal::OpenVDB_get_grid_transform(reader, heat)) {
+		if (*trans != *internal::OpenVDB_get_grid_transform(reader, heat)) {
 			validity = GRID_TRANSFORM_INVALID;
 		}
 	}
@@ -209,7 +209,7 @@ int OpenVDB_get_bbox(
 	if (flame) {
 		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, flame));
 
-		if (trans != internal::OpenVDB_get_grid_transform(reader, flame)) {
+		if (*trans != *internal::OpenVDB_get_grid_transform(reader, flame)) {
 			validity = GRID_TRANSFORM_INVALID;
 		}
 	}
@@ -217,7 +217,7 @@ int OpenVDB_get_bbox(
 	if (color) {
 		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, color));
 
-		if (trans != internal::OpenVDB_get_grid_transform(reader, flame)) {
+		if (*trans != *internal::OpenVDB_get_grid_transform(reader, flame)) {
 			validity = GRID_TRANSFORM_INVALID;
 		}
 	}
