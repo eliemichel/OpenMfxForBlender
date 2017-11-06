@@ -154,11 +154,12 @@ void OpenVDB_import_grid_vec_extern(
         struct OpenVDBReader *reader,
         const char *name,
         float **data_x, float **data_y, float **data_z,
-        const int res[3])
+        const int res_min[3], const int res[3],
+        short up, short front)
 {
 	Timer(__func__);
 
-	internal::OpenVDB_import_grid_vector_extern(reader, name, data_x, data_y, data_z, res);
+	internal::OpenVDB_import_grid_vector_extern(reader, name, data_x, data_y, data_z, res_min, res, up, front);
 }
 
 bool OpenVDB_has_grid(OpenVDBReader *reader, const char *name)

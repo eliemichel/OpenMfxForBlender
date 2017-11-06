@@ -1273,7 +1273,8 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		}
 
 		if (cache_fields & SM_ACTIVE_COLORS) {
-			OpenVDB_import_grid_vec_extern(reader, vdbmd->color, &r, &g, &b, sds->res);
+			OpenVDB_import_grid_vec_extern(reader, vdbmd->color, &r, &g, &b, sds->res_min, sds->res,
+			                               vdbmd->up_axis, vdbmd->front_axis);
 		}
 	}
 

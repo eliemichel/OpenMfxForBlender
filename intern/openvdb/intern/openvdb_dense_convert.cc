@@ -169,7 +169,9 @@ void OpenVDB_import_grid_vector_extern(
         OpenVDBReader *reader,
         const openvdb::Name &name,
         float **data_x, float **data_y, float **data_z,
-        const int res[3])
+        const int res_min[3],
+        const int res[3],
+        short up, short front)
 {
 	using namespace openvdb;
 
@@ -183,17 +185,50 @@ void OpenVDB_import_grid_vector_extern(
 
 	Vec3SGrid::Ptr vgrid = gridPtrCast<Vec3SGrid>(reader->getGrid(name));
 	Vec3SGrid::ConstAccessor acc = vgrid->getConstAccessor();
-	math::Coord xyz;
-	int &x = xyz[0], &y = xyz[1], &z = xyz[2];
+	CoordBBox bbox = vgrid->evalActiveVoxelBoundingBox();
+	Coord grid_min = bbox.getStart();
+	Coord grid_max = bbox.getEnd();
 
-	size_t index = 0;
-	for (z = 0; z < res[2]; ++z) {
-		for (y = 0; y < res[1]; ++y) {
-			for (x = 0; x < res[0]; ++x, ++index) {
+	bool inv_z = up >= 3;
+	bool inv_y = front < 3;
+	up %= 3;
+	front %= 3;
+	short right = 3 - (up + front);
+	bool inv_x = !(inv_z == inv_y);
+
+	if (up < front) {
+		inv_x = !inv_x;
+	}
+
+	if (abs(up - front) == 2) {
+		inv_x = !inv_x;
+	}
+
+	math::Coord xyz;
+	int &x = xyz[right], &y = xyz[front], &z = xyz[up];
+
+	for (z = inv_z ? (grid_max[up] - 1) : grid_min[up];
+	     inv_z ? (z >= grid_min[up]) : (z < grid_max[up]);
+	     inv_z ? --z : ++z)
+	{
+		for (y = inv_y ? (grid_max[front] - 1) : grid_min[front];
+		     inv_y ? (y >= grid_min[front]) : (y < grid_max[front]);
+		     inv_y ? --y : ++y)
+		{
+			for (x = inv_x ? (grid_max[right] - 1) : grid_min[right];
+			     inv_x ? (x >= grid_min[right]) : (x < grid_max[right]);
+			     inv_x ? --x : ++x)
+			{
+				int x_local = x - res_min[0];
+				int y_local = y - res_min[1];
+				int z_local = z - res_min[2];
+
+				int coord_local = (z_local * (res[0] * res[1])) + (y_local * res[0]) + x_local;
+
 				math::Vec3s value = acc.getValue(xyz);
-				(*data_x)[index] = value.x();
-				(*data_y)[index] = value.y();
-				(*data_z)[index] = value.z();
+				(*data_x)[coord_local] = value.x();
+				(*data_y)[coord_local] = value.y();
+				(*data_z)[coord_local] = value.z();
 			}
 		}
 	}

@@ -195,7 +195,9 @@ void OpenVDB_import_grid_vector_extern(
         OpenVDBReader *reader,
         const openvdb::Name &name,
         float **data_x, float **data_y, float **data_z,
-        const int res[3]);
+        const int res_min[3],
+        const int res[3],
+        short up, short front);
 
 openvdb::CoordBBox OpenVDB_get_grid_bounds(
         OpenVDBReader *reader,
