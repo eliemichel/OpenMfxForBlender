@@ -192,24 +192,33 @@ int OpenVDB_get_bbox(
 	front %= 3;
 	right = 3 - (up + front);
 
-	CoordBBox bbox = internal::OpenVDB_get_grid_bounds(reader, density);
-	Transform::Ptr trans = internal::OpenVDB_get_grid_transform(reader, density);
+	CoordBBox bbox;
+	Transform::Ptr trans;
 	Coord coord;
 	BBoxd bboxf;
 	openvdb::Vec3d coordf;
+
+	if (density) {
+		bbox = internal::OpenVDB_get_grid_bounds(reader, density);
+		trans = internal::OpenVDB_get_grid_transform(reader, density);
+
+		if (flame) {
+			bbox.expand(internal::OpenVDB_get_grid_bounds(reader, flame));
+
+			if (*trans != *internal::OpenVDB_get_grid_transform(reader, flame)) {
+				validity = GRID_TRANSFORM_INVALID;
+			}
+		}
+	}
+	else {
+		bbox = internal::OpenVDB_get_grid_bounds(reader, flame);
+		trans = internal::OpenVDB_get_grid_transform(reader, flame);
+	}
 
 	if (heat) {
 		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, heat));
 
 		if (*trans != *internal::OpenVDB_get_grid_transform(reader, heat)) {
-			validity = GRID_TRANSFORM_INVALID;
-		}
-	}
-
-	if (flame) {
-		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, flame));
-
-		if (*trans != *internal::OpenVDB_get_grid_transform(reader, flame)) {
 			validity = GRID_TRANSFORM_INVALID;
 		}
 	}

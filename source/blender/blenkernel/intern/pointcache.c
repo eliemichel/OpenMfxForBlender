@@ -1171,7 +1171,9 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	int cache_fields = 0;
 	bool reallocate = false;
 
-	if (!OpenVDB_has_grid(reader, vdbmd->density)) {
+	if (!OpenVDB_has_grid(reader, vdbmd->density) &&
+	    !OpenVDB_has_grid(reader, vdbmd->flame))
+	{
 		OpenVDBReader_free(reader);
 		return 0;
 	}
@@ -1189,7 +1191,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	}
 
 	if (!OpenVDB_get_bbox(reader,
-	                      vdbmd->density,
+	                      OpenVDB_has_grid(reader, vdbmd->density) ? vdbmd->density : NULL,
 	                      cache_fields & SM_ACTIVE_HEAT ? vdbmd->heat : NULL,
 	                      cache_fields & SM_ACTIVE_FIRE ? vdbmd->flame : NULL,
 	                      cache_fields & SM_ACTIVE_COLORS ? vdbmd->color : NULL,
@@ -1259,8 +1261,10 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 
 		//OpenVDB_import_grid_fl(reader, "shadow", &sds->shadow, sds->res);
 
-		OpenVDB_import_grid_fl_extern(reader, vdbmd->density, &dens, sds->res_min, sds->res,
-		                              vdbmd->up_axis, vdbmd->front_axis);
+		if (OpenVDB_has_grid(reader, vdbmd->density)) {
+			OpenVDB_import_grid_fl_extern(reader, vdbmd->density, &dens, sds->res_min, sds->res,
+										  vdbmd->up_axis, vdbmd->front_axis);
+		}
 
 		if (cache_fields & SM_ACTIVE_HEAT) {
 			OpenVDB_import_grid_fl_extern(reader, vdbmd->heat, &heat, sds->res_min, sds->res,
