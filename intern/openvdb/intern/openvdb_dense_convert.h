@@ -110,7 +110,7 @@ void OpenVDB_import_grid(
 }
 
 template <typename GridType, typename T>
-void OpenVDB_import_grid_extern(
+bool OpenVDB_import_grid_extern(
         OpenVDBReader *reader,
         const openvdb::Name &name,
         T **data,
@@ -123,10 +123,16 @@ void OpenVDB_import_grid_extern(
 	if (!reader->hasGrid(name)) {
 		std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", name.c_str());
 		memset(*data, 0, sizeof(T) * res[0] * res[1] * res[2]);
-		return;
+		return true;
 	}
 
-	typename GridType::Ptr grid = gridPtrCast<GridType>(reader->getGrid(name));
+	GridBase::Ptr grid_b = reader->getGrid(name);
+
+	if (!grid_b->isType<GridType>()) {
+		return false;
+	}
+
+	typename GridType::Ptr grid = gridPtrCast<GridType>(grid_b);
 	typename GridType::ConstAccessor acc = grid->getConstAccessor();
 	CoordBBox bbox = grid->evalActiveVoxelBoundingBox();
 	Coord grid_min = bbox.getStart();
@@ -172,6 +178,8 @@ void OpenVDB_import_grid_extern(
 			}
 		}
 	}
+
+	return true;
 }
 
 openvdb::GridBase *OpenVDB_export_vector_grid(
@@ -191,7 +199,7 @@ void OpenVDB_import_grid_vector(
         float **data_x, float **data_y, float **data_z,
         const int res[3]);
 
-void OpenVDB_import_grid_vector_extern(
+bool OpenVDB_import_grid_vector_extern(
         OpenVDBReader *reader,
         const openvdb::Name &name,
         float **data_x, float **data_y, float **data_z,

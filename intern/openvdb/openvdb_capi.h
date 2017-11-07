@@ -76,7 +76,7 @@ void OpenVDB_import_grid_fl(
         const char *name, float **data,
         const int res[3]);
 
-void OpenVDB_import_grid_fl_extern(
+bool OpenVDB_import_grid_fl_extern(
         struct OpenVDBReader *reader,
         const char *name, float **data,
         const int res_min[3], const int res[3],
@@ -93,7 +93,7 @@ void OpenVDB_import_grid_vec(
         float **data_x, float **data_y, float **data_z,
         const int res[3]);
 
-void OpenVDB_import_grid_vec_extern(
+bool OpenVDB_import_grid_vec_extern(
         struct OpenVDBReader *reader,
         const char *name,
         float **data_x, float **data_y, float **data_z,

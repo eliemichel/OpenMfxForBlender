@@ -165,7 +165,7 @@ void OpenVDB_import_grid_vector(
 	}
 }
 
-void OpenVDB_import_grid_vector_extern(
+bool OpenVDB_import_grid_vector_extern(
         OpenVDBReader *reader,
         const openvdb::Name &name,
         float **data_x, float **data_y, float **data_z,
@@ -180,10 +180,16 @@ void OpenVDB_import_grid_vector_extern(
 		memset(*data_x, 0, sizeof(float) * res[0] * res[1] * res[2]);
 		memset(*data_y, 0, sizeof(float) * res[0] * res[1] * res[2]);
 		memset(*data_z, 0, sizeof(float) * res[0] * res[1] * res[2]);
-		return;
+		return true;
 	}
 
-	Vec3SGrid::Ptr vgrid = gridPtrCast<Vec3SGrid>(reader->getGrid(name));
+	GridBase::Ptr vgrid_b = reader->getGrid(name);
+
+	if (!vgrid_b->isType<Vec3SGrid>()) {
+		return false;
+	}
+
+	Vec3SGrid::Ptr vgrid = gridPtrCast<Vec3SGrid>(vgrid_b);
 	Vec3SGrid::ConstAccessor acc = vgrid->getConstAccessor();
 	CoordBBox bbox = vgrid->evalActiveVoxelBoundingBox();
 	Coord grid_min = bbox.getStart();
@@ -232,6 +238,8 @@ void OpenVDB_import_grid_vector_extern(
 			}
 		}
 	}
+
+	return true;
 }
 
 openvdb::CoordBBox OpenVDB_get_grid_bounds(
