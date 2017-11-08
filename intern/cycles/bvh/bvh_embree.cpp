@@ -175,7 +175,7 @@ void rtc_filter_func(void*, RTCRay& ray_)
 			ray.num_hits++;
 			ray.isect_to_ccl(isect);
 			/* Only primitives from volume object. */
-			uint tri_object = kernel_tex_fetch(__prim_object, isect->prim);
+			uint tri_object = (isect->object == OBJECT_NONE) ?kernel_tex_fetch(__prim_object, isect->prim) : isect->object;
 			int object_flag = kernel_tex_fetch(__object_flag, tri_object);
 			if((object_flag & SD_OBJECT_OBJECT_HAS_VOLUME) == 0) {
 				ray.num_hits--;
