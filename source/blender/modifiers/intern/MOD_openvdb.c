@@ -84,7 +84,17 @@ static void freeData(ModifierData *md)
 
 static void copyData(ModifierData *md, ModifierData *target)
 {
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+	OpenVDBModifierData *tvdbmd = (OpenVDBModifierData *)target;
+
 	modifier_copyData_generic(md, target);
+
+	tvdbmd->smoke = (SmokeModifierData *)modifier_new(eModifierType_Smoke);
+
+	modifier_copyData((ModifierData *)vdbmd->smoke, (ModifierData *)tvdbmd->smoke);
+	tvdbmd->smoke->domain->vdb = tvdbmd;
+
+	tvdbmd->grids = MEM_dupallocN(vdbmd->grids);
 }
 
 static bool dependsOnTime(ModifierData *UNUSED(md))
