@@ -170,6 +170,15 @@ static float get_node_input_value(BL::Node& b_node, const string& name)
     return RNA_float_get(&b_sock.ptr, "default_value");
 }
 
+static float3 get_node_input_vector(BL::Node& b_node, const string& name)
+{
+    BL::NodeSocket b_sock = get_node_input(b_node, name);
+    float value[3];
+    RNA_float_get_array(&b_sock.ptr, "default_value", value);
+    return make_float3(value[0], value[1], value[2]);
+}
+
+
 static SocketType::Type convert_socket_type(BL::NodeSocket& b_socket)
 {
 	switch(b_socket.type()) {
@@ -711,7 +720,7 @@ static ShaderNode *add_node(BlenderSync &sync,
         shader->has_object_dependency = true;
 
         tex->curve_type = b_curve_node.curve_type();
-    
+        
         if (b_curve) {
             ::Object *ob = (::Object *) b_curve.ptr.data;
             ::Curve *cu = (::Curve*) ob->data;
@@ -725,6 +734,7 @@ static ShaderNode *add_node(BlenderSync &sync,
                 if (mesh) {
 
                     float line_thickness = get_node_input_value(b_node, "LineThickness");
+                    float3 curve_scale = get_node_input_vector(b_node, "CurveScale");
 
                     tex->segments = CurveToLineSegments(mesh);
                     tex->extents.resize(tex->segments.size());
@@ -741,8 +751,8 @@ static ShaderNode *add_node(BlenderSync &sync,
                     // Order line segments based on centers
                     struct LSSorter {
                         static bool doit (const float4 &a, const float4 &b) {
-                            float aa = (a.x + a.z) * 0.5F;
-                            float bb = (b.x + b.z) * 0.5F;
+                            float aa = (a.x + a.z);// * 0.5F;   // Don't need to multiply for doing comparison
+                            float bb = (b.x + b.z);// * 0.5F;
                             return aa < bb;
                         }
                     };
@@ -759,7 +769,7 @@ static ShaderNode *add_node(BlenderSync &sync,
                         for (int j = 0; j < tex->segments.size(); ++j) {
                             float4 &ls2 = tex->segments[j];
                             
-                            if ( (ls2.x - line_thickness) <= center && (ls2.z + line_thickness) >= center) {
+                            if ( (ls2.x - line_thickness/curve_scale.x) <= center && (ls2.z + line_thickness/curve_scale.x) >= center) {
                                 min_xi = std::min(min_xi,j);
                                 max_xi = std::max(max_xi,j);
                             }
@@ -767,7 +777,6 @@ static ShaderNode *add_node(BlenderSync &sync,
                         
                         tex->extents[i] = make_float4(center, __int_as_float(min_xi), __int_as_float(max_xi), 1.0F);
                     }
-                    
                     
                     tex->width = tex->segments.size();
                     tex->height = 2;
@@ -800,7 +809,7 @@ static ShaderNode *add_node(BlenderSync &sync,
                     ::memcpy(tex->generated_data.get() + sizeof(header) + tex->segments.size() * sizeof(float4),
                              tex->extents.data(), tex->extents.size() * sizeof(float4));
 
-                    bool is_float_bool = true, linear = true;
+                    bool is_float_bool, linear;
                     tex->slot = scene->image_manager->add_image(tex->filename, NULL, tex->generated_data,
                                                                 true, 0, is_float_bool, linear,
                                                                 INTERPOLATION_CLOSEST,
