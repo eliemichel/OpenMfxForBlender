@@ -1213,21 +1213,6 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		return 0;
 	}
 
-#if 0
-	OpenVDBReader_get_meta_v3_int(reader, "blender/smoke/min_resolution", sds->res_min);
-	OpenVDBReader_get_meta_v3_int(reader, "blender/smoke/max_resolution", sds->res_max);
-	OpenVDBReader_get_meta_v3_int(reader, "blender/smoke/base_resolution", sds->base_res);
-	OpenVDBReader_get_meta_v3(reader, "blender/smoke/min_bbox", sds->p0);
-	OpenVDBReader_get_meta_v3(reader, "blender/smoke/max_bbox", sds->p1);
-	OpenVDBReader_get_meta_v3(reader, "blender/smoke/dp0", sds->dp0);
-	OpenVDBReader_get_meta_v3_int(reader, "blender/smoke/shift", sds->shift);
-	OpenVDBReader_get_meta_v3(reader, "blender/smoke/obj_shift_f", sds->obj_shift_f);
-	OpenVDBReader_get_meta_v3(reader, "blender/smoke/active_color", sds->active_color);
-	OpenVDBReader_get_meta_mat4(reader, "blender/smoke/obmat", sds->obmat);
-	OpenVDBReader_get_meta_int(reader, "blender/smoke/fluid_fields", &cache_fields);
-	OpenVDBReader_get_meta_fl(reader, "blender/smoke/dx", &cache_dx);
-#endif
-
 	/* check if resolution has changed */
 	if (sds->res[0] != sds->base_res[0] ||
 		sds->res[1] != sds->base_res[1] ||
