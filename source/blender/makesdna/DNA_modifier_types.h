@@ -1626,13 +1626,18 @@ typedef struct OpenVDBModifierData {
 	int numgrids;
 	int frame_offset;
 
-	int pad;
+	int flags;
 
 	short up_axis;
 	short front_axis;
 
 	SmokeModifierData *smoke;
 } OpenVDBModifierData;
+
+/* OpenVDBModifierData flags */
+enum {
+	MOD_OPENVDB_HIDE_VOLUME = (1 << 0),
+};
 
 enum {
 	MOD_OVDB_AXIS_X     = 0,

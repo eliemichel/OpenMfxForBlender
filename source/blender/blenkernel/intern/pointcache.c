@@ -1238,6 +1238,14 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		VECCOPY(sds->res, sds->base_res);
 	}
 
+	if (vdbmd->flags & MOD_OPENVDB_HIDE_VOLUME) {
+		OpenVDBReader_free(reader);
+		sds->total_cells = sds->res[0] * sds->res[1] * sds->res[2];
+		smoke_free(sds->fluid);
+		sds->fluid = NULL;
+		return 1;
+	}
+
 	/* check if active fields have changed */
 	if ((fluid_fields != cache_fields) || (cache_fields != sds->active_fields)) {
 		reallocate = true;
