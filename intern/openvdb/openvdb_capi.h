@@ -114,6 +114,8 @@ int OpenVDB_get_bbox(
         float r_bbox_max[3],
         float r_voxel_size[3]);
 
+bool OpenVDB_has_metadata(struct OpenVDBReader *reader, const char *name);
+
 void OpenVDB_print_grids(struct OpenVDBReader *reader);
 void OpenVDB_print_metadata_names(struct OpenVDBReader *reader);
 void OpenVDB_print_grid_metadata_names(struct OpenVDBReader *reader, const char *name);

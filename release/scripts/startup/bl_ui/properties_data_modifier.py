@@ -709,8 +709,10 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "heat")
         layout.prop(md, "flame")
         layout.prop(md, "color")
-        layout.prop(md, "up_axis")
-        layout.prop(md, "front_axis")
+        if md.show_axis_convert:
+            layout.prop(md, "up_axis")
+            layout.prop(md, "front_axis")
+
         layout.prop(md, "frame_offset")
         layout.prop(md, "hide_volume")
 

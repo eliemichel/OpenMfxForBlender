@@ -317,6 +317,9 @@ if(WITH_OPENSUBDIV)
 endif()
 
 if(WITH_OPENVDB)
+	list(APPEND INC
+		../../../../intern/openvdb
+	)
 	add_definitions(-DWITH_OPENVDB)
 
 	if(WITH_OPENVDB_BLOSC)

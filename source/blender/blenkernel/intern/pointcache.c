@@ -1170,6 +1170,13 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	int fluid_fields = smoke_get_data_flags(sds);
 	int cache_fields = 0;
 	bool reallocate = false;
+	int vdb_type = PTCACHE_VDB_TYPE_GENERIC;
+	int up_axis = vdbmd->up_axis;
+	int front_axis = vdbmd->front_axis;
+
+	if (OpenVDB_has_metadata(reader, "FFXVDBVersion")) {
+		vdb_type = PTCACHE_VDB_TYPE_FUMEFX;
+	}
 
 	if (!OpenVDB_has_grid(reader, vdbmd->density) &&
 	    !OpenVDB_has_grid(reader, vdbmd->flame))
@@ -1190,16 +1197,52 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		cache_fields |= SM_ACTIVE_COLORS;
 	}
 
-	if (!OpenVDB_get_bbox(reader,
-	                      OpenVDB_has_grid(reader, vdbmd->density) ? vdbmd->density : NULL,
-	                      cache_fields & SM_ACTIVE_HEAT ? vdbmd->heat : NULL,
-	                      cache_fields & SM_ACTIVE_FIRE ? vdbmd->flame : NULL,
-	                      cache_fields & SM_ACTIVE_COLORS ? vdbmd->color : NULL,
-	                      vdbmd->up_axis, vdbmd->front_axis,
-	                      sds->res_min, sds->res_max, sds->base_res,
-	                      sds->p0, sds->p1, sds->cell_size))
-	{
-		modifier_setError((ModifierData *)vdbmd, "Grids have different transformations");
+	/* Check if FumeFX */
+	if (vdb_type == PTCACHE_VDB_TYPE_FUMEFX) {
+		int res[3];
+		OpenVDBReader_get_meta_v3_int(reader, "Nmax", sds->base_res);
+		OpenVDBReader_get_meta_v3_int(reader, "N", res);
+		OpenVDBReader_get_meta_v3_int(reader, "N0", sds->res_min);
+		VECADD(sds->res_max, sds->res_min, res);
+		sds->res_max[0] -= 1;
+		sds->res_max[1] -= 1;
+		sds->res_max[2] -= 1;
+
+		if (sds->res[0] != res[0] ||
+		    sds->res[1] != res[1] ||
+		    sds->res[2] != res[2])
+		{
+			reallocate = true;
+			VECCOPY(sds->res, res);
+		}
+
+		OpenVDBReader_get_meta_v3(reader, "Lmax", sds->p1);
+
+		sds->cell_size[0] = sds->p1[0] / sds->base_res[0];
+		sds->cell_size[1] = sds->p1[1] / sds->base_res[1];
+		sds->cell_size[2] = sds->p1[2] / sds->base_res[2];
+
+		sds->p1[0] *= 0.5f;
+		sds->p1[1] *= 0.5f;
+		sds->p0[0] = -sds->p1[0];
+		sds->p0[1] = -sds->p1[1];
+		sds->p0[2] = 0.0f;
+
+		up_axis = 1;
+		front_axis = 2;
+	}
+	else {
+		if (!OpenVDB_get_bbox(reader,
+							  OpenVDB_has_grid(reader, vdbmd->density) ? vdbmd->density : NULL,
+							  cache_fields & SM_ACTIVE_HEAT ? vdbmd->heat : NULL,
+							  cache_fields & SM_ACTIVE_FIRE ? vdbmd->flame : NULL,
+							  cache_fields & SM_ACTIVE_COLORS ? vdbmd->color : NULL,
+							  vdbmd->up_axis, vdbmd->front_axis,
+							  sds->res_min, sds->res_max, sds->base_res,
+							  sds->p0, sds->p1, sds->cell_size))
+		{
+			modifier_setError((ModifierData *)vdbmd, "Grids have different transformations");
+		}
 	}
 
 	sub_v3_v3v3(sds->global_size, sds->p1, sds->p0);
@@ -1214,9 +1257,10 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	}
 
 	/* check if resolution has changed */
-	if (sds->res[0] != sds->base_res[0] ||
-		sds->res[1] != sds->base_res[1] ||
-		sds->res[2] != sds->base_res[2])
+	if ((vdb_type == PTCACHE_VDB_TYPE_GENERIC) &&
+	    (sds->res[0] != sds->base_res[0] ||
+	    sds->res[1] != sds->base_res[1] ||
+	    sds->res[2] != sds->base_res[2]))
 	{
 		reallocate = true;
 
@@ -1239,7 +1283,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	/* reallocate fluid if needed*/
 	if (reallocate) {
 		sds->active_fields = cache_fields;
-		sds->maxres = MAX3(sds->res[0], sds->res[1], sds->res[2]);
+		sds->maxres = MAX3(sds->base_res[0], sds->base_res[1], sds->base_res[2]);
 		sds->dx = 1.0f / sds->maxres;
 		smoke_reallocate_fluid(sds, sds->dx, sds->res, 1);
 		sds->total_cells = sds->res[0] * sds->res[1] * sds->res[2];
@@ -1256,7 +1300,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 
 		if (OpenVDB_has_grid(reader, vdbmd->density)) {
 			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->density, &dens, sds->res_min, sds->res,
-										       vdbmd->up_axis, vdbmd->front_axis))
+										       up_axis, front_axis))
 			{
 				modifier_setError((ModifierData *)vdbmd, "Density grid is of the wrong type");
 			}
@@ -1264,7 +1308,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 
 		if (cache_fields & SM_ACTIVE_HEAT) {
 			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->heat, &heat, sds->res_min, sds->res,
-			                                   vdbmd->up_axis, vdbmd->front_axis))
+			                                   up_axis, front_axis))
 			{
 				modifier_setError((ModifierData *)vdbmd, "Heat grid is of the wrong type");
 			}
@@ -1272,7 +1316,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 
 		if (cache_fields & SM_ACTIVE_FIRE) {
 			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->flame, &flame, sds->res_min, sds->res,
-			                                   vdbmd->up_axis, vdbmd->front_axis))
+			                                   up_axis, front_axis))
 			{
 				modifier_setError((ModifierData *)vdbmd, "Flame grid is of the wrong type");
 			}
@@ -1280,7 +1324,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 
 		if (cache_fields & SM_ACTIVE_COLORS) {
 			if (!OpenVDB_import_grid_vec_extern(reader, vdbmd->color, &r, &g, &b, sds->res_min, sds->res,
-			                                    vdbmd->up_axis, vdbmd->front_axis))
+			                                    up_axis, front_axis))
 			{
 				modifier_setError((ModifierData *)vdbmd, "Color grid is of the wrong type");
 			}

@@ -288,6 +288,7 @@ EnumPropertyItem rna_enum_axis_flag_xyz_items[] = {
 #include "BKE_cachefile.h"
 #include "BKE_context.h"
 #include "BKE_depsgraph.h"
+#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
@@ -295,6 +296,10 @@ EnumPropertyItem rna_enum_axis_flag_xyz_items[] = {
 
 #ifdef WITH_ALEMBIC
 #  include "ABC_alembic.h"
+#endif
+
+#ifdef WITH_OPENVDB
+#  include "openvdb_capi.h"
 #endif
 
 static void rna_UVProject_projectors_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
@@ -1176,7 +1181,7 @@ static void rna_OpenVDBModifier_density_grid_set(PointerRNA *ptr, int value)
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 
 	if (value == 0) {
-		vdbmd->density[0] = "\0";
+		vdbmd->density[0] = 0;
 		return;
 	}
 
@@ -1203,7 +1208,7 @@ static void rna_OpenVDBModifier_heat_grid_set(PointerRNA *ptr, int value)
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 
 	if (value == 0) {
-		vdbmd->heat[0] = "\0";
+		vdbmd->heat[0] = 0;
 		return;
 	}
 
@@ -1230,7 +1235,7 @@ static void rna_OpenVDBModifier_flame_grid_set(PointerRNA *ptr, int value)
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 
 	if (value == 0) {
-		vdbmd->flame[0] = "\0";
+		vdbmd->flame[0] = 0;
 		return;
 	}
 
@@ -1257,7 +1262,7 @@ static void rna_OpenVDBModifier_color_grid_set(PointerRNA *ptr, int value)
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 
 	if (value == 0) {
-		vdbmd->color[0] = "\0";
+		vdbmd->color[0] = 0;
 		return;
 	}
 
@@ -1289,6 +1294,29 @@ static EnumPropertyItem *rna_OpenVDBModifier_grid_itemf(
 	*r_free = true;
 
 	return item;
+}
+
+static int rna_OpenVDBModifier_show_axis_convert_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	char filepath[1024];
+
+	BLI_strncpy(filepath, vdbmd->filepath, sizeof(filepath));
+	BLI_path_abs(filepath, G.main->name);
+
+	if (BLI_exists(filepath)) {
+		struct OpenVDBReader *reader = OpenVDBReader_create();
+		OpenVDBReader_open(reader, filepath);
+
+		if (OpenVDB_has_metadata(reader, "FFXVDBVersion")) {
+			OpenVDBReader_free(reader);
+			return 0;
+		}
+
+		OpenVDBReader_free(reader);
+	}
+
+	return 1;
 }
 
 #else
@@ -4970,6 +4998,10 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_HIDE_VOLUME);
 	RNA_def_property_ui_text(prop, "Hide Volume", "Display only bounding box (faster playback)");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "show_axis_convert", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_funcs(prop, "rna_OpenVDBModifier_show_axis_convert_get", NULL);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 }
 
 void RNA_def_modifier(BlenderRNA *brna)

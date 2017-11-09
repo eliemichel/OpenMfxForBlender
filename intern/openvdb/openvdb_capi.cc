@@ -268,6 +268,12 @@ int OpenVDB_get_bbox(
 	return validity;
 }
 
+
+bool OpenVDB_has_metadata(struct OpenVDBReader *reader, const char *name)
+{
+	return reader->hasMetadata(name);
+}
+
 void OpenVDB_print_grids(OpenVDBReader *reader)
 {
 	reader->printGrids();
