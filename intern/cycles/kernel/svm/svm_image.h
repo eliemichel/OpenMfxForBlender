@@ -396,9 +396,7 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
         float curve_thickness = stack_load_float(stack, curve_thickness_offset);
         float3 curve_location = stack_load_float3(stack, curve_location_offset);
         float3 curve_scale = stack_load_float3(stack, curve_scale_offset);
-
-        float grad = 1.0f;
-
+        
         // Binary search line segments
         int min_xi = 0;
         int max_xi = width-1;
@@ -407,14 +405,10 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
         
         float cox = (co.x - curve_location.x) / curve_scale.x;
         
-        while (true) {
+        while ( (max_xi - min_xi) > 1) {
             int c_xi = (min_xi + max_xi) / 2;
             
-            // Are we done?
-            if (max_xi == c_xi || min_xi == c_xi)
-                break;
-
-            float4 c_ex = svm_image_texture(kg, slot, (float)c_xi/width, 0.75, false, false);
+            float4 c_ex = svm_image_texture(kg, slot, (float)c_xi/(width-1), 0.75, false, false);
 
             // Narrow the range
             if (cox <= c_ex.x) {
@@ -424,13 +418,20 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
                 min_xi = c_xi;
                 min_xr = __float_as_int(c_ex.y);
             }
+            
+            // Are we done?
+            if (min_xi >= c_xi && max_xi <= (c_xi+1))
+                break;
         }
         
         kernel_assert(min_xr >= 0 && min_xr < width);
         kernel_assert(max_xr >= 0 && max_xr < width);
         
+        // Render
+        float grad = 1.0f;
+
         for (int t = min_xr; t <= max_xr; ++t) {
-            float4 ls0 = svm_image_texture(kg, slot, (float)t/width, 0.25, false, false);
+            float4 ls0 = svm_image_texture(kg, slot, (float)t/(width-1), 0.25, false, false);
 
             float2 p0,p1,co2;
             p0.x = ls0.x * curve_scale.x + curve_location.x;
@@ -443,12 +444,15 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
             // Line
             if (curve_type == 0) {
                 if (minimum_distance(p0, p1, co2) < curve_thickness) {
+
                     grad = 0.0f;
                     break;
                 }
 
             // Fill
             } else if (curve_type == 1) {
+                kernel_assert(p0.x <= p1.x);
+
                 if (co2.x < p0.x || co2.x >= p1.x)
                     continue;
 
@@ -461,7 +465,7 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 
             // Grad
             } else {
-            
+
                 float d = minimum_distance(p0, p1, co2);
                 if (d < curve_thickness) {
                     grad = min(grad, d/curve_thickness);
@@ -470,7 +474,7 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
             }
 
         }
-
+        
         f = make_float4((1.0f-grad) * fill_color.x + grad * background_color.x,
                         (1.0f-grad) * fill_color.y + grad * background_color.y,
                         (1.0f-grad) * fill_color.z + grad * background_color.z,
