@@ -451,8 +451,6 @@ ccl_device void svm_node_tex_curve(KernelGlobals *kg, ShaderData *sd, float *sta
 
             // Fill
             } else if (curve_type == 1) {
-                //std::cout << "Checked " << t << std::endl;
-
                 kernel_assert(p0.x <= p1.x);
 
                 if (co2.x < p0.x || co2.x >= p1.x)
