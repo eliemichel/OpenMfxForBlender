@@ -31,7 +31,6 @@ CryptomatteNode::CryptomatteNode(bNode *editorNode) : Node(editorNode)
 {
 	/* pass */
 }
-
 /* this is taken from alShaders/Cryptomatte/MurmurHash3.h:
  *
  * MurmurHash3 was written by Austin Appleby, and is placed in the public
@@ -49,9 +48,9 @@ CryptomatteNode::CryptomatteNode(bNode *editorNode) : Node(editorNode)
 
 #define BIG_CONSTANT(x) (x)
 
-// Other compilers
+/* Other compilers */
 
-#else	// defined(_MSC_VER)
+#else	/* defined(_MSC_VER) */
 
 #define	FORCE_INLINE inline __attribute__((always_inline))
 
@@ -70,11 +69,11 @@ inline uint64_t rotl64 ( uint64_t x, int8_t r )
 
 #define BIG_CONSTANT(x) (x##LLU)
 
-#endif // !defined(_MSC_VER)
+#endif /* !defined(_MSC_VER) */
 
-//-----------------------------------------------------------------------------
-// Block read - if your platform needs to do endian-swapping or can only
-// handle aligned reads, do the conversion here
+/* Block read - if your platform needs to do endian-swapping or can only
+ * handle aligned reads, do the conversion here
+ */
 
 FORCE_INLINE uint32_t getblock32 ( const uint32_t * p, int i )
 {
@@ -86,8 +85,7 @@ FORCE_INLINE uint64_t getblock64 ( const uint64_t * p, int i )
 	return p[i];
 }
 
-//-----------------------------------------------------------------------------
-// Finalization mix - force all bits of a hash block to avalanche
+/* Finalization mix - force all bits of a hash block to avalanche */
 
 FORCE_INLINE uint32_t fmix32 ( uint32_t h )
 {
@@ -100,8 +98,6 @@ FORCE_INLINE uint32_t fmix32 ( uint32_t h )
 	return h;
 }
 
-//----------
-
 FORCE_INLINE uint64_t fmix64 ( uint64_t k )
 {
 	k ^= k >> 33;
@@ -112,8 +108,6 @@ FORCE_INLINE uint64_t fmix64 ( uint64_t k )
 	
 	return k;
 }
-
-//-----------------------------------------------------------------------------
 
 static void MurmurHash3_x86_32 ( const void * key, int len,
 						 uint32_t seed, void * out )
@@ -126,8 +120,7 @@ static void MurmurHash3_x86_32 ( const void * key, int len,
 	const uint32_t c1 = 0xcc9e2d51;
 	const uint32_t c2 = 0x1b873593;
 	
-	//----------
-	// body
+	/* body */
 	
 	const uint32_t * blocks = (const uint32_t *)(data + nblocks*4);
 	
@@ -144,8 +137,7 @@ static void MurmurHash3_x86_32 ( const void * key, int len,
 		h1 = h1*5+0xe6546b64;
 	}
 	
-	//----------
-	// tail
+	/* tail */
 	
 	const uint8_t * tail = (const uint8_t*)(data + nblocks*4);
 	
@@ -159,8 +151,7 @@ static void MurmurHash3_x86_32 ( const void * key, int len,
 			k1 *= c1; k1 = ROTL32(k1,15); k1 *= c2; h1 ^= k1;
 	};
 	
-	//----------
-	// finalization
+	/* finalization */
 	
 	h1 ^= len;
 	
@@ -174,89 +165,15 @@ static void MurmurHash3_x86_32 ( const void * key, int len,
 static inline float hash_to_float(uint32_t hash) {
 	uint32_t mantissa = hash & (( 1 << 23) - 1);
 	uint32_t exponent = (hash >> 23) & ((1 << 8) - 1);
-	exponent = std::max(exponent, (uint32_t) 1);
-	exponent = std::min(exponent, (uint32_t) 254);
+	exponent = max(exponent, (uint32_t) 1);
+	exponent = min(exponent, (uint32_t) 254);
 	exponent = exponent << 23;
 	uint32_t sign = (hash >> 31);
 	sign = sign << 31;
 	uint32_t float_bits = sign | exponent | mantissa;
 	float f;
-	std::memcpy(&f, &float_bits, 4);
+	memcpy(&f, &float_bits, 4);
 	return f;
-}
-
-extern "C" void cryptomatte_add(NodeCryptomatte* n, float f)
-{
-	static char number[64];
-	BLI_snprintf(number, sizeof(number), "<%.9g>", f);
-	if(BLI_strnlen(n->matte_id, sizeof(n->matte_id)) == 0)
-	{
-		BLI_strncpy(n->matte_id, number, sizeof(n->matte_id));
-		return;
-	}
-	
-	// search if we already have the number
-	std::istringstream ss(n->matte_id);
-	while( ss.good() )
-	{
-		std::string token;
-		getline(ss, token, ',');
-		size_t first = token.find_first_not_of(' ');
-		size_t last = token.find_last_not_of(' ');
-		token = token.substr(first, (last-first+1));
-		if (*token.begin() == '<' && *(--token.end()) == '>') {
-			if(std::string(number) == token)
-				return;
-		} else {
-			uint32_t hash = 0;
-			MurmurHash3_x86_32(token.c_str(), token.length(), 0, &hash);
-			if (f == hash_to_float(hash))
-				return;
-		}
-	}
-
-	std::string matte_id = n->matte_id;
-	matte_id += ", ";
-	matte_id += number;
-	BLI_strncpy(n->matte_id, matte_id.c_str(), sizeof(n->matte_id));
-}
-
-extern "C" void cryptomatte_remove(NodeCryptomatte*n, float f)
-{
-	if(::strnlen(n->matte_id, sizeof(n->matte_id)) == 0)
-	{
-		// empty string, nothing to remove
-		return;
-	}
-
-	std::istringstream ss(n->matte_id);
-	std::ostringstream os;
-	bool first_string = true;
-	while( ss.good() )
-	{
-		std::string token;
-		getline(ss, token, ',');
-		size_t first = token.find_first_not_of(' ');
-		size_t last = token.find_last_not_of(' ');
-		token = token.substr(first, (last-first+1));
-		if (*token.begin() == '<' && *(--token.end()) == '>') {
-			float fx = atof(token.substr(1, token.length()-2).c_str());
-			if(f == fx)
-				continue;
-		} else {
-			uint32_t hash = 0;
-			MurmurHash3_x86_32(token.c_str(), token.length(), 0, &hash);
-			if (f == hash_to_float(hash))
-				continue;
-		}
-		if(!first_string) {
-			os << ", ";
-		} else {
-			first_string = false;
-		}
-		os << token;
-	}
-	BLI_strncpy(n->matte_id, os.str().c_str(), sizeof(n->matte_id));
 }
 
 void CryptomatteNode::convertToOperations(NodeConverter &converter, const CompositorContext &/*context*/) const
@@ -281,6 +198,9 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 				getline(ss, token, ',');
 				size_t first = token.find_first_not_of(' ');
 				size_t last = token.find_last_not_of(' ');
+				if (first == std::string::npos || last == std::string::npos) {
+					break;
+				}
 				token = token.substr(first, (last - first + 1));
 				if (*token.begin() == '<' && *(--token.end()) == '>')
 					operation->addObjectIndex(atof(token.substr(1, token.length() - 2).c_str()));
