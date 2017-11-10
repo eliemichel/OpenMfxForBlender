@@ -49,9 +49,92 @@
 #include "util/util_system.h"
 #include "util/util_thread.h"
 
-#include "render/coverage.h"
-
 CCL_NAMESPACE_BEGIN
+
+/* For Cryptomatte, this code ordinarily lives in coverage.cpp.
+ * Temprorarily moved here to get it to build on Linux (gcc?)
+ */
+
+
+static inline void kernel_write_id_slots(float *buffer, int num_slots, float id, float weight, bool init)
+{
+	kernel_assert(id != ID_NONE);
+
+	if(weight == 0.0f) {
+		return;
+	}
+
+	if(init) {
+		for(int slot = 0; slot < num_slots; slot++) {
+			buffer[slot*ID_SLOT_SIZE + 0] = ID_NONE;
+			buffer[slot*ID_SLOT_SIZE + 1] = 0.0f;
+		}
+	} else {
+		init = false;
+	}
+
+	for(int slot = 0; slot < num_slots; slot++) {
+		float *slot_id = (&buffer[slot*ID_SLOT_SIZE + 0]);
+		float *slot_weight = &buffer[slot*ID_SLOT_SIZE + 1];
+
+		/* If the loop reaches an empty slot, the ID isn't in any slot yet - so add it! */
+		if(*slot_weight == 0.0f) {
+			kernel_assert(*slot_id == ID_NONE);
+			*slot_id = id;
+			*slot_weight = weight;
+			break;
+		}
+		/* If there already is a slot for that ID, add the weight. */
+		else if(*slot_id == id) {
+			*slot_weight += weight;
+			break;
+		}
+	}
+}
+
+static bool crypomatte_comp(const std::pair<float, float>& i, const std::pair<float, float> j) { return i.first > j.first; }
+
+int flatten_coverage(KernelGlobals *kg, vector<map<float, float> > & coverage, const RenderTile &tile, const int aov_index)
+{
+	/* sort the coverage map and write it to the output */
+	int index = 0;
+	for(int y = 0; y < tile.h; y++) {
+		for(int x = 0; x < tile.w; x++) {
+			const map<float, float>& pixel = coverage[index];
+			if(!pixel.empty()) {
+				/* buffer offset */
+				int index = x + y*tile.stride;
+				int pass_stride = kg->__data.film.pass_stride;
+				float *buffer = (float*)tile.buffer + index*pass_stride;
+
+				/* sort the cryptomatte pixel */
+				vector<std::pair<float, float> > sorted_pixel;
+				for(map<float, float>::const_iterator it = pixel.begin(); it != pixel.end(); ++it) {
+					sorted_pixel.push_back(std::make_pair(it->second, it->first));
+				}
+				sort(sorted_pixel.begin(), sorted_pixel.end(), crypomatte_comp);
+				int num_slots = 2 * (kg->__data.film.use_cryptomatte & 255);
+				if(sorted_pixel.size() > num_slots) {
+					float leftover = 0.0f;
+					for(vector<pair<float, float> >::iterator it = sorted_pixel.begin()+num_slots; it != sorted_pixel.end(); it++) {
+						leftover += it->first;
+					}
+					sorted_pixel[num_slots-1].first += leftover;
+				}
+				int limit = min(num_slots, sorted_pixel.size());
+				for(int i = 0; i < limit; i++) {
+					int pass_offset = (kg->__data.film.pass_aov[aov_index] & ~(1 << 31));
+					kernel_write_id_slots(buffer + pass_offset, 2 * (kg->__data.film.use_cryptomatte & 255), sorted_pixel[i].second, sorted_pixel[i].first, i == 0);
+				}
+			}
+			index++;
+		}
+	}
+
+	return kernel_data.film.use_cryptomatte & 255;
+}
+
+/* End coverage.cpp */
 
 class CPUDevice;
 
@@ -399,9 +482,13 @@ public:
 
 		/* cryptomatte data. This needs a better place than here. */
 		vector<map<float, float> >coverage_object;
+		vector<map<float, float> >coverage_object_index;
 		vector<map<float, float> >coverage_material;
+		vector<map<float, float> >coverage_material_index;
+		vector<map<float, float> >coverage_asset;
 
-		kg.coverage_object = kg.coverage_material = NULL;
+		kg.coverage_object = kg.coverage_material = kg.coverage_asset = NULL;
+		kg.coverage_object_index = kg.coverage_material_index = NULL;
 
 		while(task.acquire_tile(this, tile)) {
 			if(kg.__data.film.use_cryptomatte & CRYPT_ACCURATE) {
@@ -409,9 +496,21 @@ public:
 					coverage_object.clear();
 					coverage_object.resize(tile.w * tile.h);
 				}
+				if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT_PASS_INDEX) {
+					coverage_object_index.clear();
+					coverage_object_index.resize(tile.w * tile.h);
+				}
 				if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
 					coverage_material.clear();
 					coverage_material.resize(tile.w * tile.h);
+				}
+				if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL_PASS_INDEX) {
+					coverage_material_index.clear();
+					coverage_material_index.resize(tile.w * tile.h);
+				}
+				if(kg.__data.film.use_cryptomatte & CRYPT_ASSET) {
+					coverage_asset.clear();
+					coverage_asset.resize(tile.w * tile.h);
 				}
 			}
 			float *render_buffer = (float*)tile.buffer;
@@ -431,8 +530,17 @@ public:
 							if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT) {
 								kg.coverage_object = &coverage_object[tile.w * (y - tile.y) + x - tile.x];
 							}
+							if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT_PASS_INDEX) {
+								kg.coverage_object_index = &coverage_object_index[tile.w * (y - tile.y) + x - tile.x];
+							}
 							if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
 								kg.coverage_material = &coverage_material[tile.w * (y - tile.y) + x - tile.x];
+							}
+							if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL_PASS_INDEX) {
+								kg.coverage_material_index = &coverage_material_index[tile.w * (y - tile.y) + x - tile.x];
+							}
+							if(kg.__data.film.use_cryptomatte & CRYPT_ASSET) {
+								kg.coverage_asset = &coverage_asset[tile.w * (y - tile.y) + x - tile.x];
 							}
 						}
 						path_trace_kernel(&kg, render_buffer, rng_state,
@@ -448,8 +556,17 @@ public:
 						if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT) {
 							aov_index += flatten_coverage(&kg, coverage_object, tile, aov_index);
 						}
+						if(kg.__data.film.use_cryptomatte & CRYPT_OBJECT_PASS_INDEX) {
+							aov_index += flatten_coverage(&kg, coverage_object_index, tile, aov_index);
+						}
 						if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL) {
 							aov_index += flatten_coverage(&kg, coverage_material, tile, aov_index);
+						}
+						if(kg.__data.film.use_cryptomatte & CRYPT_MATERIAL_PASS_INDEX) {
+							aov_index += flatten_coverage(&kg, coverage_material_index, tile, aov_index);
+						}
+						if(kg.__data.film.use_cryptomatte & CRYPT_ASSET) {
+							aov_index += flatten_coverage(&kg, coverage_asset, tile, aov_index);
 						}
 					}
 				}

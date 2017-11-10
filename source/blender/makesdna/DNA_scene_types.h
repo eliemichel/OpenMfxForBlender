@@ -322,6 +322,12 @@ typedef enum ScenePassType {
 #define RE_PASSNAME_SUBSURFACE_INDIRECT "SubsurfaceInd"
 #define RE_PASSNAME_SUBSURFACE_COLOR "SubsurfaceCol"
 
+/* Should these be replaced with R_IMF_CHAN_DEPTH_* #defines? */
+#define RE_PIXEL_TYPE_ANY 0
+#define RE_PIXEL_TYPE_HALF 1
+#define RE_PIXEL_TYPE_FLOAT 2
+
+
 /* note, srl->passflag is treestore element 'nr' in outliner, short still... */
 
 /* View - MultiView */

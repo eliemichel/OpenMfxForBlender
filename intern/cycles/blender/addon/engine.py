@@ -242,6 +242,15 @@ def register_passes(engine, scene, srl):
     if(srl.cycles.use_pass_crypto_object):
         for i in range(0, srl.cycles.pass_crypto_depth, 2):
             engine.register_pass(scene, srl, "AOV uCryptoObject" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
+    if(srl.cycles.use_pass_crypto_object_index):
+        for i in range(0, srl.cycles.pass_crypto_depth, 2):
+            engine.register_pass(scene, srl, "AOV uCryptoObjectIndex" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
     if(srl.cycles.use_pass_crypto_material):
         for i in range(0, srl.cycles.pass_crypto_depth, 2):
             engine.register_pass(scene, srl, "AOV uCryptoMaterial" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
+    if(srl.cycles.use_pass_crypto_material_index):
+        for i in range(0, srl.cycles.pass_crypto_depth, 2):
+            engine.register_pass(scene, srl, "AOV uCryptoMaterialIndex" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
+    if(srl.cycles.use_pass_crypto_asset):
+        for i in range(0, srl.cycles.pass_crypto_depth, 2):
+            engine.register_pass(scene, srl, "AOV uCryptoAsset" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
