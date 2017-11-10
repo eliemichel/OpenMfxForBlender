@@ -4992,11 +4992,21 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 
 	prop = RNA_def_property(srna, "frame_offset", PROP_INT, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Frame Offset", "Offset frame number to read from cache");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "frame_override", PROP_INT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Frame Override", "Override frame number to read from cache");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
 	prop = RNA_def_property(srna, "hide_volume", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_HIDE_VOLUME);
 	RNA_def_property_ui_text(prop, "Hide Volume", "Display only bounding box (faster playback)");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "use_frame_override", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_OVERRIDE_FRAME);
+	RNA_def_property_ui_text(prop, "Use Override", "Use manual frame override");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
 	prop = RNA_def_property(srna, "show_axis_convert", PROP_BOOLEAN, PROP_NONE);

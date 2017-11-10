@@ -1625,8 +1625,11 @@ typedef struct OpenVDBModifierData {
 
 	int numgrids;
 	int frame_offset;
+	int frame_override;
 
 	int flags;
+
+	int pad;
 
 	short up_axis;
 	short front_axis;
@@ -1636,7 +1639,8 @@ typedef struct OpenVDBModifierData {
 
 /* OpenVDBModifierData flags */
 enum {
-	MOD_OPENVDB_HIDE_VOLUME = (1 << 0),
+	MOD_OPENVDB_HIDE_VOLUME    = (1 << 0),
+	MOD_OPENVDB_OVERRIDE_FRAME = (1 << 1),
 };
 
 enum {

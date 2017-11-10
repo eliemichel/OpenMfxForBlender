@@ -714,6 +714,14 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             layout.prop(md, "front_axis")
 
         layout.prop(md, "frame_offset")
+
+        row = layout.row()
+        row.prop(md, "use_frame_override")
+
+        sub = row.row()
+        sub.active = md.use_frame_override
+        sub.prop(md, "frame_override")
+
         layout.prop(md, "hide_volume")
 
     def PARTICLE_INSTANCE(self, layout, ob, md):

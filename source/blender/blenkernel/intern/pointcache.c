@@ -2070,7 +2070,10 @@ static void openvdb_filepath(PTCacheID *pid, char *filepath, int cfra)
 	unsigned short numlen;
 
 	BLI_stringdec(vdbmd->filepath, head, tail, &numlen);
-	BLI_stringenc(filepath, head, tail, numlen, cfra + vdbmd->frame_offset);
+	BLI_stringenc(filepath, head, tail, numlen,
+	              vdbmd->flags & MOD_OPENVDB_OVERRIDE_FRAME ?
+	                  (vdbmd->frame_override) :
+	                  (cfra + vdbmd->frame_offset));
 
 	if (BLI_path_is_rel(filepath)) {
 		BLI_path_abs(filepath, blendfilename);
