@@ -92,8 +92,7 @@ typedef struct RenderPass {
 	char fullname[64]; /* EXR_PASS_MAXNAME */
 	char view[64];		/* EXR_VIEW_MAXNAME */
 	int view_id;	/* quick lookup */
-
-	int pad;
+	int pixel_type; /* RE_PIXEL_TYPE_* */
 } RenderPass;
 
 

@@ -248,7 +248,7 @@ void RE_engine_update_result(RenderEngine *engine, RenderResult *result)
 	}
 }
 
-void RE_engine_add_pass(RenderEngine *engine, const char *name, int channels, const char *chan_id, const char *layername)
+void RE_engine_add_pass(RenderEngine *engine, const char *name, int channels, const char *chan_id, const char *layername, int pixel_type)
 {
 	Render *re = engine->re;
 
@@ -256,7 +256,7 @@ void RE_engine_add_pass(RenderEngine *engine, const char *name, int channels, co
 		return;
 	}
 
-	render_result_add_pass(re->result, name, channels, chan_id, layername, NULL);
+	render_result_add_pass(re->result, name, channels, chan_id, layername, NULL, pixel_type);
 }
 
 void RE_engine_end_result(RenderEngine *engine, RenderResult *result, int cancel, int merge_results)

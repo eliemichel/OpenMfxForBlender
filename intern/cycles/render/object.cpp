@@ -416,11 +416,18 @@ void ObjectManager::device_update_object_transform(UpdateObejctTransformState *s
 	objects[offset+9] = make_float4(ob->dupli_generated[0], ob->dupli_generated[1], ob->dupli_generated[2], __int_as_float(numkeys));
 	objects[offset+10] = make_float4(ob->dupli_uv[0], ob->dupli_uv[1], __int_as_float(numsteps), __int_as_float(numverts));
 	
-	/* light linking and cyrptomatte */
-	uint32_t hash;
-	MurmurHash3_x86_32(ob->name.c_str(), ob->name.length(), 0, &hash);
-	
-    objects[offset+11] = make_float4(__uint_as_float(ob->light_linking), __uint_as_float(ob->shadow_linking), hash_to_float(hash), 0.0f);
+	/* Light linking. */
+	objects[offset+11] = make_float4(__uint_as_float(ob->light_linking), __uint_as_float(ob->shadow_linking), 0.0f, 0.0f);
+
+	/* Cryptomatte. */
+	uint32_t hash_name, hash_asset, hash_pass;
+	MurmurHash3_x86_32(ob->name.c_str(), ob->name.length(), 0, &hash_name);
+	MurmurHash3_x86_32(ob->asset_name.c_str(), ob->asset_name.length(), 0, &hash_asset);
+	std::ostringstream pass_stream;
+	pass_stream << ob->pass_id;
+	ustring pass(pass_stream.str());
+	MurmurHash3_x86_32(pass.c_str(), pass.length(), 0, &hash_pass);
+	objects[offset+12] = make_float4(hash_to_float(hash_name), hash_to_float(hash_asset), hash_to_float(hash_pass), 0.0f);
 
 	/* Object flag. */
 	if(ob->use_holdout) {
