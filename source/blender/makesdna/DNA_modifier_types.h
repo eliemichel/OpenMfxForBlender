@@ -1639,8 +1639,9 @@ typedef struct OpenVDBModifierData {
 
 /* OpenVDBModifierData flags */
 enum {
-	MOD_OPENVDB_HIDE_VOLUME    = (1 << 0),
-	MOD_OPENVDB_OVERRIDE_FRAME = (1 << 1),
+	MOD_OPENVDB_HIDE_VOLUME     = (1 << 0),
+	MOD_OPENVDB_OVERRIDE_FRAME  = (1 << 1),
+	MOD_OPENVDB_HIDE_UNSELECTED = (1 << 2),
 };
 
 enum {
