@@ -43,11 +43,6 @@ ccl_device_inline float3 motion_triangle_refine(KernelGlobals *kg,
 	float t = isect->t;
 
 #ifdef __INTERSECTION_REFINE__
-#  ifdef __EMBREE__
-	if(kernel_data.bvh.scene) {
-		return P + D*t;
-	}
-#  endif
 	if(isect->object != OBJECT_NONE) {
 		if(UNLIKELY(t == 0.0f)) {
 			return P;
@@ -119,11 +114,6 @@ float3 motion_triangle_refine_subsurface(KernelGlobals *kg,
 	float t = isect->t;
 
 #  ifdef __INTERSECTION_REFINE__
-#  ifdef __EMBREE__
-	if(kernel_data.bvh.scene) {
-		return P + D*t;
-	}
-#  endif
 	if(isect->object != OBJECT_NONE) {
 #    ifdef __OBJECT_MOTION__
 		Transform tfm = sd->ob_itfm;
