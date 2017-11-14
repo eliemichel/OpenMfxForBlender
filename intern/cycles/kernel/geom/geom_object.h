@@ -107,6 +107,12 @@ ccl_device_inline Transform object_fetch_transform_motion(KernelGlobals *kg, int
 	motion.post_y = kernel_tex_fetch(__objects, offset + 7);
 
 	Transform tfm;
+#ifdef __EMBREE__
+	if(kernel_data.bvh.scene) {
+		transform_motion_interpolate_straight(&tfm, &motion, time);
+	}
+	else
+#endif
 	transform_motion_interpolate(&tfm, &motion, time);
 
 	return tfm;
