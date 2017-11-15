@@ -6833,31 +6833,68 @@ static void def_cmp_sunbeams(StructRNA *srna)
 
 static void def_cmp_motionblur2d(StructRNA *srna)
 {
-	PropertyRNA *prop;
+    PropertyRNA *prop;
 
-	RNA_def_struct_sdna_from(srna, "NodeMotionBlur2D", "storage");
+    RNA_def_struct_sdna_from(srna, "NodeMotionBlur2D", "storage");
 
-	prop = RNA_def_property(srna, "amount", PROP_FLOAT, PROP_NONE);
-	RNA_def_property_float_sdna(prop, NULL, "amount");
-	RNA_def_property_range(prop, -100.0f, 100.0f);
-	RNA_def_property_ui_range(prop, -10.0f, 10.0f, 10, 3);
-	RNA_def_property_ui_text(prop, "Amount", "Amount of Motion Blur");
-	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+    prop = RNA_def_property(srna, "amount", PROP_FLOAT, PROP_NONE);
+    RNA_def_property_float_sdna(prop, NULL, "amount");
+    RNA_def_property_range(prop, -100.0f, 100.0f);
+    RNA_def_property_ui_range(prop, -10.0f, 10.0f, 10, 3);
+    RNA_def_property_ui_text(prop, "Amount", "Amount of Motion Blur");
+    RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 
-	prop = RNA_def_property(srna, "multisample", PROP_INT, PROP_NONE);
-	RNA_def_property_int_sdna(prop, NULL, "multisample");
-	RNA_def_property_range(prop, 1, 8);
-	RNA_def_property_ui_range(prop, 1, 8, 1, 1);
-	RNA_def_property_ui_text(prop, "Multisampling", "Multisampling amount");
-	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+    prop = RNA_def_property(srna, "multisample", PROP_INT, PROP_NONE);
+    RNA_def_property_int_sdna(prop, NULL, "multisample");
+    RNA_def_property_range(prop, 1, 8);
+    RNA_def_property_ui_range(prop, 1, 8, 1, 1);
+    RNA_def_property_ui_text(prop, "Multisampling", "Multisampling amount");
+    RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 
-	prop = RNA_def_property(srna, "fat_mode", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_ui_text(prop, "Fat Mode", "Turn on Fat mode");
-	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+    prop = RNA_def_property(srna, "fat_mode", PROP_BOOLEAN, PROP_NONE);
+    RNA_def_property_ui_text(prop, "Fat Mode", "Turn on Fat mode");
+    RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 
-	prop = RNA_def_property(srna, "fill_alpha_holes", PROP_BOOLEAN, PROP_NONE);
-	RNA_def_property_ui_text(prop, "Fill Alpha Holes", "Fill alpha holes");
-	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+    prop = RNA_def_property(srna, "fill_alpha_holes", PROP_BOOLEAN, PROP_NONE);
+    RNA_def_property_ui_text(prop, "Fill Alpha Holes", "Fill alpha holes");
+    RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+
+}
+
+static void def_cmp_othereye(StructRNA *srna)
+{
+    PropertyRNA *prop;
+
+    RNA_def_struct_sdna_from(srna, "NodeOtherEye", "storage");
+
+    prop = RNA_def_property(srna, "camera", PROP_POINTER, PROP_NONE);
+    //RNA_def_property_pointer_sdna(prop, NULL, "id");
+    RNA_def_property_struct_type(prop, "Camera");
+    RNA_def_property_flag(prop, PROP_EDITABLE);
+    RNA_def_property_ui_text(prop, "Camera", "Camera used for rendering");
+    RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+
+//    prop = RNA_def_property(srna, "amount", PROP_FLOAT, PROP_NONE);
+//    RNA_def_property_float_sdna(prop, NULL, "amount");
+//    RNA_def_property_range(prop, -100.0f, 100.0f);
+//    RNA_def_property_ui_range(prop, -10.0f, 10.0f, 10, 3);
+//    RNA_def_property_ui_text(prop, "Amount", "Amount of Motion Blur");
+//    RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+//
+//    prop = RNA_def_property(srna, "multisample", PROP_INT, PROP_NONE);
+//    RNA_def_property_int_sdna(prop, NULL, "multisample");
+//    RNA_def_property_range(prop, 1, 8);
+//    RNA_def_property_ui_range(prop, 1, 8, 1, 1);
+//    RNA_def_property_ui_text(prop, "Multisampling", "Multisampling amount");
+//    RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+//
+//    prop = RNA_def_property(srna, "fat_mode", PROP_BOOLEAN, PROP_NONE);
+//    RNA_def_property_ui_text(prop, "Fat Mode", "Turn on Fat mode");
+//    RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+//
+//    prop = RNA_def_property(srna, "fill_alpha_holes", PROP_BOOLEAN, PROP_NONE);
+//    RNA_def_property_ui_text(prop, "Fill Alpha Holes", "Fill alpha holes");
+//    RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 
 }
 

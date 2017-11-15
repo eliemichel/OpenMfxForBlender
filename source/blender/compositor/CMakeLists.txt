@@ -280,10 +280,14 @@ set(SRC
 	nodes/COM_VectorBlurNode.h
 	operations/COM_VectorBlurOperation.cpp
 	operations/COM_VectorBlurOperation.h
-	nodes/COM_MotionBlur2DNode.cpp
-	nodes/COM_MotionBlur2DNode.h
+    nodes/COM_MotionBlur2DNode.cpp
+    nodes/COM_MotionBlur2DNode.h
 	operations/COM_MotionBlur2DOperation.cpp
 	operations/COM_MotionBlur2DOperation.h
+    nodes/COM_OtherEyeNode.cpp
+    nodes/COM_OtherEyeNode.h
+    operations/COM_OtherEyeOperation.cpp
+    operations/COM_OtherEyeOperation.h
 
 	nodes/COM_FilterNode.cpp
 	nodes/COM_FilterNode.h
@@ -549,6 +553,7 @@ set(SRC
 
 list(APPEND INC
 	${CMAKE_CURRENT_BINARY_DIR}/operations
+	${CMAKE_BINARY_DIR}/source/blender/makesrna/intern
 )
 
 data_to_c(${CMAKE_CURRENT_SOURCE_DIR}/operations/COM_OpenCLKernels.cl

@@ -102,6 +102,7 @@ extern "C" {
 #include "COM_Stabilize2dNode.h"
 #include "COM_SunBeamsNode.h"
 #include "COM_MotionBlur2DNode.h"
+#include "COM_OtherEyeNode.h"
 #include "COM_SwitchNode.h"
 #include "COM_SwitchViewNode.h"
 #include "COM_TextureNode.h"
@@ -408,9 +409,12 @@ Node *Converter::convert(bNode *b_node)
 		case CMP_NODE_SUNBEAMS:
 			node = new SunBeamsNode(b_node);
 			break;
-		case CMP_NODE_MOTIONBLUR2D:
-			node = new MotionBlur2DNode(b_node);
-			break;
+        case CMP_NODE_MOTIONBLUR2D:
+            node = new MotionBlur2DNode(b_node);
+            break;
+        case CMP_NODE_OTHEREYE:
+            node = new OtherEyeNode(b_node);
+            break;
 		case CMP_NODE_CRYPTOMATTE:
 			node = new CryptomatteNode(b_node);
 			break;

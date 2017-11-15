@@ -25,7 +25,7 @@
 * ***** END GPL LICENSE BLOCK *****
 */
 
-/** \file blender/nodes/composite/nodes/node_composite_motionblur2d.c
+/** \file blender/nodes/composite/nodes/node_composite_othereye.c
 *  \ingroup cmpnodes
 */
 
@@ -33,14 +33,14 @@
 #include "BKE_context.h"
 
 static bNodeSocketTemplate inputs[] = {
-	{ SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f },
-	{ SOCK_FLOAT, 1, N_("Speed"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_VELOCITY },
-	{ SOCK_FLOAT, 1, N_("Z"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE },
-	{ SOCK_FLOAT, 1, N_("Object Index"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f },
+    { SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f },
+    { SOCK_FLOAT, 1, N_("Z"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE },
 	{ -1, 0, "" }
 };
 static bNodeSocketTemplate outputs[] = {
-	{ SOCK_RGBA, 0, N_("Image") },
+    { SOCK_RGBA, 0, N_("Orig Image") },
+    { SOCK_RGBA, 0, N_("Other Image") },
+    { SOCK_RGBA, 0, N_("Render Mask") },
 	{ -1, 0, "" }
 };
 
@@ -48,24 +48,23 @@ static void init(const bContext *C, PointerRNA *ptr)
 {
 	bNode *node = ptr->data;
 	Scene *scene = CTX_data_scene(C);
-	NodeMotionBlur2D *user = MEM_callocN(sizeof(NodeMotionBlur2D), "motion blur 2D user");
+	NodeOtherEye *user = MEM_callocN(sizeof(NodeOtherEye), "other eye");
 
 	node->id = (ID *)scene->clip;
 	node->storage = user;
-	user->fat_mode = false;
-	user->amount = 1.0f;
-	user->multisample = 1;
-	user->fill_alpha_holes = true;
+//    user->fat_mode = false;
+//    user->amount = 1.0f;
+//    user->multisample = 1;
+//    user->fill_alpha_holes = true;
 }
 
-void register_node_type_cmp_motionblur2d(void)
+void register_node_type_cmp_othereye(void)
 {
 	static bNodeType ntype;
 
-	cmp_node_type_base(&ntype, CMP_NODE_MOTIONBLUR2D, "Motion Blur 2D", NODE_CLASS_OP_FILTER, 0);
+	cmp_node_type_base(&ntype, CMP_NODE_OTHEREYE, "Other Eye", NODE_CLASS_OP_FILTER, 0);
 	node_type_socket_templates(&ntype, inputs, outputs);
 	ntype.initfunc_api = init;
-	node_type_storage(&ntype, "NodeMotionBlur2D", node_free_standard_storage, node_copy_standard_storage);
-
+	node_type_storage(&ntype, "NodeOtherEye", node_free_standard_storage, node_copy_standard_storage);
 	nodeRegisterType(&ntype);
 }

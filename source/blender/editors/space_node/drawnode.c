@@ -2497,16 +2497,32 @@ static void node_composit_buts_sunbeams(uiLayout *layout, bContext *UNUSED(C), P
 
 static void node_composit_buts_motionblur2d(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
-	bNode *node = ptr->data;
-	NodeMotionBlur2D *data = node->storage;
-	
-	uiItemR(layout, ptr, "fat_mode", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
-	uiItemR(layout, ptr, "amount", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
-	uiItemR(layout, ptr, "multisample", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
-	
-		if (!data->fat_mode) {
-			uiItemR(layout, ptr, "fill_alpha_holes", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
-		}
+    bNode *node = ptr->data;
+    NodeMotionBlur2D *data = node->storage;
+    
+    uiItemR(layout, ptr, "fat_mode", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+    uiItemR(layout, ptr, "amount", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+    uiItemR(layout, ptr, "multisample", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+    
+        if (!data->fat_mode) {
+            uiItemR(layout, ptr, "fill_alpha_holes", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+        }
+}
+
+static void node_composit_buts_othereye(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+    bNode *node = ptr->data;
+    //NodeOtherEye *data = node->storage;
+    
+    uiItemR(layout, ptr, "object", 0, NULL, 0);
+
+//    uiItemR(layout, ptr, "fat_mode", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+//    uiItemR(layout, ptr, "amount", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+//    uiItemR(layout, ptr, "multisample", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+//
+//        if (!data->fat_mode) {
+//            uiItemR(layout, ptr, "fill_alpha_holes", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+//        }
 }
 
 static void node_composit_buts_cryptomatte(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
@@ -2749,9 +2765,12 @@ static void node_composit_set_butfunc(bNodeType *ntype)
 		case CMP_NODE_SUNBEAMS:
 			ntype->draw_buttons = node_composit_buts_sunbeams;
 			break;
-		case CMP_NODE_MOTIONBLUR2D:
-			ntype->draw_buttons = node_composit_buts_motionblur2d;
-			break;
+        case CMP_NODE_MOTIONBLUR2D:
+            ntype->draw_buttons = node_composit_buts_motionblur2d;
+            break;
+        case CMP_NODE_OTHEREYE:
+            ntype->draw_buttons = node_composit_buts_othereye;
+            break;
 		case CMP_NODE_CRYPTOMATTE:
 			ntype->draw_buttons = node_composit_buts_cryptomatte;
 			ntype->draw_buttons_ex = node_composit_buts_cryptomatte_ex;

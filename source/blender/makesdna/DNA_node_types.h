@@ -752,8 +752,8 @@ typedef struct NodeTexBrick {
 
 typedef struct NodeTexCurve {
 	NodeTexBase base;
-	struct Object *object;  // Not used
-	int curve_type;
+	struct Object *object;
+    int curve_type;
     int pad;
 } NodeTexCurve;
 
@@ -905,14 +905,19 @@ typedef struct NodeSunBeams {
 } NodeSunBeams;
 
 typedef struct NodeMotionBlur2D {
-	int fat_mode;
-	float amount;
-	int multisample;
-	short blur_forwards;
-	short blur_backwards;
-	short fill_alpha_holes;
-	char pad[2];
+    int fat_mode;
+    float amount;
+    int multisample;
+    short blur_forwards;
+    short blur_backwards;
+    short fill_alpha_holes;
+    char pad[2];
 } NodeMotionBlur2D;
+
+typedef struct NodeOtherEye {
+    struct Object *camera;
+    char pad[8];
+} NodeOtherEye;
 
 typedef struct NodeCryptomatte {
 	float add[3];
