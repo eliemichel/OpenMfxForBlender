@@ -21,7 +21,9 @@
 
 #include "COM_OtherEyeOperation.h"
 #include "MEM_guardedalloc.h"
+#include "BKE_object.h"
 #include "BKE_camera.h"
+#include "DNA_object_types.h"
 
 #include <iostream>
 #include <limits>
@@ -79,17 +81,33 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
         float left_to_world[4][4];
         float world_to_right[4][4];
 
-        // Calcualte left
+        //
+        // Calculate left
+        //
+        
         CameraParams params;
+        
+        // View matrix inv
+        float viewinv[4][4];
+        float viewmat[4][4];
 
-        // window matrix, clipping and ortho
+        copy_m4_m4(viewinv, m_settings->left_camera->obmat);
+        normalize_m4(viewinv);
+        invert_m4_m4(viewmat, viewinv);
+
+        // Window matrix, clipping and ortho
         BKE_camera_params_init(&params);
         BKE_camera_params_from_object(&params, m_settings->left_camera);
         BKE_camera_params_compute_viewplane(&params, getWidth(), getHeight(), 1.0f, 1.0f);
         BKE_camera_params_compute_matrix(&params);
-
-        // Calculate right
         
+        mul_m4_m4m4(left_to_world, params.winmat, viewinv);
+
+        //
+        // Calculate right
+        //
+        
+        // TODO
 
         generateReprojection(color, depth, data, left_to_world, world_to_right);
 
