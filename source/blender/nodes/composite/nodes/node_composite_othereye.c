@@ -46,16 +46,7 @@ static bNodeSocketTemplate outputs[] = {
 
 static void init(const bContext *C, PointerRNA *ptr)
 {
-	bNode *node = ptr->data;
-	Scene *scene = CTX_data_scene(C);
-	NodeOtherEye *user = MEM_callocN(sizeof(NodeOtherEye), "other eye");
 
-	node->id = (ID *)scene->clip;
-	node->storage = user;
-//    user->fat_mode = false;
-//    user->amount = 1.0f;
-//    user->multisample = 1;
-//    user->fill_alpha_holes = true;
 }
 
 void register_node_type_cmp_othereye(void)
@@ -65,6 +56,5 @@ void register_node_type_cmp_othereye(void)
 	cmp_node_type_base(&ntype, CMP_NODE_OTHEREYE, "Other Eye", NODE_CLASS_OP_FILTER, 0);
 	node_type_socket_templates(&ntype, inputs, outputs);
 	ntype.initfunc_api = init;
-	node_type_storage(&ntype, "NodeOtherEye", node_free_standard_storage, node_copy_standard_storage);
 	nodeRegisterType(&ntype);
 }

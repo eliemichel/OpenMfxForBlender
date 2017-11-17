@@ -26,10 +26,9 @@
 void OtherEyeNode::convertToOperations(NodeConverter &converter, const CompositorContext &/*context*/) const
 {
 	bNode *node = this->getbNode();
-	NodeOtherEye *motionBlurSettings = (NodeOtherEye *)node->storage;
 
 	OtherEyeOperation *operation = new OtherEyeOperation();
-	operation->setMotionBlurSettings(motionBlurSettings);
+	operation->setCamera(node->id);
 
 	//	if (!this->getInputSocket(0)->isLinked() && this->getInputSocket(1)->isLinked()) {
 	//		operation->setResolutionInputSocketIndex(1);

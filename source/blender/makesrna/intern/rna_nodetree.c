@@ -6865,20 +6865,11 @@ static void def_cmp_othereye(StructRNA *srna)
 {
     PropertyRNA *prop;
 
-    RNA_def_struct_sdna_from(srna, "NodeOtherEye", "storage");
-
-    prop = RNA_def_property(srna, "left_camera", PROP_POINTER, PROP_NONE);
-    //RNA_def_property_pointer_sdna(prop, NULL, "id");
+    prop = RNA_def_property(srna, "camera", PROP_POINTER, PROP_NONE);
+    RNA_def_property_pointer_sdna(prop, NULL, "id");
     RNA_def_property_struct_type(prop, "Object");
     RNA_def_property_flag(prop, PROP_EDITABLE);
-    RNA_def_property_ui_text(prop, "Left Camera", "Left camera used for rendering");
-    RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
-
-    prop = RNA_def_property(srna, "right_camera", PROP_POINTER, PROP_NONE);
-    //RNA_def_property_pointer_sdna(prop, NULL, "id");
-    RNA_def_property_struct_type(prop, "Object");
-    RNA_def_property_flag(prop, PROP_EDITABLE);
-    RNA_def_property_ui_text(prop, "Right Camera", "Right Camera for reprojection");
+    RNA_def_property_ui_text(prop, "Camera", "Camera used for rendering");
     RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 }
 

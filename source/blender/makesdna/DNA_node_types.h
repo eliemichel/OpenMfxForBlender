@@ -914,11 +914,6 @@ typedef struct NodeMotionBlur2D {
     char pad[2];
 } NodeMotionBlur2D;
 
-typedef struct NodeOtherEye {
-    struct Object *left_camera;
-    struct Object *right_camera;
-} NodeOtherEye;
-
 typedef struct NodeCryptomatte {
 	float add[3];
 	float remove[3];

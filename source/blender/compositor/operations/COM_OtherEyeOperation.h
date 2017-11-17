@@ -33,7 +33,7 @@ private:
 	SocketReader *m_inputImageProgram;
 	SocketReader *m_inputDepthProgram;
 
-	NodeOtherEye *m_settings;
+	struct ID *m_camera;
 	float *m_cachedInstance;
 	
     void drawTriangle(float *data, float *depth_buffer,
@@ -54,7 +54,7 @@ public:
 	bool determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output);
 	void *initializeTileData(rcti *rect);
 
-	void setMotionBlurSettings(NodeOtherEye *settings) { this->m_settings = settings; }
+	void setCamera(struct ID *camera) { m_camera = camera; }
 
 	/**
 	* Initialize the execution

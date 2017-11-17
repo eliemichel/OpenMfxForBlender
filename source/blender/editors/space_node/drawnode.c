@@ -2512,18 +2512,7 @@ static void node_composit_buts_motionblur2d(uiLayout *layout, bContext *UNUSED(C
 static void node_composit_buts_othereye(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
     bNode *node = ptr->data;
-    //NodeOtherEye *data = node->storage;
-    
-    uiItemR(layout, ptr, "left_camera", 0, NULL, 0);
-    uiItemR(layout, ptr, "right_camera", 0, NULL, 0);
-
-//    uiItemR(layout, ptr, "fat_mode", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
-//    uiItemR(layout, ptr, "amount", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
-//    uiItemR(layout, ptr, "multisample", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
-//
-//        if (!data->fat_mode) {
-//            uiItemR(layout, ptr, "fill_alpha_holes", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
-//        }
+    uiItemR(layout, ptr, "camera", 0, NULL, 0);
 }
 
 static void node_composit_buts_cryptomatte(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)

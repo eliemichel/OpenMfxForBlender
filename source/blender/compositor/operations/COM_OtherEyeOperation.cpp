@@ -38,7 +38,6 @@ OtherEyeOperation::OtherEyeOperation() : NodeOperation()
     addOutputSocket(COM_DT_COLOR); // Orig
     addOutputSocket(COM_DT_COLOR); // Other
     addOutputSocket(COM_DT_COLOR); // Render Mask
-	m_settings = NULL;
 	m_inputImageProgram = NULL;
 	m_inputDepthProgram = NULL;
 	m_cachedInstance = NULL;
@@ -67,9 +66,6 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 		return m_cachedInstance;
 	}
 	
-    if (m_settings->left_camera == NULL)    return NULL;
-    if (m_settings->right_camera == NULL)   return NULL;
-
 	lockMutex();
 	if (m_cachedInstance == NULL) {
 		MemoryBuffer *color = (MemoryBuffer *)m_inputImageProgram->initializeTileData(rect);
@@ -81,33 +77,41 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
         float left_to_world[4][4];
         float world_to_right[4][4];
 
-        //
-        // Calculate left
-        //
-        
-        CameraParams params;
-        
-        // View matrix inv
-        float viewinv[4][4];
-        float viewmat[4][4];
+        Object *camera = (Object*) m_camera;
+        if (camera) {
 
-        copy_m4_m4(viewinv, m_settings->left_camera->obmat);
-        normalize_m4(viewinv);
-        invert_m4_m4(viewmat, viewinv);
+            //
+            // Calculate left
+            //
+            
+            CameraParams params;
+            
+            // View matrix inv
+            float viewinv[4][4];
+            float viewmat[4][4];
 
-        // Window matrix, clipping and ortho
-        BKE_camera_params_init(&params);
-        BKE_camera_params_from_object(&params, m_settings->left_camera);
-        BKE_camera_params_compute_viewplane(&params, getWidth(), getHeight(), 1.0f, 1.0f);
-        BKE_camera_params_compute_matrix(&params);
-        
-        mul_m4_m4m4(left_to_world, params.winmat, viewinv);
+            copy_m4_m4(viewinv, camera->obmat);
+            normalize_m4(viewinv);
+            invert_m4_m4(viewmat, viewinv);
 
-        //
-        // Calculate right
-        //
+            // Window matrix, clipping and ortho
+            BKE_camera_params_init(&params);
+            BKE_camera_params_from_object(&params, camera);
+            BKE_camera_params_compute_viewplane(&params, getWidth(), getHeight(), 1.0f, 1.0f);
+            BKE_camera_params_compute_matrix(&params);
+            
+            mul_m4_m4m4(left_to_world, params.winmat, viewinv);
+
+            //
+            // Calculate right
+            //
         
-        // TODO
+            // TODO
+            
+        } else {
+            unit_m4(left_to_world);
+            unit_m4(world_to_right);
+        }
 
         generateReprojection(color, depth, data, left_to_world, world_to_right);
 
