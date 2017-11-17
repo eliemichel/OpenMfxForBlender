@@ -21,7 +21,7 @@
 
 #include "COM_OtherEyeOperation.h"
 #include "MEM_guardedalloc.h"
-#include "RNA_blender_cpp.h"
+#include "BKE_camera.h"
 
 #include <iostream>
 #include <limits>
@@ -64,6 +64,9 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 	if (m_cachedInstance) {
 		return m_cachedInstance;
 	}
+	
+    if (m_settings->left_camera == NULL)    return NULL;
+    if (m_settings->right_camera == NULL)   return NULL;
 
 	lockMutex();
 	if (m_cachedInstance == NULL) {
@@ -72,28 +75,21 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 
         float *data = (float *)MEM_callocN(MEM_allocN_len(color->getBuffer()), "Other eye data buffer");
 
-        // Recover ID pointer
-        PointerRNA left_ptr;
-        RNA_id_pointer_create((ID*)m_settings->left_camera, &left_ptr);
-        BL::ID b_id_left(left_ptr);
-
-        PointerRNA right_ptr;
-        RNA_id_pointer_create((ID*)m_settings->right_camera, &right_ptr);
-        BL::ID b_id_right(right_ptr);
-
         // Camera matrices
         float left_to_world[4][4];
         float world_to_right[4][4];
 
-        if(b_id_left.is_a(&RNA_Camera)) {
-            BL::Camera b_camera(b_id_left);
-            //left_to_world = ...;    // TODO!!!
-        }
+        // Calcualte left
+        CameraParams params;
 
-        if(b_id_right.is_a(&RNA_Camera)) {
-            BL::Camera b_camera(b_id_right);
-            //world_to_right = ...;    // TODO!!!
-        }
+        // window matrix, clipping and ortho
+        BKE_camera_params_init(&params);
+        BKE_camera_params_from_object(&params, m_settings->left_camera);
+        BKE_camera_params_compute_viewplane(&params, getWidth(), getHeight(), 1.0f, 1.0f);
+        BKE_camera_params_compute_matrix(&params);
+
+        // Calculate right
+        
 
         generateReprojection(color, depth, data, left_to_world, world_to_right);
 

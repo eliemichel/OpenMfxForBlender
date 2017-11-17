@@ -553,7 +553,6 @@ set(SRC
 
 list(APPEND INC
 	${CMAKE_CURRENT_BINARY_DIR}/operations
-	${CMAKE_BINARY_DIR}/source/blender/makesrna/intern
 )
 
 data_to_c(${CMAKE_CURRENT_SOURCE_DIR}/operations/COM_OpenCLKernels.cl
