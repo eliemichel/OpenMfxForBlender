@@ -2514,7 +2514,8 @@ static void node_composit_buts_othereye(uiLayout *layout, bContext *UNUSED(C), P
     bNode *node = ptr->data;
     //NodeOtherEye *data = node->storage;
     
-    uiItemR(layout, ptr, "object", 0, NULL, 0);
+    uiItemR(layout, ptr, "left_camera", 0, NULL, 0);
+    uiItemR(layout, ptr, "right_camera", 0, NULL, 0);
 
 //    uiItemR(layout, ptr, "fat_mode", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
 //    uiItemR(layout, ptr, "amount", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
