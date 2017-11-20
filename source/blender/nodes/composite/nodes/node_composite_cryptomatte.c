@@ -251,7 +251,7 @@ static void cryptomatte_remove(NodeCryptomatte*n, float f)
 		return;
 	}
 
-	/* This will be the new srting without the removed key. */
+	/* This will be the new string without the removed key. */
 	DynStr *new_matte = BLI_dynstr_new();
 	if (!new_matte) {
 		return;
@@ -265,23 +265,28 @@ static void cryptomatte_remove(NodeCryptomatte*n, float f)
 	size_t start = 0;
 	const size_t end = strlen(n->matte_id);
 	size_t token_len = 0;
+	bool is_first = true;
 	while (start < end) {
 		bool skip = false;
-		/* Ignore leading whitespace. */
-		while(start < end && n->matte_id[start] == ' ') {
+		/* Ignore leading whitespace or commas. */
+		while(start < end &&
+		      (n->matte_id[start] == ' ') || (n->matte_id[start] == ',')) {
 			++start;
 		}
 
 		/* Find the next seprator. */
-		char* token_end = strchr(n->matte_id+start, ',');
+		char* token_end = strchr(n->matte_id+start+1, ',');
 		if (token_end == NULL || token_end == n->matte_id+start) {
 			token_end = n->matte_id+end;
 		}
 		/* Be aware that token_len still contains any trailing white space. */
 		token_len = token_end - (n->matte_id + start);
 
+		if (token_len == 1) {
+			skip = true;
+		}
 		/* If this has a leading bracket, assume a raw floating point number and look for the closing bracket. */
-		if (n->matte_id[start] == '<') {
+		else if (n->matte_id[start] == '<') {
 			if(strncmp(n->matte_id+start, number, strlen(number)) == 0) {
 				/* This number is already there, so skip it. */
 				skip = true;
@@ -301,7 +306,13 @@ static void cryptomatte_remove(NodeCryptomatte*n, float f)
 			}
 		}
 		if (!skip) {
-			BLI_dynstr_nappend(new_matte, n->matte_id+start, token_len+1);
+			if (is_first) {
+				is_first = false;
+			}
+			else {
+				BLI_dynstr_append(new_matte, ", ");
+			}
+			BLI_dynstr_nappend(new_matte, n->matte_id+start, token_len);
 		}
 		start += token_len+1;
 	}
