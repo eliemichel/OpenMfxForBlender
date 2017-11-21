@@ -2070,10 +2070,7 @@ static void openvdb_filepath(PTCacheID *pid, char *filepath, int cfra)
 	unsigned short numlen;
 
 	BLI_stringdec(vdbmd->filepath, head, tail, &numlen);
-	BLI_stringenc(filepath, head, tail, numlen,
-	              vdbmd->flags & MOD_OPENVDB_OVERRIDE_FRAME ?
-	                  (vdbmd->frame_override) :
-	                  (cfra + vdbmd->frame_offset));
+	BLI_stringenc(filepath, head, tail, numlen, cfra);
 
 	if (BLI_path_is_rel(filepath)) {
 		BLI_path_abs(filepath, blendfilename);
@@ -2445,23 +2442,51 @@ static int ptcache_old_elemsize(PTCacheID *pid)
 
 static void ptcache_find_frames_around(PTCacheID *pid, unsigned int frame, int *fra1, int *fra2)
 {
-	if (pid->cache->flag & PTCACHE_DISK_CACHE || pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) {
+	if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) {
+		SmokeModifierData *smd = (SmokeModifierData *)pid->calldata;
+		SmokeDomainSettings *sds = smd->domain;
+		OpenVDBModifierData *vdbmd = sds->vdb;
+		int cfra1 = frame;
+		int exists = BLI_stringdec(vdbmd->filepath, NULL, NULL, NULL); /* This is a frame that should exist for sure. */
+
+		while (cfra1 >= exists && !BKE_ptcache_id_exist(pid, cfra1)) {
+			cfra1--;
+		}
+
+		if (cfra1 < exists) {
+			cfra1 = frame + 1;
+
+			while(cfra1 <= exists && !BKE_ptcache_id_exist(pid, cfra1)) {
+				cfra1++;
+			}
+		}
+
+		if (BKE_ptcache_id_exist(pid, cfra1)) {
+			*fra1 = cfra1;
+			*fra2 = -1;
+		}
+		else {
+			*fra1 = -1;
+			*fra2 = -1;
+		}
+	}
+	else if (pid->cache->flag & PTCACHE_DISK_CACHE) {
 		int cfra1=frame, cfra2=frame+1;
 
 		while (cfra1 >= pid->cache->startframe && !BKE_ptcache_id_exist(pid, cfra1))
 			cfra1--;
 
 		if (cfra1 < pid->cache->startframe)
-			cfra1 = 0;
+			cfra1 = -1;
 
 		while (cfra2 <= pid->cache->endframe && !BKE_ptcache_id_exist(pid, cfra2))
 			cfra2++;
 
 		if (cfra2 > pid->cache->endframe)
-			cfra2 = 0;
+			cfra2 = -1;
 
 		if (cfra1 && !cfra2) {
-			*fra1 = 0;
+			*fra1 = -1;
 			*fra2 = cfra1;
 		}
 		else {
@@ -2486,7 +2511,7 @@ static void ptcache_find_frames_around(PTCacheID *pid, unsigned int frame, int *
 		}
 
 		if (!pm2) {
-			*fra1 = 0;
+			*fra1 = -1;
 			*fra2 = pm->frame;
 		}
 		else {
@@ -2873,8 +2898,18 @@ static int ptcache_interpolate(PTCacheID *pid, float cfra, int cfra1, int cfra2)
 /* possible to get old or interpolated result */
 int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 {
-	int cfrai = (int)floor(cfra), cfra1=0, cfra2=0;
+	int cfrai = (int)floor(cfra), cfra1 = -1, cfra2 = -1;
 	int ret = 0;
+
+	if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) {
+		SmokeModifierData *smd = (SmokeModifierData *)pid->calldata;
+		SmokeDomainSettings *sds = smd->domain;
+		OpenVDBModifierData *vdbmd = sds->vdb;
+
+		cfrai = vdbmd->flags & MOD_OPENVDB_OVERRIDE_FRAME ?
+		            (vdbmd->frame_override) :
+		            (cfrai + vdbmd->frame_offset);
+	}
 
 	/* nothing to read to */
 	if (pid->totpoint(pid->calldata, cfrai) == 0)
@@ -2886,26 +2921,31 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 	}
 
 	/* first check if we have the actual frame cached */
-	if (cfra == (float)cfrai && BKE_ptcache_id_exist(pid, cfrai))
+	if ((cfra == (float)cfrai || pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) &&
+	    BKE_ptcache_id_exist(pid, cfrai))
+	{
 		cfra1 = cfrai;
+	}
 
 	/* no exact cache frame found so try to find cached frames around cfra */
-	if (cfra1 == 0)
+	if (cfra1 < 0) {
 		ptcache_find_frames_around(pid, cfrai, &cfra1, &cfra2);
+	}
 
-	if (cfra1 == 0 && cfra2 == 0)
+	if (cfra1 < 0 && cfra2 < 0) {
 		return 0;
+	}
 
 	/* don't read old cache if already simulated past cached frame */
 	if (no_extrapolate_old) {
 		if (cfra1 == 0 && cfra2 && cfra2 <= pid->cache->simframe)
 			return 0;
-		if (cfra1 && cfra1 == cfra2)
+		if (cfra1 >= 0 && cfra1 == cfra2)
 			return 0;
 	}
 	else {
 		/* avoid calling interpolate between the same frame values */
-		if (cfra1 && cfra1 == cfra2)
+		if (cfra1 >= 0 && cfra1 == cfra2)
 			cfra1 = 0;
 	}
 
