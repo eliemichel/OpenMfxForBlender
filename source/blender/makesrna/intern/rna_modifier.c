@@ -4999,6 +4999,16 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Frame Override", "Override frame number to read from cache");
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
+	prop = RNA_def_property(srna, "frame_start", PROP_INT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Frame Start", "Frame on which to start displaying cache");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "frame_end", PROP_INT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Frame End", "Frame on which to stop displaying cache");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
 	prop = RNA_def_property(srna, "hide_volume", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_HIDE_VOLUME);
 	RNA_def_property_ui_text(prop, "Hide Volume", "Display only bounding box (faster playback)");

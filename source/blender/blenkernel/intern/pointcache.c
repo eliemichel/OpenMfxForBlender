@@ -2906,9 +2906,20 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 		SmokeDomainSettings *sds = smd->domain;
 		OpenVDBModifierData *vdbmd = sds->vdb;
 
+		if (cfrai < vdbmd->frame_start || cfrai > vdbmd->frame_end) {
+			sds->total_cells = 0;
+
+			if (sds->fluid) {
+				smoke_free(sds->fluid);
+				sds->fluid = NULL;
+			}
+
+			return 0;
+		}
+
 		cfrai = vdbmd->flags & MOD_OPENVDB_OVERRIDE_FRAME ?
 		            (vdbmd->frame_override) :
-		            (cfrai + vdbmd->frame_offset);
+		            (cfrai - vdbmd->frame_start + 1 + vdbmd->frame_offset);
 	}
 
 	/* nothing to read to */

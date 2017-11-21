@@ -713,6 +713,10 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             layout.prop(md, "up_axis")
             layout.prop(md, "front_axis")
 
+        row = layout.row()
+        row.prop(md, "frame_start")
+        row.prop(md, "frame_end")
+
         layout.prop(md, "frame_offset")
 
         row = layout.row()

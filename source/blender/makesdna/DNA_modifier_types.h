@@ -1626,6 +1626,8 @@ typedef struct OpenVDBModifierData {
 	int numgrids;
 	int frame_offset;
 	int frame_override;
+	int frame_start;
+	int frame_end;
 
 	int flags;
 
