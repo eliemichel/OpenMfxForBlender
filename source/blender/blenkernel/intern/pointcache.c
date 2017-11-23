@@ -3390,12 +3390,13 @@ int  BKE_ptcache_id_exist(PTCacheID *pid, int cfra)
 	if (!pid->cache)
 		return 0;
 
-	if (cfra<pid->cache->startframe || cfra > pid->cache->endframe)
+	if ((cfra < pid->cache->startframe || cfra > pid->cache->endframe) &&
+	    (pid->file_type != PTCACHE_FILE_OPENVDB_EXTERN))
 		return 0;
 
-	if (pid->cache->cached_frames &&
-	    pid->cache->cached_frames[cfra-pid->cache->startframe] == 0 &&
-	    pid->file_type != PTCACHE_FILE_OPENVDB_EXTERN)
+	if (pid->file_type != PTCACHE_FILE_OPENVDB_EXTERN &&
+	    pid->cache->cached_frames &&
+	    pid->cache->cached_frames[cfra-pid->cache->startframe] == 0)
 	{
 		return 0;
 	}
