@@ -5085,7 +5085,6 @@ static void direct_link_smoke_modifier(FileData *fd, SmokeModifierData *smd)
 		smd->domain->tex_shadow = NULL;
 		smd->domain->tex_wt = NULL;
 		smd->domain->coba = newdataadr(fd, smd->domain->coba);
-		smd->domain->vdb = newdataadr(fd, smd->domain->vdb);
 
 		smd->domain->effector_weights = newdataadr(fd, smd->domain->effector_weights);
 		if (!smd->domain->effector_weights)
