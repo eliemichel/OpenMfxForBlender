@@ -39,6 +39,4 @@ void OtherEyeNode::convertToOperations(NodeConverter &converter, const Composito
     converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
     converter.mapInputSocket(getInputSocket(1), operation->getInputSocket(1));
     converter.mapOutputSocket(getOutputSocket(0), operation->getOutputSocket(0));
-    converter.mapOutputSocket(getOutputSocket(1), operation->getOutputSocket(1));
-    converter.mapOutputSocket(getOutputSocket(2), operation->getOutputSocket(2));
 }

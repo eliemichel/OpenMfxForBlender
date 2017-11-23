@@ -35,9 +35,7 @@ OtherEyeOperation::OtherEyeOperation() : NodeOperation()
 {
 	addInputSocket(COM_DT_COLOR);
 	addInputSocket(COM_DT_VALUE); // ZBUF
-    addOutputSocket(COM_DT_COLOR); // Orig
     addOutputSocket(COM_DT_COLOR); // Other
-    addOutputSocket(COM_DT_COLOR); // Render Mask
 	m_inputImageProgram = NULL;
 	m_inputDepthProgram = NULL;
 	m_cachedInstance = NULL;
@@ -76,10 +74,12 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
         // Camera matrices
         float left_to_world[4][4];
         float world_to_right[4][4];
+        float width = getWidth();
+        float height = getHeight();
 
         Object *camera = (Object*) m_camera;
         if (camera) {
-
+    
             //
             // Calculate left
             //
@@ -90,6 +90,7 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
             float viewinv[4][4];
             float viewmat[4][4];
 
+            // Objmat
             copy_m4_m4(viewinv, camera->obmat);
             normalize_m4(viewinv);
             invert_m4_m4(viewmat, viewinv);
@@ -100,14 +101,25 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
             BKE_camera_params_compute_viewplane(&params, getWidth(), getHeight(), 1.0f, 1.0f);
             BKE_camera_params_compute_matrix(&params);
             
-            mul_m4_m4m4(left_to_world, params.winmat, viewinv);
+            // Framebuffer matrix
+            float fbmat[4][4];
+            zero_m4(fbmat);
+            fbmat[0][0] = width*0.5F;   fbmat[3][0] = width*0.5F;
+            fbmat[1][1] = height*0.5F;  fbmat[3][1] = height*0.5F;
+            fbmat[2][2] = 0.5F;         fbmat[3][2] = 0.5F;
+            fbmat[3][3] = 1.0F;
+
+            mul_m4_m4m4(viewinv, params.winmat, viewinv);
+            mul_m4_m4m4(viewinv, fbmat, viewinv);
+            invert_m4_m4(left_to_world, fbmat);
 
             //
             // Calculate right
             //
         
-            // TODO
-            
+            // TODO: This is a placeholder
+            invert_m4_m4(world_to_right, left_to_world);
+
         } else {
             unit_m4(left_to_world);
             unit_m4(world_to_right);
@@ -143,7 +155,7 @@ void OtherEyeOperation::drawTriangle(float *data, float *depth_buffer,
     if (minY < 0)   minY = 0;
     if (maxX >= getWidth())  maxX = getWidth()-1;
     if (maxY >= getHeight()) maxY = getHeight()-1;
-
+    
     for (int x = minX; x <= maxX; x++) {
         for (int y = minY; y <= maxY; y++) {
             float q[2] = {x - vt1[0], y - vt1[1]};
@@ -165,7 +177,7 @@ void OtherEyeOperation::drawTriangle(float *data, float *depth_buffer,
                     ci[1] = s*c2[1] + t*c3[1] + u*c1[1];
                     ci[2] = s*c2[2] + t*c3[2] + u*c1[2];
                     ci[3] = s*c2[3] + t*c3[3] + u*c1[3];
-
+                    
                     int index_col = INDEX_COL(x, y);
                     float *data_pixel = data + index_col;
 
@@ -190,15 +202,17 @@ void OtherEyeOperation::reprojectLeftToRight(float r[3], float l[3], float left_
     w[0] /= w[3];
     w[1] /= w[3];
     w[2] /= w[3];
+    w[3] = 1.0F;
 
     // w should be in world space now
 
     // World to right eye
     mul_v4_m4v4(r4, world_to_right, w);
     
-    r[0] = r4[0];
-    r[1] = r4[1];
-    r[2] = r4[2];
+    // Round to fix any round off error
+    r[0] = roundf(r4[0]);
+    r[1] = roundf(r4[1]);
+    r[2] = roundf(r4[2]);
 }
 
 void OtherEyeOperation::generateReprojection(MemoryBuffer *color, MemoryBuffer *depth, float *data, float left_to_world[4][4], float world_to_right[4][4])
@@ -232,7 +246,7 @@ void OtherEyeOperation::generateReprojection(MemoryBuffer *color, MemoryBuffer *
 
             float l_11[3] = {x+1, y+1, *depth_pixel_11};
             float r_11[3];
-
+        
             reprojectLeftToRight(r_00, l_00, left_to_world, world_to_right);
             reprojectLeftToRight(r_10, l_10, left_to_world, world_to_right);
             reprojectLeftToRight(r_01, l_01, left_to_world, world_to_right);

@@ -38,9 +38,7 @@ static bNodeSocketTemplate inputs[] = {
 	{ -1, 0, "" }
 };
 static bNodeSocketTemplate outputs[] = {
-    { SOCK_RGBA, 0, N_("Orig Image") },
     { SOCK_RGBA, 0, N_("Other Image") },
-    { SOCK_RGBA, 0, N_("Render Mask") },
 	{ -1, 0, "" }
 };
 
