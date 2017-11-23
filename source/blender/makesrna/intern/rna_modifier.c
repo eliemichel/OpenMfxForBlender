@@ -1319,6 +1319,46 @@ static int rna_OpenVDBModifier_show_axis_convert_get(PointerRNA *ptr)
 	return 1;
 }
 
+static int rna_OpenVDBModifier_frame_start_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	SmokeModifierData *smd = vdbmd->smoke;
+	SmokeDomainSettings *sds = smd->domain;
+	PointCache *cache = sds->point_cache[0];
+
+	return cache->startframe;
+}
+
+static void rna_OpenVDBModifier_frame_start_set(PointerRNA *ptr, int value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	SmokeModifierData *smd = vdbmd->smoke;
+	SmokeDomainSettings *sds = smd->domain;
+	PointCache *cache = sds->point_cache[0];
+
+	return cache->startframe = value;
+}
+
+static int rna_OpenVDBModifier_frame_end_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	SmokeModifierData *smd = vdbmd->smoke;
+	SmokeDomainSettings *sds = smd->domain;
+	PointCache *cache = sds->point_cache[0];
+
+	return cache->endframe;
+}
+
+static void rna_OpenVDBModifier_frame_end_set(PointerRNA *ptr, int value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	SmokeModifierData *smd = vdbmd->smoke;
+	SmokeDomainSettings *sds = smd->domain;
+	PointCache *cache = sds->point_cache[0];
+
+	return cache->endframe = value;
+}
+
 #else
 
 static PropertyRNA *rna_def_property_subdivision_common(StructRNA *srna, const char type[])
@@ -4997,6 +5037,18 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 
 	prop = RNA_def_property(srna, "frame_override", PROP_INT, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Frame Override", "Override frame number to read from cache");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "frame_start", PROP_INT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Frame Start", "Frame on which to start displaying the cache");
+	RNA_def_property_int_funcs(prop, "rna_OpenVDBModifier_frame_start_get", "rna_OpenVDBModifier_frame_start_set", NULL);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "frame_end", PROP_INT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Frame End", "Frame on which to stop displaying the cache");
+	RNA_def_property_int_funcs(prop, "rna_OpenVDBModifier_frame_end_get", "rna_OpenVDBModifier_frame_end_set", NULL);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
 	prop = RNA_def_property(srna, "hide_volume", PROP_BOOLEAN, PROP_NONE);
