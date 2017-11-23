@@ -7874,7 +7874,10 @@ void draw_object(Scene *scene, ARegion *ar, View3D *v3d, Base *base, const short
 	}
 
 	/* draw code for smoke, only draw domains */
-	if (smd && smd->domain) {
+	if (smd && smd->domain &&
+	    !(smd->domain->cache_file_format == PTCACHE_FILE_OPENVDB_EXTERN &&
+	      smd->domain->total_cells < 1))
+	{
 		SmokeDomainSettings *sds = smd->domain;
 		float viewnormal[3];
 
