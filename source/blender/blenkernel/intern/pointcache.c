@@ -2913,13 +2913,16 @@ static int ptcache_interpolate(PTCacheID *pid, float cfra, int cfra1, int cfra2)
 /* possible to get old or interpolated result */
 int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 {
+	SmokeModifierData *smd;
+	SmokeDomainSettings *sds;
+	OpenVDBModifierData *vdbmd;
 	int cfrai = (int)floor(cfra), cfra1 = -1, cfra2 = -1;
 	int ret = 0;
 
 	if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) {
-		SmokeModifierData *smd = (SmokeModifierData *)pid->calldata;
-		SmokeDomainSettings *sds = smd->domain;
-		OpenVDBModifierData *vdbmd = sds->vdb;
+		smd = (SmokeModifierData *)pid->calldata;
+		sds = smd->domain;
+		vdbmd = sds->vdb;
 
 		if (cfrai < pid->cache->startframe || cfrai > pid->cache->endframe) {
 			sds->total_cells = 0;
@@ -2982,8 +2985,12 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 			}
 		}
 		else if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN && pid->read_openvdb_stream) {
-			if (!ptcache_read_openvdb_extern_stream(pid, cfra1)) {
-				return 0;
+			if (cfra1 != vdbmd->frame_last) {
+				vdbmd->frame_last = cfra1;
+
+				if (!ptcache_read_openvdb_extern_stream(pid, cfra1)) {
+					return 0;
+				}
 			}
 		}
 		else if (pid->read_stream) {

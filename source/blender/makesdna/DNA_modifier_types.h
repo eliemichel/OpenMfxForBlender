@@ -1629,7 +1629,7 @@ typedef struct OpenVDBModifierData {
 
 	int flags;
 
-	int pad;
+	int frame_last;
 
 	short up_axis;
 	short front_axis;

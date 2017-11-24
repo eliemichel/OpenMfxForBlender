@@ -5401,6 +5401,8 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb)
 
 			vdbmd->grids = NULL;
 			vdbmd->numgrids = 0;
+
+			vdbmd->frame_last = -1;
 		}
 	}
 }
