@@ -83,7 +83,7 @@ void WM_OT_openvdb_import(wmOperatorType *ot)
 	ot->ui = wm_openvdb_import_draw;
 
 	WM_operator_properties_filesel(ot, FILE_TYPE_FOLDER | FILE_TYPE_OPENVDB,
-	                               FILE_BLENDER, FILE_SAVE, WM_FILESEL_FILEPATH,
+	                               FILE_BLENDER, FILE_OPENFILE, WM_FILESEL_FILEPATH,
 	                               FILE_DEFAULTDISPLAY, FILE_SORT_ALPHA);
 }
 
