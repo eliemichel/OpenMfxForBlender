@@ -1182,6 +1182,14 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	    !OpenVDB_has_grid(reader, vdbmd->flame))
 	{
 		OpenVDBReader_free(reader);
+
+		sds->total_cells = 0;
+
+		if (sds->fluid) {
+			smoke_free(sds->fluid);
+			sds->fluid = NULL;
+		}
+
 		return 0;
 	}
 
@@ -1252,7 +1260,14 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	    (sds->res_max[2] <= sds->res_min[2]))
 	{
 		OpenVDBReader_free(reader);
-		sds->total_cells = 1;
+
+		sds->total_cells = 0;
+
+		if (sds->fluid) {
+			smoke_free(sds->fluid);
+			sds->fluid = NULL;
+		}
+
 		return 0;
 	}
 
