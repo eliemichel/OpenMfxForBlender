@@ -85,13 +85,14 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
         Object *camera = (Object*) m_camera;
         if (camera) {
     
-            const char *names[2] = {STEREO_LEFT_NAME, STEREO_RIGHT_NAME};
+			// c == 0: Left eye to world
+			// c == 1: World to right eye
             for (int c = 0; c < 2; ++c) {
                 CameraParams params;
             
                 float viewinv[4][4];
                 float viewmat[4][4];
-                camera_stereo3d_model_matrix(camera, names[c] == STEREO_LEFT_NAME, viewmat);
+                camera_stereo3d_model_matrix(camera, c == 0, viewmat);
                 
                 // Objmat
                 //normalize_m4(viewmat);
@@ -114,7 +115,7 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
                 mul_m4_m4m4(viewinv, params.winmat, viewinv);
                 mul_m4_m4m4(viewinv, fbmat, viewinv);
                 
-                if (names[c] == STEREO_LEFT_NAME)
+				if (c == 0)
                     invert_m4_m4(left_to_world, viewinv);
                 else
                     copy_m4_m4(world_to_right, viewinv);
