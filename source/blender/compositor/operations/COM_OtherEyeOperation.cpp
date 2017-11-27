@@ -24,6 +24,7 @@
 #include "BKE_object.h"
 #include "BKE_camera.h"
 #include "DNA_object_types.h"
+#include "DNA_camera_types.h"
 
 #include <iostream>
 #include <limits>
@@ -116,9 +117,25 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
             //
             // Calculate right
             //
-        
+
+			// Objmat
+			copy_m4_m4(viewinv, camera->obmat);
+			normalize_m4(viewinv);
+			invert_m4_m4(viewmat, viewinv);
+
+			// Shifting the camera
+			((Camera*)camera->data)->stereo.pivot = 1;
+			float shift = camera_stereo_shift(camera);
+			params.shiftx = shift;
+			BKE_camera_params_compute_matrix(&params);
+
+			// Making sure the matrix is 
+			mul_m4_m4m4(viewinv, params.winmat, viewinv);
+			mul_m4_m4m4(viewinv, fbmat, viewinv);
+			invert_m4_m4(world_to_right, fbmat);
+
             // TODO: This is a placeholder
-            invert_m4_m4(world_to_right, left_to_world);
+            //invert_m4_m4(world_to_right, left_to_world);
 
         } else {
             unit_m4(left_to_world);
@@ -131,6 +148,40 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 	}
 	unlockMutex();
 	return m_cachedInstance;
+}
+
+float OtherEyeOperation::camera_stereo_shift(Object *camera)
+{
+	Camera *data = (Camera*)(camera->data);
+	float shift = data->shiftx;
+	float interocular_distance, convergence_distance;
+	short convergence_mode, pivot;
+	bool is_left = true;
+
+	float fac = 1.0f;
+	float fac_signed;
+
+	interocular_distance = data->stereo.interocular_distance;
+	convergence_distance = data->stereo.convergence_distance;
+	convergence_mode = data->stereo.convergence_mode;
+	pivot = data->stereo.pivot;
+
+	if (convergence_mode != CAM_S3D_OFFAXIS)
+		return shift;
+
+	if (((pivot == CAM_S3D_PIVOT_LEFT) && is_left) ||
+		((pivot == CAM_S3D_PIVOT_RIGHT) && !is_left))
+	{
+		return shift;
+	}
+
+	if (pivot == CAM_S3D_PIVOT_CENTER)
+		fac = 0.5f;
+
+	fac_signed = is_left ? fac : -fac;
+	shift += ((interocular_distance / data->sensor_x) * (data->lens / convergence_distance)) * fac_signed;
+
+	return shift;
 }
 
 void OtherEyeOperation::drawTriangle(float *data, float *depth_buffer,

@@ -53,6 +53,7 @@ public:
 	void executePixel(float output[4], int x, int y, void *data);
 	bool determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output);
 	void *initializeTileData(rcti *rect);
+	float camera_stereo_shift(Object *camera);
 
 	void setCamera(struct ID *camera) { m_camera = camera; }
 
