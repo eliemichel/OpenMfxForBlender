@@ -87,7 +87,8 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
         Object *camera = (Object*) m_camera;
         if (camera) {
     
-            //const char *names[2] = {STEREO_LEFT_NAME, STEREO_RIGHT_NAME};
+			// c == 0: Left eye to world
+			// c == 1: World to right eye
             for (int c = 0; c < 2; ++c) {
                 CameraParams params;
             
@@ -116,7 +117,7 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
                 mul_m4_m4m4(viewinv, params.winmat, viewinv);
                 mul_m4_m4m4(viewinv, fbmat, viewinv);
                 
-                if (c == 0)
+				if (c == 0)
                     invert_m4_m4(left_to_world, viewinv);
                 else
                     copy_m4_m4(world_to_right, viewinv);
