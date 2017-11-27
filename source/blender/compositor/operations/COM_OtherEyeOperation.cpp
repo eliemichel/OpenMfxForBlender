@@ -32,6 +32,10 @@
 #define INDEX_COL(x,y) ((y * getWidth() + x) * COM_NUM_CHANNELS_COLOR)
 #define INDEX_VAL(x,y) ((y * getWidth() + x) * COM_NUM_CHANNELS_VALUE)
 
+extern "C" {
+    void camera_stereo3d_model_matrix(Object *camera, const bool is_left, float r_modelmat[4][4]);
+}
+
 OtherEyeOperation::OtherEyeOperation() : NodeOperation()
 {
 	addInputSocket(COM_DT_COLOR);
@@ -81,61 +85,40 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
         Object *camera = (Object*) m_camera;
         if (camera) {
     
-            //
-            // Calculate left
-            //
+            const char *names[2] = {STEREO_LEFT_NAME, STEREO_RIGHT_NAME};
+            for (int c = 0; c < 2; ++c) {
+                CameraParams params;
             
-            CameraParams params;
-            
-            // View matrix inv
-            float viewinv[4][4];
-            float viewmat[4][4];
+                float viewinv[4][4];
+                float viewmat[4][4];
+                camera_stereo3d_model_matrix(camera, names[c] == STEREO_LEFT_NAME, viewmat);
+                
+                // Objmat
+                //normalize_m4(viewmat);
+                invert_m4_m4(viewinv, viewmat);
 
-            // Objmat
-            copy_m4_m4(viewinv, camera->obmat);
-            normalize_m4(viewinv);
-            invert_m4_m4(viewmat, viewinv);
+                // Window matrix, clipping and ortho
+                BKE_camera_params_init(&params);
+                BKE_camera_params_from_object(&params, camera);
+                BKE_camera_params_compute_viewplane(&params, getWidth(), getHeight(), 1.0f, 1.0f);
+                BKE_camera_params_compute_matrix(&params);
+                
+                // Framebuffer matrix
+                float fbmat[4][4];
+                zero_m4(fbmat);
+                fbmat[0][0] = width*0.5F;   fbmat[3][0] = width*0.5F;
+                fbmat[1][1] = height*0.5F;  fbmat[3][1] = height*0.5F;
+                fbmat[2][2] = 0.5F;         fbmat[3][2] = 0.5F;
+                fbmat[3][3] = 1.0F;
 
-            // Window matrix, clipping and ortho
-            BKE_camera_params_init(&params);
-            BKE_camera_params_from_object(&params, camera);
-            BKE_camera_params_compute_viewplane(&params, getWidth(), getHeight(), 1.0f, 1.0f);
-            BKE_camera_params_compute_matrix(&params);
-            
-            // Framebuffer matrix
-            float fbmat[4][4];
-            zero_m4(fbmat);
-            fbmat[0][0] = width*0.5F;   fbmat[3][0] = width*0.5F;
-            fbmat[1][1] = height*0.5F;  fbmat[3][1] = height*0.5F;
-            fbmat[2][2] = 0.5F;         fbmat[3][2] = 0.5F;
-            fbmat[3][3] = 1.0F;
-
-            mul_m4_m4m4(viewinv, params.winmat, viewinv);
-            mul_m4_m4m4(viewinv, fbmat, viewinv);
-            invert_m4_m4(left_to_world, fbmat);
-
-            //
-            // Calculate right
-            //
-
-			// Objmat
-			copy_m4_m4(viewinv, camera->obmat);
-			normalize_m4(viewinv);
-			invert_m4_m4(viewmat, viewinv);
-
-			// Shifting the camera
-			((Camera*)camera->data)->stereo.pivot = 1;
-			float shift = camera_stereo_shift(camera);
-			params.shiftx = shift;
-			BKE_camera_params_compute_matrix(&params);
-
-			// Making sure the matrix is 
-			mul_m4_m4m4(viewinv, params.winmat, viewinv);
-			mul_m4_m4m4(viewinv, fbmat, viewinv);
-			invert_m4_m4(world_to_right, fbmat);
-
-            // TODO: This is a placeholder
-            //invert_m4_m4(world_to_right, left_to_world);
+                mul_m4_m4m4(viewinv, params.winmat, viewinv);
+                mul_m4_m4m4(viewinv, fbmat, viewinv);
+                
+                if (names[c] == STEREO_LEFT_NAME)
+                    invert_m4_m4(left_to_world, viewinv);
+                else
+                    copy_m4_m4(world_to_right, viewinv);
+            }
 
         } else {
             unit_m4(left_to_world);
