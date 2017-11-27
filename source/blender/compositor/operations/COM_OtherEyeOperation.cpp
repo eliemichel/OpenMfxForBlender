@@ -81,17 +81,19 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
         float world_to_right[4][4];
         float width = getWidth();
         float height = getHeight();
+        float zNear = 1.0F;
+        float zFar = 100.0F;
 
         Object *camera = (Object*) m_camera;
         if (camera) {
     
-            const char *names[2] = {STEREO_LEFT_NAME, STEREO_RIGHT_NAME};
+            //const char *names[2] = {STEREO_LEFT_NAME, STEREO_RIGHT_NAME};
             for (int c = 0; c < 2; ++c) {
                 CameraParams params;
             
                 float viewinv[4][4];
                 float viewmat[4][4];
-                camera_stereo3d_model_matrix(camera, names[c] == STEREO_LEFT_NAME, viewmat);
+                camera_stereo3d_model_matrix(camera, c == 0, viewmat);
                 
                 // Objmat
                 //normalize_m4(viewmat);
@@ -108,16 +110,19 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
                 zero_m4(fbmat);
                 fbmat[0][0] = width*0.5F;   fbmat[3][0] = width*0.5F;
                 fbmat[1][1] = height*0.5F;  fbmat[3][1] = height*0.5F;
-                fbmat[2][2] = 0.5F;         fbmat[3][2] = 0.5F;
+                fbmat[2][2] = 1.0F;         fbmat[3][2] = 0.0F;
                 fbmat[3][3] = 1.0F;
 
                 mul_m4_m4m4(viewinv, params.winmat, viewinv);
                 mul_m4_m4m4(viewinv, fbmat, viewinv);
                 
-                if (names[c] == STEREO_LEFT_NAME)
+                if (c == 0)
                     invert_m4_m4(left_to_world, viewinv);
                 else
                     copy_m4_m4(world_to_right, viewinv);
+                
+                zNear = params.clipsta;
+                zFar = params.clipend;
             }
 
         } else {
@@ -125,7 +130,7 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
             unit_m4(world_to_right);
         }
 
-        generateReprojection(color, depth, data, left_to_world, world_to_right);
+        generateReprojection(color, depth, data, left_to_world, world_to_right, zNear, zFar);
 
 		m_cachedInstance = data;
 	}
@@ -225,8 +230,13 @@ void OtherEyeOperation::drawTriangle(float *data, float *depth_buffer,
     }
 }
 
-void OtherEyeOperation::reprojectLeftToRight(float r[3], float l[3], float left_to_world[4][4], float world_to_right[4][4])
+void OtherEyeOperation::reprojectLeftToRight(float r[3], float l[3], float left_to_world[4][4], float world_to_right[4][4], float zNear, float zFar)
 {
+
+    // Correct z
+    l[2] = 2.0 * zNear * zFar / (zFar + zNear - (2.0 * l[2] - 1.0) * (zFar - zNear));
+
+    // Build 4 component vector
     float l4[4] = {l[0], l[1], l[2], 1.0F};
     float r4[4];
 
@@ -244,12 +254,12 @@ void OtherEyeOperation::reprojectLeftToRight(float r[3], float l[3], float left_
     mul_v4_m4v4(r4, world_to_right, w);
     
     // Round to fix any round off error
-    r[0] = roundf(r4[0]);
-    r[1] = roundf(r4[1]);
-    r[2] = roundf(r4[2]);
+    r[0] = roundf(r4[0]/r4[3]);
+    r[1] = roundf(r4[1]/r4[3]);
+    r[2] = roundf(r4[2]/r4[3]);
 }
 
-void OtherEyeOperation::generateReprojection(MemoryBuffer *color, MemoryBuffer *depth, float *data, float left_to_world[4][4], float world_to_right[4][4])
+void OtherEyeOperation::generateReprojection(MemoryBuffer *color, MemoryBuffer *depth, float *data, float left_to_world[4][4], float world_to_right[4][4], float zNear, float zFar)
 {
 	float *depth_buffer = (float *) MEM_callocN(MEM_allocN_len(depth->getBuffer()), "Other eye depth buffer");
 
@@ -281,10 +291,10 @@ void OtherEyeOperation::generateReprojection(MemoryBuffer *color, MemoryBuffer *
             float l_11[3] = {x+1, y+1, *depth_pixel_11};
             float r_11[3];
         
-            reprojectLeftToRight(r_00, l_00, left_to_world, world_to_right);
-            reprojectLeftToRight(r_10, l_10, left_to_world, world_to_right);
-            reprojectLeftToRight(r_01, l_01, left_to_world, world_to_right);
-            reprojectLeftToRight(r_11, l_11, left_to_world, world_to_right);
+            reprojectLeftToRight(r_00, l_00, left_to_world, world_to_right, zNear, zFar);
+            reprojectLeftToRight(r_10, l_10, left_to_world, world_to_right, zNear, zFar);
+            reprojectLeftToRight(r_01, l_01, left_to_world, world_to_right, zNear, zFar);
+            reprojectLeftToRight(r_11, l_11, left_to_world, world_to_right, zNear, zFar);
 
             drawTriangle(data, depth_buffer,
                          r_00, color_pixel_00, r_00[2],

@@ -41,8 +41,8 @@ private:
                       float vt2[2], float c2[4], float d2,
                       float vt3[2], float c3[4], float d3);
 
-    void reprojectLeftToRight(float r[3], float l[3], float left_to_world[4][4], float world_to_right[4][4]);
-    void generateReprojection(MemoryBuffer *color, MemoryBuffer *depth, float *data, float left_to_world[4][4], float world_to_right[4][4]);
+    void reprojectLeftToRight(float r[3], float l[3], float left_to_world[4][4], float world_to_right[4][4], float zNear, float zFar);
+    void generateReprojection(MemoryBuffer *color, MemoryBuffer *depth, float *data, float left_to_world[4][4], float world_to_right[4][4], float zNear, float zFar);
 
 public:
 	OtherEyeOperation();
