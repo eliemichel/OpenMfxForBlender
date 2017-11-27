@@ -2986,10 +2986,11 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 		}
 		else if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN && pid->read_openvdb_stream) {
 			if (cfra1 != vdbmd->frame_last) {
-				vdbmd->frame_last = cfra1;
-
 				if (!ptcache_read_openvdb_extern_stream(pid, cfra1)) {
 					return 0;
+				}
+				else {
+					vdbmd->frame_last = cfra1;
 				}
 			}
 		}
