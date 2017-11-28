@@ -1163,6 +1163,15 @@ static void rna_MeshSequenceCache_object_path_update(Main *bmain, Scene *scene, 
 	rna_Modifier_update(bmain, scene, ptr);
 }
 
+static void rna_OpenVDBModifier_update(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	vdbmd->frame_last = -1;
+
+	rna_Modifier_update(bmain, scene, ptr);
+}
+
 static int rna_OpenVDBModifier_density_grid_get(PointerRNA *ptr)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
@@ -4983,7 +4992,7 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 
 	prop = RNA_def_property(srna, "filepath", PROP_STRING, PROP_FILEPATH);
 	RNA_def_property_ui_text(prop, "File Path", "Path to OpenVDB cache file");
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "density", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_items(prop, grid_items);
@@ -4991,7 +5000,7 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	                            "rna_OpenVDBModifier_grid_itemf");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_ui_text(prop, "Density Grid", "Name of the grid to be used for density");
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "heat", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_items(prop, grid_items);
@@ -4999,7 +5008,7 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	                            "rna_OpenVDBModifier_grid_itemf");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_ui_text(prop, "Heat Grid", "Name of the grid to be used for heat");
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "flame", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_items(prop, grid_items);
@@ -5007,7 +5016,7 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	                            "rna_OpenVDBModifier_grid_itemf");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_ui_text(prop, "Flame Grid", "Name of the grid to be used for flame");
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "color", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_items(prop, grid_items);
@@ -5015,17 +5024,17 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	                            "rna_OpenVDBModifier_grid_itemf");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_ui_text(prop, "Color Grid", "Name of the grid to be used for color");
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "up_axis", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_items(prop, axis_items);
 	RNA_def_property_ui_text(prop, "Up Axis", "Axis to point upwards");
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "front_axis", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_items(prop, axis_items);
 	RNA_def_property_ui_text(prop, "Forward Axis", "Axis to point forwards");
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "smoke", PROP_POINTER, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Smoke", "");
@@ -5033,38 +5042,38 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "frame_offset", PROP_INT, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Frame Offset", "Offset frame number to read from cache");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "frame_override", PROP_INT, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Frame Override", "Override frame number to read from cache");
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "frame_start", PROP_INT, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Frame Start", "Frame on which to start displaying the cache");
 	RNA_def_property_int_funcs(prop, "rna_OpenVDBModifier_frame_start_get", "rna_OpenVDBModifier_frame_start_set", NULL);
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "frame_end", PROP_INT, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Frame End", "Frame on which to stop displaying the cache");
 	RNA_def_property_int_funcs(prop, "rna_OpenVDBModifier_frame_end_get", "rna_OpenVDBModifier_frame_end_set", NULL);
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "hide_volume", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_HIDE_VOLUME);
 	RNA_def_property_ui_text(prop, "Hide Volume", "Display only bounding box (faster playback)");
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "hide_unselected", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_HIDE_UNSELECTED);
 	RNA_def_property_ui_text(prop, "Hide Unselected", "Display only bounding box if not selected (faster playback)");
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "use_frame_override", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_OVERRIDE_FRAME);
 	RNA_def_property_ui_text(prop, "Use Override", "Use manual frame override");
-	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "show_axis_convert", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_funcs(prop, "rna_OpenVDBModifier_show_axis_convert_get", NULL);
