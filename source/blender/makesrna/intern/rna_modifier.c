@@ -1336,7 +1336,7 @@ static void rna_OpenVDBModifier_frame_start_set(PointerRNA *ptr, int value)
 	SmokeDomainSettings *sds = smd->domain;
 	PointCache *cache = sds->point_cache[0];
 
-	return cache->startframe = value;
+	cache->startframe = value;
 }
 
 static int rna_OpenVDBModifier_frame_end_get(PointerRNA *ptr)
@@ -1356,7 +1356,7 @@ static void rna_OpenVDBModifier_frame_end_set(PointerRNA *ptr, int value)
 	SmokeDomainSettings *sds = smd->domain;
 	PointCache *cache = sds->point_cache[0];
 
-	return cache->endframe = value;
+	cache->endframe = value;
 }
 
 #else
