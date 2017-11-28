@@ -237,9 +237,9 @@ int OpenVDB_get_bbox(
 	r_res_min[2] = coord[up];
 
 	coord = bbox.getEnd();
-	r_res_max[0] = coord[right];
-	r_res_max[1] = coord[front];
-	r_res_max[2] = coord[up];
+	r_res_max[0] = coord[right] - 1;
+	r_res_max[1] = coord[front] - 1;
+	r_res_max[2] = coord[up] - 1;
 
 	coord = bbox.dim();
 	r_res[0] = coord[right];
