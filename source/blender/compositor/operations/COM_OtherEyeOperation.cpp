@@ -139,40 +139,6 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 	return m_cachedInstance;
 }
 
-float OtherEyeOperation::camera_stereo_shift(Object *camera)
-{
-	Camera *data = (Camera*)(camera->data);
-	float shift = data->shiftx;
-	float interocular_distance, convergence_distance;
-	short convergence_mode, pivot;
-	bool is_left = true;
-
-	float fac = 1.0f;
-	float fac_signed;
-
-	interocular_distance = data->stereo.interocular_distance;
-	convergence_distance = data->stereo.convergence_distance;
-	convergence_mode = data->stereo.convergence_mode;
-	pivot = data->stereo.pivot;
-
-	if (convergence_mode != CAM_S3D_OFFAXIS)
-		return shift;
-
-	if (((pivot == CAM_S3D_PIVOT_LEFT) && is_left) ||
-		((pivot == CAM_S3D_PIVOT_RIGHT) && !is_left))
-	{
-		return shift;
-	}
-
-	if (pivot == CAM_S3D_PIVOT_CENTER)
-		fac = 0.5f;
-
-	fac_signed = is_left ? fac : -fac;
-	shift += ((interocular_distance / data->sensor_x) * (data->lens / convergence_distance)) * fac_signed;
-
-	return shift;
-}
-
 void OtherEyeOperation::drawTriangle(float *data, float *depth_buffer,
                                      float vt1[2], float c1[4], float d1,
                                      float vt2[2], float c2[4], float d2,
