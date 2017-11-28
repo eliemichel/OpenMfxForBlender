@@ -79,8 +79,8 @@ void OpenVDB_import_grid_fl(
 bool OpenVDB_import_grid_fl_extern(
         struct OpenVDBReader *reader,
         const char *name, float **data,
-        const int res_min[3], const int res[3],
-        short up, short front);
+        const int res_min[3], const int res_max[3],
+        const int res[3], short up, short front);
 
 void OpenVDB_import_grid_ch(
         struct OpenVDBReader *reader,
@@ -97,8 +97,8 @@ bool OpenVDB_import_grid_vec_extern(
         struct OpenVDBReader *reader,
         const char *name,
         float **data_x, float **data_y, float **data_z,
-        const int res_min[3], const int res[3],
-        short up, short front);
+        const int res_min[3], const int res_max[3],
+        const int res[3], short up, short front);
 
 bool OpenVDB_has_grid(struct OpenVDBReader *reader, const char *name);
 

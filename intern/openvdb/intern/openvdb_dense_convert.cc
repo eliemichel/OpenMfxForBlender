@@ -170,6 +170,7 @@ bool OpenVDB_import_grid_vector_extern(
         const openvdb::Name &name,
         float **data_x, float **data_y, float **data_z,
         const int res_min[3],
+        const int res_max[3],
         const int res[3],
         short up, short front)
 {
@@ -191,9 +192,6 @@ bool OpenVDB_import_grid_vector_extern(
 
 	Vec3SGrid::Ptr vgrid = gridPtrCast<Vec3SGrid>(vgrid_b);
 	Vec3SGrid::ConstAccessor acc = vgrid->getConstAccessor();
-	CoordBBox bbox = vgrid->evalActiveVoxelBoundingBox();
-	Coord grid_min = bbox.getStart();
-	Coord grid_max = bbox.getEnd();
 
 	bool inv_z = up >= 3;
 	bool inv_y = front < 3;
@@ -212,29 +210,26 @@ bool OpenVDB_import_grid_vector_extern(
 
 	math::Coord xyz;
 	int &x = xyz[right], &y = xyz[front], &z = xyz[up];
+	int index = 0;
 
-	for (z = inv_z ? (grid_max[up] - 1) : grid_min[up];
-	     inv_z ? (z >= grid_min[up]) : (z < grid_max[up]);
+	for (z = inv_z ? res_max[2] : res_min[2];
+	     inv_z ? (z >= res_min[2]) : (z <= res_max[2]);
 	     inv_z ? --z : ++z)
 	{
-		for (y = inv_y ? (grid_max[front] - 1) : grid_min[front];
-		     inv_y ? (y >= grid_min[front]) : (y < grid_max[front]);
+		for (y = inv_y ? res_max[1] : res_min[1];
+		     inv_y ? (y >= res_min[1]) : (y <= res_max[1]);
 		     inv_y ? --y : ++y)
 		{
-			for (x = inv_x ? (grid_max[right] - 1) : grid_min[right];
-			     inv_x ? (x >= grid_min[right]) : (x < grid_max[right]);
+			for (x = inv_x ? res_max[0] : res_min[0];
+			     inv_x ? (x >= res_min[0]) : (x <= res_max[0]);
 			     inv_x ? --x : ++x)
 			{
-				int x_local = x - res_min[0];
-				int y_local = y - res_min[1];
-				int z_local = z - res_min[2];
-
-				int coord_local = (z_local * (res[0] * res[1])) + (y_local * res[0]) + x_local;
-
 				math::Vec3s value = acc.getValue(xyz);
-				(*data_x)[coord_local] = value.x();
-				(*data_y)[coord_local] = value.y();
-				(*data_z)[coord_local] = value.z();
+				(*data_x)[index] = value.x();
+				(*data_y)[index] = value.y();
+				(*data_z)[index] = value.z();
+
+				index++;
 			}
 		}
 	}

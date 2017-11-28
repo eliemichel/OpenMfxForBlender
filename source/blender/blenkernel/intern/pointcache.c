@@ -1317,7 +1317,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		//OpenVDB_import_grid_fl(reader, "shadow", &sds->shadow, sds->res);
 
 		if (OpenVDB_has_grid(reader, vdbmd->density)) {
-			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->density, &dens, sds->res_min, sds->res,
+			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->density, &dens, sds->res_min, sds->res_max, sds->res,
 										       up_axis, front_axis))
 			{
 				modifier_setError((ModifierData *)vdbmd, "Density grid is of the wrong type");
@@ -1325,7 +1325,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		}
 
 		if (cache_fields & SM_ACTIVE_HEAT) {
-			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->heat, &heat, sds->res_min, sds->res,
+			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->heat, &heat, sds->res_min, sds->res_max, sds->res,
 			                                   up_axis, front_axis))
 			{
 				modifier_setError((ModifierData *)vdbmd, "Heat grid is of the wrong type");
@@ -1333,7 +1333,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		}
 
 		if (cache_fields & SM_ACTIVE_FIRE) {
-			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->flame, &flame, sds->res_min, sds->res,
+			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->flame, &flame, sds->res_min, sds->res_max, sds->res,
 			                                   up_axis, front_axis))
 			{
 				modifier_setError((ModifierData *)vdbmd, "Flame grid is of the wrong type");
@@ -1341,7 +1341,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		}
 
 		if (cache_fields & SM_ACTIVE_COLORS) {
-			if (!OpenVDB_import_grid_vec_extern(reader, vdbmd->color, &r, &g, &b, sds->res_min, sds->res,
+			if (!OpenVDB_import_grid_vec_extern(reader, vdbmd->color, &r, &g, &b, sds->res_min, sds->res_max, sds->res,
 			                                    up_axis, front_axis))
 			{
 				modifier_setError((ModifierData *)vdbmd, "Color grid is of the wrong type");
