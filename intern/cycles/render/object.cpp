@@ -52,6 +52,9 @@ NODE_DEFINE(Object)
 
 	SOCKET_BOOLEAN(is_shadow_catcher, "Shadow Catcher", false);
 
+	SOCKET_UINT(light_linking, "Light Linking", 0);
+	SOCKET_UINT(shadow_linking, "Shadow Linking", 0x00ffffff);
+
 	return type;
 }
 
@@ -66,10 +69,8 @@ Object::Object()
 	motion.post = transform_empty();
 	use_motion = false;
 
-    light_linking = 0;
-    light_linking_prev = 0;
-    shadow_linking = 0;
-    shadow_linking_prev = 0;
+	light_linking_prev = 0;
+	shadow_linking_prev = 0;
 }
 
 Object::~Object()
