@@ -654,6 +654,7 @@ void smokeModifier_copy(struct SmokeModifierData *smd, struct SmokeModifierData 
 		tsmd->domain->draw_velocity = smd->domain->draw_velocity;
 		tsmd->domain->vector_draw_type = smd->domain->vector_draw_type;
 		tsmd->domain->vector_scale = smd->domain->vector_scale;
+		tsmd->domain->vdb = NULL;
 
 		if (smd->domain->coba) {
 			tsmd->domain->coba = MEM_dupallocN(smd->domain->coba);

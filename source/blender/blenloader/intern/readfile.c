@@ -5076,6 +5076,7 @@ static void direct_link_smoke_modifier(FileData *fd, SmokeModifierData *smd)
 		smd->coll = NULL;
 		smd->domain = newdataadr(fd, smd->domain);
 		smd->domain->smd = smd;
+		smd->domain->vdb = NULL;
 
 		smd->domain->fluid = NULL;
 		smd->domain->fluid_mutex = BLI_rw_mutex_alloc();
