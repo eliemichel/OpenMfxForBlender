@@ -111,7 +111,7 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
                 zero_m4(fbmat);
                 fbmat[0][0] = width*0.5F;   fbmat[3][0] = width*0.5F;
                 fbmat[1][1] = height*0.5F;  fbmat[3][1] = height*0.5F;
-                fbmat[2][2] = 1.0F;         fbmat[3][2] = 0.0F;
+                fbmat[2][2] = 2.0F;         fbmat[3][2] = -1.0F;
                 fbmat[3][3] = 1.0F;
 
                 mul_m4_m4m4(viewinv, params.winmat, viewinv);
@@ -201,10 +201,17 @@ void OtherEyeOperation::reprojectLeftToRight(float r[3], float l[3], float left_
 {
 
     // Correct z
-    l[2] = 2.0 * zNear * zFar / (zFar + zNear - (2.0 * l[2] - 1.0) * (zFar - zNear));
+    auto world_depth = l[2];
+    //auto normalized_depth = 2.0F * zNear * zFar / (zFar + zNear - (2.0F * world_depth - 1.0F) * (zFar - zNear));
+    
+    float normalized_depth = (zFar + zNear - 2.0 * zNear * zFar / world_depth) / (zFar - zNear);
+    normalized_depth = (normalized_depth + 1.0) / 2.0;
+    
+    normalized_depth = std::max(normalized_depth, 0.0F);
+    normalized_depth = std::min(normalized_depth, 1.0F);
 
     // Build 4 component vector
-    float l4[4] = {l[0], l[1], l[2], 1.0F};
+    float l4[4] = {l[0], l[1], normalized_depth, 1.0F};
     float r4[4];
 
     // Left camera to world transformation
