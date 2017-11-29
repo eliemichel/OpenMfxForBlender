@@ -1284,8 +1284,18 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 			modifier_setError((ModifierData *)vdbmd, "Grids have different transformations");
 		}
 
-		VECCOPY(sds->res_min, res_min);
-		VECCOPY(sds->res_max, res_max);
+		for (int i = 0; i < 3; i++) {
+			if (inv[i]) {
+				float p0 = sds->p0[i];
+				float p1 = sds->p1[i];
+
+				sds->p0[i] = -p1;
+				sds->p1[i] = -p0;
+			}
+		}
+
+		sds->res_min[0] = sds->res_min[1] = sds->res_min[2] = 0;
+		VECSUB(sds->res_max, res_max, res_min);
 	}
 
 	sub_v3_v3v3(sds->global_size, sds->p1, sds->p0);

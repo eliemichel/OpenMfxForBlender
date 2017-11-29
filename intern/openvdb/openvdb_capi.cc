@@ -246,8 +246,6 @@ int OpenVDB_get_bbox(
 	r_res[1] = coord[front];
 	r_res[2] = coord[up];
 
-	coord = Coord(0);
-	bbox = CoordBBox(coord, bbox.getEnd());
 	bboxf = trans->indexToWorld(bbox);
 
 	coordf = bboxf.min();
