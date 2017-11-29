@@ -81,8 +81,8 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
         float world_to_right[4][4];
         float width = getWidth();
         float height = getHeight();
-        float zNear = 1.0F;
-        float zFar = 100.0F;
+        float A = 1.0F;
+        float B = 1.0F;
 
         Object *camera = (Object*) m_camera;
         if (camera) {
@@ -97,7 +97,7 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
                 camera_stereo3d_model_matrix(camera, c == 0, viewmat);
                 
                 // Objmat
-                //normalize_m4(viewmat);
+                normalize_m4(viewmat);
                 invert_m4_m4(viewinv, viewmat);
 
                 // Window matrix, clipping and ortho
@@ -111,19 +111,23 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
                 zero_m4(fbmat);
                 fbmat[0][0] = width*0.5F;   fbmat[3][0] = width*0.5F;
                 fbmat[1][1] = height*0.5F;  fbmat[3][1] = height*0.5F;
-                fbmat[2][2] = 2.0F;         fbmat[3][2] = -1.0F;
+                fbmat[2][2] = 1.0F;         fbmat[3][2] = 0.0F;
                 fbmat[3][3] = 1.0F;
 
                 mul_m4_m4m4(viewinv, params.winmat, viewinv);
                 mul_m4_m4m4(viewinv, fbmat, viewinv);
                 
-				if (c == 0)
+				if (c == 0) {
                     invert_m4_m4(left_to_world, viewinv);
-                else
+                    A = params.winmat[2][2];
+                    B = params.winmat[3][2];
+                    
+                    // mat[2][2] = A = -(farClip + nearClip) / (farClip - nearClip);
+                    // mat[3][2] = B = (-2.0f * nearClip * farClip) / (farClip - nearClip);
+                } else {
                     copy_m4_m4(world_to_right, viewinv);
+                }
                 
-                zNear = params.clipsta;
-                zFar = params.clipend;
             }
 
         } else {
@@ -131,7 +135,7 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
             unit_m4(world_to_right);
         }
 
-        generateReprojection(color, depth, data, left_to_world, world_to_right, zNear, zFar);
+        generateReprojection(color, depth, data, left_to_world, world_to_right, A, B);
 
 		m_cachedInstance = data;
 	}
@@ -197,19 +201,15 @@ void OtherEyeOperation::drawTriangle(float *data, float *depth_buffer,
     }
 }
 
-void OtherEyeOperation::reprojectLeftToRight(float r[3], float l[3], float left_to_world[4][4], float world_to_right[4][4], float zNear, float zFar)
+void OtherEyeOperation::reprojectLeftToRight(float r[3], float l[3], float left_to_world[4][4], float world_to_right[4][4], float A, float B)
 {
 
     // Correct z
     auto world_depth = l[2];
-    //auto normalized_depth = 2.0F * zNear * zFar / (zFar + zNear - (2.0F * world_depth - 1.0F) * (zFar - zNear));
     
-    float normalized_depth = (zFar + zNear - 2.0 * zNear * zFar / world_depth) / (zFar - zNear);
-    normalized_depth = (normalized_depth + 1.0) / 2.0;
+    // i.e. near_clip = -1.0, far clip = 1.0
+    float normalized_depth = (-A * world_depth + B) / world_depth;
     
-    normalized_depth = std::max(normalized_depth, 0.0F);
-    normalized_depth = std::min(normalized_depth, 1.0F);
-
     // Build 4 component vector
     float l4[4] = {l[0], l[1], normalized_depth, 1.0F};
     float r4[4];
@@ -217,10 +217,10 @@ void OtherEyeOperation::reprojectLeftToRight(float r[3], float l[3], float left_
     // Left camera to world transformation
     float w[4];
     mul_v4_m4v4(w, left_to_world, l4);
-    w[0] /= w[3];
-    w[1] /= w[3];
-    w[2] /= w[3];
-    w[3] = 1.0F;
+//    w[0] /= w[3];
+//    w[1] /= w[3];
+//    w[2] /= w[3];
+//    w[3] = 1.0F;
 
     // w should be in world space now
 
@@ -233,7 +233,7 @@ void OtherEyeOperation::reprojectLeftToRight(float r[3], float l[3], float left_
     r[2] = roundf(r4[2]/r4[3]);
 }
 
-void OtherEyeOperation::generateReprojection(MemoryBuffer *color, MemoryBuffer *depth, float *data, float left_to_world[4][4], float world_to_right[4][4], float zNear, float zFar)
+void OtherEyeOperation::generateReprojection(MemoryBuffer *color, MemoryBuffer *depth, float *data, float left_to_world[4][4], float world_to_right[4][4], float A, float B)
 {
 	float *depth_buffer = (float *) MEM_callocN(MEM_allocN_len(depth->getBuffer()), "Other eye depth buffer");
 
@@ -265,10 +265,10 @@ void OtherEyeOperation::generateReprojection(MemoryBuffer *color, MemoryBuffer *
             float l_11[3] = {x+1, y+1, *depth_pixel_11};
             float r_11[3];
         
-            reprojectLeftToRight(r_00, l_00, left_to_world, world_to_right, zNear, zFar);
-            reprojectLeftToRight(r_10, l_10, left_to_world, world_to_right, zNear, zFar);
-            reprojectLeftToRight(r_01, l_01, left_to_world, world_to_right, zNear, zFar);
-            reprojectLeftToRight(r_11, l_11, left_to_world, world_to_right, zNear, zFar);
+            reprojectLeftToRight(r_00, l_00, left_to_world, world_to_right, A, B);
+            reprojectLeftToRight(r_10, l_10, left_to_world, world_to_right, A, B);
+            reprojectLeftToRight(r_01, l_01, left_to_world, world_to_right, A, B);
+            reprojectLeftToRight(r_11, l_11, left_to_world, world_to_right, A, B);
 
             drawTriangle(data, depth_buffer,
                          r_00, color_pixel_00, r_00[2],
