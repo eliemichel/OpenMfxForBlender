@@ -439,6 +439,14 @@ ccl_device_inline float camera_distance(KernelGlobals *kg, float3 P)
 		return len(P - camP);
 }
 
+ccl_device_inline float camera_distance_right_eye(KernelGlobals *kg, float3 P)
+{
+	Transform cameratoworld = kernel_data.cam.cameratoworld;
+	float3 camP = make_float3(cameratoworld.x.w, cameratoworld.y.w, cameratoworld.z.w);
+	float3 camD = make_float3(cameratoworld.x.z, cameratoworld.y.z, cameratoworld.z.z);
+	return fabsf(dot((P - camP), camD));
+}
+
 ccl_device_inline float3 camera_direction_from_point(KernelGlobals *kg, float3 P)
 {
 	Transform cameratoworld = kernel_data.cam.cameratoworld;
