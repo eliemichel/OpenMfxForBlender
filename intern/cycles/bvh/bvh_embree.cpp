@@ -419,9 +419,26 @@ unsigned BVHEmbree::add_instance(Object *ob, int i)
 	unsigned geom_id = rtcNewInstance3(scene, instance_bvh->scene, num_motion_steps, i*2);
 
 	if(ob->use_motion) {
-		rtcSetTransform2(scene, geom_id, RTC_MATRIX_ROW_MAJOR, (const float*)&ob->motion.pre, 0);
+		/* Drop animated scales. Embree knows how to apply motion blur to those, but Cycles doesn't.
+		 * This is necessary to keep it consistent with Cycles' intersection refinement.
+		 * Eventually, Cycles should either also know how to to scaling or rely on Embree to get
+		 * transformation matrices for time steps. */
+		DecompMotionTransform decom;
+		Transform decom_single, comp;
+		transform_motion_decompose(&decom, &ob->motion, &ob->tfm);
+		decom_single.x = decom.pre_x;
+		decom_single.y = decom.pre_y;
+		decom_single.z = decom.mid.z;
+		decom_single.w = decom.mid.w;
+		transform_compose(&comp, &decom_single);
+
+		rtcSetTransform2(scene, geom_id, RTC_MATRIX_ROW_MAJOR, (const float*)&comp, 0);
 		rtcSetTransform2(scene, geom_id, RTC_MATRIX_ROW_MAJOR, (const float*)&ob->tfm, 1);
-		rtcSetTransform2(scene, geom_id, RTC_MATRIX_ROW_MAJOR, (const float*)&ob->motion.post, 2);
+
+		decom_single.x = decom.post_x;
+		decom_single.y = decom.post_y;
+		transform_compose(&comp, &decom_single);
+		rtcSetTransform2(scene, geom_id, RTC_MATRIX_ROW_MAJOR, (const float*)&comp, 2);
 	} else {
 		rtcSetTransform2(scene, geom_id, RTC_MATRIX_ROW_MAJOR, (const float*)&ob->tfm);
 	}
