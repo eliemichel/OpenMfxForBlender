@@ -3026,7 +3026,7 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 			cfra1 = 0;
 	}
 
-	if (cfra1) {
+	if (cfra1 >= 0) {
 		if (pid->file_type == PTCACHE_FILE_OPENVDB && pid->read_openvdb_stream) {
 			if (!ptcache_read_openvdb_stream(pid, cfra1)) {
 				return 0;
@@ -3068,8 +3068,8 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 		}
 	}
 
-	if (cfra1)
-		ret = (cfra2 ? PTCACHE_READ_INTERPOLATED : PTCACHE_READ_EXACT);
+	if (cfra1 >= 0)
+		ret = (cfra2 >= 0 ? PTCACHE_READ_INTERPOLATED : PTCACHE_READ_EXACT);
 	else if (cfra2) {
 		ret = PTCACHE_READ_OLD;
 		pid->cache->simframe = cfra2;
