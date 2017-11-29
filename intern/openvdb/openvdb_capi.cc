@@ -124,11 +124,11 @@ bool OpenVDB_import_grid_fl_extern(
         OpenVDBReader *reader,
         const char *name, float **data,
         const int res_min[3], const int res_max[3],
-        const int res[3], short up, short front)
+        const int res[3], const int level, short up, short front)
 {
 	Timer(__func__);
 
-	return internal::OpenVDB_import_grid_extern<openvdb::FloatGrid>(reader, name, data, res_min, res_max, res, up, front);
+	return internal::OpenVDB_import_grid_extern<openvdb::FloatGrid>(reader, name, data, res_min, res_max, res, level, up, front);
 }
 
 void OpenVDB_import_grid_ch(
@@ -237,9 +237,9 @@ int OpenVDB_get_bbox(
 	r_res_min[2] = coord[up];
 
 	coord = bbox.getEnd();
-	r_res_max[0] = coord[right] - 1;
-	r_res_max[1] = coord[front] - 1;
-	r_res_max[2] = coord[up] - 1;
+	r_res_max[0] = coord[right];
+	r_res_max[1] = coord[front];
+	r_res_max[2] = coord[up];
 
 	coord = bbox.dim();
 	r_res[0] = coord[right];

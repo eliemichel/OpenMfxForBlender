@@ -726,6 +726,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         sub.active = md.use_frame_override
         sub.prop(md, "frame_override")
 
+        layout.prop(md, "simplify_level")
+
         layout.prop(md, "hide_volume")
 
         row = layout.row()

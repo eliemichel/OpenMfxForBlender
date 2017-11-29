@@ -1634,6 +1634,9 @@ typedef struct OpenVDBModifierData {
 	short up_axis;
 	short front_axis;
 
+	short simplify;
+	short pad[3];
+
 	SmokeModifierData *smoke;
 } OpenVDBModifierData;
 

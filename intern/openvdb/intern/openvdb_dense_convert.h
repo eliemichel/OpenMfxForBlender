@@ -117,6 +117,7 @@ bool OpenVDB_import_grid_extern(
         const int res_min[3],
         const int res_max[3],
         const int res[3],
+        const int level,
         short up, short front)
 {
 	using namespace openvdb;
@@ -155,17 +156,17 @@ bool OpenVDB_import_grid_extern(
 	int &x = xyz[right], &y = xyz[front], &z = xyz[up];
 	int index = 0;
 
-	for (z = inv_z ? res_max[2] : res_min[2];
-	     inv_z ? (z >= res_min[2]) : (z <= res_max[2]);
-	     inv_z ? --z : ++z)
+	for (z = inv_z ? res_max[2] - 1 : res_min[2];
+	     inv_z ? (z >= res_min[2]) : (z < res_max[2]);
+	     inv_z ? z -= level : z += level)
 	{
-		for (y = inv_y ? res_max[1] : res_min[1];
-		     inv_y ? (y >= res_min[1]) : (y <= res_max[1]);
-		     inv_y ? --y : ++y)
+		for (y = inv_y ? res_max[1] - 1 : res_min[1];
+		     inv_y ? (y >= res_min[1]) : (y < res_max[1]);
+		     inv_y ? y -= level : y += level)
 		{
-			for (x = inv_x ? res_max[0] : res_min[0];
-			     inv_x ? (x >= res_min[0]) : (x <= res_max[0]);
-			     inv_x ? --x : ++x)
+			for (x = inv_x ? res_max[0] - 1 : res_min[0];
+			     inv_x ? (x >= res_min[0]) : (x < res_max[0]);
+			     inv_x ? x -= level : x += level)
 			{
 				(*data)[index] = acc.getValue(xyz);
 
