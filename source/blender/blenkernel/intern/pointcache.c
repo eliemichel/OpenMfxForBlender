@@ -1334,7 +1334,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		smoke_free(sds->fluid);
 		sds->fluid = NULL;
 		vdbmd->frame_last = -1;
-		return 1;
+		return 0;
 	}
 
 	/* check if active fields have changed */
