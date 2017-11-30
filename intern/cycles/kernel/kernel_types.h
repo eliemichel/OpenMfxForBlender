@@ -40,7 +40,7 @@
 CCL_NAMESPACE_BEGIN
 
 /* constants */
-#define OBJECT_SIZE 		13
+#define OBJECT_SIZE 		17
 #define OBJECT_VECTOR_SIZE	6
 #define LIGHT_SIZE		13
 #define FILTER_TABLE_SIZE	1024
