@@ -32,9 +32,9 @@ enum ObjectTransform {
 	OBJECT_INVERSE_TRANSFORM = 4,
 	OBJECT_TRANSFORM_MOTION_POST = 4,
 	OBJECT_PROPERTIES = 8,
-	OBJECT_DUPLI = 9,
-    OBJECT_LIGHT_LINKING = 11,
-	OBJECT_CRYPTOMATTE = 12,
+	OBJECT_DUPLI = 13,
+    OBJECT_LIGHT_LINKING = 15,
+	OBJECT_CRYPTOMATTE = 16,
 };
 
 enum ObjectVectorTransform {
@@ -92,19 +92,24 @@ ccl_device_inline Transform object_fetch_vector_transform(KernelGlobals *kg, int
 #ifdef __OBJECT_MOTION__
 ccl_device_inline Transform object_fetch_transform_motion(KernelGlobals *kg, int object, float time)
 {
-	DecompMotionTransform motion;
+	MotionTransform motion;
 
 	int offset = object*OBJECT_SIZE + (int)OBJECT_TRANSFORM_MOTION_PRE;
 
-	motion.mid.x = kernel_tex_fetch(__objects, offset + 0);
-	motion.mid.y = kernel_tex_fetch(__objects, offset + 1);
-	motion.mid.z = kernel_tex_fetch(__objects, offset + 2);
-	motion.mid.w = kernel_tex_fetch(__objects, offset + 3);
+	motion.pre.x = kernel_tex_fetch(__objects, offset + 0);
+	motion.pre.y = kernel_tex_fetch(__objects, offset + 1);
+	motion.pre.z = kernel_tex_fetch(__objects, offset + 2);
+	motion.pre.w = kernel_tex_fetch(__objects, offset + 3);
 
-	motion.pre_x = kernel_tex_fetch(__objects, offset + 4);
-	motion.pre_y = kernel_tex_fetch(__objects, offset + 5);
-	motion.post_x = kernel_tex_fetch(__objects, offset + 6);
-	motion.post_y = kernel_tex_fetch(__objects, offset + 7);
+	motion.mid.x = kernel_tex_fetch(__objects, offset + 4);
+	motion.mid.y = kernel_tex_fetch(__objects, offset + 5);
+	motion.mid.z = kernel_tex_fetch(__objects, offset + 6);
+	motion.mid.w = kernel_tex_fetch(__objects, offset + 7);
+
+	motion.post.x = kernel_tex_fetch(__objects, offset + 8);
+	motion.post.y = kernel_tex_fetch(__objects, offset + 9);
+	motion.post.z = kernel_tex_fetch(__objects, offset + 10);
+	motion.post.w = kernel_tex_fetch(__objects, offset + 11);
 
 	Transform tfm;
 	transform_motion_interpolate(&tfm, &motion, time);
