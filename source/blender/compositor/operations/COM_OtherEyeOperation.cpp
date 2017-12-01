@@ -22,7 +22,6 @@
 #include "COM_OtherEyeOperation.h"
 #include "MEM_guardedalloc.h"
 #include "BKE_object.h"
-#include "BKE_camera.h"
 #include "DNA_object_types.h"
 #include "DNA_camera_types.h"
 
@@ -103,7 +102,7 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
                 // Window matrix, clipping and ortho
                 BKE_camera_params_init(&params);
                 BKE_camera_params_from_object(&params, camera);
-                BKE_camera_params_compute_viewplane(&params, getWidth(), getHeight(), 1.0f, 1.0f);
+				ComputeCameraParamsViewplane(&params, getWidth(), getHeight());
                 BKE_camera_params_compute_matrix(&params);
                 
                 // Framebuffer matrix
@@ -141,6 +140,23 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 	}
 	unlockMutex();
 	return m_cachedInstance;
+}
+
+void OtherEyeOperation::ComputeCameraParamsViewplane(CameraParams *params, int width, int height)
+{
+	float aspect = (float)width / (float)height;
+	if (width >= height) {
+		params->viewplane.xmin = -aspect;
+		params->viewplane.xmax =  aspect;
+		params->viewplane.ymin = -1.0f;
+		params->viewplane.ymax =  1.0f;
+	}
+	else {
+		params->viewplane.xmin = -1.0f;
+		params->viewplane.xmax =  1.0f;
+		params->viewplane.ymin = -1.0f / aspect;
+		params->viewplane.ymax =  1.0f / aspect;
+	}
 }
 
 void OtherEyeOperation::drawTriangle(float *data, float *depth_buffer,

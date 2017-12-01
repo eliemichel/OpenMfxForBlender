@@ -23,6 +23,8 @@
 #define _COM_OTHEREYEOPERATION_h
 #include "COM_NodeOperation.h"
 #include "DNA_node_types.h"
+#include "DNA_camera_types.h"
+#include "BKE_camera.h"
 
 
 class OtherEyeOperation : public NodeOperation {
@@ -54,6 +56,7 @@ public:
 	bool determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output);
 	void *initializeTileData(rcti *rect);
 	float camera_stereo_shift(Object *camera);
+	void ComputeCameraParamsViewplane(CameraParams *params, int width, int height);
 
 	void setCamera(struct ID *camera) { m_camera = camera; }
 
