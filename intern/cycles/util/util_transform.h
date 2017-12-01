@@ -510,36 +510,22 @@ ccl_device void transform_motion_interpolate(Transform *tfm, const MotionTransfo
 	transform_compose(tfm, &decomp);
 }
 
-ccl_device void transform_motion_interpolate_straight(Transform *tfm, const DecompMotionTransform *motion, float t)
+ccl_device void transform_motion_interpolate_straight(Transform *tfm, const MotionTransform *motion, float t)
 {
-	Transform decomp;
 	Transform step1, step2;
-
-	decomp.x = motion->mid.x;
-	decomp.y = motion->mid.y;
-	decomp.z = motion->mid.z;
-	decomp.w = motion->mid.w;
 
 	/* linear interpolation for rotation and scale */
 	if(t < 0.5f) {
 		t *= 2.0f;
 
-		transform_compose(&step2, &decomp);
-
-		decomp.x = motion->pre_x;
-		decomp.y = motion->pre_y;
-
-		transform_compose(&step1, &decomp);
+		transform_compose(&step2, &motion->mid);
+		transform_compose(&step1, &motion->pre);
 	}
 	else {
 		t = (t - 0.5f)*2.0f;
 
-		transform_compose(&step1, &decomp);
-
-		decomp.x = motion->post_x;
-		decomp.y = motion->post_y;
-
-		transform_compose(&step2, &decomp);
+		transform_compose(&step1, &motion->mid);
+		transform_compose(&step2, &motion->post);
 	}
 
 	/* matrix lerp */
