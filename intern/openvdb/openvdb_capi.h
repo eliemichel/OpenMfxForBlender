@@ -105,7 +105,8 @@ bool OpenVDB_has_grid(struct OpenVDBReader *reader, const char *name);
 int OpenVDB_get_bbox(
         struct OpenVDBReader *reader,
         char *density, char *heat,
-        char *flame, char *color,
+        char *flame, char color[3][64],
+        bool split_color,
         short up, short front,
         int r_res_min[3],
         int r_res_max[3],

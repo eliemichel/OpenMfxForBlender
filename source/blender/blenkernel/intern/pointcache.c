@@ -1227,7 +1227,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		cache_fields |= SM_ACTIVE_FIRE;
 	}
 
-	if (OpenVDB_has_grid(reader, vdbmd->color)) {
+	if (OpenVDB_has_grid(reader, vdbmd->color[0])) {
 		cache_fields |= SM_ACTIVE_COLORS;
 	}
 
@@ -1263,13 +1263,14 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	}
 	else {
 		if (!OpenVDB_get_bbox(reader,
-							  OpenVDB_has_grid(reader, vdbmd->density) ? vdbmd->density : NULL,
-							  cache_fields & SM_ACTIVE_HEAT ? vdbmd->heat : NULL,
-							  cache_fields & SM_ACTIVE_FIRE ? vdbmd->flame : NULL,
-							  cache_fields & SM_ACTIVE_COLORS ? vdbmd->color : NULL,
-							  vdbmd->up_axis, vdbmd->front_axis,
-							  res_min, res_max, res,
-							  sds->p0, sds->p1, sds->cell_size))
+		                      OpenVDB_has_grid(reader, vdbmd->density) ? vdbmd->density : NULL,
+		                      cache_fields & SM_ACTIVE_HEAT ? vdbmd->heat : NULL,
+		                      cache_fields & SM_ACTIVE_FIRE ? vdbmd->flame : NULL,
+		                      cache_fields & SM_ACTIVE_COLORS ? vdbmd->color : NULL,
+		                      vdbmd->flags & MOD_OPENVDB_SPLIT_COLOR,
+		                      vdbmd->up_axis, vdbmd->front_axis,
+		                      res_min, res_max, res,
+		                      sds->p0, sds->p1, sds->cell_size))
 		{
 			modifier_setError((ModifierData *)vdbmd, "Grids have different transformations");
 		}
@@ -1474,10 +1475,23 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		}
 
 		if (cache_fields & SM_ACTIVE_COLORS) {
-			if (!OpenVDB_import_grid_vec_extern(reader, vdbmd->color, &r, &g, &b, res_min, res_max, sds->res,
-			                                    up_axis, front_axis))
-			{
-				modifier_setError((ModifierData *)vdbmd, "Color grid is of the wrong type");
+			if (vdbmd->flags & MOD_OPENVDB_SPLIT_COLOR) {
+				float **color[3] = {&r, &g, &b};
+
+				for (int i = 0; i < 3; i++) {
+					if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->color[i], color[i], res_min, res_max, sds->res,
+													   level, up_axis, front_axis))
+					{
+						modifier_setError((ModifierData *)vdbmd, "Flame grid is of the wrong type");
+					}
+				}
+			}
+			else {
+				if (!OpenVDB_import_grid_vec_extern(reader, vdbmd->color[0], &r, &g, &b, res_min, res_max, sds->res,
+													up_axis, front_axis))
+				{
+					modifier_setError((ModifierData *)vdbmd, "Color grid is of the wrong type");
+				}
 			}
 		}
 	}

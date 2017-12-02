@@ -170,7 +170,8 @@ bool OpenVDB_has_grid(OpenVDBReader *reader, const char *name)
 int OpenVDB_get_bbox(
         struct OpenVDBReader *reader,
         char *density, char *heat,
-        char *flame, char *color,
+        char *flame, char color[3][64],
+        bool split_color,
         short up, short front,
         int r_res_min[3],
         int r_res_max[3],
@@ -224,10 +225,22 @@ int OpenVDB_get_bbox(
 	}
 
 	if (color) {
-		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, color));
+		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, color[0]));
 
-		if (*trans != *internal::OpenVDB_get_grid_transform(reader, flame)) {
+		if (*trans != *internal::OpenVDB_get_grid_transform(reader, color[0])) {
 			validity = GRID_TRANSFORM_INVALID;
+		}
+
+		if (split_color) {
+			for (int i = 1; i < 3; i++) {
+				if (OpenVDB_has_grid(reader, color[i])) {
+					bbox.expand(internal::OpenVDB_get_grid_bounds(reader, color[i]));
+
+					if (*trans != *internal::OpenVDB_get_grid_transform(reader, color[i])) {
+						validity = GRID_TRANSFORM_INVALID;
+					}
+				}
+			}
 		}
 	}
 

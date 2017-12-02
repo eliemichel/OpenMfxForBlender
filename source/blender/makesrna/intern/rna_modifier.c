@@ -1163,6 +1163,34 @@ static void rna_MeshSequenceCache_object_path_update(Main *bmain, Scene *scene, 
 	rna_Modifier_update(bmain, scene, ptr);
 }
 
+static void rna_OpenVDBModifier_set_color_chanels(OpenVDBModifierData *vdbmd)
+{
+	char name[64];
+	int last;
+
+	if (vdbmd->color[0][0] == 0 || vdbmd->color[1][0] != 0 || vdbmd->color[2][0] != 0) {
+		return;
+	}
+
+	BLI_strncpy_utf8(name, vdbmd->color[0], sizeof(name));
+	last = strlen(name) - 1;
+
+	if (!ELEM(name[last], '0', '1', 'X')) {
+		return;
+	}
+
+	for (int i = 1; i < 3; i++) {
+		name[last] += 1;
+
+		for (int j = 0; j < vdbmd->numgrids; j++) {
+			if (STREQ(name, vdbmd->grids[j])) {
+				BLI_strncpy_utf8(vdbmd->color[i], name, sizeof(vdbmd->color[i]));
+				break;
+			}
+		}
+	}
+}
+
 static void rna_OpenVDBModifier_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
@@ -1253,12 +1281,12 @@ static void rna_OpenVDBModifier_flame_grid_set(PointerRNA *ptr, int value)
 	}
 }
 
-static int rna_OpenVDBModifier_color_grid_get(PointerRNA *ptr)
+static int rna_OpenVDBModifier_color1_grid_get(PointerRNA *ptr)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 
 	for (int i = 0; i < vdbmd->numgrids; i++) {
-		if (STREQ(vdbmd->color, vdbmd->grids[i])) {
+		if (STREQ(vdbmd->color[0], vdbmd->grids[i])) {
 			return i + 1;
 		}
 	}
@@ -1266,17 +1294,73 @@ static int rna_OpenVDBModifier_color_grid_get(PointerRNA *ptr)
 	return 0;
 }
 
-static void rna_OpenVDBModifier_color_grid_set(PointerRNA *ptr, int value)
+static void rna_OpenVDBModifier_color1_grid_set(PointerRNA *ptr, int value)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 
 	if (value == 0) {
-		vdbmd->color[0] = 0;
+		vdbmd->color[0][0] = 0;
 		return;
 	}
 
 	if (value <= vdbmd->numgrids) {
-		BLI_strncpy_utf8(vdbmd->color, vdbmd->grids[value - 1], sizeof(vdbmd->color));
+		BLI_strncpy_utf8(vdbmd->color[0], vdbmd->grids[value - 1], sizeof(vdbmd->color[0]));
+	}
+
+	rna_OpenVDBModifier_set_color_chanels(vdbmd);
+}
+
+static int rna_OpenVDBModifier_color2_grid_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	for (int i = 0; i < vdbmd->numgrids; i++) {
+		if (STREQ(vdbmd->color[1], vdbmd->grids[i])) {
+			return i + 1;
+		}
+	}
+
+	return 0;
+}
+
+static void rna_OpenVDBModifier_color2_grid_set(PointerRNA *ptr, int value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	if (value == 0) {
+		vdbmd->color[1][0] = 0;
+		return;
+	}
+
+	if (value <= vdbmd->numgrids) {
+		BLI_strncpy_utf8(vdbmd->color[1], vdbmd->grids[value - 1], sizeof(vdbmd->color[1]));
+	}
+}
+
+static int rna_OpenVDBModifier_color3_grid_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	for (int i = 0; i < vdbmd->numgrids; i++) {
+		if (STREQ(vdbmd->color[2], vdbmd->grids[i])) {
+			return i + 1;
+		}
+	}
+
+	return 0;
+}
+
+static void rna_OpenVDBModifier_color3_grid_set(PointerRNA *ptr, int value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	if (value == 0) {
+		vdbmd->color[2][0] = 0;
+		return;
+	}
+
+	if (value <= vdbmd->numgrids) {
+		BLI_strncpy_utf8(vdbmd->color[2], vdbmd->grids[value - 1], sizeof(vdbmd->color[2]));
 	}
 }
 
@@ -5018,12 +5102,28 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Flame Grid", "Name of the grid to be used for flame");
 	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
-	prop = RNA_def_property(srna, "color", PROP_ENUM, PROP_NONE);
+	prop = RNA_def_property(srna, "color1", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_items(prop, grid_items);
-	RNA_def_property_enum_funcs(prop, "rna_OpenVDBModifier_color_grid_get", "rna_OpenVDBModifier_color_grid_set",
+	RNA_def_property_enum_funcs(prop, "rna_OpenVDBModifier_color1_grid_get", "rna_OpenVDBModifier_color1_grid_set",
 	                            "rna_OpenVDBModifier_grid_itemf");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_ui_text(prop, "Color Grid", "Name of the grid to be used for color");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "color2", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, grid_items);
+	RNA_def_property_enum_funcs(prop, "rna_OpenVDBModifier_color2_grid_get", "rna_OpenVDBModifier_color2_grid_set",
+	                            "rna_OpenVDBModifier_grid_itemf");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_ui_text(prop, "Color Grid", "Name of the grid to be used for the second color component");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "color3", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, grid_items);
+	RNA_def_property_enum_funcs(prop, "rna_OpenVDBModifier_color3_grid_get", "rna_OpenVDBModifier_color3_grid_set",
+	                            "rna_OpenVDBModifier_grid_itemf");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_ui_text(prop, "Color Grid", "Name of the grid to be used for the third color component");
 	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "up_axis", PROP_ENUM, PROP_NONE);
@@ -5079,6 +5179,11 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "use_frame_override", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_OVERRIDE_FRAME);
 	RNA_def_property_ui_text(prop, "Use Override", "Use manual frame override");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "use_split_color", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_SPLIT_COLOR);
+	RNA_def_property_ui_text(prop, "Split Color", "Input color grids by individual channel");
 	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
 	prop = RNA_def_property(srna, "show_axis_convert", PROP_BOOLEAN, PROP_NONE);

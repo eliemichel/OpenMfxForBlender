@@ -708,7 +708,24 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "density")
         layout.prop(md, "heat")
         layout.prop(md, "flame")
-        layout.prop(md, "color")
+        layout.prop(md, "color1")
+
+        if (md.use_split_color):
+            split = layout.split(percentage=0.333333)
+
+            col = split.column()
+
+            col.prop(md, "use_split_color")
+
+            col = split.column()
+
+            col.prop(md, "color2", text="")
+            col.prop(md, "color3", text="")
+        else:
+            layout.prop(md, "use_split_color")
+
+        layout.separator()
+
         if md.show_axis_convert:
             layout.prop(md, "up_axis")
             layout.prop(md, "front_axis")
