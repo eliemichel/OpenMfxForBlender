@@ -2927,9 +2927,9 @@ static int ptcache_read_openvdb_stream(PTCacheID *pid, int cfra)
 #endif
 }
 
+#if defined(WITH_OPENVDB) && defined(WITH_SMOKE)
 static int ptcache_read_openvdb_extern_stream(PTCacheID *pid, int cfra)
 {
-#ifdef WITH_OPENVDB
 	char filepath[FILE_MAX];
 
 	openvdb_filepath(pid, filepath, cfra);
@@ -2946,11 +2946,8 @@ static int ptcache_read_openvdb_extern_stream(PTCacheID *pid, int cfra)
 	}
 
 	return 1;
-#else
-	UNUSED_VARS(pid, cfra);
-	return 0;
-#endif
 }
+#endif
 
 static int ptcache_read(PTCacheID *pid, int cfra)
 {
@@ -3069,6 +3066,7 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 	int cfrai = (int)floor(cfra), cfra1 = -1, cfra2 = -1;
 	int ret = 0;
 
+#if defined(WITH_OPENVDB) && defined(WITH_SMOKE)
 	if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) {
 		smd = (SmokeModifierData *)pid->calldata;
 		sds = smd->domain;
@@ -3090,6 +3088,9 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 		            (vdbmd->frame_override) :
 		            (cfrai - pid->cache->startframe + 1 + vdbmd->frame_offset);
 	}
+#else
+	UNUSED_VARS(smd, sds, vdbmd);
+#endif
 
 	/* nothing to read to */
 	if (pid->totpoint(pid->calldata, cfrai) == 0)
@@ -3135,6 +3136,7 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 				return 0;
 			}
 		}
+#if defined(WITH_OPENVDB) && defined(WITH_SMOKE)
 		else if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN && pid->read_openvdb_stream) {
 			if (cfra1 != vdbmd->frame_last) {
 				if (!ptcache_read_openvdb_extern_stream(pid, cfra1)) {
@@ -3145,6 +3147,7 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 				}
 			}
 		}
+#endif
 		else if (pid->read_stream) {
 			if (!ptcache_read_stream(pid, cfra1))
 				return 0;

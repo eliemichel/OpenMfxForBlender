@@ -1391,6 +1391,7 @@ static EnumPropertyItem *rna_OpenVDBModifier_grid_itemf(
 
 static int rna_OpenVDBModifier_show_axis_convert_get(PointerRNA *ptr)
 {
+#ifdef WITH_OPENVDB
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 	char filepath[1024];
 
@@ -1408,6 +1409,9 @@ static int rna_OpenVDBModifier_show_axis_convert_get(PointerRNA *ptr)
 
 		OpenVDBReader_free(reader);
 	}
+#else
+	UNUSED_VARS(ptr);
+#endif
 
 	return 1;
 }
