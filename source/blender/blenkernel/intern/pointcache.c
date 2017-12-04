@@ -1488,7 +1488,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 			}
 			else {
 				if (!OpenVDB_import_grid_vec_extern(reader, vdbmd->color[0], &r, &g, &b, res_min, res_max, sds->res,
-													up_axis, front_axis))
+													level, up_axis, front_axis))
 				{
 					modifier_setError((ModifierData *)vdbmd, "Color grid is of the wrong type");
 				}
