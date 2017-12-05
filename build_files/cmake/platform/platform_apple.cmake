@@ -410,6 +410,10 @@ if(WITH_CYCLES_OSL)
 	endif()
 endif()
 
+if(WITH_CYCLES_EMBREE)
+	find_package(embree 2.16.1 REQUIRED)
+endif()
+
 if(WITH_OPENMP)
 	execute_process(COMMAND ${CMAKE_C_COMPILER} --version OUTPUT_VARIABLE COMPILER_VENDOR)
 	string(SUBSTRING "${COMPILER_VENDOR}" 0 5 VENDOR_NAME) # truncate output

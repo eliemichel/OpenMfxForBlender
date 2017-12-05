@@ -118,15 +118,28 @@ static ExtensionType get_image_extension(NodeType& b_node)
 
 static BL::NodeSocket get_node_output(BL::Node& b_node, const string& name)
 {
-	BL::Node::outputs_iterator b_out;
+    BL::Node::outputs_iterator b_out;
 
-	for(b_node.outputs.begin(b_out); b_out != b_node.outputs.end(); ++b_out)
-		if(b_out->name() == name)
-			return *b_out;
+    for(b_node.outputs.begin(b_out); b_out != b_node.outputs.end(); ++b_out)
+        if(b_out->name() == name)
+            return *b_out;
 
-	assert(0);
+    assert(0);
 
-	return *b_out;
+    return *b_out;
+}
+
+static BL::NodeSocket get_node_input(BL::Node& b_node, const string& name)
+{
+    BL::Node::inputs_iterator b_in;
+
+    for(b_node.inputs.begin(b_in); b_in != b_node.inputs.end(); ++b_in)
+        if(b_in->name() == name)
+            return *b_in;
+
+    assert(0);
+
+    return *b_in;
 }
 
 static BL::NodeSocket get_node_input(BL::Node& b_node, const string& name)
@@ -144,30 +157,30 @@ static BL::NodeSocket get_node_input(BL::Node& b_node, const string& name)
 
 static float3 get_node_output_rgba(BL::Node& b_node, const string& name)
 {
-	BL::NodeSocket b_sock = get_node_output(b_node, name);
-	float value[4];
-	RNA_float_get_array(&b_sock.ptr, "default_value", value);
-	return make_float3(value[0], value[1], value[2]);
+    BL::NodeSocket b_sock = get_node_output(b_node, name);
+    float value[4];
+    RNA_float_get_array(&b_sock.ptr, "default_value", value);
+    return make_float3(value[0], value[1], value[2]);
 }
 
 static float get_node_output_value(BL::Node& b_node, const string& name)
 {
-	BL::NodeSocket b_sock = get_node_output(b_node, name);
-	return RNA_float_get(&b_sock.ptr, "default_value");
+    BL::NodeSocket b_sock = get_node_output(b_node, name);
+    return RNA_float_get(&b_sock.ptr, "default_value");
 }
 
 static float3 get_node_output_vector(BL::Node& b_node, const string& name)
 {
-	BL::NodeSocket b_sock = get_node_output(b_node, name);
-	float value[3];
-	RNA_float_get_array(&b_sock.ptr, "default_value", value);
-	return make_float3(value[0], value[1], value[2]);
+    BL::NodeSocket b_sock = get_node_output(b_node, name);
+    float value[3];
+    RNA_float_get_array(&b_sock.ptr, "default_value", value);
+    return make_float3(value[0], value[1], value[2]);
 }
 
 static float get_node_input_value(BL::Node& b_node, const string& name)
 {
-	BL::NodeSocket b_sock = get_node_input(b_node, name);
-	return RNA_float_get(&b_sock.ptr, "default_value");
+    BL::NodeSocket b_sock = get_node_input(b_node, name);
+    return RNA_float_get(&b_sock.ptr, "default_value");
 }
 
 static float3 get_node_input_vector(BL::Node& b_node, const string& name)
@@ -712,10 +725,10 @@ static ShaderNode *add_node(BlenderSync &sync,
 		get_tex_mapping(&image->tex_mapping, b_texture_mapping);
 		node = image;
 	}
-	else if(b_node.is_a(&RNA_ShaderNodeTexCurve)) {
-		BL::ShaderNodeTexCurve b_curve_node(b_node);
+    else if(b_node.is_a(&RNA_ShaderNodeTexCurve)) {
+        BL::ShaderNodeTexCurve b_curve_node(b_node);
         BL::Curve b_curve(b_curve_node.object());
-		CurveTextureNode *tex = new CurveTextureNode();
+        CurveTextureNode *tex = new CurveTextureNode();
 
         shader->has_object_dependency = true;
 
@@ -814,18 +827,19 @@ static ShaderNode *add_node(BlenderSync &sync,
                                                                 true, 0, is_float_bool, linear,
                                                                 INTERPOLATION_CLOSEST,
                                                                 EXTENSION_CLIP,
-                                                                true);
+                                                                true, false);
+
                 }
             }
 
         }
 
-		BL::TexMapping b_texture_mapping(b_curve_node.texture_mapping());
-		get_tex_mapping(&tex->tex_mapping, b_texture_mapping);
-		node = tex;
+        BL::TexMapping b_texture_mapping(b_curve_node.texture_mapping());
+        get_tex_mapping(&tex->tex_mapping, b_texture_mapping);
+        node = tex;
     }
-	else if(b_node.is_a(&RNA_ShaderNodeTexEnvironment)) {
-		BL::ShaderNodeTexEnvironment b_env_node(b_node);
+    else if(b_node.is_a(&RNA_ShaderNodeTexEnvironment)) {
+        BL::ShaderNodeTexEnvironment b_env_node(b_node);
 		BL::Image b_image(b_env_node.image());
 		BL::ImageUser b_image_user(b_env_node.image_user());
 		EnvironmentTextureNode *env = new EnvironmentTextureNode();

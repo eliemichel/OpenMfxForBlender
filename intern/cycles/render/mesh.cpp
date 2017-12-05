@@ -38,6 +38,13 @@
 #include "util/util_progress.h"
 #include "util/util_set.h"
 
+#ifdef WITH_EMBREE
+#	include "bvh/bvh_embree.h"
+#	include "embree2/rtcore.h"
+#	include "embree2/rtcore_scene.h"
+#	include "embree2/rtcore_builder.h"
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 /* Triangle */
@@ -1055,6 +1062,10 @@ void Mesh::compute_bvh(DeviceScene *dscene,
 			                              params->use_bvh_unaligned_nodes;
 			bparams.num_motion_triangle_steps = params->num_bvh_time_steps;
 			bparams.num_motion_curve_steps = params->num_bvh_time_steps;
+			bparams.bvh_type = params->bvh_type;
+			bparams.use_bvh_embree = params->use_bvh_embree;
+			bparams.curve_flags = dscene->data.curve.curveflags;
+			bparams.curve_subdivisions = dscene->data.curve.subdivisions;
 
 			delete bvh;
 			bvh = BVH::create(bparams, objects);
@@ -1825,10 +1836,14 @@ void MeshManager::device_update_bvh(Device *device, DeviceScene *dscene, Scene *
 	                              scene->params.use_bvh_unaligned_nodes;
 	bparams.num_motion_triangle_steps = scene->params.num_bvh_time_steps;
 	bparams.num_motion_curve_steps = scene->params.num_bvh_time_steps;
+	bparams.bvh_type = scene->params.bvh_type;
+	bparams.use_bvh_embree = scene->params.use_bvh_embree;
+	bparams.curve_flags = dscene->data.curve.curveflags;
+	bparams.curve_subdivisions = dscene->data.curve.subdivisions;
 
 	delete bvh;
 	bvh = BVH::create(bparams, scene->objects);
-	bvh->build(progress);
+	bvh->build(progress, &device->stats);
 
 	if(progress.get_cancel()) return;
 
@@ -1881,6 +1896,14 @@ void MeshManager::device_update_bvh(Device *device, DeviceScene *dscene, Scene *
 	dscene->data.bvh.root = pack.root_index;
 	dscene->data.bvh.use_qbvh = scene->params.use_qbvh;
 	dscene->data.bvh.use_bvh_steps = (scene->params.num_bvh_time_steps != 0);
+
+#ifdef WITH_EMBREE
+	if(bparams.use_bvh_embree) {
+		dscene->data.bvh.scene = ((BVHEmbree*)bvh)->scene;
+	} else {
+		dscene->data.bvh.scene = NULL;
+	}
+#endif
 }
 
 void MeshManager::device_update_flags(Device * /*device*/,
