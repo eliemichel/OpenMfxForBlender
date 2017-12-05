@@ -33,6 +33,8 @@
 
 extern "C" {
     void camera_stereo3d_model_matrix(Object *camera, const bool is_left, float r_modelmat[4][4]);
+    float camera_stereo3d_shift_x(Object *camera, const char *viewname);
+
 }
 
 OtherEyeOperation::OtherEyeOperation() : NodeOperation()
@@ -90,14 +92,17 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 			// Still need to set up left_to_world and world_to_right
 			// c == 0: Left eye to world
 			// c == 1: World to right eye
+   
+            const char *names[2] = {STEREO_LEFT_NAME, STEREO_RIGHT_NAME};
+            
             for (int c = 0; c < 2; ++c) {
-                CameraParams params;
-                BKE_camera_params_init(&params);
-                BKE_camera_params_from_object(&params, camera);
-
                 float viewmat[4][4];
                 float viewinv[4][4];
                 camera_stereo3d_model_matrix(camera, c == 0, viewmat);
+                
+                // Get shift
+                float shift_x = camera_stereo3d_shift_x(camera, names[c]);
+                params.shiftx = shift_x;
                 
                 // Cycles inverts z axis
                 viewmat[2][0] *= -1.0F;
@@ -118,6 +123,8 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
                 computePerspective( cameratondc, ndctoraster,
                                     fov, params.zoom, params.clipsta, params.clipend,
                                     params.shiftx, params.shifty, params.offsetx, params.offsety);
+                
+                
                 mul_m4_m4m4(cameratoraster, ndctoraster, cameratondc);
                 mul_m4_m4m4(worldtoraster, cameratoraster, viewinv);
 

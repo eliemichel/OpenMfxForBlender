@@ -879,7 +879,7 @@ Object *BKE_camera_multiview_render(Scene *scene, Object *camera, const char *vi
 	}
 }
 
-static float camera_stereo3d_shift_x(Object *camera, const char *viewname)
+float camera_stereo3d_shift_x(Object *camera, const char *viewname)
 {
 	Camera *data = camera->data;
 	float shift = data->shiftx;
