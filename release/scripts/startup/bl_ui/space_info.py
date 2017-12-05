@@ -172,6 +172,8 @@ class INFO_MT_file_import(Menu):
             self.layout.operator("wm.collada_import", text="Collada (Default) (.dae)")
         if bpy.app.build_options.alembic:
             self.layout.operator("wm.alembic_import", text="Alembic (.abc)")
+        if bpy.app.build_options.openvdb:
+            self.layout.operator("wm.openvdb_import", text="OpenVDB (.vdb)")
 
 
 class INFO_MT_file_export(Menu):

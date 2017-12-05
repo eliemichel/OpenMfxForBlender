@@ -703,6 +703,17 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         col = split.column()
 
+    def OPENVDB(self, layout, ob, md):
+        layout.prop(md, "filepath")
+        layout.prop(md, "density")
+        layout.prop(md, "heat")
+        layout.prop(md, "flame")
+        layout.prop(md, "color")
+        layout.prop(md, "up_axis")
+        layout.prop(md, "front_axis")
+        layout.prop(md, "frame_offset")
+        layout.prop(md, "hide_volume")
+
     def PARTICLE_INSTANCE(self, layout, ob, md):
         layout.prop(md, "object")
         layout.prop(md, "particle_system_index", text="Particle System")

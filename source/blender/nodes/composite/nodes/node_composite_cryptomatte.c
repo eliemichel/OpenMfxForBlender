@@ -171,7 +171,7 @@ static void MurmurHash3_x86_32 ( const void * key, int len,
 
 /* this is taken from the cryptomatte specification 1.0 */
 
-static inline float hash_to_float(uint32_t hash) {
+static /*inline*/ float hash_to_float(uint32_t hash) {
 	uint32_t mantissa = hash & (( 1 << 23) - 1);
 	uint32_t exponent = (hash >> 23) & ((1 << 8) - 1);
 	exponent = max(exponent, (uint32_t) 1);

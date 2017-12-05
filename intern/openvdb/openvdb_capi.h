@@ -46,6 +46,11 @@ enum {
 	VEC_CONTRAVARIANT_ABSOLUTE = 4,
 };
 
+enum {
+	GRID_TRANSFORM_INVALID = 0,
+	GRID_TRANSFORM_VALID = 1,
+};
+
 struct OpenVDBFloatGrid *OpenVDB_export_grid_fl(
         struct OpenVDBWriter *writer,
         const char *name, float *data,
@@ -71,6 +76,12 @@ void OpenVDB_import_grid_fl(
         const char *name, float **data,
         const int res[3]);
 
+bool OpenVDB_import_grid_fl_extern(
+        struct OpenVDBReader *reader,
+        const char *name, float **data,
+        const int res_min[3], const int res[3],
+        short up, short front);
+
 void OpenVDB_import_grid_ch(
         struct OpenVDBReader *reader,
         const char *name, unsigned char **data,
@@ -81,6 +92,34 @@ void OpenVDB_import_grid_vec(
         const char *name,
         float **data_x, float **data_y, float **data_z,
         const int res[3]);
+
+bool OpenVDB_import_grid_vec_extern(
+        struct OpenVDBReader *reader,
+        const char *name,
+        float **data_x, float **data_y, float **data_z,
+        const int res_min[3], const int res[3],
+        short up, short front);
+
+bool OpenVDB_has_grid(struct OpenVDBReader *reader, const char *name);
+
+int OpenVDB_get_bbox(
+        struct OpenVDBReader *reader,
+        char *density, char *heat,
+        char *flame, char *color,
+        short up, short front,
+        int r_res_min[3],
+        int r_res_max[3],
+        int r_res[3],
+        float r_bbox_min[3],
+        float r_bbox_max[3],
+        float r_voxel_size[3]);
+
+void OpenVDB_print_grids(struct OpenVDBReader *reader);
+void OpenVDB_print_metadata_names(struct OpenVDBReader *reader);
+void OpenVDB_print_grid_metadata_names(struct OpenVDBReader *reader, const char *name);
+void OpenVDB_print_grid_transform(struct OpenVDBReader *reader, const char *name);
+int OpenVDB_get_num_grids(struct OpenVDBReader *reader);
+void OpenVDB_fill_name_array(struct OpenVDBReader *reader, char **r_names);
 
 struct OpenVDBWriter *OpenVDBWriter_create(void);
 void OpenVDBWriter_free(struct OpenVDBWriter *writer);

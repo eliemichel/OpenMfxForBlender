@@ -7530,6 +7530,27 @@ void draw_object(Scene *scene, ARegion *ar, View3D *v3d, Base *base, const short
 			}
 		}
 	}
+	else if (((base->flag & OB_FROMDUPLI) == 0) &&
+	         (md = modifiers_findByType(ob, eModifierType_OpenVDB)) &&
+		     (modifier_isEnabled(scene, md, eModifierMode_Realtime)))
+	{
+		smd = ((OpenVDBModifierData *)md)->smoke;
+
+		if (smd->domain) {
+			if (!v3d->transp && (dflag & DRAW_PICKING) == 0) {
+				if (!v3d->xray && !(ob->dtx & OB_DRAWXRAY)) {
+					/* object has already been drawn so skip drawing it */
+					ED_view3d_after_add(&v3d->afterdraw_transp, base, dflag);
+					return;
+				}
+				else if (v3d->xray) {
+					/* object has already been drawn so skip drawing it */
+					ED_view3d_after_add(&v3d->afterdraw_xraytransp, base, dflag);
+					return;
+				}
+			}
+		}
+	}
 
 
 	/* xray delay? */

@@ -1154,6 +1154,143 @@ static int ptcache_smoke_openvdb_read(struct OpenVDBReader *reader, void *smoke_
 
 	return 1;
 }
+
+static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void *smoke_v)
+{
+	SmokeModifierData *smd = (SmokeModifierData *)smoke_v;
+
+	if (!smd) {
+		OpenVDBReader_free(reader);
+		return 0;
+	}
+
+	SmokeDomainSettings *sds = smd->domain;
+	OpenVDBModifierData *vdbmd = sds->vdb;
+
+	int fluid_fields = smoke_get_data_flags(sds);
+	int cache_fields = 0;
+	bool reallocate = false;
+
+	if (!OpenVDB_has_grid(reader, vdbmd->density) &&
+	    !OpenVDB_has_grid(reader, vdbmd->flame))
+	{
+		OpenVDBReader_free(reader);
+		return 0;
+	}
+
+	if (OpenVDB_has_grid(reader, vdbmd->heat)) {
+		cache_fields |= SM_ACTIVE_HEAT;
+	}
+
+	if (OpenVDB_has_grid(reader, vdbmd->flame)) {
+		cache_fields |= SM_ACTIVE_FIRE;
+	}
+
+	if (OpenVDB_has_grid(reader, vdbmd->color)) {
+		cache_fields |= SM_ACTIVE_COLORS;
+	}
+
+	if (!OpenVDB_get_bbox(reader,
+	                      OpenVDB_has_grid(reader, vdbmd->density) ? vdbmd->density : NULL,
+	                      cache_fields & SM_ACTIVE_HEAT ? vdbmd->heat : NULL,
+	                      cache_fields & SM_ACTIVE_FIRE ? vdbmd->flame : NULL,
+	                      cache_fields & SM_ACTIVE_COLORS ? vdbmd->color : NULL,
+	                      vdbmd->up_axis, vdbmd->front_axis,
+	                      sds->res_min, sds->res_max, sds->base_res,
+	                      sds->p0, sds->p1, sds->cell_size))
+	{
+		modifier_setError((ModifierData *)vdbmd, "Grids have different transformations");
+	}
+
+	sub_v3_v3v3(sds->global_size, sds->p1, sds->p0);
+
+	if ((sds->res_max[0] <= sds->res_min[0]) ||
+	    (sds->res_max[1] <= sds->res_min[1]) ||
+	    (sds->res_max[2] <= sds->res_min[2]))
+	{
+		OpenVDBReader_free(reader);
+		sds->total_cells = 1;
+		return 0;
+	}
+
+	/* check if resolution has changed */
+	if (sds->res[0] != sds->base_res[0] ||
+		sds->res[1] != sds->base_res[1] ||
+		sds->res[2] != sds->base_res[2])
+	{
+		reallocate = true;
+
+		VECCOPY(sds->res, sds->base_res);
+	}
+
+	if (vdbmd->flags & MOD_OPENVDB_HIDE_VOLUME) {
+		OpenVDBReader_free(reader);
+		sds->total_cells = sds->res[0] * sds->res[1] * sds->res[2];
+		smoke_free(sds->fluid);
+		sds->fluid = NULL;
+		return 1;
+	}
+
+	/* check if active fields have changed */
+	if ((fluid_fields != cache_fields) || (cache_fields != sds->active_fields)) {
+		reallocate = true;
+	}
+
+	/* reallocate fluid if needed*/
+	if (reallocate) {
+		sds->active_fields = cache_fields;
+		sds->maxres = MAX3(sds->res[0], sds->res[1], sds->res[2]);
+		sds->dx = 1.0f / sds->maxres;
+		smoke_reallocate_fluid(sds, sds->dx, sds->res, 1);
+		sds->total_cells = sds->res[0] * sds->res[1] * sds->res[2];
+	}
+
+	if (sds->fluid) {
+		float dt, dx, *dens, *react, *fuel, *flame, *heat, *heatold, *vx, *vy, *vz, *r, *g, *b;
+		unsigned char *obstacles;
+
+		smoke_export(sds->fluid, &dt, &dx, &dens, &react, &flame, &fuel, &heat,
+		             &heatold, &vx, &vy, &vz, &r, &g, &b, &obstacles);
+
+		//OpenVDB_import_grid_fl(reader, "shadow", &sds->shadow, sds->res);
+
+		if (OpenVDB_has_grid(reader, vdbmd->density)) {
+			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->density, &dens, sds->res_min, sds->res,
+										       vdbmd->up_axis, vdbmd->front_axis))
+			{
+				modifier_setError((ModifierData *)vdbmd, "Density grid is of the wrong type");
+			}
+		}
+
+		if (cache_fields & SM_ACTIVE_HEAT) {
+			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->heat, &heat, sds->res_min, sds->res,
+			                                   vdbmd->up_axis, vdbmd->front_axis))
+			{
+				modifier_setError((ModifierData *)vdbmd, "Heat grid is of the wrong type");
+			}
+		}
+
+		if (cache_fields & SM_ACTIVE_FIRE) {
+			if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->flame, &flame, sds->res_min, sds->res,
+			                                   vdbmd->up_axis, vdbmd->front_axis))
+			{
+				modifier_setError((ModifierData *)vdbmd, "Flame grid is of the wrong type");
+			}
+		}
+
+		if (cache_fields & SM_ACTIVE_COLORS) {
+			if (!OpenVDB_import_grid_vec_extern(reader, vdbmd->color, &r, &g, &b, sds->res_min, sds->res,
+			                                    vdbmd->up_axis, vdbmd->front_axis))
+			{
+				modifier_setError((ModifierData *)vdbmd, "Color grid is of the wrong type");
+			}
+		}
+	}
+
+	OpenVDBReader_free(reader);
+
+	return 1;
+}
 #endif
 
 #else // WITH_SMOKE
@@ -1171,6 +1308,12 @@ static int ptcache_smoke_openvdb_write(struct OpenVDBWriter *writer, void *smoke
 }
 
 static int ptcache_smoke_openvdb_read(struct OpenVDBReader *reader, void *smoke_v)
+{
+	UNUSED_VARS(reader, smoke_v);
+	return 0;
+}
+
+static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void *smoke_v)
 {
 	UNUSED_VARS(reader, smoke_v);
 	return 0;
@@ -1542,7 +1685,13 @@ void BKE_ptcache_id_from_smoke(PTCacheID *pid, struct Object *ob, struct SmokeMo
 	pid->write_stream			= ptcache_smoke_write;
 
 	pid->write_openvdb_stream	= ptcache_smoke_openvdb_write;
-	pid->read_openvdb_stream	= ptcache_smoke_openvdb_read;
+
+	if (sds->cache_file_format == PTCACHE_FILE_OPENVDB_EXTERN) {
+		pid->read_openvdb_stream = ptcache_smoke_openvdb_extern_read;
+	}
+	else {
+		pid->read_openvdb_stream = ptcache_smoke_openvdb_read;
+	}
 
 	pid->write_extra_data		= NULL;
 	pid->read_extra_data		= NULL;
@@ -1864,6 +2013,24 @@ static int ptcache_filename(PTCacheID *pid, char *filename, int cfra, short do_p
 	}
 	
 	return len; /* make sure the above string is always 16 chars */
+}
+
+static void openvdb_filepath(PTCacheID *pid, char *filepath, int cfra)
+{
+	Library *lib = (pid->ob) ? pid->ob->id.lib : NULL;
+	const char *blendfilename= (lib && (pid->cache->flag & PTCACHE_IGNORE_LIBPATH)==0) ? lib->filepath: G.main->name;
+	SmokeModifierData *smd = (SmokeModifierData *)pid->calldata;
+	SmokeDomainSettings *sds = smd->domain;
+	OpenVDBModifierData *vdbmd = sds->vdb;
+	char head[FILE_MAX], tail[FILE_MAX];
+	unsigned short numlen;
+
+	BLI_stringdec(vdbmd->filepath, head, tail, &numlen);
+	BLI_stringenc(filepath, head, tail, numlen, cfra + vdbmd->frame_offset);
+
+	if (BLI_path_is_rel(filepath)) {
+		BLI_path_abs(filepath, blendfilename);
+	}
 }
 
 /* youll need to close yourself after! */
@@ -2231,7 +2398,7 @@ static int ptcache_old_elemsize(PTCacheID *pid)
 
 static void ptcache_find_frames_around(PTCacheID *pid, unsigned int frame, int *fra1, int *fra2)
 {
-	if (pid->cache->flag & PTCACHE_DISK_CACHE) {
+	if (pid->cache->flag & PTCACHE_DISK_CACHE || pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) {
 		int cfra1=frame, cfra2=frame+1;
 
 		while (cfra1 >= pid->cache->startframe && !BKE_ptcache_id_exist(pid, cfra1))
@@ -2523,6 +2690,31 @@ static int ptcache_read_openvdb_stream(PTCacheID *pid, int cfra)
 #endif
 }
 
+static int ptcache_read_openvdb_extern_stream(PTCacheID *pid, int cfra)
+{
+#ifdef WITH_OPENVDB
+	char filepath[FILE_MAX];
+
+	openvdb_filepath(pid, filepath, cfra);
+
+	if (!BLI_exists(filepath)) {
+		return 0;
+	}
+
+	struct OpenVDBReader *reader = OpenVDBReader_create();
+	OpenVDBReader_open(reader, filepath);
+
+	if (!pid->read_openvdb_stream(reader, pid->calldata)) {
+		return 0;
+	}
+
+	return 1;
+#else
+	UNUSED_VARS(pid, cfra);
+	return 0;
+#endif
+}
+
 static int ptcache_read(PTCacheID *pid, int cfra)
 {
 	PTCacheMem *pm = NULL;
@@ -2673,6 +2865,11 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 	if (cfra1) {
 		if (pid->file_type == PTCACHE_FILE_OPENVDB && pid->read_openvdb_stream) {
 			if (!ptcache_read_openvdb_stream(pid, cfra1)) {
+				return 0;
+			}
+		}
+		else if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN && pid->read_openvdb_stream) {
+			if (!ptcache_read_openvdb_extern_stream(pid, cfra1)) {
 				return 0;
 			}
 		}
@@ -3098,10 +3295,21 @@ int  BKE_ptcache_id_exist(PTCacheID *pid, int cfra)
 	if (cfra<pid->cache->startframe || cfra > pid->cache->endframe)
 		return 0;
 
-	if (pid->cache->cached_frames &&	pid->cache->cached_frames[cfra-pid->cache->startframe]==0)
+	if (pid->cache->cached_frames &&
+	    pid->cache->cached_frames[cfra-pid->cache->startframe] == 0 &&
+	    pid->file_type != PTCACHE_FILE_OPENVDB_EXTERN)
+	{
 		return 0;
+	}
 	
-	if (pid->cache->flag & PTCACHE_DISK_CACHE) {
+	if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) {
+		char filename[MAX_PTCACHE_PATH];
+
+		openvdb_filepath(pid, filename, cfra);
+
+		return BLI_exists(filename);
+	}
+	else if (pid->cache->flag & PTCACHE_DISK_CACHE) {
 		char filename[MAX_PTCACHE_FILE];
 		
 		ptcache_filename(pid, filename, cfra, 1, 1);

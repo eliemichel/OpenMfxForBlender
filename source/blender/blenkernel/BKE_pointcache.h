@@ -125,6 +125,7 @@ typedef struct PTCacheFile {
 enum {
 	PTCACHE_FILE_PTCACHE = 0,
 	PTCACHE_FILE_OPENVDB = 1,
+	PTCACHE_FILE_OPENVDB_EXTERN = 2,
 };
 
 typedef struct PTCacheID {

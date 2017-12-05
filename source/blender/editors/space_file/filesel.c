@@ -187,6 +187,8 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 			params->filter |= RNA_property_boolean_get(op->ptr, prop) ? FILE_TYPE_COLLADA : 0;
 		if ((prop = RNA_struct_find_property(op->ptr, "filter_alembic")))
 			params->filter |= RNA_property_boolean_get(op->ptr, prop) ? FILE_TYPE_ALEMBIC : 0;
+		if ((prop = RNA_struct_find_property(op->ptr, "filter_openvdb")))
+			params->filter |= RNA_property_boolean_get(op->ptr, prop) ? FILE_TYPE_OPENVDB : 0;
 		if ((prop = RNA_struct_find_property(op->ptr, "filter_glob"))) {
 			/* Protection against pyscripts not setting proper size limit... */
 			char *tmp = RNA_property_string_get_alloc(
