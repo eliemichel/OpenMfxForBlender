@@ -142,19 +142,6 @@ static BL::NodeSocket get_node_input(BL::Node& b_node, const string& name)
     return *b_in;
 }
 
-static BL::NodeSocket get_node_input(BL::Node& b_node, const string& name)
-{
-	BL::Node::inputs_iterator b_in;
-
-	for(b_node.inputs.begin(b_in); b_in != b_node.inputs.end(); ++b_in)
-		if(b_in->name() == name)
-			return *b_in;
-
-	assert(0);
-
-	return *b_in;
-}
-
 static float3 get_node_output_rgba(BL::Node& b_node, const string& name)
 {
     BL::NodeSocket b_sock = get_node_output(b_node, name);
