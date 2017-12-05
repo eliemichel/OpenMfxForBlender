@@ -226,7 +226,7 @@ void Camera::update()
 		cameratoscreen = transform_orthographic(nearclip, farclip);
 	else
 		cameratoscreen = transform_identity();
-
+  
 	Transform screentocamera = transform_inverse(cameratoscreen);
 
 	rastertocamera = screentocamera * rastertoscreen;
@@ -245,6 +245,10 @@ void Camera::update()
 	worldtoscreen = cameratoscreen * worldtocamera;
 	worldtondc = screentondc * worldtoscreen;
 	worldtoraster = ndctoraster * worldtondc;
+
+    // TEST
+    Transform cameratondc = screentondc * cameratoscreen;
+    Transform cameratoraster = ndctoraster * screentondc * cameratoscreen;
 
 	/* differentials */
 	if(type == CAMERA_ORTHOGRAPHIC) {

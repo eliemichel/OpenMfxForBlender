@@ -98,6 +98,13 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
                 float viewmat[4][4];
                 float viewinv[4][4];
                 camera_stereo3d_model_matrix(camera, c == 0, viewmat);
+                
+                // Cycles inverts z axis
+                viewmat[2][0] *= -1.0F;
+                viewmat[2][1] *= -1.0F;
+                viewmat[2][2] *= -1.0F;
+                viewmat[2][3] *= -1.0F;
+
                 invert_m4_m4(viewinv, viewmat);
                 
                 float cameratondc[4][4];
@@ -162,7 +169,7 @@ void OtherEyeOperation::computePerspective(float cameratondc[4][4], float ndctor
     // screen to ndc
     float screentondc[4][4];
     float viewplane[4][4];
-    transformFromViewplane(viewplane, -1.0f, 1.0f, -1.0f / (width / height), 1.0f / (width / height));
+    transformFromViewplane(viewplane, -width / height, width / height, -1.0f, 1.0f);
     mul_m4_m4m4(screentondc, fulltoborder, viewplane);
 
     // screen to camera
@@ -181,7 +188,7 @@ void OtherEyeOperation::computePerspective(float cameratondc[4][4], float ndctor
     //invert_m4(persp);   // TODO: ???
     
     zero_m4(scale);
-    float inv_angle = 1.0f / tanf(0.5f * far * fov);
+    float inv_angle = 1.0f / tanf(0.5f * fov);
     scale[0][0] = inv_angle;
     scale[1][1] = inv_angle;
     scale[2][2] = 1.0f;
@@ -279,7 +286,7 @@ void OtherEyeOperation::reprojectLeftToRight(float r[3], float l[3], float left_
     auto world_depth = l[2];
     
     // i.e. near_clip = -1.0, far clip = 1.0
-    float normalized_depth = (-A * world_depth + B) / world_depth;
+    float normalized_depth = (-A * world_depth + B) / world_depth + 2.0f;
     
     // Build 4 component vector
     float l4[4] = {l[0], l[1], normalized_depth, 1.0f};
