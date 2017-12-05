@@ -128,6 +128,11 @@ enum {
 	PTCACHE_FILE_OPENVDB_EXTERN = 2,
 };
 
+enum {
+	PTCACHE_VDB_TYPE_GENERIC = 0,
+	PTCACHE_VDB_TYPE_FUMEFX = 1,
+};
+
 typedef struct PTCacheID {
 	struct PTCacheID *next, *prev;
 

@@ -5076,6 +5076,7 @@ static void direct_link_smoke_modifier(FileData *fd, SmokeModifierData *smd)
 		smd->coll = NULL;
 		smd->domain = newdataadr(fd, smd->domain);
 		smd->domain->smd = smd;
+		smd->domain->vdb = NULL;
 
 		smd->domain->fluid = NULL;
 		smd->domain->fluid_mutex = BLI_rw_mutex_alloc();
@@ -5085,7 +5086,6 @@ static void direct_link_smoke_modifier(FileData *fd, SmokeModifierData *smd)
 		smd->domain->tex_shadow = NULL;
 		smd->domain->tex_wt = NULL;
 		smd->domain->coba = newdataadr(fd, smd->domain->coba);
-		smd->domain->vdb = newdataadr(fd, smd->domain->vdb);
 
 		smd->domain->effector_weights = newdataadr(fd, smd->domain->effector_weights);
 		if (!smd->domain->effector_weights)
@@ -5402,6 +5402,8 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb)
 
 			vdbmd->grids = NULL;
 			vdbmd->numgrids = 0;
+
+			vdbmd->frame_last = -1;
 		}
 	}
 }

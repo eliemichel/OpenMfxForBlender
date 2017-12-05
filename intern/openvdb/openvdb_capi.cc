@@ -123,12 +123,12 @@ void OpenVDB_import_grid_fl(
 bool OpenVDB_import_grid_fl_extern(
         OpenVDBReader *reader,
         const char *name, float **data,
-        const int res_min[3], const int res[3],
-        short up, short front)
+        const int res_min[3], const int res_max[3],
+        const int res[3], const int level, short up, short front)
 {
 	Timer(__func__);
 
-	return internal::OpenVDB_import_grid_extern<openvdb::FloatGrid>(reader, name, data, res_min, res, up, front);
+	return internal::OpenVDB_import_grid_extern<openvdb::FloatGrid>(reader, name, data, res_min, res_max, res, level, up, front);
 }
 
 void OpenVDB_import_grid_ch(
@@ -154,12 +154,12 @@ bool OpenVDB_import_grid_vec_extern(
         struct OpenVDBReader *reader,
         const char *name,
         float **data_x, float **data_y, float **data_z,
-        const int res_min[3], const int res[3],
-        short up, short front)
+        const int res_min[3], const int res_max[3],
+        const int res[3], const int level, short up, short front)
 {
 	Timer(__func__);
 
-	return internal::OpenVDB_import_grid_vector_extern(reader, name, data_x, data_y, data_z, res_min, res, up, front);
+	return internal::OpenVDB_import_grid_vector_extern(reader, name, data_x, data_y, data_z, res_min, res_max, res, level, up, front);
 }
 
 bool OpenVDB_has_grid(OpenVDBReader *reader, const char *name)
@@ -170,7 +170,8 @@ bool OpenVDB_has_grid(OpenVDBReader *reader, const char *name)
 int OpenVDB_get_bbox(
         struct OpenVDBReader *reader,
         char *density, char *heat,
-        char *flame, char *color,
+        char *flame, char color[3][64],
+        bool split_color,
         short up, short front,
         int r_res_min[3],
         int r_res_max[3],
@@ -224,10 +225,22 @@ int OpenVDB_get_bbox(
 	}
 
 	if (color) {
-		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, color));
+		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, color[0]));
 
-		if (*trans != *internal::OpenVDB_get_grid_transform(reader, flame)) {
+		if (*trans != *internal::OpenVDB_get_grid_transform(reader, color[0])) {
 			validity = GRID_TRANSFORM_INVALID;
+		}
+
+		if (split_color) {
+			for (int i = 1; i < 3; i++) {
+				if (OpenVDB_has_grid(reader, color[i])) {
+					bbox.expand(internal::OpenVDB_get_grid_bounds(reader, color[i]));
+
+					if (*trans != *internal::OpenVDB_get_grid_transform(reader, color[i])) {
+						validity = GRID_TRANSFORM_INVALID;
+					}
+				}
+			}
 		}
 	}
 
@@ -246,8 +259,6 @@ int OpenVDB_get_bbox(
 	r_res[1] = coord[front];
 	r_res[2] = coord[up];
 
-	coord = Coord(0);
-	bbox = CoordBBox(coord, bbox.getEnd());
 	bboxf = trans->indexToWorld(bbox);
 
 	coordf = bboxf.min();
@@ -266,6 +277,12 @@ int OpenVDB_get_bbox(
 	r_voxel_size[2] = coordf[up];
 
 	return validity;
+}
+
+
+bool OpenVDB_has_metadata(struct OpenVDBReader *reader, const char *name)
+{
+	return reader->hasMetadata(name);
 }
 
 void OpenVDB_print_grids(OpenVDBReader *reader)

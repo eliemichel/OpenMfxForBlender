@@ -1621,22 +1621,32 @@ typedef struct OpenVDBModifierData {
 	char density[64];
 	char heat[64];
 	char flame[64];
-	char color[64];
+	char color[3][64];
 
 	int numgrids;
 	int frame_offset;
+	int frame_override;
 
 	int flags;
 
+	int frame_last;
+
 	short up_axis;
 	short front_axis;
+
+	short simplify;
+	short pad[3];
 
 	SmokeModifierData *smoke;
 } OpenVDBModifierData;
 
 /* OpenVDBModifierData flags */
 enum {
-	MOD_OPENVDB_HIDE_VOLUME = (1 << 0),
+	MOD_OPENVDB_HIDE_VOLUME     = (1 << 0),
+	MOD_OPENVDB_OVERRIDE_FRAME  = (1 << 1),
+	MOD_OPENVDB_HIDE_UNSELECTED = (1 << 2),
+	MOD_OPENVDB_SPLIT_COLOR     = (1 << 3),
+	MOD_OPENVDB_IS_RENDER       = (1 << 4),
 };
 
 enum {

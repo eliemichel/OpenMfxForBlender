@@ -51,9 +51,11 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
+#include "BKE_depsgraph.h"
 #include "BKE_group.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
+#include "BKE_modifier.h"
 #include "BKE_particle.h"
 #include "BKE_property.h"
 #include "BKE_report.h"
@@ -88,6 +90,8 @@
 
 void ED_base_object_select(Base *base, short mode)
 {
+	ModifierData *md;
+
 	if (base) {
 		if (mode == BA_SELECT) {
 			if (!(base->object->restrictflag & OB_RESTRICT_SELECT))
@@ -97,6 +101,17 @@ void ED_base_object_select(Base *base, short mode)
 			base->flag &= ~SELECT;
 		}
 		base->object->flag = base->flag;
+	}
+
+	/* This is kinda hackish, but good enough to ensure VDB update for now. */
+	md = modifiers_findByType(base->object, eModifierType_OpenVDB);
+
+	if (md) {
+		OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+
+		if (vdbmd->flags & MOD_OPENVDB_HIDE_UNSELECTED) {
+			DAG_id_tag_update(&base->object->id, OB_RECALC_DATA);
+		}
 	}
 }
 

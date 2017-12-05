@@ -70,6 +70,8 @@ static void initData(ModifierData *md)
 
 	vdbmd->up_axis = MOD_OVDB_AXIS_Z;
 	vdbmd->front_axis = MOD_OVDB_AXIS_MIN_Y;
+
+	vdbmd->frame_last = -1;
 }
 
 static void freeData(ModifierData *md)
@@ -92,9 +94,11 @@ static void copyData(ModifierData *md, ModifierData *target)
 	tvdbmd->smoke = (SmokeModifierData *)modifier_new(eModifierType_Smoke);
 
 	modifier_copyData((ModifierData *)vdbmd->smoke, (ModifierData *)tvdbmd->smoke);
-	tvdbmd->smoke->domain->vdb = tvdbmd;
+	vdbmd->smoke->domain->vdb = vdbmd;
 
 	tvdbmd->grids = MEM_dupallocN(vdbmd->grids);
+
+	vdbmd->frame_last = -1;
 }
 
 static bool dependsOnTime(ModifierData *UNUSED(md))
@@ -119,8 +123,11 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 	SmokeModifierData *smd = vdbmd->smoke;
 	DerivedMesh *r_dm;
 	char filepath[1024];
+	int vdbflags = vdbmd->flags;
+	short vdbsimplify = vdbmd->simplify;
 
 	((ModifierData *)smd)->scene = md->scene;
+	smd->domain->vdb = vdbmd;
 
 	ob->dt = OB_WIRE;
 
@@ -143,14 +150,40 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 		OpenVDBReader_free(reader);
 	}
 
-	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
-
 	invert_m4_m4(smd->domain->imat, ob->obmat);
 	copy_m4_m4(smd->domain->obmat, ob->obmat);
+
+	/* XXX Hack to avoid passing stuff all over the place. */
+	if (flag & MOD_APPLY_RENDER) {
+		vdbmd->flags &= ~MOD_OPENVDB_HIDE_VOLUME;
+		vdbmd->simplify = 0;
+
+		if (!(vdbmd->flags & MOD_OPENVDB_IS_RENDER)) {
+			vdbmd->frame_last = -1;
+			vdbflags |= MOD_OPENVDB_IS_RENDER;
+		}
+	}
+	else {
+		if ((vdbmd->flags & MOD_OPENVDB_HIDE_UNSELECTED) &&
+			!(ob->flag & SELECT))
+		{
+			vdbmd->flags |= MOD_OPENVDB_HIDE_VOLUME;
+		}
+
+		if (vdbmd->flags & MOD_OPENVDB_IS_RENDER) {
+			vdbmd->frame_last = -1;
+			vdbflags &= ~MOD_OPENVDB_IS_RENDER;
+		}
+	}
+
+	smd->domain->flags |= MOD_SMOKE_ADAPTIVE_DOMAIN;
 
 	r_dm = modwrap_applyModifier((ModifierData *)smd, ob, dm, flag);
 
 	smd->domain->flags &= ~MOD_SMOKE_ADAPTIVE_DOMAIN;
+
+	vdbmd->flags = vdbflags;
+	vdbmd->simplify = vdbsimplify;
 
 	return r_dm;
 #else

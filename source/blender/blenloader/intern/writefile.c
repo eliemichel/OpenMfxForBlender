@@ -1703,10 +1703,6 @@ static void write_smoke_modifier(WriteData *wd, SmokeModifierData *smd)
 			if (smd->domain->coba) {
 				writestruct(wd, DATA, ColorBand, 1, smd->domain->coba);
 			}
-
-			if (smd->domain->vdb) {
-				writestruct(wd, DATA, OpenVDBModifierData, 1, smd->domain->vdb);
-			}
 		}
 
 		writestruct(wd, DATA, SmokeDomainSettings, 1, smd->domain);

@@ -79,8 +79,8 @@ void OpenVDB_import_grid_fl(
 bool OpenVDB_import_grid_fl_extern(
         struct OpenVDBReader *reader,
         const char *name, float **data,
-        const int res_min[3], const int res[3],
-        short up, short front);
+        const int res_min[3], const int res_max[3],
+        const int res[3], const int level, short up, short front);
 
 void OpenVDB_import_grid_ch(
         struct OpenVDBReader *reader,
@@ -97,15 +97,16 @@ bool OpenVDB_import_grid_vec_extern(
         struct OpenVDBReader *reader,
         const char *name,
         float **data_x, float **data_y, float **data_z,
-        const int res_min[3], const int res[3],
-        short up, short front);
+        const int res_min[3], const int res_max[3],
+        const int res[3], const int level, short up, short front);
 
 bool OpenVDB_has_grid(struct OpenVDBReader *reader, const char *name);
 
 int OpenVDB_get_bbox(
         struct OpenVDBReader *reader,
         char *density, char *heat,
-        char *flame, char *color,
+        char *flame, char color[3][64],
+        bool split_color,
         short up, short front,
         int r_res_min[3],
         int r_res_max[3],
@@ -113,6 +114,8 @@ int OpenVDB_get_bbox(
         float r_bbox_min[3],
         float r_bbox_max[3],
         float r_voxel_size[3]);
+
+bool OpenVDB_has_metadata(struct OpenVDBReader *reader, const char *name);
 
 void OpenVDB_print_grids(struct OpenVDBReader *reader);
 void OpenVDB_print_metadata_names(struct OpenVDBReader *reader);
