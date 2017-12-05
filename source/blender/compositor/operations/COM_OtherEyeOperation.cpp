@@ -105,7 +105,10 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
                 float cameratoraster[4][4];
                 float worldtoraster[4][4];
 
-                computePerspective(cameratondc, ndctoraster, params.clipsta, params.clipend);
+                // focallength_to_fov
+                float fov = 2.0f * atanf((params.sensor_y / 2.0f) / params.lens);
+
+                computePerspective(cameratondc, ndctoraster, fov, params.clipsta, params.clipend);
                 mul_m4_m4m4(cameratoraster, ndctoraster, cameratondc);
                 mul_m4_m4m4(worldtoraster, cameratoraster, viewinv);
 
@@ -135,7 +138,7 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 	return m_cachedInstance;
 }
 
-void OtherEyeOperation::computePerspective(float cameratondc[4][4], float ndctoraster[4][4], float near, float far)
+void OtherEyeOperation::computePerspective(float cameratondc[4][4], float ndctoraster[4][4], float fov, float near, float far)
 {
     float width = (float)getWidth();
     float height = (float)getHeight();
@@ -163,7 +166,7 @@ void OtherEyeOperation::computePerspective(float cameratondc[4][4], float ndctor
     mul_m4_m4m4(screentondc, fulltoborder, viewplane);
 
     // screen to camera
-    float fov = M_PI_4_F;
+    //float fov = M_PI_4_F;
     float scale[4][4];
     float persp[4][4];
     
@@ -171,9 +174,9 @@ void OtherEyeOperation::computePerspective(float cameratondc[4][4], float ndctor
     persp[0][0] = persp[1][1] = persp[3][2] = 1.0f;
     persp[2][2] = far / (far - near);
     persp[2][3] = -far * near / (far - near);
-    float inv_angle = 1.0f / tanf(0.5f * far * fov);
     
     zero_m4(scale);
+    float inv_angle = 1.0f / tanf(0.5f * far * fov);
     scale[0][0] = inv_angle;
     scale[1][1] = inv_angle;
     scale[2][2] = 1.0f;
