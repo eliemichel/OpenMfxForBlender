@@ -153,7 +153,7 @@ void OtherEyeOperation::Compute_eye_matrices(Object *camera, CameraParams *param
 	/* Full viewport to camera border in the viewport. */
 	float fulltoborder[4][4];
 	float bordertofull[4][4];
-	transform_from_viewplane(0.0f, 1.0f, 0.0f, 1.0f, fulltoborder);
+	transform_from_viewplane(0.0, 1.0, 0.0, 1.0, fulltoborder);
 	invert_m4_m4(bordertofull, fulltoborder);
 
 	/* ndc to raster */
@@ -221,7 +221,9 @@ void OtherEyeOperation::transform_from_viewplane(float left, float right, float 
 	// translate matrix
 	float translate[4][4];
 	zero_m4(translate);
-	translate_m4(translate, -left, -bottom, 0.0f);
+	translate[0][3] = -left;
+	translate[1][3] = -bottom;
+	translate[2][3] = 0.0F;
 
 	mul_m4_m4m4(transformation, scale, translate);
 }
