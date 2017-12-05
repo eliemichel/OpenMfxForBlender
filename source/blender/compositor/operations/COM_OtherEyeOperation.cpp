@@ -86,6 +86,8 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
         Object *camera = (Object*) m_camera;
         if (camera) {
 			CameraParams params;
+			BKE_camera_params_init(&params);
+			BKE_camera_params_from_object(&params, camera);
 
 			// Still need to set up left_to_world and world_to_right
 			Compute_eye_matrices(camera, &params, (float)getWidth(), (float)getHeight(), left_to_world, world_to_right);
@@ -256,13 +258,29 @@ void OtherEyeOperation::compute_auto_viewplane(CameraParams *params, int width, 
 
 void OtherEyeOperation::ComputePerspectiveMatrix(CameraParams *params)
 {
-	params->winmat[0][1] = params->winmat[0][3] = params->winmat[1][0] =
-	params->winmat[1][3] = params->winmat[2][0] = params->winmat[2][1] =
-	params->winmat[3][0] = params->winmat[3][1] = params->winmat[3][3] = 0.0;
-	params->winmat[0][0] = 1.09375; params->winmat[1][1] = 1.94444454;
-	params->winmat[2][2] = 1.00100100; params->winmat[2][3] = -0.100100100;
-	params->winmat[3][2] = 1.0;
-	params->winmat[0][2] = params->winmat[1][2] = 0.5;
+	
+	float fov = M_PI_4_F;
+	float nearclip = params->clipsta;
+	float farclip = params->clipend;
+	float persp[4][4];
+	float scale[4][4];
+	zero_m4(persp);
+	persp[0][0] = persp[1][1] = persp[3][2] = 1.0;
+	persp[2][2] = farclip / (farclip - nearclip);
+	persp[2][3] = -farclip*nearclip / (farclip - nearclip);
+
+	float inv_angle = 1.0f / tanf(0.5 * farclip * fov);
+	scale_m4_fl(scale, inv_angle); scale[2][2] = 1.0f;
+
+	mul_m4_m4m4(params->winmat, scale, persp);
+
+	//params->winmat[0][1] = params->winmat[0][3] = params->winmat[1][0] =
+	//params->winmat[1][3] = params->winmat[2][0] = params->winmat[2][1] =
+	//params->winmat[3][0] = params->winmat[3][1] = params->winmat[3][3] = 0.0;
+	//params->winmat[0][0] = 1.09375; params->winmat[1][1] = 1.94444454;
+	//params->winmat[2][2] = 1.00100100; params->winmat[2][3] = -0.100100100;
+	//params->winmat[3][2] = 1.0;
+	//params->winmat[0][2] = params->winmat[1][2] = 0.5;
 }
 
 void OtherEyeOperation::drawTriangle(float *data, float *depth_buffer,

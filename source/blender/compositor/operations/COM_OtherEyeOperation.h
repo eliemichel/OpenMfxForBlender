@@ -26,6 +26,10 @@
 #include "DNA_camera_types.h"
 #include "BKE_camera.h"
 
+#ifndef M_PI_4_F
+#  define M_PI_4_F  (0.7853981633974830f)  /* pi/4 */
+#endif
+
 class OtherEyeOperation : public NodeOperation {
 private:
 	/**
