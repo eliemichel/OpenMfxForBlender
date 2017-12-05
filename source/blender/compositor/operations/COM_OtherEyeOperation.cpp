@@ -83,9 +83,6 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 
         Object *camera = (Object*) m_camera;
         if (camera) {
-			CameraParams params;
-			BKE_camera_params_init(&params);
-			BKE_camera_params_from_object(&params, camera);
 
 			// Still need to set up left_to_world and world_to_right
 			// c == 0: Left eye to world
