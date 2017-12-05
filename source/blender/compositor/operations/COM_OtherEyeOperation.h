@@ -60,7 +60,9 @@ public:
 	void *initializeTileData(rcti *rect);
 
 	// Camera Transformations - BEGIN
-    void computePerspective     (float mat[4][4], float fbmat[4][4], float fov, float near, float far);
+    void computePerspective     (float cameratondc[4][4], float ndctoraster[4][4],
+                                 float fov, float zoom, float near, float far,
+                                 float shift_x, float shift_y, float offset_x, float offset_y);
     void transformFromViewplane (float transformation[4][4], float left, float right, float bottom, float top);
 	void transformScale         (float scale[4][4], float x, float y, float z);
 	

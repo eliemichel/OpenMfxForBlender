@@ -115,7 +115,9 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
                 // focallength_to_fov
                 float fov = 2.0f * atanf((params.sensor_y / 2.0f) / params.lens);
 
-                computePerspective(cameratondc, ndctoraster, fov, params.clipsta, params.clipend);
+                computePerspective( cameratondc, ndctoraster,
+                                    fov, params.zoom, params.clipsta, params.clipend,
+                                    params.shiftx, params.shifty, params.offsetx, params.offsety);
                 mul_m4_m4m4(cameratoraster, ndctoraster, cameratondc);
                 mul_m4_m4m4(worldtoraster, cameratoraster, viewinv);
 
@@ -145,7 +147,9 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 	return m_cachedInstance;
 }
 
-void OtherEyeOperation::computePerspective(float cameratondc[4][4], float ndctoraster[4][4], float fov, float near, float far)
+void OtherEyeOperation::computePerspective( float cameratondc[4][4], float ndctoraster[4][4],
+                                            float fov, float zoom, float near, float far,
+                                            float shift_x, float shift_y, float offset_x, float offset_y)
 {
     float width = (float)getWidth();
     float height = (float)getHeight();
@@ -166,10 +170,29 @@ void OtherEyeOperation::computePerspective(float cameratondc[4][4], float ndctor
     
     mul_m4_m4m4(ndctoraster, ndctoraster, bordertofull);
 
+    // Viewplane
+    float aspect = width/height;
+    float xaspect = aspect;
+    float yaspect = 1.0f;
+
+    float viewplane_left = -xaspect * zoom;
+    float viewplane_right = xaspect * zoom;
+    float viewplane_bottom = -yaspect * zoom;
+    float viewplane_top = yaspect * zoom;
+
+    /* modify viewplane with camera shift and 3d camera view offset */
+    float dx = 2.0f * (aspect * shift_x + offset_x * xaspect * 2.0f);
+    float dy = 2.0f * (aspect * shift_y + offset_y * yaspect * 2.0f);
+
+    viewplane_left += dx;
+    viewplane_right += dx;
+    viewplane_bottom += dy;
+    viewplane_top += dy;
+
     // screen to ndc
     float screentondc[4][4];
     float viewplane[4][4];
-    transformFromViewplane(viewplane, -width / height, width / height, -1.0f, 1.0f);
+    transformFromViewplane(viewplane, viewplane_left, viewplane_right, viewplane_bottom, viewplane_top);
     mul_m4_m4m4(screentondc, fulltoborder, viewplane);
 
     // screen to camera
