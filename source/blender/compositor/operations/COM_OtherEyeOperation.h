@@ -26,7 +26,6 @@
 #include "DNA_camera_types.h"
 #include "BKE_camera.h"
 
-
 class OtherEyeOperation : public NodeOperation {
 private:
 	/**
@@ -55,8 +54,14 @@ public:
 	void executePixel(float output[4], int x, int y, void *data);
 	bool determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output);
 	void *initializeTileData(rcti *rect);
-	float camera_stereo_shift(Object *camera);
-	void ComputeCameraParamsViewplane(CameraParams *params, int width, int height);
+
+	// Camera Transformations - BEGIN
+	void Compute_eye_matrices(Object *camera, CameraParams *params, int width, int height, float left_to_world[4][4], float world_to_right[4][4]);
+	void compute_auto_viewplane(CameraParams *params, int width, int height);
+	void ComputePerspectiveMatrix(CameraParams *params);
+	void transform_from_viewplane(float left, float right, float bottom, float top, float transformation[4][4]);
+	float** transform_scale(float x, float y, float z);
+	// Camera Transformations - END
 
 	void setCamera(struct ID *camera) { m_camera = camera; }
 
