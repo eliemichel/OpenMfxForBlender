@@ -152,8 +152,8 @@ void OtherEyeOperation::computePerspective(float cameratondc[4][4], float ndctor
 
 	// ndc to raster
     zero_m4(ndctoraster);
-    ndctoraster[0][0] = getWidth();
-    ndctoraster[1][1] = getHeight();
+    ndctoraster[0][0] = width;
+    ndctoraster[1][1] = height;
     ndctoraster[2][2] = 1.0f;
     ndctoraster[3][3] = 1.0f;
     
@@ -170,10 +170,15 @@ void OtherEyeOperation::computePerspective(float cameratondc[4][4], float ndctor
     float scale[4][4];
     float persp[4][4];
     
+    //mat[3][0] x
+    //mat[3][1] y
+    //mat[3][2] z
+
     zero_m4(persp);
-    persp[0][0] = persp[1][1] = persp[3][2] = 1.0f;
+    persp[0][0] = persp[1][1] = persp[2][3] = 1.0f;
     persp[2][2] = far / (far - near);
-    persp[2][3] = -far * near / (far - near);
+    persp[3][2] = -far * near / (far - near);
+    //invert_m4(persp);   // TODO: ???
     
     zero_m4(scale);
     float inv_angle = 1.0f / tanf(0.5f * far * fov);
@@ -202,9 +207,9 @@ void OtherEyeOperation::transformFromViewplane(float transformation[4][4], float
 	// translate matrix
 	float translate[4][4];
 	unit_m4(translate);
-	translate[0][3] = -left;
-	translate[1][3] = -bottom;
-	translate[2][3] = 0.0f;
+	translate[3][0] = -left;
+	translate[3][1] = -bottom;
+	translate[3][2] = 0.0f;
 
 	mul_m4_m4m4(transformation, scale, translate);
 }
