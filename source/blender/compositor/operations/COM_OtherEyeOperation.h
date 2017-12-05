@@ -60,13 +60,11 @@ public:
 	void *initializeTileData(rcti *rect);
 
 	// Camera Transformations - BEGIN
-	void Compute_eye_matrices(Object *camera, CameraParams *params, int width, int height, float left_to_world[4][4], float world_to_right[4][4]);
-	void compute_auto_viewplane(CameraParams *params, int width, int height);
-	void ComputePerspectiveMatrix(CameraParams *params);
-	void transform_from_viewplane(float left, float right, float bottom, float top, float transformation[4][4]);
-	float** transform_scale(float x, float y, float z);
-	// Camera Transformations - END
-
+    void computePerspective     (float mat[4][4], float fbmat[4][4], float near, float far);
+    void transformFromViewplane (float transformation[4][4], float left, float right, float bottom, float top);
+	void transformScale         (float scale[4][4], float x, float y, float z);
+	
+    // Camera Transformations - END
 	void setCamera(struct ID *camera) { m_camera = camera; }
 
 	/**

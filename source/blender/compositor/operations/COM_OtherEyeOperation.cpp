@@ -78,10 +78,8 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
         // Camera matrices
         float left_to_world[4][4];
         float world_to_right[4][4];
-        float width = getWidth();
-        float height = getHeight();
-        float A = 1.0F;
-        float B = 1.0F;
+        float A = 1.0f;
+        float B = 1.0f;
 
         Object *camera = (Object*) m_camera;
         if (camera) {
@@ -90,50 +88,39 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 			BKE_camera_params_from_object(&params, camera);
 
 			// Still need to set up left_to_world and world_to_right
-			Compute_eye_matrices(camera, &params, (float)getWidth(), (float)getHeight(), left_to_world, world_to_right);
 			// c == 0: Left eye to world
 			// c == 1: World to right eye
-    //        for (int c = 0; c < 2; ++c) {
-    //            CameraParams params;
-    //        
-    //            float viewinv[4][4];
-    //            float viewmat[4][4];
-    //            camera_stereo3d_model_matrix(camera, c == 0, viewmat);
-    //            
-    //            // Objmat
-    //            //normalize_m4(viewmat);
-    //            invert_m4_m4(viewinv, viewmat);
+            for (int c = 0; c < 2; ++c) {
+                CameraParams params;
+                BKE_camera_params_init(&params);
+                BKE_camera_params_from_object(&params, camera);
 
-    //            // Window matrix, clipping and ortho
-    //            BKE_camera_params_init(&params);
-    //            BKE_camera_params_from_object(&params, camera);
-				//compute_auto_viewplane(&params, getWidth(), getHeight());
-    //            //BKE_camera_params_compute_matrix(&params);
-				//ComputePerspectiveMatrix(&params);
-    //            
-    //            // Framebuffer matrix
-    //            float fbmat[4][4];
-    //            zero_m4(fbmat);
-    //            fbmat[0][0] = width*0.5F;   fbmat[3][0] = 0.0;
-    //            fbmat[1][1] = height*0.5F;  fbmat[3][1] = 0.0;
-    //            fbmat[2][2] = 1.0F;         fbmat[3][2] = 0.0F;
-    //            fbmat[3][3] = 1.0F;
+                float viewmat[4][4];
+                float viewinv[4][4];
+                camera_stereo3d_model_matrix(camera, c == 0, viewmat);
+                invert_m4_m4(viewinv, viewmat);
+                
+                float cameratondc[4][4];
+                float ndctoraster[4][4];
+                float cameratoraster[4][4];
+                float worldtoraster[4][4];
 
-    //            mul_m4_m4m4(viewinv, params.winmat, viewinv);
-    //            mul_m4_m4m4(viewinv, fbmat, viewinv);
-    //            
-				//if (c == 0) {
-    //                invert_m4_m4(left_to_world, viewinv);
-    //                A = params.winmat[2][2];
-    //                B = params.winmat[3][2];
-    //                
-    //                // mat[2][2] = A = -(farClip + nearClip) / (farClip - nearClip);
-    //                // mat[3][2] = B = (-2.0f * nearClip * farClip) / (farClip - nearClip);
-    //            } else {
-    //                copy_m4_m4(world_to_right, viewinv);
-    //            }
-    //            
-    //        }
+                computePerspective(cameratondc, ndctoraster, params.clipsta, params.clipend);
+                mul_m4_m4m4(cameratoraster, ndctoraster, cameratondc);
+                mul_m4_m4m4(worldtoraster, cameratoraster, viewinv);
+
+                if (c == 0) {
+                    invert_m4_m4(left_to_world, worldtoraster);
+                    A = cameratondc[2][2];
+                    B = cameratondc[3][2];
+                    
+                    // mat[2][2] = A = -(farClip + nearClip) / (farClip - nearClip);
+                    // mat[3][2] = B = (-2.0f * nearClip * farClip) / (farClip - nearClip);
+                } else {
+                    copy_m4_m4(world_to_right, worldtoraster);
+                }
+                
+            }
 
         } else {
             unit_m4(left_to_world);
@@ -148,67 +135,58 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 	return m_cachedInstance;
 }
 
-void OtherEyeOperation::Compute_eye_matrices(Object *camera, CameraParams *params, int width, int height, float left_to_world[4][4], float world_to_right[4][4])
+void OtherEyeOperation::computePerspective(float cameratondc[4][4], float ndctoraster[4][4], float near, float far)
 {
-	/* Full viewport to camera border in the viewport. */
+    float width = (float)getWidth();
+    float height = (float)getHeight();
+
+	// full viewport to camera border in the viewport.
 	float fulltoborder[4][4];
 	float bordertofull[4][4];
-	transform_from_viewplane(0.0, 1.0, 0.0, 1.0, fulltoborder);
+ 
+	transformFromViewplane(fulltoborder, 0.0f, 1.0f, 0.0f, 1.0f);
 	invert_m4_m4(bordertofull, fulltoborder);
 
-	/* ndc to raster */
-	float ndctoraster[4][4];
-	mul_m4_m4m4(ndctoraster, (float(*)[4])transform_scale(getWidth(), getHeight(), 1.0f), bordertofull);
+	// ndc to raster
+    zero_m4(ndctoraster);
+    ndctoraster[0][0] = getWidth();
+    ndctoraster[1][1] = getHeight();
+    ndctoraster[2][2] = 1.0f;
+    ndctoraster[3][3] = 1.0f;
+    
+    mul_m4_m4m4(ndctoraster, ndctoraster, bordertofull);
 
-	/* raster to screen */
-	float screentondc[4][4];
-	float screentoraster[4][4];
-	float rastertoscreen[4][4];
-	float viewplane[4][4];
-	transform_from_viewplane(-1.0f, 1.0f, -1.0f / ((float)getWidth() / (float)getHeight()), 
-		1.0f / ((float)getWidth() / (float)getHeight()), viewplane);
-	mul_m4_m4m4(screentondc, fulltoborder, viewplane);
-	mul_m4_m4m4(screentoraster, ndctoraster, screentondc);
-	invert_m4_m4(rastertoscreen, screentoraster);
+    // screen to ndc
+    float screentondc[4][4];
+    float viewplane[4][4];
+    transformFromViewplane(viewplane, -1.0f, 1.0f, -1.0f / (width / height), 1.0f / (width / height));
+    mul_m4_m4m4(screentondc, fulltoborder, viewplane);
 
-	/* screen to camera */
-	float cameratoscreen[4][4];
-	float screentocamera[4][4];
-	ComputePerspectiveMatrix(params);
-	copy_m4_m4(cameratoscreen, params->winmat);
-	invert_m4_m4(screentocamera, cameratoscreen);
+    // screen to camera
+    float fov = M_PI_4_F;
+    float scale[4][4];
+    float persp[4][4];
+    
+    zero_m4(persp);
+    persp[0][0] = persp[1][1] = persp[3][2] = 1.0f;
+    persp[2][2] = far / (far - near);
+    persp[2][3] = -far * near / (far - near);
+    float inv_angle = 1.0f / tanf(0.5f * far * fov);
+    
+    zero_m4(scale);
+    scale[0][0] = inv_angle;
+    scale[1][1] = inv_angle;
+    scale[2][2] = 1.0f;
+    scale[3][3] = 1.0f;
 
-	/* camera to raster */
-	float rastertocamera[4][4];
-	float cameratoraster[4][4];
-	mul_m4_m4m4(rastertocamera, screentocamera, rastertoscreen);
-	mul_m4_m4m4(cameratoraster, screentoraster, cameratoscreen);
-
-	/* world to raster */
-	float cameratoworld[4][4];
-	float screentoworld[4][4];
-	float rastertoworld[4][4];
-	float ndctoworld[4][4];
-	copy_m4_m4(cameratoworld, camera->obmat);
-	mul_m4_m4m4(screentoworld, cameratoworld, screentocamera);
-	mul_m4_m4m4(rastertoworld, cameratoworld, rastertocamera);
-	mul_m4_m4m4(ndctoworld, rastertoworld, ndctoraster);
-
-	/* world to raster */
-	float worldtocamera[4][4];
-	float worldtoscreen[4][4];
-	float worldtondc[4][4];
-	float worldtoraster[4][4];
-	invert_m4_m4(worldtocamera, camera->obmat);
-	mul_m4_m4m4(worldtoscreen, cameratoscreen, worldtocamera);
-	mul_m4_m4m4(worldtondc, screentondc, worldtoscreen);
-	mul_m4_m4m4(worldtoraster, ndctoraster, worldtondc);
-
-	/* copying matrices to get left_to_world and right_to_world */
-
+    float cameratoscreen[4][4];
+    mul_m4_m4m4(cameratoscreen, scale, persp);
+    
+	// camera to ndc
+	mul_m4_m4m4(cameratondc, screentondc, cameratoscreen);
 }
 
-void OtherEyeOperation::transform_from_viewplane(float left, float right, float bottom, float top, float transformation[4][4])
+void OtherEyeOperation::transformFromViewplane(float transformation[4][4], float left, float right, float bottom, float top)
 {
 	// scale matrix
 	float scale[4][4];
@@ -220,69 +198,12 @@ void OtherEyeOperation::transform_from_viewplane(float left, float right, float 
 
 	// translate matrix
 	float translate[4][4];
-	zero_m4(translate);
+	unit_m4(translate);
 	translate[0][3] = -left;
 	translate[1][3] = -bottom;
-	translate[2][3] = 0.0F;
+	translate[2][3] = 0.0f;
 
 	mul_m4_m4m4(transformation, scale, translate);
-}
-
-float** OtherEyeOperation::transform_scale(float x, float y, float z)
-{
-	float** scale = 0;
-
-	zero_m4((float(*)[4])scale);
-	scale[0][0] = x;
-	scale[1][1] = y;
-	scale[2][2] = z;
-	scale[3][3] = 1.0f;
-
-	return scale;
-}
-
-void OtherEyeOperation::compute_auto_viewplane(CameraParams *params, int width, int height)
-{
-	float aspect = (float)width / (float)height;
-	if (width >= height) {
-		params->viewplane.xmin = -aspect;
-		params->viewplane.xmax =  aspect;
-		params->viewplane.ymin = -1.0f;
-		params->viewplane.ymax =  1.0f;
-	}
-	else {
-		params->viewplane.xmin = -1.0f;
-		params->viewplane.xmax =  1.0f;
-		params->viewplane.ymin = -1.0f / aspect;
-		params->viewplane.ymax =  1.0f / aspect;
-	}
-}
-
-void OtherEyeOperation::ComputePerspectiveMatrix(CameraParams *params)
-{
-	
-	float fov = M_PI_4_F;
-	float nearclip = params->clipsta;
-	float farclip = params->clipend;
-	float persp[4][4];
-	float scale[4][4];
-	zero_m4(persp);
-	persp[0][0] = persp[1][1] = persp[3][2] = 1.0;
-	persp[2][2] = farclip / (farclip - nearclip);
-	persp[2][3] = -farclip*nearclip / (farclip - nearclip);
-
-	float inv_angle = 1.0f / tanf(0.5 * farclip * fov);
-	scale_m4_fl(scale, inv_angle); scale[2][2] = 1.0f;
-
-	mul_m4_m4m4(params->winmat, scale, persp);
-
-	//params->winmat[0][1] = params->winmat[0][3] = params->winmat[1][0] =
-	//params->winmat[1][3] = params->winmat[2][0] = params->winmat[2][1] =
-	//params->winmat[3][0] = params->winmat[3][1] = params->winmat[3][3] = 0.0;
-	//params->winmat[0][0] = 1.09375; params->winmat[1][1] = 1.94444454;
-	//params->winmat[2][2] = 1.00100100; params->winmat[2][3] = -0.100100100;
-	//params->winmat[3][2] = 1.0;
-	//params->winmat[0][2] = params->winmat[1][2] = 0.5;
 }
 
 void OtherEyeOperation::drawTriangle(float *data, float *depth_buffer,
@@ -294,7 +215,7 @@ void OtherEyeOperation::drawTriangle(float *data, float *depth_buffer,
     float vs1[2] = {vt2[0] - vt1[0], vt2[1] - vt1[1]};
     float vs2[2] = {vt3[0] - vt1[0], vt3[1] - vt1[1]};
     
-    float den = 1.0F / cross_v2v2(vs1, vs2);
+    float den = 1.0f / cross_v2v2(vs1, vs2);
     mul_v2_fl(vs1,den);
     mul_v2_fl(vs2,den);
 
@@ -353,7 +274,7 @@ void OtherEyeOperation::reprojectLeftToRight(float r[3], float l[3], float left_
     float normalized_depth = (-A * world_depth + B) / world_depth;
     
     // Build 4 component vector
-    float l4[4] = {l[0], l[1], normalized_depth, 1.0F};
+    float l4[4] = {l[0], l[1], normalized_depth, 1.0f};
     float r4[4];
 
     // Left camera to world transformation
@@ -362,7 +283,7 @@ void OtherEyeOperation::reprojectLeftToRight(float r[3], float l[3], float left_
 //    w[0] /= w[3];
 //    w[1] /= w[3];
 //    w[2] /= w[3];
-//    w[3] = 1.0F;
+//    w[3] = 1.0f;
 
     // w should be in world space now
 
