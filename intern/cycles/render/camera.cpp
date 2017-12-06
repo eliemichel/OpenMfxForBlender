@@ -226,7 +226,7 @@ void Camera::update()
 		cameratoscreen = transform_orthographic(nearclip, farclip);
 	else
 		cameratoscreen = transform_identity();
-	
+  
 	Transform screentocamera = transform_inverse(cameratoscreen);
 
 	rastertocamera = screentocamera * rastertoscreen;
