@@ -248,7 +248,7 @@ option(WITH_COMPOSITOR         "Enable the tile based nodal compositor" ON)
 option(WITH_OPENSUBDIV    "Enable OpenSubdiv for surface subdivision" _init_OPENSUBDIV)
 
 option(WITH_OPENVDB       "Enable features relying on OpenVDB" ON)
-option(WITH_OPENVDB_BLOSC "Enable blosc compression for OpenVDB, only enable if OpenVDB was built with blosc support" ON)
+option(WITH_OPENVDB_BLOSC "Enable blosc compression for OpenVDB, only enable if OpenVDB was built with blosc support" OFF)
 
 # GHOST Windowing Library Options
 option(WITH_GHOST_DEBUG   "Enable debugging output for the GHOST library" OFF)
