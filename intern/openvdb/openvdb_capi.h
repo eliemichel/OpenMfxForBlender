@@ -117,10 +117,6 @@ int OpenVDB_get_bbox(
 
 bool OpenVDB_has_metadata(struct OpenVDBReader *reader, const char *name);
 
-void OpenVDB_print_grids(struct OpenVDBReader *reader);
-void OpenVDB_print_metadata_names(struct OpenVDBReader *reader);
-void OpenVDB_print_grid_metadata_names(struct OpenVDBReader *reader, const char *name);
-void OpenVDB_print_grid_transform(struct OpenVDBReader *reader, const char *name);
 int OpenVDB_get_num_grids(struct OpenVDBReader *reader);
 void OpenVDB_fill_name_array(struct OpenVDBReader *reader, char **r_names);
 

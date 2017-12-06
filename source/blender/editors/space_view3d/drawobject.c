@@ -7532,7 +7532,7 @@ void draw_object(Scene *scene, ARegion *ar, View3D *v3d, Base *base, const short
 	}
 	else if (((base->flag & OB_FROMDUPLI) == 0) &&
 	         (md = modifiers_findByType(ob, eModifierType_OpenVDB)) &&
-		     (modifier_isEnabled(scene, md, eModifierMode_Realtime)))
+	         (modifier_isEnabled(scene, md, eModifierMode_Realtime)))
 	{
 		smd = ((OpenVDBModifierData *)md)->smoke;
 
