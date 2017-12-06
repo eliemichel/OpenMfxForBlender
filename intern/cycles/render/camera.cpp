@@ -246,10 +246,6 @@ void Camera::update()
 	worldtondc = screentondc * worldtoscreen;
 	worldtoraster = ndctoraster * worldtondc;
 
-    // TEST
-    Transform cameratondc = screentondc * cameratoscreen;
-    Transform cameratoraster = ndctoraster * screentondc * cameratoscreen;
-
 	/* differentials */
 	if(type == CAMERA_ORTHOGRAPHIC) {
 		dx = transform_direction(&rastertocamera, make_float3(1, 0, 0));
