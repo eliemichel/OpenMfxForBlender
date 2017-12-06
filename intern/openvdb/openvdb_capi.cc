@@ -285,26 +285,6 @@ bool OpenVDB_has_metadata(struct OpenVDBReader *reader, const char *name)
 	return reader->hasMetadata(name);
 }
 
-void OpenVDB_print_grids(OpenVDBReader *reader)
-{
-	reader->printGrids();
-}
-
-void OpenVDB_print_metadata_names(OpenVDBReader *reader)
-{
-	reader->printMetadataNames();
-}
-
-void OpenVDB_print_grid_metadata_names(OpenVDBReader *reader, const char *name)
-{
-	reader->printGridMetadataNames(name);
-}
-
-void OpenVDB_print_grid_transform(OpenVDBReader *reader, const char *name)
-{
-	reader->printGridTransform(name);
-}
-
 int OpenVDB_get_num_grids(struct OpenVDBReader *reader)
 {
 	return reader->numGrids();

@@ -132,37 +132,6 @@ bool OpenVDBReader::hasMetadata(const openvdb::Name &name)
 	return (*m_meta_map)[name] != NULL;
 }
 
-void OpenVDBReader::printGrids()
-{
-	for (openvdb::io::File::NameIterator nameIter = m_file->beginName(); nameIter != m_file->endName(); ++nameIter) {
-		std::cout << nameIter.gridName() << std::endl;
-	}
-}
-
-void OpenVDBReader::printMetadataNames()
-{
-	for (openvdb::MetaMap::MetaIterator metaIter = m_meta_map->beginMeta(); metaIter != m_meta_map->endMeta(); ++metaIter) {
-		std::cout << metaIter->first << std::endl;
-	}
-}
-
-void OpenVDBReader::printGridMetadataNames(const openvdb::Name &name)
-{
-	openvdb::GridBase::Ptr grid = this->getGrid(name);
-
-	for (openvdb::MetaMap::MetaIterator metaIter = grid->beginMeta(); metaIter != grid->endMeta(); ++metaIter) {
-		std::cout << metaIter->first << std::endl;
-	}
-}
-
-void OpenVDBReader::printGridTransform(const openvdb::Name &name)
-{
-	openvdb::GridBase::Ptr grid = this->getGrid(name);
-	openvdb::math::Transform::Ptr trans = grid->transformPtr();
-
-	trans->print();
-}
-
 openvdb::io::File::NameIterator OpenVDBReader::getNameIter()
 {
 	return m_file->beginName();
