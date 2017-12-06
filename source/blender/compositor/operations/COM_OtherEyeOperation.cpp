@@ -85,7 +85,6 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
 
         Object *camera = (Object*) m_camera;
         if (camera) {
-
 			// Still need to set up left_to_world and world_to_right
 			// c == 0: Left eye to world
 			// c == 1: World to right eye
@@ -93,6 +92,10 @@ void *OtherEyeOperation::initializeTileData(rcti *rect)
             const char *names[2] = {STEREO_LEFT_NAME, STEREO_RIGHT_NAME};
             
             for (int c = 0; c < 2; ++c) {
+                CameraParams params;
+                BKE_camera_params_init(&params);
+                BKE_camera_params_from_object(&params, camera);
+
                 float viewmat[4][4];
                 float viewinv[4][4];
                 camera_stereo3d_model_matrix(camera, c == 0, viewmat);
