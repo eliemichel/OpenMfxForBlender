@@ -247,7 +247,7 @@ option(WITH_COMPOSITOR         "Enable the tile based nodal compositor" ON)
 
 option(WITH_OPENSUBDIV    "Enable OpenSubdiv for surface subdivision" _init_OPENSUBDIV)
 
-option(WITH_OPENVDB       "Enable features relying on OpenVDB" OFF)
+option(WITH_OPENVDB       "Enable features relying on OpenVDB" ON)
 option(WITH_OPENVDB_BLOSC "Enable blosc compression for OpenVDB, only enable if OpenVDB was built with blosc support" OFF)
 
 # GHOST Windowing Library Options
@@ -402,6 +402,7 @@ option(WITH_CYCLES					"Enable Cycles Render Engine" ON)
 option(WITH_CYCLES_STANDALONE		"Build Cycles standalone application" OFF)
 option(WITH_CYCLES_STANDALONE_GUI	"Build Cycles standalone with GUI" OFF)
 option(WITH_CYCLES_OSL				"Build Cycles with OSL support" ${_init_CYCLES_OSL})
+option(WITH_CYCLES_EMBREE			"Build Cycles with embree support" ON)
 option(WITH_CYCLES_OPENSUBDIV		"Build Cycles with OpenSubdiv support" ${_init_CYCLES_OPENSUBDIV})
 option(WITH_CYCLES_CUDA_BINARIES	"Build Cycles CUDA binaries" OFF)
 set(CYCLES_CUDA_BINARIES_ARCH sm_20 sm_21 sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 CACHE STRING "CUDA architectures to build binaries for")

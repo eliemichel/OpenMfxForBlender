@@ -85,3 +85,7 @@ if(WITH_CYCLES_OSL)
 		set(WITH_CYCLES_OSL OFF)
 	endif()
 endif()
+
+if(WITH_CYCLES_EMBREE)
+	find_package(embree 2.16.1 REQUIRED)
+endif()

@@ -510,6 +510,32 @@ ccl_device void transform_motion_interpolate(Transform *tfm, const MotionTransfo
 	transform_compose(tfm, &decomp);
 }
 
+ccl_device void transform_motion_interpolate_straight(Transform *tfm, const MotionTransform *motion, float t)
+{
+	Transform step1, step2;
+
+	/* linear interpolation for rotation and scale */
+	if(t < 0.5f) {
+		t *= 2.0f;
+
+		transform_compose(&step2, &motion->mid);
+		transform_compose(&step1, &motion->pre);
+	}
+	else {
+		t = (t - 0.5f)*2.0f;
+
+		transform_compose(&step1, &motion->mid);
+		transform_compose(&step2, &motion->post);
+	}
+
+	/* matrix lerp */
+	tfm->x = (1.0f - t) * step1.x + t * step2.x;
+	tfm->y = (1.0f - t) * step1.y + t * step2.y;
+	tfm->z = (1.0f - t) * step1.z + t * step2.z;
+	tfm->w = (1.0f - t) * step1.w + t * step2.w;
+
+}
+
 #ifndef __KERNEL_GPU__
 
 class BoundBox2D;
