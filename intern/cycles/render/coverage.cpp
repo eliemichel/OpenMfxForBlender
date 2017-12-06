@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+#if 0
+/* temporarily inlined to device_cpu.cpp
+ * to get things to build on Linux
+ */
+
 #include "kernel/kernel_compat_cpu.h"
 #include "kernel/kernel_types.h"
 #include "kernel/split/kernel_split_data_types.h"
@@ -102,3 +107,5 @@ int flatten_coverage(KernelGlobals *kg, vector<map<float, float> > & coverage, c
 }
 
 CCL_NAMESPACE_END
+
+#endif

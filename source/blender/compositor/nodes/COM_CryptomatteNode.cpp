@@ -190,24 +190,27 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter, const Compos
 	if (cryptoMatteSettings) {
 		std::string input = cryptoMatteSettings->matte_id;
 		if (!input.empty()) {
-			// split the string by commas, ignoring white space
+			/* Split the string by commas, ignoring white space. */
 			std::istringstream ss(input);
 			while (ss.good())
 			{
 				std::string token;
 				getline(ss, token, ',');
-				size_t first = token.find_first_not_of(' ');
-				size_t last = token.find_last_not_of(' ');
-				if (first == std::string::npos || last == std::string::npos) {
-					break;
-				}
-				token = token.substr(first, (last - first + 1));
-				if (*token.begin() == '<' && *(--token.end()) == '>')
-					operation->addObjectIndex(atof(token.substr(1, token.length() - 2).c_str()));
-				else {
-					uint32_t hash = 0;
-					MurmurHash3_x86_32(token.c_str(), token.length(), 0, &hash);
-					operation->addObjectIndex(hash_to_float(hash));
+				/* Ignore empty tokens. */
+				if (token.length() > 0) {
+					size_t first = token.find_first_not_of(' ');
+					size_t last = token.find_last_not_of(' ');
+					if (first == std::string::npos || last == std::string::npos) {
+						break;
+					}
+					token = token.substr(first, (last - first + 1));
+					if (*token.begin() == '<' && *(--token.end()) == '>')
+						operation->addObjectIndex(atof(token.substr(1, token.length() - 2).c_str()));
+					else {
+						uint32_t hash = 0;
+						MurmurHash3_x86_32(token.c_str(), token.length(), 0, &hash);
+						operation->addObjectIndex(hash_to_float(hash));
+					}
 				}
 			}
 		}

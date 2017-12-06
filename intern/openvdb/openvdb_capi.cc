@@ -120,6 +120,17 @@ void OpenVDB_import_grid_fl(
 	internal::OpenVDB_import_grid<openvdb::FloatGrid>(reader, name, data, res);
 }
 
+bool OpenVDB_import_grid_fl_extern(
+        OpenVDBReader *reader,
+        const char *name, float **data,
+        const int res_min[3], const int res_max[3],
+        const int res[3], const int level, short up, short front)
+{
+	Timer(__func__);
+
+	return internal::OpenVDB_import_grid_extern<openvdb::FloatGrid>(reader, name, data, res_min, res_max, res, level, up, front);
+}
+
 void OpenVDB_import_grid_ch(
         OpenVDBReader *reader,
         const char *name, unsigned char **data,
@@ -137,6 +148,157 @@ void OpenVDB_import_grid_vec(
 	Timer(__func__);
 
 	internal::OpenVDB_import_grid_vector(reader, name, data_x, data_y, data_z, res);
+}
+
+bool OpenVDB_import_grid_vec_extern(
+        struct OpenVDBReader *reader,
+        const char *name,
+        float **data_x, float **data_y, float **data_z,
+        const int res_min[3], const int res_max[3],
+        const int res[3], const int level, short up, short front)
+{
+	Timer(__func__);
+
+	return internal::OpenVDB_import_grid_vector_extern(reader, name, data_x, data_y, data_z, res_min, res_max, res, level, up, front);
+}
+
+bool OpenVDB_has_grid(OpenVDBReader *reader, const char *name)
+{
+	return reader->hasGrid(name);
+}
+
+int OpenVDB_get_bbox(
+        struct OpenVDBReader *reader,
+        char *density, char *heat,
+        char *flame, char color[3][64],
+        bool split_color,
+        short up, short front,
+        int r_res_min[3],
+        int r_res_max[3],
+        int r_res[3],
+        float r_bbox_min[3],
+        float r_bbox_max[3],
+        float r_voxel_size[3])
+{
+	using openvdb::CoordBBox;
+	using openvdb::Coord;
+	using openvdb::math::Transform;
+	using openvdb::BBoxd;
+
+	short right;
+
+	int validity = GRID_TRANSFORM_VALID;
+
+	up %= 3;
+	front %= 3;
+	right = 3 - (up + front);
+
+	CoordBBox bbox;
+	Transform::Ptr trans;
+	Coord coord;
+	BBoxd bboxf;
+	openvdb::Vec3d coordf;
+
+	if (density) {
+		bbox = internal::OpenVDB_get_grid_bounds(reader, density);
+		trans = internal::OpenVDB_get_grid_transform(reader, density);
+
+		if (flame) {
+			bbox.expand(internal::OpenVDB_get_grid_bounds(reader, flame));
+
+			if (*trans != *internal::OpenVDB_get_grid_transform(reader, flame)) {
+				validity = GRID_TRANSFORM_INVALID;
+			}
+		}
+	}
+	else {
+		bbox = internal::OpenVDB_get_grid_bounds(reader, flame);
+		trans = internal::OpenVDB_get_grid_transform(reader, flame);
+	}
+
+	if (heat) {
+		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, heat));
+
+		if (*trans != *internal::OpenVDB_get_grid_transform(reader, heat)) {
+			validity = GRID_TRANSFORM_INVALID;
+		}
+	}
+
+	if (color) {
+		bbox.expand(internal::OpenVDB_get_grid_bounds(reader, color[0]));
+
+		if (*trans != *internal::OpenVDB_get_grid_transform(reader, color[0])) {
+			validity = GRID_TRANSFORM_INVALID;
+		}
+
+		if (split_color) {
+			for (int i = 1; i < 3; i++) {
+				if (OpenVDB_has_grid(reader, color[i])) {
+					bbox.expand(internal::OpenVDB_get_grid_bounds(reader, color[i]));
+
+					if (*trans != *internal::OpenVDB_get_grid_transform(reader, color[i])) {
+						validity = GRID_TRANSFORM_INVALID;
+					}
+				}
+			}
+		}
+	}
+
+	coord = bbox.getStart();
+	r_res_min[0] = coord[right];
+	r_res_min[1] = coord[front];
+	r_res_min[2] = coord[up];
+
+	coord = bbox.getEnd();
+	r_res_max[0] = coord[right];
+	r_res_max[1] = coord[front];
+	r_res_max[2] = coord[up];
+
+	coord = bbox.dim();
+	r_res[0] = coord[right];
+	r_res[1] = coord[front];
+	r_res[2] = coord[up];
+
+	bboxf = trans->indexToWorld(bbox);
+
+	coordf = bboxf.min();
+	r_bbox_min[0] = coordf[right];
+	r_bbox_min[1] = coordf[front];
+	r_bbox_min[2] = coordf[up];
+
+	coordf = bboxf.max();
+	r_bbox_max[0] = coordf[right];
+	r_bbox_max[1] = coordf[front];
+	r_bbox_max[2] = coordf[up];
+
+	coordf = trans->voxelSize();
+	r_voxel_size[0] = coordf[right];
+	r_voxel_size[1] = coordf[front];
+	r_voxel_size[2] = coordf[up];
+
+	return validity;
+}
+
+
+bool OpenVDB_has_metadata(struct OpenVDBReader *reader, const char *name)
+{
+	return reader->hasMetadata(name);
+}
+
+int OpenVDB_get_num_grids(struct OpenVDBReader *reader)
+{
+	return reader->numGrids();
+}
+
+void OpenVDB_fill_name_array(OpenVDBReader *reader, char **r_names)
+{
+	int num = reader->numGrids();
+	openvdb::io::File::NameIterator name_iter = reader->getNameIter();
+	char (*names)[64] = (char (*)[64])r_names;
+
+	for (int i = 0; i < num; i++, ++name_iter) {
+		strncpy(names[i], name_iter.gridName().c_str(), 64);
+	}
 }
 
 OpenVDBWriter *OpenVDBWriter_create()

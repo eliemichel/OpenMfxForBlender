@@ -127,6 +127,16 @@ size_t OpenVDBReader::numGrids() const
 	return m_file->getGrids()->size();
 }
 
+bool OpenVDBReader::hasMetadata(const openvdb::Name &name)
+{
+	return (*m_meta_map)[name] != NULL;
+}
+
+openvdb::io::File::NameIterator OpenVDBReader::getNameIter()
+{
+	return m_file->beginName();
+}
+
 void OpenVDBReader::cleanupFile()
 {
 	if (m_file) {

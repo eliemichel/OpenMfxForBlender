@@ -205,8 +205,10 @@ ccl_device int bsdf_hair_reflection_sample(const ShaderClosure *sc, float3 Ng, f
 
 	//differentials - TODO: find a better approximation for the reflective bounce
 #ifdef __RAY_DIFFERENTIALS__
-	*domega_in_dx = 2 * dot(locy, dIdx) * locy - dIdx;
-	*domega_in_dy = 2 * dot(locy, dIdy) * locy - dIdy;
+	*domega_in_dx = 2.0f * dot(locy, dIdx) * locy - dIdx;
+	*domega_in_dy = 2.0f * dot(locy, dIdy) * locy - dIdy;
+	*domega_in_dx *= 10.0f;
+	*domega_in_dy *= 10.0f;
 #endif
 
 	*pdf = fabsf(phi_pdf * theta_pdf);

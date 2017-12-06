@@ -165,4 +165,106 @@ void OpenVDB_import_grid_vector(
 	}
 }
 
+bool OpenVDB_import_grid_vector_extern(
+        OpenVDBReader *reader,
+        const openvdb::Name &name,
+        float **data_x, float **data_y, float **data_z,
+        const int res_min[3],
+        const int res_max[3],
+        const int res[3],
+        const int level,
+        short up, short front)
+{
+	using namespace openvdb;
+
+	if (!reader->hasGrid(name)) {
+		std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", name.c_str());
+		memset(*data_x, 0, sizeof(float) * res[0] * res[1] * res[2]);
+		memset(*data_y, 0, sizeof(float) * res[0] * res[1] * res[2]);
+		memset(*data_z, 0, sizeof(float) * res[0] * res[1] * res[2]);
+		return true;
+	}
+
+	GridBase::Ptr vgrid_b = reader->getGrid(name);
+
+	if (!vgrid_b->isType<Vec3SGrid>()) {
+		return false;
+	}
+
+	Vec3SGrid::Ptr vgrid = gridPtrCast<Vec3SGrid>(vgrid_b);
+	Vec3SGrid::ConstAccessor acc = vgrid->getConstAccessor();
+
+	bool inv_z = up >= 3;
+	bool inv_y = front < 3;
+	up %= 3;
+	front %= 3;
+	short right = 3 - (up + front);
+	bool inv_x = !(inv_z == inv_y);
+
+	if (up < front) {
+		inv_x = !inv_x;
+	}
+
+	if (abs(up - front) == 2) {
+		inv_x = !inv_x;
+	}
+
+	math::Coord xyz;
+	int &x = xyz[right], &y = xyz[front], &z = xyz[up];
+	int index = 0;
+
+	for (z = inv_z ? res_max[2] - 1 : res_min[2];
+	     inv_z ? (z >= res_min[2]) : (z < res_max[2]);
+	     inv_z ? z -= level : z += level)
+	{
+		for (y = inv_y ? res_max[1] - 1 : res_min[1];
+		     inv_y ? (y >= res_min[1]) : (y < res_max[1]);
+		     inv_y ? y -= level : y += level)
+		{
+			for (x = inv_x ? res_max[0] - 1 : res_min[0];
+			     inv_x ? (x >= res_min[0]) : (x < res_max[0]);
+			     inv_x ? x -= level : x += level)
+			{
+				math::Vec3s value = acc.getValue(xyz);
+				(*data_x)[index] = value.x();
+				(*data_y)[index] = value.y();
+				(*data_z)[index] = value.z();
+
+				index++;
+			}
+		}
+	}
+
+	return true;
+}
+
+openvdb::CoordBBox OpenVDB_get_grid_bounds(
+        OpenVDBReader *reader,
+        const openvdb::Name &name)
+{
+	using namespace openvdb;
+
+	if (!reader->hasGrid(name)) {
+		return CoordBBox();
+	}
+
+	GridBase::Ptr grid = reader->getGrid(name);
+
+	return grid->evalActiveVoxelBoundingBox();
+}
+
+openvdb::math::Transform::Ptr OpenVDB_get_grid_transform(
+        OpenVDBReader *reader,
+        const openvdb::Name &name)
+{
+	using namespace openvdb;
+
+	if (!reader->hasGrid(name)) {
+		return NULL;
+	}
+
+	GridBase::Ptr grid = reader->getGrid(name);
+	return grid->transformPtr();
+}
+
 }  /* namespace internal */

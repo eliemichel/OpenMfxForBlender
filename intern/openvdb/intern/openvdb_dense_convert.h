@@ -109,6 +109,75 @@ void OpenVDB_import_grid(
 	}
 }
 
+template <typename GridType, typename T>
+bool OpenVDB_import_grid_extern(
+        OpenVDBReader *reader,
+        const openvdb::Name &name,
+        T **data,
+        const int res_min[3],
+        const int res_max[3],
+        const int res[3],
+        const int level,
+        short up, short front)
+{
+	using namespace openvdb;
+
+	if (!reader->hasGrid(name)) {
+		std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", name.c_str());
+		memset(*data, 0, sizeof(T) * res[0] * res[1] * res[2]);
+		return true;
+	}
+
+	GridBase::Ptr grid_b = reader->getGrid(name);
+
+	if (!grid_b->isType<GridType>()) {
+		return false;
+	}
+
+	typename GridType::Ptr grid = gridPtrCast<GridType>(grid_b);
+	typename GridType::ConstAccessor acc = grid->getConstAccessor();
+
+	bool inv_z = up >= 3;
+	bool inv_y = front < 3;
+	up %= 3;
+	front %= 3;
+	short right = 3 - (up + front);
+	bool inv_x = !(inv_z == inv_y);
+
+	if (up < front) {
+		inv_x = !inv_x;
+	}
+
+	if (abs(up - front) == 2) {
+		inv_x = !inv_x;
+	}
+
+	math::Coord xyz;
+	int &x = xyz[right], &y = xyz[front], &z = xyz[up];
+	int index = 0;
+
+	for (z = inv_z ? res_max[2] - 1 : res_min[2];
+	     inv_z ? (z >= res_min[2]) : (z < res_max[2]);
+	     inv_z ? z -= level : z += level)
+	{
+		for (y = inv_y ? res_max[1] - 1 : res_min[1];
+		     inv_y ? (y >= res_min[1]) : (y < res_max[1]);
+		     inv_y ? y -= level : y += level)
+		{
+			for (x = inv_x ? res_max[0] - 1 : res_min[0];
+			     inv_x ? (x >= res_min[0]) : (x < res_max[0]);
+			     inv_x ? x -= level : x += level)
+			{
+				(*data)[index] = acc.getValue(xyz);
+
+				index++;
+			}
+		}
+	}
+
+	return true;
+}
+
 openvdb::GridBase *OpenVDB_export_vector_grid(
         OpenVDBWriter *writer,
         const openvdb::Name &name,
@@ -125,6 +194,24 @@ void OpenVDB_import_grid_vector(
         const openvdb::Name &name,
         float **data_x, float **data_y, float **data_z,
         const int res[3]);
+
+bool OpenVDB_import_grid_vector_extern(
+        OpenVDBReader *reader,
+        const openvdb::Name &name,
+        float **data_x, float **data_y, float **data_z,
+        const int res_min[3],
+        const int res_max[3],
+        const int res[3],
+        const int level,
+        short up, short front);
+
+openvdb::CoordBBox OpenVDB_get_grid_bounds(
+        OpenVDBReader *reader,
+        const openvdb::Name &name);
+
+openvdb::math::Transform::Ptr OpenVDB_get_grid_transform(
+        OpenVDBReader *reader,
+        const openvdb::Name &name);
 
 }  /* namespace internal */
 

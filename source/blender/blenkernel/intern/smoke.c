@@ -475,7 +475,7 @@ void smokeModifier_free(SmokeModifierData *smd)
 	}
 }
 
-void smokeModifier_createType(struct SmokeModifierData *smd)
+void smokeModifier_createType(SmokeModifierData *smd)
 {
 	if (smd)
 	{
@@ -551,6 +551,7 @@ void smokeModifier_createType(struct SmokeModifierData *smd)
 
 			smd->domain->coba = NULL;
 			smd->domain->coba_field = FLUID_FIELD_DENSITY;
+			smd->domain->vdb = NULL;
 		}
 		else if (smd->type & MOD_SMOKE_TYPE_FLOW)
 		{
@@ -653,6 +654,7 @@ void smokeModifier_copy(struct SmokeModifierData *smd, struct SmokeModifierData 
 		tsmd->domain->draw_velocity = smd->domain->draw_velocity;
 		tsmd->domain->vector_draw_type = smd->domain->vector_draw_type;
 		tsmd->domain->vector_scale = smd->domain->vector_scale;
+		tsmd->domain->vdb = NULL;
 
 		if (smd->domain->coba) {
 			tsmd->domain->coba = MEM_dupallocN(smd->domain->coba);
@@ -2740,7 +2742,8 @@ static void smokeModifier_process(SmokeModifierData *smd, Scene *scene, Object *
 		BKE_ptcache_id_from_smoke(&pid, ob, smd);
 		BKE_ptcache_id_time(&pid, scene, framenr, &startframe, &endframe, &timescale);
 
-		if (!smd->domain->fluid || framenr == startframe)
+		if ((sds->cache_file_format != PTCACHE_FILE_OPENVDB_EXTERN) &&
+		    (!smd->domain->fluid || framenr == startframe))
 		{
 			BKE_ptcache_id_reset(scene, &pid, PTCACHE_RESET_OUTDATED);
 			smokeModifier_reset_ex(smd, false);
@@ -2748,14 +2751,24 @@ static void smokeModifier_process(SmokeModifierData *smd, Scene *scene, Object *
 			cache->flag &= ~PTCACHE_REDO_NEEDED;
 		}
 
-		if (!smd->domain->fluid && (framenr != startframe) && (smd->domain->flags & MOD_SMOKE_FILE_LOAD) == 0 && (cache->flag & PTCACHE_BAKED) == 0)
+		if (!smd->domain->fluid &&
+		    (framenr != startframe) &&
+		    (smd->domain->flags & MOD_SMOKE_FILE_LOAD) == 0 &&
+		    (cache->flag & PTCACHE_BAKED) == 0 &&
+		    (sds->cache_file_format != PTCACHE_FILE_OPENVDB_EXTERN))
+		{
 			return;
+		}
 
 		smd->domain->flags &= ~MOD_SMOKE_FILE_LOAD;
-		CLAMP(framenr, startframe, endframe);
+
+		if (sds->cache_file_format != PTCACHE_FILE_OPENVDB_EXTERN) {
+			CLAMP(framenr, startframe, endframe);
+		}
 
 		/* If already viewing a pre/after frame, no need to reload */
-		if ((smd->time == framenr) && (framenr != scene->r.cfra))
+		if ((smd->time == framenr) && (framenr != scene->r.cfra) &&
+		    (sds->cache_file_format != PTCACHE_FILE_OPENVDB_EXTERN))
 			return;
 
 		if (smokeModifier_init(smd, ob, scene, dm) == 0)
@@ -2766,7 +2779,9 @@ static void smokeModifier_process(SmokeModifierData *smd, Scene *scene, Object *
 
 		/* only calculate something when we advanced a single frame */
 		/* don't simulate if viewing start frame, but scene frame is not real start frame */
-		bool can_simulate = (framenr == (int)smd->time + 1) && (framenr == scene->r.cfra);
+		bool can_simulate = (framenr == (int)smd->time + 1) &&
+		                    (framenr == scene->r.cfra) &&
+		                    (sds->cache_file_format != PTCACHE_FILE_OPENVDB_EXTERN);
 
 		/* try to read from cache */
 		if (BKE_ptcache_read(&pid, (float)framenr, can_simulate) == PTCACHE_READ_EXACT) {
