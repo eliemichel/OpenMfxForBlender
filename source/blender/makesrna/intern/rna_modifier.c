@@ -1200,6 +1200,24 @@ static void rna_OpenVDBModifier_update(Main *bmain, Scene *scene, PointerRNA *pt
 	rna_Modifier_update(bmain, scene, ptr);
 }
 
+static void rna_OpenVDBModifier_abs_path_get(PointerRNA *ptr, char *value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	BLI_strncpy(value, vdbmd->filepath, 1024);
+	BLI_path_abs(value, G.main->name);
+}
+
+static int rna_OpenVDBModifier_abs_path_length(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	char filepath[1024];
+
+	BLI_strncpy(filepath, vdbmd->filepath, sizeof(filepath));
+	BLI_path_abs(filepath, G.main->name);
+	return strlen(filepath);
+}
+
 static int rna_OpenVDBModifier_density_grid_get(PointerRNA *ptr)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
@@ -5081,6 +5099,11 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "filepath", PROP_STRING, PROP_FILEPATH);
 	RNA_def_property_ui_text(prop, "File Path", "Path to OpenVDB cache file");
 	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "abs_path", PROP_STRING, PROP_FILEPATH);
+	RNA_def_property_string_funcs(prop, "rna_OpenVDBModifier_abs_path_get", "rna_OpenVDBModifier_abs_path_length", NULL);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+	RNA_def_property_ui_text(prop, "Abs Path", "Absolute path to OpenVDB cache file");
 
 	prop = RNA_def_property(srna, "density", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_items(prop, grid_items);
