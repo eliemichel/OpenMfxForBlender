@@ -1638,6 +1638,11 @@ typedef struct OpenVDBModifierData {
 	short pad[3];
 
 	SmokeModifierData *smoke;
+
+	float max_density;
+	float max_heat;
+	float max_flame;
+	float max_color;
 } OpenVDBModifierData;
 
 /* OpenVDBModifierData flags */

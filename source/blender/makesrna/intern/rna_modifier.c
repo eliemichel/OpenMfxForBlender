@@ -5222,6 +5222,15 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "show_axis_convert", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_funcs(prop, "rna_OpenVDBModifier_show_axis_convert_get", NULL);
 	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "max_density", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "max_heat", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "max_flame", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 }
 
 void RNA_def_modifier(BlenderRNA *brna)
