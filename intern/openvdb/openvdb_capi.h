@@ -99,7 +99,8 @@ bool OpenVDB_import_grid_vec_extern(
         const char *name,
         float **data_x, float **data_y, float **data_z,
         const int res_min[3], const int res_max[3],
-        const int res[3], const int level, short up, short front);
+        const int res[3], const int level, short up, short front,
+        float *max_value);
 
 bool OpenVDB_has_grid(struct OpenVDBReader *reader, const char *name);
 

@@ -769,6 +769,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             if (md.flame != 'NONE'):
                 box.label(text="Max flame value: {:.6f}".format(md.max_flame))
 
+            if (md.color1 != 'NONE'):
+                box.label(text="Max color value: {:.6f}".format(md.max_color))
+
     def PARTICLE_INSTANCE(self, layout, ob, md):
         layout.prop(md, "object")
         layout.prop(md, "particle_system_index", text="Particle System")

@@ -1483,6 +1483,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 		if (cache_fields & SM_ACTIVE_COLORS) {
 			if (vdbmd->flags & MOD_OPENVDB_SPLIT_COLOR) {
 				float **color[3] = {&r, &g, &b};
+				float len;
 
 				for (int i = 0; i < 3; i++) {
 					if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->color[i], color[i], res_min, res_max, sds->res,
@@ -1491,10 +1492,26 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 						modifier_setError((ModifierData *)vdbmd, "Flame grid is of the wrong type");
 					}
 				}
+
+				/* Kinda inefficient maximum value calculation, but simplifies stuff a lot,
+				 * and besides, it is only an issue when using the non-standard split vector grids. */
+				vdbmd->max_color = 0.0f;
+
+				for (int i = 0; i < sds->total_cells; i++) {
+					len = (r[i] * r[i]) +
+					      (g[i] * g[i]) +
+					      (b[i] * b[i]);
+
+					if (len > vdbmd->max_color) {
+						vdbmd->max_color = len;
+					}
+				}
+
+				vdbmd->max_color = sqrt(vdbmd->max_color);
 			}
 			else {
 				if (!OpenVDB_import_grid_vec_extern(reader, vdbmd->color[0], &r, &g, &b, res_min, res_max, sds->res,
-													level, up_axis, front_axis))
+													level, up_axis, front_axis, &vdbmd->max_color))
 				{
 					modifier_setError((ModifierData *)vdbmd, "Color grid is of the wrong type");
 				}

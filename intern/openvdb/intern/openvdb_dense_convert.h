@@ -212,7 +212,8 @@ bool OpenVDB_import_grid_vector_extern(
         const int res_max[3],
         const int res[3],
         const int level,
-        short up, short front);
+        short up, short front,
+        float *max_value);
 
 openvdb::CoordBBox OpenVDB_get_grid_bounds(
         OpenVDBReader *reader,
