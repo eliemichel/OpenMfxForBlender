@@ -1155,6 +1155,22 @@ static int ptcache_smoke_openvdb_read(struct OpenVDBReader *reader, void *smoke_
 	return 1;
 }
 
+static void ptcache_smoke_openvdb_free(SmokeDomainSettings *sds)
+{
+	OpenVDBModifierData *vdbmd = sds->vdb;
+
+	if (sds->fluid) {
+		smoke_free(sds->fluid);
+		sds->fluid = NULL;
+	}
+
+	vdbmd->frame_last = -1;
+	vdbmd->max_density = 0.0f;
+	vdbmd->max_heat = 0.0f;
+	vdbmd->max_flame = 0.0f;
+	vdbmd->max_color = 0.0f;
+}
+
 static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void *smoke_v)
 {
 	SmokeModifierData *smd = (SmokeModifierData *)smoke_v;
@@ -1210,11 +1226,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 
 		sds->total_cells = 0;
 
-		if (sds->fluid) {
-			smoke_free(sds->fluid);
-			sds->fluid = NULL;
-			vdbmd->frame_last = -1;
-		}
+		ptcache_smoke_openvdb_free(sds);
 
 		return 0;
 	}
@@ -1298,11 +1310,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 
 		sds->total_cells = 0;
 
-		if (sds->fluid) {
-			smoke_free(sds->fluid);
-			sds->fluid = NULL;
-			vdbmd->frame_last = -1;
-		}
+		ptcache_smoke_openvdb_free(sds);
 
 		return 0;
 	}
@@ -1421,9 +1429,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 	if (vdbmd->flags & MOD_OPENVDB_HIDE_VOLUME) {
 		OpenVDBReader_free(reader);
 		sds->total_cells = sds->res[0] * sds->res[1] * sds->res[2];
-		smoke_free(sds->fluid);
-		sds->fluid = NULL;
-		vdbmd->frame_last = -1;
+		ptcache_smoke_openvdb_free(sds);
 		return 0;
 	}
 
@@ -3075,11 +3081,7 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 		if (cfrai < pid->cache->startframe || cfrai > pid->cache->endframe) {
 			sds->total_cells = 0;
 
-			if (sds->fluid) {
-				smoke_free(sds->fluid);
-				sds->fluid = NULL;
-				vdbmd->frame_last = -1;
-			}
+			ptcache_smoke_openvdb_free(sds);
 
 			return 0;
 		}
