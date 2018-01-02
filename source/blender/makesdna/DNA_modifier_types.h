@@ -1655,6 +1655,7 @@ enum {
 	MOD_OPENVDB_HIDE_UNSELECTED = (1 << 2),
 	MOD_OPENVDB_SPLIT_COLOR     = (1 << 3),
 	MOD_OPENVDB_IS_RENDER       = (1 << 4),
+	MOD_OPENVDB_HAS_DENSITY     = (1 << 5),
 };
 
 enum {
