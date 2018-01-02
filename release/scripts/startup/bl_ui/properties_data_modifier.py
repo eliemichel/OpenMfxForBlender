@@ -751,6 +751,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row.active = not md.hide_volume
         row.prop(md, "hide_unselected")
 
+        layout.prop(md, "numeric_display")
+
         if (md.density != 'NONE' or
                 md.heat != 'NONE' or
                 md.flame != 'NONE' or

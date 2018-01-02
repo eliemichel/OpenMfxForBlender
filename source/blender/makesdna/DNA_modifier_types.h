@@ -1643,6 +1643,9 @@ typedef struct OpenVDBModifierData {
 	float max_heat;
 	float max_flame;
 	float max_color;
+
+	int numeric_display;
+	int pad1;
 } OpenVDBModifierData;
 
 /* OpenVDBModifierData flags */
@@ -1661,6 +1664,14 @@ enum {
 	MOD_OVDB_AXIS_MIN_X = 3,
 	MOD_OVDB_AXIS_MIN_Y = 4,
 	MOD_OVDB_AXIS_MIN_Z = 5,
+};
+
+enum {
+	MOD_OVDB_NUM_NONE    = 0,
+	MOD_OVDB_NUM_DENSITY = 1,
+	MOD_OVDB_NUM_HEAT    = 2,
+	MOD_OVDB_NUM_FLAME   = 3,
+	MOD_OVDB_NUM_COLOR   = 4,
 };
 
 #define MOD_MESHSEQ_READ_ALL \
