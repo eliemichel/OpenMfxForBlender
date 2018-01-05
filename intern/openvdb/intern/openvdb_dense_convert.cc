@@ -173,9 +173,11 @@ bool OpenVDB_import_grid_vector_extern(
         const int res_max[3],
         const int res[3],
         const int level,
-        short up, short front)
+        short up, short front,
+        float *max_value)
 {
 	using namespace openvdb;
+	float len;
 
 	if (!reader->hasGrid(name)) {
 		std::fprintf(stderr, "OpenVDB grid %s not found in file!\n", name.c_str());
@@ -209,6 +211,8 @@ bool OpenVDB_import_grid_vector_extern(
 		inv_x = !inv_x;
 	}
 
+	*max_value = 0.0f;
+
 	math::Coord xyz;
 	int &x = xyz[right], &y = xyz[front], &z = xyz[up];
 	int index = 0;
@@ -230,10 +234,18 @@ bool OpenVDB_import_grid_vector_extern(
 				(*data_y)[index] = value.y();
 				(*data_z)[index] = value.z();
 
+				len = value.lengthSqr();
+
+				if (len > *max_value) {
+					*max_value = len;
+				}
+
 				index++;
 			}
 		}
 	}
+
+	*max_value = sqrt(*max_value);
 
 	return true;
 }

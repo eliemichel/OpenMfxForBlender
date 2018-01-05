@@ -751,6 +751,29 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row.active = not md.hide_volume
         row.prop(md, "hide_unselected")
 
+        layout.prop(md, "numeric_display")
+
+        if (md.density != 'NONE' or
+                md.heat != 'NONE' or
+                md.flame != 'NONE' or
+                md.color != 'NONE'):
+            layout.separator()
+            layout.label(text="Stats:")
+
+            box = layout.box()
+
+            if (md.density != 'NONE'):
+                box.label(text="Max density value: {:.6f}".format(md.max_density))
+
+            if (md.heat != 'NONE'):
+                box.label(text="Max heat value: {:.6f}".format(md.max_heat))
+
+            if (md.flame != 'NONE'):
+                box.label(text="Max flame value: {:.6f}".format(md.max_flame))
+
+            if (md.color1 != 'NONE'):
+                box.label(text="Max color value: {:.6f}".format(md.max_color))
+
     def PARTICLE_INSTANCE(self, layout, ob, md):
         layout.prop(md, "object")
         layout.prop(md, "particle_system_index", text="Particle System")

@@ -1200,6 +1200,29 @@ static void rna_OpenVDBModifier_update(Main *bmain, Scene *scene, PointerRNA *pt
 	rna_Modifier_update(bmain, scene, ptr);
 }
 
+static void rna_OpenVDBModifier_viewport_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+{
+	WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, ptr->id.data);
+}
+
+static void rna_OpenVDBModifier_abs_path_get(PointerRNA *ptr, char *value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	BLI_strncpy(value, vdbmd->filepath, 1024);
+	BLI_path_abs(value, G.main->name);
+}
+
+static int rna_OpenVDBModifier_abs_path_length(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	char filepath[1024];
+
+	BLI_strncpy(filepath, vdbmd->filepath, sizeof(filepath));
+	BLI_path_abs(filepath, G.main->name);
+	return strlen(filepath);
+}
+
 static int rna_OpenVDBModifier_density_grid_get(PointerRNA *ptr)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
@@ -5073,6 +5096,15 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 		{0, NULL, 0, NULL, NULL}
 	};
 
+	static EnumPropertyItem numeric_display_items[] = {
+	    {MOD_OVDB_NUM_NONE, "NONE", 0, "None", ""},
+	    {MOD_OVDB_NUM_DENSITY, "DENSITY", 0, "Density", ""},
+	    {MOD_OVDB_NUM_HEAT, "HEAT", 0, "Heat", ""},
+	    {MOD_OVDB_NUM_FLAME, "FLAME", 0, "Flame", ""},
+	    {MOD_OVDB_NUM_COLOR, "COLOR", 0, "Color", ""},
+		{0, NULL, 0, NULL, NULL}
+	};
+
 	srna = RNA_def_struct(brna, "OpenVDBModifier", "Modifier");
 	RNA_def_struct_ui_text(srna, "OpenVDB Modifier", "");
 	RNA_def_struct_sdna(srna, "OpenVDBModifierData");
@@ -5081,6 +5113,11 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "filepath", PROP_STRING, PROP_FILEPATH);
 	RNA_def_property_ui_text(prop, "File Path", "Path to OpenVDB cache file");
 	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "abs_path", PROP_STRING, PROP_FILEPATH);
+	RNA_def_property_string_funcs(prop, "rna_OpenVDBModifier_abs_path_get", "rna_OpenVDBModifier_abs_path_length", NULL);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+	RNA_def_property_ui_text(prop, "Abs Path", "Absolute path to OpenVDB cache file");
 
 	prop = RNA_def_property(srna, "density", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_items(prop, grid_items);
@@ -5199,6 +5236,24 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "show_axis_convert", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_funcs(prop, "rna_OpenVDBModifier_show_axis_convert_get", NULL);
 	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "max_density", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "max_heat", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "max_flame", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "max_color", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "numeric_display", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, numeric_display_items);
+	RNA_def_property_ui_text(prop, "Display Values", "Values to display numerically in the viewport");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
 }
 
 void RNA_def_modifier(BlenderRNA *brna)

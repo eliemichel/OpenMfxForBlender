@@ -1638,6 +1638,14 @@ typedef struct OpenVDBModifierData {
 	short pad[3];
 
 	SmokeModifierData *smoke;
+
+	float max_density;
+	float max_heat;
+	float max_flame;
+	float max_color;
+
+	int numeric_display;
+	int pad1;
 } OpenVDBModifierData;
 
 /* OpenVDBModifierData flags */
@@ -1647,6 +1655,7 @@ enum {
 	MOD_OPENVDB_HIDE_UNSELECTED = (1 << 2),
 	MOD_OPENVDB_SPLIT_COLOR     = (1 << 3),
 	MOD_OPENVDB_IS_RENDER       = (1 << 4),
+	MOD_OPENVDB_HAS_DENSITY     = (1 << 5),
 };
 
 enum {
@@ -1656,6 +1665,14 @@ enum {
 	MOD_OVDB_AXIS_MIN_X = 3,
 	MOD_OVDB_AXIS_MIN_Y = 4,
 	MOD_OVDB_AXIS_MIN_Z = 5,
+};
+
+enum {
+	MOD_OVDB_NUM_NONE    = 0,
+	MOD_OVDB_NUM_DENSITY = 1,
+	MOD_OVDB_NUM_HEAT    = 2,
+	MOD_OVDB_NUM_FLAME   = 3,
+	MOD_OVDB_NUM_COLOR   = 4,
 };
 
 #define MOD_MESHSEQ_READ_ALL \
