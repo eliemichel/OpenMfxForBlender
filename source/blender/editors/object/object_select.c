@@ -101,16 +101,16 @@ void ED_base_object_select(Base *base, short mode)
 			base->flag &= ~SELECT;
 		}
 		base->object->flag = base->flag;
-	}
 
-	/* This is kinda hackish, but good enough to ensure VDB update for now. */
-	md = modifiers_findByType(base->object, eModifierType_OpenVDB);
+		/* This is kinda hackish, but good enough to ensure VDB update for now. */
+		md = modifiers_findByType(base->object, eModifierType_OpenVDB);
 
-	if (md) {
-		OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+		if (md) {
+			OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
 
-		if (vdbmd->flags & MOD_OPENVDB_HIDE_UNSELECTED) {
-			DAG_id_tag_update(&base->object->id, OB_RECALC_DATA);
+			if (vdbmd->flags & MOD_OPENVDB_HIDE_UNSELECTED) {
+				DAG_id_tag_update(&base->object->id, OB_RECALC_DATA);
+			}
 		}
 	}
 }
