@@ -52,6 +52,9 @@ NODE_DEFINE(Object)
 
 	SOCKET_BOOLEAN(is_shadow_catcher, "Shadow Catcher", false);
 
+	SOCKET_UINT(light_linking, "Light Linking", 0);
+	SOCKET_UINT(shadow_linking, "Shadow Linking", 0x00ffffff);
+
 	return type;
 }
 
@@ -66,10 +69,8 @@ Object::Object()
 	motion.post = transform_empty();
 	use_motion = false;
 
-    light_linking = 0;
-    light_linking_prev = 0;
-    shadow_linking = 0;
-    shadow_linking_prev = 0;
+	light_linking_prev = 0;
+	shadow_linking_prev = 0;
 }
 
 Object::~Object()
@@ -103,7 +104,7 @@ void Object::compute_bounds(bool motion_blur)
 			mtfm.post = tfm;
 		}
 
-		DecompMotionTransform decomp;
+		MotionTransform decomp;
 		transform_motion_decompose(&decomp, &mtfm, &tfm);
 
 		bounds = BoundBox::empty;
@@ -397,10 +398,10 @@ void ObjectManager::device_update_object_transform(UpdateObejctTransformState *s
 	else if(state->need_motion == Scene::MOTION_BLUR) {
 		if(ob->use_motion) {
 			/* decompose transformations for interpolation. */
-			DecompMotionTransform decomp;
+			MotionTransform decomp;
 
 			transform_motion_decompose(&decomp, &ob->motion, &ob->tfm);
-			memcpy(&objects[offset], &decomp, sizeof(float4)*8);
+			memcpy(&objects[offset], &decomp, sizeof(float4)*12);
 			flag |= SD_OBJECT_OBJECT_MOTION;
 			state->have_motion = true;
 		}
@@ -413,11 +414,11 @@ void ObjectManager::device_update_object_transform(UpdateObejctTransformState *s
 	int numverts = mesh->verts.size();
 	int numkeys = mesh->curve_keys.size();
 
-	objects[offset+9] = make_float4(ob->dupli_generated[0], ob->dupli_generated[1], ob->dupli_generated[2], __int_as_float(numkeys));
-	objects[offset+10] = make_float4(ob->dupli_uv[0], ob->dupli_uv[1], __int_as_float(numsteps), __int_as_float(numverts));
+	objects[offset+13] = make_float4(ob->dupli_generated[0], ob->dupli_generated[1], ob->dupli_generated[2], __int_as_float(numkeys));
+	objects[offset+14] = make_float4(ob->dupli_uv[0], ob->dupli_uv[1], __int_as_float(numsteps), __int_as_float(numverts));
 	
 	/* Light linking. */
-	objects[offset+11] = make_float4(__uint_as_float(ob->light_linking), __uint_as_float(ob->shadow_linking), 0.0f, 0.0f);
+	objects[offset+15] = make_float4(__uint_as_float(ob->light_linking), __uint_as_float(ob->shadow_linking), 0.0f, 0.0f);
 
 	/* Cryptomatte. */
 	uint32_t hash_name, hash_asset, hash_pass;
@@ -427,7 +428,7 @@ void ObjectManager::device_update_object_transform(UpdateObejctTransformState *s
 	pass_stream << ob->pass_id;
 	ustring pass(pass_stream.str());
 	MurmurHash3_x86_32(pass.c_str(), pass.length(), 0, &hash_pass);
-	objects[offset+12] = make_float4(hash_to_float(hash_name), hash_to_float(hash_asset), hash_to_float(hash_pass), 0.0f);
+	objects[offset+16] = make_float4(hash_to_float(hash_name), hash_to_float(hash_asset), hash_to_float(hash_pass), 0.0f);
 
 	/* Object flag. */
 	if(ob->use_holdout) {

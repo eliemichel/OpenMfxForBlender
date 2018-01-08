@@ -25,6 +25,11 @@
 #  define __KERNEL_CPU__
 #endif
 
+#if defined(__KERNEL_CPU__) && defined(WITH_EMBREE)
+#include "embree2/rtcore.h"
+#include "embree2/rtcore_scene.h"
+#endif
+
 /* TODO(sergey): This is only to make it possible to include this header
  * from outside of the kernel. but this could be done somewhat cleaner?
  */
@@ -35,7 +40,7 @@
 CCL_NAMESPACE_BEGIN
 
 /* constants */
-#define OBJECT_SIZE 		13
+#define OBJECT_SIZE 		17
 #define OBJECT_VECTOR_SIZE	6
 #define LIGHT_SIZE		13
 #define FILTER_TABLE_SIZE	1024
@@ -79,11 +84,17 @@ CCL_NAMESPACE_BEGIN
 #  ifdef WITH_OSL
 #    define __OSL__
 #  endif
+//#  define __DNDU__
+#  define __OIIO__
 #  define __SUBSURFACE__
 #  define __CMJ__
 #  define __VOLUME__
 #  define __VOLUME_SCATTER__
 #  define __SHADOW_RECORD_ALL__
+#  define __VOLUME_RECORD_ALL__
+#  ifdef WITH_EMBREE
+#    define __EMBREE__
+#  endif
 #  ifndef __SPLIT_KERNEL__
 #    define __VOLUME_DECOUPLED__
 #    define __VOLUME_RECORD_ALL__
@@ -598,6 +609,9 @@ typedef struct Ray {
 /* Intersection */
 
 typedef struct Intersection {
+#ifdef __EMBREE__
+	float3 Ng;
+#endif
 	float t, u, v;
 	int prim;
 	int object;
@@ -908,6 +922,11 @@ typedef ccl_addr_space struct ShaderData {
 	 * not readily suitable as a tangent for shading on triangles. */
 	float3 dPdu;
 	float3 dPdv;
+#endif
+#ifdef __DNDU__
+	/* differential of N w.r.t. x and y. */
+	float3 dNdx;
+	float3 dNdy;
 #endif
 
 #ifdef __OBJECT_MOTION__
@@ -1253,6 +1272,10 @@ typedef struct KernelBVH {
 	int use_qbvh;
 	int use_bvh_steps;
 	int pad1;
+#ifdef __EMBREE__
+	RTCScene scene;
+	int pad2, pad3;
+#endif
 } KernelBVH;
 static_assert_align(KernelBVH, 16);
 

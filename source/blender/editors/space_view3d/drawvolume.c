@@ -32,6 +32,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "DNA_modifier_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_smoke_types.h"
@@ -39,6 +40,7 @@
 
 #include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_string.h"
 
 #include "BKE_DerivedMesh.h"
 #include "BKE_texture.h"
@@ -661,6 +663,69 @@ void draw_smoke_volume(SmokeDomainSettings *sds, Object *ob,
 
 	if (gl_depth) {
 		glEnable(GL_DEPTH_TEST);
+	}
+
+	if (sds->vdb && sds->vdb->numeric_display) {
+		float coord[3];
+		unsigned char col[4] = {255, 255, 255, 255};
+		char text[32];
+		int len;
+		float *field[3] = {NULL};
+		float value;
+		int index = 0;
+
+		float start_co[3];
+
+		switch (sds->vdb->numeric_display) {
+			case MOD_OVDB_NUM_DENSITY:
+				field[0] = smoke_get_density(sds->fluid);
+				break;
+			case MOD_OVDB_NUM_HEAT:
+				field[0] = smoke_get_heat(sds->fluid);
+				break;
+			case MOD_OVDB_NUM_FLAME:
+				field[0] = smoke_get_flame(sds->fluid);
+				break;
+			case MOD_OVDB_NUM_COLOR:
+				field[0] = smoke_get_color_r(sds->fluid);
+				field[1] = smoke_get_color_g(sds->fluid);
+				field[2] = smoke_get_color_b(sds->fluid);
+				break;
+			default:
+				break;
+		}
+
+		if (field[0]) {
+			for (int i = 0; i < 3; i++) {
+				start_co[i] = sds->p0[i] + (sds->cell_size[i] * sds->res_min[i]) + (sds->cell_size[i] * 0.5f);
+			}
+
+			for (int z = 0; z < sds->res[2]; z++) {
+				for (int y = 0; y < sds->res[1]; y++) {
+					for (int x = 0; x < sds->res[0]; x++) {
+						if (sds->vdb->numeric_display == MOD_OVDB_NUM_COLOR) {
+							value = sqrt((field[0][index] * field[0][index]) +
+										 (field[1][index] * field[1][index]) +
+										 (field[2][index] * field[2][index]));
+						}
+						else {
+							value = field[0][index];
+						}
+						if (value >= 0.0005f) {
+							len = BLI_snprintf_rlen(text, sizeof(text), "%.3f", value);
+
+							coord[0] = start_co[0] + (x * sds->cell_size[0]);
+							coord[1] = start_co[1] + (y * sds->cell_size[1]);
+							coord[2] = start_co[2] + (z * sds->cell_size[2]);
+
+							view3d_cached_text_draw_add(coord, text, len, 0, V3D_CACHE_TEXT_LOCALCLIP | V3D_CACHE_TEXT_ASCII, col);
+						}
+
+						index++;
+					}
+				}
+			}
+		}
 	}
 }
 

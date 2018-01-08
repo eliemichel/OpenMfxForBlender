@@ -87,7 +87,11 @@ typedef enum ModifierType {
 	eModifierType_CorrectiveSmooth  = 51,
 	eModifierType_MeshSequenceCache = 52,
 	eModifierType_SurfaceDeform     = 53,
+<<<<<<< HEAD
 	eModifierType_Scaling           = 54,
+=======
+	eModifierType_OpenVDB	        = 54,
+>>>>>>> 86a036dd0a7cf7106352014240579745bdccf4ef
 	NUM_MODIFIER_TYPES
 } ModifierType;
 
@@ -1616,6 +1620,68 @@ enum {
 	MOD_SDEF_MODE_LOOPTRI = 0,
 	MOD_SDEF_MODE_NGON = 1,
 	MOD_SDEF_MODE_CENTROID = 2,
+};
+
+typedef struct OpenVDBModifierData {
+	ModifierData modifier;
+
+	char filepath[1024];  /* FILE_MAX */
+	char (*grids)[64];
+	char density[64];
+	char heat[64];
+	char flame[64];
+	char color[3][64];
+
+	int numgrids;
+	int frame_offset;
+	int frame_override;
+
+	int flags;
+
+	int frame_last;
+
+	short up_axis;
+	short front_axis;
+
+	short simplify;
+	short pad[3];
+
+	SmokeModifierData *smoke;
+
+	float max_density;
+	float max_heat;
+	float max_flame;
+	float max_color;
+
+	int numeric_display;
+	int pad1;
+} OpenVDBModifierData;
+
+/* OpenVDBModifierData flags */
+enum {
+	MOD_OPENVDB_HIDE_VOLUME     = (1 << 0),
+	MOD_OPENVDB_OVERRIDE_FRAME  = (1 << 1),
+	MOD_OPENVDB_HIDE_UNSELECTED = (1 << 2),
+	MOD_OPENVDB_SPLIT_COLOR     = (1 << 3),
+	MOD_OPENVDB_IS_RENDER       = (1 << 4),
+	MOD_OPENVDB_HAS_DENSITY     = (1 << 5),
+};
+
+enum {
+	MOD_OVDB_AXIS_X     = 0,
+	MOD_OVDB_AXIS_Y     = 1,
+	MOD_OVDB_AXIS_Z     = 2,
+	MOD_OVDB_AXIS_MIN_X = 3,
+	MOD_OVDB_AXIS_MIN_Y = 4,
+	MOD_OVDB_AXIS_MIN_Z = 5,
+};
+
+enum {
+	MOD_OVDB_NUM_NONE    = 0,
+	MOD_OVDB_NUM_DENSITY = 1,
+	MOD_OVDB_NUM_HEAT    = 2,
+	MOD_OVDB_NUM_FLAME   = 3,
+	MOD_OVDB_NUM_COLOR   = 4,
 };
 
 #define MOD_MESHSEQ_READ_ALL \

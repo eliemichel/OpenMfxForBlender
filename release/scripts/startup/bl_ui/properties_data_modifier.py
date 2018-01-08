@@ -714,6 +714,77 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         col = split.column()
 
+    def OPENVDB(self, layout, ob, md):
+        layout.prop(md, "filepath")
+        layout.prop(md, "density")
+        layout.prop(md, "heat")
+        layout.prop(md, "flame")
+        layout.prop(md, "color1")
+
+        if (md.use_split_color):
+            split = layout.split(percentage=0.333333)
+
+            col = split.column()
+
+            col.prop(md, "use_split_color")
+
+            col = split.column()
+
+            col.prop(md, "color2", text="")
+            col.prop(md, "color3", text="")
+        else:
+            layout.prop(md, "use_split_color")
+
+        layout.separator()
+
+        if md.show_axis_convert:
+            layout.prop(md, "up_axis")
+            layout.prop(md, "front_axis")
+
+        row = layout.row()
+        row.prop(md, "frame_start")
+        row.prop(md, "frame_end")
+
+        layout.prop(md, "frame_offset")
+
+        row = layout.row()
+        row.prop(md, "use_frame_override")
+
+        sub = row.row()
+        sub.active = md.use_frame_override
+        sub.prop(md, "frame_override")
+
+        layout.prop(md, "simplify_level")
+
+        layout.prop(md, "hide_volume")
+
+        row = layout.row()
+        row.active = not md.hide_volume
+        row.prop(md, "hide_unselected")
+
+        layout.prop(md, "numeric_display")
+
+        if (md.density != 'NONE' or
+                md.heat != 'NONE' or
+                md.flame != 'NONE' or
+                md.color != 'NONE'):
+            layout.separator()
+            layout.label(text="Stats:")
+
+            box = layout.box()
+
+            if (md.density != 'NONE'):
+                box.label(text="Max density value: {:.6f}".format(md.max_density))
+
+            if (md.heat != 'NONE'):
+                box.label(text="Max heat value: {:.6f}".format(md.max_heat))
+
+            if (md.flame != 'NONE'):
+                box.label(text="Max flame value: {:.6f}".format(md.max_flame))
+
+            if (md.color1 != 'NONE'):
+                box.label(text="Max color value: {:.6f}".format(md.max_color))
+
     def PARTICLE_INSTANCE(self, layout, ob, md):
         layout.prop(md, "object")
         layout.prop(md, "particle_system_index", text="Particle System")

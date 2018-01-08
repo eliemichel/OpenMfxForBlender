@@ -25,6 +25,10 @@
  * the code has been extended and modified to support more primitives and work
  * with CPU/CUDA/OpenCL. */
 
+#ifdef __EMBREE__
+#include "kernel/bvh/bvh_embree_traversal.h"
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 #include "kernel/bvh/bvh_types.h"
@@ -167,6 +171,18 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
                                           float extmax,
                                           uint shadow_linking)
 {
+#ifdef __EMBREE__
+	if(kernel_data.bvh.scene) {
+		isect->t = ray.t;
+		CCLRay rtc_ray(ray, kg, visibility, CCLRay::RAY_REGULAR, shadow_linking);
+		rtcIntersect(kernel_data.bvh.scene, rtc_ray);
+		if(rtc_ray.geomID != RTC_INVALID_GEOMETRY_ID && rtc_ray.primID != RTC_INVALID_GEOMETRY_ID) {
+			rtc_ray.isect_to_ccl(isect);
+			return true;
+		}
+		return false;
+	}
+#endif /* __EMBREE__ */
 #ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 #  ifdef __HAIR__
@@ -212,6 +228,18 @@ ccl_device_intersect void scene_intersect_subsurface(KernelGlobals *kg,
                                                      int max_hits,
                                                      uint shadow_linking)
 {
+#ifdef __EMBREE__
+	if(kernel_data.bvh.scene) {
+		CCLRay rtc_ray(ray, kg, PATH_RAY_ALL_VISIBILITY, CCLRay::RAY_SSS, shadow_linking);
+		rtc_ray.lcg_state = lcg_state;
+		rtc_ray.max_hits = max_hits;
+		rtc_ray.ss_isect = ss_isect;
+		ss_isect->num_hits = 0;
+		rtc_ray.sss_object_id = subsurface_object;
+		rtcOccluded(kernel_data.bvh.scene, rtc_ray);
+		return;
+	}
+#endif /* __EMBREE__ */
 #ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 		return bvh_intersect_subsurface_motion(kg,
@@ -236,6 +264,24 @@ ccl_device_intersect void scene_intersect_subsurface(KernelGlobals *kg,
 #ifdef __SHADOW_RECORD_ALL__
 ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg, const Ray *ray, Intersection *isect, uint max_hits, uint *num_hits, uint shadow_linking)
 {
+#ifdef __EMBREE__
+	if(kernel_data.bvh.scene) {
+		CCLRay rtc_ray(*ray, kg, PATH_RAY_SHADOW, CCLRay::RAY_SHADOW_ALL, shadow_linking);
+		rtc_ray.isect_s = isect;
+		rtc_ray.max_hits = max_hits;
+		rtc_ray.num_hits = 0;
+		rtcOccluded(kernel_data.bvh.scene, rtc_ray);
+		if(rtc_ray.num_hits > max_hits) {
+			return true;
+		}
+		if(rtc_ray.num_hits > 0) {
+			*num_hits = rtc_ray.num_hits;
+			return (rtc_ray.geomID != RTC_INVALID_GEOMETRY_ID);
+		}
+		*num_hits = 0;
+		return false;
+	}
+#endif
 #  ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 #    ifdef __HAIR__
@@ -297,6 +343,16 @@ ccl_device_intersect uint scene_intersect_volume_all(KernelGlobals *kg,
                                                      const uint visibility,
                                                      uint shadow_linking)
 {
+#ifdef __EMBREE__
+	if(kernel_data.bvh.scene) {
+		CCLRay rtc_ray(*ray, kg, visibility, CCLRay::RAY_VOLUME_ALL, shadow_linking);
+		rtc_ray.isect_s = isect;
+		rtc_ray.max_hits = max_hits;
+		rtc_ray.num_hits = 0;
+		rtcOccluded(kernel_data.bvh.scene, rtc_ray);
+		return rtc_ray.num_hits;
+	}
+#endif
 #  ifdef __OBJECT_MOTION__
 	if(kernel_data.bvh.have_motion) {
 		return bvh_intersect_volume_all_motion(kg, ray, isect, max_hits, visibility, shadow_linking);

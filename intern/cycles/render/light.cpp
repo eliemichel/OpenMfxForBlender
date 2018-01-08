@@ -144,16 +144,17 @@ NODE_DEFINE(Light)
 
 	SOCKET_NODE(shader, "Shader", &Shader::node_type);
 
+	SOCKET_UINT(light_linking, "Light Linking", 0x00ffffff);
+	SOCKET_UINT(shadow_linking, "Shadow Linking", 0x00ffffff);
+
 	return type;
 }
 
 Light::Light()
 : Node(node_type)
 {
-    light_linking = 0;
     light_linking_prev = 0;
 
-    shadow_linking = 0;
     shadow_linking_prev = 0;
 }
 

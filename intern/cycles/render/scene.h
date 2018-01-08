@@ -131,6 +131,37 @@ public:
 	KernelData data;
 };
 
+/* Texture Cache Params */
+class TextureCacheParams {
+public:
+	TextureCacheParams() : cache_size(1024), tile_size(64), diffuse_blur(1.0f/64.f),
+	glossy_blur(0.0f), auto_convert(true), accept_unmipped(true), accept_untiled(true),
+	auto_tile(true), auto_mip(true) { }
+	
+	bool modified(const TextureCacheParams& params)
+	{
+		return !(cache_size == params.cache_size
+				 && tile_size == params.tile_size
+				 && diffuse_blur == params.diffuse_blur
+				 && glossy_blur == params.glossy_blur
+				 && auto_convert == params.auto_convert
+				 && accept_unmipped == params.accept_unmipped
+				 && accept_untiled == params.accept_untiled
+				 && auto_tile == params.auto_tile
+				 && auto_mip == params.auto_mip);
+	}
+	
+	int cache_size;
+	int tile_size;
+	float diffuse_blur;
+	float glossy_blur;
+	bool auto_convert;
+	bool accept_unmipped;
+	bool accept_untiled;
+	bool auto_tile;
+	bool auto_mip;
+};
+
 /* Scene Parameters */
 
 class SceneParams {
@@ -146,8 +177,10 @@ public:
 	bool use_bvh_unaligned_nodes;
 	int num_bvh_time_steps;
 	bool use_qbvh;
+	bool use_bvh_embree;
 	bool persistent_data;
 	int texture_limit;
+	TextureCacheParams texture;
 
 	SceneParams()
 	{
@@ -157,6 +190,7 @@ public:
 		use_bvh_unaligned_nodes = true;
 		num_bvh_time_steps = 0;
 		use_qbvh = false;
+		use_bvh_embree = false;
 		persistent_data = false;
 		texture_limit = 0;
 	}
@@ -169,7 +203,10 @@ public:
 		&& num_bvh_time_steps == params.num_bvh_time_steps
 		&& use_qbvh == params.use_qbvh
 		&& persistent_data == params.persistent_data
-		&& texture_limit == params.texture_limit); }
+		&& texture_limit == params.texture_limit
+		&& use_bvh_embree == params.use_bvh_embree
+		&& texture_limit == params.texture_limit)
+		&& !texture.modified(params.texture); }
 };
 
 /* Scene */
