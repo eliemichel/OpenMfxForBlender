@@ -87,11 +87,7 @@ typedef enum ModifierType {
 	eModifierType_CorrectiveSmooth  = 51,
 	eModifierType_MeshSequenceCache = 52,
 	eModifierType_SurfaceDeform     = 53,
-<<<<<<< HEAD
-	eModifierType_Scaling           = 54,
-=======
 	eModifierType_OpenVDB	        = 54,
->>>>>>> 86a036dd0a7cf7106352014240579745bdccf4ef
 	NUM_MODIFIER_TYPES
 } ModifierType;
 

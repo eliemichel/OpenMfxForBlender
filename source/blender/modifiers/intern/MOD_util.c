@@ -288,11 +288,6 @@ void modifier_type_init(ModifierTypeInfo *types[])
 	INIT_TYPE(CorrectiveSmooth);
 	INIT_TYPE(MeshSequenceCache);
 	INIT_TYPE(SurfaceDeform);
-<<<<<<< HEAD
-
-	INIT_TYPE(Scaling);
-=======
 	INIT_TYPE(OpenVDB);
->>>>>>> 86a036dd0a7cf7106352014240579745bdccf4ef
 #undef INIT_TYPE
 }

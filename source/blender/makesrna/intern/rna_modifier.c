@@ -419,13 +419,8 @@ static StructRNA *rna_Modifier_refine(struct PointerRNA *ptr)
 			return &RNA_MeshSequenceCacheModifier;
 		case eModifierType_SurfaceDeform:
 			return &RNA_SurfaceDeformModifier;
-<<<<<<< HEAD
-		case eModifierType_Scaling:
-			return &RNA_ScalingModifier;
-=======
 		case eModifierType_OpenVDB:
 			return &RNA_OpenVDBModifier;
->>>>>>> 86a036dd0a7cf7106352014240579745bdccf4ef
 		/* Default */
 		case eModifierType_None:
 		case eModifierType_ShapeKey:
