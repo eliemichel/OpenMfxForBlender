@@ -1910,7 +1910,13 @@ static void GPU_get_object_info(float oi[3], Material *mat)
 		random = GMS.dob->random_id;
 	}
 	else {
-		random = BLI_hash_int_2d(BLI_hash_string(GMS.gob->id.name + 2), 0);
+		// random = BLI_hash_int_2d(BLI_hash_string(GMS.gob->id.name + 2), 0);
+		// kiki edit: match new dupli_id stuff
+		random = (
+			ob->dupli_id 
+			? BLI_hash_int(ob->dupli_id) 
+			: BLI_hash_int_2d(BLI_hash_string(GMS.gob->id.name + 2), 0)
+		);
 	}
 	oi[2] = random * (1.0f/(float)0xFFFFFFFF);
 }
