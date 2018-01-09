@@ -185,33 +185,24 @@ static DupliObject *make_dupli(const DupliContext *ctx,
 
 	/* random number */
 	/* the logic here is designed to match Cycles */
-	// dob->random_id = BLI_hash_string(dob->ob->id.name + 2);
-	// const unsigned int base_hash = ob->dupli_id ? ob->dupli_id : BLI_hash_string( ctx->object->id.name + 2 );
-	const unsigned int base_hash = (
-		ctx->object->dupli_id 
-		? BLI_hash_int(ctx->object->dupli_id + index)
-		: BLI_hash_int(BLI_hash_string( ctx->object->id.name + 2))
-	);
-
-	dob->random_id = base_hash;
-
 	if (ctx->object->dupli_id) {
-		// maintain original behavior for depth hashing
+		dob->random_id = BLI_hash_int( ctx->object->dupli_id + index );
+	}
+	else {
+		dob->random_id = BLI_hash_string(ctx->object->id.name + 2);
+
 		if (dob->persistent_id[0] != INT_MAX) {
 			for(i = 0; i < MAX_DUPLI_RECUR*2; i++)
 				dob->random_id = BLI_hash_int_2d(dob->random_id, (unsigned int)dob->persistent_id[i]);
 		}
-		// else {
-		// 	dob->random_id = BLI_hash_int_2d(base_hash, 0);
-		// }
+		else {
+			dob->random_id = BLI_hash_int_2d(dob->random_id, 0);
+		}
 
 		if (ctx->object != ob) {
-			dob->random_id ^= base_hash;
+			dob->random_id ^= BLI_hash_int(BLI_hash_string(ctx->object->id.name + 2));
 		}
 	}
-	// else {
-	// 	dob->random_id = BLI_hash_int_2d(base_hash, 0);
-	// }
 
 	return dob;
 }
