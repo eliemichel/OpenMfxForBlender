@@ -117,6 +117,7 @@
 #include "BKE_material.h"
 #include "BKE_camera.h"
 #include "BKE_image.h"
+#include "BLI_hash.h"
 
 #ifdef WITH_MOD_FLUID
 #include "LBM_fluidsim.h"
@@ -654,6 +655,10 @@ void BKE_object_init(Object *ob)
 	
 	/* Animation Visualization defaults */
 	animviz_settings_init(&ob->avs);
+
+	/* kiki: locked dupli indices defaults */
+	// match the cycles ID -- name *should* be filled out ahead of time
+	ob->dupli_id = BLI_hash_string(ob->id.name + 2);
 }
 
 /* more general add: creates minimum required data, but without vertices etc. */

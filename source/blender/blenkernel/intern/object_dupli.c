@@ -176,26 +176,36 @@ static DupliObject *make_dupli(const DupliContext *ctx,
 	if (hide)
 		dob->no_draw = true;
 	/* metaballs never draw in duplis, they are instead merged into one by the basis
-	 * mball outside of the group. this does mean that if that mball is not in the
-	 * scene, they will not show up at all, limitation that should be solved once. */
+	 * mball outside of the group. this doe
+	 * s mean that if that mball is not in the
+	 * scene, they will not show up at all, limitation 
+	 * that should be solved once. */
 	if (ob->type == OB_MBALL)
 		dob->no_draw = true;
 
 	/* random number */
 	/* the logic here is designed to match Cycles */
-	dob->random_id = BLI_hash_string(dob->ob->id.name + 2);
+	// dob->random_id = BLI_hash_string(dob->ob->id.name + 2);
+	// const unsigned int base_hash = ob->dupli_id ? ob->dupli_id : BLI_hash_string( ctx->object->id.name + 2 );
+	const unsigned int base_hash = (
+		ctx->object->dupli_id 
+		? BLI_hash_int(ctx->object->dupli_id + index)
+		: BLI_hash_int(BLI_hash_string( ctx->object->id.name))
+	);
+
+	dob->random_id = base_hash;
 
 	if (dob->persistent_id[0] != INT_MAX) {
 		for(i = 0; i < MAX_DUPLI_RECUR*2; i++)
-			dob->random_id = BLI_hash_int_2d(dob->random_id, (unsigned int)dob->persistent_id[i]);
+			dob->random_id = BLI_hash_int_2d(base_hash, (unsigned int)dob->persistent_id[i]);
 	}
 	else {
-		dob->random_id = BLI_hash_int_2d(dob->random_id, 0);
+		dob->random_id = BLI_hash_int_2d(base_hash, 0);
 	}
 
-	if (ctx->object != ob) {
-		dob->random_id ^= BLI_hash_int(BLI_hash_string(ctx->object->id.name + 2));
-	}
+	// if (ctx->object != ob) {
+	// 	dob->random_id ^= base_hash;
+	// }
 
 	return dob;
 }
@@ -885,7 +895,7 @@ static void make_duplis_particle_system(const DupliContext *ctx, ParticleSystem 
 	totpart = psys->totpart;
 	totchild = psys->totchild;
 
-	BLI_srandom((unsigned int)(31415926 + psys->seed));
+	BLI_srandom((unsigned int)(31415926 + (ctx->object->dupli_id ? ctx->object->dupli_id : psys->seed)));
 
 	if ((psys->renderdata || part->draw_as == PART_DRAW_REND) && ELEM(part->ren_as, PART_DRAW_OB, PART_DRAW_GR)) {
 		ParticleSimulationData sim = {NULL};
