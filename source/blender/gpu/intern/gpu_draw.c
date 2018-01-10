@@ -1907,6 +1907,7 @@ static void GPU_get_object_info(float oi[3], Material *mat)
 	oi[1] = mat->index;
 	unsigned int random;
 	if (GMS.dob) {
+		// this is already hashed by make_dupli(), so don't re-hash!
 		random = GMS.dob->random_id;
 	}
 	else {
