@@ -743,23 +743,28 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         sub.active = md.use_frame_override
         sub.prop(md, "frame_override")
 
+        layout.separator()
+        layout.label(text="Viewport Display Options:")
+
         layout.prop(md, "simplify_level")
 
-        layout.prop(md, "hide_volume")
-
         row = layout.row()
-        row.active = not md.hide_volume
-        row.prop(md, "hide_unselected")
+        row.prop(md, "hide_volume")
+
+        sub = row.row()
+        sub.active = not md.hide_volume
+        sub.prop(md, "hide_unselected")
 
         row = layout.row()
         row.prop(md, "density_min")
         row.prop(md, "density_max")
 
+        layout.prop(md, "display_thickness")
+
         row = layout.row()
         row.prop(md, "flame_min")
         row.prop(md, "flame_max")
 
-        layout.prop(md, "display_thickness")
         layout.prop(md, "flame_thickness")
 
         layout.prop(md, "numeric_display")
