@@ -759,6 +759,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row.prop(md, "flame_min")
         row.prop(md, "flame_max")
 
+        layout.prop(md, "display_thickness")
+
         layout.prop(md, "numeric_display")
 
         if (md.density != 'NONE' or

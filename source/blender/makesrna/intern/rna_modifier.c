@@ -1479,6 +1479,24 @@ static void rna_OpenVDBModifier_frame_end_set(PointerRNA *ptr, int value)
 	cache->endframe = value;
 }
 
+static float rna_OpenVDBModifier_display_thickness_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	SmokeModifierData *smd = vdbmd->smoke;
+	SmokeDomainSettings *sds = smd->domain;
+
+	return sds->display_thickness;
+}
+
+static void rna_OpenVDBModifier_display_thickness_set(PointerRNA *ptr, float value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	SmokeModifierData *smd = vdbmd->smoke;
+	SmokeDomainSettings *sds = smd->domain;
+
+	sds->display_thickness = value;
+}
+
 #else
 
 static PropertyRNA *rna_def_property_subdivision_common(StructRNA *srna, const char type[])
@@ -5273,6 +5291,14 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "flame_max", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Max Flame", "Maximum threshold for flame display");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+
+	prop = RNA_def_property(srna, "display_thickness", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Density Thickness", "Thickness of smoke drawing in the viewport");
+	RNA_def_property_float_funcs(prop, "rna_OpenVDBModifier_display_thickness_get",
+	                             "rna_OpenVDBModifier_display_thickness_set", NULL);
+	RNA_def_property_range(prop, 0.001, 1000.0);
+	RNA_def_property_ui_range(prop, 0.1, 100.0, 0.1, 3);
 	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
 }
 
