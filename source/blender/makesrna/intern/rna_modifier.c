@@ -5300,6 +5300,11 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	RNA_def_property_range(prop, 0.001, 1000.0);
 	RNA_def_property_ui_range(prop, 0.1, 100.0, 0.1, 3);
 	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+
+	prop = RNA_def_property(srna, "flame_thickness", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Flame Thickness", "Thickness of flame drawing in the viewport");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
 }
 
 void RNA_def_modifier(BlenderRNA *brna)

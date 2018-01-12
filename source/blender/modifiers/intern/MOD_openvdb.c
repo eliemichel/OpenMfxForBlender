@@ -72,6 +72,8 @@ static void initData(ModifierData *md)
 	vdbmd->front_axis = MOD_OVDB_AXIS_MIN_Y;
 
 	vdbmd->frame_last = -1;
+
+	vdbmd->flame_thickness = 1.0f;
 }
 
 static void freeData(ModifierData *md)

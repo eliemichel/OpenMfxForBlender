@@ -433,6 +433,7 @@ static void bind_shader(SmokeDomainSettings *sds, GPUShader *shader, GPUTexture 
 	if (use_fire) {
 		spec_location = GPU_shader_get_uniform(shader, "spectrum_texture");
 		flame_location = GPU_shader_get_uniform(shader, "flame_texture");
+		densityscale_location = GPU_shader_get_uniform(shader, "density_scale");
 	}
 	else {
 		shadow_location = GPU_shader_get_uniform(shader, "shadow_texture");
@@ -450,6 +451,10 @@ static void bind_shader(SmokeDomainSettings *sds, GPUShader *shader, GPUTexture 
 	GPU_shader_bind(shader);
 
 	if (use_fire) {
+		float density_scale = sds->vdb ? sds->vdb->flame_thickness : 1.0f;
+
+		GPU_shader_uniform_vector(shader, densityscale_location, 1, 1, &density_scale);
+
 		GPU_texture_bind(sds->tex_flame, 2);
 		GPU_shader_uniform_texture(shader, flame_location, sds->tex_flame);
 
