@@ -34,6 +34,8 @@
 
 #ifdef RNA_RUNTIME
 
+#include "DNA_modifier_types.h"
+
 #include "BKE_cachefile.h"
 #include "BKE_depsgraph.h"
 
@@ -55,7 +57,23 @@ static void rna_CacheFile_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 	DAG_id_tag_update(&cache_file->id, 0);
 	WM_main_add_notifier(NC_OBJECT | ND_DRAW, NULL);
 
-	UNUSED_VARS(bmain, scene);
+	for (Base *base = scene->base.first; base != NULL; base = base->next) {
+		Object *ob = base->object;
+		if (ob) {
+			for (ModifierData *md = ob->modifiers.first; md != NULL; md = md->next) {
+				if (md->type == eModifierType_MeshSequenceCache) {
+					MeshSeqCacheModifierData *mcmd = (MeshSeqCacheModifierData *)md;
+
+					if (mcmd->cache_file == cache_file) {
+						DAG_id_tag_update((ID *)ob, OB_RECALC_DATA);
+						WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, (ID *)ob);
+					}
+				}
+			}
+		}
+	}
+
+	UNUSED_VARS(bmain);
 }
 
 static void rna_CacheFile_update_handle(Main *bmain, Scene *scene, PointerRNA *ptr)
