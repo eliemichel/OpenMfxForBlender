@@ -53,7 +53,7 @@ ccl_device float3 bsdf_refraction_eval_transmit(const ShaderClosure *sc, const f
 	return make_float3(0.0f, 0.0f, 0.0f);
 }
 
-ccl_device int bsdf_refraction_sample(const ShaderClosure *sc, float3 Ng, float3 I, float3 dIdx, float3 dIdy, float randu, float randv, float3 *eval, float3 *omega_in, float3 *domega_in_dx, float3 *domega_in_dy, float *pdf)
+ccl_device int bsdf_refraction_sample(const ShaderClosure *sc, float3 Ng, float3 I, float3 dIdx, float3 dIdy, float randu, float randv, float3 *eval, float3 *omega_in, float3 *domega_in_dx, float3 *domega_in_dy, float *pdf, ShaderData *sd)
 {
 	const MicrofacetBsdf *bsdf = (const MicrofacetBsdf*)sc;
 	float m_eta = bsdf->ior;
@@ -67,6 +67,10 @@ ccl_device int bsdf_refraction_sample(const ShaderClosure *sc, float3 Ng, float3
 	float fresnel;
 	fresnel = fresnel_dielectric(m_eta, N, I, &R, &T,
 #ifdef __RAY_DIFFERENTIALS__
+#  ifdef __DNDU__
+		ccl_fetch(sd, dNdx),
+		ccl_fetch(sd, dNdy),
+#  endif
 		dIdx, dIdy, &dRdx, &dRdy, &dTdx, &dTdy,
 #endif
 		&inside);

@@ -28,6 +28,8 @@
 #  define __KERNEL_AVX__
 #endif
 
+#define OIIO_NO_AVX 1
+
 #include "util/util_optimization.h"
 
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX

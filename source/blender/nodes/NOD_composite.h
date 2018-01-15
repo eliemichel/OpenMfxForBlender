@@ -128,6 +128,7 @@ void register_node_type_cmp_tonemap(void);
 void register_node_type_cmp_lensdist(void);
 void register_node_type_cmp_sunbeams(void);
 void register_node_type_cmp_motionblur2d(void);
+void register_node_type_cmp_othereye(void);
 
 void register_node_type_cmp_colorcorrection(void);
 void register_node_type_cmp_boxmask(void);

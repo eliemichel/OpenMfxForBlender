@@ -676,7 +676,7 @@ static void camera_model_matrix(Object *camera, float r_modelmat[4][4])
 	copy_m4_m4(r_modelmat, camera->obmat);
 }
 
-static void camera_stereo3d_model_matrix(Object *camera, const bool is_left, float r_modelmat[4][4])
+void camera_stereo3d_model_matrix(Object *camera, const bool is_left, float r_modelmat[4][4])
 {
 	Camera *data = (Camera *)camera->data;
 	float interocular_distance, convergence_distance;
@@ -879,7 +879,7 @@ Object *BKE_camera_multiview_render(Scene *scene, Object *camera, const char *vi
 	}
 }
 
-static float camera_stereo3d_shift_x(Object *camera, const char *viewname)
+float camera_stereo3d_shift_x(Object *camera, const char *viewname)
 {
 	Camera *data = camera->data;
 	float shift = data->shiftx;

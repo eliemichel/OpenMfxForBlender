@@ -115,6 +115,7 @@ EnumPropertyItem rna_enum_object_modifier_type_items[] = {
 	{eModifierType_Explode, "EXPLODE", ICON_MOD_EXPLODE, "Explode", ""},
 	{eModifierType_Fluidsim, "FLUID_SIMULATION", ICON_MOD_FLUIDSIM, "Fluid Simulation", ""},
 	{eModifierType_Ocean, "OCEAN", ICON_MOD_OCEAN, "Ocean", ""},
+	{eModifierType_OpenVDB, "OPENVDB", ICON_MOD_SMOKE, "OpenVDB", ""},
 	{eModifierType_ParticleInstance, "PARTICLE_INSTANCE", ICON_MOD_PARTICLES, "Particle Instance", ""},
 	{eModifierType_ParticleSystem, "PARTICLE_SYSTEM", ICON_MOD_PARTICLES, "Particle System", ""},
 	{eModifierType_Smoke, "SMOKE", ICON_MOD_SMOKE, "Smoke", ""},
@@ -287,6 +288,7 @@ EnumPropertyItem rna_enum_axis_flag_xyz_items[] = {
 #include "BKE_cachefile.h"
 #include "BKE_context.h"
 #include "BKE_depsgraph.h"
+#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
@@ -294,6 +296,10 @@ EnumPropertyItem rna_enum_axis_flag_xyz_items[] = {
 
 #ifdef WITH_ALEMBIC
 #  include "ABC_alembic.h"
+#endif
+
+#ifdef WITH_OPENVDB
+#  include "openvdb_capi.h"
 #endif
 
 static void rna_UVProject_projectors_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
@@ -411,6 +417,8 @@ static StructRNA *rna_Modifier_refine(struct PointerRNA *ptr)
 			return &RNA_MeshSequenceCacheModifier;
 		case eModifierType_SurfaceDeform:
 			return &RNA_SurfaceDeformModifier;
+		case eModifierType_OpenVDB:
+			return &RNA_OpenVDBModifier;
 		/* Default */
 		case eModifierType_None:
 		case eModifierType_ShapeKey:
@@ -1153,6 +1161,322 @@ static void rna_MeshSequenceCache_object_path_update(Main *bmain, Scene *scene, 
 #endif
 
 	rna_Modifier_update(bmain, scene, ptr);
+}
+
+static void rna_OpenVDBModifier_set_color_chanels(OpenVDBModifierData *vdbmd)
+{
+	char name[64];
+	int last;
+
+	if (vdbmd->color[0][0] == 0 || vdbmd->color[1][0] != 0 || vdbmd->color[2][0] != 0) {
+		return;
+	}
+
+	BLI_strncpy_utf8(name, vdbmd->color[0], sizeof(name));
+	last = strlen(name) - 1;
+
+	if (!ELEM(name[last], '0', '1', 'X')) {
+		return;
+	}
+
+	for (int i = 1; i < 3; i++) {
+		name[last] += 1;
+
+		for (int j = 0; j < vdbmd->numgrids; j++) {
+			if (STREQ(name, vdbmd->grids[j])) {
+				BLI_strncpy_utf8(vdbmd->color[i], name, sizeof(vdbmd->color[i]));
+				break;
+			}
+		}
+	}
+}
+
+static void rna_OpenVDBModifier_update(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	vdbmd->frame_last = -1;
+
+	rna_Modifier_update(bmain, scene, ptr);
+}
+
+static void rna_OpenVDBModifier_viewport_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+{
+	WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, ptr->id.data);
+}
+
+static void rna_OpenVDBModifier_abs_path_get(PointerRNA *ptr, char *value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	BLI_strncpy(value, vdbmd->filepath, 1024);
+	BLI_path_abs(value, G.main->name);
+}
+
+static int rna_OpenVDBModifier_abs_path_length(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	char filepath[1024];
+
+	BLI_strncpy(filepath, vdbmd->filepath, sizeof(filepath));
+	BLI_path_abs(filepath, G.main->name);
+	return strlen(filepath);
+}
+
+static int rna_OpenVDBModifier_density_grid_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	for (int i = 0; i < vdbmd->numgrids; i++) {
+		if (STREQ(vdbmd->density, vdbmd->grids[i])) {
+			return i + 1;
+		}
+	}
+
+	return 0;
+}
+
+static void rna_OpenVDBModifier_density_grid_set(PointerRNA *ptr, int value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	if (value == 0) {
+		vdbmd->density[0] = 0;
+		return;
+	}
+
+	if (value <= vdbmd->numgrids) {
+		BLI_strncpy_utf8(vdbmd->density, vdbmd->grids[value - 1], sizeof(vdbmd->density));
+	}
+}
+
+static int rna_OpenVDBModifier_heat_grid_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	for (int i = 0; i < vdbmd->numgrids; i++) {
+		if (STREQ(vdbmd->heat, vdbmd->grids[i])) {
+			return i + 1;
+		}
+	}
+
+	return 0;
+}
+
+static void rna_OpenVDBModifier_heat_grid_set(PointerRNA *ptr, int value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	if (value == 0) {
+		vdbmd->heat[0] = 0;
+		return;
+	}
+
+	if (value <= vdbmd->numgrids) {
+		BLI_strncpy_utf8(vdbmd->heat, vdbmd->grids[value - 1], sizeof(vdbmd->heat));
+	}
+}
+
+static int rna_OpenVDBModifier_flame_grid_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	for (int i = 0; i < vdbmd->numgrids; i++) {
+		if (STREQ(vdbmd->flame, vdbmd->grids[i])) {
+			return i + 1;
+		}
+	}
+
+	return 0;
+}
+
+static void rna_OpenVDBModifier_flame_grid_set(PointerRNA *ptr, int value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	if (value == 0) {
+		vdbmd->flame[0] = 0;
+		return;
+	}
+
+	if (value <= vdbmd->numgrids) {
+		BLI_strncpy_utf8(vdbmd->flame, vdbmd->grids[value - 1], sizeof(vdbmd->flame));
+	}
+}
+
+static int rna_OpenVDBModifier_color1_grid_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	for (int i = 0; i < vdbmd->numgrids; i++) {
+		if (STREQ(vdbmd->color[0], vdbmd->grids[i])) {
+			return i + 1;
+		}
+	}
+
+	return 0;
+}
+
+static void rna_OpenVDBModifier_color1_grid_set(PointerRNA *ptr, int value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	if (value == 0) {
+		vdbmd->color[0][0] = 0;
+		return;
+	}
+
+	if (value <= vdbmd->numgrids) {
+		BLI_strncpy_utf8(vdbmd->color[0], vdbmd->grids[value - 1], sizeof(vdbmd->color[0]));
+	}
+
+	rna_OpenVDBModifier_set_color_chanels(vdbmd);
+}
+
+static int rna_OpenVDBModifier_color2_grid_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	for (int i = 0; i < vdbmd->numgrids; i++) {
+		if (STREQ(vdbmd->color[1], vdbmd->grids[i])) {
+			return i + 1;
+		}
+	}
+
+	return 0;
+}
+
+static void rna_OpenVDBModifier_color2_grid_set(PointerRNA *ptr, int value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	if (value == 0) {
+		vdbmd->color[1][0] = 0;
+		return;
+	}
+
+	if (value <= vdbmd->numgrids) {
+		BLI_strncpy_utf8(vdbmd->color[1], vdbmd->grids[value - 1], sizeof(vdbmd->color[1]));
+	}
+}
+
+static int rna_OpenVDBModifier_color3_grid_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	for (int i = 0; i < vdbmd->numgrids; i++) {
+		if (STREQ(vdbmd->color[2], vdbmd->grids[i])) {
+			return i + 1;
+		}
+	}
+
+	return 0;
+}
+
+static void rna_OpenVDBModifier_color3_grid_set(PointerRNA *ptr, int value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+
+	if (value == 0) {
+		vdbmd->color[2][0] = 0;
+		return;
+	}
+
+	if (value <= vdbmd->numgrids) {
+		BLI_strncpy_utf8(vdbmd->color[2], vdbmd->grids[value - 1], sizeof(vdbmd->color[2]));
+	}
+}
+
+static EnumPropertyItem *rna_OpenVDBModifier_grid_itemf(
+        bContext *UNUSED(C), PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	EnumPropertyItem *item = NULL;
+	EnumPropertyItem tmp = {0, "NONE", 0, "None", "Don't use any grid"};
+	int totitem = 0;
+
+	RNA_enum_item_add(&item, &totitem, &tmp);
+
+	tmp.description = "";
+
+	for (int i = 0; i < vdbmd->numgrids; i++) {
+		tmp.value = i + 1;
+		tmp.identifier = vdbmd->grids[i];
+		tmp.name = vdbmd->grids[i];
+		RNA_enum_item_add(&item, &totitem, &tmp);
+	}
+
+	RNA_enum_item_end(&item, &totitem);
+	*r_free = true;
+
+	return item;
+}
+
+static int rna_OpenVDBModifier_show_axis_convert_get(PointerRNA *ptr)
+{
+#ifdef WITH_OPENVDB
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	char filepath[1024];
+
+	BLI_strncpy(filepath, vdbmd->filepath, sizeof(filepath));
+	BLI_path_abs(filepath, G.main->name);
+
+	if (BLI_exists(filepath)) {
+		struct OpenVDBReader *reader = OpenVDBReader_create();
+		OpenVDBReader_open(reader, filepath);
+
+		if (OpenVDB_has_metadata(reader, "FFXVDBVersion")) {
+			OpenVDBReader_free(reader);
+			return 0;
+		}
+
+		OpenVDBReader_free(reader);
+	}
+#else
+	UNUSED_VARS(ptr);
+#endif
+
+	return 1;
+}
+
+static int rna_OpenVDBModifier_frame_start_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	SmokeModifierData *smd = vdbmd->smoke;
+	SmokeDomainSettings *sds = smd->domain;
+	PointCache *cache = sds->point_cache[0];
+
+	return cache->startframe;
+}
+
+static void rna_OpenVDBModifier_frame_start_set(PointerRNA *ptr, int value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	SmokeModifierData *smd = vdbmd->smoke;
+	SmokeDomainSettings *sds = smd->domain;
+	PointCache *cache = sds->point_cache[0];
+
+	cache->startframe = value;
+}
+
+static int rna_OpenVDBModifier_frame_end_get(PointerRNA *ptr)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	SmokeModifierData *smd = vdbmd->smoke;
+	SmokeDomainSettings *sds = smd->domain;
+	PointCache *cache = sds->point_cache[0];
+
+	return cache->endframe;
+}
+
+static void rna_OpenVDBModifier_frame_end_set(PointerRNA *ptr, int value)
+{
+	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
+	SmokeModifierData *smd = vdbmd->smoke;
+	SmokeDomainSettings *sds = smd->domain;
+	PointCache *cache = sds->point_cache[0];
+
+	cache->endframe = value;
 }
 
 #else
@@ -4847,6 +5171,186 @@ static void rna_def_modifier_surfacedeform(BlenderRNA *brna)
 	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 }
 
+static void rna_def_modifier_openvdb(BlenderRNA *brna)
+{
+	StructRNA *srna;
+	PropertyRNA *prop;
+
+	static EnumPropertyItem grid_items[] = {
+	    {0, "NONE", 0, "None", "Don't use any grid"},
+		{0, NULL, 0, NULL, NULL}
+	};
+
+	static EnumPropertyItem axis_items[] = {
+	    {MOD_OVDB_AXIS_X, "X", 0, "X", ""},
+	    {MOD_OVDB_AXIS_Y, "Y", 0, "Y", ""},
+	    {MOD_OVDB_AXIS_Z, "Z", 0, "Z", ""},
+	    {MOD_OVDB_AXIS_MIN_X, "MIN_X", 0, "-X", ""},
+	    {MOD_OVDB_AXIS_MIN_Y, "MIN_Y", 0, "-Y", ""},
+	    {MOD_OVDB_AXIS_MIN_Z, "MIN_Z", 0, "-Z", ""},
+		{0, NULL, 0, NULL, NULL}
+	};
+
+	static EnumPropertyItem numeric_display_items[] = {
+	    {MOD_OVDB_NUM_NONE, "NONE", 0, "None", ""},
+	    {MOD_OVDB_NUM_DENSITY, "DENSITY", 0, "Density", ""},
+	    {MOD_OVDB_NUM_HEAT, "HEAT", 0, "Heat", ""},
+	    {MOD_OVDB_NUM_FLAME, "FLAME", 0, "Flame", ""},
+	    {MOD_OVDB_NUM_COLOR, "COLOR", 0, "Color", ""},
+		{0, NULL, 0, NULL, NULL}
+	};
+
+	srna = RNA_def_struct(brna, "OpenVDBModifier", "Modifier");
+	RNA_def_struct_ui_text(srna, "OpenVDB Modifier", "");
+	RNA_def_struct_sdna(srna, "OpenVDBModifierData");
+	RNA_def_struct_ui_icon(srna, ICON_MOD_SMOKE);
+
+	prop = RNA_def_property(srna, "filepath", PROP_STRING, PROP_FILEPATH);
+	RNA_def_property_ui_text(prop, "File Path", "Path to OpenVDB cache file");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "abs_path", PROP_STRING, PROP_FILEPATH);
+	RNA_def_property_string_funcs(prop, "rna_OpenVDBModifier_abs_path_get", "rna_OpenVDBModifier_abs_path_length", NULL);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+	RNA_def_property_ui_text(prop, "Abs Path", "Absolute path to OpenVDB cache file");
+
+	prop = RNA_def_property(srna, "density", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, grid_items);
+	RNA_def_property_enum_funcs(prop, "rna_OpenVDBModifier_density_grid_get", "rna_OpenVDBModifier_density_grid_set",
+	                            "rna_OpenVDBModifier_grid_itemf");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_ui_text(prop, "Density Grid", "Name of the grid to be used for density");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "heat", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, grid_items);
+	RNA_def_property_enum_funcs(prop, "rna_OpenVDBModifier_heat_grid_get", "rna_OpenVDBModifier_heat_grid_set",
+	                            "rna_OpenVDBModifier_grid_itemf");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_ui_text(prop, "Heat Grid", "Name of the grid to be used for heat");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "flame", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, grid_items);
+	RNA_def_property_enum_funcs(prop, "rna_OpenVDBModifier_flame_grid_get", "rna_OpenVDBModifier_flame_grid_set",
+	                            "rna_OpenVDBModifier_grid_itemf");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_ui_text(prop, "Flame Grid", "Name of the grid to be used for flame");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "color1", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, grid_items);
+	RNA_def_property_enum_funcs(prop, "rna_OpenVDBModifier_color1_grid_get", "rna_OpenVDBModifier_color1_grid_set",
+	                            "rna_OpenVDBModifier_grid_itemf");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_ui_text(prop, "Color Grid", "Name of the grid to be used for color");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "color2", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, grid_items);
+	RNA_def_property_enum_funcs(prop, "rna_OpenVDBModifier_color2_grid_get", "rna_OpenVDBModifier_color2_grid_set",
+	                            "rna_OpenVDBModifier_grid_itemf");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_ui_text(prop, "Color Grid", "Name of the grid to be used for the second color component");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "color3", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, grid_items);
+	RNA_def_property_enum_funcs(prop, "rna_OpenVDBModifier_color3_grid_get", "rna_OpenVDBModifier_color3_grid_set",
+	                            "rna_OpenVDBModifier_grid_itemf");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_ui_text(prop, "Color Grid", "Name of the grid to be used for the third color component");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "up_axis", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, axis_items);
+	RNA_def_property_ui_text(prop, "Up Axis", "Axis to point upwards");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "front_axis", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, axis_items);
+	RNA_def_property_ui_text(prop, "Forward Axis", "Axis to point forwards");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "smoke", PROP_POINTER, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Smoke", "");
+
+	prop = RNA_def_property(srna, "frame_offset", PROP_INT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Frame Offset", "Offset frame number to read from cache");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "frame_override", PROP_INT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Frame Override", "Override frame number to read from cache");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "frame_start", PROP_INT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Frame Start", "Frame on which to start displaying the cache");
+	RNA_def_property_int_funcs(prop, "rna_OpenVDBModifier_frame_start_get", "rna_OpenVDBModifier_frame_start_set", NULL);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "frame_end", PROP_INT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Frame End", "Frame on which to stop displaying the cache");
+	RNA_def_property_int_funcs(prop, "rna_OpenVDBModifier_frame_end_get", "rna_OpenVDBModifier_frame_end_set", NULL);
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "simplify_level", PROP_INT, PROP_NONE);
+	RNA_def_property_int_sdna(prop, NULL, "simplify");
+	RNA_def_property_ui_range(prop, 0, SHRT_MAX, 1, -1);
+	RNA_def_property_ui_text(prop, "Simplify Level", "Increase performance by displaying lower res");
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "hide_volume", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_HIDE_VOLUME);
+	RNA_def_property_ui_text(prop, "Hide Volume", "Display only bounding box (faster playback)");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "hide_unselected", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_HIDE_UNSELECTED);
+	RNA_def_property_ui_text(prop, "Hide Unselected", "Display only bounding box if not selected (faster playback)");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "use_frame_override", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_OVERRIDE_FRAME);
+	RNA_def_property_ui_text(prop, "Use Override", "Use manual frame override");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "use_split_color", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_SPLIT_COLOR);
+	RNA_def_property_ui_text(prop, "Split Color", "Input color grids by individual channel");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
+
+	prop = RNA_def_property(srna, "show_axis_convert", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_funcs(prop, "rna_OpenVDBModifier_show_axis_convert_get", NULL);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "max_density", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "max_heat", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "max_flame", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "max_color", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+	prop = RNA_def_property(srna, "numeric_display", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, numeric_display_items);
+	RNA_def_property_ui_text(prop, "Display Values", "Values to display numerically in the viewport");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+}
+
 void RNA_def_modifier(BlenderRNA *brna)
 {
 	StructRNA *srna;
@@ -4965,6 +5469,7 @@ void RNA_def_modifier(BlenderRNA *brna)
 	rna_def_modifier_normaledit(brna);
 	rna_def_modifier_meshseqcache(brna);
 	rna_def_modifier_surfacedeform(brna);
+	rna_def_modifier_openvdb(brna);
 }
 
 #endif

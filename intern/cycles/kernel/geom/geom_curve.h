@@ -1025,16 +1025,24 @@ ccl_device_inline float3 bvh_curve_refine(KernelGlobals *kg, ShaderData *sd, con
 			sd->Ng = normalize(-(D - tg * (dot(tg, D))));
 		}
 		else {
-			/* direction from inside to surface of curve */
-			float3 p_curr = curvepoint(isect->u, p[0], p[1], p[2], p[3]);	
-			sd->Ng = normalize(P - p_curr);
+#ifdef __EMBREE__
+			if(kernel_data.bvh.scene) {
+				sd->Ng = normalize(isect->Ng);
+			}
+			else
+#endif
+			{
+				/* direction from inside to surface of curve */
+				float3 p_curr = curvepoint(isect->u, p[0], p[1], p[2], p[3]);	
+				sd->Ng = normalize(P - p_curr);
 
-			/* adjustment for changing radius */
-			float gd = isect->v;
+				/* adjustment for changing radius */
+				float gd = isect->v;
 
-			if(gd != 0.0f) {
-				sd->Ng = sd->Ng - gd * tg;
-				sd->Ng = normalize(sd->Ng);
+				if(gd != 0.0f) {
+					sd->Ng = sd->Ng - gd * tg;
+					sd->Ng = normalize(sd->Ng);
+				}
 			}
 		}
 
@@ -1090,6 +1098,12 @@ ccl_device_inline float3 bvh_curve_refine(KernelGlobals *kg, ShaderData *sd, con
 	/* dPdu/dPdv */
 	sd->dPdu = tg;
 	sd->dPdv = cross(tg, sd->Ng);
+#endif
+#ifdef __DNDU__
+	/* dNdu/dNdv */
+	/* TODO */
+	ccl_fetch(sd, dNdx) = make_float3(0.0f, 0.0f, 0.0f);
+	ccl_fetch(sd, dNdy) = make_float3(0.0f, 0.0f, 0.0f);
 #endif
 
 	if(isect->object != OBJECT_NONE) {

@@ -95,11 +95,11 @@ ccl_device void camera_sample_perspective(KernelGlobals *kg, float raster_x, flo
 #  ifdef __KERNEL_OPENCL__
 		const MotionTransform tfm = kernel_data.cam.motion;
 		transform_motion_interpolate(&cameratoworld,
-		                             ((const DecompMotionTransform*)&tfm),
+		                             ((const MotionTransform*)&tfm),
 		                             ray->time);
 #  else
 		transform_motion_interpolate(&cameratoworld,
-		                             ((const DecompMotionTransform*)&kernel_data.cam.motion),
+		                             ((const MotionTransform*)&kernel_data.cam.motion),
 		                             ray->time);
 #  endif
 	}
@@ -207,11 +207,11 @@ ccl_device void camera_sample_orthographic(KernelGlobals *kg, float raster_x, fl
 #  ifdef __KERNEL_OPENCL__
 		const MotionTransform tfm = kernel_data.cam.motion;
 		transform_motion_interpolate(&cameratoworld,
-		                             (const DecompMotionTransform*)&tfm,
+		                             (const MotionTransform*)&tfm,
 		                             ray->time);
 #  else
 		transform_motion_interpolate(&cameratoworld,
-		                             (const DecompMotionTransform*)&kernel_data.cam.motion,
+		                             (const MotionTransform*)&kernel_data.cam.motion,
 		                             ray->time);
 #  endif
 	}
@@ -285,11 +285,11 @@ ccl_device_inline void camera_sample_panorama(KernelGlobals *kg,
 #  ifdef __KERNEL_OPENCL__
 		const MotionTransform tfm = kernel_data.cam.motion;
 		transform_motion_interpolate(&cameratoworld,
-		                             (const DecompMotionTransform*)&tfm,
+		                             (const MotionTransform*)&tfm,
 		                             ray->time);
 #  else
 		transform_motion_interpolate(&cameratoworld,
-		                             (const DecompMotionTransform*)&kernel_data.cam.motion,
+		                             (const MotionTransform*)&kernel_data.cam.motion,
 		                             ray->time);
 #  endif
 	}
@@ -437,6 +437,14 @@ ccl_device_inline float camera_distance(KernelGlobals *kg, float3 P)
 	}
 	else
 		return len(P - camP);
+}
+
+ccl_device_inline float camera_distance_right_eye(KernelGlobals *kg, float3 P)
+{
+	Transform cameratoworld = kernel_data.cam.cameratoworld;
+	float3 camP = make_float3(cameratoworld.x.w, cameratoworld.y.w, cameratoworld.z.w);
+	float3 camD = make_float3(cameratoworld.x.z, cameratoworld.y.z, cameratoworld.z.z);
+	return fabsf(dot((P - camP), camD));
 }
 
 ccl_device_inline float3 camera_direction_from_point(KernelGlobals *kg, float3 P)

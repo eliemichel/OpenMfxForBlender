@@ -38,6 +38,13 @@
 #include "util/util_progress.h"
 #include "util/util_set.h"
 
+#ifdef WITH_EMBREE
+#	include "bvh/bvh_embree.h"
+#	include "embree2/rtcore.h"
+#	include "embree2/rtcore_scene.h"
+#	include "embree2/rtcore_builder.h"
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 /* Triangle */
@@ -105,6 +112,19 @@ void Mesh::Triangle::verts_for_step(const float3 *verts,
 		r_verts[1] = vert_steps[offset + v[1]];
 		r_verts[2] = vert_steps[offset + v[2]];
 	}
+}
+
+float3 Mesh::Triangle::compute_normal(const float3 *verts) const
+{
+	const float3& v0 = verts[v[0]];
+	const float3& v1 = verts[v[1]];
+	const float3& v2 = verts[v[2]];
+	const float3 norm = cross(v1 - v0, v2 - v0);
+	const float normlen = len(norm);
+	if(normlen == 0.0f) {
+		return make_float3(1.0f, 0.0f, 0.0f);
+	}
+	return norm / normlen;
 }
 
 /* Curve */
@@ -701,21 +721,6 @@ void Mesh::compute_bounds()
 	bounds = bnds;
 }
 
-static float3 compute_face_normal(const Mesh::Triangle& t, float3 *verts)
-{
-	float3 v0 = verts[t.v[0]];
-	float3 v1 = verts[t.v[1]];
-	float3 v2 = verts[t.v[2]];
-
-	float3 norm = cross(v1 - v0, v2 - v0);
-	float normlen = len(norm);
-
-	if(normlen == 0.0f)
-		return make_float3(1.0f, 0.0f, 0.0f);
-
-	return norm / normlen;
-}
-
 void Mesh::add_face_normals()
 {
 	/* don't compute if already there */
@@ -733,7 +738,7 @@ void Mesh::add_face_normals()
 		float3 *verts_ptr = verts.data();
 
 		for(size_t i = 0; i < triangles_size; i++) {
-			fN[i] = compute_face_normal(get_triangle(i), verts_ptr);
+			fN[i] = get_triangle(i).compute_normal(verts_ptr);
 		}
 	}
 
@@ -795,7 +800,7 @@ void Mesh::add_vertex_normals()
 
 			for(size_t i = 0; i < triangles_size; i++) {
 				for(size_t j = 0; j < 3; j++) {
-					float3 fN = compute_face_normal(get_triangle(i), mP);
+					float3 fN = get_triangle(i).compute_normal(mP);
 					mN[get_triangle(i).v[j]] += fN;
 				}
 			}
@@ -1055,6 +1060,10 @@ void Mesh::compute_bvh(DeviceScene *dscene,
 			                              params->use_bvh_unaligned_nodes;
 			bparams.num_motion_triangle_steps = params->num_bvh_time_steps;
 			bparams.num_motion_curve_steps = params->num_bvh_time_steps;
+			bparams.bvh_type = params->bvh_type;
+			bparams.use_bvh_embree = params->use_bvh_embree;
+			bparams.curve_flags = dscene->data.curve.curveflags;
+			bparams.curve_subdivisions = dscene->data.curve.subdivisions;
 
 			delete bvh;
 			bvh = BVH::create(bparams, objects);
@@ -1825,10 +1834,14 @@ void MeshManager::device_update_bvh(Device *device, DeviceScene *dscene, Scene *
 	                              scene->params.use_bvh_unaligned_nodes;
 	bparams.num_motion_triangle_steps = scene->params.num_bvh_time_steps;
 	bparams.num_motion_curve_steps = scene->params.num_bvh_time_steps;
+	bparams.bvh_type = scene->params.bvh_type;
+	bparams.use_bvh_embree = scene->params.use_bvh_embree;
+	bparams.curve_flags = dscene->data.curve.curveflags;
+	bparams.curve_subdivisions = dscene->data.curve.subdivisions;
 
 	delete bvh;
 	bvh = BVH::create(bparams, scene->objects);
-	bvh->build(progress);
+	bvh->build(progress, &device->stats);
 
 	if(progress.get_cancel()) return;
 
@@ -1881,6 +1894,14 @@ void MeshManager::device_update_bvh(Device *device, DeviceScene *dscene, Scene *
 	dscene->data.bvh.root = pack.root_index;
 	dscene->data.bvh.use_qbvh = scene->params.use_qbvh;
 	dscene->data.bvh.use_bvh_steps = (scene->params.num_bvh_time_steps != 0);
+
+#ifdef WITH_EMBREE
+	if(bparams.use_bvh_embree) {
+		dscene->data.bvh.scene = ((BVHEmbree*)bvh)->scene;
+	} else {
+		dscene->data.bvh.scene = NULL;
+	}
+#endif
 }
 
 void MeshManager::device_update_flags(Device * /*device*/,

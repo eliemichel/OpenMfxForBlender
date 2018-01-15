@@ -94,8 +94,10 @@ ccl_device int bsdf_diffuse_ramp_sample(const ShaderClosure *sc, float3 Ng, floa
 	if(dot(Ng, *omega_in) > 0.0f) {
 		*eval = bsdf_diffuse_ramp_get_color(bsdf->colors, *pdf * M_PI_F) * M_1_PI_F;
 #ifdef __RAY_DIFFERENTIALS__
-		*domega_in_dx = (2 * dot(N, dIdx)) * N - dIdx;
-		*domega_in_dy = (2 * dot(N, dIdy)) * N - dIdy;
+		*domega_in_dx = (2.0f * dot(N, dIdx)) * N - dIdx;
+		*domega_in_dy = (2.0f * dot(N, dIdy)) * N - dIdy;
+		*domega_in_dx *= 125.0f;
+		*domega_in_dy *= 125.0f;
 #endif
 	}
 	else
