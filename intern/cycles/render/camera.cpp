@@ -226,7 +226,7 @@ void Camera::update()
 		cameratoscreen = transform_orthographic(nearclip, farclip);
 	else
 		cameratoscreen = transform_identity();
-	
+  
 	Transform screentocamera = transform_inverse(cameratoscreen);
 
 	rastertocamera = screentocamera * rastertoscreen;
@@ -353,7 +353,7 @@ void Camera::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 #ifdef __CAMERA_MOTION__
 	else if(need_motion == Scene::MOTION_BLUR) {
 		if(use_motion) {
-			transform_motion_decompose((DecompMotionTransform*)&kcam->motion, &motion, &matrix);
+			transform_motion_decompose((MotionTransform*)&kcam->motion, &motion, &matrix);
 			kcam->have_motion = 1;
 		}
 		if(use_perspective_motion) {

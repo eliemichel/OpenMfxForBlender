@@ -922,7 +922,8 @@ void            ntreeGPUMaterialNodes(struct bNodeTree *ntree, struct GPUMateria
 #define CMP_NODE_TRACKPOS		271
 #define CMP_NODE_INPAINT    272
 #define CMP_NODE_DESPECKLE  273
-#define CMP_NODE_MOTIONBLUR2D	274
+#define CMP_NODE_MOTIONBLUR2D    274
+#define CMP_NODE_OTHEREYE    275
 
 #define CMP_NODE_GLARE		301
 #define CMP_NODE_TONEMAP	302

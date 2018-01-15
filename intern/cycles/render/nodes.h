@@ -98,6 +98,7 @@ public:
 	float projection_blend;
 	bool animated;
 	float3 vector;
+	float3 vector_dx, vector_dy;
 
 	virtual bool equals(const ShaderNode& other)
 	{
@@ -155,6 +156,7 @@ public:
 	InterpolationType interpolation;
 	bool animated;
 	float3 vector;
+	float3 vector_dx, vector_dy;
 
 	virtual bool equals(const ShaderNode& other)
 	{

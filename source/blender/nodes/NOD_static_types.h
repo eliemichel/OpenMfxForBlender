@@ -216,7 +216,8 @@ DefNode( CompositorNode, CMP_NODE_PIXELATE,       0,                      "PIXEL
 DefNode( CompositorNode, CMP_NODE_PLANETRACKDEFORM,def_cmp_planetrackdeform,"PLANETRACKDEFORM",PlaneTrackDeform,"Plane Track Deform",""            )
 DefNode( CompositorNode, CMP_NODE_CORNERPIN,      0,                      "CORNERPIN",      CornerPin,        "Corner Pin",        ""              )
 DefNode( CompositorNode, CMP_NODE_SUNBEAMS,       def_cmp_sunbeams,       "SUNBEAMS",       SunBeams,         "Sun Beams",         ""              )
-DefNode(CompositorNode,  CMP_NODE_MOTIONBLUR2D,	  def_cmp_motionblur2d,   "MOTIONBLUR2D",	MotionBlur2D,	  "Motion Blur 2D",	   ""			   )
+DefNode(CompositorNode,  CMP_NODE_MOTIONBLUR2D,   def_cmp_motionblur2d,   "MOTIONBLUR2D",   MotionBlur2D,     "Motion Blur 2D",    ""              )
+DefNode(CompositorNode,  CMP_NODE_OTHEREYE,       def_cmp_othereye,       "OTHEREYE",       OtherEye,         "Other Eye",         ""              )
 DefNode( CompositorNode, CMP_NODE_CRYPTOMATTE,    def_cmp_cryptomatte,    "CRYPTOMATTE",    Cryptomatte,      "Cryptomatte",       ""              )
 
 DefNode( TextureNode,    TEX_NODE_OUTPUT,         def_tex_output,         "OUTPUT",         Output,           "Output",            ""              )

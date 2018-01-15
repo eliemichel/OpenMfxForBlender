@@ -90,7 +90,8 @@ set(SRC
 	composite/nodes/node_composite_math.c
 	composite/nodes/node_composite_mask.c
 	composite/nodes/node_composite_mixrgb.c
-	composite/nodes/node_composite_motionblur2d.c
+    composite/nodes/node_composite_motionblur2d.c
+    composite/nodes/node_composite_othereye.c
 	composite/nodes/node_composite_movieclip.c
 	composite/nodes/node_composite_moviedistortion.c
 	composite/nodes/node_composite_normal.c

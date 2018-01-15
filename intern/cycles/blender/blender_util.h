@@ -543,6 +543,12 @@ static inline BL::SmokeDomainSettings object_smoke_domain_find(BL::Object& b_ob)
 			if(b_smd.smoke_type() == BL::SmokeModifier::smoke_type_DOMAIN)
 				return b_smd.domain_settings();
 		}
+		else if (b_mod->is_a(&RNA_OpenVDBModifier)) {
+			BL::OpenVDBModifier b_vdbmd(*b_mod);
+			BL::SmokeModifier b_smd(b_vdbmd.smoke());
+
+			return b_smd.domain_settings();
+		}
 	}
 	
 	return BL::SmokeDomainSettings(PointerRNA_NULL);

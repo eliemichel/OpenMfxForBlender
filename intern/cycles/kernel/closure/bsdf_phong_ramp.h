@@ -105,8 +105,10 @@ ccl_device int bsdf_phong_ramp_sample(const ShaderClosure *sc, float3 Ng, float3
 		float3 R = (2 * cosNO) * bsdf->N - I;
 
 #ifdef __RAY_DIFFERENTIALS__
-		*domega_in_dx = (2 * dot(bsdf->N, dIdx)) * bsdf->N - dIdx;
-		*domega_in_dy = (2 * dot(bsdf->N, dIdy)) * bsdf->N - dIdy;
+		*domega_in_dx = (2.0f * dot(bsdf->N, dIdx)) * bsdf->N - dIdx;
+		*domega_in_dy = (2.0f * dot(bsdf->N, dIdy)) * bsdf->N - dIdy;
+		*domega_in_dx *= 10.0f;
+		*domega_in_dy *= 10.0f;
 #endif
 		
 		float3 T, B;

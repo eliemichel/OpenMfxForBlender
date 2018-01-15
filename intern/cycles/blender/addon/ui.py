@@ -467,6 +467,18 @@ class CyclesRender_PT_performance(CyclesButtonsPanel, Panel):
         subsub = sub.column(align=True)
         subsub.prop(rd, "use_save_buffers")
 
+        sub.separator()
+        sub.label(text="Texture Cache:")
+        sub.prop(cscene, "texture_cache_size")
+        sub.prop(cscene, "texture_auto_convert")
+        sub.prop(cscene, "texture_accept_unmipped")
+        sub.prop(cscene, "texture_accept_untiled")
+        sub.prop(cscene, "texture_auto_mip")
+        sub.prop(cscene, "texture_auto_tile")
+        sub.prop(cscene, "texture_tile_size")
+        sub.prop(cscene, "texture_blur_diffuse")
+        sub.prop(cscene, "texture_blur_glossy")
+
         col = split.column(align=True)
 
         col.label(text="Viewport:")
@@ -482,11 +494,17 @@ class CyclesRender_PT_performance(CyclesButtonsPanel, Panel):
         col.separator()
 
         col.label(text="Acceleration structure:")
+        row = col.row()
+        row.active = use_cpu(context)
+        row.prop(cscene, "use_bvh_embree")
+        row = col.row()
         col.prop(cscene, "debug_use_spatial_splits")
-        col.prop(cscene, "debug_use_hair_bvh")
+        row = col.row()
+        row.active = not cscene.use_bvh_embree
+        row.prop(cscene, "debug_use_hair_bvh")
 
         row = col.row()
-        row.active = not cscene.debug_use_spatial_splits
+        row.active = not cscene.debug_use_spatial_splits and not cscene.use_bvh_embree
         row.prop(cscene, "debug_bvh_time_steps")
 
 class CyclesRender_AOV_add(bpy.types.Operator):

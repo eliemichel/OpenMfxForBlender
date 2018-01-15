@@ -28,6 +28,10 @@
 #include "util/util_foreach.h"
 #include "util/util_progress.h"
 
+#ifdef WITH_EMBREE
+#  include "bvh_embree.h"
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 /* Pack Utility */
@@ -51,6 +55,10 @@ BVH::BVH(const BVHParams& params_, const vector<Object*>& objects_)
 
 BVH *BVH::create(const BVHParams& params, const vector<Object*>& objects)
 {
+#ifdef WITH_EMBREE
+	if(params.use_bvh_embree)
+		return new BVHEmbree(params, objects);
+#endif
 	if(params.use_qbvh)
 		return new BVH4(params, objects);
 	else
@@ -59,7 +67,7 @@ BVH *BVH::create(const BVHParams& params, const vector<Object*>& objects)
 
 /* Building */
 
-void BVH::build(Progress& progress)
+void BVH::build(Progress& progress, Stats*)
 {
 	progress.set_substatus("Building BVH");
 
