@@ -165,6 +165,7 @@ static void VertexSnapModifier_do(
 		return;
 
 	if ( !(target && target != ob && target->type == OB_MESH) ) {
+		modifier_setError( vmd, "Target %s is not a Mesh.", target->id.name+2 );
 		return;
 	}
 
@@ -178,6 +179,8 @@ static void VertexSnapModifier_do(
 		if (target_dm) {
 			target_dm->release(target_dm);
 		}
+
+		modifier_setError( vmd, "Target vertex count is %d; should be %d.", target_vertex_count, vertex_count );
 		return;
 	}
 
