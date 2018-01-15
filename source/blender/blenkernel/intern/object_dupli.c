@@ -892,7 +892,7 @@ static void make_duplis_particle_system(const DupliContext *ctx, ParticleSystem 
 	totpart = psys->totpart;
 	totchild = psys->totchild;
 
-	BLI_srandom((unsigned int)(31415926 + (ctx->object->dupli_id ? ctx->object->dupli_id : psys->seed)));
+	BLI_srandom((unsigned int)(31415926 + psys->seed));
 
 	if ((psys->renderdata || part->draw_as == PART_DRAW_REND) && ELEM(part->ren_as, PART_DRAW_OB, PART_DRAW_GR)) {
 		ParticleSimulationData sim = {NULL};
