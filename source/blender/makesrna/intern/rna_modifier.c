@@ -1455,28 +1455,30 @@ static void rna_OpenVDBModifier_frame_start_set(PointerRNA *ptr, int value)
 	SmokeModifierData *smd = vdbmd->smoke;
 	SmokeDomainSettings *sds = smd->domain;
 	PointCache *cache = sds->point_cache[0];
+	int len = cache->endframe - cache->startframe;
 
 	cache->startframe = value;
+	cache->endframe = cache->startframe + len;
 }
 
-static int rna_OpenVDBModifier_frame_end_get(PointerRNA *ptr)
+static int rna_OpenVDBModifier_seq_len_get(PointerRNA *ptr)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 	SmokeModifierData *smd = vdbmd->smoke;
 	SmokeDomainSettings *sds = smd->domain;
 	PointCache *cache = sds->point_cache[0];
 
-	return cache->endframe;
+	return cache->endframe - cache->startframe + 1;
 }
 
-static void rna_OpenVDBModifier_frame_end_set(PointerRNA *ptr, int value)
+static void rna_OpenVDBModifier_seq_len_set(PointerRNA *ptr, int value)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)ptr->data;
 	SmokeModifierData *smd = vdbmd->smoke;
 	SmokeDomainSettings *sds = smd->domain;
 	PointCache *cache = sds->point_cache[0];
 
-	cache->endframe = value;
+	cache->endframe = cache->startframe + value - 1;
 }
 
 static float rna_OpenVDBModifier_display_thickness_get(PointerRNA *ptr)
@@ -5215,9 +5217,10 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 
-	prop = RNA_def_property(srna, "frame_end", PROP_INT, PROP_NONE);
-	RNA_def_property_ui_text(prop, "Frame End", "Frame on which to stop displaying the cache");
-	RNA_def_property_int_funcs(prop, "rna_OpenVDBModifier_frame_end_get", "rna_OpenVDBModifier_frame_end_set", NULL);
+	prop = RNA_def_property(srna, "seq_len", PROP_INT, PROP_NONE);
+	RNA_def_property_range(prop, 1, INT_MAX);
+	RNA_def_property_ui_text(prop, "Sequence Length", "Length of sequence in frames");
+	RNA_def_property_int_funcs(prop, "rna_OpenVDBModifier_seq_len_get", "rna_OpenVDBModifier_seq_len_set", NULL);
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_update");
 

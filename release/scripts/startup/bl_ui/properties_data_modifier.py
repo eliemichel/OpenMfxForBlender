@@ -732,7 +732,7 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         row = layout.row()
         row.prop(md, "frame_start")
-        row.prop(md, "frame_end")
+        row.prop(md, "seq_len")
 
         layout.prop(md, "frame_offset")
 
