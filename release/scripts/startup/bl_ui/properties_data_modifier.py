@@ -120,6 +120,56 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "start_cap")
         layout.prop(md, "end_cap")
 
+        layout.separator()
+        sub = layout.row()
+
+        material_count = len(ob.data.materials) if (ob.data and ob.data.materials) else 0
+
+        sub.prop( md, "use_advanced_settings" )
+
+        if md.use_advanced_settings:
+            sub.separator()
+            adv = layout.box()
+
+            adv.prop( md, "random_seed" )
+
+            # mats = adv.row()
+            split = adv.split( 0.5 )
+            split.prop( md, "use_random_materials" )
+            split.label( 'Material Count: {}'.format(material_count) )
+
+            if md.use_random_materials:
+                mat_settings = adv.column()
+                mat_settings.enabled = bool( material_count )
+                mat_settings.prop( md, "random_material_type" )
+                mat_settings.prop( md, "random_material_no_duplicates")
+
+                col = mat_settings.column( align=True )
+                col.enabled = (md.random_material_type == 'LOOP')
+                col.prop( md, "loop_offset" )
+
+            subrow = adv.row( align=True )
+            subrow.prop( md, "use_random_location", text='Location' )
+            subrow.prop( md, "use_random_rotation", text='Rotation' )
+            subrow.prop( md, "use_random_scale", text='Scale' )
+
+            subrow = adv.row()
+
+            col = subrow.column( align=True )
+            col.enabled = md.use_random_location
+            col.prop( md, "random_location", text='' )
+            col.prop( md, "cumulative_location" )
+
+            col = subrow.column( align=True )
+            col.enabled = md.use_random_rotation
+            col.prop( md, "random_rotation", text='' )
+            col.prop( md, "cumulative_rotation" )
+
+            col = subrow.column( align=True )
+            col.enabled = md.use_random_scale
+            col.prop( md, "random_scale", text='' )
+            col.prop( md, "cumulative_scale" )
+
     def BEVEL(self, layout, ob, md):
         split = layout.split()
 
@@ -1195,6 +1245,7 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row = layout.row()
         row.active = md.use_remove_disconnected
         row.prop(md, "threshold")
+
 
     @staticmethod
     def vertex_weight_mask(layout, ob, md):
