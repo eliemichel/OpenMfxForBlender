@@ -1560,7 +1560,6 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *main)
 		}
 	}
 
-	/* To be added to next subversion bump! */
 	if (!MAIN_VERSION_ATLEAST(main, 278, 5)) {
 		/* Mask primitive adding code was not initializing correctly id_type of its points' parent. */
 		for (Mask *mask = main->mask.first; mask; mask = mask->id.next) {
@@ -1629,6 +1628,20 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *main)
 					if (md->type == eModifierType_SurfaceDeform) {
 						SurfaceDeformModifierData *smd = (SurfaceDeformModifierData *)md;
 						unit_m4(smd->mat);
+					}
+				}
+			}
+		}
+	}
+
+	/* To be added to next subversion bump! */
+	{
+		if (!DNA_struct_elem_find(fd->filesdna, "OpenVDBModifierData", "float", "flame_thickness")) {
+			for (Object *ob = main->object.first; ob; ob = ob->id.next) {
+				for (ModifierData *md = ob->modifiers.first; md; md = md->next) {
+					if (md->type == eModifierType_OpenVDB) {
+						OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+						vdbmd->flame_thickness = 1.0f;
 					}
 				}
 			}
