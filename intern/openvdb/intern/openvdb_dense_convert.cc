@@ -260,7 +260,7 @@ openvdb::CoordBBox OpenVDB_get_grid_bounds(
 		return CoordBBox();
 	}
 
-	GridBase::Ptr grid = reader->getGrid(name);
+	GridBase::ConstPtr grid = reader->getGridPartial(name);
 
 	return grid->evalActiveVoxelBoundingBox();
 }

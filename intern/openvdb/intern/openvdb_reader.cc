@@ -122,9 +122,19 @@ openvdb::GridBase::Ptr OpenVDBReader::getGrid(const openvdb::Name &name) const
 	return m_file->readGrid(name);
 }
 
+openvdb::GridBase::Ptr OpenVDBReader::getGridMetadata(const openvdb::Name &name) const
+{
+	return m_file->readGridMetadata(name);
+}
+
+openvdb::GridBase::ConstPtr OpenVDBReader::getGridPartial(const openvdb::Name &name) const
+{
+	return m_file->readGridPartial(name);
+}
+
 size_t OpenVDBReader::numGrids() const
 {
-	return m_file->getGrids()->size();
+	return m_file->readAllGridMetadata()->size();
 }
 
 bool OpenVDBReader::hasMetadata(const openvdb::Name &name)
