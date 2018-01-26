@@ -41,6 +41,8 @@ extern "C" {
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
+
+#include "MEM_guardedalloc.h"
 }
 
 using Alembic::AbcGeom::IObject;
@@ -122,6 +124,7 @@ AbcObjectReader::AbcObjectReader(const IObject &object, ImportSettings &settings
 	, m_object_name("")
 	, m_data_name("")
 	, m_object(NULL)
+	, m_idprop(NULL)
 	, m_iobject(object)
 	, m_settings(&settings)
 	, m_min_time(std::numeric_limits<chrono_t>::max())
@@ -143,7 +146,13 @@ AbcObjectReader::AbcObjectReader(const IObject &object, ImportSettings &settings
 }
 
 AbcObjectReader::~AbcObjectReader()
-{}
+{
+	if (m_idprop) {
+		IDP_FreeProperty(m_idprop);
+		MEM_freeN(m_idprop);
+		m_idprop = NULL;
+	}
+}
 
 const IObject &AbcObjectReader::iobject() const
 {

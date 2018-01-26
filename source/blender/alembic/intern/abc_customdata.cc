@@ -31,7 +31,11 @@ extern "C" {
 #include "DNA_customdata_types.h"
 #include "DNA_meshdata_types.h"
 
+#include "MEM_guardedalloc.h"
+
 #include "BKE_customdata.h"
+#include "BKE_DerivedMesh.h"
+#include "BKE_idprop.h"
 }
 
 /* NOTE: for now only UVs and Vertex Colors are supported for streaming.
@@ -40,6 +44,7 @@ extern "C" {
  * such data in a way that lets other DCC know what they are for. See comments
  * in the write code for the conventions. */
 
+using Alembic::AbcGeom::kVaryingScope;
 using Alembic::AbcGeom::kVertexScope;
 using Alembic::AbcGeom::kFacevaryingScope;
 
@@ -227,6 +232,11 @@ using Alembic::AbcGeom::IC3fGeomParam;
 using Alembic::AbcGeom::IC4fGeomParam;
 using Alembic::AbcGeom::IV2fGeomParam;
 
+using Alembic::AbcGeom::IInt32GeomParam;
+using Alembic::AbcGeom::IV3iGeomParam;
+using Alembic::AbcGeom::IFloatGeomParam;
+using Alembic::AbcGeom::IV3fGeomParam;
+
 static void read_uvs(const CDStreamConfig &config, void *data,
                      const Alembic::AbcGeom::V2fArraySamplePtr &uvs,
                      const Alembic::AbcGeom::UInt32ArraySamplePtr &indices)
@@ -348,7 +358,89 @@ static void read_custom_data_uvs(const ICompoundProperty &prop,
 	read_uvs(config, cd_data, sample.getVals(), sample.getIndices());
 }
 
-void read_custom_data(const ICompoundProperty &prop, const CDStreamConfig &config, const Alembic::Abc::ISampleSelector &iss)
+static void write_data_to_idprop(IDProperty *&id_prop, const void *data, size_t num, char type, const char *name)
+{
+	/* Only float and int properties are supported */
+	BLI_assert(ELEM(type, IDP_FLOAT, IDP_INT));
+
+	IDPropertyTemplate temp = {0};
+	IDProperty *prop;
+	void *t_data;
+
+	temp.array.len = num;
+	temp.array.type = type;
+	prop = IDP_New(IDP_ARRAY, &temp, name);
+
+	if (!id_prop) {
+		IDPropertyTemplate temp = {0};
+		id_prop = IDP_New(IDP_GROUP, &temp, "alembic_props");
+	}
+
+	if (IDP_AddToGroup(id_prop, prop)) {
+		t_data = IDP_Array(prop);
+		memcpy(t_data, data, num * 4);
+	}
+	else {
+		IDP_FreeProperty(prop);
+		MEM_freeN(prop);
+	}
+}
+
+template <class PropType>
+static void read_custom_data_generic(const ICompoundProperty &prop,
+                                     const PropertyHeader &prop_header,
+									 const CDStreamConfig &config,
+									 const Alembic::Abc::ISampleSelector &iss,
+                                     IDProperty *&id_prop, char type)
+{
+	PropType param(prop, prop_header.getName());
+	int scope = param.getScope();
+
+	if (ELEM(scope, kVertexScope, kVaryingScope)) {
+		size_t elem_extent = param.getDataType().getExtent();
+		size_t array_extent = param.getArrayExtent();
+		size_t total_extent = elem_extent * array_extent;
+
+		if (ELEM(total_extent, 1, 3)) {
+			DerivedMesh *dm = static_cast<DerivedMesh *>(config.user_data);
+			typename PropType::Sample sample;
+			typename PropType::Sample::samp_ptr_type vals;
+			size_t array_size;
+
+			param.getExpanded(sample, iss);
+			vals = sample.getVals();
+			array_size = vals->size();
+
+			if(array_size / array_extent == dm->getNumVerts(dm)) {
+				write_data_to_idprop(id_prop, vals->getData(), array_size * elem_extent,
+				                     type, param.getName().c_str());
+			}
+		}
+	}
+}
+
+static void read_custom_data_generic(const ICompoundProperty &prop,
+                                     const PropertyHeader &prop_header,
+									 const CDStreamConfig &config,
+									 const Alembic::Abc::ISampleSelector &iss,
+                                     IDProperty *&id_prop)
+{
+	if (IInt32GeomParam::matches(prop_header)) {
+		read_custom_data_generic<IInt32GeomParam>(prop, prop_header, config, iss, id_prop, IDP_INT);
+	}
+	else if (IV3iGeomParam::matches(prop_header)) {
+		read_custom_data_generic<IV3iGeomParam>(prop, prop_header, config, iss, id_prop, IDP_INT);
+	}
+	else if (IFloatGeomParam::matches(prop_header)) {
+		read_custom_data_generic<IFloatGeomParam>(prop, prop_header, config, iss, id_prop, IDP_FLOAT);
+	}
+	else if (IV3fGeomParam::matches(prop_header)) {
+		read_custom_data_generic<IV3fGeomParam>(prop, prop_header, config, iss, id_prop, IDP_FLOAT);
+	}
+}
+
+void read_custom_data(const ICompoundProperty &prop, const CDStreamConfig &config,
+                      const Alembic::Abc::ISampleSelector &iss, IDProperty *&id_prop)
 {
 	if (!prop.valid()) {
 		return;
@@ -381,5 +473,28 @@ void read_custom_data(const ICompoundProperty &prop, const CDStreamConfig &confi
 			read_custom_data_mcols(prop, prop_header, config, iss);
 			continue;
 		}
+
+		if (IInt32GeomParam::matches(prop_header) ||
+		    IV3iGeomParam::matches(prop_header) ||
+		    IFloatGeomParam::matches(prop_header) ||
+		    IV3fGeomParam::matches(prop_header))
+		{
+			read_custom_data_generic(prop, prop_header, config, iss, id_prop);
+			continue;
+		}
+	}
+}
+
+void add_custom_data_to_ob(Object *ob, IDProperty *&id_prop)
+{
+	if (id_prop) {
+		IDProperty *props = IDP_GetProperties((ID *)ob, true);
+
+		if (!IDP_AddToGroup(props, id_prop)) {
+			IDP_FreeProperty(id_prop);
+			MEM_freeN(id_prop);
+		}
+
+		id_prop = NULL;
 	}
 }

@@ -33,6 +33,8 @@ struct MLoop;
 struct MLoopUV;
 struct MPoly;
 struct MVert;
+struct Object;
+struct IDProperty;
 
 using Alembic::Abc::ICompoundProperty;
 using Alembic::Abc::OCompoundProperty;
@@ -98,6 +100,9 @@ void write_custom_data(const OCompoundProperty &prop,
 
 void read_custom_data(const ICompoundProperty &prop,
                       const CDStreamConfig &config,
-                      const Alembic::Abc::ISampleSelector &iss);
+                      const Alembic::Abc::ISampleSelector &iss,
+                      IDProperty *&id_prop);
+
+void add_custom_data_to_ob(Object *ob, IDProperty *&id_prop);
 
 #endif  /* __ABC_CUSTOMDATA_H__ */
