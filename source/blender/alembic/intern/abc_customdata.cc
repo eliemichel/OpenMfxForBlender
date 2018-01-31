@@ -410,11 +410,20 @@ static int get_cd_type(char idp_type, size_t extent)
 	return -1;
 }
 
-static void write_data_to_customdata(const CDStreamConfig &config, const void *data, size_t num, int type, const char *name)
+static void write_data_to_customdata(const CDStreamConfig &config, const void *data, size_t num, char type, size_t extent, const char *name)
 {
 	DerivedMesh *dm = (DerivedMesh *)config.user_data;
 	CustomData *cd = dm->getVertDataLayout(dm);
-	CustomData_add_layer_named(cd, type, CD_DUPLICATE, (void *)data, num, name);
+	int cd_type = get_cd_type(type, extent);
+
+	void *cdata = CustomData_get_layer_named(cd, cd_type, name);
+
+	if (cdata) {
+		memcpy(cdata, data, num * extent * 4);
+	}
+	else {
+		CustomData_add_layer_named(cd, cd_type, CD_DUPLICATE, (void *)data, num, name);
+	}
 }
 
 template <class PropType>
@@ -448,7 +457,7 @@ static void read_custom_data_generic(const ICompoundProperty &prop,
 				                     idp_type, param.getName().c_str());
 #endif
 				write_data_to_customdata(config, vals->getData(), array_size / array_extent,
-				                         get_cd_type(idp_type, total_extent), param.getName().c_str());
+				                         idp_type, total_extent, param.getName().c_str());
 			}
 		}
 	}
