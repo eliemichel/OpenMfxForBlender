@@ -1190,6 +1190,65 @@ static void layerSwap_flnor(void *data, const int *corner_indices)
 	memcpy(flnors, nors, sizeof(nors));
 }
 
+static void layerInterp_alembicf(
+        const void **sources, const float *weights,
+        const float *UNUSED(sub_weights), int count, void *dest)
+{
+	float result = 0.0f;
+
+	while (count--) {
+		result += *(float *)sources[count] * weights[count];
+	}
+
+	*(float *)dest = result;
+}
+
+static void layerInterp_alembici(
+        const void **sources, const float *weights,
+        const float *UNUSED(sub_weights), int count, void *dest)
+{
+	float result = 0.0f;
+
+	while (count--) {
+		result += (float)*(int *)sources[count] * weights[count];
+	}
+
+	*(int *)dest = (int)result;
+}
+
+static void layerInterp_alembicf3(
+        const void **sources, const float *weights,
+        const float *UNUSED(sub_weights), int count, void *dest)
+{
+	float result[3] = {0.0f};
+
+	while (count--) {
+		madd_v3_v3fl(result, (float *)sources[count], weights[count]);
+	}
+
+	copy_v3_v3((float *)dest, result);
+}
+
+static void layerInterp_alembici3(
+        const void **sources, const float *weights,
+        const float *UNUSED(sub_weights), int count, void *dest)
+{
+	float result[3] = {0.0f};
+	float tmp[3];
+
+	while (count--) {
+		tmp[0] = (float)((int *)sources[count])[0];
+		tmp[1] = (float)((int *)sources[count])[1];
+		tmp[2] = (float)((int *)sources[count])[2];
+
+		madd_v3_v3fl(result, tmp, weights[count]);
+	}
+
+	((int *)dest)[0] = (int)result[0];
+	((int *)dest)[1] = (int)result[1];
+	((int *)dest)[2] = (int)result[2];
+}
+
 static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
 	/* 0: CD_MVERT */
 	{sizeof(MVert), "MVert", 1, NULL, NULL, NULL, NULL, NULL, NULL},
@@ -1305,6 +1364,14 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
 	{sizeof(short[4][3]), "", 0, NULL, NULL, NULL, NULL, layerSwap_flnor, NULL},
 	/* 41: CD_CUSTOMLOOPNORMAL */
 	{sizeof(short[2]), "vec2s", 1, NULL, NULL, NULL, NULL, NULL, NULL},
+    /* 42: CD_ALEMBIC_FLOAT */
+	{sizeof(MAlembicFProperty), "MAlembicFProperty", 1, N_("AlembicFloat"), NULL, NULL, layerInterp_alembicf, NULL, NULL},
+    /* 43: CD_ALEMBIC_INT */
+	{sizeof(MAlembicIProperty), "MAlembicIProperty", 1, N_("AlembicInt"), NULL, NULL, layerInterp_alembici, NULL, NULL},
+    /* 44: CD_ALEMBIC_F3 */
+	{sizeof(MAlembicF3Property), "MAlembicF3Property", 1, N_("AlembicFloat3"), NULL, NULL, layerInterp_alembicf3, NULL, NULL},
+    /* 45: CD_ALEMBIC_I3 */
+	{sizeof(MAlembicI3Property), "MAlembicI3Property", 1, N_("AlembicInt3"), NULL, NULL, layerInterp_alembici3, NULL, NULL},
 };
 
 
@@ -1377,6 +1444,9 @@ const CustomDataMask CD_MASK_EVERYTHING =
     CD_MASK_PAINT_MASK | CD_MASK_GRID_PAINT_MASK | CD_MASK_MVERT_SKIN |
     CD_MASK_FREESTYLE_EDGE | CD_MASK_FREESTYLE_FACE |
     CD_MASK_MLOOPTANGENT | CD_MASK_TESSLOOPNORMAL | CD_MASK_CUSTOMLOOPNORMAL;
+
+const CustomDataMask CD_MASK_ALEMBIC =
+    CD_MASK_ALEMBIC_F3 | CD_MASK_ALEMBIC_FLOAT | CD_MASK_ALEMBIC_I3 | CD_MASK_ALEMBIC_INT;
 
 static const LayerTypeInfo *layerType_getInfo(int type)
 {

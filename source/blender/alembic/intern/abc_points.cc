@@ -179,7 +179,7 @@ void AbcPointsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSel
 		dm->release(dm);
 	}
 
-	DM_to_mesh(ndm, mesh, m_object, CD_MASK_MESH, true);
+	DM_to_mesh(ndm, mesh, m_object, CD_MASK_MESH | CD_MASK_ALEMBIC, true);
 
 	if (m_settings->validate_meshes) {
 		BKE_mesh_validate(mesh, false, false);

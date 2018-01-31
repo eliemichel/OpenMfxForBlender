@@ -1036,6 +1036,48 @@ static void rna_MeshLoopColorLayer_active_set(PointerRNA *ptr, int value)
 	rna_CustomDataLayer_active_set(ptr, rna_mesh_ldata(ptr), value, CD_MLOOPCOL, 0);
 }
 
+DEFINE_CUSTOMDATA_LAYER_COLLECTION(alembic_int_prop, vdata, CD_ALEMBIC_INT)
+
+static void rna_MeshVertexAlembicILayer_data_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+{
+	Mesh *me = rna_mesh(ptr);
+	CustomDataLayer *layer = (CustomDataLayer *)ptr->data;
+	rna_iterator_array_begin(iter, layer->data, sizeof(MAlembicIProperty), (me->edit_btmesh) ? 0 : me->totvert, 0, NULL);
+}
+
+DEFINE_CUSTOMDATA_LAYER_COLLECTION(alembic_float_prop, vdata, CD_ALEMBIC_FLOAT)
+
+static void rna_MeshVertexAlembicFLayer_data_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+{
+	Mesh *me = rna_mesh(ptr);
+	CustomDataLayer *layer = (CustomDataLayer *)ptr->data;
+	rna_iterator_array_begin(iter, layer->data, sizeof(MAlembicFProperty), (me->edit_btmesh) ? 0 : me->totvert, 0, NULL);
+}
+
+DEFINE_CUSTOMDATA_LAYER_COLLECTION(alembic_int3_prop, vdata, CD_ALEMBIC_I3)
+
+static void rna_MeshVertexAlembicI3Layer_data_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+{
+	Mesh *me = rna_mesh(ptr);
+	CustomDataLayer *layer = (CustomDataLayer *)ptr->data;
+	rna_iterator_array_begin(iter, layer->data, sizeof(MAlembicI3Property), (me->edit_btmesh) ? 0 : me->totvert, 0, NULL);
+}
+
+DEFINE_CUSTOMDATA_LAYER_COLLECTION(alembic_float3_prop, vdata, CD_ALEMBIC_F3)
+
+static void rna_MeshVertexAlembicF3Layer_data_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+{
+	Mesh *me = rna_mesh(ptr);
+	CustomDataLayer *layer = (CustomDataLayer *)ptr->data;
+	rna_iterator_array_begin(iter, layer->data, sizeof(MAlembicF3Property), (me->edit_btmesh) ? 0 : me->totvert, 0, NULL);
+}
+
+static int rna_MeshVertexAlembicLayer_data_length(PointerRNA *ptr)
+{
+	Mesh *me = rna_mesh(ptr);
+	return (me->edit_btmesh) ? 0 : me->totvert;
+}
+
 static int rna_float_layer_check(CollectionPropertyIterator *UNUSED(iter), void *data)
 {
 	CustomDataLayer *layer = (CustomDataLayer *)data;
@@ -1496,6 +1538,58 @@ static char *rna_MeshLoopColorLayer_path(PointerRNA *ptr)
 static char *rna_MeshColor_path(PointerRNA *ptr)
 {
 	return rna_LoopCustomData_data_path(ptr, "vertex_colors", CD_MLOOPCOL);
+}
+
+static char *rna_MeshVertexAlembicILayer_path(PointerRNA *ptr)
+{
+	CustomDataLayer *cdl = ptr->data;
+	char name_esc[sizeof(cdl->name) * 2];
+	BLI_strescape(name_esc, cdl->name, sizeof(name_esc));
+	return BLI_sprintfN("alembic_int_props[\"%s\"]", name_esc);
+}
+
+static char *rna_MeshAlembicI_path(PointerRNA *ptr)
+{
+	return rna_LoopCustomData_data_path(ptr, "alembic_int_props", CD_MLOOPCOL);
+}
+
+static char *rna_MeshVertexAlembicFLayer_path(PointerRNA *ptr)
+{
+	CustomDataLayer *cdl = ptr->data;
+	char name_esc[sizeof(cdl->name) * 2];
+	BLI_strescape(name_esc, cdl->name, sizeof(name_esc));
+	return BLI_sprintfN("alembic_float_props[\"%s\"]", name_esc);
+}
+
+static char *rna_MeshAlembicF_path(PointerRNA *ptr)
+{
+	return rna_LoopCustomData_data_path(ptr, "alembic_float_props", CD_MLOOPCOL);
+}
+
+static char *rna_MeshVertexAlembicI3Layer_path(PointerRNA *ptr)
+{
+	CustomDataLayer *cdl = ptr->data;
+	char name_esc[sizeof(cdl->name) * 2];
+	BLI_strescape(name_esc, cdl->name, sizeof(name_esc));
+	return BLI_sprintfN("alembic_int3_props[\"%s\"]", name_esc);
+}
+
+static char *rna_MeshAlembicI3_path(PointerRNA *ptr)
+{
+	return rna_LoopCustomData_data_path(ptr, "alembic_int3_props", CD_MLOOPCOL);
+}
+
+static char *rna_MeshVertexAlembicF3Layer_path(PointerRNA *ptr)
+{
+	CustomDataLayer *cdl = ptr->data;
+	char name_esc[sizeof(cdl->name) * 2];
+	BLI_strescape(name_esc, cdl->name, sizeof(name_esc));
+	return BLI_sprintfN("alembic_float3_props[\"%s\"]", name_esc);
+}
+
+static char *rna_MeshAlembicF3_path(PointerRNA *ptr)
+{
+	return rna_LoopCustomData_data_path(ptr, "alembic_float3_props", CD_MLOOPCOL);
 }
 
 /**** Float Property Layer API ****/
@@ -2581,6 +2675,144 @@ static void rna_def_mloopcol(BlenderRNA *brna)
 	RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
 }
 
+static void rna_def_malembiciprops(BlenderRNA *brna)
+{
+	StructRNA *srna;
+	PropertyRNA *prop;
+
+	srna = RNA_def_struct(brna, "MeshVertexAlembicILayer", NULL);
+	RNA_def_struct_ui_text(srna, "Mesh Vertex Alembic Int Layer", "Layer of Alembic integer data in a Mesh data-block");
+	RNA_def_struct_sdna(srna, "CustomDataLayer");
+	RNA_def_struct_path_func(srna, "rna_MeshVertexAlembicILayer_path");
+	RNA_def_struct_ui_icon(srna, ICON_GROUP_VERTEX);
+
+	prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
+	RNA_def_struct_name_property(srna, prop);
+	RNA_def_property_string_funcs(prop, NULL, NULL, "rna_MeshVertexLayer_name_set");
+	RNA_def_property_ui_text(prop, "Name", "Name of Alembic integer property layer");
+	RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
+
+	prop = RNA_def_property(srna, "data", PROP_COLLECTION, PROP_NONE);
+	RNA_def_property_struct_type(prop, "MeshAlembicIProp");
+	RNA_def_property_ui_text(prop, "Data", "");
+	RNA_def_property_collection_funcs(prop, "rna_MeshVertexAlembicILayer_data_begin", "rna_iterator_array_next",
+	                                  "rna_iterator_array_end", "rna_iterator_array_get",
+	                                  "rna_MeshVertexAlembicLayer_data_length", NULL, NULL, NULL);
+
+	srna = RNA_def_struct(brna, "MeshAlembicIProp", NULL);
+	RNA_def_struct_sdna(srna, "MAlembicIProperty");
+	RNA_def_struct_ui_text(srna, "Mesh Vertex Alembic Int Prop", "Vertex alembic integer property in a Mesh");
+	RNA_def_struct_path_func(srna, "rna_MeshAlembicI_path");
+
+	prop = RNA_def_property(srna, "val", PROP_INT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Value", "");
+	RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
+}
+
+static void rna_def_malembicfprops(BlenderRNA *brna)
+{
+	StructRNA *srna;
+	PropertyRNA *prop;
+
+	srna = RNA_def_struct(brna, "MeshVertexAlembicFLayer", NULL);
+	RNA_def_struct_ui_text(srna, "Mesh Vertex Alembic Float Layer", "Layer of Alembic float data in a Mesh data-block");
+	RNA_def_struct_sdna(srna, "CustomDataLayer");
+	RNA_def_struct_path_func(srna, "rna_MeshVertexAlembicFLayer_path");
+	RNA_def_struct_ui_icon(srna, ICON_GROUP_VERTEX);
+
+	prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
+	RNA_def_struct_name_property(srna, prop);
+	RNA_def_property_string_funcs(prop, NULL, NULL, "rna_MeshVertexLayer_name_set");
+	RNA_def_property_ui_text(prop, "Name", "Name of Alembic float property layer");
+	RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
+
+	prop = RNA_def_property(srna, "data", PROP_COLLECTION, PROP_NONE);
+	RNA_def_property_struct_type(prop, "MeshAlembicFProp");
+	RNA_def_property_ui_text(prop, "Data", "");
+	RNA_def_property_collection_funcs(prop, "rna_MeshVertexAlembicFLayer_data_begin", "rna_iterator_array_next",
+	                                  "rna_iterator_array_end", "rna_iterator_array_get",
+	                                  "rna_MeshVertexAlembicLayer_data_length", NULL, NULL, NULL);
+
+	srna = RNA_def_struct(brna, "MeshAlembicFProp", NULL);
+	RNA_def_struct_sdna(srna, "MAlembicFProperty");
+	RNA_def_struct_ui_text(srna, "Mesh Vertex Alembic Float Prop", "Vertex alembic float property in a Mesh");
+	RNA_def_struct_path_func(srna, "rna_MeshAlembicF_path");
+
+	prop = RNA_def_property(srna, "val", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Value", "");
+	RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
+}
+
+static void rna_def_malembici3props(BlenderRNA *brna)
+{
+	StructRNA *srna;
+	PropertyRNA *prop;
+
+	srna = RNA_def_struct(brna, "MeshVertexAlembicI3Layer", NULL);
+	RNA_def_struct_ui_text(srna, "Mesh Vertex Alembic Int3 Layer", "Layer of Alembic integer3 data in a Mesh data-block");
+	RNA_def_struct_sdna(srna, "CustomDataLayer");
+	RNA_def_struct_path_func(srna, "rna_MeshVertexAlembicI3Layer_path");
+	RNA_def_struct_ui_icon(srna, ICON_GROUP_VERTEX);
+
+	prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
+	RNA_def_struct_name_property(srna, prop);
+	RNA_def_property_string_funcs(prop, NULL, NULL, "rna_MeshVertexLayer_name_set");
+	RNA_def_property_ui_text(prop, "Name", "Name of Alembic integer property layer");
+	RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
+
+	prop = RNA_def_property(srna, "data", PROP_COLLECTION, PROP_NONE);
+	RNA_def_property_struct_type(prop, "MeshAlembicI3Prop");
+	RNA_def_property_ui_text(prop, "Data", "");
+	RNA_def_property_collection_funcs(prop, "rna_MeshVertexAlembicI3Layer_data_begin", "rna_iterator_array_next",
+	                                  "rna_iterator_array_end", "rna_iterator_array_get",
+	                                  "rna_MeshVertexAlembicLayer_data_length", NULL, NULL, NULL);
+
+	srna = RNA_def_struct(brna, "MeshAlembicI3Prop", NULL);
+	RNA_def_struct_sdna(srna, "MAlembicI3Property");
+	RNA_def_struct_ui_text(srna, "Mesh Vertex Alembic Int3 Prop", "Vertex alembic integer3 property in a Mesh");
+	RNA_def_struct_path_func(srna, "rna_MeshAlembicI3_path");
+
+	prop = RNA_def_property(srna, "val", PROP_INT, PROP_NONE);
+	RNA_def_property_array(prop, 3);
+	RNA_def_property_ui_text(prop, "Value", "");
+	RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
+}
+
+static void rna_def_malembicf3props(BlenderRNA *brna)
+{
+	StructRNA *srna;
+	PropertyRNA *prop;
+
+	srna = RNA_def_struct(brna, "MeshVertexAlembicF3Layer", NULL);
+	RNA_def_struct_ui_text(srna, "Mesh Vertex Alembic Float3 Layer", "Layer of Alembic float3 data in a Mesh data-block");
+	RNA_def_struct_sdna(srna, "CustomDataLayer");
+	RNA_def_struct_path_func(srna, "rna_MeshVertexAlembicF3Layer_path");
+	RNA_def_struct_ui_icon(srna, ICON_GROUP_VERTEX);
+
+	prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
+	RNA_def_struct_name_property(srna, prop);
+	RNA_def_property_string_funcs(prop, NULL, NULL, "rna_MeshVertexLayer_name_set");
+	RNA_def_property_ui_text(prop, "Name", "Name of Alembic float property layer");
+	RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
+
+	prop = RNA_def_property(srna, "data", PROP_COLLECTION, PROP_NONE);
+	RNA_def_property_struct_type(prop, "MeshAlembicF3Prop");
+	RNA_def_property_ui_text(prop, "Data", "");
+	RNA_def_property_collection_funcs(prop, "rna_MeshVertexAlembicF3Layer_data_begin", "rna_iterator_array_next",
+	                                  "rna_iterator_array_end", "rna_iterator_array_get",
+	                                  "rna_MeshVertexAlembicLayer_data_length", NULL, NULL, NULL);
+
+	srna = RNA_def_struct(brna, "MeshAlembicF3Prop", NULL);
+	RNA_def_struct_sdna(srna, "MAlembicF3Property");
+	RNA_def_struct_ui_text(srna, "Mesh Vertex Alembic Float3 Prop", "Vertex alembic float3 property in a Mesh");
+	RNA_def_struct_path_func(srna, "rna_MeshAlembicF3_path");
+
+	prop = RNA_def_property(srna, "val", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_array(prop, 3);
+	RNA_def_property_ui_text(prop, "Value", "");
+	RNA_def_property_update(prop, 0, "rna_Mesh_update_data");
+}
+
 static void rna_def_mproperties(BlenderRNA *brna)
 {
 	StructRNA *srna;
@@ -3393,6 +3625,34 @@ static void rna_def_mesh(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Vertex Colors", "All vertex colors");
 	rna_def_loop_colors(brna, prop);
 
+	prop = RNA_def_property(srna, "alembic_int_props", PROP_COLLECTION, PROP_NONE);
+	RNA_def_property_collection_sdna(prop, NULL, "vdata.layers", "vdata.totlayer");
+	RNA_def_property_collection_funcs(prop, "rna_Mesh_alembic_int_props_begin", NULL, NULL, NULL,
+	                                  "rna_Mesh_alembic_int_props_length", NULL, NULL, NULL);
+	RNA_def_property_struct_type(prop, "MeshVertexAlembicILayer");
+	RNA_def_property_ui_text(prop, "Alembic Int Props", "All Alembic integer properties");
+
+	prop = RNA_def_property(srna, "alembic_float_props", PROP_COLLECTION, PROP_NONE);
+	RNA_def_property_collection_sdna(prop, NULL, "vdata.layers", "vdata.totlayer");
+	RNA_def_property_collection_funcs(prop, "rna_Mesh_alembic_float_props_begin", NULL, NULL, NULL,
+	                                  "rna_Mesh_alembic_float_props_length", NULL, NULL, NULL);
+	RNA_def_property_struct_type(prop, "MeshVertexAlembicFLayer");
+	RNA_def_property_ui_text(prop, "Alembic Float Props", "All Alembic float properties");
+
+	prop = RNA_def_property(srna, "alembic_int3_props", PROP_COLLECTION, PROP_NONE);
+	RNA_def_property_collection_sdna(prop, NULL, "vdata.layers", "vdata.totlayer");
+	RNA_def_property_collection_funcs(prop, "rna_Mesh_alembic_int3_props_begin", NULL, NULL, NULL,
+	                                  "rna_Mesh_alembic_int3_props_length", NULL, NULL, NULL);
+	RNA_def_property_struct_type(prop, "MeshVertexAlembicI3Layer");
+	RNA_def_property_ui_text(prop, "Alembic Int3 Props", "All Alembic integer3 properties");
+
+	prop = RNA_def_property(srna, "alembic_float3_props", PROP_COLLECTION, PROP_NONE);
+	RNA_def_property_collection_sdna(prop, NULL, "vdata.layers", "vdata.totlayer");
+	RNA_def_property_collection_funcs(prop, "rna_Mesh_alembic_float3_props_begin", NULL, NULL, NULL,
+	                                  "rna_Mesh_alembic_float3_props_length", NULL, NULL, NULL);
+	RNA_def_property_struct_type(prop, "MeshVertexAlembicF3Layer");
+	RNA_def_property_ui_text(prop, "Alembic Float3 Props", "All Alembic float3 properties");
+
 	/* TODO, edge customdata layers (bmesh py api can access already) */
 	prop = RNA_def_property(srna, "vertex_layers_float", PROP_COLLECTION, PROP_NONE);
 	RNA_def_property_collection_sdna(prop, NULL, "vdata.layers", "vdata.totlayer");
@@ -3716,6 +3976,10 @@ void RNA_def_mesh(BlenderRNA *brna)
 	rna_def_mcol(brna);
 	rna_def_mloopcol(brna);
 	rna_def_mproperties(brna);
+	rna_def_malembiciprops(brna);
+	rna_def_malembicfprops(brna);
+	rna_def_malembici3props(brna);
+	rna_def_malembicf3props(brna);
 }
 
 #endif

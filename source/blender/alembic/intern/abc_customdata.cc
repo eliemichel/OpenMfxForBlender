@@ -358,6 +358,7 @@ static void read_custom_data_uvs(const ICompoundProperty &prop,
 	read_uvs(config, cd_data, sample.getVals(), sample.getIndices());
 }
 
+#if 0
 static void write_data_to_idprop(IDProperty *&id_prop, const void *data, size_t num, char type, const char *name)
 {
 	/* Only float and int properties are supported */
@@ -385,13 +386,43 @@ static void write_data_to_idprop(IDProperty *&id_prop, const void *data, size_t 
 		MEM_freeN(prop);
 	}
 }
+#endif
+
+static int get_cd_type(char idp_type, size_t extent)
+{
+	if (idp_type == IDP_INT) {
+		if (extent == 3) {
+			return CD_ALEMBIC_I3;
+		}
+		else if (extent == 1) {
+			return CD_ALEMBIC_INT;
+		}
+	}
+	else if (idp_type == IDP_FLOAT) {
+		if (extent == 3) {
+			return CD_ALEMBIC_F3;
+		}
+		else if (extent == 1) {
+			return CD_ALEMBIC_FLOAT;
+		}
+	}
+
+	return -1;
+}
+
+static void write_data_to_customdata(const CDStreamConfig &config, const void *data, size_t num, int type, const char *name)
+{
+	DerivedMesh *dm = (DerivedMesh *)config.user_data;
+	CustomData *cd = dm->getVertDataLayout(dm);
+	CustomData_add_layer_named(cd, type, CD_DUPLICATE, (void *)data, num, name);
+}
 
 template <class PropType>
 static void read_custom_data_generic(const ICompoundProperty &prop,
                                      const PropertyHeader &prop_header,
 									 const CDStreamConfig &config,
 									 const Alembic::Abc::ISampleSelector &iss,
-                                     IDProperty *&id_prop, char type)
+                                     IDProperty *&UNUSED(id_prop), char idp_type)
 {
 	PropType param(prop, prop_header.getName());
 	int scope = param.getScope();
@@ -412,8 +443,12 @@ static void read_custom_data_generic(const ICompoundProperty &prop,
 			array_size = vals->size();
 
 			if(array_size / array_extent == dm->getNumVerts(dm)) {
+#if 0
 				write_data_to_idprop(id_prop, vals->getData(), array_size * elem_extent,
-				                     type, param.getName().c_str());
+				                     idp_type, param.getName().c_str());
+#endif
+				write_data_to_customdata(config, vals->getData(), array_size / array_extent,
+				                         get_cd_type(idp_type, total_extent), param.getName().c_str());
 			}
 		}
 	}
