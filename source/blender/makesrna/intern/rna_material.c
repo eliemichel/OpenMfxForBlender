@@ -76,6 +76,11 @@ EnumPropertyItem rna_enum_ramp_blend_items[] = {
 	{0, NULL, 0, NULL, NULL}
 };
 
+EnumPropertyItem rna_enum_multi_add_items[] = {
+	{0, "MULTI_ADD", 0, "Multi Add", ""},
+	{0, NULL, 0, NULL, NULL}
+};
+
 #ifdef RNA_RUNTIME
 
 #include "MEM_guardedalloc.h"
