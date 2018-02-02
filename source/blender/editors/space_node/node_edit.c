@@ -2689,3 +2689,77 @@ void NODE_OT_cryptomatte_remove_socket(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
+
+/* ****************** Multi Add - Add Socket ****************** */
+static int node_multi_add_add_socket_exec(bContext *C, wmOperator *op)
+{
+	Scene *scene = CTX_data_scene(C);
+	SpaceNode *snode = CTX_wm_space_node(C);
+	PointerRNA ptr = CTX_data_pointer_get(C, "node");
+	bNodeTree *ntree = NULL;
+	bNode *node = NULL;
+	char file_path[MAX_NAME];
+	if (ptr.data) {
+		node = ptr.data;
+		ntree = ptr.id.data;
+	}
+	else if (snode && snode->edittree) {
+		ntree = snode->edittree;
+		node = nodeGetActive(snode->edittree);
+	}
+	if (!node || node->type != CMP_NODE_MULTIADD)
+		return OPERATOR_CANCELLED;
+	ntreeCompsitMultiAddNodeAddSocket(ntree, node);
+	snode_notify(C, snode);
+	return OPERATOR_FINISHED;
+}
+
+void NODE_OT_multi_add_add_socket(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Add Multi Add Socket";
+	ot->description = "Add a new input to a multi add node";
+	ot->idname = "NODE_OT_multi_add_add_socket";
+	/* callbacks */
+	ot->exec = node_multi_add_add_socket_exec;
+	ot->poll = composite_node_editable;
+	/* flags */
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
+
+/* ****************** Multi Add - Remove Socket ****************** */
+
+static int node_multi_add_remove_socket_exec(bContext *C, wmOperator *op)
+{
+	SpaceNode *snode = CTX_wm_space_node(C);
+	PointerRNA ptr = CTX_data_pointer_get(C, "node");
+	bNodeTree *ntree = NULL;
+	bNode *node = NULL;
+	if (ptr.data) {
+		node = ptr.data;
+		ntree = ptr.id.data;
+	}
+	else if (snode && snode->edittree) {
+		ntree = snode->edittree;
+		node = nodeGetActive(snode->edittree);
+	}
+	if (!node || node->type != CMP_NODE_MULTIADD)
+		return OPERATOR_CANCELLED;
+	if (!ntreeCompsiteMultiAddNodeRemoveSocket(ntree, node))
+		return OPERATOR_CANCELLED;
+	snode_notify(C, snode);
+	return OPERATOR_FINISHED;
+}
+
+void NODE_OT_multi_add_remove_socket(wmOperatorType *ot)
+{
+	/* identifiers */
+	ot->name = "Remove Multi Add Socket";
+	ot->description = "Remove input from a multi add node";
+	ot->idname = "NODE_OT_multi_add_remove_socket";
+	/* callbacks */
+	ot->exec = node_multi_add_remove_socket_exec;
+	ot->poll = composite_node_editable;
+	/* flags */
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
