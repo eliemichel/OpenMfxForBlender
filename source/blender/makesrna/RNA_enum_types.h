@@ -175,6 +175,7 @@ extern EnumPropertyItem rna_enum_node_vec_math_items[];
 extern EnumPropertyItem rna_enum_node_filter_items[];
 
 extern EnumPropertyItem rna_enum_ramp_blend_items[];
+extern EnumPropertyItem rna_enum_multi_add_items[];
 
 extern EnumPropertyItem rna_enum_prop_dynamicpaint_type_items[];
 

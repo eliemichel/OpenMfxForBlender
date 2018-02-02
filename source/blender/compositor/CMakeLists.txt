@@ -187,6 +187,11 @@ set(SRC
 	operations/COM_CryptomatteOperation.cpp
 	operations/COM_CryptomatteOperation.h
 
+	nodes/COM_MultiAddNode.cpp
+	nodes/COM_MultiAddNode.h
+	operations/COM_MultiAddOperation.cpp
+	operations/COM_MultiAddOperation.h
+
 	nodes/COM_CornerPinNode.cpp
 	nodes/COM_CornerPinNode.h
 	nodes/COM_PlaneTrackDeformNode.cpp
