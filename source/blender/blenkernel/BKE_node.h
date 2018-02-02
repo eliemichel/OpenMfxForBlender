@@ -943,6 +943,7 @@ void            ntreeGPUMaterialNodes(struct bNodeTree *ntree, struct GPUMateria
 #define CMP_NODE_CORNERPIN          321
 #define CMP_NODE_SWITCH_VIEW    322
 #define CMP_NODE_CRYPTOMATTE	323
+#define CMP_NODE_MULTIADD		324
 
 /* channel toggles */
 #define CMP_CHAN_RGB		1
@@ -999,6 +1000,10 @@ void ntreeCompositCryptomatteSyncFromAdd(bNodeTree *ntree, bNode *node);
 void ntreeCompositCryptomatteSyncFromRemove(bNodeTree *ntree, bNode *node);
 struct bNodeSocket *ntreeCompositCryptomatteAddSocket(struct bNodeTree *ntree, struct bNode *node);
 int ntreeCompositCryptomatteRemoveSocket(struct bNodeTree *ntree, struct bNode *node);
+
+/* Add node input socket */
+struct bNodeSocket *ntreeCompsitMultiAddNodeAddSocket(struct bNodeTree *ntree, struct bNode *node);
+int ntreeCompsiteMultiAddNodeRemoveSocket(struct bNodeTree *ntree, struct bNode *node);
 
 /** \} */
 

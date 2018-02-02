@@ -921,6 +921,10 @@ typedef struct NodeCryptomatte {
 	int num_inputs;
 } NodeCryptomatte;
 
+typedef struct NodeMultiAdd {
+	int num_inputs;
+} NodeMultiAdd;
+
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL		0
 #define NODE_SCRIPT_EXTERNAL		1
