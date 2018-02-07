@@ -980,7 +980,7 @@ static void read_mesh_sample(ImportSettings *settings,
 		read_mpolys(config, abc_mesh_data);
 	}
 
-	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
+	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
 		read_custom_data(schema.getArbGeomParams(), config, selector, id_prop);
 	}
 
@@ -1233,7 +1233,7 @@ static void read_subd_sample(ImportSettings *settings,
 		read_mpolys(config, abc_mesh_data);
 	}
 
-	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
+	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
 		read_custom_data(schema.getArbGeomParams(), config, selector, id_prop);
 	}
 

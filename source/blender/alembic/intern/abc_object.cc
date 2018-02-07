@@ -352,6 +352,8 @@ void AbcObjectReader::addCacheModifier()
 
 	BLI_strncpy(mcmd->object_path, m_iobject.getFullName().c_str(), FILE_MAX);
 
+	mcmd->read_flag = m_settings->read_flag;
+
 	mcmd->reader = reinterpret_cast<CacheReader *>(this);
 	this->incref();
 }
