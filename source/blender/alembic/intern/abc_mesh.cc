@@ -953,7 +953,7 @@ static bool read_mesh_sample(ImportSettings *settings,
                              const IPolyMeshSchema &schema,
                              const ISampleSelector &selector,
                              CDStreamConfig &config,
-                             bool &do_normals)
+                             bool &do_normals, IDProperty *&id_prop)
 {
 	const IPolyMeshSchema::Sample sample = schema.getValue(selector);
 
@@ -988,8 +988,8 @@ static bool read_mesh_sample(ImportSettings *settings,
 		}
 	}
 
-	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
-		read_custom_data(schema.getArbGeomParams(), config, selector);
+	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
+		read_custom_data(schema.getArbGeomParams(), config, selector, id_prop, settings->read_flag);
 	}
 
 	/* TODO: face sets */
@@ -1056,6 +1056,8 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 	if (m_settings->validate_meshes) {
 		BKE_mesh_validate(mesh, false, false);
 	}
+
+	add_custom_data_to_ob(m_object, m_idprop);
 
 	readFaceSetsSample(bmain, mesh, 0, sample_sel);
 
@@ -1128,7 +1130,7 @@ DerivedMesh *AbcMeshReader::read_derivedmesh(DerivedMesh *dm,
 	config.time = sample_sel.getRequestedTime();
 
 	bool do_normals = false;
-	if (!read_mesh_sample(&settings, m_schema, sample_sel, config, do_normals)) {
+	if (!read_mesh_sample(&settings, m_schema, sample_sel, config, do_normals, m_idprop)) {
 		if (new_dm) {
 			new_dm->release(new_dm);
 		}
@@ -1222,7 +1224,7 @@ ABC_INLINE MEdge *find_edge(MEdge *edges, int totedge, int v1, int v2)
 static bool read_subd_sample(ImportSettings *settings,
                              const ISubDSchema &schema,
                              const ISampleSelector &selector,
-                             CDStreamConfig &config)
+                             CDStreamConfig &config, IDProperty *&id_prop)
 {
 	const ISubDSchema::Sample sample = schema.getValue(selector);
 
@@ -1255,8 +1257,8 @@ static bool read_subd_sample(ImportSettings *settings,
 		}
 	}
 
-	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
-		read_custom_data(schema.getArbGeomParams(), config, selector);
+	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
+		read_custom_data(schema.getArbGeomParams(), config, selector, id_prop, settings->read_flag);
 	}
 
 	/* TODO: face sets */
@@ -1346,6 +1348,8 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 		BKE_mesh_validate(mesh, false, false);
 	}
 
+	add_custom_data_to_ob(m_object, m_idprop);
+
 	if (has_animations(m_schema, m_settings)) {
 		addCacheModifier();
 	}
@@ -1396,7 +1400,7 @@ DerivedMesh *AbcSubDReader::read_derivedmesh(DerivedMesh *dm,
 	/* Only read point data when streaming meshes, unless we need to create new ones. */
 	CDStreamConfig config = get_config(new_dm ? new_dm : dm);
 	config.time = sample_sel.getRequestedTime();
-	if (!read_subd_sample(&settings, m_schema, sample_sel, config)) {
+	if (!read_subd_sample(&settings, m_schema, sample_sel, config, m_idprop)) {
 		if (new_dm) {
 			new_dm->release(new_dm);
 		}
