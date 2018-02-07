@@ -87,6 +87,7 @@ struct ImportSettings {
 	float scale;
 	bool is_sequence;
 	bool set_frame_range;
+	bool import_attrs;
 
 	/* Length and frame offset of file sequences. */
 	int sequence_len;
@@ -106,6 +107,7 @@ struct ImportSettings {
 	    , scale(1.0f)
 	    , is_sequence(false)
 	    , set_frame_range(false)
+	    , import_attrs(false)
 	    , sequence_len(1)
 	    , sequence_offset(0)
 	    , read_flag(0)
@@ -139,6 +141,8 @@ protected:
 
 	chrono_t m_min_time;
 	chrono_t m_max_time;
+
+	bool m_import_attrs;
 
 	/* Use reference counting since the same reader may be used by multiple
 	 * modifiers and/or constraints. */

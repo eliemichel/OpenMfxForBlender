@@ -129,6 +129,7 @@ AbcObjectReader::AbcObjectReader(const IObject &object, ImportSettings &settings
 	, m_settings(&settings)
 	, m_min_time(std::numeric_limits<chrono_t>::max())
 	, m_max_time(std::numeric_limits<chrono_t>::min())
+	, m_import_attrs(settings.import_attrs)
 	, m_refcount(0)
 	, parent_reader(NULL)
 {
@@ -353,6 +354,9 @@ void AbcObjectReader::addCacheModifier()
 	BLI_strncpy(mcmd->object_path, m_iobject.getFullName().c_str(), FILE_MAX);
 
 	mcmd->reader = reinterpret_cast<CacheReader *>(this);
+
+	mcmd->import_attrs = m_import_attrs;
+
 	this->incref();
 }
 

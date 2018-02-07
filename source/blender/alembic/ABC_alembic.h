@@ -100,6 +100,7 @@ bool ABC_import(struct bContext *C,
                 float scale,
                 bool is_sequence,
                 bool set_frame_range,
+                bool import_attrs,
                 int sequence_len,
                 int offset,
                 bool validate_meshes,
@@ -127,7 +128,8 @@ void CacheReader_free(struct CacheReader *reader);
 struct CacheReader *CacheReader_open_alembic_object(struct AbcArchiveHandle *handle,
                                                     struct CacheReader *reader,
                                                     struct Object *object,
-                                                    const char *object_path);
+                                                    const char *object_path,
+                                                    const bool import_attrs);
 
 #ifdef __cplusplus
 }

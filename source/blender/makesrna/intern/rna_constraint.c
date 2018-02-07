@@ -486,7 +486,8 @@ static void rna_Constraint_transformCache_object_path_update(Main *bmain, Scene 
 	data->reader = CacheReader_open_alembic_object(data->cache_file->handle,
 	                                               data->reader,
 	                                               ob,
-	                                               data->object_path);
+	                                               data->object_path,
+	                                               false);
 #endif
 
 	rna_Constraint_update(bmain, scene, ptr);

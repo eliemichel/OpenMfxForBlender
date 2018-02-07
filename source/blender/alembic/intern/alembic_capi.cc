@@ -854,7 +854,7 @@ static void import_freejob(void *user_data)
 }
 
 bool ABC_import(bContext *C, const char *filepath, float scale, bool is_sequence,
-                bool set_frame_range, int sequence_len, int offset,
+                bool set_frame_range, bool import_attrs, int sequence_len, int offset,
                 bool validate_meshes, bool as_background_job)
 {
 	/* Using new here since MEM_* funcs do not call ctor to properly initialize
@@ -868,6 +868,7 @@ bool ABC_import(bContext *C, const char *filepath, float scale, bool is_sequence
 	job->settings.scale = scale;
 	job->settings.is_sequence = is_sequence;
 	job->settings.set_frame_range = set_frame_range;
+	job->settings.import_attrs = import_attrs;
 	job->settings.sequence_len = sequence_len;
 	job->settings.sequence_offset = offset;
 	job->settings.validate_meshes = validate_meshes;
@@ -967,7 +968,8 @@ void CacheReader_incref(CacheReader *reader)
 	abc_reader->incref();
 }
 
-CacheReader *CacheReader_open_alembic_object(AbcArchiveHandle *handle, CacheReader *reader, Object *object, const char *object_path)
+CacheReader *CacheReader_open_alembic_object(AbcArchiveHandle *handle, CacheReader *reader, Object *object,
+                                             const char *object_path, const bool import_attrs)
 {
 	if (object_path[0] == '\0') {
 		return reader;
@@ -987,6 +989,7 @@ CacheReader *CacheReader_open_alembic_object(AbcArchiveHandle *handle, CacheRead
 	}
 
 	ImportSettings settings;
+	settings.import_attrs = import_attrs;
 	AbcObjectReader *abc_reader = create_reader(iobject, settings);
 	abc_reader->object(object);
 	abc_reader->incref();

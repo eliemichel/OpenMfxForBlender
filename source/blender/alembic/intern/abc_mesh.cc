@@ -947,7 +947,8 @@ static void read_mesh_sample(ImportSettings *settings,
                              const IPolyMeshSchema &schema,
                              const ISampleSelector &selector,
                              CDStreamConfig &config,
-                             bool &do_normals, IDProperty *&id_prop)
+                             bool &do_normals, IDProperty *&id_prop,
+                             const bool import_attrs)
 {
 	const IPolyMeshSchema::Sample sample = schema.getValue(selector);
 
@@ -981,7 +982,7 @@ static void read_mesh_sample(ImportSettings *settings,
 	}
 
 	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
-		read_custom_data(schema.getArbGeomParams(), config, selector, id_prop);
+		read_custom_data(schema.getArbGeomParams(), config, selector, id_prop, import_attrs);
 	}
 
 	/* TODO: face sets */
@@ -1114,7 +1115,7 @@ DerivedMesh *AbcMeshReader::read_derivedmesh(DerivedMesh *dm,
 	config.time = sample_sel.getRequestedTime();
 
 	bool do_normals = false;
-	read_mesh_sample(&settings, m_schema, sample_sel, config, do_normals, m_idprop);
+	read_mesh_sample(&settings, m_schema, sample_sel, config, do_normals, m_idprop, m_import_attrs);
 
 	if (new_dm) {
 		/* Check if we had ME_SMOOTH flag set to restore it. */
@@ -1202,7 +1203,8 @@ ABC_INLINE MEdge *find_edge(MEdge *edges, int totedge, int v1, int v2)
 static void read_subd_sample(ImportSettings *settings,
                              const ISubDSchema &schema,
                              const ISampleSelector &selector,
-                             CDStreamConfig &config, IDProperty *&id_prop)
+                             CDStreamConfig &config, IDProperty *&id_prop,
+                             const bool import_attrs)
 {
 	const ISubDSchema::Sample sample = schema.getValue(selector);
 
@@ -1234,7 +1236,7 @@ static void read_subd_sample(ImportSettings *settings,
 	}
 
 	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
-		read_custom_data(schema.getArbGeomParams(), config, selector, id_prop);
+		read_custom_data(schema.getArbGeomParams(), config, selector, id_prop, import_attrs);
 	}
 
 	/* TODO: face sets */
@@ -1368,7 +1370,7 @@ DerivedMesh *AbcSubDReader::read_derivedmesh(DerivedMesh *dm,
 	/* Only read point data when streaming meshes, unless we need to create new ones. */
 	CDStreamConfig config = get_config(new_dm ? new_dm : dm);
 	config.time = sample_sel.getRequestedTime();
-	read_subd_sample(&settings, m_schema, sample_sel, config, m_idprop);
+	read_subd_sample(&settings, m_schema, sample_sel, config, m_idprop, m_import_attrs);
 
 	if (new_dm) {
 		/* Check if we had ME_SMOOTH flag set to restore it. */

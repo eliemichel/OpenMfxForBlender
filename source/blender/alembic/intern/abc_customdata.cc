@@ -484,7 +484,8 @@ static void read_custom_data_generic(const ICompoundProperty &prop,
 }
 
 void read_custom_data(const ICompoundProperty &prop, const CDStreamConfig &config,
-                      const Alembic::Abc::ISampleSelector &iss, IDProperty *&id_prop)
+                      const Alembic::Abc::ISampleSelector &iss, IDProperty *&id_prop,
+                      const bool import_attrs)
 {
 	if (!prop.valid()) {
 		return;
@@ -518,10 +519,11 @@ void read_custom_data(const ICompoundProperty &prop, const CDStreamConfig &confi
 			continue;
 		}
 
-		if (IInt32GeomParam::matches(prop_header) ||
+		if (import_attrs &&
+		    (IInt32GeomParam::matches(prop_header) ||
 		    IV3iGeomParam::matches(prop_header) ||
 		    IFloatGeomParam::matches(prop_header) ||
-		    IV3fGeomParam::matches(prop_header))
+		    IV3fGeomParam::matches(prop_header)))
 		{
 			read_custom_data_generic(prop, prop_header, config, iss, id_prop);
 			continue;
