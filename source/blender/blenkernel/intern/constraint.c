@@ -4368,8 +4368,7 @@ static void transformcache_evaluate(bConstraint *con, bConstraintOb *cob, ListBa
 		data->reader = CacheReader_open_alembic_object(cache_file->handle,
 		                                               data->reader,
 		                                               cob->ob,
-		                                               data->object_path,
-		                                               false);
+		                                               data->object_path);
 	}
 
 	ABC_get_transform(data->reader, cob->matrix, time, cache_file->scale);

@@ -196,8 +196,7 @@ void AbcPointsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSel
 
 void read_points_sample(const IPointsSchema &schema,
                         const ISampleSelector &selector,
-                        CDStreamConfig &config, IDProperty *&id_prop,
-                        const bool import_attrs)
+                        CDStreamConfig &config, IDProperty *&id_prop)
 {
 	Alembic::AbcGeom::IPointsSchema::Sample sample = schema.getValue(selector);
 
@@ -217,7 +216,7 @@ void read_points_sample(const IPointsSchema &schema,
 
 	read_mverts(config.mvert, positions, vnormals);
 
-	read_custom_data(schema.getArbGeomParams(), config, selector, id_prop, import_attrs);
+	read_custom_data(schema.getArbGeomParams(), config, selector, id_prop);
 }
 
 DerivedMesh *AbcPointsReader::read_derivedmesh(DerivedMesh *dm, 
@@ -236,7 +235,7 @@ DerivedMesh *AbcPointsReader::read_derivedmesh(DerivedMesh *dm,
 	}
 
 	CDStreamConfig config = get_config(new_dm ? new_dm : dm);
-	read_points_sample(m_schema, sample_sel, config, m_idprop, m_import_attrs);
+	read_points_sample(m_schema, sample_sel, config, m_idprop);
 
 	return new_dm ? new_dm : dm;
 }

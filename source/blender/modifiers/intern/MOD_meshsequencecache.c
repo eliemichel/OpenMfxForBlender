@@ -114,8 +114,7 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 		mcmd->reader = CacheReader_open_alembic_object(cache_file->handle,
 		                                               NULL,
 		                                               ob,
-		                                               mcmd->object_path,
-		                                               mcmd->import_attrs);
+		                                               mcmd->object_path);
 
 		if (!mcmd->reader) {
 			modifier_setError(md, "Could not create Alembic reader for file %s", cache_file->filepath);

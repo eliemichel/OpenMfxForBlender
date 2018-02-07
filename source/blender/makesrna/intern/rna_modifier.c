@@ -1157,8 +1157,7 @@ static void rna_MeshSequenceCache_object_path_update(Main *bmain, Scene *scene, 
 	mcmd->reader = CacheReader_open_alembic_object(mcmd->cache_file->handle,
 	                                               mcmd->reader,
 	                                               ob,
-	                                               mcmd->object_path,
-	                                               mcmd->import_attrs);
+	                                               mcmd->object_path);
 #endif
 
 	rna_Modifier_update(bmain, scene, ptr);

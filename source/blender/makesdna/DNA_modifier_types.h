@@ -1562,8 +1562,7 @@ typedef struct MeshSeqCacheModifierData {
 	char object_path[1024];  /* 1024 = FILE_MAX */
 
 	char read_flag;
-	char import_attrs;
-	char pad[6];
+	char pad[7];
 } MeshSeqCacheModifierData;
 
 /* MeshSeqCacheModifierData.read_flag */
