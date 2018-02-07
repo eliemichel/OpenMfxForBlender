@@ -981,7 +981,7 @@ static void read_mesh_sample(ImportSettings *settings,
 	}
 
 	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
-		read_custom_data(schema.getArbGeomParams(), config, selector, id_prop);
+		read_custom_data(schema.getArbGeomParams(), config, selector, id_prop, settings->read_flag);
 	}
 
 	/* TODO: face sets */
@@ -1234,7 +1234,7 @@ static void read_subd_sample(ImportSettings *settings,
 	}
 
 	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
-		read_custom_data(schema.getArbGeomParams(), config, selector, id_prop);
+		read_custom_data(schema.getArbGeomParams(), config, selector, id_prop, settings->read_flag);
 	}
 
 	/* TODO: face sets */

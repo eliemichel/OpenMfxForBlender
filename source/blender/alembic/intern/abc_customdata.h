@@ -101,7 +101,8 @@ void write_custom_data(const OCompoundProperty &prop,
 void read_custom_data(const ICompoundProperty &prop,
                       const CDStreamConfig &config,
                       const Alembic::Abc::ISampleSelector &iss,
-                      IDProperty *&id_prop);
+                      IDProperty *&id_prop,
+                      const int read_flag);
 
 void add_custom_data_to_ob(Object *ob, IDProperty *&id_prop);
 
