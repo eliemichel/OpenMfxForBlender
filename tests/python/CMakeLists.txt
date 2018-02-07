@@ -453,14 +453,14 @@ if(WITH_ALEMBIC AND NOT APPLE)
 	get_filename_component(ALEMBIC_ROOT_DIR ${real_include_dir} DIRECTORY)
 
 	if(MSVC)
-		add_test(NAME alembic_tests
-			COMMAND
-				"$<TARGET_FILE_DIR:blender>/${BLENDER_VERSION_MAJOR}.${BLENDER_VERSION_MINOR}/python/bin/python$<$<CONFIG:Debug>:_d>"
-				${CMAKE_CURRENT_LIST_DIR}/alembic_tests.py
-			--blender "$<TEST_FILE:blender>"
-			--testdir "${TEST_SRC_DIR}/alembic"
-			--alembic-root "${ALEMBIC_ROOT_DIR}"
-		)
+		#add_test(NAME alembic_tests
+		#	COMMAND
+		#		"$<TARGET_FILE_DIR:blender>/${BLENDER_VERSION_MAJOR}.${BLENDER_VERSION_MINOR}/python/bin/python$<$<CONFIG:Debug>:_d>"
+		#		${CMAKE_CURRENT_LIST_DIR}/alembic_tests.py
+		#	--blender "$<TEST_FILE:blender>"
+		#	--testdir "${TEST_SRC_DIR}/alembic"
+		#	--alembic-root "${ALEMBIC_ROOT_DIR}"
+		#)
 		add_test(NAME script_alembic_import 
             COMMAND 
             "$<TARGET_FILE:blender>" ${TEST_BLENDER_EXE_PARAMS} 

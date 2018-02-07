@@ -141,14 +141,23 @@ static GPUTexture *create_transfer_function(int type, const ColorBand *coba)
 static GPUTexture *create_field_texture(SmokeDomainSettings *sds)
 {
 	float *field = NULL;
+	float val_min = 0.0f, val_max = 0.0f;
 
 	switch (sds->coba_field) {
 #ifdef WITH_SMOKE
-		case FLUID_FIELD_DENSITY:    field = smoke_get_density(sds->fluid); break;
+		case FLUID_FIELD_DENSITY:
+			field = smoke_get_density(sds->fluid);
+			val_min = sds->vdb->density_min;
+			val_max = sds->vdb->density_max;
+			break;
 		case FLUID_FIELD_HEAT:       field = smoke_get_heat(sds->fluid); break;
 		case FLUID_FIELD_FUEL:       field = smoke_get_fuel(sds->fluid); break;
 		case FLUID_FIELD_REACT:      field = smoke_get_react(sds->fluid); break;
-		case FLUID_FIELD_FLAME:      field = smoke_get_flame(sds->fluid); break;
+		case FLUID_FIELD_FLAME:
+			field = smoke_get_flame(sds->fluid);
+			val_min = sds->vdb->flame_min;
+			val_max = sds->vdb->flame_max;
+			break;
 		case FLUID_FIELD_VELOCITY_X: field = smoke_get_velocity_x(sds->fluid); break;
 		case FLUID_FIELD_VELOCITY_Y: field = smoke_get_velocity_y(sds->fluid); break;
 		case FLUID_FIELD_VELOCITY_Z: field = smoke_get_velocity_z(sds->fluid); break;
@@ -162,7 +171,7 @@ static GPUTexture *create_field_texture(SmokeDomainSettings *sds)
 		default: return NULL;
 	}
 
-	return GPU_texture_create_3D(sds->res[0], sds->res[1], sds->res[2], 1, field);
+	return GPU_texture_create_3D(sds->res[0], sds->res[1], sds->res[2], 1, field, val_min, val_max);
 }
 
 typedef struct VolumeSlicer {
@@ -424,6 +433,7 @@ static void bind_shader(SmokeDomainSettings *sds, GPUShader *shader, GPUTexture 
 	if (use_fire) {
 		spec_location = GPU_shader_get_uniform(shader, "spectrum_texture");
 		flame_location = GPU_shader_get_uniform(shader, "flame_texture");
+		densityscale_location = GPU_shader_get_uniform(shader, "density_scale");
 	}
 	else {
 		shadow_location = GPU_shader_get_uniform(shader, "shadow_texture");
@@ -441,6 +451,10 @@ static void bind_shader(SmokeDomainSettings *sds, GPUShader *shader, GPUTexture 
 	GPU_shader_bind(shader);
 
 	if (use_fire) {
+		float density_scale = sds->vdb ? sds->vdb->flame_thickness : 1.0f;
+
+		GPU_shader_uniform_vector(shader, densityscale_location, 1, 1, &density_scale);
+
 		GPU_texture_bind(sds->tex_flame, 2);
 		GPU_shader_uniform_texture(shader, flame_location, sds->tex_flame);
 
