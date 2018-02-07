@@ -600,6 +600,7 @@ enum {
 	ABC_NO_ERROR = 0,
 	ABC_ARCHIVE_FAIL,
 	ABC_UNSUPPORTED_HDF5,
+	ABC_DEGENERATE,
 };
 
 struct ImportJobData {
@@ -759,6 +760,11 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
 		const AbcObjectReader *parent_reader = reader->parent_reader;
 		Object *ob = reader->object();
 
+		if (!ob) {
+			data->error_code = ABC_DEGENERATE;
+			return;
+		}
+
 		if (parent_reader == NULL) {
 			ob->parent = NULL;
 		}
@@ -792,7 +798,7 @@ static void import_endjob(void *user_data)
 	std::vector<AbcObjectReader *>::iterator iter;
 
 	/* Delete objects on cancelation. */
-	if (data->was_cancelled) {
+	if (data->was_cancelled || data->error_code == ABC_DEGENERATE) {
 		for (iter = data->readers.begin(); iter != data->readers.end(); ++iter) {
 			Object *ob = (*iter)->object();
 
@@ -841,6 +847,9 @@ static void import_endjob(void *user_data)
 			break;
 		case ABC_UNSUPPORTED_HDF5:
 			WM_report(RPT_ERROR, "Alembic archive in obsolete HDF5 format is not supported.");
+			break;
+		case ABC_DEGENERATE:
+			WM_report(RPT_ERROR, "Archive contains degenerate geometry, reading failed.");
 			break;
 	}
 
