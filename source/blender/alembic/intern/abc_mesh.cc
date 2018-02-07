@@ -770,7 +770,7 @@ void read_mverts(MVert *mverts, const P3fArraySamplePtr &positions, const N3fArr
 	}
 }
 
-static void read_mpolys(CDStreamConfig &config, const AbcMeshData &mesh_data)
+static bool read_mpolys(CDStreamConfig &config, const AbcMeshData &mesh_data)
 {
 	MPoly *mpolys = config.mpoly;
 	MLoop *mloops = config.mloop;
@@ -789,6 +789,10 @@ static void read_mpolys(CDStreamConfig &config, const AbcMeshData &mesh_data)
 
 	for (int i = 0; i < face_counts->size(); ++i) {
 		const int face_size = (*face_counts)[i];
+
+		if (face_size < 3) {
+			return false;
+		}
 
 		MPoly &poly = mpolys[i];
 		poly.loopstart = loop_index;
@@ -814,6 +818,8 @@ static void read_mpolys(CDStreamConfig &config, const AbcMeshData &mesh_data)
 			}
 		}
 	}
+
+	return true;
 }
 
 ABC_INLINE void read_uvs_params(CDStreamConfig &config,
@@ -943,7 +949,7 @@ static void get_weight_and_index(CDStreamConfig &config,
 	config.ceil_index = i1;
 }
 
-static void read_mesh_sample(ImportSettings *settings,
+static bool read_mesh_sample(ImportSettings *settings,
                              const IPolyMeshSchema &schema,
                              const ISampleSelector &selector,
                              CDStreamConfig &config,
@@ -977,7 +983,9 @@ static void read_mesh_sample(ImportSettings *settings,
 	}
 
 	if ((settings->read_flag & MOD_MESHSEQ_READ_POLY) != 0) {
-		read_mpolys(config, abc_mesh_data);
+		if (!read_mpolys(config, abc_mesh_data)) {
+			return false;
+		}
 	}
 
 	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
@@ -985,6 +993,8 @@ static void read_mesh_sample(ImportSettings *settings,
 	}
 
 	/* TODO: face sets */
+
+	return true;
 }
 
 CDStreamConfig get_config(DerivedMesh *dm)
@@ -1025,15 +1035,21 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 {
 	Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
-	m_object = BKE_object_add_only_object(bmain, OB_MESH, m_object_name.c_str());
-	m_object->data = mesh;
-
 	DerivedMesh *dm = CDDM_from_mesh(mesh);
 	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
 
 	if (ndm != dm) {
 		dm->release(dm);
 	}
+
+	if (!ndm) {
+		BKE_libblock_free(bmain, mesh);
+		m_object = NULL;
+		return;
+	}
+
+	m_object = BKE_object_add_only_object(bmain, OB_MESH, m_object_name.c_str());
+	m_object->data = mesh;
 
 	DM_to_mesh(ndm, mesh, m_object, CD_MASK_MESH, true);
 
@@ -1112,7 +1128,13 @@ DerivedMesh *AbcMeshReader::read_derivedmesh(DerivedMesh *dm,
 	config.time = sample_sel.getRequestedTime();
 
 	bool do_normals = false;
-	read_mesh_sample(&settings, m_schema, sample_sel, config, do_normals);
+	if (!read_mesh_sample(&settings, m_schema, sample_sel, config, do_normals)) {
+		if (new_dm) {
+			new_dm->release(new_dm);
+		}
+
+		return NULL;
+	}
 
 	if (new_dm) {
 		/* Check if we had ME_SMOOTH flag set to restore it. */
@@ -1197,7 +1219,7 @@ ABC_INLINE MEdge *find_edge(MEdge *edges, int totedge, int v1, int v2)
 	return NULL;
 }
 
-static void read_subd_sample(ImportSettings *settings,
+static bool read_subd_sample(ImportSettings *settings,
                              const ISubDSchema &schema,
                              const ISampleSelector &selector,
                              CDStreamConfig &config)
@@ -1228,7 +1250,9 @@ static void read_subd_sample(ImportSettings *settings,
 	}
 
 	if ((settings->read_flag & MOD_MESHSEQ_READ_POLY) != 0) {
-		read_mpolys(config, abc_mesh_data);
+		if (!read_mpolys(config, abc_mesh_data)) {
+			return false;
+		}
 	}
 
 	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)) != 0) {
@@ -1236,6 +1260,8 @@ static void read_subd_sample(ImportSettings *settings,
 	}
 
 	/* TODO: face sets */
+
+	return true;
 }
 
 /* ************************************************************************** */
@@ -1277,15 +1303,21 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 {
 	Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
-	m_object = BKE_object_add_only_object(bmain, OB_MESH, m_object_name.c_str());
-	m_object->data = mesh;
-
 	DerivedMesh *dm = CDDM_from_mesh(mesh);
 	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
 
 	if (ndm != dm) {
 		dm->release(dm);
 	}
+
+	if (!ndm) {
+		BKE_libblock_free(bmain, mesh);
+		m_object = NULL;
+		return;
+	}
+
+	m_object = BKE_object_add_only_object(bmain, OB_MESH, m_object_name.c_str());
+	m_object->data = mesh;
 
 	DM_to_mesh(ndm, mesh, m_object, CD_MASK_MESH, true);
 
@@ -1364,7 +1396,13 @@ DerivedMesh *AbcSubDReader::read_derivedmesh(DerivedMesh *dm,
 	/* Only read point data when streaming meshes, unless we need to create new ones. */
 	CDStreamConfig config = get_config(new_dm ? new_dm : dm);
 	config.time = sample_sel.getRequestedTime();
-	read_subd_sample(&settings, m_schema, sample_sel, config);
+	if (!read_subd_sample(&settings, m_schema, sample_sel, config)) {
+		if (new_dm) {
+			new_dm->release(new_dm);
+		}
+
+		return NULL;
+	}
 
 	if (new_dm) {
 		/* Check if we had ME_SMOOTH flag set to restore it. */
