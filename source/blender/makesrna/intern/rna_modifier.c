@@ -4626,6 +4626,7 @@ static void rna_def_modifier_meshseqcache(BlenderRNA *brna)
 		{MOD_MESHSEQ_READ_POLY,  "POLY", 0, "Faces", ""},
 		{MOD_MESHSEQ_READ_UV,    "UV", 0, "UV", ""},
 		{MOD_MESHSEQ_READ_COLOR, "COLOR", 0, "Color", ""},
+		{MOD_MESHSEQ_READ_ATTR,  "ATTR", 0, "Attributes", ""},
 		{0, NULL, 0, NULL, NULL}
 	};
 
