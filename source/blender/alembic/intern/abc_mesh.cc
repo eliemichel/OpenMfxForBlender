@@ -1036,7 +1036,7 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 	Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
 	DerivedMesh *dm = CDDM_from_mesh(mesh);
-	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
+	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, NULL);
 
 	if (ndm != dm) {
 		dm->release(dm);
@@ -1306,7 +1306,7 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 	Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
 	DerivedMesh *dm = CDDM_from_mesh(mesh);
-	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
+	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, NULL);
 
 	if (ndm != dm) {
 		dm->release(dm);
