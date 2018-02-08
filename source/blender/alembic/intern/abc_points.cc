@@ -218,6 +218,10 @@ void read_points_sample(const IPointsSchema &schema,
 
 	read_mverts(config.mvert, positions, vnormals);
 
+	if ((read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
+		read_vels((DerivedMesh *)config.user_data, sample.getVelocities());
+	}
+
 	read_custom_data(schema.getArbGeomParams(), config, selector, id_prop, read_flag);
 }
 
