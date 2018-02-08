@@ -581,7 +581,7 @@ void WM_OT_alembic_import(wmOperatorType *ot)
 	                "Import Custom Attributes",
 	                "If checked, custom mesh attributes will be loaded from the Alembic archive");
 
-	RNA_def_boolean(ot->srna, "import_vels", false,
+	RNA_def_boolean(ot->srna, "import_vels", true,
 	                "Import Velocities",
 	                "If checked, velocity vectors will be loaded from the Alembic archive");
 
