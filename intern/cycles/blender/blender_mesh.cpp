@@ -1079,7 +1079,7 @@ static void sync_mesh_alembic_motion(BL::Mesh& b_mesh, Scene *scene, Mesh *mesh)
 	/* Only export previous and next frame, we don't have any in between data. */
 	float motion_times[2] = {-1.0f, 1.0f};
 	for(int step = 0; step < 2; step++) {
-		float relative_time = motion_times[step] * scene->motion_shutter_time() * 0.5f;
+		float relative_time = motion_times[step] * scene->motion_shutter_time() * 0.25f; /* 0.25 factor to fix the vector scaling */
 		float3 *mP = attr_mP->data_float3() + step*mesh->verts.size();
 
 		BL::Mesh::velocities_iterator vi;
