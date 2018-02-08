@@ -863,8 +863,8 @@ static void import_freejob(void *user_data)
 }
 
 bool ABC_import(bContext *C, const char *filepath, float scale, bool is_sequence,
-                bool set_frame_range, bool import_attrs, int sequence_len, int offset,
-                bool validate_meshes, bool as_background_job)
+                bool set_frame_range, bool import_attrs, bool import_vels, int sequence_len,
+                int offset, bool validate_meshes, bool as_background_job)
 {
 	/* Using new here since MEM_* funcs do not call ctor to properly initialize
 	 * data. */
@@ -885,6 +885,10 @@ bool ABC_import(bContext *C, const char *filepath, float scale, bool is_sequence
 
 	if (import_attrs) {
 		job->settings.read_flag |= MOD_MESHSEQ_READ_ATTR;
+	}
+
+	if (import_vels) {
+		job->settings.read_flag |= MOD_MESHSEQ_READ_VELS;
 	}
 
 	G.is_break = false;

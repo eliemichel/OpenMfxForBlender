@@ -143,6 +143,8 @@ void read_mverts(MVert *mverts,
                  const Alembic::AbcGeom::P3fArraySamplePtr &positions,
                  const Alembic::AbcGeom::N3fArraySamplePtr &normals);
 
+void read_vels(DerivedMesh *dm, const Alembic::AbcGeom::V3fArraySamplePtr &velocities);
+
 CDStreamConfig get_config(DerivedMesh *dm);
 
 #endif  /* __ABC_MESH_H__ */

@@ -1606,6 +1606,7 @@ enum {
 	MOD_MESHSEQ_READ_UV    = (1 << 2),
 	MOD_MESHSEQ_READ_COLOR = (1 << 3),
 	MOD_MESHSEQ_READ_ATTR  = (1 << 4),
+	MOD_MESHSEQ_READ_VELS  = (1 << 5),
 };
 
 typedef struct SDefBind {

@@ -1060,6 +1060,38 @@ static void sync_mesh_fluid_motion(BL::Object& b_ob, Scene *scene, Mesh *mesh)
 	}
 }
 
+static void sync_mesh_alembic_motion(BL::Mesh& b_mesh, Scene *scene, Mesh *mesh)
+{
+	if(scene->need_motion() == Scene::MOTION_NONE)
+		return;
+
+	if(b_mesh.velocities.length() != mesh->verts.size())
+		return;
+
+	/* Find or add attribute */
+	float3 *P = &mesh->verts[0];
+	Attribute *attr_mP = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
+
+	if(!attr_mP) {
+		attr_mP = mesh->attributes.add(ATTR_STD_MOTION_VERTEX_POSITION);
+	}
+
+	/* Only export previous and next frame, we don't have any in between data. */
+	float motion_times[2] = {-1.0f, 1.0f};
+	for(int step = 0; step < 2; step++) {
+		float relative_time = motion_times[step] * scene->motion_shutter_time() * 0.25f; /* 0.25 factor to fix the vector scaling */
+		float3 *mP = attr_mP->data_float3() + step*mesh->verts.size();
+
+		BL::Mesh::velocities_iterator vi;
+		BL::DomainFluidSettings::fluid_mesh_vertices_iterator fvi;
+		int i = 0;
+
+		for(b_mesh.velocities.begin(vi); vi != b_mesh.velocities.end(); ++vi, ++i) {
+			mP[i] = P[i] + get_float3(vi->val()) * relative_time;
+		}
+	}
+}
+
 Mesh *BlenderSync::sync_mesh(BL::Object& b_ob,
                              bool object_updated,
                              bool hide_tris)
@@ -1189,6 +1221,9 @@ Mesh *BlenderSync::sync_mesh(BL::Object& b_ob,
 
 			if(render_layer.use_hair && mesh->subdivision_type == Mesh::SUBDIVISION_NONE)
 				sync_curves(mesh, b_mesh, b_ob, false);
+
+			/* Alembic imported motion */
+			sync_mesh_alembic_motion(b_mesh, scene, mesh);
 
 			if(can_free_caches) {
 				b_ob.cache_release();
@@ -1336,6 +1371,12 @@ void BlenderSync::sync_mesh_motion(BL::Object& b_ob,
 			}
 		}
 
+		return;
+	}
+
+	/* If we have stored velocity vectors, use the vectors exported with the mesh, and skip here. */
+	if (b_mesh.velocities.length() == b_mesh.vertices.length())
+	{
 		return;
 	}
 

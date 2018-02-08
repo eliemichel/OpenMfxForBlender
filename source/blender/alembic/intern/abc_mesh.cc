@@ -874,6 +874,24 @@ ABC_INLINE void read_normals_params(AbcMeshData &abc_data,
 	}
 }
 
+void read_vels(DerivedMesh *dm, const Alembic::AbcGeom::V3fArraySamplePtr &velocities)
+{
+	CustomData *cd = dm->getVertDataLayout(dm);
+	size_t num = dm->getNumVerts(dm);
+
+	BLI_assert(num == velocities->size());
+
+	float (*vdata)[3] = (float (*)[3])CustomData_add_layer(cd, CD_VELOCITY, CD_DEFAULT, NULL, num);
+
+	if (vdata) {
+		float (*data)[3] = (float (*)[3])velocities->getData();
+
+		for (int i = 0; i < num; i++) {
+			copy_zup_from_yup(vdata[i], data[i]);
+		}
+	}
+}
+
 static bool check_smooth_poly_flag(DerivedMesh *dm)
 {
 	MPoly *mpolys = dm->getPolyArray(dm);
@@ -986,6 +1004,10 @@ static bool read_mesh_sample(ImportSettings *settings,
 		if (!read_mpolys(config, abc_mesh_data)) {
 			return false;
 		}
+	}
+
+	if ((settings->read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
+		read_vels((DerivedMesh *)config.user_data, sample.getVelocities());
 	}
 
 	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
@@ -1255,6 +1277,10 @@ static bool read_subd_sample(ImportSettings *settings,
 		if (!read_mpolys(config, abc_mesh_data)) {
 			return false;
 		}
+	}
+
+	if ((settings->read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
+		read_vels((DerivedMesh *)config.user_data, sample.getVelocities());
 	}
 
 	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
