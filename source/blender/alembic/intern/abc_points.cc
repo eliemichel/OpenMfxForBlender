@@ -30,6 +30,7 @@
 
 extern "C" {
 #include "DNA_mesh_types.h"
+#include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_cdderivedmesh.h"
@@ -173,7 +174,7 @@ void AbcPointsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSel
 	Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
 	DerivedMesh *dm = CDDM_from_mesh(mesh);
-	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, 0, NULL);
+	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, m_settings->read_flag & ~MOD_MESHSEQ_READ_ALL, NULL);
 
 	if (ndm != dm) {
 		dm->release(dm);
