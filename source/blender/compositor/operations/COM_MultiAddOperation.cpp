@@ -32,14 +32,12 @@ MultiAddOperation::MultiAddOperation(size_t num_inputs) : NodeOperation()
 {
 
 	this->addInputSocket(COM_DT_VALUE);
-	for (size_t i = 1; i < num_inputs; i++) {
+	for (size_t i = 0; i < num_inputs; i++) {
 		this->addInputSocket(COM_DT_COLOR);
 	}
 	inputs.resize(num_inputs);
 	this->addOutputSocket(COM_DT_COLOR);
 	this->m_inputValueOperation = NULL;
-	//this->m_inputColor1Operation = NULL;
-	//this->m_inputColor2Operation = NULL;
 	this->setUseValueAlphaMultiply(false);
 	this->setUseClamp(false);
 }
@@ -47,52 +45,38 @@ MultiAddOperation::MultiAddOperation(size_t num_inputs) : NodeOperation()
 void MultiAddOperation::initExecution()
 {
 	this->m_inputValueOperation = this->getInputSocketReader(0);
-	for (size_t i = 1; i < inputs.size(); i++) {
-		inputs[i] = this->getInputSocketReader(i);
+	for (size_t i = 0; i < inputs.size(); i++) {
+		inputs[i] = this->getInputSocketReader(i+1);
 	}
-
-	//this->m_inputColor1Operation = this->getInputSocketReader(1);
-	//this->m_inputColor2Operation = this->getInputSocketReader(2);
 }
 
 void MultiAddOperation::executePixelSampled(float output[4], float x, float y, PixelSampler sampler)
 {
-	float inputColor1[4];
-	float inputColor2[4];
+	int arrsize = inputs.size();
 	float inputValue[4];
-	float (*inputColors)[4];
+	float inputColor[4];
 
 	this->m_inputValueOperation->readSampled(inputValue, x, y, sampler);
-	for (size_t i = 0; i < inputs.size(); i++) {
-		inputs[i]->readSampled(inputColors[i], x, y, sampler);
-	}
-
-
-	//this->m_inputColor1Operation->readSampled(inputColor1, x, y, sampler);
-	//this->m_inputColor2Operation->readSampled(inputColor2, x, y, sampler);
-
 	float value = inputValue[0];
 	if (this->useValueAlphaMultiply()) {
-		for (size_t i = 1; i < inputs.size(); i++) {
-			value *= inputColors[i][3];
+		inputs[arrsize-1]->readSampled(inputColor, x, y, sampler);
+		value *= inputColor[3];
+	}
+
+	for (size_t i = 0; i < inputs.size(); i++) {
+		inputs[i]->readSampled(inputColor, x, y, sampler);
+		if (i == 0) {
+			output[0] = inputColor[0];
+			output[1] = inputColor[1];
+			output[2] = inputColor[2];
+			output[3] = inputColor[3];
+		}
+		else {
+			output[0] += value * inputColor[0];
+			output[1] += value * inputColor[1];
+			output[2] += value * inputColor[2];
 		}
 	}
-
-	output[0] = inputColors[0][0];
-	output[1] = inputColors[0][1];
-	output[2] = inputColors[0][2];
-	output[3] = inputColors[0][3];
-
-	for (size_t i = 1; i < inputs.size(); i++) {
-		output[0] += value * inputColors[i][0];
-		output[1] += value * inputColors[i][1];
-		output[2] += value * inputColors[i][2];
-	}
-
-	//output[0] = inputColor1[0] + value * inputColor2[0];
-	//output[1] = inputColor1[1] + value * inputColor2[1];
-	//output[2] = inputColor1[2] + value * inputColor2[2];
-	//output[3] = inputColor1[3];
 
 	clampIfNeeded(output);
 }
@@ -110,31 +94,12 @@ void MultiAddOperation::determineResolution(unsigned int resolution[2], unsigned
 		if ((tempResolution[0] != 0) && (tempResolution[1] != 0)) {
 			this->setResolutionInputSocketIndex(i);
 			input_set = true;
+			break;
 		}
 	}
 	if (!input_set)
 		this->setResolutionInputSocketIndex(0);
 	NodeOperation::determineResolution(resolution, preferredResolution);
-
-	//socket = this->getInputSocket(1);
-	//socket->determineResolution(tempResolution, tempPreferredResolution);
-	//if ((tempResolution[0] != 0) && (tempResolution[1] != 0)) {
-	//	this->setResolutionInputSocketIndex(1);
-	//}
-	//else {
-	//	socket = this->getInputSocket(2);
-	//	socket->determineResolution(tempResolution, tempPreferredResolution);
-	//	if ((tempResolution[0] != 0) && (tempResolution[1] != 0)) {
-	//		this->setResolutionInputSocketIndex(2);
-	//	}
-	//	else {
-	//		this->setResolutionInputSocketIndex(0);
-	//	}
-	//}
-	//NodeOperation::determineResolution(resolution, preferredResolution);
-
-
-
 }
 
 void MultiAddOperation::deinitExecution()
@@ -143,6 +108,4 @@ void MultiAddOperation::deinitExecution()
 	for (size_t i = 0; i < inputs.size(); i++) {
 		inputs[i] = NULL;
 	}
-	//this->m_inputColor1Operation = NULL;
-	//this->m_inputColor2Operation = NULL;
 }

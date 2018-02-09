@@ -34,8 +34,6 @@
 /* **************** MULTI ADD RGB ******************** */
 static bNodeSocketTemplate cmp_node_multi_add_in[] = {
 	{ SOCK_FLOAT, 1, N_("Fac"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR },
-	{ SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f },
-	{ SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f },
 	{ -1, 0, "" }
 };
 static bNodeSocketTemplate cmp_node_multi_add_out[] = {
@@ -47,6 +45,12 @@ static void init(bNode *ntree, bNode *node)
 {
 	NodeMultiAdd *user = MEM_callocN(sizeof(NodeMultiAdd), "multi add user");
 	node->storage = user;
+
+	//nodeAddStaticSocket(ntree, node, SOCK_IN, SOCK_RGBA, PROP_NONE, "image", "Image");
+
+	/* add two inputs by default */
+	ntreeCompsitMultiAddNodeAddSocket(ntree, node);
+	ntreeCompsitMultiAddNodeAddSocket(ntree, node);
 }
 
 void register_node_type_cmp_multiadd()
@@ -74,7 +78,7 @@ bNodeSocket *ntreeCompsitMultiAddNodeAddSocket(bNodeTree *ntree, bNode *node)
 int ntreeCompsiteMultiAddNodeRemoveSocket(bNodeTree *ntree, bNode *node)
 {
 	NodeMultiAdd *n = node->storage;
-	if (n->num_inputs < 2)
+	if (n->num_inputs < 3)
 		return 0;
 	bNodeSocket *sock = node->inputs.last;
 	nodeRemoveSocket(ntree, node, sock);
