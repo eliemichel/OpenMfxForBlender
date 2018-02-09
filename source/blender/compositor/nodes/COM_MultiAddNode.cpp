@@ -36,21 +36,19 @@ MultiAddNode::MultiAddNode(bNode *editorNode) : Node(editorNode)
 void MultiAddNode::convertToOperations(NodeConverter &converter, const CompositorContext &/*context*/) const
 {
 	NodeInput *valueSocket = this->getInputSocket(0);
-	NodeInput *color1Socket = this->getInputSocket(1);
-	NodeInput *color2Socket = this->getInputSocket(2);
 	NodeOutput *outputSocket = this->getOutputSocket(0);
 	bool useAlphaPremultiply = (this->getbNode()->custom2 & 1) != 0;
 	bool useClamp = (this->getbNode()->custom2 & 2) != 0;
 
-	MultiAddOperation *prog = new MultiAddOperation();
+	MultiAddOperation *prog = new MultiAddOperation(getNumberOfInputSockets());
 	prog->setUseValueAlphaMultiply(useAlphaPremultiply);
 	prog->setUseClamp(useClamp);
 	converter.addOperation(prog);
 
 	converter.mapInputSocket(valueSocket, prog->getInputSocket(0));
-	converter.mapInputSocket(color1Socket, prog->getInputSocket(1));
-	converter.mapInputSocket(color2Socket, prog->getInputSocket(2));
+	for (int i = 1; i < getNumberOfInputSockets(); i++) {
+		converter.mapInputSocket(this->getInputSocket(i), prog->getInputSocket(i));
+	}
 	converter.mapOutputSocket(outputSocket, prog->getOutputSocket(0));
-
 	converter.addPreview(prog->getOutputSocket(0));
 }

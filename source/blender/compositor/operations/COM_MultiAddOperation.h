@@ -34,8 +34,6 @@ protected:
 	* Prefetched reference to the inputProgram
 	*/
 	SocketReader *m_inputValueOperation;
-	//SocketReader *m_inputColor1Operation;
-	//SocketReader *m_inputColor2Operation;
 	bool m_valueAlphaMultiply;
 	bool m_useClamp;
 
