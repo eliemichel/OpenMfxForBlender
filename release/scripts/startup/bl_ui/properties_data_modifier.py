@@ -288,6 +288,25 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         if ob.type == 'MESH':
             box.row().prop(md, "read_data")
 
+        num_attrs = len(md.attributes)
+
+        if 'ATTR' in md.read_data and num_attrs > 0:
+            layout.separator()
+            layout.label(text="Available attributes:")
+
+            box = layout.box()
+            split = box.split()
+            col = split.column()
+
+            half = num_attrs - (num_attrs // 2)
+
+            for attr in md.attributes:
+                if half == 0:
+                    col = split.column()
+
+                col.label(text=attr.name)
+                half -= 1
+
     def CAST(self, layout, ob, md):
         split = layout.split(percentage=0.25)
 
