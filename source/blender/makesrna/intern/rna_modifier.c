@@ -1499,6 +1499,12 @@ static void rna_OpenVDBModifier_display_thickness_set(PointerRNA *ptr, float val
 	sds->display_thickness = value;
 }
 
+static void rna_MeshSequenceCache_attrs_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+{
+	MeshSeqCacheModifierData *mcmd = (MeshSeqCacheModifierData *)ptr->data;
+	rna_iterator_array_begin(iter, (void *)mcmd->attr_names, sizeof(*mcmd->attr_names), mcmd->num_attr, 0, NULL);
+}
+
 #else
 
 static PropertyRNA *rna_def_property_subdivision_common(StructRNA *srna, const char type[])
@@ -4751,6 +4757,19 @@ static void rna_def_modifier_meshseqcache(BlenderRNA *brna)
 	RNA_def_property_enum_sdna(prop, NULL, "read_flag");
 	RNA_def_property_enum_items(prop, read_flag_items);
 	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "attributes", PROP_COLLECTION, PROP_NONE);
+	RNA_def_property_struct_type(prop, "MeshSeqCacheString");
+	RNA_def_property_collection_funcs(prop, "rna_MeshSequenceCache_attrs_begin", "rna_iterator_array_next",
+	                                  "rna_iterator_array_end", "rna_iterator_array_get", NULL, NULL, NULL, NULL);
+	RNA_def_property_ui_text(prop, "Attributes", "");
+
+	srna = RNA_def_struct(brna, "MeshSeqCacheString", NULL);
+	RNA_def_struct_sdna(srna, "MeshSeqCacheString");
+	RNA_def_struct_ui_text(srna, "Sequence Cache String", "");
+
+	prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Name", "");
 }
 
 static void rna_def_modifier_laplaciandeform(BlenderRNA *brna)

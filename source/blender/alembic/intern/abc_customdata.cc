@@ -22,6 +22,7 @@
  *
  */
 
+#include "abc_util.h"
 #include "abc_customdata.h"
 
 #include <Alembic/AbcGeom/All.h>
@@ -411,19 +412,26 @@ static int get_cd_type(char idp_type, size_t extent)
 	return -1;
 }
 
-static void write_data_to_customdata(const CDStreamConfig &config, const void *data, size_t num, char type, size_t extent, const char *name)
+template <class Type>
+static void write_data_to_customdata(const CDStreamConfig &config, const Type *data, size_t num, char type, size_t extent, const char *name)
 {
 	DerivedMesh *dm = (DerivedMesh *)config.user_data;
 	CustomData *cd = dm->getVertDataLayout(dm);
 	int cd_type = get_cd_type(type, extent);
 
-	void *cdata = CustomData_get_layer_named(cd, cd_type, name);
+	Type *cdata = (Type *)CustomData_get_layer_named(cd, cd_type, name);
 
-	if (cdata) {
-		memcpy(cdata, data, num * extent * 4);
+	if (!cdata) {
+		cdata = (Type *)CustomData_add_layer_named(cd, cd_type, CD_DEFAULT, NULL, num, name);
+	}
+
+	if (extent == 3) {
+		for (int i = 0; i < num; i++) {
+			copy_zup_from_yup(&cdata[i * 3], &data[i * 3]);
+		}
 	}
 	else {
-		CustomData_add_layer_named(cd, cd_type, CD_DUPLICATE, (void *)data, num, name);
+		memcpy(cdata, data, num * extent * 4);
 	}
 }
 
@@ -457,8 +465,14 @@ static void read_custom_data_generic(const ICompoundProperty &prop,
 				write_data_to_idprop(id_prop, vals->getData(), array_size * elem_extent,
 				                     idp_type, param.getName().c_str());
 #endif
-				write_data_to_customdata(config, vals->getData(), array_size / array_extent,
-				                         idp_type, total_extent, param.getName().c_str());
+				if (idp_type == IDP_FLOAT) {
+					write_data_to_customdata(config, (float *)vals->getData(), array_size / array_extent,
+											 idp_type, total_extent, param.getName().c_str());
+				}
+				else {
+					write_data_to_customdata(config, (int *)vals->getData(), array_size / array_extent,
+											 idp_type, total_extent, param.getName().c_str());
+				}
 			}
 		}
 	}

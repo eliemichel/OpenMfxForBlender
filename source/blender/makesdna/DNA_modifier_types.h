@@ -1596,7 +1596,10 @@ typedef struct MeshSeqCacheModifierData {
 	char object_path[1024];  /* 1024 = FILE_MAX */
 
 	char read_flag;
-	char pad[7];
+	char pad[3];
+
+	int num_attr;
+	char (*attr_names)[64];
 } MeshSeqCacheModifierData;
 
 /* MeshSeqCacheModifierData.read_flag */
@@ -1608,6 +1611,10 @@ enum {
 	MOD_MESHSEQ_READ_ATTR  = (1 << 4),
 	MOD_MESHSEQ_READ_VELS  = (1 << 5),
 };
+
+typedef struct MeshSeqCacheString {
+	char name[64];
+} MeshSeqCacheString;
 
 typedef struct SDefBind {
 	unsigned int *vert_inds;
