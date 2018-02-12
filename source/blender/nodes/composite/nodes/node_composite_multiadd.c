@@ -46,8 +46,6 @@ static void init(bNode *ntree, bNode *node)
 	NodeMultiAdd *user = MEM_callocN(sizeof(NodeMultiAdd), "multi add user");
 	node->storage = user;
 
-	//nodeAddStaticSocket(ntree, node, SOCK_IN, SOCK_RGBA, PROP_NONE, "image", "Image");
-
 	/* add two inputs by default */
 	ntreeCompsitMultiAddNodeAddSocket(ntree, node);
 	ntreeCompsitMultiAddNodeAddSocket(ntree, node);
