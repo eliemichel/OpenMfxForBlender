@@ -600,6 +600,7 @@ enum {
 	ABC_NO_ERROR = 0,
 	ABC_ARCHIVE_FAIL,
 	ABC_UNSUPPORTED_HDF5,
+	ABC_DEGENERATE,
 };
 
 struct ImportJobData {
@@ -759,6 +760,11 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
 		const AbcObjectReader *parent_reader = reader->parent_reader;
 		Object *ob = reader->object();
 
+		if (!ob) {
+			data->error_code = ABC_DEGENERATE;
+			return;
+		}
+
 		if (parent_reader == NULL) {
 			ob->parent = NULL;
 		}
@@ -792,7 +798,7 @@ static void import_endjob(void *user_data)
 	std::vector<AbcObjectReader *>::iterator iter;
 
 	/* Delete objects on cancelation. */
-	if (data->was_cancelled) {
+	if (data->was_cancelled || data->error_code == ABC_DEGENERATE) {
 		for (iter = data->readers.begin(); iter != data->readers.end(); ++iter) {
 			Object *ob = (*iter)->object();
 
@@ -842,6 +848,9 @@ static void import_endjob(void *user_data)
 		case ABC_UNSUPPORTED_HDF5:
 			WM_report(RPT_ERROR, "Alembic archive in obsolete HDF5 format is not supported.");
 			break;
+		case ABC_DEGENERATE:
+			WM_report(RPT_ERROR, "Archive contains degenerate geometry, reading failed.");
+			break;
 	}
 
 	WM_main_add_notifier(NC_SCENE | ND_FRAME, data->scene);
@@ -854,8 +863,8 @@ static void import_freejob(void *user_data)
 }
 
 bool ABC_import(bContext *C, const char *filepath, float scale, bool is_sequence,
-                bool set_frame_range, int sequence_len, int offset,
-                bool validate_meshes, bool as_background_job)
+                bool set_frame_range, bool import_attrs, bool import_vels, int sequence_len,
+                int offset, bool validate_meshes, bool as_background_job)
 {
 	/* Using new here since MEM_* funcs do not call ctor to properly initialize
 	 * data. */
@@ -873,6 +882,14 @@ bool ABC_import(bContext *C, const char *filepath, float scale, bool is_sequence
 	job->settings.validate_meshes = validate_meshes;
 	job->error_code = ABC_NO_ERROR;
 	job->was_cancelled = false;
+
+	if (import_attrs) {
+		job->settings.read_flag |= MOD_MESHSEQ_READ_ATTR;
+	}
+
+	if (import_vels) {
+		job->settings.read_flag |= MOD_MESHSEQ_READ_VELS;
+	}
 
 	G.is_break = false;
 

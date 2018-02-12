@@ -63,10 +63,9 @@ typedef struct CustomDataExternal {
  * layers, each with a data type (e.g. MTFace, MDeformVert, etc.). */
 typedef struct CustomData {
 	CustomDataLayer *layers;      /* CustomDataLayers, ordered by type */
-	int typemap[42];              /* runtime only! - maps types to indices of first layer of that type,
+	int typemap[47];              /* runtime only! - maps types to indices of first layer of that type,
 	                               * MUST be >= CD_NUMTYPES, but we cant use a define here.
 	                               * Correct size is ensured in CustomData_update_typemap assert() */
-	int pad_i1;
 	int totlayer, maxlayer;       /* number of layers, size of layers array */
 	int totsize;                  /* in editmode, total size of all data layers */
 	struct BLI_mempool *pool;     /* (BMesh Only): Memory pool for allocation of blocks */
@@ -130,7 +129,14 @@ typedef enum CustomDataType {
 	CD_TESSLOOPNORMAL   = 40,
 	CD_CUSTOMLOOPNORMAL = 41,
 
-	CD_NUMTYPES         = 42
+	CD_ALEMBIC_FLOAT    = 42,
+	CD_ALEMBIC_INT      = 43,
+	CD_ALEMBIC_F3       = 44,
+	CD_ALEMBIC_I3       = 45,
+
+	CD_VELOCITY         = 46,
+
+	CD_NUMTYPES         = 47
 } CustomDataType;
 
 /* Bits for CustomDataMask */
@@ -178,6 +184,13 @@ typedef enum CustomDataType {
 #define CD_MASK_MLOOPTANGENT    (1LL << CD_MLOOPTANGENT)
 #define CD_MASK_TESSLOOPNORMAL  (1LL << CD_TESSLOOPNORMAL)
 #define CD_MASK_CUSTOMLOOPNORMAL (1LL << CD_CUSTOMLOOPNORMAL)
+
+#define CD_MASK_ALEMBIC_FLOAT (1LL << CD_ALEMBIC_FLOAT)
+#define CD_MASK_ALEMBIC_INT (1LL << CD_ALEMBIC_INT)
+#define CD_MASK_ALEMBIC_F3 (1LL << CD_ALEMBIC_F3)
+#define CD_MASK_ALEMBIC_I3 (1LL << CD_ALEMBIC_I3)
+
+#define CD_MASK_VELOCITY (1LL << CD_VELOCITY)
 
 /* CustomData.flag */
 enum {

@@ -72,6 +72,8 @@ static void initData(ModifierData *md)
 	vdbmd->front_axis = MOD_OVDB_AXIS_MIN_Y;
 
 	vdbmd->frame_last = -1;
+
+	vdbmd->flame_thickness = 1.0f;
 }
 
 static void freeData(ModifierData *md)
@@ -88,6 +90,7 @@ static void copyData(ModifierData *md, ModifierData *target)
 {
 	OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
 	OpenVDBModifierData *tvdbmd = (OpenVDBModifierData *)target;
+	PointCache *cache, *tcache;
 
 	modifier_copyData_generic(md, target);
 
@@ -95,6 +98,12 @@ static void copyData(ModifierData *md, ModifierData *target)
 
 	modifier_copyData((ModifierData *)vdbmd->smoke, (ModifierData *)tvdbmd->smoke);
 	vdbmd->smoke->domain->vdb = vdbmd;
+
+	cache = vdbmd->smoke->domain->point_cache[0];
+	tcache = tvdbmd->smoke->domain->point_cache[0];
+
+	tcache->startframe = cache->startframe;
+	tcache->endframe = cache->endframe;
 
 	tvdbmd->grids = MEM_dupallocN(vdbmd->grids);
 

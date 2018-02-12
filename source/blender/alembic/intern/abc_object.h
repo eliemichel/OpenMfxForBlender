@@ -132,6 +132,7 @@ protected:
 	std::string m_object_name;
 	std::string m_data_name;
 	Object *m_object;
+	IDProperty *m_idprop;
 	Alembic::Abc::IObject m_iobject;
 
 	ImportSettings *m_settings;

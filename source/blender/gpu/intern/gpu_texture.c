@@ -25,6 +25,7 @@
  * ***** END GPL LICENSE BLOCK *****
  */
 
+#include <string.h>
 #include "MEM_guardedalloc.h"
 
 #include "DNA_image_types.h"
@@ -245,10 +246,12 @@ static GPUTexture *GPU_texture_create_nD(
 }
 
 
-GPUTexture *GPU_texture_create_3D(int w, int h, int depth, int channels, const float *fpixels)
+GPUTexture *GPU_texture_create_3D(int w, int h, int depth, int channels, const float *fpixels,
+                                  float min_val, float max_val)
 {
 	GLenum type, format, internalformat;
 	void *pixels = NULL;
+	float factor = max_val - min_val;
 
 	GPUTexture *tex = MEM_callocN(sizeof(GPUTexture), "GPUTexture");
 	tex->w = w;
@@ -336,10 +339,35 @@ GPUTexture *GPU_texture_create_3D(int w, int h, int depth, int channels, const f
 						tex3d[offset * 4] = fpixels[offset_orig * 4];
 						tex3d[offset * 4 + 1] = fpixels[offset_orig * 4 + 1];
 						tex3d[offset * 4 + 2] = fpixels[offset_orig * 4 + 2];
-						tex3d[offset * 4 + 3] = fpixels[offset_orig * 4 + 3];
+
+						if (max_val > min_val) {
+							if (fpixels[offset_orig * 4 + 3] < min_val || fpixels[offset_orig * 4 + 3] > max_val) {
+								tex3d[offset * 4] = 0.0f;
+								tex3d[offset * 4 + 1] = 0.0f;
+								tex3d[offset * 4 + 2] = 0.0f;
+								tex3d[offset * 4 + 3] = 0.0f;
+							}
+							else {
+								tex3d[offset * 4 + 3] = (fpixels[offset_orig * 4 + 3] - min_val) / factor;
+							}
+						}
+						else {
+							tex3d[offset * 4 + 3] = fpixels[offset_orig * 4 + 3];
+						}
 					}
-					else
-						tex3d[offset] = fpixels[offset_orig];
+					else {
+						if (max_val > min_val) {
+							if (fpixels[offset_orig] <= min_val || fpixels[offset_orig] > max_val) {
+								tex3d[offset] = 0.0f;
+							}
+							else {
+								tex3d[offset] = (fpixels[offset_orig] - min_val) / factor;
+							}
+						}
+						else {
+							tex3d[offset] = fpixels[offset_orig];
+						}
+					}
 				}
 			}
 		}
@@ -350,7 +378,32 @@ GPUTexture *GPU_texture_create_3D(int w, int h, int depth, int channels, const f
 	}
 	else {
 		if (fpixels) {
-			glTexImage3D(tex->target, 0, internalformat, tex->w, tex->h, tex->depth, 0, format, type, fpixels);
+			if (max_val > min_val) {
+				int numvals = tex->w * tex->h * tex->depth * channels;
+				float *tex3d = MEM_mallocN(sizeof(float) * numvals, "Copy of fpixels");
+
+				memcpy(tex3d, fpixels, sizeof(float) * numvals);
+
+				for (int i = channels - 1; i < numvals; i += channels) {
+					if (tex3d[i] <= min_val || tex3d[i] > max_val) {
+						for (int j = 0; j < channels; j++) {
+							tex3d[i - j] = 0.0f;
+						}
+					}
+					else {
+						tex3d[i] -= min_val;
+						tex3d[i] /= factor;
+					}
+				}
+
+				glTexImage3D(tex->target, 0, internalformat, tex->w, tex->h, tex->depth, 0, format, type, tex3d);
+
+				MEM_freeN(tex3d);
+			}
+			else {
+				glTexImage3D(tex->target, 0, internalformat, tex->w, tex->h, tex->depth, 0, format, type, fpixels);
+			}
+
 			GPU_ASSERT_NO_GL_ERRORS("3D glTexSubImage3D");
 		}
 	}
@@ -582,7 +635,7 @@ void GPU_invalid_tex_init(void)
 	const float color[4] = {1.0f, 0.0f, 1.0f, 1.0f};
 	GG.invalid_tex_1D = GPU_texture_create_1D(1, color, NULL);
 	GG.invalid_tex_2D = GPU_texture_create_2D(1, 1, color, GPU_HDR_NONE, NULL);
-	GG.invalid_tex_3D = GPU_texture_create_3D(1, 1, 1, 4, color);
+	GG.invalid_tex_3D = GPU_texture_create_3D(1, 1, 1, 4, color, 0.0f, 0.0f);
 }
 
 void GPU_invalid_tex_bind(int mode)

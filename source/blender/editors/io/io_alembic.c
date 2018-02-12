@@ -502,6 +502,12 @@ static void ui_alembic_import_settings(uiLayout *layout, PointerRNA *imfptr)
 
 	row = uiLayoutRow(box, false);
 	uiItemR(row, imfptr, "validate_meshes", 0, NULL, ICON_NONE);
+
+	row = uiLayoutRow(box, false);
+	uiItemR(row, imfptr, "import_attrs", 0, NULL, ICON_NONE);
+
+	row = uiLayoutRow(box, false);
+	uiItemR(row, imfptr, "import_vels", 0, NULL, ICON_NONE);
 }
 
 static void wm_alembic_import_draw(bContext *UNUSED(C), wmOperator *op)
@@ -525,6 +531,8 @@ static int wm_alembic_import_exec(bContext *C, wmOperator *op)
 	const float scale = RNA_float_get(op->ptr, "scale");
 	const bool is_sequence = RNA_boolean_get(op->ptr, "is_sequence");
 	const bool set_frame_range = RNA_boolean_get(op->ptr, "set_frame_range");
+	const bool import_attrs = RNA_boolean_get(op->ptr, "import_attrs");
+	const bool import_vels = RNA_boolean_get(op->ptr, "import_vels");
 	const bool validate_meshes = RNA_boolean_get(op->ptr, "validate_meshes");
 	const bool as_background_job = RNA_boolean_get(op->ptr, "as_background_job");
 
@@ -540,7 +548,7 @@ static int wm_alembic_import_exec(bContext *C, wmOperator *op)
 	}
 
 	bool ok = ABC_import(C, filename, scale, is_sequence, set_frame_range,
-	                     sequence_len, offset, validate_meshes,
+	                     import_attrs, import_vels, sequence_len, offset, validate_meshes,
 	                     as_background_job);
 
 	return as_background_job || ok ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
@@ -568,6 +576,14 @@ void WM_OT_alembic_import(wmOperatorType *ot)
 	RNA_def_boolean(ot->srna, "set_frame_range", true,
 	                "Set Frame Range",
 	                "If checked, update scene's start and end frame to match those of the Alembic archive");
+
+	RNA_def_boolean(ot->srna, "import_attrs", false,
+	                "Import Custom Attributes",
+	                "If checked, custom mesh attributes will be loaded from the Alembic archive");
+
+	RNA_def_boolean(ot->srna, "import_vels", true,
+	                "Import Velocities",
+	                "If checked, velocity vectors will be loaded from the Alembic archive");
 
 	RNA_def_boolean(ot->srna, "validate_meshes", 0,
 	                "Validate Meshes", "Check imported mesh objects for invalid data (slow)");

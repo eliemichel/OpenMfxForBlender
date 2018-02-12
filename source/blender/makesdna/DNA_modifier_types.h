@@ -251,7 +251,41 @@ typedef struct ArrayModifierData {
 	int flags;
 	/* the number of duplicates to generate for MOD_ARR_FIXEDCOUNT */
 	int count;
+
+	/* Materials */
+	int   advanced_settings;
+	int   random_seed;
+	int   random_material_type;
+	int   loop_offset;
+	float random_location[3];
+	float random_rotation[3];
+	float random_scale[3];
+
+	int padding;
+
 } ArrayModifierData;
+
+/* ArrayModifierData->random_type */
+enum {
+	MOD_ARR_MATERIAL_FIXED = 0,
+	// loop through all available materials in sequence
+	MOD_ARR_MATERIAL_LOOP = 1,
+	// randomize material assignments
+	MOD_ARR_MATERIAL_RANDOM = 2,
+};
+
+enum {
+	MOD_ARR_ENABLE_ADVANCED      = (1 << 0),
+	MOD_ARR_ENABLE_MATERIALS     = (1 << 1),
+	MOD_ARR_MATERIAL_NODUPES     = (1 << 2),
+	MOD_ARR_TRANS_LOCATION       = (1 << 3),
+	MOD_ARR_TRANS_ROTATION       = (1 << 4),
+	MOD_ARR_TRANS_SCALE          = (1 << 5),
+	MOD_ARR_TRANS_CUMULATIVE_LOC = (1 << 6),
+	MOD_ARR_TRANS_CUMULATIVE_ROT = (1 << 7),
+	MOD_ARR_TRANS_CUMULATIVE_SCL = (1 << 8),
+};
+
 
 /* ArrayModifierData->fit_type */
 enum {
@@ -1563,7 +1597,10 @@ typedef struct MeshSeqCacheModifierData {
 	char object_path[1024];  /* 1024 = FILE_MAX */
 
 	char read_flag;
-	char pad[7];
+	char pad[3];
+
+	int num_attr;
+	char (*attr_names)[64];
 } MeshSeqCacheModifierData;
 
 /* MeshSeqCacheModifierData.read_flag */
@@ -1572,7 +1609,13 @@ enum {
 	MOD_MESHSEQ_READ_POLY  = (1 << 1),
 	MOD_MESHSEQ_READ_UV    = (1 << 2),
 	MOD_MESHSEQ_READ_COLOR = (1 << 3),
+	MOD_MESHSEQ_READ_ATTR  = (1 << 4),
+	MOD_MESHSEQ_READ_VELS  = (1 << 5),
 };
+
+typedef struct MeshSeqCacheString {
+	char name[64];
+} MeshSeqCacheString;
 
 typedef struct SDefBind {
 	unsigned int *vert_inds;
@@ -1646,7 +1689,13 @@ typedef struct OpenVDBModifierData {
 	float max_color;
 
 	int numeric_display;
-	int pad1;
+
+	float flame_thickness;
+
+	float density_min;
+	float density_max;
+	float flame_min;
+	float flame_max;
 } OpenVDBModifierData;
 
 /* OpenVDBModifierData flags */
@@ -1695,4 +1744,4 @@ enum {
 };
 
 
-#endif  /* __DNA_MODIFIER_TYPES_H__ */
+	#endif  /* __DNA_MODIFIER_TYPES_H__ */
