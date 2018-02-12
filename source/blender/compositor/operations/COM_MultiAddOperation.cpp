@@ -57,9 +57,10 @@ void MultiAddOperation::executePixelSampled(float output[4], float x, float y, P
 	float inputColor[4];
 
 	this->m_inputValueOperation->readSampled(inputValue, x, y, sampler);
+	SocketReader *final_input = inputs[arrsize - 1];
 	float value = inputValue[0];
 	if (this->useValueAlphaMultiply()) {
-		inputs[arrsize-1]->readSampled(inputColor, x, y, sampler);
+		final_input->readSampled(inputColor, x, y, sampler);
 		value *= inputColor[3];
 	}
 
