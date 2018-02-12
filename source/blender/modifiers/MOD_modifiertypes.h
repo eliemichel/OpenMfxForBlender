@@ -87,6 +87,7 @@ extern ModifierTypeInfo modifierType_CorrectiveSmooth;
 extern ModifierTypeInfo modifierType_MeshSequenceCache;
 extern ModifierTypeInfo modifierType_SurfaceDeform;
 extern ModifierTypeInfo modifierType_OpenVDB;
+extern ModifierTypeInfo modifierType_VertexSnap;
 
 /* MOD_util.c */
 void modifier_type_init(ModifierTypeInfo *types[]);

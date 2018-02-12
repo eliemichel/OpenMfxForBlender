@@ -105,7 +105,8 @@ EnumPropertyItem rna_enum_object_modifier_type_items[] = {
 	{eModifierType_Shrinkwrap, "SHRINKWRAP", ICON_MOD_SHRINKWRAP, "Shrinkwrap", ""},
 	{eModifierType_SimpleDeform, "SIMPLE_DEFORM", ICON_MOD_SIMPLEDEFORM, "Simple Deform", ""},
 	{eModifierType_Smooth, "SMOOTH", ICON_MOD_SMOOTH, "Smooth", ""},
-	{eModifierType_SurfaceDeform, "SURFACE_DEFORM", ICON_MOD_MESHDEFORM, "Surface Deform", ""},
+	{ eModifierType_VertexSnap, "VERTEXSNAP", ICON_SNAP_VERTEX, "Vertex Snap", "" },
+	{ eModifierType_SurfaceDeform, "SURFACE_DEFORM", ICON_MOD_MESHDEFORM, "Surface Deform", "" },
 	{eModifierType_Warp, "WARP", ICON_MOD_WARP, "Warp", ""},
 	{eModifierType_Wave, "WAVE", ICON_MOD_WAVE, "Wave", ""},
 	{0, "", 0, N_("Simulate"), ""},
@@ -419,6 +420,8 @@ static StructRNA *rna_Modifier_refine(struct PointerRNA *ptr)
 			return &RNA_SurfaceDeformModifier;
 		case eModifierType_OpenVDB:
 			return &RNA_OpenVDBModifier;
+		case eModifierType_VertexSnap:
+			return &RNA_VertexSnapModifier;
 		/* Default */
 		case eModifierType_None:
 		case eModifierType_ShapeKey:
@@ -498,6 +501,7 @@ RNA_MOD_VGROUP_NAME_SET(NormalEdit, defgrp_name);
 RNA_MOD_VGROUP_NAME_SET(Shrinkwrap, vgroup_name);
 RNA_MOD_VGROUP_NAME_SET(SimpleDeform, vgroup_name);
 RNA_MOD_VGROUP_NAME_SET(Smooth, defgrp_name);
+RNA_MOD_VGROUP_NAME_SET(VertexSnap, vertex_group);
 RNA_MOD_VGROUP_NAME_SET(Solidify, defgrp_name);
 RNA_MOD_VGROUP_NAME_SET(UVWarp, vgroup_name);
 RNA_MOD_VGROUP_NAME_SET(Warp, defgrp_name);
@@ -584,6 +588,7 @@ RNA_MOD_OBJECT_SET(MeshDeform, object, OB_MESH);
 RNA_MOD_OBJECT_SET(NormalEdit, target, OB_EMPTY);
 RNA_MOD_OBJECT_SET(Shrinkwrap, target, OB_MESH);
 RNA_MOD_OBJECT_SET(Shrinkwrap, auxTarget, OB_MESH);
+RNA_MOD_OBJECT_SET(VertexSnap, target, OB_MESH);
 RNA_MOD_OBJECT_SET(SurfaceDeform, target, OB_MESH);
 
 static void rna_HookModifier_object_set(PointerRNA *ptr, PointerRNA value)
@@ -5391,39 +5396,47 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Display Values", "Values to display numerically in the viewport");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+}
 
-	prop = RNA_def_property(srna, "density_min", PROP_FLOAT, PROP_NONE);
-	RNA_def_property_ui_text(prop, "Min Density", "Minimum threshold for density display");
-	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+static void rna_def_modifier_vertex_snap(BlenderRNA *brna)
+{
+	StructRNA *srna;
+	PropertyRNA *prop;
+ 
+	static EnumPropertyItem prop_deform_space_items[] = {
+		{MOD_VSNAP_LOCAL, "LOCAL", 0, "Local", "Pull verts from target local space"},
+		{MOD_VSNAP_WORLD, "WORLD", 0, "World", "Pull verts from target world space"},
+		{0, NULL, 0, NULL, NULL}
+	};
 
-	prop = RNA_def_property(srna, "density_max", PROP_FLOAT, PROP_NONE);
-	RNA_def_property_ui_text(prop, "Max Density", "Maximum threshold for density display");
-	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+	srna = RNA_def_struct(brna, "VertexSnapModifier", "Modifier");
+	RNA_def_struct_ui_text(srna, "Vertex Snap Modifier", "Vertex Snap Modifier");
+	RNA_def_struct_sdna(srna, "VertexSnapModifierData");
+	RNA_def_struct_ui_icon(srna, ICON_SNAP_VERTEX);
+ 
+	prop = RNA_def_property(srna, "target", PROP_POINTER, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Target", "Target for snapping");
+	RNA_def_property_pointer_funcs(prop, NULL, "rna_VertexSnapModifier_target_set", NULL, "rna_Mesh_object_poll");
+	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+	RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
-	prop = RNA_def_property(srna, "flame_min", PROP_FLOAT, PROP_NONE);
-	RNA_def_property_ui_text(prop, "Min Flame", "Minimum threshold for flame display");
-	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+	prop = RNA_def_property(srna, "blend", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "blend");
+	RNA_def_property_range(prop, 0.0f, 1.0f);
+	RNA_def_property_ui_range(prop, 0.0f, 1.0f, 1, 3);
+	RNA_def_property_ui_text(prop, "Blend", "Blending amount");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+ 
+	prop = RNA_def_property(srna, "vertex_group", PROP_STRING, PROP_NONE);
+	RNA_def_property_string_sdna(prop, NULL, "vertex_group");
+	RNA_def_property_ui_text(prop, "Vertex Group", "Vertex group name for selecting/weighting the affected areas");
+	RNA_def_property_string_funcs(prop, NULL, NULL, "rna_VertexSnapModifier_vertex_group_set");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
-	prop = RNA_def_property(srna, "flame_max", PROP_FLOAT, PROP_NONE);
-	RNA_def_property_ui_text(prop, "Max Flame", "Maximum threshold for flame display");
-	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
-
-	prop = RNA_def_property(srna, "display_thickness", PROP_FLOAT, PROP_NONE);
-	RNA_def_property_ui_text(prop, "Density Thickness", "Thickness of smoke drawing in the viewport");
-	RNA_def_property_float_funcs(prop, "rna_OpenVDBModifier_display_thickness_get",
-	                             "rna_OpenVDBModifier_display_thickness_set", NULL);
-	RNA_def_property_range(prop, 0.001, 1000.0);
-	RNA_def_property_ui_range(prop, 0.1, 100.0, 0.1, 3);
-	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
-
-	prop = RNA_def_property(srna, "flame_thickness", PROP_FLOAT, PROP_NONE);
-	RNA_def_property_ui_text(prop, "Flame Thickness", "Thickness of flame drawing in the viewport");
-	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+	prop = RNA_def_property(srna, "deform_space", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_items(prop, prop_deform_space_items);
+	RNA_def_property_ui_text(prop, "Deform Space", "Pull vertices in local or world space");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
 void RNA_def_modifier(BlenderRNA *brna)
@@ -5545,6 +5558,7 @@ void RNA_def_modifier(BlenderRNA *brna)
 	rna_def_modifier_meshseqcache(brna);
 	rna_def_modifier_surfacedeform(brna);
 	rna_def_modifier_openvdb(brna);
+	rna_def_modifier_vertex_snap(brna);
 }
 
 #endif

@@ -1281,6 +1281,13 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row.active = md.use_remove_disconnected
         row.prop(md, "threshold")
 
+    def VERTEXSNAP( self, layout, ob, md ):
+        col = layout.column()
+        col.prop( md, "target", text="")
+        col.prop( md, "blend",  text='Blend Amount' )
+        col.prop( md, "deform_space" )
+        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+
 
     @staticmethod
     def vertex_weight_mask(layout, ob, md):
