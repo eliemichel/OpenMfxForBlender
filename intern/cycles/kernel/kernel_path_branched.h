@@ -434,7 +434,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 					RNG tmp_rng = cmj_hash(*rng, state.rng_offset);
 
 					PathState ps = state;
-					Ray pray = ray;
+					Ray pray = volume_ray;
 					float3 tp = throughput;
 
 					/* branch RNG state */
