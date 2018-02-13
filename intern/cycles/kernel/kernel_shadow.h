@@ -41,7 +41,7 @@ CCL_NAMESPACE_BEGIN
 
 #define STACK_MAX_HITS 64
 
-ccl_device_inline bool shadow_blocked(KernelGlobals *kg, ShaderData *shadow_sd, PathState *state, Ray *ray, float3 *shadow, uint shadow_linking)
+ccl_device_inline bool shadow_blocked(KernelGlobals *kg, ShaderData *sd, ShaderData *shadow_sd, PathState *state, Ray *ray, float3 *shadow, uint shadow_linking)
 {
 	*shadow = make_float3(1.0f, 1.0f, 1.0f);
 
@@ -88,6 +88,21 @@ ccl_device_inline bool shadow_blocked(KernelGlobals *kg, ShaderData *shadow_sd, 
 			Intersection *isect = hits;
 #ifdef __VOLUME__
 			PathState ps = *state;
+			/* Remove all non-overlapping volumes from the stack. */
+			for(int i = 0; ps.volume_stack[i].shader != SHADER_NONE; ++i) {
+				if(ps.volume_stack[i].t_exit < sd->ray_length || ps.volume_stack[i].t_enter > sd->ray_length) {
+					int j = i;
+					/* shift back next stack entries */
+					do {
+						ps.volume_stack[j] = ps.volume_stack[j+1];
+						++j;
+					}
+					while(ps.volume_stack[j].shader != SHADER_NONE);
+					--i;
+				}
+				ps.volume_stack[i].t_enter = 0.0f;
+				ps.volume_stack[i].t_exit = FLT_MAX;
+			}
 #endif
 #	ifndef __KERNEL_GPU__
 			qsort(hits, num_hits, sizeof(Intersection), intersections_compare);
@@ -195,6 +210,7 @@ ccl_device_inline bool shadow_blocked(KernelGlobals *kg, ShaderData *shadow_sd, 
 * one extra ray cast for the cases were we do want transparency. */
 
 ccl_device_noinline bool shadow_blocked(KernelGlobals *kg,
+										ShaderData *sd,
 										ShaderData *shadow_sd,
 										ccl_addr_space PathState *state,
 										ccl_addr_space Ray *ray_input,
@@ -226,6 +242,21 @@ ccl_device_noinline bool shadow_blocked(KernelGlobals *kg,
 			int bounce = state->transparent_bounce;
 #ifdef __VOLUME__
 			PathState ps = *state;
+			/* Remove all non-overlapping volumes from the stack. */
+			for(int i = 0; ps.volume_stack[i].shader != SHADER_NONE; ++i) {
+				if(ps.volume_stack[i].t_exit < sd->ray_length || ps.volume_stack[i].t_enter > sd->ray_length) {
+					int j = i;
+					/* shift back next stack entries */
+					do {
+						ps.volume_stack[j] = ps.volume_stack[j+1];
+						++j;
+					}
+					while(ps.volume_stack[j].shader != SHADER_NONE);
+					--i;
+				}
+				ps.volume_stack[i].t_enter = 0.0f;
+				ps.volume_stack[i].t_exit = FLT_MAX;
+			}
 #endif
 
 			for (;;) {

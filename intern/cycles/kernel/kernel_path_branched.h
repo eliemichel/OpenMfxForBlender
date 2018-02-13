@@ -67,7 +67,7 @@ ccl_device_inline void kernel_branched_path_ao(KernelGlobals *kg,
 			float3 ao_env = shader_eval_ao_env(kg, &sd_ao, state, 0, SHADER_CONTEXT_MAIN);
 
             uint shadow_linking = object_shadow_linking(kg, ccl_fetch(sd, object));
-			if(!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow, shadow_linking))
+			if(!shadow_blocked(kg, sd, emission_sd, state, &light_ray, &ao_shadow, shadow_linking))
 				path_radiance_accum_ao(L, throughput*num_samples_inv, ao_alpha, ao_bsdf * ao_env, ao_shadow, state->bounce);
 			state->flag &= ~PATH_RAY_AO;
 		}
@@ -274,6 +274,14 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 	PathState state;
 	path_state_init(kg, &emission_sd, &state, rng, sample, &ray);
 
+	Ray volume_ray = ray;
+	int volumes_entered = 0;
+
+	/* is there a heterogenous world shader? */
+	if(state.volume_stack[0].shader != SHADER_NONE && volume_stack_is_heterogeneous(kg, state.volume_stack)) {
+		++volumes_entered;
+	}
+
 #ifdef __KERNEL_DEBUG__
 	DebugData debug_data;
 	debug_data_init(&debug_data);
@@ -315,16 +323,81 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 		debug_data.num_ray_bounces++;
 #endif  /* __KERNEL_DEBUG__ */
 
-#ifdef __VOLUME__
-		/* Sanitize volume stack. */
-		if(!hit) {
-			kernel_volume_clean_stack(kg, state.volume_stack);
+#ifdef __VOLUME__		/* volume attenuation, emission, scatter */
+		/* this determines if we do volume tracing right away or defer until we hit a non-volume surface */
+		bool do_volume = false;
+
+		/* Do all homogenous volumes right away. */
+		if(state.volume_stack[0].shader != SHADER_NONE && !volume_stack_is_heterogeneous(kg, state.volume_stack)) {
+			do_volume = true;
 		}
-		/* volume attenuation, emission, scatter */
-		if(state.volume_stack[0].shader != SHADER_NONE) {
-			Ray volume_ray = ray;
-			volume_ray.t = (hit)? isect.t: FLT_MAX;
-			
+
+		if(hit) {
+			shader_setup_from_ray(kg, &sd, &isect, &ray);
+			if(sd.shader_flag & SD_SHADER_HAS_VOLUME) {
+				if(state.volume_stack[0].shader == SHADER_NONE) {
+					volume_ray.P = sd.P;
+					volume_ray.t = 0.0f;
+					volume_ray.D = ray.D;
+				}
+				else {
+					volume_ray.t = len(sd.P - volume_ray.P);
+				}
+				if(sd.runtime_flag & SD_RUNTIME_BACKFACING) {
+					for(int i = 0; state.volume_stack[i].shader != SHADER_NONE && i < VOLUME_STACK_SIZE; ++i) {
+						if(state.volume_stack[i].object == sd.object) {
+							state.volume_stack[i].t_exit = volume_ray.t;
+							break;
+						}
+					}
+					--volumes_entered;
+				}
+				else {
+					int i = 0;
+					while(state.volume_stack[i].shader != SHADER_NONE && i < VOLUME_STACK_SIZE) {
+						++i;
+					}
+					state.volume_stack[i].object = sd.object;
+					state.volume_stack[i].shader = sd.shader;
+					state.volume_stack[i].t_enter = volume_ray.t;
+					state.volume_stack[i].t_exit = FLT_MAX;
+					state.volume_stack[i+1].shader = SHADER_NONE;
+					++volumes_entered;
+				}
+			}
+		}
+		else {
+			int i = (kernel_data.background.volume_shader != SHADER_NONE) ? 1 : 0;
+			do {
+				if(state.volume_stack[i].t_exit == FLT_MAX) {
+					kernel_volume_stack_remove(kg, state.volume_stack[i].object, state.volume_stack);
+				}
+				else {
+					++i;
+				}
+			} while(i < VOLUME_STACK_SIZE && state.volume_stack[i].shader != SHADER_NONE);
+		}
+
+		/* Collect heterogenous volume interactions until a non-volume object is intersected
+		 or the ray leaves all volumes. Then do one ray march through all collected media.
+		 */
+
+		do_volume |= volumes_entered == 0 || (!hit) /* Leaving volumes or scene */
+			|| (!(sd.shader_flag & SD_SHADER_HAS_ONLY_VOLUME)); /* hit a non-volume object */
+		do_volume &= state.volume_stack[0].shader != SHADER_NONE;
+
+
+		if(do_volume) {
+			float3 save_p = sd.P;
+			if(hit && !(sd.shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
+				volume_ray.t = len(sd.P - volume_ray.P);
+			}
+			else if(!hit) {
+				if(kernel_data.background.volume_shader != SHADER_NONE) {
+					volume_ray.t = FLT_MAX;
+				}
+			}
+
 			bool heterogeneous = volume_stack_is_heterogeneous(kg, state.volume_stack);
 
 #ifdef __VOLUME_DECOUPLED__
@@ -427,7 +500,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 			for(int j = 0; j < num_samples; j++) {
 				PathState ps = state;
-				Ray pray = ray;
+				Ray pray = volume_ray;
 				float3 tp = throughput * num_samples_inv;
 
 				/* branch RNG state */
@@ -473,6 +546,20 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 			/* todo: avoid this calculation using decoupled ray marching */
 			kernel_volume_shadow(kg, &emission_sd, &state, &volume_ray, &throughput);
 #endif  /* __VOLUME_DECOUPLED__ */
+			for(int i = 0; state.volume_stack[i].shader != SHADER_NONE; ++i) {
+				if(state.volume_stack[i].t_exit < FLT_MAX) {
+					int j = i;
+					/* shift back next stack entries */
+					do {
+						state.volume_stack[j] = state.volume_stack[j+1];
+						++j;
+					}
+					while(state.volume_stack[j].shader != SHADER_NONE);
+					--i;
+				}
+				state.volume_stack[i].t_enter = 0.0f;
+			}
+			volume_ray.P = save_p;
 		}
 #endif  /* __VOLUME__ */
 
@@ -587,6 +674,13 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 		if(!(sd.shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
 			PathState hit_state = state;
 
+#ifdef __VOLUME__
+			for(int i = 0; hit_state.volume_stack[i].shader != SHADER_NONE; ++i) {
+				hit_state.volume_stack[i].t_enter = 0.0f;
+				hit_state.volume_stack[i].t_exit = FLT_MAX;
+			}
+#endif  /* __VOLUME__ */
+
             uint light_linking = object_light_linking(kg, sd.object);
 
 #ifdef __EMISSION__
@@ -629,11 +723,6 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 		ray.dD.dx = -sd.dI.dx;
 		ray.dD.dy = -sd.dI.dy;
 #endif  /* __RAY_DIFFERENTIALS__ */
-
-#ifdef __VOLUME__
-		/* enter/exit volume */
-		kernel_volume_stack_enter_exit(kg, &sd, state.volume_stack);
-#endif  /* __VOLUME__ */
 	}
 
 	float3 L_sum;
