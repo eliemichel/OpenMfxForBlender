@@ -993,6 +993,10 @@ static void node_shader_buts_tex_pointdensity(uiLayout *layout, bContext *UNUSED
 			if (obdata_ptr.data)
 				uiItemPointerR(layout, ptr, "vertex_attribute_name", &obdata_ptr, "vertex_colors", "", ICON_NONE);
 		}
+		if (shader_point_density->ob_color_source == SHD_POINTDENSITY_COLOR_VERTATTR) {
+			if (obdata_ptr.data)
+				uiItemR(layout, ptr, "vertex_attribute_name", 0, "", ICON_GROUP_VERTEX);
+		}
 	}
 }
 

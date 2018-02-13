@@ -92,7 +92,7 @@ static int point_data_used(PointDensity *pd)
 		}
 	}
 	else if (pd->source == TEX_PD_OBJECT) {
-		if (ELEM(pd->ob_color_source, TEX_PD_COLOR_VERTCOL, TEX_PD_COLOR_VERTWEIGHT, TEX_PD_COLOR_VERTNOR)) {
+		if (ELEM(pd->ob_color_source, TEX_PD_COLOR_VERTCOL, TEX_PD_COLOR_VERTWEIGHT, TEX_PD_COLOR_VERTNOR, TEX_PD_COLOR_VERTATTR)) {
 			pd_bitflag |= POINT_DATA_COLOR;
 		}
 	}
@@ -400,6 +400,70 @@ static void pointdensity_cache_vertex_normal(PointDensity *pd, Object *UNUSED(ob
 	}
 }
 
+static void pointdensity_cache_vertex_attr(PointDensity *pd, Object *UNUSED(ob), DerivedMesh *dm, float (*data_color)[3])
+{
+	const int numvert = dm->getNumVerts(dm);
+	int data_type;
+	void *data;
+
+	BLI_assert(data_color);
+
+	if (!(CustomData_has_layer(&dm->vertData, CD_ALEMBIC_F3) ||
+	      CustomData_has_layer(&dm->vertData, CD_ALEMBIC_FLOAT) ||
+	      CustomData_has_layer(&dm->vertData, CD_ALEMBIC_I3) ||
+	      CustomData_has_layer(&dm->vertData, CD_ALEMBIC_INT)))
+	{
+		return;
+	}
+
+	data_type = CD_ALEMBIC_F3;
+	data = CustomData_get_layer_named(&dm->vertData, CD_ALEMBIC_F3, pd->vertex_attribute_name);
+
+	if (!data) {
+		data_type = CD_ALEMBIC_FLOAT;
+		data = CustomData_get_layer_named(&dm->vertData, CD_ALEMBIC_FLOAT, pd->vertex_attribute_name);
+	}
+
+	if (!data) {
+		data_type = CD_ALEMBIC_I3;
+		data = CustomData_get_layer_named(&dm->vertData, CD_ALEMBIC_I3, pd->vertex_attribute_name);
+	}
+
+	if (!data) {
+		data_type = CD_ALEMBIC_INT;
+		data = CustomData_get_layer_named(&dm->vertData, CD_ALEMBIC_INT, pd->vertex_attribute_name);
+	}
+
+	if (!data) {
+		return;
+	}
+
+	switch (data_type) {
+		case CD_ALEMBIC_F3:
+			memcpy(data_color, data, sizeof(float[3]) * numvert);
+			break;
+		case CD_ALEMBIC_FLOAT:
+			for (int i = 0; i < numvert; i++) {
+				copy_v3_fl(data_color[i], ((float *)data)[i]);
+			}
+			break;
+		case CD_ALEMBIC_I3:
+			for (int i = 0; i < numvert; i++) {
+				data_color[i][0] = (float)((int(*)[3])data)[i][0];
+				data_color[i][1] = (float)((int(*)[3])data)[i][1];
+				data_color[i][2] = (float)((int(*)[3])data)[i][2];
+			}
+			break;
+		case CD_ALEMBIC_INT:
+			for (int i = 0; i < numvert; i++) {
+				copy_v3_fl(data_color[i], (float)((int *)data)[i]);
+			}
+			break;
+		default:
+			break;
+	}
+}
+
 static void pointdensity_cache_object(Scene *scene,
                                       PointDensity *pd,
                                       Object *ob,
@@ -467,6 +531,9 @@ static void pointdensity_cache_object(Scene *scene,
 			break;
 		case TEX_PD_COLOR_VERTNOR:
 			pointdensity_cache_vertex_normal(pd, ob, dm, data_color);
+			break;
+		case TEX_PD_COLOR_VERTATTR:
+			pointdensity_cache_vertex_attr(pd, ob, dm, data_color);
 			break;
 	}
 
@@ -820,6 +887,7 @@ static int pointdensity_color(PointDensity *pd, TexResult *texres, float age, co
 		
 		switch (pd->ob_color_source) {
 			case TEX_PD_COLOR_VERTCOL:
+			case TEX_PD_COLOR_VERTATTR:
 				texres->talpha = true;
 				copy_v3_v3(&texres->tr, col);
 				texres->ta = texres->tin;
