@@ -1652,6 +1652,10 @@ typedef struct OpenVDBModifierData {
 	float density_max;
 	float flame_min;
 	float flame_max;
+
+	char velocity[3][64];  /* Velocity grid names */
+	float max_velocity;
+	float pad1;
 } OpenVDBModifierData;
 
 /* OpenVDBModifierData flags */
@@ -1662,6 +1666,7 @@ enum {
 	MOD_OPENVDB_SPLIT_COLOR     = (1 << 3),
 	MOD_OPENVDB_IS_RENDER       = (1 << 4),
 	MOD_OPENVDB_HAS_DENSITY     = (1 << 5),
+	MOD_OPENVDB_SPLIT_VELOCITY  = (1 << 6),
 };
 
 enum {

@@ -1169,6 +1169,7 @@ static void ptcache_smoke_openvdb_free(SmokeDomainSettings *sds)
 	vdbmd->max_heat = 0.0f;
 	vdbmd->max_flame = 0.0f;
 	vdbmd->max_color = 0.0f;
+	vdbmd->max_velocity = 0.0f;
 }
 
 static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void *smoke_v)
@@ -1494,7 +1495,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 					if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->color[i], color[i], res_min, res_max, sds->res,
 													   level, up_axis, front_axis, NULL))
 					{
-						modifier_setError((ModifierData *)vdbmd, "Flame grid is of the wrong type");
+						modifier_setError((ModifierData *)vdbmd, "Color grid is of the wrong type");
 					}
 				}
 
@@ -1519,6 +1520,44 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 													level, up_axis, front_axis, &vdbmd->max_color))
 				{
 					modifier_setError((ModifierData *)vdbmd, "Color grid is of the wrong type");
+				}
+			}
+		}
+
+		if (OpenVDB_has_grid(reader, vdbmd->velocity[0])) {
+			if (vdbmd->flags & MOD_OPENVDB_SPLIT_VELOCITY) {
+				float **velocity[3] = {&vx, &vy, &vz};
+				float len;
+
+				for (int i = 0; i < 3; i++) {
+					if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->velocity[i], velocity[i], res_min, res_max, sds->res,
+													   level, up_axis, front_axis, NULL))
+					{
+						modifier_setError((ModifierData *)vdbmd, "Velocity grid is of the wrong type");
+					}
+				}
+
+				/* Kinda inefficient maximum value calculation, but simplifies stuff a lot,
+				 * and besides, it is only an issue when using the non-standard split vector grids. */
+				vdbmd->max_velocity = 0.0f;
+
+				for (int i = 0; i < sds->total_cells; i++) {
+					len = (vx[i] * vx[i]) +
+					      (vy[i] * vy[i]) +
+					      (vz[i] * vz[i]);
+
+					if (len > vdbmd->max_velocity) {
+						vdbmd->max_velocity = len;
+					}
+				}
+
+				vdbmd->max_velocity = sqrt(vdbmd->max_velocity);
+			}
+			else {
+				if (!OpenVDB_import_grid_vec_extern(reader, vdbmd->velocity[0], &vx, &vy, &vz, res_min, res_max, sds->res,
+													level, up_axis, front_axis, &vdbmd->max_velocity))
+				{
+					modifier_setError((ModifierData *)vdbmd, "Velocity grid is of the wrong type");
 				}
 			}
 		}
