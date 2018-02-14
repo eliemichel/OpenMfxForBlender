@@ -777,6 +777,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "density")
         layout.prop(md, "heat")
         layout.prop(md, "flame")
+
+        layout.separator()
         layout.prop(md, "color1")
 
         if (md.use_split_color):
@@ -792,6 +794,23 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             col.prop(md, "color3", text="")
         else:
             layout.prop(md, "use_split_color")
+
+        layout.separator()
+        layout.prop(md, "velocity1")
+
+        if (md.use_split_velocity):
+            split = layout.split(percentage=0.333333)
+
+            col = split.column()
+
+            col.prop(md, "use_split_velocity")
+
+            col = split.column()
+
+            col.prop(md, "velocity2", text="")
+            col.prop(md, "velocity3", text="")
+        else:
+            layout.prop(md, "use_split_velocity")
 
         layout.separator()
 
@@ -858,6 +877,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
             if (md.color1 != 'NONE'):
                 box.label(text="Max color value: {:.6f}".format(md.max_color))
+
+            if (md.velocity1 != 'NONE'):
+                box.label(text="Max velocity value: {:.6f}".format(md.max_velocity))
 
     def PARTICLE_INSTANCE(self, layout, ob, md):
         layout.prop(md, "object")
