@@ -41,7 +41,7 @@ void MultiAddNode::convertToOperations(NodeConverter &converter, const Composito
 	bool useClamp = (this->getbNode()->custom2 & 2) != 0;
 
 	MultiAddOperation *prog = new MultiAddOperation(getNumberOfInputSockets());
-	prog->setUseValueAlphaMultiply(useAlphaPremultiply);
+	//prog->setUseValueAlphaMultiply(useAlphaPremultiply);
 	prog->setUseClamp(useClamp);
 	converter.addOperation(prog);
 
