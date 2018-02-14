@@ -88,21 +88,7 @@ ccl_device_inline bool shadow_blocked(KernelGlobals *kg, ShaderData *sd, ShaderD
 			Intersection *isect = hits;
 #ifdef __VOLUME__
 			PathState ps = *state;
-			/* Remove all non-overlapping volumes from the stack. */
-			for(int i = 0; ps.volume_stack[i].shader != SHADER_NONE; ++i) {
-				if(ps.volume_stack[i].t_exit < sd->ray_length || ps.volume_stack[i].t_enter > sd->ray_length) {
-					int j = i;
-					/* shift back next stack entries */
-					do {
-						ps.volume_stack[j] = ps.volume_stack[j+1];
-						++j;
-					}
-					while(ps.volume_stack[j].shader != SHADER_NONE);
-					--i;
-				}
-				ps.volume_stack[i].t_enter = 0.0f;
-				ps.volume_stack[i].t_exit = FLT_MAX;
-			}
+			kernel_volume_branch_stack(sd->ray_length, ps.volume_stack);
 #endif
 #	ifndef __KERNEL_GPU__
 			qsort(hits, num_hits, sizeof(Intersection), intersections_compare);
@@ -242,21 +228,7 @@ ccl_device_noinline bool shadow_blocked(KernelGlobals *kg,
 			int bounce = state->transparent_bounce;
 #ifdef __VOLUME__
 			PathState ps = *state;
-			/* Remove all non-overlapping volumes from the stack. */
-			for(int i = 0; ps.volume_stack[i].shader != SHADER_NONE; ++i) {
-				if(ps.volume_stack[i].t_exit < sd->ray_length || ps.volume_stack[i].t_enter > sd->ray_length) {
-					int j = i;
-					/* shift back next stack entries */
-					do {
-						ps.volume_stack[j] = ps.volume_stack[j+1];
-						++j;
-					}
-					while(ps.volume_stack[j].shader != SHADER_NONE);
-					--i;
-				}
-				ps.volume_stack[i].t_enter = 0.0f;
-				ps.volume_stack[i].t_exit = FLT_MAX;
-			}
+			kernel_volume_branch_stack(sd->ray_length, ps.volume_stack);
 #endif
 
 			for (;;) {

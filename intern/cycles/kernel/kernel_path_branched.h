@@ -449,6 +449,8 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 					VolumeIntegrateResult result = kernel_volume_decoupled_scatter(kg,
 						&ps, &pray, &sd, &tp, rphase, rscatter, &volume_segment, NULL, false);
 
+					kernel_volume_branch_stack(sd.ray_length, ps.volume_stack);
+
 					(void)result;
 					kernel_assert(result == VOLUME_PATH_SCATTERED);
 
@@ -508,6 +510,8 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 				VolumeIntegrateResult result = kernel_volume_integrate(
 					kg, &ps, &sd, &volume_ray, &L, &tp, rng, heterogeneous);
+
+				kernel_volume_branch_stack(sd.ray_length, ps.volume_stack);
 
 #ifdef __VOLUME_SCATTER__
 				if(result == VOLUME_PATH_SCATTERED) {

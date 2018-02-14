@@ -61,6 +61,26 @@ ccl_device_inline bool volume_shader_extinction_sample(KernelGlobals *kg,
 	return true;
 }
 
+ccl_device_inline void kernel_volume_branch_stack(float distance, VolumeStack *stack)
+{
+	/* Remove all non-overlapping volumes from the stack.
+	   Set all other volumes to go from zero to infinity.
+	 */
+	for (int i = 0; stack[i].shader != SHADER_NONE; ++i) {
+		if (stack[i].t_exit <distance ||stack[i].t_enter > distance) {
+			int j = i;
+			/* shift back next stack entries */
+			do {
+				stack[j] = stack[j + 1];
+				++j;
+			} while(stack[j].shader != SHADER_NONE);
+			--i;
+		}
+		stack[i].t_enter = 0.0f;
+		stack[i].t_exit = FLT_MAX;
+	}
+}
+
 /* evaluate shader to get absorption, scattering and emission at P */
 ccl_device_inline bool volume_shader_sample(KernelGlobals *kg,
                                             ShaderData *sd,
