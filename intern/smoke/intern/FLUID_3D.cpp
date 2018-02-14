@@ -78,21 +78,21 @@ FLUID_3D::FLUID_3D(int *res, float dx, float dtdef, int init_heat, int init_fire
 	// allocate arrays
 	_totalCells   = _xRes * _yRes * _zRes;
 	_slabSize = _xRes * _yRes;
-	_xVelocity    = new float[_totalCells];
-	_yVelocity    = new float[_totalCells];
-	_zVelocity    = new float[_totalCells];
-	_xVelocityOb  = new float[_totalCells];
-	_yVelocityOb  = new float[_totalCells];
-	_zVelocityOb  = new float[_totalCells];
-	_xVelocityOld = new float[_totalCells];
-	_yVelocityOld = new float[_totalCells];
-	_zVelocityOld = new float[_totalCells];
-	_xForce       = new float[_totalCells];
-	_yForce       = new float[_totalCells];
-	_zForce       = new float[_totalCells];
-	_density      = new float[_totalCells];
-	_densityOld   = new float[_totalCells];
-	_obstacles    = new unsigned char[_totalCells]; // set 0 at end of step
+	_xVelocity    = new float[_totalCells]();
+	_yVelocity    = new float[_totalCells]();
+	_zVelocity    = new float[_totalCells]();
+	_xVelocityOb  = new float[_totalCells]();
+	_yVelocityOb  = new float[_totalCells]();
+	_zVelocityOb  = new float[_totalCells]();
+	_xVelocityOld = new float[_totalCells]();
+	_yVelocityOld = new float[_totalCells]();
+	_zVelocityOld = new float[_totalCells]();
+	_xForce       = new float[_totalCells]();
+	_yForce       = new float[_totalCells]();
+	_zForce       = new float[_totalCells]();
+	_density      = new float[_totalCells]();
+	_densityOld   = new float[_totalCells]();
+	_obstacles    = new unsigned char[_totalCells](); // set 0 at end of step
 
 	// For threaded version:
 	_xVelocityTemp = new float[_totalCells];
@@ -101,26 +101,7 @@ FLUID_3D::FLUID_3D(int *res, float dx, float dtdef, int init_heat, int init_fire
 	_densityTemp   = new float[_totalCells];
 
 	// DG TODO: check if alloc went fine
-
-	for (int x = 0; x < _totalCells; x++)
-	{
-		_density[x]      = 0.0f;
-		_densityOld[x]   = 0.0f;
-		_xVelocity[x]    = 0.0f;
-		_yVelocity[x]    = 0.0f;
-		_zVelocity[x]    = 0.0f;
-		_xVelocityOb[x]  = 0.0f;
-		_yVelocityOb[x]  = 0.0f;
-		_zVelocityOb[x]  = 0.0f;
-		_xVelocityOld[x] = 0.0f;
-		_yVelocityOld[x] = 0.0f;
-		_zVelocityOld[x] = 0.0f;
-		_xForce[x]       = 0.0f;
-		_yForce[x]       = 0.0f;
-		_zForce[x]       = 0.0f;
-		_obstacles[x]    = false;
-	}
-
+	
 	/* heat */
 	_heat = _heatOld = _heatTemp = NULL;
 	if (init_heat) {
@@ -155,39 +136,22 @@ FLUID_3D::FLUID_3D(int *res, float dx, float dtdef, int init_heat, int init_fire
 void FLUID_3D::initHeat()
 {
 	if (!_heat) {
-		_heat         = new float[_totalCells];
-		_heatOld      = new float[_totalCells];
+		_heat         = new float[_totalCells]();
+		_heatOld      = new float[_totalCells]();
 		_heatTemp      = new float[_totalCells];
-
-		for (int x = 0; x < _totalCells; x++)
-		{
-			_heat[x]         = 0.0f;
-			_heatOld[x]      = 0.0f;
-		}
 	}
 }
 
 void FLUID_3D::initFire()
 {
 	if (!_flame) {
-		_flame		= new float[_totalCells];
-		_fuel		= new float[_totalCells];
-		_fuelTemp	= new float[_totalCells];
-		_fuelOld	= new float[_totalCells];
-		_react		= new float[_totalCells];
-		_reactTemp	= new float[_totalCells];
-		_reactOld	= new float[_totalCells];
-
-		for (int x = 0; x < _totalCells; x++)
-		{
-			_flame[x]		= 0.0f;
-			_fuel[x]		= 0.0f;
-			_fuelTemp[x]	= 0.0f;
-			_fuelOld[x]		= 0.0f;
-			_react[x]		= 0.0f;
-			_reactTemp[x]	= 0.0f;
-			_reactOld[x]	= 0.0f;
-		}
+		_flame		= new float[_totalCells]();
+		_fuel		= new float[_totalCells]();
+		_fuelTemp	= new float[_totalCells]();
+		_fuelOld	= new float[_totalCells]();
+		_react		= new float[_totalCells]();
+		_reactTemp	= new float[_totalCells]();
+		_reactOld	= new float[_totalCells]();
 	}
 }
 
@@ -195,23 +159,20 @@ void FLUID_3D::initColors(float init_r, float init_g, float init_b)
 {
 	if (!_color_r) {
 		_color_r		= new float[_totalCells];
-		_color_rOld		= new float[_totalCells];
+		_color_rOld		= new float[_totalCells]();
 		_color_rTemp	= new float[_totalCells];
-		_color_g		= new float[_totalCells];
+		_color_g		= new float[_totalCells]();
 		_color_gOld		= new float[_totalCells];
 		_color_gTemp	= new float[_totalCells];
-		_color_b		= new float[_totalCells];
+		_color_b		= new float[_totalCells]();
 		_color_bOld		= new float[_totalCells];
 		_color_bTemp	= new float[_totalCells];
 
 		for (int x = 0; x < _totalCells; x++)
 		{
 			_color_r[x]		= _density[x] * init_r;
-			_color_rOld[x]	= 0.0f;
 			_color_g[x]		= _density[x] * init_g;
-			_color_gOld[x]	= 0.0f;
 			_color_b[x]		= _density[x] * init_b;
-			_color_bOld[x]	= 0.0f;
 		}
 	}
 }
