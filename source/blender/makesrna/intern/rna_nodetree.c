@@ -3091,6 +3091,8 @@ static int point_density_vertex_color_source_from_shader(NodeShaderTexPointDensi
 			return TEX_PD_COLOR_VERTWEIGHT;
 		case SHD_POINTDENSITY_COLOR_VERTNOR:
 			return TEX_PD_COLOR_VERTNOR;
+		case SHD_POINTDENSITY_COLOR_VERTATTR:
+			return TEX_PD_COLOR_VERTATTR;
 		default:
 			BLI_assert(!"Unknown color source");
 			return TEX_PD_COLOR_CONSTANT;
@@ -4138,6 +4140,8 @@ static void def_sh_tex_pointdensity(StructRNA *srna)
 	    {SHD_POINTDENSITY_COLOR_VERTWEIGHT, "VERTEX_WEIGHT", 0, "Vertex Weight", "Vertex group weight"},
 	    {SHD_POINTDENSITY_COLOR_VERTNOR, "VERTEX_NORMAL", 0, "Vertex Normal",
 	                                     "XYZ normal vector mapped to RGB colors"},
+	    {SHD_POINTDENSITY_COLOR_VERTATTR, "VERTEX_ATTRIBUTE", 0, "Vertex Attribute",
+	                                      "Alembic vertex attribute mapped to color"},
 		{0, NULL, 0, NULL, NULL}
 	};
 

@@ -1669,6 +1669,7 @@ static void rna_def_texture_pointdensity(BlenderRNA *brna)
 		{TEX_PD_COLOR_VERTCOL, "VERTEX_COLOR", 0, "Vertex Color", "Vertex color layer"},
 		{TEX_PD_COLOR_VERTWEIGHT, "VERTEX_WEIGHT", 0, "Vertex Weight", "Vertex group weight"},
 		{TEX_PD_COLOR_VERTNOR, "VERTEX_NORMAL", 0, "Vertex Normal", "XYZ normal vector mapped to RGB colors"},
+		{TEX_PD_COLOR_VERTATTR, "VERTEX_ATTRIBUTE", 0, "Vertex Attribute", "Alembic vertex attribute mapped to color"},
 		{0, NULL, 0, NULL, NULL}
 	};
 	
