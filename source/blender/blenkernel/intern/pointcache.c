@@ -2709,16 +2709,16 @@ static void ptcache_find_frames_around(PTCacheID *pid, unsigned int frame, int *
 			cfra1--;
 
 		if (cfra1 < pid->cache->startframe)
-			cfra1 = -1;
+			cfra1 = 0;
 
 		while (cfra2 <= pid->cache->endframe && !BKE_ptcache_id_exist(pid, cfra2))
 			cfra2++;
 
 		if (cfra2 > pid->cache->endframe)
-			cfra2 = -1;
+			cfra2 = 0;
 
 		if (cfra1 && !cfra2) {
-			*fra1 = -1;
+			*fra1 = 0;
 			*fra2 = cfra1;
 		}
 		else {
@@ -2743,7 +2743,7 @@ static void ptcache_find_frames_around(PTCacheID *pid, unsigned int frame, int *
 		}
 
 		if (!pm2) {
-			*fra1 = -1;
+			*fra1 = 0;
 			*fra2 = pm->frame;
 		}
 		else {
@@ -3130,14 +3130,17 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 	SmokeModifierData *smd;
 	SmokeDomainSettings *sds;
 	OpenVDBModifierData *vdbmd;
-	int cfrai = (int)floor(cfra), cfra1 = -1, cfra2 = -1;
+	int cfrai = (int)floor(cfra), cfra1 = 0, cfra2 = 0;
 	int ret = 0;
+	int invalid_frame = (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) ? -1 : 0;
 
 #if defined(WITH_OPENVDB) && defined(WITH_SMOKE)
 	if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) {
 		smd = (SmokeModifierData *)pid->calldata;
 		sds = smd->domain;
 		vdbmd = sds->vdb;
+
+		cfra1 = cfra2 = -1;
 
 		if (cfrai < pid->cache->startframe || cfrai > pid->cache->endframe) {
 			sds->total_cells = 0;
@@ -3172,11 +3175,11 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 	}
 
 	/* no exact cache frame found so try to find cached frames around cfra */
-	if (cfra1 < 0) {
+	if (cfra1 == invalid_frame) {
 		ptcache_find_frames_around(pid, cfrai, &cfra1, &cfra2);
 	}
 
-	if (cfra1 < 0 && cfra2 < 0) {
+	if (cfra1 == invalid_frame && cfra2 == invalid_frame) {
 		return 0;
 	}
 
@@ -3184,16 +3187,16 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 	if (no_extrapolate_old) {
 		if (cfra1 == 0 && cfra2 && cfra2 <= pid->cache->simframe)
 			return 0;
-		if (cfra1 >= 0 && cfra1 == cfra2)
+		if (cfra1 > invalid_frame && cfra1 == cfra2)
 			return 0;
 	}
 	else {
 		/* avoid calling interpolate between the same frame values */
-		if (cfra1 >= 0 && cfra1 == cfra2)
+		if (cfra1 > invalid_frame && cfra1 == cfra2)
 			cfra1 = 0;
 	}
 
-	if (cfra1 >= 0) {
+	if (cfra1 > invalid_frame) {
 		if (pid->file_type == PTCACHE_FILE_OPENVDB && pid->read_openvdb_stream) {
 			if (!ptcache_read_openvdb_stream(pid, cfra1)) {
 				return 0;
@@ -3237,8 +3240,8 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 		}
 	}
 
-	if (cfra1 >= 0)
-		ret = (cfra2 >= 0 ? PTCACHE_READ_INTERPOLATED : PTCACHE_READ_EXACT);
+	if (cfra1 > invalid_frame)
+		ret = ((cfra2 > invalid_frame) ? PTCACHE_READ_INTERPOLATED : PTCACHE_READ_EXACT);
 	else if (cfra2) {
 		ret = PTCACHE_READ_OLD;
 		pid->cache->simframe = cfra2;
