@@ -31,11 +31,6 @@
 
 #include "node_composite_util.h"
 
-/* **************** MULTI ADD RGB ******************** */
-static bNodeSocketTemplate cmp_node_multi_add_in[] = {
-	{ SOCK_FLOAT, 1, N_("Fac"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR },
-	{ -1, 0, "" }
-};
 static bNodeSocketTemplate cmp_node_multi_add_out[] = {
 	{ SOCK_RGBA, 0, N_("Image") },
 	{ -1, 0, "" }
@@ -56,7 +51,7 @@ void register_node_type_cmp_multiadd()
 	static bNodeType ntype;
 
 	cmp_node_type_base(&ntype, CMP_NODE_MULTIADD, "Multi Add", NODE_CLASS_OP_COLOR, NODE_PREVIEW);
-	node_type_socket_templates(&ntype, cmp_node_multi_add_in, cmp_node_multi_add_out);
+	node_type_socket_templates(&ntype, NULL, cmp_node_multi_add_out);
 	node_type_init(&ntype, init);
 	node_type_label(&ntype, node_multi_add_label);
 

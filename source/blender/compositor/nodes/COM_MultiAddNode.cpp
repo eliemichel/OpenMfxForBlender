@@ -41,12 +41,11 @@ void MultiAddNode::convertToOperations(NodeConverter &converter, const Composito
 	bool useClamp = (this->getbNode()->custom2 & 2) != 0;
 
 	MultiAddOperation *prog = new MultiAddOperation(getNumberOfInputSockets());
-	//prog->setUseValueAlphaMultiply(useAlphaPremultiply);
 	prog->setUseClamp(useClamp);
 	converter.addOperation(prog);
 
 	converter.mapInputSocket(valueSocket, prog->getInputSocket(0));
-	for (int i = 1; i < getNumberOfInputSockets(); i++) {
+	for (int i = 0; i < getNumberOfInputSockets(); i++) {
 		converter.mapInputSocket(this->getInputSocket(i), prog->getInputSocket(i));
 	}
 	converter.mapOutputSocket(outputSocket, prog->getOutputSocket(0));

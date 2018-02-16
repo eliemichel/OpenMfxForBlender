@@ -33,8 +33,6 @@ protected:
 	/**
 	* Prefetched reference to the inputProgram
 	*/
-	SocketReader *m_inputValueOperation;
-	//bool m_valueAlphaMultiply;
 	bool m_useClamp;
 
 	inline void clampIfNeeded(float color[4])
@@ -51,7 +49,7 @@ public:
 	/**
 	* Default constructor
 	*/
-	MultiAddOperation(size_t num_inputs = 3);
+	MultiAddOperation(size_t num_inputs = 2);
 
 	std::vector<SocketReader *> inputs;
 
@@ -72,9 +70,6 @@ public:
 
 	void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
 
-
-	//void setUseValueAlphaMultiply(const bool value) { this->m_valueAlphaMultiply = value; }
-	//inline bool useValueAlphaMultiply() { return this->m_valueAlphaMultiply; }
 	void setUseClamp(bool value) { this->m_useClamp = value; }
 };
 

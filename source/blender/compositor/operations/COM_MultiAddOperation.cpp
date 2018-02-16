@@ -30,23 +30,18 @@ extern "C" {
 /* ******** Multi Add Operation ******** */
 MultiAddOperation::MultiAddOperation(size_t num_inputs) : NodeOperation()
 {
-
-	this->addInputSocket(COM_DT_VALUE);
 	for (size_t i = 0; i < num_inputs; i++) {
 		this->addInputSocket(COM_DT_COLOR);
 	}
 	inputs.resize(num_inputs);
 	this->addOutputSocket(COM_DT_COLOR);
-	this->m_inputValueOperation = NULL;
-	//this->setUseValueAlphaMultiply(false);
 	this->setUseClamp(false);
 }
 
 void MultiAddOperation::initExecution()
 {
-	this->m_inputValueOperation = this->getInputSocketReader(0);
 	for (size_t i = 0; i < inputs.size(); i++) {
-		inputs[i] = this->getInputSocketReader(i+1);
+		inputs[i] = this->getInputSocketReader(i);
 	}
 }
 
@@ -56,13 +51,8 @@ void MultiAddOperation::executePixelSampled(float output[4], float x, float y, P
 	float inputValue[4];
 	float inputColor[4];
 
-	this->m_inputValueOperation->readSampled(inputValue, x, y, sampler);
 	SocketReader *final_input = inputs[arrsize - 1];
 	float value = inputValue[0];
-	//if (this->useValueAlphaMultiply()) {
-	//	final_input->readSampled(inputColor, x, y, sampler);
-	//	value *= inputColor[3];
-	//}
 
 	for (size_t i = 0; i < inputs.size(); i++) {
 		inputs[i]->readSampled(inputColor, x, y, sampler);
@@ -73,9 +63,9 @@ void MultiAddOperation::executePixelSampled(float output[4], float x, float y, P
 			output[3] = inputColor[3];
 		}
 		else {
-			output[0] += /*value **/ inputColor[0];
-			output[1] += /*value **/ inputColor[1];
-			output[2] += /*value **/ inputColor[2];
+			output[0] += inputColor[0];
+			output[1] += inputColor[1];
+			output[2] += inputColor[2];
 		}
 	}
 
@@ -88,24 +78,19 @@ void MultiAddOperation::determineResolution(unsigned int resolution[2], unsigned
 	unsigned int tempPreferredResolution[2] = { 0, 0 };
 	unsigned int tempResolution[2];
 
-	bool input_set = false;
-	for (size_t i = 1; i < inputs.size(); i++) {
+	for (size_t i = 0; i < inputs.size(); i++) {
 		socket = this->getInputSocket(i);
 		socket->determineResolution(tempResolution, tempPreferredResolution);
 		if ((tempResolution[0] != 0) && (tempResolution[1] != 0)) {
 			this->setResolutionInputSocketIndex(i);
-			input_set = true;
 			break;
 		}
 	}
-	if (!input_set)
-		this->setResolutionInputSocketIndex(0);
 	NodeOperation::determineResolution(resolution, preferredResolution);
 }
 
 void MultiAddOperation::deinitExecution()
 {
-	this->m_inputValueOperation = NULL;
 	for (size_t i = 0; i < inputs.size(); i++) {
 		inputs[i] = NULL;
 	}

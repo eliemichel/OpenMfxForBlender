@@ -174,9 +174,6 @@ static void node_composit_buts_multi_add(uiLayout *layout, bContext *UNUSUED(C),
 	col = uiLayoutColumn(layout, false);
 	row = uiLayoutRow(col, true);
 	uiItemR(row, ptr, "use_clamp", 0, NULL, ICON_NONE);
-	//if (ELEM(ntree->type, NTREE_COMPOSIT, NTREE_TEXTURE))
-	//	uiItemR(row, ptr, "use_alpha", 0, "", ICON_IMAGE_RGB_ALPHA);
-
 }
 
 static void node_buts_time(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
