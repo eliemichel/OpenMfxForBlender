@@ -1233,9 +1233,7 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
 		AttributeDescriptor desc = find_attribute(kg, sd, ATTR_STD_VOLUME_VELOCITY);
 		if (desc.offset != ATTR_STD_NOT_FOUND) {
 			float3 velocity = primitive_attribute_float3(kg, sd, desc, NULL, NULL);
-			if (velocity.x != 0.0f || velocity.y != 0.0f || velocity.z != 0.0f) {
-				sd->P = sd->P - velocity * (sd->time - 0.5f) * kernel_data.cam.shuttertime;
-			}
+			sd->P = sd->P - velocity * (sd->time + kernel_data.cam.motion_offset) * kernel_data.cam.shuttertime;
 		}
 	}
 

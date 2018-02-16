@@ -1112,7 +1112,8 @@ typedef struct KernelCamera {
 	int rolling_shutter_type;
 	float rolling_shutter_duration;
 
-	int pad;
+	/* 0.0 = start on frame, -1.0f = end on frame */
+	float motion_offset; 
 } KernelCamera;
 static_assert_align(KernelCamera, 16);
 

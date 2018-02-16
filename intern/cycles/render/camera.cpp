@@ -370,6 +370,7 @@ void Camera::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 	kcam->bladesrotation = bladesrotation;
 
 	/* motion blur */
+	kcam->motion_offset = motion_position == MOTION_POSITION_START ? -1.0f : motion_position == MOTION_POSITION_CENTER ? -0.5f : 0.0f;
 #ifdef __CAMERA_MOTION__
 	kcam->shuttertime = (need_motion == Scene::MOTION_BLUR) ? shuttertime: -1.0f;
 
