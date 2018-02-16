@@ -165,7 +165,7 @@ static void node_buts_mix_rgb(uiLayout *layout, bContext *UNUSED(C), PointerRNA 
 	uiItemR(col, ptr, "use_clamp", 0, NULL, ICON_NONE);
 }
 
-static void node_composit_buts_multi_add(uiLayout *layout, bContext *UNUSUED(C), PointerRNA *ptr)
+static void node_composit_buts_multi_add(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
 	uiLayout *row, *col;
 
