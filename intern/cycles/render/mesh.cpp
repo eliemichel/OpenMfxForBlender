@@ -1517,6 +1517,10 @@ void MeshManager::device_update_attributes(Device *device, DeviceScene *dscene, 
 
 		foreach(Shader *shader, mesh->used_shaders) {
 			mesh_attributes[i].add(shader->attributes);
+			/* motion blur for volumes */
+			if(shader->has_volume_spatial_varying && scene->need_motion() == Scene::MOTION_BLUR) {
+				mesh_attributes[i].add(ATTR_STD_VOLUME_VELOCITY);
+			}
 		}
 	}
 
