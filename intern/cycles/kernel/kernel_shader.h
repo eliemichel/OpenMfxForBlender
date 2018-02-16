@@ -1227,6 +1227,16 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
                                           int path_flag,
                                           ShaderContext ctx)
 {
+	/* motion blur for volumes */
+	if((kernel_data.cam.shuttertime != -1.0f) && sd->object != OBJECT_NONE) {
+		/* Calling find_attribute every time is probably excessive. This should be cached. */
+		AttributeDescriptor desc = find_attribute(kg, sd, ATTR_STD_VOLUME_VELOCITY);
+		if (desc.offset != ATTR_STD_NOT_FOUND) {
+			float3 velocity = primitive_attribute_float3(kg, sd, desc, NULL, NULL);
+			sd->P = sd->P - velocity * (sd->time + kernel_data.cam.motion_offset) * kernel_data.cam.shuttertime;
+		}
+	}
+
 	/* reset closures once at the start, we will be accumulating the closures
 	 * for all volumes in the stack into a single array of closures */
 	sd->num_closure = 0;

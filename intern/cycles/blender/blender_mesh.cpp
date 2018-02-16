@@ -323,6 +323,9 @@ static void create_mesh_volume_attributes(Scene *scene,
 		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_HEAT, frame);
 	if(mesh->need_attribute(scene, ATTR_STD_VOLUME_VELOCITY))
 		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_VELOCITY, frame);
+	else if (scene->need_motion() == Scene::MOTION_BLUR) {
+		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_VELOCITY, frame);
+	}
 }
 
 /* Create vertex color attributes. */
