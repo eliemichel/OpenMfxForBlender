@@ -912,6 +912,13 @@ class CyclesMaterialSettings(bpy.types.PropertyGroup):
                 default='MULTIPLE_IMPORTANCE',
                 )
 
+        cls.velocity_scale = FloatProperty(
+                name="Velocity Scale",
+                description="Changes the magnitude of motion blur effects based on the velocity attribute",
+                min=0.0,
+                default=1.0
+        )
+
         cls.ao_factor = FloatProperty(
                 name="Factor",
                 description="",

@@ -47,7 +47,7 @@ CCL_NAMESPACE_BEGIN
 #define RAMP_TABLE_SIZE		256
 #define SHUTTER_TABLE_SIZE		256
 #define PARTICLE_SIZE 		5
-#define SHADER_SIZE		15
+#define SHADER_SIZE		16
 #define ID_SLOT_SIZE	2
 
 #define BSSRDF_MIN_RADIUS			1e-8f
@@ -1114,6 +1114,8 @@ typedef struct KernelCamera {
 
 	/* 0.0 = start on frame, -1.0f = end on frame */
 	float motion_offset; 
+	float inv_fps;
+	float pad1, pad2, pad3;
 } KernelCamera;
 static_assert_align(KernelCamera, 16);
 
