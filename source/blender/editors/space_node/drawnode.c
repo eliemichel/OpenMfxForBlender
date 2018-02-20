@@ -169,8 +169,6 @@ static void node_composit_buts_multi_add(uiLayout *layout, bContext *UNUSED(C), 
 {
 	uiLayout *row, *col;
 
-	bNodeTree *ntree = (bNodeTree *)ptr->id.data;
-
 	col = uiLayoutColumn(layout, false);
 	row = uiLayoutRow(col, true);
 	uiItemR(row, ptr, "use_clamp", 0, NULL, ICON_NONE);

@@ -2691,14 +2691,12 @@ void NODE_OT_cryptomatte_remove_socket(wmOperatorType *ot)
 }
 
 /* ****************** Multi Add - Add Socket ****************** */
-static int node_multi_add_add_socket_exec(bContext *C, wmOperator *op)
+static int node_multi_add_add_socket_exec(bContext *C)
 {
-	Scene *scene = CTX_data_scene(C);
 	SpaceNode *snode = CTX_wm_space_node(C);
 	PointerRNA ptr = CTX_data_pointer_get(C, "node");
 	bNodeTree *ntree = NULL;
 	bNode *node = NULL;
-	char file_path[MAX_NAME];
 	if (ptr.data) {
 		node = ptr.data;
 		ntree = ptr.id.data;
@@ -2729,7 +2727,7 @@ void NODE_OT_multi_add_add_socket(wmOperatorType *ot)
 
 /* ****************** Multi Add - Remove Socket ****************** */
 
-static int node_multi_add_remove_socket_exec(bContext *C, wmOperator *op)
+static int node_multi_add_remove_socket_exec(bContext *C)
 {
 	SpaceNode *snode = CTX_wm_space_node(C);
 	PointerRNA ptr = CTX_data_pointer_get(C, "node");
