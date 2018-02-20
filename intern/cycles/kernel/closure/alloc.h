@@ -67,6 +67,7 @@ ccl_device_inline ShaderClosure *bsdf_alloc(ShaderData *sd, int size, float3 wei
 
 	float sample_weight = fabsf(average(weight));
 	sc->sample_weight = sample_weight;
+	sc->N = make_float3(0.0f, 0.0f, 0.0f);
 	return (sample_weight >= CLOSURE_WEIGHT_CUTOFF) ? sc : NULL;
 }
 
@@ -83,6 +84,7 @@ ccl_device_inline ShaderClosure *bsdf_alloc_osl(ShaderData *sd, int size, float3
 	float sample_weight = fabsf(average(weight));
 	sc->weight = weight;
 	sc->sample_weight = sample_weight;
+	sc->N = make_float3(0.0f, 0.0f, 0.0f);
 	return (sample_weight >= CLOSURE_WEIGHT_CUTOFF) ? sc : NULL;
 }
 #endif

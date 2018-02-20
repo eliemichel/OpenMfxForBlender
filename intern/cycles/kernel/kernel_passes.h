@@ -42,6 +42,13 @@ ccl_device_inline void kernel_write_pass_float3(ccl_global float *buffer, int sa
 #endif  /* __SPLIT_KERNEL__ */
 }
 
+ccl_device_inline void kernel_write_pass_float3_unaligned(ccl_global float *buffer, int sample, float3 value)
+{
+	buffer[0] = (sample == 0)? value.x : buffer[0] + value.x;
+	buffer[1] = (sample == 0)? value.y : buffer[1] + value.y;
+	buffer[2] = (sample == 0)? value.z : buffer[2] + value.z;
+}
+
 ccl_device_inline void kernel_write_pass_float4(ccl_global float *buffer, int sample, float4 value)
 {
 #if defined(__SPLIT_KERNEL__)
@@ -58,6 +65,65 @@ ccl_device_inline void kernel_write_pass_float4(ccl_global float *buffer, int sa
 	ccl_global float4 *buf = (ccl_global float4*)buffer;
 	*buf = (sample == 0)? value: *buf + value;
 #endif  /* __SPLIT_KERNEL__ */
+}
+
+ccl_device_inline void kernel_write_pass_float_variance(ccl_global float *buffer, int sample, float value)
+{
+	kernel_write_pass_float(buffer, sample, value);
+	kernel_write_pass_float(buffer + 1, sample, value*value);
+}
+
+ccl_device_inline void kernel_write_pass_float3_variance(ccl_global float *buffer, int sample, float3 value)
+{
+	kernel_write_pass_float3_unaligned(buffer, sample, value);
+	kernel_write_pass_float3_unaligned(buffer + 3, sample, value*value);
+}
+
+ccl_device_inline void kernel_update_denoising_features(KernelGlobals *kg,
+                                                        ShaderData *sd,
+                                                        ccl_addr_space PathState *state,
+                                                        PathRadiance *L)
+{
+	if(state->denoising_feature_weight == 0.0f) {
+		return;
+	}
+
+	L->denoising_depth += ensure_finite(state->denoising_feature_weight * sd->ray_length);
+
+	/* Skip implicitly transparent surfaces. */
+	if(sd->shader_flag & SD_SHADER_HAS_ONLY_VOLUME) {
+		return;
+	}
+
+	float3 normal = make_float3(0.0f, 0.0f, 0.0f);
+	float3 albedo = make_float3(0.0f, 0.0f, 0.0f);
+	float sum_weight = 0.0f, sum_nonspecular_weight = 0.0f;
+
+	for(int i = 0; i < sd->num_closure; i++) {
+		ShaderClosure *sc = &sd->closure[i];
+
+		if(!CLOSURE_IS_BSDF_OR_BSSRDF(sc->type))
+			continue;
+
+		/* All closures contribute to the normal feature, but only diffuse-like ones to the albedo. */
+		normal += sc->N * sc->sample_weight;
+		sum_weight += sc->sample_weight;
+		if(bsdf_get_roughness_sqr(sc) > sqr(0.075f)) {
+			albedo += sc->weight;
+			sum_nonspecular_weight += sc->sample_weight;
+		}
+	}
+
+	/* Wait for next bounce if 75% or more sample weight belongs to specular-like closures. */
+	if((sum_weight == 0.0f) || (sum_nonspecular_weight*4.0f > sum_weight)) {
+		if(sum_weight != 0.0f) {
+			normal /= sum_weight;
+		}
+		L->denoising_normal += ensure_finite3(state->denoising_feature_weight * normal);
+		L->denoising_albedo += ensure_finite3(state->denoising_feature_weight * albedo);
+
+		state->denoising_feature_weight = 0.0f;
+	}
 }
 
 ccl_device_inline void kernel_write_id_slots(ccl_global float *buffer, int num_slots, float id, float weight, bool init)
@@ -361,6 +427,48 @@ ccl_device_inline void kernel_write_light_passes(KernelGlobals *kg, ccl_global f
 	if(flag & PASS_MIST)
 		kernel_write_pass_float(buffer + kernel_data.film.pass_mist, sample, 1.0f - L->mist);
 #endif
+}
+
+ccl_device_inline void kernel_write_result(KernelGlobals *kg, ccl_global float *buffer, int sample, PathRadiance *L, float L_transparent, bool is_shadowcatcher)
+{
+	if(!L) {
+		kernel_write_pass_float4(buffer, sample, make_float4(0.0f, 0.0f, 0.0f, 0.0f));
+		return;
+	}
+
+	float3 L_sum;
+#ifdef __SHADOW_TRICKS__
+	if(is_shadowcatcher) {
+		L_sum = path_radiance_sum_shadowcatcher(kg, L, &L_transparent);
+	}
+	else
+#endif  /* __SHADOW_TRICKS__ */
+	{
+		L_sum = path_radiance_clamp_and_sum(kg, L);
+	}
+
+	kernel_write_light_passes(kg, buffer, L, sample);
+
+	if(kernel_data.film.pass_denoising) {
+		kernel_write_pass_float3_variance(buffer + kernel_data.film.pass_denoising, sample, L->denoising_normal);
+		kernel_write_pass_float3_variance(buffer + kernel_data.film.pass_denoising + 6, sample, L->denoising_albedo);
+		kernel_write_pass_float_variance(buffer + kernel_data.film.pass_denoising + 12, sample, L->denoising_depth);
+
+		/* Shadowing */
+		float path_total = ensure_finite(average(L->path_total));
+		float path_total_shaded = ensure_finite(average(L->path_total_shaded));
+
+		int shadow_offset = kernel_data.film.pass_denoising + ((sample & 1)? 17 : 14);
+		kernel_write_pass_float(buffer + shadow_offset, sample/2, path_total);
+		kernel_write_pass_float(buffer + shadow_offset + 1, sample/2, path_total_shaded);
+
+		float ratio = path_total_shaded / max(path_total, 1e-7f);
+		kernel_write_pass_float(buffer + shadow_offset + 2, sample, ratio*ratio);
+
+		kernel_write_pass_float3_variance(buffer + kernel_data.film.pass_denoising + 20, sample, ensure_finite3(L_sum));
+	}
+
+	kernel_write_pass_float4(buffer, sample, make_float4(L_sum.x, L_sum.y, L_sum.z, 1.0f - L_transparent));
 }
 
 CCL_NAMESPACE_END
