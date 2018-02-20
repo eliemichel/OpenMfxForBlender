@@ -103,6 +103,7 @@ public:
 	bool heterogeneous_volume;
 	VolumeSampling volume_sampling_method;
 	int volume_interpolation_method;
+	float velocity_scale;
 
 	/* ao and shadow mix factors */
 	bool use_uniform_alpha;

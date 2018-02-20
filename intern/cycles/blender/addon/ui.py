@@ -1393,6 +1393,7 @@ class CyclesMaterial_PT_settings(CyclesButtonsPanel, Panel):
         sub.prop(cmat, "volume_sampling", text="")
         sub.prop(cmat, "volume_interpolation", text="")
         col.prop(cmat, "homogeneous_volume", text="Homogeneous")
+        col.prop(cmat, "velocity_scale", text="Velocity Scale")
 
         layout.separator()
         split = layout.split()

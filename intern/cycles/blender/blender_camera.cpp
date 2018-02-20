@@ -38,6 +38,7 @@ struct BlenderCamera {
 	float shuttertime;
 	Camera::MotionPosition motion_position;
 	array<float> shutter_curve;
+	float fps;
 
 	Camera::RollingShutterType rolling_shutter_type;
 	float rolling_shutter_duration;
@@ -95,6 +96,7 @@ static void blender_camera_init(BlenderCamera *bcam,
 	bcam->sensor_height = 18.0f;
 	bcam->sensor_fit = BlenderCamera::AUTO;
 	bcam->shuttertime = 1.0f;
+	bcam->fps = 24.0f;
 	bcam->motion_position = Camera::MOTION_POSITION_CENTER;
 	bcam->rolling_shutter_type = Camera::ROLLING_SHUTTER_NONE;
 	bcam->rolling_shutter_duration = 0.1f;
@@ -461,6 +463,7 @@ static void blender_camera_sync(Camera *cam, BlenderCamera *bcam, int width, int
 	cam->rolling_shutter_duration = bcam->rolling_shutter_duration;
 
 	cam->shutter_curve = bcam->shutter_curve;
+	cam->fps = bcam->fps;
 
 	/* border */
 	cam->border = bcam->border;
@@ -501,6 +504,7 @@ void BlenderSync::sync_camera(BL::RenderSettings& b_render,
 		                                     Camera::ROLLING_SHUTTER_NUM_TYPES,
 		                                     Camera::ROLLING_SHUTTER_NONE);
 	bcam.rolling_shutter_duration = RNA_float_get(&cscene, "rolling_shutter_duration");
+	bcam.fps = b_render.fps() / b_render.fps_base();
 
 	/* border */
 	if(b_render.use_border()) {
