@@ -219,6 +219,7 @@ DefNode( CompositorNode, CMP_NODE_SUNBEAMS,       def_cmp_sunbeams,       "SUNBE
 DefNode(CompositorNode,  CMP_NODE_MOTIONBLUR2D,   def_cmp_motionblur2d,   "MOTIONBLUR2D",   MotionBlur2D,     "Motion Blur 2D",    ""              )
 DefNode(CompositorNode,  CMP_NODE_OTHEREYE,       def_cmp_othereye,       "OTHEREYE",       OtherEye,         "Other Eye",         ""              )
 DefNode( CompositorNode, CMP_NODE_CRYPTOMATTE,    def_cmp_cryptomatte,    "CRYPTOMATTE",    Cryptomatte,      "Cryptomatte",       ""              )
+DefNode( CompositorNode, CMP_NODE_MULTIADD,		  def_cmp_multiadd,		  "MULTI_ADD",		MultiAdd,		  "Multi Add",		   ""			   )
 
 DefNode( TextureNode,    TEX_NODE_OUTPUT,         def_tex_output,         "OUTPUT",         Output,           "Output",            ""              )
 DefNode( TextureNode,    TEX_NODE_CHECKER,        0,                      "CHECKER",        Checker,          "Checker",           ""              )

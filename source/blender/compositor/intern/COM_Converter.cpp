@@ -88,6 +88,7 @@ extern "C" {
 #include "COM_MixNode.h"
 #include "COM_MovieClipNode.h"
 #include "COM_MovieDistortionNode.h"
+#include "COM_MultiAddNode.h"
 #include "COM_NormalNode.h"
 #include "COM_NormalizeNode.h"
 #include "COM_OutputFileNode.h"
@@ -417,6 +418,9 @@ Node *Converter::convert(bNode *b_node)
             break;
 		case CMP_NODE_CRYPTOMATTE:
 			node = new CryptomatteNode(b_node);
+			break;
+		case CMP_NODE_MULTIADD:
+			node = new MultiAddNode(b_node);
 			break;
 	}
 	return node;
