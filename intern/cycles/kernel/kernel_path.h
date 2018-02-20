@@ -98,7 +98,7 @@ ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
         state->flag |= PATH_RAY_AO;
 
         uint shadow_linking = object_shadow_linking(kg, sd->object);
-		if(!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow, shadow_linking))
+		if(!shadow_blocked(kg, sd, emission_sd, state, &light_ray, &ao_shadow, shadow_linking))
 			path_radiance_accum_ao(L, throughput, ao_alpha, ao_bsdf, ao_shadow, state->bounce);
 
         state->flag &= ~PATH_RAY_AO;

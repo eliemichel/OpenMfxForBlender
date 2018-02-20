@@ -1249,6 +1249,10 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
 	sd->object_flag = 0;
 
 	for(int i = 0; stack[i].shader != SHADER_NONE; i++) {
+		/* Skip volumes that don't overlap the current point. */
+		if(stack[i].t_enter > sd->ray_length || stack[i].t_exit < sd->ray_length) {
+			continue;
+		}
 		/* setup shaderdata from stack. it's mostly setup already in
 		 * shader_setup_from_volume, this switching should be quick */
 		sd->object = stack[i].object;
