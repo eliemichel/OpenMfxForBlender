@@ -79,6 +79,7 @@ public:
 	void reset(Device *device, BufferParams& params);
 
 	bool copy_from_device();
+	bool get_denoising_pass_rect(string passname, float exposure, int sample, int components, float *pixels);
 	bool get_pass_rect(PassType type, float exposure, int sample, int components, float *pixels);
 	bool get_aov_rect(ustring name, float exposure, int sample, int components, float *pixels);
 

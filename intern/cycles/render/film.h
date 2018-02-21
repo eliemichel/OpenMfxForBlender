@@ -86,6 +86,7 @@ public:
 	PassSettings();
 	bool modified(const PassSettings& other) const;
 
+	int get_denoising_offset() const;
 	int get_size() const;
 	Pass* get_pass(PassType type, int &offset);
 	AOV* get_aov(ustring name, int &offset);
@@ -93,6 +94,8 @@ public:
 	bool contains(PassType type) const;
 	void add(PassType type);
 	void add(AOV aov);
+
+	bool denoising_passes;
 
 protected:
 	array<Pass> passes;

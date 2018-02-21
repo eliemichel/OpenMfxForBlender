@@ -659,6 +659,9 @@ void BlenderSession::do_write_update_render_result(BL::RenderResult& b_rr,
 			else if(b_pass.name().substr(0, 4) == "AOV ") {
 				read = buffers->get_aov_rect(ustring(b_pass.name().substr(4)), exposure, sample, components, &pixels[0]);
 			}
+			else if(b_pass.name().substr(0, 10) == "Denoising ") {
+				read = buffers->get_denoising_pass_rect(b_pass.name(), exposure, sample, components, &pixels[0]);
+			}
 			if(!read) {
 				memset(&pixels[0], 0, pixels.size()*sizeof(float));
 			}

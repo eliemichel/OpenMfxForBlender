@@ -342,6 +342,7 @@ enum PathRayFlag {
 	PATH_RAY_SINGLE_PASS_DONE = 32768,
 	PATH_RAY_SHADOW_CATCHER_ONLY = 65536,
 	PATH_RAY_SHADOW_CATCHER = 131072,
+	PATH_RAY_STORE_SHADOW_INFO = 262144,
 };
 
 /* Closure Label */
@@ -483,6 +484,10 @@ typedef ccl_addr_space struct PathRadiance {
 	float4 shadow;
 	float mist;
 #endif
+
+	float3 denoising_normal;
+	float3 denoising_albedo;
+	float denoising_depth;
 
 #ifdef __SHADOW_TRICKS__
 	/* Total light reachable across the path, ignoring shadow blocked queries. */
@@ -742,12 +747,13 @@ typedef struct AttributeDescriptor {
 #define SHADER_CLOSURE_BASE \
 	float3 weight; \
 	ClosureType type; \
-	float sample_weight \
+	float sample_weight; \
+	float3 N
 
 typedef ccl_addr_space struct ccl_align(16) ShaderClosure {
 	SHADER_CLOSURE_BASE;
 
-	float data[14]; /* pad to 80 bytes */
+	float data[10]; /* pad to 80 bytes */
 } ShaderClosure;
 
 /* Shader Context
@@ -986,6 +992,8 @@ typedef struct PathState {
 	int transmission_bounce;
 	int transparent_bounce;
 
+	float denoising_feature_weight;
+
 	/* multiple importance sampling */
 	float min_ray_pdf; /* smallest bounce pdf over entire path up to now */
 	float ray_pdf;     /* last bounce pdf */
@@ -1169,6 +1177,11 @@ typedef struct KernelFilm {
 	float mist_start;
 	float mist_inv_depth;
 	float mist_falloff;
+
+	int pass_denoising;
+	int pass_pad0;
+	int pass_pad1;
+	int pass_pad2;
 
 	int pass_aov[32];
 	

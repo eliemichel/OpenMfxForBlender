@@ -38,6 +38,22 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* Returns the square of the roughness of the closure if it has roughness,
+ * 0 for singular closures and 1 otherwise. */
+ccl_device_inline float bsdf_get_roughness_sqr(const ShaderClosure *sc)
+{
+	if(CLOSURE_IS_BSDF_SINGULAR(sc->type)) {
+		return 0.0f;
+	}
+
+	if(CLOSURE_IS_BSDF_MICROFACET(sc->type)) {
+		MicrofacetBsdf *bsdf = (MicrofacetBsdf*) sc;
+		return bsdf->alpha_x*bsdf->alpha_y;
+	}
+
+	return 1.0f;
+}
+
 ccl_device_forceinline int bsdf_sample(KernelGlobals *kg,
                                        ShaderData *sd,
                                        const ShaderClosure *sc,

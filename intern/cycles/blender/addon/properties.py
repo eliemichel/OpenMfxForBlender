@@ -1415,6 +1415,13 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
                 default=True,
                 update=update_render_passes,
                 )
+
+        cls.write_denoising_data = BoolProperty(
+                name="Write Denoising Data",
+                description="Write denoising passes",
+                default=False,
+                update=update_render_passes,
+                )
     @classmethod
     def unregister(cls):
         del bpy.types.SceneRenderLayer.cycles
