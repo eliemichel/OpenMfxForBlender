@@ -186,7 +186,7 @@ static DupliObject *make_dupli(const DupliContext *ctx,
 	/* random number */
 	/* the logic here is designed to match Cycles */
 	if (ctx->object->dupli_id) {
-		dob->random_id = BLI_hash_int( ctx->object->dupli_id + index );
+		dob->random_id = BLI_hash_int(ctx->object->dupli_id + (unsigned int)index);
 	}
 	else {
 		dob->random_id = BLI_hash_string(ctx->object->id.name + 2);
