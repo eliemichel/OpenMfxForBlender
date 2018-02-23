@@ -312,21 +312,6 @@ if(UNIX AND NOT APPLE)
 
 elseif(WIN32)
 	set(TARGETDIR_VER ${BLENDER_VERSION})
-	## these aren't getting picked up properly
-	target_link_libraries( blender
-		# C:/dev/tangent/lib/win64_vc12/OpenImageIO/lib/OpenImageIO.lib
-		# C:/dev/tangent/lib/win64_vc12/OpenImageIO/lib/OpenImageIO_Util.lib
-		# C:/dev/tangent/lib/win64_vc12/boost/lib/libboost_chrono-vc120-mt-s-1_60.lib
-		# C:/dev/tangent/lib/win64_vc12/boost/lib/libboost_date_time-vc120-mt-s-1_60.lib
-		# C:/dev/tangent/lib/win64_vc12/boost/lib/libboost_filesystem-vc120-mt-s-1_60.lib
-		# C:/dev/tangent/lib/win64_vc12/boost/lib/libboost_iostreams-vc120-mt-s-1_60.lib
-		# C:/dev/tangent/lib/win64_vc12/boost/lib/libboost_locale-vc120-mt-s-1_60.lib
-		# C:/dev/tangent/lib/win64_vc12/boost/lib/libboost_regex-vc120-mt-s-1_60.lib
-		# C:/dev/tangent/lib/win64_vc12/boost/lib/libboost_system-vc120-mt-s-1_60.lib
-		# C:/dev/tangent/lib/win64_vc12/boost/lib/libboost_thread-vc120-mt-s-1_60.lib
-		# C:/dev/tangent/lib/win64_vc12/boost/lib/libboost_wave-vc120-mt-s-1_60.lib
-		C:/dev/tangent/lib/win64_vc12/OpenColorIO/lib/OpenColorIO.lib
-	)
 
 elseif(APPLE)
 	if(WITH_PYTHON_MODULE)
