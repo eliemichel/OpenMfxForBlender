@@ -2884,6 +2884,13 @@ static void rna_def_object(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Level of Detail Levels", "A collection of detail levels to automatically switch between");
 	RNA_def_property_update(prop, NC_OBJECT | ND_LOD, NULL);
 
+	/* kiki edit: locked dupli ids */
+	prop = RNA_def_property(srna, "shader_random_seed", PROP_INT, PROP_UNSIGNED);
+	RNA_def_property_int_sdna(prop, NULL, "dupli_id");
+	// RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_ui_text(prop, "Shader Random Seed", "Value to lock colors in random shaders.");
+	RNA_def_property_update(prop, 0, "rna_Object_internal_update_data");	
+
 	RNA_api_object(srna);
 }
 

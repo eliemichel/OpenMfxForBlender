@@ -176,25 +176,32 @@ static DupliObject *make_dupli(const DupliContext *ctx,
 	if (hide)
 		dob->no_draw = true;
 	/* metaballs never draw in duplis, they are instead merged into one by the basis
-	 * mball outside of the group. this does mean that if that mball is not in the
-	 * scene, they will not show up at all, limitation that should be solved once. */
+	 * mball outside of the group. this doe
+	 * s mean that if that mball is not in the
+	 * scene, they will not show up at all, limitation 
+	 * that should be solved once. */
 	if (ob->type == OB_MBALL)
 		dob->no_draw = true;
 
 	/* random number */
 	/* the logic here is designed to match Cycles */
-	dob->random_id = BLI_hash_string(dob->ob->id.name + 2);
-
-	if (dob->persistent_id[0] != INT_MAX) {
-		for(i = 0; i < MAX_DUPLI_RECUR*2; i++)
-			dob->random_id = BLI_hash_int_2d(dob->random_id, (unsigned int)dob->persistent_id[i]);
+	if (ctx->object->dupli_id) {
+		dob->random_id = BLI_hash_int( ctx->object->dupli_id + index );
 	}
 	else {
-		dob->random_id = BLI_hash_int_2d(dob->random_id, 0);
-	}
+		dob->random_id = BLI_hash_string(ctx->object->id.name + 2);
 
-	if (ctx->object != ob) {
-		dob->random_id ^= BLI_hash_int(BLI_hash_string(ctx->object->id.name + 2));
+		if (dob->persistent_id[0] != INT_MAX) {
+			for(i = 0; i < MAX_DUPLI_RECUR*2; i++)
+				dob->random_id = BLI_hash_int_2d(dob->random_id, (unsigned int)dob->persistent_id[i]);
+		}
+		else {
+			dob->random_id = BLI_hash_int_2d(dob->random_id, 0);
+		}
+
+		if (ctx->object != ob) {
+			dob->random_id ^= BLI_hash_int(BLI_hash_string(ctx->object->id.name + 2));
+		}
 	}
 
 	return dob;

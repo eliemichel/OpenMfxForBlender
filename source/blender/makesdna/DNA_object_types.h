@@ -300,6 +300,10 @@ typedef struct Object {
 	LodLevel *currentlod;
 
 	struct PreviewImage *preview;
+
+	/* kiki edit: locked dupli indices */
+	unsigned int  dupli_id;
+	unsigned char padding3[4];
 } Object;
 
 /* Warning, this is not used anymore because hooks are now modifiers */

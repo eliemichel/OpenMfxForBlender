@@ -260,6 +260,7 @@ Object *BlenderSync::sync_object(BL::Object& b_parent,
 
 	/* only interested in object that we can create meshes from */
 	if(!object_is_mesh(b_ob)) {
+		printf("%s not a mesh!\n", b_ob.name().c_str());
 		return NULL;
 	}
 
@@ -405,7 +406,17 @@ Object *BlenderSync::sync_object(BL::Object& b_parent,
 		else {
 			object->dupli_generated = make_float3(0.0f, 0.0f, 0.0f);
 			object->dupli_uv = make_float2(0.0f, 0.0f);
-			object->random_id =  hash_int_2d(hash_string(object->name.c_str()), 0);
+			// object->random_id =  hash_int_2d(hash_string(object->name.c_str()), 0);
+			object->random_id = (
+				b_ob.shader_random_seed()
+				? b_ob.shader_random_seed()
+				: hash_int_2d(hash_string(object->name.c_str()), 0)
+			);
+		}
+
+		printf( "CYCLES: Generated object \"%s\", Dupli ID %u\n", object->name, object->random_id );
+		if (b_dupli_ob) {
+			printf( "\t dupli object\n" );
 		}
 
 		object->tag_update(scene);

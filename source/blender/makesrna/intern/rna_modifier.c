@@ -5529,7 +5529,7 @@ static void rna_def_modifier_vertex_snap(BlenderRNA *brna)
 	RNA_def_struct_ui_text(srna, "Vertex Snap Modifier", "Vertex Snap Modifier");
 	RNA_def_struct_sdna(srna, "VertexSnapModifierData");
 	RNA_def_struct_ui_icon(srna, ICON_SNAP_VERTEX);
- 
+
 	prop = RNA_def_property(srna, "target", PROP_POINTER, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Target", "Target for snapping");
 	RNA_def_property_pointer_funcs(prop, NULL, "rna_VertexSnapModifier_target_set", NULL, "rna_Mesh_object_poll");
