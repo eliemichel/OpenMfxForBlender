@@ -848,6 +848,9 @@ class TEXTURE_PT_pointdensity(TextureButtonsPanel, Panel):
                 if pd.object:
                     col.prop_search(pd, "vertex_attribute_name", pd.object, "vertex_groups", text="")
                 layout.template_color_ramp(pd, "color_ramp", expand=True)
+            if pd.vertex_color_source == 'VERTEX_ATTRIBUTE':
+                if pd.object and pd.object.data:
+                    col.prop(pd, "vertex_attribute_name", text="", icon='ICON_GROUP_VERTEX')
 
         col = split.column()
         col.label()

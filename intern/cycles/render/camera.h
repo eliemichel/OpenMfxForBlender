@@ -75,6 +75,7 @@ public:
 	MotionPosition motion_position;
 	array<float> shutter_curve;
 	size_t shutter_table_offset;
+	float fps;
 
 	/* ** Rolling shutter effect. ** */
 	/* Defines rolling shutter effect type. */

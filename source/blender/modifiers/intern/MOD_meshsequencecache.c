@@ -30,16 +30,21 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_cachefile.h"
+#include "BKE_customdata.h"
 #include "BKE_DerivedMesh.h"
 #include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_library_query.h"
 #include "BKE_scene.h"
 
+#include "BLI_string.h"
+
 #include "depsgraph_private.h"
 #include "DEG_depsgraph_build.h"
 
 #include "MOD_modifiertypes.h"
+
+#include "MEM_guardedalloc.h"
 
 #ifdef WITH_ALEMBIC
 #	include "ABC_alembic.h"
@@ -52,13 +57,13 @@ static void initData(ModifierData *md)
 	mcmd->cache_file = NULL;
 	mcmd->object_path[0] = '\0';
 	mcmd->read_flag = MOD_MESHSEQ_READ_ALL;
+	mcmd->attr_names = NULL;
+	mcmd->num_attr = 0;
 }
 
 static void copyData(ModifierData *md, ModifierData *target)
 {
-#if 0
 	MeshSeqCacheModifierData *mcmd = (MeshSeqCacheModifierData *)md;
-#endif
 	MeshSeqCacheModifierData *tmcmd = (MeshSeqCacheModifierData *)target;
 
 	modifier_copyData_generic(md, target);
@@ -66,6 +71,11 @@ static void copyData(ModifierData *md, ModifierData *target)
 	if (tmcmd->cache_file) {
 		id_us_plus(&tmcmd->cache_file->id);
 		tmcmd->reader = NULL;
+	}
+
+	if (mcmd->attr_names) {
+		tmcmd->attr_names = MEM_dupallocN(mcmd->attr_names);
+		tmcmd->num_attr = mcmd->num_attr;
 	}
 }
 
@@ -82,6 +92,12 @@ static void freeData(ModifierData *md)
 		CacheReader_free(mcmd->reader);
 #endif
 		mcmd->reader = NULL;
+	}
+
+	if (mcmd->attr_names) {
+		MEM_freeN(mcmd->attr_names);
+		mcmd->attr_names = NULL;
+		mcmd->num_attr = 0;
 	}
 }
 
@@ -103,7 +119,6 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 	Scene *scene = md->scene;
 	const float frame = BKE_scene_frame_get(scene);
 	const float time = BKE_cachefile_time_offset(mcmd->cache_file, frame, FPS);
-
 	const char *err_str = NULL;
 
 	CacheFile *cache_file = mcmd->cache_file;
@@ -133,7 +148,53 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 		modifier_setError(md, "%s", err_str);
 	}
 
-	return result ? result : dm;
+	if (!result) {
+		result = dm;
+	}
+
+	/* Store a list of all attribute names */
+	{
+		CustomData *cd = result->getVertDataLayout(result);
+		int start_type = CD_ALEMBIC_FLOAT;
+		int end_type = CD_ALEMBIC_I3;
+		int start = -1;
+		int end = -1;
+
+		start = CustomData_get_layer_index(cd, start_type);
+
+		while (start < 0 && start_type <= end_type) {
+			start_type++;
+			start = CustomData_get_layer_index(cd, start_type);
+		}
+
+		if (start != -1) {
+			if (end_type == start_type) {
+				end = start;
+			}
+			else {
+				end = CustomData_get_layer_index(cd, end_type);
+
+				while (end < 0 && end_type >= start_type) {
+					end_type--;
+					end = CustomData_get_layer_index(cd, end_type);
+				}
+			}
+
+			while (end < cd->totlayer && cd->layers[end].type == end_type) {
+				end++;
+			}
+
+			mcmd->num_attr = end - start;
+
+			mcmd->attr_names = MEM_mallocN(sizeof(*mcmd->attr_names) * mcmd->num_attr, "alembic_attribute_names");
+
+			for (int i = 0; i < mcmd->num_attr; i++) {
+				BLI_strncpy(mcmd->attr_names[i], cd->layers[start + i].name, 64);
+			}
+		}
+	}
+
+	return result;
 	UNUSED_VARS(flag);
 #else
 	return dm;

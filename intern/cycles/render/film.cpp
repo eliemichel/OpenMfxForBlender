@@ -42,6 +42,7 @@ static bool compare_pass_order(const Pass& a, const Pass& b)
 PassSettings::PassSettings()
 {
 	add(PASS_COMBINED);
+	denoising_passes = false;
 }
 
 void PassSettings::add(AOV aov)
@@ -227,7 +228,7 @@ bool PassSettings::modified(const PassSettings& other) const
 	return false;
 }
 
-int PassSettings::get_size() const
+int PassSettings::get_denoising_offset() const
 {
 	int size = 0;
 
@@ -239,6 +240,17 @@ int PassSettings::get_size() const
 
 	for(size_t i = 0; i < aovs.size(); i++) {
 		size += aovs[i].type != AOV_FLOAT ? 4 : 1;
+	}
+
+	return size;
+}
+
+int PassSettings::get_size() const
+{
+	int size = get_denoising_offset();
+
+	if(denoising_passes) {
+		size += 26;
 	}
 
 	return align_up(size, 4);
@@ -567,6 +579,14 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 		if(!pass.is_virtual) {
 			kfilm->pass_stride += pass.components;
 		}
+	}
+
+	if(passes.denoising_passes) {
+		kfilm->pass_denoising = kfilm->pass_stride;
+		kfilm->pass_stride += 26;
+	}
+	else {
+		kfilm->pass_denoising = 0;
 	}
 
 	kfilm->pass_stride = align_up(kfilm->pass_stride, 4);

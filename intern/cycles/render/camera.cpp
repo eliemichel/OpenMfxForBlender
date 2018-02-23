@@ -135,6 +135,7 @@ Camera::Camera()
 : Node(node_type)
 {
 	shutter_table_offset = TABLE_OFFSET_INVALID;
+	fps = 24.0f;
 
 	width = 1024;
 	height = 512;
@@ -370,6 +371,8 @@ void Camera::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 	kcam->bladesrotation = bladesrotation;
 
 	/* motion blur */
+	kcam->motion_offset = (motion_position == MOTION_POSITION_START) ? 0.5f : ((motion_position == MOTION_POSITION_CENTER) ? 0.0f : -0.5f);
+	kcam->inv_fps = 1.0f/fps;
 #ifdef __CAMERA_MOTION__
 	kcam->shuttertime = (need_motion == Scene::MOTION_BLUR) ? shuttertime: -1.0f;
 

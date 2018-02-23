@@ -921,6 +921,10 @@ typedef struct NodeCryptomatte {
 	int num_inputs;
 } NodeCryptomatte;
 
+typedef struct NodeMultiAdd {
+	int num_inputs;
+} NodeMultiAdd;
+
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL		0
 #define NODE_SCRIPT_EXTERNAL		1
@@ -1189,6 +1193,7 @@ enum {
 	SHD_POINTDENSITY_COLOR_VERTCOL      = 0,
 	SHD_POINTDENSITY_COLOR_VERTWEIGHT   = 1,
 	SHD_POINTDENSITY_COLOR_VERTNOR      = 2,
+	SHD_POINTDENSITY_COLOR_VERTATTR     = 3,
 };
 
 #endif

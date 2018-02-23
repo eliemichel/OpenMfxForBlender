@@ -272,6 +272,19 @@ typedef struct MStringProperty {
 	char s[255], s_len;
 } MStringProperty;
 
+typedef struct MAlembicIProperty {
+	int val;
+} MAlembicIProperty;
+typedef struct MAlembicFProperty {
+	float val;
+} MAlembicFProperty;
+typedef struct MAlembicI3Property {
+	int val[3];
+} MAlembicI3Property;
+typedef struct MAlembicF3Property {
+	float val[3];
+} MAlembicF3Property;
+
 typedef struct OrigSpaceFace {
 	float uv[4][2];
 } OrigSpaceFace;

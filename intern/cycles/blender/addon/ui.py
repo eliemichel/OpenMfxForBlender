@@ -650,7 +650,8 @@ class CyclesRender_PT_layer_passes(CyclesButtonsPanel, Panel):
           col.prop(crl, "pass_debug_bvh_intersections")
           col.prop(crl, "pass_debug_ray_bounces")
 
-        crl = rl.cycles
+        layout.prop(crl, "write_denoising_data")
+
         layout.label("Cryptomatte:")
         row = layout.row(align=True)
         row.prop(crl, "use_pass_crypto_object", text="Object", toggle=True)
@@ -1393,6 +1394,7 @@ class CyclesMaterial_PT_settings(CyclesButtonsPanel, Panel):
         sub.prop(cmat, "volume_sampling", text="")
         sub.prop(cmat, "volume_interpolation", text="")
         col.prop(cmat, "homogeneous_volume", text="Homogeneous")
+        col.prop(cmat, "velocity_scale", text="Velocity Scale")
 
         layout.separator()
         split = layout.split()

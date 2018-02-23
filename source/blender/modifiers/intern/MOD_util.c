@@ -289,5 +289,6 @@ void modifier_type_init(ModifierTypeInfo *types[])
 	INIT_TYPE(MeshSequenceCache);
 	INIT_TYPE(SurfaceDeform);
 	INIT_TYPE(OpenVDB);
+	INIT_TYPE(VertexSnap);
 #undef INIT_TYPE
 }

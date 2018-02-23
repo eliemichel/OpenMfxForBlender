@@ -1509,6 +1509,24 @@ ccl_device_inline float2 map_to_sphere(const float3 co)
 	return make_float2(u, v);
 }
 
+ccl_device_inline float sqr(float f)
+{
+	return f*f;
+}
+
+ccl_device_inline float ensure_finite(float v)
+{
+	return isfinite_safe(v)? v : 0.0f;
+}
+
+ccl_device_inline float3 ensure_finite3(float3 v)
+{
+	if(!isfinite_safe(v.x)) v.x = 0.0f;
+	if(!isfinite_safe(v.y)) v.y = 0.0f;
+	if(!isfinite_safe(v.z)) v.z = 0.0f;
+	return v;
+}
+
 CCL_NAMESPACE_END
 
 #endif /* __UTIL_MATH_H__ */

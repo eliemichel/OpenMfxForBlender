@@ -151,6 +151,7 @@ NODE_DEFINE(Shader)
 	volume_sampling_method_enum.insert("equiangular", VOLUME_SAMPLING_EQUIANGULAR);
 	volume_sampling_method_enum.insert("multiple_importance", VOLUME_SAMPLING_MULTIPLE_IMPORTANCE);
 	SOCKET_ENUM(volume_sampling_method, "Volume Sampling Method", volume_sampling_method_enum, VOLUME_SAMPLING_DISTANCE);
+	SOCKET_FLOAT(velocity_scale, "Velocity Scale", 1.0f);
 
 	static NodeEnum volume_interpolation_method_enum;
 	volume_interpolation_method_enum.insert("linear", VOLUME_INTERPOLATION_LINEAR);
@@ -533,6 +534,7 @@ void ShaderManager::device_update_common(Device *device,
 		shader_flag[i++] = __float_as_int(constant_emission.z);		// 12
 		shader_flag[i++] = __float_as_int(hash_to_float(hash_name));			// 13
 		shader_flag[i++] = __float_as_int(hash_to_float(hash_pass));			// 14
+		shader_flag[i++] = __float_as_int(shader->velocity_scale);			// 15
 
 		has_transparent_shadow |= (flag & SD_SHADER_HAS_TRANSPARENT_SHADOW) != 0;
 	}

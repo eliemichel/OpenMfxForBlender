@@ -323,6 +323,9 @@ static void create_mesh_volume_attributes(Scene *scene,
 		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_HEAT, frame);
 	if(mesh->need_attribute(scene, ATTR_STD_VOLUME_VELOCITY))
 		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_VELOCITY, frame);
+	else if (scene->need_motion() == Scene::MOTION_BLUR) {
+		create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_VELOCITY, frame);
+	}
 }
 
 /* Create vertex color attributes. */
@@ -715,6 +718,101 @@ static void attr_create_pointiness(Scene *scene,
 	}
 }
 
+/* Create Alembic custom attributes. */
+static void attr_create_alembic(Scene *scene,
+                                Mesh *mesh,
+                                BL::Mesh& b_mesh,
+                                bool subdivision)
+{
+	AttributeSet &attributes = (subdivision)? mesh->subd_attributes: mesh->attributes;
+
+	{
+		BL::Mesh::alembic_int_props_iterator iter;
+
+		for (b_mesh.alembic_int_props.begin(iter); iter != b_mesh.alembic_int_props.end(); ++iter) {
+			if (!mesh->need_attribute(scene, ustring(iter->name().c_str()))) {
+				continue;
+			}
+
+			Attribute *attr = attributes.add(ustring(iter->name().c_str()),
+											 TypeDesc::TypeFloat,
+											 ATTR_ELEMENT_VERTEX);
+
+			float *data = attr->data_float();
+
+			for (int i = 0; i < b_mesh.vertices.length(); i++) {
+				*(data++) = (int)iter->data[i].val();
+			}
+		}
+	}
+
+	{
+		BL::Mesh::alembic_float_props_iterator iter;
+
+		for (b_mesh.alembic_float_props.begin(iter); iter != b_mesh.alembic_float_props.end(); ++iter) {
+			if (!mesh->need_attribute(scene, ustring(iter->name().c_str()))) {
+				continue;
+			}
+
+			Attribute *attr = attributes.add(ustring(iter->name().c_str()),
+											 TypeDesc::TypeFloat,
+											 ATTR_ELEMENT_VERTEX);
+
+			float *data = attr->data_float();
+
+			for (int i = 0; i < b_mesh.vertices.length(); i++) {
+				*(data++) = iter->data[i].val();
+			}
+		}
+	}
+
+	{
+		BL::Mesh::alembic_int3_props_iterator iter;
+
+		for (b_mesh.alembic_int3_props.begin(iter); iter != b_mesh.alembic_int3_props.end(); ++iter) {
+			if (!mesh->need_attribute(scene, ustring(iter->name().c_str()))) {
+				continue;
+			}
+
+			Attribute *attr = attributes.add(ustring(iter->name().c_str()),
+											 TypeDesc::TypeVector,
+											 ATTR_ELEMENT_VERTEX);
+
+			float3 *data = attr->data_float3();
+
+			for (int i = 0; i < b_mesh.vertices.length(); i++) {
+				(*data)[0] = (int)iter->data[i].val()[0];
+				(*data)[1] = (int)iter->data[i].val()[1];
+				(*data)[2] = (int)iter->data[i].val()[2];
+				data++;
+			}
+		}
+	}
+
+	{
+		BL::Mesh::alembic_float3_props_iterator iter;
+
+		for (b_mesh.alembic_float3_props.begin(iter); iter != b_mesh.alembic_float3_props.end(); ++iter) {
+			if (!mesh->need_attribute(scene, ustring(iter->name().c_str()))) {
+				continue;
+			}
+
+			Attribute *attr = attributes.add(ustring(iter->name().c_str()),
+											 TypeDesc::TypeVector,
+											 ATTR_ELEMENT_VERTEX);
+
+			float3 *data = attr->data_float3();
+
+			for (int i = 0; i < b_mesh.vertices.length(); i++) {
+				(*data)[0] = iter->data[i].val()[0];
+				(*data)[1] = iter->data[i].val()[1];
+				(*data)[2] = iter->data[i].val()[2];
+				data++;
+			}
+		}
+	}
+}
+
 /* Create Mesh */
 
 static void create_mesh(Scene *scene,
@@ -858,6 +956,7 @@ static void create_mesh(Scene *scene,
 	attr_create_pointiness(scene, mesh, b_mesh, subdivision);
 	attr_create_vertex_color(scene, mesh, b_mesh, nverts, face_flags, subdivision);
 	attr_create_uv_map(scene, mesh, b_mesh, nverts, face_flags, subdivision, subdivide_uvs);
+	attr_create_alembic(scene, mesh, b_mesh, subdivision);
 
 	/* for volume objects, create a matrix to transform from object space to
 	 * mesh texture space. this does not work with deformations but that can
@@ -960,6 +1059,38 @@ static void sync_mesh_fluid_motion(BL::Object& b_ob, Scene *scene, Mesh *mesh)
 
 		for(b_fluid_domain.fluid_mesh_vertices.begin(fvi); fvi != b_fluid_domain.fluid_mesh_vertices.end(); ++fvi, ++i) {
 			mP[i] = P[i] + get_float3(fvi->velocity()) * relative_time;
+		}
+	}
+}
+
+static void sync_mesh_alembic_motion(BL::Mesh& b_mesh, Scene *scene, Mesh *mesh)
+{
+	if(scene->need_motion() == Scene::MOTION_NONE)
+		return;
+
+	if(b_mesh.velocities.length() != mesh->verts.size())
+		return;
+
+	/* Find or add attribute */
+	float3 *P = &mesh->verts[0];
+	Attribute *attr_mP = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
+
+	if(!attr_mP) {
+		attr_mP = mesh->attributes.add(ATTR_STD_MOTION_VERTEX_POSITION);
+	}
+
+	/* Only export previous and next frame, we don't have any in between data. */
+	float motion_times[2] = {-1.0f, 1.0f};
+	for(int step = 0; step < 2; step++) {
+		float relative_time = motion_times[step] * scene->motion_shutter_time() * 0.25f; /* 0.25 factor to fix the vector scaling */
+		float3 *mP = attr_mP->data_float3() + step*mesh->verts.size();
+
+		BL::Mesh::velocities_iterator vi;
+		BL::DomainFluidSettings::fluid_mesh_vertices_iterator fvi;
+		int i = 0;
+
+		for(b_mesh.velocities.begin(vi); vi != b_mesh.velocities.end(); ++vi, ++i) {
+			mP[i] = P[i] + get_float3(vi->val()) * relative_time;
 		}
 	}
 }
@@ -1093,6 +1224,9 @@ Mesh *BlenderSync::sync_mesh(BL::Object& b_ob,
 
 			if(render_layer.use_hair && mesh->subdivision_type == Mesh::SUBDIVISION_NONE)
 				sync_curves(mesh, b_mesh, b_ob, false);
+
+			/* Alembic imported motion */
+			sync_mesh_alembic_motion(b_mesh, scene, mesh);
 
 			if(can_free_caches) {
 				b_ob.cache_release();
@@ -1240,6 +1374,12 @@ void BlenderSync::sync_mesh_motion(BL::Object& b_ob,
 			}
 		}
 
+		return;
+	}
+
+	/* If we have stored velocity vectors, use the vectors exported with the mesh, and skip here. */
+	if (b_mesh.velocities.length() == b_mesh.vertices.length())
+	{
 		return;
 	}
 

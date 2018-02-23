@@ -165,6 +165,15 @@ static void node_buts_mix_rgb(uiLayout *layout, bContext *UNUSED(C), PointerRNA 
 	uiItemR(col, ptr, "use_clamp", 0, NULL, ICON_NONE);
 }
 
+static void node_composit_buts_multi_add(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+	uiLayout *row, *col;
+
+	col = uiLayoutColumn(layout, false);
+	row = uiLayoutRow(col, true);
+	uiItemR(row, ptr, "use_clamp", 0, NULL, ICON_NONE);
+}
+
 static void node_buts_time(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
 	uiLayout *row;
@@ -992,6 +1001,10 @@ static void node_shader_buts_tex_pointdensity(uiLayout *layout, bContext *UNUSED
 		if (shader_point_density->ob_color_source == SHD_POINTDENSITY_COLOR_VERTCOL) {
 			if (obdata_ptr.data)
 				uiItemPointerR(layout, ptr, "vertex_attribute_name", &obdata_ptr, "vertex_colors", "", ICON_NONE);
+		}
+		if (shader_point_density->ob_color_source == SHD_POINTDENSITY_COLOR_VERTATTR) {
+			if (obdata_ptr.data)
+				uiItemR(layout, ptr, "vertex_attribute_name", 0, "", ICON_GROUP_VERTEX);
 		}
 	}
 }
@@ -2528,6 +2541,12 @@ static void node_composit_buts_cryptomatte_ex(uiLayout *layout, bContext *UNUSED
 	uiItemO(layout, IFACE_("Remove Input"), ICON_ZOOMOUT, "NODE_OT_cryptomatte_remove_socket");
 }
 
+static void node_composit_multi_add_ex(uiLayout *layout, bContext *UNUSED(C), PointerRNA *UNUSED(ptr))
+{
+	uiItemO(layout, IFACE_("Add Input"), ICON_ZOOMIN, "NODE_OT_multi_add_add_socket");
+	uiItemO(layout, IFACE_("Remove Input"), ICON_ZOOMOUT, "NODE_OT_multi_add_remove_socket");
+}
+
 /* only once called */
 static void node_composit_set_butfunc(bNodeType *ntype)
 {
@@ -2553,6 +2572,10 @@ static void node_composit_set_butfunc(bNodeType *ntype)
 			break;
 		case CMP_NODE_RGB:
 			ntype->draw_buttons = node_buts_rgb;
+			break;
+		case CMP_NODE_MULTIADD:
+			ntype->draw_buttons = node_composit_buts_multi_add;
+			ntype->draw_buttons_ex = node_composit_multi_add_ex;
 			break;
 		case CMP_NODE_FLIP:
 			ntype->draw_buttons = node_composit_buts_flip;

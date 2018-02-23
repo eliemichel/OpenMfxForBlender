@@ -47,7 +47,7 @@ CCL_NAMESPACE_BEGIN
 #define RAMP_TABLE_SIZE		256
 #define SHUTTER_TABLE_SIZE		256
 #define PARTICLE_SIZE 		5
-#define SHADER_SIZE		15
+#define SHADER_SIZE		16
 #define ID_SLOT_SIZE	2
 
 #define BSSRDF_MIN_RADIUS			1e-8f
@@ -342,6 +342,7 @@ enum PathRayFlag {
 	PATH_RAY_SINGLE_PASS_DONE = 32768,
 	PATH_RAY_SHADOW_CATCHER_ONLY = 65536,
 	PATH_RAY_SHADOW_CATCHER = 131072,
+	PATH_RAY_STORE_SHADOW_INFO = 262144,
 };
 
 /* Closure Label */
@@ -483,6 +484,10 @@ typedef ccl_addr_space struct PathRadiance {
 	float4 shadow;
 	float mist;
 #endif
+
+	float3 denoising_normal;
+	float3 denoising_albedo;
+	float denoising_depth;
 
 #ifdef __SHADOW_TRICKS__
 	/* Total light reachable across the path, ignoring shadow blocked queries. */
@@ -742,12 +747,13 @@ typedef struct AttributeDescriptor {
 #define SHADER_CLOSURE_BASE \
 	float3 weight; \
 	ClosureType type; \
-	float sample_weight \
+	float sample_weight; \
+	float3 N
 
 typedef ccl_addr_space struct ccl_align(16) ShaderClosure {
 	SHADER_CLOSURE_BASE;
 
-	float data[14]; /* pad to 80 bytes */
+	float data[10]; /* pad to 80 bytes */
 } ShaderClosure;
 
 /* Shader Context
@@ -962,6 +968,11 @@ typedef ccl_addr_space struct ShaderData {
 typedef struct VolumeStack {
 	int object;
 	int shader;
+	/* These indicate the entry and exit points of the current ray.
+	   Volume shaders are only to be evaluated when the ray's t
+	   overlaps the volume bounds. */
+	float t_enter;
+	float t_exit;
 } VolumeStack;
 #endif
 
@@ -980,6 +991,8 @@ typedef struct PathState {
 	int glossy_bounce;
 	int transmission_bounce;
 	int transparent_bounce;
+
+	float denoising_feature_weight;
 
 	/* multiple importance sampling */
 	float min_ray_pdf; /* smallest bounce pdf over entire path up to now */
@@ -1112,7 +1125,10 @@ typedef struct KernelCamera {
 	int rolling_shutter_type;
 	float rolling_shutter_duration;
 
-	int pad;
+	/* 0.0 = start on frame, -1.0f = end on frame */
+	float motion_offset; 
+	float inv_fps;
+	float pad1, pad2, pad3;
 } KernelCamera;
 static_assert_align(KernelCamera, 16);
 
@@ -1161,6 +1177,11 @@ typedef struct KernelFilm {
 	float mist_start;
 	float mist_inv_depth;
 	float mist_falloff;
+
+	int pass_denoising;
+	int pass_pad0;
+	int pass_pad1;
+	int pass_pad2;
 
 	int pass_aov[32];
 	

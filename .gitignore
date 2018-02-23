@@ -1,5 +1,6 @@
 # generic files to ignore
 .*
+*.bat
 
 # python temp paths
 __pycache__/
@@ -44,3 +45,4 @@ Desktop.ini
 # kiki
 build
 build/*
+source/array_random.patch

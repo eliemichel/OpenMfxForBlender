@@ -28,7 +28,6 @@ typedef ccl_addr_space struct Bssrdf {
 	float texture_blur;
 	float albedo;
 	float roughness;
-	float3 N;
 } Bssrdf;
 
 /* Planar Truncated Gaussian
@@ -354,6 +353,7 @@ ccl_device_inline Bssrdf *bssrdf_alloc(ShaderData *sd, float3 weight)
 
 	float sample_weight = fabsf(average(weight));
 	bssrdf->sample_weight = sample_weight;
+	bssrdf->N = make_float3(0.0f, 0.0f, 0.0f);
 	return (sample_weight >= CLOSURE_WEIGHT_CUTOFF) ? bssrdf : NULL;
 }
 

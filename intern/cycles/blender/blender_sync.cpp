@@ -645,7 +645,20 @@ void BlenderSync::sync_film(BL::RenderLayer& b_rlay,
 			string passname = string_printf("AOV %s", name.c_str());
 			b_engine.add_pass(passname.c_str(), is_color? 3: 1, is_color? "RGB": "X", b_srlay.name().c_str(), 0);
 		} RNA_END
-		
+
+		passes.denoising_passes = get_boolean(crp, "write_denoising_data");
+		if(passes.denoising_passes) {
+			b_engine.add_pass("Denoising Normal", 3, "XYZ", b_srlay.name().c_str(), 0);
+			b_engine.add_pass("Denoising Normal Variance", 3, "XYZ", b_srlay.name().c_str(), 0);
+			b_engine.add_pass("Denoising Albedo", 3, "RGB", b_srlay.name().c_str(), 0);
+			b_engine.add_pass("Denoising Albedo Variance", 3, "RGB", b_srlay.name().c_str(), 0);
+			b_engine.add_pass("Denoising Depth", 1, "Z", b_srlay.name().c_str(), 0);
+			b_engine.add_pass("Denoising Depth Variance", 1, "Z", b_srlay.name().c_str(), 0);
+			b_engine.add_pass("Denoising Shadow A", 3, "XYV", b_srlay.name().c_str(), 0);
+			b_engine.add_pass("Denoising Shadow B", 3, "XYV", b_srlay.name().c_str(), 0);
+			b_engine.add_pass("Denoising Image", 3, "RGB", b_srlay.name().c_str(), 0);
+			b_engine.add_pass("Denoising Image Variance", 3, "RGB", b_srlay.name().c_str(), 0);
+		}
 	}
 
 	scene->film->pass_alpha_threshold = b_srlay.pass_alpha_threshold();

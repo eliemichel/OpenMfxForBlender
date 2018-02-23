@@ -139,6 +139,104 @@ bool RenderBuffers::copy_from_device()
 	return true;
 }
 
+bool RenderBuffers::get_denoising_pass_rect(string passname, float exposure, int sample, int components, float *pixels)
+{
+	float invsample = 1.0f/sample;
+	float scale = invsample;
+	bool variance = false;
+	int offset;
+
+	if(passname == "Denoising Normal") {
+		offset = 0;
+	}
+	else if(passname == "Denoising Normal Variance") {
+		offset = 3;
+		variance = true;
+	}
+	else if(passname == "Denoising Albedo") {
+		offset = 6;
+	}
+	else if(passname == "Denoising Albedo Variance") {
+		offset = 9;
+		variance = true;
+	}
+	else if(passname == "Denoising Depth") {
+		offset = 12;
+	}
+	else if(passname == "Denoising Depth Variance") {
+		offset = 13;
+		variance = true;
+	}
+	else if(passname == "Denoising Shadow A") {
+		offset = 14;
+	}
+	else if(passname == "Denoising Shadow B") {
+		offset = 17;
+	}
+	else if(passname == "Denoising Image") {
+		offset = 20;
+		scale *= exposure;
+	}
+	else if(passname == "Denoising Image Variance") {
+		offset = 23;
+		scale *= exposure*exposure;
+		variance = true;
+	}
+	else {
+		return false;
+	}
+
+	offset += params.passes.get_denoising_offset();
+	int pass_stride = params.passes.get_size();
+	int size = params.width*params.height;
+
+	if(variance) {
+		/* Approximate variance as E[x^2] - 1/N * (E[x])^2, since online variance
+		 * update does not work efficiently with atomics in the kernel. */
+		int mean_offset = offset - components;
+		float *mean = (float*)buffer.data_pointer + mean_offset;
+		float *var = (float*)buffer.data_pointer + offset;
+		assert(mean_offset >= 0);
+
+		if(components == 1) {
+			for(int i = 0; i < size; i++, mean += pass_stride, var += pass_stride, pixels++) {
+				pixels[0] = max(0.0f, var[0] - mean[0]*mean[0]*invsample)*scale;
+			}
+		}
+		else if(components == 3) {
+			for(int i = 0; i < size; i++, mean += pass_stride, var += pass_stride, pixels += 3) {
+				pixels[0] = max(0.0f, var[0] - mean[0]*mean[0]*invsample)*scale;
+				pixels[1] = max(0.0f, var[1] - mean[1]*mean[1]*invsample)*scale;
+				pixels[2] = max(0.0f, var[2] - mean[2]*mean[2]*invsample)*scale;
+			}
+		}
+		else {
+			return false;
+		}
+	}
+	else {
+		float *in = (float*)buffer.data_pointer + offset;
+
+		if(components == 1) {
+			for(int i = 0; i < size; i++, in += pass_stride, pixels++) {
+				pixels[0] = in[0]*scale;
+			}
+		}
+		else if(components == 3) {
+			for(int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
+				pixels[0] = in[0]*scale;
+				pixels[1] = in[1]*scale;
+				pixels[2] = in[2]*scale;
+			}
+		}
+		else {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 bool RenderBuffers::get_aov_rect(ustring name, float exposure, int sample, int components, float *pixels)
 {
 	int aov_offset = 0;

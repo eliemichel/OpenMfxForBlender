@@ -133,6 +133,9 @@ void node_operatortypes(void)
 
 	WM_operatortype_append(NODE_OT_cryptomatte_add_socket);
 	WM_operatortype_append(NODE_OT_cryptomatte_remove_socket);
+
+	WM_operatortype_append(NODE_OT_multi_add_add_socket);
+	WM_operatortype_append(NODE_OT_multi_add_remove_socket);
 }
 
 void ED_operatormacros_node(void)

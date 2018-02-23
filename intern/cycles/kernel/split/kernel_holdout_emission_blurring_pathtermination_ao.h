@@ -222,6 +222,11 @@ ccl_device void kernel_holdout_emission_blurring_pathtermination_ao(
 		}
 	}
 
+	if(IS_STATE(ray_state, ray_index, RAY_ACTIVE)) {
+		PathRadiance *L = &kernel_split_state.path_radiance[ray_index];
+		kernel_update_denoising_features(kg, sd, state, L);
+	}
+
 #ifdef __AO__
 	if(IS_STATE(ray_state, ray_index, RAY_ACTIVE)) {
 		/* ambient occlusion */

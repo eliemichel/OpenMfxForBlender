@@ -912,6 +912,13 @@ class CyclesMaterialSettings(bpy.types.PropertyGroup):
                 default='MULTIPLE_IMPORTANCE',
                 )
 
+        cls.velocity_scale = FloatProperty(
+                name="Velocity Scale",
+                description="Changes the magnitude of motion blur effects based on the velocity attribute",
+                min=0.0,
+                default=1.0
+        )
+
         cls.ao_factor = FloatProperty(
                 name="Factor",
                 description="",
@@ -1406,6 +1413,13 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
                 name="CryptoMatte Accurate",
                 description="Gernate a more accurate CryptoMatte pass, CPU only, may render slower and use more memory",
                 default=True,
+                update=update_render_passes,
+                )
+
+        cls.write_denoising_data = BoolProperty(
+                name="Write Denoising Data",
+                description="Write denoising passes",
+                default=False,
                 update=update_render_passes,
                 )
     @classmethod

@@ -98,6 +98,7 @@ set(SRC
 	intern/MOD_surfacedeform.c
 	intern/MOD_triangulate.c
 	intern/MOD_util.c
+	intern/MOD_vertexsnap.c
 	intern/MOD_uvwarp.c
 	intern/MOD_uvproject.c
 	intern/MOD_warp.c
@@ -107,7 +108,6 @@ set(SRC
 	intern/MOD_weightvgmix.c
 	intern/MOD_weightvgproximity.c
 	intern/MOD_wireframe.c
-	intern/MOD_scaling.c
 
 	MOD_modifiertypes.h
 	intern/MOD_boolean_util.h

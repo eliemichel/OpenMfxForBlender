@@ -72,6 +72,7 @@ public:
 
 void read_points_sample(const Alembic::AbcGeom::IPointsSchema &schema,
 	const Alembic::AbcGeom::ISampleSelector &selector,
-	CDStreamConfig &config);
+	CDStreamConfig &config, IDProperty *&id_prop,
+	const int read_flag);
 
 #endif  /* __ABC_POINTS_H__ */

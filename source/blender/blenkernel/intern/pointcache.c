@@ -1169,6 +1169,7 @@ static void ptcache_smoke_openvdb_free(SmokeDomainSettings *sds)
 	vdbmd->max_heat = 0.0f;
 	vdbmd->max_flame = 0.0f;
 	vdbmd->max_color = 0.0f;
+	vdbmd->max_velocity = 0.0f;
 }
 
 static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void *smoke_v)
@@ -1494,7 +1495,7 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 					if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->color[i], color[i], res_min, res_max, sds->res,
 													   level, up_axis, front_axis, NULL))
 					{
-						modifier_setError((ModifierData *)vdbmd, "Flame grid is of the wrong type");
+						modifier_setError((ModifierData *)vdbmd, "Color grid is of the wrong type");
 					}
 				}
 
@@ -1519,6 +1520,44 @@ static int ptcache_smoke_openvdb_extern_read(struct OpenVDBReader *reader, void 
 													level, up_axis, front_axis, &vdbmd->max_color))
 				{
 					modifier_setError((ModifierData *)vdbmd, "Color grid is of the wrong type");
+				}
+			}
+		}
+
+		if (OpenVDB_has_grid(reader, vdbmd->velocity[0])) {
+			if (vdbmd->flags & MOD_OPENVDB_SPLIT_VELOCITY) {
+				float **velocity[3] = {&vx, &vy, &vz};
+				float len;
+
+				for (int i = 0; i < 3; i++) {
+					if (!OpenVDB_import_grid_fl_extern(reader, vdbmd->velocity[i], velocity[i], res_min, res_max, sds->res,
+													   level, up_axis, front_axis, NULL))
+					{
+						modifier_setError((ModifierData *)vdbmd, "Velocity grid is of the wrong type");
+					}
+				}
+
+				/* Kinda inefficient maximum value calculation, but simplifies stuff a lot,
+				 * and besides, it is only an issue when using the non-standard split vector grids. */
+				vdbmd->max_velocity = 0.0f;
+
+				for (int i = 0; i < sds->total_cells; i++) {
+					len = (vx[i] * vx[i]) +
+					      (vy[i] * vy[i]) +
+					      (vz[i] * vz[i]);
+
+					if (len > vdbmd->max_velocity) {
+						vdbmd->max_velocity = len;
+					}
+				}
+
+				vdbmd->max_velocity = sqrt(vdbmd->max_velocity);
+			}
+			else {
+				if (!OpenVDB_import_grid_vec_extern(reader, vdbmd->velocity[0], &vx, &vy, &vz, res_min, res_max, sds->res,
+													level, up_axis, front_axis, &vdbmd->max_velocity))
+				{
+					modifier_setError((ModifierData *)vdbmd, "Velocity grid is of the wrong type");
 				}
 			}
 		}
@@ -2670,16 +2709,16 @@ static void ptcache_find_frames_around(PTCacheID *pid, unsigned int frame, int *
 			cfra1--;
 
 		if (cfra1 < pid->cache->startframe)
-			cfra1 = -1;
+			cfra1 = 0;
 
 		while (cfra2 <= pid->cache->endframe && !BKE_ptcache_id_exist(pid, cfra2))
 			cfra2++;
 
 		if (cfra2 > pid->cache->endframe)
-			cfra2 = -1;
+			cfra2 = 0;
 
 		if (cfra1 && !cfra2) {
-			*fra1 = -1;
+			*fra1 = 0;
 			*fra2 = cfra1;
 		}
 		else {
@@ -2704,7 +2743,7 @@ static void ptcache_find_frames_around(PTCacheID *pid, unsigned int frame, int *
 		}
 
 		if (!pm2) {
-			*fra1 = -1;
+			*fra1 = 0;
 			*fra2 = pm->frame;
 		}
 		else {
@@ -3091,14 +3130,17 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 	SmokeModifierData *smd;
 	SmokeDomainSettings *sds;
 	OpenVDBModifierData *vdbmd;
-	int cfrai = (int)floor(cfra), cfra1 = -1, cfra2 = -1;
+	int cfrai = (int)floor(cfra), cfra1 = 0, cfra2 = 0;
 	int ret = 0;
+	int invalid_frame = (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) ? -1 : 0;
 
 #if defined(WITH_OPENVDB) && defined(WITH_SMOKE)
 	if (pid->file_type == PTCACHE_FILE_OPENVDB_EXTERN) {
 		smd = (SmokeModifierData *)pid->calldata;
 		sds = smd->domain;
 		vdbmd = sds->vdb;
+
+		cfra1 = cfra2 = -1;
 
 		if (cfrai < pid->cache->startframe || cfrai > pid->cache->endframe) {
 			sds->total_cells = 0;
@@ -3133,11 +3175,11 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 	}
 
 	/* no exact cache frame found so try to find cached frames around cfra */
-	if (cfra1 < 0) {
+	if (cfra1 == invalid_frame) {
 		ptcache_find_frames_around(pid, cfrai, &cfra1, &cfra2);
 	}
 
-	if (cfra1 < 0 && cfra2 < 0) {
+	if (cfra1 == invalid_frame && cfra2 == invalid_frame) {
 		return 0;
 	}
 
@@ -3145,16 +3187,16 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 	if (no_extrapolate_old) {
 		if (cfra1 == 0 && cfra2 && cfra2 <= pid->cache->simframe)
 			return 0;
-		if (cfra1 >= 0 && cfra1 == cfra2)
+		if (cfra1 > invalid_frame && cfra1 == cfra2)
 			return 0;
 	}
 	else {
 		/* avoid calling interpolate between the same frame values */
-		if (cfra1 >= 0 && cfra1 == cfra2)
+		if (cfra1 > invalid_frame && cfra1 == cfra2)
 			cfra1 = 0;
 	}
 
-	if (cfra1 >= 0) {
+	if (cfra1 > invalid_frame) {
 		if (pid->file_type == PTCACHE_FILE_OPENVDB && pid->read_openvdb_stream) {
 			if (!ptcache_read_openvdb_stream(pid, cfra1)) {
 				return 0;
@@ -3198,8 +3240,8 @@ int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old)
 		}
 	}
 
-	if (cfra1 >= 0)
-		ret = (cfra2 >= 0 ? PTCACHE_READ_INTERPOLATED : PTCACHE_READ_EXACT);
+	if (cfra1 > invalid_frame)
+		ret = ((cfra2 > invalid_frame) ? PTCACHE_READ_INTERPOLATED : PTCACHE_READ_EXACT);
 	else if (cfra2) {
 		ret = PTCACHE_READ_OLD;
 		pid->cache->simframe = cfra2;

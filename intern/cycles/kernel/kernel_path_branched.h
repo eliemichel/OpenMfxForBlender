@@ -67,8 +67,12 @@ ccl_device_inline void kernel_branched_path_ao(KernelGlobals *kg,
 			float3 ao_env = shader_eval_ao_env(kg, &sd_ao, state, 0, SHADER_CONTEXT_MAIN);
 
             uint shadow_linking = object_shadow_linking(kg, ccl_fetch(sd, object));
-			if(!shadow_blocked(kg, emission_sd, state, &light_ray, &ao_shadow, shadow_linking))
-				path_radiance_accum_ao(L, throughput*num_samples_inv, ao_alpha, ao_bsdf * ao_env, ao_shadow, state->bounce);
+			if(!shadow_blocked(kg, sd, emission_sd, state, &light_ray, &ao_shadow, shadow_linking)) {
+				path_radiance_accum_ao(L, state, throughput*num_samples_inv, ao_alpha, ao_bsdf * ao_env, ao_shadow, state->bounce);
+			}
+			else {
+				path_radiance_accum_total_ao(L, state, throughput*num_samples_inv, ao_bsdf);
+			}
 			state->flag &= ~PATH_RAY_AO;
 		}
 	}
@@ -80,13 +84,30 @@ ccl_device_noinline void kernel_branched_path_surface_indirect_light(KernelGloba
 	RNG *rng, ShaderData *sd, ShaderData *indirect_sd, ShaderData *emission_sd,
 	float3 throughput, float num_samples_adjust, PathState *state, PathRadiance *L, uint light_linking)
 {
+	float sum_sample_weight;
+	if(state->denoising_feature_weight > 0.0f) {
+		sum_sample_weight = 0.0f;
+		for(int i = 0; i < sd->num_closure; i++) {
+			const ShaderClosure *sc = &sd->closure[i];
+
+			if(!CLOSURE_IS_BSDF(sc->type) || CLOSURE_IS_BSDF_TRANSPARENT(sc->type)) {
+				continue;
+			}
+
+			sum_sample_weight += sc->sample_weight;
+		}
+	}
+	else {
+		sum_sample_weight = 1.0f;
+	}
+
 	for (int i = 0; i < ccl_fetch(sd, num_closure); i++) {
 		const ShaderClosure *sc = &ccl_fetch(sd, closure)[i];
 
 		if(!CLOSURE_IS_BSDF(sc->type))
 			continue;
 		/* transparency is not handled here, but in outer loop */
-		if(sc->type == CLOSURE_BSDF_TRANSPARENT_ID)
+		if(CLOSURE_IS_BSDF_TRANSPARENT(sc->type))
 			continue;
 
 		int num_samples;
@@ -119,7 +140,8 @@ ccl_device_noinline void kernel_branched_path_surface_indirect_light(KernelGloba
 			                                        &tp,
 			                                        &ps,
 			                                        L,
-			                                        &bsdf_ray))
+			                                        &bsdf_ray,
+			                                        sum_sample_weight))
 			{
 				continue;
 			}
@@ -257,7 +279,7 @@ ccl_device void kernel_branched_path_subsurface_scatter(KernelGlobals *kg,
 }
 #endif  /* __SUBSURFACE__ */
 
-ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, int sample, Ray ray, ccl_global float *buffer)
+ccl_device void kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, int sample, Ray ray, ccl_global float *buffer)
 {
 	/* initialize */
 	PathRadiance L;
@@ -273,6 +295,14 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 	PathState state;
 	path_state_init(kg, &emission_sd, &state, rng, sample, &ray);
+
+	Ray volume_ray = ray;
+	int volumes_entered = 0;
+
+	/* is there a heterogenous world shader? */
+	if(state.volume_stack[0].shader != SHADER_NONE && volume_stack_is_heterogeneous(kg, state.volume_stack)) {
+		++volumes_entered;
+	}
 
 #ifdef __KERNEL_DEBUG__
 	DebugData debug_data;
@@ -315,16 +345,81 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 		debug_data.num_ray_bounces++;
 #endif  /* __KERNEL_DEBUG__ */
 
-#ifdef __VOLUME__
-		/* Sanitize volume stack. */
-		if(!hit) {
-			kernel_volume_clean_stack(kg, state.volume_stack);
+#ifdef __VOLUME__		/* volume attenuation, emission, scatter */
+		/* this determines if we do volume tracing right away or defer until we hit a non-volume surface */
+		bool do_volume = false;
+
+		/* Do all homogenous volumes right away. */
+		if(state.volume_stack[0].shader != SHADER_NONE && !volume_stack_is_heterogeneous(kg, state.volume_stack)) {
+			do_volume = true;
 		}
-		/* volume attenuation, emission, scatter */
-		if(state.volume_stack[0].shader != SHADER_NONE) {
-			Ray volume_ray = ray;
-			volume_ray.t = (hit)? isect.t: FLT_MAX;
-			
+
+		if(hit) {
+			shader_setup_from_ray(kg, &sd, &isect, &ray);
+			if(sd.shader_flag & SD_SHADER_HAS_VOLUME) {
+				if(state.volume_stack[0].shader == SHADER_NONE) {
+					volume_ray.P = sd.P;
+					volume_ray.t = 0.0f;
+					volume_ray.D = ray.D;
+				}
+				else {
+					volume_ray.t = len(sd.P - volume_ray.P);
+				}
+				if(sd.runtime_flag & SD_RUNTIME_BACKFACING) {
+					for(int i = 0; state.volume_stack[i].shader != SHADER_NONE && i < VOLUME_STACK_SIZE; ++i) {
+						if(state.volume_stack[i].object == sd.object) {
+							state.volume_stack[i].t_exit = volume_ray.t;
+							break;
+						}
+					}
+					--volumes_entered;
+				}
+				else {
+					int i = 0;
+					while(state.volume_stack[i].shader != SHADER_NONE && i < VOLUME_STACK_SIZE) {
+						++i;
+					}
+					state.volume_stack[i].object = sd.object;
+					state.volume_stack[i].shader = sd.shader;
+					state.volume_stack[i].t_enter = volume_ray.t;
+					state.volume_stack[i].t_exit = FLT_MAX;
+					state.volume_stack[i+1].shader = SHADER_NONE;
+					++volumes_entered;
+				}
+			}
+		}
+		else {
+			int i = (kernel_data.background.volume_shader != SHADER_NONE) ? 1 : 0;
+			do {
+				if(state.volume_stack[i].t_exit == FLT_MAX) {
+					kernel_volume_stack_remove(kg, state.volume_stack[i].object, state.volume_stack);
+				}
+				else {
+					++i;
+				}
+			} while(i < VOLUME_STACK_SIZE && state.volume_stack[i].shader != SHADER_NONE);
+		}
+
+		/* Collect heterogenous volume interactions until a non-volume object is intersected
+		 or the ray leaves all volumes. Then do one ray march through all collected media.
+		 */
+
+		do_volume |= volumes_entered == 0 || (!hit) /* Leaving volumes or scene */
+			|| (!(sd.shader_flag & SD_SHADER_HAS_ONLY_VOLUME)); /* hit a non-volume object */
+		do_volume &= state.volume_stack[0].shader != SHADER_NONE;
+
+
+		if(do_volume) {
+			float3 save_p = sd.P;
+			if(hit && !(sd.shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
+				volume_ray.t = len(sd.P - volume_ray.P);
+			}
+			else if(!hit) {
+				if(kernel_data.background.volume_shader != SHADER_NONE) {
+					volume_ray.t = FLT_MAX;
+				}
+			}
+
 			bool heterogeneous = volume_stack_is_heterogeneous(kg, state.volume_stack);
 
 #ifdef __VOLUME_DECOUPLED__
@@ -361,7 +456,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 					RNG tmp_rng = cmj_hash(*rng, state.rng_offset);
 
 					PathState ps = state;
-					Ray pray = ray;
+					Ray pray = volume_ray;
 					float3 tp = throughput;
 
 					/* branch RNG state */
@@ -375,6 +470,8 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 					VolumeIntegrateResult result = kernel_volume_decoupled_scatter(kg,
 						&ps, &pray, &sd, &tp, rphase, rscatter, &volume_segment, NULL, false);
+
+					kernel_volume_branch_stack(sd.ray_length, ps.volume_stack);
 
 					(void)result;
 					kernel_assert(result == VOLUME_PATH_SCATTERED);
@@ -427,7 +524,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 			for(int j = 0; j < num_samples; j++) {
 				PathState ps = state;
-				Ray pray = ray;
+				Ray pray = volume_ray;
 				float3 tp = throughput * num_samples_inv;
 
 				/* branch RNG state */
@@ -435,6 +532,8 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 				VolumeIntegrateResult result = kernel_volume_integrate(
 					kg, &ps, &sd, &volume_ray, &L, &tp, rng, heterogeneous);
+
+				kernel_volume_branch_stack(sd.ray_length, ps.volume_stack);
 
 #ifdef __VOLUME_SCATTER__
 				if(result == VOLUME_PATH_SCATTERED) {
@@ -473,6 +572,20 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 			/* todo: avoid this calculation using decoupled ray marching */
 			kernel_volume_shadow(kg, &emission_sd, &state, &volume_ray, &throughput);
 #endif  /* __VOLUME_DECOUPLED__ */
+			for(int i = 0; state.volume_stack[i].shader != SHADER_NONE; ++i) {
+				if(state.volume_stack[i].t_exit < FLT_MAX) {
+					int j = i;
+					/* shift back next stack entries */
+					do {
+						state.volume_stack[j] = state.volume_stack[j+1];
+						++j;
+					}
+					while(state.volume_stack[j].shader != SHADER_NONE);
+					--i;
+				}
+				state.volume_stack[i].t_enter = 0.0f;
+			}
+			volume_ray.P = save_p;
 		}
 #endif  /* __VOLUME__ */
 
@@ -504,7 +617,7 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 #ifdef __SHADOW_TRICKS__
 		if((sd.object_flag & SD_OBJECT_OBJECT_SHADOW_CATCHER)) {
 			if(state.flag & PATH_RAY_CAMERA) {
-				state.flag |= (PATH_RAY_SHADOW_CATCHER | PATH_RAY_SHADOW_CATCHER_ONLY);
+				state.flag |= (PATH_RAY_SHADOW_CATCHER | PATH_RAY_STORE_SHADOW_INFO | PATH_RAY_SHADOW_CATCHER_ONLY);
 				state.catcher_object = sd.object;
 				if(!kernel_data.background.transparent) {
 					L.shadow_color = indirect_background(kg, &emission_sd, &state, &ray, buffer, sample);
@@ -569,6 +682,8 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 			}
 		}
 
+		kernel_update_denoising_features(kg, &sd, &state, &L);
+
 #ifdef __AO__
 		/* ambient occlusion */
 		if(kernel_data.integrator.use_ambient_occlusion || (sd.runtime_flag & SD_RUNTIME_AO)) {
@@ -586,6 +701,13 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 
 		if(!(sd.shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
 			PathState hit_state = state;
+
+#ifdef __VOLUME__
+			for(int i = 0; hit_state.volume_stack[i].shader != SHADER_NONE; ++i) {
+				hit_state.volume_stack[i].t_enter = 0.0f;
+				hit_state.volume_stack[i].t_exit = FLT_MAX;
+			}
+#endif  /* __VOLUME__ */
 
             uint light_linking = object_light_linking(kg, sd.object);
 
@@ -629,31 +751,13 @@ ccl_device float4 kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, in
 		ray.dD.dx = -sd.dI.dx;
 		ray.dD.dy = -sd.dI.dy;
 #endif  /* __RAY_DIFFERENTIALS__ */
-
-#ifdef __VOLUME__
-		/* enter/exit volume */
-		kernel_volume_stack_enter_exit(kg, &sd, state.volume_stack);
-#endif  /* __VOLUME__ */
 	}
-
-	float3 L_sum;
-#ifdef __SHADOW_TRICKS__
-	if(state.flag & PATH_RAY_SHADOW_CATCHER) {
-		L_sum = path_radiance_sum_shadowcatcher(kg, &L, &L_transparent);
-	}
-	else
-#endif  /* __SHADOW_TRICKS__ */
-	{
-		L_sum = path_radiance_clamp_and_sum(kg, &L);
-	}
-
-	kernel_write_light_passes(kg, buffer, &L, sample);
 
 #ifdef __KERNEL_DEBUG__
 	kernel_write_debug_passes(kg, buffer, &state, &debug_data, sample);
 #endif  /* __KERNEL_DEBUG__ */
 
-	return make_float4(L_sum.x, L_sum.y, L_sum.z, 1.0f - L_transparent);
+	kernel_write_result(kg, buffer, sample, &L, L_transparent, state.flag & PATH_RAY_SHADOW_CATCHER);
 }
 
 ccl_device void kernel_branched_path_trace(KernelGlobals *kg,
@@ -673,16 +777,10 @@ ccl_device void kernel_branched_path_trace(KernelGlobals *kg,
 
 	kernel_path_trace_setup(kg, rng_state, sample, x, y, &rng, &ray);
 
-	/* integrate */
-	float4 L;
-
 	if(ray.t != 0.0f)
-		L = kernel_branched_path_integrate(kg, &rng, sample, ray, buffer);
+		kernel_branched_path_integrate(kg, &rng, sample, ray, buffer);
 	else
-		L = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-
-	/* accumulate result in output buffer */
-	kernel_write_pass_float4(buffer, sample, L);
+		kernel_write_result(kg, buffer, sample, NULL, 0.0f, false);
 
 	path_rng_end(kg, rng_state, rng);
 }

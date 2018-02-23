@@ -3091,6 +3091,8 @@ static int point_density_vertex_color_source_from_shader(NodeShaderTexPointDensi
 			return TEX_PD_COLOR_VERTWEIGHT;
 		case SHD_POINTDENSITY_COLOR_VERTNOR:
 			return TEX_PD_COLOR_VERTNOR;
+		case SHD_POINTDENSITY_COLOR_VERTATTR:
+			return TEX_PD_COLOR_VERTATTR;
 		default:
 			BLI_assert(!"Unknown color source");
 			return TEX_PD_COLOR_CONSTANT;
@@ -3466,6 +3468,16 @@ static void def_mix_rgb(StructRNA *srna)
 	RNA_def_property_boolean_sdna(prop, NULL, "custom2", SHD_MIXRGB_USE_ALPHA);
 	RNA_def_property_ui_text(prop, "Alpha", "Include alpha of second input in this operation");
 	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+
+	prop = RNA_def_property(srna, "use_clamp", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "custom2", SHD_MIXRGB_CLAMP);
+	RNA_def_property_ui_text(prop, "Clamp", "Clamp result of the node to 0..1 range");
+	RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+}
+
+static void def_cmp_multiadd(StructRNA *srna)
+{
+	PropertyRNA *prop;
 
 	prop = RNA_def_property(srna, "use_clamp", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "custom2", SHD_MIXRGB_CLAMP);
@@ -4138,6 +4150,8 @@ static void def_sh_tex_pointdensity(StructRNA *srna)
 	    {SHD_POINTDENSITY_COLOR_VERTWEIGHT, "VERTEX_WEIGHT", 0, "Vertex Weight", "Vertex group weight"},
 	    {SHD_POINTDENSITY_COLOR_VERTNOR, "VERTEX_NORMAL", 0, "Vertex Normal",
 	                                     "XYZ normal vector mapped to RGB colors"},
+	    {SHD_POINTDENSITY_COLOR_VERTATTR, "VERTEX_ATTRIBUTE", 0, "Vertex Attribute",
+	                                      "Alembic vertex attribute mapped to color"},
 		{0, NULL, 0, NULL, NULL}
 	};
 

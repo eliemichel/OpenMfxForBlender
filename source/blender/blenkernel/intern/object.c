@@ -657,8 +657,9 @@ void BKE_object_init(Object *ob)
 	animviz_settings_init(&ob->avs);
 
 	/* kiki: locked dupli indices defaults */
+	// if the index is zero, it'll use the old code path.
 	// match the cycles ID -- name *should* be filled out ahead of time
-	ob->dupli_id = BLI_hash_string(ob->id.name + 2);
+	ob->dupli_id = 0;
 }
 
 /* more general add: creates minimum required data, but without vertices etc. */

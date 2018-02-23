@@ -30,6 +30,7 @@
 
 extern "C" {
 #include "DNA_mesh_types.h"
+#include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_cdderivedmesh.h"
@@ -173,7 +174,7 @@ void AbcPointsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSel
 	Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
 	DerivedMesh *dm = CDDM_from_mesh(mesh);
-	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, 0, NULL);
+	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, m_settings->read_flag & ~MOD_MESHSEQ_READ_ALL, NULL);
 
 	if (ndm != dm) {
 		dm->release(dm);
@@ -187,6 +188,7 @@ void AbcPointsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSel
 
 	m_object = BKE_object_add_only_object(bmain, OB_MESH, m_object_name.c_str());
 	m_object->data = mesh;
+	add_custom_data_to_ob(m_object, m_idprop);
 
 	if (has_animations(m_schema, m_settings)) {
 		addCacheModifier();
@@ -195,7 +197,8 @@ void AbcPointsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSel
 
 void read_points_sample(const IPointsSchema &schema,
                         const ISampleSelector &selector,
-                        CDStreamConfig &config)
+                        CDStreamConfig &config, IDProperty *&id_prop,
+                        const int read_flag)
 {
 	Alembic::AbcGeom::IPointsSchema::Sample sample = schema.getValue(selector);
 
@@ -214,11 +217,17 @@ void read_points_sample(const IPointsSchema &schema,
 	}
 
 	read_mverts(config.mvert, positions, vnormals);
+
+	if ((read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
+		read_vels((DerivedMesh *)config.user_data, sample.getVelocities());
+	}
+
+	read_custom_data(schema.getArbGeomParams(), config, selector, id_prop, read_flag);
 }
 
 DerivedMesh *AbcPointsReader::read_derivedmesh(DerivedMesh *dm, 
 											   const ISampleSelector &sample_sel, 
-											   int /*read_flag*/, 
+											   int read_flag,
 											   const char **/*err_str*/)
 {
 	const IPointsSchema::Sample sample = m_schema.getValue(sample_sel);
@@ -232,7 +241,7 @@ DerivedMesh *AbcPointsReader::read_derivedmesh(DerivedMesh *dm,
 	}
 
 	CDStreamConfig config = get_config(new_dm ? new_dm : dm);
-	read_points_sample(m_schema, sample_sel, config);
+	read_points_sample(m_schema, sample_sel, config, m_idprop, read_flag);
 
 	return new_dm ? new_dm : dm;
 }

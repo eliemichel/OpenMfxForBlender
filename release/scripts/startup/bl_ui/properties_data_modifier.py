@@ -121,15 +121,54 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "end_cap")
 
         layout.separator()
-        sub = layout.split()
-        sub.prop( md, "use_random_materials" )
-        if ob.data and ob.data.materials:
-            sub.label( 'Material Count: {}'.format(len(ob.data.materials)) )
+        sub = layout.row()
 
-        layout.separator()
-        sub = layout.column()
-        sub.enabled = md.use_random_materials
-        sub.prop( md, "random_seed" )
+        material_count = len(ob.data.materials) if (ob.data and ob.data.materials) else 0
+
+        sub.prop( md, "use_advanced_settings" )
+
+        if md.use_advanced_settings:
+            sub.separator()
+            adv = layout.box()
+
+            adv.prop( md, "random_seed" )
+
+            # mats = adv.row()
+            split = adv.split( 0.5 )
+            split.prop( md, "use_random_materials" )
+            split.label( 'Material Count: {}'.format(material_count) )
+
+            if md.use_random_materials:
+                mat_settings = adv.column()
+                mat_settings.enabled = bool( material_count )
+                mat_settings.prop( md, "random_material_type" )
+                mat_settings.prop( md, "random_material_no_duplicates")
+
+                col = mat_settings.column( align=True )
+                col.enabled = (md.random_material_type == 'LOOP')
+                col.prop( md, "loop_offset" )
+
+            subrow = adv.row( align=True )
+            subrow.prop( md, "use_random_location", text='Location' )
+            subrow.prop( md, "use_random_rotation", text='Rotation' )
+            subrow.prop( md, "use_random_scale", text='Scale' )
+
+            subrow = adv.row()
+
+            col = subrow.column( align=True )
+            col.enabled = md.use_random_location
+            col.prop( md, "random_location", text='' )
+            col.prop( md, "cumulative_location" )
+
+            col = subrow.column( align=True )
+            col.enabled = md.use_random_rotation
+            col.prop( md, "random_rotation", text='' )
+            col.prop( md, "cumulative_rotation" )
+
+            col = subrow.column( align=True )
+            col.enabled = md.use_random_scale
+            col.prop( md, "random_scale", text='' )
+            col.prop( md, "cumulative_scale" )
 
     def BEVEL(self, layout, ob, md):
         split = layout.split()
@@ -248,6 +287,25 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         if ob.type == 'MESH':
             box.row().prop(md, "read_data")
+
+        num_attrs = len(md.attributes)
+
+        if 'ATTR' in md.read_data and num_attrs > 0:
+            layout.separator()
+            layout.label(text="Available attributes:")
+
+            box = layout.box()
+            split = box.split()
+            col = split.column()
+
+            half = num_attrs - (num_attrs // 2)
+
+            for attr in md.attributes:
+                if half == 0:
+                    col = split.column()
+
+                col.label(text=attr.name)
+                half -= 1
 
     def CAST(self, layout, ob, md):
         split = layout.split(percentage=0.25)
@@ -719,6 +777,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "density")
         layout.prop(md, "heat")
         layout.prop(md, "flame")
+
+        layout.separator()
         layout.prop(md, "color1")
 
         if (md.use_split_color):
@@ -736,6 +796,23 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             layout.prop(md, "use_split_color")
 
         layout.separator()
+        layout.prop(md, "velocity1")
+
+        if (md.use_split_velocity):
+            split = layout.split(percentage=0.333333)
+
+            col = split.column()
+
+            col.prop(md, "use_split_velocity")
+
+            col = split.column()
+
+            col.prop(md, "velocity2", text="")
+            col.prop(md, "velocity3", text="")
+        else:
+            layout.prop(md, "use_split_velocity")
+
+        layout.separator()
 
         if md.show_axis_convert:
             layout.prop(md, "up_axis")
@@ -743,7 +820,7 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         row = layout.row()
         row.prop(md, "frame_start")
-        row.prop(md, "frame_end")
+        row.prop(md, "seq_len")
 
         layout.prop(md, "frame_offset")
 
@@ -754,13 +831,29 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         sub.active = md.use_frame_override
         sub.prop(md, "frame_override")
 
+        layout.separator()
+        layout.label(text="Viewport Display Options:")
+
         layout.prop(md, "simplify_level")
 
-        layout.prop(md, "hide_volume")
+        row = layout.row()
+        row.prop(md, "hide_volume")
+
+        sub = row.row()
+        sub.active = not md.hide_volume
+        sub.prop(md, "hide_unselected")
 
         row = layout.row()
-        row.active = not md.hide_volume
-        row.prop(md, "hide_unselected")
+        row.prop(md, "density_min")
+        row.prop(md, "density_max")
+
+        layout.prop(md, "display_thickness")
+
+        row = layout.row()
+        row.prop(md, "flame_min")
+        row.prop(md, "flame_max")
+
+        layout.prop(md, "flame_thickness")
 
         layout.prop(md, "numeric_display")
 
@@ -784,6 +877,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
             if (md.color1 != 'NONE'):
                 box.label(text="Max color value: {:.6f}".format(md.max_color))
+
+            if (md.velocity1 != 'NONE'):
+                box.label(text="Max velocity value: {:.6f}".format(md.max_velocity))
 
     def PARTICLE_INSTANCE(self, layout, ob, md):
         layout.prop(md, "object")
@@ -1207,9 +1303,12 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row.active = md.use_remove_disconnected
         row.prop(md, "threshold")
 
-    def SCALING( self, layout, ob, md ):
+    def VERTEXSNAP( self, layout, ob, md ):
         col = layout.column()
-        col.prop( md, "scaleui", text='Scale Amount' )
+        col.prop( md, "target", text="")
+        col.prop( md, "blend",  text='Blend Amount' )
+        col.prop( md, "deform_space" )
+        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
 
 
     @staticmethod
