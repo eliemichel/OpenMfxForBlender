@@ -288,6 +288,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         if ob.type == 'MESH':
             box.row().prop(md, "read_data")
 
+            if (md.has_velocities):
+                box.prop(md, "velocity_factor")
+
         num_attrs = len(md.attributes)
 
         if 'ATTR' in md.read_data and num_attrs > 0:

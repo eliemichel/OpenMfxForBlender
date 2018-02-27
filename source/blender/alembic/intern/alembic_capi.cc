@@ -880,6 +880,7 @@ bool ABC_import(bContext *C, const char *filepath, float scale, bool is_sequence
 	job->settings.sequence_len = sequence_len;
 	job->settings.sequence_offset = offset;
 	job->settings.validate_meshes = validate_meshes;
+	job->settings.vel_fac = 1.0f;
 	job->error_code = ABC_NO_ERROR;
 	job->was_cancelled = false;
 
@@ -945,7 +946,8 @@ DerivedMesh *ABC_read_mesh(CacheReader *reader,
                            DerivedMesh *dm,
                            const float time,
                            const char **err_str,
-                           int read_flag)
+                           int read_flag,
+                           float vel_fac)
 {
 	AbcObjectReader *abc_reader = reinterpret_cast<AbcObjectReader *>(reader);
 	IObject iobject = abc_reader->iobject();
@@ -963,7 +965,7 @@ DerivedMesh *ABC_read_mesh(CacheReader *reader,
 	/* kFloorIndex is used to be compatible with non-interpolating 
 	 * properties; they use the floor. */
 	ISampleSelector sample_sel(time, ISampleSelector::kFloorIndex);
-	return abc_reader->read_derivedmesh(dm, sample_sel, read_flag, err_str);
+	return abc_reader->read_derivedmesh(dm, sample_sel, read_flag, vel_fac, err_str);
 }
 
 /* ************************************************************************** */

@@ -407,6 +407,7 @@ void read_curve_sample(Curve *cu, const ICurvesSchema &schema, const ISampleSele
 DerivedMesh *AbcCurveReader::read_derivedmesh(DerivedMesh * /*dm*/, 
 											  const ISampleSelector &sample_sel, 
 											  int /*read_flag*/, 
+                                              float /*vel_fac*/,
 											  const char ** /*err_str*/)
 {
 	const ICurvesSchema::Sample sample = m_curves_schema.getValue(sample_sel);

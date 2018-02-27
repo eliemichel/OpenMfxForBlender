@@ -107,7 +107,8 @@ public:
 
 	DerivedMesh *read_derivedmesh(DerivedMesh *dm, 
 								  const Alembic::Abc::ISampleSelector &sample_sel, 
-								  int read_flag, 
+								  int read_flag,
+	                              float vel_fac,
 								  const char **err_str);
 
 private:
@@ -134,6 +135,7 @@ public:
 	DerivedMesh *read_derivedmesh(DerivedMesh *dm, 
 								  const Alembic::Abc::ISampleSelector &sample_sel, 
 								  int read_flag, 
+	                              float vel_fac,
 								  const char **err_str);
 };
 
@@ -143,7 +145,7 @@ void read_mverts(MVert *mverts,
                  const Alembic::AbcGeom::P3fArraySamplePtr &positions,
                  const Alembic::AbcGeom::N3fArraySamplePtr &normals);
 
-void read_vels(DerivedMesh *dm, const Alembic::AbcGeom::V3fArraySamplePtr &velocities);
+void read_vels(DerivedMesh *dm, const Alembic::AbcGeom::V3fArraySamplePtr &velocities, float vel_fac);
 
 CDStreamConfig get_config(DerivedMesh *dm);
 

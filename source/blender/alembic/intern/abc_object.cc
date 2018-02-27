@@ -172,6 +172,7 @@ void AbcObjectReader::object(Object *ob)
 DerivedMesh *AbcObjectReader::read_derivedmesh(DerivedMesh *dm,
 											   const Alembic::Abc::ISampleSelector &UNUSED(sample_sel),
 											   int UNUSED(read_flag),
+                                               float UNUSED(vel_fac),
 											   const char **UNUSED(err_str))
 {
 	return dm;
