@@ -162,7 +162,7 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 
 		start = CustomData_get_layer_index(cd, start_type);
 
-		while (start < 0 && start_type <= end_type) {
+		while (start < 0 && start_type < end_type) {
 			start_type++;
 			start = CustomData_get_layer_index(cd, start_type);
 		}
@@ -174,7 +174,7 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 			else {
 				end = CustomData_get_layer_index(cd, end_type);
 
-				while (end < 0 && end_type >= start_type) {
+				while (end < 0 && end_type > start_type) {
 					end_type--;
 					end = CustomData_get_layer_index(cd, end_type);
 				}
