@@ -67,12 +67,14 @@ public:
 	DerivedMesh *read_derivedmesh(DerivedMesh *dm, 
 								  const Alembic::Abc::ISampleSelector &sample_sel, 
 								  int read_flag, 
+	                              float vel_fac,
 								  const char **err_str);
 };
 
 void read_points_sample(const Alembic::AbcGeom::IPointsSchema &schema,
 	const Alembic::AbcGeom::ISampleSelector &selector,
 	CDStreamConfig &config, IDProperty *&id_prop,
-	const int read_flag);
+	const int read_flag,
+    float vel_fac);
 
 #endif  /* __ABC_POINTS_H__ */

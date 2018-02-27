@@ -4852,6 +4852,17 @@ static void rna_def_modifier_meshseqcache(BlenderRNA *brna)
 	                                  "rna_iterator_array_end", "rna_iterator_array_get", NULL, NULL, NULL, NULL);
 	RNA_def_property_ui_text(prop, "Attributes", "");
 
+	prop = RNA_def_property(srna, "velocity_factor", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "vel_fac");
+	RNA_def_property_range(prop, 0, FLT_MAX);
+	RNA_def_property_ui_text(prop, "Velocity Factor", "Scales the velocity data by this factor");
+	RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+	prop = RNA_def_property(srna, "has_velocities", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "data_flag", MOD_MESHSEQ_HAS_VEL);
+	RNA_def_property_ui_text(prop, "Has Velocities", "");
+	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
 	srna = RNA_def_struct(brna, "MeshSeqCacheString", NULL);
 	RNA_def_struct_sdna(srna, "MeshSeqCacheString");
 	RNA_def_struct_ui_text(srna, "Sequence Cache String", "");

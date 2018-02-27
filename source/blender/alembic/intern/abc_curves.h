@@ -62,6 +62,7 @@ public:
 	DerivedMesh *read_derivedmesh(DerivedMesh *, 
 								  const Alembic::Abc::ISampleSelector &sample_sel, 
 								  int read_flag, 
+	                              float vel_fac,
 								  const char **err_str);
 };
 

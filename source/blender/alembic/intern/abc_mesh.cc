@@ -874,7 +874,7 @@ ABC_INLINE void read_normals_params(AbcMeshData &abc_data,
 	}
 }
 
-void read_vels(DerivedMesh *dm, const Alembic::AbcGeom::V3fArraySamplePtr &velocities)
+void read_vels(DerivedMesh *dm, const Alembic::AbcGeom::V3fArraySamplePtr &velocities, float vel_fac)
 {
 	CustomData *cd = dm->getVertDataLayout(dm);
 	size_t num = dm->getNumVerts(dm);
@@ -891,7 +891,7 @@ void read_vels(DerivedMesh *dm, const Alembic::AbcGeom::V3fArraySamplePtr &veloc
 		float (*data)[3] = (float (*)[3])velocities->getData();
 
 		for (int i = 0; i < num; i++) {
-			copy_zup_from_yup(vdata[i], data[i]);
+			copy_zup_from_yup(vdata[i], data[i], vel_fac);
 		}
 	}
 }
@@ -1011,7 +1011,7 @@ static bool read_mesh_sample(ImportSettings *settings,
 	}
 
 	if ((settings->read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
-		read_vels((DerivedMesh *)config.user_data, sample.getVelocities());
+		read_vels((DerivedMesh *)config.user_data, sample.getVelocities(), settings->vel_fac);
 	}
 
 	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
@@ -1062,7 +1062,7 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 	Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
 	DerivedMesh *dm = CDDM_from_mesh(mesh);
-	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, NULL);
+	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, m_settings->vel_fac, NULL);
 
 	if (ndm != dm) {
 		dm->release(dm);
@@ -1112,6 +1112,7 @@ bool AbcMeshReader::accepts_object_type(const Alembic::AbcCoreAbstract::ObjectHe
 DerivedMesh *AbcMeshReader::read_derivedmesh(DerivedMesh *dm, 
 											 const ISampleSelector &sample_sel, 
 											 int read_flag, 
+                                             float vel_fac,
 											 const char **err_str)
 {
 	const IPolyMeshSchema::Sample sample = m_schema.getValue(sample_sel);
@@ -1125,6 +1126,7 @@ DerivedMesh *AbcMeshReader::read_derivedmesh(DerivedMesh *dm,
 	/* Only read point data when streaming meshes, unless we need to create new ones. */
 	ImportSettings settings;
 	settings.read_flag |= read_flag;
+	settings.vel_fac = vel_fac;
 
 	if (dm->getNumVerts(dm) != positions->size()) {
 		new_dm = CDDM_from_template(dm,
@@ -1284,7 +1286,7 @@ static bool read_subd_sample(ImportSettings *settings,
 	}
 
 	if ((settings->read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
-		read_vels((DerivedMesh *)config.user_data, sample.getVelocities());
+		read_vels((DerivedMesh *)config.user_data, sample.getVelocities(), settings->vel_fac);
 	}
 
 	if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
@@ -1336,7 +1338,7 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 	Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
 	DerivedMesh *dm = CDDM_from_mesh(mesh);
-	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, NULL);
+	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, m_settings->vel_fac, NULL);
 
 	if (ndm != dm) {
 		dm->release(dm);
@@ -1388,6 +1390,7 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 DerivedMesh *AbcSubDReader::read_derivedmesh(DerivedMesh *dm, 
 											 const ISampleSelector &sample_sel, 
 											 int read_flag, 
+                                             float vel_fac,
 											 const char **err_str)
 {
 	const ISubDSchema::Sample sample = m_schema.getValue(sample_sel);
@@ -1400,6 +1403,7 @@ DerivedMesh *AbcSubDReader::read_derivedmesh(DerivedMesh *dm,
 
 	ImportSettings settings;
 	settings.read_flag |= read_flag;
+	settings.vel_fac = vel_fac;
 
 	if (dm->getNumVerts(dm) != positions->size()) {
 		new_dm = CDDM_from_template(dm,

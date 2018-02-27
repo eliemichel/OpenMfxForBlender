@@ -59,6 +59,7 @@ static void initData(ModifierData *md)
 	mcmd->read_flag = MOD_MESHSEQ_READ_ALL;
 	mcmd->attr_names = NULL;
 	mcmd->num_attr = 0;
+	mcmd->vel_fac = 1.0f;
 }
 
 static void copyData(ModifierData *md, ModifierData *target)
@@ -133,6 +134,7 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 
 		if (!mcmd->reader) {
 			modifier_setError(md, "Could not create Alembic reader for file %s", cache_file->filepath);
+			mcmd->data_flag &= ~MOD_MESHSEQ_HAS_VEL;
 			return dm;
 		}
 	}
@@ -142,7 +144,8 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 	                                    dm,
 	                                    time,
 	                                    &err_str,
-	                                    mcmd->read_flag);
+	                                    mcmd->read_flag,
+	                                    mcmd->vel_fac);
 
 	if (err_str) {
 		modifier_setError(md, "%s", err_str);
@@ -192,6 +195,13 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 				BLI_strncpy(mcmd->attr_names[i], cd->layers[start + i].name, 64);
 			}
 		}
+	}
+
+	if (result->getVertDataArray(result, CD_VELOCITY)) {
+		mcmd->data_flag |= MOD_MESHSEQ_HAS_VEL;
+	}
+	else {
+		mcmd->data_flag &= ~MOD_MESHSEQ_HAS_VEL;
 	}
 
 	return result;

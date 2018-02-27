@@ -121,7 +121,8 @@ struct DerivedMesh *ABC_read_mesh(struct CacheReader *reader,
                                   struct DerivedMesh *dm,
                                   const float time,
                                   const char **err_str,
-                                  int flags);
+                                  int flags,
+                                  float vel_fac);
 
 void CacheReader_incref(struct CacheReader *reader);
 void CacheReader_free(struct CacheReader *reader);
