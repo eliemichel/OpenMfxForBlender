@@ -879,6 +879,10 @@ void read_vels(DerivedMesh *dm, const Alembic::AbcGeom::V3fArraySamplePtr &veloc
 	CustomData *cd = dm->getVertDataLayout(dm);
 	size_t num = dm->getNumVerts(dm);
 
+	if (!velocities) {
+		return;
+	}
+
 	BLI_assert(num == velocities->size());
 
 	float (*vdata)[3] = (float (*)[3])CustomData_add_layer(cd, CD_VELOCITY, CD_DEFAULT, NULL, num);
