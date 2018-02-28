@@ -331,6 +331,11 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 		                      sd,
 		                      &isect,
 		                      ray);
+
+/* Skip most work for volume bounding surface. */
+#ifdef __VOLUME__
+		if (!(sd->shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
+#endif
 		float rbsdf = path_state_rng_1D_for_decision(kg, rng, state, PRNG_BSDF);
 		shader_eval_surface(kg, sd, rng, state, rbsdf, state->flag, SHADER_CONTEXT_INDIRECT, NULL, 0);
 #ifdef __BRANCHED_PATH__
@@ -449,6 +454,9 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 		}
 #endif  /* defined(__EMISSION__) && defined(__BRANCHED_PATH__) */
 
+#ifdef __VOLUME__
+		}
+#endif
 		if(!kernel_path_surface_bounce(kg, rng, sd, &throughput, state, L, ray))
 			break;
 	}
@@ -831,6 +839,11 @@ ccl_device_inline void kernel_path_integrate(KernelGlobals *kg,
 
 		/* setup shading */
 		shader_setup_from_ray(kg, &sd, &isect, &ray);
+
+		/* Skip most work for volume bounding surface. */
+#ifdef __VOLUME__
+		if (!(sd.shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
+#endif
 		float rbsdf = path_state_rng_1D_for_decision(kg, rng, &state, PRNG_BSDF);
 		shader_eval_surface(kg, &sd, rng, &state, rbsdf, state.flag, SHADER_CONTEXT_MAIN, buffer, sample);
 
@@ -943,6 +956,10 @@ ccl_device_inline void kernel_path_integrate(KernelGlobals *kg,
         uint shadow_linking = object_shadow_linking(kg, sd.object);
 
 		kernel_path_surface_connect_light(kg, rng, &sd, &emission_sd, throughput, &state, &L, light_linking, shadow_linking);
+
+#ifdef __VOLUME__
+		}
+#endif
 
 		/* compute direct lighting and next bounce */
 		if(!kernel_path_surface_bounce(kg, rng, &sd, &throughput, &state, &L, &ray))
