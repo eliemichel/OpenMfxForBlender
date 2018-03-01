@@ -81,6 +81,8 @@ public:
 	void set_pack_images(bool pack_images_);
 	bool set_animation_frame_update(int frame);
 
+	device_memory *image_memory(DeviceScene *dscene, int flat_slot);
+
 	bool need_update;
 
 	/* NOTE: Here pixels_size is a size of storage, which equals to

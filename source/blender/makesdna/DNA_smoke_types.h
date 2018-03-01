@@ -219,6 +219,9 @@ typedef struct SmokeDomainSettings {
 	char pad2;
 
 	struct OpenVDBModifierData *vdb;
+
+	float clipping;
+	float pad3;
 } SmokeDomainSettings;
 
 

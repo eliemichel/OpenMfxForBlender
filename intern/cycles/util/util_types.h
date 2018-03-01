@@ -140,6 +140,11 @@ typedef int32_t ssize_t;
 
 #endif
 
+ccl_device_inline size_t divide_up(size_t x, size_t y)
+{
+	return (x + y - 1) / y;
+}
+
 /* Generic Memory Pointer */
 
 typedef uint64_t device_ptr;
