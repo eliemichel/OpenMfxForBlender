@@ -1126,17 +1126,6 @@ ccl_device_inline int3 clamp(const int3& a, int3& mn, int mx)
 #endif
 }
 
-#endif
-
-#ifndef __KERNEL_GPU__
-
-ccl_device_inline void print_int3(const char *label, const int3& a)
-{
-	printf("%s: %d %d %d\n", label, a.x, a.y, a.z);
-}
-
-#endif
-
 ccl_device_inline bool operator==(const int3 &a, const int3 &b)
 {
     return a.x == b.x && a.y == b.y && a.z == b.z;
@@ -1151,6 +1140,17 @@ ccl_device_inline bool operator<(const int3 &a, const int3 &b)
 {
     return a.x < b.x && a.y < b.y && a.z < b.z;
 }
+
+#endif
+
+#ifndef __KERNEL_GPU__
+
+ccl_device_inline void print_int3(const char *label, const int3& a)
+{
+	printf("%s: %d %d %d\n", label, a.x, a.y, a.z);
+}
+
+#endif
 
 /* Int4 */
 
