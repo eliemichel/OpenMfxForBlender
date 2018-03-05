@@ -1037,8 +1037,11 @@ static void sync_mesh_fluid_motion(BL::Object& b_ob, Scene *scene, Mesh *mesh)
 		return;
 
 	/* If the mesh has modifiers following the fluid domain we can't export motion. */
-	if(b_fluid_domain.fluid_mesh_vertices.length() != mesh->verts.size())
+	if (b_fluid_domain.fluid_mesh_vertices.length() != mesh->verts.size()) {
+		VLOG(1) << "Topology differs, disabling motion blur for object "
+			<< b_ob.name();
 		return;
+	}
 
 	/* Find or add attribute */
 	float3 *P = &mesh->verts[0];
@@ -1069,6 +1072,9 @@ static void sync_mesh_alembic_motion(BL::Mesh& b_mesh, Scene *scene, Mesh *mesh)
 		return;
 
 	if(b_mesh.velocities.length() != mesh->verts.size())
+		return;
+
+	if (mesh->verts.size() == 0)
 		return;
 
 	/* Find or add attribute */
