@@ -251,7 +251,7 @@ GPUTexture *GPU_texture_create_3D(int w, int h, int depth, int channels, const f
 {
 	GLenum type, format, internalformat;
 	void *pixels = NULL;
-	float factor = max_val - min_val;
+	float factor = 1.0f / (max_val - min_val);
 
 	GPUTexture *tex = MEM_callocN(sizeof(GPUTexture), "GPUTexture");
 	tex->w = w;
@@ -348,7 +348,7 @@ GPUTexture *GPU_texture_create_3D(int w, int h, int depth, int channels, const f
 								tex3d[offset * 4 + 3] = 0.0f;
 							}
 							else {
-								tex3d[offset * 4 + 3] = (fpixels[offset_orig * 4 + 3] - min_val) / factor;
+								tex3d[offset * 4 + 3] = (fpixels[offset_orig * 4 + 3] - min_val) * factor;
 							}
 						}
 						else {
@@ -361,7 +361,7 @@ GPUTexture *GPU_texture_create_3D(int w, int h, int depth, int channels, const f
 								tex3d[offset] = 0.0f;
 							}
 							else {
-								tex3d[offset] = (fpixels[offset_orig] - min_val) / factor;
+								tex3d[offset] = (fpixels[offset_orig] - min_val) * factor;
 							}
 						}
 						else {
@@ -392,7 +392,7 @@ GPUTexture *GPU_texture_create_3D(int w, int h, int depth, int channels, const f
 					}
 					else {
 						tex3d[i] -= min_val;
-						tex3d[i] /= factor;
+						tex3d[i] *= factor;
 					}
 				}
 
@@ -635,7 +635,7 @@ void GPU_invalid_tex_init(void)
 	const float color[4] = {1.0f, 0.0f, 1.0f, 1.0f};
 	GG.invalid_tex_1D = GPU_texture_create_1D(1, color, NULL);
 	GG.invalid_tex_2D = GPU_texture_create_2D(1, 1, color, GPU_HDR_NONE, NULL);
-	GG.invalid_tex_3D = GPU_texture_create_3D(1, 1, 1, 4, color, 0.0f, 0.0f);
+	GG.invalid_tex_3D = GPU_texture_create_3D(1, 1, 1, 4, color, 0.0f, 1.0f);
 }
 
 void GPU_invalid_tex_bind(int mode)
