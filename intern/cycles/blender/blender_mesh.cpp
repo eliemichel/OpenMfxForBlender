@@ -1071,6 +1071,9 @@ static void sync_mesh_alembic_motion(BL::Mesh& b_mesh, Scene *scene, Mesh *mesh)
 	if(b_mesh.velocities.length() != mesh->verts.size())
 		return;
 
+	if (mesh->verts.size() == 0)
+		return;
+
 	/* Find or add attribute */
 	float3 *P = &mesh->verts[0];
 	Attribute *attr_mP = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);

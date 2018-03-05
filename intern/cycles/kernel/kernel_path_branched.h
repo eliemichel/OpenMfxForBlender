@@ -391,11 +391,11 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, int 
 		else {
 			int i = (kernel_data.background.volume_shader != SHADER_NONE) ? 1 : 0;
 			do {
-				if(state.volume_stack[i].t_exit == FLT_MAX) {
-					kernel_volume_stack_remove(kg, state.volume_stack[i].object, state.volume_stack);
+				if(state.volume_stack[i].t_exit != FLT_MAX) {
+					++i;
 				}
 				else {
-					++i;
+					kernel_volume_stack_remove(kg, state.volume_stack[i].object, state.volume_stack);
 				}
 			} while(i < VOLUME_STACK_SIZE && state.volume_stack[i].shader != SHADER_NONE);
 		}
