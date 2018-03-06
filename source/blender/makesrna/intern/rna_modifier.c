@@ -5523,6 +5523,39 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Display Values", "Values to display numerically in the viewport");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+
+	prop = RNA_def_property(srna, "density_min", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Min Density", "Minimum threshold for density display");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+
+	prop = RNA_def_property(srna, "density_max", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Max Density", "Maximum threshold for density display");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+
+	prop = RNA_def_property(srna, "flame_min", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Min Flame", "Minimum threshold for flame display");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+
+	prop = RNA_def_property(srna, "flame_max", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Max Flame", "Maximum threshold for flame display");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+
+	prop = RNA_def_property(srna, "display_thickness", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Density Thickness", "Thickness of smoke drawing in the viewport");
+	RNA_def_property_float_funcs(prop, "rna_OpenVDBModifier_display_thickness_get",
+	                             "rna_OpenVDBModifier_display_thickness_set", NULL);
+	RNA_def_property_range(prop, 0.001, 1000.0);
+	RNA_def_property_ui_range(prop, 0.1, 100.0, 0.1, 3);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
+
+	prop = RNA_def_property(srna, "flame_thickness", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_ui_text(prop, "Flame Thickness", "Thickness of flame drawing in the viewport");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, 0, "rna_OpenVDBModifier_viewport_update");
 }
 
 static void rna_def_modifier_vertex_snap(BlenderRNA *brna)
