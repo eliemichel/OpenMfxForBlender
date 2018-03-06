@@ -611,6 +611,11 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, int 
 
 		/* setup shading */
 		shader_setup_from_ray(kg, &sd, &isect, &ray);
+
+		/* Skip most work for volume bounding surface. */
+#ifdef __VOLUME__
+		if (!(sd.shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
+#endif
 		shader_eval_surface(kg, &sd, rng, &state, 0.0f, state.flag, SHADER_CONTEXT_MAIN, buffer, sample);
 		shader_merge_closures(&sd);
 
@@ -699,52 +704,61 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg, RNG *rng, int 
 		}
 #endif  /* __SUBSURFACE__ */
 
-		if(!(sd.shader_flag & SD_SHADER_HAS_ONLY_VOLUME)) {
-			PathState hit_state = state;
+		PathState hit_state = state;
 
 #ifdef __VOLUME__
-			for(int i = 0; hit_state.volume_stack[i].shader != SHADER_NONE; ++i) {
-				hit_state.volume_stack[i].t_enter = 0.0f;
-				hit_state.volume_stack[i].t_exit = FLT_MAX;
-			}
+		for(int i = 0; hit_state.volume_stack[i].shader != SHADER_NONE; ++i) {
+			hit_state.volume_stack[i].t_enter = 0.0f;
+			hit_state.volume_stack[i].t_exit = FLT_MAX;
+		}
 #endif  /* __VOLUME__ */
 
-            uint light_linking = object_light_linking(kg, sd.object);
+        uint light_linking = object_light_linking(kg, sd.object);
 
 #ifdef __EMISSION__
-			/* direct light */
-			if(kernel_data.integrator.use_direct_light) {
-				int all = kernel_data.integrator.sample_all_lights_direct;
+		/* direct light */
+		if(kernel_data.integrator.use_direct_light) {
+			int all = kernel_data.integrator.sample_all_lights_direct;
 
-                uint shadow_linking = object_shadow_linking(kg, sd.object);
+            uint shadow_linking = object_shadow_linking(kg, sd.object);
 
-				kernel_branched_path_surface_connect_light(kg, rng,
-					&sd, &emission_sd, &hit_state, throughput, 1.0f, &L, all,
-                    light_linking, shadow_linking);
-			}
+			kernel_branched_path_surface_connect_light(kg, rng,
+				&sd, &emission_sd, &hit_state, throughput, 1.0f, &L, all,
+                light_linking, shadow_linking);
+		}
 #endif  /* __EMISSION__ */
 
-			/* indirect light */
-			kernel_branched_path_surface_indirect_light(kg, rng,
-				&sd, &indirect_sd, &emission_sd, throughput, 1.0f, &hit_state, &L, light_linking);
+		/* indirect light */
+		kernel_branched_path_surface_indirect_light(kg, rng,
+			&sd, &indirect_sd, &emission_sd, throughput, 1.0f, &hit_state, &L, light_linking);
 
-			/* continue in case of transparency */
-			float3 transparency = shader_bsdf_transparency(kg, &sd);
-			throughput *= transparency;
+		/* continue in case of transparency */
+		float3 transparency = shader_bsdf_transparency(kg, &sd);
+		throughput *= transparency;
 
-			if(is_zero(throughput))
-				break;
+		if(is_zero(throughput))
+			break;
 			
-			state.matte_weight *= average(transparency);
-		}
+		state.matte_weight *= average(transparency);
 
 		/* Update Path State */
 		state.flag |= PATH_RAY_TRANSPARENT;
 		state.transparent_bounce++;
 
+#ifdef __VOLUME__
+		}
+		else {
+			/* For volume bounding meshes we pass through without counting transparent
+			 * bounces, only sanity check in case self intersection gets us stuck. */
+			state.volume_bounds_bounce++;
+			if (state.volume_bounds_bounce > VOLUME_BOUNDS_MAX) {
+				break;
+			}
+		}
+#endif
+
 		ray.P = ray_offset(sd.P, -sd.Ng);
 		ray.t -= sd.ray_length; /* clipping works through transparent */
-
 
 #ifdef __RAY_DIFFERENTIALS__
 		ray.dP = sd.dP;
