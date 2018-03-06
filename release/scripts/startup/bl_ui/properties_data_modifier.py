@@ -863,7 +863,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         if (md.density != 'NONE' or
                 md.heat != 'NONE' or
                 md.flame != 'NONE' or
-                md.color != 'NONE'):
+                md.color1 != 'NONE' or
+                md.velocity1 != 'NONE'):
             layout.separator()
             layout.label(text="Stats:")
 
