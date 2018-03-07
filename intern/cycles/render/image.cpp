@@ -105,6 +105,39 @@ bool ImageManager::set_animation_frame_update(int frame)
 	return false;
 }
 
+device_memory *ImageManager::image_memory(DeviceScene *dscene, int flat_slot)
+{
+	   ImageDataType type;
+	   int slot = flattened_slot_to_type_index(flat_slot, &type);
+
+	   device_memory *tex_img = NULL;
+
+	   switch(type) {
+		   case IMAGE_DATA_TYPE_FLOAT4:
+			   tex_img = dscene->tex_float4_image[slot];
+			   break;
+		   case IMAGE_DATA_TYPE_FLOAT:
+			   tex_img = dscene->tex_float_image[slot];
+			   break;
+		   case IMAGE_DATA_TYPE_BYTE:
+			   tex_img = dscene->tex_byte_image[slot];
+			   break;
+		   case IMAGE_DATA_TYPE_BYTE4:
+			   tex_img = dscene->tex_byte4_image[slot];
+			   break;
+		   case IMAGE_DATA_TYPE_HALF:
+			   tex_img = dscene->tex_half_image[slot];
+			   break;
+		   case IMAGE_DATA_TYPE_HALF4:
+			   tex_img = dscene->tex_half4_image[slot];
+			   break;
+		   default:
+			   assert(0);
+	   }
+
+	   return tex_img;
+}
+
 ImageDataType ImageManager::get_image_metadata(const string& filename,
                                                              void *builtin_data,
                                                              boost::shared_ptr<uint8_t> generated_data,

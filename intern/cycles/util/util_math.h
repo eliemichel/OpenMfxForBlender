@@ -1137,6 +1137,21 @@ ccl_device_inline void print_int3(const char *label, const int3& a)
 
 #endif
 
+ccl_device_inline bool operator==(const int3 &a, const int3 &b)
+{
+    return a.x == b.x && a.y == b.y && a.z == b.z;
+}
+
+ccl_device_inline bool operator!=(const int3 &a, const int3 &b)
+{
+    return !(a == b);
+}
+
+ccl_device_inline bool operator<(const int3 &a, const int3 &b)
+{
+    return a.x < b.x && a.y < b.y && a.z < b.z;
+}
+
 /* Int4 */
 
 #ifndef __KERNEL_GPU__
