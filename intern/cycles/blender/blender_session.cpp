@@ -380,6 +380,9 @@ void BlenderSession::render()
 	BL::RenderSettings r = b_scene.render();
 	BL::RenderSettings::layers_iterator b_layer_iter;
 	BL::RenderResult::views_iterator b_view_iter;
+
+	/* We do some special meta attributes when we only have single layer. */
+	const bool is_single_layer = (r.layers.length() == 1);
 	
 	for(r.layers.begin(b_layer_iter); b_layer_iter != r.layers.end(); ++b_layer_iter) {
 		b_rlay_name = b_layer_iter->name();
@@ -448,6 +451,17 @@ void BlenderSession::render()
 			if(session->progress.get_cancel())
 				break;
 		}
+
+		BL::RenderResult b_full_rr = b_engine.get_result();
+		string num_aa_samples = string_printf("%d", session->params.samples);
+		b_full_rr.stamp_data_add_field(("Cycles Samples " + b_rlay_name).c_str(), num_aa_samples.c_str());
+		if (is_single_layer) {
+			b_full_rr.stamp_data_add_field("Cycles Samples", num_aa_samples.c_str());
+			
+		}
+		/* TODO(sergey): Report whether we're doing resumable render
+		 * and also start/end sample if so.
+		 */
 
 		/* free result without merging */
 		end_render_result(b_engine, b_rr, true, false);
