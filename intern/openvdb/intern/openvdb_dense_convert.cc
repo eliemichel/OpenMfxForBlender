@@ -272,7 +272,7 @@ openvdb::math::Transform::Ptr OpenVDB_get_grid_transform(
 	using namespace openvdb;
 
 	if (!reader->hasGrid(name)) {
-		return NULL;
+		return openvdb::math::Transform::Ptr();
 	}
 
 	GridBase::Ptr grid = reader->getGrid(name);
