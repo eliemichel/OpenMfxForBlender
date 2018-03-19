@@ -414,7 +414,7 @@ Object *BlenderSync::sync_object(BL::Object& b_parent,
 			);
 		}
 
-		printf( "CYCLES: Generated object \"%s\", Dupli ID %u\n", object->name, object->random_id );
+		printf( "CYCLES: Generated object \"%s\", Dupli ID %u\n", object->name.c_str(), object->random_id );
 		if (b_dupli_ob) {
 			printf( "\t dupli object\n" );
 		}
