@@ -7929,7 +7929,8 @@ void draw_object(Scene *scene, ARegion *ar, View3D *v3d, Base *base, const short
 			p1[1] = (sds->p0[1] + sds->cell_size[1] * sds->res_max[1] + sds->obj_shift_f[1]) * fabsf(ob->size[1]);
 			p1[2] = (sds->p0[2] + sds->cell_size[2] * sds->res_max[2] + sds->obj_shift_f[2]) * fabsf(ob->size[2]);
 
-			if (!sds->vdb || !((sds->vdb->flags & MOD_OPENVDB_HIDE_UNSELECTED) && !(ob->flag & SELECT)))
+			if (!sds->vdb || (!((sds->vdb->flags & MOD_OPENVDB_HIDE_UNSELECTED) && !(ob->flag & SELECT)) &&
+			                  !(sds->vdb->flags & MOD_OPENVDB_HIDE_VOLUME)))
 			{
 				if (!sds->wt || !(sds->viewsettings & MOD_SMOKE_VIEW_SHOWBIG)) {
 					sds->tex = NULL;
