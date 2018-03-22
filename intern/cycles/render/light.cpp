@@ -230,6 +230,10 @@ void LightManager::disable_ineffective_light(Device *device, Scene *scene)
 
 bool LightManager::object_usable_as_light(Object *object) {
 	Mesh *mesh = object->mesh;
+	/* Skip objects with NaNs */
+	if (!object->bounds.valid()) {
+		return false;
+	}
 	/* Skip if we are not visible for BSDFs. */
 	if(!(object->visibility & (PATH_RAY_DIFFUSE|PATH_RAY_GLOSSY|PATH_RAY_TRANSMIT))) {
 		return false;
@@ -346,6 +350,9 @@ void LightManager::device_update_distribution(Device *device, DeviceScene *dscen
 				offset++;
 
 				Mesh::Triangle t = mesh->get_triangle(i);
+				if(!t.valid(&mesh->verts[0])) {
+					continue;
+				}
 				float3 p1 = mesh->verts[t.v[0]];
 				float3 p2 = mesh->verts[t.v[1]];
 				float3 p3 = mesh->verts[t.v[2]];
