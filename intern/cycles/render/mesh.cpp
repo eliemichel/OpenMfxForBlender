@@ -127,6 +127,11 @@ float3 Mesh::Triangle::compute_normal(const float3 *verts) const
 	return norm / normlen;
 }
 
+inline float isfinite3_safe(const float3 &f)
+{
+	return isfinite_safe(f.x) && isfinite_safe(f.y) && isfinite_safe(f.z);
+}
+
 bool Mesh::Triangle::valid(const float3 *verts) const
 {
 	return isfinite3_safe(verts[v[0]]) &&
