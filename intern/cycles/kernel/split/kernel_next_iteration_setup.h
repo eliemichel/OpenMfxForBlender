@@ -44,6 +44,7 @@ CCL_NAMESPACE_BEGIN
  *   - QUEUE_HITBG_BUFF_UPDATE_TOREGEN_RAYS will be filled with
  *     RAY_TO_REGENERATE and more RAY_UPDATE_BUFFER rays.
  */
+
 ccl_device void kernel_next_iteration_setup(KernelGlobals *kg,
                                             ccl_local_param unsigned int *local_queue_atomics)
 {
