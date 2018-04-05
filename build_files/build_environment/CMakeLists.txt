@@ -34,7 +34,11 @@
 #   Run "make deps" from main Blender directory
 #
 # LINUX USAGE:
-#   Install compiler, cmake, autoconf, automake, libtool, yasm
+#   Install compiler, cmake, autoconf, automake, libtool, yasm,
+#           libx11-dev, libbz2-dev, freeglut3-dev, libz-dev,
+#           libxmu-dev, libxi-dev, xorg-dev libglu1-mesa-dev,
+#           libflac-dev, libssl-dev, bison, flex, python3-dev,
+#           libopenal-dev, libglew-dev
 #   Run "make deps" from main Blender directory
 #
 ####################################################################################################
