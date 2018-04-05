@@ -413,12 +413,12 @@ Object *BlenderSync::sync_object(BL::Object& b_parent,
 				: hash_int_2d(hash_string(object->name.c_str()), 0)
 			);
 		}
-
+		/*
 		printf( "CYCLES: Generated object \"%s\", Dupli ID %u\n", object->name.c_str(), object->random_id );
 		if (b_dupli_ob) {
 			printf( "\t dupli object\n" );
 		}
-
+		*/
 		object->tag_update(scene);
 	}
 
