@@ -26,7 +26,7 @@ ARGS=$( \
 getopt \
 -o s:i:t:h \
 --long source:,install:,tmp:,info:,threads:,help,show-deps,no-sudo,no-build,no-confirm,use-cxx11,\
-with-all,with-opencollada,\
+with-all,with-opencollada,with-jack,\
 ver-ocio:,ver-oiio:,ver-llvm:,ver-osl:,ver-osd:,ver-openvdb:,\
 force-all,force-python,force-numpy,force-boost,\
 force-ocio,force-openexr,force-oiio,force-llvm,force-osl,force-osd,force-openvdb,\
@@ -117,6 +117,9 @@ ARGUMENTS_INFO="\"COMMAND LINE ARGUMENTS:
 
     --with-opencollada
         Build and install the OpenCOLLADA libraries.
+
+    --with-jack
+        Install the jack libraries.
 
     --ver-ocio=<ver>
         Force version of OCIO library.
@@ -289,13 +292,13 @@ NO_BUILD=false
 NO_CONFIRM=false
 USE_CXX11=false
 
-PYTHON_VERSION="3.5.2"
-PYTHON_VERSION_MIN="3.5"
+PYTHON_VERSION="3.6.2"
+PYTHON_VERSION_MIN="3.6"
 PYTHON_FORCE_BUILD=false
 PYTHON_FORCE_REBUILD=false
 PYTHON_SKIP=false
 
-NUMPY_VERSION="1.10.1"
+NUMPY_VERSION="1.13.1"
 NUMPY_VERSION_MIN="1.8"
 NUMPY_FORCE_BUILD=false
 NUMPY_FORCE_REBUILD=false
@@ -322,8 +325,8 @@ OPENEXR_FORCE_REBUILD=false
 OPENEXR_SKIP=false
 _with_built_openexr=false
 
-OIIO_VERSION="1.7.13"
-OIIO_VERSION_MIN="1.7.13"
+OIIO_VERSION="1.7.15"
+OIIO_VERSION_MIN="1.7.15"
 OIIO_VERSION_MAX="1.9.0"  # UNKNOWN currently # Not supported by current OSL...
 OIIO_FORCE_BUILD=false
 OIIO_FORCE_REBUILD=false
@@ -366,8 +369,7 @@ ALEMBIC_FORCE_BUILD=false
 ALEMBIC_FORCE_REBUILD=false
 ALEMBIC_SKIP=false
 
-# Version??
-OPENCOLLADA_VERSION="1.3"
+OPENCOLLADA_VERSION="1.6.51"
 OPENCOLLADA_FORCE_BUILD=false
 OPENCOLLADA_FORCE_REBUILD=false
 OPENCOLLADA_SKIP=false
@@ -507,6 +509,9 @@ while true; do
     ;;
     --with-opencollada)
       WITH_OPENCOLLADA=true; shift; continue
+    ;;
+    --with-jack)
+      WITH_JACK=true; shift; continue;
     ;;
     --ver-ocio)
       OCIO_VERSION="$2"
@@ -711,6 +716,9 @@ done
 if [ "$WITH_ALL" = true -a "$OPENCOLLADA_SKIP" = false ]; then
   WITH_OPENCOLLADA=true
 fi
+if [ "$WITH_ALL" = true ]; then
+  WITH_JACK=true
+fi
 
 
 WARNING "****WARNING****"
@@ -731,13 +739,16 @@ PRINT ""
 
 # This has to be done here, because user might force some versions...
 PYTHON_SOURCE=( "https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tgz" )
-NUMPY_SOURCE=( "http://sourceforge.net/projects/numpy/files/NumPy/$NUMPY_VERSION/numpy-$NUMPY_VERSION.tar.gz" )
+NUMPY_SOURCE=( "https://github.com/numpy/numpy/releases/download/v$NUMPY_VERSION/numpy-$NUMPY_VERSION.tar.gz" )
 
 _boost_version_nodots=`echo "$BOOST_VERSION" | sed -r 's/\./_/g'`
 BOOST_SOURCE=( "http://sourceforge.net/projects/boost/files/boost/$BOOST_VERSION/boost_$_boost_version_nodots.tar.bz2/download" )
 BOOST_BUILD_MODULES="--with-system --with-filesystem --with-thread --with-regex --with-locale --with-date_time --with-wave --with-iostreams --with-python --with-program_options"
 
+OCIO_USE_REPO=true
 OCIO_SOURCE=( "https://github.com/imageworks/OpenColorIO/tarball/v$OCIO_VERSION" )
+OCIO_SOURCE_REPO=( "https://github.com/imageworks/OpenColorIO.git" )
+OCIO_SOURCE_REPO_UID="6de971097c7f552300f669ed69ca0b6cf5a70843"
 
 OPENEXR_USE_REPO=false
 OPENEXR_SOURCE=( "http://download.savannah.nongnu.org/releases/openexr/openexr-$OPENEXR_VERSION.tar.gz" )
@@ -750,8 +761,8 @@ OIIO_SOURCE=( "https://github.com/OpenImageIO/oiio/archive/Release-$OIIO_VERSION
 OIIO_SOURCE_REPO=( "https://github.com/OpenImageIO/oiio.git" )
 OIIO_SOURCE_REPO_UID="c9e67275a0b248ead96152f6d2221cc0c0f278a4"
 
-LLVM_SOURCE=( "http://llvm.org/releases/$LLVM_VERSION/llvm-$LLVM_VERSION.src.tar.gz" )
-LLVM_CLANG_SOURCE=( "http://llvm.org/releases/$LLVM_VERSION/clang-$LLVM_VERSION.src.tar.gz" "http://llvm.org/releases/$LLVM_VERSION/cfe-$LLVM_VERSION.src.tar.gz" )
+LLVM_SOURCE=( "http://releases.llvm.org/$LLVM_VERSION/llvm-$LLVM_VERSION.src.tar.gz" )
+LLVM_CLANG_SOURCE=( "http://releases.llvm.org/$LLVM_VERSION/clang-$LLVM_VERSION.src.tar.gz" "http://llvm.org/releases/$LLVM_VERSION/cfe-$LLVM_VERSION.src.tar.gz" )
 
 OSL_USE_REPO=false
 OSL_SOURCE=( "https://github.com/imageworks/OpenShadingLanguage/archive/Release-$OSL_VERSION.tar.gz" )
@@ -786,7 +797,7 @@ ALEMBIC_SOURCE=( "https://github.com/alembic/alembic/archive/${ALEMBIC_VERSION}.
 # ALEMBIC_SOURCE_REPO_BRANCH="master"
 
 OPENCOLLADA_SOURCE=( "https://github.com/KhronosGroup/OpenCOLLADA.git" )
-OPENCOLLADA_REPO_UID="3335ac164e68b2512a40914b14c74db260e6ff7d"
+OPENCOLLADA_REPO_UID="0c2cdc17c22cf42050e4d42154bed2176363549c"
 OPENCOLLADA_REPO_BRANCH="master"
 
 FFMPEG_SOURCE=( "http://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.bz2" )
@@ -1149,7 +1160,7 @@ compile_Numpy() {
 
     cd $_src
 
-    $_python/bin/python3 setup.py install --prefix=$_inst
+    $_python/bin/python3 setup.py install --old-and-unmanageable --prefix=$_inst
 
     if [ -d $_inst ]; then
       # Can't use _create_inst_shortcut here...
@@ -1251,7 +1262,11 @@ compile_Boost() {
 #### Build OCIO ####
 _init_ocio() {
   _src=$SRC/OpenColorIO-$OCIO_VERSION
-  _git=false
+  if [ "$OCIO_USE_REPO" = true ]; then
+    _git=true
+  else
+    _git=false
+  fi
   _inst=$INST/ocio-$OCIO_VERSION
   _inst_shortcut=$INST/ocio
 }
@@ -1268,7 +1283,7 @@ compile_OCIO() {
   fi
 
   # To be changed each time we make edits that would modify the compiled result!
-  ocio_magic=1
+  ocio_magic=2
   _init_ocio
 
   # Clean install if needed!
@@ -1285,14 +1300,27 @@ compile_OCIO() {
     if [ ! -d $_src ]; then
       INFO "Downloading OpenColorIO-$OCIO_VERSION"
       mkdir -p $SRC
-      download OCIO_SOURCE[@] $_src.tar.gz
 
-      INFO "Unpacking OpenColorIO-$OCIO_VERSION"
-      tar -C $SRC --transform "s,(.*/?)imageworks-OpenColorIO[^/]*(.*),\1OpenColorIO-$OCIO_VERSION\2,x" \
-          -xf $_src.tar.gz
+      if [ "$OCIO_USE_REPO" = true ]; then
+        git clone ${OCIO_SOURCE_REPO[0]} $_src
+      else
+        download OCIO_SOURCE[@] $_src.tar.gz
+        INFO "Unpacking OpenColorIO-$OCIO_VERSION"
+        tar -C $SRC --transform "s,(.*/?)imageworks-OpenColorIO[^/]*(.*),\1OpenColorIO-$OCIO_VERSION\2,x" \
+            -xf $_src.tar.gz
+      fi
+
     fi
 
     cd $_src
+
+    if [ "$OCIO_USE_REPO" = true ]; then
+      # XXX For now, always update from latest repo...
+      git pull origin master
+      git checkout $OCIO_SOURCE_REPO_UID
+      git reset --hard
+    fi
+
     # Always refresh the whole build!
     if [ -d build ]; then
       rm -rf build
@@ -1498,7 +1526,6 @@ compile_OPENEXR() {
     if [ "$OPENEXR_USE_REPO" = true ]; then
       # XXX For now, always update from latest repo...
       git pull origin master
-      # Stick to same rev as windows' libs...
       git checkout $OPENEXR_SOURCE_REPO_UID
       git reset --hard
       oiio_src_path="../OpenEXR"
@@ -1576,7 +1603,7 @@ compile_OIIO() {
   fi
 
   # To be changed each time we make edits that would modify the compiled result!
-  oiio_magic=16
+  oiio_magic=17
   _init_oiio
 
   # Clean install if needed!
@@ -1639,6 +1666,9 @@ compile_OIIO() {
       cmake_d="$cmake_d -D OPENEXR_HOME=$INST/openexr"
       INFO "ILMBASE_HOME=$INST/openexr"
     fi
+
+    # ptex is only needed when nicholas bishop is ready
+    cmake_d="$cmake_d -D USE_PTEX=OFF"
 
     # Optional tests and cmd tools
     cmake_d="$cmake_d -D USE_QT=OFF"
@@ -1751,7 +1781,7 @@ compile_LLVM() {
       cd $_src
 
       # XXX Ugly patching hack!
-      patch -p1 -i "$SCRIPT_DIR/install_deps_patches/llvm.patch"
+      patch -p1 -i "$SCRIPT_DIR/patches/install_deps_llvm.diff"
 
       cd $CWD
 
@@ -1857,7 +1887,7 @@ compile_OSL() {
       git reset --hard
 
       # XXX Ugly patching hack!
-      patch -p1 -i "$SCRIPT_DIR/install_deps_patches/osl.patch"
+      patch -p1 -i "$SCRIPT_DIR/patches/install_deps_osl.diff"
     fi
 
     # Always refresh the whole build!
@@ -2638,7 +2668,7 @@ install_DEB() {
     PRINT ""
   fi
 
-  if [ "$WITH_ALL" = true ]; then
+  if [ "$WITH_JACK" = true ]; then
     _packages="$_packages libspnav-dev"
     # Only install jack if jack2 is not already installed!
     JACK="libjack-dev"
@@ -3175,7 +3205,7 @@ install_RPM() {
   if [ "$RPM" = "FEDORA" -o "$RPM" = "RHEL" ]; then
     _packages="$_packages freetype-devel tbb-devel"
 
-    if [ "$WITH_ALL" = true ]; then
+    if [ "$WITH_JACK" = true ]; then
       _packages="$_packages jack-audio-connection-kit-devel"
     fi
 
@@ -3649,7 +3679,11 @@ install_ARCH() {
   THEORA_USE=true
 
   if [ "$WITH_ALL" = true ]; then
-    _packages="$_packages jack libspnav"
+    _packages="$_packages libspnav"
+  fi
+
+  if [ "$WITH_JACK" = true ]; then
+    _packages="$_packages jack"
   fi
 
   PRINT ""
@@ -4309,6 +4343,14 @@ print_info() {
     _1="-D WITH_OPENCOLLADA=ON"
     PRINT "  $_1"
     _buildargs="$_buildargs $_1"
+  fi
+
+  if [ "$WITH_JACK" = true ]; then
+    _1="-D WITH_JACK=ON"
+    _2="-D WITH_JACK_DYNLOAD=ON"
+    PRINT "  $_1"
+    PRINT "  $_2"
+    _buildargs="$_buildargs $_1 $_2"
   fi
 
   if [ "$ALEMBIC_SKIP" = false ]; then
