@@ -464,6 +464,35 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             row = layout.row(align=True)
             row.operator("object.hook_select", text="Select")
             row.operator("object.hook_assign", text="Assign")
+            
+    def OPENMESHEFFECT(self, layout, _ob, md):
+        layout.prop(md, "plugin_path")
+        layout.separator()
+
+        #layout.prop(md, "library_path")
+        #layout.separator()
+
+        #if md.asset_info:
+        #    layout.label(text="Assets:")
+        #for asset in md.asset_info:
+        #    layout.label(text=asset.name)
+        #layout.separator()
+
+        #layout.prop(md, "asset_index")
+        #layout.separator()
+
+        if md.parameter_info:
+            layout.label(text="Parameters:")
+        for parm in md.parameter_info:
+            row = layout.row(align=True)
+            row.label(text=parm.label)
+            if parm.type == 0: # float
+                row.prop(parm, "float_value", text="")
+            if parm.type == 1: # int
+                row.prop(parm, "int_value", text="")
+            if parm.type == 2: # string
+                row.prop(parm, "string_value", text="")
+
 
     def LAPLACIANDEFORM(self, layout, ob, md):
         is_bind = md.is_bind

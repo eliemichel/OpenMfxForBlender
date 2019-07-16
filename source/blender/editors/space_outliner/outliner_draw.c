@@ -1916,6 +1916,7 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
               data.icon = ICON_MOD_EDGESPLIT;
               break;
             case eModifierType_Array:
+            case eModifierType_OpenMeshEffect:
               data.icon = ICON_MOD_ARRAY;
               break;
             case eModifierType_UVProject:

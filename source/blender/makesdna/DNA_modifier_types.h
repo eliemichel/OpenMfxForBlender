@@ -88,6 +88,7 @@ typedef enum ModifierType {
   eModifierType_MeshSequenceCache = 52,
   eModifierType_SurfaceDeform = 53,
   eModifierType_WeightedNormal = 54,
+  eModifierType_OpenMeshEffect = 55,
   NUM_MODIFIER_TYPES,
 } ModifierType;
 
@@ -1945,5 +1946,44 @@ enum {
 
 #define MOD_MESHSEQ_READ_ALL \
   (MOD_MESHSEQ_READ_VERT | MOD_MESHSEQ_READ_POLY | MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)
+
+typedef struct OpenMeshEffectAssetInfo {
+  /** MOD_OPENMESHEFFECT_MAX_ASSET_NAME */
+  char name[256];
+} OpenMeshEffectAssetInfo;
+
+#define MOD_OPENMESHEFFECT_MAX_ASSET_NAME 256
+
+typedef struct OpenMeshEffectParameterInfo {
+  /** MOD_OPENMESHEFFECT_MAX_PARAMETER_NAME */
+  char name[256];
+  /** MOD_OPENMESHEFFECT_MAX_PARAMETER_LABEL */
+  char label[256];
+  int type;
+  float float_value;
+  int int_value;
+  /** MOD_OPENMESHEFFECT_MAX_STRING_VALUE */
+  char string_value[1024];
+} OpenMeshEffectParameterInfo;
+
+#define MOD_OPENMESHEFFECT_MAX_PARAMETER_NAME 256
+#define MOD_OPENMESHEFFECT_MAX_PARAMETER_LABEL 256
+#define MOD_OPENMESHEFFECT_MAX_STRING_VALUE 1024
+
+typedef struct OpenMeshEffectModifierData {
+  ModifierData modifier;
+
+  /** 1024 = FILE_MAX. */
+  char plugin_path[1024];
+  /** 1024 = FILE_MAX. */
+  char library_path[1024];
+  int asset_index, _pad0;
+
+  /* Runtime. */
+  OpenMeshEffectAssetInfo *asset_info;
+  int num_assets, _pad1;
+  OpenMeshEffectParameterInfo *parameter_info;
+  int num_parameters, _pad2;
+} OpenMeshEffectModifierData;
 
 #endif /* __DNA_MODIFIER_TYPES_H__ */

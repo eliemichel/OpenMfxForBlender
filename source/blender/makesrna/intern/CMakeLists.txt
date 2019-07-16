@@ -168,6 +168,7 @@ set(SRC
 
 set(INC
     ../../../../intern/clog
+    ../../../../intern/openmesheffect/blender
 )
 
 set(INC_SYS

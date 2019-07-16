@@ -32,6 +32,7 @@ set(INC
   ../../../intern/elbeem/extern
   ../../../intern/eigen
   ../../../intern/guardedalloc
+  ../../../intern/openmesheffect/blender
 )
 
 set(INC_SYS
@@ -73,6 +74,7 @@ set(SRC
   intern/MOD_none.c
   intern/MOD_normal_edit.c
   intern/MOD_ocean.c
+  intern/MOD_openmesheffect.c
   intern/MOD_particleinstance.c
   intern/MOD_particlesystem.c
   intern/MOD_remesh.c
@@ -111,6 +113,7 @@ set(SRC
 set(LIB
   bf_blenkernel
   bf_blenlib
+  bf_intern_openmesheffect
 )
 
 if(WITH_ALEMBIC)

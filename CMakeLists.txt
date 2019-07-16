@@ -325,7 +325,8 @@ option(WITH_ALEMBIC_HDF5        "Enable Legacy Alembic Support (not officially s
 
 # 3D format support
 # Disable opencollada when we don't have precompiled libs
-option(WITH_OPENCOLLADA   "Enable OpenCollada Support (http://www.opencollada.org)" ${_init_OPENCOLLADA})
+option(WITH_OPENCOLLADA                  "Enable OpenCollada Support (http://www.opencollada.org)" ${_init_OPENCOLLADA})
+option(WITH_OPENCOLLADA_ANIMATION_CLIP   "Enable this when building with Collada 1.6.65 or newer" ON)
 
 # Sound output
 option(WITH_SDL           "Enable SDL for sound and joystick support" ${_init_SDL})
@@ -1754,6 +1755,7 @@ if(FIRST_RUN)
   info_cfg_option(WITH_IK_SOLVER)
   info_cfg_option(WITH_IK_ITASC)
   info_cfg_option(WITH_OPENCOLLADA)
+  info_cfg_option(WITH_OPENCOLLADA_ANIMATION_CLIP)
   info_cfg_option(WITH_FFTW3)
   info_cfg_option(WITH_INTERNATIONAL)
   info_cfg_option(WITH_INPUT_NDOF)
