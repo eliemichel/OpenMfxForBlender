@@ -80,6 +80,10 @@ void deep_copy_mesh_effect(OfxMeshEffectStruct *destination,
 
 // Mesh Effect Suite Entry Points
 
+extern const OfxMeshEffectSuiteV1 gMeshEffectSuiteV1;
+
+// See ofxMeshEffect.h for docstrings
+
 OfxStatus getPropertySet(OfxMeshEffectHandle meshEffect,
                          OfxPropertySetHandle *propHandle);
 OfxStatus getParamSet(OfxMeshEffectHandle meshEffect,

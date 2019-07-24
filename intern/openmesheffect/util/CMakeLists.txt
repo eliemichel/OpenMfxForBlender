@@ -27,9 +27,12 @@ set(INC_PRIV
 set(SRC
   intern/ofx_util.c
   intern/memory_util.c
+  intern/binary_util.c
 
   include/util/ofx_util.h
   include/util/memory_util.h
+  include/util/binary_util.h
+  include/util/path_util.h
 )
 
 set(LIB

@@ -29,10 +29,6 @@
 extern "C" {
 #endif
 
-#ifdef _WIN32
-#include <windows.h>
-#endif
-
 #include <stdbool.h>
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
@@ -42,41 +38,8 @@ extern "C" {
 #include "intern/inputs.h"
 #include "intern/mesheffect.h"
 
-// Plugin registry
-
-typedef enum OfxPluginStatus {
-    OfxPluginStatOK,
-    OfxPluginStatNotLoaded,
-    OfxPluginStatError
-} OfxPluginStatus;
-
-typedef struct PluginRegistry {
-#ifdef _WIN32
-    HINSTANCE hinstance;
-#else
-    void *handle; // handle of the binary library, to be closed
-#endif
-    int num_plugins;
-    OfxPlugin **plugins;
-    OfxPluginStatus *status;
-} PluginRegistry;
-
 OfxHost * getGlobalHost(void);
 void releaseGlobalHost(void);
-
-/**
- * /pre registry has never been allocated
- * /post if true is returned, registry is allocated and filled with valid
- *       OfxPlugin pointers. Registry must be later released using
- *       free_registry()
- */
-bool load_registry(PluginRegistry *registry, const char *ofx_filepath);
-
-/**
- * /pre registry has been allocated
- * /post registry will never be used again
- */
-void free_registry(PluginRegistry *registry);
 
 // Steps of use_plugin
 bool ofxhost_load_plugin(OfxHost *host, OfxPlugin *plugin);
@@ -87,6 +50,8 @@ bool ofxhost_create_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectDescri
 void ofxhost_destroy_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance);
 bool ofxhost_cook(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance);
 
+#include "mfxPluginRegistry.h"
+// TODO: use_plugin might be dropped from API
 /**
  * Flag the plugin as beeing used eventually and perform initial loading
  * /pre plugins have been loaded into the registry using load_plugins_linux()

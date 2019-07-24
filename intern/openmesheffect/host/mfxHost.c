@@ -31,285 +31,46 @@
 
 #include "mfxHost.h"
 
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
-
 // OFX SUITES MAIN
 
 static const void * fetchSuite(OfxPropertySetHandle host,
                                const char *suiteName,
                                int suiteVersion) {
-
-  static const OfxMeshEffectSuiteV1 meshEffectSuiteV1 = {
-    /* getPropertySet */      getPropertySet,
-    /* getParamSet */         getParamSet,
-    /* inputDefine */         inputDefine,
-    /* inputGetHandle */      inputGetHandle,
-    /* inputGetPropertySet */ inputGetPropertySet,
-    /* inputGetMesh */        inputGetMesh,
-    /* inputReleaseMesh */    inputReleaseMesh,
-    /* meshAlloc */           meshAlloc,
-    /* abort */               ofxAbort
-  };
-
-  static const OfxParameterSuiteV1 parameterSuiteV1 = {
-    /* paramDefine */            paramDefine,
-    /* paramGetHandle */         paramGetHandle,
-    /* paramSetGetPropertySet */ paramSetGetPropertySet,
-    /* paramGetPropertySet */    paramGetPropertySet,
-    /* paramGetValue */          paramGetValue,
-    /* paramGetValueAtTime */    paramGetValueAtTime,
-    /* paramGetDerivative */     paramGetDerivative,
-    /* paramGetIntegral */       paramGetIntegral,
-    /* paramSetValue */          paramSetValue,
-    /* paramSetValueAtTime */    paramSetValueAtTime,
-    /* paramGetNumKeys */        paramGetNumKeys,
-    /* paramGetKeyTime */        paramGetKeyTime,
-    /* paramGetKeyIndex */       paramGetKeyIndex,
-    /* paramDeleteKey */         paramDeleteKey,
-    /* paramDeleteAllKeys */     paramDeleteAllKeys,
-    /* paramCopy */              paramCopy,
-    /* paramEditBegin */         paramEditBegin,
-    /* paramEditEnd */           paramEditEnd
-  };
-
-  static const OfxPropertySuiteV1 propertySuiteV1 = {
-    /* propSetPointer */   propSetPointer,
-    /* propSetString */    propSetString,
-    /* propSetDouble */    propSetDouble,
-    /* propSetInt */       propSetInt,
-    /* propSetPointerN */  propSetPointerN,
-    /* propSetStringN */   propSetStringN,
-    /* propSetDoubleN */   propSetDoubleN,
-    /* propSetIntN */      propSetIntN,
-    /* propGetPointer */   propGetPointer,
-    /* propGetString */    propGetString,
-    /* propGetDouble */    propGetDouble,
-    /* propGetInt */       propGetInt,
-    /* propGetPointerN */  propGetPointerN,
-    /* propGetStringN */   propGetStringN,
-    /* propGetDoubleN */   propGetDoubleN,
-    /* propGetIntN */      propGetIntN,
-    /* propReset */        propReset,
-    /* propGetDimension */ propGetDimension
-  };
-
   (void)host; // TODO: check host?
 
   if (0 == strcmp(suiteName, kOfxMeshEffectSuite) && suiteVersion == 1) {
-    return &meshEffectSuiteV1;
+    switch (suiteVersion) {
+      case 1:
+        return &gMeshEffectSuiteV1;
+      default:
+        printf("Suite '%s' is only supported in version 1.\n", suiteName);
+        return NULL;
+    }
   }
   if (0 == strcmp(suiteName, kOfxParameterSuite) && suiteVersion == 1) {
-    return &parameterSuiteV1;
+    switch (suiteVersion) {
+      case 1:
+        return &gParameterSuiteV1;
+      default:
+        printf("Suite '%s' is only supported in version 1.\n", suiteName);
+        return NULL;
+    }
   }
   if (0 == strcmp(suiteName, kOfxPropertySuite) && suiteVersion == 1) {
-    return &propertySuiteV1;
+    switch (suiteVersion) {
+      case 1:
+        return &gPropertySuiteV1;
+      default:
+        printf("Suite '%s' is only supported in version 1.\n", suiteName);
+        return NULL;
+    }
   }
+
+  printf("Suite '%s' is not supported by this host.\n", suiteName);
   return NULL;
 }
 
 // OFX MESH EFFECT HOST
-
-typedef void (*OfxSetBundleDirectoryFunc)(const char *path);
-typedef int (*OfxGetNumberOfPluginsFunc)(void);
-typedef OfxPlugin *(*OfxGetPluginFunc)(int nth);
-
-#ifdef _WIN32
-LPVOID getLastErrorMessage() {
-  LPVOID msg;
-  FormatMessage(
-    FORMAT_MESSAGE_ALLOCATE_BUFFER |
-    FORMAT_MESSAGE_FROM_SYSTEM |
-    FORMAT_MESSAGE_IGNORE_INSERTS,
-    NULL,
-    GetLastError(),
-    MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-    (LPTSTR)&msg,
-    0, NULL);
-  return msg;
-}
-#endif // _WIN32
-
-bool load_registry(PluginRegistry *registry, const char *ofx_filepath) {
-#ifdef _WIN32
-  FARPROC proc;
-#else
-  void *proc;
-#endif
-  OfxGetNumberOfPluginsFunc fOfxGetNumberOfPlugins;
-  OfxGetPluginFunc fOfxGetPlugin;
-  OfxSetBundleDirectoryFunc fOfxSetBundleDirectory;
-
-  // Init registry
-  registry->num_plugins = 0;
-  registry->plugins = NULL;
-  registry->status = NULL;
-#ifdef _WIN32
-  registry->hinstance = NULL; 
-#else
-  registry->handle = NULL;
-#endif
-  
-  // Open ofx binary
-#ifdef _WIN32
-  registry->hinstance = LoadLibrary(TEXT(ofx_filepath));
-  if (NULL == registry->hinstance) {
-    LPVOID msg = getLastErrorMessage();
-    printf("mfxHost: Unable to load plugin binary at path %s. LoadLibrary returned: %s\n", ofx_filepath, msg);
-    LocalFree(msg);
-    return false;
-  }
-#else
-  registry->handle = dlopen(ofx_filepath, RTLD_LAZY | RTLD_LOCAL);
-  if (NULL == registry->handle) {
-    printf("mfxHost: Unable to load plugin binary at path %s. dlopen returned: %s\n", ofx_filepath, dlerror());
-    return false;
-  }
-#endif
-
-#ifdef _WIN32
-  proc = GetProcAddress(registry->hinstance, "OfxGetNumberOfPlugins");
-#else
-  proc = dlsym(registry->handle, "OfxGetNumberOfPlugins");
-#endif
-  fOfxGetNumberOfPlugins = (OfxGetNumberOfPluginsFunc)proc;
-
-  if (NULL == proc) {
-    printf("mfxHost: Unable to load symbol 'OfxGetNumberOfPlugins' from %s. ", ofx_filepath);
-#ifdef _WIN32
-    LPVOID msg = getLastErrorMessage();
-    printf("GetProcAddress returned: %s\n", msg);
-    LocalFree(msg);
-#else
-    printf("dlsym returned: %s\n", dlerror());
-#endif
-    free_registry(registry);
-    return false;
-  }
-
-#ifdef _WIN32
-  proc = GetProcAddress(registry->hinstance, "OfxGetPlugin");
-#else
-  proc = dlsym(registry->handle, "OfxGetPlugin");
-#endif
-  fOfxGetPlugin = (OfxGetPluginFunc)proc;
-
-  if (NULL == proc) {
-    printf("mfxHost: Unable to load symbol 'OfxGetPlugin' from %s. ", ofx_filepath);
-#ifdef _WIN32
-    LPVOID msg = getLastErrorMessage();
-    printf("GetProcAddress returned: %s\n", msg);
-    LocalFree(msg);
-#else
-    printf("dlsym returned: %s\n", dlerror());
-#endif
-    free_registry(registry);
-    return false;
-  }
-  
-#ifdef _WIN32
-  proc = GetProcAddress(registry->hinstance, "OfxSetBundleDirectory");
-#else
-  proc = dlsym(registry->handle, "OfxSetBundleDirectory");
-#endif
-  fOfxSetBundleDirectory = (OfxSetBundleDirectoryFunc)proc;
-  if (NULL == proc) {
-    printf("mfxHost: Unable to load symbol 'OfxSetBundleDirectory' from %s. ", ofx_filepath);
-#ifdef _WIN32
-    LPVOID msg = getLastErrorMessage();
-    printf("GetProcAddress returned: %s\n", msg);
-    LocalFree(msg);
-#else
-    printf("dlsym returned: %s\n", dlerror());
-#endif
-  }
-
-  {
-    if (NULL != fOfxSetBundleDirectory) {
-      char *bundle_directory = malloc_array(sizeof(char), strlen(ofx_filepath) + 1, "bundle directory");
-      strcpy(bundle_directory, ofx_filepath);
-      *strrchr(bundle_directory, '\\') = '\0'; // TODO: Forward slash
-      fOfxSetBundleDirectory(bundle_directory);
-    }
-  }
-
-  {
-    int i, j, n;
-    n = fOfxGetNumberOfPlugins();
-    printf("Found %d plugins in %s.\n", n, ofx_filepath);
-
-    // 1. Count number of supported plugins
-    registry->num_plugins = 0;
-    for (i = 0 ; i < n ; ++i) {
-      OfxPlugin *plugin;
-      plugin = fOfxGetPlugin(i);
-      printf("Plugin #%d: %s (API %s, version %d)\n", i, plugin->pluginIdentifier, plugin->pluginApi, plugin->apiVersion);
-
-      // API/Version check
-      if (0 != strcmp(plugin->pluginApi, kOfxMeshEffectPluginApi)) {
-        printf("Unsupported plugin API: %s (expected %s)", plugin->pluginApi, kOfxMeshEffectPluginApi);
-        continue;
-      }
-      if (plugin->apiVersion != kOfxMeshEffectPluginApiVersion) {
-        printf("Plugin API version mismatch: %d found, but %d expected", plugin->apiVersion, kOfxMeshEffectPluginApiVersion);
-        continue;
-      }
-
-      ++registry->num_plugins;
-    }
-
-    printf("Found %d supported plugins in %s.\n", registry->num_plugins, ofx_filepath);
-
-    if (registry->num_plugins > 0) {
-      registry->plugins = malloc_array(sizeof(OfxPlugin*), registry->num_plugins, "mfx plugins");
-      registry->status = malloc_array(sizeof(OfxPluginStatus), registry->num_plugins, "mfx plugins status");
-    }
-
-    for (i = 0, j = 0 ; i < n ; ++i) {
-      OfxPlugin *plugin;
-      plugin = fOfxGetPlugin(i);
-      
-      if (0 != strcmp(plugin->pluginApi, kOfxMeshEffectPluginApi)
-        || plugin->apiVersion != kOfxMeshEffectPluginApiVersion) {
-        continue;
-      }
-      
-      printf("Plugin #%d in binary is #%d in plugin registry\n", i, j);
-      registry->plugins[j] = plugin;
-      registry->status[j] = OfxPluginStatNotLoaded; // will be loaded later on when needed
-      ++j;
-    }
-  }
-
-  return true;
-}
-
-void free_registry(PluginRegistry *registry) {
-  registry->num_plugins = 0;
-  if (NULL != registry->plugins) {
-    free_array(registry->plugins);
-    registry->plugins = NULL;
-  }
-  if (NULL != registry->status) {
-    free_array(registry->status);
-    registry->status = NULL;
-  }
-#ifdef _WIN32
-  if (NULL != registry->hinstance) {
-    FreeLibrary(registry->hinstance);
-    registry->hinstance = NULL;
-  }
-#else
-  if (NULL != registry->handle) {
-    dlclose(registry->handle);
-    registry->handle = NULL;
-  }
-#endif
-}
 
 OfxHost *gHost = NULL;
 int gHostUse = 0;

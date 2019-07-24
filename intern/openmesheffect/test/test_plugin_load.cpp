@@ -17,6 +17,7 @@
 #include "testing/testing.h"
 
 #include "mfxHost.h"
+#include "intern/properties.h"
 
 TEST(OpenMeshEffectHost, ListPlugins)
 {
@@ -25,3 +26,25 @@ TEST(OpenMeshEffectHost, ListPlugins)
 	EXPECT_EQ(use_plugin(&registry, 0), true);
 	free_registry(&registry);
 }
+
+TEST(OpenMeshEffectHost, Properties)
+{
+	OfxPropertySetStruct property_set;
+	init_properties(&property_set);
+
+	property_set.context = PROP_CTX_OTHER;
+	EXPECT_EQ(propSetPointer(&property_set, "TestPropPointer", 0, &property_set), kOfxStatOK);
+	EXPECT_EQ(propSetString(&property_set, "TestPropString", 0, "lorem ipsum"), kOfxStatOK);
+	EXPECT_EQ(propSetDouble(&property_set, "TestPropDouble", 0, 3.1415), kOfxStatOK);
+	EXPECT_EQ(propSetInt(&property_set, "TestPropInt", 0, 42), kOfxStatOK);
+
+	property_set.context = PROP_CTX_MESH_EFFECT;
+	EXPECT_EQ(propSetInt(&property_set, "WrongField", 0, 0), kOfxStatErrBadHandle);
+	EXPECT_EQ(propSetInt(&property_set, kOfxMeshEffectPropContext, 0, 0), kOfxStatOK);
+
+	property_set.context = PROP_CTX_INPUT;
+	EXPECT_EQ(propSetInt(&property_set, "WrongField", 0, 0), kOfxStatErrBadHandle);
+	EXPECT_EQ(propSetInt(&property_set, kOfxPropLabel, 0, 0), kOfxStatErrBadHandle); // wrong type
+	EXPECT_EQ(propSetString(&property_set, kOfxPropLabel, 0, "label"), kOfxStatOK);
+}
+

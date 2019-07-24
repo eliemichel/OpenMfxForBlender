@@ -92,16 +92,16 @@ void deep_copy_property_set(OfxPropertySetStruct *destination, const OfxProperty
   destination->context = source->context;
 }
 
-bool check_property_context(OfxPropertySetStruct *propertySet, const char *property) {
+bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type, const char *property) {
   switch (propertySet->context) {
   case PROP_CTX_MESH_EFFECT:
     return (
-      0 == strcmp(property, kOfxMeshEffectPropContext) ||
+      (0 == strcmp(property, kOfxMeshEffectPropContext) && type == PROP_TYPE_INT) ||
       false
     );
   case PROP_CTX_INPUT:
     return (
-      0 == strcmp(property, kOfxPropLabel) ||
+      (0 == strcmp(property, kOfxPropLabel) && type == PROP_TYPE_STRING) ||
       false
     );
   case PROP_CTX_OTHER:
@@ -112,8 +112,29 @@ bool check_property_context(OfxPropertySetStruct *propertySet, const char *prope
 
 // // Property Suite Entry Points
 
+const OfxPropertySuiteV1 gPropertySuiteV1 = {
+    /* propSetPointer */   propSetPointer,
+    /* propSetString */    propSetString,
+    /* propSetDouble */    propSetDouble,
+    /* propSetInt */       propSetInt,
+    /* propSetPointerN */  propSetPointerN,
+    /* propSetStringN */   propSetStringN,
+    /* propSetDoubleN */   propSetDoubleN,
+    /* propSetIntN */      propSetIntN,
+    /* propGetPointer */   propGetPointer,
+    /* propGetString */    propGetString,
+    /* propGetDouble */    propGetDouble,
+    /* propGetInt */       propGetInt,
+    /* propGetPointerN */  propGetPointerN,
+    /* propGetStringN */   propGetStringN,
+    /* propGetDoubleN */   propGetDoubleN,
+    /* propGetIntN */      propGetIntN,
+    /* propReset */        propReset,
+    /* propGetDimension */ propGetDimension
+};
+
 OfxStatus propSetPointer(OfxPropertySetHandle properties, const char *property, int index, void *value) {
-  if (false == check_property_context(properties, property)) {
+  if (false == check_property_context(properties, PROP_TYPE_POINTER, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
@@ -125,7 +146,7 @@ OfxStatus propSetPointer(OfxPropertySetHandle properties, const char *property, 
 }
 
 OfxStatus propSetString(OfxPropertySetHandle properties, const char *property, int index, const char *value) {
-  if (false == check_property_context(properties, property)) {
+  if (false == check_property_context(properties, PROP_TYPE_STRING, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
@@ -137,7 +158,7 @@ OfxStatus propSetString(OfxPropertySetHandle properties, const char *property, i
 }
 
 OfxStatus propSetDouble(OfxPropertySetHandle properties, const char *property, int index, double value) {
-  if (false == check_property_context(properties, property)) {
+  if (false == check_property_context(properties, PROP_TYPE_DOUBLE, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
@@ -149,7 +170,7 @@ OfxStatus propSetDouble(OfxPropertySetHandle properties, const char *property, i
 }
 
 OfxStatus propSetInt(OfxPropertySetHandle properties, const char *property, int index, int value) {
-  if (false == check_property_context(properties, property)) {
+  if (false == check_property_context(properties, PROP_TYPE_INT, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
@@ -201,7 +222,7 @@ OfxStatus propSetIntN(OfxPropertySetHandle properties, const char *property, int
 }
 
 OfxStatus propGetPointer(OfxPropertySetHandle properties, const char *property, int index, void **value) {
-  if (false == check_property_context(properties, property)) {
+  if (false == check_property_context(properties, PROP_TYPE_POINTER, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
@@ -213,7 +234,7 @@ OfxStatus propGetPointer(OfxPropertySetHandle properties, const char *property, 
 }
 
 OfxStatus propGetString(OfxPropertySetHandle properties, const char *property, int index, char **value) {
-  if (false == check_property_context(properties, property)) {
+  if (false == check_property_context(properties, PROP_TYPE_STRING, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
@@ -225,7 +246,7 @@ OfxStatus propGetString(OfxPropertySetHandle properties, const char *property, i
 }
 
 OfxStatus propGetDouble(OfxPropertySetHandle properties, const char *property, int index, double *value) {
-  if (false == check_property_context(properties, property)) {
+  if (false == check_property_context(properties, PROP_TYPE_DOUBLE, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
@@ -237,7 +258,7 @@ OfxStatus propGetDouble(OfxPropertySetHandle properties, const char *property, i
 }
 
 OfxStatus propGetInt(OfxPropertySetHandle properties, const char *property, int index, int *value) {
-  if (false == check_property_context(properties, property)) {
+  if (false == check_property_context(properties, PROP_TYPE_INT, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {

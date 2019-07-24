@@ -159,7 +159,7 @@ void deep_copy_parameter_set(OfxParamSetStruct *destination, const OfxParamSetSt
   destination->effect_properties = source->effect_properties;
 }
 
-// // Parameter Suite Entry Points
+// // Utils
 
 ParamType parse_parameter_type(const char *str) {
   if (0 == strcmp(str, kOfxParamTypeDouble)) {
@@ -184,6 +184,29 @@ size_t parameter_type_dimensions(ParamType type) {
     return 1;
   }
 }
+
+// //Parameter Suite Entry Points
+
+const OfxParameterSuiteV1 gParameterSuiteV1 = {
+	/* paramDefine */            paramDefine,
+	/* paramGetHandle */         paramGetHandle,
+	/* paramSetGetPropertySet */ paramSetGetPropertySet,
+	/* paramGetPropertySet */    paramGetPropertySet,
+	/* paramGetValue */          paramGetValue,
+	/* paramGetValueAtTime */    paramGetValueAtTime,
+	/* paramGetDerivative */     paramGetDerivative,
+	/* paramGetIntegral */       paramGetIntegral,
+	/* paramSetValue */          paramSetValue,
+	/* paramSetValueAtTime */    paramSetValueAtTime,
+	/* paramGetNumKeys */        paramGetNumKeys,
+	/* paramGetKeyTime */        paramGetKeyTime,
+	/* paramGetKeyIndex */       paramGetKeyIndex,
+	/* paramDeleteKey */         paramDeleteKey,
+	/* paramDeleteAllKeys */     paramDeleteAllKeys,
+	/* paramCopy */              paramCopy,
+	/* paramEditBegin */         paramEditBegin,
+	/* paramEditEnd */           paramEditEnd
+};
 
 OfxStatus paramDefine(OfxParamSetHandle paramSet,
                       const char *paramType,

@@ -37,6 +37,13 @@ typedef struct OfxPropertyStruct {
     OfxPropertyValueStruct value[4];
 } OfxPropertyStruct;
 
+typedef enum PropertyType {
+	PROP_TYPE_POINTER,
+	PROP_TYPE_STRING,
+	PROP_TYPE_DOUBLE,
+	PROP_TYPE_INT,
+} PropertyType;
+
 typedef enum PropertySetContext {
     PROP_CTX_HOST,
     PROP_CTX_MESH_EFFECT,
@@ -60,11 +67,15 @@ int ensure_property(OfxPropertySetStruct *properties, const char *property);
 void init_properties(OfxPropertySetStruct *properties);
 void free_properties(OfxPropertySetStruct *properties);
 void deep_copy_property_set(OfxPropertySetStruct *destination, const OfxPropertySetStruct *source);
-bool check_property_context(OfxPropertySetStruct *propertySet, const char *property);
+bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type, const char *property);
 
 // // Property Suite Entry Points
 
 #include "ofxProperty.h"
+
+extern const OfxPropertySuiteV1 gPropertySuiteV1;
+
+// See ofxProperty.h for docstrings
 
 OfxStatus propSetPointer(OfxPropertySetHandle properties, const char *property, int index, void *value);
 OfxStatus propSetString(OfxPropertySetHandle properties, const char *property, int index, const char *value);

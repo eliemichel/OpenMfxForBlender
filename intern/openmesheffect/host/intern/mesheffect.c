@@ -49,6 +49,18 @@ void deep_copy_mesh_effect(OfxMeshEffectStruct *destination, const OfxMeshEffect
 
 // // Mesh Effect Suite Entry Points
 
+const OfxMeshEffectSuiteV1 gMeshEffectSuiteV1 = {
+    /* getPropertySet */      getPropertySet,
+    /* getParamSet */         getParamSet,
+    /* inputDefine */         inputDefine,
+    /* inputGetHandle */      inputGetHandle,
+    /* inputGetPropertySet */ inputGetPropertySet,
+    /* inputGetMesh */        inputGetMesh,
+    /* inputReleaseMesh */    inputReleaseMesh,
+    /* meshAlloc */           meshAlloc,
+    /* abort */               ofxAbort
+};
+
 OfxStatus getPropertySet(OfxMeshEffectHandle meshEffect,
                          OfxPropertySetHandle *propHandle) {
   *propHandle = &meshEffect->properties;

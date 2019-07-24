@@ -78,6 +78,10 @@ size_t parameter_type_dimensions(ParamType type);
 
 #include "ofxParam.h"
 
+extern const OfxParameterSuiteV1 gParameterSuiteV1;
+
+// See ofxParam.h for docstrings
+
 OfxStatus paramDefine(OfxParamSetHandle paramSet,
 	                  const char *paramType,
                       const char *name,

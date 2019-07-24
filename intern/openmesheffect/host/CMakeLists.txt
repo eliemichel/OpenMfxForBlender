@@ -26,6 +26,7 @@ set(INC_PRIV
 set(SRC
   mfxHost.c
   mfxHost.h
+  mfxPluginRegistry.h
   intern/properties.h
   intern/properties.c
   intern/parameters.h
@@ -34,6 +35,7 @@ set(SRC
   intern/inputs.c
   intern/mesheffect.h
   intern/mesheffect.c
+  intern/mfxPluginRegistry.c
 )
 
 set(LIB
