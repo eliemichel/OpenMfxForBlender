@@ -1019,7 +1019,7 @@ bool load_registry(PluginRegistry *registry, const char *ofx_filepath) {
 #else
   registry->handle = dlopen(ofx_filepath, RTLD_LAZY | RTLD_LOCAL);
   if (NULL == registry->handle) {
-    printf("mfxHost: Unable to load plugin binary at path %s. dlopen returned: %s\n", ofx_filepath, get_error());
+    printf("mfxHost: Unable to load plugin binary at path %s. dlopen returned: %s\n", ofx_filepath, dlerror());
     return false;
   }
 #endif

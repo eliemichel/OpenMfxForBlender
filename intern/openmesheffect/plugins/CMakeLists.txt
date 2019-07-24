@@ -34,4 +34,4 @@ target_include_directories(openmesheffect_sample_plugin PRIVATE "${INC}")
 target_link_libraries(openmesheffect_sample_plugin PRIVATE "${LIB}")
 
 set_property(TARGET openmesheffect_sample_plugin PROPERTY FOLDER "openmesheffect")
-set_target_properties(openmesheffect_sample_plugin PROPERTIES SUFFIX ".ofx")
+set_target_properties(openmesheffect_sample_plugin PROPERTIES SUFFIX ".ofx" PREFIX "")

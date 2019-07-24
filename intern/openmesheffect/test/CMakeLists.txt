@@ -38,7 +38,11 @@ if(WITH_GTESTS)
     openmesheffect_host
   )
 
-  add_compile_definitions(FULL_LIBRARY_OUTPUT_PATH="${LIBRARY_OUTPUT_PATH}/$<CONFIG>/")
+  if (MSVC)
+    add_definitions(-DFULL_LIBRARY_OUTPUT_PATH="${LIBRARY_OUTPUT_PATH}/$<CONFIG>/")
+  else(MSVC)
+    add_definitions(-DFULL_LIBRARY_OUTPUT_PATH="${LIBRARY_OUTPUT_PATH}/")
+  endif(MSVC)
 
   BLENDER_SRC_GTEST("openmesheffect_plugin_load" "${SRC}" "${ALL_OPENMESHEFFECT_LIBRARIES}")
   target_include_directories(openmesheffect_plugin_load_test PRIVATE ${INC})
