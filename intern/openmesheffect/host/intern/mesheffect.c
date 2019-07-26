@@ -106,17 +106,22 @@ OfxStatus inputGetMesh(OfxMeshInputHandle input,
                        OfxPropertySetHandle *meshHandle) {
   (void)time;
   OfxPropertySetHandle inputMeshHandle = &input->mesh;
-  propSetPointer(inputMeshHandle, kOfxMeshPropInternalData, 0, NULL); // TODO: get this from input
   propSetPointer(inputMeshHandle, kOfxMeshPropHostHandle, 0, (void*)input->host);
-  if (NULL == NULL) { // callback to get data from internal pointer
-    propSetInt(inputMeshHandle, kOfxMeshPropPointCount, 0, 0);
-    propSetInt(inputMeshHandle, kOfxMeshPropVertexCount, 0, 0);
-    propSetInt(inputMeshHandle, kOfxMeshPropFaceCount, 0, 0);
-    propSetPointer(inputMeshHandle, kOfxMeshPropPointData, 0, NULL);
-    propSetPointer(inputMeshHandle, kOfxMeshPropVertexData, 0, NULL);
-    propSetPointer(inputMeshHandle, kOfxMeshPropFaceData, 0, NULL);
-  } else {
-    // TODO
+  propSetInt(inputMeshHandle, kOfxMeshPropPointCount, 0, 0);
+  propSetInt(inputMeshHandle, kOfxMeshPropVertexCount, 0, 0);
+  propSetInt(inputMeshHandle, kOfxMeshPropFaceCount, 0, 0);
+  propSetPointer(inputMeshHandle, kOfxMeshPropPointData, 0, NULL);
+  propSetPointer(inputMeshHandle, kOfxMeshPropVertexData, 0, NULL);
+  propSetPointer(inputMeshHandle, kOfxMeshPropFaceData, 0, NULL);
+  
+  // Call internal callback before actually getting data
+  OfxHost *host = input->host;
+  BeforeMeshGetCbFunc beforeMeshGetCb;
+  if (NULL != host) {
+    propGetPointer(host->host, kOfxHostPropBeforeMeshGetCb, 0, (void**)&beforeMeshGetCb);
+    if (NULL != beforeMeshGetCb) {
+      beforeMeshGetCb(host, inputMeshHandle);
+    }
   }
 
   *meshHandle = inputMeshHandle;

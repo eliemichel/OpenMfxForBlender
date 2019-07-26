@@ -23,44 +23,11 @@
 #define __MFX_MESHEFFECT_H__
 
 #include "ofxMeshEffect.h"
+#include "ofxExtras.h"
 
 #include "properties.h"
 #include "parameters.h"
 #include "inputs.h"
-
-// OpenFX Internal Extensions
-
-/**
- * Implementation specific extensions to OpenFX Mesh Effect API.
- * These MUST NOT be used by plugins, but are here for communication between
- * the core host and Blender-specific code (in mfxModifier). This is among
- * others a way to keep this part of the code under the Apache 2 license while
- * mfxModifier must be released under GPL.
- */
-
-/**
- * Blind pointer to some internal data representation that is not cleared on
- * mesh release, e.g. pointer to a Mesh object.
- */
-#define kOfxMeshPropInternalData "OfxMeshPropInternalData"
-/**
- * Pointer to current ofx host
- */
-#define kOfxMeshPropHostHandle "OfxMeshPropHostHandle"
-
-/**
- * Custom callback called before releasing mesh data, converting the host mesh
- * data into some internal representation, typically stored into mesh property
- * kOfxMeshPropInternalData.
- *
- * Callback signature must be:
- *   OfxStatus callback(OfxHost *host, OfxPropertySetHandle meshHandle);
- * (type BeforeMeshReleaseCbFunc)
- */
-#define kOfxHostPropBeforeMeshReleaseCb "OfxHostPropBeforeMeshReleaseCb"
-
-typedef OfxStatus (*BeforeMeshReleaseCbFunc)(OfxHost*, OfxPropertySetHandle);
-
 
 // Mesh Effect
 
@@ -73,6 +40,9 @@ typedef struct OfxMeshEffectStruct {
 
 // OfxMeshEffectStruct
 
+/**
+ * /pre meshEffectHandle->host has been set first
+ */
 void init_mesh_effect(OfxMeshEffectHandle meshEffectHandle);
 void free_mesh_effect(OfxMeshEffectHandle meshEffectHandle);
 void deep_copy_mesh_effect(OfxMeshEffectStruct *destination,

@@ -20,18 +20,19 @@ set(INC
   .
 )
 
-set(SRC
-  mfx_sample_plugin.c
-)
+macro(MFX_PLUGIN TARGET SRC LIB)
+	add_library(${TARGET} SHARED ${SRC})
+	target_include_directories(${TARGET} PRIVATE "${INC}")
+	target_link_libraries(${TARGET} PRIVATE "${LIB}")
+	set_property(TARGET ${TARGET} PROPERTY FOLDER "openmesheffect")
+	set_target_properties(${TARGET} PROPERTIES SUFFIX ".ofx" PREFIX "")
+endmacro()
 
 set(LIB
   openmesheffect_openfx
   openmesheffect_util
 )
 
-add_library(openmesheffect_sample_plugin SHARED ${SRC})
-target_include_directories(openmesheffect_sample_plugin PRIVATE "${INC}")
-target_link_libraries(openmesheffect_sample_plugin PRIVATE "${LIB}")
-
-set_property(TARGET openmesheffect_sample_plugin PROPERTY FOLDER "openmesheffect")
-set_target_properties(openmesheffect_sample_plugin PROPERTIES SUFFIX ".ofx" PREFIX "")
+MFX_PLUGIN(openmesheffect_sample_plugin mfx_sample_plugin.c ${LIB})
+MFX_PLUGIN(openmesheffect_identity_plugin mfx_identity_plugin.c ${LIB})
+MFX_PLUGIN(openmesheffect_mirror_plugin mfx_mirror_plugin.c ${LIB})

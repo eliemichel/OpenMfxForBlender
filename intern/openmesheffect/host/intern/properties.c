@@ -15,8 +15,10 @@
  */
 
 #include <string.h>
+#include <stdio.h>
 
 #include "ofxMeshEffect.h" // for kOfxMeshEffectPropContext
+#include "ofxExtras.h" // for kOfxHostPropBeforeMeshReleaseCb
 
 #include "util/memory_util.h"
 
@@ -104,8 +106,27 @@ bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type
       (0 == strcmp(property, kOfxPropLabel) && type == PROP_TYPE_STRING) ||
       false
     );
+  case PROP_CTX_HOST:
+    return (
+      (0 == strcmp(property, kOfxHostPropBeforeMeshReleaseCb) && type == PROP_TYPE_POINTER) ||
+      (0 == strcmp(property, kOfxHostPropBeforeMeshGetCb) && type == PROP_TYPE_POINTER) ||
+      false
+    );
+  case PROP_CTX_MESH:
+    return (
+      (0 == strcmp(property, kOfxMeshPropInternalData) && type == PROP_TYPE_POINTER) ||
+      (0 == strcmp(property, kOfxMeshPropHostHandle)   && type == PROP_TYPE_POINTER) ||
+      (0 == strcmp(property, kOfxMeshPropPointCount)   && type == PROP_TYPE_INT)     ||
+      (0 == strcmp(property, kOfxMeshPropVertexCount)  && type == PROP_TYPE_INT)     ||
+      (0 == strcmp(property, kOfxMeshPropFaceCount)    && type == PROP_TYPE_INT)     ||
+      (0 == strcmp(property, kOfxMeshPropPointData)    && type == PROP_TYPE_POINTER) ||
+      (0 == strcmp(property, kOfxMeshPropVertexData)   && type == PROP_TYPE_POINTER) ||
+      (0 == strcmp(property, kOfxMeshPropFaceData)     && type == PROP_TYPE_POINTER) ||
+      false
+    );
   case PROP_CTX_OTHER:
   default:
+    printf("Warning: PROP_CTX_OTHER is depreciated.\n");
     return true;
   }
 }

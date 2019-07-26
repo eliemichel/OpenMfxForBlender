@@ -27,6 +27,7 @@ void init_input(OfxMeshInputStruct *input) {
   input->properties.context = PROP_CTX_INPUT;
   init_properties(&input->mesh);
   input->mesh.context = PROP_CTX_MESH;
+  input->host = NULL;
 }
 
 void free_input(OfxMeshInputStruct *input) {
@@ -87,6 +88,7 @@ int ensure_input(OfxMeshInputSetStruct *input_set, const char *input) {
 void init_input_set(OfxMeshInputSetStruct *input_set) {
   input_set->num_inputs = 0;
   input_set->inputs = NULL;
+  input_set->host = NULL;
 }
 
 void free_input_set(OfxMeshInputSetStruct *input_set) {

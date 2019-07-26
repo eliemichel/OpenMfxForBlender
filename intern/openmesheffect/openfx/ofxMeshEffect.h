@@ -37,6 +37,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
+/** @file ofxMeshEffect.h
+Contains the part of the API that relates to mesh processing. This is what is called "Open Mesh Effect". For more details on the basic OFX architecture, see \ref Architecture.
+*/
+
 /** @brief String used to label OFX Mesh Effect Plug-ins
 
     Set the pluginApi member of the OfxPluginHeader inside any OfxMeshEffectPluginStruct
@@ -64,6 +68,14 @@ typedef struct OfxMeshInputStruct *OfxMeshInputHandle;
 
 /** @brief Use to define the general mesh effect context See \ref ::kOfxMeshEffectPropContext */
 #define kOfxMeshEffectContextGeneral "OfxMeshEffectContextGeneral"
+
+/** @brief Identifier of the main mesh input of a mesh effect
+ */
+#define kOfxMeshMainInput "OfxMeshMainInput"
+
+/** @brief Identifier of the main mesh output of a mesh effect
+ */
+#define kOfxMeshMainOutput "OfxMeshMainOutput"
 
 /**
    \addtogroup ActionsAll

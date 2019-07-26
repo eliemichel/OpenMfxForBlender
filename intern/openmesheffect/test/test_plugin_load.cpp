@@ -32,7 +32,7 @@ TEST(OpenMeshEffectHost, Properties)
 	OfxPropertySetStruct property_set;
 	init_properties(&property_set);
 
-	property_set.context = PROP_CTX_OTHER;
+	property_set.context = PROP_CTX_OTHER; // Will raise warnings
 	EXPECT_EQ(propSetPointer(&property_set, "TestPropPointer", 0, &property_set), kOfxStatOK);
 	EXPECT_EQ(propSetString(&property_set, "TestPropString", 0, "lorem ipsum"), kOfxStatOK);
 	EXPECT_EQ(propSetDouble(&property_set, "TestPropDouble", 0, 3.1415), kOfxStatOK);
@@ -46,5 +46,22 @@ TEST(OpenMeshEffectHost, Properties)
 	EXPECT_EQ(propSetInt(&property_set, "WrongField", 0, 0), kOfxStatErrBadHandle);
 	EXPECT_EQ(propSetInt(&property_set, kOfxPropLabel, 0, 0), kOfxStatErrBadHandle); // wrong type
 	EXPECT_EQ(propSetString(&property_set, kOfxPropLabel, 0, "label"), kOfxStatOK);
+
+	property_set.context = PROP_CTX_MESH;
+	EXPECT_EQ(propSetInt(&property_set, "WrongField", 0, 0), kOfxStatErrBadHandle);
+	EXPECT_EQ(propSetInt(&property_set, kOfxMeshPropInternalData, 0, 0), kOfxStatErrBadHandle);
+	EXPECT_EQ(propSetPointer(&property_set, kOfxMeshPropInternalData, 0, NULL), kOfxStatOK);
+
+	property_set.context = PROP_CTX_HOST;
+	EXPECT_EQ(propSetInt(&property_set, "WrongField", 0, 0), kOfxStatErrBadHandle);
+	EXPECT_EQ(propSetInt(&property_set, kOfxHostPropBeforeMeshReleaseCb, 0, 0), kOfxStatErrBadHandle);
+	EXPECT_EQ(propSetPointer(&property_set, kOfxHostPropBeforeMeshReleaseCb, 0, NULL), kOfxStatOK);
 }
 
+TEST(OpenMeshEffectHost, IdentityPlugin)
+{
+	PluginRegistry registry;
+	EXPECT_EQ(load_registry(&registry, FULL_LIBRARY_OUTPUT_PATH "openmesheffect_identity_plugin.ofx"), true);
+	EXPECT_EQ(use_plugin(&registry, 0), true);
+	free_registry(&registry);
+}
