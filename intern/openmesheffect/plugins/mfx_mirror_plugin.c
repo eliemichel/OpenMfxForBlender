@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#include <stdbool.h>
+#include <string.h>
+
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
 
@@ -36,12 +39,15 @@ static OfxStatus unload() {
 
 static OfxStatus describe(OfxMeshEffectHandle descriptor) {
     bool missing_suite =
-        NULL == gRuntime->propertySuite ||
-        NULL == gRuntime->parameterSuite ||
-        NULL == gRuntime->meshEffectSuite;
+        NULL == gRuntime.propertySuite ||
+        NULL == gRuntime.parameterSuite ||
+        NULL == gRuntime.meshEffectSuite;
     if (missing_suite) {
         return kOfxStatErrMissingHostFeature;
     }
+    OfxMeshEffectSuiteV1 *meshEffectSuite = gRuntime.meshEffectSuite;
+    OfxPropertySuiteV1 *propertySuite = gRuntime.propertySuite;
+    OfxParameterSuiteV1 *parameterSuite = gRuntime.parameterSuite;
 
     OfxPropertySetHandle inputProperties;
     meshEffectSuite->inputDefine(descriptor, kOfxMeshMainInput, &inputProperties);
@@ -52,7 +58,7 @@ static OfxStatus describe(OfxMeshEffectHandle descriptor) {
     propertySuite->propSetString(outputProperties, kOfxPropLabel, 0, "Main Output");
 
     OfxParamSetHandle parameters;
-    meshEffectSuite->getParamSet(meshEffect, &parameters);
+    meshEffectSuite->getParamSet(descriptor, &parameters);
     parameterSuite->paramDefine(parameters, kOfxParamTypeInteger, "axis", NULL);
 
     return kOfxStatOK;
@@ -67,8 +73,8 @@ static OfxStatus destroyInstance(OfxMeshEffectHandle instance) {
 }
 
 static OfxStatus cook(OfxMeshEffectHandle instance) {
-    OfxMeshEffectSuiteV1 *meshEffectSuite = runtime->meshEffectSuite;
-    OfxPropertySuiteV1 *propertySuite = runtime->propertySuite;
+    OfxMeshEffectSuiteV1 *meshEffectSuite = gRuntime.meshEffectSuite;
+    OfxPropertySuiteV1 *propertySuite = gRuntime.propertySuite;
     OfxTime time = 0;
 
     // Get input/output
@@ -164,10 +170,12 @@ static OfxStatus mainEntry(const char *action,
 }
 
 static void setHost(OfxHost *host) {
-    gRuntime->host = host;
-    gRuntime->propertySuite = host->fetchSuite(host->host, kOfxPropertySuite, 1);
-    gRuntime->parameterSuite = host->fetchSuite(host->host, kOfxParameterSuite, 1);
-    gRuntime->meshEffectSuite = host->fetchSuite(host->host, kOfxMeshEffectSuite, 1);
+    gRuntime.host = host;
+    if (NULL != host) {
+      gRuntime.propertySuite = host->fetchSuite(host->host, kOfxPropertySuite, 1);
+      gRuntime.parameterSuite = host->fetchSuite(host->host, kOfxParameterSuite, 1);
+      gRuntime.meshEffectSuite = host->fetchSuite(host->host, kOfxMeshEffectSuite, 1);
+    }
 }
 
 OfxExport int OfxGetNumberOfPlugins(void) {

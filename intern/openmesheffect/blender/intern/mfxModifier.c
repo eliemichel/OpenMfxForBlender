@@ -84,6 +84,66 @@ static bool runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugi
 // INTERNALS
 
 /**
+ * Convert blender mesh from internal pointer into ofx mesh.
+ * /pre no ofx mesh has been allocated or internal pointer is null
+ */
+static OfxStatus before_mesh_get(OfxHost *host, OfxPropertySetHandle ofx_mesh) {
+  OfxPropertySuiteV1 *ps;
+  OfxMeshEffectSuiteV1 *mes;
+  Mesh *blender_mesh;
+  int point_count, vertex_count, face_count;
+  float *point_data;
+  int *vertex_data, *face_data;
+
+  ps = (OfxPropertySuiteV1*)host->fetchSuite(host->host, kOfxPropertySuite, 1);
+  mes = (OfxMeshEffectSuiteV1*)host->fetchSuite(host->host, kOfxMeshEffectSuite, 1);
+
+  ps->propGetPointer(ofx_mesh, kOfxMeshPropInternalData, 0, (void**)&blender_mesh);
+
+  if (NULL == blender_mesh) {
+    printf("NOT converting blender mesh into ofx mesh (no blender mesh)...\n");
+    return kOfxStatOK;
+  }
+
+  printf("Converting blender mesh into ofx mesh...\n");
+
+  // Set original mesh to null to prevent multiple conversions
+  ps->propSetPointer(ofx_mesh, kOfxMeshPropInternalData, 0, NULL);
+
+  point_count = blender_mesh->totvert;
+  vertex_count = 0;
+  for (int i = 0 ; i < blender_mesh->totpoly ; ++i) {
+    int after_last_loop = blender_mesh->mpoly[i].loopstart + blender_mesh->mpoly[i].totloop;
+    vertex_count = max(vertex_count, after_last_loop);
+  }
+  face_count = blender_mesh->totpoly;
+
+  mes->meshAlloc(ofx_mesh, point_count, vertex_count, face_count);
+
+  ps->propGetPointer(ofx_mesh, kOfxMeshPropPointData, 0, (void**)&point_data);
+  ps->propGetPointer(ofx_mesh, kOfxMeshPropVertexData, 0, (void**)&vertex_data);
+  ps->propGetPointer(ofx_mesh, kOfxMeshPropFaceData, 0, (void**)&face_data);
+
+  // Points (= Blender's vertex)
+  for (int i = 0 ; i < point_count ; ++i) {
+    copy_v3_v3(point_data + (i * 3), blender_mesh->mvert[i].co);
+  }
+
+  // Faces and vertices (~= Blender's loops)
+  int current_vertex = 0;
+  for (int i = 0 ; i < face_count ; ++i) {
+    face_data[i] = blender_mesh->mpoly[i].totloop;
+    int l = blender_mesh->mpoly[i].loopstart;
+    int end = current_vertex + face_data[i];
+    for (; current_vertex < end ; ++current_vertex, ++l) {
+      vertex_data[current_vertex] = blender_mesh->mloop[l].v;
+    }
+  }
+
+  return kOfxStatOK;
+}
+
+/**
  * Convert ofx mesh into blender mesh and store it in internal pointer
  */
 static OfxStatus before_mesh_release(OfxHost *host, OfxPropertySetHandle ofx_mesh) {
@@ -114,6 +174,8 @@ static OfxStatus before_mesh_release(OfxHost *host, OfxPropertySetHandle ofx_mes
     printf("WARNING: Could not allocate Blender Mesh data\n");
     return kOfxStatErrMemory;
   }
+
+  printf("Converting ofx mesh into blender mesh...\n");
 
   // Points (= Blender's vertex)
   for (int i = 0 ; i < point_count ; ++i) {
@@ -237,24 +299,22 @@ void mfx_Modifier_free_runtime_data(void *runtime_data)
 Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
 {
   printf("== mfx_Modifier_do on data %p\n", fxmd);
-  Mesh *result;
+  Mesh *result = NULL;
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
 
   if (0 == strcmp(runtime_data->current_plugin_path, "")) {
     return NULL;
   }
 
-  use_plugin(&runtime_data->registry, 0);
-
   OfxHost *ofxHost = getGlobalHost();
   OfxPropertySuiteV1 *propertySuite = (OfxPropertySuiteV1*)ofxHost->fetchSuite(ofxHost->host, kOfxPropertySuite, 1);
   OfxMeshEffectSuiteV1 *meshEffectSuite = (OfxMeshEffectSuiteV1*)ofxHost->fetchSuite(ofxHost->host, kOfxMeshEffectSuite, 1);
 
   OfxMeshEffectHandle effect_desc, effect_instance;
-  OfxMeshInputHandle output;
-  OfxPropertySetHandle output_properties;
+  OfxMeshInputHandle input, output;
 
   // Set custom callbacks
+  propertySuite->propSetPointer(ofxHost->host, kOfxHostPropBeforeMeshGetCb, 0, (void*)before_mesh_get);
   propertySuite->propSetPointer(ofxHost->host, kOfxHostPropBeforeMeshReleaseCb, 0, (void*)before_mesh_release);
 
   OfxPlugin *plugin = runtime_data->registry.plugins[0];
@@ -283,15 +343,18 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
     }
   }
 
-  // TODO: set input mesh
-  (void)mesh;
+  // Set input mesh
+  meshEffectSuite->inputGetHandle(effect_instance, kOfxMeshMainInput, &input, NULL);
+  propertySuite->propSetPointer(&input->mesh, kOfxMeshPropInternalData, 0, (void*)mesh);
 
   ofxhost_cook(plugin, effect_instance);
 
   // Get output mesh
   // do not use inputGetMesh here to avoid allocating useless data, use output->mesh instead
-  meshEffectSuite->inputGetHandle(effect_instance, "MainOutput", &output, &output_properties);
+  meshEffectSuite->inputGetHandle(effect_instance, kOfxMeshMainOutput, &output, NULL);
   propertySuite->propGetPointer(&output->mesh, kOfxMeshPropInternalData, 0, (void**)&result);
+
+  // FIXME: Memory leak: the input data is converted back into a new blender mesh that is never freed
 
   ofxhost_destroy_instance(plugin, effect_instance);
 

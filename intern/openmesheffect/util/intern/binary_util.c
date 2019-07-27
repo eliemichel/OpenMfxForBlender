@@ -46,9 +46,9 @@ BinaryHandle binary_open(const char *filepath) {
 	BinaryHandle handle;
 #ifdef _WIN32
 	handle = LoadLibrary(TEXT(filepath));
-	if (NULL == hinstance) {
+	if (NULL == handle) {
 		LPVOID msg = getLastErrorMessage();
-		printf("mfxHost: Unable to load plugin binary at path %s. LoadLibrary returned: %s\n", filepath, msg);
+		printf("mfxHost: Unable to load plugin binary at path %s. LoadLibrary returned: %s\n", filepath, (char*)msg);
 		LocalFree(msg);
 	}
 #else
@@ -81,7 +81,7 @@ ProcHandle binary_get_proc(BinaryHandle handle, const char *name) {
 		printf("mfxHost: Unable to load symbol '%s'. ", name);
 #ifdef _WIN32
 		LPVOID msg = getLastErrorMessage();
-		printf("GetProcAddress returned: %s\n", msg);
+		printf("GetProcAddress returned: %s\n", (char*)msg);
 		LocalFree(msg);
 #else // _WIN32
 		printf("dlsym returned: %s\n", dlerror());

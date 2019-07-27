@@ -78,6 +78,8 @@ OfxStatus inputDefine(OfxMeshEffectHandle meshEffect,
                       OfxPropertySetHandle *propertySet) {
   printf("Defining input '%s' on OfxMeshEffectHandle %p\n", name, meshEffect);
   int i = ensure_input(&meshEffect->inputs, name);
+  meshEffect->inputs.inputs[i]->host = meshEffect->host;
+  propSetPointer(&meshEffect->inputs.inputs[i]->mesh, kOfxMeshPropInternalData, 0, NULL);
   *propertySet = &(meshEffect->inputs.inputs[i]->properties);
   return kOfxStatOK;
 }
@@ -91,7 +93,9 @@ OfxStatus inputGetHandle(OfxMeshEffectHandle meshEffect,
     return kOfxStatErrUnknown; // bad name
   }
   *input = meshEffect->inputs.inputs[i];
-  *propertySet = &(meshEffect->inputs.inputs[i]->properties);
+  if (NULL != propertySet) {
+    *propertySet = &(meshEffect->inputs.inputs[i]->properties);
+  }
   return kOfxStatOK;
 }
 

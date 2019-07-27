@@ -98,7 +98,7 @@ bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type
   switch (propertySet->context) {
   case PROP_CTX_MESH_EFFECT:
     return (
-      (0 == strcmp(property, kOfxMeshEffectPropContext) && type == PROP_TYPE_INT) ||
+      (0 == strcmp(property, kOfxMeshEffectPropContext) && type == PROP_TYPE_STRING) ||
       false
     );
   case PROP_CTX_INPUT:

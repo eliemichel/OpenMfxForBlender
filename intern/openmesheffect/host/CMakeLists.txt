@@ -38,13 +38,16 @@ set(SRC
   intern/mfxPluginRegistry.c
 )
 
-set(LIB
+set(LIB_PRIV
   openmesheffect_openfx
+)
+
+set(LIB
   openmesheffect_util
 )
 
 add_library(openmesheffect_host "${SRC}")
 target_include_directories(openmesheffect_host PRIVATE "${INC_PRIV}" PUBLIC "${INC}")
-target_link_libraries(openmesheffect_host PRIVATE "${LIB}")
+target_link_libraries(openmesheffect_host PRIVATE "${LIB_PRIV}"  PUBLIC "${LIB}")
 
 set_property(TARGET openmesheffect_host PROPERTY FOLDER "openmesheffect")

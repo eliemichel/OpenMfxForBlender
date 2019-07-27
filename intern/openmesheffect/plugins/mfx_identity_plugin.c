@@ -105,7 +105,7 @@ static OfxStatus cook(PluginRuntime *runtime, OfxMeshEffectHandle instance) {
     // Fill in output data
     memcpy(output_points, input_points, 3 * input_point_count * sizeof(float));
     memcpy(output_vertices, input_vertices, input_vertex_count * sizeof(int));
-    memcpy(output_faces, input_faces, 3 * input_face_count * sizeof(int));
+    memcpy(output_faces, input_faces, input_face_count * sizeof(int));
 
     // Release meshes
     meshEffectSuite->inputReleaseMesh(input_mesh);
@@ -142,9 +142,11 @@ static OfxStatus mainEntry(const char *action,
 
 static void setHost(OfxHost *host) {
     gRuntime.host = host;
-    gRuntime.propertySuite = host->fetchSuite(host->host, kOfxPropertySuite, 1);
-    gRuntime.parameterSuite = host->fetchSuite(host->host, kOfxParameterSuite, 1);
-    gRuntime.meshEffectSuite = host->fetchSuite(host->host, kOfxMeshEffectSuite, 1);
+    if (NULL != host) {
+      gRuntime.propertySuite = host->fetchSuite(host->host, kOfxPropertySuite, 1);
+      gRuntime.parameterSuite = host->fetchSuite(host->host, kOfxParameterSuite, 1);
+      gRuntime.meshEffectSuite = host->fetchSuite(host->host, kOfxMeshEffectSuite, 1);
+    }
 }
 
 OfxExport int OfxGetNumberOfPlugins(void) {

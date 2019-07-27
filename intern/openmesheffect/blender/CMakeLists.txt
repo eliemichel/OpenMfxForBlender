@@ -23,6 +23,7 @@ set(INC
   intern
   ../host
   ../openfx
+  ../util/include
   ../../guardedalloc
   ../../../source/blender/makesdna
   ../../../source/blender/modifiers

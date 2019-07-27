@@ -74,7 +74,7 @@ void parameter_realloc_string(OfxParamStruct *param, int size) {
 void deep_copy_parameter(OfxParamStruct *destination, const OfxParamStruct *source) {
   destination->name = source->name;
   if (NULL != destination->name) {
-    destination->name = malloc_array(sizeof(char), strlen(source->name), "parameter name");
+    destination->name = malloc_array(sizeof(char), strlen(source->name) + 1, "parameter name");
     strcpy(destination->name, source->name);
   }
   destination->type = source->type;
@@ -126,7 +126,7 @@ int ensure_parameter(OfxParamSetStruct *param_set, const char *parameter) {
   if (i == -1) {
     append_parameters(param_set, 1);
     i = param_set->num_parameters - 1;
-    param_set->parameters[i]->name = malloc_array(sizeof(char), strlen(parameter), "parameter name");
+    param_set->parameters[i]->name = malloc_array(sizeof(char), strlen(parameter) + 1, "parameter name");
     strcpy(param_set->parameters[i]->name, parameter);
   }
   return i;

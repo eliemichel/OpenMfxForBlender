@@ -82,6 +82,7 @@ OfxHost * getGlobalHost(void) {
     init_properties(hostProperties);
     hostProperties->context = PROP_CTX_HOST;
     propSetPointer(hostProperties, kOfxHostPropBeforeMeshReleaseCb, 0, (void*)NULL);
+    propSetPointer(hostProperties, kOfxHostPropBeforeMeshGetCb, 0, (void*)NULL);
     gHost->host = hostProperties;
     gHost->fetchSuite = fetchSuite;
   }
