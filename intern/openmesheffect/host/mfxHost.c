@@ -76,7 +76,9 @@ OfxHost *gHost = NULL;
 int gHostUse = 0;
 
 OfxHost * getGlobalHost(void) {
+  printf("Getting Global Host; reference counter will be set to %d.\n", gHostUse + 1);
   if (0 == gHostUse) {
+    printf("(Allocating new host data)\n");
     gHost = malloc_array(sizeof(OfxHost), 1, "global host");
     OfxPropertySetHandle hostProperties = malloc_array(sizeof(OfxPropertySetStruct), 1, "global host properties");
     init_properties(hostProperties);
@@ -91,7 +93,9 @@ OfxHost * getGlobalHost(void) {
 }
 
 void releaseGlobalHost(void) {
+  printf("Releasing Global Host; reference counter will be set to %d.\n", gHostUse - 1);
   if (--gHostUse == 0) {
+    printf("(Freeing host data)\n");
     free_array(gHost->host);
     free_array(gHost);
     gHost = NULL;

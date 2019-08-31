@@ -55,14 +55,46 @@ typedef struct OpenMeshEffectRuntime {
   PluginRegistry registry;
   int current_asset_index;
   int asset_count, num_parameters;
+
+  OfxHost *ofx_host;
+  OfxMeshEffectHandle effect_desc;
+  OfxMeshEffectHandle effect_instance;
 } OpenMeshEffectRuntime;
 
 static void runtime_init(OpenMeshEffectRuntime *rd) {
   rd->current_plugin_path[0] = '\0';
+  rd->current_asset_index = 0;
+  rd->ofx_host = NULL;
+  rd->effect_desc = NULL;
+  rd->effect_instance = NULL;
 }
 
 static void runtime_free(OpenMeshEffectRuntime *rd) {
   printf("Unloading OFX plugin %s\n", rd->current_plugin_path);
+
+  if (0 != strcmp(rd->current_plugin_path, "")) {
+    OfxPlugin *plugin = rd->registry.plugins[rd->current_asset_index];
+    OfxPluginStatus status = rd->registry.status[rd->current_asset_index];
+
+    if (NULL != rd->effect_instance) {
+      ofxhost_destroy_instance(plugin, rd->effect_instance);
+      rd->effect_instance = NULL;
+    }
+    if (NULL != rd->effect_desc) {
+      ofxhost_release_descriptor(rd->effect_desc);
+      rd->effect_desc = NULL;
+    }
+    if (OfxPluginStatOK == status) {
+      // TODO: loop over all plugins?
+      ofxhost_unload_plugin(plugin);
+    }
+  }
+
+  if (NULL != rd->ofx_host) {
+    releaseGlobalHost();
+    rd->ofx_host = NULL;
+  }
+
   free_registry(&rd->registry);
 }
 
@@ -225,6 +257,7 @@ static OpenMeshEffectRuntime *mfx_Modifier_runtime_ensure(OpenMeshEffectModifier
     }
   }
 
+  printf("==/ mfx_Modifier_runtime_ensure\n");
   return (OpenMeshEffectRuntime *)fxmd->modifier.runtime;
 }
 
@@ -249,6 +282,8 @@ void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
 
   // move to on_asset_changed
   if (0 == strcmp(runtime_data->current_plugin_path, "")) {
+    printf("current_plugin_path is null\n");
+    printf("==/ mfx_Modifier_on_plugin_changed\n");
     return;
   }
 
@@ -277,23 +312,63 @@ void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
   ofxhost_release_descriptor(effect_desc);
   ofxhost_unload_plugin(plugin);
   releaseGlobalHost();
+
+  printf("==/ mfx_Modifier_on_plugin_changed\n");
 }
 
 void mfx_Modifier_on_library_changed(OpenMeshEffectModifierData *fxmd) {
-  printf("== mfx_Modifier_on_library_changed on data %p\n", fxmd);
+  printf("==. mfx_Modifier_on_library_changed on data %p\n", fxmd);
 }
 
 void mfx_Modifier_on_asset_changed(OpenMeshEffectModifierData *fxmd) {
-  printf("== mfx_Modifier_on_asset_changed on data %p\n", fxmd);
+  printf("==. mfx_Modifier_on_asset_changed on data %p\n", fxmd);
 }
 
 void mfx_Modifier_free_runtime_data(void *runtime_data)
 {
   printf("== mfx_Modifier_free_runtime_data\n");
   if (runtime_data == NULL) {
+    printf("runtime data is null\n");
+    printf("==/ mfx_Modifier_free_runtime_data\n");
     return;
   }
   runtime_free((OpenMeshEffectRuntime*)runtime_data);
+  printf("==/ mfx_Modifier_free_runtime_data\n");
+}
+
+bool runtime_ensure_effect_instance(OpenMeshEffectRuntime *rd) {
+  OfxPlugin *plugin = rd->registry.plugins[rd->current_asset_index];
+
+  if (NULL == rd->ofx_host) {
+    rd->ofx_host = getGlobalHost();
+
+    // Configure host
+    OfxPropertySuiteV1 *propertySuite = (OfxPropertySuiteV1*)rd->ofx_host->fetchSuite(rd->ofx_host->host, kOfxPropertySuite, 1);
+    // Set custom callbacks
+    propertySuite->propSetPointer(rd->ofx_host->host, kOfxHostPropBeforeMeshGetCb, 0, (void*)before_mesh_get);
+    propertySuite->propSetPointer(rd->ofx_host->host, kOfxHostPropBeforeMeshReleaseCb, 0, (void*)before_mesh_release);
+  }
+
+  if (NULL == rd->effect_desc) {
+    // Load plugin if not already loaded
+    OfxPluginStatus *pStatus = &rd->registry.status[rd->current_asset_index];
+    if (OfxPluginStatNotLoaded == *pStatus) {
+      if (ofxhost_load_plugin(rd->ofx_host, plugin)) {
+        *pStatus = OfxPluginStatOK;
+      } else {
+        *pStatus = OfxPluginStatError;
+        return false;
+      }
+    }
+
+    ofxhost_get_descriptor(rd->ofx_host, plugin, &rd->effect_desc);
+  }
+
+  if (NULL == rd->effect_instance) {
+    ofxhost_create_instance(plugin, rd->effect_desc, &rd->effect_instance);
+  }
+
+  return true;
 }
 
 Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
@@ -303,28 +378,26 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
 
   if (0 == strcmp(runtime_data->current_plugin_path, "")) {
+    printf("current_plugin_path is empty\n");
+    printf("==/ mfx_Modifier_do\n");
     return NULL;
   }
 
-  OfxHost *ofxHost = getGlobalHost();
-  OfxPropertySuiteV1 *propertySuite = (OfxPropertySuiteV1*)ofxHost->fetchSuite(ofxHost->host, kOfxPropertySuite, 1);
+  if (false == runtime_ensure_effect_instance(runtime_data)) {
+    printf("failed to get effect instance\n");
+    printf("==/ mfx_Modifier_do\n");
+    return NULL;
+  }
+
+  OfxPlugin *plugin = runtime_data->registry.plugins[runtime_data->current_asset_index];
+
+  OfxHost *ofxHost = runtime_data->ofx_host;
   OfxMeshEffectSuiteV1 *meshEffectSuite = (OfxMeshEffectSuiteV1*)ofxHost->fetchSuite(ofxHost->host, kOfxMeshEffectSuite, 1);
-
-  OfxMeshEffectHandle effect_desc, effect_instance;
-  OfxMeshInputHandle input, output;
-
-  // Set custom callbacks
-  propertySuite->propSetPointer(ofxHost->host, kOfxHostPropBeforeMeshGetCb, 0, (void*)before_mesh_get);
-  propertySuite->propSetPointer(ofxHost->host, kOfxHostPropBeforeMeshReleaseCb, 0, (void*)before_mesh_release);
-
-  OfxPlugin *plugin = runtime_data->registry.plugins[0];
-  ofxhost_load_plugin(ofxHost, plugin);
-  ofxhost_get_descriptor(ofxHost, plugin, &effect_desc);
-
-  ofxhost_create_instance(plugin, effect_desc, &effect_instance);
+  OfxPropertySuiteV1 *propertySuite = (OfxPropertySuiteV1*)ofxHost->fetchSuite(ofxHost->host, kOfxPropertySuite, 1);
 
   // Set params
-  OfxParamHandle *parameters = effect_instance->parameters.parameters;
+  // TODO: move this in a dedicated function
+  OfxParamHandle *parameters = runtime_data->effect_instance->parameters.parameters;
   for (int i = 0 ; i < fxmd->num_parameters ; ++i) {
     switch (parameters[i]->type) {
     case PARAM_TYPE_DOUBLE:
@@ -343,25 +416,19 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
     }
   }
 
-  // Set input mesh
-  meshEffectSuite->inputGetHandle(effect_instance, kOfxMeshMainInput, &input, NULL);
-  propertySuite->propSetPointer(&input->mesh, kOfxMeshPropInternalData, 0, (void*)mesh);
+  OfxMeshInputHandle input, output;
+  meshEffectSuite->inputGetHandle(runtime_data->effect_instance, kOfxMeshMainInput, &input, NULL);
+  meshEffectSuite->inputGetHandle(runtime_data->effect_instance, kOfxMeshMainOutput, &output, NULL);
 
-  ofxhost_cook(plugin, effect_instance);
+  // Set input mesh
+  propertySuite->propSetPointer(&input->mesh, kOfxMeshPropInternalData, 0, (void*)mesh);
+  propertySuite->propSetPointer(&output->mesh, kOfxMeshPropInternalData, 0, NULL);
+
+  ofxhost_cook(plugin, runtime_data->effect_instance);
 
   // Get output mesh
-  // do not use inputGetMesh here to avoid allocating useless data, use output->mesh instead
-  meshEffectSuite->inputGetHandle(effect_instance, kOfxMeshMainOutput, &output, NULL);
   propertySuite->propGetPointer(&output->mesh, kOfxMeshPropInternalData, 0, (void**)&result);
 
-  // FIXME: Memory leak: the input data is converted back into a new blender mesh that is never freed
-
-  ofxhost_destroy_instance(plugin, effect_instance);
-
-  // TODO: move to free runtime or somewhere like that
-  //ofxhost_release_descriptor(effect_desc);
-  //ofxhost_unload_plugin(plugin);
-  //releaseGlobalHost();
-
+  printf("==/ mfx_Modifier_do\n");
   return result;
 }

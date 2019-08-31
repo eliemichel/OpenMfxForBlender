@@ -44,12 +44,15 @@ typedef enum PropertyType {
 	PROP_TYPE_INT,
 } PropertyType;
 
+// TODO: use kOfxPropType instead
 typedef enum PropertySetContext {
-    PROP_CTX_HOST,
-    PROP_CTX_MESH_EFFECT,
-    PROP_CTX_INPUT,
-    PROP_CTX_MESH,
-    PROP_CTX_OTHER
+    PROP_CTX_HOST, // kOfxTypeMeshEffectHost
+    PROP_CTX_MESH_EFFECT, // kOfxTypeMeshEffect, kOfxTypeMeshEffectInstance
+    PROP_CTX_INPUT, // kOfxTypeMeshEffectInput
+    PROP_CTX_MESH, // kOfxTypeMesh
+    PROP_CTX_OTHER,
+    // kOfxTypeParameter
+    // kOfxTypeParameterInstance
 } PropertySetContext;
 
 typedef struct OfxPropertySetStruct {

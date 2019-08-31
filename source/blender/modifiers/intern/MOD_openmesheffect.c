@@ -68,8 +68,10 @@ static bool dependsOnNormals(struct ModifierData *md)
   return true;
 }
 
+// TODO: Why isn't this called when deleting the object on which the modifier is attached?
 static void freeRuntimeData(void *runtime_data)
 {
+  printf("freeRuntimeData on pointer %p.\n", runtime_data);
   if (runtime_data == NULL) {
     return;
   }

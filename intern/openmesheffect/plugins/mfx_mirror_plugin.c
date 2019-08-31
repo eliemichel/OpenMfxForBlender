@@ -59,6 +59,7 @@ static OfxStatus describe(OfxMeshEffectHandle descriptor) {
 
     OfxParamSetHandle parameters;
     meshEffectSuite->getParamSet(descriptor, &parameters);
+    // "axis" parameter is a bitmask, with threee booleans respectively for axes x, y and z.
     parameterSuite->paramDefine(parameters, kOfxParamTypeInteger, "axis", NULL);
 
     return kOfxStatOK;
@@ -75,6 +76,7 @@ static OfxStatus destroyInstance(OfxMeshEffectHandle instance) {
 static OfxStatus cook(OfxMeshEffectHandle instance) {
     OfxMeshEffectSuiteV1 *meshEffectSuite = gRuntime.meshEffectSuite;
     OfxPropertySuiteV1 *propertySuite = gRuntime.propertySuite;
+    OfxParameterSuiteV1 *parameterSuite = gRuntime.parameterSuite;
     OfxTime time = 0;
 
     // Get input/output
@@ -86,6 +88,14 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     OfxPropertySetHandle input_mesh, output_mesh;
     meshEffectSuite->inputGetMesh(input, time, &input_mesh);
     meshEffectSuite->inputGetMesh(output, time, &output_mesh);
+
+    // Get parameters
+    OfxParamSetHandle parameters;
+    OfxParamHandle axis_param;
+    int axis_value;
+    meshEffectSuite->getParamSet(instance, &parameters);
+    parameterSuite->paramGetHandle(parameters, "axis", &axis_param, NULL);
+    parameterSuite->paramGetValue(axis_param, &axis_value);
 
     // Get input mesh data
     int input_point_count = 0, input_vertex_count = 0, input_face_count = 0;
@@ -125,8 +135,10 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
 
     // Fill in output data
     for (int i = 0 ; i < 3 * input_point_count ; ++i) {
-        output_points[i] = input_points[i];
-        output_points[i + 3 * input_point_count] = input_points[i];
+        float value = input_points[i];
+        output_points[i] = value;
+        if ((axis_value & (1 << (i % 3))) != 0) value = -value;
+        output_points[i + 3 * input_point_count] = value;
     }
     for (int i = 0 ; i < input_vertex_count ; ++i) {
         output_vertices[i] = input_vertices[i];
