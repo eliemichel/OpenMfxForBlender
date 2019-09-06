@@ -1959,9 +1959,12 @@ typedef struct OpenMeshEffectParameterInfo {
   char name[256];
   /** MOD_OPENMESHEFFECT_MAX_PARAMETER_LABEL */
   char label[256];
+  /** OpenMeshEffect parameter type */
   int type;
-  float float_value;
-  int int_value;
+  /** Used for Double, Double2D, Double3D, RGB, RGBA */
+  float float_vec_value[4];
+  /** Used for Integer, Integer2D, Integer3D, Boolean, Choice index */
+  int integer_vec_value[4];
   /** MOD_OPENMESHEFFECT_MAX_STRING_VALUE */
   char string_value[1024];
 } OpenMeshEffectParameterInfo;

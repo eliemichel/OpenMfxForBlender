@@ -162,24 +162,70 @@ void deep_copy_parameter_set(OfxParamSetStruct *destination, const OfxParamSetSt
 // // Utils
 
 ParamType parse_parameter_type(const char *str) {
+  if (0 == strcmp(str, kOfxParamTypeInteger)) {
+    return PARAM_TYPE_INTEGER;
+  }
+  if (0 == strcmp(str, kOfxParamTypeInteger2D)) {
+    return PARAM_TYPE_INTEGER_2D;
+  }
+  if (0 == strcmp(str, kOfxParamTypeInteger3D)) {
+    return PARAM_TYPE_INTEGER_3D;
+  }
   if (0 == strcmp(str, kOfxParamTypeDouble)) {
     return PARAM_TYPE_DOUBLE;
   }
-  if (0 == strcmp(str, kOfxParamTypeInteger)) {
-    return PARAM_TYPE_INT;
+  if (0 == strcmp(str, kOfxParamTypeDouble2D)) {
+    return PARAM_TYPE_DOUBLE_2D;
+  }
+  if (0 == strcmp(str, kOfxParamTypeDouble3D)) {
+    return PARAM_TYPE_DOUBLE_3D;
+  }
+  if (0 == strcmp(str, kOfxParamTypeRGB)) {
+    return PARAM_TYPE_RGB;
+  }
+  if (0 == strcmp(str, kOfxParamTypeRGBA)) {
+    return PARAM_TYPE_RGBA;
+  }
+  if (0 == strcmp(str, kOfxParamTypeBoolean)) {
+    return PARAM_TYPE_BOOLEAN;
+  }
+  if (0 == strcmp(str, kOfxParamTypeChoice)) {
+    return PARAM_TYPE_CHOICE;
   }
   if (0 == strcmp(str, kOfxParamTypeString)) {
     return PARAM_TYPE_STRING;
+  }
+  if (0 == strcmp(str, kOfxParamTypeCustom)) {
+    return PARAM_TYPE_CUSTOM;
+  }
+  if (0 == strcmp(str, kOfxParamTypePushButton)) {
+    return PARAM_TYPE_PUSH_BUTTON;
+  }
+  if (0 == strcmp(str, kOfxParamTypeGroup)) {
+    return PARAM_TYPE_GROUP;
+  }
+  if (0 == strcmp(str, kOfxParamTypePage)) {
+    return PARAM_TYPE_PAGE;
   }
   return PARAM_TYPE_UNKNOWN;
 }
 
 size_t parameter_type_dimensions(ParamType type) {
   switch (type) {
+  case PARAM_TYPE_INTEGER:
   case PARAM_TYPE_DOUBLE:
-  case PARAM_TYPE_INT:
+  case PARAM_TYPE_BOOLEAN:
   case PARAM_TYPE_STRING:
     return 1;
+  case PARAM_TYPE_INTEGER_2D:
+  case PARAM_TYPE_DOUBLE_2D:
+    return 2;
+  case PARAM_TYPE_INTEGER_3D:
+  case PARAM_TYPE_DOUBLE_3D:
+  case PARAM_TYPE_RGB:
+    return 3;
+  case PARAM_TYPE_RGBA:
+    return 4;
   default:
     return 1;
   }
@@ -257,13 +303,25 @@ OfxStatus paramGetValue(OfxParamHandle paramHandle, ...) {
   va_start(valist, paramHandle);
   for (size_t i = 0 ; i < dimensions ; ++i) {
     switch (paramHandle->type) {
-    case PARAM_TYPE_DOUBLE:
-      *va_arg(valist, double*) = paramHandle->value[i].as_double;
-      break;
-    case PARAM_TYPE_INT:
+    case PARAM_TYPE_INTEGER:
+    case PARAM_TYPE_INTEGER_2D:
+    case PARAM_TYPE_INTEGER_3D:
       *va_arg(valist, int*) = paramHandle->value[i].as_int;
       break;
+    case PARAM_TYPE_DOUBLE:
+    case PARAM_TYPE_DOUBLE_2D:
+    case PARAM_TYPE_DOUBLE_3D:
+    case PARAM_TYPE_RGB:
+    case PARAM_TYPE_RGBA:
+      *va_arg(valist, double*) = paramHandle->value[i].as_double;
+      break;
+    case PARAM_TYPE_BOOLEAN:
+      *va_arg(valist, bool*) = paramHandle->value[i].as_bool;
+      break;
     case PARAM_TYPE_STRING:
+      // TODO: check memory management
+      *va_arg(valist, char**) = paramHandle->value[i].as_char;
+      break;
     case PARAM_TYPE_UNKNOWN:
       // TODO
       break;
@@ -301,17 +359,25 @@ OfxStatus paramSetValue(OfxParamHandle paramHandle, ...) {
   va_start(args, paramHandle);
   for (size_t i = 0 ; i < dimensions ; ++i) {
     switch (paramHandle->type) {
-    case PARAM_TYPE_DOUBLE:
-    {
-      double d = va_arg(args, double);
-      printf("double: %f\n", d);
-      paramHandle->value[i].as_double = d;
-      break;
-    }
-    case PARAM_TYPE_INT:
+    case PARAM_TYPE_INTEGER:
+    case PARAM_TYPE_INTEGER_2D:
+    case PARAM_TYPE_INTEGER_3D:
       paramHandle->value[i].as_int = va_arg(args, int);
       break;
+    case PARAM_TYPE_DOUBLE:
+    case PARAM_TYPE_DOUBLE_2D:
+    case PARAM_TYPE_DOUBLE_3D:
+    case PARAM_TYPE_RGB:
+    case PARAM_TYPE_RGBA:
+      paramHandle->value[i].as_double = va_arg(args, double);
+      break;
+    case PARAM_TYPE_BOOLEAN:
+      paramHandle->value[i].as_bool = va_arg(args, bool);
+      break;
     case PARAM_TYPE_STRING:
+      // TODO: check memory management
+      paramHandle->value[i].as_char = va_arg(args, char*);
+      break;
     case PARAM_TYPE_UNKNOWN:
       // TODO
       break;
