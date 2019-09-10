@@ -118,6 +118,7 @@ bool load_registry(PluginRegistry *registry, const char *ofx_filepath) {
   registry_init(registry);
 
   if (false == registry_init_binary(registry, ofx_filepath)) {
+    printf("Could not init binary.\n");
     free_registry(registry);
     return false;
   }

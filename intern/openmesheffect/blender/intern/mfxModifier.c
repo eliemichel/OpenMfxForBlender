@@ -176,7 +176,7 @@ typedef struct OpenMeshEffectRuntime {
   char current_plugin_path[1024];
   PluginRegistry registry;
   int current_asset_index;
-  int asset_count, num_parameters;
+  int num_parameters;
 
   OfxHost *ofx_host;
   OfxMeshEffectHandle effect_desc;
@@ -215,6 +215,11 @@ bool runtime_ensure_effect_instance(OpenMeshEffectRuntime *rd) {
 
   if (0 == strcmp(rd->current_plugin_path, "")) {
     printf("current_plugin_path is empty\n");
+    return false;
+  }
+
+  if (-1 == rd->current_asset_index) {
+    printf("No selected plug-in asset\n");
     return false;
   }
 
@@ -271,15 +276,31 @@ static bool runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugi
     runtime_free_effect_instance(rd);
     free_registry(&rd->registry);
   }
+
   strncpy(rd->current_plugin_path, plugin_path, sizeof(rd->current_plugin_path));
-  printf("Loading OFX plugin %s\n", rd->current_plugin_path);
-  if (false == load_registry(&rd->registry, plugin_path)) {
-    free_registry(&rd->registry);
-    rd->current_plugin_path[0] = '\0';
-    return false;
+
+  if (0 != strcmp(rd->current_plugin_path, "")) {
+    printf("Loading OFX plugin %s\n", rd->current_plugin_path);
+    if (false == load_registry(&rd->registry, rd->current_plugin_path)) {
+      printf("Failed to load registry.\n");
+      free_registry(&rd->registry);
+      rd->current_plugin_path[0] = '\0';
+      return false;
+    }
   }
-  runtime_ensure_effect_instance(rd);
   return true;
+}
+
+void runtime_set_asset_index(OpenMeshEffectRuntime *rd, int asset_index) {
+  if (-1 != rd->current_asset_index) {
+    runtime_free_effect_instance(rd);
+  }
+
+  rd->current_asset_index = asset_index;
+
+  if (-1 != rd->current_asset_index) {
+    runtime_ensure_effect_instance(rd);
+  }
 }
 
 void runtime_get_parameters_from_rna(OpenMeshEffectRuntime *rd, OpenMeshEffectModifierData *fxmd) {
@@ -326,21 +347,34 @@ void runtime_get_parameters_from_rna(OpenMeshEffectRuntime *rd, OpenMeshEffectMo
 static OpenMeshEffectRuntime *mfx_Modifier_runtime_ensure(OpenMeshEffectModifierData *fxmd) {
   printf("== mfx_Modifier_runtime_ensure on data %p\n", fxmd);
   OpenMeshEffectRuntime *runtime_data = (OpenMeshEffectRuntime*)fxmd->modifier.runtime;
+  printf("RUNTIME DATA @%p\n", runtime_data);
 
   // Init
   if (NULL == runtime_data) {
     fxmd->modifier.runtime = MEM_callocN(sizeof(OpenMeshEffectRuntime), "mfx runtime");
     runtime_data = (OpenMeshEffectRuntime*)fxmd->modifier.runtime;
     runtime_init(runtime_data);
+    printf("NEW RUNTIME DATA @%p\n", runtime_data);
   }
 
   // Update
+  printf("runtime_data->current_plugin_path = '%s'\n", runtime_data->current_plugin_path);
+  printf("fxmd->plugin_path = '%s'\n", fxmd->plugin_path);
   bool plugin_changed = 0 != strcmp(runtime_data->current_plugin_path, fxmd->plugin_path);
+  printf(plugin_changed ? " -> changed!\n" : " -> did not changed.\n");
   
   if (plugin_changed) {
     if (false == runtime_set_plugin_path(runtime_data, fxmd->plugin_path)) {
       fxmd->plugin_path[0] = '\0';
+      fxmd->asset_index = -1;
     }
+  }
+
+  bool asset_changed = plugin_changed || runtime_data->current_asset_index != fxmd->asset_index;
+  bool is_plugin_valid = 0 != strcmp(runtime_data->current_plugin_path, "");
+
+  if (asset_changed && is_plugin_valid) {
+    runtime_set_asset_index(runtime_data, fxmd->asset_index);
   }
 
   printf("==/ mfx_Modifier_runtime_ensure\n");
@@ -361,25 +395,40 @@ void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
     fxmd->asset_info = NULL;
   }
 
-  fxmd->num_assets = runtime_data->asset_count;
+  fxmd->num_assets = runtime_data->registry.num_plugins;
   fxmd->asset_info = MEM_calloc_arrayN(sizeof(OpenMeshEffectAssetInfo), fxmd->num_assets, "mfx asset info");
 
-  char name[MOD_OPENMESHEFFECT_MAX_ASSET_NAME];
   for (int i = 0 ; i < fxmd->num_assets ; ++i) {
     // Get asset name
-    // TODO: get name from plugin info
+    char *name = runtime_data->registry.plugins[i]->pluginIdentifier;
+    printf("Loading %s to RNA\n", name);
     strncpy(fxmd->asset_info[i].name, name, sizeof(fxmd->asset_info[i].name));
   }
 
-  // move to on_asset_changed
+  printf("==/ mfx_Modifier_on_plugin_changed\n");
+}
+
+void mfx_Modifier_on_library_changed(OpenMeshEffectModifierData *fxmd) {
+  printf("==. mfx_Modifier_on_library_changed on data %p\n", fxmd);
+}
+
+void mfx_Modifier_on_asset_changed(OpenMeshEffectModifierData *fxmd) {
+  printf("==. mfx_Modifier_on_asset_changed on data %p\n", fxmd);
+  OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
+
   if (0 == strcmp(runtime_data->current_plugin_path, "")) {
     printf("current_plugin_path is null\n");
-    printf("==/ mfx_Modifier_on_plugin_changed\n");
+    printf("==/ mfx_Modifier_on_asset_changed\n");
+    return;
+  }
+
+  if (-1 == runtime_data->current_asset_index) {
+    printf("no asset selected\n");
+    printf("==/ mfx_Modifier_on_asset_changed\n");
     return;
   }
 
   // Reset parameter DNA
-  // TODO: This section must be in on_asset_changed (when it'll exist)
   if (NULL != fxmd->parameter_info) {
     MEM_freeN(fxmd->parameter_info);
     fxmd->parameter_info = NULL;
@@ -397,16 +446,7 @@ void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
     fxmd->parameter_info[i].type = parameters->parameters[i]->type;
   }
 
-  printf("==/ mfx_Modifier_on_plugin_changed\n");
-}
-
-void mfx_Modifier_on_library_changed(OpenMeshEffectModifierData *fxmd) {
-  printf("==. mfx_Modifier_on_library_changed on data %p\n", fxmd);
-}
-
-void mfx_Modifier_on_asset_changed(OpenMeshEffectModifierData *fxmd) {
-  printf("==. mfx_Modifier_on_asset_changed on data %p\n", fxmd);
-  // TODO: Move parameter DNA update here (currently in on_plugin_changed)
+  printf("==/ mfx_Modifier_on_asset_changed on data %p\n", fxmd);
 }
 
 void mfx_Modifier_free_runtime_data(void *runtime_data)
