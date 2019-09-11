@@ -433,6 +433,11 @@ const EnumPropertyItem rna_enum_axis_flag_xyz_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
+const EnumPropertyItem rna_enum_openmesheffect_asset_items[] = {
+    {-1, "NONE", -1, "", ""},
+    {0, NULL, 0, NULL, NULL},
+};
+
 #ifdef RNA_RUNTIME
 
 #  include "DNA_particle_types.h"
@@ -1452,6 +1457,12 @@ static void rna_OpenMeshEffectModifier_library_path_set(PointerRNA *ptr, const c
   mfx_Modifier_on_library_changed(fxmd);
 }
 
+static int rna_OpenMeshEffectModifier_asset_index_get(PointerRNA *ptr)
+{
+  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
+  return fxmd->asset_index;
+}
+
 static void rna_OpenMeshEffectModifier_asset_index_set(PointerRNA *ptr, int value)
 {
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
@@ -1463,6 +1474,31 @@ static void rna_OpenMeshEffectModifier_asset_index_range(PointerRNA *ptr, int *m
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
   *min = *softmin = -1;
   *max = *softmax = fxmd->num_assets - 1;
+}
+
+static const EnumPropertyItem *rna_OpenMeshEffectModifier_asset_enum_item(struct bContext *C,
+                                                                          struct PointerRNA *ptr,
+                                                                          struct PropertyRNA *prop,
+                                                                          bool *r_free) {
+  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
+  EnumPropertyItem *item = NULL, tmp_item = {0};
+  int totitem = 0;
+
+  tmp_item.value = -1;
+  tmp_item.identifier = tmp_item.name = "(No asset selected)";
+  RNA_enum_item_add(&item, &totitem, &tmp_item);
+  RNA_enum_item_add_separator(&item, &totitem);
+
+  for (int i = 0 ; i < fxmd->num_assets ; ++i) {
+    tmp_item.value = i;
+    tmp_item.identifier = tmp_item.name = fxmd->asset_info[i].name;
+    RNA_enum_item_add(&item, &totitem, &tmp_item);
+  }
+
+  RNA_enum_item_end(&item, &totitem);
+  *r_free = true;
+
+  return item;
 }
 
 static void rna_OpenMeshEffectAssetInfo_name_get(PointerRNA *ptr, char *value)
@@ -6185,7 +6221,23 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "asset_index", PROP_INT, PROP_NONE);
   RNA_def_property_ui_text(prop, "Asset Index", "Index of the Digital Asset within the current asset library");
-  RNA_def_property_int_funcs(prop, NULL, "rna_OpenMeshEffectModifier_asset_index_set", "rna_OpenMeshEffectModifier_asset_index_range");
+  RNA_def_property_int_funcs(prop,
+                             "rna_OpenMeshEffectModifier_asset_index_get",
+                             "rna_OpenMeshEffectModifier_asset_index_set",
+                             "rna_OpenMeshEffectModifier_asset_index_range");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_enum(srna,
+                      "asset_enum",
+                      rna_enum_openmesheffect_asset_items,
+                      -1,
+                      "Select an asset",
+                      "Plug-in asset to use within the current plug-in library");
+  RNA_def_property_enum_sdna(prop, NULL, "asset_index");
+  RNA_def_property_enum_funcs(prop,
+                              "rna_OpenMeshEffectModifier_asset_index_get",
+                              "rna_OpenMeshEffectModifier_asset_index_set",
+                              "rna_OpenMeshEffectModifier_asset_enum_item");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "num_assets", PROP_INT, PROP_NONE);

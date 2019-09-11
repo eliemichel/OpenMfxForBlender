@@ -473,13 +473,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         #layout.separator()
 
         if md.asset_info:
-            layout.label(text="Assets:")
-        for asset in md.asset_info:
-            layout.label(text=asset.name)
-        layout.separator()
-
-        layout.prop(md, "asset_index")
-        layout.separator()
+            layout.prop(md, "asset_enum")
+            layout.separator()
 
         PARAM_TYPE_INTEGER = 0
         PARAM_TYPE_INTEGER_2D = 1
