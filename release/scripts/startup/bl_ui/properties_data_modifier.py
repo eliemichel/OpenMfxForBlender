@@ -469,12 +469,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "plugin_path")
         layout.separator()
 
-        #layout.prop(md, "library_path")
-        #layout.separator()
-
-        if md.asset_info:
-            layout.prop(md, "asset_enum")
-            layout.separator()
+        layout.prop(md, "asset_enum")
+        layout.separator()
 
         PARAM_TYPE_INTEGER = 0
         PARAM_TYPE_INTEGER_2D = 1
@@ -492,8 +488,6 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         PARAM_TYPE_GROUP = 13
         PARAM_TYPE_PAGE = 14
 
-        if md.parameter_info:
-            layout.label(text="Parameters:")
         for parm in md.parameter_info:
             row = layout.row(align=True)
             row.label(text=parm.label)

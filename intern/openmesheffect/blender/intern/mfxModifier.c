@@ -31,8 +31,11 @@
 #include "DNA_meshdata_types.h" // MVert
 
 #include "BKE_mesh.h" // BKE_mesh_new_nomain
+#include "BKE_main.h" // BKE_main_blendfile_path_from_global
 
 #include "BLI_math_vector.h"
+#include "BLI_string.h"
+#include "BLI_path_util.h"
 
 // UTILS
 // TODO: isn't it already defined somewhere?
@@ -281,7 +284,14 @@ static bool runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugi
 
   if (0 != strcmp(rd->current_plugin_path, "")) {
     printf("Loading OFX plugin %s\n", rd->current_plugin_path);
-    if (false == load_registry(&rd->registry, rd->current_plugin_path)) {
+    // Get absolute path (ui file browser returns relative path for saved files)
+    char abs_path[FILE_MAX];
+    BLI_strncpy(abs_path, rd->current_plugin_path, FILE_MAX);
+    char *base_path = BKE_main_blendfile_path_from_global(); // TODO: How to get a bMain object here to avoid "from_global()"?
+    if (NULL != base_path) {
+      BLI_path_abs(abs_path, base_path);
+    }
+    if (false == load_registry(&rd->registry, abs_path)) {
       printf("Failed to load registry.\n");
       free_registry(&rd->registry);
       rd->current_plugin_path[0] = '\0';
