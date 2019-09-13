@@ -450,10 +450,50 @@ void mfx_Modifier_on_asset_changed(OpenMeshEffectModifierData *fxmd) {
   fxmd->parameter_info = MEM_calloc_arrayN(sizeof(OpenMeshEffectParameterInfo), fxmd->num_parameters, "openmesheffect parameter info");
 
   for (int i = 0 ; i < fxmd->num_parameters ; ++i) {
+  
     strncpy(fxmd->parameter_info[i].name, parameters->parameters[i]->name, sizeof(fxmd->parameter_info[i].name));
     // TODO: get parameter label from ofx param description
     strncpy(fxmd->parameter_info[i].label, parameters->parameters[i]->name, sizeof(fxmd->parameter_info[i].label));
     fxmd->parameter_info[i].type = parameters->parameters[i]->type;
+
+    parameters->parameters[i]->properties.num_properties;
+    int index = find_property(&parameters->parameters[i]->properties, kOfxParamPropDefault);
+    if (index > -1) {
+      OfxPropertyStruct *default_value = parameters->parameters[i]->properties.properties[index];
+
+      switch (parameters->parameters[i]->type) {
+      case PARAM_TYPE_INTEGER_3D:
+          fxmd->parameter_info[i].integer_vec_value[2] = default_value->value[2].as_int;
+      case PARAM_TYPE_INTEGER_2D:
+        fxmd->parameter_info[i].integer_vec_value[1] = default_value->value[1].as_int;
+      case PARAM_TYPE_INTEGER:
+        fxmd->parameter_info[i].integer_vec_value[0] = default_value->value[0].as_int;
+        break;
+    
+      case PARAM_TYPE_RGBA:
+        fxmd->parameter_info[i].float_vec_value[3] = (float)default_value->value[3].as_double;
+      case PARAM_TYPE_DOUBLE_3D:
+      case PARAM_TYPE_RGB:
+        fxmd->parameter_info[i].float_vec_value[2] = (float)default_value->value[2].as_double;
+      case PARAM_TYPE_DOUBLE_2D:
+        fxmd->parameter_info[i].float_vec_value[1] = (float)default_value->value[1].as_double;
+      case PARAM_TYPE_DOUBLE:
+        fxmd->parameter_info[i].float_vec_value[0] = (float)default_value->value[0].as_double;
+        break;
+
+      case PARAM_TYPE_BOOLEAN:
+        fxmd->parameter_info[i].integer_vec_value[0] = (int)default_value->value[0].as_int;
+        break;
+
+      case PARAM_TYPE_STRING:
+        strncpy(fxmd->parameter_info[i].string_value, parameters->parameters[i]->value->as_char, sizeof(fxmd->parameter_info[i].string_value));
+        break;
+
+      default:
+        printf("-- Skipping default value for parameter %s (unsupported type: %d)\n", fxmd->parameter_info[i].name, fxmd->parameter_info[i].type);
+        break;
+      }
+    }
   }
 
   printf("==/ mfx_Modifier_on_asset_changed on data %p\n", fxmd);
