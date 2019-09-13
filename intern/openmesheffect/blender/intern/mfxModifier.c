@@ -486,7 +486,7 @@ void mfx_Modifier_on_asset_changed(OpenMeshEffectModifierData *fxmd) {
         break;
 
       case PARAM_TYPE_STRING:
-        strncpy(fxmd->parameter_info[i].string_value, parameters->parameters[i]->value->as_char, sizeof(fxmd->parameter_info[i].string_value));
+        strncpy(fxmd->parameter_info[i].string_value, default_value->value->as_char, sizeof(fxmd->parameter_info[i].string_value));
         break;
 
       default:
