@@ -68,7 +68,6 @@ static bool dependsOnNormals(struct ModifierData *md)
   return true;
 }
 
-// TODO: Why isn't this called when deleting the object on which the modifier is attached?
 static void freeRuntimeData(void *runtime_data)
 {
   printf("freeRuntimeData on pointer %p.\n", runtime_data);
@@ -76,6 +75,11 @@ static void freeRuntimeData(void *runtime_data)
     return;
   }
   mfx_Modifier_free_runtime_data(runtime_data);
+}
+
+static void freeData(struct ModifierData *md)
+{
+  freeRuntimeData(md->runtime);
 }
 
 ModifierTypeInfo modifierType_OpenMeshEffect = {
@@ -95,7 +99,7 @@ ModifierTypeInfo modifierType_OpenMeshEffect = {
 
     /* initData */ initData,
     /* requiredDataMask */ NULL,
-    /* freeData */ NULL,
+    /* freeData */ freeData,
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ dependsOnTime,
