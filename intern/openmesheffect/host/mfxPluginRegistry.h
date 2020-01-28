@@ -22,6 +22,10 @@
 #ifndef __MFX_PLUGIN_REGISTRY_H__
 #define __MFX_PLUGIN_REGISTRY_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 
 #include "ofxCore.h"
@@ -65,5 +69,9 @@ bool load_registry(PluginRegistry *registry, const char *ofx_filepath);
  * /post registry will never be used again
  */
 void free_registry(PluginRegistry *registry);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __MFX_PLUGIN_REGISTRY_H__
