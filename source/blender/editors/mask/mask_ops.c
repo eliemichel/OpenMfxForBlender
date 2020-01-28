@@ -86,7 +86,7 @@ MaskSplinePoint *ED_mask_point_find_nearest(const bContext *C,
   eMaskWhichHandle which_handle = MASK_WHICH_HANDLE_NONE;
   int width, height;
 
-  Depsgraph *depsgraph = CTX_data_evaluated_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Mask *mask_eval = (Mask *)DEG_get_evaluated_id(depsgraph, &mask_orig->id);
 
   ED_mask_get_size(sa, &width, &height);
@@ -241,7 +241,7 @@ bool ED_mask_feather_find_nearest(const bContext *C,
   float scalex, scaley;
   int width, height;
 
-  Depsgraph *depsgraph = CTX_data_evaluated_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Mask *mask_eval = (Mask *)DEG_get_evaluated_id(depsgraph, &mask_orig->id);
 
   ED_mask_get_size(sa, &width, &height);
@@ -441,6 +441,7 @@ static int masklay_new_exec(bContext *C, wmOperator *op)
   mask->masklay_act = mask->masklay_tot - 1;
 
   WM_event_add_notifier(C, NC_MASK | NA_EDITED, mask);
+  DEG_id_tag_update(&mask->id, ID_RECALC_COPY_ON_WRITE);
 
   return OPERATOR_FINISHED;
 }
@@ -474,6 +475,7 @@ static int masklay_remove_exec(bContext *C, wmOperator *UNUSED(op))
     BKE_mask_layer_remove(mask, masklay);
 
     WM_event_add_notifier(C, NC_MASK | NA_EDITED, mask);
+    DEG_id_tag_update(&mask->id, ID_RECALC_COPY_ON_WRITE);
   }
 
   return OPERATOR_FINISHED;
@@ -2206,6 +2208,7 @@ static int mask_layer_move_exec(bContext *C, wmOperator *op)
   }
 
   WM_event_add_notifier(C, NC_MASK | NA_EDITED, mask);
+  DEG_id_tag_update(&mask->id, ID_RECALC_COPY_ON_WRITE);
 
   return OPERATOR_FINISHED;
 }

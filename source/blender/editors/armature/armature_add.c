@@ -769,7 +769,7 @@ static int armature_symmetrize_exec(bContext *C, wmOperator *op)
 
         EditBone *ebone = ebone_iter->temp.ebone;
 
-        /* copy flags incase bone is pre-existing data */
+        /* Copy flags in case bone is pre-existing data. */
         ebone->flag = (ebone->flag & ~flag_copy) | (ebone_iter->flag & flag_copy);
 
         if (ebone_iter->parent == NULL) {
@@ -1120,6 +1120,8 @@ static int armature_bone_primitive_add_exec(bContext *C, wmOperator *op)
   else {
     add_v3_v3v3(bone->tail, bone->head, imat[2]);  // bone with unit length 1, pointing up Z
   }
+
+  ED_armature_edit_refresh_layer_used(obedit->data);
 
   /* note, notifier might evolve */
   WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, obedit);

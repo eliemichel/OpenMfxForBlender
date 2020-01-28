@@ -34,6 +34,7 @@
 #include "BLT_translation.h"
 
 #include "DNA_anim_types.h"
+#include "DNA_armature_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_scene_types.h"
@@ -492,8 +493,12 @@ static void test_constraint(
                CONSTRAINT_TYPE_CLAMPTO,
                CONSTRAINT_TYPE_SPLINEIK)) {
         if (ct->tar) {
+          /* The object type check is only needed here in case we have a placeholder
+           * object assigned (because the library containing the curve is missing).
+           *
+           * In other cases it should be impossible to have a type mismatch.
+           */
           if (ct->tar->type != OB_CURVE) {
-            ct->tar = NULL;
             con->flag |= CONSTRAINT_DISABLE;
           }
           else {
@@ -506,8 +511,12 @@ static void test_constraint(
       }
       else if (con->type == CONSTRAINT_TYPE_ARMATURE) {
         if (ct->tar) {
+          /* The object type check is only needed here in case we have a placeholder
+           * object assigned (because the library containing the armature is missing).
+           *
+           * In other cases it should be impossible to have a type mismatch.
+           */
           if (ct->tar->type != OB_ARMATURE) {
-            ct->tar = NULL;
             con->flag |= CONSTRAINT_DISABLE;
           }
           else if (!BKE_armature_find_bone_name(BKE_armature_from_object(ct->tar),
@@ -635,7 +644,7 @@ static const EnumPropertyItem constraint_owner_items[] = {
 static bool edit_constraint_poll_generic(bContext *C, StructRNA *rna_type)
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "constraint", rna_type);
-  Object *ob = (ptr.id.data) ? ptr.id.data : ED_object_active_context(C);
+  Object *ob = (ptr.owner_id) ? (Object *)ptr.owner_id : ED_object_active_context(C);
 
   if (!ptr.data) {
     CTX_wm_operator_poll_msg_set(C, "Context missing 'constraint'");
@@ -647,7 +656,7 @@ static bool edit_constraint_poll_generic(bContext *C, StructRNA *rna_type)
     return 0;
   }
 
-  if (ID_IS_LINKED(ob) || (ptr.id.data && ID_IS_LINKED(ptr.id.data))) {
+  if (ID_IS_LINKED(ob) || (ptr.owner_id && ID_IS_LINKED(ptr.owner_id))) {
     CTX_wm_operator_poll_msg_set(C, "Cannot edit library data");
     return 0;
   }
@@ -679,7 +688,7 @@ static void edit_constraint_properties(wmOperatorType *ot)
 static int edit_constraint_invoke_properties(bContext *C, wmOperator *op)
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "constraint", &RNA_Constraint);
-  Object *ob = (ptr.id.data) ? ptr.id.data : ED_object_active_context(C);
+  Object *ob = (ptr.owner_id) ? (Object *)ptr.owner_id : ED_object_active_context(C);
   bConstraint *con;
   ListBase *list;
 
@@ -863,13 +872,12 @@ void CONSTRAINT_OT_limitdistance_reset(wmOperatorType *ot)
 /* ------------- Child-Of Constraint ------------------ */
 
 static void child_get_inverse_matrix_owner_bone(
-    const bContext *C, wmOperator *op, Scene *scene, Object *ob, float invmat[4][4])
+    Depsgraph *depsgraph, wmOperator *op, Scene *scene, Object *ob, float invmat[4][4])
 {
   /* For bone owner we want to do this in evaluated domain.
    * BKE_pose_where_is / BKE_pose_where_is_bone relies on (re)evaluating parts of the scene
    * and copying new evaluated stuff back to original.
    */
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
   bConstraint *con_eval = edit_constraint_property_get(op, ob_eval, CONSTRAINT_TYPE_CHILDOF);
 
@@ -946,9 +954,8 @@ static void child_get_inverse_matrix_owner_bone(
 }
 
 static void child_get_inverse_matrix_owner_object(
-    const bContext *C, Scene *scene, Object *ob, bConstraint *con, float invmat[4][4])
+    Depsgraph *depsgraph, Scene *scene, Object *ob, bConstraint *con, float invmat[4][4])
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
 
   /* nullify inverse matrix first */
   unit_m4(invmat);
@@ -970,6 +977,7 @@ static void child_get_inverse_matrix_owner_object(
 static int childof_set_inverse_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
   Object *ob = ED_object_active_context(C);
   bConstraint *con = edit_constraint_property_get(op, ob, CONSTRAINT_TYPE_CHILDOF);
@@ -984,10 +992,10 @@ static int childof_set_inverse_exec(bContext *C, wmOperator *op)
   }
 
   if (owner == EDIT_CONSTRAINT_OWNER_OBJECT) {
-    child_get_inverse_matrix_owner_object(C, scene, ob, con, data->invmat);
+    child_get_inverse_matrix_owner_object(depsgraph, scene, ob, con, data->invmat);
   }
   else if (owner == EDIT_CONSTRAINT_OWNER_BONE) {
-    child_get_inverse_matrix_owner_bone(C, op, scene, ob, data->invmat);
+    child_get_inverse_matrix_owner_bone(depsgraph, op, scene, ob, data->invmat);
   }
 
   ED_object_constraint_update(bmain, ob);
@@ -1223,6 +1231,7 @@ void CONSTRAINT_OT_followpath_path_animate(wmOperatorType *ot)
 static int objectsolver_set_inverse_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
   Object *ob = ED_object_active_context(C);
   bConstraint *con = edit_constraint_property_get(op, ob, CONSTRAINT_TYPE_OBJECTSOLVER);
@@ -1237,10 +1246,10 @@ static int objectsolver_set_inverse_exec(bContext *C, wmOperator *op)
   }
 
   if (owner == EDIT_CONSTRAINT_OWNER_OBJECT) {
-    child_get_inverse_matrix_owner_object(C, scene, ob, con, data->invmat);
+    child_get_inverse_matrix_owner_object(depsgraph, scene, ob, con, data->invmat);
   }
   else if (owner == EDIT_CONSTRAINT_OWNER_BONE) {
-    child_get_inverse_matrix_owner_bone(C, op, scene, ob, data->invmat);
+    child_get_inverse_matrix_owner_bone(depsgraph, op, scene, ob, data->invmat);
   }
 
   ED_object_constraint_update(bmain, ob);
@@ -1421,14 +1430,14 @@ void ED_object_constraint_dependency_tag_update(Main *bmain, Object *ob, bConstr
 static bool constraint_poll(bContext *C)
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "constraint", &RNA_Constraint);
-  return (ptr.id.data && ptr.data);
+  return (ptr.owner_id && ptr.data);
 }
 
 static int constraint_delete_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Main *bmain = CTX_data_main(C);
   PointerRNA ptr = CTX_data_pointer_get_type(C, "constraint", &RNA_Constraint);
-  Object *ob = ptr.id.data;
+  Object *ob = (Object *)ptr.owner_id;
   bConstraint *con = ptr.data;
   ListBase *lb = get_constraint_lb(ob, con, NULL);
 
@@ -1815,10 +1824,15 @@ static bool get_new_constraint_target(
          */
         if ((ob->type == OB_ARMATURE) && (ob->mode & OB_MODE_POSE) &&
             (!only_curve && !only_mesh)) {
-          /* just use the active bone, and assume that it is visible + usable */
-          *tar_ob = ob;
-          *tar_pchan = BKE_pose_channel_active(ob);
-          found = true;
+
+          /* Only use the object & bone if the bone is visible & selected
+           * since we may have multiple objects in pose mode at once.  */
+          bPoseChannel *pchan = BKE_pose_channel_active_or_first_selected(ob);
+          if (pchan != NULL) {
+            *tar_pchan = pchan;
+            *tar_ob = ob;
+            found = true;
+          }
 
           break;
         }

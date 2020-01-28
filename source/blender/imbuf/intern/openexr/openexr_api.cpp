@@ -1118,7 +1118,7 @@ void IMB_exr_write_channels(void *handle)
       if (echan->use_half_float) {
         float *rect = echan->rect;
         half *cur = current_rect_half;
-        for (size_t i = 0; i < num_pixels; ++i, ++cur) {
+        for (size_t i = 0; i < num_pixels; i++, cur++) {
           *cur = rect[i * echan->xstride];
         }
         half *rect_to_write = current_rect_half + (data->height - 1L) * data->width;
@@ -1215,9 +1215,9 @@ void IMB_exr_read_channels(void *handle)
   /* check if exr was saved with previous versions of blender which flipped images */
   const StringAttribute *ta = data->ifile->header(0).findTypedAttribute<StringAttribute>(
       "BlenderMultiChannel");
-  short flip = (ta && STREQLEN(ta->value().c_str(),
-                               "Blender V2.43",
-                               13)); /* 'previous multilayer attribute, flipped */
+
+  /* 'previous multilayer attribute, flipped. */
+  short flip = (ta && STREQLEN(ta->value().c_str(), "Blender V2.43", 13));
 
   exr_printf(
       "\nIMB_exr_read_channels\n%s %-6s %-22s "
@@ -1762,32 +1762,11 @@ static bool imb_exr_is_multilayer_file(MultiPartInputFile &file)
   const ChannelList &channels = file.header(0).channels();
   std::set<std::string> layerNames;
 
-  /* will not include empty layer names */
+  /* This will not include empty layer names, so files with just R/G/B/A
+   * channels without a layer name will be single layer. */
   channels.layers(layerNames);
 
-  if (layerNames.size() > 1) {
-    return true;
-  }
-
-  if (layerNames.size()) {
-    /* if layerNames is not empty, it means at least one layer is non-empty,
-     * but it also could be layers without names in the file and such case
-     * shall be considered a multilayer exr
-     *
-     * that's what we do here: test whether they're empty layer names together
-     * with non-empty ones in the file
-     */
-    for (ChannelList::ConstIterator i = channels.begin(); i != channels.end(); i++) {
-      std::string layerName = i.name();
-      size_t pos = layerName.rfind('.');
-
-      if (pos == std::string::npos) {
-        return true;
-      }
-    }
-  }
-
-  return false;
+  return (layerNames.size() > 0);
 }
 
 static void imb_exr_type_by_channels(ChannelList &channels,
@@ -2034,7 +2013,7 @@ struct ImBuf *imb_load_openexr(const unsigned char *mem,
           if (!has_rgb && has_luma) {
             size_t a;
             if (exr_has_chroma(*file)) {
-              for (a = 0; a < (size_t)ibuf->x * ibuf->y; ++a) {
+              for (a = 0; a < (size_t)ibuf->x * ibuf->y; a++) {
                 float *color = ibuf->rect_float + a * 4;
                 ycc_to_rgb(color[0] * 255.0f,
                            color[1] * 255.0f,
@@ -2046,7 +2025,7 @@ struct ImBuf *imb_load_openexr(const unsigned char *mem,
               }
             }
             else {
-              for (a = 0; a < (size_t)ibuf->x * ibuf->y; ++a) {
+              for (a = 0; a < (size_t)ibuf->x * ibuf->y; a++) {
                 float *color = ibuf->rect_float + a * 4;
                 color[1] = color[2] = color[0];
               }

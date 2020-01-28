@@ -42,7 +42,6 @@ struct ReportList;
 struct Scene;
 struct UndoType;
 struct View3D;
-struct ViewContext;
 struct ViewLayer;
 struct bArmature;
 struct bContext;
@@ -74,13 +73,16 @@ typedef struct EditBone {
    * animation are automatically relative to the bones' rest positions*/
   int flag;
   int layer;
+  char inherit_scale_mode;
 
+  /* Envelope distance & weight */
   float dist, weight;
   /** put them in order! transform uses this as scale */
   float xwidth, length, zwidth;
   float rad_head, rad_tail;
 
   /* Bendy-Bone parameters */
+  short segments;
   float roll1, roll2;
   float curve_in_x, curve_in_y;
   float curve_out_x, curve_out_y;
@@ -90,8 +92,6 @@ typedef struct EditBone {
 
   /** for envelope scaling */
   float oldlength;
-
-  short segments;
 
   /** Type of next/prev bone handles */
   char bbone_prev_type;
@@ -170,6 +170,10 @@ bool ED_armature_pose_select_pick_with_buffer(struct ViewLayer *view_layer,
                                               bool deselect,
                                               bool toggle,
                                               bool do_nearest);
+
+void ED_armature_pose_select_in_wpaint_mode(struct ViewLayer *view_layer,
+                                            struct Base *base_select);
+
 bool ED_armature_edit_select_pick(
     struct bContext *C, const int mval[2], bool extend, bool deselect, bool toggle);
 
@@ -183,6 +187,8 @@ EditBone *ED_armature_ebone_find_name(const struct ListBase *edbo, const char *n
 EditBone *ED_armature_ebone_get_mirrored(const struct ListBase *edbo, EditBone *ebo);
 void ED_armature_edit_sync_selection(struct ListBase *edbo);
 void ED_armature_edit_validate_active(struct bArmature *arm);
+
+void ED_armature_edit_refresh_layer_used(struct bArmature *arm);
 
 struct Base *ED_armature_base_and_ebone_from_select_buffer(struct Base **bases,
                                                            uint bases_len,
@@ -223,15 +229,9 @@ void ED_armature_edit_transform_mirror_update(struct Object *obedit);
 void ED_armature_origin_set(
     struct Main *bmain, struct Object *ob, const float cursor[3], int centermode, int around);
 
-void ED_armature_transform_bones(struct bArmature *arm, float mat[4][4], const bool do_props);
-void ED_armature_transform_apply(struct Main *bmain,
-                                 struct Object *ob,
-                                 float mat[4][4],
-                                 const bool do_props);
-void ED_armature_transform(struct Main *bmain,
-                           struct bArmature *arm,
-                           float mat[4][4],
-                           const bool do_props);
+void ED_armature_edit_transform(struct bArmature *arm, const float mat[4][4], const bool do_props);
+
+void ED_armature_transform(struct bArmature *arm, const float mat[4][4], const bool do_props);
 
 #define ARM_GROUPS_NAME 1
 #define ARM_GROUPS_ENVELOPE 2
@@ -284,10 +284,18 @@ bool ED_pose_deselect_all_multi(struct bContext *C, int select_mode, const bool 
 bool ED_pose_deselect_all(struct Object *ob, int select_mode, const bool ignore_visibility);
 void ED_pose_bone_select_tag_update(struct Object *ob);
 void ED_pose_bone_select(struct Object *ob, struct bPoseChannel *pchan, bool select);
+
+/* Corresponds to eAnimvizCalcRange. */
+typedef enum ePosePathCalcRange {
+  POSE_PATH_CALC_RANGE_CURRENT_FRAME,
+  POSE_PATH_CALC_RANGE_CHANGED,
+  POSE_PATH_CALC_RANGE_FULL,
+} ePosePathCalcRange;
 void ED_pose_recalculate_paths(struct bContext *C,
                                struct Scene *scene,
                                struct Object *ob,
-                               bool current_frame_only);
+                               ePosePathCalcRange range);
+
 struct Object *ED_pose_object_from_context(struct bContext *C);
 
 /* meshlaplacian.c */

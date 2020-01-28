@@ -60,7 +60,6 @@ static struct {
   Object *ob;
   /* Reset when changing current_armature */
   DRWCallBuffer *bone_octahedral_solid;
-  DRWCallBuffer *bone_octahedral_wire;
   DRWCallBuffer *bone_octahedral_outline;
   DRWCallBuffer *bone_box_solid;
   DRWCallBuffer *bone_box_wire;
@@ -694,17 +693,17 @@ static bool set_pchan_color(short colCode,
         uchar cp[4] = {255};
 
         if (boneflag & BONE_DRAW_ACTIVE) {
-          copy_v3_v3_char((char *)cp, bcolor->active);
+          copy_v3_v3_uchar(cp, bcolor->active);
           if (!(boneflag & BONE_SELECTED)) {
             cp_shade_color3ub(cp, -80);
           }
         }
         else if (boneflag & BONE_SELECTED) {
-          copy_v3_v3_char((char *)cp, bcolor->select);
+          copy_v3_v3_uchar(cp, bcolor->select);
         }
         else {
           /* a bit darker than solid */
-          copy_v3_v3_char((char *)cp, bcolor->solid);
+          copy_v3_v3_uchar(cp, bcolor->solid);
           cp_shade_color3ub(cp, -50);
         }
 
@@ -742,16 +741,16 @@ static bool set_pchan_color(short colCode,
       if ((bcolor == NULL) || (bcolor->flag & TH_WIRECOLOR_CONSTCOLS)) {
         uchar cp[4];
         if (constflag & PCHAN_HAS_TARGET) {
-          rgba_char_args_set((char *)cp, 255, 150, 0, 80);
+          rgba_uchar_args_set(cp, 255, 150, 0, 80);
         }
         else if (constflag & PCHAN_HAS_IK) {
-          rgba_char_args_set((char *)cp, 255, 255, 0, 80);
+          rgba_uchar_args_set(cp, 255, 255, 0, 80);
         }
         else if (constflag & PCHAN_HAS_SPLINEIK) {
-          rgba_char_args_set((char *)cp, 200, 255, 0, 80);
+          rgba_uchar_args_set(cp, 200, 255, 0, 80);
         }
         else if (constflag & PCHAN_HAS_CONST) {
-          rgba_char_args_set((char *)cp, 0, 255, 120, 80);
+          rgba_uchar_args_set(cp, 0, 255, 120, 80);
         }
         else {
           return false;
@@ -768,13 +767,13 @@ static bool set_pchan_color(short colCode,
         uchar cp[4] = {255};
 
         if (boneflag & BONE_DRAW_ACTIVE) {
-          copy_v3_v3_char((char *)cp, bcolor->active);
+          copy_v3_v3_uchar(cp, bcolor->active);
         }
         else if (boneflag & BONE_SELECTED) {
-          copy_v3_v3_char((char *)cp, bcolor->select);
+          copy_v3_v3_uchar(cp, bcolor->select);
         }
         else {
-          copy_v3_v3_char((char *)cp, bcolor->solid);
+          copy_v3_v3_uchar(cp, bcolor->solid);
         }
 
         rgb_uchar_to_float(fcolor, cp);
@@ -798,15 +797,15 @@ static bool set_pchan_color(short colCode,
         uchar cp[4] = {255};
 
         if (boneflag & BONE_DRAW_ACTIVE) {
-          copy_v3_v3_char((char *)cp, bcolor->active);
+          copy_v3_v3_uchar(cp, bcolor->active);
           cp_shade_color3ub(cp, 10);
         }
         else if (boneflag & BONE_SELECTED) {
-          copy_v3_v3_char((char *)cp, bcolor->select);
+          copy_v3_v3_uchar(cp, bcolor->select);
           cp_shade_color3ub(cp, -30);
         }
         else {
-          copy_v3_v3_char((char *)cp, bcolor->solid);
+          copy_v3_v3_uchar(cp, bcolor->solid);
           cp_shade_color3ub(cp, -30);
         }
 
@@ -830,16 +829,16 @@ static bool set_pchan_color(short colCode,
       if ((constflag) && ((bcolor == NULL) || (bcolor->flag & TH_WIRECOLOR_CONSTCOLS))) {
         uchar cp[4];
         if (constflag & PCHAN_HAS_TARGET) {
-          rgba_char_args_set((char *)cp, 255, 150, 0, 255);
+          rgba_uchar_args_set(cp, 255, 150, 0, 255);
         }
         else if (constflag & PCHAN_HAS_IK) {
-          rgba_char_args_set((char *)cp, 255, 255, 0, 255);
+          rgba_uchar_args_set(cp, 255, 255, 0, 255);
         }
         else if (constflag & PCHAN_HAS_SPLINEIK) {
-          rgba_char_args_set((char *)cp, 200, 255, 0, 255);
+          rgba_uchar_args_set(cp, 200, 255, 0, 255);
         }
         else if (constflag & PCHAN_HAS_CONST) {
-          rgba_char_args_set((char *)cp, 0, 255, 120, 255);
+          rgba_uchar_args_set(cp, 0, 255, 120, 255);
         }
         else if (constflag) {
           UI_GetThemeColor4ubv(TH_BONE_POSE, cp);
@@ -849,7 +848,7 @@ static bool set_pchan_color(short colCode,
       }
       else {
         if (bcolor) {
-          const char *cp = bcolor->solid;
+          const uchar *cp = bcolor->solid;
           rgb_uchar_to_float(fcolor, (uchar *)cp);
           fcolor[3] = 204.f / 255.f;
         }
@@ -1351,7 +1350,8 @@ static void draw_points(const EditBone *eBone,
   bone_hint_color_shade(col_hint_tail, (g_theme.const_color) ? col_solid_tail : col_wire_tail);
 
   /* Draw root point if we are not connected to our parent */
-  if ((BONE_FLAG(eBone, pchan) & BONE_CONNECTED) == 0) {
+  if (!(eBone ? (eBone->parent && (eBone->flag & BONE_CONNECTED)) :
+                (pchan->bone->parent && (pchan->bone->flag & BONE_CONNECTED)))) {
     if (select_id != -1) {
       DRW_select_load_id(select_id | BONESEL_ROOT);
     }
@@ -1519,29 +1519,32 @@ static void draw_bone_line(EditBone *eBone,
   const float *col_head = no_display;
   const float *col_tail = col_bone;
 
-  if (eBone) {
-    if (eBone->flag & BONE_TIPSEL) {
-      col_tail = g_theme.vertex_select_color;
-    }
-    if (boneflag & BONE_SELECTED) {
-      col_bone = g_theme.edge_select_color;
-    }
-    col_wire = g_theme.wire_color;
-  }
-
-  /* Draw root point if we are not connected to our parent */
-  if ((BONE_FLAG(eBone, pchan) & BONE_CONNECTED) == 0) {
-    if (eBone) {
-      col_head = (eBone->flag & BONE_ROOTSEL) ? g_theme.vertex_select_color : col_bone;
-    }
-    else if (pchan) {
-      col_head = col_bone;
-    }
-  }
-
   if (g_theme.const_color != NULL) {
     col_wire = no_display; /* actually shrink the display. */
     col_bone = col_head = col_tail = g_theme.const_color;
+  }
+  else {
+    if (eBone) {
+      if (eBone->flag & BONE_TIPSEL) {
+        col_tail = g_theme.vertex_select_color;
+      }
+      if (boneflag & BONE_SELECTED) {
+        col_bone = g_theme.edge_select_color;
+      }
+      col_wire = g_theme.wire_color;
+    }
+
+    /* Draw root point if we are not connected to our parent. */
+    if (!(eBone ? (eBone->parent && (eBone->flag & BONE_CONNECTED)) :
+                  (pchan->bone->parent && (pchan->bone->flag & BONE_CONNECTED)))) {
+
+      if (eBone) {
+        col_head = (eBone->flag & BONE_ROOTSEL) ? g_theme.vertex_select_color : col_bone;
+      }
+      else {
+        col_head = col_bone;
+      }
+    }
   }
 
   if (select_id == -1) {
@@ -1978,6 +1981,7 @@ static void draw_armature_edit(Object *ob)
 static void draw_armature_pose(Object *ob, const float const_color[4])
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
+  const Scene *scene = draw_ctx->scene;
   bArmature *arm = ob->data;
   bPoseChannel *pchan;
   int index = -1;
@@ -1990,19 +1994,35 @@ static void draw_armature_pose(Object *ob, const float const_color[4])
     return;
   }
 
-  // if (!(base->flag & OB_FROMDUPLI)) // TODO
-  {
+  bool is_pose_select = false;
+  /* Object can be edited in the scene. */
+  if ((ob->base_flag & (BASE_FROM_SET | BASE_FROM_DUPLI)) == 0) {
     if ((draw_ctx->object_mode & OB_MODE_POSE) || (ob == draw_ctx->object_pose)) {
       arm->flag |= ARM_POSEMODE;
     }
+    is_pose_select =
+        /* If we're in pose-mode or object-mode with the ability to enter pose mode. */
+        (
+            /* Draw as if in pose mode (when selection is possible). */
+            (arm->flag & ARM_POSEMODE) ||
+            /* When we're in object mode, which may select bones. */
+            ((ob->mode & OB_MODE_POSE) &&
+             (
+                 /* Switch from object mode when object lock is disabled. */
+                 ((draw_ctx->object_mode == OB_MODE_OBJECT) &&
+                  (scene->toolsettings->object_flag & SCE_OBJECT_MODE_LOCK) == 0) ||
+                 /* Allow selection when in weight-paint mode
+                  * (selection code ensures this wont become active). */
+                 ((draw_ctx->object_mode == OB_MODE_WEIGHT_PAINT) &&
+                  (draw_ctx->object_pose != NULL))))) &&
+        DRW_state_is_select();
 
-    if (arm->flag & ARM_POSEMODE) {
+    if (is_pose_select) {
       const Object *ob_orig = DEG_get_original_object(ob);
       index = ob_orig->runtime.select_id;
     }
   }
 
-  const bool is_pose_select = (arm->flag & ARM_POSEMODE) && DRW_state_is_select();
   const bool show_text = DRW_state_show_text();
   const bool show_relations = ((draw_ctx->v3d->flag & V3D_HIDE_HELPLINES) == 0);
 

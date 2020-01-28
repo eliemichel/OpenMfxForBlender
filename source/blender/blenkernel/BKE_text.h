@@ -30,7 +30,6 @@ extern "C" {
 struct Main;
 struct Text;
 struct TextLine;
-struct TextUndoBuf;
 
 void BKE_text_free_lines(struct Text *text);
 void BKE_text_free(struct Text *text);
@@ -49,8 +48,8 @@ void BKE_text_copy_data(struct Main *bmain,
                         const int flag);
 struct Text *BKE_text_copy(struct Main *bmain, const struct Text *ta);
 void BKE_text_make_local(struct Main *bmain, struct Text *text, const bool lib_local);
-void BKE_text_clear(struct Text *text, struct TextUndoBuf *utxt);
-void BKE_text_write(struct Text *text, struct TextUndoBuf *utxt, const char *str);
+void BKE_text_clear(struct Text *text);
+void BKE_text_write(struct Text *text, const char *str);
 int BKE_text_file_modified_check(struct Text *text);
 void BKE_text_file_modified_ignore(struct Text *text);
 
@@ -60,10 +59,6 @@ void txt_order_cursors(struct Text *text, const bool reverse);
 int txt_find_string(struct Text *text, const char *findstr, int wrap, int match_case);
 bool txt_has_sel(struct Text *text);
 int txt_get_span(struct TextLine *from, struct TextLine *to);
-int txt_utf8_offset_to_index(const char *str, int offset);
-int txt_utf8_index_to_offset(const char *str, int index);
-int txt_utf8_offset_to_column(const char *str, int offset);
-int txt_utf8_column_to_offset(const char *str, int column);
 void txt_move_up(struct Text *text, const bool sel);
 void txt_move_down(struct Text *text, const bool sel);
 void txt_move_left(struct Text *text, const bool sel);
@@ -77,29 +72,27 @@ void txt_move_eol(struct Text *text, const bool sel);
 void txt_move_toline(struct Text *text, unsigned int line, const bool sel);
 void txt_move_to(struct Text *text, unsigned int line, unsigned int ch, const bool sel);
 void txt_pop_sel(struct Text *text);
-void txt_delete_char(struct Text *text, struct TextUndoBuf *utxt);
-void txt_delete_word(struct Text *text, struct TextUndoBuf *utxt);
-void txt_delete_selected(struct Text *text, struct TextUndoBuf *utxt);
+void txt_delete_char(struct Text *text);
+void txt_delete_word(struct Text *text);
+void txt_delete_selected(struct Text *text);
 void txt_sel_all(struct Text *text);
 void txt_sel_clear(struct Text *text);
 void txt_sel_line(struct Text *text);
+void txt_sel_set(struct Text *text, int startl, int startc, int endl, int endc);
 char *txt_sel_to_buf(struct Text *text, int *r_buf_strlen);
-void txt_insert_buf(struct Text *text, struct TextUndoBuf *utxt, const char *in_buffer);
-void txt_undo_add_op(struct Text *text, struct TextUndoBuf *utxt, int op);
-void txt_do_undo(struct Text *text, struct TextUndoBuf *utxt);
-void txt_do_redo(struct Text *text, struct TextUndoBuf *utxt);
-void txt_split_curline(struct Text *text, struct TextUndoBuf *utxt);
-void txt_backspace_char(struct Text *text, struct TextUndoBuf *utxt);
-void txt_backspace_word(struct Text *text, struct TextUndoBuf *utxt);
-bool txt_add_char(struct Text *text, struct TextUndoBuf *utxt, unsigned int add);
-bool txt_add_raw_char(struct Text *text, struct TextUndoBuf *utxt, unsigned int add);
-bool txt_replace_char(struct Text *text, struct TextUndoBuf *utxt, unsigned int add);
-void txt_unindent(struct Text *text, struct TextUndoBuf *utxt);
-void txt_comment(struct Text *text, struct TextUndoBuf *utxt);
-void txt_indent(struct Text *text, struct TextUndoBuf *utxt);
-void txt_uncomment(struct Text *text, struct TextUndoBuf *utxt);
-void txt_move_lines(struct Text *text, struct TextUndoBuf *utxt, const int direction);
-void txt_duplicate_line(struct Text *text, struct TextUndoBuf *utxt);
+void txt_insert_buf(struct Text *text, const char *in_buffer);
+void txt_split_curline(struct Text *text);
+void txt_backspace_char(struct Text *text);
+void txt_backspace_word(struct Text *text);
+bool txt_add_char(struct Text *text, unsigned int add);
+bool txt_add_raw_char(struct Text *text, unsigned int add);
+bool txt_replace_char(struct Text *text, unsigned int add);
+bool txt_unindent(struct Text *text);
+void txt_comment(struct Text *text);
+void txt_indent(struct Text *text);
+bool txt_uncomment(struct Text *text);
+void txt_move_lines(struct Text *text, const int direction);
+void txt_duplicate_line(struct Text *text);
 int txt_setcurr_tab_spaces(struct Text *text, int space);
 bool txt_cursor_is_line_start(struct Text *text);
 bool txt_cursor_is_line_end(struct Text *text);
@@ -125,10 +118,9 @@ enum {
   TXT_MOVE_LINE_DOWN = 1,
 };
 
-typedef struct TextUndoBuf {
-  char *buf;
-  int pos, len;
-} TextUndoBuf;
+/* Fast non-validating buffer conversion for undo. */
+char *txt_to_buf_for_undo(struct Text *text, int *r_buf_strlen);
+void txt_from_buf_for_undo(struct Text *text, const char *buf, int buf_len);
 
 #ifdef __cplusplus
 }

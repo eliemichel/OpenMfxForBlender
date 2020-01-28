@@ -43,6 +43,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_anim.h"
 #include "BKE_animsys.h"
 #include "BKE_constraint.h"
@@ -235,9 +236,9 @@ void action_group_colors_sync(bActionGroup *grp, const bActionGroup *ref_grp)
        */
       else if (grp->cs.solid[0] == 0) {
         /* define for setting colors in theme below */
-        rgba_char_args_set(grp->cs.solid, 0xff, 0x00, 0x00, 255);
-        rgba_char_args_set(grp->cs.select, 0x81, 0xe6, 0x14, 255);
-        rgba_char_args_set(grp->cs.active, 0x18, 0xb6, 0xe0, 255);
+        rgba_uchar_args_set(grp->cs.solid, 0xff, 0x00, 0x00, 255);
+        rgba_uchar_args_set(grp->cs.select, 0x81, 0xe6, 0x14, 255);
+        rgba_uchar_args_set(grp->cs.active, 0x18, 0xb6, 0xe0, 255);
       }
     }
   }
@@ -521,6 +522,38 @@ bPoseChannel *BKE_pose_channel_active(Object *ob)
     }
   }
 
+  return NULL;
+}
+
+/**
+ * Use this when detecting the "other selected bone",
+ * when we have multiple armatures in pose mode.
+ *
+ * In this case the active-selected is an obvious choice when finding the target for a
+ * constraint for eg. however from the users perspective the active pose bone of the
+ * active object is the _real_ active bone, so any other non-active selected bone
+ * is a candidate for being the other selected bone, see: T58447.
+ */
+bPoseChannel *BKE_pose_channel_active_or_first_selected(struct Object *ob)
+{
+  bArmature *arm = (ob) ? ob->data : NULL;
+
+  if (ELEM(NULL, ob, ob->pose, arm)) {
+    return NULL;
+  }
+
+  bPoseChannel *pchan = BKE_pose_channel_active(ob);
+  if (pchan && (pchan->bone->flag & BONE_SELECTED) && PBONE_VISIBLE(arm, pchan->bone)) {
+    return pchan;
+  }
+
+  for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
+    if (pchan->bone != NULL) {
+      if ((pchan->bone->flag & BONE_SELECTED) && PBONE_VISIBLE(arm, pchan->bone)) {
+        return pchan;
+      }
+    }
+  }
   return NULL;
 }
 
@@ -1387,9 +1420,7 @@ short action_get_item_transforms(bAction *act, Object *ob, bPoseChannel *pchan, 
 
       if ((curves) || (flags & ACT_TRANS_PROP) == 0) {
         /* custom properties only */
-        pPtr = strstr(
-            bPtr,
-            "[\""); /* extra '"' comment here to keep my texteditor functionlist working :) */
+        pPtr = strstr(bPtr, "[\"");
         if (pPtr) {
           flags |= ACT_TRANS_PROP;
 
@@ -1441,7 +1472,7 @@ void BKE_pose_rest(bPose *pose)
   }
 }
 
-void BKE_pose_copyesult_pchan_result(bPoseChannel *pchanto, const bPoseChannel *pchanfrom)
+void BKE_pose_copy_pchan_result(bPoseChannel *pchanto, const bPoseChannel *pchanfrom)
 {
   copy_m4_m4(pchanto->pose_mat, pchanfrom->pose_mat);
   copy_m4_m4(pchanto->chan_mat, pchanfrom->chan_mat);
@@ -1492,7 +1523,7 @@ bool BKE_pose_copy_result(bPose *to, bPose *from)
   for (pchanfrom = from->chanbase.first; pchanfrom; pchanfrom = pchanfrom->next) {
     pchanto = BKE_pose_channel_find_name(to, pchanfrom->name);
     if (pchanto != NULL) {
-      BKE_pose_copyesult_pchan_result(pchanto, pchanfrom);
+      BKE_pose_copy_pchan_result(pchanto, pchanfrom);
     }
   }
   return true;
@@ -1579,6 +1610,6 @@ void what_does_obaction(
     adt.action = act;
 
     /* execute effects of Action on to workob (or it's PoseChannels) */
-    BKE_animsys_evaluate_animdata(NULL, NULL, &workob->id, &adt, cframe, ADT_RECALC_ANIM);
+    BKE_animsys_evaluate_animdata(NULL, &workob->id, &adt, cframe, ADT_RECALC_ANIM, false);
   }
 }

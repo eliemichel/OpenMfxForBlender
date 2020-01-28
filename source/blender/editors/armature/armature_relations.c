@@ -38,6 +38,7 @@
 
 #include "BKE_action.h"
 #include "BKE_animsys.h"
+#include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
@@ -63,8 +64,11 @@
 
 #include "armature_intern.h"
 
-/* *************************************** Join *************************************** */
-/* NOTE: no operator define here as this is exported to the Object-level operator */
+/* -------------------------------------------------------------------- */
+/** \name Edit Armature Join
+ *
+ * \note No operator define here as this is exported to the Object-level operator.
+ * \{ */
 
 static void joined_armature_fix_links_constraints(Main *bmain,
                                                   Object *ob,
@@ -426,13 +430,18 @@ int join_armature_exec(bContext *C, wmOperator *op)
   ED_armature_from_edit(bmain, arm);
   ED_armature_edit_free(arm);
 
+  BKE_armature_refresh_layer_used(arm);
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
 
   return OPERATOR_FINISHED;
 }
 
-/* *********************************** Separate *********************************************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Armature Separate
+ * \{ */
 
 /* Helper function for armature separating - link fixing */
 static void separated_armature_fix_links(Main *bmain, Object *origArm, Object *newArm)
@@ -671,6 +680,9 @@ static int separate_armature_exec(bContext *C, wmOperator *op)
 
     ED_armature_to_edit(obedit->data);
 
+    ED_armature_edit_refresh_layer_used(obedit->data);
+    BKE_armature_refresh_layer_used(newob->data);
+
     /* parents tips remain selected when connected children are removed. */
     ED_armature_edit_deselect_all(obedit);
 
@@ -707,7 +719,11 @@ void ARMATURE_OT_separate(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ********************************* Parenting ************************************************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Armature Parenting
+ * \{ */
 
 /* armature parenting options */
 #define ARM_PAR_CONNECT 1
@@ -1002,3 +1018,5 @@ void ARMATURE_OT_parent_clear(wmOperatorType *ot)
                           "ClearType",
                           "What way to clear parenting");
 }
+
+/** \} */

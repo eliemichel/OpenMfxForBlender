@@ -40,6 +40,7 @@
 #include "BKE_object.h"
 #include "BKE_report.h"
 #include "BKE_layer.h"
+#include "BKE_modifier.h"
 
 #include "DEG_depsgraph.h"
 
@@ -53,6 +54,7 @@
 #include "ED_keyframing.h"
 #include "ED_mesh.h"
 #include "ED_object.h"
+#include "ED_outliner.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
 #include "ED_view3d.h"
@@ -181,10 +183,17 @@ bool ED_armature_pose_select_pick_with_buffer(ViewLayer *view_layer,
 
     if (!extend && !deselect && !toggle) {
       {
-        uint bases_len = 0;
-        Base **bases = BKE_object_pose_base_array_get_unique(view_layer, v3d, &bases_len);
-        ED_pose_deselect_all_multi_ex(bases, bases_len, SEL_DESELECT, true);
-        MEM_freeN(bases);
+        /* Don't use 'BKE_object_pose_base_array_get_unique'
+         * because we may be selecting from object mode. */
+        FOREACH_VISIBLE_BASE_BEGIN (view_layer, v3d, base_iter) {
+          Object *ob_iter = base_iter->object;
+          if ((ob_iter->type == OB_ARMATURE) && (ob_iter->mode & OB_MODE_POSE)) {
+            if (ED_pose_deselect_all(ob_iter, SEL_DESELECT, true)) {
+              ED_pose_bone_select_tag_update(ob_iter);
+            }
+          }
+        }
+        FOREACH_VISIBLE_BASE_END;
       }
       nearBone->flag |= (BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL);
       arm->act_bone = nearBone;
@@ -238,6 +247,38 @@ bool ED_armature_pose_select_pick_with_buffer(ViewLayer *view_layer,
   }
 
   return nearBone != NULL;
+}
+
+/**
+ * While in weight-paint mode, a single pose may be active as well.
+ * While not common, it's possible we have multiple armatures deforming a mesh.
+ *
+ * This function de-selects all other objects, and selects the new base.
+ * It can't be set to the active object because we need
+ * to keep this set to the weight paint object.
+ */
+void ED_armature_pose_select_in_wpaint_mode(ViewLayer *view_layer, Base *base_select)
+{
+  BLI_assert(base_select && (base_select->object->type == OB_ARMATURE));
+  Object *ob_active = OBACT(view_layer);
+  BLI_assert(ob_active && (ob_active->mode & OB_MODE_WEIGHT_PAINT));
+  VirtualModifierData virtualModifierData;
+  ModifierData *md = modifiers_getVirtualModifierList(ob_active, &virtualModifierData);
+  for (; md; md = md->next) {
+    if (md->type == eModifierType_Armature) {
+      ArmatureModifierData *amd = (ArmatureModifierData *)md;
+      Object *ob_arm = amd->object;
+      if (ob_arm != NULL) {
+        Base *base_arm = BKE_view_layer_base_find(view_layer, ob_arm);
+        if ((base_arm != NULL) && (base_arm != base_select) && (base_arm->flag & BASE_SELECTED)) {
+          ED_object_base_select(base_arm, BA_DESELECT);
+        }
+      }
+    }
+  }
+  if ((base_select->flag & BASE_SELECTED) == 0) {
+    ED_object_base_select(base_select, BA_SELECT);
+  }
 }
 
 /* 'select_mode' is usual SEL_SELECT/SEL_DESELECT/SEL_TOGGLE/SEL_INVERT.
@@ -327,15 +368,12 @@ bool ED_pose_deselect_all_multi_ex(Base **bases,
 
 bool ED_pose_deselect_all_multi(bContext *C, int select_mode, const bool ignore_visibility)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
   uint bases_len = 0;
-  Base **bases = BKE_view_layer_array_from_bases_in_mode(vc.view_layer,
-                                                         vc.v3d,
-                                                         &bases_len,
-                                                         {
-                                                             .object_mode = OB_MODE_POSE,
-                                                         });
+
+  Base **bases = BKE_object_pose_base_array_get_unique(vc.view_layer, vc.v3d, &bases_len);
   bool changed_multi = ED_pose_deselect_all_multi_ex(
       bases, bases_len, select_mode, ignore_visibility);
   MEM_freeN(bases);
@@ -409,6 +447,8 @@ static int pose_select_connected_invoke(bContext *C, wmOperator *op, const wmEve
     selectconnected_posebonechildren(base->object, curBone, extend);
   }
 
+  ED_outliner_select_sync_from_pose_bone_tag(C);
+
   ED_pose_bone_select_tag_update(base->object);
 
   return OPERATOR_FINISHED;
@@ -474,6 +514,8 @@ static int pose_de_select_all_exec(bContext *C, wmOperator *op)
   }
   CTX_DATA_END;
 
+  ED_outliner_select_sync_from_pose_bone_tag(C);
+
   WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, NULL);
 
   return OPERATOR_FINISHED;
@@ -519,6 +561,8 @@ static int pose_select_parent_exec(bContext *C, wmOperator *UNUSED(op))
   else {
     return OPERATOR_CANCELLED;
   }
+
+  ED_outliner_select_sync_from_pose_bone_tag(C);
 
   ED_pose_bone_select_tag_update(ob);
   return OPERATOR_FINISHED;
@@ -583,6 +627,8 @@ static int pose_select_constraint_target_exec(bContext *C, wmOperator *UNUSED(op
   if (!found) {
     return OPERATOR_CANCELLED;
   }
+
+  ED_outliner_select_sync_from_pose_bone_tag(C);
 
   return OPERATOR_FINISHED;
 }
@@ -672,6 +718,8 @@ static int pose_select_hierarchy_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
+  ED_outliner_select_sync_from_pose_bone_tag(C);
+
   ED_pose_bone_select_tag_update(ob);
 
   return OPERATOR_FINISHED;
@@ -723,8 +771,8 @@ static bool pose_select_same_group(bContext *C, bool extend)
   uint ob_index;
 
   uint objects_len = 0;
-  Object **objects = BKE_view_layer_array_from_objects_in_mode_unique_data(
-      view_layer, CTX_wm_view3d(C), &objects_len, OB_MODE_POSE);
+  Object **objects = BKE_object_pose_array_get_unique(view_layer, CTX_wm_view3d(C), &objects_len);
+
   for (ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *ob = BKE_object_pose_armature_get(objects[ob_index]);
     bArmature *arm = (ob) ? ob->data : NULL;
@@ -756,7 +804,7 @@ static bool pose_select_same_group(bContext *C, bool extend)
   group_flags = NULL;
   ob_index = -1;
   ob_prev = NULL;
-  CTX_DATA_BEGIN_WITH_ID (C, bPoseChannel *, pchan, visible_pose_bones, Object, *ob) {
+  CTX_DATA_BEGIN_WITH_ID (C, bPoseChannel *, pchan, visible_pose_bones, Object *, ob) {
     if (ob != ob_prev) {
       ob_index++;
       group_flags = group_flags_array + (ob_index * groups_len);
@@ -824,8 +872,8 @@ static bool pose_select_same_layer(bContext *C, bool extend)
   bool changed = false;
 
   uint objects_len = 0;
-  Object **objects = BKE_view_layer_array_from_objects_in_mode_unique_data(
-      view_layer, CTX_wm_view3d(C), &objects_len, OB_MODE_POSE);
+  Object **objects = BKE_object_pose_array_get_unique(view_layer, CTX_wm_view3d(C), &objects_len);
+
   for (ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *ob = objects[ob_index];
     ob->id.tag &= ~LIB_TAG_DOIT;
@@ -938,8 +986,8 @@ static bool pose_select_same_keyingset(bContext *C, ReportList *reports, bool ex
   }
 
   uint objects_len = 0;
-  Object **objects = BKE_view_layer_array_from_objects_in_mode_unique_data(
-      view_layer, CTX_wm_view3d(C), &objects_len, OB_MODE_POSE);
+  Object **objects = BKE_object_pose_array_get_unique(view_layer, CTX_wm_view3d(C), &objects_len);
+
   for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *ob = BKE_object_pose_armature_get(objects[ob_index]);
     bArmature *arm = (ob) ? ob->data : NULL;
@@ -1021,6 +1069,8 @@ static int pose_select_grouped_exec(bContext *C, wmOperator *op)
 
   /* report done status */
   if (changed) {
+    ED_outliner_select_sync_from_pose_bone_tag(C);
+
     return OPERATOR_FINISHED;
   }
   else {
@@ -1078,8 +1128,8 @@ static int pose_select_mirror_exec(bContext *C, wmOperator *op)
   const bool extend = RNA_boolean_get(op->ptr, "extend");
 
   uint objects_len = 0;
-  Object **objects = BKE_view_layer_array_from_objects_in_mode_unique_data(
-      view_layer, CTX_wm_view3d(C), &objects_len, OB_MODE_POSE);
+  Object **objects = BKE_object_pose_array_get_unique(view_layer, CTX_wm_view3d(C), &objects_len);
+
   for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *ob = objects[ob_index];
     bArmature *arm = ob->data;
@@ -1120,8 +1170,8 @@ static int pose_select_mirror_exec(bContext *C, wmOperator *op)
 
       /* In weightpaint we select the associated vertex group too. */
       if (is_weight_paint) {
-        ED_vgroup_select_by_name(ob, pchan_mirror_act->name);
-        DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+        ED_vgroup_select_by_name(ob_active, pchan_mirror_act->name);
+        DEG_id_tag_update(&ob_active->id, ID_RECALC_GEOMETRY);
       }
     }
 
@@ -1131,6 +1181,8 @@ static int pose_select_mirror_exec(bContext *C, wmOperator *op)
     DEG_id_tag_update(&arm->id, ID_RECALC_COPY_ON_WRITE);
   }
   MEM_freeN(objects);
+
+  ED_outliner_select_sync_from_pose_bone_tag(C);
 
   return OPERATOR_FINISHED;
 }

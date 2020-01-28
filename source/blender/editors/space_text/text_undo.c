@@ -25,6 +25,7 @@
 
 #include "DNA_text_types.h"
 
+#include "BLI_array_store.h"
 #include "BLI_array_utils.h"
 
 #include "BLT_translation.h"
@@ -35,6 +36,7 @@
 #include "BKE_report.h"
 #include "BKE_text.h"
 #include "BKE_undo_system.h"
+#include "BKE_main.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -53,7 +55,62 @@
 #include "text_intern.h"
 #include "text_format.h"
 
-/* TODO(campbell): undo_system: move text undo out of text block. */
+/* -------------------------------------------------------------------- */
+/** \name Implements ED Undo System
+ * \{ */
+
+#define ARRAY_CHUNK_SIZE 128
+
+/**
+ * Only stores the state of a text buffer.
+ */
+typedef struct TextState {
+  BArrayState *buf_array_state;
+
+  int cursor_line, cursor_line_select;
+  int cursor_column, cursor_column_select;
+} TextState;
+
+static void text_state_encode(TextState *state, Text *text, BArrayStore *buffer_store)
+{
+  int buf_len = 0;
+  uchar *buf = (uchar *)txt_to_buf_for_undo(text, &buf_len);
+  state->buf_array_state = BLI_array_store_state_add(buffer_store, buf, buf_len, NULL);
+  MEM_freeN(buf);
+
+  state->cursor_line = txt_get_span(text->lines.first, text->curl);
+  state->cursor_column = text->curc;
+
+  if (txt_has_sel(text)) {
+    state->cursor_line_select = (text->curl == text->sell) ?
+                                    state->cursor_line :
+                                    txt_get_span(text->lines.first, text->sell);
+    state->cursor_column_select = text->selc;
+  }
+  else {
+    state->cursor_line_select = state->cursor_line;
+    state->cursor_column_select = state->cursor_column;
+  }
+}
+
+static void text_state_decode(TextState *state, Text *text)
+{
+  size_t buf_len;
+  {
+    const uchar *buf = BLI_array_store_state_data_get_alloc(state->buf_array_state, &buf_len);
+    txt_from_buf_for_undo(text, (const char *)buf, buf_len);
+    MEM_freeN((void *)buf);
+  }
+
+  const bool has_select = ((state->cursor_line != state->cursor_line_select) ||
+                           (state->cursor_column != state->cursor_column_select));
+  if (has_select) {
+    txt_move_to(text, state->cursor_line_select, state->cursor_column_select, false);
+  }
+  txt_move_to(text, state->cursor_line, state->cursor_column, has_select);
+}
+
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Implements ED Undo System
@@ -62,8 +119,32 @@
 typedef struct TextUndoStep {
   UndoStep step;
   UndoRefID_Text text_ref;
-  TextUndoBuf data;
+  /**
+   * First state is optional (initial state),
+   * the second is the state after the operation is done.
+   */
+  TextState states[2];
 } TextUndoStep;
+
+static struct {
+  BArrayStore *buffer_store;
+  int users;
+} g_text_buffers = {NULL};
+
+static size_t text_undosys_step_encode_to_state(TextState *state, Text *text)
+{
+  BLI_assert(BLI_array_is_zeroed(state, 1));
+  if (g_text_buffers.buffer_store == NULL) {
+    g_text_buffers.buffer_store = BLI_array_store_create(1, ARRAY_CHUNK_SIZE);
+  }
+  g_text_buffers.users += 1;
+  const size_t total_size_prev = BLI_array_store_calc_size_compacted_get(
+      g_text_buffers.buffer_store);
+
+  text_state_encode(state, text, g_text_buffers.buffer_store);
+
+  return BLI_array_store_calc_size_compacted_get(g_text_buffers.buffer_store) - total_size_prev;
+}
 
 static bool text_undosys_poll(bContext *UNUSED(C))
 {
@@ -75,14 +156,27 @@ static bool text_undosys_poll(bContext *UNUSED(C))
 static void text_undosys_step_encode_init(struct bContext *C, UndoStep *us_p)
 {
   TextUndoStep *us = (TextUndoStep *)us_p;
-  BLI_assert(BLI_array_is_zeroed(&us->data, 1));
+  BLI_assert(BLI_array_is_zeroed(us->states, ARRAY_SIZE(us->states)));
 
-  UNUSED_VARS(C);
-  /* XXX, use to set the undo type only. */
+  Text *text = CTX_data_edit_text(C);
 
-  us->data.buf = NULL;
-  us->data.len = 0;
-  us->data.pos = -1;
+  /* Avoid writing the initial state where possible,
+   * failing to do this won't cause bugs, it's just inefficient. */
+  bool write_init = true;
+  UndoStack *ustack = ED_undo_stack_get();
+  if (ustack->step_active) {
+    if (ustack->step_active->type == BKE_UNDOSYS_TYPE_TEXT) {
+      TextUndoStep *us_active = (TextUndoStep *)ustack->step_active;
+      if (STREQ(text->id.name, us_active->text_ref.name)) {
+        write_init = false;
+      }
+    }
+  }
+
+  if (write_init) {
+    us->step.data_size = text_undosys_step_encode_to_state(&us->states[0], text);
+  }
+  us->text_ref.ptr = text;
 }
 
 static bool text_undosys_step_encode(struct bContext *C,
@@ -91,106 +185,33 @@ static bool text_undosys_step_encode(struct bContext *C,
 {
   TextUndoStep *us = (TextUndoStep *)us_p;
 
-  Text *text = CTX_data_edit_text(C);
+  Text *text = us->text_ref.ptr;
+  BLI_assert(text == CTX_data_edit_text(C));
+  UNUSED_VARS_NDEBUG(C);
 
-  /* No undo data was generated. Hint, use global undo here. */
-  if ((us->data.pos == -1) || (us->data.buf == NULL)) {
-    return false;
-  }
+  us->step.data_size += text_undosys_step_encode_to_state(&us->states[1], text);
 
   us_p->is_applied = true;
 
-  us->text_ref.ptr = text;
-
-  us->step.data_size = us->data.len;
-
   return true;
-}
-
-static void text_undosys_step_decode_undo_impl(Text *text, TextUndoStep *us)
-{
-  BLI_assert(us->step.is_applied == true);
-  TextUndoBuf data = us->data;
-  while (data.pos > -1) {
-    txt_do_undo(text, &data);
-  }
-  BLI_assert(data.pos == -1);
-  us->step.is_applied = false;
-}
-
-static void text_undosys_step_decode_redo_impl(Text *text, TextUndoStep *us)
-{
-  BLI_assert(us->step.is_applied == false);
-  TextUndoBuf data = us->data;
-  data.pos = -1;
-  while (data.pos < us->data.pos) {
-    txt_do_redo(text, &data);
-  }
-  BLI_assert(data.pos == us->data.pos);
-  us->step.is_applied = true;
-}
-
-static void text_undosys_step_decode_undo(TextUndoStep *us, bool is_final)
-{
-  TextUndoStep *us_iter = us;
-  while (us_iter->step.next && (us_iter->step.next->type == us_iter->step.type)) {
-    if (us_iter->step.next->is_applied == false) {
-      break;
-    }
-    us_iter = (TextUndoStep *)us_iter->step.next;
-  }
-  Text *text_prev = NULL;
-  while ((us_iter != us) || (is_final && us_iter == us)) {
-    Text *text = us_iter->text_ref.ptr;
-    text_undosys_step_decode_undo_impl(text, us_iter);
-    if (text_prev != text) {
-      text_update_edited(text);
-      text_prev = text;
-    }
-    if (is_final) {
-      break;
-    }
-    us_iter = (TextUndoStep *)us_iter->step.prev;
-  }
-}
-
-static void text_undosys_step_decode_redo(TextUndoStep *us)
-{
-  TextUndoStep *us_iter = us;
-  while (us_iter->step.prev && (us_iter->step.prev->type == us_iter->step.type)) {
-    if (us_iter->step.prev->is_applied == true) {
-      break;
-    }
-    us_iter = (TextUndoStep *)us_iter->step.prev;
-  }
-  Text *text_prev = NULL;
-  while (us_iter && (us_iter->step.is_applied == false)) {
-    Text *text = us_iter->text_ref.ptr;
-    text_undosys_step_decode_redo_impl(text, us_iter);
-    if (text_prev != text) {
-      text_update_edited(text);
-      text_prev = text;
-    }
-    if (us_iter == us) {
-      break;
-    }
-    us_iter = (TextUndoStep *)us_iter->step.next;
-  }
 }
 
 static void text_undosys_step_decode(
     struct bContext *C, struct Main *UNUSED(bmain), UndoStep *us_p, int dir, bool is_final)
 {
   TextUndoStep *us = (TextUndoStep *)us_p;
+  Text *text = us->text_ref.ptr;
 
-  if (dir < 0) {
-    text_undosys_step_decode_undo(us, is_final);
+  TextState *state;
+  if ((us->states[0].buf_array_state != NULL) && (dir == -1) && !is_final) {
+    state = &us->states[0];
   }
   else {
-    text_undosys_step_decode_redo(us);
+    state = &us->states[1];
   }
 
-  Text *text = us->text_ref.ptr;
+  text_state_decode(state, text);
+
   SpaceText *st = CTX_wm_space_text(C);
   if (st) {
     /* Not essential, always show text being undo where possible. */
@@ -204,7 +225,18 @@ static void text_undosys_step_decode(
 static void text_undosys_step_free(UndoStep *us_p)
 {
   TextUndoStep *us = (TextUndoStep *)us_p;
-  MEM_SAFE_FREE(us->data.buf);
+
+  for (int i = 0; i < ARRAY_SIZE(us->states); i++) {
+    TextState *state = &us->states[i];
+    if (state->buf_array_state) {
+      BLI_array_store_state_remove(g_text_buffers.buffer_store, state->buf_array_state);
+      g_text_buffers.users -= 1;
+      if (g_text_buffers.users == 0) {
+        BLI_array_store_destroy(g_text_buffers.buffer_store);
+        g_text_buffers.buffer_store = NULL;
+      }
+    }
+  }
 }
 
 static void text_undosys_foreach_ID_ref(UndoStep *us_p,
@@ -240,12 +272,16 @@ void ED_text_undosys_type(UndoType *ut)
  * \{ */
 
 /* Use operator system to finish the undo step. */
-TextUndoBuf *ED_text_undo_push_init(bContext *C)
+UndoStep *ED_text_undo_push_init(bContext *C)
 {
   UndoStack *ustack = ED_undo_stack_get();
-  UndoStep *us_p = BKE_undosys_step_push_init_with_type(ustack, C, NULL, BKE_UNDOSYS_TYPE_TEXT);
-  TextUndoStep *us = (TextUndoStep *)us_p;
-  return &us->data;
+  Main *bmain = CTX_data_main(C);
+  wmWindowManager *wm = bmain->wm.first;
+  if (wm->op_undo_depth <= 1) {
+    UndoStep *us_p = BKE_undosys_step_push_init_with_type(ustack, C, NULL, BKE_UNDOSYS_TYPE_TEXT);
+    return us_p;
+  }
+  return NULL;
 }
 
 /** \} */

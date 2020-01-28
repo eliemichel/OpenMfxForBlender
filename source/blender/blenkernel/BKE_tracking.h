@@ -25,7 +25,6 @@
  */
 
 struct Camera;
-struct Depsgraph;
 struct ImBuf;
 struct ListBase;
 struct MovieClipUser;
@@ -354,6 +353,12 @@ void BKE_tracking_reconstruction_solve(struct MovieReconstructContext *context,
                                        int message_size);
 bool BKE_tracking_reconstruction_finish(struct MovieReconstructContext *context,
                                         struct MovieTracking *tracking);
+
+void BKE_tracking_reconstruction_report_error_message(struct MovieReconstructContext *context,
+                                                      const char *error_message);
+
+const char *BKE_tracking_reconstruction_error_message_get(
+    const struct MovieReconstructContext *context);
 
 void BKE_tracking_reconstruction_scale(struct MovieTracking *tracking, float scale[3]);
 
