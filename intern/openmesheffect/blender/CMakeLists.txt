@@ -14,13 +14,12 @@
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
-# The Original Code is Copyright (C) 2019, Elie Michel
+# The Original Code is Copyright (C) 2019 - 2020, Elie Michel
 # All rights reserved.
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
   .
-  intern
   ../host
   ../openfx
   ../util/include
@@ -32,11 +31,16 @@ set(INC
 )
 
 set(INC_SYS
+  intern
 )
 
 set(SRC
-  intern/mfxModifier.c
   mfxModifier.h
+  intern/mfxModifier.c
+  intern/mfxCallbacks.h
+  intern/mfxCallbacks.c
+  intern/mfxRuntime.h
+  intern/mfxRuntime.c
 )
 
 set(LIB

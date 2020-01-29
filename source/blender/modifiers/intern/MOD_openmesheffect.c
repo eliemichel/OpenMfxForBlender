@@ -56,6 +56,15 @@ static void initData(struct ModifierData *md)
   fxmd->parameter_info = NULL;
 }
 
+static void copyData(const ModifierData *md, ModifierData *target, const int flag)
+{
+  OpenMeshEffectModifierData *tfxmd = (OpenMeshEffectModifierData *)target;
+
+  modifier_copyData_generic(md, target, flag);
+
+  //tfxmd->?
+}
+
 static bool dependsOnTime(struct ModifierData *md)
 {
   // TODO: May depend on the HDA file
@@ -70,10 +79,10 @@ static bool dependsOnNormals(struct ModifierData *md)
 
 static void freeRuntimeData(void *runtime_data)
 {
-  printf("freeRuntimeData on pointer %p.\n", runtime_data);
   if (runtime_data == NULL) {
     return;
   }
+  printf("freeRuntimeData on pointer %p.\n", runtime_data);
   mfx_Modifier_free_runtime_data(runtime_data);
 }
 
@@ -89,7 +98,7 @@ ModifierTypeInfo modifierType_OpenMeshEffect = {
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ copyData,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
