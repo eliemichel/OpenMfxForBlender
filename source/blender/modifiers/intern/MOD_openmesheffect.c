@@ -49,20 +49,27 @@ static Mesh *applyModifier(struct ModifierData *md,
 static void initData(struct ModifierData *md)
 {
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
-  fxmd->asset_index = -1;
-  fxmd->num_assets = 0;
-  fxmd->asset_info = NULL;
+  fxmd->effect_index = -1;
+  fxmd->num_effects = 0;
+  fxmd->effect_info = NULL;
   fxmd->num_parameters = 0;
   fxmd->parameter_info = NULL;
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
 {
+  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
   OpenMeshEffectModifierData *tfxmd = (OpenMeshEffectModifierData *)target;
 
   modifier_copyData_generic(md, target, flag);
 
-  //tfxmd->?
+  if (fxmd->parameter_info) {
+    tfxmd->parameter_info = MEM_dupallocN(fxmd->parameter_info);
+  }
+
+  if (fxmd->effect_info) {
+    tfxmd->effect_info = MEM_dupallocN(fxmd->effect_info);
+  }
 }
 
 static bool dependsOnTime(struct ModifierData *md)
@@ -88,7 +95,17 @@ static void freeRuntimeData(void *runtime_data)
 
 static void freeData(struct ModifierData *md)
 {
+  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+
   freeRuntimeData(md->runtime);
+
+  if (fxmd->parameter_info) {
+    MEM_freeN(fxmd->parameter_info);
+  }
+
+  if (fxmd->effect_info) {
+    MEM_freeN(fxmd->effect_info);
+  }
 }
 
 ModifierTypeInfo modifierType_OpenMeshEffect = {

@@ -35,18 +35,12 @@
 #include "BLI_string.h"
 #include "BLI_path_util.h"
 
-void runtime_init(OpenMeshEffectRuntime *rd) {
-  rd->current_plugin_path[0] = '\0';
-  rd->current_asset_index = 0;
-  rd->ofx_host = NULL;
-  rd->effect_desc = NULL;
-  rd->effect_instance = NULL;
-}
+ // Private
 
 void runtime_free_effect_instance(OpenMeshEffectRuntime *rd) {
-  if (0 != strcmp(rd->current_plugin_path, "")) {
-    OfxPlugin *plugin = rd->registry.plugins[rd->current_asset_index];
-    OfxPluginStatus status = rd->registry.status[rd->current_asset_index];
+  if (rd->is_plugin_valid) {
+    OfxPlugin *plugin = rd->registry.plugins[rd->effect_index];
+    OfxPluginStatus status = rd->registry.status[rd->effect_index];
 
     if (NULL != rd->effect_instance) {
       ofxhost_destroy_instance(plugin, rd->effect_instance);
@@ -63,18 +57,7 @@ void runtime_free_effect_instance(OpenMeshEffectRuntime *rd) {
   }
 }
 
-bool runtime_ensure_effect_instance(OpenMeshEffectRuntime *rd) {
-
-  if (0 == strcmp(rd->current_plugin_path, "")) {
-    printf("current_plugin_path is empty\n");
-    return false;
-  }
-
-  if (-1 == rd->current_asset_index) {
-    printf("No selected plug-in asset\n");
-    return false;
-  }
-
+void runtime_ensure_host(OpenMeshEffectRuntime *rd) {
   if (NULL == rd->ofx_host) {
     rd->ofx_host = getGlobalHost();
 
@@ -84,12 +67,26 @@ bool runtime_ensure_effect_instance(OpenMeshEffectRuntime *rd) {
     propertySuite->propSetPointer(rd->ofx_host->host, kOfxHostPropBeforeMeshGetCb, 0, (void*)before_mesh_get);
     propertySuite->propSetPointer(rd->ofx_host->host, kOfxHostPropBeforeMeshReleaseCb, 0, (void*)before_mesh_release);
   }
+}
 
-  OfxPlugin *plugin = rd->registry.plugins[rd->current_asset_index];
+bool runtime_ensure_effect_instance(OpenMeshEffectRuntime *rd) {
+
+  if (false == rd->is_plugin_valid) {
+    return false;
+  }
+
+  if (-1 == rd->effect_index) {
+    printf("No selected plug-in effect\n");
+    return false;
+  }
+
+  runtime_ensure_host(rd);
+
+  OfxPlugin *plugin = rd->registry.plugins[rd->effect_index];
 
   if (NULL == rd->effect_desc) {
     // Load plugin if not already loaded
-    OfxPluginStatus *pStatus = &rd->registry.status[rd->current_asset_index];
+    OfxPluginStatus *pStatus = &rd->registry.status[rd->effect_index];
     if (OfxPluginStatNotLoaded == *pStatus) {
       if (ofxhost_load_plugin(rd->ofx_host, plugin)) {
         *pStatus = OfxPluginStatOK;
@@ -109,55 +106,87 @@ bool runtime_ensure_effect_instance(OpenMeshEffectRuntime *rd) {
   return true;
 }
 
-void runtime_free(OpenMeshEffectRuntime *rd) {
-  printf("Unloading OFX plugin %s\n", rd->current_plugin_path);
+void runtime_reset_plugin_path(OpenMeshEffectRuntime *rd) {
+  if (rd->is_plugin_valid) {
+    if (-1 != rd->effect_index) {
+      runtime_free_effect_instance(rd);
+      rd->effect_index = -1;
+    }
 
-  runtime_free_effect_instance(rd);
+    printf("Unloading OFX plugin %s\n", rd->plugin_path);
+    runtime_free_effect_instance(rd);
+    free_registry(&rd->registry);
+    rd->is_plugin_valid = false;
+  }
+  rd->plugin_path[0] = '\0';
+  rd->effect_index = -1;
+}
+
+// Public
+
+void runtime_init(OpenMeshEffectRuntime *rd) {
+  rd->plugin_path[0] = '\0';
+  rd->is_plugin_valid = false;
+  rd->effect_index = 0;
+  rd->ofx_host = NULL;
+  rd->effect_desc = NULL;
+  rd->effect_instance = NULL;
+}
+
+void runtime_free(OpenMeshEffectRuntime *rd) {
+  runtime_reset_plugin_path(rd);
 
   if (NULL != rd->ofx_host) {
     releaseGlobalHost();
     rd->ofx_host = NULL;
   }
-
-  free_registry(&rd->registry);
 }
 
-bool runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugin_path) {
-  if (0 != strcmp(rd->current_plugin_path, "")) {
-    printf("Unloading OFX plugin %s\n", rd->current_plugin_path);
-    runtime_free_effect_instance(rd);
+void runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugin_path) {
+  if (0 == strcmp(rd->plugin_path, plugin_path)) {
+    return;
+  }
+
+  runtime_reset_plugin_path(rd);
+
+  strncpy(rd->plugin_path, plugin_path, sizeof(rd->plugin_path));
+
+  if (0 == strcmp(rd->plugin_path, "")) {
+    return;
+  }
+
+  printf("Loading OFX plugin %s\n", rd->plugin_path);
+  // Get absolute path (ui file browser returns relative path for saved files)
+  char abs_path[FILE_MAX];
+  BLI_strncpy(abs_path, rd->plugin_path, FILE_MAX);
+  const char *base_path = BKE_main_blendfile_path_from_global(); // TODO: How to get a bMain object here to avoid "from_global()"?
+  if (NULL != base_path) {
+    BLI_path_abs(abs_path, base_path);
+  }
+  if (false == load_registry(&rd->registry, abs_path)) {
+    printf("Failed to load registry.\n");
     free_registry(&rd->registry);
+    return;
   }
-
-  strncpy(rd->current_plugin_path, plugin_path, sizeof(rd->current_plugin_path));
-
-  if (0 != strcmp(rd->current_plugin_path, "")) {
-    printf("Loading OFX plugin %s\n", rd->current_plugin_path);
-    // Get absolute path (ui file browser returns relative path for saved files)
-    char abs_path[FILE_MAX];
-    BLI_strncpy(abs_path, rd->current_plugin_path, FILE_MAX);
-    const char *base_path = BKE_main_blendfile_path_from_global(); // TODO: How to get a bMain object here to avoid "from_global()"?
-    if (NULL != base_path) {
-      BLI_path_abs(abs_path, base_path);
-    }
-    if (false == load_registry(&rd->registry, abs_path)) {
-      printf("Failed to load registry.\n");
-      free_registry(&rd->registry);
-      rd->current_plugin_path[0] = '\0';
-      return false;
-    }
-  }
-  return true;
+  rd->is_plugin_valid = true;
 }
 
-void runtime_set_asset_index(OpenMeshEffectRuntime *rd, int asset_index) {
-  if (-1 != rd->current_asset_index) {
+void runtime_set_effect_index(OpenMeshEffectRuntime *rd, int effect_index) {
+  if (rd->effect_index == effect_index) {
+    return;
+  }
+  
+  if (-1 != rd->effect_index) {
     runtime_free_effect_instance(rd);
   }
 
-  rd->current_asset_index = asset_index;
+  if (rd->is_plugin_valid) {
+    rd->effect_index = min(max(-1, effect_index), rd->registry.num_plugins - 1);
+  } else {
+    rd->effect_index = -1;
+  }
 
-  if (-1 != rd->current_asset_index) {
+  if (-1 != rd->effect_index) {
     runtime_ensure_effect_instance(rd);
   }
 }

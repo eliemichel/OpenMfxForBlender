@@ -32,7 +32,7 @@ typedef struct OpenMeshEffectRuntime {
   /**
    * Path to the OFX plug-in bundle.
    */
-  char current_plugin_path[1024];
+  char plugin_path[1024];
 
   /**
    * Plug-in registry (as defined in mfxHost.h) holding the list of available filters within the
@@ -41,10 +41,15 @@ typedef struct OpenMeshEffectRuntime {
   PluginRegistry registry;
 
   /**
-   * Index of the current "asset" (a.k.a. "effect" or "plugin" - we should not use "asset" which is
-   * a noun from Houdini API) wrt. the list contained in plugin registry.
+   * Tells whether the plugin specified by plugin_path is valid. If true, then 'registry' can be used
    */
-  int current_asset_index;
+  bool is_plugin_valid;
+
+  /**
+   * Index of the current effect within the list of effects contained in the currently opened
+   * plugin. A value of -1 means none.
+   */
+  int effect_index;
 
   /**
    * Number of parameters available in the current effect of the current OFX bundle.
@@ -75,19 +80,47 @@ typedef struct OpenMeshEffectRuntime {
  */
 void runtime_init(OpenMeshEffectRuntime *rd);
 
-// (private)
+/**
+ * PRIVATE
+ * Free the descriptor and instance, if it was allocated (otherwise does nothing)
+ */
 void runtime_free_effect_instance(OpenMeshEffectRuntime *rd);
 
-// (private)
+/**
+ * PRIVATE
+ * Ensures that the ofx_host member if a valid OfxHost
+ */
+void runtime_ensure_host(OpenMeshEffectRuntime *rd);
+
+/**
+ * PRIVATE
+ * Ensures that the effect descriptor and instances are valid (may fail, and hence return false)
+ */
 bool runtime_ensure_effect_instance(OpenMeshEffectRuntime *rd);
+
+/**
+ * PRIVATE
+ * Ensures that the plugin path is unloaded and reset
+ */
+void runtime_reset_plugin_path(OpenMeshEffectRuntime *rd);
 
 /**
  * Free runtime data content, but the the rd pointer itself.
  */
 void runtime_free(OpenMeshEffectRuntime *rd);
 
-bool runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugin_path);
+/**
+ * Set the plugin path, as put return status in is_plugin_valid
+ */
+void runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugin_path);
 
-void runtime_set_asset_index(OpenMeshEffectRuntime *rd, int asset_index);
+/**
+ * Pick an effect in the plugin by its index. Value is clamped to valid values (including -1 to
+ * mean "no effect selected").
+ */
+void runtime_set_effect_index(OpenMeshEffectRuntime *rd, int effect_index);
 
+/**
+ * Set parameter values from Blender's RNA to the Open Mesh Effect host's structure.
+ */
 void runtime_get_parameters_from_rna(OpenMeshEffectRuntime *rd, OpenMeshEffectModifierData *fxmd);

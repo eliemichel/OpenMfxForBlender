@@ -44,8 +44,7 @@ typedef Mesh* (*MeshNewFunc)(int, int, int, int, int); // BKE_mesh_new_nomain
 typedef void (*MeshPostFunc)(Mesh*); // post processing applied to new mesh
 
 void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd);
-void mfx_Modifier_on_library_changed(OpenMeshEffectModifierData *fxmd);
-void mfx_Modifier_on_asset_changed(OpenMeshEffectModifierData *fxmd);
+void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd);
 void mfx_Modifier_free_runtime_data(void *runtime_data);
 Mesh *mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh);
 

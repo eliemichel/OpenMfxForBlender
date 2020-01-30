@@ -124,6 +124,12 @@ bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type
       (0 == strcmp(property, kOfxMeshPropFaceData)     && type == PROP_TYPE_POINTER) ||
       false
     );
+  case PROP_CTX_PARAM:
+    return (
+      (0 == strcmp(property, kOfxParamPropType) && type == PROP_TYPE_STRING) ||
+      (0 == strcmp(property, kOfxParamPropScriptName) && type == PROP_TYPE_STRING) ||
+      false
+      );
   case PROP_CTX_OTHER:
   default:
     printf("Warning: PROP_CTX_OTHER is depreciated.\n");

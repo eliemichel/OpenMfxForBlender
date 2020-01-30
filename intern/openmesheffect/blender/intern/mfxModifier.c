@@ -50,24 +50,8 @@ static OpenMeshEffectRuntime *mfx_Modifier_runtime_ensure(OpenMeshEffectModifier
   }
 
   // Update
-  printf("runtime_data->current_plugin_path = '%s'\n", runtime_data->current_plugin_path);
-  printf("fxmd->plugin_path = '%s'\n", fxmd->plugin_path);
-  bool plugin_changed = 0 != strcmp(runtime_data->current_plugin_path, fxmd->plugin_path);
-  printf(plugin_changed ? " -> changed!\n" : " -> did not changed.\n");
-  
-  if (plugin_changed) {
-    if (false == runtime_set_plugin_path(runtime_data, fxmd->plugin_path)) {
-      fxmd->plugin_path[0] = '\0';
-      fxmd->asset_index = -1;
-    }
-  }
-
-  bool asset_changed = plugin_changed || runtime_data->current_asset_index != fxmd->asset_index;
-  bool is_plugin_valid = 0 != strcmp(runtime_data->current_plugin_path, "");
-
-  if (asset_changed && is_plugin_valid) {
-    runtime_set_asset_index(runtime_data, fxmd->asset_index);
-  }
+  runtime_set_plugin_path(runtime_data, fxmd->plugin_path);
+  runtime_set_effect_index(runtime_data, fxmd->effect_index);
 
   printf("==/ mfx_Modifier_runtime_ensure\n");
   return (OpenMeshEffectRuntime *)fxmd->modifier.runtime;
@@ -82,48 +66,47 @@ void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
 
   // Free previous info
-  if (NULL != fxmd->asset_info) {
-    MEM_freeN(fxmd->asset_info);
-    fxmd->asset_info = NULL;
+  if (NULL != fxmd->effect_info) {
+    MEM_freeN(fxmd->effect_info);
+    fxmd->effect_info = NULL;
+    fxmd->num_effects = 0;
   }
 
-  fxmd->num_assets = runtime_data->registry.num_plugins;
-  fxmd->asset_info = MEM_calloc_arrayN(sizeof(OpenMeshEffectAssetInfo), fxmd->num_assets, "mfx asset info");
+  if (false == runtime_data->is_plugin_valid) {
+    printf("==/ mfx_Modifier_on_plugin_changed\n");
+    mfx_Modifier_on_effect_changed(fxmd);
+    return;
+  }
 
-  for (int i = 0 ; i < fxmd->num_assets ; ++i) {
+  fxmd->num_effects = runtime_data->registry.num_plugins;
+  fxmd->effect_info = MEM_calloc_arrayN(sizeof(OpenMeshEffectEffectInfo), fxmd->num_effects, "mfx effect info");
+
+  for (int i = 0 ; i < fxmd->num_effects; ++i) {
     // Get asset name
     const char *name = runtime_data->registry.plugins[i]->pluginIdentifier;
     printf("Loading %s to RNA\n", name);
-    strncpy(fxmd->asset_info[i].name, name, sizeof(fxmd->asset_info[i].name));
+    strncpy(fxmd->effect_info[i].name, name, sizeof(fxmd->effect_info[i].name));
   }
+
+  mfx_Modifier_on_effect_changed(fxmd);
 
   printf("==/ mfx_Modifier_on_plugin_changed\n");
 }
 
-void mfx_Modifier_on_library_changed(OpenMeshEffectModifierData *fxmd) {
-  printf("==. mfx_Modifier_on_library_changed on data %p\n", fxmd);
-}
-
-void mfx_Modifier_on_asset_changed(OpenMeshEffectModifierData *fxmd) {
+void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd) {
   printf("==. mfx_Modifier_on_asset_changed on data %p\n", fxmd);
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
-
-  if (0 == strcmp(runtime_data->current_plugin_path, "")) {
-    printf("current_plugin_path is null\n");
-    printf("==/ mfx_Modifier_on_asset_changed\n");
-    return;
-  }
-
-  if (-1 == runtime_data->current_asset_index) {
-    printf("no asset selected\n");
-    printf("==/ mfx_Modifier_on_asset_changed\n");
-    return;
-  }
 
   // Reset parameter DNA
   if (NULL != fxmd->parameter_info) {
     MEM_freeN(fxmd->parameter_info);
     fxmd->parameter_info = NULL;
+    fxmd->num_parameters = 0;
+  }
+
+  if (NULL == runtime_data->effect_desc) {
+    printf("==/ mfx_Modifier_on_asset_changed\n");
+    return;
   }
 
   OfxParamSetHandle parameters = &runtime_data->effect_desc->parameters;
@@ -132,8 +115,13 @@ void mfx_Modifier_on_asset_changed(OpenMeshEffectModifierData *fxmd) {
   fxmd->parameter_info = MEM_calloc_arrayN(sizeof(OpenMeshEffectParameterInfo), fxmd->num_parameters, "openmesheffect parameter info");
 
   for (int i = 0 ; i < fxmd->num_parameters ; ++i) {
-    strncpy(fxmd->parameter_info[i].name, parameters->parameters[i]->name, sizeof(fxmd->parameter_info[i].name));
-    // TODO: get parameter label from ofx param description
+    OfxPropertySetStruct props = parameters->parameters[i]->properties;
+    int prop_idx = find_property(&props, kOfxParamPropScriptName);
+    const char * system_name =
+      prop_idx != -1
+      ? props.properties[prop_idx]->value->as_const_char
+      : parameters->parameters[i]->name;
+    strncpy(fxmd->parameter_info[i].name, system_name, sizeof(fxmd->parameter_info[i].name));
     strncpy(fxmd->parameter_info[i].label, parameters->parameters[i]->name, sizeof(fxmd->parameter_info[i].label));
     fxmd->parameter_info[i].type = parameters->parameters[i]->type;
   }
@@ -180,7 +168,7 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   // Set input mesh
   propertySuite->propSetPointer(&input->mesh, kOfxMeshPropInternalData, 0, (void*)mesh);
 
-  OfxPlugin *plugin = runtime_data->registry.plugins[runtime_data->current_asset_index];
+  OfxPlugin *plugin = runtime_data->registry.plugins[runtime_data->effect_index];
   ofxhost_cook(plugin, runtime_data->effect_instance);
 
   // Get output mesh and take ownership

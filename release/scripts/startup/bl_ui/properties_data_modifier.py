@@ -469,7 +469,7 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "plugin_path")
         layout.separator()
 
-        layout.prop(md, "asset_enum")
+        layout.prop(md, "effect_enum")
         layout.separator()
 
         PARAM_TYPE_INTEGER = 0

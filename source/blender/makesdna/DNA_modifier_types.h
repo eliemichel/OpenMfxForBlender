@@ -1955,10 +1955,10 @@ enum {
 #define MOD_MESHSEQ_READ_ALL \
   (MOD_MESHSEQ_READ_VERT | MOD_MESHSEQ_READ_POLY | MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)
 
-typedef struct OpenMeshEffectAssetInfo {
+typedef struct OpenMeshEffectEffectInfo {
   /** MOD_OPENMESHEFFECT_MAX_ASSET_NAME */
   char name[256];
-} OpenMeshEffectAssetInfo;
+} OpenMeshEffectEffectInfo;
 
 #define MOD_OPENMESHEFFECT_MAX_ASSET_NAME 256
 
@@ -1986,13 +1986,11 @@ typedef struct OpenMeshEffectModifierData {
 
   /** 1024 = FILE_MAX. */
   char plugin_path[1024];
-  /** 1024 = FILE_MAX. */
-  char library_path[1024];
-  int asset_index, _pad0;
+  int effect_index, _pad0;
 
   /* Runtime. */
-  OpenMeshEffectAssetInfo *asset_info;
-  int num_assets, _pad1;
+  OpenMeshEffectEffectInfo *effect_info;
+  int num_effects, _pad1;
   OpenMeshEffectParameterInfo *parameter_info;
   int num_parameters, _pad2;
 } OpenMeshEffectModifierData;
