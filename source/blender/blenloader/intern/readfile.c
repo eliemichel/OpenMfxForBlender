@@ -5802,6 +5802,13 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb)
         }
       }
     }
+    else if (md->type == eModifierType_OpenMeshEffect) {
+      OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+      fxmd->num_effects = 0;
+      fxmd->effect_info = NULL;
+      fxmd->num_parameters = 0;
+      fxmd->parameter_info = NULL;
+    }
   }
 }
 
