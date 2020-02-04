@@ -1759,6 +1759,11 @@ static void write_modifiers(WriteData *wd, ListBase *modbase)
         }
       }
     }
+    else if (md->type == eModifierType_OpenMeshEffect) {
+      OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+
+      writestruct(wd, DATA, OpenMeshEffectParameterInfo, fxmd->num_parameters, fxmd->parameter_info);
+    }
   }
 }
 

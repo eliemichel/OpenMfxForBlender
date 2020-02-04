@@ -43,6 +43,11 @@ extern "C" {
 typedef Mesh* (*MeshNewFunc)(int, int, int, int, int); // BKE_mesh_new_nomain
 typedef void (*MeshPostFunc)(Mesh*); // post processing applied to new mesh
 
+void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd);
+/**
+ * Called when the "plugin path" field is changed.
+ * It completes runtime_set_plugin_path by updating DNA data (fxmd).
+ */
 void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd);
 void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd);
 void mfx_Modifier_free_runtime_data(void *runtime_data);

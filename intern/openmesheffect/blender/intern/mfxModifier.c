@@ -57,12 +57,8 @@ static OpenMeshEffectRuntime *mfx_Modifier_runtime_ensure(OpenMeshEffectModifier
   return (OpenMeshEffectRuntime *)fxmd->modifier.runtime;
 }
 
-/**
- * Called when the "plugin path" field is changed.
- * It completes runtime_set_plugin_path by updating DNA data (fxmd).
- */
-void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
-  printf("== mfx_Modifier_on_plugin_changed on data %p\n", fxmd);
+void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd) {
+  printf("== mfx_Modifier_reload_effect_info on data %p\n", fxmd);
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
 
   // Free previous info
@@ -73,21 +69,27 @@ void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
   }
 
   if (false == runtime_data->is_plugin_valid) {
-    printf("==/ mfx_Modifier_on_plugin_changed\n");
-    mfx_Modifier_on_effect_changed(fxmd);
+    printf("==/ mfx_Modifier_reload_effect_info\n");
     return;
   }
 
   fxmd->num_effects = runtime_data->registry.num_plugins;
   fxmd->effect_info = MEM_calloc_arrayN(sizeof(OpenMeshEffectEffectInfo), fxmd->num_effects, "mfx effect info");
 
-  for (int i = 0 ; i < fxmd->num_effects; ++i) {
+  for (int i = 0; i < fxmd->num_effects; ++i) {
     // Get asset name
     const char *name = runtime_data->registry.plugins[i]->pluginIdentifier;
     printf("Loading %s to RNA\n", name);
     strncpy(fxmd->effect_info[i].name, name, sizeof(fxmd->effect_info[i].name));
   }
 
+  printf("==/ mfx_Modifier_reload_effect_info\n");
+}
+
+void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
+  printf("== mfx_Modifier_on_plugin_changed on data %p\n", fxmd);
+
+  mfx_Modifier_reload_effect_info(fxmd);
   mfx_Modifier_on_effect_changed(fxmd);
 
   printf("==/ mfx_Modifier_on_plugin_changed\n");

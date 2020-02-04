@@ -5803,11 +5803,14 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb)
       }
     }
     else if (md->type == eModifierType_OpenMeshEffect) {
+      printf("OpenMeshEffectModifier: readfile.\n");
       OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+
+      fxmd->parameter_info = newdataadr(fd, fxmd->parameter_info);
+
+      // Effect list will be reloaded from plugin
       fxmd->num_effects = 0;
       fxmd->effect_info = NULL;
-      fxmd->num_parameters = 0;
-      fxmd->parameter_info = NULL;
     }
   }
 }

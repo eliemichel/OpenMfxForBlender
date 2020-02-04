@@ -6292,7 +6292,7 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
                       "effect_enum",
                       rna_enum_openmesheffect_effect_items,
                       -1,
-                      "Select an asset",
+                      "Select an effect",
                       "Plug-in effect to use within the current plug-in library");
   RNA_def_property_enum_sdna(prop, NULL, "effect_index");
   RNA_def_property_enum_funcs(prop,
