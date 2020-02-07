@@ -4,7 +4,7 @@
 /*
 Software License :
 
-Copyright (c) 2019, Elie Michel. All rights reserved.
+Copyright (c) 2019 - 2020, Elie Michel. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -60,6 +60,10 @@ typedef struct OfxMeshEffectStruct *OfxMeshEffectHandle;
 */
 typedef struct OfxMeshInputStruct *OfxMeshInputHandle;
 
+/** @brief Blind declaration of an OFX geometry data
+*/
+typedef struct OfxMeshStruct *OfxMeshHandle;
+
 /** @brief Use to define the generator mesh effect context See \ref ::kOfxMeshEffectPropContext */
 #define kOfxMeshEffectContextGenerator "OfxMeshEffectContextGenerator"
 
@@ -76,6 +80,43 @@ typedef struct OfxMeshInputStruct *OfxMeshInputHandle;
 /** @brief Identifier of the main mesh output of a mesh effect
  */
 #define kOfxMeshMainOutput "OfxMeshMainOutput"
+
+/**
+   \defgroup MeshAttrib attachements
+
+Mesh attributes can be attached to either points, vertices, faces or the whole mesh. Mandatory
+attributes include a position for points, a point index for vertices and a vertex count for faces.
+*/
+/*@{*/
+/** @brief Mesh attribute attachement to points
+ */
+#define kOfxMeshAttribPoint "OfxMeshAttribPoint"
+
+/** @brief Mesh attribute attachement to vertex
+ */
+#define kOfxMeshAttribVertex "OfxMeshAttribVertex"
+
+/** @brief Mesh attribute attachement to faces
+ */
+#define kOfxMeshAttribFace "OfxMeshAttribFace"
+
+/** @brief Mesh attribute attachement to the whole mesh
+ */
+#define kOfxMeshAttribMesh "OfxMeshAttribMesh"
+
+/** @brief Name of the point attribut for position
+ */
+#define kOfxMeshAttribPointPosition "OfxMeshAttribPointPosition"
+
+/** @brief Name of the vertex attribut for point index
+ */
+#define kOfxMeshAttribVertexPoint "OfxMeshAttribVertexPoint"
+
+/** @brief Name of the face attribut for vertex count
+ */
+#define kOfxMeshAttribFaceCounts "OfxMeshAttribFaceCounts"
+
+/*@}*/
 
 /**
    \addtogroup ActionsAll
@@ -276,32 +317,26 @@ This property is the number of faces allocated in the mesh object.
  */
 #define kOfxMeshPropFaceCount "OfxMeshPropFaceCount"
 
-/**  @brief The point data pointer of a mesh.
+/** @brief The number of attribtues in a mesh
+
+    - Type - integer X 1
+    - Property Set - a mesh instance (read only)
+
+This property is the number of attribtues stored in the mesh object. Attributes can be attached to
+either points, vertices, faces or the whole mesh. There are at least three attributes in a geometry
+namely the point's position, the vertex' point association and the face's vertex count.
+ */
+#define kOfxMeshPropAttributeCount "OfxMeshPropAttributeCount"
+
+/**  @brief The data pointer of an attribute.
 
     - Type - pointer X 1
     - Property Set - a mesh instance (read only)
 
-This property contains a pointer to memory where mesh point data is stored
+This property contains a pointer to memory where attribute data is stored, whose size depend on the
+attribute attachement (point/vertex/face/mesh) and attribute type (int, float, vector, etc.)
 */
-#define kOfxMeshPropPointData "OfxMeshPropPointData"
-
-/**  @brief The vertex data pointer of a mesh.
-
-    - Type - pointer X 1
-    - Property Set - a mesh instance (read only)
-
-This property contains a pointer to memory where mesh vertex data is stored
-*/
-#define kOfxMeshPropVertexData "OfxMeshPropVertexData"
-
-/**  @brief The face data pointer of a mesh.
-
-    - Type - pointer X 1
-    - Property Set - a mesh instance (read only)
-
-This property contains a pointer to memory where mesh face data is stored
-*/
-#define kOfxMeshPropFaceData "OfxMeshPropFaceData"
+#define kOfxMeshAttribPropData "OfxMeshAttribPropData"
 
 /*@}*/
 /*@}*/
@@ -420,9 +455,10 @@ typedef struct OfxMeshEffectSuiteV1 {
 
   /** @brief Get a handle for a mesh in an input at the indicated time
 
-      \arg input      - the input to extract the mesh from
-      \arg time       - time to fetch the mesh at
-      \arg meshHandle - property set containing the mesh's data
+      \arg input       - the input to extract the mesh from
+      \arg time        - time to fetch the mesh at
+      \arg meshHandle  - mesh containing the mesh's data
+      \arg propertySet - property set containing the mesh properties (may be NULL)
 
   A mesh is fetched from an input at the indicated time and returned in the meshHandle.
 
@@ -445,7 +481,8 @@ If inputGetMesh is called twice with the same parameters, then two separate mesh
   */
   OfxStatus (*inputGetMesh)(OfxMeshInputHandle input,
                             OfxTime time,
-                            OfxPropertySetHandle *meshHandle);
+                            OfxMeshHandle *meshHandle,
+                            OfxPropertySetHandle *propertySet);
 
   /** @brief Releases the mesh handle previously returned by inputGetMesh
 
@@ -456,27 +493,48 @@ If inputGetMesh is called twice with the same parameters, then two separate mesh
  - all operations on meshHandle will be invalid
 
 @returns
-- ::kOfxStatOK - the mesh was successfully fetched and returned in the handle,
+- ::kOfxStatOK - the mesh was successfully released,
 - ::kOfxStatErrBadHandle - the mesh handle was invalid,
  */
-  OfxStatus (*inputReleaseMesh)(OfxPropertySetHandle meshHandle);
+  OfxStatus (*inputReleaseMesh)(OfxMeshHandle meshHandle);
+
+  /** @brief Get an attribute handle from a mesh
+
+      \arg meshHandle       - mesh handle
+      \arg attachment       - attribute attachement (see \ref MeshAttrib)
+      \arg name             - attribute name
+      \arg attributeHandle  - property set for returning attribute properties
+
+\pre
+ - meshHandle was returned by inputGetMesh
+
+\post
+ - attributeHandle is a valid attribute handle
+
+@returns
+- ::kOfxStatOK - the attribute was successfully fetched and returned in the handle,
+- ::kOfxStatFailed - the attribute could not be fetched because it does not exist,
+- ::kOfxStatErrBadHandle - the mesh handle was invalid,
+ */
+  OfxStatus(*meshGetAttribute)(OfxMeshHandle meshHandle,
+                               const char *attachment,
+                               const char *name,
+                               OfxPropertySetHandle *attributeHandle);
 
 /** @brief Allocate memory of a mesh in an output input
 
-      \arg meshHandle  - property set containing the mesh's data
-      \arg pointCount  - number of point data to allocate
-      \arg vertexCount - number of vertex data to allocate
-      \arg faceCount   - number of face data to allocate
+      \arg meshHandle  - mesh handle
 
 \pre
  - meshHandle was not allocated yet
  - meshHandle was returned by inputGetMesh
  - inputReleaseMesh has not been called yet
+ - meshHandle kOfxMeshPropPointCount, kOfxMeshPropVertexCount, kOfxMeshPropFaceCount properties
+ must have been set.
+ - meshHandle attributes will no longuer change
 
 \post
- - meshHandle kOfxMeshPropPointCount property is set to pointCount, and kOfxMeshPropPointData points to an array of pointCount valid point data
- - meshHandle kOfxMeshPropVertexCount property is set to vertexCount, and kOfxMeshPropVertexData points to an array of vertexCount valid vertex data
- - meshHandle kOfxMeshPropFaceCount property is set to faceCount, and kOfxMeshPropFaceData points to an array of faceCount valid face data
+ - all attribut data pointers have been allocated
 
 @returns
 - ::kOfxStatOK           - the mesh was successfully allocated,
@@ -484,10 +542,7 @@ If inputGetMesh is called twice with the same parameters, then two separate mesh
 - ::kOfxStatErrMemory    - the host had not enough memory to complete the operation, plugin should abort whatever it was doing.
 
   */
-  OfxStatus (*meshAlloc)(OfxPropertySetHandle meshHandle,
-                         int pointCount,
-                         int vertexCount,
-                         int faceCount);
+  OfxStatus (*meshAlloc)(OfxMeshHandle meshHandle);
 
   /** @brief Returns whether to abort processing or not.
 
