@@ -33,7 +33,7 @@ typedef enum AttributeAttachment {
 } AttributeAttachment;
 
 typedef struct OfxAttributeStruct {
-  const char *name;
+  char *name; // points to memory owned by this object
   AttributeAttachment attachment;
   OfxPropertySetStruct properties;
 } OfxAttributeStruct;
@@ -47,6 +47,7 @@ typedef struct OfxAttributeSetStruct {
 
 void init_attribute(OfxAttributeStruct *attribute);
 void free_attribute(OfxAttributeStruct *attribute);
+void set_name_attribute(OfxAttributeStruct *attribute, const char *name);
 void deep_copy_attribute(OfxAttributeStruct *destination, const OfxAttributeStruct *source);
 
 // OfxAttributeSetStruct

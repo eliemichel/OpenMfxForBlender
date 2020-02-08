@@ -201,7 +201,7 @@ OfxStatus attributeDefine(OfxMeshHandle meshHandle,
   if (componentCount < 1 || componentCount > 4) {
     return kOfxStatErrValue;
   }
-  if (type != kOfxMeshAttribTypeInt && type != kOfxMeshAttribTypeFloat) {
+  if (0 != strcmp(type, kOfxMeshAttribTypeInt) && 0 != strcmp(type, kOfxMeshAttribTypeFloat)) {
     return kOfxStatErrValue;
   }
 
@@ -290,9 +290,9 @@ OfxStatus meshAlloc(OfxMeshHandle meshHandle) {
     }
 
     size_t byteSize = 0;
-    if (type == kOfxMeshAttribTypeInt) {
+    if (0 == strcmp(type, kOfxMeshAttribTypeInt)) {
       byteSize = sizeof(int);
-    } else if (type == kOfxMeshAttribTypeFloat) {
+    } else if (0 == strcmp(type, kOfxMeshAttribTypeFloat)) {
       byteSize = sizeof(float);
     } else {
       return kOfxStatErrBadHandle;

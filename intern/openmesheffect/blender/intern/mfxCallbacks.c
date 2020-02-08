@@ -84,6 +84,15 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropVertexCount, 0, vertex_count);
   ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropFaceCount, 0, face_count);
 
+  // Define vertex colors attributes
+  int vcolor_layers = CustomData_number_of_layers(&blender_mesh->ldata, CD_MLOOPCOL);
+  char name[32];
+  OfxPropertySetHandle *vcolor_attrib = MEM_malloc_arrayN(vcolor_layers, sizeof(OfxPropertySetHandle), "vertex color attributes");
+  for (int k = 0; k < vcolor_layers; ++k) {
+    sprintf(name, "color%d", k);
+    mes->attributeDefine(ofx_mesh, kOfxMeshAttribVertex, name, 3, kOfxMeshAttribTypeFloat, &vcolor_attrib[k]);
+  }
+
   mes->meshAlloc(ofx_mesh);
 
   OfxPropertySetHandle pos_attrib, vertpoint_attrib, facecounts_attrib;
@@ -110,6 +119,19 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
     }
   }
 
+  // Vertex colors
+  for (int k = 0; k < vcolor_layers; ++k) {
+    float *ofx_vcolor_data;
+    ps->propGetPointer(vcolor_attrib[k], kOfxMeshAttribPropData, 0, (void**)&ofx_vcolor_data);
+    MLoopCol *vcolor_data = (MLoopCol*)CustomData_get(&blender_mesh->ldata, k, CD_MLOOPCOL);
+    for (int i = 0; i < vertex_count; ++i) {
+      ofx_vcolor_data[3 * i + 0] = (float)vcolor_data[i].r / 255.0f;
+      ofx_vcolor_data[3 * i + 1] = (float)vcolor_data[i].g / 255.0f;
+      ofx_vcolor_data[3 * i + 2] = (float)vcolor_data[i].b / 255.0f;
+    }
+  }
+  MEM_freeN(vcolor_attrib);
+
   // Free mesh on Blender side
   BKE_mesh_free(blender_mesh);
 
@@ -123,6 +145,7 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
   int point_count, vertex_count, face_count;
   float *point_data;
   int *vertex_data, *face_data;
+  OfxStatus status;
 
   ps = (OfxPropertySuiteV1*)host->fetchSuite(host->host, kOfxPropertySuite, 1);
   mes = (OfxMeshEffectSuiteV1*)host->fetchSuite(host->host, kOfxMeshEffectSuite, 1);
@@ -171,6 +194,46 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
     blender_mesh->mpoly[i].loopstart = current_loop;
     blender_mesh->mpoly[i].totloop = count;
     current_loop += count;
+  }
+
+  // Get vertex UVs if UVs are present in the mesh
+  /*
+  int uv_layers = CustomData_number_of_layers(&blender_mesh->ldata, CD_MLOOPUV);
+  const char name[32];
+  float *ofx_uv_data;
+  for (int k = 0; k < uv_layers; ++k) {
+    OfxPropertySetHandle uv_attrib;
+    sprintf(name, "uv%d", k);
+    status = mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribVertex, name, &uv_attrib);
+    if (kOfxStatOK == status) {
+      ps->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&ofx_uv_data);
+      MLoopUV *uv_data = (MLoopUV*)CustomData_get(&blender_mesh->ldata, k, CD_MLOOPCOL);
+      for (int i = 0; i < vertex_count; ++i) {
+        uv_data[i].uv[0] = ofx_uv_data[2 * i + 0];
+        uv_data[i].uv[1] = ofx_uv_data[2 * i + 1];
+      }
+    }
+  }
+  */
+
+  int uv_layers = 4;
+  char name[32];
+  float *ofx_uv_data;
+  for (int k = 0; k < uv_layers; ++k) {
+    OfxPropertySetHandle uv_attrib;
+    sprintf(name, "uv%d", k);
+    printf("Look for attribute '%s'\n", name);
+    status = mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribVertex, name, &uv_attrib);
+    if (kOfxStatOK == status) {
+      printf("Found!\n");
+      ps->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&ofx_uv_data);
+      MLoopUV *uv_data = (MLoopUV*)CustomData_add_layer_named(&blender_mesh->ldata, CD_MLOOPUV, CD_CALLOC, NULL, vertex_count, name);
+      for (int i = 0; i < vertex_count; ++i) {
+        uv_data[i].flag = MLOOPUV_VERTSEL;
+        uv_data[i].uv[0] = ofx_uv_data[2 * i + 0];
+        uv_data[i].uv[1] = ofx_uv_data[2 * i + 1];
+      }
+    }
   }
 
   BKE_mesh_calc_edges(blender_mesh, true, false);

@@ -31,11 +31,22 @@ void init_attribute(OfxAttributeStruct *attribute)
 void free_attribute(OfxAttributeStruct *attribute)
 {
   free_properties(&attribute->properties);
+  free_array(attribute->name);
+}
+
+void set_name_attribute(OfxAttributeStruct *attribute, const char *name)
+{
+  // deep copy attribute name
+  attribute->name = (char*)malloc_array(sizeof(char), strlen(name) + 1, "attribute name");
+  strcpy(attribute->name, name);
 }
 
 void deep_copy_attribute(OfxAttributeStruct *destination, const OfxAttributeStruct *source)
 {
-  destination->name = source->name; // weak pointer?
+  // deep string copy
+  destination->name = (char*)malloc_array(sizeof(char), strlen(source->name) + 1, "attribute name");
+  strcpy(destination->name, source->name);
+
   destination->attachment = source->attachment;
   deep_copy_property_set(&destination->properties, &source->properties);
 }
@@ -78,7 +89,7 @@ int ensure_attribute(OfxAttributeSetStruct *attribute_set, AttributeAttachment a
     append_attributes(attribute_set, 1);
     i = attribute_set->num_attributes - 1;
     attribute_set->attributes[i]->attachment = attachment;
-    attribute_set->attributes[i]->name = attribute;
+    set_name_attribute(attribute_set->attributes[i], attribute);
   }
   return i;
 }
