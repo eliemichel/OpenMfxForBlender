@@ -168,15 +168,15 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   runtime_get_parameters_from_rna(runtime_data, fxmd);
 
   // Set input mesh
-  propertySuite->propSetPointer(&input->mesh, kOfxMeshPropInternalData, 0, (void*)mesh);
+  propertySuite->propSetPointer(&input->mesh.properties, kOfxMeshPropInternalData, 0, (void*)mesh);
 
   OfxPlugin *plugin = runtime_data->registry.plugins[runtime_data->effect_index];
   ofxhost_cook(plugin, runtime_data->effect_instance);
 
   // Get output mesh and take ownership
   Mesh *result = NULL;
-  propertySuite->propGetPointer(&output->mesh, kOfxMeshPropInternalData, 0, (void**)&result);
-  propertySuite->propSetPointer(&output->mesh, kOfxMeshPropInternalData, 0, NULL);
+  propertySuite->propGetPointer(&output->mesh.properties, kOfxMeshPropInternalData, 0, (void**)&result);
+  propertySuite->propSetPointer(&output->mesh.properties, kOfxMeshPropInternalData, 0, NULL);
 
   printf("==/ mfx_Modifier_do\n");
   return result;

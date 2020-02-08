@@ -49,7 +49,7 @@ inline int min(int a, int b) {
 }
 #endif
 
-OfxStatus before_mesh_get(OfxHost *host, OfxPropertySetHandle ofx_mesh) {
+OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   OfxPropertySuiteV1 *ps;
   OfxMeshEffectSuiteV1 *mes;
   Mesh *blender_mesh;
@@ -60,7 +60,7 @@ OfxStatus before_mesh_get(OfxHost *host, OfxPropertySetHandle ofx_mesh) {
   ps = (OfxPropertySuiteV1*)host->fetchSuite(host->host, kOfxPropertySuite, 1);
   mes = (OfxMeshEffectSuiteV1*)host->fetchSuite(host->host, kOfxMeshEffectSuite, 1);
 
-  ps->propGetPointer(ofx_mesh, kOfxMeshPropInternalData, 0, (void**)&blender_mesh);
+  ps->propGetPointer(&ofx_mesh->properties, kOfxMeshPropInternalData, 0, (void**)&blender_mesh);
 
   if (NULL == blender_mesh) {
     printf("NOT converting blender mesh into ofx mesh (no blender mesh)...\n");
@@ -70,7 +70,7 @@ OfxStatus before_mesh_get(OfxHost *host, OfxPropertySetHandle ofx_mesh) {
   printf("Converting blender mesh into ofx mesh...\n");
 
   // Set original mesh to null to prevent multiple conversions
-  ps->propSetPointer(ofx_mesh, kOfxMeshPropInternalData, 0, NULL);
+  ps->propSetPointer(&ofx_mesh->properties, kOfxMeshPropInternalData, 0, NULL);
 
   point_count = blender_mesh->totvert;
   vertex_count = 0;
@@ -80,11 +80,19 @@ OfxStatus before_mesh_get(OfxHost *host, OfxPropertySetHandle ofx_mesh) {
   }
   face_count = blender_mesh->totpoly;
 
-  mes->meshAlloc(ofx_mesh, point_count, vertex_count, face_count);
+  ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropPointCount, 0, point_count);
+  ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropVertexCount, 0, vertex_count);
+  ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropFaceCount, 0, face_count);
 
-  ps->propGetPointer(ofx_mesh, kOfxMeshPropPointData, 0, (void**)&point_data);
-  ps->propGetPointer(ofx_mesh, kOfxMeshPropVertexData, 0, (void**)&vertex_data);
-  ps->propGetPointer(ofx_mesh, kOfxMeshPropFaceData, 0, (void**)&face_data);
+  mes->meshAlloc(ofx_mesh);
+
+  OfxPropertySetHandle pos_attrib, vertpoint_attrib, facecounts_attrib;
+  mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib);
+  ps->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void**)&point_data);
+  mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
+  ps->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&vertex_data);
+  mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
+  ps->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&face_data);
 
   // Points (= Blender's vertex)
   for (int i = 0 ; i < point_count ; ++i) {
@@ -108,23 +116,30 @@ OfxStatus before_mesh_get(OfxHost *host, OfxPropertySetHandle ofx_mesh) {
   return kOfxStatOK;
 }
 
-OfxStatus before_mesh_release(OfxHost *host, OfxPropertySetHandle ofx_mesh) {
+OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
   OfxPropertySuiteV1 *ps;
+  OfxMeshEffectSuiteV1 *mes;
   Mesh *blender_mesh;
   int point_count, vertex_count, face_count;
   float *point_data;
   int *vertex_data, *face_data;
 
   ps = (OfxPropertySuiteV1*)host->fetchSuite(host->host, kOfxPropertySuite, 1);
+  mes = (OfxMeshEffectSuiteV1*)host->fetchSuite(host->host, kOfxMeshEffectSuite, 1);
 
-  ps->propGetInt(ofx_mesh, kOfxMeshPropPointCount, 0, &point_count);
-  ps->propGetInt(ofx_mesh, kOfxMeshPropVertexCount, 0, &vertex_count);
-  ps->propGetInt(ofx_mesh, kOfxMeshPropFaceCount, 0, &face_count);
-  ps->propGetPointer(ofx_mesh, kOfxMeshPropPointData, 0, (void**)&point_data);
-  ps->propGetPointer(ofx_mesh, kOfxMeshPropVertexData, 0, (void**)&vertex_data);
-  ps->propGetPointer(ofx_mesh, kOfxMeshPropFaceData, 0, (void**)&face_data);
+  ps->propGetInt(&ofx_mesh->properties, kOfxMeshPropPointCount, 0, &point_count);
+  ps->propGetInt(&ofx_mesh->properties, kOfxMeshPropVertexCount, 0, &vertex_count);
+  ps->propGetInt(&ofx_mesh->properties, kOfxMeshPropFaceCount, 0, &face_count);
 
-  ps->propSetPointer(ofx_mesh, kOfxMeshPropInternalData, 0, NULL);
+  OfxPropertySetHandle pos_attrib, vertpoint_attrib, facecounts_attrib;
+  mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib);
+  ps->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void**)&point_data);
+  mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
+  ps->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&vertex_data);
+  mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
+  ps->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&face_data);
+
+  ps->propSetPointer(&ofx_mesh->properties, kOfxMeshPropInternalData, 0, NULL);
 
   if (NULL == point_data || NULL == vertex_data || NULL == face_data) {
     printf("WARNING: Null data pointers\n");
@@ -160,7 +175,7 @@ OfxStatus before_mesh_release(OfxHost *host, OfxPropertySetHandle ofx_mesh) {
 
   BKE_mesh_calc_edges(blender_mesh, true, false);
 
-  ps->propSetPointer(ofx_mesh, kOfxMeshPropInternalData, 0, (void*)blender_mesh);
+  ps->propSetPointer(&ofx_mesh->properties, kOfxMeshPropInternalData, 0, (void*)blender_mesh);
 
   return kOfxStatOK;
 }

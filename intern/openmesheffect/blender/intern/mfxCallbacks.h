@@ -23,14 +23,15 @@
  */
 
 #include "ofxCore.h"
+#include "ofxMeshEffect.h"
 
 /**
  * Convert blender mesh from internal pointer into ofx mesh.
  * /pre no ofx mesh has been allocated or internal pointer is null
  */
-OfxStatus before_mesh_get(OfxHost *host, OfxPropertySetHandle ofx_mesh);
+OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh);
 
 /**
  * Convert ofx mesh into blender mesh and store it in internal pointer
  */
-OfxStatus before_mesh_release(OfxHost *host, OfxPropertySetHandle ofx_mesh);
+OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh);

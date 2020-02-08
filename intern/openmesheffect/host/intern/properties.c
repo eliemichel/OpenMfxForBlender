@@ -119,15 +119,19 @@ bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type
       (0 == strcmp(property, kOfxMeshPropPointCount)   && type == PROP_TYPE_INT)     ||
       (0 == strcmp(property, kOfxMeshPropVertexCount)  && type == PROP_TYPE_INT)     ||
       (0 == strcmp(property, kOfxMeshPropFaceCount)    && type == PROP_TYPE_INT)     ||
-      (0 == strcmp(property, kOfxMeshPropPointData)    && type == PROP_TYPE_POINTER) ||
-      (0 == strcmp(property, kOfxMeshPropVertexData)   && type == PROP_TYPE_POINTER) ||
-      (0 == strcmp(property, kOfxMeshPropFaceData)     && type == PROP_TYPE_POINTER) ||
       false
     );
   case PROP_CTX_PARAM:
     return (
       (0 == strcmp(property, kOfxParamPropType) && type == PROP_TYPE_STRING) ||
       (0 == strcmp(property, kOfxParamPropScriptName) && type == PROP_TYPE_STRING) ||
+      false
+      );
+  case PROP_CTX_ATTRIB:
+    return (
+      (0 == strcmp(property, kOfxMeshAttribPropData) && type == PROP_TYPE_POINTER) ||
+      (0 == strcmp(property, kOfxMeshAttribPropComponentCount) && type == PROP_TYPE_INT) ||
+      (0 == strcmp(property, kOfxMeshAttribPropType) && type == PROP_TYPE_STRING) ||
       false
       );
   case PROP_CTX_OTHER:

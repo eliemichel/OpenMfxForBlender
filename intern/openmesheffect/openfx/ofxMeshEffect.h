@@ -116,6 +116,14 @@ attributes include a position for points, a point index for vertices and a verte
  */
 #define kOfxMeshAttribFaceCounts "OfxMeshAttribFaceCounts"
 
+/** @brief Attribute type integer 32 bit
+ */
+#define kOfxMeshAttribTypeInt "OfxMeshAttribTypeInt"
+
+/** @brief Attribute type float 32 bit
+ */
+#define kOfxMeshAttribTypeFloat "OfxMeshAttribTypeFloat"
+
 /*@}*/
 
 /**
@@ -338,6 +346,24 @@ attribute attachement (point/vertex/face/mesh) and attribute type (int, float, v
 */
 #define kOfxMeshAttribPropData "OfxMeshAttribPropData"
 
+/**  @brief The number of components an attribute.
+
+    - Type - int X 1
+    - Property Set - a mesh attribute (read only)
+
+An attribute can have between 1 and 4 components.
+*/
+#define kOfxMeshAttribPropComponentCount "OfxMeshAttribPropComponentCount"
+
+/**  @brief The type of an attribute.
+
+    - Type - string X 1
+    - Property Set - a mesh attribute (read only)
+
+An attribute can have type kOfxMeshAttribTypeFloat or kOfxMeshAttribTypeInt
+*/
+#define kOfxMeshAttribPropType "OfxMeshAttribPropType"
+
 /*@}*/
 /*@}*/
 
@@ -441,13 +467,13 @@ typedef struct OfxMeshEffectSuiteV1 {
   /** @brief Retrieves the property set for a given input
 
   \arg input         input effect to get the property set for
-  \arg propHandle    pointer to a the property set handle, value is returned hier
+  \arg propHandle    pointer to a the property set handle, value is returned here
 
   The property handle is valid for the lifetime of the input, which is generally the lifetime of the instance.
 
   @returns
   - ::kOfxStatOK            - the property set was found and returned
-  - ::kOfxStatErrBadHandle  - if the paramter handle was invalid
+  - ::kOfxStatErrBadHandle  - if the input handle was invalid
   - ::kOfxStatErrUnknown    - if the type is unknown
   */
   OfxStatus (*inputGetPropertySet)(OfxMeshInputHandle input,
@@ -498,6 +524,37 @@ If inputGetMesh is called twice with the same parameters, then two separate mesh
  */
   OfxStatus (*inputReleaseMesh)(OfxMeshHandle meshHandle);
 
+  /** @brief Ensure that an attribute is attached to a mesh
+
+      \arg meshHandle       - mesh handle
+      \arg attachment       - attribute attachment (see \ref MeshAttrib)
+      \arg name             - attribute name
+      \arg componentCount   - nomber of components in the attribute, from 1 to 4 (1 is a scalar
+                              attribtue, 2 is a vector2, etc.)
+      \arg type             - type of the attribute data (float or int, see \ref MeshAttrib)
+      \arg attributeHandle  - property set for returning attribute properties, might be NULL.
+
+\pre
+ - meshHandle was returned by inputGetMesh
+ - attachment is a valid attachement
+
+\post
+ - attributeHandle is a valid attribute handle
+
+@returns
+- ::kOfxStatOK - the attribute was successfully fetched and returned in the handle,
+- ::kOfxStatErrBadIndex - the attribute could not be fetched because it does not exist, or the
+                          attachement is not valid.
+- ::kOfxStatErrValue - the component count or type is not valid.
+- ::kOfxStatErrBadHandle - the mesh handle was invalid,
+ */
+  OfxStatus(*attributeDefine)(OfxMeshHandle meshHandle,
+                              const char *attachment,
+                              const char *name,
+                              int componentCount,
+                              const char *type,
+                              OfxPropertySetHandle *attributeHandle);
+
   /** @brief Get an attribute handle from a mesh
 
       \arg meshHandle       - mesh handle
@@ -507,19 +564,36 @@ If inputGetMesh is called twice with the same parameters, then two separate mesh
 
 \pre
  - meshHandle was returned by inputGetMesh
+ - attachment is a valid attachement
 
 \post
  - attributeHandle is a valid attribute handle
 
 @returns
 - ::kOfxStatOK - the attribute was successfully fetched and returned in the handle,
-- ::kOfxStatFailed - the attribute could not be fetched because it does not exist,
+- ::kOfxStatErrBadIndex - the attribute could not be fetched because it does not exist, or the
+                          attachement is not valid.
 - ::kOfxStatErrBadHandle - the mesh handle was invalid,
  */
   OfxStatus(*meshGetAttribute)(OfxMeshHandle meshHandle,
                                const char *attachment,
                                const char *name,
                                OfxPropertySetHandle *attributeHandle);
+
+  /** @brief Retrieves the property set for a given mesh
+
+  \arg mesh          mesh to get the property set for
+  \arg propHandle    pointer to a the property set handle, value is returned here
+
+  The property handle is valid for the lifetime of the mesh.
+
+  @returns
+  - ::kOfxStatOK            - the property set was found and returned
+  - ::kOfxStatErrBadHandle  - if the mesh handle was invalid
+  - ::kOfxStatErrUnknown    - if the type is unknown
+  */
+  OfxStatus (*meshGetPropertySet)(OfxMeshHandle mesh,
+          OfxPropertySetHandle *propHandle);
 
 /** @brief Allocate memory of a mesh in an output input
 
@@ -531,10 +605,10 @@ If inputGetMesh is called twice with the same parameters, then two separate mesh
  - inputReleaseMesh has not been called yet
  - meshHandle kOfxMeshPropPointCount, kOfxMeshPropVertexCount, kOfxMeshPropFaceCount properties
  must have been set.
- - meshHandle attributes will no longuer change
 
 \post
  - all attribut data pointers have been allocated
+ - meshHandle attributes will no longer change (no call to meshDefineAttribute)
 
 @returns
 - ::kOfxStatOK           - the mesh was successfully allocated,

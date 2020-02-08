@@ -27,12 +27,16 @@ set(SRC
   mfxHost.c
   mfxHost.h
   mfxPluginRegistry.h
+  intern/attributes.h
+  intern/attributes.c
   intern/properties.h
   intern/properties.c
   intern/parameters.h
   intern/parameters.c
   intern/inputs.h
   intern/inputs.c
+  intern/mesh.h
+  intern/mesh.c
   intern/mesheffect.h
   intern/mesheffect.c
   intern/mfxPluginRegistry.c

@@ -50,7 +50,7 @@
  */
 #define kOfxHostPropBeforeMeshReleaseCb "OfxHostPropBeforeMeshReleaseCb"
 
-typedef OfxStatus (*BeforeMeshReleaseCbFunc)(OfxHost*, OfxPropertySetHandle);
+typedef OfxStatus (*BeforeMeshReleaseCbFunc)(OfxHost*, OfxMeshHandle);
 
 /**
  * Custom callback called when getting mesh data, converting the internal data
@@ -63,5 +63,5 @@ typedef OfxStatus (*BeforeMeshReleaseCbFunc)(OfxHost*, OfxPropertySetHandle);
  */
 #define kOfxHostPropBeforeMeshGetCb "OfxHostPropBeforeMeshGetCb"
 
-typedef OfxStatus (*BeforeMeshGetCbFunc)(OfxHost*, OfxPropertySetHandle);
+typedef OfxStatus (*BeforeMeshGetCbFunc)(OfxHost*, OfxMeshHandle);
 

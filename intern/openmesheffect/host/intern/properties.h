@@ -51,6 +51,7 @@ typedef enum PropertySetContext {
     PROP_CTX_INPUT, // kOfxTypeMeshEffectInput
     PROP_CTX_MESH, // kOfxTypeMesh
     PROP_CTX_PARAM, // kOfxTypeParameter
+    PROP_CTX_ATTRIB,
     PROP_CTX_OTHER,
     // kOfxTypeParameterInstance
 } PropertySetContext;

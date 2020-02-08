@@ -15,10 +15,28 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 
 #include "util/memory_util.h"
 
 #include "mesheffect.h"
+
+ // CONVERSION UTILS
+
+static AttributeAttachment mfxToInternalAttribAttachment(const char *attachment)
+{
+  if (0 == strcmp(attachment, kOfxMeshAttribPoint)) {
+    return ATTR_ATTACH_POINT;
+  } else if (0 == strcmp(attachment, kOfxMeshAttribVertex)) {
+    return ATTR_ATTACH_VERTEX;
+  } else if (0 == strcmp(attachment, kOfxMeshAttribFace)) {
+    return ATTR_ATTACH_FACE;
+  } else if (0 == strcmp(attachment, kOfxMeshAttribMesh)) {
+    return ATTR_ATTACH_MESH;
+  } else {
+    return ATTR_ATTACH_INVALID;
+  }
+}
 
 // OFX MESH EFFECT SUITE
 
@@ -57,6 +75,9 @@ const OfxMeshEffectSuiteV1 gMeshEffectSuiteV1 = {
     /* inputGetPropertySet */ inputGetPropertySet,
     /* inputGetMesh */        inputGetMesh,
     /* inputReleaseMesh */    inputReleaseMesh,
+    /* attributeDefine */     attributeDefine,
+    /* meshGetAttribute */    meshGetAttribute,
+    /* meshGetPropertySet */  meshGetPropertySet,
     /* meshAlloc */           meshAlloc,
     /* abort */               ofxAbort
 };
@@ -79,7 +100,7 @@ OfxStatus inputDefine(OfxMeshEffectHandle meshEffect,
   printf("Defining input '%s' on OfxMeshEffectHandle %p\n", name, meshEffect);
   int i = ensure_input(&meshEffect->inputs, name);
   meshEffect->inputs.inputs[i]->host = meshEffect->host;
-  propSetPointer(&meshEffect->inputs.inputs[i]->mesh, kOfxMeshPropInternalData, 0, NULL);
+  propSetPointer(&meshEffect->inputs.inputs[i]->mesh.properties, kOfxMeshPropInternalData, 0, NULL);
   *propertySet = &(meshEffect->inputs.inputs[i]->properties);
   return kOfxStatOK;
 }
@@ -107,16 +128,20 @@ OfxStatus inputGetPropertySet(OfxMeshInputHandle input,
 
 OfxStatus inputGetMesh(OfxMeshInputHandle input,
                        OfxTime time,
-                       OfxPropertySetHandle *meshHandle) {
+                       OfxMeshHandle *meshHandle,
+                       OfxPropertySetHandle *propertySet) {
   (void)time;
-  OfxPropertySetHandle inputMeshHandle = &input->mesh;
-  propSetPointer(inputMeshHandle, kOfxMeshPropHostHandle, 0, (void*)input->host);
-  propSetInt(inputMeshHandle, kOfxMeshPropPointCount, 0, 0);
-  propSetInt(inputMeshHandle, kOfxMeshPropVertexCount, 0, 0);
-  propSetInt(inputMeshHandle, kOfxMeshPropFaceCount, 0, 0);
-  propSetPointer(inputMeshHandle, kOfxMeshPropPointData, 0, NULL);
-  propSetPointer(inputMeshHandle, kOfxMeshPropVertexData, 0, NULL);
-  propSetPointer(inputMeshHandle, kOfxMeshPropFaceData, 0, NULL);
+  OfxMeshHandle inputMeshHandle = &input->mesh;
+  OfxPropertySetHandle inputMeshProperties = &input->mesh.properties;
+  propSetPointer(inputMeshProperties, kOfxMeshPropHostHandle, 0, (void*)input->host);
+  propSetInt(inputMeshProperties, kOfxMeshPropPointCount, 0, 0);
+  propSetInt(inputMeshProperties, kOfxMeshPropVertexCount, 0, 0);
+  propSetInt(inputMeshProperties, kOfxMeshPropFaceCount, 0, 0);
+
+  // Default attributes
+  attributeDefine(inputMeshHandle, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, 3, kOfxMeshAttribTypeFloat, NULL);
+  attributeDefine(inputMeshHandle, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, 1, kOfxMeshAttribTypeInt, NULL);
+  attributeDefine(inputMeshHandle, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, 1, kOfxMeshAttribTypeInt, NULL);
   
   // Call internal callback before actually getting data
   OfxHost *host = input->host;
@@ -129,18 +154,18 @@ OfxStatus inputGetMesh(OfxMeshInputHandle input,
   }
 
   *meshHandle = inputMeshHandle;
+  if (NULL != propertySet) {
+    *propertySet = inputMeshProperties;
+  }
 
   return kOfxStatOK;
 }
 
-OfxStatus inputReleaseMesh(OfxPropertySetHandle meshHandle) {
-  float *pointData;
-  int *vertexData, *faceData;
-
+OfxStatus inputReleaseMesh(OfxMeshHandle meshHandle) {
   // Call internal callback before actually releasing data
   OfxHost *host;
   BeforeMeshReleaseCbFunc beforeMeshReleaseCb;
-  propGetPointer(meshHandle, kOfxMeshPropHostHandle, 0, (void**)&host);
+  propGetPointer(&meshHandle->properties, kOfxMeshPropHostHandle, 0, (void**)&host);
   if (NULL != host) {
     propGetPointer(host->host, kOfxHostPropBeforeMeshReleaseCb, 0, (void**)&beforeMeshReleaseCb);
     if (NULL != beforeMeshReleaseCb) {
@@ -148,78 +173,142 @@ OfxStatus inputReleaseMesh(OfxPropertySetHandle meshHandle) {
     }
   }
 
-  propGetPointer(meshHandle, kOfxMeshPropPointData, 0, (void**)&pointData);
-  propGetPointer(meshHandle, kOfxMeshPropVertexData, 0, (void**)&vertexData);
-  propGetPointer(meshHandle, kOfxMeshPropFaceData, 0, (void**)&faceData);
-  
-  if (NULL != pointData) {
-    free_array(pointData);
-  }
-  if (NULL != vertexData) {
-    free_array(vertexData);
-  }
-  if (NULL != faceData) {
-    free_array(faceData);
+  // Free attributes
+  void *data;
+  for (int i = 0; i < meshHandle->attributes.num_attributes; ++i) {
+    OfxAttributeStruct *attribute = meshHandle->attributes.attributes[i];
+    propGetPointer(&attribute->properties, kOfxMeshAttribPropData, 0, &data);
+    if (NULL != data) {
+      free_array(data);
+    }
+    propSetPointer(&attribute->properties, kOfxMeshAttribPropData, 0, NULL);
   }
 
-  propSetInt(meshHandle, kOfxMeshPropPointCount, 0, 0);
-  propSetInt(meshHandle, kOfxMeshPropVertexCount, 0, 0);
-  propSetInt(meshHandle, kOfxMeshPropFaceCount, 0, 0);
-  propSetPointer(meshHandle, kOfxMeshPropPointData, 0, NULL);
-  propSetPointer(meshHandle, kOfxMeshPropVertexData, 0, NULL);
-  propSetPointer(meshHandle, kOfxMeshPropFaceData, 0, NULL);
+  propSetInt(&meshHandle->properties, kOfxMeshPropPointCount, 0, 0);
+  propSetInt(&meshHandle->properties, kOfxMeshPropVertexCount, 0, 0);
+  propSetInt(&meshHandle->properties, kOfxMeshPropFaceCount, 0, 0);
 
   return kOfxStatOK;
 }
 
-OfxStatus meshAlloc(OfxPropertySetHandle meshHandle,
-                    int pointCount,
-                    int vertexCount,
-                    int faceCount) {
+OfxStatus attributeDefine(OfxMeshHandle meshHandle,
+                          const char *attachment,
+                          const char *name,
+                          int componentCount,
+                          const char *type,
+                          OfxPropertySetHandle *attributeHandle)
+{
+  if (componentCount < 1 || componentCount > 4) {
+    return kOfxStatErrValue;
+  }
+  if (type != kOfxMeshAttribTypeInt && type != kOfxMeshAttribTypeFloat) {
+    return kOfxStatErrValue;
+  }
+
+  AttributeAttachment intAttachment = mfxToInternalAttribAttachment(attachment);
+  if (intAttachment == ATTR_ATTACH_INVALID) {
+    return kOfxStatErrBadIndex;
+  }
+
+  int i = ensure_attribute(&meshHandle->attributes, intAttachment, name);
+
+  OfxPropertySetStruct *attributeProperties = &meshHandle->attributes.attributes[i]->properties;
+  propSetPointer(attributeProperties, kOfxMeshAttribPropData, 0, NULL);
+  propSetInt(attributeProperties, kOfxMeshAttribPropComponentCount, 0, componentCount);
+  propSetString(attributeProperties, kOfxMeshAttribPropType, 0, type);
+
+  if (attributeHandle){
+    *attributeHandle = attributeProperties;
+  }
+  return kOfxStatOK;
+}
+
+OfxStatus meshGetAttribute(OfxMeshHandle meshHandle,
+                           const char *attachment,
+                           const char *name,
+                           OfxPropertySetHandle *attributeHandle)
+{
+  AttributeAttachment intAttachment = mfxToInternalAttribAttachment(attachment);
+  if (intAttachment == ATTR_ATTACH_INVALID) {
+    return kOfxStatErrBadIndex;
+  }
+
+  int i = find_attribute(&meshHandle->attributes, intAttachment, name);
+
+  if (i == -1) {
+    return kOfxStatErrBadIndex;
+  } else {
+    *attributeHandle = &meshHandle->attributes.attributes[i]->properties;
+    return kOfxStatOK;
+  }
+}
+
+OfxStatus meshGetPropertySet(OfxMeshHandle mesh,
+                             OfxPropertySetHandle *propHandle)
+{
+  *propHandle = &mesh->properties;
+  return kOfxStatOK;
+}
+
+OfxStatus meshAlloc(OfxMeshHandle meshHandle) {
   OfxStatus status;
 
-  float *pointData = malloc_array(sizeof(float) * 3, pointCount, "point data");
-  if (NULL == pointData) {
-    return kOfxStatErrMemory;
-  }
+  // Get counts
 
-  int *vertexData = malloc_array(sizeof(int), vertexCount, "vertex data");
-  if (NULL == vertexData) {
-    free_array(pointData);
-    return kOfxStatErrMemory;
-  }
+  int elementCount[4]; // point, vertex, face, mesh
 
-  int *faceData = malloc_array(sizeof(int) * 3, faceCount, "face data");
-  if (NULL == faceData) {
-    free_array(pointData);
-    free_array(vertexData);
-    return kOfxStatErrMemory;
+  status = propGetInt(&meshHandle->properties, kOfxMeshPropPointCount, 0, &elementCount[0]);
+  if (kOfxStatOK != status) {
+    return status;
   }
+  status = propGetInt(&meshHandle->properties, kOfxMeshPropVertexCount, 0, &elementCount[1]);
+  if (kOfxStatOK != status) {
+    return status;
+  }
+  status = propGetInt(&meshHandle->properties, kOfxMeshPropFaceCount, 0, &elementCount[2]);
+  if (kOfxStatOK != status) {
+    return status;
+  }
+  elementCount[3] = 1;
 
-  status = propSetInt(meshHandle, kOfxMeshPropPointCount, 0, pointCount);
-  if (kOfxStatOK != status) {
-    return status;
+
+  // Allocate memory attributes
+
+  for (int i = 0; i < meshHandle->attributes.num_attributes; ++i) {
+    OfxAttributeStruct *attribute = meshHandle->attributes.attributes[i];
+
+    int count;
+    status = propGetInt(&attribute->properties, kOfxMeshAttribPropComponentCount, 0, &count);
+    if (kOfxStatOK != status) {
+      return status;
+    }
+
+    char *type;
+    status = propGetString(&attribute->properties, kOfxMeshAttribPropType, 0, &type);
+    if (kOfxStatOK != status) {
+      return status;
+    }
+
+    size_t byteSize = 0;
+    if (type == kOfxMeshAttribTypeInt) {
+      byteSize = sizeof(int);
+    } else if (type == kOfxMeshAttribTypeFloat) {
+      byteSize = sizeof(float);
+    } else {
+      return kOfxStatErrBadHandle;
+    }
+
+    void *data = (void*)malloc_array(byteSize * count, elementCount[attribute->attachment], "attribute data");
+    if (NULL == data) {
+      return kOfxStatErrMemory;
+    }
+
+    status = propSetPointer(&attribute->properties, kOfxMeshAttribPropData, 0, data);
+    if (kOfxStatOK != status) {
+      return status;
+    }
   }
-  status = propSetInt(meshHandle, kOfxMeshPropVertexCount, 0, vertexCount);
-  if (kOfxStatOK != status) {
-    return status;
-  }
-  status = propSetInt(meshHandle, kOfxMeshPropFaceCount, 0, faceCount);
-  if (kOfxStatOK != status) {
-    return status;
-  }
-  status = propSetPointer(meshHandle, kOfxMeshPropPointData, 0, pointData);
-  if (kOfxStatOK != status) {
-    return status;
-  }
-  status = propSetPointer(meshHandle, kOfxMeshPropVertexData, 0, vertexData);
-  if (kOfxStatOK != status) {
-    return status;
-  }
-  status = propSetPointer(meshHandle, kOfxMeshPropFaceData, 0, faceData);
-  if (kOfxStatOK != status) {
-    return status;
-  }
+  
   return kOfxStatOK;
 }
 

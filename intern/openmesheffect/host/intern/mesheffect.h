@@ -69,12 +69,22 @@ OfxStatus inputGetPropertySet(OfxMeshInputHandle input,
                               OfxPropertySetHandle *propHandle);
 OfxStatus inputGetMesh(OfxMeshInputHandle input,
                        OfxTime time,
-                       OfxPropertySetHandle *meshHandle);
-OfxStatus inputReleaseMesh(OfxPropertySetHandle meshHandle);
-OfxStatus meshAlloc(OfxPropertySetHandle meshHandle,
-                    int pointCount,
-                    int vertexCount,
-                    int faceCount);
+                       OfxMeshHandle *meshHandle,
+                       OfxPropertySetHandle *propertySet);
+OfxStatus inputReleaseMesh(OfxMeshHandle meshHandle);
+OfxStatus attributeDefine(OfxMeshHandle meshHandle,
+                          const char *attachment,
+                          const char *name,
+                          int componentCount,
+                          const char *type,
+                          OfxPropertySetHandle *attributeHandle);
+OfxStatus meshGetAttribute(OfxMeshHandle meshHandle,
+                           const char *attachment,
+                           const char *name,
+                           OfxPropertySetHandle *attributeHandle);
+OfxStatus meshGetPropertySet(OfxMeshHandle mesh,
+                             OfxPropertySetHandle *propHandle);
+OfxStatus meshAlloc(OfxMeshHandle meshHandle);
 int ofxAbort(OfxMeshEffectHandle meshEffect);
 
 #endif // __MFX_MESHEFFECT_H__

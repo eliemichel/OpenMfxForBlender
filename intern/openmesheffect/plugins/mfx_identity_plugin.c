@@ -22,9 +22,9 @@
 
 typedef struct PluginRuntime {
     OfxHost *host;
-    OfxPropertySuiteV1 *propertySuite;
-    OfxParameterSuiteV1 *parameterSuite;
-    OfxMeshEffectSuiteV1 *meshEffectSuite;
+    const OfxPropertySuiteV1 *propertySuite;
+    const OfxParameterSuiteV1 *parameterSuite;
+    const OfxMeshEffectSuiteV1 *meshEffectSuite;
 } PluginRuntime;
 
 PluginRuntime gRuntime;
@@ -37,8 +37,8 @@ static OfxStatus describe(PluginRuntime *runtime, OfxMeshEffectHandle descriptor
     if (missing_suite) {
         return kOfxStatErrMissingHostFeature;
     }
-    OfxMeshEffectSuiteV1 *meshEffectSuite = runtime->meshEffectSuite;
-    OfxPropertySuiteV1 *propertySuite = runtime->propertySuite;
+    const OfxMeshEffectSuiteV1 *meshEffectSuite = runtime->meshEffectSuite;
+    const OfxPropertySuiteV1 *propertySuite = runtime->propertySuite;
 
     OfxPropertySetHandle inputProperties;
     meshEffectSuite->inputDefine(descriptor, kOfxMeshMainInput, &inputProperties);
@@ -52,8 +52,8 @@ static OfxStatus describe(PluginRuntime *runtime, OfxMeshEffectHandle descriptor
 }
 
 static OfxStatus cook(PluginRuntime *runtime, OfxMeshEffectHandle instance) {
-    OfxMeshEffectSuiteV1 *meshEffectSuite = runtime->meshEffectSuite;
-    OfxPropertySuiteV1 *propertySuite = runtime->propertySuite;
+    const OfxMeshEffectSuiteV1 *meshEffectSuite = runtime->meshEffectSuite;
+    const OfxPropertySuiteV1 *propertySuite = runtime->propertySuite;
     OfxTime time = 0;
 
     // Get input/output
@@ -62,45 +62,48 @@ static OfxStatus cook(PluginRuntime *runtime, OfxMeshEffectHandle instance) {
     meshEffectSuite->inputGetHandle(instance, kOfxMeshMainOutput, &output, NULL);
 
     // Get meshes
-    OfxPropertySetHandle input_mesh, output_mesh;
-    meshEffectSuite->inputGetMesh(input, time, &input_mesh);
-    meshEffectSuite->inputGetMesh(output, time, &output_mesh);
+    OfxMeshHandle input_mesh, output_mesh;
+    OfxPropertySetHandle input_mesh_prop, output_mesh_prop;
+    meshEffectSuite->inputGetMesh(input, time, &input_mesh, &input_mesh_prop);
+    meshEffectSuite->inputGetMesh(output, time, &output_mesh, &output_mesh_prop);
 
     // Get input mesh data
     int input_point_count = 0, input_vertex_count = 0, input_face_count = 0;
     float *input_points;
     int *input_vertices, *input_faces;
-    propertySuite->propGetInt(input_mesh, kOfxMeshPropPointCount,
-                              0, &input_point_count);
-    propertySuite->propGetInt(input_mesh, kOfxMeshPropVertexCount,
-                              0, &input_vertex_count);
-    propertySuite->propGetInt(input_mesh, kOfxMeshPropFaceCount,
-                              0, &input_face_count);
-    propertySuite->propGetPointer(input_mesh, kOfxMeshPropPointData,
-                                  0, (void**)&input_points);
-    propertySuite->propGetPointer(input_mesh, kOfxMeshPropVertexData,
-                                  0, (void**)&input_vertices);
-    propertySuite->propGetPointer(input_mesh, kOfxMeshPropFaceData,
-                                  0, (void**)&input_faces);
+    propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropPointCount, 0, &input_point_count);
+    propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropVertexCount, 0, &input_vertex_count);
+    propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropFaceCount, 0, &input_face_count);
+
+    // Get attribute pointers
+    OfxPropertySetHandle pos_attrib, vertpoint_attrib, facecounts_attrib;
+    meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib);
+    propertySuite->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void**)&input_points);
+    meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
+    propertySuite->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&input_vertices);
+    meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
+    propertySuite->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&input_faces);
 
     // Allocate output mesh
     int output_point_count = input_point_count;
     int output_vertex_count = input_vertex_count;
     int output_face_count = input_face_count;
-    meshEffectSuite->meshAlloc(output_mesh,
-                               output_point_count,
-                               output_vertex_count,
-                               output_face_count);
+
+    propertySuite->propSetInt(output_mesh_prop, kOfxMeshPropPointCount, 0, output_point_count);
+    propertySuite->propSetInt(output_mesh_prop, kOfxMeshPropVertexCount, 0, output_vertex_count);
+    propertySuite->propSetInt(output_mesh_prop, kOfxMeshPropFaceCount, 0, output_face_count);
+
+    meshEffectSuite->meshAlloc(output_mesh);
 
     // Get output mesh data
     float *output_points;
     int *output_vertices, *output_faces;
-    propertySuite->propGetPointer(output_mesh, kOfxMeshPropPointData,
-                                  0, (void**)&output_points);
-    propertySuite->propGetPointer(output_mesh, kOfxMeshPropVertexData,
-                                  0, (void**)&output_vertices);
-    propertySuite->propGetPointer(output_mesh, kOfxMeshPropFaceData,
-                                  0, (void**)&output_faces);
+    meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib);
+    propertySuite->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void**)&output_points);
+    meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
+    propertySuite->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&output_vertices);
+    meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
+    propertySuite->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&output_faces);
 
     // Fill in output data
     memcpy(output_points, input_points, 3 * input_point_count * sizeof(float));

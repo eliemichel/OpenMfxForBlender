@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Elie Michel
+ * Copyright 2019 - 2020 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,11 +23,12 @@
 #define __MFX_INPUTS_H__
 
 #include "properties.h"
+#include "mesh.h"
 
 typedef struct OfxMeshInputStruct {
     const char *name;
     OfxPropertySetStruct properties;
-    OfxPropertySetStruct mesh;
+    OfxMeshStruct mesh;
     OfxHost *host; // weak pointer, do not deep copy
 } OfxMeshInputStruct;
 
