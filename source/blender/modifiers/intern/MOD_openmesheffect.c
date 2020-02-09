@@ -79,6 +79,18 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   }
 }
 
+static void requiredDataMask(Object *UNUSED(ob),
+                             ModifierData *UNUSED(md),
+                             CustomData_MeshMasks *r_cddata_masks)
+{
+  /* ask for extra attibutes.
+     maybe there could be a mechanism in OpenMeshEffect to have a plugin explicitely
+     ask for input attributes, so that we can avoid feeding all of them to addons
+     that are not using it. */
+  r_cddata_masks->lmask |= CD_MLOOPUV;
+  r_cddata_masks->lmask |= CD_MLOOPCOL;
+}
+
 static bool dependsOnTime(struct ModifierData *md)
 {
   // TODO: May depend on the HDA file
@@ -132,7 +144,7 @@ ModifierTypeInfo modifierType_OpenMeshEffect = {
     /* applyModifier */ applyModifier,
 
     /* initData */ initData,
-    /* requiredDataMask */ NULL,
+    /* requiredDataMask */ requiredDataMask,
     /* freeData */ freeData,
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,
