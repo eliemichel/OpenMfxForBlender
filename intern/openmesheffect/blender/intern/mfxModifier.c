@@ -23,6 +23,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "mfxRuntime.h"
+#include "mfxCallbacks.h"
 
 #include "DNA_mesh_types.h" // Mesh
 #include "DNA_meshdata_types.h" // MVert
@@ -167,17 +168,28 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   // Get parameters
   runtime_get_parameters_from_rna(runtime_data, fxmd);
 
-  // Set input mesh
-  propertySuite->propSetPointer(&input->mesh.properties, kOfxMeshPropInternalData, 0, (void*)mesh);
+  // Set input mesh data binding, used by before/after callbacks
+  MeshInternalData input_data;
+  input_data.is_input = true;
+  input_data.blender_mesh = mesh;
+  input_data.source_mesh = NULL;
+  propertySuite->propSetPointer(&input->mesh.properties, kOfxMeshPropInternalData, 0, (void*)&input_data);
+
+  // Set output mesh data binding, used by before/after callbacks
+  MeshInternalData output_data;
+  output_data.is_input = false;
+  output_data.blender_mesh = NULL;
+  output_data.source_mesh = mesh;
+  propertySuite->propSetPointer(&output->mesh.properties, kOfxMeshPropInternalData, 0, (void*)&output_data);
 
   OfxPlugin *plugin = runtime_data->registry.plugins[runtime_data->effect_index];
   ofxhost_cook(plugin, runtime_data->effect_instance);
 
-  // Get output mesh and take ownership
-  Mesh *result = NULL;
-  propertySuite->propGetPointer(&output->mesh.properties, kOfxMeshPropInternalData, 0, (void**)&result);
-  propertySuite->propSetPointer(&output->mesh.properties, kOfxMeshPropInternalData, 0, NULL);
+  // Free mesh on Blender side
+  if (output_data.blender_mesh != output_data.source_mesh) {
+    BKE_mesh_free(output_data.source_mesh);
+  }
 
   printf("==/ mfx_Modifier_do\n");
-  return result;
+  return output_data.blender_mesh;
 }

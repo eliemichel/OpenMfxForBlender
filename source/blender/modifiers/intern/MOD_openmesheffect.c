@@ -133,7 +133,8 @@ ModifierTypeInfo modifierType_OpenMeshEffect = {
     /* structName */ "OpenMeshEffectModifierData",
     /* structSize */ sizeof(OpenMeshEffectModifierData),
     /* type */ eModifierTypeType_Constructive,
-    /* flags */ eModifierTypeFlag_AcceptsMesh,
+    /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
+        eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
 
     /* copyData */ copyData,
 

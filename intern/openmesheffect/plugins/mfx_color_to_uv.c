@@ -117,6 +117,10 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
       propertySuite->propGetPointer(vcolor_attrib, kOfxMeshAttribPropData, 0, (void**)&vcolor_data);
       meshEffectSuite->attributeDefine(output_mesh, kOfxMeshAttribVertex, "uv0", 2, kOfxMeshAttribTypeFloat, &uv_attrib);
     }
+    else {
+      // DEBUG
+      meshEffectSuite->attributeDefine(output_mesh, kOfxMeshAttribVertex, "uv0", 2, kOfxMeshAttribTypeFloat, &uv_attrib);
+    }
 
     // Allocate output mesh
     int output_point_count = input_point_count;
@@ -153,6 +157,17 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
       for (int i = 0; i < input_vertex_count; ++i) {
         uv_data[i * uv_stride + 0] = vcolor_data[i * vcolor_stride + 0];
         uv_data[i * uv_stride + 1] = vcolor_data[i * vcolor_stride + 1];
+      }
+    }
+    else {
+      // DEBUG
+      float *uv_data;
+      int uv_stride, vcolor_stride;
+      propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropComponentCount, 0, &uv_stride);
+      propertySuite->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&uv_data);
+      for (int i = 0; i < input_vertex_count; ++i) {
+        uv_data[i * uv_stride + 0] = input_points[input_vertices[i] * 3 + 0];
+        uv_data[i * uv_stride + 1] = input_points[input_vertices[i] * 3 + 1];
       }
     }
 

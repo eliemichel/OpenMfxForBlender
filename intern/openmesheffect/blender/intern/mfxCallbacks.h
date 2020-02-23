@@ -25,6 +25,21 @@
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
 
+#include "DNA_mesh_types.h"
+
+/**
+ * Data shared as a blind handle from Blender GPL code to host code
+ */
+typedef struct MeshInternalData {
+  // Data is used either for an input or for an output
+  bool is_input;
+  // For an input mesh, only blender_mesh is used
+  // For an output mesh, blender_mesh is set to NULL and source_mesh is set to the source mesh
+  // from which copying some flags and stuff.
+  Mesh *blender_mesh;
+  Mesh *source_mesh;
+} MeshInternalData;
+
 /**
  * Convert blender mesh from internal pointer into ofx mesh.
  * /pre no ofx mesh has been allocated or internal pointer is null

@@ -56,21 +56,30 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   int point_count, vertex_count, face_count;
   float *point_data;
   int *vertex_data, *face_data;
+  MeshInternalData *internal_data;
 
   ps = (OfxPropertySuiteV1*)host->fetchSuite(host->host, kOfxPropertySuite, 1);
   mes = (OfxMeshEffectSuiteV1*)host->fetchSuite(host->host, kOfxMeshEffectSuite, 1);
 
-  ps->propGetPointer(&ofx_mesh->properties, kOfxMeshPropInternalData, 0, (void**)&blender_mesh);
+  ps->propGetPointer(&ofx_mesh->properties, kOfxMeshPropInternalData, 0, (void**)&internal_data);
+
+  if (NULL == internal_data) {
+    printf("No internal data found\n");
+    return kOfxStatErrBadHandle;
+  }
+  blender_mesh = internal_data->blender_mesh;
+
+  if (false == internal_data->is_input) {
+    printf("Output: NOT converting blender mesh\n");
+    return kOfxStatOK;
+  }
 
   if (NULL == blender_mesh) {
-    printf("NOT converting blender mesh into ofx mesh (no blender mesh)...\n");
+    printf("NOT converting blender mesh into ofx mesh (no blender mesh, already converted)...\n");
     return kOfxStatOK;
   }
 
   printf("Converting blender mesh into ofx mesh...\n");
-
-  // Set original mesh to null to prevent multiple conversions
-  ps->propSetPointer(&ofx_mesh->properties, kOfxMeshPropInternalData, 0, NULL);
 
   point_count = blender_mesh->totvert;
   vertex_count = 0;
@@ -132,23 +141,35 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   }
   MEM_freeN(vcolor_attrib);
 
-  // Free mesh on Blender side
-  BKE_mesh_free(blender_mesh);
-
   return kOfxStatOK;
 }
 
 OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
   OfxPropertySuiteV1 *ps;
   OfxMeshEffectSuiteV1 *mes;
+  Mesh *source_mesh;
   Mesh *blender_mesh;
   int point_count, vertex_count, face_count;
   float *point_data;
   int *vertex_data, *face_data;
   OfxStatus status;
+  MeshInternalData *internal_data;
 
   ps = (OfxPropertySuiteV1*)host->fetchSuite(host->host, kOfxPropertySuite, 1);
   mes = (OfxMeshEffectSuiteV1*)host->fetchSuite(host->host, kOfxMeshEffectSuite, 1);
+
+  ps->propGetPointer(&ofx_mesh->properties, kOfxMeshPropInternalData, 0, (void**)&internal_data);
+
+  if (NULL == internal_data) {
+    printf("No internal data found\n");
+    return kOfxStatErrBadHandle;
+  }
+  source_mesh = internal_data->source_mesh;
+
+  if (true == internal_data->is_input) {
+    printf("Input: NOT converting ofx mesh\n");
+    return kOfxStatOK;
+  }
 
   ps->propGetInt(&ofx_mesh->properties, kOfxMeshPropPointCount, 0, &point_count);
   ps->propGetInt(&ofx_mesh->properties, kOfxMeshPropVertexCount, 0, &vertex_count);
@@ -169,7 +190,12 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
     return kOfxStatErrBadHandle;
   }
 
-  blender_mesh = BKE_mesh_new_nomain(point_count, 0, 0, vertex_count, face_count);
+  if (source_mesh) {
+    blender_mesh = BKE_mesh_new_nomain_from_template(source_mesh, point_count, 0, 0, vertex_count, face_count);
+  } else {
+    printf("Warning: No source mesh\n");
+    blender_mesh = BKE_mesh_new_nomain(point_count, 0, 0, vertex_count, face_count);
+  }
   if (NULL == blender_mesh) {
     printf("WARNING: Could not allocate Blender Mesh data\n");
     return kOfxStatErrMemory;
@@ -197,25 +223,6 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
   }
 
   // Get vertex UVs if UVs are present in the mesh
-  /*
-  int uv_layers = CustomData_number_of_layers(&blender_mesh->ldata, CD_MLOOPUV);
-  const char name[32];
-  float *ofx_uv_data;
-  for (int k = 0; k < uv_layers; ++k) {
-    OfxPropertySetHandle uv_attrib;
-    sprintf(name, "uv%d", k);
-    status = mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribVertex, name, &uv_attrib);
-    if (kOfxStatOK == status) {
-      ps->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&ofx_uv_data);
-      MLoopUV *uv_data = (MLoopUV*)CustomData_get(&blender_mesh->ldata, k, CD_MLOOPCOL);
-      for (int i = 0; i < vertex_count; ++i) {
-        uv_data[i].uv[0] = ofx_uv_data[2 * i + 0];
-        uv_data[i].uv[1] = ofx_uv_data[2 * i + 1];
-      }
-    }
-  }
-  */
-
   int uv_layers = 4;
   char name[32];
   float *ofx_uv_data;
@@ -227,18 +234,26 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
     if (kOfxStatOK == status) {
       printf("Found!\n");
       ps->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&ofx_uv_data);
-      MLoopUV *uv_data = (MLoopUV*)CustomData_add_layer_named(&blender_mesh->ldata, CD_MLOOPUV, CD_CALLOC, NULL, vertex_count, name);
+
+      // Get UV data pointer in mesh.
+      // elie: The next line does not work idk why, hence the next three lines.
+      //MLoopUV *uv_data = (MLoopUV*)CustomData_add_layer_named(&blender_mesh->ldata, CD_MLOOPUV, CD_CALLOC, NULL, vertex_count, name);
+      char uvname[MAX_CUSTOMDATA_LAYER_NAME];
+      CustomData_validate_layer_name(&blender_mesh->ldata, CD_MLOOPUV, name, uvname);
+      MLoopUV *uv_data = CustomData_duplicate_referenced_layer_named(&blender_mesh->ldata, CD_MLOOPUV, uvname, vertex_count);
+
       for (int i = 0; i < vertex_count; ++i) {
-        uv_data[i].flag = MLOOPUV_VERTSEL;
         uv_data[i].uv[0] = ofx_uv_data[2 * i + 0];
         uv_data[i].uv[1] = ofx_uv_data[2 * i + 1];
       }
+      blender_mesh->runtime.cd_dirty_loop |= CD_MASK_MLOOPUV;
+      blender_mesh->runtime.cd_dirty_poly |= CD_MASK_MTFACE;
     }
   }
 
   BKE_mesh_calc_edges(blender_mesh, true, false);
 
-  ps->propSetPointer(&ofx_mesh->properties, kOfxMeshPropInternalData, 0, (void*)blender_mesh);
+  internal_data->blender_mesh = blender_mesh;
 
   return kOfxStatOK;
 }
