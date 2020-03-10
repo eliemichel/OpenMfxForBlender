@@ -17,8 +17,8 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "ofxMeshEffect.h" // for kOfxMeshEffectPropContext
-#include "ofxExtras.h" // for kOfxHostPropBeforeMeshReleaseCb
+#include "ofxMeshEffect.h"  // for kOfxMeshEffectPropContext
+#include "ofxExtras.h"      // for kOfxHostPropBeforeMeshReleaseCb
 
 #include "util/memory_util.h"
 
@@ -28,16 +28,18 @@
 
 // // OfxPropertySetStruct
 
-void deep_copy_property(OfxPropertyStruct *destination, const OfxPropertyStruct *source) {
-  destination->name = source->name; // weak pointer?
+void deep_copy_property(OfxPropertyStruct *destination, const OfxPropertyStruct *source)
+{
+  destination->name = source->name;  // weak pointer?
   destination->value[0] = source->value[0];
   destination->value[1] = source->value[1];
   destination->value[2] = source->value[2];
   destination->value[3] = source->value[3];
 }
 
-int find_property(OfxPropertySetStruct *properties, const char *property) {
-  for (int i = 0 ; i < properties->num_properties ; ++i) {
+int find_property(OfxPropertySetStruct *properties, const char *property)
+{
+  for (int i = 0; i < properties->num_properties; ++i) {
     if (0 == strcmp(properties->properties[i]->name, property)) {
       return i;
     }
@@ -45,20 +47,25 @@ int find_property(OfxPropertySetStruct *properties, const char *property) {
   return -1;
 }
 
-void append_properties(OfxPropertySetStruct *properties, int count) {
+void append_properties(OfxPropertySetStruct *properties, int count)
+{
   int old_num_properties = properties->num_properties;
   OfxPropertyStruct **old_properties = properties->properties;
   properties->num_properties += count;
-  properties->properties = malloc_array(sizeof(OfxPropertyStruct*), properties->num_properties, "properties");
-  for (int i = 0 ; i < properties->num_properties ; ++i){
-    properties->properties[i] = i < old_num_properties ? old_properties[i] : malloc_array(sizeof(OfxPropertyStruct), 1, "property");
+  properties->properties = malloc_array(
+      sizeof(OfxPropertyStruct *), properties->num_properties, "properties");
+  for (int i = 0; i < properties->num_properties; ++i) {
+    properties->properties[i] = i < old_num_properties ?
+                                    old_properties[i] :
+                                    malloc_array(sizeof(OfxPropertyStruct), 1, "property");
   }
   if (NULL != old_properties) {
     free_array(old_properties);
   }
 }
 
-int ensure_property(OfxPropertySetStruct *properties, const char *property) {
+int ensure_property(OfxPropertySetStruct *properties, const char *property)
+{
   int i = find_property(properties, property);
   if (i == -1) {
     append_properties(properties, 1);
@@ -68,14 +75,16 @@ int ensure_property(OfxPropertySetStruct *properties, const char *property) {
   return i;
 }
 
-void init_properties(OfxPropertySetStruct *properties) {
+void init_properties(OfxPropertySetStruct *properties)
+{
   properties->num_properties = 0;
   properties->properties = NULL;
   properties->context = PROP_CTX_OTHER;
 }
 
-void free_properties(OfxPropertySetStruct *properties) {
-  for (int i = 0 ; i < properties->num_properties ; ++i){
+void free_properties(OfxPropertySetStruct *properties)
+{
+  for (int i = 0; i < properties->num_properties; ++i) {
     free_array(properties->properties[i]);
   }
   properties->num_properties = 0;
@@ -85,86 +94,79 @@ void free_properties(OfxPropertySetStruct *properties) {
   }
 }
 
-void deep_copy_property_set(OfxPropertySetStruct *destination, const OfxPropertySetStruct *source) {
+void deep_copy_property_set(OfxPropertySetStruct *destination, const OfxPropertySetStruct *source)
+{
   init_properties(destination);
   append_properties(destination, source->num_properties);
-  for (int i = 0 ; i < destination->num_properties ; ++i) {
+  for (int i = 0; i < destination->num_properties; ++i) {
     deep_copy_property(destination->properties[i], source->properties[i]);
   }
   destination->context = source->context;
 }
 
-bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type, const char *property) {
+bool check_property_context(OfxPropertySetStruct *propertySet,
+                            PropertyType type,
+                            const char *property)
+{
   switch (propertySet->context) {
-  case PROP_CTX_MESH_EFFECT:
-    return (
-      (0 == strcmp(property, kOfxMeshEffectPropContext) && type == PROP_TYPE_STRING) ||
-      false
-    );
-  case PROP_CTX_INPUT:
-    return (
-      (0 == strcmp(property, kOfxPropLabel) && type == PROP_TYPE_STRING) ||
-      false
-    );
-  case PROP_CTX_HOST:
-    return (
-      (0 == strcmp(property, kOfxHostPropBeforeMeshReleaseCb) && type == PROP_TYPE_POINTER) ||
-      (0 == strcmp(property, kOfxHostPropBeforeMeshGetCb) && type == PROP_TYPE_POINTER) ||
-      false
-    );
-  case PROP_CTX_MESH:
-    return (
-      (0 == strcmp(property, kOfxMeshPropInternalData) && type == PROP_TYPE_POINTER) ||
-      (0 == strcmp(property, kOfxMeshPropHostHandle)   && type == PROP_TYPE_POINTER) ||
-      (0 == strcmp(property, kOfxMeshPropPointCount)   && type == PROP_TYPE_INT)     ||
-      (0 == strcmp(property, kOfxMeshPropVertexCount)  && type == PROP_TYPE_INT)     ||
-      (0 == strcmp(property, kOfxMeshPropFaceCount)    && type == PROP_TYPE_INT)     ||
-      false
-    );
-  case PROP_CTX_PARAM:
-    return (
-      (0 == strcmp(property, kOfxParamPropType) && type == PROP_TYPE_STRING) ||
-      (0 == strcmp(property, kOfxParamPropScriptName) && type == PROP_TYPE_STRING) ||
-      false
-      );
-  case PROP_CTX_ATTRIB:
-    return (
-      (0 == strcmp(property, kOfxMeshAttribPropData) && type == PROP_TYPE_POINTER) ||
-      (0 == strcmp(property, kOfxMeshAttribPropComponentCount) && type == PROP_TYPE_INT) ||
-      (0 == strcmp(property, kOfxMeshAttribPropType) && type == PROP_TYPE_STRING) ||
-      false
-      );
-  case PROP_CTX_OTHER:
-  default:
-    printf("Warning: PROP_CTX_OTHER is depreciated.\n");
-    return true;
+    case PROP_CTX_MESH_EFFECT:
+      return ((0 == strcmp(property, kOfxMeshEffectPropContext) && type == PROP_TYPE_STRING) ||
+              false);
+    case PROP_CTX_INPUT:
+      return ((0 == strcmp(property, kOfxPropLabel) && type == PROP_TYPE_STRING) || false);
+    case PROP_CTX_HOST:
+      return (
+          (0 == strcmp(property, kOfxHostPropBeforeMeshReleaseCb) && type == PROP_TYPE_POINTER) ||
+          (0 == strcmp(property, kOfxHostPropBeforeMeshGetCb) && type == PROP_TYPE_POINTER) ||
+          false);
+    case PROP_CTX_MESH:
+      return ((0 == strcmp(property, kOfxMeshPropInternalData) && type == PROP_TYPE_POINTER) ||
+              (0 == strcmp(property, kOfxMeshPropHostHandle) && type == PROP_TYPE_POINTER) ||
+              (0 == strcmp(property, kOfxMeshPropPointCount) && type == PROP_TYPE_INT) ||
+              (0 == strcmp(property, kOfxMeshPropVertexCount) && type == PROP_TYPE_INT) ||
+              (0 == strcmp(property, kOfxMeshPropFaceCount) && type == PROP_TYPE_INT) || false);
+    case PROP_CTX_PARAM:
+      return ((0 == strcmp(property, kOfxParamPropType) && type == PROP_TYPE_STRING) ||
+              (0 == strcmp(property, kOfxParamPropScriptName) && type == PROP_TYPE_STRING) ||
+              false);
+    case PROP_CTX_ATTRIB:
+      return ((0 == strcmp(property, kOfxMeshAttribPropData) && type == PROP_TYPE_POINTER) ||
+              (0 == strcmp(property, kOfxMeshAttribPropComponentCount) && type == PROP_TYPE_INT) ||
+              (0 == strcmp(property, kOfxMeshAttribPropType) && type == PROP_TYPE_STRING) ||
+              false);
+    case PROP_CTX_OTHER:
+    default:
+      return true;
   }
 }
 
 // // Property Suite Entry Points
 
 const OfxPropertySuiteV1 gPropertySuiteV1 = {
-    /* propSetPointer */   propSetPointer,
-    /* propSetString */    propSetString,
-    /* propSetDouble */    propSetDouble,
-    /* propSetInt */       propSetInt,
-    /* propSetPointerN */  propSetPointerN,
-    /* propSetStringN */   propSetStringN,
-    /* propSetDoubleN */   propSetDoubleN,
-    /* propSetIntN */      propSetIntN,
-    /* propGetPointer */   propGetPointer,
-    /* propGetString */    propGetString,
-    /* propGetDouble */    propGetDouble,
-    /* propGetInt */       propGetInt,
-    /* propGetPointerN */  propGetPointerN,
-    /* propGetStringN */   propGetStringN,
-    /* propGetDoubleN */   propGetDoubleN,
-    /* propGetIntN */      propGetIntN,
-    /* propReset */        propReset,
-    /* propGetDimension */ propGetDimension
-};
+    /* propSetPointer */ propSetPointer,
+    /* propSetString */ propSetString,
+    /* propSetDouble */ propSetDouble,
+    /* propSetInt */ propSetInt,
+    /* propSetPointerN */ propSetPointerN,
+    /* propSetStringN */ propSetStringN,
+    /* propSetDoubleN */ propSetDoubleN,
+    /* propSetIntN */ propSetIntN,
+    /* propGetPointer */ propGetPointer,
+    /* propGetString */ propGetString,
+    /* propGetDouble */ propGetDouble,
+    /* propGetInt */ propGetInt,
+    /* propGetPointerN */ propGetPointerN,
+    /* propGetStringN */ propGetStringN,
+    /* propGetDoubleN */ propGetDoubleN,
+    /* propGetIntN */ propGetIntN,
+    /* propReset */ propReset,
+    /* propGetDimension */ propGetDimension};
 
-OfxStatus propSetPointer(OfxPropertySetHandle properties, const char *property, int index, void *value) {
+OfxStatus propSetPointer(OfxPropertySetHandle properties,
+                         const char *property,
+                         int index,
+                         void *value)
+{
   if (false == check_property_context(properties, PROP_TYPE_POINTER, property)) {
     return kOfxStatErrBadHandle;
   }
@@ -176,7 +178,11 @@ OfxStatus propSetPointer(OfxPropertySetHandle properties, const char *property, 
   return kOfxStatOK;
 }
 
-OfxStatus propSetString(OfxPropertySetHandle properties, const char *property, int index, const char *value) {
+OfxStatus propSetString(OfxPropertySetHandle properties,
+                        const char *property,
+                        int index,
+                        const char *value)
+{
   if (false == check_property_context(properties, PROP_TYPE_STRING, property)) {
     return kOfxStatErrBadHandle;
   }
@@ -188,7 +194,11 @@ OfxStatus propSetString(OfxPropertySetHandle properties, const char *property, i
   return kOfxStatOK;
 }
 
-OfxStatus propSetDouble(OfxPropertySetHandle properties, const char *property, int index, double value) {
+OfxStatus propSetDouble(OfxPropertySetHandle properties,
+                        const char *property,
+                        int index,
+                        double value)
+{
   if (false == check_property_context(properties, PROP_TYPE_DOUBLE, property)) {
     return kOfxStatErrBadHandle;
   }
@@ -200,7 +210,8 @@ OfxStatus propSetDouble(OfxPropertySetHandle properties, const char *property, i
   return kOfxStatOK;
 }
 
-OfxStatus propSetInt(OfxPropertySetHandle properties, const char *property, int index, int value) {
+OfxStatus propSetInt(OfxPropertySetHandle properties, const char *property, int index, int value)
+{
   if (false == check_property_context(properties, PROP_TYPE_INT, property)) {
     return kOfxStatErrBadHandle;
   }
@@ -212,8 +223,12 @@ OfxStatus propSetInt(OfxPropertySetHandle properties, const char *property, int 
   return kOfxStatOK;
 }
 
-OfxStatus propSetPointerN(OfxPropertySetHandle properties, const char *property, int count, void *const*value) {
-  for (int i = 0 ; i < count ; ++i) {
+OfxStatus propSetPointerN(OfxPropertySetHandle properties,
+                          const char *property,
+                          int count,
+                          void *const *value)
+{
+  for (int i = 0; i < count; ++i) {
     OfxStatus status = propSetPointer(properties, property, i, value[i]);
     if (kOfxStatOK != status) {
       return status;
@@ -222,8 +237,12 @@ OfxStatus propSetPointerN(OfxPropertySetHandle properties, const char *property,
   return kOfxStatOK;
 }
 
-OfxStatus propSetStringN(OfxPropertySetHandle properties, const char *property, int count, const char *const*value) {
-  for (int i = 0 ; i < count ; ++i) {
+OfxStatus propSetStringN(OfxPropertySetHandle properties,
+                         const char *property,
+                         int count,
+                         const char *const *value)
+{
+  for (int i = 0; i < count; ++i) {
     OfxStatus status = propSetString(properties, property, i, value[i]);
     if (kOfxStatOK != status) {
       return status;
@@ -232,8 +251,12 @@ OfxStatus propSetStringN(OfxPropertySetHandle properties, const char *property, 
   return kOfxStatOK;
 }
 
-OfxStatus propSetDoubleN(OfxPropertySetHandle properties, const char *property, int count, const double *value) {
-  for (int i = 0 ; i < count ; ++i) {
+OfxStatus propSetDoubleN(OfxPropertySetHandle properties,
+                         const char *property,
+                         int count,
+                         const double *value)
+{
+  for (int i = 0; i < count; ++i) {
     OfxStatus status = propSetDouble(properties, property, i, value[i]);
     if (kOfxStatOK != status) {
       return status;
@@ -242,8 +265,12 @@ OfxStatus propSetDoubleN(OfxPropertySetHandle properties, const char *property, 
   return kOfxStatOK;
 }
 
-OfxStatus propSetIntN(OfxPropertySetHandle properties, const char *property, int count, const int *value) {
-  for (int i = 0 ; i < count ; ++i) {
+OfxStatus propSetIntN(OfxPropertySetHandle properties,
+                      const char *property,
+                      int count,
+                      const int *value)
+{
+  for (int i = 0; i < count; ++i) {
     OfxStatus status = propSetInt(properties, property, i, value[i]);
     if (kOfxStatOK != status) {
       return status;
@@ -252,7 +279,11 @@ OfxStatus propSetIntN(OfxPropertySetHandle properties, const char *property, int
   return kOfxStatOK;
 }
 
-OfxStatus propGetPointer(OfxPropertySetHandle properties, const char *property, int index, void **value) {
+OfxStatus propGetPointer(OfxPropertySetHandle properties,
+                         const char *property,
+                         int index,
+                         void **value)
+{
   if (false == check_property_context(properties, PROP_TYPE_POINTER, property)) {
     return kOfxStatErrBadHandle;
   }
@@ -264,7 +295,11 @@ OfxStatus propGetPointer(OfxPropertySetHandle properties, const char *property, 
   return kOfxStatOK;
 }
 
-OfxStatus propGetString(OfxPropertySetHandle properties, const char *property, int index, char **value) {
+OfxStatus propGetString(OfxPropertySetHandle properties,
+                        const char *property,
+                        int index,
+                        char **value)
+{
   if (false == check_property_context(properties, PROP_TYPE_STRING, property)) {
     return kOfxStatErrBadHandle;
   }
@@ -276,7 +311,11 @@ OfxStatus propGetString(OfxPropertySetHandle properties, const char *property, i
   return kOfxStatOK;
 }
 
-OfxStatus propGetDouble(OfxPropertySetHandle properties, const char *property, int index, double *value) {
+OfxStatus propGetDouble(OfxPropertySetHandle properties,
+                        const char *property,
+                        int index,
+                        double *value)
+{
   if (false == check_property_context(properties, PROP_TYPE_DOUBLE, property)) {
     return kOfxStatErrBadHandle;
   }
@@ -288,7 +327,8 @@ OfxStatus propGetDouble(OfxPropertySetHandle properties, const char *property, i
   return kOfxStatOK;
 }
 
-OfxStatus propGetInt(OfxPropertySetHandle properties, const char *property, int index, int *value) {
+OfxStatus propGetInt(OfxPropertySetHandle properties, const char *property, int index, int *value)
+{
   if (false == check_property_context(properties, PROP_TYPE_INT, property)) {
     return kOfxStatErrBadHandle;
   }
@@ -300,8 +340,12 @@ OfxStatus propGetInt(OfxPropertySetHandle properties, const char *property, int 
   return kOfxStatOK;
 }
 
-OfxStatus propGetPointerN(OfxPropertySetHandle properties, const char *property, int count, void **value) {
-  for (int i = 0 ; i < count ; ++i) {
+OfxStatus propGetPointerN(OfxPropertySetHandle properties,
+                          const char *property,
+                          int count,
+                          void **value)
+{
+  for (int i = 0; i < count; ++i) {
     OfxStatus status = propGetPointer(properties, property, i, value + i);
     if (kOfxStatOK != status) {
       return status;
@@ -310,8 +354,12 @@ OfxStatus propGetPointerN(OfxPropertySetHandle properties, const char *property,
   return kOfxStatOK;
 }
 
-OfxStatus propGetStringN(OfxPropertySetHandle properties, const char *property, int count, char **value) {
-  for (int i = 0 ; i < count ; ++i) {
+OfxStatus propGetStringN(OfxPropertySetHandle properties,
+                         const char *property,
+                         int count,
+                         char **value)
+{
+  for (int i = 0; i < count; ++i) {
     OfxStatus status = propGetString(properties, property, i, value + i);
     if (kOfxStatOK != status) {
       return status;
@@ -320,8 +368,12 @@ OfxStatus propGetStringN(OfxPropertySetHandle properties, const char *property, 
   return kOfxStatOK;
 }
 
-OfxStatus propGetDoubleN(OfxPropertySetHandle properties, const char *property, int count, double *value) {
-  for (int i = 0 ; i < count ; ++i) {
+OfxStatus propGetDoubleN(OfxPropertySetHandle properties,
+                         const char *property,
+                         int count,
+                         double *value)
+{
+  for (int i = 0; i < count; ++i) {
     OfxStatus status = propGetDouble(properties, property, i, value + i);
     if (kOfxStatOK != status) {
       return status;
@@ -330,8 +382,9 @@ OfxStatus propGetDoubleN(OfxPropertySetHandle properties, const char *property, 
   return kOfxStatOK;
 }
 
-OfxStatus propGetIntN(OfxPropertySetHandle properties, const char *property, int count, int *value) {
-  for (int i = 0 ; i < count ; ++i) {
+OfxStatus propGetIntN(OfxPropertySetHandle properties, const char *property, int count, int *value)
+{
+  for (int i = 0; i < count; ++i) {
     OfxStatus status = propGetInt(properties, property, i, value + i);
     if (kOfxStatOK != status) {
       return status;
@@ -340,16 +393,17 @@ OfxStatus propGetIntN(OfxPropertySetHandle properties, const char *property, int
   return kOfxStatOK;
 }
 
-OfxStatus propReset(OfxPropertySetHandle properties, const char *property) {
+OfxStatus propReset(OfxPropertySetHandle properties, const char *property)
+{
   (void)properties;
   (void)property;
   return kOfxStatReplyDefault;
 }
 
-OfxStatus propGetDimension(OfxPropertySetHandle properties, const char *property, int *count) {
+OfxStatus propGetDimension(OfxPropertySetHandle properties, const char *property, int *count)
+{
   (void)properties;
   (void)property;
   *count = 4;
   return kOfxStatOK;
 }
-
