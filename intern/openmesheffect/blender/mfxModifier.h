@@ -40,8 +40,8 @@ extern "C" {
 #  include "MOD_modifiertypes.h"
 #endif
 
-typedef Mesh* (*MeshNewFunc)(int, int, int, int, int); // BKE_mesh_new_nomain
-typedef void (*MeshPostFunc)(Mesh*); // post processing applied to new mesh
+typedef Mesh *(*MeshNewFunc)(int, int, int, int, int);  // BKE_mesh_new_nomain
+typedef void (*MeshPostFunc)(Mesh *);                   // post processing applied to new mesh
 
 void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd);
 /**
@@ -57,4 +57,4 @@ Mesh *mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh);
 }
 #endif
 
-#endif // __MFX_MODIFIER_H__
+#endif  // __MFX_MODIFIER_H__
