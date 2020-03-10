@@ -24,6 +24,10 @@
 #include "BLI_compiler_attrs.h"
 #include "BKE_customdata.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct BMEditMesh;
 struct CustomData_MeshMasks;
 struct DepsNodeHandle;
@@ -157,7 +161,7 @@ typedef struct ModifierTypeInfo {
   /* Copy instance data for this modifier type. Should copy all user
    * level settings to the target modifier.
    *
-   * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+   * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
    */
   void (*copyData)(const struct ModifierData *md, struct ModifierData *target, const int flag);
 
@@ -417,7 +421,7 @@ typedef struct VirtualModifierData {
   ShapeKeyModifierData smd;
 } VirtualModifierData;
 
-struct ModifierData *modifiers_getVirtualModifierList(struct Object *ob,
+struct ModifierData *modifiers_getVirtualModifierList(const struct Object *ob,
                                                       struct VirtualModifierData *data);
 
 /* ensure modifier correctness when changing ob->data */
@@ -460,5 +464,9 @@ void modwrap_deformVertsEM(ModifierData *md,
 
 struct Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(struct Object *ob_eval,
                                                                    const bool get_cage_mesh);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

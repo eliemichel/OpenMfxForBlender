@@ -186,7 +186,7 @@ void EEVEE_lightprobes_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 #elif defined(IRRADIANCE_HL2)
     int grid_res = 4;
 #endif
-    int cube_res = OCTAHEDRAL_SIZE_FROM_CUBESIZE(scene_eval->eevee.gi_cubemap_resolution);
+    int cube_res = octahedral_size_from_cubesize(scene_eval->eevee.gi_cubemap_resolution);
     int vis_res = scene_eval->eevee.gi_visibility_resolution;
     sldata->fallback_lightcache = EEVEE_lightcache_create(
         1, 1, cube_res, vis_res, (int[3]){grid_res, grid_res, 1});
@@ -251,6 +251,8 @@ void EEVEE_lightbake_cache_init(EEVEE_ViewLayerData *sldata,
     // DRW_shgroup_uniform_texture(grp, "texJitter", e_data.jitter);
     DRW_shgroup_uniform_texture(grp, "probeHdr", rt_color);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(
+        grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
 
     struct GPUBatch *geom = DRW_cache_fullscreen_quad_get();
     DRW_shgroup_call(grp, geom, NULL);
@@ -272,6 +274,8 @@ void EEVEE_lightbake_cache_init(EEVEE_ViewLayerData *sldata,
     DRW_shgroup_uniform_float(grp, "intensityFac", &pinfo->intensity_fac, 1);
     DRW_shgroup_uniform_texture(grp, "probeHdr", rt_color);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(
+        grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
 
     struct GPUBatch *geom = DRW_cache_fullscreen_quad_get();
     DRW_shgroup_call(grp, geom, NULL);
@@ -292,6 +296,8 @@ void EEVEE_lightbake_cache_init(EEVEE_ViewLayerData *sldata,
     DRW_shgroup_uniform_texture(grp, "texHammersley", e_data.hammersley);
     DRW_shgroup_uniform_texture(grp, "probeDepth", rt_depth);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(
+        grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
 
     struct GPUBatch *geom = DRW_cache_fullscreen_quad_get();
     DRW_shgroup_call(grp, geom, NULL);
@@ -337,7 +343,7 @@ void EEVEE_lightprobes_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedat
     const float *col = G_draw.block.colorBackground;
 
     /* LookDev */
-    EEVEE_lookdev_cache_init(vedata, &grp, psl->probe_background, 1.0f, wo, pinfo);
+    EEVEE_lookdev_cache_init(vedata, sldata, &grp, psl->probe_background, wo, pinfo);
     /* END */
     if (!grp && wo) {
       col = &wo->horr;
@@ -360,6 +366,8 @@ void EEVEE_lightprobes_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedat
             DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
             DRW_shgroup_uniform_block(grp, "light_block", sldata->light_ubo);
             DRW_shgroup_uniform_block(grp, "shadow_block", sldata->shadow_ubo);
+            DRW_shgroup_uniform_block(
+                grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
             DRW_shgroup_call(grp, geom, NULL);
             break;
           case GPU_MAT_QUEUED:
@@ -382,70 +390,80 @@ void EEVEE_lightprobes_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedat
     }
   }
 
-  if (DRW_state_draw_support() && !LOOK_DEV_STUDIO_LIGHT_ENABLED(draw_ctx->v3d)) {
+  if (DRW_state_draw_support()) {
     DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL |
                      DRW_STATE_CULL_BACK;
     DRW_PASS_CREATE(psl->probe_display, state);
 
-    /* Cube Display */
-    if (scene_eval->eevee.flag & SCE_EEVEE_SHOW_CUBEMAPS && lcache->cube_len > 1) {
-      int cube_len = lcache->cube_len - 1; /* don't count the world. */
-      DRWShadingGroup *grp = DRW_shgroup_create(EEVEE_shaders_probe_cube_display_sh_get(),
-                                                psl->probe_display);
+    if (!LOOK_DEV_STUDIO_LIGHT_ENABLED(draw_ctx->v3d)) {
+      /* Cube Display */
+      if (scene_eval->eevee.flag & SCE_EEVEE_SHOW_CUBEMAPS && lcache->cube_len > 1) {
+        int cube_len = lcache->cube_len - 1; /* don't count the world. */
+        DRWShadingGroup *grp = DRW_shgroup_create(EEVEE_shaders_probe_cube_display_sh_get(),
+                                                  psl->probe_display);
 
-      DRW_shgroup_uniform_texture_ref(grp, "probeCubes", &lcache->cube_tx.tex);
-      DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
-      DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
-      DRW_shgroup_uniform_vec3(grp, "screen_vecs[0]", DRW_viewport_screenvecs_get(), 2);
-      DRW_shgroup_uniform_float_copy(
-          grp, "sphere_size", scene_eval->eevee.gi_cubemap_draw_size * 0.5f);
-      /* TODO (fclem) get rid of those UBO. */
-      DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
-      DRW_shgroup_uniform_block(grp, "grid_block", sldata->grid_ubo);
-
-      DRW_shgroup_call_procedural_triangles(grp, NULL, cube_len * 2);
-    }
-
-    /* Grid Display */
-    if (scene_eval->eevee.flag & SCE_EEVEE_SHOW_IRRADIANCE) {
-      EEVEE_LightGrid *egrid = lcache->grid_data + 1;
-      for (int p = 1; p < lcache->grid_len; p++, egrid++) {
-        DRWShadingGroup *shgrp = DRW_shgroup_create(EEVEE_shaders_probe_grid_display_sh_get(),
-                                                    psl->probe_display);
-
-        DRW_shgroup_uniform_int(shgrp, "offset", &egrid->offset, 1);
-        DRW_shgroup_uniform_ivec3(shgrp, "grid_resolution", egrid->resolution, 1);
-        DRW_shgroup_uniform_vec3(shgrp, "corner", egrid->corner, 1);
-        DRW_shgroup_uniform_vec3(shgrp, "increment_x", egrid->increment_x, 1);
-        DRW_shgroup_uniform_vec3(shgrp, "increment_y", egrid->increment_y, 1);
-        DRW_shgroup_uniform_vec3(shgrp, "increment_z", egrid->increment_z, 1);
-        DRW_shgroup_uniform_vec3(shgrp, "screen_vecs[0]", DRW_viewport_screenvecs_get(), 2);
-        DRW_shgroup_uniform_texture_ref(shgrp, "irradianceGrid", &lcache->grid_tx.tex);
+        DRW_shgroup_uniform_texture_ref(grp, "probeCubes", &lcache->cube_tx.tex);
+        DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
+        DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+        DRW_shgroup_uniform_vec3(grp, "screen_vecs[0]", DRW_viewport_screenvecs_get(), 2);
         DRW_shgroup_uniform_float_copy(
-            shgrp, "sphere_size", scene_eval->eevee.gi_irradiance_draw_size * 0.5f);
+            grp, "sphere_size", scene_eval->eevee.gi_cubemap_draw_size * 0.5f);
         /* TODO (fclem) get rid of those UBO. */
-        DRW_shgroup_uniform_block(shgrp, "probe_block", sldata->probe_ubo);
-        DRW_shgroup_uniform_block(shgrp, "planar_block", sldata->planar_ubo);
-        DRW_shgroup_uniform_block(shgrp, "grid_block", sldata->grid_ubo);
-        DRW_shgroup_uniform_block(shgrp, "common_block", sldata->common_ubo);
-        int tri_count = egrid->resolution[0] * egrid->resolution[1] * egrid->resolution[2] * 2;
-        DRW_shgroup_call_procedural_triangles(shgrp, NULL, tri_count);
+        DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
+        DRW_shgroup_uniform_block(grp, "grid_block", sldata->grid_ubo);
+        DRW_shgroup_uniform_block(
+            grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
+
+        DRW_shgroup_call_procedural_triangles(grp, NULL, cube_len * 2);
+      }
+
+      /* Grid Display */
+      if (scene_eval->eevee.flag & SCE_EEVEE_SHOW_IRRADIANCE) {
+        EEVEE_LightGrid *egrid = lcache->grid_data + 1;
+        for (int p = 1; p < lcache->grid_len; p++, egrid++) {
+          DRWShadingGroup *shgrp = DRW_shgroup_create(EEVEE_shaders_probe_grid_display_sh_get(),
+                                                      psl->probe_display);
+
+          DRW_shgroup_uniform_int(shgrp, "offset", &egrid->offset, 1);
+          DRW_shgroup_uniform_ivec3(shgrp, "grid_resolution", egrid->resolution, 1);
+          DRW_shgroup_uniform_vec3(shgrp, "corner", egrid->corner, 1);
+          DRW_shgroup_uniform_vec3(shgrp, "increment_x", egrid->increment_x, 1);
+          DRW_shgroup_uniform_vec3(shgrp, "increment_y", egrid->increment_y, 1);
+          DRW_shgroup_uniform_vec3(shgrp, "increment_z", egrid->increment_z, 1);
+          DRW_shgroup_uniform_vec3(shgrp, "screen_vecs[0]", DRW_viewport_screenvecs_get(), 2);
+          DRW_shgroup_uniform_texture_ref(shgrp, "irradianceGrid", &lcache->grid_tx.tex);
+          DRW_shgroup_uniform_float_copy(
+              shgrp, "sphere_size", scene_eval->eevee.gi_irradiance_draw_size * 0.5f);
+          /* TODO (fclem) get rid of those UBO. */
+          DRW_shgroup_uniform_block(shgrp, "probe_block", sldata->probe_ubo);
+          DRW_shgroup_uniform_block(shgrp, "planar_block", sldata->planar_ubo);
+          DRW_shgroup_uniform_block(shgrp, "grid_block", sldata->grid_ubo);
+          DRW_shgroup_uniform_block(shgrp, "common_block", sldata->common_ubo);
+          DRW_shgroup_uniform_block(
+              shgrp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
+          int tri_count = egrid->resolution[0] * egrid->resolution[1] * egrid->resolution[2] * 2;
+          DRW_shgroup_call_procedural_triangles(shgrp, NULL, tri_count);
+        }
       }
     }
 
     /* Planar Display */
-    DRW_shgroup_instance_format(e_data.format_probe_display_planar,
-                                {
-                                    {"probe_id", DRW_ATTR_INT, 1},
-                                    {"probe_mat", DRW_ATTR_FLOAT, 16},
-                                });
+    {
+      DRW_shgroup_instance_format(e_data.format_probe_display_planar,
+                                  {
+                                      {"probe_id", DRW_ATTR_INT, 1},
+                                      {"probe_mat", DRW_ATTR_FLOAT, 16},
+                                  });
 
-    DRWShadingGroup *grp = DRW_shgroup_create(EEVEE_shaders_probe_planar_display_sh_get(),
-                                              psl->probe_display);
-    DRW_shgroup_uniform_texture_ref(grp, "probePlanars", &txl->planar_pool);
+      DRWShadingGroup *grp = DRW_shgroup_create(EEVEE_shaders_probe_planar_display_sh_get(),
+                                                psl->probe_display);
+      DRW_shgroup_uniform_texture_ref(grp, "probePlanars", &txl->planar_pool);
+      DRW_shgroup_uniform_block(
+          grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
 
-    stl->g_data->planar_display_shgrp = DRW_shgroup_call_buffer_instance(
-        grp, e_data.format_probe_display_planar, DRW_cache_quad_get());
+      stl->g_data->planar_display_shgrp = DRW_shgroup_call_buffer_instance(
+          grp, e_data.format_probe_display_planar, DRW_cache_quad_get());
+    }
   }
   else {
     stl->g_data->planar_display_shgrp = NULL;
@@ -747,7 +765,7 @@ void EEVEE_lightprobes_cache_finish(EEVEE_ViewLayerData *sldata, EEVEE_Data *ved
   sldata->common_data.prb_lod_cube_max = (float)light_cache->mips_len - 1.0f;
   sldata->common_data.prb_lod_planar_max = (float)MAX_PLANAR_LOD_LEVEL;
   sldata->common_data.prb_irradiance_vis_size = light_cache->vis_res;
-  sldata->common_data.prb_irradiance_smooth = SQUARE(scene_eval->eevee.gi_irradiance_smoothing);
+  sldata->common_data.prb_irradiance_smooth = square_f(scene_eval->eevee.gi_irradiance_smoothing);
   sldata->common_data.prb_num_render_cube = max_ii(1, light_cache->cube_len);
   sldata->common_data.prb_num_render_grid = max_ii(1, light_cache->grid_len);
   sldata->common_data.prb_num_planar = pinfo->num_planar;
@@ -771,10 +789,10 @@ void EEVEE_lightprobes_cache_finish(EEVEE_ViewLayerData *sldata, EEVEE_Data *ved
         if (pinfo->do_grid_update) {
           scene_orig->eevee.light_cache->flag |= LIGHTCACHE_UPDATE_GRID;
         }
-        /* If we update grid we need to update the cubemaps too.
-         * So always refresh cubemaps. */
+        /* If we update grid we need to update the cube-maps too.
+         * So always refresh cube-maps. */
         scene_orig->eevee.light_cache->flag |= LIGHTCACHE_UPDATE_CUBE;
-        /* Tag the lightcache to auto update. */
+        /* Tag the light-cache to auto update. */
         scene_orig->eevee.light_cache->flag |= LIGHTCACHE_UPDATE_AUTO;
         /* Use a notifier to trigger the operator after drawing. */
         WM_event_add_notifier(draw_ctx->evil_C, NC_LIGHTPROBE, scene_orig);
@@ -1042,7 +1060,7 @@ void EEVEE_lightbake_filter_glossy(EEVEE_ViewLayerData *sldata,
   float target_size = (float)GPU_texture_width(rt_color);
 
   /* Max lod used from the render target probe */
-  pinfo->lod_rt_max = floorf(log2f(target_size)) - 2.0f;
+  pinfo->lod_rt_max = log2_floor_u(target_size) - 2.0f;
   pinfo->intensity_fac = intensity;
 
   /* Start fresh */
@@ -1151,7 +1169,7 @@ void EEVEE_lightbake_filter_diffuse(EEVEE_ViewLayerData *sldata,
   pinfo->lodfactor = bias + 0.5f *
                                 log((float)(target_size * target_size) * pinfo->samples_len_inv) /
                                 log(2);
-  pinfo->lod_rt_max = floorf(log2f(target_size)) - 2.0f;
+  pinfo->lod_rt_max = log2_floor_u(target_size) - 2.0f;
 #else
   pinfo->shres = 32;        /* Less texture fetches & reduce branches */
   pinfo->lod_rt_max = 2.0f; /* Improve cache reuse */

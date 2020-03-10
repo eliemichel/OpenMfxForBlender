@@ -59,6 +59,11 @@ typedef int (*GHOST_EventCallbackProcPtr)(GHOST_EventHandle event, GHOST_TUserDa
 extern GHOST_SystemHandle GHOST_CreateSystem(void);
 
 /**
+ * Specifies whether debug messages are to be enabled for the specific system handle.
+ */
+extern void GHOST_SystemInitDebug(GHOST_SystemHandle systemhandle, int is_debug_enabled);
+
+/**
  * Disposes the one and only system.
  * \param systemhandle The handle to the system
  * \return An indication of success.
@@ -223,6 +228,25 @@ extern GHOST_ContextHandle GHOST_CreateOpenGLContext(GHOST_SystemHandle systemha
  */
 extern GHOST_TSuccess GHOST_DisposeOpenGLContext(GHOST_SystemHandle systemhandle,
                                                  GHOST_ContextHandle contexthandle);
+
+#ifdef WIN32
+/**
+ * Create a new offscreen context.
+ * Never explicitly delete the context, use disposeContext() instead.
+ * \param systemhandle The handle to the system
+ * \return A handle to the new context ( == NULL if creation failed).
+ */
+GHOST_ContextHandle GHOST_CreateDirectXContext(GHOST_SystemHandle systemhandle);
+
+/**
+ * Dispose of a context.
+ * \param systemhandle The handle to the system
+ * \param contexthandle Handle to the context to be disposed.
+ * \return Indication of success.
+ */
+GHOST_TSuccess GHOST_DisposeDirectXContext(GHOST_SystemHandle systemhandle,
+                                           GHOST_ContextHandle contexthandle);
+#endif
 
 /**
  * Returns the window user data.

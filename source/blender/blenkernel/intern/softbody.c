@@ -1118,7 +1118,7 @@ static int sb_detect_face_pointCached(float face_v1[3],
             /* origin to face_v2*/
             sub_v3_v3(nv1, face_v2);
             facedist = dot_v3v3(nv1, d_nvect);
-            if (ABS(facedist) < outerfacethickness) {
+            if (fabsf(facedist) < outerfacethickness) {
               if (isect_point_tri_prism_v3(nv1, face_v1, face_v2, face_v3)) {
                 float df;
                 if (facedist > 0) {
@@ -2020,7 +2020,7 @@ static int _softbody_calc_forces_slice_in_a_thread(Scene *scene,
         sub_v3_v3v3(def, bp->pos, obp->pos);
         /* rather check the AABBoxes before ever calculating the real distance */
         /* mathematically it is completely nuts, but performance is pretty much (3) times faster */
-        if ((ABS(def[0]) > compare) || (ABS(def[1]) > compare) || (ABS(def[2]) > compare)) {
+        if ((fabsf(def[0]) > compare) || (fabsf(def[1]) > compare) || (fabsf(def[2]) > compare)) {
           continue;
         }
         distance = normalize_v3(def);
@@ -2700,8 +2700,9 @@ static void mesh_to_softbody(Scene *scene, Object *ob)
   bp = sb->bpoint;
 
   defgroup_index = me->dvert ? (sb->vertgroup - 1) : -1;
-  defgroup_index_mass = me->dvert ? defgroup_name_index(ob, sb->namedVG_Mass) : -1;
-  defgroup_index_spring = me->dvert ? defgroup_name_index(ob, sb->namedVG_Spring_K) : -1;
+  defgroup_index_mass = me->dvert ? BKE_object_defgroup_name_index(ob, sb->namedVG_Mass) : -1;
+  defgroup_index_spring = me->dvert ? BKE_object_defgroup_name_index(ob, sb->namedVG_Spring_K) :
+                                      -1;
 
   for (a = 0; a < me->totvert; a++, bp++) {
     /* get scalar values needed  *per vertex* from vertex group functions,
@@ -2714,7 +2715,7 @@ static void mesh_to_softbody(Scene *scene, Object *ob)
       BLI_assert(bp->goal == sb->defgoal);
     }
     if ((ob->softflag & OB_SB_GOAL) && (defgroup_index != -1)) {
-      bp->goal *= defvert_find_weight(&me->dvert[a], defgroup_index);
+      bp->goal *= BKE_defvert_find_weight(&me->dvert[a], defgroup_index);
     }
 
     /* to proof the concept
@@ -2722,11 +2723,11 @@ static void mesh_to_softbody(Scene *scene, Object *ob)
      */
 
     if (defgroup_index_mass != -1) {
-      bp->mass *= defvert_find_weight(&me->dvert[a], defgroup_index_mass);
+      bp->mass *= BKE_defvert_find_weight(&me->dvert[a], defgroup_index_mass);
     }
 
     if (defgroup_index_spring != -1) {
-      bp->springweight *= defvert_find_weight(&me->dvert[a], defgroup_index_spring);
+      bp->springweight *= BKE_defvert_find_weight(&me->dvert[a], defgroup_index_spring);
     }
   }
 
@@ -2929,8 +2930,9 @@ static void lattice_to_softbody(Scene *scene, Object *ob)
   bp = sb->bpoint;
 
   defgroup_index = lt->dvert ? (sb->vertgroup - 1) : -1;
-  defgroup_index_mass = lt->dvert ? defgroup_name_index(ob, sb->namedVG_Mass) : -1;
-  defgroup_index_spring = lt->dvert ? defgroup_name_index(ob, sb->namedVG_Spring_K) : -1;
+  defgroup_index_mass = lt->dvert ? BKE_object_defgroup_name_index(ob, sb->namedVG_Mass) : -1;
+  defgroup_index_spring = lt->dvert ? BKE_object_defgroup_name_index(ob, sb->namedVG_Spring_K) :
+                                      -1;
 
   /* same code used as for mesh vertices */
   for (a = 0; a < totvert; a++, bp++, bpnt++) {
@@ -2940,18 +2942,18 @@ static void lattice_to_softbody(Scene *scene, Object *ob)
     }
 
     if ((ob->softflag & OB_SB_GOAL) && (defgroup_index != -1)) {
-      bp->goal *= defvert_find_weight(&lt->dvert[a], defgroup_index);
+      bp->goal *= BKE_defvert_find_weight(&lt->dvert[a], defgroup_index);
     }
     else {
       bp->goal *= bpnt->weight;
     }
 
     if (defgroup_index_mass != -1) {
-      bp->mass *= defvert_find_weight(&lt->dvert[a], defgroup_index_mass);
+      bp->mass *= BKE_defvert_find_weight(&lt->dvert[a], defgroup_index_mass);
     }
 
     if (defgroup_index_spring != -1) {
-      bp->springweight *= defvert_find_weight(&lt->dvert[a], defgroup_index_spring);
+      bp->springweight *= BKE_defvert_find_weight(&lt->dvert[a], defgroup_index_spring);
     }
   }
 
@@ -3132,8 +3134,10 @@ SoftBody *sbNew(Scene *scene)
   sb->inpush = 0.5f;
 
   sb->interval = 10;
-  sb->sfra = scene->r.sfra;
-  sb->efra = scene->r.efra;
+  if (scene != NULL) {
+    sb->sfra = scene->r.sfra;
+    sb->efra = scene->r.efra;
+  }
 
   sb->colball = 0.49f;
   sb->balldamp = 0.50f;
@@ -3410,7 +3414,7 @@ static void softbody_step(
     }
 
     forcetime = forcetimemax; /* hope for integrating in one step */
-    while ((ABS(timedone) < ABS(dtime)) && (loops < 2000)) {
+    while ((fabsf(timedone) < fabsf(dtime)) && (loops < 2000)) {
       /* set goals in time */
       interpolate_exciter(ob, 200, (int)(200.0f * (timedone / dtime)));
 

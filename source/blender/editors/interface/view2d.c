@@ -174,12 +174,9 @@ static void view2d_masks(View2D *v2d, bool check_scrollers, const rcti *mask_scr
    * - if they overlap, they must not occupy the corners (which are reserved for other widgets)
    */
   if (scroll) {
-    const int scroll_width = (v2d->scroll & V2D_SCROLL_VERTICAL_HANDLES) ?
-                                 V2D_SCROLL_HANDLE_WIDTH :
-                                 V2D_SCROLL_WIDTH;
-    const int scroll_height = (v2d->scroll & V2D_SCROLL_HORIZONTAL_HANDLES) ?
-                                  V2D_SCROLL_HANDLE_HEIGHT :
-                                  V2D_SCROLL_HEIGHT;
+    float scroll_width, scroll_height;
+
+    UI_view2d_scroller_size_get(v2d, &scroll_width, &scroll_height);
 
     /* vertical scroller */
     if (scroll & V2D_SCROLL_LEFT) {
@@ -356,11 +353,6 @@ void UI_view2d_region_reinit(View2D *v2d, short type, int winx, int winy)
 
       /* note, scroll is being flipped in ED_region_panels() drawing */
       v2d->scroll |= (V2D_SCROLL_HORIZONTAL_HIDE | V2D_SCROLL_VERTICAL_HIDE);
-
-      /* initialize without scroll bars (interferes with zoom level see: T47047) */
-      if (do_init) {
-        v2d->scroll |= (V2D_SCROLL_VERTICAL_FULLR | V2D_SCROLL_HORIZONTAL_FULLR);
-      }
 
       if (do_init) {
         float panelzoom = (style) ? style->panelzoom : 1.0f;
@@ -730,7 +722,7 @@ static void ui_view2d_curRect_validate_resize(View2D *v2d, bool resize, bool mas
        * - width is OK, but need to check if outside of boundaries
        *
        * So, resolution is to just shift view by the gap between the extremities.
-       * We favour moving the 'minimum' across, as that's origin for most things
+       * We favor moving the 'minimum' across, as that's origin for most things.
        * (XXX - in the past, max was favored... if there are bugs, swap!)
        */
       if ((cur->xmin < tot->xmin) && (cur->xmax > tot->xmax)) {
@@ -787,7 +779,7 @@ static void ui_view2d_curRect_validate_resize(View2D *v2d, bool resize, bool mas
        * - height is OK, but need to check if outside of boundaries
        *
        * So, resolution is to just shift view by the gap between the extremities.
-       * We favour moving the 'minimum' across, as that's origin for most things
+       * We favor moving the 'minimum' across, as that's origin for most things.
        */
       if ((cur->ymin < tot->ymin) && (cur->ymax > tot->ymax)) {
         /* outside boundaries on both sides,
@@ -874,7 +866,7 @@ void UI_view2d_curRect_validate(View2D *v2d)
 void UI_view2d_sync(bScreen *screen, ScrArea *area, View2D *v2dcur, int flag)
 {
   ScrArea *sa;
-  ARegion *ar;
+  ARegion *region;
 
   /* don't continue if no view syncing to be done */
   if ((v2dcur->flag & (V2D_VIEWSYNC_SCREEN_TIME | V2D_VIEWSYNC_AREA_VERTICAL)) == 0) {
@@ -883,24 +875,24 @@ void UI_view2d_sync(bScreen *screen, ScrArea *area, View2D *v2dcur, int flag)
 
   /* check if doing within area syncing (i.e. channels/vertical) */
   if ((v2dcur->flag & V2D_VIEWSYNC_AREA_VERTICAL) && (area)) {
-    for (ar = area->regionbase.first; ar; ar = ar->next) {
+    for (region = area->regionbase.first; region; region = region->next) {
       /* don't operate on self */
-      if (v2dcur != &ar->v2d) {
+      if (v2dcur != &region->v2d) {
         /* only if view has vertical locks enabled */
-        if (ar->v2d.flag & V2D_VIEWSYNC_AREA_VERTICAL) {
+        if (region->v2d.flag & V2D_VIEWSYNC_AREA_VERTICAL) {
           if (flag == V2D_LOCK_COPY) {
             /* other views with locks on must copy active */
-            ar->v2d.cur.ymin = v2dcur->cur.ymin;
-            ar->v2d.cur.ymax = v2dcur->cur.ymax;
+            region->v2d.cur.ymin = v2dcur->cur.ymin;
+            region->v2d.cur.ymax = v2dcur->cur.ymax;
           }
           else { /* V2D_LOCK_SET */
                  /* active must copy others */
-            v2dcur->cur.ymin = ar->v2d.cur.ymin;
-            v2dcur->cur.ymax = ar->v2d.cur.ymax;
+            v2dcur->cur.ymin = region->v2d.cur.ymin;
+            v2dcur->cur.ymax = region->v2d.cur.ymax;
           }
 
           /* region possibly changed, so refresh */
-          ED_region_tag_redraw_no_rebuild(ar);
+          ED_region_tag_redraw_no_rebuild(region);
         }
       }
     }
@@ -909,24 +901,24 @@ void UI_view2d_sync(bScreen *screen, ScrArea *area, View2D *v2dcur, int flag)
   /* check if doing whole screen syncing (i.e. time/horizontal) */
   if ((v2dcur->flag & V2D_VIEWSYNC_SCREEN_TIME) && (screen)) {
     for (sa = screen->areabase.first; sa; sa = sa->next) {
-      for (ar = sa->regionbase.first; ar; ar = ar->next) {
+      for (region = sa->regionbase.first; region; region = region->next) {
         /* don't operate on self */
-        if (v2dcur != &ar->v2d) {
+        if (v2dcur != &region->v2d) {
           /* only if view has horizontal locks enabled */
-          if (ar->v2d.flag & V2D_VIEWSYNC_SCREEN_TIME) {
+          if (region->v2d.flag & V2D_VIEWSYNC_SCREEN_TIME) {
             if (flag == V2D_LOCK_COPY) {
               /* other views with locks on must copy active */
-              ar->v2d.cur.xmin = v2dcur->cur.xmin;
-              ar->v2d.cur.xmax = v2dcur->cur.xmax;
+              region->v2d.cur.xmin = v2dcur->cur.xmin;
+              region->v2d.cur.xmax = v2dcur->cur.xmax;
             }
             else { /* V2D_LOCK_SET */
                    /* active must copy others */
-              v2dcur->cur.xmin = ar->v2d.cur.xmin;
-              v2dcur->cur.xmax = ar->v2d.cur.xmax;
+              v2dcur->cur.xmin = region->v2d.cur.xmin;
+              v2dcur->cur.xmax = region->v2d.cur.xmax;
             }
 
             /* region possibly changed, so refresh */
-            ED_region_tag_redraw_no_rebuild(ar);
+            ED_region_tag_redraw_no_rebuild(region);
           }
         }
       }
@@ -1221,7 +1213,7 @@ void UI_view2d_view_ortho(const View2D *v2d)
  * \param xaxis: if non-zero, only use cur x-axis,
  * otherwise use cur-yaxis (mostly this will be used for x).
  */
-void UI_view2d_view_orthoSpecial(ARegion *ar, View2D *v2d, const bool xaxis)
+void UI_view2d_view_orthoSpecial(ARegion *region, View2D *v2d, const bool xaxis)
 {
   rctf curmasked;
   float xofs, yofs;
@@ -1240,19 +1232,19 @@ void UI_view2d_view_orthoSpecial(ARegion *ar, View2D *v2d, const bool xaxis)
 
   /* only set matrix with 'cur' coordinates on relevant axes */
   if (xaxis) {
-    wmOrtho2(curmasked.xmin - xofs, curmasked.xmax - xofs, -yofs, ar->winy - yofs);
+    wmOrtho2(curmasked.xmin - xofs, curmasked.xmax - xofs, -yofs, region->winy - yofs);
   }
   else {
-    wmOrtho2(-xofs, ar->winx - xofs, curmasked.ymin - yofs, curmasked.ymax - yofs);
+    wmOrtho2(-xofs, region->winx - xofs, curmasked.ymin - yofs, curmasked.ymax - yofs);
   }
 }
 
 /* Restore view matrices after drawing */
 void UI_view2d_view_restore(const bContext *C)
 {
-  ARegion *ar = CTX_wm_region(C);
-  int width = BLI_rcti_size_x(&ar->winrct) + 1;
-  int height = BLI_rcti_size_y(&ar->winrct) + 1;
+  ARegion *region = CTX_wm_region(C);
+  int width = BLI_rcti_size_x(&region->winrct) + 1;
+  int height = BLI_rcti_size_y(&region->winrct) + 1;
 
   wmOrtho2(0.0f, (float)width, 0.0f, (float)height);
   GPU_matrix_identity_set();
@@ -1351,7 +1343,7 @@ void UI_view2d_multi_grid_draw(View2D *v2d, int colorid, float step, int level_s
   uchar grid_line_color[3];
 
   /* Make an estimate of at least how many vertices will be needed */
-  unsigned vertex_count = 4;
+  uint vertex_count = 4;
   vertex_count += 2 * ((int)((v2d->cur.xmax - v2d->cur.xmin) / lstep) + 1);
   vertex_count += 2 * ((int)((v2d->cur.ymax - v2d->cur.ymin) / lstep) + 1);
 
@@ -1615,7 +1607,7 @@ void UI_view2d_scrollers_draw(View2D *v2d, View2DScrollers *vs)
      * - slider bubble is large enough (no overdraw confusion)
      * - scale is shown on the scroller
      *   (workaround to make sure that button windows don't show these,
-     *   and only the time-grids with their zoomability can do so)
+     *   and only the time-grids with their zoom-ability can do so).
      */
     if ((v2d->keepzoom & V2D_LOCKZOOM_X) == 0 && (v2d->scroll & V2D_SCROLL_HORIZONTAL_HANDLES) &&
         (BLI_rcti_size_x(&slider) > V2D_SCROLL_HANDLE_SIZE_HOTSPOT)) {
@@ -1933,10 +1925,35 @@ View2D *UI_view2d_fromcontext_rwin(const bContext *C)
     return NULL;
   }
   if (region->regiontype != RGN_TYPE_WINDOW) {
-    ARegion *ar = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
-    return ar ? &(ar->v2d) : NULL;
+    ARegion *region_win = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
+    return region_win ? &(region_win->v2d) : NULL;
   }
   return &(region->v2d);
+}
+
+/* Get scrollbar sizes of the current 2D view. The size will be zero if the view has its scrollbars
+ * disabled. */
+void UI_view2d_scroller_size_get(const View2D *v2d, float *r_x, float *r_y)
+{
+  int scroll = view2d_scroll_mapped(v2d->scroll);
+
+  if (r_x) {
+    if (scroll & V2D_SCROLL_VERTICAL) {
+      *r_x = (scroll & V2D_SCROLL_VERTICAL_HANDLES) ? V2D_SCROLL_HANDLE_WIDTH : V2D_SCROLL_WIDTH;
+    }
+    else {
+      *r_x = 0;
+    }
+  }
+  if (r_y) {
+    if (scroll & V2D_SCROLL_HORIZONTAL) {
+      *r_y = (scroll & V2D_SCROLL_HORIZONTAL_HANDLES) ? V2D_SCROLL_HANDLE_HEIGHT :
+                                                        V2D_SCROLL_HEIGHT;
+    }
+    else {
+      *r_y = 0;
+    }
+  }
 }
 
 /**
@@ -2040,7 +2057,7 @@ void UI_view2d_offset(struct View2D *v2d, float xfac, float yfac)
  * - 0 = not in scroller.
  */
 char UI_view2d_mouse_in_scrollers_ex(
-    const ARegion *ar, const View2D *v2d, int x, int y, int *r_scroll)
+    const ARegion *region, const View2D *v2d, int x, int y, int *r_scroll)
 {
   const int scroll = view2d_scroll_mapped(v2d->scroll);
   *r_scroll = scroll;
@@ -2048,8 +2065,8 @@ char UI_view2d_mouse_in_scrollers_ex(
   if (scroll) {
     /* Move to region-coordinates. */
     const int co[2] = {
-        x - ar->winrct.xmin,
-        y - ar->winrct.ymin,
+        x - region->winrct.xmin,
+        y - region->winrct.ymin,
     };
     if (scroll & V2D_SCROLL_HORIZONTAL) {
       if (IN_2D_HORIZ_SCROLL(v2d, co)) {
@@ -2066,7 +2083,7 @@ char UI_view2d_mouse_in_scrollers_ex(
   return 0;
 }
 
-char UI_view2d_rect_in_scrollers_ex(const ARegion *ar,
+char UI_view2d_rect_in_scrollers_ex(const ARegion *region,
                                     const View2D *v2d,
                                     const rcti *rect,
                                     int *r_scroll)
@@ -2077,7 +2094,7 @@ char UI_view2d_rect_in_scrollers_ex(const ARegion *ar,
   if (scroll) {
     /* Move to region-coordinates. */
     rcti rect_region = *rect;
-    BLI_rcti_translate(&rect_region, -ar->winrct.xmin, ar->winrct.ymin);
+    BLI_rcti_translate(&rect_region, -region->winrct.xmin, region->winrct.ymin);
     if (scroll & V2D_SCROLL_HORIZONTAL) {
       if (IN_2D_HORIZ_SCROLL_RECT(v2d, &rect_region)) {
         return 'h';
@@ -2093,16 +2110,16 @@ char UI_view2d_rect_in_scrollers_ex(const ARegion *ar,
   return 0;
 }
 
-char UI_view2d_mouse_in_scrollers(const ARegion *ar, const View2D *v2d, int x, int y)
+char UI_view2d_mouse_in_scrollers(const ARegion *region, const View2D *v2d, int x, int y)
 {
   int scroll_dummy = 0;
-  return UI_view2d_mouse_in_scrollers_ex(ar, v2d, x, y, &scroll_dummy);
+  return UI_view2d_mouse_in_scrollers_ex(region, v2d, x, y, &scroll_dummy);
 }
 
-char UI_view2d_rect_in_scrollers(const ARegion *ar, const View2D *v2d, const rcti *rect)
+char UI_view2d_rect_in_scrollers(const ARegion *region, const View2D *v2d, const rcti *rect)
 {
   int scroll_dummy = 0;
-  return UI_view2d_rect_in_scrollers_ex(ar, v2d, rect, &scroll_dummy);
+  return UI_view2d_rect_in_scrollers_ex(region, v2d, rect, &scroll_dummy);
 }
 
 /** \} */
@@ -2189,7 +2206,7 @@ void UI_view2d_text_cache_add_rectf(
   }
 }
 
-void UI_view2d_text_cache_draw(ARegion *ar)
+void UI_view2d_text_cache_draw(ARegion *region)
 {
   View2DString *v2s;
   int col_pack_prev = 0;
@@ -2200,7 +2217,7 @@ void UI_view2d_text_cache_draw(ARegion *ar)
   BLF_set_default();
   const float default_height = g_v2d_strings ? BLF_height(font_id, "28", 3) : 0.0f;
 
-  wmOrtho2_region_pixelspace(ar);
+  wmOrtho2_region_pixelspace(region);
 
   for (v2s = g_v2d_strings; v2s; v2s = v2s->next) {
     int xofs = 0, yofs;

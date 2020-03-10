@@ -39,7 +39,7 @@
 #include "BKE_bvhutils.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
@@ -1037,9 +1037,6 @@ static void copy_particle_edit(Depsgraph *depsgraph,
   }
   update_world_cos(ob, edit);
 
-  UI_GetThemeColor3ubv(TH_EDGE_SELECT, edit->sel_col);
-  UI_GetThemeColor3ubv(TH_WIRE, edit->nosel_col);
-
   recalc_lengths(edit);
   recalc_emitter_field(depsgraph, ob, psys);
   PE_update_object(depsgraph, scene, ob, true);
@@ -1065,7 +1062,7 @@ static void remove_particle_systems_from_object(Object *ob_to)
     if (ELEM(md->type,
              eModifierType_ParticleSystem,
              eModifierType_DynamicPaint,
-             eModifierType_Smoke)) {
+             eModifierType_Fluid)) {
       BLI_remlink(&ob_to->modifiers, md);
       modifier_free(md);
     }
@@ -1259,6 +1256,11 @@ static int copy_particle_systems_exec(bContext *C, wmOperator *op)
     }
   }
   CTX_DATA_END;
+
+  if (changed_tot > 0) {
+    Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+    DEG_graph_tag_relations_update(depsgraph);
+  }
 
   if ((changed_tot == 0 && fail == 0) || fail) {
     BKE_reportf(op->reports,

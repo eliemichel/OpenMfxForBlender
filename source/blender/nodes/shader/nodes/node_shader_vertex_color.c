@@ -20,9 +20,9 @@
 #include "../node_shader_util.h"
 
 static bNodeSocketTemplate sh_node_vertex_color_out[] = {
-    {SOCK_RGBA, 0, N_("Color")},
-    {SOCK_FLOAT, 0, N_("Alpha")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color")},
+    {SOCK_FLOAT, N_("Alpha")},
+    {-1, ""},
 };
 
 static void node_shader_init_vertex_color(bNodeTree *UNUSED(ntree), bNode *node)
@@ -39,7 +39,7 @@ static int node_shader_gpu_vertex_color(GPUMaterial *mat,
                                         GPUNodeStack *out)
 {
   NodeShaderVertexColor *vertexColor = (NodeShaderVertexColor *)node->storage;
-  GPUNodeLink *vertexColorLink = GPU_attribute(CD_MCOL, vertexColor->layer_name);
+  GPUNodeLink *vertexColorLink = GPU_attribute(mat, CD_MCOL, vertexColor->layer_name);
   return GPU_stack_link(mat, node, "node_vertex_color", in, out, vertexColorLink);
 }
 

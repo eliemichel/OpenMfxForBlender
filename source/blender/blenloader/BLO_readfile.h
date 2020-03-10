@@ -19,6 +19,8 @@
 #ifndef __BLO_READFILE_H__
 #define __BLO_READFILE_H__
 
+#include "BLI_sys_types.h"
+
 /** \file
  * \ingroup blenloader
  * \brief external readfile function prototypes.
@@ -48,8 +50,8 @@ typedef struct BlendHandle BlendHandle;
 
 typedef enum eBlenFileType {
   BLENFILETYPE_BLEND = 1,
-  BLENFILETYPE_PUB = 2,
-  BLENFILETYPE_RUNTIME = 3,
+  /* BLENFILETYPE_PUB = 2, */     /* UNUSED */
+  /* BLENFILETYPE_RUNTIME = 3, */ /* UNUSED */
 } eBlenFileType;
 
 typedef struct BlendFileData {
@@ -145,9 +147,7 @@ void BLO_library_link_end(struct Main *mainl,
                           struct ViewLayer *view_layer,
                           const struct View3D *v3d);
 
-int BLO_library_link_copypaste(struct Main *mainl,
-                               BlendHandle *bh,
-                               const unsigned int id_types_mask);
+int BLO_library_link_copypaste(struct Main *mainl, BlendHandle *bh, const uint64_t id_types_mask);
 
 void *BLO_library_read_struct(struct FileData *fd, struct BHead *bh, const char *blockname);
 

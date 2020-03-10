@@ -25,6 +25,8 @@
 #ifndef __DRW_RENDER_H__
 #define __DRW_RENDER_H__
 
+#include "DRW_engine_types.h"
+
 #include "BLI_listbase.h"
 #include "BLI_math_matrix.h"
 #include "BLI_math_vector.h"
@@ -61,8 +63,6 @@
 
 #include "DEG_depsgraph.h"
 
-struct DefaultFramebufferList;
-struct DefaultTextureList;
 struct GPUBatch;
 struct GPUFrameBuffer;
 struct GPUMaterial;
@@ -101,41 +101,6 @@ typedef char DRWViewportEmptyList;
         DRW_VIEWPORT_LIST_SIZE(*(((ty *)NULL)->stl)), \
   }
 
-/* Use of multisample framebuffers. */
-#define MULTISAMPLE_SYNC_ENABLE(dfbl, dtxl) \
-  { \
-    if (dfbl->multisample_fb != NULL && DRW_state_is_fbo()) { \
-      DRW_stats_query_start("Multisample Blit"); \
-      GPU_framebuffer_bind(dfbl->multisample_fb); \
-      /* TODO clear only depth but need to do alpha to coverage for transparencies. */ \
-      GPU_framebuffer_clear_color_depth(dfbl->multisample_fb, (const float[4]){0.0f}, 1.0f); \
-      DRW_stats_query_end(); \
-    } \
-  } \
-  ((void)0)
-
-#define MULTISAMPLE_SYNC_DISABLE(dfbl, dtxl) \
-  { \
-    if (dfbl->multisample_fb != NULL && DRW_state_is_fbo()) { \
-      DRW_stats_query_start("Multisample Resolve"); \
-      GPU_framebuffer_bind(dfbl->default_fb); \
-      DRW_multisamples_resolve(dtxl->multisample_depth, dtxl->multisample_color, true); \
-      DRW_stats_query_end(); \
-    } \
-  } \
-  ((void)0)
-
-#define MULTISAMPLE_SYNC_DISABLE_NO_DEPTH(dfbl, dtxl) \
-  { \
-    if (dfbl->multisample_fb != NULL && DRW_state_is_fbo()) { \
-      DRW_stats_query_start("Multisample Resolve"); \
-      GPU_framebuffer_bind(dfbl->default_fb); \
-      DRW_multisamples_resolve(dtxl->multisample_depth, dtxl->multisample_color, false); \
-      DRW_stats_query_end(); \
-    } \
-  } \
-  ((void)0)
-
 typedef struct DrawEngineDataSize {
   int fbl_len;
   int txl_len;
@@ -157,7 +122,6 @@ typedef struct DrawEngineType {
   void (*cache_populate)(void *vedata, struct Object *ob);
   void (*cache_finish)(void *vedata);
 
-  void (*draw_background)(void *vedata);
   void (*draw_scene)(void *vedata);
 
   void (*view_update)(void *vedata);
@@ -168,23 +132,6 @@ typedef struct DrawEngineType {
                           struct RenderLayer *layer,
                           const struct rcti *rect);
 } DrawEngineType;
-
-#ifndef __DRW_ENGINE_H__
-/* Buffer and textures used by the viewport by default */
-typedef struct DefaultFramebufferList {
-  struct GPUFrameBuffer *default_fb;
-  struct GPUFrameBuffer *color_only_fb;
-  struct GPUFrameBuffer *depth_only_fb;
-  struct GPUFrameBuffer *multisample_fb;
-} DefaultFramebufferList;
-
-typedef struct DefaultTextureList {
-  struct GPUTexture *color;
-  struct GPUTexture *depth;
-  struct GPUTexture *multisample_color;
-  struct GPUTexture *multisample_depth;
-} DefaultTextureList;
-#endif
 
 /* Textures */
 typedef enum {
@@ -244,14 +191,6 @@ void DRW_uniformbuffer_free(struct GPUUniformBuffer *ubo);
       ubo = NULL; \
     } \
   } while (0)
-
-void DRW_transform_to_display(struct GPUTexture *tex,
-                              bool use_view_transform,
-                              bool use_render_settings);
-void DRW_transform_none(struct GPUTexture *tex);
-void DRW_multisamples_resolve(struct GPUTexture *src_depth,
-                              struct GPUTexture *src_color,
-                              bool use_depth);
 
 /* Shaders */
 struct GPUShader *DRW_shader_create(const char *vert,
@@ -338,15 +277,18 @@ typedef enum {
   DRW_STATE_BLEND_ALPHA = (1 << 18),
   /** Use that if color is already premult by alpha. */
   DRW_STATE_BLEND_ALPHA_PREMUL = (1 << 19),
-  DRW_STATE_BLEND_ALPHA_UNDER_PREMUL = (1 << 20),
+  DRW_STATE_BLEND_BACKGROUND = (1 << 20),
   DRW_STATE_BLEND_OIT = (1 << 21),
   DRW_STATE_BLEND_MUL = (1 << 22),
+  DRW_STATE_BLEND_SUB = (1 << 23),
   /** Use dual source blending. WARNING: Only one color buffer allowed. */
-  DRW_STATE_BLEND_CUSTOM = (1 << 23),
+  DRW_STATE_BLEND_CUSTOM = (1 << 24),
 
+  DRW_STATE_IN_FRONT_SELECT = (1 << 25),
+  DRW_STATE_LOGIC_INVERT = (1 << 26),
   DRW_STATE_SHADOW_OFFSET = (1 << 27),
   DRW_STATE_CLIP_PLANES = (1 << 28),
-  DRW_STATE_WIRE_SMOOTH = (1 << 29),
+  // DRW_STATE_WIRE_SMOOTH = (1 << 29), /* UNUSED */
   DRW_STATE_FIRST_VERTEX_CONVENTION = (1 << 30),
   /** DO NOT USE. Assumed always enabled. Only used internally. */
   DRW_STATE_PROGRAM_POINT_SIZE = (1u << 31),
@@ -421,19 +363,20 @@ void DRW_shgroup_call_ex(DRWShadingGroup *shgroup,
 #define DRW_shgroup_call_no_cull(shgrp, geom, ob) \
   DRW_shgroup_call_ex(shgrp, ob, NULL, geom, true, NULL)
 
-void DRW_shgroup_call_range(DRWShadingGroup *shgroup,
-                            struct GPUBatch *geom,
-                            uint v_sta,
-                            uint v_ct);
+void DRW_shgroup_call_range(
+    DRWShadingGroup *shgroup, Object *ob, struct GPUBatch *geom, uint v_sta, uint v_ct);
+void DRW_shgroup_call_instance_range(
+    DRWShadingGroup *shgroup, Object *ob, struct GPUBatch *geom, uint v_sta, uint v_ct);
 
 void DRW_shgroup_call_procedural_points(DRWShadingGroup *sh, Object *ob, uint point_ct);
 void DRW_shgroup_call_procedural_lines(DRWShadingGroup *sh, Object *ob, uint line_ct);
 void DRW_shgroup_call_procedural_triangles(DRWShadingGroup *sh, Object *ob, uint tri_ct);
-
+/* Warning: Only use with Shaders that have IN_PLACE_INSTANCES defined. */
 void DRW_shgroup_call_instances(DRWShadingGroup *shgroup,
                                 Object *ob,
                                 struct GPUBatch *geom,
                                 uint count);
+/* Warning: Only use with Shaders that have INSTANCED_ATTRIB defined. */
 void DRW_shgroup_call_instances_with_attribs(DRWShadingGroup *shgroup,
                                              Object *ob,
                                              struct GPUBatch *geom,
@@ -449,6 +392,7 @@ DRWCallBuffer *DRW_shgroup_call_buffer_instance(DRWShadingGroup *shading_group,
                                                 struct GPUVertFormat *format,
                                                 struct GPUBatch *geom);
 
+void DRW_buffer_add_entry_struct(DRWCallBuffer *callbuf, const void *data);
 void DRW_buffer_add_entry_array(DRWCallBuffer *buffer, const void *attr[], uint attr_len);
 
 #define DRW_buffer_add_entry(buffer, ...) \
@@ -459,6 +403,17 @@ void DRW_buffer_add_entry_array(DRWCallBuffer *buffer, const void *attr[], uint 
 
 void DRW_shgroup_state_enable(DRWShadingGroup *shgroup, DRWState state);
 void DRW_shgroup_state_disable(DRWShadingGroup *shgroup, DRWState state);
+
+/* Reminders:
+ * - (compare_mask & reference) is what is tested against (compare_mask & stencil_value)
+ *   stencil_value being the value stored in the stencil buffer.
+ * - (writemask & reference) is what gets written if the test condition is fullfiled.
+ **/
+void DRW_shgroup_stencil_set(DRWShadingGroup *shgroup,
+                             uint write_mask,
+                             uint reference,
+                             uint comp_mask);
+/* TODO remove this function. Obsolete version. mask is actually reference value. */
 void DRW_shgroup_stencil_mask(DRWShadingGroup *shgroup, uint mask);
 
 /* Issue a clear command. */
@@ -548,6 +503,7 @@ void DRW_pass_foreach_shgroup(DRWPass *pass,
                               void (*callback)(void *userData, DRWShadingGroup *shgrp),
                               void *userData);
 void DRW_pass_sort_shgroup_z(DRWPass *pass);
+void DRW_pass_sort_shgroup_reverse(DRWPass *pass);
 
 bool DRW_pass_is_empty(DRWPass *pass);
 
@@ -648,6 +604,7 @@ void **DRW_duplidata_get(void *vedata);
 
 /* Settings */
 bool DRW_object_is_renderable(const struct Object *ob);
+bool DRW_object_is_in_edit_mode(const struct Object *ob);
 int DRW_object_visibility_in_active_context(const struct Object *ob);
 bool DRW_object_is_flat_normal(const struct Object *ob);
 bool DRW_object_use_hide_faces(const struct Object *ob);
@@ -689,7 +646,7 @@ bool DRW_state_draw_background(void);
 /* Avoid too many lookups while drawing */
 typedef struct DRWContextState {
 
-  struct ARegion *ar;        /* 'CTX_wm_region(C)' */
+  struct ARegion *region;    /* 'CTX_wm_region(C)' */
   struct RegionView3D *rv3d; /* 'CTX_wm_region_view3d(C)' */
   struct View3D *v3d;        /* 'CTX_wm_view3d(C)' */
 

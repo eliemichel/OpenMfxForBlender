@@ -204,28 +204,30 @@ FCurve *id_data_find_fcurve(
 
   RNA_pointer_create(id, type, data, &ptr);
   prop = RNA_struct_find_property(&ptr, prop_name);
-
-  if (prop) {
-    path = RNA_path_from_ID_to_property(&ptr, prop);
-
-    if (path) {
-      /* animation takes priority over drivers */
-      if ((adt->action) && (adt->action->curves.first)) {
-        fcu = list_find_fcurve(&adt->action->curves, path, index);
-      }
-
-      /* if not animated, check if driven */
-      if ((fcu == NULL) && (adt->drivers.first)) {
-        fcu = list_find_fcurve(&adt->drivers, path, index);
-        if (fcu && r_driven) {
-          *r_driven = true;
-        }
-        fcu = NULL;
-      }
-
-      MEM_freeN(path);
-    }
+  if (prop == NULL) {
+    return NULL;
   }
+
+  path = RNA_path_from_ID_to_property(&ptr, prop);
+  if (path == NULL) {
+    return NULL;
+  }
+
+  /* animation takes priority over drivers */
+  if (adt->action && adt->action->curves.first) {
+    fcu = list_find_fcurve(&adt->action->curves, path, index);
+  }
+
+  /* if not animated, check if driven */
+  if (fcu == NULL && adt->drivers.first) {
+    fcu = list_find_fcurve(&adt->drivers, path, index);
+    if (fcu && r_driven) {
+      *r_driven = true;
+    }
+    fcu = NULL;
+  }
+
+  MEM_freeN(path);
 
   return fcu;
 }
@@ -309,26 +311,28 @@ int list_find_data_fcurves(ListBase *dst,
   /* search each F-Curve one by one */
   for (fcu = src->first; fcu; fcu = fcu->next) {
     /* check if quoted string matches the path */
-    if ((fcu->rna_path) && strstr(fcu->rna_path, dataPrefix)) {
-      char *quotedName = BLI_str_quoted_substrN(fcu->rna_path, dataPrefix);
-
-      if (quotedName) {
-        /* check if the quoted name matches the required name */
-        if (STREQ(quotedName, dataName)) {
-          LinkData *ld = MEM_callocN(sizeof(LinkData), __func__);
-
-          ld->data = fcu;
-          BLI_addtail(dst, ld);
-
-          matches++;
-        }
-
-        /* always free the quoted string, since it needs freeing */
-        MEM_freeN(quotedName);
-      }
+    if (fcu->rna_path == NULL || !strstr(fcu->rna_path, dataPrefix)) {
+      continue;
     }
-  }
 
+    char *quotedName = BLI_str_quoted_substrN(fcu->rna_path, dataPrefix);
+    if (quotedName == NULL) {
+      continue;
+    }
+
+    /* check if the quoted name matches the required name */
+    if (STREQ(quotedName, dataName)) {
+      LinkData *ld = MEM_callocN(sizeof(LinkData), __func__);
+
+      ld->data = fcu;
+      BLI_addtail(dst, ld);
+
+      matches++;
+    }
+
+    /* always free the quoted string, since it needs freeing */
+    MEM_freeN(quotedName);
+  }
   /* return the number of matches */
   return matches;
 }
@@ -369,7 +373,7 @@ FCurve *rna_get_fcurve_context_ui(bContext *C,
 
   /* Special case for NLA Control Curves... */
   if (BKE_nlastrip_has_curves_for_property(ptr, prop)) {
-    NlaStrip *strip = (NlaStrip *)ptr->data;
+    NlaStrip *strip = ptr->data;
 
     /* Set the special flag, since it cannot be a normal action/driver
      * if we've been told to start looking here...
@@ -397,53 +401,58 @@ FCurve *rna_get_fcurve_context_ui(bContext *C,
 
     /* Standard F-Curve - Animation (Action) or Drivers */
     while (adt && step--) {
-      if ((adt->action && adt->action->curves.first) || (adt->drivers.first)) {
-        /* XXX this function call can become a performance bottleneck */
-        if (step) {
-          path = RNA_path_from_ID_to_property(&tptr, prop);
+      if ((adt->action == NULL || adt->action->curves.first == NULL) &&
+          (adt->drivers.first == NULL)) {
+        continue;
+      }
+
+      /* XXX this function call can become a performance bottleneck */
+      if (step) {
+        path = RNA_path_from_ID_to_property(&tptr, prop);
+      }
+      if (path == NULL) {
+        continue;
+      }
+
+      // XXX: the logic here is duplicated with a function up above
+      /* animation takes priority over drivers */
+      if (adt->action && adt->action->curves.first) {
+        fcu = list_find_fcurve(&adt->action->curves, path, rnaindex);
+
+        if (fcu && r_action) {
+          *r_action = adt->action;
         }
+      }
 
-        // XXX: the logic here is duplicated with a function up above
-        if (path) {
-          /* animation takes priority over drivers */
-          if (adt->action && adt->action->curves.first) {
-            fcu = list_find_fcurve(&adt->action->curves, path, rnaindex);
+      /* if not animated, check if driven */
+      if (!fcu && (adt->drivers.first)) {
+        fcu = list_find_fcurve(&adt->drivers, path, rnaindex);
 
-            if (fcu && r_action) {
-              *r_action = adt->action;
-            }
+        if (fcu) {
+          if (r_animdata) {
+            *r_animdata = adt;
           }
+          *r_driven = true;
+        }
+      }
 
-          /* if not animated, check if driven */
-          if (!fcu && (adt->drivers.first)) {
-            fcu = list_find_fcurve(&adt->drivers, path, rnaindex);
+      if (fcu && r_action) {
+        if (r_animdata) {
+          *r_animdata = adt;
+        }
+        *r_action = adt->action;
+        break;
+      }
 
-            if (fcu) {
-              if (r_animdata) {
-                *r_animdata = adt;
-              }
-              *r_driven = true;
-            }
-          }
-
-          if (fcu && r_action) {
-            if (r_animdata) {
-              *r_animdata = adt;
-            }
-            *r_action = adt->action;
-            break;
-          }
-          else if (step) {
-            char *tpath = BKE_animdata_driver_path_hack(C, &tptr, prop, path);
-            if (tpath && tpath != path) {
-              MEM_freeN(path);
-              path = tpath;
-              adt = BKE_animdata_from_id(tptr.owner_id);
-            }
-            else {
-              adt = NULL;
-            }
-          }
+      if (step) {
+        char *tpath = BKE_animdata_driver_path_hack(C, &tptr, prop, path);
+        if (tpath && tpath != path) {
+          MEM_freeN(path);
+          path = tpath;
+          adt = BKE_animdata_from_id(tptr.owner_id);
+        }
+        else {
+          adt = NULL;
         }
       }
     }
@@ -476,29 +485,28 @@ static int binarysearch_bezt_index_ex(
     CLOG_WARN(&LOG, "encountered invalid array");
     return 0;
   }
-  else {
-    /* check whether to add before/after/on */
-    float framenum;
 
-    /* 'First' Keyframe (when only one keyframe, this case is used) */
-    framenum = array[0].vec[1][0];
-    if (IS_EQT(frame, framenum, threshold)) {
-      *r_replace = true;
-      return 0;
-    }
-    else if (frame < framenum) {
-      return 0;
-    }
+  /* check whether to add before/after/on */
+  float framenum;
 
-    /* 'Last' Keyframe */
-    framenum = array[(arraylen - 1)].vec[1][0];
-    if (IS_EQT(frame, framenum, threshold)) {
-      *r_replace = true;
-      return (arraylen - 1);
-    }
-    else if (frame > framenum) {
-      return arraylen;
-    }
+  /* 'First' Keyframe (when only one keyframe, this case is used) */
+  framenum = array[0].vec[1][0];
+  if (IS_EQT(frame, framenum, threshold)) {
+    *r_replace = true;
+    return 0;
+  }
+  if (frame < framenum) {
+    return 0;
+  }
+
+  /* 'Last' Keyframe */
+  framenum = array[(arraylen - 1)].vec[1][0];
+  if (IS_EQT(frame, framenum, threshold)) {
+    *r_replace = true;
+    return (arraylen - 1);
+  }
+  if (frame > framenum) {
+    return arraylen;
   }
 
   /* most of the time, this loop is just to find where to put it
@@ -1036,10 +1044,14 @@ static BezTriple *cycle_offset_triple(
   return out;
 }
 
-/* This function recalculates the handles of an F-Curve
- * If the BezTriples have been rearranged, sort them first before using this.
+/**
+ * Variant of #calchandles_fcurve() that allows calculating based on a different select flag.
+ *
+ * \param sel_flag: The flag (bezt.f1/2/3) value to use to determine selection. Usually `SELECT`,
+ *                  but may want to use a different one at times (if caller does not operate on
+ *                  selection).
  */
-void calchandles_fcurve(FCurve *fcu)
+void calchandles_fcurve_ex(FCurve *fcu, eBezTriple_Flag handle_sel_flag)
 {
   BezTriple *bezt, *prev, *next;
   int a = fcu->totvert;
@@ -1075,7 +1087,7 @@ void calchandles_fcurve(FCurve *fcu)
     }
 
     /* calculate auto-handles */
-    BKE_nurb_handle_calc(bezt, prev, next, true, fcu->auto_smoothing);
+    BKE_nurb_handle_calc_ex(bezt, prev, next, handle_sel_flag, true, fcu->auto_smoothing);
 
     /* for automatic ease in and out */
     if (BEZT_IS_AUTOH(bezt) && !cycle) {
@@ -1121,7 +1133,29 @@ void calchandles_fcurve(FCurve *fcu)
   }
 }
 
-void testhandles_fcurve(FCurve *fcu, const bool use_handle)
+/**
+ * This function recalculates the handles of an F-Curve. Acts based on selection with `SELECT`
+ * flag. To use a different flag, use #calchandles_fcurve_ex().
+ *
+ * If the BezTriples have been rearranged, sort them first before using this.
+ */
+void calchandles_fcurve(FCurve *fcu)
+{
+  calchandles_fcurve_ex(fcu, SELECT);
+}
+
+/**
+ * Update handles, making sure the handle-types are valid (e.g. correctly deduced from an "Auto"
+ * type), and recalculating their position vectors.
+ * Use when something has changed handle positions.
+ *
+ * \param sel_flag: The flag (bezt.f1/2/3) value to use to determine selection. Usually `SELECT`,
+ *                  but may want to use a different one at times (if caller does not operate on
+ *                  selection).
+ * \param use_handle: Check selection state of individual handles, otherwise always update both
+ *                    handles if the key is selected.
+ */
+void testhandles_fcurve(FCurve *fcu, eBezTriple_Flag sel_flag, const bool use_handle)
 {
   BezTriple *bezt;
   unsigned int a;
@@ -1133,11 +1167,11 @@ void testhandles_fcurve(FCurve *fcu, const bool use_handle)
 
   /* loop over beztriples */
   for (a = 0, bezt = fcu->bezt; a < fcu->totvert; a++, bezt++) {
-    BKE_nurb_bezt_handle_test(bezt, use_handle);
+    BKE_nurb_bezt_handle_test(bezt, sel_flag, use_handle);
   }
 
   /* recalculate handles */
-  calchandles_fcurve(fcu);
+  calchandles_fcurve_ex(fcu, sel_flag);
 }
 
 /* This function sorts BezTriples so that they are arranged in chronological order,
@@ -1145,39 +1179,42 @@ void testhandles_fcurve(FCurve *fcu, const bool use_handle)
  */
 void sort_time_fcurve(FCurve *fcu)
 {
-  bool ok = true;
+  if (fcu->bezt == NULL) {
+    return;
+  }
 
   /* keep adjusting order of beztriples until nothing moves (bubble-sort) */
+  BezTriple *bezt;
+  uint a;
+
+  bool ok = true;
   while (ok) {
     ok = 0;
-
     /* currently, will only be needed when there are beztriples */
-    if (fcu->bezt) {
-      BezTriple *bezt;
-      unsigned int a;
 
-      /* loop over ALL points to adjust position in array and recalculate handles */
-      for (a = 0, bezt = fcu->bezt; a < fcu->totvert; a++, bezt++) {
-        /* check if thee's a next beztriple which we could try to swap with current */
-        if (a < (fcu->totvert - 1)) {
-          /* swap if one is after the other (and indicate that order has changed) */
-          if (bezt->vec[1][0] > (bezt + 1)->vec[1][0]) {
-            SWAP(BezTriple, *bezt, *(bezt + 1));
-            ok = 1;
-          }
-
-          /* if either one of both of the points exceeds crosses over the keyframe time... */
-          if ((bezt->vec[0][0] > bezt->vec[1][0]) && (bezt->vec[2][0] < bezt->vec[1][0])) {
-            /* swap handles if they have switched sides for some reason */
-            swap_v2_v2(bezt->vec[0], bezt->vec[2]);
-          }
-          else {
-            /* clamp handles */
-            CLAMP_MAX(bezt->vec[0][0], bezt->vec[1][0]);
-            CLAMP_MIN(bezt->vec[2][0], bezt->vec[1][0]);
-          }
+    /* loop over ALL points to adjust position in array and recalculate handles */
+    for (a = 0, bezt = fcu->bezt; a < fcu->totvert; a++, bezt++) {
+      /* check if thee's a next beztriple which we could try to swap with current */
+      if (a < (fcu->totvert - 1)) {
+        /* swap if one is after the other (and indicate that order has changed) */
+        if (bezt->vec[1][0] > (bezt + 1)->vec[1][0]) {
+          SWAP(BezTriple, *bezt, *(bezt + 1));
+          ok = 1;
         }
       }
+    }
+  }
+
+  for (a = 0, bezt = fcu->bezt; a < fcu->totvert; a++, bezt++) {
+    /* if either one of both of the points exceeds crosses over the keyframe time... */
+    if ((bezt->vec[0][0] > bezt->vec[1][0]) && (bezt->vec[2][0] < bezt->vec[1][0])) {
+      /* swap handles if they have switched sides for some reason */
+      swap_v2_v2(bezt->vec[0], bezt->vec[2]);
+    }
+    else {
+      /* clamp handles */
+      CLAMP_MAX(bezt->vec[0][0], bezt->vec[1][0]);
+      CLAMP_MIN(bezt->vec[2][0], bezt->vec[1][0]);
     }
   }
 }
@@ -1283,60 +1320,7 @@ static float dtar_get_prop_val(ChannelDriver *driver, DriverTarget *dtar)
   RNA_id_pointer_create(id, &id_ptr);
 
   /* get property to read from, and get value as appropriate */
-  if (RNA_path_resolve_property_full(&id_ptr, dtar->rna_path, &ptr, &prop, &index)) {
-    if (RNA_property_array_check(prop)) {
-      /* array */
-      if ((index >= 0) && (index < RNA_property_array_length(&ptr, prop))) {
-        switch (RNA_property_type(prop)) {
-          case PROP_BOOLEAN:
-            value = (float)RNA_property_boolean_get_index(&ptr, prop, index);
-            break;
-          case PROP_INT:
-            value = (float)RNA_property_int_get_index(&ptr, prop, index);
-            break;
-          case PROP_FLOAT:
-            value = RNA_property_float_get_index(&ptr, prop, index);
-            break;
-          default:
-            break;
-        }
-      }
-      else {
-        /* out of bounds */
-        if (G.debug & G_DEBUG) {
-          CLOG_ERROR(&LOG,
-                     "Driver Evaluation Error: array index is out of bounds for %s -> %s (%d)",
-                     id->name,
-                     dtar->rna_path,
-                     index);
-        }
-
-        driver->flag |= DRIVER_FLAG_INVALID;
-        dtar->flag |= DTAR_FLAG_INVALID;
-        return 0.0f;
-      }
-    }
-    else {
-      /* not an array */
-      switch (RNA_property_type(prop)) {
-        case PROP_BOOLEAN:
-          value = (float)RNA_property_boolean_get(&ptr, prop);
-          break;
-        case PROP_INT:
-          value = (float)RNA_property_int_get(&ptr, prop);
-          break;
-        case PROP_FLOAT:
-          value = RNA_property_float_get(&ptr, prop);
-          break;
-        case PROP_ENUM:
-          value = (float)RNA_property_enum_get(&ptr, prop);
-          break;
-        default:
-          break;
-      }
-    }
-  }
-  else {
+  if (!RNA_path_resolve_property_full(&id_ptr, dtar->rna_path, &ptr, &prop, &index)) {
     /* path couldn't be resolved */
     if (G.debug & G_DEBUG) {
       CLOG_ERROR(&LOG,
@@ -1348,6 +1332,57 @@ static float dtar_get_prop_val(ChannelDriver *driver, DriverTarget *dtar)
     driver->flag |= DRIVER_FLAG_INVALID;
     dtar->flag |= DTAR_FLAG_INVALID;
     return 0.0f;
+  }
+
+  if (RNA_property_array_check(prop)) {
+    /* array */
+    if (index < 0 || index >= RNA_property_array_length(&ptr, prop)) {
+      /* out of bounds */
+      if (G.debug & G_DEBUG) {
+        CLOG_ERROR(&LOG,
+                   "Driver Evaluation Error: array index is out of bounds for %s -> %s (%d)",
+                   id->name,
+                   dtar->rna_path,
+                   index);
+      }
+
+      driver->flag |= DRIVER_FLAG_INVALID;
+      dtar->flag |= DTAR_FLAG_INVALID;
+      return 0.0f;
+    }
+
+    switch (RNA_property_type(prop)) {
+      case PROP_BOOLEAN:
+        value = (float)RNA_property_boolean_get_index(&ptr, prop, index);
+        break;
+      case PROP_INT:
+        value = (float)RNA_property_int_get_index(&ptr, prop, index);
+        break;
+      case PROP_FLOAT:
+        value = RNA_property_float_get_index(&ptr, prop, index);
+        break;
+      default:
+        break;
+    }
+  }
+  else {
+    /* not an array */
+    switch (RNA_property_type(prop)) {
+      case PROP_BOOLEAN:
+        value = (float)RNA_property_boolean_get(&ptr, prop);
+        break;
+      case PROP_INT:
+        value = (float)RNA_property_int_get(&ptr, prop);
+        break;
+      case PROP_FLOAT:
+        value = RNA_property_float_get(&ptr, prop);
+        break;
+      case PROP_ENUM:
+        value = (float)RNA_property_enum_get(&ptr, prop);
+        break;
+      default:
+        break;
+    }
   }
 
   /* if we're still here, we should be ok... */
@@ -1511,7 +1546,7 @@ static float dvar_eval_rotDiff(ChannelDriver *driver, DriverVar *dvar)
   invert_qt_normalized(q1);
   mul_qt_qtqt(quat, q1, q2);
   angle = 2.0f * (saacos(quat[0]));
-  angle = ABS(angle);
+  angle = fabsf(angle);
 
   return (angle > (float)M_PI) ? (float)((2.0f * (float)M_PI) - angle) : (float)(angle);
 }
@@ -2114,20 +2149,34 @@ ChannelDriver *fcurve_copy_driver(const ChannelDriver *driver)
 
 /* Driver Expression Evaluation --------------- */
 
+/* Index constants for the expression parameter array. */
+enum {
+  /* Index of the 'frame' variable. */
+  VAR_INDEX_FRAME = 0,
+  /* Index of the first user-defined driver variable. */
+  VAR_INDEX_CUSTOM
+};
+
 static ExprPyLike_Parsed *driver_compile_simple_expr_impl(ChannelDriver *driver)
 {
   /* Prepare parameter names. */
   int names_len = BLI_listbase_count(&driver->variables);
-  const char **names = BLI_array_alloca(names, names_len + 1);
-  int i = 0;
+  const char **names = BLI_array_alloca(names, names_len + VAR_INDEX_CUSTOM);
+  int i = VAR_INDEX_CUSTOM;
 
-  names[i++] = "frame";
+  names[VAR_INDEX_FRAME] = "frame";
 
   for (DriverVar *dvar = driver->variables.first; dvar; dvar = dvar->next) {
     names[i++] = dvar->name;
   }
 
-  return BLI_expr_pylike_parse(driver->expression, names, names_len + 1);
+  return BLI_expr_pylike_parse(driver->expression, names, names_len + VAR_INDEX_CUSTOM);
+}
+
+static bool driver_check_simple_expr_depends_on_time(ExprPyLike_Parsed *expr)
+{
+  /* Check if the 'frame' parameter is actually used. */
+  return BLI_expr_pylike_is_using_param(expr, VAR_INDEX_FRAME);
 }
 
 static bool driver_evaluate_simple_expr(ChannelDriver *driver,
@@ -2137,10 +2186,10 @@ static bool driver_evaluate_simple_expr(ChannelDriver *driver,
 {
   /* Prepare parameter values. */
   int vars_len = BLI_listbase_count(&driver->variables);
-  double *vars = BLI_array_alloca(vars, vars_len + 1);
-  int i = 0;
+  double *vars = BLI_array_alloca(vars, vars_len + VAR_INDEX_CUSTOM);
+  int i = VAR_INDEX_CUSTOM;
 
-  vars[i++] = time;
+  vars[VAR_INDEX_FRAME] = time;
 
   for (DriverVar *dvar = driver->variables.first; dvar; dvar = dvar->next) {
     vars[i++] = driver_get_variable_value(driver, dvar);
@@ -2148,7 +2197,8 @@ static bool driver_evaluate_simple_expr(ChannelDriver *driver,
 
   /* Evaluate expression. */
   double result_val;
-  eExprPyLike_EvalStatus status = BLI_expr_pylike_eval(expr, vars, vars_len + 1, &result_val);
+  eExprPyLike_EvalStatus status = BLI_expr_pylike_eval(
+      expr, vars, vars_len + VAR_INDEX_CUSTOM, &result_val);
   const char *message;
 
   switch (status) {
@@ -2217,6 +2267,44 @@ bool BKE_driver_has_simple_expression(ChannelDriver *driver)
   return driver_compile_simple_expr(driver) && BLI_expr_pylike_is_valid(driver->expr_simple);
 }
 
+/* TODO(sergey): This is somewhat weak, but we don't want neither false-positive
+ * time dependencies nor special exceptions in the depsgraph evaluation. */
+static bool python_driver_exression_depends_on_time(const char *expression)
+{
+  if (expression[0] == '\0') {
+    /* Empty expression depends on nothing. */
+    return false;
+  }
+  if (strchr(expression, '(') != NULL) {
+    /* Function calls are considered dependent on a time. */
+    return true;
+  }
+  if (strstr(expression, "frame") != NULL) {
+    /* Variable `frame` depends on time. */
+    /* TODO(sergey): This is a bit weak, but not sure about better way of handling this. */
+    return true;
+  }
+  /* Possible indirect time relation s should be handled via variable targets. */
+  return false;
+}
+
+/* Check if the expression in the driver may depend on the current frame. */
+bool BKE_driver_expression_depends_on_time(ChannelDriver *driver)
+{
+  if (driver->type != DRIVER_TYPE_PYTHON) {
+    return false;
+  }
+
+  if (BKE_driver_has_simple_expression(driver)) {
+    /* Simple expressions can be checked exactly. */
+    return driver_check_simple_expr_depends_on_time(driver->expr_simple);
+  }
+  else {
+    /* Otherwise, heuristically scan the expression string for certain patterns. */
+    return python_driver_exression_depends_on_time(driver->expression);
+  }
+}
+
 /* Reset cached compiled expression data */
 void BKE_driver_invalidate_expression(ChannelDriver *driver,
                                       bool expr_changed,
@@ -2266,6 +2354,98 @@ float driver_get_variable_value(ChannelDriver *driver, DriverVar *dvar)
   return dvar->curval;
 }
 
+static void evaluate_driver_sum(ChannelDriver *driver)
+{
+  DriverVar *dvar;
+
+  /* check how many variables there are first (i.e. just one?) */
+  if (BLI_listbase_is_single(&driver->variables)) {
+    /* just one target, so just use that */
+    dvar = driver->variables.first;
+    driver->curval = driver_get_variable_value(driver, dvar);
+    return;
+  }
+
+  /* more than one target, so average the values of the targets */
+  float value = 0.0f;
+  int tot = 0;
+
+  /* loop through targets, adding (hopefully we don't get any overflow!) */
+  for (dvar = driver->variables.first; dvar; dvar = dvar->next) {
+    value += driver_get_variable_value(driver, dvar);
+    tot++;
+  }
+
+  /* perform operations on the total if appropriate */
+  if (driver->type == DRIVER_TYPE_AVERAGE) {
+    driver->curval = tot ? (value / (float)tot) : 0.0f;
+  }
+  else {
+    driver->curval = value;
+  }
+}
+
+static void evaluate_driver_min_max(ChannelDriver *driver)
+{
+  DriverVar *dvar;
+  float value = 0.0f;
+
+  /* loop through the variables, getting the values and comparing them to existing ones */
+  for (dvar = driver->variables.first; dvar; dvar = dvar->next) {
+    /* get value */
+    float tmp_val = driver_get_variable_value(driver, dvar);
+
+    /* store this value if appropriate */
+    if (dvar->prev) {
+      /* check if greater/smaller than the baseline */
+      if (driver->type == DRIVER_TYPE_MAX) {
+        /* max? */
+        if (tmp_val > value) {
+          value = tmp_val;
+        }
+      }
+      else {
+        /* min? */
+        if (tmp_val < value) {
+          value = tmp_val;
+        }
+      }
+    }
+    else {
+      /* first item - make this the baseline for comparisons */
+      value = tmp_val;
+    }
+  }
+
+  /* store value in driver */
+  driver->curval = value;
+}
+
+static void evaluate_driver_python(PathResolvedRNA *anim_rna,
+                                   ChannelDriver *driver,
+                                   ChannelDriver *driver_orig,
+                                   const float evaltime)
+{
+  /* check for empty or invalid expression */
+  if ((driver_orig->expression[0] == '\0') || (driver_orig->flag & DRIVER_FLAG_INVALID)) {
+    driver->curval = 0.0f;
+  }
+  else if (!driver_try_evaluate_simple_expr(driver, driver_orig, &driver->curval, evaltime)) {
+#ifdef WITH_PYTHON
+    /* this evaluates the expression using Python, and returns its result:
+     * - on errors it reports, then returns 0.0f
+     */
+    BLI_mutex_lock(&python_driver_lock);
+
+    driver->curval = BPY_driver_exec(anim_rna, driver, driver_orig, evaltime);
+
+    BLI_mutex_unlock(&python_driver_lock);
+#else  /* WITH_PYTHON*/
+    UNUSED_VARS(anim_rna, evaltime);
+#endif /* WITH_PYTHON*/
+  }
+}
+
 /* Evaluate an Channel-Driver to get a 'time' value to use instead of "evaltime"
  * - "evaltime" is the frame at which F-Curve is being evaluated
  * - has to return a float value
@@ -2276,8 +2456,6 @@ float evaluate_driver(PathResolvedRNA *anim_rna,
                       ChannelDriver *driver_orig,
                       const float evaltime)
 {
-  DriverVar *dvar;
-
   /* check if driver can be evaluated */
   if (driver_orig->flag & DRIVER_FLAG_INVALID) {
     return 0.0f;
@@ -2286,99 +2464,21 @@ float evaluate_driver(PathResolvedRNA *anim_rna,
   switch (driver->type) {
     case DRIVER_TYPE_AVERAGE: /* average values of driver targets */
     case DRIVER_TYPE_SUM:     /* sum values of driver targets */
-    {
-      /* check how many variables there are first (i.e. just one?) */
-      if (BLI_listbase_is_single(&driver->variables)) {
-        /* just one target, so just use that */
-        dvar = driver->variables.first;
-        driver->curval = driver_get_variable_value(driver, dvar);
-      }
-      else {
-        /* more than one target, so average the values of the targets */
-        float value = 0.0f;
-        int tot = 0;
-
-        /* loop through targets, adding (hopefully we don't get any overflow!) */
-        for (dvar = driver->variables.first; dvar; dvar = dvar->next) {
-          value += driver_get_variable_value(driver, dvar);
-          tot++;
-        }
-
-        /* perform operations on the total if appropriate */
-        if (driver->type == DRIVER_TYPE_AVERAGE) {
-          driver->curval = tot ? (value / (float)tot) : 0.0f;
-        }
-        else {
-          driver->curval = value;
-        }
-      }
+      evaluate_driver_sum(driver);
       break;
-    }
     case DRIVER_TYPE_MIN: /* smallest value */
     case DRIVER_TYPE_MAX: /* largest value */
-    {
-      float value = 0.0f;
-
-      /* loop through the variables, getting the values and comparing them to existing ones */
-      for (dvar = driver->variables.first; dvar; dvar = dvar->next) {
-        /* get value */
-        float tmp_val = driver_get_variable_value(driver, dvar);
-
-        /* store this value if appropriate */
-        if (dvar->prev) {
-          /* check if greater/smaller than the baseline */
-          if (driver->type == DRIVER_TYPE_MAX) {
-            /* max? */
-            if (tmp_val > value) {
-              value = tmp_val;
-            }
-          }
-          else {
-            /* min? */
-            if (tmp_val < value) {
-              value = tmp_val;
-            }
-          }
-        }
-        else {
-          /* first item - make this the baseline for comparisons */
-          value = tmp_val;
-        }
-      }
-
-      /* store value in driver */
-      driver->curval = value;
+      evaluate_driver_min_max(driver);
       break;
-    }
     case DRIVER_TYPE_PYTHON: /* expression */
-    {
-      /* check for empty or invalid expression */
-      if ((driver_orig->expression[0] == '\0') || (driver_orig->flag & DRIVER_FLAG_INVALID)) {
-        driver->curval = 0.0f;
-      }
-      else if (!driver_try_evaluate_simple_expr(driver, driver_orig, &driver->curval, evaltime)) {
-#ifdef WITH_PYTHON
-        /* this evaluates the expression using Python, and returns its result:
-         * - on errors it reports, then returns 0.0f
-         */
-        BLI_mutex_lock(&python_driver_lock);
-
-        driver->curval = BPY_driver_exec(anim_rna, driver, driver_orig, evaltime);
-
-        BLI_mutex_unlock(&python_driver_lock);
-#else  /* WITH_PYTHON*/
-        UNUSED_VARS(anim_rna, evaltime);
-#endif /* WITH_PYTHON*/
-      }
+      evaluate_driver_python(anim_rna, driver, driver_orig, evaltime);
       break;
-    }
-    default: {
+    default:
       /* special 'hack' - just use stored value
        * This is currently used as the mechanism which allows animated settings to be able
        * to be changed via the UI.
        */
       break;
-    }
   }
 
   /* return value for driver */
@@ -2458,11 +2558,10 @@ static int findzero(float x, float q0, float q1, float q2, float q3, float *o)
       if ((o[0] >= (float)SMALL) && (o[0] <= 1.000001f)) {
         return 1;
       }
-      else {
-        return 0;
-      }
+      return 0;
     }
-    else if (d == 0.0) {
+
+    if (d == 0.0) {
       t = sqrt3d(-q);
       o[0] = (float)(2 * t - a);
 
@@ -2474,87 +2573,78 @@ static int findzero(float x, float q0, float q1, float q2, float q3, float *o)
       if ((o[nr] >= (float)SMALL) && (o[nr] <= 1.000001f)) {
         return nr + 1;
       }
-      else {
-        return nr;
-      }
+      return nr;
     }
-    else {
-      phi = acos(-q / sqrt(-(p * p * p)));
-      t = sqrt(-p);
-      p = cos(phi / 3);
-      q = sqrt(3 - 3 * p * p);
-      o[0] = (float)(2 * t * p - a);
+
+    phi = acos(-q / sqrt(-(p * p * p)));
+    t = sqrt(-p);
+    p = cos(phi / 3);
+    q = sqrt(3 - 3 * p * p);
+    o[0] = (float)(2 * t * p - a);
+
+    if ((o[0] >= (float)SMALL) && (o[0] <= 1.000001f)) {
+      nr++;
+    }
+    o[nr] = (float)(-t * (p + q) - a);
+
+    if ((o[nr] >= (float)SMALL) && (o[nr] <= 1.000001f)) {
+      nr++;
+    }
+    o[nr] = (float)(-t * (p - q) - a);
+
+    if ((o[nr] >= (float)SMALL) && (o[nr] <= 1.000001f)) {
+      return nr + 1;
+    }
+    return nr;
+  }
+  a = c2;
+  b = c1;
+  c = c0;
+
+  if (a != 0.0) {
+    /* discriminant */
+    p = b * b - 4 * a * c;
+
+    if (p > 0) {
+      p = sqrt(p);
+      o[0] = (float)((-b - p) / (2 * a));
 
       if ((o[0] >= (float)SMALL) && (o[0] <= 1.000001f)) {
         nr++;
       }
-      o[nr] = (float)(-t * (p + q) - a);
-
-      if ((o[nr] >= (float)SMALL) && (o[nr] <= 1.000001f)) {
-        nr++;
-      }
-      o[nr] = (float)(-t * (p - q) - a);
+      o[nr] = (float)((-b + p) / (2 * a));
 
       if ((o[nr] >= (float)SMALL) && (o[nr] <= 1.000001f)) {
         return nr + 1;
       }
-      else {
-        return nr;
-      }
+      return nr;
     }
-  }
-  else {
-    a = c2;
-    b = c1;
-    c = c0;
 
-    if (a != 0.0) {
-      /* discriminant */
-      p = b * b - 4 * a * c;
-
-      if (p > 0) {
-        p = sqrt(p);
-        o[0] = (float)((-b - p) / (2 * a));
-
-        if ((o[0] >= (float)SMALL) && (o[0] <= 1.000001f)) {
-          nr++;
-        }
-        o[nr] = (float)((-b + p) / (2 * a));
-
-        if ((o[nr] >= (float)SMALL) && (o[nr] <= 1.000001f)) {
-          return nr + 1;
-        }
-        else {
-          return nr;
-        }
-      }
-      else if (p == 0) {
-        o[0] = (float)(-b / (2 * a));
-        if ((o[0] >= (float)SMALL) && (o[0] <= 1.000001f)) {
-          return 1;
-        }
-        else {
-          return 0;
-        }
-      }
-    }
-    else if (b != 0.0) {
-      o[0] = (float)(-c / b);
-
+    if (p == 0) {
+      o[0] = (float)(-b / (2 * a));
       if ((o[0] >= (float)SMALL) && (o[0] <= 1.000001f)) {
         return 1;
       }
-      else {
-        return 0;
-      }
-    }
-    else if (c == 0.0) {
-      o[0] = 0.0;
-      return 1;
     }
 
     return 0;
   }
+
+  if (b != 0.0) {
+    o[0] = (float)(-c / b);
+
+    if ((o[0] >= (float)SMALL) && (o[0] <= 1.000001f)) {
+      return 1;
+    }
+    return 0;
+  }
+
+  if (c == 0.0) {
+    o[0] = 0.0;
+    return 1;
+  }
+
+  return 0;
 }
 
 static void berekeny(float f1, float f2, float f3, float f4, float *o, int b)
@@ -3163,19 +3253,18 @@ float calculate_fcurve(PathResolvedRNA *anim_rna, FCurve *fcu, float evaltime)
   /* only calculate + set curval (overriding the existing value) if curve has
    * any data which warrants this...
    */
-  if (!BKE_fcurve_is_empty(fcu)) {
-    /* calculate and set curval (evaluates driver too if necessary) */
-    float curval;
-    if (fcu->driver) {
-      curval = evaluate_fcurve_driver(anim_rna, fcu, fcu->driver, evaltime);
-    }
-    else {
-      curval = evaluate_fcurve(fcu, evaltime);
-    }
-    fcu->curval = curval; /* debug display only, not thread safe! */
-    return curval;
-  }
-  else {
+  if (BKE_fcurve_is_empty(fcu)) {
     return 0.0f;
   }
+
+  /* calculate and set curval (evaluates driver too if necessary) */
+  float curval;
+  if (fcu->driver) {
+    curval = evaluate_fcurve_driver(anim_rna, fcu, fcu->driver, evaltime);
+  }
+  else {
+    curval = evaluate_fcurve(fcu, evaltime);
+  }
+  fcu->curval = curval; /* debug display only, not thread safe! */
+  return curval;
 }

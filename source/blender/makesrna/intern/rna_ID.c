@@ -29,7 +29,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_icons.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_object.h"
 
 #include "RNA_access.h"
@@ -90,9 +90,10 @@ const EnumPropertyItem rna_enum_id_type_items[] = {
 
 #  include "BKE_font.h"
 #  include "BKE_idprop.h"
-#  include "BKE_library_query.h"
-#  include "BKE_library_override.h"
-#  include "BKE_library_remap.h"
+#  include "BKE_lib_query.h"
+#  include "BKE_lib_override.h"
+#  include "BKE_lib_remap.h"
+#  include "BKE_library.h"
 #  include "BKE_animsys.h"
 #  include "BKE_material.h"
 #  include "BKE_global.h" /* XXX, remove me */
@@ -493,7 +494,7 @@ static ID *rna_ID_copy(ID *id, Main *bmain)
 
 static ID *rna_ID_override_create(ID *id, Main *bmain, bool remap_local_usages)
 {
-  if (!BKE_override_library_is_enabled() || !ID_IS_OVERRIDABLE_LIBRARY(id)) {
+  if (!BKE_lib_override_library_is_enabled() || !ID_IS_OVERRIDABLE_LIBRARY(id)) {
     return NULL;
   }
 
@@ -501,7 +502,7 @@ static ID *rna_ID_override_create(ID *id, Main *bmain, bool remap_local_usages)
     BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, true);
   }
 
-  ID *local_id = BKE_override_library_create_from_id(bmain, id, remap_local_usages);
+  ID *local_id = BKE_lib_override_library_create_from_id(bmain, id, remap_local_usages);
 
   if (remap_local_usages) {
     BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, false);
@@ -581,13 +582,8 @@ static void rna_ID_user_remap(ID *id, Main *bmain, ID *new_id)
 
 static struct ID *rna_ID_make_local(struct ID *self, Main *bmain, bool clear_proxy)
 {
-  /* Special case, as we can't rely on id_make_local(); it clears proxies. */
-  if (!clear_proxy && GS(self->name) == ID_OB) {
-    BKE_object_make_local_ex(bmain, (Object *)self, false, clear_proxy);
-  }
-  else {
-    id_make_local(bmain, self, false, false);
-  }
+  BKE_lib_id_make_local(
+      bmain, self, false, clear_proxy ? 0 : LIB_ID_MAKELOCAL_OBJECT_NO_PROXY_CLEARING);
 
   ID *ret_id = self->newid ? self->newid : self;
   BKE_id_clear_newpoin(self);
@@ -630,12 +626,12 @@ static int rna_IDPArray_length(PointerRNA *ptr)
 int rna_IDMaterials_assign_int(PointerRNA *ptr, int key, const PointerRNA *assign_ptr)
 {
   ID *id = ptr->owner_id;
-  short *totcol = give_totcolp_id(id);
+  short *totcol = BKE_id_material_len_p(id);
   Material *mat_id = (Material *)assign_ptr->owner_id;
   if (totcol && (key >= 0 && key < *totcol)) {
     BLI_assert(BKE_id_is_in_global_main(id));
     BLI_assert(BKE_id_is_in_global_main(&mat_id->id));
-    assign_material_id(G_MAIN, id, mat_id, key + 1);
+    BKE_id_material_assign(G_MAIN, id, mat_id, key + 1);
     return 1;
   }
   else {
@@ -645,7 +641,7 @@ int rna_IDMaterials_assign_int(PointerRNA *ptr, int key, const PointerRNA *assig
 
 static void rna_IDMaterials_append_id(ID *id, Main *bmain, Material *ma)
 {
-  BKE_material_append_id(bmain, id, ma);
+  BKE_id_material_append(bmain, id, ma);
 
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, id);
   WM_main_add_notifier(NC_OBJECT | ND_OB_SHADING, id);
@@ -654,7 +650,7 @@ static void rna_IDMaterials_append_id(ID *id, Main *bmain, Material *ma)
 static Material *rna_IDMaterials_pop_id(ID *id, Main *bmain, ReportList *reports, int index_i)
 {
   Material *ma;
-  short *totcol = give_totcolp_id(id);
+  short *totcol = BKE_id_material_len_p(id);
   const short totcol_orig = *totcol;
   if (index_i < 0) {
     index_i += (*totcol);
@@ -665,7 +661,7 @@ static Material *rna_IDMaterials_pop_id(ID *id, Main *bmain, ReportList *reports
     return NULL;
   }
 
-  ma = BKE_material_pop_id(bmain, id, index_i);
+  ma = BKE_id_material_pop(bmain, id, index_i);
 
   if (*totcol == totcol_orig) {
     BKE_report(reports, RPT_ERROR, "No material to removed");
@@ -681,7 +677,7 @@ static Material *rna_IDMaterials_pop_id(ID *id, Main *bmain, ReportList *reports
 
 static void rna_IDMaterials_clear_id(ID *id, Main *bmain)
 {
-  BKE_material_clear_id(bmain, id);
+  BKE_id_material_clear(bmain, id);
 
   DEG_id_tag_update(id, ID_RECALC_GEOMETRY);
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, id);

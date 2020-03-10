@@ -5,6 +5,7 @@
 #define M_1_PI 0.318309886183790671538  /* 1/pi */
 #define M_1_2PI 0.159154943091895335768 /* 1/(2*pi) */
 #define M_1_PI2 0.101321183642337771443 /* 1/(pi^2) */
+#define FLT_MAX 3.402823e+38
 
 #define LUT_SIZE 64
 
@@ -83,6 +84,37 @@ struct ShadowCascadeData {
 #define sh_contact_thickness contact_shadow_data.w
 #define sh_shadow_vec shadow_vec_id.xyz
 #define sh_tex_index shadow_vec_id.w
+
+/* ------ Render Passes ----- */
+layout(std140) uniform renderpass_block
+{
+  bool renderPassDiffuse;
+  bool renderPassDiffuseLight;
+  bool renderPassGlossy;
+  bool renderPassGlossyLight;
+  bool renderPassEmit;
+  bool renderPassSSSColor;
+};
+
+vec3 render_pass_diffuse_mask(vec3 diffuse_color, vec3 diffuse_light)
+{
+  return renderPassDiffuse ? (renderPassDiffuseLight ? diffuse_light : diffuse_color) : vec3(0.0);
+}
+
+vec3 render_pass_sss_mask(vec3 sss_color)
+{
+  return renderPassSSSColor ? sss_color : vec3(0.0);
+}
+
+vec3 render_pass_glossy_mask(vec3 specular_color, vec3 specular_light)
+{
+  return renderPassGlossy ? (renderPassGlossyLight ? specular_light : specular_color) : vec3(0.0);
+}
+
+vec3 render_pass_emission_mask(vec3 emission_light)
+{
+  return renderPassEmit ? emission_light : vec3(0.0);
+}
 
 /* ------- Convenience functions --------- */
 
@@ -832,11 +864,12 @@ void closure_load_sss_data(
     cl.sss_radius = radius;
     cl.sss_albedo = sss_albedo;
     cl.flag |= CLOSURE_SSS_FLAG;
+    cl.radiance += render_pass_diffuse_mask(sss_albedo, vec3(0));
   }
   else
 #  endif
   {
-    cl.radiance += sss_irradiance * sss_albedo;
+    cl.radiance += render_pass_diffuse_mask(sss_albedo, sss_irradiance * sss_albedo);
   }
 }
 
@@ -933,6 +966,11 @@ void main()
   vec2 uvs = gl_FragCoord.xy * volCoordScale.zw;
   vec3 vol_transmit, vol_scatter;
   volumetric_resolve(uvs, gl_FragCoord.z, vol_transmit, vol_scatter);
+
+  /* Removes part of the volume scattering that have
+   * already been added to the destination pixels.
+   * Since we do that using the blending pipeline we need to account for material transmittance. */
+  vol_scatter -= vol_scatter * cl.transmittance;
 
   outRadiance = vec4(cl.radiance * vol_transmit + vol_scatter, alpha * holdout);
   outTransmittance = vec4(cl.transmittance, transmit * holdout);

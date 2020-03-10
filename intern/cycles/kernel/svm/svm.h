@@ -164,6 +164,7 @@ CCL_NAMESPACE_END
 #include "kernel/svm/svm_math_util.h"
 #include "kernel/svm/svm_mapping_util.h"
 
+#include "kernel/svm/svm_aov.h"
 #include "kernel/svm/svm_attribute.h"
 #include "kernel/svm/svm_gradient.h"
 #include "kernel/svm/svm_blackbody.h"
@@ -199,6 +200,7 @@ CCL_NAMESPACE_END
 #include "kernel/svm/svm_voronoi.h"
 #include "kernel/svm/svm_checker.h"
 #include "kernel/svm/svm_brick.h"
+#include "kernel/svm/svm_vector_rotate.h"
 #include "kernel/svm/svm_vector_transform.h"
 #include "kernel/svm/svm_voxel.h"
 #include "kernel/svm/svm_bump.h"
@@ -218,6 +220,7 @@ CCL_NAMESPACE_BEGIN
 ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
                                         ShaderData *sd,
                                         ccl_addr_space PathState *state,
+                                        ccl_global float *buffer,
                                         ShaderType type,
                                         int path_flag)
 {
@@ -309,7 +312,7 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
 #  endif /* NODES_FEATURE(NODE_FEATURE_BUMP) */
 #  ifdef __TEXTURES__
       case NODE_TEX_IMAGE:
-        svm_node_tex_image(kg, sd, stack, node);
+        svm_node_tex_image(kg, sd, stack, node, &offset);
         break;
       case NODE_TEX_IMAGE_BOX:
         svm_node_tex_image_box(kg, sd, stack, node);
@@ -467,6 +470,17 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
       case NODE_IES:
         svm_node_ies(kg, sd, stack, node, &offset);
         break;
+      case NODE_AOV_START:
+        if (!svm_node_aov_check(state, buffer)) {
+          return;
+        }
+        break;
+      case NODE_AOV_COLOR:
+        svm_node_aov_color(kg, sd, stack, node, buffer);
+        break;
+      case NODE_AOV_VALUE:
+        svm_node_aov_value(kg, sd, stack, node, buffer);
+        break;
 #  endif /* __EXTRA_NODES__ */
 #endif   /* NODES_GROUP(NODE_GROUP_LEVEL_2) */
 
@@ -499,6 +513,9 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
         break;
       case NODE_COMBINE_HSV:
         svm_node_combine_hsv(kg, sd, stack, node.y, node.z, node.w, &offset);
+        break;
+      case NODE_VECTOR_ROTATE:
+        svm_node_vector_rotate(sd, stack, node.y, node.z, node.w);
         break;
       case NODE_VECTOR_TRANSFORM:
         svm_node_vector_transform(kg, sd, stack, node);

@@ -202,7 +202,8 @@ static int ed_undo_step_impl(
         if (ELEM(obact->mode,
                  OB_MODE_PAINT_GPENCIL,
                  OB_MODE_SCULPT_GPENCIL,
-                 OB_MODE_WEIGHT_GPENCIL)) {
+                 OB_MODE_WEIGHT_GPENCIL,
+                 OB_MODE_VERTEX_GPENCIL)) {
           ED_gpencil_toggle_brush_cursor(C, true, NULL);
         }
         else {
@@ -389,7 +390,7 @@ static int ed_undo_exec(bContext *C, wmOperator *op)
   int ret = ed_undo_step_direction(C, 1, op->reports);
   if (ret & OPERATOR_FINISHED) {
     /* Keep button under the cursor active. */
-    WM_event_add_mousemove(C);
+    WM_event_add_mousemove(CTX_wm_window(C));
   }
 
   ED_outliner_select_sync_from_all_tag(C);
@@ -418,7 +419,7 @@ static int ed_redo_exec(bContext *C, wmOperator *op)
   int ret = ed_undo_step_direction(C, -1, op->reports);
   if (ret & OPERATOR_FINISHED) {
     /* Keep button under the cursor active. */
-    WM_event_add_mousemove(C);
+    WM_event_add_mousemove(CTX_wm_window(C));
   }
 
   ED_outliner_select_sync_from_all_tag(C);
@@ -432,7 +433,7 @@ static int ed_undo_redo_exec(bContext *C, wmOperator *UNUSED(op))
   ret = ret ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
   if (ret & OPERATOR_FINISHED) {
     /* Keep button under the cursor active. */
-    WM_event_add_mousemove(C);
+    WM_event_add_mousemove(CTX_wm_window(C));
   }
   return ret;
 }
@@ -464,6 +465,15 @@ static bool ed_undo_redo_poll(bContext *C)
           WM_operator_check_ui_enabled(C, last_op->type->name));
 }
 
+static bool ed_undo_poll(bContext *C)
+{
+  if (!ed_undo_is_init_and_screenactive_poll(C)) {
+    return false;
+  }
+  UndoStack *undo_stack = CTX_wm_manager(C)->undo_stack;
+  return (undo_stack->step_active != NULL) && (undo_stack->step_active->prev != NULL);
+}
+
 void ED_OT_undo(wmOperatorType *ot)
 {
   /* identifiers */
@@ -473,7 +483,7 @@ void ED_OT_undo(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = ed_undo_exec;
-  ot->poll = ed_undo_is_init_and_screenactive_poll;
+  ot->poll = ed_undo_poll;
 }
 
 void ED_OT_undo_push(wmOperatorType *ot)
@@ -498,6 +508,15 @@ void ED_OT_undo_push(wmOperatorType *ot)
                  "");
 }
 
+static bool ed_redo_poll(bContext *C)
+{
+  if (!ed_undo_is_init_and_screenactive_poll(C)) {
+    return false;
+  }
+  UndoStack *undo_stack = CTX_wm_manager(C)->undo_stack;
+  return (undo_stack->step_active != NULL) && (undo_stack->step_active->next != NULL);
+}
+
 void ED_OT_redo(wmOperatorType *ot)
 {
   /* identifiers */
@@ -507,7 +526,7 @@ void ED_OT_redo(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = ed_redo_exec;
-  ot->poll = ed_undo_is_init_and_screenactive_poll;
+  ot->poll = ed_redo_poll;
 }
 
 void ED_OT_undo_redo(wmOperatorType *ot)
@@ -697,6 +716,16 @@ static int undo_history_exec(bContext *C, wmOperator *op)
   return OPERATOR_CANCELLED;
 }
 
+static bool undo_history_poll(bContext *C)
+{
+  if (!ed_undo_is_init_and_screenactive_poll(C)) {
+    return false;
+  }
+  UndoStack *undo_stack = CTX_wm_manager(C)->undo_stack;
+  /* More than just original state entry. */
+  return BLI_listbase_count_at_most(&undo_stack->steps, 2) > 1;
+}
+
 void ED_OT_undo_history(wmOperatorType *ot)
 {
   /* identifiers */
@@ -707,7 +736,7 @@ void ED_OT_undo_history(wmOperatorType *ot)
   /* api callbacks */
   ot->invoke = undo_history_invoke;
   ot->exec = undo_history_exec;
-  ot->poll = ed_undo_is_init_and_screenactive_poll;
+  ot->poll = undo_history_poll;
 
   RNA_def_int(ot->srna, "item", 0, 0, INT_MAX, "Item", "", 0, INT_MAX);
 }
@@ -746,7 +775,7 @@ void ED_undo_object_editmode_restore_helper(struct bContext *C,
   uint bases_len = 0;
   /* Don't request unique data because we want to de-select objects when exiting edit-mode
    * for that to be done on all objects we can't skip ones that share data. */
-  Base **bases = BKE_view_layer_array_from_bases_in_edit_mode(view_layer, NULL, &bases_len);
+  Base **bases = ED_undo_editmode_bases_from_view_layer(view_layer, &bases_len);
   for (uint i = 0; i < bases_len; i++) {
     ((ID *)bases[i]->object->data)->tag |= LIB_TAG_DOIT;
   }
@@ -767,6 +796,107 @@ void ED_undo_object_editmode_restore_helper(struct bContext *C,
     }
   }
   MEM_freeN(bases);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Undo View Layer Helper Functions
+ *
+ * Needed because view layer functions such as
+ * #BKE_view_layer_array_from_objects_in_edit_mode_unique_data also check visibility,
+ * which is not reliable when it comes to object undo operations,
+ * since hidden objects can be operated on in the properties editor,
+ * and local collections may be used.
+ * \{ */
+
+static int undo_editmode_objects_from_view_layer_prepare(ViewLayer *view_layer,
+                                                         Object *obact,
+                                                         int *r_active_index)
+{
+  const short object_type = obact->type;
+
+  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+    Object *ob = base->object;
+    if ((ob->type == object_type) && (ob->mode & OB_MODE_EDIT)) {
+      ID *id = ob->data;
+      id->tag &= ~LIB_TAG_DOIT;
+    }
+  }
+
+  int len = 0;
+  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+    Object *ob = base->object;
+    if ((ob->type == object_type) && (ob->mode & OB_MODE_EDIT)) {
+      if (ob == obact) {
+        *r_active_index = len;
+      }
+      ID *id = ob->data;
+      if ((id->tag & LIB_TAG_DOIT) == 0) {
+        len += 1;
+        id->tag |= LIB_TAG_DOIT;
+      }
+    }
+  }
+  return len;
+}
+
+Object **ED_undo_editmode_objects_from_view_layer(ViewLayer *view_layer, uint *r_len)
+{
+  Object *obact = OBACT(view_layer);
+  if ((obact == NULL) || (obact->mode & OB_MODE_EDIT) == 0) {
+    return MEM_mallocN(0, __func__);
+  }
+  int active_index = 0;
+  const int len = undo_editmode_objects_from_view_layer_prepare(view_layer, obact, &active_index);
+  const short object_type = obact->type;
+  int i = 0;
+  Object **objects = MEM_malloc_arrayN(len, sizeof(*objects), __func__);
+  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+    Object *ob = base->object;
+    if ((ob->type == object_type) && (ob->mode & OB_MODE_EDIT)) {
+      ID *id = ob->data;
+      if (id->tag & LIB_TAG_DOIT) {
+        objects[i++] = ob;
+        id->tag &= ~LIB_TAG_DOIT;
+      }
+    }
+  }
+  BLI_assert(i == len);
+  if (active_index > 0) {
+    SWAP(Object *, objects[0], objects[active_index]);
+  }
+  *r_len = len;
+  return objects;
+}
+
+Base **ED_undo_editmode_bases_from_view_layer(ViewLayer *view_layer, uint *r_len)
+{
+  Object *obact = OBACT(view_layer);
+  if ((obact == NULL) || (obact->mode & OB_MODE_EDIT) == 0) {
+    return MEM_mallocN(0, __func__);
+  }
+  int active_index = 0;
+  const int len = undo_editmode_objects_from_view_layer_prepare(view_layer, obact, &active_index);
+  const short object_type = obact->type;
+  int i = 0;
+  Base **base_array = MEM_malloc_arrayN(len, sizeof(*base_array), __func__);
+  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+    Object *ob = base->object;
+    if ((ob->type == object_type) && (ob->mode & OB_MODE_EDIT)) {
+      ID *id = ob->data;
+      if (id->tag & LIB_TAG_DOIT) {
+        base_array[i++] = base;
+        id->tag &= ~LIB_TAG_DOIT;
+      }
+    }
+  }
+  BLI_assert(i == len);
+  if (active_index > 0) {
+    SWAP(Base *, base_array[0], base_array[active_index]);
+  }
+  *r_len = len;
+  return base_array;
 }
 
 /** \} */

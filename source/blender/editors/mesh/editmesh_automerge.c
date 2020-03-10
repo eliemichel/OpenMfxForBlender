@@ -79,7 +79,7 @@ void EDBM_automerge(Object *obedit, bool update, const char hflag, const float d
   BMO_op_finish(bm, &weldop);
 
   if ((totvert_prev != bm->totvert) && update) {
-    EDBM_update_generic(em, true, true);
+    EDBM_update_generic(obedit->data, true, true);
   }
 }
 
@@ -92,9 +92,9 @@ void EDBM_automerge(Object *obedit, bool update, const char hflag, const float d
  * \{ */
 
 void EDBM_automerge_and_split(Object *obedit,
-                              bool UNUSED(split_edges),
-                              bool split_faces,
-                              bool update,
+                              const bool UNUSED(split_edges),
+                              const bool split_faces,
+                              const bool update,
                               const char hflag,
                               const float dist)
 {
@@ -123,26 +123,10 @@ void EDBM_automerge_and_split(Object *obedit,
 
   GHash *ghash_targetmap = BMO_SLOT_AS_GHASH(slot_targetmap);
 
-  ok = BM_mesh_intersect_edges(bm, hflag, dist, ghash_targetmap);
+  ok = BM_mesh_intersect_edges(bm, hflag, dist, split_faces, ghash_targetmap);
 
   if (ok) {
     BMO_op_exec(bm, &weldop);
-
-    BMEdge **edgenet = NULL;
-    int edgenet_alloc_len = 0;
-    if (split_faces) {
-      GHashIterator gh_iter;
-      GHASH_ITER (gh_iter, ghash_targetmap) {
-        BMVert *v = BLI_ghashIterator_getValue(&gh_iter);
-        // BLI_assert(BM_elem_flag_test(v, hflag) || hflag == BM_ELEM_TAG);
-        BM_vert_weld_linked_wire_edges_into_linked_faces(
-            bm, v, dist, &edgenet, &edgenet_alloc_len);
-      }
-    }
-
-    if (edgenet) {
-      MEM_freeN(edgenet);
-    }
   }
 
   BMO_op_finish(bm, &weldop);
@@ -153,7 +137,7 @@ void EDBM_automerge_and_split(Object *obedit,
 #endif
 
   if (LIKELY(ok) && update) {
-    EDBM_update_generic(em, true, true);
+    EDBM_update_generic(obedit->data, true, true);
   }
 }
 

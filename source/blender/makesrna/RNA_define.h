@@ -23,6 +23,7 @@
  * Functions used during preprocess and runtime, for defining the RNA.
  */
 
+#include <inttypes.h>
 #include <float.h>
 #include <limits.h>
 
@@ -233,6 +234,16 @@ PropertyRNA *RNA_def_float_matrix(StructOrFunctionRNA *cont,
                                   const char *ui_description,
                                   float softmin,
                                   float softmax);
+PropertyRNA *RNA_def_float_translation(StructOrFunctionRNA *cont,
+                                       const char *identifier,
+                                       int len,
+                                       const float *default_value,
+                                       float hardmin,
+                                       float hardmax,
+                                       const char *ui_name,
+                                       const char *ui_description,
+                                       float softmin,
+                                       float softmax);
 PropertyRNA *RNA_def_float_rotation(StructOrFunctionRNA *cont,
                                     const char *identifier,
                                     int len,
@@ -327,11 +338,11 @@ PropertyRNA *RNA_def_property(StructOrFunctionRNA *cont,
 void RNA_def_property_boolean_sdna(PropertyRNA *prop,
                                    const char *structname,
                                    const char *propname,
-                                   int bit);
+                                   int64_t bit);
 void RNA_def_property_boolean_negative_sdna(PropertyRNA *prop,
                                             const char *structname,
                                             const char *propname,
-                                            int bit);
+                                            int64_t bit);
 void RNA_def_property_int_sdna(PropertyRNA *prop, const char *structname, const char *propname);
 void RNA_def_property_float_sdna(PropertyRNA *prop, const char *structname, const char *propname);
 void RNA_def_property_string_sdna(PropertyRNA *prop, const char *structname, const char *propname);
@@ -498,6 +509,8 @@ const char *RNA_property_typename(PropertyType type);
 #define IS_DNATYPE_FLOAT_COMPAT(_str) (strcmp(_str, "float") == 0 || strcmp(_str, "double") == 0)
 #define IS_DNATYPE_INT_COMPAT(_str) \
   (strcmp(_str, "int") == 0 || strcmp(_str, "short") == 0 || strcmp(_str, "char") == 0)
+#define IS_DNATYPE_BOOLEAN_COMPAT(_str) \
+  (IS_DNATYPE_INT_COMPAT(_str) || strcmp(_str, "int64_t") == 0 || strcmp(_str, "uint64_t") == 0)
 
 void RNA_identifier_sanitize(char *identifier, int property);
 

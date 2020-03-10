@@ -28,6 +28,10 @@
 
 #include "GPU_primitive.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define GPU_TRACK_INDEX_RANGE 1
 
 typedef enum {
@@ -90,6 +94,10 @@ void GPU_indexbuf_build_in_place(GPUIndexBufBuilder *, GPUIndexBuf *);
 
 /* Create a subrange of an existing indexbuffer. */
 GPUIndexBuf *GPU_indexbuf_create_subrange(GPUIndexBuf *ibo, uint start, uint length);
+void GPU_indexbuf_create_subrange_in_place(GPUIndexBuf *r_ibo,
+                                           GPUIndexBuf *ibo,
+                                           uint start,
+                                           uint length);
 
 void GPU_indexbuf_discard(GPUIndexBuf *);
 
@@ -104,5 +112,9 @@ int GPU_indexbuf_primitive_len(GPUPrimType prim_type);
       elem = NULL; \
     } \
   } while (0)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __GPU_ELEMENT_H__ */

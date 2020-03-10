@@ -82,13 +82,13 @@ typedef struct EXTERNAL_Data {
 static struct {
   /* Depth Pre Pass */
   struct GPUShader *depth_sh;
-  bool draw_depth;
 } e_data = {NULL}; /* Engine data */
 
 typedef struct EXTERNAL_PrivateData {
   DRWShadingGroup *depth_shgrp;
 
   /* Do we need to update the depth or can we reuse the last calculated texture. */
+  bool need_depth;
   bool update_depth;
 
   float last_persmat[4][4];
@@ -100,7 +100,7 @@ static void external_engine_init(void *vedata)
 {
   EXTERNAL_StorageList *stl = ((EXTERNAL_Data *)vedata)->stl;
   const DRWContextState *draw_ctx = DRW_context_state_get();
-  ARegion *ar = draw_ctx->ar;
+  ARegion *region = draw_ctx->region;
 
   /* Depth prepass */
   if (!e_data.depth_sh) {
@@ -110,13 +110,15 @@ static void external_engine_init(void *vedata)
   if (!stl->g_data) {
     /* Alloc transient pointers */
     stl->g_data = MEM_mallocN(sizeof(*stl->g_data), __func__);
-    stl->g_data->update_depth = true;
+    stl->g_data->need_depth = true;
   }
+
+  stl->g_data->update_depth = true;
 
   /* Progressive render samples are tagged with no rebuild, in that case we
    * can skip updating the depth buffer */
-  if (!(ar && (ar->do_draw & RGN_DRAW_NO_REBUILD))) {
-    stl->g_data->update_depth = true;
+  if (region && (region->do_draw & RGN_DRAW_NO_REBUILD)) {
+    stl->g_data->update_depth = false;
   }
 }
 
@@ -126,6 +128,8 @@ static void external_cache_init(void *vedata)
   EXTERNAL_StorageList *stl = ((EXTERNAL_Data *)vedata)->stl;
   EXTERNAL_TextureList *txl = ((EXTERNAL_Data *)vedata)->txl;
   EXTERNAL_FramebufferList *fbl = ((EXTERNAL_Data *)vedata)->fbl;
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const View3D *v3d = draw_ctx->v3d;
 
   {
     DRW_texture_ensure_fullscreen_2d(&txl->depth_buffer_tx, GPU_DEPTH24_STENCIL8, 0);
@@ -144,14 +148,7 @@ static void external_cache_init(void *vedata)
   }
 
   /* Do not draw depth pass when overlays are turned off. */
-  e_data.draw_depth = false;
-  const DRWContextState *draw_ctx = DRW_context_state_get();
-  const View3D *v3d = draw_ctx->v3d;
-  if (v3d->flag2 & V3D_HIDE_OVERLAYS) {
-    /* mark `update_depth` for when overlays are turned on again. */
-    stl->g_data->update_depth = true;
-    return;
-  }
+  stl->g_data->need_depth = (v3d->flag2 & V3D_HIDE_OVERLAYS) == 0;
 }
 
 static void external_cache_populate(void *vedata, Object *ob)
@@ -163,20 +160,16 @@ static void external_cache_populate(void *vedata, Object *ob)
     return;
   }
 
-  /* Do not draw depth pass when overlays are turned off. */
-  const DRWContextState *draw_ctx = DRW_context_state_get();
-  const View3D *v3d = draw_ctx->v3d;
-  if (v3d->flag2 & V3D_HIDE_OVERLAYS) {
+  if (ob->type == OB_GPENCIL) {
+    /* Grease Pencil objects need correct depth to do the blending. */
+    stl->g_data->need_depth = true;
     return;
   }
 
-  if (stl->g_data->update_depth) {
-    e_data.draw_depth = true;
-    struct GPUBatch *geom = DRW_cache_object_surface_get(ob);
-    if (geom) {
-      /* Depth Prepass */
-      DRW_shgroup_call(stl->g_data->depth_shgrp, geom, ob);
-    }
+  struct GPUBatch *geom = DRW_cache_object_surface_get(ob);
+  if (geom) {
+    /* Depth Prepass */
+    DRW_shgroup_call(stl->g_data->depth_shgrp, geom, ob);
   }
 }
 
@@ -189,7 +182,7 @@ static void external_draw_scene_do(void *vedata)
   const DRWContextState *draw_ctx = DRW_context_state_get();
   Scene *scene = draw_ctx->scene;
   RegionView3D *rv3d = draw_ctx->rv3d;
-  ARegion *ar = draw_ctx->ar;
+  ARegion *region = draw_ctx->region;
   RenderEngineType *type;
 
   DRW_state_reset_ex(DRW_STATE_DEFAULT & ~DRW_STATE_DEPTH_LESS_EQUAL);
@@ -212,7 +205,7 @@ static void external_draw_scene_do(void *vedata)
   /* Rendered draw. */
   GPU_matrix_push_projection();
   GPU_matrix_push();
-  ED_region_pixelspace(ar);
+  ED_region_pixelspace(region);
 
   /* Render result draw. */
   type = rv3d->render_engine->type;
@@ -243,19 +236,23 @@ static void external_draw_scene(void *vedata)
    * OpenGL render is used for quick preview (thumbnails or sequencer preview)
    * where using the rendering engine to preview doesn't make so much sense. */
   if (draw_ctx->evil_C) {
+    float clear_col[4] = {0, 0, 0, 0};
+    /* This is to keep compatibility with external engine. */
+    /* TODO(fclem) remove it eventually. */
+    GPU_framebuffer_bind(dfbl->default_fb);
+    GPU_framebuffer_clear_color(dfbl->default_fb, clear_col);
+
     external_draw_scene_do(vedata);
   }
 
-  if (e_data.draw_depth) {
+  if (stl->g_data->update_depth && stl->g_data->need_depth) {
     DRW_draw_pass(psl->depth_pass);
-    // copy result to tmp buffer
+    /* Copy main depth buffer to cached framebuffer. */
     GPU_framebuffer_blit(dfbl->depth_only_fb, 0, fbl->depth_buffer_fb, 0, GPU_DEPTH_BIT);
-    stl->g_data->update_depth = false;
   }
-  else {
-    // copy tmp buffer to default
-    GPU_framebuffer_blit(fbl->depth_buffer_fb, 0, dfbl->depth_only_fb, 0, GPU_DEPTH_BIT);
-  }
+
+  /* Copy cached depth buffer to main framebuffer. */
+  GPU_framebuffer_blit(fbl->depth_buffer_fb, 0, dfbl->depth_only_fb, 0, GPU_DEPTH_BIT);
 }
 
 static void external_engine_free(void)
@@ -275,7 +272,6 @@ static DrawEngineType draw_engine_external_type = {
     &external_cache_init,
     &external_cache_populate,
     &external_cache_finish,
-    NULL,
     &external_draw_scene,
     NULL,
     NULL,

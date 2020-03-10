@@ -46,7 +46,7 @@
 #include "BKE_fcurve.h"
 #include "BKE_gpencil.h"
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mask.h"
 #include "BKE_global.h"
 #include "BKE_scene.h"
@@ -898,6 +898,23 @@ static AnimChanRearrangeFp rearrange_get_mode_func(eRearrangeAnimChan_Mode mode)
   }
 }
 
+/* get rearranging function, given 'rearrange' mode (grease pencil is inverted) */
+static AnimChanRearrangeFp rearrange_gpencil_get_mode_func(eRearrangeAnimChan_Mode mode)
+{
+  switch (mode) {
+    case REARRANGE_ANIMCHAN_TOP:
+      return rearrange_island_bottom;
+    case REARRANGE_ANIMCHAN_UP:
+      return rearrange_island_down;
+    case REARRANGE_ANIMCHAN_DOWN:
+      return rearrange_island_up;
+    case REARRANGE_ANIMCHAN_BOTTOM:
+      return rearrange_island_top;
+    default:
+      return NULL;
+  }
+}
+
 /* Rearrange Islands Generics ------------------------------------- */
 
 /* add channel into list of islands */
@@ -1331,7 +1348,7 @@ static void rearrange_gpencil_channels(bAnimContext *ac, eRearrangeAnimChan_Mode
   int filter;
 
   /* get rearranging function */
-  AnimChanRearrangeFp rearrange_func = rearrange_get_mode_func(mode);
+  AnimChanRearrangeFp rearrange_func = rearrange_gpencil_get_mode_func(mode);
 
   if (rearrange_func == NULL) {
     return;
@@ -1360,10 +1377,15 @@ static void rearrange_gpencil_channels(bAnimContext *ac, eRearrangeAnimChan_Mode
 
     /* free visible layers data */
     BLI_freelistN(&anim_data_visible);
+
+    /* Tag to recalc geometry */
+    DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
   }
 
   /* free GPD channel data */
   ANIM_animdata_freelist(&anim_data);
+
+  WM_main_add_notifier(NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
 }
 
 /* ------------------- */
@@ -1848,7 +1870,7 @@ static int animchannels_delete_exec(bContext *C, wmOperator *UNUSED(op))
     }
   }
 
-  /* cleanup */
+  ANIM_animdata_update(&ac, &anim_data);
   ANIM_animdata_freelist(&anim_data);
 
   /* send notifier that things have changed */
@@ -2531,7 +2553,7 @@ static void box_select_anim_channels(bAnimContext *ac, rcti *rect, short selectm
   int filter;
 
   SpaceNla *snla = (SpaceNla *)ac->sl;
-  View2D *v2d = &ac->ar->v2d;
+  View2D *v2d = &ac->region->v2d;
   rctf rectf;
 
   /* convert border-region to view coordinates */
@@ -2714,20 +2736,20 @@ static bool rename_anim_channels(bAnimContext *ac, int channel_index)
 
   /* free temp data and tag for refresh */
   ANIM_animdata_freelist(&anim_data);
-  ED_region_tag_redraw(ac->ar);
+  ED_region_tag_redraw(ac->region);
   return success;
 }
 
 static int animchannels_channel_get(bAnimContext *ac, const int mval[2])
 {
-  ARegion *ar;
+  ARegion *region;
   View2D *v2d;
   int channel_index;
   float x, y;
 
   /* get useful pointers from animation context data */
-  ar = ac->ar;
-  v2d = &ar->v2d;
+  region = ac->region;
+  v2d = &region->v2d;
 
   /* Figure out which channel user clicked in. */
   UI_view2d_region_to_view(v2d, mval[0], mval[1], &x, &y);
@@ -3113,8 +3135,9 @@ static int mouse_anim_channels(bContext *C, bAnimContext *ac, int channel_index,
       if (gpl->flag & GP_LAYER_SELECT) {
         ANIM_set_active_channel(ac, ac->data, ac->datatype, filter, gpl, ANIMTYPE_GPLAYER);
         /* update other layer status */
-        BKE_gpencil_layer_setactive(gpd, gpl);
+        BKE_gpencil_layer_active_set(gpd, gpl);
         BKE_gpencil_layer_autolock_set(gpd, false);
+        DEG_id_tag_update(&gpd->id, ID_RECALC_GEOMETRY);
       }
 
       /* Grease Pencil updates */
@@ -3171,7 +3194,7 @@ static int mouse_anim_channels(bContext *C, bAnimContext *ac, int channel_index,
 static int animchannels_mouseclick_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   bAnimContext ac;
-  ARegion *ar;
+  ARegion *region;
   View2D *v2d;
   int channel_index;
   int notifierFlags = 0;
@@ -3184,8 +3207,8 @@ static int animchannels_mouseclick_invoke(bContext *C, wmOperator *op, const wmE
   }
 
   /* get useful pointers from animation context data */
-  ar = ac.ar;
-  v2d = &ar->v2d;
+  region = ac.region;
+  v2d = &region->v2d;
 
   /* select mode is either replace (deselect all, then add) or add/extend */
   if (RNA_boolean_get(op->ptr, "extend")) {
@@ -3304,7 +3327,7 @@ static bool select_anim_channel_keys(bAnimContext *ac, int channel_index, bool e
   }
 
   /* free temp data and tag for refresh */
-  ED_region_tag_redraw(ac->ar);
+  ED_region_tag_redraw(ac->region);
   return success;
 }
 

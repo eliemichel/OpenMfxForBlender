@@ -234,6 +234,7 @@ static GHOST_TKey convertSDLKey(SDL_Scancode key)
       GXMAP(type, SDL_SCANCODE_RALT, GHOST_kKeyRightAlt);
       GXMAP(type, SDL_SCANCODE_LGUI, GHOST_kKeyOS);
       GXMAP(type, SDL_SCANCODE_RGUI, GHOST_kKeyOS);
+      GXMAP(type, SDL_SCANCODE_APPLICATION, GHOST_kKeyApp);
 
       GXMAP(type, SDL_SCANCODE_INSERT, GHOST_kKeyInsert);
       GXMAP(type, SDL_SCANCODE_DELETE, GHOST_kKeyDelete);
@@ -590,7 +591,7 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
         }
       }
 
-      g_event = new GHOST_EventKey(getMilliSeconds(), type, window, gkey, sym, NULL);
+      g_event = new GHOST_EventKey(getMilliSeconds(), type, window, gkey, sym, NULL, false);
       break;
     }
   }
@@ -701,9 +702,9 @@ GHOST_WindowSDL *GHOST_SystemSDL::findGhostWindow(SDL_Window *sdl_win)
   // We should always check the window manager's list of windows
   // and only process events on these windows.
 
-  std::vector<GHOST_IWindow *> &win_vec = m_windowManager->getWindows();
+  const std::vector<GHOST_IWindow *> &win_vec = m_windowManager->getWindows();
 
-  std::vector<GHOST_IWindow *>::iterator win_it = win_vec.begin();
+  std::vector<GHOST_IWindow *>::const_iterator win_it = win_vec.begin();
   std::vector<GHOST_IWindow *>::const_iterator win_end = win_vec.end();
 
   for (; win_it != win_end; ++win_it) {

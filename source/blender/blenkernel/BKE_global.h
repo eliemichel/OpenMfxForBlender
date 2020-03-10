@@ -27,6 +27,7 @@
  *   for every fresh Blender run.
  */
 
+#include "BLI_utildefines.h"
 #include "DNA_listBase.h"
 
 #ifdef __cplusplus
@@ -77,6 +78,7 @@ typedef struct Global {
    *   *    799: Enable some mysterious new depsgraph behavior (05/2015).
    *   *   1112: Disable new Cloth internal springs handling (09/2014).
    *   *   1234: Disable new dyntopo code fixing skinny faces generation (04/2015).
+   *   *   3001: Enable additional Fluid modifier (Mantaflow) options (02/2020).
    *   * 16384 and above: Reserved for python (add-ons) usage.
    */
   short debug_value;
@@ -151,11 +153,14 @@ enum {
   G_DEBUG_IO = (1 << 17),                    /* IO Debugging (for Collada, ...)*/
   G_DEBUG_GPU_SHADERS = (1 << 18),           /* GLSL shaders */
   G_DEBUG_GPU_FORCE_WORKAROUNDS = (1 << 19), /* force gpu workarounds bypassing detections. */
+
+  G_DEBUG_GHOST = (1 << 20), /* Debug GHOST module. */
 };
 
 #define G_DEBUG_ALL \
   (G_DEBUG | G_DEBUG_FFMPEG | G_DEBUG_PYTHON | G_DEBUG_EVENTS | G_DEBUG_WM | G_DEBUG_JOBS | \
-   G_DEBUG_FREESTYLE | G_DEBUG_DEPSGRAPH | G_DEBUG_GPU_MEM | G_DEBUG_IO | G_DEBUG_GPU_SHADERS)
+   G_DEBUG_FREESTYLE | G_DEBUG_DEPSGRAPH | G_DEBUG_GPU_MEM | G_DEBUG_IO | G_DEBUG_GPU_SHADERS | \
+   G_DEBUG_GHOST)
 
 /** #Global.fileflags */
 enum {

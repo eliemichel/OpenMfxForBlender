@@ -104,15 +104,9 @@ typedef enum eSound_Type {
 } eSound_Type;
 #endif
 
-/* spacesound->flag */
-enum {
-  SND_DRAWFRAMES = 1,
-  SND_CFRA_NUM = 2,
-};
-
 /* bSound->flags */
 enum {
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   /* deprecated! used for sound actuator loading */
   SOUND_FLAGS_3D = (1 << 3),
 #endif

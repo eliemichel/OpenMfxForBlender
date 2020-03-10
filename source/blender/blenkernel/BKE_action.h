@@ -25,6 +25,10 @@
  * \brief Blender kernel action and pose functionality.
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "DNA_listBase.h"
 
 /* The following structures are defined in DNA_action_types.h, and DNA_anim_types.h */
@@ -38,27 +42,13 @@ struct bPose;
 struct bPoseChannel;
 struct bPoseChannel_Runtime;
 
-/* Kernel prototypes */
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* Action Lib Stuff ----------------- */
 
 /* Allocate a new bAction with the given name */
 struct bAction *BKE_action_add(struct Main *bmain, const char name[]);
 
-void BKE_action_copy_data(struct Main *bmain,
-                          struct bAction *act_dst,
-                          const struct bAction *act_src,
-                          const int flag);
 /* Allocate a copy of the given Action and all its data */
 struct bAction *BKE_action_copy(struct Main *bmain, const struct bAction *act_src);
-
-/* Deallocate all of the Action's data, but not the Action itself */
-void BKE_action_free(struct bAction *act);
-
-void BKE_action_make_local(struct Main *bmain, struct bAction *act, const bool lib_local);
 
 /* Action API ----------------- */
 
@@ -122,6 +112,9 @@ void action_groups_add_channel(struct bAction *act,
 
 /* Remove the given channel from all groups */
 void action_groups_remove_channel(struct bAction *act, struct FCurve *fcu);
+
+/* Reconstruct group channel pointers. */
+void BKE_action_groups_reconstruct(struct bAction *act);
 
 /* Find a group with the given name */
 struct bActionGroup *BKE_action_group_find_name(struct bAction *act, const char name[]);

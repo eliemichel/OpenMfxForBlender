@@ -57,8 +57,10 @@
 
 #ifdef WIN32
 
-/** Return true if the path is absolute ie starts with a drive specifier
- * (eg A:\) or is a UNC path. */
+/**
+ * Return true if the path is absolute ie starts with a drive specifier
+ * (eg A:\) or is a UNC path.
+ */
 static bool BLI_path_is_abs(const char *name);
 
 #endif /* WIN32 */
@@ -268,15 +270,6 @@ void BLI_cleanup_dir(const char *relabase, char *dir)
 }
 
 /**
- * Cleanup filepath ensuring no trailing slash.
- */
-void BLI_cleanup_file(const char *relabase, char *path)
-{
-  BLI_cleanup_path(relabase, path);
-  BLI_del_slash(path);
-}
-
-/**
  * Make given name safe to be used in paths.
  *
  * \return true if \a fname was changed, false otherwise.
@@ -444,11 +437,13 @@ static int BLI_path_unc_prefix_len(const char *path)
 
 #if defined(WIN32)
 
-/** Return true if the path is absolute ie starts with a drive specifier
- * (eg A:\) or is a UNC path. */
+/**
+ * Return true if the path is absolute ie starts with a drive specifier
+ * (eg A:\) or is a UNC path.
+ */
 static bool BLI_path_is_abs(const char *name)
 {
-  return (name[1] == ':' && (name[2] == '\\' || name[2] == '/')) || BLI_path_is_unc(name);
+  return (name[1] == ':' && ELEM(name[2], '\\', '/')) || BLI_path_is_unc(name);
 }
 
 static wchar_t *next_slash(wchar_t *path)
@@ -483,14 +478,13 @@ static void BLI_path_unc_to_short(wchar_t *unc)
    *    \\?\C:\ to C:\ and \\?\C:\folder\... to C:\folder\...
    */
   if ((len > 3) && (unc[0] == L'\\') && (unc[1] == L'\\') && (unc[2] == L'?') &&
-      ((unc[3] == L'\\') || (unc[3] == L'/'))) {
+      ELEM(unc[3], L'\\', L'/')) {
     if ((len > 5) && (unc[5] == L':')) {
       wcsncpy(tmp, unc + 4, len - 4);
       tmp[len - 4] = L'\0';
       wcscpy(unc, tmp);
     }
-    else if ((len > 7) && (wcsncmp(&unc[4], L"UNC", 3) == 0) &&
-             ((unc[7] == L'\\') || (unc[7] == L'/'))) {
+    else if ((len > 7) && (wcsncmp(&unc[4], L"UNC", 3) == 0) && ELEM(unc[7], L'\\', L'/')) {
       tmp[0] = L'\\';
       tmp[1] = L'\\';
       wcsncpy(tmp + 2, unc + 8, len - 8);
@@ -572,7 +566,7 @@ void BLI_path_rel(char *file, const char *relfile)
         }
       }
     }
-    else if (temp[1] == ':' && file[1] == ':' && temp[0] != file[0]) {
+    else if ((temp[1] == ':' && file[1] == ':') && (tolower(temp[0]) != tolower(file[0]))) {
       return;
     }
   }
@@ -713,7 +707,7 @@ bool BLI_parent_dir(char *path)
   char tmp[FILE_MAX + 4];
 
   BLI_join_dirfile(tmp, sizeof(tmp), path, parent_dir);
-  BLI_cleanup_dir(NULL, tmp); /* does all the work of normalizing the path for us */
+  BLI_cleanup_path(NULL, tmp); /* does all the work of normalizing the path for us */
 
   if (!BLI_path_extension_check(tmp, parent_dir)) {
     strcpy(path, tmp); /* We assume pardir is always shorter... */
@@ -722,6 +716,21 @@ bool BLI_parent_dir(char *path)
   else {
     return false;
   }
+}
+
+/**
+ * Strips off nonexistent (or non-accessible) subdirectories from the end of *dir,
+ * leaving the path of the lowest-level directory that does exist and we can read.
+ */
+bool BLI_parent_dir_until_exists(char *dir)
+{
+  bool valid_path = true;
+
+  /* Loop as long as cur path is not a dir, and we can get a parent path. */
+  while ((BLI_access(dir, R_OK) != 0) && (valid_path = BLI_parent_dir(dir))) {
+    /* pass */
+  }
+  return (valid_path && dir[0]);
 }
 
 /**
@@ -735,7 +744,7 @@ static bool stringframe_chars(const char *path, int *char_start, int *char_end)
   /* Insert current frame: file### -> file001 */
   ch_sta = ch_end = 0;
   for (i = 0; path[i] != '\0'; i++) {
-    if (path[i] == '\\' || path[i] == '/') {
+    if (ELEM(path[i], '\\', '/')) {
       ch_end = 0; /* this is a directory name, don't use any hashes we found */
     }
     else if (path[i] == '#') {
@@ -1022,7 +1031,7 @@ bool BLI_path_abs(char *path, const char *basepath)
     char *p = path;
     get_default_root(tmp);
     // get rid of the slashes at the beginning of the path
-    while (*p == '\\' || *p == '/') {
+    while (ELEM(*p, '\\', '/')) {
       p++;
     }
     strcat(tmp, p);
@@ -1040,8 +1049,8 @@ bool BLI_path_abs(char *path, const char *basepath)
    * Add a '/' prefix and lowercase the drive-letter, remove the ':'.
    * C:\foo.JPG -> /c/foo.JPG */
 
-  if (isalpha(tmp[0]) && tmp[1] == ':' && (tmp[2] == '\\' || tmp[2] == '/')) {
-    tmp[1] = tolower(tmp[0]); /* replace ':' with driveletter */
+  if (isalpha(tmp[0]) && (tmp[1] == ':') && ELEM(tmp[2], '\\', '/')) {
+    tmp[1] = tolower(tmp[0]); /* Replace ':' with drive-letter. */
     tmp[0] = '/';
     /* '\' the slash will be converted later */
   }
@@ -1309,29 +1318,6 @@ const char *BLI_getenv(const char *env)
 }
 
 /**
- * Strips off nonexistent (or non-accessible) subdirectories from the end of *dir,
- * leaving the path of the lowest-level directory that does exist and we can read.
- */
-void BLI_make_exist(char *dir)
-{
-  bool valid_path = true;
-
-  /* Loop as long as cur path is not a dir, and we can get a parent path. */
-  while ((BLI_access(dir, R_OK) != 0) && (valid_path = BLI_parent_dir(dir))) {
-    /* pass */
-  }
-
-  /* If we could not find an existing dir, use default root... */
-  if (!valid_path || !dir[0]) {
-#ifdef WIN32
-    get_default_root(dir);
-#else
-    strcpy(dir, "/");
-#endif
-  }
-}
-
-/**
  * Ensures that the parent directory of *name exists.
  *
  * \return true on success (i.e. given path now exists on FS), false otherwise.
@@ -1405,7 +1391,7 @@ void BLI_make_file_string(const char *relabase, char *string, const char *dir, c
       }
 
       /* ignore leading slashes */
-      while (*dir == '/' || *dir == '\\') {
+      while (ELEM(*dir, '/', '\\')) {
         dir++;
       }
     }
@@ -1417,14 +1403,14 @@ void BLI_make_file_string(const char *relabase, char *string, const char *dir, c
   /* Make sure string ends in one (and only one) slash */
   /* first trim all slashes from the end of the string */
   sl = strlen(string);
-  while (sl > 0 && (string[sl - 1] == '/' || string[sl - 1] == '\\')) {
+  while ((sl > 0) && ELEM(string[sl - 1], '/', '\\')) {
     string[sl - 1] = '\0';
     sl--;
   }
   /* since we've now removed all slashes, put back one slash at the end. */
   strcat(string, "/");
 
-  while (*file && (*file == '/' || *file == '\\')) {
+  while (ELEM(*file, '/', '\\')) {
     /* Trim slashes from the front of file */
     file++;
   }

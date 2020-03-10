@@ -31,12 +31,6 @@
 #include <Python.h>
 #include <frameobject.h>
 
-/* Needed for 'PyInterpreterState', we should remove this dependency. */
-#if PY_VERSION_HEX >= 0x03080000
-#  define Py_BUILD_CORE
-#  include <internal/pycore_pystate.h>
-#endif
-
 #include "BLI_utildefines.h" /* for bool */
 
 #include "py_capi_utils.h"
@@ -204,8 +198,8 @@ PyObject *PyC_Tuple_PackArray_Bool(const bool *array, uint len)
  */
 void PyC_Tuple_Fill(PyObject *tuple, PyObject *value)
 {
-  unsigned int tot = PyTuple_GET_SIZE(tuple);
-  unsigned int i;
+  uint tot = PyTuple_GET_SIZE(tuple);
+  uint i;
 
   for (i = 0; i < tot; i++) {
     PyTuple_SET_ITEM(tuple, i, value);
@@ -215,8 +209,8 @@ void PyC_Tuple_Fill(PyObject *tuple, PyObject *value)
 
 void PyC_List_Fill(PyObject *list, PyObject *value)
 {
-  unsigned int tot = PyList_GET_SIZE(list);
-  unsigned int i;
+  uint tot = PyList_GET_SIZE(list);
+  uint i;
 
   for (i = 0; i < tot; i++) {
     PyList_SET_ITEM(list, i, value);
@@ -759,9 +753,10 @@ PyObject *PyC_UnicodeFromByte(const char *str)
  ****************************************************************************/
 PyObject *PyC_DefaultNameSpace(const char *filename)
 {
-  PyInterpreterState *interp = PyThreadState_GET()->interp;
+  PyObject *modules = PyImport_GetModuleDict();
+  PyObject *builtins = PyEval_GetBuiltins();
   PyObject *mod_main = PyModule_New("__main__");
-  PyDict_SetItemString(interp->modules, "__main__", mod_main);
+  PyDict_SetItemString(modules, "__main__", mod_main);
   Py_DECREF(mod_main); /* sys.modules owns now */
   PyModule_AddStringConstant(mod_main, "__name__", "__main__");
   if (filename) {
@@ -769,8 +764,8 @@ PyObject *PyC_DefaultNameSpace(const char *filename)
      * note: this wont map to a real file when executing text-blocks and buttons. */
     PyModule_AddObject(mod_main, "__file__", PyC_UnicodeFromByte(filename));
   }
-  PyModule_AddObject(mod_main, "__builtins__", interp->builtins);
-  Py_INCREF(interp->builtins); /* AddObject steals a reference */
+  PyModule_AddObject(mod_main, "__builtins__", builtins);
+  Py_INCREF(builtins); /* AddObject steals a reference */
   return PyModule_GetDict(mod_main);
 }
 
@@ -797,15 +792,15 @@ bool PyC_NameSpace_ImportArray(PyObject *py_dict, const char *imports[])
 /* restore MUST be called after this */
 void PyC_MainModule_Backup(PyObject **main_mod)
 {
-  PyInterpreterState *interp = PyThreadState_GET()->interp;
-  *main_mod = PyDict_GetItemString(interp->modules, "__main__");
+  PyObject *modules = PyImport_GetModuleDict();
+  *main_mod = PyDict_GetItemString(modules, "__main__");
   Py_XINCREF(*main_mod); /* don't free */
 }
 
 void PyC_MainModule_Restore(PyObject *main_mod)
 {
-  PyInterpreterState *interp = PyThreadState_GET()->interp;
-  PyDict_SetItemString(interp->modules, "__main__", main_mod);
+  PyObject *modules = PyImport_GetModuleDict();
+  PyDict_SetItemString(modules, "__main__", main_mod);
   Py_XDECREF(main_mod);
 }
 
@@ -1262,10 +1257,11 @@ bool PyC_RunString_AsIntPtr(const char *imports[],
   return ok;
 }
 
-bool PyC_RunString_AsString(const char *imports[],
-                            const char *expr,
-                            const char *filename,
-                            char **r_value)
+bool PyC_RunString_AsStringAndSize(const char *imports[],
+                                   const char *expr,
+                                   const char *filename,
+                                   char **r_value,
+                                   size_t *r_value_size)
 {
   PyObject *py_dict, *retval;
   bool ok = true;
@@ -1293,6 +1289,7 @@ bool PyC_RunString_AsString(const char *imports[],
       char *val_alloc = MEM_mallocN(val_len + 1, __func__);
       memcpy(val_alloc, val, val_len + 1);
       *r_value = val_alloc;
+      *r_value_size = val_len;
     }
 
     Py_DECREF(retval);
@@ -1301,6 +1298,15 @@ bool PyC_RunString_AsString(const char *imports[],
   PyC_MainModule_Restore(main_mod);
 
   return ok;
+}
+
+bool PyC_RunString_AsString(const char *imports[],
+                            const char *expr,
+                            const char *filename,
+                            char **r_value)
+{
+  size_t value_size;
+  return PyC_RunString_AsStringAndSize(imports, expr, filename, r_value, &value_size);
 }
 
 #endif /* #ifndef MATH_STANDALONE */

@@ -89,6 +89,9 @@
 
 #include <errno.h>
 
+/* Make preferences read-only, use versioning_userdef.c. */
+#define U (*((const UserDef *)&U))
+
 static void vcol_to_fcol(Mesh *me)
 {
   MFace *mface;
@@ -1292,7 +1295,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         }
       }
       if (ob->soft && ob->soft->vertgroup == 0) {
-        bDeformGroup *locGroup = defgroup_find_name(ob, "SOFTGOAL");
+        bDeformGroup *locGroup = BKE_object_defgroup_find_name(ob, "SOFTGOAL");
         if (locGroup) {
           /* retrieve index for that group */
           ob->soft->vertgroup = 1 + BLI_findindex(&ob->defbase, locGroup);
@@ -1879,7 +1882,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       for (curdef = ob->defbase.first; curdef; curdef = curdef->next) {
         /* replace an empty-string name with unique name */
         if (curdef->name[0] == '\0') {
-          defgroup_unique_name(curdef, ob);
+          BKE_object_defgroup_unique_name(curdef, ob);
         }
       }
 
@@ -2289,7 +2292,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         part->omat = paf->mat[0];
         part->hair_step = paf->totkey;
 
-        part->eff_group = paf->group;
+        part->force_group = paf->group;
 
         /* old system didn't interpolate between keypoints at render time */
         part->draw_step = part->ren_step = 0;
@@ -2486,8 +2489,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
         MEM_freeN(fluidmd->fss);
         fluidmd->fss = MEM_dupallocN(ob->fluidsimSettings);
-        fluidmd->fss->ipo = blo_do_versions_newlibadr_us(
-            fd, ob->id.lib, ob->fluidsimSettings->ipo);
+        fluidmd->fss->ipo = blo_do_versions_newlibadr(fd, ob->id.lib, ob->fluidsimSettings->ipo);
         MEM_freeN(ob->fluidsimSettings);
 
         fluidmd->fss->lastgoodframe = INT_MAX;

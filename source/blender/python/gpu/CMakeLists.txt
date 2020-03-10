@@ -19,7 +19,9 @@ set(INC
   .
   ../../blenkernel
   ../../blenlib
+  ../../editors/include
   ../../gpu
+  ../../imbuf
   ../../makesdna
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
@@ -55,6 +57,8 @@ set(SRC
 )
 
 set(LIB
+  ${PYTHON_LINKFLAGS}
+  ${PYTHON_LIBRARIES}
 )
 
 add_definitions(${GL_DEFINITIONS})

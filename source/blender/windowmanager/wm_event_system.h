@@ -31,6 +31,7 @@
 #define WM_HANDLER_MODAL 4 /* MODAL|BREAK means unhandled */
 
 struct ARegion;
+struct GHOST_TabletData;
 struct ScrArea;
 
 /* wmKeyMap is in DNA_windowmanager.h, it's saveable */
@@ -44,7 +45,7 @@ enum eWM_EventHandlerType {
   WM_HANDLER_TYPE_KEYMAP,
 };
 
-typedef bool (*EventHandlerPoll)(const ARegion *ar, const wmEvent *event);
+typedef bool (*EventHandlerPoll)(const ARegion *region, const wmEvent *event);
 
 typedef struct wmEventHandler {
   struct wmEventHandler *next, *prev;
@@ -148,7 +149,9 @@ void wm_event_do_depsgraph(bContext *C, bool is_after_open_file);
 void wm_event_do_refresh_wm_and_depsgraph(bContext *C);
 void wm_event_do_notifiers(bContext *C);
 
+/* wm_event_query.c */
 float wm_pressure_curve(float raw_pressure);
+void wm_tablet_data_from_ghost(const struct GHOST_TabletData *tablet_data, wmTabletData *wmtab);
 
 /* wm_keymap.c */
 

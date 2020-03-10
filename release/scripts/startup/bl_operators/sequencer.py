@@ -21,7 +21,11 @@
 import bpy
 from bpy.types import Operator
 
-from bpy.props import IntProperty
+from bpy.props import (
+    EnumProperty,
+    FloatProperty,
+    IntProperty,
+)
 
 
 class SequencerCrossfadeSounds(Operator):
@@ -75,11 +79,11 @@ class SequencerCrossfadeSounds(Operator):
             return {'CANCELLED'}
 
 
-class SequencerCutMulticam(Operator):
-    """Cut multi-cam strip and select camera"""
+class SequencerSplitMulticam(Operator):
+    """Split multi-cam strip and select camera"""
 
-    bl_idname = "sequencer.cut_multicam"
-    bl_label = "Cut multicam"
+    bl_idname = "sequencer.split_multicam"
+    bl_label = "Split multicam"
     bl_options = {'REGISTER', 'UNDO'}
 
     camera: IntProperty(
@@ -108,7 +112,7 @@ class SequencerCutMulticam(Operator):
             s.select = True
 
         cfra = context.scene.frame_current
-        bpy.ops.sequencer.cut(frame=cfra, type='SOFT', side='RIGHT')
+        bpy.ops.sequencer.split(frame=cfra, type='SOFT', side='RIGHT')
         for s in context.scene.sequence_editor.sequences_all:
             if s.select and s.type == 'MULTICAM' and s.frame_final_start <= cfra and cfra < s.frame_final_end:
                 context.scene.sequence_editor.active_strip = s
@@ -170,12 +174,12 @@ class SequencerFadesAdd(Operator):
     bl_label = "Add Fades"
     bl_options = {'REGISTER', 'UNDO'}
 
-    duration_seconds: bpy.props.FloatProperty(
+    duration_seconds: FloatProperty(
         name="Fade Duration",
         description="Duration of the fade in seconds",
         default=1.0,
         min=0.01)
-    type: bpy.props.EnumProperty(
+    type: EnumProperty(
         items=(
             ('IN_OUT', 'Fade In And Out', 'Fade selected strips in and out'),
             ('IN', 'Fade In', 'Fade in selected strips'),
@@ -365,7 +369,7 @@ def calculate_duration_frames(context, duration_seconds):
 
 classes = (
     SequencerCrossfadeSounds,
-    SequencerCutMulticam,
+    SequencerSplitMulticam,
     SequencerDeinterlaceSelectedMovies,
     SequencerFadesClear,
     SequencerFadesAdd,

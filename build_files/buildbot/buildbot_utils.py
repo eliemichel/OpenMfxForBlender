@@ -24,6 +24,14 @@ import re
 import subprocess
 import sys
 
+def is_tool(name):
+    """Check whether `name` is on PATH and marked as executable."""
+
+    # from whichcraft import which
+    from shutil import which
+
+    return which(name) is not None
+
 class Builder:
     def __init__(self, name, branch):
         self.name = name
@@ -42,7 +50,10 @@ class Builder:
             self.command_prefix =  []
         elif name.startswith('linux'):
             self.platform = 'linux'
-            self.command_prefix =  ['scl', 'enable', 'devtoolset-6', '--']
+            if is_tool('scl'):
+                self.command_prefix =  ['scl', 'enable', 'devtoolset-6', '--']
+            else:
+                self.command_prefix =  []
         elif name.startswith('win'):
             self.platform = 'win'
             self.command_prefix =  []
@@ -87,7 +98,7 @@ class VersionInfo:
             self.is_development_build = False
         else:
             # Development build
-            self.full_version = self.version + '-' + self.hash
+            self.full_version = self.version + self.version_char + '-' + self.hash
             self.is_development_build = True
 
     def _parse_header_file(self, filename, define):

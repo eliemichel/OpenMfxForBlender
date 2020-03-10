@@ -31,6 +31,7 @@ extern "C" {
 #endif
 
 #include "BLI_compiler_attrs.h"
+#include "BLI_sys_types.h"
 
 /********************************* Init **************************************/
 
@@ -48,6 +49,8 @@ void copy_m3_m3(float R[3][3], const float A[3][3]);
 void copy_m4_m4(float R[4][4], const float A[4][4]);
 void copy_m3_m4(float R[3][3], const float A[4][4]);
 void copy_m4_m3(float R[4][4], const float A[3][3]);
+void copy_m3_m2(float R[3][3], const float A[2][2]);
+void copy_m4_m2(float R[4][4], const float A[2][2]);
 
 void copy_m4_m4_db(double m1[4][4], const double m2[4][4]);
 
@@ -59,6 +62,9 @@ void copy_m4d_m4(double R[4][4], const float A[4][4]);
 
 void swap_m3m3(float A[3][3], float B[3][3]);
 void swap_m4m4(float A[4][4], float B[4][4]);
+
+/* Build index shuffle matrix */
+void shuffle_m4(float R[4][4], int index[4]);
 
 /******************************** Arithmetic *********************************/
 
@@ -185,7 +191,7 @@ void mul_v3_m4v3_db(double r[3], const double mat[4][4], const double vec[3]);
 void mul_v4_m4v3_db(double r[4], const double mat[4][4], const double vec[3]);
 void mul_v2_m4v3(float r[2], const float M[4][4], const float v[3]);
 void mul_v2_m2v2(float r[2], const float M[2][2], const float v[2]);
-void mul_m2v2(const float M[2][2], float v[2]);
+void mul_m2_v2(const float M[2][2], float v[2]);
 void mul_mat3_m4_v3(const float M[4][4], float r[3]);
 void mul_v3_mat3_m4v3(float r[3], const float M[4][4], const float v[3]);
 void mul_v3_mat3_m4v3_db(double r[3], const double M[4][4], const double v[3]);
@@ -204,6 +210,8 @@ void mul_v2_m3v3(float r[2], const float M[3][3], const float a[3]);
 void mul_transposed_m3_v3(const float M[3][3], float r[3]);
 void mul_transposed_mat3_m4_v3(const float M[4][4], float r[3]);
 void mul_m3_v3_double(const float M[3][3], double r[3]);
+
+void mul_m4_m4m4_aligned_scale(float R[4][4], const float A[4][4], const float B[4][4]);
 
 void mul_m3_fl(float R[3][3], float f);
 void mul_m4_fl(float R[4][4], float f);
@@ -240,6 +248,10 @@ void transpose_m4_m4(float R[4][4], const float A[4][4]);
 
 int compare_m4m4(const float mat1[4][4], const float mat2[4][4], float limit);
 
+void normalize_m2_ex(float R[2][2], float r_scale[2]) ATTR_NONNULL();
+void normalize_m2(float R[2][2]) ATTR_NONNULL();
+void normalize_m2_m2_ex(float R[2][2], const float A[2][2], float r_scale[2]) ATTR_NONNULL();
+void normalize_m2_m2(float R[2][2], const float A[2][2]) ATTR_NONNULL();
 void normalize_m3_ex(float R[3][3], float r_scale[3]) ATTR_NONNULL();
 void normalize_m3(float R[3][3]) ATTR_NONNULL();
 void normalize_m3_m3_ex(float R[3][3], const float A[3][3], float r_scale[3]) ATTR_NONNULL();

@@ -267,6 +267,12 @@ class GHOST_ISystem {
   virtual GHOST_IContext *createOffscreenContext() = 0;
 
   /**
+   * Overload to allow requesting a different context type. By default only OpenGL is supported.
+   * However by explicitly overloading this a system may add support for others.
+   */
+  virtual GHOST_IContext *createOffscreenContext(GHOST_TDrawingContextType type) = 0;
+
+  /**
    * Dispose of a context.
    * \param   context Pointer to the context to be disposed.
    * \return  Indication of success.
@@ -457,6 +463,20 @@ class GHOST_ISystem {
                                         const char * /*continue_label*/,
                                         const char * /*link*/,
                                         GHOST_DialogOptions /*dialog_options*/) const = 0;
+
+  /***************************************************************************************
+   * Debugging
+   ***************************************************************************************/
+
+  /**
+   * Specify whether debug messages are to be shown.
+   */
+  virtual void initDebug(bool is_debug_enabled) = 0;
+
+  /**
+   * Check whether debug messages are to be shown.
+   */
+  virtual bool isDebugEnabled() = 0;
 
  protected:
   /**

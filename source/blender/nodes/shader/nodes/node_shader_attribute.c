@@ -22,10 +22,10 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_attribute_out[] = {
-    {SOCK_RGBA, 0, N_("Color")},
-    {SOCK_VECTOR, 0, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_FLOAT, 0, N_("Fac"), 0.0f, 0.0f, 0.0f, 0.0f, -FLT_MAX, FLT_MAX, PROP_FACTOR},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color")},
+    {SOCK_VECTOR, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_FLOAT, N_("Fac"), 0.0f, 0.0f, 0.0f, 0.0f, -FLT_MAX, FLT_MAX, PROP_FACTOR},
+    {-1, ""},
 };
 
 static void node_shader_init_attribute(bNodeTree *UNUSED(ntree), bNode *node)
@@ -66,7 +66,7 @@ static int node_shader_gpu_attribute(GPUMaterial *mat,
                           GPU_builtin(GPU_VOLUME_TEMPERATURE));
   }
   else {
-    GPUNodeLink *cd_attr = GPU_attribute(CD_AUTO_FROM_NAME, attr->name);
+    GPUNodeLink *cd_attr = GPU_attribute(mat, CD_AUTO_FROM_NAME, attr->name);
     GPU_stack_link(mat, node, "node_attribute", in, out, cd_attr);
 
     /* for each output. */

@@ -418,6 +418,9 @@ class NODE_MT_context_menu(Menu):
         # If something is selected
         layout.operator_context = 'INVOKE_DEFAULT'
         layout.operator("node.duplicate_move")
+        props = layout.operator("wm.call_panel", text="Rename...")
+        props.name = "TOPBAR_PT_name"
+        props.keep_open = False
         layout.operator("node.delete")
         layout.operator("node.clipboard_copy", text="Copy")
         layout.operator("node.clipboard_paste", text="Paste")
@@ -527,7 +530,12 @@ class NODE_PT_active_node_properties(Panel):
             layout.label(text="Inputs:")
             for socket in value_inputs:
                 row = layout.row()
-                socket.draw(context, row, node, iface_(socket.name, socket.bl_rna.translation_context))
+                socket.draw(
+                    context,
+                    row,
+                    node,
+                    iface_(socket.label if socket.label else socket.name, socket.bl_rna.translation_context),
+                )
 
 
 class NODE_PT_texture_mapping(Panel):

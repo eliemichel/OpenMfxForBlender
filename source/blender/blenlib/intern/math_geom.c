@@ -300,6 +300,25 @@ float volume_tetrahedron_signed_v3(const float v1[3],
   return determinant_m3_array(m) / 6.0f;
 }
 
+/**
+ * The volume from a triangle that is made into a tetrahedron.
+ * This uses a simplified formula where the tip of the tetrahedron is in the world origin.
+ * Using this method, the total volume of a closed triangle mesh can be calculated.
+ * Note that you need to divide the result by 6 to get the actual volume.
+ */
+float volume_tri_tetrahedron_signed_v3_6x(const float v1[3], const float v2[3], const float v3[3])
+{
+  float v_cross[3];
+  cross_v3_v3v3(v_cross, v1, v2);
+  float tetra_volume = dot_v3v3(v_cross, v3);
+  return tetra_volume;
+}
+
+float volume_tri_tetrahedron_signed_v3(const float v1[3], const float v2[3], const float v3[3])
+{
+  return volume_tri_tetrahedron_signed_v3_6x(v1, v2, v3) / 6.0f;
+}
+
 /********************************* Distance **********************************/
 
 /* distance p to line v1-v2
@@ -636,7 +655,7 @@ float dist_squared_ray_to_seg_v3(const float ray_origin[3],
     *r_depth = depth;
   }
 
-  return len_squared_v3(dvec) - SQUARE(depth);
+  return len_squared_v3(dvec) - square_f(depth);
 }
 
 /* Returns the coordinates of the nearest vertex and
@@ -1292,7 +1311,7 @@ int isect_seg_seg_v2_point_ex(const float v0[2],
       float u_a, u_b;
 
       if (equals_v2v2(v0, v1)) {
-        if (len_squared_v2v2(v2, v3) > SQUARE(eps)) {
+        if (len_squared_v2v2(v2, v3) > square_f(eps)) {
           /* use non-point segment as basis */
           SWAP(const float *, v0, v2);
           SWAP(const float *, v1, v3);
@@ -2996,8 +3015,9 @@ int isect_line_line_v3(const float v1[3],
   return isect_line_line_epsilon_v3(v1, v2, v3, v4, r_i1, r_i2, epsilon);
 }
 
-/** Intersection point strictly between the two lines
- * \return false when no intersection is found
+/**
+ * Intersection point strictly between the two lines
+ * \return false when no intersection is found.
  */
 bool isect_line_line_strict_v3(const float v1[3],
                                const float v2[3],
@@ -3070,7 +3090,7 @@ bool isect_ray_ray_epsilon_v3(const float ray_origin_a[3],
   cross_v3_v3v3(n, ray_direction_b, ray_direction_a);
   const float nlen = len_squared_v3(n);
 
-  /* `nlen` is the the square of the area formed by the two vectors. */
+  /* `nlen` is the square of the area formed by the two vectors. */
   if (UNLIKELY(nlen < epsilon)) {
     /* The lines are parallel. */
     return false;
@@ -3188,7 +3208,7 @@ bool isect_ray_aabb_v3(const struct IsectRayAABB_Precalc *data,
  * Test a bounding box (AABB) for ray intersection.
  * Assumes the ray is already local to the boundbox space.
  *
- * \note: \a direction should be normalized
+ * \note \a direction should be normalized
  * if you intend to use the \a tmin or \a tmax distance results!
  */
 bool isect_ray_aabb_v3_simple(const float orig[3],
@@ -3660,7 +3680,9 @@ static float tri_signed_area(
   return 0.5f * ((v1[i] - v2[i]) * (v2[j] - v3[j]) + (v1[j] - v2[j]) * (v3[i] - v2[i]));
 }
 
-/* return 1 when degenerate */
+/**
+ * \return false when degenerate.
+ */
 static bool barycentric_weights(const float v1[3],
                                 const float v2[3],
                                 const float v3[3],
@@ -3679,15 +3701,18 @@ static bool barycentric_weights(const float v1[3],
 
   wtot = w[0] + w[1] + w[2];
 
-  if (fabsf(wtot) > FLT_EPSILON) {
+#ifdef DEBUG /* Avoid floating point exception when debugging. */
+  if (wtot != 0.0f)
+#endif
+  {
     mul_v3_fl(w, 1.0f / wtot);
-    return false;
+    if (is_finite_v3(w)) {
+      return true;
+    }
   }
-  else {
-    /* zero area triangle */
-    copy_v3_fl(w, 1.0f / 3.0f);
-    return true;
-  }
+  /* Zero area triangle. */
+  copy_v3_fl(w, 1.0f / 3.0f);
+  return false;
 }
 
 void interp_weights_tri_v3(
@@ -3708,7 +3733,7 @@ void interp_weights_quad_v3(float w[4],
 {
   float w2[3];
 
-  w[0] = w[1] = w[2] = w[3] = 0.0f;
+  zero_v4(w);
 
   /* first check for exact match */
   if (equals_v3v3(co, v1)) {
@@ -3726,21 +3751,21 @@ void interp_weights_quad_v3(float w[4],
   else {
     /* otherwise compute barycentric interpolation weights */
     float n1[3], n2[3], n[3];
-    bool degenerate;
+    bool ok;
 
     sub_v3_v3v3(n1, v1, v3);
     sub_v3_v3v3(n2, v2, v4);
     cross_v3_v3v3(n, n1, n2);
 
-    degenerate = barycentric_weights(v1, v2, v4, co, n, w);
+    ok = barycentric_weights(v1, v2, v4, co, n, w);
     SWAP(float, w[2], w[3]);
 
-    if (degenerate || (w[0] < 0.0f)) {
+    if (!ok || (w[0] < 0.0f)) {
       /* if w[1] is negative, co is on the other side of the v1-v3 edge,
        * so we interpolate using the other triangle */
-      degenerate = barycentric_weights(v2, v3, v4, co, n, w2);
+      ok = barycentric_weights(v2, v3, v4, co, n, w2);
 
-      if (!degenerate) {
+      if (ok) {
         w[0] = 0.0f;
         w[1] = w2[0];
         w[2] = w2[1];
@@ -3769,7 +3794,9 @@ int barycentric_inside_triangle_v2(const float w[3])
   return 0;
 }
 
-/* returns 0 for degenerated triangles */
+/**
+ * \return false for degenerated triangles.
+ */
 bool barycentric_coords_v2(
     const float v1[2], const float v2[2], const float v3[2], const float co[2], float w[3])
 {
@@ -3779,19 +3806,23 @@ bool barycentric_coords_v2(
   const float x3 = v3[0], y3 = v3[1];
   const float det = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
 
-  if (fabsf(det) > FLT_EPSILON) {
+#ifdef DEBUG /* Avoid floating point exception when debugging. */
+  if (det != 0.0f)
+#endif
+  {
     w[0] = ((y2 - y3) * (x - x3) + (x3 - x2) * (y - y3)) / det;
     w[1] = ((y3 - y1) * (x - x3) + (x1 - x3) * (y - y3)) / det;
     w[2] = 1.0f - w[0] - w[1];
-
-    return true;
+    if (is_finite_v3(w)) {
+      return true;
+    }
   }
 
   return false;
 }
 
 /**
- * \note: using #cross_tri_v2 means locations outside the triangle are correctly weighted
+ * \note Using #cross_tri_v2 means locations outside the triangle are correctly weighted.
  *
  * \note This is *exactly* the same calculation as #resolve_tri_uv_v2,
  * although it has double precision and is used for texture baking, so keep both.
@@ -3806,12 +3837,17 @@ void barycentric_weights_v2(
   w[2] = cross_tri_v2(v1, v2, co);
   wtot = w[0] + w[1] + w[2];
 
-  if (wtot != 0.0f) {
+#ifdef DEBUG /* Avoid floating point exception when debugging. */
+  if (wtot != 0.0f)
+#endif
+  {
     mul_v3_fl(w, 1.0f / wtot);
+    if (is_finite_v3(w)) {
+      return;
+    }
   }
-  else { /* dummy values for zero area face */
-    copy_v3_fl(w, 1.0f / 3.0f);
-  }
+  /* Dummy values for zero area face. */
+  copy_v3_fl(w, 1.0f / 3.0f);
 }
 
 /**
@@ -3829,12 +3865,17 @@ void barycentric_weights_v2_clamped(
   w[2] = max_ff(cross_tri_v2(v1, v2, co), 0.0f);
   wtot = w[0] + w[1] + w[2];
 
-  if (wtot != 0.0f) {
+#ifdef DEBUG /* Avoid floating point exception when debugging. */
+  if (wtot != 0.0f)
+#endif
+  {
     mul_v3_fl(w, 1.0f / wtot);
+    if (is_finite_v3(w)) {
+      return;
+    }
   }
-  else { /* dummy values for zero area face */
-    copy_v3_fl(w, 1.0f / 3.0f);
-  }
+  /* Dummy values for zero area face. */
+  copy_v3_fl(w, 1.0f / 3.0f);
 }
 
 /**
@@ -3851,12 +3892,17 @@ void barycentric_weights_v2_persp(
   w[2] = cross_tri_v2(v1, v2, co) / v3[3];
   wtot = w[0] + w[1] + w[2];
 
-  if (wtot != 0.0f) {
+#ifdef DEBUG /* Avoid floating point exception when debugging. */
+  if (wtot != 0.0f)
+#endif
+  {
     mul_v3_fl(w, 1.0f / wtot);
+    if (is_finite_v3(w)) {
+      return;
+    }
   }
-  else { /* dummy values for zero area face */
-    w[0] = w[1] = w[2] = 1.0f / 3.0f;
-  }
+  /* Dummy values for zero area face. */
+  copy_v3_fl(w, 1.0f / 3.0f);
 }
 
 /**
@@ -3942,12 +3988,17 @@ void barycentric_weights_v2_quad(const float v1[2],
 
     wtot = w[0] + w[1] + w[2] + w[3];
 
-    if (wtot != 0.0f) {
+#ifdef DEBUG /* Avoid floating point exception when debugging. */
+    if (wtot != 0.0f)
+#endif
+    {
       mul_v4_fl(w, 1.0f / wtot);
+      if (is_finite_v4(w)) {
+        return;
+      }
     }
-    else { /* dummy values for zero area face */
-      copy_v4_fl(w, 1.0f / 4.0f);
-    }
+    /* Dummy values for zero area face. */
+    copy_v4_fl(w, 1.0f / 4.0f);
   }
 }
 
@@ -4132,33 +4183,36 @@ struct Float2_Len {
 static float mean_value_half_tan_v3(const struct Float3_Len *d_curr,
                                     const struct Float3_Len *d_next)
 {
-  float cross[3], area;
+  float cross[3];
   cross_v3_v3v3(cross, d_curr->dir, d_next->dir);
-  area = len_v3(cross);
-  if (LIKELY(fabsf(area) > FLT_EPSILON)) {
+  const float area = len_v3(cross);
+  /* Compare against zero since 'FLT_EPSILON' can be too large, see: T73348. */
+  if (LIKELY(area != 0.0f)) {
     const float dot = dot_v3v3(d_curr->dir, d_next->dir);
     const float len = d_curr->len * d_next->len;
-    return (len - dot) / area;
+    const float result = (len - dot) / area;
+    if (isfinite(result)) {
+      return result;
+    }
   }
-  else {
-    return 0.0f;
-  }
+  return 0.0f;
 }
 
 static float mean_value_half_tan_v2(const struct Float2_Len *d_curr,
                                     const struct Float2_Len *d_next)
 {
-  float area;
   /* different from the 3d version but still correct */
-  area = cross_v2v2(d_curr->dir, d_next->dir);
-  if (LIKELY(fabsf(area) > FLT_EPSILON)) {
+  const float area = cross_v2v2(d_curr->dir, d_next->dir);
+  /* Compare against zero since 'FLT_EPSILON' can be too large, see: T73348. */
+  if (LIKELY(area != 0.0f)) {
     const float dot = dot_v2v2(d_curr->dir, d_next->dir);
     const float len = d_curr->len * d_next->len;
-    return (len - dot) / area;
+    const float result = (len - dot) / area;
+    if (isfinite(result)) {
+      return result;
+    }
   }
-  else {
-    return 0.0f;
-  }
+  return 0.0f;
 }
 
 void interp_weights_poly_v3(float *w, float v[][3], const int n, const float co[3])
@@ -4691,7 +4745,7 @@ void window_translate_m4(float winmat[4][4], float perspmat[4][4], const float x
  *
  * plane parameters can be NULL if you do not need them.
  */
-void planes_from_projmat(float mat[4][4],
+void planes_from_projmat(const float mat[4][4],
                          float left[4],
                          float right[4],
                          float top[4],

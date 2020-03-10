@@ -58,7 +58,7 @@
 #include "BKE_dynamicpaint.h"
 #include "BKE_effect.h"
 #include "BKE_image.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
@@ -355,7 +355,7 @@ bool dynamicPaint_outputLayerExists(struct DynamicPaintSurface *surface, Object 
       return (CustomData_get_named_layer_index(&me->ldata, CD_MLOOPCOL, name) != -1);
     }
     else if (surface->type == MOD_DPAINT_SURFACE_T_WEIGHT) {
-      return (defgroup_name_index(ob, name) != -1);
+      return (BKE_object_defgroup_name_index(ob, name) != -1);
     }
   }
 
@@ -2015,7 +2015,7 @@ static Mesh *dynamicPaint_Modifier_apply(DynamicPaintModifierData *pmd, Object *
           }
           /* vertex group paint */
           else if (surface->type == MOD_DPAINT_SURFACE_T_WEIGHT) {
-            int defgrp_index = defgroup_name_index(ob, surface->output_name);
+            int defgrp_index = BKE_object_defgroup_name_index(ob, surface->output_name);
             MDeformVert *dvert = CustomData_get_layer(&result->vdata, CD_MDEFORMVERT);
             float *weight = (float *)sData->type_data;
 
@@ -2030,13 +2030,13 @@ static Mesh *dynamicPaint_Modifier_apply(DynamicPaintModifierData *pmd, Object *
               int i;
               for (i = 0; i < sData->total_points; i++) {
                 MDeformVert *dv = &dvert[i];
-                MDeformWeight *def_weight = defvert_find_index(dv, defgrp_index);
+                MDeformWeight *def_weight = BKE_defvert_find_index(dv, defgrp_index);
 
                 /* skip if weight value is 0 and no existing weight is found */
                 if ((def_weight != NULL) || (weight[i] != 0.0f)) {
                   /* if not found, add a weight for it */
                   if (def_weight == NULL) {
-                    def_weight = defvert_verify_index(dv, defgrp_index);
+                    def_weight = BKE_defvert_ensure_index(dv, defgrp_index);
                   }
 
                   /* set weight value */
@@ -2705,7 +2705,7 @@ static void dynamic_paint_find_island_border(const DynamicPaintCreateUVSurfaceDa
       /* Check if it's close enough to likely touch the intended triangle. Any triangle
        * becomes thinner than a pixel at its vertices, so robustness requires some margin. */
       const float final_pt[2] = {((final_index % w) + 0.5f) / w, ((final_index / w) + 0.5f) / h};
-      const float threshold = SQUARE(0.7f) / (w * h);
+      const float threshold = square_f(0.7f) / (w * h);
 
       if (dist_squared_to_looptri_uv_edges(
               mlooptri, mloopuv, tempPoints[final_index].tri_index, final_pt) > threshold) {
@@ -6278,7 +6278,18 @@ static int dynamicPaint_doStep(Depsgraph *depsgraph,
 
           /* Apply brush on the surface depending on it's collision type */
           if (brush->psys && brush->psys->part &&
-              ELEM(brush->psys->part->type, PART_EMITTER, PART_FLUID) &&
+              ELEM(brush->psys->part->type,
+                   PART_EMITTER,
+                   PART_FLUID,
+                   PART_FLUID_FLIP,
+                   PART_FLUID_SPRAY,
+                   PART_FLUID_BUBBLE,
+                   PART_FLUID_FOAM,
+                   PART_FLUID_TRACER,
+                   PART_FLUID_SPRAYFOAM,
+                   PART_FLUID_SPRAYBUBBLE,
+                   PART_FLUID_FOAMBUBBLE,
+                   PART_FLUID_SPRAYFOAMBUBBLE) &&
               psys_check_enabled(brushObj, brush->psys, for_render)) {
             /* Paint a particle system */
             dynamicPaint_paintParticles(surface, brush->psys, brush, timescale);
@@ -6366,8 +6377,8 @@ static int dynamicPaint_doStep(Depsgraph *depsgraph,
   return ret;
 }
 
-/*
- * Calculate a single frame and included subframes for surface
+/**
+ * Calculate a single frame and included sub-frames for surface.
  */
 int dynamicPaint_calculateFrame(DynamicPaintSurface *surface,
                                 struct Depsgraph *depsgraph,

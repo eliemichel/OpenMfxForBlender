@@ -32,9 +32,9 @@
 using namespace std;
 using namespace Freestyle;
 
-extern "C" {
-
 #include "MEM_guardedalloc.h"
+
+extern "C" {
 
 #include "DNA_camera_types.h"
 #include "DNA_collection_types.h"
@@ -46,7 +46,7 @@ extern "C" {
 #include "BKE_context.h"
 #include "BKE_freestyle.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_linestyle.h"
 #include "BKE_scene.h"
 #include "BKE_text.h"
@@ -549,7 +549,15 @@ void FRS_composite_result(Render *re, ViewLayer *view_layer, Render *freestyle_r
     }
     return;
   }
-  dest = RE_RenderLayerGetPass(rl, RE_PASSNAME_COMBINED, re->viewname);
+
+  if (view_layer->freestyle_config.flags & FREESTYLE_AS_RENDER_PASS) {
+    RE_create_render_pass(
+        re->result, RE_PASSNAME_FREESTYLE, 4, "RGBA", view_layer->name, re->viewname);
+    dest = RE_RenderLayerGetPass(rl, RE_PASSNAME_FREESTYLE, re->viewname);
+  }
+  else {
+    dest = RE_RenderLayerGetPass(rl, RE_PASSNAME_COMBINED, re->viewname);
+  }
   if (!dest) {
     if (G.debug & G_DEBUG_FREESTYLE) {
       cout << "No destination result image to composite to" << endl;

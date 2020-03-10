@@ -439,42 +439,66 @@ void BLI_rcti_union(rcti *rct1, const rcti *rct2)
 
 void BLI_rctf_init(rctf *rect, float xmin, float xmax, float ymin, float ymax)
 {
-  if (xmin <= xmax) {
-    rect->xmin = xmin;
-    rect->xmax = xmax;
-  }
-  else {
-    rect->xmax = xmin;
-    rect->xmin = xmax;
-  }
-  if (ymin <= ymax) {
-    rect->ymin = ymin;
-    rect->ymax = ymax;
-  }
-  else {
-    rect->ymax = ymin;
-    rect->ymin = ymax;
-  }
+  rect->xmin = xmin;
+  rect->xmax = xmax;
+  rect->ymin = ymin;
+  rect->ymax = ymax;
+
+  BLI_rctf_sanitize(rect);
 }
 
 void BLI_rcti_init(rcti *rect, int xmin, int xmax, int ymin, int ymax)
 {
-  if (xmin <= xmax) {
-    rect->xmin = xmin;
-    rect->xmax = xmax;
+  rect->xmin = xmin;
+  rect->xmax = xmax;
+  rect->ymin = ymin;
+  rect->ymax = ymax;
+
+  BLI_rcti_sanitize(rect);
+}
+
+/**
+ * Check if X-min and Y-min are less than or equal to X-max and Y-max, respectively.
+ * If this returns false, #BLI_rctf_sanitize() can be called to address this.
+ *
+ * This is not a hard constraint or invariant for rectangles, in some cases it may be useful to
+ * have max < min. Usually this is what you'd want though.
+ */
+bool BLI_rctf_is_valid(const rctf *rect)
+{
+  return (rect->xmin <= rect->xmax) && (rect->ymin <= rect->ymax);
+}
+
+bool BLI_rcti_is_valid(const rcti *rect)
+{
+  return (rect->xmin <= rect->xmax) && (rect->ymin <= rect->ymax);
+}
+
+/**
+ * Ensure X-min and Y-min are less than or equal to X-max and Y-max, respectively.
+ */
+void BLI_rctf_sanitize(rctf *rect)
+{
+  if (rect->xmin > rect->xmax) {
+    SWAP(float, rect->xmin, rect->xmax);
   }
-  else {
-    rect->xmax = xmin;
-    rect->xmin = xmax;
+  if (rect->ymin > rect->ymax) {
+    SWAP(float, rect->ymin, rect->ymax);
   }
-  if (ymin <= ymax) {
-    rect->ymin = ymin;
-    rect->ymax = ymax;
+
+  BLI_assert(BLI_rctf_is_valid(rect));
+}
+
+void BLI_rcti_sanitize(rcti *rect)
+{
+  if (rect->xmin > rect->xmax) {
+    SWAP(int, rect->xmin, rect->xmax);
   }
-  else {
-    rect->ymax = ymin;
-    rect->ymin = ymax;
+  if (rect->ymin > rect->ymax) {
+    SWAP(int, rect->ymin, rect->ymax);
   }
+
+  BLI_assert(BLI_rcti_is_valid(rect));
 }
 
 void BLI_rctf_init_pt_radius(rctf *rect, const float xy[2], float size)
@@ -894,6 +918,90 @@ bool BLI_rcti_isect(const rcti *src1, const rcti *src2, rcti *dest)
       dest->xmax = 0;
       dest->ymin = 0;
       dest->ymax = 0;
+    }
+    return false;
+  }
+}
+
+bool BLI_rctf_isect_rect_x(const rctf *src1, const rctf *src2, float range_x[2])
+{
+  const float xmin = (src1->xmin) > (src2->xmin) ? (src1->xmin) : (src2->xmin);
+  const float xmax = (src1->xmax) < (src2->xmax) ? (src1->xmax) : (src2->xmax);
+
+  if (xmax >= xmin) {
+    if (range_x) {
+      range_x[0] = xmin;
+      range_x[1] = xmax;
+    }
+    return true;
+  }
+  else {
+    if (range_x) {
+      range_x[0] = 0;
+      range_x[1] = 0;
+    }
+    return false;
+  }
+}
+
+bool BLI_rctf_isect_rect_y(const rctf *src1, const rctf *src2, float range_y[2])
+{
+  const float ymin = (src1->ymin) > (src2->ymin) ? (src1->ymin) : (src2->ymin);
+  const float ymax = (src1->ymax) < (src2->ymax) ? (src1->ymax) : (src2->ymax);
+
+  if (ymax >= ymin) {
+    if (range_y) {
+      range_y[0] = ymin;
+      range_y[1] = ymax;
+    }
+    return true;
+  }
+  else {
+    if (range_y) {
+      range_y[0] = 0;
+      range_y[1] = 0;
+    }
+    return false;
+  }
+}
+
+bool BLI_rcti_isect_rect_x(const rcti *src1, const rcti *src2, int range_x[2])
+{
+  const int xmin = (src1->xmin) > (src2->xmin) ? (src1->xmin) : (src2->xmin);
+  const int xmax = (src1->xmax) < (src2->xmax) ? (src1->xmax) : (src2->xmax);
+
+  if (xmax >= xmin) {
+    if (range_x) {
+      range_x[0] = xmin;
+      range_x[1] = xmax;
+    }
+    return true;
+  }
+  else {
+    if (range_x) {
+      range_x[0] = 0;
+      range_x[1] = 0;
+    }
+    return false;
+  }
+}
+
+bool BLI_rcti_isect_rect_y(const rcti *src1, const rcti *src2, int range_y[2])
+{
+  const int ymin = (src1->ymin) > (src2->ymin) ? (src1->ymin) : (src2->ymin);
+  const int ymax = (src1->ymax) < (src2->ymax) ? (src1->ymax) : (src2->ymax);
+
+  if (ymax >= ymin) {
+    if (range_y) {
+      range_y[0] = ymin;
+      range_y[1] = ymax;
+    }
+    return true;
+  }
+  else {
+    if (range_y) {
+      range_y[0] = 0;
+      range_y[1] = 0;
     }
     return false;
   }

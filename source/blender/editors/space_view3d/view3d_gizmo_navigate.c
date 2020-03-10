@@ -239,14 +239,14 @@ static void WIDGETGROUP_navigate_setup(const bContext *C, wmGizmoGroup *gzgroup)
 static void WIDGETGROUP_navigate_draw_prepare(const bContext *C, wmGizmoGroup *gzgroup)
 {
   struct NavigateWidgetGroup *navgroup = gzgroup->customdata;
-  ARegion *ar = CTX_wm_region(C);
-  const RegionView3D *rv3d = ar->regiondata;
+  ARegion *region = CTX_wm_region(C);
+  const RegionView3D *rv3d = region->regiondata;
 
   for (int i = 0; i < 3; i++) {
     copy_v3_v3(navgroup->gz_array[GZ_INDEX_ROTATE]->matrix_offset[i], rv3d->viewmat[i]);
   }
 
-  const rcti *rect_visible = ED_region_visible_rect(ar);
+  const rcti *rect_visible = ED_region_visible_rect(region);
 
   if ((navgroup->state.rect_visible.xmax == rect_visible->xmax) &&
       (navgroup->state.rect_visible.ymax == rect_visible->ymax) &&
@@ -285,8 +285,8 @@ static void WIDGETGROUP_navigate_draw_prepare(const bContext *C, wmGizmoGroup *g
   }
 
   const float co[2] = {
-      rect_visible->xmax - icon_offset_mini * 0.75f,
-      rect_visible->ymax - icon_offset_from_axis,
+      roundf(rect_visible->xmax - icon_offset_mini * 0.75f),
+      roundf(rect_visible->ymax - icon_offset_from_axis),
   };
 
   wmGizmo *gz;
@@ -307,25 +307,25 @@ static void WIDGETGROUP_navigate_draw_prepare(const bContext *C, wmGizmoGroup *g
   if (show_navigate) {
     int icon_mini_slot = 0;
     gz = navgroup->gz_array[GZ_INDEX_ZOOM];
-    gz->matrix_basis[3][0] = co[0];
-    gz->matrix_basis[3][1] = co[1] - (icon_offset_mini * icon_mini_slot++);
+    gz->matrix_basis[3][0] = roundf(co[0]);
+    gz->matrix_basis[3][1] = roundf(co[1] - (icon_offset_mini * icon_mini_slot++));
     WM_gizmo_set_flag(gz, WM_GIZMO_HIDDEN, false);
 
     gz = navgroup->gz_array[GZ_INDEX_MOVE];
-    gz->matrix_basis[3][0] = co[0];
-    gz->matrix_basis[3][1] = co[1] - (icon_offset_mini * icon_mini_slot++);
+    gz->matrix_basis[3][0] = roundf(co[0]);
+    gz->matrix_basis[3][1] = roundf(co[1] - (icon_offset_mini * icon_mini_slot++));
     WM_gizmo_set_flag(gz, WM_GIZMO_HIDDEN, false);
 
     if ((rv3d->viewlock & RV3D_LOCKED) == 0) {
       gz = navgroup->gz_array[GZ_INDEX_CAMERA];
-      gz->matrix_basis[3][0] = co[0];
-      gz->matrix_basis[3][1] = co[1] - (icon_offset_mini * icon_mini_slot++);
+      gz->matrix_basis[3][0] = roundf(co[0]);
+      gz->matrix_basis[3][1] = roundf(co[1] - (icon_offset_mini * icon_mini_slot++));
       WM_gizmo_set_flag(gz, WM_GIZMO_HIDDEN, false);
 
       if (navgroup->state.rv3d.is_camera == false) {
         gz = navgroup->gz_array[rv3d->is_persp ? GZ_INDEX_PERSP : GZ_INDEX_ORTHO];
-        gz->matrix_basis[3][0] = co[0];
-        gz->matrix_basis[3][1] = co[1] - (icon_offset_mini * icon_mini_slot++);
+        gz->matrix_basis[3][0] = roundf(co[0]);
+        gz->matrix_basis[3][1] = roundf(co[1] - (icon_offset_mini * icon_mini_slot++));
         WM_gizmo_set_flag(gz, WM_GIZMO_HIDDEN, false);
       }
     }

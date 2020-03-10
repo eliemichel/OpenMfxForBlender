@@ -373,11 +373,9 @@ def enable(module_name, *, default_set=False, persistent=False, handle_error=Non
         # 2) Try register collected modules.
         # Removed register_module, addons need to handle their own registration now.
 
-        use_owner = mod.bl_info.get("use_owner", True)
-        if use_owner:
-            from _bpy import _bl_owner_id_get, _bl_owner_id_set
-            owner_id_prev = _bl_owner_id_get()
-            _bl_owner_id_set(module_name)
+        from _bpy import _bl_owner_id_get, _bl_owner_id_set
+        owner_id_prev = _bl_owner_id_get()
+        _bl_owner_id_set(module_name)
 
         # 3) Try run the modules register function.
         try:
@@ -393,8 +391,7 @@ def enable(module_name, *, default_set=False, persistent=False, handle_error=Non
                 _addon_remove(module_name)
             return None
         finally:
-            if use_owner:
-                _bl_owner_id_set(owner_id_prev)
+            _bl_owner_id_set(owner_id_prev)
 
     # * OK loaded successfully! *
     mod.__addon_enabled__ = True
@@ -499,6 +496,15 @@ def disable_all():
             disable(mod_name)
 
 
+def _blender_manual_url_prefix():
+    if _bpy.app.version_cycle in {"rc", "release"}:
+        manual_version = "%d.%d" % _bpy.app.version[:2]
+    else:
+        manual_version = "dev"
+
+    return f"https://docs.blender.org/manual/en/{manual_version}"
+
+
 def module_bl_info(mod, info_basis=None):
     if info_basis is None:
         info_basis = {
@@ -508,12 +514,11 @@ def module_bl_info(mod, info_basis=None):
             "blender": (),
             "location": "",
             "description": "",
-            "wiki_url": "",
+            "doc_url": "",
             "support": 'COMMUNITY',
             "category": "",
             "warning": "",
             "show_expanded": False,
-            "use_owner": True,
         }
 
     addon_info = getattr(mod, "bl_info", {})
@@ -531,9 +536,30 @@ def module_bl_info(mod, info_basis=None):
     if not addon_info["name"]:
         addon_info["name"] = mod.__name__
 
-    # Temporary auto-magic, don't use_owner for import export menus.
-    if mod.bl_info["category"] == "Import-Export":
-        mod.bl_info["use_owner"] = False
+    # Replace 'wiki_url' with 'doc_url'.
+    doc_url = addon_info.pop("wiki_url", None)
+    if doc_url is not None:
+        # Unlikely, but possible that both are set.
+        if not addon_info["doc_url"]:
+            addon_info["doc_url"] = doc_url
+        if _bpy.app.debug:
+            print(
+                "Warning: add-on \"{addon_name}\": 'wiki_url' in 'bl_info' "
+                "is deprecated please use 'doc_url' instead!\n"
+                "         {addon_path}".format(
+                    addon_name=addon_info['name'],
+                    addon_path=getattr(mod, "__file__", None),
+                )
+            )
+
+    doc_url = addon_info["doc_url"]
+    if doc_url:
+        doc_url_prefix = "{BLENDER_MANUAL_URL}"
+        if doc_url_prefix in doc_url:
+            addon_info["doc_url"] = doc_url.replace(
+                doc_url_prefix,
+                _blender_manual_url_prefix(),
+            )
 
     addon_info["_init"] = None
     return addon_info

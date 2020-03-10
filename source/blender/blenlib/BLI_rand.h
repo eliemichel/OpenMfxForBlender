@@ -20,6 +20,8 @@
 #ifndef __BLI_RAND_H__
 #define __BLI_RAND_H__
 
+#include "BLI_compiler_attrs.h"
+
 /** \file
  * \ingroup bli
  * \brief Random number functions.
@@ -72,9 +74,9 @@ void BLI_array_frand(float *ar, int count, unsigned int seed);
 /** Return a pseudo-random (hash) float from an integer value */
 float BLI_hash_frand(unsigned int seed) ATTR_WARN_UNUSED_RESULT;
 
-/** Shuffle an array randomly using the given seed.
- * contents. This routine does not use nor modify
- * the state of the BLI random number generator.
+/**
+ * Shuffle an array randomly using the given seed contents.
+ * This routine does not use nor modify the state of the BLI random number generator.
  */
 void BLI_array_randomize(void *data,
                          unsigned int elem_size,

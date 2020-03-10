@@ -214,7 +214,7 @@ Shader::Shader() : Node(node_type)
   used = false;
 
   need_update = true;
-  need_update_mesh = true;
+  need_update_geometry = true;
   need_sync_object = false;
 }
 
@@ -225,6 +225,13 @@ Shader::~Shader()
 
 bool Shader::is_constant_emission(float3 *emission)
 {
+  /* If the shader has AOVs, they need to be evaluated, so we can't skip the shader. */
+  foreach (ShaderNode *node, graph->nodes) {
+    if (node->special_type == SHADER_SPECIAL_TYPE_OUTPUT_AOV) {
+      return false;
+    }
+  }
+
   ShaderInput *surf = graph->output()->input("Surface");
 
   if (surf->link == NULL) {
@@ -281,7 +288,7 @@ void Shader::set_graph(ShaderGraph *graph_)
     const char *new_hash = (graph_) ? graph_->displacement_hash.c_str() : "";
 
     if (strcmp(old_hash, new_hash) != 0) {
-      need_update_mesh = true;
+      need_update_geometry = true;
     }
   }
 
@@ -310,7 +317,8 @@ void Shader::tag_update(Scene *scene)
    * has use_mis set to false. We are quite close to release now, so
    * better to be safe.
    */
-  if (this == scene->default_background && scene->light_manager->has_background_light(scene)) {
+  if (this == scene->background->get_shader(scene) &&
+      scene->light_manager->has_background_light(scene)) {
     scene->light_manager->need_update = true;
   }
 
@@ -339,14 +347,14 @@ void Shader::tag_update(Scene *scene)
   }
 
   /* compare if the attributes changed, mesh manager will check
-   * need_update_mesh, update the relevant meshes and clear it. */
+   * need_update_geometry, update the relevant meshes and clear it. */
   if (attributes.modified(prev_attributes)) {
-    need_update_mesh = true;
-    scene->mesh_manager->need_update = true;
+    need_update_geometry = true;
+    scene->geometry_manager->need_update = true;
   }
 
   if (has_volume != prev_has_volume) {
-    scene->mesh_manager->need_flags_update = true;
+    scene->geometry_manager->need_flags_update = true;
     scene->object_manager->need_flags_update = true;
   }
 }
@@ -481,8 +489,8 @@ void ShaderManager::device_update_shaders_used(Scene *scene)
   if (scene->background->shader)
     scene->background->shader->used = true;
 
-  foreach (Mesh *mesh, scene->meshes)
-    foreach (Shader *shader, mesh->used_shaders)
+  foreach (Geometry *geom, scene->geometry)
+    foreach (Shader *shader, geom->used_shaders)
       shader->used = true;
 
   foreach (Light *light, scene->lights)

@@ -36,8 +36,8 @@ class GHOST_EventCursor : public GHOST_Event {
    * Constructor.
    * \param msec      The time this event was generated.
    * \param type      The type of this event.
-   * \param x         The x-coordinate of the location the cursor was at at the time of the event.
-   * \param y         The y-coordinate of the location the cursor was at at the time of the event.
+   * \param x         The x-coordinate of the location the cursor was at the time of the event.
+   * \param y         The y-coordinate of the location the cursor was at the time of the event.
    */
   GHOST_EventCursor(GHOST_TUns64 msec,
                     GHOST_TEventType type,
@@ -48,6 +48,7 @@ class GHOST_EventCursor : public GHOST_Event {
   {
     m_cursorEventData.x = x;
     m_cursorEventData.y = y;
+    m_cursorEventData.tablet = window->GetTabletData();
     m_data = &m_cursorEventData;
   }
 

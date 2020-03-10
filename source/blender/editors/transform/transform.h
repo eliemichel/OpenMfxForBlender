@@ -213,7 +213,10 @@ typedef struct TransData2D {
   float ih1[2], ih2[2];
 } TransData2D;
 
-/** Used to store 2 handles for each #TransData in case the other handle wasn't selected. */
+/**
+ * Used to store 2 handles for each #TransData in case the other handle wasn't selected.
+ * Also to unset temporary flags.
+ */
 typedef struct TransDataCurveHandleFlags {
   char ih1, ih2;
   char *h1, *h2;
@@ -266,114 +269,6 @@ typedef struct TransDataNla {
   /** handle-index: 0 for dummy entry, -1 for start, 1 for end, 2 for both ends. */
   int handle;
 } TransDataNla;
-
-struct LinkNode;
-
-/* header of TransDataEdgeSlideVert, TransDataEdgeSlideEdge */
-typedef struct TransDataGenericSlideVert {
-  struct BMVert *v;
-  struct LinkNode **cd_loop_groups;
-  float co_orig_3d[3];
-} TransDataGenericSlideVert;
-
-typedef struct TransDataEdgeSlideVert {
-  /** #TransDataGenericSlideVert (header) */
-  struct BMVert *v;
-  struct LinkNode **cd_loop_groups;
-  float v_co_orig[3];
-  /* end generic */
-
-  float edge_len;
-
-  struct BMVert *v_side[2];
-
-  /* add origvert.co to get the original locations */
-  float dir_side[2][3];
-
-  int loop_nr;
-} TransDataEdgeSlideVert;
-
-typedef struct EdgeSlideData {
-  TransDataEdgeSlideVert *sv;
-  int totsv;
-
-  int mval_start[2], mval_end[2];
-  int curr_sv_index;
-
-  /** when un-clamped - use this index: #TransDataEdgeSlideVert.dir_side */
-  int curr_side_unclamp;
-} EdgeSlideData;
-
-typedef struct EdgeSlideParams {
-  float perc;
-
-  bool use_even;
-  bool flipped;
-} EdgeSlideParams;
-
-typedef struct TransDataVertSlideVert {
-  /** #TransDataGenericSlideVert (header) */
-  struct BMVert *v;
-  struct LinkNode **cd_loop_groups;
-  float co_orig_3d[3];
-  /* end generic */
-
-  float (*co_link_orig_3d)[3];
-  int co_link_tot;
-  int co_link_curr;
-} TransDataVertSlideVert;
-
-typedef struct VertSlideData {
-  TransDataVertSlideVert *sv;
-  int totsv;
-  int curr_sv_index;
-
-  /* result of ED_view3d_ob_project_mat_get */
-  float proj_mat[4][4];
-} VertSlideData;
-
-typedef struct VertSlideParams {
-  float perc;
-
-  bool use_even;
-  bool flipped;
-} VertSlideParams;
-
-typedef struct BoneInitData {
-  struct EditBone *bone;
-  float tail[3];
-  float rad_head;
-  float rad_tail;
-  float roll;
-  float head[3];
-  float dist;
-  float xwidth;
-  float zwidth;
-} BoneInitData;
-
-typedef struct PoseInitData_Mirror {
-  /** Points to the bone which this info is initialized & restored to.
-   * A NULL value is used to terminate the array. */
-  struct bPoseChannel *pchan;
-  struct {
-    float loc[3];
-    float size[3];
-    union {
-      float eul[3];
-      float quat[4];
-      float axis_angle[4];
-    };
-    float curve_in_x;
-    float curve_out_x;
-    float roll1;
-    float roll2;
-  } orig;
-  /**
-   * An extra offset to apply after mirroring.
-   * Use with #POSE_MIRROR_RELATIVE.
-   */
-  float offset_mtx[4][4];
-} PoseInitData_Mirror;
 
 typedef struct TransData {
   /** Distance needed to affect element (for Proportionnal Editing). */
@@ -631,6 +526,9 @@ typedef struct TransInfo {
   /*************** NEW STUFF *********************/
   /** event type used to launch transform. */
   short launch_event;
+  /** Is the actual launch event a tweak event? (launch_event above is set to the corresponding
+   * mouse button then.) */
+  bool is_launch_event_tweak;
 
   struct {
     /** Orientation type when when we're not constrained.
@@ -643,7 +541,7 @@ typedef struct TransInfo {
     short index;
     short *types[2];
     /* this gets used when custom_orientation is V3D_ORIENT_CUSTOM */
-    TransformOrientation *custom;
+    struct TransformOrientation *custom;
   } orientation;
   /** backup from view3d, to restore on end. */
   short gizmo_flag;
@@ -684,7 +582,7 @@ typedef struct TransInfo {
   /** Only valid (non null) during an operator called function. */
   struct bContext *context;
   struct ScrArea *sa;
-  struct ARegion *ar;
+  struct ARegion *region;
   struct Depsgraph *depsgraph;
   struct Scene *scene;
   struct ViewLayer *view_layer;
@@ -727,7 +625,7 @@ enum {
   T_EDIT = 1 << 1,
   T_POSE = 1 << 2,
   T_TEXTURE = 1 << 3,
-  /** Transforming the camera while in camera view. */
+  /** Transforming the 3d view. */
   T_CAMERA = 1 << 4,
   /** Transforming the 3D cursor. */
   T_CURSOR = 1 << 5,
@@ -869,6 +767,43 @@ enum {
   MULTI_POINTS = 1 << 3,
 };
 
+/** keymap modal items */
+/* NOTE: these values are saved in keymap files, do not change then but just add new ones. */
+enum {
+  TFM_MODAL_CANCEL = 1,
+  TFM_MODAL_CONFIRM = 2,
+  TFM_MODAL_TRANSLATE = 3,
+  TFM_MODAL_ROTATE = 4,
+  TFM_MODAL_RESIZE = 5,
+  TFM_MODAL_SNAP_INV_ON = 6,
+  TFM_MODAL_SNAP_INV_OFF = 7,
+  TFM_MODAL_SNAP_TOGGLE = 8,
+  TFM_MODAL_AXIS_X = 9,
+  TFM_MODAL_AXIS_Y = 10,
+  TFM_MODAL_AXIS_Z = 11,
+  TFM_MODAL_PLANE_X = 12,
+  TFM_MODAL_PLANE_Y = 13,
+  TFM_MODAL_PLANE_Z = 14,
+  TFM_MODAL_CONS_OFF = 15,
+  TFM_MODAL_ADD_SNAP = 16,
+  TFM_MODAL_REMOVE_SNAP = 17,
+
+  /* 18 and 19 used by numinput, defined in transform.h */
+
+  TFM_MODAL_PROPSIZE_UP = 20,
+  TFM_MODAL_PROPSIZE_DOWN = 21,
+  TFM_MODAL_AUTOIK_LEN_INC = 22,
+  TFM_MODAL_AUTOIK_LEN_DEC = 23,
+
+  TFM_MODAL_EDGESLIDE_UP = 24,
+  TFM_MODAL_EDGESLIDE_DOWN = 25,
+
+  /* for analog input, like trackpad */
+  TFM_MODAL_PROPSIZE = 26,
+  /* node editor insert offset (aka auto-offset) direction toggle */
+  TFM_MODAL_INSERTOFS_TOGGLE_DIR = 27,
+};
+
 /* Hard min/max for proportional size. */
 #define T_PROP_SIZE_MIN 1e-6f
 #define T_PROP_SIZE_MAX 1e12f
@@ -894,8 +829,6 @@ void projectFloatView(TransInfo *t, const float vec[3], float adr[2]);
 void applyAspectRatio(TransInfo *t, float vec[2]);
 void removeAspectRatio(TransInfo *t, float vec[2]);
 
-void drawPropCircle(const struct bContext *C, TransInfo *t);
-
 struct wmKeyMap *transform_modal_keymap(struct wmKeyConfig *keyconf);
 
 /*********************** transform_gizmo.c ********** */
@@ -908,32 +841,6 @@ void drawDial3d(const TransInfo *t);
 
 /*********************** TransData Creation and General Handling *********** */
 bool transdata_check_local_islands(TransInfo *t, short around);
-
-/*********************** Constraints *****************************/
-
-void drawConstraint(TransInfo *t);
-
-void getConstraintMatrix(TransInfo *t);
-void setConstraint(TransInfo *t, float space[3][3], int mode, const char text[]);
-void setAxisMatrixConstraint(TransInfo *t, int mode, const char text[]);
-void setLocalConstraint(TransInfo *t, int mode, const char text[]);
-void setUserConstraint(TransInfo *t, short orientation, int mode, const char text[]);
-
-void constraintNumInput(TransInfo *t, float vec[3]);
-
-bool isLockConstraint(TransInfo *t);
-int getConstraintSpaceDimension(TransInfo *t);
-int constraintModeToIndex(const TransInfo *t);
-char constraintModeToChar(const TransInfo *t);
-
-void startConstraint(TransInfo *t);
-void stopConstraint(TransInfo *t);
-
-void initSelectConstraint(TransInfo *t, float mtx[3][3]);
-void selectConstraint(TransInfo *t);
-void postSelectConstraint(TransInfo *t);
-
-void setNearestAxis(TransInfo *t);
 
 /********************** Mouse Input ******************************/
 
@@ -1045,12 +952,6 @@ int getTransformOrientation_ex(const struct bContext *C,
 int getTransformOrientation(const struct bContext *C, float normal[3], float plane[3]);
 
 void freeCustomNormalArray(TransInfo *t, TransDataContainer *tc, TransCustomData *custom_data);
-
-void freeEdgeSlideVerts(TransInfo *t, TransDataContainer *tc, TransCustomData *custom_data);
-void projectEdgeSlideData(TransInfo *t, bool is_final);
-
-void freeVertSlideVerts(TransInfo *t, TransDataContainer *tc, TransCustomData *custom_data);
-void projectVertSlideData(TransInfo *t, bool is_final);
 
 /* TODO. transform_query.c */
 bool checkUseAxisMatrix(TransInfo *t);

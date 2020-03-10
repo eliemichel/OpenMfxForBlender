@@ -130,8 +130,8 @@ struct gc_generation {
 
 static void id_release_gc(struct ID *id)
 {
-  unsigned int j;
-  // unsigned int i = 0;
+  uint j;
+  // uint i = 0;
   for (j = 0; j < 3; j++) {
     /* Hack below to get the 2 other lists from _PyGC_generation0 that are normally not exposed. */
     PyGC_Head *gen = (PyGC_Head *)(((char *)_PyGC_generation0) + (sizeof(gc_generation) * j));
@@ -382,7 +382,7 @@ static short pyrna_rotation_euler_order_get(PointerRNA *ptr,
                                             PropertyRNA **r_prop_eul_order);
 
 /* bpyrna vector/euler/quat callbacks. */
-static unsigned char mathutils_rna_array_cb_index = -1; /* Index for our callbacks. */
+static uchar mathutils_rna_array_cb_index = -1; /* Index for our callbacks. */
 
 /* Subtype not used much yet. */
 #  define MATHUTILS_CB_SUBTYPE_EUL 0
@@ -532,7 +532,7 @@ static Mathutils_Callback mathutils_rna_array_cb = {
 };
 
 /* bpyrna matrix callbacks */
-static unsigned char mathutils_rna_matrix_cb_index = -1; /* Index for our callbacks. */
+static uchar mathutils_rna_matrix_cb_index = -1; /* Index for our callbacks. */
 
 static int mathutils_rna_matrix_get(BaseMathObject *bmo, int UNUSED(subtype))
 {
@@ -1302,7 +1302,7 @@ BLI_bitmap *pyrna_set_to_enum_bitmap(const EnumPropertyItem *items,
       if (type_size == 2) {
         union {
           signed short as_signed;
-          unsigned short as_unsigned;
+          ushort as_unsigned;
         } ret_convert;
         ret_convert.as_signed = (signed short)ret;
         index = (int)ret_convert.as_unsigned;
@@ -1310,7 +1310,7 @@ BLI_bitmap *pyrna_set_to_enum_bitmap(const EnumPropertyItem *items,
       else if (type_size == 1) {
         union {
           signed char as_signed;
-          unsigned char as_unsigned;
+          uchar as_unsigned;
         } ret_convert;
         ret_convert.as_signed = (signed char)ret;
         index = (int)ret_convert.as_unsigned;
@@ -2596,7 +2596,8 @@ static PyObject *pyrna_prop_collection_subscript_slice(BPy_PropertyRNA *self,
   return list;
 }
 
-/** TODO - dimensions
+/**
+ * TODO - dimensions
  * \note Could also use pyrna_prop_array_to_py_index(self, count) in a loop, but it's much slower
  * since at the moment it reads (and even allocates) the entire array for each index.
  */
@@ -4770,29 +4771,25 @@ static PyObject *pyrna_struct_get_rna_type(BPy_PropertyRNA *self)
 /*****************************************************************************/
 
 static PyGetSetDef pyrna_prop_getseters[] = {
-    {(char *)"id_data",
+    {"id_data",
      (getter)pyrna_struct_get_id_data,
      (setter)NULL,
-     (char *)pyrna_struct_get_id_data_doc,
+     pyrna_struct_get_id_data_doc,
      NULL},
-    {(char *)"data",
-     (getter)pyrna_struct_get_data,
-     (setter)NULL,
-     (char *)pyrna_struct_get_data_doc,
-     NULL},
-    {(char *)"rna_type",
+    {"data", (getter)pyrna_struct_get_data, (setter)NULL, pyrna_struct_get_data_doc, NULL},
+    {"rna_type",
      (getter)pyrna_struct_get_rna_type,
      (setter)NULL,
-     (char *)pyrna_struct_get_rna_type_doc,
+     pyrna_struct_get_rna_type_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 
 static PyGetSetDef pyrna_struct_getseters[] = {
-    {(char *)"id_data",
+    {"id_data",
      (getter)pyrna_struct_get_id_data,
      (setter)NULL,
-     (char *)pyrna_struct_get_id_data_doc,
+     pyrna_struct_get_id_data_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
@@ -4800,7 +4797,7 @@ static PyGetSetDef pyrna_struct_getseters[] = {
 static PyObject *pyrna_func_doc_get(BPy_FunctionRNA *self, void *closure);
 
 static PyGetSetDef pyrna_func_getseters[] = {
-    {(char *)"__doc__", (getter)pyrna_func_doc_get, (setter)NULL, NULL, NULL},
+    {"__doc__", (getter)pyrna_func_doc_get, (setter)NULL, NULL, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 
@@ -7817,7 +7814,7 @@ static int pyrna_deferred_register_props(StructRNA *srna, PyObject *class_dict)
     }
   }
 
-  {
+  if (ret == 0) {
     /* This block can be removed once 2.8x is released and annotations are in use. */
     bool has_warning = false;
     while (PyDict_Next(class_dict, &pos, &key, &item)) {
@@ -8684,10 +8681,12 @@ static PyObject *pyrna_register_class(PyObject *UNUSED(self), PyObject *py_class
     return NULL;
   }
 
-  /* Call classed register method. */
+  /* Call classed register method.
+   * Note that zero falls through, no attribute, no error. */
   switch (_PyObject_LookupAttr(py_class, bpy_intern_str_register, &py_cls_meth)) {
     case 1: {
       PyObject *ret = PyObject_CallObject(py_cls_meth, NULL);
+      Py_DECREF(py_cls_meth);
       if (ret) {
         Py_DECREF(ret);
       }
@@ -8790,10 +8789,12 @@ static PyObject *pyrna_unregister_class(PyObject *UNUSED(self), PyObject *py_cla
     return NULL;
   }
 
-  /* Call classed unregister method. */
+  /* Call classed unregister method.
+   * Note that zero falls through, no attribute, no error. */
   switch (_PyObject_LookupAttr(py_class, bpy_intern_str_unregister, &py_cls_meth)) {
     case 1: {
       PyObject *ret = PyObject_CallObject(py_cls_meth, NULL);
+      Py_DECREF(py_cls_meth);
       if (ret) {
         Py_DECREF(ret);
       }

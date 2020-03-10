@@ -62,7 +62,7 @@
 #include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_scene.h"
-#include "BKE_smoke.h"
+#include "BKE_fluid.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_physics.h"
@@ -70,13 +70,6 @@
 
 #include "RE_render_ext.h"
 #include "RE_shader_ext.h"
-
-/* fluid sim particle import */
-#ifdef WITH_MOD_FLUID
-#  include "LBM_fluidsim.h"
-#  include <zlib.h>
-#  include <string.h>
-#endif  // WITH_MOD_FLUID
 
 EffectorWeights *BKE_effector_add_weights(Collection *collection)
 {
@@ -322,7 +315,7 @@ ListBase *BKE_effectors_create(Depsgraph *depsgraph,
       else if (weights->weight[ob->pd->forcefield] == 0.0f) {
         continue;
       }
-      else if (ob->pd->shape == PFIELD_SHAPE_POINTS && ob->runtime.mesh_eval == NULL) {
+      else if (ob->pd->shape == PFIELD_SHAPE_POINTS && BKE_object_get_evaluated_mesh(ob) == NULL) {
         continue;
       }
 
@@ -577,7 +570,7 @@ float effector_falloff(EffectorCache *eff,
         break;
 
       case PFIELD_FALL_TUBE:
-        falloff *= falloff_func_dist(eff->pd, ABS(fac));
+        falloff *= falloff_func_dist(eff->pd, fabsf(fac));
         if (falloff == 0.0f) {
           break;
         }
@@ -587,7 +580,7 @@ float effector_falloff(EffectorCache *eff,
         falloff *= falloff_func_rad(eff->pd, r_fac);
         break;
       case PFIELD_FALL_CONE:
-        falloff *= falloff_func_dist(eff->pd, ABS(fac));
+        falloff *= falloff_func_dist(eff->pd, fabsf(fac));
         if (falloff == 0.0f) {
           break;
         }
@@ -663,7 +656,7 @@ int get_effector_data(EffectorCache *eff,
     efd->size = 0.0f;
   }
   else if (eff->pd && eff->pd->shape == PFIELD_SHAPE_POINTS) {
-    Mesh *me_eval = eff->ob->runtime.mesh_eval;
+    Mesh *me_eval = BKE_object_get_evaluated_mesh(eff->ob);
     if (me_eval != NULL) {
       copy_v3_v3(efd->loc, me_eval->mvert[*efd->index].co);
       normal_short_to_float_v3(efd->nor, me_eval->mvert[*efd->index].no);
@@ -776,7 +769,7 @@ static void get_effector_tot(
   efd->index = p;
 
   if (eff->pd->shape == PFIELD_SHAPE_POINTS) {
-    Mesh *me_eval = eff->ob->runtime.mesh_eval;
+    Mesh *me_eval = BKE_object_get_evaluated_mesh(eff->ob);
     *tot = me_eval != NULL ? me_eval->totvert : 1;
 
     if (*tot && eff->pd->forcefield == PFIELD_HARMONIC && point->index >= 0) {
@@ -1031,9 +1024,10 @@ static void do_physical_effector(EffectorCache *eff,
       break;
     case PFIELD_SMOKEFLOW:
       zero_v3(force);
+#ifdef WITH_FLUID
       if (pd->f_source) {
         float density;
-        if ((density = BKE_smoke_get_velocity_at(pd->f_source, point->loc, force)) >= 0.0f) {
+        if ((density = BKE_fluid_get_velocity_at(pd->f_source, point->loc, force)) >= 0.0f) {
           float influence = strength * efd->falloff;
           if (pd->flag & PFIELD_SMOKE_DENSITY) {
             influence *= density;
@@ -1043,6 +1037,7 @@ static void do_physical_effector(EffectorCache *eff,
           madd_v3_v3fl(total_force, point->vel, -pd->f_flow * influence);
         }
       }
+#endif
       break;
   }
 

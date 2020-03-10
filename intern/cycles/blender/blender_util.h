@@ -34,8 +34,8 @@
 extern "C" {
 void BKE_image_user_frame_calc(void *ima, void *iuser, int cfra);
 void BKE_image_user_file_path(void *iuser, void *ima, char *path);
-unsigned char *BKE_image_get_pixels_for_frame(void *image, int frame);
-float *BKE_image_get_float_pixels_for_frame(void *image, int frame);
+unsigned char *BKE_image_get_pixels_for_frame(void *image, int frame, int tile);
+float *BKE_image_get_float_pixels_for_frame(void *image, int frame, int tile);
 }
 
 CCL_NAMESPACE_BEGIN
@@ -159,7 +159,7 @@ static inline void curvemapping_to_array(BL::CurveMapping &cumap, array<float> &
   data.resize(size);
   for (int i = 0; i < size; i++) {
     float t = (float)i / (float)(size - 1);
-    data[i] = curve.evaluate(t);
+    data[i] = cumap.evaluate(curve, t);
   }
 }
 
@@ -197,15 +197,16 @@ static inline void curvemapping_color_to_array(BL::CurveMapping &cumap,
     BL::CurveMap mapI = cumap.curves[3];
     for (int i = 0; i < size; i++) {
       const float t = min_x + (float)i / (float)(size - 1) * range_x;
-      data[i] = make_float3(mapR.evaluate(mapI.evaluate(t)),
-                            mapG.evaluate(mapI.evaluate(t)),
-                            mapB.evaluate(mapI.evaluate(t)));
+      data[i] = make_float3(cumap.evaluate(mapR, cumap.evaluate(mapI, t)),
+                            cumap.evaluate(mapG, cumap.evaluate(mapI, t)),
+                            cumap.evaluate(mapB, cumap.evaluate(mapI, t)));
     }
   }
   else {
     for (int i = 0; i < size; i++) {
       float t = min_x + (float)i / (float)(size - 1) * range_x;
-      data[i] = make_float3(mapR.evaluate(t), mapG.evaluate(t), mapB.evaluate(t));
+      data[i] = make_float3(
+          cumap.evaluate(mapR, t), cumap.evaluate(mapG, t), cumap.evaluate(mapB, t));
     }
   }
 }
@@ -230,12 +231,21 @@ static inline int render_resolution_y(BL::RenderSettings &b_render)
   return b_render.resolution_y() * b_render.resolution_percentage() / 100;
 }
 
-static inline string image_user_file_path(BL::ImageUser &iuser, BL::Image &ima, int cfra)
+static inline string image_user_file_path(BL::ImageUser &iuser,
+                                          BL::Image &ima,
+                                          int cfra,
+                                          bool load_tiled)
 {
   char filepath[1024];
+  iuser.tile(0);
   BKE_image_user_frame_calc(NULL, iuser.ptr.data, cfra);
   BKE_image_user_file_path(iuser.ptr.data, ima.ptr.data, filepath);
-  return string(filepath);
+
+  string filepath_str = string(filepath);
+  if (load_tiled && ima.source() == BL::Image::source_TILED) {
+    string_replace(filepath_str, "1001", "<UDIM>");
+  }
+  return filepath_str;
 }
 
 static inline int image_user_frame_number(BL::ImageUser &iuser, int cfra)
@@ -244,14 +254,14 @@ static inline int image_user_frame_number(BL::ImageUser &iuser, int cfra)
   return iuser.frame_current();
 }
 
-static inline unsigned char *image_get_pixels_for_frame(BL::Image &image, int frame)
+static inline unsigned char *image_get_pixels_for_frame(BL::Image &image, int frame, int tile)
 {
-  return BKE_image_get_pixels_for_frame(image.ptr.data, frame);
+  return BKE_image_get_pixels_for_frame(image.ptr.data, frame, tile);
 }
 
-static inline float *image_get_float_pixels_for_frame(BL::Image &image, int frame)
+static inline float *image_get_float_pixels_for_frame(BL::Image &image, int frame, int tile)
 {
-  return BKE_image_get_float_pixels_for_frame(image.ptr.data, frame);
+  return BKE_image_get_float_pixels_for_frame(image.ptr.data, frame, tile);
 }
 
 static inline void render_add_metadata(BL::RenderResult &b_rr, string name, string value)
@@ -473,7 +483,9 @@ static inline void mesh_texture_space(BL::Mesh &b_mesh, float3 &loc, float3 &siz
 }
 
 /* Object motion steps, returns 0 if no motion blur needed. */
-static inline uint object_motion_steps(BL::Object &b_parent, BL::Object &b_ob)
+static inline uint object_motion_steps(BL::Object &b_parent,
+                                       BL::Object &b_ob,
+                                       const int max_steps = INT_MAX)
 {
   /* Get motion enabled and steps from object itself. */
   PointerRNA cobject = RNA_pointer_get(&b_ob.ptr, "cycles");
@@ -482,7 +494,7 @@ static inline uint object_motion_steps(BL::Object &b_parent, BL::Object &b_ob)
     return 0;
   }
 
-  uint steps = max(1, get_int(cobject, "motion_steps"));
+  int steps = max(1, get_int(cobject, "motion_steps"));
 
   /* Also check parent object, so motion blur and steps can be
    * controlled by dupligroup duplicator for linked groups. */
@@ -500,7 +512,7 @@ static inline uint object_motion_steps(BL::Object &b_parent, BL::Object &b_ob)
   /* Use uneven number of steps so we get one keyframe at the current frame,
    * and use 2^(steps - 1) so objects with more/fewer steps still have samples
    * at the same times, to avoid sampling at many different times. */
-  return (2 << (steps - 1)) + 1;
+  return min((2 << (steps - 1)) + 1, max_steps);
 }
 
 /* object uses deformation motion blur */
@@ -521,37 +533,40 @@ static inline bool object_use_deform_motion(BL::Object &b_parent, BL::Object &b_
   return use_deform_motion;
 }
 
-static inline BL::SmokeDomainSettings object_smoke_domain_find(BL::Object &b_ob)
+static inline BL::FluidDomainSettings object_fluid_liquid_domain_find(BL::Object &b_ob)
 {
   BL::Object::modifiers_iterator b_mod;
 
   for (b_ob.modifiers.begin(b_mod); b_mod != b_ob.modifiers.end(); ++b_mod) {
-    if (b_mod->is_a(&RNA_SmokeModifier)) {
-      BL::SmokeModifier b_smd(*b_mod);
+    if (b_mod->is_a(&RNA_FluidModifier)) {
+      BL::FluidModifier b_mmd(*b_mod);
 
-      if (b_smd.smoke_type() == BL::SmokeModifier::smoke_type_DOMAIN)
-        return b_smd.domain_settings();
+      if (b_mmd.fluid_type() == BL::FluidModifier::fluid_type_DOMAIN &&
+          b_mmd.domain_settings().domain_type() == BL::FluidDomainSettings::domain_type_LIQUID) {
+        return b_mmd.domain_settings();
+      }
     }
   }
 
-  return BL::SmokeDomainSettings(PointerRNA_NULL);
+  return BL::FluidDomainSettings(PointerRNA_NULL);
 }
 
-static inline BL::DomainFluidSettings object_fluid_domain_find(BL::Object b_ob)
+static inline BL::FluidDomainSettings object_fluid_gas_domain_find(BL::Object &b_ob)
 {
   BL::Object::modifiers_iterator b_mod;
 
   for (b_ob.modifiers.begin(b_mod); b_mod != b_ob.modifiers.end(); ++b_mod) {
-    if (b_mod->is_a(&RNA_FluidSimulationModifier)) {
-      BL::FluidSimulationModifier b_fmd(*b_mod);
-      BL::FluidSettings fss = b_fmd.settings();
+    if (b_mod->is_a(&RNA_FluidModifier)) {
+      BL::FluidModifier b_mmd(*b_mod);
 
-      if (fss.type() == BL::FluidSettings::type_DOMAIN)
-        return (BL::DomainFluidSettings)b_fmd.settings();
+      if (b_mmd.fluid_type() == BL::FluidModifier::fluid_type_DOMAIN &&
+          b_mmd.domain_settings().domain_type() == BL::FluidDomainSettings::domain_type_GAS) {
+        return b_mmd.domain_settings();
+      }
     }
   }
 
-  return BL::DomainFluidSettings(PointerRNA_NULL);
+  return BL::FluidDomainSettings(PointerRNA_NULL);
 }
 
 static inline Mesh::SubdivisionType object_subdivision_type(BL::Object &b_ob,
@@ -580,209 +595,20 @@ static inline Mesh::SubdivisionType object_subdivision_type(BL::Object &b_ob,
   return Mesh::SUBDIVISION_NONE;
 }
 
-/* ID Map
- *
- * Utility class to keep in sync with blender data.
- * Used for objects, meshes, lights and shaders. */
+static inline uint object_ray_visibility(BL::Object &b_ob)
+{
+  PointerRNA cvisibility = RNA_pointer_get(&b_ob.ptr, "cycles_visibility");
+  uint flag = 0;
 
-template<typename K, typename T> class id_map {
- public:
-  id_map(vector<T *> *scene_data_)
-  {
-    scene_data = scene_data_;
-  }
+  flag |= get_boolean(cvisibility, "camera") ? PATH_RAY_CAMERA : 0;
+  flag |= get_boolean(cvisibility, "diffuse") ? PATH_RAY_DIFFUSE : 0;
+  flag |= get_boolean(cvisibility, "glossy") ? PATH_RAY_GLOSSY : 0;
+  flag |= get_boolean(cvisibility, "transmission") ? PATH_RAY_TRANSMIT : 0;
+  flag |= get_boolean(cvisibility, "shadow") ? PATH_RAY_SHADOW : 0;
+  flag |= get_boolean(cvisibility, "scatter") ? PATH_RAY_VOLUME_SCATTER : 0;
 
-  T *find(const BL::ID &id)
-  {
-    return find(id.ptr.owner_id);
-  }
-
-  T *find(const K &key)
-  {
-    if (b_map.find(key) != b_map.end()) {
-      T *data = b_map[key];
-      return data;
-    }
-
-    return NULL;
-  }
-
-  void set_recalc(const BL::ID &id)
-  {
-    b_recalc.insert(id.ptr.data);
-  }
-
-  void set_recalc(void *id_ptr)
-  {
-    b_recalc.insert(id_ptr);
-  }
-
-  bool has_recalc()
-  {
-    return !(b_recalc.empty());
-  }
-
-  void pre_sync()
-  {
-    used_set.clear();
-  }
-
-  bool sync(T **r_data, const BL::ID &id)
-  {
-    return sync(r_data, id, id, id.ptr.owner_id);
-  }
-
-  bool sync(T **r_data, const BL::ID &id, const BL::ID &parent, const K &key)
-  {
-    T *data = find(key);
-    bool recalc;
-
-    if (!data) {
-      /* add data if it didn't exist yet */
-      data = new T();
-      scene_data->push_back(data);
-      b_map[key] = data;
-      recalc = true;
-    }
-    else {
-      recalc = (b_recalc.find(id.ptr.data) != b_recalc.end());
-      if (parent.ptr.data)
-        recalc = recalc || (b_recalc.find(parent.ptr.data) != b_recalc.end());
-    }
-
-    used(data);
-
-    *r_data = data;
-    return recalc;
-  }
-
-  bool is_used(const K &key)
-  {
-    T *data = find(key);
-    return (data) ? used_set.find(data) != used_set.end() : false;
-  }
-
-  void used(T *data)
-  {
-    /* tag data as still in use */
-    used_set.insert(data);
-  }
-
-  void set_default(T *data)
-  {
-    b_map[NULL] = data;
-  }
-
-  bool post_sync(bool do_delete = true)
-  {
-    /* remove unused data */
-    vector<T *> new_scene_data;
-    typename vector<T *>::iterator it;
-    bool deleted = false;
-
-    for (it = scene_data->begin(); it != scene_data->end(); it++) {
-      T *data = *it;
-
-      if (do_delete && used_set.find(data) == used_set.end()) {
-        delete data;
-        deleted = true;
-      }
-      else
-        new_scene_data.push_back(data);
-    }
-
-    *scene_data = new_scene_data;
-
-    /* update mapping */
-    map<K, T *> new_map;
-    typedef pair<const K, T *> TMapPair;
-    typename map<K, T *>::iterator jt;
-
-    for (jt = b_map.begin(); jt != b_map.end(); jt++) {
-      TMapPair &pair = *jt;
-
-      if (used_set.find(pair.second) != used_set.end())
-        new_map[pair.first] = pair.second;
-    }
-
-    used_set.clear();
-    b_recalc.clear();
-    b_map = new_map;
-
-    return deleted;
-  }
-
-  const map<K, T *> &key_to_scene_data()
-  {
-    return b_map;
-  }
-
- protected:
-  vector<T *> *scene_data;
-  map<K, T *> b_map;
-  set<T *> used_set;
-  set<void *> b_recalc;
-};
-
-/* Object Key */
-
-enum { OBJECT_PERSISTENT_ID_SIZE = 16 };
-
-struct ObjectKey {
-  void *parent;
-  int id[OBJECT_PERSISTENT_ID_SIZE];
-  void *ob;
-
-  ObjectKey(void *parent_, int id_[OBJECT_PERSISTENT_ID_SIZE], void *ob_)
-      : parent(parent_), ob(ob_)
-  {
-    if (id_)
-      memcpy(id, id_, sizeof(id));
-    else
-      memset(id, 0, sizeof(id));
-  }
-
-  bool operator<(const ObjectKey &k) const
-  {
-    if (ob < k.ob) {
-      return true;
-    }
-    else if (ob == k.ob) {
-      if (parent < k.parent)
-        return true;
-      else if (parent == k.parent)
-        return memcmp(id, k.id, sizeof(id)) < 0;
-    }
-
-    return false;
-  }
-};
-
-/* Particle System Key */
-
-struct ParticleSystemKey {
-  void *ob;
-  int id[OBJECT_PERSISTENT_ID_SIZE];
-
-  ParticleSystemKey(void *ob_, int id_[OBJECT_PERSISTENT_ID_SIZE]) : ob(ob_)
-  {
-    if (id_)
-      memcpy(id, id_, sizeof(id));
-    else
-      memset(id, 0, sizeof(id));
-  }
-
-  bool operator<(const ParticleSystemKey &k) const
-  {
-    /* first id is particle index, we don't compare that */
-    if (ob < k.ob)
-      return true;
-    else if (ob == k.ob)
-      return memcmp(id + 1, k.id + 1, sizeof(int) * (OBJECT_PERSISTENT_ID_SIZE - 1)) < 0;
-
-    return false;
-  }
-};
+  return flag;
+}
 
 class EdgeMap {
  public:

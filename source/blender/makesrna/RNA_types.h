@@ -37,7 +37,8 @@ struct ReportList;
 struct StructRNA;
 struct bContext;
 
-/** Pointer
+/**
+ * Pointer
  *
  * RNA pointers are not a single C pointer but include the type,
  * and a pointer to the ID struct that owns the struct, since
@@ -120,6 +121,8 @@ typedef enum PropertySubType {
   PROP_PASSWORD = 6,
 
   /* numbers */
+  /** A dimension in pixel units, possibly before DPI scaling (so value may not be the final pixel
+   * value but the one to apply DPI scale to). */
   PROP_PIXEL = 12,
   PROP_UNSIGNED = 13,
   PROP_PERCENTAGE = 14,
@@ -291,6 +294,8 @@ typedef enum PropertyOverrideFlag {
   /**
    * Forbid usage of this property in comparison (& hence override) code.
    * Useful e.g. for collections of data like mesh's geometry, particles, etc.
+   * Also for runtime data that should never be considered as part of actual Blend data (e.g.
+   * depsgraph from ViewLayers...).
    */
   PROPOVERRIDE_NO_COMPARISON = (1 << 1),
 
@@ -596,7 +601,7 @@ typedef enum StructFlag {
 
   /* internal flags */
   STRUCT_RUNTIME = (1 << 3),
-  STRUCT_GENERATED = (1 << 4),
+  /* STRUCT_GENERATED = (1 << 4), */ /* UNUSED */
   STRUCT_FREE_POINTERS = (1 << 5),
   /** Menus and Panels don't need properties */
   STRUCT_NO_IDPROPERTIES = (1 << 6),

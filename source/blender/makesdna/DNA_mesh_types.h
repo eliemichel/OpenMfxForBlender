@@ -28,6 +28,10 @@
 #include "DNA_ID.h"
 #include "DNA_customdata_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct AnimData;
 struct Ipo;
 struct Key;
@@ -192,7 +196,14 @@ typedef struct Mesh {
   float remesh_voxel_size;
   float remesh_voxel_adaptivity;
   char remesh_mode;
+
   char _pad1[3];
+
+  int face_sets_color_seed;
+  /* Stores the initial Face Set to be rendered white. This way the overlay can be enabled by
+   * default and Face Sets can be used without affecting the color of the mesh. */
+  int face_sets_color_default;
+
   /** Deprecated multiresolution modeling data, only keep for loading old files. */
   struct Multires *mr DNA_DEPRECATED;
 
@@ -200,7 +211,7 @@ typedef struct Mesh {
 } Mesh;
 
 /* deprecated by MTFace, only here for file reading */
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
 typedef struct TFace {
   /** The faces image for the active UVLayer. */
   void *tpage;
@@ -254,6 +265,7 @@ enum {
   ME_REMESH_REPROJECT_PAINT_MASK = 1 << 12,
   ME_REMESH_FIX_POLES = 1 << 13,
   ME_REMESH_REPROJECT_VOLUME = 1 << 14,
+  ME_REMESH_REPROJECT_SCULPT_FACE_SETS = 1 << 15,
 };
 
 /* me->cd_flag */
@@ -276,5 +288,9 @@ enum {
 };
 
 #define MESH_MAX_VERTS 2000000000L
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -103,11 +103,9 @@ short ED_fileselect_set_params(SpaceFile *sfile)
                       sizeof(sfile->params->dir),
                       sizeof(sfile->params->file));
     sfile->params->filter_glob[0] = '\0';
-    /* set the default thumbnails size */
     sfile->params->thumbnail_size = U_default.file_space_data.thumbnail_size;
-    /* Show size column by default. */
     sfile->params->details_flags = U_default.file_space_data.details_flags;
-    sfile->params->filter_id = FILTER_ID_ALL;
+    sfile->params->filter_id = U_default.file_space_data.filter_id;
   }
 
   params = sfile->params;
@@ -162,14 +160,11 @@ short ED_fileselect_set_params(SpaceFile *sfile)
       BLI_path_abs(params->dir, blendfile_path);
     }
 
+    params->flag = 0;
     if (is_directory == true && is_filename == false && is_filepath == false &&
         is_files == false) {
       params->flag |= FILE_DIRSEL_ONLY;
     }
-    else {
-      params->flag &= ~FILE_DIRSEL_ONLY;
-    }
-
     if ((prop = RNA_struct_find_property(op->ptr, "check_existing"))) {
       params->flag |= RNA_property_boolean_get(op->ptr, prop) ? FILE_CHECK_EXISTING : 0;
     }
@@ -219,6 +214,9 @@ short ED_fileselect_set_params(SpaceFile *sfile)
     }
     if ((prop = RNA_struct_find_property(op->ptr, "filter_alembic"))) {
       params->filter |= RNA_property_boolean_get(op->ptr, prop) ? FILE_TYPE_ALEMBIC : 0;
+    }
+    if ((prop = RNA_struct_find_property(op->ptr, "filter_usd"))) {
+      params->filter |= RNA_property_boolean_get(op->ptr, prop) ? FILE_TYPE_USD : 0;
     }
     if ((prop = RNA_struct_find_property(op->ptr, "filter_glob"))) {
       /* Protection against pyscripts not setting proper size limit... */
@@ -357,6 +355,7 @@ void ED_fileselect_set_params_from_userdef(SpaceFile *sfile)
   }
   sfile->params->thumbnail_size = sfile_udata->thumbnail_size;
   sfile->params->details_flags = sfile_udata->details_flags;
+  sfile->params->filter_id = sfile_udata->filter_id;
 
   /* Combine flags we take from params with the flags we take from userdef. */
   sfile->params->flag = (sfile->params->flag & ~PARAMS_FLAGS_REMEMBERED) |
@@ -382,6 +381,7 @@ void ED_fileselect_params_to_userdef(SpaceFile *sfile,
   sfile_udata_new->sort_type = sfile->params->sort;
   sfile_udata_new->details_flags = sfile->params->details_flags;
   sfile_udata_new->flag = sfile->params->flag & PARAMS_FLAGS_REMEMBERED;
+  sfile_udata_new->filter_id = sfile->params->filter_id;
 
   if (temp_win_size && !is_maximized) {
     sfile_udata_new->temp_win_sizex = temp_win_size[0];
@@ -413,7 +413,7 @@ void fileselect_file_set(SpaceFile *sfile, const int index)
   }
 }
 
-int ED_fileselect_layout_numfiles(FileLayout *layout, ARegion *ar)
+int ED_fileselect_layout_numfiles(FileLayout *layout, ARegion *region)
 {
   int numfiles;
 
@@ -429,14 +429,14 @@ int ED_fileselect_layout_numfiles(FileLayout *layout, ARegion *ar)
    */
   if (layout->flag & FILE_LAYOUT_HOR) {
     const int x_item = layout->tile_w + (2 * layout->tile_border_x);
-    const int x_view = (int)(BLI_rctf_size_x(&ar->v2d.cur));
+    const int x_view = (int)(BLI_rctf_size_x(&region->v2d.cur));
     const int x_over = x_item - (x_view % x_item);
     numfiles = (int)((float)(x_view + x_over) / (float)(x_item));
     return numfiles * layout->rows;
   }
   else {
     const int y_item = layout->tile_h + (2 * layout->tile_border_y);
-    const int y_view = (int)(BLI_rctf_size_y(&ar->v2d.cur)) - layout->offset_top;
+    const int y_view = (int)(BLI_rctf_size_y(&region->v2d.cur)) - layout->offset_top;
     const int y_over = y_item - (y_view % y_item);
     numfiles = (int)((float)(y_view + y_over) / (float)(y_item));
     return numfiles * layout->flow_columns;
@@ -720,11 +720,11 @@ static void file_attribute_columns_init(const FileSelectParams *params, FileLayo
   layout->attribute_columns[COLUMN_SIZE].text_align = UI_STYLE_TEXT_RIGHT;
 }
 
-void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *ar)
+void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *region)
 {
   FileSelectParams *params = ED_fileselect_get_params(sfile);
   FileLayout *layout = NULL;
-  View2D *v2d = &ar->v2d;
+  View2D *v2d = &region->v2d;
   int numfiles;
   int textheight;
 
@@ -817,10 +817,10 @@ void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *ar)
   layout->dirty = false;
 }
 
-FileLayout *ED_fileselect_get_layout(struct SpaceFile *sfile, ARegion *ar)
+FileLayout *ED_fileselect_get_layout(struct SpaceFile *sfile, ARegion *region)
 {
   if (!sfile->layout) {
-    ED_fileselect_init_layout(sfile, ar);
+    ED_fileselect_init_layout(sfile, region);
   }
   return sfile->layout;
 }

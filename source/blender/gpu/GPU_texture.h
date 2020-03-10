@@ -31,6 +31,7 @@ extern "C" {
 #endif
 
 struct GPUVertBuf;
+struct ImBuf;
 struct Image;
 struct ImageUser;
 struct MovieClip;
@@ -94,10 +95,12 @@ typedef enum eGPUTextureFormat {
 #if 0
   GPU_RGB10_A2,
   GPU_RGB10_A2UI,
+  GPU_SRGB8_A8,
 #endif
   GPU_R11F_G11F_B10F,
   GPU_DEPTH32F_STENCIL8,
   GPU_DEPTH24_STENCIL8,
+  GPU_SRGB8_A8,
 
   /* Texture only format */
   GPU_RGB16F,
@@ -123,7 +126,6 @@ typedef enum eGPUTextureFormat {
 
 /* Special formats texture only */
 #if 0
-  GPU_SRGB8_A8,
   GPU_SRGB8,
   GPU_RGB9_E5,
   GPU_COMPRESSED_RG_RGTC2,
@@ -187,8 +189,10 @@ GPUTexture *GPU_texture_create_from_vertbuf(struct GPUVertBuf *vert);
 GPUTexture *GPU_texture_create_buffer(eGPUTextureFormat data_type, const uint buffer);
 
 GPUTexture *GPU_texture_from_bindcode(int textarget, int bindcode);
-GPUTexture *GPU_texture_from_blender(struct Image *ima, struct ImageUser *iuser, int textarget);
-GPUTexture *GPU_texture_from_preview(struct PreviewImage *prv, int mipmap);
+GPUTexture *GPU_texture_from_blender(struct Image *ima,
+                                     struct ImageUser *iuser,
+                                     struct ImBuf *ibuf,
+                                     int textarget);
 
 /* movie clip drawing */
 GPUTexture *GPU_texture_from_movieclip(struct MovieClip *clip,
@@ -213,6 +217,7 @@ void GPU_texture_update_sub(GPUTexture *tex,
                             int depth);
 
 void *GPU_texture_read(GPUTexture *tex, eGPUDataFormat gpu_data_format, int miplvl);
+void GPU_texture_clear(GPUTexture *tex, eGPUDataFormat gpu_data_format, const void *color);
 
 void GPU_invalid_tex_init(void);
 void GPU_invalid_tex_bind(int mode);

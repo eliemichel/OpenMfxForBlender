@@ -22,6 +22,7 @@
  * \brief Configuration file
  */
 
+/* clang-format off */
 #include <string>
 #include <algorithm>
 #include "../system/Precision.h"
@@ -29,6 +30,7 @@
 #ifdef WITH_CXX_GUARDEDALLOC
 #  include "MEM_guardedalloc.h"
 #endif
+/* clang-format on */
 
 using namespace std;
 
@@ -43,7 +45,6 @@ class Path {
   string _ModelsPath;
   string _PatternsPath;
   string _BrushesPath;
-  string _PythonPath;
   string _EnvMapDir;
   string _MapsDir;
   string _HomeDir;
@@ -71,10 +72,6 @@ class Path {
   const string &getBrushesPath() const
   {
     return _BrushesPath;
-  }
-  const string &getPythonPath() const
-  {
-    return _PythonPath;
   }
   const string &getEnvMapDir() const
   {

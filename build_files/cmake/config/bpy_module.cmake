@@ -15,7 +15,6 @@ set(WITH_PYTHON_INSTALL      OFF CACHE BOOL "" FORCE)
 # disable audio, its possible some devs may want this but for now disable
 # so the python module doesn't hold the audio device and loads quickly.
 set(WITH_AUDASPACE           OFF CACHE BOOL "" FORCE)
-set(WITH_FFTW3               OFF CACHE BOOL "" FORCE)
 set(WITH_JACK                OFF CACHE BOOL "" FORCE)
 set(WITH_SDL                 OFF CACHE BOOL "" FORCE)
 set(WITH_OPENAL              OFF CACHE BOOL "" FORCE)
@@ -45,4 +44,8 @@ if(UNIX AND NOT APPLE)
 elseif(APPLE)
   # OpenMP causes linking error on build, disable.
   set(WITH_MEM_JEMALLOC        OFF CACHE BOOL "" FORCE)
+endif()
+
+if(WIN32)
+  set(WITH_WINDOWS_BUNDLE_CRT  OFF CACHE BOOL "" FORCE)
 endif()

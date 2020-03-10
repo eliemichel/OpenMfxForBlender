@@ -32,8 +32,6 @@
 
 #include "BLI_utildefines.h"
 
-#include "BIF_gl.h"
-
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_report.h"
@@ -44,6 +42,7 @@
 
 #include "GPU_immediate.h"
 #include "GPU_texture.h"
+#include "GPU_viewport.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -67,14 +66,14 @@ static eGPUInterlaceShader interlace_gpu_id_from_type(eStereo3dInterlaceType int
   }
 }
 
-void wm_stereo3d_draw_interlace(wmWindow *win, ARegion *ar)
+void wm_stereo3d_draw_interlace(wmWindow *win, ARegion *region)
 {
   bool swap = (win->stereo3d_format->flag & S3D_INTERLACE_SWAP) != 0;
   enum eStereo3dInterlaceType interlace_type = win->stereo3d_format->interlace_type;
 
   /* wmOrtho for the screen has this same offset */
-  float halfx = GLA_PIXEL_OFS / ar->winx;
-  float halfy = GLA_PIXEL_OFS / ar->winy;
+  float halfx = GLA_PIXEL_OFS / region->winx;
+  float halfy = GLA_PIXEL_OFS / region->winy;
 
   GPUVertFormat *format = immVertexFormat();
   uint texcoord = GPU_vertformat_attr_add(format, "texCoord", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -82,7 +81,7 @@ void wm_stereo3d_draw_interlace(wmWindow *win, ARegion *ar)
 
   /* leave GL_TEXTURE0 as the latest active texture */
   for (int view = 1; view >= 0; view--) {
-    GPUTexture *texture = wm_draw_region_texture(ar, view);
+    GPUTexture *texture = wm_draw_region_texture(region, view);
     glActiveTexture(GL_TEXTURE0 + view);
     glBindTexture(GL_TEXTURE_2D, GPU_texture_opengl_bindcode(texture));
   }
@@ -96,16 +95,16 @@ void wm_stereo3d_draw_interlace(wmWindow *win, ARegion *ar)
   immBegin(GPU_PRIM_TRI_FAN, 4);
 
   immAttr2f(texcoord, halfx, halfy);
-  immVertex2f(pos, ar->winrct.xmin, ar->winrct.ymin);
+  immVertex2f(pos, region->winrct.xmin, region->winrct.ymin);
 
   immAttr2f(texcoord, 1.0f + halfx, halfy);
-  immVertex2f(pos, ar->winrct.xmax + 1, ar->winrct.ymin);
+  immVertex2f(pos, region->winrct.xmax + 1, region->winrct.ymin);
 
   immAttr2f(texcoord, 1.0f + halfx, 1.0f + halfy);
-  immVertex2f(pos, ar->winrct.xmax + 1, ar->winrct.ymax + 1);
+  immVertex2f(pos, region->winrct.xmax + 1, region->winrct.ymax + 1);
 
   immAttr2f(texcoord, halfx, 1.0f + halfy);
-  immVertex2f(pos, ar->winrct.xmin, ar->winrct.ymax + 1);
+  immVertex2f(pos, region->winrct.xmin, region->winrct.ymax + 1);
 
   immEnd();
   immUnbindProgram();
@@ -116,7 +115,7 @@ void wm_stereo3d_draw_interlace(wmWindow *win, ARegion *ar)
   }
 }
 
-void wm_stereo3d_draw_anaglyph(wmWindow *win, ARegion *ar)
+void wm_stereo3d_draw_anaglyph(wmWindow *win, ARegion *region)
 {
   for (int view = 0; view < 2; view++) {
     int bit = view + 1;
@@ -142,7 +141,7 @@ void wm_stereo3d_draw_anaglyph(wmWindow *win, ARegion *ar)
         break;
     }
 
-    wm_draw_region_blend(ar, view, false);
+    wm_draw_region_blend(region, view, false);
   }
 
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -470,7 +469,7 @@ int wm_stereo3d_set_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(ev
     return wm_stereo3d_set_exec(C, op);
   }
   else {
-    return WM_operator_props_dialog_popup(C, op, 250, 100);
+    return WM_operator_props_dialog_popup(C, op, 250);
   }
 }
 

@@ -76,6 +76,11 @@ void BKE_reports_init(ReportList *reports, int flag)
   reports->flag = flag;
 }
 
+/**
+ * Only frees the list \a reports.
+ * To make displayed reports disappear, either remove window-manager reports
+ * (wmWindowManager.reports, or CTX_wm_reports()), or use #WM_report_banners_cancel().
+ */
 void BKE_reports_clear(ReportList *reports)
 {
   Report *report, *report_next;
@@ -116,7 +121,7 @@ void BKE_report(ReportList *reports, ReportType type, const char *_message)
     report->typestr = BKE_report_type_str(type);
 
     len = strlen(message);
-    message_alloc = MEM_callocN(sizeof(char) * (len + 1), "ReportMessage");
+    message_alloc = MEM_mallocN(sizeof(char) * (len + 1), "ReportMessage");
     memcpy(message_alloc, message, sizeof(char) * (len + 1));
     report->message = message_alloc;
     report->len = len;

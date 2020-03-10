@@ -59,6 +59,7 @@ set(SRC
   transform_convert_sculpt.c
   transform_convert_sequencer.c
   transform_convert_tracking.c
+  transform_draw_cursors.c
   transform_generics.c
   transform_gizmo_2d.c
   transform_gizmo_3d.c
@@ -66,11 +67,45 @@ set(SRC
   transform_input.c
   transform_ops.c
   transform_orientations.c
+  transform_mode.c
+  transform_mode_align.c
+  transform_mode_baketime.c
+  transform_mode_bbone_resize.c
+  transform_mode_bend.c
+  transform_mode_boneenvelope.c
+  transform_mode_boneroll.c
+  transform_mode_curveshrinkfatten.c
+  transform_mode_edge_bevelweight.c
+  transform_mode_edge_crease.c
+  transform_mode_edge_rotate_normal.c
+  transform_mode_edge_seq_slide.c
+  transform_mode_edge_slide.c
+  transform_mode_gpopacity.c
+  transform_mode_gpshrinkfatten.c
+  transform_mode_maskshrinkfatten.c
+  transform_mode_mirror.c
+  transform_mode_push_pull.c
+  transform_mode_resize.c
+  transform_mode_rotate.c
+  transform_mode_shear.c
+  transform_mode_shrink_fatten.c
+  transform_mode_skin_resize.c
+  transform_mode_tilt.c
+  transform_mode_timescale.c
+  transform_mode_timeslide.c
+  transform_mode_timetranslate.c
+  transform_mode_tosphere.c
+  transform_mode_trackball.c
+  transform_mode_translate.c
+  transform_mode_vert_slide.c
   transform_snap.c
   transform_snap_object.c
 
   transform.h
+  transform_constraints.h
   transform_convert.h
+  transform_draw_cursors.h
+  transform_mode.h
   transform_snap.h
 )
 

@@ -32,6 +32,10 @@
 #include "GPU_shader_interface.h"
 #include "GPU_shader.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
   GPU_BATCH_UNUSED,
   GPU_BATCH_READY_TO_FORMAT,
@@ -41,6 +45,7 @@ typedef enum {
 } GPUBatchPhase;
 
 #define GPU_BATCH_VBO_MAX_LEN 6
+#define GPU_BATCH_INST_VBO_MAX_LEN 2
 #define GPU_BATCH_VAO_STATIC_LEN 3
 #define GPU_BATCH_VAO_DYN_ALLOC_COUNT 16
 
@@ -50,7 +55,7 @@ typedef struct GPUBatch {
   /** verts[0] is required, others can be NULL */
   GPUVertBuf *verts[GPU_BATCH_VBO_MAX_LEN];
   /** Instance attributes. */
-  GPUVertBuf *inst;
+  GPUVertBuf *inst[GPU_BATCH_INST_VBO_MAX_LEN];
   /** NULL if element list not needed */
   GPUIndexBuf *elem;
   uint32_t gl_prim_type;
@@ -117,6 +122,7 @@ void GPU_batch_callback_free_set(GPUBatch *, void (*callback)(GPUBatch *, void *
 void GPU_batch_instbuf_set(GPUBatch *, GPUVertBuf *, bool own_vbo); /* Instancing */
 void GPU_batch_elembuf_set(GPUBatch *batch, GPUIndexBuf *elem, bool own_ibo);
 
+int GPU_batch_instbuf_add_ex(GPUBatch *, GPUVertBuf *, bool own_vbo);
 int GPU_batch_vertbuf_add_ex(GPUBatch *, GPUVertBuf *, bool own_vbo);
 
 #define GPU_batch_vertbuf_add(batch, verts) GPU_batch_vertbuf_add_ex(batch, verts, false)
@@ -124,6 +130,7 @@ int GPU_batch_vertbuf_add_ex(GPUBatch *, GPUVertBuf *, bool own_vbo);
 void GPU_batch_program_set_no_use(GPUBatch *, uint32_t program, const GPUShaderInterface *);
 void GPU_batch_program_set(GPUBatch *, uint32_t program, const GPUShaderInterface *);
 void GPU_batch_program_set_shader(GPUBatch *, GPUShader *shader);
+void GPU_batch_program_set_imm_shader(GPUBatch *batch);
 void GPU_batch_program_set_builtin(GPUBatch *batch, eGPUBuiltinShader shader_id);
 void GPU_batch_program_set_builtin_with_config(GPUBatch *batch,
                                                eGPUBuiltinShader shader_id,
@@ -237,5 +244,9 @@ void gpu_batch_exit(void);
       MEM_freeN(_batch_array); \
     } \
   } while (0)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __GPU_BATCH_H__ */

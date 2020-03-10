@@ -22,8 +22,8 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_tangent_out[] = {
-    {SOCK_VECTOR, 0, N_("Tangent"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Tangent"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {-1, ""},
 };
 
 static void node_shader_init_tangent(bNodeTree *UNUSED(ntree), bNode *node)
@@ -43,10 +43,10 @@ static int node_shader_gpu_tangent(GPUMaterial *mat,
 
   if (attr->direction_type == SHD_TANGENT_UVMAP) {
     return GPU_stack_link(
-        mat, node, "node_tangentmap", in, out, GPU_attribute(CD_TANGENT, attr->uv_map));
+        mat, node, "node_tangentmap", in, out, GPU_attribute(mat, CD_TANGENT, attr->uv_map));
   }
   else {
-    GPUNodeLink *orco = GPU_attribute(CD_ORCO, "");
+    GPUNodeLink *orco = GPU_attribute(mat, CD_ORCO, "");
 
     if (attr->axis == SHD_TANGENT_AXIS_X) {
       GPU_link(mat, "tangent_orco_x", orco, &orco);

@@ -25,15 +25,20 @@
 
 /* **************** Clamp ******************** */
 static bNodeSocketTemplate sh_node_clamp_in[] = {
-    {SOCK_FLOAT, 1, N_("Value"), 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("Min"), 0.0f, 1.0f, 1.0f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("Max"), 1.0f, 1.0f, 1.0f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Value"), 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("Min"), 0.0f, 1.0f, 1.0f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("Max"), 1.0f, 1.0f, 1.0f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
+    {-1, ""},
 };
 static bNodeSocketTemplate sh_node_clamp_out[] = {
-    {SOCK_FLOAT, 0, N_("Result")},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Result")},
+    {-1, ""},
 };
+
+static void node_shader_init_clamp(bNodeTree *UNUSED(ntree), bNode *node)
+{
+  node->custom1 = NODE_CLAMP_MINMAX; /* clamp type */
+}
 
 static int gpu_shader_clamp(GPUMaterial *mat,
                             bNode *node,
@@ -41,7 +46,8 @@ static int gpu_shader_clamp(GPUMaterial *mat,
                             GPUNodeStack *in,
                             GPUNodeStack *out)
 {
-  return GPU_stack_link(mat, node, "clamp_value", in, out);
+  return (node->custom1 == NODE_CLAMP_MINMAX) ? GPU_stack_link(mat, node, "clamp_value", in, out) :
+                                                GPU_stack_link(mat, node, "clamp_range", in, out);
 }
 
 void register_node_type_sh_clamp(void)
@@ -50,6 +56,7 @@ void register_node_type_sh_clamp(void)
 
   sh_node_type_base(&ntype, SH_NODE_CLAMP, "Clamp", NODE_CLASS_CONVERTOR, 0);
   node_type_socket_templates(&ntype, sh_node_clamp_in, sh_node_clamp_out);
+  node_type_init(&ntype, node_shader_init_clamp);
   node_type_gpu(&ntype, gpu_shader_clamp);
 
   nodeRegisterType(&ntype);

@@ -19,9 +19,12 @@ set(SRC
   coverage.cpp
   denoising.cpp
   film.cpp
+  geometry.cpp
   graph.cpp
+  hair.cpp
   image.cpp
   integrator.cpp
+  jitter.cpp
   light.cpp
   merge.cpp
   mesh.cpp
@@ -54,10 +57,13 @@ set(SRC_HEADERS
   coverage.h
   denoising.h
   film.h
+  geometry.h
   graph.h
+  hair.h
   image.h
   integrator.h
   light.h
+  jitter.h
   merge.h
   mesh.h
   nodes.h
@@ -77,6 +83,9 @@ set(SRC_HEADERS
 
 set(LIB
   cycles_bvh
+  cycles_device
+  cycles_subd
+  cycles_util
 )
 
 if(WITH_CYCLES_OSL)

@@ -44,18 +44,14 @@ static int bmo_name_to_slotcode_check(BMOpSlot slot_args[BMO_OP_MAX_SLOTS],
 
 static const char *bmo_error_messages[] = {
     NULL,
-    N_("Self intersection error"),
-    N_("Could not dissolve vert"),
     N_("Could not connect vertices"),
-    N_("Could not traverse mesh"),
     N_("Could not dissolve faces"),
-    N_("Tessellation error"),
-    N_("Cannot deal with non-manifold geometry"),
     N_("Invalid selection"),
     N_("Internal mesh error"),
+    N_("Convex hull failed"),
 };
 
-BLI_STATIC_ASSERT(ARRAY_SIZE(bmo_error_messages) + 1 == BMERR_TOTAL, "message mismatch");
+BLI_STATIC_ASSERT(ARRAY_SIZE(bmo_error_messages) == BMERR_TOTAL, "message mismatch");
 
 /* operator slot type information - size of one element of the type given. */
 const int BMO_OPSLOT_TYPEINFO[BMO_OP_SLOT_TOTAL_TYPES] = {
@@ -744,11 +740,7 @@ void *bmo_slot_buffer_grow(BMesh *bm, BMOperator *op, int slot_code, int totadd)
 
       allocsize = BMO_OPSLOT_TYPEINFO[bmo_opdefines[op->type]->slot_types[slot_code].type] *
                   slot->size;
-
-      tmp = slot->data.buf;
-      slot->data.buf = MEM_callocN(allocsize, "opslot dynamic array");
-      memcpy(slot->data.buf, tmp, allocsize);
-      MEM_freeN(tmp);
+      slot->data.buf = MEM_recallocN_id(slot->data.buf, allocsize, "opslot dynamic array");
     }
 
     slot->len += totadd;

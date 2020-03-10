@@ -23,6 +23,10 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ColorManagedColorspaceSettings;
 struct ColorManagedDisplaySettings;
 struct ColorManagedViewSettings;
@@ -68,7 +72,9 @@ void BKE_curvemapping_initialize(struct CurveMapping *cumap);
 
 /* keep these (const CurveMap) - to help with thread safety */
 /* single curve, no table check */
-float BKE_curvemap_evaluateF(const struct CurveMap *cuma, float value);
+float BKE_curvemap_evaluateF(const struct CurveMapping *cumap,
+                             const struct CurveMap *cuma,
+                             float value);
 /* single curve, with table check */
 float BKE_curvemapping_evaluateF(const struct CurveMapping *cumap, int cur, float value);
 void BKE_curvemapping_evaluate3F(const struct CurveMapping *cumap,
@@ -135,4 +141,9 @@ void BKE_color_managed_colorspace_settings_copy(
 bool BKE_color_managed_colorspace_settings_equals(
     const struct ColorManagedColorspaceSettings *settings1,
     const struct ColorManagedColorspaceSettings *settings2);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

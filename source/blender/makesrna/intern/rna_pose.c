@@ -1313,7 +1313,8 @@ static void rna_def_pose_channel(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_custom_shape_bone_size", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "drawflag", PCHAN_DRAW_NO_CUSTOM_BONE_SIZE);
-  RNA_def_property_ui_text(prop, "Use Bone Size", "Scale the custom object by the bone length");
+  RNA_def_property_ui_text(
+      prop, "Scale to Bone Length", "Scale the custom object by the bone length");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_update");
 
   prop = RNA_def_property(srna, "custom_shape_transform", PROP_POINTER, PROP_NONE);
@@ -1356,7 +1357,7 @@ static void rna_def_pose_channel(BlenderRNA *brna)
   prop = RNA_def_property(srna, "lock_location", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "protectflag", OB_LOCK_LOCX);
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Lock Location", "Lock editing of location in the interface");
+  RNA_def_property_ui_text(prop, "Lock Location", "Lock editing of location when transforming");
   RNA_def_property_ui_icon(prop, ICON_UNLOCKED, 1);
   RNA_def_property_editable_func(prop, "rna_PoseChannel_proxy_editable");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_update");
@@ -1364,7 +1365,7 @@ static void rna_def_pose_channel(BlenderRNA *brna)
   prop = RNA_def_property(srna, "lock_rotation", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "protectflag", OB_LOCK_ROTX);
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Lock Rotation", "Lock editing of rotation in the interface");
+  RNA_def_property_ui_text(prop, "Lock Rotation", "Lock editing of rotation when transforming");
   RNA_def_property_ui_icon(prop, ICON_UNLOCKED, 1);
   RNA_def_property_editable_func(prop, "rna_PoseChannel_proxy_editable");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_update");
@@ -1376,7 +1377,7 @@ static void rna_def_pose_channel(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Lock Rotation (4D Angle)",
-      "Lock editing of 'angle' component of four-component rotations in the interface");
+      "Lock editing of 'angle' component of four-component rotations when transforming");
   RNA_def_property_ui_icon(prop, ICON_UNLOCKED, 1);
   RNA_def_property_editable_func(prop, "rna_PoseChannel_proxy_editable");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_update");
@@ -1394,7 +1395,7 @@ static void rna_def_pose_channel(BlenderRNA *brna)
   prop = RNA_def_property(srna, "lock_scale", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "protectflag", OB_LOCK_SCALEX);
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Lock Scale", "Lock editing of scale in the interface");
+  RNA_def_property_ui_text(prop, "Lock Scale", "Lock editing of scale when transforming");
   RNA_def_property_ui_icon(prop, ICON_UNLOCKED, 1);
   RNA_def_property_editable_func(prop, "rna_PoseChannel_proxy_editable");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_update");
@@ -1663,7 +1664,9 @@ static void rna_def_pose(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_mirror_relative", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", POSE_MIRROR_RELATIVE);
   RNA_def_property_ui_text(
-      prop, "Relative Mirror", "Apply relative transformations in X-mirror mode");
+      prop,
+      "Relative Mirror",
+      "Apply relative transformations in X-mirror mode (not supported with Auto IK)");
   RNA_def_struct_path_func(srna, "rna_Pose_path");
   RNA_def_property_update(prop, 0, "rna_Pose_update");
   RNA_def_property_flag(prop, PROP_LIB_EXCEPTION);

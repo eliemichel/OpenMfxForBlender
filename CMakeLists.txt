@@ -97,6 +97,11 @@ cmake_policy(SET CMP0010 NEW)
 # Input directories must have CMakeLists.txt
 cmake_policy(SET CMP0014 NEW)
 
+# Silence draco warning on macOS, new policy works fine.
+if(POLICY CMP0068)
+  cmake_policy(SET CMP0068 NEW)
+endif()
+
 #-----------------------------------------------------------------------------
 # Load some macros.
 include(build_files/cmake/macros.cmake)
@@ -131,68 +136,6 @@ get_blender_version()
 
 
 #-----------------------------------------------------------------------------
-# Platform Specific Defaults
-
-# list of var-names
-set(_init_vars)
-
-# initialize to ON
-macro(option_defaults_init)
-  foreach(_var ${ARGV})
-    set(${_var} ON)
-    list(APPEND _init_vars "${_var}")
-  endforeach()
-  unset(_var)
-endmacro()
-
-# remove from namespace
-macro(option_defaults_clear)
-  foreach(_var ${_init_vars})
-    unset(${_var})
-  endforeach()
-  unset(_var)
-  unset(_init_vars)
-endmacro()
-
-
-# values to initialize WITH_****
-option_defaults_init(
-  _init_BUILDINFO
-  _init_CODEC_FFMPEG
-  _init_CYCLES_OSL
-  _init_IMAGE_OPENEXR
-  _init_INPUT_NDOF
-  _init_JACK
-  _init_OPENCOLLADA
-  _init_OPENCOLORIO
-  _init_SDL
-  _init_FFTW3
-  _init_OPENSUBDIV
-)
-
-# customize...
-if(UNIX AND NOT APPLE)
-  # some of these libraries are problematic on Linux
-  # disable less important dependencies by default
-  set(_init_CODEC_FFMPEG                   OFF)
-  set(_init_CYCLES_OSL                     OFF)
-  set(_init_IMAGE_OPENEXR                  OFF)
-  set(_init_JACK                           OFF)
-  set(_init_OPENCOLLADA                    OFF)
-  set(_init_OPENCOLORIO                    OFF)
-  set(_init_SDL                            OFF)
-  set(_init_FFTW3                          OFF)
-  set(_init_OPENSUBDIV                     OFF)
-  set(_init_OPENVDB                        OFF)
-  set(_init_OPENIMAGEDENOISE               OFF)
-elseif(WIN32)
-  set(_init_JACK                           OFF)
-elseif(APPLE)
-  set(_init_JACK                           OFF)
-endif()
-
-
-#-----------------------------------------------------------------------------
 # Options
 
 # First platform specific non-cached vars
@@ -218,7 +161,7 @@ if(APPLE)
   option(WITH_PYTHON_FRAMEWORK "Enable building using the Python available in the framework (OSX only)" OFF)
 endif()
 
-option(WITH_BUILDINFO     "Include extra build details (only disable for development & faster builds)" ${_init_BUILDINFO})
+option(WITH_BUILDINFO     "Include extra build details (only disable for development & faster builds)" ON)
 if(${CMAKE_VERSION} VERSION_LESS 2.8.8)
   # add_library OBJECT arg unsupported
   set(WITH_BUILDINFO OFF)
@@ -232,20 +175,29 @@ mark_as_advanced(BUILDINFO_OVERRIDE_TIME)
 
 option(WITH_IK_ITASC      "Enable ITASC IK solver (only disable for development & for incompatible C++ compilers)" ON)
 option(WITH_IK_SOLVER     "Enable Legacy IK solver (only disable for development)" ON)
-option(WITH_FFTW3         "Enable FFTW3 support (Used for smoke, ocean sim, and audio effects)" ${_init_FFTW3})
+option(WITH_FFTW3         "Enable FFTW3 support (Used for smoke, ocean sim, and audio effects)" ON)
 option(WITH_BULLET        "Enable Bullet (Physics Engine)" ON)
 option(WITH_SYSTEM_BULLET "Use the systems bullet library (currently unsupported due to missing features in upstream!)" )
 mark_as_advanced(WITH_SYSTEM_BULLET)
-option(WITH_OPENCOLORIO   "Enable OpenColorIO color management" ${_init_OPENCOLORIO})
+option(WITH_OPENCOLORIO   "Enable OpenColorIO color management" ON)
+if(APPLE)
+  # There's no OpenXR runtime in sight for macOS, neither is code well
+  # tested there -> disable it by default.
+  option(WITH_XR_OPENXR   "Enable VR features through the OpenXR specification" OFF)
+  mark_as_advanced(WITH_XR_OPENXR)
+else()
+  # Disabled until there's more than just the build system stuff. Should be enabled soon.
+  option(WITH_XR_OPENXR   "Enable VR features through the OpenXR specification" OFF)
+endif()
 
 # Compositor
 option(WITH_COMPOSITOR         "Enable the tile based nodal compositor" ON)
-option(WITH_OPENIMAGEDENOISE   "Enable the OpenImageDenoise compositing node" ${_init_OPENIMAGEDENOISE})
+option(WITH_OPENIMAGEDENOISE   "Enable the OpenImageDenoise compositing node" ON)
 
-option(WITH_OPENSUBDIV    "Enable OpenSubdiv for surface subdivision" ${_init_OPENSUBDIV})
+option(WITH_OPENSUBDIV    "Enable OpenSubdiv for surface subdivision" ON)
 
-option(WITH_OPENVDB       "Enable features relying on OpenVDB" ${_init_OPENVDB})
-option(WITH_OPENVDB_BLOSC "Enable blosc compression for OpenVDB, only enable if OpenVDB was built with blosc support" ${_init_OPENVDB})
+option(WITH_OPENVDB       "Enable features relying on OpenVDB" ON)
+option(WITH_OPENVDB_BLOSC "Enable blosc compression for OpenVDB, only enable if OpenVDB was built with blosc support" ON)
 option(WITH_OPENVDB_3_ABI_COMPATIBLE "Assume OpenVDB library has been compiled with version 3 ABI compatibility" OFF)
 mark_as_advanced(WITH_OPENVDB_3_ABI_COMPATIBLE)
 
@@ -304,16 +256,13 @@ endif()
 
 
 # Modifiers
-option(WITH_MOD_FLUID           "Enable Elbeem Modifier (Fluid Simulation)" ON)
-option(WITH_MOD_SMOKE           "Enable Smoke Modifier (Smoke Simulation)" ON)
+option(WITH_MOD_FLUID           "Enable Mantaflow Fluid Simulation Framework" ON)
 option(WITH_MOD_REMESH          "Enable Remesh Modifier" ON)
-# option(WITH_MOD_CLOTH_ELTOPO    "Enable Experimental cloth solver" OFF)  # this is now only available in a branch
-# mark_as_advanced(WITH_MOD_CLOTH_ELTOPO)
-option(WITH_MOD_OCEANSIM        "Enable Ocean Modifier" OFF)
+option(WITH_MOD_OCEANSIM        "Enable Ocean Modifier" ON)
 
 # Image format support
 option(WITH_OPENIMAGEIO         "Enable OpenImageIO Support (http://www.openimageio.org)" ON)
-option(WITH_IMAGE_OPENEXR       "Enable OpenEXR Support (http://www.openexr.com)" ${_init_IMAGE_OPENEXR})
+option(WITH_IMAGE_OPENEXR       "Enable OpenEXR Support (http://www.openexr.com)" ON)
 option(WITH_IMAGE_OPENJPEG      "Enable OpenJpeg Support (http://www.openjpeg.org)" ON)
 option(WITH_IMAGE_TIFF          "Enable LibTIFF Support" ON)
 option(WITH_IMAGE_DDS           "Enable DDS Image Support" ON)
@@ -322,24 +271,29 @@ option(WITH_IMAGE_HDR           "Enable HDR Image Support" ON)
 
 # Audio/Video format support
 option(WITH_CODEC_AVI           "Enable Blenders own AVI file support (raw/jpeg)" ON)
-option(WITH_CODEC_FFMPEG        "Enable FFMPeg Support (http://ffmpeg.org)" ${_init_CODEC_FFMPEG})
-option(WITH_CODEC_SNDFILE       "Enable libsndfile Support (http://www.mega-nerd.com/libsndfile)" OFF)
+option(WITH_CODEC_FFMPEG        "Enable FFMPeg Support (http://ffmpeg.org)" ON)
+option(WITH_CODEC_SNDFILE       "Enable libsndfile Support (http://www.mega-nerd.com/libsndfile)" ON)
 
 # Alembic support
-option(WITH_ALEMBIC             "Enable Alembic Support" OFF)
+option(WITH_ALEMBIC             "Enable Alembic Support" ON)
 option(WITH_ALEMBIC_HDF5        "Enable Legacy Alembic Support (not officially supported)" OFF)
+
+# Universal Scene Description support
+option(WITH_USD                 "Enable Universal Scene Description (USD) Support" OFF)
 
 # 3D format support
 # Disable opencollada when we don't have precompiled libs
-option(WITH_OPENCOLLADA                  "Enable OpenCollada Support (http://www.opencollada.org)" ${_init_OPENCOLLADA})
-option(WITH_OPENCOLLADA_ANIMATION_CLIP   "Enable this when building with Collada 1.6.65 or newer" ON)
+
+option(WITH_OPENCOLLADA   "Enable OpenCollada Support (http://www.opencollada.org)" ON)
 
 # Sound output
-option(WITH_SDL           "Enable SDL for sound and joystick support" ${_init_SDL})
+option(WITH_SDL           "Enable SDL for sound and joystick support" ON)
 option(WITH_OPENAL        "Enable OpenAL Support (http://www.openal.org)" ON)
-option(WITH_JACK          "Enable JACK Support (http://www.jackaudio.org)" ${_init_JACK})
-if(UNIX AND NOT APPLE)
-  option(WITH_JACK_DYNLOAD  "Enable runtime dynamic JACK libraries loading" OFF)
+if(NOT WIN32)
+  option(WITH_JACK          "Enable JACK Support (http://www.jackaudio.org)" ON)
+  if(UNIX AND NOT APPLE)
+    option(WITH_JACK_DYNLOAD  "Enable runtime dynamic JACK libraries loading" OFF)
+  endif()
 endif()
 if(UNIX AND NOT APPLE)
   option(WITH_SDL_DYNLOAD  "Enable runtime dynamic SDL libraries loading" OFF)
@@ -355,7 +309,7 @@ option(WITH_DRACO         "Enable Draco mesh compression Python module (used for
 
 # Camera/motion tracking
 option(WITH_LIBMV         "Enable Libmv structure from motion library" ON)
-option(WITH_LIBMV_SCHUR_SPECIALIZATIONS "Enable fixed-size schur specializations." OFF)
+option(WITH_LIBMV_SCHUR_SPECIALIZATIONS "Enable fixed-size schur specializations." ON)
 mark_as_advanced(WITH_LIBMV_SCHUR_SPECIALIZATIONS)
 
 # Logging/unbit test libraries.
@@ -371,8 +325,7 @@ option(WITH_FREESTYLE     "Enable Freestyle (advanced edges rendering)" ON)
 if(WIN32)
   option(WITH_INPUT_IME "Enable Input Method Editor (IME) for complex Asian character input" ON)
 endif()
-option(WITH_INPUT_NDOF "Enable NDOF input devices (SpaceNavigator and friends)" ${_init_INPUT_NDOF})
-option(WITH_RAYOPTIMIZATION "Enable use of SIMD (SSE) optimizations for the raytracer" ON)
+option(WITH_INPUT_NDOF "Enable NDOF input devices (SpaceNavigator and friends)" ON)
 if(UNIX AND NOT APPLE)
   option(WITH_INSTALL_PORTABLE "Install redistributeable runtime, otherwise install into CMAKE_INSTALL_PREFIX" ON)
   option(WITH_STATIC_LIBS "Try to link with static libraries, as much as possible, to make blender more portable across distributions" OFF)
@@ -408,7 +361,7 @@ mark_as_advanced(WITH_CPU_SSE)
 option(WITH_CYCLES                  "Enable Cycles Render Engine" ON)
 option(WITH_CYCLES_STANDALONE       "Build Cycles standalone application" OFF)
 option(WITH_CYCLES_STANDALONE_GUI   "Build Cycles standalone with GUI" OFF)
-option(WITH_CYCLES_OSL              "Build Cycles with OSL support" ${_init_CYCLES_OSL})
+option(WITH_CYCLES_OSL              "Build Cycles with OSL support" ON)
 option(WITH_CYCLES_EMBREE           "Build Cycles with Embree support" OFF)
 option(WITH_CYCLES_CUDA_BINARIES    "Build Cycles CUDA binaries" OFF)
 option(WITH_CYCLES_CUBIN_COMPILER   "Build cubins with nvrtc based compiler instead of nvcc" OFF)
@@ -464,6 +417,11 @@ mark_as_advanced(WITH_ASSERT_ABORT)
 
 option(WITH_BOOST "Enable features depending on boost" ON)
 option(WITH_TBB   "Enable features depending on TBB (OpenVDB, OpenImageDenoise, sculpt multithreading)" ON)
+
+# TBB malloc is only supported on for windows currently
+if(WIN32)
+  option(WITH_TBB_MALLOC_PROXY "Enable the TBB malloc replacement" ON)
+endif()
 
 # Unit testsing
 option(WITH_GTESTS "Enable GTest unit testing" OFF)
@@ -544,7 +502,8 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
     if(NOT MSVC)
       find_library(COMPILER_ASAN_LIBRARY asan ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES})
     else()
-      find_library( COMPILER_ASAN_LIBRARY NAMES clang_rt.asan-x86_64
+      find_library(
+        COMPILER_ASAN_LIBRARY NAMES clang_rt.asan-x86_64
         PATHS
         [HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\LLVM\\LLVM;]/lib/clang/7.0.0/lib/windows
         [HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\LLVM\\LLVM;]/lib/clang/6.0.0/lib/windows
@@ -559,15 +518,6 @@ if(WIN32)
   option(WITH_WINDOWS_FIND_MODULES "Use find_package to locate libraries" OFF)
   mark_as_advanced(WITH_WINDOWS_FIND_MODULES)
 
-  option(WITH_WINDOWS_CODESIGN "Use signtool to sign the final binary." OFF)
-  mark_as_advanced(WITH_WINDOWS_CODESIGN)
-
-  set(WINDOWS_CODESIGN_PFX CACHE FILEPATH  "Path to pfx file to use for codesigning.")
-  mark_as_advanced(WINDOWS_CODESIGN_PFX)
-
-  set(WINDOWS_CODESIGN_PFX_PASSWORD CACHE STRING  "password for pfx file used for codesigning.")
-  mark_as_advanced(WINDOWS_CODESIGN_PFX_PASSWORD)
-
   option(WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS "Organize the visual studio projects according to source folder structure." ON)
   mark_as_advanced(WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS)
 
@@ -576,6 +526,10 @@ if(WIN32)
 
   option(WINDOWS_PYTHON_DEBUG "Include the files needed for debugging python scripts with visual studio 2017+." OFF)
   mark_as_advanced(WINDOWS_PYTHON_DEBUG)
+
+  option(WITH_WINDOWS_BUNDLE_CRT "Bundle the C runtime for install free distribution." ON)
+  mark_as_advanced(WITH_WINDOWS_BUNDLE_CRT)
+
 endif()
 
 # The following only works with the Ninja generator in CMake >= 3.0.
@@ -594,9 +548,6 @@ endif()
 # Installation process.
 option(POSTINSTALL_SCRIPT "Run given CMake script after installation process" OFF)
 mark_as_advanced(POSTINSTALL_SCRIPT)
-
-# avoid using again
-option_defaults_clear()
 
 # end option(...)
 
@@ -673,28 +624,27 @@ endif()
 
 # enable boost for cycles, audaspace or i18n
 # otherwise if the user disabled
-if(NOT WITH_BOOST)
-  # Explicitly disabled. so disable all deps.
-  macro(set_and_warn
-    _setting _val)
-    if(${${_setting}})
-      message(STATUS "'WITH_BOOST' is disabled: forcing 'set(${_setting} ${_val})'")
-    endif()
-    set(${_setting} ${_val})
-  endmacro()
 
-  set_and_warn(WITH_CYCLES         OFF)
-  set_and_warn(WITH_INTERNATIONAL  OFF)
-  set_and_warn(WITH_OPENVDB        OFF)
-  set_and_warn(WITH_OPENCOLORIO    OFF)
-  set_and_warn(WITH_QUADRIFLOW     OFF)
-elseif(WITH_CYCLES OR WITH_OPENIMAGEIO OR WITH_INTERNATIONAL OR
-       WITH_OPENVDB OR WITH_OPENCOLORIO)
-  # Keep enabled
-else()
-  # Disable boost if not needed.
+set_and_warn_dependency(WITH_BOOST WITH_CYCLES         OFF)
+set_and_warn_dependency(WITH_BOOST WITH_INTERNATIONAL  OFF)
+set_and_warn_dependency(WITH_BOOST WITH_OPENVDB        OFF)
+set_and_warn_dependency(WITH_BOOST WITH_OPENCOLORIO    OFF)
+set_and_warn_dependency(WITH_BOOST WITH_QUADRIFLOW     OFF)
+set_and_warn_dependency(WITH_BOOST WITH_USD            OFF)
+
+if(WITH_BOOST AND NOT (WITH_CYCLES OR WITH_OPENIMAGEIO OR WITH_INTERNATIONAL OR
+   WITH_OPENVDB OR WITH_OPENCOLORIO OR WITH_USD))
+  message(STATUS "No dependencies need 'WITH_BOOST' forcing WITH_BOOST=OFF")
   set(WITH_BOOST OFF)
 endif()
+
+set_and_warn_dependency(WITH_TBB WITH_USD               OFF)
+set_and_warn_dependency(WITH_TBB WITH_OPENIMAGEDENOISE  OFF)
+set_and_warn_dependency(WITH_TBB WITH_OPENVDB           OFF)
+set_and_warn_dependency(WITH_TBB WITH_MOD_FLUID         OFF)
+
+# OpenVDB uses 'half' type from OpenEXR & fails to link without OpenEXR enabled.
+set_and_warn_dependency(WITH_IMAGE_OPENEXR WITH_OPENVDB OFF)
 
 # auto enable openimageio for cycles
 if(WITH_CYCLES)
@@ -845,66 +795,13 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
     if(MSVC)
       set(COMPILER_ASAN_LINKER_FLAGS "/FUNCTIONPADMIN:6")
     endif()
-    set(PLATFORM_LINKLIBS "${PLATFORM_LINKLIBS};${COMPILER_ASAN_LIBRARY}")
-    set(PLATFORM_LINKFLAGS "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
-    set(PLATFORM_LINKFLAGS_DEBUG "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
+    if(COMPILER_ASAN_LIBRARY)
+      set(PLATFORM_LINKLIBS "${PLATFORM_LINKLIBS};${COMPILER_ASAN_LIBRARY}")
+      set(PLATFORM_LINKFLAGS "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
+      set(PLATFORM_LINKFLAGS_DEBUG "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
+    endif()
   endif()
 endif()
-
-#-----------------------------------------------------------------------------
-# Platform specifics
-
-if(WITH_X11)
-  find_package(X11 REQUIRED)
-
-  find_path(X11_XF86keysym_INCLUDE_PATH X11/XF86keysym.h ${X11_INC_SEARCH_PATH})
-  mark_as_advanced(X11_XF86keysym_INCLUDE_PATH)
-
-  list(APPEND PLATFORM_LINKLIBS ${X11_X11_LIB})
-
-  if(WITH_X11_XINPUT)
-    if(X11_Xinput_LIB)
-      list(APPEND PLATFORM_LINKLIBS ${X11_Xinput_LIB})
-    else()
-      message(FATAL_ERROR "LibXi not found. Disable WITH_X11_XINPUT if you
-      want to build without tablet support")
-    endif()
-  endif()
-
-  if(WITH_X11_XF86VMODE)
-    # XXX, why doesn't cmake make this available?
-    find_library(X11_Xxf86vmode_LIB Xxf86vm   ${X11_LIB_SEARCH_PATH})
-    mark_as_advanced(X11_Xxf86vmode_LIB)
-    if(X11_Xxf86vmode_LIB)
-      list(APPEND PLATFORM_LINKLIBS ${X11_Xxf86vmode_LIB})
-    else()
-      message(FATAL_ERROR "libXxf86vm not found. Disable WITH_X11_XF86VMODE if you
-      want to build without")
-    endif()
-  endif()
-
-  if(WITH_X11_XFIXES)
-    if(X11_Xfixes_LIB)
-      list(APPEND PLATFORM_LINKLIBS ${X11_Xfixes_LIB})
-    else()
-      message(FATAL_ERROR "libXfixes not found. Disable WITH_X11_XFIXES if you
-      want to build without")
-    endif()
-  endif()
-
-  if(WITH_X11_ALPHA)
-    find_library(X11_Xrender_LIB Xrender  ${X11_LIB_SEARCH_PATH})
-    mark_as_advanced(X11_Xrender_LIB)
-    if(X11_Xrender_LIB)
-      list(APPEND PLATFORM_LINKLIBS ${X11_Xrender_LIB})
-    else()
-      message(FATAL_ERROR "libXrender not found. Disable WITH_X11_ALPHA if you
-      want to build without")
-    endif()
-  endif()
-
-endif()
-
 
 # ----------------------------------------------------------------------------
 # Main Platform Checks
@@ -1015,6 +912,28 @@ if(NOT WITH_SYSTEM_EIGEN3)
   set(EIGEN3_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/extern/Eigen3)
 endif()
 
+if(WITH_OPENVDB)
+  list(APPEND OPENVDB_DEFINITIONS -DWITH_OPENVDB)
+
+  if(WITH_OPENVDB_3_ABI_COMPATIBLE)
+    list(APPEND OPENVDB_DEFINITIONS -DOPENVDB_3_ABI_COMPATIBLE)
+  endif()
+
+  list(APPEND OPENVDB_INCLUDE_DIRS
+    ${BOOST_INCLUDE_DIR}
+    ${TBB_INCLUDE_DIRS}
+    ${OPENEXR_INCLUDE_DIRS})
+
+  list(APPEND OPENVDB_LIBRARIES ${OPENEXR_LIBRARIES} ${ZLIB_LIBRARIES})
+
+  if(WITH_OPENVDB_BLOSC)
+    list(APPEND OPENVDB_DEFINITIONS -DWITH_OPENVDB_BLOSC)
+    list(APPEND OPENVDB_LIBRARIES ${BLOSC_LIBRARIES} ${ZLIB_LIBRARIES})
+  endif()
+
+  list(APPEND OPENVDB_LIBRARIES ${BOOST_LIBRARIES} ${TBB_LIBRARIES})
+endif()
+
 #-----------------------------------------------------------------------------
 # Configure OpenGL.
 
@@ -1038,7 +957,7 @@ if(WITH_GL_PROFILE_ES20)
       )
     endif()
 
-    list(APPEND BLENDER_GL_LIBRARIES OPENGLES_LIBRARY)
+    list(APPEND BLENDER_GL_LIBRARIES "${OPENGLES_LIBRARY}")
 
   else()
     set(OPENGLES_LIBRARY "" CACHE FILEPATH "OpenGL ES 2.0 library file")
@@ -1098,7 +1017,10 @@ else()
 endif()
 
 if(WITH_GL_EGL)
-  list(APPEND GL_DEFINITIONS -DWITH_GL_EGL)
+  find_package(OpenGL REQUIRED EGL)
+  list(APPEND BLENDER_GL_LIBRARIES OpenGL::EGL)
+
+  list(APPEND GL_DEFINITIONS -DWITH_GL_EGL -DGLEW_EGL -DGLEW_INC_EGL)
 
   if(WITH_SYSTEM_GLES)
     if(NOT OPENGLES_EGL_LIBRARY)
@@ -1108,7 +1030,7 @@ if(WITH_GL_EGL)
       )
     endif()
 
-    list(APPEND BLENDER_GL_LIBRARIES OPENGLES_EGL_LIBRARY)
+    list(APPEND BLENDER_GL_LIBRARIES ${OPENGLES_EGL_LIBRARY})
 
   else()
     set(OPENGLES_EGL_LIBRARY "" CACHE FILEPATH "EGL library file")
@@ -1146,10 +1068,6 @@ if(WITH_GL_PROFILE_ES20)
   list(APPEND GL_DEFINITIONS -DWITH_GL_PROFILE_ES20)
 else()
   list(APPEND GL_DEFINITIONS -DWITH_GL_PROFILE_CORE)
-endif()
-
-if(WITH_GL_EGL)
-  list(APPEND GL_DEFINITIONS -DWITH_EGL)
 endif()
 
 #-----------------------------------------------------------------------------
@@ -1221,10 +1139,6 @@ else()
       # so there are lots of modifications to GLEW to make this work,
       # and no attempt to make it work beyond Blender at this point.
       list(APPEND GL_DEFINITIONS -DGL_ES_VERSION_1_0=0 -DGL_ES_VERSION_CL_1_1=0 -DGL_ES_VERSION_CM_1_1=0)
-    endif()
-
-    if(WITH_GL_EGL)
-      list(APPEND GL_DEFINITIONS -DGLEW_INC_EGL)
     endif()
 
     set(BLENDER_GLEW_LIBRARIES extern_glew_es bf_intern_glew_mx)
@@ -1523,6 +1437,7 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
 
   # flags to undo strict flags
   ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_PARAMETER -Wno-unused-parameter)
+  ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_VARIABLE  -Wno-unused-variable)
   ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_MACROS    -Wno-unused-macros)
 
   ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_MISSING_VARIABLE_DECLARATIONS -Wno-missing-variable-declarations)
@@ -1541,6 +1456,8 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_REORDER -Wno-reorder)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_COMMENT -Wno-comment)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNUSED_TYPEDEFS -Wno-unused-local-typedefs)
+  ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNDEFINED_VAR_TEMPLATE -Wno-undefined-var-template)
+  ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_INSTANTIATION_AFTER_SPECIALIZATION -Wno-instantiation-after-specialization)
 
 elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
 
@@ -1792,15 +1709,16 @@ if(FIRST_RUN)
   info_cfg_option(WITH_CYCLES)
   info_cfg_option(WITH_FREESTYLE)
   info_cfg_option(WITH_OPENCOLORIO)
+  info_cfg_option(WITH_XR_OPENXR)
   info_cfg_option(WITH_OPENIMAGEDENOISE)
   info_cfg_option(WITH_OPENVDB)
   info_cfg_option(WITH_ALEMBIC)
   info_cfg_option(WITH_QUADRIFLOW)
+  info_cfg_option(WITH_USD)
 
   info_cfg_text("Compiler Options:")
   info_cfg_option(WITH_BUILDINFO)
   info_cfg_option(WITH_OPENMP)
-  info_cfg_option(WITH_RAYOPTIMIZATION)
 
   info_cfg_text("System Options:")
   info_cfg_option(WITH_INSTALL_PORTABLE)

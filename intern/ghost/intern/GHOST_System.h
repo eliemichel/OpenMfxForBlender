@@ -112,6 +112,19 @@ class GHOST_System : public GHOST_ISystem {
   GHOST_TSuccess disposeWindow(GHOST_IWindow *window);
 
   /**
+   * Create a new offscreen context.
+   * Never explicitly delete the context, use disposeContext() instead.
+   * \return  The new context (or 0 if creation failed).
+   */
+  virtual GHOST_IContext *createOffscreenContext() = 0;
+
+  /**
+   * Overload to allow requesting a different context type. By default only OpenGL is supported.
+   * However by explicitly overloading this a system may add support for others.
+   */
+  GHOST_IContext *createOffscreenContext(GHOST_TDrawingContextType type);
+
+  /**
    * Returns whether a window is valid.
    * \param   window Pointer to the window to be checked.
    * \return  Indication of validity.
@@ -328,6 +341,20 @@ class GHOST_System : public GHOST_ISystem {
     return GHOST_kFailure;
   };
 
+  /***************************************************************************************
+   * Debugging
+   ***************************************************************************************/
+
+  /**
+   * Specify whether debug messages are to be shown.
+   */
+  virtual void initDebug(bool is_debug_enabled);
+
+  /**
+   * Check whether debug messages are to be shown.
+   */
+  virtual bool isDebugEnabled();
+
  protected:
   /**
    * Initialize the system.
@@ -378,6 +405,8 @@ class GHOST_System : public GHOST_ISystem {
 
   /** Which tablet API to use. */
   GHOST_TTabletAPI m_tabletAPI;
+
+  bool m_is_debug_enabled;
 };
 
 inline GHOST_TimerManager *GHOST_System::getTimerManager() const

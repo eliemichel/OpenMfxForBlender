@@ -24,6 +24,10 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Camera;
 struct ImBuf;
 struct ListBase;
@@ -56,9 +60,7 @@ struct MovieTrackingReconstruction *BKE_tracking_get_active_reconstruction(
     struct MovieTracking *tracking);
 
 /* matrices for constraints and drawing */
-void BKE_tracking_get_camera_object_matrix(struct Scene *scene,
-                                           struct Object *ob,
-                                           float mat[4][4]);
+void BKE_tracking_get_camera_object_matrix(struct Object *camera_object, float mat[4][4]);
 void BKE_tracking_get_projection_matrix(struct MovieTracking *tracking,
                                         struct MovieTrackingObject *object,
                                         int framenr,
@@ -477,5 +479,9 @@ void BKE_tracking_get_rna_path_prefix_for_plane_track(
 #define TRACK_AREA_SEARCH 4
 
 #define TRACK_AREA_ALL (TRACK_AREA_POINT | TRACK_AREA_PAT | TRACK_AREA_SEARCH)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

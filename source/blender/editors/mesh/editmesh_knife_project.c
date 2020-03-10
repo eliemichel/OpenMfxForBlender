@@ -22,7 +22,6 @@
  */
 
 #include "DNA_curve_types.h"
-#include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 
 #include "BLI_math.h"
@@ -32,9 +31,9 @@
 #include "BKE_mesh.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
-#include "BKE_cdderivedmesh.h"
 #include "BKE_editmesh.h"
 #include "BKE_mesh_runtime.h"
+#include "BKE_object.h"
 #include "BKE_report.h"
 
 #include "DEG_depsgraph.h"
@@ -59,13 +58,13 @@ static LinkNode *knifeproject_poly_from_object(const bContext *C,
                                                LinkNode *polys)
 {
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   struct Mesh *me_eval;
   bool me_eval_needs_free;
 
-  if (ob->type == OB_MESH || ob->runtime.mesh_eval) {
+  if (ob->type == OB_MESH || ob->runtime.data_eval) {
     Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
-    me_eval = ob_eval->runtime.mesh_eval;
+    me_eval = BKE_object_get_evaluated_mesh(ob_eval);
     if (me_eval == NULL) {
       Scene *scene_eval = (Scene *)DEG_get_evaluated_id(depsgraph, &scene->id);
       me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &CD_MASK_BAREMESH);
@@ -88,7 +87,7 @@ static LinkNode *knifeproject_poly_from_object(const bContext *C,
     BKE_mesh_to_curve_nurblist(me_eval, &nurbslist, 0); /* wire */
     BKE_mesh_to_curve_nurblist(me_eval, &nurbslist, 1); /* boundary */
 
-    ED_view3d_ob_project_mat_get(ar->regiondata, ob, projmat);
+    ED_view3d_ob_project_mat_get(region->regiondata, ob, projmat);
 
     if (nurbslist.first) {
       Nurb *nu;
@@ -100,7 +99,7 @@ static LinkNode *knifeproject_poly_from_object(const bContext *C,
           float(*mval)[2] = MEM_mallocN(sizeof(*mval) * (nu->pntsu + is_cyclic), __func__);
 
           for (bp = nu->bp, a = 0; a < nu->pntsu; a++, bp++) {
-            ED_view3d_project_float_v2_m4(ar, bp->vec, mval[a], projmat);
+            ED_view3d_project_float_v2_m4(region, bp->vec, mval[a], projmat);
           }
           if (is_cyclic) {
             copy_v2_v2(mval[a], mval[0]);
@@ -143,21 +142,7 @@ static int knifeproject_exec(bContext *C, wmOperator *op)
     /* select only tagged faces */
     BM_mesh_elem_hflag_disable_all(em->bm, BM_VERT | BM_EDGE | BM_FACE, BM_ELEM_SELECT, false);
 
-    CTX_DATA_BEGIN (C, Object *, ob, selected_objects) {
-      if (ob->type == OB_MESH) {
-        Mesh *me = (Mesh *)ob->data;
-        BMEditMesh *embm = me->edit_mesh;
-        if (embm) {
-          /* not essential, but switch out of vertex mode since the
-           * selected regions wont be nicely isolated after flushing.
-           * note: call after de-select to avoid selection flushing.
-           * note: do this on all participating meshes so this is in sync
-           * e.g. for later selection picking, see T68852.*/
-          EDBM_selectmode_disable(scene, embm, SCE_SELECT_VERTEX, SCE_SELECT_EDGE);
-        }
-      }
-    }
-    CTX_DATA_END;
+    EDBM_selectmode_disable_multi(C, SCE_SELECT_VERTEX, SCE_SELECT_EDGE);
 
     BM_mesh_elem_hflag_enable_test(em->bm, BM_FACE, BM_ELEM_SELECT, true, false, BM_ELEM_TAG);
 
@@ -168,7 +153,9 @@ static int knifeproject_exec(bContext *C, wmOperator *op)
     return OPERATOR_FINISHED;
   }
   else {
-    BKE_report(op->reports, RPT_ERROR, "No other selected objects found to use for projection");
+    BKE_report(op->reports,
+               RPT_ERROR,
+               "No other selected objects have wire or boundary edges to use for projection");
     return OPERATOR_CANCELLED;
   }
 }

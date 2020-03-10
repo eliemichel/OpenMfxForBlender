@@ -29,6 +29,11 @@
 #  include "utfconv.h"
 #endif
 
+#if defined(WITH_TBB_MALLOC) && defined(_MSC_VER) && defined(NDEBUG)
+#  pragma comment(lib, "tbbmalloc_proxy.lib")
+#  pragma comment(linker, "/include:__TBB_malloc_proxy")
+#endif
+
 #include "MEM_guardedalloc.h"
 
 #include "CLG_log.h"
@@ -50,6 +55,7 @@
 #include "BKE_context.h"
 #include "BKE_font.h"
 #include "BKE_global.h"
+#include "BKE_idtype.h"
 #include "BKE_material.h"
 #include "BKE_modifier.h"
 #include "BKE_gpencil_modifier.h"
@@ -105,6 +111,21 @@
 #ifdef WITH_PYTHON_MODULE
 int main_python_enter(int argc, const char **argv);
 void main_python_exit(void);
+#endif
+
+#ifdef WITH_USD
+/**
+ * Workaround to make it possible to pass a path at runtime to USD.
+ *
+ * USD requires some JSON files, and it uses a static constructor to determine the possible
+ * file-system paths to find those files. This made it impossible for Blender to pass a path to the
+ * USD library at runtime, as the constructor would run before Blender's main() function. We have
+ * patched USD (see usd.diff) to avoid that particular static constructor, and have an
+ * initialization function instead.
+ *
+ * This function is implemented in the USD source code, pxr/base/lib/plug/initConfig.cpp.
+ */
+void usd_initialise_plugin_path(const char *datafiles_usd_path);
 #endif
 
 /* written to by 'creator_args.c' */
@@ -196,7 +217,7 @@ char **environ = NULL;
  * - setup subsystems.
  * - handle arguments.
  * - run #WM_main() event loop,
- *   or exit immediately when running in background mode.
+ *   or exit immediately when running in background-mode.
  */
 int main(int argc,
 #ifdef WIN32
@@ -346,6 +367,7 @@ int main(int argc,
 
   BKE_blender_globals_init(); /* blender.c */
 
+  BKE_idtype_init();
   IMB_init();
   BKE_cachefiles_init();
   BKE_images_init();
@@ -359,11 +381,11 @@ int main(int argc,
 
   BKE_callback_global_init();
 
-  /* first test for background */
+  /* First test for background-mode (#Global.background) */
 #ifndef WITH_PYTHON_MODULE
   ba = BLI_argsInit(argc, (const char **)argv); /* skip binary path */
 
-  /* ensure we free on early exit */
+  /* Ensure we free on early exit. */
   app_init_data.ba = ba;
 
   main_args_setup(C, ba);
@@ -373,7 +395,7 @@ int main(int argc,
   main_signal_setup();
 
 #else
-  /* using preferences or user startup makes no sense for py-as-module */
+  /* Using preferences or user startup makes no sense for #WITH_PYTHON_MODULE. */
   G.factory_startup = true;
 #endif
 
@@ -381,7 +403,7 @@ int main(int argc,
   IMB_ffmpeg_init();
 #endif
 
-  /* after level 1 args, this is so playanim skips RNA init */
+  /* After level 1 arguments, this is so #WM_main_playanim skips #RNA_init. */
   RNA_init();
 
   RE_engines_init();
@@ -390,21 +412,28 @@ int main(int argc,
   /* end second init */
 
 #if defined(WITH_PYTHON_MODULE) || defined(WITH_HEADLESS)
-  G.background = true; /* python module mode ALWAYS runs in background mode (for now) */
+  /* Python module mode ALWAYS runs in background-mode (for now). */
+  G.background = true;
 #else
   if (G.background) {
     main_signal_setup_background();
   }
 #endif
 
-  /* background render uses this font too */
+  /* Background render uses this font too. */
   BKE_vfont_builtin_register(datatoc_bfont_pfb, datatoc_bfont_pfb_size);
 
   /* Initialize ffmpeg if built in, also needed for background-mode if videos are
    * rendered via ffmpeg. */
   BKE_sound_init_once();
 
-  init_def_material();
+  BKE_materials_init();
+
+#ifdef WITH_USD
+  /* Tell USD which directory to search for its JSON files. If 'datafiles/usd'
+   * does not exist, the USD library will not be able to read or write any files. */
+  usd_initialise_plugin_path(BKE_appdir_folder_id(BLENDER_DATAFILES, "usd"));
+#endif
 
   if (G.background == 0) {
 #ifndef WITH_PYTHON_MODULE
@@ -413,8 +442,9 @@ int main(int argc,
 #endif
     WM_init(C, argc, (const char **)argv);
 
-    /* this is properly initialized with user defs, but this is default */
-    /* call after loading the startup.blend so we can read U.tempdir */
+    /* This is properly initialized with user-preferences,
+     * but this is default.
+     * Call after loading the #BLENDER_STARTUP_FILE so we can read #U.tempdir */
     BKE_tempdir_init(U.tempdir);
   }
   else {
@@ -424,15 +454,15 @@ int main(int argc,
 
     WM_init(C, argc, (const char **)argv);
 
-    /* don't use user preferences temp dir */
+    /* Don't use user preferences #U.tempdir */
     BKE_tempdir_init(NULL);
   }
 #ifdef WITH_PYTHON
   /**
-   * NOTE: the U.pythondir string is NULL until WM_init() is executed,
+   * \note the #U.pythondir string is NULL until #WM_init() is executed,
    * so we provide the BPY_ function below to append the user defined
-   * python-dir to Python's sys.path at this point.  Simply putting
-   * WM_init() before #BPY_python_start() crashes Blender at startup.
+   * python-dir to Python's `sys.path` at this point.  Simply putting
+   * #WM_init() before #BPY_python_start() crashes Blender at startup.
    */
 
   /* TODO - U.pythondir */
@@ -446,7 +476,7 @@ int main(int argc,
   WM_keyconfig_init(C);
 
 #ifdef WITH_FREESTYLE
-  /* initialize Freestyle */
+  /* Initialize Freestyle. */
   FRS_initialize();
   FRS_set_context(C);
 #endif
@@ -463,7 +493,7 @@ int main(int argc,
   callback_main_atexit(&app_init_data);
   BKE_blender_atexit_unregister(callback_main_atexit, &app_init_data);
 
-  /* paranoid, avoid accidental re-use */
+  /* Paranoid, avoid accidental re-use. */
 #ifndef WITH_PYTHON_MODULE
   ba = NULL;
   (void)ba;
@@ -475,11 +505,12 @@ int main(int argc,
 #endif
 
 #ifdef WITH_PYTHON_MODULE
-  return 0; /* keep blender in background mode running */
+  /* Keep blender in background-mode running. */
+  return 0;
 #endif
 
   if (G.background) {
-    /* Using window-manager API in background mode is a bit odd, but works fine. */
+    /* Using window-manager API in background-mode is a bit odd, but works fine. */
     WM_exit(C);
   }
   else {

@@ -25,7 +25,6 @@
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
-#include <wchar.h>
 #include <wctype.h>
 
 #include "CLG_log.h"
@@ -42,21 +41,102 @@
 #include "BLI_threads.h"
 #include "BLI_vfontdata.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_packedFile_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_vfont_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_packedFile.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_font.h"
 #include "BKE_global.h"
+#include "BKE_idtype.h"
 #include "BKE_main.h"
 #include "BKE_anim.h"
 #include "BKE_curve.h"
 
 static CLG_LogRef LOG = {"bke.data_transfer"};
 static ThreadRWMutex vfont_rwlock = BLI_RWLOCK_INITIALIZER;
+
+/**************************** Prototypes **************************/
+
+static PackedFile *get_builtin_packedfile(void);
+
+/****************************** VFont Datablock ************************/
+
+static void vfont_init_data(ID *id)
+{
+  VFont *vfont = (VFont *)id;
+  PackedFile *pf = get_builtin_packedfile();
+
+  if (pf) {
+    VFontData *vfd;
+
+    vfd = BLI_vfontdata_from_freetypefont(pf);
+    if (vfd) {
+      vfont->data = vfd;
+
+      BLI_strncpy(vfont->name, FO_BUILTIN_NAME, sizeof(vfont->name));
+    }
+
+    /* Free the packed file */
+    BKE_packedfile_free(pf);
+  }
+}
+
+static void vfont_copy_data(Main *UNUSED(bmain),
+                            ID *id_dst,
+                            const ID *UNUSED(id_src),
+                            const int flag)
+{
+  VFont *vfont_dst = (VFont *)id_dst;
+
+  /* We never handle usercount here for own data. */
+  const int flag_subdata = flag | LIB_ID_CREATE_NO_USER_REFCOUNT;
+
+  /* Just to be sure, should not have any value actually after reading time. */
+  vfont_dst->temp_pf = NULL;
+
+  if (vfont_dst->packedfile) {
+    vfont_dst->packedfile = BKE_packedfile_duplicate(vfont_dst->packedfile);
+  }
+
+  if (vfont_dst->data) {
+    vfont_dst->data = BLI_vfontdata_copy(vfont_dst->data, flag_subdata);
+  }
+}
+
+/** Free (or release) any data used by this font (does not free the font itself). */
+static void vfont_free_data(ID *id)
+{
+  VFont *vfont = (VFont *)id;
+  BKE_vfont_free_data(vfont);
+
+  if (vfont->packedfile) {
+    BKE_packedfile_free(vfont->packedfile);
+    vfont->packedfile = NULL;
+  }
+}
+
+IDTypeInfo IDType_ID_VF = {
+    .id_code = ID_VF,
+    .id_filter = FILTER_ID_VF,
+    .main_listbase_index = INDEX_ID_VF,
+    .struct_size = sizeof(VFont),
+    .name = "Font",
+    .name_plural = "fonts",
+    .translation_context = BLT_I18NCONTEXT_ID_VFONT,
+    .flags = 0,
+
+    .init_data = vfont_init_data,
+    .copy_data = vfont_copy_data,
+    .free_data = vfont_free_data,
+    .make_local = NULL,
+};
+
+/***************************** VFont *******************************/
 
 /* The vfont code */
 void BKE_vfont_free_data(struct VFont *vfont)
@@ -88,37 +168,6 @@ void BKE_vfont_free_data(struct VFont *vfont)
   if (vfont->temp_pf) {
     BKE_packedfile_free(vfont->temp_pf); /* NULL when the font file can't be found on disk */
     vfont->temp_pf = NULL;
-  }
-}
-
-/** Free (or release) any data used by this font (does not free the font itself). */
-void BKE_vfont_free(struct VFont *vf)
-{
-  BKE_vfont_free_data(vf);
-
-  if (vf->packedfile) {
-    BKE_packedfile_free(vf->packedfile);
-    vf->packedfile = NULL;
-  }
-}
-
-void BKE_vfont_copy_data(Main *UNUSED(bmain),
-                         VFont *vfont_dst,
-                         const VFont *UNUSED(vfont_src),
-                         const int flag)
-{
-  /* We never handle usercount here for own data. */
-  const int flag_subdata = flag | LIB_ID_CREATE_NO_USER_REFCOUNT;
-
-  /* Just to be sure, should not have any value actually after reading time. */
-  vfont_dst->temp_pf = NULL;
-
-  if (vfont_dst->packedfile) {
-    vfont_dst->packedfile = BKE_packedfile_duplicate(vfont_dst->packedfile);
-  }
-
-  if (vfont_dst->data) {
-    vfont_dst->data = BLI_vfontdata_copy(vfont_dst->data, flag_subdata);
   }
 }
 
@@ -219,26 +268,6 @@ static VFontData *vfont_get_data(VFont *vfont)
   return vfont->data;
 }
 
-/* Bad naming actually in this case... */
-void BKE_vfont_init(VFont *vfont)
-{
-  PackedFile *pf = get_builtin_packedfile();
-
-  if (pf) {
-    VFontData *vfd;
-
-    vfd = BLI_vfontdata_from_freetypefont(pf);
-    if (vfd) {
-      vfont->data = vfd;
-
-      BLI_strncpy(vfont->name, FO_BUILTIN_NAME, sizeof(vfont->name));
-    }
-
-    /* Free the packed file */
-    BKE_packedfile_free(pf);
-  }
-}
-
 VFont *BKE_vfont_load(Main *bmain, const char *filepath)
 {
   char filename[FILE_MAXFILE];
@@ -324,11 +353,6 @@ VFont *BKE_vfont_load_exists_ex(struct Main *bmain, const char *filepath, bool *
 VFont *BKE_vfont_load_exists(struct Main *bmain, const char *filepath)
 {
   return BKE_vfont_load_exists_ex(bmain, filepath, NULL);
-}
-
-void BKE_vfont_make_local(Main *bmain, VFont *vfont, const bool lib_local)
-{
-  BKE_id_make_local_generic(bmain, &vfont->id, true, lib_local);
 }
 
 static VFont *which_vfont(Curve *cu, CharInfo *info)
@@ -691,7 +715,7 @@ static bool vfont_to_curve(Object *ob,
                            int mode,
                            VFontToCurveIter *iter_data,
                            ListBase *r_nubase,
-                           const wchar_t **r_text,
+                           const char32_t **r_text,
                            int *r_text_len,
                            bool *r_text_free,
                            struct CharTrans **r_chartransdata)
@@ -712,8 +736,8 @@ static bool vfont_to_curve(Object *ob,
   int curbox;
   int selstart, selend;
   int cnr = 0, lnr = 0, wsnr = 0;
-  const wchar_t *mem = NULL;
-  wchar_t ascii;
+  const char32_t *mem = NULL;
+  char32_t ascii;
   bool ok = false;
   const float font_size = cu->fsize * iter_data->scale_to_fit;
   const float xof_scale = cu->xof / font_size;
@@ -759,16 +783,16 @@ static bool vfont_to_curve(Object *ob,
     custrinfo = ef->textbufinfo;
   }
   else {
-    wchar_t *mem_tmp;
+    char32_t *mem_tmp;
     slen = cu->len_wchar;
 
     /* Create unicode string */
-    mem_tmp = MEM_malloc_arrayN((slen + 1), sizeof(wchar_t), "convertedmem");
+    mem_tmp = MEM_malloc_arrayN((slen + 1), sizeof(*mem_tmp), "convertedmem");
     if (!mem_tmp) {
       return ok;
     }
 
-    BLI_strncpy_wchar_from_utf8(mem_tmp, cu->str, slen + 1);
+    BLI_str_utf8_as_utf32(mem_tmp, cu->str, slen + 1);
 
     if (cu->strinfo == NULL) { /* old file */
       cu->strinfo = MEM_calloc_arrayN((slen + 4), sizeof(CharInfo), "strinfo compat");
@@ -1605,7 +1629,7 @@ bool BKE_vfont_to_curve_ex(Object *ob,
                            Curve *cu,
                            int mode,
                            ListBase *r_nubase,
-                           const wchar_t **r_text,
+                           const char32_t **r_text,
                            int *r_text_len,
                            bool *r_text_free,
                            struct CharTrans **r_chartransdata)
@@ -1635,8 +1659,10 @@ bool BKE_vfont_to_curve_nubase(Object *ob, int mode, ListBase *r_nubase)
   return BKE_vfont_to_curve_ex(ob, ob->data, mode, r_nubase, NULL, NULL, NULL, NULL);
 }
 
-/** Warning: expects to have access to evaluated data
- * (i.e. passed object should be evaluated one...). */
+/**
+ * Warning: expects to have access to evaluated data
+ * (i.e. passed object should be evaluated one...).
+ */
 bool BKE_vfont_to_curve(Object *ob, int mode)
 {
   Curve *cu = ob->data;
@@ -1649,9 +1675,9 @@ bool BKE_vfont_to_curve(Object *ob, int mode)
  * \{ */
 
 static struct {
-  wchar_t *text_buffer;
+  char32_t *text_buffer;
   CharInfo *info_buffer;
-  size_t len_wchar;
+  size_t len_utf32;
   size_t len_utf8;
 } g_vfont_clipboard = {NULL};
 
@@ -1659,19 +1685,19 @@ void BKE_vfont_clipboard_free(void)
 {
   MEM_SAFE_FREE(g_vfont_clipboard.text_buffer);
   MEM_SAFE_FREE(g_vfont_clipboard.info_buffer);
-  g_vfont_clipboard.len_wchar = 0;
+  g_vfont_clipboard.len_utf32 = 0;
   g_vfont_clipboard.len_utf8 = 0;
 }
 
-void BKE_vfont_clipboard_set(const wchar_t *text_buf, const CharInfo *info_buf, const size_t len)
+void BKE_vfont_clipboard_set(const char32_t *text_buf, const CharInfo *info_buf, const size_t len)
 {
-  wchar_t *text;
+  char32_t *text;
   CharInfo *info;
 
   /* clean previous buffers*/
   BKE_vfont_clipboard_free();
 
-  text = MEM_malloc_arrayN((len + 1), sizeof(wchar_t), __func__);
+  text = MEM_malloc_arrayN((len + 1), sizeof(*text), __func__);
   if (text == NULL) {
     return;
   }
@@ -1682,21 +1708,21 @@ void BKE_vfont_clipboard_set(const wchar_t *text_buf, const CharInfo *info_buf, 
     return;
   }
 
-  memcpy(text, text_buf, len * sizeof(wchar_t));
+  memcpy(text, text_buf, len * sizeof(*text));
   text[len] = '\0';
   memcpy(info, info_buf, len * sizeof(CharInfo));
 
   /* store new buffers */
   g_vfont_clipboard.text_buffer = text;
   g_vfont_clipboard.info_buffer = info;
-  g_vfont_clipboard.len_utf8 = BLI_wstrlen_utf8(text);
-  g_vfont_clipboard.len_wchar = len;
+  g_vfont_clipboard.len_utf8 = BLI_str_utf32_as_utf8_len(text);
+  g_vfont_clipboard.len_utf32 = len;
 }
 
-void BKE_vfont_clipboard_get(wchar_t **r_text_buf,
+void BKE_vfont_clipboard_get(char32_t **r_text_buf,
                              CharInfo **r_info_buf,
                              size_t *r_len_utf8,
-                             size_t *r_len_wchar)
+                             size_t *r_len_utf32)
 {
   if (r_text_buf) {
     *r_text_buf = g_vfont_clipboard.text_buffer;
@@ -1706,8 +1732,8 @@ void BKE_vfont_clipboard_get(wchar_t **r_text_buf,
     *r_info_buf = g_vfont_clipboard.info_buffer;
   }
 
-  if (r_len_wchar) {
-    *r_len_wchar = g_vfont_clipboard.len_wchar;
+  if (r_len_utf32) {
+    *r_len_utf32 = g_vfont_clipboard.len_utf32;
   }
 
   if (r_len_utf8) {

@@ -521,6 +521,7 @@ static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key)
       (&(struct BMeshToMeshParams){
           /* Undo code should not be manipulating 'G_MAIN->object' hooks/vertex-parent. */
           .calc_object_remap = false,
+          .update_shapekey_indices = false,
           .cd_mask_extra = {.vmask = CD_MASK_SHAPE_KEYINDEX},
       }));
 
@@ -559,12 +560,10 @@ static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key)
   return um;
 }
 
-static void undomesh_to_editmesh(UndoMesh *um, BMEditMesh *em, Mesh *obmesh)
+static void undomesh_to_editmesh(UndoMesh *um, Object *ob, BMEditMesh *em, Key *key)
 {
   BMEditMesh *em_tmp;
-  Object *ob = em->ob;
   BMesh *bm;
-  Key *key = obmesh->key;
 
 #ifdef USE_ARRAY_STORE
 #  ifdef USE_ARRAY_STORE_THREAD
@@ -606,7 +605,6 @@ static void undomesh_to_editmesh(UndoMesh *um, BMEditMesh *em, Mesh *obmesh)
 
   em->selectmode = um->selectmode;
   bm->selectmode = um->selectmode;
-  em->ob = ob;
 
   bm->spacearr_dirty = BM_SPACEARR_DIRTY_ALL;
 
@@ -674,7 +672,8 @@ static void undomesh_free_data(UndoMesh *um)
 
 static Object *editmesh_object_from_context(bContext *C)
 {
-  Object *obedit = CTX_data_edit_object(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
   if (obedit && obedit->type == OB_MESH) {
     Mesh *me = obedit->data;
     if (me->edit_mesh != NULL) {
@@ -717,8 +716,7 @@ static bool mesh_undosys_step_encode(struct bContext *C, struct Main *bmain, Und
    * outside of this list will be moved out of edit-mode when reading back undo steps. */
   ViewLayer *view_layer = CTX_data_view_layer(C);
   uint objects_len = 0;
-  Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
-      view_layer, NULL, &objects_len);
+  Object **objects = ED_undo_editmode_objects_from_view_layer(view_layer, &objects_len);
 
   us->elems = MEM_callocN(sizeof(*us->elems) * objects_len, __func__);
   us->elems_len = objects_len;
@@ -765,7 +763,7 @@ static void mesh_undosys_step_decode(
       continue;
     }
     BMEditMesh *em = me->edit_mesh;
-    undomesh_to_editmesh(&elem->data, em, obedit->data);
+    undomesh_to_editmesh(&elem->data, obedit, em, me->key);
     em->needs_flush_to_id = 1;
     DEG_id_tag_update(&obedit->id, ID_RECALC_GEOMETRY);
   }

@@ -58,8 +58,10 @@ struct KDTree {
 
 #define KD_NODE_UNSET ((uint)-1)
 
-/** When set we know all values are unbalanced,
- * otherwise clear them when re-balancing: see T62210. */
+/**
+ * When set we know all values are unbalanced,
+ * otherwise clear them when re-balancing: see T62210.
+ */
 #define KD_NODE_ROOT_IS_INIT ((uint)-2)
 
 /* -------------------------------------------------------------------- */
@@ -77,7 +79,7 @@ static float len_squared_vnvn(const float v0[KD_DIMS], const float v1[KD_DIMS])
 {
   float d = 0.0f;
   for (uint j = 0; j < KD_DIMS; j++) {
-    d += SQUARE(v0[j] - v1[j]);
+    d += square_f(v0[j] - v1[j]);
   }
   return d;
 }
@@ -891,7 +893,7 @@ int BLI_kdtree_nd_(calc_duplicates_fast)(const KDTree *tree,
   struct DeDuplicateParams p = {
       .nodes = tree->nodes,
       .range = range,
-      .range_sq = SQUARE(range),
+      .range_sq = square_f(range),
       .duplicates = duplicates,
       .duplicates_found = &found,
   };

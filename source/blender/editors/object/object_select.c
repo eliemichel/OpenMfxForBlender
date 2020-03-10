@@ -51,7 +51,7 @@
 #include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_object.h"
@@ -523,7 +523,7 @@ static bool object_select_all_by_material(bContext *C, Material *mat)
       int a;
 
       for (a = 1; a <= ob->totcol; a++) {
-        mat1 = give_current_material(ob, a);
+        mat1 = BKE_object_material_get(ob, a);
 
         if (mat1 == mat) {
           ED_object_base_select(base, BA_SELECT);
@@ -681,7 +681,7 @@ static int object_select_linked_exec(bContext *C, wmOperator *op)
   else if (nr == OBJECT_SELECT_LINKED_MATERIAL) {
     Material *mat = NULL;
 
-    mat = give_current_material(ob, ob->actcol);
+    mat = BKE_object_material_get(ob, ob->actcol);
     if (mat == NULL) {
       return OPERATOR_CANCELLED;
     }
@@ -836,14 +836,15 @@ static bool select_grouped_parent(bContext *C) /* Makes parent active and de-sel
 /* Select objects in the same group as the active */
 static bool select_grouped_collection(bContext *C, Object *ob)
 {
+  Main *bmain = CTX_data_main(C);
   bool changed = false;
   Collection *collection, *ob_collections[COLLECTION_MENU_MAX];
   int collection_count = 0, i;
   uiPopupMenu *pup;
   uiLayout *layout;
 
-  for (collection = CTX_data_main(C)->collections.first;
-       collection && collection_count < COLLECTION_MENU_MAX;
+  for (collection = bmain->collections.first;
+       collection && (collection_count < COLLECTION_MENU_MAX);
        collection = collection->id.next) {
     if (BKE_collection_has_object(collection, ob)) {
       ob_collections[collection_count] = collection;

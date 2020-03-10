@@ -51,17 +51,15 @@
 #include "BIF_glutil.h"
 
 /* context checked on having screen, window and area */
-wmGesture *WM_gesture_new(bContext *C, const wmEvent *event, int type)
+wmGesture *WM_gesture_new(wmWindow *window, const ARegion *region, const wmEvent *event, int type)
 {
   wmGesture *gesture = MEM_callocN(sizeof(wmGesture), "new gesture");
-  wmWindow *window = CTX_wm_window(C);
-  ARegion *ar = CTX_wm_region(C);
 
   BLI_addtail(&window->gesture, gesture);
 
   gesture->type = type;
   gesture->event_type = event->type;
-  gesture->winrct = ar->winrct;
+  gesture->winrct = region->winrct;
   gesture->user_data.use_free = true; /* Free if userdata is set. */
   gesture->modal_state = GESTURE_MODAL_NOP;
 
@@ -97,10 +95,8 @@ wmGesture *WM_gesture_new(bContext *C, const wmEvent *event, int type)
   return gesture;
 }
 
-void WM_gesture_end(bContext *C, wmGesture *gesture)
+void WM_gesture_end(wmWindow *win, wmGesture *gesture)
 {
-  wmWindow *win = CTX_wm_window(C);
-
   if (win->tweak == gesture) {
     win->tweak = NULL;
   }
@@ -110,12 +106,17 @@ void WM_gesture_end(bContext *C, wmGesture *gesture)
   MEM_freeN(gesture);
 }
 
-void WM_gestures_remove(bContext *C)
+void WM_gestures_free_all(wmWindow *win)
 {
-  wmWindow *win = CTX_wm_window(C);
-
   while (win->gesture.first) {
-    WM_gesture_end(C, win->gesture.first);
+    WM_gesture_end(win, win->gesture.first);
+  }
+}
+
+void WM_gestures_remove(wmWindow *win)
+{
+  while (win->gesture.first) {
+    WM_gesture_end(win, win->gesture.first);
   }
 }
 
@@ -521,9 +522,9 @@ void wm_gesture_draw(wmWindow *win)
   }
 }
 
-void wm_gesture_tag_redraw(bContext *C)
+void wm_gesture_tag_redraw(wmWindow *win)
 {
-  bScreen *screen = CTX_wm_screen(C);
+  bScreen *screen = WM_window_get_active_screen(win);
 
   if (screen) {
     screen->do_draw_gesture = true;

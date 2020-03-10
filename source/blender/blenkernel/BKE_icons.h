@@ -26,6 +26,10 @@
  * Resizable Icons for Blender
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef void (*DrawInfoFreeFP)(void *drawinfo);
 
 enum {
@@ -62,8 +66,8 @@ struct Icon_Geom {
   int icon_id;
   int coords_len;
   int coords_range[2];
-  const unsigned char (*coords)[2];
-  const unsigned char (*colors)[4];
+  unsigned char (*coords)[2];
+  unsigned char (*colors)[4];
   /* when not NULL, the memory of coords and colors is a sub-region of this pointer. */
   const void *mem;
 };
@@ -160,9 +164,14 @@ struct Icon_Geom *BKE_icon_geom_from_file(const char *filename);
 struct ImBuf *BKE_icon_geom_rasterize(const struct Icon_Geom *geom,
                                       const unsigned int size_x,
                                       const unsigned int size_y);
+void BKE_icon_geom_invert_lightness(struct Icon_Geom *geom);
 
 int BKE_icon_ensure_studio_light(struct StudioLight *sl, int id_type);
 
 #define ICON_RENDER_DEFAULT_HEIGHT 32
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /*  __BKE_ICONS_H__ */

@@ -33,6 +33,7 @@
 #include "BLI_sys_types.h"
 
 #include "BLI_math.h"
+#include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
 #include "BLF_api.h"
@@ -562,7 +563,7 @@ static void annotation_draw_strokes(bGPdata *UNUSED(gpd),
 {
   GPU_program_point_size(true);
 
-  for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
+  LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
     /* check if stroke can be drawn */
     if (annotation_can_draw_stroke(gps, dflag) == false) {
       continue;
@@ -625,7 +626,7 @@ static void annotation_draw_strokes(bGPdata *UNUSED(gpd),
 }
 
 /* Draw selected verts for strokes being edited */
-static void annotation_draw_strokes_edit(bGPdata *gpd,
+static void annotation_draw_strokes_edit(bGPdata *UNUSED(gpd),
                                          bGPDlayer *gpl,
                                          const bGPDframe *gpf,
                                          int offsx,
@@ -660,7 +661,7 @@ static void annotation_draw_strokes_edit(bGPdata *gpd,
   GPU_program_point_size(true);
 
   /* draw stroke verts */
-  for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
+  LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
     /* check if stroke can be drawn */
     if (annotation_can_draw_stroke(gps, dflag) == false) {
       continue;
@@ -689,6 +690,9 @@ static void annotation_draw_strokes_edit(bGPdata *gpd,
       vsize = bsize + 2;
     }
 
+    /* Why? */
+    UNUSED_VARS(vsize);
+
     float selectColor[4];
     UI_GetThemeColor3fv(TH_GP_VERTEX_SELECT, selectColor);
     selectColor[3] = alpha;
@@ -709,31 +713,12 @@ static void annotation_draw_strokes_edit(bGPdata *gpd,
 
     immBegin(GPU_PRIM_POINTS, gps->totpoints);
 
-    /* Draw start and end point differently if enabled stroke direction hint */
-    bool show_direction_hint = (gpd->flag & GP_DATA_SHOW_DIRECTION) && (gps->totpoints > 1);
-
     /* Draw all the stroke points (selected or not) */
     bGPDspoint *pt = gps->points;
     for (int i = 0; i < gps->totpoints; i++, pt++) {
       /* size and color first */
-      if (show_direction_hint && i == 0) {
-        /* start point in green bigger */
-        immAttr3f(color, 0.0f, 1.0f, 0.0f);
-        immAttr1f(size, vsize + 4);
-      }
-      else if (show_direction_hint && (i == gps->totpoints - 1)) {
-        /* end point in red smaller */
-        immAttr3f(color, 1.0f, 0.0f, 0.0f);
-        immAttr1f(size, vsize + 1);
-      }
-      else if (pt->flag & GP_SPOINT_SELECT) {
-        immAttr3fv(color, selectColor);
-        immAttr1f(size, vsize);
-      }
-      else {
-        immAttr3fv(color, gpl->color);
-        immAttr1f(size, bsize);
-      }
+      immAttr3fv(color, gpl->color);
+      immAttr1f(size, bsize);
 
       /* then position */
       if (gps->flag & GP_STROKE_3DSPACE) {
@@ -857,7 +842,7 @@ static void annotation_draw_data_layers(
 {
   float ink[4];
 
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
     /* verify never thickness is less than 1 */
     CLAMP_MIN(gpl->thickness, 1.0f);
     short lthick = gpl->thickness;
@@ -872,7 +857,7 @@ static void annotation_draw_data_layers(
     }
 
     /* get frame to draw */
-    bGPDframe *gpf = BKE_gpencil_layer_getframe(gpl, cfra, GP_GETFRAME_USE_PREV);
+    bGPDframe *gpf = BKE_gpencil_layer_frame_get(gpl, cfra, GP_GETFRAME_USE_PREV);
     if (gpf == NULL) {
       continue;
     }
@@ -933,7 +918,7 @@ static void annotation_draw_data_layers(
 }
 
 /* draw a short status message in the top-right corner */
-static void annotation_draw_status_text(const bGPdata *gpd, ARegion *ar)
+static void annotation_draw_status_text(const bGPdata *gpd, ARegion *region)
 {
 
   /* Cannot draw any status text when drawing OpenGL Renders */
@@ -942,7 +927,7 @@ static void annotation_draw_status_text(const bGPdata *gpd, ARegion *ar)
   }
 
   /* Get bounds of region - Necessary to avoid problems with region overlap */
-  const rcti *rect = ED_region_visible_rect(ar);
+  const rcti *rect = ED_region_visible_rect(region);
 
   /* for now, this should only be used to indicate when we are in stroke editmode */
   if (gpd->flag & GP_DATA_STROKE_EDITMODE) {
@@ -1050,13 +1035,13 @@ void ED_annotation_draw_2dimage(const bContext *C)
 {
   wmWindowManager *wm = CTX_wm_manager(C);
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
 
   int offsx, offsy, sizex, sizey;
   int dflag = GP_DRAWDATA_NOSTATUS;
 
-  bGPdata *gpd = ED_gpencil_data_get_active(C);  // XXX
+  bGPdata *gpd = ED_annotation_data_get_active(C);
   if (gpd == NULL) {
     return;
   }
@@ -1071,10 +1056,11 @@ void ED_annotation_draw_2dimage(const bContext *C)
        * so disabled. */
       offsx = 0;
       offsy = 0;
-      sizex = ar->winx;
-      sizey = ar->winy;
+      sizex = region->winx;
+      sizey = region->winy;
 
-      wmOrtho2(ar->v2d.cur.xmin, ar->v2d.cur.xmax, ar->v2d.cur.ymin, ar->v2d.cur.ymax);
+      wmOrtho2(
+          region->v2d.cur.xmin, region->v2d.cur.xmax, region->v2d.cur.ymin, region->v2d.cur.ymax);
 
       dflag |= GP_DRAWDATA_ONLYV2D | GP_DRAWDATA_IEDITHACK;
       break;
@@ -1084,8 +1070,8 @@ void ED_annotation_draw_2dimage(const bContext *C)
       /* just draw using standard scaling (settings here are currently ignored anyways) */
       offsx = 0;
       offsy = 0;
-      sizex = ar->winx;
-      sizey = ar->winy;
+      sizex = region->winx;
+      sizey = region->winy;
 
       /* NOTE: I2D was used in 2.4x, but the old settings for that have been deprecated
        * and everything moved to standard View2d
@@ -1096,8 +1082,8 @@ void ED_annotation_draw_2dimage(const bContext *C)
     default: /* for spacetype not yet handled */
       offsx = 0;
       offsy = 0;
-      sizex = ar->winx;
-      sizey = ar->winy;
+      sizex = region->winx;
+      sizey = region->winy;
 
       dflag |= GP_DRAWDATA_ONLYI2D;
       break;
@@ -1124,7 +1110,7 @@ void ED_annotation_draw_view2d(const bContext *C, bool onlyv2d)
 {
   wmWindowManager *wm = CTX_wm_manager(C);
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
   int dflag = 0;
 
@@ -1132,7 +1118,7 @@ void ED_annotation_draw_view2d(const bContext *C, bool onlyv2d)
   if (sa == NULL) {
     return;
   }
-  bGPdata *gpd = ED_gpencil_data_get_active(C);  // XXX
+  bGPdata *gpd = ED_annotation_data_get_active(C);
   if (gpd == NULL) {
     return;
   }
@@ -1152,11 +1138,12 @@ void ED_annotation_draw_view2d(const bContext *C, bool onlyv2d)
     dflag |= GP_DRAWDATA_NO_ONIONS;
   }
 
-  annotation_draw_data_all(scene, gpd, 0, 0, ar->winx, ar->winy, CFRA, dflag, sa->spacetype);
+  annotation_draw_data_all(
+      scene, gpd, 0, 0, region->winx, region->winy, CFRA, dflag, sa->spacetype);
 
   /* draw status text (if in screen/pixel-space) */
   if (!onlyv2d) {
-    annotation_draw_status_text(gpd, ar);
+    annotation_draw_status_text(gpd, region);
   }
 }
 
@@ -1164,10 +1151,10 @@ void ED_annotation_draw_view2d(const bContext *C, bool onlyv2d)
  * Note: this gets called twice - first time with only3d=true to draw 3d-strokes,
  * second time with only3d=false for screen-aligned strokes */
 void ED_annotation_draw_view3d(
-    Scene *scene, struct Depsgraph *depsgraph, View3D *v3d, ARegion *ar, bool only3d)
+    Scene *scene, struct Depsgraph *depsgraph, View3D *v3d, ARegion *region, bool only3d)
 {
   int dflag = 0;
-  RegionView3D *rv3d = ar->regiondata;
+  RegionView3D *rv3d = region->regiondata;
   int offsx, offsy, winx, winy;
 
   /* check that we have grease-pencil stuff to draw */
@@ -1181,7 +1168,7 @@ void ED_annotation_draw_view3d(
    * deal with the camera border, otherwise map the coords to the camera border. */
   if ((rv3d->persp == RV3D_CAMOB) && !(G.f & G_FLAG_RENDER_VIEWPORT)) {
     rctf rectf;
-    ED_view3d_calc_camera_border(scene, depsgraph, ar, v3d, rv3d, &rectf, true); /* no shift */
+    ED_view3d_calc_camera_border(scene, depsgraph, region, v3d, rv3d, &rectf, true); /* no shift */
 
     offsx = round_fl_to_int(rectf.xmin);
     offsy = round_fl_to_int(rectf.ymin);
@@ -1191,8 +1178,8 @@ void ED_annotation_draw_view3d(
   else {
     offsx = 0;
     offsy = 0;
-    winx = ar->winx;
-    winy = ar->winy;
+    winx = region->winx;
+    winy = region->winy;
   }
 
   /* set flags */

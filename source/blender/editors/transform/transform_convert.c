@@ -69,6 +69,8 @@
 #include "ED_clip.h"
 #include "ED_mask.h"
 
+#include "UI_view2d.h"
+
 #include "WM_api.h" /* for WM_event_add_notifier to deal with stabilization nodes */
 #include "WM_types.h"
 
@@ -79,6 +81,7 @@
 
 #include "transform.h"
 #include "transform_convert.h"
+#include "transform_mode.h"
 
 /**
  * Transforming around ourselves is no use, fallback to individual origins,
@@ -203,8 +206,8 @@ static void set_prop_dist(TransInfo *t, const bool with_dist)
   const bool use_island = transdata_check_local_islands(t, t->around);
 
   if (t->flag & T_PROP_PROJECTED) {
-    if (t->spacetype == SPACE_VIEW3D && t->ar && t->ar->regiontype == RGN_TYPE_WINDOW) {
-      RegionView3D *rv3d = t->ar->regiondata;
+    if (t->spacetype == SPACE_VIEW3D && t->region && t->region->regiontype == RGN_TYPE_WINDOW) {
+      RegionView3D *rv3d = t->region->regiondata;
       normalize_v3_v3(_proj_vec, rv3d->viewinv[2]);
       proj_vec = _proj_vec;
     }
@@ -450,19 +453,14 @@ int count_set_pose_transflags(Object *ob,
 
   for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
     bone = pchan->bone;
+    bone->flag &= ~(BONE_TRANSFORM | BONE_TRANSFORM_MIRROR);
     if (PBONE_VISIBLE(arm, bone)) {
       if ((bone->flag & BONE_SELECTED)) {
         bone->flag |= BONE_TRANSFORM;
       }
-      else {
-        bone->flag &= ~BONE_TRANSFORM;
-      }
 
       bone->flag &= ~BONE_HINGE_CHILD_TRANSFORM;
       bone->flag &= ~BONE_TRANSFORM_CHILD;
-    }
-    else {
-      bone->flag &= ~BONE_TRANSFORM;
     }
   }
 
@@ -791,6 +789,28 @@ void clipUVData(TransInfo *t)
 
 /* ********************* ANIMATION EDITORS (GENERAL) ************************* */
 
+/**
+ * For modal operation: `t->center_global` may not have been set yet.
+ */
+void transform_convert_center_global_v2(TransInfo *t, float r_center[2])
+{
+  if (t->flag & T_MODAL) {
+    UI_view2d_region_to_view(
+        (View2D *)t->view, t->mouse.imval[0], t->mouse.imval[1], &r_center[0], &r_center[1]);
+  }
+  else {
+    copy_v2_v2(r_center, t->center_global);
+  }
+}
+
+void transform_convert_center_global_v2_int(TransInfo *t, int r_center[2])
+{
+  float center[2];
+  transform_convert_center_global_v2(t, center);
+  r_center[0] = round_fl_to_int(center[0]);
+  r_center[1] = round_fl_to_int(center[1]);
+}
+
 /* This function tests if a point is on the "mouse" side of the cursor/frame-marking */
 bool FrameOnMouseSide(char side, float frame, float cframe)
 {
@@ -867,7 +887,7 @@ static void posttrans_gpd_clean(bGPdata *gpd)
       for (gpf = gpl->frames.first; gpf; gpf = gpfn) {
         gpfn = gpf->next;
         if (gpfn && gpf->framenum == gpfn->framenum) {
-          BKE_gpencil_layer_delframe(gpl, gpf);
+          BKE_gpencil_layer_frame_delete(gpl, gpf);
         }
       }
     }
@@ -880,6 +900,8 @@ static void posttrans_gpd_clean(bGPdata *gpd)
   }
   /* set cache flag to dirty */
   DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+
+  WM_main_add_notifier(NC_GPENCIL | NA_EDITED, gpd);
 }
 
 static void posttrans_mask_clean(Mask *mask)
@@ -909,6 +931,8 @@ static void posttrans_mask_clean(Mask *mask)
     }
 #endif
   }
+
+  WM_main_add_notifier(NC_MASK | NA_EDITED, mask);
 }
 
 /* Time + Average value */
@@ -921,10 +945,17 @@ typedef struct tRetainedKeyframe {
   size_t del_count; /* number of keyframes of this sort that have been deleted so far */
 } tRetainedKeyframe;
 
-/* Called during special_aftertrans_update to make sure selected keyframes replace
+/**
+ * Called during special_aftertrans_update to make sure selected keyframes replace
  * any other keyframes which may reside on that frame (that is not selected).
+ *
+ * \param sel_flag: The flag (bezt.f1/2/3) value to use to determine selection. Usually `SELECT`,
+ *                  but may want to use a different one at times (if caller does not operate on
+ *                  selection).
  */
-static void posttrans_fcurve_clean(FCurve *fcu, const bool use_handle)
+static void posttrans_fcurve_clean(FCurve *fcu,
+                                   const eBezTriple_Flag sel_flag,
+                                   const bool use_handle)
 {
   /* NOTE: We assume that all keys are sorted */
   ListBase retained_keys = {NULL, NULL};
@@ -1036,7 +1067,7 @@ static void posttrans_fcurve_clean(FCurve *fcu, const bool use_handle)
   }
 
   /* 3) Recalculate handles */
-  testhandles_fcurve(fcu, use_handle);
+  testhandles_fcurve(fcu, sel_flag, use_handle);
 
   /* cleanup */
   BLI_freelistN(&retained_keys);
@@ -1064,11 +1095,11 @@ static void posttrans_action_clean(bAnimContext *ac, bAction *act)
 
     if (adt) {
       ANIM_nla_mapping_apply_fcurve(adt, ale->key_data, 0, 0);
-      posttrans_fcurve_clean(ale->key_data, false); /* only use handles in graph editor */
+      posttrans_fcurve_clean(ale->key_data, SELECT, false); /* only use handles in graph editor */
       ANIM_nla_mapping_apply_fcurve(adt, ale->key_data, 1, 0);
     }
     else {
-      posttrans_fcurve_clean(ale->key_data, false); /* only use handles in graph editor */
+      posttrans_fcurve_clean(ale->key_data, SELECT, false); /* only use handles in graph editor */
     }
   }
 
@@ -1090,7 +1121,7 @@ typedef struct BeztMap {
 /* This function converts an FCurve's BezTriple array to a BeztMap array
  * NOTE: this allocates memory that will need to get freed later
  */
-static BeztMap *bezt_to_beztmaps(BezTriple *bezts, int totvert, const short UNUSED(use_handle))
+static BeztMap *bezt_to_beztmaps(BezTriple *bezts, int totvert)
 {
   BezTriple *bezt = bezts;
   BezTriple *prevbezt = NULL;
@@ -1118,7 +1149,7 @@ static BeztMap *bezt_to_beztmaps(BezTriple *bezts, int totvert, const short UNUS
 }
 
 /* This function copies the code of sort_time_ipocurve, but acts on BeztMap structs instead */
-static void sort_time_beztmaps(BeztMap *bezms, int totvert, const short UNUSED(use_handle))
+static void sort_time_beztmaps(BeztMap *bezms, int totvert)
 {
   BeztMap *bezm;
   int i, ok = 1;
@@ -1163,8 +1194,7 @@ static void sort_time_beztmaps(BeztMap *bezms, int totvert, const short UNUSED(u
 }
 
 /* This function firstly adjusts the pointers that the transdata has to each BezTriple */
-static void beztmap_to_data(
-    TransInfo *t, FCurve *fcu, BeztMap *bezms, int totvert, const short UNUSED(use_handle))
+static void beztmap_to_data(TransInfo *t, FCurve *fcu, BeztMap *bezms, int totvert)
 {
   BezTriple *bezts = fcu->bezt;
   BeztMap *bezm;
@@ -1270,9 +1300,9 @@ void remake_graph_transdata(TransInfo *t, ListBase *anim_data)
 
       /* adjust transform-data pointers */
       /* note, none of these functions use 'use_handle', it could be removed */
-      bezm = bezt_to_beztmaps(fcu->bezt, fcu->totvert, use_handle);
-      sort_time_beztmaps(bezm, fcu->totvert, use_handle);
-      beztmap_to_data(t, fcu, bezm, fcu->totvert, use_handle);
+      bezm = bezt_to_beztmaps(fcu->bezt, fcu->totvert);
+      sort_time_beztmaps(bezm, fcu->totvert);
+      beztmap_to_data(t, fcu, bezm, fcu->totvert);
 
       /* free mapping stuff */
       MEM_freeN(bezm);
@@ -1281,7 +1311,7 @@ void remake_graph_transdata(TransInfo *t, ListBase *anim_data)
       sort_time_fcurve(fcu);
 
       /* make sure handles are all set correctly */
-      testhandles_fcurve(fcu, use_handle);
+      testhandles_fcurve(fcu, BEZT_FLAG_TEMP_TAG, use_handle);
     }
   }
 }
@@ -1344,6 +1374,15 @@ bool constraints_list_needinv(TransInfo *t, ListBase *list)
             return true;
           }
         }
+        else if (con->type == CONSTRAINT_TYPE_ACTION) {
+          /* The Action constraint only does this in the Before mode. */
+          bActionConstraint *data = (bActionConstraint *)con->data;
+
+          if (ELEM(data->mix_mode, ACTCON_MIX_BEFORE) &&
+              ELEM(t->mode, TFM_ROTATION, TFM_TRANSLATION)) {
+            return true;
+          }
+        }
         else if (con->type == CONSTRAINT_TYPE_TRANSFORM) {
           /* Transform constraint needs it for rotation at least (r.57309),
            * but doing so when translating may also mess things up [#36203]
@@ -1385,10 +1424,10 @@ void autokeyframe_object(bContext *C, Scene *scene, ViewLayer *view_layer, Objec
     KeyingSet *active_ks = ANIM_scene_get_active_keyingset(scene);
     ListBase dsources = {NULL, NULL};
     float cfra = (float)CFRA;  // xxx this will do for now
-    short flag = 0;
+    eInsertKeyFlags flag = 0;
 
-    /* get flags used for inserting keyframes */
-    flag = ANIM_get_keyframing_flags(scene, 1);
+    /* Get flags used for inserting keyframes. */
+    flag = ANIM_get_keyframing_flags(scene, true);
 
     /* add datasource override for the object */
     ANIM_relative_keyingset_add_source(&dsources, id, NULL, NULL);
@@ -1407,7 +1446,6 @@ void autokeyframe_object(bContext *C, Scene *scene, ViewLayer *view_layer, Objec
       if (adt && adt->action) {
         ListBase nla_cache = {NULL, NULL};
         for (fcu = adt->action->curves.first; fcu; fcu = fcu->next) {
-          fcu->flag &= ~FCURVE_SELECTED;
           insert_keyframe(bmain,
                           reports,
                           id,
@@ -1528,14 +1566,14 @@ void autokeyframe_pose(bContext *C, Scene *scene, Object *ob, int tmode, short t
     KeyingSet *active_ks = ANIM_scene_get_active_keyingset(scene);
     ListBase nla_cache = {NULL, NULL};
     float cfra = (float)CFRA;
-    short flag = 0;
+    eInsertKeyFlags flag = 0;
 
     /* flag is initialized from UserPref keyframing settings
      * - special exception for targetless IK - INSERTKEY_MATRIX keyframes should get
      *   visual keyframes even if flag not set, as it's not that useful otherwise
      *   (for quick animation recording)
      */
-    flag = ANIM_get_keyframing_flags(scene, 1);
+    flag = ANIM_get_keyframing_flags(scene, true);
 
     if (targetless_ik) {
       flag |= INSERTKEY_MATRIX;
@@ -1860,13 +1898,9 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
       }
       else {
         if (t->mode == TFM_EDGE_SLIDE) {
-          EdgeSlideParams *slp = t->custom.mode.data;
-          slp->perc = 0.0;
           projectEdgeSlideData(t, false);
         }
         else if (t->mode == TFM_VERT_SLIDE) {
-          EdgeSlideParams *slp = t->custom.mode.data;
-          slp->perc = 0.0;
           projectVertSlideData(t, false);
         }
       }
@@ -1882,8 +1916,8 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 
     SpaceSeq *sseq = (SpaceSeq *)t->sa->spacedata.first;
 
-    /* marker transform, not especially nice but we may want to move markers
-     * at the same time as keyframes in the dope sheet. */
+    /* Marker transform, not especially nice but we may want to move markers
+     * at the same time as strips in the Video Sequencer. */
     if ((sseq->flag & SEQ_MARKER_TRANS) && (canceled == 0)) {
       /* cant use TFM_TIME_EXTEND
        * for some reason EXTEND is changed into TRANSLATE, so use frame_side instead */
@@ -1959,11 +1993,11 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
         if ((saction->flag & SACTION_NOTRANSKEYCULL) == 0 && ((canceled == 0) || (duplicate))) {
           if (adt) {
             ANIM_nla_mapping_apply_fcurve(adt, fcu, 0, 0);
-            posttrans_fcurve_clean(fcu, false); /* only use handles in graph editor */
+            posttrans_fcurve_clean(fcu, SELECT, false); /* only use handles in graph editor */
             ANIM_nla_mapping_apply_fcurve(adt, fcu, 1, 0);
           }
           else {
-            posttrans_fcurve_clean(fcu, false); /* only use handles in graph editor */
+            posttrans_fcurve_clean(fcu, SELECT, false); /* only use handles in graph editor */
           }
         }
       }
@@ -2005,15 +2039,24 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
        *                            but we made duplicates, so get rid of these
        */
       if ((saction->flag & SACTION_NOTRANSKEYCULL) == 0 && ((canceled == 0) || (duplicate))) {
-        bGPdata *gpd;
+        ListBase anim_data = {NULL, NULL};
+        const int filter = ANIMFILTER_DATA_VISIBLE;
+        ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
-        // XXX: BAD! this get gpencil datablocks directly from main db...
-        // but that's how this currently works :/
-        for (gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
-          if (ID_REAL_USERS(gpd)) {
-            posttrans_gpd_clean(gpd);
+        for (bAnimListElem *ale = anim_data.first; ale; ale = ale->next) {
+          if (ale->datatype == ALE_GPFRAME) {
+            ale->id->tag |= LIB_TAG_DOIT;
           }
         }
+        for (bAnimListElem *ale = anim_data.first; ale; ale = ale->next) {
+          if (ale->datatype == ALE_GPFRAME) {
+            if (ale->id->tag & LIB_TAG_DOIT) {
+              ale->id->tag &= ~LIB_TAG_DOIT;
+              posttrans_gpd_clean((bGPdata *)ale->id);
+            }
+          }
+        }
+        ANIM_animdata_freelist(&anim_data);
       }
     }
     else if (ac.datatype == ANIMCONT_MASK) {
@@ -2027,15 +2070,24 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
        *    User canceled the transform, but we made duplicates, so get rid of these.
        */
       if ((saction->flag & SACTION_NOTRANSKEYCULL) == 0 && ((canceled == 0) || (duplicate))) {
-        Mask *mask;
+        ListBase anim_data = {NULL, NULL};
+        const int filter = ANIMFILTER_DATA_VISIBLE;
+        ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
-        // XXX: BAD! this get gpencil datablocks directly from main db...
-        // but that's how this currently works :/
-        for (mask = bmain->masks.first; mask; mask = mask->id.next) {
-          if (ID_REAL_USERS(mask)) {
-            posttrans_mask_clean(mask);
+        for (bAnimListElem *ale = anim_data.first; ale; ale = ale->next) {
+          if (ale->datatype == ALE_MASKLAY) {
+            ale->id->tag |= LIB_TAG_DOIT;
           }
         }
+        for (bAnimListElem *ale = anim_data.first; ale; ale = ale->next) {
+          if (ale->datatype == ALE_MASKLAY) {
+            if (ale->id->tag & LIB_TAG_DOIT) {
+              ale->id->tag &= ~LIB_TAG_DOIT;
+              posttrans_mask_clean((Mask *)ale->id);
+            }
+          }
+        }
+        ANIM_animdata_freelist(&anim_data);
       }
     }
 
@@ -2064,7 +2116,7 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
     }
 
     /* make sure all F-Curves are set correctly */
-    if (!ELEM(ac.datatype, ANIMCONT_GPENCIL, ANIMCONT_MASK)) {
+    if (!ELEM(ac.datatype, ANIMCONT_GPENCIL)) {
       ANIM_editkeyframes_refresh(&ac);
     }
 
@@ -2103,11 +2155,11 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
         if ((sipo->flag & SIPO_NOTRANSKEYCULL) == 0 && ((canceled == 0) || (duplicate))) {
           if (adt) {
             ANIM_nla_mapping_apply_fcurve(adt, fcu, 0, 0);
-            posttrans_fcurve_clean(fcu, use_handle);
+            posttrans_fcurve_clean(fcu, BEZT_FLAG_TEMP_TAG, use_handle);
             ANIM_nla_mapping_apply_fcurve(adt, fcu, 1, 0);
           }
           else {
-            posttrans_fcurve_clean(fcu, use_handle);
+            posttrans_fcurve_clean(fcu, BEZT_FLAG_TEMP_TAG, use_handle);
           }
         }
       }
@@ -2391,7 +2443,6 @@ void createTransData(bContext *C, TransInfo *t)
   /* if tests must match recalcData for correct updates */
   if (t->options & CTX_CURSOR) {
     t->flag |= T_CURSOR;
-    t->obedit_type = -1;
 
     if (t->spacetype == SPACE_IMAGE) {
       createTransCursor_image(t);
@@ -2407,7 +2458,6 @@ void createTransData(bContext *C, TransInfo *t)
   }
   else if (t->options & CTX_TEXTURE) {
     t->flag |= T_TEXTURE;
-    t->obedit_type = -1;
 
     createTransTexspace(t);
     countAndCleanTransDataContainer(t);
@@ -2510,7 +2560,7 @@ void createTransData(bContext *C, TransInfo *t)
     t->obedit_type = -1;
 
     t->num.flag |= NUM_NO_FRACTION; /* sequencer has no use for floating point trasnform */
-    createTransSeqData(C, t);
+    createTransSeqData(t);
     countAndCleanTransDataContainer(t);
   }
   else if (t->spacetype == SPACE_GRAPH) {
@@ -2690,9 +2740,11 @@ void createTransData(bContext *C, TransInfo *t)
       has_transform_context = false;
     }
   }
-  else if ((ob) &&
-           (ELEM(
-               ob->mode, OB_MODE_PAINT_GPENCIL, OB_MODE_SCULPT_GPENCIL, OB_MODE_WEIGHT_GPENCIL))) {
+  else if ((ob) && (ELEM(ob->mode,
+                         OB_MODE_PAINT_GPENCIL,
+                         OB_MODE_SCULPT_GPENCIL,
+                         OB_MODE_WEIGHT_GPENCIL,
+                         OB_MODE_VERTEX_GPENCIL))) {
     /* In grease pencil all transformations must be canceled if not Object or Edit. */
     has_transform_context = false;
   }
@@ -2718,14 +2770,17 @@ void createTransData(bContext *C, TransInfo *t)
     }
 
     /* Check if we're transforming the camera from the camera */
-    if ((t->spacetype == SPACE_VIEW3D) && (t->ar->regiontype == RGN_TYPE_WINDOW)) {
+    if ((t->spacetype == SPACE_VIEW3D) && (t->region->regiontype == RGN_TYPE_WINDOW)) {
       View3D *v3d = t->view;
-      RegionView3D *rv3d = t->ar->regiondata;
+      RegionView3D *rv3d = t->region->regiondata;
       if ((rv3d->persp == RV3D_CAMOB) && v3d->camera) {
         /* we could have a flag to easily check an object is being transformed */
         if (v3d->camera->id.tag & LIB_TAG_DOIT) {
           t->flag |= T_CAMERA;
         }
+      }
+      else if (v3d->ob_centre && v3d->ob_centre->id.tag & LIB_TAG_DOIT) {
+        t->flag |= T_CAMERA;
       }
     }
   }

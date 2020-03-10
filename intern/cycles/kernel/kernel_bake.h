@@ -39,13 +39,13 @@ ccl_device_inline void compute_light_pass(
 #  endif
 
   /* init radiance */
-  path_radiance_init(&L_sample, kernel_data.film.use_light_pass);
+  path_radiance_init(kg, &L_sample);
 
   /* init path state */
   path_state_init(kg, &emission_sd, &state, rng_hash, sample, NULL);
 
   /* evaluate surface shader */
-  shader_eval_surface(kg, sd, &state, state.flag);
+  shader_eval_surface(kg, sd, &state, NULL, state.flag);
 
   /* TODO, disable more closures we don't need besides transparent */
   shader_bsdf_disable_transparency(kg, sd);
@@ -64,14 +64,14 @@ ccl_device_inline void compute_light_pass(
     /* sample emission */
     if ((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
       float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf);
-      path_radiance_accum_emission(&L_sample, &state, throughput, emission);
+      path_radiance_accum_emission(kg, &L_sample, &state, throughput, emission);
     }
 
     bool is_sss_sample = false;
 
 #  ifdef __SUBSURFACE__
     /* sample subsurface scattering */
-    if ((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->flag & SD_BSSRDF)) {
+    if ((pass_filter & BAKE_FILTER_DIFFUSE) && (sd->flag & SD_BSSRDF)) {
       /* When mixing BSSRDF and BSDF closures we should skip BSDF lighting
        * if scattering was successful. */
       SubsurfaceIndirectRays ss_indirect;
@@ -118,12 +118,12 @@ ccl_device_inline void compute_light_pass(
     /* sample emission */
     if ((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
       float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf);
-      path_radiance_accum_emission(&L_sample, &state, throughput, emission);
+      path_radiance_accum_emission(kg, &L_sample, &state, throughput, emission);
     }
 
 #    ifdef __SUBSURFACE__
     /* sample subsurface scattering */
-    if ((pass_filter & BAKE_FILTER_SUBSURFACE) && (sd->flag & SD_BSSRDF)) {
+    if ((pass_filter & BAKE_FILTER_DIFFUSE) && (sd->flag & SD_BSSRDF)) {
       /* When mixing BSSRDF and BSDF closures we should skip BSDF lighting
        * if scattering was successful. */
       kernel_branched_path_subsurface_scatter(
@@ -178,10 +178,6 @@ ccl_device_inline float3 kernel_bake_shader_bsdf(KernelGlobals *kg,
       return shader_bsdf_glossy(kg, sd);
     case SHADER_EVAL_TRANSMISSION:
       return shader_bsdf_transmission(kg, sd);
-#  ifdef __SUBSURFACE__
-    case SHADER_EVAL_SUBSURFACE:
-      return shader_bsdf_subsurface(kg, sd);
-#  endif
     default:
       kernel_assert(!"Unknown bake type passed to BSDF evaluate");
       return make_float3(0.0f, 0.0f, 0.0f);
@@ -209,12 +205,12 @@ ccl_device float3 kernel_bake_evaluate_direct_indirect(KernelGlobals *kg,
     }
     else {
       /* surface color of the pass only */
-      shader_eval_surface(kg, sd, state, 0);
+      shader_eval_surface(kg, sd, state, NULL, 0);
       return kernel_bake_shader_bsdf(kg, sd, type);
     }
   }
   else {
-    shader_eval_surface(kg, sd, state, 0);
+    shader_eval_surface(kg, sd, state, NULL, 0);
     color = kernel_bake_shader_bsdf(kg, sd, type);
   }
 
@@ -287,7 +283,7 @@ ccl_device void kernel_bake_evaluate(KernelGlobals *kg,
 
   /* light passes */
   PathRadiance L;
-  path_radiance_init(&L, kernel_data.film.use_light_pass);
+  path_radiance_init(kg, &L);
 
   shader_setup_from_sample(
       kg,
@@ -332,7 +328,7 @@ ccl_device void kernel_bake_evaluate(KernelGlobals *kg,
     case SHADER_EVAL_EMISSION: {
       if (type != SHADER_EVAL_NORMAL || (sd.flag & SD_HAS_BUMP)) {
         int path_flag = (type == SHADER_EVAL_EMISSION) ? PATH_RAY_EMISSION : 0;
-        shader_eval_surface(kg, &sd, &state, path_flag);
+        shader_eval_surface(kg, &sd, &state, NULL, path_flag);
       }
 
       if (type == SHADER_EVAL_NORMAL) {
@@ -385,11 +381,6 @@ ccl_device void kernel_bake_evaluate(KernelGlobals *kg,
       if ((pass_filter & BAKE_FILTER_TRANSMISSION_INDIRECT) == BAKE_FILTER_TRANSMISSION_INDIRECT)
         out += L.indirect_transmission;
 
-      if ((pass_filter & BAKE_FILTER_SUBSURFACE_DIRECT) == BAKE_FILTER_SUBSURFACE_DIRECT)
-        out += L.direct_subsurface;
-      if ((pass_filter & BAKE_FILTER_SUBSURFACE_INDIRECT) == BAKE_FILTER_SUBSURFACE_INDIRECT)
-        out += L.indirect_subsurface;
-
       if ((pass_filter & BAKE_FILTER_EMISSION) != 0)
         out += L.emission;
 
@@ -412,13 +403,6 @@ ccl_device void kernel_bake_evaluate(KernelGlobals *kg,
     case SHADER_EVAL_TRANSMISSION: {
       out = kernel_bake_evaluate_direct_indirect(
           kg, &sd, &state, L.direct_transmission, L.indirect_transmission, type, pass_filter);
-      break;
-    }
-    case SHADER_EVAL_SUBSURFACE: {
-#    ifdef __SUBSURFACE__
-      out = kernel_bake_evaluate_direct_indirect(
-          kg, &sd, &state, L.direct_subsurface, L.indirect_subsurface, type, pass_filter);
-#    endif
       break;
     }
 #  endif
@@ -445,7 +429,7 @@ ccl_device void kernel_bake_evaluate(KernelGlobals *kg,
 
       /* evaluate */
       int path_flag = 0; /* we can't know which type of BSDF this is for */
-      shader_eval_surface(kg, &sd, &state, path_flag | PATH_RAY_EMISSION);
+      shader_eval_surface(kg, &sd, &state, NULL, path_flag | PATH_RAY_EMISSION);
       out = shader_background_eval(&sd);
       break;
     }
@@ -524,7 +508,7 @@ ccl_device void kernel_background_evaluate(KernelGlobals *kg,
 
   /* evaluate */
   int path_flag = 0; /* we can't know which type of BSDF this is for */
-  shader_eval_surface(kg, &sd, &state, path_flag | PATH_RAY_EMISSION);
+  shader_eval_surface(kg, &sd, &state, NULL, path_flag | PATH_RAY_EMISSION);
   float3 color = shader_background_eval(&sd);
 
   /* write output */

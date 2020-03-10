@@ -106,7 +106,6 @@ static bNodeSocket *verify_socket_template(
     if (sock->type != stemp->type) {
       nodeModifySocketType(ntree, node, sock, stemp->type, stemp->subtype);
     }
-    sock->limit = (stemp->limit == 0 ? (in_out == SOCK_IN ? 1 : 0xFFF) : stemp->limit);
     sock->flag |= stemp->flag;
   }
   else {
@@ -276,6 +275,11 @@ void node_socket_copy_default_value(bNodeSocket *to, const bNodeSocket *from)
   }
   node_socket_init_default_value(to);
 
+  /* use label instead of name if it has been set */
+  if (from->label[0] != '\0') {
+    BLI_strncpy(to->name, from->label, NODE_MAXSTR);
+  }
+
   switch (from->typeinfo->type) {
     case SOCK_FLOAT: {
       bNodeSocketValueFloat *toval = to->default_value;
@@ -398,6 +402,7 @@ static bNodeSocketType *make_standard_socket_type(int type, int subtype)
   StructRNA *srna;
 
   stype = MEM_callocN(sizeof(bNodeSocketType), "node socket C type");
+  stype->free_self = (void (*)(bNodeSocketType * stype)) MEM_freeN;
   BLI_strncpy(stype->idname, socket_idname, sizeof(stype->idname));
 
   /* set the RNA type
@@ -424,6 +429,10 @@ static bNodeSocketType *make_standard_socket_type(int type, int subtype)
   stype->interface_from_socket = standard_node_socket_interface_from_socket;
   stype->interface_verify_socket = standard_node_socket_interface_verify_socket;
 
+  stype->use_link_limits_of_type = true;
+  stype->input_link_limit = 1;
+  stype->output_link_limit = 0xFFF;
+
   return stype;
 }
 
@@ -436,6 +445,7 @@ static bNodeSocketType *make_socket_type_virtual(void)
   StructRNA *srna;
 
   stype = MEM_callocN(sizeof(bNodeSocketType), "node socket C type");
+  stype->free_self = (void (*)(bNodeSocketType * stype)) MEM_freeN;
   BLI_strncpy(stype->idname, socket_idname, sizeof(stype->idname));
 
   /* set the RNA type
@@ -449,6 +459,10 @@ static bNodeSocketType *make_socket_type_virtual(void)
   stype->type = SOCK_CUSTOM;
 
   ED_init_node_socket_type_virtual(stype);
+
+  stype->use_link_limits_of_type = true;
+  stype->input_link_limit = 1;
+  stype->output_link_limit = 1;
 
   return stype;
 }

@@ -810,7 +810,8 @@ static PyObject *M_Geometry_intersect_point_line(PyObject *UNUSED(self), PyObjec
 PyDoc_STRVAR(M_Geometry_intersect_point_tri_doc,
              ".. function:: intersect_point_tri(pt, tri_p1, tri_p2, tri_p3)\n"
              "\n"
-             "   Takes 4 vectors: one is the point and the next 3 define the triangle.\n"
+             "   Takes 4 vectors: one is the point and the next 3 define the triangle. Projects "
+             "the point onto the triangle plane and checks if it is within the triangle.\n"
              "\n"
              "   :arg pt: Point\n"
              "   :type pt: :class:`mathutils.Vector`\n"
@@ -851,6 +852,49 @@ static PyObject *M_Geometry_intersect_point_tri(PyObject *UNUSED(self), PyObject
   else {
     Py_RETURN_NONE;
   }
+}
+
+PyDoc_STRVAR(M_Geometry_closest_point_on_tri_doc,
+             ".. function:: closest_point_on_tri(pt, tri_p1, tri_p2, tri_p3)\n"
+             "\n"
+             "   Takes 4 vectors: one is the point and the next 3 define the triangle.\n"
+             "\n"
+             "   :arg pt: Point\n"
+             "   :type pt: :class:`mathutils.Vector`\n"
+             "   :arg tri_p1: First point of the triangle\n"
+             "   :type tri_p1: :class:`mathutils.Vector`\n"
+             "   :arg tri_p2: Second point of the triangle\n"
+             "   :type tri_p2: :class:`mathutils.Vector`\n"
+             "   :arg tri_p3: Third point of the triangle\n"
+             "   :type tri_p3: :class:`mathutils.Vector`\n"
+             "   :return: The closest point of the triangle.\n"
+             "   :rtype: :class:`mathutils.Vector`\n");
+static PyObject *M_Geometry_closest_point_on_tri(PyObject *UNUSED(self), PyObject *args)
+{
+  const char *error_prefix = "closest_point_on_tri";
+  PyObject *py_pt, *py_tri[3];
+  float pt[3], tri[3][3];
+  float vi[3];
+  int i;
+
+  if (!PyArg_ParseTuple(args, "OOOO:closest_point_on_tri", &py_pt, UNPACK3_EX(&, py_tri, ))) {
+    return NULL;
+  }
+
+  if (mathutils_array_parse(pt, 2, 3 | MU_ARRAY_SPILL | MU_ARRAY_ZERO, py_pt, error_prefix) ==
+      -1) {
+    return NULL;
+  }
+  for (i = 0; i < ARRAY_SIZE(tri); i++) {
+    if (mathutils_array_parse(
+            tri[i], 2, 3 | MU_ARRAY_SPILL | MU_ARRAY_ZERO, py_tri[i], error_prefix) == -1) {
+      return NULL;
+    }
+  }
+
+  closest_on_tri_to_point_v3(vi, pt, UNPACK3(tri));
+
+  return Vector_CreatePyObject(vi, 3, NULL);
 }
 
 PyDoc_STRVAR(
@@ -1040,7 +1084,7 @@ static PyObject *M_Geometry_points_in_planes(PyObject *UNUSED(self), PyObject *a
 {
   PyObject *py_planes;
   float(*planes)[4];
-  unsigned int planes_len;
+  uint planes_len;
 
   if (!PyArg_ParseTuple(args, "O:points_in_planes", &py_planes)) {
     return NULL;
@@ -1053,8 +1097,8 @@ static PyObject *M_Geometry_points_in_planes(PyObject *UNUSED(self), PyObject *a
   else {
     /* note, this could be refactored into plain C easy - py bits are noted */
     const float eps = 0.0001f;
-    const unsigned int len = (unsigned int)planes_len;
-    unsigned int i, j, k, l;
+    const uint len = (uint)planes_len;
+    uint i, j, k, l;
 
     float n1n2[3], n2n3[3], n3n1[3];
     float potentialVertex[3];
@@ -1202,7 +1246,8 @@ PyDoc_STRVAR(M_Geometry_tessellate_polygon_doc,
              ".. function:: tessellate_polygon(veclist_list)\n"
              "\n"
              "   Takes a list of polylines (each point a pair or triplet of numbers) and returns "
-             "the point indices for a polyline filled with triangles.\n"
+             "the point indices for a polyline filled with triangles. Does not handle degenerate "
+             "geometry (such as zero-length lines due to consecutive identical points).\n"
              "\n"
              "   :arg veclist_list: list of polylines\n"
              "   :rtype: list\n");
@@ -1604,6 +1649,7 @@ static PyObject *M_Geometry_delaunay_2d_cdt(PyObject *UNUSED(self), PyObject *ar
   in.faces_start_table = in_faces_start_table;
   in.faces_len_table = in_faces_len_table;
   in.epsilon = epsilon;
+  in.skip_input_modify = false;
 
   res = BLI_delaunay_2d_cdt_calc(&in, output_type);
 
@@ -1683,6 +1729,10 @@ static PyMethodDef M_Geometry_methods[] = {
      (PyCFunction)M_Geometry_intersect_point_tri,
      METH_VARARGS,
      M_Geometry_intersect_point_tri_doc},
+    {"closest_point_on_tri",
+     (PyCFunction)M_Geometry_closest_point_on_tri,
+     METH_VARARGS,
+     M_Geometry_closest_point_on_tri_doc},
     {"intersect_point_tri_2d",
      (PyCFunction)M_Geometry_intersect_point_tri_2d,
      METH_VARARGS,

@@ -60,8 +60,10 @@
 #endif
 
 #define BOUNDARY_PRESERVE_WEIGHT 100.0f
-/** Uses double precision, impacts behavior on near-flat surfaces,
- * cane give issues with very small faces. 1e-2 is too big, see: T48154. */
+/**
+ * Uses double precision, impacts behavior on near-flat surfaces,
+ * cane give issues with very small faces. 1e-2 is too big, see: T48154.
+ */
 #define OPTIMIZE_EPS 1e-8
 #define COST_INVALID FLT_MAX
 
@@ -409,7 +411,7 @@ static int *bm_edge_symmetry_map(BMesh *bm, uint symmetry_axis, float limit)
   BMEdge *e, **etable;
   uint i;
   int *edge_symmetry_map;
-  const float limit_sq = SQUARE(limit);
+  const float limit_sq = square_f(limit);
   KDTree_3d *tree;
 
   tree = BLI_kdtree_3d_new(bm->totedge);

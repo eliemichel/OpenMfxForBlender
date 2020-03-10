@@ -32,8 +32,6 @@
 #include "DNA_space_types.h"
 #include "DNA_view3d_types.h"
 
-#include "BIF_glutil.h"
-
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
 #include "GPU_state.h"
@@ -45,7 +43,6 @@
 
 #include "BKE_context.h"
 
-#include "ED_image.h"
 #include "ED_view3d.h"
 
 #include "BLT_translation.h"
@@ -54,6 +51,9 @@
 
 #include "transform.h"
 #include "transform_snap.h"
+
+/* Own include. */
+#include "transform_constraints.h"
 
 static void drawObjectConstraint(TransInfo *t);
 
@@ -846,8 +846,8 @@ void drawPropCircle(const struct bContext *C, TransInfo *t)
     }
     else if (ELEM(t->spacetype, SPACE_GRAPH, SPACE_ACTION)) {
       /* only scale y */
-      rcti *mask = &t->ar->v2d.mask;
-      rctf *datamask = &t->ar->v2d.cur;
+      rcti *mask = &t->region->v2d.mask;
+      rctf *datamask = &t->region->v2d.cur;
       float xsize = BLI_rctf_size_x(datamask);
       float ysize = BLI_rctf_size_y(datamask);
       float xmask = BLI_rcti_size_x(mask);
@@ -1055,7 +1055,7 @@ static void setNearestAxis3d(TransInfo *t)
    * projecting them with ED_view3d_win_to_delta and then get the length of that vector.
    */
   zfac = mul_project_m4_v3_zfac(t->persmat, t->center_global);
-  zfac = len_v3(t->persinv[0]) * 2.0f / t->ar->winx * zfac * 30.0f;
+  zfac = len_v3(t->persinv[0]) * 2.0f / t->region->winx * zfac * 30.0f;
 
   for (i = 0; i < 3; i++) {
     float axis[3], axis_2d[2];

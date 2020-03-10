@@ -29,7 +29,6 @@ set(INC
   ../makesdna
   ../makesrna
   ../render/extern/include
-  ../../../intern/elbeem/extern
   ../../../intern/eigen
   ../../../intern/guardedalloc
   ../../../intern/openmesheffect/blender
@@ -56,13 +55,12 @@ set(SRC
   intern/MOD_dynamicpaint.c
   intern/MOD_edgesplit.c
   intern/MOD_explode.c
-  intern/MOD_fluidsim.c
-  intern/MOD_fluidsim_util.c
+  intern/MOD_fluid.c
   intern/MOD_hook.c
   intern/MOD_laplaciandeform.c
   intern/MOD_laplaciansmooth.c
   intern/MOD_lattice.c
-  intern/MOD_mask.c
+  intern/MOD_mask.cc
   intern/MOD_meshcache.c
   intern/MOD_meshcache_mdd.c
   intern/MOD_meshcache_pc2.c
@@ -83,10 +81,11 @@ set(SRC
   intern/MOD_shrinkwrap.c
   intern/MOD_simpledeform.c
   intern/MOD_skin.c
-  intern/MOD_smoke.c
   intern/MOD_smooth.c
   intern/MOD_softbody.c
   intern/MOD_solidify.c
+  intern/MOD_solidify_extrude.c
+  intern/MOD_solidify_nonmanifold.c
   intern/MOD_subsurf.c
   intern/MOD_surface.c
   intern/MOD_surfacedeform.c
@@ -101,11 +100,12 @@ set(SRC
   intern/MOD_weightvgedit.c
   intern/MOD_weightvgmix.c
   intern/MOD_weightvgproximity.c
+  intern/MOD_weld.c
   intern/MOD_wireframe.c
 
   MOD_modifiertypes.h
-  intern/MOD_fluidsim_util.h
   intern/MOD_meshcache_util.h
+  intern/MOD_solidify_util.h
   intern/MOD_util.h
   intern/MOD_weightvg_util.h
 )
@@ -119,7 +119,7 @@ set(LIB
 if(WITH_ALEMBIC)
   add_definitions(-DWITH_ALEMBIC)
   list(APPEND INC
-    ../alembic
+    ../io/alembic
   )
   list(APPEND LIB
     bf_alembic
@@ -137,7 +137,7 @@ if(WITH_MOD_REMESH)
 endif()
 
 if(WITH_MOD_FLUID)
-  add_definitions(-DWITH_MOD_FLUID)
+  add_definitions(-DWITH_FLUID)
 endif()
 
 if(WITH_MOD_OCEANSIM)

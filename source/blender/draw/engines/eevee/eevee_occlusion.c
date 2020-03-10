@@ -131,7 +131,7 @@ int EEVEE_occlusion_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   return 0;
 }
 
-void EEVEE_occlusion_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
+void EEVEE_occlusion_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata, uint tot_samples)
 {
   EEVEE_FramebufferList *fbl = vedata->fbl;
   EEVEE_TextureList *txl = vedata->txl;
@@ -143,18 +143,22 @@ void EEVEE_occlusion_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata
   const Scene *scene_eval = DEG_get_evaluated_scene(draw_ctx->depsgraph);
 
   if (scene_eval->eevee.flag & SCE_EEVEE_GTAO_ENABLED) {
+    const eGPUTextureFormat texture_format = (tot_samples > 128) ? GPU_R32F : GPU_R16F;
+
     DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
     float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
     /* Should be enough precision for many samples. */
-    DRW_texture_ensure_fullscreen_2d(&txl->ao_accum, GPU_R32F, 0);
+    DRW_texture_ensure_fullscreen_2d(&txl->ao_accum, texture_format, 0);
 
     GPU_framebuffer_ensure_config(&fbl->ao_accum_fb,
                                   {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(txl->ao_accum)});
 
     /* Clear texture. */
-    GPU_framebuffer_bind(fbl->ao_accum_fb);
-    GPU_framebuffer_clear_color(fbl->ao_accum_fb, clear);
+    if (DRW_state_is_image_render() || effects->taa_current_sample == 1) {
+      GPU_framebuffer_bind(fbl->ao_accum_fb);
+      GPU_framebuffer_clear_color(fbl->ao_accum_fb, clear);
+    }
 
     /* Accumulation pass */
     DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ADD;
@@ -166,6 +170,8 @@ void EEVEE_occlusion_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata
     DRW_shgroup_uniform_texture_ref(grp, "normalBuffer", &effects->ssr_normal_input);
     DRW_shgroup_uniform_texture_ref(grp, "horizonBuffer", &effects->gtao_horizons);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(
+        grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
     DRW_shgroup_call(grp, DRW_cache_fullscreen_quad_get(), NULL);
   }
   else {
@@ -203,6 +209,8 @@ void EEVEE_occlusion_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     DRW_shgroup_uniform_texture_ref(grp, "maxzBuffer", &txl->maxzbuffer);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &effects->ao_src_depth);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(
+        grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
     DRW_shgroup_call(grp, quad, NULL);
 
     DRW_PASS_CREATE(psl->ao_horizon_search_layer, DRW_STATE_WRITE_COLOR);
@@ -211,6 +219,8 @@ void EEVEE_occlusion_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     DRW_shgroup_uniform_texture_ref(grp, "maxzBuffer", &txl->maxzbuffer);
     DRW_shgroup_uniform_texture_ref(grp, "depthBufferLayered", &effects->ao_src_depth);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(
+        grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
     DRW_shgroup_uniform_int(grp, "layer", &stl->effects->ao_depth_layer, 1);
     DRW_shgroup_call(grp, quad, NULL);
 
@@ -223,6 +233,8 @@ void EEVEE_occlusion_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
       DRW_shgroup_uniform_texture_ref(grp, "normalBuffer", &effects->ssr_normal_input);
       DRW_shgroup_uniform_texture_ref(grp, "horizonBuffer", &effects->gtao_horizons);
       DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+      DRW_shgroup_uniform_block(
+          grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
       DRW_shgroup_call(grp, quad, NULL);
     }
   }

@@ -280,7 +280,7 @@ static int ctx_data_get(bContext *C, const char *member, bContextDataResult *res
 {
   bScreen *sc;
   ScrArea *sa;
-  ARegion *ar;
+  ARegion *region;
   int done = 0, recursion = C->data.recursion;
   int ret = 0;
 
@@ -318,10 +318,10 @@ static int ctx_data_get(bContext *C, const char *member, bContextDataResult *res
       done = 1;
     }
   }
-  if (done != 1 && recursion < 2 && (ar = CTX_wm_region(C))) {
+  if (done != 1 && recursion < 2 && (region = CTX_wm_region(C))) {
     C->data.recursion = 2;
-    if (ar->type && ar->type->context) {
-      ret = ar->type->context(C, member, result);
+    if (region->type && region->type->context) {
+      ret = region->type->context(C, member, result);
       if (ret) {
         done = -(-ret | -done);
       }
@@ -466,6 +466,18 @@ PointerRNA CTX_data_pointer_get_type(const bContext *C, const char *member, Stru
   return PointerRNA_NULL;
 }
 
+PointerRNA CTX_data_pointer_get_type_silent(const bContext *C, const char *member, StructRNA *type)
+{
+  PointerRNA ptr = CTX_data_pointer_get(C, member);
+
+  if (ptr.data && RNA_struct_is_a(ptr.type, type)) {
+    return ptr;
+  }
+  else {
+    return PointerRNA_NULL;
+  }
+}
+
 ListBase CTX_data_collection_get(const bContext *C, const char *member)
 {
   bContextDataResult result;
@@ -533,7 +545,7 @@ ListBase CTX_data_dir_get_ex(const bContext *C,
   ListBase lb;
   bScreen *sc;
   ScrArea *sa;
-  ARegion *ar;
+  ARegion *region;
   int a;
 
   memset(&lb, 0, sizeof(lb));
@@ -566,9 +578,9 @@ ListBase CTX_data_dir_get_ex(const bContext *C,
       data_dir_add(&lb, entry->name, use_all);
     }
   }
-  if ((ar = CTX_wm_region(C)) && ar->type && ar->type->context) {
+  if ((region = CTX_wm_region(C)) && region->type && region->type->context) {
     memset(&result, 0, sizeof(result));
-    ar->type->context(C, "", &result);
+    region->type->context(C, "", &result);
 
     if (result.dir) {
       for (a = 0; result.dir[a]; a++) {
@@ -715,8 +727,8 @@ ARegion *CTX_wm_region(const bContext *C)
 
 void *CTX_wm_region_data(const bContext *C)
 {
-  ARegion *ar = CTX_wm_region(C);
-  return (ar) ? ar->regiondata : NULL;
+  ARegion *region = CTX_wm_region(C);
+  return (region) ? region->regiondata : NULL;
 }
 
 struct ARegion *CTX_wm_menu(const bContext *C)
@@ -755,11 +767,11 @@ View3D *CTX_wm_view3d(const bContext *C)
 RegionView3D *CTX_wm_region_view3d(const bContext *C)
 {
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   if (sa && sa->spacetype == SPACE_VIEW3D) {
-    if (ar && ar->regiontype == RGN_TYPE_WINDOW) {
-      return ar->regiondata;
+    if (region && region->regiontype == RGN_TYPE_WINDOW) {
+      return region->regiondata;
     }
   }
   return NULL;
@@ -1112,6 +1124,9 @@ enum eContextObjectMode CTX_data_mode_enum_ex(const Object *obedit,
       else if (object_mode & OB_MODE_WEIGHT_GPENCIL) {
         return CTX_MODE_WEIGHT_GPENCIL;
       }
+      else if (object_mode & OB_MODE_VERTEX_GPENCIL) {
+        return CTX_MODE_VERTEX_GPENCIL;
+      }
     }
   }
 
@@ -1128,25 +1143,11 @@ enum eContextObjectMode CTX_data_mode_enum(const bContext *C)
 /* would prefer if we can use the enum version below over this one - Campbell */
 /* must be aligned with above enum  */
 static const char *data_mode_strings[] = {
-    "mesh_edit",
-    "curve_edit",
-    "surface_edit",
-    "text_edit",
-    "armature_edit",
-    "mball_edit",
-    "lattice_edit",
-    "posemode",
-    "sculpt_mode",
-    "weightpaint",
-    "vertexpaint",
-    "imagepaint",
-    "particlemode",
-    "objectmode",
-    "greasepencil_paint",
-    "greasepencil_edit",
-    "greasepencil_sculpt",
-    "greasepencil_weight",
-    NULL,
+    "mesh_edit",           "curve_edit",          "surface_edit",        "text_edit",
+    "armature_edit",       "mball_edit",          "lattice_edit",        "posemode",
+    "sculpt_mode",         "weightpaint",         "vertexpaint",         "imagepaint",
+    "particlemode",        "objectmode",          "greasepencil_paint",  "greasepencil_edit",
+    "greasepencil_sculpt", "greasepencil_weight", "greasepencil_vertex", NULL,
 };
 BLI_STATIC_ASSERT(ARRAY_SIZE(data_mode_strings) == CTX_MODE_NUM + 1,
                   "Must have a string for each context mode")

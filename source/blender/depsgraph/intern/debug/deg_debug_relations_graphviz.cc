@@ -36,6 +36,8 @@ extern "C" {
 #include "DEG_depsgraph_debug.h"
 
 #include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
+
 #include "intern/node/deg_node_component.h"
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
@@ -123,6 +125,9 @@ static int deg_debug_node_color_index(const Node *node)
     case NodeType::OPERATION: {
       OperationNode *op_node = (OperationNode *)node;
       if (op_node->is_noop()) {
+        if (op_node->flag & OperationFlag::DEPSOP_FLAG_PINNED) {
+          return 7;
+        }
         return 8;
       }
       break;
@@ -193,6 +198,7 @@ static void deg_debug_graphviz_legend(const DebugContext &ctx)
   deg_debug_graphviz_legend_color(ctx, "Component", colors[1]);
   deg_debug_graphviz_legend_color(ctx, "ID Node", colors[5]);
   deg_debug_graphviz_legend_color(ctx, "NOOP", colors[8]);
+  deg_debug_graphviz_legend_color(ctx, "Pinned OP", colors[7]);
 #endif
 
 #ifdef COLOR_SCHEME_NODE_TYPE
@@ -426,6 +432,7 @@ static void deg_debug_graphviz_node(const DebugContext &ctx, const Node *node)
     case NodeType::SHADING_PARAMETERS:
     case NodeType::CACHE:
     case NodeType::POINT_CACHE:
+    case NodeType::IMAGE_ANIMATION:
     case NodeType::LAYER_COLLECTIONS:
     case NodeType::PARTICLE_SYSTEM:
     case NodeType::PARTICLE_SETTINGS:
@@ -553,7 +560,7 @@ static void deg_debug_graphviz_graph_nodes(const DebugContext &ctx, const Depsgr
     deg_debug_graphviz_node(ctx, node);
   }
   TimeSourceNode *time_source = graph->find_time_source();
-  if (time_source != NULL) {
+  if (time_source != nullptr) {
     deg_debug_graphviz_node(ctx, time_source);
   }
 }
@@ -570,7 +577,7 @@ static void deg_debug_graphviz_graph_relations(const DebugContext &ctx, const De
   }
 
   TimeSourceNode *time_source = graph->find_time_source();
-  if (time_source != NULL) {
+  if (time_source != nullptr) {
     deg_debug_graphviz_node_relations(ctx, time_source);
   }
 }

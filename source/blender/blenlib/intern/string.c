@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <ctype.h>
+#include <math.h>
 #include <inttypes.h>
 
 #include "MEM_guardedalloc.h"
@@ -512,8 +513,8 @@ int BLI_strcaseeq(const char *a, const char *b)
  */
 char *BLI_strcasestr(const char *s, const char *find)
 {
-  register char c, sc;
-  register size_t len;
+  char c, sc;
+  size_t len;
 
   if ((c = *find++) != 0) {
     c = tolower(c);
@@ -536,7 +537,7 @@ char *BLI_strcasestr(const char *s, const char *find)
  */
 char *BLI_strncasestr(const char *s, const char *find, size_t len)
 {
-  register char c, sc;
+  char c, sc;
 
   if ((c = *find++) != 0) {
     c = tolower(c);
@@ -567,8 +568,8 @@ char *BLI_strncasestr(const char *s, const char *find, size_t len)
 
 int BLI_strcasecmp(const char *s1, const char *s2)
 {
-  register int i;
-  register char c1, c2;
+  int i;
+  char c1, c2;
 
   for (i = 0;; i++) {
     c1 = tolower(s1[i]);
@@ -590,8 +591,8 @@ int BLI_strcasecmp(const char *s1, const char *s2)
 
 int BLI_strncasecmp(const char *s1, const char *s2, size_t len)
 {
-  register size_t i;
-  register char c1, c2;
+  size_t i;
+  char c1, c2;
 
   for (i = 0; i < len; i++) {
     c1 = tolower(s1[i]);
@@ -669,8 +670,8 @@ static int left_number_strcmp(const char *s1, const char *s2, int *tiebreaker)
  */
 int BLI_strcasecmp_natural(const char *s1, const char *s2)
 {
-  register int d1 = 0, d2 = 0;
-  register char c1, c2;
+  int d1 = 0, d2 = 0;
+  char c1, c2;
   int tiebreaker = 0;
 
   /* if both chars are numeric, to a left_number_strcmp().
@@ -685,6 +686,7 @@ int BLI_strcasecmp_natural(const char *s1, const char *s2)
         return numcompare;
       }
 
+      /* Some wasted work here, left_number_strcmp already consumes at least some digits. */
       d1++;
       while (isdigit(s1[d1])) {
         d1++;
@@ -695,14 +697,22 @@ int BLI_strcasecmp_natural(const char *s1, const char *s2)
       }
     }
 
+    /* Test for end of strings first so that shorter strings are ordered in front. */
+    if (ELEM(0, s1[d1], s2[d2])) {
+      break;
+    }
+
     c1 = tolower(s1[d1]);
     c2 = tolower(s2[d2]);
 
-    /* first check for '.' so "foo.bar" comes before "foo 1.bar" */
-    if (c1 == '.' && c2 != '.') {
+    if (c1 == c2) {
+      /* Continue iteration */
+    }
+    /* Check for '.' so "foo.bar" comes before "foo 1.bar". */
+    else if (c1 == '.') {
       return -1;
     }
-    if (c1 != '.' && c2 == '.') {
+    else if (c2 == '.') {
       return 1;
     }
     else if (c1 < c2) {
@@ -711,9 +721,7 @@ int BLI_strcasecmp_natural(const char *s1, const char *s2)
     else if (c1 > c2) {
       return 1;
     }
-    else if (c1 == 0) {
-      break;
-    }
+
     d1++;
     d2++;
   }
@@ -811,7 +819,7 @@ void BLI_str_toupper_ascii(char *str, const size_t len)
  */
 void BLI_str_rstrip(char *str)
 {
-  for (int i = (int)strlen(str) - 1; i > 0; i--) {
+  for (int i = (int)strlen(str) - 1; i >= 0; i--) {
     if (isspace(str[i])) {
       str[i] = '\0';
     }
@@ -891,6 +899,24 @@ int BLI_str_index_in_array(const char *__restrict str, const char **__restrict s
     }
   }
   return -1;
+}
+
+/**
+ * Find if a string starts with another string.
+ *
+ * \param str: The string to search within.
+ * \param start: The string we look for at the start.
+ * \return If str starts with start.
+ */
+bool BLI_str_startswith(const char *__restrict str, const char *__restrict start)
+{
+  for (; *str && *start; str++, start++) {
+    if (*str != *start) {
+      return false;
+    }
+  }
+
+  return (*start == '\0');
 }
 
 bool BLI_strn_endswith(const char *__restrict str, const char *__restrict end, size_t slength)
@@ -1094,7 +1120,7 @@ void BLI_str_format_byte_unit(char dst[15], long long int bytes, const bool base
 
   BLI_STATIC_ASSERT(ARRAY_SIZE(units_base_2) == ARRAY_SIZE(units_base_10), "array size mismatch");
 
-  while ((ABS(bytes_converted) >= base) && ((order + 1) < tot_units)) {
+  while ((fabs(bytes_converted) >= base) && ((order + 1) < tot_units)) {
     bytes_converted /= base;
     order++;
   }

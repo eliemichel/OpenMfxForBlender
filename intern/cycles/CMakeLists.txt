@@ -228,11 +228,8 @@ if(WITH_CYCLES_DEVICE_OPTIX)
       SYSTEM
       ${OPTIX_INCLUDE_DIR}
       )
-
-    # Need pre-compiled CUDA binaries in the OptiX device
-    set(WITH_CYCLES_CUDA_BINARIES ON)
   else()
-    message(STATUS "Optix not found, disabling it from Cycles")
+    message(STATUS "OptiX not found, disabling it from Cycles")
     set(WITH_CYCLES_DEVICE_OPTIX OFF)
   endif()
 endif()
@@ -362,6 +359,9 @@ if(WITH_OPENCOLORIO)
     SYSTEM
     ${OPENCOLORIO_INCLUDE_DIRS}
   )
+  if(WIN32)
+    add_definitions(-DOpenColorIO_STATIC)
+  endif()
 endif()
 
 if(WITH_CYCLES_STANDALONE OR WITH_CYCLES_NETWORK OR WITH_CYCLES_CUBIN_COMPILER)

@@ -223,6 +223,7 @@ else:
         "aud",
         "bgl",
         "blf",
+        "imbuf",
         "bmesh",
         "bmesh.ops",
         "bmesh.types",
@@ -989,6 +990,7 @@ def pymodule2sphinx(basepath, module_name, module, title):
 # Changes in Blender will force errors here
 context_type_map = {
     # context_member: (RNA type, is_collection)
+    "active_annotation_layer": ("GPencilLayer", False),
     "active_base": ("ObjectBase", False),
     "active_bone": ("EditBone", False),
     "active_gpencil_frame": ("GreasePencilLayer", True),
@@ -998,6 +1000,8 @@ context_type_map = {
     "active_operator": ("Operator", False),
     "active_pose_bone": ("PoseBone", False),
     "active_editable_fcurve": ("FCurve", False),
+    "annotation_data": ("GreasePencil", False),
+    "annotation_data_owner": ("ID", False),
     "armature": ("Armature", False),
     "bone": ("Bone", False),
     "brush": ("Brush", False),
@@ -1055,7 +1059,6 @@ context_type_map = {
     "selected_sequences": ("Sequence", True),
     "selected_visible_fcurves": ("FCurve", True),
     "sequences": ("Sequence", True),
-    "smoke": ("SmokeModifier", False),
     "soft_body": ("SoftBodyModifier", False),
     "speaker": ("Speaker", False),
     "texture": ("Texture", False),
@@ -1753,6 +1756,7 @@ def write_rst_contents(basepath):
     app_modules = (
         "bpy.context",  # note: not actually a module
         "bpy.data",     # note: not actually a module
+        "bpy.msgbus",   # note: not actually a module
         "bpy.ops",
         "bpy.types",
 
@@ -1777,7 +1781,7 @@ def write_rst_contents(basepath):
 
     standalone_modules = (
         # submodules are added in parent page
-        "mathutils", "freestyle", "bgl", "blf", "gpu", "gpu_extras",
+        "mathutils", "freestyle", "bgl", "blf", "imbuf", "gpu", "gpu_extras",
         "aud", "bpy_extras", "idprop.types", "bmesh",
     )
 
@@ -1843,6 +1847,29 @@ def write_rst_ops_index(basepath):
         file.close()
 
 
+def write_rst_msgbus(basepath):
+    """
+    Write the rst files of bpy.msgbus module
+    """
+    if 'bpy.msgbus' in EXCLUDE_MODULES:
+        return
+
+    # Write the index.
+    filepath = os.path.join(basepath, "bpy.msgbus.rst")
+    file = open(filepath, "w", encoding="utf-8")
+    fw = file.write
+    fw(title_string("Message Bus (bpy.msgbus)", "="))
+    write_example_ref("", fw, "bpy.msgbus")
+    fw(".. toctree::\n")
+    fw("   :glob:\n\n")
+    fw("   bpy.msgbus.*\n\n")
+    file.close()
+
+    # Write the contents.
+    pymodule2sphinx(basepath, 'bpy.msgbus', bpy.msgbus, 'Message Bus')
+    EXAMPLE_SET_USED.add("bpy.msgbus")
+
+
 def write_rst_data(basepath):
     '''
     Write the rst file of bpy.data module
@@ -1884,6 +1911,7 @@ def write_rst_importable_modules(basepath):
         # C_modules
         "aud": "Audio System",
         "blf": "Font Drawing",
+        "imbuf": "Image Buffer",
         "gpu": "GPU Shader Module",
         "gpu.types": "GPU Types",
         "gpu.matrix": "GPU Matrix",
@@ -1996,6 +2024,7 @@ def rna2sphinx(basepath):
     write_rst_bpy(basepath)                 # bpy, disabled by default
     write_rst_types_index(basepath)         # bpy.types
     write_rst_ops_index(basepath)           # bpy.ops
+    write_rst_msgbus(basepath)              # bpy.msgbus
     pyrna2sphinx(basepath)                  # bpy.types.* and bpy.ops.*
     write_rst_data(basepath)                # bpy.data
     write_rst_importable_modules(basepath)

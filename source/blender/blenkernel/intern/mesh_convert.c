@@ -40,12 +40,12 @@
 #include "BKE_DerivedMesh.h"
 #include "BKE_editmesh.h"
 #include "BKE_key.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
 #include "BKE_displist.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_material.h"
 #include "BKE_mball.h"
 /* these 2 are only used by conversion functions */
@@ -522,7 +522,6 @@ int BKE_mesh_nurbs_displist_to_mdata(Object *ob,
 
 Mesh *BKE_mesh_new_nomain_from_curve_displist(Object *ob, ListBase *dispbase)
 {
-  Curve *cu = ob->data;
   Mesh *mesh;
   MVert *allvert;
   MEdge *alledge;
@@ -530,7 +529,6 @@ Mesh *BKE_mesh_new_nomain_from_curve_displist(Object *ob, ListBase *dispbase)
   MPoly *allpoly;
   MLoopUV *alluv = NULL;
   int totvert, totedge, totloop, totpoly;
-  bool use_orco_uv = (cu->flag & CU_UV_ORCO) != 0;
 
   if (BKE_mesh_nurbs_displist_to_mdata(ob,
                                        dispbase,
@@ -540,7 +538,7 @@ Mesh *BKE_mesh_new_nomain_from_curve_displist(Object *ob, ListBase *dispbase)
                                        &totedge,
                                        &allloop,
                                        &allpoly,
-                                       (use_orco_uv) ? &alluv : NULL,
+                                       &alluv,
                                        &totloop,
                                        &totpoly) != 0) {
     /* Error initializing mdata. This often happens when curve is empty */
@@ -580,15 +578,11 @@ Mesh *BKE_mesh_new_nomain_from_curve(Object *ob)
 }
 
 /* this may fail replacing ob->data, be sure to check ob->type */
-void BKE_mesh_from_nurbs_displist(Main *bmain,
-                                  Object *ob,
-                                  ListBase *dispbase,
-                                  const bool use_orco_uv,
-                                  const char *obdata_name,
-                                  bool temporary)
+void BKE_mesh_from_nurbs_displist(
+    Main *bmain, Object *ob, ListBase *dispbase, const char *obdata_name, bool temporary)
 {
   Object *ob1;
-  Mesh *me_eval = ob->runtime.mesh_eval;
+  Mesh *me_eval = (Mesh *)ob->runtime.data_eval;
   Mesh *me;
   Curve *cu;
   MVert *allvert = NULL;
@@ -609,7 +603,7 @@ void BKE_mesh_from_nurbs_displist(Main *bmain,
                                          &totedge,
                                          &allloop,
                                          &allpoly,
-                                         (use_orco_uv) ? &alluv : NULL,
+                                         &alluv,
                                          &totloop,
                                          &totpoly) != 0) {
       /* Error initializing */
@@ -650,7 +644,7 @@ void BKE_mesh_from_nurbs_displist(Main *bmain,
       me = BKE_id_new_nomain(ID_ME, obdata_name);
     }
 
-    ob->runtime.mesh_eval = NULL;
+    ob->runtime.data_eval = NULL;
     BKE_mesh_nomain_to_mesh(me_eval, me, ob, &CD_MASK_MESH, true);
   }
 
@@ -706,14 +700,13 @@ void BKE_mesh_from_nurbs_displist(Main *bmain,
 void BKE_mesh_from_nurbs(Main *bmain, Object *ob)
 {
   Curve *cu = (Curve *)ob->data;
-  bool use_orco_uv = (cu->flag & CU_UV_ORCO) != 0;
   ListBase disp = {NULL, NULL};
 
   if (ob->runtime.curve_cache) {
     disp = ob->runtime.curve_cache->disp;
   }
 
-  BKE_mesh_from_nurbs_displist(bmain, ob, &disp, use_orco_uv, cu->id.name, false);
+  BKE_mesh_from_nurbs_displist(bmain, ob, &disp, cu->id.name, false);
 }
 
 typedef struct EdgeLink {
@@ -936,11 +929,9 @@ static Object *object_for_curve_to_mesh_create(Object *object)
     BKE_displist_copy(&temp_object->runtime.curve_cache->disp, &object->runtime.curve_cache->disp);
   }
   /* Constructive modifiers will use mesh to store result. */
-  if (object->runtime.mesh_eval != NULL) {
-    BKE_id_copy_ex(NULL,
-                   &object->runtime.mesh_eval->id,
-                   (ID **)&temp_object->runtime.mesh_eval,
-                   LIB_ID_COPY_LOCALIZE);
+  if (object->runtime.data_eval != NULL) {
+    BKE_id_copy_ex(
+        NULL, object->runtime.data_eval, &temp_object->runtime.data_eval, LIB_ID_COPY_LOCALIZE);
   }
 
   /* Need to create copy of curve itself as well, it will be freed by underlying conversion
@@ -1001,19 +992,15 @@ static void curve_to_mesh_eval_ensure(Object *object)
    * bit of internal functions (BKE_mesh_from_nurbs_displist, BKE_mesh_nomain_to_mesh) and also
    * Mesh From Curve operator.
    * Brecht says hold off with that. */
-  BKE_displist_make_curveTypes_forRender(NULL,
-                                         NULL,
-                                         &remapped_object,
-                                         &remapped_object.runtime.curve_cache->disp,
-                                         &remapped_object.runtime.mesh_eval,
-                                         false);
+  Mesh *mesh_eval = NULL;
+  BKE_displist_make_curveTypes_forRender(
+      NULL, NULL, &remapped_object, &remapped_object.runtime.curve_cache->disp, &mesh_eval, false);
 
   /* Note: this is to be consistent with `BKE_displist_make_curveTypes()`, however that is not a
    * real issue currently, code here is broken in more than one way, fix(es) will be done
    * separately. */
-  if (remapped_object.runtime.mesh_eval != NULL) {
-    remapped_object.runtime.mesh_eval->id.tag |= LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT;
-    remapped_object.runtime.is_mesh_eval_owned = true;
+  if (mesh_eval != NULL) {
+    BKE_object_eval_assign_data(&remapped_object, &mesh_eval->id, true);
   }
 
   BKE_object_free_curve_cache(&bevel_object);
@@ -1023,8 +1010,6 @@ static void curve_to_mesh_eval_ensure(Object *object)
 static Mesh *mesh_new_from_curve_type_object(Object *object)
 {
   Curve *curve = object->data;
-  const bool uv_from_orco = (curve->flag & CU_UV_ORCO) != 0;
-
   Object *temp_object = object_for_curve_to_mesh_create(object);
   Curve *temp_curve = (Curve *)temp_object->data;
 
@@ -1039,12 +1024,8 @@ static Mesh *mesh_new_from_curve_type_object(Object *object)
   temp_curve->editnurb = NULL;
 
   /* Convert to mesh. */
-  BKE_mesh_from_nurbs_displist(NULL,
-                               temp_object,
-                               &temp_object->runtime.curve_cache->disp,
-                               uv_from_orco,
-                               curve->id.name + 2,
-                               true);
+  BKE_mesh_from_nurbs_displist(
+      NULL, temp_object, &temp_object->runtime.curve_cache->disp, curve->id.name + 2, true);
 
   /* BKE_mesh_from_nurbs changes the type to a mesh, check it worked. If it didn't the curve did
    * not have any segments or otherwise would have generated an empty mesh. */
@@ -1086,7 +1067,7 @@ static Mesh *mesh_new_from_mball_object(Object *object)
   mesh_result->mat = MEM_dupallocN(mball->mat);
   if (mball->mat != NULL) {
     for (int i = mball->totcol; i-- > 0;) {
-      mesh_result->mat[i] = give_current_material(object, i + 1);
+      mesh_result->mat[i] = BKE_object_material_get(object, i + 1);
     }
   }
 
@@ -1117,8 +1098,8 @@ static Mesh *mesh_new_from_mesh_object_with_layers(Depsgraph *depsgraph, Object 
   }
 
   Object object_for_eval = *object;
-  if (object_for_eval.runtime.mesh_orig != NULL) {
-    object_for_eval.data = object_for_eval.runtime.mesh_orig;
+  if (object_for_eval.runtime.data_orig != NULL) {
+    object_for_eval.data = object_for_eval.runtime.data_orig;
   }
 
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
@@ -1180,11 +1161,9 @@ Mesh *BKE_mesh_new_from_object(Depsgraph *depsgraph, Object *object, bool preser
   return new_mesh;
 }
 
-static int foreach_libblock_make_original_callback(void *UNUSED(user_data_v),
-                                                   ID *UNUSED(id_self),
-                                                   ID **id_p,
-                                                   int UNUSED(cb_flag))
+static int foreach_libblock_make_original_callback(LibraryIDLinkCallbackData *cb_data)
 {
+  ID **id_p = cb_data->id_pointer;
   if (*id_p == NULL) {
     return IDWALK_RET_NOP;
   }
@@ -1193,15 +1172,14 @@ static int foreach_libblock_make_original_callback(void *UNUSED(user_data_v),
   return IDWALK_RET_NOP;
 }
 
-static int foreach_libblock_make_usercounts_callback(void *UNUSED(user_data_v),
-                                                     ID *UNUSED(id_self),
-                                                     ID **id_p,
-                                                     int cb_flag)
+static int foreach_libblock_make_usercounts_callback(LibraryIDLinkCallbackData *cb_data)
 {
+  ID **id_p = cb_data->id_pointer;
   if (*id_p == NULL) {
     return IDWALK_RET_NOP;
   }
 
+  const int cb_flag = cb_data->cb_flag;
   if (cb_flag & IDWALK_CB_USER) {
     id_us_plus(*id_p);
   }
@@ -1322,7 +1300,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
                                            ModifierData *md_eval,
                                            int build_shapekey_layers)
 {
-  Mesh *me = ob_eval->runtime.mesh_orig ? ob_eval->runtime.mesh_orig : ob_eval->data;
+  Mesh *me = ob_eval->runtime.data_orig ? ob_eval->runtime.data_orig : ob_eval->data;
   const ModifierTypeInfo *mti = modifierType_getInfo(md_eval->type);
   Mesh *result;
   KeyBlock *kb;

@@ -307,16 +307,16 @@ static void curve_cd_calc_used_gpu_layers(int *cd_layers,
                                           struct GPUMaterial **gpumat_array,
                                           int gpumat_array_len)
 {
-  GPUVertAttrLayers gpu_attrs = {{{0}}};
   for (int i = 0; i < gpumat_array_len; i++) {
     struct GPUMaterial *gpumat = gpumat_array[i];
     if (gpumat == NULL) {
       continue;
     }
-    GPU_material_vertex_attrs(gpumat, &gpu_attrs);
-    for (int j = 0; j < gpu_attrs.totlayer; j++) {
-      const char *name = gpu_attrs.layer[j].name;
-      int type = gpu_attrs.layer[j].type;
+
+    ListBase gpu_attrs = GPU_material_attributes(gpumat);
+    for (GPUMaterialAttribute *gpu_attr = gpu_attrs.first; gpu_attr; gpu_attr = gpu_attr->next) {
+      const char *name = gpu_attr->name;
+      int type = gpu_attr->type;
 
       /* Curves cannot have named layers.
        * Note: We could relax this assumption later. */
@@ -333,8 +333,7 @@ static void curve_cd_calc_used_gpu_layers(int *cd_layers,
           *cd_layers |= CD_MLOOPUV;
           break;
         case CD_TANGENT:
-          /* Currently unsupported */
-          // *cd_layers |= CD_TANGENT;
+          *cd_layers |= CD_TANGENT;
           break;
         case CD_MCOL:
           /* Curve object don't have Color data. */
@@ -358,6 +357,7 @@ typedef struct CurveBatchCache {
 
     GPUVertBuf *loop_pos_nor;
     GPUVertBuf *loop_uv;
+    GPUVertBuf *loop_tan;
   } ordered;
 
   struct {
@@ -414,7 +414,7 @@ static bool curve_batch_cache_valid(Curve *cu)
     return false;
   }
 
-  if (cache->mat_len != max_ii(1, cu->totcol)) {
+  if (cache->mat_len != DRW_curve_material_count_get(cu)) {
     return false;
   }
 
@@ -458,16 +458,10 @@ static void curve_batch_cache_init(Curve *cu)
 #endif
 
   cache->cd_used = 0;
-  cache->mat_len = max_ii(1, cu->totcol);
-  cache->surf_per_mat_tris = MEM_mallocN(sizeof(*cache->surf_per_mat_tris) * cache->mat_len,
+  cache->mat_len = DRW_curve_material_count_get(cu);
+  cache->surf_per_mat_tris = MEM_callocN(sizeof(*cache->surf_per_mat_tris) * cache->mat_len,
                                          __func__);
-  cache->surf_per_mat = MEM_mallocN(sizeof(*cache->surf_per_mat) * cache->mat_len, __func__);
-
-  /* TODO Might be wiser to alloc in one chunk. */
-  for (int i = 0; i < cache->mat_len; i++) {
-    cache->surf_per_mat_tris[i] = MEM_callocN(sizeof(GPUIndexBuf), "GPUIndexBuf");
-    cache->surf_per_mat[i] = MEM_callocN(sizeof(GPUBatch), "GPUBatch");
-  }
+  cache->surf_per_mat = MEM_callocN(sizeof(*cache->surf_per_mat) * cache->mat_len, __func__);
 
   cache->is_editmode = (cu->editnurb != NULL) || (cu->editfont != NULL);
 
@@ -914,6 +908,11 @@ GPUBatch *DRW_curve_batch_cache_get_edge_detection(Curve *cu, bool *r_is_manifol
   return DRW_batch_request(&cache->batch.edge_detection);
 }
 
+int DRW_curve_material_count_get(Curve *cu)
+{
+  return max_ii(1, cu->totcol);
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -929,23 +928,20 @@ void DRW_curve_batch_cache_create_requested(Object *ob)
 
   /* Verify that all surface batches have needed attribute layers. */
   /* TODO(fclem): We could be a bit smarter here and only do it per material. */
-  for (int i = 0; i < cache->mat_len; i++) {
-    if ((cache->cd_used & cache->cd_needed) != cache->cd_needed) {
+  if ((cache->cd_used & cache->cd_needed) != cache->cd_needed) {
+    for (int i = 0; i < cache->mat_len; i++) {
       /* We can't discard batches at this point as they have been
        * referenced for drawing. Just clear them in place. */
-      GPU_batch_clear(cache->surf_per_mat[i]);
-      memset(cache->surf_per_mat[i], 0, sizeof(*cache->surf_per_mat[i]));
+      GPU_BATCH_CLEAR_SAFE(cache->surf_per_mat[i]);
     }
-  }
-  if ((cache->cd_used & cache->cd_needed) != cache->cd_needed) {
+
     cache->cd_used |= cache->cd_needed;
     cache->cd_needed = 0;
   }
 
   /* Init batches and request VBOs & IBOs */
   if (DRW_batch_requested(cache->batch.surfaces, GPU_PRIM_TRIS)) {
-    DRW_ibo_request(cache->batch.surfaces, &cache->ibo.surfaces_tris);
-    DRW_vbo_request(cache->batch.surfaces, &cache->ordered.pos_nor);
+    DRW_vbo_request(cache->batch.surfaces, &cache->ordered.loop_pos_nor);
   }
   if (DRW_batch_requested(cache->batch.surfaces_edges, GPU_PRIM_LINES)) {
     DRW_ibo_request(cache->batch.surfaces_edges, &cache->ibo.surfaces_lines);
@@ -987,6 +983,9 @@ void DRW_curve_batch_cache_create_requested(Object *ob)
       if (cache->cd_used & CD_MLOOPUV) {
         DRW_vbo_request(cache->surf_per_mat[i], &cache->ordered.loop_uv);
       }
+      if (cache->cd_used & CD_TANGENT) {
+        DRW_vbo_request(cache->surf_per_mat[i], &cache->ordered.loop_tan);
+      }
       DRW_vbo_request(cache->surf_per_mat[i], &cache->ordered.loop_pos_nor);
     }
   }
@@ -1002,6 +1001,7 @@ void DRW_curve_batch_cache_create_requested(Object *ob)
   DRW_ADD_FLAG_FROM_VBO_REQUEST(mr_flag, cache->ordered.curves_pos, CU_DATATYPE_WIRE);
   DRW_ADD_FLAG_FROM_VBO_REQUEST(mr_flag, cache->ordered.loop_pos_nor, CU_DATATYPE_SURFACE);
   DRW_ADD_FLAG_FROM_VBO_REQUEST(mr_flag, cache->ordered.loop_uv, CU_DATATYPE_SURFACE);
+  DRW_ADD_FLAG_FROM_VBO_REQUEST(mr_flag, cache->ordered.loop_tan, CU_DATATYPE_SURFACE);
   DRW_ADD_FLAG_FROM_IBO_REQUEST(mr_flag, cache->ibo.surfaces_tris, CU_DATATYPE_SURFACE);
   DRW_ADD_FLAG_FROM_IBO_REQUEST(mr_flag, cache->ibo.surfaces_lines, CU_DATATYPE_SURFACE);
   DRW_ADD_FLAG_FROM_IBO_REQUEST(mr_flag, cache->ibo.curves_lines, CU_DATATYPE_WIRE);
@@ -1040,8 +1040,8 @@ void DRW_curve_batch_cache_create_requested(Object *ob)
 
   if (DRW_vbo_requested(cache->ordered.loop_pos_nor) ||
       DRW_vbo_requested(cache->ordered.loop_uv)) {
-    DRW_displist_vertbuf_create_loop_pos_and_nor_and_uv(
-        lb, cache->ordered.loop_pos_nor, cache->ordered.loop_uv);
+    DRW_displist_vertbuf_create_loop_pos_and_nor_and_uv_and_tan(
+        lb, cache->ordered.loop_pos_nor, cache->ordered.loop_uv, cache->ordered.loop_tan);
   }
 
   if (DRW_ibo_requested(cache->surf_per_mat_tris[0])) {

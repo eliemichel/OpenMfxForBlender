@@ -50,7 +50,7 @@
 #include "BKE_global.h"
 #include "BKE_image.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_object.h"
@@ -333,9 +333,11 @@ static int screen_render_exec(bContext *C, wmOperator *op)
   re = RE_NewSceneRender(scene);
 
   G.is_break = false;
+
+  RE_draw_lock_cb(re, NULL, NULL);
   RE_test_break_cb(re, NULL, render_break);
 
-  ima = BKE_image_verify_viewer(mainp, IMA_TYPE_R_RESULT, "Render Result");
+  ima = BKE_image_ensure_viewer(mainp, IMA_TYPE_R_RESULT, "Render Result");
   BKE_image_signal(mainp, ima, NULL, IMA_SIGNAL_FREE);
   BKE_image_backup_render(scene, ima, true);
 
@@ -955,7 +957,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
   WM_cursor_wait(1);
 
   /* flush sculpt and editmode changes */
-  ED_editors_flush_edits(bmain, true);
+  ED_editors_flush_edits_ex(bmain, true, false);
 
   /* cleanup sequencer caches before starting user triggered render.
    * otherwise, invalidated cache entries can make their way into
@@ -1047,7 +1049,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
   }
 
   /* get a render result image, and make sure it is empty */
-  ima = BKE_image_verify_viewer(bmain, IMA_TYPE_R_RESULT, "Render Result");
+  ima = BKE_image_ensure_viewer(bmain, IMA_TYPE_R_RESULT, "Render Result");
   BKE_image_signal(rj->main, ima, NULL, IMA_SIGNAL_FREE);
   BKE_image_backup_render(rj->scene, ima, true);
   rj->image = ima;
@@ -1173,7 +1175,7 @@ static int render_shutter_curve_preset_exec(bContext *C, wmOperator *op)
   CurveMap *cm = mblur_shutter_curve->cm;
   int preset = RNA_enum_get(op->ptr, "shape");
 
-  cm->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
+  mblur_shutter_curve->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
   mblur_shutter_curve->preset = preset;
   BKE_curvemap_reset(
       cm, &mblur_shutter_curve->clipr, mblur_shutter_curve->preset, CURVEMAP_SLOPE_POS_NEG);

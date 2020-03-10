@@ -87,7 +87,7 @@ void bezt_add_to_cfra_elem(ListBase *lb, struct BezTriple *bezt);
 void fcurve_free_driver(struct FCurve *fcu);
 struct ChannelDriver *fcurve_copy_driver(const struct ChannelDriver *driver);
 
-void driver_variables_copy(struct ListBase *dst_list, const struct ListBase *src_list);
+void driver_variables_copy(struct ListBase *dst_vars, const struct ListBase *src_vars);
 
 void BKE_driver_target_matrix_to_rot_channels(
     float mat[4][4], int auto_order, int rotation_mode, int channel, bool angles, float r_buf[4]);
@@ -107,6 +107,7 @@ bool driver_get_variable_property(struct ChannelDriver *driver,
                                   int *r_index);
 
 bool BKE_driver_has_simple_expression(struct ChannelDriver *driver);
+bool BKE_driver_expression_depends_on_time(struct ChannelDriver *driver);
 void BKE_driver_invalidate_expression(struct ChannelDriver *driver,
                                       bool expr_changed,
                                       bool varname_changed);
@@ -279,7 +280,7 @@ struct FCurve *rna_get_fcurve_context_ui(struct bContext *C,
                                          struct PointerRNA *ptr,
                                          struct PropertyRNA *prop,
                                          int rnaindex,
-                                         struct AnimData **r_adt,
+                                         struct AnimData **r_animdata,
                                          struct bAction **r_action,
                                          bool *r_driven,
                                          bool *r_special);
@@ -328,7 +329,8 @@ eFCU_Cycle_Type BKE_fcurve_get_cycle_type(struct FCurve *fcu);
 /* -------- Curve Sanity --------  */
 
 void calchandles_fcurve(struct FCurve *fcu);
-void testhandles_fcurve(struct FCurve *fcu, const bool use_handle);
+void calchandles_fcurve_ex(struct FCurve *fcu, eBezTriple_Flag handle_sel_flag);
+void testhandles_fcurve(struct FCurve *fcu, eBezTriple_Flag sel_flag, const bool use_handle);
 void sort_time_fcurve(struct FCurve *fcu);
 short test_time_fcurve(struct FCurve *fcu);
 

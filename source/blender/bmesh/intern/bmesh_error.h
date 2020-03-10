@@ -21,6 +21,8 @@
  * \ingroup bmesh
  */
 
+#include "bmesh_operator_api.h"
+
 /*----------- bmop error system ----------*/
 
 /* pushes an error onto the bmesh error stack.
@@ -54,13 +56,8 @@ void BMO_error_clear(BMesh *bm);
 
 /*error messages*/
 enum {
-  BMERR_SELF_INTERSECTING = 1,
-  BMERR_DISSOLVEDISK_FAILED,
-  BMERR_CONNECTVERT_FAILED,
-  BMERR_WALKER_FAILED,
+  BMERR_CONNECTVERT_FAILED = 1,
   BMERR_DISSOLVEFACES_FAILED,
-  BMERR_TESSELLATION,
-  BMERR_NONMANIFOLD,
   BMERR_INVALID_SELECTION,
   BMERR_MESH_ERROR,
   BMERR_CONVEX_HULL_FAILED,

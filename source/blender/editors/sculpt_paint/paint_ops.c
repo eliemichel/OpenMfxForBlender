@@ -26,6 +26,9 @@
 #include "BLI_math_vector.h"
 #include "BLI_string.h"
 
+#include "IMB_imbuf_types.h"
+#include "IMB_imbuf.h"
+
 #include "DNA_customdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -33,9 +36,11 @@
 
 #include "BKE_brush.h"
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_image.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_paint.h"
+#include "BKE_report.h"
 
 #include "ED_paint.h"
 #include "ED_screen.h"
@@ -69,8 +74,8 @@ static int brush_add_exec(bContext *C, wmOperator *UNUSED(op))
   }
   else {
     br = BKE_brush_add(bmain, "Brush", BKE_paint_object_mode_from_paintmode(mode));
-    id_us_min(&br->id); /* fake user only */
   }
+  id_us_min(&br->id); /* fake user only */
 
   BKE_paint_brush_set(paint, br);
 
@@ -98,20 +103,20 @@ static int brush_add_gpencil_exec(bContext *C, wmOperator *UNUSED(op))
   Paint *paint = &ts->gp_paint->paint;
   Brush *br = BKE_paint_brush(paint);
   Main *bmain = CTX_data_main(C);
-  // ePaintMode mode = PAINT_MODE_GPENCIL;
 
   if (br) {
     br = BKE_brush_copy(bmain, br);
   }
   else {
     br = BKE_brush_add(bmain, "Brush", OB_MODE_PAINT_GPENCIL);
-    id_us_min(&br->id); /* fake user only */
+
+    /* Init grease pencil specific data. */
+    BKE_brush_init_gpencil_settings(br);
   }
 
-  BKE_paint_brush_set(paint, br);
+  id_us_min(&br->id); /* fake user only */
 
-  /* init grease pencil specific data */
-  BKE_brush_init_gpencil_settings(br);
+  BKE_paint_brush_set(paint, br);
 
   return OPERATOR_FINISHED;
 }
@@ -294,6 +299,315 @@ static void PALETTE_OT_color_delete(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
+/* --- Extract Palette from Image. */
+static bool palette_extract_img_poll(bContext *C)
+{
+  SpaceLink *sl = CTX_wm_space_data(C);
+  if (sl->spacetype == SPACE_IMAGE) {
+    return true;
+  }
+
+  return false;
+}
+
+static int palette_extract_img_exec(bContext *C, wmOperator *op)
+{
+  const int threshold = RNA_int_get(op->ptr, "threshold");
+
+  Main *bmain = CTX_data_main(C);
+  bool done = false;
+
+  SpaceImage *sima = CTX_wm_space_image(C);
+  Image *image = sima->image;
+  ImageUser iuser = sima->iuser;
+  void *lock;
+  ImBuf *ibuf;
+  GHash *color_table = BLI_ghash_int_new(__func__);
+
+  ibuf = BKE_image_acquire_ibuf(image, &iuser, &lock);
+
+  if (ibuf->rect) {
+    /* Extract all colors. */
+    for (int row = 0; row < ibuf->y; row++) {
+      for (int col = 0; col < ibuf->x; col++) {
+        float color[4];
+        IMB_sampleImageAtLocation(ibuf, (float)col, (float)row, false, color);
+        const float range = pow(10.0f, threshold);
+        color[0] = truncf(color[0] * range) / range;
+        color[1] = truncf(color[1] * range) / range;
+        color[2] = truncf(color[2] * range) / range;
+
+        uint key = rgb_to_cpack(color[0], color[1], color[2]);
+        if (!BLI_ghash_haskey(color_table, POINTER_FROM_INT(key))) {
+          BLI_ghash_insert(color_table, POINTER_FROM_INT(key), POINTER_FROM_INT(key));
+        }
+      }
+    }
+
+    done = BKE_palette_from_hash(bmain, color_table, image->id.name + 2, false);
+  }
+
+  /* Free memory. */
+  BLI_ghash_free(color_table, NULL, NULL);
+  BKE_image_release_ibuf(image, ibuf, lock);
+
+  if (done) {
+    BKE_reportf(op->reports, RPT_INFO, "Palette created");
+  }
+
+  return OPERATOR_FINISHED;
+}
+
+static void PALETTE_OT_extract_from_image(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Extract Palette from Image";
+  ot->idname = "PALETTE_OT_extract_from_image";
+  ot->description = "Extract all colors used in Image and create a Palette";
+
+  /* api callbacks */
+  ot->exec = palette_extract_img_exec;
+  ot->poll = palette_extract_img_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  /* properties */
+  RNA_def_int(ot->srna, "threshold", 1, 1, 4, "Threshold", "", 1, 4);
+}
+
+/* Sort Palette color by Hue and Saturation. */
+static bool palette_sort_poll(bContext *C)
+{
+  Paint *paint = BKE_paint_get_active_from_context(C);
+  Palette *palette = paint->palette;
+  if (palette) {
+    return true;
+  }
+
+  return false;
+}
+
+static int palette_sort_exec(bContext *C, wmOperator *op)
+{
+  const int type = RNA_enum_get(op->ptr, "type");
+
+  Paint *paint = BKE_paint_get_active_from_context(C);
+  Palette *palette = paint->palette;
+
+  if (palette == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
+  tPaletteColorHSV *color_array = NULL;
+  tPaletteColorHSV *col_elm = NULL;
+
+  const int totcol = BLI_listbase_count(&palette->colors);
+
+  if (totcol > 0) {
+    color_array = MEM_calloc_arrayN(totcol, sizeof(tPaletteColorHSV), __func__);
+    /* Put all colors in an array. */
+    int t = 0;
+    for (PaletteColor *color = palette->colors.first; color; color = color->next) {
+      float h, s, v;
+      rgb_to_hsv(color->rgb[0], color->rgb[1], color->rgb[2], &h, &s, &v);
+      col_elm = &color_array[t];
+      copy_v3_v3(col_elm->rgb, color->rgb);
+      col_elm->value = color->value;
+      col_elm->h = h;
+      col_elm->s = s;
+      col_elm->v = v;
+      t++;
+    }
+    /* Sort */
+    if (type == 1) {
+      BKE_palette_sort_hsv(color_array, totcol);
+    }
+    else if (type == 2) {
+      BKE_palette_sort_svh(color_array, totcol);
+    }
+    else if (type == 3) {
+      BKE_palette_sort_vhs(color_array, totcol);
+    }
+    else {
+      BKE_palette_sort_luminance(color_array, totcol);
+    }
+
+    /* Clear old color swatches. */
+    PaletteColor *color_next = NULL;
+    for (PaletteColor *color = palette->colors.first; color; color = color_next) {
+      color_next = color->next;
+      BKE_palette_color_remove(palette, color);
+    }
+
+    /* Recreate swatches sorted. */
+    for (int i = 0; i < totcol; i++) {
+      col_elm = &color_array[i];
+      PaletteColor *palcol = BKE_palette_color_add(palette);
+      if (palcol) {
+        copy_v3_v3(palcol->rgb, col_elm->rgb);
+      }
+    }
+  }
+
+  /* Free memory. */
+  if (totcol > 0) {
+    MEM_SAFE_FREE(color_array);
+  }
+
+  WM_event_add_notifier(C, NC_BRUSH | NA_EDITED, NULL);
+
+  return OPERATOR_FINISHED;
+}
+
+static void PALETTE_OT_sort(wmOperatorType *ot)
+{
+  static const EnumPropertyItem sort_type[] = {
+      {1, "HSV", 0, "Hue, Saturation, Value", ""},
+      {2, "SVH", 0, "Saturation, Value, Hue", ""},
+      {3, "VHS", 0, "Value, Hue, Saturation", ""},
+      {4, "LUMINANCE", 0, "Luminance", ""},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  /* identifiers */
+  ot->name = "Sort Palette";
+  ot->idname = "PALETTE_OT_sort";
+  ot->description = "Sort Palette Colors";
+
+  /* api callbacks */
+  ot->exec = palette_sort_exec;
+  ot->poll = palette_sort_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  ot->prop = RNA_def_enum(ot->srna, "type", sort_type, 1, "Type", "");
+}
+
+/* Move colors in palette. */
+static int palette_color_move_exec(bContext *C, wmOperator *op)
+{
+  Paint *paint = BKE_paint_get_active_from_context(C);
+  Palette *palette = paint->palette;
+  PaletteColor *palcolor = BLI_findlink(&palette->colors, palette->active_color);
+
+  if (palcolor == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
+  const int direction = RNA_enum_get(op->ptr, "type");
+
+  BLI_assert(ELEM(direction, -1, 0, 1)); /* we use value below */
+  if (BLI_listbase_link_move(&palette->colors, palcolor, direction)) {
+    palette->active_color += direction;
+    WM_event_add_notifier(C, NC_BRUSH | NA_EDITED, NULL);
+  }
+
+  return OPERATOR_FINISHED;
+}
+
+static void PALETTE_OT_color_move(wmOperatorType *ot)
+{
+  static const EnumPropertyItem slot_move[] = {
+      {-1, "UP", 0, "Up", ""},
+      {1, "DOWN", 0, "Down", ""},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  /* identifiers */
+  ot->name = "Move Palette Color";
+  ot->idname = "PALETTE_OT_color_move";
+  ot->description = "Move the active Color up/down in the list";
+
+  /* api callbacks */
+  ot->exec = palette_color_move_exec;
+  ot->poll = palette_sort_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  ot->prop = RNA_def_enum(ot->srna, "type", slot_move, 0, "Type", "");
+}
+
+/* Join Palette swatches. */
+static bool palette_join_poll(bContext *C)
+{
+  Paint *paint = BKE_paint_get_active_from_context(C);
+  Palette *palette = paint->palette;
+  if (palette) {
+    return true;
+  }
+
+  return false;
+}
+
+static int palette_join_exec(bContext *C, wmOperator *op)
+{
+  Main *bmain = CTX_data_main(C);
+  Paint *paint = BKE_paint_get_active_from_context(C);
+  Palette *palette = paint->palette;
+  Palette *palette_join = NULL;
+  bool done = false;
+
+  char name[MAX_ID_NAME - 2];
+  RNA_string_get(op->ptr, "palette", name);
+
+  if ((palette == NULL) || (name[0] == '\0')) {
+    return OPERATOR_CANCELLED;
+  }
+
+  palette_join = (Palette *)BKE_libblock_find_name(bmain, ID_PAL, name);
+  if (palette_join == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
+  const int totcol = BLI_listbase_count(&palette_join->colors);
+
+  if (totcol > 0) {
+    for (PaletteColor *color = palette_join->colors.first; color; color = color->next) {
+      PaletteColor *palcol = BKE_palette_color_add(palette);
+      if (palcol) {
+        copy_v3_v3(palcol->rgb, color->rgb);
+        palcol->value = color->value;
+        done = true;
+      }
+    }
+  }
+
+  if (done) {
+    /* Clear old color swatches. */
+    PaletteColor *color_next = NULL;
+    for (PaletteColor *color = palette_join->colors.first; color; color = color_next) {
+      color_next = color->next;
+      BKE_palette_color_remove(palette_join, color);
+    }
+
+    /* Notifier. */
+    WM_event_add_notifier(C, NC_BRUSH | NA_EDITED, NULL);
+  }
+
+  return OPERATOR_FINISHED;
+}
+
+static void PALETTE_OT_join(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Join Palette Swatches";
+  ot->idname = "PALETTE_OT_join";
+  ot->description = "Join Palette Swatches";
+
+  /* api callbacks */
+  ot->exec = palette_join_exec;
+  ot->poll = palette_join_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  /* properties */
+  RNA_def_string(ot->srna, "palette", NULL, MAX_ID_NAME - 2, "Palette", "Name of the Palette");
+}
+
 static int brush_reset_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Paint *paint = BKE_paint_get_active_from_context(C);
@@ -456,6 +770,9 @@ static const ePaintMode brush_select_paint_modes[] = {
     PAINT_MODE_WEIGHT,
     PAINT_MODE_TEXTURE_3D,
     PAINT_MODE_GPENCIL,
+    PAINT_MODE_VERTEX_GPENCIL,
+    PAINT_MODE_SCULPT_GPENCIL,
+    PAINT_MODE_WEIGHT_GPENCIL,
 };
 
 static int brush_select_exec(bContext *C, wmOperator *op)
@@ -562,7 +879,7 @@ typedef struct {
   float *dim_target;
   float *rot_target;
   float *pos_target;
-  short event_type;
+  short launch_event;
 } StencilControlData;
 
 static void stencil_set_target(StencilControlData *scd)
@@ -602,7 +919,7 @@ static int stencil_control_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   Paint *paint = BKE_paint_get_active_from_context(C);
   Brush *br = BKE_paint_brush(paint);
   float mvalf[2] = {event->mval[0], event->mval[1]};
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   StencilControlData *scd;
   int mask = RNA_enum_get(op->ptr, "texmode");
 
@@ -626,9 +943,9 @@ static int stencil_control_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   stencil_set_target(scd);
 
   scd->mode = RNA_enum_get(op->ptr, "mode");
-  scd->event_type = event->type;
-  scd->area_size[0] = ar->winx;
-  scd->area_size[1] = ar->winy;
+  scd->launch_event = WM_userdef_event_type_from_keymap_type(event->type);
+  scd->area_size[0] = region->winx;
+  scd->area_size[1] = region->winy;
 
   op->customdata = scd;
   WM_event_add_modal_handler(C, op);
@@ -682,8 +999,7 @@ static void stencil_control_calculate(StencilControlData *scd, const int mval[2]
       if (scd->constrain_mode != STENCIL_CONSTRAINT_X) {
         mdiff[1] = factor * scd->init_sdim[1];
       }
-      CLAMP(mdiff[0], 5.0f, 10000.0f);
-      CLAMP(mdiff[1], 5.0f, 10000.0f);
+      clamp_v2(mdiff, 5.0f, 10000.0f);
       copy_v2_v2(scd->dim_target, mdiff);
       break;
     }
@@ -709,7 +1025,7 @@ static int stencil_control_modal(bContext *C, wmOperator *op, const wmEvent *eve
 {
   StencilControlData *scd = op->customdata;
 
-  if (event->type == scd->event_type && event->val == KM_RELEASE) {
+  if (event->type == scd->launch_event && event->val == KM_RELEASE) {
     MEM_freeN(op->customdata);
     WM_event_add_notifier(C, NC_WINDOW, NULL);
     return OPERATOR_FINISHED;
@@ -966,6 +1282,11 @@ void ED_operatortypes_paint(void)
   WM_operatortype_append(PALETTE_OT_color_add);
   WM_operatortype_append(PALETTE_OT_color_delete);
 
+  WM_operatortype_append(PALETTE_OT_extract_from_image);
+  WM_operatortype_append(PALETTE_OT_sort);
+  WM_operatortype_append(PALETTE_OT_color_move);
+  WM_operatortype_append(PALETTE_OT_join);
+
   /* paint curve */
   WM_operatortype_append(PAINTCURVE_OT_new);
   WM_operatortype_append(PAINTCURVE_OT_add_point);
@@ -1051,7 +1372,7 @@ void ED_keymap_paint(wmKeyConfig *keyconf)
 
   /* Sculpt mode */
   keymap = WM_keymap_ensure(keyconf, "Sculpt", 0, 0);
-  keymap->poll = sculpt_mode_poll;
+  keymap->poll = SCULPT_mode_poll;
 
   /* Vertex Paint mode */
   keymap = WM_keymap_ensure(keyconf, "Vertex Paint", 0, 0);
@@ -1062,7 +1383,7 @@ void ED_keymap_paint(wmKeyConfig *keyconf)
   keymap->poll = weight_paint_mode_poll;
 
   /*Weight paint's Vertex Selection Mode */
-  keymap = WM_keymap_ensure(keyconf, "Weight Paint Vertex Selection", 0, 0);
+  keymap = WM_keymap_ensure(keyconf, "Paint Vertex Selection (Weight, Vertex)", 0, 0);
   keymap->poll = vert_paint_poll;
 
   /* Image/Texture Paint mode */
@@ -1070,7 +1391,7 @@ void ED_keymap_paint(wmKeyConfig *keyconf)
   keymap->poll = image_texture_paint_poll;
 
   /* face-mask mode */
-  keymap = WM_keymap_ensure(keyconf, "Face Mask", 0, 0);
+  keymap = WM_keymap_ensure(keyconf, "Paint Face Mask (Weight, Vertex, Texture)", 0, 0);
   keymap->poll = facemask_paint_poll;
 
   /* paint stroke */

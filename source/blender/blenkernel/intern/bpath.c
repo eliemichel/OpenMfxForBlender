@@ -59,13 +59,14 @@
 #include "DNA_texture_types.h"
 #include "DNA_vfont_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_smoke_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_freestyle_types.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_font.h"
+#include "BKE_lib_id.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
@@ -82,6 +83,10 @@
 #endif
 
 static CLG_LogRef LOG = {"bke.bpath"};
+
+/* -------------------------------------------------------------------- */
+/** \name Check Missing Files
+ * \{ */
 
 static bool checkMissingFiles_visit_cb(void *userdata,
                                        char *UNUSED(path_dst),
@@ -104,6 +109,87 @@ void BKE_bpath_missing_files_check(Main *bmain, ReportList *reports)
                           BKE_BPATH_TRAVERSE_ABS | BKE_BPATH_TRAVERSE_SKIP_PACKED,
                           reports);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Rebase Relative Paths
+ * \{ */
+
+typedef struct BPathRebase_Data {
+  const char *basedir_src;
+  const char *basedir_dst;
+  ReportList *reports;
+
+  int count_tot;
+  int count_changed;
+  int count_failed;
+} BPathRebase_Data;
+
+static bool bpath_relative_rebase_visit_cb(void *userdata, char *path_dst, const char *path_src)
+{
+  BPathRebase_Data *data = (BPathRebase_Data *)userdata;
+
+  data->count_tot++;
+
+  if (BLI_path_is_rel(path_src)) {
+    char filepath[(FILE_MAXDIR * 2) + FILE_MAXFILE];
+    BLI_strncpy(filepath, path_src, FILE_MAX);
+    if (BLI_path_abs(filepath, data->basedir_src)) {
+      BLI_cleanup_path(NULL, filepath);
+
+      /* This may fail, if so it's fine to leave absolute since the path is still valid. */
+      BLI_path_rel(filepath, data->basedir_dst);
+
+      BLI_strncpy(path_dst, filepath, FILE_MAX);
+      data->count_changed++;
+      return true;
+    }
+    else {
+      /* Failed to make relative path absolute. */
+      BLI_assert(0);
+      BKE_reportf(data->reports, RPT_WARNING, "Path '%s' cannot be made absolute", path_src);
+      data->count_failed++;
+      return false;
+    }
+    return false;
+  }
+  else {
+    /* Absolute, leave this as-is. */
+    return false;
+  }
+}
+
+void BKE_bpath_relative_rebase(Main *bmain,
+                               const char *basedir_src,
+                               const char *basedir_dst,
+                               ReportList *reports)
+{
+  BPathRebase_Data data = {NULL};
+  const int flag = BKE_BPATH_TRAVERSE_SKIP_LIBRARY;
+
+  BLI_assert(basedir_src[0] != '\0');
+  BLI_assert(basedir_dst[0] != '\0');
+
+  data.basedir_src = basedir_src;
+  data.basedir_dst = basedir_dst;
+  data.reports = reports;
+
+  BKE_bpath_traverse_main(bmain, bpath_relative_rebase_visit_cb, flag, (void *)&data);
+
+  BKE_reportf(reports,
+              data.count_failed ? RPT_WARNING : RPT_INFO,
+              "Total files %d | Changed %d | Failed %d",
+              data.count_tot,
+              data.count_changed,
+              data.count_failed);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Make Paths Relative
+ * \{ */
 
 typedef struct BPathRemap_Data {
   const char *basedir;
@@ -160,6 +246,12 @@ void BKE_bpath_relative_convert(Main *bmain, const char *basedir, ReportList *re
               data.count_failed);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Make Paths Absolute
+ * \{ */
+
 static bool bpath_absolute_convert_visit_cb(void *userdata, char *path_dst, const char *path_src)
 {
   BPathRemap_Data *data = (BPathRemap_Data *)userdata;
@@ -206,6 +298,12 @@ void BKE_bpath_absolute_convert(Main *bmain, const char *basedir, ReportList *re
               data.count_changed,
               data.count_failed);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Find Missing Files
+ * \{ */
 
 /**
  * find this file recursively, use the biggest file so thumbnails don't get used by mistake
@@ -349,7 +447,15 @@ void BKE_bpath_missing_files_find(Main *bmain,
   BKE_bpath_traverse_main(bmain, missing_files_find__visit_cb, flag, (void *)&data);
 }
 
-/* Run a visitor on a string, replacing the contents of the string as needed. */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Generic File Path Traversal API
+ * \{ */
+
+/**
+ * Run a visitor on a string, replacing the contents of the string as needed.
+ */
 static bool rewrite_path_fixed(char *path,
                                BPathVisitor visit_cb,
                                const char *absbase,
@@ -435,7 +541,9 @@ static bool rewrite_path_alloc(char **path,
   }
 }
 
-/* Run visitor function 'visit' on all paths contained in 'id'. */
+/**
+ * Run visitor function 'visit' on all paths contained in 'id'.
+ */
 void BKE_bpath_traverse_id(
     Main *bmain, ID *id, BPathVisitor visit_cb, const int flag, void *bpath_user_data)
 {
@@ -453,7 +561,8 @@ void BKE_bpath_traverse_id(
         /* Skip empty file paths, these are typically from generated images and
          * don't make sense to add directories to until the image has been saved
          * once to give it a meaningful value. */
-        if (ELEM(ima->source, IMA_SRC_FILE, IMA_SRC_MOVIE, IMA_SRC_SEQUENCE) && ima->name[0]) {
+        if (ELEM(ima->source, IMA_SRC_FILE, IMA_SRC_MOVIE, IMA_SRC_SEQUENCE, IMA_SRC_TILED) &&
+            ima->name[0]) {
           if (rewrite_path_fixed(ima->name, visit_cb, absbase, bpath_user_data)) {
             if (flag & BKE_BPATH_TRAVERSE_RELOAD_EDITED) {
               if (!BKE_image_has_packedfile(ima) &&
@@ -497,10 +606,10 @@ void BKE_bpath_traverse_id(
             rewrite_path_fixed(fluidmd->fss->surfdataPath, visit_cb, absbase, bpath_user_data);
           }
         }
-        else if (md->type == eModifierType_Smoke) {
-          SmokeModifierData *smd = (SmokeModifierData *)md;
-          if (smd->type & MOD_SMOKE_TYPE_DOMAIN) {
-            BPATH_TRAVERSE_POINTCACHE(smd->domain->ptcaches[0]);
+        else if (md->type == eModifierType_Fluid) {
+          FluidModifierData *mmd = (FluidModifierData *)md;
+          if (mmd->type & MOD_FLUID_TYPE_DOMAIN && mmd->domain) {
+            rewrite_path_fixed(mmd->domain->cache_directory, visit_cb, absbase, bpath_user_data);
           }
         }
         else if (md->type == eModifierType_Cloth) {
@@ -681,8 +790,10 @@ void BKE_bpath_traverse_main(Main *bmain,
   }
 }
 
-/* Rewrites a relative path to be relative to the main file - unless the path is
- * absolute, in which case it is not altered. */
+/**
+ * Rewrites a relative path to be relative to the main file - unless the path is
+ * absolute, in which case it is not altered.
+ */
 bool BKE_bpath_relocate_visitor(void *pathbase_v, char *path_dst, const char *path_src)
 {
   /* be sure there is low chance of the path being too short */
@@ -696,13 +807,13 @@ bool BKE_bpath_relocate_visitor(void *pathbase_v, char *path_dst, const char *pa
   }
 
   /* Make referenced file absolute. This would be a side-effect of
-   * BLI_cleanup_file, but we do it explicitly so we know if it changed. */
+   * BLI_cleanup_path, but we do it explicitly so we know if it changed. */
   BLI_strncpy(filepath, path_src, FILE_MAX);
   if (BLI_path_abs(filepath, base_old)) {
     /* Path was relative and is now absolute. Remap.
-     * Important BLI_cleanup_dir runs before the path is made relative
+     * Important BLI_cleanup_path runs before the path is made relative
      * because it wont work for paths that start with "//../" */
-    BLI_cleanup_file(base_new, filepath);
+    BLI_cleanup_path(base_new, filepath);
     BLI_path_rel(filepath, base_new);
     BLI_strncpy(path_dst, filepath, FILE_MAX);
     return true;
@@ -713,11 +824,13 @@ bool BKE_bpath_relocate_visitor(void *pathbase_v, char *path_dst, const char *pa
   }
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
-/**
- * Backup/Restore/Free functions,
+/** \name Backup/Restore/Free functions,
+ *
  * \note These functions assume the data won't change order.
- */
+ * \{ */
 
 struct PathStore {
   struct PathStore *next, *prev;
@@ -781,3 +894,5 @@ void BKE_bpath_list_free(void *ls_handle)
   BLI_freelistN(ls);
   MEM_freeN(ls);
 }
+
+/** \} */

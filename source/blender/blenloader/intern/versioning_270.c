@@ -46,7 +46,7 @@
 #include "DNA_particle_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_view3d_types.h"
-#include "DNA_smoke_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_light_types.h"
 
@@ -80,6 +80,9 @@
 #include "readfile.h"
 
 #include "MEM_guardedalloc.h"
+
+/* Make preferences read-only, use versioning_userdef.c. */
+#define U (*((const UserDef *)&U))
 
 /* ************************************************** */
 /* GP Palettes API (Deprecated) */
@@ -230,18 +233,18 @@ static void do_version_constraints_stretch_to_limits(ListBase *lb)
 
 static void do_version_action_editor_properties_region(ListBase *regionbase)
 {
-  ARegion *ar;
+  ARegion *region;
 
-  for (ar = regionbase->first; ar; ar = ar->next) {
-    if (ar->regiontype == RGN_TYPE_UI) {
+  for (region = regionbase->first; region; region = region->next) {
+    if (region->regiontype == RGN_TYPE_UI) {
       /* already exists */
       return;
     }
-    else if (ar->regiontype == RGN_TYPE_WINDOW) {
+    else if (region->regiontype == RGN_TYPE_WINDOW) {
       /* add new region here */
       ARegion *arnew = MEM_callocN(sizeof(ARegion), "buttons for action");
 
-      BLI_insertlinkbefore(regionbase, ar, arnew);
+      BLI_insertlinkbefore(regionbase, region, arnew);
 
       arnew->regiontype = RGN_TYPE_UI;
       arnew->alignment = RGN_ALIGN_RIGHT;
@@ -524,11 +527,11 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
         SpaceLink *sl;
 
         for (sl = sa->spacedata.first; sl; sl = sl->next) {
-          ARegion *ar;
+          ARegion *region;
           ListBase *lb = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
 
-          for (ar = lb->first; ar; ar = ar->next) {
-            BLI_listbase_clear(&ar->ui_previews);
+          for (region = lb->first; region; region = region->next) {
+            BLI_listbase_clear(&region->ui_previews);
           }
         }
       }
@@ -852,18 +855,18 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
     bScreen *scr;
     ScrArea *sa;
     SpaceLink *sl;
-    ARegion *ar;
+    ARegion *region;
 
     /* Make sure sequencer preview area limits zoom */
     for (scr = bmain->screens.first; scr; scr = scr->id.next) {
       for (sa = scr->areabase.first; sa; sa = sa->next) {
         for (sl = sa->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_SEQ) {
-            for (ar = sl->regionbase.first; ar; ar = ar->next) {
-              if (ar->regiontype == RGN_TYPE_PREVIEW) {
-                ar->v2d.keepzoom |= V2D_LIMITZOOM;
-                ar->v2d.minzoom = 0.001f;
-                ar->v2d.maxzoom = 1000.0f;
+            for (region = sl->regionbase.first; region; region = region->next) {
+              if (region->regiontype == RGN_TYPE_PREVIEW) {
+                region->v2d.keepzoom |= V2D_LIMITZOOM;
+                region->v2d.minzoom = 0.001f;
+                region->v2d.maxzoom = 1000.0f;
                 break;
               }
             }
@@ -1066,12 +1069,12 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
           SpaceLink *sl;
           for (sl = sa->spacedata.first; sl; sl = sl->next) {
             if (sl->spacetype == SPACE_VIEW3D) {
-              ARegion *ar;
+              ARegion *region;
               ListBase *lb = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
-              for (ar = lb->first; ar; ar = ar->next) {
-                if (ar->regiontype == RGN_TYPE_WINDOW) {
-                  if (ar->regiondata) {
-                    RegionView3D *rv3d = ar->regiondata;
+              for (region = lb->first; region; region = region->next) {
+                if (region->regiontype == RGN_TYPE_WINDOW) {
+                  if (region->regiondata) {
+                    RegionView3D *rv3d = region->regiondata;
                     if (rv3d->view == RV3D_VIEW_PERSPORTHO) {
                       rv3d->view = RV3D_VIEW_USER;
                     }
@@ -1113,80 +1116,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
   if (!MAIN_VERSION_ATLEAST(bmain, 276, 4)) {
     for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
       ToolSettings *ts = scene->toolsettings;
-
-      if (ts->gp_sculpt.brush[0].size == 0) {
-        GP_Sculpt_Settings *gset = &ts->gp_sculpt;
-        GP_Sculpt_Data *brush;
-
-        brush = &gset->brush[GP_SCULPT_TYPE_SMOOTH];
-        brush->size = 25;
-        brush->strength = 0.3f;
-        brush->flag = GP_SCULPT_FLAG_USE_FALLOFF | GP_SCULPT_FLAG_SMOOTH_PRESSURE;
-
-        brush = &gset->brush[GP_SCULPT_TYPE_THICKNESS];
-        brush->size = 25;
-        brush->strength = 0.5f;
-        brush->flag = GP_SCULPT_FLAG_USE_FALLOFF;
-
-        brush = &gset->brush[GP_SCULPT_TYPE_GRAB];
-        brush->size = 50;
-        brush->strength = 0.3f;
-        brush->flag = GP_SCULPT_FLAG_USE_FALLOFF;
-
-        brush = &gset->brush[GP_SCULPT_TYPE_PUSH];
-        brush->size = 25;
-        brush->strength = 0.3f;
-        brush->flag = GP_SCULPT_FLAG_USE_FALLOFF;
-
-        brush = &gset->brush[GP_SCULPT_TYPE_TWIST];
-        brush->size = 50;
-        brush->strength = 0.3f;  // XXX?
-        brush->flag = GP_SCULPT_FLAG_USE_FALLOFF;
-
-        brush = &gset->brush[GP_SCULPT_TYPE_PINCH];
-        brush->size = 50;
-        brush->strength = 0.5f;  // XXX?
-        brush->flag = GP_SCULPT_FLAG_USE_FALLOFF;
-
-        brush = &gset->brush[GP_SCULPT_TYPE_RANDOMIZE];
-        brush->size = 25;
-        brush->strength = 0.5f;
-        brush->flag = GP_SCULPT_FLAG_USE_FALLOFF;
-
-        brush = &gset->brush[GP_SCULPT_TYPE_CLONE];
-        brush->size = 50;
-        brush->strength = 1.0f;
-      }
-
       if (!DNA_struct_elem_find(fd->filesdna, "ToolSettings", "char", "gpencil_v3d_align")) {
-#if 0 /* XXX: Cannot do this, as we get random crashes... */
-        if (scene->gpd) {
-          bGPdata *gpd = scene->gpd;
-
-          /* Copy over the settings stored in the GP data-block linked to the scene,
-           * for minimal disruption. */
-          ts->gpencil_v3d_align = 0;
-
-          if (gpd->flag & GP_DATA_VIEWALIGN) {
-            ts->gpencil_v3d_align |= GP_PROJECT_VIEWSPACE;
-          }
-          if (gpd->flag & GP_DATA_DEPTH_VIEW) {
-            ts->gpencil_v3d_align |= GP_PROJECT_DEPTH_VIEW;
-          }
-          if (gpd->flag & GP_DATA_DEPTH_STROKE) {
-            ts->gpencil_v3d_align |= GP_PROJECT_DEPTH_STROKE;
-          }
-
-          if (gpd->flag & GP_DATA_DEPTH_STROKE_ENDPOINTS) {
-            ts->gpencil_v3d_align |= GP_PROJECT_DEPTH_STROKE_ENDPOINTS;
-          }
-        }
-        else {
-          /* Default to cursor for all standard 3D views */
-          ts->gpencil_v3d_align = GP_PROJECT_VIEWSPACE;
-        }
-#endif
-
         ts->gpencil_v3d_align = GP_PROJECT_VIEWSPACE;
         ts->gpencil_v2d_align = GP_PROJECT_VIEWSPACE;
         ts->gpencil_seq_align = GP_PROJECT_VIEWSPACE;
@@ -1200,7 +1130,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
       /* Ensure that the datablock's onion-skinning toggle flag
        * stays in sync with the status of the actual layers
        */
-      for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+      LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
         if (gpl->flag & GP_LAYER_ONIONSKIN) {
           enabled = true;
         }
@@ -1253,11 +1183,11 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
           if (sl->spacetype == SPACE_SEQ) {
             SpaceSeq *sseq = (SpaceSeq *)sl;
             if (sseq->view == SEQ_VIEW_SEQUENCE) {
-              for (ARegion *ar = regionbase->first; ar; ar = ar->next) {
+              for (ARegion *region = regionbase->first; region; region = region->next) {
                 /* remove preview region for sequencer-only view! */
-                if (ar->regiontype == RGN_TYPE_PREVIEW) {
-                  ar->flag |= RGN_FLAG_HIDDEN;
-                  ar->alignment = RGN_ALIGN_NONE;
+                if (region->regiontype == RGN_TYPE_PREVIEW) {
+                  region->flag |= RGN_FLAG_HIDDEN;
+                  region->alignment = RGN_ALIGN_NONE;
                   break;
                 }
               }
@@ -1265,11 +1195,11 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
           }
           /* Remove old deprecated region from filebrowsers */
           else if (sl->spacetype == SPACE_FILE) {
-            for (ARegion *ar = regionbase->first; ar; ar = ar->next) {
-              if (ar->regiontype == RGN_TYPE_CHANNELS) {
+            for (ARegion *region = regionbase->first; region; region = region->next) {
+              if (region->regiontype == RGN_TYPE_CHANNELS) {
                 /* Free old deprecated 'channel' region... */
-                BKE_area_region_free(NULL, ar);
-                BLI_freelinkN(regionbase, ar);
+                BKE_area_region_free(NULL, region);
+                BLI_freelinkN(regionbase, region);
                 break;
               }
             }
@@ -1421,22 +1351,6 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
   if (!MAIN_VERSION_ATLEAST(bmain, 277, 3)) {
     /* ------- init of grease pencil initialization --------------- */
     if (!DNA_struct_elem_find(fd->filesdna, "bGPDstroke", "bGPDpalettecolor", "*palcolor")) {
-      for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
-        ToolSettings *ts = scene->toolsettings;
-        /* initialize use position for sculpt brushes */
-        ts->gp_sculpt.flag |= GP_SCULPT_SETT_FLAG_APPLY_POSITION;
-
-        /* new strength sculpt brush */
-        if (ts->gp_sculpt.brush[0].size >= 11) {
-          GP_Sculpt_Settings *gset = &ts->gp_sculpt;
-          GP_Sculpt_Data *brush;
-
-          brush = &gset->brush[GP_SCULPT_TYPE_STRENGTH];
-          brush->size = 25;
-          brush->strength = 0.5f;
-          brush->flag = GP_SCULPT_FLAG_USE_FALLOFF;
-        }
-      }
       /* Convert Grease Pencil to new palettes/brushes
        * Loop all strokes and create the palette and all colors
        */
@@ -1444,7 +1358,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
         if (BLI_listbase_is_empty(&gpd->palettes)) {
           /* create palette */
           bGPDpalette *palette = BKE_gpencil_palette_addnew(gpd, "GP_Palette");
-          for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+          LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
             /* create color using layer name */
             bGPDpalettecolor *palcolor = BKE_gpencil_palettecolor_addnew(palette, gpl->info);
             if (palcolor != NULL) {
@@ -1472,8 +1386,8 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
               ARRAY_SET_ITEMS(gpl->tintcolor, 0.0f, 0.0f, 0.0f, 0.0f);
 
               /* flush relevant layer-settings to strokes */
-              for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
-                for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
+              LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+                LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
                   /* set stroke to palette and force recalculation */
                   BLI_strncpy(gps->colorname, gpl->info, sizeof(gps->colorname));
                   gps->thickness = gpl->thickness;
@@ -1546,18 +1460,18 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
 
-    if (!DNA_struct_elem_find(fd->filesdna, "SmokeModifierData", "float", "slice_per_voxel")) {
+    if (!DNA_struct_elem_find(fd->filesdna, "FluidModifierData", "float", "slice_per_voxel")) {
       Object *ob;
       ModifierData *md;
 
       for (ob = bmain->objects.first; ob; ob = ob->id.next) {
         for (md = ob->modifiers.first; md; md = md->next) {
-          if (md->type == eModifierType_Smoke) {
-            SmokeModifierData *smd = (SmokeModifierData *)md;
-            if (smd->domain) {
-              smd->domain->slice_per_voxel = 5.0f;
-              smd->domain->slice_depth = 0.5f;
-              smd->domain->display_thickness = 1.0f;
+          if (md->type == eModifierType_Fluid) {
+            FluidModifierData *mmd = (FluidModifierData *)md;
+            if (mmd->domain) {
+              mmd->domain->slice_per_voxel = 5.0f;
+              mmd->domain->slice_depth = 0.5f;
+              mmd->domain->display_thickness = 1.0f;
             }
           }
         }
@@ -1716,16 +1630,16 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 279, 3)) {
-    if (!DNA_struct_elem_find(fd->filesdna, "SmokeDomainSettings", "float", "clipping")) {
+    if (!DNA_struct_elem_find(fd->filesdna, "FluidDomainSettings", "float", "clipping")) {
       Object *ob;
       ModifierData *md;
 
       for (ob = bmain->objects.first; ob; ob = ob->id.next) {
         for (md = ob->modifiers.first; md; md = md->next) {
-          if (md->type == eModifierType_Smoke) {
-            SmokeModifierData *smd = (SmokeModifierData *)md;
-            if (smd->domain) {
-              smd->domain->clipping = 1e-3f;
+          if (md->type == eModifierType_Fluid) {
+            FluidModifierData *mmd = (FluidModifierData *)md;
+            if (mmd->domain) {
+              mmd->domain->clipping = 1e-3f;
             }
           }
         }
@@ -1747,8 +1661,8 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
       for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
         br->falloff_angle = DEG2RADF(80);
         /* These flags are used for new feautres. They are not related to falloff_angle */
-        br->flag &= ~(BRUSH_FLAG_UNUSED_1 | BRUSH_ORIGINAL_PLANE | BRUSH_GRAB_ACTIVE_VERTEX |
-                      BRUSH_SCENE_SPACING | BRUSH_FRONTFACE_FALLOFF);
+        br->flag &= ~(BRUSH_INVERT_TO_SCRAPE_FILL | BRUSH_ORIGINAL_PLANE |
+                      BRUSH_GRAB_ACTIVE_VERTEX | BRUSH_SCENE_SPACING | BRUSH_FRONTFACE_FALLOFF);
       }
 
       for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {

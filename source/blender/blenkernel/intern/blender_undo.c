@@ -73,7 +73,7 @@ bool BKE_memfile_undo_decode(MemFileUndoData *mfu, bContext *C)
   G.fileflags |= G_FILE_NO_UI;
 
   if (UNDO_DISK) {
-    success = BKE_blendfile_read(C, mfu->filename, NULL, 0);
+    success = BKE_blendfile_read(C, mfu->filename, &(const struct BlendFileReadParams){0}, NULL);
   }
   else {
     success = BKE_blendfile_read_from_memfile(
@@ -109,7 +109,7 @@ MemFileUndoData *BKE_memfile_undo_encode(Main *bmain, MemFileUndoData *mfu_prev)
     counter = counter % U.undosteps;
 
     BLI_snprintf(numstr, sizeof(numstr), "%d.blend", counter);
-    BLI_make_file_string("/", filename, BKE_tempdir_session(), numstr);
+    BLI_join_dirfile(filename, sizeof(filename), BKE_tempdir_session(), numstr);
 
     /* success = */ /* UNUSED */ BLO_write_file(bmain, filename, fileflags, NULL, NULL);
 

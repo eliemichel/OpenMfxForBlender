@@ -35,21 +35,9 @@ set(LIB
 )
 
 if(WITH_OPENVDB)
-  add_definitions(
-    -DWITH_OPENVDB
-    ${OPENVDB_DEFINITIONS}
-  )
-
-  if(WITH_OPENVDB_3_ABI_COMPATIBLE)
-    add_definitions(
-      -DOPENVDB_3_ABI_COMPATIBLE
-    )
-  endif()
+  add_definitions(-DWITH_OPENVDB ${OPENVDB_DEFINITIONS})
 
   list(APPEND INC_SYS
-    ${BOOST_INCLUDE_DIR}
-    ${TBB_INCLUDE_DIRS}
-    ${OPENEXR_INCLUDE_DIRS}
     ${OPENVDB_INCLUDE_DIRS}
   )
 
@@ -70,11 +58,9 @@ if(WITH_OPENVDB)
     openvdb_util.h
   )
 
-  if(WITH_OPENVDB_BLOSC)
-    add_definitions(
-      -DWITH_OPENVDB_BLOSC
-    )
-  endif()
+  list(APPEND LIB
+    ${OPENVDB_LIBRARIES}
+  )
 endif()
 
 blender_add_lib(bf_intern_openvdb "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

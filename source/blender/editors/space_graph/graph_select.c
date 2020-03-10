@@ -179,7 +179,7 @@ static void get_nearest_fcurve_verts_list(bAnimContext *ac, const int mval[2], L
   int filter;
 
   SpaceGraph *sipo = (SpaceGraph *)ac->sl;
-  View2D *v2d = &ac->ar->v2d;
+  View2D *v2d = &ac->region->v2d;
   short mapping_flag = 0;
 
   /* get curves to search through
@@ -521,7 +521,7 @@ static void box_select_graphkeys(bAnimContext *ac,
   SpaceGraph *sipo = (SpaceGraph *)ac->sl;
   KeyframeEditData ked;
   KeyframeEditFunc ok_cb, select_cb;
-  View2D *v2d = &ac->ar->v2d;
+  View2D *v2d = &ac->region->v2d;
   rctf rectf, scaled_rectf;
 
   /* Convert mouse coordinates to frame ranges and
@@ -550,6 +550,10 @@ static void box_select_graphkeys(bAnimContext *ac,
   }
   else {
     ked.data = &scaled_rectf;
+  }
+
+  if (sipo->flag & SIPO_SELVHANDLESONLY) {
+    ked.iterflags |= KEYFRAME_ITER_HANDLES_DEFAULT_INVISIBLE;
   }
 
   /* treat handles separately? */
@@ -720,13 +724,17 @@ void GRAPH_OT_select_box(wmOperatorType *ot)
 
   /* properties */
   ot->prop = RNA_def_boolean(ot->srna, "axis_range", 0, "Axis Range", "");
-  RNA_def_boolean(ot->srna,
-                  "include_handles",
-                  0,
-                  "Include Handles",
-                  "Are handles tested individually against the selection criteria");
+  RNA_def_property_flag(ot->prop, PROP_SKIP_SAVE);
 
-  PropertyRNA *prop = RNA_def_boolean(
+  PropertyRNA *prop;
+  prop = RNA_def_boolean(ot->srna,
+                         "include_handles",
+                         true,
+                         "Include Handles",
+                         "Are handles tested individually against the selection criteria");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
+  prop = RNA_def_boolean(
       ot->srna, "tweak", 0, "Tweak", "Operator has been activated using a tweak event");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
@@ -1362,8 +1370,8 @@ static int graphkeys_select_leftright_invoke(bContext *C, wmOperator *op, const 
   /* handle mode-based testing */
   if (leftright == GRAPHKEYS_LRSEL_TEST) {
     Scene *scene = ac.scene;
-    ARegion *ar = ac.ar;
-    View2D *v2d = &ar->v2d;
+    ARegion *region = ac.region;
+    View2D *v2d = &region->v2d;
     float x;
 
     /* determine which side of the current frame mouse is on */
@@ -1417,23 +1425,42 @@ void GRAPH_OT_select_leftright(wmOperatorType *ot)
  */
 
 /* option 1) select keyframe directly under mouse */
-static void mouse_graph_keys(bAnimContext *ac,
-                             const int mval[2],
-                             short select_mode,
-                             const bool deselect_all,
-                             const bool curves_only)
+static int mouse_graph_keys(bAnimContext *ac,
+                            const int mval[2],
+                            eEditKeyframes_Select select_mode,
+                            const bool deselect_all,
+                            const bool curves_only,
+                            bool wait_to_deselect_others)
 {
   SpaceGraph *sipo = (SpaceGraph *)ac->sl;
   tNearestVertInfo *nvi;
   BezTriple *bezt = NULL;
+  bool run_modal = false;
 
   /* find the beztriple that we're selecting, and the handle that was clicked on */
   nvi = find_nearest_fcurve_vert(ac, mval);
 
+  if (select_mode != SELECT_REPLACE) {
+    /* The modal execution to delay deselecting other items is only needed for normal click
+     * selection, i.e. for SELECT_REPLACE. */
+    wait_to_deselect_others = false;
+  }
+
+  sipo->runtime.flag &= ~(SIPO_RUNTIME_FLAG_TWEAK_HANDLES_LEFT |
+                          SIPO_RUNTIME_FLAG_TWEAK_HANDLES_RIGHT);
+
+  const bool already_selected =
+      (nvi != NULL) && (((nvi->hpoint == NEAREST_HANDLE_KEY) && (nvi->bezt->f2 & SELECT)) ||
+                        ((nvi->hpoint == NEAREST_HANDLE_LEFT) && (nvi->bezt->f1 & SELECT)) ||
+                        ((nvi->hpoint == NEAREST_HANDLE_RIGHT) && (nvi->bezt->f3 & SELECT)));
+
+  if (wait_to_deselect_others && nvi && already_selected) {
+    run_modal = true;
+  }
   /* For replacing selection, if we have something to select, we have to clear existing selection.
    * The same goes if we found nothing to select, and deselect_all is true
    * (deselect on nothing behavior). */
-  if ((nvi != NULL && select_mode == SELECT_REPLACE) || (nvi == NULL && deselect_all)) {
+  else if ((nvi != NULL && select_mode == SELECT_REPLACE) || (nvi == NULL && deselect_all)) {
     /* reset selection mode */
     select_mode = SELECT_ADD;
 
@@ -1450,7 +1477,7 @@ static void mouse_graph_keys(bAnimContext *ac,
   }
 
   if (nvi == NULL) {
-    return;
+    return deselect_all ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
   }
 
   /* if points can be selected on this F-Curve */
@@ -1458,20 +1485,12 @@ static void mouse_graph_keys(bAnimContext *ac,
   if (!curves_only && ((nvi->fcu->flag & FCURVE_PROTECTED) == 0)) {
     /* only if there's keyframe */
     if (nvi->bezt) {
-      bezt = nvi->bezt; /* used to check bezt seletion is set */
+      bezt = nvi->bezt; /* Used to check `bezt` selection is set. */
       /* depends on selection mode */
       if (select_mode == SELECT_INVERT) {
-        /* keyframe - invert select of all */
         if (nvi->hpoint == NEAREST_HANDLE_KEY) {
-          if (BEZT_ISSEL_ANY(bezt)) {
-            BEZT_DESEL_ALL(bezt);
-          }
-          else {
-            BEZT_SEL_ALL(bezt);
-          }
+          bezt->f2 ^= SELECT;
         }
-
-        /* handles - toggle selection of relevant handle */
         else if (nvi->hpoint == NEAREST_HANDLE_LEFT) {
           /* toggle selection */
           bezt->f1 ^= SELECT;
@@ -1482,11 +1501,9 @@ static void mouse_graph_keys(bAnimContext *ac,
         }
       }
       else {
-        /* if the keyframe was clicked on, select all verts of given beztriple */
         if (nvi->hpoint == NEAREST_HANDLE_KEY) {
-          BEZT_SEL_ALL(bezt);
+          bezt->f2 |= SELECT;
         }
-        /* otherwise, select the handle that applied */
         else if (nvi->hpoint == NEAREST_HANDLE_LEFT) {
           bezt->f1 |= SELECT;
         }
@@ -1547,8 +1564,17 @@ static void mouse_graph_keys(bAnimContext *ac,
     ANIM_set_active_channel(ac, ac->data, ac->datatype, filter, nvi->fcu, nvi->ctype);
   }
 
+  if (nvi->hpoint == NEAREST_HANDLE_LEFT) {
+    sipo->runtime.flag |= SIPO_RUNTIME_FLAG_TWEAK_HANDLES_LEFT;
+  }
+  else if (nvi->hpoint == NEAREST_HANDLE_RIGHT) {
+    sipo->runtime.flag |= SIPO_RUNTIME_FLAG_TWEAK_HANDLES_RIGHT;
+  }
+
   /* free temp sample data for filtering */
   MEM_freeN(nvi);
+
+  return run_modal ? OPERATOR_RUNNING_MODAL : OPERATOR_FINISHED;
 }
 
 /* Option 2) Selects all the keyframes on either side of the current frame
@@ -1556,11 +1582,15 @@ static void mouse_graph_keys(bAnimContext *ac,
 /* (see graphkeys_select_leftright) */
 
 /* Option 3) Selects all visible keyframes in the same frame as the mouse click */
-static void graphkeys_mselect_column(bAnimContext *ac, const int mval[2], short select_mode)
+static int graphkeys_mselect_column(bAnimContext *ac,
+                                    const int mval[2],
+                                    eEditKeyframes_Select select_mode,
+                                    bool wait_to_deselect_others)
 {
   ListBase anim_data = {NULL, NULL};
   bAnimListElem *ale;
   int filter;
+  bool run_modal = false;
 
   KeyframeEditFunc select_cb, ok_cb;
   KeyframeEditData ked;
@@ -1572,15 +1602,22 @@ static void graphkeys_mselect_column(bAnimContext *ac, const int mval[2], short 
 
   /* check if anything to select */
   if (nvi == NULL) {
-    return;
+    return OPERATOR_CANCELLED;
   }
 
   /* get frame number on which elements should be selected */
   // TODO: should we restrict to integer frames only?
   selx = nvi->frame;
 
-  /* if select mode is replace, deselect all keyframes first */
-  if (select_mode == SELECT_REPLACE) {
+  if (select_mode != SELECT_REPLACE) {
+    /* Doesn't need to deselect anything -> Pass. */
+  }
+  else if (wait_to_deselect_others && (nvi->bezt->f2 & SELECT)) {
+    run_modal = true;
+  }
+  /* If select mode is replace (and we don't do delayed deselection on mouse release), deselect all
+   * keyframes first. */
+  else {
     /* reset selection mode to add to selection */
     select_mode = SELECT_ADD;
 
@@ -1622,12 +1659,14 @@ static void graphkeys_mselect_column(bAnimContext *ac, const int mval[2], short 
   MEM_freeN(nvi);
   BLI_freelistN(&ked.list);
   ANIM_animdata_freelist(&anim_data);
+
+  return run_modal ? OPERATOR_RUNNING_MODAL : OPERATOR_FINISHED;
 }
 
 /* ------------------- */
 
 /* handle clicking */
-static int graphkeys_clickselect_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+static int graphkeys_clickselect_exec(bContext *C, wmOperator *op)
 {
   bAnimContext ac;
 
@@ -1639,27 +1678,37 @@ static int graphkeys_clickselect_invoke(bContext *C, wmOperator *op, const wmEve
   /* select mode is either replace (deselect all, then add) or add/extend */
   const short selectmode = RNA_boolean_get(op->ptr, "extend") ? SELECT_INVERT : SELECT_REPLACE;
   const bool deselect_all = RNA_boolean_get(op->ptr, "deselect_all");
+  /* See #WM_operator_properties_generic_select() for a detailed description of the how and why of
+   * this. */
+  const bool wait_to_deselect_others = RNA_boolean_get(op->ptr, "wait_to_deselect_others");
+  int mval[2];
+  int ret_val;
+
+  mval[0] = RNA_int_get(op->ptr, "mouse_x");
+  mval[1] = RNA_int_get(op->ptr, "mouse_y");
 
   /* figure out action to take */
   if (RNA_boolean_get(op->ptr, "column")) {
     /* select all keyframes in the same frame as the one that was under the mouse */
-    graphkeys_mselect_column(&ac, event->mval, selectmode);
+    ret_val = graphkeys_mselect_column(&ac, mval, selectmode, wait_to_deselect_others);
   }
   else if (RNA_boolean_get(op->ptr, "curves")) {
     /* select all keyframes in the same F-Curve as the one under the mouse */
-    mouse_graph_keys(&ac, event->mval, selectmode, deselect_all, true);
+    ret_val = mouse_graph_keys(&ac, mval, selectmode, deselect_all, true, wait_to_deselect_others);
   }
   else {
     /* select keyframe under mouse */
-    mouse_graph_keys(&ac, event->mval, selectmode, deselect_all, false);
+    ret_val = mouse_graph_keys(
+        &ac, mval, selectmode, deselect_all, false, wait_to_deselect_others);
   }
 
-  /* set notifier that keyframe selection (and also channel selection in some cases) has changed */
+  /* set notifier that keyframe selection (and also channel selection in some cases) has
+   * changed */
   WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_SELECTED, NULL);
   WM_event_add_notifier(C, NC_ANIMATION | ND_ANIMCHAN | NA_SELECTED, NULL);
 
   /* for tweak grab to work */
-  return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
+  return ret_val | OPERATOR_PASS_THROUGH;
 }
 
 void GRAPH_OT_clickselect(wmOperatorType *ot)
@@ -1672,19 +1721,22 @@ void GRAPH_OT_clickselect(wmOperatorType *ot)
   ot->description = "Select keyframes by clicking on them";
 
   /* callbacks */
-  ot->invoke = graphkeys_clickselect_invoke;
   ot->poll = graphop_visible_keyframes_poll;
+  ot->exec = graphkeys_clickselect_exec;
+  ot->invoke = WM_generic_select_invoke;
+  ot->modal = WM_generic_select_modal;
 
   /* flags */
   ot->flag = OPTYPE_UNDO;
 
   /* properties */
-  prop = RNA_def_boolean(
-      ot->srna,
-      "extend",
-      0,
-      "Extend Select",
-      "Toggle keyframe selection instead of leaving newly selected keyframes only");  // SHIFTKEY
+  WM_operator_properties_generic_select(ot);
+  prop = RNA_def_boolean(ot->srna,
+                         "extend",
+                         0,
+                         "Extend Select",
+                         "Toggle keyframe selection instead of leaving newly selected "
+                         "keyframes only");  // SHIFTKEY
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
   prop = RNA_def_boolean(ot->srna,
@@ -1694,12 +1746,12 @@ void GRAPH_OT_clickselect(wmOperatorType *ot)
                          "Deselect all when nothing under the cursor");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
-  prop = RNA_def_boolean(
-      ot->srna,
-      "column",
-      0,
-      "Column Select",
-      "Select all keyframes that occur on the same frame as the one under the mouse");  // ALTKEY
+  prop = RNA_def_boolean(ot->srna,
+                         "column",
+                         0,
+                         "Column Select",
+                         "Select all keyframes that occur on the same frame as the one under "
+                         "the mouse");  // ALTKEY
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
   prop = RNA_def_boolean(ot->srna,

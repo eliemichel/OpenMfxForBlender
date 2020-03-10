@@ -84,7 +84,7 @@
 bool paint_convert_bb_to_rect(rcti *rect,
                               const float bb_min[3],
                               const float bb_max[3],
-                              const ARegion *ar,
+                              const ARegion *region,
                               RegionView3D *rv3d,
                               Object *ob)
 {
@@ -109,7 +109,7 @@ bool paint_convert_bb_to_rect(rcti *rect,
         vec[1] = j ? bb_min[1] : bb_max[1];
         vec[2] = k ? bb_min[2] : bb_max[2];
         /* convert corner to screen space */
-        ED_view3d_project_float_v2_m4(ar, vec, proj, projection_mat);
+        ED_view3d_project_float_v2_m4(region, vec, proj, projection_mat);
         /* expand 2D rectangle */
 
         /* we could project directly to int? */
@@ -129,7 +129,7 @@ bool paint_convert_bb_to_rect(rcti *rect,
  * screen_rect from screen into object-space (essentially converting a
  * 2D screens-space bounding box into four 3D planes) */
 void paint_calc_redraw_planes(float planes[4][4],
-                              const ARegion *ar,
+                              const ARegion *region,
                               Object *ob,
                               const rcti *screen_rect)
 {
@@ -143,7 +143,7 @@ void paint_calc_redraw_planes(float planes[4][4],
   rect.ymin -= 2;
   rect.ymax += 2;
 
-  ED_view3d_clipping_calc(&bb, planes, ar, ob, &rect);
+  ED_view3d_clipping_calc(&bb, planes, region, ob, &rect);
 }
 
 float paint_calc_object_space_radius(ViewContext *vc, const float center[3], float pixel_radius)
@@ -156,7 +156,7 @@ float paint_calc_object_space_radius(ViewContext *vc, const float center[3], flo
   mul_v3_m4v3(loc, ob->obmat, center);
 
   zfac = ED_view3d_calc_zfac(vc->rv3d, loc, NULL);
-  ED_view3d_win_to_delta(vc->ar, mval_f, delta, zfac);
+  ED_view3d_win_to_delta(vc->region, mval_f, delta, zfac);
 
   scale = fabsf(mat4_to_scale(ob->obmat));
   scale = (scale == 0.0f) ? 1.0f : scale;
@@ -202,10 +202,7 @@ void paint_get_tex_pixel_col(const MTex *mtex,
 
   linearrgb_to_srgb_v3_v3(rgba, rgba);
 
-  CLAMP(rgba[0], 0.0f, 1.0f);
-  CLAMP(rgba[1], 0.0f, 1.0f);
-  CLAMP(rgba[2], 0.0f, 1.0f);
-  CLAMP(rgba[3], 0.0f, 1.0f);
+  clamp_v4(rgba, 0.0f, 1.0f);
 }
 
 void paint_stroke_operator_properties(wmOperatorType *ot)
@@ -348,7 +345,7 @@ static void imapaint_pick_uv(Mesh *me_eval,
         const Material *ma;
         const TexPaintSlot *slot;
 
-        ma = give_current_material(ob_eval, mp->mat_nr + 1);
+        ma = BKE_object_material_get(ob_eval, mp->mat_nr + 1);
         slot = &ma->texpaintslot[ma->paint_active_slot];
 
         if (!(slot && slot->uvname &&
@@ -390,7 +387,7 @@ static int imapaint_pick_face(ViewContext *vc,
 
   /* sample only on the exact position */
   ED_view3d_select_id_validate(vc);
-  *r_index = DRW_select_buffer_sample_point(vc->depsgraph, vc->ar, vc->v3d, mval);
+  *r_index = DRW_select_buffer_sample_point(vc->depsgraph, vc->region, vc->v3d, mval);
 
   if ((*r_index) == 0 || (*r_index) > (unsigned int)totpoly) {
     return 0;
@@ -405,14 +402,14 @@ static Image *imapaint_face_image(Object *ob, Mesh *me, int face_index)
 {
   Image *ima;
   MPoly *mp = me->mpoly + face_index;
-  Material *ma = give_current_material(ob, mp->mat_nr + 1);
+  Material *ma = BKE_object_material_get(ob, mp->mat_nr + 1);
   ima = ma && ma->texpaintslot ? ma->texpaintslot[ma->paint_active_slot].ima : NULL;
 
   return ima;
 }
 
 /* Uses symm to selectively flip any axis of a coordinate. */
-void flip_v3_v3(float out[3], const float in[3], const char symm)
+void flip_v3_v3(float out[3], const float in[3], const ePaintSymmetryFlags symm)
 {
   if (symm & PAINT_SYMM_X) {
     out[0] = -in[0];
@@ -434,7 +431,7 @@ void flip_v3_v3(float out[3], const float in[3], const char symm)
   }
 }
 
-void flip_qt_qt(float out[4], const float in[4], const char symm)
+void flip_qt_qt(float out[4], const float in[4], const ePaintSymmetryFlags symm)
 {
   float axis[3], angle;
 
@@ -459,7 +456,7 @@ void flip_qt_qt(float out[4], const float in[4], const char symm)
 
 /* used for both 3d view and image window */
 void paint_sample_color(
-    bContext *C, ARegion *ar, int x, int y, bool texpaint_proj, bool use_palette)
+    bContext *C, ARegion *region, int x, int y, bool texpaint_proj, bool use_palette)
 {
   Scene *scene = CTX_data_scene(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
@@ -470,8 +467,8 @@ void paint_sample_color(
   unsigned int col;
   const unsigned char *cp;
 
-  CLAMP(x, 0, ar->winx);
-  CLAMP(y, 0, ar->winy);
+  CLAMP(x, 0, region->winx);
+  CLAMP(y, 0, region->winy);
 
   if (use_palette) {
     if (!palette) {
@@ -519,13 +516,22 @@ void paint_sample_color(
           }
 
           if (image) {
-            ImBuf *ibuf = BKE_image_acquire_ibuf(image, NULL, NULL);
-            if (ibuf && ibuf->rect) {
-              float uv[2];
-              float u, v;
-              imapaint_pick_uv(me_eval, scene, ob_eval, faceindex, mval, uv);
-              sample_success = true;
+            float uv[2];
+            float u, v;
+            /* XXX get appropriate ImageUser instead */
+            ImageUser iuser;
+            BKE_imageuser_default(&iuser);
+            iuser.framenr = image->lastframe;
 
+            imapaint_pick_uv(me_eval, scene, ob_eval, faceindex, mval, uv);
+
+            if (image->source == IMA_SRC_TILED) {
+              float new_uv[2];
+              iuser.tile = BKE_image_get_tile_from_pos(image, uv, new_uv, NULL);
+              u = new_uv[0];
+              v = new_uv[1];
+            }
+            else {
               u = fmodf(uv[0], 1.0f);
               v = fmodf(uv[1], 1.0f);
 
@@ -535,6 +541,11 @@ void paint_sample_color(
               if (v < 0.0f) {
                 v += 1.0f;
               }
+            }
+
+            ImBuf *ibuf = BKE_image_acquire_ibuf(image, &iuser, NULL);
+            if (ibuf && (ibuf->rect || ibuf->rect_float)) {
+              sample_success = true;
 
               u = u * ibuf->x;
               v = v * ibuf->y;
@@ -574,7 +585,7 @@ void paint_sample_color(
     if (!sample_success) {
       glReadBuffer(GL_FRONT);
       glReadPixels(
-          x + ar->winrct.xmin, y + ar->winrct.ymin, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &col);
+          x + region->winrct.xmin, y + region->winrct.ymin, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &col);
       glReadBuffer(GL_BACK);
     }
     else {
@@ -583,7 +594,8 @@ void paint_sample_color(
   }
   else {
     glReadBuffer(GL_FRONT);
-    glReadPixels(x + ar->winrct.xmin, y + ar->winrct.ymin, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &col);
+    glReadPixels(
+        x + region->winrct.xmin, y + region->winrct.ymin, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &col);
     glReadBuffer(GL_BACK);
   }
   cp = (unsigned char *)&col;

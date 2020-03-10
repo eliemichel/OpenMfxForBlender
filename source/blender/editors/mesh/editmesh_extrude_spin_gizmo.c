@@ -103,11 +103,8 @@ typedef struct GizmoGroupData_SpinInit {
 #define INIT_SCALE_BUTTON 0.15f
 
 static const uchar shape_plus[] = {
-    0x5f, 0xfb, 0x40, 0xee, 0x25, 0xda, 0x11, 0xbf, 0x4,  0xa0, 0x0,  0x80, 0x4,  0x5f, 0x11, 0x40,
-    0x25, 0x25, 0x40, 0x11, 0x5f, 0x4,  0x7f, 0x0,  0xa0, 0x4,  0xbf, 0x11, 0xda, 0x25, 0xee, 0x40,
-    0xfb, 0x5f, 0xff, 0x7f, 0xfb, 0xa0, 0xee, 0xbf, 0xda, 0xda, 0xbf, 0xee, 0xa0, 0xfb, 0x80, 0xff,
-    0x6e, 0xd7, 0x92, 0xd7, 0x92, 0x90, 0xd8, 0x90, 0xd8, 0x6d, 0x92, 0x6d, 0x92, 0x27, 0x6e, 0x27,
-    0x6e, 0x6d, 0x28, 0x6d, 0x28, 0x90, 0x6e, 0x90, 0x6e, 0xd7, 0x80, 0xff, 0x5f, 0xfb, 0x5f, 0xfb,
+    0x73, 0x73, 0x73, 0x36, 0x8c, 0x36, 0x8c, 0x73, 0xc9, 0x73, 0xc9, 0x8c, 0x8c,
+    0x8c, 0x8c, 0xc9, 0x73, 0xc9, 0x73, 0x8c, 0x36, 0x8c, 0x36, 0x73, 0x36, 0x73,
 };
 
 static void gizmo_mesh_spin_init_setup(const bContext *UNUSED(C), wmGizmoGroup *gzgroup)
@@ -129,6 +126,8 @@ static void gizmo_mesh_spin_init_setup(const bContext *UNUSED(C), wmGizmoGroup *
       PropertyRNA *prop = RNA_struct_find_property(gz->ptr, "shape");
       RNA_property_string_set_bytes(
           gz->ptr, prop, (const char *)shape_plus, ARRAY_SIZE(shape_plus));
+
+      RNA_enum_set(gz->ptr, "draw_options", ED_GIZMO_BUTTON_SHOW_BACKDROP);
 
       float color[4];
       UI_GetThemeColor3fv(TH_AXIS_X + i, color);
@@ -430,11 +429,11 @@ static void gizmo_mesh_spin_init_message_subscribe(const bContext *C,
 {
   GizmoGroupData_SpinInit *ggd = gzgroup->customdata;
   Scene *scene = CTX_data_scene(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   /* Subscribe to view properties */
   wmMsgSubscribeValue msg_sub_value_gz_tag_refresh = {
-      .owner = ar,
+      .owner = region,
       .user_data = gzgroup->parent_gzmap,
       .notify = WM_gizmo_do_msg_notify_tag_refresh,
   };
@@ -906,8 +905,8 @@ static void gizmo_mesh_spin_redo_setup(const bContext *C, wmGizmoGroup *gzgroup)
    * Initialize the orientation from the spin gizmo if possible.
    */
   {
-    ARegion *ar = CTX_wm_region(C);
-    wmGizmoMap *gzmap = ar->gizmo_map;
+    ARegion *region = CTX_wm_region(C);
+    wmGizmoMap *gzmap = region->gizmo_map;
     wmGizmoGroup *gzgroup_init = WM_gizmomap_group_find(gzmap, "MESH_GGT_spin");
     if (gzgroup_init) {
       GizmoGroupData_SpinInit *ggd_init = gzgroup_init->customdata;
@@ -927,7 +926,7 @@ static void gizmo_mesh_spin_redo_setup(const bContext *C, wmGizmoGroup *gzgroup)
   {
     wmWindow *win = CTX_wm_window(C);
     View3D *v3d = CTX_wm_view3d(C);
-    ARegion *ar = CTX_wm_region(C);
+    ARegion *region = CTX_wm_region(C);
     const wmEvent *event = win->eventstate;
     float plane_co[3], plane_no[3];
     RNA_property_float_get_array(op->ptr, ggd->data.prop_axis_co, plane_co);
@@ -938,11 +937,11 @@ static void gizmo_mesh_spin_redo_setup(const bContext *C, wmGizmoGroup *gzgroup)
     /* Use cursor as fallback if it's not set by the 'ortho_axis_active'. */
     if (is_zero_v3(ggd->data.orient_axis_relative)) {
       float cursor_co[3];
-      const int mval[2] = {event->x - ar->winrct.xmin, event->y - ar->winrct.ymin};
+      const int mval[2] = {event->x - region->winrct.xmin, event->y - region->winrct.ymin};
       float plane[4];
       plane_from_point_normal_v3(plane, plane_co, plane_no);
-      if (UNLIKELY(!ED_view3d_win_to_3d_on_plane_int(ar, plane, mval, false, cursor_co))) {
-        ED_view3d_win_to_3d_int(v3d, ar, plane, mval, cursor_co);
+      if (UNLIKELY(!ED_view3d_win_to_3d_on_plane_int(region, plane, mval, false, cursor_co))) {
+        ED_view3d_win_to_3d_int(v3d, region, plane, mval, cursor_co);
       }
       sub_v3_v3v3(ggd->data.orient_axis_relative, cursor_co, plane_co);
     }
@@ -1011,8 +1010,8 @@ static void gizmo_mesh_spin_redo_setup(const bContext *C, wmGizmoGroup *gzgroup)
   if (win && win->active) {
     bScreen *screen = WM_window_get_active_screen(win);
     if (screen->active_region) {
-      ARegion *ar = CTX_wm_region(C);
-      if (screen->active_region == ar) {
+      ARegion *region = CTX_wm_region(C);
+      if (screen->active_region == region) {
         /* Become modal as soon as it's started. */
         gizmo_mesh_spin_redo_modal_from_setup(C, gzgroup);
       }

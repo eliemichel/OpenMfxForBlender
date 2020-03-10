@@ -148,7 +148,7 @@ static void move_geom_draw(const wmGizmo *gz,
 
 static void move3d_get_translate(const wmGizmo *gz,
                                  const wmEvent *event,
-                                 const ARegion *ar,
+                                 const ARegion *region,
                                  float co_delta[3])
 {
   MoveInteraction *inter = gz->interaction_data;
@@ -157,12 +157,12 @@ static void move3d_get_translate(const wmGizmo *gz,
       event->mval[1] - inter->init.mval[1],
   };
 
-  RegionView3D *rv3d = ar->regiondata;
+  RegionView3D *rv3d = region->regiondata;
   float co_ref[3];
   mul_v3_mat3_m4v3(co_ref, gz->matrix_space, inter->init.prop_co);
   const float zfac = ED_view3d_calc_zfac(rv3d, co_ref, NULL);
 
-  ED_view3d_win_to_delta(ar, mval_delta, co_delta, zfac);
+  ED_view3d_win_to_delta(region, mval_delta, co_delta, zfac);
 
   float matrix_space_inv[3][3];
   copy_m3_m4(matrix_space_inv, gz->matrix_space);
@@ -246,11 +246,11 @@ static int gizmo_move_modal(bContext *C,
     return OPERATOR_RUNNING_MODAL;
   }
   MoveGizmo3D *move = (MoveGizmo3D *)gz;
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   float prop_delta[3];
   if (CTX_wm_area(C)->spacetype == SPACE_VIEW3D) {
-    move3d_get_translate(gz, event, ar, prop_delta);
+    move3d_get_translate(gz, event, region, prop_delta);
   }
   else {
     float mval_proj_init[2], mval_proj_curr[2];
@@ -276,6 +276,7 @@ static int gizmo_move_modal(bContext *C,
       float co[3];
       if (ED_transform_snap_object_project_view3d(
               inter->snap_context_v3d,
+              CTX_data_ensure_evaluated_depsgraph(C),
               (SCE_SNAP_MODE_VERTEX | SCE_SNAP_MODE_EDGE | SCE_SNAP_MODE_FACE),
               &(const struct SnapObjectParams){
                   .snap_select = SNAP_ALL,
@@ -303,7 +304,7 @@ static int gizmo_move_modal(bContext *C,
     zero_v3(move->prop_co);
   }
 
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw_editor_overlays(region);
 
   inter->prev.tweak_flag = tweak_flag;
 
@@ -335,6 +336,13 @@ static void gizmo_move_exit(bContext *C, wmGizmo *gz, const bool cancel)
     ED_transform_snap_object_context_destroy(inter->snap_context_v3d);
     inter->snap_context_v3d = NULL;
   }
+
+  if (!cancel) {
+    wmGizmoProperty *gz_prop = WM_gizmo_target_property_find(gz, "offset");
+    if (WM_gizmo_target_property_is_valid(gz_prop)) {
+      WM_gizmo_target_property_anim_autokey(C, gz, gz_prop);
+    }
+  }
 }
 
 static int gizmo_move_invoke(bContext *C, wmGizmo *gz, const wmEvent *event)
@@ -362,12 +370,7 @@ static int gizmo_move_invoke(bContext *C, wmGizmo *gz, const wmEvent *event)
       switch (sa->spacetype) {
         case SPACE_VIEW3D: {
           inter->snap_context_v3d = ED_transform_snap_object_context_create_view3d(
-              CTX_data_main(C),
-              CTX_data_scene(C),
-              CTX_data_ensure_evaluated_depsgraph(C),
-              0,
-              CTX_wm_region(C),
-              CTX_wm_view3d(C));
+              CTX_data_main(C), CTX_data_scene(C), 0, CTX_wm_region(C), CTX_wm_view3d(C));
           break;
         }
         default:

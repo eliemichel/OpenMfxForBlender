@@ -46,12 +46,13 @@
 #include "BKE_collection.h"
 #include "BKE_context.h"
 #include "BKE_constraint.h"
+#include "BKE_object.h"
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
-#include "BKE_library_override.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_override.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
@@ -546,10 +547,11 @@ static void merged_element_search_call_cb(struct bContext *C, void *UNUSED(arg1)
   }
 }
 
-/** Merged element search menu
+/**
+ * Merged element search menu
  * Created on activation of a merged or aggregated icon-row icon.
  */
-static uiBlock *merged_element_search_menu(bContext *C, ARegion *ar, void *data)
+static uiBlock *merged_element_search_menu(bContext *C, ARegion *region, void *data)
 {
   static char search[64] = "";
   uiBlock *block;
@@ -558,7 +560,7 @@ static uiBlock *merged_element_search_menu(bContext *C, ARegion *ar, void *data)
   /* Clear search on each menu creation */
   *search = '\0';
 
-  block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
+  block = UI_block_begin(C, region, __func__, UI_EMBOSS);
   UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_MOVEMOUSE_QUIT | UI_BLOCK_SEARCH_MENU);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 
@@ -677,8 +679,8 @@ static void object_delete_cb(bContext *C,
     }
 
     // check also library later
-    if (ob == CTX_data_edit_object(C)) {
-      ED_object_editmode_exit(C, EM_FREEDATA);
+    if ((ob->mode && OB_MODE_EDIT) && BKE_object_is_in_editmode(ob)) {
+      ED_object_editmode_exit_ex(bmain, scene, ob, EM_FREEDATA);
     }
     BKE_id_delete(bmain, ob);
   }
@@ -696,8 +698,8 @@ static void id_local_cb(bContext *C,
     Main *bmain = CTX_data_main(C);
     /* if the ID type has no special local function,
      * just clear the lib */
-    if (id_make_local(bmain, tselem->id, false, false) == false) {
-      id_clear_lib_data(bmain, tselem->id);
+    if (BKE_lib_id_make_local(bmain, tselem->id, false, 0) == false) {
+      BKE_lib_id_clear_library_data(bmain, tselem->id);
     }
     else {
       BKE_main_id_clear_newpoins(bmain);
@@ -717,7 +719,7 @@ static void id_override_library_cb(bContext *C,
     Main *bmain = CTX_data_main(C);
     /* For now, remapp all local usages of linked ID to local override one here. */
     BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, true);
-    ID *override_id = BKE_override_library_create_from_id(bmain, tselem->id, true);
+    ID *override_id = BKE_lib_override_library_create_from_id(bmain, tselem->id, true);
     if (override_id != NULL) {
       BKE_main_id_clear_newpoins(bmain);
     }
@@ -830,7 +832,7 @@ void outliner_do_object_operation_ex(bContext *C,
     if (tselem->flag & TSE_SELECTED) {
       if (tselem->type == 0 && te->idcode == ID_OB) {
         // when objects selected in other scenes... dunno if that should be allowed
-        Scene *scene_owner = (Scene *)outliner_search_back(soops, te, ID_SCE);
+        Scene *scene_owner = (Scene *)outliner_search_back(te, ID_SCE);
         if (scene_owner && scene_act != scene_owner) {
           WM_window_set_active_scene(CTX_data_main(C), C, CTX_wm_window(C), scene_owner);
         }
@@ -1046,9 +1048,8 @@ static void constraint_cb(int event, TreeElement *te, TreeStoreElem *UNUSED(tsel
 {
   bContext *C = C_v;
   Main *bmain = CTX_data_main(C);
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
   bConstraint *constraint = (bConstraint *)te->directdata;
-  Object *ob = (Object *)outliner_search_back(soops, te, ID_OB);
+  Object *ob = (Object *)outliner_search_back(te, ID_OB);
 
   if (event == OL_CONSTRAINTOP_ENABLE) {
     constraint->flag &= ~CONSTRAINT_OFF;
@@ -1087,9 +1088,8 @@ static void modifier_cb(int event, TreeElement *te, TreeStoreElem *UNUSED(tselem
 {
   bContext *C = (bContext *)Carg;
   Main *bmain = CTX_data_main(C);
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
   ModifierData *md = (ModifierData *)te->directdata;
-  Object *ob = (Object *)outliner_search_back(soops, te, ID_OB);
+  Object *ob = (Object *)outliner_search_back(te, ID_OB);
 
   if (event == OL_MODIFIER_OP_TOGVIS) {
     md->mode ^= eModifierMode_Realtime;
@@ -1528,21 +1528,41 @@ static const EnumPropertyItem prop_id_op_types[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
-static const EnumPropertyItem *outliner_id_operation_itemf(bContext *UNUSED(C),
-                                                           PointerRNA *UNUSED(ptr),
-                                                           PropertyRNA *UNUSED(prop),
-                                                           bool *r_free)
+static bool outliner_id_operation_item_poll(bContext *C,
+                                            PointerRNA *UNUSED(ptr),
+                                            PropertyRNA *UNUSED(prop),
+                                            const int enum_value)
 {
-  if (BKE_override_library_is_enabled()) {
-    *r_free = false;
-    return prop_id_op_types;
+  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+
+  switch (enum_value) {
+    case OUTLINER_IDOP_OVERRIDE_LIBRARY:
+      return BKE_lib_override_library_is_enabled();
+    case OUTLINER_IDOP_SINGLE:
+      if (!soops || ELEM(soops->outlinevis, SO_SCENES, SO_VIEW_LAYER)) {
+        return true;
+      }
+      /* TODO (dalai): enable in the few cases where this can be supported
+      (i.e., when we have a valid parent for the tselem). */
+      return false;
   }
 
+  return true;
+}
+
+static const EnumPropertyItem *outliner_id_operation_itemf(bContext *C,
+                                                           PointerRNA *ptr,
+                                                           PropertyRNA *prop,
+                                                           bool *r_free)
+{
   EnumPropertyItem *items = NULL;
   int totitem = 0;
 
+  if (C == NULL) {
+    return prop_id_op_types;
+  }
   for (const EnumPropertyItem *it = prop_id_op_types; it->identifier != NULL; it++) {
-    if (it->value == OUTLINER_IDOP_OVERRIDE_LIBRARY) {
+    if (!outliner_id_operation_item_poll(C, ptr, prop, it->value)) {
       continue;
     }
     RNA_enum_item_add(&items, &totitem, it);
@@ -1630,7 +1650,7 @@ static int outliner_id_operation_exec(bContext *C, wmOperator *op)
       break;
     }
     case OUTLINER_IDOP_OVERRIDE_LIBRARY: {
-      if (BKE_override_library_is_enabled()) {
+      if (BKE_lib_override_library_is_enabled()) {
         /* make local */
         outliner_do_libdata_operation(
             C, op->reports, scene, soops, &soops->tree, id_override_library_cb, NULL);
@@ -1904,6 +1924,7 @@ static void actionset_id_cb(TreeElement *UNUSED(te),
 
 static int outliner_action_set_exec(bContext *C, wmOperator *op)
 {
+  Main *bmain = CTX_data_main(C);
   SpaceOutliner *soops = CTX_wm_space_outliner(C);
   int scenelevel = 0, objectlevel = 0, idlevel = 0, datalevel = 0;
 
@@ -1916,7 +1937,7 @@ static int outliner_action_set_exec(bContext *C, wmOperator *op)
   set_operation_types(soops, &soops->tree, &scenelevel, &objectlevel, &idlevel, &datalevel);
 
   /* get action to use */
-  act = BLI_findlink(&CTX_data_main(C)->actions, RNA_enum_get(op->ptr, "action"));
+  act = BLI_findlink(&bmain->actions, RNA_enum_get(op->ptr, "action"));
 
   if (act == NULL) {
     BKE_report(op->reports, RPT_ERROR, "No valid action to add");
@@ -2301,7 +2322,7 @@ static int outliner_operator_menu(bContext *C, const char *opname)
 }
 
 static int do_outliner_operation_event(
-    bContext *C, ARegion *ar, SpaceOutliner *soops, TreeElement *te, const float mval[2])
+    bContext *C, ARegion *region, SpaceOutliner *soops, TreeElement *te, const float mval[2])
 {
   ReportList *reports = CTX_wm_reports(C);  // XXX...
 
@@ -2320,7 +2341,7 @@ static int do_outliner_operation_event(
 
       /* Only redraw, don't rebuild here because TreeElement pointers will
        * become invalid and operations will crash. */
-      ED_region_tag_redraw_no_rebuild(ar);
+      ED_region_tag_redraw_no_rebuild(region);
     }
 
     set_operation_types(soops, &soops->tree, &scenelevel, &objectlevel, &idlevel, &datalevel);
@@ -2398,7 +2419,7 @@ static int do_outliner_operation_event(
   }
 
   for (te = te->subtree.first; te; te = te->next) {
-    int retval = do_outliner_operation_event(C, ar, soops, te, mval);
+    int retval = do_outliner_operation_event(C, region, soops, te, mval);
     if (retval) {
       return retval;
     }
@@ -2409,7 +2430,7 @@ static int do_outliner_operation_event(
 
 static int outliner_operation(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   SpaceOutliner *soops = CTX_wm_space_outliner(C);
   uiBut *but = UI_context_active_but_get(C);
   TreeElement *te;
@@ -2419,10 +2440,10 @@ static int outliner_operation(bContext *C, wmOperator *UNUSED(op), const wmEvent
     UI_but_tooltip_timer_remove(C, but);
   }
 
-  UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fmval[0], &fmval[1]);
+  UI_view2d_region_to_view(&region->v2d, event->mval[0], event->mval[1], &fmval[0], &fmval[1]);
 
   for (te = soops->tree.first; te; te = te->next) {
-    int retval = do_outliner_operation_event(C, ar, soops, te, fmval);
+    int retval = do_outliner_operation_event(C, region, soops, te, fmval);
     if (retval) {
       return retval;
     }

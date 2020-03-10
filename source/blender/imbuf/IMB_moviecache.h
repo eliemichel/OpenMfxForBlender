@@ -31,6 +31,10 @@
  * Supposed to provide unified cache system for movie clips, sequencer and
  * other movie-related areas */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ImBuf;
 struct MovieCache;
 
@@ -57,6 +61,7 @@ void IMB_moviecache_set_priority_callback(struct MovieCache *cache,
 void IMB_moviecache_put(struct MovieCache *cache, void *userkey, struct ImBuf *ibuf);
 bool IMB_moviecache_put_if_possible(struct MovieCache *cache, void *userkey, struct ImBuf *ibuf);
 struct ImBuf *IMB_moviecache_get(struct MovieCache *cache, void *userkey);
+void IMB_moviecache_remove(struct MovieCache *cache, void *userkey);
 bool IMB_moviecache_has_frame(struct MovieCache *cache, void *userkey);
 void IMB_moviecache_free(struct MovieCache *cache);
 
@@ -76,5 +81,9 @@ bool IMB_moviecacheIter_done(struct MovieCacheIter *iter);
 void IMB_moviecacheIter_step(struct MovieCacheIter *iter);
 struct ImBuf *IMB_moviecacheIter_getImBuf(struct MovieCacheIter *iter);
 void *IMB_moviecacheIter_getUserKey(struct MovieCacheIter *iter);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

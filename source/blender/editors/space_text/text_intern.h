@@ -35,20 +35,36 @@ struct bContext;
 struct wmOperatorType;
 
 /* text_draw.c */
-void draw_text_main(struct SpaceText *st, struct ARegion *ar);
+void draw_text_main(struct SpaceText *st, struct ARegion *region);
 
 void text_update_line_edited(struct TextLine *line);
 void text_update_edited(struct Text *text);
 void text_update_character_width(struct SpaceText *st);
-void text_scroll_to_cursor(struct SpaceText *st, struct ARegion *ar, const bool center);
+void text_scroll_to_cursor(struct SpaceText *st, struct ARegion *region, const bool center);
 void text_scroll_to_cursor__area(struct SpaceText *st, struct ScrArea *sa, const bool center);
 void text_update_cursor_moved(struct bContext *C);
 
-#define TXT_OFFSET ((int)(0.5f * U.widget_unit))
+/* Padding around line numbers in character widths. */
+#define TXT_NUMCOL_PAD 1.0f
+/* Total width of the optional line numbers column. */
+#define TXT_NUMCOL_WIDTH(st) \
+  (st->runtime.cwidth_px * (st->runtime.line_number_display_digits + (2 * TXT_NUMCOL_PAD)))
+
+/* Padding on left of body text in character units. */
+#define TXT_BODY_LPAD 1.0f
+/* Left position of body text. */
+#define TXT_BODY_LEFT(st) \
+  (st->showlinenrs ? TXT_NUMCOL_WIDTH(st) : 0) + (TXT_BODY_LPAD * st->runtime.cwidth_px)
+
 #define TXT_SCROLL_WIDTH U.widget_unit
 #define TXT_SCROLL_SPACE ((int)(0.1f * U.widget_unit))
-#define TXT_LINE_SPACING ((int)(0.3f * st->lheight_dpi)) /* space between lines */
-#define TEXTXLOC (st->cwidth * st->linenrs_tot)
+
+/* Space between lines, in relation to letter height. */
+#define TXT_LINE_VPAD 0.3f
+/* Space between lines. */
+#define TXT_LINE_SPACING(st) ((int)(TXT_LINE_VPAD * st->runtime.lheight_px))
+/* Total height of each line. */
+#define TXT_LINE_HEIGHT(st) ((int)((1.0f + TXT_LINE_VPAD) * st->runtime.lheight_px))
 
 #define SUGG_LIST_SIZE 7
 #define SUGG_LIST_WIDTH 20
@@ -58,15 +74,15 @@ void text_update_cursor_moved(struct bContext *C);
 #define TOOL_SUGG_LIST 0x01
 #define TOOL_DOCUMENT 0x02
 
-int wrap_width(const struct SpaceText *st, struct ARegion *ar);
+int wrap_width(const struct SpaceText *st, struct ARegion *region);
 void wrap_offset(const struct SpaceText *st,
-                 struct ARegion *ar,
+                 struct ARegion *region,
                  struct TextLine *linein,
                  int cursin,
                  int *offl,
                  int *offc);
 void wrap_offset_in_line(const struct SpaceText *st,
-                         struct ARegion *ar,
+                         struct ARegion *region,
                          struct TextLine *linep,
                          int cursin,
                          int *offl,
@@ -76,15 +92,15 @@ int text_get_char_pos(const struct SpaceText *st, const char *line, int cur);
 void text_drawcache_tag_update(struct SpaceText *st, int full);
 void text_free_caches(struct SpaceText *st);
 
-int text_do_suggest_select(struct SpaceText *st, struct ARegion *ar);
+int text_do_suggest_select(struct SpaceText *st, struct ARegion *region);
 void text_pop_suggest_list(void);
 
-int text_get_visible_lines(const struct SpaceText *st, struct ARegion *ar, const char *str);
+int text_get_visible_lines(const struct SpaceText *st, struct ARegion *region, const char *str);
 int text_get_span_wrap(const struct SpaceText *st,
-                       struct ARegion *ar,
+                       struct ARegion *region,
                        struct TextLine *from,
                        struct TextLine *to);
-int text_get_total_lines(struct SpaceText *st, struct ARegion *ar);
+int text_get_total_lines(struct SpaceText *st, struct ARegion *region);
 
 /* text_ops.c */
 enum {
@@ -122,6 +138,7 @@ void TEXT_OT_convert_whitespace(struct wmOperatorType *ot);
 void TEXT_OT_comment_toggle(struct wmOperatorType *ot);
 void TEXT_OT_unindent(struct wmOperatorType *ot);
 void TEXT_OT_indent(struct wmOperatorType *ot);
+void TEXT_OT_indent_or_autocomplete(struct wmOperatorType *ot);
 
 void TEXT_OT_line_break(struct wmOperatorType *ot);
 void TEXT_OT_insert(struct wmOperatorType *ot);

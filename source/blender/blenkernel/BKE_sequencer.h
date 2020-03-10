@@ -24,6 +24,10 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Depsgraph;
 struct Editing;
 struct GPUOffScreen;
@@ -125,8 +129,8 @@ int BKE_sequencer_cmp_time_startdisp(const void *a, const void *b);
 enum {
   DO_SINGLE_WIPE,
   DO_DOUBLE_WIPE,
-  DO_BOX_WIPE,
-  DO_CROSS_WIPE,
+  /* DO_BOX_WIPE, */   /* UNUSED */
+  /* DO_CROSS_WIPE, */ /* UNUSED */
   DO_IRIS_WIPE,
   DO_CLOCK_WIPE,
 };
@@ -204,11 +208,9 @@ struct SeqEffectHandle {
  *
  * sequencer render functions
  * ********************************************************************** */
+double BKE_sequencer_rendersize_to_scale_factor(int size);
 
 struct ImBuf *BKE_sequencer_give_ibuf(const SeqRenderData *context, float cfra, int chanshown);
-struct ImBuf *BKE_sequencer_give_ibuf_threaded(const SeqRenderData *context,
-                                               float cfra,
-                                               int chanshown);
 struct ImBuf *BKE_sequencer_give_ibuf_direct(const SeqRenderData *context,
                                              float cfra,
                                              struct Sequence *seq);
@@ -216,9 +218,6 @@ struct ImBuf *BKE_sequencer_give_ibuf_seqbase(const SeqRenderData *context,
                                               float cfra,
                                               int chan_shown,
                                               struct ListBase *seqbasep);
-void BKE_sequencer_give_ibuf_prefetch_request(const SeqRenderData *context,
-                                              float cfra,
-                                              int chan_shown);
 
 /* **********************************************************************
  * sequencer.c
@@ -339,6 +338,7 @@ void BKE_sequencer_cache_iterate(
     struct Scene *scene,
     void *userdata,
     bool callback(void *userdata, struct Sequence *seq, int cfra, int cache_type, float cost));
+size_t BKE_sequencer_cache_get_num_items(struct Scene *scene);
 bool BKE_sequencer_cache_is_full(struct Scene *scene);
 
 /* **********************************************************************
@@ -408,7 +408,10 @@ bool BKE_sequence_base_shuffle_ex(struct ListBase *seqbasep,
 bool BKE_sequence_base_shuffle(struct ListBase *seqbasep,
                                struct Sequence *test,
                                struct Scene *evil_scene);
-bool BKE_sequence_base_shuffle_time(ListBase *seqbasep, struct Scene *evil_scene);
+bool BKE_sequence_base_shuffle_time(ListBase *seqbasep,
+                                    struct Scene *evil_scene,
+                                    ListBase *markers,
+                                    const bool use_sync_markers);
 bool BKE_sequence_base_isolated_sel_check(struct ListBase *seqbase);
 void BKE_sequencer_free_imbuf(struct Scene *scene, struct ListBase *seqbasep, bool for_render);
 struct Sequence *BKE_sequence_dupli_recursive(const struct Scene *scene_src,
@@ -499,6 +502,7 @@ enum {
   SEQ_SIDE_LEFT,
   SEQ_SIDE_RIGHT,
   SEQ_SIDE_BOTH,
+  SEQ_SIDE_NO_CHANGE,
 };
 int BKE_sequencer_find_next_prev_edit(struct Scene *scene,
                                       int cfra,
@@ -516,22 +520,6 @@ struct Sequence *BKE_sequencer_add_sound_strip(struct bContext *C,
 struct Sequence *BKE_sequencer_add_movie_strip(struct bContext *C,
                                                ListBase *seqbasep,
                                                struct SeqLoadInfo *seq_load);
-
-typedef struct ImBuf *(*SequencerDrawView)(struct Depsgraph *depsgraph,
-                                           struct Scene *scene,
-                                           struct View3DShading *shading_override,
-                                           int drawtype,
-                                           struct Object *camera,
-                                           int width,
-                                           int height,
-                                           unsigned int flag,
-                                           unsigned int draw_flags,
-                                           int alpha_mode,
-                                           int samples,
-                                           const char *viewname,
-                                           struct GPUOffScreen *ofs,
-                                           char err_out[256]);
-extern SequencerDrawView sequencer_view3d_cb;
 
 /* copy/paste */
 extern ListBase seqbase_clipboard;
@@ -598,5 +586,9 @@ void BKE_sequencer_color_balance_apply(struct StripColorBalance *cb,
                                        struct ImBuf *mask_input);
 
 void BKE_sequencer_all_free_anim_ibufs(struct Scene *scene, int cfra);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_SEQUENCER_H__ */

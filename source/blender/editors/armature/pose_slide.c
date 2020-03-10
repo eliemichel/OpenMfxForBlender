@@ -88,7 +88,7 @@ typedef struct tPoseSlideOp {
   /** area that we're operating in (needed for modal()) */
   ScrArea *sa;
   /** region that we're operating in (needed for modal()) */
-  ARegion *ar;
+  ARegion *region;
   /** len of the PoseSlideObject array. */
   uint objects_len;
 
@@ -197,8 +197,8 @@ static int pose_slide_init(bContext *C, wmOperator *op, ePoseSlide_Modes mode)
 
   /* get info from context */
   pso->scene = CTX_data_scene(C);
-  pso->sa = CTX_wm_area(C);   /* only really needed when doing modal() */
-  pso->ar = CTX_wm_region(C); /* only really needed when doing modal() */
+  pso->sa = CTX_wm_area(C);       /* only really needed when doing modal() */
+  pso->region = CTX_wm_region(C); /* only really needed when doing modal() */
 
   pso->cframe = pso->scene->r.cfra;
   pso->mode = mode;
@@ -576,7 +576,7 @@ static void pose_slide_apply_quat(tPoseSlideOp *pso, tPChanFCurveLink *pfl)
       float quat_diff[4];
 
       /* calculate the delta transform from the previous to the current */
-      /* TODO: investigate ways to favour one transform more? */
+      /* TODO: investigate ways to favor one transform more? */
       sub_qt_qtqt(quat_diff, quat_curr, quat_prev);
 
       /* increase the original by the delta transform, by an amount determined by percentage */
@@ -1004,7 +1004,7 @@ static void pose_slide_mouse_update_percentage(tPoseSlideOp *pso,
                                                wmOperator *op,
                                                const wmEvent *event)
 {
-  pso->percentage = (event->x - pso->ar->winrct.xmin) / ((float)pso->ar->winx);
+  pso->percentage = (event->x - pso->region->winrct.xmin) / ((float)pso->region->winx);
   RNA_float_set(op->ptr, "percentage", pso->percentage);
 }
 

@@ -35,7 +35,7 @@
 
 #include "BKE_colortools.h" /* CurveMapping. */
 #include "BKE_deform.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_modifier.h"
 #include "BKE_texture.h" /* Texture masking. */
 
@@ -167,6 +167,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   float *org_w; /* Array original weights. */
   float *new_w; /* Array new weights. */
   int i;
+  const bool invert_vgroup_mask = (wmd->edit_flags & MOD_WVG_EDIT_INVERT_VGROUP_MASK) != 0;
 
   /* Flags. */
   const bool do_add = (wmd->edit_flags & MOD_WVG_EDIT_ADD2VG) != 0;
@@ -187,7 +188,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   }
 
   /* Get vgroup idx from its name. */
-  const int defgrp_index = defgroup_name_index(ctx->object, wmd->defgrp_name);
+  const int defgrp_index = BKE_object_defgroup_name_index(ctx->object, wmd->defgrp_name);
   if (defgrp_index == -1) {
     return mesh;
   }
@@ -219,7 +220,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   new_w = MEM_malloc_arrayN(numVerts, sizeof(float), "WeightVGEdit Modifier, new_w");
   dw = MEM_malloc_arrayN(numVerts, sizeof(MDeformWeight *), "WeightVGEdit Modifier, dw");
   for (i = 0; i < numVerts; i++) {
-    dw[i] = defvert_find_index(&dvert[i], defgrp_index);
+    dw[i] = BKE_defvert_find_index(&dvert[i], defgrp_index);
     if (dw[i]) {
       org_w[i] = new_w[i] = dw[i]->weight;
     }
@@ -259,7 +260,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
                    wmd->mask_tex_use_channel,
                    wmd->mask_tex_mapping,
                    wmd->mask_tex_map_obj,
-                   wmd->mask_tex_uvlayer_name);
+                   wmd->mask_tex_uvlayer_name,
+                   invert_vgroup_mask);
 
   /* Update/add/remove from vgroup. */
   weightvg_update_vg(dvert,

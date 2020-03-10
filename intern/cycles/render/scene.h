@@ -44,8 +44,8 @@ class Integrator;
 class Light;
 class LightManager;
 class LookupTables;
-class Mesh;
-class MeshManager;
+class Geometry;
+class GeometryManager;
 class Object;
 class ObjectManager;
 class ParticleSystemManager;
@@ -119,7 +119,7 @@ class DeviceScene {
   device_vector<float> lookup_table;
 
   /* integrator */
-  device_vector<uint> sobol_directions;
+  device_vector<uint> sample_pattern_lut;
 
   /* ies lights */
   device_vector<float> ies_lights;
@@ -170,6 +170,8 @@ class SceneParams {
   bool persistent_data;
   int texture_limit;
 
+  bool background;
+
   SceneParams()
   {
     shadingsystem = SHADINGSYSTEM_SVM;
@@ -180,6 +182,7 @@ class SceneParams {
     num_bvh_time_steps = 0;
     persistent_data = false;
     texture_limit = 0;
+    background = true;
   }
 
   bool modified(const SceneParams &params)
@@ -210,7 +213,7 @@ class Scene {
 
   /* data lists */
   vector<Object *> objects;
-  vector<Mesh *> meshes;
+  vector<Geometry *> geometry;
   vector<Shader *> shaders;
   vector<Light *> lights;
   vector<ParticleSystem *> particle_systems;
@@ -219,7 +222,7 @@ class Scene {
   ImageManager *image_manager;
   LightManager *light_manager;
   ShaderManager *shader_manager;
-  MeshManager *mesh_manager;
+  GeometryManager *geometry_manager;
   ObjectManager *object_manager;
   ParticleSystemManager *particle_system_manager;
   CurveSystemManager *curve_system_manager;

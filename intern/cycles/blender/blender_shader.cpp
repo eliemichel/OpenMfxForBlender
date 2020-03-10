@@ -301,10 +301,14 @@ static ShaderNode *add_node(Scene *scene,
     BL::ShaderNodeMapRange b_map_range_node(b_node);
     MapRangeNode *map_range_node = new MapRangeNode();
     map_range_node->clamp = b_map_range_node.clamp();
+    map_range_node->type = (NodeMapRangeType)b_map_range_node.interpolation_type();
     node = map_range_node;
   }
   else if (b_node.is_a(&RNA_ShaderNodeClamp)) {
-    node = new ClampNode();
+    BL::ShaderNodeClamp b_clamp_node(b_node);
+    ClampNode *clamp_node = new ClampNode();
+    clamp_node->type = (NodeClampType)b_clamp_node.clamp_type();
+    node = clamp_node;
   }
   else if (b_node.is_a(&RNA_ShaderNodeMath)) {
     BL::ShaderNodeMath b_math_node(b_node);
@@ -318,6 +322,13 @@ static ShaderNode *add_node(Scene *scene,
     VectorMathNode *vector_math_node = new VectorMathNode();
     vector_math_node->type = (NodeVectorMathType)b_vector_math_node.operation();
     node = vector_math_node;
+  }
+  else if (b_node.is_a(&RNA_ShaderNodeVectorRotate)) {
+    BL::ShaderNodeVectorRotate b_vector_rotate_node(b_node);
+    VectorRotateNode *vector_rotate_node = new VectorRotateNode();
+    vector_rotate_node->type = (NodeVectorRotateType)b_vector_rotate_node.rotation_type();
+    vector_rotate_node->invert = b_vector_rotate_node.invert();
+    node = vector_rotate_node;
   }
   else if (b_node.is_a(&RNA_ShaderNodeVectorTransform)) {
     BL::ShaderNodeVectorTransform b_vector_transform_node(b_node);
@@ -630,6 +641,14 @@ static ShaderNode *add_node(Scene *scene,
     BL::Image b_image(b_image_node.image());
     BL::ImageUser b_image_user(b_image_node.image_user());
     ImageTextureNode *image = new ImageTextureNode();
+
+    image->interpolation = get_image_interpolation(b_image_node);
+    image->extension = get_image_extension(b_image_node);
+    image->projection = (NodeImageProjection)b_image_node.projection();
+    image->projection_blend = b_image_node.projection_blend();
+    BL::TexMapping b_texture_mapping(b_image_node.texture_mapping());
+    get_tex_mapping(&image->tex_mapping, b_texture_mapping);
+
     if (b_image) {
       /* builtin images will use callback-based reading because
        * they could only be loaded correct from blender side
@@ -651,7 +670,8 @@ static ShaderNode *add_node(Scene *scene,
         image->builtin_data = b_image.ptr.data;
       }
       else {
-        image->filename = image_user_file_path(b_image_user, b_image, b_scene.frame_current());
+        image->filename = image_user_file_path(
+            b_image_user, b_image, b_scene.frame_current(), true);
         image->builtin_data = NULL;
       }
 
@@ -661,25 +681,20 @@ static ShaderNode *add_node(Scene *scene,
       image->animated = b_image_node.image_user().use_auto_refresh();
       image->alpha_type = get_image_alpha_type(b_image);
 
+      image->tiles.clear();
+      BL::Image::tiles_iterator b_iter;
+      for (b_image.tiles.begin(b_iter); b_iter != b_image.tiles.end(); ++b_iter) {
+        image->tiles.push_back(b_iter->number());
+      }
+
       /* TODO: restore */
       /* TODO(sergey): Does not work properly when we change builtin type. */
 #if 0
       if (b_image.is_updated()) {
-        scene->image_manager->tag_reload_image(image->filename.string(),
-                                               image->builtin_data,
-                                               get_image_interpolation(b_image_node),
-                                               get_image_extension(b_image_node),
-                                               image->use_alpha,
-                                               image->colorspace);
+        scene->image_manager->tag_reload_image(image->image_key());
       }
 #endif
     }
-    image->projection = (NodeImageProjection)b_image_node.projection();
-    image->interpolation = get_image_interpolation(b_image_node);
-    image->extension = get_image_extension(b_image_node);
-    image->projection_blend = b_image_node.projection_blend();
-    BL::TexMapping b_texture_mapping(b_image_node.texture_mapping());
-    get_tex_mapping(&image->tex_mapping, b_texture_mapping);
     node = image;
   }
   else if (b_node.is_a(&RNA_ShaderNodeTexEnvironment)) {
@@ -687,6 +702,12 @@ static ShaderNode *add_node(Scene *scene,
     BL::Image b_image(b_env_node.image());
     BL::ImageUser b_image_user(b_env_node.image_user());
     EnvironmentTextureNode *env = new EnvironmentTextureNode();
+
+    env->interpolation = get_image_interpolation(b_env_node);
+    env->projection = (NodeEnvironmentProjection)b_env_node.projection();
+    BL::TexMapping b_texture_mapping(b_env_node.texture_mapping());
+    get_tex_mapping(&env->tex_mapping, b_texture_mapping);
+
     if (b_image) {
       bool is_builtin = b_image.packed_file() || b_image.source() == BL::Image::source_GENERATED ||
                         b_image.source() == BL::Image::source_MOVIE ||
@@ -699,7 +720,8 @@ static ShaderNode *add_node(Scene *scene,
         env->builtin_data = b_image.ptr.data;
       }
       else {
-        env->filename = image_user_file_path(b_image_user, b_image, b_scene.frame_current());
+        env->filename = image_user_file_path(
+            b_image_user, b_image, b_scene.frame_current(), false);
         env->builtin_data = NULL;
       }
 
@@ -713,19 +735,10 @@ static ShaderNode *add_node(Scene *scene,
       /* TODO(sergey): Does not work properly when we change builtin type. */
 #if 0
       if (b_image.is_updated()) {
-        scene->image_manager->tag_reload_image(env->filename.string(),
-                                               env->builtin_data,
-                                               get_image_interpolation(b_env_node),
-                                               EXTENSION_REPEAT,
-                                               env->use_alpha,
-                                               env->colorspace);
+        scene->image_manager->tag_reload_image(env->image_key());
       }
 #endif
     }
-    env->interpolation = get_image_interpolation(b_env_node);
-    env->projection = (NodeEnvironmentProjection)b_env_node.projection();
-    BL::TexMapping b_texture_mapping(b_env_node.texture_mapping());
-    get_tex_mapping(&env->tex_mapping, b_texture_mapping);
     node = env;
   }
   else if (b_node.is_a(&RNA_ShaderNodeTexGradient)) {
@@ -758,6 +771,8 @@ static ShaderNode *add_node(Scene *scene,
     BL::ShaderNodeTexWave b_wave_node(b_node);
     WaveTextureNode *wave = new WaveTextureNode();
     wave->type = (NodeWaveType)b_wave_node.wave_type();
+    wave->bands_direction = (NodeWaveBandsDirection)b_wave_node.bands_direction();
+    wave->rings_direction = (NodeWaveRingsDirection)b_wave_node.rings_direction();
     wave->profile = (NodeWaveProfile)b_wave_node.wave_profile();
     BL::TexMapping b_texture_mapping(b_wave_node.texture_mapping());
     get_tex_mapping(&wave->tex_mapping, b_texture_mapping);
@@ -876,12 +891,7 @@ static ShaderNode *add_node(Scene *scene,
     if (true) {
       point_density->add_image();
       b_point_density_node.cache_point_density(b_depsgraph);
-      scene->image_manager->tag_reload_image(point_density->filename.string(),
-                                             point_density->builtin_data,
-                                             point_density->interpolation,
-                                             EXTENSION_CLIP,
-                                             IMAGE_ALPHA_AUTO,
-                                             u_colorspace_raw);
+      scene->image_manager->tag_reload_image(point_density->image_key());
     }
     node = point_density;
 
@@ -916,6 +926,12 @@ static ShaderNode *add_node(Scene *scene,
     disp->space = (NodeNormalMapSpace)b_disp_node.space();
     disp->attribute = "";
     node = disp;
+  }
+  else if (b_node.is_a(&RNA_ShaderNodeOutputAOV)) {
+    BL::ShaderNodeOutputAOV b_aov_node(b_node);
+    OutputAOVNode *aov = new OutputAOVNode();
+    aov->name = b_aov_node.name();
+    node = aov;
   }
 
   if (node) {
@@ -1237,7 +1253,7 @@ void BlenderSync::sync_materials(BL::Depsgraph &b_depsgraph, bool update_all)
     Shader *shader;
 
     /* test if we need to sync */
-    if (shader_map.sync(&shader, b_mat) || shader->need_sync_object || update_all) {
+    if (shader_map.add_or_update(&shader, b_mat) || shader->need_sync_object || update_all) {
       ShaderGraph *graph = new ShaderGraph();
 
       shader->name = b_mat.name().c_str();
@@ -1462,7 +1478,7 @@ void BlenderSync::sync_lights(BL::Depsgraph &b_depsgraph, bool update_all)
     Shader *shader;
 
     /* test if we need to sync */
-    if (shader_map.sync(&shader, b_light) || update_all) {
+    if (shader_map.add_or_update(&shader, b_light) || update_all) {
       ShaderGraph *graph = new ShaderGraph();
 
       /* create nodes */

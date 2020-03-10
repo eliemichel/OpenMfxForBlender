@@ -120,6 +120,29 @@ static const EnumPropertyItem part_hair_ren_as_items[] = {
 };
 #endif
 
+static const EnumPropertyItem part_type_items[] = {
+    {PART_EMITTER, "EMITTER", 0, "Emitter", ""},
+    /*{PART_REACTOR, "REACTOR", 0, "Reactor", ""}, */
+    {PART_HAIR, "HAIR", 0, "Hair", ""},
+    {0, NULL, 0, NULL, NULL},
+};
+
+#ifdef RNA_RUNTIME
+static const EnumPropertyItem part_fluid_type_items[] = {
+    {PART_FLUID, "FLUID", 0, "Fluid", ""},
+    {PART_FLUID_FLIP, "FLIP", 0, "Liquid", ""},
+    {PART_FLUID_SPRAY, "SPRAY", 0, "Spray", ""},
+    {PART_FLUID_BUBBLE, "BUBBLE", 0, "Bubble", ""},
+    {PART_FLUID_FOAM, "FOAM", 0, "Foam", ""},
+    {PART_FLUID_TRACER, "TRACER", 0, "Tracer", ""},
+    {PART_FLUID_SPRAYFOAM, "SPRAYFOAM", 0, "Spray-Foam", ""},
+    {PART_FLUID_SPRAYBUBBLE, "SPRAYBUBBLE", 0, "Spray-Bubble", ""},
+    {PART_FLUID_FOAMBUBBLE, "FOAMBUBBLE", 0, "Foam-Bubble", ""},
+    {PART_FLUID_SPRAYFOAMBUBBLE, "SPRAYFOAMBUBBLE", 0, "Spray-Foam-Bubble", ""},
+    {0, NULL, 0, NULL, NULL},
+};
+#endif
+
 #ifdef RNA_RUNTIME
 
 #  include "BLI_math.h"
@@ -286,6 +309,11 @@ static void rna_Particle_uv_on_emitter(ParticleData *particle,
       psmd, part->from, pa->num, pa->num_dmcache, pa->fuv, pa->foffset, co, nor, 0, 0, sd.orco, 0);
 #  endif
 
+  if (modifier->mesh_final == NULL) {
+    BKE_report(reports, RPT_ERROR, "uv_on_emitter() requires a modifier from an evaluated object");
+    return;
+  }
+
   /* get uvco & mcol */
   int num = particle->num_dmcache;
   int from = modifier->psys->part->from;
@@ -357,11 +385,11 @@ static void rna_ParticleSystem_co_hair(
     totchild = 0;
   }
 
-  if (particle_no < totpart) {
+  if (particle_no < totpart && particlesystem->pathcache) {
     cache = particlesystem->pathcache[particle_no];
     max_k = (int)cache->segments;
   }
-  else if (particle_no < totpart + totchild) {
+  else if (particle_no < totpart + totchild && particlesystem->childcache) {
     cache = particlesystem->childcache[particle_no - totpart];
 
     if (cache->segments < 0) {
@@ -397,7 +425,7 @@ static const EnumPropertyItem *rna_Particle_Material_itemf(bContext *C,
 
   if (ob && ob->totcol > 0) {
     for (i = 1; i <= ob->totcol; i++) {
-      ma = give_current_material(ob, i);
+      ma = BKE_object_material_get(ob, i);
       tmp.value = i;
       tmp.icon = ICON_MATERIAL_DATA;
       if (ma) {
@@ -862,7 +890,7 @@ static void rna_PartSettings_start_set(struct PointerRNA *ptr, float value)
 
   /* check for clipping */
   if (value > settings->end) {
-    value = settings->end;
+    settings->end = value;
   }
 
   /*if (settings->type==PART_REACTOR && value < 1.0) */
@@ -881,7 +909,7 @@ static void rna_PartSettings_end_set(struct PointerRNA *ptr, float value)
 
   /* check for clipping */
   if (value < settings->sta) {
-    value = settings->sta;
+    settings->sta = value;
   }
 
   settings->end = value;
@@ -950,11 +978,20 @@ static float rna_PartSetting_linelenhead_get(struct PointerRNA *ptr)
   return settings->draw_line[1];
 }
 
-static bool rna_PartSettings_is_fluid_get(PointerRNA *ptr)
+static int rna_PartSettings_is_fluid_get(PointerRNA *ptr)
 {
-  ParticleSettings *part = (ParticleSettings *)ptr->data;
-
-  return part->type == PART_FLUID;
+  ParticleSettings *part = ptr->data;
+  return (ELEM(part->type,
+               PART_FLUID,
+               PART_FLUID_FLIP,
+               PART_FLUID_FOAM,
+               PART_FLUID_SPRAY,
+               PART_FLUID_BUBBLE,
+               PART_FLUID_TRACER,
+               PART_FLUID_SPRAYFOAM,
+               PART_FLUID_SPRAYBUBBLE,
+               PART_FLUID_FOAMBUBBLE,
+               PART_FLUID_SPRAYFOAMBUBBLE));
 }
 
 static void rna_ParticleSettings_use_clump_curve_update(Main *bmain, Scene *scene, PointerRNA *ptr)
@@ -1225,6 +1262,21 @@ static int rna_ParticleDupliWeight_name_length(PointerRNA *ptr)
   return strlen(tstr);
 }
 
+static const EnumPropertyItem *rna_Particle_type_itemf(bContext *UNUSED(C),
+                                                       PointerRNA *ptr,
+                                                       PropertyRNA *UNUSED(prop),
+                                                       bool *UNUSED(r_free))
+{
+  ParticleSettings *part = (ParticleSettings *)ptr->owner_id;
+
+  if (part->type == PART_HAIR || part->type == PART_EMITTER) {
+    return part_type_items;
+  }
+  else {
+    return part_fluid_type_items;
+  }
+}
+
 static const EnumPropertyItem *rna_Particle_from_itemf(bContext *UNUSED(C),
                                                        PointerRNA *UNUSED(ptr),
                                                        PropertyRNA *UNUSED(prop),
@@ -1344,7 +1396,7 @@ static void psys_vg_name_set__internal(PointerRNA *ptr, const char *value, int i
     psys->vgroup[index] = 0;
   }
   else {
-    int defgrp_index = defgroup_name_index(ob, value);
+    int defgrp_index = BKE_object_defgroup_name_index(ob, value);
 
     if (defgrp_index == -1) {
       return;
@@ -1758,9 +1810,14 @@ static void rna_def_particle(BlenderRNA *brna)
 
   /* UVs */
   func = RNA_def_function(srna, "uv_on_emitter", "rna_Particle_uv_on_emitter");
-  RNA_def_function_ui_description(func, "Obtain uv for particle on derived mesh");
+  RNA_def_function_ui_description(func,
+                                  "Obtain UV coordinates for a particle on an evaluated mesh.");
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
-  parm = RNA_def_pointer(func, "modifier", "ParticleSystemModifier", "", "Particle modifier");
+  parm = RNA_def_pointer(func,
+                         "modifier",
+                         "ParticleSystemModifier",
+                         "",
+                         "Particle modifier from an evaluated object");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
   parm = RNA_def_property(func, "uv", PROP_FLOAT, PROP_COORDS);
   RNA_def_property_array(parm, 2);
@@ -2241,13 +2298,6 @@ static void rna_def_particle_settings(BlenderRNA *brna)
   StructRNA *srna;
   PropertyRNA *prop;
 
-  static const EnumPropertyItem type_items[] = {
-      {PART_EMITTER, "EMITTER", 0, "Emitter", ""},
-      /*{PART_REACTOR, "REACTOR", 0, "Reactor", ""}, */
-      {PART_HAIR, "HAIR", 0, "Hair", ""},
-      {0, NULL, 0, NULL, NULL},
-  };
-
   static const EnumPropertyItem phys_type_items[] = {
       {PART_PHYS_NO, "NO", 0, "None", ""},
       {PART_PHYS_NEWTON, "NEWTON", 0, "Newtonian", ""},
@@ -2474,8 +2524,9 @@ static void rna_def_particle_settings(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_Particle_reset");
 
   prop = RNA_def_property(srna, "type", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_items(prop, type_items);
+  RNA_def_property_enum_items(prop, part_type_items);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_enum_funcs(prop, NULL, NULL, "rna_Particle_type_itemf");
   RNA_def_property_ui_text(prop, "Type", "Particle Type");
   RNA_def_property_update(prop, 0, "rna_Particle_change_type");
 
@@ -3414,7 +3465,7 @@ static void rna_def_particle_settings(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "rad_root");
   RNA_def_property_range(prop, 0.0f, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0f, 10.0f, 0.1, 2);
-  RNA_def_property_ui_text(prop, "Root", "Strand width at the root");
+  RNA_def_property_ui_text(prop, "Root Diameter", "Strand diameter width at the root");
   RNA_def_property_update(
       prop, 0, "rna_Particle_redo"); /* TODO: Only need to tell the render engine to update. */
 
@@ -3422,7 +3473,7 @@ static void rna_def_particle_settings(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "rad_tip");
   RNA_def_property_range(prop, 0.0f, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0f, 10.0f, 0.1, 2);
-  RNA_def_property_ui_text(prop, "Tip", "Strand width at the tip");
+  RNA_def_property_ui_text(prop, "Tip Diameter", "Strand diameter width at the tip");
   RNA_def_property_update(
       prop, 0, "rna_Particle_redo"); /* TODO: Only need to tell the render engine to update. */
 
@@ -3430,7 +3481,7 @@ static void rna_def_particle_settings(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "rad_scale");
   RNA_def_property_range(prop, 0.0f, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0f, 10.0f, 0.1, 2);
-  RNA_def_property_ui_text(prop, "Radius Scale", "Multiplier of radius properties");
+  RNA_def_property_ui_text(prop, "Diameter Scale", "Multiplier of diameter properties");
   RNA_def_property_update(
       prop, 0, "rna_Particle_redo"); /* TODO: Only need to tell the render engine to update. */
 }

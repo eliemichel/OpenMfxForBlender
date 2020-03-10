@@ -2,11 +2,11 @@
 
 #include "testing/testing.h"
 
+#include "MEM_guardedalloc.h"
+
 extern "C" {
 #include "BLI_array_utils.h"
 #include "BLI_listbase.h"
-#include "MEM_guardedalloc.h"
-
 #include "BLI_string.h"
 #include "BLI_path_util.h"
 #include "BLI_ressource_strings.h"
@@ -16,8 +16,10 @@ extern "C" {
 static bool listbase_is_valid(const ListBase *listbase)
 {
 #define TESTFAIL(test) \
-  if (!(test)) \
-    goto fail;
+  if (!(test)) { \
+    goto fail; \
+  } \
+  ((void)0)
 
   if (listbase->first) {
     const Link *prev, *link;
@@ -31,14 +33,14 @@ static bool listbase_is_valid(const ListBase *listbase)
     link = (Link *)listbase->first;
     do {
       TESTFAIL(link->prev == prev);
-    } while ((prev = link), (link = link->next));
+    } while ((void)(prev = link), (link = link->next));
     TESTFAIL(prev == listbase->last);
 
     prev = NULL;
     link = (Link *)listbase->last;
     do {
       TESTFAIL(link->next == prev);
-    } while ((prev = link), (link = link->prev));
+    } while ((void)(prev = link), (link = link->prev));
     TESTFAIL(prev == listbase->first);
   }
   else {

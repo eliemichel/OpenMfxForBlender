@@ -33,6 +33,7 @@
 
 #include "BLI_buffer.h"
 #include "BLI_listbase.h"
+#include "BLI_rect.h"
 #include "BLI_string.h"
 
 #include "BKE_context.h"
@@ -284,25 +285,11 @@ void WM_gizmogroup_ensure_init(const bContext *C, wmGizmoGroup *gzgroup)
   /* Refresh may be called multiple times,
    * this just ensures its called at least once before we draw. */
   if (UNLIKELY((gzgroup->init_flag & WM_GIZMOGROUP_INIT_REFRESH) == 0)) {
-    if (gzgroup->type->refresh) {
-      gzgroup->type->refresh(C, gzgroup);
-    }
+    /* Clear the flag before calling refresh so the callback
+     * can postpone the refresh by clearing this flag. */
     gzgroup->init_flag |= WM_GIZMOGROUP_INIT_REFRESH;
+    WM_gizmo_group_refresh(C, gzgroup);
   }
-}
-
-bool WM_gizmo_group_type_poll(const bContext *C, const struct wmGizmoGroupType *gzgt)
-{
-  /* If we're tagged, only use compatible. */
-  if (gzgt->owner_id[0] != '\0') {
-    const WorkSpace *workspace = CTX_wm_workspace(C);
-    if (BKE_workspace_owner_id_check(workspace, gzgt->owner_id) == false) {
-      return false;
-    }
-  }
-  /* Check for poll function, if gizmo-group belongs to an operator,
-   * also check if the operator is running. */
-  return (!gzgt->poll || gzgt->poll(C, (wmGizmoGroupType *)gzgt));
 }
 
 void WM_gizmo_group_remove_by_tool(bContext *C,
@@ -314,8 +301,8 @@ void WM_gizmo_group_remove_by_tool(bContext *C,
   for (bScreen *sc = bmain->screens.first; sc; sc = sc->id.next) {
     for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
       if (sa->runtime.tool == tref) {
-        for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
-          wmGizmoMap *gzmap = ar->gizmo_map;
+        for (ARegion *region = sa->regionbase.first; region; region = region->next) {
+          wmGizmoMap *gzmap = region->gizmo_map;
           if (gzmap && gzmap->type == gzmap_type) {
             wmGizmoGroup *gzgroup, *gzgroup_next;
             for (gzgroup = gzmap->groups.first; gzgroup; gzgroup = gzgroup_next) {
@@ -323,7 +310,7 @@ void WM_gizmo_group_remove_by_tool(bContext *C,
               if (gzgroup->type == gzgt) {
                 BLI_assert(gzgroup->parent_gzmap == gzmap);
                 wm_gizmogroup_free(C, gzgroup);
-                ED_region_tag_redraw(ar);
+                ED_region_tag_redraw_editor_overlays(region);
               }
             }
           }
@@ -369,8 +356,8 @@ bool wm_gizmogroup_is_any_selected(const wmGizmoGroup *gzgroup)
 
 static int gizmo_select_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-  ARegion *ar = CTX_wm_region(C);
-  wmGizmoMap *gzmap = ar->gizmo_map;
+  ARegion *region = CTX_wm_region(C);
+  wmGizmoMap *gzmap = region->gizmo_map;
   wmGizmoMapSelectState *msel = &gzmap->gzmap_context.select;
   wmGizmo *highlight = gzmap->gzmap_context.highlight;
 
@@ -404,7 +391,7 @@ static int gizmo_select_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
     }
 
     if (redraw) {
-      ED_region_tag_redraw(ar);
+      ED_region_tag_redraw_editor_overlays(region);
     }
 
     return OPERATOR_FINISHED;
@@ -560,7 +547,24 @@ static int gizmo_tweak_modal(bContext *C, wmOperator *op, const wmEvent *event)
   /* handle gizmo */
   wmGizmoFnModal modal_fn = gz->custom_modal ? gz->custom_modal : gz->type->modal;
   if (modal_fn) {
+    /* Ugly hack to ensure Python won't get 'EVT_MODAL_MAP' which isn't supported, see T73727.
+     * note that we could move away from wrapping modal gizmos in a modal operator,
+     * since it's causing the need for code like this. */
+    wmEvent *evil_event = (wmEvent *)event;
+    short event_modal_val = 0;
+
+    if (event->type == EVT_MODAL_MAP) {
+      event_modal_val = evil_event->val;
+      evil_event->type = evil_event->prevtype;
+      evil_event->val = evil_event->prevval;
+    }
+
     int modal_retval = modal_fn(C, gz, event, mtweak->flag);
+
+    if (event_modal_val != 0) {
+      evil_event->type = EVT_MODAL_MAP;
+      evil_event->val = event_modal_val;
+    }
 
     if ((modal_retval & OPERATOR_RUNNING_MODAL) == 0) {
       gizmo_tweak_finish(C, op, (modal_retval & OPERATOR_CANCELLED) != 0, true);
@@ -568,7 +572,7 @@ static int gizmo_tweak_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
 
     /* Ugly hack to send gizmo events */
-    ((wmEvent *)event)->type = EVT_GIZMO_UPDATE;
+    evil_event->type = EVT_GIZMO_UPDATE;
   }
 
   /* always return PASS_THROUGH so modal handlers
@@ -579,8 +583,8 @@ static int gizmo_tweak_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
 static int gizmo_tweak_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  ARegion *ar = CTX_wm_region(C);
-  wmGizmoMap *gzmap = ar->gizmo_map;
+  ARegion *region = CTX_wm_region(C);
+  wmGizmoMap *gzmap = region->gizmo_map;
   wmGizmo *gz = gzmap->gzmap_context.highlight;
 
   /* Needed for single click actions which don't enter modal state. */
@@ -905,10 +909,10 @@ void WM_gizmomaptype_group_init_runtime(const Main *bmain,
     for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
       for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
         ListBase *lb = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
-        for (ARegion *ar = lb->first; ar; ar = ar->next) {
-          wmGizmoMap *gzmap = ar->gizmo_map;
+        for (ARegion *region = lb->first; region; region = region->next) {
+          wmGizmoMap *gzmap = region->gizmo_map;
           if (gzmap && gzmap->type == gzmap_type) {
-            WM_gizmomaptype_group_init_runtime_with_region(gzmap_type, gzgt, ar);
+            WM_gizmomaptype_group_init_runtime_with_region(gzmap_type, gzgt, region);
           }
         }
       }
@@ -918,9 +922,9 @@ void WM_gizmomaptype_group_init_runtime(const Main *bmain,
 
 wmGizmoGroup *WM_gizmomaptype_group_init_runtime_with_region(wmGizmoMapType *gzmap_type,
                                                              wmGizmoGroupType *gzgt,
-                                                             ARegion *ar)
+                                                             ARegion *region)
 {
-  wmGizmoMap *gzmap = ar->gizmo_map;
+  wmGizmoMap *gzmap = region->gizmo_map;
   BLI_assert(gzmap && gzmap->type == gzmap_type);
   UNUSED_VARS_NDEBUG(gzmap_type);
 
@@ -937,7 +941,7 @@ wmGizmoGroup *WM_gizmomaptype_group_init_runtime_with_region(wmGizmoMapType *gzm
 
   wm_gizmomap_highlight_set(gzmap, NULL, NULL, 0);
 
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw_editor_overlays(region);
 
   return gzgroup;
 }
@@ -960,8 +964,8 @@ void WM_gizmomaptype_group_unlink(bContext *C,
     for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
       for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
         ListBase *lb = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
-        for (ARegion *ar = lb->first; ar; ar = ar->next) {
-          wmGizmoMap *gzmap = ar->gizmo_map;
+        for (ARegion *region = lb->first; region; region = region->next) {
+          wmGizmoMap *gzmap = region->gizmo_map;
           if (gzmap && gzmap->type == gzmap_type) {
             wmGizmoGroup *gzgroup, *gzgroup_next;
             for (gzgroup = gzmap->groups.first; gzgroup; gzgroup = gzgroup_next) {
@@ -969,7 +973,7 @@ void WM_gizmomaptype_group_unlink(bContext *C,
               if (gzgroup->type == gzgt) {
                 BLI_assert(gzgroup->parent_gzmap == gzmap);
                 wm_gizmogroup_free(C, gzgroup);
-                ED_region_tag_redraw(ar);
+                ED_region_tag_redraw_editor_overlays(region);
               }
             }
           }
@@ -1127,8 +1131,8 @@ void WM_gizmo_group_unlink_delayed_ptr_from_space(wmGizmoGroupType *gzgt,
                                                   wmGizmoMapType *gzmap_type,
                                                   ScrArea *sa)
 {
-  for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
-    wmGizmoMap *gzmap = ar->gizmo_map;
+  for (ARegion *region = sa->regionbase.first; region; region = region->next) {
+    wmGizmoMap *gzmap = region->gizmo_map;
     if (gzmap && gzmap->type == gzmap_type) {
       for (wmGizmoGroup *gzgroup = gzmap->groups.first; gzgroup; gzgroup = gzgroup->next) {
         if (gzgroup->type == gzgt) {
@@ -1136,6 +1140,58 @@ void WM_gizmo_group_unlink_delayed_ptr_from_space(wmGizmoGroupType *gzgt,
         }
       }
     }
+  }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Gizmo Group Type Callback Wrappers
+ *
+ * \{ */
+
+bool WM_gizmo_group_type_poll(const bContext *C, const wmGizmoGroupType *gzgt)
+{
+  /* If we're tagged, only use compatible. */
+  if (gzgt->owner_id[0] != '\0') {
+    const WorkSpace *workspace = CTX_wm_workspace(C);
+    if (BKE_workspace_owner_id_check(workspace, gzgt->owner_id) == false) {
+      return false;
+    }
+  }
+  /* Check for poll function, if gizmo-group belongs to an operator,
+   * also check if the operator is running. */
+  return (!gzgt->poll || gzgt->poll(C, (wmGizmoGroupType *)gzgt));
+}
+
+void WM_gizmo_group_refresh(const bContext *C, wmGizmoGroup *gzgroup)
+{
+  const wmGizmoGroupType *gzgt = gzgroup->type;
+  if (gzgt->flag & WM_GIZMOGROUPTYPE_DELAY_REFRESH_FOR_TWEAK) {
+    wmGizmoMap *gzmap = gzgroup->parent_gzmap;
+    wmGizmo *gz = wm_gizmomap_highlight_get(gzmap);
+    if (!gz || gz->parent_gzgroup != gzgroup) {
+      wmWindow *win = CTX_wm_window(C);
+      ARegion *region = CTX_wm_region(C);
+      BLI_assert(region->gizmo_map == gzmap);
+      /* Check if the tweak event originated from this region. */
+      if ((win->tweak != NULL) && BLI_rcti_compare(&region->winrct, &win->tweak->winrct)) {
+        /* We need to run refresh again. */
+        gzgroup->init_flag &= ~WM_GIZMOGROUP_INIT_REFRESH;
+        WM_gizmomap_tag_refresh_drawstep(gzmap, WM_gizmomap_drawstep_from_gizmo_group(gzgroup));
+        gzgroup->hide.delay_refresh_for_tweak = true;
+        return;
+      }
+    }
+    gzgroup->hide.delay_refresh_for_tweak = false;
+  }
+
+  if (gzgroup->hide.any) {
+    return;
+  }
+
+  if (gzgt->refresh) {
+    gzgt->refresh(C, gzgroup);
   }
 }
 

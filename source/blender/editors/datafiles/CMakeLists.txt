@@ -385,9 +385,8 @@ set(ICON_NAMES
   mod_mask
   mod_cloth
   mod_explode
-  mod_fluidsim
   mod_multires
-  mod_smoke
+  mod_fluid
   mod_solidify
   mod_screw
   mod_vertex_weight
@@ -529,10 +528,6 @@ set(ICON_NAMES
   axis_side
   axis_front
   axis_top
-  ndof_dom
-  ndof_turn
-  ndof_fly
-  ndof_trans
   layer_used
   layer_active
   sortalpha
@@ -653,6 +648,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.sculpt.inflate
   brush.sculpt.layer
   brush.sculpt.mask
+  brush.sculpt.multiplane_scrape
   brush.sculpt.nudge
   brush.sculpt.pinch
   brush.sculpt.pose
@@ -662,6 +658,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.sculpt.smooth
   brush.sculpt.snake_hook
   brush.sculpt.thumb
+  brush.sculpt.topology
   brush.uv_sculpt.grab
   brush.uv_sculpt.pinch
   brush.uv_sculpt.relax
@@ -693,6 +690,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.gpencil.primitive_circle
   ops.gpencil.primitive_curve
   ops.gpencil.primitive_line
+  ops.gpencil.primitive_polyline
   ops.gpencil.radius
   ops.gpencil.sculpt_clone
   ops.gpencil.sculpt_grab
@@ -728,6 +726,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.mesh.spin.duplicate
   ops.mesh.vertices_smooth
   ops.node.links_cut
+  ops.paint.eyedropper_add
   ops.paint.vertex_color_fill
   ops.paint.weight_fill
   ops.paint.weight_gradient
@@ -740,6 +739,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.sculpt.border_mask
   ops.sculpt.lasso_mask
   ops.sculpt.mesh_filter
+  ops.sequencer.blade
   ops.transform.bone_envelope
   ops.transform.bone_size
   ops.transform.edge_slide

@@ -148,10 +148,10 @@ static void rgb_tint(float col[3], float h, float h_strength, float v, float v_s
   hsv_to_rgb_v(col_hsv_to, col);
 }
 
-static void ui_tooltip_region_draw_cb(const bContext *UNUSED(C), ARegion *ar)
+static void ui_tooltip_region_draw_cb(const bContext *UNUSED(C), ARegion *region)
 {
   const float pad_px = UI_TIP_PADDING;
-  uiTooltipData *data = ar->regiondata;
+  uiTooltipData *data = region->regiondata;
   const uiWidgetColors *theme = ui_tooltip_get_theme();
   rcti bbox = data->bbox;
   float tip_colors[UI_TIP_LC_MAX][3];
@@ -168,7 +168,7 @@ static void ui_tooltip_region_draw_cb(const bContext *UNUSED(C), ARegion *ar)
   float tone_bg;
   int i;
 
-  wmOrtho2_region_pixelspace(ar);
+  wmOrtho2_region_pixelspace(region);
 
   /* draw background */
   ui_draw_tooltip_background(UI_style_get(), NULL, &bbox);
@@ -271,11 +271,11 @@ static void ui_tooltip_region_draw_cb(const bContext *UNUSED(C), ARegion *ar)
   BLF_disable(blf_mono_font, BLF_WORD_WRAP);
 }
 
-static void ui_tooltip_region_free_cb(ARegion *ar)
+static void ui_tooltip_region_free_cb(ARegion *region)
 {
   uiTooltipData *data;
 
-  data = ar->regiondata;
+  data = region->regiondata;
 
   for (int i = 0; i < data->fields_len; i++) {
     const uiTooltipField *field = &data->fields[i];
@@ -286,7 +286,23 @@ static void ui_tooltip_region_free_cb(ARegion *ar)
   }
   MEM_freeN(data->fields);
   MEM_freeN(data);
-  ar->regiondata = NULL;
+  region->regiondata = NULL;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name ToolTip Creation Utility Functions
+ * \{ */
+
+static char *ui_tooltip_text_python_from_op(bContext *C, wmOperatorType *ot, PointerRNA *opptr)
+{
+  char *str = WM_operator_pystring_ex(C, NULL, false, false, ot, opptr);
+
+  /* Avoid overly verbose tips (eg, arrays of 20 layers), exact limit is arbitrary. */
+  WM_operator_pystring_abbreviate(str, 32);
+
+  return str;
 }
 
 /** \} */
@@ -294,6 +310,8 @@ static void ui_tooltip_region_free_cb(ARegion *ar)
 /* -------------------------------------------------------------------- */
 /** \name ToolTip Creation
  * \{ */
+
+#ifdef WITH_PYTHON
 
 static bool ui_tooltip_data_append_from_keymap(bContext *C, uiTooltipData *data, wmKeyMap *keymap)
 {
@@ -334,8 +352,7 @@ static bool ui_tooltip_data_append_from_keymap(bContext *C, uiTooltipData *data,
                                                    .style = UI_TIP_STYLE_NORMAL,
                                                    .color_id = UI_TIP_LC_PYTHON,
                                                });
-        char *str = WM_operator_pystring_ex(C, NULL, false, false, ot, kmi->ptr);
-        WM_operator_pystring_abbreviate(str, 32);
+        char *str = ui_tooltip_text_python_from_op(C, ot, kmi->ptr);
         field->text = BLI_sprintfN(TIP_("Python: %s"), str);
         MEM_freeN(str);
       }
@@ -344,6 +361,8 @@ static bool ui_tooltip_data_append_from_keymap(bContext *C, uiTooltipData *data,
 
   return (fields_len_init != data->fields_len);
 }
+
+#endif /* WITH_PYTHON */
 
 /**
  * Special tool-system exception.
@@ -367,6 +386,28 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
   RNA_string_get(but->opptr, "name", tool_id);
   BLI_assert(tool_id[0] != '\0');
 
+  /* When false, we're in a different space type to the tool being set.
+   * Needed for setting the fallback tool from the properties space.
+   *
+   * If we drop the hard coded 3D-view in properties hack, we can remove this check. */
+  bool has_valid_context = true;
+  const char *has_valid_context_error = IFACE_("Unsupported context");
+  {
+    ScrArea *sa = CTX_wm_area(C);
+    if (sa == NULL) {
+      has_valid_context = false;
+    }
+    else {
+      PropertyRNA *prop = RNA_struct_find_property(but->opptr, "space_type");
+      if (RNA_property_is_set(but->opptr, prop)) {
+        const int space_type_prop = RNA_property_enum_get(but->opptr, prop);
+        if (space_type_prop != sa->spacetype) {
+          has_valid_context = false;
+        }
+      }
+    }
+  }
+
   /* We have a tool, now extract the info. */
   uiTooltipData *data = MEM_callocN(sizeof(uiTooltipData), "uiTooltipData");
 
@@ -387,7 +428,11 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
              tool_id);
     char *expr_result = NULL;
     bool is_error = false;
-    if (BPY_execute_string_as_string(C, expr_imports, expr, true, &expr_result)) {
+
+    if (has_valid_context == false) {
+      expr_result = BLI_strdup(has_valid_context_error);
+    }
+    else if (BPY_execute_string_as_string(C, expr_imports, expr, true, &expr_result)) {
       if (STREQ(expr_result, "")) {
         MEM_freeN(expr_result);
         expr_result = NULL;
@@ -440,7 +485,11 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
 
     char *expr_result = NULL;
     bool is_error = false;
-    if (BPY_execute_string_as_string(C, expr_imports, expr, true, &expr_result)) {
+
+    if (has_valid_context == false) {
+      expr_result = BLI_strdup(has_valid_context_error);
+    }
+    else if (BPY_execute_string_as_string(C, expr_imports, expr, true, &expr_result)) {
       if (STREQ(expr_result, ".")) {
         MEM_freeN(expr_result);
         expr_result = NULL;
@@ -469,7 +518,10 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
   }
 
   /* Shortcut. */
-  if (is_label == false && ((but->block->flag & UI_BLOCK_SHOW_SHORTCUT_ALWAYS) == 0)) {
+  const bool show_shortcut = is_label == false &&
+                             ((but->block->flag & UI_BLOCK_SHOW_SHORTCUT_ALWAYS) == 0);
+
+  if (show_shortcut) {
     /* There are different kinds of shortcuts:
      *
      * - Direct access to the tool (as if the toolbar button is pressed).
@@ -537,7 +589,11 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
              "'as_pointer', lambda: 0)()");
 
         intptr_t expr_result = 0;
-        if (BPY_execute_string_as_intptr(C, expr_imports, expr, true, &expr_result)) {
+
+        if (has_valid_context == false) {
+          shortcut = BLI_strdup(has_valid_context_error);
+        }
+        else if (BPY_execute_string_as_intptr(C, expr_imports, expr, true, &expr_result)) {
           if (expr_result != 0) {
             wmKeyMap *keymap = (wmKeyMap *)expr_result;
             for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
@@ -572,6 +628,93 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
     }
   }
 
+  if (show_shortcut) {
+    /* Shortcut for Cycling
+     *
+     * As a second option, we may have a shortcut to cycle this tool group.
+     *
+     * Since some keymaps may use this for the primary means of binding keys,
+     * it's useful to show these too.
+     * Without this there is no way to know how to use a key to set the tool.
+     *
+     * This is a little involved since the shortcut may be bound to another tool in this group,
+     * instead of the current tool on display. */
+
+    char *expr_result = NULL;
+    size_t expr_result_len;
+
+    {
+      const char *expr_imports[] = {"bpy", "bl_ui", NULL};
+      char expr[256];
+      SNPRINTF(expr,
+               "'\\x00'.join("
+               "item.idname for item in bl_ui.space_toolsystem_common.item_group_from_id("
+               "bpy.context, "
+               "bpy.context.space_data.type, '%s', coerce=True) "
+               "if item is not None)",
+               tool_id);
+
+      if (has_valid_context == false) {
+        /* pass */
+      }
+      else if (BPY_execute_string_as_string_and_size(
+                   C, expr_imports, expr, true, &expr_result, &expr_result_len)) {
+        /* pass. */
+      }
+    }
+
+    if (expr_result != NULL) {
+      PointerRNA op_props;
+      WM_operator_properties_create_ptr(&op_props, but->optype);
+      RNA_boolean_set(&op_props, "cycle", true);
+
+      char shortcut[128] = "";
+
+      const char *item_end = expr_result + expr_result_len;
+      const char *item_step = expr_result;
+
+      while (item_step < item_end) {
+        RNA_string_set(&op_props, "name", item_step);
+        if (WM_key_event_operator_string(C,
+                                         but->optype->idname,
+                                         WM_OP_INVOKE_REGION_WIN,
+                                         op_props.data,
+                                         true,
+                                         shortcut,
+                                         ARRAY_SIZE(shortcut))) {
+          break;
+        }
+        item_step += strlen(item_step) + 1;
+      }
+
+      WM_operator_properties_free(&op_props);
+      MEM_freeN(expr_result);
+
+      if (shortcut[0] != '\0') {
+        uiTooltipField *field = text_field_add(data,
+                                               &(uiTooltipFormat){
+                                                   .style = UI_TIP_STYLE_NORMAL,
+                                                   .color_id = UI_TIP_LC_VALUE,
+                                                   .is_pad = true,
+                                               });
+        field->text = BLI_sprintfN(TIP_("Shortcut Cycle: %s"), shortcut);
+      }
+    }
+  }
+
+  /* Python */
+  if ((is_label == false) && (U.flag & USER_TOOLTIPS_PYTHON)) {
+    uiTooltipField *field = text_field_add(data,
+                                           &(uiTooltipFormat){
+                                               .style = UI_TIP_STYLE_NORMAL,
+                                               .color_id = UI_TIP_LC_PYTHON,
+                                               .is_pad = true,
+                                           });
+    char *str = ui_tooltip_text_python_from_op(C, but->optype, but->opptr);
+    field->text = BLI_sprintfN(TIP_("Python: %s"), str);
+    MEM_freeN(str);
+  }
+
   /* Keymap */
 
   /* This is too handy not to expose somehow, let's be sneaky for now. */
@@ -588,7 +731,11 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
              tool_id);
 
     intptr_t expr_result = 0;
-    if (BPY_execute_string_as_intptr(C, expr_imports, expr, true, &expr_result)) {
+
+    if (has_valid_context == false) {
+      /* pass */
+    }
+    else if (BPY_execute_string_as_intptr(C, expr_imports, expr, true, &expr_result)) {
       if (expr_result != 0) {
         {
           uiTooltipField *field = text_field_add(data,
@@ -607,6 +754,8 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
       BLI_assert(0);
     }
   }
+#else
+  UNUSED_VARS(is_label);
 #endif /* WITH_PYTHON */
 
   if (data->fields_len == 0) {
@@ -785,10 +934,7 @@ static uiTooltipData *ui_tooltip_data_from_button(bContext *C, uiBut *but)
     /* so the context is passed to fieldf functions (some py fieldf functions use it) */
     WM_operator_properties_sanitize(opptr, false);
 
-    str = WM_operator_pystring_ex(C, NULL, false, false, but->optype, opptr);
-
-    /* avoid overly verbose tips (eg, arrays of 20 layers), exact limit is arbitrary */
-    WM_operator_pystring_abbreviate(str, 32);
+    str = ui_tooltip_text_python_from_op(C, but->optype, opptr);
 
     /* operator info */
     if (U.flag & USER_TOOLTIPS_PYTHON) {
@@ -1014,20 +1160,20 @@ static ARegion *ui_tooltip_create_with_data(bContext *C,
   const int winy = WM_window_pixels_y(win);
   uiStyle *style = UI_style_get();
   static ARegionType type;
-  ARegion *ar;
+  ARegion *region;
   int fonth, fontw;
   int h, i;
   rcti rect_i;
   int font_flag = 0;
 
   /* create area region */
-  ar = ui_region_temp_add(CTX_wm_screen(C));
+  region = ui_region_temp_add(CTX_wm_screen(C));
 
   memset(&type, 0, sizeof(ARegionType));
   type.draw = ui_tooltip_region_draw_cb;
   type.free = ui_tooltip_region_free_cb;
   type.regionid = RGN_TYPE_TEMPORARY;
-  ar->type = &type;
+  region->type = &type;
 
   /* set font, get bb */
   data->fstyle = style->widget; /* copy struct */
@@ -1091,7 +1237,7 @@ static ARegion *ui_tooltip_create_with_data(bContext *C,
   BLF_disable(data->fstyle.uifont_id, font_flag);
   BLF_disable(blf_mono_font, font_flag);
 
-  ar->regiondata = data;
+  region->regiondata = data;
 
   data->toth = fonth;
   data->lineh = h;
@@ -1238,19 +1384,19 @@ static ARegion *ui_tooltip_create_with_data(bContext *C,
     data->bbox.ymax = BLI_rcti_size_y(&rect_i);
 
     /* region bigger for shadow */
-    ar->winrct.xmin = rect_i.xmin - margin;
-    ar->winrct.xmax = rect_i.xmax + margin;
-    ar->winrct.ymin = rect_i.ymin - margin;
-    ar->winrct.ymax = rect_i.ymax + margin;
+    region->winrct.xmin = rect_i.xmin - margin;
+    region->winrct.xmax = rect_i.xmax + margin;
+    region->winrct.ymin = rect_i.ymin - margin;
+    region->winrct.ymax = rect_i.ymax + margin;
   }
 
   /* adds subwindow */
-  ED_region_init(ar);
+  ED_region_floating_initialize(region);
 
   /* notify change and redraw */
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw(region);
 
-  return ar;
+  return region;
 }
 
 /** \} */
@@ -1259,6 +1405,10 @@ static ARegion *ui_tooltip_create_with_data(bContext *C,
 /** \name ToolTip Public API
  * \{ */
 
+/**
+ * \param is_label: When true, show a small tip that only shows the name,
+ * otherwise show the full tooltip.
+ */
 ARegion *UI_tooltip_create_from_button(bContext *C, ARegion *butregion, uiBut *but, bool is_label)
 {
   wmWindow *win = CTX_wm_window(C);
@@ -1307,10 +1457,10 @@ ARegion *UI_tooltip_create_from_button(bContext *C, ARegion *butregion, uiBut *b
     }
   }
 
-  ARegion *ar = ui_tooltip_create_with_data(
+  ARegion *region = ui_tooltip_create_with_data(
       C, data, init_position, is_no_overlap ? &init_rect : NULL, aspect);
 
-  return ar;
+  return region;
 }
 
 ARegion *UI_tooltip_create_from_gizmo(bContext *C, wmGizmo *gz)
@@ -1330,9 +1480,9 @@ ARegion *UI_tooltip_create_from_gizmo(bContext *C, wmGizmo *gz)
   return ui_tooltip_create_with_data(C, data, init_position, NULL, aspect);
 }
 
-void UI_tooltip_free(bContext *C, bScreen *sc, ARegion *ar)
+void UI_tooltip_free(bContext *C, bScreen *sc, ARegion *region)
 {
-  ui_region_temp_remove(C, sc, ar);
+  ui_region_temp_remove(C, sc, region);
 }
 
 /** \} */

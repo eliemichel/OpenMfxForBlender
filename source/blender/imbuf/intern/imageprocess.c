@@ -37,6 +37,7 @@
 
 #include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_colormanagement.h"
 #include <math.h>
 
 /* Only this one is used liberally here, and in imbuf */
@@ -190,10 +191,7 @@ void bilinear_interpolation_color_wrap(
     outF[3] = ma_mb * row1[3] + a_mb * row3[3] + ma_b * row2[3] + a_b * row4[3];
 
     /* clamp here or else we can easily get off-range */
-    CLAMP(outF[0], 0.0f, 1.0f);
-    CLAMP(outF[1], 0.0f, 1.0f);
-    CLAMP(outF[2], 0.0f, 1.0f);
-    CLAMP(outF[3], 0.0f, 1.0f);
+    clamp_v4(outF, 0.0f, 1.0f);
   }
   if (outI) {
     /* sample including outside of edges of image */
@@ -491,5 +489,21 @@ void IMB_alpha_under_color_byte(unsigned char *rect, int x, int y, float backcol
     cp[3] = 255;
 
     cp += 4;
+  }
+}
+
+/* Sample pixel of image using NEAREST method. */
+void IMB_sampleImageAtLocation(ImBuf *ibuf, float x, float y, bool make_linear_rgb, float color[4])
+{
+  if (ibuf->rect_float) {
+    nearest_interpolation_color(ibuf, NULL, color, x, y);
+  }
+  else {
+    unsigned char byte_color[4];
+    nearest_interpolation_color(ibuf, byte_color, NULL, x, y);
+    rgba_uchar_to_float(color, byte_color);
+    if (make_linear_rgb) {
+      IMB_colormanagement_colorspace_to_scene_linear_v4(color, false, ibuf->rect_colorspace);
+    }
   }
 }

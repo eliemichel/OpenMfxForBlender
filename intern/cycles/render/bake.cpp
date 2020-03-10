@@ -253,8 +253,8 @@ int BakeManager::aa_samples(Scene *scene, BakeData *bake_data, ShaderEvalType ty
     /* Only antialias normal if mesh has bump mapping. */
     Object *object = scene->objects[bake_data->object()];
 
-    if (object->mesh) {
-      foreach (Shader *shader, object->mesh->used_shaders) {
+    if (object->geometry) {
+      foreach (Shader *shader, object->geometry->used_shaders) {
         if (shader->has_bump) {
           return scene->integrator->aa_samples;
         }
@@ -285,8 +285,6 @@ int BakeManager::shader_type_to_pass_filter(ShaderEvalType type, const int pass_
       return BAKE_FILTER_GLOSSY | component_flags;
     case SHADER_EVAL_TRANSMISSION:
       return BAKE_FILTER_TRANSMISSION | component_flags;
-    case SHADER_EVAL_SUBSURFACE:
-      return BAKE_FILTER_SUBSURFACE | component_flags;
     case SHADER_EVAL_COMBINED:
       return pass_filter;
     default:

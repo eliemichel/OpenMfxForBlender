@@ -50,100 +50,11 @@
 void DRW_draw_region_info(void)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
-  ARegion *ar = draw_ctx->ar;
+  ARegion *region = draw_ctx->region;
 
   DRW_draw_cursor();
 
-  view3d_draw_region_info(draw_ctx->evil_C, ar);
-}
-
-/* ************************* Background ************************** */
-void DRW_clear_background()
-{
-  GPU_clear_color(0.0, 0.0, 0.0, 0.0);
-  GPU_clear(GPU_COLOR_BIT | GPU_DEPTH_BIT | GPU_STENCIL_BIT);
-}
-
-void DRW_draw_background(bool do_alpha_checker)
-{
-  drw_state_set(DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ALPHA_UNDER_PREMUL);
-  if (do_alpha_checker) {
-    /* Transparent render, do alpha checker. */
-    GPU_matrix_push();
-    GPU_matrix_identity_set();
-    GPU_matrix_identity_projection_set();
-
-    imm_draw_box_checker_2d(-1.0f, -1.0f, 1.0f, 1.0f);
-
-    GPU_matrix_pop();
-  }
-  else {
-    float m[4][4];
-    unit_m4(m);
-
-    GPUVertFormat *format = immVertexFormat();
-    uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-    uint color = GPU_vertformat_attr_add(
-        format, "color", GPU_COMP_U8, 3, GPU_FETCH_INT_TO_FLOAT_UNIT);
-    uchar col_hi[3], col_lo[3];
-
-    GPU_matrix_push();
-    GPU_matrix_identity_set();
-    GPU_matrix_projection_set(m);
-
-    immBindBuiltinProgram(GPU_SHADER_2D_SMOOTH_COLOR_DITHER);
-
-    UI_GetThemeColor3ubv(TH_BACK, col_hi);
-    UI_GetThemeColor3ubv(UI_GetThemeValue(TH_SHOW_BACK_GRAD) ? TH_BACK_GRAD : TH_BACK, col_lo);
-
-    immBegin(GPU_PRIM_TRI_FAN, 4);
-    immAttr3ubv(color, col_lo);
-    immVertex2f(pos, -1.0f, -1.0f);
-    immVertex2f(pos, 1.0f, -1.0f);
-
-    immAttr3ubv(color, col_hi);
-    immVertex2f(pos, 1.0f, 1.0f);
-    immVertex2f(pos, -1.0f, 1.0f);
-    immEnd();
-
-    immUnbindProgram();
-
-    GPU_matrix_pop();
-  }
-}
-
-GPUBatch *DRW_draw_background_clipping_batch_from_rv3d(const RegionView3D *rv3d)
-{
-  const BoundBox *bb = rv3d->clipbb;
-  const uint clipping_index[6][4] = {
-      {0, 1, 2, 3},
-      {0, 4, 5, 1},
-      {4, 7, 6, 5},
-      {7, 3, 2, 6},
-      {1, 5, 6, 2},
-      {7, 4, 0, 3},
-  };
-  GPUVertBuf *vbo;
-  GPUIndexBuf *el;
-  GPUIndexBufBuilder elb = {0};
-
-  /* Elements */
-  GPU_indexbuf_init(&elb, GPU_PRIM_TRIS, ARRAY_SIZE(clipping_index) * 2, ARRAY_SIZE(bb->vec));
-  for (int i = 0; i < ARRAY_SIZE(clipping_index); i++) {
-    const uint *idx = clipping_index[i];
-    GPU_indexbuf_add_tri_verts(&elb, idx[0], idx[1], idx[2]);
-    GPU_indexbuf_add_tri_verts(&elb, idx[0], idx[2], idx[3]);
-  }
-  el = GPU_indexbuf_build(&elb);
-
-  GPUVertFormat format = {0};
-  uint pos_id = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
-
-  vbo = GPU_vertbuf_create_with_format(&format);
-  GPU_vertbuf_data_alloc(vbo, ARRAY_SIZE(bb->vec));
-  GPU_vertbuf_attr_fill(vbo, pos_id, bb->vec);
-
-  return GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, el, GPU_BATCH_OWNS_VBO | GPU_BATCH_OWNS_INDEX);
+  view3d_draw_region_info(draw_ctx->evil_C, region);
 }
 
 /* **************************** 3D Cursor ******************************** */
@@ -188,7 +99,7 @@ static bool is_cursor_visible(const DRWContextState *draw_ctx, Scene *scene, Vie
 void DRW_draw_cursor(void)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
-  ARegion *ar = draw_ctx->ar;
+  ARegion *region = draw_ctx->region;
   Scene *scene = draw_ctx->scene;
   ViewLayer *view_layer = draw_ctx->view_layer;
 
@@ -203,9 +114,9 @@ void DRW_draw_cursor(void)
     const View3DCursor *cursor = &scene->cursor;
 
     if (ED_view3d_project_int_global(
-            ar, cursor->location, co, V3D_PROJ_TEST_NOP | V3D_PROJ_TEST_CLIP_NEAR) ==
+            region, cursor->location, co, V3D_PROJ_TEST_NOP | V3D_PROJ_TEST_CLIP_NEAR) ==
         V3D_PROJ_RET_OK) {
-      RegionView3D *rv3d = ar->regiondata;
+      RegionView3D *rv3d = region->regiondata;
 
       float cursor_quat[4];
       BKE_scene_cursor_rot_to_quat(cursor, cursor_quat);
@@ -267,7 +178,7 @@ void DRW_draw_cursor(void)
       float original_proj[4][4];
       GPU_matrix_projection_get(original_proj);
       GPU_matrix_push();
-      ED_region_pixelspace(ar);
+      ED_region_pixelspace(region);
       GPU_matrix_translate_2f(co[0] + 0.5f, co[1] + 0.5f);
       GPU_matrix_scale_2f(U.widget_unit, U.widget_unit);
 
@@ -291,20 +202,20 @@ void DRW_draw_cursor(void)
 void DRW_draw_gizmo_3d(void)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
-  ARegion *ar = draw_ctx->ar;
+  ARegion *region = draw_ctx->region;
 
   /* draw depth culled gizmos - gizmos need to be updated *after* view matrix was set up */
   /* TODO depth culling gizmos is not yet supported, just drawing _3D here, should
    * later become _IN_SCENE (and draw _3D separate) */
-  WM_gizmomap_draw(ar->gizmo_map, draw_ctx->evil_C, WM_GIZMOMAP_DRAWSTEP_3D);
+  WM_gizmomap_draw(region->gizmo_map, draw_ctx->evil_C, WM_GIZMOMAP_DRAWSTEP_3D);
 }
 
 void DRW_draw_gizmo_2d(void)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
-  ARegion *ar = draw_ctx->ar;
+  ARegion *region = draw_ctx->region;
 
-  WM_gizmomap_draw(ar->gizmo_map, draw_ctx->evil_C, WM_GIZMOMAP_DRAWSTEP_2D);
+  WM_gizmomap_draw(region->gizmo_map, draw_ctx->evil_C, WM_GIZMOMAP_DRAWSTEP_2D);
 
   glDepthMask(GL_TRUE);
 }

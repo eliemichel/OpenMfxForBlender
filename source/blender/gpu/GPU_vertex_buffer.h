@@ -28,6 +28,10 @@
 
 #include "GPU_vertex_format.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define VRAM_USAGE 1
 /**
  * How to create a #GPUVertBuf:
@@ -88,6 +92,8 @@ void GPU_vertbuf_data_len_set(GPUVertBuf *, uint v_len);
 
 void GPU_vertbuf_attr_set(GPUVertBuf *, uint a_idx, uint v_idx, const void *data);
 
+void GPU_vertbuf_vert_set(GPUVertBuf *verts, uint v_idx, const void *data);
+
 /* Tightly packed, non interleaved input data. */
 void GPU_vertbuf_attr_fill(GPUVertBuf *, uint a_idx, const void *data);
 
@@ -135,5 +141,9 @@ uint GPU_vertbuf_get_memory_usage(void);
       verts = NULL; \
     } \
   } while (0)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __GPU_VERTEX_BUFFER_H__ */

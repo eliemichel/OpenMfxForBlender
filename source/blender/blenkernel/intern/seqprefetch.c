@@ -40,7 +40,7 @@
 #include "IMB_imbuf_types.h"
 
 #include "BKE_animsys.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_scene.h"
 #include "BKE_main.h"
 #include "BKE_context.h"
@@ -416,9 +416,7 @@ static PrefetchJob *seq_prefetch_start(const SeqRenderData *context, float cfra)
   pfjob->stop = false;
   pfjob->running = true;
 
-  if (&pfjob->threads) {
-    BLI_threadpool_remove(&pfjob->threads, pfjob);
-  }
+  BLI_threadpool_remove(&pfjob->threads, pfjob);
   BLI_threadpool_insert(&pfjob->threads, pfjob);
 
   return pfjob;

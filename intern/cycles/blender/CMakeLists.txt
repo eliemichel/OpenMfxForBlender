@@ -18,6 +18,9 @@ set(INC_SYS
 set(SRC
   blender_camera.cpp
   blender_device.cpp
+  blender_image.cpp
+  blender_geometry.cpp
+  blender_light.cpp
   blender_mesh.cpp
   blender_object.cpp
   blender_object_cull.cpp
@@ -30,9 +33,11 @@ set(SRC
   blender_sync.cpp
   blender_texture.cpp
   blender_viewport.cpp
+  blender_volume.cpp
 
   CCL_api.h
   blender_device.h
+  blender_id_map.h
   blender_object_cull.h
   blender_sync.h
   blender_session.h
@@ -49,11 +54,15 @@ set(LIB
   cycles_render
   cycles_subd
   cycles_util
+
+  ${PYTHON_LINKFLAGS}
+  ${PYTHON_LIBRARIES}
 )
 
 if(WITH_CYCLES_LOGGING)
   list(APPEND LIB
-    extern_glog
+    ${GLOG_LIBRARIES}
+    ${GFLAGS_LIBRARIES}
   )
 endif()
 
@@ -76,6 +85,10 @@ endif()
 
 if(WITH_CYCLES_NETWORK)
   add_definitions(-DWITH_NETWORK)
+endif()
+
+if(WITH_MOD_FLUID)
+  add_definitions(-DWITH_FLUID)
 endif()
 
 blender_add_lib(bf_intern_cycles "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

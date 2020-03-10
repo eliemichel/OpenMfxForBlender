@@ -40,7 +40,7 @@
 #include "BKE_action.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_nla.h"
 #include "BKE_report.h"
@@ -469,7 +469,7 @@ static int nlaedit_viewall(bContext *C, const bool only_sel)
   if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
   }
-  v2d = &ac.ar->v2d;
+  v2d = &ac.region->v2d;
 
   /* set the horizontal range, with an extra offset so that the extreme keys will be in view */
   get_nlastrip_extents(&ac, &v2d->cur.xmin, &v2d->cur.xmax, only_sel);
@@ -535,13 +535,13 @@ void NLA_OT_view_all(wmOperatorType *ot)
   ot->poll = ED_operator_nla_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 void NLA_OT_view_selected(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View Selected";
+  ot->name = "Frame Selected";
   ot->idname = "NLA_OT_view_selected";
   ot->description = "Reset viewable area to show selected strips range";
 
@@ -550,7 +550,7 @@ void NLA_OT_view_selected(wmOperatorType *ot)
   ot->poll = ED_operator_nla_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 /* *********************************************** */
@@ -565,16 +565,16 @@ static int nlaedit_viewframe_exec(bContext *C, wmOperator *op)
 void NLA_OT_view_frame(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View Frame";
+  ot->name = "Go to Current Frame";
   ot->idname = "NLA_OT_view_frame";
-  ot->description = "Reset viewable area to show range around current frame";
+  ot->description = "Move the view to the playhead";
 
   /* api callbacks */
   ot->exec = nlaedit_viewframe_exec;
   ot->poll = ED_operator_nla_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 /* *********************************************** */
@@ -587,6 +587,7 @@ void NLA_OT_view_frame(wmOperatorType *ot)
 /* add the specified action as new strip */
 static int nlaedit_add_actionclip_exec(bContext *C, wmOperator *op)
 {
+  Main *bmain = CTX_data_main(C);
   bAnimContext ac;
   Scene *scene;
 
@@ -608,7 +609,7 @@ static int nlaedit_add_actionclip_exec(bContext *C, wmOperator *op)
   cfra = (float)CFRA;
 
   /* get action to use */
-  act = BLI_findlink(&CTX_data_main(C)->actions, RNA_enum_get(op->ptr, "action"));
+  act = BLI_findlink(&bmain->actions, RNA_enum_get(op->ptr, "action"));
 
   if (act == NULL) {
     BKE_report(op->reports, RPT_ERROR, "No valid action to add");

@@ -17,11 +17,12 @@
 
 #ifdef WITH_OPTIX
 
-#  include "device/device.h"
+#  include "device/cuda/device_cuda.h"
 #  include "device/device_intern.h"
 #  include "device/device_denoising.h"
 #  include "bvh/bvh.h"
 #  include "render/scene.h"
+#  include "render/hair.h"
 #  include "render/mesh.h"
 #  include "render/object.h"
 #  include "render/buffers.h"
@@ -31,9 +32,6 @@
 #  include "util/util_debug.h"
 #  include "util/util_logging.h"
 
-#  undef _WIN32_WINNT  // Need minimum API support for Windows 7
-#  define _WIN32_WINNT _WIN32_WINNT_WIN7
-
 #  ifdef WITH_CUDA_DYNLOAD
 #    include <cuew.h>
 // Do not use CUDA SDK headers when using CUEW
@@ -41,6 +39,9 @@
 #  endif
 #  include <optix_stubs.h>
 #  include <optix_function_table_definition.h>
+
+// TODO(pmours): Disable this once drivers have native support
+#  define OPTIX_DENOISER_NO_PIXEL_STRIDE 1
 
 CCL_NAMESPACE_BEGIN
 
@@ -107,7 +108,23 @@ struct KernelParams {
     } \
     (void)0
 
-class OptiXDevice : public Device {
+#  define launch_filter_kernel(func_name, w, h, args) \
+    { \
+      CUfunction func; \
+      check_result_cuda_ret(cuModuleGetFunction(&func, cuFilterModule, func_name)); \
+      check_result_cuda_ret(cuFuncSetCacheConfig(func, CU_FUNC_CACHE_PREFER_L1)); \
+      int threads; \
+      check_result_cuda_ret( \
+          cuFuncGetAttribute(&threads, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, func)); \
+      threads = (int)sqrt((float)threads); \
+      int xblocks = ((w) + threads - 1) / threads; \
+      int yblocks = ((h) + threads - 1) / threads; \
+      check_result_cuda_ret( \
+          cuLaunchKernel(func, xblocks, yblocks, 1, threads, threads, 1, 0, 0, args, 0)); \
+    } \
+    (void)0
+
+class OptiXDevice : public CUDADevice {
 
   // List of OptiX program groups
   enum {
@@ -156,74 +173,37 @@ class OptiXDevice : public Device {
   // Use a pool with multiple threads to support launches with multiple CUDA streams
   TaskPool task_pool;
 
-  // CUDA/OptiX context handles
-  CUdevice cuda_device = 0;
-  CUcontext cuda_context = NULL;
   vector<CUstream> cuda_stream;
   OptixDeviceContext context = NULL;
 
-  // Need CUDA kernel module for some utility functions
-  CUmodule cuda_module = NULL;
-  CUmodule cuda_filter_module = NULL;
-  // All necessary OptiX kernels are in one module
-  OptixModule optix_module = NULL;
+  OptixModule optix_module = NULL;  // All necessary OptiX kernels are in one module
   OptixPipeline pipelines[NUM_PIPELINES] = {};
 
   bool motion_blur = false;
-  bool need_texture_info = false;
   device_vector<SbtRecord> sbt_data;
-  device_vector<TextureInfo> texture_info;
   device_only_memory<KernelParams> launch_params;
-  vector<device_only_memory<uint8_t>> blas;
+  vector<CUdeviceptr> as_mem;
   OptixTraversableHandle tlas_handle = 0;
 
-  // TODO(pmours): This is copied from device_cuda.cpp, so move to common code eventually
-  int can_map_host = 0;
-  size_t map_host_used = 0;
-  size_t map_host_limit = 0;
-  size_t device_working_headroom = 32 * 1024 * 1024LL;   // 32MB
-  size_t device_texture_headroom = 128 * 1024 * 1024LL;  // 128MB
-  map<device_memory *, CUDAMem> cuda_mem_map;
-  bool move_texture_to_host = false;
+  OptixDenoiser denoiser = NULL;
+  device_only_memory<unsigned char> denoiser_state;
+  int denoiser_input_passes = 0;
 
  public:
   OptiXDevice(DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background_)
-      : Device(info_, stats_, profiler_, background_),
+      : CUDADevice(info_, stats_, profiler_, background_),
         sbt_data(this, "__sbt", MEM_READ_ONLY),
-        texture_info(this, "__texture_info", MEM_TEXTURE),
-        launch_params(this, "__params")
+        launch_params(this, "__params"),
+        denoiser_state(this, "__denoiser_state")
   {
     // Store number of CUDA streams in device info
     info.cpu_threads = DebugFlags().optix.cuda_streams;
 
-    // Initialize CUDA driver API
-    check_result_cuda(cuInit(0));
-
-    // Retrieve the primary CUDA context for this device
-    check_result_cuda(cuDeviceGet(&cuda_device, info.num));
-    check_result_cuda(cuDevicePrimaryCtxRetain(&cuda_context, cuda_device));
-
-    // Make that CUDA context current
-    const CUDAContextScope scope(cuda_context);
-
-    // Limit amount of host mapped memory (see init_host_memory in device_cuda.cpp)
-    size_t default_limit = 4 * 1024 * 1024 * 1024LL;
-    size_t system_ram = system_physical_ram();
-    if (system_ram > 0) {
-      if (system_ram / 2 > default_limit) {
-        map_host_limit = system_ram - default_limit;
-      }
-      else {
-        map_host_limit = system_ram / 2;
-      }
+    // Make the CUDA context current
+    if (!cuContext) {
+      return;  // Do not initialize if CUDA context creation failed already
     }
-    else {
-      VLOG(1) << "Mapped host memory disabled, failed to get system RAM";
-    }
-
-    // Check device support for pinned host memory
-    check_result_cuda(
-        cuDeviceGetAttribute(&can_map_host, CU_DEVICE_ATTRIBUTE_CAN_MAP_HOST_MEMORY, cuda_device));
+    const CUDAContextScope scope(cuContext);
 
     // Create OptiX context for this device
     OptixDeviceContextOptions options = {};
@@ -247,7 +227,7 @@ class OptiXDevice : public Device {
           }
         };
 #  endif
-    check_result_optix(optixDeviceContextCreate(cuda_context, &options, &context));
+    check_result_optix(optixDeviceContextCreate(cuContext, &options, &context));
 #  ifdef WITH_CYCLES_LOGGING
     check_result_optix(optixDeviceContextSetLogCallback(
         context, options.logCallbackFunction, options.logCallbackData, options.logCallbackLevel));
@@ -268,21 +248,20 @@ class OptiXDevice : public Device {
     // Stop processing any more tasks
     task_pool.stop();
 
-    // Clean up all memory before destroying context
-    blas.clear();
+    // Make CUDA context current
+    const CUDAContextScope scope(cuContext);
+
+    // Free all acceleration structures
+    for (CUdeviceptr mem : as_mem) {
+      cuMemFree(mem);
+    }
 
     sbt_data.free();
     texture_info.free();
     launch_params.free();
-
-    // Make CUDA context current
-    const CUDAContextScope scope(cuda_context);
+    denoiser_state.free();
 
     // Unload modules
-    if (cuda_module != NULL)
-      cuModuleUnload(cuda_module);
-    if (cuda_filter_module != NULL)
-      cuModuleUnload(cuda_filter_module);
     if (optix_module != NULL)
       optixModuleDestroy(optix_module);
     for (unsigned int i = 0; i < NUM_PIPELINES; ++i)
@@ -290,12 +269,13 @@ class OptiXDevice : public Device {
         optixPipelineDestroy(pipelines[i]);
 
     // Destroy launch streams
-    for (int i = 0; i < info.cpu_threads; ++i)
-      cuStreamDestroy(cuda_stream[i]);
+    for (CUstream stream : cuda_stream)
+      cuStreamDestroy(stream);
 
-    // Destroy OptiX and CUDA context
+    if (denoiser != NULL)
+      optixDenoiserDestroy(denoiser);
+
     optixDeviceContextDestroy(context);
-    cuDevicePrimaryCtxRelease(cuda_device);
   }
 
  private:
@@ -311,10 +291,34 @@ class OptiXDevice : public Device {
     return BVH_LAYOUT_OPTIX;
   }
 
+  string compile_kernel_get_common_cflags(const DeviceRequestedFeatures &requested_features,
+                                          bool filter,
+                                          bool /*split*/) override
+  {
+    // Split kernel is not supported in OptiX
+    string common_cflags = CUDADevice::compile_kernel_get_common_cflags(
+        requested_features, filter, false);
+
+    // Add OptiX SDK include directory to include paths
+    const char *optix_sdk_path = getenv("OPTIX_ROOT_DIR");
+    if (optix_sdk_path) {
+      common_cflags += string_printf(" -I\"%s/include\"", optix_sdk_path);
+    }
+
+    return common_cflags;
+  }
+
   bool load_kernels(const DeviceRequestedFeatures &requested_features) override
   {
-    if (have_error())
-      return false;  // Abort early if context creation failed already
+    if (have_error()) {
+      // Abort early if context creation failed already
+      return false;
+    }
+
+    // Load CUDA modules because we need some of the utility kernels
+    if (!CUDADevice::load_kernels(requested_features)) {
+      return false;
+    }
 
     // Disable baking for now, since its kernel is not well-suited for inlining and is very slow
     if (requested_features.use_baking) {
@@ -327,18 +331,19 @@ class OptiXDevice : public Device {
       return false;
     }
 
-    const CUDAContextScope scope(cuda_context);
+    const CUDAContextScope scope(cuContext);
 
-    // Unload any existing modules first
-    if (cuda_module != NULL)
-      cuModuleUnload(cuda_module);
-    if (cuda_filter_module != NULL)
-      cuModuleUnload(cuda_filter_module);
-    if (optix_module != NULL)
+    // Unload existing OptiX module and pipelines first
+    if (optix_module != NULL) {
       optixModuleDestroy(optix_module);
-    for (unsigned int i = 0; i < NUM_PIPELINES; ++i)
-      if (pipelines[i] != NULL)
+      optix_module = NULL;
+    }
+    for (unsigned int i = 0; i < NUM_PIPELINES; ++i) {
+      if (pipelines[i] != NULL) {
         optixPipelineDestroy(pipelines[i]);
+        pipelines[i] = NULL;
+      }
+    }
 
     OptixModuleCompileOptions module_options;
     module_options.maxRegisterCount = 0;  // Do not set an explicit register limit
@@ -377,9 +382,11 @@ class OptiXDevice : public Device {
     }
 
     {  // Load and compile PTX module with OptiX kernels
-      string ptx_data;
-      const string ptx_filename = "lib/kernel_optix.ptx";
-      if (!path_read_text(path_get(ptx_filename), ptx_data)) {
+      string ptx_data, ptx_filename = path_get("lib/kernel_optix.ptx");
+      if (use_adaptive_compilation()) {
+        ptx_filename = compile_kernel(requested_features, "kernel_optix", "optix", true);
+      }
+      if (ptx_filename.empty() || !path_read_text(ptx_filename, ptx_data)) {
         set_error("Failed loading OptiX kernel " + ptx_filename + ".");
         return false;
       }
@@ -392,32 +399,6 @@ class OptiXDevice : public Device {
                                                       nullptr,
                                                       0,
                                                       &optix_module));
-    }
-
-    {  // Load CUDA modules because we need some of the utility kernels
-      int major, minor;
-      cuDeviceGetAttribute(&major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, info.num);
-      cuDeviceGetAttribute(&minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, info.num);
-
-      string cubin_data;
-      const string cubin_filename = string_printf("lib/kernel_sm_%d%d.cubin", major, minor);
-      if (!path_read_text(path_get(cubin_filename), cubin_data)) {
-        set_error("Failed loading pre-compiled CUDA kernel " + cubin_filename + ".");
-        return false;
-      }
-
-      check_result_cuda_ret(cuModuleLoadData(&cuda_module, cubin_data.data()));
-
-      if (requested_features.use_denoising) {
-        string filter_data;
-        const string filter_filename = string_printf("lib/filter_sm_%d%d.cubin", major, minor);
-        if (!path_read_text(path_get(filter_filename), filter_data)) {
-          set_error("Failed loading pre-compiled CUDA filter kernel " + filter_filename + ".");
-          return false;
-        }
-
-        check_result_cuda_ret(cuModuleLoadData(&cuda_filter_module, filter_data.data()));
-      }
     }
 
     // Create program groups
@@ -589,12 +570,17 @@ class OptiXDevice : public Device {
       return;  // Abort early if there was an error previously
 
     if (task.type == DeviceTask::RENDER) {
+      if (thread_index != 0) {
+        // Only execute denoising in a single thread (see also 'task_add')
+        task.tile_types &= ~RenderTile::DENOISE;
+      }
+
       RenderTile tile;
-      while (task.acquire_tile(this, tile)) {
+      while (task.acquire_tile(this, tile, task.tile_types)) {
         if (tile.task == RenderTile::PATH_TRACE)
           launch_render(task, tile, thread_index);
         else if (tile.task == RenderTile::DENOISE)
-          launch_denoise(task, tile, thread_index);
+          launch_denoise(task, tile);
         task.release_tile(tile);
         if (task.get_cancel() && !task.need_finish_queue)
           break;  // User requested cancellation
@@ -605,8 +591,21 @@ class OptiXDevice : public Device {
     else if (task.type == DeviceTask::SHADER) {
       launch_shader_eval(task, thread_index);
     }
-    else if (task.type == DeviceTask::FILM_CONVERT) {
-      launch_film_convert(task, thread_index);
+    else if (task.type == DeviceTask::DENOISE_BUFFER) {
+      // Set up a single tile that covers the whole task and denoise it
+      RenderTile tile;
+      tile.x = task.x;
+      tile.y = task.y;
+      tile.w = task.w;
+      tile.h = task.h;
+      tile.buffer = task.buffer;
+      tile.num_samples = task.num_samples;
+      tile.start_sample = task.sample;
+      tile.offset = task.offset;
+      tile.stride = task.stride;
+      tile.buffers = task.buffers;
+
+      launch_denoise(task, tile);
     }
   }
 
@@ -628,21 +627,24 @@ class OptiXDevice : public Device {
 
     const int end_sample = rtile.start_sample + rtile.num_samples;
     // Keep this number reasonable to avoid running into TDRs
-    const int step_samples = (info.display_device ? 8 : 32);
+    int step_samples = (info.display_device ? 8 : 32);
+    if (task.adaptive_sampling.use) {
+      step_samples = task.adaptive_sampling.align_static_samples(step_samples);
+    }
+
     // Offset into launch params buffer so that streams use separate data
     device_ptr launch_params_ptr = launch_params.device_pointer +
                                    thread_index * launch_params.data_elements;
 
-    const CUDAContextScope scope(cuda_context);
+    const CUDAContextScope scope(cuContext);
 
     for (int sample = rtile.start_sample; sample < end_sample; sample += step_samples) {
       // Copy work tile information to device
       wtile.num_samples = min(step_samples, end_sample - sample);
       wtile.start_sample = sample;
-      check_result_cuda(cuMemcpyHtoDAsync(launch_params_ptr + offsetof(KernelParams, tile),
-                                          &wtile,
-                                          sizeof(wtile),
-                                          cuda_stream[thread_index]));
+      device_ptr d_wtile_ptr = launch_params_ptr + offsetof(KernelParams, tile);
+      check_result_cuda(
+          cuMemcpyHtoDAsync(d_wtile_ptr, &wtile, sizeof(wtile), cuda_stream[thread_index]));
 
       OptixShaderBindingTable sbt_params = {};
       sbt_params.raygenRecord = sbt_data.device_pointer + PG_RGEN * sizeof(SbtRecord);
@@ -667,6 +669,12 @@ class OptiXDevice : public Device {
                                      wtile.h,
                                      1));
 
+      // Run the adaptive sampling kernels at selected samples aligned to step samples.
+      uint filter_sample = wtile.start_sample + wtile.num_samples - 1;
+      if (task.adaptive_sampling.use && task.adaptive_sampling.need_filter(filter_sample)) {
+        adaptive_sampling_filter(filter_sample, &wtile, d_wtile_ptr, cuda_stream[thread_index]);
+      }
+
       // Wait for launch to finish
       check_result_cuda(cuStreamSynchronize(cuda_stream[thread_index]));
 
@@ -678,48 +686,256 @@ class OptiXDevice : public Device {
       if (task.get_cancel() && !task.need_finish_queue)
         return;  // Cancel rendering
     }
+
+    // Finalize adaptive sampling
+    if (task.adaptive_sampling.use) {
+      device_ptr d_wtile_ptr = launch_params_ptr + offsetof(KernelParams, tile);
+      adaptive_sampling_post(rtile, &wtile, d_wtile_ptr, cuda_stream[thread_index]);
+      check_result_cuda(cuStreamSynchronize(cuda_stream[thread_index]));
+      task.update_progress(&rtile, rtile.w * rtile.h * wtile.num_samples);
+    }
   }
 
-  void launch_denoise(DeviceTask &task, RenderTile &rtile, int thread_index)
+  bool launch_denoise(DeviceTask &task, RenderTile &rtile)
   {
-    const CUDAContextScope scope(cuda_context);
+    // Update current sample (for display and NLM denoising task)
+    rtile.sample = rtile.start_sample + rtile.num_samples;
 
-    // Run CUDA denoising kernels
-    DenoisingTask denoising(this, task);
-    denoising.functions.construct_transform = function_bind(
-        &OptiXDevice::denoising_construct_transform, this, &denoising, thread_index);
-    denoising.functions.accumulate = function_bind(
-        &OptiXDevice::denoising_accumulate, this, _1, _2, _3, _4, &denoising, thread_index);
-    denoising.functions.solve = function_bind(
-        &OptiXDevice::denoising_solve, this, _1, &denoising, thread_index);
-    denoising.functions.divide_shadow = function_bind(
-        &OptiXDevice::denoising_divide_shadow, this, _1, _2, _3, _4, _5, &denoising, thread_index);
-    denoising.functions.non_local_means = function_bind(
-        &OptiXDevice::denoising_non_local_means, this, _1, _2, _3, _4, &denoising, thread_index);
-    denoising.functions.combine_halves = function_bind(&OptiXDevice::denoising_combine_halves,
-                                                       this,
-                                                       _1,
-                                                       _2,
-                                                       _3,
-                                                       _4,
-                                                       _5,
-                                                       _6,
-                                                       &denoising,
-                                                       thread_index);
-    denoising.functions.get_feature = function_bind(
-        &OptiXDevice::denoising_get_feature, this, _1, _2, _3, _4, _5, &denoising, thread_index);
-    denoising.functions.write_feature = function_bind(
-        &OptiXDevice::denoising_write_feature, this, _1, _2, _3, &denoising, thread_index);
-    denoising.functions.detect_outliers = function_bind(
-        &OptiXDevice::denoising_detect_outliers, this, _1, _2, _3, _4, &denoising, thread_index);
+    // Make CUDA context current now, since it is used for both denoising tasks
+    const CUDAContextScope scope(cuContext);
 
-    denoising.filter_area = make_int4(rtile.x, rtile.y, rtile.w, rtile.h);
-    denoising.render_buffer.samples = rtile.sample = rtile.start_sample + rtile.num_samples;
-    denoising.buffer.gpu_temporary_mem = true;
+    // Choose between OptiX and NLM denoising
+    if (task.denoising_use_optix) {
+      // Map neighboring tiles onto this device, indices are as following:
+      // Where index 4 is the center tile and index 9 is the target for the result.
+      //   0 1 2
+      //   3 4 5
+      //   6 7 8  9
+      RenderTile rtiles[10];
+      rtiles[4] = rtile;
+      task.map_neighbor_tiles(rtiles, this);
+      rtile = rtiles[4];  // Tile may have been modified by mapping code
 
-    denoising.run_denoising(&rtile);
+      // Calculate size of the tile to denoise (including overlap)
+      int4 rect = make_int4(
+          rtiles[4].x, rtiles[4].y, rtiles[4].x + rtiles[4].w, rtiles[4].y + rtiles[4].h);
+      // Overlap between tiles has to be at least 64 pixels
+      // TODO(pmours): Query this value from OptiX
+      rect = rect_expand(rect, 64);
+      int4 clip_rect = make_int4(
+          rtiles[3].x, rtiles[1].y, rtiles[5].x + rtiles[5].w, rtiles[7].y + rtiles[7].h);
+      rect = rect_clip(rect, clip_rect);
+      int2 rect_size = make_int2(rect.z - rect.x, rect.w - rect.y);
+      int2 overlap_offset = make_int2(rtile.x - rect.x, rtile.y - rect.y);
 
+      // Calculate byte offsets and strides
+      int pixel_stride = task.pass_stride * (int)sizeof(float);
+      int pixel_offset = (rtile.offset + rtile.x + rtile.y * rtile.stride) * pixel_stride;
+      const int pass_offset[3] = {
+          (task.pass_denoising_data + DENOISING_PASS_COLOR) * (int)sizeof(float),
+          (task.pass_denoising_data + DENOISING_PASS_ALBEDO) * (int)sizeof(float),
+          (task.pass_denoising_data + DENOISING_PASS_NORMAL) * (int)sizeof(float)};
+
+      // Start with the current tile pointer offset
+      int input_stride = pixel_stride;
+      device_ptr input_ptr = rtile.buffer + pixel_offset;
+
+      // Copy tile data into a common buffer if necessary
+      device_only_memory<float> input(this, "denoiser input");
+      device_vector<TileInfo> tile_info_mem(this, "denoiser tile info", MEM_READ_WRITE);
+
+      if ((!rtiles[0].buffer || rtiles[0].buffer == rtile.buffer) &&
+          (!rtiles[1].buffer || rtiles[1].buffer == rtile.buffer) &&
+          (!rtiles[2].buffer || rtiles[2].buffer == rtile.buffer) &&
+          (!rtiles[3].buffer || rtiles[3].buffer == rtile.buffer) &&
+          (!rtiles[5].buffer || rtiles[5].buffer == rtile.buffer) &&
+          (!rtiles[6].buffer || rtiles[6].buffer == rtile.buffer) &&
+          (!rtiles[7].buffer || rtiles[7].buffer == rtile.buffer) &&
+          (!rtiles[8].buffer || rtiles[8].buffer == rtile.buffer)) {
+        // Tiles are in continous memory, so can just subtract overlap offset
+        input_ptr -= (overlap_offset.x + overlap_offset.y * rtile.stride) * pixel_stride;
+        // Stride covers the whole width of the image and not just a single tile
+        input_stride *= rtile.stride;
+      }
+      else {
+        // Adjacent tiles are in separate memory regions, so need to copy them into a single one
+        input.alloc_to_device(rect_size.x * rect_size.y * task.pass_stride);
+        // Start with the new input buffer
+        input_ptr = input.device_pointer;
+        // Stride covers the width of the new input buffer, which includes tile width and overlap
+        input_stride *= rect_size.x;
+
+        TileInfo *tile_info = tile_info_mem.alloc(1);
+        for (int i = 0; i < 9; i++) {
+          tile_info->offsets[i] = rtiles[i].offset;
+          tile_info->strides[i] = rtiles[i].stride;
+          tile_info->buffers[i] = rtiles[i].buffer;
+        }
+        tile_info->x[0] = rtiles[3].x;
+        tile_info->x[1] = rtiles[4].x;
+        tile_info->x[2] = rtiles[5].x;
+        tile_info->x[3] = rtiles[5].x + rtiles[5].w;
+        tile_info->y[0] = rtiles[1].y;
+        tile_info->y[1] = rtiles[4].y;
+        tile_info->y[2] = rtiles[7].y;
+        tile_info->y[3] = rtiles[7].y + rtiles[7].h;
+        tile_info_mem.copy_to_device();
+
+        void *args[] = {
+            &input.device_pointer, &tile_info_mem.device_pointer, &rect.x, &task.pass_stride};
+        launch_filter_kernel("kernel_cuda_filter_copy_input", rect_size.x, rect_size.y, args);
+      }
+
+#  if OPTIX_DENOISER_NO_PIXEL_STRIDE
+      device_only_memory<float> input_rgb(this, "denoiser input rgb");
+      input_rgb.alloc_to_device(rect_size.x * rect_size.y * 3 * task.denoising.optix_input_passes);
+
+      void *input_args[] = {&input_rgb.device_pointer,
+                            &input_ptr,
+                            &rect_size.x,
+                            &rect_size.y,
+                            &input_stride,
+                            &task.pass_stride,
+                            const_cast<int *>(pass_offset),
+                            &task.denoising.optix_input_passes,
+                            &rtile.sample};
+      launch_filter_kernel(
+          "kernel_cuda_filter_convert_to_rgb", rect_size.x, rect_size.y, input_args);
+
+      input_ptr = input_rgb.device_pointer;
+      pixel_stride = 3 * sizeof(float);
+      input_stride = rect_size.x * pixel_stride;
+#  endif
+
+      const bool recreate_denoiser = (denoiser == NULL) ||
+                                     (task.denoising.optix_input_passes != denoiser_input_passes);
+      if (recreate_denoiser) {
+        // Destroy existing handle before creating new one
+        if (denoiser != NULL) {
+          optixDenoiserDestroy(denoiser);
+        }
+
+        // Create OptiX denoiser handle on demand when it is first used
+        OptixDenoiserOptions denoiser_options;
+        assert(task.denoising.optix_input_passes >= 1 && task.denoising.optix_input_passes <= 3);
+        denoiser_options.inputKind = static_cast<OptixDenoiserInputKind>(
+            OPTIX_DENOISER_INPUT_RGB + (task.denoising.optix_input_passes - 1));
+        denoiser_options.pixelFormat = OPTIX_PIXEL_FORMAT_FLOAT3;
+        check_result_optix_ret(optixDenoiserCreate(context, &denoiser_options, &denoiser));
+        check_result_optix_ret(
+            optixDenoiserSetModel(denoiser, OPTIX_DENOISER_MODEL_KIND_HDR, NULL, 0));
+
+        // OptiX denoiser handle was created with the requested number of input passes
+        denoiser_input_passes = task.denoising.optix_input_passes;
+      }
+
+      OptixDenoiserSizes sizes = {};
+      check_result_optix_ret(
+          optixDenoiserComputeMemoryResources(denoiser, rect_size.x, rect_size.y, &sizes));
+
+      const size_t scratch_size = sizes.recommendedScratchSizeInBytes;
+      const size_t scratch_offset = sizes.stateSizeInBytes;
+
+      // Allocate denoiser state if tile size has changed since last setup
+      if (recreate_denoiser || (denoiser_state.data_width != rect_size.x ||
+                                denoiser_state.data_height != rect_size.y)) {
+        denoiser_state.alloc_to_device(scratch_offset + scratch_size);
+
+        // Initialize denoiser state for the current tile size
+        check_result_optix_ret(optixDenoiserSetup(denoiser,
+                                                  0,
+                                                  rect_size.x,
+                                                  rect_size.y,
+                                                  denoiser_state.device_pointer,
+                                                  scratch_offset,
+                                                  denoiser_state.device_pointer + scratch_offset,
+                                                  scratch_size));
+
+        denoiser_state.data_width = rect_size.x;
+        denoiser_state.data_height = rect_size.y;
+      }
+
+      // Set up input and output layer information
+      OptixImage2D input_layers[3] = {};
+      OptixImage2D output_layers[1] = {};
+
+      for (int i = 0; i < 3; ++i) {
+#  if OPTIX_DENOISER_NO_PIXEL_STRIDE
+        input_layers[i].data = input_ptr + (rect_size.x * rect_size.y * pixel_stride * i);
+#  else
+        input_layers[i].data = input_ptr + pass_offset[i];
+#  endif
+        input_layers[i].width = rect_size.x;
+        input_layers[i].height = rect_size.y;
+        input_layers[i].rowStrideInBytes = input_stride;
+        input_layers[i].pixelStrideInBytes = pixel_stride;
+        input_layers[i].format = OPTIX_PIXEL_FORMAT_FLOAT3;
+      }
+
+#  if OPTIX_DENOISER_NO_PIXEL_STRIDE
+      output_layers[0].data = input_ptr;
+      output_layers[0].width = rect_size.x;
+      output_layers[0].height = rect_size.y;
+      output_layers[0].rowStrideInBytes = input_stride;
+      output_layers[0].pixelStrideInBytes = pixel_stride;
+      int2 output_offset = overlap_offset;
+      overlap_offset = make_int2(0, 0);  // Not supported by denoiser API, so apply manually
+#  else
+      output_layers[0].data = rtiles[9].buffer + pixel_offset;
+      output_layers[0].width = rtiles[9].w;
+      output_layers[0].height = rtiles[9].h;
+      output_layers[0].rowStrideInBytes = rtiles[9].stride * pixel_stride;
+      output_layers[0].pixelStrideInBytes = pixel_stride;
+#  endif
+      output_layers[0].format = OPTIX_PIXEL_FORMAT_FLOAT3;
+
+      // Finally run denonising
+      OptixDenoiserParams params = {};  // All parameters are disabled/zero
+      check_result_optix_ret(optixDenoiserInvoke(denoiser,
+                                                 0,
+                                                 &params,
+                                                 denoiser_state.device_pointer,
+                                                 scratch_offset,
+                                                 input_layers,
+                                                 task.denoising.optix_input_passes,
+                                                 overlap_offset.x,
+                                                 overlap_offset.y,
+                                                 output_layers,
+                                                 denoiser_state.device_pointer + scratch_offset,
+                                                 scratch_size));
+
+#  if OPTIX_DENOISER_NO_PIXEL_STRIDE
+      void *output_args[] = {&input_ptr,
+                             &rtiles[9].buffer,
+                             &output_offset.x,
+                             &output_offset.y,
+                             &rect_size.x,
+                             &rect_size.y,
+                             &rtiles[9].x,
+                             &rtiles[9].y,
+                             &rtiles[9].w,
+                             &rtiles[9].h,
+                             &rtiles[9].offset,
+                             &rtiles[9].stride,
+                             &task.pass_stride};
+      launch_filter_kernel(
+          "kernel_cuda_filter_convert_from_rgb", rtiles[9].w, rtiles[9].h, output_args);
+#  endif
+
+      check_result_cuda_ret(cuStreamSynchronize(0));
+
+      task.unmap_neighbor_tiles(rtiles, this);
+    }
+    else {
+      // Run CUDA denoising kernels
+      DenoisingTask denoising(this, task);
+      CUDADevice::denoise(rtile, denoising);
+    }
+
+    // Update task progress after the denoiser completed processing
     task.update_progress(&rtile, rtile.w * rtile.h);
+
+    return true;
   }
 
   void launch_shader_eval(DeviceTask &task, int thread_index)
@@ -730,7 +946,7 @@ class OptiXDevice : public Device {
     if (task.shader_eval_type == SHADER_EVAL_DISPLACE)
       rgen_index = PG_DISP;
 
-    const CUDAContextScope scope(cuda_context);
+    const CUDAContextScope scope(cuContext);
 
     device_ptr launch_params_ptr = launch_params.device_pointer +
                                    thread_index * launch_params.data_elements;
@@ -777,69 +993,27 @@ class OptiXDevice : public Device {
     }
   }
 
-  void launch_film_convert(DeviceTask &task, int thread_index)
-  {
-    const CUDAContextScope scope(cuda_context);
-
-    CUfunction film_convert_func;
-    check_result_cuda(cuModuleGetFunction(&film_convert_func,
-                                          cuda_module,
-                                          task.rgba_byte ? "kernel_cuda_convert_to_byte" :
-                                                           "kernel_cuda_convert_to_half_float"));
-
-    float sample_scale = 1.0f / (task.sample + 1);
-    CUdeviceptr rgba = (task.rgba_byte ? task.rgba_byte : task.rgba_half);
-
-    void *args[] = {&rgba,
-                    &task.buffer,
-                    &sample_scale,
-                    &task.x,
-                    &task.y,
-                    &task.w,
-                    &task.h,
-                    &task.offset,
-                    &task.stride};
-
-    int threads_per_block;
-    check_result_cuda(cuFuncGetAttribute(
-        &threads_per_block, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, film_convert_func));
-
-    const int num_threads_x = (int)sqrt(threads_per_block);
-    const int num_blocks_x = (task.w + num_threads_x - 1) / num_threads_x;
-    const int num_threads_y = (int)sqrt(threads_per_block);
-    const int num_blocks_y = (task.h + num_threads_y - 1) / num_threads_y;
-
-    check_result_cuda(cuLaunchKernel(film_convert_func,
-                                     num_blocks_x,
-                                     num_blocks_y,
-                                     1, /* blocks */
-                                     num_threads_x,
-                                     num_threads_y,
-                                     1, /* threads */
-                                     0,
-                                     cuda_stream[thread_index],
-                                     args,
-                                     0));
-
-    check_result_cuda(cuStreamSynchronize(cuda_stream[thread_index]));
-
-    task.update_progress(NULL);
-  }
-
   bool build_optix_bvh(const OptixBuildInput &build_input,
                        uint16_t num_motion_steps,
-                       device_memory &out_data,
                        OptixTraversableHandle &out_handle)
   {
     out_handle = 0;
 
-    const CUDAContextScope scope(cuda_context);
+    const CUDAContextScope scope(cuContext);
 
     // Compute memory usage
     OptixAccelBufferSizes sizes = {};
     OptixAccelBuildOptions options;
     options.operation = OPTIX_BUILD_OPERATION_BUILD;
-    options.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE;
+    if (background) {
+      // Prefer best performance and lowest memory consumption in background
+      options.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE | OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
+    }
+    else {
+      // Prefer fast updates in viewport
+      options.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD;
+    }
+
     options.motionOptions.numKeys = num_motion_steps;
     options.motionOptions.flags = OPTIX_MOTION_FLAG_START_VANISH | OPTIX_MOTION_FLAG_END_VANISH;
     options.motionOptions.timeBegin = 0.0f;
@@ -850,63 +1024,114 @@ class OptiXDevice : public Device {
 
     // Allocate required output buffers
     device_only_memory<char> temp_mem(this, "temp_build_mem");
-    temp_mem.alloc_to_device(sizes.tempSizeInBytes);
+    temp_mem.alloc_to_device(align_up(sizes.tempSizeInBytes, 8) + 8);
+    if (!temp_mem.device_pointer)
+      return false;  // Make sure temporary memory allocation succeeded
 
-    out_data.type = MEM_DEVICE_ONLY;
-    out_data.data_type = TYPE_UNKNOWN;
-    out_data.data_elements = 1;
-    out_data.data_size = sizes.outputSizeInBytes;
-    mem_alloc(out_data);
+    // Move textures to host memory if there is not enough room
+    size_t size = 0, free = 0;
+    cuMemGetInfo(&free, &size);
+    size = sizes.outputSizeInBytes + device_working_headroom;
+    if (size >= free && can_map_host) {
+      move_textures_to_host(size - free, false);
+    }
+
+    CUdeviceptr out_data = 0;
+    check_result_cuda_ret(cuMemAlloc(&out_data, sizes.outputSizeInBytes));
+    as_mem.push_back(out_data);
 
     // Finally build the acceleration structure
+    OptixAccelEmitDesc compacted_size_prop;
+    compacted_size_prop.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE;
+    // A tiny space was allocated for this property at the end of the temporary buffer above
+    // Make sure this pointer is 8-byte aligned
+    compacted_size_prop.result = align_up(temp_mem.device_pointer + sizes.tempSizeInBytes, 8);
+
     check_result_optix_ret(optixAccelBuild(context,
                                            NULL,
                                            &options,
                                            &build_input,
                                            1,
                                            temp_mem.device_pointer,
-                                           sizes.tempSizeInBytes,
-                                           out_data.device_pointer,
+                                           temp_mem.device_size,
+                                           out_data,
                                            sizes.outputSizeInBytes,
                                            &out_handle,
-                                           NULL,
-                                           0));
+                                           background ? &compacted_size_prop : NULL,
+                                           background ? 1 : 0));
 
     // Wait for all operations to finish
     check_result_cuda_ret(cuStreamSynchronize(NULL));
 
+    // Compact acceleration structure to save memory (do not do this in viewport for faster builds)
+    if (background) {
+      uint64_t compacted_size = sizes.outputSizeInBytes;
+      check_result_cuda_ret(
+          cuMemcpyDtoH(&compacted_size, compacted_size_prop.result, sizeof(compacted_size)));
+
+      // Temporary memory is no longer needed, so free it now to make space
+      temp_mem.free();
+
+      // There is no point compacting if the size does not change
+      if (compacted_size < sizes.outputSizeInBytes) {
+        CUdeviceptr compacted_data = 0;
+        if (cuMemAlloc(&compacted_data, compacted_size) != CUDA_SUCCESS)
+          // Do not compact if memory allocation for compacted acceleration structure fails
+          // Can just use the uncompacted one then, so succeed here regardless
+          return true;
+        as_mem.push_back(compacted_data);
+
+        check_result_optix_ret(optixAccelCompact(
+            context, NULL, out_handle, compacted_data, compacted_size, &out_handle));
+
+        // Wait for compaction to finish
+        check_result_cuda_ret(cuStreamSynchronize(NULL));
+
+        // Free uncompacted acceleration structure
+        cuMemFree(out_data);
+        as_mem.erase(as_mem.end() - 2);  // Remove 'out_data' from 'as_mem' array
+      }
+    }
+
     return true;
   }
 
-  bool build_optix_bvh(BVH *bvh, device_memory &out_data) override
+  bool build_optix_bvh(BVH *bvh) override
   {
     assert(bvh->params.top_level);
 
     unsigned int num_instances = 0;
-    unordered_map<Mesh *, vector<OptixTraversableHandle>> meshes;
+    unordered_map<Geometry *, OptixTraversableHandle> geometry;
+    geometry.reserve(bvh->geometry.size());
 
-    // Clear all previous AS
-    blas.clear();
+    // Free all previous acceleration structures
+    for (CUdeviceptr mem : as_mem) {
+      cuMemFree(mem);
+    }
+    as_mem.clear();
 
     // Build bottom level acceleration structures (BLAS)
     // Note: Always keep this logic in sync with bvh_optix.cpp!
     for (Object *ob : bvh->objects) {
-      // Skip meshes for which acceleration structure already exists
-      if (meshes.find(ob->mesh) != meshes.end())
+      // Skip geometry for which acceleration structure already exists
+      Geometry *geom = ob->geometry;
+      if (geometry.find(geom) != geometry.end())
         continue;
 
-      Mesh *const mesh = ob->mesh;
-      vector<OptixTraversableHandle> handles;
+      if (geom->type == Geometry::HAIR) {
+        // Build BLAS for curve primitives
+        Hair *const hair = static_cast<Hair *const>(ob->geometry);
+        if (hair->num_curves() == 0) {
+          continue;
+        }
 
-      // Build BLAS for curve primitives
-      if (bvh->params.primitive_mask & PRIMITIVE_ALL_CURVE && mesh->num_curves() > 0) {
-        const size_t num_curves = mesh->num_curves();
-        const size_t num_segments = mesh->num_segments();
+        const size_t num_curves = hair->num_curves();
+        const size_t num_segments = hair->num_segments();
 
         size_t num_motion_steps = 1;
-        Attribute *motion_keys = mesh->curve_attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
-        if (motion_blur && mesh->use_motion_blur && motion_keys) {
-          num_motion_steps = mesh->motion_steps;
+        Attribute *motion_keys = hair->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
+        if (motion_blur && hair->use_motion_blur && motion_keys) {
+          num_motion_steps = hair->motion_steps;
         }
 
         device_vector<OptixAabb> aabb_data(this, "temp_aabb_data", MEM_READ_ONLY);
@@ -915,21 +1140,21 @@ class OptiXDevice : public Device {
         // Get AABBs for each motion step
         for (size_t step = 0; step < num_motion_steps; ++step) {
           // The center step for motion vertices is not stored in the attribute
-          const float3 *keys = mesh->curve_keys.data();
+          const float3 *keys = hair->curve_keys.data();
           size_t center_step = (num_motion_steps - 1) / 2;
           if (step != center_step) {
             size_t attr_offset = (step > center_step) ? step - 1 : step;
             // Technically this is a float4 array, but sizeof(float3) is the same as sizeof(float4)
-            keys = motion_keys->data_float3() + attr_offset * mesh->curve_keys.size();
+            keys = motion_keys->data_float3() + attr_offset * hair->curve_keys.size();
           }
 
           size_t i = step * num_segments;
           for (size_t j = 0; j < num_curves; ++j) {
-            const Mesh::Curve c = mesh->get_curve(j);
+            const Hair::Curve c = hair->get_curve(j);
 
             for (size_t k = 0; k < c.num_segments(); ++i, ++k) {
               BoundBox bounds = BoundBox::empty;
-              c.bounds_grow(k, keys, mesh->curve_radius.data(), bounds);
+              c.bounds_grow(k, keys, hair->curve_radius.data(), bounds);
 
               aabb_data[i].minX = bounds.min.x;
               aabb_data[i].minY = bounds.min.y;
@@ -960,17 +1185,24 @@ class OptiXDevice : public Device {
         build_input.aabbArray.strideInBytes = sizeof(OptixAabb);
         build_input.aabbArray.flags = &build_flags;
         build_input.aabbArray.numSbtRecords = 1;
-        build_input.aabbArray.primitiveIndexOffset = mesh->prim_offset;
+        build_input.aabbArray.primitiveIndexOffset = hair->optix_prim_offset;
 
         // Allocate memory for new BLAS and build it
-        blas.emplace_back(this, "blas");
-        handles.emplace_back();
-        if (!build_optix_bvh(build_input, num_motion_steps, blas.back(), handles.back()))
+        OptixTraversableHandle handle;
+        if (build_optix_bvh(build_input, num_motion_steps, handle)) {
+          geometry.insert({ob->geometry, handle});
+        }
+        else {
           return false;
+        }
       }
+      else if (geom->type == Geometry::MESH) {
+        // Build BLAS for triangle primitives
+        Mesh *const mesh = static_cast<Mesh *const>(ob->geometry);
+        if (mesh->num_triangles() == 0) {
+          continue;
+        }
 
-      // Build BLAS for triangle primitives
-      if (bvh->params.primitive_mask & PRIMITIVE_ALL_TRIANGLE && mesh->num_triangles() > 0) {
         const size_t num_verts = mesh->verts.size();
 
         size_t num_motion_steps = 1;
@@ -1025,125 +1257,142 @@ class OptiXDevice : public Device {
         // buffers for that purpose. OptiX does not allow this to be zero though, so just pass in
         // one and rely on that having the same meaning in this case.
         build_input.triangleArray.numSbtRecords = 1;
-        // Triangle primitives are packed right after the curve primitives of this mesh
-        build_input.triangleArray.primitiveIndexOffset = mesh->prim_offset + mesh->num_segments();
+        build_input.triangleArray.primitiveIndexOffset = mesh->optix_prim_offset;
 
         // Allocate memory for new BLAS and build it
-        blas.emplace_back(this, "blas");
-        handles.emplace_back();
-        if (!build_optix_bvh(build_input, num_motion_steps, blas.back(), handles.back()))
+        OptixTraversableHandle handle;
+        if (build_optix_bvh(build_input, num_motion_steps, handle)) {
+          geometry.insert({ob->geometry, handle});
+        }
+        else {
           return false;
+        }
       }
-
-      meshes.insert({mesh, handles});
     }
 
     // Fill instance descriptions
     device_vector<OptixAabb> aabbs(this, "tlas_aabbs", MEM_READ_ONLY);
-    aabbs.alloc(bvh->objects.size() * 2);
+    aabbs.alloc(bvh->objects.size());
     device_vector<OptixInstance> instances(this, "tlas_instances", MEM_READ_ONLY);
-    instances.alloc(bvh->objects.size() * 2);
+    instances.alloc(bvh->objects.size());
 
     for (Object *ob : bvh->objects) {
       // Skip non-traceable objects
       if (!ob->is_traceable())
         continue;
+
       // Create separate instance for triangle/curve meshes of an object
-      for (OptixTraversableHandle handle : meshes[ob->mesh]) {
-        OptixAabb &aabb = aabbs[num_instances];
-        aabb.minX = ob->bounds.min.x;
-        aabb.minY = ob->bounds.min.y;
-        aabb.minZ = ob->bounds.min.z;
-        aabb.maxX = ob->bounds.max.x;
-        aabb.maxY = ob->bounds.max.y;
-        aabb.maxZ = ob->bounds.max.z;
+      auto handle_it = geometry.find(ob->geometry);
+      if (handle_it == geometry.end()) {
+        continue;
+      }
+      OptixTraversableHandle handle = handle_it->second;
 
-        OptixInstance &instance = instances[num_instances++];
-        memset(&instance, 0, sizeof(instance));
+      OptixAabb &aabb = aabbs[num_instances];
+      aabb.minX = ob->bounds.min.x;
+      aabb.minY = ob->bounds.min.y;
+      aabb.minZ = ob->bounds.min.z;
+      aabb.maxX = ob->bounds.max.x;
+      aabb.maxY = ob->bounds.max.y;
+      aabb.maxZ = ob->bounds.max.z;
 
-        // Clear transform to identity matrix
-        instance.transform[0] = 1.0f;
-        instance.transform[5] = 1.0f;
-        instance.transform[10] = 1.0f;
+      OptixInstance &instance = instances[num_instances++];
+      memset(&instance, 0, sizeof(instance));
 
-        // Set user instance ID to object index
-        instance.instanceId = ob->get_device_index();
+      // Clear transform to identity matrix
+      instance.transform[0] = 1.0f;
+      instance.transform[5] = 1.0f;
+      instance.transform[10] = 1.0f;
 
-        // Volumes have a special bit set in the visibility mask so a trace can mask only volumes
-        // See 'scene_intersect_volume' in bvh.h
-        instance.visibilityMask = (ob->mesh->has_volume ? 3 : 1);
+      // Set user instance ID to object index
+      instance.instanceId = ob->get_device_index();
 
-        // Insert motion traversable if object has motion
-        if (motion_blur && ob->use_motion()) {
-          blas.emplace_back(this, "motion_transform");
-          device_only_memory<uint8_t> &motion_transform_gpu = blas.back();
-          motion_transform_gpu.alloc_to_device(sizeof(OptixSRTMotionTransform) +
-                                               (max(ob->motion.size(), 2) - 2) *
-                                                   sizeof(OptixSRTData));
+      // Volumes have a special bit set in the visibility mask so a trace can mask only volumes
+      // See 'scene_intersect_volume' in bvh.h
+      instance.visibilityMask = (ob->geometry->has_volume ? 3 : 1);
 
-          // Allocate host side memory for motion transform and fill it with transform data
-          OptixSRTMotionTransform &motion_transform = *reinterpret_cast<OptixSRTMotionTransform *>(
-              motion_transform_gpu.host_pointer = new uint8_t[motion_transform_gpu.memory_size()]);
-          motion_transform.child = handle;
-          motion_transform.motionOptions.numKeys = ob->motion.size();
-          motion_transform.motionOptions.flags = OPTIX_MOTION_FLAG_NONE;
-          motion_transform.motionOptions.timeBegin = 0.0f;
-          motion_transform.motionOptions.timeEnd = 1.0f;
+      // Insert motion traversable if object has motion
+      if (motion_blur && ob->use_motion()) {
+        size_t motion_keys = max(ob->motion.size(), 2) - 2;
+        size_t motion_transform_size = sizeof(OptixSRTMotionTransform) +
+                                       motion_keys * sizeof(OptixSRTData);
 
-          OptixSRTData *const srt_data = motion_transform.srtData;
-          array<DecomposedTransform> decomp(ob->motion.size());
-          transform_motion_decompose(decomp.data(), ob->motion.data(), ob->motion.size());
+        const CUDAContextScope scope(cuContext);
 
-          for (size_t i = 0; i < ob->motion.size(); ++i) {
-            // scaling
-            srt_data[i].a = decomp[i].z.x;   // scale.x.y
-            srt_data[i].b = decomp[i].z.y;   // scale.x.z
-            srt_data[i].c = decomp[i].w.x;   // scale.y.z
-            srt_data[i].sx = decomp[i].y.w;  // scale.x.x
-            srt_data[i].sy = decomp[i].z.w;  // scale.y.y
-            srt_data[i].sz = decomp[i].w.w;  // scale.z.z
-            srt_data[i].pvx = 0;
-            srt_data[i].pvy = 0;
-            srt_data[i].pvz = 0;
-            // rotation
-            srt_data[i].qx = decomp[i].x.x;
-            srt_data[i].qy = decomp[i].x.y;
-            srt_data[i].qz = decomp[i].x.z;
-            srt_data[i].qw = decomp[i].x.w;
-            // transform
-            srt_data[i].tx = decomp[i].y.x;
-            srt_data[i].ty = decomp[i].y.y;
-            srt_data[i].tz = decomp[i].y.z;
-          }
+        CUdeviceptr motion_transform_gpu = 0;
+        check_result_cuda_ret(cuMemAlloc(&motion_transform_gpu, motion_transform_size));
+        as_mem.push_back(motion_transform_gpu);
 
-          // Upload motion transform to GPU
-          mem_copy_to(motion_transform_gpu);
-          delete[] reinterpret_cast<uint8_t *>(motion_transform_gpu.host_pointer);
-          motion_transform_gpu.host_pointer = 0;
+        // Allocate host side memory for motion transform and fill it with transform data
+        OptixSRTMotionTransform &motion_transform = *reinterpret_cast<OptixSRTMotionTransform *>(
+            new uint8_t[motion_transform_size]);
+        motion_transform.child = handle;
+        motion_transform.motionOptions.numKeys = ob->motion.size();
+        motion_transform.motionOptions.flags = OPTIX_MOTION_FLAG_NONE;
+        motion_transform.motionOptions.timeBegin = 0.0f;
+        motion_transform.motionOptions.timeEnd = 1.0f;
 
-          // Disable instance transform if object uses motion transform already
-          instance.flags = OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM;
+        OptixSRTData *const srt_data = motion_transform.srtData;
+        array<DecomposedTransform> decomp(ob->motion.size());
+        transform_motion_decompose(decomp.data(), ob->motion.data(), ob->motion.size());
 
-          // Get traversable handle to motion transform
-          optixConvertPointerToTraversableHandle(context,
-                                                 motion_transform_gpu.device_pointer,
-                                                 OPTIX_TRAVERSABLE_TYPE_SRT_MOTION_TRANSFORM,
-                                                 &instance.traversableHandle);
+        for (size_t i = 0; i < ob->motion.size(); ++i) {
+          // Scale
+          srt_data[i].sx = decomp[i].y.w;  // scale.x.x
+          srt_data[i].sy = decomp[i].z.w;  // scale.y.y
+          srt_data[i].sz = decomp[i].w.w;  // scale.z.z
+
+          // Shear
+          srt_data[i].a = decomp[i].z.x;  // scale.x.y
+          srt_data[i].b = decomp[i].z.y;  // scale.x.z
+          srt_data[i].c = decomp[i].w.x;  // scale.y.z
+          assert(decomp[i].z.z == 0.0f);  // scale.y.x
+          assert(decomp[i].w.y == 0.0f);  // scale.z.x
+          assert(decomp[i].w.z == 0.0f);  // scale.z.y
+
+          // Pivot point
+          srt_data[i].pvx = 0.0f;
+          srt_data[i].pvy = 0.0f;
+          srt_data[i].pvz = 0.0f;
+
+          // Rotation
+          srt_data[i].qx = decomp[i].x.x;
+          srt_data[i].qy = decomp[i].x.y;
+          srt_data[i].qz = decomp[i].x.z;
+          srt_data[i].qw = decomp[i].x.w;
+
+          // Translation
+          srt_data[i].tx = decomp[i].y.x;
+          srt_data[i].ty = decomp[i].y.y;
+          srt_data[i].tz = decomp[i].y.z;
+        }
+
+        // Upload motion transform to GPU
+        cuMemcpyHtoD(motion_transform_gpu, &motion_transform, motion_transform_size);
+        delete[] reinterpret_cast<uint8_t *>(&motion_transform);
+
+        // Disable instance transform if object uses motion transform already
+        instance.flags = OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM;
+
+        // Get traversable handle to motion transform
+        optixConvertPointerToTraversableHandle(context,
+                                               motion_transform_gpu,
+                                               OPTIX_TRAVERSABLE_TYPE_SRT_MOTION_TRANSFORM,
+                                               &instance.traversableHandle);
+      }
+      else {
+        instance.traversableHandle = handle;
+
+        if (ob->geometry->is_instanced()) {
+          // Set transform matrix
+          memcpy(instance.transform, &ob->tfm, sizeof(instance.transform));
         }
         else {
-          instance.traversableHandle = handle;
-
-          if (ob->mesh->is_instanced()) {
-            // Set transform matrix
-            memcpy(instance.transform, &ob->tfm, sizeof(instance.transform));
-          }
-          else {
-            // Disable instance transform if mesh already has it applied to vertex data
-            instance.flags = OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM;
-            // Non-instanced objects read ID from prim_object, so
-            // distinguish them from instanced objects with high bit set
-            instance.instanceId |= 0x800000;
-          }
+          // Disable instance transform if geometry already has it applied to vertex data
+          instance.flags = OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM;
+          // Non-instanced objects read ID from prim_object, so
+          // distinguish them from instanced objects with high bit set
+          instance.instanceId |= 0x800000;
         }
       }
     }
@@ -1154,7 +1403,7 @@ class OptiXDevice : public Device {
     instances.resize(num_instances);
     instances.copy_to_device();
 
-    // Build top-level acceleration structure
+    // Build top-level acceleration structure (TLAS)
     OptixBuildInput build_input = {};
     build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
     build_input.instanceArray.instances = instances.device_pointer;
@@ -1162,623 +1411,16 @@ class OptiXDevice : public Device {
     build_input.instanceArray.aabbs = aabbs.device_pointer;
     build_input.instanceArray.numAabbs = num_instances;
 
-    return build_optix_bvh(build_input, 0 /* TLAS has no motion itself */, out_data, tlas_handle);
-  }
-
-  void update_texture_info()
-  {
-    if (need_texture_info) {
-      texture_info.copy_to_device();
-      need_texture_info = false;
-    }
-  }
-
-  void update_launch_params(const char *name, size_t offset, void *data, size_t data_size)
-  {
-    const CUDAContextScope scope(cuda_context);
-
-    for (int i = 0; i < info.cpu_threads; ++i)
-      check_result_cuda(
-          cuMemcpyHtoD(launch_params.device_pointer + i * launch_params.data_elements + offset,
-                       data,
-                       data_size));
-
-    // Set constant memory for CUDA module
-    // TODO(pmours): This is only used for tonemapping (see 'launch_film_convert').
-    //               Could be removed by moving those functions to filter CUDA module.
-    size_t bytes = 0;
-    CUdeviceptr mem = 0;
-    check_result_cuda(cuModuleGetGlobal(&mem, &bytes, cuda_module, name));
-    assert(mem != 0 && bytes == data_size);
-    check_result_cuda(cuMemcpyHtoD(mem, data, data_size));
-  }
-
-  void mem_alloc(device_memory &mem) override
-  {
-    if (mem.type == MEM_PIXELS && !background) {
-      // Always fall back to no interop for now
-      // TODO(pmours): Support OpenGL interop when moving CUDA memory management to common code
-      background = true;
-    }
-    else if (mem.type == MEM_TEXTURE) {
-      assert(!"mem_alloc not supported for textures.");
-      return;
-    }
-
-    generic_alloc(mem);
-  }
-
-  CUDAMem *generic_alloc(device_memory &mem, size_t pitch_padding = 0)
-  {
-    CUDAContextScope scope(cuda_context);
-
-    CUdeviceptr device_pointer = 0;
-    size_t size = mem.memory_size() + pitch_padding;
-
-    CUresult mem_alloc_result = CUDA_ERROR_OUT_OF_MEMORY;
-    const char *status = "";
-
-    /* First try allocating in device memory, respecting headroom. We make
-     * an exception for texture info. It is small and frequently accessed,
-     * so treat it as working memory.
-     *
-     * If there is not enough room for working memory, we will try to move
-     * textures to host memory, assuming the performance impact would have
-     * been worse for working memory. */
-    bool is_texture = (mem.type == MEM_TEXTURE) && (&mem != &texture_info);
-    bool is_image = is_texture && (mem.data_height > 1);
-
-    size_t headroom = (is_texture) ? device_texture_headroom : device_working_headroom;
-
-    size_t total = 0, free = 0;
-    cuMemGetInfo(&free, &total);
-
-    /* Move textures to host memory if needed. */
-    if (!move_texture_to_host && !is_image && (size + headroom) >= free && can_map_host) {
-      move_textures_to_host(size + headroom - free, is_texture);
-      cuMemGetInfo(&free, &total);
-    }
-
-    /* Allocate in device memory. */
-    if (!move_texture_to_host && (size + headroom) < free) {
-      mem_alloc_result = cuMemAlloc(&device_pointer, size);
-      if (mem_alloc_result == CUDA_SUCCESS) {
-        status = " in device memory";
-      }
-    }
-
-    /* Fall back to mapped host memory if needed and possible. */
-    void *shared_pointer = 0;
-
-    if (mem_alloc_result != CUDA_SUCCESS && can_map_host) {
-      if (mem.shared_pointer) {
-        /* Another device already allocated host memory. */
-        mem_alloc_result = CUDA_SUCCESS;
-        shared_pointer = mem.shared_pointer;
-      }
-      else if (map_host_used + size < map_host_limit) {
-        /* Allocate host memory ourselves. */
-        mem_alloc_result = cuMemHostAlloc(
-            &shared_pointer, size, CU_MEMHOSTALLOC_DEVICEMAP | CU_MEMHOSTALLOC_WRITECOMBINED);
-
-        assert((mem_alloc_result == CUDA_SUCCESS && shared_pointer != 0) ||
-               (mem_alloc_result != CUDA_SUCCESS && shared_pointer == 0));
-      }
-
-      if (mem_alloc_result == CUDA_SUCCESS) {
-        cuMemHostGetDevicePointer_v2(&device_pointer, shared_pointer, 0);
-        map_host_used += size;
-        status = " in host memory";
-      }
-      else {
-        status = " failed, out of host memory";
-      }
-    }
-    else if (mem_alloc_result != CUDA_SUCCESS) {
-      status = " failed, out of device and host memory";
-    }
-
-    if (mem.name) {
-      VLOG(1) << "Buffer allocate: " << mem.name << ", "
-              << string_human_readable_number(mem.memory_size()) << " bytes. ("
-              << string_human_readable_size(mem.memory_size()) << ")" << status;
-    }
-
-    if (mem_alloc_result != CUDA_SUCCESS) {
-      set_error(string_printf("Buffer allocate %s", status));
-      return NULL;
-    }
-
-    mem.device_pointer = (device_ptr)device_pointer;
-    mem.device_size = size;
-    stats.mem_alloc(size);
-
-    if (!mem.device_pointer) {
-      return NULL;
-    }
-
-    /* Insert into map of allocations. */
-    CUDAMem *cmem = &cuda_mem_map[&mem];
-    if (shared_pointer != 0) {
-      /* Replace host pointer with our host allocation. Only works if
-       * CUDA memory layout is the same and has no pitch padding. Also
-       * does not work if we move textures to host during a render,
-       * since other devices might be using the memory. */
-
-      if (!move_texture_to_host && pitch_padding == 0 && mem.host_pointer &&
-          mem.host_pointer != shared_pointer) {
-        memcpy(shared_pointer, mem.host_pointer, size);
-
-        /* A call to device_memory::host_free() should be preceded by
-         * a call to device_memory::device_free() for host memory
-         * allocated by a device to be handled properly. Two exceptions
-         * are here and a call in CUDADevice::generic_alloc(), where
-         * the current host memory can be assumed to be allocated by
-         * device_memory::host_alloc(), not by a device */
-
-        mem.host_free();
-        mem.host_pointer = shared_pointer;
-      }
-      mem.shared_pointer = shared_pointer;
-      mem.shared_counter++;
-      cmem->use_mapped_host = true;
-    }
-    else {
-      cmem->use_mapped_host = false;
-    }
-
-    return cmem;
-  }
-
-  void tex_alloc(device_memory &mem)
-  {
-    CUDAContextScope scope(cuda_context);
-
-    /* General variables for both architectures */
-    string bind_name = mem.name;
-    size_t dsize = datatype_size(mem.data_type);
-    size_t size = mem.memory_size();
-
-    CUaddress_mode address_mode = CU_TR_ADDRESS_MODE_WRAP;
-    switch (mem.extension) {
-      case EXTENSION_REPEAT:
-        address_mode = CU_TR_ADDRESS_MODE_WRAP;
-        break;
-      case EXTENSION_EXTEND:
-        address_mode = CU_TR_ADDRESS_MODE_CLAMP;
-        break;
-      case EXTENSION_CLIP:
-        address_mode = CU_TR_ADDRESS_MODE_BORDER;
-        break;
-      default:
-        assert(0);
-        break;
-    }
-
-    CUfilter_mode filter_mode;
-    if (mem.interpolation == INTERPOLATION_CLOSEST) {
-      filter_mode = CU_TR_FILTER_MODE_POINT;
-    }
-    else {
-      filter_mode = CU_TR_FILTER_MODE_LINEAR;
-    }
-
-    /* Data Storage */
-    if (mem.interpolation == INTERPOLATION_NONE) {
-      generic_alloc(mem);
-      generic_copy_to(mem);
-
-      // Update data storage pointers in launch parameters
-#  define KERNEL_TEX(data_type, tex_name) \
-    if (strcmp(mem.name, #tex_name) == 0) \
-      update_launch_params( \
-          mem.name, offsetof(KernelParams, tex_name), &mem.device_pointer, sizeof(device_ptr));
-#  include "kernel/kernel_textures.h"
-#  undef KERNEL_TEX
-      return;
-    }
-
-    /* Image Texture Storage */
-    CUarray_format_enum format;
-    switch (mem.data_type) {
-      case TYPE_UCHAR:
-        format = CU_AD_FORMAT_UNSIGNED_INT8;
-        break;
-      case TYPE_UINT16:
-        format = CU_AD_FORMAT_UNSIGNED_INT16;
-        break;
-      case TYPE_UINT:
-        format = CU_AD_FORMAT_UNSIGNED_INT32;
-        break;
-      case TYPE_INT:
-        format = CU_AD_FORMAT_SIGNED_INT32;
-        break;
-      case TYPE_FLOAT:
-        format = CU_AD_FORMAT_FLOAT;
-        break;
-      case TYPE_HALF:
-        format = CU_AD_FORMAT_HALF;
-        break;
-      default:
-        assert(0);
-        return;
-    }
-
-    CUDAMem *cmem = NULL;
-    CUarray array_3d = NULL;
-    size_t src_pitch = mem.data_width * dsize * mem.data_elements;
-    size_t dst_pitch = src_pitch;
-
-    if (mem.data_depth > 1) {
-      /* 3D texture using array, there is no API for linear memory. */
-      CUDA_ARRAY3D_DESCRIPTOR desc;
-
-      desc.Width = mem.data_width;
-      desc.Height = mem.data_height;
-      desc.Depth = mem.data_depth;
-      desc.Format = format;
-      desc.NumChannels = mem.data_elements;
-      desc.Flags = 0;
-
-      VLOG(1) << "Array 3D allocate: " << mem.name << ", "
-              << string_human_readable_number(mem.memory_size()) << " bytes. ("
-              << string_human_readable_size(mem.memory_size()) << ")";
-
-      check_result_cuda(cuArray3DCreate(&array_3d, &desc));
-
-      if (!array_3d) {
-        return;
-      }
-
-      CUDA_MEMCPY3D param;
-      memset(&param, 0, sizeof(param));
-      param.dstMemoryType = CU_MEMORYTYPE_ARRAY;
-      param.dstArray = array_3d;
-      param.srcMemoryType = CU_MEMORYTYPE_HOST;
-      param.srcHost = mem.host_pointer;
-      param.srcPitch = src_pitch;
-      param.WidthInBytes = param.srcPitch;
-      param.Height = mem.data_height;
-      param.Depth = mem.data_depth;
-
-      check_result_cuda(cuMemcpy3D(&param));
-
-      mem.device_pointer = (device_ptr)array_3d;
-      mem.device_size = size;
-      stats.mem_alloc(size);
-
-      cmem = &cuda_mem_map[&mem];
-      cmem->texobject = 0;
-      cmem->array = array_3d;
-    }
-    else if (mem.data_height > 0) {
-      /* 2D texture, using pitch aligned linear memory. */
-      int alignment = 0;
-      check_result_cuda(cuDeviceGetAttribute(
-          &alignment, CU_DEVICE_ATTRIBUTE_TEXTURE_PITCH_ALIGNMENT, cuda_device));
-      dst_pitch = align_up(src_pitch, alignment);
-      size_t dst_size = dst_pitch * mem.data_height;
-
-      cmem = generic_alloc(mem, dst_size - mem.memory_size());
-      if (!cmem) {
-        return;
-      }
-
-      CUDA_MEMCPY2D param;
-      memset(&param, 0, sizeof(param));
-      param.dstMemoryType = CU_MEMORYTYPE_DEVICE;
-      param.dstDevice = mem.device_pointer;
-      param.dstPitch = dst_pitch;
-      param.srcMemoryType = CU_MEMORYTYPE_HOST;
-      param.srcHost = mem.host_pointer;
-      param.srcPitch = src_pitch;
-      param.WidthInBytes = param.srcPitch;
-      param.Height = mem.data_height;
-
-      check_result_cuda(cuMemcpy2DUnaligned(&param));
-    }
-    else {
-      /* 1D texture, using linear memory. */
-      cmem = generic_alloc(mem);
-      if (!cmem) {
-        return;
-      }
-
-      check_result_cuda(cuMemcpyHtoD(mem.device_pointer, mem.host_pointer, size));
-    }
-
-    /* Kepler+, bindless textures. */
-    int flat_slot = 0;
-    if (string_startswith(mem.name, "__tex_image")) {
-      int pos = string(mem.name).rfind("_");
-      flat_slot = atoi(mem.name + pos + 1);
-    }
-    else {
-      assert(0);
-    }
-
-    CUDA_RESOURCE_DESC resDesc;
-    memset(&resDesc, 0, sizeof(resDesc));
-
-    if (array_3d) {
-      resDesc.resType = CU_RESOURCE_TYPE_ARRAY;
-      resDesc.res.array.hArray = array_3d;
-      resDesc.flags = 0;
-    }
-    else if (mem.data_height > 0) {
-      resDesc.resType = CU_RESOURCE_TYPE_PITCH2D;
-      resDesc.res.pitch2D.devPtr = mem.device_pointer;
-      resDesc.res.pitch2D.format = format;
-      resDesc.res.pitch2D.numChannels = mem.data_elements;
-      resDesc.res.pitch2D.height = mem.data_height;
-      resDesc.res.pitch2D.width = mem.data_width;
-      resDesc.res.pitch2D.pitchInBytes = dst_pitch;
-    }
-    else {
-      resDesc.resType = CU_RESOURCE_TYPE_LINEAR;
-      resDesc.res.linear.devPtr = mem.device_pointer;
-      resDesc.res.linear.format = format;
-      resDesc.res.linear.numChannels = mem.data_elements;
-      resDesc.res.linear.sizeInBytes = mem.device_size;
-    }
-
-    CUDA_TEXTURE_DESC texDesc;
-    memset(&texDesc, 0, sizeof(texDesc));
-    texDesc.addressMode[0] = address_mode;
-    texDesc.addressMode[1] = address_mode;
-    texDesc.addressMode[2] = address_mode;
-    texDesc.filterMode = filter_mode;
-    texDesc.flags = CU_TRSF_NORMALIZED_COORDINATES;
-
-    check_result_cuda(cuTexObjectCreate(&cmem->texobject, &resDesc, &texDesc, NULL));
-
-    /* Resize once */
-    if (flat_slot >= texture_info.size()) {
-      /* Allocate some slots in advance, to reduce amount
-       * of re-allocations. */
-      texture_info.resize(flat_slot + 128);
-    }
-
-    /* Set Mapping and tag that we need to (re-)upload to device */
-    TextureInfo &info = texture_info[flat_slot];
-    info.data = (uint64_t)cmem->texobject;
-    info.cl_buffer = 0;
-    info.interpolation = mem.interpolation;
-    info.extension = mem.extension;
-    info.width = mem.data_width;
-    info.height = mem.data_height;
-    info.depth = mem.data_depth;
-    need_texture_info = true;
-  }
-
-  void mem_copy_to(device_memory &mem) override
-  {
-    if (mem.type == MEM_PIXELS) {
-      assert(!"mem_copy_to not supported for pixels.");
-    }
-    else if (mem.type == MEM_TEXTURE) {
-      tex_free(mem);
-      tex_alloc(mem);
-    }
-    else {
-      if (!mem.device_pointer) {
-        generic_alloc(mem);
-      }
-
-      generic_copy_to(mem);
-    }
-  }
-
-  void generic_copy_to(device_memory &mem)
-  {
-    if (mem.host_pointer && mem.device_pointer) {
-      CUDAContextScope scope(cuda_context);
-
-      /* If use_mapped_host of mem is false, the current device only
-       * uses device memory allocated by cuMemAlloc regardless of
-       * mem.host_pointer and mem.shared_pointer, and should copy
-       * data from mem.host_pointer. */
-
-      if (cuda_mem_map[&mem].use_mapped_host == false || mem.host_pointer != mem.shared_pointer) {
-        check_result_cuda(
-            cuMemcpyHtoD((CUdeviceptr)mem.device_pointer, mem.host_pointer, mem.memory_size()));
-      }
-    }
-  }
-
-  void mem_copy_from(device_memory &mem, int y, int w, int h, int elem) override
-  {
-    if (mem.type == MEM_PIXELS && !background) {
-      assert(!"mem_copy_from not supported for pixels.");
-    }
-    else if (mem.type == MEM_TEXTURE) {
-      assert(!"mem_copy_from not supported for textures.");
-    }
-    else {
-      // Calculate linear memory offset and size
-      const size_t size = elem * w * h;
-      const size_t offset = elem * y * w;
-
-      if (mem.host_pointer && mem.device_pointer) {
-        const CUDAContextScope scope(cuda_context);
-        check_result_cuda(cuMemcpyDtoH(
-            (char *)mem.host_pointer + offset, (CUdeviceptr)mem.device_pointer + offset, size));
-      }
-      else if (mem.host_pointer) {
-        memset((char *)mem.host_pointer + offset, 0, size);
-      }
-    }
-  }
-
-  void mem_zero(device_memory &mem) override
-  {
-    if (mem.host_pointer)
-      memset(mem.host_pointer, 0, mem.memory_size());
-
-    if (!mem.device_pointer)
-      mem_alloc(mem);  // Need to allocate memory first if it does not exist yet
-
-    /* If use_mapped_host of mem is false, mem.device_pointer currently
-     * refers to device memory regardless of mem.host_pointer and
-     * mem.shared_pointer. */
-
-    if (mem.device_pointer &&
-        (cuda_mem_map[&mem].use_mapped_host == false || mem.host_pointer != mem.shared_pointer)) {
-      const CUDAContextScope scope(cuda_context);
-      check_result_cuda(cuMemsetD8((CUdeviceptr)mem.device_pointer, 0, mem.memory_size()));
-    }
-  }
-
-  void mem_free(device_memory &mem) override
-  {
-    if (mem.type == MEM_PIXELS && !background) {
-      assert(!"mem_free not supported for pixels.");
-    }
-    else if (mem.type == MEM_TEXTURE) {
-      tex_free(mem);
-    }
-    else {
-      generic_free(mem);
-    }
-  }
-
-  void generic_free(device_memory &mem)
-  {
-    if (mem.device_pointer) {
-      CUDAContextScope scope(cuda_context);
-      const CUDAMem &cmem = cuda_mem_map[&mem];
-
-      /* If cmem.use_mapped_host is true, reference counting is used
-       * to safely free a mapped host memory. */
-
-      if (cmem.use_mapped_host) {
-        assert(mem.shared_pointer);
-        if (mem.shared_pointer) {
-          assert(mem.shared_counter > 0);
-          if (--mem.shared_counter == 0) {
-            if (mem.host_pointer == mem.shared_pointer) {
-              mem.host_pointer = 0;
-            }
-            cuMemFreeHost(mem.shared_pointer);
-            mem.shared_pointer = 0;
-          }
-        }
-        map_host_used -= mem.device_size;
-      }
-      else {
-        /* Free device memory. */
-        cuMemFree(mem.device_pointer);
-      }
-
-      stats.mem_free(mem.device_size);
-      mem.device_pointer = 0;
-      mem.device_size = 0;
-
-      cuda_mem_map.erase(cuda_mem_map.find(&mem));
-    }
-  }
-
-  void tex_free(device_memory &mem)
-  {
-    if (mem.device_pointer) {
-      CUDAContextScope scope(cuda_context);
-      const CUDAMem &cmem = cuda_mem_map[&mem];
-
-      if (cmem.texobject) {
-        /* Free bindless texture. */
-        cuTexObjectDestroy(cmem.texobject);
-      }
-
-      if (cmem.array) {
-        /* Free array. */
-        cuArrayDestroy(cmem.array);
-        stats.mem_free(mem.device_size);
-        mem.device_pointer = 0;
-        mem.device_size = 0;
-
-        cuda_mem_map.erase(cuda_mem_map.find(&mem));
-      }
-      else {
-        generic_free(mem);
-      }
-    }
-  }
-
-  void move_textures_to_host(size_t size, bool for_texture)
-  {
-    /* Signal to reallocate textures in host memory only. */
-    move_texture_to_host = true;
-
-    while (size > 0) {
-      /* Find suitable memory allocation to move. */
-      device_memory *max_mem = NULL;
-      size_t max_size = 0;
-      bool max_is_image = false;
-
-      foreach (auto &pair, cuda_mem_map) {
-        device_memory &mem = *pair.first;
-        CUDAMem *cmem = &pair.second;
-
-        bool is_texture = (mem.type == MEM_TEXTURE) && (&mem != &texture_info);
-        bool is_image = is_texture && (mem.data_height > 1);
-
-        /* Can't move this type of memory. */
-        if (!is_texture || cmem->array) {
-          continue;
-        }
-
-        /* Already in host memory. */
-        if (cmem->use_mapped_host) {
-          continue;
-        }
-
-        /* For other textures, only move image textures. */
-        if (for_texture && !is_image) {
-          continue;
-        }
-
-        /* Try to move largest allocation, prefer moving images. */
-        if (is_image > max_is_image || (is_image == max_is_image && mem.device_size > max_size)) {
-          max_is_image = is_image;
-          max_size = mem.device_size;
-          max_mem = &mem;
-        }
-      }
-
-      /* Move to host memory. This part is mutex protected since
-       * multiple CUDA devices could be moving the memory. The
-       * first one will do it, and the rest will adopt the pointer. */
-      if (max_mem) {
-        VLOG(1) << "Move memory from device to host: " << max_mem->name;
-
-        static thread_mutex move_mutex;
-        thread_scoped_lock lock(move_mutex);
-
-        /* Preserve the original device pointer, in case of multi device
-         * we can't change it because the pointer mapping would break. */
-        device_ptr prev_pointer = max_mem->device_pointer;
-        size_t prev_size = max_mem->device_size;
-
-        tex_free(*max_mem);
-        tex_alloc(*max_mem);
-        size = (max_size >= size) ? 0 : size - max_size;
-
-        max_mem->device_pointer = prev_pointer;
-        max_mem->device_size = prev_size;
-      }
-      else {
-        break;
-      }
-    }
-
-    /* Update texture info array with new pointers. */
-    update_texture_info();
-
-    move_texture_to_host = false;
+    return build_optix_bvh(build_input, 0, tlas_handle);
   }
 
   void const_copy_to(const char *name, void *host, size_t size) override
   {
+    // Set constant memory for CUDA module
+    // TODO(pmours): This is only used for tonemapping (see 'film_convert').
+    //               Could be removed by moving those functions to filter CUDA module.
+    CUDADevice::const_copy_to(name, host, size);
+
     if (strcmp(name, "__data") == 0) {
       assert(size <= sizeof(KernelData));
 
@@ -1787,24 +1429,32 @@ class OptiXDevice : public Device {
       *(OptixTraversableHandle *)&data->bvh.scene = tlas_handle;
 
       update_launch_params(name, offsetof(KernelParams, data), host, size);
+      return;
     }
+
+    // Update data storage pointers in launch parameters
+#  define KERNEL_TEX(data_type, tex_name) \
+    if (strcmp(name, #tex_name) == 0) { \
+      update_launch_params(name, offsetof(KernelParams, tex_name), host, size); \
+      return; \
+    }
+#  include "kernel/kernel_textures.h"
+#  undef KERNEL_TEX
   }
 
-  device_ptr mem_alloc_sub_ptr(device_memory &mem, int offset, int /*size*/) override
+  void update_launch_params(const char *name, size_t offset, void *data, size_t data_size)
   {
-    return (device_ptr)(((char *)mem.device_pointer) + mem.memory_elements_size(offset));
+    const CUDAContextScope scope(cuContext);
+
+    for (int i = 0; i < info.cpu_threads; ++i)
+      check_result_cuda(
+          cuMemcpyHtoD(launch_params.device_pointer + i * launch_params.data_elements + offset,
+                       data,
+                       data_size));
   }
 
   void task_add(DeviceTask &task) override
   {
-    // Upload texture information to device if it has changed since last launch
-    update_texture_info();
-
-    // Split task into smaller ones
-    list<DeviceTask> tasks;
-    task.split(tasks, info.cpu_threads);
-
-    // Queue tasks in internal task pool
     struct OptiXDeviceTask : public DeviceTask {
       OptiXDeviceTask(OptiXDevice *device, DeviceTask &task, int task_index) : DeviceTask(task)
       {
@@ -1814,6 +1464,26 @@ class OptiXDevice : public Device {
       }
     };
 
+    // Upload texture information to device if it has changed since last launch
+    load_texture_info();
+
+    if (task.type == DeviceTask::FILM_CONVERT) {
+      // Execute in main thread because of OpenGL access
+      film_convert(task, task.buffer, task.rgba_byte, task.rgba_half);
+      return;
+    }
+
+    if (task.type == DeviceTask::DENOISE_BUFFER) {
+      // Execute denoising in a single thread (e.g. to avoid race conditions during creation)
+      task_pool.push(new OptiXDeviceTask(this, task, 0));
+      return;
+    }
+
+    // Split task into smaller ones
+    list<DeviceTask> tasks;
+    task.split(tasks, info.cpu_threads);
+
+    // Queue tasks in internal task pool
     int task_index = 0;
     for (DeviceTask &task : tasks)
       task_pool.push(new OptiXDeviceTask(this, task, task_index++));
@@ -1830,427 +1500,6 @@ class OptiXDevice : public Device {
     // Cancel any remaining tasks in the internal pool
     task_pool.cancel();
   }
-
-#  define CUDA_GET_BLOCKSIZE(func, w, h) \
-    int threads; \
-    check_result_cuda_ret( \
-        cuFuncGetAttribute(&threads, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, func)); \
-    threads = (int)sqrt((float)threads); \
-    int xblocks = ((w) + threads - 1) / threads; \
-    int yblocks = ((h) + threads - 1) / threads;
-
-#  define CUDA_LAUNCH_KERNEL(func, args) \
-    check_result_cuda_ret(cuLaunchKernel( \
-        func, xblocks, yblocks, 1, threads, threads, 1, 0, cuda_stream[thread_index], args, 0));
-
-  /* Similar as above, but for 1-dimensional blocks. */
-#  define CUDA_GET_BLOCKSIZE_1D(func, w, h) \
-    int threads; \
-    check_result_cuda_ret( \
-        cuFuncGetAttribute(&threads, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, func)); \
-    int xblocks = ((w) + threads - 1) / threads; \
-    int yblocks = h;
-
-#  define CUDA_LAUNCH_KERNEL_1D(func, args) \
-    check_result_cuda_ret(cuLaunchKernel( \
-        func, xblocks, yblocks, 1, threads, 1, 1, 0, cuda_stream[thread_index], args, 0));
-
-  bool denoising_non_local_means(device_ptr image_ptr,
-                                 device_ptr guide_ptr,
-                                 device_ptr variance_ptr,
-                                 device_ptr out_ptr,
-                                 DenoisingTask *task,
-                                 int thread_index)
-  {
-    if (have_error())
-      return false;
-
-    int stride = task->buffer.stride;
-    int w = task->buffer.width;
-    int h = task->buffer.h;
-    int r = task->nlm_state.r;
-    int f = task->nlm_state.f;
-    float a = task->nlm_state.a;
-    float k_2 = task->nlm_state.k_2;
-
-    int pass_stride = task->buffer.pass_stride;
-    int num_shifts = (2 * r + 1) * (2 * r + 1);
-    int channel_offset = task->nlm_state.is_color ? task->buffer.pass_stride : 0;
-    int frame_offset = 0;
-
-    CUdeviceptr difference = (CUdeviceptr)task->buffer.temporary_mem.device_pointer;
-    CUdeviceptr blurDifference = difference + sizeof(float) * pass_stride * num_shifts;
-    CUdeviceptr weightAccum = difference + 2 * sizeof(float) * pass_stride * num_shifts;
-    CUdeviceptr scale_ptr = 0;
-
-    check_result_cuda_ret(
-        cuMemsetD8Async(weightAccum, 0, sizeof(float) * pass_stride, cuda_stream[thread_index]));
-    check_result_cuda_ret(
-        cuMemsetD8Async(out_ptr, 0, sizeof(float) * pass_stride, cuda_stream[thread_index]));
-
-    {
-      CUfunction cuNLMCalcDifference, cuNLMBlur, cuNLMCalcWeight, cuNLMUpdateOutput;
-      check_result_cuda_ret(cuModuleGetFunction(
-          &cuNLMCalcDifference, cuda_filter_module, "kernel_cuda_filter_nlm_calc_difference"));
-      check_result_cuda_ret(
-          cuModuleGetFunction(&cuNLMBlur, cuda_filter_module, "kernel_cuda_filter_nlm_blur"));
-      check_result_cuda_ret(cuModuleGetFunction(
-          &cuNLMCalcWeight, cuda_filter_module, "kernel_cuda_filter_nlm_calc_weight"));
-      check_result_cuda_ret(cuModuleGetFunction(
-          &cuNLMUpdateOutput, cuda_filter_module, "kernel_cuda_filter_nlm_update_output"));
-
-      check_result_cuda_ret(cuFuncSetCacheConfig(cuNLMCalcDifference, CU_FUNC_CACHE_PREFER_L1));
-      check_result_cuda_ret(cuFuncSetCacheConfig(cuNLMBlur, CU_FUNC_CACHE_PREFER_L1));
-      check_result_cuda_ret(cuFuncSetCacheConfig(cuNLMCalcWeight, CU_FUNC_CACHE_PREFER_L1));
-      check_result_cuda_ret(cuFuncSetCacheConfig(cuNLMUpdateOutput, CU_FUNC_CACHE_PREFER_L1));
-
-      CUDA_GET_BLOCKSIZE_1D(cuNLMCalcDifference, w * h, num_shifts);
-
-      void *calc_difference_args[] = {&guide_ptr,
-                                      &variance_ptr,
-                                      &scale_ptr,
-                                      &difference,
-                                      &w,
-                                      &h,
-                                      &stride,
-                                      &pass_stride,
-                                      &r,
-                                      &channel_offset,
-                                      &frame_offset,
-                                      &a,
-                                      &k_2};
-      void *blur_args[] = {&difference, &blurDifference, &w, &h, &stride, &pass_stride, &r, &f};
-      void *calc_weight_args[] = {
-          &blurDifference, &difference, &w, &h, &stride, &pass_stride, &r, &f};
-      void *update_output_args[] = {&blurDifference,
-                                    &image_ptr,
-                                    &out_ptr,
-                                    &weightAccum,
-                                    &w,
-                                    &h,
-                                    &stride,
-                                    &pass_stride,
-                                    &channel_offset,
-                                    &r,
-                                    &f};
-
-      CUDA_LAUNCH_KERNEL_1D(cuNLMCalcDifference, calc_difference_args);
-      CUDA_LAUNCH_KERNEL_1D(cuNLMBlur, blur_args);
-      CUDA_LAUNCH_KERNEL_1D(cuNLMCalcWeight, calc_weight_args);
-      CUDA_LAUNCH_KERNEL_1D(cuNLMBlur, blur_args);
-      CUDA_LAUNCH_KERNEL_1D(cuNLMUpdateOutput, update_output_args);
-    }
-
-    {
-      CUfunction cuNLMNormalize;
-      check_result_cuda_ret(cuModuleGetFunction(
-          &cuNLMNormalize, cuda_filter_module, "kernel_cuda_filter_nlm_normalize"));
-      check_result_cuda_ret(cuFuncSetCacheConfig(cuNLMNormalize, CU_FUNC_CACHE_PREFER_L1));
-      void *normalize_args[] = {&out_ptr, &weightAccum, &w, &h, &stride};
-      CUDA_GET_BLOCKSIZE(cuNLMNormalize, w, h);
-      CUDA_LAUNCH_KERNEL(cuNLMNormalize, normalize_args);
-      check_result_cuda_ret(cuStreamSynchronize(cuda_stream[thread_index]));
-    }
-
-    return !have_error();
-  }
-
-  bool denoising_construct_transform(DenoisingTask *task, int thread_index)
-  {
-    if (have_error())
-      return false;
-
-    CUfunction cuFilterConstructTransform;
-    check_result_cuda_ret(cuModuleGetFunction(&cuFilterConstructTransform,
-                                              cuda_filter_module,
-                                              "kernel_cuda_filter_construct_transform"));
-    check_result_cuda_ret(
-        cuFuncSetCacheConfig(cuFilterConstructTransform, CU_FUNC_CACHE_PREFER_SHARED));
-    CUDA_GET_BLOCKSIZE(cuFilterConstructTransform, task->storage.w, task->storage.h);
-
-    void *args[] = {&task->buffer.mem.device_pointer,
-                    &task->tile_info_mem.device_pointer,
-                    &task->storage.transform.device_pointer,
-                    &task->storage.rank.device_pointer,
-                    &task->filter_area,
-                    &task->rect,
-                    &task->radius,
-                    &task->pca_threshold,
-                    &task->buffer.pass_stride,
-                    &task->buffer.frame_stride,
-                    &task->buffer.use_time};
-    CUDA_LAUNCH_KERNEL(cuFilterConstructTransform, args);
-    check_result_cuda_ret(cuCtxSynchronize());
-
-    return !have_error();
-  }
-
-  bool denoising_accumulate(device_ptr color_ptr,
-                            device_ptr color_variance_ptr,
-                            device_ptr scale_ptr,
-                            int frame,
-                            DenoisingTask *task,
-                            int thread_index)
-  {
-    if (have_error())
-      return false;
-
-    int r = task->radius;
-    int f = 4;
-    float a = 1.0f;
-    float k_2 = task->nlm_k_2;
-
-    int w = task->reconstruction_state.source_w;
-    int h = task->reconstruction_state.source_h;
-    int stride = task->buffer.stride;
-    int frame_offset = frame * task->buffer.frame_stride;
-    int t = task->tile_info->frames[frame];
-
-    int pass_stride = task->buffer.pass_stride;
-    int num_shifts = (2 * r + 1) * (2 * r + 1);
-
-    CUdeviceptr difference = (CUdeviceptr)task->buffer.temporary_mem.device_pointer;
-    CUdeviceptr blurDifference = difference + sizeof(float) * pass_stride * num_shifts;
-
-    CUfunction cuNLMCalcDifference, cuNLMBlur, cuNLMCalcWeight, cuNLMConstructGramian;
-    check_result_cuda_ret(cuModuleGetFunction(
-        &cuNLMCalcDifference, cuda_filter_module, "kernel_cuda_filter_nlm_calc_difference"));
-    check_result_cuda_ret(
-        cuModuleGetFunction(&cuNLMBlur, cuda_filter_module, "kernel_cuda_filter_nlm_blur"));
-    check_result_cuda_ret(cuModuleGetFunction(
-        &cuNLMCalcWeight, cuda_filter_module, "kernel_cuda_filter_nlm_calc_weight"));
-    check_result_cuda_ret(cuModuleGetFunction(
-        &cuNLMConstructGramian, cuda_filter_module, "kernel_cuda_filter_nlm_construct_gramian"));
-
-    check_result_cuda_ret(cuFuncSetCacheConfig(cuNLMCalcDifference, CU_FUNC_CACHE_PREFER_L1));
-    check_result_cuda_ret(cuFuncSetCacheConfig(cuNLMBlur, CU_FUNC_CACHE_PREFER_L1));
-    check_result_cuda_ret(cuFuncSetCacheConfig(cuNLMCalcWeight, CU_FUNC_CACHE_PREFER_L1));
-    check_result_cuda_ret(
-        cuFuncSetCacheConfig(cuNLMConstructGramian, CU_FUNC_CACHE_PREFER_SHARED));
-
-    CUDA_GET_BLOCKSIZE_1D(cuNLMCalcDifference,
-                          task->reconstruction_state.source_w *
-                              task->reconstruction_state.source_h,
-                          num_shifts);
-
-    void *calc_difference_args[] = {&color_ptr,
-                                    &color_variance_ptr,
-                                    &scale_ptr,
-                                    &difference,
-                                    &w,
-                                    &h,
-                                    &stride,
-                                    &pass_stride,
-                                    &r,
-                                    &pass_stride,
-                                    &frame_offset,
-                                    &a,
-                                    &k_2};
-    void *blur_args[] = {&difference, &blurDifference, &w, &h, &stride, &pass_stride, &r, &f};
-    void *calc_weight_args[] = {
-        &blurDifference, &difference, &w, &h, &stride, &pass_stride, &r, &f};
-    void *construct_gramian_args[] = {&t,
-                                      &blurDifference,
-                                      &task->buffer.mem.device_pointer,
-                                      &task->storage.transform.device_pointer,
-                                      &task->storage.rank.device_pointer,
-                                      &task->storage.XtWX.device_pointer,
-                                      &task->storage.XtWY.device_pointer,
-                                      &task->reconstruction_state.filter_window,
-                                      &w,
-                                      &h,
-                                      &stride,
-                                      &pass_stride,
-                                      &r,
-                                      &f,
-                                      &frame_offset,
-                                      &task->buffer.use_time};
-
-    CUDA_LAUNCH_KERNEL_1D(cuNLMCalcDifference, calc_difference_args);
-    CUDA_LAUNCH_KERNEL_1D(cuNLMBlur, blur_args);
-    CUDA_LAUNCH_KERNEL_1D(cuNLMCalcWeight, calc_weight_args);
-    CUDA_LAUNCH_KERNEL_1D(cuNLMBlur, blur_args);
-    CUDA_LAUNCH_KERNEL_1D(cuNLMConstructGramian, construct_gramian_args);
-    check_result_cuda_ret(cuCtxSynchronize());
-
-    return !have_error();
-  }
-
-  bool denoising_solve(device_ptr output_ptr, DenoisingTask *task, int thread_index)
-  {
-    if (have_error())
-      return false;
-
-    CUfunction cuFinalize;
-    check_result_cuda_ret(
-        cuModuleGetFunction(&cuFinalize, cuda_filter_module, "kernel_cuda_filter_finalize"));
-    check_result_cuda_ret(cuFuncSetCacheConfig(cuFinalize, CU_FUNC_CACHE_PREFER_L1));
-    void *finalize_args[] = {&output_ptr,
-                             &task->storage.rank.device_pointer,
-                             &task->storage.XtWX.device_pointer,
-                             &task->storage.XtWY.device_pointer,
-                             &task->filter_area,
-                             &task->reconstruction_state.buffer_params.x,
-                             &task->render_buffer.samples};
-    CUDA_GET_BLOCKSIZE(
-        cuFinalize, task->reconstruction_state.source_w, task->reconstruction_state.source_h);
-    CUDA_LAUNCH_KERNEL(cuFinalize, finalize_args);
-    check_result_cuda_ret(cuStreamSynchronize(cuda_stream[thread_index]));
-
-    return !have_error();
-  }
-
-  bool denoising_combine_halves(device_ptr a_ptr,
-                                device_ptr b_ptr,
-                                device_ptr mean_ptr,
-                                device_ptr variance_ptr,
-                                int r,
-                                int4 rect,
-                                DenoisingTask *task,
-                                int thread_index)
-  {
-    if (have_error())
-      return false;
-
-    CUfunction cuFilterCombineHalves;
-    check_result_cuda_ret(cuModuleGetFunction(
-        &cuFilterCombineHalves, cuda_filter_module, "kernel_cuda_filter_combine_halves"));
-    check_result_cuda_ret(cuFuncSetCacheConfig(cuFilterCombineHalves, CU_FUNC_CACHE_PREFER_L1));
-    CUDA_GET_BLOCKSIZE(
-        cuFilterCombineHalves, task->rect.z - task->rect.x, task->rect.w - task->rect.y);
-
-    void *args[] = {&mean_ptr, &variance_ptr, &a_ptr, &b_ptr, &rect, &r};
-    CUDA_LAUNCH_KERNEL(cuFilterCombineHalves, args);
-    check_result_cuda_ret(cuStreamSynchronize(cuda_stream[thread_index]));
-
-    return !have_error();
-  }
-
-  bool denoising_divide_shadow(device_ptr a_ptr,
-                               device_ptr b_ptr,
-                               device_ptr sample_variance_ptr,
-                               device_ptr sv_variance_ptr,
-                               device_ptr buffer_variance_ptr,
-                               DenoisingTask *task,
-                               int thread_index)
-  {
-    if (have_error())
-      return false;
-
-    CUfunction cuFilterDivideShadow;
-    check_result_cuda_ret(cuModuleGetFunction(
-        &cuFilterDivideShadow, cuda_filter_module, "kernel_cuda_filter_divide_shadow"));
-    check_result_cuda_ret(cuFuncSetCacheConfig(cuFilterDivideShadow, CU_FUNC_CACHE_PREFER_L1));
-    CUDA_GET_BLOCKSIZE(
-        cuFilterDivideShadow, task->rect.z - task->rect.x, task->rect.w - task->rect.y);
-
-    void *args[] = {&task->render_buffer.samples,
-                    &task->tile_info_mem.device_pointer,
-                    &a_ptr,
-                    &b_ptr,
-                    &sample_variance_ptr,
-                    &sv_variance_ptr,
-                    &buffer_variance_ptr,
-                    &task->rect,
-                    &task->render_buffer.pass_stride,
-                    &task->render_buffer.offset};
-    CUDA_LAUNCH_KERNEL(cuFilterDivideShadow, args);
-    check_result_cuda_ret(cuStreamSynchronize(cuda_stream[thread_index]));
-
-    return !have_error();
-  }
-
-  bool denoising_get_feature(int mean_offset,
-                             int variance_offset,
-                             device_ptr mean_ptr,
-                             device_ptr variance_ptr,
-                             float scale,
-                             DenoisingTask *task,
-                             int thread_index)
-  {
-    if (have_error())
-      return false;
-
-    CUfunction cuFilterGetFeature;
-    check_result_cuda_ret(cuModuleGetFunction(
-        &cuFilterGetFeature, cuda_filter_module, "kernel_cuda_filter_get_feature"));
-    check_result_cuda_ret(cuFuncSetCacheConfig(cuFilterGetFeature, CU_FUNC_CACHE_PREFER_L1));
-    CUDA_GET_BLOCKSIZE(
-        cuFilterGetFeature, task->rect.z - task->rect.x, task->rect.w - task->rect.y);
-
-    void *args[] = {&task->render_buffer.samples,
-                    &task->tile_info_mem.device_pointer,
-                    &mean_offset,
-                    &variance_offset,
-                    &mean_ptr,
-                    &variance_ptr,
-                    &scale,
-                    &task->rect,
-                    &task->render_buffer.pass_stride,
-                    &task->render_buffer.offset};
-    CUDA_LAUNCH_KERNEL(cuFilterGetFeature, args);
-    check_result_cuda_ret(cuStreamSynchronize(cuda_stream[thread_index]));
-
-    return !have_error();
-  }
-
-  bool denoising_write_feature(int out_offset,
-                               device_ptr from_ptr,
-                               device_ptr buffer_ptr,
-                               DenoisingTask *task,
-                               int thread_index)
-  {
-    if (have_error())
-      return false;
-
-    CUfunction cuFilterWriteFeature;
-    check_result_cuda_ret(cuModuleGetFunction(
-        &cuFilterWriteFeature, cuda_filter_module, "kernel_cuda_filter_write_feature"));
-    check_result_cuda_ret(cuFuncSetCacheConfig(cuFilterWriteFeature, CU_FUNC_CACHE_PREFER_L1));
-    CUDA_GET_BLOCKSIZE(cuFilterWriteFeature, task->filter_area.z, task->filter_area.w);
-
-    void *args[] = {&task->render_buffer.samples,
-                    &task->reconstruction_state.buffer_params,
-                    &task->filter_area,
-                    &from_ptr,
-                    &buffer_ptr,
-                    &out_offset,
-                    &task->rect};
-    CUDA_LAUNCH_KERNEL(cuFilterWriteFeature, args);
-    check_result_cuda_ret(cuStreamSynchronize(cuda_stream[thread_index]));
-
-    return !have_error();
-  }
-
-  bool denoising_detect_outliers(device_ptr image_ptr,
-                                 device_ptr variance_ptr,
-                                 device_ptr depth_ptr,
-                                 device_ptr output_ptr,
-                                 DenoisingTask *task,
-                                 int thread_index)
-  {
-    if (have_error())
-      return false;
-
-    CUfunction cuFilterDetectOutliers;
-    check_result_cuda_ret(cuModuleGetFunction(
-        &cuFilterDetectOutliers, cuda_filter_module, "kernel_cuda_filter_detect_outliers"));
-    check_result_cuda_ret(cuFuncSetCacheConfig(cuFilterDetectOutliers, CU_FUNC_CACHE_PREFER_L1));
-    CUDA_GET_BLOCKSIZE(
-        cuFilterDetectOutliers, task->rect.z - task->rect.x, task->rect.w - task->rect.y);
-
-    void *args[] = {&image_ptr,
-                    &variance_ptr,
-                    &depth_ptr,
-                    &output_ptr,
-                    &task->rect,
-                    &task->buffer.pass_stride};
-
-    CUDA_LAUNCH_KERNEL(cuFilterDetectOutliers, args);
-    check_result_cuda_ret(cuStreamSynchronize(cuda_stream[thread_index]));
-
-    return !have_error();
-  }
 };
 
 bool device_optix_init()
@@ -2262,20 +1511,11 @@ bool device_optix_init()
   if (!device_cuda_init())
     return false;
 
-#  ifdef WITH_CUDA_DYNLOAD
-  // Load NVRTC function pointers for adaptive kernel compilation
-  if (DebugFlags().cuda.adaptive_compile && cuewInit(CUEW_INIT_NVRTC) != CUEW_SUCCESS) {
-    VLOG(1)
-        << "CUEW initialization failed for NVRTC. Adaptive kernel compilation won't be available.";
-  }
-#  endif
-
   const OptixResult result = optixInit();
 
   if (result == OPTIX_ERROR_UNSUPPORTED_ABI_VERSION) {
-    VLOG(1)
-        << "OptiX initialization failed because the installed driver does not support ABI version "
-        << OPTIX_ABI_VERSION;
+    VLOG(1) << "OptiX initialization failed because driver does not support ABI version "
+            << OPTIX_ABI_VERSION;
     return false;
   }
   else if (result != OPTIX_SUCCESS) {

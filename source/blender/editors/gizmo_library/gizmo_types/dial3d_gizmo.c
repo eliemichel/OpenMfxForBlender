@@ -235,7 +235,7 @@ static void dial_ghostarc_draw_incremental_angle(const float incremental_angle, 
 }
 
 static void dial_ghostarc_draw(const float angle_ofs,
-                               const float angle_delta,
+                               float angle_delta,
                                const float arc_inner_factor,
                                const float color[4])
 {
@@ -244,21 +244,36 @@ static void dial_ghostarc_draw(const float angle_ofs,
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
 
+  /* Avoid artifacts by drawing the main arc over the span of one rotation only. */
+  const float pi2 = (float)(M_PI * 2.0);
+  int rotation_count = (int)floorf(fabsf(angle_delta) / pi2);
+  angle_delta = fmod(angle_delta, pi2);
+
+  /* Calculate the remaining angle that can be filled with the background color. */
+  const float angle_background = angle_delta >= 0 ? (pi2 - angle_delta) : -(pi2 + angle_delta);
+
+  float color_background[4] = {0};
   if (arc_inner_factor != 0.0) {
-    float color_dark[4] = {0};
-    color_dark[3] = color[3] / 2;
-    immUniformColor4fv(color_dark);
-    imm_draw_disk_partial_fill_2d(pos,
-                                  0,
-                                  0,
-                                  arc_inner_factor,
-                                  width_inner,
-                                  DIAL_RESOLUTION,
-                                  RAD2DEGF(angle_ofs),
-                                  RAD2DEGF(M_PI * 2));
+    color_background[3] = color[3] / 2.0f;
   }
 
-  immUniformColor4fv(color);
+  if (rotation_count != 0) {
+    /* Calculate the background color to visualize the rotation count. */
+    copy_v4_v4(color_background, color);
+    color_background[3] = color[3] * rotation_count;
+  }
+
+  immUniformColor4fv(color_background);
+  imm_draw_disk_partial_fill_2d(pos,
+                                0,
+                                0,
+                                arc_inner_factor,
+                                width_inner,
+                                DIAL_RESOLUTION,
+                                RAD2DEGF(angle_ofs + angle_delta),
+                                RAD2DEGF(angle_background));
+
+  immUniformColor4f(UNPACK3(color), color[3] * (rotation_count + 1));
   imm_draw_disk_partial_fill_2d(pos,
                                 0,
                                 0,
@@ -272,15 +287,15 @@ static void dial_ghostarc_draw(const float angle_ofs,
 
 static void dial_ghostarc_get_angles(const wmGizmo *gz,
                                      const wmEvent *event,
-                                     const ARegion *ar,
+                                     const ARegion *region,
                                      const float mat[4][4],
                                      const float co_outer[3],
                                      float *r_start,
                                      float *r_delta)
 {
   DialInteraction *inter = gz->interaction_data;
-  const RegionView3D *rv3d = ar->regiondata;
-  const float mval[2] = {event->x - ar->winrct.xmin, event->y - ar->winrct.ymin};
+  const RegionView3D *rv3d = region->regiondata;
+  const float mval[2] = {event->x - region->winrct.xmin, event->y - region->winrct.ymin};
 
   /* We might need to invert the direction of the angles. */
   float view_vec[3], axis_vec[3];
@@ -297,12 +312,13 @@ static void dial_ghostarc_get_angles(const wmGizmo *gz,
 
   plane_from_point_normal_v3(dial_plane, gz->matrix_basis[3], axis_vec);
 
-  if (!ED_view3d_win_to_3d_on_plane(ar, dial_plane, inter->init.mval, false, proj_mval_init_rel)) {
+  if (!ED_view3d_win_to_3d_on_plane(
+          region, dial_plane, inter->init.mval, false, proj_mval_init_rel)) {
     goto fail;
   }
   sub_v3_v3(proj_mval_init_rel, gz->matrix_basis[3]);
 
-  if (!ED_view3d_win_to_3d_on_plane(ar, dial_plane, mval, false, proj_mval_new_rel)) {
+  if (!ED_view3d_win_to_3d_on_plane(region, dial_plane, mval, false, proj_mval_new_rel)) {
     goto fail;
   }
   sub_v3_v3(proj_mval_new_rel, gz->matrix_basis[3]);
@@ -425,8 +441,8 @@ static void gizmo_dial_draw_select(const bContext *C, wmGizmo *gz, int select_id
   float *clip_plane = (draw_options & ED_GIZMO_DIAL_DRAW_FLAG_CLIP) ? clip_plane_buf : NULL;
 
   if (clip_plane) {
-    ARegion *ar = CTX_wm_region(C);
-    RegionView3D *rv3d = ar->regiondata;
+    ARegion *region = CTX_wm_region(C);
+    RegionView3D *rv3d = region->regiondata;
 
     copy_v3_v3(clip_plane, rv3d->viewinv[2]);
     clip_plane[3] = -dot_v3v3(rv3d->viewinv[2], gz->matrix_basis[3]);
@@ -452,8 +468,8 @@ static void gizmo_dial_draw(const bContext *C, wmGizmo *gz)
                           NULL;
 
   if (clip_plane) {
-    ARegion *ar = CTX_wm_region(C);
-    RegionView3D *rv3d = ar->regiondata;
+    ARegion *region = CTX_wm_region(C);
+    RegionView3D *rv3d = region->regiondata;
 
     copy_v3_v3(clip_plane, rv3d->viewinv[2]);
     clip_plane[3] = -dot_v3v3(rv3d->viewinv[2], gz->matrix_basis[3]);
@@ -535,6 +551,13 @@ static void gizmo_dial_exit(bContext *C, wmGizmo *gz, const bool cancel)
     wmGizmoProperty *gz_prop = WM_gizmo_target_property_find(gz, "offset");
     if (WM_gizmo_target_property_is_valid(gz_prop)) {
       WM_gizmo_target_property_float_set(C, gz, gz_prop, reset_value);
+    }
+  }
+
+  if (!cancel) {
+    wmGizmoProperty *gz_prop = WM_gizmo_target_property_find(gz, "offset");
+    if (WM_gizmo_target_property_is_valid(gz_prop)) {
+      WM_gizmo_target_property_anim_autokey(C, gz, gz_prop);
     }
   }
 }

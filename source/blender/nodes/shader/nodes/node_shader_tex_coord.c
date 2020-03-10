@@ -24,14 +24,14 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_tex_coord_out[] = {
-    {SOCK_VECTOR, 0, N_("Generated"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_VECTOR, 0, N_("Normal"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_VECTOR, 0, N_("UV"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_VECTOR, 0, N_("Object"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_VECTOR, 0, N_("Camera"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_VECTOR, 0, N_("Window"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_VECTOR, 0, N_("Reflection"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Generated"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_VECTOR, N_("Normal"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_VECTOR, N_("UV"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_VECTOR, N_("Object"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_VECTOR, N_("Camera"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_VECTOR, N_("Window"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_VECTOR, N_("Reflection"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {-1, ""},
 };
 
 static int node_shader_gpu_tex_coord(GPUMaterial *mat,
@@ -47,8 +47,8 @@ static int node_shader_gpu_tex_coord(GPUMaterial *mat,
 
   /* Opti: don't request orco if not needed. */
   GPUNodeLink *orco = (!out[0].hasoutput) ? GPU_constant((float[4]){0.0f, 0.0f, 0.0f, 0.0f}) :
-                                            GPU_attribute(CD_ORCO, "");
-  GPUNodeLink *mtface = GPU_attribute(CD_MTFACE, "");
+                                            GPU_attribute(mat, CD_ORCO, "");
+  GPUNodeLink *mtface = GPU_attribute(mat, CD_MTFACE, "");
   GPUNodeLink *viewpos = GPU_builtin(GPU_VIEW_POSITION);
   GPUNodeLink *worldnor = GPU_builtin(GPU_WORLD_NORMAL);
   GPUNodeLink *texcofacs = GPU_builtin(GPU_CAMERA_TEXCO_FACTORS);
@@ -68,8 +68,14 @@ static int node_shader_gpu_tex_coord(GPUMaterial *mat,
      * The resulting vector can still be a bit wrong but not as much.
      * (see T70644) */
     if (node->branch_tag != 0 && ELEM(i, 1, 6)) {
-      GPU_link(
-          mat, "vector_math_normalize", out[i].link, out[i].link, out[i].link, &out[i].link, NULL);
+      GPU_link(mat,
+               "vector_math_normalize",
+               out[i].link,
+               out[i].link,
+               out[i].link,
+               out[i].link,
+               &out[i].link,
+               NULL);
     }
   }
 

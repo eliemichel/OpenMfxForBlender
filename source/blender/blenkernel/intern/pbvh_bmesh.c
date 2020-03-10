@@ -872,7 +872,7 @@ static void long_edge_queue_edge_add(EdgeQueueContext *eq_ctx, BMEdge *e)
 static void long_edge_queue_edge_add_recursive(
     EdgeQueueContext *eq_ctx, BMLoop *l_edge, BMLoop *l_end, const float len_sq, float limit_len)
 {
-  BLI_assert(len_sq > SQUARE(limit_len));
+  BLI_assert(len_sq > square_f(limit_len));
 
 #  ifdef USE_EDGEQUEUE_FRONTFACE
   if (eq_ctx->q->use_view_normal) {
@@ -905,7 +905,7 @@ static void long_edge_queue_edge_add_recursive(
     const float len_sq_cmp = len_sq * EVEN_EDGELEN_THRESHOLD;
 
     limit_len *= EVEN_GENERATION_SCALE;
-    const float limit_len_sq = SQUARE(limit_len);
+    const float limit_len_sq = square_f(limit_len);
 
     BMLoop *l_iter = l_edge;
     do {
@@ -1977,7 +1977,7 @@ bool BKE_pbvh_bmesh_update_topology(PBVH *bvh,
 
   if (mode & PBVH_Collapse) {
     EdgeQueue q;
-    BLI_mempool *queue_pool = BLI_mempool_create(sizeof(BMVert *[2]), 0, 128, BLI_MEMPOOL_NOP);
+    BLI_mempool *queue_pool = BLI_mempool_create(sizeof(BMVert *) * 2, 0, 128, BLI_MEMPOOL_NOP);
     EdgeQueueContext eq_ctx = {
         &q,
         queue_pool,
@@ -1996,7 +1996,7 @@ bool BKE_pbvh_bmesh_update_topology(PBVH *bvh,
 
   if (mode & PBVH_Subdivide) {
     EdgeQueue q;
-    BLI_mempool *queue_pool = BLI_mempool_create(sizeof(BMVert *[2]), 0, 128, BLI_MEMPOOL_NOP);
+    BLI_mempool *queue_pool = BLI_mempool_create(sizeof(BMVert *) * 2, 0, 128, BLI_MEMPOOL_NOP);
     EdgeQueueContext eq_ctx = {
         &q,
         queue_pool,

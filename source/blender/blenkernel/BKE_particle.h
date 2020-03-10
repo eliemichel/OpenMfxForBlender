@@ -28,11 +28,16 @@
  */
 
 #include "BLI_utildefines.h"
+#include "BLI_buffer.h"
 
 #include "DNA_particle_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_customdata.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct ParticleKey;
 struct ParticleSettings;
@@ -107,6 +112,9 @@ typedef struct SPHData {
   int pass;
   float element_size;
   float flow[3];
+
+  /* Temporary thread-local buffer for springs created during this step. */
+  BLI_Buffer new_springs;
 
   /* Integrator callbacks. This allows different SPH implementations. */
   void (*force_cb)(void *sphdata_v, ParticleKey *state, float *force, float *impulse);
@@ -323,7 +331,6 @@ int psys_uses_gravity(struct ParticleSimulationData *sim);
 void BKE_particlesettings_fluid_default_settings(struct ParticleSettings *part);
 
 /* free */
-void BKE_particlesettings_free(struct ParticleSettings *part);
 void psys_free_path_cache(struct ParticleSystem *psys, struct PTCacheEdit *edit);
 void psys_free(struct Object *ob, struct ParticleSystem *psys);
 
@@ -361,16 +368,8 @@ struct ModifierData *object_add_particle_system(struct Main *bmain,
                                                 const char *name);
 void object_remove_particle_system(struct Main *bmain, struct Scene *scene, struct Object *ob);
 struct ParticleSettings *BKE_particlesettings_add(struct Main *bmain, const char *name);
-void BKE_particlesettings_copy_data(struct Main *bmain,
-                                    struct ParticleSettings *part_dst,
-                                    const struct ParticleSettings *part_src,
-                                    const int flag);
 struct ParticleSettings *BKE_particlesettings_copy(struct Main *bmain,
                                                    const struct ParticleSettings *part);
-void BKE_particlesettings_make_local(struct Main *bmain,
-                                     struct ParticleSettings *part,
-                                     const bool lib_local);
-
 void psys_reset(struct ParticleSystem *psys, int mode);
 
 void psys_find_parents(struct ParticleSimulationData *sim, const bool use_render_params);
@@ -625,5 +624,9 @@ void BKE_particle_batch_cache_free(struct ParticleSystem *psys);
 
 extern void (*BKE_particle_batch_cache_dirty_tag_cb)(struct ParticleSystem *psys, int mode);
 extern void (*BKE_particle_batch_cache_free_cb)(struct ParticleSystem *psys);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_PARTICLE_H__ */

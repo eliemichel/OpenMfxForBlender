@@ -30,6 +30,10 @@
 #include "BLI_compiler_compat.h"
 #include "BLI_assert.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define GPU_VERT_ATTR_MAX_LEN 16
 #define GPU_VERT_ATTR_MAX_NAMES 6
 #define GPU_VERT_ATTR_NAMES_BUF_LEN 256
@@ -75,7 +79,7 @@ typedef struct GPUVertAttr {
 
 BLI_STATIC_ASSERT(GPU_VERT_ATTR_NAMES_BUF_LEN <= 256,
                   "We use uchar as index inside the name buffer "
-                  "so GPU_VERT_ATTR_NAMES_BUF_LEN needs to be be "
+                  "so GPU_VERT_ATTR_NAMES_BUF_LEN needs to be "
                   "smaller than GPUVertFormat->name_offset and "
                   "GPUVertAttr->names maximum value");
 
@@ -107,6 +111,8 @@ void GPU_vertformat_from_interface(GPUVertFormat *format,
 uint GPU_vertformat_attr_add(
     GPUVertFormat *, const char *name, GPUVertCompType, uint comp_len, GPUVertFetchMode);
 void GPU_vertformat_alias_add(GPUVertFormat *, const char *alias);
+
+void GPU_vertformat_multiload_enable(GPUVertFormat *format, int load_count);
 
 void GPU_vertformat_deinterleave(GPUVertFormat *format);
 
@@ -184,5 +190,9 @@ BLI_INLINE GPUPackedNormal GPU_normal_convert_i10_s3(const short data[3])
   };
   return n;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __GPU_VERTEX_FORMAT_H__ */

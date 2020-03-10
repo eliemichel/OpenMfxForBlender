@@ -32,7 +32,7 @@ CCL_NAMESPACE_BEGIN
 
 class Device;
 class DeviceScene;
-class Mesh;
+class Geometry;
 class ParticleSystem;
 class Progress;
 class Scene;
@@ -46,7 +46,7 @@ class Object : public Node {
  public:
   NODE_DECLARE
 
-  Mesh *mesh;
+  Geometry *geometry;
   Transform tfm;
   BoundBox bounds;
   uint random_id;
@@ -80,6 +80,9 @@ class Object : public Node {
   float motion_time(int step) const;
   int motion_step(float time) const;
   void update_motion();
+
+  /* Maximum number of motion steps supported (due to Embree). */
+  static const uint MAX_MOTION_STEPS = 129;
 
   /* Check whether object is traceable and it worth adding it to
    * kernel scene.

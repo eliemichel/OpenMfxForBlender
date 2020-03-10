@@ -813,7 +813,8 @@ void uiTemplateImage(uiLayout *layout,
                  "IMAGE_OT_open",
                  NULL,
                  UI_TEMPLATE_ID_FILTER_ALL,
-                 false);
+                 false,
+                 NULL);
 
     if (ima != NULL) {
       uiItemS(layout);
@@ -978,6 +979,16 @@ void uiTemplateImage(uiLayout *layout,
 
           bool is_data = IMB_colormanagement_space_name_is_data(ima->colorspace_settings.name);
           uiLayoutSetActive(sub, !is_data);
+        }
+
+        if (ima && iuser) {
+          void *lock;
+          ImBuf *ibuf = BKE_image_acquire_ibuf(ima, iuser, &lock);
+
+          if (ibuf && ibuf->rect_float && (ibuf->flags & IB_halffloat) == 0) {
+            uiItemR(col, &imaptr, "use_half_precision", 0, NULL, ICON_NONE);
+          }
+          BKE_image_release_ibuf(ima, ibuf, lock);
         }
       }
 

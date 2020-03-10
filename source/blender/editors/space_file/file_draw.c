@@ -133,8 +133,15 @@ static void draw_tile(int sx, int sy, int width, int height, int colorid, int sh
       true, (float)sx, (float)(sy - height), (float)(sx + width), (float)sy, 5.0f, color);
 }
 
-static void file_draw_icon(
-    uiBlock *block, const char *path, int sx, int sy, int icon, int width, int height, bool drag)
+static void file_draw_icon(uiBlock *block,
+                           const char *path,
+                           int sx,
+                           int sy,
+                           int icon,
+                           int width,
+                           int height,
+                           bool drag,
+                           bool dimmed)
 {
   uiBut *but;
   int x, y;
@@ -142,8 +149,11 @@ static void file_draw_icon(
   x = sx;
   y = sy - height;
 
+  /* For uiDefIconBut(), if a1==1.0 then a2 is alpha 0.0 - 1.0 */
+  const float a1 = dimmed ? 1.0f : 0.0f;
+  const float a2 = dimmed ? 0.3f : 0.0f;
   but = uiDefIconBut(
-      block, UI_BTYPE_LABEL, 0, icon, x, y, width, height, NULL, 0.0f, 0.0f, 0.0f, 0.0f, NULL);
+      block, UI_BTYPE_LABEL, 0, icon, x, y, width, height, NULL, 0.0f, 0.0f, a1, a2, NULL);
   UI_but_func_tooltip_set(but, file_draw_tooltip_func, BLI_strdup(path));
 
   if (drag) {
@@ -191,12 +201,12 @@ static void file_draw_string(int sx,
                     });
 }
 
-void file_calc_previews(const bContext *C, ARegion *ar)
+void file_calc_previews(const bContext *C, ARegion *region)
 {
   SpaceFile *sfile = CTX_wm_space_file(C);
-  View2D *v2d = &ar->v2d;
+  View2D *v2d = &region->v2d;
 
-  ED_fileselect_init_layout(sfile, ar);
+  ED_fileselect_init_layout(sfile, region);
   UI_view2d_totRect_set(v2d, sfile->layout->width, sfile->layout->height);
 }
 
@@ -210,7 +220,8 @@ static void file_draw_preview(uiBlock *block,
                               FileLayout *layout,
                               const bool is_icon,
                               const int typeflags,
-                              const bool drag)
+                              const bool drag,
+                              const bool dimmed)
 {
   uiBut *but;
   float fx, fy;
@@ -273,6 +284,10 @@ static void file_draw_preview(uiBlock *block,
     UI_GetThemeColor4fv(TH_TEXT, col);
   }
 
+  if (dimmed) {
+    col[3] *= 0.3f;
+  }
+
   if (!is_icon && typeflags & FILE_TYPE_BLENDERLIB) {
     /* Datablock preview images use premultiplied alpha. */
     GPU_blend_set_func_separate(
@@ -298,7 +313,7 @@ static void file_draw_preview(uiBlock *block,
   GPU_blend_set_func_separate(
       GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
 
-  if (icon && (icon != ICON_FILE_FONT)) {
+  if (icon && !(typeflags & FILE_TYPE_FTFONT)) {
     /* size of center icon is scaled to fit container and UI scale */
     float icon_x, icon_y;
 
@@ -362,20 +377,18 @@ static void file_draw_preview(uiBlock *block,
 
 static void renamebutton_cb(bContext *C, void *UNUSED(arg1), char *oldname)
 {
-  Main *bmain = CTX_data_main(C);
   char newname[FILE_MAX + 12];
   char orgname[FILE_MAX + 12];
   char filename[FILE_MAX + 12];
   wmWindowManager *wm = CTX_wm_manager(C);
   SpaceFile *sfile = (SpaceFile *)CTX_wm_space_data(C);
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
-  const char *blendfile_path = BKE_main_blendfile_path(bmain);
-  BLI_make_file_string(blendfile_path, orgname, sfile->params->dir, oldname);
+  BLI_join_dirfile(orgname, sizeof(orgname), sfile->params->dir, oldname);
   BLI_strncpy(filename, sfile->params->renamefile, sizeof(filename));
   BLI_filename_make_safe(filename);
-  BLI_make_file_string(blendfile_path, newname, sfile->params->dir, filename);
+  BLI_join_dirfile(newname, sizeof(newname), sfile->params->dir, filename);
 
   if (!STREQ(orgname, newname)) {
     if (!BLI_exists(newname)) {
@@ -400,7 +413,7 @@ static void renamebutton_cb(bContext *C, void *UNUSED(arg1), char *oldname)
       ED_fileselect_clear(wm, sa, sfile);
     }
 
-    ED_region_tag_redraw(ar);
+    ED_region_tag_redraw(region);
   }
 }
 
@@ -654,17 +667,17 @@ static void draw_details_columns(const FileSelectParams *params,
   }
 }
 
-void file_draw_list(const bContext *C, ARegion *ar)
+void file_draw_list(const bContext *C, ARegion *region)
 {
   SpaceFile *sfile = CTX_wm_space_file(C);
   FileSelectParams *params = ED_fileselect_get_params(sfile);
-  FileLayout *layout = ED_fileselect_get_layout(sfile, ar);
-  View2D *v2d = &ar->v2d;
+  FileLayout *layout = ED_fileselect_get_layout(sfile, region);
+  View2D *v2d = &region->v2d;
   struct FileList *files = sfile->files;
   struct FileDirEntry *file;
   const char *root = filelist_dir(files);
   ImBuf *imb;
-  uiBlock *block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
+  uiBlock *block = UI_block_begin(C, region, __func__, UI_EMBOSS);
   int numfiles;
   int numfiles_layout;
   int sx, sy;
@@ -685,12 +698,13 @@ void file_draw_list(const bContext *C, ARegion *ar)
     draw_dividers(layout, v2d);
   }
 
-  offset = ED_fileselect_layout_offset(layout, (int)ar->v2d.cur.xmin, (int)-ar->v2d.cur.ymax);
+  offset = ED_fileselect_layout_offset(
+      layout, (int)region->v2d.cur.xmin, (int)-region->v2d.cur.ymax);
   if (offset < 0) {
     offset = 0;
   }
 
-  numfiles_layout = ED_fileselect_layout_numfiles(layout, ar);
+  numfiles_layout = ED_fileselect_layout_numfiles(layout, region);
 
   /* adjust, so the next row is already drawn when scrolling */
   if (layout->flag & FILE_LAYOUT_HOR) {
@@ -775,6 +789,7 @@ void file_draw_list(const bContext *C, ARegion *ar)
 
     /* don't drag parent or refresh items */
     do_drag = !(FILENAME_IS_CURRPAR(file->relpath));
+    const bool is_hidden = (file->attributes & FILE_ATTR_HIDDEN);
 
     if (FILE_IMGDISPLAY == params->display) {
       const int icon = filelist_geticon(files, i, false);
@@ -795,7 +810,8 @@ void file_draw_list(const bContext *C, ARegion *ar)
                         layout,
                         is_icon,
                         file->typeflag,
-                        do_drag);
+                        do_drag,
+                        is_hidden);
     }
     else {
       file_draw_icon(block,
@@ -805,7 +821,8 @@ void file_draw_list(const bContext *C, ARegion *ar)
                      filelist_geticon(files, i, true),
                      ICON_DEFAULT_WIDTH_SCALE,
                      ICON_DEFAULT_HEIGHT_SCALE,
-                     do_drag);
+                     do_drag,
+                     is_hidden);
       icon_ofs += ICON_DEFAULT_WIDTH_SCALE + 0.2f * UI_UNIT_X;
     }
 
@@ -833,7 +850,7 @@ void file_draw_list(const bContext *C, ARegion *ar)
       UI_but_func_rename_set(but, renamebutton_cb, file);
       UI_but_flag_enable(but, UI_BUT_NO_UTF8); /* allow non utf8 names */
       UI_but_flag_disable(but, UI_BUT_UNDO);
-      if (false == UI_but_active_only(C, ar, block, but)) {
+      if (false == UI_but_active_only(C, region, block, but)) {
         file_selflag = filelist_entry_select_set(
             sfile->files, file, FILE_SEL_REMOVE, FILE_SEL_EDITING, CHECK_ALL);
       }

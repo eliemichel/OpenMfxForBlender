@@ -126,7 +126,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_sdna_types.h"
 #include "DNA_sequence_types.h"
-#include "DNA_smoke_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_space_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_speaker_types.h"
@@ -139,6 +139,7 @@
 #include "DNA_workspace_types.h"
 #include "DNA_movieclip_types.h"
 #include "DNA_mask_types.h"
+#include "DNA_curveprofile_types.h"
 
 #include "MEM_guardedalloc.h"  // MEM_freeN
 #include "BLI_bitmap.h"
@@ -156,7 +157,7 @@
 #include "BKE_gpencil_modifier.h"
 #include "BKE_idcode.h"
 #include "BKE_layer.h"
-#include "BKE_library_override.h"
+#include "BKE_lib_override.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_node.h"
@@ -179,6 +180,9 @@
 #include "dna_type_offsets.h"
 
 #include <errno.h>
+
+/* Make preferences read-only. */
+#define U (*((const UserDef *)&U))
 
 /* ********* my write, buffered writing with minimum size chunks ************ */
 
@@ -953,6 +957,45 @@ static void write_curvemapping(WriteData *wd, CurveMapping *cumap)
   write_curvemapping_curves(wd, cumap);
 }
 
+static void write_CurveProfile(WriteData *wd, CurveProfile *profile)
+{
+  writestruct(wd, DATA, CurveProfile, 1, profile);
+  writestruct(wd, DATA, CurveProfilePoint, profile->path_len, profile->path);
+}
+
+static void write_node_socket_default_value(WriteData *wd, bNodeSocket *sock)
+{
+  if (sock->default_value == NULL) {
+    return;
+  }
+
+  switch ((eNodeSocketDatatype)sock->type) {
+    case SOCK_FLOAT:
+      writestruct(wd, DATA, bNodeSocketValueFloat, 1, sock->default_value);
+      break;
+    case SOCK_VECTOR:
+      writestruct(wd, DATA, bNodeSocketValueVector, 1, sock->default_value);
+      break;
+    case SOCK_RGBA:
+      writestruct(wd, DATA, bNodeSocketValueRGBA, 1, sock->default_value);
+      break;
+    case SOCK_BOOLEAN:
+      writestruct(wd, DATA, bNodeSocketValueBoolean, 1, sock->default_value);
+      break;
+    case SOCK_INT:
+      writestruct(wd, DATA, bNodeSocketValueInt, 1, sock->default_value);
+      break;
+    case SOCK_STRING:
+      writestruct(wd, DATA, bNodeSocketValueString, 1, sock->default_value);
+      break;
+    case __SOCK_MESH:
+    case SOCK_CUSTOM:
+    case SOCK_SHADER:
+      BLI_assert(false);
+      break;
+  }
+}
+
 static void write_node_socket(WriteData *wd, bNodeSocket *sock)
 {
   /* actual socket writing */
@@ -962,9 +1005,7 @@ static void write_node_socket(WriteData *wd, bNodeSocket *sock)
     IDP_WriteProperty(sock->prop, wd);
   }
 
-  if (sock->default_value) {
-    writedata(wd, DATA, MEM_allocN_len(sock->default_value), sock->default_value);
-  }
+  write_node_socket_default_value(wd, sock);
 }
 static void write_node_socket_interface(WriteData *wd, bNodeSocket *sock)
 {
@@ -975,9 +1016,7 @@ static void write_node_socket_interface(WriteData *wd, bNodeSocket *sock)
     IDP_WriteProperty(sock->prop, wd);
   }
 
-  if (sock->default_value) {
-    writedata(wd, DATA, MEM_allocN_len(sock->default_value), sock->default_value);
-  }
+  write_node_socket_default_value(wd, sock);
 }
 /* this is only direct data, tree itself should have been written */
 static void write_nodetree_nolib(WriteData *wd, bNodeTree *ntree)
@@ -1618,38 +1657,38 @@ static void write_modifiers(WriteData *wd, ListBase *modbase)
       writestruct(wd, DATA, EffectorWeights, 1, clmd->sim_parms->effector_weights);
       write_pointcaches(wd, &clmd->ptcaches);
     }
-    else if (md->type == eModifierType_Smoke) {
-      SmokeModifierData *smd = (SmokeModifierData *)md;
+    else if (md->type == eModifierType_Fluid) {
+      FluidModifierData *mmd = (FluidModifierData *)md;
 
-      if (smd->type & MOD_SMOKE_TYPE_DOMAIN) {
-        writestruct(wd, DATA, SmokeDomainSettings, 1, smd->domain);
+      if (mmd->type & MOD_FLUID_TYPE_DOMAIN) {
+        writestruct(wd, DATA, FluidDomainSettings, 1, mmd->domain);
 
-        if (smd->domain) {
-          write_pointcaches(wd, &(smd->domain->ptcaches[0]));
+        if (mmd->domain) {
+          write_pointcaches(wd, &(mmd->domain->ptcaches[0]));
 
           /* create fake pointcache so that old blender versions can read it */
-          smd->domain->point_cache[1] = BKE_ptcache_add(&smd->domain->ptcaches[1]);
-          smd->domain->point_cache[1]->flag |= PTCACHE_DISK_CACHE | PTCACHE_FAKE_SMOKE;
-          smd->domain->point_cache[1]->step = 1;
+          mmd->domain->point_cache[1] = BKE_ptcache_add(&mmd->domain->ptcaches[1]);
+          mmd->domain->point_cache[1]->flag |= PTCACHE_DISK_CACHE | PTCACHE_FAKE_SMOKE;
+          mmd->domain->point_cache[1]->step = 1;
 
-          write_pointcaches(wd, &(smd->domain->ptcaches[1]));
+          write_pointcaches(wd, &(mmd->domain->ptcaches[1]));
 
-          if (smd->domain->coba) {
-            writestruct(wd, DATA, ColorBand, 1, smd->domain->coba);
+          if (mmd->domain->coba) {
+            writestruct(wd, DATA, ColorBand, 1, mmd->domain->coba);
           }
 
           /* cleanup the fake pointcache */
-          BKE_ptcache_free_list(&smd->domain->ptcaches[1]);
-          smd->domain->point_cache[1] = NULL;
+          BKE_ptcache_free_list(&mmd->domain->ptcaches[1]);
+          mmd->domain->point_cache[1] = NULL;
 
-          writestruct(wd, DATA, EffectorWeights, 1, smd->domain->effector_weights);
+          writestruct(wd, DATA, EffectorWeights, 1, mmd->domain->effector_weights);
         }
       }
-      else if (smd->type & MOD_SMOKE_TYPE_FLOW) {
-        writestruct(wd, DATA, SmokeFlowSettings, 1, smd->flow);
+      else if (mmd->type & MOD_FLUID_TYPE_FLOW) {
+        writestruct(wd, DATA, FluidFlowSettings, 1, mmd->flow);
       }
-      else if (smd->type & MOD_SMOKE_TYPE_COLL) {
-        writestruct(wd, DATA, SmokeCollSettings, 1, smd->coll);
+      else if (mmd->type & MOD_FLUID_TYPE_EFFEC) {
+        writestruct(wd, DATA, FluidEffectorSettings, 1, mmd->effector);
       }
     }
     else if (md->type == eModifierType_Fluidsim) {
@@ -1762,7 +1801,14 @@ static void write_modifiers(WriteData *wd, ListBase *modbase)
     else if (md->type == eModifierType_OpenMeshEffect) {
       OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
 
-      writestruct(wd, DATA, OpenMeshEffectParameterInfo, fxmd->num_parameters, fxmd->parameter_info);
+      writestruct(
+          wd, DATA, OpenMeshEffectParameterInfo, fxmd->num_parameters, fxmd->parameter_info);
+    }
+    else if (md->type == eModifierType_Bevel) {
+      BevelModifierData *bmd = (BevelModifierData *)md;
+      if (bmd->custom_profile) {
+        write_CurveProfile(wd, bmd->custom_profile);
+      }
     }
   }
 }
@@ -1790,11 +1836,51 @@ static void write_gpencil_modifiers(WriteData *wd, ListBase *modbase)
         write_curvemapping(wd, gpmd->curve_thickness);
       }
     }
+    else if (md->type == eGpencilModifierType_Noise) {
+      NoiseGpencilModifierData *gpmd = (NoiseGpencilModifierData *)md;
+
+      if (gpmd->curve_intensity) {
+        write_curvemapping(wd, gpmd->curve_intensity);
+      }
+    }
     else if (md->type == eGpencilModifierType_Hook) {
       HookGpencilModifierData *gpmd = (HookGpencilModifierData *)md;
 
       if (gpmd->curfalloff) {
         write_curvemapping(wd, gpmd->curfalloff);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Vertexcolor) {
+      VertexcolorGpencilModifierData *gpmd = (VertexcolorGpencilModifierData *)md;
+      if (gpmd->colorband) {
+        writestruct(wd, DATA, ColorBand, 1, gpmd->colorband);
+      }
+      if (gpmd->curve_intensity) {
+        write_curvemapping(wd, gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Smooth) {
+      SmoothGpencilModifierData *gpmd = (SmoothGpencilModifierData *)md;
+      if (gpmd->curve_intensity) {
+        write_curvemapping(wd, gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Color) {
+      ColorGpencilModifierData *gpmd = (ColorGpencilModifierData *)md;
+      if (gpmd->curve_intensity) {
+        write_curvemapping(wd, gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Opacity) {
+      OpacityGpencilModifierData *gpmd = (OpacityGpencilModifierData *)md;
+      if (gpmd->curve_intensity) {
+        write_curvemapping(wd, gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Tint) {
+      TintGpencilModifierData *gpmd = (TintGpencilModifierData *)md;
+      if (gpmd->curve_intensity) {
+        write_curvemapping(wd, gpmd->curve_intensity);
       }
     }
   }
@@ -2055,9 +2141,7 @@ static void write_customdata(WriteData *wd,
                              int count,
                              CustomData *data,
                              CustomDataLayer *layers,
-                             CustomDataMask cddata_mask,
-                             int partial_type,
-                             int partial_count)
+                             CustomDataMask cddata_mask)
 {
   int i;
 
@@ -2084,6 +2168,10 @@ static void write_customdata(WriteData *wd,
       const float *layer_data = layer->data;
       writedata(wd, DATA, sizeof(*layer_data) * count, layer_data);
     }
+    else if (layer->type == CD_SCULPT_FACE_SETS) {
+      const float *layer_data = layer->data;
+      writedata(wd, DATA, sizeof(*layer_data) * count, layer_data);
+    }
     else if (layer->type == CD_GRID_PAINT_MASK) {
       write_grid_paint_mask(wd, count, layer->data);
     }
@@ -2094,16 +2182,7 @@ static void write_customdata(WriteData *wd,
     else {
       CustomData_file_write_info(layer->type, &structname, &structnum);
       if (structnum) {
-        /* when using partial visibility, the MEdge and MFace layers
-         * are smaller than the original, so their type and count is
-         * passed to make this work */
-        if (layer->type != partial_type) {
-          datasize = structnum * count;
-        }
-        else {
-          datasize = structnum * partial_count;
-        }
-
+        datasize = structnum * count;
         writestruct_id(wd, DATA, structname, datasize, layer->data);
       }
       else {
@@ -2122,85 +2201,70 @@ static void write_customdata(WriteData *wd,
 
 static void write_mesh(WriteData *wd, Mesh *mesh)
 {
-  CustomDataLayer *vlayers = NULL, vlayers_buff[CD_TEMP_CHUNK_SIZE];
-  CustomDataLayer *elayers = NULL, elayers_buff[CD_TEMP_CHUNK_SIZE];
-  CustomDataLayer *flayers = NULL, flayers_buff[CD_TEMP_CHUNK_SIZE];
-  CustomDataLayer *llayers = NULL, llayers_buff[CD_TEMP_CHUNK_SIZE];
-  CustomDataLayer *players = NULL, players_buff[CD_TEMP_CHUNK_SIZE];
-
   if (mesh->id.us > 0 || wd->use_memfile) {
-    /* write LibData */
-    {
-      /* write a copy of the mesh, don't modify in place because it is
-       * not thread safe for threaded renders that are reading this */
-      Mesh *old_mesh = mesh;
-      Mesh copy_mesh = *mesh;
-      mesh = &copy_mesh;
+    /* Write a copy of the mesh with possibly reduced number of data layers.
+     * Don't edit the original since other threads might be reading it. */
+    Mesh *old_mesh = mesh;
+    Mesh copy_mesh = *mesh;
+    mesh = &copy_mesh;
 
-      /* cache only - don't write */
-      mesh->mface = NULL;
-      mesh->totface = 0;
-      memset(&mesh->fdata, 0, sizeof(mesh->fdata));
+    /* cache only - don't write */
+    mesh->mface = NULL;
+    mesh->totface = 0;
+    memset(&mesh->fdata, 0, sizeof(mesh->fdata));
 
-      /**
-       * Those calls:
-       * - Reduce mesh->xdata.totlayer to number of layers to write.
-       * - Fill xlayers with those layers to be written.
-       * Note that mesh->xdata is from now on invalid for Blender,
-       * but this is why the whole mesh is a temp local copy!
-       */
-      CustomData_file_write_prepare(
-          &mesh->vdata, &vlayers, vlayers_buff, ARRAY_SIZE(vlayers_buff));
-      CustomData_file_write_prepare(
-          &mesh->edata, &elayers, elayers_buff, ARRAY_SIZE(elayers_buff));
-      flayers = flayers_buff;
-      CustomData_file_write_prepare(
-          &mesh->ldata, &llayers, llayers_buff, ARRAY_SIZE(llayers_buff));
-      CustomData_file_write_prepare(
-          &mesh->pdata, &players, players_buff, ARRAY_SIZE(players_buff));
+    /* Reduce xdata layers, fill xlayers with layers to be written.
+     * This makes xdata invalid for Blender, which is why we made a
+     * temporary local copy. */
+    CustomDataLayer *vlayers = NULL, vlayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *elayers = NULL, elayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *flayers = NULL, flayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *llayers = NULL, llayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *players = NULL, players_buff[CD_TEMP_CHUNK_SIZE];
 
-      writestruct_at_address(wd, ID_ME, Mesh, 1, old_mesh, mesh);
-      write_iddata(wd, &mesh->id);
+    CustomData_file_write_prepare(&mesh->vdata, &vlayers, vlayers_buff, ARRAY_SIZE(vlayers_buff));
+    CustomData_file_write_prepare(&mesh->edata, &elayers, elayers_buff, ARRAY_SIZE(elayers_buff));
+    flayers = flayers_buff;
+    CustomData_file_write_prepare(&mesh->ldata, &llayers, llayers_buff, ARRAY_SIZE(llayers_buff));
+    CustomData_file_write_prepare(&mesh->pdata, &players, players_buff, ARRAY_SIZE(players_buff));
 
-      /* direct data */
-      if (mesh->adt) {
-        write_animdata(wd, mesh->adt);
-      }
+    writestruct_at_address(wd, ID_ME, Mesh, 1, old_mesh, mesh);
+    write_iddata(wd, &mesh->id);
 
-      writedata(wd, DATA, sizeof(void *) * mesh->totcol, mesh->mat);
-      writedata(wd, DATA, sizeof(MSelect) * mesh->totselect, mesh->mselect);
-
-      write_customdata(
-          wd, &mesh->id, mesh->totvert, &mesh->vdata, vlayers, CD_MASK_MESH.vmask, -1, 0);
-      write_customdata(
-          wd, &mesh->id, mesh->totedge, &mesh->edata, elayers, CD_MASK_MESH.emask, -1, 0);
-      /* fdata is really a dummy - written so slots align */
-      write_customdata(
-          wd, &mesh->id, mesh->totface, &mesh->fdata, flayers, CD_MASK_MESH.fmask, -1, 0);
-      write_customdata(
-          wd, &mesh->id, mesh->totloop, &mesh->ldata, llayers, CD_MASK_MESH.lmask, -1, 0);
-      write_customdata(
-          wd, &mesh->id, mesh->totpoly, &mesh->pdata, players, CD_MASK_MESH.pmask, -1, 0);
-
-      /* restore pointer */
-      mesh = old_mesh;
+    /* direct data */
+    if (mesh->adt) {
+      write_animdata(wd, mesh->adt);
     }
-  }
 
-  if (vlayers && vlayers != vlayers_buff) {
-    MEM_freeN(vlayers);
-  }
-  if (elayers && elayers != elayers_buff) {
-    MEM_freeN(elayers);
-  }
-  if (flayers && flayers != flayers_buff) {
-    MEM_freeN(flayers);
-  }
-  if (llayers && llayers != llayers_buff) {
-    MEM_freeN(llayers);
-  }
-  if (players && players != players_buff) {
-    MEM_freeN(players);
+    writedata(wd, DATA, sizeof(void *) * mesh->totcol, mesh->mat);
+    writedata(wd, DATA, sizeof(MSelect) * mesh->totselect, mesh->mselect);
+
+    write_customdata(wd, &mesh->id, mesh->totvert, &mesh->vdata, vlayers, CD_MASK_MESH.vmask);
+    write_customdata(wd, &mesh->id, mesh->totedge, &mesh->edata, elayers, CD_MASK_MESH.emask);
+    /* fdata is really a dummy - written so slots align */
+    write_customdata(wd, &mesh->id, mesh->totface, &mesh->fdata, flayers, CD_MASK_MESH.fmask);
+    write_customdata(wd, &mesh->id, mesh->totloop, &mesh->ldata, llayers, CD_MASK_MESH.lmask);
+    write_customdata(wd, &mesh->id, mesh->totpoly, &mesh->pdata, players, CD_MASK_MESH.pmask);
+
+    /* restore pointer */
+    mesh = old_mesh;
+
+    /* free temporary data */
+    if (vlayers && vlayers != vlayers_buff) {
+      MEM_freeN(vlayers);
+    }
+    if (elayers && elayers != elayers_buff) {
+      MEM_freeN(elayers);
+    }
+    if (flayers && flayers != flayers_buff) {
+      MEM_freeN(flayers);
+    }
+    if (llayers && llayers != llayers_buff) {
+      MEM_freeN(llayers);
+    }
+    if (players && players != players_buff) {
+      MEM_freeN(players);
+    }
   }
 }
 
@@ -2254,6 +2318,8 @@ static void write_image(WriteData *wd, Image *ima)
       writestruct(wd, DATA, ImageView, 1, iv);
     }
     writestruct(wd, DATA, Stereo3dFormat, 1, ima->stereo3d_format);
+
+    writelist(wd, DATA, ImageTile, &ima->tiles);
 
     ima->packedfile = NULL;
 
@@ -2526,6 +2592,18 @@ static void write_scene(WriteData *wd, Scene *sce)
     writestruct(wd, DATA, GpPaint, 1, tos->gp_paint);
     write_paint(wd, &tos->gp_paint->paint);
   }
+  if (tos->gp_vertexpaint) {
+    writestruct(wd, DATA, GpVertexPaint, 1, tos->gp_vertexpaint);
+    write_paint(wd, &tos->gp_vertexpaint->paint);
+  }
+  if (tos->gp_sculptpaint) {
+    writestruct(wd, DATA, GpSculptPaint, 1, tos->gp_sculptpaint);
+    write_paint(wd, &tos->gp_sculptpaint->paint);
+  }
+  if (tos->gp_weightpaint) {
+    writestruct(wd, DATA, GpWeightPaint, 1, tos->gp_weightpaint);
+    write_paint(wd, &tos->gp_weightpaint->paint);
+  }
   /* write grease-pencil custom ipo curve to file */
   if (tos->gp_interpolate.custom_ipo) {
     write_curvemapping(wd, tos->gp_interpolate.custom_ipo);
@@ -2537,6 +2615,10 @@ static void write_scene(WriteData *wd, Scene *sce)
   /* write grease-pencil primitive curve to file */
   if (tos->gp_sculpt.cur_primitive) {
     write_curvemapping(wd, tos->gp_sculpt.cur_primitive);
+  }
+  /* Write the curve profile to the file. */
+  if (tos->custom_bevel_profile_preset) {
+    write_CurveProfile(wd, tos->custom_bevel_profile_preset);
   }
 
   write_paint(wd, &tos->imapaint.paint);
@@ -2717,14 +2799,17 @@ static void write_gpencil(WriteData *wd, bGPdata *gpd)
 
     /* write grease-pencil layers to file */
     writelist(wd, DATA, bGPDlayer, &gpd->layers);
-    for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+    LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+      /* Write mask list. */
+      writelist(wd, DATA, bGPDlayer_Mask, &gpl->mask_layers);
       /* write this layer's frames to file */
       writelist(wd, DATA, bGPDframe, &gpl->frames);
-      for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
+      LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
         /* write strokes */
         writelist(wd, DATA, bGPDstroke, &gpf->strokes);
-        for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
+        LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
           writestruct(wd, DATA, bGPDspoint, gps->totpoints, gps->points);
+          writestruct(wd, DATA, bGPDtriangle, gps->tot_triangles, gps->triangles);
           write_dverts(wd, gps->totpoints, gps->dvert);
         }
       }
@@ -2732,19 +2817,19 @@ static void write_gpencil(WriteData *wd, bGPdata *gpd)
   }
 }
 
-static void write_region(WriteData *wd, ARegion *ar, int spacetype)
+static void write_region(WriteData *wd, ARegion *region, int spacetype)
 {
-  writestruct(wd, DATA, ARegion, 1, ar);
+  writestruct(wd, DATA, ARegion, 1, region);
 
-  if (ar->regiondata) {
-    if (ar->flag & RGN_FLAG_TEMP_REGIONDATA) {
+  if (region->regiondata) {
+    if (region->flag & RGN_FLAG_TEMP_REGIONDATA) {
       return;
     }
 
     switch (spacetype) {
       case SPACE_VIEW3D:
-        if (ar->regiontype == RGN_TYPE_WINDOW) {
-          RegionView3D *rv3d = ar->regiondata;
+        if (region->regiontype == RGN_TYPE_WINDOW) {
+          RegionView3D *rv3d = region->regiondata;
           writestruct(wd, DATA, RegionView3D, 1, rv3d);
 
           if (rv3d->localvd) {
@@ -3606,6 +3691,7 @@ static void write_workspace(WriteData *wd, WorkSpace *workspace)
   ListBase *layouts = BKE_workspace_layouts_get(workspace);
 
   writestruct(wd, ID_WS, WorkSpace, 1, workspace);
+  write_iddata(wd, &workspace->id);
   writelist(wd, DATA, WorkSpaceLayout, layouts);
   writelist(wd, DATA, WorkSpaceDataRelation, &workspace->hook_layout_relations);
   writelist(wd, DATA, wmOwnerID, &workspace->owner_ids);
@@ -3791,7 +3877,7 @@ static bool write_file_handle(Main *mainvar,
   mywrite_flush(wd);
 
   OverrideLibraryStorage *override_storage =
-      wd->use_memfile ? NULL : BKE_override_library_operations_store_initialize();
+      wd->use_memfile ? NULL : BKE_lib_override_library_operations_store_initialize();
 
   /* This outer loop allows to save first data-blocks from real mainvar,
    * then the temp ones from override process,
@@ -3816,7 +3902,7 @@ static bool write_file_handle(Main *mainvar,
         const bool do_override = !ELEM(override_storage, NULL, bmain) && id->override_library;
 
         if (do_override) {
-          BKE_override_library_operations_store_start(bmain, override_storage, id);
+          BKE_lib_override_library_operations_store_start(bmain, override_storage, id);
         }
 
         switch ((ID_Type)GS(id->name)) {
@@ -3936,7 +4022,7 @@ static bool write_file_handle(Main *mainvar,
         }
 
         if (do_override) {
-          BKE_override_library_operations_store_end(override_storage, id);
+          BKE_lib_override_library_operations_store_end(override_storage, id);
         }
       }
 
@@ -3945,7 +4031,7 @@ static bool write_file_handle(Main *mainvar,
   } while ((bmain != override_storage) && (bmain = override_storage));
 
   if (override_storage) {
-    BKE_override_library_operations_store_finalize(override_storage);
+    BKE_lib_override_library_operations_store_finalize(override_storage);
     override_storage = NULL;
   }
 
@@ -4064,39 +4150,36 @@ bool BLO_write_file(Main *mainvar,
     return 0;
   }
 
-  /* check if we need to backup and restore paths */
-  if (UNLIKELY((write_flags & G_FILE_RELATIVE_REMAP) && (G_FILE_SAVE_COPY & write_flags))) {
-    path_list_backup = BKE_bpath_list_backup(mainvar, path_list_flag);
-  }
-
-  /* remapping of relative paths to new file location */
+  /* Remapping of relative paths to new file location. */
   if (write_flags & G_FILE_RELATIVE_REMAP) {
-    char dir1[FILE_MAX];
-    char dir2[FILE_MAX];
-    BLI_split_dir_part(filepath, dir1, sizeof(dir1));
-    BLI_split_dir_part(mainvar->name, dir2, sizeof(dir2));
+    char dir_src[FILE_MAX];
+    char dir_dst[FILE_MAX];
+    BLI_split_dir_part(mainvar->name, dir_src, sizeof(dir_src));
+    BLI_split_dir_part(filepath, dir_dst, sizeof(dir_dst));
 
-    /* just in case there is some subtle difference */
-    BLI_cleanup_dir(mainvar->name, dir1);
-    BLI_cleanup_dir(mainvar->name, dir2);
+    /* Just in case there is some subtle difference. */
+    BLI_cleanup_path(mainvar->name, dir_dst);
+    BLI_cleanup_path(mainvar->name, dir_src);
 
-    if (G.relbase_valid && (BLI_path_cmp(dir1, dir2) == 0)) {
+    if (G.relbase_valid && (BLI_path_cmp(dir_dst, dir_src) == 0)) {
+      /* Saved to same path. Nothing to do. */
       write_flags &= ~G_FILE_RELATIVE_REMAP;
     }
     else {
+      /* Check if we need to backup and restore paths. */
+      if (UNLIKELY(G_FILE_SAVE_COPY & write_flags)) {
+        path_list_backup = BKE_bpath_list_backup(mainvar, path_list_flag);
+      }
+
       if (G.relbase_valid) {
-        /* blend may not have been saved before. Tn this case
-         * we should not have any relative paths, but if there
-         * is somehow, an invalid or empty G_MAIN->name it will
-         * print an error, don't try make the absolute in this case. */
-        BKE_bpath_absolute_convert(mainvar, BKE_main_blendfile_path_from_global(), NULL);
+        /* Saved, make relative paths relative to new location (if possible). */
+        BKE_bpath_relative_rebase(mainvar, dir_src, dir_dst, NULL);
+      }
+      else {
+        /* Unsaved, make all relative. */
+        BKE_bpath_relative_convert(mainvar, dir_dst, NULL);
       }
     }
-  }
-
-  if (write_flags & G_FILE_RELATIVE_REMAP) {
-    /* note, making relative to something OTHER then G_MAIN->name */
-    BKE_bpath_relative_convert(mainvar, filepath, NULL);
   }
 
   /* actual file writing */

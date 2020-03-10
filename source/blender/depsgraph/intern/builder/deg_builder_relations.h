@@ -51,6 +51,8 @@ struct Camera;
 struct Collection;
 struct EffectorWeights;
 struct FCurve;
+struct FreestyleLineSet;
+struct FreestyleLineStyle;
 struct ID;
 struct Image;
 struct Key;
@@ -240,6 +242,7 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
   virtual void build_driver_variables(ID *id, FCurve *fcurve);
   virtual void build_driver_id_property(ID *id, const char *rna_path);
   virtual void build_parameters(ID *id);
+  virtual void build_dimensions(Object *object);
   virtual void build_world(World *world);
   virtual void build_rigidbody(Scene *scene);
   virtual void build_particle_systems(Object *object);
@@ -255,6 +258,10 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
                                    bPoseChannel *pchan,
                                    bConstraint *con,
                                    RootPChanMap *root_map);
+  virtual void build_inter_ik_chains(Object *object,
+                                     const OperationKey &solver_key,
+                                     const bPoseChannel *rootchan,
+                                     const RootPChanMap *root_map);
   virtual void build_rig(Object *object);
   virtual void build_proxy_rig(Object *object);
   virtual void build_shapekeys(Key *key);
@@ -264,6 +271,8 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
   virtual void build_nodetree(bNodeTree *ntree);
   virtual void build_material(Material *ma);
   virtual void build_materials(Material **materials, int num_materials);
+  virtual void build_freestyle_lineset(FreestyleLineSet *fls);
+  virtual void build_freestyle_linestyle(FreestyleLineStyle *linestyle);
   virtual void build_texture(Tex *tex);
   virtual void build_image(Image *image);
   virtual void build_gpencil(bGPdata *gpd);
@@ -294,6 +303,8 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
 
   virtual void build_copy_on_write_relations();
   virtual void build_copy_on_write_relations(IDNode *id_node);
+  virtual void build_driver_relations();
+  virtual void build_driver_relations(IDNode *id_node);
 
   template<typename KeyType> OperationNode *find_operation_node(const KeyType &key);
 
@@ -360,7 +371,7 @@ struct DepsNodeHandle {
                  const char *default_name = "")
       : builder(builder), node(node), default_name(default_name)
   {
-    BLI_assert(node != NULL);
+    BLI_assert(node != nullptr);
   }
 
   DepsgraphRelationBuilder *builder;

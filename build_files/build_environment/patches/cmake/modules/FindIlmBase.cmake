@@ -26,8 +26,8 @@ include(FindPackageMessage)
 include(SelectLibraryConfigurations)
 
 
-if( ILMBASE_USE_STATIC_LIBS )
-  set( _ilmbase_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
+if(ILMBASE_USE_STATIC_LIBS)
+  set(_ilmbase_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
   if(WIN32)
     set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
   else()
@@ -124,7 +124,6 @@ set(IlmBase_generic_include_paths
   /usr/include
   /usr/include/${CMAKE_LIBRARY_ARCHITECTURE}
   /usr/local/include
-  /sw/include
   /opt/local/include
 )
 set(IlmBase_generic_library_paths
@@ -133,7 +132,6 @@ set(IlmBase_generic_library_paths
   /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}
   /usr/local/lib
   /usr/local/lib/${CMAKE_LIBRARY_ARCHITECTURE}
-  /sw/lib
   /opt/local/lib
 )
 
@@ -249,7 +247,7 @@ if(ILMBASE_FOUND)
 endif()
 
 # Restore the original find library ordering
-if( ILMBASE_USE_STATIC_LIBS )
+if(ILMBASE_USE_STATIC_LIBS )
   set(CMAKE_FIND_LIBRARY_SUFFIXES ${_ilmbase_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES})
 endif()
 

@@ -23,14 +23,14 @@
  */
 
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 
 #include "../node_composite_util.h"
 
 /* **************** SWITCH VIEW ******************** */
 static bNodeSocketTemplate cmp_node_switch_view_out[] = {
-    {SOCK_RGBA, 0, N_("Image"), 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Image"), 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+    {-1, ""},
 };
 
 static bNodeSocket *ntreeCompositSwitchViewAddSocket(bNodeTree *ntree,

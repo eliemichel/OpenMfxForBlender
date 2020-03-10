@@ -56,7 +56,6 @@
 /* own includes */
 #include "../gizmo_library_intern.h"
 
-#define GIZMO_RESIZER_SIZE 10.0f
 #define GIZMO_MARGIN_OFFSET_SCALE 1.5f
 
 static bool gizmo_calc_rect_view_scale(const wmGizmo *gz, const float dims[2], float scale[2])
@@ -92,12 +91,7 @@ static bool gizmo_calc_rect_view_scale(const wmGizmo *gz, const float dims[2], f
 static bool gizmo_calc_rect_view_margin(const wmGizmo *gz, const float dims[2], float margin[2])
 {
   float handle_size;
-  if (gz->parent_gzgroup->type->flag & WM_GIZMOGROUPTYPE_3D) {
-    handle_size = 0.15f;
-  }
-  else {
-    handle_size = GIZMO_RESIZER_SIZE;
-  }
+  handle_size = 0.15f;
   handle_size *= gz->scale_final;
   float scale_xy[2];
   if (!gizmo_calc_rect_view_scale(gz, dims, scale_xy)) {
@@ -1092,8 +1086,8 @@ static int gizmo_cage2d_modal(bContext *C,
   }
 
   /* tag the region for redraw */
-  ED_region_tag_redraw(CTX_wm_region(C));
-  WM_event_add_mousemove(C);
+  ED_region_tag_redraw_editor_overlays(CTX_wm_region(C));
+  WM_event_add_mousemove(CTX_wm_window(C));
 
   return OPERATOR_RUNNING_MODAL;
 }

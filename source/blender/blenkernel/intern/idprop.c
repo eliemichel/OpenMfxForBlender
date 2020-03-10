@@ -32,7 +32,7 @@
 #include "BLI_math.h"
 
 #include "BKE_idprop.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 
 #include "CLG_log.h"
 
@@ -104,7 +104,7 @@ IDProperty *IDP_CopyIDPArray(const IDProperty *array, const int flag)
      * which doesn't work here.  instead, simply copy the
      * contents of the new structure into the array cell,
      * then free it.  this makes for more maintainable
-     * code than simply reimplementing the copy functions
+     * code than simply re-implementing the copy functions
      * in this loop.*/
     tmp = IDP_CopyProperty_ex(GETPROP(narray, i), flag);
     memcpy(GETPROP(narray, i), tmp, sizeof(IDProperty));
@@ -459,6 +459,21 @@ static IDProperty *IDP_CopyID(const IDProperty *prop, const int flag)
   }
 
   return newp;
+}
+
+void IDP_AssignID(IDProperty *prop, ID *id, const int flag)
+{
+  BLI_assert(prop->type == IDP_ID);
+
+  if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0 && IDP_Id(prop) != NULL) {
+    id_us_min(IDP_Id(prop));
+  }
+
+  prop->data.pointer = id;
+
+  if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0) {
+    id_us_plus(IDP_Id(prop));
+  }
 }
 
 /** \} */
@@ -1083,6 +1098,12 @@ void IDP_FreePropertyContent_ex(IDProperty *prop, const bool do_id_user)
 void IDP_FreePropertyContent(IDProperty *prop)
 {
   IDP_FreePropertyContent_ex(prop, true);
+}
+
+void IDP_FreeProperty_ex(IDProperty *prop, const bool do_id_user)
+{
+  IDP_FreePropertyContent_ex(prop, do_id_user);
+  MEM_freeN(prop);
 }
 
 void IDP_FreeProperty(IDProperty *prop)

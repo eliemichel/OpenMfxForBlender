@@ -125,7 +125,7 @@ typedef enum eConstraintObType {
   /** string is vertex-group name */
   CONSTRAINT_OBTYPE_VERT = 3,
   /** string is vertex-group name - is not available until curves get vgroups */
-  CONSTRAINT_OBTYPE_CV = 4,
+  /* CONSTRAINT_OBTYPE_CV = 4, */ /* UNUSED */
 } eConstraintObType;
 
 /* Python Script Constraint */
@@ -336,6 +336,8 @@ typedef struct bActionConstraint {
   float min;
   float max;
   int flag;
+  char mix_mode;
+  char _pad[7];
   struct bAction *act;
   /** MAX_ID_NAME-2. */
   char subtarget[64];
@@ -495,7 +497,7 @@ typedef struct bPivotConstraint {
   float offset[3];
 
   /* Rotation-driven activation:
-   * This option provides easier one-stop setups for footrolls
+   * This option provides easier one-stop setups for foot-rolls.
    */
   /** Rotation axes to consider for this (#ePivotConstraint_Axis). */
   short rotAxis;
@@ -713,8 +715,10 @@ typedef enum eBConstraint_Flags {
 typedef enum eBConstraint_SpaceTypes {
   /** Default for all - worldspace. */
   CONSTRAINT_SPACE_WORLD = 0,
-  /** For objects (relative to parent/without parent influence),
-   * for bones (along normals of bone, without parent/restpositions). */
+  /**
+   * For objects (relative to parent/without parent influence),
+   * for bones (along normals of bone, without parent/rest-positions).
+   */
   CONSTRAINT_SPACE_LOCAL = 1,
   /** For posechannels - pose space. */
   CONSTRAINT_SPACE_POSE = 2,
@@ -723,13 +727,6 @@ typedef enum eBConstraint_SpaceTypes {
   /** For files from between 2.43-2.46 (should have been parlocal). */
   CONSTRAINT_SPACE_INVALID = 4, /* do not exchange for anything! */
 } eBConstraint_SpaceTypes;
-
-/* bConstraintChannel.flag */
-// XXX deprecated... old AnimSys
-typedef enum eConstraintChannel_Flags {
-  CONSTRAINT_CHANNEL_SELECT = (1 << 0),
-  CONSTRAINT_CHANNEL_PROTECTED = (1 << 1),
-} eConstraintChannel_Flags;
 
 /* Common enum for constraints that support override. */
 typedef enum eConstraint_EulerOrder {
@@ -755,7 +752,7 @@ typedef enum eCopyRotation_Flags {
   ROTLIKE_X_INVERT = (1 << 4),
   ROTLIKE_Y_INVERT = (1 << 5),
   ROTLIKE_Z_INVERT = (1 << 6),
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   ROTLIKE_OFFSET = (1 << 7),
 #endif
 } eCopyRotation_Flags;
@@ -865,6 +862,16 @@ typedef enum eActionConstraint_Flags {
   ACTCON_BONE_USE_OBJECT_ACTION = (1 << 0),
 } eActionConstraint_Flags;
 
+/* bActionConstraint.mix_mode */
+typedef enum eActionConstraint_MixMode {
+  /* Multiply the action transformation on the right. */
+  ACTCON_MIX_AFTER_FULL = 0,
+  /* Multiply the action transformation on the right, with anti-shear scale handling. */
+  ACTCON_MIX_AFTER,
+  /* Multiply the action transformation on the left, with anti-shear scale handling. */
+  ACTCON_MIX_BEFORE,
+} eActionConstraint_MixMode;
+
 /* Locked-Axis Values (Locked Track) */
 typedef enum eLockAxis_Modes {
   LOCK_X = 0,
@@ -930,7 +937,7 @@ typedef enum eStretchTo_VolMode {
 /* Stretch To Constraint -> plane mode */
 typedef enum eStretchTo_PlaneMode {
   PLANE_X = 0,
-  PLANE_Y = 1,
+  SWING_Y = 1,
   PLANE_Z = 2,
 } eStretchTo_PlaneMode;
 
@@ -976,7 +983,7 @@ typedef enum eSplineIK_Flags {
   CONSTRAINT_SPLINEIK_BOUND = (1 << 0),
   /* root of chain is not influenced by the constraint */
   CONSTRAINT_SPLINEIK_NO_ROOT = (1 << 1),
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   /* bones in the chain should not scale to fit the curve */
   CONSTRAINT_SPLINEIK_SCALE_LIMITED = (1 << 2),
 #endif
@@ -1035,7 +1042,7 @@ typedef enum eFloor_Flags {
 /* transform limiting constraints -> flag2 */
 typedef enum eTransformLimits_Flags2 {
   /* not used anymore - for older Limit Location constraints only */
-  LIMIT_NOPARENT = (1 << 0),
+  /* LIMIT_NOPARENT = (1 << 0), */ /* UNUSED */
   /* for all Limit constraints - allow to be used during transform? */
   LIMIT_TRANSFORM = (1 << 1),
 } eTransformLimits_Flags2;
@@ -1091,6 +1098,8 @@ typedef enum eChildOf_Flags {
   CHILDOF_SIZEY = (1 << 7),
   CHILDOF_SIZEZ = (1 << 8),
   CHILDOF_ALL = 511,
+  /* Temporary flag used by the Set Inverse operator. */
+  CHILDOF_SET_INVERSE = (1 << 9),
 } eChildOf_Flags;
 
 /* Pivot Constraint */
@@ -1142,6 +1151,8 @@ typedef enum eCameraSolver_Flags {
 /* ObjectSolver Constraint -> flag */
 typedef enum eObjectSolver_Flags {
   OBJECTSOLVER_ACTIVECLIP = (1 << 0),
+  /* Temporary flag used by the Set Inverse operator. */
+  OBJECTSOLVER_SET_INVERSE = (1 << 1),
 } eObjectSolver_Flags;
 
 /* ObjectSolver Constraint -> flag */

@@ -65,8 +65,8 @@
 #include "BKE_icons.h"
 #include "BKE_idprop.h"
 #include "BKE_image.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_report.h"
@@ -457,7 +457,7 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
       }
       case ID_MA: {
 #  define ID_CAST_OBMATACT(id_pt) \
-    (give_current_material(((Object *)id_pt), ((Object *)id_pt)->actcol))
+    (BKE_object_material_get(((Object *)id_pt), ((Object *)id_pt)->actcol))
         CTX_TEST_PTR_ID_CAST(
             C, "object", "object.active_material", ID_CAST_OBMATACT, ptr->owner_id);
         break;
@@ -644,11 +644,13 @@ void WM_operator_properties_sanitize(PointerRNA *ptr, const bool no_context)
   RNA_STRUCT_END;
 }
 
-/** set all props to their default,
+/**
+ * Set all props to their default.
+ *
  * \param do_update: Only update un-initialized props.
  *
- * \note, there's nothing specific to operators here.
- * this could be made a general function.
+ * \note There's nothing specific to operators here.
+ * This could be made a general function.
  */
 bool WM_operator_properties_default(PointerRNA *ptr, const bool do_update)
 {
@@ -718,9 +720,121 @@ void WM_operator_properties_free(PointerRNA *ptr)
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name Operator Last Properties API
+ * \{ */
+
+#if 1 /* may want to disable operator remembering previous state for testing */
+
+static bool operator_last_properties_init_impl(wmOperator *op, IDProperty *last_properties)
+{
+  bool changed = false;
+  IDPropertyTemplate val = {0};
+  IDProperty *replaceprops = IDP_New(IDP_GROUP, &val, "wmOperatorProperties");
+  PropertyRNA *iterprop;
+
+  CLOG_INFO(WM_LOG_OPERATORS, 1, "loading previous properties for '%s'", op->type->idname);
+
+  iterprop = RNA_struct_iterator_property(op->type->srna);
+
+  RNA_PROP_BEGIN (op->ptr, itemptr, iterprop) {
+    PropertyRNA *prop = itemptr.data;
+    if ((RNA_property_flag(prop) & PROP_SKIP_SAVE) == 0) {
+      if (!RNA_property_is_set(op->ptr, prop)) { /* don't override a setting already set */
+        const char *identifier = RNA_property_identifier(prop);
+        IDProperty *idp_src = IDP_GetPropertyFromGroup(last_properties, identifier);
+        if (idp_src) {
+          IDProperty *idp_dst = IDP_CopyProperty(idp_src);
+
+          /* note - in the future this may need to be done recursively,
+           * but for now RNA doesn't access nested operators */
+          idp_dst->flag |= IDP_FLAG_GHOST;
+
+          /* add to temporary group instead of immediate replace,
+           * because we are iterating over this group */
+          IDP_AddToGroup(replaceprops, idp_dst);
+          changed = true;
+        }
+      }
+    }
+  }
+  RNA_PROP_END;
+
+  IDP_MergeGroup(op->properties, replaceprops, true);
+  IDP_FreeProperty(replaceprops);
+  return changed;
+}
+
+bool WM_operator_last_properties_init(wmOperator *op)
+{
+  bool changed = false;
+  if (op->type->last_properties) {
+    changed |= operator_last_properties_init_impl(op, op->type->last_properties);
+    for (wmOperator *opm = op->macro.first; opm; opm = opm->next) {
+      IDProperty *idp_src = IDP_GetPropertyFromGroup(op->type->last_properties, opm->idname);
+      if (idp_src) {
+        changed |= operator_last_properties_init_impl(opm, idp_src);
+      }
+    }
+  }
+  return changed;
+}
+
+bool WM_operator_last_properties_store(wmOperator *op)
+{
+  if (op->type->last_properties) {
+    IDP_FreeProperty(op->type->last_properties);
+    op->type->last_properties = NULL;
+  }
+
+  if (op->properties) {
+    CLOG_INFO(WM_LOG_OPERATORS, 1, "storing properties for '%s'", op->type->idname);
+    op->type->last_properties = IDP_CopyProperty(op->properties);
+  }
+
+  if (op->macro.first != NULL) {
+    for (wmOperator *opm = op->macro.first; opm; opm = opm->next) {
+      if (opm->properties) {
+        if (op->type->last_properties == NULL) {
+          op->type->last_properties = IDP_New(
+              IDP_GROUP, &(IDPropertyTemplate){0}, "wmOperatorProperties");
+        }
+        IDProperty *idp_macro = IDP_CopyProperty(opm->properties);
+        STRNCPY(idp_macro->name, opm->type->idname);
+        IDP_ReplaceInGroup(op->type->last_properties, idp_macro);
+      }
+    }
+  }
+
+  return (op->type->last_properties != NULL);
+}
+
+#else
+
+bool WM_operator_last_properties_init(wmOperator *UNUSED(op))
+{
+  return false;
+}
+
+bool WM_operator_last_properties_store(wmOperator *UNUSED(op))
+{
+  return false;
+}
+
+#endif
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Default Operator Callbacks
  * \{ */
 
+/**
+ * Helper to get select and tweak-transform to work conflict free and as desired. See
+ * #WM_operator_properties_generic_select() for details.
+ *
+ * To be used together with #WM_generic_select_invoke() and
+ * #WM_operator_properties_generic_select().
+ */
 int WM_generic_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   PropertyRNA *wait_to_deselect_prop = RNA_struct_find_property(op->ptr,
@@ -784,9 +898,16 @@ int WM_generic_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
 
-  return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
+  return OPERATOR_RUNNING_MODAL | OPERATOR_PASS_THROUGH;
 }
 
+/**
+ * Helper to get select and tweak-transform to work conflict free and as desired. See
+ * #WM_operator_properties_generic_select() for details.
+ *
+ * To be used together with #WM_generic_select_modal() and
+ * #WM_operator_properties_generic_select().
+ */
 int WM_generic_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   RNA_int_set(op->ptr, "mouse_x", event->mval[0]);
@@ -879,7 +1000,7 @@ struct EnumSearchMenu {
 };
 
 /** Generic enum search invoke popup. */
-static uiBlock *wm_enum_search_menu(bContext *C, ARegion *ar, void *arg)
+static uiBlock *wm_enum_search_menu(bContext *C, ARegion *region, void *arg)
 {
   struct EnumSearchMenu *search_menu = arg;
   wmWindow *win = CTX_wm_window(C);
@@ -894,7 +1015,7 @@ static uiBlock *wm_enum_search_menu(bContext *C, ARegion *ar, void *arg)
   uiBlock *block;
   uiBut *but;
 
-  block = UI_block_begin(C, ar, "_popup", UI_EMBOSS);
+  block = UI_block_begin(C, region, "_popup", UI_EMBOSS);
   UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_MOVEMOUSE_QUIT | UI_BLOCK_SEARCH_MENU);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 
@@ -1193,15 +1314,15 @@ static void wm_block_redo_cancel_cb(bContext *C, void *arg_op)
   }
 }
 
-static uiBlock *wm_block_create_redo(bContext *C, ARegion *ar, void *arg_op)
+static uiBlock *wm_block_create_redo(bContext *C, ARegion *region, void *arg_op)
 {
   wmOperator *op = arg_op;
   uiBlock *block;
   uiLayout *layout;
-  uiStyle *style = UI_style_get();
+  uiStyle *style = UI_style_get_dpi();
   int width = 15 * UI_UNIT_X;
 
-  block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
+  block = UI_block_begin(C, region, __func__, UI_EMBOSS);
   UI_block_flag_disable(block, UI_BLOCK_LOOP);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_REGULAR);
 
@@ -1222,15 +1343,17 @@ static uiBlock *wm_block_create_redo(bContext *C, ARegion *ar, void *arg_op)
     }
   }
 
+  uiLayout *col = uiLayoutColumn(layout, false);
+
   if (op->type->flag & OPTYPE_MACRO) {
     for (op = op->macro.first; op; op = op->next) {
       uiTemplateOperatorPropertyButs(
-          C, layout, op, UI_BUT_LABEL_ALIGN_NONE, UI_TEMPLATE_OP_PROPS_SHOW_TITLE);
+          C, col, op, UI_BUT_LABEL_ALIGN_NONE, UI_TEMPLATE_OP_PROPS_SHOW_TITLE);
     }
   }
   else {
     uiTemplateOperatorPropertyButs(
-        C, layout, op, UI_BUT_LABEL_ALIGN_NONE, UI_TEMPLATE_OP_PROPS_SHOW_TITLE);
+        C, col, op, UI_BUT_LABEL_ALIGN_NONE, UI_TEMPLATE_OP_PROPS_SHOW_TITLE);
   }
 
   UI_block_bounds_set_popup(block, 6 * U.dpi_fac, NULL);
@@ -1272,15 +1395,15 @@ static void dialog_exec_cb(bContext *C, void *arg1, void *arg2)
 }
 
 /* Dialogs are popups that require user verification (click OK) before exec */
-static uiBlock *wm_block_dialog_create(bContext *C, ARegion *ar, void *userData)
+static uiBlock *wm_block_dialog_create(bContext *C, ARegion *region, void *userData)
 {
   wmOpPopUp *data = userData;
   wmOperator *op = data->op;
   uiBlock *block;
   uiLayout *layout;
-  uiStyle *style = UI_style_get();
+  uiStyle *style = UI_style_get_dpi();
 
-  block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
+  block = UI_block_begin(C, region, __func__, UI_EMBOSS);
   UI_block_flag_disable(block, UI_BLOCK_LOOP);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_REGULAR);
 
@@ -1316,20 +1439,20 @@ static uiBlock *wm_block_dialog_create(bContext *C, ARegion *ar, void *userData)
   UI_block_bounds_set_popup(
       block, 6 * U.dpi_fac, (const int[2]){data->width / -2, data->height / 2});
 
-  UI_block_active_only_flagged_buttons(C, ar, block);
+  UI_block_active_only_flagged_buttons(C, region, block);
 
   return block;
 }
 
-static uiBlock *wm_operator_ui_create(bContext *C, ARegion *ar, void *userData)
+static uiBlock *wm_operator_ui_create(bContext *C, ARegion *region, void *userData)
 {
   wmOpPopUp *data = userData;
   wmOperator *op = data->op;
   uiBlock *block;
   uiLayout *layout;
-  uiStyle *style = UI_style_get();
+  uiStyle *style = UI_style_get_dpi();
 
-  block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
+  block = UI_block_begin(C, region, __func__, UI_EMBOSS);
   UI_block_flag_disable(block, UI_BLOCK_LOOP);
   UI_block_flag_enable(block, UI_BLOCK_KEEP_OPEN | UI_BLOCK_MOVEMOUSE_QUIT);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_REGULAR);
@@ -1343,8 +1466,6 @@ static uiBlock *wm_operator_ui_create(bContext *C, ARegion *ar, void *userData)
   UI_block_func_set(block, NULL, NULL, NULL);
 
   UI_block_bounds_set_popup(block, 6 * U.dpi_fac, NULL);
-
-  UI_block_active_only_flagged_buttons(C, ar, block);
 
   return block;
 }
@@ -1379,12 +1500,13 @@ static void wm_operator_ui_popup_ok(struct bContext *C, void *arg, int retval)
   MEM_freeN(data);
 }
 
-int WM_operator_ui_popup(bContext *C, wmOperator *op, int width, int height)
+int WM_operator_ui_popup(bContext *C, wmOperator *op, int width)
 {
   wmOpPopUp *data = MEM_callocN(sizeof(wmOpPopUp), "WM_operator_ui_popup");
   data->op = op;
   data->width = width * U.dpi_fac;
-  data->height = height * U.dpi_fac;
+  /* Actual used height depends on the content. */
+  data->height = 0;
   data->free_op = true; /* if this runs and gets registered we may want not to free it */
   UI_popup_block_ex(C, wm_operator_ui_create, NULL, wm_operator_ui_popup_cancel, data, op);
   return OPERATOR_RUNNING_MODAL;
@@ -1420,7 +1542,7 @@ static int wm_operator_props_popup_ex(bContext *C,
   /* if we don't have global undo, we can't do undo push for automatic redo,
    * so we require manual OK clicking in this popup */
   if (!do_redo || !(U.uiflag & USER_GLOBALUNDO)) {
-    return WM_operator_props_dialog_popup(C, op, 300, 20);
+    return WM_operator_props_dialog_popup(C, op, 300);
   }
 
   UI_popup_block_ex(C, wm_block_create_redo, NULL, wm_block_redo_cancel_cb, op, op);
@@ -1456,13 +1578,14 @@ int WM_operator_props_popup(bContext *C, wmOperator *op, const wmEvent *UNUSED(e
   return wm_operator_props_popup_ex(C, op, false, true);
 }
 
-int WM_operator_props_dialog_popup(bContext *C, wmOperator *op, int width, int height)
+int WM_operator_props_dialog_popup(bContext *C, wmOperator *op, int width)
 {
   wmOpPopUp *data = MEM_callocN(sizeof(wmOpPopUp), "WM_operator_props_dialog_popup");
 
   data->op = op;
   data->width = width * U.dpi_fac;
-  data->height = height * U.dpi_fac;
+  /* Actual height depends on the content. */
+  data->height = 0;
   data->free_op = true; /* if this runs and gets registered we may want not to free it */
 
   /* op is not executed until popup OK but is clicked */
@@ -1513,7 +1636,7 @@ static int wm_debug_menu_exec(bContext *C, wmOperator *op)
 static int wm_debug_menu_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
   RNA_int_set(op->ptr, "debug_value", G.debug_value);
-  return WM_operator_props_dialog_popup(C, op, 180, 20);
+  return WM_operator_props_dialog_popup(C, op, 180);
 }
 
 static void WM_OT_debug_menu(wmOperatorType *ot)
@@ -1570,14 +1693,14 @@ struct SearchPopupInit_Data {
   int size[2];
 };
 
-static uiBlock *wm_block_search_menu(bContext *C, ARegion *ar, void *userdata)
+static uiBlock *wm_block_search_menu(bContext *C, ARegion *region, void *userdata)
 {
   const struct SearchPopupInit_Data *init_data = userdata;
   static char search[256] = "";
   uiBlock *block;
   uiBut *but;
 
-  block = UI_block_begin(C, ar, "_popup", UI_EMBOSS);
+  block = UI_block_begin(C, region, "_popup", UI_EMBOSS);
   UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_MOVEMOUSE_QUIT | UI_BLOCK_SEARCH_MENU);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 
@@ -2193,7 +2316,8 @@ static void radial_control_paint_cursor(bContext *UNUSED(C), int x, int y, void 
   short strdrawlen = 0;
   float strwidth, strheight;
   float r1 = 0.0f, r2 = 0.0f, rmin = 0.0, tex_radius, alpha;
-  float zoom[2], col[3] = {1, 1, 1};
+  float zoom[2], col[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+  float text_color[4];
 
   switch (rc->subtype) {
     case PROP_NONE:
@@ -2320,6 +2444,8 @@ static void radial_control_paint_cursor(bContext *UNUSED(C), int x, int y, void 
   immUnbindProgram();
 
   BLF_size(fontid, 1.75f * fstyle_points * U.pixelsize, U.dpi);
+  UI_GetThemeColor4fv(TH_TEXT_HI, text_color);
+  BLF_color4fv(fontid, text_color);
 
   /* draw value */
   BLF_width_and_height(fontid, str, strdrawlen, &strwidth, &strheight);
@@ -2461,7 +2587,7 @@ static int radial_control_get_properties(bContext *C, wmOperator *op)
   }
 
   if (!radial_control_get_path(
-          &ctx_ptr, op, "color_path", &rc->col_ptr, &rc->col_prop, 3, RC_PROP_REQUIRE_FLOAT)) {
+          &ctx_ptr, op, "color_path", &rc->col_ptr, &rc->col_prop, 4, RC_PROP_REQUIRE_FLOAT)) {
     return 0;
   }
 
@@ -3015,19 +3141,19 @@ static void redraw_timer_step(bContext *C,
                               struct Depsgraph *depsgraph,
                               wmWindow *win,
                               ScrArea *sa,
-                              ARegion *ar,
+                              ARegion *region,
                               const int type,
                               const int cfra)
 {
   if (type == eRTDrawRegion) {
-    if (ar) {
-      wm_draw_region_test(C, sa, ar);
+    if (region) {
+      wm_draw_region_test(C, sa, region);
     }
   }
   else if (type == eRTDrawRegionSwap) {
     CTX_wm_menu_set(C, NULL);
 
-    ED_region_tag_redraw(ar);
+    ED_region_tag_redraw(region);
     wm_draw_update(C);
 
     CTX_wm_window_set(C, win); /* XXX context manipulation warning! */
@@ -3053,7 +3179,7 @@ static void redraw_timer_step(bContext *C,
     CTX_wm_window_set(C, win); /* XXX context manipulation warning! */
 
     CTX_wm_area_set(C, sa);
-    CTX_wm_region_set(C, ar);
+    CTX_wm_region_set(C, region);
   }
   else if (type == eRTDrawWindowSwap) {
     redraw_timer_window_swap(C);
@@ -3089,7 +3215,7 @@ static int redraw_timer_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   wmWindow *win = CTX_wm_window(C);
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   wmWindowManager *wm = CTX_wm_manager(C);
   double time_start, time_delta;
   const int type = RNA_enum_get(op->ptr, "type");
@@ -3110,7 +3236,7 @@ static int redraw_timer_exec(bContext *C, wmOperator *op)
   wm_window_make_drawable(wm, win);
 
   for (a = 0; a < iter; a++) {
-    redraw_timer_step(C, bmain, scene, depsgraph, win, sa, ar, type, cfra);
+    redraw_timer_step(C, bmain, scene, depsgraph, win, sa, region, type, cfra);
     iter_steps += 1;
 
     if (time_limit != 0.0) {
@@ -3210,17 +3336,16 @@ static void previews_id_ensure(bContext *C, Scene *scene, ID *id)
   }
 }
 
-static int previews_id_ensure_callback(void *userdata,
-                                       ID *UNUSED(self_id),
-                                       ID **idptr,
-                                       int cb_flag)
+static int previews_id_ensure_callback(LibraryIDLinkCallbackData *cb_data)
 {
+  const int cb_flag = cb_data->cb_flag;
+
   if (cb_flag & IDWALK_CB_PRIVATE) {
     return IDWALK_RET_NOP;
   }
 
-  PreviewsIDEnsureData *data = userdata;
-  ID *id = *idptr;
+  PreviewsIDEnsureData *data = cb_data->user_data;
+  ID *id = *cb_data->id_pointer;
 
   if (id && (id->tag & LIB_TAG_DOIT)) {
     BLI_assert(ELEM(GS(id->name), ID_MA, ID_TE, ID_IM, ID_WO, ID_LA));
@@ -3287,37 +3412,77 @@ static void WM_OT_previews_ensure(wmOperatorType *ot)
 /** \name Data-Block Preview Clear Operator
  * \{ */
 
+typedef enum PreviewFilterID {
+  PREVIEW_FILTER_ALL,
+  PREVIEW_FILTER_GEOMETRY,
+  PREVIEW_FILTER_SHADING,
+  PREVIEW_FILTER_SCENE,
+  PREVIEW_FILTER_COLLECTION,
+  PREVIEW_FILTER_OBJECT,
+  PREVIEW_FILTER_MATERIAL,
+  PREVIEW_FILTER_LIGHT,
+  PREVIEW_FILTER_WORLD,
+  PREVIEW_FILTER_TEXTURE,
+  PREVIEW_FILTER_IMAGE,
+} PreviewFilterID;
+
 /* Only types supporting previews currently. */
 static const EnumPropertyItem preview_id_type_items[] = {
-    {FILTER_ID_SCE | FILTER_ID_GR | FILTER_ID_OB | FILTER_ID_MA | FILTER_ID_LA | FILTER_ID_WO |
-         FILTER_ID_TE | FILTER_ID_IM,
-     "ALL",
-     0,
-     "All Types",
-     ""},
-    {FILTER_ID_SCE | FILTER_ID_GR | FILTER_ID_OB,
+    {PREVIEW_FILTER_ALL, "ALL", 0, "All Types", ""},
+    {PREVIEW_FILTER_GEOMETRY,
      "GEOMETRY",
      0,
      "All Geometry Types",
      "Clear previews for scenes, collections and objects"},
-    {FILTER_ID_MA | FILTER_ID_LA | FILTER_ID_WO | FILTER_ID_TE | FILTER_ID_IM,
+    {PREVIEW_FILTER_SHADING,
      "SHADING",
      0,
      "All Shading Types",
-     "Clear previews for materiasl, lights, worlds, textures and images"},
-    {FILTER_ID_SCE, "SCENE", 0, "Scenes", ""},
-    {FILTER_ID_GR, "GROUP", 0, "Groups", ""},
-    {FILTER_ID_OB, "OBJECT", 0, "Objects", ""},
-    {FILTER_ID_MA, "MATERIAL", 0, "Materials", ""},
-    {FILTER_ID_LA, "LIGHT", 0, "Lights", ""},
-    {FILTER_ID_WO, "WORLD", 0, "Worlds", ""},
-    {FILTER_ID_TE, "TEXTURE", 0, "Textures", ""},
-    {FILTER_ID_IM, "IMAGE", 0, "Images", ""},
+     "Clear previews for materials, lights, worlds, textures and images"},
+    {PREVIEW_FILTER_SCENE, "SCENE", 0, "Scenes", ""},
+    {PREVIEW_FILTER_COLLECTION, "COLLECTION", 0, "Collections", ""},
+    {PREVIEW_FILTER_OBJECT, "OBJECT", 0, "Objects", ""},
+    {PREVIEW_FILTER_MATERIAL, "MATERIAL", 0, "Materials", ""},
+    {PREVIEW_FILTER_LIGHT, "LIGHT", 0, "Lights", ""},
+    {PREVIEW_FILTER_WORLD, "WORLD", 0, "Worlds", ""},
+    {PREVIEW_FILTER_TEXTURE, "TEXTURE", 0, "Textures", ""},
+    {PREVIEW_FILTER_IMAGE, "IMAGE", 0, "Images", ""},
 #if 0 /* XXX TODO */
-    {FILTER_ID_BR, "BRUSH", 0, "Brushes", ""},
+    {PREVIEW_FILTER_BRUSH, "BRUSH", 0, "Brushes", ""},
 #endif
     {0, NULL, 0, NULL, NULL},
 };
+
+static uint preview_filter_to_idfilter(enum PreviewFilterID filter)
+{
+  switch (filter) {
+    case PREVIEW_FILTER_ALL:
+      return FILTER_ID_SCE | FILTER_ID_GR | FILTER_ID_OB | FILTER_ID_MA | FILTER_ID_LA |
+             FILTER_ID_WO | FILTER_ID_TE | FILTER_ID_IM;
+    case PREVIEW_FILTER_GEOMETRY:
+      return FILTER_ID_SCE | FILTER_ID_GR | FILTER_ID_OB;
+    case PREVIEW_FILTER_SHADING:
+      return FILTER_ID_MA | FILTER_ID_LA | FILTER_ID_WO | FILTER_ID_TE | FILTER_ID_IM;
+    case PREVIEW_FILTER_SCENE:
+      return FILTER_ID_SCE;
+    case PREVIEW_FILTER_COLLECTION:
+      return FILTER_ID_GR;
+    case PREVIEW_FILTER_OBJECT:
+      return FILTER_ID_OB;
+    case PREVIEW_FILTER_MATERIAL:
+      return FILTER_ID_MA;
+    case PREVIEW_FILTER_LIGHT:
+      return FILTER_ID_LA;
+    case PREVIEW_FILTER_WORLD:
+      return FILTER_ID_WO;
+    case PREVIEW_FILTER_TEXTURE:
+      return FILTER_ID_TE;
+    case PREVIEW_FILTER_IMAGE:
+      return FILTER_ID_IM;
+  }
+
+  return 0;
+}
 
 static int previews_clear_exec(bContext *C, wmOperator *op)
 {
@@ -3334,7 +3499,7 @@ static int previews_clear_exec(bContext *C, wmOperator *op)
   };
   int i;
 
-  const int id_filters = RNA_enum_get(op->ptr, "id_type");
+  const int id_filters = preview_filter_to_idfilter(RNA_enum_get(op->ptr, "id_type"));
 
   for (i = 0; lb[i]; i++) {
     ID *id = lb[i]->first;
@@ -3378,8 +3543,7 @@ static void WM_OT_previews_clear(wmOperatorType *ot)
   ot->prop = RNA_def_enum_flag(ot->srna,
                                "id_type",
                                preview_id_type_items,
-                               FILTER_ID_SCE | FILTER_ID_OB | FILTER_ID_GR | FILTER_ID_MA |
-                                   FILTER_ID_LA | FILTER_ID_WO | FILTER_ID_TE | FILTER_ID_IM,
+                               PREVIEW_FILTER_ALL,
                                "Data-Block Type",
                                "Which data-block previews to clear");
 }

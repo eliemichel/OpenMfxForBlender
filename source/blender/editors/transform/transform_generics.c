@@ -31,6 +31,7 @@
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_brush_types.h"
+#include "DNA_constraint_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_lattice_types.h"
 #include "DNA_screen_types.h"
@@ -71,7 +72,7 @@
 #include "BKE_gpencil.h"
 #include "BKE_lattice.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mask.h"
 #include "BKE_nla.h"
 #include "BKE_paint.h"
@@ -111,6 +112,7 @@
 
 #include "transform.h"
 #include "transform_convert.h"
+#include "transform_mode.h"
 #include "transform_snap.h"
 
 /* ************************** Functions *************************** */
@@ -367,10 +369,10 @@ static void recalcData_actedit(TransInfo *t)
   ac.view_layer = t->view_layer;
   ac.obact = OBACT(view_layer);
   ac.sa = t->sa;
-  ac.ar = t->ar;
+  ac.region = t->region;
   ac.sl = (t->sa) ? t->sa->spacedata.first : NULL;
   ac.spacetype = (t->sa) ? t->sa->spacetype : 0;
-  ac.regiontype = (t->ar) ? t->ar->regiontype : 0;
+  ac.regiontype = (t->region) ? t->region->regiontype : 0;
 
   ANIM_animdata_context_getdata(&ac);
 
@@ -420,10 +422,10 @@ static void recalcData_graphedit(TransInfo *t)
   ac.view_layer = t->view_layer;
   ac.obact = OBACT(view_layer);
   ac.sa = t->sa;
-  ac.ar = t->ar;
+  ac.region = t->region;
   ac.sl = (t->sa) ? t->sa->spacedata.first : NULL;
   ac.spacetype = (t->sa) ? t->sa->spacetype : 0;
-  ac.regiontype = (t->ar) ? t->ar->regiontype : 0;
+  ac.regiontype = (t->region) ? t->region->regiontype : 0;
 
   ANIM_animdata_context_getdata(&ac);
 
@@ -448,7 +450,7 @@ static void recalcData_graphedit(TransInfo *t)
       dosort++;
     }
     else {
-      calchandles_fcurve(fcu);
+      calchandles_fcurve_ex(fcu, BEZT_FLAG_TEMP_TAG);
     }
 
     /* set refresh tags for objects using this animation,
@@ -781,58 +783,6 @@ static void recalcData_spaceclip(TransInfo *t)
   }
 }
 
-/**
- * if pose bone (partial) selected, copy data.
- * context; posemode armature, with mirror editing enabled.
- *
- * \param pid: Optional, apply relative transform when set.
- */
-static void pose_transform_mirror_update(Object *ob, PoseInitData_Mirror *pid)
-{
-  float flip_mtx[4][4];
-  unit_m4(flip_mtx);
-  flip_mtx[0][0] = -1;
-
-  for (bPoseChannel *pchan_orig = ob->pose->chanbase.first; pchan_orig;
-       pchan_orig = pchan_orig->next) {
-    /* Clear the MIRROR flag from previous runs */
-    pchan_orig->bone->flag &= ~BONE_TRANSFORM_MIRROR;
-  }
-
-  for (bPoseChannel *pchan_orig = ob->pose->chanbase.first; pchan_orig;
-       pchan_orig = pchan_orig->next) {
-    /* no layer check, correct mirror is more important */
-    if (pchan_orig->bone->flag & BONE_TRANSFORM) {
-      bPoseChannel *pchan = BKE_pose_channel_get_mirrored(ob->pose, pchan_orig->name);
-
-      if (pchan) {
-        /* also do bbone scaling */
-        pchan->bone->xwidth = pchan_orig->bone->xwidth;
-        pchan->bone->zwidth = pchan_orig->bone->zwidth;
-
-        /* we assume X-axis flipping for now */
-        pchan->curve_in_x = pchan_orig->curve_in_x * -1;
-        pchan->curve_out_x = pchan_orig->curve_out_x * -1;
-        pchan->roll1 = pchan_orig->roll1 * -1;  // XXX?
-        pchan->roll2 = pchan_orig->roll2 * -1;  // XXX?
-
-        float pchan_mtx_final[4][4];
-        BKE_pchan_to_mat4(pchan_orig, pchan_mtx_final);
-        mul_m4_m4m4(pchan_mtx_final, pchan_mtx_final, flip_mtx);
-        mul_m4_m4m4(pchan_mtx_final, flip_mtx, pchan_mtx_final);
-        if (pid) {
-          mul_m4_m4m4(pchan_mtx_final, pid->offset_mtx, pchan_mtx_final);
-          pid++;
-        }
-        BKE_pchan_apply_mat4(pchan, pchan_mtx_final, false);
-
-        /* set flag to let autokeyframe know to keyframe the mirrred bone */
-        pchan->bone->flag |= BONE_TRANSFORM_MIRROR;
-      }
-    }
-  }
-}
-
 /* helper for recalcData() - for object transforms, typically in the 3D view */
 static void recalcData_objects(TransInfo *t)
 {
@@ -1007,6 +957,9 @@ static void recalcData_objects(TransInfo *t)
             restoreBones(tc);
           }
         }
+
+        /* Tag for redraw/invalidate overlay cache. */
+        DEG_id_tag_update(&arm->id, ID_RECALC_SELECT);
       }
     }
     else {
@@ -1042,7 +995,7 @@ static void recalcData_objects(TransInfo *t)
         DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
         bPose *pose = ob->pose;
         if (arm->flag & ARM_MIRROR_EDIT || pose->flag & POSE_MIRROR_EDIT) {
-          pose_transform_mirror_update(ob, NULL);
+          pose_transform_mirror_update(t, tc, ob);
         }
       }
     }
@@ -1056,11 +1009,7 @@ static void recalcData_objects(TransInfo *t)
 
       if (pose->flag & POSE_MIRROR_EDIT) {
         if (t->state != TRANS_CANCEL) {
-          PoseInitData_Mirror *pid = NULL;
-          if (pose->flag & POSE_MIRROR_RELATIVE) {
-            pid = tc->custom.type.data;
-          }
-          pose_transform_mirror_update(ob, pid);
+          pose_transform_mirror_update(t, tc, ob);
         }
         else {
           restoreMirrorPoseBones(tc);
@@ -1200,12 +1149,15 @@ static void recalcData_sequencer(TransInfo *t)
 static void recalcData_gpencil_strokes(TransInfo *t)
 {
   TransDataContainer *tc = TRANS_DATA_CONTAINER_FIRST_SINGLE(t);
+  bGPDstroke *gps_prev = NULL;
 
   TransData *td = tc->data;
   for (int i = 0; i < tc->data_len; i++, td++) {
     bGPDstroke *gps = td->extra;
-    if (gps != NULL) {
-      gps->flag |= GP_STROKE_RECALC_GEOMETRY;
+    if ((gps != NULL) && (gps != gps_prev)) {
+      /* Calc geometry data. */
+      BKE_gpencil_stroke_geometry_update(gps);
+      gps_prev = gps;
     }
   }
 }
@@ -1416,10 +1368,10 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 {
   Scene *sce = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  const eObjectMode object_mode = OBACT(view_layer) ? OBACT(view_layer)->mode : OB_MODE_OBJECT;
-  const short object_type = OBACT(view_layer) ? OBACT(view_layer)->type : -1;
+  Object *obact = OBACT(view_layer);
+  const eObjectMode object_mode = obact ? obact->mode : OB_MODE_OBJECT;
   ToolSettings *ts = CTX_data_tool_settings(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   ScrArea *sa = CTX_wm_area(C);
 
   bGPdata *gpd = CTX_data_gpencil_data(C);
@@ -1429,7 +1381,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   t->scene = sce;
   t->view_layer = view_layer;
   t->sa = sa;
-  t->ar = ar;
+  t->region = region;
   t->settings = ts;
   t->reports = op ? op->reports : NULL;
 
@@ -1437,9 +1389,13 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 
   t->flag = 0;
 
-  t->obedit_type = ((object_mode == OB_MODE_EDIT) || (object_mode == OB_MODE_EDIT_GPENCIL)) ?
-                       object_type :
-                       -1;
+  if (obact && !(t->options & (CTX_CURSOR | CTX_TEXTURE)) &&
+      ELEM(object_mode, OB_MODE_EDIT, OB_MODE_EDIT_GPENCIL)) {
+    t->obedit_type = obact->type;
+  }
+  else {
+    t->obedit_type = -1;
+  }
 
   /* Many kinds of transform only use a single handle. */
   if (t->data_container == NULL) {
@@ -1449,20 +1405,16 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 
   t->redraw = TREDRAW_HARD; /* redraw first time */
 
+  int mval[2];
   if (event) {
-    t->mouse.imval[0] = event->mval[0];
-    t->mouse.imval[1] = event->mval[1];
+    copy_v2_v2_int(mval, event->mval);
   }
   else {
-    t->mouse.imval[0] = 0;
-    t->mouse.imval[1] = 0;
+    zero_v2_int(mval);
   }
-
-  t->con.imval[0] = t->mouse.imval[0];
-  t->con.imval[1] = t->mouse.imval[1];
-
-  t->mval[0] = t->mouse.imval[0];
-  t->mval[1] = t->mouse.imval[1];
+  copy_v2_v2_int(t->mval, mval);
+  copy_v2_v2_int(t->mouse.imval, mval);
+  copy_v2_v2_int(t->con.imval, mval);
 
   t->transform = NULL;
   t->handleEvent = NULL;
@@ -1514,7 +1466,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     /* background mode */
     t->spacetype = SPACE_EMPTY;
   }
-  else if ((ar == NULL) && (sa->spacetype == SPACE_VIEW3D)) {
+  else if ((region == NULL) && (sa->spacetype == SPACE_VIEW3D)) {
     /* running in the text editor */
     t->spacetype = SPACE_EMPTY;
   }
@@ -1611,7 +1563,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   else if (t->spacetype == SPACE_IMAGE) {
     SpaceImage *sima = sa->spacedata.first;
     // XXX for now, get View2D from the active region
-    t->view = &ar->v2d;
+    t->view = &region->v2d;
     t->around = sima->around;
 
     if (ED_space_image_show_uvedit(sima, OBACT(t->view_layer))) {
@@ -1630,17 +1582,17 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   }
   else if (t->spacetype == SPACE_NODE) {
     // XXX for now, get View2D from the active region
-    t->view = &ar->v2d;
+    t->view = &region->v2d;
     t->around = V3D_AROUND_CENTER_BOUNDS;
   }
   else if (t->spacetype == SPACE_GRAPH) {
     SpaceGraph *sipo = sa->spacedata.first;
-    t->view = &ar->v2d;
+    t->view = &region->v2d;
     t->around = sipo->around;
   }
   else if (t->spacetype == SPACE_CLIP) {
     SpaceClip *sclip = sa->spacedata.first;
-    t->view = &ar->v2d;
+    t->view = &region->v2d;
     t->around = sclip->around;
 
     if (ED_space_clip_check_show_trackedit(sclip)) {
@@ -1651,9 +1603,9 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     }
   }
   else {
-    if (ar) {
+    if (region) {
       // XXX for now, get View2D  from the active region
-      t->view = &ar->v2d;
+      t->view = &region->v2d;
       // XXX for now, the center point is the midpoint of the data
     }
     else {
@@ -1673,13 +1625,12 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
       ((prop = RNA_struct_find_property(op->ptr, "orient_matrix")) &&
        RNA_property_is_set(op->ptr, prop)) &&
       ((t->flag & T_MODAL) ||
-       /* When using redo, don't use the the custom constraint matrix
+       /* When using redo, don't use the custom constraint matrix
         * if the user selects a different orientation. */
        (RNA_enum_get(op->ptr, "orient_type") == RNA_enum_get(op->ptr, "orient_matrix_type")))) {
-    RNA_property_float_get_array(op->ptr, prop, &t->spacemtx[0][0]);
+    RNA_property_float_get_array(op->ptr, prop, &t->orient_matrix[0][0]);
+    copy_m3_m3(t->spacemtx, t->orient_matrix);
     /* Some transform modes use this to operate on an axis. */
-    t->orient_matrix_is_set = true;
-    copy_m3_m3(t->orient_matrix, t->spacemtx);
     t->orient_matrix_is_set = true;
     t->orientation.user = V3D_ORIENT_CUSTOM_MATRIX;
     t->orientation.custom = 0;
@@ -1776,7 +1727,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
               }
             }
           }
-          else if ((t->obedit_type == -1) && ts->proportional_objects) {
+          else if (!(t->options & CTX_CURSOR) && ts->proportional_objects) {
             t->flag |= T_PROP_EDIT;
           }
         }
@@ -1870,13 +1821,13 @@ void freeTransCustomDataForMode(TransInfo *t)
 void postTrans(bContext *C, TransInfo *t)
 {
   if (t->draw_handle_view) {
-    ED_region_draw_cb_exit(t->ar->type, t->draw_handle_view);
+    ED_region_draw_cb_exit(t->region->type, t->draw_handle_view);
   }
   if (t->draw_handle_apply) {
-    ED_region_draw_cb_exit(t->ar->type, t->draw_handle_apply);
+    ED_region_draw_cb_exit(t->region->type, t->draw_handle_apply);
   }
   if (t->draw_handle_pixel) {
-    ED_region_draw_cb_exit(t->ar->type, t->draw_handle_pixel);
+    ED_region_draw_cb_exit(t->region->type, t->draw_handle_pixel);
   }
   if (t->draw_handle_cursor) {
     WM_paint_cursor_end(CTX_wm_manager(C), t->draw_handle_cursor);
@@ -2055,10 +2006,10 @@ void calculateCenterCursor(TransInfo *t, float r_center[3])
 
   /* If edit or pose mode, move cursor in local space */
   if (t->options & CTX_PAINT_CURVE) {
-    if (ED_view3d_project_float_global(t->ar, cursor, r_center, V3D_PROJ_TEST_NOP) !=
+    if (ED_view3d_project_float_global(t->region, cursor, r_center, V3D_PROJ_TEST_NOP) !=
         V3D_PROJ_RET_OK) {
-      r_center[0] = t->ar->winx / 2.0f;
-      r_center[1] = t->ar->winy / 2.0f;
+      r_center[0] = t->region->winx / 2.0f;
+      r_center[1] = t->region->winy / 2.0f;
     }
     r_center[2] = 0.0f;
   }
@@ -2098,8 +2049,8 @@ void calculateCenterCursor2D(TransInfo *t, float r_center[2])
     }
     else if (t->options & CTX_PAINT_CURVE) {
       if (t->spacetype == SPACE_IMAGE) {
-        r_center[0] = UI_view2d_view_to_region_x(&t->ar->v2d, cursor[0]);
-        r_center[1] = UI_view2d_view_to_region_y(&t->ar->v2d, cursor[1]);
+        r_center[0] = UI_view2d_view_to_region_x(&t->region->v2d, cursor[0]);
+        r_center[1] = UI_view2d_view_to_region_y(&t->region->v2d, cursor[1]);
       }
     }
     else {
@@ -2281,7 +2232,7 @@ void calculateCenter(TransInfo *t)
 
   /* for panning from cameraview */
   if ((t->flag & T_OBJECT) && (t->flag & T_OVERRIDE_CENTER) == 0) {
-    if (t->spacetype == SPACE_VIEW3D && t->ar && t->ar->regiontype == RGN_TYPE_WINDOW) {
+    if (t->spacetype == SPACE_VIEW3D && t->region && t->region->regiontype == RGN_TYPE_WINDOW) {
 
       if (t->flag & T_CAMERA) {
         float axis[3];
@@ -2314,8 +2265,8 @@ void calculateCenter(TransInfo *t)
      * We need special case here as well, since ED_view3d_calc_zfac will crash when called
      * for a region different from RGN_TYPE_WINDOW.
      */
-    if (t->ar->regiontype == RGN_TYPE_WINDOW) {
-      t->zfac = ED_view3d_calc_zfac(t->ar->regiondata, t->center_global, NULL);
+    if (t->region->regiontype == RGN_TYPE_WINDOW) {
+      t->zfac = ED_view3d_calc_zfac(t->region->regiondata, t->center_global, NULL);
     }
     else {
       t->zfac = 0.0f;

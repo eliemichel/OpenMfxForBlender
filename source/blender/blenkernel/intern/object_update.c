@@ -24,6 +24,7 @@
 #include "DNA_anim_types.h"
 #include "DNA_collection_types.h"
 #include "DNA_constraint_types.h"
+#include "DNA_gpencil_types.h"
 #include "DNA_key_types.h"
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
@@ -150,6 +151,11 @@ void BKE_object_eval_transform_final(Depsgraph *depsgraph, Object *ob)
   else {
     ob->transflag &= ~OB_NEG_SCALE;
   }
+
+  /* Assign evaluated version. */
+  if ((ob->type == OB_GPENCIL) && (ob->runtime.gpd_eval != NULL)) {
+    ob->data = ob->runtime.gpd_eval;
+  }
 }
 
 void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *ob)
@@ -163,9 +169,6 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
       BMEditMesh *em = (ob->mode & OB_MODE_EDIT) ? BKE_editmesh_from_object(ob) : NULL;
 #else
       BMEditMesh *em = (ob->mode & OB_MODE_EDIT) ? ((Mesh *)ob->data)->edit_mesh : NULL;
-      if (em && em->ob != ob) {
-        em = NULL;
-      }
 #endif
 
       CustomData_MeshMasks cddata_masks = scene->customdata_mask;
@@ -216,9 +219,12 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
     case OB_LATTICE:
       BKE_lattice_modifiers_calc(depsgraph, scene, ob);
       break;
-    case OB_GPENCIL:
+    case OB_GPENCIL: {
+      BKE_gpencil_prepare_eval_data(depsgraph, scene, ob);
       BKE_gpencil_modifiers_calc(depsgraph, scene, ob);
+      BKE_gpencil_update_layer_parent(depsgraph, ob);
       break;
+    }
   }
 
   /* particles */
@@ -401,8 +407,8 @@ void BKE_object_data_select_update(Depsgraph *depsgraph, ID *object_data)
 void BKE_object_select_update(Depsgraph *depsgraph, Object *object)
 {
   DEG_debug_print_eval(depsgraph, __func__, object->id.name, object);
-  if (object->type == OB_MESH && !object->runtime.is_mesh_eval_owned) {
-    Mesh *mesh_input = object->runtime.mesh_orig;
+  if (object->type == OB_MESH && !object->runtime.is_data_eval_owned) {
+    Mesh *mesh_input = (Mesh *)object->runtime.data_orig;
     Mesh_Runtime *mesh_runtime = &mesh_input->runtime;
     BLI_mutex_lock(mesh_runtime->eval_mutex);
     BKE_object_data_select_update(depsgraph, object->data);

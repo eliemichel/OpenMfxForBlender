@@ -44,7 +44,7 @@
 #include "BKE_report.h"
 #include "BKE_sequencer.h"
 #include "BKE_sound.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -103,6 +103,7 @@ EnumPropertyItem prop_side_types[] = {
     {SEQ_SIDE_LEFT, "LEFT", 0, "Left", ""},
     {SEQ_SIDE_RIGHT, "RIGHT", 0, "Right", ""},
     {SEQ_SIDE_BOTH, "BOTH", 0, "Both", ""},
+    {SEQ_SIDE_NO_CHANGE, "NO_CHANGE", 0, "No change", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -729,15 +730,15 @@ static void recurs_del_seq_flag(Scene *scene, ListBase *lb, short flag, short de
   }
 }
 
-static Sequence *cut_seq_hard(
-    Main *bmain, Scene *scene, Sequence *seq, ListBase *new_seq_list, int cutframe)
+static Sequence *split_seq_hard(
+    Main *bmain, Scene *scene, Sequence *seq, ListBase *new_seq_list, int split_frame)
 {
   TransSeq ts;
   Sequence *seqn = NULL;
   bool skip_dup = false;
 
-  /* Unlike soft-cut, it's important to use the same value for both strips. */
-  const bool is_end_exact = ((seq->start + seq->len) == cutframe);
+  /* Unlike soft-split, it's important to use the same value for both strips. */
+  const bool is_end_exact = ((seq->start + seq->len) == split_frame);
 
   /* backup values */
   ts.start = seq->start;
@@ -757,37 +758,38 @@ static Sequence *cut_seq_hard(
 
   /* Precaution, needed because the length saved on-disk may not match the length saved in the
    * blend file, or our code may have minor differences reading file length between versions.
-   * This causes hard-cut to fail, see: T47862 */
+   * This causes hard-split to fail, see: T47862 */
   if (seq->type != SEQ_TYPE_META) {
     BKE_sequence_reload_new_file(bmain, scene, seq, true);
     BKE_sequence_calc(scene, seq);
   }
 
-  /* Important to offset the start when 'cutframe == seq->start'
+  /* Important to offset the start when 'split_frame == seq->start'
    * because we need at least one frame of content after start/end still have clipped it. */
-  if ((seq->startstill) && (cutframe <= seq->start)) {
+  if ((seq->startstill) && (split_frame <= seq->start)) {
     /* don't do funny things with METAs ... */
     if (seq->type == SEQ_TYPE_META) {
       skip_dup = true;
-      seq->startstill = seq->start - cutframe;
+      seq->startstill = seq->start - split_frame;
     }
     else {
-      seq->start = cutframe - 1;
-      seq->startstill = cutframe - seq->startdisp - 1;
+      seq->start = split_frame - 1;
+      seq->startstill = split_frame - seq->startdisp - 1;
       seq->anim_endofs += seq->len - 1;
       seq->endstill = 0;
     }
   }
   /* normal strip */
   else if ((is_end_exact == false) &&
-           ((cutframe >= seq->start) && (cutframe <= (seq->start + seq->len)))) {
+           ((split_frame >= seq->start) && (split_frame <= (seq->start + seq->len)))) {
     seq->endofs = 0;
     seq->endstill = 0;
-    seq->anim_endofs += (seq->start + seq->len) - cutframe;
+    seq->anim_endofs += (seq->start + seq->len) - split_frame;
   }
   /* strips with extended stillframes after */
-  else if ((is_end_exact == true) || (((seq->start + seq->len) < cutframe) && (seq->endstill))) {
-    seq->endstill -= seq->enddisp - cutframe;
+  else if ((is_end_exact == true) ||
+           (((seq->start + seq->len) < split_frame) && (seq->endstill))) {
+    seq->endstill -= seq->enddisp - split_frame;
     /* don't do funny things with METAs ... */
     if (seq->type == SEQ_TYPE_META) {
       skip_dup = true;
@@ -806,38 +808,38 @@ static Sequence *cut_seq_hard(
   if (seqn) {
     seqn->flag |= SELECT;
 
-    /* Important not to re-assign this (unlike soft-cut) */
+    /* Important not to re-assign this (unlike soft-split) */
 #if 0
-    is_end_exact = ((seqn->start + seqn->len) == cutframe);
+    is_end_exact = ((seqn->start + seqn->len) == split_frame);
 #endif
     /* Second Strip! */
     /* strips with extended stillframes before */
-    if ((seqn->startstill) && (cutframe == seqn->start + 1)) {
+    if ((seqn->startstill) && (split_frame == seqn->start + 1)) {
       seqn->start = ts.start;
-      seqn->startstill = ts.start - cutframe;
+      seqn->startstill = ts.start - split_frame;
       seqn->anim_endofs = ts.anim_endofs;
       seqn->endstill = ts.endstill;
     }
 
     /* normal strip */
     else if ((is_end_exact == false) &&
-             ((cutframe >= seqn->start) && (cutframe <= (seqn->start + seqn->len)))) {
-      seqn->start = cutframe;
+             ((split_frame >= seqn->start) && (split_frame <= (seqn->start + seqn->len)))) {
+      seqn->start = split_frame;
       seqn->startstill = 0;
       seqn->startofs = 0;
       seqn->endofs = ts.endofs;
-      seqn->anim_startofs += cutframe - ts.start;
+      seqn->anim_startofs += split_frame - ts.start;
       seqn->anim_endofs = ts.anim_endofs;
       seqn->endstill = ts.endstill;
     }
 
     /* strips with extended stillframes after */
     else if ((is_end_exact == true) ||
-             (((seqn->start + seqn->len) < cutframe) && (seqn->endstill))) {
-      seqn->start = cutframe;
+             (((seqn->start + seqn->len) < split_frame) && (seqn->endstill))) {
+      seqn->start = split_frame;
       seqn->startofs = 0;
       seqn->anim_startofs += ts.len - 1;
-      seqn->endstill = ts.enddisp - cutframe - 1;
+      seqn->endstill = ts.enddisp - split_frame - 1;
       seqn->startstill = 0;
     }
 
@@ -847,14 +849,14 @@ static Sequence *cut_seq_hard(
   return seqn;
 }
 
-static Sequence *cut_seq_soft(
-    Main *UNUSED(bmain), Scene *scene, Sequence *seq, ListBase *new_seq_list, int cutframe)
+static Sequence *split_seq_soft(
+    Main *UNUSED(bmain), Scene *scene, Sequence *seq, ListBase *new_seq_list, int split_frame)
 {
   TransSeq ts;
   Sequence *seqn = NULL;
   bool skip_dup = false;
 
-  bool is_end_exact = ((seq->start + seq->len) == cutframe);
+  bool is_end_exact = ((seq->start + seq->len) == split_frame);
 
   /* backup values */
   ts.start = seq->start;
@@ -872,29 +874,30 @@ static Sequence *cut_seq_soft(
   /* First Strip! */
   /* strips with extended stillfames before */
 
-  /* Important to offset the start when 'cutframe == seq->start'
+  /* Important to offset the start when 'split_frame == seq->start'
    * because we need at least one frame of content after start/end still have clipped it. */
-  if ((seq->startstill) && (cutframe <= seq->start)) {
+  if ((seq->startstill) && (split_frame <= seq->start)) {
     /* don't do funny things with METAs ... */
     if (seq->type == SEQ_TYPE_META) {
       skip_dup = true;
-      seq->startstill = seq->start - cutframe;
+      seq->startstill = seq->start - split_frame;
     }
     else {
-      seq->start = cutframe - 1;
-      seq->startstill = cutframe - seq->startdisp - 1;
+      seq->start = split_frame - 1;
+      seq->startstill = split_frame - seq->startdisp - 1;
       seq->endofs = seq->len - 1;
       seq->endstill = 0;
     }
   }
   /* normal strip */
-  else if ((is_end_exact == false) && (cutframe >= seq->start) &&
-           (cutframe <= (seq->start + seq->len))) {
-    seq->endofs = (seq->start + seq->len) - cutframe;
+  else if ((is_end_exact == false) && (split_frame >= seq->start) &&
+           (split_frame <= (seq->start + seq->len))) {
+    seq->endofs = (seq->start + seq->len) - split_frame;
   }
   /* strips with extended stillframes after */
-  else if ((is_end_exact == true) || (((seq->start + seq->len) < cutframe) && (seq->endstill))) {
-    seq->endstill -= seq->enddisp - cutframe;
+  else if ((is_end_exact == true) ||
+           (((seq->start + seq->len) < split_frame) && (seq->endstill))) {
+    seq->endstill -= seq->enddisp - split_frame;
     /* don't do funny things with METAs ... */
     if (seq->type == SEQ_TYPE_META) {
       skip_dup = true;
@@ -912,32 +915,32 @@ static Sequence *cut_seq_soft(
   if (seqn) {
     seqn->flag |= SELECT;
 
-    is_end_exact = ((seqn->start + seqn->len) == cutframe);
+    is_end_exact = ((seqn->start + seqn->len) == split_frame);
 
     /* Second Strip! */
     /* strips with extended stillframes before */
-    if ((seqn->startstill) && (cutframe == seqn->start + 1)) {
+    if ((seqn->startstill) && (split_frame == seqn->start + 1)) {
       seqn->start = ts.start;
-      seqn->startstill = ts.start - cutframe;
+      seqn->startstill = ts.start - split_frame;
       seqn->endofs = ts.endofs;
       seqn->endstill = ts.endstill;
     }
 
     /* normal strip */
-    else if ((is_end_exact == false) && (cutframe >= seqn->start) &&
-             (cutframe <= (seqn->start + seqn->len))) {
+    else if ((is_end_exact == false) && (split_frame >= seqn->start) &&
+             (split_frame <= (seqn->start + seqn->len))) {
       seqn->startstill = 0;
-      seqn->startofs = cutframe - ts.start;
+      seqn->startofs = split_frame - ts.start;
       seqn->endofs = ts.endofs;
       seqn->endstill = ts.endstill;
     }
 
     /* strips with extended stillframes after */
     else if ((is_end_exact == true) ||
-             (((seqn->start + seqn->len) < cutframe) && (seqn->endstill))) {
-      seqn->start = cutframe - ts.len + 1;
+             (((seqn->start + seqn->len) < split_frame) && (seqn->endstill))) {
+      seqn->start = split_frame - ts.len + 1;
       seqn->startofs = ts.len - 1;
-      seqn->endstill = ts.enddisp - cutframe - 1;
+      seqn->endstill = ts.enddisp - split_frame - 1;
       seqn->startstill = 0;
     }
 
@@ -946,19 +949,23 @@ static Sequence *cut_seq_soft(
   return seqn;
 }
 
-/* like duplicate, but only duplicate and cut overlapping strips,
- * strips to the left of the cutframe are ignored and strips to the right
+/* like duplicate, but only duplicate and split overlapping strips,
+ * strips to the left of the split_frame are ignored and strips to the right
  * are moved to the end of slist
  * we have to work on the same slist (not using a separate list), since
  * otherwise dupli_seq can't check for duplicate names properly and
  * may generate strips with the same name (which will mess up animdata)
  */
 
-static bool cut_seq_list(Main *bmain,
-                         Scene *scene,
-                         ListBase *slist,
-                         int cutframe,
-                         Sequence *(*cut_seq)(Main *bmain, Scene *, Sequence *, ListBase *, int))
+static bool split_seq_list(
+    Main *bmain,
+    Scene *scene,
+    ListBase *slist,
+    int split_frame,
+    int channel,
+    bool use_cursor_position,
+    Sequence *(*split_seq)(Main *bmain, Scene *, Sequence *, ListBase *, int))
+
 {
   Sequence *seq, *seq_next_iter;
   Sequence *seq_first_new = NULL;
@@ -968,25 +975,37 @@ static bool cut_seq_list(Main *bmain,
   while (seq && seq != seq_first_new) {
     seq_next_iter = seq->next; /* we need this because we may remove seq */
     seq->tmp = NULL;
-    if (seq->flag & SELECT) {
-      if (cutframe > seq->startdisp && cutframe < seq->enddisp) {
-        Sequence *seqn = cut_seq(bmain, scene, seq, slist, cutframe);
+    if (use_cursor_position) {
+      if (seq->machine == channel && seq->startdisp < split_frame && seq->enddisp > split_frame) {
+        Sequence *seqn = split_seq(bmain, scene, seq, slist, split_frame);
         if (seqn) {
           if (seq_first_new == NULL) {
             seq_first_new = seqn;
           }
         }
       }
-      else if (seq->enddisp <= cutframe) {
-        /* do nothing */
-      }
-      else if (seq->startdisp >= cutframe) {
-        /* move to tail */
-        BLI_remlink(slist, seq);
-        BLI_addtail(slist, seq);
+    }
+    else {
+      if (seq->flag & SELECT) {
+        if (split_frame > seq->startdisp && split_frame < seq->enddisp) {
+          Sequence *seqn = split_seq(bmain, scene, seq, slist, split_frame);
+          if (seqn) {
+            if (seq_first_new == NULL) {
+              seq_first_new = seqn;
+            }
+          }
+        }
+        else if (seq->enddisp <= split_frame) {
+          /* do nothing */
+        }
+        else if (seq->startdisp >= split_frame) {
+          /* move to tail */
+          BLI_remlink(slist, seq);
+          BLI_addtail(slist, seq);
 
-        if (seq_first_new == NULL) {
-          seq_first_new = seq;
+          if (seq_first_new == NULL) {
+            seq_first_new = seq;
+          }
         }
       }
     }
@@ -1506,64 +1525,65 @@ static int sequencer_slip_invoke(bContext *C, wmOperator *op, const wmEvent *eve
 
 static bool sequencer_slip_recursively(Scene *scene, SlipData *data, int offset)
 {
+  /* Only data types supported for now. */
+  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  bool changed = false;
 
-  /* only data types supported for now */
-  if (offset != 0) {
-    Editing *ed = BKE_sequencer_editing_get(scene, false);
-    int i;
+  /* We iterate in reverse so meta-strips are iterated after their children. */
+  for (int i = data->num_seq - 1; i >= 0; i--) {
+    Sequence *seq = data->seq_array[i];
+    int endframe;
+    /* We have the offset, apply the values to the sequence strips. */
 
-    /* we iterate in reverse so metastrips are iterated after their children */
-    for (i = data->num_seq - 1; i >= 0; i--) {
-      Sequence *seq = data->seq_array[i];
-      int endframe;
-      /* we have the offset, do the terrible math */
+    /* first, do the offset */
+    seq->start = data->ts[i].start + offset;
 
-      /* first, do the offset */
-      seq->start = data->ts[i].start + offset;
+    if (data->trim[i]) {
+      /* Find the end-frame. */
+      endframe = seq->start + seq->len;
 
-      if (data->trim[i]) {
-        /* find the endframe */
-        endframe = seq->start + seq->len;
-
-        /* now compute the terrible offsets */
-        if (endframe > seq->enddisp) {
-          seq->endstill = 0;
-          seq->endofs = endframe - seq->enddisp;
-        }
-        else if (endframe <= seq->enddisp) {
-          seq->endstill = seq->enddisp - endframe;
-          seq->endofs = 0;
-        }
-
-        if (seq->start > seq->startdisp) {
-          seq->startstill = seq->start - seq->startdisp;
-          seq->startofs = 0;
-        }
-        else if (seq->start <= seq->startdisp) {
-          seq->startstill = 0;
-          seq->startofs = seq->startdisp - seq->start;
-        }
+      /* Now compute the sequence offsets. */
+      if (endframe > seq->enddisp) {
+        seq->endstill = 0;
+        seq->endofs = endframe - seq->enddisp;
+        changed = true;
       }
-      else {
-        /* if no real trim, don't change the data, rather transform the strips themselves */
-        seq->startdisp = data->ts[i].startdisp + offset;
-        seq->enddisp = data->ts[i].enddisp + offset;
+      else if (endframe <= seq->enddisp) {
+        seq->endstill = seq->enddisp - endframe;
+        seq->endofs = 0;
+        changed = true;
       }
 
-      /* effects are only added if we they are in a meta-strip.
-       * In this case, dependent strips will just be transformed and
-       * we can skip calculating for effects.
-       * This way we can avoid an extra loop just for effects*/
-      if (!(seq->type & SEQ_TYPE_EFFECT)) {
-        BKE_sequence_calc(scene, seq);
+      if (seq->start > seq->startdisp) {
+        seq->startstill = seq->start - seq->startdisp;
+        seq->startofs = 0;
+        changed = true;
+      }
+      else if (seq->start <= seq->startdisp) {
+        seq->startstill = 0;
+        seq->startofs = seq->startdisp - seq->start;
+        changed = true;
       }
     }
-    BKE_sequencer_free_imbuf(scene, &ed->seqbase, false);
+    else {
+      /* If no real trim, don't change the data, rather transform the strips themselves. */
+      seq->startdisp = data->ts[i].startdisp + offset;
+      seq->enddisp = data->ts[i].enddisp + offset;
+      changed = true;
+    }
 
-    return true;
+    /* Effects are only added if we they are in a meta-strip.
+     * In this case, dependent strips will just be transformed and
+     * we can skip calculating for effects.
+     * This way we can avoid an extra loop just for effects*/
+    if (!(seq->type & SEQ_TYPE_EFFECT)) {
+      BKE_sequence_calc(scene, seq);
+    }
   }
-
-  return false;
+  if (changed) {
+    BKE_sequencer_free_imbuf(scene, &ed->seqbase, false);
+  }
+  return changed;
 }
 
 static int sequencer_slip_exec(bContext *C, wmOperator *op)
@@ -2142,104 +2162,144 @@ void SEQUENCER_OT_swap_inputs(struct wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* cut operator */
-static const EnumPropertyItem prop_cut_types[] = {
-    {SEQ_CUT_SOFT, "SOFT", 0, "Soft", ""},
-    {SEQ_CUT_HARD, "HARD", 0, "Hard", ""},
+/* split operator */
+static const EnumPropertyItem prop_split_types[] = {
+    {SEQ_SPLIT_SOFT, "SOFT", 0, "Soft", ""},
+    {SEQ_SPLIT_HARD, "HARD", 0, "Hard", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
-static int sequencer_cut_exec(bContext *C, wmOperator *op)
+static int sequencer_split_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   Editing *ed = BKE_sequencer_editing_get(scene, false);
-  int cut_side, cut_hard, cut_frame;
+  int split_side, split_hard, split_frame, split_channel;
+  bool changed, use_cursor_position, ignore_selection;
+  bool seq_selected = false;
 
-  bool changed;
+  split_frame = RNA_int_get(op->ptr, "frame");
+  split_channel = RNA_int_get(op->ptr, "channel");
+  use_cursor_position = RNA_boolean_get(op->ptr, "use_cursor_position");
+  split_hard = RNA_enum_get(op->ptr, "type");
+  split_side = RNA_enum_get(op->ptr, "side");
+  ignore_selection = RNA_boolean_get(op->ptr, "ignore_selection");
 
-  cut_frame = RNA_int_get(op->ptr, "frame");
-  cut_hard = RNA_enum_get(op->ptr, "type");
-  cut_side = RNA_enum_get(op->ptr, "side");
-
-  if (cut_hard == SEQ_CUT_HARD) {
-    changed = cut_seq_list(bmain, scene, ed->seqbasep, cut_frame, cut_seq_hard);
+  if (split_hard == SEQ_SPLIT_HARD) {
+    changed = split_seq_list(bmain,
+                             scene,
+                             ed->seqbasep,
+                             split_frame,
+                             split_channel,
+                             use_cursor_position,
+                             split_seq_hard);
   }
   else {
-    changed = cut_seq_list(bmain, scene, ed->seqbasep, cut_frame, cut_seq_soft);
+    changed = split_seq_list(bmain,
+                             scene,
+                             ed->seqbasep,
+                             split_frame,
+                             split_channel,
+                             use_cursor_position,
+                             split_seq_soft);
   }
-
   if (changed) { /* got new strips ? */
     Sequence *seq;
-
-    if (cut_side != SEQ_SIDE_BOTH) {
-      SEQP_BEGIN (ed, seq) {
-        if (cut_side == SEQ_SIDE_LEFT) {
-          if (seq->startdisp >= cut_frame) {
-            seq->flag &= ~SEQ_ALLSEL;
+    if (ignore_selection) {
+      if (use_cursor_position) {
+        SEQP_BEGIN (ed, seq) {
+          if (seq->enddisp == split_frame && seq->machine == split_channel) {
+            seq_selected = seq->flag & SEQ_ALLSEL;
           }
         }
-        else {
-          if (seq->enddisp <= cut_frame) {
-            seq->flag &= ~SEQ_ALLSEL;
+        SEQ_END;
+        if (!seq_selected) {
+          SEQP_BEGIN (ed, seq) {
+            if (seq->startdisp == split_frame && seq->machine == split_channel) {
+              seq->flag &= ~SEQ_ALLSEL;
+            }
           }
+          SEQ_END;
         }
       }
-      SEQ_END;
     }
-
+    else {
+      if (split_side != SEQ_SIDE_BOTH) {
+        SEQP_BEGIN (ed, seq) {
+          if (split_side == SEQ_SIDE_LEFT) {
+            if (seq->startdisp >= split_frame) {
+              seq->flag &= ~SEQ_ALLSEL;
+            }
+          }
+          else {
+            if (seq->enddisp <= split_frame) {
+              seq->flag &= ~SEQ_ALLSEL;
+            }
+          }
+        }
+        SEQ_END;
+      }
+    }
     SEQP_BEGIN (ed, seq) {
       if (seq->seq1 || seq->seq2 || seq->seq3) {
         BKE_sequence_calc(scene, seq);
       }
     }
     SEQ_END;
-
     /* as last: */
     BKE_sequencer_sort(scene);
   }
-
   if (changed) {
     WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
     return OPERATOR_FINISHED;
   }
   else {
-    return OPERATOR_CANCELLED;
+    /* Passthrough to selection if used as tool. */
+    return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
   }
 }
 
-static int sequencer_cut_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+static int sequencer_split_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   Scene *scene = CTX_data_scene(C);
   View2D *v2d = UI_view2d_fromcontext(C);
 
-  int cut_side = RNA_enum_get(op->ptr, "side");
-  int cut_frame = CFRA;
+  int split_side = RNA_enum_get(op->ptr, "side");
+  int split_frame = CFRA;
 
-  if (cut_side == SEQ_SIDE_MOUSE) {
+  if (split_side == SEQ_SIDE_MOUSE) {
     if (ED_operator_sequencer_active(C) && v2d) {
-      cut_side = mouse_frame_side(v2d, event->mval[0], cut_frame);
+      split_side = mouse_frame_side(v2d, event->mval[0], split_frame);
     }
     else {
-      cut_side = SEQ_SIDE_BOTH;
+      split_side = SEQ_SIDE_BOTH;
     }
   }
-  RNA_int_set(op->ptr, "frame", cut_frame);
-  RNA_enum_set(op->ptr, "side", cut_side);
-  /*RNA_enum_set(op->ptr, "type", cut_hard); */ /*This type is set from the key shortcut */
-  return sequencer_cut_exec(C, op);
+  float mouseloc[2];
+  UI_view2d_region_to_view(v2d, event->mval[0], event->mval[1], &mouseloc[0], &mouseloc[1]);
+  if (RNA_boolean_get(op->ptr, "use_cursor_position")) {
+    RNA_int_set(op->ptr, "frame", mouseloc[0]);
+  }
+  else {
+    RNA_int_set(op->ptr, "frame", split_frame);
+  }
+  RNA_int_set(op->ptr, "channel", mouseloc[1]);
+  RNA_enum_set(op->ptr, "side", split_side);
+  /*RNA_enum_set(op->ptr, "type", split_hard); */ /*This type is set from the key
+                                                     shortsplit */
+  return sequencer_split_exec(C, op);
 }
 
-void SEQUENCER_OT_cut(struct wmOperatorType *ot)
+void SEQUENCER_OT_split(struct wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Cut Strips";
-  ot->idname = "SEQUENCER_OT_cut";
-  ot->description = "Cut the selected strips";
+  ot->name = "Split Strips";
+  ot->idname = "SEQUENCER_OT_split";
+  ot->description = "Split the selected strips in two";
 
   /* api callbacks */
-  ot->invoke = sequencer_cut_invoke;
-  ot->exec = sequencer_cut_exec;
+  ot->invoke = sequencer_split_invoke;
+  ot->exec = sequencer_split_exec;
   ot->poll = sequencer_edit_poll;
 
   /* flags */
@@ -2252,22 +2312,48 @@ void SEQUENCER_OT_cut(struct wmOperatorType *ot)
               INT_MIN,
               INT_MAX,
               "Frame",
-              "Frame where selected strips will be cut",
+              "Frame where selected strips will be split",
+              INT_MIN,
+              INT_MAX);
+  RNA_def_int(ot->srna,
+              "channel",
+              0,
+              INT_MIN,
+              INT_MAX,
+              "Channel",
+              "Channel in which strip will be cut",
               INT_MIN,
               INT_MAX);
   RNA_def_enum(ot->srna,
                "type",
-               prop_cut_types,
-               SEQ_CUT_SOFT,
+               prop_split_types,
+               SEQ_SPLIT_SOFT,
                "Type",
-               "The type of cut operation to perform on strips");
+               "The type of split operation to perform on strips");
+
+  RNA_def_boolean(ot->srna,
+                  "use_cursor_position",
+                  0,
+                  "Use Cursor Position",
+                  "Split at position of the cursor instead of playhead");
+
   prop = RNA_def_enum(ot->srna,
                       "side",
                       prop_side_types,
                       SEQ_SIDE_MOUSE,
                       "Side",
-                      "The side that remains selected after cutting");
+                      "The side that remains selected after splitting");
+
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
+  prop = RNA_def_boolean(
+      ot->srna,
+      "ignore_selection",
+      false,
+      "Ignore Selection",
+      "Make cut event if strip is not selected preserving selection state after cut");
+
+  RNA_def_property_flag(prop, PROP_HIDDEN);
 }
 
 #undef SEQ_SIDE_MOUSE
@@ -2326,9 +2412,6 @@ void SEQUENCER_OT_duplicate(wmOperatorType *ot)
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-
-  /* to give to transform */
-  RNA_def_enum(ot->srna, "mode", rna_enum_transform_mode_types, TFM_TRANSLATION, "Mode", "");
 }
 
 /* delete operator */
@@ -2396,9 +2479,9 @@ static int sequencer_delete_exec(bContext *C, wmOperator *UNUSED(op))
 
 static int sequencer_delete_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
-  if (ar->regiontype == RGN_TYPE_WINDOW) {
+  if (region->regiontype == RGN_TYPE_WINDOW) {
     /* bounding box of 30 pixels is used for markers shortcuts,
      * prevent conflict with markers shortcuts here
      */
@@ -2817,13 +2900,13 @@ void SEQUENCER_OT_meta_separate(wmOperatorType *ot)
 /* view_all operator */
 static int sequencer_view_all_exec(bContext *C, wmOperator *op)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   rctf box;
 
   const int smooth_viewtx = WM_operator_smooth_viewtx_get(op);
 
   boundbox_seq(CTX_data_scene(C), &box);
-  UI_view2d_smooth_view(C, ar, &box, smooth_viewtx);
+  UI_view2d_smooth_view(C, region, &box, smooth_viewtx);
   return OPERATOR_FINISHED;
 }
 
@@ -2853,16 +2936,16 @@ static int sequencer_view_frame_exec(bContext *C, wmOperator *op)
 void SEQUENCER_OT_view_frame(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View Frame";
+  ot->name = "Go to Current Frame";
   ot->idname = "SEQUENCER_OT_view_frame";
-  ot->description = "Reset viewable area to show range around current frame";
+  ot->description = "Move the view to the playhead";
 
   /* api callbacks */
   ot->exec = sequencer_view_frame_exec;
   ot->poll = ED_operator_sequencer_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 /* view_all operator */
@@ -2871,7 +2954,7 @@ static int sequencer_view_all_preview_exec(bContext *C, wmOperator *UNUSED(op))
   bScreen *sc = CTX_wm_screen(C);
   ScrArea *area = CTX_wm_area(C);
 #if 0
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   SpaceSeq *sseq = area->spacedata.first;
   Scene *scene = CTX_data_scene(C);
 #endif
@@ -2886,8 +2969,8 @@ static int sequencer_view_all_preview_exec(bContext *C, wmOperator *UNUSED(op))
   float zoomX, zoomY;
   int width, height, imgwidth, imgheight;
 
-  width = ar->winx;
-  height = ar->winy;
+  width = region->winx;
+  height = region->winy;
 
   seq_reset_imageofs(sseq);
 
@@ -3020,7 +3103,7 @@ static int sequencer_view_selected_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
   View2D *v2d = UI_view2d_fromcontext(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   Editing *ed = BKE_sequencer_editing_get(scene, false);
   Sequence *last_seq = BKE_sequencer_active_get(scene);
   Sequence *seq;
@@ -3073,7 +3156,7 @@ static int sequencer_view_selected_exec(bContext *C, wmOperator *op)
       cur_new.ymax = ymid + (orig_height / 2);
     }
 
-    UI_view2d_smooth_view(C, ar, &cur_new, smooth_viewtx);
+    UI_view2d_smooth_view(C, region, &cur_new, smooth_viewtx);
 
     return OPERATOR_FINISHED;
   }
@@ -3085,7 +3168,7 @@ static int sequencer_view_selected_exec(bContext *C, wmOperator *op)
 void SEQUENCER_OT_view_selected(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View Selected";
+  ot->name = "Frame Selected";
   ot->idname = "SEQUENCER_OT_view_selected";
   ot->description = "Zoom the sequencer on the selected strips";
 
@@ -3153,7 +3236,7 @@ void SEQUENCER_OT_strip_jump(wmOperatorType *ot)
   ot->poll = sequencer_strip_jump_poll;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_UNDO;
 
   /* properties */
   RNA_def_boolean(ot->srna, "next", true, "Next Strip", "");
@@ -3677,7 +3760,7 @@ static int sequencer_enable_proxies_invoke(bContext *C,
                                            wmOperator *op,
                                            const wmEvent *UNUSED(event))
 {
-  return WM_operator_props_dialog_popup(C, op, 200, 100);
+  return WM_operator_props_dialog_popup(C, op, 200);
 }
 
 static int sequencer_enable_proxies_exec(bContext *C, wmOperator *op)
@@ -4183,4 +4266,68 @@ void SEQUENCER_OT_export_subtitles(struct wmOperatorType *ot)
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
+}
+
+static int sequencer_set_range_to_strips_exec(bContext *C, wmOperator *op)
+{
+  Scene *scene = CTX_data_scene(C);
+  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Sequence *seq;
+
+  int sfra = MAXFRAME;
+  int efra = -MAXFRAME;
+  bool selected = false;
+  const bool preview = RNA_boolean_get(op->ptr, "preview");
+
+  for (seq = ed->seqbasep->first; seq; seq = seq->next) {
+    if (seq->flag & SELECT) {
+      selected = true;
+      sfra = min_ii(sfra, seq->startdisp);
+      efra = max_ii(efra, seq->enddisp - 1);
+    }
+  }
+
+  if (!selected) {
+    BKE_report(op->reports, RPT_WARNING, "Select one or more strips");
+    return OPERATOR_CANCELLED;
+  }
+  else if (efra < 0) {
+    BKE_report(op->reports, RPT_ERROR, "Can't set a negative range");
+    return OPERATOR_CANCELLED;
+  }
+
+  if (preview) {
+    scene->r.flag |= SCER_PRV_RANGE;
+    scene->r.psfra = max_ii(0, sfra);
+    scene->r.pefra = efra;
+  }
+  else {
+    scene->r.flag &= ~SCER_PRV_RANGE;
+    scene->r.sfra = max_ii(0, sfra);
+    scene->r.efra = efra;
+  }
+
+  WM_event_add_notifier(C, NC_SCENE | ND_FRAME, scene);
+
+  return OPERATOR_FINISHED;
+}
+
+void SEQUENCER_OT_set_range_to_strips(struct wmOperatorType *ot)
+{
+  PropertyRNA *prop;
+
+  /* identifiers */
+  ot->name = "Set Range to Strips";
+  ot->idname = "SEQUENCER_OT_set_range_to_strips";
+  ot->description = "Set the frame range to the selected strips start and end";
+
+  /* api callbacks */
+  ot->exec = sequencer_set_range_to_strips_exec;
+  ot->poll = sequencer_edit_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  prop = RNA_def_boolean(ot->srna, "preview", false, "Preview", "Set the preview range instead");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE | PROP_HIDDEN);
 }

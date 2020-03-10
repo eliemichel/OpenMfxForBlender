@@ -37,7 +37,7 @@
 #include "BKE_deform.h"
 #include "BKE_mesh.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 
 #include "MOD_modifiertypes.h"
 #include "MOD_util.h"
@@ -64,6 +64,7 @@ static void initData(ModifierData *md)
   csmd->bind_coords_num = 0;
 
   csmd->lambda = 0.5f;
+  csmd->scale = 1.0f;
   csmd->repeat = 5;
   csmd->flag = 0;
   csmd->smooth_type = MOD_CORRECTIVESMOOTH_SMOOTH_SIMPLE;
@@ -124,7 +125,7 @@ static void mesh_get_weights(MDeformVert *dvert,
   uint i;
 
   for (i = 0; i < numVerts; i++, dvert++) {
-    const float w = defvert_find_weight(dvert, defgrp_index);
+    const float w = BKE_defvert_find_weight(dvert, defgrp_index);
 
     if (use_invert_vgroup == false) {
       smooth_weights[i] = w;
@@ -696,7 +697,7 @@ static void correctivesmooth_modifier_do(ModifierData *md,
     uint i;
 
     float(*tangent_spaces)[3][3];
-
+    const float scale = csmd->scale;
     /* calloc, since values are accumulated */
     tangent_spaces = MEM_calloc_arrayN(numVerts, sizeof(float[3][3]), __func__);
 
@@ -710,7 +711,7 @@ static void correctivesmooth_modifier_do(ModifierData *md,
 #endif
 
       mul_v3_m3v3(delta, tangent_spaces[i], csmd->delta_cache.deltas[i]);
-      add_v3_v3(vertexCos[i], delta);
+      madd_v3_v3fl(vertexCos[i], delta, scale);
     }
 
     MEM_freeN(tangent_spaces);

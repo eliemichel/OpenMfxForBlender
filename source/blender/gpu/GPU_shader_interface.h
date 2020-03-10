@@ -28,6 +28,10 @@
 
 #include "GPU_common.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
   GPU_UNIFORM_NONE = 0, /* uninitialized/unknown */
 
@@ -51,6 +55,7 @@ typedef enum {
   GPU_UNIFORM_COLOR,          /* vec4 color */
   GPU_UNIFORM_BASE_INSTANCE,  /* int baseInstance */
   GPU_UNIFORM_RESOURCE_CHUNK, /* int resourceChunk */
+  GPU_UNIFORM_RESOURCE_ID,    /* int resourceId */
 
   GPU_UNIFORM_CUSTOM, /* custom uniform, not one of the above built-ins */
 
@@ -99,5 +104,9 @@ const GPUShaderInput *GPU_shaderinterface_attr(const GPUShaderInterface *, const
 /* keep track of batches using this interface */
 void GPU_shaderinterface_add_batch_ref(GPUShaderInterface *, struct GPUBatch *);
 void GPU_shaderinterface_remove_batch_ref(GPUShaderInterface *, struct GPUBatch *);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __GPU_SHADER_INTERFACE_H__ */

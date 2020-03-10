@@ -112,6 +112,9 @@ if(WITH_INPUT_NDOF)
   list(APPEND INC_SYS
     ${NDOF_INCLUDE_DIRS}
   )
+  list(APPEND LIB
+    ${NDOF_LIBRARIES}
+  )
 endif()
 
 if(WITH_HEADLESS OR WITH_GHOST_SDL)
@@ -141,6 +144,11 @@ if(WITH_HEADLESS OR WITH_GHOST_SDL)
     list(APPEND INC_SYS
       ${SDL_INCLUDE_DIR}
     )
+    if(NOT WITH_SDL_DYNLOAD)
+      list(APPEND LIB
+        ${SDL_LIBRARY}
+      )
+    endif()
   endif()
 
 elseif(APPLE AND NOT WITH_X11)
@@ -272,11 +280,13 @@ elseif(WIN32)
   )
 
   list(APPEND SRC
+    intern/GHOST_ContextD3D.cpp
     intern/GHOST_DisplayManagerWin32.cpp
     intern/GHOST_DropTargetWin32.cpp
     intern/GHOST_SystemWin32.cpp
     intern/GHOST_WindowWin32.cpp
 
+    intern/GHOST_ContextD3D.h
     intern/GHOST_DisplayManagerWin32.h
     intern/GHOST_DropTargetWin32.h
     intern/GHOST_SystemWin32.h

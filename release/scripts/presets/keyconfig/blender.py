@@ -70,6 +70,7 @@ class Prefs(bpy.types.KeyConfigPreferences):
             ('DRAG', "Drag", "Drag allows click events to pass through to the tool, adding a small delay"),
         ),
         description="Activation event for gizmos that support drag motion",
+        default='DRAG',
         update=update_fn,
     )
 
@@ -107,6 +108,38 @@ class Prefs(bpy.types.KeyConfigPreferences):
         update=update_fn,
     )
 
+    v3d_mmb_action: EnumProperty(
+        name="MMB Action",
+        items=(
+            ('ORBIT', "Orbit",
+             "Orbit",
+             0),
+            ('PAN', "Pan",
+             "Set the view axis where each mouse direction always maps to the same axis",
+             1),
+        ),
+        description=(
+            "The action when Middle-Mouse dragging in the viewport. Shift-Middle-Mouse is used for the other action"
+        ),
+        update=update_fn,
+    )
+
+    v3d_alt_mmb_drag_action: EnumProperty(
+        name="Alt-MMB Drag Action",
+        items=(
+            ('RELATIVE', "Relative",
+             "Set the view axis where each mouse direction maps to an axis relative to the current orientation",
+             0),
+            ('ABSOLUTE', "Absolute",
+             "Set the view axis where each mouse direction always maps to the same axis",
+             1),
+        ),
+        description=(
+            "Action when Alt-MMB dragging in the 3D viewport"
+        ),
+        update=update_fn,
+    )
+
     # Developer note, this is an experemental option.
     use_pie_click_drag: BoolProperty(
         name="Pie Menu on Drag",
@@ -123,35 +156,35 @@ class Prefs(bpy.types.KeyConfigPreferences):
     )
 
     def draw(self, layout):
+        layout.use_property_split = True
+
         is_select_left = (self.select_mouse == 'LEFT')
 
-        split = layout.split()
-        col = split.column(align=True)
-        col.label(text="Select With:")
-        col.row().prop(self, "select_mouse", expand=True)
-
+        # General settings.
+        col = layout.column()
+        col.row().prop(self, "select_mouse", text="Select with Mouse Button", expand=True)
+        col.row().prop(self, "spacebar_action", text="Spacebar Action", expand=True)
         if is_select_left:
-            col.label(text="Activate Gizmo:")
-            col.row().prop(self, "gizmo_action", expand=True)
-        else:
-            col.label()
-            col.label()
+            col.row().prop(self, "gizmo_action", text="Activate Gizmo Event", expand=True)
 
-        col.prop(self, "use_select_all_toggle")
+        # Checkboxes sub-layout.
+        col = layout.column()
+        sub = col.column(align=True)
+        sub.prop(self, "use_select_all_toggle")
 
-        col = split.column(align=True)
-        col.label(text="Spacebar Action:")
-        col.row().prop(self, "spacebar_action", expand=True)
+        # 3DView settings.
+        col = layout.column()
+        col.label(text="3D View")
+        col.row().prop(self, "v3d_tilde_action", text="Grave Accent / Tilde Action", expand=True)
+        col.row().prop(self, "v3d_mmb_action", text="Middle Mouse Action", expand=True)
+        col.row().prop(self, "v3d_alt_mmb_drag_action", text="Alt Middle Mouse Drag Action", expand=True)
 
-        layout.label(text="3D View:")
-        split = layout.split()
-        col = split.column()
-        col.prop(self, "use_v3d_tab_menu")
-        col.prop(self, "use_pie_click_drag")
-        col = split.column()
-        col.label(text="Tilde Action:")
-        col.row().prop(self, "v3d_tilde_action", expand=True)
-        col.prop(self, "use_v3d_shade_ex_pie")
+        # Checkboxes sub-layout.
+        col = layout.column()
+        sub = col.column(align=True)
+        sub.prop(self, "use_v3d_tab_menu")
+        sub.prop(self, "use_pie_click_drag")
+        sub.prop(self, "use_v3d_shade_ex_pie")
 
 
 blender_default = bpy.utils.execfile(os.path.join(DIRNAME, "keymap_data", "blender_default.py"))
@@ -175,6 +208,8 @@ def load():
             ),
             spacebar_action=kc_prefs.spacebar_action,
             v3d_tilde_action=kc_prefs.v3d_tilde_action,
+            use_v3d_mmb_pan=(kc_prefs.v3d_mmb_action == 'PAN'),
+            v3d_alt_mmb_drag_action=kc_prefs.v3d_alt_mmb_drag_action,
             use_select_all_toggle=kc_prefs.use_select_all_toggle,
             use_v3d_tab_menu=kc_prefs.use_v3d_tab_menu,
             use_v3d_shade_ex_pie=kc_prefs.use_v3d_shade_ex_pie,

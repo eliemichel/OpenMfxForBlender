@@ -235,9 +235,6 @@ class device_memory {
   device_memory(const device_memory &) = delete;
   device_memory &operator=(const device_memory &) = delete;
 
-  /* But moving is possible. */
-  device_memory(device_memory &&);
-
   /* Host allocation on the device. All host_pointer memory should be
    * allocated with these functions, for devices that support using
    * the same pointer for host and device. */
@@ -273,11 +270,6 @@ template<typename T> class device_only_memory : public device_memory {
   virtual ~device_only_memory()
   {
     free();
-  }
-
-  device_only_memory(device_only_memory &&other)
-      : device_memory(static_cast<device_memory &&>(other))
-  {
   }
 
   void alloc_to_device(size_t num, bool shrink_to_fit = true)
@@ -336,10 +328,6 @@ template<typename T> class device_vector : public device_memory {
   virtual ~device_vector()
   {
     free();
-  }
-
-  device_vector(device_vector &&other) : device_memory(static_cast<device_memory &&>(other))
-  {
   }
 
   /* Host memory allocation. */
@@ -437,6 +425,11 @@ template<typename T> class device_vector : public device_memory {
   void copy_to_device()
   {
     device_copy_to();
+  }
+
+  void copy_from_device()
+  {
+    device_copy_from(0, data_width, data_height, sizeof(T));
   }
 
   void copy_from_device(int y, int w, int h)

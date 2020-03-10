@@ -40,11 +40,11 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
-#include "BKE_mirror.h"
+#include "BKE_mesh_mirror.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
@@ -74,6 +74,9 @@
 
 #include "object_intern.h"  // own include
 
+/* TODO(sebpa): unstable, can lead to unrecoverable errors. */
+// #define USE_MESH_CURVATURE
+
 static bool object_remesh_poll(bContext *C)
 {
   Object *ob = CTX_data_active_object(C);
@@ -83,18 +86,18 @@ static bool object_remesh_poll(bContext *C)
   }
 
   if (BKE_object_is_in_editmode(ob)) {
-    CTX_wm_operator_poll_msg_set(C, "The remesher cannot run from edit mode.");
+    CTX_wm_operator_poll_msg_set(C, "The remesher cannot run from edit mode");
     return false;
   }
 
   if (ob->mode == OB_MODE_SCULPT && ob->sculpt->bm) {
-    CTX_wm_operator_poll_msg_set(C, "The remesher cannot run with dyntopo activated.");
+    CTX_wm_operator_poll_msg_set(C, "The remesher cannot run with dyntopo activated");
     return false;
   }
 
   if (modifiers_usesMultires(ob)) {
     CTX_wm_operator_poll_msg_set(
-        C, "The remesher cannot run with a Multires modifier in the modifier stack.");
+        C, "The remesher cannot run with a Multires modifier in the modifier stack");
     return false;
   }
 
@@ -109,12 +112,8 @@ static int voxel_remesh_exec(bContext *C, wmOperator *op)
   Mesh *new_mesh;
 
   if (mesh->remesh_voxel_size <= 0.0f) {
-    BKE_report(op->reports, RPT_ERROR, "Voxel remesher cannot run with a voxel size of 0.0.");
+    BKE_report(op->reports, RPT_ERROR, "Voxel remesher cannot run with a voxel size of 0.0");
     return OPERATOR_CANCELLED;
-  }
-
-  if (ob->mode == OB_MODE_SCULPT) {
-    ED_sculpt_undo_geometry_begin(ob);
   }
 
   float isovalue = 0.0f;
@@ -126,7 +125,12 @@ static int voxel_remesh_exec(bContext *C, wmOperator *op)
       mesh, mesh->remesh_voxel_size, mesh->remesh_voxel_adaptivity, isovalue);
 
   if (!new_mesh) {
+    BKE_report(op->reports, RPT_ERROR, "Voxel remesher failed to create mesh");
     return OPERATOR_CANCELLED;
+  }
+
+  if (ob->mode == OB_MODE_SCULPT) {
+    ED_sculpt_undo_geometry_begin(ob, op->type->name);
   }
 
   if (mesh->flag & ME_REMESH_FIX_POLES && mesh->remesh_voxel_adaptivity <= 0.0f) {
@@ -134,14 +138,21 @@ static int voxel_remesh_exec(bContext *C, wmOperator *op)
     BKE_mesh_calc_normals(new_mesh);
   }
 
-  if (mesh->flag & ME_REMESH_REPROJECT_VOLUME) {
+  if (mesh->flag & ME_REMESH_REPROJECT_VOLUME || mesh->flag & ME_REMESH_REPROJECT_PAINT_MASK ||
+      mesh->flag & ME_REMESH_REPROJECT_SCULPT_FACE_SETS) {
     BKE_mesh_runtime_clear_geometry(mesh);
+  }
+
+  if (mesh->flag & ME_REMESH_REPROJECT_VOLUME) {
     BKE_shrinkwrap_remesh_target_project(new_mesh, mesh, ob);
   }
 
   if (mesh->flag & ME_REMESH_REPROJECT_PAINT_MASK) {
-    BKE_mesh_runtime_clear_geometry(mesh);
-    BKE_remesh_reproject_paint_mask(new_mesh, mesh);
+    BKE_mesh_remesh_reproject_paint_mask(new_mesh, mesh);
+  }
+
+  if (mesh->flag & ME_REMESH_REPROJECT_SCULPT_FACE_SETS) {
+    BKE_remesh_reproject_sculpt_face_sets(new_mesh, mesh);
   }
 
   BKE_mesh_nomain_to_mesh(new_mesh, mesh, ob, &CD_MASK_MESH, true);
@@ -213,6 +224,7 @@ typedef struct QuadriFlowJob {
   bool smooth_normals;
 
   int success;
+  bool is_nonblocking_job;
 } QuadriFlowJob;
 
 static bool mesh_is_manifold_consistent(Mesh *mesh)
@@ -308,7 +320,7 @@ static void quadriflow_update_job(void *customdata, float progress, int *cancel)
 
 static Mesh *remesh_symmetry_bisect(Main *bmain, Mesh *mesh, eSymmetryAxes symmetry_axes)
 {
-  MirrorModifierData mmd = {0};
+  MirrorModifierData mmd = {{0}};
   mmd.tolerance = QUADRIFLOW_MIRROR_BISECT_TOLERANCE;
 
   Mesh *mesh_bisect, *mesh_bisect_temp;
@@ -327,7 +339,8 @@ static Mesh *remesh_symmetry_bisect(Main *bmain, Mesh *mesh, eSymmetryAxes symme
       zero_v3(plane_no);
       plane_no[axis] = -1.0f;
       mesh_bisect_temp = mesh_bisect;
-      mesh_bisect = BKE_mirror_bisect_on_mirror_plane(&mmd, mesh_bisect, axis, plane_co, plane_no);
+      mesh_bisect = BKE_mesh_mirror_bisect_on_mirror_plane(
+          &mmd, mesh_bisect, axis, plane_co, plane_no);
       if (mesh_bisect_temp != mesh_bisect) {
         BKE_id_free(bmain, mesh_bisect_temp);
       }
@@ -341,7 +354,7 @@ static Mesh *remesh_symmetry_bisect(Main *bmain, Mesh *mesh, eSymmetryAxes symme
 
 static Mesh *remesh_symmetry_mirror(Object *ob, Mesh *mesh, eSymmetryAxes symmetry_axes)
 {
-  MirrorModifierData mmd = {0};
+  MirrorModifierData mmd = {{0}};
   mmd.tolerance = QUADRIFLOW_MIRROR_BISECT_TOLERANCE;
   Mesh *mesh_mirror, *mesh_mirror_temp;
 
@@ -356,7 +369,7 @@ static Mesh *remesh_symmetry_mirror(Object *ob, Mesh *mesh, eSymmetryAxes symmet
       mmd.flag = 0;
       mmd.flag &= MOD_MIR_AXIS_X << i;
       mesh_mirror_temp = mesh_mirror;
-      mesh_mirror = BKE_mirror_apply_mirror_on_axis(&mmd, NULL, ob, mesh_mirror, axis);
+      mesh_mirror = BKE_mesh_mirror_apply_mirror_on_axis(&mmd, NULL, ob, mesh_mirror, axis);
       if (mesh_mirror_temp != mesh_mirror) {
         BKE_id_free(NULL, mesh_mirror_temp);
       }
@@ -375,7 +388,9 @@ static void quadriflow_start_job(void *customdata, short *stop, short *do_update
   qj->progress = progress;
   qj->success = 1;
 
-  G.is_break = false; /* XXX shared with render - replace with job 'stop' switch */
+  if (qj->is_nonblocking_job) {
+    G.is_break = false; /* XXX shared with render - replace with job 'stop' switch */
+  }
 
   Object *ob = qj->owner;
   Mesh *mesh = ob->data;
@@ -395,15 +410,19 @@ static void quadriflow_start_job(void *customdata, short *stop, short *do_update
   /* Bisect the input mesh using the paint symmetry settings */
   bisect_mesh = remesh_symmetry_bisect(qj->bmain, bisect_mesh, qj->symmetry_axes);
 
-  new_mesh = BKE_mesh_remesh_quadriflow_to_mesh_nomain(bisect_mesh,
-                                                       qj->target_faces,
-                                                       qj->seed,
-                                                       qj->use_preserve_sharp,
-                                                       qj->use_preserve_boundary ||
-                                                           qj->use_paint_symmetry,
-                                                       qj->use_mesh_curvature,
-                                                       quadriflow_update_job,
-                                                       (void *)qj);
+  new_mesh = BKE_mesh_remesh_quadriflow_to_mesh_nomain(
+      bisect_mesh,
+      qj->target_faces,
+      qj->seed,
+      qj->use_preserve_sharp,
+      (qj->use_preserve_boundary || qj->use_paint_symmetry),
+#ifdef USE_MESH_CURVATURE
+      qj->use_mesh_curvature,
+#else
+      false,
+#endif
+      quadriflow_update_job,
+      (void *)qj);
 
   BKE_id_free(qj->bmain, bisect_mesh);
 
@@ -411,7 +430,7 @@ static void quadriflow_start_job(void *customdata, short *stop, short *do_update
     *do_update = true;
     *stop = 0;
     if (qj->success == 1) {
-      /* This is not a user cancelation event */
+      /* This is not a user cancellation event. */
       qj->success = 0;
     }
     return;
@@ -421,12 +440,12 @@ static void quadriflow_start_job(void *customdata, short *stop, short *do_update
   new_mesh = remesh_symmetry_mirror(qj->owner, new_mesh, qj->symmetry_axes);
 
   if (ob->mode == OB_MODE_SCULPT) {
-    ED_sculpt_undo_geometry_begin(ob);
+    ED_sculpt_undo_geometry_begin(ob, "QuadriFlow Remesh");
   }
 
   if (qj->preserve_paint_mask) {
     BKE_mesh_runtime_clear_geometry(mesh);
-    BKE_remesh_reproject_paint_mask(new_mesh, mesh);
+    BKE_mesh_remesh_reproject_paint_mask(new_mesh, mesh);
   }
 
   BKE_mesh_nomain_to_mesh(new_mesh, mesh, ob, &CD_MASK_MESH, true);
@@ -454,23 +473,25 @@ static void quadriflow_end_job(void *customdata)
 
   Object *ob = qj->owner;
 
-  WM_set_locked_interface(G_MAIN->wm.first, false);
+  if (qj->is_nonblocking_job) {
+    WM_set_locked_interface(G_MAIN->wm.first, false);
+  }
 
   switch (qj->success) {
     case 1:
       DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-      WM_reportf(RPT_INFO, "QuadriFlow: Completed remeshing!");
+      WM_reportf(RPT_INFO, "QuadriFlow: Remeshing completed");
       break;
     case 0:
-      WM_reportf(RPT_ERROR, "QuadriFlow: remeshing failed!");
+      WM_reportf(RPT_ERROR, "QuadriFlow: Remeshing failed");
       break;
     case -1:
-      WM_report(RPT_WARNING, "QuadriFlow: remeshing canceled!");
+      WM_report(RPT_WARNING, "QuadriFlow: Remeshing cancelled");
       break;
     case -2:
       WM_report(RPT_WARNING,
                 "QuadriFlow: The mesh needs to be manifold and have face normals that point in a "
-                "consistent direction.");
+                "consistent direction");
       break;
   }
 }
@@ -490,7 +511,9 @@ static int quadriflow_remesh_exec(bContext *C, wmOperator *op)
   job->use_preserve_sharp = RNA_boolean_get(op->ptr, "use_preserve_sharp");
   job->use_preserve_boundary = RNA_boolean_get(op->ptr, "use_preserve_boundary");
 
+#ifdef USE_MESH_CURVATURE
   job->use_mesh_curvature = RNA_boolean_get(op->ptr, "use_mesh_curvature");
+#endif
 
   job->preserve_paint_mask = RNA_boolean_get(op->ptr, "preserve_paint_mask");
   job->smooth_normals = RNA_boolean_get(op->ptr, "smooth_normals");
@@ -511,21 +534,34 @@ static int quadriflow_remesh_exec(bContext *C, wmOperator *op)
     job->symmetry_axes = 0;
   }
 
-  wmJob *wm_job = WM_jobs_get(CTX_wm_manager(C),
-                              CTX_wm_window(C),
-                              CTX_data_scene(C),
-                              "QuadriFlow Remesh",
-                              WM_JOB_PROGRESS,
-                              WM_JOB_TYPE_QUADRIFLOW_REMESH);
+  if (op->flag == 0) {
+    /* This is called directly from the exec operator, this operation is now blocking */
+    job->is_nonblocking_job = false;
+    short stop = 0, do_update = true;
+    float progress;
+    quadriflow_start_job(job, &stop, &do_update, &progress);
+    quadriflow_end_job(job);
+    quadriflow_free_job(job);
+  }
+  else {
+    /* Non blocking call. For when the operator has been called from the gui */
+    job->is_nonblocking_job = true;
 
-  WM_jobs_customdata_set(wm_job, job, quadriflow_free_job);
-  WM_jobs_timer(wm_job, 0.1, NC_GEOM | ND_DATA, NC_GEOM | ND_DATA);
-  WM_jobs_callbacks(wm_job, quadriflow_start_job, NULL, NULL, quadriflow_end_job);
+    wmJob *wm_job = WM_jobs_get(CTX_wm_manager(C),
+                                CTX_wm_window(C),
+                                CTX_data_scene(C),
+                                "QuadriFlow Remesh",
+                                WM_JOB_PROGRESS,
+                                WM_JOB_TYPE_QUADRIFLOW_REMESH);
 
-  WM_set_locked_interface(CTX_wm_manager(C), true);
+    WM_jobs_customdata_set(wm_job, job, quadriflow_free_job);
+    WM_jobs_timer(wm_job, 0.1, NC_GEOM | ND_DATA, NC_GEOM | ND_DATA);
+    WM_jobs_callbacks(wm_job, quadriflow_start_job, NULL, NULL, quadriflow_end_job);
 
-  WM_jobs_start(CTX_wm_manager(C), wm_job);
+    WM_set_locked_interface(CTX_wm_manager(C), true);
 
+    WM_jobs_start(CTX_wm_manager(C), wm_job);
+  }
   return OPERATOR_FINISHED;
 }
 
@@ -638,7 +674,7 @@ void OBJECT_OT_quadriflow_remesh(wmOperatorType *ot)
                   "use_paint_symmetry",
                   true,
                   "Use Paint Symmetry",
-                  "Generates a symmetrycal mesh using the paint symmetry configuration");
+                  "Generates a symmetrical mesh using the paint symmetry configuration");
 
   RNA_def_boolean(ot->srna,
                   "use_preserve_sharp",
@@ -651,13 +687,13 @@ void OBJECT_OT_quadriflow_remesh(wmOperatorType *ot)
                   false,
                   "Preserve Mesh Boundary",
                   "Try to preserve mesh boundary on the mesh");
-
+#ifdef USE_MESH_CURVATURE
   RNA_def_boolean(ot->srna,
                   "use_mesh_curvature",
                   false,
                   "Use Mesh Curvature",
                   "Take the mesh curvature into account when remeshing");
-
+#endif
   RNA_def_boolean(ot->srna,
                   "preserve_paint_mask",
                   false,

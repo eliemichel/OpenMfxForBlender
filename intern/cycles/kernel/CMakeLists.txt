@@ -36,6 +36,10 @@ set(SRC_CUDA_KERNELS
 )
 
 set(SRC_OPENCL_KERNELS
+  kernels/opencl/kernel_adaptive_stopping.cl
+  kernels/opencl/kernel_adaptive_filter_x.cl
+  kernels/opencl/kernel_adaptive_filter_y.cl
+  kernels/opencl/kernel_adaptive_adjust_samples.cl
   kernels/opencl/kernel_bake.cl
   kernels/opencl/kernel_base.cl
   kernels/opencl/kernel_displace.cl
@@ -94,6 +98,7 @@ set(SRC_BVH_HEADERS
 
 set(SRC_HEADERS
   kernel_accumulate.h
+  kernel_adaptive_sampling.h
   kernel_bake.h
   kernel_camera.h
   kernel_color.h
@@ -129,6 +134,7 @@ set(SRC_HEADERS
   kernel_types.h
   kernel_volume.h
   kernel_work_stealing.h
+  kernel_write_passes.h
 )
 
 set(SRC_KERNELS_CPU_HEADERS
@@ -182,6 +188,7 @@ set(SRC_CLOSURE_HEADERS
 set(SRC_SVM_HEADERS
   svm/svm.h
   svm/svm_ao.h
+  svm/svm_aov.h
   svm/svm_attribute.h
   svm/svm_bevel.h
   svm/svm_blackbody.h
@@ -226,6 +233,7 @@ set(SRC_SVM_HEADERS
   svm/svm_fractal_noise.h
   svm/svm_types.h
   svm/svm_value.h
+  svm/svm_vector_rotate.h
   svm/svm_vector_transform.h
   svm/svm_voronoi.h
   svm/svm_voxel.h
@@ -321,6 +329,10 @@ set(SRC_UTIL_HEADERS
 )
 
 set(SRC_SPLIT_HEADERS
+  split/kernel_adaptive_adjust_samples.h
+  split/kernel_adaptive_filter_x.h
+  split/kernel_adaptive_filter_y.h
+  split/kernel_adaptive_stopping.h
   split/kernel_branched.h
   split/kernel_buffer_update.h
   split/kernel_data_init.h
@@ -389,11 +401,20 @@ if(WITH_CYCLES_CUDA_BINARIES)
   set(cuda_cubins)
 
   macro(CYCLES_CUDA_KERNEL_ADD arch prev_arch name flags sources experimental)
-    set(cuda_cubin ${name}_${arch}.cubin)
+    if(${arch} MATCHES "compute_.*")
+      set(format "ptx")
+    else()
+      set(format "cubin")
+    endif()
+    set(cuda_file ${name}_${arch}.${format})
 
     set(kernel_sources ${sources})
     if(NOT ${prev_arch} STREQUAL "none")
-      set(kernel_sources ${kernel_sources} ${name}_${prev_arch}.cubin)
+      if(${prev_arch} MATCHES "compute_.*")
+        set(kernel_sources ${kernel_sources} ${name}_${prev_arch}.ptx)
+      else()
+        set(kernel_sources ${kernel_sources} ${name}_${prev_arch}.cubin)
+      endif()
     endif()
 
     set(cuda_kernel_src "/kernels/cuda/${name}.cu")
@@ -406,7 +427,7 @@ if(WITH_CYCLES_CUDA_BINARIES)
       -I ${CMAKE_CURRENT_SOURCE_DIR}/..
       -I ${CMAKE_CURRENT_SOURCE_DIR}/kernels/cuda
       --use_fast_math
-      -o ${CMAKE_CURRENT_BINARY_DIR}/${cuda_cubin})
+      -o ${CMAKE_CURRENT_BINARY_DIR}/${cuda_file})
 
     if(${experimental})
       set(cuda_flags ${cuda_flags} -D __KERNEL_EXPERIMENTAL__)
@@ -440,20 +461,21 @@ if(WITH_CYCLES_CUDA_BINARIES)
             -v
             -cuda-toolkit-dir "${CUDA_TOOLKIT_ROOT_DIR}"
         DEPENDS ${kernel_sources} cycles_cubin_cc)
+      set(cuda_file ${cuda_cubin})
     else()
       add_custom_command(
-        OUTPUT ${cuda_cubin}
+        OUTPUT ${cuda_file}
         COMMAND ${CUDA_NVCC_EXECUTABLE}
             -arch=${arch}
             ${CUDA_NVCC_FLAGS}
-            --cubin
+            --${format}
             ${CMAKE_CURRENT_SOURCE_DIR}${cuda_kernel_src}
             --ptxas-options="-v"
             ${cuda_flags}
         DEPENDS ${kernel_sources})
     endif()
-    delayed_install("${CMAKE_CURRENT_BINARY_DIR}" "${cuda_cubin}" ${CYCLES_INSTALL_PATH}/lib)
-    list(APPEND cuda_cubins ${cuda_cubin})
+    delayed_install("${CMAKE_CURRENT_BINARY_DIR}" "${cuda_file}" ${CYCLES_INSTALL_PATH}/lib)
+    list(APPEND cuda_cubins ${cuda_file})
 
     unset(cuda_debug_flags)
   endmacro()

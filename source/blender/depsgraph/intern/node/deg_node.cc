@@ -28,6 +28,7 @@
 #include "BLI_utildefines.h"
 
 #include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
 #include "intern/eval/deg_eval_copy_on_write.h"
 #include "intern/node/deg_node_component.h"
 #include "intern/node/deg_node_factory.h"
@@ -99,6 +100,8 @@ const char *nodeTypeAsString(NodeType type)
       return "CACHE";
     case NodeType::POINT_CACHE:
       return "POINT_CACHE";
+    case NodeType::IMAGE_ANIMATION:
+      return "IMAGE_ANIMATION";
     case NodeType::BATCH_CACHE:
       return "BATCH_CACHE";
     case NodeType::DUPLI:
@@ -156,6 +159,7 @@ eDepsSceneComponentType nodeTypeToSceneComponent(NodeType type)
     case NodeType::PARTICLE_SETTINGS:
     case NodeType::SHADING_PARAMETERS:
     case NodeType::POINT_CACHE:
+    case NodeType::IMAGE_ANIMATION:
     case NodeType::BATCH_CACHE:
     case NodeType::DUPLI:
     case NodeType::SYNCHRONIZATION:
@@ -237,6 +241,7 @@ eDepsObjectComponentType nodeTypeToObjectComponent(NodeType type)
     case NodeType::PARTICLE_SETTINGS:
     case NodeType::SHADING_PARAMETERS:
     case NodeType::POINT_CACHE:
+    case NodeType::IMAGE_ANIMATION:
     case NodeType::BATCH_CACHE:
     case NodeType::DUPLI:
     case NodeType::SYNCHRONIZATION:

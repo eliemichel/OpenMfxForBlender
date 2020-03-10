@@ -43,6 +43,7 @@ static void operatortypes_particle(void)
   WM_operatortype_append(PARTICLE_OT_select_tips);
   WM_operatortype_append(PARTICLE_OT_select_random);
   WM_operatortype_append(PARTICLE_OT_select_linked);
+  WM_operatortype_append(PARTICLE_OT_select_linked_pick);
   WM_operatortype_append(PARTICLE_OT_select_less);
   WM_operatortype_append(PARTICLE_OT_select_more);
 
@@ -126,7 +127,19 @@ static void operatortypes_boids(void)
 
 static void operatortypes_fluid(void)
 {
-  WM_operatortype_append(FLUID_OT_bake);
+  WM_operatortype_append(FLUID_OT_bake_all);
+  WM_operatortype_append(FLUID_OT_free_all);
+  WM_operatortype_append(FLUID_OT_bake_data);
+  WM_operatortype_append(FLUID_OT_free_data);
+  WM_operatortype_append(FLUID_OT_bake_noise);
+  WM_operatortype_append(FLUID_OT_free_noise);
+  WM_operatortype_append(FLUID_OT_bake_mesh);
+  WM_operatortype_append(FLUID_OT_free_mesh);
+  WM_operatortype_append(FLUID_OT_bake_particles);
+  WM_operatortype_append(FLUID_OT_free_particles);
+  WM_operatortype_append(FLUID_OT_bake_guides);
+  WM_operatortype_append(FLUID_OT_free_guides);
+  WM_operatortype_append(FLUID_OT_pause_bake);
 }
 
 /**************************** point cache **********************************/

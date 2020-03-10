@@ -45,7 +45,7 @@
 #include "BKE_editmesh.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
@@ -250,7 +250,7 @@ static void join_mesh_single(Depsgraph *depsgraph,
     if (matmap) {
       /* make mapping for materials */
       for (a = 1; a <= ob_src->totcol; a++) {
-        Material *ma = give_current_material(ob_src, a);
+        Material *ma = BKE_object_material_get(ob_src, a);
 
         for (b = 0; b < totcol; b++) {
           if (ma == matar[b]) {
@@ -391,7 +391,7 @@ int join_mesh_exec(bContext *C, wmOperator *op)
 
   /* obact materials in new main array, is nicer start! */
   for (a = 0; a < ob->totcol; a++) {
-    matar[a] = give_current_material(ob, a + 1);
+    matar[a] = BKE_object_material_get(ob, a + 1);
     id_us_plus((ID *)matar[a]);
     /* increase id->us : will be lowered later */
   }
@@ -429,8 +429,8 @@ int join_mesh_exec(bContext *C, wmOperator *op)
       /* Join this object's vertex groups to the base one's */
       for (dg = ob_iter->defbase.first; dg; dg = dg->next) {
         /* See if this group exists in the object (if it doesn't, add it to the end) */
-        if (!defgroup_find_name(ob, dg->name)) {
-          odg = MEM_callocN(sizeof(bDeformGroup), "join deformGroup");
+        if (!BKE_object_defgroup_find_name(ob, dg->name)) {
+          odg = MEM_mallocN(sizeof(bDeformGroup), "join deformGroup");
           memcpy(odg, dg, sizeof(bDeformGroup));
           BLI_addtail(&ob->defbase, odg);
         }
@@ -443,7 +443,7 @@ int join_mesh_exec(bContext *C, wmOperator *op)
       for (bFaceMap *fmap = ob_iter->fmaps.first; fmap; fmap = fmap->next) {
         /* See if this group exists in the object (if it doesn't, add it to the end) */
         if (BKE_object_facemap_find_name(ob, fmap->name) == NULL) {
-          bFaceMap *fmap_new = MEM_callocN(sizeof(bFaceMap), "join faceMap");
+          bFaceMap *fmap_new = MEM_mallocN(sizeof(bFaceMap), "join faceMap");
           memcpy(fmap_new, fmap, sizeof(bFaceMap));
           BLI_addtail(&ob->fmaps, fmap_new);
         }
@@ -457,7 +457,7 @@ int join_mesh_exec(bContext *C, wmOperator *op)
          * (but only if limits not exceeded yet) */
         if (totcol < MAXMAT) {
           for (a = 1; a <= ob_iter->totcol; a++) {
-            ma = give_current_material(ob_iter, a);
+            ma = BKE_object_material_get(ob_iter, a);
 
             for (b = 0; b < totcol; b++) {
               if (ma == matar[b]) {
@@ -669,7 +669,7 @@ int join_mesh_exec(bContext *C, wmOperator *op)
   ob->totcol = me->totcol = totcol;
 
   /* other mesh users */
-  test_all_objects_materials(bmain, (ID *)me);
+  BKE_objects_materials_test_all(bmain, (ID *)me);
 
   /* free temp copy of destination shapekeys (if applicable) */
   if (nkey) {
@@ -793,19 +793,38 @@ int join_mesh_shapes_exec(bContext *C, wmOperator *op)
 
 static MirrTopoStore_t mesh_topo_store = {NULL, -1. - 1, -1};
 
-/** mode is 's' start, or 'e' end, or 'u' use
+/**
+ * Mode is 's' start, or 'e' end, or 'u' use
  * if end, ob can be NULL.
- * \note, is supposed return -1 on error,
- * which callers are currently checking for, but is not used so far. */
+ * \note This is supposed return -1 on error,
+ * which callers are currently checking for, but is not used so far.
+ */
 int ED_mesh_mirror_topo_table(Object *ob, Mesh *me_eval, char mode)
 {
+
+  Mesh *me_mirror = NULL;
+  BMEditMesh *em_mirror = NULL;
+
+  if (mode != 'e') {
+    Mesh *me = ob->data;
+    if (me_eval != NULL) {
+      me_mirror = me_eval;
+    }
+    else if (me->edit_mesh != NULL) {
+      em_mirror = me->edit_mesh;
+    }
+    else {
+      me_mirror = me;
+    }
+  }
+
   if (mode == 'u') { /* use table */
-    if (ED_mesh_mirrtopo_recalc_check(ob->data, me_eval, &mesh_topo_store)) {
+    if (ED_mesh_mirrtopo_recalc_check(em_mirror, me_mirror, &mesh_topo_store)) {
       ED_mesh_mirror_topo_table(ob, me_eval, 's');
     }
   }
   else if (mode == 's') { /* start table */
-    ED_mesh_mirrtopo_init(ob->data, me_eval, &mesh_topo_store, false);
+    ED_mesh_mirrtopo_init(em_mirror, me_mirror, &mesh_topo_store, false);
   }
   else if (mode == 'e') { /* end table */
     ED_mesh_mirrtopo_free(&mesh_topo_store);
@@ -1148,11 +1167,11 @@ bool ED_mesh_pick_face(bContext *C, Object *ob, const int mval[2], uint dist_px,
     /* sample rect to increase chances of selecting, so that when clicking
      * on an edge in the backbuf, we can still select a face */
     *r_index = DRW_select_buffer_find_nearest_to_point(
-        vc.depsgraph, vc.ar, vc.v3d, mval, 1, me->totpoly + 1, &dist_px);
+        vc.depsgraph, vc.region, vc.v3d, mval, 1, me->totpoly + 1, &dist_px);
   }
   else {
     /* sample only on the exact position */
-    *r_index = DRW_select_buffer_sample_point(vc.depsgraph, vc.ar, vc.v3d, mval);
+    *r_index = DRW_select_buffer_sample_point(vc.depsgraph, vc.region, vc.v3d, mval);
   }
 
   if ((*r_index) == 0 || (*r_index) > (unsigned int)me->totpoly) {
@@ -1166,7 +1185,7 @@ bool ED_mesh_pick_face(bContext *C, Object *ob, const int mval[2], uint dist_px,
 
 static void ed_mesh_pick_face_vert__mpoly_find(
     /* context */
-    struct ARegion *ar,
+    struct ARegion *region,
     const float mval[2],
     /* mesh data (evaluated) */
     const MPoly *mp,
@@ -1182,7 +1201,7 @@ static void ed_mesh_pick_face_vert__mpoly_find(
     float sco[2];
     const int v_idx = ml->v;
     const float *co = mvert[v_idx].co;
-    if (ED_view3d_project_float_object(ar, co, sco, V3D_PROJ_TEST_NOP) == V3D_PROJ_RET_OK) {
+    if (ED_view3d_project_float_object(region, co, sco, V3D_PROJ_TEST_NOP) == V3D_PROJ_RET_OK) {
       const float len_test = len_manhattan_v2v2(mval, sco);
       if (len_test < *r_len_best) {
         *r_len_best = len_test;
@@ -1207,7 +1226,7 @@ bool ED_mesh_pick_face_vert(
   if (ED_mesh_pick_face(C, ob, mval, dist_px, &poly_index)) {
     Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
     Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
-    struct ARegion *ar = CTX_wm_region(C);
+    struct ARegion *region = CTX_wm_region(C);
 
     /* derived mesh to find deformed locations */
     Mesh *me_eval = mesh_get_eval_final(
@@ -1239,14 +1258,19 @@ bool ED_mesh_pick_face_vert(
 
       for (i = 0; i < me_eval_mpoly_len; i++) {
         if (index_mp_to_orig[i] == poly_index) {
-          ed_mesh_pick_face_vert__mpoly_find(
-              ar, mval_f, &me_eval_mpoly[i], me_eval_mvert, me_eval_mloop, &len_best, &v_idx_best);
+          ed_mesh_pick_face_vert__mpoly_find(region,
+                                             mval_f,
+                                             &me_eval_mpoly[i],
+                                             me_eval_mvert,
+                                             me_eval_mloop,
+                                             &len_best,
+                                             &v_idx_best);
         }
       }
     }
     else {
       if (poly_index < me_eval_mpoly_len) {
-        ed_mesh_pick_face_vert__mpoly_find(ar,
+        ed_mesh_pick_face_vert__mpoly_find(region,
                                            mval_f,
                                            &me_eval_mpoly[poly_index],
                                            me_eval_mvert,
@@ -1283,7 +1307,7 @@ bool ED_mesh_pick_face_vert(
 typedef struct VertPickData {
   const MVert *mvert;
   const float *mval_f; /* [2] */
-  ARegion *ar;
+  ARegion *region;
 
   /* runtime */
   float len_best;
@@ -1300,7 +1324,7 @@ static void ed_mesh_pick_vert__mapFunc(void *userData,
   if ((data->mvert[index].flag & ME_HIDE) == 0) {
     float sco[2];
 
-    if (ED_view3d_project_float_object(data->ar, co, sco, V3D_PROJ_TEST_CLIP_DEFAULT) ==
+    if (ED_view3d_project_float_object(data->region, co, sco, V3D_PROJ_TEST_CLIP_DEFAULT) ==
         V3D_PROJ_RET_OK) {
       const float len = len_manhattan_v2v2(data->mval_f, sco);
       if (len < data->len_best) {
@@ -1331,11 +1355,11 @@ bool ED_mesh_pick_vert(
       /* sample rect to increase chances of selecting, so that when clicking
        * on an face in the backbuf, we can still select a vert */
       *r_index = DRW_select_buffer_find_nearest_to_point(
-          vc.depsgraph, vc.ar, vc.v3d, mval, 1, me->totvert + 1, &dist_px);
+          vc.depsgraph, vc.region, vc.v3d, mval, 1, me->totvert + 1, &dist_px);
     }
     else {
       /* sample only on the exact position */
-      *r_index = DRW_select_buffer_sample_point(vc.depsgraph, vc.ar, vc.v3d, mval);
+      *r_index = DRW_select_buffer_sample_point(vc.depsgraph, vc.region, vc.v3d, mval);
     }
 
     if ((*r_index) == 0 || (*r_index) > (uint)me->totvert) {
@@ -1350,8 +1374,8 @@ bool ED_mesh_pick_vert(
 
     /* derived mesh to find deformed locations */
     Mesh *me_eval = mesh_get_eval_final(vc.depsgraph, scene_eval, ob_eval, &CD_MASK_BAREMESH);
-    ARegion *ar = vc.ar;
-    RegionView3D *rv3d = ar->regiondata;
+    ARegion *region = vc.region;
+    RegionView3D *rv3d = region->regiondata;
 
     /* find the vert closest to 'mval' */
     const float mval_f[2] = {(float)mval[0], (float)mval[1]};
@@ -1366,7 +1390,7 @@ bool ED_mesh_pick_vert(
 
     /* setup data */
     data.mvert = me->mvert;
-    data.ar = ar;
+    data.region = region;
     data.mval_f = mval_f;
     data.len_best = FLT_MAX;
     data.v_idx_best = -1;

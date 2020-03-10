@@ -18,14 +18,15 @@
  * \ingroup freestyle
  */
 
+/* clang-format off */
 #include "BlenderStrokeRenderer.h"
 
 #include "../application/AppConfig.h"
 #include "../stroke/Canvas.h"
 
-extern "C" {
 #include "MEM_guardedalloc.h"
 
+extern "C" {
 #include "RNA_access.h"
 #include "RNA_types.h"
 
@@ -45,7 +46,7 @@ extern "C" {
 #include "BKE_idprop.h"
 #include "BKE_global.h"
 #include "BKE_layer.h"
-#include "BKE_library.h" /* free_libblock */
+#include "BKE_lib_id.h" /* free_libblock */
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_node.h"
@@ -67,6 +68,7 @@ extern "C" {
 }
 
 #include <limits.h>
+/* clang-format on */
 
 namespace Freestyle {
 
@@ -118,8 +120,7 @@ BlenderStrokeRenderer::BlenderStrokeRenderer(Render *re, int render_count) : Str
     freestyle_scene->id.properties = IDP_CopyProperty_ex(old_scene->id.properties, 0);
   }
   // Copy eevee render settings.
-  freestyle_scene->eevee = old_scene->eevee;
-  freestyle_scene->eevee.light_cache = NULL;
+  BKE_scene_copy_data_eevee(freestyle_scene, old_scene);
 
   /* Render with transparent background. */
   freestyle_scene->r.alphamode = R_ALPHAPREMUL;
@@ -839,7 +840,7 @@ void BlenderStrokeRenderer::GenerateStrokeMesh(StrokeGroup *group, bool hasTex)
     material_index++;
   }  // loop over strokes
 
-  test_object_materials(freestyle_bmain, object_mesh, (ID *)mesh);
+  BKE_object_materials_test(freestyle_bmain, object_mesh, (ID *)mesh);
 
 #if 0  // XXX
   BLI_assert(mesh->totvert == vertex_index);

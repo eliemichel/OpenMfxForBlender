@@ -53,9 +53,10 @@
 #include "BKE_context.h"
 #include "BKE_crazyspace.h"
 #include "BKE_gpencil.h"
+#include "BKE_idtype.h"
 #include "BKE_image.h"
 #include "BKE_key.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_mesh_runtime.h"
@@ -74,12 +75,93 @@
 
 #include "bmesh.h"
 
+static void palette_init_data(ID *id)
+{
+  Palette *palette = (Palette *)id;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(palette, id));
+
+  /* Enable fake user by default. */
+  id_fake_user_set(&palette->id);
+}
+
+static void palette_copy_data(Main *UNUSED(bmain),
+                              ID *id_dst,
+                              const ID *id_src,
+                              const int UNUSED(flag))
+{
+  Palette *palette_dst = (Palette *)id_dst;
+  const Palette *palette_src = (const Palette *)id_src;
+
+  BLI_duplicatelist(&palette_dst->colors, &palette_src->colors);
+}
+
+static void palette_free_data(ID *id)
+{
+  Palette *palette = (Palette *)id;
+
+  BLI_freelistN(&palette->colors);
+}
+
+IDTypeInfo IDType_ID_PAL = {
+    .id_code = ID_PAL,
+    .id_filter = FILTER_ID_PAL,
+    .main_listbase_index = INDEX_ID_PAL,
+    .struct_size = sizeof(Palette),
+    .name = "Palette",
+    .name_plural = "palettes",
+    .translation_context = BLT_I18NCONTEXT_ID_PALETTE,
+    .flags = 0,
+
+    .init_data = palette_init_data,
+    .copy_data = palette_copy_data,
+    .free_data = palette_free_data,
+    .make_local = NULL,
+};
+
+static void paint_curve_copy_data(Main *UNUSED(bmain),
+                                  ID *id_dst,
+                                  const ID *id_src,
+                                  const int UNUSED(flag))
+{
+  PaintCurve *paint_curve_dst = (PaintCurve *)id_dst;
+  const PaintCurve *paint_curve_src = (const PaintCurve *)id_src;
+
+  if (paint_curve_src->tot_points != 0) {
+    paint_curve_dst->points = MEM_dupallocN(paint_curve_src->points);
+  }
+}
+
+static void paint_curve_free_data(ID *id)
+{
+  PaintCurve *paint_curve = (PaintCurve *)id;
+
+  MEM_SAFE_FREE(paint_curve->points);
+  paint_curve->tot_points = 0;
+}
+
+IDTypeInfo IDType_ID_PC = {
+    .id_code = ID_PC,
+    .id_filter = FILTER_ID_PC,
+    .main_listbase_index = INDEX_ID_PC,
+    .struct_size = sizeof(PaintCurve),
+    .name = "PaintCurve",
+    .name_plural = "paint_curves",
+    .translation_context = BLT_I18NCONTEXT_ID_PAINTCURVE,
+    .flags = 0,
+
+    .init_data = NULL,
+    .copy_data = paint_curve_copy_data,
+    .free_data = paint_curve_free_data,
+    .make_local = NULL,
+};
+
 const char PAINT_CURSOR_SCULPT[3] = {255, 100, 100};
 const char PAINT_CURSOR_VERTEX_PAINT[3] = {255, 255, 255};
 const char PAINT_CURSOR_WEIGHT_PAINT[3] = {200, 200, 255};
 const char PAINT_CURSOR_TEXTURE_PAINT[3] = {255, 255, 255};
 
-static eOverlayControlFlags overlay_flags = 0;
+static ePaintOverlayControlFlags overlay_flags = 0;
 
 void BKE_paint_invalidate_overlay_tex(Scene *scene, ViewLayer *view_layer, const Tex *tex)
 {
@@ -120,7 +202,7 @@ void BKE_paint_invalidate_overlay_all(void)
                     PAINT_OVERLAY_INVALID_TEXTURE_PRIMARY | PAINT_OVERLAY_INVALID_CURVE);
 }
 
-eOverlayControlFlags BKE_paint_get_overlay_flags(void)
+ePaintOverlayControlFlags BKE_paint_get_overlay_flags(void)
 {
   return overlay_flags;
 }
@@ -143,7 +225,7 @@ void BKE_paint_set_overlay_override(eOverlayFlags flags)
   }
 }
 
-void BKE_paint_reset_overlay_invalid(eOverlayControlFlags flag)
+void BKE_paint_reset_overlay_invalid(ePaintOverlayControlFlags flag)
 {
   overlay_flags &= ~(flag);
 }
@@ -152,6 +234,9 @@ bool BKE_paint_ensure_from_paintmode(Scene *sce, ePaintMode mode)
 {
   ToolSettings *ts = sce->toolsettings;
   Paint **paint_ptr = NULL;
+  /* Some paint modes don't store paint settings as pointer, for these this can be set and
+   * referenced by paint_ptr. */
+  Paint *paint_tmp = NULL;
 
   switch (mode) {
     case PAINT_MODE_SCULPT:
@@ -165,6 +250,8 @@ bool BKE_paint_ensure_from_paintmode(Scene *sce, ePaintMode mode)
       break;
     case PAINT_MODE_TEXTURE_2D:
     case PAINT_MODE_TEXTURE_3D:
+      paint_tmp = (Paint *)&ts->imapaint;
+      paint_ptr = &paint_tmp;
       break;
     case PAINT_MODE_SCULPT_UV:
       paint_ptr = (Paint **)&ts->uvsculpt;
@@ -172,10 +259,19 @@ bool BKE_paint_ensure_from_paintmode(Scene *sce, ePaintMode mode)
     case PAINT_MODE_GPENCIL:
       paint_ptr = (Paint **)&ts->gp_paint;
       break;
+    case PAINT_MODE_VERTEX_GPENCIL:
+      paint_ptr = (Paint **)&ts->gp_vertexpaint;
+      break;
+    case PAINT_MODE_SCULPT_GPENCIL:
+      paint_ptr = (Paint **)&ts->gp_sculptpaint;
+      break;
+    case PAINT_MODE_WEIGHT_GPENCIL:
+      paint_ptr = (Paint **)&ts->gp_weightpaint;
+      break;
     case PAINT_MODE_INVALID:
       break;
   }
-  if (paint_ptr && (*paint_ptr == NULL)) {
+  if (paint_ptr) {
     BKE_paint_ensure(ts, paint_ptr);
     return true;
   }
@@ -201,6 +297,12 @@ Paint *BKE_paint_get_active_from_paintmode(Scene *sce, ePaintMode mode)
         return &ts->uvsculpt->paint;
       case PAINT_MODE_GPENCIL:
         return &ts->gp_paint->paint;
+      case PAINT_MODE_VERTEX_GPENCIL:
+        return &ts->gp_vertexpaint->paint;
+      case PAINT_MODE_SCULPT_GPENCIL:
+        return &ts->gp_sculptpaint->paint;
+      case PAINT_MODE_WEIGHT_GPENCIL:
+        return &ts->gp_weightpaint->paint;
       case PAINT_MODE_INVALID:
         return NULL;
       default:
@@ -227,6 +329,12 @@ const EnumPropertyItem *BKE_paint_get_tool_enum_from_paintmode(ePaintMode mode)
       return rna_enum_brush_uv_sculpt_tool_items;
     case PAINT_MODE_GPENCIL:
       return rna_enum_brush_gpencil_types_items;
+    case PAINT_MODE_VERTEX_GPENCIL:
+      return rna_enum_brush_gpencil_vertex_types_items;
+    case PAINT_MODE_SCULPT_GPENCIL:
+      return rna_enum_brush_gpencil_sculpt_types_items;
+    case PAINT_MODE_WEIGHT_GPENCIL:
+      return rna_enum_brush_gpencil_weight_types_items;
     case PAINT_MODE_INVALID:
       break;
   }
@@ -249,6 +357,12 @@ const char *BKE_paint_get_tool_prop_id_from_paintmode(ePaintMode mode)
       return "uv_sculpt_tool";
     case PAINT_MODE_GPENCIL:
       return "gpencil_tool";
+    case PAINT_MODE_VERTEX_GPENCIL:
+      return "gpencil_vertex_tool";
+    case PAINT_MODE_SCULPT_GPENCIL:
+      return "gpencil_sculpt_tool";
+    case PAINT_MODE_WEIGHT_GPENCIL:
+      return "gpencil_weight_tool";
     default:
       /* invalid paint mode */
       return NULL;
@@ -272,6 +386,12 @@ Paint *BKE_paint_get_active(Scene *sce, ViewLayer *view_layer)
           return &ts->imapaint.paint;
         case OB_MODE_PAINT_GPENCIL:
           return &ts->gp_paint->paint;
+        case OB_MODE_VERTEX_GPENCIL:
+          return &ts->gp_vertexpaint->paint;
+        case OB_MODE_SCULPT_GPENCIL:
+          return &ts->gp_sculptpaint->paint;
+        case OB_MODE_WEIGHT_GPENCIL:
+          return &ts->gp_weightpaint->paint;
         case OB_MODE_EDIT:
           return &ts->uvsculpt->paint;
         default:
@@ -386,6 +506,12 @@ ePaintMode BKE_paintmode_get_from_tool(const struct bToolRef *tref)
         return PAINT_MODE_GPENCIL;
       case CTX_MODE_PAINT_TEXTURE:
         return PAINT_MODE_TEXTURE_3D;
+      case CTX_MODE_VERTEX_GPENCIL:
+        return PAINT_MODE_VERTEX_GPENCIL;
+      case CTX_MODE_SCULPT_GPENCIL:
+        return PAINT_MODE_SCULPT_GPENCIL;
+      case CTX_MODE_WEIGHT_GPENCIL:
+        return PAINT_MODE_WEIGHT_GPENCIL;
     }
   }
   else if (tref->space_type == SPACE_IMAGE) {
@@ -442,6 +568,18 @@ void BKE_paint_runtime_init(const ToolSettings *ts, Paint *paint)
     paint->runtime.tool_offset = offsetof(Brush, gpencil_tool);
     paint->runtime.ob_mode = OB_MODE_PAINT_GPENCIL;
   }
+  else if (paint == &ts->gp_vertexpaint->paint) {
+    paint->runtime.tool_offset = offsetof(Brush, gpencil_vertex_tool);
+    paint->runtime.ob_mode = OB_MODE_VERTEX_GPENCIL;
+  }
+  else if (paint == &ts->gp_sculptpaint->paint) {
+    paint->runtime.tool_offset = offsetof(Brush, gpencil_sculpt_tool);
+    paint->runtime.ob_mode = OB_MODE_SCULPT_GPENCIL;
+  }
+  else if (paint == &ts->gp_weightpaint->paint) {
+    paint->runtime.tool_offset = offsetof(Brush, gpencil_weight_tool);
+    paint->runtime.ob_mode = OB_MODE_WEIGHT_GPENCIL;
+  }
   else {
     BLI_assert(0);
   }
@@ -463,17 +601,16 @@ uint BKE_paint_get_brush_tool_offset_from_paintmode(const ePaintMode mode)
       return offsetof(Brush, uv_sculpt_tool);
     case PAINT_MODE_GPENCIL:
       return offsetof(Brush, gpencil_tool);
+    case PAINT_MODE_VERTEX_GPENCIL:
+      return offsetof(Brush, gpencil_vertex_tool);
+    case PAINT_MODE_SCULPT_GPENCIL:
+      return offsetof(Brush, gpencil_sculpt_tool);
+    case PAINT_MODE_WEIGHT_GPENCIL:
+      return offsetof(Brush, gpencil_weight_tool);
     case PAINT_MODE_INVALID:
       break; /* We don't use these yet. */
   }
   return 0;
-}
-
-/** Free (or release) any data used by this paint curve (does not free the pcurve itself). */
-void BKE_paint_curve_free(PaintCurve *pc)
-{
-  MEM_SAFE_FREE(pc->points);
-  pc->tot_points = 0;
 }
 
 PaintCurve *BKE_paint_curve_add(Main *bmain, const char *name)
@@ -485,36 +622,11 @@ PaintCurve *BKE_paint_curve_add(Main *bmain, const char *name)
   return pc;
 }
 
-/**
- * Only copy internal data of PaintCurve ID from source to
- * already allocated/initialized destination.
- * You probably never want to use that directly,
- * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
- *
- * WARNING! This function will not handle ID user count!
- *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
- */
-void BKE_paint_curve_copy_data(Main *UNUSED(bmain),
-                               PaintCurve *pc_dst,
-                               const PaintCurve *pc_src,
-                               const int UNUSED(flag))
-{
-  if (pc_src->tot_points != 0) {
-    pc_dst->points = MEM_dupallocN(pc_src->points);
-  }
-}
-
 PaintCurve *BKE_paint_curve_copy(Main *bmain, const PaintCurve *pc)
 {
   PaintCurve *pc_copy;
   BKE_id_copy(bmain, &pc->id, (ID **)&pc_copy);
   return pc_copy;
-}
-
-void BKE_paint_curve_make_local(Main *bmain, PaintCurve *pc, const bool lib_local)
-{
-  BKE_id_make_local_generic(bmain, &pc->id, true, lib_local);
 }
 
 Palette *BKE_paint_palette(Paint *p)
@@ -574,46 +686,11 @@ Palette *BKE_palette_add(Main *bmain, const char *name)
   return palette;
 }
 
-/**
- * Only copy internal data of Palette ID from source
- * to already allocated/initialized destination.
- * You probably never want to use that directly,
- * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
- *
- * WARNING! This function will not handle ID user count!
- *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
- */
-void BKE_palette_copy_data(Main *UNUSED(bmain),
-                           Palette *palette_dst,
-                           const Palette *palette_src,
-                           const int UNUSED(flag))
-{
-  BLI_duplicatelist(&palette_dst->colors, &palette_src->colors);
-}
-
 Palette *BKE_palette_copy(Main *bmain, const Palette *palette)
 {
   Palette *palette_copy;
   BKE_id_copy(bmain, &palette->id, (ID **)&palette_copy);
   return palette_copy;
-}
-
-void BKE_palette_make_local(Main *bmain, Palette *palette, const bool lib_local)
-{
-  BKE_id_make_local_generic(bmain, &palette->id, true, lib_local);
-}
-
-void BKE_palette_init(Palette *palette)
-{
-  /* Enable fake user by default. */
-  id_fake_user_set(&palette->id);
-}
-
-/** Free (or release) any data used by this palette (does not free the palette itself). */
-void BKE_palette_free(Palette *palette)
-{
-  BLI_freelistN(&palette->colors);
 }
 
 PaletteColor *BKE_palette_color_add(Palette *palette)
@@ -626,6 +703,204 @@ PaletteColor *BKE_palette_color_add(Palette *palette)
 bool BKE_palette_is_empty(const struct Palette *palette)
 {
   return BLI_listbase_is_empty(&palette->colors);
+}
+
+/* helper function to sort using qsort */
+static int palettecolor_compare_hsv(const void *a1, const void *a2)
+{
+  const tPaletteColorHSV *ps1 = a1, *ps2 = a2;
+
+  /* Hue */
+  if (ps1->h > ps2->h) {
+    return 1;
+  }
+  else if (ps1->h < ps2->h) {
+    return -1;
+  }
+
+  /* Saturation. */
+  if (ps1->s > ps2->s) {
+    return 1;
+  }
+  else if (ps1->s < ps2->s) {
+    return -1;
+  }
+
+  /* Value. */
+  if (1.0f - ps1->v > 1.0f - ps2->v) {
+    return 1;
+  }
+  else if (1.0f - ps1->v < 1.0f - ps2->v) {
+    return -1;
+  }
+
+  return 0;
+}
+
+/* helper function to sort using qsort */
+static int palettecolor_compare_svh(const void *a1, const void *a2)
+{
+  const tPaletteColorHSV *ps1 = a1, *ps2 = a2;
+
+  /* Saturation. */
+  if (ps1->s > ps2->s) {
+    return 1;
+  }
+  else if (ps1->s < ps2->s) {
+    return -1;
+  }
+
+  /* Value. */
+  if (1.0f - ps1->v > 1.0f - ps2->v) {
+    return 1;
+  }
+  else if (1.0f - ps1->v < 1.0f - ps2->v) {
+    return -1;
+  }
+
+  /* Hue */
+  if (ps1->h > ps2->h) {
+    return 1;
+  }
+  else if (ps1->h < ps2->h) {
+    return -1;
+  }
+
+  return 0;
+}
+
+static int palettecolor_compare_vhs(const void *a1, const void *a2)
+{
+  const tPaletteColorHSV *ps1 = a1, *ps2 = a2;
+
+  /* Value. */
+  if (1.0f - ps1->v > 1.0f - ps2->v) {
+    return 1;
+  }
+  else if (1.0f - ps1->v < 1.0f - ps2->v) {
+    return -1;
+  }
+
+  /* Hue */
+  if (ps1->h > ps2->h) {
+    return 1;
+  }
+  else if (ps1->h < ps2->h) {
+    return -1;
+  }
+
+  /* Saturation. */
+  if (ps1->s > ps2->s) {
+    return 1;
+  }
+  else if (ps1->s < ps2->s) {
+    return -1;
+  }
+
+  return 0;
+}
+
+static int palettecolor_compare_luminance(const void *a1, const void *a2)
+{
+  const tPaletteColorHSV *ps1 = a1, *ps2 = a2;
+
+  float lumi1 = (ps1->rgb[0] + ps1->rgb[1] + ps1->rgb[2]) / 3.0f;
+  float lumi2 = (ps2->rgb[0] + ps2->rgb[1] + ps2->rgb[2]) / 3.0f;
+
+  if (lumi1 > lumi2) {
+    return -1;
+  }
+  else if (lumi1 < lumi2) {
+    return 1;
+  }
+
+  return 0;
+}
+
+void BKE_palette_sort_hsv(tPaletteColorHSV *color_array, const int totcol)
+{
+  /* Sort by Hue , Saturation and Value. */
+  qsort(color_array, totcol, sizeof(tPaletteColorHSV), palettecolor_compare_hsv);
+}
+
+void BKE_palette_sort_svh(tPaletteColorHSV *color_array, const int totcol)
+{
+  /* Sort by Saturation, Value and Hue. */
+  qsort(color_array, totcol, sizeof(tPaletteColorHSV), palettecolor_compare_svh);
+}
+
+void BKE_palette_sort_vhs(tPaletteColorHSV *color_array, const int totcol)
+{
+  /* Sort by Saturation, Value and Hue. */
+  qsort(color_array, totcol, sizeof(tPaletteColorHSV), palettecolor_compare_vhs);
+}
+
+void BKE_palette_sort_luminance(tPaletteColorHSV *color_array, const int totcol)
+{
+  /* Sort by Luminance (calculated with the average, enough for sorting). */
+  qsort(color_array, totcol, sizeof(tPaletteColorHSV), palettecolor_compare_luminance);
+}
+
+bool BKE_palette_from_hash(Main *bmain, GHash *color_table, const char *name, const bool linear)
+{
+  tPaletteColorHSV *color_array = NULL;
+  tPaletteColorHSV *col_elm = NULL;
+  bool done = false;
+
+  const int totpal = BLI_ghash_len(color_table);
+
+  if (totpal > 0) {
+    color_array = MEM_calloc_arrayN(totpal, sizeof(tPaletteColorHSV), __func__);
+    /* Put all colors in an array. */
+    GHashIterator gh_iter;
+    int t = 0;
+    GHASH_ITER (gh_iter, color_table) {
+      const uint col = POINTER_AS_INT(BLI_ghashIterator_getValue(&gh_iter));
+      float r, g, b;
+      float h, s, v;
+      cpack_to_rgb(col, &r, &g, &b);
+      rgb_to_hsv(r, g, b, &h, &s, &v);
+
+      col_elm = &color_array[t];
+      col_elm->rgb[0] = r;
+      col_elm->rgb[1] = g;
+      col_elm->rgb[2] = b;
+      col_elm->h = h;
+      col_elm->s = s;
+      col_elm->v = v;
+      t++;
+    }
+  }
+
+  /* Create the Palette. */
+  if (totpal > 0) {
+    /* Sort by Hue and saturation. */
+    BKE_palette_sort_hsv(color_array, totpal);
+
+    Palette *palette = BKE_palette_add(bmain, name);
+    if (palette) {
+      for (int i = 0; i < totpal; i++) {
+        col_elm = &color_array[i];
+        PaletteColor *palcol = BKE_palette_color_add(palette);
+        if (palcol) {
+          copy_v3_v3(palcol->rgb, col_elm->rgb);
+          if (linear) {
+            linearrgb_to_srgb_v3_v3(palcol->rgb, palcol->rgb);
+          }
+        }
+      }
+      done = true;
+    }
+  }
+  else {
+    done = false;
+  }
+
+  if (totpal > 0) {
+    MEM_SAFE_FREE(color_array);
+  }
+
+  return done;
 }
 
 /* are we in vertex paint or weight paint face select mode? */
@@ -655,19 +930,19 @@ bool BKE_paint_select_elem_test(Object *ob)
 
 void BKE_paint_cavity_curve_preset(Paint *p, int preset)
 {
-  CurveMap *cm = NULL;
+  CurveMapping *cumap = NULL;
+  CurveMap *cuma = NULL;
 
   if (!p->cavity_curve) {
     p->cavity_curve = BKE_curvemapping_add(1, 0, 0, 1, 1);
   }
+  cumap = p->cavity_curve;
+  cumap->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
+  cumap->preset = preset;
 
-  cm = p->cavity_curve->cm;
-  cm->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
-
-  p->cavity_curve->preset = preset;
-  BKE_curvemap_reset(
-      cm, &p->cavity_curve->clipr, p->cavity_curve->preset, CURVEMAP_SLOPE_POSITIVE);
-  BKE_curvemapping_changed(p->cavity_curve, false);
+  cuma = cumap->cm;
+  BKE_curvemap_reset(cuma, &cumap->clipr, cumap->preset, CURVEMAP_SLOPE_POSITIVE);
+  BKE_curvemapping_changed(cumap, false);
 }
 
 eObjectMode BKE_paint_object_mode_from_paintmode(ePaintMode mode)
@@ -693,26 +968,39 @@ eObjectMode BKE_paint_object_mode_from_paintmode(ePaintMode mode)
 /**
  * Call when entering each respective paint mode.
  */
-bool BKE_paint_ensure(const ToolSettings *ts, struct Paint **r_paint)
+bool BKE_paint_ensure(ToolSettings *ts, struct Paint **r_paint)
 {
   Paint *paint = NULL;
   if (*r_paint) {
-    /* Note: 'ts->imapaint' is ignored, it's not allocated. */
-    BLI_assert(ELEM(*r_paint,
-                    &ts->gp_paint->paint,
-                    &ts->sculpt->paint,
-                    &ts->vpaint->paint,
-                    &ts->wpaint->paint,
-                    &ts->uvsculpt->paint));
+    /* Tool offset should never be 0 for initialized paint settings, so it's a reliable way to
+     * check if already initialized. */
+    if ((*r_paint)->runtime.tool_offset == 0) {
+      /* Currently only image painting is initialized this way, others have to be allocated. */
+      BLI_assert(ELEM(*r_paint, (Paint *)&ts->imapaint));
 
+      BKE_paint_runtime_init(ts, *r_paint);
+    }
+    else {
+      BLI_assert(ELEM(*r_paint,
+                      /* Cast is annoying, but prevent NULL-pointer access. */
+                      (Paint *)ts->gp_paint,
+                      (Paint *)ts->gp_vertexpaint,
+                      (Paint *)ts->gp_sculptpaint,
+                      (Paint *)ts->gp_weightpaint,
+                      (Paint *)ts->sculpt,
+                      (Paint *)ts->vpaint,
+                      (Paint *)ts->wpaint,
+                      (Paint *)ts->uvsculpt,
+                      (Paint *)&ts->imapaint));
 #ifdef DEBUG
-    struct Paint paint_test = **r_paint;
-    BKE_paint_runtime_init(ts, *r_paint);
-    /* Swap so debug doesn't hide errors when release fails. */
-    SWAP(Paint, **r_paint, paint_test);
-    BLI_assert(paint_test.runtime.ob_mode == (*r_paint)->runtime.ob_mode);
-    BLI_assert(paint_test.runtime.tool_offset == (*r_paint)->runtime.tool_offset);
+      struct Paint paint_test = **r_paint;
+      BKE_paint_runtime_init(ts, *r_paint);
+      /* Swap so debug doesn't hide errors when release fails. */
+      SWAP(Paint, **r_paint, paint_test);
+      BLI_assert(paint_test.runtime.ob_mode == (*r_paint)->runtime.ob_mode);
+      BLI_assert(paint_test.runtime.tool_offset == (*r_paint)->runtime.tool_offset);
 #endif
+    }
     return true;
   }
 
@@ -734,9 +1022,24 @@ bool BKE_paint_ensure(const ToolSettings *ts, struct Paint **r_paint)
     GpPaint *data = MEM_callocN(sizeof(*data), __func__);
     paint = &data->paint;
   }
+  else if ((GpVertexPaint **)r_paint == &ts->gp_vertexpaint) {
+    GpVertexPaint *data = MEM_callocN(sizeof(*data), __func__);
+    paint = &data->paint;
+  }
+  else if ((GpSculptPaint **)r_paint == &ts->gp_sculptpaint) {
+    GpSculptPaint *data = MEM_callocN(sizeof(*data), __func__);
+    paint = &data->paint;
+  }
+  else if ((GpWeightPaint **)r_paint == &ts->gp_weightpaint) {
+    GpWeightPaint *data = MEM_callocN(sizeof(*data), __func__);
+    paint = &data->paint;
+  }
   else if ((UvSculpt **)r_paint == &ts->uvsculpt) {
     UvSculpt *data = MEM_callocN(sizeof(*data), __func__);
     paint = &data->paint;
+  }
+  else if (*r_paint == &ts->imapaint.paint) {
+    paint = &ts->imapaint.paint;
   }
 
   paint->flags |= PAINT_SHOW_BRUSH;
@@ -752,6 +1055,8 @@ void BKE_paint_init(Main *bmain, Scene *sce, ePaintMode mode, const char col[3])
 {
   UnifiedPaintSettings *ups = &sce->toolsettings->unified_paint_settings;
   Paint *paint = BKE_paint_get_active_from_paintmode(sce, mode);
+
+  BKE_paint_ensure_from_paintmode(sce, mode);
 
   /* If there's no brush, create one */
   if (PAINT_MODE_HAS_BRUSH(mode)) {
@@ -828,7 +1133,7 @@ bool paint_is_face_hidden(const MLoopTri *lt, const MVert *mvert, const MLoop *m
 /* returns non-zero if any of the corners of the grid
  * face whose inner corner is at (x, y) are hidden,
  * zero otherwise */
-bool paint_is_grid_face_hidden(const unsigned int *grid_hidden, int gridsize, int x, int y)
+bool paint_is_grid_face_hidden(const uint *grid_hidden, int gridsize, int x, int y)
 {
   /* skip face if any of its corners are hidden */
   return (BLI_BITMAP_TEST(grid_hidden, y * gridsize + x) ||
@@ -853,7 +1158,7 @@ bool paint_is_bmesh_face_hidden(BMFace *f)
   return false;
 }
 
-float paint_grid_paint_mask(const GridPaintMask *gpm, unsigned level, unsigned x, unsigned y)
+float paint_grid_paint_mask(const GridPaintMask *gpm, uint level, uint x, uint y)
 {
   int factor = BKE_ccg_factor(level, gpm->level);
   int gridsize = BKE_ccg_gridsize(gpm->level);
@@ -1001,15 +1306,12 @@ static void sculptsession_free_pbvh(Object *object)
     ss->pbvh = NULL;
   }
 
-  if (ss->pmap) {
-    MEM_freeN(ss->pmap);
-    ss->pmap = NULL;
-  }
+  MEM_SAFE_FREE(ss->pmap);
 
-  if (ss->pmap_mem) {
-    MEM_freeN(ss->pmap_mem);
-    ss->pmap_mem = NULL;
-  }
+  MEM_SAFE_FREE(ss->pmap_mem);
+
+  MEM_SAFE_FREE(ss->preview_vert_index_list);
+  ss->preview_vert_index_count = 0;
 }
 
 void BKE_sculptsession_bm_to_me_for_render(Object *object)
@@ -1076,6 +1378,14 @@ void BKE_sculptsession_free(Object *ob)
 
     if (ss->preview_vert_index_list) {
       MEM_freeN(ss->preview_vert_index_list);
+    }
+
+    if (ss->pose_ik_chain_preview) {
+      for (int i = 0; i < ss->pose_ik_chain_preview->tot_segments; i++) {
+        MEM_SAFE_FREE(ss->pose_ik_chain_preview->segments[i].weights);
+      }
+      MEM_SAFE_FREE(ss->pose_ik_chain_preview->segments);
+      MEM_SAFE_FREE(ss->pose_ik_chain_preview);
     }
 
     BKE_sculptsession_free_vwpaint_data(ob->sculpt);
@@ -1187,6 +1497,7 @@ static void sculpt_update_object(
 
   ss->deform_modifiers_active = sculpt_modifiers_active(scene, sd, ob);
   ss->show_mask = (sd->flags & SCULPT_HIDE_MASK) == 0;
+  ss->show_face_sets = (sd->flags & SCULPT_HIDE_FACE_SETS) == 0;
 
   ss->building_vp_handle = false;
 
@@ -1226,6 +1537,19 @@ static void sculpt_update_object(
     ss->mloop = me->mloop;
     ss->multires = NULL;
     ss->vmask = CustomData_get_layer(&me->vdata, CD_PAINT_MASK);
+
+    /* Sculpt Face Sets. */
+    if (!CustomData_has_layer(&me->pdata, CD_SCULPT_FACE_SETS)) {
+      ss->face_sets = CustomData_add_layer(
+          &me->pdata, CD_SCULPT_FACE_SETS, CD_CALLOC, NULL, me->totpoly);
+      for (int i = 0; i < me->totpoly; i++) {
+        ss->face_sets[i] = 1;
+      }
+
+      /* Set the default face set color if the datalayer did not exist. */
+      me->face_sets_color_default = 1;
+    }
+    ss->face_sets = CustomData_get_layer(&me->pdata, CD_SCULPT_FACE_SETS);
   }
 
   ss->subdiv_ccg = me_eval->runtime.subdiv_ccg;
@@ -1234,12 +1558,15 @@ static void sculpt_update_object(
   BLI_assert(pbvh == ss->pbvh);
   UNUSED_VARS_NDEBUG(pbvh);
 
+  BKE_pbvh_face_sets_color_set(ss->pbvh, me->face_sets_color_seed, me->face_sets_color_default);
+
   if (need_pmap && ob->type == OB_MESH && !ss->pmap) {
     BKE_mesh_vert_poly_map_create(
         &ss->pmap, &ss->pmap_mem, me->mpoly, me->mloop, me->totvert, me->totpoly, me->totloop);
   }
 
   pbvh_show_mask_set(ss->pbvh, ss->show_mask);
+  pbvh_show_face_sets_set(ss->pbvh, ss->show_face_sets);
 
   if (ss->deform_modifiers_active) {
     if (!ss->orig_cos) {
@@ -1326,7 +1653,7 @@ void BKE_sculpt_update_object_after_eval(Depsgraph *depsgraph, Object *ob_eval)
   /* Update after mesh evaluation in the dependency graph, to rebuild PBVH or
    * other data when modifiers change the mesh. */
   Object *ob_orig = DEG_get_original_object(ob_eval);
-  Mesh *me_eval = ob_eval->runtime.mesh_eval;
+  Mesh *me_eval = BKE_object_get_evaluated_mesh(ob_eval);
 
   BLI_assert(me_eval != NULL);
 
@@ -1476,6 +1803,7 @@ static PBVH *build_pbvh_for_dynamic_topology(Object *ob)
                        ob->sculpt->cd_vert_node_offset,
                        ob->sculpt->cd_face_node_offset);
   pbvh_show_mask_set(pbvh, ob->sculpt->show_mask);
+  pbvh_show_face_sets_set(pbvh, false);
   return pbvh;
 }
 
@@ -1497,10 +1825,12 @@ static PBVH *build_pbvh_from_regular_mesh(Object *ob, Mesh *me_eval_deform)
                       me->totvert,
                       &me->vdata,
                       &me->ldata,
+                      &me->pdata,
                       looptri,
                       looptris_num);
 
   pbvh_show_mask_set(pbvh, ob->sculpt->show_mask);
+  pbvh_show_face_sets_set(pbvh, ob->sculpt->show_face_sets);
 
   const bool is_deformed = check_sculpt_object_deformed(ob, true);
   if (is_deformed && me_eval_deform != NULL) {
@@ -1526,6 +1856,7 @@ static PBVH *build_pbvh_from_ccg(Object *ob, SubdivCCG *subdiv_ccg)
                        subdiv_ccg->grid_flag_mats,
                        subdiv_ccg->grid_hidden);
   pbvh_show_mask_set(pbvh, ob->sculpt->show_mask);
+  pbvh_show_face_sets_set(pbvh, false);
   return pbvh;
 }
 

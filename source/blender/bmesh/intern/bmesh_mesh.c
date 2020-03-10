@@ -25,6 +25,7 @@
 #include "DNA_listBase.h"
 #include "DNA_scene_types.h"
 
+#include "BLI_bitmap.h"
 #include "BLI_linklist_stack.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
@@ -32,7 +33,6 @@
 #include "BLI_task.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_cdderivedmesh.h"
 #include "BKE_editmesh.h"
 #include "BKE_mesh.h"
 #include "BKE_multires.h"
@@ -1108,7 +1108,8 @@ void BM_loops_calc_normal_vcos(BMesh *bm,
   }
 }
 
-/** Define sharp edges as needed to mimic 'autosmooth' from angle threshold.
+/**
+ * Define sharp edges as needed to mimic 'autosmooth' from angle threshold.
  *
  * Used when defining an empty custom loop normals data layer,
  * to keep same shading as with autosmooth!
@@ -1837,7 +1838,8 @@ void BM_mesh_elem_index_ensure(BMesh *bm, const char htype)
  * To avoid correcting them afterwards, set 'bm->elem_index_dirty' however its possible
  * this flag is set incorrectly which could crash blender.
  *
- * These functions ensure its correct and are called more often in debug mode.
+ * Code that calls this functions may depend on dirty indices on being set.
+ * Keep this function read-only.
  */
 
 void BM_mesh_elem_index_validate(
@@ -1866,10 +1868,9 @@ void BM_mesh_elem_index_validate(
           err_val = BM_elem_index_get(ele);
           err_idx = index;
           is_error = true;
+          break;
         }
       }
-
-      BM_elem_index_set(ele, index); /* set_ok */
       index++;
     }
 
@@ -2708,3 +2709,49 @@ void BM_mesh_toolflags_set(BMesh *bm, bool use_toolflags)
 
   bm->use_toolflags = use_toolflags;
 }
+
+/* -------------------------------------------------------------------- */
+/** \name BMesh Coordinate Access
+ * \{ */
+
+void BM_mesh_vert_coords_get(BMesh *bm, float (*vert_coords)[3])
+{
+  BMIter iter;
+  BMVert *v;
+  int i;
+  BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
+    copy_v3_v3(vert_coords[i], v->co);
+  }
+}
+
+float (*BM_mesh_vert_coords_alloc(BMesh *bm, int *r_vert_len))[3]
+{
+  float(*vert_coords)[3] = MEM_mallocN(bm->totvert * sizeof(*vert_coords), __func__);
+  BM_mesh_vert_coords_get(bm, vert_coords);
+  *r_vert_len = bm->totvert;
+  return vert_coords;
+}
+
+void BM_mesh_vert_coords_apply(BMesh *bm, const float (*vert_coords)[3])
+{
+  BMIter iter;
+  BMVert *v;
+  int i;
+  BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
+    copy_v3_v3(v->co, vert_coords[i]);
+  }
+}
+
+void BM_mesh_vert_coords_apply_with_mat4(BMesh *bm,
+                                         const float (*vert_coords)[3],
+                                         const float mat[4][4])
+{
+  BMIter iter;
+  BMVert *v;
+  int i;
+  BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
+    mul_v3_m4v3(v->co, mat, vert_coords[i]);
+  }
+}
+
+/** \} */

@@ -30,6 +30,10 @@
 #include "DNA_boid_types.h"
 #include <stdio.h> /* for FILE */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Point cache clearing option, for BKE_ptcache_id_clear, before
  * and after are non inclusive (they wont remove the cfra) */
 #define PTCACHE_CLEAR_ALL 0
@@ -75,6 +79,7 @@
 
 /* Structs */
 struct ClothModifierData;
+struct FluidModifierData;
 struct ListBase;
 struct Main;
 struct Object;
@@ -83,7 +88,6 @@ struct ParticleSystem;
 struct PointCache;
 struct RigidBodyWorld;
 struct Scene;
-struct SmokeModifierData;
 struct SoftBody;
 struct ViewLayer;
 
@@ -274,9 +278,6 @@ typedef struct PTCacheEdit {
   ListBase pathcachebufs;
 
   int totpoint, totframes, totcached, edited;
-
-  unsigned char sel_col[3];
-  unsigned char nosel_col[3];
 } PTCacheEdit;
 
 /* Particle functions */
@@ -286,7 +287,7 @@ void BKE_ptcache_make_particle_key(struct ParticleKey *key, int index, void **da
 void BKE_ptcache_id_from_softbody(PTCacheID *pid, struct Object *ob, struct SoftBody *sb);
 void BKE_ptcache_id_from_particles(PTCacheID *pid, struct Object *ob, struct ParticleSystem *psys);
 void BKE_ptcache_id_from_cloth(PTCacheID *pid, struct Object *ob, struct ClothModifierData *clmd);
-void BKE_ptcache_id_from_smoke(PTCacheID *pid, struct Object *ob, struct SmokeModifierData *smd);
+void BKE_ptcache_id_from_smoke(PTCacheID *pid, struct Object *ob, struct FluidModifierData *mmd);
 void BKE_ptcache_id_from_dynamicpaint(PTCacheID *pid,
                                       struct Object *ob,
                                       struct DynamicPaintSurface *surface);
@@ -380,5 +381,9 @@ void BKE_ptcache_validate(struct PointCache *cache, int framenr);
 
 /* Set correct flags after unsuccessful simulation step */
 void BKE_ptcache_invalidate(struct PointCache *cache);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

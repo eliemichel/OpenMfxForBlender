@@ -30,15 +30,43 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_animsys.h"
-#include "BKE_library.h"
+#include "BKE_idtype.h"
+#include "BKE_lib_id.h"
 #include "BKE_lightprobe.h"
 #include "BKE_main.h"
 
-void BKE_lightprobe_init(LightProbe *probe)
+#include "BLT_translation.h"
+
+static void lightprobe_init_data(ID *id)
 {
+  LightProbe *probe = (LightProbe *)id;
   BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(probe, id));
 
   MEMCPY_STRUCT_AFTER(probe, DNA_struct_default_get(LightProbe), id);
+}
+
+void BKE_lightprobe_type_set(LightProbe *probe, const short lightprobe_type)
+{
+  probe->type = lightprobe_type;
+
+  switch (probe->type) {
+    case LIGHTPROBE_TYPE_GRID:
+      probe->distinf = 0.3f;
+      probe->falloff = 1.0f;
+      probe->clipsta = 0.01f;
+      break;
+    case LIGHTPROBE_TYPE_PLANAR:
+      probe->distinf = 0.1f;
+      probe->falloff = 0.5f;
+      probe->clipsta = 0.001f;
+      break;
+    case LIGHTPROBE_TYPE_CUBE:
+      probe->attenuation_type = LIGHTPROBE_SHAPE_ELIPSOID;
+      break;
+    default:
+      BLI_assert(!"LightProbe type not configured.");
+      break;
+  }
 }
 
 void *BKE_lightprobe_add(Main *bmain, const char *name)
@@ -47,7 +75,7 @@ void *BKE_lightprobe_add(Main *bmain, const char *name)
 
   probe = BKE_libblock_alloc(bmain, ID_LP, name, 0);
 
-  BKE_lightprobe_init(probe);
+  lightprobe_init_data(&probe->id);
 
   return probe;
 }
@@ -60,12 +88,12 @@ void *BKE_lightprobe_add(Main *bmain, const char *name)
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
-void BKE_lightprobe_copy_data(Main *UNUSED(bmain),
-                              LightProbe *UNUSED(probe_dst),
-                              const LightProbe *UNUSED(probe_src),
-                              const int UNUSED(flag))
+static void lightprobe_copy_data(Main *UNUSED(bmain),
+                                 ID *UNUSED(id_dst),
+                                 const ID *UNUSED(id_src),
+                                 const int UNUSED(flag))
 {
   /* Nothing to do here. */
 }
@@ -77,12 +105,23 @@ LightProbe *BKE_lightprobe_copy(Main *bmain, const LightProbe *probe)
   return probe_copy;
 }
 
-void BKE_lightprobe_make_local(Main *bmain, LightProbe *probe, const bool lib_local)
+static void lightprobe_make_local(Main *bmain, ID *id, const int flags)
 {
-  BKE_id_make_local_generic(bmain, &probe->id, true, lib_local);
+  BKE_lib_id_make_local_generic(bmain, id, flags);
 }
 
-void BKE_lightprobe_free(LightProbe *probe)
-{
-  BKE_animdata_free((ID *)probe, false);
-}
+IDTypeInfo IDType_ID_LP = {
+    .id_code = ID_LP,
+    .id_filter = FILTER_ID_LP,
+    .main_listbase_index = INDEX_ID_LP,
+    .struct_size = sizeof(LightProbe),
+    .name = "LightProbe",
+    .name_plural = "lightprobes",
+    .translation_context = BLT_I18NCONTEXT_ID_LIGHTPROBE,
+    .flags = 0,
+
+    .init_data = lightprobe_init_data,
+    .copy_data = lightprobe_copy_data,
+    .free_data = NULL,
+    .make_local = lightprobe_make_local,
+};

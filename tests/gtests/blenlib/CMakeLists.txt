@@ -27,6 +27,7 @@ set(INC
   ../../../intern/atomic
 )
 
+setup_libdirs()
 include_directories(${INC})
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}")
@@ -57,7 +58,9 @@ BLENDER_TEST(BLI_map "bf_blenlib")
 BLENDER_TEST(BLI_math_base "bf_blenlib")
 BLENDER_TEST(BLI_math_color "bf_blenlib")
 BLENDER_TEST(BLI_math_geom "bf_blenlib")
+BLENDER_TEST(BLI_math_vector "bf_blenlib")
 BLENDER_TEST(BLI_memiter "bf_blenlib")
+BLENDER_TEST(BLI_optional "bf_blenlib")
 BLENDER_TEST(BLI_path_util "${BLI_path_util_extra_libs}")
 BLENDER_TEST(BLI_polyfill_2d "bf_blenlib")
 BLENDER_TEST(BLI_set "bf_blenlib")

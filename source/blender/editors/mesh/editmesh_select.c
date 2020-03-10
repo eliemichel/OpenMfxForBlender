@@ -75,15 +75,18 @@
 /** \name Select Mirror
  * \{ */
 
-void EDBM_select_mirrored(
-    BMEditMesh *em, const int axis, const bool extend, int *r_totmirr, int *r_totfail)
+void EDBM_select_mirrored(BMEditMesh *em,
+                          const Mesh *me,
+                          const int axis,
+                          const bool extend,
+                          int *r_totmirr,
+                          int *r_totfail)
 {
-  Mesh *me = (Mesh *)em->ob->data;
   BMesh *bm = em->bm;
   BMIter iter;
   int totmirr = 0;
   int totfail = 0;
-  bool use_topology = (me && (me->editflag & ME_EDIT_MIRROR_TOPO));
+  bool use_topology = me->editflag & ME_EDIT_MIRROR_TOPO;
 
   *r_totmirr = *r_totfail = 0;
 
@@ -283,7 +286,7 @@ BMVert *EDBM_vert_find_nearest_ex(ViewContext *vc,
   uint base_index = 0;
 
   if (!XRAY_FLAG_ENABLED(vc->v3d)) {
-    uint dist_px = (uint)ED_view3d_backbuf_sample_size_clamp(vc->ar, *r_dist);
+    uint dist_px = (uint)ED_view3d_backbuf_sample_size_clamp(vc->region, *r_dist);
     uint index;
     BMVert *eve;
 
@@ -292,7 +295,7 @@ BMVert *EDBM_vert_find_nearest_ex(ViewContext *vc,
       DRW_select_buffer_context_create(bases, bases_len, SCE_SELECT_VERTEX);
 
       index = DRW_select_buffer_find_nearest_to_point(
-          vc->depsgraph, vc->ar, vc->v3d, vc->mval, 1, UINT_MAX, &dist_px);
+          vc->depsgraph, vc->region, vc->v3d, vc->mval, 1, UINT_MAX, &dist_px);
 
       if (index) {
         eve = (BMVert *)edbm_select_id_bm_elem_get(bases, index, &base_index);
@@ -506,7 +509,7 @@ BMEdge *EDBM_edge_find_nearest_ex(ViewContext *vc,
   uint base_index = 0;
 
   if (!XRAY_FLAG_ENABLED(vc->v3d)) {
-    uint dist_px = (uint)ED_view3d_backbuf_sample_size_clamp(vc->ar, *r_dist);
+    uint dist_px = (uint)ED_view3d_backbuf_sample_size_clamp(vc->region, *r_dist);
     uint index;
     BMEdge *eed;
 
@@ -515,7 +518,7 @@ BMEdge *EDBM_edge_find_nearest_ex(ViewContext *vc,
       DRW_select_buffer_context_create(bases, bases_len, SCE_SELECT_EDGE);
 
       index = DRW_select_buffer_find_nearest_to_point(
-          vc->depsgraph, vc->ar, vc->v3d, vc->mval, 1, UINT_MAX, &dist_px);
+          vc->depsgraph, vc->region, vc->v3d, vc->mval, 1, UINT_MAX, &dist_px);
 
       if (index) {
         eed = (BMEdge *)edbm_select_id_bm_elem_get(bases, index, &base_index);
@@ -721,7 +724,7 @@ BMFace *EDBM_face_find_nearest_ex(ViewContext *vc,
     {
       DRW_select_buffer_context_create(bases, bases_len, SCE_SELECT_FACE);
 
-      index = DRW_select_buffer_sample_point(vc->depsgraph, vc->ar, vc->v3d, vc->mval);
+      index = DRW_select_buffer_sample_point(vc->depsgraph, vc->region, vc->v3d, vc->mval);
 
       if (index) {
         efa = (BMFace *)edbm_select_id_bm_elem_get(bases, index, &base_index);
@@ -1039,7 +1042,7 @@ bool EDBM_unified_findnearest_from_raycast(ViewContext *vc,
   } best_face = {0, NULL};
 
   if (ED_view3d_win_to_ray_clipped(
-          vc->depsgraph, vc->ar, vc->v3d, mval_fl, ray_origin, ray_direction, true)) {
+          vc->depsgraph, vc->region, vc->v3d, mval_fl, ray_origin, ray_direction, true)) {
     float dist_sq_best = FLT_MAX;
     float dist_sq_best_vert = FLT_MAX;
     float dist_sq_best_edge = FLT_MAX;
@@ -1730,12 +1733,12 @@ static bool mouse_mesh_loop(
       /* We can't be sure this has already been set... */
       ED_view3d_init_mats_rv3d(vc.obedit, vc.rv3d);
 
-      if (ED_view3d_project_float_object(vc.ar, eed->v1->co, v1_co, V3D_PROJ_TEST_CLIP_NEAR) ==
+      if (ED_view3d_project_float_object(vc.region, eed->v1->co, v1_co, V3D_PROJ_TEST_CLIP_NEAR) ==
           V3D_PROJ_RET_OK) {
         length_1 = len_squared_v2v2(mvalf, v1_co);
       }
 
-      if (ED_view3d_project_float_object(vc.ar, eed->v2->co, v2_co, V3D_PROJ_TEST_CLIP_NEAR) ==
+      if (ED_view3d_project_float_object(vc.region, eed->v2->co, v2_co, V3D_PROJ_TEST_CLIP_NEAR) ==
           V3D_PROJ_RET_OK) {
         length_2 = len_squared_v2v2(mvalf, v2_co);
       }
@@ -1765,7 +1768,7 @@ static bool mouse_mesh_loop(
           float co[2], tdist;
 
           BM_face_calc_center_median(f, cent);
-          if (ED_view3d_project_float_object(vc.ar, cent, co, V3D_PROJ_TEST_CLIP_NEAR) ==
+          if (ED_view3d_project_float_object(vc.region, cent, co, V3D_PROJ_TEST_CLIP_NEAR) ==
               V3D_PROJ_RET_OK) {
             tdist = len_squared_v2v2(mvalf, co);
             if (tdist < best_dist) {
@@ -2653,6 +2656,41 @@ bool EDBM_mesh_deselect_all_multi(struct bContext *C)
   return changed_multi;
 }
 
+bool EDBM_selectmode_disable_multi_ex(Scene *scene,
+                                      struct Base **bases,
+                                      const uint bases_len,
+                                      const short selectmode_disable,
+                                      const short selectmode_fallback)
+{
+  bool changed_multi = false;
+  for (uint base_index = 0; base_index < bases_len; base_index++) {
+    Base *base_iter = bases[base_index];
+    Object *ob_iter = base_iter->object;
+    BMEditMesh *em_iter = BKE_editmesh_from_object(ob_iter);
+
+    EDBM_selectmode_disable(scene, em_iter, selectmode_disable, selectmode_fallback);
+    changed_multi = true;
+  }
+  return changed_multi;
+}
+
+bool EDBM_selectmode_disable_multi(struct bContext *C,
+                                   const short selectmode_disable,
+                                   const short selectmode_fallback)
+{
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  Scene *scene = CTX_data_scene(C);
+  ViewContext vc;
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
+  uint bases_len = 0;
+  Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(
+      vc.view_layer, NULL, &bases_len);
+  bool changed_multi = EDBM_selectmode_disable_multi_ex(
+      scene, bases, bases_len, selectmode_disable, selectmode_fallback);
+  MEM_freeN(bases);
+  return changed_multi;
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -2917,7 +2955,7 @@ bool EDBM_select_interior_faces(BMEditMesh *em)
               SWAP(int, i_a, i_b);
             }
 
-            /* Merge the the groups. */
+            /* Merge the groups. */
             LISTBASE_FOREACH (LinkData *, n, &fgroup_listbase[i_b]) {
               BMFace *f_iter = n->data;
               BM_elem_index_set(f_iter, i_a);
@@ -3828,7 +3866,7 @@ static int edbm_select_mirror_exec(bContext *C, wmOperator *op)
 
     for (int axis = 0; axis < 3; axis++) {
       if ((1 << axis) & axis_flag) {
-        EDBM_select_mirrored(em, axis, extend, &tot_mirr_iter, &tot_fail_iter);
+        EDBM_select_mirrored(em, obedit->data, axis, extend, &tot_mirr_iter, &tot_fail_iter);
       }
     }
 
@@ -4185,7 +4223,7 @@ static int edbm_select_nth_exec(bContext *C, wmOperator *op)
 
     if (edbm_deselect_nth(em, &op_params) == true) {
       found_active_elt = true;
-      EDBM_update_generic(em, false, false);
+      EDBM_update_generic(obedit->data, false, false);
     }
   }
   MEM_freeN(objects);
@@ -4919,7 +4957,7 @@ static int edbm_region_to_loop_exec(bContext *C, wmOperator *UNUSED(op))
       EDBM_selectmode_to_scene(C);
     }
 
-    DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
+    DEG_id_tag_update(&obedit->id, ID_RECALC_GEOMETRY);
     WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
   }
   MEM_freeN(objects);

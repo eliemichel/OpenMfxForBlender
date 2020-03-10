@@ -62,7 +62,7 @@
 #include "BKE_idprop.h"
 #include "BKE_image.h"
 #include "BKE_icons.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_light.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
@@ -80,10 +80,10 @@
 #include "IMB_imbuf_types.h"
 #include "IMB_thumbs.h"
 
-#include "BIF_gl.h"
 #include "BIF_glutil.h"
 
 #include "GPU_shader.h"
+#include "GPU_glew.h"
 
 #include "RE_pipeline.h"
 #include "RE_engine.h"
@@ -371,6 +371,10 @@ static Scene *preview_prepare_scene(
   if (sce) {
     ViewLayer *view_layer = sce->view_layers.first;
 
+    /* Only enable the combined renderpass */
+    view_layer->passflag = SCE_PASS_COMBINED;
+    view_layer->eevee.render_passes = 0;
+
     /* this flag tells render to not execute depsgraph or ipos etc */
     sce->r.scemode |= R_BUTS_PREVIEW;
     /* set world always back, is used now */
@@ -465,8 +469,9 @@ static Scene *preview_prepare_scene(
           copy_v4_v4(base->object->color, sp->color);
 
           if (OB_TYPE_SUPPORT_MATERIAL(base->object->type)) {
-            /* don't use assign_material, it changed mat->id.us, which shows in the UI */
-            Material ***matar = give_matarar(base->object);
+            /* don't use BKE_object_material_assign, it changed mat->id.us, which shows in the UI
+             */
+            Material ***matar = BKE_object_material_array_p(base->object);
             int actcol = max_ii(base->object->actcol - 1, 0);
 
             if (matar && actcol < base->object->totcol) {
@@ -610,7 +615,7 @@ static bool ed_preview_draw_rect(ScrArea *sa, int split, int first, rcti *rect, 
 
   if (rv && rv->rectf) {
 
-    if (ABS(rres.rectx - newx) < 2 && ABS(rres.recty - newy) < 2) {
+    if (abs(rres.rectx - newx) < 2 && abs(rres.recty - newy) < 2) {
 
       newrect->xmax = max_ii(newrect->xmax, rect->xmin + rres.rectx + offx);
       newrect->ymax = max_ii(newrect->ymax, rect->ymin + rres.recty);
@@ -689,7 +694,7 @@ void ED_preview_draw(const bContext *C, void *idp, void *parentp, void *slotp, r
      * or if the job is running and the size of preview changed */
     if ((sbuts != NULL && sbuts->preview) ||
         (!ok && !WM_jobs_test(wm, sa, WM_JOB_TYPE_RENDER_PREVIEW)) ||
-        (sp && (ABS(sp->sizex - newx) >= 2 || ABS(sp->sizey - newy) > 2))) {
+        (sp && (abs(sp->sizex - newx) >= 2 || abs(sp->sizey - newy) > 2))) {
       if (sbuts != NULL) {
         sbuts->preview = 0;
       }
@@ -953,23 +958,7 @@ static void preview_id_copy_free(ID *id)
     IDP_FreePropertyContent_ex(properties, false);
     MEM_freeN(properties);
   }
-  switch (GS(id->name)) {
-    case ID_MA:
-      BKE_material_free((Material *)id);
-      break;
-    case ID_TE:
-      BKE_texture_free((Tex *)id);
-      break;
-    case ID_LA:
-      BKE_light_free((Light *)id);
-      break;
-    case ID_WO:
-      BKE_world_free((World *)id);
-      break;
-    default:
-      BLI_assert(!"ID type preview not supported.");
-      break;
-  }
+  BKE_libblock_free_datablock(id, 0);
   MEM_freeN(id);
 }
 
@@ -1118,10 +1107,16 @@ static void icon_preview_startjob(void *customdata, short *stop, short *do_updat
     if (idtype == ID_IM) {
       Image *ima = (Image *)id;
       ImBuf *ibuf = NULL;
-      ImageUser iuser = {NULL};
+      ImageUser iuser;
+      BKE_imageuser_default(&iuser);
 
-      /* ima->ok is zero when Image cannot load */
-      if (ima == NULL || ima->ok == 0) {
+      if (ima == NULL) {
+        return;
+      }
+
+      ImageTile *tile = BKE_image_get_tile(ima, 0);
+      /* tile->ok is zero when Image cannot load */
+      if (tile->ok == 0) {
         return;
       }
 

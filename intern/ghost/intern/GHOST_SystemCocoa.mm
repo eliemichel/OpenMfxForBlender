@@ -1001,28 +1001,32 @@ GHOST_TSuccess GHOST_SystemCocoa::handleApplicationBecomeActiveEvent()
                                  (modifiers & NSEventModifierFlagShift) ? GHOST_kEventKeyDown :
                                                                           GHOST_kEventKeyUp,
                                  window,
-                                 GHOST_kKeyLeftShift));
+                                 GHOST_kKeyLeftShift,
+                                 false));
   }
   if ((modifiers & NSEventModifierFlagControl) != (m_modifierMask & NSEventModifierFlagControl)) {
     pushEvent(new GHOST_EventKey(getMilliSeconds(),
                                  (modifiers & NSEventModifierFlagControl) ? GHOST_kEventKeyDown :
                                                                             GHOST_kEventKeyUp,
                                  window,
-                                 GHOST_kKeyLeftControl));
+                                 GHOST_kKeyLeftControl,
+                                 false));
   }
   if ((modifiers & NSEventModifierFlagOption) != (m_modifierMask & NSEventModifierFlagOption)) {
     pushEvent(new GHOST_EventKey(getMilliSeconds(),
                                  (modifiers & NSEventModifierFlagOption) ? GHOST_kEventKeyDown :
                                                                            GHOST_kEventKeyUp,
                                  window,
-                                 GHOST_kKeyLeftAlt));
+                                 GHOST_kKeyLeftAlt,
+                                 false));
   }
   if ((modifiers & NSEventModifierFlagCommand) != (m_modifierMask & NSEventModifierFlagCommand)) {
     pushEvent(new GHOST_EventKey(getMilliSeconds(),
                                  (modifiers & NSEventModifierFlagCommand) ? GHOST_kEventKeyDown :
                                                                             GHOST_kEventKeyUp,
                                  window,
-                                 GHOST_kKeyOS));
+                                 GHOST_kKeyOS,
+                                 false));
   }
 
   m_modifierMask = modifiers;
@@ -1366,10 +1370,17 @@ void GHOST_SystemCocoa::handleQuitRequest()
 bool GHOST_SystemCocoa::handleOpenDocumentRequest(void *filepathStr)
 {
   NSString *filepath = (NSString *)filepathStr;
-  bool confirmOpen = true;
   NSArray *windowsList;
   char *temp_buff;
   size_t filenameTextSize;
+
+  /* Check for blender opened windows and make the frontmost key. In case blender
+   * is minimized, opened on another desktop space, or in full-screen mode. */
+  windowsList = [NSApp orderedWindows];
+  if ([windowsList count]) {
+    [[windowsList objectAtIndex:0] makeKeyAndOrderFront:nil];
+  }
+
   GHOST_Window *window = (GHOST_Window *)m_windowManager->getActiveWindow();
 
   if (!window) {
@@ -1377,51 +1388,25 @@ bool GHOST_SystemCocoa::handleOpenDocumentRequest(void *filepathStr)
   }
 
   /* Discard event if we are in cursor grab sequence,
-   * it'll lead to "stuck cursor" situation if the alert panel is raised */
-  if (window && window->getCursorGrabModeIsWarp())
+   * it'll lead to "stuck cursor" situation if the alert panel is raised. */
+  if (window && window->getCursorGrabModeIsWarp()) {
     return NO;
-
-  // Check open windows if some changes are not saved
-  if (m_windowManager->getAnyModifiedState()) {
-    @autoreleasepool {
-      NSAlert *alert = [[NSAlert alloc] init];
-      NSString *title = [NSString stringWithFormat:@"Opening %@", [filepath lastPathComponent]];
-      NSString *text = @"Current document has not been saved.\nDo you really want to proceed?";
-      [alert addButtonWithTitle:@"Open"];
-      [alert addButtonWithTitle:@"Cancel"];
-      [alert setMessageText:title];
-      [alert setInformativeText:text];
-      [alert setAlertStyle:NSAlertStyleInformational];
-      confirmOpen = [alert runModal] == NSAlertFirstButtonReturn;
-    }
   }
 
-  // Give back focus to the blender window
-  windowsList = [NSApp orderedWindows];
-  if ([windowsList count]) {
-    [[windowsList objectAtIndex:0] makeKeyAndOrderFront:nil];
+  filenameTextSize = [filepath lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
+  temp_buff = (char *)malloc(filenameTextSize + 1);
+
+  if (temp_buff == NULL) {
+    return GHOST_kFailure;
   }
 
-  if (confirmOpen) {
-    filenameTextSize = [filepath lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
+  strncpy(temp_buff, [filepath cStringUsingEncoding:NSUTF8StringEncoding], filenameTextSize);
+  temp_buff[filenameTextSize] = '\0';
 
-    temp_buff = (char *)malloc(filenameTextSize + 1);
+  pushEvent(new GHOST_EventString(
+      getMilliSeconds(), GHOST_kEventOpenMainFile, window, (GHOST_TEventDataPtr)temp_buff));
 
-    if (temp_buff == NULL) {
-      return GHOST_kFailure;
-    }
-
-    strncpy(temp_buff, [filepath cStringUsingEncoding:NSUTF8StringEncoding], filenameTextSize);
-
-    temp_buff[filenameTextSize] = '\0';
-
-    pushEvent(new GHOST_EventString(
-        getMilliSeconds(), GHOST_kEventOpenMainFile, window, (GHOST_TEventDataPtr)temp_buff));
-
-    return YES;
-  }
-  else
-    return NO;
+  return YES;
 }
 
 GHOST_TSuccess GHOST_SystemCocoa::handleTabletEvent(void *eventPtr, short eventType)
@@ -1451,11 +1436,10 @@ GHOST_TSuccess GHOST_SystemCocoa::handleTabletEvent(void *eventPtr, short eventT
       break;
 
     case NSEventTypeTabletProximity:
-      ct.Pressure = 0;
-      ct.Xtilt = 0;
-      ct.Ytilt = 0;
+      /* Reset tablet data when device enters proximity or leaves. */
+      ct = GHOST_TABLET_DATA_DEFAULT;
       if ([event isEnteringProximity]) {
-        // pointer is entering tablet area proximity
+        /* Pointer is entering tablet area proximity. */
         switch ([event pointingDeviceType]) {
           case NSPointingDeviceTypePen:
             ct.Active = GHOST_kTabletModeStylus;
@@ -1466,13 +1450,8 @@ GHOST_TSuccess GHOST_SystemCocoa::handleTabletEvent(void *eventPtr, short eventT
           case NSPointingDeviceTypeCursor:
           case NSPointingDeviceTypeUnknown:
           default:
-            ct.Active = GHOST_kTabletModeNone;
             break;
         }
-      }
-      else {
-        // pointer is leaving - return to mouse
-        ct.Active = GHOST_kTabletModeNone;
       }
       break;
 
@@ -1524,46 +1503,45 @@ GHOST_TSuccess GHOST_SystemCocoa::handleMouseEvent(void *eventPtr)
 
   switch ([event type]) {
     case NSEventTypeLeftMouseDown:
+      handleTabletEvent(event);  // Update window tablet state to be included in event.
       pushEvent(new GHOST_EventButton(
           [event timestamp] * 1000, GHOST_kEventButtonDown, window, GHOST_kButtonMaskLeft));
-      handleTabletEvent(event);  // Handle tablet events combined with mouse events
       break;
     case NSEventTypeRightMouseDown:
+      handleTabletEvent(event);  // Update window tablet state to be included in event.
       pushEvent(new GHOST_EventButton(
           [event timestamp] * 1000, GHOST_kEventButtonDown, window, GHOST_kButtonMaskRight));
-      handleTabletEvent(event);  // Handle tablet events combined with mouse events
       break;
     case NSEventTypeOtherMouseDown:
+      handleTabletEvent(event);  // Handle tablet events combined with mouse events
       pushEvent(new GHOST_EventButton([event timestamp] * 1000,
                                       GHOST_kEventButtonDown,
                                       window,
                                       convertButton([event buttonNumber])));
-      handleTabletEvent(event);  // Handle tablet events combined with mouse events
       break;
 
     case NSEventTypeLeftMouseUp:
+      handleTabletEvent(event);  // Update window tablet state to be included in event.
       pushEvent(new GHOST_EventButton(
           [event timestamp] * 1000, GHOST_kEventButtonUp, window, GHOST_kButtonMaskLeft));
-      handleTabletEvent(event);  // Handle tablet events combined with mouse events
       break;
     case NSEventTypeRightMouseUp:
+      handleTabletEvent(event);  // Update window tablet state to be included in event.
       pushEvent(new GHOST_EventButton(
           [event timestamp] * 1000, GHOST_kEventButtonUp, window, GHOST_kButtonMaskRight));
-      handleTabletEvent(event);  // Handle tablet events combined with mouse events
       break;
     case NSEventTypeOtherMouseUp:
+      handleTabletEvent(event);  // Update window tablet state to be included in event.
       pushEvent(new GHOST_EventButton([event timestamp] * 1000,
                                       GHOST_kEventButtonUp,
                                       window,
                                       convertButton([event buttonNumber])));
-      handleTabletEvent(event);  // Handle tablet events combined with mouse events
       break;
 
     case NSEventTypeLeftMouseDragged:
     case NSEventTypeRightMouseDragged:
     case NSEventTypeOtherMouseDragged:
-      // Handle tablet events combined with mouse events
-      handleTabletEvent(event);
+      handleTabletEvent(event);  // Update window tablet state to be included in event.
 
     case NSEventTypeMouseMoved: {
       GHOST_TGrabCursorMode grab_mode = window->getCursorGrabMode();
@@ -1733,6 +1711,14 @@ GHOST_TSuccess GHOST_SystemCocoa::handleMouseEvent(void *eventPtr)
                                         0));
     } break;
 
+    case NSEventTypeSmartMagnify: {
+      NSPoint mousePos = [cocoawindow mouseLocationOutsideOfEventStream];
+      GHOST_TInt32 x, y;
+      window->clientToScreenIntern(mousePos.x, mousePos.y, x, y);
+      pushEvent(new GHOST_EventTrackpad(
+          [event timestamp] * 1000, window, GHOST_kTrackpadEventSmartMagnify, x, y, 0, 0));
+    } break;
+
     case NSEventTypeRotate: {
       NSPoint mousePos = [cocoawindow mouseLocationOutsideOfEventStream];
       GHOST_TInt32 x, y;
@@ -1802,8 +1788,9 @@ GHOST_TSuccess GHOST_SystemCocoa::handleKeyEvent(void *eventPtr)
       }
 
       /* arrow keys should not have utf8 */
-      if ((keyCode > 266) && (keyCode < 271))
+      if ((keyCode >= GHOST_kKeyLeftArrow) && (keyCode <= GHOST_kKeyDownArrow)) {
         utf8_buf[0] = '\0';
+      }
 
       /* F keys should not have utf8 */
       if ((keyCode >= GHOST_kKeyF1) && (keyCode <= GHOST_kKeyF20))
@@ -1822,8 +1809,13 @@ GHOST_TSuccess GHOST_SystemCocoa::handleKeyEvent(void *eventPtr)
       }
 
       if ([event type] == NSEventTypeKeyDown) {
-        pushEvent(new GHOST_EventKey(
-            [event timestamp] * 1000, GHOST_kEventKeyDown, window, keyCode, ascii, utf8_buf));
+        pushEvent(new GHOST_EventKey([event timestamp] * 1000,
+                                     GHOST_kEventKeyDown,
+                                     window,
+                                     keyCode,
+                                     ascii,
+                                     utf8_buf,
+                                     false));
 #if 0
         printf("Key down rawCode=0x%x charsIgnoringModifiers=%c keyCode=%u ascii=%i %c utf8=%s\n",
                [event keyCode],
@@ -1837,7 +1829,7 @@ GHOST_TSuccess GHOST_SystemCocoa::handleKeyEvent(void *eventPtr)
       }
       else {
         pushEvent(new GHOST_EventKey(
-            [event timestamp] * 1000, GHOST_kEventKeyUp, window, keyCode, 0, NULL));
+            [event timestamp] * 1000, GHOST_kEventKeyUp, window, keyCode, 0, NULL, false));
 #if 0
         printf("Key up rawCode=0x%x charsIgnoringModifiers=%c keyCode=%u ascii=%i %c utf8=%s\n",
                [event keyCode],
@@ -1860,7 +1852,8 @@ GHOST_TSuccess GHOST_SystemCocoa::handleKeyEvent(void *eventPtr)
                                      (modifiers & NSEventModifierFlagShift) ? GHOST_kEventKeyDown :
                                                                               GHOST_kEventKeyUp,
                                      window,
-                                     GHOST_kKeyLeftShift));
+                                     GHOST_kKeyLeftShift,
+                                     false));
       }
       if ((modifiers & NSEventModifierFlagControl) !=
           (m_modifierMask & NSEventModifierFlagControl)) {
@@ -1868,7 +1861,8 @@ GHOST_TSuccess GHOST_SystemCocoa::handleKeyEvent(void *eventPtr)
             [event timestamp] * 1000,
             (modifiers & NSEventModifierFlagControl) ? GHOST_kEventKeyDown : GHOST_kEventKeyUp,
             window,
-            GHOST_kKeyLeftControl));
+            GHOST_kKeyLeftControl,
+            false));
       }
       if ((modifiers & NSEventModifierFlagOption) !=
           (m_modifierMask & NSEventModifierFlagOption)) {
@@ -1876,7 +1870,8 @@ GHOST_TSuccess GHOST_SystemCocoa::handleKeyEvent(void *eventPtr)
             [event timestamp] * 1000,
             (modifiers & NSEventModifierFlagOption) ? GHOST_kEventKeyDown : GHOST_kEventKeyUp,
             window,
-            GHOST_kKeyLeftAlt));
+            GHOST_kKeyLeftAlt,
+            false));
       }
       if ((modifiers & NSEventModifierFlagCommand) !=
           (m_modifierMask & NSEventModifierFlagCommand)) {
@@ -1884,7 +1879,8 @@ GHOST_TSuccess GHOST_SystemCocoa::handleKeyEvent(void *eventPtr)
             [event timestamp] * 1000,
             (modifiers & NSEventModifierFlagCommand) ? GHOST_kEventKeyDown : GHOST_kEventKeyUp,
             window,
-            GHOST_kKeyOS));
+            GHOST_kKeyOS,
+            false));
       }
 
       m_modifierMask = modifiers;

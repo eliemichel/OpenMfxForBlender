@@ -22,10 +22,13 @@
 
 #include "DRW_render.h"
 
+#include "draw_color_management.h" /* TODO remove dependency */
+
 #include "BLI_rand.h"
 
 #include "BKE_object.h"
-#include "BKE_global.h" /* for G.debug_value */
+
+#include "DEG_depsgraph_query.h"
 
 #include "DNA_world_types.h"
 
@@ -81,7 +84,9 @@ static void eevee_engine_init(void *ved)
                                                   &sldata->common_data);
   }
 
-  /* EEVEE_effects_init needs to go first for TAA */
+  /* `EEVEE_renderpasses_init` will set the active render passes used by `EEVEE_effects_init`.
+   * `EEVEE_effects_init` needs to go second for TAA. */
+  EEVEE_renderpasses_init(vedata);
   EEVEE_effects_init(sldata, vedata, camera, false);
   EEVEE_materials_init(sldata, stl, fbl);
   EEVEE_shadows_init(sldata);
@@ -115,7 +120,7 @@ void EEVEE_cache_populate(void *vedata, Object *ob)
   bool cast_shadow = false;
 
   if (ob_visibility & OB_VISIBLE_PARTICLES) {
-    EEVEE_hair_cache_populate(vedata, sldata, ob, &cast_shadow);
+    EEVEE_particle_hair_cache_populate(vedata, sldata, ob, &cast_shadow);
   }
 
   if (DRW_object_is_renderable(ob) && (ob_visibility & OB_VISIBLE_SELF)) {
@@ -146,7 +151,10 @@ void EEVEE_cache_populate(void *vedata, Object *ob)
 static void eevee_cache_finish(void *vedata)
 {
   EEVEE_ViewLayerData *sldata = EEVEE_view_layer_data_ensure();
-  EEVEE_PrivateData *g_data = ((EEVEE_Data *)vedata)->stl->g_data;
+  EEVEE_StorageList *stl = ((EEVEE_Data *)vedata)->stl;
+  EEVEE_PrivateData *g_data = stl->g_data;
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const Scene *scene_eval = DEG_get_evaluated_scene(draw_ctx->depsgraph);
 
   EEVEE_volumes_cache_finish(sldata, vedata);
   EEVEE_materials_cache_finish(sldata, vedata);
@@ -155,6 +163,14 @@ static void eevee_cache_finish(void *vedata)
 
   EEVEE_effects_draw_init(sldata, vedata);
   EEVEE_volumes_draw_init(sldata, vedata);
+
+  uint tot_samples = scene_eval->eevee.taa_render_samples;
+  if (tot_samples == 0) {
+    /* Use a high number of samples so the outputs accumulation buffers
+     * will have the highest possible precision. */
+    tot_samples = 1024;
+  }
+  EEVEE_renderpasses_output_init(sldata, vedata, tot_samples);
 
   /* Restart taa if a shader has finish compiling. */
   /* HACK We should use notification of some sort from the compilation job instead. */
@@ -169,13 +185,11 @@ static void eevee_cache_finish(void *vedata)
  * the background and the scene pass are visible.
  * Note: we could break it up in two passes using some depth test
  * to reduce the fillrate */
-static void eevee_draw_background(void *vedata)
+static void eevee_draw_scene(void *vedata)
 {
   EEVEE_PassList *psl = ((EEVEE_Data *)vedata)->psl;
-  EEVEE_TextureList *txl = ((EEVEE_Data *)vedata)->txl;
   EEVEE_StorageList *stl = ((EEVEE_Data *)vedata)->stl;
   EEVEE_FramebufferList *fbl = ((EEVEE_Data *)vedata)->fbl;
-  EEVEE_EffectsInfo *effects = stl->effects;
   EEVEE_ViewLayerData *sldata = EEVEE_view_layer_data_ensure();
 
   /* Default framebuffer and texture */
@@ -215,8 +229,10 @@ static void eevee_draw_background(void *vedata)
     /* Copy previous persmat to UBO data */
     copy_m4_m4(sldata->common_data.prev_persmat, stl->effects->prev_persmat);
 
-    /* Refresh Probes */
+    /* Refresh Probes
+     * Shadows needs to be updated for correct probes */
     DRW_stats_group_start("Probes Refresh");
+    EEVEE_shadows_update(sldata, vedata);
     EEVEE_lightprobes_refresh(sldata, vedata);
     EEVEE_lightprobes_refresh_planar(sldata, vedata);
     DRW_stats_group_end();
@@ -292,6 +308,9 @@ static void eevee_draw_background(void *vedata)
     /* Volumetrics Resolve Opaque */
     EEVEE_volumes_resolve(sldata, vedata);
 
+    /* Renderpasses */
+    EEVEE_renderpasses_output_accumulate(sldata, vedata, false);
+
     /* Transparent */
     /* TODO(fclem): should be its own Framebuffer.
      * This is needed because dualsource blending only works with 1 color buffer. */
@@ -319,75 +338,16 @@ static void eevee_draw_background(void *vedata)
     }
   }
 
-  /* Tonemapping and transfer result to default framebuffer. */
-  bool use_render_settings = stl->g_data->use_color_render_settings;
-
-  GPU_framebuffer_bind(dfbl->default_fb);
-  DRW_transform_to_display(stl->effects->final_tx, true, use_render_settings);
-
-  /* Draw checkerboard with alpha under. */
-  EEVEE_draw_alpha_checker(vedata);
-
-  /* Debug : Output buffer to view. */
-  switch (G.debug_value) {
-    case 1:
-      if (txl->maxzbuffer) {
-        DRW_transform_to_display(txl->maxzbuffer, false, false);
-      }
-      break;
-    case 2:
-      if (effects->ssr_pdf_output) {
-        DRW_transform_to_display(effects->ssr_pdf_output, false, false);
-      }
-      break;
-    case 3:
-      if (effects->ssr_normal_input) {
-        DRW_transform_to_display(effects->ssr_normal_input, false, false);
-      }
-      break;
-    case 4:
-      if (effects->ssr_specrough_input) {
-        DRW_transform_to_display(effects->ssr_specrough_input, false, false);
-      }
-      break;
-    case 5:
-      if (txl->color_double_buffer) {
-        DRW_transform_to_display(txl->color_double_buffer, false, false);
-      }
-      break;
-    case 6:
-      if (effects->gtao_horizons_debug) {
-        DRW_transform_to_display(effects->gtao_horizons_debug, false, false);
-      }
-      break;
-    case 7:
-      if (effects->gtao_horizons) {
-        DRW_transform_to_display(effects->gtao_horizons, false, false);
-      }
-      break;
-    case 8:
-      if (effects->sss_irradiance) {
-        DRW_transform_to_display(effects->sss_irradiance, false, false);
-      }
-      break;
-    case 9:
-      if (effects->sss_radius) {
-        DRW_transform_to_display(effects->sss_radius, false, false);
-      }
-      break;
-    case 10:
-      if (effects->sss_albedo) {
-        DRW_transform_to_display(effects->sss_albedo, false, false);
-      }
-      break;
-    case 11:
-      if (effects->velocity_tx) {
-        DRW_transform_to_display(effects->velocity_tx, false, false);
-      }
-      break;
-    default:
-      break;
+  if ((stl->g_data->render_passes & EEVEE_RENDER_PASS_COMBINED) != 0) {
+    /* Transfer result to default framebuffer. */
+    GPU_framebuffer_bind(dfbl->default_fb);
+    DRW_transform_none(stl->effects->final_tx);
   }
+  else {
+    EEVEE_renderpasses_draw(sldata, vedata);
+  }
+
+  EEVEE_renderpasses_draw_debug(vedata);
 
   EEVEE_volumes_free_smoke_textures();
 
@@ -458,7 +418,10 @@ static void eevee_render_to_image(void *vedata,
                                   const rcti *rect)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
-  EEVEE_render_init(vedata, engine, draw_ctx->depsgraph);
+
+  if (!EEVEE_render_init(vedata, engine, draw_ctx->depsgraph)) {
+    return;
+  }
 
   DRW_render_object_iter(vedata, engine, draw_ctx->depsgraph, EEVEE_render_cache);
 
@@ -483,6 +446,7 @@ static void eevee_engine_free(void)
   EEVEE_screen_raytrace_free();
   EEVEE_subsurface_free();
   EEVEE_volumes_free();
+  EEVEE_renderpasses_free();
 }
 
 static const DrawEngineDataSize eevee_data_size = DRW_VIEWPORT_DATA_SIZE(EEVEE_Data);
@@ -497,8 +461,7 @@ DrawEngineType draw_engine_eevee_type = {
     &eevee_cache_init,
     &EEVEE_cache_populate,
     &eevee_cache_finish,
-    &eevee_draw_background,
-    NULL, /* Everything is drawn in the background pass (see comment on function) */
+    &eevee_draw_scene,
     &eevee_view_update,
     &eevee_id_update,
     &eevee_render_to_image,

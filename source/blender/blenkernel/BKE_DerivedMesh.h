@@ -72,6 +72,10 @@
 #include "BKE_customdata.h"
 #include "BKE_bvhutils.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct BMEditMesh;
 struct CCGElem;
 struct CCGKey;
@@ -101,12 +105,6 @@ typedef enum DerivedMeshType {
   DM_TYPE_CCGDM,
 } DerivedMeshType;
 
-typedef enum DMForeachFlag {
-  DM_FOREACH_NOP = 0,
-  /* foreachMappedVert, foreachMappedLoop, foreachMappedFaceCenter */
-  DM_FOREACH_USE_NORMAL = (1 << 0),
-} DMForeachFlag;
-
 typedef enum DMDirtyFlag {
   /* dm has valid tessellated faces, but tessellated CDDATA need to be updated. */
   DM_DIRTY_TESS_CDLAYERS = 1 << 0,
@@ -122,11 +120,8 @@ struct DerivedMesh {
   int numVertData, numEdgeData, numTessFaceData, numLoopData, numPolyData;
   int needsFree;    /* checked on ->release, is set to 0 for cached results */
   int deformedOnly; /* set by modifier stack if only deformed from original */
-  BVHCache *bvhCache;
   DerivedMeshType type;
   DMDirtyFlag dirty;
-  int totmat;            /* total materials. Will be valid only before object drawing. */
-  struct Material **mat; /* material array. Will be valid only before object drawing */
 
   /**
    * \warning Typical access is done via #getLoopTriArray, #getNumLoopTri.
@@ -228,11 +223,6 @@ struct DerivedMesh {
   CustomData *(*getLoopDataLayout)(DerivedMesh *dm);
   CustomData *(*getPolyDataLayout)(DerivedMesh *dm);
 
-  /** Copies all customdata for an element source into dst at index dest */
-  void (*copyFromVertCData)(DerivedMesh *dm, int source, CustomData *dst, int dest);
-  void (*copyFromEdgeCData)(DerivedMesh *dm, int source, CustomData *dst, int dest);
-  void (*copyFromFaceCData)(DerivedMesh *dm, int source, CustomData *dst, int dest);
-
   /** Optional grid access for subsurf */
   int (*getNumGrids)(DerivedMesh *dm);
   int (*getGridSize)(DerivedMesh *dm);
@@ -241,12 +231,6 @@ struct DerivedMesh {
   void (*getGridKey)(DerivedMesh *dm, struct CCGKey *key);
   DMFlagMat *(*getGridFlagMats)(DerivedMesh *dm);
   unsigned int **(*getGridHidden)(DerivedMesh *dm);
-
-  /** Iterate over all vertex points, calling DO_MINMAX with given args.
-   *
-   * Also called in Editmode
-   */
-  void (*getMinMax)(DerivedMesh *dm, float r_min[3], float r_max[3]);
 
   /** Direct Access Operations
    * - Can be undefined
@@ -296,8 +280,9 @@ void DM_from_template(DerivedMesh *dm,
                       int numLoops,
                       int numPolys);
 
-/** utility function to release a DerivedMesh's layers
- * returns 1 if DerivedMesh has to be released by the backend, 0 otherwise
+/**
+ * Utility function to release a DerivedMesh's layers
+ * returns 1 if DerivedMesh has to be released by the backend, 0 otherwise.
  */
 int DM_release(DerivedMesh *dm);
 
@@ -361,11 +346,6 @@ void DM_interp_vert_data(struct DerivedMesh *source,
 
 void mesh_get_mapped_verts_coords(struct Mesh *me_eval, float (*r_cos)[3], const int totcos);
 
-DerivedMesh *mesh_create_derived_render(struct Depsgraph *depsgraph,
-                                        struct Scene *scene,
-                                        struct Object *ob,
-                                        const struct CustomData_MeshMasks *dataMask);
-
 /* same as above but wont use render settings */
 struct Mesh *editbmesh_get_eval_cage(struct Depsgraph *depsgraph,
                                      struct Scene *scene,
@@ -405,6 +385,10 @@ void DM_debug_print(DerivedMesh *dm);
 void DM_debug_print_cdlayers(CustomData *cdata);
 
 bool DM_is_valid(DerivedMesh *dm);
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* __BKE_DERIVEDMESH_H__ */

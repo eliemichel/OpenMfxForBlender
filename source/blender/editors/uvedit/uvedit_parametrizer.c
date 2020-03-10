@@ -503,7 +503,7 @@ static void p_chart_uv_transform(PChart *chart, float mat[2][2])
   PVert *v;
 
   for (v = chart->verts; v; v = v->nextlink) {
-    mul_m2v2(mat, v->uv);
+    mul_m2_v2(mat, v->uv);
   }
 }
 
@@ -2048,14 +2048,13 @@ static float p_collapse_cost(PEdge *edge, PEdge *pair)
     float *co2 = e->next->next->vert->co;
 
     if ((e->face != oldf1) && (e->face != oldf2)) {
-      float tetrav2[3], tetrav3[3], c[3];
+      float tetrav2[3], tetrav3[3];
 
       /* tetrahedron volume = (1/3!)*|a.(b x c)| */
       sub_v3_v3v3(tetrav2, co1, oldv->co);
       sub_v3_v3v3(tetrav3, co2, oldv->co);
-      cross_v3_v3v3(c, tetrav2, tetrav3);
+      volumecost += fabsf(volume_tri_tetrahedron_signed_v3(tetrav2, tetrav3, edgevec));
 
-      volumecost += fabsf(dot_v3v3(edgevec, c) / 6.0f);
 #  if 0
       shapecost += dot_v3v3(co1, keepv->co);
 

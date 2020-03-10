@@ -33,7 +33,7 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 
 #include "DEG_depsgraph_build.h"
@@ -112,7 +112,7 @@ static Mesh *mesh_remove_doubles_on_axis(Mesh *result,
                                          const float axis_offset[3],
                                          const float merge_threshold)
 {
-  const float merge_threshold_sq = SQUARE(merge_threshold);
+  const float merge_threshold_sq = square_f(merge_threshold);
   const bool use_offset = axis_offset != NULL;
   uint tot_doubles = 0;
   for (uint i = 0; i < totvert; i += 1) {
@@ -1090,7 +1090,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   /* validate loop edges */
 #if 0
   {
-    unsigned i = 0;
+    uint i = 0;
     printf("\n");
     for (; i < maxPolys * 4; i += 4) {
       uint ii;

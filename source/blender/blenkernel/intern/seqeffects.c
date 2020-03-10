@@ -43,7 +43,7 @@
 #include "DNA_space_types.h"
 
 #include "BKE_fcurve.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_sequencer.h"
 
@@ -2973,7 +2973,6 @@ static ImBuf *do_multicam(const SeqRenderData *context,
                           ImBuf *UNUSED(ibuf2),
                           ImBuf *UNUSED(ibuf3))
 {
-  ImBuf *i;
   ImBuf *out;
   Editing *ed;
   ListBase *seqbasep;
@@ -2991,18 +2990,7 @@ static ImBuf *do_multicam(const SeqRenderData *context,
     return NULL;
   }
 
-  i = BKE_sequencer_give_ibuf_seqbase(context, cfra, seq->multicam_source, seqbasep);
-  if (!i) {
-    return NULL;
-  }
-
-  if (BKE_sequencer_input_have_to_preprocess(context, seq, cfra)) {
-    out = IMB_dupImBuf(i);
-    IMB_freeImBuf(i);
-  }
-  else {
-    out = i;
-  }
+  out = BKE_sequencer_give_ibuf_seqbase(context, cfra, seq->multicam_source, seqbasep);
 
   return out;
 }
@@ -3061,7 +3049,6 @@ static ImBuf *do_adjustment(const SeqRenderData *context,
                             ImBuf *UNUSED(ibuf2),
                             ImBuf *UNUSED(ibuf3))
 {
-  ImBuf *i = NULL;
   ImBuf *out;
   Editing *ed;
 
@@ -3071,18 +3058,7 @@ static ImBuf *do_adjustment(const SeqRenderData *context,
     return NULL;
   }
 
-  i = do_adjustment_impl(context, seq, cfra);
-
-  if (BKE_sequencer_input_have_to_preprocess(context, seq, cfra)) {
-    out = IMB_dupImBuf(i);
-    if (out) {
-      IMB_metadata_copy(out, i);
-    }
-    IMB_freeImBuf(i);
-  }
-  else {
-    out = i;
-  }
+  out = do_adjustment_impl(context, seq, cfra);
 
   return out;
 }
@@ -3888,7 +3864,7 @@ static ImBuf *do_text_effect(const SeqRenderData *context,
   int font = blf_mono_font_render;
   int line_height;
   int y_ofs, x, y;
-  float proxy_size_comp;
+  double proxy_size_comp;
 
   if (data->text_blf_id == SEQ_FONT_NOT_LOADED) {
     data->text_blf_id = -1;
@@ -3906,15 +3882,11 @@ static ImBuf *do_text_effect(const SeqRenderData *context,
   display = IMB_colormanagement_display_get_named(display_device);
 
   /* Compensate text size for preview render size. */
-  if (ELEM(
-          context->preview_render_size, SEQ_PROXY_RENDER_SIZE_SCENE, SEQ_PROXY_RENDER_SIZE_FULL)) {
-    proxy_size_comp = context->scene->r.size / 100.0f;
-  }
-  else if (context->preview_render_size == SEQ_PROXY_RENDER_SIZE_100) {
-    proxy_size_comp = 1.0f;
+  if (context->preview_render_size == SEQ_PROXY_RENDER_SIZE_SCENE) {
+    proxy_size_comp = context->scene->r.size / 100.0;
   }
   else {
-    proxy_size_comp = context->preview_render_size / 100.0f;
+    proxy_size_comp = BKE_sequencer_rendersize_to_scale_factor(context->preview_render_size);
   }
 
   /* set before return */

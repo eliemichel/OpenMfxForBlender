@@ -49,6 +49,46 @@ def module_filesystem_remove(path_base, module_name):
             else:
                 os.remove(f_full)
 
+# This duplicates shutil.copytree from Python 3.8, with the new dirs_exist_ok
+# argument that we need. Once we upgrade to 3.8 we can remove this.
+def _preferences_copytree(entries, src, dst):
+    import os
+    import shutil
+    from shutil import Error
+
+    os.makedirs(dst, exist_ok=True)
+    errors = []
+
+    for srcentry in entries:
+        srcname = os.path.join(src, srcentry.name)
+        dstname = os.path.join(dst, srcentry.name)
+        srcobj = srcentry
+        try:
+            if srcentry.is_symlink():
+                linkto = os.readlink(srcname)
+                os.symlink(linkto, dstname)
+                shutil.copystat(srcobj, dstname, follow_symlinks=False)
+            elif srcentry.is_dir():
+                preferences_copytree(srcobj, dstname)
+            else:
+                shutil.copy2(srcentry, dstname)
+        except Error as err:
+            errors.extend(err.args[0])
+        except OSError as why:
+            errors.append((srcname, dstname, str(why)))
+    try:
+        shutil.copystat(src, dst)
+    except OSError as why:
+        if getattr(why, 'winerror', None) is None:
+            errors.append((src, dst, str(why)))
+    if errors:
+        raise Error(errors)
+    return dst
+
+def preferences_copytree(src, dst):
+    import os
+    with os.scandir(src) as entries:
+        return _preferences_copytree(entries=entries, src=src, dst=dst)
 
 class PREFERENCES_OT_keyconfig_activate(Operator):
     bl_idname = "preferences.keyconfig_activate"
@@ -110,9 +150,10 @@ class PREFERENCES_OT_copy_prev(Operator):
         return os.path.isfile(old_userpref) and not os.path.isfile(new_userpref)
 
     def execute(self, _context):
-        import shutil
-
-        shutil.copytree(self._old_path(), self._new_path(), symlinks=True)
+        # Use this instead once we upgrade to Python 3.8 with dirs_exist_ok.
+        # import shutil
+        # shutil.copytree(self._old_path(), self._new_path(), dirs_exist_ok=True)
+        preferences_copytree(self._old_path(), self._new_path())
 
         # reload preferences and recent-files.txt
         bpy.ops.wm.read_userpref()
@@ -999,7 +1040,7 @@ class PREFERENCES_OT_studiolight_new(Operator):
         if os.path.isfile(filepath_final):
             if not self.ask_overide:
                 self.ask_overide = True
-                return wm.invoke_props_dialog(self, width=600)
+                return wm.invoke_props_dialog(self, width=320)
             else:
                 for studio_light in prefs.studio_lights:
                     if studio_light.name == filename:
@@ -1025,14 +1066,14 @@ class PREFERENCES_OT_studiolight_new(Operator):
 
     def invoke(self, context, _event):
         wm = context.window_manager
-        return wm.invoke_props_dialog(self, width=600)
+        return wm.invoke_props_dialog(self, width=320)
 
 
 class PREFERENCES_OT_studiolight_uninstall(Operator):
     """Delete Studio Light"""
     bl_idname = "preferences.studiolight_uninstall"
     bl_label = "Uninstall Studio Light"
-    index: bpy.props.IntProperty()
+    index: IntProperty()
 
     def execute(self, context):
         import os
@@ -1055,7 +1096,7 @@ class PREFERENCES_OT_studiolight_copy_settings(Operator):
     """Copy Studio Light settings to the Studio light editor"""
     bl_idname = "preferences.studiolight_copy_settings"
     bl_label = "Copy Studio Light settings"
-    index: bpy.props.IntProperty()
+    index: IntProperty()
 
     def execute(self, context):
         prefs = context.preferences

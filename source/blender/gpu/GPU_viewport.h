@@ -31,7 +31,12 @@
 #include "GPU_framebuffer.h"
 #include "GPU_texture.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define GPU_INFO_SIZE 512 /* IMA_MAX_RENDER_TEXT */
+#define GLA_PIXEL_OFS 0.375f
 
 typedef struct GPUViewport GPUViewport;
 
@@ -101,8 +106,15 @@ void GPU_viewport_unbind(GPUViewport *viewport);
 void GPU_viewport_draw_to_screen(GPUViewport *viewport, const rcti *rect);
 void GPU_viewport_free(GPUViewport *viewport);
 
-GPUViewport *GPU_viewport_create_from_offscreen(struct GPUOffScreen *ofs);
-void GPU_viewport_clear_from_offscreen(GPUViewport *viewport);
+void GPU_viewport_colorspace_set(GPUViewport *viewport,
+                                 ColorManagedViewSettings *view_settings,
+                                 ColorManagedDisplaySettings *display_settings,
+                                 float dither);
+
+void GPU_viewport_bind_from_offscreen(GPUViewport *viewport, struct GPUOffScreen *ofs);
+void GPU_viewport_unbind_from_offscreen(GPUViewport *viewport,
+                                        struct GPUOffScreen *ofs,
+                                        bool display_colorspace);
 
 ViewportMemoryPool *GPU_viewport_mempool_get(GPUViewport *viewport);
 struct DRWInstanceDataList *GPU_viewport_instance_data_list_get(GPUViewport *viewport);
@@ -128,5 +140,9 @@ GPUTexture *GPU_viewport_texture_pool_query(
 
 bool GPU_viewport_engines_data_validate(GPUViewport *viewport, void **engine_handle_array);
 void GPU_viewport_cache_release(GPUViewport *viewport);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // __GPU_VIEWPORT_H__

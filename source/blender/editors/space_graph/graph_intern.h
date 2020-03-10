@@ -35,13 +35,15 @@ struct bContext;
 
 /* ***************************************** */
 /* graph_draw.c */
-void graph_draw_channel_names(struct bContext *C, struct bAnimContext *ac, struct ARegion *ar);
+void graph_draw_channel_names(struct bContext *C, struct bAnimContext *ac, struct ARegion *region);
 
 void graph_draw_curves(struct bAnimContext *ac,
                        struct SpaceGraph *sipo,
-                       struct ARegion *ar,
+                       struct ARegion *region,
                        short sel);
-void graph_draw_ghost_curves(struct bAnimContext *ac, struct SpaceGraph *sipo, struct ARegion *ar);
+void graph_draw_ghost_curves(struct bAnimContext *ac,
+                             struct SpaceGraph *sipo,
+                             struct ARegion *region);
 
 /* ***************************************** */
 /* graph_select.c */
@@ -99,6 +101,7 @@ void GRAPH_OT_paste(struct wmOperatorType *ot);
 void GRAPH_OT_duplicate(struct wmOperatorType *ot);
 void GRAPH_OT_delete(struct wmOperatorType *ot);
 void GRAPH_OT_clean(struct wmOperatorType *ot);
+void GRAPH_OT_decimate(struct wmOperatorType *ot);
 void GRAPH_OT_sample(struct wmOperatorType *ot);
 void GRAPH_OT_bake(struct wmOperatorType *ot);
 void GRAPH_OT_sound_bake(struct wmOperatorType *ot);

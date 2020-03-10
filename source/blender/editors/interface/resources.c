@@ -196,9 +196,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           cp = ts->back_grad;
           break;
 
-        case TH_SHOW_BACK_GRAD:
+        case TH_BACKGROUND_TYPE:
           cp = &setting;
-          setting = ts->show_back_grad;
+          setting = ts->background_type;
           break;
         case TH_TEXT:
           if (theme_regionid == RGN_TYPE_WINDOW) {
@@ -311,6 +311,12 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
         case TH_TIME_SCRUB_BACKGROUND:
           cp = ts->time_scrub_background;
           break;
+        case TH_TIME_MARKER_LINE:
+          cp = ts->time_marker_line;
+          break;
+        case TH_TIME_MARKER_LINE_SELECTED:
+          cp = ts->time_marker_line_selected;
+          break;
         case TH_VIEW_OVERLAY:
           cp = ts->view_overlay;
           break;
@@ -401,6 +407,12 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
         case TH_FACE_SELECT:
           cp = ts->face_select;
           break;
+        case TH_FACE_BACK:
+          cp = ts->face_back;
+          break;
+        case TH_FACE_FRONT:
+          cp = ts->face_front;
+          break;
         case TH_FACE_DOT:
           cp = ts->face_dot;
           break;
@@ -436,6 +448,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           break;
         case TH_BONE_POSE_ACTIVE:
           cp = ts->bone_pose_active;
+          break;
+        case TH_BONE_LOCKED_WEIGHT:
+          cp = ts->bone_locked_weight;
           break;
         case TH_STRIP:
           cp = ts->strip;
@@ -567,6 +582,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
         case TH_SYNTAX_S:
           cp = ts->syntaxs;
           break;
+        case TH_LINENUMBERS:
+          cp = ts->line_numbers;
+          break;
 
         case TH_NODE:
           cp = ts->syntaxl;
@@ -621,6 +639,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           break;
         case TH_NODE_CURVING:
           cp = &ts->noodle_curving;
+          break;
+        case TH_NODE_GRID_LEVELS:
+          cp = &ts->grid_levels;
           break;
 
         case TH_SEQ_MOVIE:
@@ -869,6 +890,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
         case TH_EDITOR_OUTLINE:
           cp = btheme->tui.editor_outline;
           break;
+        case TH_WIDGET_TEXT_CURSOR:
+          cp = btheme->tui.widget_text_cursor;
+          break;
         case TH_AXIS_X:
           cp = btheme->tui.xaxis;
           break;
@@ -957,6 +981,18 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
         case TH_INFO_DEBUG_TEXT:
           cp = ts->info_debug_text;
           break;
+        case TH_INFO_PROPERTY:
+          cp = ts->info_property;
+          break;
+        case TH_INFO_PROPERTY_TEXT:
+          cp = ts->info_property_text;
+          break;
+        case TH_INFO_OPERATOR:
+          cp = ts->info_operator;
+          break;
+        case TH_INFO_OPERATOR_TEXT:
+          cp = ts->info_operator_text;
+          break;
         case TH_V3D_CLIPPING_BORDER:
           cp = ts->clipping_border_3d;
           break;
@@ -968,9 +1004,10 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
 }
 
 /**
- * initialize default theme
- * \note: when you add new colors, created & saved themes need initialized
- * use function below, init_userdef_do_versions()
+ * Initialize default theme.
+ *
+ * \note When you add new colors, created & saved themes need initialized
+ * use function below, #init_userdef_do_versions.
  */
 void UI_theme_init_default(void)
 {

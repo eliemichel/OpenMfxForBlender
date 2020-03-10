@@ -103,7 +103,9 @@ void GPU_batch_init_ex(
   for (int v = 1; v < GPU_BATCH_VBO_MAX_LEN; v++) {
     batch->verts[v] = NULL;
   }
-  batch->inst = NULL;
+  for (int v = 0; v < GPU_BATCH_INST_VBO_MAX_LEN; v++) {
+    batch->inst[v] = NULL;
+  }
   batch->elem = elem;
   batch->gl_prim_type = convert_prim_type_to_gl(prim_type);
   batch->phase = GPU_BATCH_READY_TO_DRAW;
@@ -129,7 +131,8 @@ void GPU_batch_clear(GPUBatch *batch)
     GPU_indexbuf_discard(batch->elem);
   }
   if (batch->owns_flag & GPU_BATCH_OWNS_INSTANCES) {
-    GPU_vertbuf_discard(batch->inst);
+    GPU_vertbuf_discard(batch->inst[0]);
+    GPU_VERTBUF_DISCARD_SAFE(batch->inst[1]);
   }
   if ((batch->owns_flag & ~GPU_BATCH_OWNS_INDEX) != 0) {
     for (int v = 0; v < GPU_BATCH_VBO_MAX_LEN; v++) {
@@ -171,10 +174,11 @@ void GPU_batch_instbuf_set(GPUBatch *batch, GPUVertBuf *inst, bool own_vbo)
   /* redo the bindings */
   GPU_batch_vao_cache_clear(batch);
 
-  if (batch->inst != NULL && (batch->owns_flag & GPU_BATCH_OWNS_INSTANCES)) {
-    GPU_vertbuf_discard(batch->inst);
+  if (batch->inst[0] != NULL && (batch->owns_flag & GPU_BATCH_OWNS_INSTANCES)) {
+    GPU_vertbuf_discard(batch->inst[0]);
+    GPU_VERTBUF_DISCARD_SAFE(batch->inst[1]);
   }
-  batch->inst = inst;
+  batch->inst[0] = inst;
 
   if (own_vbo) {
     batch->owns_flag |= GPU_BATCH_OWNS_INSTANCES;
@@ -201,6 +205,37 @@ void GPU_batch_elembuf_set(GPUBatch *batch, GPUIndexBuf *elem, bool own_ibo)
   else {
     batch->owns_flag &= ~GPU_BATCH_OWNS_INDEX;
   }
+}
+
+/* A bit of a quick hack. Should be streamlined as the vbos handling */
+int GPU_batch_instbuf_add_ex(GPUBatch *batch, GPUVertBuf *insts, bool own_vbo)
+{
+  /* redo the bindings */
+  GPU_batch_vao_cache_clear(batch);
+
+  for (uint v = 0; v < GPU_BATCH_INST_VBO_MAX_LEN; v++) {
+    if (batch->inst[v] == NULL) {
+#if TRUST_NO_ONE
+      /* for now all VertexBuffers must have same vertex_len */
+      if (batch->inst[0] != NULL) {
+        /* Allow for different size of vertex buf (will choose the smallest number of verts). */
+        // assert(insts->vertex_len == batch->inst[0]->vertex_len);
+        assert(own_vbo == ((batch->owns_flag & GPU_BATCH_OWNS_INSTANCES) != 0));
+      }
+#endif
+      batch->inst[v] = insts;
+      if (own_vbo) {
+        batch->owns_flag |= GPU_BATCH_OWNS_INSTANCES;
+      }
+      return v;
+    }
+  }
+
+  /* we only make it this far if there is no room for another GPUVertBuf */
+#if TRUST_NO_ONE
+  assert(false);
+#endif
+  return -1;
 }
 
 /* Returns the index of verts in the batch. */
@@ -458,8 +493,10 @@ static void batch_update_program_bindings(GPUBatch *batch, uint i_first)
       create_bindings(batch->verts[v], batch->interface, 0, false);
     }
   }
-  if (batch->inst) {
-    create_bindings(batch->inst, batch->interface, i_first, true);
+  for (int v = GPU_BATCH_INST_VBO_MAX_LEN - 1; v > -1; v--) {
+    if (batch->inst[v]) {
+      create_bindings(batch->inst[v], batch->interface, i_first, true);
+    }
   }
   if (batch->elem) {
     GPU_indexbuf_use(batch->elem);
@@ -639,7 +676,11 @@ void GPU_batch_draw_advanced(GPUBatch *batch, int v_first, int v_count, int i_fi
     v_count = (batch->elem) ? batch->elem->index_len : batch->verts[0]->vertex_len;
   }
   if (i_count == 0) {
-    i_count = (batch->inst) ? batch->inst->vertex_len : 1;
+    i_count = (batch->inst[0]) ? batch->inst[0]->vertex_len : 1;
+    /* Meh. This is to be able to use different numbers of verts in instance vbos. */
+    if (batch->inst[1] && i_count > batch->inst[1]->vertex_len) {
+      i_count = batch->inst[1]->vertex_len;
+    }
   }
 
   if (v_count == 0 || i_count == 0) {
@@ -655,11 +696,24 @@ void GPU_batch_draw_advanced(GPUBatch *batch, int v_first, int v_count, int i_fi
   // BLI_assert(v_first + v_count <=
   //            (batch->elem ? batch->elem->index_len : batch->verts[0]->vertex_len));
 
+#ifdef __APPLE__
+  GLuint vao = 0;
+#endif
+
   if (!GPU_arb_base_instance_is_supported()) {
     if (i_first > 0) {
+#ifdef __APPLE__
+      /**
+       * There seems to be a nasty bug when drawing using the same VAO reconfiguring. (see T71147)
+       * We just use a throwaway VAO for that. Note that this is likely to degrade performance.
+       **/
+      glGenVertexArrays(1, &vao);
+      glBindVertexArray(vao);
+#else
       /* If using offset drawing with instancing, we must
        * use the default VAO and redo bindings. */
       glBindVertexArray(GPU_vao_default());
+#endif
       batch_update_program_bindings(batch, i_first);
     }
     else {
@@ -698,6 +752,12 @@ void GPU_batch_draw_advanced(GPUBatch *batch, int v_first, int v_count, int i_fi
     glEnable(GL_PRIMITIVE_RESTART);
 #endif
   }
+
+#ifdef __APPLE__
+  if (vao != 0) {
+    glDeleteVertexArrays(1, &vao);
+  }
+#endif
 }
 
 /* just draw some vertices and let shader place them where we want. */
@@ -721,11 +781,8 @@ void GPU_draw_primitive(GPUPrimType prim_type, int v_count)
 #if 0
 #  define USE_MULTI_DRAW_INDIRECT 0
 #else
-/* TODO: partial workaround for NVIDIA driver bug on recent GTX/RTX cards,
- * that breaks instancing when using indirect draw-call (see T70011). */
 #  define USE_MULTI_DRAW_INDIRECT \
-    (GL_ARB_multi_draw_indirect && GPU_arb_base_instance_is_supported() && \
-     !GPU_type_matches(GPU_DEVICE_NVIDIA, GPU_OS_ANY, GPU_DRIVER_OFFICIAL))
+    (GL_ARB_multi_draw_indirect && GPU_arb_base_instance_is_supported())
 #endif
 
 typedef struct GPUDrawCommand {
@@ -862,8 +919,12 @@ void GPU_draw_list_submit(GPUDrawList *list)
 
   /* Only do multi-draw indirect if doing more than 2 drawcall.
    * This avoids the overhead of buffer mapping if scene is
-   * not very instance friendly. */
-  if (USE_MULTI_DRAW_INDIRECT && cmd_len > 2) {
+   * not very instance friendly.
+   * BUT we also need to take into account the case where only
+   * a few instances are needed to finish filling a call buffer. */
+  const bool do_mdi = (cmd_len > 2) || (list->cmd_offset + bytes_used == list->buffer_size);
+
+  if (USE_MULTI_DRAW_INDIRECT && do_mdi) {
     GLenum prim = batch->gl_prim_type;
 
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, list->buffer_id);
@@ -920,6 +981,17 @@ void GPU_batch_program_set_builtin_with_config(GPUBatch *batch,
 void GPU_batch_program_set_builtin(GPUBatch *batch, eGPUBuiltinShader shader_id)
 {
   GPU_batch_program_set_builtin_with_config(batch, shader_id, GPU_SHADER_CFG_DEFAULT);
+}
+
+/* Bind program bound to IMM to the batch.
+ * XXX Use this with much care. Drawing with the GPUBatch API is not compatible with IMM.
+ * DO NOT DRAW WITH THE BATCH BEFORE CALLING immUnbindProgram. */
+void GPU_batch_program_set_imm_shader(GPUBatch *batch)
+{
+  GLuint program;
+  GPUShaderInterface *interface;
+  immGetProgram(&program, &interface);
+  GPU_batch_program_set(batch, program, interface);
 }
 
 /** \} */

@@ -180,7 +180,9 @@ static bool wm_keymap_item_equals(wmKeyMapItem *a, wmKeyMapItem *b)
 {
   return (wm_keymap_item_equals_result(a, b) && a->type == b->type && a->val == b->val &&
           a->shift == b->shift && a->ctrl == b->ctrl && a->alt == b->alt && a->oskey == b->oskey &&
-          a->keymodifier == b->keymodifier && a->maptype == b->maptype);
+          a->keymodifier == b->keymodifier && a->maptype == b->maptype &&
+          ((ISKEYBOARD(a->type) == 0) ||
+           (a->flag & KMI_REPEAT_IGNORE) == (b->flag & KMI_REPEAT_IGNORE)));
 }
 
 /* properties can be NULL, otherwise the arg passed is used and ownership is given to the kmi */
@@ -503,31 +505,6 @@ static void keymap_item_set_id(wmKeyMap *keymap, wmKeyMapItem *kmi)
   else {
     kmi->id = -keymap->kmi_id; /* User defined keymap entries have negative ids */
   }
-}
-
-/* if item was added, then bail out */
-wmKeyMapItem *WM_keymap_verify_item(
-    wmKeyMap *keymap, const char *idname, int type, int val, int modifier, int keymodifier)
-{
-  wmKeyMapItem *kmi;
-
-  for (kmi = keymap->items.first; kmi; kmi = kmi->next) {
-    if (STREQLEN(kmi->idname, idname, OP_MAX_TYPENAME)) {
-      break;
-    }
-  }
-  if (kmi == NULL) {
-    kmi = MEM_callocN(sizeof(wmKeyMapItem), "keymap entry");
-
-    BLI_addtail(&keymap->items, kmi);
-    BLI_strncpy(kmi->idname, idname, OP_MAX_TYPENAME);
-
-    keymap_item_set_id(keymap, kmi);
-
-    keymap_event_set(kmi, type, val, modifier, keymodifier);
-    wm_keymap_item_properties_set(kmi);
-  }
-  return kmi;
 }
 
 /* always add item */
@@ -912,20 +889,16 @@ wmKeyMap *WM_keymap_ensure(wmKeyConfig *keyconf, const char *idname, int spaceid
   return km;
 }
 
-wmKeyMap *WM_keymap_find_all(const bContext *C, const char *idname, int spaceid, int regionid)
+wmKeyMap *WM_keymap_find_all(wmWindowManager *wm, const char *idname, int spaceid, int regionid)
 {
-  wmWindowManager *wm = CTX_wm_manager(C);
-
   return WM_keymap_list_find(&wm->userconf->keymaps, idname, spaceid, regionid);
 }
 
-wmKeyMap *WM_keymap_find_all_spaceid_or_empty(const bContext *C,
+wmKeyMap *WM_keymap_find_all_spaceid_or_empty(wmWindowManager *wm,
                                               const char *idname,
                                               int spaceid,
                                               int regionid)
 {
-  wmWindowManager *wm = CTX_wm_manager(C);
-
   return WM_keymap_list_find_spaceid_or_empty(&wm->userconf->keymaps, idname, spaceid, regionid);
 }
 
@@ -1134,12 +1107,13 @@ const char *WM_key_event_string(const short type, const bool compact)
       case LEFTCTRLKEY:
       case RIGHTCTRLKEY:
         if (platform == MACOS) {
-          return "^";
+          return key_event_glyph_or_text(font_id, "^", "\xe2\x8c\x83");
         }
         return IFACE_("Ctrl");
       case LEFTALTKEY:
       case RIGHTALTKEY: {
         if (platform == MACOS) {
+          /* Option symbol on Mac keyboard. */
           single_glyph = "\xe2\x8c\xa5";
         }
         return key_event_glyph_or_text(font_id, IFACE_("Alt"), single_glyph);
@@ -1149,28 +1123,23 @@ const char *WM_key_event_string(const short type, const bool compact)
           return key_event_glyph_or_text(font_id, IFACE_("Cmd"), "\xe2\x8c\x98");
         }
         else if (platform == MSWIN) {
-          return key_event_glyph_or_text(font_id, IFACE_("Win"), "\xe2\x8a\x9e");
+          return key_event_glyph_or_text(font_id, IFACE_("Win"), "\xe2\x9d\x96");
         }
-        return IFACE_("OSkey");
+        return IFACE_("OS");
       } break;
-      case TABKEY: {
-        if (platform == MACOS) {
-          single_glyph = "\xe2\x86\xb9";
-        }
-        return key_event_glyph_or_text(font_id, IFACE_("Tab"), single_glyph);
-      }
+      case TABKEY:
+        return key_event_glyph_or_text(font_id, IFACE_("Tab"), "\xe2\xad\xbe");
       case BACKSPACEKEY:
         return key_event_glyph_or_text(font_id, IFACE_("Bksp"), "\xe2\x8c\xab");
       case ESCKEY:
-        return key_event_glyph_or_text(font_id, IFACE_("Esc"), NULL /* "\xe2\x8e\x8b" */);
-      case RETKEY: {
         if (platform == MACOS) {
-          single_glyph = "\xe2\x8f\x8e";
+          single_glyph = "\xe2\x8e\x8b";
         }
-        return key_event_glyph_or_text(font_id, IFACE_("Enter"), single_glyph);
-      }
+        return key_event_glyph_or_text(font_id, IFACE_("Esc"), single_glyph);
+      case RETKEY:
+        return key_event_glyph_or_text(font_id, IFACE_("Enter"), "\xe2\x86\xb5");
       case SPACEKEY:
-        return key_event_glyph_or_text(font_id, IFACE_("Space"), NULL /* "\xe2\x90\xa3" */);
+        return key_event_glyph_or_text(font_id, IFACE_("Space"), "\xe2\x90\xa3");
       case LEFTARROWKEY:
         return key_event_glyph_or_text(font_id, IFACE_("Left"), "\xe2\x86\x90");
       case UPARROWKEY:
@@ -1320,7 +1289,9 @@ int WM_modalkeymap_operator_items_to_string(wmOperatorType *ot,
                                             char *result,
                                             const int result_len)
 {
-  return WM_modalkeymap_items_to_string(ot->modalkeymap, propvalue, compact, result, result_len);
+  wmWindowManager *wm = G_MAIN->wm.first;
+  wmKeyMap *keymap = WM_keymap_active(wm, ot->modalkeymap);
+  return WM_modalkeymap_items_to_string(keymap, propvalue, compact, result, result_len);
 }
 
 char *WM_modalkeymap_operator_items_to_string_buf(wmOperatorType *ot,
@@ -1479,7 +1450,7 @@ static wmKeyMapItem *wm_keymap_item_find_props(const bContext *C,
 {
   wmWindow *win = CTX_wm_window(C);
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   wmKeyMapItem *found = NULL;
 
   /* look into multiple handler lists to find the item */
@@ -1500,40 +1471,40 @@ static wmKeyMapItem *wm_keymap_item_find_props(const bContext *C,
   if (found == NULL) {
     if (ELEM(opcontext, WM_OP_EXEC_REGION_WIN, WM_OP_INVOKE_REGION_WIN)) {
       if (sa) {
-        if (!(ar && ar->regiontype == RGN_TYPE_WINDOW)) {
-          ar = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
+        if (!(region && region->regiontype == RGN_TYPE_WINDOW)) {
+          region = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
         }
 
-        if (ar) {
+        if (region) {
           found = wm_keymap_item_find_handlers(
-              C, &ar->handlers, opname, opcontext, properties, is_strict, params, r_keymap);
+              C, &region->handlers, opname, opcontext, properties, is_strict, params, r_keymap);
         }
       }
     }
     else if (ELEM(opcontext, WM_OP_EXEC_REGION_CHANNELS, WM_OP_INVOKE_REGION_CHANNELS)) {
-      if (!(ar && ar->regiontype == RGN_TYPE_CHANNELS)) {
-        ar = BKE_area_find_region_type(sa, RGN_TYPE_CHANNELS);
+      if (!(region && region->regiontype == RGN_TYPE_CHANNELS)) {
+        region = BKE_area_find_region_type(sa, RGN_TYPE_CHANNELS);
       }
 
-      if (ar) {
+      if (region) {
         found = wm_keymap_item_find_handlers(
-            C, &ar->handlers, opname, opcontext, properties, is_strict, params, r_keymap);
+            C, &region->handlers, opname, opcontext, properties, is_strict, params, r_keymap);
       }
     }
     else if (ELEM(opcontext, WM_OP_EXEC_REGION_PREVIEW, WM_OP_INVOKE_REGION_PREVIEW)) {
-      if (!(ar && ar->regiontype == RGN_TYPE_PREVIEW)) {
-        ar = BKE_area_find_region_type(sa, RGN_TYPE_PREVIEW);
+      if (!(region && region->regiontype == RGN_TYPE_PREVIEW)) {
+        region = BKE_area_find_region_type(sa, RGN_TYPE_PREVIEW);
       }
 
-      if (ar) {
+      if (region) {
         found = wm_keymap_item_find_handlers(
-            C, &ar->handlers, opname, opcontext, properties, is_strict, params, r_keymap);
+            C, &region->handlers, opname, opcontext, properties, is_strict, params, r_keymap);
       }
     }
     else {
-      if (ar) {
+      if (region) {
         found = wm_keymap_item_find_handlers(
-            C, &ar->handlers, opname, opcontext, properties, is_strict, params, r_keymap);
+            C, &region->handlers, opname, opcontext, properties, is_strict, params, r_keymap);
       }
     }
   }
@@ -1990,9 +1961,8 @@ wmKeyMap *WM_keymap_active(wmWindowManager *wm, wmKeyMap *keymap)
  * In the keymap editor the user key configuration is edited.
  * \{ */
 
-void WM_keymap_item_restore_to_default(bContext *C, wmKeyMap *keymap, wmKeyMapItem *kmi)
+void WM_keymap_item_restore_to_default(wmWindowManager *wm, wmKeyMap *keymap, wmKeyMapItem *kmi)
 {
-  wmWindowManager *wm = CTX_wm_manager(C);
   wmKeyMap *defaultmap, *addonmap;
   wmKeyMapItem *orig;
 
@@ -2039,6 +2009,7 @@ void WM_keymap_item_restore_to_default(bContext *C, wmKeyMap *keymap, wmKeyMapIt
     kmi->oskey = orig->oskey;
     kmi->keymodifier = orig->keymodifier;
     kmi->maptype = orig->maptype;
+    kmi->flag = (kmi->flag & ~KMI_REPEAT_IGNORE) | (orig->flag & KMI_REPEAT_IGNORE);
 
     WM_keyconfig_update_tag(keymap, kmi);
   }
@@ -2050,13 +2021,10 @@ void WM_keymap_item_restore_to_default(bContext *C, wmKeyMap *keymap, wmKeyMapIt
   }
 }
 
-void WM_keymap_restore_to_default(wmKeyMap *keymap, bContext *C)
+void WM_keymap_restore_to_default(wmKeyMap *keymap, wmWindowManager *wm)
 {
-  wmWindowManager *wm = CTX_wm_manager(C);
-  wmKeyMap *usermap;
-
   /* remove keymap from U.user_keymaps and update */
-  usermap = WM_keymap_list_find(
+  wmKeyMap *usermap = WM_keymap_list_find(
       &U.user_keymaps, keymap->idname, keymap->spaceid, keymap->regionid);
 
   if (usermap) {

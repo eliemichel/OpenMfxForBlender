@@ -148,7 +148,12 @@ class FILEBROWSER_PT_filter(Panel):
             if params.use_filter_blendid:
                 row = col.row()
                 row.label(icon='BLANK1')  # Indentation
-                row.prop(params, "filter_id_category", text="")
+
+                sub = row.column(align=True)
+                filter_id = params.filter_id
+                for identifier in dir(filter_id):
+                    if identifier.startswith("category_"):
+                        sub.prop(filter_id, identifier, toggle=True)
 
                 col.separator()
 
@@ -162,27 +167,18 @@ def panel_poll_is_upper_region(region):
 
 
 class FILEBROWSER_UL_dir(UIList):
-    def draw_item(self, _context, layout, _data, item, icon, _active_data, active_propname, _index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
         direntry = item
         # space = context.space_data
-        icon = 'NONE'
-        if active_propname == "system_folders_active":
-            icon = 'DISK_DRIVE'
-        if active_propname == "system_bookmarks_active":
-            icon = 'BOOKMARKS'
-        if active_propname == "bookmarks_active":
-            icon = 'BOOKMARKS'
-        if active_propname == "recent_folders_active":
-            icon = 'FILE_FOLDER'
 
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             row = layout.row(align=True)
             row.enabled = direntry.is_valid
             # Non-editable entries would show grayed-out, which is bad in this specific case, so switch to mere label.
             if direntry.is_property_readonly("name"):
-                row.label(text=direntry.name, icon=icon)
+                row.label(text=direntry.name, icon_value=icon)
             else:
-                row.prop(direntry, "name", text="", emboss=False, icon=icon)
+                row.prop(direntry, "name", text="", emboss=False, icon_value=icon)
 
         elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
@@ -284,7 +280,7 @@ class FILEBROWSER_PT_bookmarks_recents(Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOLS'
     bl_category = "Bookmarks"
-    bl_label = "Recents"
+    bl_label = "Recent"
 
     @classmethod
     def poll(cls, context):
@@ -323,8 +319,11 @@ class FILEBROWSER_PT_advanced_filter(Panel):
             layout.prop(params, "use_filter_blendid")
             if params.use_filter_blendid:
                 layout.separator()
-                col = layout.column()
-                col.prop(params, "filter_id")
+                col = layout.column(align=True)
+                filter_id = params.filter_id
+                for identifier in dir(filter_id):
+                    if identifier.startswith("filter_"):
+                        col.prop(filter_id, identifier, toggle=True)
 
 
 class FILEBROWSER_PT_directory_path(Panel):
@@ -432,7 +431,7 @@ class FILEBROWSER_MT_view(Menu):
 class FILEBROWSER_MT_select(Menu):
     bl_label = "Select"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("file.select_all", text="All").action = 'SELECT'

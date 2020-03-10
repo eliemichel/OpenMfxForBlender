@@ -26,6 +26,10 @@
 
 #include "BLI_compiler_attrs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct BPoint;
 struct Depsgraph;
 struct Lattice;
@@ -37,15 +41,8 @@ struct Scene;
 struct bGPDstroke;
 
 void BKE_lattice_resize(struct Lattice *lt, int u, int v, int w, struct Object *ltOb);
-void BKE_lattice_init(struct Lattice *lt);
 struct Lattice *BKE_lattice_add(struct Main *bmain, const char *name);
-void BKE_lattice_copy_data(struct Main *bmain,
-                           struct Lattice *lt_dst,
-                           const struct Lattice *lt_src,
-                           const int flag);
 struct Lattice *BKE_lattice_copy(struct Main *bmain, const struct Lattice *lt);
-void BKE_lattice_free(struct Lattice *lt);
-void BKE_lattice_make_local(struct Main *bmain, struct Lattice *lt, const bool lib_local);
 void calc_lat_fudu(int flag, int res, float *r_fu, float *r_du);
 
 struct LatticeDeformData *init_latt_deform(struct Object *oblatt,
@@ -62,6 +59,7 @@ void curve_deform_verts(struct Object *cuOb,
                         int numVerts,
                         struct MDeformVert *dvert,
                         const int defgrp_index,
+                        short flag,
                         short defaxis);
 void curve_deform_vector(struct Object *cuOb,
                          struct Object *target,
@@ -75,6 +73,7 @@ void lattice_deform_verts(struct Object *laOb,
                           struct Mesh *mesh,
                           float (*vert_coords)[3],
                           int numVerts,
+                          short flag,
                           const char *vgroup,
                           float influence);
 void armature_deform_verts(struct Object *armOb,
@@ -137,5 +136,9 @@ void BKE_lattice_batch_cache_free(struct Lattice *lt);
 
 extern void (*BKE_lattice_batch_cache_dirty_tag_cb)(struct Lattice *lt, int mode);
 extern void (*BKE_lattice_batch_cache_free_cb)(struct Lattice *lt);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_LATTICE_H__ */

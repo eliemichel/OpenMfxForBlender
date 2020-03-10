@@ -46,6 +46,7 @@
     .single_color = {0.8f, 0.8f, 0.8f}, \
     .background_color = {0.05f, 0.05f, 0.05f}, \
     .studiolight_intensity = 1.0f, \
+    .render_pass = SCE_PASS_COMBINED, \
   }
 
 #define _DNA_DEFAULT_View3DOverlay \
@@ -58,6 +59,7 @@
     /* Intentionally different to vertex/paint mode, \
      * we typically want to see shading too. */ \
     .sculpt_mode_mask_opacity = 0.75f, \
+    .sculpt_mode_face_sets_opacity = 1.0f, \
  \
     .edit_flag = V3D_OVERLAY_EDIT_FACES | V3D_OVERLAY_EDIT_SEAMS | \
                              V3D_OVERLAY_EDIT_SHARP | V3D_OVERLAY_EDIT_FREESTYLE_EDGE | \

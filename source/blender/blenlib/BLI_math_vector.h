@@ -33,6 +33,7 @@ extern "C" {
 
 #include "BLI_compiler_attrs.h"
 #include "BLI_math_inline.h"
+#include "BLI_utildefines.h"
 
 /************************************* Init ***********************************/
 
@@ -105,6 +106,7 @@ MINLINE void add_v4_fl(float r[4], float f);
 MINLINE void add_v2_v2(float r[2], const float a[2]);
 MINLINE void add_v2_v2_db(double r[2], const double a[2]);
 MINLINE void add_v2_v2v2(float r[2], const float a[2], const float b[2]);
+MINLINE void add_v2_v2_int(int r[2], const int a[2]);
 MINLINE void add_v2_v2v2_int(int r[2], const int a[2], const int b[2]);
 MINLINE void add_v3_v3(float r[3], const float a[3]);
 MINLINE void add_v3_v3_db(double r[3], const double a[3]);
@@ -139,7 +141,7 @@ MINLINE void mul_v3_v3(float r[3], const float a[3]);
 MINLINE void mul_v3_v3v3(float r[3], const float a[3], const float b[3]);
 MINLINE void mul_v4_fl(float r[4], float f);
 MINLINE void mul_v4_v4(float r[4], const float a[4]);
-MINLINE void mul_v4_v4fl(float r[3], const float a[3], float f);
+MINLINE void mul_v4_v4fl(float r[3], const float a[4], float f);
 MINLINE void mul_v2_v2_cw(float r[2], const float mat[2], const float vec[2]);
 MINLINE void mul_v2_v2_ccw(float r[2], const float mat[2], const float vec[2]);
 MINLINE float mul_project_m4_v3_zfac(const float mat[4][4],
@@ -323,6 +325,8 @@ MINLINE bool equals_v2v2(const float v1[2], const float v2[2]) ATTR_WARN_UNUSED_
 MINLINE bool equals_v3v3(const float a[3], const float b[3]) ATTR_WARN_UNUSED_RESULT;
 MINLINE bool equals_v4v4(const float a[4], const float b[4]) ATTR_WARN_UNUSED_RESULT;
 
+MINLINE bool equals_v2v2_int(const int v1[2], const int v2[2]) ATTR_WARN_UNUSED_RESULT;
+
 MINLINE bool compare_v2v2(const float a[2],
                           const float b[2],
                           const float limit) ATTR_WARN_UNUSED_RESULT;
@@ -436,6 +440,13 @@ void dist_ensure_v3_v3fl(float v1[3], const float v2[3], const float dist);
 void dist_ensure_v2_v2fl(float v1[2], const float v2[2], const float dist);
 
 void axis_sort_v3(const float axis_values[3], int r_axis_order[3]);
+
+MINLINE void clamp_v2(float vec[2], const float min, const float max);
+MINLINE void clamp_v3(float vec[3], const float min, const float max);
+MINLINE void clamp_v4(float vec[4], const float min, const float max);
+MINLINE void clamp_v2_v2v2(float vec[2], const float min[2], const float max[2]);
+MINLINE void clamp_v3_v3v3(float vec[3], const float min[3], const float max[3]);
+MINLINE void clamp_v4_v4v4(float vec[4], const float min[4], const float max[4]);
 
 /***************************** Array Functions *******************************/
 /* follow fixed length vector function conventions. */

@@ -38,8 +38,8 @@
 #include "BKE_curve.h"
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_texture.h" /* Texture masking. */
@@ -79,8 +79,10 @@ typedef struct Vert2GeomData {
   float *dist[3];
 } Vert2GeomData;
 
-/** Data which is localized to each computed chunk
- * (i.e. thread-safe, and with continuous subset of index range). */
+/**
+ * Data which is localized to each computed chunk
+ * (i.e. thread-safe, and with continuous subset of index range).
+ */
 typedef struct Vert2GeomDataChunk {
   /* Read-only data */
   float last_hit_co[3][3];
@@ -409,6 +411,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   int *tidx, *indices = NULL;
   int numIdx = 0;
   int i;
+  const bool invert_vgroup_mask = (wmd->proximity_flags & MOD_WVG_PROXIMITY_INVERT_VGROUP_MASK) !=
+                                  0;
   /* Flags. */
 #if 0
   const bool do_prev = (wmd->modifier.mode & eModifierMode_DoWeightPreview) != 0;
@@ -435,7 +439,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   }
 
   /* Get vgroup idx from its name. */
-  defgrp_index = defgroup_name_index(ob, wmd->defgrp_name);
+  defgrp_index = BKE_object_defgroup_name_index(ob, wmd->defgrp_name);
   if (defgrp_index == -1) {
     return mesh;
   }
@@ -459,7 +463,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   tw = MEM_malloc_arrayN(numVerts, sizeof(float), "WeightVGProximity Modifier, tw");
   tdw = MEM_malloc_arrayN(numVerts, sizeof(MDeformWeight *), "WeightVGProximity Modifier, tdw");
   for (i = 0; i < numVerts; i++) {
-    MDeformWeight *_dw = defvert_find_index(&dvert[i], defgrp_index);
+    MDeformWeight *_dw = BKE_defvert_find_index(&dvert[i], defgrp_index);
     if (_dw) {
       tidx[numIdx] = i;
       tw[numIdx] = _dw->weight;
@@ -573,7 +577,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
                    wmd->mask_tex_use_channel,
                    wmd->mask_tex_mapping,
                    wmd->mask_tex_map_obj,
-                   wmd->mask_tex_uvlayer_name);
+                   wmd->mask_tex_uvlayer_name,
+                   invert_vgroup_mask);
 
   /* Update vgroup. Note we never add nor remove vertices from vgroup here. */
   weightvg_update_vg(dvert, defgrp_index, dw, numIdx, indices, org_w, false, 0.0f, false, 0.0f);

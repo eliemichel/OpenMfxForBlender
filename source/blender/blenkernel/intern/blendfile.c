@@ -50,7 +50,7 @@
 #include "BKE_ipo.h"
 #include "BKE_keyconfig.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
@@ -154,7 +154,7 @@ static void setup_app_data(bContext *C,
   else if (BLI_listbase_is_empty(&bfd->main->screens)) {
     mode = LOAD_UNDO;
   }
-  else if ((G.fileflags & G_FILE_NO_UI) && (is_startup == false)) {
+  else if (G.fileflags & G_FILE_NO_UI) {
     mode = LOAD_UI_OFF;
   }
   else {
@@ -372,7 +372,7 @@ static void setup_app_data(bContext *C,
      * lib_link on local IDs using linked ones.
      * There is no real way to predict amount of changes here, so we have to fully redo
      * refcounting . */
-    BKE_main_id_refcount_recompute(bmain, true);
+    BKE_main_id_refcount_recompute(bmain, false);
   }
 }
 
@@ -873,7 +873,7 @@ bool BKE_blendfile_write_partial(Main *bmain_src,
 
     while ((id = BLI_pophead(lb_src))) {
       BLI_addtail(lb_dst, id);
-      id_sort_by_name(lb_dst, id);
+      id_sort_by_name(lb_dst, id, NULL);
     }
   }
 

@@ -38,15 +38,17 @@ struct ColorBand;
 
 #define MAX_STYLE_NAME 64
 
-/** default offered by Blender.
- * #uiFont.uifont_id */
+/**
+ * Default offered by Blender.
+ * #uiFont.uifont_id
+ */
 typedef enum eUIFont_ID {
   UIFONT_DEFAULT = 0,
   /*  UIFONT_BITMAP   = 1 */ /* UNUSED */
 
   /* free slots */
   UIFONT_CUSTOM1 = 2,
-  UIFONT_CUSTOM2 = 3,
+  /* UIFONT_CUSTOM2 = 3, */ /* UNUSED */
 } eUIFont_ID;
 
 /* default fonts to load/initialize */
@@ -171,7 +173,7 @@ typedef struct ThemeUI {
 
   float icon_alpha;
   float icon_saturation;
-  char _pad[4];
+  unsigned char widget_text_cursor[4];
 
   /* Axis Colors */
   unsigned char xaxis[4], yaxis[4], zaxis[4];
@@ -212,7 +214,7 @@ typedef struct ThemeSpace {
   unsigned char back[4];
   unsigned char back_grad[4];
 
-  char show_back_grad;
+  char background_type;
   char _pad0[3];
 
   /** Panel title. */
@@ -274,20 +276,20 @@ typedef struct ThemeSpace {
   unsigned char edge[4], edge_select[4];
   unsigned char edge_seam[4], edge_sharp[4], edge_facesel[4], edge_crease[4], edge_bevel[4];
   /** Solid faces. */
-  unsigned char face[4], face_select[4];
+  unsigned char face[4], face_select[4], face_back[4], face_front[4];
   /**  selected color. */
   unsigned char face_dot[4];
   unsigned char extra_edge_len[4], extra_edge_angle[4], extra_face_angle[4], extra_face_area[4];
   unsigned char normal[4];
   unsigned char vertex_normal[4];
   unsigned char loop_normal[4];
-  unsigned char bone_solid[4], bone_pose[4], bone_pose_active[4];
+  unsigned char bone_solid[4], bone_pose[4], bone_pose_active[4], bone_locked_weight[4];
   unsigned char strip[4], strip_select[4];
   unsigned char cframe[4];
   unsigned char time_keyframe[4], time_gp_keyframe[4];
   unsigned char freestyle_edge_mark[4], freestyle_face_mark[4];
   unsigned char time_scrub_background[4];
-  char _pad5[4];
+  unsigned char time_marker_line[4], time_marker_line_selected[4];
 
   unsigned char nurb_uline[4], nurb_vline[4];
   unsigned char act_spline[4], nurb_sel_uline[4], nurb_sel_vline[4], lastsel_point[4];
@@ -313,12 +315,16 @@ typedef struct ThemeSpace {
 
   unsigned char vertex_size, outline_width, obcenter_dia, facedot_size;
   unsigned char noodle_curving;
+  unsigned char grid_levels;
 
   /* syntax for textwindow and nodes */
   unsigned char syntaxl[4], syntaxs[4];  // in nodespace used for backdrop matte
   unsigned char syntaxb[4], syntaxn[4];  // in nodespace used for color input
   unsigned char syntaxv[4], syntaxc[4];  // in nodespace used for converter group
   unsigned char syntaxd[4], syntaxr[4];  // in nodespace used for distort
+
+  unsigned char line_numbers[4];
+  char _pad6[3];
 
   unsigned char nodeclass_output[4], nodeclass_filter[4];
   unsigned char nodeclass_vector[4], nodeclass_texture[4];
@@ -409,6 +415,8 @@ typedef struct ThemeSpace {
   unsigned char info_warning[4], info_warning_text[4];
   unsigned char info_info[4], info_info_text[4];
   unsigned char info_debug[4], info_debug_text[4];
+  unsigned char info_property[4], info_property_text[4];
+  unsigned char info_operator[4], info_operator_text[4];
 
   unsigned char paint_curve_pivot[4];
   unsigned char paint_curve_handle[4];
@@ -417,6 +425,14 @@ typedef struct ThemeSpace {
   unsigned char metadatatext[4];
 
 } ThemeSpace;
+
+/* Viewport Background Gradient Types. */
+
+typedef enum eBackgroundGradientTypes {
+  TH_BACKGROUND_SINGLE_COLOR = 0,
+  TH_BACKGROUND_GRADIENT_LINEAR = 1,
+  TH_BACKGROUND_GRADIENT_RADIAL = 2,
+} eBackgroundGradientTypes;
 
 /* set of colors for use as a custom color set for Objects/Bones wire drawing */
 typedef struct ThemeWireColor {
@@ -432,7 +448,7 @@ typedef struct ThemeWireColor {
 /** #ThemeWireColor.flag */
 typedef enum eWireColor_Flags {
   TH_WIRECOLOR_CONSTCOLS = (1 << 0),
-  TH_WIRECOLOR_TEXTCOLS = (1 << 1),
+  /* TH_WIRECOLOR_TEXTCOLS = (1 << 1), */ /* UNUSED */
 } eWireColor_Flags;
 
 /**
@@ -588,13 +604,20 @@ typedef struct UserDef_FileSpaceData {
   int sort_type;      /* FileSelectParams.sort */
   int details_flags;  /* FileSelectParams.details_flags */
   int flag;           /* FileSelectParams.flag */
-
-  char _pad[4];
+  int _pad0;
+  uint64_t filter_id; /* FileSelectParams.filter_id */
 
   /** Info used when creating the file browser in a temporary window. */
   int temp_win_sizex;
   int temp_win_sizey;
 } UserDef_FileSpaceData;
+
+typedef struct UserDef_Experimental {
+  char _pad0[8]; /* makesdna does not allow empty structs. */
+} UserDef_Experimental;
+
+#define USER_EXPERIMENTAL_TEST(userdef, member) \
+  (((userdef)->flag & USER_DEVELOPER_UI) && ((userdef)->experimental).member)
 
 typedef struct UserDef {
   /** UserDef has separate do-version handling, and can be read from other files. */
@@ -712,6 +735,7 @@ typedef struct UserDef {
   short vbotimeout, vbocollectrate;
   short textimeout, texcollectrate;
   int memcachelimit;
+  /** Unused. */
   int prefetchframes;
   /** Control the rotation step of the view when PAD2, PAD4, PAD6&PAD8 is use. */
   float pad_rot_angle;
@@ -725,7 +749,6 @@ typedef struct UserDef {
   /** Milliseconds to spend spinning the view. */
   short smooth_viewtx;
   short glreslimit;
-  short curssize;
   /** #eColorPicker_Types. */
   short color_picker_type;
   /** Curve smoothing type for newly added F-Curves. */
@@ -734,7 +757,7 @@ typedef struct UserDef {
   char ipo_new;
   /** Handle types for newly added keyframes. */
   char keyhandles_new;
-  char _pad11[2];
+  char _pad11[4];
   /** #eZoomFrame_Mode. */
   char view_frame_type;
 
@@ -830,8 +853,7 @@ typedef struct UserDef {
   short pie_menu_threshold;
 
   short opensubdiv_compute_type;
-  /** #eMultiSample_Type, amount of samples for Grease Pencil. */
-  short gpencil_multisamples;
+  short _pad6;
 
   char factor_display_type;
 
@@ -846,6 +868,8 @@ typedef struct UserDef {
   /** The UI for the user preferences. */
   UserDef_SpaceData space_data;
   UserDef_FileSpaceData file_space_data;
+
+  UserDef_Experimental experimental;
 
   /** Runtime data (keep last). */
   UserDef_Runtime runtime;
@@ -879,6 +903,7 @@ typedef enum eUserPref_Section {
   USER_SECTION_ANIMATION = 13,
   USER_SECTION_NAVIGATION = 14,
   USER_SECTION_FILE_PATHS = 15,
+  USER_SECTION_EXPERIMENTAL = 16,
 } eUserPref_Section;
 
 /** #UserDef_SpaceData.flag (State of the user preferences UI). */
@@ -995,18 +1020,20 @@ typedef enum eUserpref_UI_Flag {
   USER_ZOOM_HORIZ = (1 << 26), /* for CONTINUE and DOLLY zoom */
   USER_SPLASH_DISABLE = (1 << 27),
   USER_HIDE_RECENT = (1 << 28),
-#ifdef DNA_DEPRECATED
-  USER_SHOW_THUMBNAILS =
-      (1 << 29), /* deprecated - We're just trying if there's much desire for this feature, or if
-                    we can make it go for good. Should be cleared if so - Julian, Oct. 2019 */
+#ifdef DNA_DEPRECATED_ALLOW
+  /* Deprecated: We're just trying if there's much desire for this feature,
+   * or if we can make it go for good. Should be cleared if so - Julian, Oct. 2019. */
+  USER_SHOW_THUMBNAILS = (1 << 29),
 #endif
   USER_SAVE_PROMPT = (1 << 30),
   USER_HIDE_SYSTEM_BOOKMARKS = (1u << 31),
 } eUserpref_UI_Flag;
 
-/** #UserDef.uiflag2
+/**
+ * #UserDef.uiflag2
  *
- * \note don't add new flags here, use 'uiflag' which has flags free. */
+ * \note don't add new flags here, use 'uiflag' which has flags free.
+ */
 typedef enum eUserpref_UI_Flag2 {
   USER_UIFLAG2_UNUSED_0 = (1 << 0), /* cleared */
   USER_REGION_OVERLAP = (1 << 1),
@@ -1018,6 +1045,7 @@ typedef enum eUserpref_UI_Flag2 {
 typedef enum eUserpref_GPU_Flag {
   USER_GPU_FLAG_NO_DEPT_PICK = (1 << 0),
   USER_GPU_FLAG_NO_EDIT_MODE_SMOOTH_WIRE = (1 << 1),
+  USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE = (1 << 2),
 } eUserpref_GPU_Flag;
 
 /** #UserDef.tablet_api */
@@ -1032,8 +1060,10 @@ typedef enum eUserpref_APP_Flag {
   USER_APP_LOCK_UI_LAYOUT = (1 << 0),
 } eUserpref_APP_Flag;
 
-/** Auto-Keying mode.
- * #UserDef.autokey_mode */
+/**
+ * Auto-Keying mode.
+ * #UserDef.autokey_mode
+ */
 typedef enum eAutokey_Mode {
   /* AUTOKEY_ON is a bitflag */
   AUTOKEY_ON = 1,
@@ -1044,15 +1074,18 @@ typedef enum eAutokey_Mode {
   AUTOKEY_MODE_EDITKEYS = 5,
 } eAutokey_Mode;
 
-/** Zoom to frame mode.
- * #UserDef.view_frame_type */
+/**
+ * Zoom to frame mode.
+ * #UserDef.view_frame_type
+ */
 typedef enum eZoomFrame_Mode {
   ZOOM_FRAME_MODE_KEEP_RANGE = 0,
   ZOOM_FRAME_MODE_SECONDS = 1,
   ZOOM_FRAME_MODE_KEYFRAMES = 2,
 } eZoomFrame_Mode;
 
-/** Auto-Keying flag
+/**
+ * Auto-Keying flag
  * #UserDef.autokey_flag (not strictly used when autokeying only -
  * is also used when keyframing these days).
  * \note #eAutokey_Flag is used with a macro, search for lines like IS_AUTOKEY_FLAG(INSERTAVAIL).
@@ -1101,16 +1134,10 @@ typedef enum eDupli_ID_Flags {
   USER_DUP_GPENCIL = (1 << 13),
 } eDupli_ID_Flags;
 
-/** Max anti alias draw method
- * #UserDef.gpu_viewport_antialias */
-typedef enum eOpenGL_AntiAliasMethod {
-  USER_AA_NONE = 0,
-  USER_AA_FXAA = 1,
-  USER_AA_TAA8 = 2,
-} eOpenGL_AntiAliasMethod;
-
-/** Text draw options
- * #UserDef.text_render */
+/**
+ * Text draw options
+ * #UserDef.text_render
+ */
 typedef enum eText_Draw_Options {
   USER_TEXT_DISABLE_AA = (1 << 0),
 
@@ -1119,8 +1146,10 @@ typedef enum eText_Draw_Options {
   USER_TEXT_HINTING_FULL = (1 << 3),
 } eText_Draw_Options;
 
-/** Grease Pencil Settings.
- * #UserDef.gp_settings */
+/**
+ * Grease Pencil Settings.
+ * #UserDef.gp_settings
+ */
 typedef enum eGP_UserdefSettings {
   GP_PAINT_UNUSED_0 = (1 << 0),
 } eGP_UserdefSettings;
@@ -1129,8 +1158,10 @@ enum {
   USER_GIZMO_DRAW = (1 << 0),
 };
 
-/** Color Picker Types.
- * #UserDef.color_picker_type */
+/**
+ * Color Picker Types.
+ * #UserDef.color_picker_type
+ */
 typedef enum eColorPicker_Types {
   USER_CP_CIRCLE_HSV = 0,
   USER_CP_SQUARE_SV = 1,
@@ -1139,8 +1170,10 @@ typedef enum eColorPicker_Types {
   USER_CP_CIRCLE_HSL = 4,
 } eColorPicker_Types;
 
-/** Timecode display styles
- * #UserDef.timecode_style */
+/**
+ * Timecode display styles
+ * #UserDef.timecode_style
+ */
 typedef enum eTimecodeStyles {
   /**
    * As little info as is necessary to show relevant info with '+' to denote the frames
@@ -1194,7 +1227,7 @@ typedef enum eNdof_Flag {
 
 #define NDOF_PIXELS_PER_SECOND 600.0f
 
-/** UserDef.ogl_multisamples and gpencil_multisamples */
+/** UserDef.ogl_multisamples */
 typedef enum eMultiSample_Type {
   USER_MULTISAMPLE_NONE = 0,
   USER_MULTISAMPLE_2 = 2,

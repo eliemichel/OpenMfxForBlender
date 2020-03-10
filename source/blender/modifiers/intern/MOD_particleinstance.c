@@ -35,7 +35,7 @@
 
 #include "BKE_effect.h"
 #include "BKE_lattice.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_particle.h"
@@ -162,6 +162,9 @@ static bool particle_skip(ParticleInstanceModifierData *pimd, ParticleSystem *ps
       return true;
     }
     if (pa->alive == PARS_DEAD && (pimd->flag & eParticleInstanceFlag_Dead) == 0) {
+      return true;
+    }
+    if (pa->flag & (PARS_UNEXIST | PARS_NO_DISP)) {
       return true;
     }
   }

@@ -111,14 +111,13 @@ static bool graph_panel_poll(const bContext *C, PanelType *UNUSED(pt))
 
 /* -------------- */
 
-/* Graph Editor View Settings */
-static void graph_panel_view(const bContext *C, Panel *pa)
+static void graph_panel_cursor_header(const bContext *C, Panel *pa)
 {
   bScreen *sc = CTX_wm_screen(C);
   SpaceGraph *sipo = CTX_wm_space_graph(C);
   Scene *scene = CTX_data_scene(C);
   PointerRNA spaceptr, sceneptr;
-  uiLayout *col, *sub, *row;
+  uiLayout *col;
 
   /* get RNA pointers for use when creating the UI elements */
   RNA_id_pointer_create(&scene->id, &sceneptr);
@@ -126,26 +125,41 @@ static void graph_panel_view(const bContext *C, Panel *pa)
 
   /* 2D-Cursor */
   col = uiLayoutColumn(pa->layout, false);
-  uiItemR(col, &spaceptr, "show_cursor", 0, NULL, ICON_NONE);
+  uiItemR(col, &spaceptr, "show_cursor", 0, "", ICON_NONE);
+}
+
+static void graph_panel_cursor(const bContext *C, Panel *pa)
+{
+  bScreen *sc = CTX_wm_screen(C);
+  SpaceGraph *sipo = CTX_wm_space_graph(C);
+  Scene *scene = CTX_data_scene(C);
+  PointerRNA spaceptr, sceneptr;
+  uiLayout *layout = pa->layout;
+  uiLayout *col, *sub;
+
+  /* get RNA pointers for use when creating the UI elements */
+  RNA_id_pointer_create(&scene->id, &sceneptr);
+  RNA_pointer_create(&sc->id, &RNA_SpaceGraphEditor, sipo, &spaceptr);
+
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
+
+  /* 2D-Cursor */
+  col = uiLayoutColumn(layout, false);
+  uiLayoutSetActive(col, RNA_boolean_get(&spaceptr, "show_cursor"));
 
   sub = uiLayoutColumn(col, true);
-  uiLayoutSetActive(sub, RNA_boolean_get(&spaceptr, "show_cursor"));
-  uiItemO(sub, IFACE_("Cursor from Selection"), ICON_NONE, "GRAPH_OT_frame_jump");
-
-  sub = uiLayoutColumn(col, true);
-  uiLayoutSetActive(sub, RNA_boolean_get(&spaceptr, "show_cursor"));
-  row = uiLayoutSplit(sub, 0.7f, true);
   if (sipo->mode == SIPO_MODE_DRIVERS) {
-    uiItemR(row, &spaceptr, "cursor_position_x", 0, IFACE_("Cursor X"), ICON_NONE);
+    uiItemR(sub, &spaceptr, "cursor_position_x", 0, IFACE_("Cursor X"), ICON_NONE);
   }
   else {
-    uiItemR(row, &sceneptr, "frame_current", 0, IFACE_("Cursor X"), ICON_NONE);
+    uiItemR(sub, &sceneptr, "frame_current", 0, IFACE_("Cursor X"), ICON_NONE);
   }
-  uiItemEnumO(row, "GRAPH_OT_snap", IFACE_("To Keys"), 0, "type", GRAPHKEYS_SNAP_CFRA);
 
-  row = uiLayoutSplit(sub, 0.7f, true);
-  uiItemR(row, &spaceptr, "cursor_position_y", 0, IFACE_("Cursor Y"), ICON_NONE);
-  uiItemEnumO(row, "GRAPH_OT_snap", IFACE_("To Keys"), 0, "type", GRAPHKEYS_SNAP_VALUE);
+  uiItemR(sub, &spaceptr, "cursor_position_y", 0, IFACE_("Y"), ICON_NONE);
+
+  sub = uiLayoutColumn(col, true);
+  uiItemO(sub, IFACE_("Cursor to Selection"), ICON_NONE, "GRAPH_OT_frame_jump");
 }
 
 /* ******************* active F-Curve ************** */
@@ -156,7 +170,7 @@ static void graph_panel_properties(const bContext *C, Panel *pa)
   FCurve *fcu;
   PointerRNA fcu_ptr;
   uiLayout *layout = pa->layout;
-  uiLayout *col, *row, *sub;
+  uiLayout *col;
   char name[256];
   int icon = 0;
 
@@ -193,27 +207,26 @@ static void graph_panel_properties(const bContext *C, Panel *pa)
   }
   uiItemL(col, name, icon);
 
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
+
   /* RNA-Path Editing - only really should be enabled when things aren't working */
-  col = uiLayoutColumn(layout, true);
+  col = uiLayoutColumn(layout, false);
   uiLayoutSetEnabled(col, (fcu->flag & FCURVE_DISABLED) != 0);
   uiItemR(col, &fcu_ptr, "data_path", 0, "", ICON_RNA);
   uiItemR(col, &fcu_ptr, "array_index", 0, NULL, ICON_NONE);
 
   /* color settings */
   col = uiLayoutColumn(layout, true);
-  uiItemL(col, IFACE_("Display Color:"), ICON_NONE);
+  uiItemR(col, &fcu_ptr, "color_mode", 0, "Display Color", ICON_NONE);
 
-  row = uiLayoutRow(col, true);
-  uiItemR(row, &fcu_ptr, "color_mode", 0, "", ICON_NONE);
-
-  sub = uiLayoutRow(row, true);
-  uiLayoutSetEnabled(sub, (fcu->color_mode == FCURVE_COLOR_CUSTOM));
-  uiItemR(sub, &fcu_ptr, "color", 0, "", ICON_NONE);
+  if (fcu->color_mode == FCURVE_COLOR_CUSTOM) {
+    uiItemR(col, &fcu_ptr, "color", 0, "Color", ICON_NONE);
+  }
 
   /* smoothing setting */
   col = uiLayoutColumn(layout, true);
-  uiItemL(col, IFACE_("Auto Handle Smoothing:"), ICON_NONE);
-  uiItemR(col, &fcu_ptr, "auto_smoothing", 0, "", ICON_NONE);
+  uiItemR(col, &fcu_ptr, "auto_smoothing", 0, "Handle Smoothing", ICON_NONE);
 
   MEM_freeN(ale);
 }
@@ -281,7 +294,7 @@ static void graphedit_activekey_handles_cb(bContext *C, void *fcu_ptr, void *bez
     bezt->h2 = HD_ALIGN;
   }
   else {
-    BKE_nurb_bezt_handle_test(bezt, true);
+    BKE_nurb_bezt_handle_test(bezt, SELECT, true);
   }
 
   /* now call standard updates */
@@ -339,6 +352,9 @@ static void graph_panel_key_properties(const bContext *C, Panel *pa)
   BezTriple *bezt, *prevbezt;
 
   uiLayout *layout = pa->layout;
+  const ARegion *region = CTX_wm_region(C);
+  /* Just a width big enough so buttons use entire layout width (will be clamped by it then). */
+  const int but_max_width = region->winx;
   uiLayout *col;
   uiBlock *block;
 
@@ -348,6 +364,8 @@ static void graph_panel_key_properties(const bContext *C, Panel *pa)
 
   block = uiLayoutGetBlock(layout);
   /* UI_block_func_handle_set(block, do_graph_region_buttons, NULL); */
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
 
   /* only show this info if there are keyframes to edit */
   if (get_active_fcurve_keyframe_edit(fcu, &bezt, &prevbezt)) {
@@ -404,33 +422,15 @@ static void graph_panel_key_properties(const bContext *C, Panel *pa)
     col = uiLayoutColumn(layout, true);
     /* keyframe itself */
     {
-      uiItemL(col, IFACE_("Key:"), ICON_NONE);
 
+      uiItemL_respect_property_split(col, IFACE_("Key Value"), ICON_NONE);
       but = uiDefButR(block,
                       UI_BTYPE_NUM,
                       B_REDR,
-                      IFACE_("Frame:"),
+                      "",
                       0,
                       0,
-                      UI_UNIT_X,
-                      UI_UNIT_Y,
-                      &bezt_ptr,
-                      "co",
-                      0,
-                      0,
-                      0,
-                      -1,
-                      -1,
-                      NULL);
-      UI_but_func_set(but, graphedit_activekey_update_cb, fcu, bezt);
-
-      but = uiDefButR(block,
-                      UI_BTYPE_NUM,
-                      B_REDR,
-                      IFACE_("Value:"),
-                      0,
-                      0,
-                      UI_UNIT_X,
+                      but_max_width,
                       UI_UNIT_Y,
                       &bezt_ptr,
                       "co",
@@ -442,19 +442,40 @@ static void graph_panel_key_properties(const bContext *C, Panel *pa)
                       NULL);
       UI_but_func_set(but, graphedit_activekey_update_cb, fcu, bezt);
       UI_but_unit_type_set(but, unit);
+
+      uiItemL_respect_property_split(col, IFACE_("Frame"), ICON_NONE);
+      but = uiDefButR(block,
+                      UI_BTYPE_NUM,
+                      B_REDR,
+                      "",
+                      0,
+                      0,
+                      but_max_width,
+                      UI_UNIT_Y,
+                      &bezt_ptr,
+                      "co",
+                      0,
+                      0,
+                      0,
+                      -1,
+                      -1,
+                      NULL);
+      UI_but_func_set(but, graphedit_activekey_update_cb, fcu, bezt);
     }
 
     /* previous handle - only if previous was Bezier interpolation */
     if ((prevbezt) && (prevbezt->ipo == BEZT_IPO_BEZ)) {
-      uiItemL(col, IFACE_("Left Handle:"), ICON_NONE);
 
+      col = uiLayoutColumn(layout, true);
+
+      uiItemL_respect_property_split(col, IFACE_("Left Handle X"), ICON_NONE);
       but = uiDefButR(block,
                       UI_BTYPE_NUM,
                       B_REDR,
-                      "X:",
+                      "",
                       0,
                       0,
-                      UI_UNIT_X,
+                      but_max_width,
                       UI_UNIT_Y,
                       &bezt_ptr,
                       "handle_left",
@@ -466,13 +487,14 @@ static void graph_panel_key_properties(const bContext *C, Panel *pa)
                       NULL);
       UI_but_func_set(but, graphedit_activekey_left_handle_coord_cb, fcu, bezt);
 
+      uiItemL_respect_property_split(col, IFACE_("Y"), ICON_NONE);
       but = uiDefButR(block,
                       UI_BTYPE_NUM,
                       B_REDR,
-                      "Y:",
+                      "",
                       0,
                       0,
-                      UI_UNIT_X,
+                      but_max_width,
                       UI_UNIT_Y,
                       &bezt_ptr,
                       "handle_left",
@@ -485,14 +507,14 @@ static void graph_panel_key_properties(const bContext *C, Panel *pa)
       UI_but_func_set(but, graphedit_activekey_left_handle_coord_cb, fcu, bezt);
       UI_but_unit_type_set(but, unit);
 
-      /* XXX: with label? */
+      uiItemL_respect_property_split(col, IFACE_("Type"), ICON_NONE);
       but = uiDefButR(block,
                       UI_BTYPE_MENU,
                       B_REDR,
                       NULL,
                       0,
                       0,
-                      UI_UNIT_X,
+                      but_max_width,
                       UI_UNIT_Y,
                       &bezt_ptr,
                       "handle_left_type",
@@ -508,15 +530,16 @@ static void graph_panel_key_properties(const bContext *C, Panel *pa)
     /* next handle - only if current is Bezier interpolation */
     if (bezt->ipo == BEZT_IPO_BEZ) {
       /* NOTE: special update callbacks are needed on the coords here due to T39911 */
-      uiItemL(col, IFACE_("Right Handle:"), ICON_NONE);
 
+      col = uiLayoutColumn(layout, true);
+      uiItemL_respect_property_split(col, IFACE_("Right Handle X"), ICON_NONE);
       but = uiDefButR(block,
                       UI_BTYPE_NUM,
                       B_REDR,
-                      "X:",
+                      "",
                       0,
                       0,
-                      UI_UNIT_X,
+                      but_max_width,
                       UI_UNIT_Y,
                       &bezt_ptr,
                       "handle_right",
@@ -528,13 +551,14 @@ static void graph_panel_key_properties(const bContext *C, Panel *pa)
                       NULL);
       UI_but_func_set(but, graphedit_activekey_right_handle_coord_cb, fcu, bezt);
 
+      uiItemL_respect_property_split(col, IFACE_("Y"), ICON_NONE);
       but = uiDefButR(block,
                       UI_BTYPE_NUM,
                       B_REDR,
-                      "Y:",
+                      "",
                       0,
                       0,
-                      UI_UNIT_X,
+                      but_max_width,
                       UI_UNIT_Y,
                       &bezt_ptr,
                       "handle_right",
@@ -547,14 +571,14 @@ static void graph_panel_key_properties(const bContext *C, Panel *pa)
       UI_but_func_set(but, graphedit_activekey_right_handle_coord_cb, fcu, bezt);
       UI_but_unit_type_set(but, unit);
 
-      /* XXX: with label? */
+      uiItemL_respect_property_split(col, IFACE_("Type"), ICON_NONE);
       but = uiDefButR(block,
                       UI_BTYPE_MENU,
                       B_REDR,
                       NULL,
                       0,
                       0,
-                      UI_UNIT_X,
+                      but_max_width,
                       UI_UNIT_Y,
                       &bezt_ptr,
                       "handle_right_type",
@@ -1419,9 +1443,10 @@ void graph_buttons_register(ARegionType *art)
 
   pt = MEM_callocN(sizeof(PanelType), "spacetype graph panel view");
   strcpy(pt->idname, "GRAPH_PT_view");
-  strcpy(pt->label, N_("View Properties"));
+  strcpy(pt->label, N_("Show Cursor"));
   strcpy(pt->category, "View");
   strcpy(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
-  pt->draw = graph_panel_view;
+  pt->draw = graph_panel_cursor;
+  pt->draw_header = graph_panel_cursor_header;
   BLI_addtail(&art->paneltypes, pt);
 }

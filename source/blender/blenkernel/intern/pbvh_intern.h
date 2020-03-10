@@ -134,6 +134,10 @@ struct PBVH {
   const MLoopTri *looptri;
   CustomData *vdata;
   CustomData *ldata;
+  CustomData *pdata;
+
+  int face_sets_color_seed;
+  int face_sets_color_default;
 
   /* Grid Data */
   CCGKey gridkey;
@@ -154,6 +158,7 @@ struct PBVH {
   /* flag are verts/faces deformed */
   bool deformed;
   bool show_mask;
+  bool show_face_sets;
 
   /* Dynamic topology */
   BMesh *bm;

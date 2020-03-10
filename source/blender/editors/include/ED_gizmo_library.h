@@ -25,8 +25,11 @@
 #ifndef __ED_GIZMO_LIBRARY_H__
 #define __ED_GIZMO_LIBRARY_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* initialize gizmos */
-void ED_gizmotypes_arrow_2d(void);
 void ED_gizmotypes_arrow_3d(void);
 void ED_gizmotypes_button_2d(void);
 void ED_gizmotypes_cage_2d(void);
@@ -37,10 +40,6 @@ void ED_gizmotypes_facemap_3d(void);
 void ED_gizmotypes_preselect_3d(void);
 void ED_gizmotypes_primitive_3d(void);
 void ED_gizmotypes_blank_3d(void);
-void ED_gizmotypes_value_2d(void);
-
-/* gizmo group types */
-void ED_gizmogrouptypes_value_2d(void);
 
 struct Object;
 struct bContext;
@@ -94,11 +93,6 @@ enum {
 
 void ED_gizmo_arrow3d_set_ui_range(struct wmGizmo *gz, const float min, const float max);
 void ED_gizmo_arrow3d_set_range_fac(struct wmGizmo *gz, const float range_fac);
-
-/* -------------------------------------------------------------------- */
-/* 2D Arrow Gizmo */
-
-/* none */
 
 /* -------------------------------------------------------------------- */
 /* Cage Gizmo */
@@ -246,5 +240,9 @@ void ED_gizmotypes_dial_3d_draw_util(const float matrix_basis[4][4],
                                      const float color[4],
                                      const bool select,
                                      struct Dial3dParams *params);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __ED_GIZMO_LIBRARY_H__ */

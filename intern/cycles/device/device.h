@@ -83,6 +83,7 @@ class DeviceInfo {
   bool has_profiling;        /* Supports runtime collection of profiling info. */
   int cpu_threads;
   vector<DeviceInfo> multi_devices;
+  vector<DeviceInfo> denoising_devices;
 
   DeviceInfo()
   {
@@ -407,7 +408,7 @@ class Device {
                            const DeviceDrawParams &draw_params);
 
   /* acceleration structure building */
-  virtual bool build_optix_bvh(BVH *, device_memory &)
+  virtual bool build_optix_bvh(BVH *)
   {
     return false;
   }

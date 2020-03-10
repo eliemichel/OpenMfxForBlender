@@ -18,7 +18,7 @@
 
 #  include "util/util_foreach.h"
 
-#  include "device/opencl/opencl.h"
+#  include "device/opencl/device_opencl.h"
 #  include "device/opencl/memory_manager.h"
 
 CCL_NAMESPACE_BEGIN
@@ -251,7 +251,7 @@ void MemoryManager::set_kernel_arg_buffers(cl_kernel kernel, cl_uint *narg)
       device->kernel_set_args(kernel, (*narg)++, *device_buffer.buffer);
     }
     else {
-      device->kernel_set_args(kernel, (*narg)++, device->null_mem);
+      device->kernel_set_args(kernel, (*narg)++, 0);
     }
   }
 }

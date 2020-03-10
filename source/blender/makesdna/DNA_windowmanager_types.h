@@ -239,11 +239,10 @@ typedef struct wmWindow {
   /** Window coords. */
   short posx, posy, sizex, sizey;
   /** Borderless, full. */
-  short windowstate;
-  /** Multiscreen... no idea how to store yet. */
-  short monitor;
+  char windowstate;
   /** Set to 1 if an active window, for quick rejects. */
-  short active;
+  char active;
+  char _pad0[4];
   /** Current mouse cursor type. */
   short cursor;
   /** Previous cursor when setting modal one. */
@@ -254,7 +253,8 @@ typedef struct wmWindow {
   short grabcursor;
   /** Internal: tag this for extra mousemove event,
    * makes cursors/buttons active on UI switching. */
-  short addmousemove;
+  char addmousemove;
+  char tag_cursor_refresh;
 
   /** Winid also in screens, is for retrieving this window after read. */
   int winid;
@@ -370,6 +370,7 @@ enum {
   KMI_EXPANDED = (1 << 1),
   KMI_USER_MODIFIED = (1 << 2),
   KMI_UPDATE = (1 << 3),
+  KMI_REPEAT_IGNORE = (1 << 4),
 };
 
 /** #wmKeyMapItem.maptype */
@@ -530,7 +531,7 @@ enum {
    *
    * This difference can be important because previous settings may be used,
    * even with #PROP_SKIP_SAVE the repeat last operator will use the previous settings.
-   * Unlike #OP_IS_REPEAT the selection (and context generally) may be be different each time.
+   * Unlike #OP_IS_REPEAT the selection (and context generally) may be different each time.
    * See T60777 for an example of when this is needed.
    */
   OP_IS_REPEAT_LAST = (1 << 1),

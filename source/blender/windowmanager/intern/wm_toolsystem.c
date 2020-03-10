@@ -40,7 +40,7 @@
 #include "BKE_brush.h"
 #include "BKE_context.h"
 #include "BKE_idprop.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_paint.h"
 #include "BKE_workspace.h"
@@ -172,37 +172,7 @@ static void toolsystem_ref_link(bContext *C, WorkSpace *workspace, bToolRef *tre
   if (tref_rt->data_block[0]) {
     Main *bmain = CTX_data_main(C);
 
-    if ((tref->space_type == SPACE_VIEW3D) && (tref->mode == CTX_MODE_SCULPT_GPENCIL)) {
-      const EnumPropertyItem *items = rna_enum_gpencil_sculpt_brush_items;
-      const int i = RNA_enum_from_identifier(items, tref_rt->data_block);
-      if (i != -1) {
-        const int value = items[i].value;
-        wmWindowManager *wm = bmain->wm.first;
-        for (wmWindow *win = wm->windows.first; win; win = win->next) {
-          if (workspace == WM_window_get_active_workspace(win)) {
-            Scene *scene = WM_window_get_active_scene(win);
-            ToolSettings *ts = scene->toolsettings;
-            ts->gp_sculpt.brushtype = value;
-          }
-        }
-      }
-    }
-    else if ((tref->space_type == SPACE_VIEW3D) && (tref->mode == CTX_MODE_WEIGHT_GPENCIL)) {
-      const EnumPropertyItem *items = rna_enum_gpencil_weight_brush_items;
-      const int i = RNA_enum_from_identifier(items, tref_rt->data_block);
-      if (i != -1) {
-        const int value = items[i].value;
-        wmWindowManager *wm = bmain->wm.first;
-        for (wmWindow *win = wm->windows.first; win; win = win->next) {
-          if (workspace == WM_window_get_active_workspace(win)) {
-            Scene *scene = WM_window_get_active_scene(win);
-            ToolSettings *ts = scene->toolsettings;
-            ts->gp_sculpt.weighttype = value;
-          }
-        }
-      }
-    }
-    else if ((tref->space_type == SPACE_VIEW3D) && (tref->mode == CTX_MODE_PARTICLE)) {
+    if ((tref->space_type == SPACE_VIEW3D) && (tref->mode == CTX_MODE_PARTICLE)) {
       const EnumPropertyItem *items = rna_enum_particle_edit_hair_brush_items;
       const int i = RNA_enum_from_identifier(items, tref_rt->data_block);
       if (i != -1) {
@@ -351,9 +321,37 @@ void WM_toolsystem_ref_set_from_runtime(struct bContext *C,
     *tref->runtime = *tref_rt;
   }
 
+  /* Ideally Python could check this gizmo group flag and not
+   * pass in the argument to begin with. */
+  bool use_fallback_keymap = false;
+
+  if (tref->idname_fallback[0] || tref->runtime->keymap_fallback[0]) {
+    if (tref_rt->gizmo_group[0]) {
+      wmGizmoGroupType *gzgt = WM_gizmogrouptype_find(tref_rt->gizmo_group, false);
+      if (gzgt) {
+        if (gzgt->flag & WM_GIZMOGROUPTYPE_TOOL_FALLBACK_KEYMAP) {
+          use_fallback_keymap = true;
+        }
+      }
+    }
+  }
+  if (use_fallback_keymap == false) {
+    tref->idname_fallback[0] = '\0';
+    tref->runtime->keymap_fallback[0] = '\0';
+  }
+
   toolsystem_ref_link(C, workspace, tref);
 
   toolsystem_refresh_screen_from_active_tool(bmain, workspace, tref);
+
+  /* Set the cursor if possible, if not - it's fine as entering the region will refresh it. */
+  {
+    wmWindow *win = CTX_wm_window(C);
+    if (win != NULL) {
+      win->addmousemove = true;
+      win->tag_cursor_refresh = true;
+    }
+  }
 
   {
     struct wmMsgBus *mbus = CTX_wm_message_bus(C);
@@ -386,29 +384,7 @@ void WM_toolsystem_ref_sync_from_context(Main *bmain, WorkSpace *workspace, bToo
     if (ob == NULL) {
       /* pass */
     }
-    else if ((tref->space_type == SPACE_VIEW3D) && (tref->mode == CTX_MODE_SCULPT_GPENCIL)) {
-      if (ob->mode & OB_MODE_SCULPT_GPENCIL) {
-        const EnumPropertyItem *items = rna_enum_gpencil_sculpt_brush_items;
-        const int i = RNA_enum_from_value(items, ts->gp_sculpt.brushtype);
-        const EnumPropertyItem *item = &items[i];
-        if (!STREQ(tref_rt->data_block, item->identifier)) {
-          STRNCPY(tref_rt->data_block, item->identifier);
-          SNPRINTF(tref->idname, "builtin_brush.%s", item->name);
-        }
-      }
-    }
-    else if ((tref->space_type == SPACE_VIEW3D) && (tref->mode == CTX_MODE_WEIGHT_GPENCIL)) {
-      if (ob->mode & OB_MODE_WEIGHT_GPENCIL) {
-        const EnumPropertyItem *items = rna_enum_gpencil_weight_brush_items;
-        const int i = RNA_enum_from_value(items, ts->gp_sculpt.weighttype);
-        const EnumPropertyItem *item = &items[i];
-        if (!STREQ(tref_rt->data_block, item->identifier)) {
-          STRNCPY(tref_rt->data_block, item->identifier);
-          SNPRINTF(tref->idname, "builtin_brush.%s", item->name);
-        }
-      }
-    }
-    else if ((tref->space_type == SPACE_VIEW3D) && (tref->mode == CTX_MODE_PARTICLE)) {
+    if ((tref->space_type == SPACE_VIEW3D) && (tref->mode == CTX_MODE_PARTICLE)) {
       if (ob->mode & OB_MODE_PARTICLE_EDIT) {
         const EnumPropertyItem *items = rna_enum_particle_edit_hair_brush_items;
         const int i = RNA_enum_from_value(items, ts->particle.brushtype);
@@ -468,6 +444,8 @@ static bool toolsystem_key_ensure_check(const bToolKey *tkey)
       break;
     case SPACE_NODE:
       return true;
+    case SPACE_SEQ:
+      return true;
   }
   return false;
 }
@@ -495,6 +473,11 @@ int WM_toolsystem_mode_from_spacetype(ViewLayer *view_layer, ScrArea *sa, int sp
     }
     case SPACE_NODE: {
       mode = 0;
+      break;
+    }
+    case SPACE_SEQ: {
+      SpaceSeq *sseq = sa->spacedata.first;
+      mode = sseq->view;
       break;
     }
   }
@@ -700,6 +683,8 @@ static const char *toolsystem_default_tool(const bToolKey *tkey)
           return "builtin_brush.Push";
         case CTX_MODE_WEIGHT_GPENCIL:
           return "builtin_brush.Weight";
+        case CTX_MODE_VERTEX_GPENCIL:
+          return "builtin_brush.Draw";
           /* end temporary hack. */
 
         case CTX_MODE_PARTICLE:
@@ -715,6 +700,17 @@ static const char *toolsystem_default_tool(const bToolKey *tkey)
       }
       break;
     case SPACE_NODE: {
+      return "builtin.select_box";
+    }
+    case SPACE_SEQ: {
+      switch (tkey->mode) {
+        case SEQ_VIEW_SEQUENCE:
+          return "builtin.select";
+        case SEQ_VIEW_PREVIEW:
+          return "builtin.annotate";
+        case SEQ_VIEW_SEQUENCE_PREVIEW:
+          return "builtin.select";
+      }
       return "builtin.select_box";
     }
   }

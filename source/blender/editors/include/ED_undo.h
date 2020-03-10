@@ -23,6 +23,11 @@
 
 #include "BLI_compiler_attrs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct Base;
 struct CLG_LogRef;
 struct Object;
 struct UndoStack;
@@ -62,6 +67,10 @@ void ED_undo_object_editmode_restore_helper(struct bContext *C,
                                             uint object_array_len,
                                             uint object_array_stride);
 
+struct Object **ED_undo_editmode_objects_from_view_layer(struct ViewLayer *view_layer,
+                                                         uint *r_len);
+struct Base **ED_undo_editmode_bases_from_view_layer(struct ViewLayer *view_layer, uint *r_len);
+
 struct UndoStack *ED_undo_stack_get(void);
 
 /* helpers */
@@ -76,5 +85,9 @@ void ED_undosys_type_free(void);
 
 /* memfile_undo.c */
 struct MemFile *ED_undosys_stack_memfile_get_active(struct UndoStack *ustack);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __ED_UNDO_H__ */

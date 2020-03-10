@@ -31,7 +31,10 @@
 extern "C" {
 #endif
 
+#include "DNA_defs.h"
+
 struct FileData;
+struct GHash;
 struct GPUTexture;
 struct ID;
 struct Library;
@@ -111,24 +114,6 @@ enum {
   IDP_STRING_SUB_BYTE = 1, /* arbitrary byte array, _not_ null terminated */
 };
 
-/* IDP_GROUP */
-enum {
-  /** Default. */
-  IDP_GROUP_SUB_NONE = 0,
-  /** Object mode settings. */
-  IDP_GROUP_SUB_MODE_OBJECT = 1,
-  /** Mesh edit mode settings. */
-  IDP_GROUP_SUB_MODE_EDIT = 2,
-  /** Render engine settings. */
-  IDP_GROUP_SUB_ENGINE_RENDER = 3,
-  /** Data override. */
-  IDP_GROUP_SUB_OVERRIDE = 4,
-  /** Weight paint mode settings. */
-  IDP_GROUP_SUB_MODE_PAINT_WEIGHT = 5,
-  /** Vertex paint mode settings. */
-  IDP_GROUP_SUB_MODE_PAINT_VERTEX = 6,
-};
-
 /*->flag*/
 enum {
   /** This IDProp may be statically overridden.
@@ -206,6 +191,9 @@ typedef struct IDOverrideLibraryProperty {
   ListBase operations;
 } IDOverrideLibraryProperty;
 
+/* We do not need a full struct for that currently, just a GHash. */
+typedef struct GHash IDOverrideLibraryRuntime;
+
 /* Main container for all overriding data info of a data-block. */
 typedef struct IDOverrideLibrary {
   /** Reference linked ID which this one overrides. */
@@ -220,6 +208,8 @@ typedef struct IDOverrideLibrary {
   /* Temp ID storing extra override data (used for differential operations only currently).
    * Always NULL outside of read/write context. */
   struct ID *storage;
+
+  IDOverrideLibraryRuntime *runtime;
 } IDOverrideLibrary;
 
 enum eOverrideLibrary_Flag {
@@ -255,7 +245,13 @@ typedef struct ID {
   int us;
   int icon_id;
   int recalc;
-  char _pad[4];
+
+  /**
+   * A session-wide unique identifier for a given ID, that remain the same across potential
+   * re-allocations (e.g. due to undo/redo steps).
+   */
+  unsigned int session_uuid;
+
   IDProperty *properties;
 
   /** Reference linked ID which this one overrides. */
@@ -451,9 +447,8 @@ typedef enum ID_Type {
   (!ID_IS_LINKED((_id)) && ID_IS_OVERRIDE_LIBRARY((_id)) && \
    (((ID *)(_id))->override_library->flag & OVERRIDE_LIBRARY_AUTO))
 
-/* No copy-on-write for these types.
- * Keep in sync with check_datablocks_copy_on_writable and deg_copy_on_write_is_needed */
-#define ID_TYPE_IS_COW(_id_type) (!ELEM(_id_type, ID_BR, ID_LS, ID_PAL, ID_IM))
+/* Check whether datablock type is covered by copy-on-write. */
+#define ID_TYPE_IS_COW(_id_type) (!ELEM(_id_type, ID_BR, ID_PAL, ID_IM))
 
 #ifdef GS
 #  undef GS
@@ -658,43 +653,39 @@ typedef enum IDRecalcFlag {
 
 } IDRecalcFlag;
 
-/* To filter ID types (filter_id) */
-/* XXX We cannot put all needed IDs inside an enum...
- *     We'll have to see whether we can fit all needed ones inside 32 values,
- *     or if we need to fallback to longlong defines :/
- */
+/* To filter ID types (filter_id). 64 bit to fit all types. */
 enum {
-  FILTER_ID_AC = (1 << 0),
-  FILTER_ID_AR = (1 << 1),
-  FILTER_ID_BR = (1 << 2),
-  FILTER_ID_CA = (1 << 3),
-  FILTER_ID_CU = (1 << 4),
-  FILTER_ID_GD = (1 << 5),
-  FILTER_ID_GR = (1 << 6),
-  FILTER_ID_IM = (1 << 7),
-  FILTER_ID_LA = (1 << 8),
-  FILTER_ID_LS = (1 << 9),
-  FILTER_ID_LT = (1 << 10),
-  FILTER_ID_MA = (1 << 11),
-  FILTER_ID_MB = (1 << 12),
-  FILTER_ID_MC = (1 << 13),
-  FILTER_ID_ME = (1 << 14),
-  FILTER_ID_MSK = (1 << 15),
-  FILTER_ID_NT = (1 << 16),
-  FILTER_ID_OB = (1 << 17),
-  FILTER_ID_PAL = (1 << 18),
-  FILTER_ID_PC = (1 << 19),
-  FILTER_ID_SCE = (1 << 20),
-  FILTER_ID_SPK = (1 << 21),
-  FILTER_ID_SO = (1 << 22),
-  FILTER_ID_TE = (1 << 23),
-  FILTER_ID_TXT = (1 << 24),
-  FILTER_ID_VF = (1 << 25),
-  FILTER_ID_WO = (1 << 26),
-  FILTER_ID_PA = (1 << 27),
-  FILTER_ID_CF = (1 << 28),
-  FILTER_ID_WS = (1 << 29),
-  FILTER_ID_LP = (1u << 31),
+  FILTER_ID_AC = (1ULL << 0),
+  FILTER_ID_AR = (1ULL << 1),
+  FILTER_ID_BR = (1ULL << 2),
+  FILTER_ID_CA = (1ULL << 3),
+  FILTER_ID_CU = (1ULL << 4),
+  FILTER_ID_GD = (1ULL << 5),
+  FILTER_ID_GR = (1ULL << 6),
+  FILTER_ID_IM = (1ULL << 7),
+  FILTER_ID_LA = (1ULL << 8),
+  FILTER_ID_LS = (1ULL << 9),
+  FILTER_ID_LT = (1ULL << 10),
+  FILTER_ID_MA = (1ULL << 11),
+  FILTER_ID_MB = (1ULL << 12),
+  FILTER_ID_MC = (1ULL << 13),
+  FILTER_ID_ME = (1ULL << 14),
+  FILTER_ID_MSK = (1ULL << 15),
+  FILTER_ID_NT = (1ULL << 16),
+  FILTER_ID_OB = (1ULL << 17),
+  FILTER_ID_PAL = (1ULL << 18),
+  FILTER_ID_PC = (1ULL << 19),
+  FILTER_ID_SCE = (1ULL << 20),
+  FILTER_ID_SPK = (1ULL << 21),
+  FILTER_ID_SO = (1ULL << 22),
+  FILTER_ID_TE = (1ULL << 23),
+  FILTER_ID_TXT = (1ULL << 24),
+  FILTER_ID_VF = (1ULL << 25),
+  FILTER_ID_WO = (1ULL << 26),
+  FILTER_ID_PA = (1ULL << 27),
+  FILTER_ID_CF = (1ULL << 28),
+  FILTER_ID_WS = (1ULL << 29),
+  FILTER_ID_LP = (1ULL << 31),
 };
 
 #define FILTER_ID_ALL \

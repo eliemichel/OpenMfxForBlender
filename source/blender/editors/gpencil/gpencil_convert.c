@@ -152,7 +152,7 @@ static const EnumPropertyItem *rna_GPConvert_mode_items(bContext *UNUSED(C),
  * - assumes that the active space is the 3D-View
  */
 static void gp_strokepoint_convertcoords(bContext *C,
-                                         bGPdata *gpd,
+                                         bGPdata *UNUSED(gpd),
                                          bGPDlayer *gpl,
                                          bGPDstroke *gps,
                                          bGPDspoint *source_pt,
@@ -161,7 +161,7 @@ static void gp_strokepoint_convertcoords(bContext *C,
 {
   Scene *scene = CTX_data_scene(C);
   View3D *v3d = CTX_wm_view3d(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   /* TODO(sergey): This function might be called from a loop, but no tagging is happening in it,
    * so it's not that expensive to ensure evaluated depsgraph  here. However, ideally all the
    * parameters are to wrapped into a context style struct and queried from Context once.*/
@@ -174,7 +174,7 @@ static void gp_strokepoint_convertcoords(bContext *C,
 
   /* apply parent transform */
   float fpt[3];
-  ED_gpencil_parent_location(depsgraph, obact, gpd, gpl, diff_mat);
+  BKE_gpencil_parent_matrix_get(depsgraph, obact, gpl, diff_mat);
   mul_v3_m4v3(fpt, diff_mat, &source_pt->x);
   copy_v3_v3(&pt->x, fpt);
 
@@ -188,7 +188,7 @@ static void gp_strokepoint_convertcoords(bContext *C,
 
     /* get screen coordinate */
     if (gps->flag & GP_STROKE_2DSPACE) {
-      View2D *v2d = &ar->v2d;
+      View2D *v2d = &region->v2d;
       UI_view2d_view_to_region_fl(v2d, pt->x, pt->y, &mvalf[0], &mvalf[1]);
     }
     else {
@@ -197,12 +197,12 @@ static void gp_strokepoint_convertcoords(bContext *C,
         mvalf[1] = (((float)pt->y / 100.0f) * BLI_rctf_size_y(subrect)) + subrect->ymin;
       }
       else {
-        mvalf[0] = (float)pt->x / 100.0f * ar->winx;
-        mvalf[1] = (float)pt->y / 100.0f * ar->winy;
+        mvalf[0] = (float)pt->x / 100.0f * region->winx;
+        mvalf[1] = (float)pt->y / 100.0f * region->winy;
       }
     }
 
-    ED_view3d_win_to_3d(v3d, ar, fp, mvalf, p3d);
+    ED_view3d_win_to_3d(v3d, region, fp, mvalf, p3d);
   }
 }
 
@@ -513,8 +513,8 @@ static void gp_stroke_path_animation(bContext *C,
   prop = RNA_struct_find_property(&ptr, "eval_time");
 
   /* Ensure we have an F-Curve to add keyframes to */
-  act = verify_adt_action(bmain, (ID *)cu, true);
-  fcu = verify_fcurve(bmain, act, NULL, &ptr, "eval_time", 0, true);
+  act = ED_id_action_ensure(bmain, (ID *)cu);
+  fcu = ED_action_fcurve_ensure(bmain, act, NULL, &ptr, "eval_time", 0);
 
   if (G.debug & G_DEBUG) {
     printf("%s: tot len: %f\t\ttot time: %f\n", __func__, gtd->tot_dist, gtd->tot_time);
@@ -1236,16 +1236,16 @@ static void gp_stroke_norm_curve_weights(Curve *cu, const float minmax_weights[2
 static int gp_camera_view_subrect(bContext *C, rctf *subrect)
 {
   View3D *v3d = CTX_wm_view3d(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   if (v3d) {
-    RegionView3D *rv3d = ar->regiondata;
+    RegionView3D *rv3d = region->regiondata;
 
     /* for camera view set the subrect */
     if (rv3d->persp == RV3D_CAMOB) {
       Scene *scene = CTX_data_scene(C);
       Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
-      ED_view3d_calc_camera_border(scene, depsgraph, ar, v3d, rv3d, subrect, true);
+      ED_view3d_calc_camera_border(scene, depsgraph, region, v3d, rv3d, subrect, true);
       return 1;
     }
   }
@@ -1270,7 +1270,7 @@ static void gp_layer_to_curve(bContext *C,
   Collection *collection = CTX_data_collection(C);
   Scene *scene = CTX_data_scene(C);
 
-  bGPDframe *gpf = BKE_gpencil_layer_getframe(gpl, CFRA, GP_GETFRAME_USE_PREV);
+  bGPDframe *gpf = BKE_gpencil_layer_frame_get(gpl, CFRA, GP_GETFRAME_USE_PREV);
   bGPDstroke *gps, *prev_gps = NULL;
   Object *ob;
   Curve *cu;
@@ -1385,11 +1385,13 @@ static void gp_layer_to_curve(bContext *C,
 
   if (mode == GP_STROKECONVERT_POLY) {
     for (nu = cu->nurb.first; nu; nu = nu->next) {
-      BKE_nurb_type_convert(nu, CU_POLY, false);
+      BKE_nurb_type_convert(nu, CU_POLY, false, NULL);
     }
   }
 
   ED_object_base_select(base_new, BA_SELECT);
+
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 }
 
 /* --- */
@@ -1408,7 +1410,7 @@ static bool gp_convert_check_has_valid_timing(bContext *C, bGPDlayer *gpl, wmOpe
   int i;
   bool valid = true;
 
-  if (!gpl || !(gpf = BKE_gpencil_layer_getframe(gpl, CFRA, GP_GETFRAME_USE_PREV)) ||
+  if (!gpl || !(gpf = BKE_gpencil_layer_frame_get(gpl, CFRA, GP_GETFRAME_USE_PREV)) ||
       !(gps = gpf->strokes.first)) {
     return false;
   }
@@ -1474,8 +1476,8 @@ static bool gp_convert_poll(bContext *C)
   /* only if the current view is 3D View, if there's valid data (i.e. at least one stroke!),
    * and if we are not in edit mode!
    */
-  return ((sa && sa->spacetype == SPACE_VIEW3D) && (gpl = BKE_gpencil_layer_getactive(gpd)) &&
-          (gpf = BKE_gpencil_layer_getframe(gpl, CFRA, GP_GETFRAME_USE_PREV)) &&
+  return ((sa && sa->spacetype == SPACE_VIEW3D) && (gpl = BKE_gpencil_layer_active_get(gpd)) &&
+          (gpf = BKE_gpencil_layer_frame_get(gpl, CFRA, GP_GETFRAME_USE_PREV)) &&
           (gpf->strokes.first) && (!GPENCIL_ANY_EDIT_MODE(gpd)));
 }
 
@@ -1485,7 +1487,7 @@ static int gp_convert_layer_exec(bContext *C, wmOperator *op)
   Object *ob = CTX_data_active_object(C);
   bGPdata *gpd = (bGPdata *)ob->data;
 
-  bGPDlayer *gpl = BKE_gpencil_layer_getactive(gpd);
+  bGPDlayer *gpl = BKE_gpencil_layer_active_get(gpd);
   Scene *scene = CTX_data_scene(C);
   const int mode = RNA_enum_get(op->ptr, "type");
   const bool norm_weights = RNA_boolean_get(op->ptr, "use_normalize_weights");
@@ -1749,4 +1751,92 @@ void GPENCIL_OT_convert(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
-/* ************************************************ */
+/* Generate Grease Pencil from Image. */
+static bool image_to_gpencil_poll(bContext *C)
+{
+  SpaceLink *sl = CTX_wm_space_data(C);
+  if (sl->spacetype == SPACE_IMAGE) {
+    return true;
+  }
+
+  return false;
+}
+
+static int image_to_gpencil_exec(bContext *C, wmOperator *op)
+{
+  const float size = RNA_float_get(op->ptr, "size");
+  const bool is_mask = RNA_boolean_get(op->ptr, "mask");
+
+  Main *bmain = CTX_data_main(C);
+  Scene *scene = CTX_data_scene(C);
+  SpaceImage *sima = CTX_wm_space_image(C);
+  bool done = false;
+
+  if (sima->image == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
+  /* Create Object. */
+  const float *cur = scene->cursor.location;
+  ushort local_view_bits = 0;
+  Object *ob = ED_gpencil_add_object(C, cur, local_view_bits);
+  DEG_relations_tag_update(bmain); /* added object */
+
+  /* Create material slot. */
+  Material *ma = BKE_gpencil_object_material_new(bmain, ob, "Image Material", NULL);
+  MaterialGPencilStyle *gp_style = ma->gp_style;
+  gp_style->mode = GP_MATERIAL_MODE_SQUARE;
+
+  /* Add layer and frame. */
+  bGPdata *gpd = (bGPdata *)ob->data;
+  bGPDlayer *gpl = BKE_gpencil_layer_addnew(gpd, "Image Layer", true);
+  bGPDframe *gpf = BKE_gpencil_frame_addnew(gpl, CFRA);
+  done = BKE_gpencil_from_image(sima, gpf, size, is_mask);
+
+  if (done) {
+    /* Delete any selected point. */
+    LISTBASE_FOREACH_MUTABLE (bGPDstroke *, gps, &gpf->strokes) {
+      gp_stroke_delete_tagged_points(gpf, gps, gps->next, GP_SPOINT_SELECT, false, 0);
+    }
+
+    BKE_reportf(op->reports, RPT_INFO, "Object created");
+  }
+
+  return OPERATOR_FINISHED;
+}
+
+void GPENCIL_OT_image_to_grease_pencil(wmOperatorType *ot)
+{
+  PropertyRNA *prop;
+
+  /* identifiers */
+  ot->name = "Generate Grease Pencil Object using image as source";
+  ot->idname = "GPENCIL_OT_image_to_grease_pencil";
+  ot->description = "Generate a Grease Pencil Object using Image as source";
+
+  /* api callbacks */
+  ot->exec = image_to_gpencil_exec;
+  ot->poll = image_to_gpencil_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  /* properties */
+  ot->prop = RNA_def_float(ot->srna,
+                           "size",
+                           0.005f,
+                           0.0001f,
+                           10.0f,
+                           "Point Size",
+                           "Size used for graese pencil points",
+                           0.001f,
+                           1.0f);
+  RNA_def_property_flag(ot->prop, PROP_SKIP_SAVE);
+
+  prop = RNA_def_boolean(ot->srna,
+                         "mask",
+                         false,
+                         "Generate Mask",
+                         "Create an inverted image for masking using alpha channel");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+}

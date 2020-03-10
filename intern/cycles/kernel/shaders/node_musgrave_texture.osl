@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "stdosl.h"
+#include "stdcycles.h"
 #include "node_noise.h"
 #include "vector2.h"
 #include "vector4.h"
@@ -691,7 +691,7 @@ shader node_musgrave_texture(
     float Dimension = 2.0,
     float Scale = 5.0,
     float Detail = 2.0,
-    float Lacunarity = 1.0,
+    float Lacunarity = 2.0,
     float Offset = 0.0,
     float Gain = 1.0,
     output float Fac = 0.0)

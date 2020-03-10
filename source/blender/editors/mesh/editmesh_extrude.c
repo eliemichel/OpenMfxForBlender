@@ -306,7 +306,7 @@ static int edbm_extrude_repeat_exec(bContext *C, wmOperator *op)
 
     EDBM_mesh_normals_update(em);
 
-    EDBM_update_generic(em, true, true);
+    EDBM_update_generic(obedit->data, true, true);
   }
 
   MEM_freeN(objects);
@@ -427,7 +427,7 @@ static int edbm_extrude_region_exec(bContext *C, wmOperator *op)
      * done.*/
     EDBM_mesh_normals_update(em);
 
-    EDBM_update_generic(em, true, true);
+    EDBM_update_generic(obedit->data, true, true);
   }
   MEM_freeN(objects);
   return OPERATOR_FINISHED;
@@ -482,7 +482,7 @@ static int edbm_extrude_context_exec(bContext *C, wmOperator *op)
 
     EDBM_mesh_normals_update(em);
 
-    EDBM_update_generic(em, true, true);
+    EDBM_update_generic(obedit->data, true, true);
   }
   MEM_freeN(objects);
   return OPERATOR_FINISHED;
@@ -528,7 +528,7 @@ static int edbm_extrude_verts_exec(bContext *C, wmOperator *op)
 
     edbm_extrude_verts_indiv(em, op, BM_ELEM_SELECT);
 
-    EDBM_update_generic(em, true, true);
+    EDBM_update_generic(obedit->data, true, true);
   }
   MEM_freeN(objects);
 
@@ -576,7 +576,7 @@ static int edbm_extrude_edges_exec(bContext *C, wmOperator *op)
 
     edbm_extrude_edges_indiv(em, op, BM_ELEM_SELECT, use_normal_flip);
 
-    EDBM_update_generic(em, true, true);
+    EDBM_update_generic(obedit->data, true, true);
   }
   MEM_freeN(objects);
 
@@ -624,7 +624,7 @@ static int edbm_extrude_faces_exec(bContext *C, wmOperator *op)
 
     edbm_extrude_discrete_faces(em, op, BM_ELEM_SELECT);
 
-    EDBM_update_generic(em, true, true);
+    EDBM_update_generic(obedit->data, true, true);
   }
   MEM_freeN(objects);
 
@@ -746,9 +746,9 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
         if (BM_elem_flag_test(eed, BM_ELEM_SELECT)) {
           float co1[2], co2[2];
 
-          if ((ED_view3d_project_float_object(vc.ar, eed->v1->co, co1, V3D_PROJ_TEST_NOP) ==
+          if ((ED_view3d_project_float_object(vc.region, eed->v1->co, co1, V3D_PROJ_TEST_NOP) ==
                V3D_PROJ_RET_OK) &&
-              (ED_view3d_project_float_object(vc.ar, eed->v2->co, co2, V3D_PROJ_TEST_NOP) ==
+              (ED_view3d_project_float_object(vc.region, eed->v2->co, co2, V3D_PROJ_TEST_NOP) ==
                V3D_PROJ_RET_OK)) {
             /* 2D rotate by 90d while adding.
              *  (x, y) = (y, -x)
@@ -786,7 +786,7 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
       copy_v3_v3(ofs, local_center);
 
       mul_m4_v3(vc.obedit->obmat, ofs); /* view space */
-      ED_view3d_win_to_3d_int(vc.v3d, vc.ar, ofs, event->mval, ofs);
+      ED_view3d_win_to_3d_int(vc.v3d, vc.region, ofs, event->mval, ofs);
       mul_m4_v3(vc.obedit->imat, ofs);  // back in object space
 
       sub_v3_v3(ofs, local_center);
@@ -820,7 +820,7 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
 
         /* also project the source, for retopo workflow */
         if (use_proj) {
-          EDBM_project_snap_verts(C, depsgraph, vc.ar, vc.em);
+          EDBM_project_snap_verts(C, depsgraph, vc.region, vc.obedit, vc.em);
         }
       }
 
@@ -836,7 +836,7 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
       BMOIter oiter;
 
       copy_v3_v3(local_center, cursor);
-      ED_view3d_win_to_3d_int(vc.v3d, vc.ar, local_center, event->mval, local_center);
+      ED_view3d_win_to_3d_int(vc.v3d, vc.region, local_center, event->mval, local_center);
 
       mul_m4_v3(vc.obedit->imat, local_center);  // back in object space
 
@@ -853,7 +853,7 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
     }
 
     if (use_proj) {
-      EDBM_project_snap_verts(C, depsgraph, vc.ar, vc.em);
+      EDBM_project_snap_verts(C, depsgraph, vc.region, vc.obedit, vc.em);
     }
 
     /* This normally happens when pushing undo but modal operators
@@ -861,7 +861,7 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
      * done. */
     EDBM_mesh_normals_update(vc.em);
 
-    EDBM_update_generic(vc.em, true, true);
+    EDBM_update_generic(vc.obedit->data, true, true);
 
     WM_event_add_notifier(C, NC_GEOM | ND_DATA, obedit->data);
     WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);

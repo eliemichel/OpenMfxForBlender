@@ -468,8 +468,10 @@ void BKE_previewimg_cached_release(const char *name)
   BKE_previewimg_cached_release_pointer(prv);
 }
 
-/** Handle deferred (lazy) loading/generation of preview image, if needed.
- * For now, only used with file thumbnails. */
+/**
+ * Handle deferred (lazy) loading/generation of preview image, if needed.
+ * For now, only used with file thumbnails.
+ */
 void BKE_previewimg_ensure(PreviewImage *prv, const int size)
 {
   if ((prv->tag & PRV_TAG_DEFFERED) != 0) {
@@ -840,8 +842,8 @@ struct Icon_Geom *BKE_icon_geom_from_memory(const uchar *data, size_t data_len)
   p += 2;
 
   geom->coords_len = coords_len;
-  geom->coords = (const void *)p;
-  geom->colors = (const void *)(p + (data_len / 3));
+  geom->coords = (void *)p;
+  geom->colors = (void *)(p + (data_len / 3));
   geom->icon_id = 0;
   geom->mem = data;
   return geom;

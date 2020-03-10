@@ -36,7 +36,7 @@ set(INC
   ../../../intern/atomic
   ../../../intern/guardedalloc
   ../../../intern/mikktspace
-  ../../../intern/smoke/extern
+  ../../../intern/mantaflow/extern
 )
 
 set(INC_SYS
@@ -84,10 +84,6 @@ if(WITH_IMAGE_OPENEXR)
     bf_imbuf_openexr
   )
   add_definitions(-DWITH_OPENEXR)
-endif()
-
-if(WITH_MOD_SMOKE)
-  add_definitions(-DWITH_SMOKE)
 endif()
 
 if(WITH_FREESTYLE)

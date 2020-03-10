@@ -30,6 +30,9 @@ from bpy.app.translations import (
 from bl_ui.properties_grease_pencil_common import (
     AnnotationDataPanel,
 )
+from bl_ui.space_toolsystem_common import (
+    ToolActivePanelHelper,
+)
 from rna_prop_ui import PropertyPanel
 
 
@@ -89,6 +92,35 @@ def draw_color_balance(layout, color_balance):
     split.template_color_picker(color_balance, "gain", value_slider=True, lock_luminosity=True, cubic=True)
 
 
+class SEQUENCER_PT_active_tool(ToolActivePanelHelper, Panel):
+    bl_space_type = 'SEQUENCE_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = "Tool"
+
+
+class SEQUENCER_HT_tool_header(Header):
+    bl_space_type = 'SEQUENCE_EDITOR'
+    bl_region_type = 'TOOL_HEADER'
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.template_header()
+
+        self.draw_tool_settings(context)
+
+        # TODO: options popover.
+
+    def draw_tool_settings(self, context):
+        layout = self.layout
+
+        # Active Tool
+        # -----------
+        from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
+        tool = ToolSelectPanelHelper.draw_active_tool_header(context, layout)
+        tool_mode = context.mode if tool is None else tool.mode
+
+
 class SEQUENCER_HT_header(Header):
     bl_space_type = 'SEQUENCE_EDITOR'
 
@@ -97,7 +129,10 @@ class SEQUENCER_HT_header(Header):
 
         st = context.space_data
 
-        layout.template_header()
+        show_region_tool_header = st.show_region_tool_header
+
+        if not show_region_tool_header:
+            layout.template_header()
 
         layout.prop(st, "view_type", text="")
 
@@ -134,7 +169,8 @@ class SEQUENCER_MT_editor_menus(Menu):
 
         if st.view_type in {'SEQUENCER', 'SEQUENCER_PREVIEW'}:
             layout.menu("SEQUENCER_MT_select")
-            layout.menu("SEQUENCER_MT_marker")
+            if st.show_markers:
+                layout.menu("SEQUENCER_MT_marker")
             layout.menu("SEQUENCER_MT_add")
             layout.menu("SEQUENCER_MT_strip")
 
@@ -176,12 +212,14 @@ class SEQUENCER_MT_range(Menu):
         layout = self.layout
 
         layout.operator("anim.previewrange_set", text="Set Preview Range")
+        layout.operator("sequencer.set_range_to_strips", text="Set Preview Range to Strips").preview = True
         layout.operator("anim.previewrange_clear", text="Clear Preview Range")
 
         layout.separator()
 
         layout.operator("anim.start_frame_set", text="Set Start Frame")
         layout.operator("anim.end_frame_set", text="Set End Frame")
+        layout.operator("sequencer.set_range_to_strips", text="Set Frame Range to Strips")
 
 
 class SEQUENCER_MT_preview_zoom(Menu):
@@ -223,7 +261,11 @@ class SEQUENCER_MT_view(Menu):
             # wm_keymap_item_find_props() (see #32595).
             layout.operator_context = 'INVOKE_REGION_PREVIEW'
         layout.prop(st, "show_region_ui")
+        layout.prop(st, "show_region_toolbar")
         layout.operator_context = 'INVOKE_DEFAULT'
+
+        if is_sequencer_view:
+            layout.prop(st, "show_region_hud")
 
         if st.view_type == 'SEQUENCER':
             layout.prop(st, "show_backdrop", text="Preview as Backdrop")
@@ -265,8 +307,10 @@ class SEQUENCER_MT_view(Menu):
             layout.operator_context = 'INVOKE_DEFAULT'
 
             layout.prop(st, "show_seconds")
+            layout.prop(st, "show_locked_time")
             layout.prop(st, "show_strip_offset")
-            layout.prop(st, "show_marker_lines")
+            layout.separator()
+            layout.prop(st, "show_markers")
 
         if is_preview:
             layout.separator()
@@ -316,8 +360,10 @@ class SEQUENCER_MT_select_channel(Menu):
     def draw(self, _context):
         layout = self.layout
 
-        layout.operator("sequencer.select_active_side", text="Left").side = 'LEFT'
-        layout.operator("sequencer.select_active_side", text="Right").side = 'RIGHT'
+        layout.operator("sequencer.select_side", text="Left").side = 'LEFT'
+        layout.operator("sequencer.select_side", text="Right").side = 'RIGHT'
+        layout.separator()
+        layout.operator("sequencer.select_side", text="Both Sides").side = 'BOTH'
 
 
 class SEQUENCER_MT_select_linked(Menu):
@@ -358,6 +404,8 @@ class SEQUENCER_MT_select(Menu):
         layout.separator()
 
         layout.operator("sequencer.select_box", text="Box Select")
+        props = layout.operator("sequencer.select_box", text="Box Select (Include Handles)")
+        props.include_handles = True
 
         layout.separator()
 
@@ -504,7 +552,7 @@ class SEQUENCER_MT_add(Menu):
         col.enabled = selected_sequences_len(context) >= 2
 
         col = layout.column()
-        col.operator_menu_enum("sequencer.fades_add", "type", text="Fade", icon="IPO_EASE_IN_OUT")
+        col.operator_menu_enum("sequencer.fades_add", "type", text="Fade", icon='IPO_EASE_IN_OUT')
         col.enabled = selected_sequences_len(context) >= 1
 
 
@@ -670,8 +718,8 @@ class SEQUENCER_MT_strip(Menu):
         layout.menu("SEQUENCER_MT_strip_transform")
 
         layout.separator()
-        layout.operator("sequencer.cut", text="Cut").type = 'SOFT'
-        layout.operator("sequencer.cut", text="Hold Cut").type = 'HARD'
+        layout.operator("sequencer.split", text="Split").type = 'SOFT'
+        layout.operator("sequencer.split", text="Hold Split").type = 'HARD'
 
         layout.separator()
         layout.operator("sequencer.copy", text="Copy")
@@ -735,19 +783,26 @@ class SEQUENCER_MT_context_menu(Menu):
 
         layout.operator_context = 'INVOKE_REGION_WIN'
 
-        layout.operator("sequencer.cut", text="Cut").type = 'SOFT'
+        layout.operator("sequencer.split", text="Split").type = 'SOFT'
 
         layout.separator()
 
         layout.operator("sequencer.copy", text="Copy", icon='COPYDOWN')
         layout.operator("sequencer.paste", text="Paste", icon='PASTEDOWN')
         layout.operator("sequencer.duplicate_move")
+        props = layout.operator("wm.call_panel", text="Rename...")
+        props.name = "TOPBAR_PT_name"
+        props.keep_open = False
         layout.operator("sequencer.delete", text="Delete...")
 
         layout.separator()
 
         layout.operator("sequencer.slip", text="Slip Strip Contents")
         layout.operator("sequencer.snap")
+
+        layout.separator()
+
+        layout.operator("sequencer.set_range_to_strips", text="Set Preview Range to Strips").preview = True
 
         layout.separator()
 
@@ -789,7 +844,7 @@ class SEQUENCER_MT_context_menu(Menu):
             }:
                 layout.separator()
                 layout.menu("SEQUENCER_MT_strip_effect")
-            elif strip_type in 'MOVIE':
+            elif strip_type == 'MOVIE':
                 layout.separator()
                 layout.menu("SEQUENCER_MT_strip_movie")
             elif strip_type == 'IMAGE':
@@ -1060,11 +1115,11 @@ class SEQUENCER_PT_effect(SequencerButtonsPanel, Panel):
                     if i == strip.multicam_source:
                         sub = row.row(align=True)
                         sub.enabled = False
-                        sub.operator("sequencer.cut_multicam", text=f"{i:d}").camera = i
+                        sub.operator("sequencer.split_multicam", text="%d" % i).camera = i
                     else:
                         sub_1 = row.row(align=True)
                         sub_1.enabled = True
-                        sub_1.operator("sequencer.cut_multicam", text=f"{i:d}").camera = i
+                        sub_1.operator("sequencer.split_multicam", text="%d" % i).camera = i
 
                 if strip.channel > BT_ROW and (strip_channel - 1) % BT_ROW:
                     for i in range(strip.channel, strip_channel + ((BT_ROW + 1 - strip_channel) % BT_ROW)):
@@ -2115,6 +2170,7 @@ class SEQUENCER_PT_custom_props(SequencerButtonsPanel, PropertyPanel, Panel):
 
 classes = (
     SEQUENCER_MT_change,
+    SEQUENCER_HT_tool_header,
     SEQUENCER_HT_header,
     SEQUENCER_MT_editor_menus,
     SEQUENCER_MT_range,
@@ -2140,7 +2196,7 @@ classes = (
     SEQUENCER_MT_strip_input,
     SEQUENCER_MT_strip_lock_mute,
     SEQUENCER_MT_context_menu,
-
+    SEQUENCER_PT_active_tool,
     SEQUENCER_PT_strip,
 
     SEQUENCER_PT_effect,

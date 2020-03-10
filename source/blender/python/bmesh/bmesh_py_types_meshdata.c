@@ -72,7 +72,6 @@ static int bpy_bmloopuv_uv_set(BPy_BMLoopUV *self, PyObject *value, void *UNUSED
 
 PyDoc_STRVAR(bpy_bmloopuv_flag__pin_uv_doc, "UV pin state.\n\n:type: boolean");
 PyDoc_STRVAR(bpy_bmloopuv_flag__select_doc, "UV select state.\n\n:type: boolean");
-PyDoc_STRVAR(bpy_bmloopuv_flag__select_edge_doc, "UV edge select state.\n\n:type: boolean");
 
 static PyObject *bpy_bmloopuv_flag_get(BPy_BMLoopUV *self, void *flag_p)
 {
@@ -99,26 +98,17 @@ static int bpy_bmloopuv_flag_set(BPy_BMLoopUV *self, PyObject *value, void *flag
 
 static PyGetSetDef bpy_bmloopuv_getseters[] = {
     /* attributes match rna_def_mloopuv  */
-    {(char *)"uv",
-     (getter)bpy_bmloopuv_uv_get,
-     (setter)bpy_bmloopuv_uv_set,
-     (char *)bpy_bmloopuv_uv_doc,
-     NULL},
-    {(char *)"pin_uv",
+    {"uv", (getter)bpy_bmloopuv_uv_get, (setter)bpy_bmloopuv_uv_set, bpy_bmloopuv_uv_doc, NULL},
+    {"pin_uv",
      (getter)bpy_bmloopuv_flag_get,
      (setter)bpy_bmloopuv_flag_set,
-     (char *)bpy_bmloopuv_flag__pin_uv_doc,
+     bpy_bmloopuv_flag__pin_uv_doc,
      (void *)MLOOPUV_PINNED},
-    {(char *)"select",
+    {"select",
      (getter)bpy_bmloopuv_flag_get,
      (setter)bpy_bmloopuv_flag_set,
-     (char *)bpy_bmloopuv_flag__select_doc,
+     bpy_bmloopuv_flag__select_doc,
      (void *)MLOOPUV_VERTSEL},
-    {(char *)"select_edge",
-     (getter)bpy_bmloopuv_flag_get,
-     (setter)bpy_bmloopuv_flag_set,
-     (char *)bpy_bmloopuv_flag__select_edge_doc,
-     (void *)MLOOPUV_EDGESEL},
 
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
@@ -219,20 +209,20 @@ static int bpy_bmvertskin_flag_set(BPy_BMVertSkin *self, PyObject *value, void *
 
 static PyGetSetDef bpy_bmvertskin_getseters[] = {
     /* attributes match rna_mesh_gen  */
-    {(char *)"radius",
+    {"radius",
      (getter)bpy_bmvertskin_radius_get,
      (setter)bpy_bmvertskin_radius_set,
-     (char *)bpy_bmvertskin_radius_doc,
+     bpy_bmvertskin_radius_doc,
      NULL},
-    {(char *)"use_root",
+    {"use_root",
      (getter)bpy_bmvertskin_flag_get,
      (setter)bpy_bmvertskin_flag_set,
-     (char *)bpy_bmvertskin_flag__use_root_doc,
+     bpy_bmvertskin_flag__use_root_doc,
      (void *)MVERT_SKIN_ROOT},
-    {(char *)"use_loose",
+    {"use_loose",
      (getter)bpy_bmvertskin_flag_get,
      (setter)bpy_bmvertskin_flag_set,
-     (char *)bpy_bmvertskin_flag__use_loose_doc,
+     bpy_bmvertskin_flag__use_loose_doc,
      (void *)MVERT_SKIN_LOOSE},
 
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
@@ -288,15 +278,15 @@ PyObject *BPy_BMVertSkin_CreatePyObject(struct MVertSkin *mvertskin)
 
 static void mloopcol_to_float(const MLoopCol *mloopcol, float r_col[3])
 {
-  rgba_uchar_to_float(r_col, (const unsigned char *)&mloopcol->r);
+  rgba_uchar_to_float(r_col, (const uchar *)&mloopcol->r);
 }
 
 static void mloopcol_from_float(MLoopCol *mloopcol, const float col[3])
 {
-  rgba_float_to_uchar((unsigned char *)&mloopcol->r, col);
+  rgba_float_to_uchar((uchar *)&mloopcol->r, col);
 }
 
-static unsigned char mathutils_bmloopcol_cb_index = -1;
+static uchar mathutils_bmloopcol_cb_index = -1;
 
 static int mathutils_bmloopcol_check(BaseMathObject *UNUSED(bmo))
 {
@@ -384,19 +374,21 @@ PyObject *BPy_BMLoopColor_CreatePyObject(struct MLoopCol *data)
  * This is python type wraps a deform vert as a python dictionary,
  * hiding the #MDeformWeight on access, since the mapping is very close, eg:
  *
- * C:
- *     weight = defvert_find_weight(dv, group_nr);
- *     defvert_remove_group(dv, dw)
+ * \code{.c}
+ * weight = BKE_defvert_find_weight(dv, group_nr);
+ * BKE_defvert_remove_group(dv, dw)
+ * \endcode
  *
- * Py:
- *     weight = dv[group_nr]
- *     del dv[group_nr]
+ * \code{.py}
+ * weight = dv[group_nr]
+ * del dv[group_nr]
+ * \endcode
  *
- * \note: there is nothing BMesh specific here,
+ * \note There is nothing BMesh specific here,
  * its only that BMesh is the only part of blender that uses a hand written api like this.
  * This type could eventually be used to access lattice weights.
  *
- * \note: Many of blender-api's dict-like-wrappers act like ordered dicts,
+ * \note Many of blender-api's dict-like-wrappers act like ordered dicts,
  * This is intentionally _not_ ordered, the weights can be in any order and it won't matter,
  * the order should not be used in the api in any meaningful way (as with a python dict)
  * only expose as mapping, not a sequence.
@@ -425,7 +417,7 @@ static PyObject *bpy_bmdeformvert_subscript(BPy_BMDeformVert *self, PyObject *ke
       return NULL;
     }
     else {
-      MDeformWeight *dw = defvert_find_index(self->data, i);
+      MDeformWeight *dw = BKE_defvert_find_index(self->data, i);
 
       if (dw == NULL) {
         PyErr_SetString(PyExc_KeyError,
@@ -464,7 +456,7 @@ static int bpy_bmdeformvert_ass_subscript(BPy_BMDeformVert *self, PyObject *key,
         return -1;
       }
       else {
-        MDeformWeight *dw = defvert_verify_index(self->data, i);
+        MDeformWeight *dw = BKE_defvert_ensure_index(self->data, i);
         const float f = PyFloat_AsDouble(value);
         if (f == -1 && PyErr_Occurred()) {  // parsed key not a number
           PyErr_SetString(PyExc_TypeError,
@@ -478,14 +470,14 @@ static int bpy_bmdeformvert_ass_subscript(BPy_BMDeformVert *self, PyObject *key,
     }
     else {
       /* del dvert[group_index] */
-      MDeformWeight *dw = defvert_find_index(self->data, i);
+      MDeformWeight *dw = BKE_defvert_find_index(self->data, i);
 
       if (dw == NULL) {
         PyErr_SetString(PyExc_KeyError,
                         "del BMDeformVert[key]: "
                         "key not found");
       }
-      defvert_remove_group(self->data, dw);
+      BKE_defvert_remove_group(self->data, dw);
     }
 
     return 0;
@@ -506,7 +498,7 @@ static int bpy_bmdeformvert_contains(BPy_BMDeformVert *self, PyObject *value)
     return -1;
   }
 
-  return (defvert_find_index(self->data, key) != NULL) ? 1 : 0;
+  return (BKE_defvert_find_index(self->data, key) != NULL) ? 1 : 0;
 }
 
 /* only defined for __contains__ */
@@ -625,7 +617,7 @@ static PyObject *bpy_bmdeformvert_get(BPy_BMDeformVert *self, PyObject *args)
     return NULL;
   }
   else {
-    MDeformWeight *dw = defvert_find_index(self->data, key);
+    MDeformWeight *dw = BKE_defvert_find_index(self->data, key);
 
     if (dw) {
       return PyFloat_FromDouble(dw->weight);
@@ -642,7 +634,7 @@ PyDoc_STRVAR(bpy_bmdeformvert_clear_doc,
              "   Clears all weights.\n");
 static PyObject *bpy_bmdeformvert_clear(BPy_BMDeformVert *self)
 {
-  defvert_clear(self->data);
+  BKE_defvert_clear(self->data);
 
   Py_RETURN_NONE;
 }
@@ -686,7 +678,7 @@ int BPy_BMDeformVert_AssignPyObject(struct MDeformVert *dvert, PyObject *value)
   else {
     MDeformVert *dvert_src = ((BPy_BMDeformVert *)value)->data;
     if (LIKELY(dvert != dvert_src)) {
-      defvert_copy(dvert, dvert_src);
+      BKE_defvert_copy(dvert, dvert_src);
     }
     return 0;
   }

@@ -23,9 +23,6 @@
  * Implementation of Querying and Filtering API's
  */
 
-// TODO(sergey): Use some sort of wrapper.
-#include <deque>
-
 #include "MEM_guardedalloc.h"
 
 extern "C" {
@@ -40,6 +37,7 @@ extern "C" {
 #include "DEG_depsgraph_query.h"
 
 #include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
 #include "intern/node/deg_node.h"
 #include "intern/node/deg_node_component.h"
 #include "intern/node/deg_node_id.h"
@@ -50,7 +48,7 @@ extern "C" {
 namespace DEG {
 namespace {
 
-typedef std::deque<OperationNode *> TraversalQueue;
+typedef deque<OperationNode *> TraversalQueue;
 enum {
   DEG_NODE_VISITED = (1 << 0),
 };
@@ -87,7 +85,7 @@ void deg_foreach_dependent_operation(const Depsgraph *graph,
 {
   /* Start with getting ID node from the graph. */
   IDNode *target_id_node = graph->find_id_node(id);
-  if (target_id_node == NULL) {
+  if (target_id_node == nullptr) {
     /* TODO(sergey): Shall we inform or assert here about attempt to start
      * iterating over non-existing ID? */
     return;
@@ -210,7 +208,7 @@ void deg_foreach_ancestor_ID(const Depsgraph *graph,
 {
   /* Start with getting ID node from the graph. */
   IDNode *target_id_node = graph->find_id_node(id);
-  if (target_id_node == NULL) {
+  if (target_id_node == nullptr) {
     /* TODO(sergey): Shall we inform or assert here about attempt to start
      * iterating over non-existing ID? */
     return;

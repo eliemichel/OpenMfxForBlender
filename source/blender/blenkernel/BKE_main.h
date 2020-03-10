@@ -22,13 +22,20 @@
 /** \file
  * \ingroup bke
  * \section aboutmain Main struct
- * Main is the root of the 'database' of a Blender context. All data
- * is stuffed into lists, and all these lists are knotted to here. A
- * Blender file is not much more but a binary dump of these
- * lists. This list of lists is not serialized itself.
+ * Main is the root of the 'data-base' of a Blender context. All data is put into lists, and all
+ * these lists are stored here.
  *
- * Oops... this should be a _types.h file.
+ * \note A Blender file is not much more than a binary dump of these lists. This list of lists is
+ * not serialized itself.
+ *
+ * \note `BKE_main` files are for operations over the Main database itself, or generating extra
+ * temp data to help working with it. Those should typically not affect the data-blocks themselves.
+ *
+ * \section Function Names
+ *
+ * - `BKE_main_` should be used for functions in that file.
  */
+
 #include "DNA_listBase.h"
 
 #include "BLI_compiler_attrs.h"
@@ -59,16 +66,23 @@ typedef struct MainIDRelationsEntry {
   /* WARNING! for user_to_used,
    * that pointer is really an ID** one, but for used_to_user, it’s only an ID* one! */
   struct ID **id_pointer;
-  int usage_flag; /* Using IDWALK_ enums, in BKE_library_query.h */
+  int usage_flag; /* Using IDWALK_ enums, in BKE_lib_query.h */
 } MainIDRelationsEntry;
 
 typedef struct MainIDRelations {
   struct GHash *id_user_to_used;
   struct GHash *id_used_to_user;
 
+  short flag;
+
   /* Private... */
   struct BLI_mempool *entry_pool;
 } MainIDRelations;
+
+enum {
+  /* Those bmain relations include pointers/usages from editors. */
+  MAINIDRELATIONS_INCLUDE_UI = 1 << 0,
+};
 
 typedef struct Main {
   struct Main *next, *prev;
@@ -142,7 +156,7 @@ void BKE_main_free(struct Main *mainvar);
 void BKE_main_lock(struct Main *bmain);
 void BKE_main_unlock(struct Main *bmain);
 
-void BKE_main_relations_create(struct Main *bmain);
+void BKE_main_relations_create(struct Main *bmain, const short flag);
 void BKE_main_relations_free(struct Main *bmain);
 
 struct GSet *BKE_main_gset_create(struct Main *bmain, struct GSet *gset);
@@ -151,9 +165,9 @@ struct GSet *BKE_main_gset_create(struct Main *bmain, struct GSet *gset);
 
 #define FOREACH_MAIN_LISTBASE_ID_BEGIN(_lb, _id) \
   { \
-    ID *_id_next = _lb->first; \
-    for (_id = _id_next; _id != NULL; _id = _id_next) { \
-      _id_next = _id->next;
+    ID *_id_next = (_lb)->first; \
+    for ((_id) = _id_next; (_id) != NULL; (_id) = _id_next) { \
+      _id_next = (_id)->next;
 
 #define FOREACH_MAIN_LISTBASE_ID_END \
   } \
@@ -163,9 +177,9 @@ struct GSet *BKE_main_gset_create(struct Main *bmain, struct GSet *gset);
 #define FOREACH_MAIN_LISTBASE_BEGIN(_bmain, _lb) \
   { \
     ListBase *_lbarray[MAX_LIBARRAY]; \
-    int _i = set_listbasepointers(_bmain, _lbarray); \
+    int _i = set_listbasepointers((_bmain), _lbarray); \
     while (_i--) { \
-      _lb = _lbarray[_i];
+      (_lb) = _lbarray[_i];
 
 #define FOREACH_MAIN_LISTBASE_END \
   } \
@@ -179,8 +193,8 @@ struct GSet *BKE_main_gset_create(struct Main *bmain, struct GSet *gset);
 #define FOREACH_MAIN_ID_BEGIN(_bmain, _id) \
   { \
     ListBase *_lb; \
-    FOREACH_MAIN_LISTBASE_BEGIN (_bmain, _lb) { \
-      FOREACH_MAIN_LISTBASE_ID_BEGIN (_lb, _id)
+    FOREACH_MAIN_LISTBASE_BEGIN ((_bmain), _lb) { \
+      FOREACH_MAIN_LISTBASE_ID_BEGIN (_lb, (_id))
 
 #define FOREACH_MAIN_ID_END \
   FOREACH_MAIN_LISTBASE_ID_END; \

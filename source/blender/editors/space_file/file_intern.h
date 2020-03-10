@@ -33,19 +33,12 @@ struct SpaceFile;
 struct View2D;
 
 /* file_draw.c */
-#define TILE_BORDER_X (UI_UNIT_X / 4)
-#define TILE_BORDER_Y (UI_UNIT_Y / 4)
-
-/* ui geometry */
-#define IMASEL_BUTTONS_HEIGHT (UI_UNIT_Y * 2)
-#define IMASEL_BUTTONS_MARGIN (UI_UNIT_Y / 6)
-
 #define ATTRIBUTE_COLUMN_PADDING (0.5f * UI_UNIT_X)
 
 #define SMALL_SIZE_CHECK(_size) ((_size) < 64) /* Related to FileSelectParams.thumbnail_size. */
 
-void file_calc_previews(const bContext *C, ARegion *ar);
-void file_draw_list(const bContext *C, ARegion *ar);
+void file_calc_previews(const bContext *C, ARegion *region);
+void file_draw_list(const bContext *C, ARegion *region);
 
 void file_draw_check(bContext *C);
 void file_draw_check_cb(bContext *C, void *arg1, void *arg2);
@@ -54,13 +47,6 @@ bool file_draw_check_exists(SpaceFile *sfile);
 /* file_ops.h */
 struct wmOperator;
 struct wmOperatorType;
-
-typedef enum WalkSelectDirection {
-  FILE_SELECT_WALK_UP,
-  FILE_SELECT_WALK_DOWN,
-  FILE_SELECT_WALK_LEFT,
-  FILE_SELECT_WALK_RIGHT,
-} WalkSelectDirections;
 
 void FILE_OT_highlight(struct wmOperatorType *ot);
 void FILE_OT_sort_column_ui_context(struct wmOperatorType *ot);
@@ -87,6 +73,7 @@ void FILE_OT_delete(struct wmOperatorType *ot);
 void FILE_OT_rename(struct wmOperatorType *ot);
 void FILE_OT_smoothscroll(struct wmOperatorType *ot);
 void FILE_OT_filepath_drop(struct wmOperatorType *ot);
+void FILE_OT_start_filter(struct wmOperatorType *ot);
 
 int file_exec(bContext *C, struct wmOperator *exec_op);
 int file_cancel_exec(bContext *C, struct wmOperator *unused);
@@ -99,7 +86,7 @@ int file_delete_exec(bContext *C, struct wmOperator *unused);
 void file_directory_enter_handle(bContext *C, void *arg_unused, void *arg_but);
 void file_filename_enter_handle(bContext *C, void *arg_unused, void *arg_but);
 
-int file_highlight_set(struct SpaceFile *sfile, struct ARegion *ar, int mx, int my);
+int file_highlight_set(struct SpaceFile *sfile, struct ARegion *region, int mx, int my);
 
 void file_sfile_filepath_set(struct SpaceFile *sfile, const char *filepath);
 void file_sfile_to_operator_ex(bContext *C,
@@ -136,6 +123,6 @@ void file_tool_props_region_panels_register(struct ARegionType *art);
 void file_execute_region_panels_register(struct ARegionType *art);
 
 /* file_utils.c */
-void file_tile_boundbox(const ARegion *ar, FileLayout *layout, const int file, rcti *r_bounds);
+void file_tile_boundbox(const ARegion *region, FileLayout *layout, const int file, rcti *r_bounds);
 
 #endif /* __FILE_INTERN_H__ */

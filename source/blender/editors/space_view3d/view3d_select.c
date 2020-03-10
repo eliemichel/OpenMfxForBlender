@@ -124,7 +124,7 @@ void ED_view3d_viewcontext_init(bContext *C, ViewContext *vc, Depsgraph *depsgra
 {
   memset(vc, 0, sizeof(ViewContext));
   vc->C = C;
-  vc->ar = CTX_wm_region(C);
+  vc->region = CTX_wm_region(C);
   vc->bmain = CTX_data_main(C);
   vc->depsgraph = depsgraph;
   vc->scene = CTX_data_scene(C);
@@ -589,7 +589,7 @@ static bool do_lasso_select_objects(ViewContext *vc,
   for (base = vc->view_layer->object_bases.first; base; base = base->next) {
     if (BASE_SELECTABLE(v3d, base)) { /* use this to avoid un-needed lasso lookups */
       const bool is_select = base->flag & BASE_SELECTED;
-      const bool is_inside = ((ED_view3d_project_base(vc->ar, base) == V3D_PROJ_RET_OK) &&
+      const bool is_inside = ((ED_view3d_project_base(vc->region, base) == V3D_PROJ_RET_OK) &&
                               BLI_lasso_is_point_inside(
                                   mcords, moves, base->sx, base->sy, IS_CLIPPED));
       const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
@@ -836,7 +836,7 @@ static bool do_lasso_select_mesh(ViewContext *vc,
       editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, ts->selectmode);
       esel = wm_userdata->data;
       esel->select_bitmap = DRW_select_buffer_bitmap_from_poly(
-          vc->depsgraph, vc->ar, vc->v3d, mcords, moves, &rect, NULL);
+          vc->depsgraph, vc->region, vc->v3d, mcords, moves, &rect, NULL);
     }
   }
 
@@ -1151,7 +1151,7 @@ static bool do_lasso_select_paintvert(ViewContext *vc,
       editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, SCE_SELECT_VERTEX);
       esel = wm_userdata->data;
       esel->select_bitmap = DRW_select_buffer_bitmap_from_poly(
-          vc->depsgraph, vc->ar, vc->v3d, mcords, moves, &rect, NULL);
+          vc->depsgraph, vc->region, vc->v3d, mcords, moves, &rect, NULL);
     }
   }
 
@@ -1210,7 +1210,7 @@ static bool do_lasso_select_paintface(ViewContext *vc,
     editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, SCE_SELECT_FACE);
     esel = wm_userdata->data;
     esel->select_bitmap = DRW_select_buffer_bitmap_from_poly(
-        vc->depsgraph, vc->ar, vc->v3d, mcords, moves, &rect, NULL);
+        vc->depsgraph, vc->region, vc->v3d, mcords, moves, &rect, NULL);
   }
 
   if (esel->select_bitmap) {
@@ -1566,7 +1566,7 @@ static Base *object_mouse_select_menu(bContext *C,
     }
     else {
       const int dist = 15 * U.pixelsize;
-      if (ED_view3d_project_base(vc->ar, base) == V3D_PROJ_RET_OK) {
+      if (ED_view3d_project_base(vc->region, base) == V3D_PROJ_RET_OK) {
         const int delta_px[2] = {base->sx - mval[0], base->sy - mval[1]};
         if (len_manhattan_v2_int(delta_px) < dist) {
           ok = true;
@@ -1785,7 +1785,13 @@ static int mixed_bones_object_selectbuffer_extended(ViewContext *vc,
   return hits;
 }
 
-/* returns basact */
+/**
+ * \param has_bones: When true, skip non-bone hits, also allow bases to be used
+ * that are visible but not select-able,
+ * since you may be in pose mode with an an unselect-able object.
+ *
+ * \return the active base or NULL.
+ */
 static Base *mouse_select_eval_buffer(ViewContext *vc,
                                       const uint *buffer,
                                       int hits,
@@ -1827,7 +1833,7 @@ static Base *mouse_select_eval_buffer(ViewContext *vc,
 
     base = FIRSTBASE(view_layer);
     while (base) {
-      if (BASE_SELECTABLE(v3d, base)) {
+      if (has_bones ? BASE_VISIBLE(v3d, base) : BASE_SELECTABLE(v3d, base)) {
         if (base->object->runtime.select_id == selcol) {
           break;
         }
@@ -1844,7 +1850,8 @@ static Base *mouse_select_eval_buffer(ViewContext *vc,
     while (base) {
       /* skip objects with select restriction, to prevent prematurely ending this loop
        * with an un-selectable choice */
-      if ((base->flag & BASE_SELECTABLE) == 0) {
+      if (has_bones ? (base->flag & BASE_VISIBLE_VIEWLAYER) == 0 :
+                      (base->flag & BASE_SELECTABLE) == 0) {
         base = base->next;
         if (base == NULL) {
           base = FIRSTBASE(view_layer);
@@ -1854,7 +1861,7 @@ static Base *mouse_select_eval_buffer(ViewContext *vc,
         }
       }
 
-      if (BASE_SELECTABLE(v3d, base)) {
+      if (has_bones ? BASE_VISIBLE(v3d, base) : BASE_SELECTABLE(v3d, base)) {
         for (a = 0; a < hits; a++) {
           if (has_bones) {
             /* skip non-bone objects */
@@ -1964,7 +1971,7 @@ static bool ed_object_select_pick(bContext *C,
   /* setup view context for argument to callbacks */
   ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   View3D *v3d = CTX_wm_view3d(C);
@@ -2008,7 +2015,7 @@ static bool ed_object_select_pick(bContext *C,
       while (base) {
         if (BASE_SELECTABLE(v3d, base)) {
           float screen_co[2];
-          if (ED_view3d_project_float_global(ar,
+          if (ED_view3d_project_float_global(region,
                                              base->object->obmat[3],
                                              screen_co,
                                              V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_WIN |
@@ -2077,7 +2084,8 @@ static bool ed_object_select_pick(bContext *C,
 
       if (has_bones && basact) {
         if (basact->object->type == OB_CAMERA) {
-          if (oldbasact == basact) {
+          MovieClip *clip = BKE_object_movieclip_get(scene, basact->object, false);
+          if (clip != NULL && oldbasact == basact) {
             int i, hitresult;
             bool changed = false;
 
@@ -2094,7 +2102,6 @@ static bool ed_object_select_pick(bContext *C,
                * in height word, this buffer value belongs to camera. not to bundle
                */
               if (buffer[4 * i + 3] & 0xFFFF0000) {
-                MovieClip *clip = BKE_object_movieclip_get(scene, basact->object, false);
                 MovieTracking *tracking = &clip->tracking;
                 ListBase *tracksbase;
                 MovieTrackingTrack *track;
@@ -2258,7 +2265,8 @@ static bool ed_object_select_pick(bContext *C,
         if (ELEM(basact->object->mode,
                  OB_MODE_PAINT_GPENCIL,
                  OB_MODE_SCULPT_GPENCIL,
-                 OB_MODE_WEIGHT_GPENCIL)) {
+                 OB_MODE_WEIGHT_GPENCIL,
+                 OB_MODE_VERTEX_GPENCIL)) {
           ED_gpencil_toggle_brush_cursor(C, true, NULL);
         }
         else {
@@ -2593,7 +2601,7 @@ static bool do_paintvert_box_select(ViewContext *vc,
       editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, SCE_SELECT_VERTEX);
       esel = wm_userdata->data;
       esel->select_bitmap = DRW_select_buffer_bitmap_from_rect(
-          vc->depsgraph, vc->ar, vc->v3d, rect, NULL);
+          vc->depsgraph, vc->region, vc->v3d, rect, NULL);
     }
     if (esel->select_bitmap != NULL) {
       changed |= edbm_backbuf_check_and_select_verts_obmode(me, esel, sel_op);
@@ -2648,7 +2656,7 @@ static bool do_paintface_box_select(ViewContext *vc,
       editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, SCE_SELECT_FACE);
       esel = wm_userdata->data;
       esel->select_bitmap = DRW_select_buffer_bitmap_from_rect(
-          vc->depsgraph, vc->ar, vc->v3d, rect, NULL);
+          vc->depsgraph, vc->region, vc->v3d, rect, NULL);
     }
     if (esel->select_bitmap != NULL) {
       changed |= edbm_backbuf_check_and_select_faces_obmode(me, esel, sel_op);
@@ -2850,7 +2858,7 @@ static bool do_mesh_box_select(ViewContext *vc,
       editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, ts->selectmode);
       esel = wm_userdata->data;
       esel->select_bitmap = DRW_select_buffer_bitmap_from_rect(
-          vc->depsgraph, vc->ar, vc->v3d, rect, NULL);
+          vc->depsgraph, vc->region, vc->v3d, rect, NULL);
     }
   }
 
@@ -3449,7 +3457,7 @@ static bool mesh_circle_select(ViewContext *vc,
   if (use_zbuf) {
     if (esel->select_bitmap == NULL) {
       esel->select_bitmap = DRW_select_buffer_bitmap_from_circle(
-          vc->depsgraph, vc->ar, vc->v3d, mval, (int)(rad + 1.0f), NULL);
+          vc->depsgraph, vc->region, vc->v3d, mval, (int)(rad + 1.0f), NULL);
     }
   }
 
@@ -3521,7 +3529,7 @@ static bool paint_facesel_circle_select(ViewContext *vc,
   {
     struct EditSelectBuf_Cache *esel = wm_userdata->data;
     esel->select_bitmap = DRW_select_buffer_bitmap_from_circle(
-        vc->depsgraph, vc->ar, vc->v3d, mval, (int)(rad + 1.0f), NULL);
+        vc->depsgraph, vc->region, vc->v3d, mval, (int)(rad + 1.0f), NULL);
     if (esel->select_bitmap != NULL) {
       changed |= edbm_backbuf_check_and_select_faces_obmode(me, esel, sel_op);
       MEM_freeN(esel->select_bitmap);
@@ -3576,7 +3584,7 @@ static bool paint_vertsel_circle_select(ViewContext *vc,
   if (use_zbuf) {
     struct EditSelectBuf_Cache *esel = wm_userdata->data;
     esel->select_bitmap = DRW_select_buffer_bitmap_from_circle(
-        vc->depsgraph, vc->ar, vc->v3d, mval, (int)(rad + 1.0f), NULL);
+        vc->depsgraph, vc->region, vc->v3d, mval, (int)(rad + 1.0f), NULL);
     if (esel->select_bitmap != NULL) {
       changed |= edbm_backbuf_check_and_select_verts_obmode(me, esel, sel_op);
       MEM_freeN(esel->select_bitmap);
@@ -3925,8 +3933,9 @@ static bool mball_circle_select(ViewContext *vc,
   return data.is_changed;
 }
 
-/** Callbacks for circle selection in Editmode */
-
+/**
+ * Callbacks for circle selection in Editmode
+ */
 static bool obedit_circle_select(bContext *C,
                                  ViewContext *vc,
                                  wmGenericUserData *wm_userdata,
@@ -3991,7 +4000,7 @@ static bool object_circle_select(ViewContext *vc,
   for (base = FIRSTBASE(view_layer); base; base = base->next) {
     if (BASE_SELECTABLE(v3d, base) && ((base->flag & BASE_SELECTED) != select_flag)) {
       float screen_co[2];
-      if (ED_view3d_project_float_global(vc->ar,
+      if (ED_view3d_project_float_global(vc->region,
                                          base->object->obmat[3],
                                          screen_co,
                                          V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_WIN |

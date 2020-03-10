@@ -24,12 +24,13 @@ ccl_device void svm_node_math(KernelGlobals *kg,
                               uint result_stack_offset,
                               int *offset)
 {
-  uint a_stack_offset, b_stack_offset;
-  svm_unpack_node_uchar2(inputs_stack_offsets, &a_stack_offset, &b_stack_offset);
+  uint a_stack_offset, b_stack_offset, c_stack_offset;
+  svm_unpack_node_uchar3(inputs_stack_offsets, &a_stack_offset, &b_stack_offset, &c_stack_offset);
 
   float a = stack_load_float(stack, a_stack_offset);
   float b = stack_load_float(stack, b_stack_offset);
-  float result = svm_math((NodeMathType)type, a, b);
+  float c = stack_load_float(stack, c_stack_offset);
+  float result = svm_math((NodeMathType)type, a, b, c);
 
   stack_store_float(stack, result_stack_offset, result);
 }
@@ -50,11 +51,19 @@ ccl_device void svm_node_vector_math(KernelGlobals *kg,
 
   float3 a = stack_load_float3(stack, a_stack_offset);
   float3 b = stack_load_float3(stack, b_stack_offset);
+  float3 c;
   float scale = stack_load_float(stack, scale_stack_offset);
 
   float value;
   float3 vector;
-  svm_vector_math(&value, &vector, (NodeVectorMathType)type, a, b, scale);
+
+  /* 3 Vector Operators */
+  if (type == NODE_VECTOR_MATH_WRAP) {
+    uint4 extra_node = read_node(kg, offset);
+    c = stack_load_float3(stack, extra_node.x);
+  }
+
+  svm_vector_math(&value, &vector, (NodeVectorMathType)type, a, b, c, scale);
 
   if (stack_valid(value_stack_offset))
     stack_store_float(stack, value_stack_offset, value);

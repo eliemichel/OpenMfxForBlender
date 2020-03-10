@@ -35,6 +35,7 @@
 #include "BLI_path_util.h"
 #include "BLI_rect.h"
 #include "BLI_string.h"
+#include "BLI_string_utils.h"
 #include "BLI_threads.h"
 
 #include "BKE_appdir.h"
@@ -181,26 +182,33 @@ void render_result_views_shallowdelete(RenderResult *rr)
 
 static char *set_pass_name(char *outname, const char *name, int channel, const char *chan_id)
 {
-  BLI_strncpy(outname, name, EXR_PASS_MAXNAME);
+  const char *strings[2];
+  int strings_len = 0;
+  strings[strings_len++] = name;
+  char token[2];
   if (channel >= 0) {
-    char token[3] = {'.', chan_id[channel], '\0'};
-    strncat(outname, token, EXR_PASS_MAXNAME);
+    ARRAY_SET_ITEMS(token, chan_id[channel], '\0');
+    strings[strings_len++] = token;
   }
+  BLI_string_join_array_by_sep_char(outname, EXR_PASS_MAXNAME, '.', strings, strings_len);
   return outname;
 }
 
 static void set_pass_full_name(
     char *fullname, const char *name, int channel, const char *view, const char *chan_id)
 {
-  BLI_strncpy(fullname, name, EXR_PASS_MAXNAME);
+  const char *strings[3];
+  int strings_len = 0;
+  strings[strings_len++] = name;
   if (view && view[0]) {
-    strncat(fullname, ".", EXR_PASS_MAXNAME);
-    strncat(fullname, view, EXR_PASS_MAXNAME);
+    strings[strings_len++] = view;
   }
+  char token[2];
   if (channel >= 0) {
-    char token[3] = {'.', chan_id[channel], '\0'};
-    strncat(fullname, token, EXR_PASS_MAXNAME);
+    ARRAY_SET_ITEMS(token, chan_id[channel], '\0');
+    strings[strings_len++] = token;
   }
+  BLI_string_join_array_by_sep_char(fullname, EXR_PASS_MAXNAME, '.', strings, strings_len);
 }
 
 /********************************** New **************************************/
@@ -442,6 +450,15 @@ RenderResult *render_result_new(Render *re,
       if (view_layer->passflag & SCE_PASS_SUBSURFACE_COLOR) {
         RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_SUBSURFACE_COLOR, view, "RGB");
       }
+      if (view_layer->eevee.render_passes & EEVEE_RENDER_PASS_BLOOM) {
+        RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_BLOOM, view, "RGB");
+      }
+      if (view_layer->eevee.render_passes & EEVEE_RENDER_PASS_VOLUME_SCATTER) {
+        RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_VOLUME_SCATTER, view, "RGB");
+      }
+      if (view_layer->eevee.render_passes & EEVEE_RENDER_PASS_VOLUME_TRANSMITTANCE) {
+        RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_VOLUME_TRANSMITTANCE, view, "RGB");
+      }
 #undef RENDER_LAYER_ADD_PASS_SAFE
     }
   }
@@ -520,12 +537,12 @@ void render_result_clone_passes(Render *re, RenderResult *rr, const char *viewna
   }
 }
 
-void render_result_add_pass(RenderResult *rr,
-                            const char *name,
-                            int channels,
-                            const char *chan_id,
-                            const char *layername,
-                            const char *viewname)
+void RE_create_render_pass(RenderResult *rr,
+                           const char *name,
+                           int channels,
+                           const char *chan_id,
+                           const char *layername,
+                           const char *viewname)
 {
   RenderLayer *rl;
   RenderPass *rp;
@@ -1234,7 +1251,7 @@ void render_result_exr_file_begin(Render *re, RenderEngine *engine)
        * mutex locked to avoid deadlock with Python GIL. */
       BLI_rw_mutex_lock(&re->resultmutex, THREAD_LOCK_WRITE);
       for (RenderPass *pass = templates.first; pass; pass = pass->next) {
-        render_result_add_pass(
+        RE_create_render_pass(
             re->result, pass->name, pass->channels, pass->chan_id, rl->name, NULL);
       }
       BLI_rw_mutex_unlock(&re->resultmutex);
@@ -1277,8 +1294,7 @@ void render_result_exr_file_end(Render *re, RenderEngine *engine)
      * mutex locked to avoid deadlock with Python GIL. */
     BLI_rw_mutex_lock(&re->resultmutex, THREAD_LOCK_WRITE);
     for (RenderPass *pass = templates.first; pass; pass = pass->next) {
-      render_result_add_pass(
-          re->result, pass->name, pass->channels, pass->chan_id, rl->name, NULL);
+      RE_create_render_pass(re->result, pass->name, pass->channels, pass->chan_id, rl->name, NULL);
     }
 
     BLI_freelistN(&templates);
@@ -1319,7 +1335,7 @@ void render_result_exr_file_path(Scene *scene, const char *layname, int sample, 
   /* Make name safe for paths, see T43275. */
   BLI_filename_make_safe(name);
 
-  BLI_make_file_string("/", filepath, BKE_tempdir_session(), name);
+  BLI_join_dirfile(filepath, FILE_MAX, BKE_tempdir_session(), name);
 }
 
 /* called for reading temp files, and for external engines */
@@ -1547,10 +1563,10 @@ void render_result_rect_get_pixels(RenderResult *rr,
 {
   RenderView *rv = RE_RenderViewGetById(rr, view_id);
 
-  if (rv->rect32) {
+  if (rv && rv->rect32) {
     memcpy(rect, rv->rect32, sizeof(int) * rr->rectx * rr->recty);
   }
-  else if (rv->rectf) {
+  else if (rv && rv->rectf) {
     IMB_display_buffer_transform_apply((unsigned char *)rect,
                                        rv->rectf,
                                        rr->rectx,

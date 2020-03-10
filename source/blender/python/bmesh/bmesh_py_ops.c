@@ -154,7 +154,7 @@ static PyObject *bpy_bmesh_op_doc_get(BPy_BMeshOpFunc *self, void *UNUSED(closur
 }
 
 static PyGetSetDef bpy_bmesh_op_getseters[] = {
-    {(char *)"__doc__", (getter)bpy_bmesh_op_doc_get, (setter)NULL, NULL, NULL},
+    {"__doc__", (getter)bpy_bmesh_op_doc_get, (setter)NULL, NULL, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 
@@ -259,8 +259,8 @@ static PyObject *bpy_bmesh_ops_fakemod_getattro(PyObject *UNUSED(self), PyObject
 
 static PyObject *bpy_bmesh_ops_fakemod_dir(PyObject *UNUSED(self))
 {
-  const unsigned int tot = bmo_opdefines_total;
-  unsigned int i;
+  const uint tot = bmo_opdefines_total;
+  uint i;
   PyObject *ret;
 
   ret = PyList_New(bmo_opdefines_total);

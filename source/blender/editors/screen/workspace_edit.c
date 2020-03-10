@@ -29,7 +29,7 @@
 #include "BKE_appdir.h"
 #include "BKE_blendfile.h"
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_screen.h"
 #include "BKE_workspace.h"
@@ -266,8 +266,7 @@ static WorkSpace *workspace_context_get(bContext *C)
     return (WorkSpace *)id;
   }
 
-  wmWindow *win = CTX_wm_window(C);
-  return WM_window_get_active_workspace(win);
+  return CTX_wm_workspace(C);
 }
 
 static bool workspace_context_poll(bContext *C)
@@ -334,7 +333,7 @@ static int workspace_append_activate_exec(bContext *C, wmOperator *op)
   RNA_string_get(op->ptr, "filepath", filepath);
 
   WorkSpace *appended_workspace = (WorkSpace *)WM_file_append_datablock(
-      C, filepath, ID_WS, idname);
+      bmain, CTX_data_scene(C), CTX_data_view_layer(C), CTX_wm_view3d(C), filepath, ID_WS, idname);
 
   if (appended_workspace) {
     /* Set defaults. */

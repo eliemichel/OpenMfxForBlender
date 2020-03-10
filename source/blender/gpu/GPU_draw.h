@@ -28,12 +28,13 @@
 extern "C" {
 #endif
 
+struct FluidModifierData;
 struct ImBuf;
 struct Image;
 struct ImageUser;
 struct Main;
-struct SmokeModifierData;
 
+#include "BLI_utildefines.h"
 #include "DNA_object_enums.h"
 
 /* OpenGL drawing functions related to shading. */
@@ -71,6 +72,7 @@ void GPU_create_gl_tex(unsigned int *bind,
                        int recth,
                        int textarget,
                        bool mipmap,
+                       bool half_float,
                        bool use_srgb,
                        struct Image *ima);
 void GPU_create_gl_tex_compressed(unsigned int *bind,
@@ -83,12 +85,12 @@ void GPU_free_images(struct Main *bmain);
 void GPU_free_images_anim(struct Main *bmain);
 void GPU_free_images_old(struct Main *bmain);
 
-/* smoke drawing functions */
-void GPU_free_smoke(struct SmokeModifierData *smd);
-void GPU_free_smoke_velocity(struct SmokeModifierData *smd);
-void GPU_create_smoke(struct SmokeModifierData *smd, int highres);
-void GPU_create_smoke_coba_field(struct SmokeModifierData *smd);
-void GPU_create_smoke_velocity(struct SmokeModifierData *smd);
+/* gpu_draw_smoke.c  */
+void GPU_free_smoke(struct FluidModifierData *mmd);
+void GPU_free_smoke_velocity(struct FluidModifierData *mmd);
+void GPU_create_smoke(struct FluidModifierData *mmd, int highres);
+void GPU_create_smoke_coba_field(struct FluidModifierData *mmd);
+void GPU_create_smoke_velocity(struct FluidModifierData *mmd);
 
 /* Delayed free of OpenGL buffers by main thread */
 void GPU_free_unused_buffers(struct Main *bmain);

@@ -48,7 +48,7 @@
 #include "BKE_action.h"
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_nla.h"
 #include "BKE_sound.h"
@@ -161,7 +161,7 @@ void BKE_nla_tracks_free(ListBase *tracks, bool do_id_user)
  *
  * \param use_same_action: When true, the existing action is used (instead of being duplicated)
  * \param flag: Control ID pointers management, see LIB_ID_CREATE_.../LIB_ID_COPY_...
- * flags in BKE_library.h
+ * flags in BKE_lib_id.h
  */
 NlaStrip *BKE_nlastrip_copy(Main *bmain,
                             NlaStrip *strip,
@@ -215,7 +215,7 @@ NlaStrip *BKE_nlastrip_copy(Main *bmain,
 /**
  * Copy a single NLA Track.
  * \param flag: Control ID pointers management, see LIB_ID_CREATE_.../LIB_ID_COPY_...
- * flags in BKE_library.h
+ * flags in BKE_lib_id.h
  */
 NlaTrack *BKE_nlatrack_copy(Main *bmain,
                             NlaTrack *nlt,
@@ -249,7 +249,7 @@ NlaTrack *BKE_nlatrack_copy(Main *bmain,
 /**
  * Copy all NLA data.
  * \param flag: Control ID pointers management, see LIB_ID_CREATE_.../LIB_ID_COPY_...
- * flags in BKE_library.h
+ * flags in BKE_lib_id.h
  */
 void BKE_nla_tracks_copy(Main *bmain, ListBase *dst, ListBase *src, const int flag)
 {
@@ -1499,6 +1499,10 @@ void BKE_nlastrip_validate_fcurves(NlaStrip *strip)
 
       fcu->bezt->vec[1][0] = strip->start;
       fcu->bezt->vec[1][1] = strip->influence;
+
+      /* Respect User Preferences for default interpolation and handles. */
+      fcu->bezt->h1 = fcu->bezt->h2 = U.keyhandles_new;
+      fcu->bezt->ipo = U.ipo_new;
     }
   }
 

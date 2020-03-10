@@ -36,10 +36,11 @@ set(SRC
 
 set(LIB
   extern_quadriflow
+  ${BOOST_LIBRARIES}
 )
 
 if(WIN32)
-    add_definitions(-D_USE_MATH_DEFINES)
+  add_definitions(-D_USE_MATH_DEFINES)
 endif()
 
 blender_add_lib(bf_intern_quadriflow "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

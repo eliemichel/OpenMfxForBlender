@@ -121,7 +121,7 @@ static BLI_bitmap *multires_mdisps_upsample_hidden(BLI_bitmap *lo_hidden,
     return MEM_dupallocN(lo_hidden);
   }
 
-  subd = BLI_BITMAP_NEW(SQUARE(hi_gridsize), "MDisps.hidden upsample");
+  subd = BLI_BITMAP_NEW(square_i(hi_gridsize), "MDisps.hidden upsample");
 
   factor = BKE_ccg_factor(lo_level, hi_level);
   offset = 1 << (hi_level - lo_level - 1);
@@ -179,7 +179,7 @@ static BLI_bitmap *multires_mdisps_downsample_hidden(BLI_bitmap *old_hidden,
 
   BLI_assert(new_level <= old_level);
   factor = BKE_ccg_factor(new_level, old_level);
-  new_hidden = BLI_BITMAP_NEW(SQUARE(new_gridsize), "downsample hidden");
+  new_hidden = BLI_BITMAP_NEW(square_i(new_gridsize), "downsample hidden");
 
   for (y = 0; y < new_gridsize; y++) {
     for (x = 0; x < new_gridsize; x++) {
@@ -238,7 +238,7 @@ static MDisps *multires_mdisps_initialize_hidden(Mesh *me, int level)
 {
   MDisps *mdisps = CustomData_add_layer(&me->ldata, CD_MDISPS, CD_CALLOC, NULL, me->totloop);
   int gridsize = BKE_ccg_gridsize(level);
-  int gridarea = SQUARE(gridsize);
+  int gridarea = square_i(gridsize);
   int i, j;
 
   for (i = 0; i < me->totpoly; i++) {
@@ -406,47 +406,66 @@ void multires_mark_as_modified(Depsgraph *depsgraph, Object *object, MultiresMod
   multires_ccg_mark_as_modified(subdiv_ccg, flags);
 }
 
-void multires_flush_sculpt_updates(Object *ob)
+void multires_flush_sculpt_updates(Object *object)
 {
-  if (ob && ob->sculpt && ob->sculpt->pbvh != NULL) {
-    SculptSession *sculpt_session = ob->sculpt;
-    if (BKE_pbvh_type(sculpt_session->pbvh) == PBVH_GRIDS) {
-      Mesh *mesh = ob->data;
-      multiresModifier_reshapeFromCCG(
-          sculpt_session->multires->totlvl, mesh, sculpt_session->subdiv_ccg);
-    }
+  if (object == NULL || object->sculpt == NULL || object->sculpt->pbvh == NULL) {
+    return;
+  }
+
+  SculptSession *sculpt_session = object->sculpt;
+  if (BKE_pbvh_type(sculpt_session->pbvh) != PBVH_GRIDS || sculpt_session->multires == NULL) {
+    return;
+  }
+
+  SubdivCCG *subdiv_ccg = sculpt_session->subdiv_ccg;
+  if (subdiv_ccg == NULL) {
+    return;
+  }
+
+  if (!subdiv_ccg->dirty.coords && !subdiv_ccg->dirty.hidden) {
+    return;
+  }
+
+  Mesh *mesh = object->data;
+  multiresModifier_reshapeFromCCG(
+      sculpt_session->multires->totlvl, mesh, sculpt_session->subdiv_ccg);
+
+  subdiv_ccg->dirty.coords = false;
+  subdiv_ccg->dirty.hidden = false;
+}
+
+void multires_force_sculpt_rebuild(Object *object)
+{
+  multires_flush_sculpt_updates(object);
+
+  if (object == NULL || object->sculpt == NULL) {
+    return;
+  }
+
+  SculptSession *ss = object->sculpt;
+
+  if (ss->pbvh != NULL) {
+    BKE_pbvh_free(ss->pbvh);
+    object->sculpt->pbvh = NULL;
+  }
+
+  if (ss->pmap != NULL) {
+    MEM_freeN(ss->pmap);
+    ss->pmap = NULL;
+  }
+
+  if (ss->pmap_mem != NULL) {
+    MEM_freeN(ss->pmap_mem);
+    ss->pmap_mem = NULL;
   }
 }
 
-void multires_force_sculpt_rebuild(Object *ob)
+void multires_force_external_reload(Object *object)
 {
-  multires_flush_sculpt_updates(ob);
+  Mesh *mesh = BKE_mesh_from_object(object);
 
-  if (ob && ob->sculpt) {
-    SculptSession *ss = ob->sculpt;
-    if (ss->pbvh) {
-      BKE_pbvh_free(ss->pbvh);
-      ob->sculpt->pbvh = NULL;
-    }
-
-    if (ss->pmap) {
-      MEM_freeN(ss->pmap);
-      ss->pmap = NULL;
-    }
-
-    if (ss->pmap_mem) {
-      MEM_freeN(ss->pmap_mem);
-      ss->pmap_mem = NULL;
-    }
-  }
-}
-
-void multires_force_external_reload(Object *ob)
-{
-  Mesh *me = BKE_mesh_from_object(ob);
-
-  CustomData_external_reload(&me->ldata, &me->id, CD_MASK_MDISPS, me->totloop);
-  multires_force_sculpt_rebuild(ob);
+  CustomData_external_reload(&mesh->ldata, &mesh->id, CD_MASK_MDISPS, mesh->totloop);
+  multires_force_sculpt_rebuild(object);
 }
 
 /* reset the multires levels to match the number of mdisps */
@@ -603,7 +622,7 @@ static void multires_grid_paint_mask_downsample(GridPaintMask *gpm, int level)
   if (level < gpm->level) {
     int gridsize = BKE_ccg_gridsize(level);
     float *data = MEM_calloc_arrayN(
-        SQUARE(gridsize), sizeof(float), "multires_grid_paint_mask_downsample");
+        square_i(gridsize), sizeof(float), "multires_grid_paint_mask_downsample");
     int x, y;
 
     for (y = 0; y < gridsize; y++) {
@@ -1289,13 +1308,9 @@ void multires_modifier_update_mdisps(struct DerivedMesh *dm, Scene *scene)
       int i, j, numGrids, highGridSize, lowGridSize;
       const bool has_mask = CustomData_has_layer(&me->ldata, CD_GRID_PAINT_MASK);
 
-      /* create subsurf DM from original mesh at high level */
-      if (ob->derivedDeform) {
-        cddm = CDDM_copy(ob->derivedDeform);
-      }
-      else {
-        cddm = CDDM_from_mesh(me);
-      }
+      /* Create subsurf DM from original mesh at high level. */
+      /* TODO: use mesh_deform_eval when sculpting on deformed mesh. */
+      cddm = CDDM_from_mesh(me);
       DM_set_only_copy(cddm, &CD_MASK_BAREMESH);
 
       highdm = subsurf_dm_create_local(scene,
@@ -1369,12 +1384,8 @@ void multires_modifier_update_mdisps(struct DerivedMesh *dm, Scene *scene)
       DerivedMesh *cddm, *subdm;
       const bool has_mask = CustomData_has_layer(&me->ldata, CD_GRID_PAINT_MASK);
 
-      if (ob->derivedDeform) {
-        cddm = CDDM_copy(ob->derivedDeform);
-      }
-      else {
-        cddm = CDDM_from_mesh(me);
-      }
+      /* TODO: use mesh_deform_eval when sculpting on deformed mesh. */
+      cddm = CDDM_from_mesh(me);
       DM_set_only_copy(cddm, &CD_MASK_BAREMESH);
 
       subdm = subsurf_dm_create_local(scene,

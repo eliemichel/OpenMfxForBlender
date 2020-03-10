@@ -192,8 +192,8 @@ static void editmesh_set_connectivity_distance(BMesh *bm,
             if (e_iter->l) {
               BMLoop *l_iter_radial, *l_first_radial;
               /**
-               * imaginary edge diagonally across quad,
-               * \note, this takes advantage of the rules of winding that we
+               * imaginary edge diagonally across quad.
+               * \note This takes advantage of the rules of winding that we
                * know 2 or more of a verts edges wont reference the same face twice.
                * Also, if the edge is hidden, the face will be hidden too.
                */
@@ -1030,7 +1030,15 @@ static void create_trans_vert_customdata_layer(BMVert *v,
 void trans_mesh_customdata_correction_init(TransInfo *t)
 {
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
-    BLI_assert(tc->custom.type.data == NULL);
+    if (tc->custom.type.data) {
+      if (tc->custom.type.free_cb == trans_mesh_customdata_free_cb) {
+        /* Custom data correction has initiated before. */
+        continue;
+      }
+      else {
+        BLI_assert(false);
+      }
+    }
     int i;
 
     BMEditMesh *em = BKE_editmesh_from_object(tc->obedit);
@@ -1168,7 +1176,7 @@ static void trans_mesh_customdata_correction_apply_vert(struct TransCustomDataLa
     BM_loop_interp_from_face(bm, l, f_copy, false, false);
 
     /* make sure face-attributes are correct (e.g. #MLoopUV, #MLoopCol) */
-    BM_elem_attrs_copy_ex(tcld->bm_origfaces, bm, f_copy, l->f, 0x0, CD_MASK_NORMAL);
+    BM_elem_attrs_copy_ex(tcld->bm_origfaces, bm, f_copy, l->f, BM_ELEM_SELECT, CD_MASK_NORMAL);
 
     /* weight the loop */
     if (do_loop_weight) {
@@ -1451,7 +1459,8 @@ void createTransUVs(bContext *C, TransInfo *t)
     if (is_prop_connected || is_island_center) {
       /* create element map with island information */
       const bool use_facesel = (ts->uv_flag & UV_SYNC_SELECTION) == 0;
-      elementmap = BM_uv_element_map_create(em->bm, use_facesel, false, true);
+      const bool use_uvsel = !is_prop_connected;
+      elementmap = BM_uv_element_map_create(em->bm, scene, use_facesel, use_uvsel, false, true);
       if (elementmap == NULL) {
         continue;
       }
@@ -1547,16 +1556,17 @@ void createTransUVs(bContext *C, TransInfo *t)
 
         if (is_prop_connected || is_island_center) {
           UvElement *element = BM_uv_element_get(elementmap, efa, l);
-
-          if (is_prop_connected) {
-            if (!BLI_BITMAP_TEST(island_enabled, element->island)) {
-              count_rejected++;
-              continue;
+          if (element) {
+            if (is_prop_connected) {
+              if (!BLI_BITMAP_TEST(island_enabled, element->island)) {
+                count_rejected++;
+                continue;
+              }
             }
-          }
 
-          if (is_island_center) {
-            center = island_center[element->island].co;
+            if (is_island_center) {
+              center = island_center[element->island].co;
+            }
           }
         }
 

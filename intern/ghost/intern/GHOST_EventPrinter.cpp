@@ -39,7 +39,7 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
   if (event->getType() == GHOST_kEventWindowUpdate)
     return false;
 
-  std::cout << "\nGHOST_EventPrinter::processEvent, time: " << (GHOST_TInt32)event->getTime()
+  std::cout << "GHOST_EventPrinter::processEvent, time: " << (GHOST_TInt32)event->getTime()
             << ", type: ";
   switch (event->getType()) {
     case GHOST_kEventUnknown:
@@ -164,6 +164,8 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
       break;
   }
 
+  std::cout << std::endl;
+
   std::cout.flush();
 
   return handled;
@@ -233,6 +235,9 @@ void GHOST_EventPrinter::getKeyString(GHOST_TKey key, char str[32]) const
         break;
       case GHOST_kKeyOS:
         tstr = "OS";
+        break;
+      case GHOST_kKeyApp:
+        tstr = "App";
         break;
       case GHOST_kKeyGrLess:
         // PC german!

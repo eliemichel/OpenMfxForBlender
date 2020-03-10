@@ -413,7 +413,7 @@ static int count_bone_select(bArmature *arm, ListBase *lb, const bool do_it)
   int total = 0;
 
   for (bone = lb->first; bone; bone = bone->next) {
-    bone->flag &= ~BONE_TRANSFORM;
+    bone->flag &= ~(BONE_TRANSFORM | BONE_TRANSFORM_MIRROR);
     do_next = do_it;
     if (do_it) {
       if (bone->layer & arm->layer) {
@@ -471,8 +471,8 @@ void initTransformOrientation(bContext *C, TransInfo *t)
       break;
 
     case V3D_ORIENT_VIEW:
-      if ((t->spacetype == SPACE_VIEW3D) && (t->ar->regiontype == RGN_TYPE_WINDOW)) {
-        RegionView3D *rv3d = t->ar->regiondata;
+      if ((t->spacetype == SPACE_VIEW3D) && (t->region->regiontype == RGN_TYPE_WINDOW)) {
+        RegionView3D *rv3d = t->region->regiondata;
         float mat[3][3];
 
         BLI_strncpy(t->spacename, TIP_("view"), sizeof(t->spacename));
@@ -512,11 +512,11 @@ void initTransformOrientation(bContext *C, TransInfo *t)
       t->orientation.unset = V3D_ORIENT_VIEW;
       copy_m3_m4(t->orient_matrix, t->viewinv);
       normalize_m3(t->orient_matrix);
+      negate_m3(t->orient_matrix);
     }
     else {
       copy_m3_m3(t->orient_matrix, t->spacemtx);
     }
-    negate_m3(t->orient_matrix);
   }
 }
 

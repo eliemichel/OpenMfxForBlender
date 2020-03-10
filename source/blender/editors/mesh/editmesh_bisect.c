@@ -81,8 +81,8 @@ static void mesh_bisect_interactive_calc(bContext *C,
                                          float plane_no[3])
 {
   View3D *v3d = CTX_wm_view3d(C);
-  ARegion *ar = CTX_wm_region(C);
-  RegionView3D *rv3d = ar->regiondata;
+  ARegion *region = CTX_wm_region(C);
+  RegionView3D *rv3d = region->regiondata;
 
   int x_start = RNA_int_get(op->ptr, "xstart");
   int y_start = RNA_int_get(op->ptr, "ystart");
@@ -96,18 +96,18 @@ static void mesh_bisect_interactive_calc(bContext *C,
   const float zfac = ED_view3d_calc_zfac(rv3d, co_ref, NULL);
 
   /* view vector */
-  ED_view3d_win_to_vector(ar, co_a_ss, co_a);
+  ED_view3d_win_to_vector(region, co_a_ss, co_a);
 
   /* view delta */
   sub_v2_v2v2(co_delta_ss, co_a_ss, co_b_ss);
-  ED_view3d_win_to_delta(ar, co_delta_ss, co_b, zfac);
+  ED_view3d_win_to_delta(region, co_delta_ss, co_b, zfac);
 
   /* cross both to get a normal */
   cross_v3_v3v3(plane_no, co_a, co_b);
   normalize_v3(plane_no); /* not needed but nicer for user */
 
   /* point on plane, can use either start or endpoint */
-  ED_view3d_win_to_3d(v3d, ar, co_ref, co_a_ss, plane_co);
+  ED_view3d_win_to_3d(v3d, region, co_ref, co_a_ss, plane_co);
 }
 
 static int mesh_bisect_invoke(bContext *C, wmOperator *op, const wmEvent *event)
@@ -346,10 +346,9 @@ static int mesh_bisect_exec(bContext *C, wmOperator *op)
       BMOperator bmop_fill;
       BMOperator bmop_attr;
 
+      /* The fill normal sign is ignored as the face-winding is defined by surrounding faces.
+       * The normal is passed so triangle fill wont have to calculate it. */
       normalize_v3_v3(normal_fill, plane_no_local);
-      if (clear_outer == true && clear_inner == false) {
-        negate_v3(normal_fill);
-      }
 
       /* Fill */
       BMO_op_initf(bm,
@@ -369,7 +368,7 @@ static int mesh_bisect_exec(bContext *C, wmOperator *op)
                    "face_attribute_fill faces=%S use_normals=%b use_data=%b",
                    &bmop_fill,
                    "geom.out",
-                   false,
+                   true,
                    true);
       BMO_op_exec(bm, &bmop_attr);
 
@@ -384,7 +383,7 @@ static int mesh_bisect_exec(bContext *C, wmOperator *op)
         bm, bmop.slots_out, "geom_cut.out", BM_VERT | BM_EDGE, BM_ELEM_SELECT, true);
 
     if (EDBM_op_finish(em, &bmop, op, true)) {
-      EDBM_update_generic(em, true, true);
+      EDBM_update_generic(obedit->data, true, true);
       EDBM_selectmode_flush(em);
       ret = OPERATOR_FINISHED;
     }

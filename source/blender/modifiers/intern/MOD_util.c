@@ -40,7 +40,7 @@
 #include "BKE_editmesh.h"
 #include "BKE_image.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_object.h"
 
@@ -235,7 +235,7 @@ Mesh *MOD_deform_mesh_eval_get(Object *ob,
 void MOD_get_vgroup(
     Object *ob, struct Mesh *mesh, const char *name, MDeformVert **dvert, int *defgrp_index)
 {
-  *defgrp_index = defgroup_name_index(ob, name);
+  *defgrp_index = BKE_object_defgroup_name_index(ob, name);
   *dvert = NULL;
 
   if (*defgrp_index != -1) {
@@ -279,12 +279,11 @@ void modifier_type_init(ModifierTypeInfo *types[])
   INIT_TYPE(ParticleInstance);
   INIT_TYPE(Explode);
   INIT_TYPE(Shrinkwrap);
-  INIT_TYPE(Fluidsim);
   INIT_TYPE(Mask);
   INIT_TYPE(SimpleDeform);
   INIT_TYPE(Multires);
   INIT_TYPE(Surface);
-  INIT_TYPE(Smoke);
+  INIT_TYPE(Fluid);
   INIT_TYPE(ShapeKey);
   INIT_TYPE(Solidify);
   INIT_TYPE(Screw);
@@ -301,6 +300,7 @@ void modifier_type_init(ModifierTypeInfo *types[])
   INIT_TYPE(MeshCache);
   INIT_TYPE(LaplacianDeform);
   INIT_TYPE(Wireframe);
+  INIT_TYPE(Weld);
   INIT_TYPE(DataTransfer);
   INIT_TYPE(NormalEdit);
   INIT_TYPE(CorrectiveSmooth);

@@ -29,6 +29,7 @@
 #include "util/util_vector.h"
 
 /* needed for calculating differentials */
+// clang-format off
 #include "kernel/kernel_compat_cpu.h"
 #include "kernel/split/kernel_split_data.h"
 #include "kernel/kernel_globals.h"
@@ -36,6 +37,7 @@
 #include "kernel/kernel_differential.h"
 #include "kernel/kernel_montecarlo.h"
 #include "kernel/kernel_camera.h"
+// clang-format on
 
 CCL_NAMESPACE_BEGIN
 
@@ -498,7 +500,7 @@ void Camera::device_update_volume(Device * /*device*/, DeviceScene *dscene, Scen
   BoundBox viewplane_boundbox = viewplane_bounds_get();
   for (size_t i = 0; i < scene->objects.size(); ++i) {
     Object *object = scene->objects[i];
-    if (object->mesh->has_volume && viewplane_boundbox.intersects(object->bounds)) {
+    if (object->geometry->has_volume && viewplane_boundbox.intersects(object->bounds)) {
       /* TODO(sergey): Consider adding more grained check. */
       VLOG(1) << "Detected camera inside volume.";
       kcam->is_inside_volume = 1;

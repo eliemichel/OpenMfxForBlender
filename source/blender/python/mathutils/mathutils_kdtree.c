@@ -38,9 +38,9 @@
 
 typedef struct {
   PyObject_HEAD KDTree_3d *obj;
-  unsigned int maxsize;
-  unsigned int count;
-  unsigned int count_balance; /* size when we last balanced */
+  uint maxsize;
+  uint count;
+  uint count_balance; /* size when we last balanced */
 } PyKDTree;
 
 /* -------------------------------------------------------------------- */
@@ -92,7 +92,7 @@ static PyObject *kdtree_nearest_to_py_and_check(const KDTreeNearest_3d *nearest)
 
 static int PyKDTree__tp_init(PyKDTree *self, PyObject *args, PyObject *kwargs)
 {
-  unsigned int maxsize;
+  uint maxsize;
   const char *keywords[] = {"size", NULL};
 
   if (!PyArg_ParseTupleAndKeywords(args, kwargs, "I:KDTree", (char **)keywords, &maxsize)) {
@@ -134,8 +134,7 @@ static PyObject *py_kdtree_insert(PyKDTree *self, PyObject *args, PyObject *kwar
   int index;
   const char *keywords[] = {"co", "index", NULL};
 
-  if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, (char *)"Oi:insert", (char **)keywords, &py_co, &index)) {
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "Oi:insert", (char **)keywords, &py_co, &index)) {
     return NULL;
   }
 
@@ -223,7 +222,7 @@ static PyObject *py_kdtree_find(PyKDTree *self, PyObject *args, PyObject *kwargs
   const char *keywords[] = {"co", "filter", NULL};
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, (char *)"O|O:find", (char **)keywords, &py_co, &py_filter)) {
+          args, kwargs, "O|O:find", (char **)keywords, &py_co, &py_filter)) {
     return NULL;
   }
 
@@ -274,12 +273,11 @@ static PyObject *py_kdtree_find_n(PyKDTree *self, PyObject *args, PyObject *kwar
   PyObject *py_co;
   float co[3];
   KDTreeNearest_3d *nearest;
-  unsigned int n;
+  uint n;
   int i, found;
   const char *keywords[] = {"co", "n", NULL};
 
-  if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, (char *)"OI:find_n", (char **)keywords, &py_co, &n)) {
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OI:find_n", (char **)keywords, &py_co, &n)) {
     return NULL;
   }
 
@@ -335,7 +333,7 @@ static PyObject *py_kdtree_find_range(PyKDTree *self, PyObject *args, PyObject *
   const char *keywords[] = {"co", "radius", NULL};
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, (char *)"Of:find_range", (char **)keywords, &py_co, &radius)) {
+          args, kwargs, "Of:find_range", (char **)keywords, &py_co, &radius)) {
     return NULL;
   }
 
@@ -436,7 +434,7 @@ PyTypeObject PyKDTree_Type = {
     (destructor)NULL,                       /* tp_del */
 };
 
-PyDoc_STRVAR(py_kdtree_doc, "Generic 3-dimentional kd-tree to perform spatial searches.");
+PyDoc_STRVAR(py_kdtree_doc, "Generic 3-dimensional kd-tree to perform spatial searches.");
 static struct PyModuleDef kdtree_moduledef = {
     PyModuleDef_HEAD_INIT,
     "mathutils.kdtree", /* m_name */

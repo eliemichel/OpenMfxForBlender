@@ -1973,10 +1973,6 @@ static void rna_def_mloopuv(BlenderRNA *brna)
   prop = RNA_def_property(srna, "select", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", MLOOPUV_VERTSEL);
   RNA_def_property_ui_text(prop, "UV Select", "");
-
-  prop = RNA_def_property(srna, "select_edge", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", MLOOPUV_EDGESEL);
-  RNA_def_property_ui_text(prop, "UV Edge Select", "");
 }
 
 static void rna_def_mloopcol(BlenderRNA *brna)
@@ -2274,7 +2270,7 @@ static void rna_def_mesh_looptris(BlenderRNA *brna, PropertyRNA *cprop)
 {
   StructRNA *srna;
 
-  RNA_def_property_srna(cprop, "MeshLoopTriangle");
+  RNA_def_property_srna(cprop, "MeshLoopTriangles");
   srna = RNA_def_struct(brna, "MeshLoopTriangles", NULL);
   RNA_def_struct_sdna(srna, "Mesh");
   RNA_def_struct_ui_text(
@@ -2987,7 +2983,7 @@ static void rna_def_mesh(BlenderRNA *brna)
   /* Remesh */
   prop = RNA_def_property(srna, "remesh_voxel_size", PROP_FLOAT, PROP_DISTANCE);
   RNA_def_property_float_sdna(prop, NULL, "remesh_voxel_size");
-  RNA_def_property_range(prop, 0.00001f, FLT_MAX);
+  RNA_def_property_range(prop, 0.0001f, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0001f, FLT_MAX, 0.01, 4);
   RNA_def_property_ui_text(prop,
                            "Voxel Size",
@@ -3028,6 +3024,13 @@ static void rna_def_mesh(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", ME_REMESH_REPROJECT_PAINT_MASK);
   RNA_def_property_boolean_default(prop, false);
   RNA_def_property_ui_text(prop, "Preserve Paint Mask", "Keep the current mask on the new mesh");
+  RNA_def_property_update(prop, 0, "rna_Mesh_update_draw");
+
+  prop = RNA_def_property(srna, "use_remesh_preserve_sculpt_face_sets", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", ME_REMESH_REPROJECT_SCULPT_FACE_SETS);
+  RNA_def_property_boolean_default(prop, false);
+  RNA_def_property_ui_text(
+      prop, "Preserve Face Sets", "Keep the current Face Sets on the new mesh");
   RNA_def_property_update(prop, 0, "rna_Mesh_update_draw");
 
   prop = RNA_def_property(srna, "remesh_mode", PROP_ENUM, PROP_NONE);

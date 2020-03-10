@@ -31,8 +31,6 @@
 #include "BKE_sequencer.h"
 #include "BKE_report.h"
 
-#include "UI_view2d.h"
-
 #include "transform.h"
 #include "transform_convert.h"
 
@@ -381,6 +379,10 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
         }
 
         if (overlap) {
+          const bool use_sync_markers = (((SpaceSeq *)t->sa->spacedata.first)->flag &
+                                         SEQ_MARKER_TRANS) != 0;
+          ListBase *markers = &t->scene->markers;
+
           bool has_effect_root = false, has_effect_any = false;
           for (seq = seqbasep->first; seq; seq = seq->next) {
             seq->tmp = NULL;
@@ -425,7 +427,7 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
               }
             }
 
-            BKE_sequence_base_shuffle_time(seqbasep, t->scene);
+            BKE_sequence_base_shuffle_time(seqbasep, t->scene, markers, use_sync_markers);
 
             for (seq = seqbasep->first; seq; seq = seq->next) {
               if (seq->machine >= MAXSEQ * 2) {
@@ -437,10 +439,10 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
               }
             }
 
-            BKE_sequence_base_shuffle_time(seqbasep, t->scene);
+            BKE_sequence_base_shuffle_time(seqbasep, t->scene, markers, use_sync_markers);
           }
           else {
-            BKE_sequence_base_shuffle_time(seqbasep, t->scene);
+            BKE_sequence_base_shuffle_time(seqbasep, t->scene, markers, use_sync_markers);
           }
 
           if (has_effect_any) {
@@ -518,18 +520,16 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
   DEG_id_tag_update(&t->scene->id, ID_RECALC_SEQUENCER_STRIPS);
 }
 
-void createTransSeqData(bContext *C, TransInfo *t)
+void createTransSeqData(TransInfo *t)
 {
 #define XXX_DURIAN_ANIM_TX_HACK
 
-  View2D *v2d = UI_view2d_fromcontext(C);
   Scene *scene = t->scene;
   Editing *ed = BKE_sequencer_editing_get(t->scene, false);
   TransData *td = NULL;
   TransData2D *td2d = NULL;
   TransDataSeq *tdsq = NULL;
   TransSeq *ts = NULL;
-  int xmouse;
 
   int count = 0;
 
@@ -541,18 +541,10 @@ void createTransSeqData(bContext *C, TransInfo *t)
   }
 
   tc->custom.type.free_cb = freeSeqData;
-
-  xmouse = (int)UI_view2d_region_to_view_x(v2d, t->mouse.imval[0]);
-
-  /* which side of the current frame should be allowed */
-  if (t->mode == TFM_TIME_EXTEND) {
-    /* only side on which mouse is gets transformed */
-    t->frame_side = (xmouse > CFRA) ? 'R' : 'L';
-  }
-  else {
-    /* normal transform - both sides of current frame are considered */
-    t->frame_side = 'B';
-  }
+  /* only side on which center is gets transformed */
+  int center[2];
+  transform_convert_center_global_v2_int(t, center);
+  t->frame_side = (center[0] > CFRA) ? 'R' : 'L';
 
 #ifdef XXX_DURIAN_ANIM_TX_HACK
   {
@@ -595,7 +587,7 @@ void createTransSeqData(bContext *C, TransInfo *t)
   SeqTransDataBounds(t, ed->seqbasep, ts);
 
   /* set the snap mode based on how close the mouse is at the end/start points */
-  if (abs(xmouse - ts->max) > abs(xmouse - ts->min)) {
+  if (abs(center[0] - ts->max) > abs(center[0] - ts->min)) {
     ts->snap_left = true;
   }
 

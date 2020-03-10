@@ -218,7 +218,7 @@ static int object_hide_view_set_exec(bContext *C, wmOperator *op)
 
   /* Hide selected or unselected objects. */
   for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-    if (!(base->flag & BASE_VISIBLE_DEPSGRAPH)) {
+    if (!(base->flag & BASE_VISIBLE_VIEWLAYER)) {
       continue;
     }
 
@@ -445,7 +445,7 @@ static bool ED_object_editmode_load_ex(Main *bmain, Object *obedit, const bool f
       return false;
     }
 
-    EDBM_mesh_load(bmain, obedit);
+    EDBM_mesh_load_ex(bmain, obedit, freedata);
 
     if (freedata) {
       EDBM_mesh_free(me->edit_mesh);
@@ -513,6 +513,9 @@ static bool ED_object_editmode_load_ex(Main *bmain, Object *obedit, const bool f
       ED_mball_editmball_free(obedit);
     }
   }
+  else {
+    return false;
+  }
 
   char *needs_flush_ptr = BKE_object_data_editmode_flush_ptr_get(obedit->data);
   if (needs_flush_ptr) {
@@ -540,6 +543,8 @@ bool ED_object_editmode_exit_ex(Main *bmain, Scene *scene, Object *obedit, int f
      * is flagged for editmode, without 'obedit' being set [#35489] */
     if (UNLIKELY(obedit && obedit->mode & OB_MODE_EDIT)) {
       obedit->mode &= ~OB_MODE_EDIT;
+      /* Also happens when mesh is shared across multiple objects. [#T69834] */
+      DEG_id_tag_update(&obedit->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
     }
     return true;
   }
@@ -624,7 +629,7 @@ bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag
     bArmature *arm = ob->data;
     ok = 1;
     ED_armature_to_edit(arm);
-    /* to ensure all goes in restposition and without striding */
+    /* To ensure all goes in rest-position and without striding. */
 
     arm->needs_flush_to_id = 0;
 
@@ -1015,7 +1020,7 @@ static int object_calculate_paths_invoke(bContext *C, wmOperator *op, const wmEv
 
   /* show popup dialog to allow editing of range... */
   /* FIXME: hardcoded dimensions here are just arbitrary */
-  return WM_operator_props_dialog_popup(C, op, 200, 200);
+  return WM_operator_props_dialog_popup(C, op, 200);
 }
 
 /* Calculate/recalculate whole paths (avs.path_sf to avs.path_ef) */
@@ -1365,7 +1370,8 @@ static const EnumPropertyItem *object_mode_set_itemsf(bContext *C,
                 OB_MODE_EDIT_GPENCIL,
                 OB_MODE_PAINT_GPENCIL,
                 OB_MODE_SCULPT_GPENCIL,
-                OB_MODE_WEIGHT_GPENCIL) &&
+                OB_MODE_WEIGHT_GPENCIL,
+                OB_MODE_VERTEX_GPENCIL) &&
            (ob->type == OB_GPENCIL)) ||
           (input->value == OB_MODE_OBJECT)) {
         RNA_enum_item_add(&item, &totitem, input);
@@ -1734,7 +1740,7 @@ static int move_to_collection_invoke(bContext *C, wmOperator *op, const wmEvent 
         BKE_collection_new_name_get(collection, name);
 
         RNA_property_string_set(op->ptr, prop, name);
-        return WM_operator_props_dialog_popup(C, op, 200, 100);
+        return WM_operator_props_dialog_popup(C, op, 200);
       }
     }
     return move_to_collection_exec(C, op);

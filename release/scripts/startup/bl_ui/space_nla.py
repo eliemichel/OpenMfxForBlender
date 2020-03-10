@@ -70,11 +70,13 @@ class NLA_MT_editor_menus(Menu):
     bl_idname = "NLA_MT_editor_menus"
     bl_label = ""
 
-    def draw(self, _context):
+    def draw(self, context):
+        st = context.space_data
         layout = self.layout
         layout.menu("NLA_MT_view")
         layout.menu("NLA_MT_select")
-        layout.menu("NLA_MT_marker")
+        if st.show_markers:
+            layout.menu("NLA_MT_marker")
         layout.menu("NLA_MT_edit")
         layout.menu("NLA_MT_add")
 
@@ -96,8 +98,10 @@ class NLA_MT_view(Menu):
         layout.prop(st, "show_locked_time")
 
         layout.prop(st, "show_strip_curves")
+
+        layout.separator()
+        layout.prop(st, "show_markers")
         layout.prop(st, "show_local_markers")
-        layout.prop(st, "show_marker_lines")
 
         layout.separator()
         layout.operator("anim.previewrange_set")
@@ -163,6 +167,7 @@ class NLA_MT_edit(Menu):
         layout.operator("nla.duplicate", text="Linked Duplicate").linked = True
         layout.operator("nla.split")
         layout.operator("nla.delete")
+        layout.operator("nla.tracks_delete")
 
         layout.separator()
         layout.operator("nla.mute_toggle")

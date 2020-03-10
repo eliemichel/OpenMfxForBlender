@@ -25,6 +25,13 @@ from bpy.types import (
     Panel,
 )
 
+from bl_ui.properties_grease_pencil_common import (
+    GreasePencilLayerMasksPanel,
+    GreasePencilLayerAdjustmentsPanel,
+    GreasePencilLayerRelationsPanel,
+    GreasePencilLayerDisplayPanel,
+)
+
 #######################################
 # DopeSheet Filtering - Header Buttons
 
@@ -243,6 +250,18 @@ class DOPESHEET_HT_editor_buttons(Header):
 
             layout.template_ID(st, "action", new="action.new", unlink="action.unlink")
 
+        # Layer management
+        if st.mode == 'GPENCIL':
+            row = layout.row(align=True)
+            row.operator("gpencil.layer_move", icon='TRIA_UP', text="").type = 'UP'
+            row.operator("gpencil.layer_move", icon='TRIA_DOWN', text="").type = 'DOWN'
+
+            row = layout.row(align=True)
+            row.operator("gpencil.layer_add", icon='ADD', text="")
+            row.operator("gpencil.layer_remove", icon='REMOVE', text="")
+
+            layout.separator_spacer()
+
         layout.separator_spacer()
 
         if st.mode == 'DOPESHEET':
@@ -288,7 +307,8 @@ class DOPESHEET_MT_editor_menus(Menu):
 
         layout.menu("DOPESHEET_MT_view")
         layout.menu("DOPESHEET_MT_select")
-        layout.menu("DOPESHEET_MT_marker")
+        if st.show_markers:
+            layout.menu("DOPESHEET_MT_marker")
 
         if st.mode == 'DOPESHEET' or (st.mode == 'ACTION' and st.action is not None):
             layout.menu("DOPESHEET_MT_channel")
@@ -322,9 +342,12 @@ class DOPESHEET_MT_view(Menu):
         layout.prop(st, "show_group_colors")
         layout.prop(st, "show_interpolation")
         layout.prop(st, "show_extremes")
-        layout.prop(st, "show_marker_lines")
         layout.prop(st, "use_auto_merge_keyframes")
 
+        layout.separator()
+        layout.prop(st, "show_markers")
+
+        layout.separator()
         layout.prop(st, "show_seconds")
         layout.prop(st, "show_locked_time")
 
@@ -475,6 +498,7 @@ class DOPESHEET_MT_key(Menu):
         layout.operator_menu_enum("action.keyframe_type", "type", text="Keyframe Type")
         layout.operator_menu_enum("action.handle_type", "type", text="Handle Type")
         layout.operator_menu_enum("action.interpolation_type", "type", text="Interpolation Mode")
+        layout.operator_menu_enum("action.easing_type", "type", text="Easing Mode")
 
         layout.separator()
         layout.operator("action.clean").channels = False
@@ -520,8 +544,8 @@ class DOPESHEET_MT_gpencil_channel(Menu):
         # layout.operator("anim.channels_expand")
         # layout.operator("anim.channels_collapse")
 
-        # layout.separator()
-        #layout.operator_menu_enum("anim.channels_move", "direction", text="Move...")
+        layout.separator()
+        layout.operator_menu_enum("anim.channels_move", "direction", text="Move...")
 
 
 class DOPESHEET_MT_gpencil_frame(Menu):
@@ -577,6 +601,7 @@ class DOPESHEET_MT_context_menu(Menu):
         layout.operator_menu_enum("action.keyframe_type", "type", text="Keyframe Type")
         layout.operator_menu_enum("action.handle_type", "type", text="Handle Type")
         layout.operator_menu_enum("action.interpolation_type", "type", text="Interpolation Mode")
+        layout.operator_menu_enum("action.easing_type", "type", text="Easing Mode")
 
         layout.separator()
 
@@ -594,7 +619,7 @@ class DOPESHEET_MT_context_menu(Menu):
 class DOPESHEET_MT_channel_context_menu(Menu):
     bl_label = "Dope Sheet Channel Context Menu"
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
 
         layout.operator("anim.channels_setting_enable", text="Mute Channels").type = 'MUTE'
@@ -609,7 +634,12 @@ class DOPESHEET_MT_channel_context_menu(Menu):
 
         layout.separator()
         layout.operator("anim.channels_editable_toggle")
-        layout.operator_menu_enum("action.extrapolation_type", "type", text="Extrapolation Mode")
+
+        if bpy.ops.graph.extrapolation_type.poll(context.copy()):
+            operator = "graph.extrapolation_type"
+        else:
+            operator = "action.extrapolation_type"
+        layout.operator_menu_enum(operator, "type", text="Extrapolation Mode")
 
         layout.separator()
         layout.operator("anim.channels_expand")
@@ -636,6 +666,75 @@ class DOPESHEET_MT_snap_pie(Menu):
         pie.operator("action.snap", text="Nearest Marker").type = 'NEAREST_MARKER'
 
 
+class LayersDopeSheetPanel:
+    bl_space_type = 'DOPESHEET_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = "View"
+
+    @classmethod
+    def poll(cls, context):
+        st = context.space_data
+        ob = context.object
+        if st.mode != 'GPENCIL' or ob is None or ob.type != 'GPENCIL':
+            return False
+
+        gpd = ob.data
+        gpl = gpd.layers.active
+        if gpl:
+            return True
+
+        return False
+
+
+class DOPESHEET_PT_gpencil_mode(LayersDopeSheetPanel, Panel):
+    # bl_space_type = 'DOPESHEET_EDITOR'
+    # bl_region_type = 'UI'
+    # bl_category = "View"
+    bl_label = "Layer"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        ob = context.object
+        gpd = ob.data
+        gpl = gpd.layers.active
+        if gpl:
+            row = layout.row(align=True)
+            row.prop(gpl, "blend_mode", text="Blend")
+
+            row = layout.row(align=True)
+            row.prop(gpl, "opacity", text="Opacity", slider=True)
+
+            row = layout.row(align=True)
+            row.prop(gpl, "use_lights")
+
+
+class DOPESHEET_PT_gpencil_layer_masks(LayersDopeSheetPanel, GreasePencilLayerMasksPanel, Panel):
+    bl_label = "Masks"
+    bl_parent_id = 'DOPESHEET_PT_gpencil_mode'
+    bl_options = {'DEFAULT_CLOSED'}
+
+
+class DOPESHEET_PT_gpencil_layer_adjustments(LayersDopeSheetPanel, GreasePencilLayerAdjustmentsPanel, Panel):
+    bl_label = "Adjustments"
+    bl_parent_id = 'DOPESHEET_PT_gpencil_mode'
+    bl_options = {'DEFAULT_CLOSED'}
+
+
+class DOPESHEET_PT_gpencil_layer_relations(LayersDopeSheetPanel, GreasePencilLayerRelationsPanel, Panel):
+    bl_label = "Relations"
+    bl_parent_id = 'DOPESHEET_PT_gpencil_mode'
+    bl_options = {'DEFAULT_CLOSED'}
+
+
+class DOPESHEET_PT_gpencil_layer_display(LayersDopeSheetPanel, GreasePencilLayerDisplayPanel, Panel):
+    bl_label = "Display"
+    bl_parent_id = 'DOPESHEET_PT_gpencil_mode'
+    bl_options = {'DEFAULT_CLOSED'}
+
+
 classes = (
     DOPESHEET_HT_header,
     DOPESHEET_HT_editor_buttons,
@@ -653,6 +752,11 @@ classes = (
     DOPESHEET_MT_channel_context_menu,
     DOPESHEET_MT_snap_pie,
     DOPESHEET_PT_filters,
+    DOPESHEET_PT_gpencil_mode,
+    DOPESHEET_PT_gpencil_layer_masks,
+    DOPESHEET_PT_gpencil_layer_adjustments,
+    DOPESHEET_PT_gpencil_layer_relations,
+    DOPESHEET_PT_gpencil_layer_display,
 )
 
 if __name__ == "__main__":  # only for live edit.

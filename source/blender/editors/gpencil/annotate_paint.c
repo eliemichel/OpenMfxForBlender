@@ -116,7 +116,7 @@ typedef struct tGPsdata {
   /** area where painting originated. */
   ScrArea *sa;
   /** region where painting originated. */
-  ARegion *ar;
+  ARegion *region;
   /** needed for GP_STROKE_2DSPACE. */
   View2D *v2d;
   /** for using the camera rect within the 3d view. */
@@ -218,19 +218,9 @@ static void gp_session_validatebuffer(tGPsdata *p);
 /* check if context is suitable for drawing */
 static bool gpencil_draw_poll(bContext *C)
 {
-  /* if is inside grease pencil draw mode cannot use annotations */
-  Object *obact = CTX_data_active_object(C);
-  ScrArea *sa = CTX_wm_area(C);
-  if ((sa) && (sa->spacetype == SPACE_VIEW3D)) {
-    if ((obact) && (obact->type == OB_GPENCIL) && (obact->mode == OB_MODE_PAINT_GPENCIL)) {
-      CTX_wm_operator_poll_msg_set(C, "Annotation cannot be used in grease pencil draw mode");
-      return false;
-    }
-  }
-
   if (ED_operator_regionactive(C)) {
     /* check if current context can support GPencil data */
-    if (ED_gpencil_data_get_pointers(C, NULL) != NULL) {
+    if (ED_annotation_data_get_pointers(C, NULL) != NULL) {
       /* check if Grease Pencil isn't already running */
       if (ED_gpencil_session_active() == 0) {
         return true;
@@ -240,7 +230,7 @@ static bool gpencil_draw_poll(bContext *C)
       }
     }
     else {
-      CTX_wm_operator_poll_msg_set(C, "Failed to find Grease Pencil data to draw into");
+      CTX_wm_operator_poll_msg_set(C, "Failed to find Annotation data to draw into");
     }
   }
   else {
@@ -316,7 +306,8 @@ static void gp_stroke_convertcoords(tGPsdata *p, const float mval[2], float out[
   if (gpd->runtime.sbuffer_sflag & GP_STROKE_3DSPACE) {
     int mval_i[2];
     round_v2i_v2fl(mval_i, mval);
-    if (gpencil_project_check(p) && (ED_view3d_autodist_simple(p->ar, mval_i, out, 0, depth))) {
+    if (gpencil_project_check(p) &&
+        (ED_view3d_autodist_simple(p->region, mval_i, out, 0, depth))) {
       /* projecting onto 3D-Geometry
        * - nothing more needs to be done here, since view_autodist_simple() has already done it
        */
@@ -336,13 +327,13 @@ static void gp_stroke_convertcoords(tGPsdata *p, const float mval[2], float out[
        */
 
       gp_get_3d_reference(p, rvec);
-      zfac = ED_view3d_calc_zfac(p->ar->regiondata, rvec, NULL);
+      zfac = ED_view3d_calc_zfac(p->region->regiondata, rvec, NULL);
 
-      if (ED_view3d_project_float_global(p->ar, rvec, mval_prj, V3D_PROJ_TEST_NOP) ==
+      if (ED_view3d_project_float_global(p->region, rvec, mval_prj, V3D_PROJ_TEST_NOP) ==
           V3D_PROJ_RET_OK) {
         float mval_f[2];
         sub_v2_v2v2(mval_f, mval_prj, mval);
-        ED_view3d_win_to_delta(p->ar, mval_f, dvec, zfac);
+        ED_view3d_win_to_delta(p->region, mval_f, dvec, zfac);
         sub_v3_v3v3(out, rvec, dvec);
       }
       else {
@@ -360,8 +351,8 @@ static void gp_stroke_convertcoords(tGPsdata *p, const float mval[2], float out[
   /* 2d - relative to screen (viewport area) */
   else {
     if (p->subrect == NULL) { /* normal 3D view */
-      out[0] = (float)(mval[0]) / (float)(p->ar->winx) * 100;
-      out[1] = (float)(mval[1]) / (float)(p->ar->winy) * 100;
+      out[0] = (float)(mval[0]) / (float)(p->region->winx) * 100;
+      out[1] = (float)(mval[1]) / (float)(p->region->winy) * 100;
     }
     else { /* camera view, use subrect */
       out[0] = ((mval[0] - p->subrect->xmin) / BLI_rctf_size_x(p->subrect)) * 100;
@@ -532,9 +523,11 @@ static short gp_stroke_addpoint(tGPsdata *p, const float mval[2], float pressure
       if (gpencil_project_check(p)) {
         View3D *v3d = p->sa->spacedata.first;
 
-        view3d_region_operator_needs_opengl(p->win, p->ar);
-        ED_view3d_autodist_init(
-            p->depsgraph, p->ar, v3d, (ts->annotate_v3d_align & GP_PROJECT_DEPTH_STROKE) ? 1 : 0);
+        view3d_region_operator_needs_opengl(p->win, p->region);
+        ED_view3d_autodist_init(p->depsgraph,
+                                p->region,
+                                v3d,
+                                (ts->annotate_v3d_align & GP_PROJECT_DEPTH_STROKE) ? 1 : 0);
       }
 
       /* convert screen-coordinates to appropriate coordinates (and store them) */
@@ -544,9 +537,7 @@ static short gp_stroke_addpoint(tGPsdata *p, const float mval[2], float pressure
       pts->pressure = pt->pressure;
       pts->strength = pt->strength;
       pts->time = pt->time;
-
-      /* force fill recalc */
-      gps->flag |= GP_STROKE_RECALC_GEOMETRY;
+      gps->tot_triangles = 0;
     }
 
     /* increment counters */
@@ -611,14 +602,13 @@ static void gp_stroke_newfrombuffer(tGPsdata *p)
   /* copy appropriate settings for stroke */
   gps->totpoints = totelem;
   gps->thickness = gpl->thickness;
-  gps->gradient_f = 1.0f;
-  gps->gradient_s[0] = 1.0f;
-  gps->gradient_s[1] = 1.0f;
+  gps->fill_opacity_fac = 1.0f;
+  gps->hardeness = 1.0f;
+  copy_v2_fl(gps->aspect_ratio, 1.0f);
+  gps->uv_scale = 1.0f;
   gps->flag = gpd->runtime.sbuffer_sflag;
   gps->inittime = p->inittime;
-
-  /* enable recalculation flag by default (only used if hq fill) */
-  gps->flag |= GP_STROKE_RECALC_GEOMETRY;
+  gps->tot_triangles = 0;
 
   /* allocate enough memory for a continuous array for storage points */
   gps->points = MEM_callocN(sizeof(bGPDspoint) * gps->totpoints, "gp_stroke_points");
@@ -686,9 +676,9 @@ static void gp_stroke_newfrombuffer(tGPsdata *p)
       for (i = 0, ptc = gpd->runtime.sbuffer; i < gpd->runtime.sbuffer_used; i++, ptc++, pt++) {
         round_v2i_v2fl(mval_i, &ptc->x);
 
-        if ((ED_view3d_autodist_depth(p->ar, mval_i, depth_margin, depth_arr + i) == 0) &&
+        if ((ED_view3d_autodist_depth(p->region, mval_i, depth_margin, depth_arr + i) == 0) &&
             (i && (ED_view3d_autodist_depth_seg(
-                       p->ar, mval_i, mval_prev, depth_margin + 1, depth_arr + i) == 0))) {
+                       p->region, mval_i, mval_prev, depth_margin + 1, depth_arr + i) == 0))) {
           interp_depth = true;
         }
         else {
@@ -804,11 +794,11 @@ static bool gp_stroke_eraser_is_occluded(tGPsdata *p,
                                          const int y)
 {
   if ((p->sa->spacetype == SPACE_VIEW3D) && (p->flags & GP_PAINTFLAG_V3D_ERASER_DEPTH)) {
-    RegionView3D *rv3d = p->ar->regiondata;
+    RegionView3D *rv3d = p->region->regiondata;
     const int mval_i[2] = {x, y};
     float mval_3d[3];
 
-    if (ED_view3d_autodist_simple(p->ar, mval_i, mval_3d, 0, NULL)) {
+    if (ED_view3d_autodist_simple(p->region, mval_i, mval_3d, 0, NULL)) {
       const float depth_mval = view3d_point_depth(rv3d, mval_3d);
       const float depth_pt = view3d_point_depth(rv3d, &pt->x);
 
@@ -934,8 +924,8 @@ static void gp_stroke_doeraser(tGPsdata *p)
   if (p->sa->spacetype == SPACE_VIEW3D) {
     if (p->flags & GP_PAINTFLAG_V3D_ERASER_DEPTH) {
       View3D *v3d = p->sa->spacedata.first;
-      view3d_region_operator_needs_opengl(p->win, p->ar);
-      ED_view3d_autodist_init(p->depsgraph, p->ar, v3d, 0);
+      view3d_region_operator_needs_opengl(p->win, p->region);
+      ED_view3d_autodist_init(p->depsgraph, p->region, v3d, 0);
     }
   }
 
@@ -977,7 +967,7 @@ static bool gp_session_initdata(bContext *C, tGPsdata *p)
   Main *bmain = CTX_data_main(C);
   bGPdata **gpd_ptr = NULL;
   ScrArea *curarea = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   ToolSettings *ts = CTX_data_tool_settings(C);
 
   /* make sure the active view (at the starting time) is a 3d-view */
@@ -1002,17 +992,17 @@ static bool gp_session_initdata(bContext *C, tGPsdata *p)
     /* supported views first */
     case SPACE_VIEW3D: {
       /* View3D *v3d = curarea->spacedata.first; */
-      /* RegionView3D *rv3d = ar->regiondata; */
+      /* RegionView3D *rv3d = region->regiondata; */
 
       /* set current area
        * - must verify that region data is 3D-view (and not something else)
        */
       /* CAUTION: If this is the "toolbar", then this will change on the first stroke */
       p->sa = curarea;
-      p->ar = ar;
+      p->region = region;
       p->align_flag = &ts->annotate_v3d_align;
 
-      if (ar->regiondata == NULL) {
+      if (region->regiondata == NULL) {
         p->status = GP_STATUS_ERROR;
         if (G.debug & G_DEBUG) {
           printf(
@@ -1028,8 +1018,8 @@ static bool gp_session_initdata(bContext *C, tGPsdata *p)
 
       /* set current area */
       p->sa = curarea;
-      p->ar = ar;
-      p->v2d = &ar->v2d;
+      p->region = region;
+      p->v2d = &region->v2d;
       p->align_flag = &ts->gpencil_v2d_align;
       break;
     }
@@ -1038,8 +1028,8 @@ static bool gp_session_initdata(bContext *C, tGPsdata *p)
 
       /* set current area */
       p->sa = curarea;
-      p->ar = ar;
-      p->v2d = &ar->v2d;
+      p->region = region;
+      p->v2d = &region->v2d;
       p->align_flag = &ts->gpencil_seq_align;
 
       /* check that gpencil data is allowed to be drawn */
@@ -1057,8 +1047,8 @@ static bool gp_session_initdata(bContext *C, tGPsdata *p)
 
       /* set the current area */
       p->sa = curarea;
-      p->ar = ar;
-      p->v2d = &ar->v2d;
+      p->region = region;
+      p->v2d = &region->v2d;
       p->align_flag = &ts->gpencil_ima_align;
       break;
     }
@@ -1073,8 +1063,8 @@ static bool gp_session_initdata(bContext *C, tGPsdata *p)
 
       /* set the current area */
       p->sa = curarea;
-      p->ar = ar;
-      p->v2d = &ar->v2d;
+      p->region = region;
+      p->v2d = &region->v2d;
       p->align_flag = &ts->gpencil_v2d_align;
 
       invert_m4_m4(p->imat, sc->unistabmat);
@@ -1115,7 +1105,7 @@ static bool gp_session_initdata(bContext *C, tGPsdata *p)
   }
 
   /* get gp-data */
-  gpd_ptr = ED_gpencil_data_get_pointers(C, &p->ownerPtr);
+  gpd_ptr = ED_annotation_data_get_pointers(C, &p->ownerPtr);
   if ((gpd_ptr == NULL) || !ED_gpencil_data_owner_is_annotation(&p->ownerPtr)) {
     p->status = GP_STATUS_ERROR;
     if (G.debug & G_DEBUG) {
@@ -1214,7 +1204,7 @@ static void gp_paint_initstroke(tGPsdata *p, eGPencil_PaintModes paintmode, Deps
   ToolSettings *ts = scene->toolsettings;
 
   /* get active layer (or add a new one if non-existent) */
-  p->gpl = BKE_gpencil_layer_getactive(p->gpd);
+  p->gpl = BKE_gpencil_layer_active_get(p->gpd);
   if (p->gpl == NULL) {
     /* tag for annotations */
     p->gpd->flag |= GP_DATA_ANNOTATIONS;
@@ -1242,7 +1232,7 @@ static void gp_paint_initstroke(tGPsdata *p, eGPencil_PaintModes paintmode, Deps
      */
     bool has_layer_to_erase = false;
 
-    if (gpencil_layer_is_editable(p->gpl)) {
+    if (BKE_gpencil_layer_is_editable(p->gpl)) {
       /* Ensure that there's stuff to erase here (not including selection mask below)... */
       if (p->gpl->actframe && p->gpl->actframe->strokes.first) {
         has_layer_to_erase = true;
@@ -1270,7 +1260,7 @@ static void gp_paint_initstroke(tGPsdata *p, eGPencil_PaintModes paintmode, Deps
       add_frame_mode = GP_GETFRAME_ADD_NEW;
     }
 
-    p->gpf = BKE_gpencil_layer_getframe(p->gpl, CFRA, add_frame_mode);
+    p->gpf = BKE_gpencil_layer_frame_get(p->gpl, CFRA, add_frame_mode);
 
     if (p->gpf == NULL) {
       p->status = GP_STATUS_ERROR;
@@ -1315,13 +1305,13 @@ static void gp_paint_initstroke(tGPsdata *p, eGPencil_PaintModes paintmode, Deps
   if ((*p->align_flag & GP_PROJECT_VIEWSPACE) == 0) {
     if (p->sa->spacetype == SPACE_VIEW3D) {
       View3D *v3d = p->sa->spacedata.first;
-      RegionView3D *rv3d = p->ar->regiondata;
+      RegionView3D *rv3d = p->region->regiondata;
 
       /* for camera view set the subrect */
       if (rv3d->persp == RV3D_CAMOB) {
         /* no shift */
         ED_view3d_calc_camera_border(
-            p->scene, depsgraph, p->ar, v3d, rv3d, &p->subrect_data, true);
+            p->scene, depsgraph, p->region, v3d, rv3d, &p->subrect_data, true);
         p->subrect = &p->subrect_data;
       }
     }
@@ -1332,7 +1322,7 @@ static void gp_paint_initstroke(tGPsdata *p, eGPencil_PaintModes paintmode, Deps
   p->gsc.gpl = p->gpl;
 
   p->gsc.sa = p->sa;
-  p->gsc.ar = p->ar;
+  p->gsc.region = p->region;
   p->gsc.v2d = p->v2d;
 
   p->gsc.subrect_data = p->subrect_data;
@@ -1369,9 +1359,9 @@ static void gp_paint_strokeend(tGPsdata *p)
     View3D *v3d = p->sa->spacedata.first;
 
     /* need to restore the original projection settings before packing up */
-    view3d_region_operator_needs_opengl(p->win, p->ar);
+    view3d_region_operator_needs_opengl(p->win, p->region);
     ED_view3d_autodist_init(
-        p->depsgraph, p->ar, v3d, (ts->annotate_v3d_align & GP_PROJECT_DEPTH_STROKE) ? 1 : 0);
+        p->depsgraph, p->region, v3d, (ts->annotate_v3d_align & GP_PROJECT_DEPTH_STROKE) ? 1 : 0);
   }
 
   /* check if doing eraser or not */
@@ -1471,12 +1461,7 @@ static void gpencil_draw_toggle_eraser_cursor(bContext *C, tGPsdata *p, short en
 /* Check if tablet eraser is being used (when processing events) */
 static bool gpencil_is_tablet_eraser_active(const wmEvent *event)
 {
-  if (event->tablet_data) {
-    const wmTabletData *wmtab = event->tablet_data;
-    return (wmtab->Active == EVT_TABLET_ERASER);
-  }
-
-  return false;
+  return (event->tablet.active == EVT_TABLET_ERASER);
 }
 
 /* ------------------------------- */
@@ -1696,7 +1681,6 @@ static void annotation_draw_apply_event(
   tGPsdata *p = op->customdata;
   PointerRNA itemptr;
   float mousef[2];
-  int tablet = 0;
 
   /* convert from window-space to area-space mouse coordinates
    * add any x,y override position for fake events
@@ -1730,28 +1714,19 @@ static void annotation_draw_apply_event(
 
   p->curtime = PIL_check_seconds_timer();
 
-  /* handle pressure sensitivity (which is supplied by tablets) */
-  if (event->tablet_data) {
-    const wmTabletData *wmtab = event->tablet_data;
+  /* handle pressure sensitivity (which is supplied by tablets or otherwise 1.0) */
+  p->pressure = event->tablet.pressure;
 
-    tablet = (wmtab->Active != EVT_TABLET_NONE);
-    p->pressure = wmtab->Pressure;
-
-    /* Hack for pressure sensitive eraser on D+RMB when using a tablet:
-     * The pen has to float over the tablet surface, resulting in
-     * zero pressure (T47101). Ignore pressure values if floating
-     * (i.e. "effectively zero" pressure), and only when the "active"
-     * end is the stylus (i.e. the default when not eraser)
-     */
-    if (p->paintmode == GP_PAINTMODE_ERASER) {
-      if ((wmtab->Active != EVT_TABLET_ERASER) && (p->pressure < 0.001f)) {
-        p->pressure = 1.0f;
-      }
+  /* Hack for pressure sensitive eraser on D+RMB when using a tablet:
+   * The pen has to float over the tablet surface, resulting in
+   * zero pressure (T47101). Ignore pressure values if floating
+   * (i.e. "effectively zero" pressure), and only when the "active"
+   * end is the stylus (i.e. the default when not eraser)
+   */
+  if (p->paintmode == GP_PAINTMODE_ERASER) {
+    if ((event->tablet.active != EVT_TABLET_ERASER) && (p->pressure < 0.001f)) {
+      p->pressure = 1.0f;
     }
-  }
-  else {
-    /* No tablet data -> No pressure info is available */
-    p->pressure = 1.0f;
   }
 
   /* special exception for start of strokes (i.e. maybe for just a dot) */
@@ -1768,7 +1743,7 @@ static void annotation_draw_apply_event(
     /* special exception here for too high pressure values on first touch in
      * windows for some tablets, then we just skip first touch...
      */
-    if (tablet && (p->pressure >= 0.99f)) {
+    if ((event->tablet.active != EVT_TABLET_NONE) && (p->pressure >= 0.99f)) {
       return;
     }
   }
@@ -1801,7 +1776,7 @@ static void annotation_draw_apply_event(
 
   /* force refresh */
   /* just active area for now, since doing whole screen is too slow */
-  ED_region_tag_redraw(p->ar);
+  ED_region_tag_redraw(p->region);
 }
 
 /* ------------------------------- */
@@ -1886,34 +1861,11 @@ static int gpencil_draw_exec(bContext *C, wmOperator *op)
 /* start of interactive drawing part of operator */
 static int gpencil_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  Object *ob = CTX_data_active_object(C);
-  ScrArea *sa = CTX_wm_area(C);
-  Scene *scene = CTX_data_scene(C);
   tGPsdata *p = NULL;
 
   /* support for tablets eraser pen */
   if (gpencil_is_tablet_eraser_active(event)) {
     RNA_enum_set(op->ptr, "mode", GP_PAINTMODE_ERASER);
-  }
-
-  /* if try to do annotations with a gp object selected, first
-   * unselect the object to avoid conflicts.
-   * The solution is not perfect but we can keep running the annotations while
-   * found a better solution.
-   */
-  if (sa && sa->spacetype == SPACE_VIEW3D) {
-    if ((ob != NULL) && (ob->type == OB_GPENCIL)) {
-      ob->mode = OB_MODE_OBJECT;
-      bGPdata *gpd = (bGPdata *)ob->data;
-      ED_gpencil_setup_modes(C, gpd, 0);
-      DEG_id_tag_update(&gpd->id, ID_RECALC_COPY_ON_WRITE);
-
-      ViewLayer *view_layer = CTX_data_view_layer(C);
-      BKE_view_layer_base_deselect_all(view_layer);
-      view_layer->basact = NULL;
-      DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
-      WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
-    }
   }
 
   if (G.debug & G_DEBUG) {
@@ -2091,8 +2043,8 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
    */
 
   if (p->status == GP_STATUS_IDLING) {
-    ARegion *ar = CTX_wm_region(C);
-    p->ar = ar;
+    ARegion *region = CTX_wm_region(C);
+    p->region = region;
   }
 
   /* We don't pass on key events, GP is used with key-modifiers -
@@ -2131,7 +2083,7 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
    * NOTE: cannot do RIGHTMOUSE (as is standard for canceling)
    * as that would break polyline T32647.
    */
-  if (ELEM(event->type, RETKEY, PADENTER, ESCKEY, SPACEKEY, EKEY)) {
+  if (event->val == KM_PRESS && ELEM(event->type, RETKEY, PADENTER, ESCKEY, SPACEKEY, EKEY)) {
     /* exit() ends the current stroke before cleaning up */
     /* printf("\t\tGP - end of paint op + end of stroke\n"); */
     p->status = GP_STATUS_DONE;
@@ -2199,14 +2151,14 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
        * NOTE: An exception here is that if launched from the toolbar,
        *       whatever region we're now in should become the new region
        */
-      if ((p->ar) && (p->ar->regiontype == RGN_TYPE_TOOLS)) {
+      if ((p->region) && (p->region->regiontype == RGN_TYPE_TOOLS)) {
         /* Change to whatever region is now under the mouse */
         ARegion *current_region = BKE_area_find_region_xy(p->sa, RGN_TYPE_ANY, event->x, event->y);
 
         if (G.debug & G_DEBUG) {
           printf("found alternative region %p (old was %p) - at %d %d (sa: %d %d -> %d %d)\n",
                  current_region,
-                 p->ar,
+                 p->region,
                  event->x,
                  event->y,
                  p->sa->totrct.xmin,
@@ -2219,7 +2171,7 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
           /* Assume that since we found the cursor in here, it is in bounds
            * and that this should be the region that we begin drawing in
            */
-          p->ar = current_region;
+          p->region = current_region;
           in_bounds = true;
         }
         else {
@@ -2232,9 +2184,9 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
           }
         }
       }
-      else if (p->ar) {
+      else if (p->region) {
         /* Perform bounds check. */
-        const rcti *region_rect = ED_region_visible_rect(p->ar);
+        const rcti *region_rect = ED_region_visible_rect(p->region);
         in_bounds = BLI_rcti_isect_pt_v(region_rect, event->mval);
       }
       else {
@@ -2332,7 +2284,7 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
       /* force refresh */
       /* just active area for now, since doing whole screen is too slow */
-      ED_region_tag_redraw(p->ar);
+      ED_region_tag_redraw(p->region);
 
       /* event handled, so just tag as running modal */
       estate = OPERATOR_RUNNING_MODAL;

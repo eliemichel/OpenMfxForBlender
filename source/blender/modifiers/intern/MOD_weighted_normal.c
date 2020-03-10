@@ -20,16 +20,17 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_bitmap.h"
 #include "BLI_linklist.h"
 #include "BLI_math.h"
 
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BKE_cdderivedmesh.h"
 #include "BKE_deform.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 
 #include "MOD_modifiertypes.h"
@@ -142,7 +143,7 @@ static void aggregate_item_normal(WeightedNormalModifierData *wnmd,
 
   const bool has_vgroup = dvert != NULL;
   const bool vert_of_group = has_vgroup &&
-                             defvert_find_index(&dvert[mv_index], defgrp_index) != NULL;
+                             BKE_defvert_find_index(&dvert[mv_index], defgrp_index) != NULL;
 
   if (has_vgroup &&
       ((vert_of_group && use_invert_vgroup) || (!vert_of_group && !use_invert_vgroup))) {
@@ -360,7 +361,7 @@ static void apply_weights_vertex_normal(WeightedNormalModifierData *wnmd,
   }
   else {
     /* TODO: Ideally, we could add an option to BKE_mesh_normals_loop_custom_[from_vertices_]set()
-     * to keep current clnors instead of resetting them to default autocomputed ones,
+     * to keep current clnors instead of resetting them to default auto-computed ones,
      * when given new custom normal is zero-vec.
      * But this is not exactly trivial change, better to keep this optimization for later...
      */

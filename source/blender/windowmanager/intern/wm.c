@@ -37,10 +37,13 @@
 #include "BLI_utildefines.h"
 #include "BLI_blenlib.h"
 
+#include "BLT_translation.h"
+
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
-#include "BKE_library.h"
+#include "BKE_idtype.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_workspace.h"
@@ -61,6 +64,27 @@
 #endif
 
 /* ****************************************************** */
+
+static void window_manager_free_data(ID *id)
+{
+  wm_close_and_free(NULL, (wmWindowManager *)id);
+}
+
+IDTypeInfo IDType_ID_WM = {
+    .id_code = ID_WM,
+    .id_filter = 0,
+    .main_listbase_index = INDEX_ID_WM,
+    .struct_size = sizeof(wmWindowManager),
+    .name = "WindowManager",
+    .name_plural = "window_managers",
+    .translation_context = BLT_I18NCONTEXT_ID_WINDOWMANAGER,
+    .flags = IDTYPE_FLAGS_NO_COPY | IDTYPE_FLAGS_NO_LIBLINKING | IDTYPE_FLAGS_NO_MAKELOCAL,
+
+    .init_data = NULL,
+    .copy_data = NULL,
+    .free_data = window_manager_free_data,
+    .make_local = NULL,
+};
 
 #define MAX_OP_REGISTERED 32
 
@@ -267,12 +291,17 @@ void WM_check(bContext *C)
 
   /* wm context */
   if (wm == NULL) {
-    wm = CTX_data_main(C)->wm.first;
+    wm = bmain->wm.first;
     CTX_wm_manager_set(C, wm);
   }
 
   if (wm == NULL || BLI_listbase_is_empty(&wm->windows)) {
     return;
+  }
+
+  /* Run before loading the keyconfig. */
+  if (wm->message_bus == NULL) {
+    wm->message_bus = WM_msgbus_create();
   }
 
   if (!G.background) {
@@ -284,10 +313,6 @@ void WM_check(bContext *C)
 
     /* case: no open windows at all, for old file reads */
     wm_window_ghostwindows_ensure(wm);
-  }
-
-  if (wm->message_bus == NULL) {
-    wm->message_bus = WM_msgbus_create();
   }
 
   /* case: fileread */
@@ -331,7 +356,7 @@ void wm_add_default(Main *bmain, bContext *C)
   WorkSpaceLayout *layout = BKE_workspace_layout_find_global(bmain, screen, &workspace);
 
   CTX_wm_manager_set(C, wm);
-  win = wm_window_new(C, NULL);
+  win = wm_window_new(bmain, wm, NULL);
   win->scene = CTX_data_scene(C);
   STRNCPY(win->view_layer_name, CTX_data_view_layer(C)->name);
   BKE_workspace_active_set(win->workspace_hook, workspace);
@@ -343,7 +368,7 @@ void wm_add_default(Main *bmain, bContext *C)
   wm_window_make_drawable(wm, win);
 }
 
-/* context is allowed to be NULL, do not free wm itself (library.c) */
+/* context is allowed to be NULL, do not free wm itself (lib_id.c) */
 void wm_close_and_free(bContext *C, wmWindowManager *wm)
 {
   wmWindow *win;

@@ -33,6 +33,7 @@
 
 #include "wm.h"
 
+#include "ED_keyframing.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
 
@@ -314,10 +315,12 @@ void WM_gizmo_do_msg_notify_tag_refresh(bContext *UNUSED(C),
                                         wmMsgSubscribeKey *UNUSED(msg_key),
                                         wmMsgSubscribeValue *msg_val)
 {
-  ARegion *ar = msg_val->owner;
+  ARegion *region = msg_val->owner;
   wmGizmoMap *gzmap = msg_val->user_data;
 
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw(
+      region); /* Could possibly avoid a full redraw and only tag for editor overlays
+              redraw in some cases, see ED_region_tag_redraw_editor_overlays(). */
   WM_gizmomap_tag_refresh(gzmap);
 }
 
@@ -325,7 +328,7 @@ void WM_gizmo_do_msg_notify_tag_refresh(bContext *UNUSED(C),
  * Runs on the "prepare draw" pass,
  * drawing the region clears.
  */
-void WM_gizmo_target_property_subscribe_all(wmGizmo *gz, struct wmMsgBus *mbus, ARegion *ar)
+void WM_gizmo_target_property_subscribe_all(wmGizmo *gz, struct wmMsgBus *mbus, ARegion *region)
 {
   if (gz->type->target_property_defs_len) {
     wmGizmoProperty *gz_prop_array = WM_gizmo_target_property_array(gz);
@@ -337,8 +340,8 @@ void WM_gizmo_target_property_subscribe_all(wmGizmo *gz, struct wmMsgBus *mbus, 
                                &gz_prop->ptr,
                                gz_prop->prop,
                                &(const wmMsgSubscribeValue){
-                                   .owner = ar,
-                                   .user_data = ar,
+                                   .owner = region,
+                                   .user_data = region,
                                    .notify = ED_region_do_msg_notify_tag_redraw,
                                },
                                __func__);
@@ -346,7 +349,7 @@ void WM_gizmo_target_property_subscribe_all(wmGizmo *gz, struct wmMsgBus *mbus, 
                                &gz_prop->ptr,
                                gz_prop->prop,
                                &(const wmMsgSubscribeValue){
-                                   .owner = ar,
+                                   .owner = region,
                                    .user_data = gz->parent_gzgroup->parent_gzmap,
                                    .notify = WM_gizmo_do_msg_notify_tag_refresh,
                                },
@@ -354,6 +357,21 @@ void WM_gizmo_target_property_subscribe_all(wmGizmo *gz, struct wmMsgBus *mbus, 
         }
       }
     }
+  }
+}
+
+/**
+ * Auto-key function if auto-key is enabled.
+ */
+void WM_gizmo_target_property_anim_autokey(bContext *C,
+                                           const wmGizmo *UNUSED(gz),
+                                           wmGizmoProperty *gz_prop)
+{
+  if (gz_prop->prop != NULL) {
+    Scene *scene = CTX_data_scene(C);
+    const float cfra = (float)CFRA;
+    const int index = gz_prop->index == -1 ? 0 : gz_prop->index;
+    ED_autokeyframe_property(C, scene, &gz_prop->ptr, gz_prop->prop, index, cfra);
   }
 }
 

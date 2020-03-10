@@ -56,6 +56,7 @@
 #include "DNA_meta_types.h"
 #include "DNA_movieclip_types.h"
 #include "DNA_node_types.h"
+#include "DNA_object_force_types.h"
 #include "DNA_particle_types.h"
 #include "DNA_space_types.h"
 #include "DNA_sequence_types.h"
@@ -396,7 +397,7 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
 {
   Main *bmain = CTX_data_main(C);
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   SpaceLink *sl = CTX_wm_space_data(C);
   Scene *scene = CTX_data_scene(C);
 
@@ -415,10 +416,10 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
   ac->view_layer = CTX_data_view_layer(C);
   ac->obact = (ac->view_layer->basact) ? ac->view_layer->basact->object : NULL;
   ac->sa = sa;
-  ac->ar = ar;
+  ac->region = region;
   ac->sl = sl;
   ac->spacetype = (sa) ? sa->spacetype : 0;
-  ac->regiontype = (ar) ? ar->regiontype : 0;
+  ac->regiontype = (region) ? region->regiontype : 0;
 
   /* initialise default y-scale factor */
   animedit_get_yscale_factor(ac);
@@ -2289,46 +2290,17 @@ static size_t animdata_filter_ds_material(
 static size_t animdata_filter_ds_materials(
     bAnimContext *ac, ListBase *anim_data, bDopeSheet *ads, Object *ob, int filter_mode)
 {
-  bool has_nested = false;
   size_t items = 0;
   int a = 0;
 
   /* First pass: take the materials referenced via the Material slots of the object. */
   for (a = 1; a <= ob->totcol; a++) {
-    Material *ma = give_current_material(ob, a);
+    Material *ma = BKE_object_material_get(ob, a);
 
     /* if material is valid, try to add relevant contents from here */
     if (ma) {
       /* add channels */
       items += animdata_filter_ds_material(ac, anim_data, ads, ma, filter_mode);
-
-      /* for optimising second pass - check if there's a nested material here to come back for */
-      if (has_nested == false) {
-        has_nested = (give_node_material(ma) != NULL);
-      }
-    }
-  }
-
-  /* Second pass: go through a second time looking for "nested" materials
-   * (material.material references).
-   *
-   * NOTE: here we ignore the expanded status of the parent, as it could be too confusing as to
-   * why these are disappearing/not available,
-   * since the relationships between these is not that clear.
-   */
-  if (has_nested) {
-    for (a = 1; a <= ob->totcol; a++) {
-      Material *base = give_current_material(ob, a);
-      Material *ma = give_node_material(base);
-
-      /* add channels from the nested material if it exists
-       *   - skip if the same material is referenced in its node tree
-       *     (which is common for BI materials) as that results in
-       *     confusing duplicates
-       */
-      if ((ma) && (ma != base)) {
-        items += animdata_filter_ds_material(ac, anim_data, ads, ma, filter_mode);
-      }
     }
   }
 
@@ -2433,8 +2405,9 @@ static size_t animdata_filter_ds_particles(
     ListBase tmp_data = {NULL, NULL};
     size_t tmp_items = 0;
 
-    /* if no material returned, skip - so that we don't get weird blank entries... */
-    if (ELEM(NULL, psys->part, psys->part->adt)) {
+    /* Note that when psys->part->adt is NULL the textures can still be
+     * animated. */
+    if (psys->part == NULL) {
       continue;
     }
 
@@ -2732,6 +2705,12 @@ static size_t animdata_filter_dopesheet_ob(
       tmp_items += animdata_filter_ds_obanim(ac, &tmp_data, ads, ob, filter_mode);
     }
 
+    /* particle deflector textures */
+    if (ob->pd != NULL && ob->pd->tex != NULL && !(ads->filterflag & ADS_FILTER_NOTEX)) {
+      tmp_items += animdata_filter_ds_texture(
+          ac, &tmp_data, ads, ob->pd->tex, &ob->id, filter_mode);
+    }
+
     /* shape-key */
     if ((key && key->adt) && !(ads->filterflag & ADS_FILTER_NOSHAPEKEYS)) {
       tmp_items += animdata_filter_ds_keyanim(ac, &tmp_data, ads, ob, key, filter_mode);
@@ -3017,7 +2996,7 @@ static bool animdata_filter_base_is_ok(bDopeSheet *ads, Base *base, int filter_m
    */
   if ((filter_mode & ANIMFILTER_DATA_VISIBLE) && !(ads->filterflag & ADS_FILTER_INCL_HIDDEN)) {
     /* layer visibility - we check both object and base, since these may not be in sync yet */
-    if ((base->flag & BASE_VISIBLE_DEPSGRAPH) == 0) {
+    if ((base->flag & BASE_VISIBLE_DEPSGRAPH) == 0 || (base->flag & BASE_VISIBLE_VIEWLAYER) == 0) {
       return false;
     }
 

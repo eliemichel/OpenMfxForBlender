@@ -25,14 +25,14 @@
 
 /* **************** CURVE VEC  ******************** */
 static bNodeSocketTemplate sh_node_curve_vec_in[] = {
-    {SOCK_FLOAT, 1, N_("Fac"), 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {SOCK_VECTOR, 1, N_("Vector"), 0.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_NONE},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Fac"), 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_VECTOR, N_("Vector"), 0.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_NONE},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_curve_vec_out[] = {
-    {SOCK_VECTOR, 0, N_("Vector")},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Vector")},
+    {-1, ""},
 };
 
 static void node_shader_exec_curve_vec(void *UNUSED(data),
@@ -64,10 +64,44 @@ static int gpu_shader_curve_vec(GPUMaterial *mat,
   float *array, layer;
   int size;
 
-  BKE_curvemapping_table_RGBA(node->storage, &array, &size);
+  CurveMapping *cumap = node->storage;
+
+  BKE_curvemapping_table_RGBA(cumap, &array, &size);
   GPUNodeLink *tex = GPU_color_band(mat, size, array, &layer);
 
-  return GPU_stack_link(mat, node, "curves_vec", in, out, tex, GPU_constant(&layer));
+  float ext_xyz[3][4];
+  float range_xyz[3];
+
+  for (int a = 0; a < 3; a++) {
+    const CurveMap *cm = &cumap->cm[a];
+    ext_xyz[a][0] = cm->mintable;
+    ext_xyz[a][2] = cm->maxtable;
+    range_xyz[a] = 1.0f / max_ff(1e-8f, cm->maxtable - cm->mintable);
+    /* Compute extrapolation gradients. */
+    if ((cumap->flag & CUMA_EXTEND_EXTRAPOLATE) != 0) {
+      ext_xyz[a][1] = (cm->ext_in[0] != 0.0f) ? (cm->ext_in[1] / (cm->ext_in[0] * range_xyz[a])) :
+                                                1e8f;
+      ext_xyz[a][3] = (cm->ext_out[0] != 0.0f) ?
+                          (cm->ext_out[1] / (cm->ext_out[0] * range_xyz[a])) :
+                          1e8f;
+    }
+    else {
+      ext_xyz[a][1] = 0.0f;
+      ext_xyz[a][3] = 0.0f;
+    }
+  }
+
+  return GPU_stack_link(mat,
+                        node,
+                        "curves_vec",
+                        in,
+                        out,
+                        tex,
+                        GPU_constant(&layer),
+                        GPU_uniform(range_xyz),
+                        GPU_uniform(ext_xyz[0]),
+                        GPU_uniform(ext_xyz[1]),
+                        GPU_uniform(ext_xyz[2]));
 }
 
 void register_node_type_sh_curve_vec(void)
@@ -87,14 +121,14 @@ void register_node_type_sh_curve_vec(void)
 
 /* **************** CURVE RGB  ******************** */
 static bNodeSocketTemplate sh_node_curve_rgb_in[] = {
-    {SOCK_FLOAT, 1, N_("Fac"), 1.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_FACTOR},
-    {SOCK_RGBA, 1, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Fac"), 1.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_FACTOR},
+    {SOCK_RGBA, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_curve_rgb_out[] = {
-    {SOCK_RGBA, 0, N_("Color")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color")},
+    {-1, ""},
 };
 
 static void node_shader_exec_curve_rgb(void *UNUSED(data),
@@ -147,7 +181,7 @@ static int gpu_shader_curve_rgb(GPUMaterial *mat,
     ext_rgba[a][2] = cm->maxtable;
     range_rgba[a] = 1.0f / max_ff(1e-8f, cm->maxtable - cm->mintable);
     /* Compute extrapolation gradients. */
-    if ((cm->flag & CUMA_EXTEND_EXTRAPOLATE) != 0) {
+    if ((cumap->flag & CUMA_EXTEND_EXTRAPOLATE) != 0) {
       ext_rgba[a][1] = (cm->ext_in[0] != 0.0f) ?
                            (cm->ext_in[1] / (cm->ext_in[0] * range_rgba[a])) :
                            1e8f;
