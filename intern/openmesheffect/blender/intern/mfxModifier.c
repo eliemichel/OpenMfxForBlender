@@ -25,11 +25,11 @@
 #include "mfxRuntime.h"
 #include "mfxCallbacks.h"
 
-#include "DNA_mesh_types.h" // Mesh
-#include "DNA_meshdata_types.h" // MVert
+#include "DNA_mesh_types.h"      // Mesh
+#include "DNA_meshdata_types.h"  // MVert
 
-#include "BKE_mesh.h" // BKE_mesh_new_nomain
-#include "BKE_main.h" // BKE_main_blendfile_path_from_global
+#include "BKE_mesh.h"  // BKE_mesh_new_nomain
+#include "BKE_main.h"  // BKE_main_blendfile_path_from_global
 
 #include "BLI_math_vector.h"
 #include "BLI_string.h"
@@ -37,15 +37,16 @@
 
 // PUBLIC API
 
-static OpenMeshEffectRuntime *mfx_Modifier_runtime_ensure(OpenMeshEffectModifierData *fxmd) {
+static OpenMeshEffectRuntime *mfx_Modifier_runtime_ensure(OpenMeshEffectModifierData *fxmd)
+{
   printf("== mfx_Modifier_runtime_ensure on data %p\n", fxmd);
-  OpenMeshEffectRuntime *runtime_data = (OpenMeshEffectRuntime*)fxmd->modifier.runtime;
+  OpenMeshEffectRuntime *runtime_data = (OpenMeshEffectRuntime *)fxmd->modifier.runtime;
   printf("RUNTIME DATA @%p\n", runtime_data);
 
   // Init
   if (NULL == runtime_data) {
     fxmd->modifier.runtime = MEM_callocN(sizeof(OpenMeshEffectRuntime), "mfx runtime");
-    runtime_data = (OpenMeshEffectRuntime*)fxmd->modifier.runtime;
+    runtime_data = (OpenMeshEffectRuntime *)fxmd->modifier.runtime;
     runtime_init(runtime_data);
     printf("NEW RUNTIME DATA @%p\n", runtime_data);
   }
@@ -58,7 +59,8 @@ static OpenMeshEffectRuntime *mfx_Modifier_runtime_ensure(OpenMeshEffectModifier
   return (OpenMeshEffectRuntime *)fxmd->modifier.runtime;
 }
 
-void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd) {
+void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd)
+{
   printf("== mfx_Modifier_reload_effect_info on data %p\n", fxmd);
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
 
@@ -75,7 +77,8 @@ void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd) {
   }
 
   fxmd->num_effects = runtime_data->registry.num_plugins;
-  fxmd->effect_info = MEM_calloc_arrayN(sizeof(OpenMeshEffectEffectInfo), fxmd->num_effects, "mfx effect info");
+  fxmd->effect_info = MEM_calloc_arrayN(
+      sizeof(OpenMeshEffectEffectInfo), fxmd->num_effects, "mfx effect info");
 
   for (int i = 0; i < fxmd->num_effects; ++i) {
     // Get asset name
@@ -87,7 +90,8 @@ void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd) {
   printf("==/ mfx_Modifier_reload_effect_info\n");
 }
 
-void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
+void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd)
+{
   printf("== mfx_Modifier_on_plugin_changed on data %p\n", fxmd);
 
   mfx_Modifier_reload_effect_info(fxmd);
@@ -96,7 +100,8 @@ void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
   printf("==/ mfx_Modifier_on_plugin_changed\n");
 }
 
-void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd) {
+void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd)
+{
   printf("==. mfx_Modifier_on_asset_changed on data %p\n", fxmd);
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
 
@@ -115,26 +120,27 @@ void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd) {
   OfxParamSetHandle parameters = &runtime_data->effect_desc->parameters;
 
   fxmd->num_parameters = parameters->num_parameters;
-  fxmd->parameter_info = MEM_calloc_arrayN(sizeof(OpenMeshEffectParameterInfo), fxmd->num_parameters, "openmesheffect parameter info");
+  fxmd->parameter_info = MEM_calloc_arrayN(
+      sizeof(OpenMeshEffectParameterInfo), fxmd->num_parameters, "openmesheffect parameter info");
 
-  for (int i = 0 ; i < fxmd->num_parameters ; ++i) {
+  for (int i = 0; i < fxmd->num_parameters; ++i) {
     OfxPropertySetStruct props = parameters->parameters[i]->properties;
     int prop_idx = find_property(&props, kOfxParamPropScriptName);
-    const char * system_name =
-      prop_idx != -1
-      ? props.properties[prop_idx]->value->as_const_char
-      : parameters->parameters[i]->name;
+    const char *system_name = prop_idx != -1 ? props.properties[prop_idx]->value->as_const_char :
+                                               parameters->parameters[i]->name;
     strncpy(fxmd->parameter_info[i].name, system_name, sizeof(fxmd->parameter_info[i].name));
-    strncpy(fxmd->parameter_info[i].label, parameters->parameters[i]->name, sizeof(fxmd->parameter_info[i].label));
+    strncpy(fxmd->parameter_info[i].label,
+            parameters->parameters[i]->name,
+            sizeof(fxmd->parameter_info[i].label));
     fxmd->parameter_info[i].type = parameters->parameters[i]->type;
   }
 
   printf("==/ mfx_Modifier_on_asset_changed on data %p\n", fxmd);
 }
 
-void mfx_Modifier_free_runtime_data(void * runtime_data)
+void mfx_Modifier_free_runtime_data(void *runtime_data)
 {
-  OpenMeshEffectRuntime * rd = (OpenMeshEffectRuntime *)runtime_data;
+  OpenMeshEffectRuntime *rd = (OpenMeshEffectRuntime *)runtime_data;
   printf("== mfx_Modifier_free_runtime_data\n");
   if (runtime_data == NULL) {
     printf("runtime data is null\n");
@@ -146,7 +152,7 @@ void mfx_Modifier_free_runtime_data(void * runtime_data)
   printf("==/ mfx_Modifier_free_runtime_data\n");
 }
 
-Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
+Mesh *mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
 {
   printf("== mfx_Modifier_do on data %p\n", fxmd);
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
@@ -158,13 +164,16 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   }
 
   OfxHost *ofxHost = runtime_data->ofx_host;
-  OfxMeshEffectSuiteV1 *meshEffectSuite = (OfxMeshEffectSuiteV1*)ofxHost->fetchSuite(ofxHost->host, kOfxMeshEffectSuite, 1);
-  OfxPropertySuiteV1 *propertySuite = (OfxPropertySuiteV1*)ofxHost->fetchSuite(ofxHost->host, kOfxPropertySuite, 1);
+  OfxMeshEffectSuiteV1 *meshEffectSuite = (OfxMeshEffectSuiteV1 *)ofxHost->fetchSuite(
+      ofxHost->host, kOfxMeshEffectSuite, 1);
+  OfxPropertySuiteV1 *propertySuite = (OfxPropertySuiteV1 *)ofxHost->fetchSuite(
+      ofxHost->host, kOfxPropertySuite, 1);
 
   OfxMeshInputHandle input, output;
   meshEffectSuite->inputGetHandle(runtime_data->effect_instance, kOfxMeshMainInput, &input, NULL);
-  meshEffectSuite->inputGetHandle(runtime_data->effect_instance, kOfxMeshMainOutput, &output, NULL);
-  
+  meshEffectSuite->inputGetHandle(
+      runtime_data->effect_instance, kOfxMeshMainOutput, &output, NULL);
+
   // Get parameters
   runtime_get_parameters_from_rna(runtime_data, fxmd);
 
@@ -173,14 +182,16 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   input_data.is_input = true;
   input_data.blender_mesh = mesh;
   input_data.source_mesh = NULL;
-  propertySuite->propSetPointer(&input->mesh.properties, kOfxMeshPropInternalData, 0, (void*)&input_data);
+  propertySuite->propSetPointer(
+      &input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&input_data);
 
   // Set output mesh data binding, used by before/after callbacks
   MeshInternalData output_data;
   output_data.is_input = false;
   output_data.blender_mesh = NULL;
   output_data.source_mesh = mesh;
-  propertySuite->propSetPointer(&output->mesh.properties, kOfxMeshPropInternalData, 0, (void*)&output_data);
+  propertySuite->propSetPointer(
+      &output->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&output_data);
 
   OfxPlugin *plugin = runtime_data->registry.plugins[runtime_data->effect_index];
   ofxhost_cook(plugin, runtime_data->effect_instance);

@@ -99,7 +99,8 @@ static bool dependsOnTime(struct ModifierData *md)
 
 static bool dependsOnNormals(struct ModifierData *md)
 {
-  // TODO: May depend on the HDA file (but harder to detect than time dependency -> add a user toggle)
+  // TODO: May depend on the HDA file (but harder to detect than time dependency -> add a user
+  // toggle)
   return true;
 }
 
