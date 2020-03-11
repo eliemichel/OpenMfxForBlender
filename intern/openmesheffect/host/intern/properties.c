@@ -130,8 +130,10 @@ bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type
   case PROP_CTX_ATTRIB:
     return (
       (0 == strcmp(property, kOfxMeshAttribPropData) && type == PROP_TYPE_POINTER) ||
+      (0 == strcmp(property, kOfxMeshAttribPropStride) && type == PROP_TYPE_INT) ||
       (0 == strcmp(property, kOfxMeshAttribPropComponentCount) && type == PROP_TYPE_INT) ||
       (0 == strcmp(property, kOfxMeshAttribPropType) && type == PROP_TYPE_STRING) ||
+      (0 == strcmp(property, kOfxMeshAttribPropIsOwner) && type == PROP_TYPE_INT) ||
       false
       );
   case PROP_CTX_OTHER:
