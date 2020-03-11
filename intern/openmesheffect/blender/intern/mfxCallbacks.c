@@ -22,9 +22,12 @@
 
 #include "MEM_guardedalloc.h"
 
+#include <assert.h>
+
 #include "mfxCallbacks.h"
 #include "mfxModifier.h"
 #include "mfxHost.h"
+#include "util/memory_util.h"
 
 #include "DNA_mesh_types.h"      // Mesh
 #include "DNA_meshdata_types.h"  // MVert
@@ -51,6 +54,12 @@ inline int min(int a, int b)
 }
 #endif
 
+#define MFX_CHECK(call) \
+  { \
+    OfxStatus status = call; \
+    assert(kOfxStatOK == status); \
+  }
+
 OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh)
 {
   OfxPropertySuiteV1 *ps;
@@ -64,7 +73,8 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh)
   ps = (OfxPropertySuiteV1 *)host->fetchSuite(host->host, kOfxPropertySuite, 1);
   mes = (OfxMeshEffectSuiteV1 *)host->fetchSuite(host->host, kOfxMeshEffectSuite, 1);
 
-  ps->propGetPointer(&ofx_mesh->properties, kOfxMeshPropInternalData, 0, (void **)&internal_data);
+  MFX_CHECK(ps->propGetPointer(
+      &ofx_mesh->properties, kOfxMeshPropInternalData, 0, (void **)&internal_data));
 
   if (NULL == internal_data) {
     printf("No internal data found\n");
@@ -92,9 +102,9 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh)
   }
   face_count = blender_mesh->totpoly;
 
-  ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropPointCount, 0, point_count);
-  ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropVertexCount, 0, vertex_count);
-  ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropFaceCount, 0, face_count);
+  MFX_CHECK(ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropPointCount, 0, point_count));
+  MFX_CHECK(ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropVertexCount, 0, vertex_count));
+  MFX_CHECK(ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropFaceCount, 0, face_count));
 
   // Define vertex colors attributes
   int vcolor_layers = CustomData_number_of_layers(&blender_mesh->ldata, CD_MLOOPCOL);
@@ -103,21 +113,25 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh)
       vcolor_layers, sizeof(OfxPropertySetHandle), "vertex color attributes");
   for (int k = 0; k < vcolor_layers; ++k) {
     sprintf(name, "color%d", k);
-    mes->attributeDefine(
-        ofx_mesh, kOfxMeshAttribVertex, name, 3, kOfxMeshAttribTypeFloat, &vcolor_attrib[k]);
+    MFX_CHECK(mes->attributeDefine(
+        ofx_mesh, kOfxMeshAttribVertex, name, 3, kOfxMeshAttribTypeUByte, &vcolor_attrib[k]));
   }
 
-  mes->meshAlloc(ofx_mesh);
+  // Eventually this should be avoided: we should be able to have the ofx_mesh be only a proxy to
+  // original blender mesh, without any allocation/copy of data.
+  MFX_CHECK(mes->meshAlloc(ofx_mesh));
 
   OfxPropertySetHandle pos_attrib, vertpoint_attrib, facecounts_attrib;
-  mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib);
-  ps->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void **)&point_data);
-  mes->meshGetAttribute(
-      ofx_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
-  ps->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void **)&vertex_data);
-  mes->meshGetAttribute(
-      ofx_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
-  ps->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void **)&face_data);
+  MFX_CHECK(mes->meshGetAttribute(
+      ofx_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib));
+  MFX_CHECK(ps->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void **)&point_data));
+  MFX_CHECK(mes->meshGetAttribute(
+      ofx_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib));
+  MFX_CHECK(
+      ps->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void **)&vertex_data));
+  MFX_CHECK(mes->meshGetAttribute(
+      ofx_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib));
+  MFX_CHECK(ps->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void **)&face_data));
 
   // Points (= Blender's vertex)
   for (int i = 0; i < point_count; ++i) {
@@ -138,13 +152,19 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh)
   // Vertex colors
   for (int k = 0; k < vcolor_layers; ++k) {
     float *ofx_vcolor_data;
-    ps->propGetPointer(vcolor_attrib[k], kOfxMeshAttribPropData, 0, (void **)&ofx_vcolor_data);
+    MFX_CHECK(ps->propGetPointer(
+        vcolor_attrib[k], kOfxMeshAttribPropData, 0, (void **)&ofx_vcolor_data));
+
+    // override allocated pointer to emulate manual stride-based attribute proxying, that should
+    // eventually become the default behavior for all attributes to avoid copies
+    free_array(ofx_vcolor_data);
+    MFX_CHECK(ps->propSetInt(vcolor_attrib[k], kOfxMeshAttribPropIsOwner, 0, 0));
+
     MLoopCol *vcolor_data = (MLoopCol *)CustomData_get(&blender_mesh->ldata, k, CD_MLOOPCOL);
-    for (int i = 0; i < vertex_count; ++i) {
-      ofx_vcolor_data[3 * i + 0] = (float)vcolor_data[i].r / 255.0f;
-      ofx_vcolor_data[3 * i + 1] = (float)vcolor_data[i].g / 255.0f;
-      ofx_vcolor_data[3 * i + 2] = (float)vcolor_data[i].b / 255.0f;
-    }
+
+    MFX_CHECK(ps->propSetPointer(
+        vcolor_attrib[k], kOfxMeshAttribPropData, 0, (void *)&vcolor_data[0].r));
+    MFX_CHECK(ps->propSetInt(vcolor_attrib[k], kOfxMeshAttribPropStride, 0, sizeof(MLoopCol)));
   }
   MEM_freeN(vcolor_attrib);
 

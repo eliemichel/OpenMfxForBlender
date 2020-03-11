@@ -116,6 +116,10 @@ attributes include a position for points, a point index for vertices and a verte
  */
 #define kOfxMeshAttribFaceCounts "OfxMeshAttribFaceCounts"
 
+/** @brief Attribute type unsigned integer 8 bit
+ */
+#define kOfxMeshAttribTypeUByte "OfxMeshAttribTypeUByte"
+
 /** @brief Attribute type integer 32 bit
  */
 #define kOfxMeshAttribTypeInt "OfxMeshAttribTypeInt"
@@ -338,13 +342,36 @@ namely the point's position, the vertex' point association and the face's vertex
 
 /**  @brief The data pointer of an attribute.
 
-    - Type - pointer X 1
+    - Type - int X 1
     - Property Set - a mesh instance (read only)
 
 This property contains a pointer to memory where attribute data is stored, whose size depend on the
 attribute attachement (point/vertex/face/mesh) and attribute type (int, float, vector, etc.)
 */
 #define kOfxMeshAttribPropData "OfxMeshAttribPropData"
+
+/**  @brief Whether the mesh effect owns its data
+
+    - Type - bool X 1
+    - Property Set - a mesh instance (read only)
+
+The mesh effect must free its data on destruction iff it owns it. In most cases, it is recommanded
+to use the mesh effect attributes as proxies to data structures owned by the underlying host mesh
+structures, so this is 0, but in some cases wher ethe data layout does not allow it, some memory is
+allocated in the mesh and this flag must hence be set to 1, so that memory is automatically freed
+on mesh release.
+*/
+#define kOfxMeshAttribPropIsOwner "OfxMeshAttribPropIsOwner"
+
+/**  @brief The stride of an attribute.
+
+    - Type - int X 1
+    - Property Set - a mesh instance (read only)
+
+This property contains the number of bytes between the beginning of two values of the attributes
+in the buffer to which the data property points.
+*/
+#define kOfxMeshAttribPropStride "OfxMeshAttribPropStride"
 
 /**  @brief The number of components an attribute.
 
@@ -541,6 +568,8 @@ If inputGetMesh is called twice with the same parameters, then two separate mesh
 \post
  - attributeHandle is a valid attribute handle
 
+By default, the attribute data is not owned by the mesh (kOfxMeshAttribPropIsOwner is 0)
+
 @returns
 - ::kOfxStatOK - the attribute was successfully fetched and returned in the handle,
 - ::kOfxStatErrBadIndex - the attribute could not be fetched because it does not exist, or the
@@ -607,7 +636,7 @@ If inputGetMesh is called twice with the same parameters, then two separate mesh
  must have been set.
 
 \post
- - all attribut data pointers have been allocated
+ - all attribut data pointers for which kOfxMeshAttribPropIsOwner is 1 have been allocated
  - meshHandle attributes will no longer change (no call to meshDefineAttribute)
 
 @returns

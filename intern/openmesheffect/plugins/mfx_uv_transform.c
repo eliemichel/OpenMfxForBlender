@@ -25,6 +25,15 @@
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
 
+#include "util/ofx_util.h"
+
+#define MFX_CHECK(call) \
+status = call; \
+if (kOfxStatOK != status) { \
+  printf("[MFX] Suite method call '" #call "' returned status %d (%s)\n", status, getOfxStateName(status)); \
+}
+
+
 typedef struct PluginRuntime {
     OfxHost *host;
     const OfxPropertySuiteV1 *propertySuite;
@@ -52,6 +61,8 @@ static OfxStatus describe(OfxMeshEffectHandle descriptor) {
     }
     const OfxMeshEffectSuiteV1 *meshEffectSuite = gRuntime.meshEffectSuite;
     const OfxPropertySuiteV1 *propertySuite = gRuntime.propertySuite;
+    const OfxParameterSuiteV1 *parameterSuite = gRuntime.parameterSuite;
+    OfxStatus status;
 
     OfxPropertySetHandle inputProperties;
     meshEffectSuite->inputDefine(descriptor, kOfxMeshMainInput, &inputProperties);
@@ -60,6 +71,15 @@ static OfxStatus describe(OfxMeshEffectHandle descriptor) {
     OfxPropertySetHandle outputProperties;
     meshEffectSuite->inputDefine(descriptor, kOfxMeshMainOutput, &outputProperties);
     propertySuite->propSetString(outputProperties, kOfxPropLabel, 0, "Main Output");
+
+    // Declare parameters
+    OfxParamSetHandle parameters;
+    OfxParamHandle param;
+    status = meshEffectSuite->getParamSet(descriptor, &parameters);
+
+    status = parameterSuite->paramDefine(parameters, kOfxParamTypeInteger2D, "Translation", NULL);
+    status = parameterSuite->paramDefine(parameters, kOfxParamTypeInteger2D, "Rotation", NULL);
+    status = parameterSuite->paramDefine(parameters, kOfxParamTypeInteger2D, "Scale", NULL);
 
     return kOfxStatOK;
 }
@@ -75,6 +95,7 @@ static OfxStatus destroyInstance(OfxMeshEffectHandle instance) {
 static OfxStatus cook(OfxMeshEffectHandle instance) {
     const OfxMeshEffectSuiteV1 *meshEffectSuite = gRuntime.meshEffectSuite;
     const OfxPropertySuiteV1 *propertySuite = gRuntime.propertySuite;
+    const OfxParameterSuiteV1 *parameterSuite = gRuntime.parameterSuite;
     OfxTime time = 0;
     OfxStatus status;
 
@@ -82,6 +103,18 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     OfxMeshInputHandle input, output;
     meshEffectSuite->inputGetHandle(instance, kOfxMeshMainInput, &input, NULL);
     meshEffectSuite->inputGetHandle(instance, kOfxMeshMainOutput, &output, NULL);
+
+    // Get parameters
+    OfxParamSetHandle parameters;
+    OfxParamHandle param;
+    double tx, ty, rx, ry, sx, sy;
+    MFX_CHECK(meshEffectSuite->getParamSet(instance, &parameters));
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "Translation", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &tx, &ty));
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "Rotation", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &rx, &ry));
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "Scale", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &sx, &sy));
 
     // Get meshes
     OfxMeshHandle input_mesh, output_mesh;
@@ -111,12 +144,15 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     status = meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribVertex, "color0", &vcolor_attrib);
 
     printf("Look for color0...\n");
-    char *vcolor_data = NULL;
+    float *vcolor_data = NULL;
     if (kOfxStatOK == status) {
       printf("found!\n");
       propertySuite->propGetPointer(vcolor_attrib, kOfxMeshAttribPropData, 0, (void**)&vcolor_data);
       meshEffectSuite->attributeDefine(output_mesh, kOfxMeshAttribVertex, "uv0", 2, kOfxMeshAttribTypeFloat, &uv_attrib);
-      propertySuite->propSetInt(uv_attrib, kOfxMeshAttribPropIsOwner, 0, 1);
+    }
+    else {
+      // DEBUG
+      meshEffectSuite->attributeDefine(output_mesh, kOfxMeshAttribVertex, "uv0", 2, kOfxMeshAttribTypeFloat, &uv_attrib);
     }
 
     // Allocate output mesh
@@ -146,40 +182,25 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     memcpy(output_faces, input_faces, input_face_count * sizeof(int));
 
     if (NULL != vcolor_data) {
-      char *uv_data;
+      float *uv_data;
       int uv_stride, vcolor_stride;
-      char *vcolor_type;
-      propertySuite->propGetString(vcolor_attrib, kOfxMeshAttribPropType, 0, &vcolor_type);
-      propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropStride, 0, &uv_stride);
-      propertySuite->propGetInt(vcolor_attrib, kOfxMeshAttribPropStride, 0, &vcolor_stride);
+      propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropComponentCount, 0, &uv_stride);
+      propertySuite->propGetInt(vcolor_attrib, kOfxMeshAttribPropComponentCount, 0, &vcolor_stride);
       propertySuite->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&uv_data);
-
-      // Poor man's enum (TODO lean this up)
-      int vcolor_type_enum = -1;
-      if (0 == strcmp(vcolor_type, kOfxMeshAttribTypeUByte)) {
-        vcolor_type_enum = 0;
-      } else if (0 == strcmp(vcolor_type, kOfxMeshAttribTypeInt)) {
-        vcolor_type_enum = 1;
-      } else if (0 == strcmp(vcolor_type, kOfxMeshAttribTypeFloat)) {
-        vcolor_type_enum = 2;
-      }
-
       for (int i = 0; i < input_vertex_count; ++i) {
-        switch (vcolor_type_enum) {
-        case 0:
-        {
-          const unsigned char *vcolor = ((unsigned char*)&vcolor_data[i * vcolor_stride]);
-          float *uv = ((float*)&uv_data[i * uv_stride]);
-          uv[0] = (float)vcolor[0] / 255.0f;
-          uv[1] = (float)vcolor[1] / 255.0f;
-          break;
-        }
-        case 2:
-          memcpy(&uv_data[i * uv_stride], &vcolor_data[i * vcolor_stride], 2 * sizeof(float));
-          break;
-        default:
-          printf("Warning: unsupported color attribute type: %d", vcolor_type_enum);
-        }
+        uv_data[i * uv_stride + 0] = vcolor_data[i * vcolor_stride + 0];
+        uv_data[i * uv_stride + 1] = vcolor_data[i * vcolor_stride + 1];
+      }
+    }
+    else {
+      // DEBUG
+      float *uv_data;
+      int uv_stride, vcolor_stride;
+      propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropComponentCount, 0, &uv_stride);
+      propertySuite->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&uv_data);
+      for (int i = 0; i < input_vertex_count; ++i) {
+        uv_data[i * uv_stride + 0] = input_points[input_vertices[i] * 3 + 0];
+        uv_data[i * uv_stride + 1] = input_points[input_vertices[i] * 3 + 1];
       }
     }
 

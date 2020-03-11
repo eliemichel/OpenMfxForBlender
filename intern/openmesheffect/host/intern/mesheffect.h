@@ -72,6 +72,8 @@ OfxStatus inputGetMesh(OfxMeshInputHandle input,
                        OfxMeshHandle *meshHandle,
                        OfxPropertySetHandle *propertySet);
 OfxStatus inputReleaseMesh(OfxMeshHandle meshHandle);
+
+// Future behavior: attributes will be NOT owned by default
 OfxStatus attributeDefine(OfxMeshHandle meshHandle,
                           const char *attachment,
                           const char *name,

@@ -38,3 +38,4 @@ MFX_PLUGIN(openmesheffect_test_parameters_plugin mfx_test_parameters_plugin.c "$
 MFX_PLUGIN(openmesheffect_identity_plugin mfx_identity_plugin.c "${LIB}")
 MFX_PLUGIN(openmesheffect_mirror_plugin mfx_mirror_plugin.c "${LIB}")
 MFX_PLUGIN(openmesheffect_color_to_uv mfx_color_to_uv.c "${LIB}")
+MFX_PLUGIN(openmesheffect_uv_transform mfx_uv_transform.c "${LIB}")
