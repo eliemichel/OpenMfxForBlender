@@ -5969,7 +5969,7 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb, Object *ob)
       // Effect list will be reloaded from plugin
       fxmd->num_effects = 0;
       fxmd->effect_info = NULL;
-
+    }
     else if (md->type == eModifierType_Bevel) {
       BevelModifierData *bmd = (BevelModifierData *)md;
       bmd->custom_profile = newdataadr(fd, bmd->custom_profile);
