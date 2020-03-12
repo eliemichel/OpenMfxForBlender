@@ -173,6 +173,7 @@ set(SRC
   shader/nodes/node_shader_normal.c
   shader/nodes/node_shader_normal_map.c
   shader/nodes/node_shader_object_info.c
+  shader/nodes/node_shader_output_aov.c
   shader/nodes/node_shader_output_light.c
   shader/nodes/node_shader_output_linestyle.c
   shader/nodes/node_shader_output_material.c
@@ -273,6 +274,10 @@ if(WITH_PYTHON)
   )
   list(APPEND INC_SYS
     ${PYTHON_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${PYTHON_LINKFLAGS}
+    ${PYTHON_LIBRARIES}
   )
   add_definitions(-DWITH_PYTHON)
 endif()

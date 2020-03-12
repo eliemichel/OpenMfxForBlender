@@ -435,6 +435,32 @@ static void rna_uiItemPopoverPanelFromGroup(uiLayout *layout,
   uiItemPopoverPanelFromGroup(layout, C, space_id, region_id, context, category);
 }
 
+static void rna_uiTemplateID(uiLayout *layout,
+                             bContext *C,
+                             PointerRNA *ptr,
+                             const char *propname,
+                             const char *newop,
+                             const char *openop,
+                             const char *unlinkop,
+                             int filter,
+                             const bool live_icon,
+                             const char *name,
+                             const char *text_ctxt,
+                             bool translate)
+{
+  PropertyRNA *prop = RNA_struct_find_property(ptr, propname);
+
+  if (!prop) {
+    RNA_warning("property not found: %s.%s", RNA_struct_identifier(ptr->type), propname);
+    return;
+  }
+
+  /* Get translated name (label). */
+  name = rna_translate_ui_text(name, text_ctxt, NULL, prop, translate);
+
+  uiTemplateID(layout, C, ptr, propname, newop, openop, unlinkop, filter, live_icon, name);
+}
+
 static void rna_uiTemplateAnyID(uiLayout *layout,
                                 PointerRNA *ptr,
                                 const char *propname,
@@ -477,6 +503,14 @@ static void rna_uiTemplatePathBuilder(uiLayout *layout,
 
   /* XXX This will search property again :( */
   uiTemplatePathBuilder(layout, ptr, propname, root_ptr, name);
+}
+
+static void rna_uiTemplateEventFromKeymapItem(
+    uiLayout *layout, wmKeyMapItem *kmi, const char *name, const char *text_ctxt, bool translate)
+{
+  /* Get translated name (label). */
+  name = rna_translate_ui_text(name, text_ctxt, NULL, NULL, translate);
+  uiTemplateEventFromKeymapItem(layout, name, kmi, true);
 }
 
 static int rna_ui_get_rnaptr_icon(bContext *C, PointerRNA *ptr_icon)
@@ -1006,7 +1040,7 @@ void RNA_api_ui_layout(StructRNA *srna)
   RNA_def_function_flag(func, FUNC_USE_CONTEXT);
   RNA_def_function_ui_description(func, "Inserts common Space header UI (editor type selector)");
 
-  func = RNA_def_function(srna, "template_ID", "uiTemplateID");
+  func = RNA_def_function(srna, "template_ID", "rna_uiTemplateID");
   RNA_def_function_flag(func, FUNC_USE_CONTEXT);
   api_ui_item_rna_common(func);
   RNA_def_string(func, "new", NULL, 0, "", "Operator identifier to create a new ID block");
@@ -1020,6 +1054,7 @@ void RNA_api_ui_layout(StructRNA *srna)
                "",
                "Optionally limit the items which can be selected");
   RNA_def_boolean(func, "live_icon", false, "", "Show preview instead of fixed icon");
+  api_ui_item_common_text(func);
 
   func = RNA_def_function(srna, "template_ID_preview", "uiTemplateIDPreview");
   RNA_def_function_flag(func, FUNC_USE_CONTEXT);
@@ -1211,6 +1246,10 @@ void RNA_api_ui_layout(StructRNA *srna)
   RNA_def_boolean(func, "brush", false, "", "Show brush options");
   RNA_def_boolean(func, "use_negative_slope", false, "", "Use a negative slope by default");
   RNA_def_boolean(func, "show_tone", false, "", "Show tone options");
+
+  func = RNA_def_function(srna, "template_curveprofile", "uiTemplateCurveProfile");
+  RNA_def_function_ui_description(func, "A profile path editor used for custom profiles");
+  api_ui_item_rna_common(func);
 
   func = RNA_def_function(srna, "template_color_ramp", "uiTemplateColorRamp");
   RNA_def_function_ui_description(func, "Item. A color ramp widget");
@@ -1526,6 +1565,15 @@ void RNA_api_ui_layout(StructRNA *srna)
   parm = RNA_def_pointer(func, "params", "FileSelectParams", "", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   RNA_def_function_flag(func, FUNC_USE_CONTEXT);
+
+  func = RNA_def_function(
+      srna, "template_event_from_keymap_item", "rna_uiTemplateEventFromKeymapItem");
+  RNA_def_function_ui_description(func, "Display keymap item as icons/text");
+  parm = RNA_def_property(func, "item", PROP_POINTER, PROP_NONE);
+  RNA_def_property_struct_type(parm, "KeyMapItem");
+  RNA_def_property_ui_text(parm, "Item", "");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+  api_ui_item_common_text(func);
 }
 
 #endif

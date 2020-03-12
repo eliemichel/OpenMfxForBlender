@@ -251,8 +251,59 @@ function(blender_add_lib__impl
 
   add_library(${name} ${sources})
 
+  # On Windows certain libraries have two sets of binaries: one for debug builds and one for
+  # release builds. The root of this requirement goes into ABI, I believe, but that's outside
+  # of a scope of this comment.
+  #
+  # CMake have a native way of dealing with this, which is specifying what build type the
+  # libraries are provided for:
+  #
+  #   target_link_libraries(tagret optimized|debug|general <libraries>)
+  #
+  # The build type is to be provided as a separate argument to the function.
+  #
+  # CMake's variables for libraries will contain build type in such cases. For example:
+  #
+  #   set(FOO_LIBRARIES optimized libfoo.lib debug libfoo_d.lib)
+  #
+  # Complications starts with a single argument for library_deps: all the elements are being
+  # put to a list: "${FOO_LIBRARIES}" will become "optimized;libfoo.lib;debug;libfoo_d.lib".
+  # This makes it impossible to pass it as-is to target_link_libraries sine it will treat
+  # this argument as a list of libraries to be linked against, causing missing libraries
+  # for optimized.lib.
+  #
+  # What this code does it traverses library_deps and extracts information about whether
+  # library is to provided as general, debug or optimized. This is a little state machine which
+  # keeps track of whiuch build type library is to provided for:
+  #
+  # - If "debug" or "optimized" word is found, the next element in the list is expected to be
+  #   a library which will be passed to target_link_libraries() under corresponding build type.
+  #
+  # - If there is no "debug" or "optimized" used library is specified for all build types.
+  #
+  # NOTE: If separated libraries for debug and release ar eneeded every library is the list are
+  # to be prefixed explicitly.
+  #
+  #  Use: "optimized libfoo optimized libbar debug libfoo_d debug libbar_d"
+  #  NOT: "optimized libfoo libbar debug libfoo_d libbar_d"
   if(NOT "${library_deps}" STREQUAL "")
-    target_link_libraries(${name} INTERFACE "${library_deps}")
+    set(next_library_mode "")
+    foreach(library ${library_deps})
+      string(TOLOWER "${library}" library_lower)
+      if(("${library_lower}" STREQUAL "optimized") OR
+         ("${library_lower}" STREQUAL "debug"))
+        set(next_library_mode "${library_lower}")
+      else()
+        if("${next_library_mode}" STREQUAL "optimized")
+          target_link_libraries(${name} optimized ${library})
+        elseif("${next_library_mode}" STREQUAL "debug")
+          target_link_libraries(${name} debug ${library})
+        else()
+          target_link_libraries(${name} ${library})
+        endif()
+        set(next_library_mode "")
+      endif()
+    endforeach()
   endif()
 
   # works fine without having the includes
@@ -395,6 +446,7 @@ endfunction()
 
 macro(setup_platform_linker_flags)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}")
   set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}")
 endmacro()
 
@@ -402,175 +454,31 @@ function(setup_liblinks
   target
   )
 
+  # NOTE: This might look like it affects global scope, accumulating linker flags on every call
+  # to setup_liblinks, but this isn't how CMake works. These flags will only affect current
+  # directory from where the function is called.
+  # This means that setup_liblinks() called for ffmpeg_test will not affect blender, and each
+  # of thsoe targets will have single set of linker flags.
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
   set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
+  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}" PARENT_SCOPE)
 
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
   set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
+  set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}" PARENT_SCOPE)
 
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
   set(CMAKE_MODULE_LINKER_FLAGS_DEBUG "${CMAKE_MODULE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
+  set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "${CMAKE_MODULE_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}" PARENT_SCOPE)
 
   # jemalloc must be early in the list, to be before pthread (see T57998)
   if(WITH_MEM_JEMALLOC)
     target_link_libraries(${target} ${JEMALLOC_LIBRARIES})
   endif()
 
-  target_link_libraries(
-    ${target}
-    ${PNG_LIBRARIES}
-    ${FREETYPE_LIBRARY}
-  )
-
-
-  if(WITH_PYTHON)
-    target_link_libraries(${target} ${PYTHON_LINKFLAGS})
-    target_link_libraries(${target} ${PYTHON_LIBRARIES})
-  endif()
-
-  if(WITH_LZO AND WITH_SYSTEM_LZO)
-    target_link_libraries(${target} ${LZO_LIBRARIES})
-  endif()
-  if(WITH_SYSTEM_GLEW)
-    target_link_libraries(${target} ${BLENDER_GLEW_LIBRARIES})
-  endif()
-  if(WITH_BULLET AND WITH_SYSTEM_BULLET)
-    target_link_libraries(${target} ${BULLET_LIBRARIES})
-  endif()
-  if(WITH_AUDASPACE AND WITH_SYSTEM_AUDASPACE)
-    target_link_libraries(${target} ${AUDASPACE_C_LIBRARIES} ${AUDASPACE_PY_LIBRARIES})
-  endif()
-  if(WITH_OPENAL)
-    target_link_libraries(${target} ${OPENAL_LIBRARY})
-  endif()
-  if(WITH_FFTW3)
-    target_link_libraries(${target} ${FFTW3_LIBRARIES})
-  endif()
-  if(WITH_JACK AND NOT WITH_JACK_DYNLOAD)
-    target_link_libraries(${target} ${JACK_LIBRARIES})
-  endif()
-  if(WITH_CODEC_SNDFILE)
-    target_link_libraries(${target} ${LIBSNDFILE_LIBRARIES})
-  endif()
-  if(WITH_SDL AND NOT WITH_SDL_DYNLOAD)
-    target_link_libraries(${target} ${SDL_LIBRARY})
-  endif()
-  if(WITH_CYCLES_OSL)
-    target_link_libraries(${target} ${OSL_LIBRARIES})
-  endif()
-  if(WITH_OPENVDB)
-    target_link_libraries(${target} ${OPENVDB_LIBRARIES} ${BLOSC_LIBRARIES})
-  endif()
-  if(WITH_OPENIMAGEIO)
-    target_link_libraries(${target} ${OPENIMAGEIO_LIBRARIES})
-  endif()
-  if(WITH_OPENIMAGEDENOISE)
-    target_link_libraries(${target} ${OPENIMAGEDENOISE_LIBRARIES})
-  endif()
-  if(WITH_TBB)
-    target_link_libraries(${target} ${TBB_LIBRARIES})
-  endif()
-  if(WITH_OPENCOLORIO)
-    target_link_libraries(${target} ${OPENCOLORIO_LIBRARIES})
-  endif()
-  if(WITH_OPENSUBDIV)
-      target_link_libraries(${target} ${OPENSUBDIV_LIBRARIES})
-  endif()
-  if(WITH_CYCLES_EMBREE)
-    target_link_libraries(${target} ${EMBREE_LIBRARIES})
-  endif()
-  if(WITH_BOOST)
-    target_link_libraries(${target} ${BOOST_LIBRARIES})
-    if(Boost_USE_STATIC_LIBS AND Boost_USE_ICU)
-      target_link_libraries(${target} ${ICU_LIBRARIES})
-    endif()
-  endif()
-  target_link_libraries(${target} ${JPEG_LIBRARIES})
-  if(WITH_ALEMBIC)
-    target_link_libraries(${target} ${ALEMBIC_LIBRARIES} ${HDF5_LIBRARIES})
-  endif()
-  if(WITH_IMAGE_TIFF)
-    target_link_libraries(${target} ${TIFF_LIBRARY})
-  endif()
-  if(WITH_IMAGE_OPENEXR)
-    target_link_libraries(${target} ${OPENEXR_LIBRARIES})
-  endif()
-  if(WITH_IMAGE_OPENJPEG)
-    target_link_libraries(${target} ${OPENJPEG_LIBRARIES})
-  endif()
-  if(WITH_CODEC_FFMPEG)
-    target_link_libraries(${target} ${FFMPEG_LIBRARIES})
-  endif()
-  if(WITH_OPENCOLLADA)
-    if(WIN32 AND NOT UNIX)
-      file_list_suffix(OPENCOLLADA_LIBRARIES_DEBUG "${OPENCOLLADA_LIBRARIES}" "_d")
-      target_link_libraries_debug(${target} "${OPENCOLLADA_LIBRARIES_DEBUG}")
-      target_link_libraries_optimized(${target} "${OPENCOLLADA_LIBRARIES}")
-      unset(OPENCOLLADA_LIBRARIES_DEBUG)
-
-      file_list_suffix(PCRE_LIBRARIES_DEBUG "${PCRE_LIBRARIES}" "_d")
-      target_link_libraries_debug(${target} "${PCRE_LIBRARIES_DEBUG}")
-      target_link_libraries_optimized(${target} "${PCRE_LIBRARIES}")
-      unset(PCRE_LIBRARIES_DEBUG)
-
-      if(EXPAT_LIB)
-        file_list_suffix(EXPAT_LIB_DEBUG "${EXPAT_LIB}" "_d")
-        target_link_libraries_debug(${target} "${EXPAT_LIB_DEBUG}")
-        target_link_libraries_optimized(${target} "${EXPAT_LIB}")
-        unset(EXPAT_LIB_DEBUG)
-      endif()
-    else()
-      target_link_libraries(
-        ${target}
-        ${OPENCOLLADA_LIBRARIES}
-        ${PCRE_LIBRARIES}
-        ${XML2_LIBRARIES}
-        ${EXPAT_LIB}
-      )
-    endif()
-  endif()
-  if(WITH_MOD_CLOTH_ELTOPO)
-    target_link_libraries(${target} ${LAPACK_LIBRARIES})
-  endif()
-  if(WITH_LLVM)
-    target_link_libraries(${target} ${LLVM_LIBRARY})
-  endif()
   if(WIN32 AND NOT UNIX)
     target_link_libraries(${target} ${PTHREADS_LIBRARIES})
   endif()
-  if(UNIX AND NOT APPLE)
-    if(WITH_OPENMP_STATIC)
-      target_link_libraries(${target} ${OpenMP_LIBRARIES})
-    endif()
-    if(WITH_INPUT_NDOF)
-      target_link_libraries(${target} ${NDOF_LIBRARIES})
-    endif()
-  endif()
-  if(WITH_SYSTEM_GLOG)
-    target_link_libraries(${target} ${GLOG_LIBRARIES})
-  endif()
-  if(WITH_SYSTEM_GFLAGS)
-    target_link_libraries(${target} ${GFLAGS_LIBRARIES})
-  endif()
-
-  # We put CLEW and CUEW here because OPENSUBDIV_LIBRARIES depends on them..
-  if(WITH_CYCLES OR WITH_COMPOSITOR OR WITH_OPENSUBDIV)
-    target_link_libraries(${target} "extern_clew")
-    if(WITH_CUDA_DYNLOAD)
-      target_link_libraries(${target} "extern_cuew")
-    else()
-      target_link_libraries(${target} ${CUDA_CUDA_LIBRARY})
-    endif()
-  endif()
-
-  target_link_libraries(
-    ${target}
-    ${ZLIB_LIBRARIES}
-  )
-
-  # System libraries with no dependencies such as platform link libs or opengl should go last.
-  target_link_libraries(${target}
-      ${BLENDER_GL_LIBRARIES})
 
   # target_link_libraries(${target} ${PLATFORM_LINKLIBS} ${CMAKE_DL_LIBS})
   target_link_libraries(${target} ${PLATFORM_LINKLIBS})
@@ -1218,35 +1126,12 @@ macro(openmp_delayload
         else()
           set(OPENMP_DLL_NAME "vcomp140")
         endif()
-        SET_TARGET_PROPERTIES(${projectname} PROPERTIES LINK_FLAGS_RELEASE "/DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
-        SET_TARGET_PROPERTIES(${projectname} PROPERTIES LINK_FLAGS_DEBUG "/DELAYLOAD:${OPENMP_DLL_NAME}d.dll delayimp.lib")
-        SET_TARGET_PROPERTIES(${projectname} PROPERTIES LINK_FLAGS_RELWITHDEBINFO "/DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
-        SET_TARGET_PROPERTIES(${projectname} PROPERTIES LINK_FLAGS_MINSIZEREL "/DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
+        set_property(TARGET ${projectname} APPEND_STRING  PROPERTY LINK_FLAGS_RELEASE " /DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
+        set_property(TARGET ${projectname} APPEND_STRING  PROPERTY LINK_FLAGS_DEBUG " /DELAYLOAD:${OPENMP_DLL_NAME}d.dll delayimp.lib")
+        set_property(TARGET ${projectname} APPEND_STRING  PROPERTY LINK_FLAGS_RELWITHDEBINFO " /DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
+        set_property(TARGET ${projectname} APPEND_STRING  PROPERTY LINK_FLAGS_MINSIZEREL " /DELAYLOAD:${OPENMP_DLL_NAME}.dll delayimp.lib")
       endif()
     endif()
-endmacro()
-
-macro(WINDOWS_SIGN_TARGET target)
-  if(WITH_WINDOWS_CODESIGN)
-    if(!SIGNTOOL_EXE)
-      error("Codesigning is enabled, but signtool is not found")
-    else()
-      if(WINDOWS_CODESIGN_PFX_PASSWORD)
-        set(CODESIGNPASSWORD /p ${WINDOWS_CODESIGN_PFX_PASSWORD})
-      else()
-        if($ENV{PFXPASSWORD})
-          set(CODESIGNPASSWORD /p $ENV{PFXPASSWORD})
-        else()
-          message(FATAL_ERROR "WITH_WINDOWS_CODESIGN is on but WINDOWS_CODESIGN_PFX_PASSWORD not set, and environment variable PFXPASSWORD not found, unable to sign code.")
-        endif()
-      endif()
-      add_custom_command(TARGET ${target}
-        POST_BUILD
-        COMMAND ${SIGNTOOL_EXE} sign /f ${WINDOWS_CODESIGN_PFX} ${CODESIGNPASSWORD} $<TARGET_FILE:${target}>
-        VERBATIM
-      )
-    endif()
-  endif()
 endmacro()
 
 macro(blender_precompile_headers target cpp header)

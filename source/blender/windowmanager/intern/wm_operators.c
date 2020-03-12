@@ -644,11 +644,13 @@ void WM_operator_properties_sanitize(PointerRNA *ptr, const bool no_context)
   RNA_STRUCT_END;
 }
 
-/** set all props to their default,
+/**
+ * Set all props to their default.
+ *
  * \param do_update: Only update un-initialized props.
  *
- * \note, there's nothing specific to operators here.
- * this could be made a general function.
+ * \note There's nothing specific to operators here.
+ * This could be made a general function.
  */
 bool WM_operator_properties_default(PointerRNA *ptr, const bool do_update)
 {
@@ -721,6 +723,13 @@ void WM_operator_properties_free(PointerRNA *ptr)
 /** \name Default Operator Callbacks
  * \{ */
 
+/**
+ * Helper to get select and tweak-transform to work conflict free and as desired. See
+ * #WM_operator_properties_generic_select() for details.
+ *
+ * To be used together with #WM_generic_select_invoke() and
+ * #WM_operator_properties_generic_select().
+ */
 int WM_generic_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   PropertyRNA *wait_to_deselect_prop = RNA_struct_find_property(op->ptr,
@@ -784,9 +793,16 @@ int WM_generic_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
 
-  return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
+  return OPERATOR_RUNNING_MODAL | OPERATOR_PASS_THROUGH;
 }
 
+/**
+ * Helper to get select and tweak-transform to work conflict free and as desired. See
+ * #WM_operator_properties_generic_select() for details.
+ *
+ * To be used together with #WM_generic_select_modal() and
+ * #WM_operator_properties_generic_select().
+ */
 int WM_generic_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   RNA_int_set(op->ptr, "mouse_x", event->mval[0]);
@@ -1222,15 +1238,17 @@ static uiBlock *wm_block_create_redo(bContext *C, ARegion *ar, void *arg_op)
     }
   }
 
+  uiLayout *col = uiLayoutColumn(layout, false);
+
   if (op->type->flag & OPTYPE_MACRO) {
     for (op = op->macro.first; op; op = op->next) {
       uiTemplateOperatorPropertyButs(
-          C, layout, op, UI_BUT_LABEL_ALIGN_NONE, UI_TEMPLATE_OP_PROPS_SHOW_TITLE);
+          C, col, op, UI_BUT_LABEL_ALIGN_NONE, UI_TEMPLATE_OP_PROPS_SHOW_TITLE);
     }
   }
   else {
     uiTemplateOperatorPropertyButs(
-        C, layout, op, UI_BUT_LABEL_ALIGN_NONE, UI_TEMPLATE_OP_PROPS_SHOW_TITLE);
+        C, col, op, UI_BUT_LABEL_ALIGN_NONE, UI_TEMPLATE_OP_PROPS_SHOW_TITLE);
   }
 
   UI_block_bounds_set_popup(block, 6 * U.dpi_fac, NULL);
@@ -2193,7 +2211,8 @@ static void radial_control_paint_cursor(bContext *UNUSED(C), int x, int y, void 
   short strdrawlen = 0;
   float strwidth, strheight;
   float r1 = 0.0f, r2 = 0.0f, rmin = 0.0, tex_radius, alpha;
-  float zoom[2], col[3] = {1, 1, 1};
+  float zoom[2], col[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+  float text_color[4];
 
   switch (rc->subtype) {
     case PROP_NONE:
@@ -2320,6 +2339,8 @@ static void radial_control_paint_cursor(bContext *UNUSED(C), int x, int y, void 
   immUnbindProgram();
 
   BLF_size(fontid, 1.75f * fstyle_points * U.pixelsize, U.dpi);
+  UI_GetThemeColor4fv(TH_TEXT_HI, text_color);
+  BLF_color4fv(fontid, text_color);
 
   /* draw value */
   BLF_width_and_height(fontid, str, strdrawlen, &strwidth, &strheight);
@@ -2461,7 +2482,7 @@ static int radial_control_get_properties(bContext *C, wmOperator *op)
   }
 
   if (!radial_control_get_path(
-          &ctx_ptr, op, "color_path", &rc->col_ptr, &rc->col_prop, 3, RC_PROP_REQUIRE_FLOAT)) {
+          &ctx_ptr, op, "color_path", &rc->col_ptr, &rc->col_prop, 4, RC_PROP_REQUIRE_FLOAT)) {
     return 0;
   }
 

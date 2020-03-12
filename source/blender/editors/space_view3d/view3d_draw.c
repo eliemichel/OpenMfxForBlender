@@ -796,7 +796,7 @@ void ED_view3d_draw_depth(Depsgraph *depsgraph, ARegion *ar, View3D *v3d, bool a
 
   GPU_clear(GPU_DEPTH_BIT);
 
-  if (rv3d->rflag & RV3D_CLIPPING) {
+  if (RV3D_CLIPPING_ENABLED(v3d, rv3d)) {
     ED_view3d_clipping_set(rv3d);
   }
   /* get surface depth without bias */
@@ -817,7 +817,7 @@ void ED_view3d_draw_depth(Depsgraph *depsgraph, ARegion *ar, View3D *v3d, bool a
 
   WM_draw_region_viewport_unbind(ar);
 
-  if (rv3d->rflag & RV3D_CLIPPING) {
+  if (RV3D_CLIPPING_ENABLED(v3d, rv3d)) {
     ED_view3d_clipping_disable();
   }
   rv3d->rflag &= ~RV3D_ZOFFSET_DISABLED;
@@ -870,6 +870,7 @@ void ED_view3d_grid_steps(Scene *scene,
   int i, len;
   bUnit_GetSystem(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
   float grid_scale = v3d->grid;
+  BLI_assert(STEPS_LEN >= len);
 
   if (usys) {
     if (rv3d->view == RV3D_VIEW_USER) {
@@ -903,7 +904,6 @@ void ED_view3d_grid_steps(Scene *scene,
     }
   }
 }
-#undef STEPS_LEN
 
 /* Simulates the grid scale that is actually viewed.
  * The actual code is seen in `object_grid_frag.glsl` (see `grid_res`).
@@ -919,10 +919,11 @@ float ED_view3d_grid_view_scale(Scene *scene,
     /* `0.38` was a value visually obtained in order to get a snap distance
      * that matches previous versions Blender.*/
     float min_dist = 0.38f * (rv3d->dist / v3d->lens);
-    float grid_steps[8];
+    float grid_steps[STEPS_LEN];
     ED_view3d_grid_steps(scene, v3d, rv3d, grid_steps);
+    /* Skip last item, in case the 'mid_dist' is greater than the largest unit. */
     int i;
-    for (i = 0; i < ARRAY_SIZE(grid_steps); i++) {
+    for (i = 0; i < ARRAY_SIZE(grid_steps) - 1; i++) {
       grid_scale = grid_steps[i];
       if (grid_scale > min_dist) {
         break;
@@ -945,6 +946,8 @@ float ED_view3d_grid_view_scale(Scene *scene,
 
   return grid_scale;
 }
+
+#undef STEPS_LEN
 
 static void draw_view_axis(RegionView3D *rv3d, const rcti *rect)
 {
@@ -1121,13 +1124,6 @@ static void draw_rotation_guide(const RegionView3D *rv3d)
   immEnd();
   immUnbindProgram();
 
-#  if 0
-  /* find screen coordinates for rotation center, then draw pretty icon */
-  mul_m4_v3(rv3d->persinv, rot_center);
-  UI_icon_draw(rot_center[0], rot_center[1], ICON_NDOF_TURN);
-  /* ^^ just playing around, does not work */
-#  endif
-
   GPU_blend(false);
   glDepthMask(GL_TRUE);
 }
@@ -1287,8 +1283,8 @@ static void draw_viewport_name(ARegion *ar, View3D *v3d, int xoffset, int *yoffs
 }
 
 /**
- * draw info beside axes in bottom left-corner:
- * framenum, collection, object name, bone name (if available), marker name (if available)
+ * Draw info beside axes in bottom left-corner:
+ * frame-number, collection, object name, bone name (if available), marker name (if available).
  */
 
 static void draw_selected_name(
@@ -1422,18 +1418,24 @@ static void draw_grid_unit_name(
 {
   if (!rv3d->is_persp && RV3D_VIEW_IS_AXIS(rv3d->view)) {
     const char *grid_unit = NULL;
+    int font_id = BLF_default();
     ED_view3d_grid_view_scale(scene, v3d, rv3d, &grid_unit);
 
     if (grid_unit) {
       char numstr[32] = "";
-      UI_FontThemeColor(BLF_default(), TH_TEXT_HI);
+      UI_FontThemeColor(font_id, TH_TEXT_HI);
       if (v3d->grid != 1.0f) {
         BLI_snprintf(numstr, sizeof(numstr), "%s x %.4g", grid_unit, v3d->grid);
       }
 
       *yoffset -= U.widget_unit;
+      BLF_enable(font_id, BLF_SHADOW);
+      BLF_shadow(font_id, 5, (const float[4]){0.0f, 0.0f, 0.0f, 1.0f});
+      BLF_shadow_offset(font_id, 1, -1);
       BLF_draw_default_ascii(
           xoffset, *yoffset, 0.0f, numstr[0] ? numstr : grid_unit, sizeof(numstr));
+
+      BLF_disable(font_id, BLF_SHADOW);
     }
   }
 }
@@ -1689,7 +1691,6 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
                                       int sizey,
                                       uint flag,
                                       int alpha_mode,
-                                      int samples,
                                       const char *viewname,
                                       /* output vars */
                                       GPUOffScreen *ofs,
@@ -1718,7 +1719,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
 
   if (own_ofs) {
     /* bind */
-    ofs = GPU_offscreen_create(sizex, sizey, samples, true, false, err_out);
+    ofs = GPU_offscreen_create(sizex, sizey, 0, true, false, err_out);
     if (ofs == NULL) {
       DRW_opengl_context_disable();
       return NULL;
@@ -1836,7 +1837,6 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(Depsgraph *depsgraph,
                                              uint flag,
                                              uint draw_flags,
                                              int alpha_mode,
-                                             int samples,
                                              const char *viewname,
                                              GPUOffScreen *ofs,
                                              char err_out[256])
@@ -1860,9 +1860,11 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(Depsgraph *depsgraph,
 
   if (drawtype == OB_MATERIAL) {
     v3d.shading.flag = V3D_SHADING_SCENE_WORLD | V3D_SHADING_SCENE_LIGHTS;
+    v3d.shading.render_pass = SCE_PASS_COMBINED;
   }
   else if (drawtype == OB_RENDER) {
     v3d.shading.flag = V3D_SHADING_SCENE_WORLD_RENDER | V3D_SHADING_SCENE_LIGHTS_RENDER;
+    v3d.shading.render_pass = SCE_PASS_COMBINED;
   }
 
   v3d.flag2 = V3D_HIDE_OVERLAYS;
@@ -1908,7 +1910,6 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(Depsgraph *depsgraph,
                                         height,
                                         flag,
                                         alpha_mode,
-                                        samples,
                                         viewname,
                                         ofs,
                                         err_out);

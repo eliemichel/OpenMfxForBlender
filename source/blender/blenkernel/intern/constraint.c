@@ -2096,36 +2096,21 @@ static void translike_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
   bConstraintTarget *ct = targets->first;
 
   if (VALID_CONS_TARGET(ct)) {
-    if (data->mix_mode == TRANSLIKE_MIX_REPLACE) {
-      /* just copy the entire transform matrix of the target */
-      copy_m4_m4(cob->matrix, ct->matrix);
-    }
-    else {
-      float old_loc[3], old_rot[3][3], old_size[3];
-      float new_loc[3], new_rot[3][3], new_size[3];
+    switch (data->mix_mode) {
+      case TRANSLIKE_MIX_REPLACE:
+        copy_m4_m4(cob->matrix, ct->matrix);
+        break;
 
-      /* Separate matrices so they can be combined in a way that avoids shear. */
-      mat4_to_loc_rot_size(old_loc, old_rot, old_size, cob->matrix);
-      mat4_to_loc_rot_size(new_loc, new_rot, new_size, ct->matrix);
+      case TRANSLIKE_MIX_BEFORE:
+        mul_m4_m4m4_aligned_scale(cob->matrix, ct->matrix, cob->matrix);
+        break;
 
-      switch (data->mix_mode) {
-        case TRANSLIKE_MIX_BEFORE:
-          mul_v3_m4v3(new_loc, ct->matrix, old_loc);
-          mul_m3_m3m3(new_rot, new_rot, old_rot);
-          mul_v3_v3(new_size, old_size);
-          break;
+      case TRANSLIKE_MIX_AFTER:
+        mul_m4_m4m4_aligned_scale(cob->matrix, cob->matrix, ct->matrix);
+        break;
 
-        case TRANSLIKE_MIX_AFTER:
-          mul_v3_m4v3(new_loc, cob->matrix, new_loc);
-          mul_m3_m3m3(new_rot, old_rot, new_rot);
-          mul_v3_v3(new_size, old_size);
-          break;
-
-        default:
-          BLI_assert(false);
-      }
-
-      loc_rot_size_to_mat4(cob->matrix, new_loc, new_rot, new_size);
+      default:
+        BLI_assert(!"Unknown Copy Transforms mix mode");
     }
   }
 }
@@ -2589,6 +2574,9 @@ static void actcon_new_data(void *cdata)
 
   /* set type to 20 (Loc X), as 0 is Rot X for backwards compatibility */
   data->type = 20;
+
+  /* Set the mix mode to After Original with anti-shear scale handling. */
+  data->mix_mode = ACTCON_MIX_AFTER;
 }
 
 static void actcon_id_looper(bConstraint *con, ConstraintIDFunc func, void *userdata)
@@ -2729,18 +2717,28 @@ static void actcon_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
   }
 }
 
-static void actcon_evaluate(bConstraint *UNUSED(con), bConstraintOb *cob, ListBase *targets)
+static void actcon_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targets)
 {
+  bActionConstraint *data = con->data;
   bConstraintTarget *ct = targets->first;
 
   if (VALID_CONS_TARGET(ct)) {
-    float temp[4][4];
+    switch (data->mix_mode) {
+      case ACTCON_MIX_BEFORE:
+        mul_m4_m4m4_aligned_scale(cob->matrix, ct->matrix, cob->matrix);
+        break;
 
-    /* Nice and simple... we just need to multiply the matrices, as the get_target_matrix
-     * function has already taken care of everything else.
-     */
-    copy_m4_m4(temp, cob->matrix);
-    mul_m4_m4m4(cob->matrix, temp, ct->matrix);
+      case ACTCON_MIX_AFTER:
+        mul_m4_m4m4_aligned_scale(cob->matrix, cob->matrix, ct->matrix);
+        break;
+
+      case ACTCON_MIX_AFTER_FULL:
+        mul_m4_m4m4(cob->matrix, cob->matrix, ct->matrix);
+        break;
+
+      default:
+        BLI_assert(!"Unknown Action mix mode");
+    }
   }
 }
 
@@ -3274,29 +3272,28 @@ static void stretchto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
   /* only evaluate if there is a target */
   if (VALID_CONS_TARGET(ct)) {
     float size[3], scale[3], vec[3], xx[3], zz[3], orth[3];
-    float totmat[3][3];
     float dist, bulge;
 
+    /* Remove shear if using the Damped Track mode; the other modes
+     * do it as a side effect, which is relied on by rigs. */
+    if (data->plane == SWING_Y) {
+      orthogonalize_m4_stable(cob->matrix, 1, false);
+    }
+
     /* store scaling before destroying obmat */
-    mat4_to_size(size, cob->matrix);
+    normalize_m4_ex(cob->matrix, size);
 
     /* store X orientation before destroying obmat */
-    normalize_v3_v3(xx, cob->matrix[0]);
+    copy_v3_v3(xx, cob->matrix[0]);
 
     /* store Z orientation before destroying obmat */
-    normalize_v3_v3(zz, cob->matrix[2]);
+    copy_v3_v3(zz, cob->matrix[2]);
 
-    /* XXX That makes the constraint buggy with asymmetrically scaled objects, see #29940. */
-#if 0
-    sub_v3_v3v3(vec, cob->matrix[3], ct->matrix[3]);
-    vec[0] /= size[0];
-    vec[1] /= size[1];
-    vec[2] /= size[2];
+    /* Compute distance and direction to target. */
+    sub_v3_v3v3(vec, ct->matrix[3], cob->matrix[3]);
 
     dist = normalize_v3(vec);
-#endif
 
-    dist = len_v3v3(cob->matrix[3], ct->matrix[3]);
     /* Only Y constrained object axis scale should be used, to keep same length when scaling it. */
     dist /= size[1];
 
@@ -3366,52 +3363,49 @@ static void stretchto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
         return;
     } /* switch (data->volmode) */
 
-    /* Clear the object's rotation and scale */
-    cob->matrix[0][0] = size[0] * scale[0];
-    cob->matrix[0][1] = 0;
-    cob->matrix[0][2] = 0;
-    cob->matrix[1][0] = 0;
-    cob->matrix[1][1] = size[1] * scale[1];
-    cob->matrix[1][2] = 0;
-    cob->matrix[2][0] = 0;
-    cob->matrix[2][1] = 0;
-    cob->matrix[2][2] = size[2] * scale[2];
+    /* Compute final scale. */
+    mul_v3_v3(size, scale);
 
-    sub_v3_v3v3(vec, cob->matrix[3], ct->matrix[3]);
-    normalize_v3(vec);
-
-    /* new Y aligns  object target connection*/
-    negate_v3_v3(totmat[1], vec);
     switch (data->plane) {
+      case SWING_Y:
+        /* Point the Y axis using Damped Track math. */
+        damptrack_do_transform(cob->matrix, vec, TRACK_Y);
+        break;
       case PLANE_X:
+        /* new Y aligns  object target connection*/
+        copy_v3_v3(cob->matrix[1], vec);
+
         /* build new Z vector */
         /* othogonal to "new Y" "old X! plane */
-        cross_v3_v3v3(orth, vec, xx);
+        cross_v3_v3v3(orth, xx, vec);
         normalize_v3(orth);
 
         /* new Z*/
-        copy_v3_v3(totmat[2], orth);
+        copy_v3_v3(cob->matrix[2], orth);
 
         /* we decided to keep X plane*/
-        cross_v3_v3v3(xx, orth, vec);
-        normalize_v3_v3(totmat[0], xx);
+        cross_v3_v3v3(xx, vec, orth);
+        normalize_v3_v3(cob->matrix[0], xx);
         break;
       case PLANE_Z:
+        /* new Y aligns  object target connection*/
+        copy_v3_v3(cob->matrix[1], vec);
+
         /* build new X vector */
         /* othogonal to "new Y" "old Z! plane */
-        cross_v3_v3v3(orth, vec, zz);
+        cross_v3_v3v3(orth, zz, vec);
         normalize_v3(orth);
 
         /* new X */
-        negate_v3_v3(totmat[0], orth);
+        negate_v3_v3(cob->matrix[0], orth);
 
         /* we decided to keep Z */
-        cross_v3_v3v3(zz, orth, vec);
-        normalize_v3_v3(totmat[2], zz);
+        cross_v3_v3v3(zz, vec, orth);
+        normalize_v3_v3(cob->matrix[2], zz);
         break;
     } /* switch (data->plane) */
 
-    mul_m4_m3m4(cob->matrix, totmat, cob->matrix);
+    rescale_m4(cob->matrix, size);
   }
 }
 

@@ -203,7 +203,7 @@ finally:
 static GSet *bm_edgering_pair_calc(BMesh *bm, ListBase *eloops_rim)
 {
   /**
-   * Method for for finding pairs:
+   * Method for finding pairs:
    *
    * - first create (vert -> eloop) mapping.
    * - loop over all eloops.
@@ -212,7 +212,7 @@ static GSet *bm_edgering_pair_calc(BMesh *bm, ListBase *eloops_rim)
    *       - use the edge-verts and (vert -> eloop) map
    *         to create a pair of eloop pointers, add these to a hash.
    *
-   * \note, each loop pair will be found twice.
+   * \note Each loop pair will be found twice.
    * could sort and optimize this but not really so important.
    */
 
@@ -828,6 +828,11 @@ static void bm_face_slice(BMesh *bm, BMLoop *l, const int cuts)
   for (i = 0; i < cuts; i++) {
     /* no chance of double */
     BM_face_split(bm, l_new->f, l_new->prev, l_new->next->next, &l_new, NULL, false);
+    if (l_new == NULL) {
+      /* This happens when l_new->prev and l_new->next->next are adjacent. Since
+       * this sets l_new to NULL, we cannot continue this for-loop. */
+      break;
+    }
     if (l_new->f->len < l_new->radial_next->f->len) {
       l_new = l_new->radial_next;
     }

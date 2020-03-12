@@ -637,23 +637,6 @@ static void particle_batch_cache_fill_segments_proc_pos(ParticleCacheKey **path_
   }
 }
 
-static float particle_key_select_ratio(const PTCacheEdit *edit, int strand, float t)
-{
-  const PTCacheEditPoint *point = &edit->points[strand];
-  float edit_key_seg_t = 1.0f / (point->totkey - 1);
-  if (t == 1.0) {
-    return (point->keys[point->totkey - 1].flag & PEK_SELECT) ? 1.0f : 0.0;
-  }
-  else {
-    float interp = t / edit_key_seg_t;
-    int index = (int)interp;
-    interp -= floorf(interp); /* Time between 2 edit key */
-    float s1 = (point->keys[index].flag & PEK_SELECT) ? 1.0f : 0.0;
-    float s2 = (point->keys[index + 1].flag & PEK_SELECT) ? 1.0f : 0.0;
-    return s1 + interp * (s2 - s1);
-  }
-}
-
 static float particle_key_weight(const ParticleData *particle, int strand, float t)
 {
   const ParticleData *part = particle + strand;
@@ -673,8 +656,8 @@ static float particle_key_weight(const ParticleData *particle, int strand, float
 }
 
 static int particle_batch_cache_fill_segments_edit(
-    const PTCacheEdit *edit,      /* NULL for weight data */
-    const ParticleData *particle, /* NULL for select data */
+    const PTCacheEdit *UNUSED(edit), /* NULL for weight data */
+    const ParticleData *particle,    /* NULL for select data */
     ParticleCacheKey **path_cache,
     const int start_index,
     const int num_path_keys,
@@ -697,8 +680,8 @@ static int particle_batch_cache_fill_segments_edit(
         seg_data->color = (weight < 1.0f) ? weight : 1.0f;
       }
       else {
-        float selected = particle_key_select_ratio(edit, i, strand_t);
-        seg_data->color = selected;
+        /* Computed in psys_cache_edit_paths_iter(). */
+        seg_data->color = path[j].col[0];
       }
       GPU_indexbuf_add_generic_vert(elb, curr_point);
       curr_point++;
@@ -894,11 +877,13 @@ static void particle_batch_cache_ensure_procedural_strand_data(PTCacheEdit *edit
     GPU_vertbuf_data_alloc(cache->proc_uv_buf[i], cache->strands_len);
     GPU_vertbuf_attr_get_raw_data(cache->proc_uv_buf[i], uv_id, &uv_step[i]);
 
+    char attr_safe_name[GPU_MAX_SAFE_ATTRIB_NAME];
     const char *name = CustomData_get_layer_name(&psmd->mesh_final->ldata, CD_MLOOPUV, i);
-    uint hash = BLI_ghashutil_strhash_p(name);
+    GPU_vertformat_safe_attrib_name(name, attr_safe_name, GPU_MAX_SAFE_ATTRIB_NAME);
+
     int n = 0;
-    BLI_snprintf(cache->uv_layer_names[i][n++], MAX_LAYER_NAME_LEN, "u%u", hash);
-    BLI_snprintf(cache->uv_layer_names[i][n++], MAX_LAYER_NAME_LEN, "a%u", hash);
+    BLI_snprintf(cache->uv_layer_names[i][n++], MAX_LAYER_NAME_LEN, "u%s", attr_safe_name);
+    BLI_snprintf(cache->uv_layer_names[i][n++], MAX_LAYER_NAME_LEN, "a%s", attr_safe_name);
 
     if (i == active_uv) {
       BLI_strncpy(cache->uv_layer_names[i][n++], "au", MAX_LAYER_NAME_LEN);
@@ -913,14 +898,16 @@ static void particle_batch_cache_ensure_procedural_strand_data(PTCacheEdit *edit
     GPU_vertbuf_data_alloc(cache->proc_col_buf[i], cache->strands_len);
     GPU_vertbuf_attr_get_raw_data(cache->proc_col_buf[i], col_id, &col_step[i]);
 
+    char attr_safe_name[GPU_MAX_SAFE_ATTRIB_NAME];
     const char *name = CustomData_get_layer_name(&psmd->mesh_final->ldata, CD_MLOOPCOL, i);
-    uint hash = BLI_ghashutil_strhash_p(name);
+    GPU_vertformat_safe_attrib_name(name, attr_safe_name, GPU_MAX_SAFE_ATTRIB_NAME);
+
     int n = 0;
-    BLI_snprintf(cache->col_layer_names[i][n++], MAX_LAYER_NAME_LEN, "c%u", hash);
+    BLI_snprintf(cache->col_layer_names[i][n++], MAX_LAYER_NAME_LEN, "c%s", attr_safe_name);
 
     /* We only do vcols auto name that are not overridden by uvs */
     if (CustomData_get_named_layer_index(&psmd->mesh_final->ldata, CD_MLOOPUV, name) == -1) {
-      BLI_snprintf(cache->col_layer_names[i][n++], MAX_LAYER_NAME_LEN, "a%u", hash);
+      BLI_snprintf(cache->col_layer_names[i][n++], MAX_LAYER_NAME_LEN, "a%s", attr_safe_name);
     }
 
     if (i == active_col) {
@@ -1176,10 +1163,12 @@ static void particle_batch_cache_ensure_pos_and_seg(PTCacheEdit *edit,
     col_id = MEM_mallocN(sizeof(*col_id) * num_col_layers, "Col attr format");
 
     for (int i = 0; i < num_uv_layers; i++) {
-      const char *name = CustomData_get_layer_name(&psmd->mesh_final->ldata, CD_MLOOPUV, i);
-      char uuid[32];
 
-      BLI_snprintf(uuid, sizeof(uuid), "u%u", BLI_ghashutil_strhash_p(name));
+      char uuid[32], attr_safe_name[GPU_MAX_SAFE_ATTRIB_NAME];
+      const char *name = CustomData_get_layer_name(&psmd->mesh_final->ldata, CD_MLOOPUV, i);
+      GPU_vertformat_safe_attrib_name(name, attr_safe_name, GPU_MAX_SAFE_ATTRIB_NAME);
+
+      BLI_snprintf(uuid, sizeof(uuid), "u%s", attr_safe_name);
       uv_id[i] = GPU_vertformat_attr_add(&format, uuid, GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
       if (i == active_uv) {
@@ -1187,11 +1176,12 @@ static void particle_batch_cache_ensure_pos_and_seg(PTCacheEdit *edit,
       }
     }
 
-    for (int i = 0; i < num_uv_layers; i++) {
-      const char *name = CustomData_get_layer_name(&psmd->mesh_final->ldata, CD_MLOOPUV, i);
-      char uuid[32];
+    for (int i = 0; i < num_col_layers; i++) {
+      char uuid[32], attr_safe_name[GPU_MAX_SAFE_ATTRIB_NAME];
+      const char *name = CustomData_get_layer_name(&psmd->mesh_final->ldata, CD_MLOOPCOL, i);
+      GPU_vertformat_safe_attrib_name(name, attr_safe_name, GPU_MAX_SAFE_ATTRIB_NAME);
 
-      BLI_snprintf(uuid, sizeof(uuid), "c%u", BLI_ghashutil_strhash_p(name));
+      BLI_snprintf(uuid, sizeof(uuid), "c%s", attr_safe_name);
       col_id[i] = GPU_vertformat_attr_add(&format, uuid, GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
       if (i == active_col) {
@@ -1339,9 +1329,9 @@ static void particle_batch_cache_ensure_pos(Object *object,
 
   if (format.attr_len == 0) {
     /* initialize vertex format */
-    pos_id = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
-    rot_id = GPU_vertformat_attr_add(&format, "rot", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
-    val_id = GPU_vertformat_attr_add(&format, "val", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
+    pos_id = GPU_vertformat_attr_add(&format, "part_pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
+    val_id = GPU_vertformat_attr_add(&format, "part_val", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
+    rot_id = GPU_vertformat_attr_add(&format, "part_rot", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
   }
 
   point_cache->pos = GPU_vertbuf_create_with_format(&format);

@@ -256,6 +256,9 @@ void drawSnapping(const struct bContext *C, TransInfo *t)
           immUnbindProgram();
 
           immBindBuiltinProgram(GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR);
+          float viewport_size[4];
+          GPU_viewport_size_get_f(viewport_size);
+          immUniform2f("viewport_size", viewport_size[2], viewport_size[3]);
           immUniform1f("dash_width", 6.0f * U.pixelsize);
           immUniform1f("dash_factor", 1.0f / 4.0f);
           immUniformColor4ubv(col);
@@ -379,6 +382,8 @@ void applyProject(TransInfo *t)
                       .snap_select = t->tsnap.modeSelect,
                       .use_object_edit_cage = (t->flag & T_EDIT) != 0,
                       .use_occlusion_test = false,
+                      .use_backface_culling = (t->scene->toolsettings->snap_flag &
+                                               SCE_SNAP_BACKFACE_CULLING) != 0,
                   },
                   mval_fl,
                   NULL,
@@ -1357,6 +1362,7 @@ static void TargetSnapClosest(TransInfo *t)
 short snapObjectsTransform(
     TransInfo *t, const float mval[2], float *dist_px, float r_loc[3], float r_no[3])
 {
+  float *target = (t->tsnap.status & TARGET_INIT) ? t->tsnap.snapTarget : t->center_global;
   return ED_transform_snap_object_project_view3d_ex(
       t->tsnap.object_context,
       t->scene->toolsettings->snap_mode,
@@ -1364,9 +1370,11 @@ short snapObjectsTransform(
           .snap_select = t->tsnap.modeSelect,
           .use_object_edit_cage = (t->flag & T_EDIT) != 0,
           .use_occlusion_test = t->scene->toolsettings->snap_mode != SCE_SNAP_MODE_FACE,
+          .use_backface_culling = (t->scene->toolsettings->snap_flag &
+                                   SCE_SNAP_BACKFACE_CULLING) != 0,
       },
       mval,
-      t->tsnap.snapTarget,
+      target,
       dist_px,
       r_loc,
       r_no,

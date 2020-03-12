@@ -24,7 +24,6 @@ __all__ = (
     "AddObjectHelper",
     "object_add_grid_scale",
     "object_add_grid_scale_apply_operator",
-    "object_image_guess",
     "world_to_camera_view",
 )
 
@@ -131,7 +130,10 @@ def object_data_add(context, obdata, operator=None, name=None):
     obj_new.matrix_world = add_object_align_init(context, operator)
 
     space_data = context.space_data
-    if space_data.type == 'VIEW_3D':
+    if space_data and space_data.type != 'VIEW_3D':
+        space_data = None
+
+    if space_data:
         if space_data.local_view:
             obj_new.local_view_set(space_data, True)
 
@@ -223,46 +225,6 @@ def object_add_grid_scale_apply_operator(operator, context):
             if prop_def.unit == 'LENGTH' and prop_def.subtype == 'DISTANCE':
                 setattr(operator, prop_id,
                         getattr(operator, prop_id) * grid_scale)
-
-
-def object_image_guess(obj, bm=None):
-    """
-    Return a single image used by the object,
-    first checking the texture-faces, then the material.
-    """
-    # TODO, cycles/nodes materials
-    me = obj.data
-    if bm is None:
-        if obj.mode == 'EDIT':
-            import bmesh
-            bm = bmesh.from_edit_mesh(me)
-
-    if bm is not None:
-        tex_layer = bm.faces.layers.tex.active
-        if tex_layer is not None:
-            for f in bm.faces:
-                image = f[tex_layer].image
-                if image is not None:
-                    return image
-    else:
-        tex_layer = me.uv_textures.active
-        if tex_layer is not None:
-            for tf in tex_layer.data:
-                image = tf.image
-                if image is not None:
-                    return image
-
-    for m in obj.data.materials:
-        if m is not None:
-            # backwards so topmost are highest priority
-            for mtex in reversed(m.texture_slots):
-                if mtex and mtex.use_map_color_diffuse:
-                    texture = mtex.texture
-                    if texture and texture.type == 'IMAGE':
-                        image = texture.image
-                        if image is not None:
-                            return image
-    return None
 
 
 def world_to_camera_view(scene, obj, coord):

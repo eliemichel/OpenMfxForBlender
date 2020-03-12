@@ -47,6 +47,7 @@ extern "C" {
 #include "DNA_gpencil_types.h"
 #include "DNA_key_types.h"
 #include "DNA_light_types.h"
+#include "DNA_linestyle_types.h"
 #include "DNA_material_types.h"
 #include "DNA_mask_types.h"
 #include "DNA_mesh_types.h"
@@ -120,31 +121,49 @@ namespace DEG {
 /* ***************** */
 /* Relations Builder */
 
-/* TODO(sergey): This is somewhat weak, but we don't want neither false-positive
- * time dependencies nor special exceptions in the depsgraph evaluation.
- */
-static bool python_driver_depends_on_time(ChannelDriver *driver)
+namespace {
+
+bool driver_target_depends_on_time(const DriverTarget *target)
 {
-  if (driver->expression[0] == '\0') {
-    /* Empty expression depends on nothing. */
-    return false;
-  }
-  if (strchr(driver->expression, '(') != NULL) {
-    /* Function calls are considered dependent on a time. */
+  if (target->idtype == ID_SCE &&
+      (target->rna_path != NULL && STREQ(target->rna_path, "frame_current"))) {
     return true;
   }
-  if (strstr(driver->expression, "frame") != NULL) {
-    /* Variable `frame` depends on time. */
-    /* TODO(sergey): This is a bit weak, but not sure about better way of
-     * handling this. */
-    return true;
-  }
-  /* Possible indirect time relation s should be handled via variable
-   * targets. */
   return false;
 }
 
-static bool particle_system_depends_on_time(ParticleSystem *psys)
+bool driver_variable_depends_on_time(const DriverVar *variable)
+{
+  for (int i = 0; i < variable->num_targets; ++i) {
+    if (driver_target_depends_on_time(&variable->targets[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool driver_variables_depends_on_time(const ListBase *variables)
+{
+  LISTBASE_FOREACH (const DriverVar *, variable, variables) {
+    if (driver_variable_depends_on_time(variable)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool driver_depends_on_time(ChannelDriver *driver)
+{
+  if (BKE_driver_expression_depends_on_time(driver)) {
+    return true;
+  }
+  if (driver_variables_depends_on_time(&driver->variables)) {
+    return true;
+  }
+  return false;
+}
+
+bool particle_system_depends_on_time(ParticleSystem *psys)
 {
   ParticleSettings *part = psys->part;
   /* Non-hair particles we always consider dependent on time. */
@@ -159,7 +178,7 @@ static bool particle_system_depends_on_time(ParticleSystem *psys)
   return false;
 }
 
-static bool object_particles_depends_on_time(Object *object)
+bool object_particles_depends_on_time(Object *object)
 {
   if (object->type != OB_MESH) {
     return false;
@@ -172,7 +191,7 @@ static bool object_particles_depends_on_time(Object *object)
   return false;
 }
 
-static bool check_id_has_anim_component(ID *id)
+bool check_id_has_anim_component(ID *id)
 {
   AnimData *adt = BKE_animdata_from_id(id);
   if (adt == NULL) {
@@ -181,11 +200,20 @@ static bool check_id_has_anim_component(ID *id)
   return (adt->action != NULL) || (!BLI_listbase_is_empty(&adt->nla_tracks));
 }
 
-static OperationCode bone_target_opcode(ID *target,
-                                        const char *subtarget,
-                                        ID *id,
-                                        const char *component_subdata,
-                                        RootPChanMap *root_map)
+bool check_id_has_driver_component(ID *id)
+{
+  AnimData *adt = BKE_animdata_from_id(id);
+  if (adt == NULL) {
+    return false;
+  }
+  return !BLI_listbase_is_empty(&adt->drivers);
+}
+
+OperationCode bone_target_opcode(ID *target,
+                                 const char *subtarget,
+                                 ID *id,
+                                 const char *component_subdata,
+                                 RootPChanMap *root_map)
 {
   /* Same armature.  */
   if (target == id) {
@@ -200,10 +228,12 @@ static OperationCode bone_target_opcode(ID *target,
   return OperationCode::BONE_DONE;
 }
 
-static bool object_have_geometry_component(const Object *object)
+bool object_have_geometry_component(const Object *object)
 {
   return ELEM(object->type, OB_MESH, OB_CURVE, OB_FONT, OB_SURF, OB_MBALL, OB_LATTICE, OB_GPENCIL);
 }
+
+}  // namespace
 
 /* **** General purpose functions ****  */
 
@@ -491,6 +521,9 @@ void DepsgraphRelationBuilder::build_id(ID *id)
       break;
     case ID_MSK:
       build_mask((Mask *)id);
+      break;
+    case ID_LS:
+      build_freestyle_linestyle((FreestyleLineStyle *)id);
       break;
     case ID_MC:
       build_movieclip((MovieClip *)id);
@@ -1348,7 +1381,8 @@ void DepsgraphRelationBuilder::build_animation_images(ID *id)
 {
   /* TODO: can we check for existence of node for performance? */
   if (BKE_image_user_id_has_animation(id)) {
-    OperationKey image_animation_key(id, NodeType::ANIMATION, OperationCode::IMAGE_ANIMATION);
+    OperationKey image_animation_key(
+        id, NodeType::IMAGE_ANIMATION, OperationCode::IMAGE_ANIMATION);
     TimeSourceKey time_src_key;
     add_relation(time_src_key, image_animation_key, "TimeSrc -> Image Animation");
   }
@@ -1359,9 +1393,11 @@ void DepsgraphRelationBuilder::build_action(bAction *action)
   if (built_map_.checkIsBuiltAndTag(action)) {
     return;
   }
-  TimeSourceKey time_src_key;
-  ComponentKey animation_key(&action->id, NodeType::ANIMATION);
-  add_relation(time_src_key, animation_key, "TimeSrc -> Animation");
+  if (!BLI_listbase_is_empty(&action->curves)) {
+    TimeSourceKey time_src_key;
+    ComponentKey animation_key(&action->id, NodeType::ANIMATION);
+    add_relation(time_src_key, animation_key, "TimeSrc -> Animation");
+  }
 }
 
 void DepsgraphRelationBuilder::build_driver(ID *id, FCurve *fcu)
@@ -1380,7 +1416,7 @@ void DepsgraphRelationBuilder::build_driver(ID *id, FCurve *fcu)
   /* It's quite tricky to detect if the driver actually depends on time or
    * not, so for now we'll be quite conservative here about optimization and
    * consider all python drivers to be depending on time. */
-  if ((driver->type == DRIVER_TYPE_PYTHON) && python_driver_depends_on_time(driver)) {
+  if (driver_depends_on_time(driver)) {
     TimeSourceKey time_src_key;
     add_relation(time_src_key, driver_key, "TimeSrc -> Driver");
   }
@@ -2337,6 +2373,11 @@ void DepsgraphRelationBuilder::build_cachefile(CacheFile *cache_file)
     ComponentKey datablock_key(&cache_file->id, NodeType::CACHE);
     add_relation(animation_key, datablock_key, "Datablock Animation");
   }
+  if (check_id_has_driver_component(&cache_file->id)) {
+    ComponentKey animation_key(&cache_file->id, NodeType::PARAMETERS);
+    ComponentKey datablock_key(&cache_file->id, NodeType::CACHE);
+    add_relation(animation_key, datablock_key, "Drivers -> Cache Eval");
+  }
 
   /* Cache file updates */
   if (cache_file->is_sequence) {
@@ -2381,6 +2422,18 @@ void DepsgraphRelationBuilder::build_mask(Mask *mask)
       }
     }
   }
+}
+
+void DepsgraphRelationBuilder::build_freestyle_linestyle(FreestyleLineStyle *linestyle)
+{
+  if (built_map_.checkIsBuiltAndTag(linestyle)) {
+    return;
+  }
+
+  ID *linestyle_id = &linestyle->id;
+  build_parameters(linestyle_id);
+  build_animdata(linestyle_id);
+  build_nodetree(linestyle->nodetree);
 }
 
 void DepsgraphRelationBuilder::build_movieclip(MovieClip *clip)

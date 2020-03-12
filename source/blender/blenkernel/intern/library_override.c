@@ -30,12 +30,15 @@
 #include "DNA_object_types.h"
 
 #include "DEG_depsgraph.h"
+
+#include "BKE_armature.h"
 #include "BKE_library.h"
 #include "BKE_library_override.h"
 #include "BKE_library_remap.h"
 #include "BKE_main.h"
 
 #include "BLI_utildefines.h"
+#include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_string.h"
 
@@ -148,6 +151,10 @@ void BKE_override_library_clear(IDOverrideLibrary *override, const bool do_id_us
 {
   BLI_assert(override != NULL);
 
+  if (override->runtime != NULL) {
+    BLI_ghash_clear(override->runtime, NULL, NULL);
+  }
+
   for (IDOverrideLibraryProperty *op = override->properties.first; op; op = op->next) {
     bke_override_property_clear(op);
   }
@@ -163,6 +170,11 @@ void BKE_override_library_clear(IDOverrideLibrary *override, const bool do_id_us
 void BKE_override_library_free(struct IDOverrideLibrary **override, const bool do_id_user)
 {
   BLI_assert(*override != NULL);
+
+  if ((*override)->runtime != NULL) {
+    BLI_ghash_free((*override)->runtime, NULL, NULL);
+    (*override)->runtime = NULL;
+  }
 
   BKE_override_library_clear(*override, do_id_user);
   MEM_freeN(*override);
@@ -211,7 +223,8 @@ ID *BKE_override_library_create_from_id(Main *bmain, ID *reference_id, const boo
   return local_id;
 }
 
-/** Create overridden local copies of all tagged data-blocks in given Main.
+/**
+ * Create overridden local copies of all tagged data-blocks in given Main.
  *
  * \note Set id->newid of overridden libs with newly created overrides,
  * caller is responsible to clean those pointers before/after usage as needed.
@@ -285,15 +298,28 @@ bool BKE_override_library_create_from_tag(Main *bmain)
   return ret;
 }
 
+/* We only build override GHash on request. */
+BLI_INLINE IDOverrideLibraryRuntime *override_library_rna_path_mapping_ensure(
+    IDOverrideLibrary *override)
+{
+  if (override->runtime == NULL) {
+    override->runtime = BLI_ghash_new(BLI_ghashutil_strhash_p, BLI_ghashutil_strcmp, __func__);
+    for (IDOverrideLibraryProperty *op = override->properties.first; op != NULL; op = op->next) {
+      BLI_ghash_insert(override->runtime, op->rna_path, op);
+    }
+  }
+
+  return override->runtime;
+}
+
 /**
  * Find override property from given RNA path, if it exists.
  */
 IDOverrideLibraryProperty *BKE_override_library_property_find(IDOverrideLibrary *override,
                                                               const char *rna_path)
 {
-  /* XXX TODO we'll most likely want a runtime ghash to store that mapping at some point. */
-  return BLI_findstring_ptr(
-      &override->properties, rna_path, offsetof(IDOverrideLibraryProperty, rna_path));
+  IDOverrideLibraryRuntime *override_runtime = override_library_rna_path_mapping_ensure(override);
+  return BLI_ghash_lookup(override_runtime, rna_path);
 }
 
 /**
@@ -303,13 +329,16 @@ IDOverrideLibraryProperty *BKE_override_library_property_get(IDOverrideLibrary *
                                                              const char *rna_path,
                                                              bool *r_created)
 {
-  /* XXX TODO we'll most likely want a runtime ghash to store that mapping at some point. */
   IDOverrideLibraryProperty *op = BKE_override_library_property_find(override, rna_path);
 
   if (op == NULL) {
     op = MEM_callocN(sizeof(IDOverrideLibraryProperty), __func__);
     op->rna_path = BLI_strdup(rna_path);
     BLI_addtail(&override->properties, op);
+
+    IDOverrideLibraryRuntime *override_runtime = override_library_rna_path_mapping_ensure(
+        override);
+    BLI_ghash_insert(override_runtime, op->rna_path, op);
 
     if (r_created) {
       *r_created = true;
@@ -355,6 +384,9 @@ void BKE_override_library_property_delete(IDOverrideLibrary *override,
                                           IDOverrideLibraryProperty *override_property)
 {
   bke_override_property_clear(override_property);
+  if (override->runtime != NULL) {
+    BLI_ghash_remove(override->runtime, override_property->rna_path, NULL, NULL);
+  }
   BLI_freelinkN(&override->properties, override_property);
 }
 
@@ -549,6 +581,17 @@ bool BKE_override_library_status_check_local(Main *bmain, ID *local)
 
   BLI_assert(GS(local->name) == GS(reference->name));
 
+  if (GS(local->name) == ID_OB) {
+    /* Our beloved pose's bone cross-data pointers... Usually, depsgraph evaluation would ensure
+     * this is valid, but in some cases (like hidden collections etc.) this won't be the case, so
+     * we need to take care of this ourselves. */
+    Object *ob_local = (Object *)local;
+    if (ob_local->data != NULL && ob_local->type == OB_ARMATURE && ob_local->pose != NULL &&
+        ob_local->pose->flag & POSE_RECALC) {
+      BKE_pose_rebuild(bmain, ob_local, ob_local->data, true);
+    }
+  }
+
   /* Note that reference is assumed always valid, caller has to ensure that itself. */
 
   PointerRNA rnaptr_local, rnaptr_reference;
@@ -603,6 +646,17 @@ bool BKE_override_library_status_check_reference(Main *bmain, ID *local)
     }
   }
 
+  if (GS(local->name) == ID_OB) {
+    /* Our beloved pose's bone cross-data pointers... Usually, depsgraph evaluation would ensure
+     * this is valid, but in some cases (like hidden collections etc.) this won't be the case, so
+     * we need to take care of this ourselves. */
+    Object *ob_local = (Object *)local;
+    if (ob_local->data != NULL && ob_local->type == OB_ARMATURE && ob_local->pose != NULL &&
+        ob_local->pose->flag & POSE_RECALC) {
+      BKE_pose_rebuild(bmain, ob_local, ob_local->data, true);
+    }
+  }
+
   PointerRNA rnaptr_local, rnaptr_reference;
   RNA_id_pointer_create(local, &rnaptr_local);
   RNA_id_pointer_create(reference, &rnaptr_reference);
@@ -646,6 +700,17 @@ bool BKE_override_library_operations_create(Main *bmain, ID *local, const bool f
      * is in the file in that case, until broken lib is fixed. */
     if (ID_MISSING(local->override_library->reference)) {
       return ret;
+    }
+
+    if (GS(local->name) == ID_OB) {
+      /* Our beloved pose's bone cross-data pointers... Usually, depsgraph evaluation would ensure
+       * this is valid, but in some cases (like hidden collections etc.) this won't be the case, so
+       * we need to take care of this ourselves. */
+      Object *ob_local = (Object *)local;
+      if (ob_local->data != NULL && ob_local->type == OB_ARMATURE && ob_local->pose != NULL &&
+          ob_local->pose->flag & POSE_RECALC) {
+        BKE_pose_rebuild(bmain, ob_local, ob_local->data, true);
+      }
     }
 
     PointerRNA rnaptr_local, rnaptr_reference;

@@ -27,6 +27,7 @@
 #include "BLI_system.h"
 
 #include "DNA_camera_types.h"
+#include "DNA_curveprofile_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
@@ -51,8 +52,12 @@
 #include "BKE_paint.h"
 #include "BKE_screen.h"
 #include "BKE_workspace.h"
+#include "BKE_curveprofile.h"
 
 #include "BLO_readfile.h"
+
+/* Make preferences read-only, use versioning_userdef.c. */
+#define U (*((const UserDef *)&U))
 
 /**
  * Rename if the ID doesn't exist.
@@ -145,10 +150,9 @@ static void blo_update_defaults_screen(bScreen *screen,
       }
     }
     else if (sa->spacetype == SPACE_ACTION) {
-      /* Show marker lines, hide channels and collapse summary in timelines. */
+      /* Show markers region, hide channels and collapse summary in timelines. */
       SpaceAction *saction = sa->spacedata.first;
-      saction->flag |= SACTION_SHOW_MARKER_LINES;
-
+      saction->flag |= SACTION_SHOW_MARKERS;
       if (saction->mode == SACTCONT_TIMELINE) {
         saction->ads.flag |= ADS_FLAG_SUMMARY_COLLAPSED;
 
@@ -161,11 +165,15 @@ static void blo_update_defaults_screen(bScreen *screen,
     }
     else if (sa->spacetype == SPACE_GRAPH) {
       SpaceGraph *sipo = sa->spacedata.first;
-      sipo->flag |= SIPO_MARKER_LINES;
+      sipo->flag |= SIPO_SHOW_MARKERS;
     }
     else if (sa->spacetype == SPACE_NLA) {
       SpaceNla *snla = sa->spacedata.first;
-      snla->flag |= SNLA_SHOW_MARKER_LINES;
+      snla->flag |= SNLA_SHOW_MARKERS;
+    }
+    else if (sa->spacetype == SPACE_SEQ) {
+      SpaceSeq *seq = sa->spacedata.first;
+      seq->flag |= SEQ_SHOW_MARKERS;
     }
     else if (sa->spacetype == SPACE_TEXT) {
       /* Show syntax and line numbers in Script workspace text editor. */
@@ -206,6 +214,19 @@ static void blo_update_defaults_screen(bScreen *screen,
       for (ARegion *ar = regionbase->first; ar; ar = ar->next) {
         if (ar->regiontype == RGN_TYPE_TOOL_HEADER) {
           ar->flag &= ~(RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER);
+        }
+      }
+    }
+  }
+
+  /* 2D animation template. */
+  if (app_template && STREQ(app_template, "2D_Animation")) {
+    for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+      for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+        if (sa->spacetype == SPACE_ACTION) {
+          SpaceAction *saction = sa->spacedata.first;
+          /* Enable Sliders. */
+          saction->flag |= SACTION_SLIDERS;
         }
       }
     }
@@ -323,6 +344,11 @@ static void blo_update_defaults_scene(Main *bmain, Scene *scene)
     for (int i = 0; i < ARRAY_SIZE(uv_values); i++) {
       copy_v2_v2(me->mloopuv[i].uv, uv_values[i]);
     }
+  }
+
+  /* Make sure that the curve profile is initialized */
+  if (ts->custom_bevel_profile_preset == NULL) {
+    ts->custom_bevel_profile_preset = BKE_curveprofile_add(PROF_PRESET_LINE);
   }
 }
 
@@ -500,6 +526,14 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
       brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
       id_us_min(&brush->id);
       brush->sculpt_tool = SCULPT_TOOL_POSE;
+    }
+
+    brush_name = "Multiplane Scrape";
+    brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
+    if (!brush) {
+      brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
+      id_us_min(&brush->id);
+      brush->sculpt_tool = SCULPT_TOOL_MULTIPLANE_SCRAPE;
     }
 
     brush_name = "Simplify";

@@ -388,7 +388,7 @@ static void rna_Nurb_type_set(PointerRNA *ptr, int value)
   Nurb *nu = (Nurb *)ptr->data;
   const int pntsu_prev = nu->pntsu;
 
-  if (BKE_nurb_type_convert(nu, value, true)) {
+  if (BKE_nurb_type_convert(nu, value, true, NULL)) {
     if (nu->pntsu != pntsu_prev) {
       cu->actvert = CU_ACT_NONE;
     }
@@ -585,7 +585,7 @@ static void rna_Curve_body_set(PointerRNA *ptr, const char *value)
     MEM_freeN(cu->strinfo);
   }
 
-  cu->str = MEM_mallocN(len_bytes + sizeof(wchar_t), "str");
+  cu->str = MEM_mallocN(len_bytes + sizeof(char32_t), "str");
   cu->strinfo = MEM_callocN((len_chars + 4) * sizeof(CharInfo), "strinfo");
 
   BLI_strncpy(cu->str, value, len_bytes + 1);
@@ -1033,16 +1033,9 @@ static void rna_def_path(BlenderRNA *UNUSED(brna), StructRNA *srna)
   RNA_def_property_update(prop, 0, "rna_Curve_update_data");
 }
 
-static void rna_def_nurbs(BlenderRNA *UNUSED(brna), StructRNA *srna)
+static void rna_def_nurbs(BlenderRNA *UNUSED(brna), StructRNA *UNUSED(srna))
 {
-  PropertyRNA *prop;
-
-  /* flags */
-  prop = RNA_def_property(srna, "use_uv_as_generated", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", CU_UV_ORCO);
-  RNA_def_property_ui_text(
-      prop, "Use UV for Mapping", "Uses the UV values as Generated textured coordinates");
-  RNA_def_property_update(prop, 0, "rna_Curve_update_data");
+  /* Nothing. */
 }
 
 static void rna_def_font(BlenderRNA *UNUSED(brna), StructRNA *srna)
@@ -1755,12 +1748,6 @@ static void rna_def_curve(BlenderRNA *brna)
   RNA_def_property_editable_func(prop, "rna_Curve_texspace_editable");
   RNA_def_property_float_funcs(
       prop, "rna_Curve_texspace_size_get", "rna_Curve_texspace_size_set", NULL);
-  RNA_def_property_update(prop, 0, "rna_Curve_update_data");
-
-  prop = RNA_def_property(srna, "use_uv_as_generated", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", CU_UV_ORCO);
-  RNA_def_property_ui_text(
-      prop, "Use UV for mapping", "Uses the UV values as Generated textured coordinates");
   RNA_def_property_update(prop, 0, "rna_Curve_update_data");
 
   /* materials */

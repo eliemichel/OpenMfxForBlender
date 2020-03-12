@@ -25,6 +25,8 @@
 
 #include "GPU_batch.h"
 
+extern DrawEngineType draw_engine_gpencil_type;
+
 struct GPENCIL_Data;
 struct GPENCIL_StorageList;
 struct MaterialGPencilStyle;
@@ -143,6 +145,8 @@ typedef struct GPENCIL_Storage {
   bool is_playing;
   bool is_render;
   bool is_mat_preview;
+  bool is_main_overlay;
+  bool is_main_onion;
   bool background_ready;
   int is_xray;
   bool is_ontop;
@@ -413,7 +417,6 @@ void gpencil_populate_multiedit(struct GPENCIL_e_data *e_data,
                                 void *vedata,
                                 struct Object *ob,
                                 struct tGPencilObjectCache *cache_ob);
-void gpencil_triangulate_stroke_fill(struct Object *ob, struct bGPDstroke *gps);
 void gpencil_populate_particles(struct GPENCIL_e_data *e_data,
                                 struct GHash *gh_objects,
                                 void *vedata);

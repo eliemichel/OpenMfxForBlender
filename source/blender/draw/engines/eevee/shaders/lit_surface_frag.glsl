@@ -28,7 +28,8 @@ uniform int hairThicknessRes = 1;
 
 #endif /* LIT_SURFACE_UNIFORM */
 
-/** AUTO CONFIG
+/**
+ * AUTO CONFIG
  * We include the file multiple times each time with a different configuration.
  * This leads to a lot of deadcode. Better idea would be to only generate the one needed.
  */
@@ -176,7 +177,8 @@ void CLOSURE_NAME(vec3 N
   out_refr = vec3(0.0);
 #endif
 
-#ifdef SHADOW_SHADER
+#if defined(SHADOW_SHADER) || defined(WORLD_BACKGROUND)
+  /* This makes shader resources become unused and avoid issues with samplers. (see T59747) */
   return;
 #else
 

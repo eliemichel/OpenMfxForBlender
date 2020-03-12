@@ -329,7 +329,7 @@ NUMPY_FORCE_BUILD=false
 NUMPY_FORCE_REBUILD=false
 NUMPY_SKIP=false
 
-BOOST_VERSION="1.68.0"
+BOOST_VERSION="1.70.0"
 BOOST_VERSION_MIN="1.49"
 BOOST_FORCE_BUILD=false
 BOOST_FORCE_REBUILD=false
@@ -341,9 +341,9 @@ OCIO_FORCE_BUILD=false
 OCIO_FORCE_REBUILD=false
 OCIO_SKIP=false
 
-OPENEXR_VERSION="2.3.0"
+OPENEXR_VERSION="2.4.0"
 OPENEXR_VERSION_MIN="2.0.1"
-ILMBASE_VERSION="2.3.0"
+ILMBASE_VERSION="2.4.0"
 ILMBASE_VERSION_MIN="2.3"
 OPENEXR_FORCE_BUILD=false
 OPENEXR_FORCE_REBUILD=false
@@ -379,16 +379,16 @@ OSD_FORCE_REBUILD=false
 OSD_SKIP=false
 
 # OpenVDB needs to be compiled for now
-OPENVDB_BLOSC_VERSION="1.14.4"
+OPENVDB_BLOSC_VERSION="1.5.0"
 
-OPENVDB_VERSION="5.1.0"
+OPENVDB_VERSION="7.0.0"
 OPENVDB_VERSION_MIN=$OPENVDB_VERSION
 OPENVDB_FORCE_BUILD=false
 OPENVDB_FORCE_REBUILD=false
 OPENVDB_SKIP=false
 
 # Alembic needs to be compiled for now
-ALEMBIC_VERSION="1.7.8"
+ALEMBIC_VERSION="1.7.12"
 ALEMBIC_VERSION_MIN=$ALEMBIC_VERSION
 ALEMBIC_FORCE_BUILD=false
 ALEMBIC_FORCE_REBUILD=false
@@ -767,7 +767,7 @@ while true; do
     ;;
     *)
       PRINT ""
-      ERROR "Wrong parameter! Usage:"
+      ERROR "Wrong parameter '$1'; Usage:"
       PRINT ""
       PRINT "`eval _echo "$COMMON_INFO"`"
       PRINT ""
@@ -2353,7 +2353,7 @@ compile_ALEMBIC() {
 
     prepare_opt
 
-    if [ ! -d $_src -o true ]; then
+    if [ ! -d $_src ]; then
       mkdir -p $SRC
       download ALEMBIC_SOURCE[@] "$_src.tar.gz"
 

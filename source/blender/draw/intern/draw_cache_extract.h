@@ -115,8 +115,9 @@ typedef struct MeshBufferCache {
    * Only need to be updated when topology changes. */
   struct {
     /* Indices to vloops. */
-    GPUIndexBuf *tris;  /* Ordered per material. */
-    GPUIndexBuf *lines; /* Loose edges last. */
+    GPUIndexBuf *tris;        /* Ordered per material. */
+    GPUIndexBuf *lines;       /* Loose edges last. */
+    GPUIndexBuf *lines_loose; /* sub buffer of `lines` only containing the loose edges. */
     GPUIndexBuf *points;
     GPUIndexBuf *fdots;
     /* 3D overlays. */
@@ -252,6 +253,8 @@ typedef struct MeshBatchCache {
 void mesh_buffer_cache_create_requested(MeshBatchCache *cache,
                                         MeshBufferCache mbc,
                                         Mesh *me,
+                                        const bool is_editmode,
+                                        const float obmat[4][4],
                                         const bool do_final,
                                         const bool do_uvedit,
                                         const bool use_subsurf_fdots,

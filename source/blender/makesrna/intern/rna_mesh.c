@@ -2274,7 +2274,7 @@ static void rna_def_mesh_looptris(BlenderRNA *brna, PropertyRNA *cprop)
 {
   StructRNA *srna;
 
-  RNA_def_property_srna(cprop, "MeshLoopTriangle");
+  RNA_def_property_srna(cprop, "MeshLoopTriangles");
   srna = RNA_def_struct(brna, "MeshLoopTriangles", NULL);
   RNA_def_struct_sdna(srna, "Mesh");
   RNA_def_struct_ui_text(
@@ -2987,7 +2987,7 @@ static void rna_def_mesh(BlenderRNA *brna)
   /* Remesh */
   prop = RNA_def_property(srna, "remesh_voxel_size", PROP_FLOAT, PROP_DISTANCE);
   RNA_def_property_float_sdna(prop, NULL, "remesh_voxel_size");
-  RNA_def_property_range(prop, 0.00001f, FLT_MAX);
+  RNA_def_property_range(prop, 0.0001f, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0001f, FLT_MAX, 0.01, 4);
   RNA_def_property_ui_text(prop,
                            "Voxel Size",

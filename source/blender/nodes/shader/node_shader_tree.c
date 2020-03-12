@@ -332,7 +332,16 @@ static void ntree_shader_groups_expand_inputs(bNodeTree *localtree)
 
     bNodeSocket *group_socket = group_node->inputs.first;
     for (; group_socket; group_socket = group_socket->next) {
+
       if (group_socket->link != NULL) {
+        bNodeLink *link = group_socket->link;
+        /* Fix the case where the socket is actually converting the data. (see T71374)
+         * We only do the case of lossy conversion to float.*/
+        if ((group_socket->type == SOCK_FLOAT) && (link->fromsock->type != link->tosock->type)) {
+          bNode *node = nodeAddStaticNode(NULL, localtree, SH_NODE_RGBTOBW);
+          nodeAddLink(localtree, link->fromnode, link->fromsock, node, node->inputs.first);
+          nodeAddLink(localtree, node, node->outputs.first, group_node, group_socket);
+        }
         continue;
       }
 
@@ -635,7 +644,8 @@ static bNode *ntree_shader_copy_branch(bNodeTree *ntree,
   LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node->tmp_flag >= 0) {
       int id = node->tmp_flag;
-      nodes_copy[id] = BKE_node_copy_ex(ntree, node, LIB_ID_CREATE_NO_USER_REFCOUNT);
+      nodes_copy[id] = BKE_node_copy_ex(
+          ntree, node, LIB_ID_CREATE_NO_USER_REFCOUNT | LIB_ID_CREATE_NO_MAIN, false);
       nodes_copy[id]->tmp_flag = -2; /* Copy */
       /* Make sure to clear all sockets links as they are invalid. */
       LISTBASE_FOREACH (bNodeSocket *, sock, &nodes_copy[id]->inputs) {

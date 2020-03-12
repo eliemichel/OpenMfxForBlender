@@ -64,7 +64,7 @@ def create_buildbot_upload_zip(builder, package_files):
         sys.stderr.write('Create buildbot_upload.zip failed: ' + str(ex) + '\n')
         sys.exit(1)
 
-def create_tar_bz2(src, dest, package_name):
+def create_tar_xz(src, dest, package_name):
     # One extra to remove leading os.sep when cleaning root for package_root
     ln = len(src) + 1
     flist = list()
@@ -75,9 +75,20 @@ def create_tar_bz2(src, dest, package_name):
         flist.extend([(os.path.join(root, file), os.path.join(package_root, file)) for file in files])
 
     import tarfile
-    package = tarfile.open(dest, 'w:bz2')
+
+    # Set UID/GID of archived files to 0, otherwise they'd be owned by whatever
+    # user compiled the package. If root then unpacks it to /usr/local/ you get
+    # a security issue.
+    def _fakeroot(tarinfo):
+        tarinfo.gid = 0
+        tarinfo.gname = "root"
+        tarinfo.uid = 0
+        tarinfo.uname = "root"
+        return tarinfo
+
+    package = tarfile.open(dest, 'w:xz', preset=9)
     for entry in flist:
-        package.add(entry[0], entry[1], recursive=False)
+        package.add(entry[0], entry[1], recursive=False, filter=_fakeroot)
     package.close()
 
 def cleanup_files(dirpath, extension):
@@ -98,14 +109,15 @@ def pack_mac(builder):
     package_filepath = os.path.join(builder.build_dir, package_filename)
 
     release_dir = os.path.join(builder.blender_dir, 'release', 'darwin')
-    bundle_sh = os.path.join(release_dir, 'bundle.sh')
+    buildbot_dir = os.path.join(builder.blender_dir, 'build_files', 'buildbot')
+    bundle_script = os.path.join(buildbot_dir, 'slave_bundle_dmg.py')
 
-    command = [bundle_sh]
-    command += ['--source', builder.install_dir]
+    command = [bundle_script]
     command += ['--dmg', package_filepath]
     if info.is_development_build:
         background_image = os.path.join(release_dir, 'buildbot', 'background.tif')
         command += ['--background-image', background_image]
+    command += [builder.install_dir]
     buildbot_utils.call(command)
 
     create_buildbot_upload_zip(builder, [(package_filepath, package_filename)])
@@ -149,8 +161,6 @@ def pack_linux(builder):
     blender_executable = os.path.join(builder.install_dir, 'blender')
 
     info = buildbot_utils.VersionInfo(builder)
-    blender_glibc = builder.name.split('_')[1]
-    blender_arch = 'x86_64'
 
     # Strip all unused symbols from the binaries
     print("Stripping binaries...")
@@ -161,13 +171,13 @@ def pack_linux(builder):
     buildbot_utils.call(builder.command_prefix + ['find', py_target, '-iname', '*.so', '-exec', 'strip', '-s', '{}', ';'])
 
     # Construct package name
-    platform_name = 'linux-' + blender_glibc + '-' + blender_arch
+    platform_name = 'linux64'
     package_name = get_package_name(builder, platform_name)
-    package_filename = package_name + ".tar.bz2"
+    package_filename = package_name + ".tar.xz"
 
-    print("Creating .tar.bz2 archive")
-    package_filepath = builder.install_dir + '.tar.bz2'
-    create_tar_bz2(builder.install_dir, package_filepath, package_name)
+    print("Creating .tar.xz archive")
+    package_filepath = builder.install_dir + '.tar.xz'
+    create_tar_xz(builder.install_dir, package_filepath, package_name)
 
     # Create buildbot_upload.zip
     create_buildbot_upload_zip(builder, [(package_filepath, package_filename)])

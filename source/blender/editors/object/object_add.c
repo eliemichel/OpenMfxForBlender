@@ -1803,6 +1803,9 @@ static void make_object_duplilist_real(bContext *C,
     base_dst = BKE_view_layer_base_find(view_layer, ob_dst);
     BLI_assert(base_dst != NULL);
 
+    ED_object_base_select(base_dst, BA_SELECT);
+    DEG_id_tag_update(&ob_dst->id, ID_RECALC_SELECT);
+
     BKE_scene_object_base_flag_sync_from_base(base_dst);
 
     /* make sure apply works */
@@ -1937,6 +1940,9 @@ static void make_object_duplilist_real(bContext *C,
     }
     base->object->instance_collection = NULL;
   }
+
+  ED_object_base_select(base, BA_DESELECT);
+  DEG_id_tag_update(&base->object->id, ID_RECALC_SELECT);
 
   BLI_ghash_free(dupli_gh, NULL, NULL);
   if (parent_gh) {
@@ -2338,7 +2344,7 @@ static int convert_exec(bContext *C, wmOperator *op)
 
       if (!keep_original) {
         /* other users */
-        if (cu->id.us > 1) {
+        if (ID_REAL_USERS(&cu->id) > 1) {
           for (ob1 = bmain->objects.first; ob1; ob1 = ob1->id.next) {
             if (ob1->data == ob->data) {
               ob1->type = OB_CURVE;
@@ -2687,6 +2693,8 @@ static int duplicate_exec(bContext *C, wmOperator *op)
 
   copy_object_set_idnew(C);
 
+  ED_outliner_select_sync_from_object_tag(C);
+
   DEG_relations_tag_update(bmain);
   DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE | ID_RECALC_SELECT);
 
@@ -2729,7 +2737,7 @@ void OBJECT_OT_duplicate(wmOperatorType *ot)
 /* -------------------------------------------------------------------- */
 /** \name Add Named Object Operator
  *
- * Use for for drag & drop.
+ * Use for drag & drop.
  * \{ */
 
 static int add_named_exec(bContext *C, wmOperator *op)

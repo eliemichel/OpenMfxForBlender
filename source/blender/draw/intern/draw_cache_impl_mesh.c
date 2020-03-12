@@ -831,6 +831,11 @@ GPUBatch *DRW_mesh_batch_cache_get_surface_vertpaint(Mesh *me)
   return DRW_batch_request(&cache->batch.surface);
 }
 
+int DRW_mesh_material_count_get(Mesh *me)
+{
+  return mesh_render_mat_len_get(me);
+}
+
 /** \} */
 
 /* ---------------------------------------------------------------------- */
@@ -930,6 +935,7 @@ static void edituv_request_active_uv(MeshBatchCache *cache, Mesh *me)
 {
   DRW_MeshCDMask cd_needed;
   mesh_cd_layers_type_clear(&cd_needed);
+  mesh_cd_calc_active_uv_layer(me, &cd_needed);
   mesh_cd_calc_edit_uv_layer(me, &cd_needed);
 
   BLI_assert(cd_needed.edit_uv != 0 &&
@@ -1055,6 +1061,7 @@ void DRW_mesh_batch_cache_create_requested(
     ts = scene->toolsettings;
   }
   MeshBatchCache *cache = mesh_batch_cache_get(me);
+  bool cd_uv_update = false;
 
   /* Early out */
   if (cache->batch_requested == 0) {
@@ -1063,6 +1070,13 @@ void DRW_mesh_batch_cache_create_requested(
 #endif
     return;
   }
+
+  /* Sanity check. */
+  if ((me->edit_mesh != NULL) && (ob->mode & OB_MODE_EDIT)) {
+    BLI_assert(me->edit_mesh->mesh_eval_final != NULL);
+  }
+
+  const bool is_editmode = (me->edit_mesh != NULL) && DRW_object_is_in_edit_mode(ob);
 
   DRWBatchFlag batch_requested = cache->batch_requested;
   cache->batch_requested = 0;
@@ -1125,6 +1139,7 @@ void DRW_mesh_batch_cache_create_requested(
       {
         if ((cache->cd_used.uv & cache->cd_needed.uv) != cache->cd_needed.uv) {
           GPU_VERTBUF_DISCARD_SAFE(mbuffercache->vbo.uv);
+          cd_uv_update = true;
         }
         if ((cache->cd_used.tan & cache->cd_needed.tan) != cache->cd_needed.tan ||
             cache->cd_used.tan_orco != cache->cd_needed.tan_orco) {
@@ -1164,29 +1179,27 @@ void DRW_mesh_batch_cache_create_requested(
 
   if (batch_requested & MBC_EDITUV) {
     /* Discard UV batches if sync_selection changes */
-    if (ts != NULL) {
-      const bool is_uvsyncsel = (ts->uv_flag & UV_SYNC_SELECTION);
-      if (cache->is_uvsyncsel != is_uvsyncsel) {
-        cache->is_uvsyncsel = is_uvsyncsel;
-        FOREACH_MESH_BUFFER_CACHE(cache, mbuffercache)
-        {
-          GPU_VERTBUF_DISCARD_SAFE(mbuffercache->vbo.edituv_data);
-          GPU_VERTBUF_DISCARD_SAFE(mbuffercache->vbo.fdots_uv);
-          GPU_INDEXBUF_DISCARD_SAFE(mbuffercache->ibo.edituv_tris);
-          GPU_INDEXBUF_DISCARD_SAFE(mbuffercache->ibo.edituv_lines);
-          GPU_INDEXBUF_DISCARD_SAFE(mbuffercache->ibo.edituv_points);
-        }
-        /* We only clear the batches as they may already have been
-         * referenced. */
-        GPU_BATCH_CLEAR_SAFE(cache->batch.wire_loops_uvs);
-        GPU_BATCH_CLEAR_SAFE(cache->batch.edituv_faces_stretch_area);
-        GPU_BATCH_CLEAR_SAFE(cache->batch.edituv_faces_stretch_angle);
-        GPU_BATCH_CLEAR_SAFE(cache->batch.edituv_faces);
-        GPU_BATCH_CLEAR_SAFE(cache->batch.edituv_edges);
-        GPU_BATCH_CLEAR_SAFE(cache->batch.edituv_verts);
-        GPU_BATCH_CLEAR_SAFE(cache->batch.edituv_fdots);
-        cache->batch_ready &= ~MBC_EDITUV;
+    const bool is_uvsyncsel = ts && (ts->uv_flag & UV_SYNC_SELECTION);
+    if (cd_uv_update || (cache->is_uvsyncsel != is_uvsyncsel)) {
+      cache->is_uvsyncsel = is_uvsyncsel;
+      FOREACH_MESH_BUFFER_CACHE(cache, mbuffercache)
+      {
+        GPU_VERTBUF_DISCARD_SAFE(mbuffercache->vbo.edituv_data);
+        GPU_VERTBUF_DISCARD_SAFE(mbuffercache->vbo.fdots_uv);
+        GPU_INDEXBUF_DISCARD_SAFE(mbuffercache->ibo.edituv_tris);
+        GPU_INDEXBUF_DISCARD_SAFE(mbuffercache->ibo.edituv_lines);
+        GPU_INDEXBUF_DISCARD_SAFE(mbuffercache->ibo.edituv_points);
       }
+      /* We only clear the batches as they may already have been
+       * referenced. */
+      GPU_BATCH_CLEAR_SAFE(cache->batch.wire_loops_uvs);
+      GPU_BATCH_CLEAR_SAFE(cache->batch.edituv_faces_stretch_area);
+      GPU_BATCH_CLEAR_SAFE(cache->batch.edituv_faces_stretch_angle);
+      GPU_BATCH_CLEAR_SAFE(cache->batch.edituv_faces);
+      GPU_BATCH_CLEAR_SAFE(cache->batch.edituv_edges);
+      GPU_BATCH_CLEAR_SAFE(cache->batch.edituv_verts);
+      GPU_BATCH_CLEAR_SAFE(cache->batch.edituv_fdots);
+      cache->batch_ready &= ~MBC_EDITUV;
     }
   }
 
@@ -1200,10 +1213,10 @@ void DRW_mesh_batch_cache_create_requested(
 
   cache->batch_ready |= batch_requested;
 
-  const bool do_cage = (me->edit_mesh &&
+  const bool do_cage = (is_editmode &&
                         (me->edit_mesh->mesh_eval_final != me->edit_mesh->mesh_eval_cage));
 
-  const bool do_uvcage = me->edit_mesh && !me->edit_mesh->mesh_eval_final->runtime.is_original;
+  const bool do_uvcage = is_editmode && !me->edit_mesh->mesh_eval_final->runtime.is_original;
 
   MeshBufferCache *mbufcache = &cache->final;
 
@@ -1228,7 +1241,8 @@ void DRW_mesh_batch_cache_create_requested(
     DRW_vbo_request(cache->batch.all_edges, &mbufcache->vbo.pos_nor);
   }
   if (DRW_batch_requested(cache->batch.loose_edges, GPU_PRIM_LINES)) {
-    DRW_ibo_request(cache->batch.loose_edges, &mbufcache->ibo.lines);
+    DRW_ibo_request(NULL, &mbufcache->ibo.lines);
+    DRW_ibo_request(cache->batch.loose_edges, &mbufcache->ibo.lines_loose);
     DRW_vbo_request(cache->batch.loose_edges, &mbufcache->vbo.pos_nor);
   }
   if (DRW_batch_requested(cache->batch.edge_detection, GPU_PRIM_LINES_ADJ)) {
@@ -1326,17 +1340,8 @@ void DRW_mesh_batch_cache_create_requested(
     DRW_vbo_request(cache->batch.edit_fdots, &mbufcache->vbo.fdots_pos);
     DRW_vbo_request(cache->batch.edit_fdots, &mbufcache->vbo.fdots_nor);
   }
-  if (DRW_batch_requested(cache->batch.edit_skin_roots, GPU_PRIM_LINES)) {
+  if (DRW_batch_requested(cache->batch.edit_skin_roots, GPU_PRIM_POINTS)) {
     DRW_vbo_request(cache->batch.edit_skin_roots, &mbufcache->vbo.skin_roots);
-    /* HACK(fclem): This is to workaround the deferred batch init
-     * that prevent drawing using DRW_shgroup_call_instances_with_attribs.
-     * So we instead create the whole instancing batch here.
-     * Note that we use GPU_PRIM_LINES instead of expected GPU_PRIM_LINE_STRIP
-     * in order to mimic the old stipple pattern. */
-    cache->batch.edit_skin_roots->inst = cache->batch.edit_skin_roots->verts[0];
-    cache->batch.edit_skin_roots->verts[0] = NULL;
-    GPUBatch *circle = DRW_cache_screenspace_circle_get();
-    GPU_batch_vertbuf_add(cache->batch.edit_skin_roots, circle->verts[0]);
   }
 
   /* Selection */
@@ -1406,17 +1411,44 @@ void DRW_mesh_batch_cache_create_requested(
   const bool use_subsurf_fdots = scene ? modifiers_usesSubsurfFacedots((Scene *)scene, ob) : false;
 
   if (do_uvcage) {
-    mesh_buffer_cache_create_requested(
-        cache, cache->uv_cage, me, false, true, false, &cache->cd_used, ts, true);
+    mesh_buffer_cache_create_requested(cache,
+                                       cache->uv_cage,
+                                       me,
+                                       is_editmode,
+                                       ob->obmat,
+                                       false,
+                                       true,
+                                       false,
+                                       &cache->cd_used,
+                                       ts,
+                                       true);
   }
 
   if (do_cage) {
-    mesh_buffer_cache_create_requested(
-        cache, cache->cage, me, false, false, use_subsurf_fdots, &cache->cd_used, ts, true);
+    mesh_buffer_cache_create_requested(cache,
+                                       cache->cage,
+                                       me,
+                                       is_editmode,
+                                       ob->obmat,
+                                       false,
+                                       false,
+                                       use_subsurf_fdots,
+                                       &cache->cd_used,
+                                       ts,
+                                       true);
   }
 
-  mesh_buffer_cache_create_requested(
-      cache, cache->final, me, true, false, use_subsurf_fdots, &cache->cd_used, ts, use_hide);
+  mesh_buffer_cache_create_requested(cache,
+                                     cache->final,
+                                     me,
+                                     is_editmode,
+                                     ob->obmat,
+                                     true,
+                                     false,
+                                     use_subsurf_fdots,
+                                     &cache->cd_used,
+                                     ts,
+                                     use_hide);
 
 #ifdef DEBUG
 check:

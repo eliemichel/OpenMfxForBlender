@@ -6278,7 +6278,18 @@ static int dynamicPaint_doStep(Depsgraph *depsgraph,
 
           /* Apply brush on the surface depending on it's collision type */
           if (brush->psys && brush->psys->part &&
-              ELEM(brush->psys->part->type, PART_EMITTER, PART_FLUID) &&
+              ELEM(brush->psys->part->type,
+                   PART_EMITTER,
+                   PART_FLUID,
+                   PART_FLUID_FLIP,
+                   PART_FLUID_SPRAY,
+                   PART_FLUID_BUBBLE,
+                   PART_FLUID_FOAM,
+                   PART_FLUID_TRACER,
+                   PART_FLUID_SPRAYFOAM,
+                   PART_FLUID_SPRAYBUBBLE,
+                   PART_FLUID_FOAMBUBBLE,
+                   PART_FLUID_SPRAYFOAMBUBBLE) &&
               psys_check_enabled(brushObj, brush->psys, for_render)) {
             /* Paint a particle system */
             dynamicPaint_paintParticles(surface, brush->psys, brush, timescale);

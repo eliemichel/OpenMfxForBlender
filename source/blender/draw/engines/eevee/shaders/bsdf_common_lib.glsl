@@ -5,6 +5,7 @@
 #define M_1_PI 0.318309886183790671538  /* 1/pi */
 #define M_1_2PI 0.159154943091895335768 /* 1/(2*pi) */
 #define M_1_PI2 0.101321183642337771443 /* 1/(pi^2) */
+#define FLT_MAX 3.402823e+38
 
 #define LUT_SIZE 64
 
@@ -933,6 +934,11 @@ void main()
   vec2 uvs = gl_FragCoord.xy * volCoordScale.zw;
   vec3 vol_transmit, vol_scatter;
   volumetric_resolve(uvs, gl_FragCoord.z, vol_transmit, vol_scatter);
+
+  /* Removes part of the volume scattering that have
+   * already been added to the destination pixels.
+   * Since we do that using the blending pipeline we need to account for material transmittance. */
+  vol_scatter -= vol_scatter * cl.transmittance;
 
   outRadiance = vec4(cl.radiance * vol_transmit + vol_scatter, alpha * holdout);
   outTransmittance = vec4(cl.transmittance, transmit * holdout);

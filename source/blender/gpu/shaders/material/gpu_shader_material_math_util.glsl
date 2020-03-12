@@ -48,13 +48,6 @@ int quick_floor(float x)
   return int(x) - ((x < 0) ? 1 : 0);
 }
 
-float floorfrac(float x, out int i)
-{
-  float x_floor = floor(x);
-  i = int(x_floor);
-  return x - x_floor;
-}
-
 /* Vector Math */
 
 vec2 safe_divide(vec2 a, vec2 b)
@@ -91,11 +84,6 @@ vec4 safe_divide(vec4 a, float b)
 vec3 c_mod(vec3 a, vec3 b)
 {
   return vec3(c_mod(a.x, b.x), c_mod(a.y, b.y), c_mod(a.z, b.z));
-}
-
-void vector_mix(float strength, vec3 a, vec3 b, out vec3 outVector)
-{
-  outVector = strength * a + (1 - strength) * b;
 }
 
 void invert_z(vec3 v, out vec3 outv)

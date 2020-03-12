@@ -1506,7 +1506,7 @@ static void icon_draw_rect(float x,
     return;
   }
   /* modulate color */
-  float col[4] = {1.0f, 1.0f, 1.0f, alpha};
+  float col[4] = {alpha, alpha, alpha, alpha};
 
   /* rect contains image in 'rendersize', we only scale if needed */
   if (rw != w || rh != h) {
@@ -2152,6 +2152,9 @@ int UI_rnaptr_icon_get(bContext *C, PointerRNA *ptr, int rnaicon, const bool big
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_TextureSlot)) {
     id = RNA_pointer_get(ptr, "texture").data;
+  }
+  else if (RNA_struct_is_a(ptr->type, &RNA_FileBrowserFSMenuEntry)) {
+    return RNA_int_get(ptr, "icon");
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_DynamicPaintSurface)) {
     DynamicPaintSurface *surface = ptr->data;

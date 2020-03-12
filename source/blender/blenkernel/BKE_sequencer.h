@@ -24,6 +24,10 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Depsgraph;
 struct Editing;
 struct GPUOffScreen;
@@ -204,6 +208,7 @@ struct SeqEffectHandle {
  *
  * sequencer render functions
  * ********************************************************************** */
+double BKE_sequencer_rendersize_to_scale_factor(int size);
 
 struct ImBuf *BKE_sequencer_give_ibuf(const SeqRenderData *context, float cfra, int chanshown);
 struct ImBuf *BKE_sequencer_give_ibuf_threaded(const SeqRenderData *context,
@@ -408,7 +413,10 @@ bool BKE_sequence_base_shuffle_ex(struct ListBase *seqbasep,
 bool BKE_sequence_base_shuffle(struct ListBase *seqbasep,
                                struct Sequence *test,
                                struct Scene *evil_scene);
-bool BKE_sequence_base_shuffle_time(ListBase *seqbasep, struct Scene *evil_scene);
+bool BKE_sequence_base_shuffle_time(ListBase *seqbasep,
+                                    struct Scene *evil_scene,
+                                    ListBase *markers,
+                                    const bool use_sync_markers);
 bool BKE_sequence_base_isolated_sel_check(struct ListBase *seqbase);
 void BKE_sequencer_free_imbuf(struct Scene *scene, struct ListBase *seqbasep, bool for_render);
 struct Sequence *BKE_sequence_dupli_recursive(const struct Scene *scene_src,
@@ -527,7 +535,6 @@ typedef struct ImBuf *(*SequencerDrawView)(struct Depsgraph *depsgraph,
                                            unsigned int flag,
                                            unsigned int draw_flags,
                                            int alpha_mode,
-                                           int samples,
                                            const char *viewname,
                                            struct GPUOffScreen *ofs,
                                            char err_out[256]);
@@ -598,5 +605,9 @@ void BKE_sequencer_color_balance_apply(struct StripColorBalance *cb,
                                        struct ImBuf *mask_input);
 
 void BKE_sequencer_all_free_anim_ibufs(struct Scene *scene, int cfra);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_SEQUENCER_H__ */

@@ -989,6 +989,7 @@ def pymodule2sphinx(basepath, module_name, module, title):
 # Changes in Blender will force errors here
 context_type_map = {
     # context_member: (RNA type, is_collection)
+    "active_annotation_layer": ("GPencilLayer", False),
     "active_base": ("ObjectBase", False),
     "active_bone": ("EditBone", False),
     "active_gpencil_frame": ("GreasePencilLayer", True),
@@ -998,6 +999,8 @@ context_type_map = {
     "active_operator": ("Operator", False),
     "active_pose_bone": ("PoseBone", False),
     "active_editable_fcurve": ("FCurve", False),
+    "annotation_data": ("GreasePencil", False),
+    "annotation_data_owner": ("ID", False),
     "armature": ("Armature", False),
     "bone": ("Bone", False),
     "brush": ("Brush", False),
@@ -1055,7 +1058,6 @@ context_type_map = {
     "selected_sequences": ("Sequence", True),
     "selected_visible_fcurves": ("FCurve", True),
     "sequences": ("Sequence", True),
-    "smoke": ("SmokeModifier", False),
     "soft_body": ("SoftBodyModifier", False),
     "speaker": ("Speaker", False),
     "texture": ("Texture", False),

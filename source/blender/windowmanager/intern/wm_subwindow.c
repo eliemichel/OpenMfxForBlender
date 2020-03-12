@@ -29,9 +29,9 @@
 #include "DNA_screen_types.h"
 #include "DNA_windowmanager_types.h"
 
-#include "BIF_gl.h"
-
+#include "GPU_glew.h"
 #include "GPU_matrix.h"
+#include "GPU_viewport.h"
 
 #include "WM_api.h"
 
@@ -108,7 +108,8 @@ void wmOrtho2(float x1, float x2, float y1, float y2)
     y2 += 1.0f;
   }
 
-  GPU_matrix_ortho_set(x1, x2, y1, y2, -100, 100);
+  GPU_matrix_ortho_set(
+      x1, x2, y1, y2, GPU_MATRIX_ORTHO_CLIP_NEAR_DEFAULT, GPU_MATRIX_ORTHO_CLIP_FAR_DEFAULT);
 }
 
 static void wmOrtho2_offset(const float x, const float y, const float ofs)
@@ -136,6 +137,6 @@ void wmGetProjectionMatrix(float mat[4][4], const rcti *winrct)
                   (float)width - GLA_PIXEL_OFS,
                   -GLA_PIXEL_OFS,
                   (float)height - GLA_PIXEL_OFS,
-                  -100,
-                  100);
+                  GPU_MATRIX_ORTHO_CLIP_NEAR_DEFAULT,
+                  GPU_MATRIX_ORTHO_CLIP_FAR_DEFAULT);
 }

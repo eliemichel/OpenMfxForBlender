@@ -52,9 +52,7 @@ if(BUILD_MODE STREQUAL Release)
         ${CMAKE_COMMAND} -E copy ${LIBDIR}/tiff/lib/tiff.lib ${HARVEST_TARGET}/tiff/lib/libtiff.lib &&
         ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/tiff/include/ ${HARVEST_TARGET}/tiff/include/ &&
         # hidapi
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/hidapi/ ${HARVEST_TARGET}/hidapi/ &&
-        # webp, straight up copy
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/webp ${HARVEST_TARGET}/webp &&
+        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/hidapi/ ${HARVEST_TARGET}/hidapi/
     DEPENDS
   )
 endif()
@@ -118,8 +116,6 @@ harvest(freetype/include freetype/include "*.h")
 harvest(freetype/lib/libfreetype2ST.a freetype/lib/libfreetype.a)
 harvest(glew/include glew/include "*.h")
 harvest(glew/lib glew/lib "*.a")
-harvest(ilmbase openexr "*")
-harvest(ilmbase/include openexr/include "*.h")
 harvest(jemalloc/include jemalloc/include "*.h")
 harvest(jemalloc/lib jemalloc/lib "*.a")
 harvest(jpg/include jpeg/include "*.h")
@@ -199,6 +195,9 @@ harvest(x264/lib ffmpeg/lib "*.a")
 harvest(xvidcore/lib ffmpeg/lib "*.a")
 harvest(embree/include embree/include "*.h")
 harvest(embree/lib embree/lib "*.a")
+harvest(usd/include usd/include "*.h")
+harvest(usd/lib/usd usd/lib/usd "*")
+harvest(usd/plugin usd/plugin "*")
 
 if(UNIX AND NOT APPLE)
   harvest(libglu/lib mesa/lib "*.so*")

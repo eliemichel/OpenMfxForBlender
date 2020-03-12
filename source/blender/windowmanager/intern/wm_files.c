@@ -1251,7 +1251,6 @@ static ImBuf *blend_file_thumb(const bContext *C,
                                                  IB_rect,
                                                  V3D_OFSDRAW_NONE,
                                                  R_ALPHAPREMUL,
-                                                 0,
                                                  NULL,
                                                  NULL,
                                                  err_out);
@@ -1266,7 +1265,6 @@ static ImBuf *blend_file_thumb(const bContext *C,
                                           BLEN_THUMB_SIZE * 2,
                                           IB_rect,
                                           R_ALPHAPREMUL,
-                                          0,
                                           NULL,
                                           NULL,
                                           err_out);
@@ -1388,7 +1386,7 @@ static bool wm_file_write(bContext *C, const char *filepath, int fileflags, Repo
   /* don't forget not to return without! */
   WM_cursor_wait(1);
 
-  ED_editors_flush_edits(bmain, false);
+  ED_editors_flush_edits(bmain);
 
   fileflags |= G_FILE_HISTORY; /* write file history */
 
@@ -1529,7 +1527,7 @@ void wm_autosave_timer(const bContext *C, wmWindowManager *wm, wmTimer *UNUSED(w
     Main *bmain = CTX_data_main(C);
     int fileflags = G.fileflags & ~(G_FILE_COMPRESS | G_FILE_HISTORY);
 
-    ED_editors_flush_edits(bmain, false);
+    ED_editors_flush_edits(bmain);
 
     /* Error reporting into console */
     BLO_write_file(bmain, filepath, fileflags, NULL, NULL);
@@ -1657,7 +1655,7 @@ static int wm_homefile_write_exec(bContext *C, wmOperator *op)
 
   printf("Writing homefile: '%s' ", filepath);
 
-  ED_editors_flush_edits(bmain, false);
+  ED_editors_flush_edits(bmain);
 
   /*  force save as regular blend file */
   fileflags = G.fileflags & ~(G_FILE_COMPRESS | G_FILE_HISTORY);
