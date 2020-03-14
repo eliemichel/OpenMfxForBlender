@@ -338,7 +338,7 @@ enum {
 
 enum {
   SPECIAL_IMG_DOCUMENT = 0,
-  SPECIAL_IMG_UNSUPORTED = 1,
+  SPECIAL_IMG_DRIVE_DISC = 1,
   SPECIAL_IMG_FOLDER = 2,
   SPECIAL_IMG_PARENT = 3,
   SPECIAL_IMG_DRIVE_FIXED = 4,
@@ -999,6 +999,9 @@ static int filelist_geticon_ex(const int typeflag,
     return ICON_FILE_3D;
   }
   else if (typeflag & FILE_TYPE_ALEMBIC) {
+    return ICON_FILE_3D;
+  }
+  else if (typeflag & FILE_TYPE_USD) {
     return ICON_FILE_3D;
   }
   else if (typeflag & FILE_TYPE_OBJECT_IO) {
@@ -2129,6 +2132,9 @@ int ED_path_extension_type(const char *path)
   }
   else if (BLI_path_extension_check(path, ".abc")) {
     return FILE_TYPE_ALEMBIC;
+  }
+  else if (BLI_path_extension_check_n(path, ".usd", ".usda", ".usdc", NULL)) {
+    return FILE_TYPE_USD;
   }
   else if (BLI_path_extension_check(path, ".zip")) {
     return FILE_TYPE_ARCHIVE;

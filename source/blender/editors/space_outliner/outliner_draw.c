@@ -295,6 +295,10 @@ static void outliner_object_set_flag_recursive_cb(bContext *C,
       }
       else {
         Base *base_iter = BKE_view_layer_base_find(view_layer, ob_iter);
+        /* Child can be in a collection excluded from viewlayer. */
+        if (base_iter == NULL) {
+          continue;
+        }
         RNA_pointer_create(&scene->id, &RNA_ObjectBase, base_iter, &ptr);
       }
       RNA_property_boolean_set(&ptr, base_or_object_prop, value);
@@ -415,7 +419,8 @@ static void outliner_collection_set_flag_recursive(Scene *scene,
   }
 }
 
-/** Check if collection is already isolated.
+/**
+ * Check if collection is already isolated.
  *
  * A collection is isolated if all its parents and children are "visible".
  * All the other collections must be "invisible".
@@ -817,6 +822,7 @@ static void namebutton_cb(bContext *C, void *tsep, char *oldname)
           BLI_uniquename(
               &gpd->layers, gpl, "GP Layer", '.', offsetof(bGPDlayer, info), sizeof(gpl->info));
 
+          DEG_id_tag_update(&gpd->id, ID_RECALC_GEOMETRY);
           WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_SELECTED, gpd);
           break;
         }
@@ -2124,14 +2130,14 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
             case eModifierType_Surface:
               data.icon = ICON_MOD_PHYSICS;
               break;
-            case eModifierType_Fluidsim:
+            case eModifierType_Fluidsim: /* deprecated, old fluid modifier */
               data.icon = ICON_MOD_FLUIDSIM;
               break;
             case eModifierType_Multires:
               data.icon = ICON_MOD_MULTIRES;
               break;
-            case eModifierType_Smoke:
-              data.icon = ICON_MOD_SMOKE;
+            case eModifierType_Fluid:
+              data.icon = ICON_MOD_FLUID;
               break;
             case eModifierType_Solidify:
               data.icon = ICON_MOD_SOLIDIFY;
@@ -2170,6 +2176,9 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
               break;
             case eModifierType_Wireframe:
               data.icon = ICON_MOD_WIREFRAME;
+              break;
+            case eModifierType_Weld:
+              data.icon = ICON_AUTOMERGE_OFF; /* XXX, needs own icon */
               break;
             case eModifierType_LaplacianDeform:
               data.icon = ICON_MOD_MESHDEFORM; /* XXX, needs own icon */

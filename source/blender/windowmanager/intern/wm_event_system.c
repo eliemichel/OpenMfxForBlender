@@ -114,7 +114,9 @@ static int wm_operator_call_internal(bContext *C,
                                      const bool poll_only,
                                      wmEvent *event);
 
-/* ************ event management ************** */
+/* -------------------------------------------------------------------- */
+/** \name Event Management
+ * \{ */
 
 wmEvent *wm_event_add_ex(wmWindow *win,
                          const wmEvent *event_to_add,
@@ -199,7 +201,11 @@ void wm_event_init_from_window(wmWindow *win, wmEvent *event)
   *event = *(win->eventstate);
 }
 
-/* ********************* notifiers, listeners *************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Notifiers & Listeners
+ * \{ */
 
 static bool wm_test_duplicate_notifier(wmWindowManager *wm, unsigned int type, void *reference)
 {
@@ -578,7 +584,11 @@ static int wm_event_always_pass(const wmEvent *event)
   return ISTIMER(event->type) || (event->type == WINDEACTIVATE);
 }
 
-/* ********************* ui handler ******************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name UI Handling
+ * \{ */
 
 static int wm_handler_ui_call(bContext *C,
                               wmEventHandler_UI *handler,
@@ -669,7 +679,11 @@ static void wm_handler_ui_cancel(bContext *C)
   }
 }
 
-/* ********************* operators ******************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Operator Logic
+ * \{ */
 
 bool WM_operator_poll(bContext *C, wmOperatorType *ot)
 {
@@ -845,6 +859,16 @@ void WM_report_banner_show(void)
 
   rti = MEM_callocN(sizeof(ReportTimerInfo), "ReportTimerInfo");
   wm_reports->reporttimer->customdata = rti;
+}
+
+/**
+ * Hide all currently displayed banners and abort their timer.
+ */
+void WM_report_banners_cancel(Main *bmain)
+{
+  wmWindowManager *wm = bmain->wm.first;
+  BKE_reports_clear(&wm->reports);
+  WM_event_remove_timer(wm, NULL, wm->reports.reporttimer);
 }
 
 bool WM_event_is_last_mousemove(const wmEvent *event)
@@ -1363,7 +1387,7 @@ bool WM_operator_last_properties_store(wmOperator *op)
               IDP_GROUP, &(IDPropertyTemplate){0}, "wmOperatorProperties");
         }
         IDProperty *idp_macro = IDP_CopyProperty(opm->properties);
-        STRNCPY(idp_macro->name, opm->idname);
+        STRNCPY(idp_macro->name, opm->type->idname);
         IDP_ReplaceInGroup(op->type->last_properties, idp_macro);
       }
     }
@@ -1794,7 +1818,13 @@ int WM_operator_call_py(bContext *C,
   return retval;
 }
 
-/* ********************* handlers *************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Handler Types
+ *
+ * General API for different handler types.
+ * \{ */
 
 /* future extra customadata free? */
 void wm_event_free_handler(wmEventHandler *handler)
@@ -2073,12 +2103,23 @@ static wmKeyMapItem *wm_eventmatch_modal_keymap_items(const wmKeyMap *keymap,
   return NULL;
 }
 
-/* operator exists */
+/**
+ * This function prepares events for use with #wmOperatorType.modal by:
+ *
+ * - Matching keymap items with the operators modal keymap.
+ * - Converting double click events into press events,
+ *   allowing them to be restored when the events aren't handled.
+ *
+ *   This is done since we only want to use double click events to match key-map items,
+ *   allowing modal functions to check for press/release events without having to interpret them.
+ */
 static void wm_event_modalkeymap(const bContext *C,
                                  wmOperator *op,
                                  wmEvent *event,
                                  bool *dbl_click_disabled)
 {
+  BLI_assert(event->type != EVT_MODAL_MAP);
+
   /* support for modal keymap in macros */
   if (op->opm) {
     op = op->opm;
@@ -2107,12 +2148,19 @@ static void wm_event_modalkeymap(const bContext *C,
       event->prevval = event_match->val;
       event->type = EVT_MODAL_MAP;
       event->val = kmi->propvalue;
+
+      /* Avoid double-click events even in the case of 'EVT_MODAL_MAP',
+       * since it's possible users configure double-click keymap items
+       * which would break when modal functions expect press/release. */
+      if (event->prevtype == KM_DBL_CLICK) {
+        event->prevtype = KM_PRESS;
+        *dbl_click_disabled = true;
+      }
     }
   }
-  else {
-    /* modal keymap checking returns handled events fine, but all hardcoded modal
-     * handling typically swallows all events (OPERATOR_RUNNING_MODAL).
-     * This bypass just disables support for double clicks in hardcoded modal handlers */
+
+  if (event->type != EVT_MODAL_MAP) {
+    /* This bypass just disables support for double-click in modal handlers. */
     if (event->val == KM_DBL_CLICK) {
       event->val = KM_PRESS;
       *dbl_click_disabled = true;
@@ -2147,7 +2195,8 @@ static void wm_event_modalmap_end(wmEvent *event, bool dbl_click_disabled)
     event->val = event->prevval;
     event->prevval = 0;
   }
-  else if (dbl_click_disabled) {
+
+  if (dbl_click_disabled) {
     event->val = KM_DBL_CLICK;
   }
 }
@@ -2265,9 +2314,18 @@ static int wm_handler_operator_call(bContext *C,
       bool use_last_properties = true;
       PointerRNA tool_properties = {0};
 
-      bToolRef *keymap_tool = ((handler_base->type == WM_HANDLER_TYPE_KEYMAP) ?
-                                   ((wmEventHandler_Keymap *)handler_base)->keymap_tool :
-                                   NULL);
+      bToolRef *keymap_tool = NULL;
+      if (handler_base->type == WM_HANDLER_TYPE_KEYMAP) {
+        keymap_tool = ((wmEventHandler_Keymap *)handler_base)->keymap_tool;
+      }
+      else if (handler_base->type == WM_HANDLER_TYPE_GIZMO) {
+        wmGizmoMap *gizmo_map = ((wmEventHandler_Gizmo *)handler_base)->gizmo_map;
+        wmGizmo *gz = wm_gizmomap_highlight_get(gizmo_map);
+        if (gz && (gz->flag & WM_GIZMO_OPERATOR_TOOL_INIT)) {
+          keymap_tool = WM_toolsystem_ref_from_context(C);
+        }
+      }
+
       const bool is_tool = (keymap_tool != NULL);
       const bool use_tool_properties = is_tool;
 
@@ -2850,7 +2908,7 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
           if (wm_gizmomap_highlight_set(gzmap, C, gz, part)) {
             if (gz != NULL) {
               if (U.flag & USER_TOOLTIPS) {
-                WM_tooltip_timer_init(C, CTX_wm_window(C), region, WM_gizmomap_tooltip_init);
+                WM_tooltip_timer_init(C, CTX_wm_window(C), area, region, WM_gizmomap_tooltip_init);
               }
             }
           }
@@ -3521,7 +3579,11 @@ void wm_event_do_handlers(bContext *C)
   WM_gizmoconfig_update(CTX_data_main(C));
 }
 
-/* ********** filesector handling ************ */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name File Selector Handling
+ * \{ */
 
 void WM_event_fileselect_event(wmWindowManager *wm, void *ophandle, int eventval)
 {
@@ -3617,6 +3679,12 @@ void WM_event_add_fileselect(bContext *C, wmOperator *op)
 
   WM_event_fileselect_event(wm, op, EVT_FILESELECT_FULL_OPEN);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Modal Operator Handling
+ * \{ */
 
 #if 0
 /* lets not expose struct outside wm? */
@@ -3721,22 +3789,89 @@ wmEventHandler_Keymap *WM_event_add_keymap_handler(ListBase *handlers, wmKeyMap 
   return handler;
 }
 
-/** Follow #wmEventHandler_KeymapDynamicFn signature. */
+/**
+ * Implements fallback tool when enabled by:
+ * #SCE_WORKSPACE_TOOL_FALLBACK, #WM_GIZMOGROUPTYPE_TOOL_FALLBACK_KEYMAP.
+ *
+ * This runs before #WM_event_get_keymap_from_toolsystem,
+ * allowing both the fallback-tool and active-tool to be activated
+ * providing the key-map is configured so the keys don't conflict.
+ * For example one mouse button can run the active-tool, another button for the fallback-tool.
+ * See T72567.
+ *
+ * Follow #wmEventHandler_KeymapDynamicFn signature.
+ */
+wmKeyMap *WM_event_get_keymap_from_toolsystem_fallback(wmWindowManager *wm,
+                                                       wmEventHandler_Keymap *handler)
+{
+  ScrArea *sa = handler->dynamic.user_data;
+  handler->keymap_tool = NULL;
+  bToolRef_Runtime *tref_rt = sa->runtime.tool ? sa->runtime.tool->runtime : NULL;
+  if (tref_rt && tref_rt->keymap_fallback[0]) {
+    const char *keymap_id = NULL;
+
+    /* Support for the gizmo owning the tool keymap. */
+    if (tref_rt->gizmo_group[0] != '\0' && tref_rt->keymap_fallback[0] != '\n') {
+      wmGizmoMap *gzmap = NULL;
+      wmGizmoGroup *gzgroup = NULL;
+      for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+        if (ar->gizmo_map != NULL) {
+          gzmap = ar->gizmo_map;
+          gzgroup = WM_gizmomap_group_find(gzmap, tref_rt->gizmo_group);
+          if (gzgroup != NULL) {
+            break;
+          }
+        }
+      }
+      if (gzgroup != NULL) {
+        if (gzgroup->type->flag & WM_GIZMOGROUPTYPE_TOOL_FALLBACK_KEYMAP) {
+          /* If all are hidden, don't override. */
+          if (gzgroup->use_fallback_keymap) {
+            wmGizmo *highlight = wm_gizmomap_highlight_get(gzmap);
+            if (highlight == NULL) {
+              keymap_id = tref_rt->keymap_fallback;
+            }
+          }
+        }
+      }
+    }
+
+    if (keymap_id && keymap_id[0]) {
+      wmKeyMap *km = WM_keymap_list_find_spaceid_or_empty(
+          &wm->userconf->keymaps, keymap_id, sa->spacetype, RGN_TYPE_WINDOW);
+      /* We shouldn't use keymaps from unrelated spaces. */
+      if (km != NULL) {
+        handler->keymap_tool = sa->runtime.tool;
+        return km;
+      }
+      else {
+        printf(
+            "Keymap: '%s' not found for tool '%s'\n", tref_rt->keymap, sa->runtime.tool->idname);
+      }
+    }
+  }
+  return NULL;
+}
+
 wmKeyMap *WM_event_get_keymap_from_toolsystem(wmWindowManager *wm, wmEventHandler_Keymap *handler)
 {
   ScrArea *sa = handler->dynamic.user_data;
   handler->keymap_tool = NULL;
   bToolRef_Runtime *tref_rt = sa->runtime.tool ? sa->runtime.tool->runtime : NULL;
   if (tref_rt && tref_rt->keymap[0]) {
-    wmKeyMap *km = WM_keymap_list_find_spaceid_or_empty(
-        &wm->userconf->keymaps, tref_rt->keymap, sa->spacetype, RGN_TYPE_WINDOW);
-    /* We shouldn't use keymaps from unrelated spaces. */
-    if (km != NULL) {
-      handler->keymap_tool = sa->runtime.tool;
-      return km;
-    }
-    else {
-      printf("Keymap: '%s' not found for tool '%s'\n", tref_rt->keymap, sa->runtime.tool->idname);
+    const char *keymap_id = tref_rt->keymap;
+    {
+      wmKeyMap *km = WM_keymap_list_find_spaceid_or_empty(
+          &wm->userconf->keymaps, keymap_id, sa->spacetype, RGN_TYPE_WINDOW);
+      /* We shouldn't use keymaps from unrelated spaces. */
+      if (km != NULL) {
+        handler->keymap_tool = sa->runtime.tool;
+        return km;
+      }
+      else {
+        printf(
+            "Keymap: '%s' not found for tool '%s'\n", tref_rt->keymap, sa->runtime.tool->idname);
+      }
     }
   }
   return NULL;
@@ -4059,7 +4194,11 @@ bool WM_event_type_mask_test(const int event_type, const enum eEventType_Mask ma
   return false;
 }
 
-/* ********************* ghost stuff *************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Ghost Event Conversion
+ * \{ */
 
 static int convert_key(GHOST_TKey key)
 {
@@ -4072,7 +4211,7 @@ static int convert_key(GHOST_TKey key)
   else if (key >= GHOST_kKeyNumpad0 && key <= GHOST_kKeyNumpad9) {
     return (PAD0 + ((int)key - GHOST_kKeyNumpad0));
   }
-  else if (key >= GHOST_kKeyF1 && key <= GHOST_kKeyF19) {
+  else if (key >= GHOST_kKeyF1 && key <= GHOST_kKeyF24) {
     return (F1KEY + ((int)key - GHOST_kKeyF1));
   }
   else {
@@ -4133,6 +4272,8 @@ static int convert_key(GHOST_TKey key)
         return LEFTALTKEY;
       case GHOST_kKeyRightAlt:
         return RIGHTALTKEY;
+      case GHOST_kKeyApp:
+        return APPKEY;
 
       case GHOST_kKeyCapsLock:
         return CAPSLOCKKEY;
@@ -4894,9 +5035,8 @@ void WM_set_locked_interface(wmWindowManager *wm, bool lock)
 }
 
 #ifdef WITH_INPUT_NDOF
-/* -------------------------------------------------------------------- */
-/* NDOF */
 
+/* -------------------------------------------------------------------- */
 /** \name NDOF Utility Functions
  * \{ */
 
@@ -4998,6 +5138,19 @@ wmKeyMap *WM_event_get_keymap_from_handler(wmWindowManager *wm, wmEventHandler_K
   return keymap;
 }
 
+wmKeyMapItem *WM_event_match_keymap_item(bContext *C, wmKeyMap *keymap, const wmEvent *event)
+{
+  for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
+    if (wm_eventmatch(event, kmi)) {
+      wmOperatorType *ot = WM_operatortype_find(kmi->idname, 0);
+      if (WM_operator_poll_context(C, ot, WM_OP_INVOKE_DEFAULT)) {
+        return kmi;
+      }
+    }
+  }
+  return NULL;
+}
+
 static wmKeyMapItem *wm_kmi_from_event(bContext *C,
                                        wmWindowManager *wm,
                                        ListBase *handlers,
@@ -5013,13 +5166,9 @@ static wmKeyMapItem *wm_kmi_from_event(bContext *C,
         wmEventHandler_Keymap *handler = (wmEventHandler_Keymap *)handler_base;
         wmKeyMap *keymap = WM_event_get_keymap_from_handler(wm, handler);
         if (keymap && WM_keymap_poll(C, keymap)) {
-          for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
-            if (wm_eventmatch(event, kmi)) {
-              wmOperatorType *ot = WM_operatortype_find(kmi->idname, 0);
-              if (WM_operator_poll_context(C, ot, WM_OP_INVOKE_DEFAULT)) {
-                return kmi;
-              }
-            }
+          wmKeyMapItem *kmi = WM_event_match_keymap_item(C, keymap, event);
+          if (kmi != NULL) {
+            return kmi;
           }
         }
       }
@@ -5266,8 +5415,9 @@ void WM_window_cursor_keymap_status_refresh(bContext *C, wmWindow *win)
  *
  * \{ */
 
-bool WM_window_modal_keymap_status_draw(bContext *UNUSED(C), wmWindow *win, uiLayout *layout)
+bool WM_window_modal_keymap_status_draw(bContext *C, wmWindow *win, uiLayout *layout)
 {
+  wmWindowManager *wm = CTX_wm_manager(C);
   wmKeyMap *keymap = NULL;
   wmOperator *op = NULL;
   LISTBASE_FOREACH (wmEventHandler *, handler_base, &win->modalhandlers) {
@@ -5275,7 +5425,7 @@ bool WM_window_modal_keymap_status_draw(bContext *UNUSED(C), wmWindow *win, uiLa
       wmEventHandler_Op *handler = (wmEventHandler_Op *)handler_base;
       if (handler->op != NULL) {
         /* 'handler->keymap' could be checked too, seems not to be used. */
-        wmKeyMap *keymap_test = handler->op->type->modalkeymap;
+        wmKeyMap *keymap_test = WM_keymap_active(wm, handler->op->type->modalkeymap);
         if (keymap_test && keymap_test->modal_items) {
           keymap = keymap_test;
           op = handler->op;
@@ -5314,17 +5464,7 @@ bool WM_window_modal_keymap_status_draw(bContext *UNUSED(C), wmWindow *win, uiLa
           /* Assume release events just disable something which was toggled on. */
           continue;
         }
-        int icon_mod[4];
-#ifdef WITH_HEADLESS
-        int icon = 0;
-#else
-        int icon = UI_icon_from_keymap_item(kmi, icon_mod);
-#endif
-        if (icon != 0) {
-          for (int j = 0; j < ARRAY_SIZE(icon_mod) && icon_mod[j]; j++) {
-            uiItemL(row, "", icon_mod[j]);
-          }
-          uiItemL(row, items[i].name, icon);
+        if (uiTemplateEventFromKeymapItem(row, items[i].name, kmi, false)) {
           show_text = false;
         }
       }

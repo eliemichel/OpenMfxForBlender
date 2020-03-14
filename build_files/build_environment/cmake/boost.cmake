@@ -29,16 +29,16 @@ if(WIN32)
     set(PYTHON_OUTPUTDIR ${BUILD_DIR}/python/src/external_python/pcbuild/win32/)
     set(BOOST_ADDRESS_MODEL 32)
   endif()
-  if(MSVC14)
-    set(BOOST_TOOLSET toolset=msvc-14.0)
-    set(BOOST_COMPILER_STRING -vc140)
-  endif()
+
+  set(BOOST_TOOLSET toolset=msvc-14.1)
+  set(BOOST_COMPILER_STRING -vc141)
+
   set(BOOST_CONFIGURE_COMMAND bootstrap.bat)
   set(BOOST_BUILD_COMMAND bjam)
-  set(BOOST_BUILD_OPTIONS runtime-link=static )
+  set(BOOST_BUILD_OPTIONS runtime-link=shared )
   set(BOOST_HARVEST_CMD   ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/boost/lib/ ${HARVEST_TARGET}/boost/lib/ )
   if(BUILD_MODE STREQUAL Release)
-    set(BOOST_HARVEST_CMD ${BOOST_HARVEST_CMD} && ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/boost/include/boost-1_68/ ${HARVEST_TARGET}/boost/include/)
+    set(BOOST_HARVEST_CMD ${BOOST_HARVEST_CMD} && ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/boost/include/boost-${BOOST_VERSION_NODOTS_SHORT}/ ${HARVEST_TARGET}/boost/include/)
   endif()
 
 elseif(APPLE)
@@ -72,6 +72,9 @@ set(BOOST_OPTIONS
   --with-serialization
   --with-program_options
   --with-iostreams
+  -sNO_BZIP2=1
+  -sNO_LZMA=1
+  -sNO_ZSTD=1
   ${BOOST_TOOLSET}
 )
 

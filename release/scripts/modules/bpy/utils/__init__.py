@@ -409,26 +409,17 @@ def app_template_paths(subdir=None):
     :return: app template paths.
     :rtype: generator
     """
-    # Note: keep in sync with: Blender's BKE_appdir_app_template_any
-
-    subdir_tuple = (subdir,) if subdir is not None else ()
-
-    # Avoid adding 'bl_app_templates_system' twice.
-    # Either we have a portable build or an installed system build.
-    for resource_type, module_name in (
-            ('USER', "bl_app_templates_user"),
-            ('LOCAL', "bl_app_templates_system"),
-            ('SYSTEM', "bl_app_templates_system"),
+    subdir_args = (subdir,) if subdir is not None else ()
+    # Note: keep in sync with: Blender's 'BKE_appdir_app_template_any'.
+    # Uses 'BLENDER_USER_SCRIPTS', 'BLENDER_SYSTEM_SCRIPTS'
+    # ... in this case 'system' accounts for 'local' too.
+    for resource_fn, module_name in (
+            (_user_resource, "bl_app_templates_user"),
+            (system_resource, "bl_app_templates_system"),
     ):
-        path = resource_path(resource_type)
-        if path:
-            path = _os.path.join(
-                *(path, "scripts", "startup", module_name, *subdir_tuple))
-            if _os.path.isdir(path):
-                yield path
-                # Only load LOCAL or SYSTEM (never both).
-                if resource_type == 'LOCAL':
-                    break
+        path = resource_fn('SCRIPTS', _os.path.join("startup", module_name, *subdir_args))
+        if path and _os.path.isdir(path):
+            yield path
 
 
 def preset_paths(subdir):
@@ -455,6 +446,44 @@ def preset_paths(subdir):
             dirs.append(directory)
 
     return dirs
+
+
+def is_path_builtin(path):
+    """
+    Returns True if the path is one of the built-in paths used by Blender.
+
+    :arg path: Path you want to check if it is in the built-in settings directory
+    :type path: str
+    :rtype: bool
+    """
+    # Note that this function is is not optimized for speed,
+    # it's intended to be used to check if it's OK to remove presets.
+    #
+    # If this is used in a draw-loop for example, we could cache some of the values.
+    user_path = resource_path('USER')
+
+    for res in ('SYSTEM', 'LOCAL'):
+        parent_path = resource_path(res)
+        if not parent_path or parent_path == user_path:
+            # Make sure that the current path is not empty string and that it is
+            # not the same as the user config path. IE "~/.config/blender" on Linux
+            # This can happen on portable installs.
+            continue
+
+        try:
+            if _os.path.samefile(
+                    _os.path.commonpath([parent_path]),
+                    _os.path.commonpath([parent_path, path])
+            ):
+                return True
+        except FileNotFoundError:
+            # The path we tried to look up doesn't exist.
+            pass
+        except ValueError:
+            # Happens on Windows when paths don't have the same drive.
+            pass
+
+    return False
 
 
 def smpte_from_seconds(time, fps=None, fps_base=None):

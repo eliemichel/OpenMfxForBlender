@@ -2956,6 +2956,41 @@ void uiItemL(uiLayout *layout, const char *name, int icon)
   uiItemL_(layout, name, icon);
 }
 
+/**
+ * Helper to add a label, which handles logic for split property layout if needed.
+ *
+ * Normally, we handle the split layout in #uiItemFullR(), but there are other cases where we may
+ * want to use the logic. For those this helper was added, although it will likely have to be
+ * extended to support more cases.
+ * Ideally, #uiItemFullR() could just call this, but it currently has too many special needs.
+ *
+ * \return the layout to place the item(s) associated to the label in.
+ */
+uiLayout *uiItemL_respect_property_split(uiLayout *layout, const char *text, int icon)
+{
+  if (layout->item.flag & UI_ITEM_PROP_SEP) {
+    uiLayout *layout_split = uiLayoutSplit(layout, UI_ITEM_PROP_SEP_DIVIDE, true);
+    uiLayout *layout_sub = uiLayoutColumn(layout_split, true);
+
+    layout_split->space = layout_sub->space = layout->space = 0;
+    layout_sub->alignment = UI_LAYOUT_ALIGN_RIGHT;
+
+    uiItemL_(layout_sub, text, icon);
+
+    /* Give caller a new sub-row to place items in. */
+    return uiLayoutRow(layout_split, true);
+  }
+  else {
+    char namestr[UI_MAX_NAME_STR];
+    if (text) {
+      text = ui_item_name_add_colon(text, namestr);
+    }
+    uiItemL_(layout, text, icon);
+
+    return layout;
+  }
+}
+
 void uiItemLDrag(uiLayout *layout, PointerRNA *ptr, const char *name, int icon)
 {
   uiBut *but = uiItemL_(layout, name, icon);
@@ -3650,8 +3685,13 @@ static void ui_litem_estimate_box(uiLayout *litem)
   uiStyle *style = litem->root->style;
 
   ui_litem_estimate_column(litem, true);
-  litem->w += 2 * style->boxspace;
-  litem->h += 2 * style->boxspace;
+
+  int boxspace = style->boxspace;
+  if (litem->root->type == UI_LAYOUT_HEADER) {
+    boxspace = 0;
+  }
+  litem->w += 2 * boxspace;
+  litem->h += 2 * boxspace;
 }
 
 static void ui_litem_layout_box(uiLayout *litem)
@@ -3661,29 +3701,34 @@ static void ui_litem_layout_box(uiLayout *litem)
   uiBut *but;
   int w, h;
 
+  int boxspace = style->boxspace;
+  if (litem->root->type == UI_LAYOUT_HEADER) {
+    boxspace = 0;
+  }
+
   w = litem->w;
   h = litem->h;
 
-  litem->x += style->boxspace;
-  litem->y -= style->boxspace;
+  litem->x += boxspace;
+  litem->y -= boxspace;
 
   if (w != 0) {
-    litem->w -= 2 * style->boxspace;
+    litem->w -= 2 * boxspace;
   }
   if (h != 0) {
-    litem->h -= 2 * style->boxspace;
+    litem->h -= 2 * boxspace;
   }
 
   ui_litem_layout_column(litem, true);
 
-  litem->x -= style->boxspace;
-  litem->y -= style->boxspace;
+  litem->x -= boxspace;
+  litem->y -= boxspace;
 
   if (w != 0) {
-    litem->w += 2 * style->boxspace;
+    litem->w += 2 * boxspace;
   }
   if (h != 0) {
-    litem->h += 2 * style->boxspace;
+    litem->h += 2 * boxspace;
   }
 
   /* roundbox around the sublayout */

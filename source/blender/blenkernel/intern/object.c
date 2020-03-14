@@ -39,6 +39,7 @@
 #include "DNA_key_types.h"
 #include "DNA_light_types.h"
 #include "DNA_lattice_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_material_types.h"
 #include "DNA_meta_types.h"
 #include "DNA_mesh_types.h"
@@ -48,7 +49,6 @@
 #include "DNA_screen_types.h"
 #include "DNA_sequence_types.h"
 #include "DNA_shader_fx_types.h"
-#include "DNA_smoke_types.h"
 #include "DNA_space_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_world_types.h"
@@ -122,10 +122,6 @@
 #include "DEG_depsgraph_query.h"
 
 #include "DRW_engine.h"
-
-#ifdef WITH_MOD_FLUID
-#  include "LBM_fluidsim.h"
-#endif
 
 #ifdef WITH_PYTHON
 #  include "BPY_extern.h"
@@ -1130,13 +1126,13 @@ void BKE_object_copy_particlesystems(Object *ob_dst, const Object *ob_src, const
           }
         }
       }
-      else if (md->type == eModifierType_Smoke) {
-        SmokeModifierData *smd = (SmokeModifierData *)md;
+      else if (md->type == eModifierType_Fluid) {
+        FluidModifierData *mmd = (FluidModifierData *)md;
 
-        if (smd->type == MOD_SMOKE_TYPE_FLOW) {
-          if (smd->flow) {
-            if (smd->flow->psys == psys) {
-              smd->flow->psys = npsys;
+        if (mmd->type == MOD_FLUID_TYPE_FLOW) {
+          if (mmd->flow) {
+            if (mmd->flow->psys == psys) {
+              mmd->flow->psys = npsys;
             }
           }
         }
@@ -1327,7 +1323,7 @@ void BKE_object_transform_copy(Object *ob_tar, const Object *ob_src)
 {
   copy_v3_v3(ob_tar->loc, ob_src->loc);
   copy_v3_v3(ob_tar->rot, ob_src->rot);
-  copy_v3_v3(ob_tar->quat, ob_src->quat);
+  copy_v4_v4(ob_tar->quat, ob_src->quat);
   copy_v3_v3(ob_tar->rotAxis, ob_src->rotAxis);
   ob_tar->rotAngle = ob_src->rotAngle;
   ob_tar->rotmode = ob_src->rotmode;
@@ -1462,7 +1458,8 @@ Object *BKE_object_copy(Main *bmain, const Object *ob)
   return ob_copy;
 }
 
-/** Perform deep-copy of object and its 'children' data-blocks (obdata, materials, actions, etc.).
+/**
+ * Perform deep-copy of object and its 'children' data-blocks (obdata, materials, actions, etc.).
  *
  * \param dupflag: Controls which sub-data are also duplicated
  * (see #eDupli_ID_Flags in DNA_userdef_types.h).
@@ -2333,38 +2330,36 @@ static void give_parvert(Object *par, int nr, float vec[3])
       int count = 0;
       const int numVerts = me_eval->totvert;
 
-      if (nr < numVerts) {
-        if (em && me_eval->runtime.is_original) {
-          if (em->bm->elem_table_dirty & BM_VERT) {
+      if (em && me_eval->runtime.is_original) {
+        if (em->bm->elem_table_dirty & BM_VERT) {
 #ifdef VPARENT_THREADING_HACK
-            BLI_mutex_lock(&vparent_lock);
-            if (em->bm->elem_table_dirty & BM_VERT) {
-              BM_mesh_elem_table_ensure(em->bm, BM_VERT);
-            }
-            BLI_mutex_unlock(&vparent_lock);
-#else
-            BLI_assert(!"Not safe for threading");
+          BLI_mutex_lock(&vparent_lock);
+          if (em->bm->elem_table_dirty & BM_VERT) {
             BM_mesh_elem_table_ensure(em->bm, BM_VERT);
+          }
+          BLI_mutex_unlock(&vparent_lock);
+#else
+          BLI_assert(!"Not safe for threading");
+          BM_mesh_elem_table_ensure(em->bm, BM_VERT);
 #endif
-          }
         }
+      }
 
-        if (CustomData_has_layer(&me_eval->vdata, CD_ORIGINDEX) &&
-            !(em && me_eval->runtime.is_original)) {
-          const int *index = CustomData_get_layer(&me_eval->vdata, CD_ORIGINDEX);
-          /* Get the average of all verts with (original index == nr). */
-          for (int i = 0; i < numVerts; i++) {
-            if (index[i] == nr) {
-              add_v3_v3(vec, me_eval->mvert[i].co);
-              count++;
-            }
-          }
-        }
-        else {
-          if (nr < numVerts) {
-            add_v3_v3(vec, me_eval->mvert[nr].co);
+      if (CustomData_has_layer(&me_eval->vdata, CD_ORIGINDEX) &&
+          !(em && me_eval->runtime.is_original)) {
+        const int *index = CustomData_get_layer(&me_eval->vdata, CD_ORIGINDEX);
+        /* Get the average of all verts with (original index == nr). */
+        for (int i = 0; i < numVerts; i++) {
+          if (index[i] == nr) {
+            add_v3_v3(vec, me_eval->mvert[i].co);
             count++;
           }
+        }
+      }
+      else {
+        if (nr < numVerts) {
+          add_v3_v3(vec, me_eval->mvert[nr].co);
+          count++;
         }
       }
 
@@ -3762,24 +3757,24 @@ int BKE_object_is_modified(Scene *scene, Object *ob)
  * speed. In combination with checks of modifier stack and real life usage
  * percentage of false-positives shouldn't be that height.
  */
-static bool object_moves_in_time(Object *object)
+bool BKE_object_moves_in_time(const Object *object, bool recurse_parent)
 {
-  AnimData *adt = object->adt;
-  if (adt != NULL) {
-    /* If object has any sort of animation data assume it is moving. */
-    if (adt->action != NULL || !BLI_listbase_is_empty(&adt->nla_tracks) ||
-        !BLI_listbase_is_empty(&adt->drivers) || !BLI_listbase_is_empty(&adt->overrides)) {
-      return true;
-    }
+  /* If object has any sort of animation data assume it is moving. */
+  if (BKE_animdata_id_is_animated(&object->id)) {
+    return true;
   }
   if (!BLI_listbase_is_empty(&object->constraints)) {
     return true;
   }
-  if (object->parent != NULL) {
-    /* TODO(sergey): Do recursive check here? */
-    return true;
+  if (recurse_parent && object->parent != NULL) {
+    return BKE_object_moves_in_time(object->parent, true);
   }
   return false;
+}
+
+static bool object_moves_in_time(const Object *object)
+{
+  return BKE_object_moves_in_time(object, true);
 }
 
 static bool object_deforms_in_time(Object *object)
@@ -3825,7 +3820,7 @@ static bool constructive_modifier_is_deform_modified(ModifierData *md)
   return false;
 }
 
-static bool modifiers_has_animation_check(Object *ob)
+static bool modifiers_has_animation_check(const Object *ob)
 {
   /* TODO(sergey): This is a bit code duplication with depsgraph, but
    * would be nicer to solve this as a part of new dependency graph
@@ -3895,21 +3890,6 @@ int BKE_object_is_deform_modified(Scene *scene, Object *ob)
   }
 
   return flag;
-}
-
-/* See if an object is using an animated modifier */
-bool BKE_object_is_animated(Scene *scene, Object *ob)
-{
-  ModifierData *md;
-  VirtualModifierData virtualModifierData;
-
-  for (md = modifiers_getVirtualModifierList(ob, &virtualModifierData); md; md = md->next) {
-    if (modifier_dependsOnTime(md) && (modifier_isEnabled(scene, md, eModifierMode_Realtime) ||
-                                       modifier_isEnabled(scene, md, eModifierMode_Render))) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /** Return the number of scenes using (instantiating) that object in their collections. */
@@ -4394,10 +4374,10 @@ bool BKE_object_modifier_update_subframe(Depsgraph *depsgraph,
       return true;
     }
   }
-  else if (type == eModifierType_Smoke) {
-    SmokeModifierData *smd = (SmokeModifierData *)md;
+  else if (type == eModifierType_Fluid) {
+    FluidModifierData *mmd = (FluidModifierData *)md;
 
-    if (smd && (smd->type & MOD_SMOKE_TYPE_DOMAIN) != 0) {
+    if (mmd && (mmd->type & MOD_FLUID_TYPE_DOMAIN) != 0) {
       return true;
     }
   }

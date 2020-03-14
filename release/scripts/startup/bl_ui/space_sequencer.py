@@ -134,7 +134,8 @@ class SEQUENCER_MT_editor_menus(Menu):
 
         if st.view_type in {'SEQUENCER', 'SEQUENCER_PREVIEW'}:
             layout.menu("SEQUENCER_MT_select")
-            layout.menu("SEQUENCER_MT_marker")
+            if st.show_markers:
+                layout.menu("SEQUENCER_MT_marker")
             layout.menu("SEQUENCER_MT_add")
             layout.menu("SEQUENCER_MT_strip")
 
@@ -176,12 +177,14 @@ class SEQUENCER_MT_range(Menu):
         layout = self.layout
 
         layout.operator("anim.previewrange_set", text="Set Preview Range")
+        layout.operator("sequencer.set_range_to_strips", text="Set Preview Range to Strips").preview = True
         layout.operator("anim.previewrange_clear", text="Clear Preview Range")
 
         layout.separator()
 
         layout.operator("anim.start_frame_set", text="Set Start Frame")
         layout.operator("anim.end_frame_set", text="Set End Frame")
+        layout.operator("sequencer.set_range_to_strips", text="Set Frame Range to Strips")
 
 
 class SEQUENCER_MT_preview_zoom(Menu):
@@ -266,7 +269,8 @@ class SEQUENCER_MT_view(Menu):
 
             layout.prop(st, "show_seconds")
             layout.prop(st, "show_strip_offset")
-            layout.prop(st, "show_marker_lines")
+            layout.separator()
+            layout.prop(st, "show_markers")
 
         if is_preview:
             layout.separator()
@@ -316,8 +320,10 @@ class SEQUENCER_MT_select_channel(Menu):
     def draw(self, _context):
         layout = self.layout
 
-        layout.operator("sequencer.select_active_side", text="Left").side = 'LEFT'
-        layout.operator("sequencer.select_active_side", text="Right").side = 'RIGHT'
+        layout.operator("sequencer.select_side", text="Left").side = 'LEFT'
+        layout.operator("sequencer.select_side", text="Right").side = 'RIGHT'
+        layout.separator()
+        layout.operator("sequencer.select_side", text="Both Sides").side = 'BOTH'
 
 
 class SEQUENCER_MT_select_linked(Menu):
@@ -504,7 +510,7 @@ class SEQUENCER_MT_add(Menu):
         col.enabled = selected_sequences_len(context) >= 2
 
         col = layout.column()
-        col.operator_menu_enum("sequencer.fades_add", "type", text="Fade", icon="IPO_EASE_IN_OUT")
+        col.operator_menu_enum("sequencer.fades_add", "type", text="Fade", icon='IPO_EASE_IN_OUT')
         col.enabled = selected_sequences_len(context) >= 1
 
 
@@ -742,12 +748,19 @@ class SEQUENCER_MT_context_menu(Menu):
         layout.operator("sequencer.copy", text="Copy", icon='COPYDOWN')
         layout.operator("sequencer.paste", text="Paste", icon='PASTEDOWN')
         layout.operator("sequencer.duplicate_move")
+        props = layout.operator("wm.call_panel", text="Rename...")
+        props.name = "TOPBAR_PT_name"
+        props.keep_open = False
         layout.operator("sequencer.delete", text="Delete...")
 
         layout.separator()
 
         layout.operator("sequencer.slip", text="Slip Strip Contents")
         layout.operator("sequencer.snap")
+
+        layout.separator()
+
+        layout.operator("sequencer.set_range_to_strips", text="Set Preview Range to Strips").preview = True
 
         layout.separator()
 

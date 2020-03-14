@@ -1280,11 +1280,12 @@ static void region_rect_recursive(
      */
     const int size_min[2] = {UI_UNIT_X, UI_UNIT_Y};
     rcti overlap_remainder_margin = *overlap_remainder;
+
     BLI_rcti_resize(&overlap_remainder_margin,
                     max_ii(0, BLI_rcti_size_x(overlap_remainder) - UI_UNIT_X / 2),
                     max_ii(0, BLI_rcti_size_y(overlap_remainder) - UI_UNIT_Y / 2));
-    ar->winrct.xmin = overlap_remainder_margin.xmin;
-    ar->winrct.ymin = overlap_remainder_margin.ymin;
+    ar->winrct.xmin = overlap_remainder_margin.xmin + ar->runtime.offset_x;
+    ar->winrct.ymin = overlap_remainder_margin.ymin + ar->runtime.offset_y;
     ar->winrct.xmax = ar->winrct.xmin + prefsizex - 1;
     ar->winrct.ymax = ar->winrct.ymin + prefsizey - 1;
 
@@ -1435,6 +1436,11 @@ static void region_rect_recursive(
         ar->winrct.ymin = BLI_rcti_cent_y(remainder) + 1;
         BLI_rcti_init(remainder, 0, 0, 0, 0);
       }
+
+      /* Fix any negative dimensions. This can happen when a quad split 3d view gets to small. (see
+       * T72200). BLI_rcti_init() sanitizes, making sure min values are <= max values. */
+      BLI_rcti_init(
+          &ar->winrct, ar->winrct.xmin, ar->winrct.xmax, ar->winrct.ymin, ar->winrct.ymax);
 
       quad++;
     }
@@ -1594,6 +1600,8 @@ static void ed_default_handlers(
     }
   }
   if (flag & ED_KEYMAP_TOOL) {
+    WM_event_add_keymap_handler_dynamic(
+        &ar->handlers, WM_event_get_keymap_from_toolsystem_fallback, sa);
     WM_event_add_keymap_handler_dynamic(&ar->handlers, WM_event_get_keymap_from_toolsystem, sa);
   }
   if (flag & ED_KEYMAP_VIEW2D) {
@@ -1947,7 +1955,7 @@ void ED_area_newspace(bContext *C, ScrArea *sa, int type, const bool skip_ar_exi
 
   if (sa->spacetype != type) {
     SpaceType *st;
-    SpaceLink *slold;
+    SpaceLink *slold = sa->spacedata.first;
     SpaceLink *sl;
     /* store sa->type->exit callback */
     void *sa_exit = sa->type ? sa->type->exit : NULL;
@@ -1963,7 +1971,7 @@ void ED_area_newspace(bContext *C, ScrArea *sa, int type, const bool skip_ar_exi
      */
     int header_alignment = ED_area_header_alignment_or_fallback(sa, -1);
     const bool sync_header_alignment = ((header_alignment != -1) &&
-                                        (sa->flag & AREA_FLAG_TEMP_TYPE) == 0);
+                                        ((slold->link_flag & SPACE_FLAG_TYPE_TEMPORARY) == 0));
 
     /* in some cases (opening temp space) we don't want to
      * call area exit callback, so we temporarily unset it */
@@ -1979,7 +1987,6 @@ void ED_area_newspace(bContext *C, ScrArea *sa, int type, const bool skip_ar_exi
     }
 
     st = BKE_spacetype_from_id(type);
-    slold = sa->spacedata.first;
 
     sa->spacetype = type;
     sa->type = st;
@@ -2010,6 +2017,10 @@ void ED_area_newspace(bContext *C, ScrArea *sa, int type, const bool skip_ar_exi
       slold->regionbase = sa->regionbase;
       sa->regionbase = sl->regionbase;
       BLI_listbase_clear(&sl->regionbase);
+      /* SPACE_FLAG_TYPE_WAS_ACTIVE is only used to go back to a previously active space that is
+       * overlapped by temporary ones. It's now properly activated, so the flag should be cleared
+       * at this point. */
+      sl->link_flag &= ~SPACE_FLAG_TYPE_WAS_ACTIVE;
 
       /* put in front of list */
       BLI_remlink(&sa->spacedata, sl);
@@ -2073,23 +2084,45 @@ void ED_area_newspace(bContext *C, ScrArea *sa, int type, const bool skip_ar_exi
   ED_area_tag_redraw(sa);
 }
 
-void ED_area_prevspace(bContext *C, ScrArea *sa)
+static SpaceLink *area_get_prevspace(ScrArea *sa)
 {
   SpaceLink *sl = sa->spacedata.first;
 
-  if (sl && sl->next) {
-    ED_area_newspace(C, sa, sl->next->spacetype, false);
+  /* First toggle to the next temporary space in the list. */
+  for (SpaceLink *sl_iter = sl->next; sl_iter; sl_iter = sl_iter->next) {
+    if (sl_iter->link_flag & SPACE_FLAG_TYPE_TEMPORARY) {
+      return sl_iter;
+    }
+  }
 
-    /* keep old spacedata but move it to end, so calling
-     * ED_area_prevspace once more won't open it again */
-    BLI_remlink(&sa->spacedata, sl);
-    BLI_addtail(&sa->spacedata, sl);
+  /* No temporary space, find the item marked as last active. */
+  for (SpaceLink *sl_iter = sl->next; sl_iter; sl_iter = sl_iter->next) {
+    if (sl_iter->link_flag & SPACE_FLAG_TYPE_WAS_ACTIVE) {
+      return sl_iter;
+    }
+  }
+
+  /* If neither is found, we can just return to the regular previous one. */
+  return sl->next;
+}
+
+void ED_area_prevspace(bContext *C, ScrArea *sa)
+{
+  SpaceLink *sl = sa->spacedata.first;
+  SpaceLink *prevspace = sl ? area_get_prevspace(sa) : NULL;
+
+  if (prevspace) {
+    ED_area_newspace(C, sa, prevspace->spacetype, false);
+    /* We've exited the space, so it can't be considered temporary anymore. */
+    sl->link_flag &= ~SPACE_FLAG_TYPE_TEMPORARY;
   }
   else {
     /* no change */
     return;
   }
-  sa->flag &= ~(AREA_FLAG_STACKED_FULLSCREEN | AREA_FLAG_TEMP_TYPE);
+  /* If this is a stacked fullscreen, changing to previous area exits it (meaning we're still in a
+   * fullscreen, but not in a stacked one). */
+  sa->flag &= ~AREA_FLAG_STACKED_FULLSCREEN;
 
   ED_area_tag_redraw(sa);
 
@@ -3186,15 +3219,15 @@ void ED_region_image_metadata_panel_draw(ImBuf *ibuf, uiLayout *layout)
   IMB_metadata_foreach(ibuf, metadata_panel_draw_field, &ctx);
 }
 
-void ED_region_grid_draw(ARegion *ar, float zoomx, float zoomy)
+void ED_region_grid_draw(ARegion *ar, float zoomx, float zoomy, float x0, float y0)
 {
   float gridsize, gridstep = 1.0f / 32.0f;
   float fac, blendfac;
   int x1, y1, x2, y2;
 
-  /* the image is located inside (0, 0), (1, 1) as set by view2d */
-  UI_view2d_view_to_region(&ar->v2d, 0.0f, 0.0f, &x1, &y1);
-  UI_view2d_view_to_region(&ar->v2d, 1.0f, 1.0f, &x2, &y2);
+  /* the image is located inside (x0, y0), (x0+1, y0+1) as set by view2d */
+  UI_view2d_view_to_region(&ar->v2d, x0, y0, &x1, &y1);
+  UI_view2d_view_to_region(&ar->v2d, x0 + 1.0f, y0 + 1.0f, &x2, &y2);
 
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);

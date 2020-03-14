@@ -84,6 +84,7 @@ class AddPresetBase:
 
     def execute(self, context):
         import os
+        from bpy.utils import is_path_builtin
 
         if hasattr(self, "pre_cb"):
             self.pre_cb(context)
@@ -188,6 +189,11 @@ class AddPresetBase:
                                                  ext=ext)
 
             if not filepath:
+                return {'CANCELLED'}
+
+            # Do not remove bundled presets
+            if is_path_builtin(filepath):
+                self.report({'WARNING'}, "You can't remove the default presets")
                 return {'CANCELLED'}
 
             try:
@@ -376,16 +382,16 @@ class AddPresetFluid(AddPresetBase, Operator):
     """Add or remove a Fluid Preset"""
     bl_idname = "fluid.preset_add"
     bl_label = "Add Fluid Preset"
-    preset_menu = "FLUID_PT_presets"
+    preset_menu = "FLUID_MT_presets"
 
     preset_defines = [
         "fluid = bpy.context.fluid"
-    ]
+        ]
 
     preset_values = [
-        "fluid.settings.viscosity_base",
-        "fluid.settings.viscosity_exponent",
-    ]
+        "fluid.domain_settings.viscosity_base",
+        "fluidanta.domain_settings.viscosity_exponent",
+        ]
 
     preset_subdir = "fluid"
 
@@ -495,7 +501,7 @@ class AddPresetTrackingSettings(AddPresetBase, Operator):
         "settings.use_default_mask",
         "settings.use_default_red_channel",
         "settings.use_default_green_channel",
-        "settings.use_default_blue_channel"
+        "settings.use_default_blue_channel",
         "settings.default_weight"
     ]
 

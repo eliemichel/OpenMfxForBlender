@@ -401,6 +401,12 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
         case TH_FACE_SELECT:
           cp = ts->face_select;
           break;
+        case TH_FACE_BACK:
+          cp = ts->face_back;
+          break;
+        case TH_FACE_FRONT:
+          cp = ts->face_front;
+          break;
         case TH_FACE_DOT:
           cp = ts->face_dot;
           break;
@@ -566,6 +572,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           break;
         case TH_SYNTAX_S:
           cp = ts->syntaxs;
+          break;
+        case TH_LINENUMBERS:
+          cp = ts->line_numbers;
           break;
 
         case TH_NODE:
@@ -869,6 +878,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
         case TH_EDITOR_OUTLINE:
           cp = btheme->tui.editor_outline;
           break;
+        case TH_WIDGET_TEXT_CURSOR:
+          cp = btheme->tui.widget_text_cursor;
+          break;
         case TH_AXIS_X:
           cp = btheme->tui.xaxis;
           break;
@@ -968,9 +980,10 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
 }
 
 /**
- * initialize default theme
- * \note: when you add new colors, created & saved themes need initialized
- * use function below, init_userdef_do_versions()
+ * Initialize default theme.
+ *
+ * \note When you add new colors, created & saved themes need initialized
+ * use function below, #init_userdef_do_versions.
  */
 void UI_theme_init_default(void)
 {

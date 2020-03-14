@@ -445,7 +445,7 @@ static bool ED_object_editmode_load_ex(Main *bmain, Object *obedit, const bool f
       return false;
     }
 
-    EDBM_mesh_load(bmain, obedit);
+    EDBM_mesh_load_ex(bmain, obedit, freedata);
 
     if (freedata) {
       EDBM_mesh_free(me->edit_mesh);
@@ -513,6 +513,9 @@ static bool ED_object_editmode_load_ex(Main *bmain, Object *obedit, const bool f
       ED_mball_editmball_free(obedit);
     }
   }
+  else {
+    return false;
+  }
 
   char *needs_flush_ptr = BKE_object_data_editmode_flush_ptr_get(obedit->data);
   if (needs_flush_ptr) {
@@ -540,6 +543,8 @@ bool ED_object_editmode_exit_ex(Main *bmain, Scene *scene, Object *obedit, int f
      * is flagged for editmode, without 'obedit' being set [#35489] */
     if (UNLIKELY(obedit && obedit->mode & OB_MODE_EDIT)) {
       obedit->mode &= ~OB_MODE_EDIT;
+      /* Also happens when mesh is shared across multiple objects. [#T69834] */
+      DEG_id_tag_update(&obedit->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
     }
     return true;
   }

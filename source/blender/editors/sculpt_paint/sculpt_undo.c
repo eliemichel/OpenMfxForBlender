@@ -498,7 +498,7 @@ static void sculpt_undo_restore_list(bContext *C, Depsgraph *depsgraph, ListBase
   SculptSession *ss = ob->sculpt;
   SubdivCCG *subdiv_ccg = ss->subdiv_ccg;
   SculptUndoNode *unode;
-  bool update = false, rebuild = false, update_mask = false;
+  bool update = false, rebuild = false, update_mask = false, update_visibility = false;
   bool need_mask = false;
 
   for (unode = lb->first; unode; unode = unode->next) {
@@ -575,6 +575,7 @@ static void sculpt_undo_restore_list(bContext *C, Depsgraph *depsgraph, ListBase
       case SCULPT_UNDO_HIDDEN:
         if (sculpt_undo_restore_hidden(C, unode)) {
           rebuild = true;
+          update_visibility = true;
         }
         break;
       case SCULPT_UNDO_MASK:
@@ -631,7 +632,7 @@ static void sculpt_undo_restore_list(bContext *C, Depsgraph *depsgraph, ListBase
       }
     }
 
-    tag_update |= ((Mesh *)ob->data)->id.us > 1 || !BKE_sculptsession_use_pbvh_draw(ob, v3d);
+    tag_update |= ID_REAL_USERS(ob->data) > 1 || !BKE_sculptsession_use_pbvh_draw(ob, v3d);
 
     if (ss->shapekey_active || ss->deform_modifiers_active) {
       Mesh *mesh = ob->data;
@@ -639,6 +640,11 @@ static void sculpt_undo_restore_list(bContext *C, Depsgraph *depsgraph, ListBase
 
       BKE_sculptsession_free_deformMats(ss);
       tag_update |= true;
+    }
+
+    if (BKE_pbvh_type(ss->pbvh) == PBVH_FACES && update_visibility) {
+      Mesh *mesh = ob->data;
+      BKE_mesh_flush_hidden_from_verts(mesh);
     }
 
     if (tag_update) {
@@ -1279,9 +1285,9 @@ static void sculpt_undosys_step_free(UndoStep *us_p)
   sculpt_undo_free_list(&us->data.nodes);
 }
 
-void ED_sculpt_undo_geometry_begin(struct Object *ob)
+void ED_sculpt_undo_geometry_begin(struct Object *ob, const char *name)
 {
-  sculpt_undo_push_begin("voxel remesh");
+  sculpt_undo_push_begin(name);
   sculpt_undo_push_node(ob, NULL, SCULPT_UNDO_GEOMETRY);
 }
 

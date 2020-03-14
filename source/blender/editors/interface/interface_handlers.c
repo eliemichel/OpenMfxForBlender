@@ -32,7 +32,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_brush_types.h"
-
+#include "DNA_curveprofile_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 
@@ -57,6 +57,7 @@
 #include "BKE_tracking.h"
 #include "BKE_unit.h"
 #include "BKE_paint.h"
+#include "BKE_curveprofile.h"
 
 #include "IMB_colormanagement.h"
 
@@ -293,6 +294,7 @@ typedef struct uiHandleButtonMulti {
 typedef struct uiHandleButtonData {
   wmWindowManager *wm;
   wmWindow *window;
+  ScrArea *area;
   ARegion *region;
 
   bool interactive;
@@ -442,6 +444,8 @@ static uiButMultiState *ui_multibut_lookup(uiHandleButtonData *data, const uiBut
 static ColorBand but_copypaste_coba = {0};
 static CurveMapping but_copypaste_curve = {0};
 static bool but_copypaste_curve_alive = false;
+static CurveProfile but_copypaste_profile = {0};
+static bool but_copypaste_profile_alive = false;
 
 /** \} */
 
@@ -787,7 +791,10 @@ static void ui_apply_but_undo(uiBut *but)
       /* Exception for renaming ID data, we always need undo pushes in this case,
        * because undo systems track data by their ID, see: T67002. */
       extern PropertyRNA rna_ID_name;
-      if (but->rnaprop == &rna_ID_name) {
+      /* Exception for active shape-key, since changing this in edit-mode updates
+       * the shape key from object mode data. */
+      extern PropertyRNA rna_Object_active_shape_key_index;
+      if (ELEM(but->rnaprop, &rna_ID_name, &rna_Object_active_shape_key_index)) {
         /* pass */
       }
       else {
@@ -1074,6 +1081,13 @@ static void ui_apply_but_COLORBAND(bContext *C, uiBut *but, uiHandleButtonData *
 }
 
 static void ui_apply_but_CURVE(bContext *C, uiBut *but, uiHandleButtonData *data)
+{
+  ui_apply_but_func(C, but);
+  data->retval = but->retval;
+  data->applied = true;
+}
+
+static void ui_apply_but_CURVEPROFILE(bContext *C, uiBut *but, uiHandleButtonData *data)
 {
   ui_apply_but_func(C, but);
   data->retval = but->retval;
@@ -1979,6 +1993,7 @@ static void ui_apply_but(
   float *editvec;
   ColorBand *editcoba;
   CurveMapping *editcumap;
+  CurveProfile *editprofile;
 
   data->retval = 0;
 
@@ -2036,11 +2051,13 @@ static void ui_apply_but(
   editvec = but->editvec;
   editcoba = but->editcoba;
   editcumap = but->editcumap;
+  editprofile = but->editprofile;
   but->editstr = NULL;
   but->editval = NULL;
   but->editvec = NULL;
   but->editcoba = NULL;
   but->editcumap = NULL;
+  but->editprofile = NULL;
 
   /* handle different types */
   switch (but->type) {
@@ -2100,6 +2117,9 @@ static void ui_apply_but(
     case UI_BTYPE_CURVE:
       ui_apply_but_CURVE(C, but, data);
       break;
+    case UI_BTYPE_CURVEPROFILE:
+      ui_apply_but_CURVEPROFILE(C, but, data);
+      break;
     case UI_BTYPE_KEY_EVENT:
     case UI_BTYPE_HOTKEY_EVENT:
       ui_apply_but_BUT(C, but, data);
@@ -2147,6 +2167,7 @@ static void ui_apply_but(
   but->editvec = editvec;
   but->editcoba = editcoba;
   but->editcumap = editcumap;
+  but->editprofile = editprofile;
 }
 
 /** \} */
@@ -2446,6 +2467,29 @@ static void ui_but_paste_curvemapping(bContext *C, uiBut *but)
   }
 }
 
+static void ui_but_copy_CurveProfile(uiBut *but)
+{
+  if (but->poin != NULL) {
+    but_copypaste_profile_alive = true;
+    BKE_curveprofile_free_data(&but_copypaste_profile);
+    BKE_curveprofile_copy_data(&but_copypaste_profile, (CurveProfile *)but->poin);
+  }
+}
+
+static void ui_but_paste_CurveProfile(bContext *C, uiBut *but)
+{
+  if (but_copypaste_profile_alive) {
+    if (!but->poin) {
+      but->poin = MEM_callocN(sizeof(CurveProfile), "CurveProfile");
+    }
+
+    button_activate_state(C, but, BUTTON_STATE_NUM_EDITING);
+    BKE_curveprofile_free_data((CurveProfile *)but->poin);
+    BKE_curveprofile_copy_data((CurveProfile *)but->poin, &but_copypaste_profile);
+    button_activate_state(C, but, BUTTON_STATE_EXIT);
+  }
+}
+
 static void ui_but_copy_operator(bContext *C, uiBut *but, char *output, int output_len_max)
 {
   PointerRNA *opptr;
@@ -2540,6 +2584,10 @@ static void ui_but_copy(bContext *C, uiBut *but, const bool copy_array)
       ui_but_copy_curvemapping(but);
       break;
 
+    case UI_BTYPE_CURVEPROFILE:
+      ui_but_copy_CurveProfile(but);
+      break;
+
     case UI_BTYPE_BUT:
       if (!but->optype) {
         break;
@@ -2623,6 +2671,10 @@ static void ui_but_paste(bContext *C, uiBut *but, uiHandleButtonData *data, cons
       ui_but_paste_curvemapping(C, but);
       break;
 
+    case UI_BTYPE_CURVEPROFILE:
+      ui_but_paste_CurveProfile(C, but);
+      break;
+
     default:
       break;
   }
@@ -2633,6 +2685,7 @@ static void ui_but_paste(bContext *C, uiBut *but, uiHandleButtonData *data, cons
 void ui_but_clipboard_free(void)
 {
   BKE_curvemapping_free_data(&but_copypaste_curve);
+  BKE_curveprofile_free_data(&but_copypaste_profile);
 }
 
 /** \} */
@@ -2646,7 +2699,7 @@ void ui_but_clipboard_free(void)
  * It converts every UTF-8 character to an asterisk, and also remaps
  * the cursor position and selection start/end.
  *
- * \note: remapping is used, because password could contain UTF-8 characters.
+ * \note remapping is used, because password could contain UTF-8 characters.
  *
  * \{ */
 
@@ -3757,6 +3810,9 @@ static void ui_numedit_begin(uiBut *but, uiHandleButtonData *data)
   if (but->type == UI_BTYPE_CURVE) {
     but->editcumap = (CurveMapping *)but->poin;
   }
+  if (but->type == UI_BTYPE_CURVEPROFILE) {
+    but->editprofile = (CurveProfile *)but->poin;
+  }
   else if (but->type == UI_BTYPE_COLORBAND) {
     data->coba = (ColorBand *)but->poin;
     but->editcoba = data->coba;
@@ -3847,6 +3903,7 @@ static void ui_numedit_end(uiBut *but, uiHandleButtonData *data)
   but->editvec = NULL;
   but->editcoba = NULL;
   but->editcumap = NULL;
+  but->editprofile = NULL;
 
   data->dragstartx = 0;
   data->draglastx = 0;
@@ -4306,8 +4363,10 @@ static int ui_do_but_TEX(
       else if (but->dt == UI_EMBOSS_NONE && !event->ctrl) {
         /* pass */
       }
-      else if (!ui_but_extra_operator_icon_mouse_over_get(but, data, event)) {
-        button_activate_state(C, but, BUTTON_STATE_TEXT_EDITING);
+      else {
+        if (!ui_but_extra_operator_icon_mouse_over_get(but, data, event)) {
+          button_activate_state(C, but, BUTTON_STATE_TEXT_EDITING);
+        }
         return WM_UI_HANDLER_BREAK;
       }
     }
@@ -6803,6 +6862,285 @@ static int ui_do_but_CURVE(
   return WM_UI_HANDLER_CONTINUE;
 }
 
+/* Same as ui_numedit_but_CURVE with some smaller changes. */
+static bool ui_numedit_but_CURVEPROFILE(uiBlock *block,
+                                        uiBut *but,
+                                        uiHandleButtonData *data,
+                                        int evtx,
+                                        int evty,
+                                        bool snap,
+                                        const bool shift)
+{
+  CurveProfile *profile = (CurveProfile *)but->poin;
+  CurveProfilePoint *pts = profile->path;
+  float fx, fy, zoomx, zoomy;
+  int mx, my, dragx, dragy;
+  int a;
+  bool changed = false;
+
+  /* evtx evty and drag coords are absolute mousecoords,
+   * prevents errors when editing when layout changes */
+  mx = evtx;
+  my = evty;
+  ui_window_to_block(data->region, block, &mx, &my);
+  dragx = data->draglastx;
+  dragy = data->draglasty;
+  ui_window_to_block(data->region, block, &dragx, &dragy);
+
+  zoomx = BLI_rctf_size_x(&but->rect) / BLI_rctf_size_x(&profile->view_rect);
+  zoomy = BLI_rctf_size_y(&but->rect) / BLI_rctf_size_y(&profile->view_rect);
+
+  if (snap) {
+    float d[2];
+
+    d[0] = mx - data->dragstartx;
+    d[1] = my - data->dragstarty;
+
+    if (len_squared_v2(d) < (3.0f * 3.0f)) {
+      snap = false;
+    }
+  }
+
+  fx = (mx - dragx) / zoomx;
+  fy = (my - dragy) / zoomy;
+
+  if (data->dragsel != -1) {
+    CurveProfilePoint *point_last = NULL;
+    const float mval_factor = ui_mouse_scale_warp_factor(shift);
+    bool moved_point = false; /* for ctrl grid, can't use orig coords because of sorting */
+
+    fx *= mval_factor;
+    fy *= mval_factor;
+
+    /* Move all the points that aren't the last or the first */
+    for (a = 1; a < profile->path_len - 1; a++) {
+      if (pts[a].flag & PROF_SELECT) {
+        float origx = pts[a].x, origy = pts[a].y;
+        pts[a].x += fx;
+        pts[a].y += fy;
+        if (snap) {
+          pts[a].x = 0.125f * roundf(8.0f * pts[a].x);
+          pts[a].y = 0.125f * roundf(8.0f * pts[a].y);
+        }
+        if (!moved_point && (pts[a].x != origx || pts[a].y != origy)) {
+          moved_point = true;
+        }
+
+        point_last = &pts[a];
+      }
+    }
+
+    BKE_curveprofile_update(profile, false);
+
+    if (moved_point) {
+      data->draglastx = evtx;
+      data->draglasty = evty;
+      changed = true;
+#ifdef USE_CONT_MOUSE_CORRECT
+      /* note: using 'cmp_last' is weak since there may be multiple points selected,
+       * but in practice this isnt really an issue */
+      if (ui_but_is_cursor_warp(but)) {
+        /* OK but can go outside bounds */
+        data->ungrab_mval[0] = but->rect.xmin +
+                               ((point_last->x - profile->view_rect.xmin) * zoomx);
+        data->ungrab_mval[1] = but->rect.ymin +
+                               ((point_last->y - profile->view_rect.ymin) * zoomy);
+        BLI_rctf_clamp_pt_v(&but->rect, data->ungrab_mval);
+      }
+#endif
+    }
+    data->dragchange = true; /* mark for selection */
+  }
+  else {
+    /* clamp for clip */
+    if (profile->flag & PROF_USE_CLIP) {
+      if (profile->view_rect.xmin - fx < profile->clip_rect.xmin) {
+        fx = profile->view_rect.xmin - profile->clip_rect.xmin;
+      }
+      else if (profile->view_rect.xmax - fx > profile->clip_rect.xmax) {
+        fx = profile->view_rect.xmax - profile->clip_rect.xmax;
+      }
+      if (profile->view_rect.ymin - fy < profile->clip_rect.ymin) {
+        fy = profile->view_rect.ymin - profile->clip_rect.ymin;
+      }
+      else if (profile->view_rect.ymax - fy > profile->clip_rect.ymax) {
+        fy = profile->view_rect.ymax - profile->clip_rect.ymax;
+      }
+    }
+
+    profile->view_rect.xmin -= fx;
+    profile->view_rect.ymin -= fy;
+    profile->view_rect.xmax -= fx;
+    profile->view_rect.ymax -= fy;
+
+    data->draglastx = evtx;
+    data->draglasty = evty;
+
+    changed = true;
+  }
+
+  return changed;
+}
+
+/**
+ * Interaction for curve profile widget.
+ * \note Uses hardcoded keys rather than the keymap.
+ */
+static int ui_do_but_CURVEPROFILE(
+    bContext *C, uiBlock *block, uiBut *but, uiHandleButtonData *data, const wmEvent *event)
+{
+  int mx, my, i;
+
+  mx = event->x;
+  my = event->y;
+  ui_window_to_block(data->region, block, &mx, &my);
+
+  /* Move selected control points. */
+  if (event->type == GKEY && event->val == KM_RELEASE) {
+    data->dragstartx = mx;
+    data->dragstarty = my;
+    data->draglastx = mx;
+    data->draglasty = my;
+    button_activate_state(C, but, BUTTON_STATE_NUM_EDITING);
+    return WM_UI_HANDLER_BREAK;
+  }
+
+  CurveProfile *profile = (CurveProfile *)but->poin;
+
+  /* Delete selected control points. */
+  if (event->type == XKEY && event->val == KM_RELEASE) {
+    BKE_curveprofile_remove_by_flag(profile, PROF_SELECT);
+    BKE_curveprofile_update(profile, false);
+    button_activate_state(C, but, BUTTON_STATE_EXIT);
+    return WM_UI_HANDLER_BREAK;
+  }
+
+  /* Selecting, adding, and starting point movements. */
+  if (data->state == BUTTON_STATE_HIGHLIGHT) {
+    if (event->type == LEFTMOUSE && event->val == KM_PRESS) {
+      CurveProfilePoint *pts; /* Path or table. */
+      const float m_xy[2] = {mx, my};
+      float dist_min_sq;
+      int i_selected = -1;
+
+      if (event->ctrl) {
+        float f_xy[2];
+        BLI_rctf_transform_pt_v(&profile->view_rect, &but->rect, f_xy, m_xy);
+
+        BKE_curveprofile_insert(profile, f_xy[0], f_xy[1]);
+        BKE_curveprofile_update(profile, false);
+      }
+
+      /* Check for selecting of a point by finding closest point in radius. */
+      dist_min_sq = SQUARE(U.dpi_fac * 14.0f); /* 14 pixels radius for selecting points. */
+      pts = profile->path;
+      for (i = 0; i < profile->path_len; i++) {
+        float f_xy[2];
+        BLI_rctf_transform_pt_v(&but->rect, &profile->view_rect, f_xy, &pts[i].x);
+        const float dist_sq = len_squared_v2v2(m_xy, f_xy);
+        if (dist_sq < dist_min_sq) {
+          i_selected = i;
+          dist_min_sq = dist_sq;
+        }
+      }
+
+      /* Add a point if the click was close to the path but not a control point. */
+      if (i_selected == -1) { /* No control point selected. */
+        float f_xy[2], f_xy_prev[2];
+        pts = profile->table;
+        BLI_rctf_transform_pt_v(&but->rect, &profile->view_rect, f_xy, &pts[0].x);
+
+        dist_min_sq = SQUARE(U.dpi_fac * 8.0f); /* 8 pixel radius from each table point. */
+
+        /* Loop through the path's high resolution table and find what's near the click. */
+        for (i = 1; i <= PROF_N_TABLE(profile->path_len); i++) {
+          copy_v2_v2(f_xy_prev, f_xy);
+          BLI_rctf_transform_pt_v(&but->rect, &profile->view_rect, f_xy, &pts[i].x);
+
+          if (dist_squared_to_line_segment_v2(m_xy, f_xy_prev, f_xy) < dist_min_sq) {
+            BLI_rctf_transform_pt_v(&profile->view_rect, &but->rect, f_xy, m_xy);
+
+            CurveProfilePoint *new_pt = BKE_curveprofile_insert(profile, f_xy[0], f_xy[1]);
+            BKE_curveprofile_update(profile, false);
+
+            /* reset pts back to the control points. */
+            pts = profile->path;
+
+            /* Get the index of the newly added point. */
+            for (i = 0; i < profile->path_len; i++) {
+              if (&pts[i] == new_pt) {
+                i_selected = i;
+              }
+            }
+            break;
+          }
+        }
+      }
+
+      /* Change the flag for the point(s) if one was selected. */
+      if (i_selected != -1) {
+        /* Deselect all if this one is deselected, except if we hold shift. */
+        if (!event->shift) {
+          for (i = 0; i < profile->path_len; i++) {
+            pts[i].flag &= ~PROF_SELECT;
+          }
+          pts[i_selected].flag |= PROF_SELECT;
+        }
+        else {
+          pts[i_selected].flag ^= PROF_SELECT;
+        }
+      }
+      else {
+        /* Move the view. */
+        data->cancel = true;
+      }
+
+      data->dragsel = i_selected;
+
+      data->dragstartx = mx;
+      data->dragstarty = my;
+      data->draglastx = mx;
+      data->draglasty = my;
+
+      button_activate_state(C, but, BUTTON_STATE_NUM_EDITING);
+      return WM_UI_HANDLER_BREAK;
+    }
+  }
+  else if (data->state == BUTTON_STATE_NUM_EDITING) { /* Do control point movement. */
+    if (event->type == MOUSEMOVE) {
+      if (mx != data->draglastx || my != data->draglasty) {
+        if (ui_numedit_but_CURVEPROFILE(
+                block, but, data, mx, my, event->ctrl != 0, event->shift != 0)) {
+          ui_numedit_apply(C, block, but, data);
+        }
+      }
+    }
+    else if (event->type == LEFTMOUSE && event->val == KM_RELEASE) {
+      /* Finish move. */
+      if (data->dragsel != -1) {
+        CurveProfilePoint *pts = profile->path;
+
+        if (data->dragchange == false) {
+          /* Deselect all, select one. */
+          if (!event->shift) {
+            for (i = 0; i < profile->path_len; i++) {
+              pts[i].flag &= ~PROF_SELECT;
+            }
+            pts[data->dragsel].flag |= PROF_SELECT;
+          }
+        }
+        else {
+          BKE_curveprofile_update(profile, true); /* Remove doubles after move. */
+        }
+      }
+      button_activate_state(C, but, BUTTON_STATE_EXIT);
+    }
+    return WM_UI_HANDLER_BREAK;
+  }
+
+  return WM_UI_HANDLER_CONTINUE;
+}
+
 static bool ui_numedit_but_HISTOGRAM(uiBut *but, uiHandleButtonData *data, int mx, int my)
 {
   Histogram *hist = (Histogram *)but->poin;
@@ -7208,6 +7546,9 @@ static int ui_do_button(bContext *C, uiBlock *block, uiBut *but, const wmEvent *
     case UI_BTYPE_CURVE:
       retval = ui_do_but_CURVE(C, block, but, data, event);
       break;
+    case UI_BTYPE_CURVEPROFILE:
+      retval = ui_do_but_CURVEPROFILE(C, block, but, data, event);
+      break;
     case UI_BTYPE_HSVCUBE:
       retval = ui_do_but_HSVCUBE(C, block, but, data, event);
       break;
@@ -7386,7 +7727,8 @@ static void button_tooltip_timer_reset(bContext *C, uiBut *but)
       if (!wm->drags.first) {
         bool is_label = UI_but_has_tooltip_label(but);
         double delay = is_label ? UI_TOOLTIP_DELAY_LABEL : UI_TOOLTIP_DELAY;
-        WM_tooltip_timer_init_ex(C, data->window, data->region, ui_but_tooltip_init, delay);
+        WM_tooltip_timer_init_ex(
+            C, data->window, data->area, data->region, ui_but_tooltip_init, delay);
         if (is_label) {
           bScreen *sc = WM_window_get_active_screen(data->window);
           if (sc->tool_tip) {
@@ -7592,6 +7934,7 @@ static void button_activate_init(bContext *C, ARegion *ar, uiBut *but, uiButtonA
   data = MEM_callocN(sizeof(uiHandleButtonData), "uiHandleButtonData");
   data->wm = CTX_wm_manager(C);
   data->window = CTX_wm_window(C);
+  data->area = CTX_wm_area(C);
   BLI_assert(ar != NULL);
   data->region = ar;
 
@@ -7599,7 +7942,7 @@ static void button_activate_init(bContext *C, ARegion *ar, uiBut *but, uiButtonA
   copy_v2_fl(data->ungrab_mval, FLT_MAX);
 #endif
 
-  if (ELEM(but->type, UI_BTYPE_CURVE, UI_BTYPE_SEARCH_MENU)) {
+  if (ELEM(but->type, UI_BTYPE_CURVE, UI_BTYPE_CURVEPROFILE, UI_BTYPE_SEARCH_MENU)) {
     /* XXX curve is temp */
   }
   else {
@@ -7674,7 +8017,7 @@ static void button_activate_init(bContext *C, ARegion *ar, uiBut *but, uiButtonA
     /* Show a label for this button. */
     bScreen *sc = WM_window_get_active_screen(data->window);
     if ((PIL_check_seconds_timer() - WM_tooltip_time_closed()) < 0.1) {
-      WM_tooltip_immediate_init(C, CTX_wm_window(C), ar, ui_but_tooltip_init);
+      WM_tooltip_immediate_init(C, CTX_wm_window(C), data->area, ar, ui_but_tooltip_init);
       if (sc->tool_tip) {
         sc->tool_tip->pass = 1;
       }
@@ -9163,7 +9506,8 @@ static int ui_handle_menu_event(bContext *C,
                  * To support we would need UI_RETURN_OUT_PARENT to be handled by
                  * top-level buttons, not just menus. Note that this isn't very important
                  * since it's easy to manually close these menus by clicking on them. */
-                menu->menuretval = (level > 0) ? UI_RETURN_OUT_PARENT : UI_RETURN_OUT;
+                menu->menuretval = (level > 0 && is_parent_inside) ? UI_RETURN_OUT_PARENT :
+                                                                     UI_RETURN_OUT;
               }
             }
             retval = WM_UI_HANDLER_BREAK;
@@ -9210,18 +9554,29 @@ static int ui_handle_menu_event(bContext *C,
           break;
 
         case WHEELUPMOUSE:
-        case WHEELDOWNMOUSE: {
+        case WHEELDOWNMOUSE:
+        case MOUSEPAN: {
           if (IS_EVENT_MOD(event, shift, ctrl, alt, oskey)) {
             /* pass */
           }
           else if (!ui_block_is_menu(block)) {
-            const int scroll_dir = (event->type == WHEELUPMOUSE) ? 1 : -1;
-            if (ui_menu_scroll_step(ar, block, scroll_dir)) {
-              if (but) {
-                but->active->cancel = true;
-                button_activate_exit(C, but, but->active, false, false);
+            int type = event->type;
+            int val = event->val;
+
+            /* convert pan to scrollwheel */
+            if (type == MOUSEPAN) {
+              ui_pan_to_scroll(event, &type, &val);
+            }
+
+            if (type != MOUSEPAN) {
+              const int scroll_dir = (type == WHEELUPMOUSE) ? 1 : -1;
+              if (ui_menu_scroll_step(ar, block, scroll_dir)) {
+                if (but) {
+                  but->active->cancel = true;
+                  button_activate_exit(C, but, but->active, false, false);
+                }
+                WM_event_add_mousemove(C);
               }
-              WM_event_add_mousemove(C);
             }
             break;
           }
@@ -9233,7 +9588,6 @@ static int ui_handle_menu_event(bContext *C,
         case PAGEDOWNKEY:
         case HOMEKEY:
         case ENDKEY:
-        case MOUSEPAN:
           /* arrowkeys: only handle for block_loop blocks */
           if (IS_EVENT_MOD(event, shift, ctrl, alt, oskey)) {
             /* pass */
@@ -10275,7 +10629,13 @@ static int ui_handler_region_menu(bContext *C, const wmEvent *event, void *UNUSE
         (ui_screen_region_find_mouse_over(screen, event) == NULL) &&
         (ELEM(but->type, UI_BTYPE_PULLDOWN, UI_BTYPE_POPOVER, UI_BTYPE_MENU)) &&
         (but_other = ui_but_find_mouse_over(ar, event)) && (but != but_other) &&
-        (ELEM(but_other->type, UI_BTYPE_PULLDOWN, UI_BTYPE_POPOVER, UI_BTYPE_MENU))) {
+        (ELEM(but_other->type, UI_BTYPE_PULLDOWN, UI_BTYPE_POPOVER, UI_BTYPE_MENU)) &&
+        /* Hover-opening menu's doesn't work well for buttons over one another
+         * along the same axis the menu is opening on (see T71719). */
+        (((data->menu->direction & (UI_DIR_LEFT | UI_DIR_RIGHT)) &&
+          BLI_rctf_isect_rect_x(&but->rect, &but_other->rect, NULL)) ||
+         ((data->menu->direction & (UI_DIR_DOWN | UI_DIR_UP)) &&
+          BLI_rctf_isect_rect_y(&but->rect, &but_other->rect, NULL)))) {
       /* if mouse moves to a different root-level menu button,
        * open it to replace the current menu */
       if ((but_other->flag & UI_BUT_DISABLED) == 0) {

@@ -257,6 +257,8 @@ void wm_window_free(bContext *C, wmWindowManager *wm, wmWindow *win)
     MEM_freeN(win->cursor_keymap_status);
   }
 
+  WM_gestures_free_all(win);
+
   wm_event_free_all(win);
 
   wm_ghostwindow_destroy(wm, win);
@@ -393,6 +395,7 @@ void wm_quit_with_optional_confirmation_prompt(bContext *C, wmWindow *win)
 
   if (U.uiflag & USER_SAVE_PROMPT) {
     if (wm_file_or_image_is_modified(C) && !G.background) {
+      wm_window_raise(win);
       wm_confirm_quit(C);
     }
     else {
@@ -1638,6 +1641,7 @@ void wm_ghost_init(bContext *C)
     }
 
     g_system = GHOST_CreateSystem();
+    GHOST_SystemInitDebug(g_system, G.debug & G_DEBUG_GHOST);
 
     if (C != NULL) {
       GHOST_AddEventConsumer(g_system, consumer);
@@ -1882,12 +1886,17 @@ void WM_clipboard_text_set(const char *buf, bool selection)
 
 void WM_progress_set(wmWindow *win, float progress)
 {
-  GHOST_SetProgressBar(win->ghostwin, progress);
+  /* In background mode we may have windows, but not actual GHOST windows. */
+  if (win->ghostwin) {
+    GHOST_SetProgressBar(win->ghostwin, progress);
+  }
 }
 
 void WM_progress_clear(wmWindow *win)
 {
-  GHOST_EndProgressBar(win->ghostwin);
+  if (win->ghostwin) {
+    GHOST_EndProgressBar(win->ghostwin);
+  }
 }
 
 /** \} */

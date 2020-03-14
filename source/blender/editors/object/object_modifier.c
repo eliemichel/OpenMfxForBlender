@@ -127,6 +127,11 @@ static void object_force_modifier_bind_simple_options(Depsgraph *depsgraph,
   md_eval->mode = mode;
 }
 
+/** Add a modifier to given object, including relevant extra processing needed by some physics
+ * types (particles, simulations...).
+ *
+ * \param scene is only used to set current frame in some cases, and may be NULL.
+ */
 ModifierData *ED_object_modifier_add(
     ReportList *reports, Main *bmain, Scene *scene, Object *ob, const char *name, int type)
 {
@@ -923,6 +928,7 @@ bool edit_modifier_poll_generic(bContext *C,
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "modifier", rna_type);
   Object *ob = (ptr.owner_id) ? (Object *)ptr.owner_id : ED_object_active_context(C);
+  ModifierData *mod = ptr.data; /* May be NULL. */
 
   if (!ob || ID_IS_LINKED(ob)) {
     return 0;
@@ -935,8 +941,10 @@ bool edit_modifier_poll_generic(bContext *C,
   }
 
   if (ID_IS_OVERRIDE_LIBRARY(ob)) {
-    CTX_wm_operator_poll_msg_set(C, "Cannot edit modifiers coming from library override");
-    return (((ModifierData *)ptr.data)->flag & eModifierFlag_OverrideLibrary_Local) != 0;
+    if ((mod != NULL) && (mod->flag & eModifierFlag_OverrideLibrary_Local) == 0) {
+      CTX_wm_operator_poll_msg_set(C, "Cannot edit modifiers coming from library override");
+      return 0;
+    }
   }
 
   if (!is_editmode_allowed && CTX_data_edit_object(C) != NULL) {

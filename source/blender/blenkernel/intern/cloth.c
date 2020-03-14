@@ -31,6 +31,7 @@
 
 #include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_rand.h"
 #include "BLI_edgehash.h"
 #include "BLI_linklist.h"
 
@@ -129,6 +130,22 @@ void cloth_init(ClothModifierData *clmd)
    */
   clmd->sim_parms->eff_force_scale = 1000.0;
   clmd->sim_parms->eff_wind_scale = 250.0;
+
+  /* Internal spring settings */
+  clmd->sim_parms->internal_spring_max_length = 0.0f;
+  clmd->sim_parms->internal_spring_max_diversion = M_PI / 4.0f;
+  clmd->sim_parms->internal_tension = 15.0f;
+  clmd->sim_parms->max_internal_tension = 15.0f;
+  clmd->sim_parms->internal_compression = 15.0f;
+  clmd->sim_parms->max_internal_compression = 15.0f;
+  clmd->sim_parms->vgroup_intern = 0;
+  clmd->sim_parms->flags |= CLOTH_SIMSETTINGS_FLAG_INTERNAL_SPRINGS_NORMAL;
+
+  /* Pressure settings */
+  clmd->sim_parms->uniform_pressure_force = 0.0f;
+  clmd->sim_parms->target_volume = 0.0f;
+  clmd->sim_parms->pressure_factor = 1.0f;
+  clmd->sim_parms->vgroup_pressure = 0;
 
   // also from softbodies
   clmd->sim_parms->maxgoal = 1.0f;
@@ -290,6 +307,12 @@ static int do_init_cloth(Object *ob, ClothModifierData *clmd, Mesh *result, int 
     }
 
     BKE_cloth_solver_set_positions(clmd);
+
+    ClothSimSettings *parms = clmd->sim_parms;
+    if (parms->flags & CLOTH_SIMSETTINGS_FLAG_PRESSURE &&
+        !(parms->flags & CLOTH_SIMSETTINGS_FLAG_PRESSURE_VOL)) {
+      BKE_cloth_solver_set_volume(clmd);
+    }
 
     clmd->clothObject->last_frame = MINFRAME - 1;
     clmd->sim_parms->dt = 1.0f / clmd->sim_parms->stepsPerFrame;
@@ -640,8 +663,9 @@ int cloth_uses_vgroup(ClothModifierData *clmd)
 {
   return (((clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_SELF) &&
            (clmd->coll_parms->vgroup_selfcol > 0)) ||
-          (clmd->sim_parms->vgroup_struct > 0) || (clmd->sim_parms->vgroup_bend > 0) ||
-          (clmd->sim_parms->vgroup_shrink > 0) || (clmd->sim_parms->vgroup_mass > 0));
+          (clmd->sim_parms->vgroup_pressure > 0) || (clmd->sim_parms->vgroup_struct > 0) ||
+          (clmd->sim_parms->vgroup_bend > 0) || (clmd->sim_parms->vgroup_shrink > 0) ||
+          (clmd->sim_parms->vgroup_intern > 0) || (clmd->sim_parms->vgroup_mass > 0));
 }
 
 /**
@@ -649,27 +673,16 @@ int cloth_uses_vgroup(ClothModifierData *clmd)
  */
 static void cloth_apply_vgroup(ClothModifierData *clmd, Mesh *mesh)
 {
-  /* Can be optimized to do all groups in one loop. */
-  int i = 0;
-  int j = 0;
-  MDeformVert *dvert = NULL;
-  Cloth *clothObj = NULL;
-  int mvert_num;
-  /* float goalfac = 0; */ /* UNUSED */
-  ClothVertex *verts = NULL;
-
   if (!clmd || !mesh) {
     return;
   }
 
-  clothObj = clmd->clothObject;
+  int mvert_num = mesh->totvert;
 
-  mvert_num = mesh->totvert;
-
-  verts = clothObj->verts;
+  ClothVertex *verts = clmd->clothObject->verts;
 
   if (cloth_uses_vgroup(clmd)) {
-    for (i = 0; i < mvert_num; i++, verts++) {
+    for (int i = 0; i < mvert_num; i++, verts++) {
 
       /* Reset Goal values to standard */
       if (clmd->sim_parms->vgroup_mass > 0) {
@@ -686,9 +699,9 @@ static void cloth_apply_vgroup(ClothModifierData *clmd, Mesh *mesh)
       verts->flags &= ~CLOTH_VERT_FLAG_PINNED;
       verts->flags &= ~CLOTH_VERT_FLAG_NOSELFCOLL;
 
-      dvert = CustomData_get(&mesh->vdata, i, CD_MDEFORMVERT);
+      MDeformVert *dvert = CustomData_get(&mesh->vdata, i, CD_MDEFORMVERT);
       if (dvert) {
-        for (j = 0; j < dvert->totweight; j++) {
+        for (int j = 0; j < dvert->totweight; j++) {
           if (dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_mass - 1)) {
             verts->goal = dvert->dw[j].weight;
 
@@ -715,19 +728,27 @@ static void cloth_apply_vgroup(ClothModifierData *clmd, Mesh *mesh)
             verts->bend_stiff = dvert->dw[j].weight;
           }
 
-          if (clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_SELF) {
-            if (dvert->dw[j].def_nr == (clmd->coll_parms->vgroup_selfcol - 1)) {
-              if (dvert->dw[j].weight > 0.0f) {
-                verts->flags |= CLOTH_VERT_FLAG_NOSELFCOLL;
-              }
+          if (dvert->dw[j].def_nr == (clmd->coll_parms->vgroup_selfcol - 1)) {
+            if (dvert->dw[j].weight > 0.0f) {
+              verts->flags |= CLOTH_VERT_FLAG_NOSELFCOLL;
             }
           }
-          if (clmd->sim_parms->vgroup_shrink > 0) {
-            if (dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_shrink - 1)) {
-              /* Used for linear interpolation between min and max
-               * shrink factor based on weight. */
-              verts->shrink_factor = dvert->dw[j].weight;
-            }
+
+          if (dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_shrink - 1)) {
+            /* Used for linear interpolation between min and max
+             * shrink factor based on weight. */
+            verts->shrink_factor = dvert->dw[j].weight;
+          }
+
+          if (dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_intern - 1)) {
+            /* Used to define the stiffness weight on the internal spring connected to this vertex.
+             */
+            verts->internal_stiff = dvert->dw[j].weight;
+          }
+
+          if (dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_pressure - 1)) {
+            /* Used to define how much the pressure settings should affect the given vertex. */
+            verts->pressure_factor = dvert->dw[j].weight;
           }
         }
       }
@@ -739,10 +760,10 @@ static float cloth_shrink_factor(ClothModifierData *clmd, ClothVertex *verts, in
 {
   /* Linear interpolation between min and max shrink factor based on weight. */
   float base = 1.0f - clmd->sim_parms->shrink_min;
-  float delta = clmd->sim_parms->shrink_min - clmd->sim_parms->shrink_max;
+  float shrink_factor_delta = clmd->sim_parms->shrink_min - clmd->sim_parms->shrink_max;
 
-  float k1 = base + delta * verts[i1].shrink_factor;
-  float k2 = base + delta * verts[i2].shrink_factor;
+  float k1 = base + shrink_factor_delta * verts[i1].shrink_factor;
+  float k2 = base + shrink_factor_delta * verts[i2].shrink_factor;
 
   /* Use geometrical mean to average two factors since it behaves better
    * for diagonals when a rectangle transforms into a trapezoid. */
@@ -897,9 +918,9 @@ static void cloth_from_mesh(ClothModifierData *clmd, Mesh *mesh)
   }
 }
 
-/***************************************************************************************
- * SPRING NETWORK GPU_BATCH_BUILDING IMPLEMENTATION BEGIN
- ***************************************************************************************/
+/* -------------------------------------------------------------------- */
+/** \name Spring Network Building Implementation
+ * \{ */
 
 BLI_INLINE void spring_verts_ordered_set(ClothSpring *spring, int v0, int v1)
 {
@@ -1140,6 +1161,11 @@ static void cloth_update_springs(ClothModifierData *clmd)
                                cloth->verts[spring->ij].bend_stiff) /
                               2.0f;
     }
+    else if (spring->type & CLOTH_SPRING_TYPE_INTERNAL) {
+      spring->lin_stiffness = (cloth->verts[spring->kl].internal_stiff +
+                               cloth->verts[spring->ij].internal_stiff) /
+                              2.0f;
+    }
     else if (spring->type == CLOTH_SPRING_TYPE_BENDING_HAIR) {
       ClothVertex *v1 = &cloth->verts[spring->ij];
       ClothVertex *v2 = &cloth->verts[spring->kl];
@@ -1204,8 +1230,8 @@ static void cloth_update_spring_lengths(ClothModifierData *clmd, Mesh *mesh)
     ClothSpring *spring = search->link;
 
     if (spring->type != CLOTH_SPRING_TYPE_SEWING) {
-      if (spring->type &
-          (CLOTH_SPRING_TYPE_STRUCTURAL | CLOTH_SPRING_TYPE_SHEAR | CLOTH_SPRING_TYPE_BENDING)) {
+      if (spring->type & (CLOTH_SPRING_TYPE_STRUCTURAL | CLOTH_SPRING_TYPE_SHEAR |
+                          CLOTH_SPRING_TYPE_BENDING | CLOTH_SPRING_TYPE_INTERNAL)) {
         shrink_factor = cloth_shrink_factor(clmd, cloth->verts, spring->ij, spring->kl);
       }
       else {
@@ -1381,6 +1407,85 @@ BLI_INLINE bool cloth_bend_set_poly_vert_array(int **poly, int len, const MLoop 
   return true;
 }
 
+static bool find_internal_spring_target_vertex(BVHTreeFromMesh *treedata,
+                                               unsigned int v_idx,
+                                               RNG *rng,
+                                               float max_length,
+                                               float max_diversion,
+                                               bool check_normal,
+                                               unsigned int *r_tar_v_idx)
+{
+  float co[3], no[3], new_co[3];
+  float radius;
+
+  copy_v3_v3(co, treedata->vert[v_idx].co);
+  normal_short_to_float_v3(no, treedata->vert[v_idx].no);
+  negate_v3(no);
+
+  float vec_len = sin(max_diversion);
+  float offset[3];
+
+  offset[0] = 0.5f - BLI_rng_get_float(rng);
+  offset[1] = 0.5f - BLI_rng_get_float(rng);
+  offset[2] = 0.5f - BLI_rng_get_float(rng);
+
+  normalize_v3(offset);
+  mul_v3_fl(offset, vec_len);
+  add_v3_v3(no, offset);
+  normalize_v3(no);
+
+  /* Nudge the start point so we do not hit it with the ray. */
+  copy_v3_v3(new_co, no);
+  mul_v3_fl(new_co, FLT_EPSILON);
+  add_v3_v3(new_co, co);
+
+  radius = 0.0f;
+  if (max_length == 0.0f) {
+    max_length = FLT_MAX;
+  }
+
+  BVHTreeRayHit rayhit = {0};
+  rayhit.index = -1;
+  rayhit.dist = max_length;
+
+  BLI_bvhtree_ray_cast(
+      treedata->tree, new_co, no, radius, &rayhit, treedata->raycast_callback, treedata);
+
+  unsigned int vert_idx = -1;
+  const MLoop *mloop = treedata->loop;
+  const MLoopTri *lt = NULL;
+
+  if (rayhit.index != -1 && rayhit.dist <= max_length) {
+    if (check_normal && dot_v3v3(rayhit.no, no) < 0.0f) {
+      /* We hit a point that points in the same direction as our starting point. */
+      return false;
+    }
+
+    float min_len = FLT_MAX;
+    lt = &treedata->looptri[rayhit.index];
+
+    for (int i = 0; i < 3; i++) {
+      unsigned int tmp_vert_idx = mloop[lt->tri[i]].v;
+      if (tmp_vert_idx == v_idx) {
+        /* We managed to hit ourselves. */
+        return false;
+      }
+
+      float len = len_v3v3(co, rayhit.co);
+      if (len < min_len) {
+        min_len = len;
+        vert_idx = tmp_vert_idx;
+      }
+    }
+
+    *r_tar_v_idx = vert_idx;
+    return true;
+  }
+  else {
+    return false;
+  }
+}
+
 static int cloth_build_springs(ClothModifierData *clmd, Mesh *mesh)
 {
   Cloth *cloth = clmd->clothObject;
@@ -1425,6 +1530,69 @@ static int cloth_build_springs(ClothModifierData *clmd, Mesh *mesh)
     if (!edgelist) {
       return 0;
     }
+  }
+
+  bool use_internal_springs = (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_INTERNAL_SPRINGS);
+
+  if (use_internal_springs) {
+    BVHTreeFromMesh treedata = {NULL};
+    unsigned int tar_v_idx;
+    BLI_bitmap *verts_used = NULL;
+    RNG *rng;
+
+    verts_used = BLI_BITMAP_NEW(mvert_num * mvert_num, __func__);
+    BKE_bvhtree_from_mesh_get(&treedata, mesh, BVHTREE_FROM_LOOPTRI, 2);
+    rng = BLI_rng_new_srandom(0);
+
+    for (int i = 0; i < mvert_num; i++) {
+      if (find_internal_spring_target_vertex(
+              &treedata,
+              i,
+              rng,
+              clmd->sim_parms->internal_spring_max_length,
+              clmd->sim_parms->internal_spring_max_diversion,
+              (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_INTERNAL_SPRINGS_NORMAL),
+              &tar_v_idx)) {
+        if (BLI_BITMAP_TEST_BOOL(verts_used, i * mvert_num + tar_v_idx)) {
+          continue;
+        }
+
+        BLI_BITMAP_ENABLE(verts_used, i * mvert_num + tar_v_idx);
+        BLI_BITMAP_ENABLE(verts_used, tar_v_idx * mvert_num + i);
+
+        spring = (ClothSpring *)MEM_callocN(sizeof(ClothSpring), "cloth spring");
+
+        if (spring) {
+          spring_verts_ordered_set(spring, i, tar_v_idx);
+
+          shrink_factor = cloth_shrink_factor(clmd, cloth->verts, spring->ij, spring->kl);
+          spring->restlen = len_v3v3(cloth->verts[spring->kl].xrest,
+                                     cloth->verts[spring->ij].xrest) *
+                            shrink_factor;
+          spring->lin_stiffness = (cloth->verts[spring->kl].internal_stiff +
+                                   cloth->verts[spring->ij].internal_stiff) /
+                                  2.0f;
+          spring->type = CLOTH_SPRING_TYPE_INTERNAL;
+
+          spring->flags = 0;
+
+          BLI_linklist_prepend(&cloth->springs, spring);
+
+          if (spring_ref) {
+            spring_ref[i].spring = spring;
+          }
+        }
+        else {
+          cloth_free_errorsprings(cloth, edgelist, spring_ref);
+          MEM_freeN(verts_used);
+          free_bvhtree_from_mesh(&treedata);
+          return 0;
+        }
+      }
+    }
+    MEM_freeN(verts_used);
+    free_bvhtree_from_mesh(&treedata);
+    BLI_rng_free(rng);
   }
 
   clmd->sim_parms->avg_spring_len = 0.0f;
@@ -1740,8 +1908,6 @@ static int cloth_build_springs(ClothModifierData *clmd, Mesh *mesh)
 #endif
 
   return 1;
+}
 
-} /* cloth_build_springs */
-/***************************************************************************************
- * SPRING NETWORK GPU_BATCH_BUILDING IMPLEMENTATION END
- ***************************************************************************************/
+/** \} */

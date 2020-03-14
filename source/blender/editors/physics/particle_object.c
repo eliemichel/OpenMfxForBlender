@@ -1065,7 +1065,7 @@ static void remove_particle_systems_from_object(Object *ob_to)
     if (ELEM(md->type,
              eModifierType_ParticleSystem,
              eModifierType_DynamicPaint,
-             eModifierType_Smoke)) {
+             eModifierType_Fluid)) {
       BLI_remlink(&ob_to->modifiers, md);
       modifier_free(md);
     }
@@ -1259,6 +1259,11 @@ static int copy_particle_systems_exec(bContext *C, wmOperator *op)
     }
   }
   CTX_DATA_END;
+
+  if (changed_tot > 0) {
+    Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+    DEG_graph_tag_relations_update(depsgraph);
+  }
 
   if ((changed_tot == 0 && fail == 0) || fail) {
     BKE_reportf(op->reports,

@@ -225,6 +225,13 @@ Shader::~Shader()
 
 bool Shader::is_constant_emission(float3 *emission)
 {
+  /* If the shader has AOVs, they need to be evaluated, so we can't skip the shader. */
+  foreach (ShaderNode *node, graph->nodes) {
+    if (node->special_type == SHADER_SPECIAL_TYPE_OUTPUT_AOV) {
+      return false;
+    }
+  }
+
   ShaderInput *surf = graph->output()->input("Surface");
 
   if (surf->link == NULL) {
@@ -310,7 +317,8 @@ void Shader::tag_update(Scene *scene)
    * has use_mis set to false. We are quite close to release now, so
    * better to be safe.
    */
-  if (this == scene->default_background && scene->light_manager->has_background_light(scene)) {
+  if (this == scene->background->get_shader(scene) &&
+      scene->light_manager->has_background_light(scene)) {
     scene->light_manager->need_update = true;
   }
 

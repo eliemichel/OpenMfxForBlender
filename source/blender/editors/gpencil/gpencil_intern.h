@@ -214,6 +214,8 @@ typedef struct tGPDprimitive {
   int sel_cp;
   /** flag to determine operations in progress */
   int flag;
+  /** flag to determine operations previous mode */
+  int prev_flag;
   /** recorded mouse-position */
   float mval[2];
   /** previous recorded mouse-position */
@@ -426,12 +428,15 @@ void GPENCIL_OT_sculpt_paint(struct wmOperatorType *ot);
 
 /* buttons editing --- */
 
-void GPENCIL_OT_data_add(struct wmOperatorType *ot);
+void GPENCIL_OT_annotation_add(struct wmOperatorType *ot);
 void GPENCIL_OT_data_unlink(struct wmOperatorType *ot);
 
 void GPENCIL_OT_layer_add(struct wmOperatorType *ot);
 void GPENCIL_OT_layer_remove(struct wmOperatorType *ot);
 void GPENCIL_OT_layer_move(struct wmOperatorType *ot);
+void GPENCIL_OT_layer_annotation_add(struct wmOperatorType *ot);
+void GPENCIL_OT_layer_annotation_remove(struct wmOperatorType *ot);
+void GPENCIL_OT_layer_annotation_move(struct wmOperatorType *ot);
 void GPENCIL_OT_layer_duplicate(struct wmOperatorType *ot);
 void GPENCIL_OT_layer_duplicate_object(struct wmOperatorType *ot);
 
@@ -447,6 +452,7 @@ void GPENCIL_OT_layer_merge(struct wmOperatorType *ot);
 void GPENCIL_OT_blank_frame_add(struct wmOperatorType *ot);
 
 void GPENCIL_OT_active_frame_delete(struct wmOperatorType *ot);
+void GPENCIL_OT_annotation_active_frame_delete(struct wmOperatorType *ot);
 void GPENCIL_OT_active_frames_delete_all(struct wmOperatorType *ot);
 void GPENCIL_OT_frame_duplicate(struct wmOperatorType *ot);
 void GPENCIL_OT_frame_clean_fill(struct wmOperatorType *ot);
@@ -465,6 +471,7 @@ enum {
   GP_STROKE_CIRCLE = 2,
   GP_STROKE_ARC = 3,
   GP_STROKE_CURVE = 4,
+  GP_STROKE_POLYLINE = 5,
 };
 
 enum {

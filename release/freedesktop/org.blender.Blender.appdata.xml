@@ -40,6 +40,26 @@
         </screenshot>
     </screenshots>
     <releases>
+        <release version="2.82" date="2020-02-13">
+            <description>
+                <p>New features:</p>
+                <ul>
+                    <li>New Mantaflow fluid and smoke simulation system</li>
+                    <li>UDIM textures for rendering and painting</li>
+                    <li>USD scene export</li>
+                    <li>Bevel custom profiles</li>
+                    <li>Cycles custom shader AOVs</li>
+                    <li>Cloth air pressure simulation</li>
+                    <li>Weld modifier for meshes</li>
+                </ul>
+                <p>Enhancements:</p>
+                <ul>
+                    <li>New and improved sculpt tools</li>
+                    <li>New grease pencil tools and modifiers</li>
+                    <li>New bone and constraint settings for rigging</li>
+                </ul>
+            </description>
+        </release>
         <release version="2.81" date="2019-11-14">
             <description>
                 <p>New features:</p>
@@ -50,7 +70,6 @@
                     <li>Revamped shaders for texturing</li>
                     <li>Cycles denoising with OpenImageDenoise and NVIDIA RTX support</li>
                     <li>Library overrides to make local overrides to linked characters and other data</li>
-                    <li>
                 </ul>
                 <ul>
                 <p>Enhancements:</p>

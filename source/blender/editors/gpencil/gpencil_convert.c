@@ -1385,11 +1385,13 @@ static void gp_layer_to_curve(bContext *C,
 
   if (mode == GP_STROKECONVERT_POLY) {
     for (nu = cu->nurb.first; nu; nu = nu->next) {
-      BKE_nurb_type_convert(nu, CU_POLY, false);
+      BKE_nurb_type_convert(nu, CU_POLY, false, NULL);
     }
   }
 
   ED_object_base_select(base_new, BA_SELECT);
+
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 }
 
 /* --- */

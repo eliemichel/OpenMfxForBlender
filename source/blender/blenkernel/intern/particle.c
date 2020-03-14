@@ -34,7 +34,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_particle_types.h"
-#include "DNA_smoke_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_dynamicpaint_types.h"
 
@@ -360,6 +360,11 @@ bool psys_check_enabled(Object *ob, ParticleSystem *psys, const bool use_render_
   }
 
   psmd = psys_get_modifier(ob, psys);
+
+  if (!psmd) {
+    return 0;
+  }
+
   if (use_render_params) {
     if (!(psmd->modifier.mode & eModifierMode_Render)) {
       return 0;
@@ -2965,7 +2970,7 @@ void psys_cache_paths(ParticleSimulationData *sim, float cfra, const bool use_re
     /*--get the first data points--*/
     init_particle_interpolation(sim->ob, sim->psys, pa, &pind);
 
-    /* hairmat is needed for for non-hair particle too so we get proper rotations */
+    /* 'hairmat' is needed for non-hair particle too so we get proper rotations. */
     psys_mat_hair_to_global(sim->ob, psmd->mesh_final, psys->part->from, pa, hairmat);
     copy_v3_v3(rotmat[0], hairmat[2]);
     copy_v3_v3(rotmat[1], hairmat[1]);
@@ -3241,22 +3246,24 @@ static void psys_cache_edit_paths_iter(void *__restrict iter_data_v,
       }
     }
     else {
+      /* HACK(fclem): Instead of setting the color we pass the select state in the red channel.
+       * This is then picked up in DRW and the gpu shader will do the color interpolation. */
       if ((ekey + (pind.ekey[0] - point->keys))->flag & PEK_SELECT) {
         if ((ekey + (pind.ekey[1] - point->keys))->flag & PEK_SELECT) {
-          copy_v3_v3(ca->col, iter_data->sel_col);
+          ca->col[0] = 1.0f;
         }
         else {
           keytime = (t - (*pind.ekey[0]->time)) / ((*pind.ekey[1]->time) - (*pind.ekey[0]->time));
-          interp_v3_v3v3(ca->col, iter_data->sel_col, iter_data->nosel_col, keytime);
+          ca->col[0] = 1.0f - keytime;
         }
       }
       else {
         if ((ekey + (pind.ekey[1] - point->keys))->flag & PEK_SELECT) {
           keytime = (t - (*pind.ekey[0]->time)) / ((*pind.ekey[1]->time) - (*pind.ekey[0]->time));
-          interp_v3_v3v3(ca->col, iter_data->nosel_col, iter_data->sel_col, keytime);
+          ca->col[0] = keytime;
         }
         else {
-          copy_v3_v3(ca->col, iter_data->nosel_col);
+          ca->col[0] = 0.0f;
         }
       }
     }
@@ -3560,7 +3567,9 @@ ModifierData *object_add_particle_system(Main *bmain, Scene *scene, Object *ob, 
 
   psys->totpart = 0;
   psys->flag = PSYS_CURRENT;
-  psys->cfra = BKE_scene_frame_to_ctime(scene, CFRA + 1);
+  if (scene != NULL) {
+    psys->cfra = BKE_scene_frame_to_ctime(scene, CFRA + 1);
+  }
 
   DEG_relations_tag_update(bmain);
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
@@ -3577,12 +3586,45 @@ void object_remove_particle_system(Main *bmain, Scene *UNUSED(scene), Object *ob
     return;
   }
 
-  /* clear all other appearances of this pointer (like on smoke flow modifier) */
-  if ((md = modifiers_findByType(ob, eModifierType_Smoke))) {
-    SmokeModifierData *smd = (SmokeModifierData *)md;
-    if ((smd->type == MOD_SMOKE_TYPE_FLOW) && smd->flow && smd->flow->psys) {
-      if (smd->flow->psys == psys) {
-        smd->flow->psys = NULL;
+  /* Clear particle system in fluid modifier. */
+  if ((md = modifiers_findByType(ob, eModifierType_Fluid))) {
+    FluidModifierData *mmd = (FluidModifierData *)md;
+
+    /* Clear particle system pointer in flow settings. */
+    if ((mmd->type == MOD_FLUID_TYPE_FLOW) && mmd->flow && mmd->flow->psys) {
+      if (mmd->flow->psys == psys) {
+        mmd->flow->psys = NULL;
+      }
+    }
+    /* Clear particle flag in domain settings when removing particle system manually. */
+    if (mmd->type == MOD_FLUID_TYPE_DOMAIN) {
+      if (psys->part->type == PART_FLUID_FLIP) {
+        mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_FLIP;
+      }
+      if (psys->part->type == PART_FLUID_SPRAY || psys->part->type == PART_FLUID_SPRAYFOAM ||
+          psys->part->type == PART_FLUID_SPRAYBUBBLE ||
+          psys->part->type == PART_FLUID_SPRAYFOAMBUBBLE) {
+        mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_SPRAY;
+      }
+      if (psys->part->type == PART_FLUID_FOAM || psys->part->type == PART_FLUID_SPRAYFOAM ||
+          psys->part->type == PART_FLUID_FOAMBUBBLE ||
+          psys->part->type == PART_FLUID_SPRAYFOAMBUBBLE) {
+        mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_FOAM;
+      }
+      if (psys->part->type == PART_FLUID_BUBBLE || psys->part->type == PART_FLUID_FOAMBUBBLE ||
+          psys->part->type == PART_FLUID_SPRAYBUBBLE ||
+          psys->part->type == PART_FLUID_SPRAYFOAMBUBBLE) {
+        mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_BUBBLE;
+      }
+      if (psys->part->type == PART_FLUID_TRACER) {
+        mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_TRACER;
+      }
+
+      /* Disable combined export if combined particle system was deleted. */
+      if (psys->part->type == PART_FLUID_SPRAYFOAM || psys->part->type == PART_FLUID_SPRAYBUBBLE ||
+          psys->part->type == PART_FLUID_FOAMBUBBLE ||
+          psys->part->type == PART_FLUID_SPRAYFOAMBUBBLE) {
+        mmd->domain->sndparticle_combined_export = SNDPARTICLE_COMBINED_EXPORT_OFF;
       }
     }
   }
@@ -3596,12 +3638,14 @@ void object_remove_particle_system(Main *bmain, Scene *UNUSED(scene), Object *ob
     }
   }
 
-  /* clear modifier */
+  /* Clear modifier, skip empty ones. */
   psmd = psys_get_modifier(ob, psys);
-  BLI_remlink(&ob->modifiers, psmd);
-  modifier_free((ModifierData *)psmd);
+  if (psmd) {
+    BLI_remlink(&ob->modifiers, psmd);
+    modifier_free((ModifierData *)psmd);
+  }
 
-  /* clear particle system */
+  /* Clear particle system. */
   BLI_remlink(&ob->particlesystem, psys);
   if (psys->part) {
     id_us_min(&psys->part->id);

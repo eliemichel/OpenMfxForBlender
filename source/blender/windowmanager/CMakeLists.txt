@@ -66,6 +66,7 @@ set(SRC
   intern/wm_menu_type.c
   intern/wm_operator_props.c
   intern/wm_operator_type.c
+  intern/wm_operator_utils.c
   intern/wm_operators.c
   intern/wm_panel_type.c
   intern/wm_platform_support.c
@@ -121,6 +122,10 @@ if(WITH_AUDASPACE)
   list(APPEND INC_SYS
     ${AUDASPACE_C_INCLUDE_DIRS}
   )
+  list(APPEND LIB
+    ${AUDASPACE_C_LIBRARIES}
+    ${AUDASPACE_PY_LIBRARIES}
+  )
 endif()
 
 add_definitions(${GL_DEFINITIONS})
@@ -136,6 +141,9 @@ endif()
 if(WITH_CODEC_FFMPEG)
   list(APPEND INC_SYS
     ${FFMPEG_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${FFMPEG_LIBRARIES}
   )
   add_definitions(-DWITH_FFMPEG)
 endif()
