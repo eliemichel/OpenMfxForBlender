@@ -96,6 +96,43 @@ void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
   printf("==/ mfx_Modifier_on_plugin_changed\n");
 }
 
+// TODO: move somewhere else
+static void copy_parameter_value(OpenMeshEffectParameterInfo *parameter_info, OfxPropertyStruct *value)
+{
+  switch (parameter_info->type) {
+  case PARAM_TYPE_INTEGER_3D:
+    parameter_info->integer_vec_value[2] = value->value[2].as_int;
+  case PARAM_TYPE_INTEGER_2D:
+    parameter_info->integer_vec_value[1] = value->value[1].as_int;
+  case PARAM_TYPE_INTEGER:
+    parameter_info->integer_vec_value[0] = value->value[0].as_int;
+    break;
+
+  case PARAM_TYPE_RGBA:
+    parameter_info->float_vec_value[3] = (float)value->value[3].as_double;
+  case PARAM_TYPE_DOUBLE_3D:
+  case PARAM_TYPE_RGB:
+    parameter_info->float_vec_value[2] = (float)value->value[2].as_double;
+  case PARAM_TYPE_DOUBLE_2D:
+    parameter_info->float_vec_value[1] = (float)value->value[1].as_double;
+  case PARAM_TYPE_DOUBLE:
+    parameter_info->float_vec_value[0] = (float)value->value[0].as_double;
+    break;
+
+  case PARAM_TYPE_BOOLEAN:
+    parameter_info->integer_vec_value[0] = (int)value->value[0].as_int;
+    break;
+
+  case PARAM_TYPE_STRING:
+    strncpy(parameter_info->string_value, value->value[0].as_char, MOD_OPENMESHEFFECT_MAX_STRING_VALUE);
+    break;
+
+  default:
+    printf("-- Skipping default value for parameter %s (unsupported type: %d)\n", parameter_info->name, parameter_info->type);
+    break;
+  }
+}
+
 void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd) {
   printf("==. mfx_Modifier_on_asset_changed on data %p\n", fxmd);
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
@@ -127,6 +164,11 @@ void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd) {
     strncpy(fxmd->parameter_info[i].name, system_name, sizeof(fxmd->parameter_info[i].name));
     strncpy(fxmd->parameter_info[i].label, parameters->parameters[i]->name, sizeof(fxmd->parameter_info[i].label));
     fxmd->parameter_info[i].type = parameters->parameters[i]->type;
+
+    int default_idx = find_property(&props, kOfxParamPropDefault);
+    if (default_idx > -1) {
+      copy_parameter_value(&fxmd->parameter_info[i], props.properties[default_idx]);
+    }
   }
 
   printf("==/ mfx_Modifier_on_asset_changed on data %p\n", fxmd);

@@ -125,6 +125,10 @@ bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type
     return (
       (0 == strcmp(property, kOfxParamPropType) && type == PROP_TYPE_STRING) ||
       (0 == strcmp(property, kOfxParamPropScriptName) && type == PROP_TYPE_STRING) ||
+      (0 == strcmp(property, kOfxParamPropDefault) && type == PROP_TYPE_STRING) ||
+      (0 == strcmp(property, kOfxParamPropDefault) && type == PROP_TYPE_INT) ||
+      (0 == strcmp(property, kOfxParamPropDefault) && type == PROP_TYPE_DOUBLE) ||
+      (0 == strcmp(property, kOfxParamPropDefault) && type == PROP_TYPE_POINTER) ||
       false
       );
   case PROP_CTX_ATTRIB:
