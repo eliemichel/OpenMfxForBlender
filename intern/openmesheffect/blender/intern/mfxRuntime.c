@@ -202,6 +202,14 @@ void runtime_get_parameters_from_rna(OpenMeshEffectRuntime *rd, OpenMeshEffectMo
     case PARAM_TYPE_INTEGER:
       parameters[i]->value[0].as_int = fxmd->parameter_info[i].integer_vec_value[0];
       break;
+
+    case PARAM_TYPE_SHORT_3D:
+      parameters[i]->value[2].as_short = fxmd->parameter_info[i].short_vec_value[2];
+    case PARAM_TYPE_SHORT_2D:
+      parameters[i]->value[1].as_short = fxmd->parameter_info[i].short_vec_value[1];
+    case PARAM_TYPE_SHORT:
+      parameters[i]->value[0].as_short = fxmd->parameter_info[i].short_vec_value[0];
+      break;
     
     case PARAM_TYPE_RGBA:
       parameters[i]->value[3].as_double = (double)fxmd->parameter_info[i].float_vec_value[3];

@@ -31,6 +31,7 @@ typedef union OfxParamValueStruct {
     int as_int;
     double as_double;
     bool as_bool;
+    short as_short;
 } OfxParamValueStruct;
 
 /**

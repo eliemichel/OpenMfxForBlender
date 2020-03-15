@@ -171,6 +171,15 @@ ParamType parse_parameter_type(const char *str) {
   if (0 == strcmp(str, kOfxParamTypeInteger3D)) {
     return PARAM_TYPE_INTEGER_3D;
   }
+  if (0 == strcmp(str, kOfxParamTypeShort)) {
+    return PARAM_TYPE_SHORT;
+  }
+  if (0 == strcmp(str, kOfxParamTypeShort2D)) {
+    return PARAM_TYPE_SHORT_2D;
+  }
+  if (0 == strcmp(str, kOfxParamTypeShort3D)) {
+    return PARAM_TYPE_SHORT_3D;
+  }
   if (0 == strcmp(str, kOfxParamTypeDouble)) {
     return PARAM_TYPE_DOUBLE;
   }
@@ -213,14 +222,17 @@ ParamType parse_parameter_type(const char *str) {
 size_t parameter_type_dimensions(ParamType type) {
   switch (type) {
   case PARAM_TYPE_INTEGER:
+  case PARAM_TYPE_SHORT:
   case PARAM_TYPE_DOUBLE:
   case PARAM_TYPE_BOOLEAN:
   case PARAM_TYPE_STRING:
     return 1;
   case PARAM_TYPE_INTEGER_2D:
+  case PARAM_TYPE_SHORT_2D:
   case PARAM_TYPE_DOUBLE_2D:
     return 2;
   case PARAM_TYPE_INTEGER_3D:
+  case PARAM_TYPE_SHORT_3D:
   case PARAM_TYPE_DOUBLE_3D:
   case PARAM_TYPE_RGB:
     return 3;
@@ -308,6 +320,11 @@ OfxStatus paramGetValue(OfxParamHandle paramHandle, ...) {
     case PARAM_TYPE_INTEGER_3D:
       *va_arg(valist, int*) = paramHandle->value[i].as_int;
       break;
+    case PARAM_TYPE_SHORT:
+    case PARAM_TYPE_SHORT_2D:
+    case PARAM_TYPE_SHORT_3D:
+      *va_arg(valist, short *) = paramHandle->value[i].as_short;
+      break;
     case PARAM_TYPE_DOUBLE:
     case PARAM_TYPE_DOUBLE_2D:
     case PARAM_TYPE_DOUBLE_3D:
@@ -359,10 +376,16 @@ OfxStatus paramSetValue(OfxParamHandle paramHandle, ...) {
   va_start(args, paramHandle);
   for (size_t i = 0 ; i < dimensions ; ++i) {
     switch (paramHandle->type) {
+    
     case PARAM_TYPE_INTEGER:
     case PARAM_TYPE_INTEGER_2D:
     case PARAM_TYPE_INTEGER_3D:
       paramHandle->value[i].as_int = va_arg(args, int);
+      break;
+    case PARAM_TYPE_SHORT:
+    case PARAM_TYPE_SHORT_2D:
+    case PARAM_TYPE_SHORT_3D:
+      paramHandle->value[i].as_short = va_arg(args, short);
       break;
     case PARAM_TYPE_DOUBLE:
     case PARAM_TYPE_DOUBLE_2D:

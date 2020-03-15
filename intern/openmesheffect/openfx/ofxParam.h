@@ -66,6 +66,8 @@ These strings are used to identify the type of the parameter when it is defined,
 
 /** @brief String to identify a param as a single valued integer */
 #define kOfxParamTypeInteger "OfxParamTypeInteger"
+/** @brief String to identify a param as a single valued short */
+#define kOfxParamTypeShort "OfxParamTypeShort"
 /** @brief String to identify a param as a Single valued floating point parameter  */
 #define kOfxParamTypeDouble "OfxParamTypeDouble"
 /** @brief String to identify a param as a Single valued boolean parameter */
@@ -80,10 +82,14 @@ These strings are used to identify the type of the parameter when it is defined,
 #define kOfxParamTypeDouble2D "OfxParamTypeDouble2D"
 /** @brief String to identify a param as a Two dimensional integer point parameter */
 #define kOfxParamTypeInteger2D "OfxParamTypeInteger2D"
+/** @brief String to identify a param as a Two dimensional short point parameter */
+#define kOfxParamTypeShort2D "OfxParamTypeShort2D"
 /** @brief String to identify a param as a Three dimensional floating point parameter */
 #define kOfxParamTypeDouble3D "OfxParamTypeDouble3D"
 /** @brief String to identify a param as a Three dimensional integer parameter */
 #define kOfxParamTypeInteger3D "OfxParamTypeInteger3D"
+/** @brief String to identify a param as a Three dimensional short parameter */
+#define kOfxParamTypeShort3D "OfxParamTypeShort3D"
 /** @brief String to identify a param as a String (UTF8) parameter */
 #define kOfxParamTypeString "OfxParamTypeString"
 /** @brief String to identify a param as a Plug-in defined parameter */
@@ -415,6 +421,7 @@ rendered output. Think of the what happens when you add a new key frame.
 
 The exact type and dimension is dependant on the type of the parameter. These are....
   - ::kOfxParamTypeInteger - integer property of one dimension
+  - ::kOfxParamTypeShort - short property of one dimension
   - ::kOfxParamTypeDouble - double property of one dimension
   - ::kOfxParamTypeBoolean - integer property of one dimension
   - ::kOfxParamTypeChoice - integer property of one dimension
@@ -422,8 +429,10 @@ The exact type and dimension is dependant on the type of the parameter. These ar
   - ::kOfxParamTypeRGB - double property of three dimensions
   - ::kOfxParamTypeDouble2D - double property of two dimensions
   - ::kOfxParamTypeInteger2D - integer property of two dimensions
+  - ::kOfxParamTypeShort2D - short property of two dimensions
   - ::kOfxParamTypeDouble3D - double property of three dimensions
   - ::kOfxParamTypeInteger3D - integer property of three dimensions
+  - ::kOfxParamTypeShort3D - short property of three dimensions
   - ::kOfxParamTypeString - string property of one dimension
   - ::kOfxParamTypeCustom - string property of one dimension
   - ::kOfxParamTypeGroup - does not have this property
