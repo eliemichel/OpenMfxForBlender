@@ -181,7 +181,7 @@ void runtime_set_effect_index(OpenMeshEffectRuntime *rd, int effect_index) {
   }
 
   if (rd->is_plugin_valid) {
-    rd->effect_index = min(max(-1, effect_index), rd->registry.num_plugins - 1);
+    rd->effect_index = min_ii(max_ii(-1, effect_index), rd->registry.num_plugins - 1);
   } else {
     rd->effect_index = -1;
   }
