@@ -30,6 +30,7 @@ typedef union OfxPropertyValueStruct {
     char *as_char;
     double as_double;
     int as_int;
+    bool as_bool;
 } OfxPropertyValueStruct;
 
 typedef struct OfxPropertyStruct {

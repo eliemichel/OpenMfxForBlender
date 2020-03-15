@@ -186,6 +186,12 @@ ParamType parse_parameter_type(const char *str) {
   if (0 == strcmp(str, kOfxParamTypeRGBA)) {
     return PARAM_TYPE_RGBA;
   }
+  if (0 == strcmp(str, kOfxParamTypeBoolean3D)) {
+    return PARAM_TYPE_BOOLEAN_3D;
+  }
+  if (0 == strcmp(str, kOfxParamTypeBoolean2D)) {
+    return PARAM_TYPE_BOOLEAN_2D;
+  }
   if (0 == strcmp(str, kOfxParamTypeBoolean)) {
     return PARAM_TYPE_BOOLEAN;
   }
@@ -217,9 +223,11 @@ size_t parameter_type_dimensions(ParamType type) {
   case PARAM_TYPE_BOOLEAN:
   case PARAM_TYPE_STRING:
     return 1;
+  case PARAM_TYPE_BOOLEAN_2D:
   case PARAM_TYPE_INTEGER_2D:
   case PARAM_TYPE_DOUBLE_2D:
     return 2;
+  case PARAM_TYPE_BOOLEAN_3D:
   case PARAM_TYPE_INTEGER_3D:
   case PARAM_TYPE_DOUBLE_3D:
   case PARAM_TYPE_RGB:
@@ -316,8 +324,11 @@ OfxStatus paramGetValue(OfxParamHandle paramHandle, ...) {
       *va_arg(valist, double*) = paramHandle->value[i].as_double;
       break;
     case PARAM_TYPE_BOOLEAN:
+    case PARAM_TYPE_BOOLEAN_2D:
+    case PARAM_TYPE_BOOLEAN_3D:
       *va_arg(valist, bool*) = paramHandle->value[i].as_bool;
       break;
+
     case PARAM_TYPE_STRING:
       // TODO: check memory management
       *va_arg(valist, char**) = paramHandle->value[i].as_char;
@@ -372,6 +383,8 @@ OfxStatus paramSetValue(OfxParamHandle paramHandle, ...) {
       paramHandle->value[i].as_double = va_arg(args, double);
       break;
     case PARAM_TYPE_BOOLEAN:
+    case PARAM_TYPE_BOOLEAN_2D:
+    case PARAM_TYPE_BOOLEAN_3D:
       paramHandle->value[i].as_bool = va_arg(args, bool);
       break;
     case PARAM_TYPE_STRING:

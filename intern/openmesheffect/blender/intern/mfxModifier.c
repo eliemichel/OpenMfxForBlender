@@ -119,8 +119,14 @@ static void copy_parameter_value(OpenMeshEffectParameterInfo *parameter_info, Of
     parameter_info->float_vec_value[0] = (float)value->value[0].as_double;
     break;
 
+  case PARAM_TYPE_BOOLEAN_3D:
+    parameter_info->bool_vec_value[2] = (bool)value->value[2].as_bool;
+    break;
+  case PARAM_TYPE_BOOLEAN_2D:
+    parameter_info->bool_vec_value[1] = (bool)value->value[1].as_bool;
+    break;
   case PARAM_TYPE_BOOLEAN:
-    parameter_info->integer_vec_value[0] = (int)value->value[0].as_int;
+    parameter_info->bool_vec_value[0] = (bool)value->value[0].as_bool;
     break;
 
   case PARAM_TYPE_STRING:

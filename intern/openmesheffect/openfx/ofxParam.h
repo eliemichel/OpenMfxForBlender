@@ -80,10 +80,14 @@ These strings are used to identify the type of the parameter when it is defined,
 #define kOfxParamTypeDouble2D "OfxParamTypeDouble2D"
 /** @brief String to identify a param as a Two dimensional integer point parameter */
 #define kOfxParamTypeInteger2D "OfxParamTypeInteger2D"
+/** @brief String to identify a param as a Two dimensional boolean point parameter */
+#define kOfxParamTypeBoolean2D "kOfxParamTypeBoolean2D"
 /** @brief String to identify a param as a Three dimensional floating point parameter */
 #define kOfxParamTypeDouble3D "OfxParamTypeDouble3D"
 /** @brief String to identify a param as a Three dimensional integer parameter */
 #define kOfxParamTypeInteger3D "OfxParamTypeInteger3D"
+/** @brief String to identify a param as a Three dimensional boolean parameter */
+#define kOfxParamTypeBoolean3D "kOfxParamTypeBoolean3D"
 /** @brief String to identify a param as a String (UTF8) parameter */
 #define kOfxParamTypeString "OfxParamTypeString"
 /** @brief String to identify a param as a Plug-in defined parameter */

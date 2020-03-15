@@ -2036,6 +2036,9 @@ typedef struct OpenMeshEffectParameterInfo {
   float float_vec_value[4];
   /** Used for Integer, Integer2D, Integer3D, Boolean, Choice index */
   int integer_vec_value[4];
+  /** Used for Boolean, Boolean2D, Boolean3D */
+  bool bool_vec_value[4];
+
   /** MOD_OPENMESHEFFECT_MAX_STRING_VALUE */
   char string_value[1024];
 } OpenMeshEffectParameterInfo;

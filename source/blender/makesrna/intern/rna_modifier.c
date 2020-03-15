@@ -1859,19 +1859,35 @@ static void rna_OpenMeshEffectParameterInfo_rgba_value_set(PointerRNA *ptr, cons
 static void rna_OpenMeshEffectParameterInfo_boolean_value_get(PointerRNA *ptr, bool *value)
 {
   OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
-  value[0] = parm->integer_vec_value[0] != 0;
-  value[1] = false;
-  value[2] = false;
-  value[3] = false;
-}
+  value[0] = parm->bool_vec_value[0];
+ }
 
 static void rna_OpenMeshEffectParameterInfo_boolean_value_set(PointerRNA *ptr, const bool *value)
 {
   OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
-  parm->integer_vec_value[0] = value[0] ? 1 : 0;
-  parm->integer_vec_value[1] = false;
-  parm->integer_vec_value[2] = false;
-  parm->integer_vec_value[3] = false;
+  parm->bool_vec_value[0] = value[0];
+}
+static void rna_OpenMeshEffectParameterInfo_boolean2d_value_get(PointerRNA *ptr, bool *value)
+{
+  OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
+  copy_v2_v2(value, parm->bool_vec_value);
+}
+
+static void rna_OpenMeshEffectParameterInfo_boolean2d_value_set(PointerRNA *ptr, const bool *value)
+{
+  OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
+  copy_v2_v2_bool(parm->bool_vec_value, value);
+}
+static void rna_OpenMeshEffectParameterInfo_boolean3d_value_get(PointerRNA *ptr, bool *value)
+{
+  OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
+  copy_v3_v3(value, parm->bool_vec_value);
+}
+
+static void rna_OpenMeshEffectParameterInfo_boolean3d_value_set(PointerRNA *ptr, const bool *value)
+{
+  OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
+  copy_v3_v3_bool(parm->bool_vec_value, value);
 }
 
 static void rna_OpenMeshEffectParameterInfo_string_value_get(PointerRNA *ptr, char *value)
@@ -6745,13 +6761,29 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
                                NULL);
 
   prop = RNA_def_property(srna, "boolean_value", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "integer_vec_value", 0);
+  RNA_def_property_boolean_sdna(prop, NULL, "boolean_vec_value", 0);
   RNA_def_property_array(prop, 1);
   RNA_def_property_ui_text(prop, "Boolean", "Parameter value as a boolean");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
   RNA_def_property_boolean_funcs(prop,
                                 "rna_OpenMeshEffectParameterInfo_boolean_value_get",
                                 "rna_OpenMeshEffectParameterInfo_boolean_value_set");
+  prop = RNA_def_property(srna, "boolean2d_value", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "boolean_vec_value", 0);
+  RNA_def_property_array(prop, 2);
+  RNA_def_property_ui_text(prop, "Boolean2D", "Parameter value as a 2D boolean");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+  RNA_def_property_boolean_funcs(prop,
+                                 "rna_OpenMeshEffectParameterInfo_boolean2d_value_get",
+                                 "rna_OpenMeshEffectParameterInfo_boolean2d_value_set");
+  prop = RNA_def_property(srna, "boolean3d_value", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "boolean_vec_value", 0);
+  RNA_def_property_array(prop, 3);
+  RNA_def_property_ui_text(prop, "Boolean3D", "Parameter value as a 3D boolean");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+  RNA_def_property_boolean_funcs(prop,
+                                 "rna_OpenMeshEffectParameterInfo_boolean3d_value_get",
+                                 "rna_OpenMeshEffectParameterInfo_boolean3d_value_set");
 
   prop = RNA_def_property(srna, "string_value", PROP_STRING, PROP_NONE);
   RNA_def_property_string_funcs(prop,
