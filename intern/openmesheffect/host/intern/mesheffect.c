@@ -302,6 +302,8 @@ OfxStatus meshAlloc(OfxMeshHandle meshHandle) {
       byteSize = sizeof(int);
     } else if (0 == strcmp(type, kOfxMeshAttribTypeFloat)) {
       byteSize = sizeof(float);
+    } else if (0 == strcmp(type, kOfxMeshAttribTypeShort)){
+      byteSize = sizeof(short);  
     } else {
       return kOfxStatErrBadHandle;
     }

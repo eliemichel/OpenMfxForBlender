@@ -128,6 +128,10 @@ attributes include a position for points, a point index for vertices and a verte
  */
 #define kOfxMeshAttribTypeFloat "OfxMeshAttribTypeFloat"
 
+/** @brief Attribute type short 16 bit
+ */
+#define kOfxMeshAttribTypeShort "OfxMeshAttribTypeShort"
+
 /*@}*/
 
 /**
