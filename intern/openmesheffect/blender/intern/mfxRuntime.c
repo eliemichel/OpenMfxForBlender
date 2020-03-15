@@ -214,8 +214,14 @@ void runtime_get_parameters_from_rna(OpenMeshEffectRuntime *rd, OpenMeshEffectMo
       parameters[i]->value[0].as_double = (double)fxmd->parameter_info[i].float_vec_value[0];
       break;
 
+    case PARAM_TYPE_BOOLEAN_3D:
+      parameters[i]->value[2].as_bool = fxmd->parameter_info[i].bool_vec_value[2];
+      break;
+    case PARAM_TYPE_BOOLEAN_2D:
+      parameters[i]->value[1].as_bool = fxmd->parameter_info[i].bool_vec_value[1];
+      break;
     case PARAM_TYPE_BOOLEAN:
-      parameters[i]->value[0].as_bool = fxmd->parameter_info[i].integer_vec_value[0];
+      parameters[i]->value[0].as_bool = fxmd->parameter_info[i].bool_vec_value[0];
       break;
 
     case PARAM_TYPE_STRING:

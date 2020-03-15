@@ -43,6 +43,8 @@ typedef enum PropertyType {
 	PROP_TYPE_STRING,
 	PROP_TYPE_DOUBLE,
 	PROP_TYPE_INT,
+  PROP_TYPE_BOOL,
+
 } PropertyType;
 
 // TODO: use kOfxPropType instead
