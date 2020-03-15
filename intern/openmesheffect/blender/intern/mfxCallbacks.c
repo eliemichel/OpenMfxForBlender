@@ -39,19 +39,6 @@
 #include "BLI_string.h"
 #include "BLI_path_util.h"
 
-#ifdef _WIN32
-#else
- // UTILS
- // TODO: isn't it already defined somewhere?
-inline int max(int a, int b) {
-  return (a > b) ? a : b;
-}
-
-inline int min(int a, int b) {
-  return (a < b) ? a : b;
-}
-#endif
-
 #define MFX_CHECK(call) { OfxStatus status = call; assert(kOfxStatOK == status); }
 
 OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
