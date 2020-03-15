@@ -108,6 +108,14 @@ static void copy_parameter_value(OpenMeshEffectParameterInfo *parameter_info, Of
     parameter_info->integer_vec_value[0] = value->value[0].as_int;
     break;
 
+  case PARAM_TYPE_SHORT_3D:
+    parameter_info->short_vec_value[2] = value->value[2].as_short;
+  case PARAM_TYPE_SHORT_2D:
+    parameter_info->short_vec_value[1] = value->value[1].as_short;
+  case PARAM_TYPE_SHORT:
+    parameter_info->short_vec_value[0] = value->value[0].as_short;
+    break;
+
   case PARAM_TYPE_RGBA:
     parameter_info->float_vec_value[3] = (float)value->value[3].as_double;
   case PARAM_TYPE_DOUBLE_3D:

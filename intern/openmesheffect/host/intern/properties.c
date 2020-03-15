@@ -127,6 +127,7 @@ bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type
       (0 == strcmp(property, kOfxParamPropScriptName) && type == PROP_TYPE_STRING) ||
       (0 == strcmp(property, kOfxParamPropDefault) && type == PROP_TYPE_STRING) ||
       (0 == strcmp(property, kOfxParamPropDefault) && type == PROP_TYPE_INT) ||
+      (0 == strcmp(property, kOfxParamPropDefault) && type == PROP_TYPE_SHORT) ||
       (0 == strcmp(property, kOfxParamPropDefault) && type == PROP_TYPE_DOUBLE) ||
       (0 == strcmp(property, kOfxParamPropDefault) && type == PROP_TYPE_POINTER) ||
       false
@@ -154,18 +155,22 @@ const OfxPropertySuiteV1 gPropertySuiteV1 = {
     /* propSetString */    propSetString,
     /* propSetDouble */    propSetDouble,
     /* propSetInt */       propSetInt,
+    /* propSetShort */     propSetShort,
     /* propSetPointerN */  propSetPointerN,
     /* propSetStringN */   propSetStringN,
     /* propSetDoubleN */   propSetDoubleN,
     /* propSetIntN */      propSetIntN,
+    /* propSetShortN */    propSetShortN,
     /* propGetPointer */   propGetPointer,
     /* propGetString */    propGetString,
     /* propGetDouble */    propGetDouble,
     /* propGetInt */       propGetInt,
+    /* propGetShort */     propGetShort,
     /* propGetPointerN */  propGetPointerN,
     /* propGetStringN */   propGetStringN,
     /* propGetDoubleN */   propGetDoubleN,
     /* propGetIntN */      propGetIntN,
+    /* propGetShortN */    propGetShortN,
     /* propReset */        propReset,
     /* propGetDimension */ propGetDimension
 };
@@ -217,7 +222,18 @@ OfxStatus propSetInt(OfxPropertySetHandle properties, const char *property, int 
   properties->properties[i]->value[index].as_int = value;
   return kOfxStatOK;
 }
-
+OfxStatus propSetShort(OfxPropertySetHandle properties, const char *property, int index, short value)
+{
+  if (false == check_property_context(properties, PROP_TYPE_SHORT, property)) {
+    return kOfxStatErrBadHandle;
+  }
+  if (index < 0 || index >= 4) {
+    return kOfxStatErrBadIndex;
+  }
+  int i = ensure_property(properties, property);
+  properties->properties[i]->value[index].as_short = value;
+  return kOfxStatOK;
+}
 OfxStatus propSetPointerN(OfxPropertySetHandle properties, const char *property, int count, void *const*value) {
   for (int i = 0 ; i < count ; ++i) {
     OfxStatus status = propSetPointer(properties, property, i, value[i]);
@@ -251,6 +267,16 @@ OfxStatus propSetDoubleN(OfxPropertySetHandle properties, const char *property, 
 OfxStatus propSetIntN(OfxPropertySetHandle properties, const char *property, int count, const int *value) {
   for (int i = 0 ; i < count ; ++i) {
     OfxStatus status = propSetInt(properties, property, i, value[i]);
+    if (kOfxStatOK != status) {
+      return status;
+    }
+  }
+  return kOfxStatOK;
+}
+
+OfxStatus propSetShortN(OfxPropertySetHandle properties, const char *property, int count, const short *value) {
+  for (int i = 0 ; i < count ; ++i) {
+    OfxStatus status = propSetShort(properties, property, i, value[i]);
     if (kOfxStatOK != status) {
       return status;
     }
@@ -305,7 +331,18 @@ OfxStatus propGetInt(OfxPropertySetHandle properties, const char *property, int 
   *value = properties->properties[i]->value[index].as_int;
   return kOfxStatOK;
 }
-
+OfxStatus propGetShort(OfxPropertySetHandle properties, const char *property, int index, short *value)
+{
+  if (false == check_property_context(properties, PROP_TYPE_SHORT, property)) {
+    return kOfxStatErrBadHandle;
+  }
+  if (index < 0 || index >= 4) {
+    return kOfxStatErrBadIndex;
+  }
+  int i = ensure_property(properties, property);
+  *value = properties->properties[i]->value[index].as_short;
+  return kOfxStatOK;
+}
 OfxStatus propGetPointerN(OfxPropertySetHandle properties, const char *property, int count, void **value) {
   for (int i = 0 ; i < count ; ++i) {
     OfxStatus status = propGetPointer(properties, property, i, value + i);
@@ -339,6 +376,16 @@ OfxStatus propGetDoubleN(OfxPropertySetHandle properties, const char *property, 
 OfxStatus propGetIntN(OfxPropertySetHandle properties, const char *property, int count, int *value) {
   for (int i = 0 ; i < count ; ++i) {
     OfxStatus status = propGetInt(properties, property, i, value + i);
+    if (kOfxStatOK != status) {
+      return status;
+    }
+  }
+  return kOfxStatOK;
+}
+OfxStatus propGetShortN(OfxPropertySetHandle properties, const char *property, int count, short *value)
+{
+  for (int i = 0; i < count; ++i) {
+    OfxStatus status = propGetShort(properties, property, i, value + i);
     if (kOfxStatOK != status) {
       return status;
     }

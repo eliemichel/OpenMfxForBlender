@@ -110,7 +110,24 @@ typedef struct OfxPropertySuiteV1 {
         - ::kOfxStatErrValue
 */
   OfxStatus (*propSetInt)    (OfxPropertySetHandle properties, const char *property, int index, int value);
+  /** @brief Set a single value in an short property
 
+    \arg properties is the handle of the thing holding the property
+    \arg property is the string labelling the property
+    \arg index is for multidimenstional properties and is dimension of the one we are setting
+    \arg value is the value of the property we are setting
+
+    @returns
+      - ::kOfxStatOK
+      - ::kOfxStatErrBadHandle
+      - ::kOfxStatErrUnknown
+      - ::kOfxStatErrBadIndex
+      - ::kOfxStatErrValue
+*/
+  OfxStatus (*propSetShort)(OfxPropertySetHandle properties,
+                          const char *property,
+                          int index,
+                          short value);
   /** @brief Set multiple values of the pointer property
 
       \arg properties is the handle of the thing holding the property
@@ -176,6 +193,23 @@ typedef struct OfxPropertySuiteV1 {
 
  */
   OfxStatus (*propSetIntN)    (OfxPropertySetHandle properties, const char *property, int count, const int *value);
+
+  /** @brief Set multiple values of an short property 
+
+      \arg properties is the handle of the thing holding the property
+      \arg property is the string labelling the property
+      \arg count is the number of values we are setting in that property (ie: indicies 0..count-1)
+      \arg value is a pointer to an array of property values
+
+      @returns
+        - ::kOfxStatOK
+        - ::kOfxStatErrBadHandle
+        - ::kOfxStatErrUnknown
+        - ::kOfxStatErrBadIndex
+        - ::kOfxStatErrValue
+
+ */
+  OfxStatus (*propSetShortN)    (OfxPropertySetHandle properties, const char *property, int count, const short *value);
   
   /** @brief Get a single value from a pointer property
 
@@ -239,6 +273,23 @@ typedef struct OfxPropertySuiteV1 {
  */
   OfxStatus (*propGetInt)    (OfxPropertySetHandle properties, const char *property, int index, int *value);
 
+  /** @brief Get a single value of an short property
+
+     \arg properties is the handle of the thing holding the property
+     \arg property is the string labelling the property
+     \arg index refers to the index of a multi-dimensional property
+     \arg value is a pointer the return location
+
+     @returns
+       - ::kOfxStatOK
+       - ::kOfxStatErrBadHandle
+       - ::kOfxStatErrUnknown
+       - ::kOfxStatErrBadIndex
+*/
+  OfxStatus (*propGetShort)(OfxPropertySetHandle properties,
+                          const char *property,
+                          int index,
+                          short *value);
   /** @brief Get multiple values of a pointer property 
 
       \arg properties is the handle of the thing holding the property
@@ -252,6 +303,7 @@ typedef struct OfxPropertySuiteV1 {
         - ::kOfxStatErrUnknown
         - ::kOfxStatErrBadIndex
   */
+
   OfxStatus (*propGetPointerN)(OfxPropertySetHandle properties, const char *property, int count, void **value);
 
   /** @brief Get multiple values of a string property
@@ -300,6 +352,24 @@ typedef struct OfxPropertySuiteV1 {
         - ::kOfxStatErrBadIndex
   */
   OfxStatus (*propGetIntN)    (OfxPropertySetHandle properties, const char *property, int count, int *value);
+
+  /** @brief Get multiple values of an short property
+
+      \arg properties is the handle of the thing holding the property
+      \arg property is the string labelling the property
+      \arg count is the number of values we are getting of that property (ie: indicies 0..count-1)
+      \arg value is a pointer to an array of where we will return the property values
+
+      @returns
+        - ::kOfxStatOK
+        - ::kOfxStatErrBadHandle
+        - ::kOfxStatErrUnknown
+        - ::kOfxStatErrBadIndex
+  */
+  OfxStatus (*propGetShortN)(OfxPropertySetHandle properties,
+                           const char *property,
+                           int count,
+                           short *value);
 
   /** @brief Resets all dimensions of a property to its default value
 

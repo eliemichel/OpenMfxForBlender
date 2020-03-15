@@ -30,6 +30,7 @@ typedef union OfxPropertyValueStruct {
     char *as_char;
     double as_double;
     int as_int;
+    short as_short;
 } OfxPropertyValueStruct;
 
 typedef struct OfxPropertyStruct {
@@ -42,6 +43,7 @@ typedef enum PropertyType {
 	PROP_TYPE_STRING,
 	PROP_TYPE_DOUBLE,
 	PROP_TYPE_INT,
+  PROP_TYPE_SHORT,
 } PropertyType;
 
 // TODO: use kOfxPropType instead
@@ -85,18 +87,22 @@ OfxStatus propSetPointer(OfxPropertySetHandle properties, const char *property, 
 OfxStatus propSetString(OfxPropertySetHandle properties, const char *property, int index, const char *value);
 OfxStatus propSetDouble(OfxPropertySetHandle properties, const char *property, int index, double value);
 OfxStatus propSetInt(OfxPropertySetHandle properties, const char *property, int index, int value);
+OfxStatus propSetShort(OfxPropertySetHandle properties, const char *property, int index, short value);
 OfxStatus propSetPointerN(OfxPropertySetHandle properties, const char *property, int count, void *const*value);
 OfxStatus propSetStringN(OfxPropertySetHandle properties, const char *property, int count, const char *const*value);
 OfxStatus propSetDoubleN(OfxPropertySetHandle properties, const char *property, int count, const double *value);
 OfxStatus propSetIntN(OfxPropertySetHandle properties, const char *property, int count, const int *value);
+OfxStatus propSetShortN(OfxPropertySetHandle properties, const char *property, int count, const short *value);
 OfxStatus propGetPointer(OfxPropertySetHandle properties, const char *property, int index, void **value);
 OfxStatus propGetString(OfxPropertySetHandle properties, const char *property, int index, char **value);
 OfxStatus propGetDouble(OfxPropertySetHandle properties, const char *property, int index, double *value);
 OfxStatus propGetInt(OfxPropertySetHandle properties, const char *property, int index, int *value);
+OfxStatus propGetShort(OfxPropertySetHandle properties, const char *property, int index, short *value);
 OfxStatus propGetPointerN(OfxPropertySetHandle properties, const char *property, int count, void **value);
 OfxStatus propGetStringN(OfxPropertySetHandle properties, const char *property, int count, char **value);
 OfxStatus propGetDoubleN(OfxPropertySetHandle properties, const char *property, int count, double *value);
 OfxStatus propGetIntN(OfxPropertySetHandle properties, const char *property, int count, int *value);
+OfxStatus propGetShortN(OfxPropertySetHandle properties, const char *property, int count, short *value);
 OfxStatus propReset(OfxPropertySetHandle properties, const char *property);
 OfxStatus propGetDimension(OfxPropertySetHandle properties, const char *property, int *count);
 
