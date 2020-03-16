@@ -71,12 +71,6 @@ static OfxStatus cook(PluginRuntime *runtime, OfxMeshEffectHandle instance) {
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropVertexCount, 0, &input_vertex_count);
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropFaceCount, 0, &input_face_count);
 
-    // Get attribute pointers
-    OfxPropertySetHandle vertpoint_attrib, facecounts_attrib;
-    meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
-    propertySuite->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&input_vertices);
-    meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
-    propertySuite->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&input_faces);
 
     // Allocate output mesh
     int output_point_count = input_point_count;
@@ -89,12 +83,7 @@ static OfxStatus cook(PluginRuntime *runtime, OfxMeshEffectHandle instance) {
 
     meshEffectSuite->meshAlloc(output_mesh);
 
-    // Get output mesh data
-    int *output_vertices, *output_faces;
-    meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
-    propertySuite->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&output_vertices);
-    meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
-    propertySuite->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&output_faces);
+
 
     // Fill in output data
     Attribute input_pos, output_pos;
@@ -102,8 +91,15 @@ static OfxStatus cook(PluginRuntime *runtime, OfxMeshEffectHandle instance) {
     getPointAttribute(output_mesh, kOfxMeshAttribPointPosition, &output_pos);
     copyAttribute(&output_pos, &input_pos, 0, input_point_count);
 
-    memcpy(output_vertices, input_vertices, input_vertex_count * sizeof(int));
-    memcpy(output_faces, input_faces, input_face_count * sizeof(int));
+    Attribute input_vertcounts, output_vertcounts;
+    getPointAttribute(input_mesh, kOfxMeshAttribVertexPoint, &input_vertcounts);
+    getPointAttribute(output_mesh, kOfxMeshAttribVertexPoint, &output_vertcounts);
+    copyAttribute(&output_vertcounts, &input_vertcounts, 0, input_vertex_count);
+
+    Attribute input_facecounts, output_facecounts;
+    getPointAttribute(input_mesh, kOfxMeshAttribFaceCounts, &input_facecounts);
+    getPointAttribute(output_mesh, kOfxMeshAttribFaceCounts, &output_facecounts);
+    copyAttribute(&output_facecounts, &input_facecounts, 0, input_face_count);
 
     // Release meshes
     meshEffectSuite->inputReleaseMesh(input_mesh);

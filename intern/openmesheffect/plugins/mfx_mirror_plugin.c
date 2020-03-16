@@ -95,17 +95,12 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
 
     // Get input mesh data
     int input_point_count = 0, input_vertex_count = 0, input_face_count = 0;
-    int *input_vertices, *input_faces;
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropPointCount, 0, &input_point_count);
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropVertexCount, 0, &input_vertex_count);
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropFaceCount, 0, &input_face_count);
 
-    // Get attribute pointers
-    OfxPropertySetHandle vertpoint_attrib, facecounts_attrib;
-    meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
-    propertySuite->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&input_vertices);
-    meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
-    propertySuite->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&input_faces);
+
+    
 
     // Allocate output mesh
     int output_point_count = 2 * input_point_count;
@@ -119,17 +114,15 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     meshEffectSuite->meshAlloc(output_mesh);
 
     // Get output mesh data
-    int *output_vertices, *output_faces;
-    meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
-    propertySuite->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&output_vertices);
-    meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
-    propertySuite->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&output_faces);
+
+   
+    printf("%d", input_face_count);
 
     // Point position
     Attribute input_pos, output_pos;
     getPointAttribute(input_mesh, kOfxMeshAttribPointPosition, &input_pos);
     getPointAttribute(output_mesh, kOfxMeshAttribPointPosition, &output_pos);
-
+   
     switch (input_pos.type) {
     case MFX_FLOAT_ATTR:
       for (int i = 0; i < input_point_count; ++i) {
@@ -151,17 +144,48 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
       printf("Warning: unsupported attribute type: %d", input_pos.type);
     }
 
+    Attribute input_vertcounts, output_vertcounts;
+    getVertexAttribute(input_mesh, kOfxMeshAttribVertexPoint, &input_vertcounts);
+    getVertexAttribute(output_mesh, kOfxMeshAttribVertexPoint, &output_vertcounts);
     // Fill in output data
-    for (int i = 0 ; i < input_vertex_count ; ++i) {
-        output_vertices[i] = input_vertices[i];
-        output_vertices[i + input_vertex_count]
-            = input_point_count + input_vertices[i];
-    }
-    for (int i = 0 ; i < input_face_count ; ++i) {
-        output_faces[i] = input_faces[i];
-        output_faces[i + input_face_count] = input_faces[i];
-    }
+    switch (input_vertcounts.type) {
+      case MFX_INT_ATTR:
+      for (int i = 0 ; i < input_vertex_count ; ++i) {
+        // 1. copy
+        int *src = (int *)&input_vertcounts.data[i * input_vertcounts.stride];
+        int *dst = (int *)&output_vertcounts.data[i * output_vertcounts.stride];
+        memcpy(dst, src, sizeof(int));
 
+        // 2. mirror
+        dst = (int*)&output_vertcounts.data[(input_vertex_count + i) * output_vertcounts.stride];
+        int value = src[0];
+
+        dst[0] = input_point_count + value;
+      }
+      break;
+    default:
+        printf("Warning: unsupported attribute type: %d", input_vertcounts.type);
+    }
+    // Face Count
+    Attribute input_facecounts, output_facecounts;
+    getFaceAttribute(input_mesh, kOfxMeshAttribFaceCounts, &input_facecounts);
+    getFaceAttribute(output_mesh, kOfxMeshAttribFaceCounts, &output_facecounts);
+    switch (input_facecounts.type) {
+    case MFX_INT_ATTR:
+      for (int i = 0; i < input_face_count; ++i) {
+      // 1. copy
+      int* src = (int*)&input_facecounts.data[i * input_facecounts.stride];
+      int* dst = (int*)&output_facecounts.data[i * output_facecounts.stride];
+      memcpy(dst, src, sizeof(int));
+
+      // 2. mirror
+      dst = (int *)&output_facecounts.data[(input_face_count + i) * output_facecounts.stride];  
+      dst[0] = src[0];
+      }
+      break;
+    default:
+      printf("Warning: unsupported attribute type: %d", input_facecounts.type);
+    }
     // Release meshes
     meshEffectSuite->inputReleaseMesh(input_mesh);
     meshEffectSuite->inputReleaseMesh(output_mesh);
