@@ -277,11 +277,22 @@ OfxStatus meshAlloc(OfxMeshHandle meshHandle) {
   }
   elementCount[3] = 1;
 
-
   // Allocate memory attributes
 
   for (int i = 0; i < meshHandle->attributes.num_attributes; ++i) {
     OfxAttributeStruct *attribute = meshHandle->attributes.attributes[i];
+
+    int is_owner;
+    status = propGetInt(&attribute->properties, kOfxMeshAttribPropIsOwner, 0, &is_owner);
+    if (kOfxStatOK != status) {
+      return status;
+    }
+
+    // Don't allocate non-own attributes (i.e. attributes which are just proxy to externally
+    // allocated buffers.
+    if (!is_owner) {
+      continue;
+    }
 
     int count;
     status = propGetInt(&attribute->properties, kOfxMeshAttribPropComponentCount, 0, &count);
@@ -316,7 +327,7 @@ OfxStatus meshAlloc(OfxMeshHandle meshHandle) {
       return status;
     }
 
-    status = propSetInt(&attribute->properties, kOfxMeshAttribPropStride, 0, (int)byteSize);
+    status = propSetInt(&attribute->properties, kOfxMeshAttribPropStride, 0, (int)(byteSize * count));
     if (kOfxStatOK != status) {
       return status;
     }

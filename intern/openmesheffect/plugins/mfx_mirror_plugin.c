@@ -16,18 +16,11 @@
 
 #include <stdbool.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
-
-typedef struct PluginRuntime {
-    OfxHost *host;
-    OfxPropertySuiteV1 *propertySuite;
-    OfxParameterSuiteV1 *parameterSuite;
-    OfxMeshEffectSuiteV1 *meshEffectSuite;
-} PluginRuntime;
-
-PluginRuntime gRuntime;
+#include "util/plugin_support.h"
 
 static OfxStatus load() {
     return kOfxStatOK;
@@ -45,9 +38,9 @@ static OfxStatus describe(OfxMeshEffectHandle descriptor) {
     if (missing_suite) {
         return kOfxStatErrMissingHostFeature;
     }
-    OfxMeshEffectSuiteV1 *meshEffectSuite = gRuntime.meshEffectSuite;
-    OfxPropertySuiteV1 *propertySuite = gRuntime.propertySuite;
-    OfxParameterSuiteV1 *parameterSuite = gRuntime.parameterSuite;
+    const OfxMeshEffectSuiteV1 *meshEffectSuite = gRuntime.meshEffectSuite;
+    const OfxPropertySuiteV1 *propertySuite = gRuntime.propertySuite;
+    const OfxParameterSuiteV1 *parameterSuite = gRuntime.parameterSuite;
 
     OfxPropertySetHandle inputProperties;
     meshEffectSuite->inputDefine(descriptor, kOfxMeshMainInput, &inputProperties);
@@ -58,9 +51,11 @@ static OfxStatus describe(OfxMeshEffectHandle descriptor) {
     propertySuite->propSetString(outputProperties, kOfxPropLabel, 0, "Main Output");
 
     OfxParamSetHandle parameters;
+    OfxPropertySetHandle param_props;
     meshEffectSuite->getParamSet(descriptor, &parameters);
     // "axis" parameter is a bitmask, with threee booleans respectively for axes x, y and z.
-    parameterSuite->paramDefine(parameters, kOfxParamTypeInteger, "axis", NULL);
+    parameterSuite->paramDefine(parameters, kOfxParamTypeInteger, "axis", &param_props);
+    propertySuite->propSetInt(param_props, kOfxParamPropDefault, 0, 1);
 
     return kOfxStatOK;
 }
@@ -74,9 +69,9 @@ static OfxStatus destroyInstance(OfxMeshEffectHandle instance) {
 }
 
 static OfxStatus cook(OfxMeshEffectHandle instance) {
-    OfxMeshEffectSuiteV1 *meshEffectSuite = gRuntime.meshEffectSuite;
-    OfxPropertySuiteV1 *propertySuite = gRuntime.propertySuite;
-    OfxParameterSuiteV1 *parameterSuite = gRuntime.parameterSuite;
+    const OfxMeshEffectSuiteV1 *meshEffectSuite = gRuntime.meshEffectSuite;
+    const OfxPropertySuiteV1 *propertySuite = gRuntime.propertySuite;
+    const OfxParameterSuiteV1 *parameterSuite = gRuntime.parameterSuite;
     OfxTime time = 0;
 
     // Get input/output
@@ -100,16 +95,13 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
 
     // Get input mesh data
     int input_point_count = 0, input_vertex_count = 0, input_face_count = 0;
-    float *input_points;
     int *input_vertices, *input_faces;
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropPointCount, 0, &input_point_count);
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropVertexCount, 0, &input_vertex_count);
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropFaceCount, 0, &input_face_count);
 
     // Get attribute pointers
-    OfxPropertySetHandle pos_attrib, vertpoint_attrib, facecounts_attrib;
-    meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib);
-    propertySuite->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void**)&input_points);
+    OfxPropertySetHandle vertpoint_attrib, facecounts_attrib;
     meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
     propertySuite->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&input_vertices);
     meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
@@ -127,22 +119,39 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     meshEffectSuite->meshAlloc(output_mesh);
 
     // Get output mesh data
-    float *output_points;
     int *output_vertices, *output_faces;
-    meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib);
-    propertySuite->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void**)&output_points);
     meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
     propertySuite->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&output_vertices);
     meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
     propertySuite->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&output_faces);
 
-    // Fill in output data
-    for (int i = 0 ; i < 3 * input_point_count ; ++i) {
-        float value = input_points[i];
-        output_points[i] = value;
-        if ((axis_value & (1 << (i % 3))) != 0) value = -value;
-        output_points[i + 3 * input_point_count] = value;
+    // Point position
+    Attribute input_pos, output_pos;
+    getPointAttribute(input_mesh, kOfxMeshAttribPointPosition, &input_pos);
+    getPointAttribute(output_mesh, kOfxMeshAttribPointPosition, &output_pos);
+
+    switch (input_pos.type) {
+    case MFX_FLOAT_ATTR:
+      for (int i = 0; i < input_point_count; ++i) {
+        // 1. copy
+        float *src = (float*)&input_pos.data[i * input_pos.stride];
+        float *dst = (float*)&output_pos.data[i * output_pos.stride];
+        memcpy(dst, src, 3 * sizeof(float));
+
+        // 2. mirror
+        dst = (float*)&output_pos.data[(input_point_count + i) * output_pos.stride];
+        for (int k = 0; k < 3; ++k) {
+          float value = src[k];
+          if ((axis_value & (1 << k)) != 0) value = -value;
+          dst[k] = value;
+        }
+      }
+      break;
+    default:
+      printf("Warning: unsupported attribute type: %d", input_pos.type);
     }
+
+    // Fill in output data
     for (int i = 0 ; i < input_vertex_count ; ++i) {
         output_vertices[i] = input_vertices[i];
         output_vertices[i + input_vertex_count]

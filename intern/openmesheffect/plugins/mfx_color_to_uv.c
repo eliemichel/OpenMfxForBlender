@@ -24,15 +24,7 @@
 
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
-
-typedef struct PluginRuntime {
-    OfxHost *host;
-    const OfxPropertySuiteV1 *propertySuite;
-    const OfxParameterSuiteV1 *parameterSuite;
-    const OfxMeshEffectSuiteV1 *meshEffectSuite;
-} PluginRuntime;
-
-PluginRuntime gRuntime;
+#include "util/plugin_support.h"
 
 static OfxStatus load() {
     return kOfxStatOK;
@@ -141,46 +133,19 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     propertySuite->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&output_faces);
 
     // Fill in output data
-    memcpy(output_points, input_points, 3 * input_point_count * sizeof(float));
+    Attribute input_pos, output_pos;
+    getPointAttribute(input_mesh, kOfxMeshAttribPointPosition, &input_pos);
+    getPointAttribute(output_mesh, kOfxMeshAttribPointPosition, &output_pos);
+    copyAttribute(&output_pos, &input_pos, 0, input_point_count);
+
     memcpy(output_vertices, input_vertices, input_vertex_count * sizeof(int));
     memcpy(output_faces, input_faces, input_face_count * sizeof(int));
 
     if (NULL != vcolor_data) {
-      char *uv_data;
-      int uv_stride, vcolor_stride;
-      char *vcolor_type;
-      propertySuite->propGetString(vcolor_attrib, kOfxMeshAttribPropType, 0, &vcolor_type);
-      propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropStride, 0, &uv_stride);
-      propertySuite->propGetInt(vcolor_attrib, kOfxMeshAttribPropStride, 0, &vcolor_stride);
-      propertySuite->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&uv_data);
-
-      // Poor man's enum (TODO lean this up)
-      int vcolor_type_enum = -1;
-      if (0 == strcmp(vcolor_type, kOfxMeshAttribTypeUByte)) {
-        vcolor_type_enum = 0;
-      } else if (0 == strcmp(vcolor_type, kOfxMeshAttribTypeInt)) {
-        vcolor_type_enum = 1;
-      } else if (0 == strcmp(vcolor_type, kOfxMeshAttribTypeFloat)) {
-        vcolor_type_enum = 2;
-      }
-
-      for (int i = 0; i < input_vertex_count; ++i) {
-        switch (vcolor_type_enum) {
-        case 0:
-        {
-          const unsigned char *vcolor = ((unsigned char*)&vcolor_data[i * vcolor_stride]);
-          float *uv = ((float*)&uv_data[i * uv_stride]);
-          uv[0] = (float)vcolor[0] / 255.0f;
-          uv[1] = (float)vcolor[1] / 255.0f;
-          break;
-        }
-        case 2:
-          memcpy(&uv_data[i * uv_stride], &vcolor_data[i * vcolor_stride], 2 * sizeof(float));
-          break;
-        default:
-          printf("Warning: unsupported color attribute type: %d", vcolor_type_enum);
-        }
-      }
+      Attribute input_color, output_uv;
+      getVertexAttribute(input_mesh, "color0", &input_color);
+      getVertexAttribute(output_mesh, "uv0", &output_uv);
+      copyAttribute(&output_uv, &input_color, 0, input_vertex_count);
     }
 
     // Release meshes

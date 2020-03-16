@@ -14,20 +14,17 @@
  * limitations under the License.
  */
 
+/**
+ * TODO: At the moment this only copies the position attribute and topology. We should copy all
+ * available attributes but there is no mechanism yet to query the list of existing attributes.
+ */
+
 #include <stdbool.h>
 #include <string.h>
 
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
-
-typedef struct PluginRuntime {
-    OfxHost *host;
-    const OfxPropertySuiteV1 *propertySuite;
-    const OfxParameterSuiteV1 *parameterSuite;
-    const OfxMeshEffectSuiteV1 *meshEffectSuite;
-} PluginRuntime;
-
-PluginRuntime gRuntime;
+#include "util/plugin_support.h"
 
 static OfxStatus describe(PluginRuntime *runtime, OfxMeshEffectHandle descriptor) {
     bool missing_suite =
@@ -69,16 +66,13 @@ static OfxStatus cook(PluginRuntime *runtime, OfxMeshEffectHandle instance) {
 
     // Get input mesh data
     int input_point_count = 0, input_vertex_count = 0, input_face_count = 0;
-    float *input_points;
     int *input_vertices, *input_faces;
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropPointCount, 0, &input_point_count);
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropVertexCount, 0, &input_vertex_count);
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropFaceCount, 0, &input_face_count);
 
     // Get attribute pointers
-    OfxPropertySetHandle pos_attrib, vertpoint_attrib, facecounts_attrib;
-    meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib);
-    propertySuite->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void**)&input_points);
+    OfxPropertySetHandle vertpoint_attrib, facecounts_attrib;
     meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
     propertySuite->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&input_vertices);
     meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
@@ -96,17 +90,18 @@ static OfxStatus cook(PluginRuntime *runtime, OfxMeshEffectHandle instance) {
     meshEffectSuite->meshAlloc(output_mesh);
 
     // Get output mesh data
-    float *output_points;
     int *output_vertices, *output_faces;
-    meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib);
-    propertySuite->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void**)&output_points);
     meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
     propertySuite->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&output_vertices);
     meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
     propertySuite->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&output_faces);
 
     // Fill in output data
-    memcpy(output_points, input_points, 3 * input_point_count * sizeof(float));
+    Attribute input_pos, output_pos;
+    getPointAttribute(input_mesh, kOfxMeshAttribPointPosition, &input_pos);
+    getPointAttribute(output_mesh, kOfxMeshAttribPointPosition, &output_pos);
+    copyAttribute(&output_pos, &input_pos, 0, input_point_count);
+
     memcpy(output_vertices, input_vertices, input_vertex_count * sizeof(int));
     memcpy(output_faces, input_faces, input_face_count * sizeof(int));
 
