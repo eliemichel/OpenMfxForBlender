@@ -113,7 +113,6 @@ void runtime_reset_plugin_path(OpenMeshEffectRuntime *rd) {
       rd->effect_index = -1;
     }
 
-    printf("Unloading OFX plugin %s\n", rd->plugin_path);
     runtime_free_effect_instance(rd);
     free_registry(&rd->registry);
     rd->is_plugin_valid = false;
@@ -155,7 +154,6 @@ void runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugin_path)
     return;
   }
 
-  printf("Loading OFX plugin %s\n", rd->plugin_path);
   // Get absolute path (ui file browser returns relative path for saved files)
   char abs_path[FILE_MAX];
   BLI_strncpy(abs_path, rd->plugin_path, FILE_MAX);

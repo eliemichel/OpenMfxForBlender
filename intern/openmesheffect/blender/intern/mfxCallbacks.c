@@ -70,7 +70,6 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
     return kOfxStatOK;
   }
 
-  printf("Converting blender mesh into ofx mesh...\n");
 
   point_count = blender_mesh->totvert;
   vertex_count = 0;
@@ -89,7 +88,6 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   char name[32];
   OfxPropertySetHandle vcolor_attrib;
   for (int k = 0; k < vcolor_layers; ++k) {
-    sprintf(name, "color%d", k);
     MFX_CHECK(mes->attributeDefine(ofx_mesh, kOfxMeshAttribVertex, name, 3, kOfxMeshAttribTypeUByte, &vcolor_attrib));
     MFX_CHECK(ps->propSetInt(vcolor_attrib, kOfxMeshAttribPropIsOwner, 0, 0));
     MLoopCol *vcolor_data = (MLoopCol*)CustomData_get(&blender_mesh->ldata, k, CD_MLOOPCOL);
@@ -102,7 +100,6 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   name[32];
   OfxPropertySetHandle uv_attrib;
   for (int k = 0; k < uv_layers; ++k) {
-    sprintf(name, "uv%d", k);
     MFX_CHECK(mes->attributeDefine(ofx_mesh, kOfxMeshAttribVertex, name, 3, kOfxMeshAttribTypeFloat, &uv_attrib));
     MFX_CHECK(ps->propSetInt(uv_attrib, kOfxMeshAttribPropIsOwner, 0, 0));
     MLoopUV *uv_data = (MLoopUV*)CustomData_get(&blender_mesh->ldata, k, CD_MLOOPUV);
@@ -199,7 +196,6 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
     return kOfxStatErrMemory;
   }
 
-  printf("Converting ofx mesh into blender mesh...\n");
 
   // Points (= Blender's vertex)
   for (int i = 0 ; i < point_count ; ++i) {
@@ -226,11 +222,8 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
   float *ofx_uv_data;
   for (int k = 0; k < uv_layers; ++k) {
     OfxPropertySetHandle uv_attrib;
-    sprintf(name, "uv%d", k);
-    printf("Look for attribute '%s'\n", name);
     status = mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribVertex, name, &uv_attrib);
     if (kOfxStatOK == status) {
-      printf("Found!\n");
       ps->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&ofx_uv_data);
 
       // Get UV data pointer in mesh.

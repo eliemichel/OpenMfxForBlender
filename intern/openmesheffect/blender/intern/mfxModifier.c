@@ -38,9 +38,7 @@
 // PUBLIC API
 
 static OpenMeshEffectRuntime *mfx_Modifier_runtime_ensure(OpenMeshEffectModifierData *fxmd) {
-  printf("== mfx_Modifier_runtime_ensure on data %p\n", fxmd);
   OpenMeshEffectRuntime *runtime_data = (OpenMeshEffectRuntime*)fxmd->modifier.runtime;
-  printf("RUNTIME DATA @%p\n", runtime_data);
 
   // Init
   if (NULL == runtime_data) {
@@ -54,12 +52,10 @@ static OpenMeshEffectRuntime *mfx_Modifier_runtime_ensure(OpenMeshEffectModifier
   runtime_set_plugin_path(runtime_data, fxmd->plugin_path);
   runtime_set_effect_index(runtime_data, fxmd->effect_index);
 
-  printf("==/ mfx_Modifier_runtime_ensure\n");
   return (OpenMeshEffectRuntime *)fxmd->modifier.runtime;
 }
 
 void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd) {
-  printf("== mfx_Modifier_reload_effect_info on data %p\n", fxmd);
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
 
   // Free previous info
@@ -80,20 +76,16 @@ void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd) {
   for (int i = 0; i < fxmd->num_effects; ++i) {
     // Get asset name
     const char *name = runtime_data->registry.plugins[i]->pluginIdentifier;
-    printf("Loading %s to RNA\n", name);
     strncpy(fxmd->effect_info[i].name, name, sizeof(fxmd->effect_info[i].name));
   }
 
-  printf("==/ mfx_Modifier_reload_effect_info\n");
 }
 
 void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
-  printf("== mfx_Modifier_on_plugin_changed on data %p\n", fxmd);
 
   mfx_Modifier_reload_effect_info(fxmd);
   mfx_Modifier_on_effect_changed(fxmd);
 
-  printf("==/ mfx_Modifier_on_plugin_changed\n");
 }
 
 // TODO: move somewhere else
@@ -134,7 +126,6 @@ static void copy_parameter_value(OpenMeshEffectParameterInfo *parameter_info, Of
 }
 
 void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd) {
-  printf("==. mfx_Modifier_on_asset_changed on data %p\n", fxmd);
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
 
   // Reset parameter DNA
@@ -171,13 +162,11 @@ void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd) {
     }
   }
 
-  printf("==/ mfx_Modifier_on_asset_changed on data %p\n", fxmd);
 }
 
 void mfx_Modifier_free_runtime_data(void * runtime_data)
 {
   OpenMeshEffectRuntime * rd = (OpenMeshEffectRuntime *)runtime_data;
-  printf("== mfx_Modifier_free_runtime_data\n");
   if (runtime_data == NULL) {
     printf("runtime data is null\n");
     printf("==/ mfx_Modifier_free_runtime_data\n");
@@ -185,12 +174,10 @@ void mfx_Modifier_free_runtime_data(void * runtime_data)
   }
   runtime_free(rd);
   MEM_freeN(rd);
-  printf("==/ mfx_Modifier_free_runtime_data\n");
 }
 
 Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
 {
-  printf("== mfx_Modifier_do on data %p\n", fxmd);
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
 
   if (false == runtime_ensure_effect_instance(runtime_data)) {
@@ -232,6 +219,5 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
     BKE_mesh_free(output_data.source_mesh);
   }
 
-  printf("==/ mfx_Modifier_do\n");
   return output_data.blender_mesh;
 }
