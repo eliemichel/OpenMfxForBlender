@@ -44,7 +44,6 @@ static void registry_init(PluginRegistry *registry) {
 static void registry_init_plugins(PluginRegistry *registry) {
   int i, n;
   n = registry->getNumberOfPlugins();
-  printf("Found %d plugins.\n", n);
 
   if (n > 0) {
     registry->plugins = malloc_array(sizeof(OfxPlugin*), n, "mfx plugins");
@@ -56,7 +55,6 @@ static void registry_init_plugins(PluginRegistry *registry) {
   for (i = 0 ; i < n ; ++i) {
     OfxPlugin *plugin;
     plugin = registry->getPlugin(i);
-    printf("Plugin #%d: %s (API %s, version %d)\n", i, plugin->pluginIdentifier, plugin->pluginApi, plugin->apiVersion);
 
     // API/Version check
     if (0 != strcmp(plugin->pluginApi, kOfxMeshEffectPluginApi)) {
@@ -68,13 +66,11 @@ static void registry_init_plugins(PluginRegistry *registry) {
       continue;
     }
 
-    printf("Plugin #%d in binary is #%d in plugin registry\n", i, registry->num_plugins);
     registry->plugins[registry->num_plugins] = plugin;
     registry->status[registry->num_plugins] = OfxPluginStatNotLoaded;
     ++registry->num_plugins;
   }
 
-  printf("Found %d supported plugins.\n", registry->num_plugins);
 
   // 2. Resize plug-in array to remove unused cells at the end
   if (registry->num_plugins > 0) {
@@ -113,7 +109,6 @@ static bool registry_init_binary(PluginRegistry *registry, const char *ofx_filep
 }
 
 bool load_registry(PluginRegistry *registry, const char *ofx_filepath) {
-  printf("Loading OFX plug-ins from %s.\n", ofx_filepath);
 
   registry_init(registry);
 

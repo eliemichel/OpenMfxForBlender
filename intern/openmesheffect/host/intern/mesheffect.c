@@ -97,7 +97,6 @@ OfxStatus getParamSet(OfxMeshEffectHandle meshEffect,
 OfxStatus inputDefine(OfxMeshEffectHandle meshEffect,
                       const char *name,
                       OfxPropertySetHandle *propertySet) {
-  printf("Defining input '%s' on OfxMeshEffectHandle %p\n", name, meshEffect);
   int i = ensure_input(&meshEffect->inputs, name);
   meshEffect->inputs.inputs[i]->host = meshEffect->host;
   propSetPointer(&meshEffect->inputs.inputs[i]->mesh.properties, kOfxMeshPropInternalData, 0, NULL);

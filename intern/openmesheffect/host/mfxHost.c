@@ -76,7 +76,6 @@ OfxHost *gHost = NULL;
 int gHostUse = 0;
 
 OfxHost * getGlobalHost(void) {
-  printf("Getting Global Host; reference counter will be set to %d.\n", gHostUse + 1);
   if (0 == gHostUse) {
     printf("(Allocating new host data)\n");
     gHost = malloc_array(sizeof(OfxHost), 1, "global host");
@@ -93,7 +92,6 @@ OfxHost * getGlobalHost(void) {
 }
 
 void releaseGlobalHost(void) {
-  printf("Releasing Global Host; reference counter will be set to %d.\n", gHostUse - 1);
   if (--gHostUse == 0) {
     printf("(Freeing host data)\n");
     free_array(gHost->host);
@@ -108,7 +106,6 @@ bool ofxhost_load_plugin(OfxHost *host, OfxPlugin *plugin) {
   plugin->setHost(host);
 
   status = plugin->mainEntry(kOfxActionLoad, NULL, NULL, NULL);
-  printf("%s action returned status %d (%s)\n", kOfxActionLoad, status, getOfxStateName(status));
 
   if (kOfxStatReplyDefault == status) {
     printf("WARNING: The plugin '%s' ignored load action.\n", plugin->pluginIdentifier);
@@ -128,7 +125,6 @@ void ofxhost_unload_plugin(OfxPlugin *plugin) {
   OfxStatus status;
   
   status = plugin->mainEntry(kOfxActionUnload, NULL, NULL, NULL);
-  printf("%s action returned status %d (%s)\n", kOfxActionUnload, status, getOfxStateName(status));
 
   if (kOfxStatReplyDefault == status) {
     printf("WARNING: The plugin '%s' ignored unload action.\n", plugin->pluginIdentifier);
@@ -151,7 +147,6 @@ bool ofxhost_get_descriptor(OfxHost *host, OfxPlugin *plugin, OfxMeshEffectHandl
   init_mesh_effect(effectHandle);
 
   status = plugin->mainEntry(kOfxActionDescribe, effectHandle, NULL, NULL);
-  printf("%s action returned status %d (%s)\n", kOfxActionDescribe, status, getOfxStateName(status));
 
   if (kOfxStatErrMissingHostFeature == status) {
     printf("ERROR: The plugin '%s' lacks some host feature.\n", plugin->pluginIdentifier); // see message
@@ -190,7 +185,6 @@ bool ofxhost_create_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectDescri
   deep_copy_mesh_effect(instance, effectDescriptor);
 
   status = plugin->mainEntry(kOfxActionCreateInstance, instance, NULL, NULL);
-  printf("%s action returned status %d (%s)\n", kOfxActionCreateInstance, status, getOfxStateName(status));
 
   if (kOfxStatErrMemory == status) {
     printf("ERROR: Not enough memory for plug-in '%s'.\n", plugin->pluginIdentifier);
@@ -214,7 +208,6 @@ void ofxhost_destroy_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectInsta
   OfxStatus status;
 
   status = plugin->mainEntry(kOfxActionDestroyInstance, effectInstance, NULL, NULL);
-  printf("%s action returned status %d (%s)\n", kOfxActionDestroyInstance, status, getOfxStateName(status));
 
   if (kOfxStatFailed == status) {
     printf("ERROR: Error while destroying an instance of plug-in '%s'.\n", plugin->pluginIdentifier); // see message
@@ -231,7 +224,6 @@ bool ofxhost_cook(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance) {
   OfxStatus status;
 
   status = plugin->mainEntry(kOfxMeshEffectActionCook, effectInstance, NULL, NULL);
-  printf("%s action returned status %d (%s)\n", kOfxMeshEffectActionCook, status, getOfxStateName(status));
 
   if (kOfxStatErrMemory == status) {
     printf("ERROR: Not enough memory for plug-in '%s'.\n", plugin->pluginIdentifier);
@@ -250,7 +242,6 @@ bool ofxhost_cook(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance) {
 
 bool use_plugin(const PluginRegistry *registry, int plugin_index) {
   OfxPlugin *plugin = registry->plugins[plugin_index];
-  printf("Using plugin #%d: %s\n", plugin_index, plugin->pluginIdentifier);
 
   // Set host (TODO: do this in load_plugins?)
   OfxHost *host = getGlobalHost();

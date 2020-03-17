@@ -143,10 +143,8 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     OfxPropertySetHandle vcolor_attrib, uv_attrib;
     status = meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribVertex, "color0", &vcolor_attrib);
 
-    printf("Look for color0...\n");
     float *vcolor_data = NULL;
     if (kOfxStatOK == status) {
-      printf("found!\n");
       propertySuite->propGetPointer(vcolor_attrib, kOfxMeshAttribPropData, 0, (void**)&vcolor_data);
       meshEffectSuite->attributeDefine(output_mesh, kOfxMeshAttribVertex, "uv0", 2, kOfxMeshAttribTypeFloat, &uv_attrib);
     }
