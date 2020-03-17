@@ -42,14 +42,12 @@ static Mesh *applyModifier(struct ModifierData *md,
                            const struct ModifierEvalContext *ctx,
                            struct Mesh *mesh)
 {
-  printf("OpenMeshEffectModifier: applyModifier.\n");
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
   return mfx_Modifier_do(fxmd, mesh);
 }
 
 static void initData(struct ModifierData *md)
 {
-  printf("OpenMeshEffectModifier: initData.\n");
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
   fxmd->effect_index = -1;
   fxmd->num_effects = 0;
@@ -60,7 +58,6 @@ static void initData(struct ModifierData *md)
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
 {
-  printf("OpenMeshEffectModifier: copyData.\n");
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
   OpenMeshEffectModifierData *tfxmd = (OpenMeshEffectModifierData *)target;
 
@@ -108,13 +105,11 @@ static void freeRuntimeData(void *runtime_data)
   if (runtime_data == NULL) {
     return;
   }
-  printf("freeRuntimeData on pointer %p.\n", runtime_data);
   mfx_Modifier_free_runtime_data(runtime_data);
 }
 
 static void freeData(struct ModifierData *md)
 {
-  printf("OpenMeshEffectModifier: freeData.\n");
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
 
   freeRuntimeData(md->runtime);

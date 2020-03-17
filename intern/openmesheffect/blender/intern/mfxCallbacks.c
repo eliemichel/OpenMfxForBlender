@@ -61,12 +61,10 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   blender_mesh = internal_data->blender_mesh;
 
   if (false == internal_data->is_input) {
-    printf("Output: NOT converting blender mesh\n");
     return kOfxStatOK;
   }
 
   if (NULL == blender_mesh) {
-    printf("NOT converting blender mesh into ofx mesh (no blender mesh, already converted)...\n");
     return kOfxStatOK;
   }
 
@@ -162,7 +160,6 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
   source_mesh = internal_data->source_mesh;
 
   if (true == internal_data->is_input) {
-    printf("Input: NOT converting ofx mesh\n");
     return kOfxStatOK;
   }
 

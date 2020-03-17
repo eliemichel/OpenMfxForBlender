@@ -76,7 +76,6 @@ bool runtime_ensure_effect_instance(OpenMeshEffectRuntime *rd) {
   }
 
   if (-1 == rd->effect_index) {
-    printf("No selected plug-in effect\n");
     return false;
   }
 

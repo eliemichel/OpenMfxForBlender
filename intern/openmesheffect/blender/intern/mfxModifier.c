@@ -45,7 +45,6 @@ static OpenMeshEffectRuntime *mfx_Modifier_runtime_ensure(OpenMeshEffectModifier
     fxmd->modifier.runtime = MEM_callocN(sizeof(OpenMeshEffectRuntime), "mfx runtime");
     runtime_data = (OpenMeshEffectRuntime*)fxmd->modifier.runtime;
     runtime_init(runtime_data);
-    printf("NEW RUNTIME DATA @%p\n", runtime_data);
   }
 
   // Update
@@ -66,7 +65,6 @@ void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd) {
   }
 
   if (false == runtime_data->is_plugin_valid) {
-    printf("==/ mfx_Modifier_reload_effect_info\n");
     return;
   }
 
@@ -181,8 +179,7 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
 
   if (false == runtime_ensure_effect_instance(runtime_data)) {
-    printf("failed to get effect instance\n");
-    printf("==/ mfx_Modifier_do\n");
+
     return NULL;
   }
 
