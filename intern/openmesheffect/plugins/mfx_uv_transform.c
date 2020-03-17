@@ -125,8 +125,6 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
 
     // Get input mesh data
     int input_point_count = 0, input_vertex_count = 0, input_face_count = 0;
-    float *input_points;
-    int *input_vertices, *input_faces;
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropPointCount, 0, &input_point_count);
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropVertexCount, 0, &input_vertex_count);
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropFaceCount, 0, &input_face_count);
