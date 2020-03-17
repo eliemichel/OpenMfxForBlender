@@ -91,10 +91,10 @@ static OfxStatus cook(PluginRuntime *runtime, OfxMeshEffectHandle instance) {
     getPointAttribute(output_mesh, kOfxMeshAttribPointPosition, &output_pos);
     copyAttribute(&output_pos, &input_pos, 0, input_point_count);
 
-    Attribute input_vertcounts, output_vertcounts;
-    getPointAttribute(input_mesh, kOfxMeshAttribVertexPoint, &input_vertcounts);
-    getPointAttribute(output_mesh, kOfxMeshAttribVertexPoint, &output_vertcounts);
-    copyAttribute(&output_vertcounts, &input_vertcounts, 0, input_vertex_count);
+    Attribute input_vertpoints, output_vertpoint;
+    getPointAttribute(input_mesh, kOfxMeshAttribVertexPoint, &input_vertpoints);
+    getPointAttribute(output_mesh, kOfxMeshAttribVertexPoint, &output_vertpoint);
+    copyAttribute(&output_vertpoint, &input_vertpoints, 0, input_vertex_count);
 
     Attribute input_facecounts, output_facecounts;
     getPointAttribute(input_mesh, kOfxMeshAttribFaceCounts, &input_facecounts);

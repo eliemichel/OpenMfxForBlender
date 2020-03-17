@@ -113,10 +113,6 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
 
     meshEffectSuite->meshAlloc(output_mesh);
 
-    // Get output mesh data
-
-   
-    printf("%d", input_face_count);
 
     // Point position
     Attribute input_pos, output_pos;
@@ -144,29 +140,30 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
       printf("Warning: unsupported attribute type: %d", input_pos.type);
     }
 
-    Attribute input_vertcounts, output_vertcounts;
-    getVertexAttribute(input_mesh, kOfxMeshAttribVertexPoint, &input_vertcounts);
-    getVertexAttribute(output_mesh, kOfxMeshAttribVertexPoint, &output_vertcounts);
+    // Vertex point
+    Attribute input_vertpoint, output_vertpoint;
+    getVertexAttribute(input_mesh, kOfxMeshAttribVertexPoint, &input_vertpoint);
+    getVertexAttribute(output_mesh, kOfxMeshAttribVertexPoint, &output_vertpoint);
     // Fill in output data
-    switch (input_vertcounts.type) {
+    switch (input_vertpoint.type) {
       case MFX_INT_ATTR:
       for (int i = 0 ; i < input_vertex_count ; ++i) {
         // 1. copy
-        int *src = (int *)&input_vertcounts.data[i * input_vertcounts.stride];
-        int *dst = (int *)&output_vertcounts.data[i * output_vertcounts.stride];
+        int *src = (int *)&input_vertpoint.data[i * input_vertpoint.stride];
+        int *dst = (int *)&output_vertpoint.data[i * output_vertpoint.stride];
         memcpy(dst, src, sizeof(int));
 
         // 2. mirror
-        dst = (int*)&output_vertcounts.data[(input_vertex_count + i) * output_vertcounts.stride];
+        dst = (int *)&output_vertpoint.data[(input_vertex_count + i) * output_vertpoint.stride];
         int value = src[0];
 
         dst[0] = input_point_count + value;
       }
       break;
     default:
-        printf("Warning: unsupported attribute type: %d", input_vertcounts.type);
+        printf("Warning: unsupported attribute type: %d", input_vertpoint.type);
     }
-    // Face Count
+    // Face count
     Attribute input_facecounts, output_facecounts;
     getFaceAttribute(input_mesh, kOfxMeshAttribFaceCounts, &input_facecounts);
     getFaceAttribute(output_mesh, kOfxMeshAttribFaceCounts, &output_facecounts);

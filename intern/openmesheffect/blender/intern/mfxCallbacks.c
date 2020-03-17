@@ -108,11 +108,7 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
     MFX_CHECK(ps->propSetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void*)&uv_data[0].uv[0]));
     MFX_CHECK(ps->propSetInt(uv_attrib, kOfxMeshAttribPropStride, 0, sizeof(MLoopCol)));
   }
-  printf("%d" ,face_count);
-  for (int i = 0; i < face_count; i++) {
-    printf("%d" , blender_mesh->mpoly->totloop);
 
-  }
   // Point position is non-owned
   OfxPropertySetHandle pos_attrib;
   MFX_CHECK(mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib));
@@ -121,7 +117,8 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   MFX_CHECK(ps->propSetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void*)&blender_mesh->mvert[0].co[0]));
   MFX_CHECK(ps->propSetInt(pos_attrib, kOfxMeshAttribPropStride, 0, sizeof(MVert)));
 
-  
+  // Vertex point is non-owned
+
   OfxPropertySetHandle vertpoint_attrib;
   MFX_CHECK(mes->meshGetAttribute(
       ofx_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib));
@@ -131,8 +128,8 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
       vertpoint_attrib, kOfxMeshAttribPropData, 0, (void *)&blender_mesh->mloop[0].v));
   MFX_CHECK(ps->propSetInt(vertpoint_attrib, kOfxMeshAttribPropStride, 0, sizeof(MLoop)));
 
+  // Face count is non-owned
   OfxPropertySetHandle facecounts_attrib;
-
   MFX_CHECK(mes->meshGetAttribute(
       ofx_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib));
 
