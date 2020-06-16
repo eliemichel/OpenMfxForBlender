@@ -83,20 +83,12 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
 
     // Get input mesh data
     int input_point_count = 0, input_vertex_count = 0, input_face_count = 0;
-    float *input_points;
-    int *input_vertices, *input_faces;
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropPointCount, 0, &input_point_count);
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropVertexCount, 0, &input_vertex_count);
     propertySuite->propGetInt(input_mesh_prop, kOfxMeshPropFaceCount, 0, &input_face_count);
 
     // Get attribute pointers
-    OfxPropertySetHandle pos_attrib, vertpoint_attrib, facecounts_attrib;
-    meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib);
-    propertySuite->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void**)&input_points);
-    meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
-    propertySuite->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&input_vertices);
-    meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
-    propertySuite->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&input_faces);
+   
 
     // Get vertex color
     OfxPropertySetHandle vcolor_attrib, uv_attrib;
@@ -123,14 +115,7 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     meshEffectSuite->meshAlloc(output_mesh);
 
     // Get output mesh data
-    float *output_points;
-    int *output_vertices, *output_faces;
-    meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib);
-    propertySuite->propGetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void**)&output_points);
-    meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib);
-    propertySuite->propGetPointer(vertpoint_attrib, kOfxMeshAttribPropData, 0, (void**)&output_vertices);
-    meshEffectSuite->meshGetAttribute(output_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib);
-    propertySuite->propGetPointer(facecounts_attrib, kOfxMeshAttribPropData, 0, (void**)&output_faces);
+
 
     // Fill in output data
     Attribute input_pos, output_pos;
@@ -138,8 +123,15 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     getPointAttribute(output_mesh, kOfxMeshAttribPointPosition, &output_pos);
     copyAttribute(&output_pos, &input_pos, 0, input_point_count);
 
-    memcpy(output_vertices, input_vertices, input_vertex_count * sizeof(int));
-    memcpy(output_faces, input_faces, input_face_count * sizeof(int));
+    Attribute input_vertpoint, output_vertpoint;
+    getVertexAttribute(input_mesh, kOfxMeshAttribVertexPoint, &input_vertpoint);
+    getVertexAttribute(output_mesh, kOfxMeshAttribVertexPoint, &output_vertpoint);
+    copyAttribute(&output_vertpoint, &input_vertpoint, 0, input_vertex_count);
+
+    Attribute input_facecounts, output_facecounts;
+    getFaceAttribute(input_mesh, kOfxMeshAttribFaceCounts, &input_facecounts);
+    getFaceAttribute(output_mesh, kOfxMeshAttribFaceCounts, &output_facecounts);
+    copyAttribute(&output_facecounts, &input_facecounts, 0, input_face_count);
 
     if (NULL != vcolor_data) {
       Attribute input_color, output_uv;
