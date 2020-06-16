@@ -34,16 +34,6 @@ if (kOfxStatOK != status) { \
   printf("[MFX] Suite method call '" #call "' returned status %d (%s)\n", status, getOfxStateName(status)); \
 }
 
-
-typedef struct PluginRuntime {
-    OfxHost *host;
-    const OfxPropertySuiteV1 *propertySuite;
-    const OfxParameterSuiteV1 *parameterSuite;
-    const OfxMeshEffectSuiteV1 *meshEffectSuite;
-} PluginRuntime;
-
-PluginRuntime gRuntime;
-
 static OfxStatus load() {
     return kOfxStatOK;
 }
@@ -185,12 +175,14 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     else {
       // DEBUG
       float *uv_data;
-      int uv_stride, vcolor_stride;
+      int uv_stride;
       propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropComponentCount, 0, &uv_stride);
       propertySuite->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&uv_data);
       for (int i = 0; i < input_vertex_count; ++i) {
-        uv_data[i * uv_stride + 0] = input_points[input_vertices[i] * 3 + 0];
-        uv_data[i * uv_stride + 1] = input_points[input_vertices[i] * 3 + 1];
+        int vert = *(int *)input_vertpoint.data[i * input_vertpoint.stride];
+        float *P = (float *)input_pos.data[vert * input_pos.stride];
+        uv_data[i * uv_stride + 0] = P[0];
+        uv_data[i * uv_stride + 1] = P[1];
       }
     }
 

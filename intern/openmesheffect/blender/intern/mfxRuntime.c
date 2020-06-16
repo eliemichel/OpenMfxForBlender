@@ -38,7 +38,7 @@
  // Private
 
 void runtime_free_effect_instance(OpenMeshEffectRuntime *rd) {
-  if (rd->is_plugin_valid) {
+  if (rd->is_plugin_valid && -1 != rd->effect_index) {
     OfxPlugin *plugin = rd->registry.plugins[rd->effect_index];
     OfxPluginStatus status = rd->registry.status[rd->effect_index];
 
