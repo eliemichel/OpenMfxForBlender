@@ -29,8 +29,8 @@
 #include "../system/Iterator.h"
 
 #include "../view_map/ViewMap.h"
-#include "../view_map/ViewMapIterators.h"
 #include "../view_map/ViewMapAdvancedIterators.h"
+#include "../view_map/ViewMapIterators.h"
 
 // using namespace ViewEdgeInternal;
 

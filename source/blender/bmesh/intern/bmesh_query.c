@@ -27,9 +27,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_alloca.h"
 #include "BLI_linklist.h"
+#include "BLI_math.h"
 #include "BLI_utildefines_stack.h"
 
 #include "BKE_customdata.h"
@@ -2429,6 +2429,22 @@ bool BM_edge_is_all_face_flag_test(const BMEdge *e, const char hflag, const bool
   }
 
   return true;
+}
+
+bool BM_edge_is_any_face_flag_test(const BMEdge *e, const char hflag)
+{
+  if (e->l) {
+    BMLoop *l_iter, *l_first;
+
+    l_iter = l_first = e->l;
+    do {
+      if (BM_elem_flag_test(l_iter->f, hflag)) {
+        return true;
+      }
+    } while ((l_iter = l_iter->radial_next) != l_first);
+  }
+
+  return false;
 }
 
 /* convenience functions for checking flags */

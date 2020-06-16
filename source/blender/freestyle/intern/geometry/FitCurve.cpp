@@ -21,8 +21,8 @@
  */
 
 #include <cstdlib>  // for malloc and free
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
 
 #include "FitCurve.h"
 

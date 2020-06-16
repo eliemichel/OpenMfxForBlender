@@ -373,6 +373,12 @@ MINLINE void add_v2_v2v2(float r[2], const float a[2], const float b[2])
   r[1] = a[1] + b[1];
 }
 
+MINLINE void add_v2_v2_int(int r[2], const int a[2])
+{
+  r[0] = r[0] + a[0];
+  r[1] = r[1] + a[1];
+}
+
 MINLINE void add_v2_v2v2_int(int r[2], const int a[2], const int b[2])
 {
   r[0] = a[0] + b[0];
@@ -1284,6 +1290,53 @@ MINLINE bool compare_len_v3v3(const float v1[3], const float v2[3], const float 
   sub_v3_v3v3(d, v1, v2);
   return (dot_v3v3(d, d) <= (limit * limit));
 }
+
+/** \name Vector Clamping
+ * \{ */
+
+MINLINE void clamp_v2(float vec[2], const float min, const float max)
+{
+  CLAMP(vec[0], min, max);
+  CLAMP(vec[1], min, max);
+}
+
+MINLINE void clamp_v3(float vec[3], const float min, const float max)
+{
+  CLAMP(vec[0], min, max);
+  CLAMP(vec[1], min, max);
+  CLAMP(vec[2], min, max);
+}
+
+MINLINE void clamp_v4(float vec[4], const float min, const float max)
+{
+  CLAMP(vec[0], min, max);
+  CLAMP(vec[1], min, max);
+  CLAMP(vec[2], min, max);
+  CLAMP(vec[3], min, max);
+}
+
+MINLINE void clamp_v2_v2v2(float vec[2], const float min[2], const float max[2])
+{
+  CLAMP(vec[0], min[0], max[0]);
+  CLAMP(vec[1], min[1], max[1]);
+}
+
+MINLINE void clamp_v3_v3v3(float vec[3], const float min[3], const float max[3])
+{
+  CLAMP(vec[0], min[0], max[0]);
+  CLAMP(vec[1], min[1], max[1]);
+  CLAMP(vec[2], min[2], max[2]);
+}
+
+MINLINE void clamp_v4_v4v4(float vec[4], const float min[4], const float max[4])
+{
+  CLAMP(vec[0], min[0], max[0]);
+  CLAMP(vec[1], min[1], max[1]);
+  CLAMP(vec[2], min[2], max[2]);
+  CLAMP(vec[3], min[3], max[3]);
+}
+
+/** \} */
 
 /**
  * <pre>

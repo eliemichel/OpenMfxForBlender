@@ -1158,7 +1158,7 @@ class I18n:
             print("WARNING: skipping file {}, too huge!".format(path))
             return None, None, None, False
         txt = ""
-        with open(path) as f:
+        with open(path, encoding="utf8") as f:
             txt = f.read()
         _in = 0
         _out = len(txt)
@@ -1413,8 +1413,8 @@ class I18n:
                 "#       and edit the translations by hand.",
                 "#       Just carefully respect the format of the tuple!",
                 "",
-                "# Tuple of tuples "
-                "((msgctxt, msgid), (sources, gen_comments), (lang, translation, (is_fuzzy, comments)), ...)",
+                "# Tuple of tuples:",
+                "# ((msgctxt, msgid), (sources, gen_comments), (lang, translation, (is_fuzzy, comments)), ...)",
                 "translations_tuple = (",
             ]
             # First gather all keys (msgctxt, msgid) - theoretically, all translations should share the same, but...
@@ -1544,7 +1544,7 @@ class I18n:
                 "",
                 self.settings.PARSER_PY_MARKER_END,
             ]
-        with open(dst, 'w') as f:
+        with open(dst, 'w', encoding="utf8") as f:
             f.write((prev or "") + "\n".join(txt) + (nxt or ""))
         self.unescape()
 

@@ -27,6 +27,8 @@
 #include "BKE_movieclip.h"
 #include "BKE_object.h"
 
+#include "BLI_listbase.h"
+
 #include "DNA_camera_types.h"
 #include "DNA_screen_types.h"
 
@@ -53,11 +55,8 @@ void OVERLAY_image_cache_init(OVERLAY_Data *vedata)
   OVERLAY_PrivateData *pd = vedata->stl->pd;
   DRWState state;
 
-  state = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_GREATER | DRW_STATE_BLEND_ALPHA_UNDER_PREMUL;
-  DRW_PASS_CREATE(psl->image_background_under_ps, state);
-
-  state = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_LESS_EQUAL | DRW_STATE_BLEND_ALPHA;
-  DRW_PASS_CREATE(psl->image_background_over_ps, state);
+  state = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_GREATER | DRW_STATE_BLEND_ALPHA_PREMUL;
+  DRW_PASS_CREATE(psl->image_background_ps, state);
 
   state = DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS;
   DRW_PASS_CREATE(psl->image_empties_ps, state | pd->clipping_state);
@@ -105,22 +104,28 @@ static void overlay_image_calc_aspect(Image *ima, const int size[2], float r_ima
   }
 }
 
-static void camera_background_images_stereo_setup(Scene *scene,
-                                                  View3D *v3d,
+static eStereoViews camera_background_images_stereo_eye(const Scene *scene, const View3D *v3d)
+{
+  if ((scene->r.scemode & R_MULTIVIEW) == 0) {
+    return STEREO_LEFT_ID;
+  }
+  else if (v3d->stereo3d_camera != STEREO_3D_ID) {
+    /* show only left or right camera */
+    return v3d->stereo3d_camera;
+  }
+  else {
+    return v3d->multiview_eye;
+  }
+}
+
+static void camera_background_images_stereo_setup(const Scene *scene,
+                                                  const View3D *v3d,
                                                   Image *ima,
                                                   ImageUser *iuser)
 {
   if (BKE_image_is_stereo(ima)) {
     iuser->flag |= IMA_SHOW_STEREO;
-
-    if ((scene->r.scemode & R_MULTIVIEW) == 0) {
-      iuser->multiview_eye = STEREO_LEFT_ID;
-    }
-    else if (v3d->stereo3d_camera != STEREO_3D_ID) {
-      /* show only left or right camera */
-      iuser->multiview_eye = v3d->stereo3d_camera;
-    }
-
+    iuser->multiview_eye = camera_background_images_stereo_eye(scene, v3d);
     BKE_image_multiview_index(ima, iuser);
   }
   else {
@@ -244,7 +249,7 @@ static void image_camera_background_matrix_get(const Camera *cam,
   unit_m4(scale);
   unit_m4(translate);
 
-  /*  Normalized Object space camera frame corners. */
+  /* Normalized Object space camera frame corners. */
   float cam_corners[4][3];
   BKE_camera_view_frame(draw_ctx->scene, cam, cam_corners);
   float cam_width = fabsf(cam_corners[0][0] - cam_corners[3][0]);
@@ -282,6 +287,9 @@ static void image_camera_background_matrix_get(const Camera *cam,
   translate[3][0] = bgpic->offset[0];
   translate[3][1] = bgpic->offset[1];
   translate[3][2] = cam_corners[0][2];
+  if (cam->type == CAM_ORTHO) {
+    mul_v2_fl(translate[3], cam->ortho_scale);
+  }
   /* These lines are for keeping 2.80 behavior and could be removed to keep 2.79 behavior. */
   translate[3][0] *= min_ff(1.0f, cam_aspect);
   translate[3][1] /= max_ff(1.0f, cam_aspect) * (image_aspect / cam_aspect);
@@ -300,6 +308,8 @@ void OVERLAY_image_camera_cache_populate(OVERLAY_Data *vedata, Object *ob)
   OVERLAY_PrivateData *pd = vedata->stl->pd;
   OVERLAY_PassList *psl = vedata->psl;
   const DRWContextState *draw_ctx = DRW_context_state_get();
+  const View3D *v3d = draw_ctx->v3d;
+  const Scene *scene = draw_ctx->scene;
   Camera *cam = ob->data;
 
   const bool show_frame = BKE_object_empty_image_frame_is_visible_in_view3d(ob, draw_ctx->rv3d);
@@ -308,10 +318,12 @@ void OVERLAY_image_camera_cache_populate(OVERLAY_Data *vedata, Object *ob)
     return;
   }
 
-  float norm_obmat[4][4];
-  normalize_m4_m4(norm_obmat, ob->obmat);
+  const bool stereo_eye = camera_background_images_stereo_eye(scene, v3d) == STEREO_LEFT_ID;
+  const char *viewname = (stereo_eye == STEREO_LEFT_ID) ? STEREO_RIGHT_NAME : STEREO_LEFT_NAME;
+  float modelmat[4][4];
+  BKE_camera_multiview_model_matrix(&scene->r, ob, viewname, modelmat);
 
-  for (CameraBGImage *bgpic = cam->bg_images.first; bgpic; bgpic = bgpic->next) {
+  LISTBASE_FOREACH (CameraBGImage *, bgpic, &cam->bg_images) {
     if (bgpic->flag & CAM_BGIMG_FLAG_DISABLED) {
       continue;
     }
@@ -327,32 +339,21 @@ void OVERLAY_image_camera_cache_populate(OVERLAY_Data *vedata, Object *ob)
     if (tex) {
       image_camera_background_matrix_get(cam, bgpic, draw_ctx, aspect, mat);
 
-      mul_m4_m4m4(mat, norm_obmat, mat);
+      mul_m4_m4m4(mat, modelmat, mat);
       const bool is_foreground = (bgpic->flag & CAM_BGIMG_FLAG_FOREGROUND) != 0;
 
-      float color_alpha[4] = {1.0f, 1.0f, 1.0f, bgpic->alpha};
       float color_premult_alpha[4] = {bgpic->alpha, bgpic->alpha, bgpic->alpha, bgpic->alpha};
 
-      /* When drawing background we do 2 passes.
-       * - One alpha over, which works where background is visible.
-       * - One alpha under, works under partially visible objects. (only in cycles)
-       * This approach is not ideal and should be revisited.
-       **/
-      for (int i = 0; i < (is_foreground ? 1 : 2); i++) {
-        DRWPass *pass = is_foreground ? psl->image_foreground_ps :
-                                        ((i == 0) ? psl->image_background_under_ps :
-                                                    psl->image_background_over_ps);
-        GPUShader *sh = OVERLAY_shader_image();
-        DRWShadingGroup *grp = DRW_shgroup_create(sh, pass);
-        float *color = (is_foreground || i == 1) ? color_alpha : color_premult_alpha;
-        DRW_shgroup_uniform_texture(grp, "imgTexture", tex);
-        DRW_shgroup_uniform_bool_copy(grp, "imgPremultiplied", use_alpha_premult);
-        DRW_shgroup_uniform_bool_copy(grp, "imgAlphaBlend", true);
-        DRW_shgroup_uniform_bool_copy(grp, "imgLinear", !DRW_state_do_color_management());
-        DRW_shgroup_uniform_bool_copy(grp, "depthSet", true);
-        DRW_shgroup_uniform_vec4_copy(grp, "color", color);
-        DRW_shgroup_call_obmat(grp, DRW_cache_quad_get(), mat);
-      }
+      DRWPass *pass = is_foreground ? psl->image_foreground_ps : psl->image_background_ps;
+
+      GPUShader *sh = OVERLAY_shader_image();
+      DRWShadingGroup *grp = DRW_shgroup_create(sh, pass);
+      DRW_shgroup_uniform_texture(grp, "imgTexture", tex);
+      DRW_shgroup_uniform_bool_copy(grp, "imgPremultiplied", use_alpha_premult);
+      DRW_shgroup_uniform_bool_copy(grp, "imgAlphaBlend", true);
+      DRW_shgroup_uniform_bool_copy(grp, "depthSet", true);
+      DRW_shgroup_uniform_vec4_copy(grp, "color", color_premult_alpha);
+      DRW_shgroup_call_obmat(grp, DRW_cache_quad_get(), mat);
     }
   }
 }
@@ -380,7 +381,9 @@ void OVERLAY_image_empty_cache_populate(OVERLAY_Data *vedata, Object *ob)
      * see: T59347 */
     int size[2] = {0};
     if (ima != NULL) {
-      tex = GPU_texture_from_blender(ima, ob->iuser, NULL, GL_TEXTURE_2D);
+      ImageUser iuser = *ob->iuser;
+      camera_background_images_stereo_setup(draw_ctx->scene, draw_ctx->v3d, ima, &iuser);
+      tex = GPU_texture_from_blender(ima, &iuser, NULL, GL_TEXTURE_2D);
       if (tex) {
         size[0] = GPU_texture_orig_width(tex);
         size[1] = GPU_texture_orig_height(tex);
@@ -402,16 +405,22 @@ void OVERLAY_image_empty_cache_populate(OVERLAY_Data *vedata, Object *ob)
   /* Use the actual depth if we are doing depth tests to determine the distance to the object */
   char depth_mode = DRW_state_is_depth() ? OB_EMPTY_IMAGE_DEPTH_DEFAULT : ob->empty_image_depth;
   DRWPass *pass = NULL;
-  switch (depth_mode) {
-    case OB_EMPTY_IMAGE_DEPTH_DEFAULT:
-      pass = (use_alpha_blend) ? psl->image_empties_blend_ps : psl->image_empties_ps;
-      break;
-    case OB_EMPTY_IMAGE_DEPTH_BACK:
-      pass = psl->image_empties_back_ps;
-      break;
-    case OB_EMPTY_IMAGE_DEPTH_FRONT:
-      pass = psl->image_empties_front_ps;
-      break;
+  if ((ob->dtx & OB_DRAWXRAY) != 0) {
+    /* Object In Front overrides image empty depth mode. */
+    pass = psl->image_empties_front_ps;
+  }
+  else {
+    switch (depth_mode) {
+      case OB_EMPTY_IMAGE_DEPTH_DEFAULT:
+        pass = (use_alpha_blend) ? psl->image_empties_blend_ps : psl->image_empties_ps;
+        break;
+      case OB_EMPTY_IMAGE_DEPTH_BACK:
+        pass = psl->image_empties_back_ps;
+        break;
+      case OB_EMPTY_IMAGE_DEPTH_FRONT:
+        pass = psl->image_empties_front_ps;
+        break;
+    }
   }
 
   if (show_frame) {
@@ -427,7 +436,6 @@ void OVERLAY_image_empty_cache_populate(OVERLAY_Data *vedata, Object *ob)
     DRW_shgroup_uniform_texture(grp, "imgTexture", tex);
     DRW_shgroup_uniform_bool_copy(grp, "imgPremultiplied", use_alpha_premult);
     DRW_shgroup_uniform_bool_copy(grp, "imgAlphaBlend", use_alpha_blend);
-    DRW_shgroup_uniform_bool_copy(grp, "imgLinear", false);
     DRW_shgroup_uniform_bool_copy(grp, "depthSet", depth_mode != OB_EMPTY_IMAGE_DEPTH_DEFAULT);
     DRW_shgroup_uniform_vec4_copy(grp, "color", ob->color);
     DRW_shgroup_call_obmat(grp, DRW_cache_quad_get(), mat);
@@ -438,30 +446,25 @@ void OVERLAY_image_cache_finish(OVERLAY_Data *vedata)
 {
   OVERLAY_PassList *psl = vedata->psl;
 
-  DRW_pass_sort_shgroup_reverse(psl->image_background_under_ps);
   DRW_pass_sort_shgroup_z(psl->image_empties_blend_ps);
   DRW_pass_sort_shgroup_z(psl->image_empties_front_ps);
   DRW_pass_sort_shgroup_z(psl->image_empties_back_ps);
+}
+
+void OVERLAY_image_background_draw(OVERLAY_Data *vedata)
+{
+  OVERLAY_PassList *psl = vedata->psl;
+
+  DRW_draw_pass(psl->image_background_ps);
+  DRW_draw_pass(psl->image_empties_back_ps);
 }
 
 void OVERLAY_image_draw(OVERLAY_Data *vedata)
 {
   OVERLAY_PassList *psl = vedata->psl;
   OVERLAY_PrivateData *pd = vedata->stl->pd;
-  OVERLAY_FramebufferList *fbl = vedata->fbl;
-
-  const DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
 
   DRW_view_set_active(pd->view_reference_images);
-  DRW_draw_pass(psl->image_background_over_ps);
-
-  if (DRW_state_is_fbo() && !DRW_pass_is_empty(psl->image_background_under_ps)) {
-    GPU_framebuffer_bind(dfbl->default_fb);
-    DRW_draw_pass(psl->image_background_under_ps);
-    GPU_framebuffer_bind(fbl->overlay_default_fb);
-  }
-
-  DRW_draw_pass(psl->image_empties_back_ps);
 
   DRW_draw_pass(psl->image_empties_ps);
   DRW_draw_pass(psl->image_empties_blend_ps);

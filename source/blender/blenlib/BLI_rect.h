@@ -24,9 +24,9 @@
  * \ingroup bli
  */
 
-#include "DNA_vec_types.h"
-#include "BLI_sys_types.h" /* bool */
 #include "BLI_compiler_compat.h"
+#include "BLI_sys_types.h" /* bool */
+#include "DNA_vec_types.h"
 
 struct rctf;
 struct rcti;
@@ -39,6 +39,10 @@ bool BLI_rcti_is_empty(const struct rcti *rect);
 bool BLI_rctf_is_empty(const struct rctf *rect);
 void BLI_rctf_init(struct rctf *rect, float xmin, float xmax, float ymin, float ymax);
 void BLI_rcti_init(struct rcti *rect, int xmin, int xmax, int ymin, int ymax);
+bool BLI_rctf_is_valid(const struct rctf *rect);
+bool BLI_rcti_is_valid(const struct rcti *rect);
+void BLI_rctf_sanitize(struct rctf *rect);
+void BLI_rcti_sanitize(struct rcti *rect);
 void BLI_rctf_init_pt_radius(struct rctf *rect, const float xy[2], float size);
 void BLI_rcti_init_pt_radius(struct rcti *rect, const int xy[2], int size);
 void BLI_rcti_init_minmax(struct rcti *rect);

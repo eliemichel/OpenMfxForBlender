@@ -26,9 +26,9 @@
 
 #include "GHOST_WindowManager.h"
 
+#include "GHOST_EventButton.h"
 #include "GHOST_EventCursor.h"
 #include "GHOST_EventKey.h"
-#include "GHOST_EventButton.h"
 #include "GHOST_EventWheel.h"
 
 GHOST_SystemSDL::GHOST_SystemSDL() : GHOST_System()
@@ -390,22 +390,31 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
             SDL_WarpMouseInWindow(sdl_win, x_new - x_win, y_new - y_win);
           }
 
-          g_event = new GHOST_EventCursor(
-              getMilliSeconds(), GHOST_kEventCursorMove, window, x_new, y_new);
+          g_event = new GHOST_EventCursor(getMilliSeconds(),
+                                          GHOST_kEventCursorMove,
+                                          window,
+                                          x_new,
+                                          y_new,
+                                          GHOST_TABLET_DATA_NONE);
         }
         else {
           g_event = new GHOST_EventCursor(getMilliSeconds(),
                                           GHOST_kEventCursorMove,
                                           window,
                                           x_root + x_accum,
-                                          y_root + y_accum);
+                                          y_root + y_accum,
+                                          GHOST_TABLET_DATA_NONE);
         }
       }
       else
 #endif
       {
-        g_event = new GHOST_EventCursor(
-            getMilliSeconds(), GHOST_kEventCursorMove, window, x_root, y_root);
+        g_event = new GHOST_EventCursor(getMilliSeconds(),
+                                        GHOST_kEventCursorMove,
+                                        window,
+                                        x_root,
+                                        y_root,
+                                        GHOST_TABLET_DATA_NONE);
       }
       break;
     }
@@ -435,7 +444,8 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
       else
         break;
 
-      g_event = new GHOST_EventButton(getMilliSeconds(), type, window, gbmask);
+      g_event = new GHOST_EventButton(
+          getMilliSeconds(), type, window, gbmask, GHOST_TABLET_DATA_NONE);
       break;
     }
     case SDL_MOUSEWHEEL: {
@@ -591,7 +601,7 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
         }
       }
 
-      g_event = new GHOST_EventKey(getMilliSeconds(), type, window, gkey, sym, NULL);
+      g_event = new GHOST_EventKey(getMilliSeconds(), type, window, gkey, sym, NULL, false);
       break;
     }
   }
@@ -702,9 +712,9 @@ GHOST_WindowSDL *GHOST_SystemSDL::findGhostWindow(SDL_Window *sdl_win)
   // We should always check the window manager's list of windows
   // and only process events on these windows.
 
-  std::vector<GHOST_IWindow *> &win_vec = m_windowManager->getWindows();
+  const std::vector<GHOST_IWindow *> &win_vec = m_windowManager->getWindows();
 
-  std::vector<GHOST_IWindow *>::iterator win_it = win_vec.begin();
+  std::vector<GHOST_IWindow *>::const_iterator win_it = win_vec.begin();
   std::vector<GHOST_IWindow *>::const_iterator win_end = win_vec.end();
 
   for (; win_it != win_end; ++win_it) {

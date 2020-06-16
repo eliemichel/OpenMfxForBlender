@@ -42,7 +42,6 @@
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
 
@@ -178,7 +177,7 @@ static void draw_modifier__generator(uiLayout *layout,
       const uiFontStyle *fstyle = UI_FSTYLE_WIDGET;
       float *cp = NULL;
       char xval[32];
-      unsigned int i;
+      uint i;
       int maxXWidth;
 
       /* draw polynomial order selector */
@@ -274,7 +273,7 @@ static void draw_modifier__generator(uiLayout *layout,
 
         /* 'x' param (and '+' if necessary) */
         if (i == 0) {
-          BLI_strncpy(xval, "", sizeof(xval));
+          BLI_strncpy(xval, " ", sizeof(xval));
         }
         else if (i == 1) {
           BLI_strncpy(xval, "x", sizeof(xval));
@@ -317,7 +316,7 @@ static void draw_modifier__generator(uiLayout *layout,
     case FCM_GENERATOR_POLYNOMIAL_FACTORISED: /* Factorized polynomial expression */
     {
       float *cp = NULL;
-      unsigned int i;
+      uint i;
 
       /* draw polynomial order selector */
       row = uiLayoutRow(layout, false);
@@ -718,28 +717,31 @@ static void draw_modifier__envelope(uiLayout *layout,
 
   /* control points list */
   for (i = 0, fed = env->data; i < env->totvert; i++, fed++) {
+    PointerRNA ctrl_ptr;
+    RNA_pointer_create(fcurve_owner_id, &RNA_FModifierEnvelopeControlPoint, fed, &ctrl_ptr);
+
     /* get a new row to operate on */
     row = uiLayoutRow(layout, true);
     block = uiLayoutGetBlock(row);
 
     UI_block_align_begin(block);
-    but = uiDefButF(block,
-                    UI_BTYPE_NUM,
-                    B_FMODIFIER_REDRAW,
-                    IFACE_("Fra:"),
-                    0,
-                    0,
-                    4.5 * UI_UNIT_X,
-                    UI_UNIT_Y,
-                    &fed->time,
-                    -MAXFRAMEF,
-                    MAXFRAMEF,
-                    10,
-                    1,
-                    TIP_("Frame that envelope point occurs"));
-    UI_but_func_set(but, validate_fmodifier_cb, fcm, NULL);
-
-    uiDefButF(block,
+    uiDefButR(block,
+              UI_BTYPE_NUM,
+              B_FMODIFIER_REDRAW,
+              IFACE_("Fra:"),
+              0,
+              0,
+              4.5 * UI_UNIT_X,
+              UI_UNIT_Y,
+              &ctrl_ptr,
+              "frame",
+              -1,
+              -MAXFRAMEF,
+              MAXFRAMEF,
+              10,
+              1,
+              NULL);
+    uiDefButR(block,
               UI_BTYPE_NUM,
               B_FMODIFIER_REDRAW,
               IFACE_("Min:"),
@@ -747,13 +749,15 @@ static void draw_modifier__envelope(uiLayout *layout,
               0,
               5 * UI_UNIT_X,
               UI_UNIT_Y,
-              &fed->min,
+              &ctrl_ptr,
+              "min",
+              -1,
               -UI_FLT_MAX,
               UI_FLT_MAX,
               10,
               2,
-              TIP_("Minimum bound of envelope at this point"));
-    uiDefButF(block,
+              NULL);
+    uiDefButR(block,
               UI_BTYPE_NUM,
               B_FMODIFIER_REDRAW,
               IFACE_("Max:"),
@@ -761,12 +765,14 @@ static void draw_modifier__envelope(uiLayout *layout,
               0,
               5 * UI_UNIT_X,
               UI_UNIT_Y,
-              &fed->max,
+              &ctrl_ptr,
+              "max",
+              -1,
               -UI_FLT_MAX,
               UI_FLT_MAX,
               10,
               2,
-              TIP_("Maximum bound of envelope at this point"));
+              NULL);
 
     but = uiDefIconBut(block,
                        UI_BTYPE_BUT,

@@ -31,24 +31,24 @@
 #  endif
 
 #  ifdef WIN32
-#    include <windows.h>
 #    include <float.h>
+#    include <windows.h>
 #  endif
 
+#  include <errno.h>
 #  include <stdlib.h>
 #  include <string.h>
-#  include <errno.h>
 
 #  include "BLI_sys_types.h"
 
 #  ifdef WIN32
 #    include "BLI_winstuff.h"
 #  endif
-#  include "BLI_utildefines.h"
-#  include "BLI_string.h"
-#  include "BLI_path_util.h"
 #  include "BLI_fileops.h"
+#  include "BLI_path_util.h"
+#  include "BLI_string.h"
 #  include "BLI_system.h"
+#  include "BLI_utildefines.h"
 #  include BLI_SYSTEM_PID_H
 
 #  include "BKE_appdir.h" /* BKE_tempdir_base */
@@ -102,16 +102,19 @@ static void sig_handle_crash_backtrace(FILE *fp)
 
 static void sig_handle_crash(int signum)
 {
-  wmWindowManager *wm = G_MAIN->wm.first;
+  /* Might be called after WM/Main exit, so needs to be careful about NULL-checking before
+   * de-referencing. */
+
+  wmWindowManager *wm = G_MAIN ? G_MAIN->wm.first : NULL;
 
 #  ifdef USE_WRITE_CRASH_BLEND
-  if (wm->undo_stack) {
+  if (wm && wm->undo_stack) {
     struct MemFile *memfile = BKE_undosys_stack_memfile_get_active(wm->undo_stack);
     if (memfile) {
       char fname[FILE_MAX];
 
-      if (!G_MAIN->name[0]) {
-        BLI_make_file_string("/", fname, BKE_tempdir_base(), "crash.blend");
+      if (!(G_MAIN && G_MAIN->name[0])) {
+        BLI_join_dirfile(fname, sizeof(fname), BKE_tempdir_base(), "crash.blend");
       }
       else {
         BLI_strncpy(fname, G_MAIN->name, sizeof(fname));
@@ -131,7 +134,7 @@ static void sig_handle_crash(int signum)
 
   char fname[FILE_MAX];
 
-  if (!G_MAIN->name[0]) {
+  if (!(G_MAIN && G_MAIN->name[0])) {
     BLI_join_dirfile(fname, sizeof(fname), BKE_tempdir_base(), "blender.crash.txt");
   }
   else {

@@ -19,13 +19,13 @@
 #ifndef __COM_RENDERLAYERSPROG_H__
 #define __COM_RENDERLAYERSPROG_H__
 
+#include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 #include "COM_NodeOperation.h"
 #include "DNA_scene_types.h"
-#include "BLI_listbase.h"
-#include "BKE_image.h"
+#include "MEM_guardedalloc.h"
 extern "C" {
 #include "RE_pipeline.h"
-#include "MEM_guardedalloc.h"
 }
 
 /**

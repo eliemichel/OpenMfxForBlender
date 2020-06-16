@@ -23,8 +23,8 @@
 
 #include "node_composite_util.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_linklist.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_scene_types.h"
 
@@ -32,72 +32,68 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_scene.h"
 
 /* **************** IMAGE (and RenderResult, multilayer image) ******************** */
 
 static bNodeSocketTemplate cmp_node_rlayers_out[] = {
-    {SOCK_RGBA, 0, N_("Image"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_FLOAT, 0, N_("Alpha"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_FLOAT, 0, N_(RE_PASSNAME_Z), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_VECTOR, 0, N_(RE_PASSNAME_NORMAL), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_VECTOR, 0, N_(RE_PASSNAME_UV), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_VECTOR, 0, N_(RE_PASSNAME_VECTOR), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_DEPRECATED), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_DEPRECATED), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_DEPRECATED), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_SHADOW), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_AO), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_DEPRECATED), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_DEPRECATED), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_DEPRECATED), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_FLOAT, 0, N_(RE_PASSNAME_INDEXOB), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_FLOAT, 0, N_(RE_PASSNAME_INDEXMA), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_FLOAT, 0, N_(RE_PASSNAME_MIST), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_EMIT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_ENVIRONMENT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_DIFFUSE_DIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_DIFFUSE_INDIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_DIFFUSE_COLOR), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_GLOSSY_DIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_GLOSSY_INDIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_GLOSSY_COLOR), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_TRANSM_DIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_TRANSM_INDIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_TRANSM_COLOR), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_SUBSURFACE_DIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_SUBSURFACE_INDIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 0, N_(RE_PASSNAME_SUBSURFACE_COLOR), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Image"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_FLOAT, N_("Alpha"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_FLOAT, N_(RE_PASSNAME_Z), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_VECTOR, N_(RE_PASSNAME_NORMAL), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_VECTOR, N_(RE_PASSNAME_UV), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_VECTOR, N_(RE_PASSNAME_VECTOR), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_DEPRECATED), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_DEPRECATED), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_DEPRECATED), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_SHADOW), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_AO), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_DEPRECATED), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_DEPRECATED), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_DEPRECATED), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_FLOAT, N_(RE_PASSNAME_INDEXOB), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_FLOAT, N_(RE_PASSNAME_INDEXMA), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_FLOAT, N_(RE_PASSNAME_MIST), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_EMIT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_ENVIRONMENT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_DIFFUSE_DIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_DIFFUSE_INDIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_DIFFUSE_COLOR), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_GLOSSY_DIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_GLOSSY_INDIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_GLOSSY_COLOR), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_TRANSM_DIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_TRANSM_INDIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_TRANSM_COLOR), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_SUBSURFACE_DIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_SUBSURFACE_INDIRECT), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_(RE_PASSNAME_SUBSURFACE_COLOR), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {-1, ""},
 };
+#define MAX_LEGACY_SOCKET_INDEX 30
 
 static void cmp_node_image_add_pass_output(bNodeTree *ntree,
                                            bNode *node,
                                            const char *name,
                                            const char *passname,
                                            int rres_index,
-                                           int type,
-                                           int is_rlayers,
+                                           eNodeSocketDatatype type,
+                                           int UNUSED(is_rlayers),
                                            LinkNodePair *available_sockets,
                                            int *prev_index)
 {
-  bNodeSocket *sock;
-  int sock_index = BLI_findstringindex(&node->outputs, name, offsetof(bNodeSocket, name));
+  bNodeSocket *sock = BLI_findstring(&node->outputs, name, offsetof(bNodeSocket, name));
 
-  if (sock_index < 0) {
-    /* The first 31 sockets always are the legacy hardcoded sockets.
-     * Any dynamically allocated sockets follow afterwards,
-     * and are sorted in the order in which they were stored in the RenderResult.
-     * Therefore, we remember the index of the last matched socket.
-     * New sockets are placed behind the previously traversed one,
-     * but always after the first 31. */
-    int after_index = *prev_index;
-    if (is_rlayers && after_index < 30) {
-      after_index = 30;
-    }
+  /* Replace if types don't match. */
+  if (sock && sock->type != type) {
+    nodeRemoveSocket(ntree, node, sock);
+    sock = NULL;
+  }
 
+  /* Create socket if it doesn't exist yet. */
+  if (sock == NULL) {
     if (rres_index >= 0) {
       sock = node_add_socket_from_template(
           ntree, node, &cmp_node_rlayers_out[rres_index], SOCK_OUT);
@@ -108,26 +104,20 @@ static void cmp_node_image_add_pass_output(bNodeTree *ntree,
     /* extra socket info */
     NodeImageLayer *sockdata = MEM_callocN(sizeof(NodeImageLayer), "node image layer");
     sock->storage = sockdata;
+  }
 
+  NodeImageLayer *sockdata = sock->storage;
+  if (sockdata) {
     BLI_strncpy(sockdata->pass_name, passname, sizeof(sockdata->pass_name));
+  }
 
-    sock_index = BLI_listbase_count(&node->outputs) - 1;
-    if (sock_index != after_index + 1) {
-      bNodeSocket *after_sock = BLI_findlink(&node->outputs, after_index);
-      BLI_remlink(&node->outputs, sock);
-      BLI_insertlinkafter(&node->outputs, after_sock, sock);
-    }
-  }
-  else {
-    sock = BLI_findlink(&node->outputs, sock_index);
-    NodeImageLayer *sockdata = sock->storage;
-    if (sockdata) {
-      BLI_strncpy(sockdata->pass_name, passname, sizeof(sockdata->pass_name));
-    }
-  }
+  /* Reorder sockets according to order that passes are added. */
+  const int after_index = (*prev_index)++;
+  bNodeSocket *after_sock = BLI_findlink(&node->outputs, after_index);
+  BLI_remlink(&node->outputs, sock);
+  BLI_insertlinkafter(&node->outputs, after_sock, sock);
 
   BLI_linklist_append(available_sockets, sock);
-  *prev_index = sock_index;
 }
 
 static void cmp_node_image_create_outputs(bNodeTree *ntree,
@@ -238,8 +228,12 @@ typedef struct RLayerUpdateData {
   int prev_index;
 } RLayerUpdateData;
 
-void node_cmp_rlayers_register_pass(
-    bNodeTree *ntree, bNode *node, Scene *scene, ViewLayer *view_layer, const char *name, int type)
+void node_cmp_rlayers_register_pass(bNodeTree *ntree,
+                                    bNode *node,
+                                    Scene *scene,
+                                    ViewLayer *view_layer,
+                                    const char *name,
+                                    eNodeSocketDatatype type)
 {
   RLayerUpdateData *data = node->storage;
 
@@ -278,7 +272,7 @@ static void cmp_node_rlayer_create_outputs_cb(void *UNUSED(userdata),
                                               const char *name,
                                               int UNUSED(channels),
                                               const char *UNUSED(chanid),
-                                              int type)
+                                              eNodeSocketDatatype type)
 {
   /* Register the pass in all scenes that have a render layer node for this layer.
    * Since multiple scenes can be used in the compositor, the code must loop over all scenes
@@ -314,6 +308,11 @@ static void cmp_node_rlayer_create_outputs(bNodeTree *ntree,
         RE_engine_update_render_passes(
             engine, scene, view_layer, cmp_node_rlayer_create_outputs_cb, NULL);
         RE_engine_free(engine);
+
+        if ((scene->r.mode & R_EDGE_FRS) &&
+            (view_layer->freestyle_config.flags & FREESTYLE_AS_RENDER_PASS)) {
+          ntreeCompositRegisterPass(ntree, scene, view_layer, RE_PASSNAME_FREESTYLE, SOCK_RGBA);
+        }
 
         MEM_freeN(data);
         node->storage = NULL;
@@ -383,7 +382,7 @@ static void cmp_node_image_verify_outputs(bNodeTree *ntree, bNode *node, bool rl
           break;
         }
       }
-      if (!link && (!rlayer || sock_index > 30)) {
+      if (!link && (!rlayer || sock_index > MAX_LEGACY_SOCKET_INDEX)) {
         MEM_freeN(sock->storage);
         nodeRemoveSocket(ntree, node, sock);
       }
@@ -502,7 +501,7 @@ const char *node_cmp_rlayers_sock_to_pass(int sock_index)
       RE_PASSNAME_SUBSURFACE_INDIRECT,
       RE_PASSNAME_SUBSURFACE_COLOR,
   };
-  if (sock_index > 30) {
+  if (sock_index > MAX_LEGACY_SOCKET_INDEX) {
     return NULL;
   }
   return sock_to_passname[sock_index];

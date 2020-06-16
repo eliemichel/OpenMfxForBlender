@@ -1,6 +1,6 @@
-#include "testing/testing.h"
 #include "BLI_string_ref.h"
 #include "BLI_vector.h"
+#include "testing/testing.h"
 
 using BLI::StringRef;
 using BLI::StringRefNull;
@@ -227,4 +227,13 @@ TEST(string_ref, DropPrefix)
   StringRef ref2 = ref.drop_prefix("tes");
   EXPECT_EQ(ref2.size(), 1);
   EXPECT_EQ(ref2, "t");
+}
+
+TEST(string_ref, Substr)
+{
+  StringRef ref("hello world");
+  EXPECT_EQ(ref.substr(0, 5), "hello");
+  EXPECT_EQ(ref.substr(4, 0), "");
+  EXPECT_EQ(ref.substr(3, 4), "lo w");
+  EXPECT_EQ(ref.substr(6, 5), "world");
 }

@@ -22,8 +22,8 @@
 #ifndef __GHOST_WINDOWSDL_H__
 #define __GHOST_WINDOWSDL_H__
 
-#include "GHOST_Window.h"
 #include "GHOST_SystemSDL.h"
+#include "GHOST_Window.h"
 
 #include <map>
 
@@ -48,11 +48,6 @@ class GHOST_WindowSDL : public GHOST_Window {
   SDL_Cursor *m_sdl_custom_cursor;
 
  public:
-  const GHOST_TabletData *GetTabletData()
-  {
-    return NULL;
-  }
-
   GHOST_WindowSDL(GHOST_SystemSDL *system,
                   const STR_String &title,
                   GHOST_TInt32 left,

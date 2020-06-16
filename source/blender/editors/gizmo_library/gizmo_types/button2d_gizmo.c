@@ -32,12 +32,12 @@
 
 #include "BKE_context.h"
 
+#include "GPU_batch.h"
+#include "GPU_batch_utils.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
 #include "GPU_matrix.h"
 #include "GPU_select.h"
-#include "GPU_batch.h"
-#include "GPU_batch_utils.h"
 #include "GPU_state.h"
 
 #include "RNA_access.h"
@@ -47,9 +47,9 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_gizmo_library.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
-#include "ED_gizmo_library.h"
 
 #include "UI_interface.h"
 #include "UI_interface_icons.h"
@@ -76,7 +76,8 @@ static void button2d_geom_draw_backdrop(const wmGizmo *gz,
                                         const float fill_alpha,
                                         const bool select)
 {
-  GPU_line_width(gz->line_width);
+  float viewport[4];
+  GPU_viewport_size_get_f(viewport);
 
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -85,10 +86,14 @@ static void button2d_geom_draw_backdrop(const wmGizmo *gz,
   if (color[3] == 1.0 && fill_alpha == 1.0 && select == false) {
     immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
     immUniformColor4fv(color);
-    GPU_polygon_smooth(0);
     imm_draw_circle_fill_2d(pos, 0, 0, 1.0f, CIRCLE_RESOLUTION);
+    immUnbindProgram();
+
+    immBindBuiltinProgram(GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
+    immUniform2fv("viewportSize", &viewport[2]);
+    immUniform1f("lineWidth", gz->line_width * U.pixelsize);
+    immUniformColor4fv(color);
     imm_draw_circle_wire_2d(pos, 0, 0, 1.0f, CIRCLE_RESOLUTION);
-    GPU_polygon_smooth(1);
     immUnbindProgram();
   }
   else {
@@ -103,9 +108,10 @@ static void button2d_geom_draw_backdrop(const wmGizmo *gz,
 
     /* Draw outline. */
     if ((fill_alpha != 1.0f) && (select == false)) {
-      immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
+      immBindBuiltinProgram(GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
+      immUniform2fv("viewportSize", &viewport[2]);
+      immUniform1f("lineWidth", gz->line_width * U.pixelsize);
       immUniformColor4fv(color);
-      GPU_line_width(gz->line_width);
       imm_draw_circle_wire_2d(pos, 0, 0, 1.0f, CIRCLE_RESOLUTION);
       immUnbindProgram();
     }
@@ -120,6 +126,8 @@ static void button2d_draw_intern(const bContext *C,
                                  const bool highlight)
 {
   ButtonGizmo2D *button = (ButtonGizmo2D *)gz;
+  float viewport[4];
+  GPU_viewport_size_get_f(viewport);
 
   const int draw_options = RNA_enum_get(gz->ptr, "draw_options");
   if (button->is_init == false) {
@@ -155,9 +163,9 @@ static void button2d_draw_intern(const bContext *C,
     float matrix_final_no_offset[4][4];
     WM_gizmo_calc_matrix_final_no_offset(gz, matrix_final_no_offset);
     uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
-    immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
-    immUniformColor4fv(color);
-    GPU_line_width(gz->line_width);
+    immBindBuiltinProgram(GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
+    immUniform2fv("viewportSize", &viewport[2]);
+    immUniform1f("lineWidth", gz->line_width * U.pixelsize);
     immUniformColor4fv(color);
     immBegin(GPU_PRIM_LINE_STRIP, 2);
     immVertex3fv(pos, matrix_final[3]);
@@ -197,11 +205,19 @@ static void button2d_draw_intern(const bContext *C,
     if (button->shape_batch[0] != NULL) {
       GPU_line_smooth(true);
       GPU_polygon_smooth(false);
-      GPU_line_width(1.0f);
       for (uint i = 0; i < ARRAY_SIZE(button->shape_batch) && button->shape_batch[i]; i++) {
-        /* Invert line color for wire. */
-        GPU_batch_program_set_builtin(button->shape_batch[i], GPU_SHADER_2D_UNIFORM_COLOR);
+        const bool do_wires = (i == 1);
+        if (do_wires) {
+          GPU_batch_program_set_builtin(button->shape_batch[i],
+                                        GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
+          GPU_batch_uniform_2fv(button->shape_batch[i], "viewportSize", &viewport[2]);
+          GPU_batch_uniform_1f(button->shape_batch[i], "lineWidth", gz->line_width * U.pixelsize);
+        }
+        else {
+          GPU_batch_program_set_builtin(button->shape_batch[i], GPU_SHADER_2D_UNIFORM_COLOR);
+        }
 
+        /* Invert line color for wire. */
         if (draw_options & ED_GIZMO_BUTTON_SHOW_BACKDROP) {
           /* If we have a backdrop already,
            * draw a contrasting shape over it instead of drawing it the same color.

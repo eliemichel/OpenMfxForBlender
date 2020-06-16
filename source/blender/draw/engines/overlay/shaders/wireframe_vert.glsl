@@ -4,6 +4,8 @@ uniform bool useColoring;
 uniform bool isTransform;
 uniform bool isObjectColor;
 uniform bool isRandomColor;
+uniform bool isHair;
+uniform vec4 hairDupliMatrix[4];
 
 in vec3 pos;
 in vec3 nor;
@@ -101,26 +103,38 @@ void wire_object_color_get(out vec3 rim_col, out vec3 wire_col)
 
 void main()
 {
+  bool no_attr = all(equal(nor, vec3(0)));
+  vec3 wnor = no_attr ? ViewMatrixInverse[2].xyz : normalize(normal_object_to_world(nor));
   vec3 wpos = point_object_to_world(pos);
-  vec3 wnor = normalize(normal_object_to_world(nor));
+
+  if (isHair) {
+    mat4 obmat = mat4(
+        hairDupliMatrix[0], hairDupliMatrix[1], hairDupliMatrix[2], hairDupliMatrix[3]);
+
+    wpos = (obmat * vec4(pos, 1.0)).xyz;
+    wnor = -normalize(mat3(obmat) * nor);
+  }
 
   bool is_persp = (ProjectionMatrix[3][3] == 0.0);
   vec3 V = (is_persp) ? normalize(ViewMatrixInverse[3].xyz - wpos) : ViewMatrixInverse[2].xyz;
 
   float facing = dot(wnor, V);
+
+  gl_Position = point_world_to_ndc(wpos);
+
+#ifndef CUSTOM_DEPTH_BIAS
   float facing_ratio = clamp(1.0 - facing * facing, 0.0, 1.0);
   float flip = sign(facing);           /* Flip when not facing the normal (i.e.: backfacing). */
   float curvature = (1.0 - wd * 0.75); /* Avoid making things worse for curvy areas. */
   vec3 wofs = wnor * (facing_ratio * curvature * flip);
   wofs = normal_world_to_view(wofs);
 
-  gl_Position = point_world_to_ndc(wpos);
-
   /* Push vertex half a pixel (maximum) in normal direction. */
   gl_Position.xy += wofs.xy * sizeViewportInv.xy * gl_Position.w;
 
   /* Push the vertex towards the camera. Helps a bit. */
-  gl_Position.z -= facing_ratio * curvature * 4.0e-5;
+  gl_Position.z -= facing_ratio * curvature * 1.0e-6 * gl_Position.w;
+#endif
 
   /* Convert to screen position [0..sizeVp]. */
   edgeStart = ((gl_Position.xy / gl_Position.w) * 0.5 + 0.5) * sizeViewport.xy;
@@ -138,15 +152,24 @@ void main()
 
   facing = clamp(abs(facing), 0.0, 1.0);
 
-  vec3 final_front_col = mix(rim_col, wire_col, 0.4);
-  vec3 final_rim_col = mix(rim_col, wire_col, 0.1);
-  finalColor = mix(final_rim_col, final_front_col, facing);
+  /* Do interpolation in a non-linear space to have a better visual result. */
+  rim_col = pow(rim_col, vec3(1.0 / 2.2));
+  wire_col = pow(wire_col, vec3(1.0 / 2.2));
+  vec3 final_front_col = mix(rim_col, wire_col, 0.35);
+  finalColor = mix(rim_col, final_front_col, facing);
+  finalColor = pow(finalColor, vec3(2.2));
 #endif
 
   /* Cull flat edges below threshold. */
-  if (get_edge_sharpness(wd) < 0.0) {
+  if (!no_attr && (get_edge_sharpness(wd) < 0.0)) {
     edgeStart = vec2(-1.0);
   }
+
+#ifdef SELECT_EDGES
+  /* HACK: to avoid loosing sub pixel object in selections, we add a bit of randomness to the
+   * wire to at least create one fragment that will pass the occlusion query. */
+  gl_Position.xy += sizeViewportInv.xy * gl_Position.w * ((gl_VertexID % 2 == 0) ? -1.0 : 1.0);
+#endif
 
 #ifdef USE_WORLD_CLIP_PLANES
   world_clip_planes_calc_clip_distance(wpos);

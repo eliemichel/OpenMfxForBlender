@@ -29,17 +29,17 @@
 
 #include "BLT_translation.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_rect.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_object_types.h"
 
 #include "BKE_camera.h"
-#include "BKE_global.h"
 #include "BKE_colortools.h"
+#include "BKE_global.h"
 #include "BKE_layer.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
@@ -55,16 +55,16 @@
 #  include "BPY_extern.h"
 #endif
 
+#include "RE_bake.h"
 #include "RE_engine.h"
 #include "RE_pipeline.h"
-#include "RE_bake.h"
 
 #include "DRW_engine.h"
 
 #include "initrender.h"
-#include "renderpipeline.h"
-#include "render_types.h"
 #include "render_result.h"
+#include "render_types.h"
+#include "renderpipeline.h"
 
 /* Render Engine Types */
 
@@ -87,8 +87,8 @@ void RE_engines_exit(void)
     BLI_remlink(&R_engines, type);
 
     if (!(type->flag & RE_INTERNAL)) {
-      if (type->ext.free) {
-        type->ext.free(type->ext.data);
+      if (type->rna_ext.free) {
+        type->rna_ext.free(type->rna_ext.data);
       }
 
       MEM_freeN(type);
@@ -116,7 +116,7 @@ RenderEngineType *RE_engines_find(const char *idname)
   return type;
 }
 
-bool RE_engine_is_external(Render *re)
+bool RE_engine_is_external(const Render *re)
 {
   return (re->engine && re->engine->type && re->engine->type->render);
 }
@@ -258,7 +258,7 @@ void RE_engine_add_pass(RenderEngine *engine,
     return;
   }
 
-  render_result_add_pass(re->result, name, channels, chan_id, layername, NULL);
+  RE_create_render_pass(re->result, name, channels, chan_id, layername, NULL);
 }
 
 void RE_engine_end_result(
@@ -605,9 +605,11 @@ bool RE_bake_engine(Render *re,
   engine->resolution_x = re->winx;
   engine->resolution_y = re->winy;
 
+  BLI_rw_mutex_lock(&re->partsmutex, THREAD_LOCK_WRITE);
   RE_parts_init(re);
   engine->tile_x = re->r.tilex;
   engine->tile_y = re->r.tiley;
+  BLI_rw_mutex_unlock(&re->partsmutex);
 
   if (type->bake) {
     engine->depsgraph = depsgraph;
@@ -863,7 +865,7 @@ void RE_engine_register_pass(struct RenderEngine *engine,
                              const char *name,
                              int channels,
                              const char *chanid,
-                             int type)
+                             eNodeSocketDatatype type)
 {
   if (!(scene && view_layer && engine && engine->update_render_passes_cb)) {
     return;

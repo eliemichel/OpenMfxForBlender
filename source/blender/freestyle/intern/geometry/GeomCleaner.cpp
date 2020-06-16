@@ -29,9 +29,9 @@
 #  endif
 #endif
 
-#include <stdio.h>
 #include <list>
 #include <map>
+#include <stdio.h>
 
 #include "GeomCleaner.h"
 

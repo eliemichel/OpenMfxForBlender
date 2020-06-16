@@ -21,22 +21,22 @@
  * \ingroup bke
  */
 
-#include <stdlib.h>
+#include <float.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <math.h>
-#include <float.h>
 
 #include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
+#include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
-#include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -48,7 +48,7 @@
 #include "BKE_action.h"
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_nla.h"
 #include "BKE_sound.h"
@@ -161,7 +161,7 @@ void BKE_nla_tracks_free(ListBase *tracks, bool do_id_user)
  *
  * \param use_same_action: When true, the existing action is used (instead of being duplicated)
  * \param flag: Control ID pointers management, see LIB_ID_CREATE_.../LIB_ID_COPY_...
- * flags in BKE_library.h
+ * flags in BKE_lib_id.h
  */
 NlaStrip *BKE_nlastrip_copy(Main *bmain,
                             NlaStrip *strip,
@@ -215,7 +215,7 @@ NlaStrip *BKE_nlastrip_copy(Main *bmain,
 /**
  * Copy a single NLA Track.
  * \param flag: Control ID pointers management, see LIB_ID_CREATE_.../LIB_ID_COPY_...
- * flags in BKE_library.h
+ * flags in BKE_lib_id.h
  */
 NlaTrack *BKE_nlatrack_copy(Main *bmain,
                             NlaTrack *nlt,
@@ -249,7 +249,7 @@ NlaTrack *BKE_nlatrack_copy(Main *bmain,
 /**
  * Copy all NLA data.
  * \param flag: Control ID pointers management, see LIB_ID_CREATE_.../LIB_ID_COPY_...
- * flags in BKE_library.h
+ * flags in BKE_lib_id.h
  */
 void BKE_nla_tracks_copy(Main *bmain, ListBase *dst, ListBase *src, const int flag)
 {

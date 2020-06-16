@@ -23,8 +23,9 @@
 
 #pragma once
 
-#include "intern/node/deg_node.h"
 #include "BLI_sys_types.h"
+#include "DNA_ID.h"
+#include "intern/node/deg_node.h"
 
 struct GHash;
 
@@ -57,7 +58,7 @@ struct IDNode : public Node {
   };
 
   virtual void init(const ID *id, const char *subdata) override;
-  void init_copy_on_write(ID *id_cow_hint = NULL);
+  void init_copy_on_write(ID *id_cow_hint = nullptr);
   ~IDNode();
   void destroy();
 
@@ -73,6 +74,10 @@ struct IDNode : public Node {
   IDComponentsMask get_visible_components_mask() const;
 
   /* ID Block referenced. */
+  /* Type of the ID stored separately, so it's possible to perform check whether CoW is needed
+   * without de-referencing the id_cow (which is not safe when ID is NOT covered by CoW and has
+   * been deleted from the main database.) */
+  ID_Type id_type;
   ID *id_orig;
   ID *id_cow;
 

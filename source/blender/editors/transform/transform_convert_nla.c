@@ -26,16 +26,14 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 
-#include "BKE_nla.h"
 #include "BKE_context.h"
+#include "BKE_nla.h"
 #include "BKE_report.h"
 
 #include "ED_anim_api.h"
-
-#include "UI_view2d.h"
 
 #include "transform.h"
 #include "transform_convert.h"
@@ -73,11 +71,7 @@ void createTransNlaData(bContext *C, TransInfo *t)
 
   /* which side of the current frame should be allowed */
   if (t->mode == TFM_TIME_EXTEND) {
-    /* only side on which mouse is gets transformed */
-    float xmouse, ymouse;
-
-    UI_view2d_region_to_view(&ac.ar->v2d, t->mouse.imval[0], t->mouse.imval[1], &xmouse, &ymouse);
-    t->frame_side = (xmouse > CFRA) ? 'R' : 'L';
+    t->frame_side = transform_convert_frame_side_dir_get(t, (float)CFRA);
   }
   else {
     /* normal transform - both sides of current frame are considered */

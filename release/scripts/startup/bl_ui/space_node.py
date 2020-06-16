@@ -76,7 +76,8 @@ class NODE_HT_header(Header):
 
                 layout.separator_spacer()
 
-                types_that_support_material = {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META', 'GPENCIL'}
+                types_that_support_material = {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META',
+                                               'GPENCIL', 'VOLUME', 'HAIR', 'POINTCLOUD'}
                 # disable material slot buttons when pinned, cannot find correct slot within id_from (#36589)
                 # disable also when the selected object does not support materials
                 has_material_slots = not snode.pin and ob_type in types_that_support_material
@@ -530,7 +531,12 @@ class NODE_PT_active_node_properties(Panel):
             layout.label(text="Inputs:")
             for socket in value_inputs:
                 row = layout.row()
-                socket.draw(context, row, node, iface_(socket.name, socket.bl_rna.translation_context))
+                socket.draw(
+                    context,
+                    row,
+                    node,
+                    iface_(socket.label if socket.label else socket.name, socket.bl_rna.translation_context),
+                )
 
 
 class NODE_PT_texture_mapping(Panel):

@@ -26,8 +26,8 @@
  * lookups. Keys and values are stored in groups of four to avoid wasting memory due to padding.
  */
 
-#include "BLI_hash_cxx.h"
 #include "BLI_array_ref.h"
+#include "BLI_hash_cxx.h"
 #include "BLI_open_addressing.h"
 
 namespace BLI {
@@ -413,6 +413,19 @@ template<typename KeyT, typename ValueT, typename Allocator = GuardedAllocator> 
     return m_array.slots_set();
   }
 
+  template<typename FuncT> void foreach_item(const FuncT &func) const
+  {
+    for (const Item &item : m_array) {
+      for (uint offset = 0; offset < 4; offset++) {
+        if (item.is_set(offset)) {
+          const KeyT &key = *item.key(offset);
+          const ValueT &value = *item.value(offset);
+          func(key, value);
+        }
+      }
+    }
+  }
+
   void print_table() const
   {
     std::cout << "Hash Table:\n";
@@ -624,16 +637,15 @@ template<typename KeyT, typename ValueT, typename Allocator = GuardedAllocator> 
   template<typename ForwardKeyT, typename ForwardValueT>
   bool add_override__impl(ForwardKeyT &&key, ForwardValueT &&value)
   {
-    return this->add_or_modify(
-        std::forward<ForwardKeyT>(key),
-        [&](ValueT *dst) {
-          new (dst) ValueT(std::forward<ForwardValueT>(value));
-          return true;
-        },
-        [&](ValueT *old_value) {
-          *old_value = std::forward<ForwardValueT>(value);
-          return false;
-        });
+    auto create_func = [&](ValueT *dst) {
+      new (dst) ValueT(std::forward<ForwardValueT>(value));
+      return true;
+    };
+    auto modify_func = [&](ValueT *old_value) {
+      *old_value = std::forward<ForwardValueT>(value);
+      return false;
+    };
+    return this->add_or_modify(std::forward<ForwardKeyT>(key), create_func, modify_func);
   }
 
   template<typename ForwardKeyT, typename ForwardValueT>

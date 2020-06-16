@@ -29,13 +29,13 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BKE_deform.h"
 #include "BKE_mesh.h"
 #include "BKE_particle.h"
-#include "BKE_deform.h"
 
 #include "MOD_modifiertypes.h"
-#include "MOD_util.h"
 #include "MOD_solidify_util.h" /* own include */
+#include "MOD_util.h"
 
 #ifdef __GNUC__
 #  pragma GCC diagnostic error "-Wsign-conversion"
@@ -224,22 +224,28 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
 
   const bool need_poly_normals = (smd->flag & MOD_SOLIDIFY_NORMAL_CALC) ||
                                  (smd->flag & MOD_SOLIDIFY_EVEN) ||
-                                 (smd->flag & MOD_SOLIDIFY_OFFSET_ANGLE_CLAMP);
+                                 (smd->flag & MOD_SOLIDIFY_OFFSET_ANGLE_CLAMP) ||
+                                 (smd->bevel_convex != 0);
 
   const float ofs_orig = -(((-smd->offset_fac + 1.0f) * 0.5f) * smd->offset);
   const float ofs_new = smd->offset + ofs_orig;
   const float offset_fac_vg = smd->offset_fac_vg;
   const float offset_fac_vg_inv = 1.0f - smd->offset_fac_vg;
+  const float bevel_convex = smd->bevel_convex;
   const bool do_flip = (smd->flag & MOD_SOLIDIFY_FLIP) != 0;
   const bool do_clamp = (smd->offset_clamp != 0.0f);
-  const bool do_angle_clamp = (smd->flag & MOD_SOLIDIFY_OFFSET_ANGLE_CLAMP) != 0;
-  const bool do_shell = ((smd->flag & MOD_SOLIDIFY_RIM) && (smd->flag & MOD_SOLIDIFY_NOSHELL)) ==
-                        0;
+  const bool do_angle_clamp = do_clamp && (smd->flag & MOD_SOLIDIFY_OFFSET_ANGLE_CLAMP) != 0;
+  const bool do_bevel_convex = bevel_convex != 0.0f;
+  const bool do_rim = (smd->flag & MOD_SOLIDIFY_RIM) != 0;
+  const bool do_shell = !(do_rim && (smd->flag & MOD_SOLIDIFY_NOSHELL) != 0);
 
   /* weights */
   MDeformVert *dvert;
   const bool defgrp_invert = (smd->flag & MOD_SOLIDIFY_VGROUP_INV) != 0;
   int defgrp_index;
+  const int shell_defgrp_index = BKE_object_defgroup_name_index(ctx->object,
+                                                                smd->shell_defgrp_name);
+  const int rim_defgrp_index = BKE_object_defgroup_name_index(ctx->object, smd->rim_defgrp_name);
 
   /* array size is doubled in case of using a shell */
   const uint stride = do_shell ? 2 : 1;
@@ -268,7 +274,7 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
   STACK_INIT(new_vert_arr, numVerts * 2);
   STACK_INIT(new_edge_arr, numEdges * 2);
 
-  if (smd->flag & MOD_SOLIDIFY_RIM) {
+  if (do_rim) {
     BLI_bitmap *orig_mvert_tag = BLI_BITMAP_NEW(numVerts, __func__);
     uint eidx;
     uint i;
@@ -366,6 +372,11 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
   mloop = result->mloop;
   medge = result->medge;
   mvert = result->mvert;
+
+  if (do_bevel_convex) {
+    /* Make sure bweight is enabled. */
+    result->cd_flag |= ME_CDFLAG_EDGE_BWEIGHT;
+  }
 
   if (do_shell) {
     CustomData_copy_data(&mesh->vdata, &result->vdata, 0, 0, (int)numVerts);
@@ -507,62 +518,81 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
     const float offset = fabsf(smd->offset) * smd->offset_clamp;
     const float offset_sq = offset * offset;
 
-    if (do_clamp) {
-      uint i;
+    /* for bevel weight */
+    float *edge_angs = NULL;
 
+    if (do_clamp) {
       vert_lens = MEM_malloc_arrayN(numVerts, sizeof(float), "vert_lens");
       copy_vn_fl(vert_lens, (int)numVerts, FLT_MAX);
-      for (i = 0; i < numEdges; i++) {
+      for (uint i = 0; i < numEdges; i++) {
         const float ed_len_sq = len_squared_v3v3(mvert[medge[i].v1].co, mvert[medge[i].v2].co);
         vert_lens[medge[i].v1] = min_ff(vert_lens[medge[i].v1], ed_len_sq);
         vert_lens[medge[i].v2] = min_ff(vert_lens[medge[i].v2], ed_len_sq);
       }
+    }
+
+    if (do_angle_clamp || do_bevel_convex) {
+      uint eidx;
       if (do_angle_clamp) {
-        uint eidx;
         vert_angs = MEM_malloc_arrayN(numVerts, sizeof(float), "vert_angs");
         copy_vn_fl(vert_angs, (int)numVerts, 0.5f * M_PI);
-        uint(*edge_user_pairs)[2] = MEM_malloc_arrayN(
-            numEdges, sizeof(*edge_user_pairs), "edge_user_pairs");
-        for (eidx = 0; eidx < numEdges; eidx++) {
-          edge_user_pairs[eidx][0] = INVALID_UNUSED;
-          edge_user_pairs[eidx][1] = INVALID_UNUSED;
+      }
+      if (do_bevel_convex) {
+        edge_angs = MEM_malloc_arrayN(numEdges, sizeof(float), "edge_angs");
+        if (!do_rim) {
+          edge_users = MEM_malloc_arrayN(numEdges, sizeof(*edge_users), "solid_mod edges");
         }
-        for (i = 0, mp = orig_mpoly; i < numPolys; i++, mp++) {
-          ml = orig_mloop + mp->loopstart;
-          MLoop *ml_prev = ml + (mp->totloop - 1);
+      }
+      uint(*edge_user_pairs)[2] = MEM_malloc_arrayN(
+          numEdges, sizeof(*edge_user_pairs), "edge_user_pairs");
+      for (eidx = 0; eidx < numEdges; eidx++) {
+        edge_user_pairs[eidx][0] = INVALID_UNUSED;
+        edge_user_pairs[eidx][1] = INVALID_UNUSED;
+      }
+      mp = orig_mpoly;
+      for (uint i = 0; i < numPolys; i++, mp++) {
+        ml = orig_mloop + mp->loopstart;
+        MLoop *ml_prev = ml + (mp->totloop - 1);
 
-          for (int j = 0; j < mp->totloop; j++, ml++) {
-            /* add edge user */
-            eidx = ml_prev->e;
-            ed = orig_medge + eidx;
-            BLI_assert(ELEM(ml_prev->v, ed->v1, ed->v2) && ELEM(ml->v, ed->v1, ed->v2));
-            char flip = (char)((ml_prev->v > ml->v) == (ed->v1 < ed->v2));
-            if (edge_user_pairs[eidx][flip] == INVALID_UNUSED) {
-              edge_user_pairs[eidx][flip] = i;
-            }
-            else {
-              edge_user_pairs[eidx][0] = INVALID_PAIR;
-              edge_user_pairs[eidx][1] = INVALID_PAIR;
-            }
-            ml_prev = ml;
+        for (uint j = 0; j < mp->totloop; j++, ml++) {
+          /* add edge user */
+          eidx = ml_prev->e;
+          ed = orig_medge + eidx;
+          BLI_assert(ELEM(ml_prev->v, ed->v1, ed->v2) && ELEM(ml->v, ed->v1, ed->v2));
+          char flip = (char)((ml_prev->v > ml->v) == (ed->v1 < ed->v2));
+          if (edge_user_pairs[eidx][flip] == INVALID_UNUSED) {
+            edge_user_pairs[eidx][flip] = i;
           }
+          else {
+            edge_user_pairs[eidx][0] = INVALID_PAIR;
+            edge_user_pairs[eidx][1] = INVALID_PAIR;
+          }
+          ml_prev = ml;
         }
-        ed = orig_medge;
-        float e[3];
-        for (i = 0; i < numEdges; i++, ed++) {
-          if (!ELEM(edge_user_pairs[i][0], INVALID_UNUSED, INVALID_PAIR) &&
-              !ELEM(edge_user_pairs[i][1], INVALID_UNUSED, INVALID_PAIR)) {
-            const float *n0 = poly_nors[edge_user_pairs[i][0]];
-            const float *n1 = poly_nors[edge_user_pairs[i][1]];
-            sub_v3_v3v3(e, orig_mvert[ed->v1].co, orig_mvert[ed->v2].co);
-            normalize_v3(e);
-            const float angle = angle_signed_on_axis_v3v3_v3(n0, n1, e);
+      }
+      ed = orig_medge;
+      float e[3];
+      for (uint i = 0; i < numEdges; i++, ed++) {
+        if (!ELEM(edge_user_pairs[i][0], INVALID_UNUSED, INVALID_PAIR) &&
+            !ELEM(edge_user_pairs[i][1], INVALID_UNUSED, INVALID_PAIR)) {
+          const float *n0 = poly_nors[edge_user_pairs[i][0]];
+          const float *n1 = poly_nors[edge_user_pairs[i][1]];
+          sub_v3_v3v3(e, orig_mvert[ed->v1].co, orig_mvert[ed->v2].co);
+          normalize_v3(e);
+          const float angle = angle_signed_on_axis_v3v3_v3(n0, n1, e);
+          if (do_angle_clamp) {
             vert_angs[ed->v1] = max_ff(vert_angs[ed->v1], angle);
             vert_angs[ed->v2] = max_ff(vert_angs[ed->v2], angle);
           }
+          if (do_bevel_convex) {
+            edge_angs[i] = angle;
+            if (!do_rim) {
+              edge_users[i] = INVALID_PAIR;
+            }
+          }
         }
-        MEM_freeN(edge_user_pairs);
       }
+      MEM_freeN(edge_user_pairs);
     }
 
     if (ofs_new != 0.0f) {
@@ -578,10 +608,10 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
         if (dvert) {
           MDeformVert *dv = &dvert[i];
           if (defgrp_invert) {
-            scalar_short_vgroup = 1.0f - defvert_find_weight(dv, defgrp_index);
+            scalar_short_vgroup = 1.0f - BKE_defvert_find_weight(dv, defgrp_index);
           }
           else {
-            scalar_short_vgroup = defvert_find_weight(dv, defgrp_index);
+            scalar_short_vgroup = BKE_defvert_find_weight(dv, defgrp_index);
           }
           scalar_short_vgroup = (offset_fac_vg + (scalar_short_vgroup * offset_fac_vg_inv)) *
                                 scalar_short;
@@ -625,10 +655,10 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
         if (dvert) {
           MDeformVert *dv = &dvert[i];
           if (defgrp_invert) {
-            scalar_short_vgroup = 1.0f - defvert_find_weight(dv, defgrp_index);
+            scalar_short_vgroup = 1.0f - BKE_defvert_find_weight(dv, defgrp_index);
           }
           else {
-            scalar_short_vgroup = defvert_find_weight(dv, defgrp_index);
+            scalar_short_vgroup = BKE_defvert_find_weight(dv, defgrp_index);
           }
           scalar_short_vgroup = (offset_fac_vg + (scalar_short_vgroup * offset_fac_vg_inv)) *
                                 scalar_short;
@@ -656,6 +686,33 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
         }
         madd_v3v3short_fl(mv->co, mv->no, scalar_short_vgroup);
       }
+    }
+
+    if (do_bevel_convex) {
+      for (uint i = 0; i < numEdges; i++) {
+        if (edge_users[i] == INVALID_PAIR) {
+          float angle = edge_angs[i];
+          medge[i].bweight = (char)clamp_i(
+              (int)medge[i].bweight + (int)((angle < M_PI ? clamp_f(bevel_convex, 0.0f, 1.0f) :
+                                                            clamp_f(bevel_convex, -1.0f, 0.0f)) *
+                                            255),
+              0,
+              255);
+          if (do_shell) {
+            medge[i + numEdges].bweight = (char)clamp_i(
+                (int)medge[i + numEdges].bweight +
+                    (int)((angle > M_PI ? clamp_f(bevel_convex, 0.0f, 1.0f) :
+                                          clamp_f(bevel_convex, -1.0f, 0.0f)) *
+                          255),
+                0,
+                255);
+          }
+        }
+      }
+      if (!do_rim) {
+        MEM_freeN(edge_users);
+      }
+      MEM_freeN(edge_angs);
     }
 
     if (do_clamp) {
@@ -740,18 +797,86 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
 
       if (defgrp_invert) {
         for (i = 0; i < numVerts; i++, dv++) {
-          scalar = 1.0f - defvert_find_weight(dv, defgrp_index);
+          scalar = 1.0f - BKE_defvert_find_weight(dv, defgrp_index);
           scalar = offset_fac_vg + (scalar * offset_fac_vg_inv);
           vert_angles[i] *= scalar;
         }
       }
       else {
         for (i = 0; i < numVerts; i++, dv++) {
-          scalar = defvert_find_weight(dv, defgrp_index);
+          scalar = BKE_defvert_find_weight(dv, defgrp_index);
           scalar = offset_fac_vg + (scalar * offset_fac_vg_inv);
           vert_angles[i] *= scalar;
         }
       }
+    }
+
+    /* for angle clamp */
+    float *vert_angs = NULL;
+    /* for bevel convex */
+    float *edge_angs = NULL;
+
+    if (do_angle_clamp || do_bevel_convex) {
+      uint eidx;
+      if (do_angle_clamp) {
+        vert_angs = MEM_malloc_arrayN(numVerts, sizeof(float), "vert_angs even");
+        copy_vn_fl(vert_angs, (int)numVerts, 0.5f * M_PI);
+      }
+      if (do_bevel_convex) {
+        edge_angs = MEM_malloc_arrayN(numEdges, sizeof(float), "edge_angs even");
+        if (!do_rim) {
+          edge_users = MEM_malloc_arrayN(numEdges, sizeof(*edge_users), "solid_mod edges");
+        }
+      }
+      uint(*edge_user_pairs)[2] = MEM_malloc_arrayN(
+          numEdges, sizeof(*edge_user_pairs), "edge_user_pairs");
+      for (eidx = 0; eidx < numEdges; eidx++) {
+        edge_user_pairs[eidx][0] = INVALID_UNUSED;
+        edge_user_pairs[eidx][1] = INVALID_UNUSED;
+      }
+      for (i = 0, mp = orig_mpoly; i < numPolys; i++, mp++) {
+        ml = orig_mloop + mp->loopstart;
+        MLoop *ml_prev = ml + (mp->totloop - 1);
+
+        for (int j = 0; j < mp->totloop; j++, ml++) {
+          /* add edge user */
+          eidx = ml_prev->e;
+          ed = orig_medge + eidx;
+          BLI_assert(ELEM(ml_prev->v, ed->v1, ed->v2) && ELEM(ml->v, ed->v1, ed->v2));
+          char flip = (char)((ml_prev->v > ml->v) == (ed->v1 < ed->v2));
+          if (edge_user_pairs[eidx][flip] == INVALID_UNUSED) {
+            edge_user_pairs[eidx][flip] = i;
+          }
+          else {
+            edge_user_pairs[eidx][0] = INVALID_PAIR;
+            edge_user_pairs[eidx][1] = INVALID_PAIR;
+          }
+          ml_prev = ml;
+        }
+      }
+      ed = orig_medge;
+      float e[3];
+      for (i = 0; i < numEdges; i++, ed++) {
+        if (!ELEM(edge_user_pairs[i][0], INVALID_UNUSED, INVALID_PAIR) &&
+            !ELEM(edge_user_pairs[i][1], INVALID_UNUSED, INVALID_PAIR)) {
+          const float *n0 = poly_nors[edge_user_pairs[i][0]];
+          const float *n1 = poly_nors[edge_user_pairs[i][1]];
+          if (do_angle_clamp) {
+            const float angle = M_PI - angle_normalized_v3v3(n0, n1);
+            vert_angs[ed->v1] = max_ff(vert_angs[ed->v1], angle);
+            vert_angs[ed->v2] = max_ff(vert_angs[ed->v2], angle);
+          }
+          if (do_bevel_convex) {
+            sub_v3_v3v3(e, orig_mvert[ed->v1].co, orig_mvert[ed->v2].co);
+            normalize_v3(e);
+            edge_angs[i] = angle_signed_on_axis_v3v3_v3(n0, n1, e);
+            if (!do_rim) {
+              edge_users[i] = INVALID_PAIR;
+            }
+          }
+        }
+      }
+      MEM_freeN(edge_user_pairs);
     }
 
     if (do_clamp) {
@@ -767,48 +892,6 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
           vert_lens_sq[medge[i].v2] = min_ff(vert_lens_sq[medge[i].v2], ed_len);
         }
         if (do_angle_clamp) {
-          uint eidx;
-          float *vert_angs = MEM_malloc_arrayN(numVerts, sizeof(float), "vert_angs even");
-          copy_vn_fl(vert_angs, (int)numVerts, 0.5f * M_PI);
-          uint(*edge_user_pairs)[2] = MEM_malloc_arrayN(
-              numEdges, sizeof(*edge_user_pairs), "edge_user_pairs");
-          for (eidx = 0; eidx < numEdges; eidx++) {
-            edge_user_pairs[eidx][0] = INVALID_UNUSED;
-            edge_user_pairs[eidx][1] = INVALID_UNUSED;
-          }
-          for (i = 0, mp = orig_mpoly; i < numPolys; i++, mp++) {
-            ml = orig_mloop + mp->loopstart;
-            MLoop *ml_prev = ml + (mp->totloop - 1);
-
-            for (int j = 0; j < mp->totloop; j++, ml++) {
-              /* add edge user */
-              eidx = ml_prev->e;
-              ed = orig_medge + eidx;
-              BLI_assert(ELEM(ml_prev->v, ed->v1, ed->v2) && ELEM(ml->v, ed->v1, ed->v2));
-              char flip = (char)((ml_prev->v > ml->v) == (ed->v1 < ed->v2));
-              if (edge_user_pairs[eidx][flip] == INVALID_UNUSED) {
-                edge_user_pairs[eidx][flip] = i;
-              }
-              else {
-                edge_user_pairs[eidx][0] = INVALID_PAIR;
-                edge_user_pairs[eidx][1] = INVALID_PAIR;
-              }
-              ml_prev = ml;
-            }
-          }
-          ed = orig_medge;
-          for (i = 0; i < numEdges; i++, ed++) {
-            if (!ELEM(edge_user_pairs[i][0], INVALID_UNUSED, INVALID_PAIR) &&
-                !ELEM(edge_user_pairs[i][1], INVALID_UNUSED, INVALID_PAIR)) {
-              const float *n0 = poly_nors[edge_user_pairs[i][0]];
-              const float *n1 = poly_nors[edge_user_pairs[i][1]];
-              const float angle = M_PI - angle_normalized_v3v3(n0, n1);
-              vert_angs[ed->v1] = max_ff(vert_angs[ed->v1], angle);
-              vert_angs[ed->v2] = max_ff(vert_angs[ed->v2], angle);
-            }
-          }
-          MEM_freeN(edge_user_pairs);
-
           for (i = 0; i < numVerts; i++) {
             float cos_ang = cosf(vert_angs[i] * 0.5f);
             if (cos_ang > 0) {
@@ -830,6 +913,33 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
         }
         MEM_freeN(vert_lens_sq);
       }
+    }
+
+    if (do_bevel_convex) {
+      for (i = 0; i < numEdges; i++) {
+        if (edge_users[i] == INVALID_PAIR) {
+          float angle = edge_angs[i];
+          medge[i].bweight = (char)clamp_i(
+              (int)medge[i].bweight + (int)((angle < M_PI ? clamp_f(bevel_convex, 0, 1) :
+                                                            clamp_f(bevel_convex, -1, 0)) *
+                                            255),
+              0,
+              255);
+          if (do_shell) {
+            medge[i + numEdges].bweight = (char)clamp_i(
+                (int)medge[i + numEdges].bweight +
+                    (int)((angle > M_PI ? clamp_f(bevel_convex, 0, 1) :
+                                          clamp_f(bevel_convex, -1, 0)) *
+                          255),
+                0,
+                255);
+          }
+        }
+      }
+      if (!do_rim) {
+        MEM_freeN(edge_users);
+      }
+      MEM_freeN(edge_angs);
     }
 
 #undef INVALID_UNUSED
@@ -874,7 +984,7 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
   }
 
   /* must recalculate normals with vgroups since they can displace unevenly [#26888] */
-  if ((mesh->runtime.cd_dirty_vert & CD_MASK_NORMAL) || (smd->flag & MOD_SOLIDIFY_RIM) || dvert) {
+  if ((mesh->runtime.cd_dirty_vert & CD_MASK_NORMAL) || do_rim || dvert) {
     result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
   }
   else if (do_shell) {
@@ -886,7 +996,37 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
     }
   }
 
-  if (smd->flag & MOD_SOLIDIFY_RIM) {
+  /* Add vertex weights for rim and shell vgroups. */
+  if (shell_defgrp_index != -1 || rim_defgrp_index != -1) {
+    dvert = CustomData_duplicate_referenced_layer(&result->vdata, CD_MDEFORMVERT, result->totvert);
+    /* If no vertices were ever added to an object's vgroup, dvert might be NULL. */
+    if (dvert == NULL) {
+      /* Add a valid data layer! */
+      dvert = CustomData_add_layer(
+          &result->vdata, CD_MDEFORMVERT, CD_CALLOC, NULL, result->totvert);
+    }
+    /* Ultimate security check. */
+    if (!dvert) {
+      return result;
+    }
+    result->dvert = dvert;
+
+    if (rim_defgrp_index != -1) {
+      for (uint i = 0; i < rimVerts; i++) {
+        BKE_defvert_ensure_index(&result->dvert[new_vert_arr[i]], rim_defgrp_index)->weight = 1.0f;
+        BKE_defvert_ensure_index(&result->dvert[(do_shell ? new_vert_arr[i] : i) + numVerts],
+                                 rim_defgrp_index)
+            ->weight = 1.0f;
+      }
+    }
+
+    if (shell_defgrp_index != -1) {
+      for (uint i = numVerts; i < result->totvert; i++) {
+        BKE_defvert_ensure_index(&result->dvert[i], shell_defgrp_index)->weight = 1.0f;
+      }
+    }
+  }
+  if (do_rim) {
     uint i;
 
     /* bugger, need to re-calculate the normals for the new edge faces.
@@ -1091,10 +1231,6 @@ Mesh *MOD_solidify_extrude_applyModifier(ModifierData *md,
 
   if (poly_nors) {
     MEM_freeN(poly_nors);
-  }
-
-  if (numPolys == 0 && numVerts != 0) {
-    modifier_setError(md, "Faces needed for useful output");
   }
 
   return result;

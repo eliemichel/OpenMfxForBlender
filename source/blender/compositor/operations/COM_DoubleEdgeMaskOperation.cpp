@@ -18,8 +18,8 @@
 
 #include <stdlib.h>
 
-#include "COM_DoubleEdgeMaskOperation.h"
 #include "BLI_math.h"
+#include "COM_DoubleEdgeMaskOperation.h"
 #include "DNA_node_types.h"
 #include "MEM_guardedalloc.h"
 
@@ -1136,7 +1136,7 @@ static void do_fillGradientBuffer(unsigned int rw,
    * purpose of GO for the proportion calculation.
    *
    * For the purposes of the minimum distance comparisons, we only check
-   * the sums-of-squares against eachother, since they are in the same
+   * the sums-of-squares against each other, since they are in the same
    * mathematical sort-order as if we did go ahead and take square roots
    *
    * Loop through all gradient pixels.

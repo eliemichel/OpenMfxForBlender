@@ -24,9 +24,13 @@
 #ifndef __NLA_PRIVATE_H__
 #define __NLA_PRIVATE_H__
 
-#include "RNA_types.h"
 #include "BLI_bitmap.h"
 #include "BLI_ghash.h"
+#include "RNA_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* --------------- NLA Evaluation DataTypes ----------------------- */
 
@@ -176,5 +180,9 @@ void nladata_flush_channels(PointerRNA *ptr,
                             NlaEvalData *channels,
                             NlaEvalSnapshot *snapshot,
                             const bool flush_to_original);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __NLA_PRIVATE_H__ */

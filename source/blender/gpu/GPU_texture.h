@@ -31,12 +31,12 @@ extern "C" {
 #endif
 
 struct GPUVertBuf;
+struct ImBuf;
 struct Image;
 struct ImageUser;
 struct MovieClip;
 struct MovieClipUser;
 struct PreviewImage;
-struct ImBuf;
 
 struct GPUFrameBuffer;
 typedef struct GPUTexture GPUTexture;
@@ -95,10 +95,12 @@ typedef enum eGPUTextureFormat {
 #if 0
   GPU_RGB10_A2,
   GPU_RGB10_A2UI,
+  GPU_SRGB8_A8,
 #endif
   GPU_R11F_G11F_B10F,
   GPU_DEPTH32F_STENCIL8,
   GPU_DEPTH24_STENCIL8,
+  GPU_SRGB8_A8,
 
   /* Texture only format */
   GPU_RGB16F,
@@ -124,7 +126,6 @@ typedef enum eGPUTextureFormat {
 
 /* Special formats texture only */
 #if 0
-  GPU_SRGB8_A8,
   GPU_SRGB8,
   GPU_RGB9_E5,
   GPU_COMPRESSED_RG_RGTC2,
@@ -161,6 +162,12 @@ GPUTexture *GPU_texture_create_nD(int w,
                                   int samples,
                                   const bool can_rescale,
                                   char err_out[256]);
+GPUTexture *GPU_texture_cube_create(int w,
+                                    int d,
+                                    const void *pixels,
+                                    eGPUTextureFormat tex_format,
+                                    eGPUDataFormat gpu_data_format,
+                                    char err_out[256]);
 
 GPUTexture *GPU_texture_create_1d(int w,
                                   eGPUTextureFormat data_type,
@@ -184,6 +191,9 @@ GPUTexture *GPU_texture_create_cube(int w,
                                     eGPUTextureFormat data_type,
                                     const float *pixels,
                                     char err_out[256]);
+GPUTexture *GPU_texture_create_cube_array(
+    int w, int d, eGPUTextureFormat data_type, const float *pixels, char err_out[256]);
+
 GPUTexture *GPU_texture_create_from_vertbuf(struct GPUVertBuf *vert);
 GPUTexture *GPU_texture_create_buffer(eGPUTextureFormat data_type, const uint buffer);
 
@@ -192,7 +202,6 @@ GPUTexture *GPU_texture_from_blender(struct Image *ima,
                                      struct ImageUser *iuser,
                                      struct ImBuf *ibuf,
                                      int textarget);
-GPUTexture *GPU_texture_from_preview(struct PreviewImage *prv, int mipmap);
 
 /* movie clip drawing */
 GPUTexture *GPU_texture_from_movieclip(struct MovieClip *clip,
@@ -217,6 +226,7 @@ void GPU_texture_update_sub(GPUTexture *tex,
                             int depth);
 
 void *GPU_texture_read(GPUTexture *tex, eGPUDataFormat gpu_data_format, int miplvl);
+void GPU_texture_clear(GPUTexture *tex, eGPUDataFormat gpu_data_format, const void *color);
 
 void GPU_invalid_tex_init(void);
 void GPU_invalid_tex_bind(int mode);
@@ -229,14 +239,17 @@ void GPU_texture_bind(GPUTexture *tex, int number);
 void GPU_texture_unbind(GPUTexture *tex);
 int GPU_texture_bound_number(GPUTexture *tex);
 
+void GPU_texture_copy(GPUTexture *dst, GPUTexture *src);
+
 void GPU_texture_generate_mipmap(GPUTexture *tex);
 void GPU_texture_compare_mode(GPUTexture *tex, bool use_compare);
 void GPU_texture_filter_mode(GPUTexture *tex, bool use_filter);
 void GPU_texture_mipmap_mode(GPUTexture *tex, bool use_mipmap, bool use_filter);
-void GPU_texture_wrap_mode(GPUTexture *tex, bool use_repeat);
+void GPU_texture_wrap_mode(GPUTexture *tex, bool use_repeat, bool use_clamp);
 void GPU_texture_filters(GPUTexture *tex,
                          eGPUFilterFunction min_filter,
                          eGPUFilterFunction mag_filter);
+void GPU_texture_swizzle_channel_auto(GPUTexture *tex, int channels);
 
 void GPU_texture_attach_framebuffer(GPUTexture *tex, struct GPUFrameBuffer *fb, int attachment);
 int GPU_texture_detach_framebuffer(GPUTexture *tex, struct GPUFrameBuffer *fb);
@@ -250,6 +263,7 @@ void GPU_texture_orig_size_set(GPUTexture *tex, int w, int h);
 int GPU_texture_layers(const GPUTexture *tex);
 eGPUTextureFormat GPU_texture_format(const GPUTexture *tex);
 int GPU_texture_samples(const GPUTexture *tex);
+bool GPU_texture_array(const GPUTexture *tex);
 bool GPU_texture_cube(const GPUTexture *tex);
 bool GPU_texture_depth(const GPUTexture *tex);
 bool GPU_texture_stencil(const GPUTexture *tex);

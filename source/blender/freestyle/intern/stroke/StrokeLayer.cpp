@@ -19,9 +19,9 @@
  * \brief Class to define a layer of strokes.
  */
 
+#include "StrokeLayer.h"
 #include "Canvas.h"
 #include "Stroke.h"
-#include "StrokeLayer.h"
 
 namespace Freestyle {
 

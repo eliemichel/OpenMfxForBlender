@@ -22,28 +22,19 @@
 /* **************** WAVE ******************** */
 
 static bNodeSocketTemplate sh_node_tex_wave_in[] = {
-    {SOCK_VECTOR, 1, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
-    {SOCK_FLOAT, 1, N_("Scale"), 5.0f, 0.0f, 0.0f, 0.0f, -1000.0f, 1000.0f},
-    {SOCK_FLOAT, 1, N_("Distortion"), 0.0f, 0.0f, 0.0f, 0.0f, -1000.0f, 1000.0f},
-    {SOCK_FLOAT, 1, N_("Detail"), 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 16.0f},
-    {SOCK_FLOAT, 1, N_("Detail Scale"), 1.0f, 0.0f, 0.0f, 0.0f, -1000.0f, 1000.0f},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
+    {SOCK_FLOAT, N_("Scale"), 5.0f, 0.0f, 0.0f, 0.0f, -1000.0f, 1000.0f},
+    {SOCK_FLOAT, N_("Distortion"), 0.0f, 0.0f, 0.0f, 0.0f, -1000.0f, 1000.0f},
+    {SOCK_FLOAT, N_("Detail"), 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 16.0f},
+    {SOCK_FLOAT, N_("Detail Scale"), 1.0f, 0.0f, 0.0f, 0.0f, -1000.0f, 1000.0f},
+    {SOCK_FLOAT, N_("Detail Roughness"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_FLOAT, N_("Phase Offset"), 0.0f, 0.0f, 0.0f, 0.0f, -1000.0f, 1000.0f},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_tex_wave_out[] = {
-    {SOCK_RGBA,
-     0,
-     N_("Color"),
-     0.0f,
-     0.0f,
-     0.0f,
-     0.0f,
-     0.0f,
-     1.0f,
-     PROP_NONE,
-     SOCK_NO_INTERNAL_LINK},
+    {SOCK_RGBA, N_("Color"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_NO_INTERNAL_LINK},
     {SOCK_FLOAT,
-     0,
      N_("Fac"),
      0.0f,
      0.0f,
@@ -53,7 +44,7 @@ static bNodeSocketTemplate sh_node_tex_wave_out[] = {
      1.0f,
      PROP_FACTOR,
      SOCK_NO_INTERNAL_LINK},
-    {-1, 0, ""},
+    {-1, ""},
 };
 
 static void node_shader_init_tex_wave(bNodeTree *UNUSED(ntree), bNode *node)
@@ -62,7 +53,9 @@ static void node_shader_init_tex_wave(bNodeTree *UNUSED(ntree), bNode *node)
   BKE_texture_mapping_default(&tex->base.tex_mapping, TEXMAP_TYPE_POINT);
   BKE_texture_colormapping_default(&tex->base.color_mapping);
   tex->wave_type = SHD_WAVE_BANDS;
-
+  tex->bands_direction = SHD_WAVE_BANDS_DIRECTION_X;
+  tex->rings_direction = SHD_WAVE_RINGS_DIRECTION_X;
+  tex->wave_profile = SHD_WAVE_PROFILE_SIN;
   node->storage = tex;
 }
 
@@ -77,10 +70,19 @@ static int node_shader_gpu_tex_wave(GPUMaterial *mat,
 
   NodeTexWave *tex = (NodeTexWave *)node->storage;
   float wave_type = tex->wave_type;
+  float bands_direction = tex->bands_direction;
+  float rings_direction = tex->rings_direction;
   float wave_profile = tex->wave_profile;
 
-  return GPU_stack_link(
-      mat, node, "node_tex_wave", in, out, GPU_constant(&wave_type), GPU_constant(&wave_profile));
+  return GPU_stack_link(mat,
+                        node,
+                        "node_tex_wave",
+                        in,
+                        out,
+                        GPU_constant(&wave_type),
+                        GPU_constant(&bands_direction),
+                        GPU_constant(&rings_direction),
+                        GPU_constant(&wave_profile));
 }
 
 /* node type definition */

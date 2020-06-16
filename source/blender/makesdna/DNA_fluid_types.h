@@ -24,6 +24,8 @@
 #ifndef __DNA_FLUID_TYPES_H__
 #define __DNA_FLUID_TYPES_H__
 
+#include "DNA_listBase.h"
+
 /* Domain flags. */
 enum {
   FLUID_DOMAIN_USE_NOISE = (1 << 1),        /* Use noise. */
@@ -41,6 +43,8 @@ enum {
   FLUID_DOMAIN_USE_SPEED_VECTORS = (1 << 11),   /* Generate mesh speed vectors. */
   FLUID_DOMAIN_EXPORT_MANTA_SCRIPT = (1 << 12), /* Export mantaflow script during bake. */
   FLUID_DOMAIN_USE_FRACTIONS = (1 << 13),       /* Use second order obstacles. */
+  FLUID_DOMAIN_DELETE_IN_OBSTACLE = (1 << 14),  /* Delete fluid inside obstacles. */
+  FLUID_DOMAIN_USE_DIFFUSION = (1 << 15), /* Use diffusion (e.g. viscosity, surface tension). */
 };
 
 /* Border collisions. */
@@ -211,6 +215,46 @@ enum {
 #define FLUID_DOMAIN_SMOKE_SCRIPT "smoke_script.py"
 #define FLUID_DOMAIN_LIQUID_SCRIPT "liquid_script.py"
 
+#define FLUID_DOMAIN_FILE_CONFIG "config_####"
+
+#define FLUID_DOMAIN_FILE_DENSITY "density_####"
+#define FLUID_DOMAIN_FILE_SHADOW "shadow_####"
+#define FLUID_DOMAIN_FILE_VEL "vel_####"
+#define FLUID_DOMAIN_FILE_HEAT "heat_####"
+#define FLUID_DOMAIN_FILE_COLORR "color_r_####"
+#define FLUID_DOMAIN_FILE_COLORG "color_g_####"
+#define FLUID_DOMAIN_FILE_COLORB "color_b_####"
+#define FLUID_DOMAIN_FILE_FLAME "flame_####"
+#define FLUID_DOMAIN_FILE_FUEL "fuel_####"
+#define FLUID_DOMAIN_FILE_REACT "react_####"
+
+#define FLUID_DOMAIN_FILE_PHI "phi_####"
+#define FLUID_DOMAIN_FILE_PP "pp_####"
+#define FLUID_DOMAIN_FILE_PVEL "pVel_####"
+
+#define FLUID_DOMAIN_FILE_DENSITYNOISE "density_noise_####"
+#define FLUID_DOMAIN_FILE_COLORRNOISE "color_r_noise_####"
+#define FLUID_DOMAIN_FILE_COLORGNOISE "color_g_noise_####"
+#define FLUID_DOMAIN_FILE_COLORBNOISE "color_b_noise_####"
+#define FLUID_DOMAIN_FILE_FLAMENOISE "flame_noise_####"
+#define FLUID_DOMAIN_FILE_FUELNOISE "fuel_noise_####"
+#define FLUID_DOMAIN_FILE_REACTNOISE "react_noise_####"
+
+#define FLUID_DOMAIN_FILE_MESH "lMesh_####"
+#define FLUID_DOMAIN_FILE_MESHVEL "lVelMesh_####"
+
+#define FLUID_DOMAIN_FILE_PPSND "ppSnd_####"
+#define FLUID_DOMAIN_FILE_PVELSND "pVelSnd_####"
+#define FLUID_DOMAIN_FILE_PLIFESND "pLifeSnd_####"
+
+#define FLUID_DOMAIN_FILE_GUIDEVEL "guidevel_####"
+
+#define FLUID_DOMAIN_EXTENSION_UNI ".uni"
+#define FLUID_DOMAIN_EXTENSION_OPENVDB ".vdb"
+#define FLUID_DOMAIN_EXTENSION_RAW ".raw"
+#define FLUID_DOMAIN_EXTENSION_OBJ ".obj"
+#define FLUID_DOMAIN_EXTENSION_BINOBJ ".bobj.gz"
+
 enum {
   FLUID_DOMAIN_CACHE_REPLAY = 0,
   FLUID_DOMAIN_CACHE_MODULAR = 1,
@@ -252,7 +296,8 @@ typedef struct FluidDomainSettings {
   struct Collection *fluid_group;
   struct Collection *force_group;    /* UNUSED */
   struct Collection *effector_group; /* Effector objects group. */
-  struct GPUTexture *tex;
+  struct GPUTexture *tex_density;
+  struct GPUTexture *tex_color;
   struct GPUTexture *tex_wt;
   struct GPUTexture *tex_shadow;
   struct GPUTexture *tex_flame;
@@ -348,7 +393,6 @@ typedef struct FluidDomainSettings {
   float surface_tension;
   float viscosity_base;
   int viscosity_exponent;
-  float domain_size;
 
   /* Mesh options. */
   float mesh_concave_upper;
@@ -359,7 +403,7 @@ typedef struct FluidDomainSettings {
   int mesh_scale;
   int totvert;
   short mesh_generator;
-  char _pad5[2]; /* Unused. */
+  char _pad5[6]; /* Unused. */
 
   /* Secondary particle options. */
   int particle_type;
@@ -494,8 +538,10 @@ enum {
   FLUID_FLOW_USE_PART_SIZE = (1 << 4),
   /* Control when to apply inflow. */
   FLUID_FLOW_USE_INFLOW = (1 << 5),
-  /* Control when to apply inflow. */
+  /* Control how to initialize flow objects. */
   FLUID_FLOW_USE_PLANE_INIT = (1 << 6),
+  /* Notify domain objects about state change (invalidate cache). */
+  FLUID_FLOW_NEEDS_UPDATE = (1 << 7),
 };
 
 typedef struct FluidFlowSettings {
@@ -563,6 +609,16 @@ enum {
   FLUID_EFFECTOR_GUIDE_AVERAGED = 3,
 };
 
+/* Effector flags. */
+enum {
+  /* Control when to apply inflow. */
+  FLUID_EFFECTOR_USE_EFFEC = (1 << 1),
+  /* Control how to initialize flow objects. */
+  FLUID_EFFECTOR_USE_PLANE_INIT = (1 << 2),
+  /* Notify domain objects about state change (invalidate cache). */
+  FLUID_EFFECTOR_NEEDS_UPDATE = (1 << 3),
+};
+
 /* Collision objects (filled with smoke). */
 typedef struct FluidEffectorSettings {
 
@@ -578,8 +634,9 @@ typedef struct FluidEffectorSettings {
 
   float surface_distance; /* Thickness of mesh surface, used in obstacle sdf. */
   int flags;
+  int subframes;
   short type;
-  char _pad1[2];
+  char _pad1[6];
 
   /* Guiding options. */
   float vel_multi; /* Multiplier for object velocity. */

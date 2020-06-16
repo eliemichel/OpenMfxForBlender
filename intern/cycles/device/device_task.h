@@ -47,7 +47,7 @@ class DenoiseParams {
   int neighbor_frames;
   /* Clamp the input to the range of +-1e8. Should be enough for any legitimate data. */
   bool clamp_input;
-  /* Controls which passes the OptiX AI denoiser should use as input. */
+  /* Passes handed over to the OptiX denoiser (default to color + albedo). */
   int optix_input_passes;
 
   DenoiseParams()
@@ -58,13 +58,26 @@ class DenoiseParams {
     relative_pca = false;
     neighbor_frames = 2;
     clamp_input = true;
-    optix_input_passes = 1;
+    optix_input_passes = 2;
   }
+};
+
+class AdaptiveSampling {
+ public:
+  AdaptiveSampling();
+
+  int align_static_samples(int samples) const;
+  int align_dynamic_samples(int offset, int samples) const;
+  bool need_filter(int sample) const;
+
+  bool use;
+  int adaptive_step;
+  int min_samples;
 };
 
 class DeviceTask : public Task {
  public:
-  typedef enum { RENDER, FILM_CONVERT, SHADER } Type;
+  typedef enum { RENDER, FILM_CONVERT, SHADER, DENOISE_BUFFER } Type;
   Type type;
 
   int x, y, w, h;
@@ -81,7 +94,7 @@ class DeviceTask : public Task {
   int shader_filter;
   int shader_x, shader_w;
 
-  int passes_size;
+  RenderBuffers *buffers;
 
   explicit DeviceTask(Type type = RENDER);
 
@@ -90,7 +103,7 @@ class DeviceTask : public Task {
 
   void update_progress(RenderTile *rtile, int pixel_samples = -1);
 
-  function<bool(Device *device, RenderTile &)> acquire_tile;
+  function<bool(Device *device, RenderTile &, uint)> acquire_tile;
   function<void(long, int)> update_progress_sample;
   function<void(RenderTile &)> update_tile_sample;
   function<void(RenderTile &)> release_tile;
@@ -98,6 +111,7 @@ class DeviceTask : public Task {
   function<void(RenderTile *, Device *)> map_neighbor_tiles;
   function<void(RenderTile *, Device *)> unmap_neighbor_tiles;
 
+  uint tile_types;
   DenoiseParams denoising;
   bool denoising_from_render;
   vector<int> denoising_frames;
@@ -114,7 +128,7 @@ class DeviceTask : public Task {
 
   bool need_finish_queue;
   bool integrator_branched;
-  int2 requested_tile_size;
+  AdaptiveSampling adaptive_sampling;
 
  protected:
   double last_update_time;

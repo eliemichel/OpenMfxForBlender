@@ -27,12 +27,12 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_deform.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mirror.h"
 #include "BKE_modifier.h"
-#include "BKE_deform.h"
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
@@ -77,7 +77,7 @@ Mesh *BKE_mesh_mirror_bisect_on_mirror_plane(MirrorModifierData *mmd,
   }
   plane_from_point_normal_v3(plane, plane_co, plane_no);
 
-  BM_mesh_bisect_plane(bm, plane, false, false, 0, 0, bisect_distance);
+  BM_mesh_bisect_plane(bm, plane, true, false, 0, 0, bisect_distance);
 
   /* Plane definitions for vert killing. */
   float plane_offset[4];
@@ -290,6 +290,8 @@ Mesh *BKE_mesh_mirror_apply_mirror_on_axis(MirrorModifierData *mmd,
       (is_zero_v2(mmd->uv_offset_copy) == false)) {
     const bool do_mirr_u = (mmd->flag & MOD_MIR_MIRROR_U) != 0;
     const bool do_mirr_v = (mmd->flag & MOD_MIR_MIRROR_V) != 0;
+    /* If set, flip around center of each tile. */
+    const bool do_mirr_udim = (mmd->flag & MOD_MIR_MIRROR_UDIM) != 0;
 
     const int totuv = CustomData_number_of_layers(&result->ldata, CD_MLOOPUV);
 
@@ -299,10 +301,22 @@ Mesh *BKE_mesh_mirror_apply_mirror_on_axis(MirrorModifierData *mmd,
       dmloopuv += j; /* second set of loops only */
       for (; j-- > 0; dmloopuv++) {
         if (do_mirr_u) {
-          dmloopuv->uv[0] = 1.0f - dmloopuv->uv[0] + mmd->uv_offset[0];
+          float u = dmloopuv->uv[0];
+          if (do_mirr_udim) {
+            dmloopuv->uv[0] = ceilf(u) - fmodf(u, 1.0f) + mmd->uv_offset[0];
+          }
+          else {
+            dmloopuv->uv[0] = 1.0f - u + mmd->uv_offset[0];
+          }
         }
         if (do_mirr_v) {
-          dmloopuv->uv[1] = 1.0f - dmloopuv->uv[1] + mmd->uv_offset[1];
+          float v = dmloopuv->uv[1];
+          if (do_mirr_udim) {
+            dmloopuv->uv[1] = ceilf(v) - fmodf(v, 1.0f) + mmd->uv_offset[1];
+          }
+          else {
+            dmloopuv->uv[1] = 1.0f - v + mmd->uv_offset[1];
+          }
         }
         dmloopuv->uv[0] += mmd->uv_offset_copy[0];
         dmloopuv->uv[1] += mmd->uv_offset_copy[1];
@@ -384,16 +398,16 @@ Mesh *BKE_mesh_mirror_apply_mirror_on_axis(MirrorModifierData *mmd,
                          maxVerts;
     int *flip_map = NULL, flip_map_len = 0;
 
-    flip_map = defgroup_flip_map(ob, &flip_map_len, false);
+    flip_map = BKE_object_defgroup_flip_map(ob, &flip_map_len, false);
 
     if (flip_map) {
       for (i = 0; i < maxVerts; dvert++, i++) {
         /* merged vertices get both groups, others get flipped */
         if (do_vtargetmap && (vtargetmap[i] != -1)) {
-          defvert_flip_merged(dvert, flip_map, flip_map_len);
+          BKE_defvert_flip_merged(dvert, flip_map, flip_map_len);
         }
         else {
-          defvert_flip(dvert, flip_map, flip_map_len);
+          BKE_defvert_flip(dvert, flip_map, flip_map_len);
         }
       }
 

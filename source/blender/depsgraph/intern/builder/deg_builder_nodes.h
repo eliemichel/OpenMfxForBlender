@@ -39,6 +39,7 @@ struct FreestyleLineSet;
 struct FreestyleLineStyle;
 struct GHash;
 struct ID;
+struct IDProperty;
 struct Image;
 struct Key;
 struct LayerCollection;
@@ -106,27 +107,27 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
 
   OperationNode *add_operation_node(ComponentNode *comp_node,
                                     OperationCode opcode,
-                                    const DepsEvalOperationCb &op = NULL,
+                                    const DepsEvalOperationCb &op = nullptr,
                                     const char *name = "",
                                     int name_tag = -1);
   OperationNode *add_operation_node(ID *id,
                                     NodeType comp_type,
                                     const char *comp_name,
                                     OperationCode opcode,
-                                    const DepsEvalOperationCb &op = NULL,
+                                    const DepsEvalOperationCb &op = nullptr,
                                     const char *name = "",
                                     int name_tag = -1);
   OperationNode *add_operation_node(ID *id,
                                     NodeType comp_type,
                                     OperationCode opcode,
-                                    const DepsEvalOperationCb &op = NULL,
+                                    const DepsEvalOperationCb &op = nullptr,
                                     const char *name = "",
                                     int name_tag = -1);
 
   OperationNode *ensure_operation_node(ID *id,
                                        NodeType comp_type,
                                        OperationCode opcode,
-                                       const DepsEvalOperationCb &op = NULL,
+                                       const DepsEvalOperationCb &op = nullptr,
                                        const char *name = "",
                                        int name_tag = -1);
 
@@ -149,6 +150,8 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
 
   virtual void build_id(ID *id);
 
+  virtual void build_idproperties(IDProperty *id_property);
+
   virtual void build_scene_render(Scene *scene, ViewLayer *view_layer);
   virtual void build_scene_parameters(Scene *scene);
   virtual void build_scene_compositor(Scene *scene);
@@ -164,6 +167,7 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
                             bool is_visible);
   virtual void build_object_proxy_from(Object *object, bool is_object_visible);
   virtual void build_object_proxy_group(Object *object, bool is_object_visible);
+  virtual void build_object_instance_collection(Object *object, bool is_object_visible);
   virtual void build_object_flags(int base_index,
                                   Object *object,
                                   eDepsNode_LinkedState_Type linked_state);
@@ -192,11 +196,13 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   virtual void build_driver_variables(ID *id, FCurve *fcurve);
   virtual void build_driver_id_property(ID *id, const char *rna_path);
   virtual void build_parameters(ID *id);
+  virtual void build_dimensions(Object *object);
   virtual void build_ik_pose(Object *object, bPoseChannel *pchan, bConstraint *con);
   virtual void build_splineik_pose(Object *object, bPoseChannel *pchan, bConstraint *con);
   virtual void build_rig(Object *object, bool is_object_visible);
   virtual void build_proxy_rig(Object *object);
   virtual void build_armature(bArmature *armature);
+  virtual void build_armature_bones(ListBase *bones);
   virtual void build_shapekeys(Key *key);
   virtual void build_camera(Camera *camera);
   virtual void build_light(Light *lamp);

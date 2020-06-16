@@ -122,6 +122,11 @@ static BMO_FlagSet bmo_enum_falloff_type[] = {
   {0, NULL},
 };
 
+/* Quiet 'enum-conversion' warning. */
+#define BM_FACE ((int)BM_FACE)
+#define BM_EDGE ((int)BM_EDGE)
+#define BM_VERT ((int)BM_VERT)
+
 /*
  * Vertex Smooth.
  *
@@ -320,6 +325,7 @@ static BMOpDefine bmo_mirror_def = {
    {"axis",            BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM}, bmo_enum_axis_xyz},   /* the axis to use. */
    {"mirror_u",        BMO_OP_SLOT_BOOL},  /* mirror UVs across the u axis */
    {"mirror_v",        BMO_OP_SLOT_BOOL},  /* mirror UVs across the v axis */
+   {"mirror_udim",     BMO_OP_SLOT_BOOL},  /* mirror UVs in each tile */
    {{'\0'}},
   },
   /* slots_out */
@@ -2071,6 +2077,10 @@ static BMOpDefine bmo_symmetrize_def = {
 };
 
 /* clang-format on */
+
+#undef BM_FACE
+#undef BM_EDGE
+#undef BM_VERT
 
 const BMOpDefine *bmo_opdefines[] = {
     &bmo_average_vert_facedata_def,

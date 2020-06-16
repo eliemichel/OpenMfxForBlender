@@ -29,8 +29,8 @@
 #include "BLI_dynstr.h"
 #include "BLI_fileops.h"
 #include "BLI_fileops_types.h"
-#include "BLI_listbase.h"
 #include "BLI_linklist.h"
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_math_color.h"
 #include "BLI_path_util.h"
@@ -56,17 +56,6 @@ static int last_studiolight_id = 0;
 #define STUDIOLIGHT_IRRADIANCE_EQUIRECT_WIDTH (STUDIOLIGHT_IRRADIANCE_EQUIRECT_HEIGHT * 2)
 #define STUDIOLIGHT_PASSNAME_DIFFUSE "diffuse"
 #define STUDIOLIGHT_PASSNAME_SPECULAR "specular"
-/*
- * The method to calculate the irradiance buffers
- * The irradiance buffer is only shown in the background when in LookDev.
- *
- * STUDIOLIGHT_IRRADIANCE_METHOD_RADIANCE is very slow, but very accurate
- * STUDIOLIGHT_IRRADIANCE_METHOD_SPHERICAL_HARMONICS is faster but has artifacts
- * Cannot have both enabled at the same time!!!
- */
-// #define STUDIOLIGHT_IRRADIANCE_METHOD_RADIANCE
-#define STUDIOLIGHT_IRRADIANCE_METHOD_SPHERICAL_HARMONICS
-
 /* Temporarily disabled due to the creation of textures with -nan(ind)s */
 #define STUDIOLIGHT_SH_WINDOWING 0.0f /* 0.0 is disabled */
 
@@ -516,7 +505,7 @@ static void studiolight_create_equirect_radiance_gputexture(StudioLight *sl)
     GPUTexture *tex = sl->equirect_radiance_gputexture;
     GPU_texture_bind(tex, 0);
     GPU_texture_filter_mode(tex, true);
-    GPU_texture_wrap_mode(tex, true);
+    GPU_texture_wrap_mode(tex, true, true);
     GPU_texture_unbind(tex);
   }
   sl->flag |= STUDIOLIGHT_EQUIRECT_RADIANCE_GPUTEXTURE;
@@ -580,7 +569,7 @@ static void studiolight_create_equirect_irradiance_gputexture(StudioLight *sl)
     GPUTexture *tex = sl->equirect_irradiance_gputexture;
     GPU_texture_bind(tex, 0);
     GPU_texture_filter_mode(tex, true);
-    GPU_texture_wrap_mode(tex, true);
+    GPU_texture_wrap_mode(tex, true, true);
     GPU_texture_unbind(tex);
   }
   sl->flag |= STUDIOLIGHT_EQUIRECT_IRRADIANCE_GPUTEXTURE;
@@ -620,8 +609,8 @@ static void studiolight_calculate_radiance_cubemap_buffers(StudioLight *sl)
     BKE_studiolight_ensure_flag(sl, STUDIOLIGHT_EXTERNAL_IMAGE_LOADED);
     ImBuf *ibuf = sl->equirect_radiance_buffer;
     if (ibuf) {
-      float *colbuf = MEM_mallocN(SQUARE(STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE) * sizeof(float[4]),
-                                  __func__);
+      float *colbuf = MEM_malloc_arrayN(
+          square_i(STUDIOLIGHT_RADIANCE_CUBEMAP_SIZE), sizeof(float[4]), __func__);
 
       /* front */
       studiolight_calculate_radiance_buffer(ibuf, colbuf, 0, 2, 1, 1, -1, 1);
@@ -783,11 +772,11 @@ static float studiolight_spherical_harmonics_lambda_get(float *sh, float max_lap
   table_b[0] = 0.0f;
   int index = 1;
   for (int level = 1; level < STUDIOLIGHT_SH_BANDS; level++) {
-    table_l[level] = (float)(SQUARE(level) * SQUARE(level + 1));
+    table_l[level] = (float)(square_i(level) * square_i(level + 1));
 
     float b = 0.0f;
     for (int m = -1; m <= level; m++) {
-      b += SQUARE(sh[index++]);
+      b += square_f(sh[index++]);
     }
     table_b[level] = b;
   }
@@ -808,9 +797,9 @@ static float studiolight_spherical_harmonics_lambda_get(float *sh, float max_lap
     float fd = 0.0f;
 
     for (int level = 1; level < STUDIOLIGHT_SH_BANDS; level++) {
-      f += table_l[level] * table_b[level] / SQUARE(1.0f + lambda * table_l[level]);
-      fd += (2.0f * SQUARE(table_l[level]) * table_b[level]) /
-            CUBE(1.0f + lambda * table_l[level]);
+      f += table_l[level] * table_b[level] / square_f(1.0f + lambda * table_l[level]);
+      fd += (2.0f * square_f(table_l[level]) * table_b[level]) /
+            cube_f(1.0f + lambda * table_l[level]);
     }
 
     f = target_squared_laplacian - f;
@@ -818,7 +807,7 @@ static float studiolight_spherical_harmonics_lambda_get(float *sh, float max_lap
     float delta = -f / fd;
     lambda += delta;
 
-    if (ABS(delta) < 1e-6f) {
+    if (fabsf(delta) < 1e-6f) {
       break;
     }
   }
@@ -848,9 +837,11 @@ static void studiolight_spherical_harmonics_apply_windowing(float (*sh)[3], floa
   int index = 0;
   for (int level = 0; level < STUDIOLIGHT_SH_BANDS; level++) {
     float s[3];
-    s[0] = 1.0f / (1.0f + lambda_r * SQUARE(level) * SQUARE(level + 1.0f));
-    s[1] = 1.0f / (1.0f + lambda_g * SQUARE(level) * SQUARE(level + 1.0f));
-    s[2] = 1.0f / (1.0f + lambda_b * SQUARE(level) * SQUARE(level + 1.0f));
+    const int level_sq = square_i(level);
+    const int level_1_sq = square_i(level + 1.0f);
+    s[0] = 1.0f / (1.0f + lambda_r * level_sq * level_1_sq);
+    s[1] = 1.0f / (1.0f + lambda_g * level_sq * level_1_sq);
+    s[2] = 1.0f / (1.0f + lambda_b * level_sq * level_1_sq);
 
     for (int m = -1; m <= level; m++) {
       mul_v3_v3(sh[index++], s);
@@ -958,7 +949,8 @@ static void studiolight_spherical_harmonics_apply_band_factors(StudioLight *sl, 
 
   int index = 0, dst_idx = 0;
   for (int band = 0; band < STUDIOLIGHT_SH_BANDS; band++) {
-    for (int m = 0; m < SQUARE(band + 1) - SQUARE(band); m++) {
+    const int last_band = square_i(band + 1) - square_i(band);
+    for (int m = 0; m < last_band; m++) {
       /* Skip L3 */
       if (band != 3) {
         mul_v3_v3fl(sl->spherical_harmonics_coefs[dst_idx++], sh[index], sl_sh_band_factors[band]);
@@ -1023,40 +1015,6 @@ BLI_INLINE void studiolight_evaluate_specular_radiance_buffer(ImBuf *radiance_bu
 
   madd_v3_v3fl(color, accum, 1.0f / accum_weight);
 }
-
-#ifdef STUDIOLIGHT_IRRADIANCE_METHOD_RADIANCE
-static void studiolight_irradiance_eval(StudioLight *sl, float color[3], const float normal[3])
-{
-  copy_v3_fl(color, 0.0f);
-
-  /* XXX: This is madness, iterating over all cubemap pixels for each destination pixels
-   * even if their weight is 0.0f.
-   * It should use hemisphere, cosine sampling at least. */
-
-  /* back */
-  studiolight_evaluate_specular_radiance_buffer(
-      sl->radiance_cubemap_buffers[STUDIOLIGHT_Y_POS], normal, color, 0, 2, 1, 1);
-  /* front */
-  studiolight_evaluate_specular_radiance_buffer(
-      sl->radiance_cubemap_buffers[STUDIOLIGHT_Y_NEG], normal, color, 0, 2, 1, -1);
-
-  /* left */
-  studiolight_evaluate_specular_radiance_buffer(
-      sl->radiance_cubemap_buffers[STUDIOLIGHT_X_POS], normal, color, 1, 2, 0, 1);
-  /* right */
-  studiolight_evaluate_specular_radiance_buffer(
-      sl->radiance_cubemap_buffers[STUDIOLIGHT_X_NEG], normal, color, 1, 2, 0, -1);
-
-  /* top */
-  studiolight_evaluate_specular_radiance_buffer(
-      sl->radiance_cubemap_buffers[STUDIOLIGHT_Z_POS], normal, color, 0, 1, 2, 1);
-  /* bottom */
-  studiolight_evaluate_specular_radiance_buffer(
-      sl->radiance_cubemap_buffers[STUDIOLIGHT_Z_NEG], normal, color, 0, 1, 2, -1);
-
-  mul_v3_fl(color, 1.0 / M_PI);
-}
-#endif
 
 static float brdf_approx(float spec_color, float roughness, float NV)
 {
@@ -1185,11 +1143,7 @@ static bool studiolight_load_spherical_harmonics_coefficients(StudioLight *sl)
 static void studiolight_calculate_irradiance_equirect_image(StudioLight *sl)
 {
   if (sl->flag & STUDIOLIGHT_EXTERNAL_FILE) {
-#ifdef STUDIOLIGHT_IRRADIANCE_METHOD_RADIANCE
-    BKE_studiolight_ensure_flag(sl, STUDIOLIGHT_RADIANCE_BUFFERS_CALCULATED);
-#else
     BKE_studiolight_ensure_flag(sl, STUDIOLIGHT_SPHERICAL_HARMONICS_COEFFICIENTS_CALCULATED);
-#endif
 
     float *colbuf = MEM_mallocN(STUDIOLIGHT_IRRADIANCE_EQUIRECT_WIDTH *
                                     STUDIOLIGHT_IRRADIANCE_EQUIRECT_HEIGHT * sizeof(float[4]),
@@ -1202,11 +1156,7 @@ static void studiolight_calculate_irradiance_equirect_image(StudioLight *sl)
                  STUDIOLIGHT_IRRADIANCE_EQUIRECT_HEIGHT) {
       float dir[3];
       equirect_to_direction(dir, x, y);
-#ifdef STUDIOLIGHT_IRRADIANCE_METHOD_RADIANCE
-      studiolight_irradiance_eval(sl, pixel, dir);
-#else
       studiolight_spherical_harmonics_eval(sl, pixel, dir);
-#endif
       pixel[3] = 1.0f;
     }
     ITER_PIXELS_END;
@@ -1217,15 +1167,6 @@ static void studiolight_calculate_irradiance_equirect_image(StudioLight *sl)
                                                          STUDIOLIGHT_IRRADIANCE_EQUIRECT_HEIGHT,
                                                          4);
     MEM_freeN(colbuf);
-
-#ifdef STUDIOLIGHT_IRRADIANCE_METHOD_RADIANCE
-    /*
-     * Only store cached files when using STUDIOLIGHT_IRRADIANCE_METHOD_RADIANCE
-     */
-    if (sl->flag & STUDIOLIGHT_USER_DEFINED) {
-      IMB_saveiff(sl->equirect_irradiance_buffer, sl->path_irr_cache, IB_rectfloat);
-    }
-#endif
   }
   sl->flag |= STUDIOLIGHT_EQUIRECT_IRRADIANCE_IMAGE_CALCULATED;
 }
@@ -1327,7 +1268,7 @@ static void sphere_normal_from_uv(float normal[3], float u, float v)
   normal[0] = u * 2.0f - 1.0f;
   normal[1] = v * 2.0f - 1.0f;
   float dist = len_v2(normal);
-  normal[2] = sqrtf(1.0f - SQUARE(dist));
+  normal[2] = sqrtf(1.0f - square_f(dist));
 }
 
 static void studiolight_radiance_preview(uint *icon_buffer, StudioLight *sl)

@@ -23,9 +23,9 @@
  * Some really low-level file operations.
  */
 
-#include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
 
 #include <sys/stat.h>
 
@@ -38,8 +38,8 @@
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || \
     defined(__DragonFly__)
 /* For statfs */
-#  include <sys/param.h>
 #  include <sys/mount.h>
+#  include <sys/param.h>
 #endif
 
 #if defined(__linux__) || defined(__hpux) || defined(__GNU__) || defined(__GLIBC__)
@@ -50,26 +50,26 @@
 #include <string.h> /* strcpy etc.. */
 
 #ifdef WIN32
-#  include <io.h>
-#  include <direct.h>
-#  include <stdbool.h>
-#  include "BLI_winstuff.h"
 #  include "BLI_string_utf8.h"
+#  include "BLI_winstuff.h"
 #  include "utfconv.h"
+#  include <direct.h>
+#  include <io.h>
+#  include <stdbool.h>
 #else
+#  include <pwd.h>
 #  include <sys/ioctl.h>
 #  include <unistd.h>
-#  include <pwd.h>
 #endif
 
 /* lib includes */
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_linklist.h"
-#include "BLI_string.h"
 #include "BLI_fileops.h"
+#include "BLI_linklist.h"
 #include "BLI_path_util.h"
+#include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 /**
  * Copies the current working directory into *dir (max size maxncpy), and
@@ -115,7 +115,7 @@ double BLI_dir_free_space(const char *dir)
 
   tmp[0] = '\\';
   tmp[1] = 0; /* Just a failsafe */
-  if (dir[0] == '/' || dir[0] == '\\') {
+  if (ELEM(dir[0] == '/', '\\')) {
     tmp[0] = '\\';
     tmp[1] = 0;
   }
@@ -175,6 +175,33 @@ double BLI_dir_free_space(const char *dir)
 #endif
 }
 
+int64_t BLI_ftell(FILE *stream)
+{
+#ifdef WIN32
+  return _ftelli64(stream);
+#else
+  return ftell(stream);
+#endif
+}
+
+int BLI_fseek(FILE *stream, int64_t offset, int whence)
+{
+#ifdef WIN32
+  return _fseeki64(stream, offset, whence);
+#else
+  return fseek(stream, offset, whence);
+#endif
+}
+
+int64_t BLI_lseek(int fd, int64_t offset, int whence)
+{
+#ifdef WIN32
+  return _lseeki64(fd, offset, whence);
+#else
+  return lseek(fd, offset, whence);
+#endif
+}
+
 /**
  * Returns the file size of an opened file descriptor.
  */
@@ -199,6 +226,75 @@ size_t BLI_file_size(const char *path)
   return stats.st_size;
 }
 
+#ifndef __APPLE__
+eFileAttributes BLI_file_attributes(const char *path)
+{
+  int ret = 0;
+
+#  ifdef WIN32
+  WCHAR wline[FILE_MAXDIR];
+  size_t bsize = count_utf_16_from_8(path);
+  conv_utf_8_to_16(path, wline, bsize);
+  DWORD attr = GetFileAttributesW(wline);
+  if (attr & FILE_ATTRIBUTE_READONLY) {
+    ret |= FILE_ATTR_READONLY;
+  }
+  if (attr & FILE_ATTRIBUTE_HIDDEN) {
+    ret |= FILE_ATTR_HIDDEN;
+  }
+  if (attr & FILE_ATTRIBUTE_SYSTEM) {
+    ret |= FILE_ATTR_SYSTEM;
+  }
+  if (attr & FILE_ATTRIBUTE_ARCHIVE) {
+    ret |= FILE_ATTR_ARCHIVE;
+  }
+  if (attr & FILE_ATTRIBUTE_COMPRESSED) {
+    ret |= FILE_ATTR_COMPRESSED;
+  }
+  if (attr & FILE_ATTRIBUTE_ENCRYPTED) {
+    ret |= FILE_ATTR_ENCRYPTED;
+  }
+  if (attr & FILE_ATTRIBUTE_TEMPORARY) {
+    ret |= FILE_ATTR_TEMPORARY;
+  }
+  if (attr & FILE_ATTRIBUTE_SPARSE_FILE) {
+    ret |= FILE_ATTR_SPARSE_FILE;
+  }
+  if (attr & FILE_ATTRIBUTE_OFFLINE) {
+    ret |= FILE_ATTR_OFFLINE;
+  }
+  if (attr & FILE_ATTRIBUTE_REPARSE_POINT) {
+    ret |= FILE_ATTR_REPARSE_POINT;
+  }
+
+#  endif
+
+#  ifdef __linux__
+  UNUSED_VARS(path);
+
+  /* TODO:
+   * If Immutable set FILE_ATTR_READONLY
+   * If Archived set FILE_ATTR_ARCHIVE
+   */
+
+#  endif
+
+  return ret;
+}
+#endif
+
+/**
+ * Returns the target path of a file-based redirection, like Mac Alias or Win32 Shortcut file.
+ */
+#ifndef __APPLE__
+bool BLI_file_alias_target(char UNUSED(target[FILE_MAXDIR]), const char *UNUSED(filepath))
+{
+  /* TODO: Find target in Win32 Shortcut - Shell Link (.lnk) file.
+   * Format: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-shllink/ */
+  return false;
+}
+#endif
+
 /**
  * Returns the st_mode from stat-ing the specified path name, or 0 if stat fails
  * (most likely doesn't exist or no access).
@@ -213,7 +309,7 @@ int BLI_exists(const char *name)
   len = wcslen(tmp_16);
   /* in Windows #stat doesn't recognize dir ending on a slash
    * so we remove it here */
-  if (len > 3 && (tmp_16[len - 1] == L'\\' || tmp_16[len - 1] == L'/')) {
+  if ((len > 3) && ELEM(tmp_16[len - 1], L'\\', L'/')) {
     tmp_16[len - 1] = '\0';
   }
   /* two special cases where the trailing slash is needed:
@@ -221,7 +317,7 @@ int BLI_exists(const char *name)
    * 2. after the C:\ when the path is the volume only
    */
   if ((len >= 3) && (tmp_16[0] == L'\\') && (tmp_16[1] == L'\\')) {
-    BLI_cleanup_unc_16(tmp_16);
+    BLI_path_normalize_unc_16(tmp_16);
   }
 
   if ((tmp_16[1] == L':') && (tmp_16[2] == L'\0')) {
@@ -319,15 +415,15 @@ static void *file_read_data_as_mem_impl(FILE *fp,
   if (S_ISDIR(st.st_mode)) {
     return NULL;
   }
-  if (fseek(fp, 0L, SEEK_END) == -1) {
+  if (BLI_fseek(fp, 0L, SEEK_END) == -1) {
     return NULL;
   }
   /* Don't use the 'st_size' because it may be the symlink. */
-  const long int filelen = ftell(fp);
+  const long int filelen = BLI_ftell(fp);
   if (filelen == -1) {
     return NULL;
   }
-  if (fseek(fp, 0L, SEEK_SET) == -1) {
+  if (BLI_fseek(fp, 0L, SEEK_SET) == -1) {
     return NULL;
   }
 
@@ -385,6 +481,63 @@ void *BLI_file_read_binary_as_mem(const char *filepath, size_t pad_bytes, size_t
 }
 
 /**
+ * Return the text file data with:
+
+ * - Newlines replaced with '\0'.
+ * - Optionally trim whitespace, replacing trailing ' ' & '\t' with '\0'.
+ *
+ * This is an alternative to using #BLI_file_read_as_lines,
+ * allowing us to loop over lines without converting it into a linked list
+ * with individual allocations.
+ *
+ * \param trim_trailing_space: Replace trailing spaces & tabs with nil.
+ * This arguments prevents the caller from counting blank lines (if that's important).
+ * \param pad_bytes: When this is non-zero, the first byte is set to nil,
+ * to simplify parsing the file.
+ * It's recommended to pass in 1, so all text is nil terminated.
+ *
+ * Example looping over lines:
+ *
+ * \code{.c}
+ * size_t data_len;
+ * char *data = BLI_file_read_text_as_mem_with_newline_as_nil(filepath, true, 1, &data_len);
+ * char *data_end = data + data_len;
+ * for (char *line = data; line != data_end; line = strlen(line) + 1) {
+ *  printf("line='%s'\n", line);
+ * }
+ * \endcode
+ */
+void *BLI_file_read_text_as_mem_with_newline_as_nil(const char *filepath,
+                                                    bool trim_trailing_space,
+                                                    size_t pad_bytes,
+                                                    size_t *r_size)
+{
+  char *mem = BLI_file_read_text_as_mem(filepath, pad_bytes, r_size);
+  if (mem != NULL) {
+    char *mem_end = mem + *r_size;
+    if (pad_bytes != 0) {
+      *mem_end = '\0';
+    }
+    for (char *p = mem, *p_next; p != mem_end; p = p_next) {
+      p_next = memchr(p, '\n', mem_end - p);
+      if (p_next != NULL) {
+        if (trim_trailing_space) {
+          for (char *p_trim = p_next - 1; p_trim > p && ELEM(*p_trim, ' ', '\t'); p_trim--) {
+            *p_trim = '\0';
+          }
+        }
+        *p_next = '\0';
+        p_next++;
+      }
+      else {
+        p_next = mem_end;
+      }
+    }
+  }
+  return mem;
+}
+
+/**
  * Reads the contents of a text file and returns the lines in a linked list.
  */
 LinkNode *BLI_file_read_as_lines(const char *name)
@@ -398,9 +551,9 @@ LinkNode *BLI_file_read_as_lines(const char *name)
     return NULL;
   }
 
-  fseek(fp, 0, SEEK_END);
-  size = (size_t)ftell(fp);
-  fseek(fp, 0, SEEK_SET);
+  BLI_fseek(fp, 0, SEEK_END);
+  size = (size_t)BLI_ftell(fp);
+  BLI_fseek(fp, 0, SEEK_SET);
 
   if (UNLIKELY(size == (size_t)-1)) {
     fclose(fp);

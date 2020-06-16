@@ -1,6 +1,6 @@
-#include "testing/testing.h"
 #include "BLI_index_range.h"
 #include "BLI_vector.h"
+#include "testing/testing.h"
 
 using BLI::ArrayRef;
 using BLI::IndexRange;
@@ -116,6 +116,15 @@ TEST(index_range, Slice)
   IndexRange slice = range.slice(2, 6);
   EXPECT_EQ(slice.size(), 6);
   EXPECT_EQ(slice.first(), 7);
+  EXPECT_EQ(slice.last(), 12);
+}
+
+TEST(index_range, SliceRange)
+{
+  IndexRange range = IndexRange(5, 15);
+  IndexRange slice = range.slice(IndexRange(3, 5));
+  EXPECT_EQ(slice.size(), 5);
+  EXPECT_EQ(slice.first(), 8);
   EXPECT_EQ(slice.last(), 12);
 }
 

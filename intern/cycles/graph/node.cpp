@@ -133,7 +133,7 @@ void Node::set(const SocketType &input, const Transform &value)
 
 void Node::set(const SocketType &input, Node *value)
 {
-  assert(input.type == SocketType::TRANSFORM);
+  assert(input.type == SocketType::NODE);
   get_socket_value<Node *>(this, input) = value;
 }
 
@@ -213,7 +213,7 @@ float Node::get_float(const SocketType &input) const
 
 float2 Node::get_float2(const SocketType &input) const
 {
-  assert(input.type == SocketType::FLOAT);
+  assert(input.type == SocketType::POINT2);
   return get_socket_value<float2>(this, input);
 }
 
@@ -272,7 +272,7 @@ const array<float> &Node::get_float_array(const SocketType &input) const
 
 const array<float2> &Node::get_float2_array(const SocketType &input) const
 {
-  assert(input.type == SocketType::FLOAT_ARRAY);
+  assert(input.type == SocketType::POINT2_ARRAY);
   return get_socket_value<array<float2>>(this, input);
 }
 
@@ -667,6 +667,16 @@ size_t Node::get_total_size_in_bytes() const
     }
   }
   return total_size;
+}
+
+bool Node::is_a(const NodeType *type_)
+{
+  for (const NodeType *base = type; base; base = base->base) {
+    if (base == type_) {
+      return true;
+    }
+  }
+  return false;
 }
 
 CCL_NAMESPACE_END

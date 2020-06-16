@@ -32,7 +32,7 @@
 
 #include "BKE_collection.h"
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
@@ -40,8 +40,8 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
-#include "ED_screen.h"
 #include "ED_object.h"
+#include "ED_screen.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -302,8 +302,8 @@ static int collection_objects_remove_all_exec(bContext *C, wmOperator *UNUSED(op
 void COLLECTION_OT_objects_remove_all(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Remove from All Unlinked Collections";
-  ot->description = "Remove selected objects from all collections not used in a scene";
+  ot->name = "Remove from All Collections";
+  ot->description = "Remove selected objects from all collections";
   ot->idname = "COLLECTION_OT_objects_remove_all";
 
   /* api callbacks */
@@ -479,6 +479,18 @@ static int collection_link_exec(bContext *C, wmOperator *op)
    */
   if (BKE_collection_has_object(collection, ob)) {
     return OPERATOR_FINISHED;
+  }
+
+  /* Currently this should not be allowed (might be supported in the future though...). */
+  if (ID_IS_OVERRIDE_LIBRARY(&collection->id)) {
+    BKE_report(op->reports, RPT_ERROR, "Could not add the collection because it is overridden.");
+    return OPERATOR_CANCELLED;
+  }
+  /* Linked collections are already checked for by using RNA_collection_local_itemf
+   * but operator can be called without invoke */
+  if (ID_IS_LINKED(&collection->id)) {
+    BKE_report(op->reports, RPT_ERROR, "Could not add the collection because it is linked.");
+    return OPERATOR_CANCELLED;
   }
 
   /* Adding object to collection which is used as dupli-collection for self is bad idea.

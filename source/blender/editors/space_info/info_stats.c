@@ -40,25 +40,24 @@
 
 #include "BLT_translation.h"
 
-#include "BKE_anim.h"
 #include "BKE_blender_version.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
+#include "BKE_editmesh.h"
+#include "BKE_gpencil.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
+#include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
-#include "BKE_editmesh.h"
-#include "BKE_object.h"
-#include "BKE_gpencil.h"
 #include "BKE_scene.h"
 #include "BKE_subdiv_ccg.h"
 
 #include "DEG_depsgraph_query.h"
 
-#include "ED_info.h"
 #include "ED_armature.h"
+#include "ED_info.h"
 
 #include "GPU_extensions.h"
 
@@ -137,7 +136,7 @@ static void stats_object(Object *ob, SceneStats *stats, GSet *objects_gset)
   switch (ob->type) {
     case OB_MESH: {
       /* we assume evaluated mesh is already built, this strictly does stats now. */
-      Mesh *me_eval = ob->runtime.mesh_eval;
+      Mesh *me_eval = BKE_object_get_evaluated_mesh(ob);
       if (!BLI_gset_add(objects_gset, me_eval)) {
         break;
       }
@@ -153,8 +152,7 @@ static void stats_object(Object *ob, SceneStats *stats, GSet *objects_gset)
     case OB_SURF:
     case OB_CURVE:
     case OB_FONT: {
-      Mesh *me_eval = ob->runtime.mesh_eval;
-
+      Mesh *me_eval = BKE_object_get_evaluated_mesh(ob);
       if ((me_eval != NULL) && !BLI_gset_add(objects_gset, me_eval)) {
         break;
       }
@@ -203,6 +201,11 @@ static void stats_object(Object *ob, SceneStats *stats, GSet *objects_gset)
         stats->totgpstroke += gpd->totstroke;
         stats->totgppoint += gpd->totpoint;
       }
+      break;
+    }
+    case OB_HAIR:
+    case OB_POINTCLOUD:
+    case OB_VOLUME: {
       break;
     }
   }
@@ -562,7 +565,7 @@ static void stats_string(ViewLayer *view_layer)
                         gpumemstr);
   }
 
-  ofs += BLI_snprintf(s + ofs, MAX_INFO_LEN - ofs, " | %s", versionstr);
+  ofs += BLI_snprintf(s + ofs, MAX_INFO_LEN - ofs, " | %s", BKE_blender_version_string());
 #undef MAX_INFO_MEM_LEN
 }
 
@@ -578,8 +581,8 @@ void ED_info_stats_clear(ViewLayer *view_layer)
 
 const char *ED_info_stats_string(Main *bmain, Scene *scene, ViewLayer *view_layer)
 {
-  /* Looping through dependency graph when interface is locked in not safe.
-   * Thew interface is marked as locked when jobs wants to modify the
+  /* Looping through dependency graph when interface is locked is not safe.
+   * The interface is marked as locked when jobs wants to modify the
    * dependency graph. */
   wmWindowManager *wm = bmain->wm.first;
   if (wm->is_interface_locked) {

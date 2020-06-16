@@ -19,8 +19,8 @@
  * \brief Class to fill in a grid from a SceneGraph (uses only the WingedEdge structures)
  */
 
-#include "WEdge.h"
 #include "WFillGrid.h"
+#include "WEdge.h"
 
 namespace Freestyle {
 

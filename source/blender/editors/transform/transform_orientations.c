@@ -18,9 +18,9 @@
  * \ingroup edtransform
  */
 
-#include <string.h>
-#include <stddef.h>
 #include <ctype.h>
+#include <stddef.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -34,15 +34,15 @@
 #include "DNA_view3d_types.h"
 #include "DNA_workspace_types.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_action.h"
-#include "BKE_curve.h"
 #include "BKE_context.h"
+#include "BKE_curve.h"
 #include "BKE_editmesh.h"
 #include "BKE_layer.h"
 #include "BKE_report.h"
@@ -296,7 +296,7 @@ bool createSpaceNormalTangent(float mat[3][3], const float normal[3], const floa
   return true;
 }
 
-void BIF_createTransformOrientation(bContext *C,
+bool BIF_createTransformOrientation(bContext *C,
                                     ReportList *reports,
                                     const char *name,
                                     const bool use_view,
@@ -333,6 +333,7 @@ void BIF_createTransformOrientation(bContext *C,
   if (activate && ts != NULL) {
     BIF_selectTransformOrientation(C, ts);
   }
+  return (ts != NULL);
 }
 
 TransformOrientation *addMatrixSpace(bContext *C,
@@ -471,8 +472,8 @@ void initTransformOrientation(bContext *C, TransInfo *t)
       break;
 
     case V3D_ORIENT_VIEW:
-      if ((t->spacetype == SPACE_VIEW3D) && (t->ar->regiontype == RGN_TYPE_WINDOW)) {
-        RegionView3D *rv3d = t->ar->regiondata;
+      if ((t->spacetype == SPACE_VIEW3D) && (t->region->regiontype == RGN_TYPE_WINDOW)) {
+        RegionView3D *rv3d = t->region->regiondata;
         float mat[3][3];
 
         BLI_strncpy(t->spacename, TIP_("view"), sizeof(t->spacename));
@@ -512,23 +513,23 @@ void initTransformOrientation(bContext *C, TransInfo *t)
       t->orientation.unset = V3D_ORIENT_VIEW;
       copy_m3_m4(t->orient_matrix, t->viewinv);
       normalize_m3(t->orient_matrix);
+      negate_m3(t->orient_matrix);
     }
     else {
       copy_m3_m3(t->orient_matrix, t->spacemtx);
     }
-    negate_m3(t->orient_matrix);
   }
 }
 
 /**
  * utility function - get first n, selected vert/edge/faces
  */
-static unsigned int bm_mesh_elems_select_get_n__internal(
-    BMesh *bm, BMElem **elems, const unsigned int n, const BMIterType itype, const char htype)
+static uint bm_mesh_elems_select_get_n__internal(
+    BMesh *bm, BMElem **elems, const uint n, const BMIterType itype, const char htype)
 {
   BMIter iter;
   BMElem *ele;
-  unsigned int i;
+  uint i;
 
   BLI_assert(ELEM(htype, BM_VERT, BM_EDGE, BM_FACE));
   BLI_assert(ELEM(itype, BM_VERTS_OF_MESH, BM_EDGES_OF_MESH, BM_FACES_OF_MESH));
@@ -579,18 +580,18 @@ static unsigned int bm_mesh_elems_select_get_n__internal(
   return i;
 }
 
-static unsigned int bm_mesh_verts_select_get_n(BMesh *bm, BMVert **elems, const unsigned int n)
+static uint bm_mesh_verts_select_get_n(BMesh *bm, BMVert **elems, const uint n)
 {
   return bm_mesh_elems_select_get_n__internal(
       bm, (BMElem **)elems, min_ii(n, bm->totvertsel), BM_VERTS_OF_MESH, BM_VERT);
 }
-static unsigned int bm_mesh_edges_select_get_n(BMesh *bm, BMEdge **elems, const unsigned int n)
+static uint bm_mesh_edges_select_get_n(BMesh *bm, BMEdge **elems, const uint n)
 {
   return bm_mesh_elems_select_get_n__internal(
       bm, (BMElem **)elems, min_ii(n, bm->totedgesel), BM_EDGES_OF_MESH, BM_EDGE);
 }
 #if 0
-static unsigned int bm_mesh_faces_select_get_n(BMesh *bm, BMVert **elems, const unsigned int n)
+static uint bm_mesh_faces_select_get_n(BMesh *bm, BMVert **elems, const uint n)
 {
   return bm_mesh_elems_select_get_n__internal(
       bm, (BMElem **)elems, min_ii(n, bm->totfacesel), BM_FACES_OF_MESH, BM_FACE);

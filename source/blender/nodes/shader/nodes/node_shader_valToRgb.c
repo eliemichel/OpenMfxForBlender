@@ -21,18 +21,18 @@
  * \ingroup shdnodes
  */
 
-#include "node_shader_util.h"
 #include "IMB_colormanagement.h"
+#include "node_shader_util.h"
 
 /* **************** VALTORGB ******************** */
 static bNodeSocketTemplate sh_node_valtorgb_in[] = {
-    {SOCK_FLOAT, 1, N_("Fac"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Fac"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {-1, ""},
 };
 static bNodeSocketTemplate sh_node_valtorgb_out[] = {
-    {SOCK_RGBA, 0, N_("Color")},
-    {SOCK_FLOAT, 0, N_("Alpha")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color")},
+    {SOCK_FLOAT, N_("Alpha")},
+    {-1, ""},
 };
 
 static void node_shader_exec_valtorgb(void *UNUSED(data),
@@ -94,6 +94,17 @@ static int gpu_shader_valtorgb(GPUMaterial *mat,
                               GPU_uniform(&mul_bias[1]),
                               GPU_uniform(&coba->data[0].r),
                               GPU_uniform(&coba->data[1].r));
+      case COLBAND_INTERP_EASE:
+        mul_bias[0] = 1.0f / (coba->data[1].pos - coba->data[0].pos);
+        mul_bias[1] = -mul_bias[0] * coba->data[0].pos;
+        return GPU_stack_link(mat,
+                              node,
+                              "valtorgb_opti_ease",
+                              in,
+                              out,
+                              GPU_uniform(mul_bias),
+                              GPU_uniform(&coba->data[0].r),
+                              GPU_uniform(&coba->data[1].r));
       default:
         break;
     }
@@ -127,9 +138,9 @@ void register_node_type_sh_valtorgb(void)
 
 /* **************** RGBTOBW ******************** */
 static bNodeSocketTemplate sh_node_rgbtobw_in[] = {
-    {SOCK_RGBA, 1, N_("Color"), 0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 1.0f}, {-1, 0, ""}};
+    {SOCK_RGBA, N_("Color"), 0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 1.0f}, {-1, ""}};
 static bNodeSocketTemplate sh_node_rgbtobw_out[] = {
-    {SOCK_FLOAT, 0, N_("Val"), 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f}, {-1, 0, ""}};
+    {SOCK_FLOAT, N_("Val"), 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f}, {-1, ""}};
 
 static void node_shader_exec_rgbtobw(void *UNUSED(data),
                                      int UNUSED(thread),

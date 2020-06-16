@@ -21,15 +21,14 @@
  * \ingroup edtransform
  */
 
-#include "DNA_particle_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_particle_types.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_math.h"
 
 #include "BKE_context.h"
-#include "BKE_report.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
 

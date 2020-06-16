@@ -25,8 +25,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_kdtree.h"
+#include "BLI_utildefines.h"
 
 #include "../generic/py_capi_utils.h"
 #include "../generic/python_utildefines.h"
@@ -38,9 +38,9 @@
 
 typedef struct {
   PyObject_HEAD KDTree_3d *obj;
-  unsigned int maxsize;
-  unsigned int count;
-  unsigned int count_balance; /* size when we last balanced */
+  uint maxsize;
+  uint count;
+  uint count_balance; /* size when we last balanced */
 } PyKDTree;
 
 /* -------------------------------------------------------------------- */
@@ -92,7 +92,7 @@ static PyObject *kdtree_nearest_to_py_and_check(const KDTreeNearest_3d *nearest)
 
 static int PyKDTree__tp_init(PyKDTree *self, PyObject *args, PyObject *kwargs)
 {
-  unsigned int maxsize;
+  uint maxsize;
   const char *keywords[] = {"size", NULL};
 
   if (!PyArg_ParseTupleAndKeywords(args, kwargs, "I:KDTree", (char **)keywords, &maxsize)) {
@@ -273,7 +273,7 @@ static PyObject *py_kdtree_find_n(PyKDTree *self, PyObject *args, PyObject *kwar
   PyObject *py_co;
   float co[3];
   KDTreeNearest_3d *nearest;
-  unsigned int n;
+  uint n;
   int i, found;
   const char *keywords[] = {"co", "n", NULL};
 

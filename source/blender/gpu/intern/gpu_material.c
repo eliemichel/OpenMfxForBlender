@@ -32,14 +32,15 @@
 #include "DNA_scene_types.h"
 #include "DNA_world_types.h"
 
-#include "BLI_math.h"
+#include "BLI_ghash.h"
 #include "BLI_listbase.h"
-#include "BLI_utildefines.h"
+#include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
-#include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_main.h"
+#include "BKE_material.h"
 #include "BKE_node.h"
 #include "BKE_scene.h"
 
@@ -51,6 +52,7 @@
 #include "DRW_engine.h"
 
 #include "gpu_codegen.h"
+#include "gpu_node_graph.h"
 
 /* Structs */
 #define MAX_COLOR_BAND 128
@@ -68,21 +70,19 @@ struct GPUMaterial {
 
   const void *engine_type; /* attached engine type */
   int options;             /* to identify shader variations (shadow, probe, world background...) */
+  bool is_volume_shader;   /* is volumetric shader */
 
-  /* for creating the material */
-  ListBase nodes;
-  GPUNodeLink *outlink;
+  /* Nodes */
+  GPUNodeGraph graph;
 
   /* for binding the material */
   GPUPass *pass;
-  ListBase inputs; /* GPUInput */
-  GPUVertAttrLayers attrs;
-  int builtins;
 
   /* XXX: Should be in Material. But it depends on the output node
    * used and since the output selection is different for GPUMaterial...
    */
-  int domain;
+  bool has_volume_output;
+  bool has_surface_output;
 
   /* Only used by Eevee to know which bsdf are used. */
   int flag;
@@ -111,8 +111,8 @@ struct GPUMaterial {
 };
 
 enum {
-  GPU_DOMAIN_SURFACE = (1 << 0),
-  GPU_DOMAIN_VOLUME = (1 << 1),
+  GPU_USE_SURFACE_OUTPUT = (1 << 0),
+  GPU_USE_VOLUME_OUTPUT = (1 << 1),
 };
 
 /* Functions */
@@ -168,8 +168,7 @@ static void gpu_material_free_single(GPUMaterial *material)
   /* Cancel / wait any pending lazy compilation. */
   DRW_deferred_shader_remove(material);
 
-  GPU_pass_free_nodes(&material->nodes);
-  GPU_inputs_free(&material->inputs);
+  gpu_node_graph_free(&material->graph);
 
   if (material->pass != NULL) {
     GPU_pass_release(material->pass);
@@ -192,17 +191,12 @@ static void gpu_material_free_single(GPUMaterial *material)
 
 void GPU_material_free(ListBase *gpumaterial)
 {
-  for (LinkData *link = gpumaterial->first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, gpumaterial) {
     GPUMaterial *material = link->data;
     gpu_material_free_single(material);
     MEM_freeN(material);
   }
   BLI_freelistN(gpumaterial);
-}
-
-eGPUBuiltin GPU_get_material_builtins(GPUMaterial *material)
-{
-  return material->builtins;
 }
 
 Scene *GPU_material_scene(GPUMaterial *material)
@@ -213,11 +207,6 @@ Scene *GPU_material_scene(GPUMaterial *material)
 GPUPass *GPU_material_get_pass(GPUMaterial *material)
 {
   return material->pass;
-}
-
-ListBase *GPU_material_get_inputs(GPUMaterial *material)
-{
-  return &material->inputs;
 }
 
 /* Return can be NULL if it's a world material. */
@@ -570,21 +559,31 @@ struct GPUUniformBuffer *GPU_material_create_sss_profile_ubo(void)
 #undef SSS_EXPONENT
 #undef SSS_SAMPLES
 
-void GPU_material_vertex_attrs(GPUMaterial *material, GPUVertAttrLayers *r_attrs)
+ListBase GPU_material_attributes(GPUMaterial *material)
 {
-  *r_attrs = material->attrs;
+  return material->graph.attributes;
+}
+
+ListBase GPU_material_textures(GPUMaterial *material)
+{
+  return material->graph.textures;
+}
+
+ListBase GPU_material_volume_grids(GPUMaterial *material)
+{
+  return material->graph.volume_grids;
 }
 
 void GPU_material_output_link(GPUMaterial *material, GPUNodeLink *link)
 {
-  if (!material->outlink) {
-    material->outlink = link;
+  if (!material->graph.outlink) {
+    material->graph.outlink = link;
   }
 }
 
-void gpu_material_add_node(GPUMaterial *material, GPUNode *node)
+GPUNodeGraph *gpu_material_node_graph(GPUMaterial *material)
 {
-  BLI_addtail(&material->nodes, node);
+  return &material->graph;
 }
 
 GSet *gpu_material_used_libraries(GPUMaterial *material)
@@ -600,14 +599,19 @@ eGPUMaterialStatus GPU_material_status(GPUMaterial *mat)
 
 /* Code generation */
 
-bool GPU_material_use_domain_surface(GPUMaterial *mat)
+bool GPU_material_has_surface_output(GPUMaterial *mat)
 {
-  return (mat->domain & GPU_DOMAIN_SURFACE);
+  return mat->has_surface_output;
 }
 
-bool GPU_material_use_domain_volume(GPUMaterial *mat)
+bool GPU_material_has_volume_output(GPUMaterial *mat)
 {
-  return (mat->domain & GPU_DOMAIN_VOLUME);
+  return mat->has_volume_output;
+}
+
+bool GPU_material_is_volume_shader(GPUMaterial *mat)
+{
+  return mat->is_volume_shader;
 }
 
 void GPU_material_flag_set(GPUMaterial *mat, eGPUMatFlag flag)
@@ -624,7 +628,7 @@ GPUMaterial *GPU_material_from_nodetree_find(ListBase *gpumaterials,
                                              const void *engine_type,
                                              int options)
 {
-  for (LinkData *link = gpumaterials->first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, gpumaterials) {
     GPUMaterial *current_material = (GPUMaterial *)link->data;
     if (current_material->engine_type == engine_type && current_material->options == options) {
       return current_material;
@@ -644,7 +648,8 @@ GPUMaterial *GPU_material_from_nodetree(Scene *scene,
                                         struct bNodeTree *ntree,
                                         ListBase *gpumaterials,
                                         const void *engine_type,
-                                        int options,
+                                        const int options,
+                                        const bool is_volume_shader,
                                         const char *vert_code,
                                         const char *geom_code,
                                         const char *frag_lib,
@@ -663,6 +668,7 @@ GPUMaterial *GPU_material_from_nodetree(Scene *scene,
   mat->scene = scene;
   mat->engine_type = engine_type;
   mat->options = options;
+  mat->is_volume_shader = is_volume_shader;
 #ifndef NDEBUG
   BLI_snprintf(mat->name, sizeof(mat->name), "%s", name);
 #else
@@ -678,10 +684,10 @@ GPUMaterial *GPU_material_from_nodetree(Scene *scene,
 
   gpu_material_ramp_texture_build(mat);
 
-  SET_FLAG_FROM_TEST(mat->domain, has_surface_output, GPU_DOMAIN_SURFACE);
-  SET_FLAG_FROM_TEST(mat->domain, has_volume_output, GPU_DOMAIN_VOLUME);
+  mat->has_surface_output = has_surface_output;
+  mat->has_volume_output = has_volume_output;
 
-  if (mat->outlink) {
+  if (mat->graph.outlink) {
     /* HACK: this is only for eevee. We add the define here after the nodetree evaluation. */
     if (GPU_material_flag_get(mat, GPU_MATFLAG_SSS)) {
       defines = BLI_string_joinN(defines,
@@ -689,20 +695,8 @@ GPUMaterial *GPU_material_from_nodetree(Scene *scene,
                                  "#  define USE_SSS\n"
                                  "#endif\n");
     }
-    /* Prune the unused nodes and extract attributes before compiling so the
-     * generated VBOs are ready to accept the future shader. */
-    GPU_nodes_prune(&mat->nodes, mat->outlink);
-    GPU_nodes_get_vertex_attrs(&mat->nodes, &mat->attrs);
     /* Create source code and search pass cache for an already compiled version. */
-    mat->pass = GPU_generate_pass(mat,
-                                  mat->outlink,
-                                  &mat->attrs,
-                                  &mat->nodes,
-                                  &mat->builtins,
-                                  vert_code,
-                                  geom_code,
-                                  frag_lib,
-                                  defines);
+    mat->pass = GPU_generate_pass(mat, &mat->graph, vert_code, geom_code, frag_lib, defines);
 
     if (GPU_material_flag_get(mat, GPU_MATFLAG_SSS)) {
       MEM_freeN((char *)defines);
@@ -711,13 +705,14 @@ GPUMaterial *GPU_material_from_nodetree(Scene *scene,
     if (mat->pass == NULL) {
       /* We had a cache hit and the shader has already failed to compile. */
       mat->status = GPU_MAT_FAILED;
+      gpu_node_graph_free(&mat->graph);
     }
     else {
       GPUShader *sh = GPU_pass_shader_get(mat->pass);
       if (sh != NULL) {
         /* We had a cache hit and the shader is already compiled. */
         mat->status = GPU_MAT_SUCCESS;
-        GPU_nodes_extract_dynamic_inputs(sh, &mat->inputs, &mat->nodes);
+        gpu_node_graph_free_nodes(&mat->graph);
       }
       else {
         mat->status = GPU_MAT_QUEUED;
@@ -726,6 +721,7 @@ GPUMaterial *GPU_material_from_nodetree(Scene *scene,
   }
   else {
     mat->status = GPU_MAT_FAILED;
+    gpu_node_graph_free(&mat->graph);
   }
 
   /* Only free after GPU_pass_shader_get where GPUUniformBuffer
@@ -763,14 +759,14 @@ void GPU_material_compile(GPUMaterial *mat)
     GPUShader *sh = GPU_pass_shader_get(mat->pass);
     if (sh != NULL) {
       mat->status = GPU_MAT_SUCCESS;
-      GPU_nodes_extract_dynamic_inputs(sh, &mat->inputs, &mat->nodes);
+      gpu_node_graph_free_nodes(&mat->graph);
     }
   }
   else {
     mat->status = GPU_MAT_FAILED;
-    GPU_pass_free_nodes(&mat->nodes);
     GPU_pass_release(mat->pass);
     mat->pass = NULL;
+    gpu_node_graph_free(&mat->graph);
   }
 }
 
@@ -778,7 +774,6 @@ void GPU_materials_free(Main *bmain)
 {
   Material *ma;
   World *wo;
-  extern Material defmaterial;
 
   for (ma = bmain->materials.first; ma; ma = ma->id.next) {
     GPU_material_free(&ma->gpumaterial);
@@ -788,5 +783,5 @@ void GPU_materials_free(Main *bmain)
     GPU_material_free(&wo->gpumaterial);
   }
 
-  GPU_material_free(&defmaterial.gpumaterial);
+  BKE_material_defaults_free_gpu();
 }

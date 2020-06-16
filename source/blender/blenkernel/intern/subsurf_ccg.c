@@ -28,11 +28,11 @@
 #  define USE_DYNSIZE
 #endif
 
+#include <float.h>
+#include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <math.h>
-#include <float.h>
 
 #include "atomic_ops.h"
 
@@ -44,7 +44,6 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_bitmap.h"
 #include "BLI_blenlib.h"
 #include "BLI_edgehash.h"
@@ -52,8 +51,8 @@
 #include "BLI_memarena.h"
 #include "BLI_task.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_pbvh.h"
 #include "BKE_ccg.h"
 #include "BKE_cdderivedmesh.h"
 #include "BKE_mesh.h"
@@ -62,6 +61,7 @@
 #include "BKE_multires.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
+#include "BKE_pbvh.h"
 #include "BKE_scene.h"
 #include "BKE_subsurf.h"
 
@@ -838,7 +838,8 @@ static void minmax_v3_v3v3(const float vec[3], float min[3], float max[3])
   }
 }
 
-static void ccgDM_getMinMax(DerivedMesh *dm, float r_min[3], float r_max[3])
+/* UNUSED, keep since this functionality may be useful in the future. */
+static void UNUSED_FUNCTION(ccgDM_getMinMax)(DerivedMesh *dm, float r_min[3], float r_max[3])
 {
   CCGDerivedMesh *ccgdm = (CCGDerivedMesh *)dm;
   CCGSubSurf *ss = ccgdm->ss;
@@ -2042,7 +2043,6 @@ static void ccgDM_recalcLoopTri(DerivedMesh *dm)
 
 static void set_default_ccgdm_callbacks(CCGDerivedMesh *ccgdm)
 {
-  ccgdm->dm.getMinMax = ccgDM_getMinMax;
   ccgdm->dm.getNumVerts = ccgDM_getNumVerts;
   ccgdm->dm.getNumEdges = ccgDM_getNumEdges;
   ccgdm->dm.getNumLoops = ccgDM_getNumLoops;

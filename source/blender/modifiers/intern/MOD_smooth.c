@@ -30,11 +30,11 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
+#include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_particle.h"
-#include "BKE_deform.h"
 
 #include "MOD_modifiertypes.h"
 #include "MOD_util.h"
@@ -101,6 +101,7 @@ static void smoothModifier_do(
 
   const float fac_new = smd->fac;
   const float fac_orig = 1.0f - fac_new;
+  const bool invert_vgroup = (smd->flag & MOD_SMOOTH_INVERT_VGROUP) != 0;
 
   MEdge *medges = mesh->medge;
   const int num_edges = mesh->totedge;
@@ -139,7 +140,9 @@ static void smoothModifier_do(
         }
         float *vco_new = accumulated_vecs[i];
 
-        const float f_new = defvert_find_weight(dv, defgrp_index) * fac_new;
+        const float f_new = invert_vgroup ?
+                                (1.0f - BKE_defvert_find_weight(dv, defgrp_index)) * fac_new :
+                                BKE_defvert_find_weight(dv, defgrp_index) * fac_new;
         if (f_new <= 0.0f) {
           continue;
         }

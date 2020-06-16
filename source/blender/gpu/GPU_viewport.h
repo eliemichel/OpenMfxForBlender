@@ -26,10 +26,15 @@
 
 #include <stdbool.h>
 
+#include "DNA_scene_types.h"
 #include "DNA_vec_types.h"
 
 #include "GPU_framebuffer.h"
 #include "GPU_texture.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define GPU_INFO_SIZE 512 /* IMA_MAX_RENDER_TEXT */
 #define GLA_PIXEL_OFS 0.375f
@@ -80,6 +85,8 @@ typedef struct ViewportEngineData {
   StorageList *stl;
   char info[GPU_INFO_SIZE];
 
+  TextureList *txl_stereo;
+  StorageList *stl_stereo;
   /* we may want to put this elsewhere */
   struct DRWTextStore *text_draw_cache;
 
@@ -97,13 +104,25 @@ typedef struct ViewportEngineData_Info {
 } ViewportEngineData_Info;
 
 GPUViewport *GPU_viewport_create(void);
-void GPU_viewport_bind(GPUViewport *viewport, const rcti *rect);
+GPUViewport *GPU_viewport_stereo_create(void);
+void GPU_viewport_bind(GPUViewport *viewport, int view, const rcti *rect);
 void GPU_viewport_unbind(GPUViewport *viewport);
-void GPU_viewport_draw_to_screen(GPUViewport *viewport, const rcti *rect);
+void GPU_viewport_draw_to_screen(GPUViewport *viewport, int view, const rcti *rect);
+void GPU_viewport_draw_to_screen_ex(GPUViewport *viewport,
+                                    int view,
+                                    const rcti *rect,
+                                    bool display_colorspace);
 void GPU_viewport_free(GPUViewport *viewport);
 
-GPUViewport *GPU_viewport_create_from_offscreen(struct GPUOffScreen *ofs);
-void GPU_viewport_clear_from_offscreen(GPUViewport *viewport);
+void GPU_viewport_colorspace_set(GPUViewport *viewport,
+                                 ColorManagedViewSettings *view_settings,
+                                 ColorManagedDisplaySettings *display_settings,
+                                 float dither);
+
+void GPU_viewport_bind_from_offscreen(GPUViewport *viewport, struct GPUOffScreen *ofs);
+void GPU_viewport_unbind_from_offscreen(GPUViewport *viewport,
+                                        struct GPUOffScreen *ofs,
+                                        bool display_colorspace);
 
 ViewportMemoryPool *GPU_viewport_mempool_get(GPUViewport *viewport);
 struct DRWInstanceDataList *GPU_viewport_instance_data_list_get(GPUViewport *viewport);
@@ -111,9 +130,11 @@ struct DRWInstanceDataList *GPU_viewport_instance_data_list_get(GPUViewport *vie
 void *GPU_viewport_engine_data_create(GPUViewport *viewport, void *engine_type);
 void *GPU_viewport_engine_data_get(GPUViewport *viewport, void *engine_type);
 void *GPU_viewport_framebuffer_list_get(GPUViewport *viewport);
+void GPU_viewport_stereo_composite(GPUViewport *viewport, Stereo3dFormat *stereo_format);
 void *GPU_viewport_texture_list_get(GPUViewport *viewport);
 void GPU_viewport_size_get(const GPUViewport *viewport, int size[2]);
 void GPU_viewport_size_set(GPUViewport *viewport, const int size[2]);
+void GPU_viewport_active_view_set(GPUViewport *viewport, int view);
 
 /* Profiling */
 double *GPU_viewport_cache_time_get(GPUViewport *viewport);
@@ -121,7 +142,7 @@ double *GPU_viewport_cache_time_get(GPUViewport *viewport);
 void GPU_viewport_tag_update(GPUViewport *viewport);
 bool GPU_viewport_do_update(GPUViewport *viewport);
 
-GPUTexture *GPU_viewport_color_texture(GPUViewport *viewport);
+GPUTexture *GPU_viewport_color_texture(GPUViewport *viewport, int view);
 
 /* Texture pool */
 GPUTexture *GPU_viewport_texture_pool_query(
@@ -129,5 +150,9 @@ GPUTexture *GPU_viewport_texture_pool_query(
 
 bool GPU_viewport_engines_data_validate(GPUViewport *viewport, void **engine_handle_array);
 void GPU_viewport_cache_release(GPUViewport *viewport);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // __GPU_VIEWPORT_H__

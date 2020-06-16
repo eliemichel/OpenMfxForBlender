@@ -19,10 +19,10 @@
 /* For constants. */
 #include "BLI_math_base.h"
 
-#include "DNA_userdef_types.h"
+#include "DNA_anim_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_space_types.h"
-#include "DNA_anim_types.h"
+#include "DNA_userdef_types.h"
 
 #include "BLI_math_rotation.h"
 
@@ -31,8 +31,8 @@
 #include "BLO_readfile.h" /* own include */
 
 const UserDef U_default = {
-    .versionfile = BLENDER_VERSION,
-    .subversionfile = BLENDER_SUBVERSION,
+    .versionfile = BLENDER_FILE_VERSION,
+    .subversionfile = BLENDER_FILE_SUBVERSION,
     .flag = (USER_AUTOSAVE | USER_TOOLTIPS | USER_SAVE_PREVIEWS | USER_RELPATHS |
              USER_RELEASECONFIRM | USER_SCRIPT_AUTOEXEC_DISABLE | USER_NONEGFRAMES),
     .dupflag = USER_DUP_MESH | USER_DUP_CURVE | USER_DUP_SURF | USER_DUP_FONT | USER_DUP_MBALL |
@@ -64,7 +64,8 @@ const UserDef U_default = {
     .uiflag2 = USER_REGION_OVERLAP,
     .gpu_flag = USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE,
     .app_flag = 0,
-    .language = 0,
+    /** Default language of English (1), not Automatic (0). */
+    .language = 1,
     .viewzoom = USER_ZOOM_DOLLY,
     .mixbufsize = 2048,
     .audiodevice = 0,
@@ -136,7 +137,6 @@ const UserDef U_default = {
     .recent_files = 10,
     .smooth_viewtx = 200,
     .glreslimit = 0,
-    .curssize = 0,
     .color_picker_type = USER_CP_CIRCLE_HSV,
     .auto_smoothing_new = FCURVE_SMOOTH_CONT_ACCEL,
     .ipo_new = BEZT_IPO_BEZ,
@@ -188,7 +188,6 @@ const UserDef U_default = {
     .pie_menu_radius = 100,
     .pie_menu_threshold = 12,
     .opensubdiv_compute_type = 0,
-    .gpencil_multisamples = 4,
     .factor_display_type = USER_FACTOR_AS_FACTOR,
     .render_display_type = USER_RENDER_DISPLAY_WINDOW,
     .filebrowser_display_type = USER_TEMP_SPACE_DISPLAY_WINDOW,
@@ -222,6 +221,11 @@ const UserDef U_default = {
             .temp_win_sizex = 1020,
             .temp_win_sizey = 600,
         },
+
+    .sequencer_disk_cache_dir = "",
+    .sequencer_disk_cache_compression = 0,
+    .sequencer_disk_cache_size_limit = 100,
+    .sequencer_disk_cache_flag = 0,
 
     .runtime =
         {

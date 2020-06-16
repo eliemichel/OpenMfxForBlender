@@ -23,6 +23,12 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "DNA_scene_types.h"
+
 struct BezTriple;
 struct Curve;
 struct Depsgraph;
@@ -72,21 +78,14 @@ typedef struct CVKeyIndex {
   ((((cu)->flag & CU_3D) == 0) && (((cu)->flag & (CU_FRONT | CU_BACK)) != 0))
 
 /* ** Curve ** */
-void BKE_curve_free(struct Curve *cu);
 void BKE_curve_editfont_free(struct Curve *cu);
 void BKE_curve_init(struct Curve *cu, const short curve_type);
 struct Curve *BKE_curve_add(struct Main *bmain, const char *name, int type);
-void BKE_curve_copy_data(struct Main *bmain,
-                         struct Curve *cu_dst,
-                         const struct Curve *cu_src,
-                         const int flag);
 struct Curve *BKE_curve_copy(struct Main *bmain, const struct Curve *cu);
-void BKE_curve_make_local(struct Main *bmain, struct Curve *cu, const bool lib_local);
 short BKE_curve_type_get(struct Curve *cu);
 void BKE_curve_type_test(struct Object *ob);
 void BKE_curve_curve_dimension_update(struct Curve *cu);
 
-void BKE_curve_boundbox_calc(struct Curve *cu, float r_loc[3], float r_size[3]);
 struct BoundBox *BKE_curve_boundbox_get(struct Object *ob);
 
 void BKE_curve_texspace_calc(struct Curve *cu);
@@ -143,8 +142,6 @@ void BKE_curve_editNurb_keyIndex_delCV(struct GHash *keyindex, const void *cv);
 void BKE_curve_editNurb_keyIndex_free(struct GHash **keyindex);
 void BKE_curve_editNurb_free(struct Curve *cu);
 struct ListBase *BKE_curve_editNurbs_get(struct Curve *cu);
-
-float *BKE_curve_surf_make_orco(struct Object *ob);
 
 void BKE_curve_bevelList_free(struct ListBase *bev);
 void BKE_curve_bevelList_make(struct Object *ob, struct ListBase *nurbs, bool for_render);
@@ -262,8 +259,9 @@ void BKE_nurb_handles_calc(struct Nurb *nu);
 void BKE_nurb_handles_autocalc(struct Nurb *nu, int flag);
 void BKE_nurb_bezt_handle_test(struct BezTriple *bezt,
                                const eBezTriple_Flag__Alias sel_flag,
-                               const bool use_handle);
-void BKE_nurb_handles_test(struct Nurb *nu, const bool use_handles);
+                               const bool use_handle,
+                               const bool use_around_local);
+void BKE_nurb_handles_test(struct Nurb *nu, const bool use_handles, const bool use_around_local);
 
 /* **** Depsgraph evaluation **** */
 
@@ -294,5 +292,9 @@ void BKE_curve_decimate_nurb(struct Nurb *nu,
 
 extern void (*BKE_curve_batch_cache_dirty_tag_cb)(struct Curve *cu, int mode);
 extern void (*BKE_curve_batch_cache_free_cb)(struct Curve *cu);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_CURVE_H__ */

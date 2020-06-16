@@ -20,8 +20,8 @@
  */
 
 #include "Stroke.h"
-#include "StrokeIterators.h"
 #include "StrokeAdvancedIterators.h"
+#include "StrokeIterators.h"
 #include "StrokeRenderer.h"
 
 #include "BKE_global.h"

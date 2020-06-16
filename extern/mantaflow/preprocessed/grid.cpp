@@ -853,6 +853,147 @@ template<class T> struct knPermuteAxes : public KernelBase {
   int axis2;
 };
 
+struct knJoinVec : public KernelBase {
+  knJoinVec(Grid<Vec3> &a, const Grid<Vec3> &b, bool keepMax)
+      : KernelBase(&a, 0), a(a), b(b), keepMax(keepMax)
+  {
+    runMessage();
+    run();
+  }
+  inline void op(IndexInt idx, Grid<Vec3> &a, const Grid<Vec3> &b, bool keepMax) const
+  {
+    Real a1 = normSquare(a[idx]);
+    Real b1 = normSquare(b[idx]);
+    a[idx] = (keepMax) ? max(a1, b1) : min(a1, b1);
+  }
+  inline Grid<Vec3> &getArg0()
+  {
+    return a;
+  }
+  typedef Grid<Vec3> type0;
+  inline const Grid<Vec3> &getArg1()
+  {
+    return b;
+  }
+  typedef Grid<Vec3> type1;
+  inline bool &getArg2()
+  {
+    return keepMax;
+  }
+  typedef bool type2;
+  void runMessage()
+  {
+    debMsg("Executing kernel knJoinVec ", 3);
+    debMsg("Kernel range"
+               << " x " << maxX << " y " << maxY << " z " << minZ << " - " << maxZ << " ",
+           4);
+  };
+  void operator()(const tbb::blocked_range<IndexInt> &__r) const
+  {
+    for (IndexInt idx = __r.begin(); idx != (IndexInt)__r.end(); idx++)
+      op(idx, a, b, keepMax);
+  }
+  void run()
+  {
+    tbb::parallel_for(tbb::blocked_range<IndexInt>(0, size), *this);
+  }
+  Grid<Vec3> &a;
+  const Grid<Vec3> &b;
+  bool keepMax;
+};
+struct knJoinInt : public KernelBase {
+  knJoinInt(Grid<int> &a, const Grid<int> &b, bool keepMax)
+      : KernelBase(&a, 0), a(a), b(b), keepMax(keepMax)
+  {
+    runMessage();
+    run();
+  }
+  inline void op(IndexInt idx, Grid<int> &a, const Grid<int> &b, bool keepMax) const
+  {
+    a[idx] = (keepMax) ? max(a[idx], b[idx]) : min(a[idx], b[idx]);
+  }
+  inline Grid<int> &getArg0()
+  {
+    return a;
+  }
+  typedef Grid<int> type0;
+  inline const Grid<int> &getArg1()
+  {
+    return b;
+  }
+  typedef Grid<int> type1;
+  inline bool &getArg2()
+  {
+    return keepMax;
+  }
+  typedef bool type2;
+  void runMessage()
+  {
+    debMsg("Executing kernel knJoinInt ", 3);
+    debMsg("Kernel range"
+               << " x " << maxX << " y " << maxY << " z " << minZ << " - " << maxZ << " ",
+           4);
+  };
+  void operator()(const tbb::blocked_range<IndexInt> &__r) const
+  {
+    for (IndexInt idx = __r.begin(); idx != (IndexInt)__r.end(); idx++)
+      op(idx, a, b, keepMax);
+  }
+  void run()
+  {
+    tbb::parallel_for(tbb::blocked_range<IndexInt>(0, size), *this);
+  }
+  Grid<int> &a;
+  const Grid<int> &b;
+  bool keepMax;
+};
+struct knJoinReal : public KernelBase {
+  knJoinReal(Grid<Real> &a, const Grid<Real> &b, bool keepMax)
+      : KernelBase(&a, 0), a(a), b(b), keepMax(keepMax)
+  {
+    runMessage();
+    run();
+  }
+  inline void op(IndexInt idx, Grid<Real> &a, const Grid<Real> &b, bool keepMax) const
+  {
+    a[idx] = (keepMax) ? max(a[idx], b[idx]) : min(a[idx], b[idx]);
+  }
+  inline Grid<Real> &getArg0()
+  {
+    return a;
+  }
+  typedef Grid<Real> type0;
+  inline const Grid<Real> &getArg1()
+  {
+    return b;
+  }
+  typedef Grid<Real> type1;
+  inline bool &getArg2()
+  {
+    return keepMax;
+  }
+  typedef bool type2;
+  void runMessage()
+  {
+    debMsg("Executing kernel knJoinReal ", 3);
+    debMsg("Kernel range"
+               << " x " << maxX << " y " << maxY << " z " << minZ << " - " << maxZ << " ",
+           4);
+  };
+  void operator()(const tbb::blocked_range<IndexInt> &__r) const
+  {
+    for (IndexInt idx = __r.begin(); idx != (IndexInt)__r.end(); idx++)
+      op(idx, a, b, keepMax);
+  }
+  void run()
+  {
+    tbb::parallel_for(tbb::blocked_range<IndexInt>(0, size), *this);
+  }
+  Grid<Real> &a;
+  const Grid<Real> &b;
+  bool keepMax;
+};
+
 template<class T> Grid<T> &Grid<T>::safeDivide(const Grid<T> &a)
 {
   knGridSafeDiv<T>(*this, a);
@@ -927,6 +1068,18 @@ void Grid<T>::permuteAxesCopyToGrid(int axis0, int axis1, int axis2, Grid<T> &ou
                 sizeTarget[axis2] == size[2],
             "Permuted grids must have the same dimensions!");
   knPermuteAxes<T>(*this, out, axis0, axis1, axis2);
+}
+template<> void Grid<Vec3>::join(const Grid<Vec3> &a, bool keepMax)
+{
+  knJoinVec(*this, a, keepMax);
+}
+template<> void Grid<int>::join(const Grid<int> &a, bool keepMax)
+{
+  knJoinInt(*this, a, keepMax);
+}
+template<> void Grid<Real>::join(const Grid<Real> &a, bool keepMax)
+{
+  knJoinReal(*this, a, keepMax);
 }
 
 template<> Real Grid<Real>::getMax() const
@@ -1244,15 +1397,67 @@ void PbRegister_gridMaxDiffVec3()
 }
 }
 
+struct knCopyMacToVec3 : public KernelBase {
+  knCopyMacToVec3(MACGrid &source, Grid<Vec3> &target)
+      : KernelBase(&source, 0), source(source), target(target)
+  {
+    runMessage();
+    run();
+  }
+  inline void op(int i, int j, int k, MACGrid &source, Grid<Vec3> &target) const
+  {
+    target(i, j, k) = source(i, j, k);
+  }
+  inline MACGrid &getArg0()
+  {
+    return source;
+  }
+  typedef MACGrid type0;
+  inline Grid<Vec3> &getArg1()
+  {
+    return target;
+  }
+  typedef Grid<Vec3> type1;
+  void runMessage()
+  {
+    debMsg("Executing kernel knCopyMacToVec3 ", 3);
+    debMsg("Kernel range"
+               << " x " << maxX << " y " << maxY << " z " << minZ << " - " << maxZ << " ",
+           4);
+  };
+  void operator()(const tbb::blocked_range<IndexInt> &__r) const
+  {
+    const int _maxX = maxX;
+    const int _maxY = maxY;
+    if (maxZ > 1) {
+      for (int k = __r.begin(); k != (int)__r.end(); k++)
+        for (int j = 0; j < _maxY; j++)
+          for (int i = 0; i < _maxX; i++)
+            op(i, j, k, source, target);
+    }
+    else {
+      const int k = 0;
+      for (int j = __r.begin(); j != (int)__r.end(); j++)
+        for (int i = 0; i < _maxX; i++)
+          op(i, j, k, source, target);
+    }
+  }
+  void run()
+  {
+    if (maxZ > 1)
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(minZ, maxZ), *this);
+    else
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(0, maxY), *this);
+  }
+  MACGrid &source;
+  Grid<Vec3> &target;
+};
 // simple helper functions to copy (convert) mac to vec3 , and levelset to real grids
 // (are assumed to be the same for running the test cases - in general they're not!)
 
 void copyMacToVec3(MACGrid &source, Grid<Vec3> &target)
 {
-  FOR_IJK(target)
-  {
-    target(i, j, k) = source(i, j, k);
-  }
+  knCopyMacToVec3(source, target);
 }
 static PyObject *_W_3(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
@@ -1323,10 +1528,14 @@ void PbRegister_convertMacToVec3()
 }
 }
 
-//! vec3->mac grid conversion , but with full resampling
-void resampleVec3ToMac(Grid<Vec3> &source, MACGrid &target)
-{
-  FOR_IJK_BND(target, 1)
+struct knResampleVec3ToMac : public KernelBase {
+  knResampleVec3ToMac(Grid<Vec3> &source, MACGrid &target)
+      : KernelBase(&source, 1), source(source), target(target)
+  {
+    runMessage();
+    run();
+  }
+  inline void op(int i, int j, int k, Grid<Vec3> &source, MACGrid &target) const
   {
     target(i, j, k)[0] = 0.5 * (source(i - 1, j, k)[0] + source(i, j, k))[0];
     target(i, j, k)[1] = 0.5 * (source(i, j - 1, k)[1] + source(i, j, k))[1];
@@ -1334,6 +1543,55 @@ void resampleVec3ToMac(Grid<Vec3> &source, MACGrid &target)
       target(i, j, k)[2] = 0.5 * (source(i, j, k - 1)[2] + source(i, j, k))[2];
     }
   }
+  inline Grid<Vec3> &getArg0()
+  {
+    return source;
+  }
+  typedef Grid<Vec3> type0;
+  inline MACGrid &getArg1()
+  {
+    return target;
+  }
+  typedef MACGrid type1;
+  void runMessage()
+  {
+    debMsg("Executing kernel knResampleVec3ToMac ", 3);
+    debMsg("Kernel range"
+               << " x " << maxX << " y " << maxY << " z " << minZ << " - " << maxZ << " ",
+           4);
+  };
+  void operator()(const tbb::blocked_range<IndexInt> &__r) const
+  {
+    const int _maxX = maxX;
+    const int _maxY = maxY;
+    if (maxZ > 1) {
+      for (int k = __r.begin(); k != (int)__r.end(); k++)
+        for (int j = 1; j < _maxY; j++)
+          for (int i = 1; i < _maxX; i++)
+            op(i, j, k, source, target);
+    }
+    else {
+      const int k = 0;
+      for (int j = __r.begin(); j != (int)__r.end(); j++)
+        for (int i = 1; i < _maxX; i++)
+          op(i, j, k, source, target);
+    }
+  }
+  void run()
+  {
+    if (maxZ > 1)
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(minZ, maxZ), *this);
+    else
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(1, maxY), *this);
+  }
+  Grid<Vec3> &source;
+  MACGrid &target;
+};
+//! vec3->mac grid conversion , but with full resampling
+
+void resampleVec3ToMac(Grid<Vec3> &source, MACGrid &target)
+{
+  knResampleVec3ToMac(source, target);
 }
 static PyObject *_W_5(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
@@ -1367,13 +1625,66 @@ void PbRegister_resampleVec3ToMac()
 }
 }
 
-//! mac->vec3 grid conversion , with full resampling
-void resampleMacToVec3(MACGrid &source, Grid<Vec3> &target)
-{
-  FOR_IJK_BND(target, 1)
+struct knResampleMacToVec3 : public KernelBase {
+  knResampleMacToVec3(MACGrid &source, Grid<Vec3> &target)
+      : KernelBase(&source, 1), source(source), target(target)
+  {
+    runMessage();
+    run();
+  }
+  inline void op(int i, int j, int k, MACGrid &source, Grid<Vec3> &target) const
   {
     target(i, j, k) = source.getCentered(i, j, k);
   }
+  inline MACGrid &getArg0()
+  {
+    return source;
+  }
+  typedef MACGrid type0;
+  inline Grid<Vec3> &getArg1()
+  {
+    return target;
+  }
+  typedef Grid<Vec3> type1;
+  void runMessage()
+  {
+    debMsg("Executing kernel knResampleMacToVec3 ", 3);
+    debMsg("Kernel range"
+               << " x " << maxX << " y " << maxY << " z " << minZ << " - " << maxZ << " ",
+           4);
+  };
+  void operator()(const tbb::blocked_range<IndexInt> &__r) const
+  {
+    const int _maxX = maxX;
+    const int _maxY = maxY;
+    if (maxZ > 1) {
+      for (int k = __r.begin(); k != (int)__r.end(); k++)
+        for (int j = 1; j < _maxY; j++)
+          for (int i = 1; i < _maxX; i++)
+            op(i, j, k, source, target);
+    }
+    else {
+      const int k = 0;
+      for (int j = __r.begin(); j != (int)__r.end(); j++)
+        for (int i = 1; i < _maxX; i++)
+          op(i, j, k, source, target);
+    }
+  }
+  void run()
+  {
+    if (maxZ > 1)
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(minZ, maxZ), *this);
+    else
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(1, maxY), *this);
+  }
+  MACGrid &source;
+  Grid<Vec3> &target;
+};
+//! mac->vec3 grid conversion , with full resampling
+
+void resampleMacToVec3(MACGrid &source, Grid<Vec3> &target)
+{
+  knResampleMacToVec3(source, target);
 }
 static PyObject *_W_6(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
@@ -1407,12 +1718,65 @@ void PbRegister_resampleMacToVec3()
 }
 }
 
-void copyLevelsetToReal(LevelsetGrid &source, Grid<Real> &target)
-{
-  FOR_IJK(target)
+struct knCopyLevelsetToReal : public KernelBase {
+  knCopyLevelsetToReal(LevelsetGrid &source, Grid<Real> &target)
+      : KernelBase(&source, 0), source(source), target(target)
+  {
+    runMessage();
+    run();
+  }
+  inline void op(int i, int j, int k, LevelsetGrid &source, Grid<Real> &target) const
   {
     target(i, j, k) = source(i, j, k);
   }
+  inline LevelsetGrid &getArg0()
+  {
+    return source;
+  }
+  typedef LevelsetGrid type0;
+  inline Grid<Real> &getArg1()
+  {
+    return target;
+  }
+  typedef Grid<Real> type1;
+  void runMessage()
+  {
+    debMsg("Executing kernel knCopyLevelsetToReal ", 3);
+    debMsg("Kernel range"
+               << " x " << maxX << " y " << maxY << " z " << minZ << " - " << maxZ << " ",
+           4);
+  };
+  void operator()(const tbb::blocked_range<IndexInt> &__r) const
+  {
+    const int _maxX = maxX;
+    const int _maxY = maxY;
+    if (maxZ > 1) {
+      for (int k = __r.begin(); k != (int)__r.end(); k++)
+        for (int j = 0; j < _maxY; j++)
+          for (int i = 0; i < _maxX; i++)
+            op(i, j, k, source, target);
+    }
+    else {
+      const int k = 0;
+      for (int j = __r.begin(); j != (int)__r.end(); j++)
+        for (int i = 0; i < _maxX; i++)
+          op(i, j, k, source, target);
+    }
+  }
+  void run()
+  {
+    if (maxZ > 1)
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(minZ, maxZ), *this);
+    else
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(0, maxY), *this);
+  }
+  LevelsetGrid &source;
+  Grid<Real> &target;
+};
+
+void copyLevelsetToReal(LevelsetGrid &source, Grid<Real> &target)
+{
+  knCopyLevelsetToReal(source, target);
 }
 static PyObject *_W_7(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
@@ -1446,17 +1810,95 @@ void PbRegister_copyLevelsetToReal()
 }
 }
 
-void copyVec3ToReal(Grid<Vec3> &source,
-                    Grid<Real> &targetX,
-                    Grid<Real> &targetY,
-                    Grid<Real> &targetZ)
-{
-  FOR_IJK(source)
+struct knCopyVec3ToReal : public KernelBase {
+  knCopyVec3ToReal(Grid<Vec3> &source,
+                   Grid<Real> &targetX,
+                   Grid<Real> &targetY,
+                   Grid<Real> &targetZ)
+      : KernelBase(&source, 0),
+        source(source),
+        targetX(targetX),
+        targetY(targetY),
+        targetZ(targetZ)
+  {
+    runMessage();
+    run();
+  }
+  inline void op(int i,
+                 int j,
+                 int k,
+                 Grid<Vec3> &source,
+                 Grid<Real> &targetX,
+                 Grid<Real> &targetY,
+                 Grid<Real> &targetZ) const
   {
     targetX(i, j, k) = source(i, j, k).x;
     targetY(i, j, k) = source(i, j, k).y;
     targetZ(i, j, k) = source(i, j, k).z;
   }
+  inline Grid<Vec3> &getArg0()
+  {
+    return source;
+  }
+  typedef Grid<Vec3> type0;
+  inline Grid<Real> &getArg1()
+  {
+    return targetX;
+  }
+  typedef Grid<Real> type1;
+  inline Grid<Real> &getArg2()
+  {
+    return targetY;
+  }
+  typedef Grid<Real> type2;
+  inline Grid<Real> &getArg3()
+  {
+    return targetZ;
+  }
+  typedef Grid<Real> type3;
+  void runMessage()
+  {
+    debMsg("Executing kernel knCopyVec3ToReal ", 3);
+    debMsg("Kernel range"
+               << " x " << maxX << " y " << maxY << " z " << minZ << " - " << maxZ << " ",
+           4);
+  };
+  void operator()(const tbb::blocked_range<IndexInt> &__r) const
+  {
+    const int _maxX = maxX;
+    const int _maxY = maxY;
+    if (maxZ > 1) {
+      for (int k = __r.begin(); k != (int)__r.end(); k++)
+        for (int j = 0; j < _maxY; j++)
+          for (int i = 0; i < _maxX; i++)
+            op(i, j, k, source, targetX, targetY, targetZ);
+    }
+    else {
+      const int k = 0;
+      for (int j = __r.begin(); j != (int)__r.end(); j++)
+        for (int i = 0; i < _maxX; i++)
+          op(i, j, k, source, targetX, targetY, targetZ);
+    }
+  }
+  void run()
+  {
+    if (maxZ > 1)
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(minZ, maxZ), *this);
+    else
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(0, maxY), *this);
+  }
+  Grid<Vec3> &source;
+  Grid<Real> &targetX;
+  Grid<Real> &targetY;
+  Grid<Real> &targetZ;
+};
+
+void copyVec3ToReal(Grid<Vec3> &source,
+                    Grid<Real> &targetX,
+                    Grid<Real> &targetY,
+                    Grid<Real> &targetZ)
+{
+  knCopyVec3ToReal(source, targetX, targetY, targetZ);
 }
 static PyObject *_W_8(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
@@ -1492,17 +1934,95 @@ void PbRegister_copyVec3ToReal()
 }
 }
 
-void copyRealToVec3(Grid<Real> &sourceX,
-                    Grid<Real> &sourceY,
-                    Grid<Real> &sourceZ,
-                    Grid<Vec3> &target)
-{
-  FOR_IJK(target)
+struct knCopyRealToVec3 : public KernelBase {
+  knCopyRealToVec3(Grid<Real> &sourceX,
+                   Grid<Real> &sourceY,
+                   Grid<Real> &sourceZ,
+                   Grid<Vec3> &target)
+      : KernelBase(&sourceX, 0),
+        sourceX(sourceX),
+        sourceY(sourceY),
+        sourceZ(sourceZ),
+        target(target)
+  {
+    runMessage();
+    run();
+  }
+  inline void op(int i,
+                 int j,
+                 int k,
+                 Grid<Real> &sourceX,
+                 Grid<Real> &sourceY,
+                 Grid<Real> &sourceZ,
+                 Grid<Vec3> &target) const
   {
     target(i, j, k).x = sourceX(i, j, k);
     target(i, j, k).y = sourceY(i, j, k);
     target(i, j, k).z = sourceZ(i, j, k);
   }
+  inline Grid<Real> &getArg0()
+  {
+    return sourceX;
+  }
+  typedef Grid<Real> type0;
+  inline Grid<Real> &getArg1()
+  {
+    return sourceY;
+  }
+  typedef Grid<Real> type1;
+  inline Grid<Real> &getArg2()
+  {
+    return sourceZ;
+  }
+  typedef Grid<Real> type2;
+  inline Grid<Vec3> &getArg3()
+  {
+    return target;
+  }
+  typedef Grid<Vec3> type3;
+  void runMessage()
+  {
+    debMsg("Executing kernel knCopyRealToVec3 ", 3);
+    debMsg("Kernel range"
+               << " x " << maxX << " y " << maxY << " z " << minZ << " - " << maxZ << " ",
+           4);
+  };
+  void operator()(const tbb::blocked_range<IndexInt> &__r) const
+  {
+    const int _maxX = maxX;
+    const int _maxY = maxY;
+    if (maxZ > 1) {
+      for (int k = __r.begin(); k != (int)__r.end(); k++)
+        for (int j = 0; j < _maxY; j++)
+          for (int i = 0; i < _maxX; i++)
+            op(i, j, k, sourceX, sourceY, sourceZ, target);
+    }
+    else {
+      const int k = 0;
+      for (int j = __r.begin(); j != (int)__r.end(); j++)
+        for (int i = 0; i < _maxX; i++)
+          op(i, j, k, sourceX, sourceY, sourceZ, target);
+    }
+  }
+  void run()
+  {
+    if (maxZ > 1)
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(minZ, maxZ), *this);
+    else
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(0, maxY), *this);
+  }
+  Grid<Real> &sourceX;
+  Grid<Real> &sourceY;
+  Grid<Real> &sourceZ;
+  Grid<Vec3> &target;
+};
+
+void copyRealToVec3(Grid<Real> &sourceX,
+                    Grid<Real> &sourceY,
+                    Grid<Real> &sourceZ,
+                    Grid<Vec3> &target)
+{
+  knCopyRealToVec3(sourceX, sourceY, sourceZ, target);
 }
 static PyObject *_W_9(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {

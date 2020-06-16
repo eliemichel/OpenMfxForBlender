@@ -23,23 +23,23 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_modifier_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_linklist.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_crazyspace.h"
 #include "BKE_DerivedMesh.h"
+#include "BKE_crazyspace.h"
+#include "BKE_editmesh.h"
+#include "BKE_lib_id.h"
+#include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_multires.h"
-#include "BKE_mesh.h"
-#include "BKE_editmesh.h"
-#include "BKE_library.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -81,17 +81,16 @@ static void set_crazy_vertex_quat(float r_quat[4],
   sub_qt_qtqt(r_quat, q2, q1);
 }
 
-static int modifiers_disable_subsurf_temporary(Object *ob)
+static bool modifiers_disable_subsurf_temporary(struct Scene *scene, Object *ob)
 {
-  ModifierData *md;
-  int disabled = 0;
+  bool disabled = false;
+  int cageIndex = modifiers_getCageIndex(scene, ob, NULL, 1);
 
-  for (md = ob->modifiers.first; md; md = md->next) {
+  ModifierData *md = ob->modifiers.first;
+  for (int i = 0; md && i <= cageIndex; i++, md = md->next) {
     if (md->type == eModifierType_Subsurf) {
-      if (md->mode & eModifierMode_OnCage) {
-        md->mode ^= eModifierMode_DisableTemporary;
-        disabled = 1;
-      }
+      md->mode ^= eModifierMode_DisableTemporary;
+      disabled = true;
     }
   }
 
@@ -108,7 +107,7 @@ float (*BKE_crazyspace_get_mapped_editverts(struct Depsgraph *depsgraph, Object 
   BMEditMesh *editmesh_eval = mesh_eval->edit_mesh;
 
   /* disable subsurf temporal, get mapped cos, and enable it */
-  if (modifiers_disable_subsurf_temporary(obedit_eval)) {
+  if (modifiers_disable_subsurf_temporary(scene_eval, obedit_eval)) {
     /* need to make new derivemesh */
     makeDerivedMesh(depsgraph, scene_eval, obedit_eval, editmesh_eval, &CD_MASK_BAREMESH);
   }
@@ -122,7 +121,7 @@ float (*BKE_crazyspace_get_mapped_editverts(struct Depsgraph *depsgraph, Object 
   mesh_get_mapped_verts_coords(mesh_eval_cage, vertexcos, nverts);
 
   /* set back the flag, no new cage needs to be built, transform does it */
-  modifiers_disable_subsurf_temporary(obedit_eval);
+  modifiers_disable_subsurf_temporary(scene_eval, obedit_eval);
 
   return vertexcos;
 }
@@ -288,13 +287,13 @@ int BKE_crazyspace_get_first_deform_matrices_editbmesh(struct Depsgraph *depsgra
     if (mti->type == eModifierTypeType_OnlyDeform && mti->deformMatricesEM) {
       if (!defmats) {
         const int required_mode = eModifierMode_Realtime | eModifierMode_Editmode;
-        CustomData_MeshMasks data_mask = CD_MASK_BAREMESH;
+        CustomData_MeshMasks cd_mask_extra = CD_MASK_BAREMESH;
         CDMaskLink *datamasks = modifiers_calcDataMasks(
-            scene, ob, md, &data_mask, required_mode, NULL, NULL);
-        data_mask = datamasks->mask;
+            scene, ob, md, &cd_mask_extra, required_mode, NULL, NULL);
+        cd_mask_extra = datamasks->mask;
         BLI_linklist_free((LinkNode *)datamasks, NULL);
 
-        me = BKE_mesh_from_editmesh_with_coords_thin_wrap(em, &data_mask, NULL, me_input);
+        me = BKE_mesh_from_editmesh_with_coords_thin_wrap(em, &cd_mask_extra, NULL, me_input);
         deformedVerts = editbmesh_vert_coords_alloc(em, &numVerts);
         defmats = MEM_mallocN(sizeof(*defmats) * numVerts, "defmats");
 
@@ -339,8 +338,8 @@ static void crazyspace_init_object_for_eval(struct Depsgraph *depsgraph,
 {
   Object *object_eval = DEG_get_evaluated_object(depsgraph, object);
   *object_crazy = *object_eval;
-  if (object_crazy->runtime.mesh_orig != NULL) {
-    object_crazy->data = object_crazy->runtime.mesh_orig;
+  if (object_crazy->runtime.data_orig != NULL) {
+    object_crazy->data = object_crazy->runtime.data_orig;
   }
 }
 

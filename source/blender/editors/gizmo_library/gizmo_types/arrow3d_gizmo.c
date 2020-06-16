@@ -50,12 +50,12 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
-#include "ED_view3d.h"
-#include "ED_screen.h"
 #include "ED_gizmo_library.h"
+#include "ED_screen.h"
+#include "ED_view3d.h"
 
 #include "UI_interface.h"
 
@@ -88,9 +88,14 @@ static void arrow_draw_geom(const ArrowGizmo3D *arrow, const bool select, const 
   const int draw_style = RNA_enum_get(arrow->gizmo.ptr, "draw_style");
   const int draw_options = RNA_enum_get(arrow->gizmo.ptr, "draw_options");
 
-  immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
+  immBindBuiltinProgram(GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
+
+  float viewport[4];
+  GPU_viewport_size_get_f(viewport);
+  immUniform2fv("viewportSize", &viewport[2]);
 
   if (draw_style == ED_GIZMO_ARROW_STYLE_CROSS) {
+    immUniform1f("lineWidth", U.pixelsize);
     immUniformColor4fv(color);
 
     immBegin(GPU_PRIM_LINES, 4);
@@ -112,7 +117,7 @@ static void arrow_draw_geom(const ArrowGizmo3D *arrow, const bool select, const 
         {-unitx, unity, 0},
     };
 
-    GPU_line_width(arrow->gizmo.line_width);
+    immUniform1f("lineWidth", arrow->gizmo.line_width * U.pixelsize);
     wm_gizmo_vec_draw(color, vec, ARRAY_SIZE(vec), pos, GPU_PRIM_LINE_LOOP);
   }
   else {
@@ -127,7 +132,7 @@ static void arrow_draw_geom(const ArrowGizmo3D *arrow, const bool select, const 
     };
 
     if (draw_options & ED_GIZMO_ARROW_DRAW_FLAG_STEM) {
-      GPU_line_width(arrow->gizmo.line_width);
+      immUniform1f("lineWidth", arrow->gizmo.line_width * U.pixelsize);
       wm_gizmo_vec_draw(color, vec, ARRAY_SIZE(vec), pos, GPU_PRIM_LINE_STRIP);
     }
     else {
@@ -159,6 +164,10 @@ static void arrow_draw_geom(const ArrowGizmo3D *arrow, const bool select, const 
 
       /* translate to line end */
       GPU_matrix_translate_3f(0.0f, 0.0f, arrow_length);
+
+      immUnbindProgram();
+      immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
+      immUniformColor4fv(color);
 
       imm_draw_circle_fill_3d(pos, 0.0, 0.0, width, 8);
       imm_draw_cylinder_fill_3d(pos, width, 0.0, len, 8, 1);
@@ -242,7 +251,7 @@ static int gizmo_arrow_test_select(bContext *UNUSED(C), wmGizmo *gz, const int m
   const float arrow_head_threshold_px = 12 * UI_DPI_FAC;
 
   /* Distance to arrow head. */
-  if (len_squared_v2v2(mval_fl, arrow_end) < SQUARE(arrow_head_threshold_px)) {
+  if (len_squared_v2v2(mval_fl, arrow_end) < square_f(arrow_head_threshold_px)) {
     return 0;
   }
 
@@ -252,7 +261,7 @@ static int gizmo_arrow_test_select(bContext *UNUSED(C), wmGizmo *gz, const int m
   /* Clamp inside the line, to avoid overlapping with other gizmos,
    * especially around the start of the arrow. */
   if (lambda >= 0.0 && lambda <= 1.0) {
-    if (len_squared_v2v2(mval_fl, co_isect) < SQUARE(arrow_stem_threshold_px)) {
+    if (len_squared_v2v2(mval_fl, co_isect) < square_f(arrow_stem_threshold_px)) {
       return 0;
     }
   }
@@ -274,8 +283,8 @@ static int gizmo_arrow_modal(bContext *C,
   }
   ArrowGizmo3D *arrow = (ArrowGizmo3D *)gz;
   GizmoInteraction *inter = gz->interaction_data;
-  ARegion *ar = CTX_wm_region(C);
-  RegionView3D *rv3d = ar->regiondata;
+  ARegion *region = CTX_wm_region(C);
+  RegionView3D *rv3d = region->regiondata;
 
   float offset[3];
   float facdir = 1.0f;
@@ -298,7 +307,7 @@ static int gizmo_arrow_modal(bContext *C,
   int ok = 0;
 
   for (int j = 0; j < 2; j++) {
-    ED_view3d_win_to_ray(ar, proj[j].mval, proj[j].ray_origin, proj[j].ray_direction);
+    ED_view3d_win_to_ray(region, proj[j].mval, proj[j].ray_origin, proj[j].ray_direction);
     /* Force Y axis if we're view aligned */
     if (j == 0) {
       if (RAD2DEGF(acosf(dot_v3v3(proj[j].ray_direction, arrow->gizmo.matrix_basis[2]))) < 5.0f) {
@@ -353,8 +362,8 @@ static int gizmo_arrow_modal(bContext *C,
   }
 
   /* tag the region for redraw */
-  ED_region_tag_redraw(ar);
-  WM_event_add_mousemove(C);
+  ED_region_tag_redraw_editor_overlays(region);
+  WM_event_add_mousemove(CTX_wm_window(C));
 
   return OPERATOR_RUNNING_MODAL;
 }

@@ -22,21 +22,26 @@
 #define DNA_DEPRECATED_ALLOW
 #include <string.h>
 
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
-#include "DNA_userdef_types.h"
+#ifdef WITH_INTERNATIONAL
+#  include "BLT_translation.h"
+#endif
+
+#include "DNA_anim_types.h"
 #include "DNA_curve_types.h"
-#include "DNA_windowmanager_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_space_types.h"
-#include "DNA_anim_types.h"
+#include "DNA_userdef_types.h"
+#include "DNA_windowmanager_types.h"
 
 #include "BKE_addon.h"
 #include "BKE_colorband.h"
-#include "BKE_main.h"
 #include "BKE_idprop.h"
 #include "BKE_keyconfig.h"
+#include "BKE_main.h"
 
 #include "BLO_readfile.h" /* Own include. */
 
@@ -162,6 +167,59 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
     FROM_DEFAULT_V4_UCHAR(tui.widget_text_cursor);
     FROM_DEFAULT_V4_UCHAR(space_view3d.face_back);
     FROM_DEFAULT_V4_UCHAR(space_view3d.face_front);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 1)) {
+    FROM_DEFAULT_V4_UCHAR(space_view3d.bone_locked_weight);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 2)) {
+    FROM_DEFAULT_V4_UCHAR(space_info.info_property);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_property_text);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_operator);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_operator_text);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 5)) {
+    FROM_DEFAULT_V4_UCHAR(space_graph.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_action.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_nla.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_clip.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_graph.time_marker_line_selected);
+    FROM_DEFAULT_V4_UCHAR(space_action.time_marker_line_selected);
+    FROM_DEFAULT_V4_UCHAR(space_nla.time_marker_line_selected);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.time_marker_line_selected);
+    FROM_DEFAULT_V4_UCHAR(space_clip.time_marker_line_selected);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 6)) {
+    btheme->space_node.grid_levels = U_theme_default.space_node.grid_levels;
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 9)) {
+    FROM_DEFAULT_V4_UCHAR(space_info.info_warning);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 10)) {
+    FROM_DEFAULT_V4_UCHAR(tui.gizmo_view_align);
+
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.active_strip);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.selected_strip);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.color_strip);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.mask);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 11)) {
+    FROM_DEFAULT_V4_UCHAR(tui.transparent_checker_primary);
+    FROM_DEFAULT_V4_UCHAR(tui.transparent_checker_secondary);
+    btheme->tui.transparent_checker_size = U_theme_default.tui.transparent_checker_size;
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 18)) {
+    FROM_DEFAULT_V4_UCHAR(space_info.info_report_error);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_report_warning);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_report_info);
   }
 
   /**
@@ -486,7 +544,7 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     userdef->gpu_viewport_quality = 0.6f;
 
     /* Reset theme, old themes will not be compatible with minor version updates from now on. */
-    for (bTheme *btheme = userdef->themes.first; btheme; btheme = btheme->next) {
+    LISTBASE_FOREACH (bTheme *, btheme, &userdef->themes) {
       memcpy(btheme, &U_theme_default, sizeof(*btheme));
     }
 
@@ -504,8 +562,8 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 
   if (!USER_VERSION_ATLEAST(280, 31)) {
     /* Remove select/action mouse from user defined keymaps. */
-    for (wmKeyMap *keymap = userdef->user_keymaps.first; keymap; keymap = keymap->next) {
-      for (wmKeyMapDiffItem *kmdi = keymap->diff_items.first; kmdi; kmdi = kmdi->next) {
+    LISTBASE_FOREACH (wmKeyMap *, keymap, &userdef->user_keymaps) {
+      LISTBASE_FOREACH (wmKeyMapDiffItem *, kmdi, &keymap->diff_items) {
         if (kmdi->remove_item) {
           do_version_select_mouse(userdef, kmdi->remove_item);
         }
@@ -514,7 +572,7 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
         }
       }
 
-      for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
+      LISTBASE_FOREACH (wmKeyMapItem *, kmi, &keymap->items) {
         do_version_select_mouse(userdef, kmi);
       }
     }
@@ -692,10 +750,13 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     userdef->gpu_flag |= USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE;
   }
 
-  if (!USER_VERSION_ATLEAST(282, 7)) {
-    if (userdef->pixelsize == 0.0f) {
-      userdef->pixelsize = 1.0f;
+  if (!USER_VERSION_ATLEAST(283, 13)) {
+    /* If Translations is off then language should default to English. */
+    if ((userdef->transopts & USER_DOTRANSLATE_DEPRECATED) == 0) {
+      userdef->language = ULANGUAGE_ENGLISH;
     }
+    /* Clear this deprecated flag. */
+    userdef->transopts &= ~USER_DOTRANSLATE_DEPRECATED;
   }
 
   /**
@@ -711,7 +772,11 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     /* Keep this block, even when empty. */
   }
 
-  for (bTheme *btheme = userdef->themes.first; btheme; btheme = btheme->next) {
+  if (userdef->pixelsize == 0.0f) {
+    userdef->pixelsize = 1.0f;
+  }
+
+  LISTBASE_FOREACH (bTheme *, btheme, &userdef->themes) {
     do_versions_theme(userdef, btheme);
   }
 #undef USER_VERSION_ATLEAST

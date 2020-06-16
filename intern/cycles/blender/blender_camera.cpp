@@ -725,22 +725,26 @@ static void blender_camera_view_subset(BL::RenderEngine &b_engine,
   BoundBox2D cam, view;
   float view_aspect, cam_aspect, sensor_size;
 
-  /* get viewport viewplane */
+  /* Get viewport viewplane. */
   BlenderCamera view_bcam;
   blender_camera_init(&view_bcam, b_render);
   blender_camera_from_view(&view_bcam, b_engine, b_scene, b_v3d, b_rv3d, width, height, true);
 
   blender_camera_viewplane(&view_bcam, width, height, &view, &view_aspect, &sensor_size);
 
-  /* get camera viewplane */
+  /* Get camera viewplane. */
   BlenderCamera cam_bcam;
   blender_camera_init(&cam_bcam, b_render);
   blender_camera_from_object(&cam_bcam, b_engine, b_ob, true);
 
+  /* Camera border is affect by aspect, viewport is not. */
+  cam_bcam.pixelaspect.x = b_render.pixel_aspect_x();
+  cam_bcam.pixelaspect.y = b_render.pixel_aspect_y();
+
   blender_camera_viewplane(
       &cam_bcam, cam_bcam.full_width, cam_bcam.full_height, &cam, &cam_aspect, &sensor_size);
 
-  /* return */
+  /* Return */
   *view_box = view * (1.0f / view_aspect);
   *cam_box = cam * (1.0f / cam_aspect);
 }
@@ -863,7 +867,8 @@ void BlenderSync::sync_view(BL::SpaceView3D &b_v3d,
   }
 }
 
-BufferParams BlenderSync::get_buffer_params(BL::RenderSettings &b_render,
+BufferParams BlenderSync::get_buffer_params(BL::Scene &b_scene,
+                                            BL::RenderSettings &b_render,
                                             BL::SpaceView3D &b_v3d,
                                             BL::RegionView3D &b_rv3d,
                                             Camera *cam,
@@ -899,7 +904,11 @@ BufferParams BlenderSync::get_buffer_params(BL::RenderSettings &b_render,
     params.height = height;
   }
 
-  update_viewport_display_passes(b_v3d, params.passes);
+  PassType display_pass = update_viewport_display_passes(b_v3d, params.passes);
+
+  /* Can only denoise the combined image pass */
+  params.denoising_data_pass = display_pass == PASS_COMBINED &&
+                               update_viewport_display_denoising(b_v3d, b_scene);
 
   return params;
 }

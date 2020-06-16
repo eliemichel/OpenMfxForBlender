@@ -25,8 +25,8 @@
 
 #include "BLI_utildefines.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_rand.h"
 #include "BLI_string.h"
 
@@ -35,7 +35,7 @@
 
 #include "BKE_effect.h"
 #include "BKE_lattice.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_particle.h"

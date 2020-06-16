@@ -23,14 +23,14 @@
 
 #include <stdio.h>
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_math_base.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_modifier.h"
 #include "BKE_shader_fx.h"
 

@@ -228,13 +228,12 @@ Note that the context is read-only.
 These values cannot be modified directly,
 though they may be changed by running API functions or by using the data API.
 
-So ``bpy.context.object = obj`` will raise an error.
+So ``bpy.context.active_object = obj`` will raise an error.
 
-But ``bpy.context.scene.objects.active = obj`` will work as expected.
-
+But ``bpy.context.view_layer.objects.active = obj`` works as expected.
 
 The context attributes change depending on where they are accessed.
-The 3D view has different context members than the console,
+The 3D Viewport has different context members than the Python Console,
 so take care when accessing context attributes that the user state is known.
 
 See :mod:`bpy.context` API reference.
@@ -256,9 +255,9 @@ Examples:
    >>> bpy.ops.object.scale_apply()
    {'FINISHED'}
 
-.. note::
+.. tip::
 
-   The menu item: :menuselection:`Help --> Operator Cheat Sheet`
+   The :ref:`Operator Cheat Sheet <blender_manual:bpy.ops.wm.operator_cheat_sheet>`.
    gives a list of all operators and their default values in Python syntax, along with the generated docs.
    This is a good way to get an overview of all Blender's operators.
 

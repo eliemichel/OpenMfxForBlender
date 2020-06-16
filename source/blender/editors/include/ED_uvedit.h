@@ -24,6 +24,10 @@
 #ifndef __ED_UVEDIT_H__
 #define __ED_UVEDIT_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ARegionType;
 struct BMEditMesh;
 struct BMFace;
@@ -46,20 +50,17 @@ void ED_operatortypes_uvedit(void);
 void ED_keymap_uvedit(struct wmKeyConfig *keyconf);
 
 bool ED_uvedit_minmax(const struct Scene *scene,
-                      struct Image *ima,
                       struct Object *obedit,
                       float min[2],
                       float max[2]);
 void ED_uvedit_select_all(struct BMesh *bm);
 
 bool ED_uvedit_minmax_multi(const struct Scene *scene,
-                            struct Image *ima,
                             struct Object **objects_edit,
                             uint objects_len,
                             float r_min[2],
                             float r_max[2]);
 bool ED_uvedit_center_multi(const struct Scene *scene,
-                            Image *ima,
                             struct Object **objects_edit,
                             uint objects_len,
                             float r_cent[2],
@@ -91,11 +92,7 @@ void ED_object_assign_active_image(struct Main *bmain,
 bool ED_uvedit_test(struct Object *obedit);
 
 /* visibility and selection */
-bool uvedit_face_visible_nolocal_ex(const struct ToolSettings *ts, struct BMFace *efa);
-bool uvedit_face_visible_test_ex(const struct ToolSettings *ts,
-                                 struct Object *obedit,
-                                 struct Image *ima,
-                                 struct BMFace *efa);
+bool uvedit_face_visible_test_ex(const struct ToolSettings *ts, struct BMFace *efa);
 bool uvedit_face_select_test_ex(const struct ToolSettings *ts,
                                 struct BMFace *efa,
                                 const int cd_loop_uv_offset);
@@ -106,11 +103,7 @@ bool uvedit_uv_select_test_ex(const struct ToolSettings *ts,
                               struct BMLoop *l,
                               const int cd_loop_uv_offset);
 
-bool uvedit_face_visible_nolocal(const struct Scene *scene, struct BMFace *efa);
-bool uvedit_face_visible_test(const struct Scene *scene,
-                              struct Object *obedit,
-                              struct Image *ima,
-                              struct BMFace *efa);
+bool uvedit_face_visible_test(const struct Scene *scene, struct BMFace *efa);
 bool uvedit_face_select_test(const struct Scene *scene,
                              struct BMFace *efa,
                              const int cd_loop_uv_offset);
@@ -171,12 +164,10 @@ void uvedit_uv_select_disable(struct BMEditMesh *em,
 
 bool ED_uvedit_nearest_uv(const struct Scene *scene,
                           struct Object *obedit,
-                          struct Image *ima,
                           const float co[2],
                           float *dist_sq,
                           float r_uv[2]);
 bool ED_uvedit_nearest_uv_multi(const struct Scene *scene,
-                                struct Image *ima,
                                 struct Object **objects,
                                 const uint objects_len,
                                 const float co[2],
@@ -184,7 +175,7 @@ bool ED_uvedit_nearest_uv_multi(const struct Scene *scene,
                                 float r_uv[2]);
 
 void ED_uvedit_get_aspect(
-    const struct Scene *scene, struct Object *ob, struct BMesh *em, float *aspx, float *aspy);
+    const struct Scene *scene, struct Object *ob, struct BMesh *em, float *r_aspx, float *r_aspy);
 
 /* uvedit_unwrap_ops.c */
 void ED_uvedit_live_unwrap_begin(struct Scene *scene, struct Object *obedit);
@@ -195,7 +186,7 @@ void ED_uvedit_live_unwrap(const struct Scene *scene, struct Object **objects, i
 void ED_uvedit_add_simple_uvs(struct Main *bmain, const struct Scene *scene, struct Object *ob);
 
 /* uvedit_draw.c */
-void ED_image_draw_cursor(struct ARegion *ar, const float cursor[2]);
+void ED_image_draw_cursor(struct ARegion *region, const float cursor[2]);
 void ED_uvedit_draw_main(struct SpaceImage *sima,
                          const struct Scene *scene,
                          struct ViewLayer *view_layer,
@@ -205,5 +196,9 @@ void ED_uvedit_draw_main(struct SpaceImage *sima,
 
 /* uvedit_buttons.c */
 void ED_uvedit_buttons_register(struct ARegionType *art);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __ED_UVEDIT_H__ */

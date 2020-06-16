@@ -30,20 +30,21 @@
 
 #include "DNA_movieclip_types.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_math.h"
-#include "BLI_listbase.h"
 #include "BLI_ghash.h"
+#include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
+#include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
 #include "BKE_movieclip.h"
 #include "BKE_tracking.h"
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 #include "IMB_moviecache.h"
 
 #include "tracking_private.h"
@@ -126,7 +127,6 @@ void tracks_map_merge(TracksMap *map, MovieTracking *tracking)
   MovieTrackingTrack *track;
   ListBase tracks = {NULL, NULL}, new_tracks = {NULL, NULL};
   ListBase *old_tracks;
-  int a;
 
   if (map->is_camera) {
     old_tracks = &tracking->tracks;
@@ -146,7 +146,7 @@ void tracks_map_merge(TracksMap *map, MovieTracking *tracking)
    * this is needed to keep names in unique state and it's faster to change names
    * of currently operating tracks (if needed)
    */
-  for (a = 0; a < map->num_tracks; a++) {
+  for (int a = 0; a < map->num_tracks; a++) {
     MovieTrackingTrack *old_track;
     bool mapped_to_old = false;
 
@@ -221,11 +221,9 @@ void tracks_map_merge(TracksMap *map, MovieTracking *tracking)
 
 void tracks_map_free(TracksMap *map, void (*customdata_free)(void *customdata))
 {
-  int i = 0;
-
   BLI_ghash_free(map->hash, NULL, NULL);
 
-  for (i = 0; i < map->num_tracks; i++) {
+  for (int i = 0; i < map->num_tracks; i++) {
     if (map->customdata && customdata_free) {
       customdata_free(&map->customdata[i * map->customdata_size]);
     }
@@ -345,12 +343,11 @@ void tracking_get_marker_coords_for_tracking(int frame_width,
                                              double search_pixel_x[5],
                                              double search_pixel_y[5])
 {
-  int i;
   float unified_coords[2];
   float pixel_coords[2];
 
   /* Convert the corners into search space coordinates. */
-  for (i = 0; i < 4; i++) {
+  for (int i = 0; i < 4; i++) {
     marker_unified_to_search_pixel(
         frame_width, frame_height, marker, marker->pattern_corners[i], pixel_coords);
     search_pixel_x[i] = pixel_coords[0] - 0.5f;
@@ -373,12 +370,11 @@ void tracking_set_marker_coords_from_tracking(int frame_width,
                                               const double search_pixel_x[5],
                                               const double search_pixel_y[5])
 {
-  int i;
   float marker_unified[2];
   float search_pixel[2];
 
   /* Convert the corners into search space coordinates. */
-  for (i = 0; i < 4; i++) {
+  for (int i = 0; i < 4; i++) {
     search_pixel[0] = search_pixel_x[i] + 0.5;
     search_pixel[1] = search_pixel_y[i] + 0.5;
     search_pixel_to_marker_unified(
@@ -394,7 +390,7 @@ void tracking_set_marker_coords_from_tracking(int frame_width,
    * Otherwise, the entire patch shifted, and that delta should be applied to
    * all the coordinates.
    */
-  for (i = 0; i < 4; i++) {
+  for (int i = 0; i < 4; i++) {
     marker->pattern_corners[i][0] -= marker_unified[0];
     marker->pattern_corners[i][1] -= marker_unified[1];
   }
@@ -437,6 +433,59 @@ void tracking_marker_insert_disabled(MovieTrackingTrack *track,
   }
 }
 
+static void distortion_model_parameters_from_tracking(
+    const MovieTrackingCamera *camera, libmv_CameraIntrinsicsOptions *camera_intrinsics_options)
+{
+  switch (camera->distortion_model) {
+    case TRACKING_DISTORTION_MODEL_POLYNOMIAL:
+      camera_intrinsics_options->distortion_model = LIBMV_DISTORTION_MODEL_POLYNOMIAL;
+      camera_intrinsics_options->polynomial_k1 = camera->k1;
+      camera_intrinsics_options->polynomial_k2 = camera->k2;
+      camera_intrinsics_options->polynomial_k3 = camera->k3;
+      camera_intrinsics_options->polynomial_p1 = 0.0;
+      camera_intrinsics_options->polynomial_p2 = 0.0;
+      return;
+
+    case TRACKING_DISTORTION_MODEL_DIVISION:
+      camera_intrinsics_options->distortion_model = LIBMV_DISTORTION_MODEL_DIVISION;
+      camera_intrinsics_options->division_k1 = camera->division_k1;
+      camera_intrinsics_options->division_k2 = camera->division_k2;
+      return;
+  }
+
+  /* Unknown distortion model, which might be due to opening newer file in older Blender.
+   * Fallback to a known and supported model with 0 distortion. */
+  camera_intrinsics_options->distortion_model = LIBMV_DISTORTION_MODEL_POLYNOMIAL;
+  camera_intrinsics_options->polynomial_k1 = 0.0;
+  camera_intrinsics_options->polynomial_k2 = 0.0;
+  camera_intrinsics_options->polynomial_k3 = 0.0;
+  camera_intrinsics_options->polynomial_p1 = 0.0;
+  camera_intrinsics_options->polynomial_p2 = 0.0;
+}
+
+static void distortion_model_parameters_from_options(
+    const libmv_CameraIntrinsicsOptions *camera_intrinsics_options, MovieTrackingCamera *camera)
+{
+  switch (camera_intrinsics_options->distortion_model) {
+    case LIBMV_DISTORTION_MODEL_POLYNOMIAL:
+      camera->distortion_model = TRACKING_DISTORTION_MODEL_POLYNOMIAL;
+      camera->k1 = camera_intrinsics_options->polynomial_k1;
+      camera->k2 = camera_intrinsics_options->polynomial_k2;
+      camera->k3 = camera_intrinsics_options->polynomial_k3;
+      return;
+
+    case LIBMV_DISTORTION_MODEL_DIVISION:
+      camera->distortion_model = TRACKING_DISTORTION_MODEL_DIVISION;
+      camera->division_k1 = camera_intrinsics_options->division_k1;
+      camera->division_k2 = camera_intrinsics_options->division_k2;
+      return;
+  }
+
+  /* Libmv returned distortion model which is not known to Blender. This is a logical error in code
+   * and Blender side is to be updated to match Libmv. */
+  BLI_assert(!"Unknown distortion model");
+}
+
 /* Fill in Libmv C-API camera intrinsics options from tracking structure. */
 void tracking_cameraIntrinscisOptionsFromTracking(
     MovieTracking *tracking,
@@ -447,29 +496,14 @@ void tracking_cameraIntrinscisOptionsFromTracking(
   MovieTrackingCamera *camera = &tracking->camera;
   float aspy = 1.0f / tracking->camera.pixel_aspect;
 
+  camera_intrinsics_options->num_threads = BLI_system_thread_count();
+
   camera_intrinsics_options->focal_length = camera->focal;
 
   camera_intrinsics_options->principal_point_x = camera->principal[0];
   camera_intrinsics_options->principal_point_y = camera->principal[1] * aspy;
 
-  switch (camera->distortion_model) {
-    case TRACKING_DISTORTION_MODEL_POLYNOMIAL:
-      camera_intrinsics_options->distortion_model = LIBMV_DISTORTION_MODEL_POLYNOMIAL;
-      camera_intrinsics_options->polynomial_k1 = camera->k1;
-      camera_intrinsics_options->polynomial_k2 = camera->k2;
-      camera_intrinsics_options->polynomial_k3 = camera->k3;
-      camera_intrinsics_options->polynomial_p1 = 0.0;
-      camera_intrinsics_options->polynomial_p2 = 0.0;
-      break;
-    case TRACKING_DISTORTION_MODEL_DIVISION:
-      camera_intrinsics_options->distortion_model = LIBMV_DISTORTION_MODEL_DIVISION;
-      camera_intrinsics_options->division_k1 = camera->division_k1;
-      camera_intrinsics_options->division_k2 = camera->division_k2;
-      break;
-    default:
-      BLI_assert(!"Unknown distortion model");
-      break;
-  }
+  distortion_model_parameters_from_tracking(camera, camera_intrinsics_options);
 
   camera_intrinsics_options->image_width = calibration_width;
   camera_intrinsics_options->image_height = (int)(calibration_height * aspy);
@@ -486,22 +520,7 @@ void tracking_trackingCameraFromIntrinscisOptions(
   camera->principal[0] = camera_intrinsics_options->principal_point_x;
   camera->principal[1] = camera_intrinsics_options->principal_point_y / (double)aspy;
 
-  switch (camera_intrinsics_options->distortion_model) {
-    case LIBMV_DISTORTION_MODEL_POLYNOMIAL:
-      camera->distortion_model = TRACKING_DISTORTION_MODEL_POLYNOMIAL;
-      camera->k1 = camera_intrinsics_options->polynomial_k1;
-      camera->k2 = camera_intrinsics_options->polynomial_k2;
-      camera->k3 = camera_intrinsics_options->polynomial_k3;
-      break;
-    case LIBMV_DISTORTION_MODEL_DIVISION:
-      camera->distortion_model = TRACKING_DISTORTION_MODEL_DIVISION;
-      camera->division_k1 = camera_intrinsics_options->division_k1;
-      camera->division_k2 = camera_intrinsics_options->division_k2;
-      break;
-    default:
-      BLI_assert(!"Unknown distortion model");
-      break;
-  }
+  distortion_model_parameters_from_options(camera_intrinsics_options, camera);
 }
 
 /* Get previous keyframed marker. */
@@ -672,8 +691,6 @@ static ImBuf *accessor_get_preprocessed_ibuf(TrackingImageAccessor *accessor,
 static ImBuf *make_grayscale_ibuf_copy(ImBuf *ibuf)
 {
   ImBuf *grayscale = IMB_allocImBuf(ibuf->x, ibuf->y, 32, 0);
-  size_t size;
-  int i;
 
   BLI_assert(ibuf->channels == 3 || ibuf->channels == 4);
 
@@ -682,13 +699,13 @@ static ImBuf *make_grayscale_ibuf_copy(ImBuf *ibuf)
    *
    * Will generalize it later.
    */
-  size = (size_t)grayscale->x * (size_t)grayscale->y * sizeof(float);
+  const size_t size = (size_t)grayscale->x * (size_t)grayscale->y * sizeof(float);
   grayscale->channels = 1;
   if ((grayscale->rect_float = MEM_mapallocN(size, "tracking grayscale image")) != NULL) {
     grayscale->mall |= IB_rectfloat;
     grayscale->flags |= IB_rectfloat;
 
-    for (i = 0; i < grayscale->x * grayscale->y; i++) {
+    for (int i = 0; i < grayscale->x * grayscale->y; i++) {
       const float *pixel = ibuf->rect_float + ibuf->channels * i;
 
       grayscale->rect_float[i] = 0.2126f * pixel[0] + 0.7152f * pixel[1] + 0.0722f * pixel[2];
@@ -785,14 +802,12 @@ static ImBuf *accessor_get_ibuf(TrackingImageAccessor *accessor,
                   clamped_height);
     }
     else {
-      int y;
       /* TODO(sergey): We don't do any color space or alpha conversion
        * here. Probably Libmv is better to work in the linear space,
        * but keep sRGB space here for compatibility for now.
        */
-      for (y = 0; y < clamped_height; y++) {
-        int x;
-        for (x = 0; x < clamped_width; x++) {
+      for (int y = 0; y < clamped_height; y++) {
+        for (int x = 0; x < clamped_width; x++) {
           int src_x = x + clamped_origin_x, src_y = y + clamped_origin_y;
           int dst_x = x + dst_offset_x, dst_y = y + dst_offset_y;
           int dst_index = (dst_y * width + dst_x) * 4,

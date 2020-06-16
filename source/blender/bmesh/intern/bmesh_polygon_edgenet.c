@@ -24,14 +24,14 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_alloca.h"
+#include "BLI_array.h"
+#include "BLI_kdopbvh.h"
+#include "BLI_linklist_stack.h"
 #include "BLI_math.h"
 #include "BLI_memarena.h"
-#include "BLI_array.h"
-#include "BLI_alloca.h"
-#include "BLI_utildefines_stack.h"
-#include "BLI_linklist_stack.h"
 #include "BLI_sort_utils.h"
-#include "BLI_kdopbvh.h"
+#include "BLI_utildefines_stack.h"
 
 #include "BKE_customdata.h"
 
@@ -1298,7 +1298,7 @@ bool BM_face_split_edgenet_connect_islands(BMesh *bm,
 
   if (use_partial_connect) {
     for (uint i = 0; i < edge_net_init_len; i++) {
-      for (unsigned j = 0; j < 2; j++) {
+      for (uint j = 0; j < 2; j++) {
         BMVert *v_delimit = (&edge_arr[i]->v1)[j];
         BMVert *v_other;
 

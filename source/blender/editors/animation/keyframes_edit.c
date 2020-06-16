@@ -20,17 +20,17 @@
  * \ingroup edanimation
  */
 
+#include <float.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
-#include <float.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_lasso_2d.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_object_types.h"
@@ -79,7 +79,7 @@ short ANIM_fcurve_keyframes_loop(KeyframeEditData *ked,
 {
   BezTriple *bezt;
   short ok = 0;
-  unsigned int i;
+  uint i;
 
   /* sanity check */
   if (ELEM(NULL, fcu, fcu->bezt)) {
@@ -456,6 +456,24 @@ short ANIM_animchanneldata_keyframes_loop(KeyframeEditData *ked,
   return 0;
 }
 
+void ANIM_animdata_keyframe_callback(bAnimContext *ac,
+                                     eAnimFilter_Flags filter,
+                                     KeyframeEditFunc callback_fn)
+{
+  ListBase anim_data = {NULL, NULL};
+  bAnimListElem *ale;
+
+  ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
+
+  for (ale = anim_data.first; ale; ale = ale->next) {
+    ANIM_fcurve_keyframes_loop(NULL, ale->key_data, NULL, callback_fn, calchandles_fcurve);
+    ale->update |= ANIM_UPDATE_DEFAULT;
+  }
+
+  ANIM_animdata_update(ac, &anim_data);
+  ANIM_animdata_freelist(&anim_data);
+}
+
 /* ************************************************************************** */
 /* Keyframe Integrity Tools */
 
@@ -501,7 +519,7 @@ void ANIM_editkeyframes_refresh(bAnimContext *ac)
       ok |= KEYFRAME_OK_KEY; \
 \
     if (ked && (ked->iterflags & KEYFRAME_ITER_INCL_HANDLES)) { \
-      /* Only act on visible items, so check handle visiblity state. */ \
+      /* Only act on visible items, so check handle visibility state. */ \
       const bool handles_visible = ((ked->iterflags & KEYFRAME_ITER_HANDLES_DEFAULT_INVISIBLE) ? \
                                         (BEZT_ISSEL_ANY(bezt)) : \
                                         true); \
@@ -1459,7 +1477,7 @@ KeyframeEditFunc ANIM_editkeyframes_easing(short mode)
 
 static short select_bezier_add(KeyframeEditData *ked, BezTriple *bezt)
 {
-  /* Only act on visible items, so check handle visiblity state. */
+  /* Only act on visible items, so check handle visibility state. */
   const bool handles_visible = ked && ((ked->iterflags & KEYFRAME_ITER_HANDLES_DEFAULT_INVISIBLE) ?
                                            (BEZT_ISSEL_ANY(bezt)) :
                                            true);
@@ -1485,7 +1503,7 @@ static short select_bezier_add(KeyframeEditData *ked, BezTriple *bezt)
 
 static short select_bezier_subtract(KeyframeEditData *ked, BezTriple *bezt)
 {
-  /* Only act on visible items, so check handle visiblity state. */
+  /* Only act on visible items, so check handle visibility state. */
   const bool handles_visible = ked && ((ked->iterflags & KEYFRAME_ITER_HANDLES_DEFAULT_INVISIBLE) ?
                                            (BEZT_ISSEL_ANY(bezt)) :
                                            true);

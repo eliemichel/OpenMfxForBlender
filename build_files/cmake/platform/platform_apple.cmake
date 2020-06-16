@@ -222,12 +222,10 @@ if(WITH_OPENCOLLADA)
     -lMathMLSolver
     -lGeneratedSaxParser
     -lbuffer -lftoa -lUTF
-    ${OPENCOLLADA_LIBPATH}/libxml2.a
   )
-  # PCRE is bundled with openCollada
-  # set(PCRE ${LIBDIR}/pcre)
-  # set(PCRE_LIBPATH ${PCRE}/lib)
+  # PCRE and XML2 are bundled with OpenCollada.
   set(PCRE_LIBRARIES pcre)
+  set(XML2_LIBRARIES xml2)
 endif()
 
 if(WITH_SDL)
@@ -381,7 +379,7 @@ if(WITH_CYCLES_OSL)
 endif()
 
 if(WITH_CYCLES_EMBREE)
-  find_package(Embree 3.2.4 REQUIRED)
+  find_package(Embree 3.8.0 REQUIRED)
   set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
 endif()
 
@@ -398,21 +396,6 @@ if(WITH_TBB)
   find_package(TBB)
 endif()
 
-if(NOT WITH_TBB OR NOT TBB_FOUND)
-  if(WITH_OPENIMAGEDENOISE)
-    message(STATUS "TBB not found, disabling OpenImageDenoise")
-    set(WITH_OPENIMAGEDENOISE OFF)
-  endif()
-  if(WITH_OPENVDB)
-    message(STATUS "TBB not found, disabling OpenVDB")
-    set(WITH_OPENVDB OFF)
-  endif()
-  if(WITH_MOD_FLUID)
-    message(STATUS "TBB not found, disabling Fluid modifier")
-    set(WITH_MOD_FLUID OFF)
-  endif()
-endif()
-
 # CMake FindOpenMP doesn't know about AppleClang before 3.12, so provide custom flags.
 if(WITH_OPENMP)
   if(CMAKE_C_COMPILER_ID MATCHES "AppleClang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "7.0")
@@ -426,11 +409,21 @@ if(WITH_OPENMP)
 
     # Copy libomp.dylib to allow executables like datatoc and tests to work.
     execute_process(
-        COMMAND mkdir -p ${CMAKE_BINARY_DIR}/Resources/lib
-        COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/Resources/lib/libomp.dylib)
+      COMMAND mkdir -p ${CMAKE_BINARY_DIR}/Resources/lib
+      COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/Resources/lib/libomp.dylib
+    )
     execute_process(
-        COMMAND mkdir -p ${CMAKE_BINARY_DIR}/bin/Resources/lib
-        COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/bin/Resources/lib/libomp.dylib)
+      COMMAND mkdir -p ${CMAKE_BINARY_DIR}/bin/Resources/lib
+      COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/bin/Resources/lib/libomp.dylib
+    )
+  endif()
+endif()
+
+if(WITH_XR_OPENXR)
+  find_package(OpenXR-SDK)
+  if(NOT OPENXR_SDK_FOUND)
+    message(WARNING "OpenXR-SDK was not found, disabling WITH_XR_OPENXR")
+    set(WITH_XR_OPENXR OFF)
   endif()
 endif()
 
@@ -454,7 +447,9 @@ if(${XCODE_VERSION} VERSION_EQUAL 5 OR ${XCODE_VERSION} VERSION_GREATER 5)
   # Xcode 5 is always using CLANG, which has too low template depth of 128 for libmv
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth=1024")
 endif()
-# Get rid of eventually clashes, we export some symbols explicitly as local
+
+# Avoid conflicts with Luxrender, and other plug-ins that may use the same
+# libraries as Blender with a different version or build options.
 set(PLATFORM_LINKFLAGS
   "${PLATFORM_LINKFLAGS} -Xlinker -unexported_symbols_list -Xlinker '${CMAKE_SOURCE_DIR}/source/creator/osx_locals.map'"
 )

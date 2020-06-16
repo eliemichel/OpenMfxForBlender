@@ -26,11 +26,11 @@
 
 #include "BKE_global.h" /* for G.debug_value */
 
-#include "eevee_private.h"
-#include "GPU_texture.h"
 #include "GPU_extensions.h"
 #include "GPU_platform.h"
 #include "GPU_state.h"
+#include "GPU_texture.h"
+#include "eevee_private.h"
 
 static struct {
   /* Downsample Depth */
@@ -170,13 +170,8 @@ void EEVEE_effects_init(EEVEE_ViewLayerData *sldata,
   EEVEE_subsurface_init(sldata, vedata);
 
   /* Force normal buffer creation. */
-  if (!minimal && (stl->g_data->render_passes & SCE_PASS_NORMAL) != 0) {
+  if (!minimal && (stl->g_data->render_passes & EEVEE_RENDER_PASS_NORMAL) != 0) {
     effects->enabled_effects |= EFFECT_NORMAL_BUFFER;
-  }
-
-  /* Alpha checker if background is not drawn in viewport. */
-  if (!DRW_state_is_image_render() && !DRW_state_draw_background()) {
-    effects->enabled_effects |= EFFECT_ALPHA_CHECKER;
   }
 
   /**
@@ -338,34 +333,11 @@ void EEVEE_effects_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     grp = DRW_shgroup_create(EEVEE_shaders_velocity_resolve_sh_get(), psl->velocity_resolve);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(
+        grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
     DRW_shgroup_uniform_mat4(grp, "currPersinv", effects->velocity_curr_persinv);
     DRW_shgroup_uniform_mat4(grp, "pastPersmat", effects->velocity_past_persmat);
     DRW_shgroup_call(grp, quad, NULL);
-  }
-
-  if ((effects->enabled_effects & EFFECT_ALPHA_CHECKER) != 0) {
-    GPUShader *checker_sh = GPU_shader_get_builtin_shader(GPU_SHADER_2D_CHECKER);
-
-    copy_v4_fl4(effects->color_checker_dark, 0.15f, 0.15f, 0.15f, 1.0f);
-    copy_v4_fl4(effects->color_checker_light, 0.2f, 0.2f, 0.2f, 1.0f);
-
-    DRW_PASS_CREATE(psl->alpha_checker,
-                    DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ALPHA_UNDER_PREMUL);
-    grp = DRW_shgroup_create(checker_sh, psl->alpha_checker);
-    DRW_shgroup_uniform_vec4(grp, "color1", effects->color_checker_dark, 1);
-    DRW_shgroup_uniform_vec4(grp, "color2", effects->color_checker_light, 1);
-    DRW_shgroup_uniform_int_copy(grp, "size", 8);
-    DRW_shgroup_call(grp, quad, NULL);
-
-    float viewmat[4][4], winmat[4][4];
-    unit_m4(viewmat);
-    unit_m4(winmat);
-    /* Winmat must be negative. */
-    swap_v3_v3(winmat[0], winmat[1]);
-
-    /* Using default view bypasses the culling. */
-    const DRWView *default_view = DRW_view_default_get();
-    effects->checker_view = DRW_view_create_sub(default_view, viewmat, winmat);
   }
 }
 
@@ -524,21 +496,6 @@ void EEVEE_downsample_cube_buffer(EEVEE_Data *vedata, GPUTexture *texture_src, i
   DRW_stats_group_end();
 }
 
-void EEVEE_draw_alpha_checker(EEVEE_Data *vedata)
-{
-  EEVEE_PassList *psl = vedata->psl;
-  EEVEE_StorageList *stl = vedata->stl;
-  EEVEE_EffectsInfo *effects = stl->effects;
-
-  if ((effects->enabled_effects & EFFECT_ALPHA_CHECKER) != 0) {
-    DRW_view_set_active(effects->checker_view);
-
-    DRW_draw_pass(psl->alpha_checker);
-
-    DRW_view_set_active(NULL);
-  }
-}
-
 static void EEVEE_velocity_resolve(EEVEE_Data *vedata)
 {
   EEVEE_PassList *psl = vedata->psl;
@@ -558,7 +515,7 @@ static void EEVEE_velocity_resolve(EEVEE_Data *vedata)
   DRW_view_persmat_get(view, effects->velocity_past_persmat, false);
 }
 
-void EEVEE_draw_effects(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
+void EEVEE_draw_effects(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 {
   EEVEE_TextureList *txl = vedata->txl;
   EEVEE_FramebufferList *fbl = vedata->fbl;
@@ -585,6 +542,10 @@ void EEVEE_draw_effects(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
 
   EEVEE_temporal_sampling_draw(vedata);
   EEVEE_bloom_draw(vedata);
+
+  /* Post effect render passes are done here just after the drawing of the effects and just before
+   * the swapping of the buffers. */
+  EEVEE_renderpasses_output_accumulate(sldata, vedata, true);
 
   /* Save the final texture and framebuffer for final transformation or read. */
   effects->final_tx = effects->source_buffer;

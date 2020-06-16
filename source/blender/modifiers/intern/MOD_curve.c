@@ -26,13 +26,13 @@
 #include "BLI_utildefines.h"
 
 #include "DNA_mesh_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_editmesh.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 
@@ -119,8 +119,14 @@ static void deformVerts(ModifierData *md,
 
   /* silly that defaxis and curve_deform_verts are off by 1
    * but leave for now to save having to call do_versions */
-  curve_deform_verts(
-      cmd->object, ctx->object, vertexCos, numVerts, dvert, defgrp_index, cmd->defaxis - 1);
+  curve_deform_verts(cmd->object,
+                     ctx->object,
+                     vertexCos,
+                     numVerts,
+                     dvert,
+                     defgrp_index,
+                     cmd->flag,
+                     cmd->defaxis - 1);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
     BKE_id_free(NULL, mesh_src);

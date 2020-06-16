@@ -38,8 +38,8 @@
 #include "BKE_curve.h"
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_texture.h" /* Texture masking. */
@@ -49,9 +49,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "MOD_weightvg_util.h"
 #include "MOD_modifiertypes.h"
 #include "MOD_util.h"
+#include "MOD_weightvg_util.h"
 
 //#define USE_TIMEIT
 
@@ -239,8 +239,13 @@ static float get_ob2ob_distance(const Object *ob, const Object *obr)
 /**
  * Maps distances to weights, with an optional "smoothing" mapping.
  */
-static void do_map(
-    Object *ob, float *weights, const int nidx, const float min_d, const float max_d, short mode)
+static void do_map(Object *ob,
+                   float *weights,
+                   const int nidx,
+                   const float min_d,
+                   const float max_d,
+                   short mode,
+                   const bool do_invert_mapping)
 {
   const float range_inv = 1.0f / (max_d - min_d); /* invert since multiplication is faster */
   uint i = nidx;
@@ -276,14 +281,15 @@ static void do_map(
     }
   }
 
-  if (!ELEM(mode, MOD_WVG_MAPPING_NONE, MOD_WVG_MAPPING_CURVE)) {
+  BLI_assert(mode != MOD_WVG_MAPPING_CURVE);
+  if (do_invert_mapping || mode != MOD_WVG_MAPPING_NONE) {
     RNG *rng = NULL;
 
     if (mode == MOD_WVG_MAPPING_RANDOM) {
       rng = BLI_rng_new_srandom(BLI_ghashutil_strhash(ob->id.name + 2));
     }
 
-    weightvg_do_map(nidx, weights, mode, NULL, rng);
+    weightvg_do_map(nidx, weights, mode, do_invert_mapping, NULL, rng);
 
     if (rng) {
       BLI_rng_free(rng);
@@ -360,6 +366,8 @@ static void foreachTexLink(ModifierData *md, Object *ob, TexWalkFunc walk, void 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   WeightVGProximityModifierData *wmd = (WeightVGProximityModifierData *)md;
+  bool need_transform_relation = false;
+
   if (wmd->proximity_ob_target != NULL) {
     DEG_add_object_relation(
         ctx->node, wmd->proximity_ob_target, DEG_OB_COMP_TRANSFORM, "WeightVGProximity Modifier");
@@ -368,17 +376,25 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
       DEG_add_object_relation(
           ctx->node, wmd->proximity_ob_target, DEG_OB_COMP_GEOMETRY, "WeightVGProximity Modifier");
     }
+    need_transform_relation = true;
   }
-  if (wmd->mask_tex_map_obj != NULL && wmd->mask_tex_mapping == MOD_DISP_MAP_OBJECT) {
-    DEG_add_object_relation(
-        ctx->node, wmd->mask_tex_map_obj, DEG_OB_COMP_TRANSFORM, "WeightVGProximity Modifier");
-    DEG_add_object_relation(
-        ctx->node, wmd->mask_tex_map_obj, DEG_OB_COMP_GEOMETRY, "WeightVGProximity Modifier");
-  }
+
   if (wmd->mask_texture != NULL) {
     DEG_add_generic_id_relation(ctx->node, &wmd->mask_texture->id, "WeightVGProximity Modifier");
+
+    if (wmd->mask_tex_map_obj != NULL && wmd->mask_tex_mapping == MOD_DISP_MAP_OBJECT) {
+      MOD_depsgraph_update_object_bone_relation(
+          ctx->node, wmd->mask_tex_map_obj, wmd->mask_tex_map_bone, "WeightVGProximity Modifier");
+      need_transform_relation = true;
+    }
+    else if (wmd->mask_tex_mapping == MOD_DISP_MAP_GLOBAL) {
+      need_transform_relation = true;
+    }
   }
-  DEG_add_modifier_to_transform_relation(ctx->node, "WeightVGProximity Modifier");
+
+  if (need_transform_relation) {
+    DEG_add_modifier_to_transform_relation(ctx->node, "WeightVGProximity Modifier");
+  }
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene),
@@ -411,6 +427,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   int *tidx, *indices = NULL;
   int numIdx = 0;
   int i;
+  const bool invert_vgroup_mask = (wmd->proximity_flags & MOD_WVG_PROXIMITY_INVERT_VGROUP_MASK) !=
+                                  0;
   /* Flags. */
 #if 0
   const bool do_prev = (wmd->modifier.mode & eModifierMode_DoWeightPreview) != 0;
@@ -437,7 +455,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   }
 
   /* Get vgroup idx from its name. */
-  defgrp_index = defgroup_name_index(ob, wmd->defgrp_name);
+  defgrp_index = BKE_object_defgroup_name_index(ob, wmd->defgrp_name);
   if (defgrp_index == -1) {
     return mesh;
   }
@@ -461,7 +479,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   tw = MEM_malloc_arrayN(numVerts, sizeof(float), "WeightVGProximity Modifier, tw");
   tdw = MEM_malloc_arrayN(numVerts, sizeof(MDeformWeight *), "WeightVGProximity Modifier, tdw");
   for (i = 0; i < numVerts; i++) {
-    MDeformWeight *_dw = defvert_find_index(&dvert[i], defgrp_index);
+    MDeformWeight *_dw = BKE_defvert_find_index(&dvert[i], defgrp_index);
     if (_dw) {
       tidx[numIdx] = i;
       tw[numIdx] = _dw->weight;
@@ -557,7 +575,13 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   }
 
   /* Map distances to weights. */
-  do_map(ob, new_w, numIdx, wmd->min_dist, wmd->max_dist, wmd->falloff_type);
+  do_map(ob,
+         new_w,
+         numIdx,
+         wmd->min_dist,
+         wmd->max_dist,
+         wmd->falloff_type,
+         (wmd->proximity_flags & MOD_WVG_PROXIMITY_INVERT_FALLOFF) != 0);
 
   /* Do masking. */
   struct Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
@@ -575,7 +599,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
                    wmd->mask_tex_use_channel,
                    wmd->mask_tex_mapping,
                    wmd->mask_tex_map_obj,
-                   wmd->mask_tex_uvlayer_name);
+                   wmd->mask_tex_map_bone,
+                   wmd->mask_tex_uvlayer_name,
+                   invert_vgroup_mask);
 
   /* Update vgroup. Note we never add nor remove vertices from vgroup here. */
   weightvg_update_vg(dvert, defgrp_index, dw, numIdx, indices, org_w, false, 0.0f, false, 0.0f);

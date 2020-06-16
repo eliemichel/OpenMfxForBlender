@@ -22,9 +22,9 @@
  * \brief Classes to render a stroke with OpenGL
  */
 
+#include <algorithm>
 #include <map>
 #include <string.h>
-#include <algorithm>
 #include <utility>
 #include <vector>
 

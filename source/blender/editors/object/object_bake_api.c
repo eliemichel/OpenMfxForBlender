@@ -23,23 +23,23 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_object_types.h"
-#include "DNA_mesh_types.h"
 #include "DNA_material_types.h"
+#include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
-#include "BLI_listbase.h"
 #include "BLI_fileops.h"
+#include "BLI_listbase.h"
 #include "BLI_path_util.h"
 
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
@@ -57,9 +57,9 @@
 #include "RE_engine.h"
 #include "RE_pipeline.h"
 
-#include "IMB_imbuf_types.h"
-#include "IMB_imbuf.h"
 #include "IMB_colormanagement.h"
+#include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -116,7 +116,7 @@ typedef struct BakeAPIRender {
   short *do_update;
 
   /* for redrawing */
-  ScrArea *sa;
+  ScrArea *area;
 } BakeAPIRender;
 
 /* callbacks */
@@ -143,7 +143,7 @@ static int bake_modal(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
 
   /* running render */
   switch (event->type) {
-    case ESCKEY: {
+    case EVT_ESCKEY: {
       G.is_break = true;
       return OPERATOR_RUNNING_MODAL;
     }
@@ -161,10 +161,10 @@ static int bake_break(void *UNUSED(rjv))
   return 0;
 }
 
-static void bake_update_image(ScrArea *sa, Image *image)
+static void bake_update_image(ScrArea *area, Image *image)
 {
-  if (sa && sa->spacetype == SPACE_IMAGE) { /* in case the user changed while baking */
-    SpaceImage *sima = sa->spacedata.first;
+  if (area && area->spacetype == SPACE_IMAGE) { /* in case the user changed while baking */
+    SpaceImage *sima = area->spacedata.first;
     if (sima) {
       sima->image = image;
     }
@@ -234,7 +234,7 @@ static bool write_internal_bake_pixels(Image *image,
                                   ibuf->x);
     }
     else {
-      IMB_buffer_byte_from_float((unsigned char *)ibuf->rect,
+      IMB_buffer_byte_from_float((uchar *)ibuf->rect,
                                  buffer,
                                  ibuf->channels,
                                  ibuf->dither,
@@ -259,7 +259,7 @@ static bool write_internal_bake_pixels(Image *image,
                                        mask_buffer);
     }
     else {
-      IMB_buffer_byte_from_float_mask((unsigned char *)ibuf->rect,
+      IMB_buffer_byte_from_float_mask((uchar *)ibuf->rect,
                                       buffer,
                                       ibuf->channels,
                                       ibuf->dither,
@@ -359,7 +359,7 @@ static bool write_external_bake_pixels(const char *filepath,
           buffer, ibuf->x, ibuf->y, ibuf->channels, from_colorspace, to_colorspace, false);
     }
 
-    IMB_buffer_byte_from_float((unsigned char *)ibuf->rect,
+    IMB_buffer_byte_from_float((uchar *)ibuf->rect,
                                buffer,
                                ibuf->channels,
                                ibuf->dither,
@@ -446,7 +446,8 @@ static bool bake_object_check(ViewLayer *view_layer, Object *ob, ReportList *rep
   for (i = 0; i < ob->totcol; i++) {
     bNodeTree *ntree = NULL;
     bNode *node = NULL;
-    ED_object_get_active_image(ob, i + 1, &image, NULL, &node, &ntree);
+    const int mat_nr = i + 1;
+    ED_object_get_active_image(ob, mat_nr, &image, NULL, &node, &ntree);
 
     if (image) {
       ImBuf *ibuf;
@@ -481,7 +482,7 @@ static bool bake_object_check(ViewLayer *view_layer, Object *ob, ReportList *rep
       }
     }
     else {
-      Material *mat = give_current_material(ob, i);
+      Material *mat = BKE_object_material_get(ob, mat_nr);
       if (mat != NULL) {
         BKE_reportf(reports,
                     RPT_INFO,
@@ -743,7 +744,7 @@ static int bake(Render *re,
                 const int width,
                 const int height,
                 const char *identifier,
-                ScrArea *sa,
+                ScrArea *area,
                 const char *uv_layer)
 {
   /* We build a depsgraph for the baking,
@@ -1146,7 +1147,7 @@ static int bake(Render *re,
                                         is_noncolor);
 
         /* might be read by UI to set active image for display */
-        bake_update_image(sa, bk_image->image);
+        bake_update_image(area, bk_image->image);
 
         if (!ok) {
           BKE_reportf(reports,
@@ -1283,13 +1284,13 @@ cleanup:
 static void bake_init_api_data(wmOperator *op, bContext *C, BakeAPIRender *bkr)
 {
   bool is_save_internal;
-  bScreen *sc = CTX_wm_screen(C);
+  bScreen *screen = CTX_wm_screen(C);
 
   bkr->ob = CTX_data_active_object(C);
   bkr->main = CTX_data_main(C);
   bkr->view_layer = CTX_data_view_layer(C);
   bkr->scene = CTX_data_scene(C);
-  bkr->sa = sc ? BKE_screen_find_big_area(sc, SPACE_IMAGE, 10) : NULL;
+  bkr->area = screen ? BKE_screen_find_big_area(screen, SPACE_IMAGE, 10) : NULL;
 
   bkr->pass_type = RNA_enum_get(op->ptr, "type");
   bkr->pass_filter = RNA_enum_get(op->ptr, "pass_filter");
@@ -1400,7 +1401,7 @@ static int bake_exec(bContext *C, wmOperator *op)
                   bkr.width,
                   bkr.height,
                   bkr.identifier,
-                  bkr.sa,
+                  bkr.area,
                   bkr.uv_layer);
   }
   else {
@@ -1432,7 +1433,7 @@ static int bake_exec(bContext *C, wmOperator *op)
                     bkr.width,
                     bkr.height,
                     bkr.identifier,
-                    bkr.sa,
+                    bkr.area,
                     bkr.uv_layer);
     }
   }
@@ -1501,7 +1502,7 @@ static void bake_startjob(void *bkv, short *UNUSED(stop), short *do_update, floa
                        bkr->width,
                        bkr->height,
                        bkr->identifier,
-                       bkr->sa,
+                       bkr->area,
                        bkr->uv_layer);
   }
   else {
@@ -1533,7 +1534,7 @@ static void bake_startjob(void *bkv, short *UNUSED(stop), short *do_update, floa
                          bkr->width,
                          bkr->height,
                          bkr->identifier,
-                         bkr->sa,
+                         bkr->area,
                          bkr->uv_layer);
 
       if (bkr->result == OPERATOR_CANCELLED) {

@@ -280,7 +280,7 @@ typedef struct MStringProperty {
  */
 typedef struct MDeformWeight {
   /** The index for the vertex group, must *always* be unique when in an array. */
-  int def_nr;
+  unsigned int def_nr;
   /** Weight between 0.0 and 1.0. */
   float weight;
 } MDeformWeight;
@@ -331,7 +331,7 @@ typedef struct MLoopUV {
 
 /** #MLoopUV.flag */
 enum {
-  MLOOPUV_EDGESEL = (1 << 0),
+  /* MLOOPUV_DEPRECATED = (1 << 0), MLOOPUV_EDGESEL removed */
   MLOOPUV_VERTSEL = (1 << 1),
   MLOOPUV_PINNED = (1 << 2),
 };

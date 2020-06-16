@@ -21,18 +21,18 @@
  * \ingroup spseq
  */
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 
 #include "DNA_space_types.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_sequencer.h"
 #include "ED_markers.h"
-#include "ED_transform.h" /* transform keymap */
 #include "ED_select_utils.h"
+#include "ED_sequencer.h"
+#include "ED_transform.h" /* Transform keymap. */
 
 #include "BKE_sequencer.h"
 
@@ -43,7 +43,7 @@
 void sequencer_operatortypes(void)
 {
   /* sequencer_edit.c */
-  WM_operatortype_append(SEQUENCER_OT_cut);
+  WM_operatortype_append(SEQUENCER_OT_split);
   WM_operatortype_append(SEQUENCER_OT_slip);
   WM_operatortype_append(SEQUENCER_OT_mute);
   WM_operatortype_append(SEQUENCER_OT_unmute);

@@ -60,9 +60,11 @@ enum class OperationCode {
 
   /* Scene related. ------------------------------------------------------- */
   SCENE_EVAL,
+  AUDIO_VOLUME,
 
   /* Object related. ------------------------------------------------------ */
   OBJECT_BASE_FLAGS,
+  DIMENSIONS,
 
   /* Transform. ----------------------------------------------------------- */
   /* Transform entry point. */
@@ -168,6 +170,7 @@ enum class OperationCode {
   /* Shading. ------------------------------------------------------------- */
   SHADING,
   MATERIAL_UPDATE,
+  LIGHT_UPDATE,
   WORLD_UPDATE,
 
   /* Batch caches. -------------------------------------------------------- */
@@ -209,6 +212,10 @@ enum OperationFlag {
   DEPSOP_FLAG_DIRECTLY_MODIFIED = (1 << 1),
   /* Node was updated due to user input. */
   DEPSOP_FLAG_USER_MODIFIED = (1 << 2),
+  /* Node may not be removed, even when it has no evaluation callback and no
+   * outgoing relations. This is for NO-OP nodes that are purely used to indicate a
+   * relation between components/IDs, and not for connecting to an operation. */
+  DEPSOP_FLAG_PINNED = (1 << 3),
 
   /* Set of flags which gets flushed along the relations. */
   DEPSOP_FLAG_FLUSH = (DEPSOP_FLAG_USER_MODIFIED),

@@ -170,7 +170,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         if md.limit_method == 'ANGLE':
             layout.prop(md, "angle_limit")
         elif md.limit_method == 'VGROUP':
-            layout.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+            row = layout.row(align=True)
+            row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+            row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         layout.label(text="Face Strength Mode:")
         layout.row().prop(md, "face_strength_mode", expand=True)
@@ -293,7 +295,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         col = split.column()
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
         col = split.column()
         col.label(text="Control Object:")
         col.prop(md, "object", text="")
@@ -314,7 +318,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "object", text="")
         col = split.column()
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
         layout.label(text="Deformation Axis:")
         layout.row().prop(md, "deform_axis", expand=True)
 
@@ -379,7 +385,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             col.label(text="Space:")
             col.prop(md, "space", text="")
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         col = split.column(align=True)
         col.active = has_texture
@@ -388,6 +396,10 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         if md.texture_coords == 'OBJECT':
             col.label(text="Object:")
             col.prop(md, "texture_coords_object", text="")
+            obj = md.texture_coords_object
+            if obj and obj.type == 'ARMATURE':
+                col.label(text="Bone:")
+                col.prop_search(md, "texture_coords_bone", obj.data, "bones", text="")
         elif md.texture_coords == 'UV' and ob.type == 'MESH':
             col.label(text="UV Map:")
             col.prop_search(md, "uv_layer", ob.data, "uv_layers", text="")
@@ -417,7 +429,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         col = split.column()
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
         sub = col.column()
         sub.active = bool(md.vertex_group)
         sub.prop(md, "protect")
@@ -448,7 +462,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             col.prop_search(md, "subtarget", md.object.data, "bones", text="")
         col = split.column()
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         layout.separator()
 
@@ -530,13 +546,10 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         layout.prop(md, "iterations")
 
-        row = layout.row()
-        row.active = not is_bind
-        row.label(text="Anchors Vertex Group:")
-
-        row = layout.row()
+        row = layout.row(align=True)
         row.enabled = not is_bind
-        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop_search(md, "vertex_group", ob, "vertex_groups")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         layout.separator()
 
@@ -565,7 +578,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "use_normalized")
 
         layout.label(text="Vertex Group:")
-        layout.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = layout.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
     def LATTICE(self, layout, ob, md):
         split = layout.split()
@@ -576,7 +591,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         col = split.column()
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         layout.separator()
         layout.prop(md, "strength", slider=True)
@@ -686,6 +703,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row = layout.row()
         row.prop(md, "use_mirror_u", text="Flip U")
         row.prop(md, "use_mirror_v", text="Flip V")
+        row = layout.row()
+        row.prop(md, "use_mirror_udim", text="Flip UDIM")
 
         col = layout.column(align=True)
 
@@ -700,7 +719,19 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "offset_v")
 
     def MULTIRES(self, layout, ob, md):
-        layout.row().prop(md, "subdivision_type", expand=True)
+        # Changing some of the properties can not be done once there is an
+        # actual displacement stored for this multires modifier. This check
+        # will disallow those properties from change.
+        # This is a bit stupid check but should be sufficient for the usual
+        # multires usage. It might become less strict and only disallow
+        # modifications if there is CD_MDISPS layer, or if there is actual
+        # non-zero displacement but such checks will be too slow to be done
+        # on every redraw.
+        have_displacement = (md.total_levels != 0)
+
+        row = layout.row()
+        row.enabled = not have_displacement
+        row.prop(md, "subdivision_type", expand=True)
 
         split = layout.split()
         col = split.column()
@@ -708,7 +739,10 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         # TODO(sergey): Expose it again after T58473 is solved.
         # col.prop(md, "sculpt_levels", text="Sculpt")
         col.prop(md, "render_levels", text="Render")
-        col.prop(md, "quality")
+
+        row = col.row()
+        row.enabled = not have_displacement
+        row.prop(md, "quality")
 
         col = split.column()
 
@@ -719,7 +753,10 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.operator("object.multires_base_apply", text="Apply Base")
         col.prop(md, "uv_smooth", text="")
         col.prop(md, "show_only_control_edges")
-        col.prop(md, "use_creases")
+
+        row = col.row()
+        row.enabled = not have_displacement
+        row.prop(md, "use_creases")
 
         layout.separator()
 
@@ -759,6 +796,19 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "resolution")
         col.prop(md, "size")
         col.prop(md, "spatial_size")
+
+        layout.separator()
+
+        layout.prop(md, "spectrum")
+
+        if md.spectrum in {'TEXEL_MARSEN_ARSLOE', 'JONSWAP'}:
+            split = layout.split()
+
+            col = split.column()
+            col.prop(md, "sharpen_peak_jonswap")
+
+            col = split.column()
+            col.prop(md, "fetch_jonswap")
 
         layout.label(text="Waves:")
 
@@ -1009,7 +1059,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "factor")
         col.prop(md, "iterations")
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
     def SOFT_BODY(self, layout, _ob, _md):
         layout.label(text="Settings are inside the Physics tab")
@@ -1044,12 +1096,23 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         sub = col.row()
         sub.active = bool(md.vertex_group)
         sub.prop(md, "thickness_vertex_group", text="Factor")
+        if solidify_mode == 'NON_MANIFOLD':
+            sub = col.row()
+            sub.active = bool(md.vertex_group)
+            sub.prop(md, "use_flat_faces")
 
         if solidify_mode == 'EXTRUDE':
             col.label(text="Crease:")
             col.prop(md, "edge_crease_inner", text="Inner")
             col.prop(md, "edge_crease_outer", text="Outer")
             col.prop(md, "edge_crease_rim", text="Rim")
+            col.label(text="Bevel:")
+            col.prop(md, "bevel_convex")
+        else:
+            col.label(text="Bevel:")
+            col.prop(md, "bevel_convex")
+            col.separator()
+            col.prop(md, "nonmanifold_merge_threshold")
 
         col = split.column()
 
@@ -1076,6 +1139,17 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row = row.row(align=True)
         row.active = md.use_rim
         row.prop(md, "material_offset_rim", text="Rim")
+
+        col.separator()
+
+        row = col.row(align=True)
+        row.label(text="Shell Vertex Group:")
+        row = col.row(align=True)
+        row.prop_search(md, "shell_vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.label(text="Rim Vertex Group:")
+        row = col.row(align=True)
+        row.prop_search(md, "rim_vertex_group", ob, "vertex_groups", text="")
 
     def SUBSURF(self, layout, ob, md):
         from bpy import context
@@ -1135,13 +1209,24 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.label(text="Settings are inside the Physics tab")
 
     def SURFACE_DEFORM(self, layout, _ob, md):
-        col = layout.column()
+        split = layout.split()
+        col = split.column()
         col.active = not md.is_bound
 
-        col.prop(md, "target")
-        col.prop(md, "falloff")
+        col.label(text="Target:")
+        col.prop(md, "target", text="")
 
-        layout.separator()
+        col = split.column()
+        col.label(text="Vertex Group:")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", _ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
+
+        split = layout.split()
+        col = split.column()
+        col.prop(md, "falloff")
+        col = split.column()
+        col.prop(md, "strength")
 
         col = layout.column()
 
@@ -1178,12 +1263,30 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.label(text="From:")
         col.prop(md, "object_from", text="")
 
-        col.prop(md, "use_volume_preserve")
-
         col = split.column()
         col.label(text="To:")
         col.prop(md, "object_to", text="")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+
+        split = layout.split()
+        col = split.column()
+        obj = md.object_from
+        if obj and obj.type == 'ARMATURE':
+            col.label(text="Bone:")
+            col.prop_search(md, "bone_from", obj.data, "bones", text="")
+
+        col = split.column()
+        obj = md.object_to
+        if obj and obj.type == 'ARMATURE':
+            col.label(text="Bone:")
+            col.prop_search(md, "bone_to", obj.data, "bones", text="")
+
+        split = layout.split()
+        col = split.column()
+        col.prop(md, "use_volume_preserve")
+        col = split.column()
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         col = layout.column()
 
@@ -1209,6 +1312,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         if md.texture_coords == 'OBJECT':
             layout.prop(md, "texture_coords_object", text="Object")
+            obj = md.texture_coords_object
+            if obj and obj.type == 'ARMATURE':
+                layout.prop_search(md, "texture_coords_bone", obj.data, "bones", text="Bone")
         elif md.texture_coords == 'UV' and ob.type == 'MESH':
             layout.prop_search(md, "uv_layer", ob.data, "uv_layers")
 
@@ -1248,7 +1354,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.separator()
 
         layout.prop(md, "start_position_object")
-        layout.prop_search(md, "vertex_group", ob, "vertex_groups")
+        row = layout.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
         split = layout.split(factor=0.33)
         col = split.column()
         col.label(text="Texture")
@@ -1259,6 +1367,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             layout.prop_search(md, "uv_layer", ob.data, "uv_layers")
         elif md.texture_coords == 'OBJECT':
             layout.prop(md, "texture_coords_object")
+            obj = md.texture_coords_object
+            if obj and obj.type == 'ARMATURE':
+                layout.prop_search(md, "texture_coords_bone", obj.data, "bones")
 
         layout.separator()
 
@@ -1280,17 +1391,22 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "mode")
 
         row = layout.row()
-        row.prop(md, "octree_depth")
-        row.prop(md, "scale")
+        if md.mode == 'VOXEL':
+            layout.prop(md, "voxel_size")
+            layout.prop(md, "adaptivity")
+        else:
+            row.prop(md, "octree_depth")
+            row.prop(md, "scale")
 
-        if md.mode == 'SHARP':
-            layout.prop(md, "sharpness")
+            if md.mode == 'SHARP':
+                layout.prop(md, "sharpness")
+
+            layout.prop(md, "use_remove_disconnected")
+            row = layout.row()
+            row.active = md.use_remove_disconnected
+            row.prop(md, "threshold")
 
         layout.prop(md, "use_smooth_shade")
-        layout.prop(md, "use_remove_disconnected")
-        row = layout.row()
-        row.active = md.use_remove_disconnected
-        row.prop(md, "threshold")
 
     @staticmethod
     def vertex_weight_mask(layout, ob, md):
@@ -1303,7 +1419,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         if not md.mask_texture:
             split = layout.split(factor=0.4)
             split.label(text="Vertex Group Mask:")
-            split.prop_search(md, "mask_vertex_group", ob, "vertex_groups", text="")
+            row = split.row(align=True)
+            row.prop_search(md, "mask_vertex_group", ob, "vertex_groups", text="")
+            row.prop(md, "invert_mask_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         if not md.mask_vertex_group:
             split = layout.split(factor=0.4)
@@ -1322,6 +1440,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
                 if md.mask_tex_mapping == 'OBJECT':
                     layout.prop(md, "mask_tex_map_object", text="Object")
+                    obj = md.mask_tex_map_object
+                    if obj and obj.type == 'ARMATURE':
+                        layout.prop_search(md, "mask_tex_map_bone", obj.data, "bones", text="Bone")
                 elif md.mask_tex_mapping == 'UV' and ob.type == 'MESH':
                     layout.prop_search(md, "mask_tex_uv_layer", ob.data, "uv_layers")
 
@@ -1349,7 +1470,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         layout.separator()
 
-        layout.prop(md, "falloff_type")
+        row = layout.row(align=True)
+        row.prop(md, "falloff_type")
+        row.prop(md, "invert_falloff", text="", icon='ARROW_LEFTRIGHT')
         if md.falloff_type == 'CURVE':
             layout.template_curve_mapping(md, "map_curve")
 
@@ -1407,7 +1530,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "max_dist")
 
         layout.separator()
-        layout.prop(md, "falloff_type")
+        row = layout.row(align=True)
+        row.prop(md, "falloff_type")
+        row.prop(md, "invert_falloff", text="", icon='ARROW_LEFTRIGHT')
 
         # Common mask options
         layout.separator()
@@ -1488,10 +1613,25 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             col.prop_search(md, "bone_to", obj.data, "bones", text="")
 
         split = layout.split()
+        col = split.column()
+        col.label(text="Offset:")
+        col.prop(md, "offset", text="")
+
+        col = split.column()
+        col.label(text="Scale:")
+        col.prop(md, "scale", text="")
+
+        col = split.column()
+        col.label(text="Rotate:")
+        col.prop(md, "rotation", text="")
+
+        split = layout.split()
 
         col = split.column()
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         col = split.column()
         col.label(text="UV Map:")
@@ -1532,7 +1672,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
     def WELD(self, layout, ob, md):
         layout.prop(md, "merge_threshold", text="Distance")
         layout.prop(md, "max_interactions")
-        layout.prop_search(md, "vertex_group", ob, "vertex_groups")
+        row = layout.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
     def DATA_TRANSFER(self, layout, ob, md):
         row = layout.row(align=True)
@@ -1687,7 +1829,7 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         layout.prop(md, "factor", text="Factor")
         layout.prop(md, "iterations")
-
+        layout.prop(md, "scale")
         row = layout.row()
         row.prop(md, "smooth_type")
 
@@ -1756,132 +1898,102 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
     # ...to avoid lengthy if statements
     # so each type must have a function here.
 
-    def GP_NOISE(self, layout, ob, md):
+    def gpencil_masking(self, layout, ob, md, use_vertex, use_curve=False):
         gpd = ob.data
+        layout.separator()
+        layout.label(text="Influence Filters:")
+
+        split = layout.split(factor=0.25)
+
+        col1 = split.column()
+
+        col1.label(text="Layer:")
+        col1.label(text="Material:")
+        if use_vertex:
+            col1.label(text="Vertex Group:")
+
+        col2 = split.column()
+
+        split = col2.split(factor=0.6)
+        row = split.row(align=True)
+        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
+        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
+
+        row = split.row(align=True)
+        row.prop(md, "layer_pass", text="Pass")
+        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+
+        split = col2.split(factor=0.6)
+
+        row = split.row(align=True)
+        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
+        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
+
+        row = split.row(align=True)
+        row.prop(md, "pass_index", text="Pass")
+        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
+
+        if use_vertex:
+            row = col2.row(align=True)
+            row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+            row.prop(md, "invert_vertex", text="", icon='ARROW_LEFTRIGHT')
+
+        if use_curve:
+            col = layout.column()
+            col.separator()
+            col.prop(md, "use_custom_curve")
+            if md.use_custom_curve:
+                col.template_curve_mapping(md, "curve")
+
+    def GP_NOISE(self, layout, ob, md):
         split = layout.split()
 
         col = split.column()
         row = col.row(align=True)
-        row.prop(md, "factor")
+        row.prop(md, "factor", text="Position")
+        row = col.row(align=True)
+        row.prop(md, "factor_strength", text="Strength")
+        row = col.row(align=True)
+        row.prop(md, "factor_thickness", text="Thickness")
+        row = col.row(align=True)
+        row.prop(md, "factor_uvs", text="UV")
+
+        col.separator()
+        row = col.row(align=True)
         row.prop(md, "random", text="", icon='TIME', toggle=True)
-        row = col.row()
-        row.enabled = md.random
-        row.prop(md, "step")
-        row = col.row()
-        row.enabled = md.random
-        row.prop(md, "seed")
-        col.prop(md, "full_stroke")
-        col.prop(md, "move_extreme")
 
-        row = layout.row(align=True)
-        row.label(text="Affect:")
-        row = layout.row(align=True)
-        row.prop(md, "use_edit_position", text="Position", icon='MESH_DATA', toggle=True)
-        row.prop(md, "use_edit_strength", text="Strength", icon='COLOR', toggle=True)
-        row.prop(md, "use_edit_thickness", text="Thickness", icon='LINE_DATA', toggle=True)
-        row.prop(md, "use_edit_uv", text="UV", icon='MOD_UVPROJECT', toggle=True)
+        subrow = row.row(align=True)
+        subrow.enabled = md.random
+        subrow.prop(md, "step")
+        subrow.prop(md, "seed")
 
-        col = layout.column()
         col.separator()
-        col.label(text="Vertex Group:")
-        row = col.row(align=True)
-        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
-        row.prop(md, "invert_vertex", text="", icon='ARROW_LEFTRIGHT')
+        col.prop(md, "noise_scale")
 
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, True, True)
 
     def GP_SMOOTH(self, layout, ob, md):
-        gpd = ob.data
         col = layout.column()
         col.prop(md, "factor")
-        col.prop(md, "step")
+        col.prop(md, "step", text="Repeat")
 
         col.label(text="Affect:")
         row = col.row(align=True)
-        row.prop(md, "use_edit_position", text="Position", icon='MESH_DATA', toggle=True)
-        row.prop(md, "use_edit_strength", text="Strength", icon='COLOR', toggle=True)
-        row.prop(md, "use_edit_thickness", text="Thickness", icon='LINE_DATA', toggle=True)
-        row.prop(md, "use_edit_uv", text="UV", icon='MOD_UVPROJECT', toggle=True)
+        row.prop(md, "use_edit_position", text="Position", toggle=True)
+        row.prop(md, "use_edit_strength", text="Strength", toggle=True)
+        row.prop(md, "use_edit_thickness", text="Thickness", toggle=True)
+        row.prop(md, "use_edit_uv", text="UV", toggle=True)
 
-        col.separator()
-        col.label(text="Vertex Group:")
-        row = col.row(align=True)
-        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
-        row.prop(md, "invert_vertex", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, True, True)
 
     def GP_SUBDIV(self, layout, ob, md):
-        gpd = ob.data
+        layout.row().prop(md, "subdivision_type", expand=True)
         split = layout.split()
-
         col = split.column()
         row = col.row(align=True)
-        row.prop(md, "level")
-        row.prop(md, "simple", text="", icon='PARTICLE_POINT')
+        row.prop(md, "level", text="Subdivisions")
 
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Material:")
-        row = col.row(align=True)
-
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, False)
 
     def GP_SIMPLIFY(self, layout, ob, md):
         gpd = ob.data
@@ -1903,108 +2015,49 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
         elif md.mode == 'MERGE':
             col.prop(md, "distance")
 
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, False)
 
     def GP_THICK(self, layout, ob, md):
-        gpd = ob.data
-        split = layout.split()
-
-        col = split.column()
-        row = col.row(align=True)
-        row.prop(md, "thickness", text="Thickness Factor")
+        col = layout.column()
 
         col.prop(md, "normalize_thickness")
 
-        if not md.normalize_thickness:
-            split = layout.split()
-            col = split.column()
-            col.prop(md, "use_custom_curve")
+        if md.normalize_thickness:
+            col.prop(md, "thickness")
+        else:
+            col.prop(md, "thickness_factor")
 
-            if md.use_custom_curve:
-                col.template_curve_mapping(md, "curve")
-
-        col = layout.column()
-        col.separator()
-        col.label(text="Vertex Group:")
-        row = col.row(align=True)
-        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
-        row.prop(md, "invert_vertex", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, True, True)
 
     def GP_TINT(self, layout, ob, md):
-        gpd = ob.data
-        split = layout.split()
+        layout.row().prop(md, "tint_type", expand=True)
 
-        col = split.column()
-        col.prop(md, "color")
-        col.prop(md, "factor")
+        if md.tint_type == 'UNIFORM':
+            col = layout.column()
+            col.prop(md, "color")
 
-        row = layout.row()
-        row.prop(md, "create_materials")
-        row.prop(md, "modify_color")
+            col.separator()
+            col.prop(md, "factor")
 
-        col = layout.column()
+        if md.tint_type == 'GRADIENT':
+            col = layout.column()
+            col.label(text="Colors:")
+            col.template_color_ramp(md, "colors")
+
+            col.separator()
+
+            col.label(text="Object:")
+            col.prop(md, "object", text="")
+
+            col.separator()
+            row = col.row(align=True)
+            row.prop(md, "radius")
+            row.prop(md, "factor")
+
         col.separator()
+        col.prop(md, "vertex_mode")
 
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, True, True)
 
     def GP_TIME(self, layout, ob, md):
         gpd = ob.data
@@ -2050,7 +2103,6 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
         row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
 
     def GP_COLOR(self, layout, ob, md):
-        gpd = ob.data
         split = layout.split()
 
         col = split.column()
@@ -2060,134 +2112,71 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "value", text="V", slider=True)
 
         row = layout.row()
-        row.prop(md, "create_materials")
         row.prop(md, "modify_color")
 
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, False, True)
 
     def GP_OPACITY(self, layout, ob, md):
-        gpd = ob.data
         split = layout.split()
 
         col = split.column()
-        col.label(text="Opacity:")
-        col.prop(md, "factor")
+        col.prop(md, "modify_color")
 
-        row = layout.row()
-        row.prop(md, "opacity_mode", text="Mode")
-
-        if md.opacity_mode == 'MATERIAL':
-            row = layout.row()
-            row.prop(md, "create_materials")
-            row.prop(md, "modify_color", text="Change")
+        if md.modify_color == 'HARDNESS':
+            col.prop(md, "hardness")
+            show = False
         else:
-            col = layout.column()
-            col.separator()
-            col.label(text="Vertex Group:")
-            row = col.row(align=True)
-            row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
-            row.prop(md, "invert_vertex", text="", icon='ARROW_LEFTRIGHT')
+            col.prop(md, "normalize_opacity")
+            if md.normalize_opacity is True:
+                text="Strength"
+            else:
+                text="Opacity Factor"
 
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+            col.prop(md, "factor", text=text)
+            show = True
+        self.gpencil_masking(layout, ob, md, show, show)
 
     def GP_ARRAY(self, layout, ob, md):
-        gpd = ob.data
-
         col = layout.column()
         col.prop(md, "count")
 
         split = layout.split()
         col = split.column()
-        col.label(text="Offset:")
-        col.prop(md, "offset", text="")
-        col.prop(md, "offset_object", text="Object")
+        col.prop(md, "use_constant_offset", text="Constant Offset")
+        subcol = col.column()
+        subcol.enabled = md.use_constant_offset
+        subcol.prop(md, "constant_offset", text="")
+
+        col.prop(md, "use_object_offset")
+        subcol = col.column()
+        subcol.enabled = md.use_object_offset
+        subcol.prop(md, "offset_object", text="")
 
         col = split.column()
-        col.label(text="Shift:")
-        col.prop(md, "shift", text="")
+        col.prop(md, "use_relative_offset", text="Relative Offset")
+        subcol = col.column()
+        subcol.enabled = md.use_relative_offset
+        subcol.prop(md, "relative_offset", text="")
 
         split = layout.split()
         col = split.column()
-        col.label(text="Rotation:")
-        col.prop(md, "rotation", text="")
-        col.separator()
-        row = col.row(align=True)
-        row.prop(md, "random_rot", text="", icon='TIME', toggle=True)
-        row.prop(md, "rot_factor", text="")
+        col.label(text="Random Offset:")
+        col.prop(md, "random_offset", text="")
 
         col = split.column()
-        col.label(text="Scale:")
-        col.prop(md, "scale", text="")
-        col.separator()
-        row = col.row(align=True)
-        row.prop(md, "random_scale", text="", icon='TIME', toggle=True)
-        row.prop(md, "scale_factor", text="")
+        col.label(text="Random Rotation:")
+        col.prop(md, "random_rotation", text="")
+
+        col = split.column()
+        col.label(text="Random Scale:")
+        col.prop(md, "random_scale", text="")
 
         col = layout.column()
-        col.prop(md, "replace_material", text="Material")
-        col.prop(md, "keep_on_top", text="Keep original stroke on top")
-
-        col = layout.column()
+        col.prop(md, "seed")
         col.separator()
+        col.prop(md, "replace_material", text="Material Override")
 
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, False)
 
     def GP_BUILD(self, layout, ob, md):
         gpd = ob.data
@@ -2214,18 +2203,26 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
         sub.prop(md, "frame_start", text="Start")
         sub.prop(md, "frame_end", text="End")
 
-        col = layout.column()
-        col.separator()
-        col.label(text="Layer:")
-        row = col.row(align=True)
+        layout.label(text="Influence Filters:")
+
+        split = layout.split(factor=0.25)
+
+        col1 = split.column()
+
+        col1.label(text="Layer:")
+
+        col2 = split.column()
+
+        split = col2.split(factor=0.6)
+        row = split.row(align=True)
         row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
         row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
+
+        row = split.row(align=True)
         row.prop(md, "layer_pass", text="Pass")
         row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
 
     def GP_LATTICE(self, layout, ob, md):
-        gpd = ob.data
         split = layout.split()
 
         col = split.column()
@@ -2234,70 +2231,20 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
 
         layout.prop(md, "strength", slider=True)
 
-        col = layout.column()
-        col.separator()
-        col.label(text="Vertex Group:")
-        row = col.row(align=True)
-        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
-        row.prop(md, "invert_vertex", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, True)
 
     def GP_MIRROR(self, layout, ob, md):
-        gpd = ob.data
-
         row = layout.row(align=True)
         row.prop(md, "x_axis")
         row.prop(md, "y_axis")
         row.prop(md, "z_axis")
 
-        layout.label(text="Object:")
+        layout.label(text="Mirror Object:")
         layout.prop(md, "object", text="")
 
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, False)
 
     def GP_HOOK(self, layout, ob, md):
-        gpd = ob.data
         split = layout.split()
 
         col = split.column()
@@ -2327,71 +2274,16 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
         col = split.column()
         col.prop(md, "use_falloff_uniform")
 
-        col = layout.column()
-        col.separator()
-        col.label(text="Vertex Group:")
-        row = col.row(align=True)
-        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
-        row.prop(md, "invert_vertex", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, True)
 
     def GP_OFFSET(self, layout, ob, md):
-        gpd = ob.data
-        col = layout.column()
+        split = layout.split()
 
-        col.prop(md, "location")
-        col.prop(md, "scale")
-        col.prop(md, "rotation")
+        split.column().prop(md, "location")
+        split.column().prop(md, "rotation")
+        split.column().prop(md, "scale")
 
-        col = layout.column()
-        col.separator()
-        col.label(text="Vertex Group:")
-        row = col.row(align=True)
-        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
-        row.prop(md, "invert_vertex", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, True)
 
     def GP_ARMATURE(self, layout, ob, md):
         split = layout.split()
@@ -2417,50 +2309,23 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
         sub.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
     def GP_MULTIPLY(self, layout, ob, md):
-        gpd = ob.data
         col = layout.column()
 
-        col.prop(md, "duplications")
+        col.prop(md, "duplicates")
         subcol = col.column()
-        subcol.enabled = md.duplications > 0
+        subcol.enabled = md.duplicates > 0
         subcol.prop(md, "distance")
         subcol.prop(md, "offset", slider=True)
 
         subcol.separator()
 
-        subcol.prop(md, "enable_fading")
-        if md.enable_fading:
+        subcol.prop(md, "use_fade")
+        if md.use_fade:
             subcol.prop(md, "fading_center")
             subcol.prop(md, "fading_thickness", slider=True)
             subcol.prop(md, "fading_opacity", slider=True)
 
-        subcol.separator()
-
-        col.prop(md, "enable_angle_splitting")
-        if md.enable_angle_splitting:
-            col.prop(md, "split_angle")
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Material:")
-        row = col.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
-        row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "pass_index", text="Pass")
-        row.prop(md, "invert_material_pass", text="", icon='ARROW_LEFTRIGHT')
-
-        col = layout.column()
-        col.separator()
-
-        col.label(text="Layer:")
-        row = col.row(align=True)
-        row.prop_search(md, "layer", gpd, "layers", text="", icon='GREASEPENCIL')
-        row.prop(md, "invert_layers", text="", icon='ARROW_LEFTRIGHT')
-        row = layout.row(align=True)
-        row.prop(md, "layer_pass", text="Pass")
-        row.prop(md, "invert_layer_pass", text="", icon='ARROW_LEFTRIGHT')
+        self.gpencil_masking(layout, ob, md, False)
 
 
 classes = (
@@ -2470,5 +2335,6 @@ classes = (
 
 if __name__ == "__main__":  # only for live edit.
     from bpy.utils import register_class
+
     for cls in classes:
         register_class(cls)

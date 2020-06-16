@@ -23,8 +23,8 @@
  * \ingroup bke
  */
 
-#include <math.h>
 #include <float.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -33,6 +33,10 @@
 #include "DNA_cloth_types.h"
 
 #include "BLI_kdopbvh.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Collection;
 struct CollisionModifierData;
@@ -170,5 +174,9 @@ void BKE_collider_cache_free(struct ListBase **colliders);
 /////////////////////////////////////////////////
 
 /////////////////////////////////////////////////
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

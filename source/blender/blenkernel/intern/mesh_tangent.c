@@ -30,14 +30,14 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
 #include "BLI_task.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_customdata.h"
 #include "BKE_mesh.h"
-#include "BKE_mesh_tangent.h"
 #include "BKE_mesh_runtime.h"
+#include "BKE_mesh_tangent.h"
 #include "BKE_report.h"
 
 #include "BLI_strict_flags.h"
@@ -660,7 +660,7 @@ void BKE_mesh_calc_loop_tangent_ex(const MVert *mvert,
     if (looptri_len != 0) {
       TaskScheduler *scheduler = BLI_task_scheduler_get();
       TaskPool *task_pool;
-      task_pool = BLI_task_pool_create(scheduler, NULL);
+      task_pool = BLI_task_pool_create(scheduler, NULL, TASK_PRIORITY_LOW);
 
       tangent_mask_curr = 0;
       /* Calculate tangent layers */
@@ -707,8 +707,7 @@ void BKE_mesh_calc_loop_tangent_ex(const MVert *mvert,
         }
 
         mesh2tangent->tangent = loopdata_out->layers[index].data;
-        BLI_task_pool_push(
-            task_pool, DM_calc_loop_tangents_thread, mesh2tangent, false, TASK_PRIORITY_LOW);
+        BLI_task_pool_push(task_pool, DM_calc_loop_tangents_thread, mesh2tangent, false, NULL);
       }
 
       BLI_assert(tangent_mask_curr == tangent_mask);

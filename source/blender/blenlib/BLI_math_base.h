@@ -27,13 +27,14 @@
  * \ingroup bli
  */
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(_USE_MATH_DEFINES)
 #  define _USE_MATH_DEFINES
 #endif
 
-#include <math.h>
 #include "BLI_assert.h"
 #include "BLI_math_inline.h"
+#include "BLI_sys_types.h"
+#include <math.h>
 
 #ifndef M_PI
 #  define M_PI 3.14159265358979323846 /* pi */
@@ -114,6 +115,23 @@ MINLINE float sasqrt(float fac);
 MINLINE float interpf(float a, float b, float t);
 MINLINE double interpd(double a, double b, double t);
 
+/* NOTE: Compilers will upcast all types smaller than int to int when performing arithmetic
+ * operation. */
+MINLINE int square_s(short a);
+MINLINE int square_uchar(unsigned char a);
+MINLINE int cube_s(short a);
+MINLINE int cube_uchar(unsigned char a);
+
+MINLINE int square_i(int a);
+MINLINE unsigned int square_uint(unsigned int a);
+MINLINE float square_f(float a);
+MINLINE double square_d(double a);
+
+MINLINE int cube_i(int a);
+MINLINE unsigned int cube_uint(unsigned int a);
+MINLINE float cube_f(float a);
+MINLINE double cube_d(double a);
+
 MINLINE float min_ff(float a, float b);
 MINLINE float max_ff(float a, float b);
 MINLINE float min_fff(float a, float b, float c);
@@ -133,6 +151,9 @@ MINLINE int max_iiii(int a, int b, int c, int d);
 
 MINLINE size_t min_zz(size_t a, size_t b);
 MINLINE size_t max_zz(size_t a, size_t b);
+
+MINLINE char min_cc(char a, char b);
+MINLINE char max_cc(char a, char b);
 
 MINLINE int clamp_i(int value, int min, int max);
 MINLINE float clamp_f(float value, float min, float max);

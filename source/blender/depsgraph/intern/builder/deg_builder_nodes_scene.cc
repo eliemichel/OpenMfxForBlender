@@ -46,7 +46,7 @@ void DepsgraphNodeBuilder::build_scene_render(Scene *scene, ViewLayer *view_laye
     build_scene_sequencer(scene);
     build_scene_speakers(scene, view_layer);
   }
-  if (scene->camera != NULL) {
+  if (scene->camera != nullptr) {
     build_object(-1, scene->camera, DEG_ID_LINKED_DIRECTLY, true);
   }
 }
@@ -57,6 +57,7 @@ void DepsgraphNodeBuilder::build_scene_parameters(Scene *scene)
     return;
   }
   build_parameters(&scene->id);
+  build_idproperties(scene->id.properties);
   add_operation_node(&scene->id, NodeType::PARAMETERS, OperationCode::SCENE_EVAL);
   /* NOTE: This is a bit overkill and can potentially pull a bit too much into the graph, but:
    *
@@ -76,7 +77,7 @@ void DepsgraphNodeBuilder::build_scene_compositor(Scene *scene)
   if (built_map_.checkIsBuiltAndTag(scene, BuilderMap::TAG_SCENE_COMPOSITOR)) {
     return;
   }
-  if (scene->nodetree == NULL) {
+  if (scene->nodetree == nullptr) {
     return;
   }
   build_nodetree(scene->nodetree);

@@ -86,10 +86,6 @@ if(WITH_IMAGE_OPENEXR)
   add_definitions(-DWITH_OPENEXR)
 endif()
 
-if(WITH_MOD_FLUID)
-  add_definitions(-DWITH_FLUID)
-endif()
-
 if(WITH_FREESTYLE)
   list(APPEND INC
     ../freestyle
@@ -111,5 +107,7 @@ if(APPLE)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mfpmath=sse")
   endif()
 endif()
+
+add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib_nolist(bf_render "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

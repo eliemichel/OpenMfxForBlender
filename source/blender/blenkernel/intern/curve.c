@@ -22,37 +22,39 @@
  */
 
 #include <math.h>  // floor
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_math.h"
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
 #include "BLI_linklist.h"
+#include "BLI_math.h"
+#include "BLI_utildefines.h"
+
+#include "BLT_translation.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_curve_types.h"
-#include "DNA_material_types.h"
 #include "DNA_defaults.h"
+#include "DNA_material_types.h"
 
 /* for dereferencing pointers */
 #include "DNA_key_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_vfont_types.h"
-#include "DNA_object_types.h"
 
-#include "BKE_animsys.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
 #include "BKE_font.h"
+#include "BKE_idtype.h"
 #include "BKE_key.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
-#include "BKE_object.h"
 #include "BKE_material.h"
+#include "BKE_object.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -63,6 +65,73 @@
 
 /* local */
 static CLG_LogRef LOG = {"bke.curve"};
+
+static void curve_init_data(ID *id)
+{
+  Curve *curve = (Curve *)id;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(curve, id));
+
+  MEMCPY_STRUCT_AFTER(curve, DNA_struct_default_get(Curve), id);
+}
+
+static void curve_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const int flag)
+{
+  Curve *curve_dst = (Curve *)id_dst;
+  const Curve *curve_src = (const Curve *)id_src;
+
+  BLI_listbase_clear(&curve_dst->nurb);
+  BKE_nurbList_duplicate(&(curve_dst->nurb), &(curve_src->nurb));
+
+  curve_dst->mat = MEM_dupallocN(curve_src->mat);
+
+  curve_dst->str = MEM_dupallocN(curve_src->str);
+  curve_dst->strinfo = MEM_dupallocN(curve_src->strinfo);
+  curve_dst->tb = MEM_dupallocN(curve_src->tb);
+  curve_dst->batch_cache = NULL;
+
+  if (curve_src->key && (flag & LIB_ID_COPY_SHAPEKEY)) {
+    BKE_id_copy_ex(bmain, &curve_src->key->id, (ID **)&curve_dst->key, flag);
+    /* XXX This is not nice, we need to make BKE_id_copy_ex fully re-entrant... */
+    curve_dst->key->from = &curve_dst->id;
+  }
+
+  curve_dst->editnurb = NULL;
+  curve_dst->editfont = NULL;
+}
+
+static void curve_free_data(ID *id)
+{
+  Curve *curve = (Curve *)id;
+
+  BKE_curve_batch_cache_free(curve);
+
+  BKE_nurbList_free(&curve->nurb);
+  BKE_curve_editfont_free(curve);
+
+  BKE_curve_editNurb_free(curve);
+
+  MEM_SAFE_FREE(curve->mat);
+  MEM_SAFE_FREE(curve->str);
+  MEM_SAFE_FREE(curve->strinfo);
+  MEM_SAFE_FREE(curve->tb);
+}
+
+IDTypeInfo IDType_ID_CU = {
+    .id_code = ID_CU,
+    .id_filter = FILTER_ID_CU,
+    .main_listbase_index = INDEX_ID_CU,
+    .struct_size = sizeof(Curve),
+    .name = "Curve",
+    .name_plural = "curves",
+    .translation_context = BLT_I18NCONTEXT_ID_CURVE,
+    .flags = 0,
+
+    .init_data = curve_init_data,
+    .copy_data = curve_copy_data,
+    .free_data = curve_free_data,
+    .make_local = NULL,
+};
 
 static int cu_isectLL(const float v1[3],
                       const float v2[3],
@@ -127,29 +196,9 @@ void BKE_curve_editNurb_free(Curve *cu)
   }
 }
 
-/** Free (or release) any data used by this curve (does not free the curve itself). */
-void BKE_curve_free(Curve *cu)
-{
-  BKE_animdata_free((ID *)cu, false);
-
-  BKE_curve_batch_cache_free(cu);
-
-  BKE_nurbList_free(&cu->nurb);
-  BKE_curve_editfont_free(cu);
-
-  BKE_curve_editNurb_free(cu);
-
-  MEM_SAFE_FREE(cu->mat);
-  MEM_SAFE_FREE(cu->str);
-  MEM_SAFE_FREE(cu->strinfo);
-  MEM_SAFE_FREE(cu->tb);
-}
-
 void BKE_curve_init(Curve *cu, const short curve_type)
 {
-  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(cu, id));
-
-  MEMCPY_STRUCT_AFTER(cu, DNA_struct_default_get(Curve), id);
+  curve_init_data(&cu->id);
 
   cu->type = curve_type;
 
@@ -181,46 +230,11 @@ Curve *BKE_curve_add(Main *bmain, const char *name, int type)
   return cu;
 }
 
-/**
- * Only copy internal data of Curve ID from source
- * to already allocated/initialized destination.
- * You probably never want to use that directly,
- * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
- *
- * WARNING! This function will not handle ID user count!
- *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
- */
-void BKE_curve_copy_data(Main *bmain, Curve *cu_dst, const Curve *cu_src, const int flag)
-{
-  BLI_listbase_clear(&cu_dst->nurb);
-  BKE_nurbList_duplicate(&(cu_dst->nurb), &(cu_src->nurb));
-
-  cu_dst->mat = MEM_dupallocN(cu_src->mat);
-
-  cu_dst->str = MEM_dupallocN(cu_src->str);
-  cu_dst->strinfo = MEM_dupallocN(cu_src->strinfo);
-  cu_dst->tb = MEM_dupallocN(cu_src->tb);
-  cu_dst->batch_cache = NULL;
-
-  if (cu_src->key && (flag & LIB_ID_COPY_SHAPEKEY)) {
-    BKE_id_copy_ex(bmain, &cu_src->key->id, (ID **)&cu_dst->key, flag);
-  }
-
-  cu_dst->editnurb = NULL;
-  cu_dst->editfont = NULL;
-}
-
 Curve *BKE_curve_copy(Main *bmain, const Curve *cu)
 {
   Curve *cu_copy;
   BKE_id_copy(bmain, &cu->id, (ID **)&cu_copy);
   return cu_copy;
-}
-
-void BKE_curve_make_local(Main *bmain, Curve *cu, const bool lib_local)
-{
-  BKE_id_make_local_generic(bmain, &cu->id, true, lib_local);
 }
 
 /* Get list of nurbs from editnurbs structure */
@@ -1805,91 +1819,91 @@ void BKE_curve_bevel_make(Object *ob, ListBase *disp)
     }
   }
   else {
-    short dnr;
+    /* The general case for nonzero extrusion or an incomplete loop. */
+    dl = MEM_callocN(sizeof(DispList), "makebevelcurve");
+    if ((cu->flag & (CU_FRONT | CU_BACK)) == 0) {
+      /* The full loop. */
+      nr = 4 * cu->bevresol + 6;
+      dl->flag = DL_FRONT_CURVE | DL_BACK_CURVE;
+    }
+    else if ((cu->flag & CU_FRONT) && (cu->flag & CU_BACK)) {
+      /* Half the loop. */
+      nr = 2 * (cu->bevresol + 1) + ((cu->ext1 == 0.0f) ? 1 : 2);
+      dl->flag = DL_FRONT_CURVE | DL_BACK_CURVE;
+    }
+    else {
+      /* One quarter of the loop (just front or back). */
+      nr = (cu->ext1 == 0.0f) ? cu->bevresol + 2 : cu->bevresol + 3;
+      dl->flag = (cu->flag & CU_FRONT) ? DL_FRONT_CURVE : DL_BACK_CURVE;
+    }
 
-    /* bevel now in three parts, for proper vertex normals */
-    /* part 1, back */
+    dl->verts = MEM_malloc_arrayN(nr, sizeof(float[3]), "makebevelcurve");
+    BLI_addtail(disp, dl);
+    /* Use a different type depending on whether the loop is complete or not. */
+    dl->type = ((cu->flag & (CU_FRONT | CU_BACK)) == 0) ? DL_POLY : DL_SEGM;
+    dl->parts = 1;
+    dl->nr = nr;
 
-    if ((cu->flag & CU_BACK) || !(cu->flag & CU_FRONT)) {
-      dnr = nr = 2 + cu->bevresol;
-      if ((cu->flag & (CU_FRONT | CU_BACK)) == 0) {
-        nr = 3 + 2 * cu->bevresol;
-      }
-      dl = MEM_callocN(sizeof(DispList), "makebevelcurve p1");
-      dl->verts = MEM_malloc_arrayN(nr, sizeof(float[3]), "makebevelcurve p1");
-      BLI_addtail(disp, dl);
-      dl->type = DL_SEGM;
-      dl->parts = 1;
-      dl->flag = DL_BACK_CURVE;
-      dl->nr = nr;
+    fp = dl->verts;
+    dangle = (float)M_PI_2 / (cu->bevresol + 1);
+    angle = 0.0;
 
-      /* half a circle */
-      fp = dl->verts;
-      dangle = ((float)M_PI_2 / (dnr - 1));
-      angle = -(nr - 1) * dangle;
-
-      for (a = 0; a < nr; a++) {
+    /* Build the back section. */
+    if (cu->flag & CU_BACK || !(cu->flag & CU_FRONT)) {
+      angle = (float)M_PI_2 * 3.0f;
+      for (a = 0; a < cu->bevresol + 2; a++) {
         fp[0] = 0.0;
         fp[1] = (float)(cosf(angle) * (cu->ext2));
         fp[2] = (float)(sinf(angle) * (cu->ext2)) - cu->ext1;
         angle += dangle;
         fp += 3;
       }
-    }
-
-    /* part 2, sidefaces */
-    if (cu->ext1 != 0.0f) {
-      nr = 2;
-
-      dl = MEM_callocN(sizeof(DispList), "makebevelcurve p2");
-      dl->verts = MEM_malloc_arrayN(nr, sizeof(float[3]), "makebevelcurve p2");
-      BLI_addtail(disp, dl);
-      dl->type = DL_SEGM;
-      dl->parts = 1;
-      dl->nr = nr;
-
-      fp = dl->verts;
-      fp[1] = cu->ext2;
-      fp[2] = -cu->ext1;
-      fp[4] = cu->ext2;
-      fp[5] = cu->ext1;
-
-      if ((cu->flag & (CU_FRONT | CU_BACK)) == 0) {
-        dl = MEM_dupallocN(dl);
-        dl->verts = MEM_dupallocN(dl->verts);
-        BLI_addtail(disp, dl);
-
-        fp = dl->verts;
-        fp[1] = -fp[1];
-        fp[2] = -fp[2];
-        fp[4] = -fp[4];
-        fp[5] = -fp[5];
+      if ((cu->ext1 != 0.0f) && !(cu->flag & CU_FRONT) && (cu->flag & CU_BACK)) {
+        /* Add the extrusion if we're only building the back. */
+        fp[0] = 0.0;
+        fp[1] = cu->ext2;
+        fp[2] = cu->ext1;
       }
     }
 
-    /* part 3, front */
-    if ((cu->flag & CU_FRONT) || !(cu->flag & CU_BACK)) {
-      dnr = nr = 2 + cu->bevresol;
-      if ((cu->flag & (CU_FRONT | CU_BACK)) == 0) {
-        nr = 3 + 2 * cu->bevresol;
+    /* Build the front section. */
+    if (cu->flag & CU_FRONT || !(cu->flag & CU_BACK)) {
+      if ((cu->ext1 != 0.0f) && !(cu->flag & CU_BACK) && (cu->flag & CU_FRONT)) {
+        /* Add the extrusion if we're only building the back. */
+        fp[0] = 0.0;
+        fp[1] = cu->ext2;
+        fp[2] = -cu->ext1;
+        fp += 3;
       }
-      dl = MEM_callocN(sizeof(DispList), "makebevelcurve p3");
-      dl->verts = MEM_malloc_arrayN(nr, sizeof(float[3]), "makebevelcurve p3");
-      BLI_addtail(disp, dl);
-      dl->type = DL_SEGM;
-      dl->flag = DL_FRONT_CURVE;
-      dl->parts = 1;
-      dl->nr = nr;
-
-      /* half a circle */
-      fp = dl->verts;
-      angle = 0.0;
-      dangle = ((float)M_PI_2 / (dnr - 1));
-
-      for (a = 0; a < nr; a++) {
+      /* Don't duplicate the last back vertex. */
+      angle = (cu->ext1 == 0.0f && (cu->flag & CU_BACK)) ? dangle : 0;
+      int front_len = (cu->ext1 == 0.0f && ((cu->flag & CU_BACK) || !(cu->flag & CU_FRONT))) ?
+                          cu->bevresol + 1 :
+                          cu->bevresol + 2;
+      for (a = 0; a < front_len; a++) {
         fp[0] = 0.0;
         fp[1] = (float)(cosf(angle) * (cu->ext2));
         fp[2] = (float)(sinf(angle) * (cu->ext2)) + cu->ext1;
+        angle += dangle;
+        fp += 3;
+      }
+    }
+
+    /* Build the other half only if we're building the full loop. */
+    if (!(cu->flag & (CU_FRONT | CU_BACK))) {
+      for (a = 0; a < cu->bevresol + 1; a++) {
+        fp[0] = 0.0;
+        fp[1] = (float)(cosf(angle) * (cu->ext2));
+        fp[2] = (float)(sinf(angle) * (cu->ext2)) + cu->ext1;
+        angle += dangle;
+        fp += 3;
+      }
+
+      angle = (float)M_PI;
+      for (a = 0; a < cu->bevresol + 1; a++) {
+        fp[0] = 0.0;
+        fp[1] = (float)(cosf(angle) * (cu->ext2));
+        fp[2] = (float)(sinf(angle) * (cu->ext2)) - cu->ext1;
         angle += dangle;
         fp += 3;
       }
@@ -3032,7 +3046,7 @@ void BKE_curve_bevelList_make(Object *ob, ListBase *nurbs, bool for_render)
     blnext = bl->next;
     if (bl->nr && bl->dupe_nr) {
       nr = bl->nr - bl->dupe_nr + 1; /* +1 because vectorbezier sets flag too */
-      blnew = MEM_callocN(sizeof(BevList), "makeBevelList4");
+      blnew = MEM_mallocN(sizeof(BevList), "makeBevelList4");
       memcpy(blnew, bl, sizeof(BevList));
       blnew->bevpoints = MEM_calloc_arrayN(nr, sizeof(BevPoint), "makeBevelPoints4");
       if (!blnew->bevpoints) {
@@ -4137,7 +4151,8 @@ void BKE_nurb_handle_calc_simple_auto(Nurb *nu, BezTriple *bezt)
  */
 void BKE_nurb_bezt_handle_test(BezTriple *bezt,
                                const eBezTriple_Flag__Alias sel_flag,
-                               const bool use_handle)
+                               const bool use_handle,
+                               const bool use_around_local)
 {
   short flag = 0;
 
@@ -4158,6 +4173,10 @@ void BKE_nurb_bezt_handle_test(BezTriple *bezt,
   }
   else {
     flag = (bezt->f2 & sel_flag) ? (SEL_F1 | SEL_F2 | SEL_F3) : 0;
+  }
+
+  if (use_around_local) {
+    flag &= ~SEL_F2;
   }
 
   /* check for partial selection */
@@ -4186,7 +4205,7 @@ void BKE_nurb_bezt_handle_test(BezTriple *bezt,
 #undef SEL_F3
 }
 
-void BKE_nurb_handles_test(Nurb *nu, const bool use_handle)
+void BKE_nurb_handles_test(Nurb *nu, const bool use_handle, const bool use_around_local)
 {
   BezTriple *bezt;
   int a;
@@ -4198,7 +4217,7 @@ void BKE_nurb_handles_test(Nurb *nu, const bool use_handle)
   bezt = nu->bezt;
   a = nu->pntsu;
   while (a--) {
-    BKE_nurb_bezt_handle_test(bezt, SELECT, use_handle);
+    BKE_nurb_bezt_handle_test(bezt, SELECT, use_handle, use_around_local);
     bezt++;
   }
 
@@ -4601,7 +4620,7 @@ void BKE_nurb_direction_switch(Nurb *nu)
 void BKE_curve_nurbs_vert_coords_get(ListBase *lb, float (*vert_coords)[3], int vert_len)
 {
   float *co = vert_coords[0];
-  for (Nurb *nu = lb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, lb) {
     if (nu->type == CU_BEZIER) {
       BezTriple *bezt = nu->bezt;
       for (int i = 0; i < nu->pntsu; i++, bezt++) {
@@ -4681,7 +4700,7 @@ void BKE_curve_nurbs_vert_coords_apply(ListBase *lb,
 {
   const float *co = vert_coords[0];
 
-  for (Nurb *nu = lb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, lb) {
     if (nu->type == CU_BEZIER) {
       BezTriple *bezt = nu->bezt;
 
@@ -4719,7 +4738,7 @@ float (*BKE_curve_nurbs_key_vert_coords_alloc(ListBase *lb, float *key, int *r_v
   float(*cos)[3] = MEM_malloc_arrayN(vert_len, sizeof(*cos), __func__);
 
   float *co = cos[0];
-  for (Nurb *nu = lb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, lb) {
     if (nu->type == CU_BEZIER) {
       BezTriple *bezt = nu->bezt;
 
@@ -5157,7 +5176,7 @@ bool BKE_curve_minmax(Curve *cu, bool use_radius, float min[3], float max[3])
     use_radius = false;
   }
   /* Do bounding box based on splines. */
-  for (Nurb *nu = nurb_lb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, nurb_lb) {
     BKE_nurb_minmax(nu, use_radius, min, max);
   }
   const bool result = (BLI_listbase_is_empty(nurb_lb) == false);

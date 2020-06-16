@@ -1,4 +1,4 @@
-/*
+﻿/*
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -29,10 +29,10 @@
 #include <string.h>
 
 #include "DNA_listBase.h"
-#include "DNA_screen_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_windowmanager_types.h"
+#include "DNA_screen_types.h"
 #include "DNA_userdef_types.h"
+#include "DNA_windowmanager_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -42,14 +42,14 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_dynstr.h"
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
 #include "BLI_timer.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_context.h"
 #include "BKE_customdata.h"
-#include "BKE_idprop.h"
 #include "BKE_global.h"
+#include "BKE_idprop.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
@@ -63,28 +63,25 @@
 #include "ED_fileselect.h"
 #include "ED_info.h"
 #include "ED_screen.h"
-#include "ED_view3d.h"
-#include "ED_util.h"
 #include "ED_undo.h"
+#include "ED_util.h"
+#include "ED_view3d.h"
 
 #include "RNA_access.h"
 
 #include "UI_interface.h"
-#include "UI_view2d.h"
 
 #include "PIL_time.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
 #include "WM_toolsystem.h"
+#include "WM_types.h"
 
 #include "wm.h"
-#include "wm_window.h"
 #include "wm_event_system.h"
 #include "wm_event_types.h"
-
-#include "RNA_enum_types.h"
+#include "wm_window.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -104,7 +101,6 @@
 #define USE_GIZMO_MOUSE_PRIORITY_HACK
 
 static void wm_notifier_clear(wmNotifier *note);
-static void update_tablet_data(wmWindow *win, wmEvent *event);
 
 static int wm_operator_call_internal(bContext *C,
                                      wmOperatorType *ot,
@@ -113,6 +109,8 @@ static int wm_operator_call_internal(bContext *C,
                                      const short context,
                                      const bool poll_only,
                                      wmEvent *event);
+
+static bool wm_operator_check_locked_interface(bContext *C, wmOperatorType *ot);
 
 /* -------------------------------------------------------------------- */
 /** \name Event Management
@@ -125,14 +123,6 @@ wmEvent *wm_event_add_ex(wmWindow *win,
   wmEvent *event = MEM_mallocN(sizeof(wmEvent), "wmEvent");
 
   *event = *event_to_add;
-
-  update_tablet_data(win, event);
-
-  if (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE)) {
-    /* We could have a preference to support relative tablet motion (we can't detect that). */
-    event->is_motion_absolute = ((event->tablet_data != NULL) &&
-                                 (event->tablet_data->Active != GHOST_kTabletModeNone));
-  }
 
   if (event_to_add_after == NULL) {
     BLI_addtail(&win->queue, event);
@@ -177,10 +167,6 @@ void wm_event_free(wmEvent *event)
     }
   }
 
-  if (event->tablet_data) {
-    MEM_freeN((void *)event->tablet_data);
-  }
-
   MEM_freeN(event);
 }
 
@@ -195,9 +181,6 @@ void wm_event_free_all(wmWindow *win)
 
 void wm_event_init_from_window(wmWindow *win, wmEvent *event)
 {
-  /* make sure we don't copy any owned pointers */
-  BLI_assert(win->eventstate->tablet_data == NULL);
-
   *event = *(win->eventstate);
 }
 
@@ -207,11 +190,9 @@ void wm_event_init_from_window(wmWindow *win, wmEvent *event)
 /** \name Notifiers & Listeners
  * \{ */
 
-static bool wm_test_duplicate_notifier(wmWindowManager *wm, unsigned int type, void *reference)
+static bool wm_test_duplicate_notifier(const wmWindowManager *wm, uint type, void *reference)
 {
-  wmNotifier *note;
-
-  for (note = wm->queue.first; note; note = note->next) {
+  LISTBASE_FOREACH (wmNotifier *, note, &wm->queue) {
     if ((note->category | note->data | note->subtype | note->action) == type &&
         note->reference == reference) {
       return 1;
@@ -221,10 +202,8 @@ static bool wm_test_duplicate_notifier(wmWindowManager *wm, unsigned int type, v
   return 0;
 }
 
-/* XXX: in future, which notifiers to send to other windows? */
-void WM_event_add_notifier(const bContext *C, unsigned int type, void *reference)
+void WM_event_add_notifier_ex(wmWindowManager *wm, const wmWindow *win, uint type, void *reference)
 {
-  wmWindowManager *wm = CTX_wm_manager(C);
   wmNotifier *note;
 
   if (wm_test_duplicate_notifier(wm, type, reference)) {
@@ -233,10 +212,9 @@ void WM_event_add_notifier(const bContext *C, unsigned int type, void *reference
 
   note = MEM_callocN(sizeof(wmNotifier), "notifier");
 
-  note->wm = wm;
-  BLI_addtail(&note->wm->queue, note);
+  BLI_addtail(&wm->queue, note);
 
-  note->window = CTX_wm_window(C);
+  note->window = win;
 
   note->category = type & NOTE_CATEGORY;
   note->data = type & NOTE_DATA;
@@ -244,6 +222,12 @@ void WM_event_add_notifier(const bContext *C, unsigned int type, void *reference
   note->action = type & NOTE_ACTION;
 
   note->reference = reference;
+}
+
+/* XXX: in future, which notifiers to send to other windows? */
+void WM_event_add_notifier(const bContext *C, uint type, void *reference)
+{
+  WM_event_add_notifier_ex(CTX_wm_manager(C), CTX_wm_window(C), type, reference);
 }
 
 void WM_main_add_notifier(unsigned int type, void *reference)
@@ -258,8 +242,7 @@ void WM_main_add_notifier(unsigned int type, void *reference)
 
   note = MEM_callocN(sizeof(wmNotifier), "notifier");
 
-  note->wm = wm;
-  BLI_addtail(&note->wm->queue, note);
+  BLI_addtail(&wm->queue, note);
 
   note->category = type & NOTE_CATEGORY;
   note->data = type & NOTE_DATA;
@@ -302,16 +285,16 @@ void WM_main_remove_notifier_reference(const void *reference)
 void WM_main_remap_editor_id_reference(ID *old_id, ID *new_id)
 {
   Main *bmain = G_MAIN;
-  bScreen *sc;
+  bScreen *screen;
 
-  for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-    ScrArea *sa;
+  for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+    ScrArea *area;
 
-    for (sa = sc->areabase.first; sa; sa = sa->next) {
+    for (area = screen->areabase.first; area; area = area->next) {
       SpaceLink *sl;
 
-      for (sl = sa->spacedata.first; sl; sl = sl->next) {
-        ED_spacedata_id_remap(sa, sl, old_id, new_id);
+      for (sl = area->spacedata.first; sl; sl = sl->next) {
+        ED_spacedata_id_remap(area, sl, old_id, new_id);
       }
     }
   }
@@ -346,14 +329,14 @@ void wm_event_do_depsgraph(bContext *C, bool is_after_open_file)
   }
   /* Combine datamasks so 1 win doesn't disable UV's in another [#26448]. */
   CustomData_MeshMasks win_combine_v3d_datamask = {0};
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     const Scene *scene = WM_window_get_active_scene(win);
     const bScreen *screen = WM_window_get_active_screen(win);
 
     ED_view3d_screen_datamask(C, scene, screen, &win_combine_v3d_datamask);
   }
   /* Update all the dependency graphs of visible view layers. */
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     Scene *scene = WM_window_get_active_scene(win);
     ViewLayer *view_layer = WM_window_get_active_view_layer(win);
     Main *bmain = CTX_data_main(C);
@@ -386,15 +369,15 @@ void wm_event_do_refresh_wm_and_depsgraph(bContext *C)
 {
   wmWindowManager *wm = CTX_wm_manager(C);
   /* cached: editor refresh callbacks now, they get context */
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     const bScreen *screen = WM_window_get_active_screen(win);
-    ScrArea *sa;
+    ScrArea *area;
 
     CTX_wm_window_set(C, win);
-    for (sa = screen->areabase.first; sa; sa = sa->next) {
-      if (sa->do_refresh) {
-        CTX_wm_area_set(C, sa);
-        ED_area_do_refresh(C, sa);
+    for (area = screen->areabase.first; area; area = area->next) {
+      if (area->do_refresh) {
+        CTX_wm_area_set(C, area);
+        ED_area_do_refresh(C, area);
       }
     }
   }
@@ -524,7 +507,7 @@ void wm_event_do_notifiers(bContext *C)
         /* pass */
       }
       else {
-        ARegion *ar;
+        ARegion *region;
 
         /* XXX context in notifiers? */
         CTX_wm_window_set(C, win);
@@ -537,15 +520,14 @@ void wm_event_do_notifiers(bContext *C)
 #  endif
         ED_screen_do_listen(C, note);
 
-        for (ar = screen->regionbase.first; ar; ar = ar->next) {
-          ED_region_do_listen(win, NULL, ar, note, scene);
+        for (region = screen->regionbase.first; region; region = region->next) {
+          ED_region_do_listen(win, NULL, region, note, scene);
         }
 
-        ED_screen_areas_iter(win, screen, sa)
-        {
-          ED_area_do_listen(win, sa, note, scene);
-          for (ar = sa->regionbase.first; ar; ar = ar->next) {
-            ED_region_do_listen(win, sa, ar, note, scene);
+        ED_screen_areas_iter (win, screen, area) {
+          ED_area_do_listen(win, area, note, scene);
+          for (region = area->regionbase.first; region; region = region->next) {
+            ED_region_do_listen(win, area, region, note, scene);
           }
         }
       }
@@ -620,6 +602,12 @@ static int wm_handler_ui_call(bContext *C,
     }
   }
 
+  /* Don't block file-select events. Those are triggered by a separate file browser window.
+   * See T75292. */
+  if (event->type == EVT_FILESELECT) {
+    return WM_UI_HANDLER_CONTINUE;
+  }
+
   /* we set context to where ui handler came from */
   if (handler->context.area) {
     CTX_wm_area_set(C, handler->context.area);
@@ -658,25 +646,119 @@ static int wm_handler_ui_call(bContext *C,
   return WM_HANDLER_CONTINUE;
 }
 
-static void wm_handler_ui_cancel(bContext *C)
+void wm_event_handler_ui_cancel_ex(bContext *C,
+                                   wmWindow *win,
+                                   ARegion *region,
+                                   bool reactivate_button)
 {
-  wmWindow *win = CTX_wm_window(C);
-  ARegion *ar = CTX_wm_region(C);
-
-  if (!ar) {
+  if (!region) {
     return;
   }
 
-  LISTBASE_FOREACH_MUTABLE (wmEventHandler *, handler_base, &ar->handlers) {
+  LISTBASE_FOREACH_MUTABLE (wmEventHandler *, handler_base, &region->handlers) {
     if (handler_base->type == WM_HANDLER_TYPE_UI) {
       wmEventHandler_UI *handler = (wmEventHandler_UI *)handler_base;
       BLI_assert(handler->handle_fn != NULL);
       wmEvent event;
       wm_event_init_from_window(win, &event);
       event.type = EVT_BUT_CANCEL;
+      event.val = reactivate_button ? 0 : 1;
       handler->handle_fn(C, &event, handler->user_data);
     }
   }
+}
+
+static void wm_event_handler_ui_cancel(bContext *C)
+{
+  wmWindow *win = CTX_wm_window(C);
+  ARegion *region = CTX_wm_region(C);
+  wm_event_handler_ui_cancel_ex(C, win, region, true);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name WM Reports
+ *
+ * Access to #wmWindowManager.reports
+ * \{ */
+
+/**
+ * Show the report in the info header.
+ */
+void WM_report_banner_show(void)
+{
+  wmWindowManager *wm = G_MAIN->wm.first;
+  ReportList *wm_reports = &wm->reports;
+  ReportTimerInfo *rti;
+
+  /* After adding reports to the global list, reset the report timer. */
+  WM_event_remove_timer(wm, NULL, wm_reports->reporttimer);
+
+  /* Records time since last report was added */
+  wm_reports->reporttimer = WM_event_add_timer(wm, wm->winactive, TIMERREPORT, 0.05);
+
+  rti = MEM_callocN(sizeof(ReportTimerInfo), "ReportTimerInfo");
+  wm_reports->reporttimer->customdata = rti;
+}
+
+/**
+ * Hide all currently displayed banners and abort their timer.
+ */
+void WM_report_banners_cancel(Main *bmain)
+{
+  wmWindowManager *wm = bmain->wm.first;
+  BKE_reports_clear(&wm->reports);
+  WM_event_remove_timer(wm, NULL, wm->reports.reporttimer);
+}
+
+#ifdef WITH_INPUT_NDOF
+void WM_ndof_deadzone_set(float deadzone)
+{
+  GHOST_setNDOFDeadZone(deadzone);
+}
+#endif
+
+static void wm_add_reports(ReportList *reports)
+{
+  /* if the caller owns them, handle this */
+  if (reports->list.first && (reports->flag & RPT_OP_HOLD) == 0) {
+    wmWindowManager *wm = G_MAIN->wm.first;
+
+    /* add reports to the global list, otherwise they are not seen */
+    BLI_movelisttolist(&wm->reports.list, &reports->list);
+
+    WM_report_banner_show();
+  }
+}
+
+void WM_report(ReportType type, const char *message)
+{
+  ReportList reports;
+
+  BKE_reports_init(&reports, RPT_STORE);
+  BKE_report(&reports, type, message);
+
+  wm_add_reports(&reports);
+
+  BKE_reports_clear(&reports);
+}
+
+void WM_reportf(ReportType type, const char *format, ...)
+{
+  DynStr *ds;
+  va_list args;
+
+  ds = BLI_dynstr_new();
+  va_start(args, format);
+  BLI_dynstr_vappendf(ds, format, args);
+  va_end(args);
+
+  char *str = BLI_dynstr_get_cstring(ds);
+  WM_report(type, str);
+  MEM_freeN(str);
+
+  BLI_dynstr_free(ds);
 }
 
 /** \} */
@@ -753,181 +835,13 @@ bool WM_operator_check_ui_empty(wmOperatorType *ot)
  */
 void WM_operator_region_active_win_set(bContext *C)
 {
-  ScrArea *sa = CTX_wm_area(C);
-  if (sa) {
-    ARegion *ar = CTX_wm_region(C);
-    if (ar && ar->regiontype == RGN_TYPE_WINDOW) {
-      sa->region_active_win = BLI_findindex(&sa->regionbase, ar);
+  ScrArea *area = CTX_wm_area(C);
+  if (area) {
+    ARegion *region = CTX_wm_region(C);
+    if (region && region->regiontype == RGN_TYPE_WINDOW) {
+      area->region_active_win = BLI_findindex(&area->regionbase, region);
     }
   }
-}
-
-int WM_event_modifier_flag(const wmEvent *event)
-{
-  int flag = 0;
-  if (event->ctrl) {
-    flag |= KM_CTRL;
-  }
-  if (event->alt) {
-    flag |= KM_ALT;
-  }
-  if (event->shift) {
-    flag |= KM_SHIFT;
-  }
-  if (event->oskey) {
-    flag |= KM_OSKEY;
-  }
-  return flag;
-}
-
-/* for debugging only, getting inspecting events manually is tedious */
-void WM_event_print(const wmEvent *event)
-{
-  if (event) {
-    const char *unknown = "UNKNOWN";
-    const char *type_id = unknown;
-    const char *val_id = unknown;
-
-    RNA_enum_identifier(rna_enum_event_type_items, event->type, &type_id);
-    RNA_enum_identifier(rna_enum_event_value_items, event->val, &val_id);
-
-    printf(
-        "wmEvent  type:%d / %s, val:%d / %s,\n"
-        "         shift:%d, ctrl:%d, alt:%d, oskey:%d, keymodifier:%d,\n"
-        "         mouse:(%d,%d), ascii:'%c', utf8:'%.*s', keymap_idname:%s, pointer:%p\n",
-        event->type,
-        type_id,
-        event->val,
-        val_id,
-        event->shift,
-        event->ctrl,
-        event->alt,
-        event->oskey,
-        event->keymodifier,
-        event->x,
-        event->y,
-        event->ascii,
-        BLI_str_utf8_size(event->utf8_buf),
-        event->utf8_buf,
-        event->keymap_idname,
-        (const void *)event);
-
-#ifdef WITH_INPUT_NDOF
-    if (ISNDOF(event->type)) {
-      const wmNDOFMotionData *ndof = event->customdata;
-      if (event->type == NDOF_MOTION) {
-        printf("   ndof: rot: (%.4f %.4f %.4f), tx: (%.4f %.4f %.4f), dt: %.4f, progress: %u\n",
-               UNPACK3(ndof->rvec),
-               UNPACK3(ndof->tvec),
-               ndof->dt,
-               ndof->progress);
-      }
-      else {
-        /* ndof buttons printed already */
-      }
-    }
-#endif /* WITH_INPUT_NDOF */
-
-    if (event->tablet_data) {
-      const wmTabletData *wmtab = event->tablet_data;
-      printf(" tablet: active: %d, pressure %.4f, tilt: (%.4f %.4f)\n",
-             wmtab->Active,
-             wmtab->Pressure,
-             wmtab->Xtilt,
-             wmtab->Ytilt);
-    }
-  }
-  else {
-    printf("wmEvent - NULL\n");
-  }
-}
-
-/**
- * Show the report in the info header.
- */
-void WM_report_banner_show(void)
-{
-  wmWindowManager *wm = G_MAIN->wm.first;
-  ReportList *wm_reports = &wm->reports;
-  ReportTimerInfo *rti;
-
-  /* After adding reports to the global list, reset the report timer. */
-  WM_event_remove_timer(wm, NULL, wm_reports->reporttimer);
-
-  /* Records time since last report was added */
-  wm_reports->reporttimer = WM_event_add_timer(wm, wm->winactive, TIMERREPORT, 0.05);
-
-  rti = MEM_callocN(sizeof(ReportTimerInfo), "ReportTimerInfo");
-  wm_reports->reporttimer->customdata = rti;
-}
-
-/**
- * Hide all currently displayed banners and abort their timer.
- */
-void WM_report_banners_cancel(Main *bmain)
-{
-  wmWindowManager *wm = bmain->wm.first;
-  BKE_reports_clear(&wm->reports);
-  WM_event_remove_timer(wm, NULL, wm->reports.reporttimer);
-}
-
-bool WM_event_is_last_mousemove(const wmEvent *event)
-{
-  while ((event = event->next)) {
-    if (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-#ifdef WITH_INPUT_NDOF
-void WM_ndof_deadzone_set(float deadzone)
-{
-  GHOST_setNDOFDeadZone(deadzone);
-}
-#endif
-
-static void wm_add_reports(ReportList *reports)
-{
-  /* if the caller owns them, handle this */
-  if (reports->list.first && (reports->flag & RPT_OP_HOLD) == 0) {
-    wmWindowManager *wm = G_MAIN->wm.first;
-
-    /* add reports to the global list, otherwise they are not seen */
-    BLI_movelisttolist(&wm->reports.list, &reports->list);
-
-    WM_report_banner_show();
-  }
-}
-
-void WM_report(ReportType type, const char *message)
-{
-  ReportList reports;
-
-  BKE_reports_init(&reports, RPT_STORE);
-  BKE_report(&reports, type, message);
-
-  wm_add_reports(&reports);
-
-  BKE_reports_clear(&reports);
-}
-
-void WM_reportf(ReportType type, const char *format, ...)
-{
-  DynStr *ds;
-  va_list args;
-
-  ds = BLI_dynstr_new();
-  va_start(args, format);
-  BLI_dynstr_vappendf(ds, format, args);
-  va_end(args);
-
-  char *str = BLI_dynstr_get_cstring(ds);
-  WM_report(type, str);
-  MEM_freeN(str);
-
-  BLI_dynstr_free(ds);
 }
 
 /* (caller_owns_reports == true) when called from python */
@@ -938,7 +852,7 @@ static void wm_operator_reports(bContext *C, wmOperator *op, int retval, bool ca
       /* FIXME, temp setting window, see other call to UI_popup_menu_reports for why */
       wmWindow *win_prev = CTX_wm_window(C);
       ScrArea *area_prev = CTX_wm_area(C);
-      ARegion *ar_prev = CTX_wm_region(C);
+      ARegion *region_prev = CTX_wm_region(C);
 
       if (win_prev == NULL) {
         CTX_wm_window_set(C, CTX_wm_manager(C)->windows.first);
@@ -948,7 +862,7 @@ static void wm_operator_reports(bContext *C, wmOperator *op, int retval, bool ca
 
       CTX_wm_window_set(C, win_prev);
       CTX_wm_area_set(C, area_prev);
-      CTX_wm_region_set(C, ar_prev);
+      CTX_wm_region_set(C, region_prev);
     }
   }
 
@@ -969,6 +883,10 @@ static void wm_operator_reports(bContext *C, wmOperator *op, int retval, bool ca
     }
   }
 
+  /* Refresh Info Editor with reports immediately, even if op returned OPERATOR_CANCELLED. */
+  if ((retval & OPERATOR_CANCELLED) && !BLI_listbase_is_empty(&op->reports->list)) {
+    WM_event_add_notifier(C, NC_SPACE | ND_SPACE_INFO_REPORT, NULL);
+  }
   /* if the caller owns them, handle this */
   wm_add_reports(op->reports);
 }
@@ -1043,9 +961,9 @@ static void wm_operator_finished(bContext *C, wmOperator *op, const bool repeat,
 
   if (hud_status != NOP) {
     if (hud_status == SET) {
-      ScrArea *sa = CTX_wm_area(C);
-      if (sa) {
-        ED_area_type_hud_ensure(C, sa);
+      ScrArea *area = CTX_wm_area(C);
+      if (area) {
+        ED_area_type_hud_ensure(C, area);
       }
     }
     else if (hud_status == CLEAR) {
@@ -1298,11 +1216,11 @@ static wmOperator *wm_operator_create(wmWindowManager *wm,
 
 static void wm_region_mouse_co(bContext *C, wmEvent *event)
 {
-  ARegion *ar = CTX_wm_region(C);
-  if (ar) {
+  ARegion *region = CTX_wm_region(C);
+  if (region) {
     /* compatibility convention */
-    event->mval[0] = event->x - ar->winrct.xmin;
-    event->mval[1] = event->y - ar->winrct.ymin;
+    event->mval[0] = event->x - region->winrct.xmin;
+    event->mval[1] = event->y - region->winrct.ymin;
   }
   else {
     /* these values are invalid (avoid odd behavior by relying on old mval values) */
@@ -1310,105 +1228,6 @@ static void wm_region_mouse_co(bContext *C, wmEvent *event)
     event->mval[1] = -1;
   }
 }
-
-#if 1 /* may want to disable operator remembering previous state for testing */
-
-static bool operator_last_properties_init_impl(wmOperator *op, IDProperty *last_properties)
-{
-  bool changed = false;
-  IDPropertyTemplate val = {0};
-  IDProperty *replaceprops = IDP_New(IDP_GROUP, &val, "wmOperatorProperties");
-  PropertyRNA *iterprop;
-
-  CLOG_INFO(WM_LOG_OPERATORS, 1, "loading previous properties for '%s'", op->type->idname);
-
-  iterprop = RNA_struct_iterator_property(op->type->srna);
-
-  RNA_PROP_BEGIN (op->ptr, itemptr, iterprop) {
-    PropertyRNA *prop = itemptr.data;
-    if ((RNA_property_flag(prop) & PROP_SKIP_SAVE) == 0) {
-      if (!RNA_property_is_set(op->ptr, prop)) { /* don't override a setting already set */
-        const char *identifier = RNA_property_identifier(prop);
-        IDProperty *idp_src = IDP_GetPropertyFromGroup(last_properties, identifier);
-        if (idp_src) {
-          IDProperty *idp_dst = IDP_CopyProperty(idp_src);
-
-          /* note - in the future this may need to be done recursively,
-           * but for now RNA doesn't access nested operators */
-          idp_dst->flag |= IDP_FLAG_GHOST;
-
-          /* add to temporary group instead of immediate replace,
-           * because we are iterating over this group */
-          IDP_AddToGroup(replaceprops, idp_dst);
-          changed = true;
-        }
-      }
-    }
-  }
-  RNA_PROP_END;
-
-  IDP_MergeGroup(op->properties, replaceprops, true);
-  IDP_FreeProperty(replaceprops);
-  return changed;
-}
-
-bool WM_operator_last_properties_init(wmOperator *op)
-{
-  bool changed = false;
-  if (op->type->last_properties) {
-    changed |= operator_last_properties_init_impl(op, op->type->last_properties);
-    for (wmOperator *opm = op->macro.first; opm; opm = opm->next) {
-      IDProperty *idp_src = IDP_GetPropertyFromGroup(op->type->last_properties, opm->idname);
-      if (idp_src) {
-        changed |= operator_last_properties_init_impl(opm, idp_src);
-      }
-    }
-  }
-  return changed;
-}
-
-bool WM_operator_last_properties_store(wmOperator *op)
-{
-  if (op->type->last_properties) {
-    IDP_FreeProperty(op->type->last_properties);
-    op->type->last_properties = NULL;
-  }
-
-  if (op->properties) {
-    CLOG_INFO(WM_LOG_OPERATORS, 1, "storing properties for '%s'", op->type->idname);
-    op->type->last_properties = IDP_CopyProperty(op->properties);
-  }
-
-  if (op->macro.first != NULL) {
-    for (wmOperator *opm = op->macro.first; opm; opm = opm->next) {
-      if (opm->properties) {
-        if (op->type->last_properties == NULL) {
-          op->type->last_properties = IDP_New(
-              IDP_GROUP, &(IDPropertyTemplate){0}, "wmOperatorProperties");
-        }
-        IDProperty *idp_macro = IDP_CopyProperty(opm->properties);
-        STRNCPY(idp_macro->name, opm->type->idname);
-        IDP_ReplaceInGroup(op->type->last_properties, idp_macro);
-      }
-    }
-  }
-
-  return (op->type->last_properties != NULL);
-}
-
-#else
-
-bool WM_operator_last_properties_init(wmOperator *UNUSED(op))
-{
-  return false;
-}
-
-bool WM_operator_last_properties_store(wmOperator *UNUSED(op))
-{
-  return false;
-}
-
-#endif
 
 /**
  * Also used for exec when 'event' is NULL.
@@ -1528,20 +1347,21 @@ static int wm_operator_invoke(bContext *C,
 
         if (wrap) {
           const rcti *winrect = NULL;
-          ARegion *ar = CTX_wm_region(C);
-          ScrArea *sa = CTX_wm_area(C);
+          ARegion *region = CTX_wm_region(C);
+          ScrArea *area = CTX_wm_area(C);
 
           /* Wrap only in X for header. */
-          if (ar && ELEM(ar->regiontype, RGN_TYPE_HEADER, RGN_TYPE_TOOL_HEADER, RGN_TYPE_FOOTER)) {
+          if (region &&
+              ELEM(region->regiontype, RGN_TYPE_HEADER, RGN_TYPE_TOOL_HEADER, RGN_TYPE_FOOTER)) {
             wrap = WM_CURSOR_WRAP_X;
           }
 
-          if (ar && ar->regiontype == RGN_TYPE_WINDOW &&
-              BLI_rcti_isect_pt_v(&ar->winrct, &event->x)) {
-            winrect = &ar->winrct;
+          if (region && region->regiontype == RGN_TYPE_WINDOW &&
+              BLI_rcti_isect_pt_v(&region->winrct, &event->x)) {
+            winrect = &region->winrct;
           }
-          else if (sa && BLI_rcti_isect_pt_v(&sa->totrct, &event->x)) {
-            winrect = &sa->totrct;
+          else if (area && BLI_rcti_isect_pt_v(&area->totrct, &event->x)) {
+            winrect = &area->totrct;
           }
 
           if (winrect) {
@@ -1559,7 +1379,7 @@ static int wm_operator_invoke(bContext *C,
        * while dragging the view or worse, that stay there permanently
        * after the modal operator has swallowed all events and passed
        * none to the UI handler */
-      wm_handler_ui_cancel(C);
+      wm_event_handler_ui_cancel(C);
     }
     else {
       WM_operator_free(op);
@@ -1639,7 +1459,7 @@ static int wm_operator_call_internal(bContext *C,
         /* forces operator to go to the region window/channels/preview, for header menus
          * but we stay in the same region if we are already in one
          */
-        ARegion *ar = CTX_wm_region(C);
+        ARegion *region = CTX_wm_region(C);
         ScrArea *area = CTX_wm_area(C);
         int type = RGN_TYPE_WINDOW;
 
@@ -1661,7 +1481,7 @@ static int wm_operator_call_internal(bContext *C,
             break;
         }
 
-        if (!(ar && ar->regiontype == type) && area) {
+        if (!(region && region->regiontype == type) && area) {
           ARegion *ar1;
           if (type == RGN_TYPE_WINDOW) {
             ar1 = BKE_area_find_region_active_win(area);
@@ -1678,32 +1498,32 @@ static int wm_operator_call_internal(bContext *C,
         retval = wm_operator_invoke(C, ot, event, properties, reports, poll_only, true);
 
         /* set region back */
-        CTX_wm_region_set(C, ar);
+        CTX_wm_region_set(C, region);
 
         return retval;
       }
       case WM_OP_EXEC_AREA:
       case WM_OP_INVOKE_AREA: {
         /* remove region from context */
-        ARegion *ar = CTX_wm_region(C);
+        ARegion *region = CTX_wm_region(C);
 
         CTX_wm_region_set(C, NULL);
         retval = wm_operator_invoke(C, ot, event, properties, reports, poll_only, true);
-        CTX_wm_region_set(C, ar);
+        CTX_wm_region_set(C, region);
 
         return retval;
       }
       case WM_OP_EXEC_SCREEN:
       case WM_OP_INVOKE_SCREEN: {
         /* remove region + area from context */
-        ARegion *ar = CTX_wm_region(C);
+        ARegion *region = CTX_wm_region(C);
         ScrArea *area = CTX_wm_area(C);
 
         CTX_wm_region_set(C, NULL);
         CTX_wm_area_set(C, NULL);
         retval = wm_operator_invoke(C, ot, event, properties, reports, poll_only, true);
         CTX_wm_area_set(C, area);
-        CTX_wm_region_set(C, ar);
+        CTX_wm_region_set(C, region);
 
         return retval;
       }
@@ -1846,17 +1666,16 @@ static void wm_handler_op_context(bContext *C, wmEventHandler_Op *handler, const
       CTX_wm_area_set(C, NULL);
     }
     else {
-      ScrArea *sa = NULL;
+      ScrArea *area = NULL;
 
-      ED_screen_areas_iter(win, screen, sa_iter)
-      {
-        if (sa_iter == handler->context.area) {
-          sa = sa_iter;
+      ED_screen_areas_iter (win, screen, area_iter) {
+        if (area_iter == handler->context.area) {
+          area = area_iter;
           break;
         }
       }
 
-      if (sa == NULL) {
+      if (area == NULL) {
         /* when changing screen layouts with running modal handlers (like render display), this
          * is not an error to print */
         if (handler->op == NULL) {
@@ -1866,31 +1685,31 @@ static void wm_handler_op_context(bContext *C, wmEventHandler_Op *handler, const
         }
       }
       else {
-        ARegion *ar;
+        ARegion *region;
         wmOperator *op = handler->op ? (handler->op->opm ? handler->op->opm : handler->op) : NULL;
-        CTX_wm_area_set(C, sa);
+        CTX_wm_area_set(C, area);
 
         if (op && (op->flag & OP_IS_MODAL_CURSOR_REGION)) {
-          ar = BKE_area_find_region_xy(sa, handler->context.region_type, event->x, event->y);
-          if (ar) {
-            handler->context.region = ar;
+          region = BKE_area_find_region_xy(area, handler->context.region_type, event->x, event->y);
+          if (region) {
+            handler->context.region = region;
           }
         }
         else {
-          ar = NULL;
+          region = NULL;
         }
 
-        if (ar == NULL) {
-          for (ar = sa->regionbase.first; ar; ar = ar->next) {
-            if (ar == handler->context.region) {
+        if (region == NULL) {
+          for (region = area->regionbase.first; region; region = region->next) {
+            if (region == handler->context.region) {
               break;
             }
           }
         }
 
         /* XXX no warning print here, after full-area and back regions are remade */
-        if (ar) {
-          CTX_wm_region_set(C, ar);
+        if (region) {
+          CTX_wm_region_set(C, region);
         }
       }
     }
@@ -1964,46 +1783,16 @@ void WM_event_remove_handlers(bContext *C, ListBase *handlers)
   }
 }
 
-/* do userdef mappings */
-int WM_userdef_event_map(int kmitype)
-{
-  switch (kmitype) {
-    case WHEELOUTMOUSE:
-      return (U.uiflag & USER_WHEELZOOMDIR) ? WHEELUPMOUSE : WHEELDOWNMOUSE;
-    case WHEELINMOUSE:
-      return (U.uiflag & USER_WHEELZOOMDIR) ? WHEELDOWNMOUSE : WHEELUPMOUSE;
-  }
-
-  return kmitype;
-}
-
-/**
- * Use so we can check if 'wmEvent.type' is released in modal operators.
- *
- * An alternative would be to add a 'wmEvent.type_nokeymap'... or similar.
- */
-int WM_userdef_event_type_from_keymap_type(int kmitype)
-{
-  switch (kmitype) {
-    case EVT_TWEAK_L:
-      return LEFTMOUSE;
-    case EVT_TWEAK_M:
-      return MIDDLEMOUSE;
-    case EVT_TWEAK_R:
-      return RIGHTMOUSE;
-    case WHEELOUTMOUSE:
-      return (U.uiflag & USER_WHEELZOOMDIR) ? WHEELUPMOUSE : WHEELDOWNMOUSE;
-    case WHEELINMOUSE:
-      return (U.uiflag & USER_WHEELZOOMDIR) ? WHEELDOWNMOUSE : WHEELUPMOUSE;
-  }
-
-  return kmitype;
-}
-
 static bool wm_eventmatch(const wmEvent *winevent, const wmKeyMapItem *kmi)
 {
   if (kmi->flag & KMI_INACTIVE) {
     return false;
+  }
+
+  if (winevent->is_repeat) {
+    if (kmi->flag & KMI_REPEAT_IGNORE) {
+      return false;
+    }
   }
 
   const int kmitype = WM_userdef_event_map(kmi->type);
@@ -2021,19 +1810,16 @@ static bool wm_eventmatch(const wmEvent *winevent, const wmKeyMapItem *kmi)
 
   if (kmitype != KM_ANY) {
     if (ELEM(kmitype, TABLET_STYLUS, TABLET_ERASER)) {
-      const wmTabletData *wmtab = winevent->tablet_data;
+      const wmTabletData *wmtab = &winevent->tablet;
 
-      if (wmtab == NULL) {
-        return false;
-      }
-      else if (winevent->type != LEFTMOUSE) {
+      if (winevent->type != LEFTMOUSE) {
         /* tablet events can occur on hover + keypress */
         return false;
       }
-      else if ((kmitype == TABLET_STYLUS) && (wmtab->Active != EVT_TABLET_STYLUS)) {
+      else if ((kmitype == TABLET_STYLUS) && (wmtab->active != EVT_TABLET_STYLUS)) {
         return false;
       }
-      else if ((kmitype == TABLET_ERASER) && (wmtab->Active != EVT_TABLET_ERASER)) {
+      else if ((kmitype == TABLET_ERASER) && (wmtab->active != EVT_TABLET_ERASER)) {
         return false;
       }
     }
@@ -2054,25 +1840,25 @@ static bool wm_eventmatch(const wmEvent *winevent, const wmKeyMapItem *kmi)
    * Account for rare case of when these keys are used as the 'type' not as modifiers. */
   if (kmi->shift != KM_ANY) {
     if ((winevent->shift != kmi->shift) && !(winevent->shift & kmi->shift) &&
-        !ELEM(winevent->type, LEFTSHIFTKEY, RIGHTSHIFTKEY)) {
+        !ELEM(winevent->type, EVT_LEFTSHIFTKEY, EVT_RIGHTSHIFTKEY)) {
       return false;
     }
   }
   if (kmi->ctrl != KM_ANY) {
     if (winevent->ctrl != kmi->ctrl && !(winevent->ctrl & kmi->ctrl) &&
-        !ELEM(winevent->type, LEFTCTRLKEY, RIGHTCTRLKEY)) {
+        !ELEM(winevent->type, EVT_LEFTCTRLKEY, EVT_RIGHTCTRLKEY)) {
       return false;
     }
   }
   if (kmi->alt != KM_ANY) {
     if (winevent->alt != kmi->alt && !(winevent->alt & kmi->alt) &&
-        !ELEM(winevent->type, LEFTALTKEY, RIGHTALTKEY)) {
+        !ELEM(winevent->type, EVT_LEFTALTKEY, EVT_RIGHTALTKEY)) {
       return false;
     }
   }
   if (kmi->oskey != KM_ANY) {
     if (winevent->oskey != kmi->oskey && !(winevent->oskey & kmi->oskey) &&
-        (winevent->type != OSKEY)) {
+        (winevent->type != EVT_OSKEY)) {
       return false;
     }
   }
@@ -2093,7 +1879,9 @@ static wmKeyMapItem *wm_eventmatch_modal_keymap_items(const wmKeyMap *keymap,
                                                       wmOperator *op,
                                                       const wmEvent *event)
 {
-  for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
+  LISTBASE_FOREACH (wmKeyMapItem *, kmi, &keymap->items) {
+    /* Should already be handled by #wm_user_modal_keymap_set_items. */
+    BLI_assert(kmi->propvalue_str[0] == '\0');
     if (wm_eventmatch(event, kmi)) {
       if ((keymap->poll_modal_item == NULL) || (keymap->poll_modal_item(op, kmi->propvalue))) {
         return kmi;
@@ -2113,10 +1901,10 @@ static wmKeyMapItem *wm_eventmatch_modal_keymap_items(const wmKeyMap *keymap,
  *   This is done since we only want to use double click events to match key-map items,
  *   allowing modal functions to check for press/release events without having to interpret them.
  */
-static void wm_event_modalkeymap(const bContext *C,
-                                 wmOperator *op,
-                                 wmEvent *event,
-                                 bool *dbl_click_disabled)
+static void wm_event_modalkeymap_begin(const bContext *C,
+                                       wmOperator *op,
+                                       wmEvent *event,
+                                       bool *dbl_click_disabled)
 {
   BLI_assert(event->type != EVT_MODAL_MAP);
 
@@ -2169,25 +1957,13 @@ static void wm_event_modalkeymap(const bContext *C,
 }
 
 /**
- * Check whether operator is allowed to run in case interface is locked,
- * If interface is unlocked, will always return truth.
+ * Restore changes from #wm_event_modalkeymap_begin
+ *
+ * \warning bad hacking event system...
+ * better restore event type for checking of #KM_CLICK for example.
+ * Modal maps could use different method (ton).
  */
-static bool wm_operator_check_locked_interface(bContext *C, wmOperatorType *ot)
-{
-  wmWindowManager *wm = CTX_wm_manager(C);
-
-  if (wm->is_interface_locked) {
-    if ((ot->flag & OPTYPE_LOCK_BYPASS) == 0) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/* bad hacking event system... better restore event type for checking of KM_CLICK for example */
-/* XXX modal maps could use different method (ton) */
-static void wm_event_modalmap_end(wmEvent *event, bool dbl_click_disabled)
+static void wm_event_modalkeymap_end(wmEvent *event, bool dbl_click_disabled)
 {
   if (event->type == EVT_MODAL_MAP) {
     event->type = event->prevtype;
@@ -2206,7 +1982,8 @@ static int wm_handler_operator_call(bContext *C,
                                     ListBase *handlers,
                                     wmEventHandler *handler_base,
                                     wmEvent *event,
-                                    PointerRNA *properties)
+                                    PointerRNA *properties,
+                                    const char *kmi_idname)
 {
   int retval = OPERATOR_PASS_THROUGH;
 
@@ -2231,7 +2008,7 @@ static int wm_handler_operator_call(bContext *C,
 
       wm_handler_op_context(C, handler, event);
       wm_region_mouse_co(C, event);
-      wm_event_modalkeymap(C, op, event, &dbl_click_disabled);
+      wm_event_modalkeymap_begin(C, op, event, &dbl_click_disabled);
 
       if (ot->flag & OPTYPE_UNDO) {
         wm->op_undo_depth++;
@@ -2246,7 +2023,7 @@ static int wm_handler_operator_call(bContext *C,
        * the event, operator etc have all been freed. - campbell */
       if (CTX_wm_manager(C) == wm) {
 
-        wm_event_modalmap_end(event, dbl_click_disabled);
+        wm_event_modalkeymap_end(event, dbl_click_disabled);
 
         if (ot->flag & OPTYPE_UNDO) {
           wm->op_undo_depth--;
@@ -2308,7 +2085,7 @@ static int wm_handler_operator_call(bContext *C,
     }
   }
   else {
-    wmOperatorType *ot = WM_operatortype_find(event->keymap_idname, 0);
+    wmOperatorType *ot = WM_operatortype_find(kmi_idname, 0);
 
     if (ot && wm_operator_check_locked_interface(C, ot)) {
       bool use_last_properties = true;
@@ -2351,12 +2128,12 @@ static int wm_handler_operator_call(bContext *C,
             wmGizmoGroupType *gzgt = WM_gizmogrouptype_find(idname, false);
             if (gzgt != NULL) {
               if ((gzgt->flag & WM_GIZMOGROUPTYPE_TOOL_INIT) != 0) {
-                ARegion *ar = CTX_wm_region(C);
-                if (ar != NULL) {
+                ARegion *region = CTX_wm_region(C);
+                if (region != NULL) {
                   wmGizmoMapType *gzmap_type = WM_gizmomaptype_ensure(&gzgt->gzmap_params);
                   WM_gizmo_group_type_ensure_ptr_ex(gzgt, gzmap_type);
                   wmGizmoGroup *gzgroup = WM_gizmomaptype_group_init_runtime_with_region(
-                      gzmap_type, gzgt, ar);
+                      gzmap_type, gzgt, region);
                   /* We can't rely on drawing to initialize gizmo's since disabling
                    * overlays/gizmos will prevent pre-drawing setup calls. (see T60905) */
                   WM_gizmogroup_ensure_init(C, gzgroup);
@@ -2451,19 +2228,19 @@ static int wm_handler_fileselect_do(bContext *C,
       }
       else {
         wmWindow *temp_win;
-        ScrArea *ctx_sa = CTX_wm_area(C);
+        ScrArea *ctx_area = CTX_wm_area(C);
 
         for (temp_win = wm->windows.first; temp_win; temp_win = temp_win->next) {
           bScreen *screen = WM_window_get_active_screen(temp_win);
-          ScrArea *file_sa = screen->areabase.first;
+          ScrArea *file_area = screen->areabase.first;
 
-          if (screen->temp && (file_sa->spacetype == SPACE_FILE)) {
+          if (screen->temp && (file_area->spacetype == SPACE_FILE)) {
             int win_size[2];
             bool is_maximized;
             ED_fileselect_window_params_get(temp_win, win_size, &is_maximized);
-            ED_fileselect_params_to_userdef(file_sa->spacedata.first, win_size, is_maximized);
+            ED_fileselect_params_to_userdef(file_area->spacedata.first, win_size, is_maximized);
 
-            if (BLI_listbase_is_single(&file_sa->spacedata)) {
+            if (BLI_listbase_is_single(&file_area->spacedata)) {
               BLI_assert(ctx_win != temp_win);
 
               wm_window_close(C, wm, temp_win);
@@ -2479,20 +2256,20 @@ static int wm_handler_fileselect_do(bContext *C,
                 handler->context.win = NULL;
               }
             }
-            else if (file_sa->full) {
-              ED_screen_full_prevspace(C, file_sa);
+            else if (file_area->full) {
+              ED_screen_full_prevspace(C, file_area);
             }
             else {
-              ED_area_prevspace(C, file_sa);
+              ED_area_prevspace(C, file_area);
             }
 
             break;
           }
         }
 
-        if (!temp_win && ctx_sa->full) {
-          ED_fileselect_params_to_userdef(ctx_sa->spacedata.first, NULL, false);
-          ED_screen_full_prevspace(C, ctx_sa);
+        if (!temp_win && ctx_area->full) {
+          ED_fileselect_params_to_userdef(ctx_area->spacedata.first, NULL, false);
+          ED_screen_full_prevspace(C, ctx_area);
         }
       }
 
@@ -2531,7 +2308,7 @@ static int wm_handler_fileselect_do(bContext *C,
            * it can be removed without breaking anything but then no linking errors - campbell */
           wmWindow *win_prev = CTX_wm_window(C);
           ScrArea *area_prev = CTX_wm_area(C);
-          ARegion *ar_prev = CTX_wm_region(C);
+          ARegion *region_prev = CTX_wm_region(C);
 
           if (win_prev == NULL) {
             CTX_wm_window_set(C, CTX_wm_manager(C)->windows.first);
@@ -2549,7 +2326,7 @@ static int wm_handler_fileselect_do(bContext *C,
 
           CTX_wm_window_set(C, win_prev);
           CTX_wm_area_set(C, area_prev);
-          CTX_wm_region_set(C, ar_prev);
+          CTX_wm_region_set(C, region_prev);
         }
 
         /* for WM_operator_pystring only, custom report handling is done above */
@@ -2629,27 +2406,25 @@ static int wm_handlers_do_keymap_with_keymap_handler(
 {
   int action = WM_HANDLER_CONTINUE;
 
-  PRINT("%s:   checking '%s' ...", __func__, keymap->idname);
-
   if (keymap == NULL) {
     /* Only callback is allowed to have NULL keymaps. */
     BLI_assert(handler->dynamic.keymap_fn);
   }
   else {
+    PRINT("%s:   checking '%s' ...", __func__, keymap->idname);
+
     if (WM_keymap_poll(C, keymap)) {
 
       PRINT("pass\n");
 
-      for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
+      LISTBASE_FOREACH (wmKeyMapItem *, kmi, &keymap->items) {
         if (wm_eventmatch(event, kmi)) {
           struct wmEventHandler_KeymapPost keymap_post = handler->post;
 
           PRINT("%s:     item matched '%s'\n", __func__, kmi->idname);
 
-          /* weak, but allows interactive callback to not use rawkey */
-          event->keymap_idname = kmi->idname;
-
-          action |= wm_handler_operator_call(C, handlers, &handler->head, event, kmi->ptr);
+          action |= wm_handler_operator_call(
+              C, handlers, &handler->head, event, kmi->ptr, kmi->idname);
 
           if (action & WM_HANDLER_BREAK) {
             /* not always_pass here, it denotes removed handler_base */
@@ -2703,13 +2478,11 @@ static int wm_handlers_do_keymap_with_gizmo_handler(
       if (wm_eventmatch(event, kmi)) {
         PRINT("%s:     item matched '%s'\n", __func__, kmi->idname);
 
-        /* weak, but allows interactive callback to not use rawkey */
-        event->keymap_idname = kmi->idname;
-
         CTX_wm_gizmo_group_set(C, gzgroup);
 
         /* handler->op is called later, we want keymap op to be triggered here */
-        action |= wm_handler_operator_call(C, handlers, &handler->head, event, kmi->ptr);
+        action |= wm_handler_operator_call(
+            C, handlers, &handler->head, event, kmi->ptr, kmi->idname);
 
         CTX_wm_gizmo_group_set(C, NULL);
 
@@ -2742,6 +2515,171 @@ static int wm_handlers_do_keymap_with_gizmo_handler(
 
   return action;
 }
+
+static int wm_handlers_do_gizmo_handler(bContext *C,
+                                        wmWindowManager *wm,
+                                        wmEventHandler_Gizmo *handler,
+                                        wmEvent *event,
+                                        ListBase *handlers,
+                                        const bool do_debug_handler)
+{
+  int action = WM_HANDLER_CONTINUE;
+  ScrArea *area = CTX_wm_area(C);
+  ARegion *region = CTX_wm_region(C);
+  wmGizmoMap *gzmap = handler->gizmo_map;
+  BLI_assert(gzmap != NULL);
+  wmGizmo *gz = wm_gizmomap_highlight_get(gzmap);
+
+  /* Needed so UI blocks over gizmos don't let events fall through to the gizmos,
+   * noticeable for the node editor - where dragging on a node should move it, see: T73212.
+   * note we still allow for starting the gizmo drag outside, then travel 'inside' the node */
+  if (region->type->clip_gizmo_events_by_ui) {
+    if (UI_region_block_find_mouse_over(region, &event->x, true)) {
+      if (gz != NULL && event->type != EVT_GIZMO_UPDATE) {
+        WM_tooltip_clear(C, CTX_wm_window(C));
+        wm_gizmomap_highlight_set(gzmap, C, NULL, 0);
+      }
+      return action;
+    }
+  }
+
+  if (region->gizmo_map != handler->gizmo_map) {
+    WM_gizmomap_tag_refresh(handler->gizmo_map);
+  }
+
+  wm_gizmomap_handler_context_gizmo(C, handler);
+  wm_region_mouse_co(C, event);
+
+  /* Drag events use the previous click location to highlight the gizmos,
+   * Get the highlight again in case the user dragged off the gizmo. */
+  const bool is_event_drag = ISTWEAK(event->type) || (event->val == KM_CLICK_DRAG);
+  const bool is_event_modifier = ISKEYMODIFIER(event->type);
+
+  bool handle_highlight = false;
+  bool handle_keymap = false;
+
+  /* handle gizmo highlighting */
+  if (!wm_gizmomap_modal_get(gzmap) &&
+      ((event->type == MOUSEMOVE) || is_event_modifier || is_event_drag)) {
+    handle_highlight = true;
+    if (is_event_modifier || is_event_drag) {
+      handle_keymap = true;
+    }
+  }
+  else {
+    handle_keymap = true;
+  }
+
+  if (handle_highlight) {
+    struct {
+      wmGizmo *gz;
+      int part;
+    } prev = {
+        .gz = gz,
+        .part = gz ? gz->highlight_part : 0,
+    };
+    int part = -1;
+    gz = wm_gizmomap_highlight_find(gzmap, C, event, &part);
+
+    /* If no gizmos are/were active, don't clear tool-tips. */
+    if (gz || prev.gz) {
+      if ((prev.gz != gz) || (prev.part != part)) {
+        WM_tooltip_clear(C, CTX_wm_window(C));
+      }
+    }
+
+    if (wm_gizmomap_highlight_set(gzmap, C, gz, part)) {
+      if (gz != NULL) {
+        if (U.flag & USER_TOOLTIPS) {
+          WM_tooltip_timer_init(C, CTX_wm_window(C), area, region, WM_gizmomap_tooltip_init);
+        }
+      }
+    }
+  }
+
+  /* Don't use from now on. */
+  bool is_event_handle_all = gz && (gz->flag & WM_GIZMO_EVENT_HANDLE_ALL);
+
+  if (handle_keymap) {
+    /* Handle highlight gizmo. */
+    if (gz != NULL) {
+      bool keymap_poll = false;
+      wmGizmoGroup *gzgroup = gz->parent_gzgroup;
+      wmKeyMap *keymap = WM_keymap_active(wm, gz->keymap ? gz->keymap : gzgroup->type->keymap);
+      action |= wm_handlers_do_keymap_with_gizmo_handler(
+          C, event, handlers, handler, gzgroup, keymap, do_debug_handler, &keymap_poll);
+
+#ifdef USE_GIZMO_MOUSE_PRIORITY_HACK
+      if (((action & WM_HANDLER_BREAK) == 0) && !is_event_handle_all && keymap_poll) {
+        if ((event->val == KM_PRESS) && ELEM(event->type, LEFTMOUSE, MIDDLEMOUSE, RIGHTMOUSE)) {
+
+          wmEvent event_test_click = *event;
+          event_test_click.val = KM_CLICK;
+
+          wmEvent event_test_click_drag = *event;
+          event_test_click_drag.val = KM_CLICK_DRAG;
+
+          wmEvent event_test_tweak = *event;
+          event_test_tweak.type = EVT_TWEAK_L + (event->type - LEFTMOUSE);
+          event_test_tweak.val = KM_ANY;
+
+          LISTBASE_FOREACH (wmKeyMapItem *, kmi, &keymap->items) {
+            if ((kmi->flag & KMI_INACTIVE) == 0) {
+              if (wm_eventmatch(&event_test_click, kmi) ||
+                  wm_eventmatch(&event_test_click_drag, kmi) ||
+                  wm_eventmatch(&event_test_tweak, kmi)) {
+                wmOperatorType *ot = WM_operatortype_find(kmi->idname, 0);
+                if (WM_operator_poll_context(C, ot, WM_OP_INVOKE_DEFAULT)) {
+                  is_event_handle_all = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+#endif /* USE_GIZMO_MOUSE_PRIORITY_HACK */
+    }
+
+    /* Don't use from now on. */
+    gz = NULL;
+
+    /* Fallback to selected gizmo (when un-handled). */
+    if ((action & WM_HANDLER_BREAK) == 0) {
+      if (WM_gizmomap_is_any_selected(gzmap)) {
+        const ListBase *groups = WM_gizmomap_group_list(gzmap);
+        LISTBASE_FOREACH (wmGizmoGroup *, gzgroup, groups) {
+          if (wm_gizmogroup_is_any_selected(gzgroup)) {
+            wmKeyMap *keymap = WM_keymap_active(wm, gzgroup->type->keymap);
+            action |= wm_handlers_do_keymap_with_gizmo_handler(
+                C, event, handlers, handler, gzgroup, keymap, do_debug_handler, NULL);
+            if (action & WM_HANDLER_BREAK) {
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (is_event_handle_all) {
+    if (action == WM_HANDLER_CONTINUE) {
+      action |= WM_HANDLER_BREAK | WM_HANDLER_MODAL;
+    }
+  }
+
+  /* restore the area */
+  CTX_wm_area_set(C, area);
+  CTX_wm_region_set(C, region);
+
+  return action;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Handle Single Event (All Handler Types)
+ * \{ */
 
 static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers)
 {
@@ -2854,142 +2792,7 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
       }
       else if (handler_base->type == WM_HANDLER_TYPE_GIZMO) {
         wmEventHandler_Gizmo *handler = (wmEventHandler_Gizmo *)handler_base;
-        ScrArea *area = CTX_wm_area(C);
-        ARegion *region = CTX_wm_region(C);
-        wmGizmoMap *gzmap = handler->gizmo_map;
-        BLI_assert(gzmap != NULL);
-        wmGizmo *gz = wm_gizmomap_highlight_get(gzmap);
-
-        if (region->gizmo_map != handler->gizmo_map) {
-          WM_gizmomap_tag_refresh(handler->gizmo_map);
-        }
-
-        wm_gizmomap_handler_context_gizmo(C, handler);
-        wm_region_mouse_co(C, event);
-
-        /* Drag events use the previous click location to highlight the gizmos,
-         * Get the highlight again in case the user dragged off the gizmo. */
-        const bool is_event_drag = ISTWEAK(event->type) || (event->val == KM_CLICK_DRAG);
-        const bool is_event_modifier = ISKEYMODIFIER(event->type);
-
-        bool handle_highlight = false;
-        bool handle_keymap = false;
-
-        /* handle gizmo highlighting */
-        if (!wm_gizmomap_modal_get(gzmap) &&
-            ((event->type == MOUSEMOVE) || is_event_modifier || is_event_drag)) {
-          handle_highlight = true;
-          if (is_event_modifier || is_event_drag) {
-            handle_keymap = true;
-          }
-        }
-        else {
-          handle_keymap = true;
-        }
-
-        if (handle_highlight) {
-          struct {
-            wmGizmo *gz;
-            int part;
-          } prev = {
-              .gz = gz,
-              .part = gz ? gz->highlight_part : 0,
-          };
-          int part = -1;
-          gz = wm_gizmomap_highlight_find(gzmap, C, event, &part);
-
-          /* If no gizmos are/were active, don't clear tool-tips. */
-          if (gz || prev.gz) {
-            if ((prev.gz != gz) || (prev.part != part)) {
-              WM_tooltip_clear(C, CTX_wm_window(C));
-            }
-          }
-
-          if (wm_gizmomap_highlight_set(gzmap, C, gz, part)) {
-            if (gz != NULL) {
-              if (U.flag & USER_TOOLTIPS) {
-                WM_tooltip_timer_init(C, CTX_wm_window(C), area, region, WM_gizmomap_tooltip_init);
-              }
-            }
-          }
-        }
-
-        /* Don't use from now on. */
-        bool is_event_handle_all = gz && (gz->flag & WM_GIZMO_EVENT_HANDLE_ALL);
-
-        if (handle_keymap) {
-          /* Handle highlight gizmo. */
-          if (gz != NULL) {
-            bool keymap_poll = false;
-            wmGizmoGroup *gzgroup = gz->parent_gzgroup;
-            wmKeyMap *keymap = WM_keymap_active(wm,
-                                                gz->keymap ? gz->keymap : gzgroup->type->keymap);
-            action |= wm_handlers_do_keymap_with_gizmo_handler(
-                C, event, handlers, handler, gzgroup, keymap, do_debug_handler, &keymap_poll);
-
-#ifdef USE_GIZMO_MOUSE_PRIORITY_HACK
-            if (((action & WM_HANDLER_BREAK) == 0) && !is_event_handle_all && keymap_poll) {
-              if ((event->val == KM_PRESS) &&
-                  ELEM(event->type, LEFTMOUSE, MIDDLEMOUSE, RIGHTMOUSE)) {
-
-                wmEvent event_test_click = *event;
-                event_test_click.val = KM_CLICK;
-
-                wmEvent event_test_click_drag = *event;
-                event_test_click_drag.val = KM_CLICK_DRAG;
-
-                wmEvent event_test_tweak = *event;
-                event_test_tweak.type = EVT_TWEAK_L + (event->type - LEFTMOUSE);
-                event_test_tweak.val = KM_ANY;
-
-                for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
-                  if ((kmi->flag & KMI_INACTIVE) == 0) {
-                    if (wm_eventmatch(&event_test_click, kmi) ||
-                        wm_eventmatch(&event_test_click_drag, kmi) ||
-                        wm_eventmatch(&event_test_tweak, kmi)) {
-                      wmOperatorType *ot = WM_operatortype_find(kmi->idname, 0);
-                      if (WM_operator_poll_context(C, ot, WM_OP_INVOKE_DEFAULT)) {
-                        is_event_handle_all = true;
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-#endif /* USE_GIZMO_MOUSE_PRIORITY_HACK */
-          }
-
-          /* Don't use from now on. */
-          gz = NULL;
-
-          /* Fallback to selected gizmo (when un-handled). */
-          if ((action & WM_HANDLER_BREAK) == 0) {
-            if (WM_gizmomap_is_any_selected(gzmap)) {
-              const ListBase *groups = WM_gizmomap_group_list(gzmap);
-              for (wmGizmoGroup *gzgroup = groups->first; gzgroup; gzgroup = gzgroup->next) {
-                if (wm_gizmogroup_is_any_selected(gzgroup)) {
-                  wmKeyMap *keymap = WM_keymap_active(wm, gzgroup->type->keymap);
-                  action |= wm_handlers_do_keymap_with_gizmo_handler(
-                      C, event, handlers, handler, gzgroup, keymap, do_debug_handler, NULL);
-                  if (action & WM_HANDLER_BREAK) {
-                    break;
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        if (is_event_handle_all) {
-          if (action == WM_HANDLER_CONTINUE) {
-            action |= WM_HANDLER_BREAK | WM_HANDLER_MODAL;
-          }
-        }
-
-        /* restore the area */
-        CTX_wm_area_set(C, area);
-        CTX_wm_region_set(C, region);
+        action |= wm_handlers_do_gizmo_handler(C, wm, handler, event, handlers, do_debug_handler);
       }
       else if (handler_base->type == WM_HANDLER_TYPE_OP) {
         wmEventHandler_Op *handler = (wmEventHandler_Op *)handler_base;
@@ -3000,7 +2803,7 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
           }
         }
         else {
-          action |= wm_handler_operator_call(C, handlers, handler_base, event, NULL);
+          action |= wm_handler_operator_call(C, handlers, handler_base, event, NULL, NULL);
         }
       }
       else {
@@ -3156,12 +2959,36 @@ static int wm_handlers_do(bContext *C, wmEvent *event, ListBase *handlers)
       wmWindow *win = CTX_wm_window(C);
       if (win) {
         win->eventstate->check_click = 0;
+        win->eventstate->check_drag = 0;
+      }
+    }
+  }
+  else if (ISMOUSE_WHEEL(event->type) || ISMOUSE_GESTURE(event->type)) {
+    /* Modifiers which can trigger click event's,
+     * however we don't want this if the mouse wheel has been used, see T74607. */
+    if (wm_action_not_handled(action)) {
+      /* pass */
+    }
+    else {
+      wmWindow *win = CTX_wm_window(C);
+      if (win) {
+        if (ISKEYMODIFIER(win->eventstate->type)) {
+          win->eventstate->check_click = 0;
+        }
       }
     }
   }
 
   return action;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Event Queue Utilities
+ *
+ * Utilities used by #wm_event_do_handlers.
+ * \{ */
 
 static bool wm_event_inside_rect(const wmEvent *event, const rcti *rect)
 {
@@ -3174,12 +3001,12 @@ static bool wm_event_inside_rect(const wmEvent *event, const rcti *rect)
   return false;
 }
 
-static bool wm_event_inside_region(const wmEvent *event, const ARegion *ar)
+static bool wm_event_inside_region(const wmEvent *event, const ARegion *region)
 {
   if (wm_event_always_pass(event)) {
     return true;
   }
-  return ED_region_contains_xy(ar, &event->x);
+  return ED_region_contains_xy(region, &event->x);
 }
 
 static ScrArea *area_event_inside(bContext *C, const int xy[2])
@@ -3188,10 +3015,9 @@ static ScrArea *area_event_inside(bContext *C, const int xy[2])
   bScreen *screen = CTX_wm_screen(C);
 
   if (screen) {
-    ED_screen_areas_iter(win, screen, sa)
-    {
-      if (BLI_rcti_isect_pt_v(&sa->totrct, xy)) {
-        return sa;
+    ED_screen_areas_iter (win, screen, area) {
+      if (BLI_rcti_isect_pt_v(&area->totrct, xy)) {
+        return area;
       }
     }
   }
@@ -3202,25 +3028,25 @@ static ARegion *region_event_inside(bContext *C, const int xy[2])
 {
   bScreen *screen = CTX_wm_screen(C);
   ScrArea *area = CTX_wm_area(C);
-  ARegion *ar;
+  ARegion *region;
 
   if (screen && area) {
-    for (ar = area->regionbase.first; ar; ar = ar->next) {
-      if (BLI_rcti_isect_pt_v(&ar->winrct, xy)) {
-        return ar;
+    for (region = area->regionbase.first; region; region = region->next) {
+      if (BLI_rcti_isect_pt_v(&region->winrct, xy)) {
+        return region;
       }
     }
   }
   return NULL;
 }
 
-static void wm_paintcursor_tag(bContext *C, wmPaintCursor *pc, ARegion *ar)
+static void wm_paintcursor_tag(bContext *C, wmPaintCursor *pc, ARegion *region)
 {
-  if (ar) {
+  if (region) {
     for (; pc; pc = pc->next) {
       if (pc->poll == NULL || pc->poll(C)) {
         wmWindow *win = CTX_wm_window(C);
-        WM_paint_cursor_tag_redraw(win, ar);
+        WM_paint_cursor_tag_redraw(win, region);
       }
     }
   }
@@ -3233,23 +3059,23 @@ static void wm_paintcursor_test(bContext *C, const wmEvent *event)
   wmWindowManager *wm = CTX_wm_manager(C);
 
   if (wm->paintcursors.first) {
-    ARegion *ar = CTX_wm_region(C);
+    ARegion *region = CTX_wm_region(C);
 
-    if (ar) {
-      wm_paintcursor_tag(C, wm->paintcursors.first, ar);
+    if (region) {
+      wm_paintcursor_tag(C, wm->paintcursors.first, region);
     }
 
     /* if previous position was not in current region, we have to set a temp new context */
-    if (ar == NULL || !BLI_rcti_isect_pt_v(&ar->winrct, &event->prevx)) {
-      ScrArea *sa = CTX_wm_area(C);
+    if (region == NULL || !BLI_rcti_isect_pt_v(&region->winrct, &event->prevx)) {
+      ScrArea *area = CTX_wm_area(C);
 
       CTX_wm_area_set(C, area_event_inside(C, &event->prevx));
       CTX_wm_region_set(C, region_event_inside(C, &event->prevx));
 
       wm_paintcursor_tag(C, wm->paintcursors.first, CTX_wm_region(C));
 
-      CTX_wm_area_set(C, sa);
-      CTX_wm_region_set(C, ar);
+      CTX_wm_area_set(C, area);
+      CTX_wm_region_set(C, region);
     }
   }
 }
@@ -3265,7 +3091,7 @@ static void wm_event_drag_and_drop_test(wmWindowManager *wm, wmWindow *win, wmEv
   if (event->type == MOUSEMOVE || ISKEYMODIFIER(event->type)) {
     screen->do_draw_drag = true;
   }
-  else if (event->type == ESCKEY) {
+  else if (event->type == EVT_ESCKEY) {
     WM_drag_free_list(&wm->drags);
 
     screen->do_draw_drag = true;
@@ -3308,6 +3134,33 @@ static bool wm_event_pie_filter(wmWindow *win, const wmEvent *event)
     return false;
   }
 }
+
+/**
+ * Account for the special case when events are being handled and a file is loaded.
+ * In this case event handling exits early, however when "Load UI" is disabled
+ * the even will still be in #wmWindow.queue.
+ *
+ * Without this it's possible to continuously handle the same event, see: T76484.
+ */
+static void wm_event_free_and_remove_from_queue_if_valid(wmEvent *event)
+{
+  LISTBASE_FOREACH (wmWindowManager *, wm, &G_MAIN->wm) {
+    LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
+      if (BLI_remlink_safe(&win->queue, event)) {
+        wm_event_free(event);
+        return;
+      }
+    }
+  }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Main Event Queue (Every Window)
+ *
+ * Handle events for all windows, run from the #WM_main event loop.
+ * \{ */
 
 /* called in main loop */
 /* goes over entire hierarchy:  events -> window -> screen -> area -> region */
@@ -3353,9 +3206,9 @@ void wm_event_do_handlers(bContext *C)
 
           if (((is_playing_sound == 1) && (is_playing_screen == 0)) ||
               ((is_playing_sound == 0) && (is_playing_screen == 1))) {
-            wmWindow *context_old_win = CTX_wm_window(C);
-            bScreen *context_screen_win = CTX_wm_screen(C);
-            Scene *context_scene_win = CTX_data_scene(C);
+            wmWindow *win_ctx = CTX_wm_window(C);
+            bScreen *screen_stx = CTX_wm_screen(C);
+            Scene *scene_ctx = CTX_data_scene(C);
 
             CTX_wm_window_set(C, win);
             CTX_wm_screen_set(C, screen);
@@ -3363,9 +3216,9 @@ void wm_event_do_handlers(bContext *C)
 
             ED_screen_animation_play(C, -1, 1);
 
-            CTX_data_scene_set(C, context_scene_win);
-            CTX_wm_screen_set(C, context_screen_win);
-            CTX_wm_window_set(C, context_old_win);
+            CTX_data_scene_set(C, scene_ctx);
+            CTX_wm_screen_set(C, screen_stx);
+            CTX_wm_window_set(C, win_ctx);
           }
 
           if (is_playing_sound == 0) {
@@ -3431,6 +3284,7 @@ void wm_event_do_handlers(bContext *C)
 
       /* fileread case */
       if (CTX_wm_window(C) == NULL) {
+        wm_event_free_and_remove_from_queue_if_valid(event);
         return;
       }
 
@@ -3450,7 +3304,7 @@ void wm_event_do_handlers(bContext *C)
       wm_tweakevent_test(C, event, action);
 
       if ((action & WM_HANDLER_BREAK) == 0) {
-        ARegion *ar;
+        ARegion *region;
 
         /* Note: setting subwin active should be done here, after modal handlers have been done */
         if (event->type == MOUSEMOVE) {
@@ -3466,8 +3320,7 @@ void wm_event_do_handlers(bContext *C)
         }
 #endif
 
-        ED_screen_areas_iter(win, screen, sa)
-        {
+        ED_screen_areas_iter (win, screen, area) {
           /* after restoring a screen from SCREENMAXIMIZED we have to wait
            * with the screen handling till the region coordinates are updated */
           if (screen->skip_handling == true) {
@@ -3477,18 +3330,18 @@ void wm_event_do_handlers(bContext *C)
           }
 
           /* update azones if needed - done here because it needs to be independent from redraws */
-          if (sa->flag & AREA_FLAG_ACTIONZONES_UPDATE) {
-            ED_area_azones_update(sa, &event->x);
+          if (area->flag & AREA_FLAG_ACTIONZONES_UPDATE) {
+            ED_area_azones_update(area, &event->x);
           }
 
-          if (wm_event_inside_rect(event, &sa->totrct)) {
-            CTX_wm_area_set(C, sa);
+          if (wm_event_inside_rect(event, &area->totrct)) {
+            CTX_wm_area_set(C, area);
 
             if ((action & WM_HANDLER_BREAK) == 0) {
-              for (ar = sa->regionbase.first; ar; ar = ar->next) {
-                if (wm_event_inside_region(event, ar)) {
+              for (region = area->regionbase.first; region; region = region->next) {
+                if (wm_event_inside_region(event, region)) {
 
-                  CTX_wm_region_set(C, ar);
+                  CTX_wm_region_set(C, region);
 
                   /* call even on non mouse events, since the */
                   wm_region_mouse_co(C, event);
@@ -3501,10 +3354,11 @@ void wm_event_do_handlers(bContext *C)
                     }
                   }
 
-                  action |= wm_handlers_do(C, event, &ar->handlers);
+                  action |= wm_handlers_do(C, event, &region->handlers);
 
                   /* fileread case (python), [#29489] */
                   if (CTX_wm_window(C) == NULL) {
+                    wm_event_free_and_remove_from_queue_if_valid(event);
                     return;
                   }
 
@@ -3519,7 +3373,7 @@ void wm_event_do_handlers(bContext *C)
 
             if ((action & WM_HANDLER_BREAK) == 0) {
               wm_region_mouse_co(C, event); /* only invalidates event->mval in this case */
-              action |= wm_handlers_do(C, event, &sa->handlers);
+              action |= wm_handlers_do(C, event, &area->handlers);
             }
             CTX_wm_area_set(C, NULL);
 
@@ -3539,6 +3393,7 @@ void wm_event_do_handlers(bContext *C)
 
           /* fileread case */
           if (CTX_wm_window(C) == NULL) {
+            wm_event_free_and_remove_from_queue_if_valid(event);
             return;
           }
         }
@@ -3637,13 +3492,12 @@ void WM_event_add_fileselect(bContext *C, wmOperator *op)
         bool cancel_handler = true;
 
         /* find the area with the file selector for this handler */
-        ED_screen_areas_iter(win, screen, sa)
-        {
-          if (sa->spacetype == SPACE_FILE) {
-            SpaceFile *sfile = sa->spacedata.first;
+        ED_screen_areas_iter (win, screen, area) {
+          if (area->spacetype == SPACE_FILE) {
+            SpaceFile *sfile = area->spacedata.first;
 
             if (sfile->op == handler->op) {
-              CTX_wm_area_set(C, sa);
+              CTX_wm_area_set(C, area);
               wm_handler_fileselect_do(C, &win->modalhandlers, handler, EVT_FILESELECT_CANCEL);
               cancel_handler = false;
               break;
@@ -3804,9 +3658,9 @@ wmEventHandler_Keymap *WM_event_add_keymap_handler(ListBase *handlers, wmKeyMap 
 wmKeyMap *WM_event_get_keymap_from_toolsystem_fallback(wmWindowManager *wm,
                                                        wmEventHandler_Keymap *handler)
 {
-  ScrArea *sa = handler->dynamic.user_data;
+  ScrArea *area = handler->dynamic.user_data;
   handler->keymap_tool = NULL;
-  bToolRef_Runtime *tref_rt = sa->runtime.tool ? sa->runtime.tool->runtime : NULL;
+  bToolRef_Runtime *tref_rt = area->runtime.tool ? area->runtime.tool->runtime : NULL;
   if (tref_rt && tref_rt->keymap_fallback[0]) {
     const char *keymap_id = NULL;
 
@@ -3814,9 +3668,9 @@ wmKeyMap *WM_event_get_keymap_from_toolsystem_fallback(wmWindowManager *wm,
     if (tref_rt->gizmo_group[0] != '\0' && tref_rt->keymap_fallback[0] != '\n') {
       wmGizmoMap *gzmap = NULL;
       wmGizmoGroup *gzgroup = NULL;
-      for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
-        if (ar->gizmo_map != NULL) {
-          gzmap = ar->gizmo_map;
+      LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
+        if (region->gizmo_map != NULL) {
+          gzmap = region->gizmo_map;
           gzgroup = WM_gizmomap_group_find(gzmap, tref_rt->gizmo_group);
           if (gzgroup != NULL) {
             break;
@@ -3838,15 +3692,15 @@ wmKeyMap *WM_event_get_keymap_from_toolsystem_fallback(wmWindowManager *wm,
 
     if (keymap_id && keymap_id[0]) {
       wmKeyMap *km = WM_keymap_list_find_spaceid_or_empty(
-          &wm->userconf->keymaps, keymap_id, sa->spacetype, RGN_TYPE_WINDOW);
+          &wm->userconf->keymaps, keymap_id, area->spacetype, RGN_TYPE_WINDOW);
       /* We shouldn't use keymaps from unrelated spaces. */
       if (km != NULL) {
-        handler->keymap_tool = sa->runtime.tool;
+        handler->keymap_tool = area->runtime.tool;
         return km;
       }
       else {
         printf(
-            "Keymap: '%s' not found for tool '%s'\n", tref_rt->keymap, sa->runtime.tool->idname);
+            "Keymap: '%s' not found for tool '%s'\n", tref_rt->keymap, area->runtime.tool->idname);
       }
     }
   }
@@ -3855,22 +3709,22 @@ wmKeyMap *WM_event_get_keymap_from_toolsystem_fallback(wmWindowManager *wm,
 
 wmKeyMap *WM_event_get_keymap_from_toolsystem(wmWindowManager *wm, wmEventHandler_Keymap *handler)
 {
-  ScrArea *sa = handler->dynamic.user_data;
+  ScrArea *area = handler->dynamic.user_data;
   handler->keymap_tool = NULL;
-  bToolRef_Runtime *tref_rt = sa->runtime.tool ? sa->runtime.tool->runtime : NULL;
+  bToolRef_Runtime *tref_rt = area->runtime.tool ? area->runtime.tool->runtime : NULL;
   if (tref_rt && tref_rt->keymap[0]) {
     const char *keymap_id = tref_rt->keymap;
     {
       wmKeyMap *km = WM_keymap_list_find_spaceid_or_empty(
-          &wm->userconf->keymaps, keymap_id, sa->spacetype, RGN_TYPE_WINDOW);
+          &wm->userconf->keymaps, keymap_id, area->spacetype, RGN_TYPE_WINDOW);
       /* We shouldn't use keymaps from unrelated spaces. */
       if (km != NULL) {
-        handler->keymap_tool = sa->runtime.tool;
+        handler->keymap_tool = area->runtime.tool;
         return km;
       }
       else {
         printf(
-            "Keymap: '%s' not found for tool '%s'\n", tref_rt->keymap, sa->runtime.tool->idname);
+            "Keymap: '%s' not found for tool '%s'\n", tref_rt->keymap, area->runtime.tool->idname);
       }
     }
   }
@@ -3935,10 +3789,10 @@ static bool event_or_prev_in_rect(const wmEvent *event, const rcti *rect)
   }
 }
 
-static bool handler_region_v2d_mask_test(const ARegion *ar, const wmEvent *event)
+static bool handler_region_v2d_mask_test(const ARegion *region, const wmEvent *event)
 {
-  rcti rect = ar->v2d.mask;
-  BLI_rcti_translate(&rect, ar->winrct.xmin, ar->winrct.ymin);
+  rcti rect = region->v2d.mask;
+  BLI_rcti_translate(&rect, region->winrct.xmin, region->winrct.ymin);
   return event_or_prev_in_rect(event, &rect);
 }
 
@@ -4102,96 +3956,9 @@ static void WM_event_remove_handler(ListBase *handlers, wmEventHandler *handler)
 }
 #endif
 
-void WM_event_add_mousemove(const bContext *C)
+void WM_event_add_mousemove(wmWindow *win)
 {
-  wmWindow *window = CTX_wm_window(C);
-
-  window->addmousemove = 1;
-}
-
-/* for modal callbacks, check configuration for how to interpret exit with tweaks  */
-bool WM_event_is_modal_tweak_exit(const wmEvent *event, int tweak_event)
-{
-  /* if the release-confirm userpref setting is enabled,
-   * tweak events can be canceled when mouse is released
-   */
-  if (U.flag & USER_RELEASECONFIRM) {
-    /* option on, so can exit with km-release */
-    if (event->val == KM_RELEASE) {
-      switch (tweak_event) {
-        case EVT_TWEAK_L:
-        case EVT_TWEAK_M:
-        case EVT_TWEAK_R:
-          return 1;
-      }
-    }
-    else {
-      /* if the initial event wasn't a tweak event then
-       * ignore USER_RELEASECONFIRM setting: see [#26756] */
-      if (ELEM(tweak_event, EVT_TWEAK_L, EVT_TWEAK_M, EVT_TWEAK_R) == 0) {
-        return 1;
-      }
-    }
-  }
-  else {
-    /* this is fine as long as not doing km-release, otherwise
-     * some items (i.e. markers) being tweaked may end up getting
-     * dropped all over
-     */
-    if (event->val != KM_RELEASE) {
-      return 1;
-    }
-  }
-
-  return 0;
-}
-
-bool WM_event_type_mask_test(const int event_type, const enum eEventType_Mask mask)
-{
-  /* Keyboard. */
-  if (mask & EVT_TYPE_MASK_KEYBOARD) {
-    if (ISKEYBOARD(event_type)) {
-      return true;
-    }
-  }
-  else if (mask & EVT_TYPE_MASK_KEYBOARD_MODIFIER) {
-    if (ISKEYMODIFIER(event_type)) {
-      return true;
-    }
-  }
-
-  /* Mouse. */
-  if (mask & EVT_TYPE_MASK_MOUSE) {
-    if (ISMOUSE(event_type)) {
-      return true;
-    }
-  }
-  else if (mask & EVT_TYPE_MASK_MOUSE_WHEEL) {
-    if (ISMOUSE_WHEEL(event_type)) {
-      return true;
-    }
-  }
-  else if (mask & EVT_TYPE_MASK_MOUSE_GESTURE) {
-    if (ISMOUSE_GESTURE(event_type)) {
-      return true;
-    }
-  }
-
-  /* Tweak. */
-  if (mask & EVT_TYPE_MASK_TWEAK) {
-    if (ISTWEAK(event_type)) {
-      return true;
-    }
-  }
-
-  /* Action Zone. */
-  if (mask & EVT_TYPE_MASK_ACTIONZONE) {
-    if (IS_EVENT_ACTIONZONE(event_type)) {
-      return true;
-    }
-  }
-
-  return false;
+  win->addmousemove = 1;
 }
 
 /** \} */
@@ -4203,139 +3970,139 @@ bool WM_event_type_mask_test(const int event_type, const enum eEventType_Mask ma
 static int convert_key(GHOST_TKey key)
 {
   if (key >= GHOST_kKeyA && key <= GHOST_kKeyZ) {
-    return (AKEY + ((int)key - GHOST_kKeyA));
+    return (EVT_AKEY + ((int)key - GHOST_kKeyA));
   }
   else if (key >= GHOST_kKey0 && key <= GHOST_kKey9) {
-    return (ZEROKEY + ((int)key - GHOST_kKey0));
+    return (EVT_ZEROKEY + ((int)key - GHOST_kKey0));
   }
   else if (key >= GHOST_kKeyNumpad0 && key <= GHOST_kKeyNumpad9) {
-    return (PAD0 + ((int)key - GHOST_kKeyNumpad0));
+    return (EVT_PAD0 + ((int)key - GHOST_kKeyNumpad0));
   }
   else if (key >= GHOST_kKeyF1 && key <= GHOST_kKeyF24) {
-    return (F1KEY + ((int)key - GHOST_kKeyF1));
+    return (EVT_F1KEY + ((int)key - GHOST_kKeyF1));
   }
   else {
     switch (key) {
       case GHOST_kKeyBackSpace:
-        return BACKSPACEKEY;
+        return EVT_BACKSPACEKEY;
       case GHOST_kKeyTab:
-        return TABKEY;
+        return EVT_TABKEY;
       case GHOST_kKeyLinefeed:
-        return LINEFEEDKEY;
+        return EVT_LINEFEEDKEY;
       case GHOST_kKeyClear:
         return 0;
       case GHOST_kKeyEnter:
-        return RETKEY;
+        return EVT_RETKEY;
 
       case GHOST_kKeyEsc:
-        return ESCKEY;
+        return EVT_ESCKEY;
       case GHOST_kKeySpace:
-        return SPACEKEY;
+        return EVT_SPACEKEY;
       case GHOST_kKeyQuote:
-        return QUOTEKEY;
+        return EVT_QUOTEKEY;
       case GHOST_kKeyComma:
-        return COMMAKEY;
+        return EVT_COMMAKEY;
       case GHOST_kKeyMinus:
-        return MINUSKEY;
+        return EVT_MINUSKEY;
       case GHOST_kKeyPlus:
-        return PLUSKEY;
+        return EVT_PLUSKEY;
       case GHOST_kKeyPeriod:
-        return PERIODKEY;
+        return EVT_PERIODKEY;
       case GHOST_kKeySlash:
-        return SLASHKEY;
+        return EVT_SLASHKEY;
 
       case GHOST_kKeySemicolon:
-        return SEMICOLONKEY;
+        return EVT_SEMICOLONKEY;
       case GHOST_kKeyEqual:
-        return EQUALKEY;
+        return EVT_EQUALKEY;
 
       case GHOST_kKeyLeftBracket:
-        return LEFTBRACKETKEY;
+        return EVT_LEFTBRACKETKEY;
       case GHOST_kKeyRightBracket:
-        return RIGHTBRACKETKEY;
+        return EVT_RIGHTBRACKETKEY;
       case GHOST_kKeyBackslash:
-        return BACKSLASHKEY;
+        return EVT_BACKSLASHKEY;
       case GHOST_kKeyAccentGrave:
-        return ACCENTGRAVEKEY;
+        return EVT_ACCENTGRAVEKEY;
 
       case GHOST_kKeyLeftShift:
-        return LEFTSHIFTKEY;
+        return EVT_LEFTSHIFTKEY;
       case GHOST_kKeyRightShift:
-        return RIGHTSHIFTKEY;
+        return EVT_RIGHTSHIFTKEY;
       case GHOST_kKeyLeftControl:
-        return LEFTCTRLKEY;
+        return EVT_LEFTCTRLKEY;
       case GHOST_kKeyRightControl:
-        return RIGHTCTRLKEY;
+        return EVT_RIGHTCTRLKEY;
       case GHOST_kKeyOS:
-        return OSKEY;
+        return EVT_OSKEY;
       case GHOST_kKeyLeftAlt:
-        return LEFTALTKEY;
+        return EVT_LEFTALTKEY;
       case GHOST_kKeyRightAlt:
-        return RIGHTALTKEY;
+        return EVT_RIGHTALTKEY;
       case GHOST_kKeyApp:
-        return APPKEY;
+        return EVT_APPKEY;
 
       case GHOST_kKeyCapsLock:
-        return CAPSLOCKKEY;
+        return EVT_CAPSLOCKKEY;
       case GHOST_kKeyNumLock:
         return 0;
       case GHOST_kKeyScrollLock:
         return 0;
 
       case GHOST_kKeyLeftArrow:
-        return LEFTARROWKEY;
+        return EVT_LEFTARROWKEY;
       case GHOST_kKeyRightArrow:
-        return RIGHTARROWKEY;
+        return EVT_RIGHTARROWKEY;
       case GHOST_kKeyUpArrow:
-        return UPARROWKEY;
+        return EVT_UPARROWKEY;
       case GHOST_kKeyDownArrow:
-        return DOWNARROWKEY;
+        return EVT_DOWNARROWKEY;
 
       case GHOST_kKeyPrintScreen:
         return 0;
       case GHOST_kKeyPause:
-        return PAUSEKEY;
+        return EVT_PAUSEKEY;
 
       case GHOST_kKeyInsert:
-        return INSERTKEY;
+        return EVT_INSERTKEY;
       case GHOST_kKeyDelete:
-        return DELKEY;
+        return EVT_DELKEY;
       case GHOST_kKeyHome:
-        return HOMEKEY;
+        return EVT_HOMEKEY;
       case GHOST_kKeyEnd:
-        return ENDKEY;
+        return EVT_ENDKEY;
       case GHOST_kKeyUpPage:
-        return PAGEUPKEY;
+        return EVT_PAGEUPKEY;
       case GHOST_kKeyDownPage:
-        return PAGEDOWNKEY;
+        return EVT_PAGEDOWNKEY;
 
       case GHOST_kKeyNumpadPeriod:
-        return PADPERIOD;
+        return EVT_PADPERIOD;
       case GHOST_kKeyNumpadEnter:
-        return PADENTER;
+        return EVT_PADENTER;
       case GHOST_kKeyNumpadPlus:
-        return PADPLUSKEY;
+        return EVT_PADPLUSKEY;
       case GHOST_kKeyNumpadMinus:
-        return PADMINUS;
+        return EVT_PADMINUS;
       case GHOST_kKeyNumpadAsterisk:
-        return PADASTERKEY;
+        return EVT_PADASTERKEY;
       case GHOST_kKeyNumpadSlash:
-        return PADSLASHKEY;
+        return EVT_PADSLASHKEY;
 
       case GHOST_kKeyGrLess:
-        return GRLESSKEY;
+        return EVT_GRLESSKEY;
 
       case GHOST_kKeyMediaPlay:
-        return MEDIAPLAY;
+        return EVT_MEDIAPLAY;
       case GHOST_kKeyMediaStop:
-        return MEDIASTOP;
+        return EVT_MEDIASTOP;
       case GHOST_kKeyMediaFirst:
-        return MEDIAFIRST;
+        return EVT_MEDIAFIRST;
       case GHOST_kKeyMediaLast:
-        return MEDIALAST;
+        return EVT_MEDIALAST;
 
       default:
-        return UNKNOWNKEY; /* GHOST_kKeyUnknown */
+        return EVT_UNKNOWNKEY; /* GHOST_kKeyUnknown */
     }
   }
 }
@@ -4388,84 +4155,75 @@ static void wm_eventemulation(wmEvent *event, bool test_only)
   /* numpad emulation */
   if (U.flag & USER_NONUMPAD) {
     switch (event->type) {
-      case ZEROKEY:
-        event->type = PAD0;
+      case EVT_ZEROKEY:
+        event->type = EVT_PAD0;
         break;
-      case ONEKEY:
-        event->type = PAD1;
+      case EVT_ONEKEY:
+        event->type = EVT_PAD1;
         break;
-      case TWOKEY:
-        event->type = PAD2;
+      case EVT_TWOKEY:
+        event->type = EVT_PAD2;
         break;
-      case THREEKEY:
-        event->type = PAD3;
+      case EVT_THREEKEY:
+        event->type = EVT_PAD3;
         break;
-      case FOURKEY:
-        event->type = PAD4;
+      case EVT_FOURKEY:
+        event->type = EVT_PAD4;
         break;
-      case FIVEKEY:
-        event->type = PAD5;
+      case EVT_FIVEKEY:
+        event->type = EVT_PAD5;
         break;
-      case SIXKEY:
-        event->type = PAD6;
+      case EVT_SIXKEY:
+        event->type = EVT_PAD6;
         break;
-      case SEVENKEY:
-        event->type = PAD7;
+      case EVT_SEVENKEY:
+        event->type = EVT_PAD7;
         break;
-      case EIGHTKEY:
-        event->type = PAD8;
+      case EVT_EIGHTKEY:
+        event->type = EVT_PAD8;
         break;
-      case NINEKEY:
-        event->type = PAD9;
+      case EVT_NINEKEY:
+        event->type = EVT_PAD9;
         break;
-      case MINUSKEY:
-        event->type = PADMINUS;
+      case EVT_MINUSKEY:
+        event->type = EVT_PADMINUS;
         break;
-      case EQUALKEY:
-        event->type = PADPLUSKEY;
+      case EVT_EQUALKEY:
+        event->type = EVT_PADPLUSKEY;
         break;
-      case BACKSLASHKEY:
-        event->type = PADSLASHKEY;
+      case EVT_BACKSLASHKEY:
+        event->type = EVT_PADSLASHKEY;
         break;
     }
   }
 }
 
-/* applies the global tablet pressure correction curve */
-float wm_pressure_curve(float pressure)
+static const wmTabletData wm_event_tablet_data_default = {
+    .active = EVT_TABLET_NONE,
+    .pressure = 1.0f,
+    .x_tilt = 0.0f,
+    .y_tilt = 0.0f,
+    .is_motion_absolute = false,
+};
+
+void WM_event_tablet_data_default_set(wmTabletData *tablet_data)
 {
-  if (U.pressure_threshold_max != 0.0f) {
-    pressure /= U.pressure_threshold_max;
-  }
-
-  CLAMP(pressure, 0.0f, 1.0f);
-
-  if (U.pressure_softness != 0.0f) {
-    pressure = powf(pressure, powf(4.0f, -U.pressure_softness));
-  }
-
-  return pressure;
+  *tablet_data = wm_event_tablet_data_default;
 }
 
-/* adds customdata to event */
-static void update_tablet_data(wmWindow *win, wmEvent *event)
+void wm_tablet_data_from_ghost(const GHOST_TabletData *tablet_data, wmTabletData *wmtab)
 {
-  const GHOST_TabletData *td = GHOST_GetTabletData(win->ghostwin);
-
-  /* if there's tablet data from an active tablet device then add it */
-  if ((td != NULL) && td->Active != GHOST_kTabletModeNone) {
-    struct wmTabletData *wmtab = MEM_mallocN(sizeof(wmTabletData), "customdata tablet");
-
-    wmtab->Active = (int)td->Active;
-    wmtab->Pressure = wm_pressure_curve(td->Pressure);
-    wmtab->Xtilt = td->Xtilt;
-    wmtab->Ytilt = td->Ytilt;
-
-    event->tablet_data = wmtab;
-    // printf("%s: using tablet %.5f\n", __func__, wmtab->Pressure);
+  if ((tablet_data != NULL) && tablet_data->Active != GHOST_kTabletModeNone) {
+    wmtab->active = (int)tablet_data->Active;
+    wmtab->pressure = wm_pressure_curve(tablet_data->Pressure);
+    wmtab->x_tilt = tablet_data->Xtilt;
+    wmtab->y_tilt = tablet_data->Ytilt;
+    /* We could have a preference to support relative tablet motion (we can't detect that). */
+    wmtab->is_motion_absolute = true;
+    // printf("%s: using tablet %.5f\n", __func__, wmtab->pressure);
   }
   else {
-    event->tablet_data = NULL;
+    *wmtab = wm_event_tablet_data_default;
     // printf("%s: not using tablet\n", __func__);
   }
 }
@@ -4609,6 +4367,7 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
 
   /* initialize and copy state (only mouse x y and modifiers) */
   event = *evt;
+  event.is_repeat = false;
 
   switch (type) {
     /* mouse move, also to inactive window (X11 does this) */
@@ -4617,6 +4376,7 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
 
       copy_v2_v2_int(&event.x, &cd->x);
       wm_stereo3d_mouse_offset_apply(win, &event.x);
+      wm_tablet_data_from_ghost(&cd->tablet, &event.tablet);
 
       event.prevtype = event.type;
       event.prevval = event.val;
@@ -4624,7 +4384,7 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
       {
         wmEvent *event_new = wm_event_add_mousemove(win, &event);
         copy_v2_v2_int(&evt->x, &event_new->x);
-        evt->is_motion_absolute = event_new->is_motion_absolute;
+        evt->tablet.is_motion_absolute = event_new->tablet.is_motion_absolute;
       }
 
       /* also add to other window if event is there, this makes overdraws disappear nicely */
@@ -4642,7 +4402,7 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
         {
           wmEvent *event_new = wm_event_add_mousemove(owin, &oevent);
           copy_v2_v2_int(&oevt->x, &event_new->x);
-          oevt->is_motion_absolute = event_new->is_motion_absolute;
+          oevt->tablet.is_motion_absolute = event_new->tablet.is_motion_absolute;
         }
       }
 
@@ -4655,6 +4415,9 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
           event.type = MOUSEZOOM;
           pd->deltaX = -pd->deltaX;
           pd->deltaY = -pd->deltaY;
+          break;
+        case GHOST_kTrackpadEventSmartMagnify:
+          event.type = MOUSESMARTZOOM;
           break;
         case GHOST_kTrackpadEventRotate:
           event.type = MOUSEROTATE;
@@ -4706,6 +4469,9 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
         event.type = MIDDLEMOUSE;
       }
 
+      /* Get tablet data. */
+      wm_tablet_data_from_ghost(&bd->tablet, &event.tablet);
+
       wm_eventemulation(&event, false);
 
       /* copy previous state to prev event state (two old!) */
@@ -4715,17 +4481,6 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
       /* copy to event state */
       evt->val = event.val;
       evt->type = event.type;
-
-      if (win->active == 0) {
-        int cx, cy;
-
-        /* Entering window, update mouse pos.
-         * (ghost sends win-activate *after* the mouseclick in window!) */
-        wm_get_cursor_position(win, &cx, &cy);
-
-        event.x = evt->x = cx;
-        event.y = evt->y = cy;
-      }
 
       /* double click test */
       if (wm_event_is_double_click(&event, evt)) {
@@ -4747,6 +4502,7 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
         oevent.y = event.y;
         oevent.type = event.type;
         oevent.val = event.val;
+        oevent.tablet = event.tablet;
 
         wm_event_add(owin, &oevent);
       }
@@ -4765,6 +4521,7 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
       event.ascii = kd->ascii;
       memcpy(
           event.utf8_buf, kd->utf8_buf, sizeof(event.utf8_buf)); /* might be not null terminated*/
+      event.is_repeat = kd->is_repeat;
       event.val = (type == GHOST_kEventKeyDown) ? KM_PRESS : KM_RELEASE;
 
       wm_eventemulation(&event, false);
@@ -4776,6 +4533,7 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
       /* copy to event state */
       evt->val = event.val;
       evt->type = event.type;
+      evt->is_repeat = event.is_repeat;
 
       /* exclude arrow keys, esc, etc from text input */
       if (type == GHOST_kEventKeyUp) {
@@ -4808,8 +4566,8 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
 
       /* assigning both first and second is strange - campbell */
       switch (event.type) {
-        case LEFTSHIFTKEY:
-        case RIGHTSHIFTKEY:
+        case EVT_LEFTSHIFTKEY:
+        case EVT_RIGHTSHIFTKEY:
           if (event.val == KM_PRESS) {
             if (evt->ctrl || evt->alt || evt->oskey) {
               keymodifier = (KM_MOD_FIRST | KM_MOD_SECOND);
@@ -4820,8 +4578,8 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
           }
           event.shift = evt->shift = keymodifier;
           break;
-        case LEFTCTRLKEY:
-        case RIGHTCTRLKEY:
+        case EVT_LEFTCTRLKEY:
+        case EVT_RIGHTCTRLKEY:
           if (event.val == KM_PRESS) {
             if (evt->shift || evt->alt || evt->oskey) {
               keymodifier = (KM_MOD_FIRST | KM_MOD_SECOND);
@@ -4832,8 +4590,8 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
           }
           event.ctrl = evt->ctrl = keymodifier;
           break;
-        case LEFTALTKEY:
-        case RIGHTALTKEY:
+        case EVT_LEFTALTKEY:
+        case EVT_RIGHTALTKEY:
           if (event.val == KM_PRESS) {
             if (evt->ctrl || evt->shift || evt->oskey) {
               keymodifier = (KM_MOD_FIRST | KM_MOD_SECOND);
@@ -4844,7 +4602,7 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
           }
           event.alt = evt->alt = keymodifier;
           break;
-        case OSKEY:
+        case EVT_OSKEY:
           if (event.val == KM_PRESS) {
             if (evt->ctrl || evt->alt || evt->shift) {
               keymodifier = (KM_MOD_FIRST | KM_MOD_SECOND);
@@ -4883,13 +4641,13 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
        * (to compose complex latin characters e.g.), it's not really clear why.
        * Since it's impossible to map a key modifier to an unknown key,
        * it shouldn't harm to clear it. */
-      if (event.keymodifier == UNKNOWNKEY) {
+      if (event.keymodifier == EVT_UNKNOWNKEY) {
         evt->keymodifier = event.keymodifier = 0;
       }
 
       /* if test_break set, it catches this. Do not set with modifier presses.
        * XXX Keep global for now? */
-      if ((event.type == ESCKEY && event.val == KM_PRESS) &&
+      if ((event.type == EVT_ESCKEY && event.val == KM_PRESS) &&
           /* check other modifiers because ms-windows uses these to bring up the task manager */
           (event.shift == 0 && event.ctrl == 0 && event.alt == 0)) {
         G.is_break = true;
@@ -5013,6 +4771,29 @@ void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void 
 #endif
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name WM Interface Locking
+ * \{ */
+
+/**
+ * Check whether operator is allowed to run in case interface is locked,
+ * If interface is unlocked, will always return truth.
+ */
+static bool wm_operator_check_locked_interface(bContext *C, wmOperatorType *ot)
+{
+  wmWindowManager *wm = CTX_wm_manager(C);
+
+  if (wm->is_interface_locked) {
+    if ((ot->flag & OPTYPE_LOCK_BYPASS) == 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 void WM_set_locked_interface(wmWindowManager *wm, bool lock)
 {
   /* This will prevent events from being handled while interface is locked
@@ -5034,95 +4815,11 @@ void WM_set_locked_interface(wmWindowManager *wm, bool lock)
   BKE_spacedata_draw_locks(lock);
 }
 
-#ifdef WITH_INPUT_NDOF
+/** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name NDOF Utility Functions
+/** \name Event / Keymap Matching API
  * \{ */
-
-void WM_event_ndof_pan_get(const wmNDOFMotionData *ndof, float r_pan[3], const bool use_zoom)
-{
-  int z_flag = use_zoom ? NDOF_ZOOM_INVERT : NDOF_PANZ_INVERT_AXIS;
-  r_pan[0] = ndof->tvec[0] * ((U.ndof_flag & NDOF_PANX_INVERT_AXIS) ? -1.0f : 1.0f);
-  r_pan[1] = ndof->tvec[1] * ((U.ndof_flag & NDOF_PANY_INVERT_AXIS) ? -1.0f : 1.0f);
-  r_pan[2] = ndof->tvec[2] * ((U.ndof_flag & z_flag) ? -1.0f : 1.0f);
-}
-
-void WM_event_ndof_rotate_get(const wmNDOFMotionData *ndof, float r_rot[3])
-{
-  r_rot[0] = ndof->rvec[0] * ((U.ndof_flag & NDOF_ROTX_INVERT_AXIS) ? -1.0f : 1.0f);
-  r_rot[1] = ndof->rvec[1] * ((U.ndof_flag & NDOF_ROTY_INVERT_AXIS) ? -1.0f : 1.0f);
-  r_rot[2] = ndof->rvec[2] * ((U.ndof_flag & NDOF_ROTZ_INVERT_AXIS) ? -1.0f : 1.0f);
-}
-
-float WM_event_ndof_to_axis_angle(const struct wmNDOFMotionData *ndof, float axis[3])
-{
-  float angle;
-  angle = normalize_v3_v3(axis, ndof->rvec);
-
-  axis[0] = axis[0] * ((U.ndof_flag & NDOF_ROTX_INVERT_AXIS) ? -1.0f : 1.0f);
-  axis[1] = axis[1] * ((U.ndof_flag & NDOF_ROTY_INVERT_AXIS) ? -1.0f : 1.0f);
-  axis[2] = axis[2] * ((U.ndof_flag & NDOF_ROTZ_INVERT_AXIS) ? -1.0f : 1.0f);
-
-  return ndof->dt * angle;
-}
-
-void WM_event_ndof_to_quat(const struct wmNDOFMotionData *ndof, float q[4])
-{
-  float axis[3];
-  float angle;
-
-  angle = WM_event_ndof_to_axis_angle(ndof, axis);
-  axis_angle_to_quat(q, axis, angle);
-}
-#endif /* WITH_INPUT_NDOF */
-
-/* if this is a tablet event, return tablet pressure and set *pen_flip
- * to 1 if the eraser tool is being used, 0 otherwise */
-float WM_event_tablet_data(const wmEvent *event, int *pen_flip, float tilt[2])
-{
-  int erasor = 0;
-  float pressure = 1;
-
-  if (tilt) {
-    zero_v2(tilt);
-  }
-
-  if (event->tablet_data) {
-    const wmTabletData *wmtab = event->tablet_data;
-
-    erasor = (wmtab->Active == EVT_TABLET_ERASER);
-    if (wmtab->Active != EVT_TABLET_NONE) {
-      pressure = wmtab->Pressure;
-      if (tilt) {
-        tilt[0] = wmtab->Xtilt;
-        tilt[1] = wmtab->Ytilt;
-      }
-    }
-  }
-
-  if (pen_flip) {
-    (*pen_flip) = erasor;
-  }
-
-  return pressure;
-}
-
-bool WM_event_is_tablet(const struct wmEvent *event)
-{
-  return (event->tablet_data) ? true : false;
-}
-
-#ifdef WITH_INPUT_IME
-/* most os using ctrl/oskey + space to switch ime, avoid added space */
-bool WM_event_is_ime_switch(const struct wmEvent *event)
-{
-  return event->val == KM_PRESS && event->type == SPACEKEY &&
-         (event->ctrl || event->oskey || event->shift || event->alt);
-}
-#endif
-
-/** \} */
 
 wmKeyMap *WM_event_get_keymap_from_handler(wmWindowManager *wm, wmEventHandler_Keymap *handler)
 {
@@ -5140,7 +4837,7 @@ wmKeyMap *WM_event_get_keymap_from_handler(wmWindowManager *wm, wmEventHandler_K
 
 wmKeyMapItem *WM_event_match_keymap_item(bContext *C, wmKeyMap *keymap, const wmEvent *event)
 {
-  for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
+  LISTBASE_FOREACH (wmKeyMapItem *, kmi, &keymap->items) {
     if (wm_eventmatch(event, kmi)) {
       wmOperatorType *ot = WM_operatortype_find(kmi->idname, 0);
       if (WM_operator_poll_context(C, ot, WM_OP_INVOKE_DEFAULT)) {
@@ -5151,10 +4848,10 @@ wmKeyMapItem *WM_event_match_keymap_item(bContext *C, wmKeyMap *keymap, const wm
   return NULL;
 }
 
-static wmKeyMapItem *wm_kmi_from_event(bContext *C,
-                                       wmWindowManager *wm,
-                                       ListBase *handlers,
-                                       const wmEvent *event)
+wmKeyMapItem *WM_event_match_keymap_item_from_handlers(bContext *C,
+                                                       wmWindowManager *wm,
+                                                       ListBase *handlers,
+                                                       const wmEvent *event)
 {
   LISTBASE_FOREACH (wmEventHandler *, handler_base, handlers) {
     /* during this loop, ui handlers for nested menus can tag multiple handlers free */
@@ -5176,6 +4873,8 @@ static wmKeyMapItem *wm_kmi_from_event(bContext *C,
   }
   return NULL;
 }
+
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Cursor Keymap Status
@@ -5244,30 +4943,30 @@ ScrArea *WM_window_status_area_find(wmWindow *win, bScreen *screen)
   if (screen->state == SCREENFULL) {
     return NULL;
   }
-  ScrArea *sa_statusbar = NULL;
-  for (ScrArea *sa = win->global_areas.areabase.first; sa; sa = sa->next) {
-    if (sa->spacetype == SPACE_STATUSBAR) {
-      sa_statusbar = sa;
+  ScrArea *area_statusbar = NULL;
+  LISTBASE_FOREACH (ScrArea *, area, &win->global_areas.areabase) {
+    if (area->spacetype == SPACE_STATUSBAR) {
+      area_statusbar = area;
       break;
     }
   }
-  return sa_statusbar;
+  return area_statusbar;
 }
 
 void WM_window_status_area_tag_redraw(wmWindow *win)
 {
-  bScreen *sc = WM_window_get_active_screen(win);
-  ScrArea *sa = WM_window_status_area_find(win, sc);
-  if (sa != NULL) {
-    ED_area_tag_redraw(sa);
+  bScreen *screen = WM_window_get_active_screen(win);
+  ScrArea *area = WM_window_status_area_find(win, screen);
+  if (area != NULL) {
+    ED_area_tag_redraw(area);
   }
 }
 
 void WM_window_cursor_keymap_status_refresh(bContext *C, wmWindow *win)
 {
   bScreen *screen = WM_window_get_active_screen(win);
-  ScrArea *sa_statusbar = WM_window_status_area_find(win, screen);
-  if (sa_statusbar == NULL) {
+  ScrArea *area_statusbar = WM_window_status_area_find(win, screen);
+  if (area_statusbar == NULL) {
     MEM_SAFE_FREE(win->cursor_keymap_status);
     return;
   }
@@ -5289,28 +4988,27 @@ void WM_window_cursor_keymap_status_refresh(bContext *C, wmWindow *win)
   cd->state_event = *win->eventstate;
 
   /* Find active region and associated area. */
-  ARegion *ar = screen->active_region;
-  if (ar == NULL) {
+  ARegion *region = screen->active_region;
+  if (region == NULL) {
     return;
   }
 
-  ScrArea *sa = NULL;
-  ED_screen_areas_iter(win, screen, sa_iter)
-  {
-    if (BLI_findindex(&sa_iter->regionbase, ar) != -1) {
-      sa = sa_iter;
+  ScrArea *area = NULL;
+  ED_screen_areas_iter (win, screen, area_iter) {
+    if (BLI_findindex(&area_iter->regionbase, region) != -1) {
+      area = area_iter;
       break;
     }
   }
-  if (sa == NULL) {
+  if (area == NULL) {
     return;
   }
 
   /* Keep as-is. */
-  if (ELEM(sa->spacetype, SPACE_STATUSBAR, SPACE_TOPBAR)) {
+  if (ELEM(area->spacetype, SPACE_STATUSBAR, SPACE_TOPBAR)) {
     return;
   }
-  if (ELEM(ar->regiontype,
+  if (ELEM(region->regiontype,
            RGN_TYPE_HEADER,
            RGN_TYPE_TOOL_HEADER,
            RGN_TYPE_FOOTER,
@@ -5319,23 +5017,24 @@ void WM_window_cursor_keymap_status_refresh(bContext *C, wmWindow *win)
     return;
   }
   /* Fallback to window. */
-  if (ELEM(ar->regiontype, RGN_TYPE_TOOLS, RGN_TYPE_TOOL_PROPS)) {
-    ar = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
+  if (ELEM(region->regiontype, RGN_TYPE_TOOLS, RGN_TYPE_TOOL_PROPS)) {
+    region = BKE_area_find_region_type(area, RGN_TYPE_WINDOW);
   }
 
   /* Detect changes to the state. */
   {
     bToolRef *tref = NULL;
-    if ((ar->regiontype == RGN_TYPE_WINDOW) && ((1 << sa->spacetype) & WM_TOOLSYSTEM_SPACE_MASK)) {
+    if ((region->regiontype == RGN_TYPE_WINDOW) &&
+        ((1 << area->spacetype) & WM_TOOLSYSTEM_SPACE_MASK)) {
       ViewLayer *view_layer = WM_window_get_active_view_layer(win);
       WorkSpace *workspace = WM_window_get_active_workspace(win);
       const bToolKey tkey = {
-          .space_type = sa->spacetype,
-          .mode = WM_toolsystem_mode_from_spacetype(view_layer, sa, sa->spacetype),
+          .space_type = area->spacetype,
+          .mode = WM_toolsystem_mode_from_spacetype(view_layer, area, area->spacetype),
       };
       tref = WM_toolsystem_ref_find(workspace, &tkey);
     }
-    wm_event_cursor_store(&cd->state, win->eventstate, sa->spacetype, ar->regiontype, tref);
+    wm_event_cursor_store(&cd->state, win->eventstate, area->spacetype, region->regiontype, tref);
     if (memcmp(&cd->state, &cd_prev.state, sizeof(cd->state)) == 0) {
       return;
     }
@@ -5367,12 +5066,12 @@ void WM_window_cursor_keymap_status_refresh(bContext *C, wmWindow *win)
   }
 
   CTX_wm_window_set(C, win);
-  CTX_wm_area_set(C, sa);
-  CTX_wm_region_set(C, ar);
+  CTX_wm_area_set(C, area);
+  CTX_wm_region_set(C, region);
 
   ListBase *handlers[] = {
-      &ar->handlers,
-      &sa->handlers,
+      &region->handlers,
+      &area->handlers,
       &win->handlers,
   };
 
@@ -5389,7 +5088,7 @@ void WM_window_cursor_keymap_status_refresh(bContext *C, wmWindow *win)
     wm_eventemulation(&test_event, true);
     wmKeyMapItem *kmi = NULL;
     for (int handler_index = 0; handler_index < ARRAY_SIZE(handlers); handler_index++) {
-      kmi = wm_kmi_from_event(C, wm, handlers[handler_index], &test_event);
+      kmi = WM_event_match_keymap_item_from_handlers(C, wm, handlers[handler_index], &test_event);
       if (kmi) {
         break;
       }
@@ -5402,7 +5101,7 @@ void WM_window_cursor_keymap_status_refresh(bContext *C, wmWindow *win)
   }
 
   if (memcmp(&cd_prev.text, &cd->text, sizeof(cd_prev.text)) != 0) {
-    ED_area_tag_redraw(sa_statusbar);
+    ED_area_tag_redraw(area_statusbar);
   }
 
   CTX_wm_window_set(C, NULL);
@@ -5483,46 +5182,6 @@ bool WM_window_modal_keymap_status_draw(bContext *C, wmWindow *win, uiLayout *la
     }
   }
   return true;
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Event Click/Drag Checks
- *
- * Values under this limit are detected as clicks.
- *
- * \{ */
-
-int WM_event_drag_threshold(const struct wmEvent *event)
-{
-  int drag_threshold;
-  if (WM_event_is_tablet(event)) {
-    drag_threshold = U.drag_threshold_tablet;
-  }
-  else if (ISMOUSE(event->prevtype)) {
-    drag_threshold = U.drag_threshold_mouse;
-  }
-  else {
-    /* Typically keyboard, could be NDOF button or other less common types. */
-    drag_threshold = U.drag_threshold;
-  }
-  return drag_threshold * U.dpi_fac;
-}
-
-bool WM_event_drag_test_with_delta(const wmEvent *event, const int drag_delta[2])
-{
-  const int drag_threshold = WM_event_drag_threshold(event);
-  return abs(drag_delta[0]) > drag_threshold || abs(drag_delta[1]) > drag_threshold;
-}
-
-bool WM_event_drag_test(const wmEvent *event, const int prev_xy[2])
-{
-  const int drag_delta[2] = {
-      prev_xy[0] - event->x,
-      prev_xy[1] - event->y,
-  };
-  return WM_event_drag_test_with_delta(event, drag_delta);
 }
 
 /** \} */

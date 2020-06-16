@@ -27,8 +27,8 @@
 #include "util/util_list.h"
 #include "util/util_stats.h"
 #include "util/util_string.h"
-#include "util/util_thread.h"
 #include "util/util_texture.h"
+#include "util/util_thread.h"
 #include "util/util_types.h"
 #include "util/util_vector.h"
 
@@ -75,14 +75,16 @@ class DeviceInfo {
   string description;
   string id; /* used for user preferences, should stay fixed with changing hardware config */
   int num;
-  bool display_device;       /* GPU is used as a display device. */
-  bool has_half_images;      /* Support half-float textures. */
-  bool has_volume_decoupled; /* Decoupled volume shading. */
-  bool has_osl;              /* Support Open Shading Language. */
-  bool use_split_kernel;     /* Use split or mega kernel. */
-  bool has_profiling;        /* Supports runtime collection of profiling info. */
+  bool display_device;               /* GPU is used as a display device. */
+  bool has_half_images;              /* Support half-float textures. */
+  bool has_volume_decoupled;         /* Decoupled volume shading. */
+  bool has_adaptive_stop_per_sample; /* Per-sample adaptive sampling stopping. */
+  bool has_osl;                      /* Support Open Shading Language. */
+  bool use_split_kernel;             /* Use split or mega kernel. */
+  bool has_profiling;                /* Supports runtime collection of profiling info. */
   int cpu_threads;
   vector<DeviceInfo> multi_devices;
+  vector<DeviceInfo> denoising_devices;
 
   DeviceInfo()
   {
@@ -93,6 +95,7 @@ class DeviceInfo {
     display_device = false;
     has_half_images = false;
     has_volume_decoupled = false;
+    has_adaptive_stop_per_sample = false;
     has_osl = false;
     use_split_kernel = false;
     has_profiling = false;

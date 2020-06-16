@@ -30,22 +30,22 @@
 
 #include "CLG_log.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_path_util.h"
 #include "BLI_fileops.h"
 #include "BLI_listbase.h"
+#include "BLI_path_util.h"
 #include "BLI_string.h"
 #include "BLI_string_utf8.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
 #include "RNA_types.h"
 
 #include "bpy.h"
-#include "bpy_rna.h"
-#include "bpy_path.h"
 #include "bpy_capi_utils.h"
-#include "bpy_traceback.h"
 #include "bpy_intern_string.h"
+#include "bpy_path.h"
+#include "bpy_rna.h"
+#include "bpy_traceback.h"
 
 #include "bpy_app_translations.h"
 
@@ -66,12 +66,12 @@
 #include "../generic/py_capi_utils.h"
 
 /* inittab initialization functions */
+#include "../bmesh/bmesh_py_api.h"
 #include "../generic/bgl.h"
 #include "../generic/blf_py_api.h"
 #include "../generic/idprop_py_api.h"
 #include "../generic/imbuf_py_api.h"
 #include "../gpu/gpu_py_api.h"
-#include "../bmesh/bmesh_py_api.h"
 #include "../mathutils/mathutils.h"
 
 /* Logging types to use anywhere in the Python modules. */
@@ -279,9 +279,10 @@ void BPY_python_start(int argc, const char **argv)
    * While harmless, it's noisy. */
   Py_FrozenFlag = 1;
 
-  /* Only use the systems environment variables when explicitly requested.
+  /* Only use the systems environment variables and site when explicitly requested.
    * Since an incorrect 'PYTHONPATH' causes difficult to debug errors, see: T72807. */
   Py_IgnoreEnvironmentFlag = !py_use_system_env;
+  Py_NoUserSiteDirectory = !py_use_system_env;
 
   Py_Initialize();
 
@@ -940,7 +941,7 @@ static void bpy_module_delay_init(PyObject *bpy_proxy)
   char filename_abs[1024];
 
   BLI_strncpy(filename_abs, filename_rel, sizeof(filename_abs));
-  BLI_path_cwd(filename_abs, sizeof(filename_abs));
+  BLI_path_abs_from_cwd(filename_abs, sizeof(filename_abs));
   Py_DECREF(filename_obj);
 
   argv[0] = filename_abs;
@@ -1040,12 +1041,12 @@ bool BPY_string_is_keyword(const char *str)
 
 /* EVIL, define text.c functions here... */
 /* BKE_text.h */
-int text_check_identifier_unicode(const unsigned int ch)
+int text_check_identifier_unicode(const uint ch)
 {
   return (ch < 255 && text_check_identifier((char)ch)) || Py_UNICODE_ISALNUM(ch);
 }
 
-int text_check_identifier_nodigit_unicode(const unsigned int ch)
+int text_check_identifier_nodigit_unicode(const uint ch)
 {
   return (ch < 255 && text_check_identifier_nodigit((char)ch)) || Py_UNICODE_ISALPHA(ch);
 }

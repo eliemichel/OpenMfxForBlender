@@ -37,8 +37,8 @@
 
 #include "rna_internal.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 const EnumPropertyItem rna_enum_image_generated_type_items[] = {
     {IMA_GENTYPE_BLANK, "BLANK", 0, "Blank", "Generate a blank image"},
@@ -57,7 +57,7 @@ static const EnumPropertyItem image_source_items[] = {
     {IMA_SRC_MOVIE, "MOVIE", 0, "Movie", "Movie file"},
     {IMA_SRC_GENERATED, "GENERATED", 0, "Generated", "Generated image"},
     {IMA_SRC_VIEWER, "VIEWER", 0, "Viewer", "Compositing node viewer"},
-    {IMA_SRC_TILED, "TILED", 0, "Tiled", "Tiled image texture"},
+    {IMA_SRC_TILED, "TILED", 0, "UDIM Tiles", "Tiled UDIM image texture"},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -191,6 +191,19 @@ static char *rna_ImageUser_path(PointerRNA *ptr)
   }
 
   return BLI_strdup("");
+}
+
+static void rna_Image_gpu_texture_update(Main *UNUSED(bmain),
+                                         Scene *UNUSED(scene),
+                                         PointerRNA *ptr)
+{
+  Image *ima = (Image *)ptr->owner_id;
+
+  if (!G.background) {
+    GPU_free_image(ima);
+  }
+
+  WM_main_add_notifier(NC_IMAGE | ND_DISPLAY, &ima->id);
 }
 
 static const EnumPropertyItem *rna_Image_source_itemf(bContext *UNUSED(C),
@@ -385,7 +398,7 @@ static void rna_Image_resolution_set(PointerRNA *ptr, const float *values)
 static int rna_Image_bindcode_get(PointerRNA *ptr)
 {
   Image *ima = (Image *)ptr->data;
-  GPUTexture *tex = ima->gputexture[TEXTARGET_TEXTURE_2D];
+  GPUTexture *tex = ima->gputexture[TEXTARGET_TEXTURE_2D][0];
   return (tex) ? GPU_texture_opengl_bindcode(tex) : 0;
 }
 
@@ -988,7 +1001,7 @@ static void rna_def_image(BlenderRNA *brna)
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_generated_update");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
-  prop = RNA_def_property(srna, "generated_width", PROP_INT, PROP_NONE);
+  prop = RNA_def_property(srna, "generated_width", PROP_INT, PROP_PIXEL);
   RNA_def_property_int_sdna(prop, NULL, "gen_x");
   RNA_def_property_flag(prop, PROP_PROPORTIONAL);
   RNA_def_property_range(prop, 1, 65536);
@@ -996,7 +1009,7 @@ static void rna_def_image(BlenderRNA *brna)
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_generated_update");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
-  prop = RNA_def_property(srna, "generated_height", PROP_INT, PROP_NONE);
+  prop = RNA_def_property(srna, "generated_height", PROP_INT, PROP_PIXEL);
   RNA_def_property_int_sdna(prop, NULL, "gen_y");
   RNA_def_property_flag(prop, PROP_PROPORTIONAL);
   RNA_def_property_range(prop, 1, 65536);
@@ -1118,6 +1131,13 @@ static void rna_def_image(BlenderRNA *brna)
                            "Representation of alpha in the image file, to convert to and from "
                            "when saving and loading the image");
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_colormanage_update");
+
+  prop = RNA_def_property(srna, "use_half_precision", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", IMA_HIGH_BITDEPTH);
+  RNA_def_property_ui_text(prop,
+                           "Half Float Precision",
+                           "Use 16bits per channel to lower the memory usage during rendering");
+  RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_gpu_texture_update");
 
   /* multiview */
   prop = RNA_def_property(srna, "views_format", PROP_ENUM, PROP_NONE);

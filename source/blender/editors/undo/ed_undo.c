@@ -27,11 +27,11 @@
 
 #include "CLG_log.h"
 
-#include "DNA_scene_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -39,27 +39,27 @@
 #include "BKE_callbacks.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_layer.h"
 #include "BKE_main.h"
+#include "BKE_paint.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
-#include "BKE_layer.h"
 #include "BKE_undo_system.h"
 #include "BKE_workspace.h"
-#include "BKE_paint.h"
 
 #include "BLO_blend_validate.h"
 
 #include "ED_gpencil.h"
-#include "ED_render.h"
 #include "ED_object.h"
 #include "ED_outliner.h"
+#include "ED_render.h"
 #include "ED_screen.h"
 #include "ED_undo.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_toolsystem.h"
+#include "WM_types.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -79,14 +79,25 @@ static CLG_LogRef LOG = {"ed.undo"};
 void ED_undo_push(bContext *C, const char *str)
 {
   CLOG_INFO(&LOG, 1, "name='%s'", str);
+  WM_file_tag_modified();
 
-  const int steps = U.undosteps;
+  wmWindowManager *wm = CTX_wm_manager(C);
+  int steps = U.undosteps;
 
+  /* Ensure steps that have been initialized are always pushed,
+   * even when undo steps are zero.
+   *
+   * Note that some modes (paint, sculpt) initialize an undo step before an action runs,
+   * then accumulate changes there, or restore data from it in the case of 2D painting.
+   *
+   * For this reason we need to handle the undo step even when undo steps is set to zero.
+   */
+  if ((steps <= 0) && wm->undo_stack->step_init != NULL) {
+    steps = 1;
+  }
   if (steps <= 0) {
     return;
   }
-
-  wmWindowManager *wm = CTX_wm_manager(C);
 
   /* Only apply limit if this is the last undo step. */
   if (wm->undo_stack->step_active && (wm->undo_stack->step_active->next == NULL)) {
@@ -97,14 +108,12 @@ void ED_undo_push(bContext *C, const char *str)
 
   if (U.undomemory != 0) {
     const size_t memory_limit = (size_t)U.undomemory * 1024 * 1024;
-    BKE_undosys_stack_limit_steps_and_memory(wm->undo_stack, 0, memory_limit);
+    BKE_undosys_stack_limit_steps_and_memory(wm->undo_stack, -1, memory_limit);
   }
 
   if (CLOG_CHECK(&LOG, 1)) {
     BKE_undosys_print(wm->undo_stack);
   }
-
-  WM_file_tag_modified();
 }
 
 /**
@@ -119,7 +128,7 @@ static int ed_undo_step_impl(
   CLOG_INFO(&LOG, 1, "name='%s', step=%d", undoname, step);
   wmWindowManager *wm = CTX_wm_manager(C);
   Scene *scene = CTX_data_scene(C);
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
   /* undo during jobs are running can easily lead to freeing data using by jobs,
    * or they can just lead to freezing job in some other cases */
@@ -138,7 +147,7 @@ static int ed_undo_step_impl(
   if (ED_gpencil_session_active()) {
     return ED_undo_gpencil_step(C, step, undoname);
   }
-  if (sa && (sa->spacetype == SPACE_VIEW3D)) {
+  if (area && (area->spacetype == SPACE_VIEW3D)) {
     Object *obact = CTX_data_active_object(C);
     if (obact && (obact->type == OB_GPENCIL)) {
       ED_gpencil_toggle_brush_cursor(C, false, NULL);
@@ -195,14 +204,15 @@ static int ed_undo_step_impl(
     }
 
     /* Set special modes for grease pencil */
-    if (sa && (sa->spacetype == SPACE_VIEW3D)) {
+    if (area && (area->spacetype == SPACE_VIEW3D)) {
       Object *obact = CTX_data_active_object(C);
       if (obact && (obact->type == OB_GPENCIL)) {
         /* set cursor */
         if (ELEM(obact->mode,
                  OB_MODE_PAINT_GPENCIL,
                  OB_MODE_SCULPT_GPENCIL,
-                 OB_MODE_WEIGHT_GPENCIL)) {
+                 OB_MODE_WEIGHT_GPENCIL,
+                 OB_MODE_VERTEX_GPENCIL)) {
           ED_gpencil_toggle_brush_cursor(C, true, NULL);
         }
         else {
@@ -389,7 +399,7 @@ static int ed_undo_exec(bContext *C, wmOperator *op)
   int ret = ed_undo_step_direction(C, 1, op->reports);
   if (ret & OPERATOR_FINISHED) {
     /* Keep button under the cursor active. */
-    WM_event_add_mousemove(C);
+    WM_event_add_mousemove(CTX_wm_window(C));
   }
 
   ED_outliner_select_sync_from_all_tag(C);
@@ -418,7 +428,7 @@ static int ed_redo_exec(bContext *C, wmOperator *op)
   int ret = ed_undo_step_direction(C, -1, op->reports);
   if (ret & OPERATOR_FINISHED) {
     /* Keep button under the cursor active. */
-    WM_event_add_mousemove(C);
+    WM_event_add_mousemove(CTX_wm_window(C));
   }
 
   ED_outliner_select_sync_from_all_tag(C);
@@ -432,7 +442,7 @@ static int ed_undo_redo_exec(bContext *C, wmOperator *UNUSED(op))
   ret = ret ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
   if (ret & OPERATOR_FINISHED) {
     /* Keep button under the cursor active. */
-    WM_event_add_mousemove(C);
+    WM_event_add_mousemove(CTX_wm_window(C));
   }
   return ret;
 }
@@ -464,6 +474,15 @@ static bool ed_undo_redo_poll(bContext *C)
           WM_operator_check_ui_enabled(C, last_op->type->name));
 }
 
+static bool ed_undo_poll(bContext *C)
+{
+  if (!ed_undo_is_init_and_screenactive_poll(C)) {
+    return false;
+  }
+  UndoStack *undo_stack = CTX_wm_manager(C)->undo_stack;
+  return (undo_stack->step_active != NULL) && (undo_stack->step_active->prev != NULL);
+}
+
 void ED_OT_undo(wmOperatorType *ot)
 {
   /* identifiers */
@@ -473,7 +492,7 @@ void ED_OT_undo(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = ed_undo_exec;
-  ot->poll = ed_undo_is_init_and_screenactive_poll;
+  ot->poll = ed_undo_poll;
 }
 
 void ED_OT_undo_push(wmOperatorType *ot)
@@ -498,6 +517,15 @@ void ED_OT_undo_push(wmOperatorType *ot)
                  "");
 }
 
+static bool ed_redo_poll(bContext *C)
+{
+  if (!ed_undo_is_init_and_screenactive_poll(C)) {
+    return false;
+  }
+  UndoStack *undo_stack = CTX_wm_manager(C)->undo_stack;
+  return (undo_stack->step_active != NULL) && (undo_stack->step_active->next != NULL);
+}
+
 void ED_OT_redo(wmOperatorType *ot)
 {
   /* identifiers */
@@ -507,7 +535,7 @@ void ED_OT_redo(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = ed_redo_exec;
-  ot->poll = ed_undo_is_init_and_screenactive_poll;
+  ot->poll = ed_redo_poll;
 }
 
 void ED_OT_undo_redo(wmOperatorType *ot)
@@ -539,11 +567,11 @@ int ED_undo_operator_repeat(bContext *C, wmOperator *op)
     struct Scene *scene = CTX_data_scene(C);
 
     /* keep in sync with logic in view3d_panel_operator_redo() */
-    ARegion *ar_orig = CTX_wm_region(C);
-    ARegion *ar_win = BKE_area_find_region_active_win(CTX_wm_area(C));
+    ARegion *region_orig = CTX_wm_region(C);
+    ARegion *region_win = BKE_area_find_region_active_win(CTX_wm_area(C));
 
-    if (ar_win) {
-      CTX_wm_region_set(C, ar_win);
+    if (region_win) {
+      CTX_wm_region_set(C, region_win);
     }
 
     if ((WM_operator_repeat_check(C, op)) && (WM_operator_poll(C, op->type)) &&
@@ -566,9 +594,9 @@ int ED_undo_operator_repeat(bContext *C, wmOperator *op)
       if (op->type->check) {
         if (op->type->check(C, op)) {
           /* check for popup and re-layout buttons */
-          ARegion *ar_menu = CTX_wm_menu(C);
-          if (ar_menu) {
-            ED_region_tag_refresh_ui(ar_menu);
+          ARegion *region_menu = CTX_wm_menu(C);
+          if (region_menu) {
+            ED_region_tag_refresh_ui(region_menu);
           }
         }
       }
@@ -591,7 +619,7 @@ int ED_undo_operator_repeat(bContext *C, wmOperator *op)
     }
 
     /* set region back */
-    CTX_wm_region_set(C, ar_orig);
+    CTX_wm_region_set(C, region_orig);
   }
   else {
     CLOG_WARN(&LOG, "called with NULL 'op'");
@@ -697,6 +725,16 @@ static int undo_history_exec(bContext *C, wmOperator *op)
   return OPERATOR_CANCELLED;
 }
 
+static bool undo_history_poll(bContext *C)
+{
+  if (!ed_undo_is_init_and_screenactive_poll(C)) {
+    return false;
+  }
+  UndoStack *undo_stack = CTX_wm_manager(C)->undo_stack;
+  /* More than just original state entry. */
+  return BLI_listbase_count_at_most(&undo_stack->steps, 2) > 1;
+}
+
 void ED_OT_undo_history(wmOperatorType *ot)
 {
   /* identifiers */
@@ -707,7 +745,7 @@ void ED_OT_undo_history(wmOperatorType *ot)
   /* api callbacks */
   ot->invoke = undo_history_invoke;
   ot->exec = undo_history_exec;
-  ot->poll = ed_undo_is_init_and_screenactive_poll;
+  ot->poll = undo_history_poll;
 
   RNA_def_int(ot->srna, "item", 0, 0, INT_MAX, "Item", "", 0, INT_MAX);
 }
@@ -787,7 +825,7 @@ static int undo_editmode_objects_from_view_layer_prepare(ViewLayer *view_layer,
 {
   const short object_type = obact->type;
 
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     Object *ob = base->object;
     if ((ob->type == object_type) && (ob->mode & OB_MODE_EDIT)) {
       ID *id = ob->data;
@@ -796,7 +834,7 @@ static int undo_editmode_objects_from_view_layer_prepare(ViewLayer *view_layer,
   }
 
   int len = 0;
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     Object *ob = base->object;
     if ((ob->type == object_type) && (ob->mode & OB_MODE_EDIT)) {
       if (ob == obact) {
@@ -823,7 +861,7 @@ Object **ED_undo_editmode_objects_from_view_layer(ViewLayer *view_layer, uint *r
   const short object_type = obact->type;
   int i = 0;
   Object **objects = MEM_malloc_arrayN(len, sizeof(*objects), __func__);
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     Object *ob = base->object;
     if ((ob->type == object_type) && (ob->mode & OB_MODE_EDIT)) {
       ID *id = ob->data;
@@ -852,7 +890,7 @@ Base **ED_undo_editmode_bases_from_view_layer(ViewLayer *view_layer, uint *r_len
   const short object_type = obact->type;
   int i = 0;
   Base **base_array = MEM_malloc_arrayN(len, sizeof(*base_array), __func__);
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     Object *ob = base->object;
     if ((ob->type == object_type) && (ob->mode & OB_MODE_EDIT)) {
       ID *id = ob->data;

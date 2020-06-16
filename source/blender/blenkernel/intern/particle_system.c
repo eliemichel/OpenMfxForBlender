@@ -26,56 +26,56 @@
 
 #include <stddef.h>
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_boid_types.h"
-#include "DNA_particle_types.h"
+#include "DNA_curve_types.h"
+#include "DNA_listBase.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
-#include "DNA_curve_types.h"
+#include "DNA_particle_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_texture_types.h"
-#include "DNA_listBase.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_edgehash.h"
-#include "BLI_rand.h"
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
-#include "BLI_kdtree.h"
+#include "BLI_edgehash.h"
 #include "BLI_kdopbvh.h"
+#include "BLI_kdtree.h"
+#include "BLI_linklist.h"
+#include "BLI_math.h"
+#include "BLI_rand.h"
+#include "BLI_string_utils.h"
 #include "BLI_task.h"
 #include "BLI_threads.h"
-#include "BLI_linklist.h"
-#include "BLI_string_utils.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_animsys.h"
 #include "BKE_boids.h"
 #include "BKE_collision.h"
 #include "BKE_colortools.h"
 #include "BKE_effect.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_particle.h"
 
-#include "BKE_collection.h"
-#include "BKE_object.h"
-#include "BKE_material.h"
+#include "BKE_bvhutils.h"
 #include "BKE_cloth.h"
+#include "BKE_collection.h"
 #include "BKE_lattice.h"
-#include "BKE_pointcache.h"
+#include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
+#include "BKE_object.h"
+#include "BKE_pointcache.h"
 #include "BKE_scene.h"
-#include "BKE_bvhutils.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_physics.h"
@@ -465,7 +465,7 @@ void psys_thread_context_init(ParticleThreadContext *ctx, ParticleSimulationData
   memset(ctx, 0, sizeof(ParticleThreadContext));
   ctx->sim = *sim;
   ctx->mesh = ctx->sim.psmd->mesh_final;
-  ctx->ma = give_current_material(sim->ob, sim->psys->part->omat);
+  ctx->ma = BKE_object_material_get(sim->ob, sim->psys->part->omat);
 }
 
 void psys_tasks_create(ParticleThreadContext *ctx,
@@ -1258,7 +1258,8 @@ static void set_keyed_keys(ParticleSimulationData *sim)
       key = pa->keys + k;
       key->time = -1.0; /* use current time */
 
-      psys_get_particle_state(&ksim, p % ksim.psys->totpart, key, 1);
+      const int p_ksim = (ksim.psys->totpart) ? p % ksim.psys->totpart : 0;
+      psys_get_particle_state(&ksim, p_ksim, key, 1);
 
       if (psys->flag & PSYS_KEYED_TIMING) {
         key->time = pa->time + pt->time;
@@ -4378,7 +4379,6 @@ static void particles_fluid_step(ParticleSimulationData *sim,
               1. / fabsf(ob->scale[0]), 1. / fabsf(ob->scale[1]), 1. / fabsf(ob->scale[2])};
           mul_v3_fl(scaleAbs, max_size);
           mul_v3_v3(pa->state.co, scaleAbs);
-          ;
 
           /* Match domain scale. */
           mul_m4_v3(ob->obmat, pa->state.co);

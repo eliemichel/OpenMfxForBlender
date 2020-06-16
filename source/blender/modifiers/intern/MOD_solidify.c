@@ -53,6 +53,8 @@ static void initData(ModifierData *md)
   smd->mode = MOD_SOLIDIFY_MODE_EXTRUDE;
   smd->nonmanifold_offset_mode = MOD_SOLIDIFY_NONMANIFOLD_OFFSET_MODE_CONSTRAINTS;
   smd->nonmanifold_boundary_mode = MOD_SOLIDIFY_NONMANIFOLD_BOUNDARY_MODE_NONE;
+  smd->merge_tolerance = 0.0001f;
+  smd->bevel_convex = 0.0f;
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -62,7 +64,8 @@ static void requiredDataMask(Object *UNUSED(ob),
   SolidifyModifierData *smd = (SolidifyModifierData *)md;
 
   /* ask for vertexgroups if we need them */
-  if (smd->defgrp_name[0] != '\0') {
+  if (smd->defgrp_name[0] != '\0' || smd->shell_defgrp_name[0] != '\0' ||
+      smd->rim_defgrp_name[0] != '\0') {
     r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
   }
 }
@@ -70,11 +73,13 @@ static void requiredDataMask(Object *UNUSED(ob),
 static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   const SolidifyModifierData *smd = (SolidifyModifierData *)md;
-  if (smd->mode == MOD_SOLIDIFY_MODE_EXTRUDE) {
-    return MOD_solidify_extrude_applyModifier(md, ctx, mesh);
-  }
-  else if (smd->mode == MOD_SOLIDIFY_MODE_NONMANIFOLD) {
-    return MOD_solidify_nonmanifold_applyModifier(md, ctx, mesh);
+  switch (smd->mode) {
+    case MOD_SOLIDIFY_MODE_EXTRUDE:
+      return MOD_solidify_extrude_applyModifier(md, ctx, mesh);
+    case MOD_SOLIDIFY_MODE_NONMANIFOLD:
+      return MOD_solidify_nonmanifold_applyModifier(md, ctx, mesh);
+    default:
+      BLI_assert(0);
   }
   return mesh;
 }

@@ -24,6 +24,7 @@
  */
 
 #include <float.h>
+#include <inttypes.h>
 #include <limits.h>
 
 #include "DNA_listBase.h"
@@ -75,7 +76,7 @@ void RNA_def_struct_identifier_no_struct_map(StructRNA *srna, const char *identi
 void RNA_def_struct_identifier(BlenderRNA *brna, StructRNA *srna, const char *identifier);
 void RNA_def_struct_ui_text(StructRNA *srna, const char *name, const char *description);
 void RNA_def_struct_ui_icon(StructRNA *srna, int icon);
-void RNA_struct_free_extension(StructRNA *srna, ExtensionRNA *ext);
+void RNA_struct_free_extension(StructRNA *srna, ExtensionRNA *rna_ext);
 void RNA_struct_free(BlenderRNA *brna, StructRNA *srna);
 
 void RNA_def_struct_translation_context(StructRNA *srna, const char *context);
@@ -233,6 +234,16 @@ PropertyRNA *RNA_def_float_matrix(StructOrFunctionRNA *cont,
                                   const char *ui_description,
                                   float softmin,
                                   float softmax);
+PropertyRNA *RNA_def_float_translation(StructOrFunctionRNA *cont,
+                                       const char *identifier,
+                                       int len,
+                                       const float *default_value,
+                                       float hardmin,
+                                       float hardmax,
+                                       const char *ui_name,
+                                       const char *ui_description,
+                                       float softmin,
+                                       float softmax);
 PropertyRNA *RNA_def_float_rotation(StructOrFunctionRNA *cont,
                                     const char *identifier,
                                     int len,
@@ -327,11 +338,11 @@ PropertyRNA *RNA_def_property(StructOrFunctionRNA *cont,
 void RNA_def_property_boolean_sdna(PropertyRNA *prop,
                                    const char *structname,
                                    const char *propname,
-                                   int bit);
+                                   int64_t bit);
 void RNA_def_property_boolean_negative_sdna(PropertyRNA *prop,
                                             const char *structname,
                                             const char *propname,
-                                            int bit);
+                                            int64_t bit);
 void RNA_def_property_int_sdna(PropertyRNA *prop, const char *structname, const char *propname);
 void RNA_def_property_float_sdna(PropertyRNA *prop, const char *structname, const char *propname);
 void RNA_def_property_string_sdna(PropertyRNA *prop, const char *structname, const char *propname);
@@ -358,6 +369,7 @@ void RNA_def_property_multi_array(PropertyRNA *prop, int dimension, const int le
 void RNA_def_property_range(PropertyRNA *prop, double min, double max);
 
 void RNA_def_property_enum_items(PropertyRNA *prop, const EnumPropertyItem *item);
+void RNA_def_property_enum_native_type(PropertyRNA *prop, const char *native_enum_type);
 void RNA_def_property_string_maxlength(PropertyRNA *prop, int maxlength);
 void RNA_def_property_struct_type(PropertyRNA *prop, const char *type);
 void RNA_def_property_struct_runtime(PropertyRNA *prop, StructRNA *type);
@@ -498,6 +510,8 @@ const char *RNA_property_typename(PropertyType type);
 #define IS_DNATYPE_FLOAT_COMPAT(_str) (strcmp(_str, "float") == 0 || strcmp(_str, "double") == 0)
 #define IS_DNATYPE_INT_COMPAT(_str) \
   (strcmp(_str, "int") == 0 || strcmp(_str, "short") == 0 || strcmp(_str, "char") == 0)
+#define IS_DNATYPE_BOOLEAN_COMPAT(_str) \
+  (IS_DNATYPE_INT_COMPAT(_str) || strcmp(_str, "int64_t") == 0 || strcmp(_str, "uint64_t") == 0)
 
 void RNA_identifier_sanitize(char *identifier, int property);
 

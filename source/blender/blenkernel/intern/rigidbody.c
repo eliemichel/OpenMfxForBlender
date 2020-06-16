@@ -22,19 +22,19 @@
  * \brief Blender-side interface and methods for dealing with Rigid Body simulations
  */
 
+#include <float.h>
+#include <limits.h>
+#include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
-#include <stddef.h>
-#include <float.h>
-#include <math.h>
-#include <limits.h>
 
 #include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 
 #ifdef WITH_BULLET
 #  include "RBI_api.h"
@@ -44,8 +44,8 @@
 #include "DNA_collection_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-#include "DNA_object_types.h"
 #include "DNA_object_force_types.h"
+#include "DNA_object_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
 
@@ -62,8 +62,8 @@
 #include "BKE_rigidbody.h"
 #include "BKE_scene.h"
 #ifdef WITH_BULLET
-#  include "BKE_library.h"
-#  include "BKE_library_query.h"
+#  include "BKE_lib_id.h"
+#  include "BKE_lib_query.h"
 #endif
 
 #include "DEG_depsgraph.h"
@@ -332,22 +332,24 @@ void BKE_rigidbody_object_copy(Main *bmain, Object *ob_dst, const Object *ob_src
 /* get the appropriate evaluated mesh based on rigid body mesh source */
 static Mesh *rigidbody_get_mesh(Object *ob)
 {
+  BLI_assert(ob->type == OB_MESH);
+
   switch (ob->rigidbody_object->mesh_source) {
     case RBO_MESH_DEFORM:
       return ob->runtime.mesh_deform_eval;
     case RBO_MESH_FINAL:
-      return ob->runtime.mesh_eval;
+      return BKE_object_get_evaluated_mesh(ob);
     case RBO_MESH_BASE:
       /* This mesh may be used for computing looptris, which should be done
        * on the original; otherwise every time the CoW is recreated it will
        * have to be recomputed. */
       BLI_assert(ob->rigidbody_object->mesh_source == RBO_MESH_BASE);
-      return ob->runtime.mesh_orig;
+      return (Mesh *)ob->runtime.data_orig;
   }
 
   /* Just return something sensible so that at least Blender won't crash. */
   BLI_assert(!"Unknown mesh source");
-  return ob->runtime.mesh_eval;
+  return BKE_object_get_evaluated_mesh(ob);
 }
 
 /* create collision shape of mesh - convex hull */
@@ -1022,6 +1024,11 @@ static void rigidbody_validate_sim_constraint(RigidBodyWorld *rbw, Object *ob, b
       }
     }
     else { /* can't create constraint without both rigid bodies */
+      return;
+    }
+
+    /* When 'rbc->type' is unknown. */
+    if (rbc->physics_constraint == NULL) {
       return;
     }
 

@@ -52,6 +52,7 @@ extern const EnumPropertyItem rna_enum_mesh_select_mode_items[];
 extern const EnumPropertyItem rna_enum_mesh_select_mode_uv_items[];
 extern const EnumPropertyItem rna_enum_mesh_delimit_mode_items[];
 extern const EnumPropertyItem rna_enum_space_graph_mode_items[];
+extern const EnumPropertyItem rna_enum_space_sequencer_view_type_items[];
 extern const EnumPropertyItem rna_enum_space_type_items[];
 extern const EnumPropertyItem rna_enum_space_image_mode_items[];
 extern const EnumPropertyItem rna_enum_space_image_mode_all_items[];
@@ -121,12 +122,13 @@ extern const EnumPropertyItem rna_enum_brush_uv_sculpt_tool_items[];
 extern const EnumPropertyItem rna_enum_brush_vertex_tool_items[];
 extern const EnumPropertyItem rna_enum_brush_weight_tool_items[];
 extern const EnumPropertyItem rna_enum_brush_gpencil_types_items[];
+extern const EnumPropertyItem rna_enum_brush_gpencil_vertex_types_items[];
+extern const EnumPropertyItem rna_enum_brush_gpencil_sculpt_types_items[];
+extern const EnumPropertyItem rna_enum_brush_gpencil_weight_types_items[];
 extern const EnumPropertyItem rna_enum_brush_image_tool_items[];
 
 extern const EnumPropertyItem rna_enum_particle_edit_hair_brush_items[];
 extern const EnumPropertyItem rna_enum_particle_edit_disconnected_hair_brush_items[];
-extern const EnumPropertyItem rna_enum_gpencil_sculpt_brush_items[];
-extern const EnumPropertyItem rna_enum_gpencil_weight_brush_items[];
 
 extern const EnumPropertyItem rna_enum_uv_sculpt_tool_items[];
 
@@ -140,6 +142,8 @@ extern const EnumPropertyItem rna_enum_symmetrize_direction_items[];
 extern const EnumPropertyItem rna_enum_texture_type_items[];
 
 extern const EnumPropertyItem rna_enum_light_type_items[];
+
+extern const EnumPropertyItem rna_enum_lightprobes_type_items[];
 
 extern const EnumPropertyItem rna_enum_unpack_method_items[];
 

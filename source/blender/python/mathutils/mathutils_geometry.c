@@ -25,13 +25,13 @@
 
 /* Used for PolyFill */
 #ifndef MATH_STANDALONE /* define when building outside blender */
-#  include "MEM_guardedalloc.h"
+#  include "BKE_curve.h"
+#  include "BKE_displist.h"
 #  include "BLI_blenlib.h"
 #  include "BLI_boxpack_2d.h"
 #  include "BLI_convexhull_2d.h"
 #  include "BLI_delaunay_2d.h"
-#  include "BKE_displist.h"
-#  include "BKE_curve.h"
+#  include "MEM_guardedalloc.h"
 #endif
 
 #include "BLI_math.h"
@@ -1084,7 +1084,7 @@ static PyObject *M_Geometry_points_in_planes(PyObject *UNUSED(self), PyObject *a
 {
   PyObject *py_planes;
   float(*planes)[4];
-  unsigned int planes_len;
+  uint planes_len;
 
   if (!PyArg_ParseTuple(args, "O:points_in_planes", &py_planes)) {
     return NULL;
@@ -1097,8 +1097,8 @@ static PyObject *M_Geometry_points_in_planes(PyObject *UNUSED(self), PyObject *a
   else {
     /* note, this could be refactored into plain C easy - py bits are noted */
     const float eps = 0.0001f;
-    const unsigned int len = (unsigned int)planes_len;
-    unsigned int i, j, k, l;
+    const uint len = (uint)planes_len;
+    uint i, j, k, l;
 
     float n1n2[3], n2n3[3], n3n1[3];
     float potentialVertex[3];
@@ -1246,7 +1246,8 @@ PyDoc_STRVAR(M_Geometry_tessellate_polygon_doc,
              ".. function:: tessellate_polygon(veclist_list)\n"
              "\n"
              "   Takes a list of polylines (each point a pair or triplet of numbers) and returns "
-             "the point indices for a polyline filled with triangles.\n"
+             "the point indices for a polyline filled with triangles. Does not handle degenerate "
+             "geometry (such as zero-length lines due to consecutive identical points).\n"
              "\n"
              "   :arg veclist_list: list of polylines\n"
              "   :rtype: list\n");
@@ -1418,7 +1419,7 @@ static void boxPack_ToPyObject(PyObject *value, BoxPack **boxarray)
 PyDoc_STRVAR(M_Geometry_box_pack_2d_doc,
              ".. function:: box_pack_2d(boxes)\n"
              "\n"
-             "   Returns the normal of the 3D tri or quad.\n"
+             "   Returns a tuple with the width and height of the packed bounding box.\n"
              "\n"
              "   :arg boxes: list of boxes, each box is a list where the first 4 items are [x, y, "
              "width, height, ...] other items are ignored.\n"
@@ -1648,6 +1649,7 @@ static PyObject *M_Geometry_delaunay_2d_cdt(PyObject *UNUSED(self), PyObject *ar
   in.faces_start_table = in_faces_start_table;
   in.faces_len_table = in_faces_len_table;
   in.epsilon = epsilon;
+  in.skip_input_modify = false;
 
   res = BLI_delaunay_2d_cdt_calc(&in, output_type);
 

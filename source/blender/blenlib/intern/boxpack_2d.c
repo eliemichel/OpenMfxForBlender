@@ -18,14 +18,14 @@
  * \ingroup bli
  */
 
-#include <stdlib.h> /* for qsort */
 #include <math.h>   /* for fabsf */
+#include <stdlib.h> /* for qsort */
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_listbase.h"
 #include "BLI_boxpack_2d.h" /* own include */
+#include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
 #include "BLI_sort.h" /* qsort_r */
 #define qsort_r BLI_qsort_r
@@ -705,7 +705,7 @@ void BLI_box_pack_2d_fixedarea(ListBase *boxes, int width, int height, ListBase 
   LISTBASE_FOREACH_MUTABLE (FixedSizeBoxPack *, box, boxes) {
     LISTBASE_FOREACH (FixedSizeBoxPack *, space, &spaces) {
       /* Skip this space if it's too small. */
-      if (box->w > space->w || box->h > space->w) {
+      if (box->w > space->w || box->h > space->h) {
         continue;
       }
 

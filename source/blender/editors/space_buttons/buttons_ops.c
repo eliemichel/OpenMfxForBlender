@@ -28,10 +28,10 @@
 
 #include "DNA_userdef_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_fileops.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -110,7 +110,7 @@ static int file_browse_exec(bContext *C, wmOperator *op)
 
     if (BLI_is_dir(path)) {
       /* do this first so '//' isnt converted to '//\' on windows */
-      BLI_add_slash(path);
+      BLI_path_slash_ensure(path);
       if (is_relative) {
         BLI_strncpy(path, str, FILE_MAX);
         BLI_path_rel(path, BKE_main_blendfile_path(bmain));
@@ -122,7 +122,7 @@ static int file_browse_exec(bContext *C, wmOperator *op)
       }
     }
     else {
-      char *const lslash = (char *)BLI_last_slash(str);
+      char *const lslash = (char *)BLI_path_slash_rfind(str);
       if (lslash) {
         lslash[1] = '\0';
       }
@@ -187,7 +187,7 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     PointerRNA props_ptr;
 
     if (event->alt) {
-      char *lslash = (char *)BLI_last_slash(str);
+      char *lslash = (char *)BLI_path_slash_rfind(str);
       if (lslash) {
         *lslash = '\0';
       }
@@ -227,7 +227,7 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
           is_relative = false;
         }
 
-        /* annoying exception!, if were dealing with the user prefs, default relative to be off */
+        /* annoying exception!, if we're dealing with the user prefs, default relative to be off */
         RNA_property_boolean_set(op->ptr, prop_relpath, is_relative);
       }
     }

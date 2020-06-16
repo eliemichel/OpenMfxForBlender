@@ -39,8 +39,8 @@
 
 #include "WM_types.h"
 
-#include "ED_keyframing.h"
 #include "ED_keyframes_edit.h"
+#include "ED_keyframing.h"
 
 const EnumPropertyItem rna_enum_fmodifier_type_items[] = {
     {FMODIFIER_TYPE_NULL, "NULL", 0, "Invalid", ""},
@@ -211,8 +211,8 @@ static StructRNA *rna_FModifierType_refine(struct PointerRNA *ptr)
 
 /* ****************************** */
 
+#  include "BKE_anim_data.h"
 #  include "BKE_fcurve.h"
-#  include "BKE_animsys.h"
 
 #  include "DEG_depsgraph.h"
 #  include "DEG_depsgraph_build.h"
@@ -2297,7 +2297,7 @@ static void rna_def_fcurve(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "group", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "grp");
-  RNA_def_property_flag(prop, PROP_EDITABLE);
+  RNA_def_property_flag(prop, PROP_EDITABLE | PROP_PTR_NO_OWNERSHIP);
   RNA_def_property_ui_text(prop, "Group", "Action Group that this F-Curve belongs to");
   RNA_def_property_pointer_funcs(prop, NULL, "rna_FCurve_group_set", NULL, NULL);
   RNA_def_property_update(prop, NC_ANIMATION, NULL);

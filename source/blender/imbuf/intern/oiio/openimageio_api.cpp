@@ -29,20 +29,20 @@
 #endif
 
 // NOTE: Keep first, BLI_path_util conflicts with OIIO's format.
-#include <memory>
 #include "openimageio_api.h"
 #include <OpenImageIO/imageio.h>
+#include <memory>
 
-extern "C" {
 #include "MEM_guardedalloc.h"
 
+extern "C" {
 #include "BLI_blenlib.h"
 
-#include "IMB_imbuf_types.h"
-#include "IMB_imbuf.h"
 #include "IMB_allocimbuf.h"
 #include "IMB_colormanagement.h"
 #include "IMB_colormanagement_intern.h"
+#include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 }
 
 OIIO_NAMESPACE_USING
@@ -194,7 +194,7 @@ struct ImBuf *imb_load_photoshop(const char *filename, int flags, char colorspac
 {
   struct ImBuf *ibuf = NULL;
   int width, height, components;
-  bool is_float, is_alpha;
+  bool is_float, is_alpha, is_half;
   int basesize;
   char file_colorspace[IM_MAX_SPACE];
   const bool is_colorspace_manually_set = (colorspace[0] != '\0');
@@ -243,6 +243,7 @@ struct ImBuf *imb_load_photoshop(const char *filename, int flags, char colorspac
   is_alpha = spec.alpha_channel != -1;
   basesize = spec.format.basesize();
   is_float = basesize > 1;
+  is_half = spec.format == TypeDesc::HALF;
 
   /* we only handle certain number of components */
   if (!(components >= 1 && components <= 4)) {
@@ -271,6 +272,7 @@ struct ImBuf *imb_load_photoshop(const char *filename, int flags, char colorspac
   ibuf->ftype = IMB_FTYPE_PSD;
   ibuf->channels = 4;
   ibuf->planes = (3 + (is_alpha ? 1 : 0)) * 4 << basesize;
+  ibuf->flags |= (is_float && is_half) ? IB_halffloat : 0;
 
   try {
     return ibuf;

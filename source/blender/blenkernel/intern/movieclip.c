@@ -21,9 +21,9 @@
  * \ingroup bke
  */
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
-#include <fcntl.h>
 
 #ifndef WIN32
 #  include <unistd.h>
@@ -36,12 +36,12 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_constraint_types.h"
-#include "DNA_screen_types.h"
-#include "DNA_space_types.h"
 #include "DNA_movieclip_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
+#include "DNA_space_types.h"
 #include "DNA_view3d_types.h"
 
 #include "BLI_utildefines.h"
@@ -51,18 +51,20 @@
 #include "BLI_math.h"
 #include "BLI_threads.h"
 
-#include "BKE_animsys.h"
+#include "BLT_translation.h"
+
 #include "BKE_colortools.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_idtype.h"
+#include "BKE_image.h" /* openanim */
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_movieclip.h"
 #include "BKE_node.h"
-#include "BKE_image.h" /* openanim */
 #include "BKE_tracking.h"
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 #include "IMB_moviecache.h"
 
 #include "DEG_depsgraph.h"
@@ -73,6 +75,52 @@
 #ifdef WITH_OPENEXR
 #  include "intern/openexr/openexr_multi.h"
 #endif
+
+static void free_buffers(MovieClip *clip);
+
+static void movie_clip_copy_data(Main *UNUSED(bmain), ID *id_dst, const ID *id_src, const int flag)
+{
+  MovieClip *movie_clip_dst = (MovieClip *)id_dst;
+  const MovieClip *movie_clip_src = (const MovieClip *)id_src;
+
+  /* We never handle usercount here for own data. */
+  const int flag_subdata = flag | LIB_ID_CREATE_NO_USER_REFCOUNT;
+
+  movie_clip_dst->anim = NULL;
+  movie_clip_dst->cache = NULL;
+
+  BKE_tracking_copy(&movie_clip_dst->tracking, &movie_clip_src->tracking, flag_subdata);
+  movie_clip_dst->tracking_context = NULL;
+
+  BKE_color_managed_colorspace_settings_copy(&movie_clip_dst->colorspace_settings,
+                                             &movie_clip_src->colorspace_settings);
+}
+
+static void movie_clip_free_data(ID *id)
+{
+  MovieClip *movie_clip = (MovieClip *)id;
+
+  /* Also frees animdata. */
+  free_buffers(movie_clip);
+
+  BKE_tracking_free(&movie_clip->tracking);
+}
+
+IDTypeInfo IDType_ID_MC = {
+    .id_code = ID_MC,
+    .id_filter = FILTER_ID_MC,
+    .main_listbase_index = INDEX_ID_MC,
+    .struct_size = sizeof(MovieClip),
+    .name = "MovieClip",
+    .name_plural = "movieclips",
+    .translation_context = BLT_I18NCONTEXT_ID_MOVIECLIP,
+    .flags = 0,
+
+    .init_data = NULL,
+    .copy_data = movie_clip_copy_data,
+    .free_data = movie_clip_free_data,
+    .make_local = NULL,
+};
 
 /*********************** movieclip buffer loaders *************************/
 
@@ -149,14 +197,14 @@ static void get_sequence_fname(const MovieClip *clip, const int framenr, char *n
   int offset;
 
   BLI_strncpy(name, clip->name, sizeof(clip->name));
-  BLI_stringdec(name, head, tail, &numlen);
+  BLI_path_sequence_decode(name, head, tail, &numlen);
 
   /* Movie-clips always points to first image from sequence, auto-guess offset for now.
    * Could be something smarter in the future. */
   offset = sequence_guess_offset(clip->name, strlen(head), numlen);
 
   if (numlen) {
-    BLI_stringenc(
+    BLI_path_sequence_encode(
         name, head, tail, numlen, offset + framenr - clip->start_frame + clip->frame_offset);
   }
   else {
@@ -373,7 +421,7 @@ static void movieclip_calc_length(MovieClip *clip)
     unsigned short numlen;
     char name[FILE_MAX], head[FILE_MAX], tail[FILE_MAX];
 
-    BLI_stringdec(clip->name, head, tail, &numlen);
+    BLI_path_sequence_decode(clip->name, head, tail, &numlen);
 
     if (numlen == 0) {
       /* there's no number group in file name, assume it's single framed sequence */
@@ -408,9 +456,10 @@ typedef struct MovieClipCache {
     int flag;
 
     /* cache for undistorted shot */
+    float focal_length;
     float principal[2];
-    float polynomial_k1;
-    float division_k1;
+    float polynomial_k[3];
+    float division_k[2];
     short distortion_model;
     bool undistortion_used;
 
@@ -457,7 +506,7 @@ static int user_frame_to_cache_frame(MovieClip *clip, int framenr)
       unsigned short numlen;
       char head[FILE_MAX], tail[FILE_MAX];
 
-      BLI_stringdec(clip->name, head, tail, &numlen);
+      BLI_path_sequence_decode(clip->name, head, tail, &numlen);
 
       /* see comment in get_sequence_fname */
       clip->cache->sequence_offset = sequence_guess_offset(clip->name, strlen(head), numlen);
@@ -600,7 +649,7 @@ static bool put_imbuf_cache(
     clip->cache->sequence_offset = -1;
     if (clip->source == MCLIP_SRC_SEQUENCE) {
       unsigned short numlen;
-      BLI_stringdec(clip->name, NULL, NULL, &numlen);
+      BLI_path_sequence_decode(clip->name, NULL, NULL, &numlen);
       clip->cache->is_still_sequence = (numlen == 0);
     }
   }
@@ -839,6 +888,10 @@ static bool check_undistortion_cache_flags(const MovieClip *clip)
   const MovieClipCache *cache = clip->cache;
   const MovieTrackingCamera *camera = &clip->tracking.camera;
 
+  if (camera->focal != cache->postprocessed.focal_length) {
+    return false;
+  }
+
   /* check for distortion model changes */
   if (!equals_v2v2(camera->principal, cache->postprocessed.principal)) {
     return false;
@@ -848,11 +901,11 @@ static bool check_undistortion_cache_flags(const MovieClip *clip)
     return false;
   }
 
-  if (!equals_v3v3(&camera->k1, &cache->postprocessed.polynomial_k1)) {
+  if (!equals_v3v3(&camera->k1, cache->postprocessed.polynomial_k)) {
     return false;
   }
 
-  if (!equals_v2v2(&camera->division_k1, &cache->postprocessed.division_k1)) {
+  if (!equals_v2v2(&camera->division_k1, cache->postprocessed.division_k)) {
     return false;
   }
 
@@ -953,9 +1006,10 @@ static void put_postprocessed_frame_to_cache(
 
   if (need_undistortion_postprocess(user, flag)) {
     cache->postprocessed.distortion_model = camera->distortion_model;
+    cache->postprocessed.focal_length = camera->focal;
     copy_v2_v2(cache->postprocessed.principal, camera->principal);
-    copy_v3_v3(&cache->postprocessed.polynomial_k1, &camera->k1);
-    copy_v2_v2(&cache->postprocessed.division_k1, &camera->division_k1);
+    copy_v3_v3(cache->postprocessed.polynomial_k, &camera->k1);
+    copy_v2_v2(cache->postprocessed.division_k, &camera->division_k1);
     cache->postprocessed.undistortion_used = true;
   }
   else {
@@ -1621,54 +1675,11 @@ void BKE_movieclip_build_proxy_frame_for_ibuf(MovieClip *clip,
   }
 }
 
-/** Free (or release) any data used by this movie clip (does not free the clip itself). */
-void BKE_movieclip_free(MovieClip *clip)
-{
-  /* Also frees animdata. */
-  free_buffers(clip);
-
-  BKE_tracking_free(&clip->tracking);
-  BKE_animdata_free((ID *)clip, false);
-}
-
-/**
- * Only copy internal data of MovieClip ID from source
- * to already allocated/initialized destination.
- * You probably never want to use that directly,
- * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
- *
- * WARNING! This function will not handle ID user count!
- *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
- */
-void BKE_movieclip_copy_data(Main *UNUSED(bmain),
-                             MovieClip *clip_dst,
-                             const MovieClip *clip_src,
-                             const int flag)
-{
-  /* We never handle usercount here for own data. */
-  const int flag_subdata = flag | LIB_ID_CREATE_NO_USER_REFCOUNT;
-
-  clip_dst->anim = NULL;
-  clip_dst->cache = NULL;
-
-  BKE_tracking_copy(&clip_dst->tracking, &clip_src->tracking, flag_subdata);
-  clip_dst->tracking_context = NULL;
-
-  BKE_color_managed_colorspace_settings_copy(&clip_dst->colorspace_settings,
-                                             &clip_src->colorspace_settings);
-}
-
 MovieClip *BKE_movieclip_copy(Main *bmain, const MovieClip *clip)
 {
   MovieClip *clip_copy;
   BKE_id_copy(bmain, &clip->id, (ID **)&clip_copy);
   return clip_copy;
-}
-
-void BKE_movieclip_make_local(Main *bmain, MovieClip *clip, const bool lib_local)
-{
-  BKE_id_make_local_generic(bmain, &clip->id, true, lib_local);
 }
 
 float BKE_movieclip_remap_scene_to_clip_frame(const MovieClip *clip, float framenr)
@@ -1738,7 +1749,7 @@ bool BKE_movieclip_put_frame_if_possible(MovieClip *clip, MovieClipUser *user, I
   return result;
 }
 
-static void movieclip_selection_synchronize(MovieClip *clip_dst, const MovieClip *clip_src)
+static void movieclip_selection_sync(MovieClip *clip_dst, const MovieClip *clip_src)
 {
   BLI_assert(clip_dst != clip_src);
   MovieTracking *tracking_dst = &clip_dst->tracking, tracking_src = clip_src->tracking;
@@ -1805,5 +1816,5 @@ void BKE_movieclip_eval_update(struct Depsgraph *depsgraph, Main *bmain, MovieCl
 void BKE_movieclip_eval_selection_update(struct Depsgraph *depsgraph, MovieClip *clip)
 {
   DEG_debug_print_eval(depsgraph, __func__, clip->id.name, clip);
-  movieclip_selection_synchronize(clip, (MovieClip *)clip->id.orig_id);
+  movieclip_selection_sync(clip, (MovieClip *)clip->id.orig_id);
 }

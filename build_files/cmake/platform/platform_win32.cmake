@@ -131,8 +131,8 @@ add_definitions(
 # MSVC11 needs _ALLOW_KEYWORD_MACROS to build
 add_definitions(-D_ALLOW_KEYWORD_MACROS)
 
-# We want to support Vista level ABI
-add_definitions(-D_WIN32_WINNT=0x600)
+# We want to support Windows 7 level ABI
+add_definitions(-D_WIN32_WINNT=0x601)
 include(build_files/cmake/platform/platform_win32_bundle_crt.cmake)
 remove_cc_flag("/MDd" "/MD")
 
@@ -143,6 +143,14 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /nologo /J /Gd /MP /EHsc /bigobj")
   set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /nologo /J /Gd /MP /bigobj")
 endif()
+
+# C++ standards conformace (/permissive-) is available on msvc 15.5 (1912) and up
+if(MSVC_VERSION GREATER 1911 AND NOT MSVC_CLANG)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /permissive-")
+  # Two-phase name lookup does not place nicely with OpenMP yet, so disable for now
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:twoPhase-")
+endif()
+
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd /ZI")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MDd /ZI")
@@ -158,7 +166,7 @@ if(MSVC_VERSION GREATER 1914 AND NOT MSVC_CLANG)
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /JMC")
 endif()
 
-set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /SUBSYSTEM:CONSOLE /STACK:2097152 /INCREMENTAL:NO ")
+set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /SUBSYSTEM:CONSOLE /STACK:2097152,70656 /INCREMENTAL:NO ")
 set(PLATFORM_LINKFLAGS_RELEASE "/NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:libcmtd.lib /NODEFAULTLIB:msvcrtd.lib")
 set(PLATFORM_LINKFLAGS_DEBUG "${PLATFORM_LINKFLAGS_DEBUG} /IGNORE:4099 /NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:libcmtd.lib")
 
@@ -496,7 +504,7 @@ if(WITH_OPENVDB)
   set(OPENVDB_LIBPATH ${OPENVDB}/lib)
   set(OPENVDB_INCLUDE_DIRS ${OPENVDB}/include)
   set(OPENVDB_LIBRARIES optimized ${OPENVDB_LIBPATH}/openvdb.lib debug ${OPENVDB_LIBPATH}/openvdb_d.lib ${BLOSC_LIBRARIES})
-  set(OPENVDB_DEFINITIONS -DNOMINMAX)
+  set(OPENVDB_DEFINITIONS -DNOMINMAX -DOPENVDB_STATICLIB -D_USE_MATH_DEFINES)
 endif()
 
 if(WITH_OPENIMAGEDENOISE)
@@ -570,19 +578,6 @@ if(WITH_TBB)
   if(WITH_TBB_MALLOC_PROXY)
     add_definitions(-DWITH_TBB_MALLOC)
   endif()
-else()
-  if(WITH_OPENIMAGEDENOISE)
-    message(STATUS "TBB disabled, also disabling OpenImageDenoise")
-    set(WITH_OPENIMAGEDENOISE OFF)
-  endif()
-  if(WITH_OPENVDB)
-    message(STATUS "TBB disabled, also disabling OpenVDB")
-    set(WITH_OPENVDB OFF)
-  endif()
-  if(WITH_MOD_FLUID)
-    message(STATUS "TBB disabled, disabling Fluid modifier")
-    set(WITH_MOD_FLUID OFF)
-  endif()
 endif()
 
 # used in many places so include globally, like OpenGL
@@ -612,7 +607,7 @@ endif()
 
 if(WITH_CYCLES_OSL)
   set(CYCLES_OSL ${LIBDIR}/osl CACHE PATH "Path to OpenShadingLanguage installation")
-
+  set(OSL_SHADER_DIR ${CYCLES_OSL}/shaders)
   find_library(OSL_LIB_EXEC NAMES oslexec PATHS ${CYCLES_OSL}/lib)
   find_library(OSL_LIB_COMP NAMES oslcomp PATHS ${CYCLES_OSL}/lib)
   find_library(OSL_LIB_QUERY NAMES oslquery PATHS ${CYCLES_OSL}/lib)
@@ -674,9 +669,10 @@ if(WITH_USD)
     set(USD_INCLUDE_DIRS ${LIBDIR}/usd/include)
     set(USD_RELEASE_LIB ${LIBDIR}/usd/lib/libusd_m.lib)
     set(USD_DEBUG_LIB ${LIBDIR}/usd/lib/libusd_m_d.lib)
+    set(USD_LIBRARY_DIR ${LIBDIR}/usd/lib)
     set(USD_LIBRARIES
-        debug ${USD_DEBUG_LIB}
-        optimized ${USD_RELEASE_LIB}
+      debug ${USD_DEBUG_LIB}
+      optimized ${USD_RELEASE_LIB}
     )
   endif()
 endif()
@@ -715,5 +711,17 @@ if(WINDOWS_PYTHON_DEBUG)
     <LocalDebuggerCommandArguments>-con --env-system-scripts \"${CMAKE_SOURCE_DIR}/release/scripts\" </LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>")
+  endif()
+endif()
+
+if(WITH_XR_OPENXR)
+  if(EXISTS ${LIBDIR}/xr_openxr_sdk)
+    set(XR_OPENXR_SDK ${LIBDIR}/xr_openxr_sdk)
+    set(XR_OPENXR_SDK_LIBPATH ${LIBDIR}/xr_openxr_sdk/lib)
+    set(XR_OPENXR_SDK_INCLUDE_DIR ${XR_OPENXR_SDK}/include)
+    set(XR_OPENXR_SDK_LIBRARIES optimized ${XR_OPENXR_SDK_LIBPATH}/openxr_loader.lib debug ${XR_OPENXR_SDK_LIBPATH}/openxr_loader_d.lib)
+  else()
+    message(WARNING "OpenXR-SDK was not found, disabling WITH_XR_OPENXR")
+    set(WITH_XR_OPENXR OFF)
   endif()
 endif()

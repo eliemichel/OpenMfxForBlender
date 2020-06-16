@@ -22,32 +22,32 @@
 
 #include "CLG_log.h"
 
+#include "DNA_key_types.h"
+#include "DNA_layer_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-#include "DNA_key_types.h"
-#include "DNA_layer_types.h"
 
-#include "BLI_listbase.h"
 #include "BLI_array_utils.h"
+#include "BLI_listbase.h"
 
 #include "BKE_context.h"
+#include "BKE_editmesh.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
-#include "BKE_editmesh.h"
 #include "BKE_undo_system.h"
 
 #include "DEG_depsgraph.h"
 
-#include "ED_object.h"
 #include "ED_mesh.h"
-#include "ED_util.h"
+#include "ED_object.h"
 #include "ED_undo.h"
+#include "ED_util.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 #define USE_ARRAY_STORE
 
@@ -542,15 +542,15 @@ static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key)
 #  ifdef USE_ARRAY_STORE_THREAD
     if (um_arraystore.task_pool == NULL) {
       TaskScheduler *scheduler = BLI_task_scheduler_get();
-      um_arraystore.task_pool = BLI_task_pool_create_background(scheduler, NULL);
+      um_arraystore.task_pool = BLI_task_pool_create_background(
+          scheduler, NULL, TASK_PRIORITY_LOW);
     }
 
     struct UMArrayData *um_data = MEM_mallocN(sizeof(*um_data), __func__);
     um_data->um = um;
     um_data->um_ref = um_ref;
 
-    BLI_task_pool_push(
-        um_arraystore.task_pool, um_arraystore_compact_cb, um_data, true, TASK_PRIORITY_LOW);
+    BLI_task_pool_push(um_arraystore.task_pool, um_arraystore_compact_cb, um_data, true, NULL);
 #  else
     um_arraystore_compact_with_info(um, um_ref);
 #  endif

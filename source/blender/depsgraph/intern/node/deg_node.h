@@ -114,6 +114,8 @@ enum class NodeType {
   SHADING_PARAMETERS,
   /* Point cache Component */
   POINT_CACHE,
+  /* Image Animation Component */
+  IMAGE_ANIMATION,
   /* Cache Component */
   /* TODO(sergey); Verify that we really need this. */
   CACHE,
@@ -191,11 +193,11 @@ struct Node {
 
   virtual OperationNode *get_entry_operation()
   {
-    return NULL;
+    return nullptr;
   }
   virtual OperationNode *get_exit_operation()
   {
-    return NULL;
+    return nullptr;
   }
 
   virtual NodeClass get_class() const;

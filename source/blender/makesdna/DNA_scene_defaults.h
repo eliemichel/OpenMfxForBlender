@@ -85,7 +85,6 @@
  \
     .im_format = _DNA_DEFAULT_ImageFormatData, \
  \
-    .displaymode = R_OUTPUT_WINDOW, \
     .framapto = 100, \
     .images = 100, \
     .framelen = 1.0, \
@@ -225,7 +224,7 @@
     .shadow_cube_size = 512, \
     .shadow_cascade_size = 1024, \
  \
-    .light_cache = NULL, \
+    .light_cache_data = NULL, \
     .light_threshold = 0.01f, \
  \
     .overscan = 3.0f, \

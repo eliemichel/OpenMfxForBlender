@@ -21,8 +21,8 @@
  * \ingroup freestyle
  */
 
-#include <string.h>
 #include <float.h>
+#include <string.h>
 
 #include "../geometry/BBox.h"
 #include "../geometry/Geom.h"
@@ -30,14 +30,14 @@
 #include "../geometry/GeomUtils.h"
 #include "../scene_graph/IndexedFaceSet.h"
 #include "../scene_graph/NodeGroup.h"
-#include "../scene_graph/NodeTransform.h"
 #include "../scene_graph/NodeShape.h"
+#include "../scene_graph/NodeTransform.h"
 #include "../system/FreestyleConfig.h"
 #include "../system/RenderMonitor.h"
 
-extern "C" {
 #include "MEM_guardedalloc.h"
 
+extern "C" {
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -48,7 +48,7 @@ extern "C" {
 #include "render_types.h"
 
 #include "BKE_customdata.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_scene.h"

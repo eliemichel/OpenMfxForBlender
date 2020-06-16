@@ -166,7 +166,8 @@ def print_info(reports, pot):
     spell_errors = check_ctxt.get("spell_errors")
 
     # XXX Temp, no multi_rnatip nor py_in_rna, see below.
-    keys = multi_lines | not_capitalized | end_point | undoc_ops | spell_errors.keys()
+    # Also, multi-lines tooltips are valid now.
+    keys = not_capitalized | end_point | undoc_ops | spell_errors.keys()
     if keys:
         _print("WARNINGS:")
         for key in keys:
@@ -599,8 +600,8 @@ def dump_py_messages_from_files(msgs, reports, files, settings):
     # We manually add funcs from bpy.app.translations
     for func_id, func_ids in pgettext_variants:
         func_translate_args[func_id] = pgettext_variants_args
-        for func_id in func_ids:
-            func_translate_args[func_id] = pgettext_variants_args
+        for sub_func_id in func_ids:
+            func_translate_args[sub_func_id] = pgettext_variants_args
     # print(func_translate_args)
 
     # Break recursive nodes look up on some kind of nodes.
@@ -764,7 +765,7 @@ def dump_src_messages(msgs, reports, settings):
             }
 
         data = ""
-        with open(path) as f:
+        with open(path, encoding="utf8") as f:
             data = f.read()
         for srch in pygettexts:
             m = srch(data)
@@ -797,7 +798,7 @@ def dump_src_messages(msgs, reports, settings):
     forbidden = set()
     forced = set()
     if os.path.isfile(settings.SRC_POTFILES):
-        with open(settings.SRC_POTFILES) as src:
+        with open(settings.SRC_POTFILES, encoding="utf8") as src:
             for l in src:
                 if l[0] == '-':
                     forbidden.add(l[1:].rstrip('\n'))

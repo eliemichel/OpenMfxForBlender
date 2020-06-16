@@ -23,8 +23,8 @@
 /* Future-proof, See https://docs.python.org/3/c-api/arg.html#strings-and-buffers */
 #define PY_SSIZE_T_CLEAN
 
-#include <Python.h>
 #include "blf_py_api.h"
+#include <Python.h>
 
 #include "../../blenfont/BLF_api.h"
 
@@ -186,7 +186,7 @@ static PyObject *py_blf_draw(PyObject *UNUSED(self), PyObject *args)
     return NULL;
   }
 
-  BLF_draw(fontid, text, (unsigned int)text_length);
+  BLF_draw(fontid, text, (uint)text_length);
 
   Py_RETURN_NONE;
 }

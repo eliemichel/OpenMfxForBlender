@@ -26,13 +26,13 @@
 #include "StrokeRenderer.h"
 #include "StyleModule.h"
 
-#include "../image/Image.h"
 #include "../image/GaussianFilter.h"
+#include "../image/Image.h"
 #include "../image/ImagePyramid.h"
 
 #include "../system/FreestyleConfig.h"
-#include "../system/TimeStamp.h"
 #include "../system/PseudoNoise.h"
+#include "../system/TimeStamp.h"
 
 #include "../view_map/SteerableViewMap.h"
 

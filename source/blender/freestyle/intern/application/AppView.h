@@ -22,8 +22,9 @@
  */
 
 #include "AppConfig.h"
-#include "../geometry/Geom.h"
+
 #include "../geometry/BBox.h"
+#include "../geometry/Geom.h"
 #include "../scene_graph/NodeDrawingStyle.h"
 #include "../system/Precision.h"
 

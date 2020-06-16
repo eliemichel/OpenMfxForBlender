@@ -23,26 +23,25 @@
 
 #include "intern/node/deg_node_id.h"
 
-#include <stdio.h>
 #include <cstring> /* required for STREQ later on. */
+#include <stdio.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 extern "C" {
 #include "DNA_ID.h"
 #include "DNA_anim_types.h"
 
-#include "BKE_animsys.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 }
 
 #include "DEG_depsgraph.h"
 
 #include "intern/eval/deg_eval_copy_on_write.h"
-#include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_component.h"
+#include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_time.h"
 
 namespace DEG {
@@ -101,8 +100,9 @@ static void id_deps_node_hash_value_free(void *value_v)
 /* Initialize 'id' node - from pointer data given. */
 void IDNode::init(const ID *id, const char *UNUSED(subdata))
 {
-  BLI_assert(id != NULL);
+  BLI_assert(id != nullptr);
   /* Store ID-pointer. */
+  id_type = GS(id->name);
   id_orig = (ID *)id;
   eval_flags = 0;
   previous_eval_flags = 0;
@@ -126,7 +126,7 @@ void IDNode::init_copy_on_write(ID *id_cow_hint)
   /* Create pointer as early as possible, so we can use it for function
    * bindings. Rest of data we'll be copying to the new datablock when
    * it is actually needed. */
-  if (id_cow_hint != NULL) {
+  if (id_cow_hint != nullptr) {
     // BLI_assert(deg_copy_on_write_is_needed(id_orig));
     if (deg_copy_on_write_is_needed(id_orig)) {
       id_cow = id_cow_hint;
@@ -154,22 +154,22 @@ IDNode::~IDNode()
 
 void IDNode::destroy()
 {
-  if (id_orig == NULL) {
+  if (id_orig == nullptr) {
     return;
   }
 
   BLI_ghash_free(components, id_deps_node_hash_key_free, id_deps_node_hash_value_free);
 
   /* Free memory used by this CoW ID. */
-  if (id_cow != id_orig && id_cow != NULL) {
+  if (id_cow != id_orig && id_cow != nullptr) {
     deg_free_copy_on_write_datablock(id_cow);
     MEM_freeN(id_cow);
-    id_cow = NULL;
+    id_cow = nullptr;
     DEG_COW_PRINT("Destroy CoW for %s: id_orig=%p id_cow=%p\n", id_orig->name, id_orig, id_cow);
   }
 
   /* Tag that the node is freed. */
-  id_orig = NULL;
+  id_orig = nullptr;
 }
 
 string IDNode::identifier() const

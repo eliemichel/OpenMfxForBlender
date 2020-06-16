@@ -27,13 +27,13 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_utildefines_stack.h"
 #include "BLI_edgehash.h"
 #include "BLI_ghash.h"
+#include "BLI_utildefines.h"
+#include "BLI_utildefines_stack.h"
 
 #include "BKE_customdata.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 

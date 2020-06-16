@@ -85,6 +85,7 @@ NodeGroup *BlenderFileLoader::Load()
 #endif
 
   int id = 0;
+  const eEvaluationMode eval_mode = DEG_get_mode(_depsgraph);
 
   DEG_OBJECT_ITER_BEGIN (_depsgraph,
                          ob,
@@ -96,6 +97,10 @@ NodeGroup *BlenderFileLoader::Load()
     }
 
     if (ob->base_flag & (BASE_HOLDOUT | BASE_INDIRECT_ONLY)) {
+      continue;
+    }
+
+    if (!(BKE_object_visibility(ob, eval_mode) & OB_VISIBLE_SELF)) {
       continue;
     }
 
@@ -519,7 +524,7 @@ void BlenderFileLoader::insertShapeNode(Object *ob, Mesh *me, int id)
   for (int a = 0; a < tottri; a++) {
     const MLoopTri *lt = &mlooptri[a];
     const MPoly *mp = &mpoly[lt->poly];
-    Material *mat = give_current_material(ob, mp->mat_nr + 1);
+    Material *mat = BKE_object_material_get(ob, mp->mat_nr + 1);
 
     copy_v3_v3(v1, mvert[mloop[lt->tri[0]].v].co);
     copy_v3_v3(v2, mvert[mloop[lt->tri[1]].v].co);

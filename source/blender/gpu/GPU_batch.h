@@ -27,10 +27,14 @@
 #ifndef __GPU_BATCH_H__
 #define __GPU_BATCH_H__
 
-#include "GPU_vertex_buffer.h"
 #include "GPU_element.h"
-#include "GPU_shader_interface.h"
 #include "GPU_shader.h"
+#include "GPU_shader_interface.h"
+#include "GPU_vertex_buffer.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum {
   GPU_BATCH_UNUSED,
@@ -126,6 +130,7 @@ int GPU_batch_vertbuf_add_ex(GPUBatch *, GPUVertBuf *, bool own_vbo);
 void GPU_batch_program_set_no_use(GPUBatch *, uint32_t program, const GPUShaderInterface *);
 void GPU_batch_program_set(GPUBatch *, uint32_t program, const GPUShaderInterface *);
 void GPU_batch_program_set_shader(GPUBatch *, GPUShader *shader);
+void GPU_batch_program_set_imm_shader(GPUBatch *batch);
 void GPU_batch_program_set_builtin(GPUBatch *batch, eGPUBuiltinShader shader_id);
 void GPU_batch_program_set_builtin_with_config(GPUBatch *batch,
                                                eGPUBuiltinShader shader_id,
@@ -239,5 +244,9 @@ void gpu_batch_exit(void);
       MEM_freeN(_batch_array); \
     } \
   } while (0)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __GPU_BATCH_H__ */

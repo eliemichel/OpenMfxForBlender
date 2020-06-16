@@ -14,25 +14,25 @@
  * limitations under the License.
  */
 
+#include "render/camera.h"
 #include "render/colorspace.h"
 #include "render/mesh.h"
 #include "render/object.h"
 #include "render/scene.h"
-#include "render/camera.h"
 
-#include "blender/blender_sync.h"
 #include "blender/blender_session.h"
+#include "blender/blender_sync.h"
 #include "blender/blender_util.h"
 
 #include "subd/subd_patch.h"
 #include "subd/subd_split.h"
 
 #include "util/util_algorithm.h"
+#include "util/util_disjoint_set.h"
 #include "util/util_foreach.h"
 #include "util/util_hash.h"
 #include "util/util_logging.h"
 #include "util/util_math.h"
-#include "util/util_disjoint_set.h"
 
 #include "mikktspace.h"
 
@@ -278,54 +278,6 @@ static void mikk_compute_tangents(
   genTangSpaceDefault(&context);
 }
 
-/* Create Volume Attribute */
-
-static void create_mesh_volume_attribute(
-    BL::Object &b_ob, Mesh *mesh, ImageManager *image_manager, AttributeStandard std, float frame)
-{
-  BL::FluidDomainSettings b_domain = object_fluid_domain_find(b_ob);
-
-  if (!b_domain)
-    return;
-
-  mesh->volume_isovalue = b_domain.clipping();
-
-  Attribute *attr = mesh->attributes.add(std);
-  VoxelAttribute *volume_data = attr->data_voxel();
-  ImageMetaData metadata;
-  bool animated = false;
-
-  volume_data->manager = image_manager;
-  volume_data->slot = image_manager->add_image(Attribute::standard_name(std),
-                                               b_ob.ptr.data,
-                                               animated,
-                                               frame,
-                                               INTERPOLATION_LINEAR,
-                                               EXTENSION_CLIP,
-                                               IMAGE_ALPHA_AUTO,
-                                               u_colorspace_raw,
-                                               metadata);
-}
-
-static void create_mesh_volume_attributes(Scene *scene, BL::Object &b_ob, Mesh *mesh, float frame)
-{
-  /* for smoke volume rendering */
-  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_DENSITY))
-    create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_DENSITY, frame);
-  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_COLOR))
-    create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_COLOR, frame);
-  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_FLAME))
-    create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_FLAME, frame);
-  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_HEAT))
-    create_mesh_volume_attribute(b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_HEAT, frame);
-  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_TEMPERATURE))
-    create_mesh_volume_attribute(
-        b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_TEMPERATURE, frame);
-  if (mesh->need_attribute(scene, ATTR_STD_VOLUME_VELOCITY))
-    create_mesh_volume_attribute(
-        b_ob, mesh, scene->image_manager, ATTR_STD_VOLUME_VELOCITY, frame);
-}
-
 /* Create vertex color attributes. */
 static void attr_create_vertex_color(Scene *scene, Mesh *mesh, BL::Mesh &b_mesh, bool subdivision)
 {
@@ -333,14 +285,27 @@ static void attr_create_vertex_color(Scene *scene, Mesh *mesh, BL::Mesh &b_mesh,
     BL::Mesh::vertex_colors_iterator l;
 
     for (b_mesh.vertex_colors.begin(l); l != b_mesh.vertex_colors.end(); ++l) {
-      if (!mesh->need_attribute(scene, ustring(l->name().c_str())))
-        continue;
+      const bool active_render = l->active_render();
+      AttributeStandard vcol_std = (active_render) ? ATTR_STD_VERTEX_COLOR : ATTR_STD_NONE;
+      ustring vcol_name = ustring(l->name().c_str());
 
-      Attribute *attr = mesh->subd_attributes.add(
-          ustring(l->name().c_str()), TypeRGBA, ATTR_ELEMENT_CORNER_BYTE);
+      const bool need_vcol = mesh->need_attribute(scene, vcol_name) ||
+                             mesh->need_attribute(scene, vcol_std);
+
+      if (!need_vcol) {
+        continue;
+      }
+
+      Attribute *vcol_attr = NULL;
+      if (active_render) {
+        vcol_attr = mesh->subd_attributes.add(vcol_std, vcol_name);
+      }
+      else {
+        vcol_attr = mesh->subd_attributes.add(vcol_name, TypeRGBA, ATTR_ELEMENT_CORNER_BYTE);
+      }
 
       BL::Mesh::polygons_iterator p;
-      uchar4 *cdata = attr->data_uchar4();
+      uchar4 *cdata = vcol_attr->data_uchar4();
 
       for (b_mesh.polygons.begin(p); p != b_mesh.polygons.end(); ++p) {
         int n = p->loop_total();
@@ -355,14 +320,27 @@ static void attr_create_vertex_color(Scene *scene, Mesh *mesh, BL::Mesh &b_mesh,
   else {
     BL::Mesh::vertex_colors_iterator l;
     for (b_mesh.vertex_colors.begin(l); l != b_mesh.vertex_colors.end(); ++l) {
-      if (!mesh->need_attribute(scene, ustring(l->name().c_str())))
-        continue;
+      const bool active_render = l->active_render();
+      AttributeStandard vcol_std = (active_render) ? ATTR_STD_VERTEX_COLOR : ATTR_STD_NONE;
+      ustring vcol_name = ustring(l->name().c_str());
 
-      Attribute *attr = mesh->attributes.add(
-          ustring(l->name().c_str()), TypeRGBA, ATTR_ELEMENT_CORNER_BYTE);
+      const bool need_vcol = mesh->need_attribute(scene, vcol_name) ||
+                             mesh->need_attribute(scene, vcol_std);
+
+      if (!need_vcol) {
+        continue;
+      }
+
+      Attribute *vcol_attr = NULL;
+      if (active_render) {
+        vcol_attr = mesh->attributes.add(vcol_std, vcol_name);
+      }
+      else {
+        vcol_attr = mesh->attributes.add(vcol_name, TypeRGBA, ATTR_ELEMENT_CORNER_BYTE);
+      }
 
       BL::Mesh::loop_triangles_iterator t;
-      uchar4 *cdata = attr->data_uchar4();
+      uchar4 *cdata = vcol_attr->data_uchar4();
 
       for (b_mesh.loop_triangles.begin(t); t != b_mesh.loop_triangles.end(); ++t) {
         int3 li = get_int3(t->loops());
@@ -859,9 +837,9 @@ static void create_mesh(Scene *scene,
     attr_create_uv_map(scene, mesh, b_mesh);
   }
 
-  /* for volume objects, create a matrix to transform from object space to
+  /* For volume objects, create a matrix to transform from object space to
    * mesh texture space. this does not work with deformations but that can
-   * probably only be done well with a volume grid mapping of coordinates */
+   * probably only be done well with a volume grid mapping of coordinates. */
   if (mesh->need_attribute(scene, ATTR_STD_GENERATED_TRANSFORM)) {
     Attribute *attr = mesh->attributes.add(ATTR_STD_GENERATED_TRANSFORM);
     Transform *tfm = attr->data_transform();
@@ -930,7 +908,7 @@ static void sync_mesh_fluid_motion(BL::Object &b_ob, Scene *scene, Mesh *mesh)
   if (scene->need_motion() == Scene::MOTION_NONE)
     return;
 
-  BL::FluidDomainSettings b_fluid_domain = object_fluid_domain_find(b_ob);
+  BL::FluidDomainSettings b_fluid_domain = object_fluid_liquid_domain_find(b_ob);
 
   if (!b_fluid_domain)
     return;
@@ -963,82 +941,11 @@ static void sync_mesh_fluid_motion(BL::Object &b_ob, Scene *scene, Mesh *mesh)
   }
 }
 
-Mesh *BlenderSync::sync_mesh(BL::Depsgraph &b_depsgraph,
-                             BL::Object &b_ob,
-                             BL::Object &b_ob_instance,
-                             bool object_updated,
-                             bool show_self,
-                             bool show_particles)
+void BlenderSync::sync_mesh(BL::Depsgraph b_depsgraph,
+                            BL::Object b_ob,
+                            Mesh *mesh,
+                            const vector<Shader *> &used_shaders)
 {
-  /* test if we can instance or if the object is modified */
-  BL::ID b_ob_data = b_ob.data();
-  BL::ID key = (BKE_object_is_modified(b_ob)) ? b_ob_instance : b_ob_data;
-  BL::Material material_override = view_layer.material_override;
-
-  /* find shader indices */
-  vector<Shader *> used_shaders;
-
-  BL::Object::material_slots_iterator slot;
-  for (b_ob.material_slots.begin(slot); slot != b_ob.material_slots.end(); ++slot) {
-    if (material_override) {
-      find_shader(material_override, used_shaders, scene->default_surface);
-    }
-    else {
-      BL::ID b_material(slot->material());
-      find_shader(b_material, used_shaders, scene->default_surface);
-    }
-  }
-
-  if (used_shaders.size() == 0) {
-    if (material_override)
-      find_shader(material_override, used_shaders, scene->default_surface);
-    else
-      used_shaders.push_back(scene->default_surface);
-  }
-
-  /* test if we need to sync */
-  int requested_geometry_flags = Mesh::GEOMETRY_NONE;
-  if (view_layer.use_surfaces) {
-    requested_geometry_flags |= Mesh::GEOMETRY_TRIANGLES;
-  }
-  if (view_layer.use_hair) {
-    requested_geometry_flags |= Mesh::GEOMETRY_CURVES;
-  }
-  Mesh *mesh;
-
-  if (!mesh_map.sync(&mesh, key)) {
-    /* if transform was applied to mesh, need full update */
-    if (object_updated && mesh->transform_applied)
-      ;
-    /* test if shaders changed, these can be object level so mesh
-     * does not get tagged for recalc */
-    else if (mesh->used_shaders != used_shaders)
-      ;
-    else if (requested_geometry_flags != mesh->geometry_flags)
-      ;
-    else {
-      /* even if not tagged for recalc, we may need to sync anyway
-       * because the shader needs different mesh attributes */
-      bool attribute_recalc = false;
-
-      foreach (Shader *shader, mesh->used_shaders)
-        if (shader->need_update_mesh)
-          attribute_recalc = true;
-
-      if (!attribute_recalc)
-        return mesh;
-    }
-  }
-
-  /* ensure we only sync instanced meshes once */
-  if (mesh_synced.find(mesh) != mesh_synced.end())
-    return mesh;
-
-  progress.set_sync_status("Synchronizing object", b_ob.name());
-
-  mesh_synced.insert(mesh);
-
-  /* create derived mesh */
   array<int> oldtriangles;
   array<Mesh::SubdFace> oldsubd_faces;
   array<int> oldsubd_face_corners;
@@ -1046,150 +953,73 @@ Mesh *BlenderSync::sync_mesh(BL::Depsgraph &b_depsgraph,
   oldsubd_faces.steal_data(mesh->subd_faces);
   oldsubd_face_corners.steal_data(mesh->subd_face_corners);
 
-  /* compares curve_keys rather than strands in order to handle quick hair
-   * adjustments in dynamic BVH - other methods could probably do this better*/
-  array<float3> oldcurve_keys;
-  array<float> oldcurve_radius;
-  oldcurve_keys.steal_data(mesh->curve_keys);
-  oldcurve_radius.steal_data(mesh->curve_radius);
-
-  /* ensure bvh rebuild (instead of refit) if has_voxel_attributes() changed */
-  bool oldhas_voxel_attributes = mesh->has_voxel_attributes();
-
   mesh->clear();
   mesh->used_shaders = used_shaders;
-  mesh->name = ustring(b_ob_data.name().c_str());
 
-  if (requested_geometry_flags != Mesh::GEOMETRY_NONE) {
+  mesh->subdivision_type = Mesh::SUBDIVISION_NONE;
+
+  if (view_layer.use_surfaces) {
     /* Adaptive subdivision setup. Not for baking since that requires
      * exact mapping to the Blender mesh. */
-    if (scene->bake_manager->get_baking()) {
-      mesh->subdivision_type = Mesh::SUBDIVISION_NONE;
-    }
-    else {
+    if (!scene->bake_manager->get_baking()) {
       mesh->subdivision_type = object_subdivision_type(b_ob, preview, experimental);
     }
 
     /* For some reason, meshes do not need this... */
     bool need_undeformed = mesh->need_attribute(scene, ATTR_STD_GENERATED);
-
     BL::Mesh b_mesh = object_to_mesh(
         b_data, b_ob, b_depsgraph, need_undeformed, mesh->subdivision_type);
 
     if (b_mesh) {
       /* Sync mesh itself. */
-      if (view_layer.use_surfaces && show_self) {
-        if (mesh->subdivision_type != Mesh::SUBDIVISION_NONE)
-          create_subd_mesh(scene, mesh, b_ob, b_mesh, used_shaders, dicing_rate, max_subdivisions);
-        else
-          create_mesh(scene, mesh, b_mesh, used_shaders, false);
-
-        create_mesh_volume_attributes(scene, b_ob, mesh, b_scene.frame_current());
-      }
-
-      /* Sync hair curves. */
-      if (view_layer.use_hair && show_particles &&
-          mesh->subdivision_type == Mesh::SUBDIVISION_NONE) {
-        sync_curves(mesh, b_mesh, b_ob, false);
-      }
+      if (mesh->subdivision_type != Mesh::SUBDIVISION_NONE)
+        create_subd_mesh(
+            scene, mesh, b_ob, b_mesh, mesh->used_shaders, dicing_rate, max_subdivisions);
+      else
+        create_mesh(scene, mesh, b_mesh, mesh->used_shaders, false);
 
       free_object_to_mesh(b_data, b_ob, b_mesh);
     }
   }
-  mesh->geometry_flags = requested_geometry_flags;
 
   /* mesh fluid motion mantaflow */
   sync_mesh_fluid_motion(b_ob, scene, mesh);
 
   /* tag update */
   bool rebuild = (oldtriangles != mesh->triangles) || (oldsubd_faces != mesh->subd_faces) ||
-                 (oldsubd_face_corners != mesh->subd_face_corners) ||
-                 (oldcurve_keys != mesh->curve_keys) || (oldcurve_radius != mesh->curve_radius) ||
-                 (oldhas_voxel_attributes != mesh->has_voxel_attributes());
+                 (oldsubd_face_corners != mesh->subd_face_corners);
 
   mesh->tag_update(scene, rebuild);
-
-  return mesh;
 }
 
-void BlenderSync::sync_mesh_motion(BL::Depsgraph &b_depsgraph,
-                                   BL::Object &b_ob,
-                                   Object *object,
-                                   float motion_time)
+void BlenderSync::sync_mesh_motion(BL::Depsgraph b_depsgraph,
+                                   BL::Object b_ob,
+                                   Mesh *mesh,
+                                   int motion_step)
 {
-  /* ensure we only sync instanced meshes once */
-  Mesh *mesh = object->mesh;
-
-  if (mesh_motion_synced.find(mesh) != mesh_motion_synced.end())
-    return;
-
-  mesh_motion_synced.insert(mesh);
-
-  /* ensure we only motion sync meshes that also had mesh synced, to avoid
-   * unnecessary work and to ensure that its attributes were clear */
-  if (mesh_synced.find(mesh) == mesh_synced.end())
-    return;
-
-  /* Find time matching motion step required by mesh. */
-  int motion_step = mesh->motion_step(motion_time);
-  if (motion_step < 0) {
+  /* Fluid motion blur already exported. */
+  BL::FluidDomainSettings b_fluid_domain = object_fluid_liquid_domain_find(b_ob);
+  if (b_fluid_domain) {
     return;
   }
 
-  /* skip empty meshes */
-  const size_t numverts = mesh->verts.size();
-  const size_t numkeys = mesh->curve_keys.size();
-
-  if (!numverts && !numkeys)
+  /* Skip if no vertices were exported. */
+  size_t numverts = mesh->verts.size();
+  if (numverts == 0) {
     return;
+  }
 
-  /* skip objects without deforming modifiers. this is not totally reliable,
-   * would need a more extensive check to see which objects are animated */
+  /* Skip objects without deforming modifiers. this is not totally reliable,
+   * would need a more extensive check to see which objects are animated. */
   BL::Mesh b_mesh(PointerRNA_NULL);
-
-  /* manta motion is exported immediate with mesh, skip here */
-  BL::FluidDomainSettings b_fluid_domain = object_fluid_domain_find(b_ob);
-  if (b_fluid_domain)
-    return;
-
   if (ccl::BKE_object_is_deform_modified(b_ob, b_scene, preview)) {
     /* get derived mesh */
     b_mesh = object_to_mesh(b_data, b_ob, b_depsgraph, false, Mesh::SUBDIVISION_NONE);
   }
 
-  if (!b_mesh) {
-    /* if we have no motion blur on this frame, but on other frames, copy */
-    if (numverts) {
-      /* triangles */
-      Attribute *attr_mP = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
-
-      if (attr_mP) {
-        Attribute *attr_mN = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_NORMAL);
-        Attribute *attr_N = mesh->attributes.find(ATTR_STD_VERTEX_NORMAL);
-        float3 *P = &mesh->verts[0];
-        float3 *N = (attr_N) ? attr_N->data_float3() : NULL;
-
-        memcpy(attr_mP->data_float3() + motion_step * numverts, P, sizeof(float3) * numverts);
-        if (attr_mN)
-          memcpy(attr_mN->data_float3() + motion_step * numverts, N, sizeof(float3) * numverts);
-      }
-    }
-
-    if (numkeys) {
-      /* curves */
-      Attribute *attr_mP = mesh->curve_attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
-
-      if (attr_mP) {
-        float3 *keys = &mesh->curve_keys[0];
-        memcpy(attr_mP->data_float3() + motion_step * numkeys, keys, sizeof(float3) * numkeys);
-      }
-    }
-
-    return;
-  }
-
   /* TODO(sergey): Perform preliminary check for number of vertices. */
-  if (numverts) {
+  if (b_mesh) {
+    /* Export deformed coordinates. */
     /* Find attributes. */
     Attribute *attr_mP = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
     Attribute *attr_mN = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_NORMAL);
@@ -1254,14 +1084,13 @@ void BlenderSync::sync_mesh_motion(BL::Depsgraph &b_depsgraph,
         }
       }
     }
+
+    free_object_to_mesh(b_data, b_ob, b_mesh);
+    return;
   }
 
-  /* hair motion */
-  if (numkeys)
-    sync_curves(mesh, b_mesh, b_ob, true, motion_step);
-
-  /* free derived mesh */
-  free_object_to_mesh(b_data, b_ob, b_mesh);
+  /* No deformation on this frame, copy coordinates if other frames did have it. */
+  mesh->copy_center_to_motion_step(motion_step);
 }
 
 CCL_NAMESPACE_END

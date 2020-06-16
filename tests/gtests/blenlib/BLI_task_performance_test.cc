@@ -1,11 +1,13 @@
 /* Apache License, Version 2.0 */
 
-#include "testing/testing.h"
 #include "BLI_ressource_strings.h"
+#include "testing/testing.h"
 
 #include "atomic_ops.h"
 
 #define GHASH_INTERNAL_API
+
+#include "MEM_guardedalloc.h"
 
 extern "C" {
 #include "BLI_utildefines.h"
@@ -15,8 +17,6 @@ extern "C" {
 #include "BLI_task.h"
 
 #include "PIL_time.h"
-
-#include "MEM_guardedalloc.h"
 }
 
 #define NUM_RUN_AVERAGED 100

@@ -28,8 +28,8 @@
 
 #include "BLI_array.h"
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_action.h"
 #include "BKE_armature.h"
@@ -52,10 +52,10 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 
-#include "ED_object.h"
-#include "ED_transverts.h"
 #include "ED_keyframing.h"
+#include "ED_object.h"
 #include "ED_screen.h"
+#include "ED_transverts.h"
 
 #include "view3d_intern.h"
 
@@ -715,7 +715,7 @@ static void bundle_midpoint(Scene *scene, Object *ob, float r_vec[3])
 
   copy_m4_m4(cammat, ob->obmat);
 
-  BKE_tracking_get_camera_object_matrix(scene, ob, mat);
+  BKE_tracking_get_camera_object_matrix(ob, mat);
 
   INIT_MINMAX(min, max);
 

@@ -22,23 +22,13 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_tex_environment_in[] = {
-    {SOCK_VECTOR, 1, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_tex_environment_out[] = {
-    {SOCK_RGBA,
-     0,
-     N_("Color"),
-     0.0f,
-     0.0f,
-     0.0f,
-     0.0f,
-     0.0f,
-     1.0f,
-     PROP_NONE,
-     SOCK_NO_INTERNAL_LINK},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_NO_INTERNAL_LINK},
+    {-1, ""},
 };
 
 static void node_shader_init_tex_environment(bNodeTree *UNUSED(ntree), bNode *node)
@@ -88,7 +78,7 @@ static int node_shader_gpu_tex_environment(GPUMaterial *mat,
              "node_tex_environment_equirectangular",
              in[0].link,
              GPU_constant(&clamp_size),
-             GPU_image(ima, iuser),
+             GPU_image(mat, ima, iuser),
              &in[0].link);
   }
   else {
@@ -103,7 +93,7 @@ static int node_shader_gpu_tex_environment(GPUMaterial *mat,
       GPU_link(mat,
                "node_tex_image_linear_no_mip",
                in[0].link,
-               GPU_image(ima, iuser),
+               GPU_image(mat, ima, iuser),
                &out[0].link,
                &outalpha);
       break;
@@ -111,13 +101,17 @@ static int node_shader_gpu_tex_environment(GPUMaterial *mat,
       GPU_link(mat,
                "node_tex_image_nearest",
                in[0].link,
-               GPU_image(ima, iuser),
+               GPU_image(mat, ima, iuser),
                &out[0].link,
                &outalpha);
       break;
     default:
-      GPU_link(
-          mat, "node_tex_image_cubic", in[0].link, GPU_image(ima, iuser), &out[0].link, &outalpha);
+      GPU_link(mat,
+               "node_tex_image_cubic",
+               in[0].link,
+               GPU_image(mat, ima, iuser),
+               &out[0].link,
+               &outalpha);
       break;
   }
 

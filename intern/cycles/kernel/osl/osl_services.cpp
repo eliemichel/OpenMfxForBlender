@@ -39,6 +39,7 @@
 #include "util/util_logging.h"
 #include "util/util_string.h"
 
+// clang-format off
 #include "kernel/kernel_compat_cpu.h"
 #include "kernel/split/kernel_split_data_types.h"
 #include "kernel/kernel_globals.h"
@@ -56,6 +57,7 @@
 #include "kernel/kernel_projection.h"
 #include "kernel/kernel_accumulate.h"
 #include "kernel/kernel_shader.h"
+// clang-format on
 
 CCL_NAMESPACE_BEGIN
 
@@ -1009,7 +1011,13 @@ bool OSLRenderServices::get_userdata(
   return false; /* disabled by lockgeom */
 }
 
+#if OSL_LIBRARY_VERSION_CODE >= 11100
+TextureSystem::TextureHandle *OSLRenderServices::get_texture_handle(ustring filename,
+                                                                    OSL::ShadingContext *)
+#else
+
 TextureSystem::TextureHandle *OSLRenderServices::get_texture_handle(ustring filename)
+#endif
 {
   OSLTextureHandleMap::iterator it = textures.find(filename);
 
@@ -1220,8 +1228,8 @@ bool OSLRenderServices::texture3d(ustring filename,
       ShaderData *sd = (ShaderData *)(sg->renderstate);
       KernelGlobals *kernel_globals = sd->osl_globals;
       int slot = handle->svm_slot;
-      float4 rgba = kernel_tex_image_interp_3d(
-          kernel_globals, slot, P.x, P.y, P.z, INTERPOLATION_NONE);
+      float3 P_float3 = make_float3(P.x, P.y, P.z);
+      float4 rgba = kernel_tex_image_interp_3d(kernel_globals, slot, P_float3, INTERPOLATION_NONE);
 
       result[0] = rgba[0];
       if (nchannels > 1)
@@ -1363,6 +1371,17 @@ bool OSLRenderServices::environment(ustring filename,
   return status;
 }
 
+#if OSL_LIBRARY_VERSION_CODE >= 11100
+bool OSLRenderServices::get_texture_info(ustring filename,
+                                         TextureHandle *texture_handle,
+                                         TexturePerthread *,
+                                         OSL::ShadingContext *,
+                                         int subimage,
+                                         ustring dataname,
+                                         TypeDesc datatype,
+                                         void *data,
+                                         ustring *)
+#else
 bool OSLRenderServices::get_texture_info(OSL::ShaderGlobals *sg,
                                          ustring filename,
                                          TextureHandle *texture_handle,
@@ -1370,6 +1389,7 @@ bool OSLRenderServices::get_texture_info(OSL::ShaderGlobals *sg,
                                          ustring dataname,
                                          TypeDesc datatype,
                                          void *data)
+#endif
 {
   OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
 

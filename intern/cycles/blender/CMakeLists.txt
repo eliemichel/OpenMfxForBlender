@@ -18,6 +18,9 @@ set(INC_SYS
 set(SRC
   blender_camera.cpp
   blender_device.cpp
+  blender_image.cpp
+  blender_geometry.cpp
+  blender_light.cpp
   blender_mesh.cpp
   blender_object.cpp
   blender_object_cull.cpp
@@ -30,9 +33,12 @@ set(SRC
   blender_sync.cpp
   blender_texture.cpp
   blender_viewport.cpp
+  blender_volume.cpp
 
   CCL_api.h
   blender_device.h
+  blender_id_map.h
+  blender_image.h
   blender_object_cull.h
   blender_sync.h
   blender_session.h
@@ -84,6 +90,20 @@ endif()
 
 if(WITH_MOD_FLUID)
   add_definitions(-DWITH_FLUID)
+endif()
+
+if(WITH_NEW_OBJECT_TYPES)
+  add_definitions(-DWITH_NEW_OBJECT_TYPES)
+endif()
+
+if(WITH_OPENVDB)
+  add_definitions(-DWITH_OPENVDB ${OPENVDB_DEFINITIONS})
+  list(APPEND INC_SYS
+    ${OPENVDB_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${OPENVDB_LIBRARIES}
+  )
 endif()
 
 blender_add_lib(bf_intern_cycles "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

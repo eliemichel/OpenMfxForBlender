@@ -40,15 +40,15 @@
 #include "DNA_texture_types.h"
 #include "DNA_world_types.h"
 
-#include "BLI_utildefines.h"
+#include "BLI_fileops.h"
 #include "BLI_ghash.h"
 #include "BLI_linklist_lockfree.h"
 #include "BLI_string.h"
-#include "BLI_fileops.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_icons.h"
 #include "BKE_global.h" /* only for G.background test */
+#include "BKE_icons.h"
 #include "BKE_studiolight.h"
 
 #include "BLI_sys_types.h"  // for intptr_t support
@@ -842,8 +842,8 @@ struct Icon_Geom *BKE_icon_geom_from_memory(const uchar *data, size_t data_len)
   p += 2;
 
   geom->coords_len = coords_len;
-  geom->coords = (const void *)p;
-  geom->colors = (const void *)(p + (data_len / 3));
+  geom->coords = (void *)p;
+  geom->colors = (void *)(p + (data_len / 3));
   geom->icon_id = 0;
   geom->mem = data;
   return geom;

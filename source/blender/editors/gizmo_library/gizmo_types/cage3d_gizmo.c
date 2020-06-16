@@ -34,11 +34,11 @@
 
 #include "BKE_context.h"
 
-#include "GPU_matrix.h"
-#include "GPU_shader.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
+#include "GPU_matrix.h"
 #include "GPU_select.h"
+#include "GPU_shader.h"
 #include "GPU_state.h"
 
 #include "RNA_access.h"
@@ -47,9 +47,9 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_gizmo_library.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
-#include "ED_gizmo_library.h"
 
 /* own includes */
 #include "../gizmo_library_intern.h"
@@ -130,13 +130,21 @@ static void gizmo_rect_pivot_from_scale_part(int part, float r_pt[3], bool r_con
  * Useful for 3D views, see: #ED_GIZMO_CAGE2D_STYLE_BOX
  * \{ */
 
-static void cage3d_draw_box_corners(const float r[3], const float margin[3], const float color[3])
+static void cage3d_draw_box_corners(const float r[3],
+                                    const float margin[3],
+                                    const float color[3],
+                                    const float line_width)
 {
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
   UNUSED_VARS(margin);
 
-  immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
+  immBindBuiltinProgram(GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
   immUniformColor3fv(color);
+
+  float viewport[4];
+  GPU_viewport_size_get_f(viewport);
+  immUniform2fv("viewportSize", &viewport[2]);
+  immUniform1f("lineWidth", line_width * U.pixelsize);
 
   imm_draw_cube_wire_3d(pos, (float[3]){0}, r);
 
@@ -199,12 +207,18 @@ static void cage3d_draw_circle_wire(const float r[3],
                                     const float margin[3],
                                     const float color[3],
                                     const int transform_flag,
-                                    const int draw_options)
+                                    const int draw_options,
+                                    const float line_width)
 {
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
 
-  immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
+  immBindBuiltinProgram(GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
   immUniformColor3fv(color);
+
+  float viewport[4];
+  GPU_viewport_size_get_f(viewport);
+  immUniform2fv("viewportSize", &viewport[2]);
+  immUniform1f("lineWidth", line_width * U.pixelsize);
 
   imm_draw_cube_wire_3d(pos, (float[3]){0}, r);
 
@@ -339,15 +353,14 @@ static void gizmo_cage3d_draw_intern(
     };
 #endif
     if (draw_style == ED_GIZMO_CAGE2D_STYLE_BOX) {
-      /* corner gizmos */
-      GPU_line_width(gz->line_width + 3.0f);
-      cage3d_draw_box_corners(size_real, margin, (const float[3]){0, 0, 0});
+      float color[4], black[3] = {0, 0, 0};
+      gizmo_color_get(gz, highlight, color);
 
       /* corner gizmos */
-      float color[4];
-      gizmo_color_get(gz, highlight, color);
-      GPU_line_width(gz->line_width);
-      cage3d_draw_box_corners(size_real, margin, color);
+      cage3d_draw_box_corners(size_real, margin, black, gz->line_width + 3.0f);
+
+      /* corner gizmos */
+      cage3d_draw_box_corners(size_real, margin, color, gz->line_width);
 
       bool show = false;
       if (gz->highlight_part == ED_GIZMO_CAGE3D_PART_TRANSLATE) {
@@ -366,34 +379,29 @@ static void gizmo_cage3d_draw_intern(
       }
     }
     else if (draw_style == ED_GIZMO_CAGE2D_STYLE_CIRCLE) {
-      float color[4];
+      float color[4], black[3] = {0, 0, 0};
       gizmo_color_get(gz, highlight, color);
 
-      GPU_line_smooth(true);
-      GPU_polygon_smooth(true);
       GPU_blend(true);
 
-      GPU_line_width(gz->line_width + 3.0f);
       cage3d_draw_circle_wire(
-          size_real, margin, (const float[3]){0, 0, 0}, transform_flag, draw_options);
-      GPU_line_width(gz->line_width);
-      cage3d_draw_circle_wire(size_real, margin, color, transform_flag, draw_options);
+          size_real, margin, black, transform_flag, draw_options, gz->line_width + 3.0f);
+      cage3d_draw_circle_wire(
+          size_real, margin, color, transform_flag, draw_options, gz->line_width);
 
       /* corner gizmos */
-      cage3d_draw_circle_handles(
-          rv3d, matrix_final, size_real, margin, (const float[3]){0, 0, 0}, true, 60);
+      GPU_polygon_smooth(true);
+      cage3d_draw_circle_handles(rv3d, matrix_final, size_real, margin, black, true, 60);
       cage3d_draw_circle_handles(rv3d, matrix_final, size_real, margin, color, true, 40);
+      GPU_polygon_smooth(false);
 
       GPU_blend(false);
-      GPU_polygon_smooth(false);
-      GPU_line_smooth(false);
     }
     else {
       BLI_assert(0);
     }
   }
 
-  GPU_line_width(1.0);
   GPU_matrix_pop();
 }
 
@@ -402,15 +410,15 @@ static void gizmo_cage3d_draw_intern(
  */
 static void gizmo_cage3d_draw_select(const bContext *C, wmGizmo *gz, int select_id)
 {
-  ARegion *ar = CTX_wm_region(C);
-  RegionView3D *rv3d = ar->regiondata;
+  ARegion *region = CTX_wm_region(C);
+  RegionView3D *rv3d = region->regiondata;
   gizmo_cage3d_draw_intern(rv3d, gz, true, false, select_id);
 }
 
 static void gizmo_cage3d_draw(const bContext *C, wmGizmo *gz)
 {
-  ARegion *ar = CTX_wm_region(C);
-  RegionView3D *rv3d = ar->regiondata;
+  ARegion *region = CTX_wm_region(C);
+  RegionView3D *rv3d = region->regiondata;
   const bool is_highlight = (gz->state & WM_GIZMO_STATE_HIGHLIGHT) != 0;
   gizmo_cage3d_draw_intern(rv3d, gz, false, is_highlight, -1);
 }
@@ -585,8 +593,8 @@ static int gizmo_cage3d_modal(bContext *C,
   }
 
   /* tag the region for redraw */
-  ED_region_tag_redraw(CTX_wm_region(C));
-  WM_event_add_mousemove(C);
+  ED_region_tag_redraw_editor_overlays(CTX_wm_region(C));
+  WM_event_add_mousemove(CTX_wm_window(C));
 
   return OPERATOR_RUNNING_MODAL;
 }

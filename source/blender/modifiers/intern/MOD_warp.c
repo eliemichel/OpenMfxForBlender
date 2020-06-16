@@ -30,14 +30,15 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 
+#include "BKE_action.h" /* BKE_pose_channel_find_name */
+#include "BKE_colortools.h"
+#include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
-#include "BKE_deform.h"
 #include "BKE_texture.h"
-#include "BKE_colortools.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -82,6 +83,22 @@ static void requiredDataMask(Object *UNUSED(ob),
   /* ask for UV coordinates if we need them */
   if (wmd->texmapping == MOD_DISP_MAP_UV) {
     r_cddata_masks->fmask |= CD_MASK_MTFACE;
+  }
+}
+
+static void matrix_from_obj_pchan(float mat[4][4],
+                                  const float obinv[4][4],
+                                  Object *ob,
+                                  const char *bonename)
+{
+  bPoseChannel *pchan = BKE_pose_channel_find_name(ob->pose, bonename);
+  if (pchan) {
+    float mat_bone_world[4][4];
+    mul_m4_m4m4(mat_bone_world, ob->obmat, pchan->pose_mat);
+    mul_m4_m4m4(mat, obinv, mat_bone_world);
+  }
+  else {
+    mul_m4_m4m4(mat, obinv, ob->obmat);
   }
 }
 
@@ -138,18 +155,31 @@ static void foreachTexLink(ModifierData *md, Object *ob, TexWalkFunc walk, void 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   WarpModifierData *wmd = (WarpModifierData *)md;
+  bool need_transform_relation = false;
+
   if (wmd->object_from != NULL && wmd->object_to != NULL) {
-    DEG_add_modifier_to_transform_relation(ctx->node, "Warplace Modifier");
-    DEG_add_object_relation(
-        ctx->node, wmd->object_from, DEG_OB_COMP_TRANSFORM, "Warp Modifier from");
-    DEG_add_object_relation(ctx->node, wmd->object_to, DEG_OB_COMP_TRANSFORM, "Warp Modifier to");
+    MOD_depsgraph_update_object_bone_relation(
+        ctx->node, wmd->object_from, wmd->bone_from, "Warp Modifier");
+    MOD_depsgraph_update_object_bone_relation(
+        ctx->node, wmd->object_to, wmd->bone_to, "Warp Modifier");
+    need_transform_relation = true;
   }
-  if ((wmd->texmapping == MOD_DISP_MAP_OBJECT) && wmd->map_object != NULL) {
-    DEG_add_object_relation(
-        ctx->node, wmd->map_object, DEG_OB_COMP_TRANSFORM, "Warp Modifier map");
-  }
+
   if (wmd->texture != NULL) {
     DEG_add_generic_id_relation(ctx->node, &wmd->texture->id, "Warp Modifier");
+
+    if ((wmd->texmapping == MOD_DISP_MAP_OBJECT) && wmd->map_object != NULL) {
+      MOD_depsgraph_update_object_bone_relation(
+          ctx->node, wmd->map_object, wmd->map_bone, "Warp Modifier");
+      need_transform_relation = true;
+    }
+    else if (wmd->texmapping == MOD_DISP_MAP_GLOBAL) {
+      need_transform_relation = true;
+    }
+  }
+
+  if (need_transform_relation) {
+    DEG_add_modifier_to_transform_relation(ctx->node, "Warp Modifier");
   }
 }
 
@@ -169,13 +199,13 @@ static void warpModifier_do(WarpModifierData *wmd,
 
   float tmat[4][4];
 
-  const float falloff_radius_sq = SQUARE(wmd->falloff_radius);
+  const float falloff_radius_sq = square_f(wmd->falloff_radius);
   float strength = wmd->strength;
   float fac = 1.0f, weight;
   int i;
   int defgrp_index;
   MDeformVert *dvert, *dv = NULL;
-
+  const bool invert_vgroup = (wmd->flag & MOD_WARP_INVERT_VGROUP) != 0;
   float(*tex_co)[3] = NULL;
 
   if (!(wmd->object_from && wmd->object_to)) {
@@ -197,8 +227,9 @@ static void warpModifier_do(WarpModifierData *wmd,
 
   invert_m4_m4(obinv, ob->obmat);
 
-  mul_m4_m4m4(mat_from, obinv, wmd->object_from->obmat);
-  mul_m4_m4m4(mat_to, obinv, wmd->object_to->obmat);
+  /* Checks that the objects/bones are available. */
+  matrix_from_obj_pchan(mat_from, obinv, wmd->object_from, wmd->bone_from);
+  matrix_from_obj_pchan(mat_to, obinv, wmd->object_to, wmd->bone_to);
 
   invert_m4_m4(tmat, mat_from);  // swap?
   mul_m4_m4m4(mat_final, tmat, mat_to);
@@ -235,7 +266,8 @@ static void warpModifier_do(WarpModifierData *wmd,
       /* skip if no vert group found */
       if (defgrp_index != -1) {
         dv = &dvert[i];
-        weight = defvert_find_weight(dv, defgrp_index) * strength;
+        weight = invert_vgroup ? 1.0f - BKE_defvert_find_weight(dv, defgrp_index) * strength :
+                                 BKE_defvert_find_weight(dv, defgrp_index) * strength;
         if (weight <= 0.0f) {
           continue;
         }

@@ -82,25 +82,33 @@ list(APPEND ALL_CYCLES_LIBRARIES
   ${TIFF_LIBRARY}
   ${OPENIMAGEIO_LIBRARIES}
   ${OPENEXR_LIBRARIES}
+  ${OPENVDB_LIBRARIES}
 )
 
 include_directories(${INC})
 
-link_directories(${OPENIMAGEIO_LIBPATH}
-                 ${BOOST_LIBPATH}
-                 ${PNG_LIBPATH}
-                 ${JPEG_LIBPATH}
-                 ${ZLIB_LIBPATH}
-                 ${TIFF_LIBPATH}
-                 ${OPENEXR_LIBPATH}
-                 ${OPENCOLORIO_LIBPATH})
+link_directories(
+  ${OPENIMAGEIO_LIBPATH}
+  ${BOOST_LIBPATH}
+  ${PNG_LIBPATH}
+  ${JPEG_LIBPATH}
+  ${ZLIB_LIBPATH}
+  ${TIFF_LIBPATH}
+  ${OPENEXR_LIBPATH}
+  ${OPENCOLORIO_LIBPATH}
+  ${OPENVDB_LIBPATH}
+)
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}")
 set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}")
 
 CYCLES_TEST(render_graph_finalize "${ALL_CYCLES_LIBRARIES};bf_intern_numaapi")
 CYCLES_TEST(util_aligned_malloc "cycles_util")
-CYCLES_TEST(util_path "cycles_util;${BOOST_LIBRARIES};${OPENIMAGEIO_LIBRARIES}")
-CYCLES_TEST(util_string "cycles_util;${BOOST_LIBRARIES};${OPENIMAGEIO_LIBRARIES}")
-CYCLES_TEST(util_task "cycles_util;${BOOST_LIBRARIES};${OPENIMAGEIO_LIBRARIES};bf_intern_numaapi")
-CYCLES_TEST(util_time "cycles_util;${BOOST_LIBRARIES};${OPENIMAGEIO_LIBRARIES}")
+CYCLES_TEST(util_path "cycles_util;${OPENIMAGEIO_LIBRARIES};${BOOST_LIBRARIES}")
+CYCLES_TEST(util_string "cycles_util;${OPENIMAGEIO_LIBRARIES};${BOOST_LIBRARIES}")
+CYCLES_TEST(util_task "cycles_util;${OPENIMAGEIO_LIBRARIES};${BOOST_LIBRARIES};bf_intern_numaapi")
+CYCLES_TEST(util_time "cycles_util;${OPENIMAGEIO_LIBRARIES};${BOOST_LIBRARIES}")
+set_source_files_properties(util_avxf_avx_test.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX_KERNEL_FLAGS}")
+CYCLES_TEST(util_avxf_avx "cycles_util;bf_intern_numaapi;${OPENIMAGEIO_LIBRARIES};${BOOST_LIBRARIES}")
+set_source_files_properties(util_avxf_avx2_test.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX2_KERNEL_FLAGS}")
+CYCLES_TEST(util_avxf_avx2 "cycles_util;bf_intern_numaapi;${OPENIMAGEIO_LIBRARIES};${BOOST_LIBRARIES}")

@@ -41,8 +41,8 @@
 #include "util/util_progress.h"
 #include "util/util_time.h"
 
-#include "blender/blender_sync.h"
 #include "blender/blender_session.h"
+#include "blender/blender_sync.h"
 #include "blender/blender_util.h"
 
 CCL_NAMESPACE_BEGIN
@@ -138,14 +138,6 @@ void BlenderSession::create_session()
   scene = new Scene(scene_params, session->device);
   scene->name = b_scene.name();
 
-  /* setup callbacks for builtin image support */
-  scene->image_manager->builtin_image_info_cb = function_bind(
-      &BlenderSession::builtin_image_info, this, _1, _2, _3);
-  scene->image_manager->builtin_image_pixels_cb = function_bind(
-      &BlenderSession::builtin_image_pixels, this, _1, _2, _3, _4, _5, _6, _7);
-  scene->image_manager->builtin_image_float_pixels_cb = function_bind(
-      &BlenderSession::builtin_image_float_pixels, this, _1, _2, _3, _4, _5, _6, _7);
-
   session->scene = scene;
 
   /* There is no single depsgraph to use for the entire render.
@@ -166,7 +158,7 @@ void BlenderSession::create_session()
 
   /* set buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
   session->reset(buffer_params, session_params.samples);
 
   b_engine.use_highlight_tiles(session_params.progressive_refine == false);
@@ -176,9 +168,13 @@ void BlenderSession::create_session()
 
 void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsgraph)
 {
+  /* Update data, scene and depsgraph pointers. These can change after undo. */
   this->b_data = b_data;
   this->b_depsgraph = b_depsgraph;
   this->b_scene = b_depsgraph.scene_eval();
+  if (sync) {
+    sync->reset(this->b_data, this->b_scene);
+  }
 
   if (preview_osl) {
     PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
@@ -244,7 +240,7 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
   BL::SpaceView3D b_null_space_view3d(PointerRNA_NULL);
   BL::RegionView3D b_null_region_view3d(PointerRNA_NULL);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_null_space_view3d, b_null_region_view3d, scene->camera, width, height);
+      b_scene, b_render, b_null_space_view3d, b_null_region_view3d, scene->camera, width, height);
   session->reset(buffer_params, session_params.samples);
 
   b_engine.use_highlight_tiles(session_params.progressive_refine == false);
@@ -278,8 +274,6 @@ static ShaderEvalType get_shader_type(const string &pass_type)
     return SHADER_EVAL_GLOSSY_COLOR;
   else if (strcmp(shader_type, "TRANSMISSION_COLOR") == 0)
     return SHADER_EVAL_TRANSMISSION_COLOR;
-  else if (strcmp(shader_type, "SUBSURFACE_COLOR") == 0)
-    return SHADER_EVAL_SUBSURFACE_COLOR;
   else if (strcmp(shader_type, "EMIT") == 0)
     return SHADER_EVAL_EMISSION;
 
@@ -296,8 +290,6 @@ static ShaderEvalType get_shader_type(const string &pass_type)
     return SHADER_EVAL_GLOSSY;
   else if (strcmp(shader_type, "TRANSMISSION") == 0)
     return SHADER_EVAL_TRANSMISSION;
-  else if (strcmp(shader_type, "SUBSURFACE") == 0)
-    return SHADER_EVAL_SUBSURFACE;
 
   /* extra */
   else if (strcmp(shader_type, "ENVIRONMENT") == 0)
@@ -460,7 +452,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   SessionParams session_params = BlenderSync::get_session_params(
       b_engine, b_userpref, b_scene, background);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
 
   /* render each layer */
   BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
@@ -474,7 +466,8 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   b_rlay_name = b_view_layer.name();
 
   /* add passes */
-  vector<Pass> passes = sync->sync_render_passes(b_rlay, b_view_layer);
+  vector<Pass> passes = sync->sync_render_passes(
+      b_rlay, b_view_layer, session_params.adaptive_sampling);
   buffer_params.passes = passes;
 
   PointerRNA crl = RNA_pointer_get(&b_view_layer.ptr, "cycles");
@@ -640,8 +633,6 @@ static int bake_pass_filter_get(const int pass_filter)
     flag |= BAKE_FILTER_GLOSSY;
   if ((pass_filter & BL::BakeSettings::pass_filter_TRANSMISSION) != 0)
     flag |= BAKE_FILTER_TRANSMISSION;
-  if ((pass_filter & BL::BakeSettings::pass_filter_SUBSURFACE) != 0)
-    flag |= BAKE_FILTER_SUBSURFACE;
 
   if ((pass_filter & BL::BakeSettings::pass_filter_EMIT) != 0)
     flag |= BAKE_FILTER_EMISSION;
@@ -706,7 +697,7 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
     SessionParams session_params = BlenderSync::get_session_params(
         b_engine, b_userpref, b_scene, background);
     BufferParams buffer_params = BlenderSync::get_buffer_params(
-        b_render, b_v3d, b_rv3d, scene->camera, width, height);
+        b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
 
     scene->bake_manager->set_shader_limit((size_t)b_engine.tile_x(), (size_t)b_engine.tile_y());
 
@@ -720,9 +711,12 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
     int tri_offset = 0;
 
     for (size_t i = 0; i < scene->objects.size(); i++) {
-      if (strcmp(scene->objects[i]->name.c_str(), b_object.name().c_str()) == 0) {
+      const Object *object = scene->objects[i];
+      const Geometry *geom = object->geometry;
+      if (object->name == b_object.name() && geom->type == Geometry::MESH) {
+        const Mesh *mesh = static_cast<const Mesh *>(geom);
         object_index = i;
-        tri_offset = scene->objects[i]->mesh->tri_offset;
+        tri_offset = mesh->prim_offset;
         break;
       }
     }
@@ -848,11 +842,11 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
   if (session->params.modified(session_params) || scene->params.modified(scene_params)) {
     free_session();
     create_session();
-    return;
   }
 
   /* increase samples, but never decrease */
   session->set_samples(session_params.samples);
+  session->set_denoising_start_sample(session_params.denoising_start_sample);
   session->set_pause(session_pause);
 
   /* copy recalc flags, outside of mutex so we can decide to do the real
@@ -883,10 +877,28 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
   else
     sync->sync_camera(b_render, b_camera_override, width, height, "");
 
+  /* get buffer parameters */
+  BufferParams buffer_params = BlenderSync::get_buffer_params(
+      b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
+
+  if (session_params.device.type != DEVICE_OPTIX &&
+      session_params.device.denoising_devices.empty()) {
+    /* cannot use OptiX denoising when it is not supported by the device. */
+    buffer_params.denoising_data_pass = false;
+  }
+  else {
+    session->set_denoising(buffer_params.denoising_data_pass, true);
+  }
+
+  if (scene->film->denoising_data_pass != buffer_params.denoising_data_pass) {
+    scene->film->denoising_data_pass = buffer_params.denoising_data_pass;
+
+    /* Force a scene and session reset below. */
+    scene->film->tag_update(scene);
+  }
+
   /* reset if needed */
   if (scene->need_reset()) {
-    BufferParams buffer_params = BlenderSync::get_buffer_params(
-        b_render, b_v3d, b_rv3d, scene->camera, width, height);
     session->reset(buffer_params, session_params.samples);
 
     /* After session reset, so device is not accessing image data anymore. */
@@ -953,7 +965,7 @@ bool BlenderSession::draw(int w, int h)
       SessionParams session_params = BlenderSync::get_session_params(
           b_engine, b_userpref, b_scene, background);
       BufferParams buffer_params = BlenderSync::get_buffer_params(
-          b_render, b_v3d, b_rv3d, scene->camera, width, height);
+          b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
       bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
       if (session_pause == false) {
@@ -971,7 +983,7 @@ bool BlenderSession::draw(int w, int h)
 
   /* draw */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
   DeviceDrawParams draw_params;
 
   if (session->params.display_buffer_linear) {
@@ -1110,341 +1122,6 @@ void BlenderSession::test_cancel()
   if (background)
     if (b_engine.test_break())
       session->progress.set_cancel("Cancelled");
-}
-
-/* builtin image file name is actually an image datablock name with
- * absolute sequence frame number concatenated via '@' character
- *
- * this function splits frame from builtin name
- */
-int BlenderSession::builtin_image_frame(const string &builtin_name)
-{
-  int last = builtin_name.find_last_of('@');
-  return atoi(builtin_name.substr(last + 1, builtin_name.size() - last - 1).c_str());
-}
-
-void BlenderSession::builtin_image_info(const string &builtin_name,
-                                        void *builtin_data,
-                                        ImageMetaData &metadata)
-{
-  /* empty image */
-  metadata.width = 1;
-  metadata.height = 1;
-
-  if (!builtin_data)
-    return;
-
-  /* recover ID pointer */
-  PointerRNA ptr;
-  RNA_id_pointer_create((ID *)builtin_data, &ptr);
-  BL::ID b_id(ptr);
-
-  if (b_id.is_a(&RNA_Image)) {
-    /* image data */
-    BL::Image b_image(b_id);
-
-    metadata.builtin_free_cache = !b_image.has_data();
-    metadata.is_float = b_image.is_float();
-    metadata.width = b_image.size()[0];
-    metadata.height = b_image.size()[1];
-    metadata.depth = 1;
-    metadata.channels = b_image.channels();
-
-    if (metadata.is_float) {
-      /* Float images are already converted on the Blender side,
-       * no need to do anything in Cycles. */
-      metadata.colorspace = u_colorspace_raw;
-    }
-  }
-  else if (b_id.is_a(&RNA_Object)) {
-    /* smoke volume data */
-    BL::Object b_ob(b_id);
-    BL::FluidDomainSettings b_domain = object_fluid_domain_find(b_ob);
-
-    metadata.is_float = true;
-    metadata.depth = 1;
-    metadata.channels = 1;
-
-    if (!b_domain)
-      return;
-
-    if (builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_DENSITY) ||
-        builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_FLAME) ||
-        builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_HEAT) ||
-        builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_TEMPERATURE))
-      metadata.channels = 1;
-    else if (builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_COLOR))
-      metadata.channels = 4;
-    else if (builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_VELOCITY))
-      metadata.channels = 3;
-    else
-      return;
-
-    int3 resolution = get_int3(b_domain.domain_resolution());
-    int amplify = (b_domain.use_noise()) ? b_domain.noise_scale() : 1;
-
-    /* Velocity and heat data is always low-resolution. */
-    if (builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_VELOCITY) ||
-        builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_HEAT)) {
-      amplify = 1;
-    }
-
-    metadata.width = resolution.x * amplify;
-    metadata.height = resolution.y * amplify;
-    metadata.depth = resolution.z * amplify;
-  }
-  else {
-    /* TODO(sergey): Check we're indeed in shader node tree. */
-    PointerRNA ptr;
-    RNA_pointer_create(NULL, &RNA_Node, builtin_data, &ptr);
-    BL::Node b_node(ptr);
-    if (b_node.is_a(&RNA_ShaderNodeTexPointDensity)) {
-      BL::ShaderNodeTexPointDensity b_point_density_node(b_node);
-      metadata.channels = 4;
-      metadata.width = b_point_density_node.resolution();
-      metadata.height = metadata.width;
-      metadata.depth = metadata.width;
-      metadata.is_float = true;
-    }
-  }
-}
-
-bool BlenderSession::builtin_image_pixels(const string &builtin_name,
-                                          void *builtin_data,
-                                          int tile,
-                                          unsigned char *pixels,
-                                          const size_t pixels_size,
-                                          const bool associate_alpha,
-                                          const bool free_cache)
-{
-  if (!builtin_data) {
-    return false;
-  }
-
-  const int frame = builtin_image_frame(builtin_name);
-
-  PointerRNA ptr;
-  RNA_id_pointer_create((ID *)builtin_data, &ptr);
-  BL::Image b_image(ptr);
-
-  const int width = b_image.size()[0];
-  const int height = b_image.size()[1];
-  const int channels = b_image.channels();
-
-  unsigned char *image_pixels = image_get_pixels_for_frame(b_image, frame, tile);
-  const size_t num_pixels = ((size_t)width) * height;
-
-  if (image_pixels && num_pixels * channels == pixels_size) {
-    memcpy(pixels, image_pixels, pixels_size * sizeof(unsigned char));
-  }
-  else {
-    if (channels == 1) {
-      memset(pixels, 0, pixels_size * sizeof(unsigned char));
-    }
-    else {
-      const size_t num_pixels_safe = pixels_size / channels;
-      unsigned char *cp = pixels;
-      for (size_t i = 0; i < num_pixels_safe; i++, cp += channels) {
-        cp[0] = 255;
-        cp[1] = 0;
-        cp[2] = 255;
-        if (channels == 4) {
-          cp[3] = 255;
-        }
-      }
-    }
-  }
-
-  if (image_pixels) {
-    MEM_freeN(image_pixels);
-  }
-
-  /* Free image buffers to save memory during render. */
-  if (free_cache) {
-    b_image.buffers_free();
-  }
-
-  if (associate_alpha) {
-    /* Premultiply, byte images are always straight for Blender. */
-    unsigned char *cp = pixels;
-    for (size_t i = 0; i < num_pixels; i++, cp += channels) {
-      cp[0] = (cp[0] * cp[3]) >> 8;
-      cp[1] = (cp[1] * cp[3]) >> 8;
-      cp[2] = (cp[2] * cp[3]) >> 8;
-    }
-  }
-  return true;
-}
-
-bool BlenderSession::builtin_image_float_pixels(const string &builtin_name,
-                                                void *builtin_data,
-                                                int tile,
-                                                float *pixels,
-                                                const size_t pixels_size,
-                                                const bool,
-                                                const bool free_cache)
-{
-  if (!builtin_data) {
-    return false;
-  }
-
-  PointerRNA ptr;
-  RNA_id_pointer_create((ID *)builtin_data, &ptr);
-  BL::ID b_id(ptr);
-
-  if (b_id.is_a(&RNA_Image)) {
-    /* image data */
-    BL::Image b_image(b_id);
-    int frame = builtin_image_frame(builtin_name);
-
-    const int width = b_image.size()[0];
-    const int height = b_image.size()[1];
-    const int channels = b_image.channels();
-
-    float *image_pixels;
-    image_pixels = image_get_float_pixels_for_frame(b_image, frame, tile);
-    const size_t num_pixels = ((size_t)width) * height;
-
-    if (image_pixels && num_pixels * channels == pixels_size) {
-      memcpy(pixels, image_pixels, pixels_size * sizeof(float));
-    }
-    else {
-      if (channels == 1) {
-        memset(pixels, 0, num_pixels * sizeof(float));
-      }
-      else {
-        const size_t num_pixels_safe = pixels_size / channels;
-        float *fp = pixels;
-        for (int i = 0; i < num_pixels_safe; i++, fp += channels) {
-          fp[0] = 1.0f;
-          fp[1] = 0.0f;
-          fp[2] = 1.0f;
-          if (channels == 4) {
-            fp[3] = 1.0f;
-          }
-        }
-      }
-    }
-
-    if (image_pixels) {
-      MEM_freeN(image_pixels);
-    }
-
-    /* Free image buffers to save memory during render. */
-    if (free_cache) {
-      b_image.buffers_free();
-    }
-
-    return true;
-  }
-  else if (b_id.is_a(&RNA_Object)) {
-    /* smoke volume data */
-    BL::Object b_ob(b_id);
-    BL::FluidDomainSettings b_domain = object_fluid_domain_find(b_ob);
-
-    if (!b_domain) {
-      return false;
-    }
-#if WITH_FLUID
-    int3 resolution = get_int3(b_domain.domain_resolution());
-    int length, amplify = (b_domain.use_noise()) ? b_domain.noise_scale() : 1;
-
-    /* Velocity and heat data is always low-resolution. */
-    if (builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_VELOCITY) ||
-        builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_HEAT)) {
-      amplify = 1;
-    }
-
-    const int width = resolution.x * amplify;
-    const int height = resolution.y * amplify;
-    const int depth = resolution.z * amplify;
-    const size_t num_pixels = ((size_t)width) * height * depth;
-
-    if (builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_DENSITY)) {
-      FluidDomainSettings_density_grid_get_length(&b_domain.ptr, &length);
-      if (length == num_pixels) {
-        FluidDomainSettings_density_grid_get(&b_domain.ptr, pixels);
-        return true;
-      }
-    }
-    else if (builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_FLAME)) {
-      /* this is in range 0..1, and interpreted by the OpenGL smoke viewer
-       * as 1500..3000 K with the first part faded to zero density */
-      FluidDomainSettings_flame_grid_get_length(&b_domain.ptr, &length);
-      if (length == num_pixels) {
-        FluidDomainSettings_flame_grid_get(&b_domain.ptr, pixels);
-        return true;
-      }
-    }
-    else if (builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_COLOR)) {
-      /* the RGB is "premultiplied" by density for better interpolation results */
-      FluidDomainSettings_color_grid_get_length(&b_domain.ptr, &length);
-      if (length == num_pixels * 4) {
-        FluidDomainSettings_color_grid_get(&b_domain.ptr, pixels);
-        return true;
-      }
-    }
-    else if (builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_VELOCITY)) {
-      FluidDomainSettings_velocity_grid_get_length(&b_domain.ptr, &length);
-      if (length == num_pixels * 3) {
-        FluidDomainSettings_velocity_grid_get(&b_domain.ptr, pixels);
-        return true;
-      }
-    }
-    else if (builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_HEAT)) {
-      FluidDomainSettings_heat_grid_get_length(&b_domain.ptr, &length);
-      if (length == num_pixels) {
-        FluidDomainSettings_heat_grid_get(&b_domain.ptr, pixels);
-        return true;
-      }
-    }
-    else if (builtin_name == Attribute::standard_name(ATTR_STD_VOLUME_TEMPERATURE)) {
-      FluidDomainSettings_temperature_grid_get_length(&b_domain.ptr, &length);
-      if (length == num_pixels) {
-        FluidDomainSettings_temperature_grid_get(&b_domain.ptr, pixels);
-        return true;
-      }
-    }
-    else {
-      fprintf(
-          stderr, "Cycles error: unknown volume attribute %s, skipping\n", builtin_name.c_str());
-      pixels[0] = 0.0f;
-      return false;
-    }
-#endif
-    fprintf(stderr, "Cycles error: unexpected smoke volume resolution, skipping\n");
-  }
-  else {
-    /* We originally were passing view_layer here but in reality we need a
-     * a depsgraph to pass to the RE_point_density_minmax() function.
-     */
-    /* TODO(sergey): Check we're indeed in shader node tree. */
-    PointerRNA ptr;
-    RNA_pointer_create(NULL, &RNA_Node, builtin_data, &ptr);
-    BL::Node b_node(ptr);
-    if (b_node.is_a(&RNA_ShaderNodeTexPointDensity)) {
-      BL::ShaderNodeTexPointDensity b_point_density_node(b_node);
-      int length;
-      b_point_density_node.calc_point_density(b_depsgraph, &length, &pixels);
-    }
-  }
-
-  return false;
-}
-
-void BlenderSession::builtin_images_load()
-{
-  /* Force builtin images to be loaded along with Blender data sync. This
-   * is needed because we may be reading from depsgraph evaluated data which
-   * can be freed by Blender before Cycles reads it.
-   *
-   * TODO: the assumption that no further access to builtin image data will
-   * happen is really weak, and likely to break in the future. We should find
-   * a better solution to hand over the data directly to the image manager
-   * instead of through callbacks whose timing is difficult to control. */
-  ImageManager *manager = session->scene->image_manager;
-  Device *device = session->device;
-  manager->device_load_builtin(device, session->scene, session->progress);
 }
 
 void BlenderSession::update_resumable_tile_manager(int num_samples)

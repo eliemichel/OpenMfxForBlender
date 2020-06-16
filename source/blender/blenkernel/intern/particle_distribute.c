@@ -25,7 +25,6 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_jitter_2d.h"
 #include "BLI_kdtree.h"
 #include "BLI_math.h"
@@ -33,6 +32,7 @@
 #include "BLI_rand.h"
 #include "BLI_sort.h"
 #include "BLI_task.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -41,7 +41,7 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_object.h"
 #include "BKE_particle.h"
@@ -1337,7 +1337,7 @@ static void distribute_particles_on_dm(ParticleSimulationData *sim, int from)
   }
 
   task_scheduler = BLI_task_scheduler_get();
-  task_pool = BLI_task_pool_create(task_scheduler, &ctx);
+  task_pool = BLI_task_pool_create(task_scheduler, &ctx, TASK_PRIORITY_LOW);
 
   totpart = (from == PART_FROM_CHILD ? sim->psys->totchild : sim->psys->totpart);
   psys_tasks_create(&ctx, 0, totpart, &tasks, &numtasks);
@@ -1346,10 +1346,10 @@ static void distribute_particles_on_dm(ParticleSimulationData *sim, int from)
 
     psys_task_init_distribute(task, sim);
     if (from == PART_FROM_CHILD) {
-      BLI_task_pool_push(task_pool, exec_distribute_child, task, false, TASK_PRIORITY_LOW);
+      BLI_task_pool_push(task_pool, exec_distribute_child, task, false, NULL);
     }
     else {
-      BLI_task_pool_push(task_pool, exec_distribute_parent, task, false, TASK_PRIORITY_LOW);
+      BLI_task_pool_push(task_pool, exec_distribute_parent, task, false, NULL);
     }
   }
   BLI_task_pool_work_and_wait(task_pool);

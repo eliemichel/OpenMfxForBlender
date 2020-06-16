@@ -87,8 +87,10 @@ def context_path_validate(context, data_path):
             # One of the items in the rna path is None, just ignore this
             value = Ellipsis
         else:
-            # We have a real error in the rna path, don't ignore that
-            raise
+            # Print invalid path, but don't show error to the users and fully
+            # break the UI if the operator is bound to an event like left click.
+            print("context_path_validate error: context.%s not found (invalid keymap entry?)" % data_path)
+            value = Ellipsis
 
     return value
 
@@ -1104,8 +1106,8 @@ class WM_OT_doc_view(Operator):
 
     doc_id: doc_id
     if bpy.app.version_cycle in {"release", "rc", "beta"}:
-        _prefix = ("https://docs.blender.org/api/%d.%d%s" %
-                   (bpy.app.version[0], bpy.app.version[1], bpy.app.version_char))
+        _prefix = ("https://docs.blender.org/api/%d.%d" %
+                   (bpy.app.version[0], bpy.app.version[1]))
     else:
         _prefix = ("https://docs.blender.org/api/master")
 
@@ -1147,22 +1149,26 @@ rna_property = StringProperty(
 
 rna_min = FloatProperty(
     name="Min",
+    description="Minimum value of the property",
     default=-10000.0,
     precision=3,
 )
 
 rna_max = FloatProperty(
     name="Max",
+    description="Maximum value of the property",
     default=10000.0,
     precision=3,
 )
 
 rna_use_soft_limits = BoolProperty(
     name="Use Soft Limits",
+    description="Limits the Property Value slider to a range, values outside the range must be inputted numerically",
 )
 
 rna_is_overridable_library = BoolProperty(
     name="Is Library Overridable",
+    description="Allow the property to be overridden when the Data-Block is linked",
     default=False,
 )
 
@@ -1177,6 +1183,7 @@ rna_vector_subtype_items = (
 
 
 class WM_OT_properties_edit(Operator):
+    """Edit the attributes of the property"""
     bl_idname = "wm.properties_edit"
     bl_label = "Edit Property"
     # register only because invoke_props_popup requires.
@@ -1468,6 +1475,7 @@ class WM_OT_properties_edit(Operator):
 
 
 class WM_OT_properties_add(Operator):
+    """Add your own property to the data-block"""
     bl_idname = "wm.properties_add"
     bl_label = "Add Property"
     bl_options = {'UNDO', 'INTERNAL'}
@@ -2417,7 +2425,14 @@ class WM_MT_splash(Menu):
 
         col = split.column()
 
-        col.label()
+        sub = col.split(factor=0.35)
+        row = sub.row()
+        row.alignment = 'RIGHT'
+        row.label(text="Language")
+        prefs = context.preferences
+        sub.prop(prefs.view, "language", text="")
+
+        col.separator()
 
         sub = col.split(factor=0.35)
         row = sub.row()
@@ -2458,14 +2473,6 @@ class WM_MT_splash(Menu):
         if label == "Presets":
             label = "Blender Dark"
         sub.menu("USERPREF_MT_interface_theme_presets", text=label)
-
-        # We need to make switching to a language easier first
-        #sub = col.split(factor=0.35)
-        #row = sub.row()
-        #row.alignment = 'RIGHT'
-        # row.label(text="Language:")
-        #prefs = context.preferences
-        #sub.prop(prefs.system, "language", text="")
 
         # Keep height constant
         if not has_select_mouse:

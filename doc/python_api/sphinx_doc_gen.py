@@ -223,6 +223,7 @@ else:
         "aud",
         "bgl",
         "blf",
+        "imbuf",
         "bmesh",
         "bmesh.ops",
         "bmesh.types",
@@ -402,32 +403,21 @@ MODULE_GROUPING = {
 
 # -------------------------------BLENDER----------------------------------------
 
-blender_version_strings = [str(v) for v in bpy.app.version]
-is_release = bpy.app.version_cycle in {"rc", "release"}
-
 # converting bytes to strings, due to T30154
 BLENDER_REVISION = str(bpy.app.build_hash, 'utf_8')
 
-if is_release:
-    # '2.62a'
-    BLENDER_VERSION_DOTS = ".".join(blender_version_strings[:2]) + bpy.app.version_char
-else:
-    # '2.62.1'
-    BLENDER_VERSION_DOTS = ".".join(blender_version_strings)
+# '2.83.0 Beta' or '2.83.0' or '2.83.1'
+BLENDER_VERSION_DOTS = bpy.app.version_string
 
 if BLENDER_REVISION != "Unknown":
-    # '2.62a SHA1' (release) or '2.62.1 SHA1' (non-release)
+    # SHA1 Git hash
     BLENDER_VERSION_HASH = BLENDER_REVISION
 else:
     # Fallback: Should not be used
     BLENDER_VERSION_HASH = "Hash Unknown"
 
-if is_release:
-    # '2_62a_release'
-    BLENDER_VERSION_PATH = "%s%s_release" % ("_".join(blender_version_strings[:2]), bpy.app.version_char)
-else:
-    # '2_62_1'
-    BLENDER_VERSION_PATH = "_".join(blender_version_strings)
+# '2_83'
+BLENDER_VERSION_PATH = "%d_%d" % (bpy.app.version[0], bpy.app.version[1])
 
 # --------------------------DOWNLOADABLE FILES----------------------------------
 
@@ -511,7 +501,7 @@ def is_struct_seq(value):
 
 
 def undocumented_message(module_name, type_name, identifier):
-    return "Undocumented `contribute <https://developer.blender.org/T51061>`"
+    return "Undocumented, consider `contributing <https://developer.blender.org/T51061>`__."
 
 
 def range_str(val):
@@ -1051,6 +1041,7 @@ context_type_map = {
     "selected_editable_fcurves": ("FCurve", True),
     "selected_editable_objects": ("Object", True),
     "selected_editable_sequences": ("Sequence", True),
+    "selected_nla_strips": ("NlaStrip", True),
     "selected_nodes": ("Node", True),
     "selected_objects": ("Object", True),
     "selected_pose_bones": ("PoseBone", True),
@@ -1072,6 +1063,7 @@ context_type_map = {
     "visible_pose_bones": ("PoseBone", True),
     "visible_fcurves": ("FCurve", True),
     "weight_paint_object": ("Object", False),
+    "volume": ("Volume", False),
     "world": ("World", False),
 }
 
@@ -1755,6 +1747,7 @@ def write_rst_contents(basepath):
     app_modules = (
         "bpy.context",  # note: not actually a module
         "bpy.data",     # note: not actually a module
+        "bpy.msgbus",   # note: not actually a module
         "bpy.ops",
         "bpy.types",
 
@@ -1779,7 +1772,7 @@ def write_rst_contents(basepath):
 
     standalone_modules = (
         # submodules are added in parent page
-        "mathutils", "freestyle", "bgl", "blf", "gpu", "gpu_extras",
+        "mathutils", "freestyle", "bgl", "blf", "imbuf", "gpu", "gpu_extras",
         "aud", "bpy_extras", "idprop.types", "bmesh",
     )
 
@@ -1845,6 +1838,29 @@ def write_rst_ops_index(basepath):
         file.close()
 
 
+def write_rst_msgbus(basepath):
+    """
+    Write the rst files of bpy.msgbus module
+    """
+    if 'bpy.msgbus' in EXCLUDE_MODULES:
+        return
+
+    # Write the index.
+    filepath = os.path.join(basepath, "bpy.msgbus.rst")
+    file = open(filepath, "w", encoding="utf-8")
+    fw = file.write
+    fw(title_string("Message Bus (bpy.msgbus)", "="))
+    write_example_ref("", fw, "bpy.msgbus")
+    fw(".. toctree::\n")
+    fw("   :glob:\n\n")
+    fw("   bpy.msgbus.*\n\n")
+    file.close()
+
+    # Write the contents.
+    pymodule2sphinx(basepath, 'bpy.msgbus', bpy.msgbus, 'Message Bus')
+    EXAMPLE_SET_USED.add("bpy.msgbus")
+
+
 def write_rst_data(basepath):
     '''
     Write the rst file of bpy.data module
@@ -1886,6 +1902,7 @@ def write_rst_importable_modules(basepath):
         # C_modules
         "aud": "Audio System",
         "blf": "Font Drawing",
+        "imbuf": "Image Buffer",
         "gpu": "GPU Shader Module",
         "gpu.types": "GPU Types",
         "gpu.matrix": "GPU Matrix",
@@ -1998,6 +2015,7 @@ def rna2sphinx(basepath):
     write_rst_bpy(basepath)                 # bpy, disabled by default
     write_rst_types_index(basepath)         # bpy.types
     write_rst_ops_index(basepath)           # bpy.ops
+    write_rst_msgbus(basepath)              # bpy.msgbus
     pyrna2sphinx(basepath)                  # bpy.types.* and bpy.ops.*
     write_rst_data(basepath)                # bpy.data
     write_rst_importable_modules(basepath)

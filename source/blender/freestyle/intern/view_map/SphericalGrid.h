@@ -34,9 +34,9 @@
 #include "OccluderSource.h"
 #include "ViewMap.h"
 
-#include "../geometry/Polygon.h"
 #include "../geometry/BBox.h"
 #include "../geometry/GridHelpers.h"
+#include "../geometry/Polygon.h"
 
 #include "../system/PointerSequence.h"
 

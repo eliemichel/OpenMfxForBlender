@@ -35,7 +35,7 @@ set(INC
   ..
   ../../../source/blender/blenlib
   ../../../source/blender/blenkernel
-  ../../../source/blender/usd
+  ../../../source/blender/io/usd
   ../../../source/blender/makesdna
   ../../../source/blender/depsgraph
   ${USD_INCLUDE_DIRS}
@@ -76,12 +76,14 @@ set(SRC
 
 
 if(WITH_BUILDINFO)
-  list(APPEND SRC "$<TARGET_OBJECTS:buildinfoobj>")
+  list(APPEND SRC
+    "$<TARGET_OBJECTS:buildinfoobj>"
+  )
 endif()
 
 # get_cmake_property(_variableNames VARIABLES)
-# list (SORT _variableNames)
-# foreach (_variableName ${_variableNames})
+# list(SORT _variableNames)
+# foreach(_variableName ${_variableNames})
 #     message(STATUS "${_variableName}=${${_variableName}}")
 # endforeach()
 

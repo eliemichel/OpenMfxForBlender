@@ -31,12 +31,13 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_task.h"
 #include "BLI_math.h"
+#include "BLI_task.h"
+#include "BLI_utildefines.h"
 
-#include "IMB_imbuf_types.h"
+#include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 #include <math.h>
 
 /* Only this one is used liberally here, and in imbuf */
@@ -190,10 +191,7 @@ void bilinear_interpolation_color_wrap(
     outF[3] = ma_mb * row1[3] + a_mb * row3[3] + ma_b * row2[3] + a_b * row4[3];
 
     /* clamp here or else we can easily get off-range */
-    CLAMP(outF[0], 0.0f, 1.0f);
-    CLAMP(outF[1], 0.0f, 1.0f);
-    CLAMP(outF[2], 0.0f, 1.0f);
-    CLAMP(outF[3], 0.0f, 1.0f);
+    clamp_v4(outF, 0.0f, 1.0f);
   }
   if (outI) {
     /* sample including outside of edges of image */
@@ -362,7 +360,7 @@ void IMB_processor_apply_threaded(
   int total_tasks = (buffer_lines + lines_per_task - 1) / lines_per_task;
   int i, start_line;
 
-  task_pool = BLI_task_pool_create(task_scheduler, do_thread);
+  task_pool = BLI_task_pool_create(task_scheduler, do_thread, TASK_PRIORITY_LOW);
 
   handles = MEM_callocN(handle_size * total_tasks, "processor apply threaded handles");
 
@@ -381,7 +379,7 @@ void IMB_processor_apply_threaded(
 
     init_handle(handle, start_line, lines_per_current_task, init_customdata);
 
-    BLI_task_pool_push(task_pool, processor_apply_func, handle, false, TASK_PRIORITY_LOW);
+    BLI_task_pool_push(task_pool, processor_apply_func, handle, false, NULL);
 
     start_line += lines_per_task;
   }
@@ -423,13 +421,10 @@ void IMB_processor_apply_threaded_scanlines(int total_scanlines,
   data.total_scanlines = total_scanlines;
   const int total_tasks = (total_scanlines + scanlines_per_task - 1) / scanlines_per_task;
   TaskScheduler *task_scheduler = BLI_task_scheduler_get();
-  TaskPool *task_pool = BLI_task_pool_create(task_scheduler, &data);
+  TaskPool *task_pool = BLI_task_pool_create(task_scheduler, &data, TASK_PRIORITY_LOW);
   for (int i = 0, start_line = 0; i < total_tasks; i++) {
-    BLI_task_pool_push(task_pool,
-                       processor_apply_scanline_func,
-                       POINTER_FROM_INT(start_line),
-                       false,
-                       TASK_PRIORITY_LOW);
+    BLI_task_pool_push(
+        task_pool, processor_apply_scanline_func, POINTER_FROM_INT(start_line), false, NULL);
     start_line += scanlines_per_task;
   }
 
@@ -491,5 +486,21 @@ void IMB_alpha_under_color_byte(unsigned char *rect, int x, int y, float backcol
     cp[3] = 255;
 
     cp += 4;
+  }
+}
+
+/* Sample pixel of image using NEAREST method. */
+void IMB_sampleImageAtLocation(ImBuf *ibuf, float x, float y, bool make_linear_rgb, float color[4])
+{
+  if (ibuf->rect_float) {
+    nearest_interpolation_color(ibuf, NULL, color, x, y);
+  }
+  else {
+    unsigned char byte_color[4];
+    nearest_interpolation_color(ibuf, byte_color, NULL, x, y);
+    rgba_uchar_to_float(color, byte_color);
+    if (make_linear_rgb) {
+      IMB_colormanagement_colorspace_to_scene_linear_v4(color, false, ibuf->rect_colorspace);
+    }
   }
 }

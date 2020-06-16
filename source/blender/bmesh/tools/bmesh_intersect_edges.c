@@ -57,7 +57,7 @@ struct EDBMSplitBestFaceData {
    * Track the range of vertices in edgenet along the faces normal,
    * find the lowest since it's most likely to be most co-planar with the face.
    */
-  float best_face_range_on_normal_axis;
+  float best_edgenet_range_on_face_normal;
   BMFace *r_best_face;
 };
 
@@ -76,11 +76,14 @@ static bool bm_vert_pair_share_best_splittable_face_cb(BMFace *f,
     SWAP(float, min, max);
   }
 
-  BMVert *v_test = l_b->v;
   BMEdge **e_iter = &data->edgenet[0];
+  BMEdge *e_next = data->edgenet[1];
+  BMVert *v_test = ELEM((*e_iter)->v1, e_next->v1, e_next->v2) ? (*e_iter)->v2 : (*e_iter)->v1;
+
   int verts_len = data->edgenet_len - 1;
   for (int i = verts_len; i--; e_iter++) {
     v_test = BM_edge_other_vert(*e_iter, v_test);
+    BLI_assert(v_test != NULL);
     if (!BM_face_point_inside_test(f, v_test->co)) {
       return false;
     }
@@ -93,9 +96,9 @@ static bool bm_vert_pair_share_best_splittable_face_cb(BMFace *f,
     }
   }
 
-  const float test_face_range_on_normal_axis = max - min;
-  if (test_face_range_on_normal_axis < data->best_face_range_on_normal_axis) {
-    data->best_face_range_on_normal_axis = test_face_range_on_normal_axis;
+  const float test_edgenet_range_on_face_normal = max - min;
+  if (test_edgenet_range_on_face_normal < data->best_edgenet_range_on_face_normal) {
+    data->best_edgenet_range_on_face_normal = test_edgenet_range_on_face_normal;
     data->r_best_face = f;
   }
 
@@ -111,114 +114,80 @@ static bool bm_vert_pair_share_splittable_face_cb(BMFace *UNUSED(f),
   float(*data)[3] = userdata;
   float *v_a_co = data[0];
   float *v_a_b_dir = data[1];
+  const float range_min = -FLT_EPSILON;
+  const float range_max = 1.0f + FLT_EPSILON;
 
-  float lambda;
-  if (isect_ray_seg_v3(v_a_co, v_a_b_dir, l_a->prev->v->co, l_a->next->v->co, &lambda)) {
-    if (IN_RANGE(lambda, 0.0f, 1.0f)) {
+  float co[3];
+  float dir[3];
+  float lambda_b;
+
+  copy_v3_v3(co, l_a->prev->v->co);
+  sub_v3_v3v3(dir, l_a->next->v->co, co);
+  if (isect_ray_ray_v3(v_a_co, v_a_b_dir, co, dir, NULL, &lambda_b)) {
+    if (IN_RANGE(lambda_b, range_min, range_max)) {
       return true;
     }
-    else if (isect_ray_seg_v3(v_a_co, v_a_b_dir, l_b->prev->v->co, l_b->next->v->co, &lambda)) {
-      return IN_RANGE(lambda, 0.0f, 1.0f);
+    else {
+      copy_v3_v3(co, l_b->prev->v->co);
+      sub_v3_v3v3(dir, l_b->next->v->co, co);
+      if (isect_ray_ray_v3(v_a_co, v_a_b_dir, co, dir, NULL, &lambda_b)) {
+        return IN_RANGE(lambda_b, range_min, range_max);
+      }
     }
   }
   return false;
 }
 
-void BM_vert_weld_linked_wire_edges_into_linked_faces(
-    BMesh *bm, BMVert *v, const float epsilon, BMEdge **r_edgenet[], int *r_edgenet_alloc_len)
+static BMFace *bm_vert_pair_best_face_get(
+    BMVert *v_a, BMVert *v_b, BMEdge **edgenet, const int edgenet_len, const float epsilon)
 {
-  BMEdge **edgenet = *r_edgenet;
-  int edgenet_alloc_len = *r_edgenet_alloc_len;
+  BMFace *r_best_face = NULL;
 
-  BMIter iter;
-  BMEdge *e;
-  BM_ITER_ELEM (e, &iter, v, BM_EDGES_OF_VERT) {
-    int edgenet_len = 0;
-    BMVert *v_other = v;
-    while (BM_edge_is_wire(e)) {
-      if (edgenet_alloc_len == edgenet_len) {
-        edgenet_alloc_len = (edgenet_alloc_len + 1) * 2;
-        edgenet = MEM_reallocN(edgenet, (edgenet_alloc_len) * sizeof(*edgenet));
-      }
-      edgenet[edgenet_len++] = e;
-      v_other = BM_edge_other_vert(e, v_other);
-      if (v_other == v) {
-        /* Endless loop. */
-        break;
-      }
+  BLI_assert(v_a != v_b);
 
-      BMEdge *e_next = BM_DISK_EDGE_NEXT(e, v_other);
-      if (e_next == e) {
-        /* Vert is wire_endpoint. */
-        edgenet_len = 0;
-        break;
-      }
+  BMLoop *dummy;
+  if (edgenet_len == 1) {
+    float data[2][3];
+    copy_v3_v3(data[0], v_b->co);
+    sub_v3_v3v3(data[1], v_a->co, data[0]);
+    r_best_face = BM_vert_pair_shared_face_cb(
+        v_a, v_b, false, bm_vert_pair_share_splittable_face_cb, &data, &dummy, &dummy);
+    BLI_assert(!r_best_face || BM_edge_in_face(edgenet[0], r_best_face) == false);
+  }
+  else {
+    struct EDBMSplitBestFaceData data = {
+        .edgenet = edgenet,
+        .edgenet_len = edgenet_len,
+        .best_edgenet_range_on_face_normal = FLT_MAX,
+        .r_best_face = NULL,
+    };
+    BM_vert_pair_shared_face_cb(
+        v_a, v_b, true, bm_vert_pair_share_best_splittable_face_cb, &data, &dummy, &dummy);
 
-      BMEdge *e_test = e_next;
-      while ((e_test = BM_DISK_EDGE_NEXT(e_test, v_other)) != e) {
-        if (e_test->l) {
-          /* Vert is linked to a face. */
-          goto l_break;
+    if (data.r_best_face) {
+      /* Check if the edgenet's range is smaller than the face's range. */
+      float no[3], min = FLT_MAX, max = -FLT_MAX;
+      copy_v3_v3(no, data.r_best_face->no);
+      BMVert *v_test;
+      BMIter f_iter;
+      BM_ITER_ELEM (v_test, &f_iter, data.r_best_face, BM_VERTS_OF_FACE) {
+        float dot = dot_v3v3(v_test->co, no);
+        if (dot < min) {
+          min = dot;
+        }
+        if (dot > max) {
+          max = dot;
         }
       }
-
-      e = e_next;
-    }
-
-    BMLoop *dummy;
-    BMFace *best_face;
-
-  l_break:
-    if (edgenet_len == 0) {
-      /* Nothing to do. */
-      continue;
-    }
-    if (edgenet_len == 1) {
-      float data[2][3];
-      copy_v3_v3(data[0], v_other->co);
-      sub_v3_v3v3(data[1], v->co, data[0]);
-      best_face = BM_vert_pair_shared_face_cb(
-          v_other, v, true, bm_vert_pair_share_splittable_face_cb, &data, &dummy, &dummy);
-    }
-    else {
-      struct EDBMSplitBestFaceData data = {
-          .edgenet = edgenet,
-          .edgenet_len = edgenet_len,
-          .best_face_range_on_normal_axis = FLT_MAX,
-          .r_best_face = NULL,
-      };
-      BM_vert_pair_shared_face_cb(
-          v_other, v, true, bm_vert_pair_share_best_splittable_face_cb, &data, &dummy, &dummy);
-
-      if (data.r_best_face) {
-        float no[3], min = FLT_MAX, max = -FLT_MAX;
-        copy_v3_v3(no, data.r_best_face->no);
-        BMVert *v_test;
-        BMIter f_iter;
-        BM_ITER_ELEM (v_test, &f_iter, data.r_best_face, BM_VERTS_OF_FACE) {
-          float dot = dot_v3v3(v_test->co, no);
-          if (dot < min) {
-            min = dot;
-          }
-          if (dot > max) {
-            max = dot;
-          }
-        }
-        float range = max - min + 2 * epsilon;
-        if (range < data.best_face_range_on_normal_axis) {
-          data.r_best_face = NULL;
-        }
+      float face_range_on_normal = max - min + 2 * epsilon;
+      if (face_range_on_normal < data.best_edgenet_range_on_face_normal) {
+        data.r_best_face = NULL;
       }
-      best_face = data.r_best_face;
     }
-
-    if (best_face) {
-      BM_face_split_edgenet(bm, best_face, edgenet, edgenet_len, NULL, NULL);
-    }
+    r_best_face = data.r_best_face;
   }
 
-  *r_edgenet = edgenet;
-  *r_edgenet_alloc_len = edgenet_alloc_len;
+  return r_best_face;
 }
 
 /** \} */
@@ -304,7 +273,7 @@ static bool bm_edgexvert_isect_impl(BMVert *v,
   }
 
   if (v != e_v) {
-    float dist_sq_vert = SQUARE(dist_sq_vert_factor) * len_squared_v3(dir);
+    float dist_sq_vert = square_f(dist_sq_vert_factor) * len_squared_v3(dir);
     if (dist_sq_vert < data_dist_sq) {
       /* Vert x Vert is already handled elsewhere. */
       return false;
@@ -412,8 +381,8 @@ static bool bm_edgexedge_isect_impl(struct EDBMSplitData *data,
       return false;
     }
 
-    float dist_sq_va = SQUARE(dist_sq_va_factor) * len_squared_v3(dir_a);
-    float dist_sq_vb = SQUARE(dist_sq_vb_factor) * len_squared_v3(dir_b);
+    float dist_sq_va = square_f(dist_sq_va_factor) * len_squared_v3(dir_a);
+    float dist_sq_vb = square_f(dist_sq_vb_factor) * len_squared_v3(dir_b);
 
     if (dist_sq_va < data->dist_sq || dist_sq_vb < data->dist_sq) {
       /* Vert x Edge is already handled elsewhere. */
@@ -517,7 +486,8 @@ static int sort_cmp_by_lambda_cb(const void *index1_v, const void *index2_v, voi
 
 #define INTERSECT_EDGES
 
-bool BM_mesh_intersect_edges(BMesh *bm, const char hflag, const float dist, GHash *r_targetmap)
+bool BM_mesh_intersect_edges(
+    BMesh *bm, const char hflag, const float dist, const bool split_faces, GHash *r_targetmap)
 {
   bool ok = false;
 
@@ -534,7 +504,7 @@ bool BM_mesh_intersect_edges(BMesh *bm, const char hflag, const float dist, GHas
   BLI_Stack **pair_stack_vertxvert = pair_stack;
   BLI_Stack **pair_stack_edgexelem = &pair_stack[KDOP_TREE_TYPE];
 
-  const float dist_sq = SQUARE(dist);
+  const float dist_sq = square_f(dist);
   const float dist_half = dist / 2;
 
   struct EDBMSplitData data = {
@@ -542,7 +512,7 @@ bool BM_mesh_intersect_edges(BMesh *bm, const char hflag, const float dist, GHas
       .pair_stack = pair_stack,
       .cut_edges_len = 0,
       .dist_sq = dist_sq,
-      .dist_sq_sq = SQUARE(dist_sq),
+      .dist_sq_sq = square_f(dist_sq),
   };
 
   BM_mesh_elem_table_ensure(bm, BM_VERT | BM_EDGE);
@@ -560,6 +530,9 @@ bool BM_mesh_intersect_edges(BMesh *bm, const char hflag, const float dist, GHas
         verts_remain_len++;
       }
     }
+
+    /* The index will indicate which cut in pair_array this vertex belongs to. */
+    BM_elem_index_set(v, -1);
   }
   bm->elem_index_dirty |= BM_VERT;
 
@@ -621,6 +594,10 @@ bool BM_mesh_intersect_edges(BMesh *bm, const char hflag, const float dist, GHas
       /* Don't test hidden edges or smaller than the minimum distance.
        * These have already been handled in the vertices overlap. */
       BM_elem_index_set(e, 0);
+      if (split_faces) {
+        /* Tag to be ignored. */
+        BM_elem_flag_enable(e, BM_ELEM_TAG);
+      }
       continue;
     }
 
@@ -631,6 +608,10 @@ bool BM_mesh_intersect_edges(BMesh *bm, const char hflag, const float dist, GHas
     else {
       BM_elem_index_set(e, EDGE_REMAIN_TO_TEST);
       edges_remain_len++;
+      if (split_faces) {
+        /* Tag to be ignored. */
+        BM_elem_flag_enable(e, BM_ELEM_TAG);
+      }
     }
   }
 
@@ -656,7 +637,7 @@ bool BM_mesh_intersect_edges(BMesh *bm, const char hflag, const float dist, GHas
         BLI_bvhtree_insert(tree_edges_act, i, co[0], 2);
       }
       else if (edge_test == EDGE_REMAIN_TO_TEST) {
-        BLI_assert(tree_edges_act);
+        BLI_assert(tree_edges_remain);
         e->head.index = 0;
         copy_v3_v3(co[0], e->v1->co);
         copy_v3_v3(co[1], e->v2->co);
@@ -823,6 +804,11 @@ bool BM_mesh_intersect_edges(BMesh *bm, const char hflag, const float dist, GHas
           lambda = (pair_elem->lambda - lambda_prev) / (1.0f - lambda_prev);
           lambda_prev = pair_elem->lambda;
           e = pair_elem->edge;
+          if (split_faces) {
+            /* Tagged edges are ignored when split faces.
+             * Un-tag these. */
+            BM_elem_flag_disable(e, BM_ELEM_TAG);
+          }
 
           BMVert *v_new = BM_edge_split(bm, e, e->v1, NULL, lambda);
           pair_elem->vert = v_new;
@@ -856,10 +842,187 @@ bool BM_mesh_intersect_edges(BMesh *bm, const char hflag, const float dist, GHas
         BLI_assert((*pair_iter)[0].elem->head.htype == BM_VERT);
         BLI_assert((*pair_iter)[1].elem->head.htype == BM_VERT);
         BLI_assert((*pair_iter)[0].elem != (*pair_iter)[1].elem);
-
-        BLI_ghash_insert(r_targetmap, (*pair_iter)[0].vert, (*pair_iter)[1].vert);
+        BMVert *v_key, *v_val;
+        v_key = (*pair_iter)[0].vert;
+        v_val = (*pair_iter)[1].vert;
+        BLI_ghash_insert(r_targetmap, v_key, v_val);
+        if (split_faces) {
+          /* The vertex index indicates its position in the pair_array flat. */
+          BM_elem_index_set(v_key, i * 2);
+          BM_elem_index_set(v_val, i * 2 + 1);
+        }
       }
 
+      if (split_faces) {
+        BMEdge **edgenet = NULL;
+        int edgenet_alloc_len = 0;
+
+        struct EDBMSplitElem *pair_flat = (struct EDBMSplitElem *)&pair_array[0];
+        BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
+          if (BM_elem_flag_test(e, BM_ELEM_TAG)) {
+            /* Edge out of context or already tested. */
+            continue;
+          }
+
+          BMVert *va, *vb, *va_dest = NULL;
+          va = e->v1;
+          vb = e->v2;
+
+          int v_cut = BM_elem_index_get(va);
+          int v_cut_other = BM_elem_index_get(vb);
+          if (v_cut == -1 && v_cut_other == -1) {
+            if (!BM_elem_flag_test(va, BM_ELEM_TAG) && !BM_elem_flag_test(vb, BM_ELEM_TAG)) {
+              /* Edge out of context. */
+              BM_elem_flag_enable(e, BM_ELEM_TAG);
+            }
+            continue;
+          }
+
+          /* Tag to avoid testing again. */
+          BM_elem_flag_enable(e, BM_ELEM_TAG);
+
+          if (v_cut == -1) {
+            SWAP(BMVert *, va, vb);
+            v_cut = v_cut_other;
+            v_cut_other = -1;
+          }
+
+          /* `v_cut` indicates the other vertex within the `pair_array`. */
+          v_cut += v_cut % 2 ? -1 : 1;
+          va_dest = pair_flat[v_cut].vert;
+
+          if (BM_vert_pair_share_face_check(va, va_dest)) {
+            /* Vert par acts on the same face.
+             * Although there are cases like this where the face can be split,
+             * for efficiency it is better to ignore then. */
+            continue;
+          }
+
+          BMFace *best_face = NULL;
+          BMVert *v_other_dest, *v_other = vb;
+          BMEdge *e_net = e;
+          int edgenet_len = 0;
+          while (true) {
+            if (v_cut_other != -1) {
+              v_cut_other += v_cut_other % 2 ? -1 : 1;
+              v_other_dest = pair_flat[v_cut_other].vert;
+
+              if (BM_vert_pair_share_face_check(v_other, v_other_dest)) {
+                /* Vert par acts on the same face.
+                 * Although there are cases like this where the face can be split,
+                 * for efficiency and to avoid complications, it is better to ignore these cases.
+                 */
+                break;
+              }
+            }
+            else {
+              v_other_dest = v_other;
+            }
+
+            if (va_dest == v_other_dest) {
+              /* Edge/Edgenet to vertex - we can't split the face. */
+              break;
+            }
+            if (edgenet_len == 0 && BM_edge_exists(va_dest, v_other_dest)) {
+              /* Edge to edge - no need to detect face. */
+              break;
+            }
+
+            if (edgenet_alloc_len == edgenet_len) {
+              edgenet_alloc_len = (edgenet_alloc_len + 1) * 2;
+              edgenet = MEM_reallocN(edgenet, (edgenet_alloc_len) * sizeof(*edgenet));
+            }
+            edgenet[edgenet_len++] = e_net;
+
+            best_face = bm_vert_pair_best_face_get(
+                va_dest, v_other_dest, edgenet, edgenet_len, dist);
+
+            if (best_face) {
+              if ((va_dest != va) && !BM_edge_exists(va_dest, va)) {
+                /**
+                 * <pre>
+                 *  va---vb---
+                 *      /
+                 *  va_dest
+                 * </pre>
+                 */
+                e_net = edgenet[0];
+                if (edgenet_len > 1) {
+                  vb = BM_edge_other_vert(e_net, va);
+                }
+                else {
+                  vb = v_other_dest;
+                }
+                edgenet[0] = BM_edge_create(bm, va_dest, vb, e_net, BM_CREATE_NOP);
+              }
+              if ((edgenet_len > 1) && (v_other_dest != v_other) &&
+                  !BM_edge_exists(v_other_dest, v_other)) {
+                /**
+                 * <pre>
+                 *  ---v---v_other
+                 *      \
+                 *       v_other_dest
+                 * </pre>
+                 */
+                e_net = edgenet[edgenet_len - 1];
+                edgenet[edgenet_len - 1] = BM_edge_create(
+                    bm, v_other_dest, BM_edge_other_vert(e_net, v_other), e_net, BM_CREATE_NOP);
+              }
+              break;
+            }
+
+            BMEdge *e_test = e_net, *e_next = NULL;
+            while ((e_test = BM_DISK_EDGE_NEXT(e_test, v_other)) != (e_net)) {
+              if (!BM_edge_is_wire(e_test)) {
+                if (BM_elem_flag_test(e_test, BM_ELEM_TAG)) {
+                  continue;
+                }
+                if (!BM_elem_flag_test(e_test->v1, BM_ELEM_TAG) &&
+                    !BM_elem_flag_test(e_test->v2, BM_ELEM_TAG)) {
+                  continue;
+                }
+                /* Avoids endless loop. */
+                BM_elem_flag_enable(e_test, BM_ELEM_TAG);
+              }
+              else if (!BM_edge_is_wire(e_net)) {
+                continue;
+              }
+              e_next = e_test;
+              break;
+            }
+
+            if (e_next == NULL) {
+              break;
+            }
+
+            e_net = e_next;
+            v_other = BM_edge_other_vert(e_net, v_other);
+            if (v_other == va) {
+              /* Endless loop. */
+              break;
+            }
+            v_cut_other = BM_elem_index_get(v_other);
+          }
+
+          if (best_face) {
+            BMFace **face_arr = NULL;
+            int face_arr_len = 0;
+            BM_face_split_edgenet(bm, best_face, edgenet, edgenet_len, &face_arr, &face_arr_len);
+            if (face_arr) {
+              /* Update the new faces normal.
+               * Normal is necessary to obtain the best face for edgenet */
+              while (face_arr_len--) {
+                BM_face_normal_update(face_arr[face_arr_len]);
+              }
+              MEM_freeN(face_arr);
+            }
+          }
+        }
+
+        if (edgenet) {
+          MEM_freeN(edgenet);
+        }
+      }
       ok = true;
     }
   }

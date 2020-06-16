@@ -21,8 +21,8 @@
  * \ingroup bke
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -34,13 +34,13 @@
 #include "DNA_ID.h"
 #include "DNA_collection_types.h"
 #include "DNA_dynamicpaint_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_modifier_types.h"
-#include "DNA_object_types.h"
 #include "DNA_object_force_types.h"
+#include "DNA_object_types.h"
 #include "DNA_particle_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_fluid_types.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
@@ -52,19 +52,18 @@
 #include "PIL_time.h"
 
 #include "BKE_appdir.h"
-#include "BKE_anim.h"
 #include "BKE_cloth.h"
 #include "BKE_collection.h"
 #include "BKE_dynamicpaint.h"
+#include "BKE_fluid.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_scene.h"
-#include "BKE_fluid.h"
 #include "BKE_softbody.h"
 
 #include "BIK_api.h"
@@ -1840,7 +1839,7 @@ PTCacheID BKE_ptcache_id_find(Object *ob, Scene *scene, PointCache *cache)
   ListBase pidlist;
   BKE_ptcache_ids_from_object(&pidlist, ob, scene, MAX_DUPLI_RECUR);
 
-  for (PTCacheID *pid = pidlist.first; pid; pid = pid->next) {
+  LISTBASE_FOREACH (PTCacheID *, pid, &pidlist) {
     if (pid->cache == cache) {
       result = *pid;
       break;
@@ -1953,8 +1952,8 @@ static bool foreach_object_ptcache(
     if (!foreach_object_modifier_ptcache(object, callback, callback_user_data)) {
       return false;
     }
-    /* Consider all object in dupli groups to be part of the same object,
-     * for baking with linking dupligroups. Once we have better overrides
+    /* Consider all object in dupli-groups to be part of the same object,
+     * for baking with linking dupli-groups. Once we have better overrides
      * this can be revisited so users select the local objects directly. */
     if (scene != NULL && (duplis-- > 0) && (object->instance_collection != NULL)) {
       FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN (object->instance_collection, current_object) {
@@ -2067,7 +2066,7 @@ static int ptcache_path(PTCacheID *pid, char *filename)
       BLI_path_abs(filename, blendfilename);
     }
 
-    return BLI_add_slash(filename); /* new strlen() */
+    return BLI_path_slash_ensure(filename); /* new strlen() */
   }
   else if (G.relbase_valid || lib) {
     char file[MAX_PTCACHE_PATH]; /* we don't want the dir, only the file */
@@ -2084,14 +2083,14 @@ static int ptcache_path(PTCacheID *pid, char *filename)
     BLI_snprintf(filename, MAX_PTCACHE_PATH, "//" PTCACHE_PATH "%s", file);
 
     BLI_path_abs(filename, blendfilename);
-    return BLI_add_slash(filename); /* new strlen() */
+    return BLI_path_slash_ensure(filename); /* new strlen() */
   }
 
   /* use the temp path. this is weak but better then not using point cache at all */
   /* temporary directory is assumed to exist and ALWAYS has a trailing slash */
   BLI_snprintf(filename, MAX_PTCACHE_PATH, "%s" PTCACHE_PATH, BKE_tempdir_session());
 
-  return BLI_add_slash(filename); /* new strlen() */
+  return BLI_path_slash_ensure(filename); /* new strlen() */
 }
 
 static int ptcache_filename(PTCacheID *pid, char *filename, int cfra, short do_path, short do_ext)
@@ -2385,7 +2384,7 @@ static int ptcache_file_header_begin_read(PTCacheFile *pf)
 
   /* if there was an error set file as it was */
   if (error) {
-    fseek(pf->fp, 0, SEEK_SET);
+    BLI_fseek(pf->fp, 0, SEEK_SET);
   }
 
   return !error;

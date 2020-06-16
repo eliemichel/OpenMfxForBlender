@@ -44,6 +44,7 @@ static struct {
   /* Probes */
   struct GPUShader *probe_default_sh;
   struct GPUShader *probe_default_studiolight_sh;
+  struct GPUShader *probe_background_studiolight_sh;
   struct GPUShader *probe_grid_display_sh;
   struct GPUShader *probe_cube_display_sh;
   struct GPUShader *probe_planar_display_sh;
@@ -87,6 +88,7 @@ extern char datatoc_lightprobe_planar_downsample_vert_glsl[];
 extern char datatoc_irradiance_lib_glsl[];
 extern char datatoc_lightprobe_lib_glsl[];
 extern char datatoc_octahedron_lib_glsl[];
+extern char datatoc_cubemap_lib_glsl[];
 
 /* Velocity Resolve */
 extern char datatoc_effect_velocity_resolve_frag_glsl[];
@@ -191,10 +193,33 @@ GPUShader *EEVEE_shaders_default_studiolight_sh_get(void)
   return e_data.probe_default_studiolight_sh;
 }
 
+GPUShader *EEVEE_shaders_background_studiolight_sh_get(void)
+{
+  if (e_data.probe_background_studiolight_sh == NULL) {
+    char *frag_str = BLI_string_joinN(datatoc_octahedron_lib_glsl,
+                                      datatoc_cubemap_lib_glsl,
+                                      datatoc_common_uniforms_lib_glsl,
+                                      datatoc_bsdf_common_lib_glsl,
+                                      datatoc_lightprobe_lib_glsl,
+                                      datatoc_default_world_frag_glsl);
+
+    e_data.probe_background_studiolight_sh = DRW_shader_create_with_lib(
+        datatoc_background_vert_glsl,
+        NULL,
+        frag_str,
+        datatoc_common_view_lib_glsl,
+        "#define LOOKDEV_BG\n" SHADER_DEFINES);
+
+    MEM_freeN(frag_str);
+  }
+  return e_data.probe_background_studiolight_sh;
+}
+
 GPUShader *EEVEE_shaders_probe_cube_display_sh_get(void)
 {
   if (e_data.probe_cube_display_sh == NULL) {
     char *shader_str = BLI_string_joinN(datatoc_octahedron_lib_glsl,
+                                        datatoc_cubemap_lib_glsl,
                                         datatoc_common_view_lib_glsl,
                                         datatoc_common_uniforms_lib_glsl,
                                         datatoc_bsdf_common_lib_glsl,
@@ -216,6 +241,7 @@ GPUShader *EEVEE_shaders_probe_grid_display_sh_get(void)
 {
   if (e_data.probe_grid_display_sh == NULL) {
     char *shader_str = BLI_string_joinN(datatoc_octahedron_lib_glsl,
+                                        datatoc_cubemap_lib_glsl,
                                         datatoc_common_view_lib_glsl,
                                         datatoc_common_uniforms_lib_glsl,
                                         datatoc_bsdf_common_lib_glsl,
@@ -299,6 +325,7 @@ void EEVEE_shaders_free(void)
   DRW_SHADER_FREE_SAFE(e_data.probe_grid_fill_sh);
   DRW_SHADER_FREE_SAFE(e_data.probe_planar_downsample_sh);
   DRW_SHADER_FREE_SAFE(e_data.probe_default_studiolight_sh);
+  DRW_SHADER_FREE_SAFE(e_data.probe_background_studiolight_sh);
   DRW_SHADER_FREE_SAFE(e_data.probe_grid_display_sh);
   DRW_SHADER_FREE_SAFE(e_data.probe_cube_display_sh);
   DRW_SHADER_FREE_SAFE(e_data.probe_planar_display_sh);

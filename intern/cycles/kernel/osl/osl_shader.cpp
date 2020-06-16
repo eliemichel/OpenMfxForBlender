@@ -16,6 +16,7 @@
 
 #include <OSL/oslexec.h>
 
+// clang-format off
 #include "kernel/kernel_compat_cpu.h"
 #include "kernel/kernel_montecarlo.h"
 #include "kernel/kernel_types.h"
@@ -28,6 +29,7 @@
 #include "kernel/osl/osl_globals.h"
 #include "kernel/osl/osl_services.h"
 #include "kernel/osl/osl_shader.h"
+// clang-format on
 
 #include "util/util_foreach.h"
 
@@ -382,10 +384,6 @@ int OSLShader::find_attribute(KernelGlobals *kg,
 {
   /* for OSL, a hash map is used to lookup the attribute by name. */
   int object = sd->object * ATTR_PRIM_TYPES;
-#ifdef __HAIR__
-  if (sd->type & PRIMITIVE_ALL_CURVE)
-    object += ATTR_PRIM_CURVE;
-#endif
 
   OSLGlobals::AttributeMap &attr_map = kg->osl->attribute_map[object];
   ustring stdname(std::string("geom:") +

@@ -19,6 +19,10 @@
 # <pep8 compliant>
 import bpy
 from bpy.types import Header, Menu, Panel
+from bpy.app.translations import (
+    contexts as i18n_contexts,
+    pgettext_iface as iface_,
+)
 
 
 class OUTLINER_HT_header(Header):
@@ -100,20 +104,26 @@ class OUTLINER_MT_editor_menus(Menu):
             layout.menu("OUTLINER_MT_edit_datablocks")
 
 
-class OUTLINER_MT_context(Menu):
-    bl_label = "Outliner"
+class OUTLINER_MT_context_menu(Menu):
+    bl_label = "Outliner Context Menu"
 
-    def draw(self, _context):
+    def draw(self, context):
+        space = context.space_data
+
         layout = self.layout
 
-        layout.menu("OUTLINER_MT_context_view")
+        if space.display_mode == 'VIEW_LAYER':
+            OUTLINER_MT_collection_new.draw_without_context_menu(context, layout)
+            layout.separator()
+
+        layout.menu("OUTLINER_MT_context_menu_view")
 
         layout.separator()
 
         layout.menu("INFO_MT_area")
 
 
-class OUTLINER_MT_context_view(Menu):
+class OUTLINER_MT_context_menu_view(Menu):
     bl_label = "View"
 
     def draw(self, _context):
@@ -232,21 +242,25 @@ class OUTLINER_MT_collection(Menu):
 
         layout.separator()
 
-        OUTLINER_MT_context.draw(self, context)
+        OUTLINER_MT_context_menu.draw(self, context)
 
 
 class OUTLINER_MT_collection_new(Menu):
     bl_label = "Collection"
 
+    @staticmethod
+    def draw_without_context_menu(context, layout):
+        layout.operator("outliner.collection_new", text="New Collection").nested = False
+        layout.operator("outliner.id_paste", text="Paste Data-Blocks", icon='PASTEDOWN')
+
     def draw(self, context):
         layout = self.layout
 
-        layout.operator("outliner.collection_new", text="New").nested = False
-        layout.operator("outliner.id_paste", text="Paste", icon='PASTEDOWN')
+        self.draw_without_context_menu(context, layout)
 
         layout.separator()
 
-        OUTLINER_MT_context.draw(self, context)
+        OUTLINER_MT_context_menu.draw(self, context)
 
 
 class OUTLINER_MT_object(Menu):
@@ -279,8 +293,10 @@ class OUTLINER_MT_object(Menu):
 
         if object_mode in {'EDIT', 'POSE'}:
             name = bpy.types.Object.bl_rna.properties["mode"].enum_items[object_mode].name
-            layout.operator("outliner.object_operation", text=f"{name:s} Set").type = 'OBJECT_MODE_ENTER'
-            layout.operator("outliner.object_operation", text=f"{name:s} Clear").type = 'OBJECT_MODE_EXIT'
+            layout.operator("outliner.object_operation",
+                            text=iface_("%s Set", i18n_contexts.operator_default) % name).type = 'OBJECT_MODE_ENTER'
+            layout.operator("outliner.object_operation",
+                            text=iface_("%s Clear", i18n_contexts.operator_default) % name).type = 'OBJECT_MODE_EXIT'
             del name
 
             layout.separator()
@@ -293,7 +309,7 @@ class OUTLINER_MT_object(Menu):
 
         layout.separator()
 
-        OUTLINER_MT_context.draw(self, context)
+        OUTLINER_MT_context_menu.draw(self, context)
 
 
 class OUTLINER_PT_filter(Panel):
@@ -391,6 +407,9 @@ class OUTLINER_PT_filter(Panel):
         if (
                 bpy.data.curves or
                 bpy.data.metaballs or
+                (hasattr(bpy.data, "hairs") and bpy.data.hairs) or
+                (hasattr(bpy.data, "pointclouds") and bpy.data.pointclouds) or
+                bpy.data.volumes or
                 bpy.data.lightprobes or
                 bpy.data.lattices or
                 bpy.data.fonts or
@@ -410,8 +429,8 @@ classes = (
     OUTLINER_MT_collection_visibility,
     OUTLINER_MT_collection_view_layer,
     OUTLINER_MT_object,
-    OUTLINER_MT_context,
-    OUTLINER_MT_context_view,
+    OUTLINER_MT_context_menu,
+    OUTLINER_MT_context_menu_view,
     OUTLINER_PT_filter,
 )
 

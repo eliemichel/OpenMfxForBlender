@@ -20,8 +20,8 @@
 
 #include <stdlib.h>
 
-#include "DNA_anim_types.h"
 #include "DNA_action_types.h"
+#include "DNA_anim_types.h"
 #include "DNA_scene_types.h"
 
 #include "MEM_guardedalloc.h"
@@ -123,8 +123,8 @@ static FCurve *rna_Action_fcurve_new(bAction *act,
     return NULL;
   }
 
-  /* annoying, check if this exists */
-  if (verify_fcurve(bmain, act, group, NULL, data_path, index, 0)) {
+  /* Annoying, check if this exists. */
+  if (ED_action_fcurve_find(act, data_path, index)) {
     BKE_reportf(reports,
                 RPT_ERROR,
                 "F-Curve '%s[%d]' already exists in action '%s'",
@@ -133,7 +133,7 @@ static FCurve *rna_Action_fcurve_new(bAction *act,
                 act->id.name + 2);
     return NULL;
   }
-  return verify_fcurve(bmain, act, group, NULL, data_path, index, 1);
+  return ED_action_fcurve_ensure(bmain, act, group, NULL, data_path, index);
 }
 
 static FCurve *rna_Action_fcurve_find(bAction *act,
@@ -345,14 +345,14 @@ static void rna_def_dopesheet(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_only_selected", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "filterflag", ADS_FILTER_ONLYSEL);
   RNA_def_property_ui_text(
-      prop, "Only Selected", "Only include channels relating to selected objects and data");
+      prop, "Only Show Selected", "Only include channels relating to selected objects and data");
   RNA_def_property_ui_icon(prop, ICON_RESTRICT_SELECT_OFF, 0);
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
 
   prop = RNA_def_property(srna, "show_hidden", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "filterflag", ADS_FILTER_INCL_HIDDEN);
   RNA_def_property_ui_text(
-      prop, "Display Hidden", "Include channels from objects/bone that are not visible");
+      prop, "Show Hidden", "Include channels from objects/bone that are not visible");
   RNA_def_property_ui_icon(prop, ICON_OBJECT_HIDDEN, 0);
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
 
@@ -368,8 +368,9 @@ static void rna_def_dopesheet(BlenderRNA *brna)
   /* Debug Filtering Settings */
   prop = RNA_def_property(srna, "show_only_errors", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "filterflag", ADS_FILTER_ONLY_ERRORS);
-  RNA_def_property_ui_text(
-      prop, "Show Errors", "Only include F-Curves and drivers that are disabled or have errors");
+  RNA_def_property_ui_text(prop,
+                           "Only Show Errors",
+                           "Only include F-Curves and drivers that are disabled or have errors");
   RNA_def_property_ui_icon(prop, ICON_ERROR, 0);
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
 
@@ -568,6 +569,29 @@ static void rna_def_dopesheet(BlenderRNA *brna)
   RNA_def_property_ui_icon(prop, ICON_FILE, 0);
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
 
+#  ifdef WITH_NEW_OBJECT_TYPES
+  prop = RNA_def_property(srna, "show_hairs", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_negative_sdna(prop, NULL, "filterflag2", ADS_FILTER_NOHAIR);
+  RNA_def_property_ui_text(
+      prop, "Display Hair", "Include visualization of hair related animation data");
+  RNA_def_property_ui_icon(prop, ICON_OUTLINER_OB_HAIR, 0);
+  RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
+
+  prop = RNA_def_property(srna, "show_pointclouds", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_negative_sdna(prop, NULL, "filterflag2", ADS_FILTER_NOPOINTCLOUD);
+  RNA_def_property_ui_text(
+      prop, "Display Point Cloud", "Include visualization of point cloud related animation data");
+  RNA_def_property_ui_icon(prop, ICON_OUTLINER_OB_POINTCLOUD, 0);
+  RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
+#  endif
+
+  prop = RNA_def_property(srna, "show_volumes", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_negative_sdna(prop, NULL, "filterflag2", ADS_FILTER_NOVOLUME);
+  RNA_def_property_ui_text(
+      prop, "Display Volume", "Include visualization of volume related animation data");
+  RNA_def_property_ui_icon(prop, ICON_OUTLINER_OB_VOLUME, 0);
+  RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
+
   prop = RNA_def_property(srna, "show_gpencil", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "filterflag", ADS_FILTER_NOGPENCIL);
   RNA_def_property_ui_text(
@@ -582,15 +606,6 @@ static void rna_def_dopesheet(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Display Movie Clips", "Include visualization of movie clip related animation data");
   RNA_def_property_ui_icon(prop, ICON_TRACKER, 0);
-  RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
-
-  /* GPencil Mode Settings */
-  prop = RNA_def_property(srna, "show_gpencil_3d_only", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "filterflag", ADS_FILTER_GP_3DONLY);
-  RNA_def_property_ui_text(prop,
-                           "Active Scene Only",
-                           "Only show Grease Pencil data-blocks used as part of the active scene");
-  RNA_def_property_ui_icon(prop, ICON_SCENE_DATA, 0);
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
 }
 
@@ -646,6 +661,12 @@ static void rna_def_action_group(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", AGRP_EXPANDED_G);
   RNA_def_property_ui_text(
       prop, "Expanded in Graph Editor", "Action group is expanded in graph editor");
+  RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
+
+  prop = RNA_def_property(srna, "use_pin", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", ADT_CURVES_ALWAYS_VISIBLE);
+  RNA_def_property_ui_text(prop, "Pin in Graph Editor", "");
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
 
   /* color set */

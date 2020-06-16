@@ -19,9 +19,14 @@ set(SRC
   coverage.cpp
   denoising.cpp
   film.cpp
+  geometry.cpp
   graph.cpp
+  hair.cpp
   image.cpp
+  image_oiio.cpp
+  image_vdb.cpp
   integrator.cpp
+  jitter.cpp
   light.cpp
   merge.cpp
   mesh.cpp
@@ -54,10 +59,15 @@ set(SRC_HEADERS
   coverage.h
   denoising.h
   film.h
+  geometry.h
   graph.h
+  hair.h
   image.h
+  image_oiio.h
+  image_vdb.h
   integrator.h
   light.h
+  jitter.h
   merge.h
   mesh.h
   nodes.h
@@ -85,6 +95,29 @@ set(LIB
 if(WITH_CYCLES_OSL)
   list(APPEND LIB
     cycles_kernel_osl
+  )
+
+  SET_PROPERTY(SOURCE osl.cpp PROPERTY COMPILE_FLAGS ${RTTI_DISABLE_FLAGS})
+endif()
+
+if(WITH_OPENCOLORIO)
+  add_definitions(-DWITH_OCIO)
+  include_directories(
+    SYSTEM
+    ${OPENCOLORIO_INCLUDE_DIRS}
+  )
+  if(WIN32)
+    add_definitions(-DOpenColorIO_STATIC)
+  endif()
+endif()
+
+if(WITH_OPENVDB)
+  add_definitions(-DWITH_OPENVDB ${OPENVDB_DEFINITIONS})
+  list(APPEND INC_SYS
+    ${OPENVDB_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${OPENVDB_LIBRARIES}
   )
 endif()
 

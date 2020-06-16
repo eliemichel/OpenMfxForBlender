@@ -23,9 +23,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
 #include "BLI_dlrbTree.h"
+#include "BLI_math.h"
 
 #include "BLT_translation.h"
 
@@ -86,9 +86,9 @@ typedef struct tPoseSlideOp {
   /** current scene */
   Scene *scene;
   /** area that we're operating in (needed for modal()) */
-  ScrArea *sa;
+  ScrArea *area;
   /** region that we're operating in (needed for modal()) */
-  ARegion *ar;
+  ARegion *region;
   /** len of the PoseSlideObject array. */
   uint objects_len;
 
@@ -197,8 +197,8 @@ static int pose_slide_init(bContext *C, wmOperator *op, ePoseSlide_Modes mode)
 
   /* get info from context */
   pso->scene = CTX_data_scene(C);
-  pso->sa = CTX_wm_area(C);   /* only really needed when doing modal() */
-  pso->ar = CTX_wm_region(C); /* only really needed when doing modal() */
+  pso->area = CTX_wm_area(C);     /* only really needed when doing modal() */
+  pso->region = CTX_wm_region(C); /* only really needed when doing modal() */
 
   pso->cframe = pso->scene->r.cfra;
   pso->mode = mode;
@@ -544,71 +544,56 @@ static void pose_slide_apply_quat(tPoseSlideOp *pso, tPChanFCurveLink *pfl)
 
   /* only if all channels exist, proceed */
   if (fcu_w && fcu_x && fcu_y && fcu_z) {
-    float quat_prev[4], quat_prev_orig[4];
-    float quat_next[4], quat_next_orig[4];
-    float quat_curr[4], quat_curr_orig[4];
     float quat_final[4];
-
-    copy_qt_qt(quat_curr_orig, pchan->quat);
-
-    /* get 2 quats */
-    quat_prev_orig[0] = evaluate_fcurve(fcu_w, prevFrameF);
-    quat_prev_orig[1] = evaluate_fcurve(fcu_x, prevFrameF);
-    quat_prev_orig[2] = evaluate_fcurve(fcu_y, prevFrameF);
-    quat_prev_orig[3] = evaluate_fcurve(fcu_z, prevFrameF);
-
-    quat_next_orig[0] = evaluate_fcurve(fcu_w, nextFrameF);
-    quat_next_orig[1] = evaluate_fcurve(fcu_x, nextFrameF);
-    quat_next_orig[2] = evaluate_fcurve(fcu_y, nextFrameF);
-    quat_next_orig[3] = evaluate_fcurve(fcu_z, nextFrameF);
-
-    normalize_qt_qt(quat_prev, quat_prev_orig);
-    normalize_qt_qt(quat_next, quat_next_orig);
-    normalize_qt_qt(quat_curr, quat_curr_orig);
 
     /* perform blending */
     if (pso->mode == POSESLIDE_BREAKDOWN) {
       /* Just perform the interpolation between quat_prev and
        * quat_next using pso->percentage as a guide. */
+      float quat_prev[4];
+      float quat_next[4];
+
+      quat_prev[0] = evaluate_fcurve(fcu_w, prevFrameF);
+      quat_prev[1] = evaluate_fcurve(fcu_x, prevFrameF);
+      quat_prev[2] = evaluate_fcurve(fcu_y, prevFrameF);
+      quat_prev[3] = evaluate_fcurve(fcu_z, prevFrameF);
+
+      quat_next[0] = evaluate_fcurve(fcu_w, nextFrameF);
+      quat_next[1] = evaluate_fcurve(fcu_x, nextFrameF);
+      quat_next[2] = evaluate_fcurve(fcu_y, nextFrameF);
+      quat_next[3] = evaluate_fcurve(fcu_z, nextFrameF);
+
+      normalize_qt(quat_prev);
+      normalize_qt(quat_next);
+
       interp_qt_qtqt(quat_final, quat_prev, quat_next, pso->percentage);
     }
-    else if (pso->mode == POSESLIDE_PUSH) {
-      float quat_diff[4];
-
-      /* calculate the delta transform from the previous to the current */
-      /* TODO: investigate ways to favour one transform more? */
-      sub_qt_qtqt(quat_diff, quat_curr, quat_prev);
-
-      /* increase the original by the delta transform, by an amount determined by percentage */
-      add_qt_qtqt(quat_final, quat_curr, quat_diff, pso->percentage);
-
-      normalize_qt(quat_final);
-    }
     else {
-      BLI_assert(pso->mode == POSESLIDE_RELAX);
-      float quat_interp[4], quat_final_prev[4];
-      /* TODO: maybe a sensitivity ctrl on top of this is needed */
-      int iters = (int)ceil(10.0f * pso->percentage);
+      /* POSESLIDE_PUSH and POSESLIDE_RELAX. */
+      float quat_breakdown[4];
+      float quat_curr[4];
 
-      copy_qt_qt(quat_final, quat_curr);
+      copy_qt_qt(quat_curr, pchan->quat);
 
-      /* perform this blending several times until a satisfactory result is reached */
-      while (iters-- > 0) {
-        /* calculate the interpolation between the endpoints */
-        interp_qt_qtqt(quat_interp,
-                       quat_prev,
-                       quat_next,
-                       (cframe - pso->prevFrame) / (pso->nextFrame - pso->prevFrame));
+      quat_breakdown[0] = evaluate_fcurve(fcu_w, cframe);
+      quat_breakdown[1] = evaluate_fcurve(fcu_x, cframe);
+      quat_breakdown[2] = evaluate_fcurve(fcu_y, cframe);
+      quat_breakdown[3] = evaluate_fcurve(fcu_z, cframe);
 
-        normalize_qt_qt(quat_final_prev, quat_final);
+      normalize_qt(quat_breakdown);
+      normalize_qt(quat_curr);
 
-        /* tricky interpolations - blending between original and new */
-        interp_qt_qtqt(quat_final, quat_final_prev, quat_interp, 1.0f / 6.0f);
+      if (pso->mode == POSESLIDE_PUSH) {
+        interp_qt_qtqt(quat_final, quat_breakdown, quat_curr, 1.0f + pso->percentage);
+      }
+      else {
+        BLI_assert(pso->mode == POSESLIDE_RELAX);
+        interp_qt_qtqt(quat_final, quat_curr, quat_breakdown, pso->percentage);
       }
     }
 
     /* Apply final to the pose bone, keeping compatible for similar keyframe positions. */
-    quat_to_compatible_quat(pchan->quat, quat_final, quat_curr_orig);
+    quat_to_compatible_quat(pchan->quat, quat_final, pchan->quat);
   }
 
   /* free the path now */
@@ -904,7 +889,7 @@ static void pose_slide_draw_status(tPoseSlideOp *pso)
                  limits_str);
   }
 
-  ED_area_status_text(pso->sa, status_str);
+  ED_area_status_text(pso->area, status_str);
 }
 
 /* common code for invoke() methods */
@@ -1004,7 +989,7 @@ static void pose_slide_mouse_update_percentage(tPoseSlideOp *pso,
                                                wmOperator *op,
                                                const wmEvent *event)
 {
-  pso->percentage = (event->x - pso->ar->winrct.xmin) / ((float)pso->ar->winx);
+  pso->percentage = (event->x - pso->region->winrct.xmin) / ((float)pso->region->winx);
   RNA_float_set(op->ptr, "percentage", pso->percentage);
 }
 
@@ -1067,11 +1052,11 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
   switch (event->type) {
     case LEFTMOUSE: /* confirm */
-    case RETKEY:
-    case PADENTER: {
+    case EVT_RETKEY:
+    case EVT_PADENTER: {
       if (event->val == KM_PRESS) {
         /* return to normal cursor and header status */
-        ED_area_status_text(pso->sa, NULL);
+        ED_area_status_text(pso->area, NULL);
         WM_cursor_modal_restore(win);
 
         /* insert keyframes as required... */
@@ -1084,11 +1069,11 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
       break;
     }
 
-    case ESCKEY: /* cancel */
+    case EVT_ESCKEY: /* cancel */
     case RIGHTMOUSE: {
       if (event->val == KM_PRESS) {
         /* return to normal cursor and header status */
-        ED_area_status_text(pso->sa, NULL);
+        ED_area_status_text(pso->area, NULL);
         WM_cursor_modal_restore(win);
 
         /* reset transforms back to original state */
@@ -1141,31 +1126,31 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
         switch (event->type) {
           /* Transform Channel Limits  */
           /* XXX: Replace these hardcoded hotkeys with a modalmap that can be customised */
-          case GKEY: /* Location */
+          case EVT_GKEY: /* Location */
           {
             pose_slide_toggle_channels_mode(op, pso, PS_TFM_LOC);
             do_pose_update = true;
             break;
           }
-          case RKEY: /* Rotation */
+          case EVT_RKEY: /* Rotation */
           {
             pose_slide_toggle_channels_mode(op, pso, PS_TFM_ROT);
             do_pose_update = true;
             break;
           }
-          case SKEY: /* Scale */
+          case EVT_SKEY: /* Scale */
           {
             pose_slide_toggle_channels_mode(op, pso, PS_TFM_SIZE);
             do_pose_update = true;
             break;
           }
-          case BKEY: /* Bendy Bones */
+          case EVT_BKEY: /* Bendy Bones */
           {
             pose_slide_toggle_channels_mode(op, pso, PS_TFM_BBONE_SHAPE);
             do_pose_update = true;
             break;
           }
-          case CKEY: /* Custom Properties */
+          case EVT_CKEY: /* Custom Properties */
           {
             pose_slide_toggle_channels_mode(op, pso, PS_TFM_PROPS);
             do_pose_update = true;
@@ -1174,19 +1159,19 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
           /* Axis Locks */
           /* XXX: Hardcoded... */
-          case XKEY: {
+          case EVT_XKEY: {
             if (pose_slide_toggle_axis_locks(op, pso, PS_LOCK_X)) {
               do_pose_update = true;
             }
             break;
           }
-          case YKEY: {
+          case EVT_YKEY: {
             if (pose_slide_toggle_axis_locks(op, pso, PS_LOCK_Y)) {
               do_pose_update = true;
             }
             break;
           }
-          case ZKEY: {
+          case EVT_ZKEY: {
             if (pose_slide_toggle_axis_locks(op, pso, PS_LOCK_Z)) {
               do_pose_update = true;
             }
@@ -1254,51 +1239,60 @@ static int pose_slide_exec_common(bContext *C, wmOperator *op, tPoseSlideOp *pso
   return OPERATOR_FINISHED;
 }
 
-/* common code for defining RNA properties */
-/* TODO: Skip save on these? */
+/**
+ * Common code for defining RNA properties.
+ */
 static void pose_slide_opdef_properties(wmOperatorType *ot)
 {
-  RNA_def_float_percentage(ot->srna,
-                           "percentage",
-                           0.5f,
-                           0.0f,
-                           1.0f,
-                           "Percentage",
-                           "Weighting factor for which keyframe is favored more",
-                           0.0,
-                           1.0);
+  PropertyRNA *prop;
 
-  RNA_def_int(ot->srna,
-              "prev_frame",
-              0,
-              MINAFRAME,
-              MAXFRAME,
-              "Previous Keyframe",
-              "Frame number of keyframe immediately before the current frame",
-              0,
-              50);
-  RNA_def_int(ot->srna,
-              "next_frame",
-              0,
-              MINAFRAME,
-              MAXFRAME,
-              "Next Keyframe",
-              "Frame number of keyframe immediately after the current frame",
-              0,
-              50);
+  prop = RNA_def_float_percentage(ot->srna,
+                                  "percentage",
+                                  0.5f,
+                                  0.0f,
+                                  1.0f,
+                                  "Percentage",
+                                  "Weighting factor for which keyframe is favored more",
+                                  0.0,
+                                  1.0);
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
-  RNA_def_enum(ot->srna,
-               "channels",
-               prop_channels_types,
-               PS_TFM_ALL,
-               "Channels",
-               "Set of properties that are affected");
-  RNA_def_enum(ot->srna,
-               "axis_lock",
-               prop_axis_lock_types,
-               0,
-               "Axis Lock",
-               "Transform axis to restrict effects to");
+  prop = RNA_def_int(ot->srna,
+                     "prev_frame",
+                     0,
+                     MINAFRAME,
+                     MAXFRAME,
+                     "Previous Keyframe",
+                     "Frame number of keyframe immediately before the current frame",
+                     0,
+                     50);
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
+  prop = RNA_def_int(ot->srna,
+                     "next_frame",
+                     0,
+                     MINAFRAME,
+                     MAXFRAME,
+                     "Next Keyframe",
+                     "Frame number of keyframe immediately after the current frame",
+                     0,
+                     50);
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
+  prop = RNA_def_enum(ot->srna,
+                      "channels",
+                      prop_channels_types,
+                      PS_TFM_ALL,
+                      "Channels",
+                      "Set of properties that are affected");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+  prop = RNA_def_enum(ot->srna,
+                      "axis_lock",
+                      prop_axis_lock_types,
+                      0,
+                      "Axis Lock",
+                      "Transform axis to restrict effects to");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
 /* ------------------------------------ */

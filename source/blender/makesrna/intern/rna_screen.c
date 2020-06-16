@@ -18,16 +18,16 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
 #include "rna_internal.h"
 
-#include "DNA_screen_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 #include "DNA_workspace_types.h"
 
 const EnumPropertyItem rna_enum_region_type_items[] = {
@@ -55,8 +55,8 @@ const EnumPropertyItem rna_enum_region_type_items[] = {
 #ifdef RNA_RUNTIME
 
 #  include "BKE_global.h"
-#  include "BKE_workspace.h"
 #  include "BKE_screen.h"
+#  include "BKE_workspace.h"
 
 #  include "DEG_depsgraph.h"
 
@@ -80,7 +80,7 @@ static void rna_Screen_redraw_update(Main *UNUSED(bmain), Scene *UNUSED(scene), 
   /* the settings for this are currently only available from a menu in the TimeLine,
    * hence refresh=SPACE_ACTION, as timeline is now in there
    */
-  ED_screen_animation_timer_update(screen, screen->redraws_flag, SPACE_ACTION);
+  ED_screen_animation_timer_update(screen, screen->redraws_flag);
 }
 
 static bool rna_Screen_is_animation_playing_get(PointerRNA *UNUSED(ptr))
@@ -98,8 +98,8 @@ static int rna_region_alignment_get(PointerRNA *ptr)
 
 static bool rna_Screen_fullscreen_get(PointerRNA *ptr)
 {
-  bScreen *sc = (bScreen *)ptr->data;
-  return (sc->state == SCREENMAXIMIZED);
+  bScreen *screen = (bScreen *)ptr->data;
+  return (screen->state == SCREENMAXIMIZED);
 }
 
 /* UI compatible list: should not be needed, but for now we need to keep EMPTY
@@ -109,29 +109,17 @@ static const EnumPropertyItem *rna_Area_type_itemf(bContext *UNUSED(C),
                                                    PropertyRNA *UNUSED(prop),
                                                    bool *r_free)
 {
-  EnumPropertyItem *item = NULL;
-  int totitem = 0;
-
   /* +1 to skip SPACE_EMPTY */
-  for (const EnumPropertyItem *item_from = rna_enum_space_type_items + 1; item_from->identifier;
-       item_from++) {
-    if (ELEM(item_from->value, SPACE_TOPBAR, SPACE_STATUSBAR)) {
-      continue;
-    }
-    RNA_enum_item_add(&item, &totitem, item_from);
-  }
-  RNA_enum_item_end(&item, &totitem);
-  *r_free = true;
-
-  return item;
+  *r_free = false;
+  return rna_enum_space_type_items + 1;
 }
 
 static int rna_Area_type_get(PointerRNA *ptr)
 {
-  ScrArea *sa = (ScrArea *)ptr->data;
+  ScrArea *area = (ScrArea *)ptr->data;
   /* Usually 'spacetype' is used. It lags behind a bit while switching area
    * type though, then we use 'butspacetype' instead (T41435). */
-  return (sa->butspacetype == SPACE_EMPTY) ? sa->spacetype : sa->butspacetype;
+  return (area->butspacetype == SPACE_EMPTY) ? area->spacetype : area->butspacetype;
 }
 
 static void rna_Area_type_set(PointerRNA *ptr, int value)
@@ -143,17 +131,17 @@ static void rna_Area_type_set(PointerRNA *ptr, int value)
     return;
   }
 
-  ScrArea *sa = (ScrArea *)ptr->data;
-  sa->butspacetype = value;
+  ScrArea *area = (ScrArea *)ptr->data;
+  area->butspacetype = value;
 }
 
 static void rna_Area_type_update(bContext *C, PointerRNA *ptr)
 {
-  bScreen *sc = (bScreen *)ptr->owner_id;
-  ScrArea *sa = (ScrArea *)ptr->data;
+  bScreen *screen = (bScreen *)ptr->owner_id;
+  ScrArea *area = (ScrArea *)ptr->data;
 
   /* Running update without having called 'set', see: T64049 */
-  if (sa->butspacetype == SPACE_EMPTY) {
+  if (area->butspacetype == SPACE_EMPTY) {
     return;
   }
 
@@ -161,23 +149,23 @@ static void rna_Area_type_update(bContext *C, PointerRNA *ptr)
   wmWindow *win;
   /* XXX this call still use context, so we trick it to work in the right context */
   for (win = wm->windows.first; win; win = win->next) {
-    if (sc == WM_window_get_active_screen(win)) {
+    if (screen == WM_window_get_active_screen(win)) {
       wmWindow *prevwin = CTX_wm_window(C);
       ScrArea *prevsa = CTX_wm_area(C);
       ARegion *prevar = CTX_wm_region(C);
 
       CTX_wm_window_set(C, win);
-      CTX_wm_area_set(C, sa);
+      CTX_wm_area_set(C, area);
       CTX_wm_region_set(C, NULL);
 
-      ED_area_newspace(C, sa, sa->butspacetype, true);
-      ED_area_tag_redraw(sa);
+      ED_area_newspace(C, area, area->butspacetype, true);
+      ED_area_tag_redraw(area);
 
       /* Unset so that rna_Area_type_get uses spacetype instead. */
-      sa->butspacetype = SPACE_EMPTY;
+      area->butspacetype = SPACE_EMPTY;
 
       /* It is possible that new layers becomes visible. */
-      if (sa->spacetype == SPACE_VIEW3D) {
+      if (area->spacetype == SPACE_VIEW3D) {
         DEG_on_visible_update(CTX_data_main(C), false);
       }
 
@@ -225,51 +213,55 @@ static const EnumPropertyItem *rna_Area_ui_type_itemf(bContext *C,
 
 static int rna_Area_ui_type_get(PointerRNA *ptr)
 {
-  ScrArea *sa = ptr->data;
+  ScrArea *area = ptr->data;
   const int area_type = rna_Area_type_get(ptr);
-  const bool area_changing = sa->butspacetype != SPACE_EMPTY;
+  const bool area_changing = area->butspacetype != SPACE_EMPTY;
   int value = area_type << 16;
 
-  /* sa->type can be NULL (when not yet initialized), try to do it now. */
-  /* Copied from `ED_area_initialize()`.*/
-  if (sa->type == NULL || area_changing) {
-    sa->type = BKE_spacetype_from_id(area_type);
-    if (sa->type == NULL) {
-      sa->spacetype = SPACE_VIEW3D;
-      sa->type = BKE_spacetype_from_id(sa->spacetype);
+  /* Area->type can be NULL when not yet initialized (for example when accessed
+   * through the outliner or API when not visible), or it can be wrong while
+   * the area type is changing.
+   * So manually do the lookup in those cases, but do not actually change area->type
+   * since that prevents a proper exit when the area type is changing.
+   * Logic copied from `ED_area_initialize()`.*/
+  SpaceType *type = area->type;
+  if (type == NULL || area_changing) {
+    type = BKE_spacetype_from_id(area_type);
+    if (type == NULL) {
+      type = BKE_spacetype_from_id(SPACE_VIEW3D);
     }
-    BLI_assert(sa->type != NULL);
+    BLI_assert(type != NULL);
   }
-  if (sa->type->space_subtype_item_extend != NULL) {
-    value |= area_changing ? sa->butspacetype_subtype : sa->type->space_subtype_get(sa);
+  if (type->space_subtype_item_extend != NULL) {
+    value |= area_changing ? area->butspacetype_subtype : type->space_subtype_get(area);
   }
   return value;
 }
 
 static void rna_Area_ui_type_set(PointerRNA *ptr, int value)
 {
-  ScrArea *sa = ptr->data;
+  ScrArea *area = ptr->data;
   const int space_type = value >> 16;
   SpaceType *st = BKE_spacetype_from_id(space_type);
 
   rna_Area_type_set(ptr, space_type);
 
   if (st && st->space_subtype_item_extend != NULL) {
-    sa->butspacetype_subtype = value & 0xffff;
+    area->butspacetype_subtype = value & 0xffff;
   }
 }
 
 static void rna_Area_ui_type_update(bContext *C, PointerRNA *ptr)
 {
-  ScrArea *sa = ptr->data;
-  SpaceType *st = BKE_spacetype_from_id(sa->butspacetype);
+  ScrArea *area = ptr->data;
+  SpaceType *st = BKE_spacetype_from_id(area->butspacetype);
 
   rna_Area_type_update(C, ptr);
 
-  if ((sa->type == st) && (st->space_subtype_item_extend != NULL)) {
-    st->space_subtype_set(sa, sa->butspacetype_subtype);
+  if ((area->type == st) && (st->space_subtype_item_extend != NULL)) {
+    st->space_subtype_set(area, area->butspacetype_subtype);
   }
-  sa->butspacetype_subtype = 0;
+  area->butspacetype_subtype = 0;
 }
 
 static void rna_View2D_region_to_view(struct View2D *v2d, float x, float y, float result[2])

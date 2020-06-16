@@ -20,29 +20,29 @@
  * \ingroup spgraph
  */
 
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <float.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_lasso_2d.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
-#include "BLI_lasso_2d.h"
 
 #include "DNA_anim_types.h"
-#include "DNA_screen_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
 
+#include "BKE_context.h"
 #include "BKE_fcurve.h"
 #include "BKE_nla.h"
-#include "BKE_context.h"
 
 #include "UI_view2d.h"
 
@@ -179,7 +179,7 @@ static void get_nearest_fcurve_verts_list(bAnimContext *ac, const int mval[2], L
   int filter;
 
   SpaceGraph *sipo = (SpaceGraph *)ac->sl;
-  View2D *v2d = &ac->ar->v2d;
+  View2D *v2d = &ac->region->v2d;
   short mapping_flag = 0;
 
   /* get curves to search through
@@ -521,7 +521,7 @@ static void box_select_graphkeys(bAnimContext *ac,
   SpaceGraph *sipo = (SpaceGraph *)ac->sl;
   KeyframeEditData ked;
   KeyframeEditFunc ok_cb, select_cb;
-  View2D *v2d = &ac->ar->v2d;
+  View2D *v2d = &ac->region->v2d;
   rctf rectf, scaled_rectf;
 
   /* Convert mouse coordinates to frame ranges and
@@ -724,13 +724,17 @@ void GRAPH_OT_select_box(wmOperatorType *ot)
 
   /* properties */
   ot->prop = RNA_def_boolean(ot->srna, "axis_range", 0, "Axis Range", "");
-  RNA_def_boolean(ot->srna,
-                  "include_handles",
-                  true,
-                  "Include Handles",
-                  "Are handles tested individually against the selection criteria");
+  RNA_def_property_flag(ot->prop, PROP_SKIP_SAVE);
 
-  PropertyRNA *prop = RNA_def_boolean(
+  PropertyRNA *prop;
+  prop = RNA_def_boolean(ot->srna,
+                         "include_handles",
+                         true,
+                         "Include Handles",
+                         "Are handles tested individually against the selection criteria");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
+  prop = RNA_def_boolean(
       ot->srna, "tweak", 0, "Tweak", "Operator has been activated using a tweak event");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
@@ -1366,8 +1370,8 @@ static int graphkeys_select_leftright_invoke(bContext *C, wmOperator *op, const 
   /* handle mode-based testing */
   if (leftright == GRAPHKEYS_LRSEL_TEST) {
     Scene *scene = ac.scene;
-    ARegion *ar = ac.ar;
-    View2D *v2d = &ar->v2d;
+    ARegion *region = ac.region;
+    View2D *v2d = &region->v2d;
     float x;
 
     /* determine which side of the current frame mouse is on */
@@ -1481,7 +1485,7 @@ static int mouse_graph_keys(bAnimContext *ac,
   if (!curves_only && ((nvi->fcu->flag & FCURVE_PROTECTED) == 0)) {
     /* only if there's keyframe */
     if (nvi->bezt) {
-      bezt = nvi->bezt; /* used to check bezt seletion is set */
+      bezt = nvi->bezt; /* Used to check `bezt` selection is set. */
       /* depends on selection mode */
       if (select_mode == SELECT_INVERT) {
         if (nvi->hpoint == NEAREST_HANDLE_KEY) {

@@ -205,7 +205,7 @@ static void barycentric_weights_v2_grid_cache(const uint xtot,
 static void bm_grid_fill_array(BMesh *bm,
                                BMVert **v_grid,
                                const uint xtot,
-                               unsigned const int ytot,
+                               const uint ytot,
                                const short mat_nr,
                                const bool use_smooth,
                                const bool use_flip,
@@ -616,7 +616,14 @@ void bmo_grid_fill_exec(BMesh *bm, BMOperator *op)
   count = BM_mesh_edgeloops_find(bm, &eloops, bm_edge_test_cb, (void *)bm);
 
   if (count != 2) {
-    BMO_error_raise(bm, op, BMERR_INVALID_SELECTION, "Select two edge loops");
+    /* Note that this error message has been adjusted to make sense when called
+     * from the operator 'MESH_OT_fill_grid' which has a 'prepare' pass which can
+     * extract two 'rail' loops from a single edge loop, see T72075. */
+    BMO_error_raise(bm,
+                    op,
+                    BMERR_INVALID_SELECTION,
+                    "Select two edge loops "
+                    "or a single closed edge loop from which two edge loops can be calculated");
     goto cleanup;
   }
 

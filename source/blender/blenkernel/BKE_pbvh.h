@@ -66,19 +66,23 @@ typedef enum {
   PBVH_UpdateDrawBuffers = 1 << 4,
   PBVH_UpdateRedraw = 1 << 5,
   PBVH_UpdateMask = 1 << 6,
+  PBVH_UpdateVisibility = 1 << 8,
 
-  PBVH_RebuildDrawBuffers = 1 << 7,
-  PBVH_FullyHidden = 1 << 8,
-  PBVH_FullyMasked = 1 << 9,
-  PBVH_FullyUnmasked = 1 << 10,
+  PBVH_RebuildDrawBuffers = 1 << 9,
+  PBVH_FullyHidden = 1 << 10,
+  PBVH_FullyMasked = 1 << 11,
+  PBVH_FullyUnmasked = 1 << 12,
 
-  PBVH_UpdateTopology = 1 << 11,
+  PBVH_UpdateTopology = 1 << 13,
 } PBVHNodeFlags;
 
 typedef struct PBVHFrustumPlanes {
   float (*planes)[4];
   int num_planes;
 } PBVHFrustumPlanes;
+
+void BKE_pbvh_set_frustum_planes(PBVH *bvh, PBVHFrustumPlanes *planes);
+void BKE_pbvh_get_frustum_planes(PBVH *bvh, PBVHFrustumPlanes *planes);
 
 /* Callbacks */
 
@@ -101,6 +105,7 @@ void BKE_pbvh_build_mesh(PBVH *bvh,
                          int totvert,
                          struct CustomData *vdata,
                          struct CustomData *ldata,
+                         struct CustomData *pdata,
                          const struct MLoopTri *looptri,
                          int looptri_num);
 void BKE_pbvh_build_grids(PBVH *bvh,
@@ -117,7 +122,6 @@ void BKE_pbvh_build_bmesh(PBVH *bvh,
                           const int cd_vert_node_offset,
                           const int cd_face_node_offset);
 void BKE_pbvh_free(PBVH *bvh);
-void BKE_pbvh_free_layer_disp(PBVH *bvh);
 
 /* Hierarchical Search in the BVH, two methods:
  * - for each hit calling a callback
@@ -153,6 +157,7 @@ bool BKE_pbvh_node_raycast(PBVH *bvh,
                            struct IsectRayPrecalc *isect_precalc,
                            float *depth,
                            int *active_vertex_index,
+                           int *active_face_grid_index,
                            float *face_normal);
 
 bool BKE_pbvh_bmesh_node_raycast_detail(PBVHNode *node,
@@ -185,9 +190,9 @@ bool BKE_pbvh_node_find_nearest_to_ray(PBVH *bvh,
 /* Drawing */
 
 void BKE_pbvh_draw_cb(PBVH *bvh,
-                      bool show_vcol,
                       bool update_only_visible,
-                      PBVHFrustumPlanes *frustum,
+                      PBVHFrustumPlanes *update_frustum,
+                      PBVHFrustumPlanes *draw_frustum,
                       void (*draw_fn)(void *user_data, struct GPU_PBVH_Buffers *buffers),
                       void *user_data);
 
@@ -217,6 +222,8 @@ int BKE_pbvh_count_grid_quads(BLI_bitmap **grid_hidden,
                               int totgrid,
                               int gridsize);
 
+void BKE_pbvh_sync_face_sets_to_grids(PBVH *bvh);
+
 /* multires level, only valid for type == PBVH_GRIDS */
 const struct CCGKey *BKE_pbvh_get_grid_key(const PBVH *pbvh);
 
@@ -243,6 +250,7 @@ bool BKE_pbvh_bmesh_update_topology(PBVH *bvh,
 
 void BKE_pbvh_node_mark_update(PBVHNode *node);
 void BKE_pbvh_node_mark_update_mask(PBVHNode *node);
+void BKE_pbvh_node_mark_update_visibility(PBVHNode *node);
 void BKE_pbvh_node_mark_rebuild_draw(PBVHNode *node);
 void BKE_pbvh_node_mark_redraw(PBVHNode *node);
 void BKE_pbvh_node_mark_normals_update(PBVHNode *node);
@@ -286,6 +294,7 @@ void BKE_pbvh_bmesh_after_stroke(PBVH *bvh);
 
 void BKE_pbvh_update_bounds(PBVH *bvh, int flags);
 void BKE_pbvh_update_vertex_data(PBVH *bvh, int flags);
+void BKE_pbvh_update_visibility(PBVH *bvh);
 void BKE_pbvh_update_normals(PBVH *bvh, struct SubdivCCG *subdiv_ccg);
 void BKE_pbvh_redraw_BB(PBVH *bvh, float bb_min[3], float bb_max[3]);
 void BKE_pbvh_get_grid_updates(PBVH *bvh, bool clear, void ***r_gridfaces, int *r_totface);
@@ -294,14 +303,12 @@ void BKE_pbvh_grids_update(PBVH *bvh,
                            void **gridfaces,
                            struct DMFlagMat *flagmats,
                            unsigned int **grid_hidden);
+void BKE_pbvh_subdiv_cgg_set(PBVH *bvh, struct SubdivCCG *subdiv_ccg);
+void BKE_pbvh_face_sets_set(PBVH *bvh, int *face_sets);
 
-/* Layer displacement */
+void BKE_pbvh_face_sets_color_set(PBVH *bvh, int seed, int color_default);
 
-/* Get the node's displacement layer, creating it if necessary */
-float *BKE_pbvh_node_layer_disp_get(PBVH *pbvh, PBVHNode *node);
-
-/* If the node has a displacement layer, free it and set to null */
-void BKE_pbvh_node_layer_disp_free(PBVHNode *node);
+void BKE_pbvh_respect_hide_set(PBVH *bvh, bool respect_hide);
 
 /* vertex deformer */
 float (*BKE_pbvh_vert_coords_alloc(struct PBVH *pbvh))[3];
@@ -328,6 +335,7 @@ typedef struct PBVHVertexIter {
   int gy;
   int i;
   int index;
+  bool respect_hide;
 
   /* grid */
   struct CCGKey key;
@@ -358,6 +366,7 @@ typedef struct PBVHVertexIter {
   short *no;
   float *fno;
   float *mask;
+  bool visible;
 } PBVHVertexIter;
 
 void pbvh_vertex_iter_init(PBVH *bvh, PBVHNode *node, PBVHVertexIter *vi, int mode);
@@ -387,6 +396,7 @@ void pbvh_vertex_iter_init(PBVH *bvh, PBVHNode *node, PBVHVertexIter *vi, int mo
           vi.mask = vi.key.has_mask ? CCG_elem_mask(&vi.key, vi.grid) : NULL; \
           vi.grid = CCG_elem_next(&vi.key, vi.grid); \
           vi.index++; \
+          vi.visible = true; \
           if (vi.gh) { \
             if (BLI_BITMAP_TEST(vi.gh, vi.gy * vi.gridsize + vi.gx)) \
               continue; \
@@ -394,8 +404,15 @@ void pbvh_vertex_iter_init(PBVH *bvh, PBVHNode *node, PBVHVertexIter *vi, int mo
         } \
         else if (vi.mverts) { \
           vi.mvert = &vi.mverts[vi.vert_indices[vi.gx]]; \
-          if (mode == PBVH_ITER_UNIQUE && vi.mvert->flag & ME_HIDE) \
-            continue; \
+          if (vi.respect_hide) { \
+            vi.visible = !(vi.mvert->flag & ME_HIDE); \
+            if (mode == PBVH_ITER_UNIQUE && !vi.visible) { \
+              continue; \
+            } \
+          } \
+          else { \
+            BLI_assert(vi.visible); \
+          } \
           vi.co = vi.mvert->co; \
           vi.no = vi.mvert->no; \
           vi.index = vi.vert_indices[vi.i]; \
@@ -411,7 +428,8 @@ void pbvh_vertex_iter_init(PBVH *bvh, PBVHNode *node, PBVHVertexIter *vi, int mo
             vi.bm_vert = BLI_gsetIterator_getKey(&vi.bm_other_verts); \
             BLI_gsetIterator_step(&vi.bm_other_verts); \
           } \
-          if (mode == PBVH_ITER_UNIQUE && BM_elem_flag_test(vi.bm_vert, BM_ELEM_HIDDEN)) \
+          vi.visible = !BM_elem_flag_test_bool(vi.bm_vert, BM_ELEM_HIDDEN); \
+          if (mode == PBVH_ITER_UNIQUE && !vi.visible) \
             continue; \
           vi.co = vi.bm_vert->co; \
           vi.fno = vi.bm_vert->no; \
@@ -442,6 +460,9 @@ bool BKE_pbvh_node_vert_update_check_any(PBVH *bvh, PBVHNode *node);
 bool pbvh_has_mask(PBVH *bvh);
 void pbvh_show_mask_set(PBVH *bvh, bool show_mask);
 
+bool pbvh_has_face_sets(PBVH *bvh);
+void pbvh_show_face_sets_set(PBVH *bvh, bool show_face_sets);
+
 /* Parallelization */
 typedef void (*PBVHParallelRangeFunc)(void *__restrict userdata,
                                       const int iter,
@@ -466,6 +487,8 @@ void BKE_pbvh_parallel_range(const int start,
                              void *userdata,
                              PBVHParallelRangeFunc func,
                              const struct PBVHParallelSettings *settings);
+
+struct MVert *BKE_pbvh_get_verts(const PBVH *bvh);
 
 #ifdef __cplusplus
 }

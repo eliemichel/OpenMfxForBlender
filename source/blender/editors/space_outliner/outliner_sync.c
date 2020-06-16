@@ -32,6 +32,7 @@
 
 #include "BLI_compiler_compat.h"
 #include "BLI_ghash.h"
+#include "BLI_listbase.h"
 
 #include "BKE_armature.h"
 #include "BKE_context.h"
@@ -95,8 +96,8 @@ void ED_outliner_select_sync_flag_outliners(const bContext *C)
   wmWindowManager *wm = CTX_wm_manager(C);
 
   for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
-    for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
-      for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+    LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+      LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
         if (sl->spacetype == SPACE_OUTLINER) {
           SpaceOutliner *soutliner = (SpaceOutliner *)sl;
 
@@ -318,7 +319,7 @@ static void outliner_sync_selection_from_outliner(Scene *scene,
                                                   SelectedItems *selected_items)
 {
 
-  for (TreeElement *te = tree->first; te; te = te->next) {
+  LISTBASE_FOREACH (TreeElement *, te, tree) {
     TreeStoreElem *tselem = TREESTORE(te);
 
     if (tselem->type == 0 && te->idcode == ID_OB) {
@@ -350,8 +351,9 @@ static void outliner_sync_selection_from_outliner(Scene *scene,
 /* Set clean outliner and mark other outliners for syncing */
 void ED_outliner_select_sync_from_outliner(bContext *C, SpaceOutliner *soops)
 {
-  /* Don't sync in certain outliner display modes */
-  if (ELEM(soops->outlinevis, SO_LIBRARIES, SO_DATA_API, SO_ID_ORPHANS)) {
+  /* Don't sync if not checked or in certain outliner display modes */
+  if (!(soops->flag & SO_SYNC_SELECT) ||
+      ELEM(soops->outlinevis, SO_LIBRARIES, SO_DATA_API, SO_ID_ORPHANS)) {
     return;
   }
 
@@ -499,7 +501,7 @@ static void outliner_sync_selection_to_outliner(ViewLayer *view_layer,
                                                 SyncSelectActiveData *active_data,
                                                 const SyncSelectTypes *sync_types)
 {
-  for (TreeElement *te = tree->first; te; te = te->next) {
+  LISTBASE_FOREACH (TreeElement *, te, tree) {
     TreeStoreElem *tselem = TREESTORE(te);
 
     if (tselem->type == 0 && te->idcode == ID_OB) {

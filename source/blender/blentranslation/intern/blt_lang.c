@@ -33,8 +33,8 @@
 
 #include "RNA_types.h"
 
-#include "BLT_translation.h"
 #include "BLT_lang.h" /* own include */
+#include "BLT_translation.h"
 
 #include "BLI_path_util.h"
 #include "BLI_string.h"
@@ -253,7 +253,8 @@ void BLT_lang_free(void)
 }
 
 #ifdef WITH_INTERNATIONAL
-#  define ULANGUAGE ((U.language >= 0 && U.language < num_locales) ? U.language : 0)
+#  define ULANGUAGE \
+    ((U.language >= ULANGUAGE_AUTO && U.language < num_locales) ? U.language : ULANGUAGE_ENGLISH)
 #  define LOCALE(_id) (locales ? locales[(_id)] : "")
 #endif
 
@@ -263,10 +264,6 @@ void BLT_lang_set(const char *str)
   int ulang = ULANGUAGE;
   const char *short_locale = str ? str : LOCALE(ulang);
   const char *short_locale_utf8 = NULL;
-
-  if ((U.transopts & USER_DOTRANSLATE) == 0) {
-    return;
-  }
 
   /* We want to avoid locales like '.UTF-8'! */
   if (short_locale[0]) {
@@ -388,13 +385,7 @@ static void blt_lang_check_ime_supported(void)
 {
 #ifdef WITH_INPUT_IME
   const char *uilng = BLT_lang_get();
-  if (U.transopts & USER_DOTRANSLATE) {
-    ime_is_lang_supported = STREQ(uilng, "zh_CN") || STREQ(uilng, "zh_TW") ||
-                            STREQ(uilng, "ja_JP");
-  }
-  else {
-    ime_is_lang_supported = false;
-  }
+  ime_is_lang_supported = STREQ(uilng, "zh_CN") || STREQ(uilng, "zh_TW") || STREQ(uilng, "ja_JP");
 #else
   ime_is_lang_supported = false;
 #endif

@@ -26,8 +26,8 @@
 
 #include "DNA_space_types.h"
 
-#include "BLI_rect.h"
 #include "BLI_math_base.h"
+#include "BLI_rect.h"
 
 #include "UI_resources.h"
 
@@ -160,6 +160,12 @@ void WM_operator_properties_filesel(wmOperatorType *ot,
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
   prop = RNA_def_boolean(
       ot->srna, "filter_usd", (filter & FILE_TYPE_USD) != 0, "Filter USD files", "");
+  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
+  prop = RNA_def_boolean(ot->srna,
+                         "filter_volume",
+                         (filter & FILE_TYPE_VOLUME) != 0,
+                         "Filter OpenVDB volume files",
+                         "");
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
   prop = RNA_def_boolean(
       ot->srna, "filter_folder", (filter & FILE_TYPE_FOLDER) != 0, "Filter folders", "");
@@ -396,6 +402,25 @@ void WM_operator_properties_select_operation_simple(wmOperatorType *ot)
       {0, NULL, 0, NULL, NULL},
   };
   PropertyRNA *prop = RNA_def_enum(ot->srna, "mode", select_mode_items, SEL_OP_SET, "Mode", "");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+}
+
+void WM_operator_properties_select_walk_direction(wmOperatorType *ot)
+{
+  static const EnumPropertyItem direction_items[] = {
+      {UI_SELECT_WALK_UP, "UP", 0, "Prev", ""},
+      {UI_SELECT_WALK_DOWN, "DOWN", 0, "Next", ""},
+      {UI_SELECT_WALK_LEFT, "LEFT", 0, "Left", ""},
+      {UI_SELECT_WALK_RIGHT, "RIGHT", 0, "Right", ""},
+      {0, NULL, 0, NULL, NULL},
+  };
+  PropertyRNA *prop;
+  prop = RNA_def_enum(ot->srna,
+                      "direction",
+                      direction_items,
+                      0,
+                      "Walk Direction",
+                      "Select/Deselect element in this direction");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 

@@ -22,49 +22,51 @@
  */
 
 #include <ctype.h>
-#include <stdlib.h>
-#include <math.h>
-#include <string.h>
-#include <stdio.h>
 #include <float.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
-#include "BLI_listbase.h"
-#include "BLI_string.h"
+#include "BLI_alloca.h"
 #include "BLI_ghash.h"
+#include "BLI_listbase.h"
+#include "BLI_math.h"
+#include "BLI_string.h"
 #include "BLI_task.h"
 #include "BLI_utildefines.h"
-#include "BLI_alloca.h"
+#include "BLT_translation.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_mesh_types.h"
 #include "DNA_lattice_types.h"
 #include "DNA_listBase.h"
+#include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
-#include "BKE_animsys.h"
-#include "BKE_armature.h"
 #include "BKE_action.h"
-#include "BKE_anim.h"
+#include "BKE_anim_visualization.h"
+#include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_curve.h"
 #include "BKE_deform.h"
 #include "BKE_displist.h"
 #include "BKE_idprop.h"
-#include "BKE_library.h"
+#include "BKE_idtype.h"
 #include "BKE_lattice.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
 
 #include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_query.h"
 
 #include "BIK_api.h"
 
@@ -73,6 +75,97 @@
 #include "CLG_log.h"
 
 static CLG_LogRef LOG = {"bke.armature"};
+
+/*************************** Prototypes ***************************/
+
+static void copy_bonechildren(Bone *bone_dst,
+                              const Bone *bone_src,
+                              const Bone *bone_src_act,
+                              Bone **r_bone_dst_act,
+                              const int flag);
+
+static void copy_bonechildren_custom_handles(Bone *bone_dst, bArmature *arm_dst);
+
+/*********************** Armature Datablock ***********************/
+
+/**
+ * Only copy internal data of Armature ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
+ *
+ * WARNING! This function will not handle ID user count!
+ *
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
+ */
+static void armature_copy_data(Main *UNUSED(bmain), ID *id_dst, const ID *id_src, const int flag)
+{
+  bArmature *armature_dst = (bArmature *)id_dst;
+  const bArmature *armature_src = (const bArmature *)id_src;
+
+  Bone *bone_src, *bone_dst;
+  Bone *bone_dst_act = NULL;
+
+  /* We never handle usercount here for own data. */
+  const int flag_subdata = flag | LIB_ID_CREATE_NO_USER_REFCOUNT;
+
+  armature_dst->bonehash = NULL;
+
+  BLI_duplicatelist(&armature_dst->bonebase, &armature_src->bonebase);
+
+  /* Duplicate the childrens' lists */
+  bone_dst = armature_dst->bonebase.first;
+  for (bone_src = armature_src->bonebase.first; bone_src; bone_src = bone_src->next) {
+    bone_dst->parent = NULL;
+    copy_bonechildren(bone_dst, bone_src, armature_src->act_bone, &bone_dst_act, flag_subdata);
+    bone_dst = bone_dst->next;
+  }
+
+  armature_dst->act_bone = bone_dst_act;
+
+  BKE_armature_bone_hash_make(armature_dst);
+
+  /* Fix custom handle references. */
+  for (bone_dst = armature_dst->bonebase.first; bone_dst; bone_dst = bone_dst->next) {
+    copy_bonechildren_custom_handles(bone_dst, armature_dst);
+  }
+
+  armature_dst->edbo = NULL;
+  armature_dst->act_edbone = NULL;
+}
+
+/** Free (or release) any data used by this armature (does not free the armature itself). */
+static void armature_free_data(struct ID *id)
+{
+  bArmature *armature = (bArmature *)id;
+
+  BKE_armature_bone_hash_free(armature);
+  BKE_armature_bonelist_free(&armature->bonebase);
+
+  /* free editmode data */
+  if (armature->edbo) {
+    BLI_freelistN(armature->edbo);
+
+    MEM_freeN(armature->edbo);
+    armature->edbo = NULL;
+  }
+}
+
+IDTypeInfo IDType_ID_AR = {
+    .id_code = ID_AR,
+    .id_filter = FILTER_ID_AR,
+    .main_listbase_index = INDEX_ID_AR,
+    .struct_size = sizeof(bArmature),
+    .name = "Armature",
+    .name_plural = "armatures",
+    .translation_context = BLT_I18NCONTEXT_ID_ARMATURE,
+    .flags = 0,
+
+    .init_data = NULL,
+    .copy_data = armature_copy_data,
+    .free_data = armature_free_data,
+    .make_local = NULL,
+};
 
 /* **************** Generic Functions, data level *************** */
 
@@ -98,7 +191,7 @@ bArmature *BKE_armature_from_object(Object *ob)
 int BKE_armature_bonelist_count(ListBase *lb)
 {
   int i = 0;
-  for (Bone *bone = lb->first; bone; bone = bone->next) {
+  LISTBASE_FOREACH (Bone *, bone, lb) {
     i += 1 + BKE_armature_bonelist_count(&bone->childbase);
   }
 
@@ -117,28 +210,6 @@ void BKE_armature_bonelist_free(ListBase *lb)
   }
 
   BLI_freelistN(lb);
-}
-
-/** Free (or release) any data used by this armature (does not free the armature itself). */
-void BKE_armature_free(bArmature *arm)
-{
-  BKE_animdata_free(&arm->id, false);
-
-  BKE_armature_bone_hash_free(arm);
-  BKE_armature_bonelist_free(&arm->bonebase);
-
-  /* free editmode data */
-  if (arm->edbo) {
-    BLI_freelistN(arm->edbo);
-
-    MEM_freeN(arm->edbo);
-    arm->edbo = NULL;
-  }
-}
-
-void BKE_armature_make_local(Main *bmain, bArmature *arm, const bool lib_local)
-{
-  BKE_id_make_local_generic(bmain, &arm->id, true, lib_local);
 }
 
 static void copy_bonechildren(Bone *bone_dst,
@@ -184,52 +255,6 @@ static void copy_bonechildren_custom_handles(Bone *bone_dst, bArmature *arm_dst)
        bone_dst_child = bone_dst_child->next) {
     copy_bonechildren_custom_handles(bone_dst_child, arm_dst);
   }
-}
-
-/**
- * Only copy internal data of Armature ID from source
- * to already allocated/initialized destination.
- * You probably never want to use that directly,
- * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
- *
- * WARNING! This function will not handle ID user count!
- *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
- */
-void BKE_armature_copy_data(Main *UNUSED(bmain),
-                            bArmature *arm_dst,
-                            const bArmature *arm_src,
-                            const int flag)
-{
-  Bone *bone_src, *bone_dst;
-  Bone *bone_dst_act = NULL;
-
-  /* We never handle usercount here for own data. */
-  const int flag_subdata = flag | LIB_ID_CREATE_NO_USER_REFCOUNT;
-
-  arm_dst->bonehash = NULL;
-
-  BLI_duplicatelist(&arm_dst->bonebase, &arm_src->bonebase);
-
-  /* Duplicate the childrens' lists */
-  bone_dst = arm_dst->bonebase.first;
-  for (bone_src = arm_src->bonebase.first; bone_src; bone_src = bone_src->next) {
-    bone_dst->parent = NULL;
-    copy_bonechildren(bone_dst, bone_src, arm_src->act_bone, &bone_dst_act, flag_subdata);
-    bone_dst = bone_dst->next;
-  }
-
-  arm_dst->act_bone = bone_dst_act;
-
-  BKE_armature_bone_hash_make(arm_dst);
-
-  /* Fix custom handle references. */
-  for (bone_dst = arm_dst->bonebase.first; bone_dst; bone_dst = bone_dst->next) {
-    copy_bonechildren_custom_handles(bone_dst, arm_dst);
-  }
-
-  arm_dst->edbo = NULL;
-  arm_dst->act_edbone = NULL;
 }
 
 bArmature *BKE_armature_copy(Main *bmain, const bArmature *arm)
@@ -279,7 +304,7 @@ static void armature_transform_recurse(ListBase *bonebase,
                                        const Bone *bone_parent,
                                        const float arm_mat_parent_inv[4][4])
 {
-  for (Bone *bone = bonebase->first; bone; bone = bone->next) {
+  LISTBASE_FOREACH (Bone *, bone, bonebase) {
 
     /* Store the initial bone roll in a matrix, this is needed even for child bones
      * so any change in head/tail doesn't cause the roll to change.
@@ -400,7 +425,7 @@ Bone *BKE_armature_find_bone_name(bArmature *arm, const char *name)
 
 static void armature_bone_from_name_insert_recursive(GHash *bone_hash, ListBase *lb)
 {
-  for (Bone *bone = lb->first; bone; bone = bone->next) {
+  LISTBASE_FOREACH (Bone *, bone, lb) {
     BLI_ghash_insert(bone_hash, bone->name, bone);
     armature_bone_from_name_insert_recursive(bone_hash, &bone->childbase);
   }
@@ -450,20 +475,27 @@ bool BKE_armature_bone_flag_test_recursive(const Bone *bone, int flag)
 
 static void armature_refresh_layer_used_recursive(bArmature *arm, ListBase *bones)
 {
-  for (Bone *bone = bones->first; bone; bone = bone->next) {
+  LISTBASE_FOREACH (Bone *, bone, bones) {
     arm->layer_used |= bone->layer;
     armature_refresh_layer_used_recursive(arm, &bone->childbase);
   }
 }
 
-/* Update the layers_used variable after bones are moved between layer
- * NOTE: Used to be done in drawing code in 2.7, but that won't work with
- *       Copy-on-Write, as drawing uses evaluated copies.
- */
-void BKE_armature_refresh_layer_used(bArmature *arm)
+void BKE_armature_refresh_layer_used(struct Depsgraph *depsgraph, struct bArmature *arm)
 {
+  if (arm->edbo != NULL) {
+    /* Don't perform this update when the armature is in edit mode. In that case it should be
+     * handled by ED_armature_edit_refresh_layer_used(). */
+    return;
+  }
+
   arm->layer_used = 0;
   armature_refresh_layer_used_recursive(arm, &arm->bonebase);
+
+  if (depsgraph == NULL || DEG_is_active(depsgraph)) {
+    bArmature *arm_orig = (bArmature *)DEG_get_original_id(&arm->id);
+    arm_orig->layer_used = arm->layer_used;
+  }
 }
 
 /* Finds the best possible extension to the name on a particular axis. (For renaming, check for
@@ -983,12 +1015,12 @@ void BKE_pchan_bbone_handles_compute(const BBoneSplineParameters *param,
    * - These properties allow users to hand-animate the
    *   bone curve/shape, without having to resort to using
    *   extra bones
-   * - The "bone" level offsets are for defining the restpose
+   * - The "bone" level offsets are for defining the rest-pose
    *   shape of the bone (e.g. for curved eyebrows for example).
    *   -> In the viewport, it's needed to define what the rest pose
    *      looks like
    *   -> For "rest == 0", we also still need to have it present
-   *      so that we can "cancel out" this restpose when it comes
+   *      so that we can "cancel out" this rest-pose when it comes
    *      time to deform some geometry, it won't cause double transforms.
    * - The "pchan" level offsets are the ones that animators actually
    *   end up animating
@@ -1533,7 +1565,7 @@ static void armature_vert_task(void *__restrict userdata,
   }
 
   if (armature_def_nr != -1 && dvert) {
-    armature_weight = defvert_find_weight(dvert, armature_def_nr);
+    armature_weight = BKE_defvert_find_weight(dvert, armature_def_nr);
 
     if (data->invert_vgroup) {
       armature_weight = 1.0f - armature_weight;
@@ -1562,8 +1594,8 @@ static void armature_vert_task(void *__restrict userdata,
     int deformed = 0;
     unsigned int j;
     for (j = dvert->totweight; j != 0; j--, dw++) {
-      const int index = dw->def_nr;
-      if (index >= 0 && index < data->defbase_tot && (pchan = data->defnrToPC[index])) {
+      const uint index = dw->def_nr;
+      if (index < data->defbase_tot && (pchan = data->defnrToPC[index])) {
         float weight = dw->weight;
         Bone *bone = pchan->bone;
 
@@ -1681,7 +1713,7 @@ void armature_deform_verts(Object *armOb,
   }
 
   /* get the def_nr for the overall armature vertex group if present */
-  armature_def_nr = defgroup_name_index(target, defgrp_name);
+  armature_def_nr = BKE_object_defgroup_name_index(target, defgrp_name);
 
   if (ELEM(target->type, OB_MESH, OB_LATTICE, OB_GPENCIL)) {
     defbase_tot = BLI_listbase_count(&target->defbase);
@@ -2442,8 +2474,10 @@ void vec_roll_to_mat3(const float vec[3], const float roll, float mat[3][3])
   vec_roll_to_mat3_normalized(nor, roll, mat);
 }
 
-/* recursive part, calculates restposition of entire tree of children */
-/* used by exiting editmode too */
+/**
+ * Recursive part, calculates rest-position of entire tree of children.
+ * \note Used when exiting edit-mode too.
+ */
 void BKE_armature_where_is_bone(Bone *bone, const Bone *bone_parent, const bool use_recursion)
 {
   float vec[3];
@@ -2496,7 +2530,7 @@ void BKE_armature_where_is(bArmature *arm)
 
 /* if bone layer is protected, copy the data from from->pose
  * when used with linked libraries this copies from the linked pose into the local pose */
-static void pose_proxy_synchronize(Object *ob, Object *from, int layer_protected)
+static void pose_proxy_sync(Object *ob, Object *from, int layer_protected)
 {
   bPose *pose = ob->pose, *frompose = from->pose;
   bPoseChannel *pchan, *pchanp;
@@ -2675,7 +2709,7 @@ static int rebuild_pose_bone(bPose *pose, Bone *bone, bPoseChannel *parchan, int
  */
 void BKE_pose_clear_pointers(bPose *pose)
 {
-  for (bPoseChannel *pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
+  LISTBASE_FOREACH (bPoseChannel *, pchan, &pose->chanbase) {
     pchan->bone = NULL;
     pchan->child = NULL;
   }
@@ -2683,7 +2717,7 @@ void BKE_pose_clear_pointers(bPose *pose)
 
 void BKE_pose_remap_bone_pointers(bArmature *armature, bPose *pose)
 {
-  for (bPoseChannel *pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
+  LISTBASE_FOREACH (bPoseChannel *, pchan, &pose->chanbase) {
     pchan->bone = BKE_armature_find_bone_name(armature, pchan->name);
   }
 }
@@ -2759,7 +2793,7 @@ void BKE_pose_rebuild(Main *bmain, Object *ob, bArmature *arm, const bool do_id_
    * using COW tag was working this morning, but not anymore... */
   if (ob->proxy != NULL && (ob->id.tag & LIB_TAG_NO_MAIN) == 0) {
     BKE_object_copy_proxy_drivers(ob, ob->proxy);
-    pose_proxy_synchronize(ob, ob->proxy, arm->layer_protected);
+    pose_proxy_sync(ob, ob->proxy, arm->layer_protected);
   }
 
   BKE_pose_update_constraint_flags(pose); /* for IK detection for example */
@@ -2914,7 +2948,7 @@ void BKE_pose_where_is(struct Depsgraph *depsgraph, Scene *scene, Object *ob)
 
   ctime = BKE_scene_frame_get(scene); /* not accurate... */
 
-  /* In editmode or restposition we read the data from the bones */
+  /* In edit-mode or rest-position we read the data from the bones. */
   if (arm->edbo || (arm->flag & ARM_RESTPOS)) {
     for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
       bone = pchan->bone;

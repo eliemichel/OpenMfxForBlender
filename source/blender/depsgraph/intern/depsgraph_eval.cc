@@ -20,14 +20,14 @@
 /** \file
  * \ingroup depsgraph
  *
- * Evaluation engine entrypoints for Depsgraph Engine.
+ * Evaluation engine entry-points for Depsgraph Engine.
  */
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
-#include "BLI_ghash.h"
 
 extern "C" {
 #include "BKE_scene.h"

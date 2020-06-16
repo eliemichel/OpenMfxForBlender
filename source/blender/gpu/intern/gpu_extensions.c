@@ -24,9 +24,9 @@
  * with checks for drivers and GPU support.
  */
 
-#include "BLI_utildefines.h"
 #include "BLI_math_base.h"
 #include "BLI_math_vector.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_global.h"
 #include "MEM_guardedalloc.h"
@@ -34,13 +34,13 @@
 #include "GPU_extensions.h"
 #include "GPU_framebuffer.h"
 #include "GPU_glew.h"
-#include "GPU_texture.h"
 #include "GPU_platform.h"
+#include "GPU_texture.h"
 
 #include "intern/gpu_private.h"
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifdef WIN32
@@ -78,6 +78,8 @@ static struct GPUGlobal {
   /* Some Intel drivers have limited support for `GLEW_ARB_base_instance` so in
    * these cases it is best to indicate that it is not supported. See T67951 */
   bool glew_arb_base_instance_is_supported;
+  /* Cubemap Array support. */
+  bool glew_arb_texture_cube_map_array_is_supported;
   /* Some Intel drivers have issues with using mips as framebuffer targets if
    * GL_TEXTURE_MAX_LEVEL is higher than the target mip.
    * We need a workaround in this cases. */
@@ -90,6 +92,7 @@ static struct GPUGlobal {
   /* Crappy driver don't know how to map framebuffer slot to output vars...
    * We need to have no "holes" in the output buffer slots. */
   bool unused_fb_slot_workaround;
+  bool broken_amd_driver;
   /* Some crappy Intel drivers don't work well with shaders created in different
    * rendering contexts. */
   bool context_local_shaders_workaround;
@@ -196,6 +199,11 @@ bool GPU_arb_base_instance_is_supported(void)
   return GG.glew_arb_base_instance_is_supported;
 }
 
+bool GPU_arb_texture_cube_map_array_is_supported(void)
+{
+  return GG.glew_arb_texture_cube_map_array_is_supported;
+}
+
 bool GPU_mip_render_workaround(void)
 {
   return GG.mip_render_workaround;
@@ -219,7 +227,7 @@ bool GPU_context_local_shaders_workaround(void)
 bool GPU_crappy_amd_driver(void)
 {
   /* Currently are the same drivers with the `unused_fb_slot` problem. */
-  return GPU_unused_fb_slot_workaround();
+  return GG.broken_amd_driver;
 }
 
 void gpu_extensions_init(void)
@@ -268,6 +276,7 @@ void gpu_extensions_init(void)
        * And many others... */
 
       GG.unused_fb_slot_workaround = true;
+      GG.broken_amd_driver = true;
     }
   }
 
@@ -279,6 +288,7 @@ void gpu_extensions_init(void)
   }
 
   GG.glew_arb_base_instance_is_supported = GLEW_ARB_base_instance;
+  GG.glew_arb_texture_cube_map_array_is_supported = GLEW_ARB_texture_cube_map_array;
   gpu_detect_mip_render_workaround();
 
   if (G.debug & G_DEBUG_GPU_FORCE_WORKAROUNDS) {
@@ -291,6 +301,14 @@ void gpu_extensions_init(void)
     GG.mip_render_workaround = true;
     GG.depth_blitting_workaround = true;
     GG.unused_fb_slot_workaround = true;
+    GG.context_local_shaders_workaround = GLEW_ARB_get_program_binary;
+  }
+
+  /* Special fix for theses specific GPUs. Without thoses workaround, blender crashes on strartup.
+   * (see T72098) */
+  if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_OFFICIAL) &&
+      (strstr(renderer, "HD Graphics 620") || strstr(renderer, "HD Graphics 630"))) {
+    GG.mip_render_workaround = true;
     GG.context_local_shaders_workaround = GLEW_ARB_get_program_binary;
   }
 
@@ -328,7 +346,9 @@ void gpu_extensions_init(void)
       GG.context_local_shaders_workaround = true;
     }
   }
-  else if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE)) {
+  else if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE) &&
+           (strstr(version, "Mesa 18.") || strstr(version, "Mesa 19.0") ||
+            strstr(version, "Mesa 19.1") || strstr(version, "Mesa 19.2"))) {
     /* See T70187: merging vertices fail. This has been tested from 18.2.2 till 19.3.0~dev of the
      * Mesa driver */
     GG.unused_fb_slot_workaround = true;
@@ -344,7 +364,11 @@ void gpu_extensions_exit(void)
 
 bool GPU_mem_stats_supported(void)
 {
+#ifndef GPU_STANDALONE
   return (GLEW_NVX_gpu_memory_info || GLEW_ATI_meminfo) && (G.debug & G_DEBUG_GPU_MEM);
+#else
+  return false;
+#endif
 }
 
 void GPU_mem_stats_get(int *totalmem, int *freemem)

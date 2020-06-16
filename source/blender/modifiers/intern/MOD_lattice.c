@@ -29,8 +29,8 @@
 
 #include "BKE_editmesh.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 
@@ -101,8 +101,14 @@ static void deformVerts(ModifierData *md,
 
   MOD_previous_vcos_store(md, vertexCos); /* if next modifier needs original vertices */
 
-  lattice_deform_verts(
-      lmd->object, ctx->object, mesh_src, vertexCos, numVerts, lmd->name, lmd->strength);
+  lattice_deform_verts(lmd->object,
+                       ctx->object,
+                       mesh_src,
+                       vertexCos,
+                       numVerts,
+                       lmd->flag,
+                       lmd->name,
+                       lmd->strength);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
     BKE_id_free(NULL, mesh_src);

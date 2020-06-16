@@ -27,13 +27,22 @@ if NOT "%verbose%" == "" (
 
 if "%VS_InstallDir%"=="" (
 	if NOT "%verbose%" == "" (
-		echo Visual Studio is detected but the "Desktop development with C++" workload has not been instlled
+		echo.
+		echo Visual Studio is detected but no suitable installation was found. 
+		echo.
+		echo Check the "Desktop development with C++" workload has been installed. 
+		echo. 
+		echo If you are attempting to use either Visual Studio Preview version or the Visual C++ Build tools, Please see 'make help' on how to opt in to those toolsets.
+		echo. 
 		goto FAIL
 	)
 )
 
 set VCVARS=%VS_InstallDir%\VC\Auxiliary\Build\vcvarsall.bat
 if exist "%VCVARS%" (
+	if NOT "%verbose%" == "" (
+		echo calling "%VCVARS%" %BUILD_ARCH%
+	)
 	call "%VCVARS%" %BUILD_ARCH%
 ) else (
 	if NOT "%verbose%" == "" (
@@ -43,6 +52,9 @@ if exist "%VCVARS%" (
 )
 
 rem try msbuild
+if NOT "%verbose%" == "" (
+	echo Testing for MSBuild 
+)
 msbuild /version > NUL 
 if errorlevel 1 (
 	if NOT "%verbose%" == "" (
@@ -56,6 +68,9 @@ if NOT "%verbose%" == "" (
 )
 
 REM try the c++ compiler
+if NOT "%verbose%" == "" (
+	echo Testing for the C/C++ Compiler
+)
 cl 2> NUL 1>&2
 if errorlevel 1 (
 	if NOT "%verbose%" == "" (

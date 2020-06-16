@@ -22,8 +22,9 @@
  * \brief Configuration file
  */
 
-#include <string>
 #include <algorithm>
+#include <string>
+
 #include "../system/Precision.h"
 
 #ifdef WITH_CXX_GUARDEDALLOC
@@ -43,7 +44,6 @@ class Path {
   string _ModelsPath;
   string _PatternsPath;
   string _BrushesPath;
-  string _PythonPath;
   string _EnvMapDir;
   string _MapsDir;
   string _HomeDir;
@@ -71,10 +71,6 @@ class Path {
   const string &getBrushesPath() const
   {
     return _BrushesPath;
-  }
-  const string &getPythonPath() const
-  {
-    return _PythonPath;
   }
   const string &getEnvMapDir() const
   {

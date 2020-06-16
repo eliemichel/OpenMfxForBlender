@@ -32,23 +32,23 @@
 
 #include "BLT_translation.h"
 
-#include "DNA_brush_types.h"
 #include "DNA_ID.h"
+#include "DNA_brush_types.h"
+#include "DNA_linestyle_types.h"
 #include "DNA_node_types.h"
-#include "DNA_object_types.h"
 #include "DNA_object_force_types.h"
+#include "DNA_object_types.h"
 #include "DNA_particle_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
-#include "DNA_linestyle_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "BKE_context.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_layer.h"
 #include "BKE_linestyle.h"
 #include "BKE_modifier.h"
-#include "BKE_gpencil_modifier.h"
 #include "BKE_node.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
@@ -373,7 +373,7 @@ static void template_texture_select(bContext *C, void *user_p, void *UNUSED(arg)
 
   /* set user as active */
   if (user->node) {
-    ED_node_set_active(CTX_data_main(C), user->ntree, user->node);
+    ED_node_set_active(CTX_data_main(C), user->ntree, user->node, NULL);
     ct->texture = NULL;
   }
   else {

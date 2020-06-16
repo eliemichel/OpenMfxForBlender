@@ -25,13 +25,13 @@
 
 #include "BLI_math.h"
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_bvhutils.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 
 #include "DEG_depsgraph.h"

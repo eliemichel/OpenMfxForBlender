@@ -21,19 +21,19 @@
  * \ingroup edobj
  */
 
+#include <ctype.h>
+#include <float.h>
+#include <math.h>
+#include <stddef.h>  //for offsetof
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 #include <time.h>
-#include <float.h>
-#include <ctype.h>
-#include <stddef.h>  //for offsetof
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -41,25 +41,26 @@
 #include "DNA_collection_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_material_types.h"
-#include "DNA_meta_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_object_force_types.h"
-#include "DNA_meshdata_types.h"
-#include "DNA_vfont_types.h"
-#include "DNA_mesh_types.h"
 #include "DNA_lattice_types.h"
+#include "DNA_material_types.h"
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_meta_types.h"
+#include "DNA_object_force_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_vfont_types.h"
 #include "DNA_workspace_types.h"
 
 #include "IMB_imbuf_types.h"
 
-#include "BKE_anim.h"
+#include "BKE_anim_visualization.h"
 #include "BKE_collection.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_editlattice.h"
+#include "BKE_editmesh.h"
 #include "BKE_effect.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
@@ -74,10 +75,9 @@
 #include "BKE_paint.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
-#include "BKE_softbody.h"
-#include "BKE_editmesh.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
+#include "BKE_softbody.h"
 #include "BKE_workspace.h"
 
 #include "DEG_depsgraph.h"
@@ -86,15 +86,15 @@
 #include "ED_anim_api.h"
 #include "ED_armature.h"
 #include "ED_curve.h"
-#include "ED_mesh.h"
-#include "ED_mball.h"
+#include "ED_gpencil.h"
+#include "ED_image.h"
 #include "ED_lattice.h"
+#include "ED_mball.h"
+#include "ED_mesh.h"
 #include "ED_object.h"
 #include "ED_outliner.h"
 #include "ED_screen.h"
 #include "ED_undo.h"
-#include "ED_image.h"
-#include "ED_gpencil.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -106,9 +106,9 @@
 #include "UI_resources.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
 #include "WM_toolsystem.h"
+#include "WM_types.h"
 
 #include "object_intern.h"  // own include
 
@@ -166,7 +166,7 @@ static int object_hide_view_clear_exec(bContext *C, wmOperator *op)
   const bool select = RNA_boolean_get(op->ptr, "select");
   bool changed = false;
 
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     if (base->flag & BASE_HIDDEN) {
       base->flag &= ~BASE_HIDDEN;
       changed = true;
@@ -217,8 +217,8 @@ static int object_hide_view_set_exec(bContext *C, wmOperator *op)
   bool changed = false;
 
   /* Hide selected or unselected objects. */
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-    if (!(base->flag & BASE_VISIBLE_DEPSGRAPH)) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
+    if (!(base->flag & BASE_VISIBLE_VIEWLAYER)) {
       continue;
     }
 
@@ -321,7 +321,7 @@ void ED_collection_hide_menu_draw(const bContext *C, uiLayout *layout)
 
   uiLayoutSetOperatorContext(layout, WM_OP_EXEC_REGION_WIN);
 
-  for (LayerCollection *lc = lc_scene->layer_collections.first; lc; lc = lc->next) {
+  LISTBASE_FOREACH (LayerCollection *, lc, &lc_scene->layer_collections) {
     int index = BKE_layer_collection_findindex(view_layer, lc);
     uiLayout *row = uiLayoutRow(layout, false);
 
@@ -414,7 +414,7 @@ static bool mesh_needs_keyindex(Main *bmain, const Mesh *me)
       return true;
     }
     if (ob->data == me) {
-      for (const ModifierData *md = ob->modifiers.first; md; md = md->next) {
+      LISTBASE_FOREACH (const ModifierData *, md, &ob->modifiers) {
         if (md->type == eModifierType_Hook) {
           return true;
         }
@@ -454,8 +454,8 @@ static bool ED_object_editmode_load_ex(Main *bmain, Object *obedit, const bool f
     }
     /* will be recalculated as needed. */
     {
-      ED_mesh_mirror_spatial_table(NULL, NULL, NULL, NULL, 'e');
-      ED_mesh_mirror_topo_table(NULL, NULL, 'e');
+      ED_mesh_mirror_spatial_table_end(obedit);
+      ED_mesh_mirror_topo_table_end(obedit);
     }
   }
   else if (obedit->type == OB_ARMATURE) {
@@ -629,7 +629,7 @@ bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag
     bArmature *arm = ob->data;
     ok = 1;
     ED_armature_to_edit(arm);
-    /* to ensure all goes in restposition and without striding */
+    /* To ensure all goes in rest-position and without striding. */
 
     arm->needs_flush_to_id = 0;
 
@@ -1020,7 +1020,7 @@ static int object_calculate_paths_invoke(bContext *C, wmOperator *op, const wmEv
 
   /* show popup dialog to allow editing of range... */
   /* FIXME: hardcoded dimensions here are just arbitrary */
-  return WM_operator_props_dialog_popup(C, op, 200, 200);
+  return WM_operator_props_dialog_popup(C, op, 200);
 }
 
 /* Calculate/recalculate whole paths (avs.path_sf to avs.path_ef) */
@@ -1370,7 +1370,8 @@ static const EnumPropertyItem *object_mode_set_itemsf(bContext *C,
                 OB_MODE_EDIT_GPENCIL,
                 OB_MODE_PAINT_GPENCIL,
                 OB_MODE_SCULPT_GPENCIL,
-                OB_MODE_WEIGHT_GPENCIL) &&
+                OB_MODE_WEIGHT_GPENCIL,
+                OB_MODE_VERTEX_GPENCIL) &&
            (ob->type == OB_GPENCIL)) ||
           (input->value == OB_MODE_OBJECT)) {
         RNA_enum_item_add(&item, &totitem, input);
@@ -1392,64 +1393,105 @@ static const EnumPropertyItem *object_mode_set_itemsf(bContext *C,
 
 static bool object_mode_set_poll(bContext *C)
 {
-  /* Since Grease Pencil editmode is also handled here,
-   * we have a special exception for allowing this operator
-   * to still work in that case when there's no active object
-   * so that users can exit editmode this way as per normal.
-   */
-  if (ED_operator_object_active_editable(C)) {
-    return true;
-  }
-  else {
-    return (CTX_data_gpencil_data(C) != NULL);
-  }
+  /* Needed as #ED_operator_object_active_editable doesn't call use 'active_object'. */
+  Object *ob = CTX_data_active_object(C);
+  return ED_operator_object_active_editable_ex(C, ob);
 }
 
 static int object_mode_set_exec(bContext *C, wmOperator *op)
 {
-  bool use_submode = STREQ(op->idname, "OBJECT_OT_mode_set_with_submode");
+  const bool use_submode = STREQ(op->idname, "OBJECT_OT_mode_set_with_submode");
   Object *ob = CTX_data_active_object(C);
   eObjectMode mode = RNA_enum_get(op->ptr, "mode");
-  eObjectMode restore_mode = (ob) ? ob->mode : OB_MODE_OBJECT;
   const bool toggle = RNA_boolean_get(op->ptr, "toggle");
 
   /* by default the operator assume is a mesh, but if gp object change mode */
-  if ((ob != NULL) && (ob->type == OB_GPENCIL) && (mode == OB_MODE_EDIT)) {
+  if ((ob->type == OB_GPENCIL) && (mode == OB_MODE_EDIT)) {
     mode = OB_MODE_EDIT_GPENCIL;
   }
 
-  if (!ob || !ED_object_mode_compat_test(ob, mode)) {
+  if (!ED_object_mode_compat_test(ob, mode)) {
     return OPERATOR_PASS_THROUGH;
   }
 
-  if (ob->mode != mode) {
-    /* we should be able to remove this call, each operator calls  */
-    ED_object_mode_compat_set(C, ob, mode, op->reports);
-  }
-
-  /* Exit current mode if it's not the mode we're setting */
-  if (mode != OB_MODE_OBJECT && (ob->mode != mode || toggle)) {
-    /* Enter new mode */
-    ED_object_mode_toggle(C, mode);
-  }
-
-  if (toggle) {
-    /* Special case for Object mode! */
-    if (mode == OB_MODE_OBJECT && restore_mode == OB_MODE_OBJECT &&
-        ob->restore_mode != OB_MODE_OBJECT) {
-      ED_object_mode_toggle(C, ob->restore_mode);
+  /**
+   * Mode Switching Logic (internal details).
+   *
+   * Notes:
+   * - Code below avoids calling mode switching functions more than once,
+   *   as this causes unnecessary calculations and undo steps to be added.
+   * - Even though toggle is called (#ED_object_mode_toggle),
+   *   this is just used to enable/disable the mode based on checking the current mode.
+   * - Code would read better if we used #ED_object_mode_set,
+   *   this needs some refactoring as it handles undo differently (TODO).
+   * - The previous mode (#Object.restore_mode) is object mode by default.
+   *
+   * Supported Cases:
+   * - Setting the mode (when the 'toggle' setting is off).
+   * - Toggle the mode:
+   *   - Toggle between object mode and non-object mode property.
+   *   - Toggle between the previous mode (#Object.restore_mode) and the mode property.
+   *   - Toggle object mode.
+   *     While this is similar to regular toggle,
+   *     this operator depends on there being a previous mode set
+   *     (this isn't bound to a key with the default key-map).
+   */
+  if (toggle == false) {
+    if (ob->mode != mode) {
+      if (mode == OB_MODE_OBJECT) {
+        /* Exit the current mode into object mode. */
+        ED_object_mode_compat_set(C, ob, OB_MODE_OBJECT, op->reports);
+      }
+      else {
+        /* Enter 'mode'. */
+        ED_object_mode_toggle(C, mode);
+      }
     }
-    else if (ob->mode == mode) {
-      /* For toggling, store old mode so we know what to go back to */
-      ob->restore_mode = restore_mode;
+  }
+  else {
+    const eObjectMode mode_prev = ob->mode;
+    /* When toggling object mode, we always use the restore mode,
+     * otherwise there is nothing to do. */
+    if (mode == OB_MODE_OBJECT) {
+      if (ob->mode != OB_MODE_OBJECT) {
+        /* Set object mode if the object is not already in object mode. */
+        if (ED_object_mode_compat_set(C, ob, OB_MODE_OBJECT, op->reports)) {
+          /* Store old mode so we know what to go back to. */
+          ob->restore_mode = mode_prev;
+        }
+      }
+      else {
+        if (ob->restore_mode != OB_MODE_OBJECT) {
+          /* Enter 'restore_mode'. */
+          ED_object_mode_toggle(C, ob->restore_mode);
+        }
+      }
     }
-    else if (ob->restore_mode != OB_MODE_OBJECT && ob->restore_mode != mode) {
-      ED_object_mode_toggle(C, ob->restore_mode);
+    else {
+      /* Non-object modes, enter the 'mode' unless it's already set,
+       * in that case use restore mode. */
+      if (ob->mode != mode) {
+        ED_object_mode_toggle(C, mode);
+        if (ob->mode == mode) {
+          /* Store old mode so we know what to go back to. */
+          ob->restore_mode = mode_prev;
+        }
+      }
+      else {
+        if (ob->restore_mode != OB_MODE_OBJECT) {
+          /* Enter 'restore_mode'. */
+          ED_object_mode_toggle(C, ob->restore_mode);
+        }
+        else {
+          /* Enter 'mode'. */
+          ED_object_mode_toggle(C, mode);
+        }
+      }
     }
   }
 
   /* if type is OB_GPENCIL, set cursor mode */
-  if ((ob) && (ob->type == OB_GPENCIL)) {
+  if (ob->type == OB_GPENCIL) {
     if (ob->data) {
       bGPdata *gpd = (bGPdata *)ob->data;
       ED_gpencil_setup_modes(C, gpd, ob->mode);
@@ -1484,8 +1526,7 @@ void OBJECT_OT_mode_set(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = object_mode_set_exec;
-
-  ot->poll = object_mode_set_poll;  // ED_operator_object_active_editable;
+  ot->poll = object_mode_set_poll;
 
   /* flags */
   ot->flag = 0; /* no register/undo here, leave it to operators being called */
@@ -1592,7 +1633,7 @@ static int move_to_collection_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  for (LinkData *link = objects.first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, &objects) {
     Object *ob = link->data;
 
     if (!is_link) {
@@ -1739,7 +1780,7 @@ static int move_to_collection_invoke(bContext *C, wmOperator *op, const wmEvent 
         BKE_collection_new_name_get(collection, name);
 
         RNA_property_string_set(op->ptr, prop, name);
-        return WM_operator_props_dialog_popup(C, op, 200, 100);
+        return WM_operator_props_dialog_popup(C, op, 200);
       }
     }
     return move_to_collection_exec(C, op);

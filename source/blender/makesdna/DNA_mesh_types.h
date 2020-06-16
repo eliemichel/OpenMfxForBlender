@@ -24,9 +24,9 @@
 #ifndef __DNA_MESH_TYPES_H__
 #define __DNA_MESH_TYPES_H__
 
-#include "DNA_defs.h"
 #include "DNA_ID.h"
 #include "DNA_customdata_types.h"
+#include "DNA_defs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -78,8 +78,8 @@ struct MLoopTri_Store {
 
 /* not saved in file! */
 typedef struct Mesh_Runtime {
-  /* Evaluated mesh for objects which do not have effective modifiers. This mesh is sued as a
-   * result of modifier stack evaluation.
+  /* Evaluated mesh for objects which do not have effective modifiers.
+   * This mesh is used as a result of modifier stack evaluation.
    * Since modifier stack evaluation is threaded on object level we need some synchronization. */
   struct Mesh *mesh_eval;
   void *eval_mutex;
@@ -134,9 +134,13 @@ typedef struct Mesh {
   struct MLoopCol *mloopcol;
   /* END BMESH ONLY */
 
-  /* mface stores the tessellation (triangulation) of the mesh,
-   * real faces are now stored in nface.*/
-  /** Array of mesh object mode faces for tessellation. */
+  /**
+   * Legacy face storage (quads & tries only),
+   * faces are now stored in #Mesh.mpoly & #Mesh.mloop arrays.
+   *
+   * \note This would be marked deprecated however the particles still use this at run-time
+   * for placing particles on the mesh (something which should be eventually upgraded).
+   */
   struct MFace *mface;
   /** Store tessellation face UV's and texture here. */
   struct MTFace *mtface;
@@ -196,7 +200,14 @@ typedef struct Mesh {
   float remesh_voxel_size;
   float remesh_voxel_adaptivity;
   char remesh_mode;
+
   char _pad1[3];
+
+  int face_sets_color_seed;
+  /* Stores the initial Face Set to be rendered white. This way the overlay can be enabled by
+   * default and Face Sets can be used without affecting the color of the mesh. */
+  int face_sets_color_default;
+
   /** Deprecated multiresolution modeling data, only keep for loading old files. */
   struct Multires *mr DNA_DEPRECATED;
 
@@ -237,9 +248,9 @@ enum {
 /* we cant have both flags enabled at once,
  * flags defined in DNA_scene_types.h */
 #define ME_EDIT_PAINT_SEL_MODE(_me) \
-  ((_me->editflag & ME_EDIT_PAINT_FACE_SEL) ? \
+  (((_me)->editflag & ME_EDIT_PAINT_FACE_SEL) ? \
        SCE_SELECT_FACE : \
-       (_me->editflag & ME_EDIT_PAINT_VERT_SEL) ? SCE_SELECT_VERTEX : 0)
+       ((_me)->editflag & ME_EDIT_PAINT_VERT_SEL) ? SCE_SELECT_VERTEX : 0)
 
 /* me->flag */
 enum {
@@ -258,6 +269,7 @@ enum {
   ME_REMESH_REPROJECT_PAINT_MASK = 1 << 12,
   ME_REMESH_FIX_POLES = 1 << 13,
   ME_REMESH_REPROJECT_VOLUME = 1 << 14,
+  ME_REMESH_REPROJECT_SCULPT_FACE_SETS = 1 << 15,
 };
 
 /* me->cd_flag */

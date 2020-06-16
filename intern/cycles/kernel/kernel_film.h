@@ -28,27 +28,21 @@ ccl_device float4 film_get_pass_result(KernelGlobals *kg,
   int display_pass_components = kernel_data.film.display_pass_components;
 
   if (display_pass_components == 4) {
-    ccl_global float4 *in = (ccl_global float4 *)(buffer + display_pass_stride +
-                                                  index * kernel_data.film.pass_stride);
+    float4 in = *(ccl_global float4 *)(buffer + display_pass_stride +
+                                       index * kernel_data.film.pass_stride);
     float alpha = use_display_sample_scale ?
-                      (kernel_data.film.use_display_pass_alpha ? in->w : 1.0f / sample_scale) :
+                      (kernel_data.film.use_display_pass_alpha ? in.w : 1.0f / sample_scale) :
                       1.0f;
 
-    pass_result = make_float4(in->x, in->y, in->z, alpha);
+    pass_result = make_float4(in.x, in.y, in.z, alpha);
 
     int display_divide_pass_stride = kernel_data.film.display_divide_pass_stride;
     if (display_divide_pass_stride != -1) {
       ccl_global float4 *divide_in = (ccl_global float4 *)(buffer + display_divide_pass_stride +
                                                            index * kernel_data.film.pass_stride);
-      if (divide_in->x != 0.0f) {
-        pass_result.x /= divide_in->x;
-      }
-      if (divide_in->y != 0.0f) {
-        pass_result.y /= divide_in->y;
-      }
-      if (divide_in->z != 0.0f) {
-        pass_result.z /= divide_in->z;
-      }
+      float3 divided = safe_divide_even_color(float4_to_float3(pass_result),
+                                              float4_to_float3(*divide_in));
+      pass_result = make_float4(divided.x, divided.y, divided.z, pass_result.w);
     }
 
     if (kernel_data.film.use_display_exposure) {

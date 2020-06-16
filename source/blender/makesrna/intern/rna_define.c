@@ -18,23 +18,23 @@
  * \ingroup RNA
  */
 
+#include <ctype.h>
 #include <float.h>
 #include <limits.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stddef.h>
 #include <string.h>
-#include <ctype.h>
 
 #include "BLI_utildefines.h"
 #include "MEM_guardedalloc.h"
 
+#include "DNA_defaults.h"
 #include "DNA_genfile.h"
 #include "DNA_sdna_types.h"
-#include "DNA_defaults.h"
 
-#include "BLI_listbase.h"
 #include "BLI_ghash.h"
+#include "BLI_listbase.h"
 
 #include "BLT_translation.h"
 
@@ -760,10 +760,10 @@ void RNA_define_fallback_property_update(int noteflag, const char *updatefunc)
 }
 #endif
 
-void RNA_struct_free_extension(StructRNA *srna, ExtensionRNA *ext)
+void RNA_struct_free_extension(StructRNA *srna, ExtensionRNA *rna_ext)
 {
 #ifdef RNA_RUNTIME
-  ext->free(ext->data);                    /* decref's the PyObject that the srna owns */
+  rna_ext->free(rna_ext->data);            /* decref's the PyObject that the srna owns */
   RNA_struct_blender_type_set(srna, NULL); /* this gets accessed again - XXX fixme */
 
   /* NULL the srna's value so RNA_struct_free wont complain of a leak */
@@ -771,7 +771,7 @@ void RNA_struct_free_extension(StructRNA *srna, ExtensionRNA *ext)
 
 #else
   (void)srna;
-  (void)ext;
+  (void)rna_ext;
 #endif
 }
 
@@ -1819,6 +1819,23 @@ void RNA_def_property_struct_runtime(PropertyRNA *prop, StructRNA *type)
   }
 }
 
+void RNA_def_property_enum_native_type(PropertyRNA *prop, const char *native_enum_type)
+{
+  StructRNA *srna = DefRNA.laststruct;
+  switch (prop->type) {
+    case PROP_ENUM: {
+      EnumPropertyRNA *eprop = (EnumPropertyRNA *)prop;
+      eprop->native_enum_type = native_enum_type;
+      break;
+    }
+    default:
+      CLOG_ERROR(
+          &LOG, "\"%s.%s\", invalid type for struct type.", srna->identifier, prop->identifier);
+      DefRNA.error = 1;
+      break;
+  }
+}
+
 void RNA_def_property_enum_items(PropertyRNA *prop, const EnumPropertyItem *item)
 {
   StructRNA *srna = DefRNA.laststruct;
@@ -1832,8 +1849,19 @@ void RNA_def_property_enum_items(PropertyRNA *prop, const EnumPropertyItem *item
       for (i = 0; item[i].identifier; i++) {
         eprop->totitem++;
 
-        if (item[i].identifier[0] && item[i].value == eprop->defaultvalue) {
-          defaultfound = 1;
+        if (item[i].identifier[0]) {
+          /* Don't allow spaces in internal enum items (it's fine for Python ones). */
+          if (DefRNA.preprocess && strstr(item[i].identifier, " ")) {
+            CLOG_ERROR(&LOG,
+                       "\"%s.%s\", enum identifiers must not contain spaces.",
+                       srna->identifier,
+                       prop->identifier);
+            DefRNA.error = 1;
+            break;
+          }
+          else if (item[i].value == eprop->defaultvalue) {
+            defaultfound = 1;
+          }
         }
       }
 
@@ -2178,7 +2206,7 @@ static PropertyDefRNA *rna_def_property_sdna(PropertyRNA *prop,
 void RNA_def_property_boolean_sdna(PropertyRNA *prop,
                                    const char *structname,
                                    const char *propname,
-                                   int bit)
+                                   int64_t bit)
 {
   PropertyDefRNA *dp;
   BoolPropertyRNA *bprop = (BoolPropertyRNA *)prop;
@@ -2199,7 +2227,7 @@ void RNA_def_property_boolean_sdna(PropertyRNA *prop,
 
     if (DefRNA.silent == 0) {
       /* error check to ensure floats are not wrapped as ints/bools */
-      if (dp->dnatype && *dp->dnatype && IS_DNATYPE_INT_COMPAT(dp->dnatype) == 0) {
+      if (dp->dnatype && *dp->dnatype && IS_DNATYPE_BOOLEAN_COMPAT(dp->dnatype) == 0) {
         CLOG_ERROR(&LOG,
                    "%s.%s is a '%s' but wrapped as type '%s'.",
                    srna->identifier,
@@ -2269,7 +2297,7 @@ void RNA_def_property_boolean_sdna(PropertyRNA *prop,
 void RNA_def_property_boolean_negative_sdna(PropertyRNA *prop,
                                             const char *structname,
                                             const char *propname,
-                                            int booleanbit)
+                                            int64_t booleanbit)
 {
   PropertyDefRNA *dp;
 
@@ -2278,7 +2306,7 @@ void RNA_def_property_boolean_negative_sdna(PropertyRNA *prop,
   dp = rna_find_struct_property_def(DefRNA.laststruct, prop);
 
   if (dp) {
-    dp->booleannegative = 1;
+    dp->booleannegative = true;
   }
 }
 
@@ -3888,6 +3916,36 @@ PropertyRNA *RNA_def_float_matrix(StructOrFunctionRNA *cont_,
   return prop;
 }
 
+PropertyRNA *RNA_def_float_translation(StructOrFunctionRNA *cont_,
+                                       const char *identifier,
+                                       int len,
+                                       const float *default_value,
+                                       float hardmin,
+                                       float hardmax,
+                                       const char *ui_name,
+                                       const char *ui_description,
+                                       float softmin,
+                                       float softmax)
+{
+  PropertyRNA *prop;
+
+  prop = RNA_def_float_vector(cont_,
+                              identifier,
+                              len,
+                              default_value,
+                              hardmin,
+                              hardmax,
+                              ui_name,
+                              ui_description,
+                              softmin,
+                              softmax);
+  prop->subtype = PROP_TRANSLATION;
+
+  RNA_def_property_ui_range(prop, softmin, softmax, 1, RNA_TRANSLATION_PREC_DEFAULT);
+
+  return prop;
+}
+
 PropertyRNA *RNA_def_float_rotation(StructOrFunctionRNA *cont_,
                                     const char *identifier,
                                     int len,
@@ -4294,22 +4352,28 @@ int rna_parameter_size(PropertyRNA *parm)
 
 void RNA_enum_item_add(EnumPropertyItem **items, int *totitem, const EnumPropertyItem *item)
 {
-  EnumPropertyItem *newitems;
   int tot = *totitem;
 
   if (tot == 0) {
-    *items = MEM_callocN(sizeof(EnumPropertyItem) * 8, "RNA_enum_items_add");
+    *items = MEM_callocN(sizeof(EnumPropertyItem) * 8, __func__);
   }
   else if (tot >= 8 && (tot & (tot - 1)) == 0) {
     /* power of two > 8 */
-    newitems = MEM_callocN(sizeof(EnumPropertyItem) * tot * 2, "RNA_enum_items_add");
-    memcpy(newitems, *items, sizeof(EnumPropertyItem) * tot);
-    MEM_freeN(*items);
-    *items = newitems;
+    *items = MEM_recallocN_id(*items, sizeof(EnumPropertyItem) * tot * 2, __func__);
   }
 
   (*items)[tot] = *item;
   *totitem = tot + 1;
+
+  /* Ensure we get crashes on missing calls to 'RNA_enum_item_end', see T74227. */
+#ifdef DEBUG
+  static const EnumPropertyItem item_error = {
+      -1, POINTER_FROM_INT(-1), -1, POINTER_FROM_INT(-1), POINTER_FROM_INT(-1)};
+  if (item != &item_error) {
+    RNA_enum_item_add(items, totitem, &item_error);
+    *totitem -= 1;
+  }
+#endif
 }
 
 void RNA_enum_item_add_separator(EnumPropertyItem **items, int *totitem)

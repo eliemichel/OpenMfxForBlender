@@ -22,11 +22,11 @@
 #include <algorithm>
 #include <stdexcept>
 
-#include "Operators.h"
 #include "Canvas.h"
+#include "CurveIterators.h"
+#include "Operators.h"
 #include "Stroke.h"
 #include "StrokeIterators.h"
-#include "CurveIterators.h"
 
 #include "BKE_global.h"
 

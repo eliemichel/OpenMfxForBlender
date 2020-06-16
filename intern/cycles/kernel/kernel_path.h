@@ -18,6 +18,7 @@
 #  include "kernel/osl/osl_shader.h"
 #endif
 
+// clang-format off
 #include "kernel/kernel_random.h"
 #include "kernel/kernel_projection.h"
 #include "kernel/kernel_montecarlo.h"
@@ -31,6 +32,7 @@
 #include "kernel/kernel_accumulate.h"
 #include "kernel/kernel_shader.h"
 #include "kernel/kernel_light.h"
+#include "kernel/kernel_adaptive_sampling.h"
 #include "kernel/kernel_passes.h"
 
 #if defined(__VOLUME__) || defined(__SUBSURFACE__)
@@ -48,6 +50,7 @@
 #include "kernel/kernel_path_surface.h"
 #include "kernel/kernel_path_volume.h"
 #include "kernel/kernel_path_subsurface.h"
+// clang-format on
 
 CCL_NAMESPACE_BEGIN
 
@@ -168,19 +171,19 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *k
   Ray volume_ray = *ray;
   volume_ray.t = (hit) ? isect->t : FLT_MAX;
 
-  bool heterogeneous = volume_stack_is_heterogeneous(kg, state->volume_stack);
+  float step_size = volume_stack_step_size(kg, state->volume_stack);
 
 #    ifdef __VOLUME_DECOUPLED__
   int sampling_method = volume_stack_sampling_method(kg, state->volume_stack);
   bool direct = (state->flag & PATH_RAY_CAMERA) != 0;
-  bool decoupled = kernel_volume_use_decoupled(kg, heterogeneous, direct, sampling_method);
+  bool decoupled = kernel_volume_use_decoupled(kg, step_size, direct, sampling_method);
 
   if (decoupled) {
     /* cache steps along volume for repeated sampling */
     VolumeSegment volume_segment;
 
     shader_setup_from_volume(kg, sd, &volume_ray);
-    kernel_volume_decoupled_record(kg, state, &volume_ray, sd, &volume_segment, heterogeneous);
+    kernel_volume_decoupled_record(kg, state, &volume_ray, sd, &volume_segment, step_size);
 
     volume_segment.sampling_method = sampling_method;
 
@@ -226,7 +229,7 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *k
   {
     /* integrate along volume segment with distance sampling */
     VolumeIntegrateResult result = kernel_volume_integrate(
-        kg, state, sd, &volume_ray, L, throughput, heterogeneous);
+        kg, state, sd, &volume_ray, L, throughput, step_size);
 
 #    ifdef __VOLUME_SCATTER__
     if (result == VOLUME_PATH_SCATTERED) {
@@ -655,6 +658,14 @@ ccl_device void kernel_path_trace(
   int pass_stride = kernel_data.film.pass_stride;
 
   buffer += index * pass_stride;
+
+  if (kernel_data.film.pass_adaptive_aux_buffer) {
+    ccl_global float4 *aux = (ccl_global float4 *)(buffer +
+                                                   kernel_data.film.pass_adaptive_aux_buffer);
+    if ((*aux).w > 0.0f) {
+      return;
+    }
+  }
 
   /* Initialize random numbers and sample ray. */
   uint rng_hash;

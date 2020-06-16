@@ -26,6 +26,10 @@
 
 #include "BLI_sys_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Mesh;
 struct Subdiv;
 struct SubdivForeachContext;
@@ -156,6 +160,10 @@ typedef struct SubdivForeachContext {
 /* Invokes callbacks in the order and with values which corresponds to creation
  * of final subdivided mesh.
  *
+ * Main goal is to abstract all the traversal routines to give geometry element
+ * indices (for vertices, edges, loops, polygons) in the same way as subdivision
+ * modifier will do for a dense mesh.
+ *
  * Returns truth if the whole topology was traversed, without any early exits.
  *
  * TODO(sergey): Need to either get rid of subdiv or of coarse_mesh.
@@ -166,5 +174,9 @@ bool BKE_subdiv_foreach_subdiv_geometry(struct Subdiv *subdiv,
                                         const struct SubdivForeachContext *context,
                                         const struct SubdivToMeshSettings *mesh_settings,
                                         const struct Mesh *coarse_mesh);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_SUBDIV_FOREACH_H__ */

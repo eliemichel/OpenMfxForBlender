@@ -25,9 +25,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
 #include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
 #include "PIL_time.h"
 #include "PIL_time_utildefines.h"
@@ -42,8 +42,8 @@ extern "C" {
 } /* extern "C" */
 
 #include "DEG_depsgraph.h"
-#include "DEG_depsgraph_debug.h"
 #include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_debug.h"
 
 #include "builder/deg_builder.h"
 #include "builder/deg_builder_cache.h"
@@ -60,6 +60,7 @@ extern "C" {
 #include "intern/node/deg_node_operation.h"
 
 #include "intern/depsgraph_registry.h"
+#include "intern/depsgraph_relation.h"
 #include "intern/depsgraph_type.h"
 
 /* ****************** */
@@ -143,7 +144,7 @@ void DEG_add_object_pointcache_relation(struct DepsNodeHandle *node_handle,
   ID *id = DEG_get_id_from_handle(node_handle);
   DEG::ComponentKey point_cache_key(id, DEG::NodeType::POINT_CACHE);
   DEG::Relation *rel = relation_builder->add_relation(comp_key, point_cache_key, "Point Cache");
-  if (rel != NULL) {
+  if (rel != nullptr) {
     rel->flag |= DEG::RELATION_FLAG_FLUSH_USER_EDIT_ONLY;
   }
   else {
@@ -250,6 +251,7 @@ void DEG_graph_build_from_view_layer(Depsgraph *graph,
   relation_builder.begin_build();
   relation_builder.build_view_layer(scene, view_layer, DEG::DEG_ID_LINKED_DIRECTLY);
   relation_builder.build_copy_on_write_relations();
+  relation_builder.build_driver_relations();
   /* Finalize building. */
   graph_build_finalize_common(deg_graph, bmain);
   /* Finish statistics. */
@@ -283,6 +285,7 @@ void DEG_graph_build_for_render_pipeline(Depsgraph *graph,
   relation_builder.begin_build();
   relation_builder.build_scene_render(scene, view_layer);
   relation_builder.build_copy_on_write_relations();
+  relation_builder.build_driver_relations();
   /* Finalize building. */
   graph_build_finalize_common(deg_graph, bmain);
   /* Finish statistics. */
@@ -316,6 +319,7 @@ void DEG_graph_build_for_compositor_preview(
   relation_builder.build_scene_render(scene, view_layer);
   relation_builder.build_nodetree(nodetree);
   relation_builder.build_copy_on_write_relations();
+  relation_builder.build_driver_relations();
   /* Finalize building. */
   graph_build_finalize_common(deg_graph, bmain);
   /* Finish statistics. */
@@ -376,7 +380,7 @@ class DepsgraphFromIDsNodeBuilder : public DepsgraphNodeBuilder {
 
   virtual void build_object_proxy_group(Object *object, bool is_visible) override
   {
-    if (object->proxy_group == NULL) {
+    if (object->proxy_group == nullptr) {
       return;
     }
     if (!filter_.contains(&object->proxy_group->id)) {
@@ -407,7 +411,7 @@ class DepsgraphFromIDsRelationBuilder : public DepsgraphRelationBuilder {
 
   virtual void build_object_proxy_group(Object *object) override
   {
-    if (object->proxy_group == NULL) {
+    if (object->proxy_group == nullptr) {
       return;
     }
     if (!filter_.contains(&object->proxy_group->id)) {
@@ -457,6 +461,7 @@ void DEG_graph_build_from_ids(Depsgraph *graph,
     relation_builder.build_id(ids[i]);
   }
   relation_builder.build_copy_on_write_relations();
+  relation_builder.build_driver_relations();
   /* Finalize building. */
   graph_build_finalize_common(deg_graph, bmain);
   /* Finish statistics. */
@@ -478,7 +483,7 @@ void DEG_graph_tag_relations_update(Depsgraph *graph)
    * TODO(sergey): Try to make it so we don't flush updates
    * to the whole depsgraph. */
   DEG::IDNode *id_node = deg_graph->find_id_node(&deg_graph->scene->id);
-  if (id_node != NULL) {
+  if (id_node != nullptr) {
     id_node->tag_update(deg_graph, DEG::DEG_UPDATE_SOURCE_RELATIONS);
   }
 }

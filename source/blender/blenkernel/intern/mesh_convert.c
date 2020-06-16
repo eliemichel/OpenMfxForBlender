@@ -22,32 +22,32 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_scene_types.h"
+#include "DNA_curve_types.h"
 #include "DNA_key_types.h"
 #include "DNA_material_types.h"
+#include "DNA_mesh_types.h"
 #include "DNA_meta_types.h"
 #include "DNA_object_types.h"
-#include "DNA_mesh_types.h"
-#include "DNA_curve_types.h"
+#include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_math.h"
-#include "BLI_listbase.h"
 #include "BLI_edgehash.h"
+#include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_main.h"
 #include "BKE_DerivedMesh.h"
+#include "BKE_displist.h"
 #include "BKE_editmesh.h"
 #include "BKE_key.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
+#include "BKE_main.h"
+#include "BKE_material.h"
+#include "BKE_mball.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
-#include "BKE_displist.h"
-#include "BKE_library.h"
-#include "BKE_material.h"
-#include "BKE_mball.h"
 /* these 2 are only used by conversion functions */
 #include "BKE_curve.h"
 /* -- */
@@ -582,7 +582,7 @@ void BKE_mesh_from_nurbs_displist(
     Main *bmain, Object *ob, ListBase *dispbase, const char *obdata_name, bool temporary)
 {
   Object *ob1;
-  Mesh *me_eval = ob->runtime.mesh_eval;
+  Mesh *me_eval = (Mesh *)ob->runtime.data_eval;
   Mesh *me;
   Curve *cu;
   MVert *allvert = NULL;
@@ -644,7 +644,7 @@ void BKE_mesh_from_nurbs_displist(
       me = BKE_id_new_nomain(ID_ME, obdata_name);
     }
 
-    ob->runtime.mesh_eval = NULL;
+    ob->runtime.data_eval = NULL;
     BKE_mesh_nomain_to_mesh(me_eval, me, ob, &CD_MASK_MESH, true);
   }
 
@@ -929,11 +929,9 @@ static Object *object_for_curve_to_mesh_create(Object *object)
     BKE_displist_copy(&temp_object->runtime.curve_cache->disp, &object->runtime.curve_cache->disp);
   }
   /* Constructive modifiers will use mesh to store result. */
-  if (object->runtime.mesh_eval != NULL) {
-    BKE_id_copy_ex(NULL,
-                   &object->runtime.mesh_eval->id,
-                   (ID **)&temp_object->runtime.mesh_eval,
-                   LIB_ID_COPY_LOCALIZE);
+  if (object->runtime.data_eval != NULL) {
+    BKE_id_copy_ex(
+        NULL, object->runtime.data_eval, &temp_object->runtime.data_eval, LIB_ID_COPY_LOCALIZE);
   }
 
   /* Need to create copy of curve itself as well, it will be freed by underlying conversion
@@ -994,19 +992,15 @@ static void curve_to_mesh_eval_ensure(Object *object)
    * bit of internal functions (BKE_mesh_from_nurbs_displist, BKE_mesh_nomain_to_mesh) and also
    * Mesh From Curve operator.
    * Brecht says hold off with that. */
-  BKE_displist_make_curveTypes_forRender(NULL,
-                                         NULL,
-                                         &remapped_object,
-                                         &remapped_object.runtime.curve_cache->disp,
-                                         &remapped_object.runtime.mesh_eval,
-                                         false);
+  Mesh *mesh_eval = NULL;
+  BKE_displist_make_curveTypes_forRender(
+      NULL, NULL, &remapped_object, &remapped_object.runtime.curve_cache->disp, &mesh_eval, false);
 
   /* Note: this is to be consistent with `BKE_displist_make_curveTypes()`, however that is not a
    * real issue currently, code here is broken in more than one way, fix(es) will be done
    * separately. */
-  if (remapped_object.runtime.mesh_eval != NULL) {
-    remapped_object.runtime.mesh_eval->id.tag |= LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT;
-    remapped_object.runtime.is_mesh_eval_owned = true;
+  if (mesh_eval != NULL) {
+    BKE_object_eval_assign_data(&remapped_object, &mesh_eval->id, true);
   }
 
   BKE_object_free_curve_cache(&bevel_object);
@@ -1073,7 +1067,7 @@ static Mesh *mesh_new_from_mball_object(Object *object)
   mesh_result->mat = MEM_dupallocN(mball->mat);
   if (mball->mat != NULL) {
     for (int i = mball->totcol; i-- > 0;) {
-      mesh_result->mat[i] = give_current_material(object, i + 1);
+      mesh_result->mat[i] = BKE_object_material_get(object, i + 1);
     }
   }
 
@@ -1104,8 +1098,8 @@ static Mesh *mesh_new_from_mesh_object_with_layers(Depsgraph *depsgraph, Object 
   }
 
   Object object_for_eval = *object;
-  if (object_for_eval.runtime.mesh_orig != NULL) {
-    object_for_eval.data = object_for_eval.runtime.mesh_orig;
+  if (object_for_eval.runtime.data_orig != NULL) {
+    object_for_eval.data = object_for_eval.runtime.data_orig;
   }
 
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
@@ -1161,17 +1155,27 @@ Mesh *BKE_mesh_new_from_object(Depsgraph *depsgraph, Object *object, bool preser
     /* Happens in special cases like request of mesh for non-mother meta ball. */
     return NULL;
   }
+
   /* The result must have 0 users, since it's just a mesh which is free-dangling data-block.
    * All the conversion functions are supposed to ensure mesh is not counted. */
   BLI_assert(new_mesh->id.us == 0);
+
+  /* It is possible that mesh came from modifier stack evaluation, which preserves edit_mesh
+   * pointer (which allows draw manager to access edit mesh when drawing). Normally this does
+   * not cause ownership problems because evaluated object runtime is keeping track of the real
+   * ownership.
+   *
+   * Here we are constructing a mesh which is supposed to be independent, which means no shared
+   * ownership is allowed, so we make sure edit mesh is reset to NULL (which is similar to as if
+   * one duplicates the objects and applies all the modifiers). */
+  new_mesh->edit_mesh = NULL;
+
   return new_mesh;
 }
 
-static int foreach_libblock_make_original_callback(void *UNUSED(user_data_v),
-                                                   ID *UNUSED(id_self),
-                                                   ID **id_p,
-                                                   int UNUSED(cb_flag))
+static int foreach_libblock_make_original_callback(LibraryIDLinkCallbackData *cb_data)
 {
+  ID **id_p = cb_data->id_pointer;
   if (*id_p == NULL) {
     return IDWALK_RET_NOP;
   }
@@ -1180,15 +1184,14 @@ static int foreach_libblock_make_original_callback(void *UNUSED(user_data_v),
   return IDWALK_RET_NOP;
 }
 
-static int foreach_libblock_make_usercounts_callback(void *UNUSED(user_data_v),
-                                                     ID *UNUSED(id_self),
-                                                     ID **id_p,
-                                                     int cb_flag)
+static int foreach_libblock_make_usercounts_callback(LibraryIDLinkCallbackData *cb_data)
 {
+  ID **id_p = cb_data->id_pointer;
   if (*id_p == NULL) {
     return IDWALK_RET_NOP;
   }
 
+  const int cb_flag = cb_data->cb_flag;
   if (cb_flag & IDWALK_CB_USER) {
     id_us_plus(*id_p);
   }
@@ -1309,11 +1312,11 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
                                            ModifierData *md_eval,
                                            int build_shapekey_layers)
 {
-  Mesh *me = ob_eval->runtime.mesh_orig ? ob_eval->runtime.mesh_orig : ob_eval->data;
+  Mesh *me = ob_eval->runtime.data_orig ? ob_eval->runtime.data_orig : ob_eval->data;
   const ModifierTypeInfo *mti = modifierType_getInfo(md_eval->type);
   Mesh *result;
   KeyBlock *kb;
-  ModifierEvalContext mectx = {depsgraph, ob_eval, 0};
+  ModifierEvalContext mectx = {depsgraph, ob_eval, MOD_APPLY_TO_BASE_MESH};
 
   if (!(md_eval->mode & eModifierMode_Realtime)) {
     return NULL;
@@ -1429,6 +1432,8 @@ void BKE_mesh_nomain_to_mesh(Mesh *mesh_src,
                              const CustomData_MeshMasks *mask,
                              bool take_ownership)
 {
+  BLI_assert(mesh_src->id.tag & LIB_TAG_NO_MAIN);
+
   /* mesh_src might depend on mesh_dst, so we need to do everything with a local copy */
   /* TODO(Sybren): the above claim came from 2.7x derived-mesh code (DM_to_mesh);
    * check whether it is still true with Mesh */
@@ -1580,6 +1585,8 @@ void BKE_mesh_nomain_to_mesh(Mesh *mesh_src,
 
 void BKE_mesh_nomain_to_meshkey(Mesh *mesh_src, Mesh *mesh_dst, KeyBlock *kb)
 {
+  BLI_assert(mesh_src->id.tag & LIB_TAG_NO_MAIN);
+
   int a, totvert = mesh_src->totvert;
   float *fp;
   MVert *mvert;

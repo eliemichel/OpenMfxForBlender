@@ -14,22 +14,24 @@
  * limitations under the License.
  */
 
-#include "render/camera.h"
+#include "render/object.h"
 #include "device/device.h"
+#include "render/camera.h"
+#include "render/curves.h"
+#include "render/hair.h"
+#include "render/integrator.h"
 #include "render/light.h"
 #include "render/mesh.h"
-#include "render/curves.h"
-#include "render/object.h"
 #include "render/particles.h"
 #include "render/scene.h"
 
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
 #include "util/util_map.h"
+#include "util/util_murmurhash.h"
 #include "util/util_progress.h"
 #include "util/util_set.h"
 #include "util/util_vector.h"
-#include "util/util_murmurhash.h"
 
 #include "subd/subd_patch_table.h"
 
@@ -64,6 +66,7 @@ struct UpdateObjectTransformState {
   KernelObject *objects;
   Transform *object_motion_pass;
   DecomposedTransform *object_motion;
+  float *object_volume_step;
 
   /* Flags which will be synchronized to Integrator. */
   bool have_motion;
@@ -87,7 +90,7 @@ NODE_DEFINE(Object)
 {
   NodeType *type = NodeType::add("object", create);
 
-  SOCKET_NODE(mesh, "Mesh", &Mesh::node_type);
+  SOCKET_NODE(geometry, "Geometry", &Geometry::node_base_type);
   SOCKET_TRANSFORM(tfm, "Transform", transform_identity());
   SOCKET_UINT(visibility, "Visibility", ~0);
   SOCKET_COLOR(color, "Color", make_float3(0.0f, 0.0f, 0.0f));
@@ -152,7 +155,7 @@ void Object::update_motion()
 
 void Object::compute_bounds(bool motion_blur)
 {
-  BoundBox mbounds = mesh->bounds;
+  BoundBox mbounds = geometry->bounds;
 
   if (motion_blur && use_motion()) {
     array<DecomposedTransform> decomp(motion.size());
@@ -172,7 +175,7 @@ void Object::compute_bounds(bool motion_blur)
   }
   else {
     /* No motion blur case. */
-    if (mesh->transform_applied) {
+    if (geometry->transform_applied) {
       bounds = mbounds;
     }
     else {
@@ -183,89 +186,18 @@ void Object::compute_bounds(bool motion_blur)
 
 void Object::apply_transform(bool apply_to_motion)
 {
-  if (!mesh || tfm == transform_identity())
+  if (!geometry || tfm == transform_identity())
     return;
 
-  /* triangles */
-  if (mesh->verts.size()) {
-    /* store matrix to transform later. when accessing these as attributes we
-     * do not want the transform to be applied for consistency between static
-     * and dynamic BVH, so we do it on packing. */
-    mesh->transform_normal = transform_transposed_inverse(tfm);
-
-    /* apply to mesh vertices */
-    for (size_t i = 0; i < mesh->verts.size(); i++)
-      mesh->verts[i] = transform_point(&tfm, mesh->verts[i]);
-
-    if (apply_to_motion) {
-      Attribute *attr = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
-
-      if (attr) {
-        size_t steps_size = mesh->verts.size() * (mesh->motion_steps - 1);
-        float3 *vert_steps = attr->data_float3();
-
-        for (size_t i = 0; i < steps_size; i++)
-          vert_steps[i] = transform_point(&tfm, vert_steps[i]);
-      }
-
-      Attribute *attr_N = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_NORMAL);
-
-      if (attr_N) {
-        Transform ntfm = mesh->transform_normal;
-        size_t steps_size = mesh->verts.size() * (mesh->motion_steps - 1);
-        float3 *normal_steps = attr_N->data_float3();
-
-        for (size_t i = 0; i < steps_size; i++)
-          normal_steps[i] = normalize(transform_direction(&ntfm, normal_steps[i]));
-      }
-    }
-  }
-
-  /* curves */
-  if (mesh->curve_keys.size()) {
-    /* compute uniform scale */
-    float3 c0 = transform_get_column(&tfm, 0);
-    float3 c1 = transform_get_column(&tfm, 1);
-    float3 c2 = transform_get_column(&tfm, 2);
-    float scalar = powf(fabsf(dot(cross(c0, c1), c2)), 1.0f / 3.0f);
-
-    /* apply transform to curve keys */
-    for (size_t i = 0; i < mesh->curve_keys.size(); i++) {
-      float3 co = transform_point(&tfm, mesh->curve_keys[i]);
-      float radius = mesh->curve_radius[i] * scalar;
-
-      /* scale for curve radius is only correct for uniform scale */
-      mesh->curve_keys[i] = co;
-      mesh->curve_radius[i] = radius;
-    }
-
-    if (apply_to_motion) {
-      Attribute *curve_attr = mesh->curve_attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
-
-      if (curve_attr) {
-        /* apply transform to motion curve keys */
-        size_t steps_size = mesh->curve_keys.size() * (mesh->motion_steps - 1);
-        float4 *key_steps = curve_attr->data_float4();
-
-        for (size_t i = 0; i < steps_size; i++) {
-          float3 co = transform_point(&tfm, float4_to_float3(key_steps[i]));
-          float radius = key_steps[i].w * scalar;
-
-          /* scale for curve radius is only correct for uniform scale */
-          key_steps[i] = float3_to_float4(co);
-          key_steps[i].w = radius;
-        }
-      }
-    }
-  }
+  geometry->apply_transform(tfm, apply_to_motion);
 
   /* we keep normals pointing in same direction on negative scale, notify
-   * mesh about this in it (re)calculates normals */
+   * geometry about this in it (re)calculates normals */
   if (transform_negative_scale(tfm))
-    mesh->transform_negative_scaled = true;
+    geometry->transform_negative_scaled = true;
 
   if (bounds.valid()) {
-    mesh->compute_bounds();
+    geometry->compute_bounds();
     compute_bounds(false);
   }
 
@@ -275,11 +207,11 @@ void Object::apply_transform(bool apply_to_motion)
 
 void Object::tag_update(Scene *scene)
 {
-  if (mesh) {
-    if (mesh->transform_applied)
-      mesh->need_update = true;
+  if (geometry) {
+    if (geometry->transform_applied)
+      geometry->need_update = true;
 
-    foreach (Shader *shader, mesh->used_shaders) {
+    foreach (Shader *shader, geometry->used_shaders) {
       if (shader->use_mis && shader->has_surface_emission)
         scene->light_manager->need_update = true;
     }
@@ -287,7 +219,7 @@ void Object::tag_update(Scene *scene)
 
   scene->camera->need_flags_update = true;
   scene->curve_system_manager->need_update = true;
-  scene->mesh_manager->need_update = true;
+  scene->geometry_manager->need_update = true;
   scene->object_manager->need_update = true;
 }
 
@@ -336,6 +268,82 @@ uint Object::visibility_for_tracing() const
   return trace_visibility;
 }
 
+float Object::compute_volume_step_size() const
+{
+  if (geometry->type != Geometry::MESH) {
+    return FLT_MAX;
+  }
+
+  Mesh *mesh = static_cast<Mesh *>(geometry);
+
+  if (!mesh->has_volume) {
+    return FLT_MAX;
+  }
+
+  /* Compute step rate from shaders. */
+  float step_rate = FLT_MAX;
+
+  foreach (Shader *shader, mesh->used_shaders) {
+    if (shader->has_volume) {
+      if ((shader->heterogeneous_volume && shader->has_volume_spatial_varying) ||
+          (shader->has_volume_attribute_dependency)) {
+        step_rate = fminf(shader->volume_step_rate, step_rate);
+      }
+    }
+  }
+
+  if (step_rate == FLT_MAX) {
+    return FLT_MAX;
+  }
+
+  /* Compute step size from voxel grids. */
+  float step_size = FLT_MAX;
+
+  foreach (Attribute &attr, mesh->attributes.attributes) {
+    if (attr.element == ATTR_ELEMENT_VOXEL) {
+      ImageHandle &handle = attr.data_voxel();
+      const ImageMetaData &metadata = handle.metadata();
+      if (metadata.width == 0 || metadata.height == 0 || metadata.depth == 0) {
+        continue;
+      }
+
+      /* User specified step size. */
+      float voxel_step_size = mesh->volume_step_size;
+
+      if (voxel_step_size == 0.0f) {
+        /* Auto detect step size. */
+        float3 size = make_float3(
+            1.0f / metadata.width, 1.0f / metadata.height, 1.0f / metadata.depth);
+
+        /* Step size is transformed from voxel to world space. */
+        Transform voxel_tfm = tfm;
+        if (metadata.use_transform_3d) {
+          voxel_tfm = tfm * transform_inverse(metadata.transform_3d);
+        }
+        voxel_step_size = min3(fabs(transform_direction(&voxel_tfm, size)));
+      }
+      else if (mesh->volume_object_space) {
+        /* User specified step size in object space. */
+        float3 size = make_float3(voxel_step_size, voxel_step_size, voxel_step_size);
+        voxel_step_size = min3(fabs(transform_direction(&tfm, size)));
+      }
+
+      if (voxel_step_size > 0.0f) {
+        step_size = fminf(voxel_step_size, step_size);
+      }
+    }
+  }
+
+  if (step_size == FLT_MAX) {
+    /* Fall back to 1/10th of bounds for procedural volumes. */
+    step_size = 0.1f * average(bounds.size());
+  }
+
+  step_size *= step_rate;
+
+  return step_size;
+}
+
 int Object::get_device_index() const
 {
   return index;
@@ -353,32 +361,33 @@ ObjectManager::~ObjectManager()
 {
 }
 
-void ObjectManager::device_update_object_transform(UpdateObjectTransformState *state, Object *ob)
+static float object_surface_area(UpdateObjectTransformState *state,
+                                 const Transform &tfm,
+                                 Geometry *geom)
 {
-  KernelObject &kobject = state->objects[ob->index];
-  Transform *object_motion_pass = state->object_motion_pass;
+  if (geom->type != Geometry::MESH) {
+    return 0.0f;
+  }
 
-  Mesh *mesh = ob->mesh;
-  uint flag = 0;
-
-  /* Compute transformations. */
-  Transform tfm = ob->tfm;
-  Transform itfm = transform_inverse(tfm);
+  Mesh *mesh = static_cast<Mesh *>(geom);
+  if (mesh->has_volume) {
+    /* Volume density automatically adjust to object scale. */
+    if (mesh->volume_object_space) {
+      const float3 unit = normalize(make_float3(1.0f, 1.0f, 1.0f));
+      return 1.0f / len(transform_direction(&tfm, unit));
+    }
+    else {
+      return 1.0f;
+    }
+  }
 
   /* Compute surface area. for uniform scale we can do avoid the many
    * transform calls and share computation for instances.
    *
    * TODO(brecht): Correct for displacement, and move to a better place.
    */
-  float uniform_scale;
   float surface_area = 0.0f;
-  float3 color = ob->color;
-  float pass_id = ob->pass_id;
-  float random_number = (float)ob->random_id * (1.0f / (float)0xFFFFFFFF);
-  int particle_index = (ob->particle_system) ?
-                           ob->particle_index + state->particle_offset[ob->particle_system] :
-                           0;
-
+  float uniform_scale;
   if (transform_uniform_scale(tfm, uniform_scale)) {
     map<Mesh *, float>::iterator it;
 
@@ -424,9 +433,31 @@ void ObjectManager::device_update_object_transform(UpdateObjectTransformState *s
     }
   }
 
+  return surface_area;
+}
+
+void ObjectManager::device_update_object_transform(UpdateObjectTransformState *state, Object *ob)
+{
+  KernelObject &kobject = state->objects[ob->index];
+  Transform *object_motion_pass = state->object_motion_pass;
+
+  Geometry *geom = ob->geometry;
+  uint flag = 0;
+
+  /* Compute transformations. */
+  Transform tfm = ob->tfm;
+  Transform itfm = transform_inverse(tfm);
+
+  float3 color = ob->color;
+  float pass_id = ob->pass_id;
+  float random_number = (float)ob->random_id * (1.0f / (float)0xFFFFFFFF);
+  int particle_index = (ob->particle_system) ?
+                           ob->particle_index + state->particle_offset[ob->particle_system] :
+                           0;
+
   kobject.tfm = tfm;
   kobject.itfm = itfm;
-  kobject.surface_area = surface_area;
+  kobject.surface_area = object_surface_area(state, tfm, geom);
   kobject.color[0] = color.x;
   kobject.color[1] = color.y;
   kobject.color[2] = color.z;
@@ -435,11 +466,16 @@ void ObjectManager::device_update_object_transform(UpdateObjectTransformState *s
   kobject.particle_index = particle_index;
   kobject.motion_offset = 0;
 
-  if (mesh->use_motion_blur) {
+  if (geom->use_motion_blur) {
     state->have_motion = true;
   }
-  if (mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION)) {
-    flag |= SD_OBJECT_HAS_VERTEX_MOTION;
+
+  if (geom->type == Geometry::MESH) {
+    /* TODO: why only mesh? */
+    Mesh *mesh = static_cast<Mesh *>(geom);
+    if (mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION)) {
+      flag |= SD_OBJECT_HAS_VERTEX_MOTION;
+    }
   }
 
   if (state->need_motion == Scene::MOTION_PASS) {
@@ -460,7 +496,7 @@ void ObjectManager::device_update_object_transform(UpdateObjectTransformState *s
     /* Motion transformations, is world/object space depending if mesh
      * comes with deformed position in object space, or if we transform
      * the shading point in world space. */
-    if (!mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION)) {
+    if (!(flag & SD_OBJECT_HAS_VERTEX_MOTION)) {
       tfm_pre = tfm_pre * itfm;
       tfm_post = tfm_post * itfm;
     }
@@ -485,12 +521,13 @@ void ObjectManager::device_update_object_transform(UpdateObjectTransformState *s
   kobject.dupli_generated[0] = ob->dupli_generated[0];
   kobject.dupli_generated[1] = ob->dupli_generated[1];
   kobject.dupli_generated[2] = ob->dupli_generated[2];
-  kobject.numkeys = mesh->curve_keys.size();
+  kobject.numkeys = (geom->type == Geometry::HAIR) ? static_cast<Hair *>(geom)->curve_keys.size() :
+                                                     0;
   kobject.dupli_uv[0] = ob->dupli_uv[0];
   kobject.dupli_uv[1] = ob->dupli_uv[1];
-  int totalsteps = mesh->motion_steps;
+  int totalsteps = geom->motion_steps;
   kobject.numsteps = (totalsteps - 1) / 2;
-  kobject.numverts = mesh->verts.size();
+  kobject.numverts = (geom->type == Geometry::MESH) ? static_cast<Mesh *>(geom)->verts.size() : 0;
   kobject.patch_map_offset = 0;
   kobject.attribute_map_offset = 0;
   uint32_t hash_name = util_murmur_hash3(ob->name.c_str(), ob->name.length(), 0);
@@ -503,9 +540,10 @@ void ObjectManager::device_update_object_transform(UpdateObjectTransformState *s
     flag |= SD_OBJECT_HOLDOUT_MASK;
   }
   state->object_flag[ob->index] = flag;
+  state->object_volume_step[ob->index] = FLT_MAX;
 
   /* Have curves. */
-  if (mesh->num_curves()) {
+  if (geom->type == Geometry::HAIR) {
     state->have_curves = true;
   }
 }
@@ -556,6 +594,7 @@ void ObjectManager::device_update_transforms(DeviceScene *dscene, Scene *scene, 
 
   state.objects = dscene->objects.alloc(scene->objects.size());
   state.object_flag = dscene->object_flag.alloc(scene->objects.size());
+  state.object_volume_step = dscene->object_volume_step.alloc(scene->objects.size());
   state.object_motion = NULL;
   state.object_motion_pass = NULL;
 
@@ -676,25 +715,30 @@ void ObjectManager::device_update_flags(
 
   /* Object info flag. */
   uint *object_flag = dscene->object_flag.data();
+  float *object_volume_step = dscene->object_volume_step.data();
 
   /* Object volume intersection. */
   vector<Object *> volume_objects;
   bool has_volume_objects = false;
   foreach (Object *object, scene->objects) {
-    if (object->mesh->has_volume) {
+    if (object->geometry->has_volume) {
       if (bounds_valid) {
         volume_objects.push_back(object);
       }
       has_volume_objects = true;
+      object_volume_step[object->index] = object->compute_volume_step_size();
+    }
+    else {
+      object_volume_step[object->index] = FLT_MAX;
     }
   }
 
   foreach (Object *object, scene->objects) {
-    if (object->mesh->has_volume) {
+    if (object->geometry->has_volume) {
       object_flag[object->index] |= SD_OBJECT_HAS_VOLUME;
       object_flag[object->index] &= ~SD_OBJECT_HAS_VOLUME_ATTRIBUTES;
 
-      foreach (Attribute &attr, object->mesh->attributes.attributes) {
+      foreach (Attribute &attr, object->geometry->attributes.attributes) {
         if (attr.element == ATTR_ELEMENT_VOXEL) {
           object_flag[object->index] |= SD_OBJECT_HAS_VOLUME_ATTRIBUTES;
         }
@@ -703,6 +747,7 @@ void ObjectManager::device_update_flags(
     else {
       object_flag[object->index] &= ~(SD_OBJECT_HAS_VOLUME | SD_OBJECT_HAS_VOLUME_ATTRIBUTES);
     }
+
     if (object->is_shadow_catcher) {
       object_flag[object->index] |= SD_OBJECT_SHADOW_CATCHER;
     }
@@ -731,6 +776,7 @@ void ObjectManager::device_update_flags(
 
   /* Copy object flag. */
   dscene->object_flag.copy_to_device();
+  dscene->object_volume_step.copy_to_device();
 }
 
 void ObjectManager::device_update_mesh_offsets(Device *, DeviceScene *dscene, Scene *scene)
@@ -744,21 +790,24 @@ void ObjectManager::device_update_mesh_offsets(Device *, DeviceScene *dscene, Sc
   bool update = false;
 
   foreach (Object *object, scene->objects) {
-    Mesh *mesh = object->mesh;
+    Geometry *geom = object->geometry;
 
-    if (mesh->patch_table) {
-      uint patch_map_offset = 2 * (mesh->patch_table_offset + mesh->patch_table->total_size() -
-                                   mesh->patch_table->num_nodes * PATCH_NODE_SIZE) -
-                              mesh->patch_offset;
+    if (geom->type == Geometry::MESH) {
+      Mesh *mesh = static_cast<Mesh *>(geom);
+      if (mesh->patch_table) {
+        uint patch_map_offset = 2 * (mesh->patch_table_offset + mesh->patch_table->total_size() -
+                                     mesh->patch_table->num_nodes * PATCH_NODE_SIZE) -
+                                mesh->patch_offset;
 
-      if (kobjects[object->index].patch_map_offset != patch_map_offset) {
-        kobjects[object->index].patch_map_offset = patch_map_offset;
-        update = true;
+        if (kobjects[object->index].patch_map_offset != patch_map_offset) {
+          kobjects[object->index].patch_map_offset = patch_map_offset;
+          update = true;
+        }
       }
     }
 
-    if (kobjects[object->index].attribute_map_offset != mesh->attr_map_offset) {
-      kobjects[object->index].attribute_map_offset = mesh->attr_map_offset;
+    if (kobjects[object->index].attribute_map_offset != geom->attr_map_offset) {
+      kobjects[object->index].attribute_map_offset = geom->attr_map_offset;
       update = true;
     }
   }
@@ -774,15 +823,16 @@ void ObjectManager::device_free(Device *, DeviceScene *dscene)
   dscene->object_motion_pass.free();
   dscene->object_motion.free();
   dscene->object_flag.free();
+  dscene->object_volume_step.free();
 }
 
 void ObjectManager::apply_static_transforms(DeviceScene *dscene, Scene *scene, Progress &progress)
 {
   /* todo: normals and displacement should be done before applying transform! */
-  /* todo: create objects/meshes in right order! */
+  /* todo: create objects/geometry in right order! */
 
-  /* counter mesh users */
-  map<Mesh *, int> mesh_users;
+  /* counter geometry users */
+  map<Geometry *, int> geometry_users;
   Scene::MotionType need_motion = scene->need_motion();
   bool motion_blur = need_motion == Scene::MOTION_BLUR;
   bool apply_to_motion = need_motion != Scene::MOTION_PASS;
@@ -790,10 +840,10 @@ void ObjectManager::apply_static_transforms(DeviceScene *dscene, Scene *scene, P
   bool have_instancing = false;
 
   foreach (Object *object, scene->objects) {
-    map<Mesh *, int>::iterator it = mesh_users.find(object->mesh);
+    map<Geometry *, int>::iterator it = geometry_users.find(object->geometry);
 
-    if (it == mesh_users.end())
-      mesh_users[object->mesh] = 1;
+    if (it == geometry_users.end())
+      geometry_users[object->geometry] = 1;
     else
       it->second++;
   }
@@ -803,27 +853,34 @@ void ObjectManager::apply_static_transforms(DeviceScene *dscene, Scene *scene, P
 
   uint *object_flag = dscene->object_flag.data();
 
-  /* apply transforms for objects with single user meshes */
+  /* apply transforms for objects with single user geometry */
   foreach (Object *object, scene->objects) {
     /* Annoying feedback loop here: we can't use is_instanced() because
      * it'll use uninitialized transform_applied flag.
      *
-     * Could be solved by moving reference counter to Mesh.
+     * Could be solved by moving reference counter to Geometry.
      */
-    if ((mesh_users[object->mesh] == 1 && !object->mesh->has_surface_bssrdf) &&
-        !object->mesh->has_true_displacement() &&
-        object->mesh->subdivision_type == Mesh::SUBDIVISION_NONE) {
+    Geometry *geom = object->geometry;
+    bool apply = (geometry_users[geom] == 1) && !geom->has_surface_bssrdf &&
+                 !geom->has_true_displacement();
+
+    if (geom->type == Geometry::MESH) {
+      Mesh *mesh = static_cast<Mesh *>(geom);
+      apply = apply && mesh->subdivision_type == Mesh::SUBDIVISION_NONE;
+    }
+
+    if (apply) {
       if (!(motion_blur && object->use_motion())) {
-        if (!object->mesh->transform_applied) {
+        if (!geom->transform_applied) {
           object->apply_transform(apply_to_motion);
-          object->mesh->transform_applied = true;
+          geom->transform_applied = true;
 
           if (progress.get_cancel())
             return;
         }
 
         object_flag[i] |= SD_OBJECT_TRANSFORM_APPLIED;
-        if (object->mesh->transform_negative_scaled)
+        if (geom->transform_negative_scaled)
           object_flag[i] |= SD_OBJECT_NEGATIVE_SCALE_APPLIED;
       }
       else
@@ -842,7 +899,7 @@ void ObjectManager::tag_update(Scene *scene)
 {
   need_update = true;
   scene->curve_system_manager->need_update = true;
-  scene->mesh_manager->need_update = true;
+  scene->geometry_manager->need_update = true;
   scene->light_manager->need_update = true;
 }
 

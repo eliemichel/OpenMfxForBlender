@@ -29,8 +29,8 @@ extern "C" {
 #endif
 
 #include "DNA_ID.h"
-#include "DNA_tracking_types.h"
 #include "DNA_color_types.h" /* for color management */
+#include "DNA_tracking_types.h"
 
 struct AnimData;
 struct ImBuf;
@@ -177,12 +177,6 @@ enum {
 enum {
   MCLIP_SRC_SEQUENCE = 1,
   MCLIP_SRC_MOVIE = 2,
-};
-
-/* MovieClip->selection types */
-enum {
-  MCLIP_SEL_NONE = 0,
-  MCLIP_SEL_TRACK = 1,
 };
 
 /* MovieClip->flag */

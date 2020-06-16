@@ -32,6 +32,8 @@ layout(std140) uniform globalsBlock
   vec4 colorFace;
   vec4 colorFaceSelect;
   vec4 colorFaceFreestyle;
+  vec4 colorGpencilVertex;
+  vec4 colorGpencilVertexSelect;
   vec4 colorNormal;
   vec4 colorVNormal;
   vec4 colorLNormal;
@@ -42,6 +44,10 @@ layout(std140) uniform globalsBlock
   vec4 colorLightNoAlpha;
 
   vec4 colorBackground;
+  vec4 colorBackgroundGradient;
+  vec4 colorCheckerPrimary;
+  vec4 colorCheckerSecondary;
+  vec4 colorClippingBorder;
   vec4 colorEditMeshMiddle;
 
   vec4 colorHandleFree;
@@ -61,6 +67,30 @@ layout(std140) uniform globalsBlock
   vec4 colorActiveSpline;
 
   vec4 colorBonePose;
+  vec4 colorBonePoseActive;
+  vec4 colorBonePoseActiveUnsel;
+  vec4 colorBonePoseConstraint;
+  vec4 colorBonePoseIK;
+  vec4 colorBonePoseSplineIK;
+  vec4 colorBonePoseTarget;
+  vec4 colorBoneSolid;
+  vec4 colorBoneLocked;
+  vec4 colorBoneActive;
+  vec4 colorBoneActiveUnsel;
+  vec4 colorBoneSelect;
+  vec4 colorBoneIKLine;
+  vec4 colorBoneIKLineNoTarget;
+  vec4 colorBoneIKLineSpline;
+
+  vec4 colorText;
+  vec4 colorTextHi;
+
+  vec4 colorBundleSolid;
+
+  vec4 colorMballRadius;
+  vec4 colorMballRadiusSelect;
+  vec4 colorMballStiffness;
+  vec4 colorMballStiffnessSelect;
 
   vec4 colorCurrentFrame;
 
@@ -76,7 +106,7 @@ layout(std140) uniform globalsBlock
   vec4 screenVecs[2];
   vec4 sizeViewport; /* Inverted size in zw. */
 
-  float sizePixel; /* This one is for dpi scalling */
+  float sizePixel; /* This one is for dpi scaling */
   float pixelFac;  /* To use with mul_project_m4_v3_zfac() */
   float sizeObjectCenter;
   float sizeLightCenter;
@@ -86,6 +116,7 @@ layout(std140) uniform globalsBlock
   float sizeEdge;
   float sizeEdgeFix;
   float sizeFaceDot;
+  float sizeChecker;
 
   float pad_globalsBlock;
 };

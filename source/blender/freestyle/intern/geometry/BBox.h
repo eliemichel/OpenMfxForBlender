@@ -22,8 +22,8 @@
  * \brief A class to hold a bounding box
  */
 
-#include <stdlib.h>
 #include <algorithm>
+#include <stdlib.h>
 
 #include "BLI_utildefines.h"
 

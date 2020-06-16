@@ -23,6 +23,10 @@
 
 #include "BLI_compiler_attrs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Main;
 struct bScreen;
 struct bToolRef;
@@ -31,7 +35,6 @@ struct bToolRef;
 /* Create, delete, init */
 
 struct WorkSpace *BKE_workspace_add(struct Main *bmain, const char *name);
-void BKE_workspace_free(struct WorkSpace *workspace);
 void BKE_workspace_remove(struct Main *bmain, struct WorkSpace *workspace);
 
 struct WorkSpaceInstanceHook *BKE_workspace_instance_hook_create(const struct Main *bmain);
@@ -111,5 +114,9 @@ void BKE_workspace_id_tag_all_visible(struct Main *bmain, int tag) ATTR_NONNULL(
 
 #undef GETTER_ATTRS
 #undef SETTER_ATTRS
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_WORKSPACE_H__ */

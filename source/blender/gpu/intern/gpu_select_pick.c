@@ -23,19 +23,20 @@
  * Custom select code for picking small regions (not efficient for large regions).
  * `gpu_select_pick_*` API.
  */
-#include <string.h>
-#include <stdlib.h>
 #include <float.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include "GPU_immediate.h"
 #include "GPU_draw.h"
-#include "GPU_select.h"
 #include "GPU_glew.h"
+#include "GPU_immediate.h"
+#include "GPU_select.h"
+#include "GPU_state.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_rect.h"
 #include "BLI_listbase.h"
+#include "BLI_rect.h"
 #include "BLI_utildefines.h"
 
 #include "gpu_select_private.h"
@@ -313,17 +314,10 @@ void gpu_select_pick_begin(uint (*buffer)[4], uint bufsize, const rcti *input, c
 
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
-
-    if (mode == GPU_SELECT_PICK_ALL) {
-      /* Note that other depth settings (such as #GL_LEQUAL) work too,
-       * since the depth is always cleared.
-       * Noting this for cases when depth picking is used where
-       * drawing calls change depth settings. */
-      glDepthFunc(GL_ALWAYS);
-    }
-    else {
-      glDepthFunc(GL_LEQUAL);
-    }
+    /* Always use #GL_LEQUAL even though GPU_SELECT_PICK_ALL always clears the buffer. This is
+     * because individual objects themselves might have sections that overlap and we need these
+     * to have the correct distance information. */
+    glDepthFunc(GL_LEQUAL);
 
     float viewport[4];
     glGetFloatv(GL_VIEWPORT, viewport);
@@ -730,8 +724,7 @@ void gpu_select_pick_cache_load_id(void)
 #ifdef DEBUG_PRINT
   printf("%s (building depth from cache)\n", __func__);
 #endif
-  for (DepthBufCache *rect_depth = ps->cache.bufs.first; rect_depth;
-       rect_depth = rect_depth->next) {
+  LISTBASE_FOREACH (DepthBufCache *, rect_depth, &ps->cache.bufs) {
     if (rect_depth->next != NULL) {
       /* we know the buffers differ, but this sub-region may not.
        * double check before adding an id-pass */

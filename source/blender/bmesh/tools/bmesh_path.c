@@ -22,9 +22,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
-#include "BLI_linklist.h"
 #include "BLI_heap_simple.h"
+#include "BLI_linklist.h"
+#include "BLI_math.h"
 
 #include "bmesh.h"
 #include "bmesh_path.h" /* own include */
@@ -225,7 +225,7 @@ static void edgetag_add_adjacent(HeapSimple *heap,
 
   /* unlike vert/face, stepping faces disables scanning connected edges
    * and only steps over faces (selecting a ring of edges instead of a loop) */
-  if (params->use_step_face == false) {
+  if (params->use_step_face == false || e_a->l == NULL) {
     BMIter viter;
     BMVert *v;
 

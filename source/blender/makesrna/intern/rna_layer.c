@@ -18,8 +18,8 @@
  * \ingroup RNA
  */
 
-#include "DNA_scene_types.h"
 #include "DNA_layer_types.h"
+#include "DNA_scene_types.h"
 #include "DNA_view3d_types.h"
 
 #include "BLT_translation.h"
@@ -51,9 +51,11 @@
 
 #  include "BKE_idprop.h"
 #  include "BKE_layer.h"
+#  include "BKE_mesh.h"
 #  include "BKE_node.h"
 #  include "BKE_scene.h"
-#  include "BKE_mesh.h"
+
+#  include "BLI_listbase.h"
 
 #  include "DEG_depsgraph_build.h"
 #  include "DEG_depsgraph_query.h"
@@ -88,11 +90,22 @@ static PointerRNA rna_LayerObjects_active_object_get(PointerRNA *ptr)
 
 static void rna_LayerObjects_active_object_set(PointerRNA *ptr,
                                                PointerRNA value,
-                                               struct ReportList *UNUSED(reports))
+                                               struct ReportList *reports)
 {
   ViewLayer *view_layer = (ViewLayer *)ptr->data;
   if (value.data) {
-    view_layer->basact = BKE_view_layer_base_find(view_layer, (Object *)value.data);
+    Object *ob = value.data;
+    Base *basact_test = BKE_view_layer_base_find(view_layer, ob);
+    if (basact_test != NULL) {
+      view_layer->basact = basact_test;
+    }
+    else {
+      BKE_reportf(reports,
+                  RPT_ERROR,
+                  "ViewLayer '%s' does not contain object '%s'",
+                  view_layer->name,
+                  ob->id.name + 2);
+    }
   }
   else {
     view_layer->basact = NULL;
@@ -286,19 +299,6 @@ static void rna_LayerCollection_hide_viewport_set(PointerRNA *ptr, bool value)
   rna_LayerCollection_flag_set(ptr, value, LAYER_COLLECTION_HIDE);
 }
 
-static void rna_LayerCollection_exclude_update_recursive(ListBase *lb, const bool exclude)
-{
-  for (LayerCollection *lc = lb->first; lc; lc = lc->next) {
-    if (exclude) {
-      lc->flag |= LAYER_COLLECTION_EXCLUDE;
-    }
-    else {
-      lc->flag &= ~LAYER_COLLECTION_EXCLUDE;
-    }
-    rna_LayerCollection_exclude_update_recursive(&lc->layer_collections, exclude);
-  }
-}
-
 static void rna_LayerCollection_exclude_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
   Scene *scene = (Scene *)ptr->owner_id;
@@ -307,7 +307,7 @@ static void rna_LayerCollection_exclude_update(Main *bmain, Scene *UNUSED(scene)
 
   /* Set/Unset it recursively to match the behavior of excluding via the menu or shortcuts. */
   const bool exclude = (lc->flag & LAYER_COLLECTION_EXCLUDE) != 0;
-  rna_LayerCollection_exclude_update_recursive(&lc->layer_collections, exclude);
+  BKE_layer_collection_set_flag(lc, LAYER_COLLECTION_EXCLUDE, exclude);
 
   BKE_layer_collection_sync(scene, view_layer);
 
@@ -423,7 +423,7 @@ static void rna_def_layer_collection(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop,
                            "Visible",
-                           "Whether this collection is visible for the viewlayer, take into "
+                           "Whether this collection is visible for the view layer, take into "
                            "account the collection parent");
 
   func = RNA_def_function(srna, "has_objects", "rna_LayerCollection_has_objects");
@@ -434,7 +434,7 @@ static void rna_def_layer_collection(BlenderRNA *brna)
       srna, "has_selected_objects", "rna_LayerCollection_has_selected_objects");
   RNA_def_function_ui_description(func, "");
   prop = RNA_def_pointer(
-      func, "view_layer", "ViewLayer", "", "ViewLayer the layer collection belongs to");
+      func, "view_layer", "ViewLayer", "", "View layer the layer collection belongs to");
   RNA_def_parameter_flags(prop, 0, PARM_REQUIRED);
   RNA_def_function_return(func, RNA_def_boolean(func, "result", 0, "", ""));
 }
@@ -584,6 +584,7 @@ void RNA_def_view_layer(BlenderRNA *brna)
   /* Dependency Graph */
   prop = RNA_def_property(srna, "depsgraph", PROP_POINTER, PROP_NONE);
   RNA_def_property_struct_type(prop, "Depsgraph");
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_NO_COMPARISON);
   RNA_def_property_ui_text(prop, "Dependency Graph", "Dependencies in the scene data");
   RNA_def_property_pointer_funcs(prop, "rna_ViewLayer_depsgraph_get", NULL, NULL, NULL);
 

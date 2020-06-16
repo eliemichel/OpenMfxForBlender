@@ -32,11 +32,12 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_sdna_types.h"
 #include "DNA_key_types.h"
+#include "DNA_sdna_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "BKE_key.h"
+#include "BKE_lib_id.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_report.h"

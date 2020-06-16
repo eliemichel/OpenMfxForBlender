@@ -28,13 +28,14 @@
 #include "PIL_time.h"
 
 #include "BLI_compiler_attrs.h"
-#include "BLI_utildefines.h"
-#include "BLI_task.h"
 #include "BLI_ghash.h"
 #include "BLI_gsqueue.h"
+#include "BLI_task.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_global.h"
 
+#include "DNA_node_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -43,6 +44,8 @@
 
 #include "atomic_ops.h"
 
+#include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
 #include "intern/eval/deg_eval_copy_on_write.h"
 #include "intern/eval/deg_eval_flush.h"
 #include "intern/eval/deg_eval_stats.h"
@@ -51,7 +54,6 @@
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 #include "intern/node/deg_node_time.h"
-#include "intern/depsgraph.h"
 
 namespace DEG {
 
@@ -70,8 +72,7 @@ void schedule_children(DepsgraphEvalState *state,
 
 void schedule_node_to_pool(OperationNode *node, const int thread_id, TaskPool *pool)
 {
-  BLI_task_pool_push_from_thread(
-      pool, deg_task_run_func, node, false, TASK_PRIORITY_HIGH, thread_id);
+  BLI_task_pool_push_from_thread(pool, deg_task_run_func, node, false, NULL, thread_id);
 }
 
 /* Denotes which part of dependency graph is being evaluated. */
@@ -86,7 +87,7 @@ enum class EvaluationStage {
 
   /* Workaround for areas which can not be evaluated in threads.
    *
-   * For example, metaballs, which are iterating over all bases and are requesting duplilists
+   * For example, metaballs, which are iterating over all bases and are requesting dupli-lists
    * to see whether there are metaballs inside. */
   SINGLE_THREADED_WORKAROUND,
 };
@@ -342,11 +343,13 @@ void depsgraph_ensure_view_layer(Depsgraph *graph)
    * - It was tagged for update of CoW component.
    * This allows us to have proper view layer pointer. */
   Scene *scene_cow = graph->scene_cow;
-  if (!deg_copy_on_write_is_expanded(&scene_cow->id) ||
-      scene_cow->id.recalc & ID_RECALC_COPY_ON_WRITE) {
-    const IDNode *id_node = graph->find_id_node(&graph->scene->id);
-    deg_update_copy_on_write_datablock(graph, id_node);
+  if (deg_copy_on_write_is_expanded(&scene_cow->id) &&
+      (scene_cow->id.recalc & ID_RECALC_COPY_ON_WRITE) == 0) {
+    return;
   }
+
+  const IDNode *scene_id_node = graph->find_id_node(&graph->scene->id);
+  deg_update_copy_on_write_datablock(graph, scene_id_node);
 }
 
 }  // namespace
@@ -364,14 +367,15 @@ void deg_evaluate_on_refresh(Depsgraph *graph)
   if (BLI_gset_len(graph->entry_tags) == 0) {
     return;
   }
-  const bool do_time_debug = ((G.debug & G_DEBUG_DEPSGRAPH_TIME) != 0);
-  const double start_time = do_time_debug ? PIL_check_seconds_timer() : 0;
+
+  graph->debug.begin_graph_evaluation();
+
   graph->is_evaluating = true;
   depsgraph_ensure_view_layer(graph);
   /* Set up evaluation state. */
   DepsgraphEvalState state;
   state.graph = graph;
-  state.do_stats = do_time_debug;
+  state.do_stats = graph->debug.do_time_debug();
   state.need_single_thread_pass = false;
   /* Set up task scheduler and pull for threaded evaluation. */
   TaskScheduler *task_scheduler;
@@ -384,7 +388,7 @@ void deg_evaluate_on_refresh(Depsgraph *graph)
     task_scheduler = BLI_task_scheduler_get();
     need_free_scheduler = false;
   }
-  TaskPool *task_pool = BLI_task_pool_create_suspended(task_scheduler, &state);
+  TaskPool *task_pool = BLI_task_pool_create_suspended(task_scheduler, &state, TASK_PRIORITY_HIGH);
   /* Prepare all nodes for evaluation. */
   initialize_execution(&state, graph);
 
@@ -418,9 +422,8 @@ void deg_evaluate_on_refresh(Depsgraph *graph)
     BLI_task_scheduler_free(task_scheduler);
   }
   graph->is_evaluating = false;
-  if (do_time_debug) {
-    printf("Depsgraph updated in %f seconds.\n", PIL_check_seconds_timer() - start_time);
-  }
+
+  graph->debug.end_graph_evaluation();
 }
 
 }  // namespace DEG

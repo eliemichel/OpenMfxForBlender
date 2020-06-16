@@ -18,29 +18,28 @@
  * \ingroup spinfo
  */
 
-#include <math.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <limits.h>
-#include <assert.h>
-
 #include "MEM_guardedalloc.h"
 
 #include "BLF_api.h"
 
 #include "BLI_math.h"
-#include "BLI_utildefines.h"
 #include "BLI_string_utf8.h"
+#include "BLI_utildefines.h"
 
 #include "GPU_immediate.h"
 #include "GPU_state.h"
 
+#include "DNA_userdef_types.h" /* For 'U.dpi_fac' */
+
+#include "UI_interface.h"
+#include "UI_interface_icons.h"
+
 #include "textview.h"
 
-static void console_font_begin(const int font_id, const int lheight)
+static void textview_font_begin(const int font_id, const int lheight)
 {
-  /* 0.875 is based on: 16 pixels lines get 14 pixel text. */
-  BLF_size(font_id, 0.875 * lheight, 72);
+  /* Font size in relation to line height. */
+  BLF_size(font_id, 0.8f * lheight, 72);
 }
 
 typedef struct TextViewDrawState {
@@ -49,9 +48,13 @@ typedef struct TextViewDrawState {
   int lheight;
   /** Text vertical offset per line. */
   int lofs;
+  int row_vpadding;
   /** Number of characters that fit into the width of the console (fixed width). */
   int columns;
+  /** For drawing text. */
   const rcti *draw_rect;
+  /** For drawing backgrounds colors which may extend beyond text. */
+  const rcti *draw_rect_outer;
   int scroll_ymin, scroll_ymax;
   int *xy;   // [2]
   int *sel;  // [2]
@@ -61,20 +64,22 @@ typedef struct TextViewDrawState {
   bool do_draw;
 } TextViewDrawState;
 
-BLI_INLINE void console_step_sel(TextViewDrawState *tds, const int step)
+BLI_INLINE void textview_step_sel(TextViewDrawState *tds, const int step)
 {
   tds->sel[0] += step;
   tds->sel[1] += step;
 }
 
-static void console_draw_sel(const char *str,
-                             const int sel[2],
-                             const int xy[2],
-                             const int str_len_draw,
-                             const int cwidth,
-                             const int lheight,
-                             const unsigned char bg_sel[4])
+static void textview_draw_sel(const char *str,
+                              const int xy[2],
+                              const int str_len_draw,
+                              TextViewDrawState *tds,
+                              const uchar bg_sel[4])
 {
+  const int sel[2] = {tds->sel[0], tds->sel[1]};
+  const int cwidth = tds->cwidth;
+  const int lheight = tds->lheight;
+
   if (sel[0] <= str_len_draw && sel[1] >= 0) {
     const int sta = BLI_str_utf8_offset_to_column(str, max_ii(sel[0], 0));
     const int end = BLI_str_utf8_offset_to_column(str, min_ii(sel[1], str_len_draw));
@@ -88,7 +93,7 @@ static void console_draw_sel(const char *str,
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
     immUniformColor4ubv(bg_sel);
-    immRecti(pos, xy[0] + (cwidth * sta), xy[1] - 2 + lheight, xy[0] + (cwidth * end), xy[1] - 2);
+    immRecti(pos, xy[0] + (cwidth * sta), xy[1] + lheight, xy[0] + (cwidth * end), xy[1]);
 
     immUnbindProgram();
 
@@ -97,28 +102,29 @@ static void console_draw_sel(const char *str,
 }
 
 /**
- * \warning Allocated memory for 'offsets' must be freed by caller.
+ * \warning Allocated memory for 'r_offsets' must be freed by caller.
  * \return The length in bytes.
  */
-static int console_wrap_offsets(const char *str, int len, int width, int *lines, int **offsets)
+static int textview_wrap_offsets(
+    const char *str, int len, int width, int *r_lines, int **r_offsets)
 {
   int i, end; /* Offset as unicode code-point. */
   int j;      /* Offset as bytes. */
 
-  *lines = 1;
+  *r_lines = 1;
 
-  *offsets = MEM_callocN(
-      sizeof(**offsets) *
+  *r_offsets = MEM_callocN(
+      sizeof(**r_offsets) *
           (len * BLI_UTF8_WIDTH_MAX / MAX2(1, width - (BLI_UTF8_WIDTH_MAX - 1)) + 1),
-      "console_wrap_offsets");
-  (*offsets)[0] = 0;
+      __func__);
+  (*r_offsets)[0] = 0;
 
   for (i = 0, end = width, j = 0; j < len && str[j]; j += BLI_str_utf8_size_safe(str + j)) {
     int columns = BLI_str_utf8_char_width_safe(str + j);
 
     if (i + columns > end) {
-      (*offsets)[*lines] = j;
-      (*lines)++;
+      (*r_offsets)[*r_lines] = j;
+      (*r_lines)++;
 
       end = i + width;
     }
@@ -131,23 +137,30 @@ static int console_wrap_offsets(const char *str, int len, int width, int *lines,
  * return false if the last line is off the screen
  * should be able to use this for any string type.
  */
-static bool console_draw_string(TextViewDrawState *tds,
-                                const char *str,
-                                int str_len,
-                                const unsigned char fg[3],
-                                const unsigned char bg[3],
-                                const unsigned char bg_sel[4])
+static bool textview_draw_string(TextViewDrawState *tds,
+                                 const char *str,
+                                 int str_len,
+                                 const uchar fg[4],
+                                 const uchar bg[4],
+                                 int icon,
+                                 const uchar icon_fg[4],
+                                 const uchar icon_bg[4],
+                                 const uchar bg_sel[4])
 {
   int tot_lines; /* Total number of lines for wrapping. */
   int *offsets;  /* Offsets of line beginnings for wrapping. */
-  int y_next;
 
-  str_len = console_wrap_offsets(str, str_len, tds->columns, &tot_lines, &offsets);
-  y_next = tds->xy[1] + tds->lheight * tot_lines;
+  str_len = textview_wrap_offsets(str, str_len, tds->columns, &tot_lines, &offsets);
+
+  int line_height = (tot_lines * tds->lheight) + (tds->row_vpadding * 2);
+  int line_bottom = tds->xy[1];
+  int line_top = line_bottom + line_height;
+
+  int y_next = line_top;
 
   /* Just advance the height. */
   if (tds->do_draw == false) {
-    if (tds->mval_pick_offset && tds->mval[1] != INT_MAX && tds->xy[1] <= tds->mval[1]) {
+    if (tds->mval_pick_offset && tds->mval[1] != INT_MAX && line_bottom <= tds->mval[1]) {
       if (y_next >= tds->mval[1]) {
         int ofs = 0;
 
@@ -179,113 +192,111 @@ static bool console_draw_string(TextViewDrawState *tds,
 
     /* Adjust selection even if not drawing. */
     if (tds->sel[0] != tds->sel[1]) {
-      console_step_sel(tds, -(str_len + 1));
+      textview_step_sel(tds, -(str_len + 1));
     }
 
     MEM_freeN(offsets);
     return true;
   }
 
-  /* Check if we need to wrap lines. */
-  if (tot_lines > 1) {
-    const int initial_offset = offsets[tot_lines - 1];
-    size_t len = str_len - initial_offset;
-    const char *s = str + initial_offset;
-    int i;
+  size_t len;
+  const char *s;
+  int i;
 
-    int sel_orig[2];
-    copy_v2_v2_int(sel_orig, tds->sel);
+  int sel_orig[2];
+  copy_v2_v2_int(sel_orig, tds->sel);
 
-    /* Invert and swap for wrapping. */
-    tds->sel[0] = str_len - sel_orig[1];
-    tds->sel[1] = str_len - sel_orig[0];
+  /* Invert and swap for wrapping. */
+  tds->sel[0] = str_len - sel_orig[1];
+  tds->sel[1] = str_len - sel_orig[0];
 
-    if (bg) {
-      GPUVertFormat *format = immVertexFormat();
-      uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
-      immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+  if (bg) {
+    GPUVertFormat *format = immVertexFormat();
+    uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
+    immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+    immUniformColor4ubv(bg);
+    immRecti(pos, tds->draw_rect_outer->xmin, line_bottom, tds->draw_rect_outer->xmax, line_top);
+    immUnbindProgram();
+  }
 
-      immUniformColor3ubv(bg);
-      immRecti(
-          pos, 0, tds->xy[1], tds->draw_rect->xmax, (tds->xy[1] + (tds->lheight * tot_lines)));
+  if (icon_bg) {
+    float col[4];
+    int bg_size = UI_DPI_ICON_SIZE * 1.2;
+    float vpadding = (tds->lheight + (tds->row_vpadding * 2) - bg_size) / 2;
+    float hpadding = tds->draw_rect->xmin - (bg_size * 1.2f);
 
-      immUnbindProgram();
-    }
+    rgba_uchar_to_float(col, icon_bg);
+    UI_draw_roundbox_corner_set(UI_CNR_ALL);
+    UI_draw_roundbox_aa(true,
+                        hpadding,
+                        line_top - bg_size - vpadding,
+                        bg_size + hpadding,
+                        line_top - vpadding,
+                        4 * UI_DPI_FAC,
+                        col);
+  }
 
-    /* Last part needs no clipping. */
+  if (icon) {
+    int vpadding = (tds->lheight + (tds->row_vpadding * 2) - UI_DPI_ICON_SIZE) / 2;
+    int hpadding = tds->draw_rect->xmin - (UI_DPI_ICON_SIZE * 1.3f);
+
+    GPU_blend(true);
+    UI_icon_draw_ex(hpadding,
+                    line_top - UI_DPI_ICON_SIZE - vpadding,
+                    icon,
+                    (16 / UI_DPI_ICON_SIZE),
+                    1.0f,
+                    0.0f,
+                    icon_fg,
+                    false);
+    GPU_blend(false);
+  }
+
+  tds->xy[1] += tds->row_vpadding;
+
+  /* Last part needs no clipping. */
+  const int final_offset = offsets[tot_lines - 1];
+  len = str_len - final_offset;
+  s = str + final_offset;
+  BLF_position(tds->font_id, tds->xy[0], tds->lofs + line_bottom + tds->row_vpadding, 0);
+  BLF_color4ubv(tds->font_id, fg);
+  BLF_draw_mono(tds->font_id, s, len, tds->cwidth);
+
+  if (tds->sel[0] != tds->sel[1]) {
+    textview_step_sel(tds, -final_offset);
+    int pos[2] = {tds->xy[0], line_bottom};
+    textview_draw_sel(s, pos, len, tds, bg_sel);
+  }
+
+  tds->xy[1] += tds->lheight;
+
+  BLF_color4ubv(tds->font_id, fg);
+
+  for (i = tot_lines - 1; i > 0; i--) {
+    len = offsets[i] - offsets[i - 1];
+    s = str + offsets[i - 1];
+
     BLF_position(tds->font_id, tds->xy[0], tds->lofs + tds->xy[1], 0);
-    BLF_color3ubv(tds->font_id, fg);
     BLF_draw_mono(tds->font_id, s, len, tds->cwidth);
 
     if (tds->sel[0] != tds->sel[1]) {
-      console_step_sel(tds, -initial_offset);
-      /* BLF_color3ub(tds->font_id, 255, 0, 0); // debug */
-      console_draw_sel(s, tds->sel, tds->xy, len, tds->cwidth, tds->lheight, bg_sel);
+      textview_step_sel(tds, len);
+      textview_draw_sel(s, tds->xy, len, tds, bg_sel);
     }
 
     tds->xy[1] += tds->lheight;
 
-    for (i = tot_lines - 1; i > 0; i--) {
-      len = offsets[i] - offsets[i - 1];
-      s = str + offsets[i - 1];
-
-      BLF_position(tds->font_id, tds->xy[0], tds->lofs + tds->xy[1], 0);
-      BLF_draw_mono(tds->font_id, s, len, tds->cwidth);
-
-      if (tds->sel[0] != tds->sel[1]) {
-        console_step_sel(tds, len);
-        /* BLF_color3ub(tds->font_id, 0, 255, 0); // debug */
-        console_draw_sel(s, tds->sel, tds->xy, len, tds->cwidth, tds->lheight, bg_sel);
-      }
-
-      tds->xy[1] += tds->lheight;
-
-      /* Check if were out of view bounds. */
-      if (tds->xy[1] > tds->scroll_ymax) {
-        MEM_freeN(offsets);
-        return false;
-      }
-    }
-
-    copy_v2_v2_int(tds->sel, sel_orig);
-    console_step_sel(tds, -(str_len + 1));
-  }
-  else {
-    /* Simple, no wrap. */
-
-    if (bg) {
-      GPUVertFormat *format = immVertexFormat();
-      uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
-      immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
-
-      immUniformColor3ubv(bg);
-      immRecti(pos, 0, tds->xy[1], tds->draw_rect->xmax, tds->xy[1] + tds->lheight);
-
-      immUnbindProgram();
-    }
-
-    BLF_color3ubv(tds->font_id, fg);
-    BLF_position(tds->font_id, tds->xy[0], tds->lofs + tds->xy[1], 0);
-    BLF_draw_mono(tds->font_id, str, str_len, tds->cwidth);
-
-    if (tds->sel[0] != tds->sel[1]) {
-      int isel[2];
-
-      isel[0] = str_len - tds->sel[1];
-      isel[1] = str_len - tds->sel[0];
-
-      /* BLF_color3ub(tds->font_id, 255, 255, 0); // debug */
-      console_draw_sel(str, isel, tds->xy, str_len, tds->cwidth, tds->lheight, bg_sel);
-      console_step_sel(tds, -(str_len + 1));
-    }
-
-    tds->xy[1] += tds->lheight;
-
+    /* Check if we're out of view bounds. */
     if (tds->xy[1] > tds->scroll_ymax) {
       MEM_freeN(offsets);
       return false;
     }
   }
+
+  tds->xy[1] = y_next;
+
+  copy_v2_v2_int(tds->sel, sel_orig);
+  textview_step_sel(tds, -(str_len + 1));
 
   MEM_freeN(offsets);
   return true;
@@ -306,14 +317,15 @@ int textview_draw(TextViewContext *tvc,
 {
   TextViewDrawState tds = {0};
 
-  int x_orig = tvc->draw_rect.xmin, y_orig = tvc->draw_rect.ymin + tvc->lheight / 6;
+  const int x_orig = tvc->draw_rect.xmin, y_orig = tvc->draw_rect.ymin;
   int xy[2];
   /* Disable selection by. */
   int sel[2] = {-1, -1};
-  unsigned char fg[3], bg[3];
+  uchar fg[4], bg[4], icon_fg[4], icon_bg[4];
+  int icon = 0;
   const int font_id = blf_mono_font;
 
-  console_font_begin(font_id, tvc->lheight);
+  textview_font_begin(font_id, tvc->lheight);
 
   xy[0] = x_orig;
   xy[1] = y_orig;
@@ -338,6 +350,7 @@ int textview_draw(TextViewContext *tvc,
   tds.cwidth = (int)BLF_fixed_width(font_id);
   BLI_assert(tds.cwidth > 0);
   tds.lheight = tvc->lheight;
+  tds.row_vpadding = tvc->row_vpadding;
   tds.lofs = -BLF_descender(font_id);
   /* Note, scroll bar must be already subtracted. */
   tds.columns = (tvc->draw_rect.xmax - tvc->draw_rect.xmin) / tds.cwidth;
@@ -346,6 +359,7 @@ int textview_draw(TextViewContext *tvc,
     tds.columns = 1;
   }
   tds.draw_rect = &tvc->draw_rect;
+  tds.draw_rect_outer = &tvc->draw_rect_outer;
   tds.scroll_ymin = tvc->scroll_ymin;
   tds.scroll_ymax = tvc->scroll_ymax;
   tds.xy = xy;
@@ -354,45 +368,51 @@ int textview_draw(TextViewContext *tvc,
   tds.mval = mval;
   tds.do_draw = do_draw;
 
-  /* Shouldnt be needed. */
-  tvc->cwidth = tds.cwidth;
-  tvc->columns = tds.columns;
-  tvc->iter_index = 0;
-
   if (tvc->sel_start != tvc->sel_end) {
     sel[0] = tvc->sel_start;
     sel[1] = tvc->sel_end;
   }
 
   if (tvc->begin(tvc)) {
-    unsigned char bg_sel[4] = {0};
+    uchar bg_sel[4] = {0};
 
     if (do_draw && tvc->const_colors) {
       tvc->const_colors(tvc, bg_sel);
     }
 
+    int iter_index = 0;
     do {
       const char *ext_line;
       int ext_len;
-      int color_flag = 0;
+      int data_flag = 0;
 
       const int y_prev = xy[1];
 
       if (do_draw) {
-        color_flag = tvc->line_color(tvc, fg, bg);
+        data_flag = tvc->line_data(tvc, fg, bg, &icon, icon_fg, icon_bg);
       }
 
       tvc->line_get(tvc, &ext_line, &ext_len);
 
-      if (!console_draw_string(&tds,
-                               ext_line,
-                               ext_len,
-                               (color_flag & TVC_LINE_FG) ? fg : NULL,
-                               (color_flag & TVC_LINE_BG) ? bg : NULL,
-                               bg_sel)) {
+      const bool is_out_of_view_y = !textview_draw_string(
+          &tds,
+          ext_line,
+          ext_len,
+          (data_flag & TVC_LINE_FG) ? fg : NULL,
+          (data_flag & TVC_LINE_BG) ? bg : NULL,
+          (data_flag & TVC_LINE_ICON) ? icon : 0,
+          (data_flag & TVC_LINE_ICON_FG) ? icon_fg : NULL,
+          (data_flag & TVC_LINE_ICON_BG) ? icon_bg : NULL,
+          bg_sel);
+
+      if (do_draw) {
+        /* We always want the cursor to draw. */
+        if (tvc->draw_cursor && iter_index == 0) {
+          tvc->draw_cursor(tvc, tds.cwidth, tds.columns);
+        }
+
         /* When drawing, if we pass v2d->cur.ymax, then quit. */
-        if (do_draw) {
-          /* Past the y limits. */
+        if (is_out_of_view_y) {
           break;
         }
       }
@@ -402,12 +422,17 @@ int textview_draw(TextViewContext *tvc,
         break;
       }
 
-      tvc->iter_index++;
+      iter_index++;
 
     } while (tvc->step(tvc));
   }
 
   tvc->end(tvc);
+
+  /* Sanity checks (bugs here can be tricky to track down). */
+  BLI_assert(tds.lheight == tvc->lheight);
+  BLI_assert(tds.row_vpadding == tvc->row_vpadding);
+  BLI_assert(tds.do_draw == do_draw);
 
   xy[1] += tvc->lheight * 2;
 

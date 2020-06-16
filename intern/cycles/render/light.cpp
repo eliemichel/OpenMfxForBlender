@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-#include "render/background.h"
+#include "render/light.h"
 #include "device/device.h"
-#include "render/integrator.h"
+#include "render/background.h"
 #include "render/film.h"
 #include "render/graph.h"
-#include "render/light.h"
+#include "render/integrator.h"
 #include "render/mesh.h"
 #include "render/nodes.h"
 #include "render/object.h"
@@ -28,9 +28,9 @@
 
 #include "util/util_foreach.h"
 #include "util/util_hash.h"
+#include "util/util_logging.h"
 #include "util/util_path.h"
 #include "util/util_progress.h"
-#include "util/util_logging.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -232,7 +232,10 @@ void LightManager::disable_ineffective_light(Scene *scene)
 
 bool LightManager::object_usable_as_light(Object *object)
 {
-  Mesh *mesh = object->mesh;
+  Geometry *geom = object->geometry;
+  if (geom->type != Geometry::MESH) {
+    return false;
+  }
   /* Skip objects with NaNs */
   if (!object->bounds.valid()) {
     return false;
@@ -243,10 +246,10 @@ bool LightManager::object_usable_as_light(Object *object)
   }
   /* Skip if we have no emission shaders. */
   /* TODO(sergey): Ideally we want to avoid such duplicated loop, since it'll
-   * iterate all mesh shaders twice (when counting and when calculating
+   * iterate all geometry shaders twice (when counting and when calculating
    * triangle area.
    */
-  foreach (const Shader *shader, mesh->used_shaders) {
+  foreach (const Shader *shader, geom->used_shaders) {
     if (shader->use_mis && shader->has_surface_emission) {
       return true;
     }
@@ -285,8 +288,9 @@ void LightManager::device_update_distribution(Device *,
     if (!object_usable_as_light(object)) {
       continue;
     }
+
     /* Count triangles. */
-    Mesh *mesh = object->mesh;
+    Mesh *mesh = static_cast<Mesh *>(object->geometry);
     size_t mesh_num_triangles = mesh->num_triangles();
     for (size_t i = 0; i < mesh_num_triangles; i++) {
       int shader_index = mesh->shader[i];
@@ -320,7 +324,7 @@ void LightManager::device_update_distribution(Device *,
       continue;
     }
     /* Sum area. */
-    Mesh *mesh = object->mesh;
+    Mesh *mesh = static_cast<Mesh *>(object->geometry);
     bool transform_applied = mesh->transform_applied;
     Transform tfm = object->tfm;
     int object_id = j;
@@ -352,7 +356,7 @@ void LightManager::device_update_distribution(Device *,
 
       if (shader->use_mis && shader->has_surface_emission) {
         distribution[offset].totarea = totarea;
-        distribution[offset].prim = i + mesh->tri_offset;
+        distribution[offset].prim = i + mesh->prim_offset;
         distribution[offset].mesh_light.shader_flag = shader_flag;
         distribution[offset].mesh_light.object_id = object_id;
         offset++;
@@ -573,8 +577,8 @@ void LightManager::device_update_background(Device *device,
       if (node->type == EnvironmentTextureNode::node_type) {
         EnvironmentTextureNode *env = (EnvironmentTextureNode *)node;
         ImageMetaData metadata;
-        if (env->image_manager && !env->slots.empty() &&
-            env->image_manager->get_image_metadata(env->slots[0], metadata)) {
+        if (!env->handle.empty()) {
+          ImageMetaData metadata = env->handle.metadata();
           res.x = max(res.x, metadata.width);
           res.y = max(res.y, metadata.height);
         }

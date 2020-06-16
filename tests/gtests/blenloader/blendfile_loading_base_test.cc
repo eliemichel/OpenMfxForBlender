@@ -17,31 +17,32 @@
  */
 #include "blendfile_loading_base_test.h"
 
+#include "MEM_guardedalloc.h"
+
 extern "C" {
 #include "BKE_appdir.h"
 #include "BKE_blender.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_idtype.h"
 #include "BKE_image.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_node.h"
 #include "BKE_scene.h"
 
-#include "BLI_threads.h"
 #include "BLI_path_util.h"
+#include "BLI_threads.h"
 
 #include "BLO_readfile.h"
 
-#include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_build.h"
 
 #include "DNA_genfile.h" /* for DNA_sdna_current_init() */
 #include "DNA_windowmanager_types.h"
 
 #include "IMB_imbuf.h"
-
-#include "MEM_guardedalloc.h"
 
 #include "RNA_define.h"
 
@@ -65,6 +66,8 @@ void BlendfileLoadingBaseTest::SetUpTestCase()
 
   DNA_sdna_current_init();
   BKE_blender_globals_init();
+
+  BKE_idtype_init();
   IMB_init();
   BKE_images_init();
   BKE_modifier_init();

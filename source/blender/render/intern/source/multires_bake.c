@@ -25,12 +25,12 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_threads.h"
 
 #include "BKE_ccg.h"
@@ -38,8 +38,8 @@
 #include "BKE_image.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
-#include "BKE_multires.h"
 #include "BKE_modifier.h"
+#include "BKE_multires.h"
 #include "BKE_subsurf.h"
 
 #include "DEG_depsgraph.h"
@@ -48,8 +48,8 @@
 #include "RE_pipeline.h"
 #include "RE_shader_ext.h"
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 typedef void (*MPassKnownData)(DerivedMesh *lores_dm,
                                DerivedMesh *hires_dm,
@@ -838,8 +838,7 @@ static void apply_heights_callback(DerivedMesh *lores_dm,
     resolve_tri_uv_v2(uv, st, st0, st1, st2);
   }
 
-  CLAMP(uv[0], 0.0f, 1.0f);
-  CLAMP(uv[1], 0.0f, 1.0f);
+  clamp_v2(uv, 0.0f, 1.0f);
 
   get_ccgdm_data(
       lores_dm, hires_dm, height_data->orig_index_mp_to_orig, lvl, lt, uv[0], uv[1], p1, NULL);
@@ -951,8 +950,7 @@ static void apply_tangmat_callback(DerivedMesh *lores_dm,
     resolve_tri_uv_v2(uv, st, st0, st1, st2);
   }
 
-  CLAMP(uv[0], 0.0f, 1.0f);
-  CLAMP(uv[1], 0.0f, 1.0f);
+  clamp_v2(uv, 0.0f, 1.0f);
 
   get_ccgdm_data(
       lores_dm, hires_dm, normal_data->orig_index_mp_to_orig, lvl, lt, uv[0], uv[1], NULL, n);
@@ -1219,8 +1217,7 @@ static void apply_ao_callback(DerivedMesh *lores_dm,
     resolve_tri_uv_v2(uv, st, st0, st1, st2);
   }
 
-  CLAMP(uv[0], 0.0f, 1.0f);
-  CLAMP(uv[1], 0.0f, 1.0f);
+  clamp_v2(uv, 0.0f, 1.0f);
 
   get_ccgdm_data(
       lores_dm, hires_dm, ao_data->orig_index_mp_to_orig, lvl, lt, uv[0], uv[1], pos, nrm);

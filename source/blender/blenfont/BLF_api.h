@@ -27,12 +27,17 @@
 #include "BLI_compiler_attrs.h"
 #include "BLI_sys_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* enable this only if needed (unused circa 2016) */
 #define BLF_BLUR_ENABLE 0
 
 struct ColorManagedDisplay;
 struct ResultBLF;
 struct rctf;
+struct rcti;
 
 int BLF_init(void);
 void BLF_exit(void);
@@ -110,6 +115,24 @@ void BLF_draw_ascii_ex(int fontid, const char *str, size_t len, struct ResultBLF
     ATTR_NONNULL(2);
 void BLF_draw_ascii(int fontid, const char *str, size_t len) ATTR_NONNULL(2);
 int BLF_draw_mono(int fontid, const char *str, size_t len, int cwidth) ATTR_NONNULL(2);
+
+typedef bool (*BLF_GlyphBoundsFn)(const char *str,
+                                  const size_t str_ofs,
+                                  const struct rcti *glyph_bounds,
+                                  const int glyph_advance_x,
+                                  void *user_data);
+
+void BLF_boundbox_foreach_glyph_ex(int fontid,
+                                   const char *str,
+                                   size_t len,
+                                   BLF_GlyphBoundsFn user_fn,
+                                   void *user_data,
+                                   struct ResultBLF *r_info) ATTR_NONNULL(2);
+void BLF_boundbox_foreach_glyph(int fontid,
+                                const char *str,
+                                size_t len,
+                                BLF_GlyphBoundsFn user_fn,
+                                void *user_data) ATTR_NONNULL(2);
 
 /* Get the string byte offset that fits within a given width */
 size_t BLF_width_to_strlen(int fontid, const char *str, size_t len, float width, float *r_width)
@@ -234,11 +257,9 @@ void BLF_thumb_preview(const char *filename,
                        int h,
                        int channels) ATTR_NONNULL();
 
-/* blf_font_i18.c */
-unsigned char *BLF_get_unifont(int *unifont_size);
-void BLF_free_unifont(void);
-unsigned char *BLF_get_unifont_mono(int *unifont_size);
-void BLF_free_unifont_mono(void);
+/* blf_font_default.c */
+int BLF_load_default(const bool unique);
+int BLF_load_mono_default(const bool unique);
 
 #ifdef DEBUG
 void BLF_state_print(int fontid);
@@ -276,5 +297,9 @@ struct ResultBLF {
    */
   int width;
 };
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BLF_API_H__ */

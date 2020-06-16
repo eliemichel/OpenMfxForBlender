@@ -21,8 +21,8 @@
 
 #include "Chain.h"
 
-#include "../view_map/ViewMapIterators.h"
 #include "../view_map/ViewMapAdvancedIterators.h"
+#include "../view_map/ViewMapIterators.h"
 
 namespace Freestyle {
 

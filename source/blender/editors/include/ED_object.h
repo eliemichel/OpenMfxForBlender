@@ -54,8 +54,8 @@ struct wmOperator;
 struct wmOperatorType;
 struct wmWindowManager;
 
-#include "DNA_object_enums.h"
 #include "BLI_compiler_attrs.h"
+#include "DNA_object_enums.h"
 
 /* object_edit.c */
 /* context.object */
@@ -145,6 +145,12 @@ typedef enum eObjectSelect_Mode {
   BA_SELECT = 1,
   BA_INVERT = 2,
 } eObjectSelect_Mode;
+
+typedef enum eObClearParentTypes {
+  CLEAR_PARENT_ALL = 0,
+  CLEAR_PARENT_KEEP_TRANSFORM,
+  CLEAR_PARENT_INVERSE,
+} eObClearParentTypes;
 
 #ifdef __RNA_TYPES_H__
 extern struct EnumPropertyItem prop_clear_parent_types[];
@@ -240,7 +246,7 @@ void ED_object_sculptmode_exit(struct bContext *C, struct Depsgraph *depsgraph);
 void ED_object_location_from_view(struct bContext *C, float loc[3]);
 void ED_object_rotation_from_quat(float rot[3], const float quat[4], const char align_axis);
 void ED_object_rotation_from_view(struct bContext *C, float rot[3], const char align_axis);
-void ED_object_base_init_transform_on_add(struct Object *obejct,
+void ED_object_base_init_transform_on_add(struct Object *object,
                                           const float loc[3],
                                           const float rot[3]);
 float ED_object_new_primitive_matrix(struct bContext *C,
@@ -254,6 +260,7 @@ float ED_object_new_primitive_matrix(struct bContext *C,
 #define OBJECT_ADD_SIZE_MAXF 1.0e12f
 
 void ED_object_add_unit_props_size(struct wmOperatorType *ot);
+void ED_object_add_unit_props_radius_ex(struct wmOperatorType *ot, float default_value);
 void ED_object_add_unit_props_radius(struct wmOperatorType *ot);
 void ED_object_add_generic_props(struct wmOperatorType *ot, bool do_editmode);
 void ED_object_add_mesh_props(struct wmOperatorType *ot);
@@ -362,13 +369,13 @@ int ED_object_modifier_convert(struct ReportList *reports,
                                struct ViewLayer *view_layer,
                                struct Object *ob,
                                struct ModifierData *md);
-int ED_object_modifier_apply(struct Main *bmain,
-                             struct ReportList *reports,
-                             struct Depsgraph *depsgraph,
-                             struct Scene *scene,
-                             struct Object *ob,
-                             struct ModifierData *md,
-                             int mode);
+bool ED_object_modifier_apply(struct Main *bmain,
+                              struct ReportList *reports,
+                              struct Depsgraph *depsgraph,
+                              struct Scene *scene,
+                              struct Object *ob,
+                              struct ModifierData *md,
+                              int mode);
 int ED_object_modifier_copy(struct ReportList *reports,
                             struct Object *ob,
                             struct ModifierData *md);

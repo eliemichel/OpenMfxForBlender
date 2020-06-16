@@ -63,11 +63,11 @@
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-#include "DNA_object_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
 
 #include "BKE_deform.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_modifier.h"
@@ -922,7 +922,13 @@ static Mesh *subdivide_base(Mesh *orig)
 
     u = e->v1;
     radrat = (half_v2(outnode[e->v2].radius) / half_v2(outnode[e->v1].radius));
-    radrat = (radrat + 1) / 2;
+    if (isfinite(radrat)) {
+      radrat = (radrat + 1) / 2;
+    }
+    else {
+      /* Happens when skin is scaled to zero. */
+      radrat = 1.0f;
+    }
 
     /* Add vertices and edge segments */
     for (j = 0; j < edge_subd[i]; j++, v++, outedge++) {
@@ -943,7 +949,7 @@ static Mesh *subdivide_base(Mesh *orig)
         weight = interpf(vg->w2, vg->w1, t);
 
         if (weight > 0) {
-          defvert_add_index_notest(&outdvert[v], vg->def_nr, weight);
+          BKE_defvert_add_index_notest(&outdvert[v], vg->def_nr, weight);
         }
       }
 
@@ -1058,7 +1064,7 @@ static void output_frames(BMesh *bm, SkinNode *sn, const MDeformVert *input_dver
           dv = CustomData_bmesh_get(&bm->vdata, v->head.data, CD_MDEFORMVERT);
 
           BLI_assert(dv->totweight == 0);
-          defvert_copy(dv, input_dvert);
+          BKE_defvert_copy(dv, input_dvert);
         }
       }
     }

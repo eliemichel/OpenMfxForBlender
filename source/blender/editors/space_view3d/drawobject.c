@@ -22,22 +22,22 @@
  */
 
 #include "DNA_mesh_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_math.h"
 
 #include "BKE_DerivedMesh.h"
-#include "BKE_global.h"
-
 #include "BKE_editmesh.h"
+#include "BKE_global.h"
+#include "BKE_object.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-#include "GPU_shader.h"
-#include "GPU_immediate.h"
 #include "GPU_batch.h"
+#include "GPU_immediate.h"
+#include "GPU_shader.h"
 #include "GPU_state.h"
 
 #include "ED_mesh.h"
@@ -87,7 +87,7 @@ static void circball_array_fill(float verts[CIRCLE_RESOL][3],
   }
 }
 
-void imm_drawcircball(const float cent[3], float rad, const float tmat[4][4], unsigned pos)
+void imm_drawcircball(const float cent[3], float rad, const float tmat[4][4], uint pos)
 {
   float verts[CIRCLE_RESOL][3];
 
@@ -120,8 +120,9 @@ void ED_draw_object_facemap(Depsgraph *depsgraph,
   Mesh *me = ob->data;
   {
     Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
-    if (ob_eval->runtime.mesh_eval) {
-      me = ob_eval->runtime.mesh_eval;
+    Mesh *me_eval = BKE_object_get_evaluated_mesh(ob_eval);
+    if (me_eval != NULL) {
+      me = me_eval;
     }
   }
 

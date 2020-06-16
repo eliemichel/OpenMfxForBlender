@@ -21,20 +21,20 @@
  * \ingroup texnodes
  */
 
-#include "node_texture_util.h"
 #include "NOD_texture.h"
+#include "node_texture_util.h"
 
 /* **************** SCALAR MATH ******************** */
 static bNodeSocketTemplate inputs[] = {
-    {SOCK_FLOAT, 1, N_("Value"), 0.5f, 0.5f, 0.5f, 1.0f, -100.0f, 100.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("Value"), 0.5f, 0.5f, 0.5f, 1.0f, -100.0f, 100.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("Value"), 0.0f, 0.5f, 0.5f, 1.0f, -100.0f, 100.0f, PROP_NONE},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Value"), 0.5f, 0.5f, 0.5f, 1.0f, -100.0f, 100.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("Value"), 0.5f, 0.5f, 0.5f, 1.0f, -100.0f, 100.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("Value"), 0.0f, 0.5f, 0.5f, 1.0f, -100.0f, 100.0f, PROP_NONE},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate outputs[] = {
-    {SOCK_FLOAT, 0, N_("Value")},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Value")},
+    {-1, ""},
 };
 
 static void valuefn(float *out, TexParams *p, bNode *node, bNodeStack **in, short thread)
@@ -336,43 +336,6 @@ static void exec(void *data,
   tex_output(node, execdata, in, out[0], &valuefn, data);
 }
 
-static void node_shader_update_math(bNodeTree *UNUSED(ntree), bNode *node)
-{
-  bNodeSocket *sock = BLI_findlink(&node->inputs, 1);
-  nodeSetSocketAvailability(sock,
-                            !ELEM(node->custom1,
-                                  NODE_MATH_SQRT,
-                                  NODE_MATH_SIGN,
-                                  NODE_MATH_CEIL,
-                                  NODE_MATH_SINE,
-                                  NODE_MATH_ROUND,
-                                  NODE_MATH_FLOOR,
-                                  NODE_MATH_COSINE,
-                                  NODE_MATH_ARCSINE,
-                                  NODE_MATH_TANGENT,
-                                  NODE_MATH_ABSOLUTE,
-                                  NODE_MATH_RADIANS,
-                                  NODE_MATH_DEGREES,
-                                  NODE_MATH_FRACTION,
-                                  NODE_MATH_ARCCOSINE,
-                                  NODE_MATH_ARCTANGENT) &&
-                                !ELEM(node->custom1,
-                                      NODE_MATH_INV_SQRT,
-                                      NODE_MATH_TRUNC,
-                                      NODE_MATH_EXPONENT,
-                                      NODE_MATH_COSH,
-                                      NODE_MATH_SINH,
-                                      NODE_MATH_TANH));
-  bNodeSocket *sock2 = BLI_findlink(&node->inputs, 2);
-  nodeSetSocketAvailability(sock2,
-                            ELEM(node->custom1,
-                                 NODE_MATH_COMPARE,
-                                 NODE_MATH_MULTIPLY_ADD,
-                                 NODE_MATH_WRAP,
-                                 NODE_MATH_SMOOTH_MIN,
-                                 NODE_MATH_SMOOTH_MAX));
-}
-
 void register_node_type_tex_math(void)
 {
   static bNodeType ntype;
@@ -382,7 +345,7 @@ void register_node_type_tex_math(void)
   node_type_label(&ntype, node_math_label);
   node_type_storage(&ntype, "", NULL, NULL);
   node_type_exec(&ntype, NULL, NULL, exec);
-  node_type_update(&ntype, node_shader_update_math);
+  node_type_update(&ntype, node_math_update);
 
   nodeRegisterType(&ntype);
 }

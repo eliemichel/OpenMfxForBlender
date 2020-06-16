@@ -26,6 +26,10 @@
 
 #include "BLI_sys_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Define icon enum. */
 #define DEF_ICON(name) ICON_##name,
 #define DEF_ICON_VECTOR(name) ICON_##name,
@@ -108,6 +112,8 @@ typedef enum ThemeColorID {
   TH_FACEDOT_SIZE,
   TH_CFRAME,
   TH_TIME_SCRUB_BACKGROUND,
+  TH_TIME_MARKER_LINE,
+  TH_TIME_MARKER_LINE_SELECTED,
   TH_TIME_KEYFRAME,
   TH_TIME_GP_KEYFRAME,
   TH_NURB_ULINE,
@@ -143,6 +149,7 @@ typedef enum ThemeColorID {
   TH_BONE_SOLID,
   TH_BONE_POSE,
   TH_BONE_POSE_ACTIVE,
+  TH_BONE_LOCKED_WEIGHT,
 
   TH_STRIP,
   TH_STRIP_SELECT,
@@ -198,10 +205,12 @@ typedef enum ThemeColorID {
   TH_SEQ_SCENE,
   TH_SEQ_AUDIO,
   TH_SEQ_EFFECT,
-  TH_SEQ_TRANSITION,
   TH_SEQ_META,
   TH_SEQ_TEXT,
   TH_SEQ_PREVIEW,
+  TH_SEQ_COLOR,
+  TH_SEQ_ACTIVE,
+  TH_SEQ_SELECTED,
 
   TH_EDGE_SHARP,
   TH_EDITMESH_ACTIVE,
@@ -228,6 +237,7 @@ typedef enum ThemeColorID {
   TH_DRAWEXTRA_FACEANG,
 
   TH_NODE_CURVING,
+  TH_NODE_GRID_LEVELS,
 
   TH_MARKER_OUTLINE,
   TH_MARKER,
@@ -298,6 +308,10 @@ typedef enum ThemeColorID {
   TH_WIDGET_TEXT_CURSOR,
   TH_EDITOR_OUTLINE,
 
+  TH_TRANSPARENT_CHECKER_PRIMARY,
+  TH_TRANSPARENT_CHECKER_SECONDARY,
+  TH_TRANSPARENT_CHECKER_SIZE,
+
   TH_AXIS_X, /* X/Y/Z Axis */
   TH_AXIS_Y,
   TH_AXIS_Z,
@@ -305,10 +319,11 @@ typedef enum ThemeColorID {
   TH_GIZMO_HI,
   TH_GIZMO_PRIMARY,
   TH_GIZMO_SECONDARY,
+  TH_GIZMO_VIEW_ALIGN,
   TH_GIZMO_A,
   TH_GIZMO_B,
 
-  TH_SHOW_BACK_GRAD,
+  TH_BACKGROUND_TYPE,
 
   TH_INFO_SELECTED,
   TH_INFO_SELECTED_TEXT,
@@ -320,7 +335,14 @@ typedef enum ThemeColorID {
   TH_INFO_INFO_TEXT,
   TH_INFO_DEBUG,
   TH_INFO_DEBUG_TEXT,
+  TH_INFO_PROPERTY,
+  TH_INFO_PROPERTY_TEXT,
+  TH_INFO_OPERATOR,
+  TH_INFO_OPERATOR_TEXT,
   TH_VIEW_OVERLAY,
+  TH_INFO_REPORT_ERROR,
+  TH_INFO_REPORT_WARNING,
+  TH_INFO_REPORT_INFO,
 
   TH_V3D_CLIPPING_BORDER,
 
@@ -435,5 +457,9 @@ int UI_ThemeMenuShadowWidth(void);
 const unsigned char *UI_ThemeGetColorPtr(struct bTheme *btheme, int spacetype, int colorid);
 
 void UI_make_axis_color(const unsigned char *src_col, unsigned char *dst_col, const char axis);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __UI_RESOURCES_H__ */

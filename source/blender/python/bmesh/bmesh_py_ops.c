@@ -26,15 +26,15 @@
 
 #include <Python.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_dynstr.h"
+#include "BLI_utildefines.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "bmesh.h"
 
-#include "bmesh_py_ops_call.h"
 #include "bmesh_py_ops.h" /* own include */
+#include "bmesh_py_ops_call.h"
 
 /* bmesh operator 'bmesh.ops.*' callable types
  * ******************************************* */
@@ -259,8 +259,8 @@ static PyObject *bpy_bmesh_ops_fakemod_getattro(PyObject *UNUSED(self), PyObject
 
 static PyObject *bpy_bmesh_ops_fakemod_dir(PyObject *UNUSED(self))
 {
-  const unsigned int tot = bmo_opdefines_total;
-  unsigned int i;
+  const uint tot = bmo_opdefines_total;
+  uint i;
   PyObject *ret;
 
   ret = PyList_New(bmo_opdefines_total);

@@ -19,9 +19,9 @@
  */
 
 #include "BLI_listbase.h"
-#include "BLI_string.h"
-#include "BLI_rect.h"
 #include "BLI_math.h"
+#include "BLI_rect.h"
+#include "BLI_string.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
@@ -31,13 +31,13 @@
 #include "BKE_main.h"
 #include "BKE_report.h"
 
+#include "BKE_material.h"
 #include "BKE_object.h"
 #include "BKE_unit.h"
-#include "BKE_material.h"
 
+#include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-#include "DNA_gpencil_types.h"
 #include "DNA_view3d_types.h"
 
 #include "ED_gizmo_utils.h"
@@ -46,21 +46,22 @@
 #include "ED_transform_snap_object_context.h"
 #include "ED_view3d.h"
 
-#include "UI_resources.h"
 #include "UI_interface.h"
+#include "UI_resources.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "RNA_access.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_toolsystem.h"
+#include "WM_types.h"
 
 #include "view3d_intern.h" /* own include */
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
+#include "GPU_matrix.h"
 #include "GPU_state.h"
 
 #include "BLF_api.h"
@@ -110,8 +111,8 @@ typedef struct RulerInfo {
 
   /* wm state */
   wmWindow *win;
-  ScrArea *sa;
-  ARegion *ar; /* re-assigned every modal update */
+  ScrArea *area;
+  ARegion *region; /* re-assigned every modal update */
 
   /* Track changes in state. */
   struct {
@@ -201,7 +202,7 @@ static bool view3d_ruler_pick(wmGizmoGroup *gzgroup,
                               int *r_co_index)
 {
   RulerInfo *ruler_info = gzgroup->customdata;
-  ARegion *ar = ruler_info->ar;
+  ARegion *region = ruler_info->region;
   bool found = false;
 
   float dist_best = RULER_PICK_DIST_SQ;
@@ -214,7 +215,7 @@ static bool view3d_ruler_pick(wmGizmoGroup *gzgroup,
 
     /* should these be checked? - ok for now not to */
     for (j = 0; j < 3; j++) {
-      ED_view3d_project_float_global(ar, ruler_item->co[j], co_ss[j], V3D_PROJ_TEST_NOP);
+      ED_view3d_project_float_global(region, ruler_item->co[j], co_ss[j], V3D_PROJ_TEST_NOP);
     }
 
     if (ruler_item->flag & RULERITEM_USE_ANGLE) {
@@ -288,12 +289,7 @@ static void ruler_state_set(bContext *C, RulerInfo *ruler_info, int state)
   else if (state == RULER_STATE_DRAG) {
     memset(&ruler_info->drag_state_prev, 0x0, sizeof(ruler_info->drag_state_prev));
     ruler_info->snap_context = ED_transform_snap_object_context_create_view3d(
-        bmain,
-        CTX_data_scene(C),
-        CTX_data_ensure_evaluated_depsgraph(C),
-        0,
-        ruler_info->ar,
-        CTX_wm_view3d(C));
+        bmain, CTX_data_scene(C), 0, ruler_info->region, CTX_wm_view3d(C));
   }
   else {
     BLI_assert(0);
@@ -304,11 +300,12 @@ static void ruler_state_set(bContext *C, RulerInfo *ruler_info, int state)
 
 static void view3d_ruler_item_project(RulerInfo *ruler_info, float r_co[3], const int xy[2])
 {
-  ED_view3d_win_to_3d_int(ruler_info->sa->spacedata.first, ruler_info->ar, r_co, xy, r_co);
+  ED_view3d_win_to_3d_int(ruler_info->area->spacedata.first, ruler_info->region, r_co, xy, r_co);
 }
 
 /* use for mousemove events */
-static bool view3d_ruler_item_mousemove(RulerInfo *ruler_info,
+static bool view3d_ruler_item_mousemove(struct Depsgraph *depsgraph,
+                                        RulerInfo *ruler_info,
                                         RulerItem *ruler_item,
                                         const int mval[2],
                                         const bool do_thickness,
@@ -327,7 +324,7 @@ static bool view3d_ruler_item_mousemove(RulerInfo *ruler_info,
     view3d_ruler_item_project(ruler_info, co, mval);
     if (do_thickness && inter->co_index != 1) {
       // Scene *scene = CTX_data_scene(C);
-      // View3D *v3d = ruler_info->sa->spacedata.first;
+      // View3D *v3d = ruler_info->area->spacedata.first;
       const float mval_fl[2] = {UNPACK2(mval)};
       float ray_normal[3];
       float ray_start[3];
@@ -336,6 +333,7 @@ static bool view3d_ruler_item_mousemove(RulerInfo *ruler_info,
       co_other = ruler_item->co[inter->co_index == 0 ? 2 : 0];
 
       if (ED_transform_snap_object_project_view3d(ruler_info->snap_context,
+                                                  depsgraph,
                                                   SCE_SNAP_MODE_FACE,
                                                   &(const struct SnapObjectParams){
                                                       .snap_select = SNAP_ALL,
@@ -350,6 +348,7 @@ static bool view3d_ruler_item_mousemove(RulerInfo *ruler_info,
         /* add some bias */
         madd_v3_v3v3fl(ray_start, co, ray_normal, eps_bias);
         ED_transform_snap_object_project_ray(ruler_info->snap_context,
+                                             depsgraph,
                                              &(const struct SnapObjectParams){
                                                  .snap_select = SNAP_ALL,
                                                  .use_object_edit_cage = true,
@@ -379,6 +378,7 @@ static bool view3d_ruler_item_mousemove(RulerInfo *ruler_info,
 
       if (ED_transform_snap_object_project_view3d(
               ruler_info->snap_context,
+              depsgraph,
               (SCE_SNAP_MODE_VERTEX | SCE_SNAP_MODE_EDGE | SCE_SNAP_MODE_FACE |
                SCE_SNAP_MODE_EDGE_MIDPOINT | SCE_SNAP_MODE_EDGE_PERPENDICULAR),
               &(const struct SnapObjectParams){
@@ -410,7 +410,7 @@ static bool view3d_ruler_item_mousemove(RulerInfo *ruler_info,
 /* Helper: Find the layer created as ruler. */
 static bGPDlayer *view3d_ruler_layer_get(bGPdata *gpd)
 {
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
     if (gpl->flag & GP_LAYER_IS_RULER) {
       return gpl;
     }
@@ -446,7 +446,7 @@ static bool view3d_ruler_to_gpencil(bContext *C, wmGizmoGroup *gzgroup)
     gpl->flag |= GP_LAYER_HIDE | GP_LAYER_IS_RULER;
   }
 
-  gpf = BKE_gpencil_layer_getframe(gpl, CFRA, GP_GETFRAME_ADD_NEW);
+  gpf = BKE_gpencil_layer_frame_get(gpl, CFRA, GP_GETFRAME_ADD_NEW);
   BKE_gpencil_free_strokes(gpf);
 
   for (ruler_item = gzgroup->gizmos.first; ruler_item;
@@ -478,9 +478,10 @@ static bool view3d_ruler_to_gpencil(bContext *C, wmGizmoGroup *gzgroup)
     }
     gps->flag = GP_STROKE_3DSPACE;
     gps->thickness = 3;
-    gps->gradient_f = 1.0f;
-    gps->gradient_s[0] = 1.0f;
-    gps->gradient_s[1] = 1.0f;
+    gps->hardeness = 1.0f;
+    gps->fill_opacity_fac = 1.0f;
+    copy_v2_fl(gps->aspect_ratio, 1.0f);
+    gps->uv_scale = 1.0f;
 
     BLI_addtail(&gpf->strokes, gps);
     changed = true;
@@ -499,7 +500,7 @@ static bool view3d_ruler_from_gpencil(const bContext *C, wmGizmoGroup *gzgroup)
     gpl = view3d_ruler_layer_get(scene->gpd);
     if (gpl) {
       bGPDframe *gpf;
-      gpf = BKE_gpencil_layer_getframe(gpl, CFRA, GP_GETFRAME_USE_PREV);
+      gpf = BKE_gpencil_layer_frame_get(gpl, CFRA, GP_GETFRAME_USE_PREV);
       if (gpf) {
         bGPDstroke *gps;
         for (gps = gpf->strokes.first; gps; gps = gps->next) {
@@ -543,8 +544,8 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
   UnitSettings *unit = &scene->unit;
   RulerInfo *ruler_info = gz->parent_gzgroup->customdata;
   RulerItem *ruler_item = (RulerItem *)gz;
-  ARegion *ar = ruler_info->ar;
-  RegionView3D *rv3d = ar->regiondata;
+  ARegion *region = ruler_info->region;
+  RegionView3D *rv3d = region->regiondata;
   const float cap_size = 4.0f;
   const float bg_margin = 4.0f * U.pixelsize;
   const float arc_size = 64.0f * U.pixelsize;
@@ -575,20 +576,30 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
   const bool is_act = (ruler_info->item_active == ruler_item);
   float dir_ruler[2];
   float co_ss[3][2];
+  bool proj_ok[3];
   int j;
 
-  /* should these be checked? - ok for now not to */
+  /* Check if each corner is behind the near plane. If it is, we do not draw certain lines. */
   for (j = 0; j < 3; j++) {
-    ED_view3d_project_float_global(ar, ruler_item->co[j], co_ss[j], V3D_PROJ_TEST_NOP);
+    eV3DProjStatus status = ED_view3d_project_float_global(
+        region, ruler_item->co[j], co_ss[j], V3D_PROJ_TEST_CLIP_NEAR);
+    proj_ok[j] = (status == V3D_PROJ_RET_OK);
   }
+
+  /* 3d drawing. */
+
+  GPU_matrix_push_projection();
+  GPU_matrix_push();
+  GPU_matrix_projection_set(rv3d->winmat);
+  GPU_matrix_set(rv3d->viewmat);
 
   GPU_blend(true);
 
-  const uint shdr_pos = GPU_vertformat_attr_add(
-      immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+  const uint shdr_pos_3d = GPU_vertformat_attr_add(
+      immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
 
   if (ruler_item->flag & RULERITEM_USE_ANGLE) {
-    immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
+    immBindBuiltinProgram(GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR);
 
     float viewport_size[4];
     GPU_viewport_size_get_f(viewport_size);
@@ -605,21 +616,20 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 
     immBegin(GPU_PRIM_LINE_STRIP, 3);
 
-    immVertex2fv(shdr_pos, co_ss[0]);
-    immVertex2fv(shdr_pos, co_ss[1]);
-    immVertex2fv(shdr_pos, co_ss[2]);
+    immVertex3fv(shdr_pos_3d, ruler_item->co[0]);
+    immVertex3fv(shdr_pos_3d, ruler_item->co[1]);
+    immVertex3fv(shdr_pos_3d, ruler_item->co[2]);
 
     immEnd();
 
     immUnbindProgram();
 
-    immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+    immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
 
     /* arc */
     {
       float dir_tmp[3];
-      float co_tmp[3];
-      float arc_ss_coord[2];
+      float ar_coord[3];
 
       float dir_a[3];
       float dir_b[3];
@@ -648,16 +658,53 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
       immBegin(GPU_PRIM_LINE_STRIP, arc_steps + 1);
 
       for (j = 0; j <= arc_steps; j++) {
-        madd_v3_v3v3fl(co_tmp, ruler_item->co[1], dir_tmp, px_scale);
-        ED_view3d_project_float_global(ar, co_tmp, arc_ss_coord, V3D_PROJ_TEST_NOP);
+        madd_v3_v3v3fl(ar_coord, ruler_item->co[1], dir_tmp, px_scale);
         mul_qt_v3(quat, dir_tmp);
 
-        immVertex2fv(shdr_pos, arc_ss_coord);
+        immVertex3fv(shdr_pos_3d, ar_coord);
       }
 
       immEnd();
     }
 
+    immUnbindProgram();
+  }
+  else {
+    immBindBuiltinProgram(GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR);
+
+    float viewport_size[4];
+    GPU_viewport_size_get_f(viewport_size);
+    immUniform2f("viewport_size", viewport_size[2], viewport_size[3]);
+
+    immUniform1i("colors_len", 2); /* "advanced" mode */
+    const float *col = is_act ? color_act : color_base;
+    immUniformArray4fv(
+        "colors",
+        (float *)(float[][4]){{0.67f, 0.67f, 0.67f, 1.0f}, {col[0], col[1], col[2], col[3]}},
+        2);
+    immUniform1f("dash_width", 6.0f);
+    immUniform1f("dash_factor", 0.5f);
+
+    immBegin(GPU_PRIM_LINES, 2);
+
+    immVertex3fv(shdr_pos_3d, ruler_item->co[0]);
+    immVertex3fv(shdr_pos_3d, ruler_item->co[2]);
+
+    immEnd();
+
+    immUnbindProgram();
+  }
+
+  /* 2d drawing. */
+
+  GPU_matrix_pop();
+  GPU_matrix_pop_projection();
+
+  const uint shdr_pos_2d = GPU_vertformat_attr_add(
+      immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
+  if (ruler_item->flag & RULERITEM_USE_ANGLE) {
+    immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
     /* capping */
     {
       float rot_90_vec_a[2];
@@ -676,15 +723,15 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 
       GPU_blend(true);
 
-      if (is_act && (ruler_item->flag & RULERITEM_USE_ANGLE_ACTIVE)) {
+      if (proj_ok[1] && is_act && (ruler_item->flag & RULERITEM_USE_ANGLE_ACTIVE)) {
         GPU_line_width(3.0f);
         immUniformColor3fv(color_act);
         immBegin(GPU_PRIM_LINES, 4);
         /* angle vertex */
-        immVertex2f(shdr_pos, co_ss[1][0] - cap_size, co_ss[1][1] - cap_size);
-        immVertex2f(shdr_pos, co_ss[1][0] + cap_size, co_ss[1][1] + cap_size);
-        immVertex2f(shdr_pos, co_ss[1][0] - cap_size, co_ss[1][1] + cap_size);
-        immVertex2f(shdr_pos, co_ss[1][0] + cap_size, co_ss[1][1] - cap_size);
+        immVertex2f(shdr_pos_2d, co_ss[1][0] - cap_size, co_ss[1][1] - cap_size);
+        immVertex2f(shdr_pos_2d, co_ss[1][0] + cap_size, co_ss[1][1] + cap_size);
+        immVertex2f(shdr_pos_2d, co_ss[1][0] - cap_size, co_ss[1][1] + cap_size);
+        immVertex2f(shdr_pos_2d, co_ss[1][0] + cap_size, co_ss[1][1] - cap_size);
 
         immEnd();
         GPU_line_width(1.0f);
@@ -692,25 +739,33 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 
       immUniformColor3ubv(color_wire);
 
-      immBegin(GPU_PRIM_LINES, 8);
+      if (proj_ok[0] || proj_ok[2] || proj_ok[1]) {
+        immBegin(GPU_PRIM_LINES, proj_ok[0] * 2 + proj_ok[2] * 2 + proj_ok[1] * 4);
 
-      madd_v2_v2v2fl(cap, co_ss[0], rot_90_vec_a, cap_size);
-      immVertex2fv(shdr_pos, cap);
-      madd_v2_v2v2fl(cap, co_ss[0], rot_90_vec_a, -cap_size);
-      immVertex2fv(shdr_pos, cap);
+        if (proj_ok[0]) {
+          madd_v2_v2v2fl(cap, co_ss[0], rot_90_vec_a, cap_size);
+          immVertex2fv(shdr_pos_2d, cap);
+          madd_v2_v2v2fl(cap, co_ss[0], rot_90_vec_a, -cap_size);
+          immVertex2fv(shdr_pos_2d, cap);
+        }
 
-      madd_v2_v2v2fl(cap, co_ss[2], rot_90_vec_b, cap_size);
-      immVertex2fv(shdr_pos, cap);
-      madd_v2_v2v2fl(cap, co_ss[2], rot_90_vec_b, -cap_size);
-      immVertex2fv(shdr_pos, cap);
+        if (proj_ok[2]) {
+          madd_v2_v2v2fl(cap, co_ss[2], rot_90_vec_b, cap_size);
+          immVertex2fv(shdr_pos_2d, cap);
+          madd_v2_v2v2fl(cap, co_ss[2], rot_90_vec_b, -cap_size);
+          immVertex2fv(shdr_pos_2d, cap);
+        }
 
-      /* angle vertex */
-      immVertex2f(shdr_pos, co_ss[1][0] - cap_size, co_ss[1][1] - cap_size);
-      immVertex2f(shdr_pos, co_ss[1][0] + cap_size, co_ss[1][1] + cap_size);
-      immVertex2f(shdr_pos, co_ss[1][0] - cap_size, co_ss[1][1] + cap_size);
-      immVertex2f(shdr_pos, co_ss[1][0] + cap_size, co_ss[1][1] - cap_size);
+        /* angle vertex */
+        if (proj_ok[1]) {
+          immVertex2f(shdr_pos_2d, co_ss[1][0] - cap_size, co_ss[1][1] - cap_size);
+          immVertex2f(shdr_pos_2d, co_ss[1][0] + cap_size, co_ss[1][1] + cap_size);
+          immVertex2f(shdr_pos_2d, co_ss[1][0] - cap_size, co_ss[1][1] + cap_size);
+          immVertex2f(shdr_pos_2d, co_ss[1][0] + cap_size, co_ss[1][1] - cap_size);
+        }
 
-      immEnd();
+        immEnd();
+      }
 
       GPU_blend(false);
     }
@@ -729,10 +784,10 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
     posit[1] = co_ss[1][1] - (numstr_size[1] / 2.0f);
 
     /* draw text (bg) */
-    {
+    if (proj_ok[1]) {
       immUniformColor4fv(color_back);
       GPU_blend(true);
-      immRectf(shdr_pos,
+      immRectf(shdr_pos_2d,
                posit[0] - bg_margin,
                posit[1] - bg_margin,
                posit[0] + bg_margin + numstr_size[0],
@@ -743,7 +798,7 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
     immUnbindProgram();
 
     /* draw text */
-    {
+    if (proj_ok[1]) {
       BLF_color3ubv(blf_mono_font, color_text);
       BLF_position(blf_mono_font, posit[0], posit[1], 0.0f);
       BLF_rotation(blf_mono_font, 0.0f);
@@ -751,30 +806,6 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
     }
   }
   else {
-    immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
-
-    float viewport_size[4];
-    GPU_viewport_size_get_f(viewport_size);
-    immUniform2f("viewport_size", viewport_size[2], viewport_size[3]);
-
-    immUniform1i("colors_len", 2); /* "advanced" mode */
-    const float *col = is_act ? color_act : color_base;
-    immUniformArray4fv(
-        "colors",
-        (float *)(float[][4]){{0.67f, 0.67f, 0.67f, 1.0f}, {col[0], col[1], col[2], col[3]}},
-        2);
-    immUniform1f("dash_width", 6.0f);
-    immUniform1f("dash_factor", 0.5f);
-
-    immBegin(GPU_PRIM_LINES, 2);
-
-    immVertex2fv(shdr_pos, co_ss[0]);
-    immVertex2fv(shdr_pos, co_ss[2]);
-
-    immEnd();
-
-    immUnbindProgram();
-
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
     sub_v2_v2v2(dir_ruler, co_ss[0], co_ss[2]);
@@ -790,19 +821,25 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 
       immUniformColor3ubv(color_wire);
 
-      immBegin(GPU_PRIM_LINES, 4);
+      if (proj_ok[0] || proj_ok[2]) {
+        immBegin(GPU_PRIM_LINES, proj_ok[0] * 2 + proj_ok[2] * 2);
 
-      madd_v2_v2v2fl(cap, co_ss[0], rot_90_vec, cap_size);
-      immVertex2fv(shdr_pos, cap);
-      madd_v2_v2v2fl(cap, co_ss[0], rot_90_vec, -cap_size);
-      immVertex2fv(shdr_pos, cap);
+        if (proj_ok[0]) {
+          madd_v2_v2v2fl(cap, co_ss[0], rot_90_vec, cap_size);
+          immVertex2fv(shdr_pos_2d, cap);
+          madd_v2_v2v2fl(cap, co_ss[0], rot_90_vec, -cap_size);
+          immVertex2fv(shdr_pos_2d, cap);
+        }
 
-      madd_v2_v2v2fl(cap, co_ss[2], rot_90_vec, cap_size);
-      immVertex2fv(shdr_pos, cap);
-      madd_v2_v2v2fl(cap, co_ss[2], rot_90_vec, -cap_size);
-      immVertex2fv(shdr_pos, cap);
+        if (proj_ok[2]) {
+          madd_v2_v2v2fl(cap, co_ss[2], rot_90_vec, cap_size);
+          immVertex2fv(shdr_pos_2d, cap);
+          madd_v2_v2v2fl(cap, co_ss[2], rot_90_vec, -cap_size);
+          immVertex2fv(shdr_pos_2d, cap);
+        }
 
-      immEnd();
+        immEnd();
+      }
 
       GPU_blend(false);
     }
@@ -824,10 +861,10 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
     posit[1] -= numstr_size[1] / 2.0f;
 
     /* draw text (bg) */
-    {
+    if (proj_ok[0] && proj_ok[2]) {
       immUniformColor4fv(color_back);
       GPU_blend(true);
-      immRectf(shdr_pos,
+      immRectf(shdr_pos_2d,
                posit[0] - bg_margin,
                posit[1] - bg_margin,
                posit[0] + bg_margin + numstr_size[0],
@@ -838,7 +875,7 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
     immUnbindProgram();
 
     /* draw text */
-    {
+    if (proj_ok[0] && proj_ok[2]) {
       BLF_color3ubv(blf_mono_font, color_text);
       BLF_position(blf_mono_font, posit[0], posit[1], 0.0f);
       BLF_draw(blf_mono_font, numstr, sizeof(numstr));
@@ -859,12 +896,12 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
     const float size = 2.5f * UI_GetThemeValuef(TH_VERTEX_SIZE);
     float co_ss_snap[3];
     ED_view3d_project_float_global(
-        ar, ruler_item->co[inter->co_index], co_ss_snap, V3D_PROJ_TEST_NOP);
+        region, ruler_item->co[inter->co_index], co_ss_snap, V3D_PROJ_TEST_NOP);
 
     uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
-    immUniformColor4fv(color_act);
+    immUniformThemeColor3(TH_GIZMO_VIEW_ALIGN);
 
     imm_draw_circle_wire_2d(pos, co_ss_snap[0], co_ss_snap[1], size * U.pixelsize, 32);
 
@@ -901,10 +938,10 @@ static int gizmo_ruler_modal(bContext *C,
   int exit_code = OPERATOR_RUNNING_MODAL;
   RulerInfo *ruler_info = gz->parent_gzgroup->customdata;
   RulerItem *ruler_item = (RulerItem *)gz;
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   bool do_cursor_update = false;
 
-  ruler_info->ar = ar;
+  ruler_info->region = region;
 
   switch (event->type) {
     case MOUSEMOVE: {
@@ -922,8 +959,9 @@ static int gizmo_ruler_modal(bContext *C,
 
   if (do_cursor_update) {
     if (ruler_info->state == RULER_STATE_DRAG) {
+      struct Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
       if (view3d_ruler_item_mousemove(
-              ruler_info, ruler_item, event->mval, do_thickness, do_snap)) {
+              depsgraph, ruler_info, ruler_item, event->mval, do_thickness, do_snap)) {
         do_draw = true;
       }
     }
@@ -933,7 +971,7 @@ static int gizmo_ruler_modal(bContext *C,
   ruler_info->drag_state_prev.do_thickness = do_thickness;
 
   if (do_draw) {
-    ED_region_tag_redraw(ar);
+    ED_region_tag_redraw_editor_overlays(region);
   }
   return exit_code;
 }
@@ -946,7 +984,7 @@ static int gizmo_ruler_invoke(bContext *C, wmGizmo *gz, const wmEvent *event)
   RulerInteraction *inter = MEM_callocN(sizeof(RulerInteraction), __func__);
   gz->interaction_data = inter;
 
-  ARegion *ar = ruler_info->ar;
+  ARegion *region = ruler_info->region;
 
   const float mval_fl[2] = {UNPACK2(event->mval)};
 
@@ -963,8 +1001,10 @@ static int gizmo_ruler_invoke(bContext *C, wmGizmo *gz, const wmEvent *event)
         float co_ss[2][2];
         float fac;
 
-        ED_view3d_project_float_global(ar, ruler_item_pick->co[0], co_ss[0], V3D_PROJ_TEST_NOP);
-        ED_view3d_project_float_global(ar, ruler_item_pick->co[2], co_ss[1], V3D_PROJ_TEST_NOP);
+        ED_view3d_project_float_global(
+            region, ruler_item_pick->co[0], co_ss[0], V3D_PROJ_TEST_NOP);
+        ED_view3d_project_float_global(
+            region, ruler_item_pick->co[2], co_ss[1], V3D_PROJ_TEST_NOP);
 
         fac = line_point_factor_v2(mval_fl, co_ss[0], co_ss[1]);
         CLAMP(fac, 0.0f, 1.0f);
@@ -974,7 +1014,9 @@ static int gizmo_ruler_invoke(bContext *C, wmGizmo *gz, const wmEvent *event)
       }
 
       /* update the new location */
-      view3d_ruler_item_mousemove(ruler_info, ruler_item_pick, event->mval, false, false);
+      struct Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+      view3d_ruler_item_mousemove(
+          depsgraph, ruler_info, ruler_item_pick, event->mval, false, false);
     }
   }
   else {
@@ -1059,11 +1101,11 @@ static void WIDGETGROUP_ruler_setup(const bContext *C, wmGizmoGroup *gzgroup)
   }
 
   wmWindow *win = CTX_wm_window(C);
-  ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ScrArea *area = CTX_wm_area(C);
+  ARegion *region = CTX_wm_region(C);
   ruler_info->win = win;
-  ruler_info->sa = sa;
-  ruler_info->ar = ar;
+  ruler_info->area = area;
+  ruler_info->region = region;
 
   gzgroup->customdata = ruler_info;
 }
@@ -1100,16 +1142,16 @@ static bool view3d_ruler_poll(bContext *C)
 
 static int view3d_ruler_add_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   View3D *v3d = CTX_wm_view3d(C);
-  RegionView3D *rv3d = ar->regiondata;
+  RegionView3D *rv3d = region->regiondata;
 
   if (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_TOOL)) {
     BKE_report(op->reports, RPT_WARNING, "Gizmos hidden in this view");
     return OPERATOR_CANCELLED;
   }
 
-  wmGizmoMap *gzmap = ar->gizmo_map;
+  wmGizmoMap *gzmap = region->gizmo_map;
   wmGizmoGroup *gzgroup = WM_gizmomap_group_find(gzmap, view3d_gzgt_ruler_id);
   const bool use_depth = (v3d->shading.type >= OB_SOLID);
 
@@ -1124,9 +1166,10 @@ static int view3d_ruler_add_invoke(bContext *C, wmOperator *op, const wmEvent *e
     RulerInfo *ruler_info = gzgroup->customdata;
     RulerInteraction *inter = ruler_item->gz.interaction_data;
     if (use_depth) {
+      struct Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
       /* snap the first point added, not essential but handy */
       inter->co_index = 0;
-      view3d_ruler_item_mousemove(ruler_info, ruler_item, event->mval, false, true);
+      view3d_ruler_item_mousemove(depsgraph, ruler_info, ruler_item, event->mval, false, true);
       copy_v3_v3(inter->drag_start_co, ruler_item->co[inter->co_index]);
     }
     else {
@@ -1162,7 +1205,7 @@ void VIEW3D_OT_ruler_add(wmOperatorType *ot)
 
 static int view3d_ruler_remove_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   View3D *v3d = CTX_wm_view3d(C);
 
   if (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_TOOL)) {
@@ -1170,7 +1213,7 @@ static int view3d_ruler_remove_invoke(bContext *C, wmOperator *op, const wmEvent
     return OPERATOR_CANCELLED;
   }
 
-  wmGizmoMap *gzmap = ar->gizmo_map;
+  wmGizmoMap *gzmap = region->gizmo_map;
   wmGizmoGroup *gzgroup = WM_gizmomap_group_find(gzmap, view3d_gzgt_ruler_id);
   if (gzgroup) {
     RulerInfo *ruler_info = gzgroup->customdata;
@@ -1187,7 +1230,7 @@ static int view3d_ruler_remove_invoke(bContext *C, wmOperator *op, const wmEvent
       /* Update the annotation layer. */
       view3d_ruler_to_gpencil(C, gzgroup);
 
-      ED_region_tag_redraw(ar);
+      ED_region_tag_redraw_editor_overlays(region);
       return OPERATOR_FINISHED;
     }
   }

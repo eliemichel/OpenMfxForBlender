@@ -22,9 +22,9 @@
  * \brief Class to define a cell grid surrounding the projected image of a scene
  */
 
-#include <stdexcept>
 #include <algorithm>
 #include <memory>
+#include <stdexcept>
 
 #include "AutoPtrHelper.h"
 #include "OccluderSource.h"

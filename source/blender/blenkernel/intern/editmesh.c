@@ -24,14 +24,15 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_listBase.h"
-#include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
 
+#include "BLI_bitmap.h"
 #include "BLI_math.h"
 
+#include "BKE_DerivedMesh.h"
 #include "BKE_editmesh.h"
-#include "BKE_cdderivedmesh.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_iterators.h"
 #include "BKE_object.h"
@@ -65,6 +66,10 @@ BMEditMesh *BKE_editmesh_copy(BMEditMesh *em)
    * in that case it makes more sense to do the
    * tessellation only when/if that copy ends up getting used. */
   em_copy->looptris = NULL;
+
+  /* Copy various settings. */
+  em_copy->selectmode = em->selectmode;
+  em_copy->mat_nr = em->mat_nr;
 
   return em_copy;
 }

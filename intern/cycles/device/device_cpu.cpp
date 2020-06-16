@@ -29,16 +29,19 @@
 #include "device/device_intern.h"
 #include "device/device_split_kernel.h"
 
+// clang-format off
 #include "kernel/kernel.h"
 #include "kernel/kernel_compat_cpu.h"
 #include "kernel/kernel_types.h"
 #include "kernel/split/kernel_split_data.h"
 #include "kernel/kernel_globals.h"
+#include "kernel/kernel_adaptive_sampling.h"
 
 #include "kernel/filter/filter.h"
 
 #include "kernel/osl/osl_shader.h"
 #include "kernel/osl/osl_globals.h"
+// clang-format on
 
 #include "render/buffers.h"
 #include "render/coverage.h"
@@ -261,7 +264,7 @@ class CPUDevice : public Device {
 
   CPUDevice(DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background_)
       : Device(info_, stats_, profiler_, background_),
-        texture_info(this, "__texture_info", MEM_TEXTURE),
+        texture_info(this, "__texture_info", MEM_GLOBAL),
 #define REGISTER_KERNEL(name) name##_kernel(KERNEL_FUNCTIONS(name))
         REGISTER_KERNEL(path_trace),
         REGISTER_KERNEL(convert_to_half_float),
@@ -317,6 +320,10 @@ class CPUDevice : public Device {
     REGISTER_SPLIT_KERNEL(next_iteration_setup);
     REGISTER_SPLIT_KERNEL(indirect_subsurface);
     REGISTER_SPLIT_KERNEL(buffer_update);
+    REGISTER_SPLIT_KERNEL(adaptive_stopping);
+    REGISTER_SPLIT_KERNEL(adaptive_filter_x);
+    REGISTER_SPLIT_KERNEL(adaptive_filter_y);
+    REGISTER_SPLIT_KERNEL(adaptive_adjust_samples);
 #undef REGISTER_SPLIT_KERNEL
 #undef KERNEL_FUNCTIONS
   }
@@ -338,7 +345,10 @@ class CPUDevice : public Device {
     if (DebugFlags().cpu.has_sse2() && system_cpu_support_sse2()) {
       bvh_layout_mask |= BVH_LAYOUT_BVH4;
     }
-#if defined(__x86_64__) || defined(_M_X64)
+    /* MSVC does not support the -march=native switch and you always end up  */
+    /* with an sse2 kernel when you use WITH_KERNEL_NATIVE. We *cannot* feed */
+    /* that kernel BVH8 even if the CPU flags would allow for it. */
+#if (defined(__x86_64__) || defined(_M_X64)) && !(defined(_MSC_VER) && defined(WITH_KERNEL_NATIVE))
     if (DebugFlags().cpu.has_avx2() && system_cpu_support_avx2()) {
       bvh_layout_mask |= BVH_LAYOUT_BVH8;
     }
@@ -361,6 +371,9 @@ class CPUDevice : public Device {
   {
     if (mem.type == MEM_TEXTURE) {
       assert(!"mem_alloc not supported for textures.");
+    }
+    else if (mem.type == MEM_GLOBAL) {
+      assert(!"mem_alloc not supported for global memory.");
     }
     else {
       if (mem.name) {
@@ -386,9 +399,13 @@ class CPUDevice : public Device {
 
   void mem_copy_to(device_memory &mem)
   {
-    if (mem.type == MEM_TEXTURE) {
-      tex_free(mem);
-      tex_alloc(mem);
+    if (mem.type == MEM_GLOBAL) {
+      global_free(mem);
+      global_alloc(mem);
+    }
+    else if (mem.type == MEM_TEXTURE) {
+      tex_free((device_texture &)mem);
+      tex_alloc((device_texture &)mem);
     }
     else if (mem.type == MEM_PIXELS) {
       assert(!"mem_copy_to not supported for pixels.");
@@ -420,8 +437,11 @@ class CPUDevice : public Device {
 
   void mem_free(device_memory &mem)
   {
-    if (mem.type == MEM_TEXTURE) {
-      tex_free(mem);
+    if (mem.type == MEM_GLOBAL) {
+      global_free(mem);
+    }
+    else if (mem.type == MEM_TEXTURE) {
+      tex_free((device_texture &)mem);
     }
     else if (mem.device_pointer) {
       if (mem.type == MEM_DEVICE_ONLY) {
@@ -443,51 +463,50 @@ class CPUDevice : public Device {
     kernel_const_copy(&kernel_globals, name, host, size);
   }
 
-  void tex_alloc(device_memory &mem)
+  void global_alloc(device_memory &mem)
   {
-    VLOG(1) << "Texture allocate: " << mem.name << ", "
+    VLOG(1) << "Global memory allocate: " << mem.name << ", "
             << string_human_readable_number(mem.memory_size()) << " bytes. ("
             << string_human_readable_size(mem.memory_size()) << ")";
 
-    if (mem.interpolation == INTERPOLATION_NONE) {
-      /* Data texture. */
-      kernel_tex_copy(&kernel_globals, mem.name, mem.host_pointer, mem.data_size);
-    }
-    else {
-      /* Image Texture. */
-      int flat_slot = 0;
-      if (string_startswith(mem.name, "__tex_image")) {
-        int pos = string(mem.name).rfind("_");
-        flat_slot = atoi(mem.name + pos + 1);
-      }
-      else {
-        assert(0);
-      }
-
-      if (flat_slot >= texture_info.size()) {
-        /* Allocate some slots in advance, to reduce amount
-         * of re-allocations. */
-        texture_info.resize(flat_slot + 128);
-      }
-
-      TextureInfo &info = texture_info[flat_slot];
-      info.data = (uint64_t)mem.host_pointer;
-      info.cl_buffer = 0;
-      info.interpolation = mem.interpolation;
-      info.extension = mem.extension;
-      info.width = mem.data_width;
-      info.height = mem.data_height;
-      info.depth = mem.data_depth;
-
-      need_texture_info = true;
-    }
+    kernel_global_memory_copy(&kernel_globals, mem.name, mem.host_pointer, mem.data_size);
 
     mem.device_pointer = (device_ptr)mem.host_pointer;
     mem.device_size = mem.memory_size();
     stats.mem_alloc(mem.device_size);
   }
 
-  void tex_free(device_memory &mem)
+  void global_free(device_memory &mem)
+  {
+    if (mem.device_pointer) {
+      mem.device_pointer = 0;
+      stats.mem_free(mem.device_size);
+      mem.device_size = 0;
+    }
+  }
+
+  void tex_alloc(device_texture &mem)
+  {
+    VLOG(1) << "Texture allocate: " << mem.name << ", "
+            << string_human_readable_number(mem.memory_size()) << " bytes. ("
+            << string_human_readable_size(mem.memory_size()) << ")";
+
+    mem.device_pointer = (device_ptr)mem.host_pointer;
+    mem.device_size = mem.memory_size();
+    stats.mem_alloc(mem.device_size);
+
+    const uint slot = mem.slot;
+    if (slot >= texture_info.size()) {
+      /* Allocate some slots in advance, to reduce amount of re-allocations. */
+      texture_info.resize(slot + 128);
+    }
+
+    texture_info[slot] = mem.info;
+    texture_info[slot].data = (uint64_t)mem.host_pointer;
+    need_texture_info = true;
+  }
+
+  void tex_free(device_texture &mem)
   {
     if (mem.device_pointer) {
       mem.device_pointer = 0;
@@ -508,13 +527,14 @@ class CPUDevice : public Device {
 
   void thread_run(DeviceTask *task)
   {
-    if (task->type == DeviceTask::RENDER) {
+    if (task->type == DeviceTask::RENDER)
       thread_render(*task);
-    }
-    else if (task->type == DeviceTask::FILM_CONVERT)
-      thread_film_convert(*task);
     else if (task->type == DeviceTask::SHADER)
       thread_shader(*task);
+    else if (task->type == DeviceTask::FILM_CONVERT)
+      thread_film_convert(*task);
+    else if (task->type == DeviceTask::DENOISE_BUFFER)
+      thread_denoise(*task);
   }
 
   class CPUDeviceTask : public DeviceTask {
@@ -819,6 +839,62 @@ class CPUDevice : public Device {
     return true;
   }
 
+  bool adaptive_sampling_filter(KernelGlobals *kg, RenderTile &tile, int sample)
+  {
+    WorkTile wtile;
+    wtile.x = tile.x;
+    wtile.y = tile.y;
+    wtile.w = tile.w;
+    wtile.h = tile.h;
+    wtile.offset = tile.offset;
+    wtile.stride = tile.stride;
+    wtile.buffer = (float *)tile.buffer;
+
+    /* For CPU we do adaptive stopping per sample so we can stop earlier, but
+     * for combined CPU + GPU rendering we match the GPU and do it per tile
+     * after a given number of sample steps. */
+    if (!kernel_data.integrator.adaptive_stop_per_sample) {
+      for (int y = wtile.y; y < wtile.y + wtile.h; ++y) {
+        for (int x = wtile.x; x < wtile.x + wtile.w; ++x) {
+          const int index = wtile.offset + x + y * wtile.stride;
+          float *buffer = wtile.buffer + index * kernel_data.film.pass_stride;
+          kernel_do_adaptive_stopping(kg, buffer, sample);
+        }
+      }
+    }
+
+    bool any = false;
+    for (int y = wtile.y; y < wtile.y + wtile.h; ++y) {
+      any |= kernel_do_adaptive_filter_x(kg, y, &wtile);
+    }
+    for (int x = wtile.x; x < wtile.x + wtile.w; ++x) {
+      any |= kernel_do_adaptive_filter_y(kg, x, &wtile);
+    }
+    return (!any);
+  }
+
+  void adaptive_sampling_post(const RenderTile &tile, KernelGlobals *kg)
+  {
+    float *render_buffer = (float *)tile.buffer;
+    for (int y = tile.y; y < tile.y + tile.h; y++) {
+      for (int x = tile.x; x < tile.x + tile.w; x++) {
+        int index = tile.offset + x + y * tile.stride;
+        ccl_global float *buffer = render_buffer + index * kernel_data.film.pass_stride;
+        if (buffer[kernel_data.film.pass_sample_count] < 0.0f) {
+          buffer[kernel_data.film.pass_sample_count] = -buffer[kernel_data.film.pass_sample_count];
+          float sample_multiplier = tile.sample / max((float)tile.start_sample + 1.0f,
+                                                      buffer[kernel_data.film.pass_sample_count]);
+          if (sample_multiplier != 1.0f) {
+            kernel_adaptive_post_adjust(kg, buffer, sample_multiplier);
+          }
+        }
+        else {
+          kernel_adaptive_post_adjust(kg, buffer, tile.sample / (tile.sample - 1.0f));
+        }
+      }
+    }
+  }
+
   void path_trace(DeviceTask &task, RenderTile &tile, KernelGlobals *kg)
   {
     const bool use_coverage = kernel_data.film.cryptomatte_passes & CRYPT_ACCURATE;
@@ -851,13 +927,26 @@ class CPUDevice : public Device {
           path_trace_kernel()(kg, render_buffer, sample, x, y, tile.offset, tile.stride);
         }
       }
-
       tile.sample = sample + 1;
+
+      if (task.adaptive_sampling.use && task.adaptive_sampling.need_filter(sample)) {
+        const bool stop = adaptive_sampling_filter(kg, tile, sample);
+        if (stop) {
+          const int num_progress_samples = end_sample - sample;
+          tile.sample = end_sample;
+          task.update_progress(&tile, tile.w * tile.h * num_progress_samples);
+          break;
+        }
+      }
 
       task.update_progress(&tile, tile.w * tile.h);
     }
     if (use_coverage) {
       coverage.finalize();
+    }
+
+    if (task.adaptive_sampling.use) {
+      adaptive_sampling_post(tile, kg);
     }
   }
 
@@ -923,7 +1012,7 @@ class CPUDevice : public Device {
     DenoisingTask denoising(this, task);
     denoising.profiler = &kg->profiler;
 
-    while (task.acquire_tile(this, tile)) {
+    while (task.acquire_tile(this, tile, task.tile_types)) {
       if (tile.task == RenderTile::PATH_TRACE) {
         if (use_split_kernel) {
           device_only_memory<uchar> void_buffer(this, "void_buffer");
@@ -952,6 +1041,33 @@ class CPUDevice : public Device {
     kg->~KernelGlobals();
     kgbuffer.free();
     delete split_kernel;
+  }
+
+  void thread_denoise(DeviceTask &task)
+  {
+    RenderTile tile;
+    tile.x = task.x;
+    tile.y = task.y;
+    tile.w = task.w;
+    tile.h = task.h;
+    tile.buffer = task.buffer;
+    tile.sample = task.sample + task.num_samples;
+    tile.num_samples = task.num_samples;
+    tile.start_sample = task.sample;
+    tile.offset = task.offset;
+    tile.stride = task.stride;
+    tile.buffers = task.buffers;
+
+    DenoisingTask denoising(this, task);
+
+    ProfilingState denoising_profiler_state;
+    profiler.add_state(&denoising_profiler_state);
+    denoising.profiler = &denoising_profiler_state;
+
+    denoise(denoising, tile);
+    task.update_progress(&tile, tile.w * tile.h);
+
+    profiler.remove_state(&denoising_profiler_state);
   }
 
   void thread_film_convert(DeviceTask &task)
@@ -1224,6 +1340,7 @@ void device_cpu_info(vector<DeviceInfo> &devices)
   info.id = "CPU";
   info.num = 0;
   info.has_volume_decoupled = true;
+  info.has_adaptive_stop_per_sample = true;
   info.has_osl = true;
   info.has_half_images = true;
   info.has_profiling = true;

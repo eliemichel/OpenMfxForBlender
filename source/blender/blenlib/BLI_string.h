@@ -24,15 +24,15 @@
  * \ingroup bli
  */
 
-#include <stdarg.h>
 #include <inttypes.h>
+#include <stdarg.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include "BLI_compiler_attrs.h"
-#include "BLI_utildefines_variadic.h"
+#include "BLI_utildefines.h"
 
 char *BLI_strdupn(const char *str, const size_t len) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
@@ -118,6 +118,7 @@ int BLI_str_index_in_array_n(const char *__restrict str,
 int BLI_str_index_in_array(const char *__restrict str, const char **__restrict str_array)
     ATTR_NONNULL();
 
+bool BLI_str_startswith(const char *__restrict str, const char *__restrict start) ATTR_NONNULL();
 bool BLI_str_endswith(const char *__restrict str, const char *__restrict end) ATTR_NONNULL();
 bool BLI_strn_endswith(const char *__restrict str, const char *__restrict end, size_t length)
     ATTR_NONNULL();

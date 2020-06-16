@@ -50,6 +50,9 @@ def _init_addon_blacklist():
     # netrender has known problems re-registering
     BLACKLIST_ADDONS.add("netrender")
 
+    if not bpy.app.build_options.xr_openxr:
+        BLACKLIST_ADDONS.add("viewport_vr_preview")
+
     for mod in addon_utils.modules():
         if addon_utils.module_bl_info(mod)['blender'] < (2, 80, 0):
             BLACKLIST_ADDONS.add(mod.__name__)
@@ -141,11 +144,4 @@ def main():
 
 
 if __name__ == "__main__":
-
-    # So a python error exits(1)
-    try:
-        main()
-    except:
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    main()

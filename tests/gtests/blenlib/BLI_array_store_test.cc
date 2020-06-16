@@ -2,17 +2,17 @@
 
 #include "testing/testing.h"
 
+#include "MEM_guardedalloc.h"
+
 extern "C" {
 #include "BLI_array_store.h"
-
-#include "MEM_guardedalloc.h"
-#include "BLI_sys_types.h"
-#include "BLI_utildefines.h"
-#include "BLI_listbase.h"
 #include "BLI_array_utils.h"
-#include "BLI_string.h"
+#include "BLI_listbase.h"
 #include "BLI_rand.h"
 #include "BLI_ressource_strings.h"
+#include "BLI_string.h"
+#include "BLI_sys_types.h"
+#include "BLI_utildefines.h"
 }
 
 /* print memory savings */

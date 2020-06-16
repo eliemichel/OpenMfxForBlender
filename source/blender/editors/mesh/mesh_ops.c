@@ -21,16 +21,16 @@
  * \ingroup edmesh
  */
 
-#include "DNA_scene_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_scene_types.h"
 
 #include "RNA_access.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_object.h"
 #include "ED_mesh.h"
+#include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
 
@@ -203,7 +203,7 @@ void ED_operatortypes_mesh(void)
   WM_operatortype_append(MESH_OT_normals_tools);
   WM_operatortype_append(MESH_OT_set_normals_from_faces);
   WM_operatortype_append(MESH_OT_average_normals);
-  WM_operatortype_append(MESH_OT_smoothen_normals);
+  WM_operatortype_append(MESH_OT_smooth_normals);
   WM_operatortype_append(MESH_OT_mod_weighted_strength);
 }
 

@@ -18,37 +18,37 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
-#include <stddef.h>
-#include <string.h>
 #include <ctype.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "DNA_ID.h"
-#include "DNA_scene_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_scene_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_dynstr.h"
 #include "BLI_ghash.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "BLF_api.h"
 #include "BLT_translation.h"
 
-#include "BKE_animsys.h"
+#include "BKE_anim_data.h"
 #include "BKE_collection.h"
 #include "BKE_context.h"
-#include "BKE_idcode.h"
-#include "BKE_idprop.h"
 #include "BKE_fcurve.h"
+#include "BKE_idprop.h"
+#include "BKE_idtype.h"
 #include "BKE_main.h"
-#include "BKE_report.h"
 #include "BKE_node.h"
+#include "BKE_report.h"
 
 #include "DEG_depsgraph.h"
 
@@ -63,8 +63,8 @@
 #include "DNA_object_types.h"
 #include "WM_types.h"
 
-#include "rna_internal.h"
 #include "rna_access_internal.h"
+#include "rna_internal.h"
 
 const PointerRNA PointerRNA_NULL = {NULL};
 
@@ -2263,10 +2263,22 @@ static void rna_property_update(
   }
 
   if (!is_rna || (prop->flag & PROP_IDPROPERTY)) {
-    /* WARNING! This is so property drivers update the display!
-     * not especially nice  */
+
+    /* Disclaimer: this logic is not applied consistently, causing some confusing behavior.
+     *
+     * - When animated (which skips update functions).
+     * - When ID-properties are edited via Python (since RNA properties aren't used in this case).
+     *
+     * Adding updates will add a lot of overhead in the case of animation.
+     * For Python it may cause unexpected slow-downs for developers using ID-properties
+     * for data storage. Further, the root ID isn't available with nested data-structures.
+     *
+     * So editing custom properties only causes updates in the UI,
+     * keep this exception because it happens to be useful for driving settings.
+     * Python developers on the other hand will need to manually 'update_tag', see: T74000. */
     DEG_id_tag_update(ptr->owner_id,
                       ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_PARAMETERS);
+
     WM_main_add_notifier(NC_WINDOW, NULL);
     /* Not nice as well, but the only way to make sure material preview
      * is updated with custom nodes.
@@ -3771,7 +3783,7 @@ void RNA_property_pointer_set(PointerRNA *ptr,
     if (ptr_value.type != NULL && !RNA_struct_is_a(ptr_value.type, pprop->type)) {
       BKE_reportf(reports,
                   RPT_ERROR,
-                  "%s: expected %s type, not %s.\n",
+                  "%s: expected %s type, not %s",
                   __func__,
                   pprop->type->identifier,
                   ptr_value.type->identifier);
@@ -3783,7 +3795,7 @@ void RNA_property_pointer_set(PointerRNA *ptr,
     if (ptr_value.type != NULL && !RNA_struct_is_a(ptr_value.type, &RNA_ID)) {
       BKE_reportf(reports,
                   RPT_ERROR,
-                  "%s: expected ID type, not %s.\n",
+                  "%s: expected ID type, not %s",
                   __func__,
                   ptr_value.type->identifier);
       return;
@@ -5820,7 +5832,7 @@ ID *RNA_find_real_ID_and_path(Main *bmain, ID *id, const char **r_path)
     *r_path = "";
   }
 
-  if ((id != NULL) && (id->flag & LIB_PRIVATE_DATA)) {
+  if ((id != NULL) && (id->flag & LIB_EMBEDDED_DATA)) {
     switch (GS(id->name)) {
       case ID_NT:
         if (r_path) {
@@ -6104,7 +6116,7 @@ char *RNA_path_full_ID_py(Main *bmain, ID *id)
   BLI_strescape(id_esc, id->name + 2, sizeof(id_esc));
 
   return BLI_sprintfN("bpy.data.%s[\"%s\"]%s%s",
-                      BKE_idcode_to_name_plural(GS(id->name)),
+                      BKE_idtype_idcode_to_name_plural(GS(id->name)),
                       id_esc,
                       path[0] ? "." : "",
                       path);

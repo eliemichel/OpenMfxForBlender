@@ -27,11 +27,11 @@
 
 #include "DNA_object_enums.h"
 
-#include "DNA_defs.h"
-#include "DNA_customdata_types.h"
-#include "DNA_listBase.h"
 #include "DNA_ID.h"
 #include "DNA_action_types.h" /* bAnimVizSettings */
+#include "DNA_customdata_types.h"
+#include "DNA_defs.h"
+#include "DNA_listBase.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -124,7 +124,7 @@ struct CustomData_MeshMasks;
 typedef struct Object_Runtime {
   /**
    * The custom data layer mask that was last used
-   * to calculate mesh_eval and mesh_deform_eval.
+   * to calculate data_eval and mesh_deform_eval.
    */
   CustomData_MeshMasks last_data_mask;
 
@@ -141,30 +141,42 @@ typedef struct Object_Runtime {
   char _pad1[3];
 
   /**
-   * Denotes whether the evaluated mesh is owned by this object or is referenced and owned by
+   * Denotes whether the evaluated data is owned by this object or is referenced and owned by
    * somebody else.
    */
-  char is_mesh_eval_owned;
+  char is_data_eval_owned;
 
   /** Axis aligned boundbox (in localspace). */
   struct BoundBox *bb;
 
   /**
-   * Original mesh pointer, before object->data was changed to point
-   * to mesh_eval.
+   * Original data pointer, before object->data was changed to point
+   * to data_eval.
    * Is assigned by dependency graph's copy-on-write evaluation.
    */
-  struct Mesh *mesh_orig;
+  struct ID *data_orig;
   /**
-   * Mesh structure created during object evaluation.
+   * Object data structure created during object evaluation.
    * It has all modifiers applied.
    */
-  struct Mesh *mesh_eval;
+  struct ID *data_eval;
   /**
    * Mesh structure created during object evaluation.
    * It has deformation only modifiers applied on it.
    */
   struct Mesh *mesh_deform_eval;
+
+  /**
+   * Original grease pencil bGPdata pointer, before object->data was changed to point
+   * to gpd_eval.
+   * Is assigned by dependency graph's copy-on-write evaluation.
+   */
+  struct bGPdata *gpd_orig;
+  /**
+   * bGPdata structure created during object evaluation.
+   * It has all modifiers applied.
+   */
+  struct bGPdata *gpd_eval;
 
   /**
    * This is a mesh representation of corresponding object.
@@ -174,14 +186,6 @@ typedef struct Object_Runtime {
 
   /** Runtime evaluated curve-specific data, not stored in the file. */
   struct CurveCache *curve_cache;
-
-  /** Runtime grease pencil drawing data */
-  struct GpencilBatchCache *gpencil_cache;
-  /** Runtime grease pencil total layers used for evaluated data created by modifiers */
-  int gpencil_tot_layers;
-  char _pad4[4];
-  /** Runtime grease pencil evaluated data created by modifiers */
-  struct bGPDframe *gpencil_evaluated_frames;
 
   unsigned short local_collections_bits;
   short _pad2[3];
@@ -374,8 +378,6 @@ typedef struct Object {
   struct FluidsimSettings *fluidsimSettings
       DNA_DEPRECATED;  // XXX deprecated... replaced by mantaflow, keep for readfile
 
-  struct DerivedMesh *derivedDeform, *derivedFinal;
-
   ListBase pc_ids;
 
   /** Settings for Bullet rigid body. */
@@ -454,12 +456,18 @@ enum {
   /** Grease Pencil object used in 3D view but not used for annotation in 2D. */
   OB_GPENCIL = 26,
 
+  OB_HAIR = 27,
+
+  OB_POINTCLOUD = 28,
+
+  OB_VOLUME = 29,
+
   OB_TYPE_MAX,
 };
 
 /* check if the object type supports materials */
 #define OB_TYPE_SUPPORT_MATERIAL(_type) \
-  (((_type) >= OB_MESH && (_type) <= OB_MBALL) || ((_type) == OB_GPENCIL))
+  (((_type) >= OB_MESH && (_type) <= OB_MBALL) || ((_type) >= OB_GPENCIL && (_type) <= OB_VOLUME))
 #define OB_TYPE_SUPPORT_VGROUP(_type) (ELEM(_type, OB_MESH, OB_LATTICE, OB_GPENCIL))
 #define OB_TYPE_SUPPORT_EDITMODE(_type) \
   (ELEM(_type, OB_MESH, OB_FONT, OB_CURVE, OB_SURF, OB_MBALL, OB_LATTICE, OB_ARMATURE))
@@ -470,7 +478,20 @@ enum {
 
 /* is this ID type used as object data */
 #define OB_DATA_SUPPORT_ID(_id_type) \
-  (ELEM(_id_type, ID_ME, ID_CU, ID_MB, ID_LA, ID_SPK, ID_LP, ID_CA, ID_LT, ID_GD, ID_AR))
+  (ELEM(_id_type, \
+        ID_ME, \
+        ID_CU, \
+        ID_MB, \
+        ID_LA, \
+        ID_SPK, \
+        ID_LP, \
+        ID_CA, \
+        ID_LT, \
+        ID_GD, \
+        ID_AR, \
+        ID_HA, \
+        ID_PT, \
+        ID_VO))
 
 #define OB_DATA_SUPPORT_ID_CASE \
 ID_ME: \
@@ -482,7 +503,10 @@ case ID_LP: \
 case ID_CA: \
 case ID_LT: \
 case ID_GD: \
-case ID_AR
+case ID_AR: \
+case ID_HA: \
+case ID_PT: \
+case ID_VO
 
 /* partype: first 4 bits: type */
 enum {
@@ -529,23 +553,13 @@ enum {
   OB_NEGZ = 5,
 };
 
-/* dt: no flags */
-enum {
-  OB_BOUNDBOX = 1,
-  OB_WIRE = 2,
-  OB_SOLID = 3,
-  OB_MATERIAL = 4,
-  OB_TEXTURE = 5,
-  OB_RENDER = 6,
-};
-
 /* dtx: flags (short) */
 enum {
   OB_DRAWBOUNDOX = 1 << 0,
   OB_AXIS = 1 << 1,
   OB_TEXSPACE = 1 << 2,
   OB_DRAWNAME = 1 << 3,
-  OB_DRAWIMAGE = 1 << 4,
+  /* OB_DRAWIMAGE = 1 << 4, */ /* UNUSED */
   /* for solid+wire display */
   OB_DRAWWIRE = 1 << 5,
   /* for overdraw s*/
@@ -554,6 +568,8 @@ enum {
   OB_DRAWTRANSP = 1 << 7,
   OB_DRAW_ALL_EDGES = 1 << 8, /* only for meshes currently */
   OB_DRAW_NO_SHADOW_CAST = 1 << 9,
+  /* Enable lights for grease pencil. */
+  OB_USE_GPENCIL_LIGHTS = 1 << 10,
 };
 
 /* empty_drawtype: no flags */
@@ -581,17 +597,10 @@ enum {
   OB_BOUND_SPHERE = 1,
   OB_BOUND_CYLINDER = 2,
   OB_BOUND_CONE = 3,
-  OB_BOUND_TRIANGLE_MESH = 4,
-  OB_BOUND_CONVEX_HULL = 5,
+  /* OB_BOUND_TRIANGLE_MESH = 4, */  /* UNUSED */
+  /* OB_BOUND_CONVEX_HULL = 5, */    /* UNUSED */
   /*  OB_BOUND_DYN_MESH      = 6, */ /*UNUSED*/
   OB_BOUND_CAPSULE = 7,
-};
-
-/* lod flags */
-enum {
-  OB_LOD_USE_MESH = 1 << 0,
-  OB_LOD_USE_MAT = 1 << 1,
-  OB_LOD_USE_HYST = 1 << 2,
 };
 
 /* **************** BASE ********************* */
@@ -648,13 +657,13 @@ enum {
   /* object-channel expanded status */
   OB_ADS_COLLAPSED = 1 << 10,
   /* object's ipo-block */
-  OB_ADS_SHOWIPO = 1 << 11,
+  /* OB_ADS_SHOWIPO = 1 << 11, */ /* UNUSED */
   /* object's constraint channels */
-  OB_ADS_SHOWCONS = 1 << 12,
+  /* OB_ADS_SHOWCONS = 1 << 12, */ /* UNUSED */
   /* object's material channels */
-  OB_ADS_SHOWMATS = 1 << 13,
+  /* OB_ADS_SHOWMATS = 1 << 13, */ /* UNUSED */
   /* object's marticle channels */
-  OB_ADS_SHOWPARTS = 1 << 14,
+  /* OB_ADS_SHOWPARTS = 1 << 14, */ /* UNUSED */
 };
 
 /* ob->protectflag */

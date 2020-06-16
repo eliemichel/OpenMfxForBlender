@@ -3,10 +3,10 @@
 #include "testing/testing.h"
 
 extern "C" {
+#include "../../../source/blender/imbuf/IMB_imbuf.h"
 #include "BLI_fileops.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
-#include "../../../source/blender/imbuf/IMB_imbuf.h"
 
 #ifdef _WIN32
 #  include "../../../source/blender/blenkernel/BKE_global.h"
@@ -58,59 +58,59 @@ char *zLhm65070058860608_br_find_exe(const char *default_exe)
 /* -------------------------------------------------------------------- */
 /* tests */
 
-/* BLI_cleanup_path */
+/* BLI_path_normalize */
 #ifndef _WIN32
 TEST(path_util, Clean)
 {
   /* "/./" -> "/" */
   {
     char path[FILE_MAX] = "/a/./b/./c/./";
-    BLI_cleanup_path(NULL, path);
+    BLI_path_normalize(NULL, path);
     EXPECT_STREQ("/a/b/c/", path);
   }
 
   {
     char path[FILE_MAX] = "/./././";
-    BLI_cleanup_path(NULL, path);
+    BLI_path_normalize(NULL, path);
     EXPECT_STREQ("/", path);
   }
 
   {
     char path[FILE_MAX] = "/a/./././b/";
-    BLI_cleanup_path(NULL, path);
+    BLI_path_normalize(NULL, path);
     EXPECT_STREQ("/a/b/", path);
   }
 
   /* "//" -> "/" */
   {
     char path[FILE_MAX] = "a////";
-    BLI_cleanup_path(NULL, path);
+    BLI_path_normalize(NULL, path);
     EXPECT_STREQ("a/", path);
   }
 
   if (0) /* FIXME */
   {
     char path[FILE_MAX] = "./a////";
-    BLI_cleanup_path(NULL, path);
+    BLI_path_normalize(NULL, path);
     EXPECT_STREQ("./a/", path);
   }
 
   /* "foo/bar/../" -> "foo/" */
   {
     char path[FILE_MAX] = "/a/b/c/../../../";
-    BLI_cleanup_path(NULL, path);
+    BLI_path_normalize(NULL, path);
     EXPECT_STREQ("/", path);
   }
 
   {
     char path[FILE_MAX] = "/a/../a/b/../b/c/../c/";
-    BLI_cleanup_path(NULL, path);
+    BLI_path_normalize(NULL, path);
     EXPECT_STREQ("/a/b/c/", path);
   }
 
   {
     char path[FILE_MAX] = "//../";
-    BLI_cleanup_path("/a/b/c/", path);
+    BLI_path_normalize("/a/b/c/", path);
     EXPECT_STREQ("/a/b/", path);
   }
 }
@@ -123,10 +123,10 @@ TEST(path_util, Clean)
     int index_output, len_output; \
     const bool ret = BLI_path_name_at_index(path, index_input, &index_output, &len_output); \
     if (expect == NULL) { \
-      EXPECT_EQ(ret, false); \
+      EXPECT_FALSE(ret); \
     } \
     else { \
-      EXPECT_EQ(ret, true); \
+      EXPECT_TRUE(ret); \
       EXPECT_EQ(strlen(expect), len_output); \
       path[index_output + len_output] = '\0'; \
       EXPECT_STREQ(&path[index_output], expect); \
@@ -355,42 +355,42 @@ TEST(path_util, Frame)
   {
     char path[FILE_MAX] = "";
     ret = BLI_path_frame(path, 123, 1);
-    EXPECT_EQ(ret, 1);
+    EXPECT_TRUE(ret);
     EXPECT_STREQ("123", path);
   }
 
   {
     char path[FILE_MAX] = "";
     ret = BLI_path_frame(path, 123, 12);
-    EXPECT_EQ(ret, 1);
+    EXPECT_TRUE(ret);
     EXPECT_STREQ("000000000123", path);
   }
 
   {
     char path[FILE_MAX] = "test_";
     ret = BLI_path_frame(path, 123, 1);
-    EXPECT_EQ(ret, 1);
+    EXPECT_TRUE(ret);
     EXPECT_STREQ("test_123", path);
   }
 
   {
     char path[FILE_MAX] = "test_";
     ret = BLI_path_frame(path, 1, 12);
-    EXPECT_EQ(ret, 1);
+    EXPECT_TRUE(ret);
     EXPECT_STREQ("test_000000000001", path);
   }
 
   {
     char path[FILE_MAX] = "test_############";
     ret = BLI_path_frame(path, 1, 0);
-    EXPECT_EQ(ret, 1);
+    EXPECT_TRUE(ret);
     EXPECT_STREQ("test_000000000001", path);
   }
 
   {
     char path[FILE_MAX] = "test_#_#_middle";
     ret = BLI_path_frame(path, 123, 0);
-    EXPECT_EQ(ret, 1);
+    EXPECT_TRUE(ret);
     EXPECT_STREQ("test_#_123_middle", path);
   }
 
@@ -398,14 +398,14 @@ TEST(path_util, Frame)
   {
     char path[FILE_MAX] = "";
     ret = BLI_path_frame(path, 123, 0);
-    EXPECT_EQ(ret, 0);
+    EXPECT_FALSE(ret);
     EXPECT_STREQ("", path);
   }
 
   {
     char path[FILE_MAX] = "test_middle";
     ret = BLI_path_frame(path, 123, 0);
-    EXPECT_EQ(ret, 0);
+    EXPECT_FALSE(ret);
     EXPECT_STREQ("test_middle", path);
   }
 }

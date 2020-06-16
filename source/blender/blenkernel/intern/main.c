@@ -35,8 +35,8 @@
 #include "DNA_ID.h"
 
 #include "BKE_global.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 
 #include "IMB_imbuf.h"
@@ -209,12 +209,12 @@ void BKE_main_unlock(struct Main *bmain)
   BLI_spin_unlock((SpinLock *)bmain->lock);
 }
 
-static int main_relations_create_idlink_cb(void *user_data,
-                                           ID *id_self,
-                                           ID **id_pointer,
-                                           int cb_flag)
+static int main_relations_create_idlink_cb(LibraryIDLinkCallbackData *cb_data)
 {
-  MainIDRelations *rel = user_data;
+  MainIDRelations *rel = cb_data->user_data;
+  ID *id_self = cb_data->id_self;
+  ID **id_pointer = cb_data->id_pointer;
+  const int cb_flag = cb_data->cb_flag;
 
   if (*id_pointer) {
     MainIDRelationsEntry *entry, **entry_p;
@@ -246,7 +246,7 @@ static int main_relations_create_idlink_cb(void *user_data,
 }
 
 /** Generate the mappings between used IDs and their users, and vice-versa. */
-void BKE_main_relations_create(Main *bmain)
+void BKE_main_relations_create(Main *bmain, const short flag)
 {
   if (bmain->relations != NULL) {
     BKE_main_relations_free(bmain);
@@ -262,10 +262,14 @@ void BKE_main_relations_create(Main *bmain)
 
   ID *id;
   FOREACH_MAIN_ID_BEGIN (bmain, id) {
+    const int idwalk_flag = IDWALK_READONLY |
+                            ((flag & MAINIDRELATIONS_INCLUDE_UI) != 0 ? IDWALK_INCLUDE_UI : 0);
     BKE_library_foreach_ID_link(
-        NULL, id, main_relations_create_idlink_cb, bmain->relations, IDWALK_READONLY);
+        NULL, id, main_relations_create_idlink_cb, bmain->relations, idwalk_flag);
   }
   FOREACH_MAIN_ID_END;
+
+  bmain->relations->flag = flag;
 }
 
 void BKE_main_relations_free(Main *bmain)
@@ -469,6 +473,12 @@ ListBase *which_libbase(Main *bmain, short type)
       return &(bmain->cachefiles);
     case ID_WS:
       return &(bmain->workspaces);
+    case ID_HA:
+      return &(bmain->hairs);
+    case ID_PT:
+      return &(bmain->pointclouds);
+    case ID_VO:
+      return &(bmain->volumes);
   }
   return NULL;
 }
@@ -517,6 +527,9 @@ int set_listbasepointers(Main *bmain, ListBase **lb)
   lb[INDEX_ID_ME] = &(bmain->meshes);
   lb[INDEX_ID_CU] = &(bmain->curves);
   lb[INDEX_ID_MB] = &(bmain->metaballs);
+  lb[INDEX_ID_HA] = &(bmain->hairs);
+  lb[INDEX_ID_PT] = &(bmain->pointclouds);
+  lb[INDEX_ID_VO] = &(bmain->volumes);
 
   lb[INDEX_ID_LT] = &(bmain->lattices);
   lb[INDEX_ID_LA] = &(bmain->lights);

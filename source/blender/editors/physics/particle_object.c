@@ -31,15 +31,15 @@
 #include "DNA_modifier_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
-#include "BLI_utildefines.h"
+#include "BLI_math.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_bvhutils.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
@@ -59,9 +59,9 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_object.h"
 #include "ED_particle.h"
 #include "ED_screen.h"
-#include "ED_object.h"
 
 #include "UI_resources.h"
 
@@ -1036,9 +1036,6 @@ static void copy_particle_edit(Depsgraph *depsgraph,
     pa++;
   }
   update_world_cos(ob, edit);
-
-  UI_GetThemeColor3ubv(TH_EDGE_SELECT, edit->sel_col);
-  UI_GetThemeColor3ubv(TH_WIRE, edit->nosel_col);
 
   recalc_lengths(edit);
   recalc_emitter_field(depsgraph, ob, psys);

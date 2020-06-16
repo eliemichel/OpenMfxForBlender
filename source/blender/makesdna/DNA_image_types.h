@@ -24,9 +24,9 @@
 #ifndef __DNA_IMAGE_TYPES_H__
 #define __DNA_IMAGE_TYPES_H__
 
-#include "DNA_defs.h"
 #include "DNA_ID.h"
 #include "DNA_color_types.h" /* for color management */
+#include "DNA_defs.h"
 
 struct GPUTexture;
 struct MovieCache;
@@ -133,8 +133,8 @@ typedef struct Image {
 
   /** Not written in file. */
   struct MovieCache *cache;
-  /** Not written in file 4 = TEXTARGET_COUNT. */
-  struct GPUTexture *gputexture[4];
+  /** Not written in file 4 = TEXTARGET_COUNT, 2 = stereo eyes. */
+  struct GPUTexture *gputexture[4][2];
 
   /* sources from: */
   ListBase anims;
@@ -192,7 +192,7 @@ typedef struct Image {
 
 /* Image.flag */
 enum {
-  IMA_FLAG_UNUSED_0 = (1 << 0), /* cleared */
+  IMA_HIGH_BITDEPTH = (1 << 0),
   IMA_FLAG_UNUSED_1 = (1 << 1), /* cleared */
 #ifdef DNA_DEPRECATED_ALLOW
   IMA_DO_PREMUL = (1 << 2),
@@ -223,7 +223,7 @@ enum {
 
 /* Image.source, where the image comes from */
 enum {
-  IMA_SRC_CHECK = 0,
+  /* IMA_SRC_CHECK = 0, */ /* UNUSED */
   IMA_SRC_FILE = 1,
   IMA_SRC_SEQUENCE = 2,
   IMA_SRC_MOVIE = 3,

@@ -186,7 +186,7 @@ void OVERLAY_particle_cache_populate(OVERLAY_Data *vedata, Object *ob)
       /* TODO(fclem) Here would be a good place for preemptive culling. */
 
       /* fclem: Is color even usefull in our modern context? */
-      Material *ma = give_current_material(ob, part->omat);
+      Material *ma = BKE_object_material_get(ob, part->omat);
       float color[4] = {0.6f, 0.6f, 0.6f, part->draw_size};
       if (ma != NULL) {
         copy_v3_v3(color, &ma->r);
@@ -205,7 +205,7 @@ void OVERLAY_particle_cache_populate(OVERLAY_Data *vedata, Object *ob)
           grp = DRW_shgroup_create_sub(pd->particle_shapes_grp);
           DRW_shgroup_uniform_vec4_copy(grp, "color", color);
           shape = DRW_cache_particles_get_prim(draw_as);
-          DRW_shgroup_call_instances_with_attribs(grp, NULL, shape, geom);
+          DRW_shgroup_call_instances_with_attrs(grp, NULL, shape, geom);
           break;
       }
     }

@@ -36,8 +36,8 @@
 
 #  include "DEG_depsgraph.h"
 
-#  include "ED_screen.h"
 #  include "ED_object.h"
+#  include "ED_screen.h"
 
 #  include "RNA_access.h"
 #  include "RNA_define.h"
@@ -48,7 +48,7 @@
 #  include "WM_api.h"
 #  include "WM_types.h"
 
-#  include "../../collada/collada.h"
+#  include "collada.h"
 
 #  include "io_collada.h"
 
@@ -541,7 +541,7 @@ void WM_OT_collada_export(wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_COLLADA,
                                  FILE_BLENDER,
                                  FILE_SAVE,
-                                 WM_FILESEL_FILEPATH,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
 
@@ -870,7 +870,7 @@ void WM_OT_collada_import(wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_COLLADA,
                                  FILE_BLENDER,
                                  FILE_OPENFILE,
-                                 WM_FILESEL_FILEPATH,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
 

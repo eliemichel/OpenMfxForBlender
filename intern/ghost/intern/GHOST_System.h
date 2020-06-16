@@ -27,10 +27,10 @@
 
 #include "GHOST_ISystem.h"
 
-#include "GHOST_Debug.h"
 #include "GHOST_Buttons.h"
-#include "GHOST_ModifierKeys.h"
+#include "GHOST_Debug.h"
 #include "GHOST_EventManager.h"
+#include "GHOST_ModifierKeys.h"
 #ifdef GHOST_DEBUG
 #  include "GHOST_EventPrinter.h"
 #endif  // GHOST_DEBUG
@@ -110,6 +110,13 @@ class GHOST_System : public GHOST_ISystem {
    * \return  Indication of success.
    */
   GHOST_TSuccess disposeWindow(GHOST_IWindow *window);
+
+  /**
+   * Create a new offscreen context.
+   * Never explicitly delete the context, use disposeContext() instead.
+   * \return  The new context (or 0 if creation failed).
+   */
+  virtual GHOST_IContext *createOffscreenContext() = 0;
 
   /**
    * Returns whether a window is valid.

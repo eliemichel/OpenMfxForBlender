@@ -25,6 +25,8 @@
 
 #include <stddef.h>
 
+#include "DNA_ID.h"
+
 struct ID;
 
 /* Uncomment this to have verbose log about original and CoW pointers
@@ -52,11 +54,11 @@ struct IDNode;
  */
 ID *deg_expand_copy_on_write_datablock(const struct Depsgraph *depsgraph,
                                        const IDNode *id_node,
-                                       DepsgraphNodeBuilder *node_builder = NULL,
+                                       DepsgraphNodeBuilder *node_builder = nullptr,
                                        bool create_placeholders = false);
 ID *deg_expand_copy_on_write_datablock(const struct Depsgraph *depsgraph,
                                        struct ID *id_orig,
-                                       DepsgraphNodeBuilder *node_builder = NULL,
+                                       DepsgraphNodeBuilder *node_builder = nullptr,
                                        bool create_placeholders = false);
 
 /* Makes sure given CoW data-block is brought back to state of the original
@@ -94,5 +96,6 @@ bool deg_copy_on_write_is_expanded(const struct ID *id_cow);
  * This includes images.
  */
 bool deg_copy_on_write_is_needed(const ID *id_orig);
+bool deg_copy_on_write_is_needed(const ID_Type id_type);
 
 }  // namespace DEG

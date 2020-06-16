@@ -64,9 +64,7 @@ void BKE_object_free_particlesystems(struct Object *ob);
 void BKE_object_free_softbody(struct Object *ob);
 void BKE_object_free_curve_cache(struct Object *ob);
 
-void BKE_object_free(struct Object *ob);
 void BKE_object_free_derived_caches(struct Object *ob);
-void BKE_object_free_derived_mesh_caches(struct Object *ob);
 void BKE_object_free_caches(struct Object *object);
 
 void BKE_object_modifier_hook_reset(struct Object *ob, struct HookModifierData *hmd);
@@ -78,9 +76,7 @@ bool BKE_object_shaderfx_use_time(struct Object *ob, struct ShaderFxData *md);
 
 bool BKE_object_support_modifier_type_check(const struct Object *ob, int modifier_type);
 
-void BKE_object_link_modifiers(struct Scene *scene,
-                               struct Object *ob_dst,
-                               const struct Object *ob_src);
+void BKE_object_link_modifiers(struct Object *ob_dst, const struct Object *ob_src);
 void BKE_object_free_modifiers(struct Object *ob, const int flag);
 void BKE_object_free_shaderfx(struct Object *ob, const int flag);
 
@@ -112,7 +108,6 @@ typedef enum eObjectVisibilityResult {
 
 int BKE_object_visibility(const struct Object *ob, const int dag_eval_mode);
 
-void BKE_object_init(struct Object *ob, const short ob_type);
 struct Object *BKE_object_add_only_object(struct Main *bmain, int type, const char *name)
     ATTR_NONNULL(1) ATTR_RETURNS_NONNULL;
 struct Object *BKE_object_add(struct Main *bmain,
@@ -136,16 +131,7 @@ struct Object *BKE_object_add_for_data(struct Main *bmain,
 void *BKE_object_obdata_add_from_type(struct Main *bmain, int type, const char *name)
     ATTR_NONNULL(1);
 
-void BKE_object_copy_data(struct Main *bmain,
-                          struct Object *ob_dst,
-                          const struct Object *ob_src,
-                          const int flag);
 struct Object *BKE_object_copy(struct Main *bmain, const struct Object *ob);
-void BKE_object_make_local(struct Main *bmain, struct Object *ob, const bool lib_local);
-void BKE_object_make_local_ex(struct Main *bmain,
-                              struct Object *ob,
-                              const bool lib_local,
-                              const bool clear_proxy);
 bool BKE_object_is_libdata(const struct Object *ob);
 bool BKE_object_obdata_is_libdata(const struct Object *ob);
 
@@ -288,9 +274,10 @@ void BKE_object_eval_uber_transform(struct Depsgraph *depsgraph, struct Object *
 void BKE_object_eval_uber_data(struct Depsgraph *depsgraph,
                                struct Scene *scene,
                                struct Object *ob);
+void BKE_object_eval_assign_data(struct Object *object, struct ID *data, bool is_owned);
 
 void BKE_object_eval_boundbox(struct Depsgraph *depsgraph, struct Object *object);
-void BKE_object_synchronize_to_original(struct Depsgraph *depsgraph, struct Object *object);
+void BKE_object_sync_to_original(struct Depsgraph *depsgraph, struct Object *object);
 
 void BKE_object_eval_ptcache_reset(struct Depsgraph *depsgraph,
                                    struct Scene *scene,
@@ -300,7 +287,6 @@ void BKE_object_eval_transform_all(struct Depsgraph *depsgraph,
                                    struct Scene *scene,
                                    struct Object *object);
 
-void BKE_object_eval_update_shading(struct Depsgraph *depsgraph, struct Object *object);
 void BKE_object_data_select_update(struct Depsgraph *depsgraph, struct ID *object_data);
 void BKE_object_select_update(struct Depsgraph *depsgraph, struct Object *object);
 
@@ -328,8 +314,7 @@ int BKE_object_obdata_texspace_get(struct Object *ob,
                                    float **r_loc,
                                    float **r_size);
 
-struct Mesh *BKE_object_get_evaluated_mesh(const struct Depsgraph *depsgraph, struct Object *ob);
-struct Mesh *BKE_object_get_final_mesh(struct Object *object);
+struct Mesh *BKE_object_get_evaluated_mesh(struct Object *object);
 struct Mesh *BKE_object_get_pre_modified_mesh(struct Object *object);
 struct Mesh *BKE_object_get_original_mesh(struct Object *object);
 
@@ -372,7 +357,8 @@ typedef enum eObRelationTypes {
   OB_REL_CHILDREN = (1 << 2),           /* immediate children */
   OB_REL_CHILDREN_RECURSIVE = (1 << 3), /* All children */
   OB_REL_MOD_ARMATURE = (1 << 4),       /* Armatures related to the selected objects */
-  OB_REL_SCENE_CAMERA = (1 << 5), /* you might want the scene camera too even if unselected? */
+  /* OB_REL_SCENE_CAMERA = (1 << 5), */ /* you might want the scene camera too even if unselected?
+                                         */
 } eObRelationTypes;
 
 typedef enum eObjectSet {
@@ -408,7 +394,7 @@ bool BKE_object_empty_image_data_is_visible_in_view3d(const struct Object *ob,
  * The result is owned by the object.
  *
  * The mesh will be freed when object is re-evaluated or is destroyed. It is possible to force to
- * clear memory sued by this mesh by calling BKE_object_to_mesh_clear().
+ * clear memory used by this mesh by calling BKE_object_to_mesh_clear().
  *
  * If preserve_all_data_layers is truth then the modifier stack is re-evaluated to ensure it
  * preserves all possible custom data layers.

@@ -26,6 +26,14 @@ bool test_occlusion()
   return ndc.z > texture(depthTex, ndc.xy).r;
 }
 
+vec3 non_linear_blend_color(vec3 col1, vec3 col2, float fac)
+{
+  col1 = pow(col1, vec3(1.0 / 2.2));
+  col2 = pow(col2, vec3(1.0 / 2.2));
+  vec3 col = mix(col1, col2, fac);
+  return pow(col, vec3(2.2));
+}
+
 void main()
 {
   GPU_INTEL_VERTEX_SHADER_WORKAROUND
@@ -40,10 +48,10 @@ void main()
   gl_PointSize = sizeVertex * 2.0;
   /* Make selected and active vertex always on top. */
   if ((data.x & VERT_SELECTED) != 0) {
-    gl_Position.z -= 1e-7;
+    gl_Position.z -= 5e-7 * abs(gl_Position.w);
   }
   if ((data.x & VERT_ACTIVE) != 0) {
-    gl_Position.z -= 1e-7;
+    gl_Position.z -= 5e-7 * abs(gl_Position.w);
   }
 
   bool occluded = test_occlusion();
@@ -60,6 +68,10 @@ void main()
   float crease = float(m_data.z) / 255.0;
   float bweight = float(m_data.w) / 255.0;
   finalColorOuter = EDIT_MESH_edge_color_outer(m_data.y, m_data.x, crease, bweight);
+
+  if (finalColorOuter.a > 0.0) {
+    gl_Position.z -= 5e-7 * abs(gl_Position.w);
+  }
 
   bool occluded = false; /* Done in fragment shader */
 
@@ -88,7 +100,8 @@ void main()
   float facing = dot(view_vec, view_normal);
   facing = 1.0 - abs(facing) * 0.2;
 
-  finalColor.rgb = mix(colorEditMeshMiddle.rgb, finalColor.rgb, facing);
+  /* Do interpolation in a non-linear space to have a better visual result. */
+  finalColor.rgb = non_linear_blend_color(colorEditMeshMiddle.rgb, finalColor.rgb, facing);
 #endif
 
 #ifdef USE_WORLD_CLIP_PLANES

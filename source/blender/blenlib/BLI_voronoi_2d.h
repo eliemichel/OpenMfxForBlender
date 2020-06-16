@@ -26,6 +26,10 @@ struct ListBase;
  * \ingroup bli
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct VoronoiSite {
   float co[2];
   float color[3];
@@ -69,9 +73,13 @@ void BLI_voronoi_triangulate(const VoronoiSite *sites,
                              struct ListBase *edges,
                              int width,
                              int height,
-                             VoronoiTriangulationPoint **triangulated_points_r,
-                             int *triangulated_points_total_r,
-                             int (**triangles_r)[3],
-                             int *triangles_total_r);
+                             VoronoiTriangulationPoint **r_triangulated_points,
+                             int *r_triangulated_points_total,
+                             int (**r_triangles)[3],
+                             int *r_triangles_total);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BLI_VORONOI_2D_H__ */

@@ -26,8 +26,8 @@
 #include "ViewMap.h"
 
 #include "../scene_graph/LineRep.h"
-#include "../scene_graph/NodeShape.h"
 #include "../scene_graph/NodeGroup.h"
+#include "../scene_graph/NodeShape.h"
 #include "../scene_graph/OrientedLineRep.h"
 #include "../scene_graph/VertexRep.h"
 

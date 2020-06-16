@@ -22,8 +22,8 @@
 #include <stdio.h> /* printf */
 
 #include "Curve.h"
-#include "CurveIterators.h"
 #include "CurveAdvancedIterators.h"
+#include "CurveIterators.h"
 
 #include "BKE_global.h"
 #include "BLI_utildefines.h"

@@ -21,22 +21,22 @@
  * \ingroup edanimation
  */
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 
 #include "BLI_sys_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math_base.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_scene_types.h"
 
 #include "BKE_context.h"
-#include "BKE_sequencer.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_scene.h"
+#include "BKE_sequencer.h"
 
 #include "UI_view2d.h"
 
@@ -49,6 +49,7 @@
 #include "ED_anim_api.h"
 #include "ED_screen.h"
 #include "ED_sequencer.h"
+#include "ED_time_scrub_ui.h"
 #include "ED_util.h"
 
 #include "DEG_depsgraph.h"
@@ -61,7 +62,7 @@
 /* Check if the operator can be run from the current context */
 static bool change_frame_poll(bContext *C)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
   /* XXX temp? prevent changes during render */
   if (G.is_rendering) {
@@ -71,11 +72,11 @@ static bool change_frame_poll(bContext *C)
   /* although it's only included in keymaps for regions using ED_KEYMAP_ANIMATION,
    * this shouldn't show up in 3D editor (or others without 2D timeline view) via search
    */
-  if (sa) {
-    if (ELEM(sa->spacetype, SPACE_ACTION, SPACE_NLA, SPACE_SEQ, SPACE_CLIP)) {
+  if (area) {
+    if (ELEM(area->spacetype, SPACE_ACTION, SPACE_NLA, SPACE_SEQ, SPACE_CLIP)) {
       return true;
     }
-    else if (sa->spacetype == SPACE_GRAPH) {
+    else if (area->spacetype == SPACE_GRAPH) {
       /* NOTE: Graph Editor has special version which does some extra stuff.
        * No need to show the generic error message for that case though!
        */
@@ -151,11 +152,13 @@ static float frame_from_event(bContext *C, const wmEvent *event)
 
 static void change_frame_seq_preview_begin(bContext *C, const wmEvent *event)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   bScreen *screen = CTX_wm_screen(C);
-  if (sa && sa->spacetype == SPACE_SEQ) {
-    SpaceSeq *sseq = sa->spacedata.first;
-    if (ED_space_sequencer_check_show_strip(sseq)) {
+  if (area && area->spacetype == SPACE_SEQ) {
+    SpaceSeq *sseq = area->spacedata.first;
+    ARegion *region = CTX_wm_region(C);
+    if (ED_space_sequencer_check_show_strip(sseq) &&
+        !ED_time_scrub_event_in_region(region, event)) {
       ED_sequencer_special_preview_set(C, event->mval);
     }
   }
@@ -215,7 +218,7 @@ static int change_frame_modal(bContext *C, wmOperator *op, const wmEvent *event)
   int ret = OPERATOR_RUNNING_MODAL;
   /* execute the events */
   switch (event->type) {
-    case ESCKEY:
+    case EVT_ESCKEY:
       ret = OPERATOR_FINISHED;
       break;
 
@@ -233,8 +236,8 @@ static int change_frame_modal(bContext *C, wmOperator *op, const wmEvent *event)
       }
       break;
 
-    case LEFTCTRLKEY:
-    case RIGHTCTRLKEY:
+    case EVT_LEFTCTRLKEY:
+    case EVT_RIGHTCTRLKEY:
       if (event->val == KM_RELEASE) {
         RNA_boolean_set(op->ptr, "snap", false);
       }
@@ -282,7 +285,7 @@ static void ANIM_OT_change_frame(wmOperatorType *ot)
 
 static bool anim_set_end_frames_poll(bContext *C)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
   /* XXX temp? prevent changes during render */
   if (G.is_rendering) {
@@ -292,8 +295,8 @@ static bool anim_set_end_frames_poll(bContext *C)
   /* although it's only included in keymaps for regions using ED_KEYMAP_ANIMATION,
    * this shouldn't show up in 3D editor (or others without 2D timeline view) via search
    */
-  if (sa) {
-    if (ELEM(sa->spacetype, SPACE_ACTION, SPACE_GRAPH, SPACE_NLA, SPACE_SEQ, SPACE_CLIP)) {
+  if (area) {
+    if (ELEM(area->spacetype, SPACE_ACTION, SPACE_GRAPH, SPACE_NLA, SPACE_SEQ, SPACE_CLIP)) {
       return true;
     }
   }
@@ -403,7 +406,7 @@ static void ANIM_OT_end_frame_set(wmOperatorType *ot)
 static int previewrange_define_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   float sfra, efra;
   rcti rect;
 
@@ -411,8 +414,8 @@ static int previewrange_define_exec(bContext *C, wmOperator *op)
   WM_operator_properties_border_to_rcti(op, &rect);
 
   /* convert min/max values to frames (i.e. region to 'tot' rect) */
-  sfra = UI_view2d_region_to_view_x(&ar->v2d, rect.xmin);
-  efra = UI_view2d_region_to_view_x(&ar->v2d, rect.xmax);
+  sfra = UI_view2d_region_to_view_x(&region->v2d, rect.xmin);
+  efra = UI_view2d_region_to_view_x(&region->v2d, rect.xmax);
 
   /* set start/end frames for preview-range
    * - must clamp within allowable limits

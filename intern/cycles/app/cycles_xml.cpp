@@ -16,9 +16,9 @@
 
 #include <stdio.h>
 
-#include <sstream>
 #include <algorithm>
 #include <iterator>
+#include <sstream>
 
 #include "graph/node_xml.h"
 
@@ -32,8 +32,8 @@
 #include "render/nodes.h"
 #include "render/object.h"
 #include "render/osl.h"
-#include "render/shader.h"
 #include "render/scene.h"
+#include "render/shader.h"
 
 #include "subd/subd_patch.h"
 #include "subd/subd_split.h"
@@ -292,7 +292,7 @@ static void xml_read_shader_graph(XMLReadState &state, Shader *shader, xml_node 
             filepath = path_join(state.base, filepath);
           }
 
-          snode = ((OSLShaderManager *)manager)->osl_node(filepath);
+          snode = OSLShaderManager::osl_node(manager, filepath);
 
           if (!snode) {
             fprintf(stderr, "Failed to create OSL node from \"%s\".\n", filepath.c_str());
@@ -324,6 +324,10 @@ static void xml_read_shader_graph(XMLReadState &state, Shader *shader, xml_node 
       }
       else if (node_type->type != NodeType::SHADER) {
         fprintf(stderr, "Node type \"%s\" is not a shader node.\n", node_type->name.c_str());
+        continue;
+      }
+      else if (node_type->create == NULL) {
+        fprintf(stderr, "Can't create abstract node type \"%s\".\n", node_type->name.c_str());
         continue;
       }
 
@@ -376,11 +380,11 @@ static Mesh *xml_add_mesh(Scene *scene, const Transform &tfm)
 {
   /* create mesh */
   Mesh *mesh = new Mesh();
-  scene->meshes.push_back(mesh);
+  scene->geometry.push_back(mesh);
 
   /* create object*/
   Object *object = new Object();
-  object->mesh = mesh;
+  object->geometry = mesh;
   object->tfm = tfm;
   scene->objects.push_back(object);
 

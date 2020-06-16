@@ -29,8 +29,8 @@
  * \ingroup freestyle
  */
 
-#include "matrix_util.h"
 #include "normal_cycle.h"
+#include "matrix_util.h"
 
 namespace Freestyle {
 

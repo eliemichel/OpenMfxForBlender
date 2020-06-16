@@ -26,9 +26,9 @@
  */
 
 #include "GHOST_WindowManager.h"
-#include <algorithm>
 #include "GHOST_Debug.h"
 #include "GHOST_Window.h"
+#include <algorithm>
 
 GHOST_WindowManager::GHOST_WindowManager()
     : m_fullScreenWindow(0), m_activeWindow(0), m_activeWindowBeforeFullScreen(0)
@@ -162,7 +162,7 @@ void GHOST_WindowManager::setWindowInactive(const GHOST_IWindow *window)
   }
 }
 
-std::vector<GHOST_IWindow *> &GHOST_WindowManager::getWindows()
+const std::vector<GHOST_IWindow *> &GHOST_WindowManager::getWindows() const
 {
   return m_windows;
 }

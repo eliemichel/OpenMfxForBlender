@@ -17,9 +17,15 @@
 #ifndef __DEVICE_INTERN_H__
 #define __DEVICE_INTERN_H__
 
+#include "util/util_string.h"
+#include "util/util_vector.h"
+
 CCL_NAMESPACE_BEGIN
 
 class Device;
+class DeviceInfo;
+class Profiler;
+class Stats;
 
 Device *device_cpu_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
 bool device_opencl_init();
@@ -39,7 +45,7 @@ Device *device_multi_create(DeviceInfo &info, Stats &stats, Profiler &profiler, 
 void device_cpu_info(vector<DeviceInfo> &devices);
 void device_opencl_info(vector<DeviceInfo> &devices);
 void device_cuda_info(vector<DeviceInfo> &devices);
-void device_optix_info(vector<DeviceInfo> &devices);
+void device_optix_info(const vector<DeviceInfo> &cuda_devices, vector<DeviceInfo> &devices);
 void device_network_info(vector<DeviceInfo> &devices);
 
 string device_cpu_capabilities();

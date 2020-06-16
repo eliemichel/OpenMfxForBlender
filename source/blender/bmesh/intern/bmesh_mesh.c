@@ -25,6 +25,7 @@
 #include "DNA_listBase.h"
 #include "DNA_scene_types.h"
 
+#include "BLI_bitmap.h"
 #include "BLI_linklist_stack.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
@@ -32,7 +33,6 @@
 #include "BLI_task.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_cdderivedmesh.h"
 #include "BKE_editmesh.h"
 #include "BKE_mesh.h"
 #include "BKE_multires.h"
@@ -676,7 +676,7 @@ static void bm_mesh_loops_calc_normals(BMesh *bm,
                                        const float (*fnos)[3],
                                        float (*r_lnos)[3],
                                        MLoopNorSpaceArray *r_lnors_spacearr,
-                                       short (*clnors_data)[2],
+                                       const short (*clnors_data)[2],
                                        const int cd_loop_clnors_offset,
                                        const bool do_rebuild)
 {
@@ -786,8 +786,9 @@ static void bm_mesh_loops_calc_normals(BMesh *bm,
           BKE_lnor_space_add_loop(r_lnors_spacearr, lnor_space, l_curr_index, l_curr, true);
 
           if (has_clnors) {
-            short(*clnor)[2] = clnors_data ? &clnors_data[l_curr_index] :
-                                             BM_ELEM_CD_GET_VOID_P(l_curr, cd_loop_clnors_offset);
+            const short(*clnor)[2] = clnors_data ? &clnors_data[l_curr_index] :
+                                                   (const void *)BM_ELEM_CD_GET_VOID_P(
+                                                       l_curr, cd_loop_clnors_offset);
             BKE_lnor_space_custom_data_to_normal(lnor_space, *clnor, r_lnos[l_curr_index]);
           }
         }
@@ -820,7 +821,7 @@ static void bm_mesh_loops_calc_normals(BMesh *bm,
 
         /* We validate clnors data on the fly - cheapest way to do! */
         int clnors_avg[2] = {0, 0};
-        short(*clnor_ref)[2] = NULL;
+        const short(*clnor_ref)[2] = NULL;
         int clnors_nbr = 0;
         bool clnors_invalid = false;
 
@@ -886,9 +887,9 @@ static void bm_mesh_loops_calc_normals(BMesh *bm,
 
             if (has_clnors) {
               /* Accumulate all clnors, if they are not all equal we have to fix that! */
-              short(*clnor)[2] = clnors_data ?
-                                     &clnors_data[lfan_pivot_index] :
-                                     BM_ELEM_CD_GET_VOID_P(lfan_pivot, cd_loop_clnors_offset);
+              const short(*clnor)[2] = clnors_data ? &clnors_data[lfan_pivot_index] :
+                                                     (const void *)BM_ELEM_CD_GET_VOID_P(
+                                                         lfan_pivot, cd_loop_clnors_offset);
               if (clnors_nbr) {
                 clnors_invalid |= ((*clnor_ref)[0] != (*clnor)[0] ||
                                    (*clnor_ref)[1] != (*clnor)[1]);
@@ -1049,7 +1050,7 @@ void BM_mesh_loop_normals_update(BMesh *bm,
                                  const float split_angle,
                                  float (*r_lnos)[3],
                                  MLoopNorSpaceArray *r_lnors_spacearr,
-                                 short (*clnors_data)[2],
+                                 const short (*clnors_data)[2],
                                  const int cd_loop_clnors_offset)
 {
   const bool has_clnors = clnors_data || (cd_loop_clnors_offset != -1);
@@ -1627,20 +1628,6 @@ void BM_loop_normal_editdata_array_free(BMLoopNorEditDataArray *lnors_ed_arr)
   MEM_freeN(lnors_ed_arr);
 }
 
-int BM_total_loop_select(BMesh *bm)
-{
-  int r_sel = 0;
-  BMVert *v;
-  BMIter viter;
-
-  BM_ITER_MESH (v, &viter, bm, BM_VERTS_OF_MESH) {
-    if (BM_elem_flag_test(v, BM_ELEM_SELECT)) {
-      r_sel += BM_vert_face_count(v);
-    }
-  }
-  return r_sel;
-}
-
 /**
  * \brief BMesh Begin Edit
  *
@@ -1838,7 +1825,8 @@ void BM_mesh_elem_index_ensure(BMesh *bm, const char htype)
  * To avoid correcting them afterwards, set 'bm->elem_index_dirty' however its possible
  * this flag is set incorrectly which could crash blender.
  *
- * These functions ensure its correct and are called more often in debug mode.
+ * Code that calls this functions may depend on dirty indices on being set.
+ * Keep this function read-only.
  */
 
 void BM_mesh_elem_index_validate(
@@ -1867,10 +1855,9 @@ void BM_mesh_elem_index_validate(
           err_val = BM_elem_index_get(ele);
           err_idx = index;
           is_error = true;
+          break;
         }
       }
-
-      BM_elem_index_set(ele, index); /* set_ok */
       index++;
     }
 
@@ -2593,7 +2580,7 @@ void BM_mesh_rebuild(BMesh *bm,
     }
   }
 
-  for (BMEditSelection *ese = bm->selected.first; ese; ese = ese->next) {
+  LISTBASE_FOREACH (BMEditSelection *, ese, &bm->selected) {
     switch (ese->htype) {
       case BM_VERT:
         if (remap & BM_VERT) {

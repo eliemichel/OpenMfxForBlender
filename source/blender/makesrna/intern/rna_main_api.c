@@ -21,19 +21,19 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "DNA_ID.h"
 #include "DNA_modifier_types.h"
-#include "DNA_space_types.h"
 #include "DNA_object_types.h"
+#include "DNA_space_types.h"
 
 #include "BLI_utildefines.h"
 
-#include "RNA_define.h"
 #include "RNA_access.h"
+#include "RNA_define.h"
 #include "RNA_enum_types.h"
 
 #include "rna_internal.h"
@@ -49,12 +49,13 @@
 #  include "BKE_displist.h"
 #  include "BKE_font.h"
 #  include "BKE_gpencil.h"
+#  include "BKE_hair.h"
 #  include "BKE_icons.h"
-#  include "BKE_idcode.h"
+#  include "BKE_idtype.h"
 #  include "BKE_image.h"
-#  include "BKE_light.h"
 #  include "BKE_lattice.h"
-#  include "BKE_library_remap.h"
+#  include "BKE_lib_remap.h"
+#  include "BKE_light.h"
 #  include "BKE_lightprobe.h"
 #  include "BKE_linestyle.h"
 #  include "BKE_mask.h"
@@ -66,11 +67,13 @@
 #  include "BKE_object.h"
 #  include "BKE_paint.h"
 #  include "BKE_particle.h"
+#  include "BKE_pointcloud.h"
 #  include "BKE_scene.h"
 #  include "BKE_sound.h"
 #  include "BKE_speaker.h"
 #  include "BKE_text.h"
 #  include "BKE_texture.h"
+#  include "BKE_volume.h"
 #  include "BKE_workspace.h"
 #  include "BKE_world.h"
 
@@ -78,27 +81,30 @@
 #  include "DEG_depsgraph_query.h"
 
 #  include "DNA_armature_types.h"
+#  include "DNA_brush_types.h"
 #  include "DNA_camera_types.h"
+#  include "DNA_collection_types.h"
 #  include "DNA_curve_types.h"
+#  include "DNA_gpencil_types.h"
+#  include "DNA_hair_types.h"
+#  include "DNA_lattice_types.h"
 #  include "DNA_light_types.h"
+#  include "DNA_lightprobe_types.h"
+#  include "DNA_mask_types.h"
 #  include "DNA_material_types.h"
 #  include "DNA_mesh_types.h"
-#  include "DNA_speaker_types.h"
+#  include "DNA_meta_types.h"
+#  include "DNA_movieclip_types.h"
+#  include "DNA_node_types.h"
+#  include "DNA_particle_types.h"
+#  include "DNA_pointcloud_types.h"
 #  include "DNA_sound_types.h"
-#  include "DNA_lightprobe_types.h"
+#  include "DNA_speaker_types.h"
 #  include "DNA_text_types.h"
 #  include "DNA_texture_types.h"
-#  include "DNA_collection_types.h"
-#  include "DNA_brush_types.h"
-#  include "DNA_lattice_types.h"
-#  include "DNA_meta_types.h"
-#  include "DNA_world_types.h"
-#  include "DNA_particle_types.h"
 #  include "DNA_vfont_types.h"
-#  include "DNA_node_types.h"
-#  include "DNA_movieclip_types.h"
-#  include "DNA_mask_types.h"
-#  include "DNA_gpencil_types.h"
+#  include "DNA_volume_types.h"
+#  include "DNA_world_types.h"
 
 #  include "ED_screen.h"
 
@@ -129,7 +135,7 @@ static void rna_Main_ID_remove(Main *bmain,
     BKE_reportf(reports,
                 RPT_ERROR,
                 "%s '%s' is outside of main database and can not be removed from it",
-                BKE_idcode_to_name(GS(id->name)),
+                BKE_idtype_idcode_to_name(GS(id->name)),
                 id->name + 2);
     return;
   }
@@ -151,7 +157,7 @@ static void rna_Main_ID_remove(Main *bmain,
         reports,
         RPT_ERROR,
         "%s '%s' must have zero users to be removed, found %d (try with do_unlink=True parameter)",
-        BKE_idcode_to_name(GS(id->name)),
+        BKE_idtype_idcode_to_name(GS(id->name)),
         id->name + 2,
         ID_REAL_USERS(id));
   }
@@ -250,6 +256,18 @@ static Object *rna_Main_objects_new(Main *bmain, ReportList *reports, const char
       case ID_AR:
         type = OB_ARMATURE;
         break;
+      case ID_LP:
+        type = OB_LIGHTPROBE;
+        break;
+      case ID_HA:
+        type = OB_HAIR;
+        break;
+      case ID_PT:
+        type = OB_POINTCLOUD;
+        break;
+      case ID_VO:
+        type = OB_VOLUME;
+        break;
       default: {
         const char *idname;
         if (RNA_enum_id_from_value(rna_enum_id_type_items, GS(data->name), &idname) == 0) {
@@ -267,7 +285,7 @@ static Object *rna_Main_objects_new(Main *bmain, ReportList *reports, const char
   ob = BKE_object_add_only_object(bmain, type, safe_name);
 
   ob->data = data;
-  test_object_materials(bmain, ob, ob->data);
+  BKE_object_materials_test(bmain, ob, ob->data);
 
   return ob;
 }
@@ -286,7 +304,7 @@ static void rna_Main_materials_gpencil_data(Main *UNUSED(bmain), PointerRNA *id_
 {
   ID *id = id_ptr->data;
   Material *ma = (Material *)id;
-  BKE_material_init_gpencil_settings(ma);
+  BKE_gpencil_material_attr_init(ma);
 }
 
 static void rna_Main_materials_gpencil_remove(Main *UNUSED(bmain), PointerRNA *id_ptr)
@@ -665,12 +683,15 @@ static FreestyleLineStyle *rna_Main_linestyles_new(Main *bmain, const char *name
   return linestyle;
 }
 
-static LightProbe *rna_Main_lightprobe_new(Main *bmain, const char *name)
+static LightProbe *rna_Main_lightprobe_new(Main *bmain, const char *name, int type)
 {
   char safe_name[MAX_ID_NAME - 2];
   rna_idname_validate(name, safe_name);
 
   LightProbe *probe = BKE_lightprobe_add(bmain, safe_name);
+
+  BKE_lightprobe_type_set(probe, type);
+
   id_us_min(&probe->id);
   return probe;
 }
@@ -683,6 +704,38 @@ static bGPdata *rna_Main_gpencils_new(Main *bmain, const char *name)
   bGPdata *gpd = BKE_gpencil_data_addnew(bmain, safe_name);
   id_us_min(&gpd->id);
   return gpd;
+}
+
+#  ifdef WITH_NEW_OBJECT_TYPES
+static Hair *rna_Main_hairs_new(Main *bmain, const char *name)
+{
+  char safe_name[MAX_ID_NAME - 2];
+  rna_idname_validate(name, safe_name);
+
+  Hair *hair = BKE_hair_add(bmain, safe_name);
+  id_us_min(&hair->id);
+  return hair;
+}
+
+static PointCloud *rna_Main_pointclouds_new(Main *bmain, const char *name)
+{
+  char safe_name[MAX_ID_NAME - 2];
+  rna_idname_validate(name, safe_name);
+
+  PointCloud *pointcloud = BKE_pointcloud_add(bmain, safe_name);
+  id_us_min(&pointcloud->id);
+  return pointcloud;
+}
+#  endif
+
+static Volume *rna_Main_volumes_new(Main *bmain, const char *name)
+{
+  char safe_name[MAX_ID_NAME - 2];
+  rna_idname_validate(name, safe_name);
+
+  Volume *volume = BKE_volume_add(bmain, safe_name);
+  id_us_min(&volume->id);
+  return volume;
 }
 
 /* tag functions, all the same */
@@ -727,6 +780,11 @@ RNA_MAIN_ID_TAG_FUNCS_DEF(cachefiles, cachefiles, ID_CF)
 RNA_MAIN_ID_TAG_FUNCS_DEF(paintcurves, paintcurves, ID_PC)
 RNA_MAIN_ID_TAG_FUNCS_DEF(workspaces, workspaces, ID_WS)
 RNA_MAIN_ID_TAG_FUNCS_DEF(lightprobes, lightprobes, ID_LP)
+#  ifdef WITH_NEW_OBJECT_TYPES
+RNA_MAIN_ID_TAG_FUNCS_DEF(hairs, hairs, ID_HA)
+RNA_MAIN_ID_TAG_FUNCS_DEF(pointclouds, pointclouds, ID_PT)
+#  endif
+RNA_MAIN_ID_TAG_FUNCS_DEF(volumes, volumes, ID_VO)
 
 #  undef RNA_MAIN_ID_TAG_FUNCS_DEF
 
@@ -2079,6 +2137,9 @@ void RNA_def_main_lightprobes(BlenderRNA *brna, PropertyRNA *cprop)
   RNA_def_function_ui_description(func, "Add a new probe to the main database");
   parm = RNA_def_string(func, "name", "Probe", 0, "", "New name for the data-block");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  parm = RNA_def_enum(
+      func, "type", rna_enum_lightprobes_type_items, 0, "Type", "The type of lightprobe to add");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   /* return type */
   parm = RNA_def_pointer(func, "lightprobe", "LightProbe", "", "New light probe data-block");
   RNA_def_function_return(func, parm);
@@ -2104,6 +2165,141 @@ void RNA_def_main_lightprobes(BlenderRNA *brna, PropertyRNA *cprop)
       func, "do_ui_user", true, "", "Make sure interface does not reference this light probe");
 
   func = RNA_def_function(srna, "tag", "rna_Main_lightprobes_tag");
+  parm = RNA_def_boolean(func, "value", 0, "Value", "");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+}
+
+void RNA_def_main_hairs(BlenderRNA *brna, PropertyRNA *cprop)
+{
+  StructRNA *srna;
+  FunctionRNA *func;
+  PropertyRNA *parm;
+
+  RNA_def_property_srna(cprop, "BlendDataHairs");
+  srna = RNA_def_struct(brna, "BlendDataHairs", NULL);
+  RNA_def_struct_sdna(srna, "Main");
+  RNA_def_struct_ui_text(srna, "Main Hairs", "Collection of hairs");
+
+  func = RNA_def_function(srna, "new", "rna_Main_hairs_new");
+  RNA_def_function_ui_description(func, "Add a new hair to the main database");
+  parm = RNA_def_string(func, "name", "Hair", 0, "", "New name for the data-block");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  /* return type */
+  parm = RNA_def_pointer(func, "hair", "Hair", "", "New hair data-block");
+  RNA_def_function_return(func, parm);
+
+  func = RNA_def_function(srna, "remove", "rna_Main_ID_remove");
+  RNA_def_function_flag(func, FUNC_USE_REPORTS);
+  RNA_def_function_ui_description(func, "Remove a hair from the current blendfile");
+  parm = RNA_def_pointer(func, "hair", "Hair", "", "Hair to remove");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
+  RNA_def_parameter_clear_flags(parm, PROP_THICK_WRAP, 0);
+  RNA_def_boolean(func,
+                  "do_unlink",
+                  true,
+                  "",
+                  "Unlink all usages of this hair before deleting it "
+                  "(WARNING: will also delete objects instancing that hair data)");
+  RNA_def_boolean(func,
+                  "do_id_user",
+                  true,
+                  "",
+                  "Decrement user counter of all datablocks used by this hair data");
+  RNA_def_boolean(
+      func, "do_ui_user", true, "", "Make sure interface does not reference this hair data");
+
+  func = RNA_def_function(srna, "tag", "rna_Main_hairs_tag");
+  parm = RNA_def_boolean(func, "value", 0, "Value", "");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+}
+
+void RNA_def_main_pointclouds(BlenderRNA *brna, PropertyRNA *cprop)
+{
+  StructRNA *srna;
+  FunctionRNA *func;
+  PropertyRNA *parm;
+
+  RNA_def_property_srna(cprop, "BlendDataPointClouds");
+  srna = RNA_def_struct(brna, "BlendDataPointClouds", NULL);
+  RNA_def_struct_sdna(srna, "Main");
+  RNA_def_struct_ui_text(srna, "Main Point Clouds", "Collection of point clouds");
+
+  func = RNA_def_function(srna, "new", "rna_Main_pointclouds_new");
+  RNA_def_function_ui_description(func, "Add a new point cloud to the main database");
+  parm = RNA_def_string(func, "name", "PointCloud", 0, "", "New name for the data-block");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  /* return type */
+  parm = RNA_def_pointer(func, "pointcloud", "PointCloud", "", "New point cloud data-block");
+  RNA_def_function_return(func, parm);
+
+  func = RNA_def_function(srna, "remove", "rna_Main_ID_remove");
+  RNA_def_function_flag(func, FUNC_USE_REPORTS);
+  RNA_def_function_ui_description(func, "Remove a point cloud from the current blendfile");
+  parm = RNA_def_pointer(func, "pointcloud", "PointCloud", "", "Point cloud to remove");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
+  RNA_def_parameter_clear_flags(parm, PROP_THICK_WRAP, 0);
+  RNA_def_boolean(func,
+                  "do_unlink",
+                  true,
+                  "",
+                  "Unlink all usages of this point cloud before deleting it "
+                  "(WARNING: will also delete objects instancing that point cloud data)");
+  RNA_def_boolean(func,
+                  "do_id_user",
+                  true,
+                  "",
+                  "Decrement user counter of all datablocks used by this point cloud data");
+  RNA_def_boolean(func,
+                  "do_ui_user",
+                  true,
+                  "",
+                  "Make sure interface does not reference this point cloud data");
+
+  func = RNA_def_function(srna, "tag", "rna_Main_pointclouds_tag");
+  parm = RNA_def_boolean(func, "value", 0, "Value", "");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+}
+
+void RNA_def_main_volumes(BlenderRNA *brna, PropertyRNA *cprop)
+{
+  StructRNA *srna;
+  FunctionRNA *func;
+  PropertyRNA *parm;
+
+  RNA_def_property_srna(cprop, "BlendDataVolumes");
+  srna = RNA_def_struct(brna, "BlendDataVolumes", NULL);
+  RNA_def_struct_sdna(srna, "Main");
+  RNA_def_struct_ui_text(srna, "Main Volumes", "Collection of volumes");
+
+  func = RNA_def_function(srna, "new", "rna_Main_volumes_new");
+  RNA_def_function_ui_description(func, "Add a new volume to the main database");
+  parm = RNA_def_string(func, "name", "Volume", 0, "", "New name for the data-block");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  /* return type */
+  parm = RNA_def_pointer(func, "volume", "Volume", "", "New volume data-block");
+  RNA_def_function_return(func, parm);
+
+  func = RNA_def_function(srna, "remove", "rna_Main_ID_remove");
+  RNA_def_function_flag(func, FUNC_USE_REPORTS);
+  RNA_def_function_ui_description(func, "Remove a volume from the current blendfile");
+  parm = RNA_def_pointer(func, "volume", "Volume", "", "Volume to remove");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
+  RNA_def_parameter_clear_flags(parm, PROP_THICK_WRAP, 0);
+  RNA_def_boolean(func,
+                  "do_unlink",
+                  true,
+                  "",
+                  "Unlink all usages of this volume before deleting it "
+                  "(WARNING: will also delete objects instancing that volume data)");
+  RNA_def_boolean(func,
+                  "do_id_user",
+                  true,
+                  "",
+                  "Decrement user counter of all datablocks used by this volume data");
+  RNA_def_boolean(
+      func, "do_ui_user", true, "", "Make sure interface does not reference this volume data");
+
+  func = RNA_def_function(srna, "tag", "rna_Main_volumes_tag");
   parm = RNA_def_boolean(func, "value", 0, "Value", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 }

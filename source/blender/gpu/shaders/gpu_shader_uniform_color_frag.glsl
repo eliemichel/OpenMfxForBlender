@@ -17,8 +17,5 @@ void main()
 #else
   fragColor = color;
 #endif
-
-#if defined(USE_BACKGROUND)
-  gl_FragDepth = 1.0;
-#endif
+  fragColor = blender_srgb_to_framebuffer_space(fragColor);
 }

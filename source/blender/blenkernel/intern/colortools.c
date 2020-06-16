@@ -21,10 +21,10 @@
  * \ingroup bke
  */
 
-#include <string.h>
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
-#include <float.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -33,9 +33,9 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
-#include "BLI_utildefines.h"
 #include "BLI_task.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_colortools.h"
 #include "BKE_curve.h"
@@ -391,7 +391,7 @@ void BKE_curvemap_reset(CurveMap *cuma, const rctf *clipr, int preset, int slope
       cuma->curve[6].y = 0.025f;
       break;
     case CURVE_PRESET_BELL:
-      cuma->curve[0].x = 0;
+      cuma->curve[0].x = 0.0f;
       cuma->curve[0].y = 0.025f;
 
       cuma->curve[1].x = 0.50f;
@@ -1805,6 +1805,7 @@ void BKE_color_managed_view_settings_free(ColorManagedViewSettings *settings)
 {
   if (settings->curve_mapping) {
     BKE_curvemapping_free(settings->curve_mapping);
+    settings->curve_mapping = NULL;
   }
 }
 

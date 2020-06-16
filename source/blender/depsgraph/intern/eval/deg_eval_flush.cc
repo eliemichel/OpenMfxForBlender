@@ -25,15 +25,13 @@
 
 #include "intern/eval/deg_eval_flush.h"
 
-// TODO(sergey): Use some sort of wrapper.
-#include <deque>
 #include <cmath>
 
-#include "BLI_utildefines.h"
+#include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_math_vector.h"
 #include "BLI_task.h"
-#include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_object.h"
 #include "BKE_scene.h"
@@ -49,6 +47,8 @@ extern "C" {
 
 #include "intern/debug/deg_debug.h"
 #include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
+#include "intern/depsgraph_type.h"
 #include "intern/depsgraph_update.h"
 #include "intern/node/deg_node.h"
 #include "intern/node/deg_node_component.h"
@@ -83,7 +83,7 @@ enum {
   COMPONENT_STATE_DONE = 2,
 };
 
-typedef std::deque<OperationNode *> FlushQueue;
+typedef deque<OperationNode *> FlushQueue;
 
 namespace {
 
@@ -156,7 +156,7 @@ BLI_INLINE void flush_handle_component_node(IDNode *id_node,
    * whole IK solver, otherwise result might be unpredictable. */
   if (comp_node->type == NodeType::BONE) {
     ComponentNode *pose_comp = id_node->find_component(NodeType::EVAL_POSE);
-    BLI_assert(pose_comp != NULL);
+    BLI_assert(pose_comp != nullptr);
     if (pose_comp->custom_flags == COMPONENT_STATE_NONE) {
       queue->push_front(pose_comp->get_entry_operation());
       pose_comp->custom_flags = COMPONENT_STATE_SCHEDULED;
@@ -172,15 +172,16 @@ BLI_INLINE void flush_handle_component_node(IDNode *id_node,
  */
 BLI_INLINE OperationNode *flush_schedule_children(OperationNode *op_node, FlushQueue *queue)
 {
-  OperationNode *result = NULL;
+  if (op_node->flag & DEPSOP_FLAG_USER_MODIFIED) {
+    IDNode *id_node = op_node->owner->owner;
+    id_node->is_user_modified = true;
+  }
+
+  OperationNode *result = nullptr;
   for (Relation *rel : op_node->outlinks) {
     /* Flush is forbidden, completely. */
     if (rel->flag & RELATION_FLAG_NO_FLUSH) {
       continue;
-    }
-    if (op_node->flag & DEPSOP_FLAG_USER_MODIFIED) {
-      IDNode *id_node = op_node->owner->owner;
-      id_node->is_user_modified = true;
     }
     /* Relation only allows flushes on user changes, but the node was not
      * affected by user. */
@@ -196,7 +197,7 @@ BLI_INLINE OperationNode *flush_schedule_children(OperationNode *op_node, FlushQ
     if (to_node->scheduled) {
       continue;
     }
-    if (result != NULL) {
+    if (result != nullptr) {
       queue->push_front(to_node);
     }
     else {
@@ -210,7 +211,7 @@ BLI_INLINE OperationNode *flush_schedule_children(OperationNode *op_node, FlushQ
 void flush_engine_data_update(ID *id)
 {
   DrawDataList *draw_data_list = DRW_drawdatalist_from_id(id);
-  if (draw_data_list == NULL) {
+  if (draw_data_list == nullptr) {
     return;
   }
   LISTBASE_FOREACH (DrawData *, draw_data, draw_data_list) {
@@ -235,7 +236,7 @@ void flush_editors_id_update(Depsgraph *graph, const DEGEditorUpdateContext *upd
         continue;
       }
       DepsNodeFactory *factory = type_get_factory(comp_node->type);
-      BLI_assert(factory != NULL);
+      BLI_assert(factory != nullptr);
       id_cow->recalc |= factory->id_recalc_tag();
     }
     GHASH_FOREACH_END();
@@ -336,8 +337,8 @@ void invalidate_tagged_evaluated_data(Depsgraph *graph)
 void deg_graph_flush_updates(Main *bmain, Depsgraph *graph)
 {
   /* Sanity checks. */
-  BLI_assert(bmain != NULL);
-  BLI_assert(graph != NULL);
+  BLI_assert(bmain != nullptr);
+  BLI_assert(graph != nullptr);
   /* Nothing to update, early out. */
   if (graph->need_update_time) {
     const Scene *scene_orig = graph->scene;
@@ -364,7 +365,7 @@ void deg_graph_flush_updates(Main *bmain, Depsgraph *graph)
   while (!queue.empty()) {
     OperationNode *op_node = queue.front();
     queue.pop_front();
-    while (op_node != NULL) {
+    while (op_node != nullptr) {
       /* Tag operation as required for update. */
       op_node->flag |= DEPSOP_FLAG_NEEDS_UPDATE;
       /* Inform corresponding ID and component nodes about the change. */
@@ -392,7 +393,7 @@ void deg_graph_clear_tags(Depsgraph *graph)
                     DEPSOP_FLAG_USER_MODIFIED);
   }
   /* Clear any entry tags which haven't been flushed. */
-  BLI_gset_clear(graph->entry_tags, NULL);
+  BLI_gset_clear(graph->entry_tags, nullptr);
 }
 
 }  // namespace DEG

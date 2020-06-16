@@ -20,8 +20,8 @@
 
 #include <string.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_cachefile_types.h"
 #include "DNA_mesh_types.h"
@@ -31,7 +31,7 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_cachefile.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_scene.h"
 
 #include "DEG_depsgraph_build.h"
@@ -42,7 +42,7 @@
 #ifdef WITH_ALEMBIC
 #  include "ABC_alembic.h"
 #  include "BKE_global.h"
-#  include "BKE_library.h"
+#  include "BKE_lib_id.h"
 #endif
 
 static void initData(ModifierData *md)

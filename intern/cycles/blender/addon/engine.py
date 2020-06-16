@@ -33,7 +33,7 @@ def _is_using_buggy_driver():
             # in the version string, but those cards do not quite work and
             # causing crashes.
             return True
-        regex = re.compile(".*Compatibility Profile Context ([0-9]+(\.[0-9]+)+)$")
+        regex = re.compile(".*Compatibility Profile Context ([0-9]+(\\.[0-9]+)+)$")
         if not regex.match(version):
             # Skip cards like FireGL
             return False
@@ -245,9 +245,6 @@ def list_render_passes(srl):
     if srl.use_pass_transmission_direct:   yield ("TransDir",      "RGB",  'COLOR')
     if srl.use_pass_transmission_indirect: yield ("TransInd",      "RGB",  'COLOR')
     if srl.use_pass_transmission_color:    yield ("TransCol",      "RGB",  'COLOR')
-    if srl.use_pass_subsurface_direct:     yield ("SubsurfaceDir", "RGB",  'COLOR')
-    if srl.use_pass_subsurface_indirect:   yield ("SubsurfaceInd", "RGB",  'COLOR')
-    if srl.use_pass_subsurface_color:      yield ("SubsurfaceCol", "RGB",  'COLOR')
     if srl.use_pass_emit:                  yield ("Emit",          "RGB",  'COLOR')
     if srl.use_pass_environment:           yield ("Env",           "RGB",  'COLOR')
 
@@ -258,19 +255,21 @@ def list_render_passes(srl):
     if crl.pass_debug_bvh_traversed_instances: yield ("Debug BVH Traversed Instances", "X",   'VALUE')
     if crl.pass_debug_bvh_intersections:       yield ("Debug BVH Intersections",       "X",   'VALUE')
     if crl.pass_debug_ray_bounces:             yield ("Debug Ray Bounces",             "X",   'VALUE')
+    if crl.pass_debug_sample_count:            yield ("Debug Sample Count",            "X",   'VALUE')
     if crl.use_pass_volume_direct:             yield ("VolumeDir",                     "RGB", 'COLOR')
     if crl.use_pass_volume_indirect:           yield ("VolumeInd",                     "RGB", 'COLOR')
 
     # Cryptomatte passes.
+    crypto_depth = (crl.pass_crypto_depth + 1) // 2
     if crl.use_pass_crypto_object:
-        for i in range(0, crl.pass_crypto_depth, 2):
-            yield ("CryptoObject" + '{:02d}'.format(i//2), "RGBA", 'COLOR')
+        for i in range(0, crypto_depth):
+            yield ("CryptoObject" + '{:02d}'.format(i), "RGBA", 'COLOR')
     if crl.use_pass_crypto_material:
-        for i in range(0, crl.pass_crypto_depth, 2):
-            yield ("CryptoMaterial" + '{:02d}'.format(i//2), "RGBA", 'COLOR')
+        for i in range(0, crypto_depth):
+            yield ("CryptoMaterial" + '{:02d}'.format(i), "RGBA", 'COLOR')
     if srl.cycles.use_pass_crypto_asset:
-        for i in range(0, srl.cycles.pass_crypto_depth, 2):
-            yield ("CryptoAsset" + '{:02d}'.format(i//2), "RGBA", 'COLOR')
+        for i in range(0, crypto_depth):
+            yield ("CryptoAsset" + '{:02d}'.format(i), "RGBA", 'COLOR')
 
     # Denoising passes.
     if crl.use_denoising or crl.denoising_store_passes:
@@ -284,8 +283,7 @@ def list_render_passes(srl):
             yield ("Denoising Intensity",       "X",   'VALUE')
             clean_options = ("denoising_diffuse_direct", "denoising_diffuse_indirect",
                              "denoising_glossy_direct", "denoising_glossy_indirect",
-                             "denoising_transmission_direct", "denoising_transmission_indirect",
-                             "denoising_subsurface_direct", "denoising_subsurface_indirect")
+                             "denoising_transmission_direct", "denoising_transmission_indirect")
             if any(getattr(crl, option) for option in clean_options):
                 yield ("Denoising Clean", "RGB", 'COLOR')
 

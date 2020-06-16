@@ -33,11 +33,11 @@
 #include "BLI_threads.h"
 
 #include "BKE_bvhutils.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
-#include "BKE_subdiv_ccg.h"
 #include "BKE_shrinkwrap.h"
+#include "BKE_subdiv_ccg.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Mesh Runtime Struct Utils

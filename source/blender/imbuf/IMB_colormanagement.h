@@ -24,8 +24,12 @@
  * \ingroup imbuf
  */
 
-#include "BLI_sys_types.h"
 #include "BLI_compiler_compat.h"
+#include "BLI_sys_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define BCM_CONFIG_FILE "config.ocio"
 
@@ -52,6 +56,7 @@ void IMB_colormanagement_validate_settings(
 
 const char *IMB_colormanagement_role_colorspace_name_get(int role);
 void IMB_colormanagement_check_is_data(struct ImBuf *ibuf, const char *name);
+void IMB_colormanagegent_copy_settings(struct ImBuf *ibuf_src, struct ImBuf *ibuf_dst);
 void IMB_colormanagement_assign_float_colorspace(struct ImBuf *ibuf, const char *name);
 void IMB_colormanagement_assign_rect_colorspace(struct ImBuf *ibuf, const char *name);
 
@@ -195,8 +200,8 @@ void IMB_colormanagement_buffer_make_display_space(
 
 void IMB_colormanagement_display_settings_from_ctx(
     const struct bContext *C,
-    struct ColorManagedViewSettings **view_settings_r,
-    struct ColorManagedDisplaySettings **display_settings_r);
+    struct ColorManagedViewSettings **r_view_settings,
+    struct ColorManagedDisplaySettings **r_display_settings);
 
 const char *IMB_colormanagement_get_display_colorspace_name(
     const struct ColorManagedViewSettings *view_settings,
@@ -332,7 +337,8 @@ bool IMB_colormanagement_setup_glsl_draw_from_space(
     const struct ColorManagedDisplaySettings *display_settings,
     struct ColorSpace *colorspace,
     float dither,
-    bool predivide);
+    bool predivide,
+    bool do_overlay_merge);
 /* Same as setup_glsl_draw, but color management settings are guessing from a given context */
 bool IMB_colormanagement_setup_glsl_draw_ctx(const struct bContext *C,
                                              float dither,
@@ -361,6 +367,10 @@ enum {
   COLOR_ROLE_DEFAULT_FLOAT,
   COLOR_ROLE_DATA,
 };
+
+#ifdef __cplusplus
+}
+#endif
 
 #include "intern/colormanagement_inline.c"
 

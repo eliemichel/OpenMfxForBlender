@@ -22,16 +22,23 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "DNA_brush_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_brush_types.h"
 
 #include "BLI_utildefines.h"
 
-#include "BKE_main.h"
-#include "BKE_library.h"
 #include "BKE_brush.h"
+#include "BKE_lib_id.h"
+#include "BKE_main.h"
 #include "BKE_paint.h"
+
+/* -------------------------------------------------------------------- */
+/** \name Tool Slot Initialization / Versioning
+ *
+ * These functions run to update old files (while versioning),
+ * take care only to perform low-level functions here.
+ * \{ */
 
 void BKE_paint_toolslots_len_ensure(Paint *paint, int len)
 {
@@ -62,28 +69,53 @@ static void paint_toolslots_init(Main *bmain, Paint *paint)
   }
 }
 
+/**
+ * Initialize runtime since this is called from versioning code.
+ */
+static void paint_toolslots_init_with_runtime(Main *bmain, ToolSettings *ts, Paint *paint)
+{
+  if (paint == NULL) {
+    return;
+  }
+
+  /* Needed so #Paint_Runtime is updated when versioning. */
+  BKE_paint_runtime_init(ts, paint);
+  paint_toolslots_init(bmain, paint);
+}
+
 void BKE_paint_toolslots_init_from_main(struct Main *bmain)
 {
   for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
     ToolSettings *ts = scene->toolsettings;
-    paint_toolslots_init(bmain, &ts->imapaint.paint);
+    paint_toolslots_init_with_runtime(bmain, ts, &ts->imapaint.paint);
     if (ts->sculpt) {
-      paint_toolslots_init(bmain, &ts->sculpt->paint);
+      paint_toolslots_init_with_runtime(bmain, ts, &ts->sculpt->paint);
     }
     if (ts->vpaint) {
-      paint_toolslots_init(bmain, &ts->vpaint->paint);
+      paint_toolslots_init_with_runtime(bmain, ts, &ts->vpaint->paint);
     }
     if (ts->wpaint) {
-      paint_toolslots_init(bmain, &ts->wpaint->paint);
+      paint_toolslots_init_with_runtime(bmain, ts, &ts->wpaint->paint);
     }
     if (ts->uvsculpt) {
-      paint_toolslots_init(bmain, &ts->uvsculpt->paint);
+      paint_toolslots_init_with_runtime(bmain, ts, &ts->uvsculpt->paint);
     }
     if (ts->gp_paint) {
-      paint_toolslots_init(bmain, &ts->gp_paint->paint);
+      paint_toolslots_init_with_runtime(bmain, ts, &ts->gp_paint->paint);
+    }
+    if (ts->gp_vertexpaint) {
+      paint_toolslots_init_with_runtime(bmain, ts, &ts->gp_vertexpaint->paint);
+    }
+    if (ts->gp_sculptpaint) {
+      paint_toolslots_init_with_runtime(bmain, ts, &ts->gp_sculptpaint->paint);
+    }
+    if (ts->gp_weightpaint) {
+      paint_toolslots_init_with_runtime(bmain, ts, &ts->gp_weightpaint->paint);
     }
   }
 }
+
+/** \} */
 
 void BKE_paint_toolslots_brush_update_ex(Paint *paint, Brush *brush)
 {

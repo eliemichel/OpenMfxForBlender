@@ -24,6 +24,10 @@
 #ifndef __ED_ANIM_API_H__
 #define __ED_ANIM_API_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct AnimData;
 struct Depsgraph;
 struct ID;
@@ -70,17 +74,17 @@ typedef struct bAnimContext {
 
   /** editor->mode */
   short mode;
-  /** sa->spacetype */
+  /** area->spacetype */
   short spacetype;
   /** active region -> type (channels or main) */
   short regiontype;
 
   /** editor host */
-  struct ScrArea *sa;
+  struct ScrArea *area;
   /** editor data */
   struct SpaceLink *sl;
   /** region within editor */
-  struct ARegion *ar;
+  struct ARegion *region;
 
   /** dopesheet data for editor (or which is being used) */
   struct bDopeSheet *ads;
@@ -189,7 +193,7 @@ typedef struct bAnimListElem {
 typedef enum eAnim_ChannelType {
   ANIMTYPE_NONE = 0,
   ANIMTYPE_ANIMDATA,
-  ANIMTYPE_SPECIALDATA,
+  ANIMTYPE_SPECIALDATA__UNUSED,
 
   ANIMTYPE_SUMMARY,
 
@@ -222,6 +226,9 @@ typedef enum eAnim_ChannelType {
   ANIMTYPE_DSSPK,
   ANIMTYPE_DSGPENCIL,
   ANIMTYPE_DSMCLIP,
+  ANIMTYPE_DSHAIR,
+  ANIMTYPE_DSPOINTCLOUD,
+  ANIMTYPE_DSVOLUME,
 
   ANIMTYPE_SHAPEKEY,
 
@@ -330,25 +337,28 @@ typedef enum eAnimFilter_Flags {
 /* 'Object' channels */
 #define SEL_OBJC(base) (CHECK_TYPE_INLINE(base, Base *), ((base->flag & SELECT)))
 #define EXPANDED_OBJC(ob) \
-  (CHECK_TYPE_INLINE(ob, Object *), ((ob->nlaflag & OB_ADS_COLLAPSED) == 0))
+  (CHECK_TYPE_INLINE(ob, Object *), (((ob)->nlaflag & OB_ADS_COLLAPSED) == 0))
 /* 'Sub-object' channels (flags stored in Data block) */
 #define FILTER_SKE_OBJD(key) (CHECK_TYPE_INLINE(key, Key *), ((key->flag & KEY_DS_EXPAND)))
 #define FILTER_MAT_OBJD(ma) (CHECK_TYPE_INLINE(ma, Material *), ((ma->flag & MA_DS_EXPAND)))
 #define FILTER_LAM_OBJD(la) (CHECK_TYPE_INLINE(la, Light *), ((la->flag & LA_DS_EXPAND)))
 #define FILTER_CAM_OBJD(ca) (CHECK_TYPE_INLINE(ca, Camera *), ((ca->flag & CAM_DS_EXPAND)))
 #define FILTER_CACHEFILE_OBJD(cf) \
-  (CHECK_TYPE_INLINE(cf, CacheFile *), ((cf->flag & CACHEFILE_DS_EXPAND)))
+  (CHECK_TYPE_INLINE(cf, CacheFile *), (((cf)->flag & CACHEFILE_DS_EXPAND)))
 #define FILTER_CUR_OBJD(cu) (CHECK_TYPE_INLINE(cu, Curve *), ((cu->flag & CU_DS_EXPAND)))
 #define FILTER_PART_OBJD(part) \
-  (CHECK_TYPE_INLINE(part, ParticleSettings *), ((part->flag & PART_DS_EXPAND)))
+  (CHECK_TYPE_INLINE(part, ParticleSettings *), (((part)->flag & PART_DS_EXPAND)))
 #define FILTER_MBALL_OBJD(mb) (CHECK_TYPE_INLINE(mb, MetaBall *), ((mb->flag2 & MB_DS_EXPAND)))
 #define FILTER_ARM_OBJD(arm) (CHECK_TYPE_INLINE(arm, bArmature *), ((arm->flag & ARM_DS_EXPAND)))
 #define FILTER_MESH_OBJD(me) (CHECK_TYPE_INLINE(me, Mesh *), ((me->flag & ME_DS_EXPAND)))
 #define FILTER_LATTICE_OBJD(lt) (CHECK_TYPE_INLINE(lt, Lattice *), ((lt->flag & LT_DS_EXPAND)))
 #define FILTER_SPK_OBJD(spk) (CHECK_TYPE_INLINE(spk, Speaker *), ((spk->flag & SPK_DS_EXPAND)))
+#define FILTER_HAIR_OBJD(ha) (CHECK_TYPE_INLINE(ha, Hair *), ((ha->flag & HA_DS_EXPAND)))
+#define FILTER_POINTS_OBJD(pt) (CHECK_TYPE_INLINE(pt, PointCloud *), ((pt->flag & PT_DS_EXPAND)))
+#define FILTER_VOLUME_OBJD(vo) (CHECK_TYPE_INLINE(vo, Volume *), ((vo->flag & VO_DS_EXPAND)))
 /* Variable use expanders */
 #define FILTER_NTREE_DATA(ntree) \
-  (CHECK_TYPE_INLINE(ntree, bNodeTree *), ((ntree->flag & NTREE_DS_EXPAND)))
+  (CHECK_TYPE_INLINE(ntree, bNodeTree *), (((ntree)->flag & NTREE_DS_EXPAND)))
 #define FILTER_TEX_DATA(tex) (CHECK_TYPE_INLINE(tex, Tex *), ((tex->flag & TEX_DS_EXPAND)))
 
 /* 'Sub-object/Action' channels (flags stored in Action) */
@@ -359,11 +369,11 @@ typedef enum eAnimFilter_Flags {
 
 /* Actions (also used for Dopesheet) */
 /* Action Channel Group */
-#define EDITABLE_AGRP(agrp) ((agrp->flag & AGRP_PROTECTED) == 0)
+#define EDITABLE_AGRP(agrp) (((agrp)->flag & AGRP_PROTECTED) == 0)
 #define EXPANDED_AGRP(ac, agrp) \
-  (((!(ac) || ((ac)->spacetype != SPACE_GRAPH)) && (agrp->flag & AGRP_EXPANDED)) || \
-   (((ac) && ((ac)->spacetype == SPACE_GRAPH)) && (agrp->flag & AGRP_EXPANDED_G)))
-#define SEL_AGRP(agrp) ((agrp->flag & AGRP_SELECTED) || (agrp->flag & AGRP_ACTIVE))
+  (((!(ac) || ((ac)->spacetype != SPACE_GRAPH)) && ((agrp)->flag & AGRP_EXPANDED)) || \
+   (((ac) && ((ac)->spacetype == SPACE_GRAPH)) && ((agrp)->flag & AGRP_EXPANDED_G)))
+#define SEL_AGRP(agrp) (((agrp)->flag & AGRP_SELECTED) || ((agrp)->flag & AGRP_ACTIVE))
 /* F-Curve Channels */
 #define EDITABLE_FCU(fcu) ((fcu->flag & FCURVE_PROTECTED) == 0)
 #define SEL_FCU(fcu) (fcu->flag & FCURVE_SELECTED)
@@ -403,7 +413,7 @@ typedef enum eAnimFilter_Flags {
 
 /* channel heights */
 #define ACHANNEL_FIRST_TOP(ac) \
-  (UI_view2d_scale_get_y(&(ac)->ar->v2d) * -UI_TIME_SCRUB_MARGIN_Y - ACHANNEL_SKIP)
+  (UI_view2d_scale_get_y(&(ac)->region->v2d) * -UI_TIME_SCRUB_MARGIN_Y - ACHANNEL_SKIP)
 #define ACHANNEL_HEIGHT(ac) (0.8f * (ac)->yscale_fac * U.widget_unit)
 #define ACHANNEL_SKIP (0.1f * U.widget_unit)
 #define ACHANNEL_STEP(ac) (ACHANNEL_HEIGHT(ac) + ACHANNEL_SKIP)
@@ -421,9 +431,10 @@ typedef enum eAnimFilter_Flags {
 
 /* NLA channel heights */
 #define NLACHANNEL_FIRST_TOP(ac) \
-  (UI_view2d_scale_get_y(&(ac)->ar->v2d) * -UI_TIME_SCRUB_MARGIN_Y - NLACHANNEL_SKIP)
+  (UI_view2d_scale_get_y(&(ac)->region->v2d) * -UI_TIME_SCRUB_MARGIN_Y - NLACHANNEL_SKIP)
 #define NLACHANNEL_HEIGHT(snla) \
-  ((snla && (snla->flag & SNLA_NOSTRIPCURVES)) ? (0.8f * U.widget_unit) : (1.2f * U.widget_unit))
+  (((snla) && ((snla)->flag & SNLA_NOSTRIPCURVES)) ? (0.8f * U.widget_unit) : \
+                                                     (1.2f * U.widget_unit))
 #define NLACHANNEL_SKIP (0.1f * U.widget_unit)
 #define NLACHANNEL_STEP(snla) (NLACHANNEL_HEIGHT(snla) + NLACHANNEL_SKIP)
 /* Additional offset to give some room at the end. */
@@ -474,7 +485,7 @@ typedef enum eAnimChannel_Role {
   /** datablock expander - a "composite" channel type */
   ACHANNEL_ROLE_EXPANDER = -1,
   /** special purposes - not generally for hierarchy processing */
-  ACHANNEL_ROLE_SPECIAL = 0,
+  /* ACHANNEL_ROLE_SPECIAL = 0, */ /* UNUSED */
   /** data channel - a channel representing one of the actual building blocks of channels */
   ACHANNEL_ROLE_CHANNEL = 1,
 } eAnimChannel_Role;
@@ -628,7 +639,7 @@ bool ANIM_remove_empty_action_from_animdata(struct AnimData *adt);
 /* flags for Current Frame Drawing */
 enum eAnimEditDraw_CurrentFrame {
   /* plain time indicator with no special indicators */
-  DRAWCFRA_PLAIN = 0,
+  /* DRAWCFRA_PLAIN = 0, */ /* UNUSED */
   /* time indication in seconds or frames */
   DRAWCFRA_UNIT_SECONDS = (1 << 0),
   /* draw indicator extra wide (for timeline) */
@@ -729,7 +740,7 @@ typedef enum eAnimUnitConv_Flags {
   ANIM_UNITCONV_ONLYSEL = (1 << 2),
   /* only touch selected vertices */
   ANIM_UNITCONV_SELVERTS = (1 << 3),
-  ANIM_UNITCONV_SKIPKNOTS = (1 << 4),
+  /* ANIM_UNITCONV_SKIPKNOTS = (1 << 4), */ /* UNUSED */
   /* Scale FCurve i a way it fits to -1..1 space */
   ANIM_UNITCONV_NORMALIZE = (1 << 5),
   /* Only when normalization is used: use scale factor from previous run,
@@ -830,7 +841,7 @@ void ED_animedit_unlink_action(struct bContext *C,
                                bool force_delete);
 
 /* Drivers Editor - Utility to set up UI correctly */
-void ED_drivers_editor_init(struct bContext *C, struct ScrArea *sa);
+void ED_drivers_editor_init(struct bContext *C, struct ScrArea *area);
 
 /* ************************************************ */
 
@@ -858,5 +869,9 @@ void animviz_calc_motionpaths(struct Depsgraph *depsgraph,
                               bool restore);
 
 void animviz_get_object_motionpaths(struct Object *ob, ListBase *targets);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __ED_ANIM_API_H__ */

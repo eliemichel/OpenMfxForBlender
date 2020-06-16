@@ -23,12 +23,12 @@
  * \ingroup bli
  */
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
 #include <wctype.h>
 #include <wcwidth.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 #include "BLI_utildefines.h"
 
@@ -288,22 +288,6 @@ size_t BLI_strncpy_utf8_rlen(char *__restrict dst, const char *__restrict src, s
   return (size_t)(dst - r_dst);
 }
 
-char *BLI_strncat_utf8(char *__restrict dst, const char *__restrict src, size_t maxncpy)
-{
-  while (*dst && maxncpy > 0) {
-    dst++;
-    maxncpy--;
-  }
-
-#ifdef DEBUG_STRSIZE
-  memset(dst, 0xff, sizeof(*dst) * maxncpy);
-#endif
-
-  BLI_STR_UTF8_CPY(dst, src, maxncpy);
-
-  return dst;
-}
-
 #undef BLI_STR_UTF8_CPY
 
 /* --------------------------------------------------------------------------*/
@@ -373,23 +357,23 @@ size_t BLI_strlen_utf8_ex(const char *strc, size_t *r_len_bytes)
 
 size_t BLI_strlen_utf8(const char *strc)
 {
-  size_t len;
-
-  for (len = 0; *strc; len++) {
-    strc += BLI_str_utf8_size_safe(strc);
-  }
-
-  return len;
+  size_t len_bytes;
+  return BLI_strlen_utf8_ex(strc, &len_bytes);
 }
 
 size_t BLI_strnlen_utf8_ex(const char *strc, const size_t maxlen, size_t *r_len_bytes)
 {
-  size_t len;
+  size_t len = 0;
   const char *strc_orig = strc;
   const char *strc_end = strc + maxlen;
 
-  for (len = 0; *strc && strc < strc_end; len++) {
-    strc += BLI_str_utf8_size_safe(strc);
+  while (true) {
+    size_t step = (size_t)BLI_str_utf8_size_safe(strc);
+    if (!*strc || strc + step > strc_end) {
+      break;
+    }
+    strc += step;
+    len++;
   }
 
   *r_len_bytes = (size_t)(strc - strc_orig);
@@ -403,14 +387,8 @@ size_t BLI_strnlen_utf8_ex(const char *strc, const size_t maxlen, size_t *r_len_
  */
 size_t BLI_strnlen_utf8(const char *strc, const size_t maxlen)
 {
-  size_t len;
-  const char *strc_end = strc + maxlen;
-
-  for (len = 0; *strc && strc < strc_end; len++) {
-    strc += BLI_str_utf8_size_safe(strc);
-  }
-
-  return len;
+  size_t len_bytes;
+  return BLI_strnlen_utf8_ex(strc, maxlen, &len_bytes);
 }
 
 size_t BLI_strncpy_wchar_from_utf8(wchar_t *__restrict dst_w,
@@ -600,7 +578,7 @@ uint BLI_str_utf8_as_unicode(const char *p)
 uint BLI_str_utf8_as_unicode_and_size(const char *__restrict p, size_t *__restrict index)
 {
   int i, len;
-  unsigned mask = 0;
+  uint mask = 0;
   uint result;
   const unsigned char c = (unsigned char)*p;
 

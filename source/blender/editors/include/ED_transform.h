@@ -24,6 +24,10 @@
 #ifndef __ED_TRANSFORM_H__
 #define __ED_TRANSFORM_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ******************* Registration Function ********************** */
 
 struct Object;
@@ -119,7 +123,7 @@ struct bContext;
 void BIF_clearTransformOrientation(struct bContext *C);
 void BIF_removeTransformOrientation(struct bContext *C, struct TransformOrientation *ts);
 void BIF_removeTransformOrientationIndex(struct bContext *C, int index);
-void BIF_createTransformOrientation(struct bContext *C,
+bool BIF_createTransformOrientation(struct bContext *C,
                                     struct ReportList *reports,
                                     const char *name,
                                     const bool use_view,
@@ -205,5 +209,9 @@ struct TransformCalcParams {
 int ED_transform_calc_gizmo_stats(const struct bContext *C,
                                   const struct TransformCalcParams *params,
                                   struct TransformBounds *tbounds);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __ED_TRANSFORM_H__ */

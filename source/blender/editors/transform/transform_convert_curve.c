@@ -25,11 +25,11 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 
 #include "BKE_context.h"
 #include "BKE_curve.h"
-#include "BKE_report.h"
 
 #include "transform.h"
 #include "transform_convert.h"
@@ -99,7 +99,7 @@ void createTransCurveVerts(TransInfo *t)
 
     /* count total of vertices, check identical as in 2nd loop for making transdata! */
     ListBase *nurbs = BKE_curve_editNurbs_get(cu);
-    for (Nurb *nu = nurbs->first; nu; nu = nu->next) {
+    LISTBASE_FOREACH (Nurb *, nu, nurbs) {
       if (nu->type == CU_BEZIER) {
         for (a = 0, bezt = nu->bezt; a < nu->pntsu; a++, bezt++) {
           if (bezt->hide == 0) {
@@ -167,6 +167,8 @@ void createTransCurveVerts(TransInfo *t)
                              ((v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) == 0) :
                              false;
 
+    bool use_around_origins_for_handles_test = ((t->around == V3D_AROUND_LOCAL_ORIGINS) &&
+                                                transform_mode_use_local_origins(t));
     float mtx[3][3], smtx[3][3];
 
     copy_m3_m4(mtx, tc->obedit->obmat);
@@ -174,7 +176,7 @@ void createTransCurveVerts(TransInfo *t)
 
     TransData *td = tc->data;
     ListBase *nurbs = BKE_curve_editNurbs_get(cu);
-    for (Nurb *nu = nurbs->first; nu; nu = nu->next) {
+    LISTBASE_FOREACH (Nurb *, nu, nurbs) {
       if (nu->type == CU_BEZIER) {
         TransData *head, *tail;
         head = tail = td;
@@ -342,7 +344,7 @@ void createTransCurveVerts(TransInfo *t)
         if (ELEM(t->mode, TFM_CURVE_SHRINKFATTEN, TFM_TILT, TFM_DUMMY) == 0) {
           /* sets the handles based on their selection,
            * do this after the data is copied to the TransData */
-          BKE_nurb_handles_test(nu, !hide_handles);
+          BKE_nurb_handles_test(nu, !hide_handles, use_around_origins_for_handles_test);
         }
       }
       else {

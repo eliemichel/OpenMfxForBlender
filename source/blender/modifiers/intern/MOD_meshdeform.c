@@ -31,14 +31,14 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
+#include "BKE_deform.h"
+#include "BKE_editmesh.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
-#include "BKE_deform.h"
-#include "BKE_editmesh.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -161,6 +161,8 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
     DEG_add_object_relation(ctx->node, mmd->object, DEG_OB_COMP_TRANSFORM, "Mesh Deform Modifier");
     DEG_add_object_relation(ctx->node, mmd->object, DEG_OB_COMP_GEOMETRY, "Mesh Deform Modifier");
   }
+  /* We need own transformation as well. */
+  DEG_add_modifier_to_transform_relation(ctx->node, "Mesh Deform Modifier");
 }
 
 static float meshdeform_dynamic_bind(MeshDeformModifierData *mmd, float (*dco)[3], float vec[3])
@@ -284,7 +286,7 @@ static void meshdeform_vert_task(void *__restrict userdata,
   }
 
   if (dvert) {
-    fac = defvert_find_weight(&dvert[iter], defgrp_index);
+    fac = BKE_defvert_find_weight(&dvert[iter], defgrp_index);
 
     if (mmd->flag & MOD_MDEF_INVERT_VGROUP) {
       fac = 1.0f - fac;

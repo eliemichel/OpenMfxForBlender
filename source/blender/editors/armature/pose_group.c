@@ -31,8 +31,8 @@
 #include "DNA_armature_types.h"
 #include "DNA_object_types.h"
 
-#include "BKE_armature.h"
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_context.h"
 
 #include "DEG_depsgraph.h"
@@ -44,6 +44,7 @@
 #include "WM_types.h"
 
 #include "ED_armature.h"
+#include "ED_outliner.h"
 #include "ED_screen.h"
 
 #include "UI_interface.h"
@@ -484,6 +485,7 @@ static int pose_group_select_exec(bContext *C, wmOperator *UNUSED(op))
   bArmature *arm = ob->data;
   DEG_id_tag_update(&arm->id, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_OBJECT | ND_POSE, ob);
+  ED_outliner_select_sync_from_pose_bone_tag(C);
 
   return OPERATOR_FINISHED;
 }
@@ -518,6 +520,7 @@ static int pose_group_deselect_exec(bContext *C, wmOperator *UNUSED(op))
   bArmature *arm = ob->data;
   DEG_id_tag_update(&arm->id, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_OBJECT | ND_POSE, ob);
+  ED_outliner_select_sync_from_pose_bone_tag(C);
 
   return OPERATOR_FINISHED;
 }

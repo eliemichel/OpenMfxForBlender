@@ -23,6 +23,10 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct MEdge;
 struct MLoop;
 struct MLoopTri;
@@ -244,18 +248,15 @@ int *BKE_mesh_calc_smoothgroups(const struct MEdge *medge,
                                 int *r_totgroup,
                                 const bool use_bitflags);
 
-/* No good (portable) way to have exported inlined functions... */
-#define BKE_MESH_TESSFACE_VINDEX_ORDER(_mf, _v) \
-  ((CHECK_TYPE_INLINE(_mf, MFace *), CHECK_TYPE_INLINE(&(_v), unsigned int *)), \
-   ((_mf->v1 == _v) ? \
-        0 : \
-        (_mf->v2 == _v) ? 1 : (_mf->v3 == _v) ? 2 : (_mf->v4 && _mf->v4 == _v) ? 3 : -1))
-
 /* use on looptri vertex values */
 #define BKE_MESH_TESSTRI_VINDEX_ORDER(_tri, _v) \
   ((CHECK_TYPE_ANY( \
         _tri, unsigned int *, int *, int[3], const unsigned int *, const int *, const int[3]), \
     CHECK_TYPE_ANY(_v, unsigned int, const unsigned int, int, const int)), \
    (((_tri)[0] == _v) ? 0 : ((_tri)[1] == _v) ? 1 : ((_tri)[2] == _v) ? 2 : -1))
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_MESH_MAPPING_H__ */

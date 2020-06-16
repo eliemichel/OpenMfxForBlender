@@ -19,8 +19,9 @@
 #include "blender/CCL_api.h"
 
 #include "blender/blender_device.h"
-#include "blender/blender_sync.h"
 #include "blender/blender_session.h"
+#include "blender/blender_sync.h"
+#include "blender/blender_util.h"
 
 #include "render/denoising.h"
 #include "render/merge.h"
@@ -37,8 +38,8 @@
 #ifdef WITH_OSL
 #  include "render/osl.h"
 
-#  include <OSL/oslquery.h>
 #  include <OSL/oslconfig.h>
+#  include <OSL/oslquery.h>
 #endif
 
 #ifdef WITH_OPENCL
@@ -57,6 +58,12 @@ void *pylong_as_voidptr_typesafe(PyObject *object)
   if (object == Py_None)
     return NULL;
   return PyLong_AsVoidPtr(object);
+}
+
+PyObject *pyunicode_from_string(const char *str)
+{
+  /* Ignore errors if device API returns invalid UTF-8 strings. */
+  return PyUnicode_DecodeUTF8(str, strlen(str), "ignore");
 }
 
 /* Synchronize debug flags from a given Blender scene.
@@ -428,9 +435,9 @@ static PyObject *available_devices_func(PyObject * /*self*/, PyObject *args)
     DeviceInfo &device = devices[i];
     string type_name = Device::string_from_type(device.type);
     PyObject *device_tuple = PyTuple_New(3);
-    PyTuple_SET_ITEM(device_tuple, 0, PyUnicode_FromString(device.description.c_str()));
-    PyTuple_SET_ITEM(device_tuple, 1, PyUnicode_FromString(type_name.c_str()));
-    PyTuple_SET_ITEM(device_tuple, 2, PyUnicode_FromString(device.id.c_str()));
+    PyTuple_SET_ITEM(device_tuple, 0, pyunicode_from_string(device.description.c_str()));
+    PyTuple_SET_ITEM(device_tuple, 1, pyunicode_from_string(type_name.c_str()));
+    PyTuple_SET_ITEM(device_tuple, 2, pyunicode_from_string(device.id.c_str()));
     PyTuple_SET_ITEM(ret, i, device_tuple);
   }
 
@@ -641,7 +648,7 @@ static PyObject *osl_compile_func(PyObject * /*self*/, PyObject *args)
 static PyObject *system_info_func(PyObject * /*self*/, PyObject * /*value*/)
 {
   string system_info = Device::device_capabilities();
-  return PyUnicode_FromString(system_info.c_str());
+  return pyunicode_from_string(system_info.c_str());
 }
 
 #ifdef WITH_OPENCL

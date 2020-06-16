@@ -25,10 +25,10 @@
  * Wraps OpenGL and FreeType.
  */
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 #include <ft2build.h>
 
@@ -47,14 +47,12 @@
 
 #include "IMB_colormanagement.h"
 
-#ifndef BLF_STANDALONE
-#  include "GPU_shader.h"
-#  include "GPU_matrix.h"
-#  include "GPU_immediate.h"
-#endif
+#include "GPU_immediate.h"
+#include "GPU_matrix.h"
+#include "GPU_shader.h"
 
-#include "blf_internal_types.h"
 #include "blf_internal.h"
+#include "blf_internal_types.h"
 
 /* Max number of font in memory.
  * Take care that now every font have a glyph cache per size/dpi,
@@ -584,9 +582,6 @@ static void blf_draw_gl__start(FontBLF *font)
    * in BLF_position (old ui_rasterpos_safe).
    */
 
-  /* always bind the texture for the first glyph */
-  font->tex_bind_state = 0;
-
   if ((font->flags & (BLF_ROTATION | BLF_MATRIX | BLF_ASPECT)) == 0) {
     return; /* glyphs will be translated individually and batched. */
   }
@@ -685,6 +680,42 @@ int BLF_draw_mono(int fontid, const char *str, size_t len, int cwidth)
   }
 
   return columns;
+}
+
+/**
+ * Run \a user_fn for each character, with the bound-box that would be used for drawing.
+ *
+ * \param user_fn: Callback that runs on each glyph, returning false early exits.
+ * \param user_data: User argument passed to \a user_fn.
+ *
+ * \note The font position, clipping, matrix and rotation are not applied.
+ */
+void BLF_boundbox_foreach_glyph_ex(int fontid,
+                                   const char *str,
+                                   size_t len,
+                                   BLF_GlyphBoundsFn user_fn,
+                                   void *user_data,
+                                   struct ResultBLF *r_info)
+{
+  FontBLF *font = blf_get(fontid);
+
+  BLF_RESULT_CHECK_INIT(r_info);
+
+  if (font) {
+    if (font->flags & BLF_WORD_WRAP) {
+      /* TODO: word-wrap support. */
+      BLI_assert(0);
+    }
+    else {
+      blf_font_boundbox_foreach_glyph(font, str, len, user_fn, user_data, r_info);
+    }
+  }
+}
+
+void BLF_boundbox_foreach_glyph(
+    int fontid, const char *str, size_t len, BLF_GlyphBoundsFn user_fn, void *user_data)
+{
+  BLF_boundbox_foreach_glyph_ex(fontid, str, len, user_fn, user_data, NULL);
 }
 
 size_t BLF_width_to_strlen(int fontid, const char *str, size_t len, float width, float *r_width)
@@ -935,10 +966,7 @@ void blf_draw_buffer__start(FontBLF *font)
 {
   FontBufInfoBLF *buf_info = &font->buf_info;
 
-  buf_info->col_char[0] = buf_info->col_init[0] * 255;
-  buf_info->col_char[1] = buf_info->col_init[1] * 255;
-  buf_info->col_char[2] = buf_info->col_init[2] * 255;
-  buf_info->col_char[3] = buf_info->col_init[3] * 255;
+  rgba_float_to_uchar(buf_info->col_char, buf_info->col_init);
 
   if (buf_info->display) {
     copy_v4_v4(buf_info->col_float, buf_info->col_init);

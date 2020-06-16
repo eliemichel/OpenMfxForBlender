@@ -19,9 +19,9 @@
  */
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_bitmap_draw_2d.h"
 #include "BLI_math_geom.h"
+#include "BLI_utildefines.h"
 
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
@@ -138,4 +138,18 @@ ImBuf *BKE_icon_geom_rasterize(const struct Icon_Geom *geom,
   }
   IMB_scaleImBuf(ibuf, size_x, size_y);
   return ibuf;
+}
+
+void BKE_icon_geom_invert_lightness(struct Icon_Geom *geom)
+{
+  const int length = 3 * geom->coords_len;
+
+  for (int i = 0; i < length; i++) {
+    float rgb[3], hsl[3];
+
+    rgb_uchar_to_float(rgb, geom->colors[i]);
+    rgb_to_hsl_v(rgb, hsl);
+    hsl_to_rgb(hsl[0], hsl[1], 1.0f - hsl[2], &rgb[0], &rgb[1], &rgb[2]);
+    rgb_float_to_uchar(geom->colors[i], rgb);
+  }
 }

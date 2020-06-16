@@ -28,16 +28,17 @@
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_object_types.h"
+#include "DNA_mask_types.h"
 #include "DNA_node_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
 #include "BKE_action.h"
+#include "BKE_anim_data.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
 #include "BKE_gpencil.h"
@@ -360,16 +361,6 @@ void ANIM_animdata_update(bAnimContext *ac, ListBase *anim_data)
 {
   bAnimListElem *ale;
 
-  if (ELEM(ac->datatype, ANIMCONT_MASK)) {
-#ifdef DEBUG
-    /* quiet assert */
-    for (ale = anim_data->first; ale; ale = ale->next) {
-      ale->update = 0;
-    }
-#endif
-    return;
-  }
-
   for (ale = anim_data->first; ale; ale = ale->next) {
     if (ale->type == ANIMTYPE_GPLAYER) {
       bGPDlayer *gpl = ale->data;
@@ -377,7 +368,7 @@ void ANIM_animdata_update(bAnimContext *ac, ListBase *anim_data)
       if (ale->update & ANIM_UPDATE_ORDER) {
         ale->update &= ~ANIM_UPDATE_ORDER;
         if (gpl) {
-          // gpencil_sort_frames(gpl);
+          BKE_gpencil_layer_frames_sort(gpl, NULL);
         }
       }
 
@@ -386,6 +377,27 @@ void ANIM_animdata_update(bAnimContext *ac, ListBase *anim_data)
         ANIM_list_elem_update(ac->bmain, ac->scene, ale);
       }
       /* disable handles to avoid crash */
+      if (ale->update & ANIM_UPDATE_HANDLES) {
+        ale->update &= ~ANIM_UPDATE_HANDLES;
+      }
+    }
+    else if (ale->datatype == ALE_MASKLAY) {
+      MaskLayer *masklay = ale->data;
+
+      if (ale->update & ANIM_UPDATE_ORDER) {
+        ale->update &= ~ANIM_UPDATE_ORDER;
+        if (masklay) {
+          /* While correct & we could enable it: 'posttrans_mask_clean' currently
+           * both sorts and removes doubles, so this is not necessary here. */
+          // BKE_mask_layer_shape_sort(masklay);
+        }
+      }
+
+      if (ale->update & ANIM_UPDATE_DEPS) {
+        ale->update &= ~ANIM_UPDATE_DEPS;
+        ANIM_list_elem_update(ac->bmain, ac->scene, ale);
+      }
+      /* Disable handles to avoid assert. */
       if (ale->update & ANIM_UPDATE_HANDLES) {
         ale->update &= ~ANIM_UPDATE_HANDLES;
       }

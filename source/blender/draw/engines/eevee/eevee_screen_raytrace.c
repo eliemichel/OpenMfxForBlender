@@ -29,8 +29,8 @@
 
 #include "DEG_depsgraph_query.h"
 
-#include "eevee_private.h"
 #include "GPU_texture.h"
+#include "eevee_private.h"
 
 /* SSR shader variations */
 enum {
@@ -54,6 +54,7 @@ extern char datatoc_common_uniforms_lib_glsl[];
 extern char datatoc_bsdf_common_lib_glsl[];
 extern char datatoc_bsdf_sampling_lib_glsl[];
 extern char datatoc_octahedron_lib_glsl[];
+extern char datatoc_cubemap_lib_glsl[];
 extern char datatoc_effect_ssr_frag_glsl[];
 extern char datatoc_lightprobe_lib_glsl[];
 extern char datatoc_raytrace_lib_glsl[];
@@ -67,6 +68,7 @@ static struct GPUShader *eevee_effects_screen_raytrace_shader_get(int options)
                                             datatoc_bsdf_sampling_lib_glsl,
                                             datatoc_ambient_occlusion_lib_glsl,
                                             datatoc_octahedron_lib_glsl,
+                                            datatoc_cubemap_lib_glsl,
                                             datatoc_lightprobe_lib_glsl,
                                             datatoc_raytrace_lib_glsl,
                                             datatoc_effect_ssr_frag_glsl);
@@ -235,6 +237,8 @@ void EEVEE_screen_raytrace_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
     DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
     DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(
+        grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
     if (!effects->reflection_trace_full) {
       DRW_shgroup_uniform_ivec2(grp, "halfresOffset", effects->ssr_halfres_ofs, 1);
     }
@@ -255,6 +259,8 @@ void EEVEE_screen_raytrace_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
     DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
     DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(
+        grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
     DRW_shgroup_uniform_int(grp, "neighborOffset", &effects->ssr_neighbor_ofs, 1);
     if ((effects->enabled_effects & EFFECT_GTAO) != 0) {
       DRW_shgroup_uniform_texture(grp, "utilTex", EEVEE_materials_get_util_tex());
@@ -332,6 +338,43 @@ void EEVEE_reflection_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *v
     /* Restore */
     GPU_framebuffer_bind(fbl->main_fb);
     DRW_stats_group_end();
+  }
+}
+
+void EEVEE_reflection_output_init(EEVEE_ViewLayerData *UNUSED(sldata),
+                                  EEVEE_Data *vedata,
+                                  uint tot_samples)
+{
+  EEVEE_FramebufferList *fbl = vedata->fbl;
+  EEVEE_TextureList *txl = vedata->txl;
+  EEVEE_StorageList *stl = vedata->stl;
+  EEVEE_EffectsInfo *effects = stl->effects;
+
+  float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+  /* Create FrameBuffer. */
+  const eGPUTextureFormat texture_format = (tot_samples > 256) ? GPU_RGBA32F : GPU_RGBA16F;
+  DRW_texture_ensure_fullscreen_2d(&txl->ssr_accum, texture_format, 0);
+
+  GPU_framebuffer_ensure_config(&fbl->ssr_accum_fb,
+                                {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(txl->ssr_accum)});
+
+  /* Clear texture. */
+  if (DRW_state_is_image_render() || effects->taa_current_sample == 1) {
+    GPU_framebuffer_bind(fbl->ssr_accum_fb);
+    GPU_framebuffer_clear_color(fbl->ssr_accum_fb, clear);
+  }
+}
+
+void EEVEE_reflection_output_accumulate(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
+{
+  EEVEE_FramebufferList *fbl = vedata->fbl;
+  EEVEE_PassList *psl = vedata->psl;
+  EEVEE_StorageList *stl = vedata->stl;
+
+  if (stl->g_data->valid_double_buffer) {
+    GPU_framebuffer_bind(fbl->ssr_accum_fb);
+    DRW_draw_pass(psl->ssr_resolve);
   }
 }
 

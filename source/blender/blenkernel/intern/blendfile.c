@@ -31,9 +31,9 @@
 #include "DNA_workspace_types.h"
 
 #include "BLI_listbase.h"
+#include "BLI_path_util.h"
 #include "BLI_string.h"
 #include "BLI_system.h"
-#include "BLI_path_util.h"
 #include "BLI_utildefines.h"
 
 #include "IMB_colormanagement.h"
@@ -50,7 +50,7 @@
 #include "BKE_ipo.h"
 #include "BKE_keyconfig.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
@@ -76,7 +76,7 @@
 static bool clean_paths_visit_cb(void *UNUSED(userdata), char *path_dst, const char *path_src)
 {
   strcpy(path_dst, path_src);
-  BLI_path_native_slash(path_dst);
+  BLI_path_slash_native(path_dst);
   return !STREQ(path_dst, path_src);
 }
 
@@ -88,7 +88,7 @@ static void clean_paths(Main *main)
   BKE_bpath_traverse_main(main, clean_paths_visit_cb, BKE_BPATH_TRAVERSE_SKIP_MULTIFILE, NULL);
 
   for (scene = main->scenes.first; scene; scene = scene->id.next) {
-    BLI_path_native_slash(scene->r.pic);
+    BLI_path_slash_native(scene->r.pic);
   }
 }
 
@@ -134,25 +134,28 @@ static void setup_app_userdef(BlendFileData *bfd)
 static void setup_app_data(bContext *C,
                            BlendFileData *bfd,
                            const char *filepath,
-                           const bool is_startup,
+                           const struct BlendFileReadParams *params,
                            ReportList *reports)
 {
   Main *bmain = G_MAIN;
   Scene *curscene = NULL;
   const bool recover = (G.fileflags & G_FILE_RECOVER) != 0;
+  const bool is_startup = params->is_startup;
   enum {
     LOAD_UI = 1,
     LOAD_UI_OFF,
     LOAD_UNDO,
   } mode;
 
-  /* may happen with library files - UNDO file should never have NULL cursccene... */
-  if (ELEM(NULL, bfd->curscreen, bfd->curscene)) {
+  if (params->undo_direction != 0) {
+    BLI_assert(bfd->curscene != NULL);
+    mode = LOAD_UNDO;
+  }
+  /* may happen with library files - UNDO file should never have NULL curscene (but may have a
+   * NULL curscreen)... */
+  else if (ELEM(NULL, bfd->curscreen, bfd->curscene)) {
     BKE_report(reports, RPT_WARNING, "Library file, loading empty scene");
     mode = LOAD_UI_OFF;
-  }
-  else if (BLI_listbase_is_empty(&bfd->main->screens)) {
-    mode = LOAD_UNDO;
   }
   else if (G.fileflags & G_FILE_NO_UI) {
     mode = LOAD_UI_OFF;
@@ -197,6 +200,27 @@ static void setup_app_data(bContext *C,
     SWAP(ListBase, bmain->wm, bfd->main->wm);
     SWAP(ListBase, bmain->workspaces, bfd->main->workspaces);
     SWAP(ListBase, bmain->screens, bfd->main->screens);
+
+    /* In case of actual new file reading without loading UI, we need to regenerate the session
+     * uuid of the UI-related datablocks we are keeping from previous session, otherwise their uuid
+     * will collide with some generated for newly read data. */
+    if (mode != LOAD_UNDO) {
+      ID *id;
+      FOREACH_MAIN_LISTBASE_ID_BEGIN (&bfd->main->wm, id) {
+        BKE_lib_libblock_session_uuid_renew(id);
+      }
+      FOREACH_MAIN_LISTBASE_ID_END;
+
+      FOREACH_MAIN_LISTBASE_ID_BEGIN (&bfd->main->workspaces, id) {
+        BKE_lib_libblock_session_uuid_renew(id);
+      }
+      FOREACH_MAIN_LISTBASE_ID_END;
+
+      FOREACH_MAIN_LISTBASE_ID_BEGIN (&bfd->main->screens, id) {
+        BKE_lib_libblock_session_uuid_renew(id);
+      }
+      FOREACH_MAIN_LISTBASE_ID_END;
+    }
 
     /* we re-use current window and screen */
     win = CTX_wm_window(C);
@@ -342,7 +366,7 @@ static void setup_app_data(bContext *C,
     wmWindowManager *wm = bmain->wm.first;
 
     if (wm) {
-      for (wmWindow *win = wm->windows.first; win; win = win->next) {
+      LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
         if (win->scene && win->scene != curscene) {
           BKE_scene_set_background(bmain, win->scene);
         }
@@ -371,8 +395,10 @@ static void setup_app_data(bContext *C,
      * means that we do not reset their user count, however we do increase that one when doing
      * lib_link on local IDs using linked ones.
      * There is no real way to predict amount of changes here, so we have to fully redo
-     * refcounting . */
-    BKE_main_id_refcount_recompute(bmain, true);
+     * refcounting.
+     * Now that we re-use (and do not liblink in readfile.c) most local datablocks as well, we have
+     * to recompute refcount for all local IDs too. */
+    BKE_main_id_refcount_recompute(bmain, false);
   }
 }
 
@@ -386,14 +412,15 @@ static void setup_app_blend_file_data(bContext *C,
     setup_app_userdef(bfd);
   }
   if ((params->skip_flags & BLO_READ_SKIP_DATA) == 0) {
-    setup_app_data(C, bfd, filepath, params->is_startup, reports);
+    setup_app_data(C, bfd, filepath, params, reports);
   }
 }
 
 static int handle_subversion_warning(Main *main, ReportList *reports)
 {
-  if (main->minversionfile > BLENDER_VERSION ||
-      (main->minversionfile == BLENDER_VERSION && main->minsubversionfile > BLENDER_SUBVERSION)) {
+  if (main->minversionfile > BLENDER_FILE_VERSION ||
+      (main->minversionfile == BLENDER_FILE_VERSION &&
+       main->minsubversionfile > BLENDER_FILE_SUBVERSION)) {
     BKE_reportf(reports,
                 RPT_ERROR,
                 "File written by newer Blender binary (%d.%d), expect loss of data!",
@@ -473,16 +500,15 @@ bool BKE_blendfile_read_from_memfile(bContext *C,
   Main *bmain = CTX_data_main(C);
   BlendFileData *bfd;
 
-  bfd = BLO_read_from_memfile(
-      bmain, BKE_main_blendfile_path(bmain), memfile, params->skip_flags, reports);
+  bfd = BLO_read_from_memfile(bmain, BKE_main_blendfile_path(bmain), memfile, params, reports);
   if (bfd) {
-    /* remove the unused screens and wm */
-    while (bfd->main->wm.first) {
-      BKE_id_free(bfd->main, bfd->main->wm.first);
-    }
-    while (bfd->main->screens.first) {
-      BKE_id_free(bfd->main, bfd->main->screens.first);
-    }
+    /* Removing the unused workspaces, screens and wm is useless here, setup_app_data will switch
+     * those lists with the ones from old bmain, which freeing is much more efficient than
+     * individual calls to `BKE_id_free()`.
+     * Further more, those are expected to be empty anyway with new memfile reading code. */
+    BLI_assert(BLI_listbase_is_empty(&bfd->main->wm));
+    BLI_assert(BLI_listbase_is_empty(&bfd->main->workspaces));
+    BLI_assert(BLI_listbase_is_empty(&bfd->main->screens));
 
     setup_app_blend_file_data(C, bfd, "<memory1>", params, reports);
     BLO_blendfiledata_free(bfd);

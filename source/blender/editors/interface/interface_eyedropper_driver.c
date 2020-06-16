@@ -29,11 +29,11 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_anim_types.h"
-#include "DNA_screen_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
-#include "BKE_context.h"
 #include "BKE_animsys.h"
+#include "BKE_context.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -48,8 +48,8 @@
 
 #include "ED_keyframing.h"
 
-#include "interface_intern.h"
 #include "interface_eyedropper_intern.h"
+#include "interface_intern.h"
 
 typedef struct DriverDropper {
   /* Destination property (i.e. where we'll add a driver) */
@@ -180,7 +180,10 @@ static int driverdropper_invoke(bContext *C, wmOperator *op, const wmEvent *UNUS
 {
   /* init */
   if (driverdropper_init(C, op)) {
-    WM_cursor_modal_set(CTX_wm_window(C), WM_CURSOR_EYEDROPPER);
+    wmWindow *win = CTX_wm_window(C);
+    /* Workaround for de-activating the button clearing the cursor, see T76794 */
+    UI_context_active_but_clear(C, win, CTX_wm_region(C));
+    WM_cursor_modal_set(win, WM_CURSOR_EYEDROPPER);
 
     /* add temp handler */
     WM_event_add_modal_handler(C, op);

@@ -20,9 +20,13 @@
  * \ingroup bke
  */
 
-#include "DNA_shader_fx_types.h" /* needed for all enum typdefs */
-#include "BLI_compiler_attrs.h"
 #include "BKE_customdata.h"
+#include "BLI_compiler_attrs.h"
+#include "DNA_shader_fx_types.h" /* needed for all enum typdefs */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct ID;
 struct ListBase;
@@ -31,9 +35,9 @@ struct Object;
 struct ShaderFxData;
 
 #define SHADER_FX_ACTIVE(_fx, _is_render) \
-  (((_fx->mode & eShaderFxMode_Realtime) && (_is_render == false)) || \
-   ((_fx->mode & eShaderFxMode_Render) && (_is_render == true)))
-#define SHADER_FX_EDIT(_fx, _is_edit) (((_fx->mode & eShaderFxMode_Editmode) == 0) && (_is_edit))
+  ((((_fx)->mode & eShaderFxMode_Realtime) && (_is_render == false)) || \
+   (((_fx)->mode & eShaderFxMode_Render) && (_is_render == true)))
+#define SHADER_FX_EDIT(_fx, _is_edit) ((((_fx)->mode & eShaderFxMode_Editmode) == 0) && (_is_edit))
 
 typedef enum {
   /* Should not be used, only for None type */
@@ -174,5 +178,9 @@ void BKE_shaderfx_copyData_ex(struct ShaderFxData *fx,
 void BKE_shaderfx_foreachIDLink(struct Object *ob, ShaderFxIDWalkFunc walk, void *userData);
 
 bool BKE_shaderfx_has_gpencil(struct Object *ob);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_SHADER_FX_H__ */

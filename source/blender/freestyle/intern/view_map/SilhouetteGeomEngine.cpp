@@ -20,8 +20,8 @@
  * implies that this geom engine has as member data the viewpoint, transformations, projections...
  */
 
-#include <cstring>
 #include <cstdio>
+#include <cstring>
 
 #include "Silhouette.h"
 #include "SilhouetteGeomEngine.h"

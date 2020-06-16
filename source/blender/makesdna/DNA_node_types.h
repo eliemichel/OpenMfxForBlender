@@ -25,10 +25,10 @@
 #define __DNA_NODE_TYPES_H__
 
 #include "DNA_ID.h"
-#include "DNA_vec_types.h"
 #include "DNA_listBase.h"
-#include "DNA_texture_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_texture_types.h"
+#include "DNA_vec_types.h"
 
 struct AnimData;
 struct ID;
@@ -94,7 +94,8 @@ typedef struct bNodeSocket {
   void *storage;
 
   short type, flag;
-  /** Max. number of links. */
+  /** Max. number of links. Read via nodeSocketLinkLimit, because the limit might be defined on the
+   * socket type. */
   short limit;
   /** Input/output type. */
   short in_out;
@@ -115,6 +116,9 @@ typedef struct bNodeSocket {
   short stack_type DNA_DEPRECATED;
   char display_shape;
   char _pad[3];
+
+  /** Custom dynamic defined label, MAX_NAME. */
+  char label[64];
 
   /** Cached data from execution. */
   void *cache;
@@ -570,13 +574,6 @@ enum {
 };
 
 enum {
-  CMP_NODE_LENSFLARE_GHOST = (1 << 0),
-  CMP_NODE_LENSFLARE_GLOW = (1 << 1),
-  CMP_NODE_LENSFLARE_CIRCLE = (1 << 2),
-  CMP_NODE_LENSFLARE_STREAKS = (1 << 3),
-};
-
-enum {
   CMP_NODE_DILATEERODE_STEP = 0,
   CMP_NODE_DILATEERODE_DISTANCE_THRESH = 1,
   CMP_NODE_DILATEERODE_DISTANCE = 2,
@@ -893,6 +890,8 @@ typedef struct NodeTexMusgrave {
 typedef struct NodeTexWave {
   NodeTexBase base;
   int wave_type;
+  int bands_direction;
+  int rings_direction;
   int wave_profile;
 } NodeTexWave;
 
@@ -1136,8 +1135,25 @@ enum {
 #define SHD_WAVE_BANDS 0
 #define SHD_WAVE_RINGS 1
 
-#define SHD_WAVE_PROFILE_SIN 0
-#define SHD_WAVE_PROFILE_SAW 1
+enum {
+  SHD_WAVE_BANDS_DIRECTION_X = 0,
+  SHD_WAVE_BANDS_DIRECTION_Y = 1,
+  SHD_WAVE_BANDS_DIRECTION_Z = 2,
+  SHD_WAVE_BANDS_DIRECTION_DIAGONAL = 3,
+};
+
+enum {
+  SHD_WAVE_RINGS_DIRECTION_X = 0,
+  SHD_WAVE_RINGS_DIRECTION_Y = 1,
+  SHD_WAVE_RINGS_DIRECTION_Z = 2,
+  SHD_WAVE_RINGS_DIRECTION_SPHERICAL = 3,
+};
+
+enum {
+  SHD_WAVE_PROFILE_SIN = 0,
+  SHD_WAVE_PROFILE_SAW = 1,
+  SHD_WAVE_PROFILE_TRI = 2,
+};
 
 /* sky texture */
 #define SHD_SKY_OLD 0
@@ -1188,6 +1204,15 @@ enum {
   NODE_MAPPING_TYPE_TEXTURE = 1,
   NODE_MAPPING_TYPE_VECTOR = 2,
   NODE_MAPPING_TYPE_NORMAL = 3,
+};
+
+/* Rotation node vector types */
+enum {
+  NODE_VECTOR_ROTATE_TYPE_AXIS = 0,
+  NODE_VECTOR_ROTATE_TYPE_AXIS_X = 1,
+  NODE_VECTOR_ROTATE_TYPE_AXIS_Y = 2,
+  NODE_VECTOR_ROTATE_TYPE_AXIS_Z = 3,
+  NODE_VECTOR_ROTATE_TYPE_EULER_XYZ = 4,
 };
 
 /* math node clamp */
@@ -1262,6 +1287,10 @@ enum {
   NODE_VECTOR_MATH_ABSOLUTE = 17,
   NODE_VECTOR_MATH_MINIMUM = 18,
   NODE_VECTOR_MATH_MAXIMUM = 19,
+  NODE_VECTOR_MATH_WRAP = 20,
+  NODE_VECTOR_MATH_SINE = 21,
+  NODE_VECTOR_MATH_COSINE = 22,
+  NODE_VECTOR_MATH_TANGENT = 23,
 };
 
 /* Clamp node types. */

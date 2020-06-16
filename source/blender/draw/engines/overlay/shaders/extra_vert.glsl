@@ -137,11 +137,11 @@ void main()
   }
   /* Empties */
   else if ((vclass & VCLASS_EMPTY_SCALED) != 0) {
-    /* This is a bit silly but we avoid scalling the object matrix on CPU (saving a mat4 mul) */
+    /* This is a bit silly but we avoid scaling the object matrix on CPU (saving a mat4 mul) */
     vpos *= empty_scale;
   }
   else if ((vclass & VCLASS_EMPTY_SIZE) != 0) {
-    /* This is a bit silly but we avoid scalling the object matrix on CPU (saving a mat4 mul) */
+    /* This is a bit silly but we avoid scaling the object matrix on CPU (saving a mat4 mul) */
     vpos *= empty_size;
   }
   else if ((vclass & VCLASS_EMPTY_AXES) != 0) {
@@ -177,7 +177,7 @@ void main()
 
   vec3 world_pos;
   if ((vclass & VCLASS_SCREENSPACE) != 0) {
-    /* Relative to DPI scalling. Have constant screen size. */
+    /* Relative to DPI scaling. Have constant screen size. */
     vec3 screen_pos = screenVecs[0].xyz * vpos.x + screenVecs[1].xyz * vpos.y;
     vec3 p = (obmat * vec4(vofs, 1.0)).xyz;
     float screen_size = mul_project_m4_v3_zfac(p) * sizePixel;
@@ -220,6 +220,13 @@ void main()
 
   /* Convert to screen position [0..sizeVp]. */
   edgePos = edgeStart = ((gl_Position.xy / gl_Position.w) * 0.5 + 0.5) * sizeViewport.xy;
+
+#ifdef SELECT_EDGES
+  /* HACK: to avoid loosing sub pixel object in selections, we add a bit of randomness to the
+   * wire to at least create one fragment that will pass the occlusion query. */
+  /* TODO(fclem) Limit this workaround to selection. It's not very noticeable but still... */
+  gl_Position.xy += sizeViewportInv.xy * gl_Position.w * ((gl_VertexID % 2 == 0) ? -1.0 : 1.0);
+#endif
 
 #ifdef USE_WORLD_CLIP_PLANES
   world_clip_planes_calc_clip_distance(world_pos);

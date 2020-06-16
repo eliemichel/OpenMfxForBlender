@@ -70,25 +70,25 @@
  * and only editing the active shape key-block.
  */
 
+#include "DNA_key_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-#include "DNA_object_types.h"
 #include "DNA_modifier_types.h"
-#include "DNA_key_types.h"
+#include "DNA_object_types.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_listbase.h"
 #include "BLI_alloca.h"
+#include "BLI_listbase.h"
 #include "BLI_math_vector.h"
 
+#include "BKE_customdata.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
-#include "BKE_customdata.h"
 #include "BKE_multires.h"
 
-#include "BKE_main.h"
 #include "BKE_key.h"
+#include "BKE_main.h"
 
 #include "bmesh.h"
 #include "intern/bmesh_private.h" /* For element checking. */
@@ -893,6 +893,10 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
 
       j = bm_to_mesh_shape_layer_index_from_kb(bm, currkey);
       cd_shape_offset = CustomData_get_n_offset(&bm->vdata, CD_SHAPEKEY, j);
+      if (cd_shape_offset < 0) {
+        /* The target Mesh has more shapekeys than the BMesh. */
+        continue;
+      }
 
       fp = newkey = MEM_callocN(me->key->elemsize * bm->totvert, "currkey->data");
       oldkey = currkey->data;

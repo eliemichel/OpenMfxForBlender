@@ -22,10 +22,10 @@
 
 #include "mathutils.h"
 
+#include "../generic/py_capi_utils.h"
+#include "../generic/python_utildefines.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
-#include "../generic/python_utildefines.h"
-#include "../generic/py_capi_utils.h"
 
 #ifndef MATH_STANDALONE
 #  include "BLI_dynstr.h"
@@ -848,8 +848,8 @@ PyObject *Euler_CreatePyObject_wrap(float eul[3], const short order, PyTypeObjec
 
 PyObject *Euler_CreatePyObject_cb(PyObject *cb_user,
                                   const short order,
-                                  unsigned char cb_type,
-                                  unsigned char cb_subtype)
+                                  uchar cb_type,
+                                  uchar cb_subtype)
 {
   EulerObject *self = (EulerObject *)Euler_CreatePyObject(NULL, order, NULL);
   if (self) {

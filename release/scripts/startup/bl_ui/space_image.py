@@ -93,9 +93,6 @@ class IMAGE_MT_view(Menu):
         layout.separator()
 
         layout.prop(sima, "use_realtime_update")
-        if show_uvedit:
-            layout.prop(tool_settings, "show_uv_local_view")
-
         layout.prop(uv, "show_metadata")
 
         if paint.brush and (context.image_paint_object or sima.mode == 'PAINT'):
@@ -237,6 +234,11 @@ class IMAGE_MT_image(Menu):
             else:
                 layout.separator()
                 layout.operator("image.pack", text="Pack")
+
+        if ima:
+            layout.separator()
+            layout.operator("palette.extract_from_image", text="Extract Palette")
+            layout.operator("gpencil.image_to_grease_pencil", text="Generate Grease Pencil")
 
 
 class IMAGE_MT_image_invert(Menu):
@@ -698,7 +700,7 @@ class IMAGE_HT_header(Header):
                 layout.prop(tool_settings, "uv_select_mode", text="", expand=True)
                 layout.prop(uvedit, "sticky_select_mode", icon_only=True)
 
-        MASK_MT_editor_menus.draw_collapsible(context, layout)
+        IMAGE_MT_editor_menus.draw_collapsible(context, layout)
 
         layout.separator_spacer()
 
@@ -744,8 +746,8 @@ class IMAGE_HT_header(Header):
                 row.operator("image.play_composite", icon='PLAY')
 
 
-class MASK_MT_editor_menus(Menu):
-    bl_idname = "MASK_MT_editor_menus"
+class IMAGE_MT_editor_menus(Menu):
+    bl_idname = "IMAGE_MT_editor_menus"
     bl_label = ""
 
     def draw(self, context):
@@ -1460,7 +1462,7 @@ classes = (
     IMAGE_MT_uvs_snap_pie,
     IMAGE_HT_tool_header,
     IMAGE_HT_header,
-    MASK_MT_editor_menus,
+    IMAGE_MT_editor_menus,
     IMAGE_PT_active_tool,
     IMAGE_PT_mask,
     IMAGE_PT_mask_layers,
