@@ -228,7 +228,8 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
   // Get vertex UVs if UVs are present in the mesh
   int uv_layers = 4;
   char name[32];
-  float *ofx_uv_data;
+  char *ofx_uv_data;
+  int ofx_uv_stride;
   for (int k = 0; k < uv_layers; ++k) {
     OfxPropertySetHandle uv_attrib;
     sprintf(name, "uv%d", k);
@@ -237,6 +238,7 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
     if (kOfxStatOK == status) {
       printf("Found!\n");
       ps->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&ofx_uv_data);
+      ps->propGetInt(uv_attrib, kOfxMeshAttribPropStride, 0, &ofx_uv_stride);
 
       // Get UV data pointer in mesh.
       // elie: The next line does not work idk why, hence the next three lines.
@@ -246,8 +248,9 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
       MLoopUV *uv_data = CustomData_duplicate_referenced_layer_named(&blender_mesh->ldata, CD_MLOOPUV, uvname, vertex_count);
 
       for (int i = 0; i < vertex_count; ++i) {
-        uv_data[i].uv[0] = ofx_uv_data[2 * i + 0];
-        uv_data[i].uv[1] = ofx_uv_data[2 * i + 1];
+        float *uv = (float *)(ofx_uv_data + ofx_uv_stride * i);
+        uv_data[i].uv[0] = uv[0];
+        uv_data[i].uv[1] = uv[1];
       }
       blender_mesh->runtime.cd_dirty_loop |= CD_MASK_MLOOPUV;
       blender_mesh->runtime.cd_dirty_poly |= CD_MASK_MTFACE;
