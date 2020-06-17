@@ -70,13 +70,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 
   modifier_copyData_generic(md, target, flag);
 
-  if (fxmd->parameter_info) {
-    tfxmd->parameter_info = MEM_dupallocN(fxmd->parameter_info);
-  }
-
-  if (fxmd->effect_info) {
-    tfxmd->effect_info = MEM_dupallocN(fxmd->effect_info);
-  }
+  mfx_Modifier_copyData(fxmd, tfxmd);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -93,13 +87,13 @@ static void requiredDataMask(Object *UNUSED(ob),
 
 static bool dependsOnTime(struct ModifierData *md)
 {
-  // TODO: May depend on the HDA file
+  // TODO: May depend on the OFX file
   return true;
 }
 
 static bool dependsOnNormals(struct ModifierData *md)
 {
-  // TODO: May depend on the HDA file (but harder to detect than time dependency -> add a user toggle)
+  // TODO: May depend on the OFX file (but harder to detect than time dependency -> add a user toggle)
   return true;
 }
 
@@ -118,6 +112,7 @@ static void freeData(struct ModifierData *md)
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
 
   freeRuntimeData(md->runtime);
+  md->runtime = NULL;
 
   if (fxmd->parameter_info) {
     MEM_freeN(fxmd->parameter_info);

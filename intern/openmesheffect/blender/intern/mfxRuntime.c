@@ -24,6 +24,7 @@
 
 #include "mfxCallbacks.h"
 #include "mfxRuntime.h"
+#include "mfxPluginRegistryPool.h"
 
 #include "DNA_mesh_types.h" // Mesh
 #include "DNA_meshdata_types.h" // MVert
@@ -37,10 +38,27 @@
 
  // Private
 
+// Get absolute path (ui file browser returns relative path for saved files)
+void normalize_plugin_path(char *path, char *out_path)
+{
+  BLI_strncpy(out_path, path, FILE_MAX);
+  const char *base_path =
+      BKE_main_blendfile_path_from_global();  // TODO: How to get a bMain object here to avoid
+                                              // "from_global()"?
+  if (NULL != base_path) {
+    BLI_path_abs(out_path, base_path);
+  }
+}
+
 void runtime_free_effect_instance(OpenMeshEffectRuntime *rd) {
   if (rd->is_plugin_valid && -1 != rd->effect_index) {
-    OfxPlugin *plugin = rd->registry.plugins[rd->effect_index];
-    OfxPluginStatus status = rd->registry.status[rd->effect_index];
+    OfxPlugin *plugin = rd->registry->plugins[rd->effect_index];
+    OfxPluginStatus status = rd->registry->status[rd->effect_index];
+
+    printf("runtime_free_effect_instance: plugin = %p, registry.plugins = %p, rd = %p\n",
+           plugin,
+           rd->registry,
+           rd);
 
     if (NULL != rd->effect_instance) {
       ofxhost_destroy_instance(plugin, rd->effect_instance);
@@ -53,7 +71,10 @@ void runtime_free_effect_instance(OpenMeshEffectRuntime *rd) {
     if (OfxPluginStatOK == status) {
       // TODO: loop over all plugins?
       ofxhost_unload_plugin(plugin);
+      rd->registry->status[rd->effect_index] = OfxPluginStatNotLoaded;
     }
+
+    rd->effect_index = -1;
   }
 }
 
@@ -82,15 +103,16 @@ bool runtime_ensure_effect_instance(OpenMeshEffectRuntime *rd) {
 
   runtime_ensure_host(rd);
 
-  OfxPlugin *plugin = rd->registry.plugins[rd->effect_index];
+  OfxPlugin *plugin = rd->registry->plugins[rd->effect_index];
 
   if (NULL == rd->effect_desc) {
     // Load plugin if not already loaded
-    OfxPluginStatus *pStatus = &rd->registry.status[rd->effect_index];
+    OfxPluginStatus *pStatus = &rd->registry->status[rd->effect_index];
     if (OfxPluginStatNotLoaded == *pStatus) {
       if (ofxhost_load_plugin(rd->ofx_host, plugin)) {
         *pStatus = OfxPluginStatOK;
       } else {
+        printf("Error while loading plugin!\n");
         *pStatus = OfxPluginStatError;
         return false;
       }
@@ -108,14 +130,12 @@ bool runtime_ensure_effect_instance(OpenMeshEffectRuntime *rd) {
 
 void runtime_reset_plugin_path(OpenMeshEffectRuntime *rd) {
   if (rd->is_plugin_valid) {
-    if (-1 != rd->effect_index) {
-      runtime_free_effect_instance(rd);
-      rd->effect_index = -1;
-    }
-
     printf("Unloading OFX plugin %s\n", rd->plugin_path);
     runtime_free_effect_instance(rd);
-    free_registry(&rd->registry);
+
+    char abs_path[FILE_MAX];
+    normalize_plugin_path(rd->plugin_path, abs_path);
+    release_registry(abs_path);
     rd->is_plugin_valid = false;
   }
   rd->plugin_path[0] = '\0';
@@ -156,18 +176,11 @@ void runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugin_path)
   }
 
   printf("Loading OFX plugin %s\n", rd->plugin_path);
-  // Get absolute path (ui file browser returns relative path for saved files)
+  
   char abs_path[FILE_MAX];
-  BLI_strncpy(abs_path, rd->plugin_path, FILE_MAX);
-  const char *base_path = BKE_main_blendfile_path_from_global(); // TODO: How to get a bMain object here to avoid "from_global()"?
-  if (NULL != base_path) {
-    BLI_path_abs(abs_path, base_path);
-  }
-  if (false == load_registry(&rd->registry, abs_path)) {
-    printf("Failed to load registry.\n");
-    free_registry(&rd->registry);
-    return;
-  }
+  normalize_plugin_path(rd->plugin_path, abs_path);
+
+  rd->registry = get_registry(abs_path);
   rd->is_plugin_valid = true;
 }
 
@@ -181,7 +194,7 @@ void runtime_set_effect_index(OpenMeshEffectRuntime *rd, int effect_index) {
   }
 
   if (rd->is_plugin_valid) {
-    rd->effect_index = min_ii(max_ii(-1, effect_index), rd->registry.num_plugins - 1);
+    rd->effect_index = min_ii(max_ii(-1, effect_index), rd->registry->num_plugins - 1);
   } else {
     rd->effect_index = -1;
   }

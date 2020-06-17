@@ -27,6 +27,7 @@ set(SRC
   mfxHost.c
   mfxHost.h
   mfxPluginRegistry.h
+  mfxPluginRegistryPool.h
   intern/attributes.h
   intern/attributes.c
   intern/properties.h
@@ -40,6 +41,7 @@ set(SRC
   intern/mesheffect.h
   intern/mesheffect.c
   intern/mfxPluginRegistry.c
+  intern/mfxPluginRegistryPool.c
 )
 
 set(LIB_PRIV

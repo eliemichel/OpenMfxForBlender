@@ -58,6 +58,22 @@ void append_properties(OfxPropertySetStruct *properties, int count) {
   }
 }
 
+void remove_property(OfxPropertySetStruct *properties, int index)
+{
+  int old_num_properties = properties->num_properties;
+  OfxPropertyStruct **old_properties = properties->properties;
+  properties->num_properties -= 1;
+  properties->properties = malloc_array(
+      sizeof(OfxPropertyStruct *), properties->num_properties, "properties");
+  for (int i = 0; i < properties->num_properties; ++i) {
+    properties->properties[i] = i < index ? old_properties[i] : old_properties[i - 1];
+  }
+  if (NULL != old_properties) {
+    free_array(old_properties[index]);
+    free_array(old_properties);
+  }
+}
+
 int ensure_property(OfxPropertySetStruct *properties, const char *property) {
   int i = find_property(properties, property);
   if (i == -1) {

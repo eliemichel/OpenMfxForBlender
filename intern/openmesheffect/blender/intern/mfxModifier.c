@@ -74,12 +74,12 @@ void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd) {
     return;
   }
 
-  fxmd->num_effects = runtime_data->registry.num_plugins;
+  fxmd->num_effects = runtime_data->registry->num_plugins;
   fxmd->effect_info = MEM_calloc_arrayN(sizeof(OpenMeshEffectEffectInfo), fxmd->num_effects, "mfx effect info");
 
   for (int i = 0; i < fxmd->num_effects; ++i) {
     // Get asset name
-    const char *name = runtime_data->registry.plugins[i]->pluginIdentifier;
+    const char *name = runtime_data->registry->plugins[i]->pluginIdentifier;
     printf("Loading %s to RNA\n", name);
     strncpy(fxmd->effect_info[i].name, name, sizeof(fxmd->effect_info[i].name));
   }
@@ -224,7 +224,7 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   output_data.source_mesh = mesh;
   propertySuite->propSetPointer(&output->mesh.properties, kOfxMeshPropInternalData, 0, (void*)&output_data);
 
-  OfxPlugin *plugin = runtime_data->registry.plugins[runtime_data->effect_index];
+  OfxPlugin *plugin = runtime_data->registry->plugins[runtime_data->effect_index];
   ofxhost_cook(plugin, runtime_data->effect_instance);
 
   // Free mesh on Blender side
@@ -234,4 +234,15 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
 
   printf("==/ mfx_Modifier_do\n");
   return output_data.blender_mesh;
+}
+
+void mfx_Modifier_copyData(OpenMeshEffectModifierData *source, OpenMeshEffectModifierData *destination)
+{
+  if (source->parameter_info) {
+    destination->parameter_info = MEM_dupallocN(source->parameter_info);
+  }
+
+  if (source->effect_info) {
+    destination->effect_info = MEM_dupallocN(source->effect_info);
+  }
 }

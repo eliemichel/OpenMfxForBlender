@@ -36,9 +36,9 @@ typedef struct OpenMeshEffectRuntime {
 
   /**
    * Plug-in registry (as defined in mfxHost.h) holding the list of available filters within the
-   * OFX bundle.
+   * OFX bundle. This is a pointer to a reference-counted registry handled by mfxPluginRegistryPool
    */
-  PluginRegistry registry;
+  PluginRegistry *registry;
 
   /**
    * Tells whether the plugin specified by plugin_path is valid. If true, then 'registry' can be used

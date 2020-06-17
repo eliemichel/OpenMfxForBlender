@@ -53,6 +53,13 @@ void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd);
 void mfx_Modifier_free_runtime_data(void *runtime_data);
 Mesh *mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh);
 
+/**
+ * Copy parameter_info, effect_info.
+ * Must be called *after* blender's modifier_copyData_generic()
+ */
+void mfx_Modifier_copyData(OpenMeshEffectModifierData *source,
+                           OpenMeshEffectModifierData *destination);
+
 #ifdef __cplusplus
 }
 #endif

@@ -67,6 +67,7 @@ typedef struct OfxPropertySetStruct {
 void deep_copy_property(OfxPropertyStruct *destination, const OfxPropertyStruct *source);
 int find_property(OfxPropertySetStruct *properties, const char *property);
 void append_properties(OfxPropertySetStruct *properties, int count);
+void remove_property(OfxPropertySetStruct *properties, int index);
 int ensure_property(OfxPropertySetStruct *properties, const char *property);
 void init_properties(OfxPropertySetStruct *properties);
 void free_properties(OfxPropertySetStruct *properties);
