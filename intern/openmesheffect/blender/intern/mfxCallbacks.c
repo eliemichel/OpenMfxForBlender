@@ -102,23 +102,21 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   OfxPropertySetHandle uv_attrib;
   for (int k = 0; k < uv_layers; ++k) {
     sprintf(name, "uv%d", k);
-    MFX_CHECK(mes->attributeDefine(ofx_mesh, kOfxMeshAttribVertex, name, 3, kOfxMeshAttribTypeFloat, &uv_attrib));
+    MFX_CHECK(mes->attributeDefine(ofx_mesh, kOfxMeshAttribVertex, name, 2, kOfxMeshAttribTypeFloat, &uv_attrib));
     MFX_CHECK(ps->propSetInt(uv_attrib, kOfxMeshAttribPropIsOwner, 0, 0));
     MLoopUV *uv_data = (MLoopUV*)CustomData_get(&blender_mesh->ldata, k, CD_MLOOPUV);
     MFX_CHECK(ps->propSetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void*)&uv_data[0].uv[0]));
-    MFX_CHECK(ps->propSetInt(uv_attrib, kOfxMeshAttribPropStride, 0, sizeof(MLoopCol)));
+    MFX_CHECK(ps->propSetInt(uv_attrib, kOfxMeshAttribPropStride, 0, sizeof(MLoopUV)));
   }
 
-  // Point position is non-owned
+  // Point position
   OfxPropertySetHandle pos_attrib;
   MFX_CHECK(mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib));
-  MFX_CHECK(mes->attributeDefine(ofx_mesh, kOfxMeshAttribVertex, name, 3, kOfxMeshAttribTypeFloat, &vcolor_attrib));
   MFX_CHECK(ps->propSetInt(pos_attrib, kOfxMeshAttribPropIsOwner, 0, 0));
   MFX_CHECK(ps->propSetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void*)&blender_mesh->mvert[0].co[0]));
   MFX_CHECK(ps->propSetInt(pos_attrib, kOfxMeshAttribPropStride, 0, sizeof(MVert)));
 
-  // Vertex point is non-owned
-
+  // Vertex point
   OfxPropertySetHandle vertpoint_attrib;
   MFX_CHECK(mes->meshGetAttribute(
       ofx_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib));
@@ -128,7 +126,7 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
       vertpoint_attrib, kOfxMeshAttribPropData, 0, (void *)&blender_mesh->mloop[0].v));
   MFX_CHECK(ps->propSetInt(vertpoint_attrib, kOfxMeshAttribPropStride, 0, sizeof(MLoop)));
 
-  // Face count is non-owned
+  // Face count
   OfxPropertySetHandle facecounts_attrib;
   MFX_CHECK(mes->meshGetAttribute(
       ofx_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib));
@@ -138,11 +136,7 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
       facecounts_attrib, kOfxMeshAttribPropData, 0, (void *)&blender_mesh->mpoly[0].totloop));
   MFX_CHECK(ps->propSetInt(facecounts_attrib, kOfxMeshAttribPropStride, 0, sizeof(MPoly)));
 
-  // Eventually this should be avoided: we should be able to have the ofx_mesh be only a proxy to
-  // original blender mesh, without any allocation/copy of data.
   MFX_CHECK(mes->meshAlloc(ofx_mesh));
-
-  
 
   return kOfxStatOK;
 }
