@@ -181,7 +181,7 @@ void runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugin_path)
   normalize_plugin_path(rd->plugin_path, abs_path);
 
   rd->registry = get_registry(abs_path);
-  rd->is_plugin_valid = true;
+  rd->is_plugin_valid = rd->registry != NULL;
 }
 
 void runtime_set_effect_index(OpenMeshEffectRuntime *rd, int effect_index) {

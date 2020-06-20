@@ -54,6 +54,10 @@ static OpenMeshEffectRuntime *mfx_Modifier_runtime_ensure(OpenMeshEffectModifier
   runtime_set_plugin_path(runtime_data, fxmd->plugin_path);
   runtime_set_effect_index(runtime_data, fxmd->effect_index);
 
+  if (false == runtime_data->is_plugin_valid) {
+    modifier_setError(&fxmd->modifier, "Could not load ofx plugins!");
+  }
+
   printf("==/ mfx_Modifier_runtime_ensure\n");
   return (OpenMeshEffectRuntime *)fxmd->modifier.runtime;
 }
