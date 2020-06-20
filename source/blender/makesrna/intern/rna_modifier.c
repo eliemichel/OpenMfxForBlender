@@ -1719,6 +1719,24 @@ static void rna_OpenMeshEffectEffectInfo_name_set(PointerRNA *ptr, const char *v
   BLI_strncpy(info->name, value, sizeof(info->name));
 }
 
+static void rna_OpenMeshEffect_message_get(PointerRNA *ptr, char *value)
+{
+  OpenMeshEffectModifierData *info = (OpenMeshEffectModifierData *)ptr->data;
+  BLI_strncpy(value, info->message, sizeof(info->message));
+}
+
+static int rna_OpenMeshEffect_message_length(PointerRNA *ptr)
+{
+  OpenMeshEffectModifierData *info = (OpenMeshEffectModifierData *)ptr->data;
+  return strlen(info->message);
+}
+
+static void rna_OpenMeshEffect_message_set(PointerRNA *ptr, const char *value)
+{
+  OpenMeshEffectModifierData *info = (OpenMeshEffectModifierData *)ptr->data;
+  BLI_strncpy(info->message, value, sizeof(info->message));
+}
+
 static void rna_OpenMeshEffectParameterInfo_name_get(PointerRNA *ptr, char *value)
 {
   OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
@@ -6848,10 +6866,6 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "effect_index", PROP_INT, PROP_NONE);
   RNA_def_property_ui_text(prop, "Effect Index", "Index of the effect within the current OFX plugin bundle");
-  RNA_def_property_int_funcs(prop,
-                             "rna_OpenMeshEffectModifier_effect_index_get",
-                             "rna_OpenMeshEffectModifier_effect_index_set",
-                             "rna_OpenMeshEffectModifier_effect_index_range");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_enum(srna,
@@ -6904,6 +6918,10 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Parameters", "");
 
   prop = RNA_def_property(srna, "message", PROP_STRING, PROP_NONE);
+  RNA_def_property_string_funcs(prop,
+                                "rna_OpenMeshEffect_message_get",
+                                "rna_OpenMeshEffect_message_length",
+                                "rna_OpenMeshEffect_message_set");
   RNA_def_property_ui_text(prop, "Message", "");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 

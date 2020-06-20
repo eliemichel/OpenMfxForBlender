@@ -60,6 +60,11 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   blender_mesh = internal_data->blender_mesh;
 
   if (false == internal_data->is_input) {
+    // Initialize counters to zero
+    MFX_CHECK(ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropPointCount, 0, 0));
+    MFX_CHECK(ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropVertexCount, 0, 0));
+    MFX_CHECK(ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropFaceCount, 0, 0));
+
     printf("Output: NOT converting blender mesh\n");
     return kOfxStatOK;
   }

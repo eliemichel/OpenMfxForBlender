@@ -56,6 +56,7 @@ static void initData(struct ModifierData *md)
   fxmd->effect_info = NULL;
   fxmd->num_parameters = 0;
   fxmd->parameter_info = NULL;
+  fxmd->message[0] = '\0';
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)

@@ -40,17 +40,28 @@ extern "C" {
 #  include "MOD_modifiertypes.h"
 #endif
 
+// Callback types required by mfxHost
 typedef Mesh* (*MeshNewFunc)(int, int, int, int, int); // BKE_mesh_new_nomain
 typedef void (*MeshPostFunc)(Mesh*); // post processing applied to new mesh
 
 void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd);
+
 /**
  * Called when the "plugin path" field is changed.
  * It completes runtime_set_plugin_path by updating DNA data (fxmd).
  */
 void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd);
+
+/**
+ * Called when the user switched to another effect within the same plugin bundle.
+ */
 void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd);
+
 void mfx_Modifier_free_runtime_data(void *runtime_data);
+
+/**
+ * Actually run the modifier, calling the cook action of the plugin
+ */
 Mesh *mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh);
 
 /**

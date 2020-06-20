@@ -31,6 +31,7 @@ void init_parameter(OfxParamStruct *param) {
   param->type = PARAM_TYPE_DOUBLE;
   param->name = NULL;
   init_properties(&param->properties);
+  param->properties.context = PROP_CTX_PARAM;
 }
 
 void free_parameter(OfxParamStruct *param) {

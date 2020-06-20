@@ -49,6 +49,7 @@ void init_mesh_effect(OfxMeshEffectHandle meshEffectHandle) {
   init_parameter_set(&meshEffectHandle->parameters);
   meshEffectHandle->parameters.effect_properties = &meshEffectHandle->properties;
   meshEffectHandle->properties.context = PROP_CTX_MESH_EFFECT;
+  meshEffectHandle->messageType = OFX_MESSAGE_INVALID;
 }
 
 void free_mesh_effect(OfxMeshEffectHandle meshEffectHandle) {
@@ -63,6 +64,8 @@ void deep_copy_mesh_effect(OfxMeshEffectStruct *destination, const OfxMeshEffect
   deep_copy_parameter_set(&destination->parameters, &source->parameters);
   destination->parameters.effect_properties = &destination->properties;
   destination->host = source->host; // not deep copied, as this is a weak pointer
+  destination->messageType = source->messageType;
+  strncpy(destination->message, source->message, sizeof(source->message));
 }
 
 // // Mesh Effect Suite Entry Points

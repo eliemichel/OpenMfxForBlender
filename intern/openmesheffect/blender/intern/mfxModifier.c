@@ -228,9 +228,11 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   ofxhost_cook(plugin, runtime_data->effect_instance);
 
   // Free mesh on Blender side
-  if (output_data.blender_mesh != output_data.source_mesh) {
+  if (NULL != output_data.blender_mesh && output_data.blender_mesh != output_data.source_mesh) {
     BKE_mesh_free(output_data.source_mesh);
   }
+
+  runtime_set_message_in_rna(runtime_data, fxmd);
 
   printf("==/ mfx_Modifier_do\n");
   return output_data.blender_mesh;
@@ -244,5 +246,10 @@ void mfx_Modifier_copyData(OpenMeshEffectModifierData *source, OpenMeshEffectMod
 
   if (source->effect_info) {
     destination->effect_info = MEM_dupallocN(source->effect_info);
+  }
+
+  OpenMeshEffectRuntime *runtime_data = source->modifier.runtime;
+  if (NULL != runtime_data) {
+    runtime_set_message_in_rna(runtime_data, destination);
   }
 }
