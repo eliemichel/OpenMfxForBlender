@@ -6903,6 +6903,10 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
                                     NULL);
   RNA_def_property_ui_text(prop, "Parameters", "");
 
+  prop = RNA_def_property(srna, "message", PROP_STRING, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Message", "");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
   // OpenMeshEffectAssetInfo
 
   srna = RNA_def_struct(brna, "OpenMeshEffectEffectInfo", NULL);

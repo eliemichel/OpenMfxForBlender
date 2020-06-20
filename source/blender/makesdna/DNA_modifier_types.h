@@ -2158,6 +2158,8 @@ typedef struct OpenMeshEffectModifierData {
   int num_effects, _pad1;
   OpenMeshEffectParameterInfo *parameter_info;
   int num_parameters, _pad2;
+
+  char message[1024];
 } OpenMeshEffectModifierData;
 
 #ifdef __cplusplus
