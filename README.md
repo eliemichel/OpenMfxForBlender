@@ -2,7 +2,7 @@
 Open Mesh Effect for Blender
 ============================
 
-This is an edited version of Blender 2.82 including an [Open Mesh Effects](https://github.com/eliemichel/OpenMeshEffect) based modifier.
+This is an edited version of Blender 2.83 LTS including an [Open Mesh Effects](https://github.com/eliemichel/OpenMeshEffect) based modifier.
 
 ![OpenMeshEffect modifier for Blender](doc/openmesheffect/openmesheffect-for-blender.png)
 
