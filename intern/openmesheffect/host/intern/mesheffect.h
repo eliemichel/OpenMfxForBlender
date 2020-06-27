@@ -28,6 +28,7 @@
 #include "properties.h"
 #include "parameters.h"
 #include "inputs.h"
+#include "messages.h"
 
 // Mesh Effect
 
@@ -36,6 +37,10 @@ typedef struct OfxMeshEffectStruct {
     OfxPropertySetStruct properties;
     OfxParamSetStruct parameters;
     OfxHost *host; // weak pointer, do not deep copy
+
+    // Only the last persistent message is stored
+    OfxMessageType messageType;
+    char message[1024];
 } OfxMeshEffectStruct;
 
 // OfxMeshEffectStruct

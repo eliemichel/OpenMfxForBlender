@@ -150,6 +150,11 @@ PluginRegistry *get_registry(const char *ofx_filepath)
   }
 
   entry->count += 1;
+
+  if (false == entry->is_valid) {
+    return NULL;
+  }
+
   return &entry->registry;
 }
 

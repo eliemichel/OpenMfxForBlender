@@ -23,6 +23,7 @@
 #include "ofxCore.h"
 #include "ofxParam.h"
 #include "ofxMeshEffect.h"
+#include "ofxMessage.h"
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -33,6 +34,7 @@ typedef struct PluginRuntime {
     OfxPropertySuiteV1 *propertySuite;
     OfxParameterSuiteV1 *parameterSuite;
     OfxMeshEffectSuiteV1 *meshEffectSuite;
+    OfxMessageSuiteV2 *messageSuite;
 } PluginRuntime;
 
 PluginRuntime plugin0_runtime;
@@ -43,6 +45,7 @@ static OfxStatus plugin0_load(PluginRuntime *runtime) {
     runtime->propertySuite = (OfxPropertySuiteV1*)h->fetchSuite(h->host, kOfxPropertySuite, 1);
     runtime->parameterSuite = (OfxParameterSuiteV1*)h->fetchSuite(h->host, kOfxParameterSuite, 1);
     runtime->meshEffectSuite = (OfxMeshEffectSuiteV1*)h->fetchSuite(h->host, kOfxMeshEffectSuite, 1);
+    runtime->messageSuite = (OfxMessageSuiteV2*)h->fetchSuite(h->host, kOfxMessageSuite, 2);
     return kOfxStatOK;
 }
 
@@ -173,6 +176,14 @@ static OfxStatus plugin0_cook(PluginRuntime *runtime, OfxMeshEffectHandle meshEf
     status = runtime->parameterSuite->paramGetHandle(parameters, "Description", &param, NULL);
     status = runtime->parameterSuite->paramGetValue(param, &str);
     printf(" - Parameter 'Description' (kOfxParamTypeString): (%s)\n", str);
+
+    // Also test messaging system
+    runtime->messageSuite->message(
+      meshEffect, kOfxMessageMessage, NULL, "mfx_test_parameters_plugin cooked successfully.");
+    runtime->messageSuite->setPersistentMessage(
+        meshEffect, kOfxMessageMessage, NULL, "mfx_test_parameters_plugin cooked successfully!");
+    runtime->messageSuite->setPersistentMessage(
+        meshEffect, kOfxMessageError, NULL, "oh no, an error!");
     
     return kOfxStatOK;
 }

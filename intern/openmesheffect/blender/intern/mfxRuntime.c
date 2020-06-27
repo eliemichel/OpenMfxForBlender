@@ -181,7 +181,7 @@ void runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugin_path)
   normalize_plugin_path(rd->plugin_path, abs_path);
 
   rd->registry = get_registry(abs_path);
-  rd->is_plugin_valid = true;
+  rd->is_plugin_valid = rd->registry != NULL;
 }
 
 void runtime_set_effect_index(OpenMeshEffectRuntime *rd, int effect_index) {
@@ -240,5 +240,23 @@ void runtime_get_parameters_from_rna(OpenMeshEffectRuntime *rd, OpenMeshEffectMo
       printf("-- Skipping parameter %s (unsupported type: %d)\n", parameters[i]->name, parameters[i]->type);
       break;
     }
+  }
+}
+
+void runtime_set_message_in_rna(OpenMeshEffectRuntime *rd, OpenMeshEffectModifierData *fxmd)
+{
+  if (NULL == rd->effect_instance) {
+    return;
+  }
+
+  OfxMessageType type = rd->effect_instance->messageType;
+
+  if (type != OFX_MESSAGE_INVALID) {
+    BLI_strncpy(fxmd->message, rd->effect_instance->message, 1024);
+    fxmd->message[1023] = '\0';
+  }
+
+  if (type == OFX_MESSAGE_ERROR || type == OFX_MESSAGE_FATAL) {
+    modifier_setError(&fxmd->modifier, rd->effect_instance->message);
   }
 }

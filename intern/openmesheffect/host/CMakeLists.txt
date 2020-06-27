@@ -40,6 +40,8 @@ set(SRC
   intern/mesh.c
   intern/mesheffect.h
   intern/mesheffect.c
+  intern/messages.h
+  intern/messages.c
   intern/mfxPluginRegistry.c
   intern/mfxPluginRegistryPool.c
 )

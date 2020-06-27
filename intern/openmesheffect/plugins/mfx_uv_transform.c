@@ -124,7 +124,7 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     status = meshEffectSuite->meshGetAttribute(input_mesh, kOfxMeshAttribVertex, "color0", &vcolor_attrib);
 
     printf("Look for color0...\n");
-    float *vcolor_data = NULL;
+    char *vcolor_data = NULL;
     if (kOfxStatOK == status) {
       printf("found!\n");
       propertySuite->propGetPointer(vcolor_attrib, kOfxMeshAttribPropData, 0, (void**)&vcolor_data);
@@ -162,27 +162,30 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     copyAttribute(&output_facecounts, &input_facecounts, 0, input_face_count);
 
     if (NULL != vcolor_data) {
-      float *uv_data;
+      char *uv_data;
       int uv_stride, vcolor_stride;
       propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropComponentCount, 0, &uv_stride);
       propertySuite->propGetInt(vcolor_attrib, kOfxMeshAttribPropComponentCount, 0, &vcolor_stride);
       propertySuite->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&uv_data);
       for (int i = 0; i < input_vertex_count; ++i) {
-        uv_data[i * uv_stride + 0] = vcolor_data[i * vcolor_stride + 0];
-        uv_data[i * uv_stride + 1] = vcolor_data[i * vcolor_stride + 1];
+        float *vcolor = (float *)(vcolor_data + vcolor_stride * i);
+        float *uv = (float *)(uv_data + uv_stride * i);
+        uv[0] = vcolor[0];
+        uv[1] = vcolor[1];
       }
     }
     else {
       // DEBUG
-      float *uv_data;
+      char *uv_data;
       int uv_stride;
       propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropComponentCount, 0, &uv_stride);
       propertySuite->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&uv_data);
       for (int i = 0; i < input_vertex_count; ++i) {
         int vert = *(int *)input_vertpoint.data[i * input_vertpoint.stride];
         float *P = (float *)input_pos.data[vert * input_pos.stride];
-        uv_data[i * uv_stride + 0] = P[0];
-        uv_data[i * uv_stride + 1] = P[1];
+        float *uv = (float *)(uv_data + uv_stride * i);
+        uv[0] = P[0];
+        uv[1] = P[1];
       }
     }
 

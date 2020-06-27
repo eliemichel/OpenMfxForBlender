@@ -64,6 +64,11 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   blender_mesh = internal_data->blender_mesh;
 
   if (false == internal_data->is_input) {
+    // Initialize counters to zero
+    MFX_CHECK(ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropPointCount, 0, 0));
+    MFX_CHECK(ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropVertexCount, 0, 0));
+    MFX_CHECK(ps->propSetInt(&ofx_mesh->properties, kOfxMeshPropFaceCount, 0, 0));
+
     printf("Output: NOT converting blender mesh\n");
     return kOfxStatOK;
   }
@@ -106,23 +111,21 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   OfxPropertySetHandle uv_attrib;
   for (int k = 0; k < uv_layers; ++k) {
     sprintf(name, "uv%d", k);
-    MFX_CHECK(mes->attributeDefine(ofx_mesh, kOfxMeshAttribVertex, name, 3, kOfxMeshAttribTypeFloat, &uv_attrib));
+    MFX_CHECK(mes->attributeDefine(ofx_mesh, kOfxMeshAttribVertex, name, 2, kOfxMeshAttribTypeFloat, &uv_attrib));
     MFX_CHECK(ps->propSetInt(uv_attrib, kOfxMeshAttribPropIsOwner, 0, 0));
     MLoopUV *uv_data = (MLoopUV*)CustomData_get(&blender_mesh->ldata, k, CD_MLOOPUV);
     MFX_CHECK(ps->propSetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void*)&uv_data[0].uv[0]));
-    MFX_CHECK(ps->propSetInt(uv_attrib, kOfxMeshAttribPropStride, 0, sizeof(MLoopCol)));
+    MFX_CHECK(ps->propSetInt(uv_attrib, kOfxMeshAttribPropStride, 0, sizeof(MLoopUV)));
   }
 
-  // Point position is non-owned
+  // Point position
   OfxPropertySetHandle pos_attrib;
   MFX_CHECK(mes->meshGetAttribute(ofx_mesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib));
-  MFX_CHECK(mes->attributeDefine(ofx_mesh, kOfxMeshAttribVertex, name, 3, kOfxMeshAttribTypeFloat, &vcolor_attrib));
   MFX_CHECK(ps->propSetInt(pos_attrib, kOfxMeshAttribPropIsOwner, 0, 0));
   MFX_CHECK(ps->propSetPointer(pos_attrib, kOfxMeshAttribPropData, 0, (void*)&blender_mesh->mvert[0].co[0]));
   MFX_CHECK(ps->propSetInt(pos_attrib, kOfxMeshAttribPropStride, 0, sizeof(MVert)));
 
-  // Vertex point is non-owned
-
+  // Vertex point
   OfxPropertySetHandle vertpoint_attrib;
   MFX_CHECK(mes->meshGetAttribute(
       ofx_mesh, kOfxMeshAttribVertex, kOfxMeshAttribVertexPoint, &vertpoint_attrib));
@@ -132,7 +135,7 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
       vertpoint_attrib, kOfxMeshAttribPropData, 0, (void *)&blender_mesh->mloop[0].v));
   MFX_CHECK(ps->propSetInt(vertpoint_attrib, kOfxMeshAttribPropStride, 0, sizeof(MLoop)));
 
-  // Face count is non-owned
+  // Face count
   OfxPropertySetHandle facecounts_attrib;
   MFX_CHECK(mes->meshGetAttribute(
       ofx_mesh, kOfxMeshAttribFace, kOfxMeshAttribFaceCounts, &facecounts_attrib));
@@ -142,11 +145,7 @@ OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
       facecounts_attrib, kOfxMeshAttribPropData, 0, (void *)&blender_mesh->mpoly[0].totloop));
   MFX_CHECK(ps->propSetInt(facecounts_attrib, kOfxMeshAttribPropStride, 0, sizeof(MPoly)));
 
-  // Eventually this should be avoided: we should be able to have the ofx_mesh be only a proxy to
-  // original blender mesh, without any allocation/copy of data.
   MFX_CHECK(mes->meshAlloc(ofx_mesh));
-
-  
 
   return kOfxStatOK;
 }
@@ -232,7 +231,8 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
   // Get vertex UVs if UVs are present in the mesh
   int uv_layers = 4;
   char name[32];
-  float *ofx_uv_data;
+  char *ofx_uv_data;
+  int ofx_uv_stride;
   for (int k = 0; k < uv_layers; ++k) {
     OfxPropertySetHandle uv_attrib;
     sprintf(name, "uv%d", k);
@@ -241,6 +241,7 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
     if (kOfxStatOK == status) {
       printf("Found!\n");
       ps->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void**)&ofx_uv_data);
+      ps->propGetInt(uv_attrib, kOfxMeshAttribPropStride, 0, &ofx_uv_stride);
 
       // Get UV data pointer in mesh.
       // elie: The next line does not work idk why, hence the next three lines.
@@ -250,8 +251,9 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
       MLoopUV *uv_data = CustomData_duplicate_referenced_layer_named(&blender_mesh->ldata, CD_MLOOPUV, uvname, vertex_count);
 
       for (int i = 0; i < vertex_count; ++i) {
-        uv_data[i].uv[0] = ofx_uv_data[2 * i + 0];
-        uv_data[i].uv[1] = ofx_uv_data[2 * i + 1];
+        float *uv = (float *)(ofx_uv_data + ofx_uv_stride * i);
+        uv_data[i].uv[0] = uv[0];
+        uv_data[i].uv[1] = uv[1];
       }
       blender_mesh->runtime.cd_dirty_loop |= CD_MASK_MLOOPUV;
       blender_mesh->runtime.cd_dirty_poly |= CD_MASK_MTFACE;

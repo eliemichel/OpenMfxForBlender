@@ -18,18 +18,22 @@
  * \ingroup openmesheffect
  */
 
-#include <string.h>
-#include <stdio.h>
-#include <stdarg.h>
-
-#include "ofxProperty.h"
-#include "ofxParam.h"
-#include "ofxMeshEffect.h"
 
 #include "util/ofx_util.h"
 #include "util/memory_util.h"
 
+#include "intern/messages.h"
+
 #include "mfxHost.h"
+
+#include "ofxProperty.h"
+#include "ofxParam.h"
+#include "ofxMeshEffect.h"
+#include "ofxMessage.h"
+
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
 
 // OFX SUITES MAIN
 
@@ -60,6 +64,16 @@ static const void * fetchSuite(OfxPropertySetHandle host,
     switch (suiteVersion) {
       case 1:
         return &gPropertySuiteV1;
+      default:
+        printf("Suite '%s' is only supported in version 1.\n", suiteName);
+        return NULL;
+    }
+  }
+  if (0 == strcmp(suiteName, kOfxMessageSuite) && suiteVersion <= 2) {
+    switch (suiteVersion) {
+      case 1: // V2 is backward compatible
+      case 2:
+        return &gMessageSuiteV2;
       default:
         printf("Suite '%s' is only supported in version 1.\n", suiteName);
         return NULL;

@@ -81,6 +81,35 @@ typedef struct OpenMeshEffectRuntime {
 void runtime_init(OpenMeshEffectRuntime *rd);
 
 /**
+ * Free runtime data content, but the the rd pointer itself.
+ */
+void runtime_free(OpenMeshEffectRuntime *rd);
+
+/**
+ * Set the plugin path, as put return status in is_plugin_valid
+ */
+void runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugin_path);
+
+/**
+ * Pick an effect in the plugin by its index. Value is clamped to valid values (including -1 to
+ * mean "no effect selected").
+ */
+void runtime_set_effect_index(OpenMeshEffectRuntime *rd, int effect_index);
+
+/**
+ * Set parameter values from Blender's RNA to the Open Mesh Effect host's structure.
+ */
+void runtime_get_parameters_from_rna(OpenMeshEffectRuntime *rd, OpenMeshEffectModifierData *fxmd);
+
+/**
+ * Copy messages returned by the plugin in the RNA
+ */
+void runtime_set_message_in_rna(OpenMeshEffectRuntime *rd, OpenMeshEffectModifierData *fxmd);
+
+///////////////////////////////////////////////////////////////////////////////
+// Private functions
+
+/**
  * PRIVATE
  * Free the descriptor and instance, if it was allocated (otherwise does nothing)
  */
@@ -103,24 +132,3 @@ bool runtime_ensure_effect_instance(OpenMeshEffectRuntime *rd);
  * Ensures that the plugin path is unloaded and reset
  */
 void runtime_reset_plugin_path(OpenMeshEffectRuntime *rd);
-
-/**
- * Free runtime data content, but the the rd pointer itself.
- */
-void runtime_free(OpenMeshEffectRuntime *rd);
-
-/**
- * Set the plugin path, as put return status in is_plugin_valid
- */
-void runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugin_path);
-
-/**
- * Pick an effect in the plugin by its index. Value is clamped to valid values (including -1 to
- * mean "no effect selected").
- */
-void runtime_set_effect_index(OpenMeshEffectRuntime *rd, int effect_index);
-
-/**
- * Set parameter values from Blender's RNA to the Open Mesh Effect host's structure.
- */
-void runtime_get_parameters_from_rna(OpenMeshEffectRuntime *rd, OpenMeshEffectModifierData *fxmd);
