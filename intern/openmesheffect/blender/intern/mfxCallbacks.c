@@ -41,6 +41,10 @@
 
 #define MFX_CHECK(call) { OfxStatus status = call; assert(kOfxStatOK == status); }
 
+#ifndef max
+#define max(a,b) (((a) > (b)) ? (a) : (b))
+#endif
+
 OfxStatus before_mesh_get(OfxHost *host, OfxMeshHandle ofx_mesh) {
   OfxPropertySuiteV1 *ps;
   OfxMeshEffectSuiteV1 *mes;
