@@ -41,6 +41,8 @@ set(SRC
   intern/mfxCallbacks.cpp
   intern/mfxRuntime.h
   intern/mfxRuntime.cpp
+  intern/mfxConvert.h
+  intern/mfxConvert.cpp
 )
 
 set(LIB
