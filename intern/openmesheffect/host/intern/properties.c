@@ -145,6 +145,15 @@ bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type
       (0 == strcmp(property, kOfxParamPropDefault) && type == PROP_TYPE_INT) ||
       (0 == strcmp(property, kOfxParamPropDefault) && type == PROP_TYPE_DOUBLE) ||
       (0 == strcmp(property, kOfxParamPropDefault) && type == PROP_TYPE_POINTER) ||
+      (0 == strcmp(property, kOfxPropLabel) && type == PROP_TYPE_STRING) ||
+      (0 == strcmp(property, kOfxParamPropMin) && type == PROP_TYPE_STRING) ||
+      (0 == strcmp(property, kOfxParamPropMin) && type == PROP_TYPE_INT) ||
+      (0 == strcmp(property, kOfxParamPropMin) && type == PROP_TYPE_DOUBLE) ||
+      (0 == strcmp(property, kOfxParamPropMin) && type == PROP_TYPE_POINTER) ||
+      (0 == strcmp(property, kOfxParamPropMax) && type == PROP_TYPE_STRING) ||
+      (0 == strcmp(property, kOfxParamPropMax) && type == PROP_TYPE_INT) ||
+      (0 == strcmp(property, kOfxParamPropMax) && type == PROP_TYPE_DOUBLE) ||
+      (0 == strcmp(property, kOfxParamPropMax) && type == PROP_TYPE_POINTER) ||
       false
       );
   case PROP_CTX_ATTRIB:

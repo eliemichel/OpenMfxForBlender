@@ -248,7 +248,7 @@ OfxStatus before_mesh_release(OfxHost *host, OfxMeshHandle ofx_mesh) {
       //MLoopUV *uv_data = (MLoopUV*)CustomData_add_layer_named(&blender_mesh->ldata, CD_MLOOPUV, CD_CALLOC, NULL, vertex_count, name);
       char uvname[MAX_CUSTOMDATA_LAYER_NAME];
       CustomData_validate_layer_name(&blender_mesh->ldata, CD_MLOOPUV, name, uvname);
-      MLoopUV *uv_data = CustomData_duplicate_referenced_layer_named(&blender_mesh->ldata, CD_MLOOPUV, uvname, vertex_count);
+      MLoopUV *uv_data = (MLoopUV*)CustomData_duplicate_referenced_layer_named(&blender_mesh->ldata, CD_MLOOPUV, uvname, vertex_count);
 
       for (int i = 0; i < vertex_count; ++i) {
         float *uv = (float *)(ofx_uv_data + ofx_uv_stride * i);

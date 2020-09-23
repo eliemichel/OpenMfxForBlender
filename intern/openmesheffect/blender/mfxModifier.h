@@ -44,6 +44,11 @@ extern "C" {
 typedef Mesh* (*MeshNewFunc)(int, int, int, int, int); // BKE_mesh_new_nomain
 typedef void (*MeshPostFunc)(Mesh*); // post processing applied to new mesh
 
+/**
+ * Copy from runtime data (runtime_data->registry) to RNA (fxmd->effect_info)
+ * the meta information about effects contained in the bundle.
+ * Populate fxmd->num_effects and fxmd->effect_info unless runtime_data->is_plugin_valid if false
+ */
 void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd);
 
 /**
