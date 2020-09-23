@@ -36,11 +36,11 @@ set(INC_SYS
 
 set(SRC
   mfxModifier.h
-  intern/mfxModifier.c
+  intern/mfxModifier.cpp
   intern/mfxCallbacks.h
-  intern/mfxCallbacks.c
+  intern/mfxCallbacks.cpp
   intern/mfxRuntime.h
-  intern/mfxRuntime.c
+  intern/mfxRuntime.cpp
 )
 
 set(LIB

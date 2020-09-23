@@ -28,7 +28,38 @@
 /**
  * Structure holding runtime allocated data for OpenMeshEffect plug-in hosting.
  */
-typedef struct OpenMeshEffectRuntime {
+class OpenMeshEffectRuntime {
+ public:
+  OpenMeshEffectRuntime();
+  ~OpenMeshEffectRuntime();
+
+  /**
+   * Set the plugin path, as put return status in is_plugin_valid
+   */
+  void set_plugin_path(const char *plugin_path);
+
+  /**
+   * Pick an effect in the plugin by its index. Value is clamped to valid values (including -1 to
+   * mean "no effect selected").
+   */
+  void set_effect_index(int effect_index);
+
+  /**
+   * Set parameter values from Blender's RNA to the Open Mesh Effect host's structure.
+   */
+  void get_parameters_from_rna(OpenMeshEffectModifierData *fxmd);
+
+  /**
+   * Copy messages returned by the plugin in the RNA
+   */
+  void set_message_in_rna(OpenMeshEffectModifierData *fxmd);
+
+  /**
+   * Ensures that the effect descriptor and instances are valid (may fail, and hence return false)
+   */
+  bool ensure_effect_instance();
+
+ public:
   /**
    * Path to the OFX plug-in bundle.
    */
@@ -73,62 +104,31 @@ typedef struct OpenMeshEffectRuntime {
    * Effect instance, used for cooking
    */
   OfxMeshEffectHandle effect_instance;
-} OpenMeshEffectRuntime;
 
-/**
- * Initialize runtim data
- */
-void runtime_init(OpenMeshEffectRuntime *rd);
+private:
+  /**
+   * Get absolute path (ui file browser returns relative path for saved files)
+   */
+  static void normalize_plugin_path(char *path, char *out_path);
 
-/**
- * Free runtime data content, but the the rd pointer itself.
- */
-void runtime_free(OpenMeshEffectRuntime *rd);
+private:
+  /**
+   * Free the descriptor and instance, if it had been allocated (otherwise does nothing)
+   */
+  void free_effect_instance();
 
-/**
- * Set the plugin path, as put return status in is_plugin_valid
- */
-void runtime_set_plugin_path(OpenMeshEffectRuntime *rd, const char *plugin_path);
+  /**
+   * Ensures that the ofx_host member if a valid OfxHost
+   */
+  void ensure_host();
 
-/**
- * Pick an effect in the plugin by its index. Value is clamped to valid values (including -1 to
- * mean "no effect selected").
- */
-void runtime_set_effect_index(OpenMeshEffectRuntime *rd, int effect_index);
+  /**
+   * Ensures that the plugin path is unloaded and reset
+   */
+  void reset_plugin_path();
+};
 
-/**
- * Set parameter values from Blender's RNA to the Open Mesh Effect host's structure.
- */
-void runtime_get_parameters_from_rna(OpenMeshEffectRuntime *rd, OpenMeshEffectModifierData *fxmd);
-
-/**
- * Copy messages returned by the plugin in the RNA
- */
-void runtime_set_message_in_rna(OpenMeshEffectRuntime *rd, OpenMeshEffectModifierData *fxmd);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Private functions
 
-/**
- * PRIVATE
- * Free the descriptor and instance, if it was allocated (otherwise does nothing)
- */
-void runtime_free_effect_instance(OpenMeshEffectRuntime *rd);
-
-/**
- * PRIVATE
- * Ensures that the ofx_host member if a valid OfxHost
- */
-void runtime_ensure_host(OpenMeshEffectRuntime *rd);
-
-/**
- * PRIVATE
- * Ensures that the effect descriptor and instances are valid (may fail, and hence return false)
- */
-bool runtime_ensure_effect_instance(OpenMeshEffectRuntime *rd);
-
-/**
- * PRIVATE
- * Ensures that the plugin path is unloaded and reset
- */
-void runtime_reset_plugin_path(OpenMeshEffectRuntime *rd);
