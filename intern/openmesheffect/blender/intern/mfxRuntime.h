@@ -25,6 +25,9 @@
 
 #include "ofxCore.h"
 
+#include <map>
+#include <string>
+
 /**
  * Structure holding runtime allocated data for OpenMeshEffect plug-in hosting.
  */
@@ -59,6 +62,23 @@ class OpenMeshEffectRuntime {
    */
   bool ensure_effect_instance();
 
+  /**
+   * Tells whether the plugin specified by plugin_path is valid. If true, then 'registry' can be
+   * used
+   */
+  bool is_plugin_valid() const;
+
+  /**
+   * Cache current value of the parameters. This is used to try to remember these parameters while
+   * reloading plugins.
+   */
+  void save_rna_parameter_values(OpenMeshEffectModifierData *fxmd);
+
+  /**
+   * Restore the cache current value of the parameters, only if parameter names match.
+   */
+  void try_restore_rna_parameter_values(OpenMeshEffectModifierData *fxmd);
+
  public:
   /**
    * Path to the OFX plug-in bundle.
@@ -72,20 +92,10 @@ class OpenMeshEffectRuntime {
   PluginRegistry *registry;
 
   /**
-   * Tells whether the plugin specified by plugin_path is valid. If true, then 'registry' can be used
-   */
-  bool is_plugin_valid;
-
-  /**
    * Index of the current effect within the list of effects contained in the currently opened
    * plugin. A value of -1 means none.
    */
   int effect_index;
-
-  /**
-   * Number of parameters available in the current effect of the current OFX bundle.
-   */
-  int num_parameters;
 
 
   // OFX data handles
@@ -126,8 +136,16 @@ private:
    * Ensures that the plugin path is unloaded and reset
    */
   void reset_plugin_path();
-};
 
+private:
+  /**
+   * Tells whether the plugin specified by plugin_path is valid. If true, then 'registry' can be
+   * used
+   */
+  bool m_is_plugin_valid;
+
+  std::map<std::string, OfxParamStruct> m_saved_parameter_values;
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 // Private functions

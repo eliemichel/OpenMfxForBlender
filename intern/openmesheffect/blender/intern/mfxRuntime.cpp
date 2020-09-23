@@ -24,6 +24,7 @@
 
 #include "mfxCallbacks.h"
 #include "mfxRuntime.h"
+#include "mfxConvert.h"
 #include "mfxPluginRegistryPool.h"
 
 #include "DNA_mesh_types.h" // Mesh
@@ -42,12 +43,11 @@
 OpenMeshEffectRuntime::OpenMeshEffectRuntime()
 {
   plugin_path[0] = '\0';
-  is_plugin_valid = false;
+  m_is_plugin_valid = false;
   effect_index = 0;
   ofx_host = nullptr;
   effect_desc = nullptr;
   effect_instance = nullptr;
-  num_parameters = 0;
   registry = nullptr;
 }
 
@@ -81,7 +81,7 @@ void OpenMeshEffectRuntime::set_plugin_path(const char *plugin_path)
   normalize_plugin_path(this->plugin_path, abs_path);
 
   this->registry = get_registry(abs_path);
-  this->is_plugin_valid = this->registry != NULL;
+  m_is_plugin_valid = this->registry != NULL;
 }
 
 void OpenMeshEffectRuntime::set_effect_index(int effect_index)
@@ -94,7 +94,7 @@ void OpenMeshEffectRuntime::set_effect_index(int effect_index)
     free_effect_instance();
   }
 
-  if (this->is_plugin_valid) {
+  if (is_plugin_valid()) {
     this->effect_index = min_ii(max_ii(-1, effect_index), this->registry->num_plugins - 1);
   } else {
     this->effect_index = -1;
@@ -109,39 +109,7 @@ void OpenMeshEffectRuntime::get_parameters_from_rna(OpenMeshEffectModifierData *
 {
   OfxParamHandle *parameters = this->effect_instance->parameters.parameters;
   for (int i = 0 ; i < fxmd->num_parameters ; ++i) {
-    switch (parameters[i]->type) {
-    case PARAM_TYPE_INTEGER_3D:
-      parameters[i]->value[2].as_int = fxmd->parameter_info[i].integer_vec_value[2];
-    case PARAM_TYPE_INTEGER_2D:
-      parameters[i]->value[1].as_int = fxmd->parameter_info[i].integer_vec_value[1];
-    case PARAM_TYPE_INTEGER:
-      parameters[i]->value[0].as_int = fxmd->parameter_info[i].integer_vec_value[0];
-      break;
-    
-    case PARAM_TYPE_RGBA:
-      parameters[i]->value[3].as_double = (double)fxmd->parameter_info[i].float_vec_value[3];
-    case PARAM_TYPE_DOUBLE_3D:
-    case PARAM_TYPE_RGB:
-      parameters[i]->value[2].as_double = (double)fxmd->parameter_info[i].float_vec_value[2];
-    case PARAM_TYPE_DOUBLE_2D:
-      parameters[i]->value[1].as_double = (double)fxmd->parameter_info[i].float_vec_value[1];
-    case PARAM_TYPE_DOUBLE:
-      parameters[i]->value[0].as_double = (double)fxmd->parameter_info[i].float_vec_value[0];
-      break;
-
-    case PARAM_TYPE_BOOLEAN:
-      parameters[i]->value[0].as_bool = fxmd->parameter_info[i].integer_vec_value[0];
-      break;
-
-    case PARAM_TYPE_STRING:
-      parameter_realloc_string(parameters[i], MOD_OPENMESHEFFECT_MAX_STRING_VALUE);
-      strncpy(parameters[i]->value[0].as_char, fxmd->parameter_info[i].string_value, MOD_OPENMESHEFFECT_MAX_STRING_VALUE);
-      break;
-
-    default:
-      printf("-- Skipping parameter %s (unsupported type: %d)\n", parameters[i]->name, parameters[i]->type);
-      break;
-    }
+    copy_parameter_value_from_rna(parameters[i], fxmd->parameter_info + i);
   }
 }
 
@@ -163,6 +131,74 @@ void OpenMeshEffectRuntime::set_message_in_rna(OpenMeshEffectModifierData *fxmd)
   }
 }
 
+bool OpenMeshEffectRuntime::ensure_effect_instance()
+{
+
+  if (false == is_plugin_valid()) {
+    return false;
+  }
+
+  if (-1 == this->effect_index) {
+    printf("No selected plug-in effect\n");
+    return false;
+  }
+
+  ensure_host();
+
+  OfxPlugin *plugin = this->registry->plugins[this->effect_index];
+
+  if (NULL == this->effect_desc) {
+    // Load plugin if not already loaded
+    OfxPluginStatus *pStatus = &this->registry->status[this->effect_index];
+    if (OfxPluginStatNotLoaded == *pStatus) {
+      if (ofxhost_load_plugin(this->ofx_host, plugin)) {
+        *pStatus = OfxPluginStatOK;
+      }
+      else {
+        printf("Error while loading plugin!\n");
+        *pStatus = OfxPluginStatError;
+        return false;
+      }
+    }
+
+    ofxhost_get_descriptor(this->ofx_host, plugin, &this->effect_desc);
+  }
+
+  if (NULL == this->effect_instance) {
+    ofxhost_create_instance(plugin, this->effect_desc, &this->effect_instance);
+  }
+
+  return true;
+}
+
+bool OpenMeshEffectRuntime::is_plugin_valid() const
+{
+  return m_is_plugin_valid;
+}
+
+void OpenMeshEffectRuntime::save_rna_parameter_values(OpenMeshEffectModifierData *fxmd)
+{
+  m_saved_parameter_values.clear();
+  for (int i = 0; i < fxmd->num_parameters; ++i) {
+    OpenMeshEffectParameterInfo* rna = fxmd->parameter_info + i;
+    std::string key = std::string(rna->name);
+    copy_parameter_value_from_rna(&m_saved_parameter_values[key], rna);
+  }
+}
+
+void OpenMeshEffectRuntime::try_restore_rna_parameter_values(OpenMeshEffectModifierData *fxmd)
+{
+  for (int i = 0; i < fxmd->num_parameters; ++i) {
+    OpenMeshEffectParameterInfo *rna = fxmd->parameter_info + i;
+    std::string key = std::string(rna->name);
+    if (m_saved_parameter_values.count(key)) {
+      copy_parameter_value_to_rna(rna, &m_saved_parameter_values[key]);
+    }
+  }
+}
+
+
+
 // ----------------------------------------------------------------------------
 // Private static
 
@@ -180,10 +216,9 @@ void OpenMeshEffectRuntime::normalize_plugin_path(char *path, char *out_path)
 // ----------------------------------------------------------------------------
 // Private
 
-
 void OpenMeshEffectRuntime::free_effect_instance()
 {
-  if (this->is_plugin_valid && -1 != this->effect_index) {
+  if (is_plugin_valid() && -1 != this->effect_index) {
     OfxPlugin *plugin = this->registry->plugins[this->effect_index];
     OfxPluginStatus status = this->registry->status[this->effect_index];
 
@@ -226,56 +261,16 @@ void OpenMeshEffectRuntime::ensure_host()
   }
 }
 
-bool OpenMeshEffectRuntime::ensure_effect_instance()
-{
-
-  if (false == this->is_plugin_valid) {
-    return false;
-  }
-
-  if (-1 == this->effect_index) {
-    printf("No selected plug-in effect\n");
-    return false;
-  }
-
-  ensure_host();
-
-  OfxPlugin *plugin = this->registry->plugins[this->effect_index];
-
-  if (NULL == this->effect_desc) {
-    // Load plugin if not already loaded
-    OfxPluginStatus *pStatus = &this->registry->status[this->effect_index];
-    if (OfxPluginStatNotLoaded == *pStatus) {
-      if (ofxhost_load_plugin(this->ofx_host, plugin)) {
-        *pStatus = OfxPluginStatOK;
-      }
-      else {
-        printf("Error while loading plugin!\n");
-        *pStatus = OfxPluginStatError;
-        return false;
-      }
-    }
-
-    ofxhost_get_descriptor(this->ofx_host, plugin, &this->effect_desc);
-  }
-
-  if (NULL == this->effect_instance) {
-    ofxhost_create_instance(plugin, this->effect_desc, &this->effect_instance);
-  }
-
-  return true;
-}
-
 void OpenMeshEffectRuntime::reset_plugin_path()
 {
-  if (this->is_plugin_valid) {
+  if (is_plugin_valid()) {
     printf("Unloading OFX plugin %s\n", this->plugin_path);
     free_effect_instance();
 
     char abs_path[FILE_MAX];
     normalize_plugin_path(this->plugin_path, abs_path);
     release_registry(abs_path);
-    this->is_plugin_valid = false;
+    m_is_plugin_valid = false;
   }
   this->plugin_path[0] = '\0';
   this->effect_index = -1;

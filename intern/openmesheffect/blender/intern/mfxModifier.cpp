@@ -25,6 +25,7 @@
 
 #include "mfxCallbacks.h"
 #include "mfxRuntime.h"
+#include "mfxConvert.h"
 
 #include "DNA_mesh_types.h"      // Mesh
 #include "DNA_meshdata_types.h"  // MVert
@@ -58,7 +59,7 @@ static OpenMeshEffectRuntime *mfx_Modifier_runtime_ensure(OpenMeshEffectModifier
   runtime->set_plugin_path(fxmd->plugin_path);
   runtime->set_effect_index(fxmd->effect_index);
 
-  if (false == runtime->is_plugin_valid) {
+  if (false == runtime->is_plugin_valid()) {
     modifier_setError(&fxmd->modifier, "Could not load ofx plugins!");
   }
 
@@ -77,7 +78,7 @@ void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd) {
     fxmd->num_effects = 0;
   }
 
-  if (false == runtime_data->is_plugin_valid) {
+  if (false == runtime_data->is_plugin_valid()) {
     printf("==/ mfx_Modifier_reload_effect_info\n");
     return;
   }
@@ -104,49 +105,13 @@ void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
   printf("==/ mfx_Modifier_on_plugin_changed\n");
 }
 
-// TODO: move somewhere else
-static void copy_parameter_value(OpenMeshEffectParameterInfo *parameter_info, OfxPropertyStruct *value)
-{
-  switch (parameter_info->type) {
-  case PARAM_TYPE_INTEGER_3D:
-    parameter_info->integer_vec_value[2] = value->value[2].as_int;
-  case PARAM_TYPE_INTEGER_2D:
-    parameter_info->integer_vec_value[1] = value->value[1].as_int;
-  case PARAM_TYPE_INTEGER:
-    parameter_info->integer_vec_value[0] = value->value[0].as_int;
-    break;
-
-  case PARAM_TYPE_RGBA:
-    parameter_info->float_vec_value[3] = (float)value->value[3].as_double;
-  case PARAM_TYPE_DOUBLE_3D:
-  case PARAM_TYPE_RGB:
-    parameter_info->float_vec_value[2] = (float)value->value[2].as_double;
-  case PARAM_TYPE_DOUBLE_2D:
-    parameter_info->float_vec_value[1] = (float)value->value[1].as_double;
-  case PARAM_TYPE_DOUBLE:
-    parameter_info->float_vec_value[0] = (float)value->value[0].as_double;
-    break;
-
-  case PARAM_TYPE_BOOLEAN:
-    parameter_info->integer_vec_value[0] = (int)value->value[0].as_int;
-    break;
-
-  case PARAM_TYPE_STRING:
-    strncpy(parameter_info->string_value, value->value[0].as_char, MOD_OPENMESHEFFECT_MAX_STRING_VALUE);
-    break;
-
-  default:
-    printf("-- Skipping default value for parameter %s (unsupported type: %d)\n", parameter_info->name, parameter_info->type);
-    break;
-  }
-}
-
 void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd) {
   printf("==. mfx_Modifier_on_asset_changed on data %p\n", fxmd);
   OpenMeshEffectRuntime *runtime_data = mfx_Modifier_runtime_ensure(fxmd);
 
   // Reset parameter DNA
   if (NULL != fxmd->parameter_info) {
+    runtime_data->save_rna_parameter_values(fxmd);
     MEM_freeN(fxmd->parameter_info);
     fxmd->parameter_info = NULL;
     fxmd->num_parameters = 0;
@@ -175,9 +140,11 @@ void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd) {
 
     int default_idx = find_property(&props, kOfxParamPropDefault);
     if (default_idx > -1) {
-      copy_parameter_value(&fxmd->parameter_info[i], props.properties[default_idx]);
+      copy_parameter_value_to_rna(&fxmd->parameter_info[i], props.properties[default_idx]);
     }
   }
+
+  runtime_data->try_restore_rna_parameter_values(fxmd);
 
   printf("==/ mfx_Modifier_on_asset_changed on data %p\n", fxmd);
 }
@@ -186,12 +153,10 @@ void mfx_Modifier_free_runtime_data(void * runtime_data)
 {
   OpenMeshEffectRuntime * rd = (OpenMeshEffectRuntime *)runtime_data;
   printf("== mfx_Modifier_free_runtime_data\n");
-  if (runtime_data == NULL) {
-    printf("runtime data is null\n");
-    printf("==/ mfx_Modifier_free_runtime_data\n");
-    return;
+  if (NULL != rd) {
+    delete rd;
   }
-  delete rd;
+  
   printf("==/ mfx_Modifier_free_runtime_data\n");
 }
 
