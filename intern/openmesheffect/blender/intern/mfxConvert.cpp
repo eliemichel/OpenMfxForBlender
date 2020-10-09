@@ -20,6 +20,7 @@
 #include "mfxHost.h"
 
 #include <iostream>
+#include <cstring>
 
 void copy_parameter_value_from_rna(OfxParamHandle param, const OpenMeshEffectParameterInfo *rna)
 {
