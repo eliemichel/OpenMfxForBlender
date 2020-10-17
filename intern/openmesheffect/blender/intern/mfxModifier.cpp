@@ -182,6 +182,17 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   // Get parameters
   runtime->get_parameters_from_rna(fxmd);
 
+  // Test if we can skip cooking
+  OfxPlugin *plugin = runtime->registry->plugins[runtime->effect_index];
+  bool shouldCook = true;
+  ofxhost_is_identity(plugin, runtime->effect_instance, &shouldCook);
+
+  if (false == shouldCook) {
+    printf("effect is identity, skipping cooking\n");
+    printf("==/ mfx_Modifier_do\n");
+    return mesh;
+  }
+
   // Set input mesh data binding, used by before/after callbacks
   MeshInternalData input_data;
   input_data.is_input = true;
@@ -196,7 +207,6 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   output_data.source_mesh = mesh;
   propertySuite->propSetPointer(&output->mesh.properties, kOfxMeshPropInternalData, 0, (void*)&output_data);
 
-  OfxPlugin *plugin = runtime->registry->plugins[runtime->effect_index];
   ofxhost_cook(plugin, runtime->effect_instance);
 
   // Free mesh on Blender side
