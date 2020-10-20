@@ -49,6 +49,7 @@ void ofxhost_release_descriptor(OfxMeshEffectHandle effectDescriptor);
 bool ofxhost_create_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectDescriptor, OfxMeshEffectHandle *effectInstance);
 void ofxhost_destroy_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance);
 bool ofxhost_cook(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance);
+bool ofxhost_is_identity(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance, bool *shouldCook);
 
 #include "mfxPluginRegistry.h"
 // TODO: use_plugin might be dropped from API

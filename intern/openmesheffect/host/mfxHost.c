@@ -262,6 +262,44 @@ bool ofxhost_cook(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance) {
   return true;
 }
 
+bool ofxhost_is_identity(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance, bool *shouldCook) {
+  OfxStatus status;
+
+  OfxPropertySetStruct inArgs, outArgs;
+  init_properties(&inArgs);
+  init_properties(&outArgs);
+
+  propSetInt(&inArgs, kOfxPropTime, 0, 0);
+  propSetString(&outArgs, kOfxPropName, 0, "");
+  propSetInt(&outArgs, kOfxPropTime, 0, 0);
+
+  *shouldCook = true;
+
+  status = plugin->mainEntry(kOfxMeshEffectActionIsIdentity, effectInstance, &inArgs, &outArgs);
+  printf("%s action returned status %d (%s)\n", kOfxMeshEffectActionIsIdentity, status, getOfxStateName(status));
+
+  free_properties(&inArgs);
+  free_properties(&outArgs);
+
+  if (kOfxStatErrMemory == status) {
+    printf("ERROR: Not enough memory for plug-in '%s'.\n", plugin->pluginIdentifier);
+    return false;
+  }
+  if (kOfxStatFailed == status) {
+    printf("ERROR: Error while cooking an instance of plug-in '%s'.\n", plugin->pluginIdentifier); // see message
+    return false;
+  }
+  if (kOfxStatErrFatal == status) {
+    printf("ERROR: Fatal error while cooking an instance of plug-in '%s'.\n", plugin->pluginIdentifier);
+    return false;
+  }
+  if (kOfxStatOK == status) {
+    *shouldCook = false;
+    return true;
+  }
+  return true;
+}
+
 bool use_plugin(const PluginRegistry *registry, int plugin_index) {
   OfxPlugin *plugin = registry->plugins[plugin_index];
   printf("Using plugin #%d: %s\n", plugin_index, plugin->pluginIdentifier);
