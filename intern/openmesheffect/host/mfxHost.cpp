@@ -23,6 +23,12 @@
 #include "util/memory_util.h"
 
 #include "intern/messages.h"
+#include "intern/properties.h"
+#include "intern/parameters.h"
+#include "intern/inputs.h"
+#include "intern/mesheffect.h"
+#include "intern/parameterSuite.h"
+#include "mfxPluginRegistry.h"
 
 #include "mfxHost.h"
 
@@ -93,8 +99,8 @@ OfxHost * getGlobalHost(void) {
   printf("Getting Global Host; reference counter will be set to %d.\n", gHostUse + 1);
   if (0 == gHostUse) {
     printf("(Allocating new host data)\n");
-    gHost = malloc_array(sizeof(OfxHost), 1, "global host");
-    OfxPropertySetHandle hostProperties = malloc_array(sizeof(OfxPropertySetStruct), 1, "global host properties");
+    gHost = (OfxHost*)malloc_array(sizeof(OfxHost), 1, "global host");
+    OfxPropertySetHandle hostProperties = (OfxPropertySetHandle)malloc_array(sizeof(OfxPropertySetStruct), 1, "global host properties");
     init_properties(hostProperties);
     hostProperties->context = PROP_CTX_HOST;
     propSetPointer(hostProperties, kOfxHostPropBeforeMeshReleaseCb, 0, (void*)NULL);
@@ -159,7 +165,7 @@ bool ofxhost_get_descriptor(OfxHost *host, OfxPlugin *plugin, OfxMeshEffectHandl
   OfxMeshEffectHandle effectHandle;
 
   *effectDescriptor = NULL;
-  effectHandle = malloc_array(sizeof(OfxMeshEffectStruct), 1, "mesh effect descriptor");
+  effectHandle = (OfxMeshEffectHandle)malloc_array(sizeof(OfxMeshEffectStruct), 1, "mesh effect descriptor");
 
   effectHandle->host = host;
   init_mesh_effect(effectHandle);
@@ -200,7 +206,8 @@ bool ofxhost_create_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectDescri
 
   *effectInstance = NULL;
 
-  instance = malloc_array(sizeof(OfxMeshEffectStruct), 1, "mesh effect descriptor");
+  instance = (OfxMeshEffectHandle)malloc_array(
+      sizeof(OfxMeshEffectStruct), 1, "mesh effect descriptor");
   deep_copy_mesh_effect(instance, effectDescriptor);
 
   status = plugin->mainEntry(kOfxActionCreateInstance, instance, NULL, NULL);
@@ -297,53 +304,5 @@ bool ofxhost_is_identity(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance, 
     *shouldCook = false;
     return true;
   }
-  return true;
-}
-
-bool use_plugin(const PluginRegistry *registry, int plugin_index) {
-  OfxPlugin *plugin = registry->plugins[plugin_index];
-  printf("Using plugin #%d: %s\n", plugin_index, plugin->pluginIdentifier);
-
-  // Set host (TODO: do this in load_plugins?)
-  OfxHost *host = getGlobalHost();
-
-  // Load action if not loaded yet
-  if (OfxPluginStatNotLoaded == registry->status[plugin_index]) {
-    if (ofxhost_load_plugin(host, plugin)) {
-      registry->status[plugin_index] = OfxPluginStatOK;
-    } else {
-      registry->status[plugin_index] = OfxPluginStatError;
-      return false;
-    }
-  }
-
-  if (OfxPluginStatError == registry->status[plugin_index]) {
-    return false;
-  }
-
-  // Describe action
-  OfxMeshEffectHandle effectDescriptor;
-  if (ofxhost_get_descriptor(host, plugin, &effectDescriptor)) {
-    OfxMeshEffectHandle effectInstance;
-
-    // DEBUG
-    printf("After describing effect:\n");
-    printf("  Found %d inputs:\n", effectDescriptor->inputs.num_inputs);
-    for (int i = 0 ; i < effectDescriptor->inputs.num_inputs ; ++i) {
-      printf("    #%d: %s\n", i, effectDescriptor->inputs.inputs[i]->name);
-    }
-
-    // Create Instance action
-    if (ofxhost_create_instance(plugin, effectDescriptor, &effectInstance)) {
-      ofxhost_cook(plugin, effectInstance);
-      ofxhost_destroy_instance(plugin, effectInstance);
-    }
-    ofxhost_release_descriptor(effectDescriptor);
-  }
-
-  // Unload action (TODO: move into e.g. free_registry)
-  //ofxhost_unload_plugin(plugin);
-  //releaseGlobalHost();
-
   return true;
 }

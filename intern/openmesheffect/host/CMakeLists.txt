@@ -24,26 +24,29 @@ set(INC_PRIV
 )
 
 set(SRC
-  mfxHost.c
+  mfxHost.cpp
   mfxHost.h
   mfxPluginRegistry.h
   mfxPluginRegistryPool.h
   intern/attributes.h
-  intern/attributes.c
+  intern/attributes.cpp
   intern/properties.h
-  intern/properties.c
+  intern/properties.cpp
   intern/parameters.h
-  intern/parameters.c
+  intern/parameters.cpp
   intern/inputs.h
-  intern/inputs.c
+  intern/inputs.cpp
   intern/mesh.h
-  intern/mesh.c
+  intern/mesh.cpp
   intern/mesheffect.h
-  intern/mesheffect.c
+  intern/mesheffect.cpp
   intern/messages.h
-  intern/messages.c
-  intern/mfxPluginRegistry.c
-  intern/mfxPluginRegistryPool.c
+  intern/messages.cpp
+  intern/mfxPluginRegistry.cpp
+  intern/mfxPluginRegistryPool.cpp
+
+  intern/parameterSuite.h
+  intern/parameterSuite.cpp
 )
 
 set(LIB_PRIV

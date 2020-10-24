@@ -44,7 +44,7 @@ static void entry_init(PluginRegistryPoolEntry *entry, const char *filename)
 {
   entry->is_valid = load_registry(&entry->registry, filename);
   size_t len = strlen(filename);
-  entry->filename = malloc_array(sizeof(char), len + 1, "ofx filename");
+  entry->filename = (char*)malloc_array(sizeof(char), len + 1, "ofx filename");
   strncpy(entry->filename, filename, len + 1);
   entry->count = 0;
 }
@@ -88,7 +88,7 @@ static PluginRegistryPoolEntry *pool_find(PluginRegistryPool *pool, const char *
 static PluginRegistryPoolEntry *pool_add(PluginRegistryPool *pool, const char *filename)
 {
   // Create and init entry
-  PluginRegistryPoolEntry *entry = malloc_array(
+  PluginRegistryPoolEntry *entry = (PluginRegistryPoolEntry *)malloc_array(
     sizeof(PluginRegistryPoolEntry), 1, "plugin registry pool entry");
   entry_init(entry, filename);
 
@@ -123,7 +123,7 @@ static void pool_remove(PluginRegistryPool *pool,
 static void ensure_pool()
 {
   if (NULL == gPluginRegistryPool) {
-    gPluginRegistryPool = malloc_array(sizeof(PluginRegistryPool), 1, "global plugin registry pool");
+    gPluginRegistryPool = (PluginRegistryPool*)malloc_array(sizeof(PluginRegistryPool), 1, "global plugin registry pool");
     gPluginRegistryPool->first_entry = NULL;
   }
 }

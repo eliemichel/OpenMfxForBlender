@@ -22,6 +22,7 @@
 
 #include "mfxModifier.h"
 #include "mfxHost.h"
+#include "mfxPluginRegistry.h"
 
 #include "ofxCore.h"
 
@@ -30,6 +31,8 @@
 
 /**
  * Structure holding runtime allocated data for OpenMeshEffect plug-in hosting.
+ * It ensures communication between Blender's RNA (OpenMeshEffectModifierData)
+ * and the non-GPL mfxHost.
  */
 class OpenMeshEffectRuntime {
  public:

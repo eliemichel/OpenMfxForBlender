@@ -26,6 +26,9 @@
 #include "mfxRuntime.h"
 #include "mfxConvert.h"
 #include "mfxPluginRegistryPool.h"
+#include <mfxHost/mesheffect>
+#include <mfxHost/messages>
+#include "ofxExtras.h"
 
 #include "DNA_mesh_types.h" // Mesh
 #include "DNA_meshdata_types.h" // MVert

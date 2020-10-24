@@ -33,11 +33,6 @@ extern "C" {
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
 
-#include "intern/properties.h"
-#include "intern/parameters.h"
-#include "intern/inputs.h"
-#include "intern/mesheffect.h"
-
 OfxHost * getGlobalHost(void);
 void releaseGlobalHost(void);
 
@@ -50,16 +45,6 @@ bool ofxhost_create_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectDescri
 void ofxhost_destroy_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance);
 bool ofxhost_cook(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance);
 bool ofxhost_is_identity(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance, bool *shouldCook);
-
-#include "mfxPluginRegistry.h"
-// TODO: use_plugin might be dropped from API
-/**
- * Flag the plugin as beeing used eventually and perform initial loading
- * /pre plugins have been loaded into the registry using load_plugins_linux()
- *      plugin_index is between 0 included and registry->num_plugins excluded
- * /post use_plugin() will not be called again for this plugin
- */
-bool use_plugin(const PluginRegistry *registry, int plugin_index);
 
 #ifdef __cplusplus
 }

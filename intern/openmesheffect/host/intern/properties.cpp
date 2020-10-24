@@ -49,9 +49,12 @@ void append_properties(OfxPropertySetStruct *properties, int count) {
   int old_num_properties = properties->num_properties;
   OfxPropertyStruct **old_properties = properties->properties;
   properties->num_properties += count;
-  properties->properties = malloc_array(sizeof(OfxPropertyStruct*), properties->num_properties, "properties");
+  properties->properties = (OfxPropertyStruct**)malloc_array(sizeof(OfxPropertyStruct*), properties->num_properties, "properties");
   for (int i = 0 ; i < properties->num_properties ; ++i){
-    properties->properties[i] = i < old_num_properties ? old_properties[i] : malloc_array(sizeof(OfxPropertyStruct), 1, "property");
+    properties->properties[i] = i < old_num_properties ?
+                                    old_properties[i] :
+                                    (OfxPropertyStruct *)malloc_array(
+                                        sizeof(OfxPropertyStruct), 1, "property");
   }
   if (NULL != old_properties) {
     free_array(old_properties);
@@ -63,7 +66,7 @@ void remove_property(OfxPropertySetStruct *properties, int index)
   int old_num_properties = properties->num_properties;
   OfxPropertyStruct **old_properties = properties->properties;
   properties->num_properties -= 1;
-  properties->properties = malloc_array(
+  properties->properties = (OfxPropertyStruct **)malloc_array(
       sizeof(OfxPropertyStruct *), properties->num_properties, "properties");
   for (int i = 0; i < properties->num_properties; ++i) {
     properties->properties[i] = i < index ? old_properties[i] : old_properties[i - 1];

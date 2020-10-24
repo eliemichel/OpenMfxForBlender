@@ -19,6 +19,14 @@
 
 #include "ofxCore.h"
 
-const char * getOfxStateName(OfxStatus status);
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+const char *getOfxStateName(OfxStatus status);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __MFX_OFX_UTIL_H__

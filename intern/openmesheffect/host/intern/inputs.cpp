@@ -57,13 +57,14 @@ void append_inputs(OfxMeshInputSetStruct *input_set, int count) {
   int old_num_input = input_set->num_inputs;
   OfxMeshInputStruct **old_inputs = input_set->inputs;
   input_set->num_inputs += count;
-  input_set->inputs = malloc_array(sizeof(OfxMeshInputStruct*), input_set->num_inputs, "inputs");
+  input_set->inputs = (OfxMeshInputStruct **)malloc_array(
+      sizeof(OfxMeshInputStruct *), input_set->num_inputs, "inputs");
   for (int i = 0 ; i < input_set->num_inputs ; ++i){
     OfxMeshInputStruct *input;
     if (i < old_num_input) {
       input = old_inputs[i];
     } else {
-      input = malloc_array(sizeof(OfxMeshInputStruct), 1, "input");
+      input = (OfxMeshInputStruct*)malloc_array(sizeof(OfxMeshInputStruct), 1, "input");
       input->host = input_set->host;
       init_input(input);
     }

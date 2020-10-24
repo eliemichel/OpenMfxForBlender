@@ -24,18 +24,19 @@
 
 #include <stdbool.h>
 
-typedef union OfxPropertyValueStruct {
+union OfxPropertyValueStruct {
     void *as_pointer;
     const char *as_const_char;
     char *as_char;
     double as_double;
     int as_int;
-} OfxPropertyValueStruct;
+};
 
-typedef struct OfxPropertyStruct {
+class OfxPropertyStruct {
+ public:
     const char *name;
     OfxPropertyValueStruct value[4];
-} OfxPropertyStruct;
+};
 
 typedef enum PropertyType {
 	PROP_TYPE_POINTER,

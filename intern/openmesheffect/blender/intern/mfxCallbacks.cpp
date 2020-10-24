@@ -26,7 +26,9 @@
 
 #include "mfxCallbacks.h"
 #include "mfxModifier.h"
+#include "ofxExtras.h"
 #include "mfxHost.h"
+#include <mfxHost/mesh>
 #include "util/memory_util.h"
 
 #include "DNA_mesh_types.h" // Mesh

@@ -47,8 +47,8 @@ static void registry_init_plugins(PluginRegistry *registry) {
   printf("Found %d plugins.\n", n);
 
   if (n > 0) {
-    registry->plugins = malloc_array(sizeof(OfxPlugin*), n, "mfx plugins");
-    registry->status = malloc_array(sizeof(OfxPluginStatus), n, "mfx plugins status");
+    registry->plugins = (OfxPlugin **)malloc_array(sizeof(OfxPlugin *), n, "mfx plugins");
+    registry->status = (OfxPluginStatus*)malloc_array(sizeof(OfxPluginStatus), n, "mfx plugins status");
   }
 
   // 1. Count number of supported plugins
@@ -80,8 +80,8 @@ static void registry_init_plugins(PluginRegistry *registry) {
   if (registry->num_plugins > 0) {
     OfxPlugin **old_plugins = registry->plugins;
     OfxPluginStatus *old_status = registry->status;
-    registry->plugins = malloc_array(sizeof(OfxPlugin*), registry->num_plugins, "mfx plugins");
-    registry->status = malloc_array(sizeof(OfxPluginStatus), registry->num_plugins, "mfx plugins status");
+    registry->plugins = (OfxPlugin**)malloc_array(sizeof(OfxPlugin*), registry->num_plugins, "mfx plugins");
+    registry->status = (OfxPluginStatus*)malloc_array(sizeof(OfxPluginStatus), registry->num_plugins, "mfx plugins status");
     for (i = 0 ; i < registry->num_plugins ; ++i) {
       registry->plugins[i] = old_plugins[i];
       registry->status[i] = old_status[i];
@@ -124,7 +124,7 @@ bool load_registry(PluginRegistry *registry, const char *ofx_filepath) {
   }
 
   if (NULL != registry->setBundleDirectory) {
-    char *bundle_directory = malloc_array(sizeof(char), strlen(ofx_filepath) + 1, "bundle directory");
+    char *bundle_directory = (char*)malloc_array(sizeof(char), strlen(ofx_filepath) + 1, "bundle directory");
     strcpy(bundle_directory, ofx_filepath);
     *strrchr(bundle_directory, PATH_DIR_SEP) = '\0';
     registry->setBundleDirectory(bundle_directory);

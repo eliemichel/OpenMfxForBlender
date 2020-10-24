@@ -19,6 +19,7 @@
 #pragma once
 
 #include "mfxHost.h"
+#include <mfxHost/parameters>
 
 #include "ofxParam.h"
 

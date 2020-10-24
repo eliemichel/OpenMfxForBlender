@@ -19,7 +19,15 @@
 
 #include "stddef.h" // for size_t
 
-void * malloc_array(size_t size, size_t count, const char *reason);
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void *malloc_array(size_t size, size_t count, const char *reason);
 void free_array(void *p);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __MFX_MEMORY_UTIL_H__

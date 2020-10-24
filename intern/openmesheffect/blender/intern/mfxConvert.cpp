@@ -50,7 +50,7 @@ void copy_parameter_value_from_rna(OfxParamHandle param, const OpenMeshEffectPar
       break;
 
     case PARAM_TYPE_STRING:
-      parameter_realloc_string(param, MOD_OPENMESHEFFECT_MAX_STRING_VALUE);
+      param->realloc_string(MOD_OPENMESHEFFECT_MAX_STRING_VALUE);
       strncpy(param->value[0].as_char, rna->string_value, MOD_OPENMESHEFFECT_MAX_STRING_VALUE);
       break;
 

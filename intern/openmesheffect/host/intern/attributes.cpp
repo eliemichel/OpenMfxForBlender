@@ -67,13 +67,14 @@ void append_attributes(OfxAttributeSetStruct *attribute_set, int count) {
   int old_num_attributes = attribute_set->num_attributes;
   OfxAttributeStruct **old_attributes = attribute_set->attributes;
   attribute_set->num_attributes += count;
-  attribute_set->attributes = malloc_array(sizeof(OfxAttributeStruct*), attribute_set->num_attributes, "attributes");
+  attribute_set->attributes = (OfxAttributeStruct **)malloc_array(
+      sizeof(OfxAttributeStruct *), attribute_set->num_attributes, "attributes");
   for (int i = 0 ; i < attribute_set->num_attributes; ++i){
     OfxAttributeStruct *attribute;
     if (i < old_num_attributes) {
       attribute = old_attributes[i];
     } else {
-      attribute = malloc_array(sizeof(OfxAttributeStruct), 1, "attribute");
+      attribute = (OfxAttributeStruct*)malloc_array(sizeof(OfxAttributeStruct), 1, "attribute");
       init_attribute(attribute);
     }
     attribute_set->attributes[i] = attribute;
