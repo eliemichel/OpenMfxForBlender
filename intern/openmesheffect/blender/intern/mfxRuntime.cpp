@@ -197,7 +197,130 @@ void OpenMeshEffectRuntime::try_restore_rna_parameter_values(OpenMeshEffectModif
   }
 }
 
+Mesh * OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
+{
+  if (false == this->ensure_effect_instance()) {
+    printf("failed to get effect instance\n");
+    return NULL;
+  }
 
+  OfxHost *ofxHost = this->ofx_host;
+  OfxMeshEffectSuiteV1 *meshEffectSuite = (OfxMeshEffectSuiteV1 *)ofxHost->fetchSuite(
+      ofxHost->host, kOfxMeshEffectSuite, 1);
+  OfxPropertySuiteV1 *propertySuite = (OfxPropertySuiteV1 *)ofxHost->fetchSuite(
+      ofxHost->host, kOfxPropertySuite, 1);
+
+  OfxMeshInputHandle input, output;
+  meshEffectSuite->inputGetHandle(this->effect_instance, kOfxMeshMainInput, &input, NULL);
+  meshEffectSuite->inputGetHandle(this->effect_instance, kOfxMeshMainOutput, &output, NULL);
+
+  // Get parameters
+  this->get_parameters_from_rna(fxmd);
+
+  // Test if we can skip cooking
+  OfxPlugin *plugin = this->registry->plugins[this->effect_index];
+  bool shouldCook = true;
+  ofxhost_is_identity(plugin, this->effect_instance, &shouldCook);
+
+  if (false == shouldCook) {
+    printf("effect is identity, skipping cooking\n");
+    return mesh;
+  }
+
+  // Set input mesh data binding, used by before/after callbacks
+  MeshInternalData input_data;
+  input_data.is_input = true;
+  input_data.blender_mesh = mesh;
+  input_data.source_mesh = NULL;
+  propertySuite->propSetPointer(
+      &input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&input_data);
+
+  // Set output mesh data binding, used by before/after callbacks
+  MeshInternalData output_data;
+  output_data.is_input = false;
+  output_data.blender_mesh = NULL;
+  output_data.source_mesh = mesh;
+  propertySuite->propSetPointer(
+      &output->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&output_data);
+
+  ofxhost_cook(plugin, this->effect_instance);
+
+  // Free mesh on Blender side
+  if (NULL != output_data.blender_mesh && output_data.blender_mesh != output_data.source_mesh) {
+    BKE_mesh_free(output_data.source_mesh);
+  }
+
+  this->set_message_in_rna(fxmd);
+
+  return output_data.blender_mesh;
+}
+
+void OpenMeshEffectRuntime::reload_effect_info(OpenMeshEffectModifierData *fxmd)
+{
+  // Free previous info
+  if (NULL != fxmd->effect_info) {
+    MEM_freeN(fxmd->effect_info);
+    fxmd->effect_info = NULL;
+    fxmd->num_effects = 0;
+  }
+
+  if (false == this->is_plugin_valid()) {
+    return;
+  }
+
+  fxmd->num_effects = this->registry->num_plugins;
+  fxmd->effect_info = (OpenMeshEffectEffectInfo *)MEM_calloc_arrayN(
+      sizeof(OpenMeshEffectEffectInfo), fxmd->num_effects, "mfx effect info");
+
+  for (int i = 0; i < fxmd->num_effects; ++i) {
+    // Get asset name
+    const char *name = this->registry->plugins[i]->pluginIdentifier;
+    printf("Loading %s to RNA\n", name);
+    strncpy(fxmd->effect_info[i].name, name, sizeof(fxmd->effect_info[i].name));
+  }
+}
+
+void OpenMeshEffectRuntime::reload_parameter_info(OpenMeshEffectModifierData *fxmd)
+{
+
+  // Reset parameter DNA
+  if (NULL != fxmd->parameter_info) {
+    save_rna_parameter_values(fxmd);
+    MEM_freeN(fxmd->parameter_info);
+    fxmd->parameter_info = NULL;
+    fxmd->num_parameters = 0;
+  }
+
+  if (NULL == this->effect_desc) {
+    printf("==/ mfx_Modifier_on_asset_changed\n");
+    return;
+  }
+
+  OfxParamSetHandle parameters = &this->effect_desc->parameters;
+
+  fxmd->num_parameters = parameters->num_parameters;
+  fxmd->parameter_info = (OpenMeshEffectParameterInfo *)MEM_calloc_arrayN(
+      sizeof(OpenMeshEffectParameterInfo), fxmd->num_parameters, "openmesheffect parameter info");
+
+  for (int i = 0; i < fxmd->num_parameters; ++i) {
+    OfxPropertySetStruct props = parameters->parameters[i]->properties;
+    int prop_idx = find_property(&props, kOfxParamPropScriptName);
+    const char *system_name = prop_idx != -1 ? props.properties[prop_idx]->value->as_const_char :
+                                               parameters->parameters[i]->name;
+    strncpy(fxmd->parameter_info[i].name, system_name, sizeof(fxmd->parameter_info[i].name));
+    strncpy(fxmd->parameter_info[i].label,
+            parameters->parameters[i]->name,
+            sizeof(fxmd->parameter_info[i].label));
+    fxmd->parameter_info[i].type = parameters->parameters[i]->type;
+
+    int default_idx = find_property(&props, kOfxParamPropDefault);
+    if (default_idx > -1) {
+      copy_parameter_value_to_rna(&fxmd->parameter_info[i], props.properties[default_idx]);
+    }
+  }
+
+  try_restore_rna_parameter_values(fxmd);
+}
 
 // ----------------------------------------------------------------------------
 // Private static

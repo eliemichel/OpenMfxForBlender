@@ -22,7 +22,7 @@
 
 #include "MEM_guardedalloc.h"
 
-#include <assert.h>
+#include <cassert>
 
 #include "mfxCallbacks.h"
 #include "mfxModifier.h"

@@ -27,6 +27,12 @@
 #ifndef __MFX_MODIFIER_H__
 #define __MFX_MODIFIER_H__
 
+/**
+ * This is called from C code and handles the connection with the C++
+ * based implementation of the modifier (mfxRuntime) that is stored in
+ * the 'runtime' field of the ModifierData.
+ */
+
 #ifdef __cplusplus
 extern "C" {
 #endif

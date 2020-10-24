@@ -79,6 +79,21 @@ class OpenMeshEffectRuntime {
    */
   void try_restore_rna_parameter_values(OpenMeshEffectModifierData *fxmd);
 
+  /**
+   * Actually apply the modifier
+   */
+  Mesh * cook(OpenMeshEffectModifierData *fxmd, Mesh *mesh);
+
+  /**
+   * Reload the list of effects contaiend in the plugin
+   */
+  void reload_effect_info(OpenMeshEffectModifierData *fxmd);
+
+  /**
+   * Reload the list of parameters contaiend in the current effect
+   */
+  void reload_parameter_info(OpenMeshEffectModifierData *fxmd);
+
  public:
   /**
    * Path to the OFX plug-in bundle.
@@ -146,7 +161,3 @@ private:
 
   std::map<std::string, OfxParamStruct> m_saved_parameter_values;
 };
-
-///////////////////////////////////////////////////////////////////////////////
-// Private functions
-
