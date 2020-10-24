@@ -14,34 +14,34 @@
  * limitations under the License.
  */
 
-/** \file
- * \ingroup openmesheffect
- *
- */
+ /** \file
+  * \ingroup openmesheffect
+  *
+  */
 
-#ifndef __MFX_MESSAGES_H__
-#define __MFX_MESSAGES_H__
+#ifndef __MFX_MESSAGE_SUITE_H__
+#define __MFX_MESSAGE_SUITE_H__
+
+// // Message Suite Entry Points
 
 #include "ofxMessage.h"
 
-enum class OfxMessageType {
-  Invalid = -1, // meaning "don't show"
-  Fatal,
-  Error,
-  Warning,
-  Message,
-  Log,
-  Question,
-};
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/**
- * Get message type as an enum value from its string based expression
- */
-OfxMessageType parseMessageType(const char *messageType);
+// See ofxMessage.h for docstrings
 
-/**
- * Return a human readable version of OfxMessageType value
- */
-const char *messageTypeTag(OfxMessageType type);
+extern const OfxMessageSuiteV2 gMessageSuiteV2;
 
-#endif // __MFX_MESSAGES_H__
+OfxStatus message(
+    void *handle, const char *messageType, const char *messageId, const char *format, ...);
+OfxStatus setPersistentMessage(
+    void *handle, const char *messageType, const char *messageId, const char *format, ...);
+OfxStatus clearPersistentMessage(void *handle);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // __MFX_MESSAGE_SUITE_H__

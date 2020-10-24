@@ -124,12 +124,12 @@ void OpenMeshEffectRuntime::set_message_in_rna(OpenMeshEffectModifierData *fxmd)
 
   OfxMessageType type = this->effect_instance->messageType;
 
-  if (type != OFX_MESSAGE_INVALID) {
+  if (type != OfxMessageType::Invalid) {
     BLI_strncpy(fxmd->message, this->effect_instance->message, 1024);
     fxmd->message[1023] = '\0';
   }
 
-  if (type == OFX_MESSAGE_ERROR || type == OFX_MESSAGE_FATAL) {
+  if (type == OfxMessageType::Error || type == OfxMessageType::Fatal) {
     modifier_setError(&fxmd->modifier, this->effect_instance->message);
   }
 }

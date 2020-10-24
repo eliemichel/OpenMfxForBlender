@@ -44,9 +44,17 @@ set(SRC
   intern/messages.cpp
   intern/mfxPluginRegistry.cpp
   intern/mfxPluginRegistryPool.cpp
+  intern/PluginRegistryPool.h
+  intern/PluginRegistryPool.cpp
 
   intern/parameterSuite.h
   intern/parameterSuite.cpp
+  intern/propertySuite.h
+  intern/propertySuite.cpp
+  intern/meshEffectSuite.h
+  intern/meshEffectSuite.cpp
+  intern/messageSuite.h
+  intern/messageSuite.cpp
 )
 
 set(LIB_PRIV

@@ -91,9 +91,9 @@ struct OfxParamSetStruct {
   OfxParamSetStruct(const OfxParamSetStruct &) = delete;
   OfxParamSetStruct &operator=(const OfxParamSetStruct &) = delete;
 
-  int find_parameter(const char *param) const;
-  void append_parameters(int count);
-  int ensure_parameter(const char *parameter);
+  int find(const char *param) const;
+  void append(int count);
+  int ensure(const char *parameter);
 
   void deep_copy_from(const OfxParamSetStruct &other);
 

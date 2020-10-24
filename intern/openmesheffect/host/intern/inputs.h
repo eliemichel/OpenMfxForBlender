@@ -25,32 +25,45 @@
 #include "properties.h"
 #include "mesh.h"
 
-typedef struct OfxMeshInputStruct {
-    const char *name;
-    OfxPropertySetStruct properties;
-    OfxMeshStruct mesh;
-    OfxHost *host; // weak pointer, do not deep copy
-} OfxMeshInputStruct;
+#include "ofxCore.h"
 
-typedef struct OfxMeshInputSetStruct {
-    int num_inputs;
-    OfxMeshInputStruct **inputs;
-    OfxHost *host; // weak pointer, do not deep copy
-} OfxMeshInputSetStruct;
+struct OfxMeshInputStruct {
+ public:
+  OfxMeshInputStruct();
+  ~OfxMeshInputStruct();
 
-// OfxInputStruct
+  // Disable copy, we handle it explicitely
+  OfxMeshInputStruct(const OfxMeshInputStruct &) = delete;
+  OfxMeshInputStruct &operator=(const OfxMeshInputStruct &) = delete;
 
-void init_input(OfxMeshInputStruct *input);
-void free_input(OfxMeshInputStruct *input);
-void deep_copy_input(OfxMeshInputStruct *destination, const OfxMeshInputStruct *source);
+  void deep_copy_from(const OfxMeshInputStruct &other);
 
-// OfxInputSetStruct
+ public:
+  const char *name;
+  OfxPropertySetStruct properties;
+  OfxMeshStruct mesh;
+  OfxHost *host; // weak pointer, do not deep copy
+};
 
-int find_input(const OfxMeshInputSetStruct *input_set, const char *input);
-void append_inputs(OfxMeshInputSetStruct *input_set, int count);
-int ensure_input(OfxMeshInputSetStruct *input_set, const char *input);
-void init_input_set(OfxMeshInputSetStruct *input_set);
-void free_input_set(OfxMeshInputSetStruct *input_set);
-void deep_copy_input_set(OfxMeshInputSetStruct *destination, const OfxMeshInputSetStruct *source);
+struct OfxMeshInputSetStruct {
+ public:
+  OfxMeshInputSetStruct();
+  ~OfxMeshInputSetStruct();
+
+  // Disable copy, we handle it explicitely
+  OfxMeshInputSetStruct(const OfxMeshInputSetStruct &) = delete;
+  OfxMeshInputSetStruct &operator=(const OfxMeshInputSetStruct &) = delete;
+
+  int find(const char *input) const;
+  void append(int count);
+  int ensure(const char *input);
+
+  void deep_copy_from(const OfxMeshInputSetStruct &other);
+
+ public:
+  int num_inputs;
+  OfxMeshInputStruct **inputs;
+  OfxHost *host; // weak pointer, do not deep copy
+};
 
 #endif // __MFX_INPUTS_H__

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Elie Michel
+ * Copyright 2019-2020 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,13 +24,13 @@
 #ifndef __MFX_PLUGIN_REGISTRY_POOL_H__
 #define __MFX_PLUGIN_REGISTRY_POOL_H__
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 
 #include "mfxPluginRegistry.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * Access the global plugin registry pool. There is one registry per ofx file,

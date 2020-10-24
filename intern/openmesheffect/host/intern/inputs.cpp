@@ -22,90 +22,94 @@
 
 // // OfxInputStruct
 
-void init_input(OfxMeshInputStruct *input) {
-  input->properties.context = PROP_CTX_INPUT;
-  init_mesh(&input->mesh);
-  input->host = NULL;
+OfxMeshInputStruct::OfxMeshInputStruct()
+{
+  properties.context = PROP_CTX_INPUT;
+  host = NULL;
 }
 
-void free_input(OfxMeshInputStruct *input) {
-  free_mesh(&input->mesh);
-  free_array(input);
+OfxMeshInputStruct::~OfxMeshInputStruct()
+{
 }
 
-void deep_copy_input(OfxMeshInputStruct *destination, const OfxMeshInputStruct *source) {
-  destination->name = source->name; // weak pointer?
-  destination->properties.deep_copy_from(source->properties);
-  deep_copy_mesh(&destination->mesh, &source->mesh);
-  destination->host = source->host; // not deep copied, as this is a weak pointer
+void OfxMeshInputStruct::deep_copy_from(const OfxMeshInputStruct &other)
+{
+  this->name = other.name;  // weak pointer?
+  this->properties.deep_copy_from(other.properties);
+  this->mesh.deep_copy_from(other.mesh);
+  this->host = other.host;  // not deep copied, as this is a weak pointer
 }
 
 // // OfxInputSetStruct
 
-int find_input(const OfxMeshInputSetStruct *input_set, const char *input) {
-  for (int i = 0 ; i < input_set->num_inputs ; ++i) {
-    if (0 == strcmp(input_set->inputs[i]->name, input)) {
+OfxMeshInputSetStruct::OfxMeshInputSetStruct()
+{
+  num_inputs = 0;
+  inputs = NULL;
+  host = NULL;
+}
+
+OfxMeshInputSetStruct::~OfxMeshInputSetStruct()
+{
+  for (int i = 0; i < num_inputs; ++i) {
+    delete inputs[i];
+  }
+  num_inputs = 0;
+  if (NULL != inputs) {
+    free_array(inputs);
+    inputs = NULL;
+  }
+}
+
+int OfxMeshInputSetStruct::find(const char *input) const
+{
+  for (int i = 0 ; i < this->num_inputs ; ++i) {
+    if (0 == strcmp(this->inputs[i]->name, input)) {
       return i;
     }
   }
   return -1;
 }
 
-void append_inputs(OfxMeshInputSetStruct *input_set, int count) {
-  int old_num_input = input_set->num_inputs;
-  OfxMeshInputStruct **old_inputs = input_set->inputs;
-  input_set->num_inputs += count;
-  input_set->inputs = (OfxMeshInputStruct **)malloc_array(
-      sizeof(OfxMeshInputStruct *), input_set->num_inputs, "inputs");
-  for (int i = 0 ; i < input_set->num_inputs ; ++i){
+void OfxMeshInputSetStruct::append(int count)
+{
+  int old_num_input = this->num_inputs;
+  OfxMeshInputStruct **old_inputs = this->inputs;
+  this->num_inputs += count;
+  this->inputs = (OfxMeshInputStruct **)malloc_array(
+      sizeof(OfxMeshInputStruct *), this->num_inputs, "inputs");
+  for (int i = 0; i < this->num_inputs; ++i) {
     OfxMeshInputStruct *input;
     if (i < old_num_input) {
       input = old_inputs[i];
     } else {
-      input = (OfxMeshInputStruct*)malloc_array(sizeof(OfxMeshInputStruct), 1, "input");
-      input->host = input_set->host;
-      init_input(input);
+      input = new OfxMeshInputStruct();
+      input->host = this->host;
     }
-    input_set->inputs[i] = input;
+    this->inputs[i] = input;
   }
   if (NULL != old_inputs) {
     free_array(old_inputs);
   }
 }
 
-int ensure_input(OfxMeshInputSetStruct *input_set, const char *input) {
-  int i = find_input(input_set, input);
+int OfxMeshInputSetStruct::ensure(const char *input)
+{
+  int i = find(input);
   if (i == -1) {
-    append_inputs(input_set, 1);
-    i = input_set->num_inputs - 1;
-    input_set->inputs[i]->name = input;
+    append(1);
+    i = this->num_inputs - 1;
+    this->inputs[i]->name = input;
   }
   return i;
 }
 
-void init_input_set(OfxMeshInputSetStruct *input_set) {
-  input_set->num_inputs = 0;
-  input_set->inputs = NULL;
-  input_set->host = NULL;
-}
-
-void free_input_set(OfxMeshInputSetStruct *input_set) {
-  for (int i = 0 ; i < input_set->num_inputs ; ++i){
-    free_input(input_set->inputs[i]);
+void OfxMeshInputSetStruct::deep_copy_from(const OfxMeshInputSetStruct &other)
+{
+  append(other.num_inputs);
+  for (int i = 0 ; i < this->num_inputs ; ++i) {
+    this->inputs[i]->deep_copy_from(*other.inputs[i]);
   }
-  input_set->num_inputs = 0;
-  if (NULL != input_set->inputs) {
-    free_array(input_set->inputs);
-    input_set->inputs = NULL;
-  }
-}
-
-void deep_copy_input_set(OfxMeshInputSetStruct *destination, const OfxMeshInputSetStruct *source) {
-  init_input_set(destination);
-  append_inputs(destination, source->num_inputs);
-  for (int i = 0 ; i < destination->num_inputs ; ++i) {
-    deep_copy_input(destination->inputs[i], source->inputs[i]);
-  }
-  destination->host = source->host; // not deep copied, as this is a weak pointer
+  this->host = other.host; // not deep copied, as this is a weak pointer
 }
 

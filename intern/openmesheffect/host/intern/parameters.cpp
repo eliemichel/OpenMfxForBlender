@@ -118,7 +118,7 @@ OfxParamSetStruct::~OfxParamSetStruct()
   }
 }
 
-int OfxParamSetStruct::find_parameter(const char *param) const
+int OfxParamSetStruct::find(const char *param) const
 {
   for (int i = 0 ; i < this->num_parameters ; ++i) {
     if (0 == strcmp(this->parameters[i]->name, param)) {
@@ -128,7 +128,7 @@ int OfxParamSetStruct::find_parameter(const char *param) const
   return -1;
 }
 
-void OfxParamSetStruct::append_parameters(int count)
+void OfxParamSetStruct::append(int count)
 {
   int old_num_parameters = this->num_parameters;
   OfxParamStruct **old_parameters = this->parameters;
@@ -147,11 +147,11 @@ void OfxParamSetStruct::append_parameters(int count)
   }
 }
 
-int OfxParamSetStruct::ensure_parameter(const char *parameter)
+int OfxParamSetStruct::ensure(const char *parameter)
 {
-  int i = find_parameter(parameter);
+  int i = find(parameter);
   if (i == -1) {
-    append_parameters(1);
+    append(1);
     i = this->num_parameters - 1;
     this->parameters[i]->name = (char *)malloc_array(
         sizeof(char), strlen(parameter) + 1, "parameter name");
@@ -162,7 +162,7 @@ int OfxParamSetStruct::ensure_parameter(const char *parameter)
 
 void OfxParamSetStruct::deep_copy_from(const OfxParamSetStruct &other)
 {
-  append_parameters(other.num_parameters);
+  append(other.num_parameters);
   for (int i = 0 ; i < this->num_parameters ; ++i) {
     this->parameters[i]->deep_copy_from(*other.parameters[i]);
   }

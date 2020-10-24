@@ -15,109 +15,50 @@
  */
 
 #include "messages.h"
-#include "mesheffect.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <stdarg.h>
+#include <cstring>
 
-static OfxMessageType parseMessageType(const char *messageType)
+OfxMessageType parseMessageType(const char *messageType)
 {
   if (0 == strcmp(messageType, kOfxMessageFatal)) {
-    return OFX_MESSAGE_FATAL;
+      return OfxMessageType::Fatal;
   }
   if (0 == strcmp(messageType, kOfxMessageError)) {
-    return OFX_MESSAGE_ERROR;
+    return OfxMessageType::Error;
   }
   if (0 == strcmp(messageType, kOfxMessageWarning)) {
-    return OFX_MESSAGE_WARNING;
+    return OfxMessageType::Warning;
   }
   if (0 == strcmp(messageType, kOfxMessageMessage)) {
-    return OFX_MESSAGE_MESSAGE;
+    return OfxMessageType::Message;
   }
   if (0 == strcmp(messageType, kOfxMessageLog)) {
-    return OFX_MESSAGE_LOG;
+    return OfxMessageType::Log;
   }
   if (0 == strcmp(messageType, kOfxMessageQuestion)) {
-    return OFX_MESSAGE_QUESTION;
+    return OfxMessageType::Question;
   }
-  return OFX_MESSAGE_INVALID;
+  return OfxMessageType::Invalid;
 }
 
 const char *messageTypeTag(OfxMessageType type)
 {
   switch (type) {
-    case OFX_MESSAGE_INVALID:
+    case OfxMessageType::Invalid:
       return "INVALID";
-    case OFX_MESSAGE_FATAL:
+    case OfxMessageType::Fatal:
       return "FATAL";
-    case OFX_MESSAGE_ERROR:
+    case OfxMessageType::Error:
       return "ERROR";
-    case OFX_MESSAGE_WARNING:
+    case OfxMessageType::Warning:
       return "WARNING";
-    case OFX_MESSAGE_MESSAGE:
+    case OfxMessageType::Message:
       return "MESSAGE";
-    case OFX_MESSAGE_LOG:
+    case OfxMessageType::Log:
       return "LOG";
-    case OFX_MESSAGE_QUESTION:
+    case OfxMessageType::Question:
       return "QUESTION";
     default:
       return "";
   }
-}
-
-// // Message Suite Entry Points
-
-const OfxMessageSuiteV2 gMessageSuiteV2 = {
-    message,
-    setPersistentMessage,
-    clearPersistentMessage,
-};
-
-OfxStatus message(
-    void *handle, const char *messageType, const char *messageId, const char *format, ...)
-{
-  OfxMessageType type = parseMessageType(messageType);
-  printf("[OpenMeshEffect] %s (%p): ", messageTypeTag(type), handle);
-
-  va_list args;
-  va_start(args, format);
-  vprintf(format, args);
-  va_end(args);
-
-  printf("\n");
-  return kOfxStatOK;
-}
-
-OfxStatus setPersistentMessage(
-    void *handle, const char *messageType, const char *messageId, const char *format, ...)
-{
-  if (handle == NULL) {
-    return kOfxStatErrBadHandle;
-  }
-  OfxMessageType type = parseMessageType(messageType);
-  if (type != OFX_MESSAGE_ERROR && type != OFX_MESSAGE_WARNING && type != OFX_MESSAGE_MESSAGE) {
-    return kOfxStatErrValue;
-  }
-
-  // effect instance handle
-  OfxMeshEffectHandle effect = (OfxMeshEffectHandle)handle;
-  effect->messageType = type;
-  
-  va_list args;
-  va_start(args, format);
-  vsprintf(effect->message, format, args);
-  va_end(args);
-
-  return kOfxStatOK;
-}
-
-OfxStatus clearPersistentMessage(void* handle)
-{
-  if (handle == NULL) {
-    return kOfxStatErrBadHandle;
-  }
-  OfxMeshEffectHandle effect = (OfxMeshEffectHandle)handle;
-  effect->messageType = OFX_MESSAGE_INVALID;
-  return kOfxStatOK;
 }

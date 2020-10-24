@@ -32,66 +32,26 @@
 
 // Mesh Effect
 
-typedef struct OfxMeshEffectStruct {
-    OfxMeshInputSetStruct inputs;
-    OfxPropertySetStruct properties;
-    OfxParamSetStruct parameters;
-    OfxHost *host; // weak pointer, do not deep copy
+struct OfxMeshEffectStruct {
+ public:
+  OfxMeshEffectStruct(OfxHost *host);
+  ~OfxMeshEffectStruct();
 
-    // Only the last persistent message is stored
-    OfxMessageType messageType;
-    char message[1024];
-} OfxMeshEffectStruct;
+  // Disable copy, we handle it explicitely
+  OfxMeshEffectStruct(const OfxMeshEffectStruct &) = delete;
+  OfxMeshEffectStruct &operator=(const OfxMeshEffectStruct &) = delete;
 
-// OfxMeshEffectStruct
+  void deep_copy_from(const OfxMeshEffectStruct &other);
 
-/**
- * /pre meshEffectHandle->host has been set first
- */
-void init_mesh_effect(OfxMeshEffectHandle meshEffectHandle);
-void free_mesh_effect(OfxMeshEffectHandle meshEffectHandle);
-void deep_copy_mesh_effect(OfxMeshEffectStruct *destination,
-	                       const OfxMeshEffectStruct *source);
+ public:
+  OfxMeshInputSetStruct inputs;
+  OfxPropertySetStruct properties;
+  OfxParamSetStruct parameters;
+  OfxHost *host; // weak pointer, do not deep copy
 
-// Mesh Effect Suite Entry Points
-
-extern const OfxMeshEffectSuiteV1 gMeshEffectSuiteV1;
-
-// See ofxMeshEffect.h for docstrings
-
-OfxStatus getPropertySet(OfxMeshEffectHandle meshEffect,
-                         OfxPropertySetHandle *propHandle);
-OfxStatus getParamSet(OfxMeshEffectHandle meshEffect,
-                      OfxParamSetHandle *paramSet);
-OfxStatus inputDefine(OfxMeshEffectHandle meshEffect,
-                      const char *name,
-                      OfxPropertySetHandle *propertySet);
-OfxStatus inputGetHandle(OfxMeshEffectHandle meshEffect,
-                         const char *name,
-                         OfxMeshInputHandle *input,
-                         OfxPropertySetHandle *propertySet);
-OfxStatus inputGetPropertySet(OfxMeshInputHandle input,
-                              OfxPropertySetHandle *propHandle);
-OfxStatus inputGetMesh(OfxMeshInputHandle input,
-                       OfxTime time,
-                       OfxMeshHandle *meshHandle,
-                       OfxPropertySetHandle *propertySet);
-OfxStatus inputReleaseMesh(OfxMeshHandle meshHandle);
-
-// Future behavior: attributes will be NOT owned by default
-OfxStatus attributeDefine(OfxMeshHandle meshHandle,
-                          const char *attachment,
-                          const char *name,
-                          int componentCount,
-                          const char *type,
-                          OfxPropertySetHandle *attributeHandle);
-OfxStatus meshGetAttribute(OfxMeshHandle meshHandle,
-                           const char *attachment,
-                           const char *name,
-                           OfxPropertySetHandle *attributeHandle);
-OfxStatus meshGetPropertySet(OfxMeshHandle mesh,
-                             OfxPropertySetHandle *propHandle);
-OfxStatus meshAlloc(OfxMeshHandle meshHandle);
-int ofxAbort(OfxMeshEffectHandle meshEffect);
+  // Only the last persistent message is stored
+  OfxMessageType messageType;
+  char message[1024];
+};
 
 #endif // __MFX_MESHEFFECT_H__

@@ -32,31 +32,43 @@ typedef enum AttributeAttachment {
   ATTR_ATTACH_MESH,
 } AttributeAttachment;
 
-typedef struct OfxAttributeStruct {
+struct OfxAttributeStruct {
+ public:
+  OfxAttributeStruct();
+  ~OfxAttributeStruct();
+
+  // Disable copy, we handle it explicitely
+  OfxAttributeStruct(const OfxAttributeStruct &) = delete;
+  OfxAttributeStruct &operator=(const OfxAttributeStruct &) = delete;
+
+  void set_name(const char *name);
+
+  void deep_copy_from(const OfxAttributeStruct &other);
+
+ public:
   char *name; // points to memory owned by this object
   AttributeAttachment attachment;
   OfxPropertySetStruct properties;
-} OfxAttributeStruct;
+};
 
-typedef struct OfxAttributeSetStruct {
-    int num_attributes;
-    OfxAttributeStruct **attributes;
-} OfxAttributeSetStruct;
+struct OfxAttributeSetStruct {
+ public:
+  OfxAttributeSetStruct();
+  ~OfxAttributeSetStruct();
 
-// OfxMeshAttributeStruct
+  // Disable copy, we handle it explicitely
+  OfxAttributeSetStruct(const OfxAttributeSetStruct &) = delete;
+  OfxAttributeSetStruct &operator=(const OfxAttributeSetStruct &) = delete;
 
-void init_attribute(OfxAttributeStruct *attribute);
-void free_attribute(OfxAttributeStruct *attribute);
-void set_name_attribute(OfxAttributeStruct *attribute, const char *name);
-void deep_copy_attribute(OfxAttributeStruct *destination, const OfxAttributeStruct *source);
+  int find(AttributeAttachment attachment, const char *attribute) const;
+  void append(int count);
+  int ensure(AttributeAttachment attachment, const char *attribute);
 
-// OfxAttributeSetStruct
+  void deep_copy_from(const OfxAttributeSetStruct &other);
 
-int find_attribute(const OfxAttributeSetStruct *attribute_set, AttributeAttachment attachment, const char *attribute);
-void append_attributes(OfxAttributeSetStruct *attribute_set, int count);
-int ensure_attribute(OfxAttributeSetStruct *attribute_set, AttributeAttachment attachment, const char *attribute);
-void init_attribute_set(OfxAttributeSetStruct *attribute_set);
-void free_attribute_set(OfxAttributeSetStruct *attribute_set);
-void deep_copy_attribute_set(OfxAttributeSetStruct *destination, const OfxAttributeSetStruct *source);
+ public:
+  int num_attributes;
+  OfxAttributeStruct **attributes;
+};
 
 #endif // __MFX_ATTRIBUTES_H__

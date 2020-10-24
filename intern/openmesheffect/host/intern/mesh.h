@@ -25,15 +25,20 @@
 #include "properties.h"
 #include "attributes.h"
 
-typedef struct OfxMeshStruct {
-    OfxPropertySetStruct properties;
-    OfxAttributeSetStruct attributes;
-} OfxMeshStruct;
+struct OfxMeshStruct {
+ public:
+  OfxMeshStruct();
+  ~OfxMeshStruct();
 
-// OfxMeshStruct
+  // Disable copy, we handle it explicitely
+  OfxMeshStruct(const OfxMeshStruct &) = delete;
+  OfxMeshStruct &operator=(const OfxMeshStruct &) = delete;
 
-void init_mesh(OfxMeshStruct *mesh);
-void free_mesh(OfxMeshStruct *mesh);
-void deep_copy_mesh(OfxMeshStruct *destination, const OfxMeshStruct *source);
+  void deep_copy_from(const OfxMeshStruct &other);
+
+ public:
+  OfxPropertySetStruct properties;
+  OfxAttributeSetStruct attributes;
+};
 
 #endif // __MFX_MESH_H__

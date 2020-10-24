@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Elie Michel
+ * Copyright 2019-2020 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,11 +46,11 @@ OfxStatus paramDefine(OfxParamSetHandle paramSet,
     const char* paramType,
     const char* name,
     OfxPropertySetHandle* propertySet) {
-  int i = paramSet->find_parameter(name);
+  int i = paramSet->find(name);
     if (-1 != i) {
         return kOfxStatErrExists;
     }
-    i = paramSet->ensure_parameter(name);
+    i = paramSet->ensure(name);
     paramSet->parameters[i]->set_type(parse_parameter_type(paramType));
     if (NULL != propertySet) {
         *propertySet = &paramSet->parameters[i]->properties;
@@ -62,7 +62,7 @@ OfxStatus paramGetHandle(OfxParamSetHandle paramSet,
     const char* name,
     OfxParamHandle* param,
     OfxPropertySetHandle* propertySet) {
-  int i = paramSet->find_parameter(name);
+  int i = paramSet->find(name);
     if (-1 == i) {
         return kOfxStatErrUnknown; // parameter not found
     }

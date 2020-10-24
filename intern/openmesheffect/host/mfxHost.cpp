@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Elie Michel
+ * Copyright 2019-2020 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,9 @@
 #include "intern/inputs.h"
 #include "intern/mesheffect.h"
 #include "intern/parameterSuite.h"
+#include "intern/propertySuite.h"
+#include "intern/meshEffectSuite.h"
+#include "intern/messageSuite.h"
 #include "mfxPluginRegistry.h"
 
 #include "mfxHost.h"
@@ -164,10 +167,7 @@ bool ofxhost_get_descriptor(OfxHost *host, OfxPlugin *plugin, OfxMeshEffectHandl
   OfxMeshEffectHandle effectHandle;
 
   *effectDescriptor = NULL;
-  effectHandle = (OfxMeshEffectHandle)malloc_array(sizeof(OfxMeshEffectStruct), 1, "mesh effect descriptor");
-
-  effectHandle->host = host;
-  init_mesh_effect(effectHandle);
+  effectHandle = new OfxMeshEffectStruct(host);
 
   status = plugin->mainEntry(kOfxActionDescribe, effectHandle, NULL, NULL);
   printf("%s action returned status %d (%s)\n", kOfxActionDescribe, status, getOfxStateName(status));
@@ -195,8 +195,7 @@ bool ofxhost_get_descriptor(OfxHost *host, OfxPlugin *plugin, OfxMeshEffectHandl
 }
 
 void ofxhost_release_descriptor(OfxMeshEffectHandle effectDescriptor) {
-  free_mesh_effect(effectDescriptor);
-  free_array(effectDescriptor);
+  delete effectDescriptor;
 }
 
 bool ofxhost_create_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectDescriptor, OfxMeshEffectHandle *effectInstance) {
@@ -207,7 +206,7 @@ bool ofxhost_create_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectDescri
 
   instance = (OfxMeshEffectHandle)malloc_array(
       sizeof(OfxMeshEffectStruct), 1, "mesh effect descriptor");
-  deep_copy_mesh_effect(instance, effectDescriptor);
+  instance->deep_copy_from(*effectDescriptor);
 
   status = plugin->mainEntry(kOfxActionCreateInstance, instance, NULL, NULL);
   printf("%s action returned status %d (%s)\n", kOfxActionCreateInstance, status, getOfxStateName(status));
@@ -243,8 +242,7 @@ void ofxhost_destroy_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectInsta
     printf("ERROR: Fatal error while destroying an instance of plug-in '%s'.\n", plugin->pluginIdentifier);
   }
 
-  free_mesh_effect(effectInstance);
-  free_array(effectInstance);
+  delete effectInstance;
 }
 
 bool ofxhost_cook(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance) {

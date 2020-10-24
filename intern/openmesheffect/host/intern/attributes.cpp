@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Elie Michel
+ * Copyright 2019-2020 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,98 +22,102 @@
 
 // // OfxMeshAttributeStruct
 
-void init_attribute(OfxAttributeStruct *attribute)
+OfxAttributeStruct::OfxAttributeStruct()
 {
-  attribute->properties.context = PROP_CTX_ATTRIB;
+  properties.context = PROP_CTX_ATTRIB;
 }
 
-void free_attribute(OfxAttributeStruct *attribute)
+OfxAttributeStruct::~OfxAttributeStruct()
 {
-  free_array(attribute->name);
+  free_array(name);
 }
 
-void set_name_attribute(OfxAttributeStruct *attribute, const char *name)
+void OfxAttributeStruct::set_name(const char *name)
 {
   // deep copy attribute name
-  attribute->name = (char*)malloc_array(sizeof(char), strlen(name) + 1, "attribute name");
-  strcpy(attribute->name, name);
+  this->name = (char*)malloc_array(sizeof(char), strlen(name) + 1, "attribute name");
+  strcpy(this->name, name);
 }
 
-void deep_copy_attribute(OfxAttributeStruct *destination, const OfxAttributeStruct *source)
+void OfxAttributeStruct::deep_copy_from(const OfxAttributeStruct &other)
 {
   // deep string copy
-  destination->name = (char*)malloc_array(sizeof(char), strlen(source->name) + 1, "attribute name");
-  strcpy(destination->name, source->name);
+  this->name = (char*)malloc_array(sizeof(char), strlen(other.name) + 1, "attribute name");
+  strcpy(this->name, other.name);
 
-  destination->attachment = source->attachment;
-  destination->properties.deep_copy_from(source->properties);
+  this->attachment = other.attachment;
+  this->properties.deep_copy_from(other.properties);
 }
 
 // // OfxAttributeSetStruct
 
-int find_attribute(const OfxAttributeSetStruct *attribute_set, AttributeAttachment attachment, const char *attribute) {
-  for (int i = 0 ; i < attribute_set->num_attributes ; ++i) {
-    if (attribute_set->attributes[i]->attachment == attachment
-      && 0 == strcmp(attribute_set->attributes[i]->name, attribute)) {
+OfxAttributeSetStruct::OfxAttributeSetStruct()
+{
+  num_attributes = 0;
+  attributes = NULL;
+}
+
+OfxAttributeSetStruct::~OfxAttributeSetStruct()
+{
+  for (int i = 0; i < this->num_attributes; ++i) {
+    delete this->attributes[i];
+  }
+  this->num_attributes = 0;
+  if (NULL != this->attributes) {
+    free_array(this->attributes);
+    this->attributes = NULL;
+  }
+}
+
+int OfxAttributeSetStruct::find(AttributeAttachment attachment, const char *attribute) const
+{
+  for (int i = 0 ; i < this->num_attributes ; ++i) {
+    if (this->attributes[i]->attachment == attachment
+      && 0 == strcmp(this->attributes[i]->name, attribute)) {
       return i;
     }
   }
   return -1;
 }
 
-void append_attributes(OfxAttributeSetStruct *attribute_set, int count) {
-  int old_num_attributes = attribute_set->num_attributes;
-  OfxAttributeStruct **old_attributes = attribute_set->attributes;
-  attribute_set->num_attributes += count;
-  attribute_set->attributes = (OfxAttributeStruct **)malloc_array(
-      sizeof(OfxAttributeStruct *), attribute_set->num_attributes, "attributes");
-  for (int i = 0 ; i < attribute_set->num_attributes; ++i){
+void OfxAttributeSetStruct::append(int count)
+{
+  int old_num_attributes = this->num_attributes;
+  OfxAttributeStruct **old_attributes = this->attributes;
+  this->num_attributes += count;
+  this->attributes = (OfxAttributeStruct **)malloc_array(
+      sizeof(OfxAttributeStruct *), this->num_attributes, "attributes");
+  for (int i = 0; i < this->num_attributes; ++i) {
     OfxAttributeStruct *attribute;
     if (i < old_num_attributes) {
       attribute = old_attributes[i];
     } else {
-      attribute = (OfxAttributeStruct*)malloc_array(sizeof(OfxAttributeStruct), 1, "attribute");
-      init_attribute(attribute);
+      attribute = new OfxAttributeStruct();
     }
-    attribute_set->attributes[i] = attribute;
+    this->attributes[i] = attribute;
   }
   if (NULL != old_attributes) {
     free_array(old_attributes);
   }
 }
 
-int ensure_attribute(OfxAttributeSetStruct *attribute_set, AttributeAttachment attachment, const char *attribute) {
-  int i = find_attribute(attribute_set, attachment, attribute);
+int OfxAttributeSetStruct::ensure(AttributeAttachment attachment, const char *attribute)
+{
+  int i = find(attachment, attribute);
   if (i == -1) {
-    append_attributes(attribute_set, 1);
-    i = attribute_set->num_attributes - 1;
-    attribute_set->attributes[i]->attachment = attachment;
-    set_name_attribute(attribute_set->attributes[i], attribute);
+    append(1);
+    i = this->num_attributes - 1;
+    this->attributes[i]->attachment = attachment;
+    this->attributes[i]->set_name(attribute);
   }
   return i;
 }
 
-void init_attribute_set(OfxAttributeSetStruct *attribute_set) {
-  attribute_set->num_attributes = 0;
-  attribute_set->attributes = NULL;
-}
-
-void free_attribute_set(OfxAttributeSetStruct *attribute_set) {
-  for (int i = 0 ; i < attribute_set->num_attributes; ++i){
-    free_attribute(attribute_set->attributes[i]);
-  }
-  attribute_set->num_attributes = 0;
-  if (NULL != attribute_set->attributes) {
-    free_array(attribute_set->attributes);
-    attribute_set->attributes = NULL;
-  }
-}
-
-void deep_copy_attribute_set(OfxAttributeSetStruct *destination, const OfxAttributeSetStruct *source) {
-  init_attribute_set(destination);
-  append_attributes(destination, source->num_attributes);
-  for (int i = 0 ; i < destination->num_attributes ; ++i) {
-    deep_copy_attribute(destination->attributes[i], source->attributes[i]);
+void OfxAttributeSetStruct::deep_copy_from(const OfxAttributeSetStruct &other)
+{
+  append(other.num_attributes);
+  for (int i = 0 ; i < this->num_attributes ; ++i) {
+    this->attributes[i]->deep_copy_from(*other.attributes[i]);
   }
 }
 
