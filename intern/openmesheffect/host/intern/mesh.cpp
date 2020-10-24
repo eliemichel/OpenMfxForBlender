@@ -23,9 +23,8 @@
 // // OfxInputStruct
 
 OfxMeshStruct::OfxMeshStruct()
-{
-  properties.context = PROP_CTX_MESH;
-}
+	: properties(PropertySetContext::Mesh)
+{}
 
 OfxMeshStruct::~OfxMeshStruct()
 {

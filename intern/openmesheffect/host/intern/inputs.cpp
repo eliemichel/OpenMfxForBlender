@@ -14,23 +14,19 @@
  * limitations under the License.
  */
 
-#include <string.h>
-
-#include "util/memory_util.h"
-
 #include "inputs.h"
+
+#include <cstring>
 
 // // OfxInputStruct
 
 OfxMeshInputStruct::OfxMeshInputStruct()
-{
-  properties.context = PROP_CTX_INPUT;
-  host = NULL;
-}
+    : properties(PropertySetContext::Input)
+    , host(nullptr)
+{}
 
 OfxMeshInputStruct::~OfxMeshInputStruct()
-{
-}
+{}
 
 void OfxMeshInputStruct::deep_copy_from(const OfxMeshInputStruct &other)
 {
@@ -45,8 +41,8 @@ void OfxMeshInputStruct::deep_copy_from(const OfxMeshInputStruct &other)
 OfxMeshInputSetStruct::OfxMeshInputSetStruct()
 {
   num_inputs = 0;
-  inputs = NULL;
-  host = NULL;
+  inputs = nullptr;
+  host = nullptr;
 }
 
 OfxMeshInputSetStruct::~OfxMeshInputSetStruct()
@@ -55,9 +51,9 @@ OfxMeshInputSetStruct::~OfxMeshInputSetStruct()
     delete inputs[i];
   }
   num_inputs = 0;
-  if (NULL != inputs) {
-    free_array(inputs);
-    inputs = NULL;
+  if (nullptr != inputs) {
+    delete[] inputs;
+    inputs = nullptr;
   }
 }
 
@@ -76,8 +72,7 @@ void OfxMeshInputSetStruct::append(int count)
   int old_num_input = this->num_inputs;
   OfxMeshInputStruct **old_inputs = this->inputs;
   this->num_inputs += count;
-  this->inputs = (OfxMeshInputStruct **)malloc_array(
-      sizeof(OfxMeshInputStruct *), this->num_inputs, "inputs");
+  this->inputs = new OfxMeshInputStruct*[this->num_inputs];
   for (int i = 0; i < this->num_inputs; ++i) {
     OfxMeshInputStruct *input;
     if (i < old_num_input) {
@@ -89,7 +84,7 @@ void OfxMeshInputSetStruct::append(int count)
     this->inputs[i] = input;
   }
   if (NULL != old_inputs) {
-    free_array(old_inputs);
+    delete[] old_inputs;
   }
 }
 

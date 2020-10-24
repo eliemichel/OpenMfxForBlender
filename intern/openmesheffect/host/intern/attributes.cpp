@@ -14,35 +14,32 @@
  * limitations under the License.
  */
 
-#include <string.h>
-
-#include "util/memory_util.h"
-
 #include "attributes.h"
+
+#include <cstring>
 
 // // OfxMeshAttributeStruct
 
 OfxAttributeStruct::OfxAttributeStruct()
-{
-  properties.context = PROP_CTX_ATTRIB;
-}
+    : properties(PropertySetContext::Attrib)
+{}
 
 OfxAttributeStruct::~OfxAttributeStruct()
 {
-  free_array(name);
+  delete[] name;
 }
 
 void OfxAttributeStruct::set_name(const char *name)
 {
   // deep copy attribute name
-  this->name = (char*)malloc_array(sizeof(char), strlen(name) + 1, "attribute name");
+  this->name = new char[strlen(name) + 1];
   strcpy(this->name, name);
 }
 
 void OfxAttributeStruct::deep_copy_from(const OfxAttributeStruct &other)
 {
   // deep string copy
-  this->name = (char*)malloc_array(sizeof(char), strlen(other.name) + 1, "attribute name");
+  this->name = new char[strlen(other.name) + 1];
   strcpy(this->name, other.name);
 
   this->attachment = other.attachment;
@@ -54,18 +51,18 @@ void OfxAttributeStruct::deep_copy_from(const OfxAttributeStruct &other)
 OfxAttributeSetStruct::OfxAttributeSetStruct()
 {
   num_attributes = 0;
-  attributes = NULL;
+  attributes = nullptr;
 }
 
 OfxAttributeSetStruct::~OfxAttributeSetStruct()
 {
-  for (int i = 0; i < this->num_attributes; ++i) {
-    delete this->attributes[i];
+  for (int i = 0; i < num_attributes; ++i) {
+    delete attributes[i];
   }
-  this->num_attributes = 0;
-  if (NULL != this->attributes) {
-    free_array(this->attributes);
-    this->attributes = NULL;
+  num_attributes = 0;
+  if (nullptr != attributes) {
+    delete[] attributes;
+    attributes = nullptr;
   }
 }
 
@@ -85,8 +82,7 @@ void OfxAttributeSetStruct::append(int count)
   int old_num_attributes = this->num_attributes;
   OfxAttributeStruct **old_attributes = this->attributes;
   this->num_attributes += count;
-  this->attributes = (OfxAttributeStruct **)malloc_array(
-      sizeof(OfxAttributeStruct *), this->num_attributes, "attributes");
+  this->attributes = new OfxAttributeStruct*[num_attributes];
   for (int i = 0; i < this->num_attributes; ++i) {
     OfxAttributeStruct *attribute;
     if (i < old_num_attributes) {
@@ -97,7 +93,7 @@ void OfxAttributeSetStruct::append(int count)
     this->attributes[i] = attribute;
   }
   if (NULL != old_attributes) {
-    free_array(old_attributes);
+    delete[] old_attributes;
   }
 }
 

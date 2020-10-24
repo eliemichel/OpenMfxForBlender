@@ -27,11 +27,11 @@
 // // Mesh Effect
 
 OfxMeshEffectStruct::OfxMeshEffectStruct(OfxHost *host)
+	: properties(PropertySetContext::MeshEffect)
 {
   this->host = host;
   this->inputs.host = host;
   this->parameters.effect_properties = &this->properties;
-  this->properties.context = PROP_CTX_MESH_EFFECT;
   this->messageType = OfxMessageType::Invalid;
   this->message[0] = '\0';
 }

@@ -17,31 +17,29 @@
 #include "parameters.h"
 #include "properties.h"
 
-#include "util/memory_util.h"
-
 #include "ofxParam.h"
 
-#include <string.h>
-#include <stdio.h>
+#include <cstring>
+#include <cstdio>
 
 // OFX PARAMETERS SUITE
 
 // // OfxParamStruct
 
 OfxParamStruct::OfxParamStruct()
+	: properties(PropertySetContext::Param)
 {
   type = PARAM_TYPE_DOUBLE;
-  name = NULL;
-  properties.context = PROP_CTX_PARAM;
+  name = nullptr;
 }
 
 OfxParamStruct::~OfxParamStruct()
 {
   if (PARAM_TYPE_STRING == type) {
-    free_array(value[0].as_char);
+    delete[] value[0].as_char;
   }
-  if (NULL != name) {
-    free_array(name);
+  if (nullptr != name) {
+    delete[] name;
   }
 }
 
@@ -52,14 +50,14 @@ void OfxParamStruct::set_type(ParamType type)
   }
 
   if (PARAM_TYPE_STRING == this->type) {
-    free_array(this->value[0].as_char);
-    this->value[0].as_char = NULL;
+    delete[] this->value[0].as_char;
+    this->value[0].as_char = nullptr;
   }
 
   this->type = type;
 
   if (PARAM_TYPE_STRING == this->type) {
-    this->value[0].as_char = NULL;
+    this->value[0].as_char = nullptr;
     realloc_string(1);
   }
 }
@@ -67,9 +65,9 @@ void OfxParamStruct::set_type(ParamType type)
 void OfxParamStruct::realloc_string(int size)
 {
   if (NULL != this->value[0].as_char) {
-    free_array(this->value[0].as_char);
+    delete[] this->value[0].as_char;
   }
-  this->value[0].as_char = (char *)malloc_array(sizeof(char), size, "parameter string value");
+  this->value[0].as_char = new char[size + 1];
   this->value[0].as_char[0] = '\0';
 }
 
@@ -77,7 +75,7 @@ void OfxParamStruct::deep_copy_from(const OfxParamStruct &other)
 {
   this->name = other.name;
   if (NULL != this->name) {
-    this->name = (char *)malloc_array(sizeof(char), strlen(other.name) + 1, "parameter name");
+    this->name = new char[strlen(other.name) + 1];
     strcpy(this->name, other.name);
   }
   this->type = other.type;
@@ -90,7 +88,7 @@ void OfxParamStruct::deep_copy_from(const OfxParamStruct &other)
   if (this->type == PARAM_TYPE_STRING) {
     int n = strlen(other.value[0].as_char);
     this->value[0].as_char = NULL;
-    realloc_string(n + 1);
+    realloc_string(n);
     strcpy(this->value[0].as_char, other.value[0].as_char);
   }
 
@@ -102,8 +100,8 @@ void OfxParamStruct::deep_copy_from(const OfxParamStruct &other)
 OfxParamSetStruct::OfxParamSetStruct()
 {
   num_parameters = 0;
-  parameters = NULL;
-  effect_properties = NULL;
+  parameters = nullptr;
+  effect_properties = nullptr;
 }
 
 OfxParamSetStruct::~OfxParamSetStruct()
@@ -112,9 +110,9 @@ OfxParamSetStruct::~OfxParamSetStruct()
     delete parameters[i];
   }
   num_parameters = 0;
-  if (NULL != parameters) {
-    free_array(parameters);
-    parameters = NULL;
+  if (nullptr != parameters) {
+    delete[] parameters;
+    parameters = nullptr;
   }
 }
 
@@ -133,8 +131,7 @@ void OfxParamSetStruct::append(int count)
   int old_num_parameters = this->num_parameters;
   OfxParamStruct **old_parameters = this->parameters;
   this->num_parameters += count;
-  this->parameters = (OfxParamStruct **)malloc_array(
-      sizeof(OfxParamStruct *), this->num_parameters, "parameters");
+  this->parameters = new OfxParamStruct*[num_parameters];
   for (int i = 0; i < this->num_parameters; ++i) {
     if (i < old_num_parameters) {
       this->parameters[i] = old_parameters[i];
@@ -143,7 +140,7 @@ void OfxParamSetStruct::append(int count)
     }
   }
   if (NULL != old_parameters) {
-    free_array(old_parameters);
+    delete[] old_parameters;
   }
 }
 
@@ -153,8 +150,7 @@ int OfxParamSetStruct::ensure(const char *parameter)
   if (i == -1) {
     append(1);
     i = this->num_parameters - 1;
-    this->parameters[i]->name = (char *)malloc_array(
-        sizeof(char), strlen(parameter) + 1, "parameter name");
+    this->parameters[i]->name = new char[strlen(parameter) + 1];
     strcpy(this->parameters[i]->name, parameter);
   }
   return i;

@@ -49,30 +49,32 @@ struct OfxPropertyStruct {
   OfxPropertyValueStruct value[4];
 };
 
-typedef enum PropertyType {
+enum PropertyType {
 	PROP_TYPE_POINTER,
 	PROP_TYPE_STRING,
 	PROP_TYPE_DOUBLE,
 	PROP_TYPE_INT,
-} PropertyType;
+};
 
 // TODO: use kOfxPropType instead
-typedef enum PropertySetContext {
-    PROP_CTX_HOST, // kOfxTypeMeshEffectHost
-    PROP_CTX_MESH_EFFECT, // kOfxTypeMeshEffect, kOfxTypeMeshEffectInstance
-    PROP_CTX_INPUT, // kOfxTypeMeshEffectInput
-    PROP_CTX_MESH, // kOfxTypeMesh
-    PROP_CTX_PARAM, // kOfxTypeParameter
-    PROP_CTX_ATTRIB,
-    PROP_CTX_OTHER,
-    // kOfxTypeParameterInstance
-} PropertySetContext;
+enum class PropertySetContext {
+  Host, // kOfxTypeMeshEffectHost
+  MeshEffect, // kOfxTypeMeshEffect, kOfxTypeMeshEffectInstance
+  Input, // kOfxTypeMeshEffectInput
+  Mesh, // kOfxTypeMesh
+  Param, // kOfxTypeParameter
+  Attrib,
+  ActionIdentityIn,
+  ActionIdentityOut,
+  Other,
+  // kOfxTypeParameterInstance
+};
 
 // // OfxPropertySetStruct
 
 struct OfxPropertySetStruct {
  public:
-  OfxPropertySetStruct();
+  OfxPropertySetStruct(PropertySetContext context);
   ~OfxPropertySetStruct();
 
   // Disable copy, we handle it explicitely

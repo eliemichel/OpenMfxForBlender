@@ -95,6 +95,7 @@ static const void * fetchSuite(OfxPropertySetHandle host,
 
 // OFX MESH EFFECT HOST
 
+// TODO: Use a more C++ idiomatic singleton pattern
 OfxHost *gHost = NULL;
 int gHostUse = 0;
 
@@ -102,9 +103,8 @@ OfxHost * getGlobalHost(void) {
   printf("Getting Global Host; reference counter will be set to %d.\n", gHostUse + 1);
   if (0 == gHostUse) {
     printf("(Allocating new host data)\n");
-    gHost = (OfxHost*)malloc_array(sizeof(OfxHost), 1, "global host");
-    OfxPropertySetHandle hostProperties = new OfxPropertySetStruct();
-    hostProperties->context = PROP_CTX_HOST;
+    gHost = new OfxHost;
+    OfxPropertySetHandle hostProperties = new OfxPropertySetStruct(PropertySetContext::Host);
     propSetPointer(hostProperties, kOfxHostPropBeforeMeshReleaseCb, 0, (void*)NULL);
     propSetPointer(hostProperties, kOfxHostPropBeforeMeshGetCb, 0, (void*)NULL);
     gHost->host = hostProperties;
@@ -118,8 +118,8 @@ void releaseGlobalHost(void) {
   printf("Releasing Global Host; reference counter will be set to %d.\n", gHostUse - 1);
   if (--gHostUse == 0) {
     printf("(Freeing host data)\n");
-    free_array(gHost->host);
-    free_array(gHost);
+    delete gHost->host;
+    delete gHost;
     gHost = NULL;
   }
 }
@@ -204,8 +204,7 @@ bool ofxhost_create_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectDescri
 
   *effectInstance = NULL;
 
-  instance = (OfxMeshEffectHandle)malloc_array(
-      sizeof(OfxMeshEffectStruct), 1, "mesh effect descriptor");
+  instance = new OfxMeshEffectStruct(effectDescriptor->host);
   instance->deep_copy_from(*effectDescriptor);
 
   status = plugin->mainEntry(kOfxActionCreateInstance, instance, NULL, NULL);
@@ -269,7 +268,8 @@ bool ofxhost_cook(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance) {
 bool ofxhost_is_identity(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance, bool *shouldCook) {
   OfxStatus status;
 
-  OfxPropertySetStruct inArgs, outArgs;
+  OfxPropertySetStruct inArgs(PropertySetContext::ActionIdentityIn);
+  OfxPropertySetStruct outArgs(PropertySetContext::ActionIdentityOut);
 
   propSetInt(&inArgs, kOfxPropTime, 0, 0);
   propSetString(&outArgs, kOfxPropName, 0, "");
