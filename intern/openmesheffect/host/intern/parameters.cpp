@@ -32,13 +32,11 @@ OfxParamStruct::OfxParamStruct()
 {
   type = PARAM_TYPE_DOUBLE;
   name = NULL;
-  init_properties(&properties);
   properties.context = PROP_CTX_PARAM;
 }
 
 OfxParamStruct::~OfxParamStruct()
 {
-  free_properties(&properties);
   if (PARAM_TYPE_STRING == type) {
     free_array(value[0].as_char);
   }
@@ -96,7 +94,7 @@ void OfxParamStruct::deep_copy_from(const OfxParamStruct &other)
     strcpy(this->value[0].as_char, other.value[0].as_char);
   }
 
-  deep_copy_property_set(&this->properties, &other.properties);
+  this->properties.deep_copy_from(other.properties);
 }
 
 // // OfxParamSetStruct
@@ -120,7 +118,7 @@ OfxParamSetStruct::~OfxParamSetStruct()
   }
 }
 
-int OfxParamSetStruct::find_parameter(const char *param)
+int OfxParamSetStruct::find_parameter(const char *param) const
 {
   for (int i = 0 ; i < this->num_parameters ; ++i) {
     if (0 == strcmp(this->parameters[i]->name, param)) {

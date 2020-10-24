@@ -306,8 +306,8 @@ void OpenMeshEffectRuntime::reload_parameter_info(OpenMeshEffectModifierData *fx
       sizeof(OpenMeshEffectParameterInfo), fxmd->num_parameters, "openmesheffect parameter info");
 
   for (int i = 0; i < fxmd->num_parameters; ++i) {
-    OfxPropertySetStruct props = parameters->parameters[i]->properties;
-    int prop_idx = find_property(&props, kOfxParamPropScriptName);
+    const OfxPropertySetStruct & props = parameters->parameters[i]->properties;
+    int prop_idx = props.find_property(kOfxParamPropScriptName);
     const char *system_name = prop_idx != -1 ? props.properties[prop_idx]->value->as_const_char :
                                                parameters->parameters[i]->name;
     strncpy(fxmd->parameter_info[i].name, system_name, sizeof(fxmd->parameter_info[i].name));
@@ -316,7 +316,7 @@ void OpenMeshEffectRuntime::reload_parameter_info(OpenMeshEffectModifierData *fx
             sizeof(fxmd->parameter_info[i].label));
     fxmd->parameter_info[i].type = parameters->parameters[i]->type;
 
-    int default_idx = find_property(&props, kOfxParamPropDefault);
+    int default_idx = props.find_property(kOfxParamPropDefault);
     if (default_idx > -1) {
       copy_parameter_value_to_rna(&fxmd->parameter_info[i], props.properties[default_idx]);
     }

@@ -26,32 +26,65 @@
 
 // OFX PROPERTIES SUITE
 
-// // OfxPropertySetStruct
+// // OfxPropertyStruct
 
-void deep_copy_property(OfxPropertyStruct *destination, const OfxPropertyStruct *source) {
-  destination->name = source->name; // weak pointer?
-  destination->value[0] = source->value[0];
-  destination->value[1] = source->value[1];
-  destination->value[2] = source->value[2];
-  destination->value[3] = source->value[3];
+OfxPropertyStruct::OfxPropertyStruct()
+{
 }
 
-int find_property(OfxPropertySetStruct *properties, const char *property) {
-  for (int i = 0 ; i < properties->num_properties ; ++i) {
-    if (0 == strcmp(properties->properties[i]->name, property)) {
+OfxPropertyStruct::~OfxPropertyStruct()
+{
+}
+
+void OfxPropertyStruct::deep_copy_from(const OfxPropertyStruct &other)
+{
+  this->name = other.name;  // weak pointer?
+  this->value[0] = other.value[0];
+  this->value[1] = other.value[1];
+  this->value[2] = other.value[2];
+  this->value[3] = other.value[3];
+}
+
+// // OfxPropertySetStruct
+
+OfxPropertySetStruct::OfxPropertySetStruct()
+{
+  num_properties = 0;
+  properties = NULL;
+  context = PROP_CTX_OTHER;
+}
+
+OfxPropertySetStruct::~OfxPropertySetStruct()
+{
+  for (int i = 0; i < this->num_properties; ++i) {
+    free_array(this->properties[i]);
+  }
+  this->num_properties = 0;
+  if (NULL != this->properties) {
+    free_array(this->properties);
+    this->properties = NULL;
+  }
+}
+
+int OfxPropertySetStruct::find_property(const char *property) const
+{
+  for (int i = 0 ; i < this->num_properties ; ++i) {
+    if (0 == strcmp(this->properties[i]->name, property)) {
       return i;
     }
   }
   return -1;
 }
 
-void append_properties(OfxPropertySetStruct *properties, int count) {
-  int old_num_properties = properties->num_properties;
-  OfxPropertyStruct **old_properties = properties->properties;
-  properties->num_properties += count;
-  properties->properties = (OfxPropertyStruct**)malloc_array(sizeof(OfxPropertyStruct*), properties->num_properties, "properties");
-  for (int i = 0 ; i < properties->num_properties ; ++i){
-    properties->properties[i] = i < old_num_properties ?
+void OfxPropertySetStruct::append_properties(int count)
+{
+  int old_num_properties = this->num_properties;
+  OfxPropertyStruct **old_properties = this->properties;
+  this->num_properties += count;
+  this->properties = (OfxPropertyStruct **)malloc_array(
+      sizeof(OfxPropertyStruct *), this->num_properties, "properties");
+  for (int i = 0; i < this->num_properties; ++i) {
+    this->properties[i] = i < old_num_properties ?
                                     old_properties[i] :
                                     (OfxPropertyStruct *)malloc_array(
                                         sizeof(OfxPropertyStruct), 1, "property");
@@ -61,15 +94,14 @@ void append_properties(OfxPropertySetStruct *properties, int count) {
   }
 }
 
-void remove_property(OfxPropertySetStruct *properties, int index)
+void OfxPropertySetStruct::remove_property(int index)
 {
-  int old_num_properties = properties->num_properties;
-  OfxPropertyStruct **old_properties = properties->properties;
-  properties->num_properties -= 1;
-  properties->properties = (OfxPropertyStruct **)malloc_array(
-      sizeof(OfxPropertyStruct *), properties->num_properties, "properties");
-  for (int i = 0; i < properties->num_properties; ++i) {
-    properties->properties[i] = i < index ? old_properties[i] : old_properties[i - 1];
+  OfxPropertyStruct **old_properties = this->properties;
+  this->num_properties -= 1;
+  this->properties = (OfxPropertyStruct **)malloc_array(
+      sizeof(OfxPropertyStruct *), this->num_properties, "properties");
+  for (int i = 0; i < this->num_properties; ++i) {
+    this->properties[i] = i < index ? old_properties[i] : old_properties[i + 1];
   }
   if (NULL != old_properties) {
     free_array(old_properties[index]);
@@ -77,44 +109,29 @@ void remove_property(OfxPropertySetStruct *properties, int index)
   }
 }
 
-int ensure_property(OfxPropertySetStruct *properties, const char *property) {
-  int i = find_property(properties, property);
+int OfxPropertySetStruct::ensure_property(const char *property)
+{
+  int i = find_property(property);
   if (i == -1) {
-    append_properties(properties, 1);
-    i = properties->num_properties - 1;
-    properties->properties[i]->name = property;
+    append_properties(1);
+    i = this->num_properties - 1;
+    this->properties[i]->name = property;
   }
   return i;
 }
 
-void init_properties(OfxPropertySetStruct *properties) {
-  properties->num_properties = 0;
-  properties->properties = NULL;
-  properties->context = PROP_CTX_OTHER;
+void OfxPropertySetStruct::deep_copy_from(const OfxPropertySetStruct &other)
+{
+  append_properties(other.num_properties);
+  for (int i = 0 ; i < this->num_properties ; ++i) {
+    this->properties[i]->deep_copy_from(*other.properties[i]);
+  }
+  this->context = other.context;
 }
 
-void free_properties(OfxPropertySetStruct *properties) {
-  for (int i = 0 ; i < properties->num_properties ; ++i){
-    free_array(properties->properties[i]);
-  }
-  properties->num_properties = 0;
-  if (NULL != properties->properties) {
-    free_array(properties->properties);
-    properties->properties = NULL;
-  }
-}
-
-void deep_copy_property_set(OfxPropertySetStruct *destination, const OfxPropertySetStruct *source) {
-  init_properties(destination);
-  append_properties(destination, source->num_properties);
-  for (int i = 0 ; i < destination->num_properties ; ++i) {
-    deep_copy_property(destination->properties[i], source->properties[i]);
-  }
-  destination->context = source->context;
-}
-
-bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type, const char *property) {
-  switch (propertySet->context) {
+bool OfxPropertySetStruct::check_property_context(PropertySetContext context, PropertyType type, const char *property)
+{
+  switch (context) {
   case PROP_CTX_MESH_EFFECT:
     return (
       (0 == strcmp(property, kOfxMeshEffectPropContext) && type == PROP_TYPE_STRING) ||
@@ -199,49 +216,52 @@ const OfxPropertySuiteV1 gPropertySuiteV1 = {
 };
 
 OfxStatus propSetPointer(OfxPropertySetHandle properties, const char *property, int index, void *value) {
-  if (false == check_property_context(properties, PROP_TYPE_POINTER, property)) {
+  if (false == OfxPropertySetStruct::check_property_context(
+                   properties->context, PROP_TYPE_POINTER, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = ensure_property(properties, property);
+  int i = properties->ensure_property(property);
   properties->properties[i]->value[index].as_pointer = value;
   return kOfxStatOK;
 }
 
 OfxStatus propSetString(OfxPropertySetHandle properties, const char *property, int index, const char *value) {
-  if (false == check_property_context(properties, PROP_TYPE_STRING, property)) {
+  if (false == OfxPropertySetStruct::check_property_context(properties->context, PROP_TYPE_STRING, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = ensure_property(properties, property);
+  int i = properties->ensure_property(property);
   properties->properties[i]->value[index].as_const_char = value;
   return kOfxStatOK;
 }
 
 OfxStatus propSetDouble(OfxPropertySetHandle properties, const char *property, int index, double value) {
-  if (false == check_property_context(properties, PROP_TYPE_DOUBLE, property)) {
+  if (false == OfxPropertySetStruct::check_property_context(
+                   properties->context, PROP_TYPE_DOUBLE, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = ensure_property(properties, property);
+  int i = properties->ensure_property(property);
   properties->properties[i]->value[index].as_double = value;
   return kOfxStatOK;
 }
 
 OfxStatus propSetInt(OfxPropertySetHandle properties, const char *property, int index, int value) {
-  if (false == check_property_context(properties, PROP_TYPE_INT, property)) {
+  if (false == OfxPropertySetStruct::check_property_context(
+                   properties->context, PROP_TYPE_INT, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = ensure_property(properties, property);
+  int i = properties->ensure_property(property);
   properties->properties[i]->value[index].as_int = value;
   return kOfxStatOK;
 }
@@ -287,49 +307,52 @@ OfxStatus propSetIntN(OfxPropertySetHandle properties, const char *property, int
 }
 
 OfxStatus propGetPointer(OfxPropertySetHandle properties, const char *property, int index, void **value) {
-  if (false == check_property_context(properties, PROP_TYPE_POINTER, property)) {
+  if (false == OfxPropertySetStruct::check_property_context(properties->context, PROP_TYPE_POINTER, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = ensure_property(properties, property);
+  int i = properties->ensure_property(property);
   *value = properties->properties[i]->value[index].as_pointer;
   return kOfxStatOK;
 }
 
 OfxStatus propGetString(OfxPropertySetHandle properties, const char *property, int index, char **value) {
-  if (false == check_property_context(properties, PROP_TYPE_STRING, property)) {
+  if (false == OfxPropertySetStruct::check_property_context(
+                   properties->context, PROP_TYPE_STRING, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = ensure_property(properties, property);
+  int i = properties->ensure_property(property);
   *value = properties->properties[i]->value[index].as_char;
   return kOfxStatOK;
 }
 
 OfxStatus propGetDouble(OfxPropertySetHandle properties, const char *property, int index, double *value) {
-  if (false == check_property_context(properties, PROP_TYPE_DOUBLE, property)) {
+  if (false == OfxPropertySetStruct::check_property_context(
+                   properties->context, PROP_TYPE_DOUBLE, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = ensure_property(properties, property);
+  int i = properties->ensure_property(property);
   *value = properties->properties[i]->value[index].as_double;
   return kOfxStatOK;
 }
 
 OfxStatus propGetInt(OfxPropertySetHandle properties, const char *property, int index, int *value) {
-  if (false == check_property_context(properties, PROP_TYPE_INT, property)) {
+  if (false == OfxPropertySetStruct::check_property_context(
+                   properties->context, PROP_TYPE_INT, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = ensure_property(properties, property);
+  int i = properties->ensure_property(property);
   *value = properties->properties[i]->value[index].as_int;
   return kOfxStatOK;
 }

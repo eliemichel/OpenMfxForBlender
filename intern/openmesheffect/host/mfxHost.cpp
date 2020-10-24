@@ -100,8 +100,7 @@ OfxHost * getGlobalHost(void) {
   if (0 == gHostUse) {
     printf("(Allocating new host data)\n");
     gHost = (OfxHost*)malloc_array(sizeof(OfxHost), 1, "global host");
-    OfxPropertySetHandle hostProperties = (OfxPropertySetHandle)malloc_array(sizeof(OfxPropertySetStruct), 1, "global host properties");
-    init_properties(hostProperties);
+    OfxPropertySetHandle hostProperties = new OfxPropertySetStruct();
     hostProperties->context = PROP_CTX_HOST;
     propSetPointer(hostProperties, kOfxHostPropBeforeMeshReleaseCb, 0, (void*)NULL);
     propSetPointer(hostProperties, kOfxHostPropBeforeMeshGetCb, 0, (void*)NULL);
@@ -273,8 +272,6 @@ bool ofxhost_is_identity(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance, 
   OfxStatus status;
 
   OfxPropertySetStruct inArgs, outArgs;
-  init_properties(&inArgs);
-  init_properties(&outArgs);
 
   propSetInt(&inArgs, kOfxPropTime, 0, 0);
   propSetString(&outArgs, kOfxPropName, 0, "");
@@ -284,9 +281,6 @@ bool ofxhost_is_identity(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance, 
 
   status = plugin->mainEntry(kOfxMeshEffectActionIsIdentity, effectInstance, &inArgs, &outArgs);
   printf("%s action returned status %d (%s)\n", kOfxMeshEffectActionIsIdentity, status, getOfxStateName(status));
-
-  free_properties(&inArgs);
-  free_properties(&outArgs);
 
   if (kOfxStatErrMemory == status) {
     printf("ERROR: Not enough memory for plug-in '%s'.\n", plugin->pluginIdentifier);

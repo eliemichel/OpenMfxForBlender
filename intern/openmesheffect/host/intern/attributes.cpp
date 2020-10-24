@@ -24,13 +24,11 @@
 
 void init_attribute(OfxAttributeStruct *attribute)
 {
-  init_properties(&attribute->properties);
   attribute->properties.context = PROP_CTX_ATTRIB;
 }
 
 void free_attribute(OfxAttributeStruct *attribute)
 {
-  free_properties(&attribute->properties);
   free_array(attribute->name);
 }
 
@@ -48,7 +46,7 @@ void deep_copy_attribute(OfxAttributeStruct *destination, const OfxAttributeStru
   strcpy(destination->name, source->name);
 
   destination->attachment = source->attachment;
-  deep_copy_property_set(&destination->properties, &source->properties);
+  destination->properties.deep_copy_from(source->properties);
 }
 
 // // OfxAttributeSetStruct

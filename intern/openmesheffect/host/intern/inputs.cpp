@@ -23,21 +23,19 @@
 // // OfxInputStruct
 
 void init_input(OfxMeshInputStruct *input) {
-  init_properties(&input->properties);
   input->properties.context = PROP_CTX_INPUT;
   init_mesh(&input->mesh);
   input->host = NULL;
 }
 
 void free_input(OfxMeshInputStruct *input) {
-  free_properties(&input->properties);
   free_mesh(&input->mesh);
   free_array(input);
 }
 
 void deep_copy_input(OfxMeshInputStruct *destination, const OfxMeshInputStruct *source) {
   destination->name = source->name; // weak pointer?
-  deep_copy_property_set(&destination->properties, &source->properties);
+  destination->properties.deep_copy_from(source->properties);
   deep_copy_mesh(&destination->mesh, &source->mesh);
   destination->host = source->host; // not deep copied, as this is a weak pointer
 }

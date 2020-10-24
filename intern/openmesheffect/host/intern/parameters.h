@@ -59,7 +59,7 @@ typedef enum ParamType {
 
 // // OfxParamStruct
 
-class OfxParamStruct {
+struct OfxParamStruct {
  public:
   OfxParamStruct();
   ~OfxParamStruct();
@@ -82,7 +82,7 @@ class OfxParamStruct {
 
 // // OfxParamSetStruct
 
-class OfxParamSetStruct {
+struct OfxParamSetStruct {
  public:
   OfxParamSetStruct();
   ~OfxParamSetStruct();
@@ -91,7 +91,7 @@ class OfxParamSetStruct {
   OfxParamSetStruct(const OfxParamSetStruct &) = delete;
   OfxParamSetStruct &operator=(const OfxParamSetStruct &) = delete;
 
-  int find_parameter(const char *param);
+  int find_parameter(const char *param) const;
   void append_parameters(int count);
   int ensure_parameter(const char *parameter);
 

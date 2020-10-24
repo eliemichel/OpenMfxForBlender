@@ -32,10 +32,21 @@ union OfxPropertyValueStruct {
     int as_int;
 };
 
-class OfxPropertyStruct {
+struct OfxPropertyStruct {
  public:
-    const char *name;
-    OfxPropertyValueStruct value[4];
+  OfxPropertyStruct();
+  ~OfxPropertyStruct();
+
+  // Disable copy, we handle it explicitely
+  OfxPropertyStruct(const OfxPropertyStruct &) = delete;
+  OfxPropertyStruct &operator=(const OfxPropertyStruct &) = delete;
+
+
+  void deep_copy_from(const OfxPropertyStruct &other);
+
+ public:
+  const char *name;
+  OfxPropertyValueStruct value[4];
 };
 
 typedef enum PropertyType {
@@ -57,23 +68,35 @@ typedef enum PropertySetContext {
     // kOfxTypeParameterInstance
 } PropertySetContext;
 
-typedef struct OfxPropertySetStruct {
-    PropertySetContext context; // TODO: use this rather than generic property set objects
-    int num_properties;
-    OfxPropertyStruct **properties;
-} OfxPropertySetStruct;
-
 // // OfxPropertySetStruct
 
-void deep_copy_property(OfxPropertyStruct *destination, const OfxPropertyStruct *source);
-int find_property(OfxPropertySetStruct *properties, const char *property);
-void append_properties(OfxPropertySetStruct *properties, int count);
-void remove_property(OfxPropertySetStruct *properties, int index);
-int ensure_property(OfxPropertySetStruct *properties, const char *property);
-void init_properties(OfxPropertySetStruct *properties);
-void free_properties(OfxPropertySetStruct *properties);
-void deep_copy_property_set(OfxPropertySetStruct *destination, const OfxPropertySetStruct *source);
-bool check_property_context(OfxPropertySetStruct *propertySet, PropertyType type, const char *property);
+struct OfxPropertySetStruct {
+ public:
+  OfxPropertySetStruct();
+  ~OfxPropertySetStruct();
+
+  // Disable copy, we handle it explicitely
+  OfxPropertySetStruct(const OfxPropertySetStruct &) = delete;
+  OfxPropertySetStruct &operator=(const OfxPropertySetStruct &) = delete;
+
+  int find_property(const char *property) const;
+  void append_properties(int count);
+  void remove_property(int index);
+  int ensure_property(const char *property);
+
+  void deep_copy_from(const OfxPropertySetStruct &other);
+
+ public:
+  static bool check_property_context(PropertySetContext context,
+                                     PropertyType type,
+                                     const char *property);
+
+ public:
+  PropertySetContext context; // TODO: use this rather than generic property set objects
+  int num_properties;
+  OfxPropertyStruct **properties;
+};
+
 
 // // Property Suite Entry Points
 

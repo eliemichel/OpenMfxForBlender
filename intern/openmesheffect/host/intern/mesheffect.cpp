@@ -45,7 +45,6 @@ static AttributeAttachment mfxToInternalAttribAttachment(const char *attachment)
 void init_mesh_effect(OfxMeshEffectHandle meshEffectHandle) {
   meshEffectHandle->inputs.host = meshEffectHandle->host;
   init_input_set(&meshEffectHandle->inputs);
-  init_properties(&meshEffectHandle->properties);
   meshEffectHandle->parameters.effect_properties = &meshEffectHandle->properties;
   meshEffectHandle->properties.context = PROP_CTX_MESH_EFFECT;
   meshEffectHandle->messageType = OFX_MESSAGE_INVALID;
@@ -53,12 +52,11 @@ void init_mesh_effect(OfxMeshEffectHandle meshEffectHandle) {
 
 void free_mesh_effect(OfxMeshEffectHandle meshEffectHandle) {
   free_input_set(&meshEffectHandle->inputs);
-  free_properties(&meshEffectHandle->properties);
 }
 
 void deep_copy_mesh_effect(OfxMeshEffectStruct *destination, const OfxMeshEffectStruct *source) {
   deep_copy_input_set(&destination->inputs, &source->inputs);
-  deep_copy_property_set(&destination->properties, &source->properties);
+  destination->properties.deep_copy_from(source->properties);
   destination->parameters.deep_copy_from(source->parameters);
   destination->parameters.effect_properties = &destination->properties;
   destination->host = source->host; // not deep copied, as this is a weak pointer

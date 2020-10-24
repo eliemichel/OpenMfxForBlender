@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Elie Michel
+ * Copyright 2019-2020 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,10 @@
 
 #ifndef __MFX_HOST_H__
 #define __MFX_HOST_H__
+
+/**
+ * This file defines the public C API for the Open Mesh Effect Host
+ */
 
 #ifdef __cplusplus
 extern "C" {

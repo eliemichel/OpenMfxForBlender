@@ -23,17 +23,15 @@
 // // OfxInputStruct
 
 void init_mesh(OfxMeshStruct *mesh) {
-  init_properties(&mesh->properties);
   init_attribute_set(&mesh->attributes);
   mesh->properties.context = PROP_CTX_MESH;
 }
 
 void free_mesh(OfxMeshStruct *mesh) {
-  free_properties(&mesh->properties);
   free_attribute_set(&mesh->attributes);
 }
 
 void deep_copy_mesh(OfxMeshStruct *destination, const OfxMeshStruct *source) {
-  deep_copy_property_set(&destination->properties, &source->properties);
+  destination->properties.deep_copy_from(source->properties);
   deep_copy_attribute_set(&destination->attributes, &source->attributes);
 }
