@@ -24,6 +24,8 @@
 
 #include "properties.h"
 
+#include <cstddef>
+
 union OfxParamValueStruct {
     void *as_pointer;
     const char *as_const_char;
