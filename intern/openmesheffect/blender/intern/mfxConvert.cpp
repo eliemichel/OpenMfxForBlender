@@ -102,8 +102,40 @@ void copy_parameter_value_to_rna(OpenMeshEffectParameterInfo *rna, const OfxProp
   }
 }
 
+void copy_parameter_minmax_to_rna(int rna_type,
+                                  int int_rna[],
+                                  float float_rna[],
+                                  const OfxPropertyStruct *prop)
+{
+  switch (rna_type) {
+    case PARAM_TYPE_INTEGER_3D:
+      int_rna[2] = prop->value[2].as_int;
+    case PARAM_TYPE_INTEGER_2D:
+      int_rna[1] = prop->value[1].as_int;
+    case PARAM_TYPE_INTEGER:
+      int_rna[0] = prop->value[0].as_int;
+      break;
+
+    case PARAM_TYPE_RGBA:
+      float_rna[3] = (float)prop->value[3].as_double;
+    case PARAM_TYPE_DOUBLE_3D:
+    case PARAM_TYPE_RGB:
+      float_rna[2] = (float)prop->value[2].as_double;
+    case PARAM_TYPE_DOUBLE_2D:
+      float_rna[1] = (float)prop->value[1].as_double;
+    case PARAM_TYPE_DOUBLE:
+      float_rna[0] = (float)prop->value[0].as_double;
+      break;
+
+    case PARAM_TYPE_BOOLEAN:
+      int_rna[0] = (int)prop->value[0].as_int;
+      break;
+  }
+}
+
 void copy_parameter_value_to_rna(OpenMeshEffectParameterInfo *rna, const OfxParamHandle param)
 {
+  rna->type = static_cast<int>(param->type);
   switch (rna->type) {
     case PARAM_TYPE_INTEGER_3D:
       rna->integer_vec_value[2] = param->value[2].as_int;

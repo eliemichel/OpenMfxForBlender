@@ -285,7 +285,6 @@ void OpenMeshEffectRuntime::reload_effect_info(OpenMeshEffectModifierData *fxmd)
 
 void OpenMeshEffectRuntime::reload_parameter_info(OpenMeshEffectModifierData *fxmd)
 {
-
   // Reset parameter DNA
   if (NULL != fxmd->parameter_info) {
     save_rna_parameter_values(fxmd);
@@ -307,18 +306,63 @@ void OpenMeshEffectRuntime::reload_parameter_info(OpenMeshEffectModifierData *fx
 
   for (int i = 0; i < fxmd->num_parameters; ++i) {
     const OfxPropertySetStruct & props = parameters->parameters[i]->properties;
+    OpenMeshEffectParameterInfo &rna = fxmd->parameter_info[i];
+
     int prop_idx = props.find_property(kOfxParamPropScriptName);
     const char *system_name = prop_idx != -1 ? props.properties[prop_idx]->value->as_const_char :
                                                parameters->parameters[i]->name;
-    strncpy(fxmd->parameter_info[i].name, system_name, sizeof(fxmd->parameter_info[i].name));
-    strncpy(fxmd->parameter_info[i].label,
-            parameters->parameters[i]->name,
-            sizeof(fxmd->parameter_info[i].label));
-    fxmd->parameter_info[i].type = parameters->parameters[i]->type;
+    strncpy(rna.name, system_name, sizeof(rna.name));
+    strncpy(rna.label, parameters->parameters[i]->name, sizeof(rna.label));
+    rna.type = static_cast<int>(parameters->parameters[i]->type);
 
     int default_idx = props.find_property(kOfxParamPropDefault);
     if (default_idx > -1) {
-      copy_parameter_value_to_rna(&fxmd->parameter_info[i], props.properties[default_idx]);
+      copy_parameter_value_to_rna(&rna, props.properties[default_idx]);
+    }
+
+    // Handle boundaries
+    // (TODO: there must be some factorization possible)
+    for (int k = 0; k < 4; ++k) {
+      rna.int_min[k] = -INT_MAX;
+      rna.int_softmin[k] = -INT_MAX;
+      rna.int_max[k] = INT_MAX;
+      rna.int_softmax[k] = INT_MAX;
+      rna.float_min[k] = -FLT_MAX;
+      rna.float_softmin[k] = -FLT_MAX;
+      rna.float_max[k] = FLT_MAX;
+      rna.float_softmax[k] = FLT_MAX;
+    }
+
+    int min_idx = props.find_property(kOfxParamPropMin);
+    if (min_idx > -1) {
+      copy_parameter_minmax_to_rna(
+          rna.type, rna.int_min, rna.float_min, props.properties[min_idx]);
+    }
+
+    int softmin_idx = props.find_property(kOfxParamPropDisplayMin);
+    if (softmin_idx > -1) {
+      copy_parameter_minmax_to_rna(
+          rna.type, rna.int_softmin, rna.float_softmin, props.properties[softmin_idx]);
+    }
+    else if (min_idx > -1) {
+      copy_parameter_minmax_to_rna(
+          rna.type, rna.int_softmin, rna.float_softmin, props.properties[min_idx]);
+    }
+
+    int max_idx = props.find_property(kOfxParamPropMax);
+    if (max_idx > -1) {
+      copy_parameter_minmax_to_rna(
+          rna.type, rna.int_max, rna.float_max, props.properties[max_idx]);
+    }
+
+    int softmax_idx = props.find_property(kOfxParamPropDisplayMax);
+    if (softmax_idx > -1) {
+      copy_parameter_minmax_to_rna(
+          rna.type, rna.int_softmax, rna.float_softmax, props.properties[softmax_idx]);
+    }
+    else if (max_idx > -1) {
+      copy_parameter_minmax_to_rna(
+          rna.type, rna.int_softmax, rna.float_softmax, props.properties[max_idx]);
     }
   }
 

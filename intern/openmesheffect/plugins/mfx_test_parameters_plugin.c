@@ -97,7 +97,11 @@ static OfxStatus plugin0_describe(const PluginRuntime *runtime, OfxMeshEffectHan
     runtime->propertySuite->propSetIntN(paramProps, kOfxParamPropDefault, 3, int3D);
 
     status = runtime->parameterSuite->paramDefine(parameters, kOfxParamTypeDouble, "Distance", &paramProps);
-    runtime->propertySuite->propSetDouble(paramProps, kOfxParamPropDefault, 0, 17);
+    runtime->propertySuite->propSetDouble(paramProps, kOfxParamPropDefault, 0, 17.0);
+    runtime->propertySuite->propSetDouble(paramProps, kOfxParamPropMin, 0, -10.0);
+    runtime->propertySuite->propSetDouble(paramProps, kOfxParamPropMax, 0, 110.0);
+    runtime->propertySuite->propSetDouble(paramProps, kOfxParamPropDisplayMin, 0, 0.0);
+    runtime->propertySuite->propSetDouble(paramProps, kOfxParamPropDisplayMax, 0, 100.0);
 
     status = runtime->parameterSuite->paramDefine(parameters, kOfxParamTypeDouble2D, "Vector2D", &paramProps);
     double double2D[2] = { 12.89, 1.02369 };
