@@ -21,8 +21,7 @@
  * \ingroup spfile
  */
 
-#ifndef __FILELIST_H__
-#define __FILELIST_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,7 +51,7 @@ void folderlist_free(struct ListBase *folderlist);
 struct ListBase *folderlist_duplicate(ListBase *folderlist);
 void folderlist_popdir(struct ListBase *folderlist, char *dir);
 void folderlist_pushdir(struct ListBase *folderlist, const char *dir);
-const char *folderlist_peeklastdir(struct ListBase *folderdist);
+const char *folderlist_peeklastdir(struct ListBase *folderlist);
 int folderlist_clear_next(struct SpaceFile *sfile);
 
 void filelist_setsorting(struct FileList *filelist, const short sort, bool invert_sort);
@@ -138,6 +137,4 @@ bool filelist_cache_previews_running(struct FileList *filelist);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

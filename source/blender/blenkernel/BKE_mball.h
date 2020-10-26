@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_MBALL_H__
-#define __BKE_MBALL_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -37,7 +36,6 @@ struct Object;
 struct Scene;
 
 struct MetaBall *BKE_mball_add(struct Main *bmain, const char *name);
-struct MetaBall *BKE_mball_copy(struct Main *bmain, const struct MetaBall *mb);
 
 bool BKE_mball_is_any_selected(const struct MetaBall *mb);
 bool BKE_mball_is_any_selected_multi(struct Base **bases, int bases_len);
@@ -91,6 +89,4 @@ extern void (*BKE_mball_batch_cache_free_cb)(struct MetaBall *mb);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

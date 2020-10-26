@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_CANVAS_H__
-#define __FREESTYLE_CANVAS_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -244,7 +243,7 @@ class Canvas {
 
   void resetModified(bool iMod = false);
   void causalStyleModules(std::vector<unsigned> &vec, unsigned index = 0);
-  void setModified(unsigned index, bool b);
+  void setModified(unsigned index, bool iMod);
 
 #ifdef WITH_CXX_GUARDEDALLOC
   MEM_CXX_CLASS_ALLOC_FUNCS("Freestyle:Canvas")
@@ -252,5 +251,3 @@ class Canvas {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_CANVAS_H__

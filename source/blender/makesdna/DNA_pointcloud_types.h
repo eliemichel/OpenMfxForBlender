@@ -18,8 +18,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_POINTCLOUD_TYPES_H__
-#define __DNA_POINTCLOUD_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_customdata_types.h"
@@ -39,6 +38,8 @@ typedef struct PointCloud {
 
   /* Custom Data */
   struct CustomData pdata;
+  int attributes_active_index;
+  int _pad4;
 
   /* Material */
   struct Material **mat;
@@ -56,5 +57,3 @@ enum {
 
 /* Only one material supported currently. */
 #define POINTCLOUD_MATERIAL_NR 1
-
-#endif /* __DNA_POINTCLOUD_TYPES_H__ */

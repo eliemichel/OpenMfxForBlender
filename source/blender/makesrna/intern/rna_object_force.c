@@ -25,6 +25,8 @@
 #include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
 #include "DNA_particle_types.h"
+#include "DNA_pointcache_types.h"
+#include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
 
 #include "RNA_define.h"
@@ -145,7 +147,7 @@ static char *rna_PointCache_path(PointerRNA *ptr)
   PointCache *cache = ptr->data;
 
   for (md = ob->modifiers.first; md; md = md->next) {
-    const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
+    const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
     if (!(mti->flags & eModifierTypeFlag_UsesPointCache)) {
       continue;
@@ -430,7 +432,7 @@ static char *rna_CollisionSettings_path(PointerRNA *UNUSED(ptr))
   /* both methods work ok, but return the shorter path */
 #  if 0
   Object *ob = (Object *)ptr->owner_id;
-  ModifierData *md = (ModifierData *)modifiers_findByType(ob, eModifierType_Collision);
+  ModifierData *md = (ModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Collision);
 
   if (md) {
     char name_esc[sizeof(md->name) * 2];
@@ -604,7 +606,7 @@ static void rna_SoftBodySettings_spring_vgroup_set(PointerRNA *ptr, const char *
 static char *rna_SoftBodySettings_path(PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
-  ModifierData *md = (ModifierData *)modifiers_findByType(ob, eModifierType_Softbody);
+  ModifierData *md = (ModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Softbody);
   char name_esc[sizeof(md->name) * 2];
 
   BLI_strescape(name_esc, md->name, sizeof(name_esc));
@@ -776,11 +778,22 @@ static char *rna_EffectorWeight_path(PointerRNA *ptr)
     }
   }
   else {
-    Object *ob = (Object *)ptr->owner_id;
+    ID *id = ptr->owner_id;
+
+    if (id && GS(id->name) == ID_SCE) {
+      const Scene *scene = (Scene *)id;
+      const RigidBodyWorld *rbw = scene->rigidbody_world;
+
+      if (rbw->effector_weights == ew) {
+        return BLI_strdup("rigidbody_world.effector_weights");
+      }
+    }
+
+    Object *ob = (Object *)id;
     ModifierData *md;
 
     /* check softbody modifier */
-    md = (ModifierData *)modifiers_findByType(ob, eModifierType_Softbody);
+    md = (ModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Softbody);
     if (md) {
       /* no pointer from modifier data to actual softbody storage, would be good to add */
       if (ob->soft->effector_weights == ew) {
@@ -791,7 +804,7 @@ static char *rna_EffectorWeight_path(PointerRNA *ptr)
     }
 
     /* check cloth modifier */
-    md = (ModifierData *)modifiers_findByType(ob, eModifierType_Cloth);
+    md = (ModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Cloth);
     if (md) {
       ClothModifierData *cmd = (ClothModifierData *)md;
       if (cmd->sim_parms->effector_weights == ew) {
@@ -802,18 +815,18 @@ static char *rna_EffectorWeight_path(PointerRNA *ptr)
     }
 
     /* check smoke modifier */
-    md = (ModifierData *)modifiers_findByType(ob, eModifierType_Fluid);
+    md = (ModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
     if (md) {
-      FluidModifierData *mmd = (FluidModifierData *)md;
-      if (mmd->domain->effector_weights == ew) {
+      FluidModifierData *fmd = (FluidModifierData *)md;
+      if (fmd->domain->effector_weights == ew) {
         char name_esc[sizeof(md->name) * 2];
         BLI_strescape(name_esc, md->name, sizeof(name_esc));
-        return BLI_sprintfN("modifiers[\"%s\"].settings.effector_weights", name_esc);
+        return BLI_sprintfN("modifiers[\"%s\"].domain_settings.effector_weights", name_esc);
       }
     }
 
     /* check dynamic paint modifier */
-    md = (ModifierData *)modifiers_findByType(ob, eModifierType_DynamicPaint);
+    md = (ModifierData *)BKE_modifiers_findby_type(ob, eModifierType_DynamicPaint);
     if (md) {
       DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
 
@@ -843,14 +856,14 @@ static char *rna_EffectorWeight_path(PointerRNA *ptr)
 static void rna_CollisionSettings_dependency_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
-  ModifierData *md = modifiers_findByType(ob, eModifierType_Collision);
+  ModifierData *md = BKE_modifiers_findby_type(ob, eModifierType_Collision);
 
   /* add/remove modifier as needed */
   if (ob->pd->deflect && !md) {
     ED_object_modifier_add(NULL, bmain, scene, ob, NULL, eModifierType_Collision);
   }
   else if (!ob->pd->deflect && md) {
-    ED_object_modifier_remove(NULL, bmain, ob, md);
+    ED_object_modifier_remove(NULL, bmain, scene, ob, md);
   }
 
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, ob);
@@ -934,7 +947,7 @@ static void rna_def_pointcache_common(StructRNA *srna)
   prop = RNA_def_property(srna, "frame_start", PROP_INT, PROP_TIME);
   RNA_def_property_int_sdna(prop, NULL, "startframe");
   RNA_def_property_range(prop, -MAXFRAME, MAXFRAME);
-  RNA_def_property_ui_range(prop, 1, MAXFRAME, 1, 1);
+  RNA_def_property_ui_range(prop, 0, MAXFRAME, 1, 1);
   RNA_def_property_ui_text(prop, "Start", "Frame on which the simulation starts");
 
   prop = RNA_def_property(srna, "frame_end", PROP_INT, PROP_TIME);
@@ -1332,7 +1345,7 @@ static void rna_def_effector_weight(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "weight[13]");
   RNA_def_property_range(prop, -200.0f, 200.0f);
   RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.1, 3);
-  RNA_def_property_ui_text(prop, "Smoke Flow", "Smoke Flow effector weight");
+  RNA_def_property_ui_text(prop, "Fluid Flow", "Fluid Flow effector weight");
   RNA_def_property_update(prop, 0, "rna_EffectorWeight_update");
 }
 
@@ -1396,11 +1409,11 @@ static void rna_def_field(BlenderRNA *brna)
        "Turbulence",
        "Create turbulence with a noise field"},
       {PFIELD_DRAG, "DRAG", ICON_FORCE_DRAG, "Drag", "Create a force that dampens motion"},
-      {PFIELD_SMOKEFLOW,
-       "SMOKE_FLOW",
-       ICON_FORCE_SMOKEFLOW,
-       "Smoke Flow",
-       "Create a force based on smoke simulation air flow"},
+      {PFIELD_FLUIDFLOW,
+       "FLUID_FLOW",
+       ICON_FORCE_FLUIDFLOW,
+       "Fluid Flow",
+       "Create a force based on fluid simulation velocities"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -1514,6 +1527,15 @@ static void rna_def_field(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "f_flow");
   RNA_def_property_range(prop, 0.0f, 10.0f);
   RNA_def_property_ui_text(prop, "Flow", "Convert effector force into air flow velocity");
+  RNA_def_property_update(prop, 0, "rna_FieldSettings_update");
+
+  prop = RNA_def_property(srna, "wind_factor", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "f_wind_factor");
+  RNA_def_property_range(prop, 0.0f, 1.0f);
+  RNA_def_property_ui_text(
+      prop,
+      "Wind Factor",
+      "How much the force is reduced when acting parallel to a surface, e.g. cloth");
   RNA_def_property_update(prop, 0, "rna_FieldSettings_update");
 
   /* different ui range to above */
@@ -1908,7 +1930,7 @@ static void rna_def_softbody(BlenderRNA *brna)
   prop = RNA_def_property(srna, "plastic", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "plastic");
   RNA_def_property_range(prop, 0.0f, 100.0f);
-  RNA_def_property_ui_text(prop, "Plastic", "Permanent deform");
+  RNA_def_property_ui_text(prop, "Plasticity", "Permanent deform");
   RNA_def_property_update(prop, 0, "rna_softbody_update");
 
   prop = RNA_def_property(srna, "bend", PROP_FLOAT, PROP_NONE);

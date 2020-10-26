@@ -55,6 +55,7 @@
 
 #include "BIF_glutil.h"
 
+#include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
 #include "GPU_matrix.h"
@@ -150,8 +151,8 @@ void ED_image_draw_info(Scene *scene,
                         const uchar cp[4],
                         const float fp[4],
                         const float linearcol[4],
-                        int *zp,
-                        float *zpf)
+                        const int *zp,
+                        const float *zpf)
 {
   rcti color_rect;
   char str[256];
@@ -168,16 +169,14 @@ void ED_image_draw_info(Scene *scene,
   uchar green[3] = {0, 255, 0};
   uchar blue[3] = {100, 100, 255};
 #else
-  uchar red[3] = {255, 255, 255};
-  uchar green[3] = {255, 255, 255};
-  uchar blue[3] = {255, 255, 255};
+  const uchar red[3] = {255, 255, 255};
+  const uchar green[3] = {255, 255, 255};
+  const uchar blue[3] = {255, 255, 255};
 #endif
   float hue = 0, sat = 0, val = 0, lum = 0, u = 0, v = 0;
   float col[4], finalcol[4];
 
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   uint pos = GPU_vertformat_attr_add(
       immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
@@ -189,7 +188,7 @@ void ED_image_draw_info(Scene *scene,
 
   immUnbindProgram();
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   BLF_size(blf_mono_font, 11 * U.pixelsize, U.dpi);
 
@@ -350,7 +349,7 @@ void ED_image_draw_info(Scene *scene,
     copy_v4_v4(finalcol, col);
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
   dx += 0.25f * UI_UNIT_X;
 
   BLI_rcti_init(&color_rect,
@@ -389,10 +388,10 @@ void ED_image_draw_info(Scene *scene,
     immRecti(pos, color_quater_x, color_quater_y, color_rect_half.xmax, color_rect_half.ymax);
     immRecti(pos, color_rect_half.xmin, color_rect_half.ymin, color_quater_x, color_quater_y);
 
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
     immUniformColor3fvAlpha(finalcol, fp ? fp[3] : (cp[3] / 255.0f));
     immRecti(pos, color_rect.xmin, color_rect.ymin, color_rect.xmax, color_rect.ymax);
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
   else {
     immUniformColor3fv(finalcol);
@@ -463,25 +462,24 @@ void ED_image_draw_info(Scene *scene,
 
 /* image drawing */
 static void sima_draw_zbuf_pixels(
-    float x1, float y1, int rectx, int recty, int *rect, float zoomx, float zoomy)
+    float x1, float y1, int rectx, int recty, const int *rect, float zoomx, float zoomy)
 {
-  float red[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+  const float red[4] = {1.0f, 0.0f, 0.0f, 0.0f};
 
   /* Slowwww */
-  int *recti = MEM_mallocN(rectx * recty * sizeof(int), "temp");
+  float *rectf = MEM_mallocN(rectx * recty * sizeof(float), "temp");
   for (int a = rectx * recty - 1; a >= 0; a--) {
     /* zbuffer values are signed, so we need to shift color range */
-    recti[a] = rect[a] * 0.5f + 0.5f;
+    rectf[a] = rect[a] * 0.5f + 0.5f;
   }
 
   IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR);
   GPU_shader_uniform_vector(
-      state.shader, GPU_shader_get_uniform_ensure(state.shader, "shuffle"), 4, 1, red);
+      state.shader, GPU_shader_get_uniform(state.shader, "shuffle"), 4, 1, red);
 
-  immDrawPixelsTex(
-      &state, x1, y1, rectx, recty, GL_RED, GL_INT, GL_NEAREST, recti, zoomx, zoomy, NULL);
+  immDrawPixelsTex(&state, x1, y1, rectx, recty, GPU_R16F, false, rectf, zoomx, zoomy, NULL);
 
-  MEM_freeN(recti);
+  MEM_freeN(rectf);
 }
 
 static void sima_draw_zbuffloat_pixels(Scene *scene,
@@ -489,13 +487,13 @@ static void sima_draw_zbuffloat_pixels(Scene *scene,
                                        float y1,
                                        int rectx,
                                        int recty,
-                                       float *rect_float,
+                                       const float *rect_float,
                                        float zoomx,
                                        float zoomy)
 {
   float bias, scale, *rectf, clip_end;
   int a;
-  float red[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+  const float red[4] = {1.0f, 0.0f, 0.0f, 0.0f};
 
   if (scene->camera && scene->camera->type == OB_CAMERA) {
     bias = ((Camera *)scene->camera->data)->clip_start;
@@ -524,10 +522,9 @@ static void sima_draw_zbuffloat_pixels(Scene *scene,
 
   IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR);
   GPU_shader_uniform_vector(
-      state.shader, GPU_shader_get_uniform_ensure(state.shader, "shuffle"), 4, 1, red);
+      state.shader, GPU_shader_get_uniform(state.shader, "shuffle"), 4, 1, red);
 
-  immDrawPixelsTex(
-      &state, x1, y1, rectx, recty, GL_RED, GL_FLOAT, GL_NEAREST, rectf, zoomx, zoomy, NULL);
+  immDrawPixelsTex(&state, x1, y1, rectx, recty, GPU_R16F, false, rectf, zoomx, zoomy, NULL);
 
   MEM_freeN(rectf);
 }
@@ -542,9 +539,7 @@ static void draw_udim_label(ARegion *region, float fx, float fy, const char *lab
   int x, y;
   UI_view2d_view_to_region(&region->v2d, fx, fy, &x, &y);
 
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   int textwidth = BLF_width(blf_mono_font, label, strlen(label)) + 10;
   float stepx = BLI_rcti_size_x(&region->v2d.mask) / BLI_rctf_size_x(&region->v2d.cur);
@@ -562,7 +557,7 @@ static void draw_udim_label(ARegion *region, float fx, float fy, const char *lab
   BLF_position(blf_mono_font, (int)(x + 10), (int)(y + 10), 0);
   BLF_draw_ascii(blf_mono_font, label, strlen(label));
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }
 
 static void draw_image_buffer(const bContext *C,
@@ -576,7 +571,8 @@ static void draw_image_buffer(const bContext *C,
                               float zoomy)
 {
   /* Image are still drawn in display space. */
-  glDisable(GL_FRAMEBUFFER_SRGB);
+  GPUFrameBuffer *fb = GPU_framebuffer_active_get();
+  GPU_framebuffer_bind_no_srgb(fb);
 
   int x, y;
   int sima_flag = sima->flag & ED_space_image_get_display_channel_mask(ibuf);
@@ -604,16 +600,13 @@ static void draw_image_buffer(const bContext *C,
     if (sima_flag & SI_USE_ALPHA) {
       imm_draw_box_checker_2d(x, y, x + ibuf->x * zoomx, y + ibuf->y * zoomy);
 
-      GPU_blend(true);
-      GPU_blend_set_func_separate(
-          GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+      GPU_blend(GPU_BLEND_ALPHA);
     }
 
     /* If RGBA display with color management */
     if ((sima_flag & (SI_SHOW_R | SI_SHOW_G | SI_SHOW_B | SI_SHOW_ALPHA)) == 0) {
 
-      ED_draw_imbuf_ctx_clipping(
-          C, ibuf, x, y, GL_NEAREST, 0, 0, clip_max_x, clip_max_y, zoomx, zoomy);
+      ED_draw_imbuf_ctx_clipping(C, ibuf, x, y, false, 0, 0, clip_max_x, clip_max_y, zoomx, zoomy);
     }
     else {
       float shuffle[4] = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -637,7 +630,7 @@ static void draw_image_buffer(const bContext *C,
 
       IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR);
       GPU_shader_uniform_vector(
-          state.shader, GPU_shader_get_uniform_ensure(state.shader, "shuffle"), 4, 1, shuffle);
+          state.shader, GPU_shader_get_uniform(state.shader, "shuffle"), 4, 1, shuffle);
 
       IMB_colormanagement_display_settings_from_ctx(C, &view_settings, &display_settings);
       display_buffer = IMB_display_buffer_acquire(
@@ -649,9 +642,8 @@ static void draw_image_buffer(const bContext *C,
                                   y,
                                   ibuf->x,
                                   ibuf->y,
-                                  GL_RGBA,
-                                  GL_UNSIGNED_BYTE,
-                                  GL_NEAREST,
+                                  GPU_RGBA8,
+                                  false,
                                   display_buffer,
                                   0,
                                   0,
@@ -666,11 +658,11 @@ static void draw_image_buffer(const bContext *C,
     }
 
     if (sima_flag & SI_USE_ALPHA) {
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
   }
 
-  glEnable(GL_FRAMEBUFFER_SRGB);
+  GPU_framebuffer_bind(fb);
 }
 
 static void draw_image_buffer_repeated(const bContext *C,
@@ -775,25 +767,13 @@ static void draw_image_paint_helpers(
         return;
       }
 
-      GPU_blend(true);
-      GPU_blend_set_func_separate(
-          GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+      GPU_blend(GPU_BLEND_ALPHA);
 
       IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_COLOR);
-      immDrawPixelsTex(&state,
-                       x,
-                       y,
-                       ibuf->x,
-                       ibuf->y,
-                       GL_RGBA,
-                       GL_UNSIGNED_BYTE,
-                       GL_NEAREST,
-                       display_buffer,
-                       zoomx,
-                       zoomy,
-                       col);
+      immDrawPixelsTex(
+          &state, x, y, ibuf->x, ibuf->y, GPU_RGBA8, false, display_buffer, zoomx, zoomy, col);
 
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
 
       BKE_image_release_ibuf(brush->clone.image, ibuf, NULL);
       IMB_display_buffer_release(cache_handle);
@@ -812,7 +792,7 @@ static void draw_udim_tile_grid(uint pos_attr,
 {
   float x1, y1;
   UI_view2d_view_to_region_fl(&region->v2d, x, y, &x1, &y1);
-  int gridpos[5][2] = {{0, 0}, {0, 1}, {1, 1}, {1, 0}, {0, 0}};
+  const int gridpos[5][2] = {{0, 0}, {0, 1}, {1, 1}, {1, 0}, {0, 0}};
   for (int i = 0; i < 4; i++) {
     immAttr3fv(color_attr, color);
     immVertex2f(pos_attr, x1 + gridpos[i][0] * stepx, y1 + gridpos[i][1] * stepy);
@@ -846,7 +826,7 @@ static void draw_udim_tile_grids(ARegion *region, SpaceImage *sima, Image *ima)
   immBegin(GPU_PRIM_LINES, 8 * num_tiles);
 
   float theme_color[3], selected_color[3];
-  UI_GetThemeColorShade3fv(TH_BACK, 60.0f, theme_color);
+  UI_GetThemeColorShade3fv(TH_GRID, 60.0f, theme_color);
   UI_GetThemeColor3fv(TH_FACE_SELECT, selected_color);
 
   if (ima != NULL) {
@@ -887,7 +867,7 @@ void draw_image_main(const bContext *C, ARegion *region)
   Image *ima;
   ImBuf *ibuf;
   float zoomx, zoomy;
-  bool show_viewer, show_render, show_paint, show_stereo3d, show_multilayer;
+  bool show_viewer, show_stereo3d, show_multilayer;
   void *lock;
 
   /* XXX can we do this in refresh? */
@@ -920,9 +900,6 @@ void draw_image_main(const bContext *C, ARegion *region)
   }
 
   show_viewer = (ima && ima->source == IMA_SRC_VIEWER) != 0;
-  show_render = (show_viewer && ima->type == IMA_TYPE_R_RESULT) != 0;
-  show_paint = (ima && (sima->mode == SI_MODE_PAINT) && (show_viewer == false) &&
-                (show_render == false));
   show_stereo3d = (ima && BKE_image_is_stereo(ima) && (sima->iuser.flag & IMA_SHOW_STEREO));
   show_multilayer = ima && BKE_image_is_multilayer(ima);
 
@@ -1020,16 +997,32 @@ void draw_image_main(const bContext *C, ARegion *region)
   }
 
   draw_udim_tile_grids(region, sima, ima);
-
-  /* paint helpers */
-  if (show_paint) {
-    draw_image_paint_helpers(C, region, scene, zoomx, zoomy);
-  }
+  draw_image_main_helpers(C, region);
 
   if (show_viewer) {
     BLI_thread_unlock(LOCK_DRAW_IMAGE);
   }
+}
 
+void draw_image_main_helpers(const bContext *C, ARegion *region)
+{
+  SpaceImage *sima = CTX_wm_space_image(C);
+  Scene *scene = CTX_data_scene(C);
+  Image *ima;
+  float zoomx, zoomy;
+  bool show_viewer, show_render, show_paint;
+
+  ima = ED_space_image(sima);
+  ED_space_image_get_zoom(sima, region, &zoomx, &zoomy);
+
+  show_viewer = (ima && ima->source == IMA_SRC_VIEWER) != 0;
+  show_render = (show_viewer && ima->type == IMA_TYPE_R_RESULT) != 0;
+  show_paint = (ima && (sima->mode == SI_MODE_PAINT) && (show_viewer == false) &&
+                (show_render == false));
+  /* paint helpers */
+  if (show_paint) {
+    draw_image_paint_helpers(C, region, scene, zoomx, zoomy);
+  }
   /* render info */
   if (ima && show_render) {
     draw_render_info(C, sima->iuser.scene, ima, region, zoomx, zoomy);
@@ -1072,9 +1065,7 @@ void draw_image_cache(const bContext *C, ARegion *region)
   const rcti *rect_visible = ED_region_visible_rect(region);
   const int region_bottom = rect_visible->ymin;
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   /* Draw cache background. */
   ED_region_cache_draw_background(region);
@@ -1090,7 +1081,7 @@ void draw_image_cache(const bContext *C, ARegion *region)
         region, num_segments, points, sfra + sima->iuser.offset, efra + sima->iuser.offset);
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   /* Draw current frame. */
   x = (cfra - sfra) / (efra - sfra + 1) * region->winx;

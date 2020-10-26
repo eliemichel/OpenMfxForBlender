@@ -20,8 +20,7 @@
  * \ingroup eevee
  */
 
-#ifndef __EEVEE_LIGHTCACHE_H__
-#define __EEVEE_LIGHTCACHE_H__
+#pragma once
 
 #include "BLI_sys_types.h" /* for bool */
 
@@ -41,7 +40,7 @@ struct wmJob *EEVEE_lightbake_job_create(struct wmWindowManager *wm,
                                          int delay,
                                          int frame);
 void *EEVEE_lightbake_job_data_alloc(struct Main *bmain,
-                                     struct ViewLayer *viewlayer,
+                                     struct ViewLayer *view_layer,
                                      struct Scene *scene,
                                      bool run_as_job,
                                      int frame);
@@ -62,5 +61,3 @@ struct LightCache *EEVEE_lightcache_create(const int grid_len,
 void EEVEE_lightcache_free(struct LightCache *lcache);
 bool EEVEE_lightcache_load(struct LightCache *lcache);
 void EEVEE_lightcache_info_update(struct SceneEEVEE *eevee);
-
-#endif /* __EEVEE_LIGHTCACHE_H__ */

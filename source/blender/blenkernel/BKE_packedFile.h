@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_PACKEDFILE_H__
-#define __BKE_PACKEDFILE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -30,6 +29,8 @@ extern "C" {
 #define RET_OK 0
 #define RET_ERROR 1
 
+struct BlendDataReader;
+struct BlendWriter;
 struct ID;
 struct Image;
 struct Main;
@@ -60,7 +61,7 @@ enum ePF_FileStatus {
 struct PackedFile *BKE_packedfile_duplicate(const struct PackedFile *pf_src);
 struct PackedFile *BKE_packedfile_new(struct ReportList *reports,
                                       const char *filename,
-                                      const char *relabase);
+                                      const char *basepath);
 struct PackedFile *BKE_packedfile_new_from_memory(void *mem, int memlen);
 
 void BKE_packedfile_pack_all(struct Main *bmain, struct ReportList *reports, bool verbose);
@@ -122,8 +123,9 @@ void BKE_packedfile_id_unpack(struct Main *bmain,
                               struct ReportList *reports,
                               enum ePF_FileStatus how);
 
+void BKE_packedfile_blend_write(struct BlendWriter *writer, struct PackedFile *pf);
+void BKE_packedfile_blend_read(struct BlendDataReader *reader, struct PackedFile **pf_p);
+
 #ifdef __cplusplus
 }
-#endif
-
 #endif

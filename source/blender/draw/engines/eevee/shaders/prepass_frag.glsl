@@ -1,4 +1,14 @@
 
+/* Required by some nodes. */
+#pragma BLENDER_REQUIRE(common_hair_lib.glsl)
+#pragma BLENDER_REQUIRE(common_utiltex_lib.glsl)
+
+#pragma BLENDER_REQUIRE(common_view_lib.glsl)
+#pragma BLENDER_REQUIRE(common_uniforms_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_lit_lib.glsl)
+#pragma BLENDER_REQUIRE(surface_lib.glsl)
+
 #ifdef USE_ALPHA_HASH
 
 /* From the paper "Hashed Alpha Testing" by Chris Wyman and Morgan McGuire */
@@ -45,41 +55,28 @@ float hashed_alpha_threshold(vec3 co)
   /* Find our final, uniformly distributed alpha threshold. */
   float threshold = (x < one_a) ? ((x < a) ? cases.x : cases.y) : cases.z;
 
+  /* Jitter the threshold for TAA accumulation. */
+  threshold = fract(threshold + alphaHashOffset);
+
   /* Avoids threshold == 0. */
   threshold = clamp(threshold, 1.0e-6, 1.0);
 
-  /* Jitter the threshold for TAA accumulation. */
-  return fract(threshold + alphaHashOffset);
+  return threshold;
 }
 
 #endif
 
-#ifdef USE_ALPHA_CLIP
-uniform float alphaThreshold;
-#endif
-
 void main()
 {
-  /* For now do nothing.
-   * In the future, output object motion blur. */
-
-#if defined(USE_ALPHA_HASH) || defined(USE_ALPHA_CLIP)
-#  define NODETREE_EXEC
+#if defined(USE_ALPHA_HASH)
 
   Closure cl = nodetree_exec();
 
   float opacity = saturate(1.0 - avg(cl.transmittance));
 
-#  if defined(USE_ALPHA_HASH)
   /* Hashed Alpha Testing */
   if (opacity < hashed_alpha_threshold(worldPosition)) {
     discard;
   }
-#  elif defined(USE_ALPHA_CLIP)
-  /* Alpha clip */
-  if (opacity <= alphaThreshold) {
-    discard;
-  }
-#  endif
 #endif
 }

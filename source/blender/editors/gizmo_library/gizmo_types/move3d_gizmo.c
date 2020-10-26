@@ -207,9 +207,9 @@ static void move3d_draw_intern(const bContext *C,
     GPU_matrix_mul(matrix_align);
   }
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   move_geom_draw(gz, color, select, draw_options);
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
   GPU_matrix_pop();
 
   if (gz->interaction_data) {
@@ -220,9 +220,9 @@ static void move3d_draw_intern(const bContext *C,
       GPU_matrix_mul(matrix_align);
     }
 
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
     move_geom_draw(gz, (const float[4]){0.5f, 0.5f, 0.5f, 0.5f}, select, draw_options);
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
     GPU_matrix_pop();
   }
 }
@@ -240,9 +240,9 @@ static void gizmo_move_draw(const bContext *C, wmGizmo *gz)
 
   (void)is_modal;
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   move3d_draw_intern(C, gz, false, is_highlight);
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }
 
 static int gizmo_move_modal(bContext *C,
@@ -382,7 +382,7 @@ static int gizmo_move_invoke(bContext *C, wmGizmo *gz, const wmEvent *event)
       switch (area->spacetype) {
         case SPACE_VIEW3D: {
           inter->snap_context_v3d = ED_transform_snap_object_context_create_view3d(
-              CTX_data_main(C), CTX_data_scene(C), 0, CTX_wm_region(C), CTX_wm_view3d(C));
+              CTX_data_scene(C), 0, CTX_wm_region(C), CTX_wm_view3d(C));
           break;
         }
         default:
@@ -481,4 +481,4 @@ void ED_gizmotypes_move_3d(void)
   WM_gizmotype_append(GIZMO_GT_move_3d);
 }
 
-/** \} */  // Move Gizmo API
+/** \} */ /* Move Gizmo API */

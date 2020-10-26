@@ -18,11 +18,12 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_GPENCIL_MODIFIER_TYPES_H__
-#define __DNA_GPENCIL_MODIFIER_TYPES_H__
+#pragma once
 
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
+
+struct LatticeDeformData;
 
 /* WARNING ALERT! TYPEDEF VALUES ARE WRITTEN IN FILES! SO DO NOT CHANGE!
  * (ONLY ADD NEW ITEMS AT THE END)
@@ -47,6 +48,8 @@ typedef enum GpencilModifierType {
   eGpencilModifierType_Armature = 15,
   eGpencilModifierType_Time = 16,
   eGpencilModifierType_Multiply = 17,
+  eGpencilModifierType_Texture = 18,
+  /* Keep last. */
   NUM_GREASEPENCIL_MODIFIER_TYPES,
 } GpencilModifierType;
 
@@ -54,7 +57,10 @@ typedef enum GpencilModifierMode {
   eGpencilModifierMode_Realtime = (1 << 0),
   eGpencilModifierMode_Render = (1 << 1),
   eGpencilModifierMode_Editmode = (1 << 2),
-  eGpencilModifierMode_Expanded = (1 << 3),
+#ifdef DNA_DEPRECATED_ALLOW
+  eGpencilModifierMode_Expanded_DEPRECATED = (1 << 3),
+#endif
+  eGpencilModifierMode_Virtual = (1 << 4),
 } GpencilModifierMode;
 
 typedef enum {
@@ -66,9 +72,9 @@ typedef struct GpencilModifierData {
   struct GpencilModifierData *next, *prev;
 
   int type, mode;
-  int stackindex;
+  char _pad0[4];
   short flag;
-  short _pad;
+  short ui_expand_flag;
   /** MAX_NAME. */
   char name[64];
 
@@ -77,10 +83,12 @@ typedef struct GpencilModifierData {
 
 typedef struct NoiseGpencilModifierData {
   GpencilModifierData modifier;
+  /** Material for filtering. */
+  struct Material *material;
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Optional vertexgroup name, MAX_VGROUP_NAME. */
   char vgname[64];
   /** Custom index for passes. */
@@ -120,10 +128,12 @@ typedef enum eNoiseGpencil_Flag {
 
 typedef struct SubdivGpencilModifierData {
   GpencilModifierData modifier;
+  /** Material for filtering. */
+  struct Material *material;
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Custom index for passes. */
   int pass_index;
   /** Flags. */
@@ -151,10 +161,12 @@ typedef enum eSubdivGpencil_Type {
 
 typedef struct ThickGpencilModifierData {
   GpencilModifierData modifier;
+  /** Material for filtering. */
+  struct Material *material;
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Optional vertexgroup name, MAX_VGROUP_NAME. */
   char vgname[64];
   /** Custom index for passes. */
@@ -225,10 +237,12 @@ typedef enum eOpacityModesGpencil_Flag {
 
 typedef struct ColorGpencilModifierData {
   GpencilModifierData modifier;
+  /** Material for filtering. */
+  struct Material *material;
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Custom index for passes. */
   int pass_index;
   /** Flags. */
@@ -255,10 +269,12 @@ typedef enum eColorGpencil_Flag {
 
 typedef struct OpacityGpencilModifierData {
   GpencilModifierData modifier;
+  /** Material for filtering. */
+  struct Material *material;
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Optional vertexgroup name, MAX_VGROUP_NAME. */
   char vgname[64];
   /** Custom index for passes. */
@@ -290,6 +306,8 @@ typedef enum eOpacityGpencil_Flag {
 typedef struct ArrayGpencilModifierData {
   GpencilModifierData modifier;
   struct Object *object;
+  /** Material for filtering. */
+  struct Material *material;
   /** Number of elements in array. */
   int count;
   /** Several flags. */
@@ -313,7 +331,7 @@ typedef struct ArrayGpencilModifierData {
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Material replace (0 keep default). */
   int mat_rpl;
   /** Custom index for passes. */
@@ -332,13 +350,15 @@ typedef enum eArrayGpencil_Flag {
 
 typedef struct BuildGpencilModifierData {
   GpencilModifierData modifier;
+  /** Material for filtering. */
+  struct Material *material;
 
   /** If set, restrict modifier to operating on this layer. */
   char layername[64];
   int pass_index;
 
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
 
   /** Custom index for passes. */
   int layer_pass;
@@ -368,6 +388,9 @@ typedef struct BuildGpencilModifierData {
    * For the "Concurrent" mode, when should "shorter" strips start/end.
    */
   short time_alignment;
+  /** Factor of the stroke (used instead of frame evaluation. */
+  float percentage_fac;
+  char _pad[4];
 } BuildGpencilModifierData;
 
 typedef enum eBuildGpencil_Mode {
@@ -403,15 +426,20 @@ typedef enum eBuildGpencil_Flag {
   /* Restrict modifier to only operating between the nominated frames */
   GP_BUILD_RESTRICT_TIME = (1 << 2),
   GP_BUILD_INVERT_LAYERPASS = (1 << 3),
+
+  /* Use a percentage instead of frame number to evaluate strokes. */
+  GP_BUILD_PERCENTAGE = (1 << 4),
 } eBuildGpencil_Flag;
 
 typedef struct LatticeGpencilModifierData {
   GpencilModifierData modifier;
   struct Object *object;
+  /** Material for filtering. */
+  struct Material *material;
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Optional vertexgroup name, MAX_VGROUP_NAME. */
   char vgname[64];
   /** Custom index for passes. */
@@ -421,8 +449,8 @@ typedef struct LatticeGpencilModifierData {
   float strength;
   /** Custom index for passes. */
   int layer_pass;
-  /** Runtime only (LatticeDeformData). */
-  void *cache_data;
+  /** Runtime only. */
+  struct LatticeDeformData *cache_data;
 } LatticeGpencilModifierData;
 
 typedef enum eLatticeGpencil_Flag {
@@ -436,10 +464,12 @@ typedef enum eLatticeGpencil_Flag {
 typedef struct MirrorGpencilModifierData {
   GpencilModifierData modifier;
   struct Object *object;
+  /** Material for filtering. */
+  struct Material *material;
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Custom index for passes. */
   int pass_index;
   /** Flags. */
@@ -464,12 +494,14 @@ typedef struct HookGpencilModifierData {
   GpencilModifierData modifier;
 
   struct Object *object;
+  /** Material for filtering. */
+  struct Material *material;
   /** Optional name of bone target, MAX_ID_NAME-2. */
   char subtarget[64];
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Optional vertexgroup name, MAX_VGROUP_NAME. */
   char vgname[64];
   /** Custom index for passes. */
@@ -515,10 +547,12 @@ typedef enum eHookGpencil_Falloff {
 
 typedef struct SimplifyGpencilModifierData {
   GpencilModifierData modifier;
+  /** Material for filtering. */
+  struct Material *material;
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Custom index for passes. */
   int pass_index;
   /** Flags. */
@@ -558,10 +592,12 @@ typedef enum eSimplifyGpencil_Mode {
 
 typedef struct OffsetGpencilModifierData {
   GpencilModifierData modifier;
+  /** Material for filtering. */
+  struct Material *material;
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Optional vertexgroup name, MAX_VGROUP_NAME. */
   char vgname[64];
   /** Custom index for passes. */
@@ -585,10 +621,12 @@ typedef enum eOffsetGpencil_Flag {
 
 typedef struct SmoothGpencilModifierData {
   GpencilModifierData modifier;
+  /** Material for filtering. */
+  struct Material *material;
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Optional vertexgroup name, MAX_VGROUP_NAME. */
   char vgname[64];
   /** Custom index for passes. */
@@ -621,12 +659,12 @@ typedef enum eSmoothGpencil_Flag {
 
 typedef struct ArmatureGpencilModifierData {
   GpencilModifierData modifier;
-  /** Deformflag replaces armature->deformflag. */
+  /** #eArmature_DeformFlag use instead of #bArmature.deformflag. */
   short deformflag, multi;
   int _pad;
   struct Object *object;
-  /** Stored input of previous modifier, for vertexgroup blending. */
-  float *prevCos;
+  /** Stored input of previous modifier, for vertex-group blending. */
+  float (*vert_coords_prev)[3];
   /** MAX_VGROUP_NAME. */
   char vgname[64];
 
@@ -634,10 +672,12 @@ typedef struct ArmatureGpencilModifierData {
 
 typedef struct MultiplyGpencilModifierData {
   GpencilModifierData modifier;
+  /** Material for filtering. */
+  struct Material *material;
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Custom index for passes. */
   int pass_index;
   /** Flags. */
@@ -672,10 +712,12 @@ typedef struct TintGpencilModifierData {
   GpencilModifierData modifier;
 
   struct Object *object;
+  /** Material for filtering. */
+  struct Material *material;
   /** Layer name. */
   char layername[64];
   /** Material name. */
-  char materialname[64];
+  char materialname[64] DNA_DEPRECATED;
   /** Optional vertexgroup name, MAX_VGROUP_NAME. */
   char vgname[64];
   /** Custom index for passes. */
@@ -713,4 +755,50 @@ typedef enum eTintGpencil_Flag {
   GP_TINT_CUSTOM_CURVE = (1 << 6),
 } eTintGpencil_Flag;
 
-#endif /* __DNA_GPENCIL_MODIFIER_TYPES_H__ */
+typedef struct TextureGpencilModifierData {
+  GpencilModifierData modifier;
+  /** Material for filtering. */
+  struct Material *material;
+  /** Layer name. */
+  char layername[64];
+  /** Material name. */
+  char materialname[64] DNA_DEPRECATED;
+  /** Optional vertexgroup name, MAX_VGROUP_NAME. */
+  char vgname[64];
+  /** Custom index for passes. */
+  int pass_index;
+  /** Flags. */
+  int flag;
+  /** Offset value to add to uv_fac. */
+  float uv_offset;
+  float uv_scale;
+  float fill_rotation;
+  float fill_offset[2];
+  float fill_scale;
+  /** Custom index for passes. */
+  int layer_pass;
+  /** Texture fit options. */
+  short fit_method;
+  short mode;
+} TextureGpencilModifierData;
+
+typedef enum eTextureGpencil_Flag {
+  GP_TEX_INVERT_LAYER = (1 << 0),
+  GP_TEX_INVERT_PASS = (1 << 1),
+  GP_TEX_INVERT_VGROUP = (1 << 2),
+  GP_TEX_INVERT_LAYERPASS = (1 << 3),
+  GP_TEX_INVERT_MATERIAL = (1 << 4),
+} eTextureGpencil_Flag;
+
+/* Texture->fit_method */
+typedef enum eTextureGpencil_Fit {
+  GP_TEX_FIT_STROKE = 0,
+  GP_TEX_CONSTANT_LENGTH = 1,
+} eTextureGpencil_Fit;
+
+/* Texture->mode */
+typedef enum eTextureGpencil_Mode {
+  STROKE = 0,
+  FILL = 1,
+  STROKE_AND_FILL = 2,
+} eTextureGpencil_Mode;

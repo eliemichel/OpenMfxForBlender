@@ -18,11 +18,9 @@
 
 #include <string.h>
 
-extern "C" {
 #include "DNA_node_types.h"
 
 #include "BKE_node.h"
-}
 
 #include "COM_NodeOperation.h"
 #include "COM_NodeOperationBuilder.h"
@@ -418,19 +416,19 @@ NodeOperation *Converter::convertDataType(NodeOperationOutput *from, NodeOperati
   if (fromDatatype == COM_DT_VALUE && toDatatype == COM_DT_COLOR) {
     return new ConvertValueToColorOperation();
   }
-  else if (fromDatatype == COM_DT_VALUE && toDatatype == COM_DT_VECTOR) {
+  if (fromDatatype == COM_DT_VALUE && toDatatype == COM_DT_VECTOR) {
     return new ConvertValueToVectorOperation();
   }
-  else if (fromDatatype == COM_DT_COLOR && toDatatype == COM_DT_VALUE) {
+  if (fromDatatype == COM_DT_COLOR && toDatatype == COM_DT_VALUE) {
     return new ConvertColorToValueOperation();
   }
-  else if (fromDatatype == COM_DT_COLOR && toDatatype == COM_DT_VECTOR) {
+  if (fromDatatype == COM_DT_COLOR && toDatatype == COM_DT_VECTOR) {
     return new ConvertColorToVectorOperation();
   }
-  else if (fromDatatype == COM_DT_VECTOR && toDatatype == COM_DT_VALUE) {
+  if (fromDatatype == COM_DT_VECTOR && toDatatype == COM_DT_VALUE) {
     return new ConvertVectorToValueOperation();
   }
-  else if (fromDatatype == COM_DT_VECTOR && toDatatype == COM_DT_COLOR) {
+  if (fromDatatype == COM_DT_VECTOR && toDatatype == COM_DT_COLOR) {
     return new ConvertVectorToColorOperation();
   }
 

@@ -53,15 +53,15 @@ getopt \
 --long source:,install:,tmp:,info:,threads:,help,show-deps,no-sudo,no-build,no-confirm,\
 with-all,with-opencollada,with-jack,with-embree,with-oidn,\
 ver-ocio:,ver-oiio:,ver-llvm:,ver-osl:,ver-osd:,ver-openvdb:,ver-xr-openxr:,\
-force-all,force-python,force-numpy,force-boost,\
+force-all,force-python,force-numpy,force-boost,force-tbb,\
 force-ocio,force-openexr,force-oiio,force-llvm,force-osl,force-osd,force-openvdb,\
 force-ffmpeg,force-opencollada,force-alembic,force-embree,force-oidn,force-usd,\
 force-xr-openxr,\
-build-all,build-python,build-numpy,build-boost,\
+build-all,build-python,build-numpy,build-boost,build-tbb,\
 build-ocio,build-openexr,build-oiio,build-llvm,build-osl,build-osd,build-openvdb,\
 build-ffmpeg,build-opencollada,build-alembic,build-embree,build-oidn,build-usd,\
 build-xr-openxr,\
-skip-python,skip-numpy,skip-boost,\
+skip-python,skip-numpy,skip-boost,skip-tbb,\
 skip-ocio,skip-openexr,skip-oiio,skip-llvm,skip-osl,skip-osd,skip-openvdb,\
 skip-ffmpeg,skip-opencollada,skip-alembic,skip-embree,skip-oidn,skip-usd,\
 skip-xr-openxr \
@@ -191,6 +191,9 @@ ARGUMENTS_INFO="\"COMMAND LINE ARGUMENTS:
     --build-boost
         Force the build of Boost.
 
+    --build-tbb
+        Force the build of TBB.
+
     --build-ocio
         Force the build of OpenColorIO.
 
@@ -255,6 +258,9 @@ ARGUMENTS_INFO="\"COMMAND LINE ARGUMENTS:
     --force-boost
         Force the rebuild of Boost.
 
+    --force-tbb
+        Force the rebuild of TBB.
+
     --force-ocio
         Force the rebuild of OpenColorIO.
 
@@ -312,6 +318,9 @@ ARGUMENTS_INFO="\"COMMAND LINE ARGUMENTS:
     --skip-boost
         Unconditionally skip Boost installation/building.
 
+    --skip-tbb
+        Unconditionally skip TBB installation/building.
+
     --skip-ocio
         Unconditionally skip OpenColorIO installation/building.
 
@@ -365,63 +374,96 @@ NO_BUILD=false
 NO_CONFIRM=false
 USE_CXX11=true
 
-CLANG_FORMAT_VERSION_MIN="6.0"
+# Note about versions: Min is inclusive, Max is exclusive (i.e. XXX_VERSION_MIN <= ACTUAL_VERSION < XXX_VERSION_MAX)
+# XXX_VERSION is officially supported/used version in official builds.
+# XXX_VERSION_SHORT is used for various things, like preferred version (when distribution provides several of them),
+#                   and to name shortcuts to built libraries' installation directories...
 
-PYTHON_VERSION="3.7.4"
+CLANG_FORMAT_VERSION_MIN="6.0"
+CLANG_FORMAT_VERSION_MAX="10.0"
+
+PYTHON_VERSION="3.7.7"
+PYTHON_VERSION_SHORT="3.7"
 PYTHON_VERSION_MIN="3.7"
+PYTHON_VERSION_MAX="3.9"
+PYTHON_VERSION_INSTALLED=$PYTHON_VERSION_MIN
 PYTHON_FORCE_BUILD=false
 PYTHON_FORCE_REBUILD=false
 PYTHON_SKIP=false
 
-NUMPY_VERSION="1.17.0"
+NUMPY_VERSION="1.17.5"
+NUMPY_VERSION_SHORT="1.17"
 NUMPY_VERSION_MIN="1.8"
+NUMPY_VERSION_MAX="2.0"
 NUMPY_FORCE_BUILD=false
 NUMPY_FORCE_REBUILD=false
 NUMPY_SKIP=false
 
 BOOST_VERSION="1.70.0"
+BOOST_VERSION_SHORT="1.70"
 BOOST_VERSION_MIN="1.49"
+BOOST_VERSION_MAX="2.0"
 BOOST_FORCE_BUILD=false
 BOOST_FORCE_REBUILD=false
 BOOST_SKIP=false
 
-OCIO_VERSION="1.1.0"
+TBB_VERSION="2019"
+TBB_VERSION_SHORT="2019"
+TBB_VERSION_UPDATE="_U9"  # Used for source packages...
+TBB_VERSION_MIN="2018"
+TBB_VERSION_MAX="2021"
+TBB_FORCE_BUILD=false
+TBB_FORCE_REBUILD=false
+TBB_SKIP=false
+
+OCIO_VERSION="1.1.1"
+OCIO_VERSION_SHORT="1.1"
 OCIO_VERSION_MIN="1.0"
+OCIO_VERSION_MAX="1.2"
 OCIO_FORCE_BUILD=false
 OCIO_FORCE_REBUILD=false
 OCIO_SKIP=false
 
 OPENEXR_VERSION="2.4.0"
+OPENEXR_VERSION_SHORT="2.4"
 OPENEXR_VERSION_MIN="2.3"
+OPENEXR_VERSION_MAX="3.0"
 OPENEXR_FORCE_BUILD=false
 OPENEXR_FORCE_REBUILD=false
 OPENEXR_SKIP=false
 _with_built_openexr=false
 
-OIIO_VERSION="1.8.13"
-OIIO_VERSION_MIN="1.8.13"
-OIIO_VERSION_MAX="99.99.0"  # UNKNOWN currently # Not supported by current OSL...
+OIIO_VERSION="2.1.15.0"
+OIIO_VERSION_SHORT="2.1"
+OIIO_VERSION_MIN="1.8"
+OIIO_VERSION_MAX="3.0"
 OIIO_FORCE_BUILD=false
 OIIO_FORCE_REBUILD=false
 OIIO_SKIP=false
 
 LLVM_VERSION="9.0.1"
+LLVM_VERSION_SHORT="9.0"
 LLVM_VERSION_MIN="6.0"
+LLVM_VERSION_MAX="11.0"
 LLVM_VERSION_FOUND=""
 LLVM_FORCE_BUILD=false
 LLVM_FORCE_REBUILD=false
 LLVM_SKIP=false
 
 # OSL needs to be compiled for now!
-OSL_VERSION="1.10.9"
-OSL_VERSION_MIN=$OSL_VERSION
+OSL_VERSION="1.10.10"
+OSL_VERSION_SHORT="1.10"
+OSL_VERSION_MIN="1.10"
+OSL_VERSION_MAX="2.0"
 OSL_FORCE_BUILD=false
 OSL_FORCE_REBUILD=false
 OSL_SKIP=false
 
 # OpenSubdiv needs to be compiled for now
-OSD_VERSION="3.4.0_RC2"
-OSD_VERSION_MIN=$OSD_VERSION
+OSD_VERSION="3.4.3"
+OSD_VERSION_SHORT="3.4"
+OSD_VERSION_MIN="3.4"
+OSD_VERSION_MAX="4.0"
 OSD_FORCE_BUILD=false
 OSD_FORCE_REBUILD=false
 OSD_SKIP=false
@@ -430,46 +472,69 @@ OSD_SKIP=false
 OPENVDB_BLOSC_VERSION="1.5.0"
 
 OPENVDB_VERSION="7.0.0"
-OPENVDB_VERSION_MIN=$OPENVDB_VERSION
+OPENVDB_VERSION_SHORT="7.0"
+OPENVDB_VERSION_MIN="7.0"
+OPENVDB_VERSION_MAX="7.1"
 OPENVDB_FORCE_BUILD=false
 OPENVDB_FORCE_REBUILD=false
 OPENVDB_SKIP=false
 
 # Alembic needs to be compiled for now
 ALEMBIC_VERSION="1.7.12"
-ALEMBIC_VERSION_MIN=$ALEMBIC_VERSION
+ALEMBIC_VERSION_SHORT="1.7"
+ALEMBIC_VERSION_MIN="1.7"
+ALEMBIC_VERSION_MAX="2.0"
 ALEMBIC_FORCE_BUILD=false
 ALEMBIC_FORCE_REBUILD=false
 ALEMBIC_SKIP=false
 
-USD_VERSION="19.11"
+USD_VERSION="20.05"
+USD_VERSION_SHORT="20.05"
+USD_VERSION_MIN="20.05"
+USD_VERSION_MAX="20.06"
 USD_FORCE_BUILD=false
 USD_FORCE_REBUILD=false
 USD_SKIP=false
 
 OPENCOLLADA_VERSION="1.6.68"
+OPENCOLLADA_VERSION_SHORT="1.6"
+OPENCOLLADA_VERSION_MIN="1.6.68"
+OPENCOLLADA_VERSION_MAX="1.7"
 OPENCOLLADA_FORCE_BUILD=false
 OPENCOLLADA_FORCE_REBUILD=false
 OPENCOLLADA_SKIP=false
 
-EMBREE_VERSION="3.8.0"
+EMBREE_VERSION="3.10.0"
+EMBREE_VERSION_SHORT="3.10"
+EMBREE_VERSION_MIN="3.10"
+EMBREE_VERSION_MAX="4.0"
 EMBREE_FORCE_BUILD=false
 EMBREE_FORCE_REBUILD=false
 EMBREE_SKIP=false
 
-OIDN_VERSION="1.0.0"
+OIDN_VERSION="1.2.3"
+OIDN_VERSION_SHORT="1.2"
+OIDN_VERSION_MIN="1.2.0"
+OIDN_VERSION_MAX="1.3"
 OIDN_FORCE_BUILD=false
 OIDN_FORCE_REBUILD=false
 OIDN_SKIP=false
 
-FFMPEG_VERSION="4.0.2"
-FFMPEG_VERSION_MIN="2.8.4"
+ISPC_VERSION="1.14.1"
+
+FFMPEG_VERSION="4.2.3"
+FFMPEG_VERSION_SHORT="4.2"
+FFMPEG_VERSION_MIN="3.0"
+FFMPEG_VERSION_MAX="5.0"
 FFMPEG_FORCE_BUILD=false
 FFMPEG_FORCE_REBUILD=false
 FFMPEG_SKIP=false
 _ffmpeg_list_sep=";"
 
-XR_OPENXR_VERSION="1.0.6"
+XR_OPENXR_VERSION="1.0.8"
+XR_OPENXR_VERSION_SHORT="1.0"
+XR_OPENXR_VERSION_MIN="1.0.8"
+XR_OPENXR_VERSION_MAX="2.0"
 XR_OPENXR_FORCE_BUILD=false
 XR_OPENXR_FORCE_REBUILD=false
 XR_OPENXR_SKIP=false
@@ -617,42 +682,50 @@ while true; do
     --ver-ocio)
       OCIO_VERSION="$2"
       OCIO_VERSION_MIN=$OCIO_VERSION
+      OCIO_VERSION_SHORT=$OCIO_VERSION
       shift; shift; continue
     ;;
     --ver-oiio)
       OIIO_VERSION="$2"
       OIIO_VERSION_MIN=$OIIO_VERSION
+      OIIO_VERSION_SHORT=$OIIO_VERSION
       shift; shift; continue
     ;;
     --ver-llvm)
       LLVM_VERSION="$2"
       LLVM_VERSION_MIN=$LLVM_VERSION
+      LLVM_VERSION_SHORT=$LLVM_VERSION
       shift; shift; continue
     ;;
     --ver-osl)
       OSL_VERSION="$2"
       OSL_VERSION_MIN=$OSL_VERSION
+      OSL_VERSION_SHORT=$OSL_VERSION
       shift; shift; continue
     ;;
     --ver-osd)
       OSD_VERSION="$2"
       OSD_VERSION_MIN=$OSD_VERSION
+      OSD_VERSION_SHORT=$OSD_VERSION
       shift; shift; continue
     ;;
     --ver-openvdb)
       OPENVDB_VERSION="$2"
       OPENVDB_VERSION_MIN=$OPENVDB_VERSION
+      OPENVDB_VERSION_SHORT=$OPENVDB_VERSION
       shift; shift; continue
     ;;
     --ver-xr-openxr)
       XR_OPENXR_VERSION="$2"
       XR_OPENXR_VERSION_MIN=$XR_OPENXR_VERSION
+      XR_OPENXR_VERSION_SHORT=$XR_OPENXR_VERSION
       shift; shift; continue
     ;;
     --build-all)
       PYTHON_FORCE_BUILD=true
       NUMPY_FORCE_BUILD=true
       BOOST_FORCE_BUILD=true
+      TBB_FORCE_BUILD=true
       OCIO_FORCE_BUILD=true
       OPENEXR_FORCE_BUILD=true
       OIIO_FORCE_BUILD=true
@@ -681,6 +754,9 @@ while true; do
     ;;
     --build-boost)
       BOOST_FORCE_BUILD=true; shift; continue
+    ;;
+    --build-tbb)
+      TBB_FORCE_BUILD=true; shift; continue
     ;;
     --build-ocio)
       OCIO_FORCE_BUILD=true; shift; continue
@@ -728,6 +804,7 @@ while true; do
       PYTHON_FORCE_REBUILD=true
       NUMPY_FORCE_REBUILD=true
       BOOST_FORCE_REBUILD=true
+      TBB_FORCE_REBUILD=true
       OCIO_FORCE_REBUILD=true
       OPENEXR_FORCE_REBUILD=true
       OIIO_FORCE_REBUILD=true
@@ -754,6 +831,9 @@ while true; do
     ;;
     --force-boost)
       BOOST_FORCE_REBUILD=true; shift; continue
+    ;;
+    --force-tbb)
+      TBB_FORCE_REBUILD=true; shift; continue
     ;;
     --force-ocio)
       OCIO_FORCE_REBUILD=true; shift; continue
@@ -805,6 +885,9 @@ while true; do
     ;;
     --skip-boost)
       BOOST_SKIP=true; shift; continue
+    ;;
+    --skip-tbb)
+      TBB_SKIP=true; shift; continue
     ;;
     --skip-ocio)
       OCIO_SKIP=true; shift; continue
@@ -898,8 +981,11 @@ PYTHON_SOURCE=( "https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHO
 NUMPY_SOURCE=( "https://github.com/numpy/numpy/releases/download/v$NUMPY_VERSION/numpy-$NUMPY_VERSION.tar.gz" )
 
 _boost_version_nodots=`echo "$BOOST_VERSION" | sed -r 's/\./_/g'`
-BOOST_SOURCE=( "http://sourceforge.net/projects/boost/files/boost/$BOOST_VERSION/boost_$_boost_version_nodots.tar.bz2/download" )
+BOOST_SOURCE=( "https://dl.bintray.com/boostorg/release/$BOOST_VERSION/source/boost_$_boost_version_nodots.tar.bz2" )
 BOOST_BUILD_MODULES="--with-system --with-filesystem --with-thread --with-regex --with-locale --with-date_time --with-wave --with-iostreams --with-python --with-program_options"
+
+TBB_SOURCE=( "https://github.com/oneapi-src/oneTBB/archive/$TBB_VERSION$TBB_VERSION_UPDATE.tar.gz" )
+TBB_SOURCE_CMAKE=( "https://raw.githubusercontent.com/wjakob/tbb/master/CMakeLists.txt" )
 
 OCIO_USE_REPO=false
 OCIO_SOURCE=( "https://github.com/AcademySoftwareFoundation/OpenColorIO/archive/v$OCIO_VERSION.tar.gz")
@@ -974,6 +1060,8 @@ OIDN_SOURCE=( "https://github.com/OpenImageDenoise/oidn/releases/download/v${OID
 #~ OIDN_REPO_UID="dabfd9c80101edae9d25a710160d12d6d963c591"
 #~ OIDN_REPO_BRANCH="master"
 
+ISPC_BINARY=( "https://github.com/ispc/ispc/releases/download/v${ISPC_VERSION}/ispc-v${ISPC_VERSION}-linux.tar.gz" )
+
 FFMPEG_SOURCE=( "http://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.bz2" )
 
 XR_OPENXR_USE_REPO=false
@@ -999,7 +1087,7 @@ Those libraries should be available as packages in all recent distributions (opt
     * libjpeg, libpng, libtiff, [openjpeg2], [libopenal].
     * libx11, libxcursor, libxi, libxrandr, libxinerama (and other libx... as needed).
     * libsqlite3, libbz2, libssl, libfftw3, libxml2, libtinyxml, yasm, libyaml-cpp.
-    * libsdl1.2, libglew, [libglewmx].\""
+    * libsdl2, libglew, libpugixml, libpotrace, [libgmp], [libglewmx], fontconfig.\""
 
 DEPS_SPECIFIC_INFO="\"BUILDABLE DEPENDENCIES:
 
@@ -1011,6 +1099,7 @@ You may also want to build them yourself (optional ones are [between brackets]):
     * Python $PYTHON_VERSION_MIN (from $PYTHON_SOURCE).
     * [NumPy $NUMPY_VERSION_MIN] (from $NUMPY_SOURCE).
     * Boost $BOOST_VERSION_MIN (from $BOOST_SOURCE, modules: $BOOST_BUILD_MODULES).
+    * TBB $TBB_VERSION_MIN (from $TBB_SOURCE).
     * [FFMpeg $FFMPEG_VERSION_MIN (needs libvorbis, libogg, libtheora, libx264, libmp3lame, libxvidcore, libvpx, ...)] (from $FFMPEG_SOURCE).
     * [OpenColorIO $OCIO_VERSION_MIN] (from $OCIO_SOURCE).
     * ILMBase $OPENEXR_VERSION_MIN (from $OPENEXR_SOURCE).
@@ -1170,13 +1259,16 @@ version_match() {
 # ----------------------------------------------------------------------------
 # Generic compile helpers
 
-prepare_opt() {
+prepare_inst() {
   INFO "Ensuring $INST exists and is writable by us"
   if [ ! $SUDO ]; then
     WARNING "--no-sudo enabled, might be impossible to create install dir..."
   fi
+
   if [ ! -d  $INST ]; then
-    $SUDO mkdir -p $INST
+    # Try to create normal user directory first to possibly avoid excessive
+    # system operations
+    mkdir -p $INST || $SUDO mkdir -p $INST
   fi
 
   if [ ! -w $INST ]; then
@@ -1238,7 +1330,7 @@ _init_python() {
   _src=$SRC/Python-$PYTHON_VERSION
   _git=false
   _inst=$INST/python-$PYTHON_VERSION
-  _inst_shortcut=$INST/python-$PYTHON_VERSION_MIN
+  _inst_shortcut=$INST/python-$PYTHON_VERSION_SHORT
 }
 
 _update_deps_python() {
@@ -1248,8 +1340,10 @@ _update_deps_python() {
 clean_Python() {
   clean_Numpy
   _init_python
+  if [ -d $_inst ]; then
+    _update_deps_python
+  fi
   _clean
-  _update_deps_python
 }
 
 compile_Python() {
@@ -1275,7 +1369,7 @@ compile_Python() {
     # Rebuild dependencies as well!
     _update_deps_python
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -1311,7 +1405,7 @@ compile_Python() {
     INFO "If you want to force rebuild of this lib, use the --force-python option."
   fi
 
-  run_ldconfig "python-$PYTHON_VERSION_MIN"
+  run_ldconfig "python-$PYTHON_VERSION_SHORT"
 }
 
 # ----------------------------------------------------------------------------
@@ -1321,8 +1415,8 @@ _init_numpy() {
   _src=$SRC/numpy-$NUMPY_VERSION
   _git=false
   _inst=$INST/numpy-$NUMPY_VERSION
-  _python=$INST/python-$PYTHON_VERSION
-  _site=lib/python$PYTHON_VERSION_MIN/site-packages
+  _python=$INST/python-$PYTHON_VERSION_SHORT
+  _site=lib/python$PYTHON_VERSION_SHORT/site-packages
   _inst_shortcut=$_python/$_site/numpy
 }
 
@@ -1332,8 +1426,10 @@ _update_deps_numpy() {
 
 clean_Numpy() {
   _init_numpy
+  if [ -d $_inst ]; then
+    _update_deps_numpy
+  fi
   _clean
-  _update_deps_numpy
 }
 
 compile_Numpy() {
@@ -1359,7 +1455,7 @@ compile_Numpy() {
     # Rebuild dependencies as well!
     _update_deps_numpy
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -1399,7 +1495,7 @@ compile_Numpy() {
 _init_boost() {
   _src=$SRC/boost-$BOOST_VERSION
   _git=false
-  _inst=$INST/boost-$BOOST_VERSION
+  _inst=$INST/boost-$BOOST_VERSION_SHORT
   _inst_shortcut=$INST/boost
 }
 
@@ -1418,8 +1514,10 @@ _update_deps_boost() {
 
 clean_Boost() {
   _init_boost
+  if [ -d $_inst ]; then
+    _update_deps_boost
+  fi
   _clean
-  _update_deps_boost
 }
 
 compile_Boost() {
@@ -1446,7 +1544,7 @@ compile_Boost() {
     # Rebuild dependencies as well!
     _update_deps_boost
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       INFO "Downloading Boost-$BOOST_VERSION"
@@ -1485,6 +1583,130 @@ compile_Boost() {
 }
 
 # ----------------------------------------------------------------------------
+# Build TBB
+
+_init_tbb() {
+  _src=$SRC/TBB-$TBB_VERSION
+  _git=false
+  _inst=$INST/tbb-$TBB_VERSION_SHORT
+  _inst_shortcut=$INST/tbb
+}
+
+_update_deps_tbb() {
+  OSD_FORCE_REBUILD=true
+  OPENVDB_FORCE_REBUILD=true
+  USD_FORCE_REBUILD=true
+  EMBREE_FORCE_REBUILD=true
+  OIDN_FORCE_REBUILD=true
+  if [ "$_is_building" = true ]; then
+    OSD_FORCE_BUILD=true
+    OPENVDB_FORCE_BUILD=true
+    USD_FORCE_BUILD=true
+    EMBREE_FORCE_BUILD=true
+    OIDN_FORCE_BUILD=true
+  fi
+}
+
+clean_TBB() {
+  _init_tbb
+  if [ -d $_inst ]; then
+    _update_deps_tbb
+  fi
+  _clean
+}
+
+compile_TBB() {
+  if [ "$NO_BUILD" = true ]; then
+    WARNING "--no-build enabled, TBB will not be compiled!"
+    return
+  fi
+
+  # To be changed each time we make edits that would modify the compiled result!
+  tbb_magic=0
+  _init_tbb
+
+  # Clean install if needed!
+  magic_compile_check tbb-$TBB_VERSION $tbb_magic
+  if [ $? -eq 1 -o "$TBB_FORCE_REBUILD" = true ]; then
+    clean_TBB
+  fi
+
+  if [ ! -d $_inst ]; then
+    INFO "Building TBB-$TBB_VERSION$TBB_VERSION_UPDATE"
+    _is_building=true
+
+    # Rebuild dependencies as well!
+    _update_deps_tbb
+
+    prepare_inst
+
+    if [ ! -d $_src ]; then
+      INFO "Downloading TBB-$TBB_VERSION$TBB_VERSION_UPDATE"
+      mkdir -p $SRC
+
+      download TBB_SOURCE[@] $_src.tar.gz
+      INFO "Unpacking TBB-$TBB_VERSION$TBB_VERSION_UPDATE"
+      tar -C $SRC --transform "s,(.*/?)oneTBB[^/]*(.*),\1TBB-$TBB_VERSION\2,x" \
+          -xf $_src.tar.gz
+
+      INFO
+
+      # Super-hack: Add some cmake builder to tbb... since they don't even have an install target by default, sic.
+      download TBB_SOURCE_CMAKE[@] $_src/CMakeLists.txt
+      cp $_src/build/vs2013/version_string.ver $_src/build/version_string.ver.in
+    fi
+
+    cd $_src
+
+    # Always refresh the whole build!
+    if [ -d cmake_build ]; then
+      rm -rf cmake_build
+    fi
+    mkdir cmake_build
+    cd cmake_build
+
+    cmake_d="-D CMAKE_BUILD_TYPE=Release"
+    cmake_d="$cmake_d -D CMAKE_PREFIX_PATH=$_inst"
+    cmake_d="$cmake_d -D CMAKE_INSTALL_PREFIX=$_inst"
+    cmake_d="$cmake_d -D TBB_BUILD_SHARED=ON"
+    cmake_d="$cmake_d -D TBB_BUILD_STATIC=OFF"
+    cmake_d="$cmake_d -D TBB_BUILD_TBBMALLOC=ON"
+    cmake_d="$cmake_d -D TBB_BUILD_TBBMALLOC_PROXY=OFF"
+    cmake_d="$cmake_d -D TBB_BUILD_TESTS=OFF"
+
+    if file /bin/cp | grep -q '32-bit'; then
+      cflags="-fPIC -m32 -march=i686"
+    else
+      cflags="-fPIC"
+    fi
+
+    cmake $cmake_d -D CMAKE_CXX_FLAGS="$cflags" -D CMAKE_EXE_LINKER_FLAGS="-lgcc_s -lgcc" ..
+
+    make -j$THREADS && make install
+
+    make clean
+
+    if [ -d $_inst ]; then
+      _create_inst_shortcut
+    else
+      ERROR "TBB-$TBB_VERSION$TBB_VERSION_UPDATE failed to compile, exiting"
+      exit 1
+    fi
+
+    magic_compile_set tbb-$TBB_VERSION $tbb_magic
+
+    cd $CWD
+    INFO "Done compiling TBB-$TBB_VERSION$TBB_VERSION_UPDATE!"
+    _is_building=false
+  else
+    INFO "Own TBB-$TBB_VERSION$TBB_VERSION_UPDATE is up to date, nothing to do!"
+    INFO "If you want to force rebuild of this lib, use the --force-tbb option."
+  fi
+
+  run_ldconfig "tbb"
+}
+
+# ----------------------------------------------------------------------------
 # Build OCIO
 
 _init_ocio() {
@@ -1494,7 +1716,7 @@ _init_ocio() {
   else
     _git=false
   fi
-  _inst=$INST/ocio-$OCIO_VERSION
+  _inst=$INST/ocio-$OCIO_VERSION_SHORT
   _inst_shortcut=$INST/ocio
 }
 
@@ -1504,8 +1726,10 @@ _update_deps_ocio() {
 
 clean_OCIO() {
   _init_ocio
+  if [ -d $_inst ]; then
+    _update_deps_ocio
+  fi
   _clean
-  _update_deps_ocio
 }
 
 compile_OCIO() {
@@ -1527,11 +1751,11 @@ compile_OCIO() {
   if [ ! -d $_inst ]; then
     INFO "Building OpenColorIO-$OCIO_VERSION"
     _is_building=true
-    
+
     # Rebuild dependencies as well!
     _update_deps_ocio
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       INFO "Downloading OpenColorIO-$OCIO_VERSION"
@@ -1617,7 +1841,7 @@ compile_OCIO() {
 _init_openexr() {
   _src=$SRC/OpenEXR-$OPENEXR_VERSION
   _git=false
-  _inst=$_openexr_inst
+  _inst=$INST/openexr-$OPENEXR_VERSION_SHORT
   _inst_shortcut=$INST/openexr
 }
 
@@ -1632,8 +1856,10 @@ _update_deps_openexr() {
 
 clean_OPENEXR() {
   _init_openexr
+  if [ -d $_inst ]; then
+    _update_deps_openexr
+  fi
   _clean
-  _update_deps_openexr
 }
 
 compile_OPENEXR() {
@@ -1651,7 +1877,6 @@ compile_OPENEXR() {
     clean_OPENEXR
   fi
 
-  _openexr_inst=$INST/openexr-$OPENEXR_VERSION
   PRINT ""
   _init_openexr
 
@@ -1662,7 +1887,7 @@ compile_OPENEXR() {
     # Rebuild dependencies as well!
     _update_deps_openexr
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       INFO "Downloading OpenEXR-$OPENEXR_VERSION"
@@ -1697,7 +1922,7 @@ compile_OPENEXR() {
     mkdir build
     cd build
 
-    cmake_d="$cmake_d -D CMAKE_INSTALL_PREFIX=$_openexr_inst"
+    cmake_d="$cmake_d -D CMAKE_INSTALL_PREFIX=$_inst"
     cmake_d="$cmake_d -D CMAKE_INSTALL_DOCDIR=/dev/null"  # Hack, there is no option to disable that currently...
     cmake_d="$cmake_d -D BUILD_SHARED_LIBS=ON"
     cmake_d="$cmake_d -D BUILD_TESTING=OFF"
@@ -1746,7 +1971,7 @@ compile_OPENEXR() {
 _init_oiio() {
   _src=$SRC/OpenImageIO-$OIIO_VERSION
   _git=true
-  _inst=$INST/oiio-$OIIO_VERSION
+  _inst=$INST/oiio-$OIIO_VERSION_SHORT
   _inst_shortcut=$INST/oiio
 }
 
@@ -1759,8 +1984,10 @@ _update_deps_oiio() {
 
 clean_OIIO() {
   _init_oiio
+  if [ -d $_inst ]; then
+    _update_deps_oiio
+  fi
   _clean
-  _update_deps_oiio
 }
 
 compile_OIIO() {
@@ -1786,7 +2013,7 @@ compile_OIIO() {
     # Rebuild dependencies as well!
     _update_deps_oiio
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -1899,7 +2126,7 @@ _init_llvm() {
   _src=$SRC/LLVM-$LLVM_VERSION
   _src_clang=$SRC/CLANG-$LLVM_VERSION
   _git=false
-  _inst=$INST/llvm-$LLVM_VERSION
+  _inst=$INST/llvm-$LLVM_VERSION_SHORT
   _inst_shortcut=$INST/llvm
 }
 
@@ -1912,8 +2139,10 @@ _update_deps_llvm() {
 
 clean_LLVM() {
   _init_llvm
+  if [ -d $_inst ]; then
+    _update_deps_llvm
+  fi
   _clean
-  _update_deps_llvm
 }
 
 compile_LLVM() {
@@ -1939,7 +2168,7 @@ compile_LLVM() {
     # Rebuild dependencies as well!
     _update_deps_llvm
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src -o true ]; then
       mkdir -p $SRC
@@ -2009,7 +2238,7 @@ compile_LLVM() {
 _init_osl() {
   _src=$SRC/OpenShadingLanguage-$OSL_VERSION
   _git=true
-  _inst=$INST/osl-$OSL_VERSION
+  _inst=$INST/osl-$OSL_VERSION_SHORT
   _inst_shortcut=$INST/osl
 }
 
@@ -2019,8 +2248,10 @@ _update_deps_osl() {
 
 clean_OSL() {
   _init_osl
+  if [ -d $_inst ]; then
+    _update_deps_osl
+  fi
   _clean
-  _update_deps_osl
 }
 
 compile_OSL() {
@@ -2047,7 +2278,7 @@ compile_OSL() {
     # Rebuild dependencies as well!
     _update_deps_osl
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -2152,7 +2383,7 @@ compile_OSL() {
 _init_osd() {
   _src=$SRC/OpenSubdiv-$OSD_VERSION
   _git=true
-  _inst=$INST/osd-$OSD_VERSION
+  _inst=$INST/osd-$OSD_VERSION_SHORT
   _inst_shortcut=$INST/osd
 }
 
@@ -2162,8 +2393,10 @@ _update_deps_osd() {
 
 clean_OSD() {
   _init_osd
+  if [ -d $_inst ]; then
+    _update_deps_osd
+  fi
   _clean
-  _update_deps_osd
 }
 
 compile_OSD() {
@@ -2189,7 +2422,7 @@ compile_OSD() {
     # Rebuild dependencies as well!
     _update_deps_osd
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -2222,6 +2455,9 @@ compile_OSD() {
     mkdir build
     cd build
 
+    if [ -d $INST/tbb ]; then
+      cmake_d="$cmake_d $cmake_d -D TBB_LOCATION=$INST/tbb"
+    fi
     cmake_d="-D CMAKE_BUILD_TYPE=Release"
     cmake_d="$cmake_d -D CMAKE_INSTALL_PREFIX=$_inst"
     # ptex is only needed when nicholas bishop is ready
@@ -2274,8 +2510,10 @@ _update_deps_blosc() {
 
 clean_BLOSC() {
   _init_blosc
+  if [ -d $_inst ]; then
+    _update_deps_blosc
+  fi
   _clean
-  _update_deps_blosc
 }
 
 compile_BLOSC() {
@@ -2302,7 +2540,7 @@ compile_BLOSC() {
     # Rebuild dependencies as well!
     _update_deps_blosc
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       INFO "Downloading Blosc-$OPENVDB_BLOSC_VERSION"
@@ -2359,7 +2597,7 @@ compile_BLOSC() {
 _init_openvdb() {
   _src=$SRC/openvdb-$OPENVDB_VERSION
   _git=false
-  _inst=$INST/openvdb-$OPENVDB_VERSION
+  _inst=$INST/openvdb-$OPENVDB_VERSION_SHORT
   _inst_shortcut=$INST/openvdb
 }
 
@@ -2369,8 +2607,10 @@ _update_deps_openvdb() {
 
 clean_OPENVDB() {
   _init_openvdb
+  if [ -d $_inst ]; then
+    _update_deps_openvdb
+  fi
   _clean
-  _update_deps_openvdb
 }
 
 compile_OPENVDB() {
@@ -2399,7 +2639,7 @@ compile_OPENVDB() {
     # Rebuild dependencies as well!
     _update_deps_openvdb
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src -o true ]; then
       mkdir -p $SRC
@@ -2428,6 +2668,9 @@ compile_OPENVDB() {
 
     if [ -d $INST/boost ]; then
       make_d="$make_d BOOST_INCL_DIR=$INST/boost/include BOOST_LIB_DIR=$INST/boost/lib"
+    fi
+    if [ -d $INST/tbb ]; then
+      make_d="$make_d TBB_ROOT=$INST/tbb TBB_USE_STATIC_LIBS=OFF"
     fi
 
     if [ "$_with_built_openexr" = true ]; then
@@ -2472,7 +2715,7 @@ compile_OPENVDB() {
 _init_alembic() {
   _src=$SRC/alembic-$ALEMBIC_VERSION
   _git=false
-  _inst=$INST/alembic-$ALEMBIC_VERSION
+  _inst=$INST/alembic-$ALEMBIC_VERSION_SHORT
   _inst_shortcut=$INST/alembic
 }
 
@@ -2482,8 +2725,10 @@ _update_deps_alembic() {
 
 clean_ALEMBIC() {
   _init_alembic
+  if [ -d $_inst ]; then
+    _update_deps_alembic
+  fi
   _clean
-  _update_deps_alembic
 }
 
 compile_ALEMBIC() {
@@ -2509,7 +2754,7 @@ compile_ALEMBIC() {
     # Rebuild dependencies as well!
     _update_deps_alembic
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -2575,7 +2820,7 @@ compile_ALEMBIC() {
 _init_usd() {
   _src=$SRC/USD-$USD_VERSION
   _git=false
-  _inst=$INST/usd-$USD_VERSION
+  _inst=$INST/usd-$USD_VERSION_SHORT
   _inst_shortcut=$INST/usd
 }
 
@@ -2585,8 +2830,10 @@ _update_deps_usd() {
 
 clean_USD() {
   _init_usd
+  if [ -d $_inst ]; then
+    _update_deps_usd
+  fi
   _clean
-  _update_deps_usd
 }
 
 compile_USD() {
@@ -2612,7 +2859,7 @@ compile_USD() {
     # Rebuild dependencies as well!
     _update_deps_usd
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -2629,6 +2876,10 @@ compile_USD() {
     # For the reasoning behind these options, please see usd.cmake.
     if [ -d $INST/boost ]; then
       cmake_d="$cmake_d $cmake_d -D BOOST_ROOT=$INST/boost"
+    fi
+
+    if [ -d $INST/tbb ]; then
+      cmake_d="$cmake_d $cmake_d -D TBB_ROOT_DIR=$INST/tbb"
     fi
     cmake_d="$cmake_d -DPXR_SET_INTERNAL_NAMESPACE=usdBlender"
     cmake_d="$cmake_d -DPXR_ENABLE_PYTHON_SUPPORT=OFF"
@@ -2668,7 +2919,7 @@ compile_USD() {
 _init_opencollada() {
   _src=$SRC/OpenCOLLADA-$OPENCOLLADA_VERSION
   _git=true
-  _inst=$INST/opencollada-$OPENCOLLADA_VERSION
+  _inst=$INST/opencollada-$OPENCOLLADA_VERSION_SHORT
   _inst_shortcut=$INST/opencollada
 }
 
@@ -2678,8 +2929,10 @@ _update_deps_collada() {
 
 clean_OpenCOLLADA() {
   _init_opencollada
+  if [ -d $_inst ]; then
+    _update_deps_collada
+  fi
   _clean
-  _update_deps_collada
 }
 
 compile_OpenCOLLADA() {
@@ -2705,7 +2958,7 @@ compile_OpenCOLLADA() {
     # Rebuild dependencies as well!
     _update_deps_collada
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -2772,7 +3025,7 @@ compile_OpenCOLLADA() {
 _init_embree() {
   _src=$SRC/embree-$EMBREE_VERSION
   _git=true
-  _inst=$INST/embree-$EMBREE_VERSION
+  _inst=$INST/embree-$EMBREE_VERSION_SHORT
   _inst_shortcut=$INST/embree
 }
 
@@ -2782,8 +3035,10 @@ _update_deps_embree() {
 
 clean_Embree() {
   _init_embree
+  if [ -d $_inst ]; then
+    _update_deps_embree
+  fi
   _clean
-  _update_deps_embree
 }
 
 compile_Embree() {
@@ -2793,7 +3048,7 @@ compile_Embree() {
   fi
 
   # To be changed each time we make edits that would modify the compiled results!
-  embree_magic=9
+  embree_magic=10
   _init_embree
 
   # Clean install if needed!
@@ -2809,7 +3064,7 @@ compile_Embree() {
     # Rebuild dependencies as well!
     _update_deps_embree
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -2847,8 +3102,12 @@ compile_Embree() {
     cmake_d="$cmake_d -D EMBREE_RAY_MASK=ON"
     cmake_d="$cmake_d -D EMBREE_FILTER_FUNCTION=ON"
     cmake_d="$cmake_d -D EMBREE_BACKFACE_CULLING=OFF"
-    cmake_d="$cmake_d -D EMBREE_TASKING_SYSTEM=INTERNAL"
     cmake_d="$cmake_d -D EMBREE_MAX_ISA=AVX2"
+
+    cmake_d="$cmake_d -D EMBREE_TASKING_SYSTEM=TBB"
+    if [ -d $INST/tbb ]; then
+      make_d="$make_d EMBREE_TBB_ROOT=$INST/tbb"
+    fi
 
     cmake $cmake_d ../
 
@@ -2876,10 +3135,83 @@ compile_Embree() {
 # ----------------------------------------------------------------------------
 # Build OpenImageDenoise
 
+_init_ispc() {
+  _src=$SRC/ispc-v$ISPC_VERSION
+  _inst=$INST/ispc-v$ISPC_VERSION
+  _inst_shortcut=$INST/ispc
+}
+
+_update_deps_ispc() {
+  OIDN_FORCE_REBUILD=true
+  if [ "$_is_building" = true ]; then
+    OIDN_FORCE_BUILD=true
+  fi
+}
+
+clean_ispc() {
+  _init_ispc
+  if [ -d $_inst ]; then
+    _update_deps_ispc
+  fi
+  _clean
+}
+
+install_ISPC() {
+  # To be changed each time we make edits that would modify the compiled results!
+  ispc_magic=0
+  _init_ispc
+
+  # Clean install if needed!
+  magic_compile_check ispc-$ISPC_VERSION $ispc_magic
+  if [ $? -eq 1 ]; then
+    clean_ispc
+  fi
+
+  if [ ! -d $_inst ]; then
+    INFO "Installing Implicit SPMD Program Compiler v$ISPC_VERSION"
+    _is_building=true
+
+    # Rebuild dependencies as well!
+    _update_deps_ispc
+
+    prepare_inst
+
+    if [ ! -d $_src ]; then
+      mkdir -p $SRC
+      download ISPC_BINARY[@] "$_src.tar.gz"
+      INFO "Unpacking ISPC-v$ISPC_VERSION"
+      tar -C $SRC --transform "s,(.*/?)ispc-v$ISPC_VERSION-linux[^/]*(.*),\1ispc-v$ISPC_VERSION\2,x" \
+          -xf $_src.tar.gz
+    fi
+
+    mkdir -p $_inst
+    cp -r $_src/bin $_inst/bin
+
+    if [ -d $_inst ]; then
+      _create_inst_shortcut
+    else
+      ERROR "ISPC-v$ISPC_VERSION failed to install, exiting"
+      exit 1
+    fi
+
+    magic_compile_set ispc-$ISPC_VERSION $ispc_magic
+
+    cd $CWD
+    INFO "Done compiling ISPC-v$ISPC_VERSION!"
+    _is_building=false
+  else
+    INFO "Own ISPC-v$ISPC_VERSION is up to date, nothing to do!"
+  fi
+
+  _ispc_path_bin=$_inst/bin
+  run_ldconfig "ispc"
+}
+
+
 _init_oidn() {
   _src=$SRC/oidn-$OIDN_VERSION
   _git=true
-  _inst=$INST/oidn-$OIDN_VERSION
+  _inst=$INST/oidn-$OIDN_VERSION_SHORT
   _inst_shortcut=$INST/oidn
 }
 
@@ -2889,8 +3221,10 @@ _update_deps_oidn() {
 
 clean_oidn() {
   _init_oidn
+  if [ -d $_inst ]; then
+    _update_deps_oidn
+  fi
   _clean
-  _update_deps_oidn
 }
 
 compile_OIDN() {
@@ -2898,6 +3232,9 @@ compile_OIDN() {
     WARNING "--no-build enabled, OpenImageDenoise will not be compiled!"
     return
   fi
+
+  # Latest OIDN requires ISPC compiler tool...
+  install_ISPC
 
   # To be changed each time we make edits that would modify the compiled results!
   oidn_magic=9
@@ -2916,7 +3253,7 @@ compile_OIDN() {
     # Rebuild dependencies as well!
     _update_deps_oidn
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -2951,6 +3288,11 @@ compile_OIDN() {
     cmake_d="$cmake_d -D WITH_EXAMPLE=OFF"
     cmake_d="$cmake_d -D WITH_TEST=OFF"
     cmake_d="$cmake_d -D OIDN_STATIC_LIB=ON"
+    cmake_d="$cmake_d -D ISPC_DIR_HINT=$_ispc_path_bin"
+
+    if [ -d $INST/tbb ]; then
+      make_d="$make_d TBB_ROOT=$INST/tbb"
+    fi
 
     cmake $cmake_d ../
 
@@ -2982,7 +3324,7 @@ compile_OIDN() {
 
 _init_ffmpeg() {
   _src=$SRC/ffmpeg-$FFMPEG_VERSION
-  _inst=$INST/ffmpeg-$FFMPEG_VERSION
+  _inst=$INST/ffmpeg-$FFMPEG_VERSION_SHORT
   _inst_shortcut=$INST/ffmpeg
 }
 
@@ -2992,8 +3334,10 @@ _update_deps_ffmpeg() {
 
 clean_FFmpeg() {
   _init_ffmpeg
+  if [ -d $_inst ]; then
+    _update_deps_ffmpeg
+  fi
   _clean
-  _update_deps_ffmpeg
 }
 
 compile_FFmpeg() {
@@ -3019,7 +3363,7 @@ compile_FFmpeg() {
     # Rebuild dependencies as well!
     _update_deps_ffmpeg
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       INFO "Downloading ffmpeg-$FFMPEG_VERSION"
@@ -3109,7 +3453,7 @@ compile_FFmpeg() {
 _init_xr_openxr_sdk() {
   _src=$SRC/XR-OpenXR-SDK-$XR_OPENXR_VERSION
   _git=true
-  _inst=$INST/xr-openxr-sdk-$XR_OPENXR_VERSION
+  _inst=$INST/xr-openxr-sdk-$XR_OPENXR_VERSION_SHORT
   _inst_shortcut=$INST/xr-openxr-sdk
 }
 
@@ -3119,8 +3463,10 @@ _update_deps_xr_openxr_sdk() {
 
 clean_XR_OpenXR_SDK() {
   _init_xr_openxr_sdk
+  if [ -d $_inst ]; then
+    _update_deps_xr_openxr_sdk
+  fi
   _clean
-  _update_deps_xr_openxr_sdk
 }
 
 compile_XR_OpenXR_SDK() {
@@ -3134,7 +3480,7 @@ compile_XR_OpenXR_SDK() {
   _init_xr_openxr_sdk
 
   # Clean install if needed!
-  magic_compile_check xr-openxr-$OPENXR_VERSION $xr_openxr_magic
+  magic_compile_check xr-openxr-$XR_OPENXR_VERSION $xr_openxr_magic
   if [ $? -eq 1 -o "$XR_OPENXR_FORCE_REBUILD" = true ]; then
     clean_XR_OpenXR_SDK
   fi
@@ -3146,7 +3492,7 @@ compile_XR_OpenXR_SDK() {
     # Rebuild dependencies as well!
     _update_deps_xr_openxr_sdk
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -3311,11 +3657,12 @@ install_DEB() {
   THEORA_DEV="libtheora-dev"
 
   _packages="gawk cmake cmake-curses-gui build-essential libjpeg-dev libpng-dev libtiff-dev \
-             git libfreetype6-dev libx11-dev flex bison libtbb-dev libxxf86vm-dev \
+             git libfreetype6-dev libfontconfig-dev libx11-dev flex bison libxxf86vm-dev \
              libxcursor-dev libxi-dev wget libsqlite3-dev libxrandr-dev libxinerama-dev \
              libbz2-dev libncurses5-dev libssl-dev liblzma-dev libreadline-dev \
              libopenal-dev libglew-dev yasm $THEORA_DEV $VORBIS_DEV $OGG_DEV \
-             libsdl1.2-dev libfftw3-dev patch bzip2 libxml2-dev libtinyxml-dev libjemalloc-dev"
+             libsdl2-dev libfftw3-dev patch bzip2 libxml2-dev libtinyxml-dev libjemalloc-dev \
+             libgmp-dev libpugixml-dev libpotrace-dev"
              # libglewmx-dev  (broken in deb testing currently...)
 
   VORBIS_USE=true
@@ -3345,13 +3692,18 @@ install_DEB() {
 
   PRINT ""
   CLANG_FORMAT="clang-format"
-  check_package_version_ge_DEB $CLANG_FORMAT $CLANG_FORMAT_VERSION_MIN
+  check_package_version_ge_DEB $CLANG_FORMAT $CLANG_FORMAT_VERSION
   if [ $? -eq 0 ]; then
     _packages="$_packages $CLANG_FORMAT"
   else
-    PRINT ""
-    WARNING "clang-format $CLANG_FORMAT_VERSION_MIN or higher not found, this is NOT needed to get Blender compiling..."
-    PRINT ""
+    check_package_version_ge_DEB $CLANG_FORMAT $CLANG_FORMAT_VERSION_MIN
+    if [ $? -eq 0 ]; then
+      _packages="$_packages $CLANG_FORMAT"
+    else
+      PRINT ""
+      WARNING "clang-format $CLANG_FORMAT_VERSION_MIN or higher not found, this is NOT needed to get Blender compiling..."
+      PRINT ""
+    fi
   fi
 
   if [ "$WITH_JACK" = true ]; then
@@ -3466,9 +3818,11 @@ install_DEB() {
     INFO "Forced Python/NumPy building, as requested..."
     _do_compile_python=true
   else
-    check_package_DEB python$PYTHON_VERSION_MIN-dev
+    check_package_version_ge_lt_DEB python3-dev $PYTHON_VERSION_MIN $PYTHON_VERSION_MAX
     if [ $? -eq 0 ]; then
-      install_packages_DEB python$PYTHON_VERSION_MIN-dev
+      PYTHON_VERSION_INSTALLED=$(echo `get_package_version_DEB python3-dev` | sed -r 's/^([0-9]+\.[0-9]+).*/\1/')
+
+      install_packages_DEB python3-dev
       clean_Python
       PRINT ""
       if [ "$NUMPY_SKIP" = true ]; then
@@ -3506,7 +3860,7 @@ install_DEB() {
     INFO "Forced Boost building, as requested..."
     compile_Boost
   else
-    check_package_version_ge_DEB libboost-dev $BOOST_VERSION_MIN
+    check_package_version_ge_lt_DEB libboost-dev $BOOST_VERSION_MIN $BOOST_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_DEB libboost-dev
 
@@ -3521,20 +3875,36 @@ install_DEB() {
 
 
   PRINT ""
+  if [ "$TBB_SKIP" = true ]; then
+    WARNING "Skipping TBB installation, as requested..."
+  elif [ "$TBB_FORCE_BUILD" = true ]; then
+    INFO "Forced TBB building, as requested..."
+    compile_TBB
+  else
+    check_package_version_ge_lt_DEB libtbb-dev $TBB_VERSION_MIN $TBB_VERSION_MAX
+    if [ $? -eq 0 ]; then
+      install_packages_DEB libtbb-dev
+      clean_TBB
+    else
+      compile_TBB
+    fi
+  fi
+
+
+  PRINT ""
   if [ "$OCIO_SKIP" = true ]; then
     WARNING "Skipping OpenColorIO installation, as requested..."
   elif [ "$OCIO_FORCE_BUILD" = true ]; then
     INFO "Forced OpenColorIO building, as requested..."
     compile_OCIO
   else
-    # XXX Always force build of own OCIO, until linux distro guys update their package to default libyaml-cpp ver (0.5)!
-    #check_package_version_ge_DEB libopencolorio-dev $OCIO_VERSION_MIN
-    #if [ $? -eq 0 ]; then
-      #install_packages_DEB libopencolorio-dev
-      #clean_OCIO
-    #else
+    check_package_version_ge_lt_DEB libopencolorio-dev $OCIO_VERSION_MIN $OCIO_VERSION_MAX
+    if [ $? -eq 0 ]; then
+      install_packages_DEB libopencolorio-dev
+      clean_OCIO
+    else
       compile_OCIO
-    #fi
+    fi
   fi
 
 
@@ -3545,7 +3915,7 @@ install_DEB() {
     INFO "Forced ILMBase/OpenEXR building, as requested..."
     compile_OPENEXR
   else
-    check_package_version_ge_DEB libopenexr-dev $OPENEXR_VERSION_MIN
+    check_package_version_ge_lt_DEB libopenexr-dev $OPENEXR_VERSION_MIN $OPENEXR_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_DEB libopenexr-dev
       OPENEXR_VERSION=`get_package_version_DEB libopenexr-dev`
@@ -3564,14 +3934,13 @@ install_DEB() {
     INFO "Forced OpenImageIO building, as requested..."
     compile_OIIO
   else
-    # XXX Debian Testing / Ubuntu 16.04 pulls in WAY too many deps (gtk2/opencv ?!) incl. OCIO build against libyaml-cpp0.3 so build for now...
-    #check_package_version_ge_lt_DEB libopenimageio-dev $OIIO_VERSION_MIN $OIIO_VERSION_MAX
-    #if [ $? -eq 0 -a "$_with_built_openexr" = false ]; then
-    #  install_packages_DEB libopenimageio-dev
-    #  clean_OIIO
-    #else
+    check_package_version_ge_lt_DEB libopenimageio-dev $OIIO_VERSION_MIN $OIIO_VERSION_MAX
+    if [ $? -eq 0 -a "$_with_built_openexr" = false ]; then
+      install_packages_DEB libopenimageio-dev
+      clean_OIIO
+    else
       compile_OIIO
-    #fi
+    fi
   fi
 
 
@@ -3585,11 +3954,12 @@ install_DEB() {
     INFO "Forced LLVM building, as requested..."
     _do_compile_llvm=true
   else
-    check_package_DEB clang-$LLVM_VERSION_MIN
+    check_package_version_ge_lt_DEB llvm-dev $LLVM_VERSION_MIN $LLVM_VERSION_MAX
     if [ $? -eq 0 ]; then
-      install_packages_DEB llvm-$LLVM_VERSION_MIN-dev clang-$LLVM_VERSION_MIN
+      install_packages_DEB llvm-dev clang
       have_llvm=true
-      LLVM_VERSION_FOUND=$LLVM_VERSION_MIN
+      LLVM_VERSION=`llvm-config --version`
+      LLVM_VERSION_FOUND=$LLVM_VERSION
       clean_LLVM
     else
       _do_compile_llvm=true
@@ -3615,8 +3985,13 @@ install_DEB() {
     INFO "Forced OpenShadingLanguage building, as requested..."
     _do_compile_osl=true
   else
-    # No package currently!
-    _do_compile_osl=true
+    check_package_version_ge_lt_DEB  libopenshadinglanguage-dev $OSL_VERSION_MIN $OSL_VERSION_MAX
+    if [ $? -eq 0 ]; then
+      install_packages_DEB libopenshadinglanguage-dev
+      clean_OSL
+    else
+      _do_compile_osl=true
+    fi
   fi
 
   if [ "$_do_compile_osl" = true ]; then
@@ -3648,7 +4023,7 @@ install_DEB() {
     INFO "Forced OpenVDB building, as requested..."
     compile_OPENVDB
   else
-    check_package_version_ge_DEB libopenvdb-dev $OPENVDB_VERSION_MIN
+    check_package_version_ge_lt_DEB libopenvdb-dev $OPENVDB_VERSION_MIN $OPENVDB_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_DEB libopenvdb-dev libblosc-dev
       clean_OPENVDB
@@ -3664,7 +4039,6 @@ install_DEB() {
     INFO "Forced Alembic building, as requested..."
     compile_ALEMBIC
   else
-    # No package currently, only HDF5!
     compile_ALEMBIC
   fi
 
@@ -3710,8 +4084,14 @@ install_DEB() {
       INFO "Forced Embree building, as requested..."
       _do_compile_embree=true
     else
-      # No package currently!
-      _do_compile_embree=true
+      # There is a package, but it does not provide everything that Blender needs...
+      #~ check_package_version_ge_lt_DEB libembree-dev $EMBREE_VERSION_MIN $EMBREE_VERSION_MAX
+      #~ if [ $? -eq 0 ]; then
+        #~ install_packages_DEB libembree-dev
+        #~ clean_Embree
+      #~ else
+        _do_compile_embree=true
+      #~ fi
     fi
 
     if [ "$_do_compile_embree" = true ]; then
@@ -3747,7 +4127,7 @@ install_DEB() {
     # XXX Debian Testing / Ubuntu 16.04 finally includes FFmpeg, so check as usual
     check_package_DEB ffmpeg
     if [ $? -eq 0 ]; then
-      check_package_version_ge_DEB ffmpeg $FFMPEG_VERSION_MIN
+      check_package_version_ge_lt_DEB ffmpeg $FFMPEG_VERSION_MIN $FFMPEG_VERSION_MAX
       if [ $? -eq 0 ]; then
         install_packages_DEB libavdevice-dev
         clean_FFmpeg
@@ -3943,12 +4323,13 @@ install_RPM() {
   OGG_DEV="libogg-devel"
   THEORA_DEV="libtheora-devel"
 
-  _packages="gcc gcc-c++ git make cmake tar bzip2 xz findutils flex bison \
-             libtiff-devel libjpeg-devel libpng-devel sqlite-devel fftw-devel SDL-devel \
+  _packages="gcc gcc-c++ git make cmake tar bzip2 xz findutils flex bison fontconfig-devel \
+             libtiff-devel libjpeg-devel libpng-devel sqlite-devel fftw-devel SDL2-devel \
              libX11-devel libXi-devel libXcursor-devel libXrandr-devel libXinerama-devel \
              wget ncurses-devel readline-devel $OPENJPEG_DEV openal-soft-devel \
              glew-devel yasm $THEORA_DEV $VORBIS_DEV $OGG_DEV patch \
-             libxml2-devel yaml-cpp-devel tinyxml-devel jemalloc-devel"
+             libxml2-devel yaml-cpp-devel tinyxml-devel jemalloc-devel \
+             gmp-devel pugixml-devel potrace-devel"
 
   OPENJPEG_USE=true
   VORBIS_USE=true
@@ -3956,7 +4337,7 @@ install_RPM() {
   THEORA_USE=true
 
   if [ "$RPM" = "FEDORA" -o "$RPM" = "RHEL" ]; then
-    _packages="$_packages freetype-devel tbb-devel"
+    _packages="$_packages freetype-devel"
 
     if [ "$WITH_JACK" = true ]; then
       _packages="$_packages jack-audio-connection-kit-devel"
@@ -3996,17 +4377,6 @@ install_RPM() {
 
     PRINT ""
     install_packages_RPM $_packages
-
-    PRINT ""
-    # Install TBB on openSUSE, from temporary repo
-    check_package_RPM tbb-devel
-    if [ $? -eq 0 ]; then
-      install_packages_RPM tbb-devel
-    else
-      $SUDO zypper ar -f http://download.opensuse.org/repositories/devel:/libraries:/c_c++/openSUSE_$_suse_rel/devel:libraries:c_c++.repo
-      $SUDO zypper -n --gpg-auto-import-keys install tbb-devel
-      $SUDO zypper rr devel_libraries_c_c++
-    fi
 
     PRINT ""
     X264_DEV="libx264-devel"
@@ -4082,15 +4452,17 @@ install_RPM() {
     INFO "Forced Python/NumPy building, as requested..."
     _do_compile_python=true
   else
-    check_package_version_match_RPM python3-devel $PYTHON_VERSION_MIN
+    check_package_version_ge_lt_RPM python3-devel $PYTHON_VERSION_MIN $PYTHON_VERSION_MAX
     if [ $? -eq 0 ]; then
+      PYTHON_VERSION_INSTALLED=$(echo `get_package_version_RPM python3-devel` | sed -r 's/^([0-9]+\.[0-9]+).*/\1/')
+
       install_packages_RPM python3-devel
       clean_Python
       PRINT ""
       if [ "$NUMPY_SKIP" = true ]; then
         WARNING "Skipping NumPy installation, as requested..."
       else
-        check_package_version_ge_RPM python3-numpy $NUMPY_VERSION_MIN
+        check_package_version_ge_lt_RPM python3-numpy $NUMPY_VERSION_MIN $NUMPY_VERSION_MAX
         if [ $? -eq 0 ]; then
           install_packages_RPM python3-numpy
         else
@@ -4123,7 +4495,7 @@ install_RPM() {
     INFO "Forced Boost building, as requested..."
     _do_compile_boost=true
   else
-    check_package_version_ge_RPM boost-devel $BOOST_VERSION_MIN
+    check_package_version_ge_lt_RPM boost-devel $BOOST_VERSION_MIN $BOOST_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_RPM boost-devel
       clean_Boost
@@ -4144,6 +4516,23 @@ install_RPM() {
 
 
   PRINT ""
+  if [ "$TBB_SKIP" = true ]; then
+    WARNING "Skipping TBB installation, as requested..."
+  elif [ "$TBB_FORCE_BUILD" = true ]; then
+    INFO "Forced TBB building, as requested..."
+    compile_TBB
+  else
+    check_package_version_ge_lt_RPM tbb-devel $TBB_VERSION_MIN $TBB_VERSION_MAX
+    if [ $? -eq 0 ]; then
+      install_packages_RPM tbb-devel
+      clean_TBB
+    else
+      compile_TBB
+    fi
+  fi
+
+
+  PRINT ""
   if [ "$OCIO_SKIP" = true ]; then
     WARNING "Skipping OpenColorIO installation, as requested..."
   elif [ "$OCIO_FORCE_BUILD" = true ]; then
@@ -4151,7 +4540,7 @@ install_RPM() {
     compile_OCIO
   else
     if [ "$RPM" = "SUSE" ]; then
-      check_package_version_ge_RPM OpenColorIO-devel $OCIO_VERSION_MIN
+      check_package_version_ge_lt_RPM OpenColorIO-devel $OCIO_VERSION_MIN $OCIO_VERSION_MAX
       if [ $? -eq 0 ]; then
         install_packages_RPM OpenColorIO-devel
         clean_OCIO
@@ -4171,7 +4560,7 @@ install_RPM() {
     INFO "Forced ILMBase/OpenEXR building, as requested..."
     compile_OPENEXR
   else
-    check_package_version_ge_RPM openexr-devel $OPENEXR_VERSION_MIN
+    check_package_version_ge_lt_RPM openexr-devel $OPENEXR_VERSION_MIN $OPENEXR_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_RPM openexr-devel
       OPENEXR_VERSION=`get_package_version_RPM openexr-devel`
@@ -4189,7 +4578,6 @@ install_RPM() {
     INFO "Forced OpenImageIO building, as requested..."
     compile_OIIO
   else
-    # XXX RPM distros pulls in too much and depends on old libs, so better to build for now...
     #check_package_version_ge_lt_RPM OpenImageIO-devel $OIIO_VERSION_MIN $OIIO_VERSION_MAX
     #if [ $? -eq 0 -a $_with_built_openexr == false ]; then
     #  install_packages_RPM OpenImageIO-devel
@@ -4215,10 +4603,11 @@ install_RPM() {
     else
       CLANG_DEV="clang-devel"
     fi
-    check_package_version_match_RPM $CLANG_DEV $LLVM_VERSION
+    check_package_version_ge_lt_RPM llvm-devel $LLVM_VERSION_MIN $LLVM_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_RPM llvm-devel $CLANG_DEV
       have_llvm=true
+      LLVM_VERSION=`llvm-config --version`
       LLVM_VERSION_FOUND=$LLVM_VERSION
       clean_LLVM
     else
@@ -4245,8 +4634,18 @@ install_RPM() {
     INFO "Forced OpenShadingLanguage building, as requested..."
     _do_compile_osl=true
   else
-    # No package currently!
-    _do_compile_osl=true
+    if [ "$RPM" = "SUSE" ]; then
+      OSL_DEV="OpenShadingLanguage-devel"
+    else
+      OSL_DEV="openshadinglanguage-devel"
+    fi
+    check_package_version_ge_lt_RPM $OSL_DEV $OSL_VERSION_MIN $OSL_VERSION_MAX
+    if [ $? -eq 0 ]; then
+      install_packages_RPM $OSL_DEV
+      clean_OSL
+    else
+      _do_compile_osl=true
+    fi
   fi
 
   if [ "$_do_compile_osl" = true ]; then
@@ -4334,8 +4733,14 @@ install_RPM() {
       INFO "Forced Embree building, as requested..."
       _do_compile_embree=true
     else
-      # No package...
-      _do_compile_embree=true
+      # There is a package, but it does not provide everything that Blender needs...
+      #~ check_package_version_ge_lt_RPM embree-devel $EMBREE_VERSION_MIN $EMBREE_VERSION_MAX
+      #~ if [ $? -eq 0 ]; then
+        #~ install_packages_RPM embree-devel
+        #~ clean_Embree
+      #~ else
+        _do_compile_embree=true
+      #~ fi
     fi
 
     if [ "$_do_compile_embree" = true ]; then
@@ -4368,7 +4773,7 @@ install_RPM() {
     INFO "Forced FFMpeg building, as requested..."
     compile_FFmpeg
   else
-    check_package_version_ge_RPM ffmpeg-devel $FFMPEG_VERSION_MIN
+    check_package_version_ge_lt_RPM ffmpeg-devel $FFMPEG_VERSION_MIN $FFMPEG_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_RPM ffmpeg ffmpeg-devel
       clean_FFmpeg
@@ -4497,10 +4902,10 @@ install_ARCH() {
     BASE_DEVEL=`pacman -Sgq base-devel | sed -e 's/^gcc$/gcc-multilib/g' | paste -s -d' '`
   fi
 
-  _packages="$BASE_DEVEL git cmake \
+  _packages="$BASE_DEVEL git cmake fontconfig \
              libxi libxcursor libxrandr libxinerama glew libpng libtiff wget openal \
-             $OPENJPEG_DEV $VORBIS_DEV $OGG_DEV $THEORA_DEV yasm sdl fftw intel-tbb \
-             libxml2 yaml-cpp tinyxml python-requests jemalloc"
+             $OPENJPEG_DEV $VORBIS_DEV $OGG_DEV $THEORA_DEV yasm sdl2 fftw \
+             libxml2 yaml-cpp tinyxml python-requests jemalloc gmp potrace pugixml"
 
   OPENJPEG_USE=true
   VORBIS_USE=true
@@ -4588,15 +4993,17 @@ install_ARCH() {
     INFO "Forced Python/NumPy building, as requested..."
     _do_compile_python=true
   else
-    check_package_version_ge_ARCH python $PYTHON_VERSION_MIN
+    check_package_version_ge_lt_ARCH python $PYTHON_VERSION_MIN $PYTHON_VERSION_MAX
     if [ $? -eq 0 ]; then
+      PYTHON_VERSION_INSTALLED=$(echo `get_package_version_ARCH python` | sed -r 's/^([0-9]+\.[0-9]+).*/\1/')
+
       install_packages_ARCH python
       clean_Python
       PRINT ""
       if [ "$NUMPY_SKIP" = true ]; then
         WARNING "Skipping NumPy installation, as requested..."
       else
-        check_package_version_ge_ARCH python-numpy $NUMPY_VERSION_MIN
+        check_package_version_ge_ARCH python-numpy $NUMPY_VERSION_MIN $NUMPY_VERSION_MAX
         if [ $? -eq 0 ]; then
           install_packages_ARCH python-numpy
         else
@@ -4628,12 +5035,29 @@ install_ARCH() {
     INFO "Forced Boost building, as requested..."
     compile_Boost
   else
-    check_package_version_ge_ARCH boost $BOOST_VERSION_MIN
+    check_package_version_ge_lt_ARCH boost $BOOST_VERSION_MIN $BOOST_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_ARCH boost
       clean_Boost
     else
       compile_Boost
+    fi
+  fi
+
+
+  PRINT ""
+  if [ "$TBB_SKIP" = true ]; then
+    WARNING "Skipping TBB installation, as requested..."
+  elif [ "$TBB_FORCE_BUILD" = true ]; then
+    INFO "Forced TBB building, as requested..."
+    compile_TBB
+  else
+    check_package_version_ge_lt_ARCH intel-tbb $TBB_VERSION_MIN $TBB_VERSION_MAX
+    if [ $? -eq 0 ]; then
+      install_packages_ARCH intel-tbb
+      clean_TBB
+    else
+      compile_TBB
     fi
   fi
 
@@ -4645,7 +5069,7 @@ install_ARCH() {
     INFO "Forced OpenColorIO building, as requested..."
     compile_OCIO
   else
-    check_package_version_ge_ARCH opencolorio $OCIO_VERSION_MIN
+    check_package_version_ge_lt_ARCH opencolorio $OCIO_VERSION_MIN $OCIO_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_ARCH opencolorio
       clean_OCIO
@@ -4662,7 +5086,7 @@ install_ARCH() {
     INFO "Forced ILMBase/OpenEXR building, as requested..."
     compile_OPENEXR
   else
-    check_package_version_ge_ARCH openexr $OPENEXR_VERSION_MIN
+    check_package_version_ge_lt_ARCH openexr $OPENEXR_VERSION_MIN $OPENEXR_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_ARCH openexr
       OPENEXR_VERSION=`get_package_version_ARCH openexr`
@@ -4701,11 +5125,11 @@ install_ARCH() {
     INFO "Forced LLVM building, as requested..."
     _do_compile_llvm=true
   else
-    check_package_version_match_ARCH llvm $LLVM_VERSION_MIN
+    check_package_version_ge_lt_ARCH llvm $LLVM_VERSION_MIN $LLVM_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_ARCH llvm clang
       have_llvm=true
-      LLVM_VERSION=`get_package_version_ARCH llvm`
+      LLVM_VERSION=`llvm-config --version`
       LLVM_VERSION_FOUND=$LLVM_VERSION
       clean_LLVM
     else
@@ -4732,14 +5156,13 @@ install_ARCH() {
     INFO "Forced OpenShadingLanguage building, as requested..."
     _do_compile_osl=true
   else
-    # XXX Compile for now due to requirement of LLVM 3.4 ...
-    #check_package_version_ge_ARCH openshadinglanguage $OSL_VERSION_MIN
-    #if [ $? -eq 0 ]; then
-    #  install_packages_ARCH openshadinglanguage
-    #  clean_OSL
-    #else
+    check_package_version_ge_lt_ARCH openshadinglanguage $OSL_VERSION_MIN $OSL_VERSION_MAX
+    if [ $? -eq 0 ]; then
+      install_packages_ARCH openshadinglanguage
+      clean_OSL
+    else
       _do_compile_osl=true
-    #fi
+    fi
   fi
 
   if [ "$_do_compile_osl" = true ]; then
@@ -4759,7 +5182,7 @@ install_ARCH() {
     INFO "Forced OpenSubdiv building, as requested..."
     compile_OSD
   else
-    check_package_version_ge_ARCH opensubdiv $OSD_VERSION_MIN
+    check_package_version_ge_lt_ARCH opensubdiv $OSD_VERSION_MIN $OSD_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_ARCH opensubdiv
       clean_OSD
@@ -4776,7 +5199,7 @@ install_ARCH() {
     INFO "Forced OpenVDB building, as requested..."
     compile_OPENVDB
   else
-    check_package_version_ge_ARCH openvdb $OPENVDB_VERSION_MIN
+    check_package_version_ge_lt_ARCH openvdb $OPENVDB_VERSION_MIN $OPENVDB_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_ARCH openvdb
       clean_OPENVDB
@@ -4841,13 +5264,14 @@ install_ARCH() {
       INFO "Forced Embree building, as requested..."
       _do_compile_embree=true
     else
-      check_package_ARCH embree
-      if [ $? -eq 0 ]; then
-        install_packages_ARCH embree
-        clean_Embree
-      else
+      # There is a package, but it does not provide everything that Blender needs...
+      #~ check_package_version_ge_lt_ARCH embree $EMBREE_VERSION_MIN $EMBREE_VERSION_MAX
+      #~ if [ $? -eq 0 ]; then
+        #~ install_packages_ARCH embree
+        #~ clean_Embree
+      #~ else
         _do_compile_embree=true
-      fi
+      #~ fi
     fi
 
     if [ "$_do_compile_embree" = true ]; then
@@ -4880,7 +5304,7 @@ install_ARCH() {
     INFO "Forced FFMpeg building, as requested..."
     compile_FFmpeg
   else
-    check_package_version_ge_ARCH ffmpeg $FFMPEG_VERSION_MIN
+    check_package_version_ge_lt_ARCH ffmpeg $FFMPEG_VERSION_MIN $FFMPEG_VERSION_MAX
     if [ $? -eq 0 ]; then
       install_packages_ARCH ffmpeg
       clean_FFmpeg
@@ -4932,15 +5356,10 @@ install_OTHER() {
   fi
 
   PRINT ""
-  _do_compile_python=false
   if [ "$PYTHON_SKIP" = true ]; then
     WARNING "Skipping Python/NumPy installation, as requested..."
   elif [ "$PYTHON_FORCE_BUILD" = true ]; then
     INFO "Forced Python/NumPy building, as requested..."
-    _do_compile_python=true
-  fi
-
-  if [ "$_do_compile_python" = true ]; then
     compile_Python
     PRINT ""
     if [ "$NUMPY_SKIP" = true ]; then
@@ -4957,6 +5376,15 @@ install_OTHER() {
   elif [ "$BOOST_FORCE_BUILD" = true ]; then
     INFO "Forced Boost building, as requested..."
     compile_Boost
+  fi
+
+
+  PRINT ""
+  if [ "$TBB_SKIP" = true ]; then
+    WARNING "Skipping TBB installation, as requested..."
+  elif [ "$TBB_FORCE_BUILD" = true ]; then
+    INFO "Forced TBB building, as requested..."
+    compile_TBB
   fi
 
 
@@ -4989,16 +5417,10 @@ install_OTHER() {
 
   PRINT ""
   have_llvm=false
-  _do_compile_llvm=false
   if [ "$LLVM_SKIP" = true ]; then
     WARNING "Skipping LLVM installation, as requested (this also implies skipping OSL!)..."
   elif [ "$LLVM_FORCE_BUILD" = true ]; then
     INFO "Forced LLVM building, as requested..."
-    _do_compile_llvm=true
-  fi
-
-  if [ "$_do_compile_llvm" = true ]; then
-    PRINT ""
     compile_LLVM
     have_llvm=true
     LLVM_VERSION_FOUND=$LLVM_VERSION
@@ -5006,15 +5428,10 @@ install_OTHER() {
 
 
   PRINT ""
-  _do_compile_osl=false
   if [ "$OSL_SKIP" = true ]; then
     WARNING "Skipping OpenShadingLanguage installation, as requested..."
   elif [ "$OSL_FORCE_BUILD" = true ]; then
     INFO "Forced OpenShadingLanguage building, as requested..."
-    _do_compile_osl=true
-  fi
-
-  if [ "$_do_compile_osl" = true ]; then
     if [ "$have_llvm" = true ]; then
       PRINT ""
       compile_OSL
@@ -5025,66 +5442,40 @@ install_OTHER() {
 
 
   PRINT ""
-  _do_compile_osd=false
   if [ "$OSD_SKIP" = true ]; then
     WARNING "Skipping OpenSubdiv installation, as requested..."
   elif [ "$OSD_FORCE_BUILD" = true ]; then
     INFO "Forced OpenSubdiv building, as requested..."
-    _do_compile_osd=true
-  fi
-
-  if [ "$_do_compile_osd" = true ]; then
-    PRINT ""
     compile_OSD
   fi
 
 
   if [ "$WITH_OPENCOLLADA" = true ]; then
-    _do_compile_collada=false
     PRINT ""
     if [ "$OPENCOLLADA_SKIP" = true ]; then
       WARNING "Skipping OpenCOLLADA installation, as requested..."
     elif [ "$OPENCOLLADA_FORCE_BUILD" = true ]; then
       INFO "Forced OpenCollada building, as requested..."
-      _do_compile_collada=true
-    fi
-
-    if [ "$_do_compile_collada" = true ]; then
-      PRINT ""
       compile_OpenCOLLADA
     fi
   fi
 
   if [ "$WITH_EMBREE" = true ]; then
-    _do_compile_embree=false
     PRINT ""
     if [ "$EMBREE_SKIP" = true ]; then
       WARNING "Skipping Embree installation, as requested..."
     elif [ "$EMBREE_FORCE_BUILD" = true ]; then
       INFO "Forced Embree building, as requested..."
-      _do_compile_embree=true
-    fi
-
-    if [ "$_do_compile_embree" = true ]; then
-      PRINT ""
       compile_Embree
     fi
   fi
 
   if [ "$WITH_OIDN" = true ]; then
-    _do_compile_oidn=false
     PRINT ""
     if [ "$OIDN_SKIP" = true ]; then
       WARNING "Skipping OpenImgeDenoise installation, as requested..."
     elif [ "$OIDN_FORCE_BUILD" = true ]; then
       INFO "Forced OpenImageDenoise building, as requested..."
-      _do_compile_oidn=true
-    else
-      # No package currently!
-      _do_compile_oidn=true
-    fi
-
-    if [ "$_do_compile_oidn" = true ]; then
       compile_OIDN
     fi
   fi
@@ -5102,9 +5493,6 @@ install_OTHER() {
     WARNING "Skipping OpenXR-SDK installation, as requested..."
   elif [ "$XR_OPENXR_FORCE_BUILD" = true ]; then
     INFO "Forced OpenXR-SDK building, as requested..."
-    compile_XR_OpenXR_SDK
-  else
-    # No package currently!
     compile_XR_OpenXR_SDK
   fi
 }
@@ -5191,19 +5579,20 @@ print_info() {
   PRINT ""
   PRINT "If you're using CMake add this to your configuration flags:"
 
-  _buildargs="-U *SNDFILE* -U PYTHON* -U *BOOST* -U *Boost*"
+  _buildargs="-U *SNDFILE* -U PYTHON* -U *BOOST* -U *Boost* -U *TBB*"
   _buildargs="$_buildargs -U *OPENCOLORIO* -U *OPENEXR* -U *OPENIMAGEIO* -U *LLVM* -U *CYCLES*"
-  _buildargs="$_buildargs -U *OPENSUBDIV* -U *OPENVDB* -U *COLLADA* -U *FFMPEG* -U *ALEMBIC* -U *USD*"
+  _buildargs="$_buildargs -U *OPENSUBDIV* -U *OPENVDB*  -U *BLOSC* -U *COLLADA* -U *FFMPEG* -U *ALEMBIC* -U *USD*"
+  _buildargs="$_buildargs -U *EMBREE* -U *OPENIMAGEDENOISE* -U *OPENXR*"
 
   _1="-D WITH_CODEC_SNDFILE=ON"
   PRINT "  $_1"
   _buildargs="$_buildargs $_1"
 
-  _1="-D PYTHON_VERSION=$PYTHON_VERSION_MIN"
+  _1="-D PYTHON_VERSION=$PYTHON_VERSION_INSTALLED"
   PRINT "  $_1"
   _buildargs="$_buildargs $_1"
-  if [ -d "$INST/python-$PYTHON_VERSION_MIN" ]; then
-    _1="-D PYTHON_ROOT_DIR=$INST/python-$PYTHON_VERSION_MIN"
+  if [ -d "$INST/python-$PYTHON_VERSION_INSTALLED" ]; then
+    _1="-D PYTHON_ROOT_DIR=$INST/python-$PYTHON_VERSION_INSTALLED"
     PRINT "  $_1"
     _buildargs="$_buildargs $_1"
   fi
@@ -5214,6 +5603,12 @@ print_info() {
     PRINT "  $_1"
     PRINT "  $_2"
     _buildargs="$_buildargs $_1 $_2"
+  fi
+
+  if [ -d $INST/tbb ]; then
+    _1="-D TBB_ROOT_DIR=$INST/tbb"
+    PRINT "  $_1"
+    _buildargs="$_buildargs $_1"
   fi
 
   if [ "$OCIO_SKIP" = false ]; then

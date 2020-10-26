@@ -18,8 +18,7 @@
  * \ingroup collada
  */
 
-#ifndef __MESHIMPORTER_H__
-#define __MESHIMPORTER_H__
+#pragma once
 
 #include <map>
 #include <vector>
@@ -38,14 +37,13 @@
 #include "ArmatureImporter.h"
 #include "collada_utils.h"
 
-extern "C" {
 #include "BLI_edgehash.h"
+
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-}
 
 /* only for ArmatureImporter to "see" MeshImporter::get_object_by_geom_uid */
 class MeshImporterBase {
@@ -106,11 +104,11 @@ class MeshImporter : public MeshImporterBase {
   std::multimap<COLLADAFW::UniqueId, COLLADAFW::UniqueId> materials_mapped_to_geom;
 
   bool set_poly_indices(
-      MPoly *mpoly, MLoop *mloop, int loop_index, unsigned int *indices, int loop_count);
+      MPoly *mpoly, MLoop *mloop, int loop_index, const unsigned int *indices, int loop_count);
 
   void set_face_uv(MLoopUV *mloopuv,
                    UVDataWrapper &uvs,
-                   int loop_index,
+                   int start_index,
                    COLLADAFW::IndexList &index_list,
                    int count);
 
@@ -178,5 +176,3 @@ class MeshImporter : public MeshImporterBase {
   bool write_geometry(const COLLADAFW::Geometry *geom);
   std::string *get_geometry_name(const std::string &mesh_name);
 };
-
-#endif

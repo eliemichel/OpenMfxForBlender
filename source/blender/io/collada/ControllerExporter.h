@@ -18,8 +18,7 @@
  * \ingroup collada
  */
 
-#ifndef __CONTROLLEREXPORTER_H__
-#define __CONTROLLEREXPORTER_H__
+#pragma once
 
 #include <list>
 #include <string>
@@ -57,9 +56,9 @@ class ControllerExporter : public COLLADASW::LibraryControllers,
   BCExportSettings export_settings;
 
  public:
-  // XXX exporter writes wrong data for shared armatures.  A separate
-  // controller should be written for each armature-mesh binding how do
-  // we make controller ids then?
+  /* XXX exporter writes wrong data for shared armatures.  A separate
+   * controller should be written for each armature-mesh binding how do
+   * we make controller ids then? */
   ControllerExporter(BlenderContext &blender_context,
                      COLLADASW::StreamWriter *sw,
                      BCExportSettings &export_settings)
@@ -92,8 +91,8 @@ class ControllerExporter : public COLLADASW::LibraryControllers,
 
   std::string get_controller_id(Key *key, Object *ob);
 
-  // ob should be of type OB_MESH
-  // both args are required
+  /* ob should be of type OB_MESH
+   * both args are required */
   void export_skin_controller(Object *ob, Object *ob_arm);
 
   void export_morph_controller(Object *ob, Key *key);
@@ -133,5 +132,3 @@ class ControllerExporter : public COLLADASW::LibraryControllers,
 
   void write_bone_URLs(COLLADASW::InstanceController &ins, Object *ob_arm, Bone *bone);
 };
-
-#endif

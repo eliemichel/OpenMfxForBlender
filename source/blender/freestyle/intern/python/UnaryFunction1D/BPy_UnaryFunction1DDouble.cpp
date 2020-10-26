@@ -160,13 +160,10 @@ static char UnaryFunction1DDouble___doc__[] =
     ":class:`Interface1D` and return a float value.\n"
     "\n"
     ".. method:: __init__()\n"
+    "            __init__(integration_type)\n"
     "\n"
-    "   Default constructor.\n"
-    "\n"
-    ".. method:: __init__(integration_type)\n"
-    "\n"
-    "   Builds a unary 1D function using the integration method given as\n"
-    "   argument.\n"
+    "   Builds a unary 1D function using the default constructor\n"
+    "   or the integration method given as an argument.\n"
     "\n"
     "   :arg integration_type: An integration method.\n"
     "   :type integration_type: :class:`IntegrationType`\n";
@@ -197,9 +194,7 @@ static int UnaryFunction1DDouble___init__(BPy_UnaryFunction1DDouble *self,
 
 static void UnaryFunction1DDouble___dealloc__(BPy_UnaryFunction1DDouble *self)
 {
-  if (self->uf1D_double) {
-    delete self->uf1D_double;
-  }
+  delete self->uf1D_double;
   UnaryFunction1D_Type.tp_dealloc((PyObject *)self);
 }
 

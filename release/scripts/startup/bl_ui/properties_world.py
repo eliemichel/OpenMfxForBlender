@@ -77,9 +77,12 @@ class EEVEE_WORLD_PT_mist(WorldButtonsPanel, Panel):
 
         world = context.world
 
-        layout.prop(world.mist_settings, "start")
-        layout.prop(world.mist_settings, "depth")
-        layout.prop(world.mist_settings, "falloff")
+        col = layout.column(align=True)
+        col.prop(world.mist_settings, "start")
+        col.prop(world.mist_settings, "depth")
+
+        col = layout.column()
+        col.prop(world.mist_settings, "falloff")
 
 
 class WORLD_PT_custom_props(WorldButtonsPanel, PropertyPanel, Panel):
@@ -104,6 +107,8 @@ class EEVEE_WORLD_PT_surface(WorldButtonsPanel, Panel):
 
         layout.prop(world, "use_nodes", icon='NODETREE')
         layout.separator()
+
+        layout.use_property_split = True
 
         if world.use_nodes:
             ntree = world.node_tree
@@ -138,6 +143,8 @@ class EEVEE_WORLD_PT_volume(WorldButtonsPanel, Panel):
         world = context.world
         ntree = world.node_tree
         node = ntree.get_output_node('EEVEE')
+
+        layout.use_property_split = True
 
         if node:
             input = find_node_input(node, 'Volume')

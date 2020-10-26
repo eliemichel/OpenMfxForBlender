@@ -20,15 +20,14 @@
  * \ingroup draw_engine
  */
 
-#ifndef __SELECT_PRIVATE_H__
-#define __SELECT_PRIVATE_H__
+#pragma once
 
 #define USE_CAGE_OCCLUSION
 
 #include "DRW_render.h"
 
 /* GPUViewport.storage
- * Is freed everytime the viewport engine changes */
+ * Is freed every time the viewport engine changes. */
 typedef struct SELECTID_StorageList {
   struct SELECTID_PrivateData *g_data;
 } SELECTID_StorageList;
@@ -78,5 +77,3 @@ void select_id_draw_object(void *vedata,
                            uint *r_vert_offset,
                            uint *r_edge_offset,
                            uint *r_face_offset);
-
-#endif /* __SELECT_PRIVATE_H__ */

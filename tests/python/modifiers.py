@@ -46,7 +46,7 @@ def get_generate_modifiers_list(test_object_name, randomize=False):
     generate_modifiers = [
         ModifierSpec('array', 'ARRAY', {}),
         ModifierSpec('bevel', 'BEVEL', {'width': 0.1}),
-        ModifierSpec('boolean', 'BOOLEAN', {'object': boolean_test_object}),
+        ModifierSpec('boolean', 'BOOLEAN', {'object': boolean_test_object, 'solver': 'FAST'}),
         ModifierSpec('build', 'BUILD', {'frame_start': 0, 'frame_duration': 1}),
         ModifierSpec('decimate', 'DECIMATE', {}),
         ModifierSpec('edge split', 'EDGE_SPLIT', {}),
@@ -186,7 +186,7 @@ def main():
         ["testMergedWeld", "expectedMergedWeld",
          [ModifierSpec("weld", 'WELD', {"merge_threshold": 0.021})]],
         ["testMergedAllWeld", "expectedMergedAllWeld",
-         [ModifierSpec("weld", 'WELD', {"merge_threshold": 1.1})]],
+         [ModifierSpec("weld", 'WELD', {"merge_threshold": 1.8})]],
         ["testMergedNoneWeld", "expectedMergedNoneWeld",
          [ModifierSpec("weld", 'WELD', {"merge_threshold": 0.019})]],
 

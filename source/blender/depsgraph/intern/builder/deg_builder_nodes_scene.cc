@@ -25,7 +25,8 @@
 
 #include "DNA_scene_types.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 void DepsgraphNodeBuilder::build_scene_render(Scene *scene, ViewLayer *view_layer)
 {
@@ -70,6 +71,10 @@ void DepsgraphNodeBuilder::build_scene_parameters(Scene *scene)
    * in when building scene from view layer, so this particular case does not make things
    * marginally worse.  */
   build_scene_compositor(scene);
+
+  LISTBASE_FOREACH (TimeMarker *, marker, &scene->markers) {
+    build_idproperties(marker->prop);
+  }
 }
 
 void DepsgraphNodeBuilder::build_scene_compositor(Scene *scene)
@@ -83,4 +88,5 @@ void DepsgraphNodeBuilder::build_scene_compositor(Scene *scene)
   build_nodetree(scene->nodetree);
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

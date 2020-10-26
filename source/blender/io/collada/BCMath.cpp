@@ -17,6 +17,8 @@
  * All rights reserved.
  */
 
+#include "BLI_utildefines.h"
+
 #include "BCMath.h"
 #include "BlenderContext.h"
 
@@ -65,32 +67,36 @@ BCMatrix::BCMatrix(BC_global_forward_axis global_forward_axis, BC_global_up_axis
   mat3_from_axis_conversion(
       BC_DEFAULT_FORWARD, BC_DEFAULT_UP, global_forward_axis, global_up_axis, mrot);
 
-  transpose_m3(mrot);  // TODO: Verify that mat3_from_axis_conversion() returns a transposed matrix
+  transpose_m3(
+      mrot); /* TODO: Verify that mat3_from_axis_conversion() returns a transposed matrix */
   copy_m4_m3(mat, mrot);
   set_transform(mat);
 }
 
-void BCMatrix::add_transform(const Matrix &mat, bool inverse)
+void BCMatrix::add_transform(const Matrix &mat, bool inverted)
 {
-  add_transform(this->matrix, mat, this->matrix, inverse);
+  add_transform(this->matrix, mat, this->matrix, inverted);
 }
 
-void BCMatrix::add_transform(const BCMatrix &mat, bool inverse)
+void BCMatrix::add_transform(const BCMatrix &mat, bool inverted)
 {
-  add_transform(this->matrix, mat.matrix, this->matrix, inverse);
+  add_transform(this->matrix, mat.matrix, this->matrix, inverted);
 }
 
-void BCMatrix::apply_transform(const BCMatrix &mat, bool inverse)
+void BCMatrix::apply_transform(const BCMatrix &mat, bool inverted)
 {
-  apply_transform(this->matrix, mat.matrix, this->matrix, inverse);
+  apply_transform(this->matrix, mat.matrix, this->matrix, inverted);
 }
 
-void BCMatrix::add_transform(Matrix &to, const Matrix &transform, const Matrix &from, bool inverse)
+void BCMatrix::add_transform(Matrix &to,
+                             const Matrix &transform,
+                             const Matrix &from,
+                             bool inverted)
 {
-  if (inverse) {
+  if (inverted) {
     Matrix globinv;
     invert_m4_m4(globinv, transform);
-    add_transform(to, globinv, from, /*inverse=*/false);
+    add_transform(to, globinv, from, /*inverted=*/false);
   }
   else {
     mul_m4_m4m4(to, transform, from);
@@ -105,7 +111,7 @@ void BCMatrix::apply_transform(Matrix &to,
   Matrix globinv;
   invert_m4_m4(globinv, transform);
   if (inverse) {
-    add_transform(to, globinv, from, /*inverse=*/false);
+    add_transform(to, globinv, from, /*inverted=*/false);
   }
   else {
     mul_m4_m4m4(to, transform, from);
@@ -138,10 +144,10 @@ void BCMatrix::set_transform(Matrix &mat)
   quat_to_eul(this->rot, this->q);
 }
 
-void BCMatrix::copy(Matrix &out, Matrix &in)
+void BCMatrix::copy(Matrix &r, Matrix &a)
 {
   /* destination comes first: */
-  memcpy(out, in, sizeof(Matrix));
+  memcpy(r, a, sizeof(Matrix));
 }
 
 void BCMatrix::transpose(Matrix &mat)
@@ -211,7 +217,7 @@ void BCMatrix::get_matrix(Matrix &mat,
   }
 }
 
-const bool BCMatrix::in_range(const BCMatrix &other, float distance) const
+bool BCMatrix::in_range(const BCMatrix &other, float distance) const
 {
   for (int i = 0; i < 4; i++) {
     for (int j = 0; j < 4; j++) {

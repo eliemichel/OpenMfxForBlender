@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2020 Blender Foundation.
@@ -174,7 +174,7 @@ static int sculpt_mask_expand_modal(bContext *C, wmOperator *op, const wmEvent *
   ARegion *region = CTX_wm_region(C);
   float prevclick_f[2];
   copy_v2_v2(prevclick_f, op->customdata);
-  int prevclick[2] = {(int)prevclick_f[0], (int)prevclick_f[1]};
+  const int prevclick[2] = {(int)prevclick_f[0], (int)prevclick_f[1]};
   int len = (int)len_v2v2_int(prevclick, event->mval);
   len = abs(len);
   int mask_speed = RNA_int_get(op->ptr, "mask_speed");
@@ -188,8 +188,14 @@ static int sculpt_mask_expand_modal(bContext *C, wmOperator *op, const wmEvent *
     float mouse[2];
     mouse[0] = event->mval[0];
     mouse[1] = event->mval[1];
-    SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false);
-    mask_expand_update_it = ss->filter_cache->mask_update_it[(int)SCULPT_active_vertex_get(ss)];
+    if (SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false)) {
+      /* The cursor is over the mesh, get the update iteration from the updated active vertex. */
+      mask_expand_update_it = ss->filter_cache->mask_update_it[(int)SCULPT_active_vertex_get(ss)];
+    }
+    else {
+      /* When the cursor is outside the mesh, affect the entire connected component. */
+      mask_expand_update_it = ss->filter_cache->mask_update_last_it - 1;
+    }
   }
 
   if ((event->type == EVT_ESCKEY && event->val == KM_PRESS) ||
@@ -206,14 +212,14 @@ static int sculpt_mask_expand_modal(bContext *C, wmOperator *op, const wmEvent *
       (event->type == EVT_PADENTER && event->val == KM_PRESS)) {
 
     /* Smooth iterations. */
-    BKE_sculpt_update_object_for_edit(depsgraph, ob, true, false);
+    BKE_sculpt_update_object_for_edit(depsgraph, ob, true, false, false);
     const int smooth_iterations = RNA_int_get(op->ptr, "smooth_iterations");
     SCULPT_mask_filter_smooth_apply(
         sd, ob, ss->filter_cache->nodes, ss->filter_cache->totnode, smooth_iterations);
 
     /* Pivot position. */
     if (RNA_boolean_get(op->ptr, "update_pivot")) {
-      const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+      const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
       const float threshold = 0.2f;
       float avg[3];
       int total = 0;
@@ -288,10 +294,9 @@ static int sculpt_mask_expand_modal(bContext *C, wmOperator *op, const wmEvent *
         .mask_expand_keep_prev_mask = RNA_boolean_get(op->ptr, "keep_previous_mask"),
         .mask_expand_create_face_set = RNA_boolean_get(op->ptr, "create_face_set"),
     };
-    PBVHParallelSettings settings;
-    BKE_pbvh_parallel_range_settings(
-        &settings, (sd->flags & SCULPT_USE_OPENMP), ss->filter_cache->totnode);
-    BKE_pbvh_parallel_range(0, ss->filter_cache->totnode, &data, sculpt_expand_task_cb, &settings);
+    TaskParallelSettings settings;
+    BKE_pbvh_parallel_range_settings(&settings, true, ss->filter_cache->totnode);
+    BLI_task_parallel_range(0, ss->filter_cache->totnode, &data, sculpt_expand_task_cb, &settings);
     ss->filter_cache->mask_update_current_it = mask_expand_update_it;
   }
 
@@ -358,14 +363,14 @@ static int sculpt_mask_expand_invoke(bContext *C, wmOperator *op, const wmEvent 
   mouse[0] = event->mval[0];
   mouse[1] = event->mval[1];
 
-  SCULPT_vertex_random_access_init(ss);
+  SCULPT_vertex_random_access_ensure(ss);
 
-  op->customdata = MEM_mallocN(2 * sizeof(float), "initial mouse position");
+  op->customdata = MEM_mallocN(sizeof(float[2]), "initial mouse position");
   copy_v2_v2(op->customdata, mouse);
 
   SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false);
 
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, true, true);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, true, true, false);
 
   int vertex_count = SCULPT_vertex_count_get(ss);
 
@@ -458,10 +463,9 @@ static int sculpt_mask_expand_invoke(bContext *C, wmOperator *op, const wmEvent 
       .mask_expand_keep_prev_mask = RNA_boolean_get(op->ptr, "keep_previous_mask"),
       .mask_expand_create_face_set = RNA_boolean_get(op->ptr, "create_face_set"),
   };
-  PBVHParallelSettings settings;
-  BKE_pbvh_parallel_range_settings(
-      &settings, (sd->flags & SCULPT_USE_OPENMP), ss->filter_cache->totnode);
-  BKE_pbvh_parallel_range(0, ss->filter_cache->totnode, &data, sculpt_expand_task_cb, &settings);
+  TaskParallelSettings settings;
+  BKE_pbvh_parallel_range_settings(&settings, true, ss->filter_cache->totnode);
+  BLI_task_parallel_range(0, ss->filter_cache->totnode, &data, sculpt_expand_task_cb, &settings);
 
   const char *status_str = TIP_(
       "Move the mouse to expand the mask from the active vertex. LMB: confirm mask, ESC/RMB: "

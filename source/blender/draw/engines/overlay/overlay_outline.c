@@ -138,6 +138,11 @@ void OVERLAY_outline_cache_init(OVERLAY_Data *vedata)
     pd->outlines_grp = grp = DRW_shgroup_create(sh_geom, psl->outlines_prepass_ps);
     DRW_shgroup_uniform_bool_copy(grp, "isTransform", (G.moving & G_TRANSFORM_OBJ) != 0);
 
+    GPUShader *sh_geom_ptcloud = OVERLAY_shader_outline_prepass_pointcloud();
+
+    pd->outlines_ptcloud_grp = grp = DRW_shgroup_create(sh_geom_ptcloud, psl->outlines_prepass_ps);
+    DRW_shgroup_uniform_bool_copy(grp, "isTransform", (G.moving & G_TRANSFORM_OBJ) != 0);
+
     GPUShader *sh_gpencil = OVERLAY_shader_outline_prepass_gpencil();
 
     pd->outlines_gpencil_grp = grp = DRW_shgroup_create(sh_gpencil, psl->outlines_prepass_ps);
@@ -178,10 +183,10 @@ typedef struct iterData {
   float plane[4];
 } iterData;
 
-static void gp_layer_cache_populate(bGPDlayer *gpl,
-                                    bGPDframe *UNUSED(gpf),
-                                    bGPDstroke *UNUSED(gps),
-                                    void *thunk)
+static void gpencil_layer_cache_populate(bGPDlayer *gpl,
+                                         bGPDframe *UNUSED(gpf),
+                                         bGPDstroke *UNUSED(gps),
+                                         void *thunk)
 {
   iterData *iter = (iterData *)thunk;
   bGPdata *gpd = (bGPdata *)iter->ob->data;
@@ -204,10 +209,10 @@ static void gp_layer_cache_populate(bGPDlayer *gpl,
   DRW_shgroup_uniform_vec4_copy(grp, "gpDepthPlane", iter->plane);
 }
 
-static void gp_stroke_cache_populate(bGPDlayer *UNUSED(gpl),
-                                     bGPDframe *UNUSED(gpf),
-                                     bGPDstroke *gps,
-                                     void *thunk)
+static void gpencil_stroke_cache_populate(bGPDlayer *UNUSED(gpl),
+                                          bGPDframe *UNUSED(gpf),
+                                          bGPDstroke *gps,
+                                          void *thunk)
 {
   iterData *iter = (iterData *)thunk;
 
@@ -258,8 +263,24 @@ static void OVERLAY_outline_gpencil(OVERLAY_PrivateData *pd, Object *ob)
     gpencil_depth_plane(ob, iter.plane);
   }
 
-  BKE_gpencil_visible_stroke_iter(
-      ob, gp_layer_cache_populate, gp_stroke_cache_populate, &iter, false, pd->cfra);
+  BKE_gpencil_visible_stroke_iter(NULL,
+                                  ob,
+                                  gpencil_layer_cache_populate,
+                                  gpencil_stroke_cache_populate,
+                                  &iter,
+                                  false,
+                                  pd->cfra);
+}
+
+static void OVERLAY_outline_volume(OVERLAY_PrivateData *pd, Object *ob)
+{
+  struct GPUBatch *geom = DRW_cache_volume_selection_surface_get(ob);
+  if (geom == NULL) {
+    return;
+  }
+
+  DRWShadingGroup *shgroup = pd->outlines_grp;
+  DRW_shgroup_call(shgroup, geom, ob);
 }
 
 void OVERLAY_outline_cache_populate(OVERLAY_Data *vedata,
@@ -283,6 +304,17 @@ void OVERLAY_outline_cache_populate(OVERLAY_Data *vedata,
     return;
   }
 
+  if (ob->type == OB_VOLUME) {
+    OVERLAY_outline_volume(pd, ob);
+    return;
+  }
+
+  if (ob->type == OB_POINTCLOUD && pd->wireframe_mode) {
+    /* Looks bad in this case. Could be relaxed if we draw a
+     * wireframe of some sort in the future. */
+    return;
+  }
+
   if (dupli && !init_dupli) {
     geom = dupli->outline_geom;
     shgroup = dupli->outline_shgrp;
@@ -302,12 +334,18 @@ void OVERLAY_outline_cache_populate(OVERLAY_Data *vedata,
     }
 
     if (geom) {
-      shgroup = pd->outlines_grp;
+      shgroup = (ob->type == OB_POINTCLOUD) ? pd->outlines_ptcloud_grp : pd->outlines_grp;
     }
   }
 
   if (shgroup && geom) {
-    DRW_shgroup_call(shgroup, geom, ob);
+    if (ob->type == OB_POINTCLOUD) {
+      /* Draw range to avoid drawcall batching messing up the instance attrib. */
+      DRW_shgroup_call_instance_range(shgroup, ob, geom, 0, 0);
+    }
+    else {
+      DRW_shgroup_call(shgroup, geom, ob);
+    }
   }
 
   if (init_dupli) {
@@ -320,7 +358,7 @@ void OVERLAY_outline_draw(OVERLAY_Data *vedata)
 {
   OVERLAY_FramebufferList *fbl = vedata->fbl;
   OVERLAY_PassList *psl = vedata->psl;
-  float clearcol[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  const float clearcol[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
   bool do_outlines = psl->outlines_prepass_ps != NULL &&
                      !DRW_pass_is_empty(psl->outlines_prepass_ps);

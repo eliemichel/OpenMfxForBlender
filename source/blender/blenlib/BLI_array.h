@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_ARRAY_H__
-#define __BLI_ARRAY_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -118,7 +117,7 @@ void _bli_array_grow_func(void **arr_p,
   { \
     if (arr && (char *)arr != _##arr##_static) { \
       BLI_array_fake_user(arr); \
-      MEM_freeN(arr); \
+      MEM_freeN((void *)arr); \
     } \
   } \
   ((void)0)
@@ -173,5 +172,3 @@ void _bli_array_grow_func(void **arr_p,
   ((void)0)
 
 /** \} */
-
-#endif /* __BLI_ARRAY_H__ */

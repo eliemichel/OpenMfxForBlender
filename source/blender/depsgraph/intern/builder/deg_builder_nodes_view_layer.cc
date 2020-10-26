@@ -34,7 +34,6 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "DNA_freestyle_types.h"
 #include "DNA_layer_types.h"
 #include "DNA_linestyle_types.h"
@@ -45,7 +44,6 @@ extern "C" {
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
-} /* extern "C" */
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -57,7 +55,8 @@ extern "C" {
 #include "intern/node/deg_node_component.h"
 #include "intern/node/deg_node_operation.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 void DepsgraphNodeBuilder::build_layer_collections(ListBase *lb)
 {
@@ -176,4 +175,5 @@ void DepsgraphNodeBuilder::build_view_layer(Scene *scene,
   }
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

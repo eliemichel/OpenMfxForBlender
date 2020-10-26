@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_TEXT_H__
-#define __BKE_TEXT_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -40,7 +39,6 @@ struct Text *BKE_text_load_ex(struct Main *bmain,
                               const char *relpath,
                               const bool is_internal);
 struct Text *BKE_text_load(struct Main *bmain, const char *file, const char *relpath);
-struct Text *BKE_text_copy(struct Main *bmain, const struct Text *ta);
 void BKE_text_clear(struct Text *text);
 void BKE_text_write(struct Text *text, const char *str);
 int BKE_text_file_modified_check(struct Text *text);
@@ -90,8 +88,8 @@ int txt_setcurr_tab_spaces(struct Text *text, int space);
 bool txt_cursor_is_line_start(struct Text *text);
 bool txt_cursor_is_line_end(struct Text *text);
 
-int txt_calc_tab_left(struct TextLine *line, int ch);
-int txt_calc_tab_right(struct TextLine *line, int ch);
+int txt_calc_tab_left(struct TextLine *tl, int ch);
+int txt_calc_tab_right(struct TextLine *tl, int ch);
 
 /* utility functions, could be moved somewhere more generic but are python/text related  */
 int text_check_bracket(const char ch);
@@ -112,11 +110,9 @@ enum {
 };
 
 /* Fast non-validating buffer conversion for undo. */
-char *txt_to_buf_for_undo(struct Text *text, int *r_buf_strlen);
+char *txt_to_buf_for_undo(struct Text *text, int *r_buf_len);
 void txt_from_buf_for_undo(struct Text *text, const char *buf, int buf_len);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

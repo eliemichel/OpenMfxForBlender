@@ -45,7 +45,7 @@
 
 /* ******************** default callbacks for userpref space ***************** */
 
-static SpaceLink *userpref_new(const ScrArea *area, const Scene *UNUSED(scene))
+static SpaceLink *userpref_create(const ScrArea *area, const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceUserPref *spref;
@@ -115,7 +115,7 @@ static void userpref_main_region_init(wmWindowManager *wm, ARegion *region)
 {
   /* do not use here, the properties changed in userprefs do a system-wide refresh,
    * then scroller jumps back */
-  /*  region->v2d.flag &= ~V2D_IS_INITIALISED; */
+  /*  region->v2d.flag &= ~V2D_IS_INIT; */
 
   region->v2d.scroll = V2D_SCROLL_RIGHT | V2D_SCROLL_VERTICAL_HIDE;
 
@@ -141,8 +141,7 @@ static void userpref_main_region_layout(const bContext *C, ARegion *region)
     BLI_str_tolower_ascii(id_lower, strlen(id_lower));
   }
 
-  ED_region_panels_layout_ex(
-      C, region, &region->type->paneltypes, contexts, U.space_data.section_active, true, NULL);
+  ED_region_panels_layout_ex(C, region, &region->type->paneltypes, contexts, NULL);
 }
 
 static void userpref_operatortypes(void)
@@ -235,7 +234,7 @@ void ED_spacetype_userpref(void)
   st->spaceid = SPACE_USERPREF;
   strncpy(st->name, "Userpref", BKE_ST_MAXNAME);
 
-  st->new = userpref_new;
+  st->create = userpref_create;
   st->free = userpref_free;
   st->init = userpref_init;
   st->duplicate = userpref_duplicate;

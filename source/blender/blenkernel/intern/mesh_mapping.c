@@ -953,7 +953,7 @@ void BKE_mesh_loop_islands_free(MeshIslandStore *island_store)
 
 void BKE_mesh_loop_islands_add(MeshIslandStore *island_store,
                                const int item_num,
-                               int *items_indices,
+                               const int *items_indices,
                                const int num_island_items,
                                int *island_item_indices,
                                const int num_innercut_items,
@@ -1047,10 +1047,9 @@ static bool mesh_check_island_boundary_uv(const MPoly *UNUSED(mp),
     }
     return false;
   }
-  else {
-    /* Edge is UV boundary if tagged as seam. */
-    return (me->flag & ME_SEAM) != 0;
-  }
+
+  /* Edge is UV boundary if tagged as seam. */
+  return (me->flag & ME_SEAM) != 0;
 }
 
 static bool mesh_calc_islands_loop_poly_uv(MVert *UNUSED(verts),

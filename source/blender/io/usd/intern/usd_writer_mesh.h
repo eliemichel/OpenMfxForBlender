@@ -16,14 +16,13 @@
  * The Original Code is Copyright (C) 2019 Blender Foundation.
  * All rights reserved.
  */
-#ifndef __USD_WRITER_MESH_H__
-#define __USD_WRITER_MESH_H__
+#pragma once
 
 #include "usd_writer_abstract.h"
 
 #include <pxr/usd/usdGeom/mesh.h>
 
-namespace USD {
+namespace blender::io::usd {
 
 struct USDMeshData;
 
@@ -61,6 +60,4 @@ class USDMeshWriter : public USDGenericMeshWriter {
   virtual Mesh *get_export_mesh(Object *object_eval, bool &r_needsfree) override;
 };
 
-}  // namespace USD
-
-#endif /* __USD_WRITER_MESH_H__ */
+}  // namespace blender::io::usd

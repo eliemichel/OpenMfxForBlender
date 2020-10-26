@@ -104,7 +104,7 @@ static void emdm_ts_GetPosition(const SMikkTSpaceContext *pContext,
                                 const int face_num,
                                 const int vert_index)
 {
-  // assert(vert_index >= 0 && vert_index < 4);
+  // BLI_assert(vert_index >= 0 && vert_index < 4);
   SGLSLEditMeshToTangent *pMesh = pContext->m_pUserData;
   const BMLoop **lt;
   const BMLoop *l;
@@ -138,7 +138,7 @@ static void emdm_ts_GetTextureCoordinate(const SMikkTSpaceContext *pContext,
                                          const int face_num,
                                          const int vert_index)
 {
-  // assert(vert_index >= 0 && vert_index < 4);
+  // BLI_assert(vert_index >= 0 && vert_index < 4);
   SGLSLEditMeshToTangent *pMesh = pContext->m_pUserData;
   const BMLoop **lt;
   const BMLoop *l;
@@ -176,7 +176,7 @@ static void emdm_ts_GetNormal(const SMikkTSpaceContext *pContext,
                               const int face_num,
                               const int vert_index)
 {
-  // assert(vert_index >= 0 && vert_index < 4);
+  // BLI_assert(vert_index >= 0 && vert_index < 4);
   SGLSLEditMeshToTangent *pMesh = pContext->m_pUserData;
   const BMLoop **lt;
   const BMLoop *l;
@@ -221,7 +221,7 @@ static void emdm_ts_SetTSpace(const SMikkTSpaceContext *pContext,
                               const int face_num,
                               const int vert_index)
 {
-  // assert(vert_index >= 0 && vert_index < 4);
+  // BLI_assert(vert_index >= 0 && vert_index < 4);
   SGLSLEditMeshToTangent *pMesh = pContext->m_pUserData;
   const BMLoop **lt;
   const BMLoop *l;
@@ -251,9 +251,7 @@ finally:
   pRes[3] = fSign;
 }
 
-static void emDM_calc_loop_tangents_thread(TaskPool *__restrict UNUSED(pool),
-                                           void *taskdata,
-                                           int UNUSED(threadid))
+static void emDM_calc_loop_tangents_thread(TaskPool *__restrict UNUSED(pool), void *taskdata)
 {
   struct SGLSLEditMeshToTangent *mesh2tangent = taskdata;
   /* new computation method */
@@ -276,8 +274,8 @@ static void emDM_calc_loop_tangents_thread(TaskPool *__restrict UNUSED(pool),
 /**
  * \see #BKE_mesh_calc_loop_tangent, same logic but used arrays instead of #BMesh data.
  *
- * \note This function is not so normal, its using `bm->ldata` as input,
- * but output's to `dm->loopData`.
+ * \note This function is not so normal, its using #BMesh.ldata as input,
+ * but output's to #Mesh.ldata.
  * This is done because #CD_TANGENT is cache data used only for drawing.
  */
 void BKE_editmesh_loop_tangent_calc(BMEditMesh *em,
@@ -362,9 +360,8 @@ void BKE_editmesh_loop_tangent_calc(BMEditMesh *em,
 #endif
     /* Calculation */
     if (em->tottri != 0) {
-      TaskScheduler *scheduler = BLI_task_scheduler_get();
       TaskPool *task_pool;
-      task_pool = BLI_task_pool_create(scheduler, NULL, TASK_PRIORITY_LOW);
+      task_pool = BLI_task_pool_create(NULL, TASK_PRIORITY_LOW);
 
       tangent_mask_curr = 0;
       /* Calculate tangent layers */

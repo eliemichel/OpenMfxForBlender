@@ -459,6 +459,49 @@ bool RenderBuffers::get_pass_rect(
   return false;
 }
 
+bool RenderBuffers::set_pass_rect(PassType type, int components, float *pixels, int samples)
+{
+  if (buffer.data() == NULL) {
+    return false;
+  }
+
+  int pass_offset = 0;
+
+  for (size_t j = 0; j < params.passes.size(); j++) {
+    Pass &pass = params.passes[j];
+
+    if (pass.type != type) {
+      pass_offset += pass.components;
+      continue;
+    }
+
+    float *out = buffer.data() + pass_offset;
+    int pass_stride = params.get_passes_size();
+    int size = params.width * params.height;
+
+    assert(pass.components == components);
+
+    for (int i = 0; i < size; i++, out += pass_stride, pixels += components) {
+      if (pass.filter) {
+        /* Scale by the number of samples, inverse of what we do in get_pass_rect.
+         * A better solution would be to remove the need for set_pass_rect entirely,
+         * and change baking to bake multiple objects in a tile at once. */
+        for (int j = 0; j < components; j++) {
+          out[j] = pixels[j] * samples;
+        }
+      }
+      else {
+        /* For non-filtered passes just straight copy, these may contain non-float data. */
+        memcpy(out, pixels, sizeof(float) * components);
+      }
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
 /* Display Buffer */
 
 DisplayBuffer::DisplayBuffer(Device *device, bool linear)

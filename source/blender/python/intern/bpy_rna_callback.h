@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BPY_RNA_CALLBACK_H__
-#define __BPY_RNA_CALLBACK_H__
+#pragma once
 
 /** \file
  * \ingroup pythonintern
@@ -24,12 +23,18 @@
 struct BPy_StructRNA;
 struct PyObject;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #if 0
 PyObject *pyrna_callback_add(BPy_StructRNA *self, PyObject *args);
 PyObject *pyrna_callback_remove(BPy_StructRNA *self, PyObject *args);
 #endif
 
-PyObject *pyrna_callback_classmethod_add(PyObject *cls, PyObject *args);
-PyObject *pyrna_callback_classmethod_remove(PyObject *cls, PyObject *args);
+PyObject *pyrna_callback_classmethod_add(PyObject *self, PyObject *args);
+PyObject *pyrna_callback_classmethod_remove(PyObject *self, PyObject *args);
 
-#endif /* __BPY_RNA_CALLBACK_H__ */
+#ifdef __cplusplus
+}
+#endif

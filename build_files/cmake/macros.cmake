@@ -169,6 +169,26 @@ function(blender_include_dirs_sys
   include_directories(SYSTEM ${_ALL_INCS})
 endfunction()
 
+# Set include paths for header files included with "*.h" syntax.
+# This enables auto-complete suggestions for user header files on Xcode.
+# Build process is not affected since the include paths are the same
+# as in HEADER_SEARCH_PATHS.
+function(blender_user_header_search_paths
+  name
+  includes
+  )
+
+  if(XCODE)
+    set(_ALL_INCS "")
+    foreach(_INC ${includes})
+      get_filename_component(_ABS_INC ${_INC} ABSOLUTE)
+      # _ALL_INCS is a space-separated string of file paths in quotes.
+      set(_ALL_INCS "${_ALL_INCS} \"${_ABS_INC}\"")
+    endforeach()
+    set_target_properties(${name} PROPERTIES XCODE_ATTRIBUTE_USER_HEADER_SEARCH_PATHS "${_ALL_INCS}")
+  endif()
+endfunction()
+
 function(blender_source_group
   name
   sources
@@ -282,14 +302,14 @@ function(blender_add_lib__impl
   #
   # What this code does it traverses library_deps and extracts information about whether
   # library is to provided as general, debug or optimized. This is a little state machine which
-  # keeps track of whiuch build type library is to provided for:
+  # keeps track of which build type library is to provided for:
   #
   # - If "debug" or "optimized" word is found, the next element in the list is expected to be
   #   a library which will be passed to target_link_libraries() under corresponding build type.
   #
   # - If there is no "debug" or "optimized" used library is specified for all build types.
   #
-  # NOTE: If separated libraries for debug and release ar eneeded every library is the list are
+  # NOTE: If separated libraries for debug and release are needed every library is the list are
   # to be prefixed explicitly.
   #
   #  Use: "optimized libfoo optimized libbar debug libfoo_d debug libbar_d"
@@ -317,6 +337,7 @@ function(blender_add_lib__impl
   # works fine without having the includes
   # listed is helpful for IDE's (QtCreator/MSVC)
   blender_source_group("${name}" "${sources}")
+  blender_user_header_search_paths("${name}" "${includes}")
 
   list_assert_duplicates("${sources}")
   list_assert_duplicates("${includes}")
@@ -353,6 +374,83 @@ function(blender_add_lib
   set_property(GLOBAL APPEND PROPERTY BLENDER_LINK_LIBS ${name})
 endfunction()
 
+# Add tests for a Blender library, to be called in tandem with blender_add_lib().
+# The tests will be part of the blender_test executable (see tests/gtests/runner).
+function(blender_add_test_lib
+  name
+  sources
+  includes
+  includes_sys
+  library_deps
+  )
+
+  add_cc_flags_custom_test(${name} PARENT_SCOPE)
+
+  # Otherwise external projects will produce warnings that we cannot fix.
+  remove_strict_flags()
+
+  # This duplicates logic that's also in GTestTesting.cmake, macro BLENDER_SRC_GTEST_EX.
+  # TODO(Sybren): deduplicate after the general approach in D7649 has been approved.
+  LIST(APPEND includes
+    ${CMAKE_SOURCE_DIR}/tests/gtests
+  )
+  LIST(APPEND includes_sys
+    ${GLOG_INCLUDE_DIRS}
+    ${GFLAGS_INCLUDE_DIRS}
+    ${CMAKE_SOURCE_DIR}/extern/gtest/include
+    ${CMAKE_SOURCE_DIR}/extern/gmock/include
+  )
+  add_definitions(-DBLENDER_GFLAGS_NAMESPACE=${GFLAGS_NAMESPACE})
+  add_definitions(${GFLAGS_DEFINES})
+  add_definitions(${GLOG_DEFINES})
+
+  blender_add_lib__impl(${name} "${sources}" "${includes}" "${includes_sys}" "${library_deps}")
+
+  set_property(GLOBAL APPEND PROPERTY BLENDER_TEST_LIBS ${name})
+endfunction()
+
+
+# Add tests for a Blender library, to be called in tandem with blender_add_lib().
+# Test will be compiled into a ${name}_test executable.
+#
+# To be used for smaller isolated libraries, that do not have many dependencies.
+# For libraries that do drag in many other Blender libraries and would create a
+# very large executable, blender_add_test_lib() should be used instead.
+function(blender_add_test_executable
+  name
+  sources
+  includes
+  includes_sys
+  library_deps
+  )
+
+  add_cc_flags_custom_test(${name} PARENT_SCOPE)
+
+  ## Otherwise external projects will produce warnings that we cannot fix.
+  remove_strict_flags()
+
+  include_directories(${includes})
+  include_directories(${includes_sys})
+  setup_libdirs()
+
+  BLENDER_SRC_GTEST_EX(
+    NAME ${name}
+    SRC "${sources}"
+    EXTRA_LIBS "${library_deps}"
+    SKIP_ADD_TEST
+  )
+
+  include(GTest)
+  set(_GOOGLETEST_DISCOVER_TESTS_SCRIPT
+    ${CMAKE_SOURCE_DIR}/build_files/cmake/Modules/GTestAddTests.cmake
+  )
+
+  gtest_discover_tests(${name}_test
+    DISCOVERY_MODE PRE_TEST
+    WORKING_DIRECTORY "${TEST_INSTALL_DIR}"
+  )
+endfunction()
+
 # Ninja only: assign 'heavy pool' to some targets that are especially RAM-consuming to build.
 function(setup_heavy_lib_pool)
   if(WITH_NINJA_POOL_JOBS AND NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS)
@@ -360,7 +458,7 @@ function(setup_heavy_lib_pool)
       list(APPEND _HEAVY_LIBS "cycles_device" "cycles_kernel")
     endif()
     if(WITH_LIBMV)
-      list(APPEND _HEAVY_LIBS "bf_intern_libmv")
+      list(APPEND _HEAVY_LIBS "extern_ceres" "bf_intern_libmv")
     endif()
     if(WITH_OPENVDB)
       list(APPEND _HEAVY_LIBS "bf_intern_openvdb")
@@ -378,8 +476,8 @@ function(SETUP_LIBDIRS)
 
   # NOTE: For all new libraries, use absolute library paths.
   # This should eventually be phased out.
-
-  if(NOT MSVC)
+  # APPLE plaform uses full paths for linking libraries, and avoids link_directories.
+  if(NOT MSVC AND NOT APPLE)
     link_directories(${JPEG_LIBPATH} ${PNG_LIBPATH} ${ZLIB_LIBPATH} ${FREETYPE_LIBPATH})
 
     if(WITH_PYTHON)  #  AND NOT WITH_PYTHON_MODULE  # WIN32 needs
@@ -436,7 +534,18 @@ function(SETUP_LIBDIRS)
 
     if(WITH_ALEMBIC)
       link_directories(${ALEMBIC_LIBPATH})
-      link_directories(${HDF5_LIBPATH})
+    endif()
+
+    if(WITH_GMP)
+      link_directories(${GMP_LIBPATH})
+    endif()
+
+    if(WITH_GHOST_WAYLAND)
+      link_directories(
+        ${wayland-client_LIBRARY_DIRS}
+        ${wayland-egl_LIBRARY_DIRS}
+        ${xkbcommon_LIBRARY_DIRS}
+        ${wayland-cursor_LIBRARY_DIRS})
     endif()
 
     if(WIN32 AND NOT UNIX)
@@ -445,33 +554,18 @@ function(SETUP_LIBDIRS)
   endif()
 endfunction()
 
-macro(setup_platform_linker_flags)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}")
-  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}")
-  set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}")
-endmacro()
+# Platform specific linker flags for targets.
+function(setup_platform_linker_flags
+  target)
+  set_property(TARGET ${target} APPEND_STRING PROPERTY LINK_FLAGS " ${PLATFORM_LINKFLAGS}")
+  set_property(TARGET ${target} APPEND_STRING PROPERTY LINK_FLAGS_RELEASE " ${PLATFORM_LINKFLAGS_RELEASE}")
+  set_property(TARGET ${target} APPEND_STRING PROPERTY LINK_FLAGS_DEBUG " ${PLATFORM_LINKFLAGS_DEBUG}")
+endfunction()
 
-function(setup_liblinks
+# Platform specific libraries for targets.
+function(setup_platform_linker_libs
   target
   )
-
-  # NOTE: This might look like it affects global scope, accumulating linker flags on every call
-  # to setup_liblinks, but this isn't how CMake works. These flags will only affect current
-  # directory from where the function is called.
-  # This means that setup_liblinks() called for ffmpeg_test will not affect blender, and each
-  # of thsoe targets will have single set of linker flags.
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
-  set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
-  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}" PARENT_SCOPE)
-
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
-  set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
-  set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}" PARENT_SCOPE)
-
-  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
-  set(CMAKE_MODULE_LINKER_FLAGS_DEBUG "${CMAKE_MODULE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
-  set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "${CMAKE_MODULE_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}" PARENT_SCOPE)
-
   # jemalloc must be early in the list, to be before pthread (see T57998)
   if(WITH_MEM_JEMALLOC)
     target_link_libraries(${target} ${JEMALLOC_LIBRARIES})
@@ -1146,8 +1240,16 @@ endmacro()
 
 macro(without_system_libs_begin)
   set(CMAKE_IGNORE_PATH "${CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES};${CMAKE_SYSTEM_INCLUDE_PATH};${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES};${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES}")
+  if(APPLE)
+    # Avoid searching for headers in frameworks (like Mono), and libraries in LIBDIR.
+    set(CMAKE_FIND_FRAMEWORK NEVER)
+  endif()
 endmacro()
 
 macro(without_system_libs_end)
   unset(CMAKE_IGNORE_PATH)
+  if(APPLE)
+    # FIRST is the default.
+    set(CMAKE_FIND_FRAMEWORK FIRST)
+  endif()
 endmacro()

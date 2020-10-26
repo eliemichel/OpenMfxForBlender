@@ -160,13 +160,12 @@ void BM_data_interp_face_vert_edge(BMesh *bm,
     if (!l_v1 || !l_v2) {
       return;
     }
-    else {
-      const void *src[2];
-      src[0] = l_v1->head.data;
-      src[1] = l_v2->head.data;
 
-      CustomData_bmesh_interp(&bm->ldata, src, w, NULL, 2, l_v->head.data);
-    }
+    const void *src[2];
+    src[0] = l_v1->head.data;
+    src[1] = l_v2->head.data;
+
+    CustomData_bmesh_interp(&bm->ldata, src, w, NULL, 2, l_v->head.data);
   } while ((l_iter = l_iter->radial_next) != e->l);
 }
 
@@ -296,7 +295,7 @@ static bool quad_co(const float v1[3],
                     float r_uv[2])
 {
   float projverts[5][3], n2[3];
-  float origin[2] = {0.0f, 0.0f};
+  const float origin[2] = {0.0f, 0.0f};
   int i;
 
   /* project points into 2d along normal */
@@ -329,7 +328,7 @@ static bool quad_co(const float v1[3],
   return true;
 }
 
-static void mdisp_axis_from_quad(float v1[3],
+static void mdisp_axis_from_quad(const float v1[3],
                                  const float v2[3],
                                  float UNUSED(v3[3]),
                                  const float v4[3],
@@ -536,7 +535,7 @@ void BM_loop_interp_multires_ex(BMesh *UNUSED(bm),
     md_dst->totdisp = md_src->totdisp;
     md_dst->level = md_src->level;
     if (md_dst->totdisp) {
-      md_dst->disps = MEM_callocN(sizeof(float) * 3 * md_dst->totdisp, __func__);
+      md_dst->disps = MEM_callocN(sizeof(float[3]) * md_dst->totdisp, __func__);
     }
     else {
       return;
@@ -744,9 +743,21 @@ void BM_loop_interp_from_face(
   float co[2];
   int i;
 
-  /* convert the 3d coords into 2d for projection */
-  BLI_assert(BM_face_is_normal_valid(f_src));
-  axis_dominant_v3_to_m3(axis_mat, f_src->no);
+  /* Convert the 3d coords into 2d for projection. */
+  float axis_dominant[3];
+  if (!is_zero_v3(f_src->no)) {
+    BLI_assert(BM_face_is_normal_valid(f_src));
+    copy_v3_v3(axis_dominant, f_src->no);
+  }
+  else {
+    /* Rare case in which all the vertices of the face are aligned.
+     * Get a random axis that is orthogonal to the tangent. */
+    float vec[3];
+    BM_face_calc_tangent_auto(f_src, vec);
+    ortho_v3_v3(axis_dominant, vec);
+    normalize_v3(axis_dominant);
+  }
+  axis_dominant_v3_to_m3(axis_mat, axis_dominant);
 
   i = 0;
   l_iter = l_first = BM_FACE_FIRST_LOOP(f_src);
@@ -869,7 +880,7 @@ static void update_data_blocks(BMesh *bm, CustomData *olddata, CustomData *data)
   }
 
   if (oldpool) {
-    /* this should never happen but can when dissolve fails - [#28960] */
+    /* this should never happen but can when dissolve fails - T28960. */
     BLI_assert(data->pool != oldpool);
 
     BLI_mempool_destroy(oldpool);

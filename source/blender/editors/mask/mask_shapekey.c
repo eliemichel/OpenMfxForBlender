@@ -71,9 +71,7 @@ static int mask_shape_key_insert_exec(bContext *C, wmOperator *UNUSED(op))
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void MASK_OT_shape_key_insert(wmOperatorType *ot)
@@ -119,9 +117,7 @@ static int mask_shape_key_clear_exec(bContext *C, wmOperator *UNUSED(op))
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void MASK_OT_shape_key_clear(wmOperatorType *ot)
@@ -205,9 +201,7 @@ static int mask_shape_key_feather_reset_exec(bContext *C, wmOperator *UNUSED(op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void MASK_OT_shape_key_feather_reset(wmOperatorType *ot)
@@ -333,7 +327,7 @@ static int mask_shape_key_rekey_exec(bContext *C, wmOperator *op)
 
                 if (MASKPOINT_ISSEL_ANY(point)) {
                   if (do_location) {
-                    memcpy(shape_ele_dst->value, shape_ele_src->value, sizeof(float) * 6);
+                    memcpy(shape_ele_dst->value, shape_ele_src->value, sizeof(float[6]));
                   }
                   if (do_feather) {
                     shape_ele_dst->value[6] = shape_ele_src->value[6];
@@ -365,9 +359,7 @@ static int mask_shape_key_rekey_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void MASK_OT_shape_key_rekey(wmOperatorType *ot)

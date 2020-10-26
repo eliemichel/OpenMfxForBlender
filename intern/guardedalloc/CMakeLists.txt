@@ -28,6 +28,7 @@ set(INC_SYS
 )
 
 set(SRC
+  ./intern/leak_detector.cc
   ./intern/mallocn.c
   ./intern/mallocn_guarded_impl.c
   ./intern/mallocn_lockfree_impl.c
@@ -53,6 +54,14 @@ if(WIN32 AND NOT UNIX)
 
     mmap_win.h
   )
+
+  list(APPEND INC_SYS
+    ${PTHREADS_INC}
+  )
+
+  list(APPEND LIB
+    ${PTHREADS_LIBRARIES}
+  )
 endif()
 
 # Jemalloc 5.0.0+ needs extra configuration.
@@ -68,4 +77,20 @@ if(WITH_CXX_GUARDEDALLOC)
     cpp/mallocn.cpp
   )
   blender_add_lib(bf_intern_guardedalloc_cpp "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+endif()
+
+if(WITH_GTESTS)
+  set(TEST_SRC
+    tests/guardedalloc_alignment_test.cc
+    tests/guardedalloc_overflow_test.cc
+  )
+  set(TEST_INC
+    ../../source/blender/blenlib
+  )
+  set(TEST_LIB
+    bf_intern_guardedalloc
+    bf_blenlib
+  )
+  include(GTestTesting)
+  blender_add_test_executable(guardedalloc "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB};${TEST_LIB}")
 endif()

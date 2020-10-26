@@ -258,6 +258,15 @@ DefNode(TextureNode,    TEX_NODE_PROC+TEX_NOISE, 0,                      "TEX_NO
 DefNode(TextureNode,    TEX_NODE_PROC+TEX_STUCCI, 0,                     "TEX_STUCCI",     TexStucci,        "Stucci",            ""              )
 DefNode(TextureNode,    TEX_NODE_PROC+TEX_DISTNOISE, 0,                  "TEX_DISTNOISE",  TexDistNoise,     "Distorted Noise",   ""              )
 
+DefNode(FunctionNode, FN_NODE_BOOLEAN_MATH,  def_boolean_math,  "BOOLEAN_MATH",  BooleanMath,  "Boolean Math", "")
+DefNode(FunctionNode, FN_NODE_FLOAT_COMPARE, def_float_compare, "FLOAT_COMPARE", FloatCompare, "Float Compare", "")
+DefNode(FunctionNode, FN_NODE_SWITCH,        def_fn_switch,     "SWITCH",        Switch,       "Switch", "")
+DefNode(FunctionNode, FN_NODE_GROUP_INSTANCE_ID, 0,             "GROUP_INSTANCE_ID", GroupInstanceID,  "Group Instance ID", "")
+DefNode(FunctionNode, FN_NODE_COMBINE_STRINGS, 0,               "COMBINE_STRINGS", CombineStrings, "Combine Strings", "")
+DefNode(FunctionNode, FN_NODE_OBJECT_TRANSFORMS, 0,             "OBJECT_TRANSFORMS", ObjectTransforms, "Object Transforms", "")
+DefNode(FunctionNode, FN_NODE_RANDOM_FLOAT, 0,                  "RANDOM_FLOAT", RandomFloat, "Random Float", "")
+
+
 /* undefine macros */
 #undef DefNode
 

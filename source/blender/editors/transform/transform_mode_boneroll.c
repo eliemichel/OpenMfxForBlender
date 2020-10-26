@@ -54,7 +54,7 @@ static void applyBoneRoll(TransInfo *t, const int UNUSED(mval[2]))
 
   final = t->values[0];
 
-  snapGridIncrement(t, &final);
+  transform_snap_increment(t, &final);
 
   applyNumInput(&t->num, &final);
 
@@ -75,10 +75,6 @@ static void applyBoneRoll(TransInfo *t, const int UNUSED(mval[2]))
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     TransData *td = tc->data;
     for (i = 0; i < tc->data_len; i++, td++) {
-      if (td->flag & TD_NOACTION) {
-        break;
-      }
-
       if (td->flag & TD_SKIP) {
         continue;
       }
@@ -101,11 +97,10 @@ void initBoneRoll(TransInfo *t)
 
   t->idx_max = 0;
   t->num.idx_max = 0;
-  t->snap[0] = 0.0f;
-  t->snap[1] = DEG2RAD(5.0);
-  t->snap[2] = DEG2RAD(1.0);
+  t->snap[0] = DEG2RAD(5.0);
+  t->snap[1] = DEG2RAD(1.0);
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   t->num.unit_use_radians = (t->scene->unit.system_rotation == USER_UNIT_ROT_RADIANS);
   t->num.unit_type[0] = B_UNIT_ROTATION;

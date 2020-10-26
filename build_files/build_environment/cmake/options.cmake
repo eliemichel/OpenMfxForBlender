@@ -17,9 +17,11 @@
 # ***** END GPL LICENSE BLOCK *****
 
 if(WIN32)
-  option(ENABLE_MINGW64 "Enable building of ffmpeg/iconv/libsndfile/lapack/fftw3 by installing mingw64" ON)
+  option(ENABLE_MINGW64 "Enable building of ffmpeg/iconv/libsndfile/fftw3 by installing mingw64" ON)
 endif()
 option(WITH_WEBP "Enable building of oiio with webp support" OFF)
+option(WITH_BOOST_PYTHON "Enable building of boost with python support" OFF)
+option(WITH_NANOVDB "Enable building of OpenVDB with NanoVDB included" OFF)
 set(MAKE_THREADS 1 CACHE STRING "Number of threads to run make with")
 
 if(NOT BUILD_MODE)
@@ -45,11 +47,7 @@ message("PATCH_DIR = ${PATCH_DIR}")
 message("BUILD_DIR = ${BUILD_DIR}")
 
 if(WIN32)
-  if("${CMAKE_SIZEOF_VOID_P}" EQUAL "8")
-    set(PATCH_CMD ${DOWNLOAD_DIR}/mingw/mingw64/msys/1.0/bin/patch.exe)
-  else()
-    set(PATCH_CMD ${DOWNLOAD_DIR}/mingw/mingw32/msys/1.0/bin/patch.exe)
-  endif()
+  set(PATCH_CMD ${DOWNLOAD_DIR}/mingw/mingw64/msys/1.0/bin/patch.exe)
   set(LIBEXT ".lib")
   set(LIBPREFIX "")
 
@@ -82,17 +80,10 @@ if(WIN32)
   set(PLATFORM_CXX_FLAGS)
   set(PLATFORM_CMAKE_FLAGS)
 
-  if("${CMAKE_SIZEOF_VOID_P}" EQUAL "8")
-    set(MINGW_PATH ${DOWNLOAD_DIR}/mingw/mingw64)
-    set(MINGW_SHELL ming64sh.cmd)
-    set(PERL_SHELL ${DOWNLOAD_DIR}/perl/portableshell.bat)
-    set(MINGW_HOST x86_64-w64-mingw32)
-  else()
-    set(MINGW_PATH ${DOWNLOAD_DIR}/mingw/mingw32)
-    set(MINGW_SHELL ming32sh.cmd)
-    set(PERL_SHELL ${DOWNLOAD_DIR}/perl32/portableshell.bat)
-    set(MINGW_HOST i686-w64-mingw32)
-  endif()
+  set(MINGW_PATH ${DOWNLOAD_DIR}/mingw/mingw64)
+  set(MINGW_SHELL ming64sh.cmd)
+  set(PERL_SHELL ${DOWNLOAD_DIR}/perl/portableshell.bat)
+  set(MINGW_HOST x86_64-w64-mingw32)
 
   set(CONFIGURE_ENV
     cd ${MINGW_PATH} &&
@@ -124,16 +115,32 @@ else()
       COMMAND xcode-select --print-path
       OUTPUT_VARIABLE XCODE_DEV_PATH OUTPUT_STRIP_TRAILING_WHITESPACE
     )
-    set(OSX_ARCHITECTURES x86_64)
-    set(OSX_DEPLOYMENT_TARGET 10.11)
+    execute_process(
+      COMMAND xcodebuild -version -sdk macosx SDKVersion
+      OUTPUT_VARIABLE MACOSX_SDK_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+    if(NOT CMAKE_OSX_ARCHITECTURES)
+      execute_process(COMMAND uname -m OUTPUT_VARIABLE ARCHITECTURE OUTPUT_STRIP_TRAILING_WHITESPACE)
+      message(STATUS "Detected native architecture ${ARCHITECTURE}.")
+      set(CMAKE_OSX_ARCHITECTURES "${ARCHITECTURE}")
+    endif()
+    if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64")
+      set(OSX_DEPLOYMENT_TARGET 10.13)
+    else()
+      set(OSX_DEPLOYMENT_TARGET 11.00)
+    endif()
     set(OSX_SYSROOT ${XCODE_DEV_PATH}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk)
 
-    set(PLATFORM_CFLAGS "-isysroot ${OSX_SYSROOT} -mmacosx-version-min=${OSX_DEPLOYMENT_TARGET}")
-    set(PLATFORM_CXXFLAGS "-isysroot ${OSX_SYSROOT} -mmacosx-version-min=${OSX_DEPLOYMENT_TARGET} -std=c++11 -stdlib=libc++")
-    set(PLATFORM_LDFLAGS "-isysroot ${OSX_SYSROOT} -mmacosx-version-min=${OSX_DEPLOYMENT_TARGET}")
-    set(PLATFORM_BUILD_TARGET --build=x86_64-apple-darwin15.0.0) # OS X 10.11
+    set(PLATFORM_CFLAGS "-isysroot ${OSX_SYSROOT} -mmacosx-version-min=${OSX_DEPLOYMENT_TARGET} -arch ${CMAKE_OSX_ARCHITECTURES}")
+    set(PLATFORM_CXXFLAGS "-isysroot ${OSX_SYSROOT} -mmacosx-version-min=${OSX_DEPLOYMENT_TARGET} -std=c++11 -stdlib=libc++ -arch ${CMAKE_OSX_ARCHITECTURES}")
+    set(PLATFORM_LDFLAGS "-isysroot ${OSX_SYSROOT} -mmacosx-version-min=${OSX_DEPLOYMENT_TARGET} -arch ${CMAKE_OSX_ARCHITECTURES}")
+    if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64")
+      set(PLATFORM_BUILD_TARGET --build=x86_64-apple-darwin17.0.0) # OS X 10.13
+    else()
+      set(PLATFORM_BUILD_TARGET --build=aarch64-apple-darwin20.0.0) # macOS 11.00
+    endif()
     set(PLATFORM_CMAKE_FLAGS
-      -DCMAKE_OSX_ARCHITECTURES:STRING=${OSX_ARCHITECTURES}
+      -DCMAKE_OSX_ARCHITECTURES:STRING=${CMAKE_OSX_ARCHITECTURES}
       -DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=${OSX_DEPLOYMENT_TARGET}
       -DCMAKE_OSX_SYSROOT:PATH=${OSX_SYSROOT}
     )
@@ -166,6 +173,7 @@ else()
 
   set(CONFIGURE_ENV
     export MACOSX_DEPLOYMENT_TARGET=${OSX_DEPLOYMENT_TARGET} &&
+    export MACOSX_SDK_VERSION=${OSX_DEPLOYMENT_TARGET} &&
     export CFLAGS=${PLATFORM_CFLAGS} &&
     export CXXFLAGS=${PLATFORM_CXXFLAGS} &&
     export LDFLAGS=${PLATFORM_LDFLAGS}
@@ -187,18 +195,6 @@ set(DEFAULT_CMAKE_FLAGS
   -DCMAKE_CXX_FLAGS_RELWITHDEBINFO=${CMAKE_CXX_FLAGS_RELWITHDEBINFO}
   ${PLATFORM_CMAKE_FLAGS}
 )
-
-if(WIN32)
-  # We need both flavors to build the thumbnail dlls
-  if(MSVC12)
-    set(GENERATOR_32 "Visual Studio 12 2013")
-    set(GENERATOR_64 "Visual Studio 12 2013 Win64")
-  elseif(MSVC14)
-    set(GENERATOR_32 "Visual Studio 14 2015")
-    set(GENERATOR_64 "Visual Studio 14 2015 Win64")
-  endif()
-endif()
-
 
 if(WIN32)
   if(BUILD_MODE STREQUAL Debug)

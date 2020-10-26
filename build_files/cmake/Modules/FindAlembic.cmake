@@ -12,12 +12,8 @@
 #=============================================================================
 # Copyright 2016 Blender Foundation.
 #
-# Distributed under the OSI-approved BSD License (the "License");
-# see accompanying file Copyright.txt for details.
-#
-# This software is distributed WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the License for more information.
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
 #=============================================================================
 
 # If ALEMBIC_ROOT_DIR was defined in the environment, use it.
@@ -51,12 +47,12 @@ FIND_LIBRARY(ALEMBIC_LIBRARY
 # handle the QUIETLY and REQUIRED arguments and set ALEMBIC_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(ALEMBIC DEFAULT_MSG ALEMBIC_LIBRARY ALEMBIC_INCLUDE_DIR)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(Alembic DEFAULT_MSG ALEMBIC_LIBRARY ALEMBIC_INCLUDE_DIR)
 
 IF(ALEMBIC_FOUND)
   SET(ALEMBIC_LIBRARIES ${ALEMBIC_LIBRARY})
   SET(ALEMBIC_INCLUDE_DIRS ${ALEMBIC_INCLUDE_DIR})
-ENDIF(ALEMBIC_FOUND)
+ENDIF()
 
 MARK_AS_ADVANCED(
   ALEMBIC_INCLUDE_DIR

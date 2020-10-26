@@ -18,14 +18,19 @@
  * \ingroup pythonintern
  */
 
-#ifndef __BPY_GIZMO_WRAP_H__
-#define __BPY_GIZMO_WRAP_H__
+#pragma once
 
 struct wmGizmoGroupType;
 struct wmGizmoType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* exposed to rna/wm api */
 void BPY_RNA_gizmo_wrapper(struct wmGizmoType *gzt, void *userdata);
 void BPY_RNA_gizmogroup_wrapper(struct wmGizmoGroupType *gzgt, void *userdata);
 
-#endif /* __BPY_GIZMO_WRAP_H__ */
+#ifdef __cplusplus
+}
+#endif

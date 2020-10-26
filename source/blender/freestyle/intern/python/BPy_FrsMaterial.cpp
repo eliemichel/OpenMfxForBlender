@@ -55,21 +55,14 @@ PyDoc_STRVAR(
     "Class defining a material.\n"
     "\n"
     ".. method:: __init__()\n"
+    "            __init__(brother)\n"
+    "            __init__(line, diffuse, ambient, specular, emission, shininess, priority)\n"
     "\n"
-    "   Default constructor.\n"
+    "   Creates a :class:`FrsMaterial` using either default constructor,\n"
+    "   copy constructor, or an overloaded constructor\n"
     "\n"
-    ".. method:: __init__(brother)\n"
-    "\n"
-    "   Copy constructor.\n"
-    "\n"
-    "   :arg brother: A Material object.\n"
+    "   :arg brother: A Material object to be used as a copy constructor.\n"
     "   :type brother: :class:`Material`\n"
-    "\n"
-    ".. method:: __init__(line, diffuse, ambient, specular, emission, shininess, priority)\n"
-    "\n"
-    "   Builds a Material from its line, diffuse, ambient, specular, emissive\n"
-    "   colors, a shininess coefficient and line color priority.\n"
-    "\n"
     "   :arg line: The line color.\n"
     "   :type line: :class:`mathutils.Vector`, list or tuple of 4 float values\n"
     "   :arg diffuse: The diffuse color.\n"
@@ -108,7 +101,7 @@ static int FrsMaterial_init(BPy_FrsMaterial *self, PyObject *args, PyObject *kwd
       self->m = new FrsMaterial(*m);
     }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "O&O&O&O&O&fi",
@@ -508,9 +501,8 @@ static PyObject *BPy_FrsMaterial_richcmpr(PyObject *objectA,
     if (comparison_type == Py_NE) {
       Py_RETURN_TRUE;
     }
-    else {
-      Py_RETURN_FALSE;
-    }
+
+    Py_RETURN_FALSE;
   }
 
   matA = (BPy_FrsMaterial *)objectA;
@@ -531,9 +523,8 @@ static PyObject *BPy_FrsMaterial_richcmpr(PyObject *objectA,
   if (result == true) {
     Py_RETURN_TRUE;
   }
-  else {
-    Py_RETURN_FALSE;
-  }
+
+  Py_RETURN_FALSE;
 }
 
 static Py_hash_t FrsMaterial_hash(PyObject *self)

@@ -39,6 +39,7 @@ enum {
   EXT_INPUT = 1,
   EXT_KEEP = 2,
   EXT_DEL = 4,
+  EXT_TAG = 8,
 };
 
 #define VERT_MARK 1
@@ -335,6 +336,8 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
   const bool use_normal_flip = BMO_slot_bool_get(op->slots_in, "use_normal_flip");
   const bool use_normal_from_adjacent = BMO_slot_bool_get(op->slots_in,
                                                           "use_normal_from_adjacent");
+  const bool use_dissolve_ortho_edges = BMO_slot_bool_get(op->slots_in,
+                                                          "use_dissolve_ortho_edges");
 
   /* initialize our sub-operators */
   BMO_op_initf(bm,
@@ -378,7 +381,7 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 
   /* calculate verts to delete */
   BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
-    if (v->e) { /* only deal with verts attached to geometry [#33651] */
+    if (v->e) { /* only deal with verts attached to geometry T33651. */
       found = false;
 
       BM_ITER_ELEM (e, &viter, v, BM_EDGES_OF_VERT) {
@@ -442,6 +445,24 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
     }
   }
 
+  BMVert **dissolve_verts = NULL;
+  int dissolve_verts_len = 0;
+  float average_normal[3];
+  if (use_dissolve_ortho_edges) {
+    /* Calc average normal. */
+    zero_v3(average_normal);
+    BMO_ITER (f, &siter, dupeop.slots_out, "geom.out", BM_FACE) {
+      add_v3_v3(average_normal, f->no);
+    }
+    if (normalize_v3(average_normal) == 0.0f) {
+      average_normal[2] = 1.0f;
+    }
+
+    /* Allocate array to store possible vertices that will be dissolved. */
+    int boundary_verts_len = BMO_slot_map_count(dupeop.slots_out, "boundary_map.out");
+    dissolve_verts = MEM_mallocN((size_t)boundary_verts_len * sizeof(*dissolve_verts), __func__);
+  }
+
   BMO_slot_copy(&dupeop, slots_out, "geom.out", op, slots_out, "geom.out");
 
   slot_edges_exclude = BMO_slot_get(op->slots_in, "edges_exclude");
@@ -457,10 +478,10 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
       BMVert *v1 = e->v1, *v2 = e->v2;
 
       /* The original edge was excluded,
-       * this would result in a standalone wire edge - see [#30399] */
+       * this would result in a standalone wire edge - see T30399. */
       BM_edge_kill(bm, e);
 
-      /* kill standalone vertices from this edge - see [#32341] */
+      /* kill standalone vertices from this edge - see T32341. */
       if (!v1->e) {
         BM_vert_kill(bm, v1);
       }
@@ -471,7 +492,7 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
       continue;
     }
 
-    /* skip creating face for excluded edges see [#35503] */
+    /* skip creating face for excluded edges see T35503. */
     if (BMO_slot_map_contains(slot_edges_exclude, e)) {
       /* simply skip creating the face */
       continue;
@@ -481,6 +502,16 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 
     if (!e_new) {
       continue;
+    }
+
+    BMFace *join_face = NULL;
+    if (use_dissolve_ortho_edges) {
+      if (BM_edge_is_boundary(e)) {
+        join_face = e->l->f;
+        if (fabs(dot_v3v3(average_normal, join_face->no)) > 0.0001f) {
+          join_face = NULL;
+        }
+      }
     }
 
     bool edge_normal_flip;
@@ -542,6 +573,22 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 #endif
 
     bm_extrude_copy_face_loop_attributes(bm, f);
+    if (join_face) {
+      BMVert *v1 = e->v1;
+      BMVert *v2 = e->v2;
+      if (!BMO_elem_flag_test(bm, v1, EXT_TAG)) {
+        BMO_elem_flag_enable(bm, v1, EXT_TAG);
+        dissolve_verts[dissolve_verts_len++] = v1;
+      }
+      if (!BMO_elem_flag_test(bm, v2, EXT_TAG)) {
+        BMO_elem_flag_enable(bm, v2, EXT_TAG);
+        dissolve_verts[dissolve_verts_len++] = v2;
+      }
+      /* Tag the edges that can collapse. */
+      BMO_elem_flag_enable(bm, f_edges[0], EXT_TAG);
+      BMO_elem_flag_enable(bm, f_edges[1], EXT_TAG);
+      bmesh_kernel_join_face_kill_edge(bm, join_face, f, e);
+    }
   }
 
   /* link isolated vert */
@@ -557,6 +604,23 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
     }
 
     BM_edge_create(bm, v, v2, NULL, BM_CREATE_NO_DOUBLE);
+  }
+
+  if (dissolve_verts) {
+    BMVert **v_iter = &dissolve_verts[0];
+    for (int i = dissolve_verts_len; i--; v_iter++) {
+      v = *v_iter;
+      e = v->e;
+      BMEdge *e_other = BM_DISK_EDGE_NEXT(e, v);
+      if ((e_other == e) || (BM_DISK_EDGE_NEXT(e_other, v) == e)) {
+        /* Loose edge or BMVert is edge pair. */
+        BM_edge_collapse(bm, BMO_elem_flag_test(bm, e, EXT_TAG) ? e : e_other, v, true, true);
+      }
+      else {
+        BLI_assert(!BM_vert_is_edge_pair(v));
+      }
+    }
+    MEM_freeN(dissolve_verts);
   }
 
   /* cleanup */

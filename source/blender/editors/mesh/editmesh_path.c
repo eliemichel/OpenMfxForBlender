@@ -642,10 +642,10 @@ static BMElem *edbm_elem_find_nearest(ViewContext *vc, const char htype)
   if ((em->selectmode & SCE_SELECT_VERTEX) && (htype == BM_VERT)) {
     return (BMElem *)EDBM_vert_find_nearest(vc, &dist);
   }
-  else if ((em->selectmode & SCE_SELECT_EDGE) && (htype == BM_EDGE)) {
+  if ((em->selectmode & SCE_SELECT_EDGE) && (htype == BM_EDGE)) {
     return (BMElem *)EDBM_edge_find_nearest(vc, &dist);
   }
-  else if ((em->selectmode & SCE_SELECT_FACE) && (htype == BM_FACE)) {
+  if ((em->selectmode & SCE_SELECT_FACE) && (htype == BM_FACE)) {
     return (BMElem *)EDBM_face_find_nearest(vc, &dist);
   }
 
@@ -698,10 +698,9 @@ static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *op, const wmE
 
   /* If nothing is selected, let's select the picked vertex/edge/face. */
   if ((vc.em->bm->totvertsel == 0) && (eve || eed || efa)) {
-    /* TODO (dfelinto) right now we try to find the closest element twice.
+    /* TODO(dfelinto): right now we try to find the closest element twice.
      * The ideal is to refactor EDBM_select_pick so it doesn't
-     * have to pick the nearest vert/edge/face again.
-     */
+     * have to pick the nearest vert/edge/face again. */
     EDBM_select_pick(C, event->mval, true, false, false);
     return OPERATOR_FINISHED;
   }

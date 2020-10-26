@@ -218,7 +218,7 @@ static void rna_def_movieclip_proxy(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "100%", "Build proxy resolution 100% of the original undistorted footage dimension");
 
-  /* build timecodes */
+  /* Build time-codes. */
   prop = RNA_def_property(srna, "build_record_run", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "build_tc_flag", IMB_TC_RECORD_RUN);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
@@ -329,7 +329,7 @@ static void rna_def_movieclip(BlenderRNA *brna)
   RNA_def_struct_ui_icon(srna, ICON_SEQUENCE);
 
   prop = RNA_def_property(srna, "filepath", PROP_STRING, PROP_FILEPATH);
-  RNA_def_property_string_sdna(prop, NULL, "name");
+  RNA_def_property_string_sdna(prop, NULL, "filepath");
   RNA_def_property_ui_text(prop, "File Path", "Filename of the movie or sequence file");
   RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, "rna_MovieClip_reload_update");
 
@@ -410,7 +410,7 @@ static void rna_def_movieclip(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Frame Offset",
-      "Offset of footage first frame relative to it's file name "
+      "Offset of footage first frame relative to its file name "
       "(affects only how footage is loading, does not change data associated with a clip)");
   RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, "rna_MovieClip_reload_update");
 

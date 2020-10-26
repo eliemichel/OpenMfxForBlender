@@ -27,6 +27,10 @@
 #include "BLI_path_util.h"
 #include "BLI_utildefines.h"
 
+#ifdef WITH_PYTHON
+#  include "BPY_extern.h"
+#endif
+
 #include "DEG_depsgraph.h"
 
 #include "BKE_image.h"
@@ -98,7 +102,7 @@ const EnumPropertyItem rna_enum_bake_pass_type_items[] = {
 #  include "BKE_context.h"
 #  include "BKE_report.h"
 
-#  include "GPU_extensions.h"
+#  include "GPU_capabilities.h"
 #  include "GPU_shader.h"
 #  include "IMB_colormanagement.h"
 
@@ -131,7 +135,7 @@ static void engine_bind_display_space_shader(RenderEngine *UNUSED(engine), Scene
   GPUShader *shader = GPU_shader_get_builtin_shader(GPU_SHADER_2D_IMAGE);
   GPU_shader_bind(shader);
 
-  int img_loc = GPU_shader_get_uniform_ensure(shader, "image");
+  int img_loc = GPU_shader_get_uniform(shader, "image");
 
   GPU_shader_uniform_int(shader, img_loc, 0);
 }
@@ -181,11 +185,8 @@ static void engine_bake(RenderEngine *engine,
                         struct Object *object,
                         const int pass_type,
                         const int pass_filter,
-                        const int object_id,
-                        const struct BakePixel *pixel_array,
-                        const int num_pixels,
-                        const int depth,
-                        void *result)
+                        const int width,
+                        const int height)
 {
   extern FunctionRNA rna_RenderEngine_bake_func;
   PointerRNA ptr;
@@ -200,11 +201,8 @@ static void engine_bake(RenderEngine *engine,
   RNA_parameter_set_lookup(&list, "object", &object);
   RNA_parameter_set_lookup(&list, "pass_type", &pass_type);
   RNA_parameter_set_lookup(&list, "pass_filter", &pass_filter);
-  RNA_parameter_set_lookup(&list, "object_id", &object_id);
-  RNA_parameter_set_lookup(&list, "pixel_array", &pixel_array);
-  RNA_parameter_set_lookup(&list, "num_pixels", &num_pixels);
-  RNA_parameter_set_lookup(&list, "depth", &depth);
-  RNA_parameter_set_lookup(&list, "result", &result);
+  RNA_parameter_set_lookup(&list, "width", &width);
+  RNA_parameter_set_lookup(&list, "height", &height);
   engine->type->rna_ext.call(NULL, &ptr, func, &list);
 
   RNA_parameter_list_free(&list);
@@ -305,7 +303,7 @@ static void rna_RenderEngine_unregister(Main *bmain, StructRNA *type)
   BLI_freelinkN(&R_engines, et);
 
   /* Stop all renders in case we were using this one. */
-  ED_render_engine_changed(bmain);
+  ED_render_engine_changed(bmain, false);
 }
 
 static StructRNA *rna_RenderEngine_register(Main *bmain,
@@ -414,6 +412,19 @@ static PointerRNA rna_RenderEngine_camera_override_get(PointerRNA *ptr)
   }
 }
 
+static void rna_RenderEngine_engine_frame_set(RenderEngine *engine, int frame, float subframe)
+{
+#  ifdef WITH_PYTHON
+  BPy_BEGIN_ALLOW_THREADS;
+#  endif
+
+  RE_engine_frame_set(engine, frame, subframe);
+
+#  ifdef WITH_PYTHON
+  BPy_END_ALLOW_THREADS;
+#  endif
+}
+
 static void rna_RenderResult_views_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
   RenderResult *rr = (RenderResult *)ptr->data;
@@ -459,12 +470,6 @@ void rna_RenderPass_rect_set(PointerRNA *ptr, const float *values)
 {
   RenderPass *rpass = (RenderPass *)ptr->data;
   memcpy(rpass->rect, values, sizeof(float) * rpass->rectx * rpass->recty * rpass->channels);
-}
-
-static PointerRNA rna_BakePixel_next_get(PointerRNA *ptr)
-{
-  BakePixel *bp = ptr->data;
-  return rna_pointer_inherit_refine(ptr, &RNA_BakePixel, bp + 1);
 }
 
 static RenderPass *rna_RenderPass_find_by_type(RenderLayer *rl, int passtype, const char *view)
@@ -535,33 +540,9 @@ static void rna_def_render_engine(BlenderRNA *brna)
                      0,
                      INT_MAX);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  parm = RNA_def_int(func,
-                     "object_id",
-                     0,
-                     0,
-                     INT_MAX,
-                     "Object Id",
-                     "Id of the current object being baked in relation to the others",
-                     0,
-                     INT_MAX);
+  parm = RNA_def_int(func, "width", 0, 0, INT_MAX, "Width", "Image width", 0, INT_MAX);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  parm = RNA_def_pointer(func, "pixel_array", "BakePixel", "", "");
-  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  parm = RNA_def_int(func,
-                     "num_pixels",
-                     0,
-                     0,
-                     INT_MAX,
-                     "Number of Pixels",
-                     "Size of the baking batch",
-                     0,
-                     INT_MAX);
-  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  parm = RNA_def_int(
-      func, "depth", 0, 0, INT_MAX, "Pixels depth", "Number of channels", 1, INT_MAX);
-  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  /* TODO, see how array size of 0 works, this shouldnt be used */
-  parm = RNA_def_pointer(func, "result", "AnyType", "", "");
+  parm = RNA_def_int(func, "height", 0, 0, INT_MAX, "Height", "Image height", 0, INT_MAX);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
   /* viewport render callbacks */
@@ -709,7 +690,7 @@ static void rna_def_render_engine(BlenderRNA *brna)
   parm = RNA_def_string(func, "info", NULL, 0, "Info", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
-  func = RNA_def_function(srna, "frame_set", "RE_engine_frame_set");
+  func = RNA_def_function(srna, "frame_set", "rna_RenderEngine_engine_frame_set");
   RNA_def_function_ui_description(func, "Evaluate scene at a different frame (for motion blur)");
   parm = RNA_def_int(func, "frame", 0, INT_MIN, INT_MAX, "Frame", "", INT_MIN, INT_MAX);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
@@ -865,6 +846,14 @@ static void rna_def_render_engine(BlenderRNA *brna)
   RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
   RNA_def_property_ui_text(
       prop, "Use Eevee Viewport", "Uses Eevee for viewport shading in LookDev shading mode");
+
+  prop = RNA_def_property(srna, "bl_use_gpu_context", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_GPU_CONTEXT);
+  RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(
+      prop,
+      "Use GPU Context",
+      "Enable OpenGL context for the render method, for engines that render using OpenGL");
 
   prop = RNA_def_property(srna, "bl_use_shading_nodes_custom", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_SHADING_NODES_CUSTOM);
@@ -1119,53 +1108,6 @@ static void rna_def_render_pass(BlenderRNA *brna)
   RNA_define_verify_sdna(1);
 }
 
-static void rna_def_render_bake_pixel(BlenderRNA *brna)
-{
-  StructRNA *srna;
-  PropertyRNA *prop;
-
-  srna = RNA_def_struct(brna, "BakePixel", NULL);
-  RNA_def_struct_ui_text(srna, "Bake Pixel", "");
-
-  RNA_define_verify_sdna(0);
-
-  prop = RNA_def_property(srna, "primitive_id", PROP_INT, PROP_NONE);
-  RNA_def_property_int_sdna(prop, NULL, "primitive_id");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "object_id", PROP_INT, PROP_NONE);
-  RNA_def_property_int_sdna(prop, NULL, "object_id");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "uv", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_array(prop, 2);
-  RNA_def_property_float_sdna(prop, NULL, "uv");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "du_dx", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_float_sdna(prop, NULL, "du_dx");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "du_dy", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_float_sdna(prop, NULL, "du_dy");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "dv_dx", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_float_sdna(prop, NULL, "dv_dx");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "dv_dy", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_float_sdna(prop, NULL, "dv_dy");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "next", PROP_POINTER, PROP_NONE);
-  RNA_def_property_struct_type(prop, "BakePixel");
-  RNA_def_property_pointer_funcs(prop, "rna_BakePixel_next_get", NULL, NULL, NULL);
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  RNA_define_verify_sdna(1);
-}
-
 void RNA_def_render(BlenderRNA *brna)
 {
   rna_def_render_engine(brna);
@@ -1173,7 +1115,6 @@ void RNA_def_render(BlenderRNA *brna)
   rna_def_render_view(brna);
   rna_def_render_layer(brna);
   rna_def_render_pass(brna);
-  rna_def_render_bake_pixel(brna);
 }
 
 #endif /* RNA_RUNTIME */

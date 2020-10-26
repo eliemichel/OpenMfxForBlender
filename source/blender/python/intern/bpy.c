@@ -35,6 +35,8 @@
 #include "RNA_access.h"
 #include "RNA_types.h"
 
+#include "GPU_state.h"
+
 #include "bpy.h"
 #include "bpy_app.h"
 #include "bpy_capi_utils.h"
@@ -145,7 +147,7 @@ static PyObject *bpy_blend_paths(PyObject *UNUSED(self), PyObject *args, PyObjec
   return list;
 }
 
-// PyDoc_STRVAR(bpy_user_resource_doc[] = // now in bpy/utils.py
+// PyDoc_STRVAR(bpy_user_resource_doc[] = /* now in bpy/utils.py */
 static PyObject *bpy_user_resource(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
 {
   const struct PyC_StringEnumItems type_items[] = {
@@ -330,6 +332,9 @@ static PyMethodDef meth_bpy_escape_identifier = {
 static PyObject *bpy_import_test(const char *modname)
 {
   PyObject *mod = PyImport_ImportModuleLevel(modname, NULL, NULL, NULL, 0);
+
+  GPU_bgl_end();
+
   if (mod) {
     Py_DECREF(mod);
   }
@@ -344,7 +349,7 @@ static PyObject *bpy_import_test(const char *modname)
 /******************************************************************************
  * Description: Creates the bpy module and adds it to sys.modules for importing
  ******************************************************************************/
-void BPy_init_modules(void)
+void BPy_init_modules(struct bContext *C)
 {
   PointerRNA ctx_ptr;
   PyObject *mod;
@@ -380,10 +385,7 @@ void BPy_init_modules(void)
   PyModule_AddObject(mod, "types", BPY_rna_types());
 
   /* needs to be first so bpy_types can run */
-  BPY_library_load_module(mod);
-  BPY_library_write_module(mod);
-
-  BPY_rna_id_collection_module(mod);
+  BPY_library_load_type_ready();
 
   BPY_rna_gizmo_module(mod);
 
@@ -398,8 +400,7 @@ void BPy_init_modules(void)
   PyModule_AddObject(mod, "_utils_previews", BPY_utils_previews_module());
   PyModule_AddObject(mod, "msgbus", BPY_msgbus_module());
 
-  /* bpy context */
-  RNA_pointer_create(NULL, &RNA_Context, (void *)BPy_GetContext(), &ctx_ptr);
+  RNA_pointer_create(NULL, &RNA_Context, C, &ctx_ptr);
   bpy_context_module = (BPy_StructRNA *)pyrna_struct_CreatePyObject(&ctx_ptr);
   /* odd that this is needed, 1 ref on creation and another for the module
    * but without we get a crash on exit */

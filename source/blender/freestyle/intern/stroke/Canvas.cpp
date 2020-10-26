@@ -41,10 +41,8 @@
 // soc #include <qimage.h>
 // soc #include <QString>
 
-extern "C" {
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-}
 
 using namespace std;
 
@@ -92,9 +90,7 @@ Canvas::~Canvas()
     }
     _maps.clear();
   }
-  if (_steerableViewMap) {
-    delete _steerableViewMap;
-  }
+  delete _steerableViewMap;
 }
 
 void Canvas::preDraw()

@@ -10,22 +10,22 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2016 Kévin Dietrich.
  * All rights reserved.
  */
+#pragma once
 
 /** \file
  * \ingroup balembic
  */
 
-#ifndef __ABC_READER_POINTS_H__
-#define __ABC_READER_POINTS_H__
-
 #include "abc_customdata.h"
 #include "abc_reader_object.h"
+
+namespace blender::io::alembic {
 
 class AbcPointsReader : public AbcObjectReader {
   Alembic::AbcGeom::IPointsSchema m_schema;
@@ -51,4 +51,4 @@ void read_points_sample(const Alembic::AbcGeom::IPointsSchema &schema,
                         const Alembic::AbcGeom::ISampleSelector &selector,
                         CDStreamConfig &config);
 
-#endif /* __ABC_READER_POINTS_H__ */
+}  // namespace blender::io::alembic

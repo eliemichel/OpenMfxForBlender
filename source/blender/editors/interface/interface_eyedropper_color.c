@@ -39,8 +39,6 @@
 
 #include "RNA_access.h"
 
-#include "GPU_glew.h"
-
 #include "UI_interface.h"
 
 #include "IMB_colormanagement.h"
@@ -138,10 +136,25 @@ void eyedropper_color_sample_fl(bContext *C, int mx, int my, float r_col[3])
 {
   /* we could use some clever */
   Main *bmain = CTX_data_main(C);
-  bScreen *screen = CTX_wm_screen(C);
-  ScrArea *area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, mx, my);
+  wmWindowManager *wm = CTX_wm_manager(C);
   const char *display_device = CTX_data_scene(C)->display_settings.display_device;
   struct ColorManagedDisplay *display = IMB_colormanagement_display_get_named(display_device);
+
+  wmWindow *win = CTX_wm_window(C);
+  bScreen *screen = CTX_wm_screen(C);
+  ScrArea *area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, mx, my);
+  if (area == NULL) {
+    int mval[2] = {mx, my};
+    if (WM_window_find_under_cursor(wm, NULL, win, mval, &win, mval)) {
+      mx = mval[0];
+      my = mval[1];
+      screen = WM_window_get_active_screen(win);
+      area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, mx, my);
+    }
+    else {
+      win = NULL;
+    }
+  }
 
   if (area) {
     if (area->spacetype == SPACE_IMAGE) {
@@ -159,7 +172,7 @@ void eyedropper_color_sample_fl(bContext *C, int mx, int my, float r_col[3])
       ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_WINDOW, mx, my);
       if (region) {
         SpaceNode *snode = area->spacedata.first;
-        int mval[2] = {mx - region->winrct.xmin, my - region->winrct.ymin};
+        const int mval[2] = {mx - region->winrct.xmin, my - region->winrct.ymin};
 
         if (ED_space_node_color_sample(bmain, snode, region, mval, r_col)) {
           return;
@@ -179,12 +192,15 @@ void eyedropper_color_sample_fl(bContext *C, int mx, int my, float r_col[3])
     }
   }
 
-  /* fallback to simple opengl picker */
-  glReadBuffer(GL_FRONT);
-  glReadPixels(mx, my, 1, 1, GL_RGB, GL_FLOAT, r_col);
-  glReadBuffer(GL_BACK);
-
-  IMB_colormanagement_display_to_scene_linear_v3(r_col, display);
+  if (win) {
+    /* Fallback to simple opengl picker. */
+    const int mval[2] = {mx, my};
+    WM_window_pixel_sample_read(wm, win, mval, r_col);
+    IMB_colormanagement_display_to_scene_linear_v3(r_col, display);
+  }
+  else {
+    zero_v3(r_col);
+  }
 }
 
 /* sets the sample color RGB, maintaining A */
@@ -302,9 +318,7 @@ static int eyedropper_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
 
     return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    return OPERATOR_PASS_THROUGH;
-  }
+  return OPERATOR_PASS_THROUGH;
 }
 
 /* Repeat operator */
@@ -320,9 +334,7 @@ static int eyedropper_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_PASS_THROUGH;
-  }
+  return OPERATOR_PASS_THROUGH;
 }
 
 static bool eyedropper_poll(bContext *C)

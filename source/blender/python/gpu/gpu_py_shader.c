@@ -78,7 +78,7 @@ static int bpygpu_uniform_location_get(GPUShader *shader,
                                        const char *name,
                                        const char *error_prefix)
 {
-  int uniform = GPU_shader_get_uniform_ensure(shader, name);
+  const int uniform = GPU_shader_get_uniform(shader, name);
 
   if (uniform == -1) {
     PyErr_Format(PyExc_ValueError, "%s: uniform %.32s not found", error_prefix, name);
@@ -158,7 +158,7 @@ static PyObject *bpygpu_shader_uniform_from_name(BPyGPUShader *self, PyObject *a
     return NULL;
   }
 
-  int uniform = bpygpu_uniform_location_get(self->shader, name, "GPUShader.get_uniform");
+  const int uniform = bpygpu_uniform_location_get(self->shader, name, "GPUShader.get_uniform");
 
   if (uniform == -1) {
     return NULL;
@@ -184,7 +184,7 @@ static PyObject *bpygpu_shader_uniform_block_from_name(BPyGPUShader *self, PyObj
     return NULL;
   }
 
-  int uniform = GPU_shader_get_uniform_block(self->shader, name);
+  const int uniform = GPU_shader_get_uniform_block(self->shader, name);
 
   if (uniform == -1) {
     PyErr_Format(PyExc_ValueError, "GPUShader.get_uniform_block: uniform %.32s not found", name);
@@ -231,15 +231,13 @@ PyDoc_STRVAR(bpygpu_shader_uniform_vector_float_doc,
              "   :type location: int\n"
              "   :param buffer:  The data that should be set. Can support the buffer protocol.\n"
              "   :type buffer: sequence of floats\n"
-             "   :param length: Size of the uniform data type:\n"
-             "\n"
+             "   :param length: Size of the uniform data type:\n\n"
              "      - 1: float\n"
              "      - 2: vec2 or float[2]\n"
              "      - 3: vec3 or float[3]\n"
              "      - 4: vec4 or float[4]\n"
              "      - 9: mat3\n"
              "      - 16: mat4\n"
-             "\n"
              "   :type length: int\n"
              "   :param count: Specifies the number of elements, vector or matrices that are to "
              "be modified.\n"
@@ -504,7 +502,7 @@ static PyObject *bpygpu_shader_attr_from_name(BPyGPUShader *self, PyObject *arg)
     return NULL;
   }
 
-  int attr = GPU_shader_get_attribute(self->shader, name);
+  const int attr = GPU_shader_get_attribute(self->shader, name);
 
   if (attr == -1) {
     PyErr_Format(PyExc_ValueError, "GPUShader.attr_from_name: attribute %.32s not found", name);
@@ -524,7 +522,7 @@ PyDoc_STRVAR(bpygpu_shader_calc_format_doc,
 static PyObject *bpygpu_shader_calc_format(BPyGPUShader *self, PyObject *UNUSED(arg))
 {
   BPyGPUVertFormat *ret = (BPyGPUVertFormat *)BPyGPUVertFormat_CreatePyObject(NULL);
-  GPU_vertformat_from_interface(&ret->fmt, GPU_shader_get_interface(self->shader));
+  GPU_vertformat_from_shader(&ret->fmt, self->shader);
   return (PyObject *)ret;
 }
 
@@ -597,21 +595,20 @@ PyDoc_STRVAR(
     "   GPUShader combines multiple GLSL shaders into a program used for drawing.\n"
     "   It must contain a vertex and fragment shaders, with an optional geometry shader.\n"
     "\n"
-    "   The GLSL #version directive is automatically included at the top of shaders, and set to "
-    "330.\n"
-    "   Some preprocessor directives are automatically added according to the Operating System or "
-    "availability:\n"
-    "   ``GPU_ATI``, ``GPU_NVIDIA`` and ``GPU_INTEL``.\n"
+    "   The GLSL ``#version`` directive is automatically included at the top of shaders,\n"
+    "   and set to 330. Some preprocessor directives are automatically added according to\n"
+    "   the Operating System or availability: ``GPU_ATI``, ``GPU_NVIDIA`` and ``GPU_INTEL``.\n"
     "\n"
     "   The following extensions are enabled by default if supported by the GPU:\n"
-    "   ``GL_ARB_texture_gather`` and ``GL_ARB_texture_query_lod``.\n"
+    "   ``GL_ARB_texture_gather``, ``GL_ARB_texture_cube_map_array``\n"
+    "   and ``GL_ARB_shader_draw_parameters``.\n"
     "\n"
-    "   To debug shaders, use the --debug-gpu-shaders command line option"
+    "   To debug shaders, use the ``--debug-gpu-shaders`` command line option\n"
     "   to see full GLSL shader compilation and linking errors.\n"
     "\n"
-    "   For drawing user interface elements and gizmos, use "
-    "   ``fragOutput = blender_srgb_to_framebuffer_space(fragOutput)``"
-    "   to transform the output sRGB colors to the framebuffer colorspace."
+    "   For drawing user interface elements and gizmos, use\n"
+    "   ``fragOutput = blender_srgb_to_framebuffer_space(fragOutput)``\n"
+    "   to transform the output sRGB colors to the frame-buffer color-space.\n"
     "\n"
     "   :param vertexcode: Vertex shader code.\n"
     "   :type vertexcode: str\n"
@@ -654,19 +651,19 @@ PyDoc_STRVAR(bpygpu_shader_from_builtin_doc,
              ".. function:: from_builtin(shader_name)\n"
              "\n"
              "   Shaders that are embedded in the blender internal code.\n"
-             "   They all read the uniform 'mat4 ModelViewProjectionMatrix', which can be edited "
-             "by the 'gpu.matrix' module.\n"
-             "   For more details, you can check the shader code with the function "
-             "'gpu.shader.code_from_builtin';\n"
+             "   They all read the uniform ``mat4 ModelViewProjectionMatrix``,\n"
+             "   which can be edited by the :mod:`gpu.matrix` module.\n"
+             "   For more details, you can check the shader code with the\n"
+             "   :func:`gpu.shader.code_from_builtin` function.\n"
              "\n"
-             "   :param shader_name: One of these builtin shader names: {\n"
-             "       '2D_UNIFORM_COLOR',\n"
-             "       '2D_FLAT_COLOR',\n"
-             "       '2D_SMOOTH_COLOR',\n"
-             "       '2D_IMAGE',\n"
-             "       '3D_UNIFORM_COLOR',\n"
-             "       '3D_FLAT_COLOR',\n"
-             "       '3D_SMOOTH_COLOR'}\n"
+             "   :param shader_name: One of these builtin shader names:\n\n"
+             "      - ``2D_UNIFORM_COLOR``\n"
+             "      - ``2D_FLAT_COLOR``\n"
+             "      - ``2D_SMOOTH_COLOR``\n"
+             "      - ``2D_IMAGE``\n"
+             "      - ``3D_UNIFORM_COLOR``\n"
+             "      - ``3D_FLAT_COLOR``\n"
+             "      - ``3D_SMOOTH_COLOR``\n"
              "   :type shader_name: str\n"
              "   :return: Shader object corresponding to the given name.\n"
              "   :rtype: :class:`bpy.types.GPUShader`\n");
@@ -690,14 +687,14 @@ PyDoc_STRVAR(bpygpu_shader_code_from_builtin_doc,
              "\n"
              "   Exposes the internal shader code for query.\n"
              "\n"
-             "   :param shader_name: One of these builtin shader names: {\n"
-             "       '2D_UNIFORM_COLOR',\n"
-             "       '2D_FLAT_COLOR',\n"
-             "       '2D_SMOOTH_COLOR',\n"
-             "       '2D_IMAGE',\n"
-             "       '3D_UNIFORM_COLOR',\n"
-             "       '3D_FLAT_COLOR',\n"
-             "       '3D_SMOOTH_COLOR'}\n"
+             "   :param shader_name: One of these builtin shader names:\n\n"
+             "      - ``2D_UNIFORM_COLOR``\n"
+             "      - ``2D_FLAT_COLOR``\n"
+             "      - ``2D_SMOOTH_COLOR``\n"
+             "      - ``2D_IMAGE``\n"
+             "      - ``3D_UNIFORM_COLOR``\n"
+             "      - ``3D_FLAT_COLOR``\n"
+             "      - ``3D_SMOOTH_COLOR``\n"
              "   :type shader_name: str\n"
              "   :return: Vertex, fragment and geometry shader codes.\n"
              "   :rtype: dict\n");
@@ -751,7 +748,34 @@ static struct PyMethodDef bpygpu_shader_module_methods[] = {
 };
 
 PyDoc_STRVAR(bpygpu_shader_module_doc,
-             "This module provides access to GPUShader internal functions.");
+             "This module provides access to GPUShader internal functions.\n"
+             "\n"
+             ".. rubric:: Built-in shaders\n"
+             "\n"
+             "All built-in shaders have the ``mat4 ModelViewProjectionMatrix`` uniform.\n"
+             "The value of it can only be modified using the :class:`gpu.matrix` module.\n"
+             "\n"
+             "2D_UNIFORM_COLOR\n"
+             "   :Attributes: vec3 pos\n"
+             "   :Uniforms: vec4 color\n"
+             "2D_FLAT_COLOR\n"
+             "   :Attributes: vec3 pos, vec4 color\n"
+             "   :Uniforms: none\n"
+             "2D_SMOOTH_COLOR\n"
+             "   :Attributes: vec3 pos, vec4 color\n"
+             "   :Uniforms: none\n"
+             "2D_IMAGE\n"
+             "   :Attributes: vec3 pos, vec2 texCoord\n"
+             "   :Uniforms: sampler2D image\n"
+             "3D_UNIFORM_COLOR\n"
+             "   :Attributes: vec3 pos\n"
+             "   :Uniforms: vec4 color\n"
+             "3D_FLAT_COLOR\n"
+             "   :Attributes: vec3 pos, vec4 color\n"
+             "   :Uniforms: none\n"
+             "3D_SMOOTH_COLOR\n"
+             "   :Attributes: vec3 pos, vec4 color\n"
+             "   :Uniforms: none\n");
 static PyModuleDef BPyGPU_shader_module_def = {
     PyModuleDef_HEAD_INIT,
     .m_name = "gpu.shader",

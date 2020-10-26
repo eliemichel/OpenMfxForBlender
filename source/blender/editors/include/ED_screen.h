@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_SCREEN_H__
-#define __ED_SCREEN_H__
+#pragma once
 
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
@@ -73,7 +72,7 @@ void ED_region_exit(struct bContext *C, struct ARegion *region);
 void ED_region_remove(struct bContext *C, struct ScrArea *area, struct ARegion *region);
 void ED_region_pixelspace(struct ARegion *region);
 void ED_region_update_rect(struct ARegion *region);
-void ED_region_floating_initialize(struct ARegion *region);
+void ED_region_floating_init(struct ARegion *region);
 void ED_region_tag_redraw(struct ARegion *region);
 void ED_region_tag_redraw_partial(struct ARegion *region, const struct rcti *rct, bool rebuild);
 void ED_region_tag_redraw_cursor(struct ARegion *region);
@@ -81,20 +80,23 @@ void ED_region_tag_redraw_no_rebuild(struct ARegion *region);
 void ED_region_tag_refresh_ui(struct ARegion *region);
 void ED_region_tag_redraw_editor_overlays(struct ARegion *region);
 
+void ED_region_search_filter_update(const struct ScrArea *area, struct ARegion *region);
+const char *ED_area_region_search_filter_get(const struct ScrArea *area,
+                                             const struct ARegion *region);
+
 void ED_region_panels_init(struct wmWindowManager *wm, struct ARegion *region);
-void ED_region_panels_ex(const struct bContext *C,
-                         struct ARegion *region,
-                         const char *contexts[],
-                         int contextnr,
-                         const bool vertical);
+void ED_region_panels_ex(const struct bContext *C, struct ARegion *region, const char *contexts[]);
 void ED_region_panels(const struct bContext *C, struct ARegion *region);
 void ED_region_panels_layout_ex(const struct bContext *C,
                                 struct ARegion *region,
                                 struct ListBase *paneltypes,
                                 const char *contexts[],
-                                int contextnr,
-                                const bool vertical,
                                 const char *category_override);
+bool ED_region_property_search(const struct bContext *C,
+                               struct ARegion *region,
+                               struct ListBase *paneltypes,
+                               const char *contexts[],
+                               const char *category_override);
 
 void ED_region_panels_layout(const struct bContext *C, struct ARegion *region);
 void ED_region_panels_draw(const struct bContext *C, struct ARegion *region);
@@ -171,7 +173,7 @@ void ED_spacetypes_keymap(struct wmKeyConfig *keyconf);
 int ED_area_header_switchbutton(const struct bContext *C, struct uiBlock *block, int yco);
 
 /* areas */
-void ED_area_initialize(struct wmWindowManager *wm, struct wmWindow *win, struct ScrArea *area);
+void ED_area_init(struct wmWindowManager *wm, struct wmWindow *win, struct ScrArea *area);
 void ED_area_exit(struct bContext *C, struct ScrArea *area);
 int ED_screen_area_active(const struct bContext *C);
 void ED_screen_global_areas_refresh(struct wmWindow *win);
@@ -188,11 +190,7 @@ void ED_area_newspace(struct bContext *C, ScrArea *area, int type, const bool sk
 void ED_area_prevspace(struct bContext *C, ScrArea *area);
 void ED_area_swapspace(struct bContext *C, ScrArea *sa1, ScrArea *sa2);
 int ED_area_headersize(void);
-int ED_area_header_alignment_or_fallback(const ScrArea *area, int fallback);
-int ED_area_header_alignment(const ScrArea *area);
 int ED_area_footersize(void);
-int ED_area_footer_alignment_or_fallback(const ScrArea *area, int fallback);
-int ED_area_footer_alignment(const ScrArea *area);
 int ED_area_global_size_y(const ScrArea *area);
 int ED_area_global_min_size_y(const ScrArea *area);
 int ED_area_global_max_size_y(const ScrArea *area);
@@ -221,7 +219,7 @@ ScrArea *ED_screen_areas_iter_next(const bScreen *screen, const ScrArea *area);
                                                                       vert_name->next)
 
 /* screens */
-void ED_screens_initialize(struct Main *bmain, struct wmWindowManager *wm);
+void ED_screens_init(struct Main *bmain, struct wmWindowManager *wm);
 void ED_screen_draw_edges(struct wmWindow *win);
 void ED_screen_draw_join_shape(struct ScrArea *sa1, struct ScrArea *sa2);
 void ED_screen_draw_split_preview(struct ScrArea *area, const int dir, const float fac);
@@ -287,6 +285,12 @@ bool ED_workspace_delete(struct WorkSpace *workspace,
                          struct bContext *C,
                          struct wmWindowManager *wm) ATTR_NONNULL();
 void ED_workspace_scene_data_sync(struct WorkSpaceInstanceHook *hook, Scene *scene) ATTR_NONNULL();
+struct WorkSpaceLayout *ED_workspace_screen_change_ensure_unused_layout(
+    struct Main *bmain,
+    struct WorkSpace *workspace,
+    struct WorkSpaceLayout *layout_new,
+    const struct WorkSpaceLayout *layout_fallback_base,
+    struct wmWindow *win) ATTR_NONNULL();
 struct WorkSpaceLayout *ED_workspace_layout_add(struct Main *bmain,
                                                 struct WorkSpace *workspace,
                                                 struct wmWindow *win,
@@ -349,6 +353,8 @@ bool ED_operator_console_active(struct bContext *C);
 bool ED_operator_object_active(struct bContext *C);
 bool ED_operator_object_active_editable_ex(struct bContext *C, const Object *ob);
 bool ED_operator_object_active_editable(struct bContext *C);
+bool ED_operator_object_active_local_editable_ex(struct bContext *C, const Object *ob);
+bool ED_operator_object_active_local_editable(struct bContext *C);
 bool ED_operator_object_active_editable_mesh(struct bContext *C);
 bool ED_operator_object_active_editable_font(struct bContext *C);
 bool ED_operator_editable_mesh(struct bContext *C);
@@ -476,5 +482,3 @@ enum {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_SCREEN_H__ */

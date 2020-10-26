@@ -13,31 +13,29 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * The Original Code is Copyright (C) 2005 Blender Foundation.
+ * The Original Code is Copyright (C) 2020 Blender Foundation.
  * All rights reserved.
  */
 
 /** \file
  * \ingroup gpu
+ *
+ * Helpers for GPU / drawing debugging.
  */
 
-#ifndef __GPU_DEBUG_H__
-#define __GPU_DEBUG_H__
+#pragma once
 
-#include "GPU_glew.h"
+#include "BLI_sys_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* prints something if debug mode is active only */
-void GPU_print_error_debug(const char *str);
-
-/* inserts a debug marker message for the debug context messaging system */
-void GPU_string_marker(const char *str);
+void GPU_debug_group_begin(const char *name);
+void GPU_debug_group_end(void);
+void GPU_debug_get_groups_names(int name_buf_len, char *r_name_buf);
+bool GPU_debug_group_match(const char *ref);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_DEBUG_H__ */

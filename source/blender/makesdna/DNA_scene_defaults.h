@@ -18,8 +18,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SCENE_DEFAULTS_H__
-#define __DNA_SCENE_DEFAULTS_H__
+#pragma once
 
 #include "DNA_view3d_defaults.h"
 
@@ -129,6 +128,7 @@
  \
     .simplify_subsurf = 6, \
     .simplify_particles = 1.0f, \
+    .simplify_volumes = 1.0f, \
  \
     .border.xmin = 0.0f, \
     .border.ymin = 0.0f, \
@@ -218,8 +218,10 @@
     .bloom_radius = 6.5f, \
     .bloom_clamp = 0.0f, \
  \
-    .motion_blur_samples = 8, \
     .motion_blur_shutter = 0.5f, \
+    .motion_blur_depth_scale = 100.0f, \
+    .motion_blur_max = 32, \
+    .motion_blur_steps = 1, \
  \
     .shadow_cube_size = 512, \
     .shadow_cascade_size = 1024, \
@@ -325,7 +327,7 @@
     .doublimit = 0.001, \
     .vgroup_weight = 1.0f, \
     .uvcalc_margin = 0.001f, \
-    .uvcalc_flag = UVCALC_TRANSFORM_CORRECT, \
+    .uvcalc_flag = UVCALC_TRANSFORM_CORRECT_SLIDE, \
     .unwrapper = 1, \
     .select_thresh = 0.01f, \
  \
@@ -363,5 +365,3 @@
   }
 
 /* clang-format off */
-
-#endif  /* __DNA_SCENE_DEFAULTS_H__ */

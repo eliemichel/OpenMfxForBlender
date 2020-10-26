@@ -18,8 +18,7 @@
  * \ingroup collada
  */
 
-#ifndef __EFFECTEXPORTER_H__
-#define __EFFECTEXPORTER_H__
+#pragma once
 
 #include <string>
 #include <vector>
@@ -66,9 +65,9 @@ class EffectsExporter : COLLADASW::LibraryEffects {
   void set_specular(COLLADASW::EffectProfile &ep, Material *ma);
   void set_reflective(COLLADASW::EffectProfile &ep, Material *ma);
 
-  void get_images(Material *ma, KeyImageMap &uid_image_map);
+  void get_images(Material *ma, KeyImageMap &material_image_map);
   void create_image_samplers(COLLADASW::EffectProfile &ep,
-                             KeyImageMap &uid_image_map,
+                             KeyImageMap &material_image_map,
                              std::string &active_uv);
 
   void writeTextures(COLLADASW::EffectProfile &ep,
@@ -85,5 +84,3 @@ class EffectsExporter : COLLADASW::LibraryEffects {
   Scene *scene;
   bContext *mContext;
 };
-
-#endif

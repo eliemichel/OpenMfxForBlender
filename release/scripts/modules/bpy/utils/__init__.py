@@ -283,6 +283,8 @@ def load_scripts(reload_scripts=False, refresh_scripts=False):
     del _initialize
 
     if reload_scripts:
+        _bpy.context.window_manager.tag_script_reload()
+
         import gc
         print("gc.collect() -> %d" % gc.collect())
 
@@ -789,7 +791,7 @@ def register_tool(tool_cls, *, after=None, separator=False, group=False):
 
     cls = ToolSelectPanelHelper._tool_class_from_space_type(space_type)
     if cls is None:
-        raise Exception(f"Space type {space_type!r} has no toolbar")
+        raise Exception("Space type %r has no toolbar" % space_type)
     tools = cls._tools[context_mode]
 
     # First sanity check
@@ -799,9 +801,9 @@ def register_tool(tool_cls, *, after=None, separator=False, group=False):
         if item is not None
     }
     if not issubclass(tool_cls, WorkSpaceTool):
-        raise Exception(f"Expected WorkSpaceTool subclass, not {type(tool_cls)!r}")
+        raise Exception("Expected WorkSpaceTool subclass, not %r" % type(tool_cls))
     if tool_cls.bl_idname in tools_id:
-        raise Exception(f"Tool {tool_cls.bl_idname!r} already exists!")
+        raise Exception("Tool %r already exists!" % tool_cls.bl_idname)
     del tools_id, WorkSpaceTool
 
     # Convert the class into a ToolDef.
@@ -844,7 +846,6 @@ def register_tool(tool_cls, *, after=None, separator=False, group=False):
     if group:
         # Create a new group
         tool_converted = (tool_converted,)
-
 
     tool_def_insert = (
         (None, tool_converted) if separator else
@@ -900,7 +901,7 @@ def unregister_tool(tool_cls):
     from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
     cls = ToolSelectPanelHelper._tool_class_from_space_type(space_type)
     if cls is None:
-        raise Exception(f"Space type {space_type!r} has no toolbar")
+        raise Exception("Space type %r has no toolbar" % space_type)
     tools = cls._tools[context_mode]
 
     tool_def = tool_cls._bl_tool
@@ -952,7 +953,7 @@ def unregister_tool(tool_cls):
                     break
 
     if not changed:
-        raise Exception(f"Unable to remove {tool_cls!r}")
+        raise Exception("Unable to remove %r" % tool_cls)
     del tool_cls._bl_tool
 
     keymap_data = tool_def.keymap
@@ -963,7 +964,7 @@ def unregister_tool(tool_cls):
         for kc in (keyconfigs.default, keyconfigs.addon):
             km = kc.keymaps.get(keymap_data[0])
             if km is None:
-                print(f"Warning keymap {keymap_data[0]!r} not found in {kc.name!r}!")
+                print("Warning keymap %r not found in %r!" % (keymap_data[0], kc.name))
             else:
                 kc.keymaps.remove(km)
 

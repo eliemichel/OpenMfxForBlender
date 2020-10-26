@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_LIB_ID_H__
-#define __BKE_LIB_ID_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -46,12 +45,14 @@
  * specific cases requiring advanced (and potentially dangerous) handling.
  */
 
+#include "BLI_compiler_attrs.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "BLI_compiler_attrs.h"
-
+struct BlendDataReader;
+struct BlendWriter;
 struct GHash;
 struct ID;
 struct Library;
@@ -98,6 +99,12 @@ enum {
   /** Do not tag new ID for update in depsgraph. */
   LIB_ID_CREATE_NO_DEG_TAG = 1 << 8,
 
+  /** Very similar to #LIB_ID_CREATE_NO_MAIN, and should never be used with it (typically combined
+   * with #LIB_ID_CREATE_LOCALIZE or #LIB_ID_COPY_LOCALIZE in fact).
+   * It ensures that IDs created with it will get the #LIB_TAG_LOCALIZED tag, and uses some
+   * specific code in some copy cases (mostly for node trees). */
+  LIB_ID_CREATE_LOCAL = 1 << 9,
+
   /* *** Specific options to some ID types or usages. *** */
   /* *** May be ignored by unrelated ID copying functions. *** */
   /** Object only, needed by make_local code. */
@@ -119,13 +126,18 @@ enum {
   LIB_ID_COPY_KEEP_LIB = 1 << 25,
   /** EXCEPTION! Deep-copy shapekeys used by copied obdata ID. */
   LIB_ID_COPY_SHAPEKEY = 1 << 26,
+  /** EXCEPTION! Specific deep-copy of node trees used e.g. for rendering purposes. */
+  LIB_ID_COPY_NODETREE_LOCALIZE = 1 << 27,
 
   /* *** Helper 'defines' gathering most common flag sets. *** */
   /** Shapekeys are not real ID's, more like local data to geometry IDs... */
   LIB_ID_COPY_DEFAULT = LIB_ID_COPY_SHAPEKEY,
+
+  /** Create a local, outside of bmain, data-block to work on. */
+  LIB_ID_CREATE_LOCALIZE = LIB_ID_CREATE_NO_MAIN | LIB_ID_CREATE_NO_USER_REFCOUNT |
+                           LIB_ID_CREATE_NO_DEG_TAG,
   /** Generate a local copy, outside of bmain, to work on (used by COW e.g.). */
-  LIB_ID_COPY_LOCALIZE = LIB_ID_CREATE_NO_MAIN | LIB_ID_CREATE_NO_USER_REFCOUNT |
-                         LIB_ID_CREATE_NO_DEG_TAG | LIB_ID_COPY_NO_PREVIEW | LIB_ID_COPY_CACHES,
+  LIB_ID_COPY_LOCALIZE = LIB_ID_CREATE_LOCALIZE | LIB_ID_COPY_NO_PREVIEW | LIB_ID_COPY_CACHES,
 };
 
 void BKE_libblock_copy_ex(struct Main *bmain,
@@ -143,6 +155,16 @@ void BLI_libblock_ensure_unique_name(struct Main *bmain, const char *name) ATTR_
 struct ID *BKE_libblock_find_name(struct Main *bmain,
                                   const short type,
                                   const char *name) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+
+/**
+ * Duplicate (a.k.a. deep copy) common processing options.
+ * See also eDupli_ID_Flags for options controlling what kind of IDs to duplicate.
+ */
+typedef enum eLibIDDuplicateFlags {
+  /** This call to a duplicate function is part of another call for some parent ID.
+   * Therefore, this sub-process should not clear `newid` pointers, nor handle remapping itself. */
+  LIB_ID_DUPLICATE_IS_SUBPROCESS = 1 << 0,
+} eLibIDDuplicateFlags;
 
 /* lib_remap.c (keep here since they're general functions) */
 /**
@@ -215,8 +237,14 @@ bool id_single_user(struct bContext *C,
                     struct PointerRNA *ptr,
                     struct PropertyRNA *prop);
 bool BKE_id_copy_is_allowed(const struct ID *id);
-bool BKE_id_copy(struct Main *bmain, const struct ID *id, struct ID **newid);
-bool BKE_id_copy_ex(struct Main *bmain, const struct ID *id, struct ID **r_newid, const int flag);
+struct ID *BKE_id_copy(struct Main *bmain, const struct ID *id);
+struct ID *BKE_id_copy_ex(struct Main *bmain,
+                          const struct ID *id,
+                          struct ID **r_newid,
+                          const int flag);
+struct ID *BKE_id_copy_for_duplicate(struct Main *bmain,
+                                     struct ID *id,
+                                     const uint duplicate_flags);
 
 void BKE_lib_id_swap(struct Main *bmain, struct ID *id_a, struct ID *id_b);
 void BKE_lib_id_swap_full(struct Main *bmain, struct ID *id_a, struct ID *id_b);
@@ -250,8 +278,12 @@ void BKE_main_id_repair_duplicate_names_listbase(struct ListBase *lb);
 
 #define MAX_ID_FULL_NAME (64 + 64 + 3 + 1)         /* 64 is MAX_ID_NAME - 2 */
 #define MAX_ID_FULL_NAME_UI (MAX_ID_FULL_NAME + 3) /* Adds 'keycode' two letters at beginning. */
-void BKE_id_full_name_get(char name[MAX_ID_FULL_NAME], const struct ID *id);
-void BKE_id_full_name_ui_prefix_get(char name[MAX_ID_FULL_NAME_UI], const struct ID *id);
+void BKE_id_full_name_get(char name[MAX_ID_FULL_NAME], const struct ID *id, char separator_char);
+void BKE_id_full_name_ui_prefix_get(char name[MAX_ID_FULL_NAME_UI],
+                                    const struct ID *id,
+                                    const bool add_lib_hint,
+                                    char separator_char,
+                                    int *r_prefix_len);
 
 char *BKE_id_to_unique_string_key(const struct ID *id);
 
@@ -269,10 +301,10 @@ bool BKE_id_is_in_global_main(struct ID *id);
 void BKE_id_ordered_list(struct ListBase *ordered_lb, const struct ListBase *lb);
 void BKE_id_reorder(const struct ListBase *lb, struct ID *id, struct ID *relative, bool after);
 
+void BKE_id_blend_write(struct BlendWriter *writer, struct ID *id);
+
 #define IS_TAGGED(_id) ((_id) && (((ID *)_id)->tag & LIB_TAG_DOIT))
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_LIB_ID_H__ */

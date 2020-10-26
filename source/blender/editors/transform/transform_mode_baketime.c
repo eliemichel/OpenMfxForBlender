@@ -67,7 +67,7 @@ static void applyBakeTime(TransInfo *t, const int mval[2])
     time = (float)(t->center2d[0] - mval[0]) * fac;
   }
 
-  snapGridIncrement(t, &time);
+  transform_snap_increment(t, &time);
 
   applyNumInput(&t->num, &time);
 
@@ -97,10 +97,6 @@ static void applyBakeTime(TransInfo *t, const int mval[2])
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     TransData *td = tc->data;
     for (i = 0; i < tc->data_len; i++, td++) {
-      if (td->flag & TD_NOACTION) {
-        break;
-      }
-
       if (td->flag & TD_SKIP) {
         continue;
       }
@@ -129,11 +125,10 @@ void initBakeTime(TransInfo *t)
 
   t->idx_max = 0;
   t->num.idx_max = 0;
-  t->snap[0] = 0.0f;
-  t->snap[1] = 1.0f;
-  t->snap[2] = t->snap[1] * 0.1f;
+  t->snap[0] = 1.0f;
+  t->snap[1] = t->snap[0] * 0.1f;
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   t->num.unit_type[0] = B_UNIT_NONE; /* Don't think this uses units? */
 }

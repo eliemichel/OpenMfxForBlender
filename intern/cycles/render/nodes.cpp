@@ -19,6 +19,7 @@
 #include "render/constant_fold.h"
 #include "render/film.h"
 #include "render/image.h"
+#include "render/image_sky.h"
 #include "render/integrator.h"
 #include "render/light.h"
 #include "render/mesh.h"
@@ -26,9 +27,10 @@
 #include "render/scene.h"
 #include "render/svm.h"
 
+#include "sky_model.h"
+
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
-#include "util/util_sky_model.h"
 #include "util/util_transform.h"
 
 #include "kernel/svm/svm_color_util.h"
@@ -260,9 +262,9 @@ ImageTextureNode::ImageTextureNode() : ImageSlotTextureNode(node_type)
   tiles.push_back(1001);
 }
 
-ShaderNode *ImageTextureNode::clone() const
+ShaderNode *ImageTextureNode::clone(ShaderGraph *graph) const
 {
-  ImageTextureNode *node = new ImageTextureNode(*this);
+  ImageTextureNode *node = graph->create_node<ImageTextureNode>(*this);
   node->handle = handle;
   return node;
 }
@@ -523,9 +525,9 @@ EnvironmentTextureNode::EnvironmentTextureNode() : ImageSlotTextureNode(node_typ
   animated = false;
 }
 
-ShaderNode *EnvironmentTextureNode::clone() const
+ShaderNode *EnvironmentTextureNode::clone(ShaderGraph *graph) const
 {
-  EnvironmentTextureNode *node = new EnvironmentTextureNode(*this);
+  EnvironmentTextureNode *node = graph->create_node<EnvironmentTextureNode>(*this);
   node->handle = handle;
   return node;
 }
@@ -630,7 +632,7 @@ typedef struct SunSky {
 
   /* Parameter */
   float radiance_x, radiance_y, radiance_z;
-  float config_x[9], config_y[9], config_z[9];
+  float config_x[9], config_y[9], config_z[9], nishita_data[10];
 } SunSky;
 
 /* Preetham model */
@@ -640,7 +642,7 @@ static float sky_perez_function(float lam[6], float theta, float gamma)
          (1.0f + lam[2] * expf(lam[3] * gamma) + lam[4] * cosf(gamma) * cosf(gamma));
 }
 
-static void sky_texture_precompute_old(SunSky *sunsky, float3 dir, float turbidity)
+static void sky_texture_precompute_preetham(SunSky *sunsky, float3 dir, float turbidity)
 {
   /*
    * We re-use the SunSky struct of the new model, to avoid extra variables
@@ -703,10 +705,10 @@ static void sky_texture_precompute_old(SunSky *sunsky, float3 dir, float turbidi
 }
 
 /* Hosek / Wilkie */
-static void sky_texture_precompute_new(SunSky *sunsky,
-                                       float3 dir,
-                                       float turbidity,
-                                       float ground_albedo)
+static void sky_texture_precompute_hosek(SunSky *sunsky,
+                                         float3 dir,
+                                         float turbidity,
+                                         float ground_albedo)
 {
   /* Calculate Sun Direction and save coordinates */
   float2 spherical = sky_spherical_coordinates(dir);
@@ -725,8 +727,8 @@ static void sky_texture_precompute_new(SunSky *sunsky,
   float solarElevation = M_PI_2_F - theta;
 
   /* Initialize Sky Model */
-  ArHosekSkyModelState *sky_state;
-  sky_state = arhosek_xyz_skymodelstate_alloc_init(
+  SKY_ArHosekSkyModelState *sky_state;
+  sky_state = SKY_arhosek_xyz_skymodelstate_alloc_init(
       (double)turbidity, (double)ground_albedo, (double)solarElevation);
 
   /* Copy values from sky_state to SunSky */
@@ -740,7 +742,42 @@ static void sky_texture_precompute_new(SunSky *sunsky,
   sunsky->radiance_z = (float)sky_state->radiances[2];
 
   /* Free sky_state */
-  arhosekskymodelstate_free(sky_state);
+  SKY_arhosekskymodelstate_free(sky_state);
+}
+
+/* Nishita improved */
+static void sky_texture_precompute_nishita(SunSky *sunsky,
+                                           bool sun_disc,
+                                           float sun_size,
+                                           float sun_intensity,
+                                           float sun_elevation,
+                                           float sun_rotation,
+                                           float altitude,
+                                           float air_density,
+                                           float dust_density)
+{
+  /* sample 2 sun pixels */
+  float pixel_bottom[3];
+  float pixel_top[3];
+  SKY_nishita_skymodel_precompute_sun(
+      sun_elevation, sun_size, altitude, air_density, dust_density, pixel_bottom, pixel_top);
+  /* limit sun rotation between 0 and 360 degrees */
+  sun_rotation = fmodf(sun_rotation, M_2PI_F);
+  if (sun_rotation < 0.0f) {
+    sun_rotation += M_2PI_F;
+  }
+  sun_rotation = M_2PI_F - sun_rotation;
+  /* send data to svm_sky */
+  sunsky->nishita_data[0] = pixel_bottom[0];
+  sunsky->nishita_data[1] = pixel_bottom[1];
+  sunsky->nishita_data[2] = pixel_bottom[2];
+  sunsky->nishita_data[3] = pixel_top[0];
+  sunsky->nishita_data[4] = pixel_top[1];
+  sunsky->nishita_data[5] = pixel_top[2];
+  sunsky->nishita_data[6] = sun_elevation;
+  sunsky->nishita_data[7] = sun_rotation;
+  sunsky->nishita_data[8] = sun_disc ? sun_size : -1.0f;
+  sunsky->nishita_data[9] = sun_intensity;
 }
 
 NODE_DEFINE(SkyTextureNode)
@@ -750,13 +787,23 @@ NODE_DEFINE(SkyTextureNode)
   TEXTURE_MAPPING_DEFINE(SkyTextureNode);
 
   static NodeEnum type_enum;
-  type_enum.insert("preetham", NODE_SKY_OLD);
-  type_enum.insert("hosek_wilkie", NODE_SKY_NEW);
-  SOCKET_ENUM(type, "Type", type_enum, NODE_SKY_NEW);
+  type_enum.insert("preetham", NODE_SKY_PREETHAM);
+  type_enum.insert("hosek_wilkie", NODE_SKY_HOSEK);
+  type_enum.insert("nishita_improved", NODE_SKY_NISHITA);
+  SOCKET_ENUM(type, "Type", type_enum, NODE_SKY_NISHITA);
 
   SOCKET_VECTOR(sun_direction, "Sun Direction", make_float3(0.0f, 0.0f, 1.0f));
   SOCKET_FLOAT(turbidity, "Turbidity", 2.2f);
   SOCKET_FLOAT(ground_albedo, "Ground Albedo", 0.3f);
+  SOCKET_BOOLEAN(sun_disc, "Sun Disc", true);
+  SOCKET_FLOAT(sun_size, "Sun Size", 0.009512f);
+  SOCKET_FLOAT(sun_intensity, "Sun Intensity", 1.0f);
+  SOCKET_FLOAT(sun_elevation, "Sun Elevation", 15.0f * M_PI_F / 180.0f);
+  SOCKET_FLOAT(sun_rotation, "Sun Rotation", 0.0f);
+  SOCKET_FLOAT(altitude, "Altitude", 1.0f);
+  SOCKET_FLOAT(air_density, "Air", 1.0f);
+  SOCKET_FLOAT(dust_density, "Dust", 1.0f);
+  SOCKET_FLOAT(ozone_density, "Ozone", 1.0f);
 
   SOCKET_IN_POINT(
       vector, "Vector", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_TEXTURE_GENERATED);
@@ -776,10 +823,37 @@ void SkyTextureNode::compile(SVMCompiler &compiler)
   ShaderOutput *color_out = output("Color");
 
   SunSky sunsky;
-  if (type == NODE_SKY_OLD)
-    sky_texture_precompute_old(&sunsky, sun_direction, turbidity);
-  else if (type == NODE_SKY_NEW)
-    sky_texture_precompute_new(&sunsky, sun_direction, turbidity, ground_albedo);
+  if (type == NODE_SKY_PREETHAM)
+    sky_texture_precompute_preetham(&sunsky, sun_direction, turbidity);
+  else if (type == NODE_SKY_HOSEK)
+    sky_texture_precompute_hosek(&sunsky, sun_direction, turbidity, ground_albedo);
+  else if (type == NODE_SKY_NISHITA) {
+    /* Clamp altitude to reasonable values.
+     * Below 1m causes numerical issues and above 60km is space. */
+    float clamped_altitude = clamp(altitude, 1.0f, 59999.0f);
+
+    sky_texture_precompute_nishita(&sunsky,
+                                   sun_disc,
+                                   get_sun_size(),
+                                   sun_intensity,
+                                   sun_elevation,
+                                   sun_rotation,
+                                   clamped_altitude,
+                                   air_density,
+                                   dust_density);
+    /* precomputed texture image parameters */
+    ImageManager *image_manager = compiler.scene->image_manager;
+    ImageParams impar;
+    impar.interpolation = INTERPOLATION_LINEAR;
+    impar.extension = EXTENSION_EXTEND;
+
+    /* precompute sky texture */
+    if (handle.empty()) {
+      SkyLoader *loader = new SkyLoader(
+          sun_elevation, clamped_altitude, air_density, dust_density, ozone_density);
+      handle = image_manager->add_image(loader, impar);
+    }
+  }
   else
     assert(false);
 
@@ -787,38 +861,55 @@ void SkyTextureNode::compile(SVMCompiler &compiler)
 
   compiler.stack_assign(color_out);
   compiler.add_node(NODE_TEX_SKY, vector_offset, compiler.stack_assign(color_out), type);
-  compiler.add_node(__float_as_uint(sunsky.phi),
-                    __float_as_uint(sunsky.theta),
-                    __float_as_uint(sunsky.radiance_x),
-                    __float_as_uint(sunsky.radiance_y));
-  compiler.add_node(__float_as_uint(sunsky.radiance_z),
-                    __float_as_uint(sunsky.config_x[0]),
-                    __float_as_uint(sunsky.config_x[1]),
-                    __float_as_uint(sunsky.config_x[2]));
-  compiler.add_node(__float_as_uint(sunsky.config_x[3]),
-                    __float_as_uint(sunsky.config_x[4]),
-                    __float_as_uint(sunsky.config_x[5]),
-                    __float_as_uint(sunsky.config_x[6]));
-  compiler.add_node(__float_as_uint(sunsky.config_x[7]),
-                    __float_as_uint(sunsky.config_x[8]),
-                    __float_as_uint(sunsky.config_y[0]),
-                    __float_as_uint(sunsky.config_y[1]));
-  compiler.add_node(__float_as_uint(sunsky.config_y[2]),
-                    __float_as_uint(sunsky.config_y[3]),
-                    __float_as_uint(sunsky.config_y[4]),
-                    __float_as_uint(sunsky.config_y[5]));
-  compiler.add_node(__float_as_uint(sunsky.config_y[6]),
-                    __float_as_uint(sunsky.config_y[7]),
-                    __float_as_uint(sunsky.config_y[8]),
-                    __float_as_uint(sunsky.config_z[0]));
-  compiler.add_node(__float_as_uint(sunsky.config_z[1]),
-                    __float_as_uint(sunsky.config_z[2]),
-                    __float_as_uint(sunsky.config_z[3]),
-                    __float_as_uint(sunsky.config_z[4]));
-  compiler.add_node(__float_as_uint(sunsky.config_z[5]),
-                    __float_as_uint(sunsky.config_z[6]),
-                    __float_as_uint(sunsky.config_z[7]),
-                    __float_as_uint(sunsky.config_z[8]));
+  /* nishita doesn't need this data */
+  if (type != NODE_SKY_NISHITA) {
+    compiler.add_node(__float_as_uint(sunsky.phi),
+                      __float_as_uint(sunsky.theta),
+                      __float_as_uint(sunsky.radiance_x),
+                      __float_as_uint(sunsky.radiance_y));
+    compiler.add_node(__float_as_uint(sunsky.radiance_z),
+                      __float_as_uint(sunsky.config_x[0]),
+                      __float_as_uint(sunsky.config_x[1]),
+                      __float_as_uint(sunsky.config_x[2]));
+    compiler.add_node(__float_as_uint(sunsky.config_x[3]),
+                      __float_as_uint(sunsky.config_x[4]),
+                      __float_as_uint(sunsky.config_x[5]),
+                      __float_as_uint(sunsky.config_x[6]));
+    compiler.add_node(__float_as_uint(sunsky.config_x[7]),
+                      __float_as_uint(sunsky.config_x[8]),
+                      __float_as_uint(sunsky.config_y[0]),
+                      __float_as_uint(sunsky.config_y[1]));
+    compiler.add_node(__float_as_uint(sunsky.config_y[2]),
+                      __float_as_uint(sunsky.config_y[3]),
+                      __float_as_uint(sunsky.config_y[4]),
+                      __float_as_uint(sunsky.config_y[5]));
+    compiler.add_node(__float_as_uint(sunsky.config_y[6]),
+                      __float_as_uint(sunsky.config_y[7]),
+                      __float_as_uint(sunsky.config_y[8]),
+                      __float_as_uint(sunsky.config_z[0]));
+    compiler.add_node(__float_as_uint(sunsky.config_z[1]),
+                      __float_as_uint(sunsky.config_z[2]),
+                      __float_as_uint(sunsky.config_z[3]),
+                      __float_as_uint(sunsky.config_z[4]));
+    compiler.add_node(__float_as_uint(sunsky.config_z[5]),
+                      __float_as_uint(sunsky.config_z[6]),
+                      __float_as_uint(sunsky.config_z[7]),
+                      __float_as_uint(sunsky.config_z[8]));
+  }
+  else {
+    compiler.add_node(__float_as_uint(sunsky.nishita_data[0]),
+                      __float_as_uint(sunsky.nishita_data[1]),
+                      __float_as_uint(sunsky.nishita_data[2]),
+                      __float_as_uint(sunsky.nishita_data[3]));
+    compiler.add_node(__float_as_uint(sunsky.nishita_data[4]),
+                      __float_as_uint(sunsky.nishita_data[5]),
+                      __float_as_uint(sunsky.nishita_data[6]),
+                      __float_as_uint(sunsky.nishita_data[7]));
+    compiler.add_node(__float_as_uint(sunsky.nishita_data[8]),
+                      __float_as_uint(sunsky.nishita_data[9]),
+                      handle.svm_slot(),
+                      0);
+  }
 
   tex_mapping.compile_end(compiler, vector_in, vector_offset);
 }
@@ -828,10 +919,37 @@ void SkyTextureNode::compile(OSLCompiler &compiler)
   tex_mapping.compile(compiler);
 
   SunSky sunsky;
-  if (type == NODE_SKY_OLD)
-    sky_texture_precompute_old(&sunsky, sun_direction, turbidity);
-  else if (type == NODE_SKY_NEW)
-    sky_texture_precompute_new(&sunsky, sun_direction, turbidity, ground_albedo);
+  if (type == NODE_SKY_PREETHAM)
+    sky_texture_precompute_preetham(&sunsky, sun_direction, turbidity);
+  else if (type == NODE_SKY_HOSEK)
+    sky_texture_precompute_hosek(&sunsky, sun_direction, turbidity, ground_albedo);
+  else if (type == NODE_SKY_NISHITA) {
+    /* Clamp altitude to reasonable values.
+     * Below 1m causes numerical issues and above 60km is space. */
+    float clamped_altitude = clamp(altitude, 1.0f, 59999.0f);
+
+    sky_texture_precompute_nishita(&sunsky,
+                                   sun_disc,
+                                   get_sun_size(),
+                                   sun_intensity,
+                                   sun_elevation,
+                                   sun_rotation,
+                                   clamped_altitude,
+                                   air_density,
+                                   dust_density);
+    /* precomputed texture image parameters */
+    ImageManager *image_manager = compiler.scene->image_manager;
+    ImageParams impar;
+    impar.interpolation = INTERPOLATION_LINEAR;
+    impar.extension = EXTENSION_EXTEND;
+
+    /* precompute sky texture */
+    if (handle.empty()) {
+      SkyLoader *loader = new SkyLoader(
+          sun_elevation, clamped_altitude, air_density, dust_density, ozone_density);
+      handle = image_manager->add_image(loader, impar);
+    }
+  }
   else
     assert(false);
 
@@ -843,6 +961,11 @@ void SkyTextureNode::compile(OSLCompiler &compiler)
   compiler.parameter_array("config_x", sunsky.config_x, 9);
   compiler.parameter_array("config_y", sunsky.config_y, 9);
   compiler.parameter_array("config_z", sunsky.config_z, 9);
+  compiler.parameter_array("nishita_data", sunsky.nishita_data, 10);
+  /* nishita texture */
+  if (type == NODE_SKY_NISHITA) {
+    compiler.parameter_texture("filename", handle.svm_slot());
+  }
   compiler.add(this, "node_sky_texture");
 }
 
@@ -1111,9 +1234,9 @@ IESLightNode::IESLightNode() : TextureNode(node_type)
   slot = -1;
 }
 
-ShaderNode *IESLightNode::clone() const
+ShaderNode *IESLightNode::clone(ShaderGraph *graph) const
 {
-  IESLightNode *node = new IESLightNode(*this);
+  IESLightNode *node = graph->create_node<IESLightNode>(*this);
 
   node->light_manager = NULL;
   node->slot = -1;
@@ -1659,12 +1782,12 @@ PointDensityTextureNode::~PointDensityTextureNode()
 {
 }
 
-ShaderNode *PointDensityTextureNode::clone() const
+ShaderNode *PointDensityTextureNode::clone(ShaderGraph *graph) const
 {
   /* Increase image user count for new node. We need to ensure to not call
    * add_image again, to work around access of freed data on the Blender
    * side. A better solution should be found to avoid this. */
-  PointDensityTextureNode *node = new PointDensityTextureNode(*this);
+  PointDensityTextureNode *node = graph->create_node<PointDensityTextureNode>(*this);
   node->handle = handle; /* TODO: not needed? */
   return node;
 }
@@ -2166,12 +2289,11 @@ NODE_DEFINE(AnisotropicBsdfNode)
   SOCKET_IN_FLOAT(surface_mix_weight, "SurfaceMixWeight", 0.0f, SocketType::SVM_INTERNAL);
 
   static NodeEnum distribution_enum;
-  distribution_enum.insert("beckmann", CLOSURE_BSDF_MICROFACET_BECKMANN_ANISO_ID);
-  distribution_enum.insert("GGX", CLOSURE_BSDF_MICROFACET_GGX_ANISO_ID);
-  distribution_enum.insert("Multiscatter GGX", CLOSURE_BSDF_MICROFACET_MULTI_GGX_ANISO_ID);
-  distribution_enum.insert("ashikhmin_shirley", CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ANISO_ID);
-  SOCKET_ENUM(
-      distribution, "Distribution", distribution_enum, CLOSURE_BSDF_MICROFACET_GGX_ANISO_ID);
+  distribution_enum.insert("beckmann", CLOSURE_BSDF_MICROFACET_BECKMANN_ID);
+  distribution_enum.insert("GGX", CLOSURE_BSDF_MICROFACET_GGX_ID);
+  distribution_enum.insert("Multiscatter GGX", CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID);
+  distribution_enum.insert("ashikhmin_shirley", CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ID);
+  SOCKET_ENUM(distribution, "Distribution", distribution_enum, CLOSURE_BSDF_MICROFACET_GGX_ID);
 
   SOCKET_IN_VECTOR(tangent, "Tangent", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_TANGENT);
 
@@ -2186,7 +2308,7 @@ NODE_DEFINE(AnisotropicBsdfNode)
 
 AnisotropicBsdfNode::AnisotropicBsdfNode() : BsdfNode(node_type)
 {
-  closure = CLOSURE_BSDF_MICROFACET_GGX_ANISO_ID;
+  closure = CLOSURE_BSDF_MICROFACET_GGX_ID;
 }
 
 void AnisotropicBsdfNode::attributes(Shader *shader, AttributeRequestSet *attributes)
@@ -2205,7 +2327,7 @@ void AnisotropicBsdfNode::compile(SVMCompiler &compiler)
 {
   closure = distribution;
 
-  if (closure == CLOSURE_BSDF_MICROFACET_MULTI_GGX_ANISO_ID)
+  if (closure == CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID)
     BsdfNode::compile(
         compiler, input("Roughness"), input("Anisotropy"), input("Rotation"), input("Color"));
   else
@@ -2299,7 +2421,7 @@ void GlossyBsdfNode::compile(SVMCompiler &compiler)
   if (closure == CLOSURE_BSDF_REFLECTION_ID)
     BsdfNode::compile(compiler, NULL, NULL);
   else if (closure == CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID)
-    BsdfNode::compile(compiler, input("Roughness"), NULL, input("Color"));
+    BsdfNode::compile(compiler, input("Roughness"), NULL, NULL, input("Color"));
   else
     BsdfNode::compile(compiler, input("Roughness"), NULL);
 }
@@ -2633,6 +2755,7 @@ NODE_DEFINE(PrincipledBsdfNode)
   SOCKET_IN_FLOAT(transmission_roughness, "Transmission Roughness", 0.0f);
   SOCKET_IN_FLOAT(anisotropic_rotation, "Anisotropic Rotation", 0.0f);
   SOCKET_IN_COLOR(emission, "Emission", make_float3(0.0f, 0.0f, 0.0f));
+  SOCKET_IN_FLOAT(emission_strength, "Emission Strength", 1.0f);
   SOCKET_IN_FLOAT(alpha, "Alpha", 1.0f);
   SOCKET_IN_NORMAL(normal, "Normal", make_float3(0.0f, 0.0f, 0.0f), SocketType::LINK_NORMAL);
   SOCKET_IN_NORMAL(clearcoat_normal,
@@ -2659,16 +2782,18 @@ void PrincipledBsdfNode::expand(ShaderGraph *graph)
   ShaderOutput *principled_out = output("BSDF");
 
   ShaderInput *emission_in = input("Emission");
-  if (emission_in->link || emission != make_float3(0.0f, 0.0f, 0.0f)) {
+  ShaderInput *emission_strength_in = input("Emission Strength");
+  if ((emission_in->link || emission != make_float3(0.0f, 0.0f, 0.0f)) &&
+      (emission_strength_in->link || emission_strength != 0.0f)) {
     /* Create add closure and emission. */
-    AddClosureNode *add = new AddClosureNode();
-    EmissionNode *emission_node = new EmissionNode();
+    AddClosureNode *add = graph->create_node<AddClosureNode>();
+    EmissionNode *emission_node = graph->create_node<EmissionNode>();
     ShaderOutput *new_out = add->output("Closure");
 
     graph->add(add);
     graph->add(emission_node);
 
-    emission_node->strength = 1.0f;
+    graph->relink(emission_strength_in, emission_node->input("Strength"));
     graph->relink(emission_in, emission_node->input("Color"));
     graph->relink(principled_out, new_out);
     graph->connect(emission_node->output("Emission"), add->input("Closure1"));
@@ -2680,8 +2805,8 @@ void PrincipledBsdfNode::expand(ShaderGraph *graph)
   ShaderInput *alpha_in = input("Alpha");
   if (alpha_in->link || alpha != 1.0f) {
     /* Create mix and transparent BSDF for alpha transparency. */
-    MixClosureNode *mix = new MixClosureNode();
-    TransparentBsdfNode *transparent = new TransparentBsdfNode();
+    MixClosureNode *mix = graph->create_node<MixClosureNode>();
+    TransparentBsdfNode *transparent = graph->create_node<TransparentBsdfNode>();
 
     graph->add(mix);
     graph->add(transparent);
@@ -4353,7 +4478,7 @@ void VolumeInfoNode::expand(ShaderGraph *graph)
 {
   ShaderOutput *color_out = output("Color");
   if (!color_out->links.empty()) {
-    AttributeNode *attr = new AttributeNode();
+    AttributeNode *attr = graph->create_node<AttributeNode>();
     attr->attribute = "color";
     graph->add(attr);
     graph->relink(color_out, attr->output("Color"));
@@ -4361,7 +4486,7 @@ void VolumeInfoNode::expand(ShaderGraph *graph)
 
   ShaderOutput *density_out = output("Density");
   if (!density_out->links.empty()) {
-    AttributeNode *attr = new AttributeNode();
+    AttributeNode *attr = graph->create_node<AttributeNode>();
     attr->attribute = "density";
     graph->add(attr);
     graph->relink(density_out, attr->output("Fac"));
@@ -4369,7 +4494,7 @@ void VolumeInfoNode::expand(ShaderGraph *graph)
 
   ShaderOutput *flame_out = output("Flame");
   if (!flame_out->links.empty()) {
-    AttributeNode *attr = new AttributeNode();
+    AttributeNode *attr = graph->create_node<AttributeNode>();
     attr->attribute = "flame";
     graph->add(attr);
     graph->relink(flame_out, attr->output("Fac"));
@@ -4377,7 +4502,7 @@ void VolumeInfoNode::expand(ShaderGraph *graph)
 
   ShaderOutput *temperature_out = output("Temperature");
   if (!temperature_out->links.empty()) {
-    AttributeNode *attr = new AttributeNode();
+    AttributeNode *attr = graph->create_node<AttributeNode>();
     attr->attribute = "temperature";
     graph->add(attr);
     graph->relink(temperature_out, attr->output("Fac"));
@@ -5646,7 +5771,7 @@ void MapRangeNode::expand(ShaderGraph *graph)
   if (clamp) {
     ShaderOutput *result_out = output("Result");
     if (!result_out->links.empty()) {
-      ClampNode *clamp_node = new ClampNode();
+      ClampNode *clamp_node = graph->create_node<ClampNode>();
       clamp_node->type = NODE_CLAMP_RANGE;
       graph->add(clamp_node);
       graph->relink(result_out, clamp_node->output("Result"));
@@ -5788,9 +5913,9 @@ OutputAOVNode::OutputAOVNode() : ShaderNode(node_type)
 
 void OutputAOVNode::simplify_settings(Scene *scene)
 {
-  slot = scene->film->get_aov_offset(name.string(), is_color);
+  slot = scene->film->get_aov_offset(scene, name.string(), is_color);
   if (slot == -1) {
-    slot = scene->film->get_aov_offset(name.string(), is_color);
+    slot = scene->film->get_aov_offset(scene, name.string(), is_color);
   }
 
   if (slot == -1 || is_color) {
@@ -5887,7 +6012,7 @@ void MathNode::expand(ShaderGraph *graph)
   if (use_clamp) {
     ShaderOutput *result_out = output("Value");
     if (!result_out->links.empty()) {
-      ClampNode *clamp_node = new ClampNode();
+      ClampNode *clamp_node = graph->create_node<ClampNode>();
       clamp_node->type = NODE_CLAMP_MINMAX;
       clamp_node->min = 0.0f;
       clamp_node->max = 1.0f;
@@ -6215,7 +6340,7 @@ void BumpNode::constant_fold(const ConstantFolder &folder)
 
   if (height_in->link == NULL) {
     if (normal_in->link == NULL) {
-      GeometryNode *geom = new GeometryNode();
+      GeometryNode *geom = folder.graph->create_node<GeometryNode>();
       folder.graph->add(geom);
       folder.bypass(geom->output("Normal"));
     }
@@ -6498,12 +6623,12 @@ OSLNode::~OSLNode()
   delete type;
 }
 
-ShaderNode *OSLNode::clone() const
+ShaderNode *OSLNode::clone(ShaderGraph *graph) const
 {
-  return OSLNode::create(this->inputs.size(), this);
+  return OSLNode::create(graph, this->inputs.size(), this);
 }
 
-OSLNode *OSLNode::create(size_t num_inputs, const OSLNode *from)
+OSLNode *OSLNode::create(ShaderGraph *graph, size_t num_inputs, const OSLNode *from)
 {
   /* allocate space for the node itself and parameters, aligned to 16 bytes
    * assuming that's the most parameter types need */
@@ -6514,7 +6639,9 @@ OSLNode *OSLNode::create(size_t num_inputs, const OSLNode *from)
   memset(node_memory, 0, node_size + inputs_size);
 
   if (!from) {
-    return new (node_memory) OSLNode();
+    OSLNode *node = new (node_memory) OSLNode();
+    node->set_owner(graph);
+    return node;
   }
   else {
     /* copy input default values and node type for cloning */
@@ -6522,6 +6649,7 @@ OSLNode *OSLNode::create(size_t num_inputs, const OSLNode *from)
 
     OSLNode *node = new (node_memory) OSLNode(*from);
     node->type = new NodeType(*(from->type));
+    node->set_owner(from->owner);
     return node;
   }
 }

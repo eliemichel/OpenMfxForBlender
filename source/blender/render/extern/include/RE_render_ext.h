@@ -20,8 +20,7 @@
  * \ingroup render
  */
 
-#ifndef __RE_RENDER_EXT_H__
-#define __RE_RENDER_EXT_H__
+#pragma once
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 /* this include is for non-render pipeline exports (still old cruft here) */
@@ -32,19 +31,21 @@ struct Depsgraph;
 struct ImagePool;
 struct MTex;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* render_texture.c */
-/* used by particle.c, effect.c, editmesh_modes.c and brush.c, returns 1 if rgb, 0 otherwise */
-int externtex(const struct MTex *mtex,
-              const float vec[3],
-              float *tin,
-              float *tr,
-              float *tg,
-              float *tb,
-              float *ta,
-              const int thread,
-              struct ImagePool *pool,
-              const bool skip_load_image,
-              const bool texnode_preview);
+bool RE_texture_evaluate(const struct MTex *mtex,
+                         const float vec[3],
+                         const int thread,
+                         struct ImagePool *pool,
+                         const bool skip_load_image,
+                         const bool texnode_preview,
+                         /* Return arguments. */
+                         float *r_intensity,
+                         float r_rgba[4]) ATTR_NONNULL(1, 2, 7, 8);
+
 void texture_rgb_blend(
     float in[3], const float tex[3], const float out[3], float fact, float facg, int blendtype);
 float texture_value_blend(float tex, float out, float fact, float facg, int blendtype);
@@ -74,4 +75,6 @@ void RE_point_density_free(struct PointDensity *pd);
 
 void RE_point_density_fix_linking(void);
 
-#endif /* __RE_RENDER_EXT_H__ */
+#ifdef __cplusplus
+}
+#endif

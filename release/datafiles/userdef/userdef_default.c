@@ -109,7 +109,7 @@ const UserDef U_default = {
     .keyconfigstr = "blender",
     .undosteps = 32,
     .undomemory = 0,
-    .gp_manhattendist = 1,
+    .gp_manhattandist = 1,
     .gp_euclideandist = 2,
     .gp_eraser = 25,
     .gp_settings = 0,
@@ -218,7 +218,7 @@ const UserDef U_default = {
             .flag = FILE_HIDE_DOT,
             .filter_id = FILTER_ID_ALL,
 
-            .temp_win_sizex = 1020,
+            .temp_win_sizex = 1060,
             .temp_win_sizey = 600,
         },
 
@@ -226,6 +226,10 @@ const UserDef U_default = {
     .sequencer_disk_cache_compression = 0,
     .sequencer_disk_cache_size_limit = 100,
     .sequencer_disk_cache_flag = 0,
+
+    .collection_instance_empty_size = 1.0f,
+
+    .statusbar_flag = STATUSBAR_SHOW_VERSION,
 
     .runtime =
         {

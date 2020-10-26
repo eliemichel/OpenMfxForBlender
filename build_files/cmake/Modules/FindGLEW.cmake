@@ -13,12 +13,8 @@
 #=============================================================================
 # Copyright 2014 Blender Foundation.
 #
-# Distributed under the OSI-approved BSD License (the "License");
-# see accompanying file Copyright.txt for details.
-#
-# This software is distributed WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the License for more information.
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
 #=============================================================================
 
 # If GLEW_ROOT_DIR was defined in the environment, use it.
@@ -51,12 +47,12 @@ FIND_LIBRARY(GLEW_LIBRARY
 # handle the QUIETLY and REQUIRED arguments and set GLEW_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(Glew DEFAULT_MSG
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(GLEW DEFAULT_MSG
     GLEW_LIBRARY GLEW_INCLUDE_DIR)
 
 IF(GLEW_FOUND)
   SET(GLEW_INCLUDE_DIRS ${GLEW_INCLUDE_DIR})
-ENDIF(GLEW_FOUND)
+ENDIF()
 
 MARK_AS_ADVANCED(
   GLEW_INCLUDE_DIR

@@ -18,8 +18,7 @@
  * \ingroup wm
  */
 
-#ifndef __WM_XR_INTERN_H__
-#define __WM_XR_INTERN_H__
+#pragma once
 
 #include "CLG_log.h"
 
@@ -34,18 +33,27 @@ typedef struct wmXrSessionState {
   float viewer_viewmat[4][4];
   float focal_len;
 
+  /** Copy of XrSessionSettings.base_pose_ data to detect changes that need
+   * resetting to base pose. */
+  char prev_base_pose_type; /* eXRSessionBasePoseType */
+  Object *prev_base_pose_object;
   /** Copy of XrSessionSettings.flag created on the last draw call, stored to detect changes. */
   int prev_settings_flag;
   /** Copy of wmXrDrawData.eye_position_ofs. */
   float prev_eye_position_ofs[3];
 
+  bool force_reset_to_base_pose;
   bool is_view_data_set;
 } wmXrSessionState;
 
 typedef struct wmXrRuntimeData {
   GHOST_XrContextHandle context;
 
-  /* Although this struct is internal, RNA gets a handle to this for state information queries. */
+  /** The window the session was started in. Stored to be able to follow its view-layer. This may
+   * be an invalid reference, i.e. the window may have been closed. */
+  wmWindow *session_root_win;
+
+  /** Although this struct is internal, RNA gets a handle to this for state information queries. */
   wmXrSessionState session_state;
   wmXrSessionExitFn exit_fn;
 } wmXrRuntimeData;
@@ -66,6 +74,8 @@ typedef struct wmXrDrawData {
    * space). With positional tracking enabled, it should be the same as the base pose, when
    * disabled it also contains a location delta from the moment the option was toggled. */
   GHOST_XrPose base_pose;
+  /** Offset to _substract_ from the OpenXR eye and viewer pose to get the wanted effective pose
+   * (e.g. a pose exactly at the landmark position). */
   float eye_position_ofs[3]; /* Local/view space. */
 } wmXrDrawData;
 
@@ -87,5 +97,3 @@ void wm_xr_session_gpu_binding_context_destroy(GHOST_ContextHandle context);
 
 void wm_xr_pose_to_viewmat(const GHOST_XrPose *pose, float r_viewmat[4][4]);
 void wm_xr_draw_view(const GHOST_XrDrawViewInfo *draw_view, void *customdata);
-
-#endif

@@ -21,10 +21,13 @@
  * \ingroup wm
  */
 
-#ifndef __WM_WINDOW_H__
-#define __WM_WINDOW_H__
+#pragma once
 
 struct wmOperator;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* *************** internal api ************** */
 void wm_ghost_init(bContext *C);
@@ -33,7 +36,10 @@ void wm_ghost_exit(void);
 void wm_get_screensize(int *r_width, int *r_height);
 void wm_get_desktopsize(int *r_width, int *r_height);
 
-wmWindow *wm_window_new(const struct Main *bmain, wmWindowManager *wm, wmWindow *parent);
+wmWindow *wm_window_new(const struct Main *bmain,
+                        wmWindowManager *wm,
+                        wmWindow *parent,
+                        bool dialog);
 wmWindow *wm_window_copy(struct Main *bmain,
                          wmWindowManager *wm,
                          wmWindow *win_src,
@@ -82,11 +88,6 @@ int wm_window_new_main_exec(bContext *C, struct wmOperator *op);
 
 void wm_test_autorun_warning(bContext *C);
 
-/* Initial (unmaximized) size to start with for
- * systems that can't find it for themselves (X11).
- * Clamped by real desktop limits */
-#define WM_WIN_INIT_SIZE_X 1800
-#define WM_WIN_INIT_SIZE_Y 1000
-#define WM_WIN_INIT_PAD 40
-
-#endif /* __WM_WINDOW_H__ */
+#ifdef __cplusplus
+}
+#endif

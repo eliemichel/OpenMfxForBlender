@@ -26,7 +26,9 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_collection_types.h"
+#include "DNA_constraint_types.h"
 #include "DNA_material_types.h"
+#include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_space_types.h"
 
@@ -36,6 +38,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_collection.h"
+#include "BKE_constraint.h"
 #include "BKE_context.h"
 #include "BKE_layer.h"
 #include "BKE_lib_id.h"
@@ -44,6 +47,7 @@
 #include "BKE_object.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
+#include "BKE_shader_fx.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -65,6 +69,8 @@
 
 #include "outliner_intern.h"
 
+static Collection *collection_parent_from_ID(ID *id);
+
 /* ******************** Drop Target Find *********************** */
 
 static TreeElement *outliner_dropzone_element(TreeElement *te,
@@ -79,8 +85,8 @@ static TreeElement *outliner_dropzone_element(TreeElement *te,
   }
   /* Not it.  Let's look at its children. */
   if (children && (TREESTORE(te)->flag & TSE_CLOSED) == 0 && (te->subtree.first)) {
-    for (te = te->subtree.first; te; te = te->next) {
-      TreeElement *te_valid = outliner_dropzone_element(te, fmval, children);
+    LISTBASE_FOREACH (TreeElement *, te_sub, &te->subtree) {
+      TreeElement *te_valid = outliner_dropzone_element(te_sub, fmval, children);
       if (te_valid) {
         return te_valid;
       }
@@ -90,13 +96,11 @@ static TreeElement *outliner_dropzone_element(TreeElement *te,
 }
 
 /* Find tree element to drop into. */
-static TreeElement *outliner_dropzone_find(const SpaceOutliner *soops,
+static TreeElement *outliner_dropzone_find(const SpaceOutliner *space_outliner,
                                            const float fmval[2],
                                            const bool children)
 {
-  TreeElement *te;
-
-  for (te = soops->tree.first; te; te = te->next) {
+  LISTBASE_FOREACH (TreeElement *, te, &space_outliner->tree) {
     TreeElement *te_valid = outliner_dropzone_element(te, fmval, children);
     if (te_valid) {
       return te_valid;
@@ -108,11 +112,11 @@ static TreeElement *outliner_dropzone_find(const SpaceOutliner *soops,
 static TreeElement *outliner_drop_find(bContext *C, const wmEvent *event)
 {
   ARegion *region = CTX_wm_region(C);
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   float fmval[2];
   UI_view2d_region_to_view(&region->v2d, event->mval[0], event->mval[1], &fmval[0], &fmval[1]);
 
-  return outliner_dropzone_find(soops, fmval, true);
+  return outliner_dropzone_find(space_outliner, fmval, true);
 }
 
 static ID *outliner_ID_drop_find(bContext *C, const wmEvent *event, short idcode)
@@ -123,9 +127,7 @@ static ID *outliner_ID_drop_find(bContext *C, const wmEvent *event, short idcode
   if (te && te->idcode == idcode && tselem->type == 0) {
     return tselem->id;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 /* Find tree element to drop into, with additional before and after reorder support. */
@@ -133,14 +135,14 @@ static TreeElement *outliner_drop_insert_find(bContext *C,
                                               const wmEvent *event,
                                               TreeElementInsertType *r_insert_type)
 {
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   ARegion *region = CTX_wm_region(C);
   TreeElement *te_hovered;
   float view_mval[2];
 
   UI_view2d_region_to_view(
       &region->v2d, event->mval[0], event->mval[1], &view_mval[0], &view_mval[1]);
-  te_hovered = outliner_find_item_at_y(soops, &soops->tree, view_mval[1]);
+  te_hovered = outliner_find_item_at_y(space_outliner, &space_outliner->tree, view_mval[1]);
 
   if (te_hovered) {
     /* Mouse hovers an element (ignoring x-axis),
@@ -148,64 +150,73 @@ static TreeElement *outliner_drop_insert_find(bContext *C,
     const float margin = UI_UNIT_Y * (1.0f / 4);
 
     if (view_mval[1] < (te_hovered->ys + margin)) {
-      if (TSELEM_OPEN(TREESTORE(te_hovered), soops)) {
+      if (TSELEM_OPEN(TREESTORE(te_hovered), space_outliner) &&
+          !BLI_listbase_is_empty(&te_hovered->subtree)) {
         /* inserting after a open item means we insert into it, but as first child */
         if (BLI_listbase_is_empty(&te_hovered->subtree)) {
           *r_insert_type = TE_INSERT_INTO;
           return te_hovered;
         }
-        else {
-          *r_insert_type = TE_INSERT_BEFORE;
-          return te_hovered->subtree.first;
-        }
+        *r_insert_type = TE_INSERT_BEFORE;
+        return te_hovered->subtree.first;
       }
-      else {
-        *r_insert_type = TE_INSERT_AFTER;
-        return te_hovered;
-      }
-    }
-    else if (view_mval[1] > (te_hovered->ys + (3 * margin))) {
-      *r_insert_type = TE_INSERT_BEFORE;
-      return te_hovered;
-    }
-    else {
-      *r_insert_type = TE_INSERT_INTO;
-      return te_hovered;
-    }
-  }
-  else {
-    /* Mouse doesn't hover any item (ignoring x-axis),
-     * so it's either above list bounds or below. */
-    TreeElement *first = soops->tree.first;
-    TreeElement *last = soops->tree.last;
-
-    if (view_mval[1] < last->ys) {
       *r_insert_type = TE_INSERT_AFTER;
-      return last;
+      return te_hovered;
     }
-    else if (view_mval[1] > (first->ys + UI_UNIT_Y)) {
+    if (view_mval[1] > (te_hovered->ys + (3 * margin))) {
       *r_insert_type = TE_INSERT_BEFORE;
-      return first;
+      return te_hovered;
     }
-    else {
-      BLI_assert(0);
-      return NULL;
-    }
+    *r_insert_type = TE_INSERT_INTO;
+    return te_hovered;
   }
+
+  /* Mouse doesn't hover any item (ignoring x-axis),
+   * so it's either above list bounds or below. */
+  TreeElement *first = space_outliner->tree.first;
+  TreeElement *last = space_outliner->tree.last;
+
+  if (view_mval[1] < last->ys) {
+    *r_insert_type = TE_INSERT_AFTER;
+    return last;
+  }
+  if (view_mval[1] > (first->ys + UI_UNIT_Y)) {
+    *r_insert_type = TE_INSERT_BEFORE;
+    return first;
+  }
+  BLI_assert(0);
+  return NULL;
 }
 
-static Collection *outliner_collection_from_tree_element_and_parents(TreeElement *te,
-                                                                     TreeElement **r_te)
+typedef bool (*CheckTypeFn)(TreeElement *te);
+
+static TreeElement *outliner_data_from_tree_element_and_parents(CheckTypeFn check_type,
+                                                                TreeElement *te)
 {
   while (te != NULL) {
-    Collection *collection = outliner_collection_from_tree_element(te);
-    if (collection) {
-      *r_te = te;
-      return collection;
+    if (check_type(te)) {
+      return te;
     }
     te = te->parent;
   }
   return NULL;
+}
+
+static bool is_collection_element(TreeElement *te)
+{
+  return outliner_is_collection_tree_element(te);
+}
+
+static bool is_object_element(TreeElement *te)
+{
+  TreeStoreElem *tselem = TREESTORE(te);
+  return tselem->type == 0 && te->idcode == ID_OB;
+}
+
+static bool is_pchan_element(TreeElement *te)
+{
+  TreeStoreElem *tselem = TREESTORE(te);
+  return tselem->type == TSE_POSE_CHANNEL;
 }
 
 static TreeElement *outliner_drop_insert_collection_find(bContext *C,
@@ -217,11 +228,12 @@ static TreeElement *outliner_drop_insert_collection_find(bContext *C,
     return NULL;
   }
 
-  TreeElement *collection_te;
-  Collection *collection = outliner_collection_from_tree_element_and_parents(te, &collection_te);
-  if (!collection) {
+  TreeElement *collection_te = outliner_data_from_tree_element_and_parents(is_collection_element,
+                                                                           te);
+  if (!collection_te) {
     return NULL;
   }
+  Collection *collection = outliner_collection_from_tree_element(collection_te);
 
   if (collection_te != te) {
     *r_insert_type = TE_INSERT_INTO;
@@ -233,6 +245,30 @@ static TreeElement *outliner_drop_insert_collection_find(bContext *C,
   }
 
   return collection_te;
+}
+
+static int outliner_get_insert_index(TreeElement *drag_te,
+                                     TreeElement *drop_te,
+                                     TreeElementInsertType insert_type,
+                                     ListBase *listbase)
+{
+  /* Find the element to insert after. NULL is the start of the list. */
+  if (drag_te->index < drop_te->index) {
+    if (insert_type == TE_INSERT_BEFORE) {
+      drop_te = drop_te->prev;
+    }
+  }
+  else {
+    if (insert_type == TE_INSERT_AFTER) {
+      drop_te = drop_te->next;
+    }
+  }
+
+  if (drop_te == NULL) {
+    return 0;
+  }
+
+  return BLI_findindex(listbase, drop_te->directdata);
 }
 
 /* ******************** Parent Drop Operator *********************** */
@@ -270,16 +306,14 @@ static bool parent_drop_allowed(TreeElement *te, Object *potential_child)
     }
     return false;
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
-static bool allow_parenting_without_modifier_key(SpaceOutliner *soops)
+static bool allow_parenting_without_modifier_key(SpaceOutliner *space_outliner)
 {
-  switch (soops->outlinevis) {
+  switch (space_outliner->outlinevis) {
     case SO_VIEW_LAYER:
-      return soops->filter & SO_FILTER_NO_COLLECTION;
+      return space_outliner->filter & SO_FILTER_NO_COLLECTION;
     case SO_SCENES:
       return true;
     default:
@@ -292,9 +326,9 @@ static bool parent_drop_poll(bContext *C,
                              const wmEvent *event,
                              const char **UNUSED(r_tooltip))
 {
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
 
-  bool changed = outliner_flag_set(&soops->tree, TSE_DRAG_ANY, false);
+  bool changed = outliner_flag_set(&space_outliner->tree, TSE_DRAG_ANY, false);
   if (changed) {
     ED_region_tag_redraw_no_rebuild(CTX_wm_region(C));
   }
@@ -304,7 +338,7 @@ static bool parent_drop_poll(bContext *C,
     return false;
   }
 
-  if (!allow_parenting_without_modifier_key(soops)) {
+  if (!allow_parenting_without_modifier_key(space_outliner)) {
     if (!event->shift) {
       return false;
     }
@@ -332,9 +366,9 @@ static void parent_drop_set_parents(bContext *C,
                                     const bool keep_transform)
 {
   Main *bmain = CTX_data_main(C);
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
 
-  TreeElement *te = outliner_find_id(soops, &soops->tree, &parent->id);
+  TreeElement *te = outliner_find_id(space_outliner, &space_outliner->tree, &parent->id);
   Scene *scene = (Scene *)outliner_search_back(te, ID_SCE);
 
   if (scene == NULL) {
@@ -431,9 +465,9 @@ static bool parent_clear_poll(bContext *C,
                               const wmEvent *event,
                               const char **UNUSED(r_tooltip))
 {
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
 
-  if (!allow_parenting_without_modifier_key(soops)) {
+  if (!allow_parenting_without_modifier_key(space_outliner)) {
     if (!event->shift) {
       return false;
     }
@@ -629,6 +663,417 @@ void OUTLINER_OT_material_drop(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
+/* ******************** Data Stack Drop Operator *********************** */
+
+/* A generic operator to allow drag and drop for modifiers, constraints,
+ * and shader effects which all share the same UI stack layout.
+ *
+ * The following operations are allowed:
+ * - Reordering within an object.
+ * - Copying a single modifier/constraint/effect to another object.
+ * - Copying (linking) an object's modifiers/constraints/effects to another. */
+
+typedef enum eDataStackDropAction {
+  DATA_STACK_DROP_REORDER,
+  DATA_STACK_DROP_COPY,
+  DATA_STACK_DROP_LINK,
+} eDataStackDropAction;
+
+typedef struct StackDropData {
+  Object *ob_parent;
+  bPoseChannel *pchan_parent;
+  TreeStoreElem *drag_tselem;
+  void *drag_directdata;
+  int drag_index;
+
+  eDataStackDropAction drop_action;
+  TreeElement *drop_te;
+  TreeElementInsertType insert_type;
+} StackDropData;
+
+static void datastack_drop_data_init(wmDrag *drag,
+                                     Object *ob,
+                                     bPoseChannel *pchan,
+                                     TreeElement *te,
+                                     TreeStoreElem *tselem,
+                                     void *directdata)
+{
+  StackDropData *drop_data = MEM_callocN(sizeof(*drop_data), "datastack drop data");
+
+  drop_data->ob_parent = ob;
+  drop_data->pchan_parent = pchan;
+  drop_data->drag_tselem = tselem;
+  drop_data->drag_directdata = directdata;
+  drop_data->drag_index = te->index;
+
+  drag->poin = drop_data;
+  drag->flags |= WM_DRAG_FREE_DATA;
+}
+
+static bool datastack_drop_init(bContext *C, const wmEvent *event, StackDropData *drop_data)
+{
+  if (!ELEM(drop_data->drag_tselem->type,
+            TSE_MODIFIER,
+            TSE_MODIFIER_BASE,
+            TSE_CONSTRAINT,
+            TSE_CONSTRAINT_BASE,
+            TSE_GPENCIL_EFFECT,
+            TSE_GPENCIL_EFFECT_BASE)) {
+    return false;
+  }
+
+  TreeElement *te_target = outliner_drop_insert_find(C, event, &drop_data->insert_type);
+  if (!te_target) {
+    return false;
+  }
+  TreeStoreElem *tselem_target = TREESTORE(te_target);
+
+  if (drop_data->drag_tselem == tselem_target) {
+    return false;
+  }
+
+  Object *ob = NULL;
+  TreeElement *object_te = outliner_data_from_tree_element_and_parents(is_object_element,
+                                                                       te_target);
+  if (object_te) {
+    ob = (Object *)TREESTORE(object_te)->id;
+  }
+
+  bPoseChannel *pchan = NULL;
+  TreeElement *pchan_te = outliner_data_from_tree_element_and_parents(is_pchan_element, te_target);
+  if (pchan_te) {
+    pchan = (bPoseChannel *)pchan_te->directdata;
+  }
+  if (pchan) {
+    ob = NULL;
+  }
+
+  if (ob && ID_IS_LINKED(&ob->id)) {
+    return false;
+  }
+
+  /* Drag a base for linking. */
+  if (ELEM(drop_data->drag_tselem->type,
+           TSE_MODIFIER_BASE,
+           TSE_CONSTRAINT_BASE,
+           TSE_GPENCIL_EFFECT_BASE)) {
+    drop_data->insert_type = TE_INSERT_INTO;
+    drop_data->drop_action = DATA_STACK_DROP_LINK;
+
+    if (pchan && pchan != drop_data->pchan_parent) {
+      drop_data->drop_te = pchan_te;
+      tselem_target = TREESTORE(pchan_te);
+    }
+    else if (ob && ob != drop_data->ob_parent) {
+      drop_data->drop_te = object_te;
+      tselem_target = TREESTORE(object_te);
+    }
+    else {
+      return false;
+    }
+  }
+  else if (ob || pchan) {
+    /* Drag a single item. */
+    if (pchan && pchan != drop_data->pchan_parent) {
+      drop_data->insert_type = TE_INSERT_INTO;
+      drop_data->drop_action = DATA_STACK_DROP_COPY;
+      drop_data->drop_te = pchan_te;
+      tselem_target = TREESTORE(pchan_te);
+    }
+    else if (ob && ob != drop_data->ob_parent) {
+      drop_data->insert_type = TE_INSERT_INTO;
+      drop_data->drop_action = DATA_STACK_DROP_COPY;
+      drop_data->drop_te = object_te;
+      tselem_target = TREESTORE(object_te);
+    }
+    else if (tselem_target->type == drop_data->drag_tselem->type) {
+      if (drop_data->insert_type == TE_INSERT_INTO) {
+        return false;
+      }
+      drop_data->drop_action = DATA_STACK_DROP_REORDER;
+      drop_data->drop_te = te_target;
+    }
+    else {
+      return false;
+    }
+  }
+  else {
+    return false;
+  }
+
+  return true;
+}
+
+/* Ensure that grease pencil and object data remain separate. */
+static bool datastack_drop_are_types_valid(StackDropData *drop_data)
+{
+  TreeStoreElem *tselem = TREESTORE(drop_data->drop_te);
+  Object *ob_parent = drop_data->ob_parent;
+  Object *ob_dst = (Object *)tselem->id;
+
+  /* Don't allow data to be moved between objects and bones. */
+  if (tselem->type == TSE_CONSTRAINT) {
+  }
+  else if ((drop_data->pchan_parent && tselem->type != TSE_POSE_CHANNEL) ||
+           (!drop_data->pchan_parent && tselem->type == TSE_POSE_CHANNEL)) {
+    return false;
+  }
+
+  switch (drop_data->drag_tselem->type) {
+    case TSE_MODIFIER_BASE:
+    case TSE_MODIFIER:
+      if (ob_parent->type == OB_GPENCIL) {
+        return ob_dst->type == OB_GPENCIL;
+      }
+      else if (ob_parent->type != OB_GPENCIL) {
+        return ob_dst->type != OB_GPENCIL;
+      }
+      break;
+    case TSE_CONSTRAINT_BASE:
+    case TSE_CONSTRAINT:
+
+      break;
+    case TSE_GPENCIL_EFFECT_BASE:
+    case TSE_GPENCIL_EFFECT:
+      return ob_parent->type == OB_GPENCIL && ob_dst->type == OB_GPENCIL;
+      break;
+  }
+
+  return true;
+}
+
+static bool datastack_drop_poll(bContext *C,
+                                wmDrag *drag,
+                                const wmEvent *event,
+                                const char **r_tooltip)
+{
+  if (drag->type != WM_DRAG_DATASTACK) {
+    return false;
+  }
+
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
+  ARegion *region = CTX_wm_region(C);
+  bool changed = outliner_flag_set(&space_outliner->tree, TSE_HIGHLIGHTED | TSE_DRAG_ANY, false);
+
+  StackDropData *drop_data = drag->poin;
+  if (!drop_data) {
+    return false;
+  }
+
+  if (!datastack_drop_init(C, event, drop_data)) {
+    return false;
+  }
+
+  if (!datastack_drop_are_types_valid(drop_data)) {
+    return false;
+  }
+
+  TreeStoreElem *tselem_target = TREESTORE(drop_data->drop_te);
+  switch (drop_data->insert_type) {
+    case TE_INSERT_BEFORE:
+      tselem_target->flag |= TSE_DRAG_BEFORE;
+      break;
+    case TE_INSERT_AFTER:
+      tselem_target->flag |= TSE_DRAG_AFTER;
+      break;
+    case TE_INSERT_INTO:
+      tselem_target->flag |= TSE_DRAG_INTO;
+      break;
+  }
+
+  switch (drop_data->drop_action) {
+    case DATA_STACK_DROP_REORDER:
+      *r_tooltip = TIP_("Reorder");
+      break;
+    case DATA_STACK_DROP_COPY:
+      if (drop_data->pchan_parent) {
+        *r_tooltip = TIP_("Copy to bone");
+      }
+      else {
+        *r_tooltip = TIP_("Copy to object");
+      }
+      break;
+    case DATA_STACK_DROP_LINK:
+      if (drop_data->pchan_parent) {
+        *r_tooltip = TIP_("Link all to bone");
+      }
+      else {
+        *r_tooltip = TIP_("Link all to object");
+      }
+      break;
+  }
+
+  if (changed) {
+    ED_region_tag_redraw_no_rebuild(region);
+  }
+
+  return true;
+}
+
+static void datastack_drop_link(bContext *C, StackDropData *drop_data)
+{
+  Main *bmain = CTX_data_main(C);
+  TreeStoreElem *tselem = TREESTORE(drop_data->drop_te);
+  Object *ob_dst = (Object *)tselem->id;
+
+  switch (drop_data->drag_tselem->type) {
+    case TSE_MODIFIER_BASE:
+      ED_object_modifier_link(C, ob_dst, drop_data->ob_parent);
+      break;
+    case TSE_CONSTRAINT_BASE: {
+      ListBase *src;
+
+      if (drop_data->pchan_parent) {
+        src = &drop_data->pchan_parent->constraints;
+      }
+      else {
+        src = &drop_data->ob_parent->constraints;
+      }
+
+      ListBase *dst;
+      if (tselem->type == TSE_POSE_CHANNEL) {
+        bPoseChannel *pchan = (bPoseChannel *)drop_data->drop_te->directdata;
+        dst = &pchan->constraints;
+      }
+      else {
+        dst = &ob_dst->constraints;
+      }
+
+      ED_object_constraint_link(bmain, ob_dst, dst, src);
+      break;
+    }
+    case TSE_GPENCIL_EFFECT_BASE:
+      if (ob_dst->type != OB_GPENCIL) {
+        return;
+      }
+
+      ED_object_shaderfx_link(ob_dst, drop_data->ob_parent);
+      break;
+  }
+}
+
+static void datastack_drop_copy(bContext *C, StackDropData *drop_data)
+{
+  Main *bmain = CTX_data_main(C);
+
+  TreeStoreElem *tselem = TREESTORE(drop_data->drop_te);
+  Object *ob_dst = (Object *)tselem->id;
+
+  switch (drop_data->drag_tselem->type) {
+    case TSE_MODIFIER:
+      if (drop_data->ob_parent->type == OB_GPENCIL && ob_dst->type == OB_GPENCIL) {
+        ED_object_gpencil_modifier_copy_to_object(ob_dst, drop_data->drag_directdata);
+      }
+      else if (drop_data->ob_parent->type != OB_GPENCIL && ob_dst->type != OB_GPENCIL) {
+        ED_object_modifier_copy_to_object(
+            C, ob_dst, drop_data->ob_parent, drop_data->drag_directdata);
+      }
+      break;
+    case TSE_CONSTRAINT:
+      if (tselem->type == TSE_POSE_CHANNEL) {
+        ED_object_constraint_copy_for_pose(
+            bmain, ob_dst, drop_data->drop_te->directdata, drop_data->drag_directdata);
+      }
+      else {
+        ED_object_constraint_copy_for_object(bmain, ob_dst, drop_data->drag_directdata);
+      }
+      break;
+    case TSE_GPENCIL_EFFECT: {
+      if (ob_dst->type != OB_GPENCIL) {
+        return;
+      }
+
+      ED_object_shaderfx_copy(ob_dst, drop_data->drag_directdata);
+      break;
+    }
+  }
+}
+
+static void datastack_drop_reorder(bContext *C, ReportList *reports, StackDropData *drop_data)
+{
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
+
+  TreeElement *drag_te = outliner_find_tree_element(&space_outliner->tree, drop_data->drag_tselem);
+  if (!drag_te) {
+    return;
+  }
+
+  TreeElement *drop_te = drop_data->drop_te;
+  TreeElementInsertType insert_type = drop_data->insert_type;
+
+  Object *ob = drop_data->ob_parent;
+
+  int index = 0;
+  switch (drop_data->drag_tselem->type) {
+    case TSE_MODIFIER:
+      if (ob->type == OB_GPENCIL) {
+        index = outliner_get_insert_index(
+            drag_te, drop_te, insert_type, &ob->greasepencil_modifiers);
+        ED_object_gpencil_modifier_move_to_index(reports, ob, drop_data->drag_directdata, index);
+      }
+      else if (ob->type != OB_GPENCIL) {
+        index = outliner_get_insert_index(drag_te, drop_te, insert_type, &ob->modifiers);
+        ED_object_modifier_move_to_index(reports, ob, drop_data->drag_directdata, index);
+      }
+      break;
+    case TSE_CONSTRAINT:
+      if (drop_data->pchan_parent) {
+        index = outliner_get_insert_index(
+            drag_te, drop_te, insert_type, &drop_data->pchan_parent->constraints);
+      }
+      else {
+        index = outliner_get_insert_index(drag_te, drop_te, insert_type, &ob->constraints);
+      }
+      ED_object_constraint_move_to_index(ob, drop_data->drag_directdata, index);
+
+      break;
+    case TSE_GPENCIL_EFFECT:
+      index = outliner_get_insert_index(drag_te, drop_te, insert_type, &ob->shader_fx);
+      ED_object_shaderfx_move_to_index(reports, ob, drop_data->drag_directdata, index);
+  }
+}
+
+static int datastack_drop_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  if (event->custom != EVT_DATA_DRAGDROP) {
+    return OPERATOR_CANCELLED;
+  }
+
+  ListBase *lb = event->customdata;
+  wmDrag *drag = lb->first;
+  StackDropData *drop_data = drag->poin;
+
+  switch (drop_data->drop_action) {
+    case DATA_STACK_DROP_LINK:
+      datastack_drop_link(C, drop_data);
+      break;
+    case DATA_STACK_DROP_COPY:
+      datastack_drop_copy(C, drop_data);
+      break;
+    case DATA_STACK_DROP_REORDER:
+      datastack_drop_reorder(C, op->reports, drop_data);
+      break;
+  }
+
+  return OPERATOR_FINISHED;
+}
+
+void OUTLINER_OT_datastack_drop(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Data Stack Drop";
+  ot->description = "Copy or reorder modifiers, constraints, and effects";
+  ot->idname = "OUTLINER_OT_datastack_drop";
+
+  /* api callbacks */
+  ot->invoke = datastack_drop_invoke;
+
+  ot->poll = ED_operator_outliner_active;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
+}
+
 /* ******************** Collection Drop Operator *********************** */
 
 typedef struct CollectionDrop {
@@ -650,7 +1095,7 @@ static Collection *collection_parent_from_ID(ID *id)
   if (GS(id->name) == ID_SCE) {
     return ((Scene *)id)->master_collection;
   }
-  else if (GS(id->name) == ID_GR) {
+  if (GS(id->name) == ID_GR) {
     return (Collection *)id;
   }
 
@@ -662,7 +1107,7 @@ static bool collection_drop_init(bContext *C,
                                  const wmEvent *event,
                                  CollectionDrop *data)
 {
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
 
   /* Get collection to drop into. */
   TreeElementInsertType insert_type;
@@ -698,7 +1143,7 @@ static bool collection_drop_init(bContext *C,
   /* Get collection to drag out of. */
   ID *parent = drag_id->from_parent;
   Collection *from_collection = collection_parent_from_ID(parent);
-  if (event->ctrl || soops->outlinevis == SO_SCENES) {
+  if (event->ctrl || space_outliner->outlinevis == SO_SCENES) {
     from_collection = NULL;
   }
 
@@ -725,9 +1170,9 @@ static bool collection_drop_poll(bContext *C,
                                  const wmEvent *event,
                                  const char **r_tooltip)
 {
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   ARegion *region = CTX_wm_region(C);
-  bool changed = outliner_flag_set(&soops->tree, TSE_HIGHLIGHTED | TSE_DRAG_ANY, false);
+  bool changed = outliner_flag_set(&space_outliner->tree, TSE_HIGHLIGHTED | TSE_DRAG_ANY, false);
 
   CollectionDrop data;
   if (!event->shift && collection_drop_init(C, drag, event, &data)) {
@@ -772,12 +1217,10 @@ static bool collection_drop_poll(bContext *C,
     }
     return true;
   }
-  else {
-    if (changed) {
-      ED_region_tag_redraw_no_rebuild(region);
-    }
-    return false;
+  if (changed) {
+    ED_region_tag_redraw_no_rebuild(region);
   }
+  return false;
 }
 
 static int collection_drop_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
@@ -802,12 +1245,12 @@ static int collection_drop_invoke(bContext *C, wmOperator *UNUSED(op), const wmE
   bool relative_after = false;
 
   if (ELEM(data.insert_type, TE_INSERT_BEFORE, TE_INSERT_AFTER)) {
-    SpaceOutliner *soops = CTX_wm_space_outliner(C);
+    SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
 
     relative = data.to;
     relative_after = (data.insert_type == TE_INSERT_AFTER);
 
-    TreeElement *parent_te = outliner_find_parent_element(&soops->tree, NULL, data.te);
+    TreeElement *parent_te = outliner_find_parent_element(&space_outliner->tree, NULL, data.te);
     data.to = (parent_te) ? outliner_collection_from_tree_element(parent_te) : NULL;
   }
 
@@ -873,14 +1316,16 @@ void OUTLINER_OT_collection_drop(wmOperatorType *ot)
 
 /* ********************* Outliner Drag Operator ******************** */
 
-static TreeElement *outliner_item_drag_element_find(SpaceOutliner *soops,
+#define OUTLINER_DRAG_SCOLL_OUTSIDE_PAD 7 /* In UI units */
+
+static TreeElement *outliner_item_drag_element_find(SpaceOutliner *space_outliner,
                                                     ARegion *region,
                                                     const wmEvent *event)
 {
   /* note: using EVT_TWEAK_ events to trigger dragging is fine,
    * it sends coordinates from where dragging was started */
   const float my = UI_view2d_region_to_view_y(&region->v2d, event->mval[1]);
-  return outliner_find_item_at_y(soops, &soops->tree, my);
+  return outliner_find_item_at_y(space_outliner, &space_outliner->tree, my);
 }
 
 static int outliner_item_drag_drop_invoke(bContext *C,
@@ -888,14 +1333,15 @@ static int outliner_item_drag_drop_invoke(bContext *C,
                                           const wmEvent *event)
 {
   ARegion *region = CTX_wm_region(C);
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
-  TreeElement *te = outliner_item_drag_element_find(soops, region, event);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
+  TreeElement *te = outliner_item_drag_element_find(space_outliner, region, event);
 
   if (!te) {
     return (OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH);
   }
 
-  TreeElementIcon data = tree_element_get_icon(TREESTORE(te), te);
+  TreeStoreElem *tselem = TREESTORE(te);
+  TreeElementIcon data = tree_element_get_icon(tselem, te);
   if (!data.drag_id) {
     return (OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH);
   }
@@ -906,16 +1352,44 @@ static int outliner_item_drag_drop_invoke(bContext *C,
   if (outliner_item_is_co_within_close_toggle(te, view_mval[0])) {
     return (OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH);
   }
+  if (outliner_is_co_within_mode_column(space_outliner, view_mval)) {
+    return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
+  }
 
-  wmDrag *drag = WM_event_start_drag(C, data.icon, WM_DRAG_ID, NULL, 0.0, WM_DRAG_NOP);
+  /* Scroll the view when dragging near edges, but not
+   * when the drag goes too far outside the region. */
+  {
+    wmOperatorType *ot = WM_operatortype_find("VIEW2D_OT_edge_pan", true);
+    PointerRNA op_ptr;
+    WM_operator_properties_create_ptr(&op_ptr, ot);
+    RNA_int_set(&op_ptr, "outside_padding", OUTLINER_DRAG_SCOLL_OUTSIDE_PAD);
+    WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &op_ptr);
+    WM_operator_properties_free(&op_ptr);
+  }
 
-  if (ELEM(GS(data.drag_id->name), ID_OB, ID_GR)) {
+  const bool use_datastack_drag = ELEM(tselem->type,
+                                       TSE_MODIFIER,
+                                       TSE_MODIFIER_BASE,
+                                       TSE_CONSTRAINT,
+                                       TSE_CONSTRAINT_BASE,
+                                       TSE_GPENCIL_EFFECT,
+                                       TSE_GPENCIL_EFFECT_BASE);
+
+  const int wm_drag_type = use_datastack_drag ? WM_DRAG_DATASTACK : WM_DRAG_ID;
+  wmDrag *drag = WM_event_start_drag(C, data.icon, wm_drag_type, NULL, 0.0, WM_DRAG_NOP);
+
+  if (use_datastack_drag) {
+    TreeElement *te_bone = NULL;
+    bPoseChannel *pchan = outliner_find_parent_bone(te, &te_bone);
+    datastack_drop_data_init(drag, (Object *)tselem->id, pchan, te, tselem, te->directdata);
+  }
+  else if (ELEM(GS(data.drag_id->name), ID_OB, ID_GR)) {
     /* For collections and objects we cheat and drag all selected. */
 
     /* Only drag element under mouse if it was not selected before. */
-    if ((TREESTORE(te)->flag & TSE_SELECTED) == 0) {
-      outliner_flag_set(&soops->tree, TSE_SELECTED, 0);
-      TREESTORE(te)->flag |= TSE_SELECTED;
+    if ((tselem->flag & TSE_SELECTED) == 0) {
+      outliner_flag_set(&space_outliner->tree, TSE_SELECTED, 0);
+      tselem->flag |= TSE_SELECTED;
     }
 
     /* Gather all selected elements. */
@@ -924,12 +1398,20 @@ static int outliner_item_drag_drop_invoke(bContext *C,
     };
 
     if (GS(data.drag_id->name) == ID_OB) {
-      outliner_tree_traverse(
-          soops, &soops->tree, 0, TSE_SELECTED, outliner_find_selected_objects, &selected);
+      outliner_tree_traverse(space_outliner,
+                             &space_outliner->tree,
+                             0,
+                             TSE_SELECTED,
+                             outliner_find_selected_objects,
+                             &selected);
     }
     else {
-      outliner_tree_traverse(
-          soops, &soops->tree, 0, TSE_SELECTED, outliner_find_selected_collections, &selected);
+      outliner_tree_traverse(space_outliner,
+                             &space_outliner->tree,
+                             0,
+                             TSE_SELECTED,
+                             outliner_find_selected_collections,
+                             &selected);
     }
 
     LISTBASE_FOREACH (LinkData *, link, &selected.selected_array) {
@@ -986,7 +1468,7 @@ static int outliner_item_drag_drop_invoke(bContext *C,
     WM_drag_add_ID(drag, data.drag_id, data.drag_parent);
   }
 
-  ED_outliner_select_sync_from_all_tag(C);
+  ED_outliner_select_sync_from_outliner(C, space_outliner);
 
   return (OPERATOR_FINISHED | OPERATOR_PASS_THROUGH);
 }
@@ -1005,6 +1487,8 @@ void OUTLINER_OT_item_drag_drop(wmOperatorType *ot)
   ot->poll = ED_operator_outliner_active;
 }
 
+#undef OUTLINER_DRAG_SCOLL_OUTSIDE_PAD
+
 /* *************************** Drop Boxes ************************** */
 
 /* region dropbox definition */
@@ -1016,5 +1500,6 @@ void outliner_dropboxes(void)
   WM_dropbox_add(lb, "OUTLINER_OT_parent_clear", parent_clear_poll, NULL);
   WM_dropbox_add(lb, "OUTLINER_OT_scene_drop", scene_drop_poll, NULL);
   WM_dropbox_add(lb, "OUTLINER_OT_material_drop", material_drop_poll, NULL);
+  WM_dropbox_add(lb, "OUTLINER_OT_datastack_drop", datastack_drop_poll, NULL);
   WM_dropbox_add(lb, "OUTLINER_OT_collection_drop", collection_drop_poll, NULL);
 }

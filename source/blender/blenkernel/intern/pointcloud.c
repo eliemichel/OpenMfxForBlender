@@ -21,6 +21,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_defaults.h"
+#include "DNA_material_types.h"
 #include "DNA_object_types.h"
 #include "DNA_pointcloud_types.h"
 
@@ -46,7 +47,144 @@
 
 #include "DEG_depsgraph_query.h"
 
+#include "BLO_read_write.h"
+
 /* PointCloud datablock */
+
+static void pointcloud_random(PointCloud *pointcloud);
+
+const char *POINTCLOUD_ATTR_POSITION = "Position";
+const char *POINTCLOUD_ATTR_RADIUS = "Radius";
+
+static void pointcloud_init_data(ID *id)
+{
+  PointCloud *pointcloud = (PointCloud *)id;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(pointcloud, id));
+
+  MEMCPY_STRUCT_AFTER(pointcloud, DNA_struct_default_get(PointCloud), id);
+
+  CustomData_reset(&pointcloud->pdata);
+  CustomData_add_layer_named(&pointcloud->pdata,
+                             CD_PROP_FLOAT3,
+                             CD_CALLOC,
+                             NULL,
+                             pointcloud->totpoint,
+                             POINTCLOUD_ATTR_POSITION);
+  BKE_pointcloud_update_customdata_pointers(pointcloud);
+}
+
+static void pointcloud_copy_data(Main *UNUSED(bmain), ID *id_dst, const ID *id_src, const int flag)
+{
+  PointCloud *pointcloud_dst = (PointCloud *)id_dst;
+  const PointCloud *pointcloud_src = (const PointCloud *)id_src;
+  pointcloud_dst->mat = MEM_dupallocN(pointcloud_dst->mat);
+
+  const eCDAllocType alloc_type = (flag & LIB_ID_COPY_CD_REFERENCE) ? CD_REFERENCE : CD_DUPLICATE;
+  CustomData_copy(&pointcloud_src->pdata,
+                  &pointcloud_dst->pdata,
+                  CD_MASK_ALL,
+                  alloc_type,
+                  pointcloud_dst->totpoint);
+  BKE_pointcloud_update_customdata_pointers(pointcloud_dst);
+}
+
+static void pointcloud_free_data(ID *id)
+{
+  PointCloud *pointcloud = (PointCloud *)id;
+  BKE_animdata_free(&pointcloud->id, false);
+  BKE_pointcloud_batch_cache_free(pointcloud);
+  CustomData_free(&pointcloud->pdata, pointcloud->totpoint);
+  MEM_SAFE_FREE(pointcloud->mat);
+}
+
+static void pointcloud_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  PointCloud *pointcloud = (PointCloud *)id;
+  for (int i = 0; i < pointcloud->totcol; i++) {
+    BKE_LIB_FOREACHID_PROCESS(data, pointcloud->mat[i], IDWALK_CB_USER);
+  }
+}
+
+static void pointcloud_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  PointCloud *pointcloud = (PointCloud *)id;
+  if (pointcloud->id.us > 0 || BLO_write_is_undo(writer)) {
+    CustomDataLayer *players = NULL, players_buff[CD_TEMP_CHUNK_SIZE];
+    CustomData_blend_write_prepare(
+        &pointcloud->pdata, &players, players_buff, ARRAY_SIZE(players_buff));
+
+    /* Write LibData */
+    BLO_write_id_struct(writer, PointCloud, id_address, &pointcloud->id);
+    BKE_id_blend_write(writer, &pointcloud->id);
+
+    /* Direct data */
+    CustomData_blend_write(
+        writer, &pointcloud->pdata, players, pointcloud->totpoint, CD_MASK_ALL, &pointcloud->id);
+
+    BLO_write_pointer_array(writer, pointcloud->totcol, pointcloud->mat);
+    if (pointcloud->adt) {
+      BKE_animdata_blend_write(writer, pointcloud->adt);
+    }
+
+    /* Remove temporary data. */
+    if (players && players != players_buff) {
+      MEM_freeN(players);
+    }
+  }
+}
+
+static void pointcloud_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  PointCloud *pointcloud = (PointCloud *)id;
+  BLO_read_data_address(reader, &pointcloud->adt);
+  BKE_animdata_blend_read_data(reader, pointcloud->adt);
+
+  /* Geometry */
+  CustomData_blend_read(reader, &pointcloud->pdata, pointcloud->totpoint);
+  BKE_pointcloud_update_customdata_pointers(pointcloud);
+
+  /* Materials */
+  BLO_read_pointer_array(reader, (void **)&pointcloud->mat);
+}
+
+static void pointcloud_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  PointCloud *pointcloud = (PointCloud *)id;
+  for (int a = 0; a < pointcloud->totcol; a++) {
+    BLO_read_id_address(reader, pointcloud->id.lib, &pointcloud->mat[a]);
+  }
+}
+
+static void pointcloud_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  PointCloud *pointcloud = (PointCloud *)id;
+  for (int a = 0; a < pointcloud->totcol; a++) {
+    BLO_expand(expander, pointcloud->mat[a]);
+  }
+}
+
+IDTypeInfo IDType_ID_PT = {
+    .id_code = ID_PT,
+    .id_filter = FILTER_ID_PT,
+    .main_listbase_index = INDEX_ID_PT,
+    .struct_size = sizeof(PointCloud),
+    .name = "PointCloud",
+    .name_plural = "pointclouds",
+    .translation_context = BLT_I18NCONTEXT_ID_POINTCLOUD,
+    .flags = 0,
+
+    .init_data = pointcloud_init_data,
+    .copy_data = pointcloud_copy_data,
+    .free_data = pointcloud_free_data,
+    .make_local = NULL,
+    .foreach_id = pointcloud_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = pointcloud_blend_write,
+    .blend_read_data = pointcloud_blend_read_data,
+    .blend_read_lib = pointcloud_blend_read_lib,
+    .blend_read_expand = pointcloud_blend_read_expand,
+};
 
 static void pointcloud_random(PointCloud *pointcloud)
 {
@@ -66,81 +204,29 @@ static void pointcloud_random(PointCloud *pointcloud)
   BLI_rng_free(rng);
 }
 
-static void pointcloud_init_data(ID *id)
+void *BKE_pointcloud_add(Main *bmain, const char *name)
 {
-  PointCloud *pointcloud = (PointCloud *)id;
-  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(pointcloud, id));
+  PointCloud *pointcloud = BKE_id_new(bmain, ID_PT, name);
 
-  MEMCPY_STRUCT_AFTER(pointcloud, DNA_struct_default_get(PointCloud), id);
-
-  CustomData_reset(&pointcloud->pdata);
-  CustomData_add_layer(&pointcloud->pdata, CD_LOCATION, CD_CALLOC, NULL, pointcloud->totpoint);
-  CustomData_add_layer(&pointcloud->pdata, CD_RADIUS, CD_CALLOC, NULL, pointcloud->totpoint);
-  BKE_pointcloud_update_customdata_pointers(pointcloud);
-
-  pointcloud_random(pointcloud);
+  return pointcloud;
 }
 
-void *BKE_pointcloud_add(Main *bmain, const char *name)
+void *BKE_pointcloud_add_default(Main *bmain, const char *name)
 {
   PointCloud *pointcloud = BKE_libblock_alloc(bmain, ID_PT, name, 0);
 
   pointcloud_init_data(&pointcloud->id);
 
+  CustomData_add_layer_named(&pointcloud->pdata,
+                             CD_PROP_FLOAT,
+                             CD_CALLOC,
+                             NULL,
+                             pointcloud->totpoint,
+                             POINTCLOUD_ATTR_RADIUS);
+  pointcloud_random(pointcloud);
+
   return pointcloud;
 }
-
-static void pointcloud_copy_data(Main *UNUSED(bmain), ID *id_dst, const ID *id_src, const int flag)
-{
-  PointCloud *pointcloud_dst = (PointCloud *)id_dst;
-  const PointCloud *pointcloud_src = (const PointCloud *)id_src;
-  pointcloud_dst->mat = MEM_dupallocN(pointcloud_dst->mat);
-
-  const eCDAllocType alloc_type = (flag & LIB_ID_COPY_CD_REFERENCE) ? CD_REFERENCE : CD_DUPLICATE;
-  CustomData_copy(&pointcloud_src->pdata,
-                  &pointcloud_dst->pdata,
-                  CD_MASK_ALL,
-                  alloc_type,
-                  pointcloud_dst->totpoint);
-  BKE_pointcloud_update_customdata_pointers(pointcloud_dst);
-}
-
-PointCloud *BKE_pointcloud_copy(Main *bmain, const PointCloud *pointcloud)
-{
-  PointCloud *pointcloud_copy;
-  BKE_id_copy(bmain, &pointcloud->id, (ID **)&pointcloud_copy);
-  return pointcloud_copy;
-}
-
-static void pointcloud_make_local(Main *bmain, ID *id, const int flags)
-{
-  BKE_lib_id_make_local_generic(bmain, id, flags);
-}
-
-static void pointcloud_free_data(ID *id)
-{
-  PointCloud *pointcloud = (PointCloud *)id;
-  BKE_animdata_free(&pointcloud->id, false);
-  BKE_pointcloud_batch_cache_free(pointcloud);
-  CustomData_free(&pointcloud->pdata, pointcloud->totpoint);
-  MEM_SAFE_FREE(pointcloud->mat);
-}
-
-IDTypeInfo IDType_ID_PT = {
-    .id_code = ID_PT,
-    .id_filter = FILTER_ID_PT,
-    .main_listbase_index = INDEX_ID_PT,
-    .struct_size = sizeof(PointCloud),
-    .name = "PointCloud",
-    .name_plural = "pointclouds",
-    .translation_context = BLT_I18NCONTEXT_ID_POINTCLOUD,
-    .flags = 0,
-
-    .init_data = pointcloud_init_data,
-    .copy_data = pointcloud_copy_data,
-    .free_data = pointcloud_free_data,
-    .make_local = pointcloud_make_local,
-};
 
 BoundBox *BKE_pointcloud_boundbox_get(Object *ob)
 {
@@ -162,8 +248,8 @@ BoundBox *BKE_pointcloud_boundbox_get(Object *ob)
     for (int a = 0; a < pointcloud->totpoint; a++) {
       float *co = pointcloud_co[a];
       float radius = (pointcloud_radius) ? pointcloud_radius[a] : 0.0f;
-      float co_min[3] = {co[0] - radius, co[1] - radius, co[2] - radius};
-      float co_max[3] = {co[0] + radius, co[1] + radius, co[2] + radius};
+      const float co_min[3] = {co[0] - radius, co[1] - radius, co[2] - radius};
+      const float co_max[3] = {co[0] + radius, co[1] + radius, co[2] + radius};
       DO_MIN(co_min, min);
       DO_MAX(co_max, max);
     }
@@ -176,15 +262,23 @@ BoundBox *BKE_pointcloud_boundbox_get(Object *ob)
 
 void BKE_pointcloud_update_customdata_pointers(PointCloud *pointcloud)
 {
-  pointcloud->co = CustomData_get_layer(&pointcloud->pdata, CD_LOCATION);
-  pointcloud->radius = CustomData_get_layer(&pointcloud->pdata, CD_RADIUS);
+  pointcloud->co = CustomData_get_layer_named(
+      &pointcloud->pdata, CD_PROP_FLOAT3, POINTCLOUD_ATTR_POSITION);
+  pointcloud->radius = CustomData_get_layer_named(
+      &pointcloud->pdata, CD_PROP_FLOAT, POINTCLOUD_ATTR_RADIUS);
+}
+
+bool BKE_pointcloud_customdata_required(PointCloud *UNUSED(pointcloud), CustomDataLayer *layer)
+{
+  return layer->type == CD_PROP_FLOAT3 && STREQ(layer->name, POINTCLOUD_ATTR_POSITION);
 }
 
 /* Dependency Graph */
 
 PointCloud *BKE_pointcloud_new_for_eval(const PointCloud *pointcloud_src, int totpoint)
 {
-  PointCloud *pointcloud_dst = BKE_id_new_nomain(ID_HA, NULL);
+  PointCloud *pointcloud_dst = BKE_id_new_nomain(ID_PT, NULL);
+  CustomData_free(&pointcloud_dst->pdata, pointcloud_dst->totpoint);
 
   STRNCPY(pointcloud_dst->id.name, pointcloud_src->id.name);
   pointcloud_dst->mat = MEM_dupallocN(pointcloud_src->mat);
@@ -206,17 +300,70 @@ PointCloud *BKE_pointcloud_copy_for_eval(struct PointCloud *pointcloud_src, bool
     flags |= LIB_ID_COPY_CD_REFERENCE;
   }
 
-  PointCloud *result;
-  BKE_id_copy_ex(NULL, &pointcloud_src->id, (ID **)&result, flags);
+  PointCloud *result = (PointCloud *)BKE_id_copy_ex(NULL, &pointcloud_src->id, NULL, flags);
   return result;
 }
 
-static PointCloud *pointcloud_evaluate_modifiers(struct Depsgraph *UNUSED(depsgraph),
-                                                 struct Scene *UNUSED(scene),
-                                                 Object *UNUSED(object),
+static PointCloud *pointcloud_evaluate_modifiers(struct Depsgraph *depsgraph,
+                                                 struct Scene *scene,
+                                                 Object *object,
                                                  PointCloud *pointcloud_input)
 {
-  return pointcloud_input;
+  PointCloud *pointcloud = pointcloud_input;
+
+  /* Modifier evaluation modes. */
+  const bool use_render = (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
+  const int required_mode = use_render ? eModifierMode_Render : eModifierMode_Realtime;
+  ModifierApplyFlag apply_flag = use_render ? MOD_APPLY_RENDER : MOD_APPLY_USECACHE;
+  const ModifierEvalContext mectx = {depsgraph, object, apply_flag};
+
+  /* Get effective list of modifiers to execute. Some effects like shape keys
+   * are added as virtual modifiers before the user created modifiers. */
+  VirtualModifierData virtualModifierData;
+  ModifierData *md = BKE_modifiers_get_virtual_modifierlist(object, &virtualModifierData);
+
+  /* Evaluate modifiers. */
+  for (; md; md = md->next) {
+    const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
+
+    if (!BKE_modifier_is_enabled(scene, md, required_mode)) {
+      continue;
+    }
+
+    if ((mti->type == eModifierTypeType_OnlyDeform) &&
+        (mti->flags & eModifierTypeFlag_AcceptsVertexCosOnly)) {
+      /* Ensure we are not modifying the input. */
+      if (pointcloud == pointcloud_input) {
+        pointcloud = BKE_pointcloud_copy_for_eval(pointcloud, true);
+      }
+
+      /* Ensure we are not overwriting referenced data. */
+      CustomData_duplicate_referenced_layer_named(
+          &pointcloud->pdata, CD_PROP_FLOAT3, POINTCLOUD_ATTR_POSITION, pointcloud->totpoint);
+      BKE_pointcloud_update_customdata_pointers(pointcloud);
+
+      /* Created deformed coordinates array on demand. */
+      mti->deformVerts(md, &mectx, NULL, pointcloud->co, pointcloud->totpoint);
+    }
+    else if (mti->modifyPointCloud) {
+      /* Ensure we are not modifying the input. */
+      if (pointcloud == pointcloud_input) {
+        pointcloud = BKE_pointcloud_copy_for_eval(pointcloud, true);
+      }
+
+      PointCloud *pointcloud_next = mti->modifyPointCloud(md, &mectx, pointcloud);
+
+      if (pointcloud_next && pointcloud_next != pointcloud) {
+        /* If the modifier returned a new pointcloud, release the old one. */
+        if (pointcloud != pointcloud_input) {
+          BKE_id_free(NULL, pointcloud);
+        }
+        pointcloud = pointcloud_next;
+      }
+    }
+  }
+
+  return pointcloud;
 }
 
 void BKE_pointcloud_data_update(struct Depsgraph *depsgraph, struct Scene *scene, Object *object)

@@ -28,13 +28,16 @@
  * Only included in wm.h and lower level files.
  */
 
-#ifndef __WM_GIZMO_WMAPI_H__
-#define __WM_GIZMO_WMAPI_H__
+#pragma once
 
 struct wmEventHandler_Gizmo;
 struct wmEventHandler_Op;
 struct wmGizmoMap;
 struct wmOperatorType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* -------------------------------------------------------------------- */
 /* wmGizmo */
@@ -92,4 +95,6 @@ struct ListBase *wm_gizmomap_groups_get(wmGizmoMap *gzmap);
 
 void wm_gizmomaptypes_free(void);
 
-#endif /* __WM_GIZMO_WMAPI_H__ */
+#ifdef __cplusplus
+}
+#endif

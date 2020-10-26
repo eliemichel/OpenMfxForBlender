@@ -20,8 +20,7 @@
  *   so for BPath we don't need to malloc
  */
 
-#ifndef __BKE_BPATH_H__
-#define __BKE_BPATH_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,17 +35,20 @@ struct ReportList;
  * path has changed, and in that case, should write the result to pathOut. */
 typedef bool (*BPathVisitor)(void *userdata, char *path_dst, const char *path_src);
 /* Executes 'visit' for each path associated with 'id'. */
-void BKE_bpath_traverse_id(
-    struct Main *bmain, struct ID *id, BPathVisitor visit_cb, const int flag, void *userdata);
+void BKE_bpath_traverse_id(struct Main *bmain,
+                           struct ID *id,
+                           BPathVisitor visit_cb,
+                           const int flag,
+                           void *bpath_user_data);
 void BKE_bpath_traverse_id_list(struct Main *bmain,
                                 struct ListBase *lb,
                                 BPathVisitor visit_cb,
                                 const int flag,
-                                void *userdata);
+                                void *bpath_user_data);
 void BKE_bpath_traverse_main(struct Main *bmain,
                              BPathVisitor visit_cb,
                              const int flag,
-                             void *userdata);
+                             void *bpath_user_data);
 bool BKE_bpath_relocate_visitor(void *oldbasepath, char *path_dst, const char *path_src);
 
 /* Functions for temp backup/restore of paths, path count must NOT change */
@@ -92,5 +94,3 @@ void BKE_bpath_absolute_convert(struct Main *bmain,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_BPATH_H__ */

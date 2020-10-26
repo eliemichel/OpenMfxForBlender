@@ -152,12 +152,11 @@ static int knifeproject_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    BKE_report(op->reports,
-               RPT_ERROR,
-               "No other selected objects have wire or boundary edges to use for projection");
-    return OPERATOR_CANCELLED;
-  }
+
+  BKE_report(op->reports,
+             RPT_ERROR,
+             "No other selected objects have wire or boundary edges to use for projection");
+  return OPERATOR_CANCELLED;
 }
 
 void MESH_OT_knife_project(wmOperatorType *ot)
@@ -165,7 +164,7 @@ void MESH_OT_knife_project(wmOperatorType *ot)
   /* description */
   ot->name = "Knife Project";
   ot->idname = "MESH_OT_knife_project";
-  ot->description = "Use other objects outlines & boundaries to project knife cuts";
+  ot->description = "Use other objects outlines and boundaries to project knife cuts";
 
   /* callbacks */
   ot->exec = knifeproject_exec;

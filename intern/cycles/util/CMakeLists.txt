@@ -1,3 +1,16 @@
+# Copyright 2011-2020 Blender Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 set(INC
   ..
@@ -29,7 +42,7 @@ set(SRC
 )
 
 set(LIB
-
+  ${TBB_LIBRARIES}
 )
 
 if(WITH_CYCLES_STANDALONE)
@@ -86,7 +99,9 @@ set(SRC_HEADERS
   util_math_matrix.h
   util_md5.h
   util_murmurhash.h
+  util_openimagedenoise.h
   util_opengl.h
+  util_openvdb.h
   util_optimization.h
   util_param.h
   util_path.h
@@ -97,11 +112,9 @@ set(SRC_HEADERS
   util_rect.h
   util_set.h
   util_simd.h
-  util_sky_model.cpp
-  util_sky_model.h
-  util_sky_model_data.h
   util_avxf.h
   util_avxb.h
+  util_avxi.h
   util_semaphore.h
   util_sseb.h
   util_ssef.h
@@ -112,6 +125,7 @@ set(SRC_HEADERS
   util_string.h
   util_system.h
   util_task.h
+  util_tbb.h
   util_texture.h
   util_thread.h
   util_time.h

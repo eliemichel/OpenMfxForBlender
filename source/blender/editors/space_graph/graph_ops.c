@@ -54,7 +54,7 @@
 #include "WM_types.h"
 
 /* ************************** view-based operators **********************************/
-// XXX should these really be here?
+/* XXX should these really be here? */
 
 /* Set Cursor --------------------------------------------------------------------- */
 /* The 'cursor' in the Graph Editor consists of two parts:
@@ -66,7 +66,7 @@ static bool graphview_cursor_poll(bContext *C)
 {
   /* prevent changes during render */
   if (G.is_rendering) {
-    return 0;
+    return false;
   }
 
   return ED_operator_graphedit_active(C);
@@ -452,6 +452,7 @@ void graphedit_operatortypes(void)
   WM_operatortype_append(GRAPH_OT_snap);
   WM_operatortype_append(GRAPH_OT_mirror);
   WM_operatortype_append(GRAPH_OT_frame_jump);
+  WM_operatortype_append(GRAPH_OT_snap_cursor_value);
   WM_operatortype_append(GRAPH_OT_handle_type);
   WM_operatortype_append(GRAPH_OT_interpolation_type);
   WM_operatortype_append(GRAPH_OT_extrapolation_type);

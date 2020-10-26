@@ -13,13 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
+#pragma once
 
 /** \file
  * \ingroup balembic
  */
-
-#ifndef __ABC_ALEMBIC_H__
-#define __ABC_ALEMBIC_H__
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,11 +32,6 @@ struct Scene;
 struct bContext;
 
 typedef struct AbcArchiveHandle AbcArchiveHandle;
-
-enum {
-  ABC_ARCHIVE_OGAWA = 0,
-  ABC_ARCHIVE_HDF5 = 1,
-};
 
 int ABC_get_version(void);
 
@@ -67,8 +60,8 @@ struct AlembicExportParams {
   bool triangulate;
   bool export_hair;
   bool export_particles;
-
-  unsigned int compression_type : 1;
+  bool export_custom_properties;
+  bool use_instancing;
 
   /* See MOD_TRIANGULATE_NGON_xxx and MOD_TRIANGULATE_QUAD_xxx
    * in DNA_modifier_types.h */
@@ -115,13 +108,13 @@ void ABC_get_transform(struct CacheReader *reader,
                        float time,
                        float scale);
 
-/* Either modifies current_mesh in-place or constructs a new mesh. */
+/* Either modifies existing_mesh in-place or constructs a new mesh. */
 struct Mesh *ABC_read_mesh(struct CacheReader *reader,
                            struct Object *ob,
-                           struct Mesh *current_mesh,
+                           struct Mesh *existing_mesh,
                            const float time,
                            const char **err_str,
-                           int flags);
+                           int read_flags);
 
 bool ABC_mesh_topology_changed(struct CacheReader *reader,
                                struct Object *ob,
@@ -137,8 +130,16 @@ struct CacheReader *CacheReader_open_alembic_object(struct AbcArchiveHandle *han
                                                     struct Object *object,
                                                     const char *object_path);
 
+bool ABC_has_vec3_array_property_named(struct CacheReader *reader, const char *name);
+
+/* r_vertex_velocities should point to a preallocated array of num_vertices floats */
+int ABC_read_velocity_cache(struct CacheReader *reader,
+                            const char *velocity_name,
+                            float time,
+                            float velocity_scale,
+                            int num_vertices,
+                            float *r_vertex_velocities);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ABC_ALEMBIC_H__ */

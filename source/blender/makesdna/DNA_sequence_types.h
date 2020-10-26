@@ -28,12 +28,12 @@
  * - Meta Strip (SEQ_TYPE_META): Support for nesting Sequences.
  */
 
-#ifndef __DNA_SEQUENCE_TYPES_H__
-#define __DNA_SEQUENCE_TYPES_H__
+#pragma once
 
 #include "DNA_color_types.h"
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
+#include "DNA_session_uuid_types.h"
 #include "DNA_vec_types.h"
 #include "DNA_vfont_types.h"
 
@@ -76,24 +76,24 @@ typedef struct StripColorBalance {
   float gain[3];
   int flag;
   char _pad[4];
-  // float exposure;
-  // float saturation;
+  /* float exposure; */
+  /* float saturation; */
 } StripColorBalance;
 
 typedef struct StripProxy {
-  char dir[768];  // custom directory for index and proxy files
-                  // (defaults to BL_proxy)
+  char dir[768]; /* custom directory for index and proxy files */
+                 /* (defaults to BL_proxy) */
 
-  char file[256];     // custom file
-  struct anim *anim;  // custom proxy anim file
+  char file[256];    /* custom file */
+  struct anim *anim; /* custom proxy anim file */
 
-  short tc;  // time code in use
+  short tc; /* time code in use */
 
-  short quality;           // proxy build quality
-  short build_size_flags;  // size flags (see below) of all proxies
-                           // to build
-  short build_tc_flags;    // time code flags (see below) of all tc indices
-                           // to build
+  short quality;          /* proxy build quality */
+  short build_size_flags; /* size flags (see below) of all proxies */
+                          /* to build */
+  short build_tc_flags;   /* time code flags (see below) of all tc indices */
+                          /* to build */
   short build_flags;
   char storage;
   char _pad[5];
@@ -118,6 +118,10 @@ typedef struct Strip {
   /* color management */
   ColorManagedColorspaceSettings colorspace_settings;
 } Strip;
+
+typedef struct SequenceRuntime {
+  SessionUUID session_uuid;
+} SequenceRuntime;
 
 /**
  * The sequence structure is the basic struct used by any strip.
@@ -237,8 +241,7 @@ typedef struct Sequence {
   int cache_flag;
   int _pad2[3];
 
-  struct Sequence *orig_sequence;
-  void *_pad3;
+  SequenceRuntime runtime;
 } Sequence;
 
 typedef struct MetaStack {
@@ -468,6 +471,7 @@ typedef struct SequencerScopes {
 #define SEQ_SPEED_INTEGRATE (1 << 0)
 #define SEQ_SPEED_UNUSED_1 (1 << 1) /* cleared */
 #define SEQ_SPEED_COMPRESS_IPO_Y (1 << 2)
+#define SEQ_SPEED_USE_INTERPOLATION (1 << 3)
 
 /* ***************** SEQUENCE ****************** */
 #define SEQ_NAME_MAXSTR 64
@@ -634,7 +638,7 @@ enum {
   seqModifierType_Mask = 5,
   seqModifierType_WhiteBalance = 6,
   seqModifierType_Tonemap = 7,
-
+  /* Keep last. */
   NUM_SEQUENCE_MODIFIER_TYPES,
 };
 
@@ -691,5 +695,3 @@ enum {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_SEQUENCE_TYPES_H__ */

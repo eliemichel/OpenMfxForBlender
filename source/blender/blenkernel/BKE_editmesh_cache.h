@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_EDITMESH_CACHE_H__
-#define __BKE_EDITMESH_CACHE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -33,8 +32,11 @@ void BKE_editmesh_cache_ensure_vert_normals(struct BMEditMesh *em, struct EditMe
 
 void BKE_editmesh_cache_ensure_poly_centers(struct BMEditMesh *em, struct EditMeshData *emd);
 
+bool BKE_editmesh_cache_calc_minmax(struct BMEditMesh *em,
+                                    struct EditMeshData *emd,
+                                    float min[3],
+                                    float max[3]);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_EDITMESH_CACHE_H__ */

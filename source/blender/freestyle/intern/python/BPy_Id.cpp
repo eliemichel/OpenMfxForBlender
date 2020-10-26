@@ -46,24 +46,21 @@ int Id_Init(PyObject *module)
 
 //------------------------INSTANCE METHODS ----------------------------------
 
-PyDoc_STRVAR(Id_doc,
-             "Class for representing an object Id.\n"
-             "\n"
-             ".. method:: __init__(first=0, second=0)\n"
-             "\n"
-             "   Build the Id from two numbers.\n"
-             "\n"
-             "   :arg first: The first number.\n"
-             "   :type first: int\n"
-             "   :arg second: The second number.\n"
-             "   :type second: int\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
-             "\n"
-             "   :arg brother: An Id object.\n"
-             "   :type brother: :class:`Id`");
+PyDoc_STRVAR(
+    Id_doc,
+    "Class for representing an object Id.\n"
+    "\n"
+    ".. method:: __init__(brother)\n"
+    "            __init__(first=0, second=0)\n"
+    "\n"
+    "   Build the Id from two numbers or another :class:`Id` using the copy constructor.\n"
+    "\n"
+    "   :arg brother: An Id object.\n"
+    "   :type brother: :class:`Id`"
+    "   :arg first: The first number.\n"
+    "   :type first: int\n"
+    "   :arg second: The second number.\n"
+    "   :type second: int\n");
 
 static int Id_init(BPy_Id *self, PyObject *args, PyObject *kwds)
 {
@@ -75,7 +72,7 @@ static int Id_init(BPy_Id *self, PyObject *args, PyObject *kwds)
   if (PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist_1, &Id_Type, &brother)) {
     self->id = new Id(*(((BPy_Id *)brother)->id));
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args, kwds, "|ii", (char **)kwlist_2, &first, &second)) {
     self->id = new Id(first, second);
   }

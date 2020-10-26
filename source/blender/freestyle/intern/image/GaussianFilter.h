@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GAUSSIANFILTER_H__
-#define __GAUSSIANFILTER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -27,9 +26,7 @@
 
 #include "../system/FreestyleConfig.h"
 
-extern "C" {
 #include "BLI_math.h"
-}
 
 #ifdef WITH_CXX_GUARDEDALLOC
 #  include "MEM_guardedalloc.h"
@@ -153,5 +150,3 @@ template<class Map> float GaussianFilter::getSmoothedPixel(Map *map, int x, int 
 }
 
 } /* namespace Freestyle */
-
-#endif  // __GAUSSIANFILTER_H__

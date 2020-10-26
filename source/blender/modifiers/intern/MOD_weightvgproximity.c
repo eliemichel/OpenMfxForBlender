@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2011 by Bastien Montagne.
@@ -29,20 +29,32 @@
 #include "BLI_rand.h"
 #include "BLI_task.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_bvhutils.h"
+#include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
 #include "BKE_texture.h" /* Texture masking. */
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph_query.h"
@@ -50,6 +62,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 #include "MOD_weightvg_util.h"
 
@@ -304,15 +317,9 @@ static void initData(ModifierData *md)
 {
   WeightVGProximityModifierData *wmd = (WeightVGProximityModifierData *)md;
 
-  wmd->proximity_mode = MOD_WVG_PROXIMITY_OBJECT;
-  wmd->proximity_flags = MOD_WVG_PROXIMITY_GEOM_VERTS;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(wmd, modifier));
 
-  wmd->falloff_type = MOD_WVG_MAPPING_NONE;
-
-  wmd->mask_constant = 1.0f;
-  wmd->mask_tex_use_channel = MOD_WVG_MASK_TEX_USE_INT; /* Use intensity by default. */
-  wmd->mask_tex_mapping = MOD_DISP_MAP_LOCAL;
-  wmd->max_dist = 1.0f; /* vert arbitrary distance, but don't use 0 */
+  MEMCPY_STRUCT_AFTER(wmd, DNA_struct_default_get(WeightVGProximityModifierData), modifier);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -342,20 +349,13 @@ static bool dependsOnTime(ModifierData *md)
   return 0;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
-{
-  WeightVGProximityModifierData *wmd = (WeightVGProximityModifierData *)md;
-  walk(userData, ob, &wmd->proximity_ob_target, IDWALK_CB_NOP);
-  walk(userData, ob, &wmd->mask_tex_map_obj, IDWALK_CB_NOP);
-}
-
 static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   WeightVGProximityModifierData *wmd = (WeightVGProximityModifierData *)md;
 
   walk(userData, ob, (ID **)&wmd->mask_texture, IDWALK_CB_USER);
-
-  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+  walk(userData, ob, (ID **)&wmd->proximity_ob_target, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&wmd->mask_tex_map_obj, IDWALK_CB_NOP);
 }
 
 static void foreachTexLink(ModifierData *md, Object *ob, TexWalkFunc walk, void *userData)
@@ -404,13 +404,13 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   WeightVGProximityModifierData *wmd = (WeightVGProximityModifierData *)md;
   /* If no vertex group, bypass. */
   if (wmd->defgrp_name[0] == '\0') {
-    return 1;
+    return true;
   }
   /* If no target object, bypass. */
   return (wmd->proximity_ob_target == NULL);
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   BLI_assert(mesh != NULL);
 
@@ -429,6 +429,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   int i;
   const bool invert_vgroup_mask = (wmd->proximity_flags & MOD_WVG_PROXIMITY_INVERT_VGROUP_MASK) !=
                                   0;
+  const bool do_normalize = (wmd->proximity_flags & MOD_WVG_PROXIMITY_WEIGHTS_NORMALIZE) != 0;
   /* Flags. */
 #if 0
   const bool do_prev = (wmd->modifier.mode & eModifierMode_DoWeightPreview) != 0;
@@ -540,6 +541,11 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
       /* We must check that we do have a valid target_mesh! */
       if (target_mesh != NULL) {
+
+        /* TODO: edit-mode versions of the BVH lookup functions are available so it could be
+         * avoided. */
+        BKE_mesh_wrapper_ensure_mdata(target_mesh);
+
         SpaceTransform loc2trgt;
         float *dists_v = use_trgt_verts ? MEM_malloc_arrayN(numIdx, sizeof(float), "dists_v") :
                                           NULL;
@@ -604,7 +610,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
                    invert_vgroup_mask);
 
   /* Update vgroup. Note we never add nor remove vertices from vgroup here. */
-  weightvg_update_vg(dvert, defgrp_index, dw, numIdx, indices, org_w, false, 0.0f, false, 0.0f);
+  weightvg_update_vg(
+      dvert, defgrp_index, dw, numIdx, indices, org_w, false, 0.0f, false, 0.0f, do_normalize);
 
   /* If weight preview enabled... */
 #if 0 /* XXX Currently done in mod stack :/ */
@@ -624,25 +631,98 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   TIMEIT_END(perf);
 #endif
 
+  mesh->runtime.is_original = false;
+
   /* Return the vgroup-modified mesh. */
   return mesh;
+}
+
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemPointerR(layout, ptr, "vertex_group", &ob_ptr, "vertex_groups", NULL, ICON_NONE);
+
+  uiItemR(layout, ptr, "target", 0, NULL, ICON_NONE);
+
+  uiItemS(layout);
+
+  uiItemR(layout, ptr, "proximity_mode", 0, NULL, ICON_NONE);
+  if (RNA_enum_get(ptr, "proximity_mode") == MOD_WVG_PROXIMITY_GEOMETRY) {
+    uiItemR(layout, ptr, "proximity_geometry", UI_ITEM_R_EXPAND, IFACE_("Geometry"), ICON_NONE);
+  }
+
+  col = uiLayoutColumn(layout, true);
+  uiItemR(col, ptr, "min_dist", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "max_dist", 0, NULL, ICON_NONE);
+
+  uiItemR(layout, ptr, "normalize", 0, NULL, ICON_NONE);
+}
+
+static void falloff_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *row, *sub;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  row = uiLayoutRow(layout, true);
+  uiItemR(row, ptr, "falloff_type", 0, IFACE_("Type"), ICON_NONE);
+  sub = uiLayoutRow(row, true);
+  uiLayoutSetPropSep(sub, false);
+  uiItemR(row, ptr, "invert_falloff", 0, "", ICON_ARROW_LEFTRIGHT);
+  modifier_panel_end(layout, ptr);
+}
+
+static void influence_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  weightvg_ui_common(C, &ob_ptr, ptr, layout);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(
+      region_type, eModifierType_WeightVGProximity, panel_draw);
+  modifier_subpanel_register(
+      region_type, "falloff", "Falloff", NULL, falloff_panel_draw, panel_type);
+  modifier_subpanel_register(
+      region_type, "influence", "Influence", NULL, influence_panel_draw, panel_type);
 }
 
 ModifierTypeInfo modifierType_WeightVGProximity = {
     /* name */ "VertexWeightProximity",
     /* structName */ "WeightVGProximityModifierData",
     /* structSize */ sizeof(WeightVGProximityModifierData),
+    /* srna */ &RNA_VertexWeightProximityModifier,
     /* type */ eModifierTypeType_NonGeometrical,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_UsesPreview,
+    /* icon */ ICON_MOD_VERTEX_WEIGHT,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -651,8 +731,10 @@ ModifierTypeInfo modifierType_WeightVGProximity = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ foreachTexLink,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

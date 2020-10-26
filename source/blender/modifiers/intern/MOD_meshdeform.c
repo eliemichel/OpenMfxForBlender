@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -26,25 +26,39 @@
 #include "BLI_math.h"
 #include "BLI_task.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_global.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "BLO_read_write.h"
+
+#include "RNA_access.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 #ifdef __SSE2__
@@ -55,7 +69,9 @@ static void initData(ModifierData *md)
 {
   MeshDeformModifierData *mmd = (MeshDeformModifierData *)md;
 
-  mmd->gridsize = 5;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(mmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(mmd, DNA_struct_default_get(MeshDeformModifierData), modifier);
 }
 
 static void freeData(ModifierData *md)
@@ -93,7 +109,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   const MeshDeformModifierData *mmd = (const MeshDeformModifierData *)md;
   MeshDeformModifierData *tmmd = (MeshDeformModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   if (mmd->bindinfluences) {
     tmmd->bindinfluences = MEM_dupallocN(mmd->bindinfluences);
@@ -147,11 +163,11 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return !mmd->object || mmd->object->type != OB_MESH;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   MeshDeformModifierData *mmd = (MeshDeformModifierData *)md;
 
-  walk(userData, ob, &mmd->object, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&mmd->object, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -318,12 +334,7 @@ static void meshdeform_vert_task(void *__restrict userdata,
   if (totweight > 0.0f) {
     mul_v3_fl(co, fac / totweight);
     mul_m3_v3(data->icagemat, co);
-    if (G.debug_value != 527) {
-      add_v3_v3(vertexCos[iter], co);
-    }
-    else {
-      copy_v3_v3(vertexCos[iter], co);
-    }
+    add_v3_v3(vertexCos[iter], co);
   }
 }
 
@@ -339,9 +350,8 @@ static void meshdeformModifier_do(ModifierData *md,
   Mesh *cagemesh;
   MDeformVert *dvert = NULL;
   float imat[4][4], cagemat[4][4], iobmat[4][4], icagemat[3][3], cmat[4][4];
-  float co[3], (*dco)[3] = NULL, (*bindcagecos)[3];
+  float(*dco)[3] = NULL, (*bindcagecos)[3];
   int a, totvert, totcagevert, defgrp_index;
-  float(*cagecos)[3] = NULL;
   MeshdeformUserdata data;
 
   static int recursive_bind_sentinel = 0;
@@ -363,7 +373,7 @@ static void meshdeformModifier_do(ModifierData *md,
   Object *ob_target = mmd->object;
   cagemesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
   if (cagemesh == NULL) {
-    modifier_setError(md, "Cannot get mesh from cage object");
+    BKE_modifier_set_error(ctx->object, md, "Cannot get mesh from cage object");
     return;
   }
 
@@ -378,7 +388,7 @@ static void meshdeformModifier_do(ModifierData *md,
   if (!mmd->bindcagecos) {
     /* progress bar redraw can make this recursive .. */
     if (!DEG_is_active(ctx->depsgraph)) {
-      modifier_setError(md, "Attempt to bind from inactive dependency graph");
+      BKE_modifier_set_error(ob, md, "Attempt to bind from inactive dependency graph");
       goto finally;
     }
     if (!recursive_bind_sentinel) {
@@ -392,42 +402,38 @@ static void meshdeformModifier_do(ModifierData *md,
 
   /* verify we have compatible weights */
   totvert = numVerts;
-  totcagevert = cagemesh->totvert;
+  totcagevert = BKE_mesh_wrapper_vert_len(cagemesh);
 
   if (mmd->totvert != totvert) {
-    modifier_setError(md, "Verts changed from %d to %d", mmd->totvert, totvert);
+    BKE_modifier_set_error(ob, md, "Vertices changed from %d to %d", mmd->totvert, totvert);
     goto finally;
   }
   else if (mmd->totcagevert != totcagevert) {
-    modifier_setError(md, "Cage verts changed from %d to %d", mmd->totcagevert, totcagevert);
+    BKE_modifier_set_error(
+        ob, md, "Cage vertices changed from %d to %d", mmd->totcagevert, totcagevert);
     goto finally;
   }
   else if (mmd->bindcagecos == NULL) {
-    modifier_setError(md, "Bind data missing");
+    BKE_modifier_set_error(ob, md, "Bind data missing");
     goto finally;
   }
-
-  /* setup deformation data */
-  cagecos = BKE_mesh_vert_coords_alloc(cagemesh, NULL);
-  bindcagecos = (float(*)[3])mmd->bindcagecos;
 
   /* We allocate 1 element extra to make it possible to
    * load the values to SSE registers, which are float4.
    */
   dco = MEM_calloc_arrayN((totcagevert + 1), sizeof(*dco), "MDefDco");
   zero_v3(dco[totcagevert]);
+
+  /* setup deformation data */
+  BKE_mesh_wrapper_vert_coords_copy(cagemesh, dco, totcagevert);
+  bindcagecos = (float(*)[3])mmd->bindcagecos;
+
   for (a = 0; a < totcagevert; a++) {
     /* get cage vertex in world space with binding transform */
-    copy_v3_v3(co, cagecos[a]);
-
-    if (G.debug_value != 527) {
-      mul_m4_v3(mmd->bindmat, co);
-      /* compute difference with world space bind coord */
-      sub_v3_v3v3(dco[a], co, bindcagecos[a]);
-    }
-    else {
-      copy_v3_v3(dco[a], co);
-    }
+    float co[3];
+    mul_v3_m4v3(co, mmd->bindmat, dco[a]);
+    /* compute difference with world space bind coord */
+    sub_v3_v3v3(dco[a], co, bindcagecos[a]);
   }
 
   MOD_get_vgroup(ob, mesh, mmd->defgrp_name, &dvert, &defgrp_index);
@@ -449,7 +455,6 @@ static void meshdeformModifier_do(ModifierData *md,
 
 finally:
   MEM_SAFE_FREE(dco);
-  MEM_SAFE_FREE(cagecos);
 }
 
 static void deformVerts(ModifierData *md,
@@ -479,6 +484,11 @@ static void deformVertsEM(ModifierData *md,
   Mesh *mesh_src = MOD_deform_mesh_eval_get(
       ctx->object, editData, mesh, NULL, numVerts, false, false);
 
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  }
+
   meshdeformModifier_do(md, ctx, mesh_src, vertexCos, numVerts);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
@@ -488,7 +498,7 @@ static void deformVertsEM(ModifierData *md,
 
 #define MESHDEFORM_MIN_INFLUENCE 0.00001f
 
-void modifier_mdef_compact_influences(ModifierData *md)
+void BKE_modifier_mdef_compact_influences(ModifierData *md)
 {
   MeshDeformModifierData *mmd = (MeshDeformModifierData *)md;
   float weight, *weights, totweight;
@@ -553,13 +563,80 @@ void modifier_mdef_compact_influences(ModifierData *md)
   mmd->bindweights = NULL;
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  bool is_bound = RNA_boolean_get(ptr, "is_bound");
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, true);
+  uiLayoutSetEnabled(col, !is_bound);
+  uiItemR(col, ptr, "object", 0, NULL, ICON_NONE);
+
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  col = uiLayoutColumn(layout, false);
+  uiLayoutSetEnabled(col, !is_bound);
+  uiItemR(col, ptr, "precision", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "use_dynamic_bind", 0, NULL, ICON_NONE);
+
+  uiItemO(layout,
+          is_bound ? IFACE_("Unbind") : IFACE_("Bind"),
+          ICON_NONE,
+          "OBJECT_OT_meshdeform_bind");
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_MeshDeform, panel_draw);
+}
+
+static void blendWrite(BlendWriter *writer, const ModifierData *md)
+{
+  MeshDeformModifierData *mmd = (MeshDeformModifierData *)md;
+  int size = mmd->dyngridsize;
+
+  BLO_write_struct_array(writer, MDefInfluence, mmd->totinfluence, mmd->bindinfluences);
+  BLO_write_int32_array(writer, mmd->totvert + 1, mmd->bindoffsets);
+  BLO_write_float3_array(writer, mmd->totcagevert, mmd->bindcagecos);
+  BLO_write_struct_array(writer, MDefCell, size * size * size, mmd->dyngrid);
+  BLO_write_struct_array(writer, MDefInfluence, mmd->totinfluence, mmd->dyninfluences);
+  BLO_write_int32_array(writer, mmd->totvert, mmd->dynverts);
+}
+
+static void blendRead(BlendDataReader *reader, ModifierData *md)
+{
+  MeshDeformModifierData *mmd = (MeshDeformModifierData *)md;
+
+  BLO_read_data_address(reader, &mmd->bindinfluences);
+  BLO_read_int32_array(reader, mmd->totvert + 1, &mmd->bindoffsets);
+  BLO_read_float3_array(reader, mmd->totcagevert, &mmd->bindcagecos);
+  BLO_read_data_address(reader, &mmd->dyngrid);
+  BLO_read_data_address(reader, &mmd->dyninfluences);
+  BLO_read_int32_array(reader, mmd->totvert, &mmd->dynverts);
+
+  /* Deprecated storage. */
+  BLO_read_float_array(reader, mmd->totvert, &mmd->bindweights);
+  BLO_read_float3_array(reader, mmd->totcagevert, &mmd->bindcos);
+}
+
 ModifierTypeInfo modifierType_MeshDeform = {
     /* name */ "MeshDeform",
     /* structName */ "MeshDeformModifierData",
     /* structSize */ sizeof(MeshDeformModifierData),
+    /* srna */ &RNA_MeshDeformModifier,
     /* type */ eModifierTypeType_OnlyDeform,
-    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
+    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_MOD_MESHDEFORM,
 
     /* copyData */ copyData,
 
@@ -567,7 +644,10 @@ ModifierTypeInfo modifierType_MeshDeform = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -576,8 +656,10 @@ ModifierTypeInfo modifierType_MeshDeform = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ blendWrite,
+    /* blendRead */ blendRead,
 };

@@ -41,10 +41,10 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
   endif()
 endif()
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 
-# Prever LEGACY OpenGL to eb compatible with all the existing releases and
-# platforms which don't hare GLVND yet. Only do it if preference was not set
+# Prefer LEGACY OpenGL to be compatible with all the existing releases and
+# platforms which don't have GLVND yet. Only do it if preference was not set
 # externally.
 if(NOT DEFINED OpenGL_GL_PREFERENCE)
   set(OpenGL_GL_PREFERENCE "LEGACY")
@@ -102,6 +102,11 @@ if(POLICY CMP0068)
   cmake_policy(SET CMP0068 NEW)
 endif()
 
+# find_package() uses <PackageName>_ROOT variables.
+if(POLICY CMP0074)
+  cmake_policy(SET CMP0074 NEW)
+endif()
+
 #-----------------------------------------------------------------------------
 # Load some macros.
 include(build_files/cmake/macros.cmake)
@@ -123,7 +128,9 @@ enable_testing()
 
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin CACHE INTERNAL "" FORCE)
 set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib CACHE INTERNAL "" FORCE)
-if(MSVC)
+
+get_property(GENERATOR_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(GENERATOR_IS_MULTI_CONFIG)
   set(TESTS_OUTPUT_DIR ${EXECUTABLE_OUTPUT_PATH}/tests/$<CONFIG>/ CACHE INTERNAL "" FORCE)
 else()
   set(TESTS_OUTPUT_DIR ${EXECUTABLE_OUTPUT_PATH}/tests/ CACHE INTERNAL "" FORCE)
@@ -137,11 +144,6 @@ get_blender_version()
 
 #-----------------------------------------------------------------------------
 # Options
-
-# First platform specific non-cached vars
-if(UNIX AND NOT (APPLE OR HAIKU))
-  set(WITH_X11 ON)
-endif()
 
 # Blender internal features
 option(WITH_BLENDER "Build blender (disable to build only the blender player)" ON)
@@ -188,6 +190,7 @@ if(APPLE)
 else()
   option(WITH_XR_OPENXR   "Enable VR features through the OpenXR specification" ON)
 endif()
+option(WITH_GMP "Enable features depending on GMP (Exact Boolean)" ON)
 
 # Compositor
 option(WITH_COMPOSITOR         "Enable the tile based nodal compositor" ON)
@@ -195,10 +198,12 @@ option(WITH_OPENIMAGEDENOISE   "Enable the OpenImageDenoise compositing node" ON
 
 option(WITH_OPENSUBDIV    "Enable OpenSubdiv for surface subdivision" ON)
 
+option(WITH_POTRACE       "Enable features relying on potrace" ON)
 option(WITH_OPENVDB       "Enable features relying on OpenVDB" ON)
 option(WITH_OPENVDB_BLOSC "Enable blosc compression for OpenVDB, only enable if OpenVDB was built with blosc support" ON)
 option(WITH_OPENVDB_3_ABI_COMPATIBLE "Assume OpenVDB library has been compiled with version 3 ABI compatibility" OFF)
 mark_as_advanced(WITH_OPENVDB_3_ABI_COMPATIBLE)
+option(WITH_NANOVDB       "Enable usage of NanoVDB data structure for accelerated rendering on the GPU" OFF)
 
 # GHOST Windowing Library Options
 option(WITH_GHOST_DEBUG   "Enable debugging output for the GHOST library" OFF)
@@ -207,7 +212,15 @@ mark_as_advanced(WITH_GHOST_DEBUG)
 option(WITH_GHOST_SDL    "Enable building Blender against SDL for windowing rather than the native APIs" OFF)
 mark_as_advanced(WITH_GHOST_SDL)
 
-if(WITH_X11)
+if(UNIX AND NOT (APPLE OR HAIKU))
+  option(WITH_GHOST_X11 "Enable building Blender against X11 for windowing" ON)
+  mark_as_advanced(WITH_GHOST_X11)
+
+  option(WITH_GHOST_WAYLAND "Enable building Blender against Wayland for windowing (under development)" OFF)
+  mark_as_advanced(WITH_GHOST_WAYLAND)
+endif()
+
+if(WITH_GHOST_X11)
   option(WITH_GHOST_XDND    "Enable drag'n'drop support on X11 using XDND protocol" ON)
 endif()
 
@@ -232,7 +245,7 @@ if(UNIX AND NOT APPLE)
   mark_as_advanced(WITH_OPENMP_STATIC)
 endif()
 
-if(WITH_X11)
+if(WITH_GHOST_X11)
   option(WITH_X11_XINPUT    "Enable X11 Xinput (tablet support and unicode input)"  ON)
   option(WITH_X11_XF86VMODE "Enable X11 video mode switching"                       ON)
   option(WITH_X11_XFIXES    "Enable X11 XWayland cursor warping workaround"         ON)
@@ -275,7 +288,6 @@ option(WITH_CODEC_SNDFILE       "Enable libsndfile Support (http://www.mega-nerd
 
 # Alembic support
 option(WITH_ALEMBIC             "Enable Alembic Support" ON)
-option(WITH_ALEMBIC_HDF5        "Enable Legacy Alembic Support (not officially supported)" OFF)
 
 # Universal Scene Description support
 option(WITH_USD                 "Enable Universal Scene Description (USD) Support" ON)
@@ -319,10 +331,6 @@ mark_as_advanced(WITH_SYSTEM_GLOG)
 # Freestyle
 option(WITH_FREESTYLE     "Enable Freestyle (advanced edges rendering)" ON)
 
-# New object types
-option(WITH_NEW_OBJECT_TYPES "Enable new hair and pointcloud objects (use for development only, don't save in files)" OFF)
-mark_as_advanced(WITH_NEW_OBJECT_TYPES)
-
 # Misc
 if(WIN32)
   option(WITH_INPUT_IME "Enable Input Method Editor (IME) for complex Asian character input" ON)
@@ -364,12 +372,12 @@ option(WITH_CYCLES                  "Enable Cycles Render Engine" ON)
 option(WITH_CYCLES_STANDALONE       "Build Cycles standalone application" OFF)
 option(WITH_CYCLES_STANDALONE_GUI   "Build Cycles standalone with GUI" OFF)
 option(WITH_CYCLES_OSL              "Build Cycles with OSL support" ON)
-option(WITH_CYCLES_EMBREE           "Build Cycles with Embree support" OFF)
+option(WITH_CYCLES_EMBREE           "Build Cycles with Embree support" ON)
 option(WITH_CYCLES_CUDA_BINARIES    "Build Cycles CUDA binaries" OFF)
 option(WITH_CYCLES_CUBIN_COMPILER   "Build cubins with nvrtc based compiler instead of nvcc" OFF)
 option(WITH_CYCLES_CUDA_BUILD_SERIAL "Build cubins one after another (useful on machines with limited RAM)" OFF)
 mark_as_advanced(WITH_CYCLES_CUDA_BUILD_SERIAL)
-set(CYCLES_CUDA_BINARIES_ARCH sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 sm_70 sm_75 CACHE STRING "CUDA architectures to build binaries for")
+set(CYCLES_CUDA_BINARIES_ARCH sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 sm_70 sm_75 sm_86 compute_75 CACHE STRING "CUDA architectures to build binaries for")
 mark_as_advanced(CYCLES_CUDA_BINARIES_ARCH)
 unset(PLATFORM_DEFAULT)
 option(WITH_CYCLES_LOGGING  "Build Cycles with logging support" ON)
@@ -417,6 +425,11 @@ mark_as_advanced(WITH_CXX_GUARDEDALLOC)
 option(WITH_ASSERT_ABORT "Call abort() when raising an assertion through BLI_assert()" ON)
 mark_as_advanced(WITH_ASSERT_ABORT)
 
+if(UNIX AND NOT APPLE)
+  option(WITH_CLANG_TIDY "Use Clang Tidy to analyze the source code (only enable for development on Linux using Clang)" OFF)
+  mark_as_advanced(WITH_CLANG_TIDY)
+endif()
+
 option(WITH_BOOST "Enable features depending on boost" ON)
 option(WITH_TBB   "Enable features depending on TBB (OpenVDB, OpenImageDenoise, sculpt multithreading)" ON)
 
@@ -425,10 +438,20 @@ if(WIN32)
   option(WITH_TBB_MALLOC_PROXY "Enable the TBB malloc replacement" ON)
 endif()
 
+# This should be turned off when Blender enter beta/rc/release
+if("${BLENDER_VERSION_CYCLE}" STREQUAL "release" OR
+   "${BLENDER_VERSION_CYCLE}" STREQUAL "rc")
+  set(WITH_EXPERIMENTAL_FEATURES OFF)
+else()
+  set(WITH_EXPERIMENTAL_FEATURES ON)
+endif()
+
 # Unit testsing
 option(WITH_GTESTS "Enable GTest unit testing" OFF)
 option(WITH_OPENGL_RENDER_TESTS "Enable OpenGL render related unit testing (Experimental)" OFF)
 option(WITH_OPENGL_DRAW_TESTS "Enable OpenGL UI drawing related unit testing (Experimental)" OFF)
+set(TEST_PYTHON_EXE "" CACHE PATH "Python executable to run unit tests")
+mark_as_advanced(TEST_PYTHON_EXE)
 
 # Documentation
 if(UNIX AND NOT APPLE)
@@ -469,6 +492,8 @@ endif()
 if(CMAKE_COMPILER_IS_GNUCC)
   option(WITH_LINKER_GOLD "Use ld.gold linker which is usually faster than ld.bfd" ON)
   mark_as_advanced(WITH_LINKER_GOLD)
+  option(WITH_LINKER_LLD "Use ld.lld linker which is usually faster than ld.gold" OFF)
+  mark_as_advanced(WITH_LINKER_LLD)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
@@ -491,9 +516,22 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
 -fno-sanitize=alignment \
 ")
 
-    if(NOT MSVC) # not all sanitizers are supported with clang-cl, these two however are very vocal about it
-      set(_asan_defaults "${_asan_defaults} -fsanitize=leak -fsanitize=object-size" )
+    if(MSVC)
+      # clang-cl doesn't support all sanitizers, but leak and object-size give errors/warnings.
+      set(_asan_defaults "${_asan_defaults}")
+    elseif(APPLE)
+      # AppleClang doesn't support all sanitizers, but leak gives error.
+      # Build type is not known for multi-config generator, so don't add object-size sanitizer.
+      if(CMAKE_BUILD_TYPE MATCHES "Debug" OR GENERATOR_IS_MULTI_CONFIG)
+        # Silence the warning that object-size is not effective in -O0.
+        set(_asan_defaults "${_asan_defaults}")
+      else()
+        set(_asan_defaults "${_asan_defaults} -fsanitize=object-size")
+      endif()
+    else()
+      set(_asan_defaults "${_asan_defaults} -fsanitize=leak -fsanitize=object-size")
     endif()
+
     set(COMPILER_ASAN_CFLAGS "${_asan_defaults}" CACHE STRING "C flags for address sanitizer")
     mark_as_advanced(COMPILER_ASAN_CFLAGS)
     set(COMPILER_ASAN_CXXFLAGS "${_asan_defaults}" CACHE STRING "C++ flags for address sanitizer")
@@ -501,16 +539,33 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
 
     unset(_asan_defaults)
 
-    if(NOT MSVC)
-      find_library(COMPILER_ASAN_LIBRARY asan ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES})
-    else()
-      find_library(
-        COMPILER_ASAN_LIBRARY NAMES clang_rt.asan-x86_64
+    if(MSVC)
+        find_library(
+          COMPILER_ASAN_LIBRARY NAMES clang_rt.asan-x86_64
         PATHS
         [HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\LLVM\\LLVM;]/lib/clang/7.0.0/lib/windows
         [HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\LLVM\\LLVM;]/lib/clang/6.0.0/lib/windows
       )
+    elseif(APPLE)
+      execute_process(COMMAND ${CMAKE_CXX_COMPILER}
+        -print-file-name=lib
+        OUTPUT_VARIABLE CLANG_LIB_DIR
+      )
+      string(STRIP "${CLANG_LIB_DIR}" CLANG_LIB_DIR)
+      find_library(
+        COMPILER_ASAN_LIBRARY
+        NAMES
+          libclang_rt.asan_osx_dynamic.dylib
+        PATHS
+          "${CLANG_LIB_DIR}/darwin/"
+      )
+      unset(CLANG_LIB_DIR)
+    else()
+      find_library(
+        COMPILER_ASAN_LIBRARY asan ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES}
+      )
     endif()
+
     mark_as_advanced(COMPILER_ASAN_LIBRARY)
   endif()
 endif()
@@ -531,6 +586,15 @@ if(WIN32)
 
   option(WITH_WINDOWS_BUNDLE_CRT "Bundle the C runtime for install free distribution." ON)
   mark_as_advanced(WITH_WINDOWS_BUNDLE_CRT)
+
+  option(WITH_WINDOWS_SCCACHE "Use sccache to speed up builds (Ninja builder only)" OFF)
+  mark_as_advanced(WITH_WINDOWS_SCCACHE)
+
+  option(WITH_WINDOWS_PDB "Generate a pdb file for client side stacktraces" ON)
+  mark_as_advanced(WITH_WINDOWS_PDB)
+
+  option(WITH_WINDOWS_STRIPPED_PDB "Use a stripped PDB file" On)
+  mark_as_advanced(WITH_WINDOWS_STRIPPED_PDB)
 
 endif()
 
@@ -635,10 +699,14 @@ if(WITH_BOOST AND NOT (WITH_CYCLES OR WITH_OPENIMAGEIO OR WITH_INTERNATIONAL OR
   set(WITH_BOOST OFF)
 endif()
 
+set_and_warn_dependency(WITH_TBB WITH_CYCLES            OFF)
 set_and_warn_dependency(WITH_TBB WITH_USD               OFF)
 set_and_warn_dependency(WITH_TBB WITH_OPENIMAGEDENOISE  OFF)
 set_and_warn_dependency(WITH_TBB WITH_OPENVDB           OFF)
 set_and_warn_dependency(WITH_TBB WITH_MOD_FLUID         OFF)
+
+# NanoVDB requires OpenVDB to convert the data structure
+set_and_warn_dependency(WITH_OPENVDB WITH_NANOVDB       OFF)
 
 # OpenVDB uses 'half' type from OpenEXR & fails to link without OpenEXR enabled.
 set_and_warn_dependency(WITH_IMAGE_OPENEXR WITH_OPENVDB OFF)
@@ -672,7 +740,8 @@ if(WITH_INSTALL_PORTABLE)
 endif()
 
 if(WITH_GHOST_SDL OR WITH_HEADLESS)
-  set(WITH_X11           OFF)
+  set(WITH_GHOST_WAYLAND OFF)
+  set(WITH_GHOST_X11     OFF)
   set(WITH_X11_XINPUT    OFF)
   set(WITH_X11_XF86VMODE OFF)
   set(WITH_X11_XFIXES    OFF)
@@ -773,11 +842,10 @@ set(CXX_WARNINGS)
 set(C_REMOVE_STRICT_FLAGS)
 set(CXX_REMOVE_STRICT_FLAGS)
 
-# libraries to link the binary with passed to target_link_libraries()
-# known as LLIBS to scons
+# Libraries to link to targets in setup_platform_linker_libs
 set(PLATFORM_LINKLIBS "")
 
-# Added to linker flags in setup_liblinks
+# Added to target linker flags in setup_platform_linker_flags
 # - CMAKE_EXE_LINKER_FLAGS
 # - CMAKE_EXE_LINKER_FLAGS_DEBUG
 set(PLATFORM_LINKFLAGS "")
@@ -785,15 +853,27 @@ set(PLATFORM_LINKFLAGS_DEBUG "")
 
 if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
   if(WITH_COMPILER_ASAN)
-    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${COMPILER_ASAN_CFLAGS}")
-    set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CFLAGS}")
+    if(NOT APPLE)
+      # Avoid passing address sanitizer compiler flags to `try_compile`.
+      # Since linker flags are not set, all compiler checks and `find_package`
+      # calls that rely on `try_compile` will fail.
+      # See CMP0066 also.
+      set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${COMPILER_ASAN_CFLAGS}")
+      set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CFLAGS}")
 
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${COMPILER_ASAN_CXXFLAGS}")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CXXFLAGS}")
+      set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${COMPILER_ASAN_CXXFLAGS}")
+      set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CXXFLAGS}")
+    endif()
     if(MSVC)
       set(COMPILER_ASAN_LINKER_FLAGS "/FUNCTIONPADMIN:6")
     endif()
-    if(COMPILER_ASAN_LIBRARY)
+
+    if(APPLE AND COMPILER_ASAN_LIBRARY)
+      string(REPLACE " " ";" _list_COMPILER_ASAN_CFLAGS ${COMPILER_ASAN_CFLAGS})
+      add_compile_options("$<$<NOT:$<CONFIG:Release>>:${_list_COMPILER_ASAN_CFLAGS}>")
+      add_link_options("$<$<NOT:$<CONFIG:Release>>:-fno-omit-frame-pointer;-fsanitize=address>")
+      unset(_list_COMPILER_ASAN_CFLAGS)
+    elseif(COMPILER_ASAN_LIBRARY)
       set(PLATFORM_LINKLIBS "${PLATFORM_LINKLIBS};${COMPILER_ASAN_LIBRARY}")
       set(PLATFORM_LINKFLAGS "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
       set(PLATFORM_LINKFLAGS_DEBUG "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
@@ -882,7 +962,7 @@ if(MSVC)
   # endianess-detection and auto-setting is counterproductive
   # so we just set endianness according CMAKE_OSX_ARCHITECTURES
 
-elseif(CMAKE_OSX_ARCHITECTURES MATCHES i386 OR CMAKE_OSX_ARCHITECTURES MATCHES x86_64)
+elseif(CMAKE_OSX_ARCHITECTURES MATCHES i386 OR CMAKE_OSX_ARCHITECTURES MATCHES x86_64 OR CMAKE_OSX_ARCHITECTURES MATCHES arm64)
   add_definitions(-D__LITTLE_ENDIAN__)
 elseif(CMAKE_OSX_ARCHITECTURES MATCHES ppc OR CMAKE_OSX_ARCHITECTURES MATCHES ppc64)
   add_definitions(-D__BIG_ENDIAN__)
@@ -1225,7 +1305,7 @@ endif()
 
 if(WITH_LIBMV)
   # We always have C++11 which includes unordered_map.
-  set(CERES_DEFINES -DCERES_STD_UNORDERED_MAP)
+  set(CERES_DEFINES "-DCERES_STD_UNORDERED_MAP;-DCERES_USE_CXX_THREADS")
 endif()
 
 #-----------------------------------------------------------------------------
@@ -1541,20 +1621,21 @@ if(WITH_PYTHON)
 endif()
 
 if(MSVC)
-  # MSVC needs to be tested first, since clang on windows will
-  # match the compiler test below but clang-cl does not accept -std=c++11
-  # since it is on by default and cannot be turned off.
-  #
-  # Nothing special is needed, C++11 features are available by default.
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17")
+  # Make MSVC properly report the value of the __cplusplus preprocessor macro
+  # Available MSVC 15.7 (1914) and up, without this it reports 199711L regardless
+  # of the C++ standard chosen above
+  if(MSVC_VERSION GREATER 1913)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:__cplusplus")
+  endif()
 elseif(
   CMAKE_COMPILER_IS_GNUCC OR
   CMAKE_C_COMPILER_ID MATCHES "Clang" OR
   CMAKE_C_COMPILER_ID MATCHES "Intel"
 )
-  # TODO(sergey): Do we want c++11 or gnu-c++11 here?
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 else()
-  message(FATAL_ERROR "Unknown compiler ${CMAKE_C_COMPILER_ID}, can't enable C++11 build")
+  message(FATAL_ERROR "Unknown compiler ${CMAKE_C_COMPILER_ID}, can't enable C++17 build")
 endif()
 
 # Visual Studio has all standards it supports available by default
@@ -1614,10 +1695,6 @@ endif()
 
 #-----------------------------------------------------------------------------
 # Libraries
-
-if(WITH_GTESTS)
-  include(GTestTesting)
-endif()
 
 if(WITH_BLENDER)
   add_subdirectory(intern)
@@ -1712,6 +1789,8 @@ if(FIRST_RUN)
   info_cfg_option(WITH_ALEMBIC)
   info_cfg_option(WITH_QUADRIFLOW)
   info_cfg_option(WITH_USD)
+  info_cfg_option(WITH_TBB)
+  info_cfg_option(WITH_GMP)
 
   info_cfg_text("Compiler Options:")
   info_cfg_option(WITH_BUILDINFO)

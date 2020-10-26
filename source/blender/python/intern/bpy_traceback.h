@@ -18,9 +18,14 @@
  * \ingroup pythonintern
  */
 
-#ifndef __BPY_TRACEBACK_H__
-#define __BPY_TRACEBACK_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void python_script_error_jump(const char *filepath, int *lineno, int *offset);
 
-#endif /* __BPY_TRACEBACK_H__ */
+#ifdef __cplusplus
+}
+#endif

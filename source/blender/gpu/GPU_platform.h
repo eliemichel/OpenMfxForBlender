@@ -21,14 +21,10 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_PLATFORM_H__
-#define __GPU_PLATFORM_H__
+#pragma once
 
 #include "BLI_sys_types.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "BLI_utildefines.h"
 
 /* GPU platform support */
 
@@ -42,6 +38,8 @@ typedef enum eGPUDeviceType {
   GPU_DEVICE_UNKNOWN = (1 << 5),
   GPU_DEVICE_ANY = (0xff),
 } eGPUDeviceType;
+
+ENUM_OPERATORS(eGPUDeviceType, GPU_DEVICE_ANY)
 
 typedef enum eGPUOSType {
   GPU_OS_WIN = (1 << 8),
@@ -63,6 +61,10 @@ typedef enum eGPUSupportLevel {
   GPU_SUPPORT_LEVEL_UNSUPPORTED,
 } eGPUSupportLevel;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 bool GPU_type_matches(eGPUDeviceType device, eGPUOSType os, eGPUDriverType driver);
 eGPUSupportLevel GPU_platform_support_level(void);
 const char *GPU_platform_support_level_key(void);
@@ -71,5 +73,3 @@ const char *GPU_platform_gpu_name(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_PLATFORM_H__ */

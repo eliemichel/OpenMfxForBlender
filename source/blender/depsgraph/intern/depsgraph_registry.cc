@@ -27,48 +27,43 @@
 
 #include "intern/depsgraph.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
-typedef set<Depsgraph *> DepsgraphStorage;
-typedef map<Main *, DepsgraphStorage> MainDepsgraphMap;
-
-static MainDepsgraphMap g_graph_registry;
+using GraphRegistry = Map<Main *, VectorSet<Depsgraph *>>;
+static GraphRegistry &get_graph_registry()
+{
+  static GraphRegistry graph_registry;
+  return graph_registry;
+}
 
 void register_graph(Depsgraph *depsgraph)
 {
   Main *bmain = depsgraph->bmain;
-  MainDepsgraphMap::iterator it = g_graph_registry.find(bmain);
-  if (it == g_graph_registry.end()) {
-    it = g_graph_registry.insert(make_pair(bmain, DepsgraphStorage())).first;
-  }
-  DepsgraphStorage &storage = it->second;
-  storage.insert(depsgraph);
+  get_graph_registry().lookup_or_add_default(bmain).add_new(depsgraph);
 }
 
 void unregister_graph(Depsgraph *depsgraph)
 {
   Main *bmain = depsgraph->bmain;
-  MainDepsgraphMap::iterator it = g_graph_registry.find(bmain);
-  BLI_assert(it != g_graph_registry.end());
-
-  // Remove dependency graph from storage.
-  DepsgraphStorage &storage = it->second;
-  storage.erase(depsgraph);
+  GraphRegistry &graph_registry = get_graph_registry();
+  VectorSet<Depsgraph *> &graphs = graph_registry.lookup(bmain);
+  graphs.remove(depsgraph);
 
   // If this was the last depsgraph associated with the main, remove the main entry as well.
-  if (storage.empty()) {
-    g_graph_registry.erase(bmain);
+  if (graphs.is_empty()) {
+    graph_registry.remove(bmain);
   }
 }
 
-const set<Depsgraph *> &get_all_registered_graphs(Main *bmain)
+Span<Depsgraph *> get_all_registered_graphs(Main *bmain)
 {
-  MainDepsgraphMap::iterator it = g_graph_registry.find(bmain);
-  if (it == g_graph_registry.end()) {
-    static DepsgraphStorage empty_storage;
-    return empty_storage;
+  VectorSet<Depsgraph *> *graphs = get_graph_registry().lookup_ptr(bmain);
+  if (graphs != nullptr) {
+    return *graphs;
   }
-  return it->second;
+  return {};
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

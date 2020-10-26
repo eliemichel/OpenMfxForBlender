@@ -27,21 +27,20 @@
 
 #include <cmath>
 
-#include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_math_vector.h"
 #include "BLI_task.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_key.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
 
-extern "C" {
+#include "DNA_key_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
 #include "DRW_engine.h"
-} /* extern "C" */
 
 #include "DEG_depsgraph.h"
 
@@ -70,7 +69,8 @@ extern "C" {
 // catch usage of invalid state.
 #undef INVALIDATE_ON_FLUSH
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 enum {
   ID_STATE_NONE = 0,
@@ -94,12 +94,12 @@ void flush_init_id_node_func(void *__restrict data_v,
   Depsgraph *graph = (Depsgraph *)data_v;
   IDNode *id_node = graph->id_nodes[i];
   id_node->custom_flags = ID_STATE_NONE;
-  GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components)
+  for (ComponentNode *comp_node : id_node->components.values()) {
     comp_node->custom_flags = COMPONENT_STATE_NONE;
-  GHASH_FOREACH_END();
+  }
 }
 
-BLI_INLINE void flush_prepare(Depsgraph *graph)
+inline void flush_prepare(Depsgraph *graph)
 {
   for (OperationNode *node : graph->operations) {
     node->scheduled = false;
@@ -114,9 +114,9 @@ BLI_INLINE void flush_prepare(Depsgraph *graph)
   }
 }
 
-BLI_INLINE void flush_schedule_entrypoints(Depsgraph *graph, FlushQueue *queue)
+inline void flush_schedule_entrypoints(Depsgraph *graph, FlushQueue *queue)
 {
-  GSET_FOREACH_BEGIN (OperationNode *, op_node, graph->entry_tags) {
+  for (OperationNode *op_node : graph->entry_tags) {
     queue->push_back(op_node);
     op_node->scheduled = true;
     DEG_DEBUG_PRINTF((::Depsgraph *)graph,
@@ -124,18 +124,17 @@ BLI_INLINE void flush_schedule_entrypoints(Depsgraph *graph, FlushQueue *queue)
                      "Operation is entry point for update: %s\n",
                      op_node->identifier().c_str());
   }
-  GSET_FOREACH_END();
 }
 
-BLI_INLINE void flush_handle_id_node(IDNode *id_node)
+inline void flush_handle_id_node(IDNode *id_node)
 {
   id_node->custom_flags = ID_STATE_MODIFIED;
 }
 
 /* TODO(sergey): We can reduce number of arguments here. */
-BLI_INLINE void flush_handle_component_node(IDNode *id_node,
-                                            ComponentNode *comp_node,
-                                            FlushQueue *queue)
+inline void flush_handle_component_node(IDNode *id_node,
+                                        ComponentNode *comp_node,
+                                        FlushQueue *queue)
 {
   /* We only handle component once. */
   if (comp_node->custom_flags == COMPONENT_STATE_DONE) {
@@ -170,7 +169,7 @@ BLI_INLINE void flush_handle_component_node(IDNode *id_node,
  * return value, so it can start being handled right away, without building too
  * much of a queue.
  */
-BLI_INLINE OperationNode *flush_schedule_children(OperationNode *op_node, FlushQueue *queue)
+inline OperationNode *flush_schedule_children(OperationNode *op_node, FlushQueue *queue)
 {
   if (op_node->flag & DEPSOP_FLAG_USER_MODIFIED) {
     IDNode *id_node = op_node->owner->owner;
@@ -231,7 +230,7 @@ void flush_editors_id_update(Depsgraph *graph, const DEGEditorUpdateContext *upd
     ID *id_orig = id_node->id_orig;
     ID *id_cow = id_node->id_cow;
     /* Gather recalc flags from all changed components. */
-    GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components) {
+    for (ComponentNode *comp_node : id_node->components.values()) {
       if (comp_node->custom_flags != COMPONENT_STATE_DONE) {
         continue;
       }
@@ -239,7 +238,6 @@ void flush_editors_id_update(Depsgraph *graph, const DEGEditorUpdateContext *upd
       BLI_assert(factory != nullptr);
       id_cow->recalc |= factory->id_recalc_tag();
     }
-    GHASH_FOREACH_END();
     DEG_DEBUG_PRINTF((::Depsgraph *)graph,
                      EVAL,
                      "Accumulated recalc bits for %s: %u\n",
@@ -255,10 +253,30 @@ void flush_editors_id_update(Depsgraph *graph, const DEGEditorUpdateContext *upd
     if (deg_copy_on_write_is_expanded(id_cow)) {
       if (graph->is_active && id_node->is_user_modified) {
         deg_editors_id_update(update_ctx, id_orig);
-      }
-      /* ID may need to get its auto-override operations refreshed. */
-      if (ID_IS_OVERRIDE_LIBRARY_AUTO(id_orig)) {
-        id_orig->tag |= LIB_TAG_OVERRIDE_LIBRARY_AUTOREFRESH;
+
+        /* We only want to tag an ID for lib-override auto-refresh if it was actually tagged as
+         * changed. CoW IDs indirectly modified because of changes in other IDs should never
+         * require a lib-override diffing. */
+        if (ID_IS_OVERRIDE_LIBRARY_REAL(id_orig)) {
+          id_orig->tag |= LIB_TAG_OVERRIDE_LIBRARY_AUTOREFRESH;
+        }
+        else if (ID_IS_OVERRIDE_LIBRARY_VIRTUAL(id_orig)) {
+          switch (GS(id_orig->name)) {
+            case ID_KE:
+              ((Key *)id_orig)->from->tag |= LIB_TAG_OVERRIDE_LIBRARY_AUTOREFRESH;
+              break;
+            case ID_GR:
+              BLI_assert(id_orig->flag & LIB_EMBEDDED_DATA);
+              /* TODO. */
+              break;
+            case ID_NT:
+              BLI_assert(id_orig->flag & LIB_EMBEDDED_DATA);
+              /* TODO. */
+              break;
+            default:
+              BLI_assert(0);
+          }
+        }
       }
       /* Inform draw engines that something was changed. */
       flush_engine_data_update(id_cow);
@@ -307,7 +325,7 @@ void invalidate_tagged_evaluated_data(Depsgraph *graph)
     if (!deg_copy_on_write_is_expanded(id_cow)) {
       continue;
     }
-    GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components) {
+    for (ComponentNode *comp_node : id_node->components.values()) {
       if (comp_node->custom_flags != COMPONENT_STATE_DONE) {
         continue;
       }
@@ -322,7 +340,6 @@ void invalidate_tagged_evaluated_data(Depsgraph *graph)
           break;
       }
     }
-    GHASH_FOREACH_END();
   }
 #else
   (void)graph;
@@ -334,20 +351,16 @@ void invalidate_tagged_evaluated_data(Depsgraph *graph)
 /* Flush updates from tagged nodes outwards until all affected nodes
  * are tagged.
  */
-void deg_graph_flush_updates(Main *bmain, Depsgraph *graph)
+void deg_graph_flush_updates(Depsgraph *graph)
 {
   /* Sanity checks. */
-  BLI_assert(bmain != nullptr);
   BLI_assert(graph != nullptr);
+  Main *bmain = graph->bmain;
+
+  graph->time_source->flush_update_tag(graph);
+
   /* Nothing to update, early out. */
-  if (graph->need_update_time) {
-    const Scene *scene_orig = graph->scene;
-    const float ctime = BKE_scene_frame_get(scene_orig);
-    DEG::TimeSourceNode *time_source = graph->find_time_source();
-    graph->ctime = ctime;
-    time_source->tag_update(graph, DEG::DEG_UPDATE_SOURCE_TIME);
-  }
-  if (BLI_gset_len(graph->entry_tags) == 0) {
+  if (graph->entry_tags.is_empty()) {
     return;
   }
   /* Reset all flags, get ready for the flush. */
@@ -393,7 +406,10 @@ void deg_graph_clear_tags(Depsgraph *graph)
                     DEPSOP_FLAG_USER_MODIFIED);
   }
   /* Clear any entry tags which haven't been flushed. */
-  BLI_gset_clear(graph->entry_tags, nullptr);
+  graph->entry_tags.clear();
+
+  graph->time_source->tagged_for_update = false;
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

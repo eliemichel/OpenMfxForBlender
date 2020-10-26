@@ -239,7 +239,7 @@ int imagewrap(Tex *tex,
     }
   }
 
-  /* keep this before interpolation [#29761] */
+  /* Keep this before interpolation T29761. */
   if (ima) {
     if ((tex->imaflag & TEX_USEALPHA) && (ima->alpha_mode != IMA_ALPHA_IGNORE)) {
       if ((tex->imaflag & TEX_CALCALPHA) == 0) {
@@ -254,7 +254,7 @@ int imagewrap(Tex *tex,
     filterx = (0.5f * tex->filtersize) / ibuf->x;
     filtery = (0.5f * tex->filtersize) / ibuf->y;
 
-    /* important that this value is wrapped [#27782]
+    /* Important that this value is wrapped T27782.
      * this applies the modifications made by the checks above,
      * back to the floating point values */
     fx -= (float)(xi - x) / (float)ibuf->x;
@@ -491,7 +491,7 @@ static float clipx_rctf(rctf *rf, float x1, float x2)
     rf->xmin = rf->xmax;
     return 0.0;
   }
-  else if (size != 0.0f) {
+  if (size != 0.0f) {
     return BLI_rctf_size_x(rf) / size;
   }
   return 1.0;
@@ -514,7 +514,7 @@ static float clipy_rctf(rctf *rf, float y1, float y2)
     rf->ymin = rf->ymax;
     return 0.0;
   }
-  else if (size != 0.0f) {
+  if (size != 0.0f) {
     return BLI_rctf_size_y(rf) / size;
   }
   return 1.0;
@@ -888,7 +888,7 @@ static void ewa_read_pixel_cb(void *userdata, int x, int y, float result[4])
 static void ewa_eval(TexResult *texr, ImBuf *ibuf, float fx, float fy, afdata_t *AFD)
 {
   ReadEWAData data;
-  float uv[2] = {fx, fy};
+  const float uv[2] = {fx, fy};
   data.ibuf = ibuf;
   data.AFD = AFD;
   BLI_ewa_filter(ibuf->x,

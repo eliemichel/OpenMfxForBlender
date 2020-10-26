@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2011 by Bastien Montagne.
@@ -27,6 +27,8 @@
 #include "BLI_rand.h"
 #include "BLI_string.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_color_types.h" /* CurveMapping. */
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -35,15 +37,22 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_colortools.h" /* CurveMapping. */
+#include "BKE_context.h"
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
 #include "BKE_modifier.h"
 #include "BKE_texture.h" /* Texture masking. */
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
 #include "MEM_guardedalloc.h"
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 #include "MOD_weightvg_util.h"
 #include "RE_shader_ext.h" /* Texture masking. */
@@ -74,7 +83,7 @@ void weightvg_do_map(
   }
 
   if (cmap && falloff_type == MOD_WVG_MAPPING_CURVE) {
-    BKE_curvemapping_initialize(cmap);
+    BKE_curvemapping_init(cmap);
   }
 
   /* Map each weight (vertex) to its new value, accordingly to the chosen mode. */
@@ -240,9 +249,10 @@ void weightvg_do_mask(const ModifierEvalContext *ctx,
     /* For each weight (vertex), make the mix between org and new weights. */
     for (i = 0; i < num; i++) {
       int idx = indices ? indices[i] : i;
-      const float f = invert_vgroup_mask ?
-                          1.0f - BKE_defvert_find_weight(&dvert[idx], ref_didx) * fact :
-                          BKE_defvert_find_weight(&dvert[idx], ref_didx) * fact;
+      const float f = (invert_vgroup_mask ?
+                           (1.0f - BKE_defvert_find_weight(&dvert[idx], ref_didx)) :
+                           BKE_defvert_find_weight(&dvert[idx], ref_didx)) *
+                      fact;
       org_w[i] = (new_w[i] * f) + (org_w[i] * (1.0f - f));
       /* If that vertex is not in ref vgroup, assume null factor, and hence do nothing! */
     }
@@ -272,9 +282,35 @@ void weightvg_update_vg(MDeformVert *dvert,
                         const bool do_add,
                         const float add_thresh,
                         const bool do_rem,
-                        const float rem_thresh)
+                        const float rem_thresh,
+                        const bool do_normalize)
 {
   int i;
+
+  float min_w = weights[0];
+  float norm_fac = 1.0f;
+  if (do_normalize) {
+    float max_w = weights[0];
+    for (i = 1; i < num; i++) {
+      const float w = weights[i];
+
+      /* No need to clamp here, normalization will ensure we stay within [0.0, 1.0] range. */
+      if (w < min_w) {
+        min_w = w;
+      }
+      else if (w > max_w) {
+        max_w = w;
+      }
+    }
+
+    const float range = max_w - min_w;
+    if (fabsf(range) > FLT_EPSILON) {
+      norm_fac = 1.0f / range;
+    }
+    else {
+      min_w = 0.0f;
+    }
+  }
 
   for (i = 0; i < num; i++) {
     float w = weights[i];
@@ -282,6 +318,9 @@ void weightvg_update_vg(MDeformVert *dvert,
     MDeformWeight *dw = dws ? dws[i] :
                               ((defgrp_idx >= 0) ? BKE_defvert_find_index(dv, defgrp_idx) : NULL);
 
+    if (do_normalize) {
+      w = (w - min_w) * norm_fac;
+    }
     /* Never allow weights out of [0.0, 1.0] range. */
     CLAMP(w, 0.0f, 1.0f);
 
@@ -297,6 +336,51 @@ void weightvg_update_vg(MDeformVert *dvert,
     /* Else, add it if needed! */
     else if (do_add && w > add_thresh) {
       BKE_defvert_add_index_notest(dv, defgrp_idx, w);
+    }
+  }
+}
+
+/* Common vertex weight mask interface elements for the modifier panels.
+ */
+void weightvg_ui_common(const bContext *C, PointerRNA *ob_ptr, PointerRNA *ptr, uiLayout *layout)
+{
+  PointerRNA mask_texture_ptr = RNA_pointer_get(ptr, "mask_texture");
+  bool has_mask_texture = !RNA_pointer_is_null(&mask_texture_ptr);
+  bool has_mask_vertex_group = RNA_string_length(ptr, "mask_vertex_group") != 0;
+  int mask_tex_mapping = RNA_enum_get(ptr, "mask_tex_mapping");
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "mask_constant", UI_ITEM_R_SLIDER, IFACE_("Global Influence:"), ICON_NONE);
+
+  if (!has_mask_texture) {
+    modifier_vgroup_ui(layout, ptr, ob_ptr, "mask_vertex_group", "invert_mask_vertex_group", NULL);
+  }
+
+  if (!has_mask_vertex_group) {
+    uiTemplateID(layout,
+                 C,
+                 ptr,
+                 "mask_texture",
+                 "texture.new",
+                 NULL,
+                 NULL,
+                 0,
+                 ICON_NONE,
+                 IFACE_("Mask Texture"));
+
+    if (has_mask_texture) {
+      uiItemR(layout, ptr, "mask_tex_use_channel", 0, IFACE_("Channel"), ICON_NONE);
+      uiItemR(layout, ptr, "mask_tex_mapping", 0, NULL, ICON_NONE);
+
+      if (mask_tex_mapping == MOD_DISP_MAP_OBJECT) {
+        uiItemR(layout, ptr, "mask_tex_map_object", 0, IFACE_("Object"), ICON_NONE);
+      }
+      else if (mask_tex_mapping == MOD_DISP_MAP_UV && RNA_enum_get(ob_ptr, "type") == OB_MESH) {
+        PointerRNA obj_data_ptr = RNA_pointer_get(ob_ptr, "data");
+        uiItemPointerR(
+            layout, ptr, "mask_tex_uv_layer", &obj_data_ptr, "uv_layers", NULL, ICON_NONE);
+      }
     }
   }
 }

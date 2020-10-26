@@ -82,7 +82,7 @@
 #  include <libswscale/swscale.h>
 
 #  include "ffmpeg_compat.h"
-#endif  // WITH_FFMPEG
+#endif /* WITH_FFMPEG */
 
 int ismovie(const char *UNUSED(filepath))
 {
@@ -301,7 +301,26 @@ struct anim *IMB_open_anim(const char *name,
     anim->ib_flags = ib_flags;
     anim->streamindex = streamindex;
   }
-  return (anim);
+  return anim;
+}
+
+bool IMB_anim_can_produce_frames(const struct anim *anim)
+{
+#if !(defined(WITH_AVI) || defined(WITH_FFMPEG))
+  UNUSED_VARS(anim);
+#endif
+
+#ifdef WITH_AVI
+  if (anim->avi != NULL) {
+    return true;
+  }
+#endif
+#ifdef WITH_FFMPEG
+  if (anim->pCodecCtx != NULL) {
+    return true;
+  }
+#endif
+  return false;
 }
 
 void IMB_suffix_anim(struct anim *anim, const char *suffix)
@@ -448,7 +467,7 @@ static ImBuf *avi_fetchibuf(struct anim *anim, int position)
       if (lpbi) {
         ibuf = IMB_ibImageFromMemory(
             (const unsigned char *)lpbi, 100, IB_rect, anim->colorspace, "<avi_fetchibuf>");
-        // Oh brother...
+        /* Oh brother... */
       }
     }
   }
@@ -724,7 +743,7 @@ static int startffmpeg(struct anim *anim)
   }
 #  endif
 
-  return (0);
+  return 0;
 }
 
 /* postprocess the image in anim->pFrame and do color conversion
@@ -784,7 +803,7 @@ static void ffmpeg_postprocess(struct anim *anim)
   if (ENDIAN_ORDER == B_ENDIAN) {
     int *dstStride = anim->pFrameRGB->linesize;
     uint8_t **dst = anim->pFrameRGB->data;
-    int dstStride2[4] = {dstStride[0], 0, 0, 0};
+    const int dstStride2[4] = {dstStride[0], 0, 0, 0};
     uint8_t *dst2[4] = {dst[0], 0, 0, 0};
     int x, y, h, w;
     unsigned char *bottom;
@@ -830,7 +849,7 @@ static void ffmpeg_postprocess(struct anim *anim)
   else {
     int *dstStride = anim->pFrameRGB->linesize;
     uint8_t **dst = anim->pFrameRGB->data;
-    int dstStride2[4] = {-dstStride[0], 0, 0, 0};
+    const int dstStride2[4] = {-dstStride[0], 0, 0, 0};
     uint8_t *dst2[4] = {dst[0] + (anim->y - 1) * dstStride[0], 0, 0, 0};
 
     sws_scale(anim->img_convert_ctx,
@@ -1041,7 +1060,7 @@ static ImBuf *ffmpeg_fetchibuf(struct anim *anim, int position, IMB_Timecode_Typ
   int old_frame_index = 0; /* To quiet gcc barking... */
 
   if (anim == NULL) {
-    return (0);
+    return 0;
   }
 
   av_log(anim->pFormatCtx, AV_LOG_DEBUG, "FETCH: pos=%d\n", position);
@@ -1186,7 +1205,29 @@ static ImBuf *ffmpeg_fetchibuf(struct anim *anim, int position, IMB_Timecode_Typ
   }
 
   IMB_freeImBuf(anim->last_frame);
-  anim->last_frame = IMB_allocImBuf(anim->x, anim->y, 32, IB_rect);
+
+  /* Certain versions of FFmpeg have a bug in libswscale which ends up in crash
+   * when destination buffer is not properly aligned. For example, this happens
+   * in FFmpeg 4.3.1. It got fixed later on, but for compatibility reasons is
+   * still best to avoid crash.
+   *
+   * This is achieved by using own allocation call rather than relying on
+   * IMB_allocImBuf() to do so since the IMB_allocImBuf() is not guaranteed
+   * to perform aligned allocation.
+   *
+   * In theory this could give better performance, since SIMD operations on
+   * aligned data are usually faster.
+   *
+   * Note that even though sometimes vertical flip is required it does not
+   * affect on alignment of data passed to sws_scale because if the X dimension
+   * is not 32 byte aligned special intermediate buffer is allocated.
+   *
+   * The issue was reported to FFmpeg under ticket #8747 in the FFmpeg tracker
+   * and is fixed in the newer versions than 4.3.1. */
+  anim->last_frame = IMB_allocImBuf(anim->x, anim->y, 32, 0);
+  anim->last_frame->rect = MEM_mallocN_aligned((size_t)4 * anim->x * anim->y, 32, "ffmpeg ibuf");
+  anim->last_frame->mall |= IB_rect;
+
   anim->last_frame->rect_colorspace = colormanage_colorspace_get_named(anim->colorspace);
 
   ffmpeg_postprocess(anim);
@@ -1250,7 +1291,7 @@ static ImBuf *anim_getnew(struct anim *anim)
   struct ImBuf *ibuf = NULL;
 
   if (anim == NULL) {
-    return (NULL);
+    return NULL;
   }
 
   free_anim_movie(anim);
@@ -1264,7 +1305,7 @@ static ImBuf *anim_getnew(struct anim *anim)
 #endif
 
   if (anim->curtype != 0) {
-    return (NULL);
+    return NULL;
   }
   anim->curtype = imb_get_anim_type(anim->name);
 
@@ -1278,7 +1319,7 @@ static ImBuf *anim_getnew(struct anim *anim)
       break;
     case ANIM_MOVIE:
       if (startmovie(anim)) {
-        return (NULL);
+        return NULL;
       }
       ibuf = IMB_allocImBuf(anim->x, anim->y, 24, 0); /* fake */
       break;
@@ -1286,7 +1327,7 @@ static ImBuf *anim_getnew(struct anim *anim)
     case ANIM_AVI:
       if (startavi(anim)) {
         printf("couldn't start avi\n");
-        return (NULL);
+        return NULL;
       }
       ibuf = IMB_allocImBuf(anim->x, anim->y, 24, 0);
       break;
@@ -1294,13 +1335,13 @@ static ImBuf *anim_getnew(struct anim *anim)
 #ifdef WITH_FFMPEG
     case ANIM_FFMPEG:
       if (startffmpeg(anim)) {
-        return (0);
+        return 0;
       }
       ibuf = IMB_allocImBuf(anim->x, anim->y, 24, 0);
       break;
 #endif
   }
-  return (ibuf);
+  return ibuf;
 }
 
 struct ImBuf *IMB_anim_previewframe(struct anim *anim)
@@ -1328,7 +1369,7 @@ struct ImBuf *IMB_anim_absolute(struct anim *anim,
   int pic;
   int filter_y;
   if (anim == NULL) {
-    return (NULL);
+    return NULL;
   }
 
   filter_y = (anim->ib_flags & IB_animdeinterlace);
@@ -1337,7 +1378,7 @@ struct ImBuf *IMB_anim_absolute(struct anim *anim,
     if (anim->curtype == 0) {
       ibuf = anim_getnew(anim);
       if (ibuf == NULL) {
-        return (NULL);
+        return NULL;
       }
 
       IMB_freeImBuf(ibuf); /* ???? */
@@ -1345,10 +1386,10 @@ struct ImBuf *IMB_anim_absolute(struct anim *anim,
     }
 
     if (position < 0) {
-      return (NULL);
+      return NULL;
     }
     if (position >= anim->duration_in_frames) {
-      return (NULL);
+      return NULL;
     }
   }
   else {
@@ -1403,7 +1444,7 @@ struct ImBuf *IMB_anim_absolute(struct anim *anim,
     }
     BLI_snprintf(ibuf->name, sizeof(ibuf->name), "%s.%04d", anim->name, anim->curposition + 1);
   }
-  return (ibuf);
+  return ibuf;
 }
 
 /***/

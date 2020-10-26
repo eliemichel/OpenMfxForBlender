@@ -20,8 +20,7 @@
  * Triangulate.
  */
 
-#ifndef __BMESH_TRIANGULATE_H__
-#define __BMESH_TRIANGULATE_H__
+#pragma once
 
 void BM_mesh_triangulate(BMesh *bm,
                          const int quad_method,
@@ -30,6 +29,4 @@ void BM_mesh_triangulate(BMesh *bm,
                          const bool tag_only,
                          BMOperator *op,
                          BMOpSlot *slot_facemap_out,
-                         BMOpSlot *slot_doubles_out);
-
-#endif /* __BMESH_TRIANGULATE_H__ */
+                         BMOpSlot *slot_facemap_double_out);

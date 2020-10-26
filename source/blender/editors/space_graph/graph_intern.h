@@ -21,8 +21,7 @@
  * \ingroup spgraph
  */
 
-#ifndef __GRAPH_INTERN_H__
-#define __GRAPH_INTERN_H__
+#pragma once
 
 struct ARegion;
 struct ARegionType;
@@ -84,7 +83,7 @@ void get_graph_keyframe_extents(struct bAnimContext *ac,
                                 float *xmax,
                                 float *ymin,
                                 float *ymax,
-                                const bool do_selected,
+                                const bool do_sel_only,
                                 const bool include_handles);
 
 void GRAPH_OT_previewrange_set(struct wmOperatorType *ot);
@@ -114,6 +113,7 @@ void GRAPH_OT_extrapolation_type(struct wmOperatorType *ot);
 void GRAPH_OT_easing_type(struct wmOperatorType *ot);
 
 void GRAPH_OT_frame_jump(struct wmOperatorType *ot);
+void GRAPH_OT_snap_cursor_value(struct wmOperatorType *ot);
 void GRAPH_OT_snap(struct wmOperatorType *ot);
 void GRAPH_OT_mirror(struct wmOperatorType *ot);
 
@@ -177,5 +177,3 @@ bool graphop_selected_fcurve_poll(struct bContext *C);
 /* graph_ops.c */
 void graphedit_keymap(struct wmKeyConfig *keyconf);
 void graphedit_operatortypes(void);
-
-#endif /* __GRAPH_INTERN_H__ */

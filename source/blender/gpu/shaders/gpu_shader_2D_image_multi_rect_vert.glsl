@@ -11,44 +11,33 @@ uniform vec4 calls_data[MAX_CALLS * 3];
 out vec2 texCoord_interp;
 flat out vec4 finalColor;
 
+in vec2 pos;
+
 void main()
 {
-  /* Rendering 2 triangle per icon. */
-  int i = gl_VertexID / 6;
-  int v = gl_VertexID % 6;
+  vec4 rect = calls_data[gl_InstanceID * 3];
+  vec4 tex = calls_data[gl_InstanceID * 3 + 1];
+  finalColor = calls_data[gl_InstanceID * 3 + 2];
 
-  vec4 pos = calls_data[i * 3];
-  vec4 tex = calls_data[i * 3 + 1];
-  finalColor = calls_data[i * 3 + 2];
-
-  /* TODO Remove this */
-  if (v == 2) {
-    v = 4;
-  }
-  else if (v == 3) {
-    v = 0;
-  }
-  else if (v == 5) {
-    v = 2;
-  }
-
-  if (v == 0) {
-    pos.xy = pos.xw;
-    tex.xy = tex.xw;
-  }
-  else if (v == 1) {
-    pos.xy = pos.xz;
+  /* Use pos to select the right swizzle (instead of gl_VertexID)
+   * in order to workaround an OSX driver bug. */
+  if (pos == vec2(0.0, 0.0)) {
+    rect.xy = rect.xz;
     tex.xy = tex.xz;
   }
-  else if (v == 2) {
-    pos.xy = pos.yw;
+  else if (pos == vec2(0.0, 1.0)) {
+    rect.xy = rect.xw;
+    tex.xy = tex.xw;
+  }
+  else if (pos == vec2(1.0, 1.0)) {
+    rect.xy = rect.yw;
     tex.xy = tex.yw;
   }
   else {
-    pos.xy = pos.yz;
+    rect.xy = rect.yz;
     tex.xy = tex.yz;
   }
 
-  gl_Position = vec4(pos.xy, 0.0f, 1.0f);
+  gl_Position = vec4(rect.xy, 0.0f, 1.0f);
   texCoord_interp = tex.xy;
 }

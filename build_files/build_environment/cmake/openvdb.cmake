@@ -20,6 +20,14 @@ if(BUILD_MODE STREQUAL Debug)
   set(BLOSC_POST _d)
 endif()
 
+if(WIN32)
+  set(OPENVDB_SHARED ON)
+  set(OPENVDB_STATIC OFF)
+else()
+  set(OPENVDB_SHARED OFF)
+  set(OPENVDB_STATIC ON)
+endif()
+
 set(OPENVDB_EXTRA_ARGS
   -DBoost_COMPILER:STRING=${BOOST_COMPILER_STRING}
   -DBoost_USE_MULTITHREADED=ON
@@ -27,6 +35,7 @@ set(OPENVDB_EXTRA_ARGS
   -DBoost_USE_STATIC_RUNTIME=OFF
   -DBOOST_ROOT=${LIBDIR}/boost
   -DBoost_NO_SYSTEM_PATHS=ON
+  -DBoost_NO_BOOST_CMAKE=ON
   -DZLIB_LIBRARY=${LIBDIR}/zlib/lib/${ZLIB_LIBRARY}
   -DZLIB_INCLUDE_DIR=${LIBDIR}/zlib/include/
   -DBlosc_INCLUDE_DIR=${LIBDIR}/blosc/include/
@@ -41,8 +50,24 @@ set(OPENVDB_EXTRA_ARGS
   -DOPENEXR_LIBRARYDIR=${LIBDIR}/openexr/lib
    # All libs live in openexr, even the ilmbase ones
   -DILMBASE_LIBRARYDIR=${LIBDIR}/openexr/lib
-  -DOPENVDB_CORE_SHARED=Off
+  -DOPENVDB_CORE_SHARED=${OPENVDB_SHARED}
+  -DOPENVDB_CORE_STATIC=${OPENVDB_STATIC}
   -DOPENVDB_BUILD_BINARIES=Off
+  -DCMAKE_DEBUG_POSTFIX=_d
+   # NanoVDB is header-only, so only need the install target
+  -DNANOVDB_BUILD_UNITTESTS=OFF
+  -DNANOVDB_BUILD_EXAMPLES=OFF
+  -DNANOVDB_BUILD_BENCHMARK=OFF
+  -DNANOVDB_BUILD_DOCS=OFF
+  -DNANOVDB_BUILD_TOOLS=OFF
+  -DNANOVDB_CUDA_KEEP_PTX=OFF
+  -DNANOVDB_USE_OPENGL=OFF
+  -DNANOVDB_USE_OPENGL=OFF
+  -DNANOVDB_USE_CUDA=OFF
+  -DNANOVDB_USE_TBB=OFF
+  -DNANOVDB_USE_OPTIX=OFF
+  -DNANOVDB_USE_OPENVDB=OFF
+  -DNANOVDB_ALLOW_FETCHCONTENT=OFF
 )
 
 if(WIN32)
@@ -63,12 +88,18 @@ else()
   )
 endif()
 
+if(WITH_NANOVDB)
+  set(OPENVDB_PATCH_FILE openvdb_nanovdb.diff)
+else()
+  set(OPENVDB_PATCH_FILE openvdb.diff)
+endif()
+
 ExternalProject_Add(openvdb
   URL ${OPENVDB_URI}
   DOWNLOAD_DIR ${DOWNLOAD_DIR}
   URL_HASH MD5=${OPENVDB_HASH}
   PREFIX ${BUILD_DIR}/openvdb
-  PATCH_COMMAND ${PATCH_CMD} -p 1 -d ${BUILD_DIR}/openvdb/src/openvdb < ${PATCH_DIR}/openvdb.diff
+  PATCH_COMMAND ${PATCH_CMD} -p 1 -d ${BUILD_DIR}/openvdb/src/openvdb < ${PATCH_DIR}/${OPENVDB_PATCH_FILE}
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${LIBDIR}/openvdb ${DEFAULT_CMAKE_FLAGS} ${OPENVDB_EXTRA_ARGS}
   INSTALL_DIR ${LIBDIR}/openvdb
 )
@@ -85,14 +116,22 @@ add_dependencies(
 if(WIN32)
   if(BUILD_MODE STREQUAL Release)
     ExternalProject_Add_Step(openvdb after_install
-      COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/openvdb/include ${HARVEST_TARGET}/openvdb/include
-      COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openvdb/lib/libopenvdb.lib ${HARVEST_TARGET}/openvdb/lib/openvdb.lib
+      COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/openvdb/include/openvdb ${HARVEST_TARGET}/openvdb/include/openvdb
+      COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openvdb/lib/openvdb.lib ${HARVEST_TARGET}/openvdb/lib/openvdb.lib
+      COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openvdb/bin/openvdb.dll ${HARVEST_TARGET}/openvdb/bin/openvdb.dll
       DEPENDEES install
     )
+    if(WITH_NANOVDB)
+      ExternalProject_Add_Step(openvdb nanovdb_install
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/openvdb/nanovdb ${HARVEST_TARGET}/nanovdb/include/nanovdb
+        DEPENDEES after_install
+      )
+    endif()
   endif()
   if(BUILD_MODE STREQUAL Debug)
     ExternalProject_Add_Step(openvdb after_install
-      COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openvdb/lib/libopenvdb.lib ${HARVEST_TARGET}/openvdb/lib/openvdb_d.lib
+      COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openvdb/lib/openvdb_d.lib ${HARVEST_TARGET}/openvdb/lib/openvdb_d.lib
+      COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openvdb/bin/openvdb_d.dll ${HARVEST_TARGET}/openvdb/bin/openvdb_d.dll
       DEPENDEES install
     )
   endif()

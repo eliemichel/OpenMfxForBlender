@@ -22,15 +22,13 @@
  * Declaration of GHOST_WindowCocoa class.
  */
 
-#ifndef __GHOST_WINDOWCOCOA_H__
-#define __GHOST_WINDOWCOCOA_H__
+#pragma once
 
 #ifndef __APPLE__
 #  error Apple OSX only!
 #endif  // __APPLE__
 
 #include "GHOST_Window.h"
-#include "STR_String.h"
 
 @class CAMetalLayer;
 @class CocoaMetalView;
@@ -58,7 +56,7 @@ class GHOST_WindowCocoa : public GHOST_Window {
    * \param stereoVisual      Stereo visual for quad buffered stereo.
    */
   GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
-                    const STR_String &title,
+                    const char *title,
                     GHOST_TInt32 left,
                     GHOST_TInt32 bottom,
                     GHOST_TUns32 width,
@@ -92,13 +90,12 @@ class GHOST_WindowCocoa : public GHOST_Window {
    * Sets the title displayed in the title bar.
    * \param title The title to display in the title bar.
    */
-  void setTitle(const STR_String &title);
-
+  void setTitle(const char *title);
   /**
    * Returns the title displayed in the title bar.
    * \param title The title displayed in the title bar.
    */
-  void getTitle(STR_String &title) const;
+  std::string getTitle() const;
 
   /**
    * Returns the window rectangle dimensions.
@@ -329,5 +326,3 @@ class GHOST_WindowCocoa : public GHOST_Window {
   bool m_debug_context;  // for debug messages during context setup
   bool m_is_dialog;
 };
-
-#endif  // __GHOST_WINDOWCOCOA_H__

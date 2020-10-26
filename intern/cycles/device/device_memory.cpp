@@ -125,6 +125,11 @@ void device_memory::restore_device()
   device_pointer = original_device_ptr;
 }
 
+bool device_memory::is_resident(Device *sub_device) const
+{
+  return device->is_resident(device_pointer, sub_device);
+}
+
 /* Device Sub Ptr */
 
 device_sub_ptr::device_sub_ptr(device_memory &mem, int offset, int size) : device(mem.device)
@@ -161,6 +166,8 @@ device_texture::device_texture(Device *device,
       data_elements = 4;
       break;
     case IMAGE_DATA_TYPE_BYTE:
+    case IMAGE_DATA_TYPE_NANOVDB_FLOAT:
+    case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
       data_type = TYPE_UCHAR;
       data_elements = 1;
       break;

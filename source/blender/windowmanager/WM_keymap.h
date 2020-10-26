@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __WM_KEYMAP_H__
-#define __WM_KEYMAP_H__
+#pragma once
 
 /** \file
  * \ingroup wm
@@ -82,7 +81,7 @@ wmKeyMap *WM_keymap_find_all_spaceid_or_empty(struct wmWindowManager *wm,
                                               const char *idname,
                                               int spaceid,
                                               int regionid);
-wmKeyMap *WM_keymap_active(struct wmWindowManager *wm, struct wmKeyMap *keymap);
+wmKeyMap *WM_keymap_active(const struct wmWindowManager *wm, struct wmKeyMap *keymap);
 bool WM_keymap_remove(struct wmKeyConfig *keyconfig, struct wmKeyMap *keymap);
 bool WM_keymap_poll(struct bContext *C, struct wmKeyMap *keymap);
 
@@ -194,5 +193,3 @@ const char *WM_bool_as_string(bool test);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __WM_KEYMAP_H__ */

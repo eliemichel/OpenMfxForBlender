@@ -26,6 +26,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 
 #include "BKE_curve.h"
@@ -44,8 +45,13 @@
 /** \name Cursor Picking API
  * \{ */
 
-static void ED_curve_pick_vert__do_closest(
-    void *userData, Nurb *nu, BPoint *bp, BezTriple *bezt, int beztindex, const float screen_co[2])
+static void ED_curve_pick_vert__do_closest(void *userData,
+                                           Nurb *nu,
+                                           BPoint *bp,
+                                           BezTriple *bezt,
+                                           int beztindex,
+                                           bool handles_visible,
+                                           const float screen_co[2])
 {
   struct {
     BPoint *bp;
@@ -57,13 +63,15 @@ static void ED_curve_pick_vert__do_closest(
     bool is_changed;
   } *data = userData;
 
-  short flag;
+  uint8_t flag;
   float dist_test;
 
   if (bp) {
     flag = bp->f1;
   }
   else {
+    BLI_assert(handles_visible || beztindex == 1);
+
     if (beztindex == 0) {
       flag = bezt->f1;
     }
@@ -92,6 +100,8 @@ static void ED_curve_pick_vert__do_closest(
     data->hpoint = bezt ? beztindex : 0;
     data->is_changed = true;
   }
+
+  UNUSED_VARS_NDEBUG(handles_visible);
 }
 
 bool ED_curve_pick_vert(ViewContext *vc,
@@ -161,7 +171,6 @@ void ED_curve_nurb_vert_selected_find(
   /* in nu and (bezt or bp) selected are written if there's 1 sel.  */
   /* if more points selected in 1 spline: return only nu, bezt and bp are 0 */
   ListBase *editnurb = &cu->editnurb->nurbs;
-  Nurb *nu1;
   BezTriple *bezt1;
   BPoint *bp1;
   int a;
@@ -170,7 +179,7 @@ void ED_curve_nurb_vert_selected_find(
   *r_bezt = NULL;
   *r_bp = NULL;
 
-  for (nu1 = editnurb->first; nu1; nu1 = nu1->next) {
+  LISTBASE_FOREACH (Nurb *, nu1, editnurb) {
     if (nu1->type == CU_BEZIER) {
       bezt1 = nu1->bezt;
       a = nu1->pntsu;
@@ -182,7 +191,8 @@ void ED_curve_nurb_vert_selected_find(
             *r_bezt = NULL;
             return;
           }
-          else if (*r_bezt || *r_bp) {
+
+          if (*r_bezt || *r_bp) {
             *r_bp = NULL;
             *r_bezt = NULL;
           }
@@ -205,7 +215,8 @@ void ED_curve_nurb_vert_selected_find(
             *r_nu = NULL;
             return;
           }
-          else if (*r_bezt || *r_bp) {
+
+          if (*r_bezt || *r_bp) {
             *r_bp = NULL;
             *r_bezt = NULL;
           }

@@ -274,7 +274,7 @@ static void pointdensity_cache_psys(
   BLI_bvhtree_balance(pd->point_tree);
 
   if (psys->lattice_deform_data) {
-    end_latt_deform(psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(psys->lattice_deform_data);
     psys->lattice_deform_data = NULL;
   }
 }
@@ -557,7 +557,7 @@ static float density_falloff(PointDensityRangeData *pdr, int index, float square
   }
 
   if (pdr->density_curve && dist != 0.0f) {
-    BKE_curvemapping_initialize(pdr->density_curve);
+    BKE_curvemapping_init(pdr->density_curve);
     density = BKE_curvemapping_evaluateF(pdr->density_curve, 0, density / dist) * dist;
   }
 
@@ -770,7 +770,7 @@ static void pointdensity_color(
 
 static void sample_dummy_point_density(int resolution, float *values)
 {
-  memset(values, 0, sizeof(float) * 4 * resolution * resolution * resolution);
+  memset(values, 0, sizeof(float[4]) * resolution * resolution * resolution);
 }
 
 static void particle_system_minmax(Depsgraph *depsgraph,
@@ -823,7 +823,7 @@ static void particle_system_minmax(Depsgraph *depsgraph,
   }
 
   if (psys->lattice_deform_data) {
-    end_latt_deform(psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(psys->lattice_deform_data);
     psys->lattice_deform_data = NULL;
   }
 }
@@ -868,7 +868,7 @@ void RE_point_density_minmax(struct Depsgraph *depsgraph,
     particle_system_minmax(depsgraph, scene, object, psys, pd->radius, r_min, r_max);
   }
   else {
-    float radius[3] = {pd->radius, pd->radius, pd->radius};
+    const float radius[3] = {pd->radius, pd->radius, pd->radius};
     BoundBox *bb = BKE_object_boundbox_get(object);
 
     if (bb != NULL) {

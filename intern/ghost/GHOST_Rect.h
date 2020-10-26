@@ -22,8 +22,7 @@
  * Macro's used in GHOST debug target.
  */
 
-#ifndef __GHOST_RECT_H__
-#define __GHOST_RECT_H__
+#pragma once
 
 #include "GHOST_Types.h"
 
@@ -45,14 +44,6 @@ class GHOST_Rect {
    */
   GHOST_Rect(GHOST_TInt32 l = 0, GHOST_TInt32 t = 0, GHOST_TInt32 r = 0, GHOST_TInt32 b = 0)
       : m_l(l), m_t(t), m_r(r), m_b(b)
-  {
-  }
-
-  /**
-   * Copy constructor.
-   * \param   r   rectangle to copy
-   */
-  GHOST_Rect(const GHOST_Rect &r) : m_l(r.m_l), m_t(r.m_t), m_r(r.m_r), m_b(r.m_b)
   {
   }
 
@@ -271,5 +262,3 @@ inline bool GHOST_Rect::isInside(GHOST_TInt32 x, GHOST_TInt32 y) const
 {
   return (x >= m_l) && (x <= m_r) && (y >= m_t) && (y <= m_b);
 }
-
-#endif  // __GHOST_RECT_H__

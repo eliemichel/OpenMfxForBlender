@@ -39,10 +39,10 @@
 
 #include "ED_screen.h"
 
-#include "script_intern.h"  // own include
+#include "script_intern.h" /* own include */
 
 #ifdef WITH_PYTHON
-#  include "BPY_extern.h" /* BPY_script_exec */
+#  include "BPY_extern_run.h"
 #endif
 
 static int run_pyfile_exec(bContext *C, wmOperator *op)
@@ -50,7 +50,7 @@ static int run_pyfile_exec(bContext *C, wmOperator *op)
   char path[512];
   RNA_string_get(op->ptr, "filepath", path);
 #ifdef WITH_PYTHON
-  if (BPY_execute_filepath(C, path, op->reports)) {
+  if (BPY_run_filepath(C, path, op->reports)) {
     ARegion *region = CTX_wm_region(C);
     ED_region_tag_redraw(region);
     return OPERATOR_FINISHED;
@@ -115,15 +115,32 @@ static int script_reload_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  WM_script_tag_reload();
+  /* TODO(campbell): this crashes on netrender and keying sets, need to look into why
+   * disable for now unless running in debug mode. */
 
-  /* TODO, this crashes on netrender and keying sets, need to look into why
-   * disable for now unless running in debug mode */
-  WM_cursor_wait(1);
-  BPY_execute_string(
-      C, (const char *[]){"bpy", NULL}, "bpy.utils.load_scripts(reload_scripts=True)");
-  WM_cursor_wait(0);
-  WM_event_add_notifier(C, NC_WINDOW, NULL);
+  /* It would be nice if we could detect when this is called from the Python
+   * only postponing in that case, for now always do it. */
+  if (true) {
+    /* Postpone when called from Python so this can be called from an operator
+     * that might be re-registered, crashing Blender when we try to read from the
+     * freed operator type which, see T80694. */
+    BPY_run_string_exec(C,
+                        (const char *[]){"bpy", NULL},
+                        "def fn():\n"
+                        "    bpy.utils.load_scripts(reload_scripts=True)\n"
+                        "    return None\n"
+                        "bpy.app.timers.register(fn)");
+  }
+  else {
+    WM_cursor_wait(true);
+    BPY_run_string_eval(
+        C, (const char *[]){"bpy", NULL}, "bpy.utils.load_scripts(reload_scripts=True)");
+    WM_cursor_wait(false);
+  }
+
+  /* Note that #WM_script_tag_reload is called from `bpy.utils.load_scripts`,
+   * any additional updates required by this operator should go there. */
+
   return OPERATOR_FINISHED;
 #else
   UNUSED_VARS(C, op);

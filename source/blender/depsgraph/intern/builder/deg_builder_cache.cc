@@ -29,11 +29,10 @@
 
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "BKE_animsys.h"
-}
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 /* Animated property storage. */
 
@@ -68,15 +67,16 @@ AnimatedPropertyID::AnimatedPropertyID(ID * /*id*/,
   property_rna = RNA_struct_type_find_property(type, property_name);
 }
 
-bool AnimatedPropertyID::operator<(const AnimatedPropertyID &other) const
+bool operator==(const AnimatedPropertyID &a, const AnimatedPropertyID &b)
 {
-  if (data < other.data) {
-    return true;
-  }
-  else if (data == other.data) {
-    return property_rna < other.property_rna;
-  }
-  return false;
+  return a.data == b.data && a.property_rna == b.property_rna;
+}
+
+uint64_t AnimatedPropertyID::hash() const
+{
+  uintptr_t ptr1 = (uintptr_t)data;
+  uintptr_t ptr2 = (uintptr_t)property_rna;
+  return static_cast<uint64_t>(((ptr1 >> 4) * 33) ^ (ptr2 >> 4));
 }
 
 namespace {
@@ -128,7 +128,7 @@ void AnimatedPropertyStorage::initializeFromID(DepsgraphBuilderCache *builder_ca
 
 void AnimatedPropertyStorage::tagPropertyAsAnimated(const AnimatedPropertyID &property_id)
 {
-  animated_properties_set.insert(property_id);
+  animated_properties_set.add(property_id);
 }
 
 void AnimatedPropertyStorage::tagPropertyAsAnimated(const PointerRNA *pointer_rna,
@@ -139,7 +139,7 @@ void AnimatedPropertyStorage::tagPropertyAsAnimated(const PointerRNA *pointer_rn
 
 bool AnimatedPropertyStorage::isPropertyAnimated(const AnimatedPropertyID &property_id)
 {
-  return animated_properties_set.find(property_id) != animated_properties_set.end();
+  return animated_properties_set.contains(property_id);
 }
 
 bool AnimatedPropertyStorage::isPropertyAnimated(const PointerRNA *pointer_rna,
@@ -156,21 +156,16 @@ DepsgraphBuilderCache::DepsgraphBuilderCache()
 
 DepsgraphBuilderCache::~DepsgraphBuilderCache()
 {
-  for (AnimatedPropertyStorageMap::value_type &iter : animated_property_storage_map_) {
-    AnimatedPropertyStorage *animated_property_storage = iter.second;
-    OBJECT_GUARDED_DELETE(animated_property_storage, AnimatedPropertyStorage);
+  for (AnimatedPropertyStorage *animated_property_storage :
+       animated_property_storage_map_.values()) {
+    delete animated_property_storage;
   }
 }
 
 AnimatedPropertyStorage *DepsgraphBuilderCache::ensureAnimatedPropertyStorage(ID *id)
 {
-  AnimatedPropertyStorageMap::iterator it = animated_property_storage_map_.find(id);
-  if (it != animated_property_storage_map_.end()) {
-    return it->second;
-  }
-  AnimatedPropertyStorage *animated_property_storage = OBJECT_GUARDED_NEW(AnimatedPropertyStorage);
-  animated_property_storage_map_.insert(make_pair(id, animated_property_storage));
-  return animated_property_storage;
+  return animated_property_storage_map_.lookup_or_add_cb(
+      id, []() { return new AnimatedPropertyStorage(); });
 }
 
 AnimatedPropertyStorage *DepsgraphBuilderCache::ensureInitializedAnimatedPropertyStorage(ID *id)
@@ -183,4 +178,5 @@ AnimatedPropertyStorage *DepsgraphBuilderCache::ensureInitializedAnimatedPropert
   return animated_property_storage;
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

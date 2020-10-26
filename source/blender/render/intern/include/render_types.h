@@ -21,8 +21,7 @@
  * \ingroup render
  */
 
-#ifndef __RENDER_TYPES_H__
-#define __RENDER_TYPES_H__
+#pragma once
 
 /* ------------------------------------------------------------------------- */
 /* exposed internal in render module only! */
@@ -42,6 +41,10 @@ struct Main;
 struct Object;
 struct RenderEngine;
 struct ReportList;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* this is handed over to threaded hiding/passes/shading engine */
 typedef struct RenderPart {
@@ -160,4 +163,6 @@ struct Render {
 /* R.flag */
 #define R_ANIMATION 1
 
-#endif /* __RENDER_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -18,21 +18,20 @@
  * \ingroup collada
  */
 
-#ifndef __COLLADA_H__
-#define __COLLADA_H__
+#pragma once
 
 #include <stdlib.h>
 
 #include "ExportSettings.h"
 #include "ImportSettings.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "BLI_linklist.h"
 #include "BLI_path_util.h"
 #include "RNA_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct bContext;
 
@@ -45,6 +44,4 @@ int collada_export(struct bContext *C, ExportSettings *export_settings);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

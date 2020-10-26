@@ -39,6 +39,7 @@
 
 #include "BLT_translation.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_cachefile.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
@@ -47,6 +48,8 @@
 #include "BKE_scene.h"
 
 #include "DEG_depsgraph_query.h"
+
+#include "BLO_read_write.h"
 
 #ifdef WITH_ALEMBIC
 #  include "ABC_alembic.h"
@@ -61,6 +64,8 @@ static void cache_file_init_data(ID *id)
   BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(cache_file, id));
 
   cache_file->scale = 1.0f;
+  cache_file->velocity_unit = CACHEFILE_VELOCITY_UNIT_SECOND;
+  BLI_strncpy(cache_file->velocity_name, ".velocities", sizeof(cache_file->velocity_name));
 }
 
 static void cache_file_copy_data(Main *UNUSED(bmain),
@@ -83,6 +88,37 @@ static void cache_file_free_data(ID *id)
   BLI_freelistN(&cache_file->object_paths);
 }
 
+static void cache_file_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  CacheFile *cache_file = (CacheFile *)id;
+  if (cache_file->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+    BLI_listbase_clear(&cache_file->object_paths);
+    cache_file->handle = NULL;
+    memset(cache_file->handle_filepath, 0, sizeof(cache_file->handle_filepath));
+    cache_file->handle_readers = NULL;
+
+    BLO_write_id_struct(writer, CacheFile, id_address, &cache_file->id);
+
+    if (cache_file->adt) {
+      BKE_animdata_blend_write(writer, cache_file->adt);
+    }
+  }
+}
+
+static void cache_file_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  CacheFile *cache_file = (CacheFile *)id;
+  BLI_listbase_clear(&cache_file->object_paths);
+  cache_file->handle = NULL;
+  cache_file->handle_filepath[0] = '\0';
+  cache_file->handle_readers = NULL;
+
+  /* relink animdata */
+  BLO_read_data_address(reader, &cache_file->adt);
+  BKE_animdata_blend_read_data(reader, cache_file->adt);
+}
+
 IDTypeInfo IDType_ID_CF = {
     .id_code = ID_CF,
     .id_filter = FILTER_ID_CF,
@@ -97,6 +133,13 @@ IDTypeInfo IDType_ID_CF = {
     .copy_data = cache_file_copy_data,
     .free_data = cache_file_free_data,
     .make_local = NULL,
+    .foreach_id = NULL,
+    .foreach_cache = NULL,
+
+    .blend_write = cache_file_blend_write,
+    .blend_read_data = cache_file_blend_read_data,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 /* TODO: make this per cache file to avoid global locks. */
@@ -204,18 +247,9 @@ static void cachefile_handle_free(CacheFile *cache_file)
 
 void *BKE_cachefile_add(Main *bmain, const char *name)
 {
-  CacheFile *cache_file = BKE_libblock_alloc(bmain, ID_CF, name, 0);
-
-  cache_file_init_data(&cache_file->id);
+  CacheFile *cache_file = BKE_id_new(bmain, ID_CF, name);
 
   return cache_file;
-}
-
-CacheFile *BKE_cachefile_copy(Main *bmain, const CacheFile *cache_file)
-{
-  CacheFile *cache_file_copy;
-  BKE_id_copy(bmain, &cache_file->id, (ID **)&cache_file_copy);
-  return cache_file_copy;
 }
 
 void BKE_cachefile_reload(Depsgraph *depsgraph, CacheFile *cache_file)

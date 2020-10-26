@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_SPEAKER_H__
-#define __BKE_SPEAKER_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -30,10 +29,7 @@ struct Main;
 struct Speaker;
 
 void *BKE_speaker_add(struct Main *bmain, const char *name);
-struct Speaker *BKE_speaker_copy(struct Main *bmain, const struct Speaker *spk);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

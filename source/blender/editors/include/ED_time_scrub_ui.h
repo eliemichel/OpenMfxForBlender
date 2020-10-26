@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_TIME_SCRUB_UI_H__
-#define __ED_TIME_SCRUB_UI_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,6 +30,11 @@ extern "C" {
 struct bContext;
 struct bDopeSheet;
 struct wmEvent;
+
+void ED_time_scrub_draw_current_frame(const struct ARegion *region,
+                                      const struct Scene *scene,
+                                      bool display_seconds,
+                                      bool draw_line);
 
 void ED_time_scrub_draw(const struct ARegion *region,
                         const struct Scene *scene,
@@ -46,5 +50,3 @@ void ED_time_scrub_channel_search_draw(const struct bContext *C,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_TIME_SCRUB_UI_H__ */

@@ -27,8 +27,7 @@
  *         FRANCE
  */
 
-#ifndef __FREESTYLE_CURVATURE_H__
-#define __FREESTYLE_CURVATURE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -123,7 +122,7 @@ class Face_Curvature_Info {
 #endif
 };
 
-bool gts_vertex_mean_curvature_normal(WVertex *v, Vec3r &n);
+bool gts_vertex_mean_curvature_normal(WVertex *v, Vec3r &Kh);
 
 bool gts_vertex_gaussian_curvature(WVertex *v, real *Kg);
 
@@ -142,5 +141,3 @@ void compute_curvature_tensor_one_ring(WVertex *start, NormalCycle &nc);
 }  // namespace OGF
 
 } /* namespace Freestyle */
-
-#endif /* __FREESTYLE_CURVATURE_H__ */

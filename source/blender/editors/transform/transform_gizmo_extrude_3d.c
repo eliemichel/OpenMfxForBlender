@@ -38,7 +38,6 @@
 #include "ED_gizmo_utils.h"
 #include "ED_screen.h"
 #include "ED_transform.h"
-#include "ED_view3d.h"
 
 #include "UI_resources.h"
 
@@ -214,7 +213,7 @@ static void gizmo_mesh_extrude_setup(const bContext *C, wmGizmoGroup *gzgroup)
     PointerRNA macroptr = RNA_pointer_get(ptr, "TRANSFORM_OT_translate");
     RNA_boolean_set(&macroptr, "release_confirm", true);
 
-    bool constraint[3] = {0, 0, 0};
+    const bool constraint[3] = {0, 0, 0};
     RNA_boolean_set_array(&macroptr, "constraint_axis", constraint);
   }
 

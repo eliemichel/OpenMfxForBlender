@@ -20,8 +20,7 @@
  * Copyright 2011-2012 AutoCRC
  */
 
-#ifndef __BKE_PARTICLE_H__
-#define __BKE_PARTICLE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -47,7 +46,6 @@ struct ParticleSystemModifierData;
 struct BVHTreeRay;
 struct BVHTreeRayHit;
 struct CustomData_MeshMasks;
-struct Depsgraph;
 struct Depsgraph;
 struct EdgeHash;
 struct KDTree_3d;
@@ -218,7 +216,7 @@ typedef struct ParticleCollision {
   /** Collision modifier for current object. */
   struct CollisionModifierData *md;
 
-  /** Time factor of previous collision, needed for substracting face velocity. */
+  /** Time factor of previous collision, needed for subtracting face velocity. */
   float f;
   float fac1, fac2;
 
@@ -349,7 +347,7 @@ void copy_particle_key(struct ParticleKey *to, struct ParticleKey *from, int tim
 void psys_emitter_customdata_mask(struct ParticleSystem *psys,
                                   struct CustomData_MeshMasks *r_cddata_masks);
 void psys_particle_on_emitter(struct ParticleSystemModifierData *psmd,
-                              int distr,
+                              int from,
                               int index,
                               int index_dmcache,
                               float fuv[4],
@@ -366,10 +364,12 @@ struct ModifierData *object_add_particle_system(struct Main *bmain,
                                                 struct Scene *scene,
                                                 struct Object *ob,
                                                 const char *name);
+struct ModifierData *object_copy_particle_system(struct Main *bmain,
+                                                 struct Scene *scene,
+                                                 struct Object *ob,
+                                                 const struct ParticleSystem *psys_orig);
 void object_remove_particle_system(struct Main *bmain, struct Scene *scene, struct Object *ob);
 struct ParticleSettings *BKE_particlesettings_add(struct Main *bmain, const char *name);
-struct ParticleSettings *BKE_particlesettings_copy(struct Main *bmain,
-                                                   const struct ParticleSettings *part);
 void psys_reset(struct ParticleSystem *psys, int mode);
 
 void psys_find_parents(struct ParticleSimulationData *sim, const bool use_render_params);
@@ -393,7 +393,7 @@ int do_guides(struct Depsgraph *depsgraph,
               struct ParticleSettings *part,
               struct ListBase *effectors,
               ParticleKey *state,
-              int pa_num,
+              int index,
               float time);
 void precalc_guides(struct ParticleSimulationData *sim, struct ListBase *effectors);
 float psys_get_timestep(struct ParticleSimulationData *sim);
@@ -430,7 +430,7 @@ void psys_apply_child_modifiers(struct ParticleThreadContext *ctx,
                                 const float parent_orco[3]);
 
 void psys_sph_init(struct ParticleSimulationData *sim, struct SPHData *sphdata);
-void psys_sph_finalise(struct SPHData *sphdata);
+void psys_sph_finalize(struct SPHData *sphdata);
 void psys_sph_density(struct BVHTree *tree, struct SPHData *data, float co[3], float vars[2]);
 
 /* for anim.c */
@@ -577,7 +577,7 @@ void psys_particle_on_dm(struct Mesh *mesh_final,
 
 /* particle_system.c */
 void distribute_particles(struct ParticleSimulationData *sim, int from);
-void initialize_particle(struct ParticleSimulationData *sim, struct ParticleData *pa);
+void init_particle(struct ParticleSimulationData *sim, struct ParticleData *pa);
 void psys_calc_dmcache(struct Object *ob,
                        struct Mesh *mesh_final,
                        struct Mesh *mesh_original,
@@ -628,5 +628,3 @@ extern void (*BKE_particle_batch_cache_free_cb)(struct ParticleSystem *psys);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_PARTICLE_H__ */

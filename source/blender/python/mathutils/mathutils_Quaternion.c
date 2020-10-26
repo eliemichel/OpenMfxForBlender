@@ -34,7 +34,8 @@
 
 #define QUAT_SIZE 4
 
-static PyObject *quat__apply_to_copy(PyNoArgsFunction quat_func, QuaternionObject *self);
+static PyObject *quat__apply_to_copy(PyObject *(*quat_func)(QuaternionObject *),
+                                     QuaternionObject *self);
 static void quat__axis_angle_sanitize(float axis[3], float *angle);
 static PyObject *Quaternion_copy(QuaternionObject *self);
 static PyObject *Quaternion_deepcopy(QuaternionObject *self, PyObject *args);
@@ -463,7 +464,7 @@ PyDoc_STRVAR(Quaternion_normalized_doc,
              "   :rtype: :class:`Quaternion`\n");
 static PyObject *Quaternion_normalized(QuaternionObject *self)
 {
-  return quat__apply_to_copy((PyNoArgsFunction)Quaternion_normalize, self);
+  return quat__apply_to_copy(Quaternion_normalize, self);
 }
 
 PyDoc_STRVAR(Quaternion_invert_doc,
@@ -490,7 +491,7 @@ PyDoc_STRVAR(Quaternion_inverted_doc,
              "   :rtype: :class:`Quaternion`\n");
 static PyObject *Quaternion_inverted(QuaternionObject *self)
 {
-  return quat__apply_to_copy((PyNoArgsFunction)Quaternion_invert, self);
+  return quat__apply_to_copy(Quaternion_invert, self);
 }
 
 PyDoc_STRVAR(Quaternion_identity_doc,
@@ -553,7 +554,7 @@ PyDoc_STRVAR(Quaternion_conjugated_doc,
              "   :rtype: :class:`Quaternion`\n");
 static PyObject *Quaternion_conjugated(QuaternionObject *self)
 {
-  return quat__apply_to_copy((PyNoArgsFunction)Quaternion_conjugate, self);
+  return quat__apply_to_copy(Quaternion_conjugate, self);
 }
 
 PyDoc_STRVAR(Quaternion_copy_doc,
@@ -814,7 +815,7 @@ static PyObject *Quaternion_subscript(QuaternionObject *self, PyObject *item)
     }
     return Quaternion_item(self, i);
   }
-  else if (PySlice_Check(item)) {
+  if (PySlice_Check(item)) {
     Py_ssize_t start, stop, step, slicelength;
 
     if (PySlice_GetIndicesEx(item, QUAT_SIZE, &start, &stop, &step, &slicelength) < 0) {
@@ -824,20 +825,17 @@ static PyObject *Quaternion_subscript(QuaternionObject *self, PyObject *item)
     if (slicelength <= 0) {
       return PyTuple_New(0);
     }
-    else if (step == 1) {
+    if (step == 1) {
       return Quaternion_slice(self, start, stop);
     }
-    else {
-      PyErr_SetString(PyExc_IndexError, "slice steps not supported with quaternions");
-      return NULL;
-    }
-  }
-  else {
-    PyErr_Format(PyExc_TypeError,
-                 "quaternion indices must be integers, not %.200s",
-                 Py_TYPE(item)->tp_name);
+
+    PyErr_SetString(PyExc_IndexError, "slice steps not supported with quaternions");
     return NULL;
   }
+
+  PyErr_Format(
+      PyExc_TypeError, "quaternion indices must be integers, not %.200s", Py_TYPE(item)->tp_name);
+  return NULL;
 }
 
 static int Quaternion_ass_subscript(QuaternionObject *self, PyObject *item, PyObject *value)
@@ -852,7 +850,7 @@ static int Quaternion_ass_subscript(QuaternionObject *self, PyObject *item, PyOb
     }
     return Quaternion_ass_item(self, i, value);
   }
-  else if (PySlice_Check(item)) {
+  if (PySlice_Check(item)) {
     Py_ssize_t start, stop, step, slicelength;
 
     if (PySlice_GetIndicesEx(item, QUAT_SIZE, &start, &stop, &step, &slicelength) < 0) {
@@ -862,17 +860,14 @@ static int Quaternion_ass_subscript(QuaternionObject *self, PyObject *item, PyOb
     if (step == 1) {
       return Quaternion_ass_slice(self, start, stop, value);
     }
-    else {
-      PyErr_SetString(PyExc_IndexError, "slice steps not supported with quaternion");
-      return -1;
-    }
-  }
-  else {
-    PyErr_Format(PyExc_TypeError,
-                 "quaternion indices must be integers, not %.200s",
-                 Py_TYPE(item)->tp_name);
+
+    PyErr_SetString(PyExc_IndexError, "slice steps not supported with quaternion");
     return -1;
   }
+
+  PyErr_Format(
+      PyExc_TypeError, "quaternion indices must be integers, not %.200s", Py_TYPE(item)->tp_name);
+  return -1;
 }
 
 /* ------------------------NUMERIC PROTOCOLS---------------------- */
@@ -961,14 +956,12 @@ static PyObject *Quaternion_mul(PyObject *q1, PyObject *q2)
   }
 
   if (quat1 && quat2) { /* QUAT * QUAT (element-wise product) */
-#ifdef USE_MATHUTILS_ELEM_MUL
     float quat[QUAT_SIZE];
     mul_vn_vnvn(quat, quat1->quat, quat2->quat, QUAT_SIZE);
     return Quaternion_CreatePyObject(quat, Py_TYPE(q1));
-#endif
   }
   /* the only case this can happen (for a supported type is "FLOAT * QUAT") */
-  else if (quat2) { /* FLOAT * QUAT */
+  if (quat2) { /* FLOAT * QUAT */
     if (((scalar = PyFloat_AsDouble(q1)) == -1.0f && PyErr_Occurred()) == 0) {
       return quat_mul_float(quat2, scalar);
     }
@@ -1006,17 +999,8 @@ static PyObject *Quaternion_imul(PyObject *q1, PyObject *q2)
     }
   }
 
-  if (quat1 && quat2) { /* QUAT *= QUAT (inplace element-wise product) */
-#ifdef USE_MATHUTILS_ELEM_MUL
+  if (quat1 && quat2) { /* QUAT *= QUAT (in-place element-wise product). */
     mul_vn_vn(quat1->quat, quat2->quat, QUAT_SIZE);
-#else
-    PyErr_Format(PyExc_TypeError,
-                 "In place element-wise multiplication: "
-                 "not supported between '%.200s' and '%.200s' types",
-                 Py_TYPE(q1)->tp_name,
-                 Py_TYPE(q2)->tp_name);
-    return NULL;
-#endif
   }
   else if (quat1 && (((scalar = PyFloat_AsDouble(q2)) == -1.0f && PyErr_Occurred()) == 0)) {
     /* QUAT *= FLOAT */
@@ -1059,7 +1043,7 @@ static PyObject *Quaternion_matmul(PyObject *q1, PyObject *q2)
     mul_qt_qtqt(quat, quat1->quat, quat2->quat);
     return Quaternion_CreatePyObject(quat, Py_TYPE(q1));
   }
-  else if (quat1) {
+  if (quat1) {
     /* QUAT @ VEC */
     if (VectorObject_Check(q2)) {
       VectorObject *vec2 = (VectorObject *)q2;
@@ -1385,18 +1369,18 @@ static PyObject *Quaternion_new(PyTypeObject *type, PyObject *args, PyObject *kw
   return Quaternion_CreatePyObject(quat, type);
 }
 
-static PyObject *quat__apply_to_copy(PyNoArgsFunction quat_func, QuaternionObject *self)
+static PyObject *quat__apply_to_copy(PyObject *(*quat_func)(QuaternionObject *),
+                                     QuaternionObject *self)
 {
   PyObject *ret = Quaternion_copy(self);
-  PyObject *ret_dummy = quat_func(ret);
+  PyObject *ret_dummy = quat_func((QuaternionObject *)ret);
   if (ret_dummy) {
     Py_DECREF(ret_dummy);
     return ret;
   }
-  else { /* error */
-    Py_DECREF(ret);
-    return NULL;
-  }
+  /* error */
+  Py_DECREF(ret);
+  return NULL;
 }
 
 /* axis vector suffers from precision errors, use this function to ensure */

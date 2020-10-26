@@ -27,6 +27,9 @@
 
 #include "MEM_guardedalloc.h"
 
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
 #include "DNA_defaults.h"
 #include "DNA_scene_types.h"
 #include "DNA_texture_types.h"
@@ -35,9 +38,11 @@
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_icons.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_world.h"
@@ -50,6 +55,8 @@
 
 #include "GPU_material.h"
 
+#include "BLO_read_write.h"
+
 /** Free (or release) any data used by this world (does not free the world itself). */
 static void world_free_data(ID *id)
 {
@@ -59,7 +66,7 @@ static void world_free_data(ID *id)
 
   /* is no lib link block, but world extension */
   if (wrld->nodetree) {
-    ntreeFreeNestedTree(wrld->nodetree);
+    ntreeFreeEmbeddedTree(wrld->nodetree);
     MEM_freeN(wrld->nodetree);
     wrld->nodetree = NULL;
   }
@@ -78,17 +85,6 @@ static void world_init_data(ID *id)
   MEMCPY_STRUCT_AFTER(wrld, DNA_struct_default_get(World), id);
 }
 
-World *BKE_world_add(Main *bmain, const char *name)
-{
-  World *wrld;
-
-  wrld = BKE_libblock_alloc(bmain, ID_WO, name, 0);
-
-  world_init_data(&wrld->id);
-
-  return wrld;
-}
-
 /**
  * Only copy internal data of World ID from source
  * to already allocated/initialized destination.
@@ -103,12 +99,19 @@ static void world_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const int
 {
   World *wrld_dst = (World *)id_dst;
   const World *wrld_src = (const World *)id_src;
+
+  const bool is_localized = (flag & LIB_ID_CREATE_LOCAL) != 0;
   /* We always need allocation of our private ID data. */
   const int flag_private_id_data = flag & ~LIB_ID_CREATE_NO_ALLOCATE;
 
   if (wrld_src->nodetree) {
-    BKE_id_copy_ex(
-        bmain, (ID *)wrld_src->nodetree, (ID **)&wrld_dst->nodetree, flag_private_id_data);
+    if (is_localized) {
+      wrld_dst->nodetree = ntreeLocalize(wrld_src->nodetree);
+    }
+    else {
+      BKE_id_copy_ex(
+          bmain, (ID *)wrld_src->nodetree, (ID **)&wrld_dst->nodetree, flag_private_id_data);
+    }
   }
 
   BLI_listbase_clear(&wrld_dst->gpumaterial);
@@ -122,46 +125,62 @@ static void world_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const int
   }
 }
 
-World *BKE_world_copy(Main *bmain, const World *wrld)
+static void world_foreach_id(ID *id, LibraryForeachIDData *data)
 {
-  World *wrld_copy;
-  BKE_id_copy(bmain, &wrld->id, (ID **)&wrld_copy);
-  return wrld_copy;
-}
+  World *world = (World *)id;
 
-World *BKE_world_localize(World *wrld)
-{
-  /* TODO(bastien): Replace with something like:
-   *
-   *   World *wrld_copy;
-   *   BKE_id_copy_ex(bmain, &wrld->id, (ID **)&wrld_copy,
-   *                  LIB_ID_COPY_NO_MAIN | LIB_ID_COPY_NO_PREVIEW | LIB_ID_COPY_NO_USER_REFCOUNT,
-   *                  false);
-   *   return wrld_copy;
-   *
-   * NOTE: Only possible once nested node trees are fully converted to that too. */
-
-  World *wrldn;
-
-  wrldn = BKE_libblock_copy_for_localize(&wrld->id);
-
-  if (wrld->nodetree) {
-    wrldn->nodetree = ntreeLocalize(wrld->nodetree);
+  if (world->nodetree) {
+    /* nodetree **are owned by IDs**, treat them as mere sub-data and not real ID! */
+    BKE_library_foreach_ID_embedded(data, (ID **)&world->nodetree);
   }
-
-  wrldn->preview = NULL;
-
-  BLI_listbase_clear(&wrldn->gpumaterial);
-  BLI_listbase_clear((ListBase *)&wrldn->drawdata);
-
-  wrldn->id.tag |= LIB_TAG_LOCALIZED;
-
-  return wrldn;
 }
 
-static void world_make_local(Main *bmain, ID *id, const int flags)
+static void world_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
-  BKE_lib_id_make_local_generic(bmain, id, flags);
+  World *wrld = (World *)id;
+  if (wrld->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+    BLI_listbase_clear(&wrld->gpumaterial);
+
+    /* write LibData */
+    BLO_write_id_struct(writer, World, id_address, &wrld->id);
+    BKE_id_blend_write(writer, &wrld->id);
+
+    if (wrld->adt) {
+      BKE_animdata_blend_write(writer, wrld->adt);
+    }
+
+    /* nodetree is integral part of world, no libdata */
+    if (wrld->nodetree) {
+      BLO_write_struct(writer, bNodeTree, wrld->nodetree);
+      ntreeBlendWrite(writer, wrld->nodetree);
+    }
+
+    BKE_previewimg_blend_write(writer, wrld->preview);
+  }
+}
+
+static void world_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  World *wrld = (World *)id;
+  BLO_read_data_address(reader, &wrld->adt);
+  BKE_animdata_blend_read_data(reader, wrld->adt);
+
+  BLO_read_data_address(reader, &wrld->preview);
+  BKE_previewimg_blend_read(reader, wrld->preview);
+  BLI_listbase_clear(&wrld->gpumaterial);
+}
+
+static void world_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  World *wrld = (World *)id;
+  BLO_read_id_address(reader, wrld->id.lib, &wrld->ipo); /* XXX deprecated, old animation system */
+}
+
+static void world_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  World *wrld = (World *)id;
+  BLO_expand(expander, wrld->ipo); /* XXX deprecated, old animation system */
 }
 
 IDTypeInfo IDType_ID_WO = {
@@ -177,8 +196,24 @@ IDTypeInfo IDType_ID_WO = {
     .init_data = world_init_data,
     .copy_data = world_copy_data,
     .free_data = world_free_data,
-    .make_local = world_make_local,
+    .make_local = NULL,
+    .foreach_id = world_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = world_blend_write,
+    .blend_read_data = world_blend_read_data,
+    .blend_read_lib = world_blend_read_lib,
+    .blend_read_expand = world_blend_read_expand,
 };
+
+World *BKE_world_add(Main *bmain, const char *name)
+{
+  World *wrld;
+
+  wrld = BKE_id_new(bmain, ID_WO, name);
+
+  return wrld;
+}
 
 void BKE_world_eval(struct Depsgraph *depsgraph, World *world)
 {

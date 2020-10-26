@@ -18,9 +18,9 @@
  * \ingroup python
  */
 
-#ifndef __BPY_EXTERN_H__
-#define __BPY_EXTERN_H__
+#pragma once
 
+struct AnimationEvalContext;
 struct ChannelDriver; /* DNA_anim_types.h */
 struct ID;            /* DNA_ID.h */
 struct ListBase;      /* DNA_listBase.h */
@@ -35,11 +35,11 @@ struct bContext;
 struct bContextDataResult;
 struct bPythonConstraint; /* DNA_constraint_types.h */
 
+#include "BLI_utildefines.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BLI_utildefines.h"
 
 void BPY_pyconstraint_exec(struct bPythonConstraint *con,
                            struct bConstraintOb *cob,
@@ -49,11 +49,6 @@ void BPY_pyconstraint_target(struct bPythonConstraint *con, struct bConstraintTa
 void BPY_pyconstraint_update(struct Object *owner, struct bConstraint *con);
 int BPY_is_pyconstraint(struct Text *text);
 //  void BPY_free_pyconstraint_links(struct Text *text);
-
-void BPY_python_start(int argc, const char **argv);
-void BPY_python_end(void);
-void BPY_python_reset(struct bContext *C);
-void BPY_python_use_system_env(void);
 
 /* global interpreter lock */
 
@@ -72,43 +67,8 @@ void BPY_thread_restore(BPy_ThreadStatePtr tstate);
   } \
   (void)0
 
-bool BPY_execute_filepath(struct bContext *C, const char *filepath, struct ReportList *reports);
-bool BPY_execute_text(struct bContext *C,
-                      struct Text *text,
-                      struct ReportList *reports,
-                      const bool do_jump);
-
-bool BPY_execute_string_as_number(struct bContext *C,
-                                  const char *imports[],
-                                  const char *expr,
-                                  const bool verbose,
-                                  double *r_value);
-bool BPY_execute_string_as_intptr(struct bContext *C,
-                                  const char *imports[],
-                                  const char *expr,
-                                  const bool verbose,
-                                  intptr_t *r_value);
-bool BPY_execute_string_as_string_and_size(struct bContext *C,
-                                           const char *imports[],
-                                           const char *expr,
-                                           const bool verbose,
-                                           char **r_value,
-                                           size_t *r_value_size);
-bool BPY_execute_string_as_string(struct bContext *C,
-                                  const char *imports[],
-                                  const char *expr,
-                                  const bool verbose,
-                                  char **r_value);
-
-bool BPY_execute_string_ex(struct bContext *C,
-                           const char *imports[],
-                           const char *expr,
-                           bool use_eval);
-bool BPY_execute_string(struct bContext *C, const char *imports[], const char *expr);
-
 void BPY_text_free_code(struct Text *text);
-void BPY_modules_update(
-    struct bContext *C);  // XXX - annoying, need this for pointers that get out of date
+void BPY_modules_update(void);
 void BPY_modules_load_user(struct bContext *C);
 
 void BPY_app_handlers_reset(const short do_all);
@@ -117,7 +77,7 @@ void BPY_driver_reset(void);
 float BPY_driver_exec(struct PathResolvedRNA *anim_rna,
                       struct ChannelDriver *driver,
                       struct ChannelDriver *driver_orig,
-                      const float evaltime);
+                      const struct AnimationEvalContext *anim_eval_context);
 
 void BPY_DECREF(void *pyob_ptr); /* Py_DECREF() */
 void BPY_DECREF_RNA_INVALIDATE(void *pyob_ptr);
@@ -126,6 +86,16 @@ int BPY_context_member_get(struct bContext *C,
                            struct bContextDataResult *result);
 void BPY_context_set(struct bContext *C);
 void BPY_context_update(struct bContext *C);
+
+#define BPY_context_dict_clear_members(C, ...) \
+  BPY_context_dict_clear_members_array(&((C)->data.py_context), \
+                                       (C)->data.py_context_orig, \
+                                       ((const char *[]){__VA_ARGS__}), \
+                                       VA_NARGS_COUNT(__VA_ARGS__))
+void BPY_context_dict_clear_members_array(void **dict_p,
+                                          void *dict_orig,
+                                          const char *context_members[],
+                                          uint context_members_len);
 
 void BPY_id_release(struct ID *id);
 
@@ -139,5 +109,3 @@ const char *BPY_app_translations_py_pgettext(const char *msgctxt, const char *ms
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-#endif /* __BPY_EXTERN_H__ */

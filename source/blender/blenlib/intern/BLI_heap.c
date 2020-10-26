@@ -330,7 +330,7 @@ float BLI_heap_top_value(const Heap *heap)
 }
 
 /**
- * Pop the top node off the heap and return it's pointer.
+ * Pop the top node off the heap and return its pointer.
  */
 void *BLI_heap_pop_min(Heap *heap)
 {
@@ -393,14 +393,14 @@ void BLI_heap_node_value_update_ptr(Heap *heap, HeapNode *node, float value, voi
   }
 }
 
-float BLI_heap_node_value(const HeapNode *node)
+float BLI_heap_node_value(const HeapNode *heap)
 {
-  return node->value;
+  return heap->value;
 }
 
-void *BLI_heap_node_ptr(const HeapNode *node)
+void *BLI_heap_node_ptr(const HeapNode *heap)
 {
-  return node->ptr;
+  return heap->ptr;
 }
 
 static bool heap_is_minheap(const Heap *heap, uint root)

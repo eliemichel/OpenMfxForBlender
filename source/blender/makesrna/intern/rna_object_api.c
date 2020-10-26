@@ -36,7 +36,7 @@
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 
-#include "BKE_gpencil_geom.h"
+#include "BKE_gpencil_curve.h"
 #include "BKE_layer.h"
 
 #include "DEG_depsgraph.h"
@@ -397,6 +397,9 @@ static PointerRNA rna_Object_shape_key_add(
     RNA_pointer_create((ID *)BKE_key_from_object(ob), &RNA_ShapeKey, kb, &keyptr);
     WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
+    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+    DEG_relations_tag_update(bmain);
+
     return keyptr;
   }
   else {
@@ -713,8 +716,9 @@ bool rna_Object_generate_gpencil_strokes(Object *ob,
                                          bContext *C,
                                          ReportList *reports,
                                          Object *ob_gpencil,
-                                         bool gpencil_lines,
-                                         bool use_collections)
+                                         bool use_collections,
+                                         float scale_thickness,
+                                         float sample)
 {
   if (ob->type != OB_CURVE) {
     BKE_reportf(reports,
@@ -726,7 +730,8 @@ bool rna_Object_generate_gpencil_strokes(Object *ob,
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
 
-  BKE_gpencil_convert_curve(bmain, scene, ob_gpencil, ob, gpencil_lines, use_collections, false);
+  BKE_gpencil_convert_curve(
+      bmain, scene, ob_gpencil, ob, use_collections, scale_thickness, sample);
 
   WM_main_add_notifier(NC_GPENCIL | ND_DATA, NULL);
 
@@ -954,7 +959,7 @@ void RNA_api_object(StructRNA *srna)
   RNA_def_function_ui_description(func, "Clears mesh data-block created by to_mesh()");
 
   /* Armature */
-  func = RNA_def_function(srna, "find_armature", "modifiers_isDeformedByArmature");
+  func = RNA_def_function(srna, "find_armature", "BKE_modifiers_is_deformed_by_armature");
   RNA_def_function_ui_description(
       func, "Find armature influencing this object as a parent or via a modifier");
   parm = RNA_def_pointer(
@@ -1190,12 +1195,17 @@ void RNA_api_object(StructRNA *srna)
   RNA_def_function_ui_description(func, "Convert a curve object to grease pencil strokes.");
   RNA_def_function_flag(func, FUNC_USE_CONTEXT | FUNC_USE_REPORTS);
 
-  parm = RNA_def_pointer(
-      func, "ob_gpencil", "Object", "", "Grease Pencil object used to create new strokes");
+  parm = RNA_def_pointer(func,
+                         "grease_pencil_object",
+                         "Object",
+                         "",
+                         "Grease Pencil object used to create new strokes");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
-  parm = RNA_def_boolean(func, "gpencil_lines", 0, "", "Create Lines");
-  parm = RNA_def_boolean(func, "use_collections", 1, "", "Use Collections");
-
+  parm = RNA_def_boolean(func, "use_collections", true, "", "Use Collections");
+  parm = RNA_def_float(
+      func, "scale_thickness", 1.0f, 0.0f, FLT_MAX, "", "Thickness scaling factor", 0.0f, 100.0f);
+  parm = RNA_def_float(
+      func, "sample", 0.0f, 0.0f, FLT_MAX, "", "Sample distance, zero to disable", 0.0f, 100.0f);
   parm = RNA_def_boolean(func, "result", 0, "", "Result");
   RNA_def_function_return(func, parm);
 }

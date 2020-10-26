@@ -55,20 +55,14 @@ PyDoc_STRVAR(ViewShape_doc,
              "and :class:`ViewEdge`) that are issued from the same input shape.\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
+             "            __init__(sshape)\n"
              "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
+             "   Builds a :class:`ViewShape` using the default constructor,\n"
+             "   copy constructor, or from a :class:`SShape`.\n"
              "\n"
              "   :arg brother: A ViewShape object.\n"
              "   :type brother: :class:`ViewShape`\n"
-             "\n"
-             ".. method:: __init__(sshape)\n"
-             "\n"
-             "   Builds a ViewShape from an SShape.\n"
-             "\n"
              "   :arg sshape: An SShape object.\n"
              "   :type sshape: :class:`SShape`");
 
@@ -88,7 +82,7 @@ static int ViewShape_init(BPy_ViewShape *self, PyObject *args, PyObject *kwds)
       self->py_ss = ((BPy_ViewShape *)obj)->py_ss;
     }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist_2, &SShape_Type, &obj)) {
     BPy_SShape *py_ss = (BPy_SShape *)obj;
     self->vs = new ViewShape(py_ss->ss);

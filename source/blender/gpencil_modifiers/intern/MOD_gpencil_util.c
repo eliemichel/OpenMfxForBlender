@@ -72,13 +72,14 @@ void gpencil_modifier_type_init(GpencilModifierTypeInfo *types[])
   INIT_GP_TYPE(Armature);
   INIT_GP_TYPE(Time);
   INIT_GP_TYPE(Multiply);
+  INIT_GP_TYPE(Texture);
 #undef INIT_GP_TYPE
 }
 
 /* verify if valid layer, material and pass index */
 bool is_stroke_affected_by_modifier(Object *ob,
                                     char *mlayername,
-                                    char *mmaterialname,
+                                    Material *material,
                                     const int mpassindex,
                                     const int gpl_passindex,
                                     const int minpoints,
@@ -105,15 +106,15 @@ bool is_stroke_affected_by_modifier(Object *ob,
       }
     }
   }
-  /* omit if filter by material */
-  if (mmaterialname[0] != '\0') {
+  /* Omit if filter by material. */
+  if (material != NULL) {
     if (inv4 == false) {
-      if (!STREQ(mmaterialname, ma->id.name + 2)) {
+      if (material != ma) {
         return false;
       }
     }
     else {
-      if (STREQ(mmaterialname, ma->id.name + 2)) {
+      if (material == ma) {
         return false;
       }
     }
@@ -179,9 +180,8 @@ float get_modifier_point_weight(MDeformVert *dvert, bool inverse, int def_nr)
     if (inverse == 1) {
       return 1.0f;
     }
-    else {
-      return -1.0f;
-    }
+
+    return -1.0f;
   }
 
   return weight;

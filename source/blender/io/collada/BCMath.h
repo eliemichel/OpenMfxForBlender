@@ -18,15 +18,13 @@
  * \ingroup collada
  */
 
-#ifndef __BCMATH_H__
-#define __BCMATH_H__
+#pragma once
 
 #include "BlenderTypes.h"
 
-extern "C" {
 #include "BKE_object.h"
+
 #include "BLI_math.h"
-}
 
 class BCQuat {
  private:
@@ -94,17 +92,15 @@ class BCMatrix {
   void apply_transform(Matrix &to,
                        const Matrix &transform,
                        const Matrix &from,
-                       const bool inverted = false);
+                       const bool inverse = false);
   void add_inverted_transform(Matrix &to, const Matrix &transform, const Matrix &from);
   void add_transform(const Matrix &matrix, const bool inverted = false);
   void add_transform(const BCMatrix &matrix, const bool inverted = false);
   void apply_transform(const BCMatrix &matrix, const bool inverted = false);
 
-  const bool in_range(const BCMatrix &other, float distance) const;
+  bool in_range(const BCMatrix &other, float distance) const;
 
   static void sanitize(Matrix &matrix, int precision);
   static void sanitize(DMatrix &matrix, int precision);
   static void transpose(Matrix &matrix);
 };
-
-#endif /* __BCMATH_H__ */

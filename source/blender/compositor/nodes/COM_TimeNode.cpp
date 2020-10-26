@@ -19,9 +19,9 @@
 #include "COM_TimeNode.h"
 #include "COM_ExecutionSystem.h"
 #include "COM_SetValueOperation.h"
-extern "C" {
+
 #include "BKE_colortools.h"
-}
+
 #include "BLI_utildefines.h"
 
 TimeNode::TimeNode(bNode *editorNode) : Node(editorNode)
@@ -49,7 +49,7 @@ void TimeNode::convertToOperations(NodeConverter &converter,
     fac = (context.getFramenumber() - node->custom1) / (float)(node->custom2 - node->custom1);
   }
 
-  BKE_curvemapping_initialize((CurveMapping *)node->storage);
+  BKE_curvemapping_init((CurveMapping *)node->storage);
   fac = BKE_curvemapping_evaluateF((CurveMapping *)node->storage, 0, fac);
   operation->setValue(clamp_f(fac, 0.0f, 1.0f));
   converter.addOperation(operation);

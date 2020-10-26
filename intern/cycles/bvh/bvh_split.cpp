@@ -33,7 +33,7 @@ CCL_NAMESPACE_BEGIN
 BVHObjectSplit::BVHObjectSplit(BVHBuild *builder,
                                BVHSpatialStorage *storage,
                                const BVHRange &range,
-                               vector<BVHReference> *references,
+                               vector<BVHReference> &references,
                                float nodeSAH,
                                const BVHUnaligned *unaligned_heuristic,
                                const Transform *aligned_space)
@@ -43,7 +43,7 @@ BVHObjectSplit::BVHObjectSplit(BVHBuild *builder,
       left_bounds(BoundBox::empty),
       right_bounds(BoundBox::empty),
       storage_(storage),
-      references_(references),
+      references_(&references),
       unaligned_heuristic_(unaligned_heuristic),
       aligned_space_(aligned_space)
 {
@@ -133,7 +133,7 @@ void BVHObjectSplit::split(BVHRange &left, BVHRange &right, const BVHRange &rang
 BVHSpatialSplit::BVHSpatialSplit(const BVHBuild &builder,
                                  BVHSpatialStorage *storage,
                                  const BVHRange &range,
-                                 vector<BVHReference> *references,
+                                 vector<BVHReference> &references,
                                  float nodeSAH,
                                  const BVHUnaligned *unaligned_heuristic,
                                  const Transform *aligned_space)
@@ -141,7 +141,7 @@ BVHSpatialSplit::BVHSpatialSplit(const BVHBuild &builder,
       dim(0),
       pos(0.0f),
       storage_(storage),
-      references_(references),
+      references_(&references),
       unaligned_heuristic_(unaligned_heuristic),
       aligned_space_(aligned_space)
 {
@@ -152,7 +152,7 @@ BVHSpatialSplit::BVHSpatialSplit(const BVHBuild &builder,
   }
   else {
     range_bounds = unaligned_heuristic->compute_aligned_boundbox(
-        range, &references->at(0), *aligned_space);
+        range, &references_->at(0), *aligned_space);
   }
 
   float3 origin = range_bounds.min;
@@ -458,7 +458,7 @@ void BVHSpatialSplit::split_object_reference(
 {
   Geometry *geom = object->geometry;
 
-  if (geom->type == Geometry::MESH) {
+  if (geom->type == Geometry::MESH || geom->type == Geometry::VOLUME) {
     Mesh *mesh = static_cast<Mesh *>(geom);
     for (int tri_idx = 0; tri_idx < mesh->num_triangles(); ++tri_idx) {
       split_triangle_primitive(mesh, &object->tfm, tri_idx, dim, pos, left_bounds, right_bounds);

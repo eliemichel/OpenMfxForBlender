@@ -401,7 +401,7 @@ static int wm_macro_modal(bContext *C, wmOperator *op, const wmEvent *event)
     retval = opm->type->modal(C, opm, event);
     OPERATOR_RETVAL_CHECK(retval);
 
-    /* if we're halfway through using a tool and cancel it, clear the options [#37149] */
+    /* if we're halfway through using a tool and cancel it, clear the options T37149. */
     if (retval & OPERATOR_CANCELLED) {
       WM_operator_properties_clear(opm->ptr);
     }
@@ -606,24 +606,32 @@ char *WM_operatortype_description(struct bContext *C,
       if (description[0]) {
         return description;
       }
-      else {
-        MEM_freeN(description);
-      }
+      MEM_freeN(description);
     }
   }
 
   const char *info = RNA_struct_ui_description(ot->srna);
-
-  if (!(info && info[0])) {
-    info = RNA_struct_ui_name(ot->srna);
-  }
-
   if (info && info[0]) {
     return BLI_strdup(info);
   }
-  else {
-    return NULL;
+  return NULL;
+}
+
+/**
+ * Use when we want a label, preferring the description.
+ */
+char *WM_operatortype_description_or_name(struct bContext *C,
+                                          struct wmOperatorType *ot,
+                                          struct PointerRNA *properties)
+{
+  char *text = WM_operatortype_description(C, ot, properties);
+  if (text == NULL) {
+    const char *text_orig = WM_operatortype_name(ot, properties);
+    if (text_orig != NULL) {
+      text = BLI_strdup(text_orig);
+    }
   }
+  return text;
 }
 
 /** \} */

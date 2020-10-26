@@ -35,6 +35,7 @@
 #include "BKE_deform.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 
 #include "DEG_depsgraph.h"
@@ -198,27 +199,26 @@ bool ED_armature_ebone_is_child_recursive(EditBone *ebone_parent, EditBone *ebon
  */
 EditBone *ED_armature_ebone_find_shared_parent(EditBone *ebone_child[], const uint ebone_child_tot)
 {
-  uint i;
-  EditBone *ebone_iter;
-
 #define EBONE_TEMP_UINT(ebone) (*((uint *)(&((ebone)->temp))))
 
   /* clear all */
-  for (i = 0; i < ebone_child_tot; i++) {
-    for (ebone_iter = ebone_child[i]; ebone_iter; ebone_iter = ebone_iter->parent) {
+  for (uint i = 0; i < ebone_child_tot; i++) {
+    for (EditBone *ebone_iter = ebone_child[i]; ebone_iter; ebone_iter = ebone_iter->parent) {
       EBONE_TEMP_UINT(ebone_iter) = 0;
     }
   }
 
   /* accumulate */
-  for (i = 0; i < ebone_child_tot; i++) {
-    for (ebone_iter = ebone_child[i]->parent; ebone_iter; ebone_iter = ebone_iter->parent) {
+  for (uint i = 0; i < ebone_child_tot; i++) {
+    for (EditBone *ebone_iter = ebone_child[i]->parent; ebone_iter;
+         ebone_iter = ebone_iter->parent) {
       EBONE_TEMP_UINT(ebone_iter) += 1;
     }
   }
 
   /* only need search the first chain */
-  for (ebone_iter = ebone_child[0]->parent; ebone_iter; ebone_iter = ebone_iter->parent) {
+  for (EditBone *ebone_iter = ebone_child[0]->parent; ebone_iter;
+       ebone_iter = ebone_iter->parent) {
     if (EBONE_TEMP_UINT(ebone_iter) == ebone_child_tot) {
       return ebone_iter;
     }
@@ -229,7 +229,7 @@ EditBone *ED_armature_ebone_find_shared_parent(EditBone *ebone_child[], const ui
   return NULL;
 }
 
-void ED_armature_ebone_to_mat3(EditBone *ebone, float mat[3][3])
+void ED_armature_ebone_to_mat3(EditBone *ebone, float r_mat[3][3])
 {
   float delta[3], roll;
 
@@ -246,20 +246,20 @@ void ED_armature_ebone_to_mat3(EditBone *ebone, float mat[3][3])
     }
   }
 
-  vec_roll_to_mat3_normalized(delta, roll, mat);
+  vec_roll_to_mat3_normalized(delta, roll, r_mat);
 }
 
-void ED_armature_ebone_to_mat4(EditBone *ebone, float mat[4][4])
+void ED_armature_ebone_to_mat4(EditBone *ebone, float r_mat[4][4])
 {
   float m3[3][3];
 
   ED_armature_ebone_to_mat3(ebone, m3);
 
-  copy_m4_m3(mat, m3);
-  copy_v3_v3(mat[3], ebone->head);
+  copy_m4_m3(r_mat, m3);
+  copy_v3_v3(r_mat[3], ebone->head);
 }
 
-void ED_armature_ebone_from_mat3(EditBone *ebone, float mat[3][3])
+void ED_armature_ebone_from_mat3(EditBone *ebone, const float mat[3][3])
 {
   float vec[3], roll;
   const float len = len_v3v3(ebone->head, ebone->tail);
@@ -270,7 +270,7 @@ void ED_armature_ebone_from_mat3(EditBone *ebone, float mat[3][3])
   ebone->roll = roll;
 }
 
-void ED_armature_ebone_from_mat4(EditBone *ebone, float mat[4][4])
+void ED_armature_ebone_from_mat4(EditBone *ebone, const float mat[4][4])
 {
   float mat3[3][3];
 
@@ -392,7 +392,7 @@ void armature_tag_unselect(bArmature *arm)
 void ED_armature_ebone_transform_mirror_update(bArmature *arm, EditBone *ebo, bool check_select)
 {
   /* TODO When this function is called by property updates,
-   * cancelling the value change will not restore mirrored bone correctly. */
+   * canceling the value change will not restore mirrored bone correctly. */
 
   /* Currently check_select==true when this function is called from a transform operator,
    * eg. from 3d viewport. */
@@ -696,7 +696,7 @@ void ED_armature_from_edit(Main *bmain, bArmature *arm)
 
   /* armature bones */
   BKE_armature_bone_hash_free(arm);
-  BKE_armature_bonelist_free(&arm->bonebase);
+  BKE_armature_bonelist_free(&arm->bonebase, true);
   arm->act_bone = NULL;
 
   /* remove zero sized bones, this gives unstable restposes */
@@ -848,7 +848,7 @@ void ED_armature_to_edit(bArmature *arm)
 
 /* free's bones and their properties */
 
-void ED_armature_ebone_listbase_free(ListBase *lb)
+void ED_armature_ebone_listbase_free(ListBase *lb, const bool do_id_user)
 {
   EditBone *ebone, *ebone_next;
 
@@ -856,7 +856,7 @@ void ED_armature_ebone_listbase_free(ListBase *lb)
     ebone_next = ebone->next;
 
     if (ebone->prop) {
-      IDP_FreeProperty(ebone->prop);
+      IDP_FreeProperty_ex(ebone->prop, do_id_user);
     }
 
     MEM_freeN(ebone);
@@ -865,7 +865,7 @@ void ED_armature_ebone_listbase_free(ListBase *lb)
   BLI_listbase_clear(lb);
 }
 
-void ED_armature_ebone_listbase_copy(ListBase *lb_dst, ListBase *lb_src)
+void ED_armature_ebone_listbase_copy(ListBase *lb_dst, ListBase *lb_src, const bool do_id_user)
 {
   EditBone *ebone_src;
   EditBone *ebone_dst;
@@ -875,7 +875,8 @@ void ED_armature_ebone_listbase_copy(ListBase *lb_dst, ListBase *lb_src)
   for (ebone_src = lb_src->first; ebone_src; ebone_src = ebone_src->next) {
     ebone_dst = MEM_dupallocN(ebone_src);
     if (ebone_dst->prop) {
-      ebone_dst->prop = IDP_CopyProperty(ebone_dst->prop);
+      ebone_dst->prop = IDP_CopyProperty_ex(ebone_dst->prop,
+                                            do_id_user ? 0 : LIB_ID_CREATE_NO_USER_REFCOUNT);
     }
     ebone_src->temp.ebone = ebone_dst;
     BLI_addtail(lb_dst, ebone_dst);
@@ -915,9 +916,7 @@ int ED_armature_ebone_selectflag_get(const EditBone *ebone)
     return ((ebone->flag & (BONE_SELECTED | BONE_TIPSEL)) |
             ((ebone->parent->flag & BONE_TIPSEL) ? BONE_ROOTSEL : 0));
   }
-  else {
-    return (ebone->flag & (BONE_SELECTED | BONE_ROOTSEL | BONE_TIPSEL));
-  }
+  return (ebone->flag & (BONE_SELECTED | BONE_ROOTSEL | BONE_TIPSEL));
 }
 
 void ED_armature_ebone_selectflag_set(EditBone *ebone, int flag)

@@ -268,9 +268,8 @@ int IMB_indexer_get_frame_index(struct anim_index *idx, int frameno)
   if (first == idx->num_entries) {
     return idx->num_entries - 1;
   }
-  else {
-    return first;
-  }
+
+  return first;
 }
 
 unsigned long long IMB_indexer_get_pts(struct anim_index *idx, int frame_index)
@@ -473,10 +472,6 @@ static struct proxy_output_ctx *alloc_proxy_output_ffmpeg(
   char fname[FILE_MAX];
   int ffmpeg_quality;
 
-  /* JPEG requires this */
-  width = round_up(width, 8);
-  height = round_up(height, 8);
-
   rv->proxy_size = proxy_size;
   rv->anim = anim;
 
@@ -633,9 +628,8 @@ static int add_to_proxy_output_ffmpeg(struct proxy_output_ctx *ctx, AVFrame *fra
 
     return 1;
   }
-  else {
-    return 0;
-  }
+
+  return 0;
 }
 
 static void free_proxy_output_ffmpeg(struct proxy_output_ctx *ctx, int rollback)
@@ -894,7 +888,7 @@ static void index_rebuild_ffmpeg_proc_decoded_frame(FFmpegIndexBuilderContext *c
 }
 
 static int index_rebuild_ffmpeg(FFmpegIndexBuilderContext *context,
-                                short *stop,
+                                const short *stop,
                                 short *do_update,
                                 float *progress)
 {
@@ -1090,7 +1084,7 @@ static void index_rebuild_fallback_finish(FallbackIndexBuilderContext *context, 
 }
 
 static void index_rebuild_fallback(FallbackIndexBuilderContext *context,
-                                   short *stop,
+                                   const short *stop,
                                    short *do_update,
                                    float *progress)
 {

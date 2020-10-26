@@ -16,16 +16,6 @@
 #
 # ***** END GPL LICENSE BLOCK *****
 
-if(ALEMBIC_HDF5)
-  set(ALEMBIC_HDF5_HL)
-  # in debug mode we do not build HDF5_hdf5_hl_LIBRARY which makes cmake really
-  # unhappy, stub it with the debug mode lib. it's not linking it in at this
-  # point in time anyhow
-  if(BUILD_MODE STREQUAL Debug)
-    set(ALEMBIC_HDF5_HL -DHDF5_hdf5_hl_LIBRARY=${LIBDIR}/hdf5/lib/libhdf5_hl_D.${LIBEXT})
-  endif()
-endif()
-
 set(ALEMBIC_EXTRA_ARGS
   -DBUILDSTATIC=ON
   -DLINKSTATIC=ON
@@ -38,6 +28,7 @@ set(ALEMBIC_EXTRA_ARGS
   -DBoost_DEBUG=ON
   -DBOOST_ROOT=${LIBDIR}/boost
   -DBoost_NO_SYSTEM_PATHS=ON
+  -DBoost_NO_BOOST_CMAKE=ON
   -DILMBASE_ROOT=${LIBDIR}/openexr
   -DALEMBIC_ILMBASE_INCLUDE_DIRECTORY=${LIBDIR}/openexr/include/OpenEXR
   -DALEMBIC_ILMBASE_HALF_LIB=${LIBDIR}/openexr/lib/${LIBPREFIX}Half${OPENEXR_VERSION_POSTFIX}${LIBEXT}
@@ -52,7 +43,6 @@ set(ALEMBIC_EXTRA_ARGS
   -DUSE_PRMAN=0
   -DUSE_HDF5=Off
   -DUSE_STATIC_HDF5=Off
-  -DHDF5_ROOT=${LIBDIR}/hdf5
   -DUSE_TESTS=Off
   -DALEMBIC_NO_OPENGL=1
   -DUSE_BINARIES=ON
@@ -61,7 +51,6 @@ set(ALEMBIC_EXTRA_ARGS
   -DGLUT_INCLUDE_DIR=""
   -DZLIB_LIBRARY=${LIBDIR}/zlib/lib/${ZLIB_LIBRARY}
   -DZLIB_INCLUDE_DIR=${LIBDIR}/zlib/include/
-  ${ALEMBIC_HDF5_HL}
 )
 
 ExternalProject_Add(external_alembic

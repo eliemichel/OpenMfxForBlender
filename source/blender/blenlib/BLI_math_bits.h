@@ -15,22 +15,23 @@
  *
  * */
 
-#ifndef __BLI_MATH_BITS_H__
-#define __BLI_MATH_BITS_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
 
+#include "BLI_math_inline.h"
+#include "BLI_utildefines.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "BLI_math_inline.h"
-
 /* Search the value from LSB to MSB for a set bit. Returns index of this bit. */
 MINLINE int bitscan_forward_i(int a);
 MINLINE unsigned int bitscan_forward_uint(unsigned int a);
+MINLINE unsigned int bitscan_forward_uint64(unsigned long long a);
 
 /* Similar to above, but also clears the bit. */
 MINLINE int bitscan_forward_clear_i(int *a);
@@ -39,6 +40,7 @@ MINLINE unsigned int bitscan_forward_clear_uint(unsigned int *a);
 /* Search the value from MSB to LSB for a set bit. Returns index of this bit. */
 MINLINE int bitscan_reverse_i(int a);
 MINLINE unsigned int bitscan_reverse_uint(unsigned int a);
+MINLINE unsigned int bitscan_reverse_uint64(unsigned long long a);
 
 /* Similar to above, but also clears the bit. */
 MINLINE int bitscan_reverse_clear_i(int *a);
@@ -67,5 +69,3 @@ MINLINE float xor_fl(float x, int y);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MATH_BITS_H__ */

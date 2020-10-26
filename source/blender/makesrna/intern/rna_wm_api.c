@@ -261,7 +261,7 @@ static wmKeyMapItem *rna_KeyMap_item_new(wmKeyMap *km,
     kmi->flag |= KMI_REPEAT_IGNORE;
   }
 
-  /* [#32437] allow scripts to define hotkeys that get added to start of keymap
+  /* T32437 allow scripts to define hotkeys that get added to start of keymap
    *          so that they stand a chance against catch-all defines later on
    */
   if (head) {
@@ -558,6 +558,12 @@ static void rna_WindowManager_print_undo_steps(wmWindowManager *wm)
   BKE_undosys_print(wm->undo_stack);
 }
 
+static void rna_WindowManager_tag_script_reload(void)
+{
+  WM_script_tag_reload();
+  WM_main_add_notifier(NC_WINDOW, NULL);
+}
+
 static PointerRNA rna_WindoManager_operator_properties_last(const char *idname)
 {
   wmOperatorType *ot = WM_operatortype_find(idname, true);
@@ -626,6 +632,7 @@ static wmEvent *rna_Window_event_add_simulate(wmWindow *win,
   wmEvent e = *win->eventstate;
   e.type = type;
   e.val = value;
+  e.is_repeat = false;
   e.x = x;
   e.y = y;
   /* Note: KM_MOD_FIRST, KM_MOD_SECOND aren't used anywhere, set as bools */
@@ -913,6 +920,12 @@ void RNA_api_wm(StructRNA *srna)
 
   RNA_def_function(srna, "print_undo_steps", "rna_WindowManager_print_undo_steps");
 
+  /* Used by (#SCRIPT_OT_reload). */
+  func = RNA_def_function(srna, "tag_script_reload", "rna_WindowManager_tag_script_reload");
+  RNA_def_function_ui_description(
+      func, "Tag for refreshing the interface after scripts have been reloaded");
+  RNA_def_function_flag(func, FUNC_NO_SELF);
+
   parm = RNA_def_property(srna, "is_interface_locked", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_ui_text(
       parm,
@@ -1122,7 +1135,7 @@ void RNA_api_keymapitems(StructRNA *srna)
   RNA_def_boolean(func, "alt", 0, "Alt", "");
   RNA_def_boolean(func, "oskey", 0, "OS Key", "");
   RNA_def_enum(func, "key_modifier", rna_enum_event_type_items, 0, "Key Modifier", "");
-  RNA_def_boolean(func, "repeat", true, "Repeat", "When set, accept key-repeat events");
+  RNA_def_boolean(func, "repeat", false, "Repeat", "When set, accept key-repeat events");
   RNA_def_boolean(func,
                   "head",
                   0,
@@ -1146,7 +1159,7 @@ void RNA_api_keymapitems(StructRNA *srna)
   RNA_def_boolean(func, "alt", 0, "Alt", "");
   RNA_def_boolean(func, "oskey", 0, "OS Key", "");
   RNA_def_enum(func, "key_modifier", rna_enum_event_type_items, 0, "Key Modifier", "");
-  RNA_def_boolean(func, "repeat", true, "Repeat", "When set, accept key-repeat events");
+  RNA_def_boolean(func, "repeat", false, "Repeat", "When set, accept key-repeat events");
   parm = RNA_def_pointer(func, "item", "KeyMapItem", "Item", "Added key map item");
   RNA_def_function_return(func, parm);
 

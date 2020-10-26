@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_BLURBASEOPERATION_H__
-#define __COM_BLURBASEOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 #include "COM_QualityStepHelper.h"
 
@@ -33,7 +33,7 @@ class BlurBaseOperation : public NodeOperation, public QualityStepHelper {
   BlurBaseOperation(DataType data_type);
   float *make_gausstab(float rad, int size);
 #ifdef __SSE2__
-  __m128 *convert_gausstab_sse(const float *gaustab, int size);
+  __m128 *convert_gausstab_sse(const float *gausstab, int size);
 #endif
   float *make_dist_fac_inverse(float rad, int size, int falloff);
 
@@ -77,4 +77,3 @@ class BlurBaseOperation : public NodeOperation, public QualityStepHelper {
 
   void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
 };
-#endif

@@ -44,7 +44,7 @@
  *     this avoids going into an eternal loop if there are many possible branches (see T45582).
  *   - when running into a branch, create a new #PathLinkState state and add to the heap.
  *   - when the target is reached,
- *     finish - since none of the other paths can be shorter then the one just found.
+ *     finish - since none of the other paths can be shorter than the one just found.
  * - if the connection can't be found - fail.
  * - with the connection found, split all edges tagging verts
  *   (or tag verts that sit on the intersection).
@@ -155,16 +155,14 @@ static int min_dist_dir_test(MinDistDir *mddir, const float dist_dir[3], const f
   if (mddir->dist_min[0] == FLT_MAX) {
     return 0;
   }
-  else {
-    if (dot_v3v3(dist_dir, mddir->dir) > 0.0f) {
-      if (dist_sq < mddir->dist_min[0]) {
-        return 0;
-      }
+  if (dot_v3v3(dist_dir, mddir->dir) > 0.0f) {
+    if (dist_sq < mddir->dist_min[0]) {
+      return 0;
     }
-    else {
-      if (dist_sq < mddir->dist_min[1]) {
-        return 1;
-      }
+  }
+  else {
+    if (dist_sq < mddir->dist_min[1]) {
+      return 1;
     }
   }
 
@@ -191,9 +189,7 @@ static int state_isect_co_pair(const PathContext *pc, const float co_a[3], const
   if ((test_a && test_b) && (test_a != test_b)) {
     return 1; /* on either side */
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 static int state_isect_co_exact(const PathContext *pc, const float co[3])

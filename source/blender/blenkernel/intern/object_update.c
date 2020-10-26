@@ -100,7 +100,7 @@ void BKE_object_eval_parent(Depsgraph *depsgraph, Object *ob)
   DEG_debug_print_eval(depsgraph, __func__, ob->id.name, ob);
 
   /* get local matrix (but don't calculate it, as that was done already!) */
-  // XXX: redundant?
+  /* XXX: redundant? */
   copy_m4_m4(locmat, ob->obmat);
 
   /* get parent effect matrix */
@@ -145,7 +145,7 @@ void BKE_object_eval_transform_final(Depsgraph *depsgraph, Object *ob)
   DEG_debug_print_eval(depsgraph, __func__, ob->id.name, ob);
   /* Make sure inverse matrix is always up to date. This way users of it
    * do not need to worry about recalculating it. */
-  invert_m4_m4(ob->imat, ob->obmat);
+  invert_m4_m4_safe(ob->imat, ob->obmat);
   /* Set negative scale flag in object. */
   if (is_negative_m4(ob->obmat)) {
     ob->transflag |= OB_NEG_SCALE;
@@ -183,7 +183,7 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
 #endif
         /* Always compute UVs, vertex colors as orcos for render. */
         cddata_masks.lmask |= CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL;
-        cddata_masks.vmask |= CD_MASK_ORCO;
+        cddata_masks.vmask |= CD_MASK_ORCO | CD_MASK_PROP_COLOR;
       }
       if (em) {
         makeDerivedMesh(depsgraph, scene, ob, em, &cddata_masks); /* was CD_MASK_BAREMESH */

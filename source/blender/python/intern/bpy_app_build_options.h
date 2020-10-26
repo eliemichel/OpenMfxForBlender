@@ -18,9 +18,14 @@
  * \ingroup pythonintern
  */
 
-#ifndef __BPY_APP_BUILD_OPTIONS_H__
-#define __BPY_APP_BUILD_OPTIONS_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 PyObject *BPY_app_build_options_struct(void);
 
-#endif /* __BPY_APP_BUILD_OPTIONS_H__ */
+#ifdef __cplusplus
+}
+#endif

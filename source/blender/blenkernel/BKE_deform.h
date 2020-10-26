@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_DEFORM_H__
-#define __BKE_DEFORM_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,6 +28,8 @@ extern "C" {
  * \brief support for deformation groups and hooks.
  */
 
+struct BlendDataReader;
+struct BlendWriter;
 struct ListBase;
 struct MDeformVert;
 struct MEdge;
@@ -38,16 +39,18 @@ struct Object;
 struct bDeformGroup;
 
 struct bDeformGroup *BKE_object_defgroup_new(struct Object *ob, const char *name);
-void BKE_defgroup_copy_list(struct ListBase *lb1, const struct ListBase *lb2);
+void BKE_defgroup_copy_list(struct ListBase *outbase, const struct ListBase *inbase);
 struct bDeformGroup *BKE_defgroup_duplicate(const struct bDeformGroup *ingroup);
-struct bDeformGroup *BKE_object_defgroup_find_name(struct Object *ob, const char *name);
-int *BKE_object_defgroup_flip_map(struct Object *ob, int *flip_map_len, const bool use_default);
-int *BKE_object_defgroup_flip_map_single(struct Object *ob,
+struct bDeformGroup *BKE_object_defgroup_find_name(const struct Object *ob, const char *name);
+int *BKE_object_defgroup_flip_map(const struct Object *ob,
+                                  int *flip_map_len,
+                                  const bool use_default);
+int *BKE_object_defgroup_flip_map_single(const struct Object *ob,
                                          int *flip_map_len,
                                          const bool use_default,
                                          int defgroup);
-int BKE_object_defgroup_flip_index(struct Object *ob, int index, const bool use_default);
-int BKE_object_defgroup_name_index(struct Object *ob, const char *name);
+int BKE_object_defgroup_flip_index(const struct Object *ob, int index, const bool use_default);
+int BKE_object_defgroup_name_index(const struct Object *ob, const char *name);
 void BKE_object_defgroup_unique_name(struct bDeformGroup *dg, struct Object *ob);
 
 struct MDeformWeight *BKE_defvert_find_index(const struct MDeformVert *dv, const int defgroup);
@@ -109,7 +112,7 @@ void BKE_defvert_sync_mapped(struct MDeformVert *dvert_dst,
                              const int *flip_map,
                              const int flip_map_len,
                              const bool use_ensure);
-void BKE_defvert_remap(struct MDeformVert *dvert, int *map, const int map_len);
+void BKE_defvert_remap(struct MDeformVert *dvert, const int *map, const int map_len);
 void BKE_defvert_flip(struct MDeformVert *dvert, const int *flip_map, const int flip_map_len);
 void BKE_defvert_flip_merged(struct MDeformVert *dvert,
                              const int *flip_map,
@@ -161,8 +164,11 @@ void BKE_defvert_extract_vgroup_to_polyweights(struct MDeformVert *dvert,
 
 void BKE_defvert_weight_to_rgb(float r_rgb[3], const float weight);
 
+void BKE_defvert_blend_write(struct BlendWriter *writer, int count, struct MDeformVert *dvlist);
+void BKE_defvert_blend_read(struct BlendDataReader *reader,
+                            int count,
+                            struct MDeformVert *mdverts);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_DEFORM_H__ */

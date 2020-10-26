@@ -46,11 +46,12 @@ PyDoc_STRVAR(
     "they will be included in the adjacency iterator (i.e, the adjacent\n"
     "iterator will only stop on \"valid\" edges).\n"
     "\n"
-    ".. method:: __init__(restrict_to_selection=True, restrict_to_unvisited=True, begin=None, "
-    "orientation=True)\n"
+    ".. method:: __init__(restrict_to_selection=True, restrict_to_unvisited=True,"
+    "                     begin=None, orientation=True)\n"
+    "            __init__(brother)\n"
     "\n"
     "   Builds a Chaining Iterator from the first ViewEdge used for\n"
-    "   iteration and its orientation.\n"
+    "   iteration and its orientation or by using the copy constructor.\n"
     "\n"
     "   :arg restrict_to_selection: Indicates whether to force the chaining\n"
     "      to stay within the set of selected ViewEdges or not.\n"
@@ -63,11 +64,6 @@ PyDoc_STRVAR(
     "   :arg orientation: The direction to follow to explore the graph.  If\n"
     "      true, the direction indicated by the first ViewEdge is used.\n"
     "   :type orientation: bool\n"
-    "\n"
-    ".. method:: __init__(brother)\n"
-    "\n"
-    "   Copy constructor.\n"
-    "\n"
     "   :arg brother: \n"
     "   :type brother: ChainingIterator");
 
@@ -91,8 +87,8 @@ static int ChainingIterator___init__(BPy_ChainingIterator *self, PyObject *args,
           args, kwds, "O!", (char **)kwlist_1, &ChainingIterator_Type, &obj1)) {
     self->c_it = new ChainingIterator(*(((BPy_ChainingIterator *)obj1)->c_it));
   }
-  else if (PyErr_Clear(),
-           (obj1 = obj2 = obj3 = obj4 = 0),
+  else if ((void)PyErr_Clear(),
+           (void)(obj1 = obj2 = obj3 = obj4 = 0),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "|O!O!O&O!",

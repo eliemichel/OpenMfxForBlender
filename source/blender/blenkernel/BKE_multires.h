@@ -10,15 +10,14 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2007 by Nicholas Bishop
  * All rights reserved.
  */
 
-#ifndef __BKE_MULTIRES_H__
-#define __BKE_MULTIRES_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -37,7 +36,6 @@ struct DerivedMesh;
 struct MDisps;
 struct Mesh;
 struct ModifierData;
-struct Multires;
 struct MultiresModifierData;
 struct Object;
 struct Scene;
@@ -110,21 +108,16 @@ void multiresModifier_del_levels(struct MultiresModifierData *mmd,
 void multiresModifier_base_apply(struct Depsgraph *depsgraph,
                                  struct Object *object,
                                  struct MultiresModifierData *mmd);
-void multiresModifier_subdivide_legacy(struct MultiresModifierData *mmd,
-                                       struct Scene *scene,
-                                       struct Object *ob,
-                                       int updateblock,
-                                       int simple);
+int multiresModifier_rebuild_subdiv(struct Depsgraph *depsgraph,
+                                    struct Object *object,
+                                    struct MultiresModifierData *mmd,
+                                    int rebuild_limit,
+                                    bool switch_view_to_lower_level);
 void multiresModifier_sync_levels_ex(struct Object *ob_dst,
                                      struct MultiresModifierData *mmd_src,
                                      struct MultiresModifierData *mmd_dst);
 
 void multires_stitch_grids(struct Object *);
-
-/* Related to the old multires */
-void multires_free(struct Multires *mr);
-void multires_load_old(struct Object *ob, struct Mesh *me);
-void multires_load_old_250(struct Mesh *);
 
 void multiresModifier_scale_disp(struct Depsgraph *depsgraph,
                                  struct Scene *scene,
@@ -147,7 +140,7 @@ void multiresModifier_ensure_external_read(struct Mesh *mesh,
 void old_mdisps_bilinear(float out[3], float (*disps)[3], const int st, float u, float v);
 int mdisp_rot_face_to_crn(struct MVert *mvert,
                           struct MPoly *mpoly,
-                          struct MLoop *mloops,
+                          struct MLoop *mloop,
                           const struct MLoopTri *lt,
                           const int face_side,
                           const float u,
@@ -175,13 +168,25 @@ bool multiresModifier_reshapeFromCCG(const int tot_level,
                                      struct SubdivCCG *subdiv_ccg);
 
 /* Subdivide multires displacement once. */
-void multiresModifier_subdivide(struct Object *object, struct MultiresModifierData *mmd);
+
+typedef enum eMultiresSubdivideModeType {
+  MULTIRES_SUBDIVIDE_CATMULL_CLARK,
+  MULTIRES_SUBDIVIDE_SIMPLE,
+  MULTIRES_SUBDIVIDE_LINEAR,
+} eMultiresSubdivideModeType;
+
+void multiresModifier_subdivide(struct Object *object,
+                                struct MultiresModifierData *mmd,
+                                const eMultiresSubdivideModeType mode);
+void multires_subdivide_create_tangent_displacement_linear_grids(struct Object *object,
+                                                                 struct MultiresModifierData *mmd);
 
 /* Subdivide displacement to the given level.
  * If level is lower than the current top level nothing happens. */
 void multiresModifier_subdivide_to_level(struct Object *object,
                                          struct MultiresModifierData *mmd,
-                                         const int top_level);
+                                         const int top_level,
+                                         const eMultiresSubdivideModeType mode);
 
 /* Subdivision integration, defined in multires_subdiv.c */
 
@@ -213,12 +218,8 @@ BLI_INLINE void BKE_multires_construct_tangent_matrix(float tangent_matrix[3][3]
                                                       const float dPdv[3],
                                                       const int corner);
 
-int BKE_multires_sculpt_level_get(const struct MultiresModifierData *mmd);
-
 #ifdef __cplusplus
 }
 #endif
 
 #include "intern/multires_inline.h"
-
-#endif /* __BKE_MULTIRES_H__ */

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -25,19 +25,32 @@
 
 #include "BLI_math.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_query.h"
 
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 #include "bmesh.h"
@@ -366,14 +379,9 @@ static void initData(ModifierData *md)
 {
   SimpleDeformModifierData *smd = (SimpleDeformModifierData *)md;
 
-  smd->mode = MOD_SIMPLEDEFORM_MODE_TWIST;
-  smd->axis = 0;
-  smd->deform_axis = 0;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(smd, modifier));
 
-  smd->origin = NULL;
-  smd->factor = DEG2RADF(45.0f);
-  smd->limit[0] = 0.0f;
-  smd->limit[1] = 1.0f;
+  MEMCPY_STRUCT_AFTER(smd, DNA_struct_default_get(SimpleDeformModifierData), modifier);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -388,10 +396,10 @@ static void requiredDataMask(Object *UNUSED(ob),
   }
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   SimpleDeformModifierData *smd = (SimpleDeformModifierData *)md;
-  walk(userData, ob, &smd->origin, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&smd->origin, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -440,6 +448,11 @@ static void deformVertsEM(ModifierData *md,
     mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
   }
 
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  }
+
   SimpleDeformModifier_do(sdmd, ctx, ctx->object, mesh_src, vertexCos, numVerts);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
@@ -447,23 +460,100 @@ static void deformVertsEM(ModifierData *md,
   }
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  int deform_method = RNA_enum_get(ptr, "deform_method");
+
+  row = uiLayoutRow(layout, false);
+  uiItemR(row, ptr, "deform_method", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+
+  uiLayoutSetPropSep(layout, true);
+
+  if (ELEM(deform_method, MOD_SIMPLEDEFORM_MODE_TAPER, MOD_SIMPLEDEFORM_MODE_STRETCH)) {
+    uiItemR(layout, ptr, "factor", 0, NULL, ICON_NONE);
+  }
+  else {
+    uiItemR(layout, ptr, "angle", 0, NULL, ICON_NONE);
+  }
+
+  uiItemR(layout, ptr, "origin", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "deform_axis", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void restrictions_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+  int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  int deform_method = RNA_enum_get(ptr, "deform_method");
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "limits", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+
+  if (ELEM(deform_method,
+           MOD_SIMPLEDEFORM_MODE_TAPER,
+           MOD_SIMPLEDEFORM_MODE_STRETCH,
+           MOD_SIMPLEDEFORM_MODE_TWIST)) {
+    int deform_axis = RNA_enum_get(ptr, "deform_axis");
+
+    row = uiLayoutRowWithHeading(layout, true, IFACE_("Lock"));
+    if (deform_axis != 0) {
+      uiItemR(row, ptr, "lock_x", toggles_flag, NULL, ICON_NONE);
+    }
+    if (deform_axis != 1) {
+      uiItemR(row, ptr, "lock_y", toggles_flag, NULL, ICON_NONE);
+    }
+    if (deform_axis != 2) {
+      uiItemR(row, ptr, "lock_z", toggles_flag, NULL, ICON_NONE);
+    }
+  }
+
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(
+      region_type, eModifierType_SimpleDeform, panel_draw);
+  modifier_subpanel_register(
+      region_type, "restrictions", "Restrictions", NULL, restrictions_panel_draw, panel_type);
+}
+
 ModifierTypeInfo modifierType_SimpleDeform = {
     /* name */ "SimpleDeform",
     /* structName */ "SimpleDeformModifierData",
     /* structSize */ sizeof(SimpleDeformModifierData),
+    /* srna */ &RNA_SimpleDeformModifier,
     /* type */ eModifierTypeType_OnlyDeform,
 
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
-        eModifierTypeFlag_AcceptsLattice | eModifierTypeFlag_SupportsEditmode |
+        eModifierTypeFlag_AcceptsVertexCosOnly | eModifierTypeFlag_SupportsEditmode |
         eModifierTypeFlag_EnableInEditmode,
+    /* icon */ ICON_MOD_SIMPLEDEFORM,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -472,8 +562,10 @@ ModifierTypeInfo modifierType_SimpleDeform = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

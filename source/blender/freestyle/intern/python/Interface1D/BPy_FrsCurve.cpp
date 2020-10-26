@@ -41,20 +41,14 @@ PyDoc_STRVAR(FrsCurve_doc,
              "specialization of a Curve.\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
+             "            __init__(id)\n"
              "\n"
-             "   Default Constructor.\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy Constructor.\n"
+             "   Builds a :class:`FrsCurve` using a default constructor,\n"
+             "   copy constructor or from an :class:`Id`.\n"
              "\n"
              "   :arg brother: A Curve object.\n"
              "   :type brother: :class:`Curve`\n"
-             "\n"
-             ".. method:: __init__(id)\n"
-             "\n"
-             "   Builds a Curve from its Id.\n"
-             "\n"
              "   :arg id: An Id object.\n"
              "   :type id: :class:`Id`");
 
@@ -72,7 +66,7 @@ static int FrsCurve_init(BPy_FrsCurve *self, PyObject *args, PyObject *kwds)
       self->c = new Curve(*(((BPy_FrsCurve *)obj)->c));
     }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist_2, &Id_Type, &obj)) {
     self->c = new Curve(*(((BPy_Id *)obj)->id));
   }

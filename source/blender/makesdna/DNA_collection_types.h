@@ -23,8 +23,7 @@
  * \brief Object groups, one object can be in many groups at once.
  */
 
-#ifndef __DNA_COLLECTION_TYPES_H__
-#define __DNA_COLLECTION_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
@@ -59,7 +58,9 @@ typedef struct Collection {
   short flag;
   /* Runtime-only, always cleared on file load. */
   short tag;
-  char _pad[4];
+
+  int16_t color_tag;
+  char _pad[2];
 
   /* Runtime. Cache of objects in this collection and all its
    * children. This is created on demand when e.g. some physics
@@ -94,4 +95,17 @@ enum {
   COLLECTION_TAG_RELATION_REBUILD = (1 << 0),
 };
 
-#endif /* __DNA_COLLECTION_TYPES_H__ */
+/* Collection->color_tag. */
+typedef enum CollectionColorTag {
+  COLLECTION_COLOR_NONE = -1,
+  COLLECTION_COLOR_01,
+  COLLECTION_COLOR_02,
+  COLLECTION_COLOR_03,
+  COLLECTION_COLOR_04,
+  COLLECTION_COLOR_05,
+  COLLECTION_COLOR_06,
+  COLLECTION_COLOR_07,
+  COLLECTION_COLOR_08,
+
+  COLLECTION_COLOR_TOT,
+} CollectionColorTag;

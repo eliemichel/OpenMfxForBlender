@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_SCANFILL_H__
-#define __BLI_SCANFILL_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -36,7 +35,7 @@ typedef struct ScanFillContext {
   ListBase fillfacebase;
 
   /* increment this value before adding each curve to skip having to calculate
-   * 'poly_nr' for edges and verts (which can take approx half scanfill time) */
+   * 'poly_nr' for edges and verts (which can take approx half scan-fill time) */
   unsigned short poly_nr;
 
   /* private */
@@ -46,9 +45,9 @@ typedef struct ScanFillContext {
 #define BLI_SCANFILL_ARENA_SIZE MEM_SIZE_OPTIMAL(1 << 14)
 
 /**
- * \note this is USHRT_MAX so incrementing  will set to zero
+ * \note this is USHRT_MAX so incrementing will set to zero
  * which happens if callers choose to increment #ScanFillContext.poly_nr before adding each curve.
- * Nowhere else in scanfill do we make use of intentional overflow like this.
+ * Nowhere else in scan-fill do we make use of intentional overflow like this.
  */
 #define SF_POLY_UNSET ((unsigned short)-1)
 
@@ -64,7 +63,7 @@ typedef struct ScanFillVert {
   float co[3];
   /** 2D projection of vertex location */
   float xy[2];
-  /** index, caller can use how it likes to match the scanfill result with own data */
+  /** index, caller can use how it likes to match the scan-fill result with own data */
   unsigned int keyindex;
   unsigned short poly_nr;
   /** number of edges using this vertex */
@@ -107,7 +106,7 @@ enum {
   BLI_SCANFILL_CALC_POLYS = (1 << 2),
 
   /* note: This flag removes checks for overlapping polygons.
-   * when this flag is set, we'll never get back more faces then (totvert - 2) */
+   * when this flag is set, we'll never get back more faces than (totvert - 2) */
   BLI_SCANFILL_CALC_HOLES = (1 << 3),
 
   /* checks valid edge users - can skip for simple loops */
@@ -130,6 +129,4 @@ bool BLI_scanfill_calc_self_isect(ScanFillContext *sf_ctx,
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

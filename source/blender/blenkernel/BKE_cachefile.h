@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_CACHEFILE_H__
-#define __BKE_CACHEFILE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -38,8 +37,6 @@ void BKE_cachefiles_init(void);
 void BKE_cachefiles_exit(void);
 
 void *BKE_cachefile_add(struct Main *bmain, const char *name);
-
-struct CacheFile *BKE_cachefile_copy(struct Main *bmain, const struct CacheFile *cache_file);
 
 void BKE_cachefile_reload(struct Depsgraph *depsgraph, struct CacheFile *cache_file);
 
@@ -66,5 +63,3 @@ void BKE_cachefile_reader_free(struct CacheFile *cache_file, struct CacheReader 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_CACHEFILE_H__ */

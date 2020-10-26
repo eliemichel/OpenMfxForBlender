@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_SCENE_HASH_H__
-#define __FREESTYLE_SCENE_HASH_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -67,7 +66,7 @@ class SceneHash : public SceneVisitor {
   }
 
  private:
-  void adler32(unsigned char *data, int size);
+  void adler32(const unsigned char *data, int size);
 
   uint32_t _sum;
   uint32_t _prevSum;
@@ -78,5 +77,3 @@ class SceneHash : public SceneVisitor {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_SCENE_HASH_H__

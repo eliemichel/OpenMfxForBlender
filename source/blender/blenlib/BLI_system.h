@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_SYSTEM_H__
-#define __BLI_SYSTEM_H__
+#pragma once
 
 #include <stdio.h>
 
@@ -53,6 +52,10 @@ int BLI_system_memory_max_in_megabytes_int(void);
 /* getpid */
 #ifdef WIN32
 #  define BLI_SYSTEM_PID_H <process.h>
+
+/* void* since we really do not want to drag Windows.h in to get the proper typedef. */
+void BLI_windows_handle_exception(void *exception);
+
 #else
 #  define BLI_SYSTEM_PID_H <unistd.h>
 #endif
@@ -60,5 +63,3 @@ int BLI_system_memory_max_in_megabytes_int(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_SYSTEM_H__ */

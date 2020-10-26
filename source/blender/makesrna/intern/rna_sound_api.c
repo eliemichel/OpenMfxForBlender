@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2015 by the Blender Foundation.
@@ -34,7 +34,8 @@
 
 static void rna_Sound_pack(bSound *sound, Main *bmain, ReportList *reports)
 {
-  sound->packedfile = BKE_packedfile_new(reports, sound->name, ID_BLEND_PATH(bmain, &sound->id));
+  sound->packedfile = BKE_packedfile_new(
+      reports, sound->filepath, ID_BLEND_PATH(bmain, &sound->id));
 }
 
 static void rna_Sound_unpack(bSound *sound, Main *bmain, ReportList *reports, int method)

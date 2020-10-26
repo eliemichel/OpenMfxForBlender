@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_IMAGE_H__
-#define __ED_IMAGE_H__
+#pragma once
 
 #include "DNA_listBase.h"
 #include "DNA_space_types.h"
@@ -69,7 +68,7 @@ void ED_space_image_get_size(struct SpaceImage *sima, int *r_width, int *r_heigh
 void ED_space_image_get_size_fl(struct SpaceImage *sima, float r_size[2]);
 void ED_space_image_get_aspect(struct SpaceImage *sima, float *r_aspx, float *r_aspy);
 void ED_space_image_get_zoom(struct SpaceImage *sima,
-                             struct ARegion *region,
+                             const struct ARegion *region,
                              float *r_zoomx,
                              float *r_zoomy);
 void ED_space_image_get_uv_aspect(struct SpaceImage *sima, float *r_aspx, float *r_aspy);
@@ -88,14 +87,18 @@ void ED_image_get_uv_aspect(struct Image *ima,
                             float *r_aspx,
                             float *r_aspy);
 void ED_image_mouse_pos(struct SpaceImage *sima,
-                        struct ARegion *region,
+                        const struct ARegion *region,
                         const int mval[2],
                         float co[2]);
 void ED_image_view_center_to_point(struct SpaceImage *sima, float x, float y);
-void ED_image_point_pos(
-    struct SpaceImage *sima, struct ARegion *region, float x, float y, float *r_x, float *r_y);
+void ED_image_point_pos(struct SpaceImage *sima,
+                        const struct ARegion *region,
+                        float x,
+                        float y,
+                        float *r_x,
+                        float *r_y);
 void ED_image_point_pos__reverse(struct SpaceImage *sima,
-                                 struct ARegion *region,
+                                 const struct ARegion *region,
                                  const float co[2],
                                  float r_co[2]);
 bool ED_image_slot_cycle(struct Image *image, int direction);
@@ -106,7 +109,7 @@ bool ED_space_image_show_uvedit(struct SpaceImage *sima, struct Object *obedit);
 
 bool ED_space_image_paint_curve(const struct bContext *C);
 
-bool ED_space_image_check_show_maskedit(struct SpaceImage *sima, struct ViewLayer *view_layer);
+bool ED_space_image_check_show_maskedit(struct SpaceImage *sima, struct Object *obedit);
 bool ED_space_image_maskedit_poll(struct bContext *C);
 bool ED_space_image_maskedit_mask_poll(struct bContext *C);
 bool ED_space_image_cursor_poll(struct bContext *C);
@@ -121,8 +124,8 @@ void ED_image_draw_info(struct Scene *scene,
                         const unsigned char cp[4],
                         const float fp[4],
                         const float linearcol[4],
-                        int *zp,
-                        float *zpf);
+                        const int *zp,
+                        const float *zpf);
 
 bool ED_space_image_show_cache(struct SpaceImage *sima);
 
@@ -153,5 +156,3 @@ ListBase ED_image_filesel_detect_sequences(struct Main *bmain,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_IMAGE_H__ */

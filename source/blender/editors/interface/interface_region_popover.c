@@ -151,7 +151,7 @@ static uiBlock *ui_block_func_POPOVER(bContext *C, uiPopupBlockHandle *handle, v
     UI_block_bounds_set_normal(block, block_margin);
 
     /* If menu slides out of other menu, override direction. */
-    bool slideout = ui_block_is_menu(pup->but->block);
+    const bool slideout = ui_block_is_menu(pup->but->block);
     if (slideout) {
       UI_block_direction_set(block, UI_DIR_RIGHT);
     }
@@ -171,7 +171,6 @@ static uiBlock *ui_block_func_POPOVER(bContext *C, uiPopupBlockHandle *handle, v
     }
 
     if (!slideout) {
-      ScrArea *area = CTX_wm_area(C);
       ARegion *region = CTX_wm_region(C);
 
       if (region && region->panels.first) {
@@ -180,14 +179,9 @@ static uiBlock *ui_block_func_POPOVER(bContext *C, uiPopupBlockHandle *handle, v
         UI_block_direction_set(block, UI_DIR_UP | UI_DIR_CENTER_X);
       }
       /* Prefer popover from header to be positioned into the editor. */
-      else if (area && region) {
-        if (ELEM(region->regiontype, RGN_TYPE_HEADER, RGN_TYPE_TOOL_HEADER)) {
-          if (RGN_ALIGN_ENUM_FROM_MASK(ED_area_header_alignment(area)) == RGN_ALIGN_BOTTOM) {
-            UI_block_direction_set(block, UI_DIR_UP | UI_DIR_CENTER_X);
-          }
-        }
-        if (region->regiontype == RGN_TYPE_FOOTER) {
-          if (RGN_ALIGN_ENUM_FROM_MASK(ED_area_footer_alignment(area)) == RGN_ALIGN_BOTTOM) {
+      else if (region) {
+        if (RGN_TYPE_IS_HEADER_ANY(region->regiontype)) {
+          if (RGN_ALIGN_ENUM_FROM_MASK(region->alignment) == RGN_ALIGN_BOTTOM) {
             UI_block_direction_set(block, UI_DIR_UP | UI_DIR_CENTER_X);
           }
         }
@@ -209,11 +203,12 @@ static uiBlock *ui_block_func_POPOVER(bContext *C, uiPopupBlockHandle *handle, v
     if (!handle->refresh) {
       uiBut *but = NULL;
       uiBut *but_first = NULL;
-      for (but = block->buttons.first; but; but = but->next) {
-        if ((but_first == NULL) && ui_but_is_editable(but)) {
-          but_first = but;
+      LISTBASE_FOREACH (uiBut *, but_iter, &block->buttons) {
+        if ((but_first == NULL) && ui_but_is_editable(but_iter)) {
+          but_first = but_iter;
         }
-        if (but->flag & (UI_SELECT | UI_SELECT_DRAW)) {
+        if (but_iter->flag & (UI_SELECT | UI_SELECT_DRAW)) {
+          but = but_iter;
           break;
         }
       }
@@ -252,6 +247,8 @@ uiPopupBlockHandle *ui_popover_panel_create(
     bContext *C, ARegion *butregion, uiBut *but, uiMenuCreateFunc menu_func, void *arg)
 {
   wmWindow *window = CTX_wm_window(C);
+  const uiStyle *style = UI_style_get_dpi();
+  const PanelType *panel_type = (PanelType *)arg;
 
   /* Create popover, buttons are created from callback. */
   uiPopover *pup = MEM_callocN(sizeof(uiPopover), __func__);
@@ -259,8 +256,12 @@ uiPopupBlockHandle *ui_popover_panel_create(
 
   /* FIXME: maybe one day we want non panel popovers? */
   {
-    int ui_units_x = ((PanelType *)arg)->ui_units_x;
-    pup->ui_size_x = U.widget_unit * (ui_units_x ? ui_units_x : UI_POPOVER_WIDTH_UNITS);
+    const int ui_units_x = (panel_type->ui_units_x == 0) ? UI_POPOVER_WIDTH_UNITS :
+                                                           panel_type->ui_units_x;
+    /* Scale width by changes to Text Style point size. */
+    const int text_points_max = MAX2(style->widget.points, style->widgetlabel.points);
+    pup->ui_size_x = ui_units_x * U.widget_unit *
+                     (text_points_max / (float)UI_DEFAULT_TEXT_POINTS);
   }
 
   pup->menu_func = menu_func;
@@ -345,13 +346,13 @@ int UI_popover_panel_invoke(bContext *C, const char *idname, bool keep_open, Rep
  * \param from_active_button: Use the active button for positioning,
  * use when the popover is activated from an operator instead of directly from the button.
  */
-uiPopover *UI_popover_begin(bContext *C, int ui_size_x, bool from_active_button)
+uiPopover *UI_popover_begin(bContext *C, int ui_menu_width, bool from_active_button)
 {
   uiPopover *pup = MEM_callocN(sizeof(uiPopover), "popover menu");
-  if (ui_size_x == 0) {
-    ui_size_x = U.widget_unit * UI_POPOVER_WIDTH_UNITS;
+  if (ui_menu_width == 0) {
+    ui_menu_width = U.widget_unit * UI_POPOVER_WIDTH_UNITS;
   }
-  pup->ui_size_x = ui_size_x;
+  pup->ui_size_x = ui_menu_width;
 
   ARegion *butregion = NULL;
   uiBut *but = NULL;

@@ -30,7 +30,7 @@
 #include "BLI_math_color.h"
 #include "BLI_memblock.h"
 
-#include "GPU_uniformbuffer.h"
+#include "GPU_uniform_buffer.h"
 
 #include "IMB_imbuf_types.h"
 
@@ -46,7 +46,7 @@ static GPENCIL_MaterialPool *gpencil_material_pool_add(GPENCIL_PrivateData *pd)
   matpool->next = NULL;
   matpool->used_count = 0;
   if (matpool->ubo == NULL) {
-    matpool->ubo = GPU_uniformbuffer_create(sizeof(matpool->mat_data), NULL, NULL);
+    matpool->ubo = GPU_uniformbuf_create(sizeof(matpool->mat_data));
   }
   pd->last_material_pool = matpool;
   return matpool;
@@ -63,7 +63,7 @@ static struct GPUTexture *gpencil_image_texture_get(Image *image, bool *r_alpha_
   ibuf = BKE_image_acquire_ibuf(image, &iuser, &lock);
 
   if (ibuf != NULL && ibuf->rect != NULL) {
-    gpu_tex = GPU_texture_from_blender(image, &iuser, ibuf, GL_TEXTURE_2D);
+    gpu_tex = BKE_image_get_gpu_texture(image, &iuser, ibuf);
     *r_alpha_premult = (image->alpha_mode == IMA_ALPHA_PREMUL);
   }
   BKE_image_release_ibuf(image, ibuf, lock);
@@ -237,6 +237,14 @@ GPENCIL_MaterialPool *gpencil_material_pool_create(GPENCIL_PrivateData *pd, Obje
       mat_data->flag |= GP_STROKE_OVERLAP;
     }
 
+    /* Material with holdout. */
+    if (gp_style->flag & GP_MATERIAL_IS_STROKE_HOLDOUT) {
+      mat_data->flag |= GP_STROKE_HOLDOUT;
+    }
+    if (gp_style->flag & GP_MATERIAL_IS_FILL_HOLDOUT) {
+      mat_data->flag |= GP_FILL_HOLDOUT;
+    }
+
     gp_style = gpencil_viewport_material_overrides(pd, ob, color_type, gp_style);
 
     /* Stroke Style */
@@ -301,7 +309,7 @@ void gpencil_material_resources_get(GPENCIL_MaterialPool *first_pool,
                                     int mat_id,
                                     GPUTexture **r_tex_stroke,
                                     GPUTexture **r_tex_fill,
-                                    GPUUniformBuffer **r_ubo_mat)
+                                    GPUUniformBuf **r_ubo_mat)
 {
   GPENCIL_MaterialPool *matpool = first_pool;
   int pool_id = mat_id / GP_MATERIAL_BUFFER_LEN;
@@ -331,7 +339,7 @@ GPENCIL_LightPool *gpencil_light_pool_add(GPENCIL_PrivateData *pd)
   /* Tag light list end. */
   lightpool->light_data[0].color[0] = -1.0;
   if (lightpool->ubo == NULL) {
-    lightpool->ubo = GPU_uniformbuffer_create(sizeof(lightpool->light_data), NULL, NULL);
+    lightpool->ubo = GPU_uniformbuf_create(sizeof(lightpool->light_data));
   }
   pd->last_light_pool = lightpool;
   return lightpool;
@@ -359,12 +367,11 @@ static float light_power_get(const Light *la)
   if (la->type == LA_AREA) {
     return 1.0f / (4.0f * M_PI);
   }
-  else if (la->type == LA_SPOT || la->type == LA_LOCAL) {
+  if (la->type == LA_SPOT || la->type == LA_LOCAL) {
     return 1.0f / (4.0f * M_PI * M_PI);
   }
-  else {
-    return 1.0f / M_PI;
-  }
+
+  return 1.0f / M_PI;
 }
 
 void gpencil_light_pool_populate(GPENCIL_LightPool *lightpool, Object *ob)
@@ -421,7 +428,7 @@ GPENCIL_LightPool *gpencil_light_pool_create(GPENCIL_PrivateData *pd, Object *UN
   if (lightpool == NULL) {
     lightpool = gpencil_light_pool_add(pd);
   }
-  /* TODO(fclem) Light linking. */
+  /* TODO(fclem): Light linking. */
   // gpencil_light_pool_populate(lightpool, ob);
 
   return lightpool;

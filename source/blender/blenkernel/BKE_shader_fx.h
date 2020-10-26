@@ -13,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_SHADER_FX_H__
-#define __BKE_SHADER_FX_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -28,6 +27,7 @@
 extern "C" {
 #endif
 
+struct ARegionType;
 struct ID;
 struct ListBase;
 struct ModifierUpdateDepsgraphContext;
@@ -62,11 +62,6 @@ typedef enum {
   eShaderFxTypeFlag_NoUserAdd = (1 << 5),
 } ShaderFxTypeFlag;
 
-/* IMPORTANT! Keep ObjectWalkFunc and IDWalkFunc signatures compatible. */
-typedef void (*ShaderFxObjectWalkFunc)(void *userData,
-                                       struct Object *ob,
-                                       struct Object **obpoin,
-                                       int cb_flag);
 typedef void (*ShaderFxIDWalkFunc)(void *userData,
                                    struct Object *ob,
                                    struct ID **idpoin,
@@ -134,53 +129,46 @@ typedef struct ShaderFxTypeInfo {
    */
   bool (*dependsOnTime)(struct ShaderFxData *fx);
 
-  /* Should call the given walk function on with a pointer to each Object
-   * pointer that the effect data stores. This is used for linking on file
-   * load and for unlinking objects or forwarding object references.
-   *
-   * This function is optional.
-   */
-  void (*foreachObjectLink)(struct ShaderFxData *fx,
-                            struct Object *ob,
-                            ShaderFxObjectWalkFunc walk,
-                            void *userData);
-
   /* Should call the given walk function with a pointer to each ID
    * pointer (i.e. each data-block pointer) that the effect data
    * stores. This is used for linking on file load and for
    * unlinking data-blocks or forwarding data-block references.
    *
-   * This function is optional. If it is not present, foreachObjectLink
-   * will be used.
+   * This function is optional.
    */
   void (*foreachIDLink)(struct ShaderFxData *fx,
                         struct Object *ob,
                         ShaderFxIDWalkFunc walk,
                         void *userData);
+
+  /* Register the panel types for the effect's UI. */
+  void (*panelRegister)(struct ARegionType *region_type);
 } ShaderFxTypeInfo;
+
+#define SHADERFX_TYPE_PANEL_PREFIX "FX_PT_"
 
 /* Initialize  global data (type info and some common global storages). */
 void BKE_shaderfx_init(void);
 
-const ShaderFxTypeInfo *BKE_shaderfxType_getInfo(ShaderFxType type);
+void BKE_shaderfxType_panel_id(ShaderFxType type, char *r_idname);
+const ShaderFxTypeInfo *BKE_shaderfx_get_info(ShaderFxType type);
 struct ShaderFxData *BKE_shaderfx_new(int type);
 void BKE_shaderfx_free_ex(struct ShaderFxData *fx, const int flag);
 void BKE_shaderfx_free(struct ShaderFxData *fx);
 bool BKE_shaderfx_unique_name(struct ListBase *shaderfx, struct ShaderFxData *fx);
-bool BKE_shaderfx_dependsOnTime(struct ShaderFxData *fx);
-struct ShaderFxData *BKE_shaderfx_findByType(struct Object *ob, ShaderFxType type);
-struct ShaderFxData *BKE_shaderfx_findByName(struct Object *ob, const char *name);
-void BKE_shaderfx_copyData_generic(const struct ShaderFxData *fx_src, struct ShaderFxData *fx_dst);
-void BKE_shaderfx_copyData(struct ShaderFxData *fx, struct ShaderFxData *target);
-void BKE_shaderfx_copyData_ex(struct ShaderFxData *fx,
+bool BKE_shaderfx_depends_ontime(struct ShaderFxData *fx);
+struct ShaderFxData *BKE_shaderfx_findby_type(struct Object *ob, ShaderFxType type);
+struct ShaderFxData *BKE_shaderfx_findby_name(struct Object *ob, const char *name);
+void BKE_shaderfx_copydata_generic(const struct ShaderFxData *fx_src, struct ShaderFxData *fx_dst);
+void BKE_shaderfx_copydata(struct ShaderFxData *fx, struct ShaderFxData *target);
+void BKE_shaderfx_copydata_ex(struct ShaderFxData *fx,
                               struct ShaderFxData *target,
                               const int flag);
-void BKE_shaderfx_foreachIDLink(struct Object *ob, ShaderFxIDWalkFunc walk, void *userData);
+void BKE_shaderfx_copy(struct ListBase *dst, const struct ListBase *src);
+void BKE_shaderfx_foreach_ID_link(struct Object *ob, ShaderFxIDWalkFunc walk, void *userData);
 
 bool BKE_shaderfx_has_gpencil(struct Object *ob);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_SHADER_FX_H__ */

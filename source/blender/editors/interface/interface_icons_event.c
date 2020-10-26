@@ -85,8 +85,8 @@ static void icon_draw_rect_input_text(const rctf *rect,
   BLF_size(font_id, font_size * U.pixelsize, U.dpi);
   float width, height;
   BLF_width_and_height(font_id, str, BLF_DRAW_STR_DUMMY_MAX, &width, &height);
-  float x = rect->xmin + (((rect->xmax - rect->xmin) - width) / 2.0f);
-  float y = rect->ymin + (((rect->ymax - rect->ymin) - height) / 2.0f);
+  const float x = rect->xmin + (((rect->xmax - rect->xmin) - width) / 2.0f);
+  const float y = rect->ymin + (((rect->ymax - rect->ymin) - height) / 2.0f);
   BLF_position(font_id, x, y, 0.0f);
   BLF_draw(font_id, str, BLF_DRAW_STR_DUMMY_MAX);
   BLF_batch_draw_flush();
@@ -98,8 +98,8 @@ static void icon_draw_rect_input_symbol(const rctf *rect, const float color[4], 
   const int font_id = blf_mono_font;
   BLF_color4fv(font_id, color);
   BLF_size(font_id, 19 * U.pixelsize, U.dpi);
-  float x = rect->xmin + (2.0f * U.pixelsize);
-  float y = rect->ymin + (1.0f * U.pixelsize);
+  const float x = rect->xmin + (2.0f * U.pixelsize);
+  const float y = rect->ymin + (1.0f * U.pixelsize);
   BLF_position(font_id, x, y, 0.0f);
   BLF_draw(font_id, str, BLF_DRAW_STR_DUMMY_MAX);
   BLF_batch_draw_flush();
@@ -143,7 +143,7 @@ void icon_draw_rect_input(float x,
   };
 
   if ((event_type >= EVT_AKEY) && (event_type <= EVT_ZKEY)) {
-    char str[2] = {'A' + (event_type - EVT_AKEY), '\0'};
+    const char str[2] = {'A' + (event_type - EVT_AKEY), '\0'};
     icon_draw_rect_input_text(&rect, color, str, 13);
   }
   else if ((event_type >= EVT_F1KEY) && (event_type <= EVT_F12KEY)) {

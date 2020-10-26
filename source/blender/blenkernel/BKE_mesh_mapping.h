@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_MESH_MAPPING_H__
-#define __BKE_MESH_MAPPING_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -49,9 +48,6 @@ typedef struct UvMapVert {
   unsigned int poly_index;
   unsigned short loop_of_poly_index;
   bool separate;
-  /* Zero-ed by map creation, left for use by specific areas. Is not
-   * initialized to anything. */
-  unsigned char flag;
 } UvMapVert;
 
 /* UvElement stores per uv information so that we can quickly access information for a uv.
@@ -111,17 +107,17 @@ void BKE_mesh_uv_vert_map_free(UvVertMap *vmap);
 
 void BKE_mesh_vert_poly_map_create(MeshElemMap **r_map,
                                    int **r_mem,
-                                   const struct MPoly *mface,
+                                   const struct MPoly *mpoly,
                                    const struct MLoop *mloop,
                                    int totvert,
-                                   int totface,
+                                   int totpoly,
                                    int totloop);
 void BKE_mesh_vert_loop_map_create(MeshElemMap **r_map,
                                    int **r_mem,
-                                   const struct MPoly *mface,
+                                   const struct MPoly *mpoly,
                                    const struct MLoop *mloop,
                                    int totvert,
-                                   int totface,
+                                   int totpoly,
                                    int totloop);
 void BKE_mesh_vert_looptri_map_create(MeshElemMap **r_map,
                                       int **r_mem,
@@ -153,7 +149,7 @@ void BKE_mesh_edge_poly_map_create(MeshElemMap **r_map,
                                    const int totloop);
 void BKE_mesh_origindex_map_create(MeshElemMap **r_map,
                                    int **r_mem,
-                                   const int totorig,
+                                   const int totsource,
                                    const int *final_origindex,
                                    const int totfinal);
 void BKE_mesh_origindex_map_create_looptri(MeshElemMap **r_map,
@@ -192,14 +188,14 @@ typedef struct MeshIslandStore {
 
 void BKE_mesh_loop_islands_init(MeshIslandStore *island_store,
                                 const short item_type,
-                                const int item_num,
+                                const int items_num,
                                 const short island_type,
                                 const short innercut_type);
 void BKE_mesh_loop_islands_clear(MeshIslandStore *island_store);
 void BKE_mesh_loop_islands_free(MeshIslandStore *island_store);
-void BKE_mesh_loop_islands_add(MeshIslandStore *islands,
+void BKE_mesh_loop_islands_add(MeshIslandStore *island_store,
                                const int item_num,
-                               int *item_indices,
+                               const int *items_indices,
                                const int num_island_items,
                                int *island_item_indices,
                                const int num_innercut_items,
@@ -258,5 +254,3 @@ int *BKE_mesh_calc_smoothgroups(const struct MEdge *medge,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_MESH_MAPPING_H__ */

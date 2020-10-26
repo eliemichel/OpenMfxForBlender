@@ -57,7 +57,7 @@
 /* The formatting of these bmesh operators is parsed by
  * 'doc/python_api/rst_from_bmesh_opdefines.py'
  * for use in python docs, so reStructuredText may be used
- * rather then doxygen syntax.
+ * rather than doxygen syntax.
  *
  * template (py quotes used because nested comments don't work
  * on all C compilers):
@@ -366,7 +366,7 @@ static BMOpDefine bmo_find_doubles_def = {
 /*
  * Remove Doubles.
  *
- * Finds groups of vertices closer then dist and merges them together,
+ * Finds groups of vertices closer than dist and merges them together,
  * using the weld verts bmop.
  */
 static BMOpDefine bmo_remove_doubles_def = {
@@ -567,7 +567,7 @@ static BMOpDefine bmo_contextual_create_def = {
   },
   /* slots_out */
   {{"faces.out", BMO_OP_SLOT_ELEMENT_BUF, {BM_FACE}}, /* newly-made face(s) */
-  /* note, this is for stand-alone edges only, not edges which are apart of newly created faces */
+  /* note, this is for stand-alone edges only, not edges which are a part of newly created faces */
    {"edges.out", BMO_OP_SLOT_ELEMENT_BUF, {BM_EDGE}}, /* newly-made edge(s) */
    {{'\0'}},
   },
@@ -1052,6 +1052,7 @@ static BMOpDefine bmo_extrude_face_region_def = {
    {"use_keep_orig", BMO_OP_SLOT_BOOL},   /* keep original geometry (requires ``geom`` to include edges). */
    {"use_normal_flip", BMO_OP_SLOT_BOOL},  /* Create faces with reversed direction. */
    {"use_normal_from_adjacent", BMO_OP_SLOT_BOOL},  /* Use winding from surrounding faces instead of this region. */
+   {"use_dissolve_ortho_edges", BMO_OP_SLOT_BOOL},  /* Dissolve edges whose faces form a flat surface. */
    {"use_select_history", BMO_OP_SLOT_BOOL},  /* pass to duplicate */
    {{'\0'}},
   },
@@ -1723,6 +1724,13 @@ static BMO_FlagSet bmo_enum_bevel_offset_type[] = {
   {BEVEL_AMT_WIDTH, "WIDTH"},
   {BEVEL_AMT_DEPTH, "DEPTH"},
   {BEVEL_AMT_PERCENT, "PERCENT"},
+  {BEVEL_AMT_ABSOLUTE, "ABSOLUTE"},
+  {0, NULL},
+};
+
+static BMO_FlagSet bmo_enum_bevel_profile_type[] = {
+  {BEVEL_PROFILE_SUPERELLIPSE, "SUPERELLIPSE"},
+  {BEVEL_PROFILE_CUSTOM, "CUSTOM"},
   {0, NULL},
 };
 
@@ -1747,6 +1755,12 @@ static BMO_FlagSet bmo_enum_bevel_vmesh_method[] = {
   {0, NULL},
 };
 
+static BMO_FlagSet bmo_enum_bevel_affect_type[] = {
+  {BEVEL_AFFECT_VERTICES, "VERTICES"},
+  {BEVEL_AFFECT_EDGES, "EDGES"},
+  {0, NULL},
+};
+
 /*
  * Bevel.
  *
@@ -1758,10 +1772,13 @@ static BMOpDefine bmo_bevel_def = {
   {{"geom", BMO_OP_SLOT_ELEMENT_BUF, {BM_VERT | BM_EDGE | BM_FACE}},     /* input edges and vertices */
    {"offset", BMO_OP_SLOT_FLT},           /* amount to offset beveled edge */
    {"offset_type", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
-    bmo_enum_bevel_offset_type}, /* how to measure the offset */
+    bmo_enum_bevel_offset_type},          /* how to measure the offset */
+   {"profile_type", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
+    bmo_enum_bevel_profile_type},         /* The profile type to use for bevel. */
    {"segments", BMO_OP_SLOT_INT},         /* number of segments in bevel */
    {"profile", BMO_OP_SLOT_FLT},          /* profile shape, 0->1 (.5=>round) */
-   {"vertex_only", BMO_OP_SLOT_BOOL},     /* only bevel vertices, not edges */
+   {"affect", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
+    bmo_enum_bevel_affect_type},          /* Whether to bevel vertices or edges. */
    {"clamp_overlap", BMO_OP_SLOT_BOOL},   /* do not allow beveled edges/vertices to overlap each other */
    {"material", BMO_OP_SLOT_INT},         /* material for bevel faces, -1 means get from adjacent faces */
    {"loop_slide", BMO_OP_SLOT_BOOL},      /* prefer to slide along edges to having even widths */
@@ -1776,9 +1793,7 @@ static BMOpDefine bmo_bevel_def = {
     bmo_enum_bevel_miter_type},           /* outer miter kind */
    {"spread", BMO_OP_SLOT_FLT},           /* amount to offset beveled edge */
    {"smoothresh", BMO_OP_SLOT_FLT},       /* for passing mesh's smoothresh, used in hardening */
-   {"use_custom_profile", BMO_OP_SLOT_BOOL}, /* Whether to use custom profile feature */
-   /* the ProfileWiget struct for the custom profile shape */
-   {"custom_profile", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_STRUCT}},
+   {"custom_profile", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_STRUCT}}, /* CurveProfile */
    {"vmesh_method", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
     bmo_enum_bevel_vmesh_method},
    {{'\0'}},

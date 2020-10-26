@@ -57,6 +57,8 @@
 #include "BKE_main.h"
 #include "BKE_packedFile.h"
 
+#include "BLO_read_write.h"
+
 static CLG_LogRef LOG = {"bke.data_transfer"};
 static ThreadRWMutex vfont_rwlock = BLI_RWLOCK_INITIALIZER;
 
@@ -78,7 +80,7 @@ static void vfont_init_data(ID *id)
     if (vfd) {
       vfont->data = vfd;
 
-      BLI_strncpy(vfont->name, FO_BUILTIN_NAME, sizeof(vfont->name));
+      BLI_strncpy(vfont->filepath, FO_BUILTIN_NAME, sizeof(vfont->filepath));
     }
 
     /* Free the packed file */
@@ -120,6 +122,31 @@ static void vfont_free_data(ID *id)
   }
 }
 
+static void vfont_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  VFont *vf = (VFont *)id;
+  if (vf->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+    vf->data = NULL;
+    vf->temp_pf = NULL;
+
+    /* write LibData */
+    BLO_write_id_struct(writer, VFont, id_address, &vf->id);
+    BKE_id_blend_write(writer, &vf->id);
+
+    /* direct data */
+    BKE_packedfile_blend_write(writer, vf->packedfile);
+  }
+}
+
+static void vfont_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  VFont *vf = (VFont *)id;
+  vf->data = NULL;
+  vf->temp_pf = NULL;
+  BKE_packedfile_blend_read(reader, &vf->packedfile);
+}
+
 IDTypeInfo IDType_ID_VF = {
     .id_code = ID_VF,
     .id_filter = FILTER_ID_VF,
@@ -128,12 +155,19 @@ IDTypeInfo IDType_ID_VF = {
     .name = "Font",
     .name_plural = "fonts",
     .translation_context = BLT_I18NCONTEXT_ID_VFONT,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_NO_ANIMDATA,
 
     .init_data = vfont_init_data,
     .copy_data = vfont_copy_data,
     .free_data = vfont_free_data,
     .make_local = NULL,
+    .foreach_id = NULL,
+    .foreach_cache = NULL,
+
+    .blend_write = vfont_blend_write,
+    .blend_read_data = vfont_blend_read_data,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 /***************************** VFont *******************************/
@@ -176,7 +210,7 @@ static int builtin_font_size = 0;
 
 bool BKE_vfont_is_builtin(struct VFont *vfont)
 {
-  return STREQ(vfont->name, FO_BUILTIN_NAME);
+  return STREQ(vfont->filepath, FO_BUILTIN_NAME);
 }
 
 void BKE_vfont_builtin_register(void *mem, int size)
@@ -192,13 +226,12 @@ static PackedFile *get_builtin_packedfile(void)
 
     return NULL;
   }
-  else {
-    void *mem = MEM_mallocN(builtin_font_size, "vfd_builtin");
 
-    memcpy(mem, builtin_font_data, builtin_font_size);
+  void *mem = MEM_mallocN(builtin_font_size, "vfd_builtin");
 
-    return BKE_packedfile_new_from_memory(mem, builtin_font_size);
-  }
+  memcpy(mem, builtin_font_data, builtin_font_size);
+
+  return BKE_packedfile_new_from_memory(mem, builtin_font_size);
 }
 
 static VFontData *vfont_get_data(VFont *vfont)
@@ -236,20 +269,20 @@ static VFontData *vfont_get_data(VFont *vfont)
         }
       }
       else {
-        pf = BKE_packedfile_new(NULL, vfont->name, ID_BLEND_PATH_FROM_GLOBAL(&vfont->id));
+        pf = BKE_packedfile_new(NULL, vfont->filepath, ID_BLEND_PATH_FROM_GLOBAL(&vfont->id));
 
         if (vfont->temp_pf == NULL) {
           vfont->temp_pf = BKE_packedfile_new(
-              NULL, vfont->name, ID_BLEND_PATH_FROM_GLOBAL(&vfont->id));
+              NULL, vfont->filepath, ID_BLEND_PATH_FROM_GLOBAL(&vfont->id));
         }
       }
       if (!pf) {
-        CLOG_WARN(&LOG, "Font file doesn't exist: %s", vfont->name);
+        CLOG_WARN(&LOG, "Font file doesn't exist: %s", vfont->filepath);
 
         /* DON'T DO THIS
          * missing file shouldn't modify path! - campbell */
 #if 0
-        strcpy(vfont->name, FO_BUILTIN_NAME);
+        strcpy(vfont->filepath, FO_BUILTIN_NAME);
 #endif
         pf = get_builtin_packedfile();
       }
@@ -300,7 +333,7 @@ VFont *BKE_vfont_load(Main *bmain, const char *filepath)
       if (vfd->name[0] != '\0') {
         BLI_strncpy(vfont->id.name + 2, vfd->name, sizeof(vfont->id.name) - 2);
       }
-      BLI_strncpy(vfont->name, filepath, sizeof(vfont->name));
+      BLI_strncpy(vfont->filepath, filepath, sizeof(vfont->filepath));
 
       /* if autopack is on store the packedfile in de font structure */
       if (!is_builtin && (G.fileflags & G_FILE_AUTOPACK)) {
@@ -332,7 +365,7 @@ VFont *BKE_vfont_load_exists_ex(struct Main *bmain, const char *filepath, bool *
 
   /* first search an identical filepath */
   for (vfont = bmain->fonts.first; vfont; vfont = vfont->id.next) {
-    BLI_strncpy(strtest, vfont->name, sizeof(vfont->name));
+    BLI_strncpy(strtest, vfont->filepath, sizeof(vfont->filepath));
     BLI_path_abs(strtest, ID_BLEND_PATH(bmain, &vfont->id));
 
     if (BLI_path_cmp(strtest, str) == 0) {
@@ -428,20 +461,14 @@ static void build_underline(Curve *cu,
   BLI_addtail(nubase, nu2);
 
   if (rot != 0.0f) {
-    float si, co;
-    int i;
+    float si = sinf(rot);
+    float co = cosf(rot);
 
-    si = sinf(rot);
-    co = cosf(rot);
+    for (int i = nu2->pntsu; i > 0; i--) {
+      float *fp = bp->vec;
 
-    for (i = nu2->pntsu; i > 0; i--) {
-      float *fp;
-      float x, y;
-
-      fp = bp->vec;
-
-      x = fp[0] - rect->xmin;
-      y = fp[1] - rect->ymin;
+      float x = fp[0] - rect->xmin;
+      float y = fp[1] - rect->ymin;
 
       fp[0] = (+co * x + si * y) + rect->xmin;
       fp[1] = (-si * x + co * y) + rect->ymin;
@@ -468,35 +495,29 @@ static void buildchar(Curve *cu,
                       int charidx,
                       const float fsize)
 {
-  BezTriple *bezt1, *bezt2;
-  Nurb *nu1 = NULL, *nu2 = NULL;
-  float *fp, shear, x, si, co;
-  VFontData *vfd = NULL;
-  VChar *che = NULL;
-  int i;
-
-  vfd = vfont_get_data(which_vfont(cu, info));
+  VFontData *vfd = vfont_get_data(which_vfont(cu, info));
   if (!vfd) {
     return;
   }
 
   /* make a copy at distance ofsx, ofsy with shear */
-  shear = cu->shear;
-  si = sinf(rot);
-  co = cosf(rot);
+  float shear = cu->shear;
+  float si = sinf(rot);
+  float co = cosf(rot);
 
-  che = find_vfont_char(vfd, character);
+  VChar *che = find_vfont_char(vfd, character);
 
   /* Select the glyph data */
+  Nurb *nu1 = NULL;
   if (che) {
     nu1 = che->nurbsbase.first;
   }
 
   /* Create the character */
   while (nu1) {
-    bezt1 = nu1->bezt;
+    BezTriple *bezt1 = nu1->bezt;
     if (bezt1) {
-      nu2 = (Nurb *)MEM_mallocN(sizeof(Nurb), "duplichar_nurb");
+      Nurb *nu2 = (Nurb *)MEM_mallocN(sizeof(Nurb), "duplichar_nurb");
       if (nu2 == NULL) {
         break;
       }
@@ -514,20 +535,20 @@ static void buildchar(Curve *cu,
       }
       /* nu2->trim.first = 0; */
       /* nu2->trim.last = 0; */
-      i = nu2->pntsu;
+      int u = nu2->pntsu;
 
-      bezt2 = (BezTriple *)MEM_malloc_arrayN(i, sizeof(BezTriple), "duplichar_bezt2");
+      BezTriple *bezt2 = (BezTriple *)MEM_malloc_arrayN(u, sizeof(BezTriple), "duplichar_bezt2");
       if (bezt2 == NULL) {
         MEM_freeN(nu2);
         break;
       }
-      memcpy(bezt2, bezt1, i * sizeof(struct BezTriple));
+      memcpy(bezt2, bezt1, u * sizeof(struct BezTriple));
       nu2->bezt = bezt2;
 
       if (shear != 0.0f) {
         bezt2 = nu2->bezt;
 
-        for (i = nu2->pntsu; i > 0; i--) {
+        for (int i = nu2->pntsu; i > 0; i--) {
           bezt2->vec[0][0] += shear * bezt2->vec[0][1];
           bezt2->vec[1][0] += shear * bezt2->vec[1][1];
           bezt2->vec[2][0] += shear * bezt2->vec[2][1];
@@ -536,10 +557,10 @@ static void buildchar(Curve *cu,
       }
       if (rot != 0.0f) {
         bezt2 = nu2->bezt;
-        for (i = nu2->pntsu; i > 0; i--) {
-          fp = bezt2->vec[0];
+        for (int i = nu2->pntsu; i > 0; i--) {
+          float *fp = bezt2->vec[0];
 
-          x = fp[0];
+          float x = fp[0];
           fp[0] = co * x + si * fp[1];
           fp[1] = -si * x + co * fp[1];
           x = fp[3];
@@ -556,8 +577,8 @@ static void buildchar(Curve *cu,
 
       if (info->flag & CU_CHINFO_SMALLCAPS_CHECK) {
         const float sca = cu->smallcaps_scale;
-        for (i = nu2->pntsu; i > 0; i--) {
-          fp = bezt2->vec[0];
+        for (int i = nu2->pntsu; i > 0; i--) {
+          float *fp = bezt2->vec[0];
           fp[0] *= sca;
           fp[1] *= sca;
           fp[3] *= sca;
@@ -569,8 +590,8 @@ static void buildchar(Curve *cu,
       }
       bezt2 = nu2->bezt;
 
-      for (i = nu2->pntsu; i > 0; i--) {
-        fp = bezt2->vec[0];
+      for (int i = nu2->pntsu; i > 0; i--) {
+        float *fp = bezt2->vec[0];
         fp[0] = (fp[0] + ofsx) * fsize;
         fp[1] = (fp[1] + ofsy) * fsize;
         fp[3] = (fp[3] + ofsx) * fsize;
@@ -620,12 +641,11 @@ int BKE_vfont_select_get(Object *ob, int *r_start, int *r_end)
   if (start == end + 1) {
     return 0;
   }
-  else {
-    BLI_assert(start < end + 1);
-    *r_start = start;
-    *r_end = end;
-    return direction;
-  }
+
+  BLI_assert(start < end + 1);
+  *r_start = start;
+  *r_end = end;
+  return direction;
 }
 
 void BKE_vfont_select_clamp(Object *ob)
@@ -646,12 +666,11 @@ static float char_width(Curve *cu, VChar *che, CharInfo *info)
   if (che == NULL) {
     return 0.0f;
   }
-  else if (info->flag & CU_CHINFO_SMALLCAPS_CHECK) {
+  if (info->flag & CU_CHINFO_SMALLCAPS_CHECK) {
     return che->width * cu->smallcaps_scale;
   }
-  else {
-    return che->width;
-  }
+
+  return che->width;
 }
 
 static void textbox_scale(TextBox *tb_dst, const TextBox *tb_src, float scale)
@@ -671,6 +690,16 @@ struct TempLineInfo {
   int char_nr;   /* number of characters */
   int wspace_nr; /* number of whitespaces of line */
 };
+
+/* -------------------------------------------------------------------- */
+/** \name VFont Scale Overflow
+ *
+ * Scale the font to fit inside #TextBox bounds.
+ *
+ * - Scale horizontally when #TextBox.h is zero,
+ *   otherwise scale vertically, allowing the text to wrap horizontally.
+ * - Never increase scale to fit, only ever scale on overflow.
+ * \{ */
 
 typedef struct VFontToCurveIter {
   int iteraction;
@@ -692,6 +721,8 @@ enum {
 
 #define FONT_TO_CURVE_SCALE_ITERATIONS 20
 #define FONT_TO_CURVE_SCALE_THRESHOLD 0.0001f
+
+/** \} */
 
 /**
  * Font metric values explained:
@@ -784,7 +815,7 @@ static bool vfont_to_curve(Object *ob,
   }
   else {
     char32_t *mem_tmp;
-    slen = cu->len_wchar;
+    slen = cu->len_char32;
 
     /* Create unicode string */
     mem_tmp = MEM_malloc_arrayN((slen + 1), sizeof(*mem_tmp), "convertedmem");
@@ -1157,6 +1188,14 @@ static bool vfont_to_curve(Object *ob,
         ct_last = chartransdata + (is_last_filled_textbox ? slen : i_textbox_next - 1);
         lines = ct_last->linenr - ct_first->linenr + 1;
 
+        if (cu->overflow == CU_OVERFLOW_TRUNCATE) {
+          /* Ensure overflow doesn't truncate text, before centering vertically
+           * giving odd/buggy results, see: T66614. */
+          if ((tb_index == cu->totbox - 1) && (last_line != -1)) {
+            lines = last_line - ct_first->linenr;
+          }
+        }
+
         textbox_scale(&tb_scale, &cu->tb[tb_index], 1.0f / font_size);
         /* The initial Y origin of the textbox is hardcoded to 1.0f * text scale. */
         const float textbox_y_origin = 1.0f;
@@ -1228,7 +1267,7 @@ static bool vfont_to_curve(Object *ob,
     if (cu->textoncurve->runtime.curve_cache != NULL &&
         cu->textoncurve->runtime.curve_cache->path != NULL) {
       float distfac, imat[4][4], imat3[3][3], cmat[3][3];
-      float minx, maxx, miny, maxy;
+      float minx, maxx;
       float timeofs, sizefac;
 
       if (ob != NULL) {
@@ -1243,33 +1282,36 @@ static bool vfont_to_curve(Object *ob,
       mul_m3_m3m3(cmat, cmat, imat3);
       sizefac = normalize_v3(cmat[0]) / font_size;
 
-      minx = miny = 1.0e20f;
-      maxx = maxy = -1.0e20f;
       ct = chartransdata;
-      for (i = 0; i <= slen; i++, ct++) {
+      minx = maxx = ct->xof;
+      ct++;
+      for (i = 1; i <= slen; i++, ct++) {
         if (minx > ct->xof) {
           minx = ct->xof;
         }
         if (maxx < ct->xof) {
           maxx = ct->xof;
         }
-        if (miny > ct->yof) {
-          miny = ct->yof;
-        }
-        if (maxy < ct->yof) {
-          maxy = ct->yof;
-        }
       }
 
-      /* we put the x-coordinaat exact at the curve, the y is rotated */
+      /* We put the x-coordinate exact at the curve, the y is rotated. */
 
       /* length correction */
-      distfac = sizefac * cu->textoncurve->runtime.curve_cache->path->totdist / (maxx - minx);
+      const float chartrans_size_x = maxx - minx;
+      if (chartrans_size_x != 0.0f) {
+        const float totdist = cu->textoncurve->runtime.curve_cache->path->totdist;
+        distfac = (sizefac * totdist) / chartrans_size_x;
+        distfac = (distfac > 1.0f) ? (1.0f / distfac) : 1.0f;
+      }
+      else {
+        /* Happens when there are no characters, set this value to place the text cursor. */
+        distfac = 0.0f;
+      }
+
       timeofs = 0.0f;
 
-      if (distfac > 1.0f) {
-        /* path longer than text: spacemode involves */
-        distfac = 1.0f / distfac;
+      if (distfac < 1.0f) {
+        /* Path longer than text: space-mode is involved. */
 
         if (cu->spacemode == CU_ALIGN_X_RIGHT) {
           timeofs = 1.0f - distfac;
@@ -1281,11 +1323,10 @@ static bool vfont_to_curve(Object *ob,
           distfac = 1.0f;
         }
       }
-      else {
-        distfac = 1.0;
-      }
 
-      distfac /= (maxx - minx);
+      if (chartrans_size_x != 0.0f) {
+        distfac /= chartrans_size_x;
+      }
 
       timeofs += distfac * cu->xof; /* not cyclic */
 
@@ -1294,7 +1335,7 @@ static bool vfont_to_curve(Object *ob,
         float ctime, dtime, vec[4], tvec[4], rotvec[3];
         float si, co;
 
-        /* rotate around center character */
+        /* Rotate around center character. */
         info = &custrinfo[i];
         ascii = mem[i];
         if (info->flag & CU_CHINFO_SMALLCAPS_CHECK) {
@@ -1501,7 +1542,7 @@ static bool vfont_to_curve(Object *ob,
       }
       else if (tb_scale.h == 0.0f) {
         /* This is a horizontal overflow. */
-        if (longest_line_length != 0.0f) {
+        if (longest_line_length > tb_scale.w) {
           /* We make sure longest line before it broke can fit here. */
           float scale_to_fit = tb_scale.w / longest_line_length;
           scale_to_fit -= FLT_EPSILON;
@@ -1590,32 +1631,32 @@ static bool vfont_to_curve(Object *ob,
     }
     return true;
   }
+
+  ok = true;
+finally:
+  if (r_text) {
+    *r_text = mem;
+    *r_text_len = slen;
+    *r_text_free = (ef == NULL);
+  }
   else {
-    ok = true;
-  finally:
-    if (r_text) {
-      *r_text = mem;
-      *r_text_len = slen;
-      *r_text_free = (ef == NULL);
+    if (ef == NULL) {
+      MEM_freeN((void *)mem);
+    }
+  }
+
+  if (chartransdata) {
+    if (ok && r_chartransdata) {
+      *r_chartransdata = chartransdata;
     }
     else {
-      if (ef == NULL) {
-        MEM_freeN((void *)mem);
-      }
+      MEM_freeN(chartransdata);
     }
-
-    if (chartransdata) {
-      if (ok && r_chartransdata) {
-        *r_chartransdata = chartransdata;
-      }
-      else {
-        MEM_freeN(chartransdata);
-      }
-    }
-
-    /* Store the effective scale, to use for the textbox lines. */
-    cu->fsize_realtime = font_size;
   }
+
+  /* Store the effective scale, to use for the textbox lines. */
+  cu->fsize_realtime = font_size;
+
   return ok;
 
 #undef MARGIN_X_MIN

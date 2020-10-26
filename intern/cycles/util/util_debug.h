@@ -73,10 +73,10 @@ class DebugFlags {
       return sse2;
     }
 
-    /* Requested BVH size.
+    /* Requested BVH layout.
      *
-     * Rendering will use widest possible BVH which is below or equal
-     * this one.
+     * By default the fastest will be used. For debugging the BVH used by other
+     * CPUs and GPUs can be selected here instead.
      */
     BVHLayout bvh_layout;
 
@@ -108,6 +108,9 @@ class DebugFlags {
 
     /* Number of CUDA streams to launch kernels concurrently from. */
     int cuda_streams;
+
+    /* Use OptiX curves API for hair instead of custom implementation. */
+    bool curves_api;
   };
 
   /* Descriptor of OpenCL feature-set to be used. */

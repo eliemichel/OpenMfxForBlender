@@ -20,16 +20,11 @@
  *
  * */
 
-#ifndef __BLI_MATH_GEOM_H__
-#define __BLI_MATH_GEOM_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #include "BLI_compiler_attrs.h"
 #include "BLI_math_inline.h"
@@ -39,24 +34,31 @@ extern "C" {
 #  pragma GCC diagnostic ignored "-Wredundant-decls"
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /********************************** Polygons *********************************/
 
-float normal_tri_v3(float r[3], const float a[3], const float b[3], const float c[3]);
+float normal_tri_v3(float n[3], const float v1[3], const float v2[3], const float v3[3]);
 float normal_quad_v3(
-    float r[3], const float a[3], const float b[3], const float c[3], const float d[3]);
-float normal_poly_v3(float r[3], const float verts[][3], unsigned int nr);
+    float n[3], const float v1[3], const float v2[3], const float v3[3], const float v4[3]);
+float normal_poly_v3(float n[3], const float verts[][3], unsigned int nr);
 
-MINLINE float area_tri_v2(const float a[2], const float b[2], const float c[2]);
-MINLINE float area_squared_tri_v2(const float a[2], const float b[2], const float c[2]);
+MINLINE float area_tri_v2(const float v1[2], const float v2[2], const float v3[2]);
+MINLINE float area_squared_tri_v2(const float v1[2], const float v2[2], const float v3[2]);
 MINLINE float area_tri_signed_v2(const float v1[2], const float v2[2], const float v3[2]);
-float area_tri_v3(const float a[3], const float b[3], const float c[3]);
-float area_squared_tri_v3(const float a[3], const float b[3], const float c[3]);
+float area_tri_v3(const float v1[3], const float v2[3], const float v3[3]);
+float area_squared_tri_v3(const float v1[3], const float v2[3], const float v3[3]);
 float area_tri_signed_v3(const float v1[3],
                          const float v2[3],
                          const float v3[3],
                          const float normal[3]);
-float area_quad_v3(const float a[3], const float b[3], const float c[3], const float d[3]);
-float area_squared_quad_v3(const float a[3], const float b[3], const float c[3], const float d[3]);
+float area_quad_v3(const float v1[3], const float v2[3], const float v3[3], const float v4[3]);
+float area_squared_quad_v3(const float v1[3],
+                           const float v2[3],
+                           const float v3[3],
+                           const float v4[3]);
 float area_poly_v3(const float verts[][3], unsigned int nr);
 float area_poly_v2(const float verts[][2], unsigned int nr);
 float area_squared_poly_v3(const float verts[][3], unsigned int nr);
@@ -190,6 +192,10 @@ float dist_squared_to_projected_aabb_simple(const float projmat[4][4],
                                             const float bbmin[3],
                                             const float bbmax[3]);
 
+float closest_to_ray_v3(float r_close[3],
+                        const float p[3],
+                        const float ray_orig[3],
+                        const float ray_dir[3]);
 float closest_to_line_v2(float r_close[2], const float p[2], const float l1[2], const float l2[2]);
 double closest_to_line_v2_db(double r_close[2],
                              const double p[2],
@@ -209,9 +215,9 @@ void closest_to_plane_v3(float r_close[3], const float plane[4], const float pt[
 void closest_to_plane3_normalized_v3(float r_close[3], const float plane[3], const float pt[3]);
 void closest_to_plane3_v3(float r_close[3], const float plane[3], const float pt[3]);
 
-/* Set 'r' to the point in triangle (t1, t2, t3) closest to point 'p' */
+/* Set 'r' to the point in triangle (v1, v2, v3) closest to point 'p' */
 void closest_on_tri_to_point_v3(
-    float r[3], const float p[3], const float t1[3], const float t2[3], const float t3[3]);
+    float r[3], const float p[3], const float v1[3], const float v2[3], const float v3[3]);
 
 float ray_point_factor_v3_ex(const float p[3],
                              const float ray_origin[3],
@@ -253,7 +259,7 @@ void limit_dist_v3(float v1[3], float v2[3], const float dist);
 #define ISECT_LINE_LINE_EXACT 1
 #define ISECT_LINE_LINE_CROSS 2
 
-int isect_seg_seg_v2(const float a1[2], const float a2[2], const float b1[2], const float b2[2]);
+int isect_seg_seg_v2(const float v1[2], const float v2[2], const float v3[2], const float v4[2]);
 void isect_seg_seg_v3(const float a0[3],
                       const float a1[3],
                       const float b0[3],
@@ -261,7 +267,7 @@ void isect_seg_seg_v3(const float a0[3],
                       float r_a[3],
                       float r_b[3]);
 
-int isect_seg_seg_v2_int(const int a1[2], const int a2[2], const int b1[2], const int b2[2]);
+int isect_seg_seg_v2_int(const int v1[2], const int v2[2], const int v3[2], const int v4[2]);
 int isect_seg_seg_v2_point_ex(const float v0[2],
                               const float v1[2],
                               const float v2[2],
@@ -399,15 +405,19 @@ bool isect_ray_tri_epsilon_v3(const float ray_origin[3],
                               float *r_lambda,
                               float r_uv[2],
                               const float epsilon);
-bool isect_tri_tri_epsilon_v3(const float t_a0[3],
-                              const float t_a1[3],
-                              const float t_a2[3],
-                              const float t_b0[3],
-                              const float t_b1[3],
-                              const float t_b2[3],
-                              float r_i1[3],
-                              float r_i2[3],
-                              const float epsilon);
+bool isect_tri_tri_v3_ex(const float tri_a[3][3],
+                         const float tri_b[3][3],
+                         float r_i1[3],
+                         float r_i2[3],
+                         int *r_tri_a_edge_isect_count);
+bool isect_tri_tri_v3(const float t_a0[3],
+                      const float t_a1[3],
+                      const float t_a2[3],
+                      const float t_b0[3],
+                      const float t_b1[3],
+                      const float t_b2[3],
+                      float r_i1[3],
+                      float r_i2[3]);
 
 bool isect_tri_tri_v2(const float p1[2],
                       const float q1[2],
@@ -450,11 +460,11 @@ bool isect_ray_seg_v2(const float ray_origin[2],
                       float *r_lambda,
                       float *r_u);
 
-bool isect_ray_seg_v3(const float ray_origin[3],
-                      const float ray_direction[3],
-                      const float v0[3],
-                      const float v1[3],
-                      float *r_lambda);
+bool isect_ray_line_v3(const float ray_origin[3],
+                       const float ray_direction[3],
+                       const float v0[3],
+                       const float v1[3],
+                       float *r_lambda);
 
 /* point in polygon */
 bool isect_point_poly_v2(const float pt[2],
@@ -467,7 +477,7 @@ bool isect_point_poly_v2_int(const int pt[2],
                              const bool use_holes);
 
 int isect_point_quad_v2(
-    const float p[2], const float a[2], const float b[2], const float c[2], const float d[2]);
+    const float p[2], const float v1[2], const float v2[2], const float v3[2], const float v4[2]);
 
 int isect_point_tri_v2(const float pt[2], const float v1[2], const float v2[2], const float v3[2]);
 bool isect_point_tri_v2_cw(const float pt[2],
@@ -544,13 +554,13 @@ bool point_in_slice_seg(float p[3], float l1[3], float l2[3]);
 
 /****************************** Interpolation ********************************/
 void interp_weights_tri_v3(
-    float w[3], const float a[3], const float b[3], const float c[3], const float p[3]);
+    float w[3], const float v1[3], const float v2[3], const float v3[3], const float co[3]);
 void interp_weights_quad_v3(float w[4],
-                            const float a[3],
-                            const float b[3],
-                            const float c[3],
-                            const float d[3],
-                            const float p[3]);
+                            const float v1[3],
+                            const float v2[3],
+                            const float v3[3],
+                            const float v4[3],
+                            const float co[3]);
 void interp_weights_poly_v3(float w[], float v[][3], const int n, const float co[3]);
 void interp_weights_poly_v2(float w[], float v[][2], const int n, const float co[2]);
 
@@ -562,7 +572,7 @@ void interp_cubic_v3(float x[3],
                      const float v2[3],
                      const float t);
 
-int interp_sparse_array(float *array, const int list_size, const float invalid);
+int interp_sparse_array(float *array, const int list_size, const float skipval);
 
 void transform_point_by_tri_v3(float pt_tar[3],
                                float const pt_src[3],
@@ -657,8 +667,8 @@ void planes_from_projmat(const float mat[4][4],
                          float right[4],
                          float top[4],
                          float bottom[4],
-                         float front[4],
-                         float back[4]);
+                         float near[4],
+                         float far[4]);
 
 void projmat_dimensions(const float projmat[4][4],
                         float *r_left,
@@ -667,6 +677,13 @@ void projmat_dimensions(const float projmat[4][4],
                         float *r_top,
                         float *r_near,
                         float *r_far);
+void projmat_dimensions_db(const float projmat[4][4],
+                           double *r_left,
+                           double *r_right,
+                           double *r_bottom,
+                           double *r_top,
+                           double *r_near,
+                           double *r_far);
 
 void projmat_from_subregion(const float projmat[4][4],
                             const int win_size[2],
@@ -814,5 +831,3 @@ float cubic_tangent_factor_circle_v3(const float tan_l[3], const float tan_r[3])
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MATH_GEOM_H__ */

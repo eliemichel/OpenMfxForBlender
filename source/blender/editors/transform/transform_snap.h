@@ -18,8 +18,7 @@
  * \ingroup editors
  */
 
-#ifndef __TRANSFORM_SNAP_H__
-#define __TRANSFORM_SNAP_H__
+#pragma once
 
 #define SNAP_MIN_DISTANCE 30
 
@@ -55,16 +54,10 @@ void snapFrameTransform(struct TransInfo *t,
                         /* return args */
                         float *r_val);
 
-typedef enum {
-  NO_GEARS = 0,
-  BIG_GEARS = 1,
-  SMALL_GEARS = 2,
-} GearsType;
-
 bool transformModeUseSnap(const TransInfo *t);
 
-void snapGridIncrement(TransInfo *t, float *val);
-void snapGridIncrementAction(TransInfo *t, float *val, GearsType action);
+bool transform_snap_increment(TransInfo *t, float *val);
+bool transform_snap_grid(TransInfo *t, float *val);
 
 void snapSequenceBounds(TransInfo *t, const int mval[2]);
 
@@ -87,4 +80,4 @@ void addSnapPoint(TransInfo *t);
 eRedrawFlag updateSelectedSnapPoint(TransInfo *t);
 void removeSnapPoint(TransInfo *t);
 
-#endif /* __TRANSFORM_SNAP_H__ */
+float transform_snap_distance_len_squared_fn(TransInfo *t, const float p1[3], const float p2[3]);

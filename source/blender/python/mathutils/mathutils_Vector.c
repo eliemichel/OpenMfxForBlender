@@ -48,7 +48,7 @@
 static PyObject *Vector_copy(VectorObject *self);
 static PyObject *Vector_deepcopy(VectorObject *self, PyObject *args);
 static PyObject *Vector_to_tuple_ex(VectorObject *self, int ndigits);
-static int row_vector_multiplication(float rvec[MAX_DIMENSIONS],
+static int row_vector_multiplication(float r_vec[MAX_DIMENSIONS],
                                      VectorObject *vec,
                                      MatrixObject *mat);
 
@@ -96,18 +96,17 @@ static PyObject *Vector_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
   return Vector_CreatePyObject_alloc(vec, size, type);
 }
 
-static PyObject *vec__apply_to_copy(PyNoArgsFunction vec_func, VectorObject *self)
+static PyObject *vec__apply_to_copy(PyObject *(*vec_func)(VectorObject *), VectorObject *self)
 {
   PyObject *ret = Vector_copy(self);
-  PyObject *ret_dummy = vec_func(ret);
+  PyObject *ret_dummy = vec_func((VectorObject *)ret);
   if (ret_dummy) {
     Py_DECREF(ret_dummy);
     return (PyObject *)ret;
   }
-  else { /* error */
-    Py_DECREF(ret);
-    return NULL;
-  }
+  /* error */
+  Py_DECREF(ret);
+  return NULL;
 }
 
 /*-----------------------CLASS-METHODS----------------------------*/
@@ -357,7 +356,7 @@ PyDoc_STRVAR(Vector_normalize_doc,
              "      however 4D Vectors w axis is left untouched.\n");
 static PyObject *Vector_normalize(VectorObject *self)
 {
-  int size = (self->size == 4 ? 3 : self->size);
+  const int size = (self->size == 4 ? 3 : self->size);
   if (BaseMath_ReadCallback_ForWrite(self) == -1) {
     return NULL;
   }
@@ -376,7 +375,7 @@ PyDoc_STRVAR(Vector_normalized_doc,
              "   :rtype: :class:`Vector`\n");
 static PyObject *Vector_normalized(VectorObject *self)
 {
-  return vec__apply_to_copy((PyNoArgsFunction)Vector_normalize, self);
+  return vec__apply_to_copy(Vector_normalize, self);
 }
 
 PyDoc_STRVAR(Vector_resize_doc,
@@ -484,7 +483,7 @@ static PyObject *Vector_resize_2d(VectorObject *self)
     return NULL;
   }
 
-  self->vec = PyMem_Realloc(self->vec, (sizeof(float) * 2));
+  self->vec = PyMem_Realloc(self->vec, sizeof(float[2]));
   if (self->vec == NULL) {
     PyErr_SetString(PyExc_MemoryError,
                     "Vector.resize_2d(): "
@@ -515,7 +514,7 @@ static PyObject *Vector_resize_3d(VectorObject *self)
     return NULL;
   }
 
-  self->vec = PyMem_Realloc(self->vec, (sizeof(float) * 3));
+  self->vec = PyMem_Realloc(self->vec, sizeof(float[3]));
   if (self->vec == NULL) {
     PyErr_SetString(PyExc_MemoryError,
                     "Vector.resize_3d(): "
@@ -550,7 +549,7 @@ static PyObject *Vector_resize_4d(VectorObject *self)
     return NULL;
   }
 
-  self->vec = PyMem_Realloc(self->vec, (sizeof(float) * 4));
+  self->vec = PyMem_Realloc(self->vec, sizeof(float[4]));
   if (self->vec == NULL) {
     PyErr_SetString(PyExc_MemoryError,
                     "Vector.resize_4d(): "
@@ -930,7 +929,7 @@ PyDoc_STRVAR(Vector_dot_doc,
              "   :arg other: The other vector to perform the dot product with.\n"
              "   :type other: :class:`Vector`\n"
              "   :return: The dot product.\n"
-             "   :rtype: :class:`Vector`\n");
+             "   :rtype: float\n");
 static PyObject *Vector_dot(VectorObject *self, PyObject *value)
 {
   float *tvec;
@@ -1004,12 +1003,11 @@ static PyObject *Vector_angle(VectorObject *self, PyObject *args)
       Py_INCREF(fallback);
       return fallback;
     }
-    else {
-      PyErr_SetString(PyExc_ValueError,
-                      "Vector.angle(other): "
-                      "zero length vectors have no valid angle");
-      return NULL;
-    }
+
+    PyErr_SetString(PyExc_ValueError,
+                    "Vector.angle(other): "
+                    "zero length vectors have no valid angle");
+    return NULL;
   }
 
   return PyFloat_FromDouble(saacos(dot / (sqrt(dot_self) * sqrt(dot_other))));
@@ -1059,12 +1057,11 @@ static PyObject *Vector_angle_signed(VectorObject *self, PyObject *args)
       Py_INCREF(fallback);
       return fallback;
     }
-    else {
-      PyErr_SetString(PyExc_ValueError,
-                      "Vector.angle_signed(other): "
-                      "zero length vectors have no valid angle");
-      return NULL;
-    }
+
+    PyErr_SetString(PyExc_ValueError,
+                    "Vector.angle_signed(other): "
+                    "zero length vectors have no valid angle");
+    return NULL;
   }
 
   return PyFloat_FromDouble(angle_signed_v2v2(self->vec, tvec));
@@ -1238,12 +1235,11 @@ static PyObject *Vector_slerp(VectorObject *self, PyObject *args)
       Py_INCREF(fallback);
       return fallback;
     }
-    else {
-      PyErr_SetString(PyExc_ValueError,
-                      "Vector.slerp(): "
-                      "zero length vectors unsupported");
-      return NULL;
-    }
+
+    PyErr_SetString(PyExc_ValueError,
+                    "Vector.slerp(): "
+                    "zero length vectors unsupported");
+    return NULL;
   }
 
   /* We have sane state, execute slerp */
@@ -1256,12 +1252,11 @@ static PyObject *Vector_slerp(VectorObject *self, PyObject *args)
       Py_INCREF(fallback);
       return fallback;
     }
-    else {
-      PyErr_SetString(PyExc_ValueError,
-                      "Vector.slerp(): "
-                      "opposite vectors unsupported");
-      return NULL;
-    }
+
+    PyErr_SetString(PyExc_ValueError,
+                    "Vector.slerp(): "
+                    "opposite vectors unsupported");
+    return NULL;
   }
 
   interp_dot_slerp(fac, cosom, w);
@@ -1738,7 +1733,7 @@ static PyObject *vector_mul_float(VectorObject *vec, const float scalar)
   mul_vn_vn_fl(tvec, vec->vec, vec->size, scalar);
   return Vector_CreatePyObject_alloc(tvec, vec->size, Py_TYPE(vec));
 }
-#ifdef USE_MATHUTILS_ELEM_MUL
+
 static PyObject *vector_mul_vec(VectorObject *vec1, VectorObject *vec2)
 {
   float *tvec = PyMem_Malloc(vec1->size * sizeof(float));
@@ -1752,7 +1747,7 @@ static PyObject *vector_mul_vec(VectorObject *vec1, VectorObject *vec2)
   mul_vn_vnvn(tvec, vec1->vec, vec2->vec, vec1->size);
   return Vector_CreatePyObject_alloc(tvec, vec1->size, Py_TYPE(vec1));
 }
-#endif
+
 static PyObject *Vector_mul(PyObject *v1, PyObject *v2)
 {
   VectorObject *vec1 = NULL, *vec2 = NULL;
@@ -1775,7 +1770,6 @@ static PyObject *Vector_mul(PyObject *v1, PyObject *v2)
 
   /* make sure v1 is always the vector */
   if (vec1 && vec2) {
-#ifdef USE_MATHUTILS_ELEM_MUL
     if (vec1->size != vec2->size) {
       PyErr_SetString(PyExc_ValueError,
                       "Vector multiplication: "
@@ -1785,9 +1779,8 @@ static PyObject *Vector_mul(PyObject *v1, PyObject *v2)
 
     /* element-wise product */
     return vector_mul_vec(vec1, vec2);
-#endif
   }
-  else if (vec1) {
+  if (vec1) {
     if (((scalar = PyFloat_AsDouble(v2)) == -1.0f && PyErr_Occurred()) == 0) { /* VEC * FLOAT */
       return vector_mul_float(vec1, scalar);
     }
@@ -1832,7 +1825,6 @@ static PyObject *Vector_imul(PyObject *v1, PyObject *v2)
   /* Intentionally don't support (Quaternion, Matrix) here, uses reverse order instead. */
 
   if (vec1 && vec2) {
-#ifdef USE_MATHUTILS_ELEM_MUL
     if (vec1->size != vec2->size) {
       PyErr_SetString(PyExc_ValueError,
                       "Vector multiplication: "
@@ -1840,16 +1832,8 @@ static PyObject *Vector_imul(PyObject *v1, PyObject *v2)
       return NULL;
     }
 
-    /* element-wise product inplace */
+    /* Element-wise product in-place. */
     mul_vn_vn(vec1->vec, vec2->vec, vec1->size);
-#else
-    PyErr_Format(PyExc_TypeError,
-                 "In place element-wise multiplication: "
-                 "not supported between '%.200s' and '%.200s' types",
-                 Py_TYPE(v1)->tp_name,
-                 Py_TYPE(v2)->tp_name);
-    return NULL;
-#endif
   }
   else if (vec1 && (((scalar = PyFloat_AsDouble(v2)) == -1.0f && PyErr_Occurred()) ==
                     0)) { /* VEC *= FLOAT */
@@ -1901,7 +1885,7 @@ static PyObject *Vector_matmul(PyObject *v1, PyObject *v2)
     /*dot product*/
     return PyFloat_FromDouble(dot_vn_vn(vec1->vec, vec2->vec, vec1->size));
   }
-  else if (vec1) {
+  if (vec1) {
     if (MatrixObject_Check(v2)) {
       /* VEC @ MATRIX */
       float tvec[MAX_DIMENSIONS];
@@ -2043,16 +2027,15 @@ static PyObject *Vector_richcmpr(PyObject *objectA, PyObject *objectB, int compa
 {
   VectorObject *vecA = NULL, *vecB = NULL;
   int result = 0;
-  double epsilon = 0.000001f;
+  const double epsilon = 0.000001f;
   double lenA, lenB;
 
   if (!VectorObject_Check(objectA) || !VectorObject_Check(objectB)) {
     if (comparison_type == Py_NE) {
       Py_RETURN_TRUE;
     }
-    else {
-      Py_RETURN_FALSE;
-    }
+
+    Py_RETURN_FALSE;
   }
   vecA = (VectorObject *)objectA;
   vecB = (VectorObject *)objectB;
@@ -2065,9 +2048,8 @@ static PyObject *Vector_richcmpr(PyObject *objectA, PyObject *objectB, int compa
     if (comparison_type == Py_NE) {
       Py_RETURN_TRUE;
     }
-    else {
-      Py_RETURN_FALSE;
-    }
+
+    Py_RETURN_FALSE;
   }
 
   switch (comparison_type) {
@@ -2118,9 +2100,8 @@ static PyObject *Vector_richcmpr(PyObject *objectA, PyObject *objectB, int compa
   if (result == 1) {
     Py_RETURN_TRUE;
   }
-  else {
-    Py_RETURN_FALSE;
-  }
+
+  Py_RETURN_FALSE;
 }
 
 static Py_hash_t Vector_hash(VectorObject *self)
@@ -2163,7 +2144,7 @@ static PyObject *Vector_subscript(VectorObject *self, PyObject *item)
     }
     return Vector_item(self, i);
   }
-  else if (PySlice_Check(item)) {
+  if (PySlice_Check(item)) {
     Py_ssize_t start, stop, step, slicelength;
 
     if (PySlice_GetIndicesEx(item, self->size, &start, &stop, &step, &slicelength) < 0) {
@@ -2173,19 +2154,17 @@ static PyObject *Vector_subscript(VectorObject *self, PyObject *item)
     if (slicelength <= 0) {
       return PyTuple_New(0);
     }
-    else if (step == 1) {
+    if (step == 1) {
       return Vector_slice(self, start, stop);
     }
-    else {
-      PyErr_SetString(PyExc_IndexError, "slice steps not supported with vectors");
-      return NULL;
-    }
-  }
-  else {
-    PyErr_Format(
-        PyExc_TypeError, "vector indices must be integers, not %.200s", Py_TYPE(item)->tp_name);
+
+    PyErr_SetString(PyExc_IndexError, "slice steps not supported with vectors");
     return NULL;
   }
+
+  PyErr_Format(
+      PyExc_TypeError, "vector indices must be integers, not %.200s", Py_TYPE(item)->tp_name);
+  return NULL;
 }
 
 static int Vector_ass_subscript(VectorObject *self, PyObject *item, PyObject *value)
@@ -2200,7 +2179,7 @@ static int Vector_ass_subscript(VectorObject *self, PyObject *item, PyObject *va
     }
     return Vector_ass_item(self, i, value);
   }
-  else if (PySlice_Check(item)) {
+  if (PySlice_Check(item)) {
     Py_ssize_t start, stop, step, slicelength;
 
     if (PySlice_GetIndicesEx(item, self->size, &start, &stop, &step, &slicelength) < 0) {
@@ -2210,16 +2189,14 @@ static int Vector_ass_subscript(VectorObject *self, PyObject *item, PyObject *va
     if (step == 1) {
       return Vector_ass_slice(self, start, stop, value);
     }
-    else {
-      PyErr_SetString(PyExc_IndexError, "slice steps not supported with vectors");
-      return -1;
-    }
-  }
-  else {
-    PyErr_Format(
-        PyExc_TypeError, "vector indices must be integers, not %.200s", Py_TYPE(item)->tp_name);
+
+    PyErr_SetString(PyExc_IndexError, "slice steps not supported with vectors");
     return -1;
   }
+
+  PyErr_Format(
+      PyExc_TypeError, "vector indices must be integers, not %.200s", Py_TYPE(item)->tp_name);
+  return -1;
 }
 
 static PyMappingMethods Vector_AsMapping = {
@@ -2515,7 +2492,7 @@ static int Vector_swizzle_set(VectorObject *self, PyObject *value, void *closure
   swizzleClosure = POINTER_AS_INT(closure);
 
   /* We must first copy current vec into tvec, else some org values may be lost.
-   * See [#31760].
+   * See T31760.
    * Assuming self->size can't be higher than MAX_DIMENSIONS! */
   memcpy(tvec, self->vec, self->size * sizeof(float));
 
@@ -2527,16 +2504,15 @@ static int Vector_swizzle_set(VectorObject *self, PyObject *value, void *closure
   }
 
   /* We must copy back the whole tvec into vec, else some changes may be lost (e.g. xz...).
-   * See [#31760]. */
+   * See T31760. */
   memcpy(self->vec, tvec, self->size * sizeof(float));
   /* continue with BaseMathObject_WriteCallback at the end */
 
   if (BaseMath_WriteCallback(self) == -1) {
     return -1;
   }
-  else {
-    return 0;
-  }
+
+  return 0;
 }
 
 #define _SWIZZLE1(a) ((a) | SWIZZLE_VALID_AXIS)

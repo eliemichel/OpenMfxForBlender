@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_IMAGE_TYPES_H__
-#define __DNA_IMAGE_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_color_types.h" /* for color management */
@@ -117,24 +116,24 @@ typedef struct ImageTile {
 #define IMA_NEED_FRAME_RECALC (1 << 3)
 #define IMA_SHOW_STEREO (1 << 4)
 
-enum {
-  TEXTARGET_TEXTURE_2D = 0,
-  TEXTARGET_TEXTURE_CUBE_MAP = 1,
-  TEXTARGET_TEXTURE_2D_ARRAY = 2,
-  TEXTARGET_TEXTURE_TILE_MAPPING = 3,
-  TEXTARGET_COUNT = 4,
-};
+/* Used to get the correct gpu texture from an Image datablock. */
+typedef enum eGPUTextureTarget {
+  TEXTARGET_2D = 0,
+  TEXTARGET_2D_ARRAY,
+  TEXTARGET_TILE_MAPPING,
+  TEXTARGET_COUNT,
+} eGPUTextureTarget;
 
 typedef struct Image {
   ID id;
 
   /** File path, 1024 = FILE_MAX. */
-  char name[1024];
+  char filepath[1024];
 
   /** Not written in file. */
   struct MovieCache *cache;
-  /** Not written in file 4 = TEXTARGET_COUNT, 2 = stereo eyes. */
-  struct GPUTexture *gputexture[4][2];
+  /** Not written in file 3 = TEXTARGET_COUNT, 2 = stereo eyes. */
+  struct GPUTexture *gputexture[3][2];
 
   /* sources from: */
   ListBase anims;
@@ -148,9 +147,12 @@ typedef struct Image {
   int lastframe;
 
   /* GPU texture flag. */
-  short gpuflag;
-  char _pad2[2];
   int gpuframenr;
+  short gpuflag;
+  short gpu_pass;
+  short gpu_layer;
+  short gpu_slot;
+  char _pad2[4];
 
   /** Deprecated. */
   struct PackedFile *packedfile DNA_DEPRECATED;
@@ -265,5 +267,3 @@ enum {
   IMA_ALPHA_CHANNEL_PACKED = 2,
   IMA_ALPHA_IGNORE = 3,
 };
-
-#endif

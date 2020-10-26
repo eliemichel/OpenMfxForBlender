@@ -3,18 +3,16 @@
  * Clément Foucault */
 
 uniform vec3 planeAxes;
-uniform float meshSize;
+uniform vec3 gridSize;
 
 uniform int gridFlag;
-
-#define cameraPos (ViewMatrixInverse[3].xyz)
 
 #define PLANE_XY (1 << 4)
 #define PLANE_XZ (1 << 5)
 #define PLANE_YZ (1 << 6)
 #define CLIP_Z_POS (1 << 7)
 #define CLIP_Z_NEG (1 << 8)
-
+#define PLANE_IMAGE (1 << 11)
 in vec3 pos;
 
 out vec3 local_pos;
@@ -30,13 +28,16 @@ void main()
   else if ((gridFlag & PLANE_XZ) != 0) {
     vert_pos = vec3(pos.x, 0.0, pos.y);
   }
-  else {
+  else if ((gridFlag & PLANE_YZ) != 0) {
     vert_pos = vec3(0.0, pos.x, pos.y);
+  }
+  else /* PLANE_IMAGE */ {
+    vert_pos = vec3(pos.xy * 0.5 + 0.5, 0.0);
   }
 
   local_pos = vert_pos;
 
-  vec3 real_pos = cameraPos * planeAxes + vert_pos * meshSize;
+  vec3 real_pos = cameraPos * planeAxes + vert_pos * gridSize;
 
   /* Used for additional Z axis */
   if ((gridFlag & CLIP_Z_POS) != 0) {

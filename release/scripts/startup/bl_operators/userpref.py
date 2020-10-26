@@ -49,6 +49,7 @@ def module_filesystem_remove(path_base, module_name):
             else:
                 os.remove(f_full)
 
+
 # This duplicates shutil.copytree from Python 3.8, with the new dirs_exist_ok
 # argument that we need. Once we upgrade to 3.8 we can remove this.
 def _preferences_copytree(entries, src, dst):
@@ -85,10 +86,12 @@ def _preferences_copytree(entries, src, dst):
         raise Error(errors)
     return dst
 
+
 def preferences_copytree(src, dst):
     import os
     with os.scandir(src) as entries:
         return _preferences_copytree(entries=entries, src=src, dst=dst)
+
 
 class PREFERENCES_OT_keyconfig_activate(Operator):
     bl_idname = "preferences.keyconfig_activate"
@@ -110,20 +113,33 @@ class PREFERENCES_OT_copy_prev(Operator):
     bl_idname = "preferences.copy_prev"
     bl_label = "Copy Previous Settings"
 
-    @staticmethod
-    def previous_version():
-        ver = bpy.app.version
-        ver_old = ((ver[0] * 100) + ver[1]) - 1
-        return ver_old // 100, ver_old % 100
+    @classmethod
+    def _old_version_path(cls, version):
+        return bpy.utils.resource_path('USER', version[0], version[1])
 
-    @staticmethod
-    def _old_path():
-        ver = bpy.app.version
-        ver_old = ((ver[0] * 100) + ver[1]) - 1
-        return bpy.utils.resource_path('USER', ver_old // 100, ver_old % 100)
+    @classmethod
+    def previous_version(cls):
+        # Find config folder from previous version.
+        import os
+        version = bpy.app.version
+        version_new = ((version[0] * 100) + version[1])
+        version_old = ((version[0] * 100) + version[1]) - 1
+        # Ensure we only try to copy files from a point release.
+        # The check below ensures the second numbers match.
+        while (version_new % 100) // 10 == (version_old % 100) // 10:
+            version_split = version_old // 100, version_old % 100
+            if os.path.isdir(cls._old_version_path(version_split)):
+                return version_split
+            version_old = version_old - 1
+        return None
 
-    @staticmethod
-    def _new_path():
+    @classmethod
+    def _old_path(cls):
+        version_old = cls.previous_version()
+        return cls._old_version_path(version_old) if version_old else None
+
+    @classmethod
+    def _new_path(cls):
         return bpy.utils.resource_path('USER')
 
     @classmethod
@@ -132,6 +148,8 @@ class PREFERENCES_OT_copy_prev(Operator):
 
         old = cls._old_path()
         new = cls._new_path()
+        if not old:
+            return False
 
         # Disable operator in case config path is overridden with environment
         # variable. That case has no automatic per-version configuration.
@@ -210,7 +228,7 @@ class PREFERENCES_OT_keyconfig_import(Operator):
         options={'HIDDEN'},
     )
     keep_original: BoolProperty(
-        name="Keep original",
+        name="Keep Original",
         description="Keep original file after copying to configuration folder",
         default=True,
     )
@@ -339,7 +357,7 @@ class PREFERENCES_OT_keyitem_restore(Operator):
 
     item_id: IntProperty(
         name="Item Identifier",
-        description="Identifier of the item to remove",
+        description="Identifier of the item to restore",
     )
 
     @classmethod
@@ -698,7 +716,7 @@ class PREFERENCES_OT_addon_install(Operator):
         addons_new.discard("modules")
 
         # disable any addons we may have enabled previously and removed.
-        # this is unlikely but do just in case. bug [#23978]
+        # this is unlikely but do just in case. bug T23978.
         for new_addon in addons_new:
             addon_utils.disable(new_addon, default_set=True)
 
@@ -972,6 +990,7 @@ class PREFERENCES_OT_studiolight_install(Operator):
         options={'HIDDEN'},
     )
     type: EnumProperty(
+        name="Type",
         items=(
             ('MATCAP', "MatCap", ""),
             ('WORLD', "World", ""),
@@ -1093,9 +1112,9 @@ class PREFERENCES_OT_studiolight_uninstall(Operator):
 
 
 class PREFERENCES_OT_studiolight_copy_settings(Operator):
-    """Copy Studio Light settings to the Studio light editor"""
+    """Copy Studio Light settings to the Studio Light editor"""
     bl_idname = "preferences.studiolight_copy_settings"
-    bl_label = "Copy Studio Light settings"
+    bl_label = "Copy Studio Light Settings"
     index: IntProperty()
 
     def execute(self, context):

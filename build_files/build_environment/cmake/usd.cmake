@@ -22,9 +22,14 @@ set(USD_EXTRA_ARGS
   -DBoost_USE_STATIC_LIBS=ON
   -DBoost_USE_STATIC_RUNTIME=OFF
   -DBOOST_ROOT=${LIBDIR}/boost
+  -DBoost_NO_SYSTEM_PATHS=ON
+  -DBoost_NO_BOOST_CMAKE=ON
   -DTBB_INCLUDE_DIRS=${LIBDIR}/tbb/include
-  -DTBB_LIBRARIES=${LIBDIR}/tbb/lib/${LIBPREFIX}tbb_static${LIBEXT}
-  -DTbb_TBB_LIBRARY=${LIBDIR}/tbb/lib/${LIBPREFIX}tbb_static${LIBEXT}
+  -DTBB_LIBRARIES=${LIBDIR}/tbb/lib/${LIBPREFIX}${TBB_LIBRARY}${LIBEXT}
+  -DTbb_TBB_LIBRARY=${LIBDIR}/tbb/lib/${LIBPREFIX}${TBB_LIBRARY}${LIBEXT}
+  # USD wants the tbb debug lib set even when you are doing a release build
+  # Otherwise it will error out during the cmake configure phase.
+  -DTBB_LIBRARIES_DEBUG=${LIBDIR}/tbb/lib/${LIBPREFIX}${TBB_LIBRARY}${LIBEXT}
 
   # This is a preventative measure that avoids possible conflicts when add-ons
   # try to load another USD library into the same process space.
@@ -76,14 +81,14 @@ if(WIN32)
   if(BUILD_MODE STREQUAL Release)
     ExternalProject_Add_Step(external_usd after_install
       COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/usd/ ${HARVEST_TARGET}/usd
-      COMMAND ${CMAKE_COMMAND} -E copy ${BUILD_DIR}/usd/src/external_usd-build/pxr/Release/libusd_m.lib ${HARVEST_TARGET}/usd/lib/libusd_m.lib
+      COMMAND ${CMAKE_COMMAND} -E copy ${BUILD_DIR}/usd/src/external_usd-build/pxr/Release/usd_m.lib ${HARVEST_TARGET}/usd/lib/libusd_m.lib
       DEPENDEES install
     )
   endif()
   if(BUILD_MODE STREQUAL Debug)
     ExternalProject_Add_Step(external_usd after_install
       COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/usd/lib ${HARVEST_TARGET}/usd/lib
-      COMMAND ${CMAKE_COMMAND} -E copy ${BUILD_DIR}/usd/src/external_usd-build/pxr/Debug/libusd_m_d.lib ${HARVEST_TARGET}/usd/lib/libusd_m_d.lib
+      COMMAND ${CMAKE_COMMAND} -E copy ${BUILD_DIR}/usd/src/external_usd-build/pxr/Debug/usd_m_d.lib ${HARVEST_TARGET}/usd/lib/libusd_m_d.lib
       DEPENDEES install
     )
   endif()

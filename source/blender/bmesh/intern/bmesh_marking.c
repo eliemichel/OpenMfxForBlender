@@ -163,7 +163,7 @@ static bool bm_edge_is_face_visible_any(const BMEdge *e)
  * Remove isolated selected elements when in a mode doesn't support them.
  * eg: in edge-mode a selected vertex must be connected to a selected edge.
  *
- * \note this could be made apart of #BM_mesh_select_mode_flush_ex
+ * \note this could be made a part of #BM_mesh_select_mode_flush_ex
  */
 void BM_mesh_select_mode_clean_ex(BMesh *bm, const short selectmode)
 {
@@ -733,9 +733,9 @@ void BM_elem_select_set(BMesh *bm, BMElem *ele, const bool select)
 }
 
 /* this replaces the active flag used in uv/face mode */
-void BM_mesh_active_face_set(BMesh *bm, BMFace *efa)
+void BM_mesh_active_face_set(BMesh *bm, BMFace *f)
 {
-  bm->act_face = efa;
+  bm->act_face = f;
 }
 
 BMFace *BM_mesh_active_face_get(BMesh *bm, const bool is_sloppy, const bool is_selected)
@@ -743,7 +743,7 @@ BMFace *BM_mesh_active_face_get(BMesh *bm, const bool is_sloppy, const bool is_s
   if (bm->act_face && (!is_selected || BM_elem_flag_test(bm->act_face, BM_ELEM_SELECT))) {
     return bm->act_face;
   }
-  else if (is_sloppy) {
+  if (is_sloppy) {
     BMIter iter;
     BMFace *f = NULL;
     BMEditSelection *ese;
@@ -953,9 +953,7 @@ bool _bm_select_history_remove(BMesh *bm, BMHeader *ele)
     BLI_freelinkN(&bm->selected, ese);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 void _bm_select_history_store_notest(BMesh *bm, BMHeader *ele)

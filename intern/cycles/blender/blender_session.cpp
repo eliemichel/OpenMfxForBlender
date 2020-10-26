@@ -47,6 +47,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+DeviceTypeMask BlenderSession::device_override = DEVICE_MASK_ALL;
 bool BlenderSession::headless = false;
 int BlenderSession::num_resumable_chunks = 0;
 int BlenderSession::current_resumable_chunk = 0;
@@ -59,6 +60,7 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
                                BL::BlendData &b_data,
                                bool preview_osl)
     : session(NULL),
+      scene(NULL),
       sync(NULL),
       b_engine(b_engine),
       b_userpref(b_userpref),
@@ -88,6 +90,7 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
                                int width,
                                int height)
     : session(NULL),
+      scene(NULL),
       sync(NULL),
       b_engine(b_engine),
       b_userpref(b_userpref),
@@ -158,7 +161,7 @@ void BlenderSession::create_session()
 
   /* set buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
   session->reset(buffer_params, session_params.samples);
 
   b_engine.use_highlight_tiles(session_params.progressive_refine == false);
@@ -239,8 +242,13 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
 
   BL::SpaceView3D b_null_space_view3d(PointerRNA_NULL);
   BL::RegionView3D b_null_region_view3d(PointerRNA_NULL);
-  BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_scene, b_render, b_null_space_view3d, b_null_region_view3d, scene->camera, width, height);
+  BufferParams buffer_params = BlenderSync::get_buffer_params(b_render,
+                                                              b_null_space_view3d,
+                                                              b_null_region_view3d,
+                                                              scene->camera,
+                                                              width,
+                                                              height,
+                                                              session_params.denoising.use);
   session->reset(buffer_params, session_params.samples);
 
   b_engine.use_highlight_tiles(session_params.progressive_refine == false);
@@ -251,9 +259,7 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
 
 void BlenderSession::free_session()
 {
-  if (sync)
-    delete sync;
-
+  delete sync;
   delete session;
 }
 
@@ -321,6 +327,7 @@ static void end_render_result(BL::RenderEngine &b_engine,
 
 void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
                                                  bool do_update_only,
+                                                 bool do_read_only,
                                                  bool highlight)
 {
   int x = rtile.x - session->tile_manager.params.full_x;
@@ -346,7 +353,24 @@ void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
 
   BL::RenderLayer b_rlay = *b_single_rlay;
 
-  if (do_update_only) {
+  if (do_read_only) {
+    /* copy each pass */
+    BL::RenderLayer::passes_iterator b_iter;
+
+    for (b_rlay.passes.begin(b_iter); b_iter != b_rlay.passes.end(); ++b_iter) {
+      BL::RenderPass b_pass(*b_iter);
+
+      /* find matching pass type */
+      PassType pass_type = BlenderSync::get_pass_type(b_pass);
+      int components = b_pass.channels();
+
+      rtile.buffers->set_pass_rect(
+          pass_type, components, (float *)b_pass.rect(), rtile.num_samples);
+    }
+
+    end_render_result(b_engine, b_rr, false, false, false);
+  }
+  else if (do_update_only) {
     /* Sample would be zero at initial tile update, which is only needed
      * to tag tile form blender side as IN PROGRESS for proper highlight
      * no buffers should be sent to blender yet. For denoise we also
@@ -366,9 +390,14 @@ void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
   }
 }
 
+void BlenderSession::read_render_tile(RenderTile &rtile)
+{
+  do_write_update_render_tile(rtile, false, true, false);
+}
+
 void BlenderSession::write_render_tile(RenderTile &rtile)
 {
-  do_write_update_render_tile(rtile, false, false);
+  do_write_update_render_tile(rtile, false, false, false);
 }
 
 void BlenderSession::update_render_tile(RenderTile &rtile, bool highlight)
@@ -378,9 +407,9 @@ void BlenderSession::update_render_tile(RenderTile &rtile, bool highlight)
    * would need to be investigated a bit further, but for now shall be fine
    */
   if (!b_engine.is_preview())
-    do_write_update_render_tile(rtile, true, highlight);
+    do_write_update_render_tile(rtile, true, false, highlight);
   else
-    do_write_update_render_tile(rtile, false, false);
+    do_write_update_render_tile(rtile, false, false, false);
 }
 
 static void add_cryptomatte_layer(BL::RenderResult &b_rr, string name, string manifest)
@@ -448,14 +477,13 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   session->update_render_tile_cb = function_bind(
       &BlenderSession::update_render_tile, this, _1, _2);
 
+  BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
+
   /* get buffer parameters */
   SessionParams session_params = BlenderSync::get_session_params(
-      b_engine, b_userpref, b_scene, background);
+      b_engine, b_userpref, b_scene, background, b_view_layer);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
-
-  /* render each layer */
-  BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
+      b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
 
   /* temporary render result to find needed passes and views */
   BL::RenderResult b_rr = begin_render_result(
@@ -465,39 +493,18 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   BL::RenderLayer b_rlay = *b_single_rlay;
   b_rlay_name = b_view_layer.name();
 
-  /* add passes */
+  /* Update denoising parameters. */
+  session->set_denoising(session_params.denoising);
+
+  /* Compute render passes and film settings. */
   vector<Pass> passes = sync->sync_render_passes(
-      b_rlay, b_view_layer, session_params.adaptive_sampling);
+      b_rlay, b_view_layer, session_params.adaptive_sampling, session_params.denoising);
+
+  /* Set buffer params, using film settings from sync_render_passes. */
   buffer_params.passes = passes;
-
-  PointerRNA crl = RNA_pointer_get(&b_view_layer.ptr, "cycles");
-  bool use_denoising = get_boolean(crl, "use_denoising");
-  bool use_optix_denoising = get_boolean(crl, "use_optix_denoising");
-  bool write_denoising_passes = get_boolean(crl, "denoising_store_passes");
-
-  buffer_params.denoising_data_pass = use_denoising || write_denoising_passes;
-  buffer_params.denoising_clean_pass = (scene->film->denoising_flags & DENOISING_CLEAN_ALL_PASSES);
-  buffer_params.denoising_prefiltered_pass = write_denoising_passes && !use_optix_denoising;
-
-  session->params.run_denoising = use_denoising || write_denoising_passes;
-  session->params.full_denoising = use_denoising && !use_optix_denoising;
-  session->params.optix_denoising = use_denoising && use_optix_denoising;
-  session->params.write_denoising_passes = write_denoising_passes && !use_optix_denoising;
-  session->params.denoising.radius = get_int(crl, "denoising_radius");
-  session->params.denoising.strength = get_float(crl, "denoising_strength");
-  session->params.denoising.feature_strength = get_float(crl, "denoising_feature_strength");
-  session->params.denoising.relative_pca = get_boolean(crl, "denoising_relative_pca");
-  session->params.denoising.optix_input_passes = get_enum(crl, "denoising_optix_input_passes");
-  session->tile_manager.schedule_denoising = session->params.run_denoising;
-
-  scene->film->denoising_data_pass = buffer_params.denoising_data_pass;
-  scene->film->denoising_clean_pass = buffer_params.denoising_clean_pass;
-  scene->film->denoising_prefiltered_pass = buffer_params.denoising_prefiltered_pass;
-
-  scene->film->pass_alpha_threshold = b_view_layer.pass_alpha_threshold();
-  scene->film->tag_passes_update(scene, passes);
-  scene->film->tag_update(scene);
-  scene->integrator->tag_update(scene);
+  buffer_params.denoising_data_pass = scene->film->denoising_data_pass;
+  buffer_params.denoising_clean_pass = scene->film->denoising_clean_pass;
+  buffer_params.denoising_prefiltered_pass = scene->film->denoising_prefiltered_pass;
 
   BL::RenderResult::views_iterator b_view_iter;
 
@@ -556,6 +563,10 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
     session->reset(buffer_params, effective_layer_samples);
 
     /* render */
+    if (!b_engine.is_preview() && background && print_render_stats) {
+      scene->enable_update_stats();
+    }
+
     session->start();
     session->wait();
 
@@ -597,25 +608,6 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
 #endif
 }
 
-static void populate_bake_data(BakeData *data,
-                               const int object_id,
-                               BL::BakePixel &pixel_array,
-                               const int num_pixels)
-{
-  BL::BakePixel bp = pixel_array;
-
-  int i;
-  for (i = 0; i < num_pixels; i++) {
-    if (bp.object_id() == object_id) {
-      data->set(i, bp.primitive_id(), bp.uv(), bp.du_dx(), bp.du_dy(), bp.dv_dx(), bp.dv_dy());
-    }
-    else {
-      data->set_null(i);
-    }
-    bp = bp.next();
-  }
-}
-
 static int bake_pass_filter_get(const int pass_filter)
 {
   int flag = BAKE_FILTER_NONE;
@@ -646,43 +638,26 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
                           BL::Object &b_object,
                           const string &pass_type,
                           const int pass_filter,
-                          const int object_id,
-                          BL::BakePixel &pixel_array,
-                          const size_t num_pixels,
-                          const int /*depth*/,
-                          float result[])
+                          const int bake_width,
+                          const int bake_height)
 {
   b_depsgraph = b_depsgraph_;
 
   ShaderEvalType shader_type = get_shader_type(pass_type);
-
-  /* Set baking flag in advance, so kernel loading can check if we need
-   * any baking capabilities.
-   */
-  scene->bake_manager->set_baking(true);
-
-  /* ensure kernels are loaded before we do any scene updates */
-  session->load_kernels();
-
-  if (shader_type == SHADER_EVAL_UV) {
-    /* force UV to be available */
-    Pass::add(PASS_UV, scene->film->passes);
-  }
-
   int bake_pass_filter = bake_pass_filter_get(pass_filter);
-  bake_pass_filter = BakeManager::shader_type_to_pass_filter(shader_type, bake_pass_filter);
 
-  /* force use_light_pass to be true if we bake more than just colors */
-  if (bake_pass_filter & ~BAKE_FILTER_COLOR) {
-    Pass::add(PASS_LIGHT, scene->film->passes);
-  }
+  /* Initialize bake manager, before we load the baking kernels. */
+  scene->bake_manager->set(scene, b_object.name(), shader_type, bake_pass_filter);
 
-  /* create device and update scene */
-  scene->film->tag_update(scene);
-  scene->integrator->tag_update(scene);
+  /* Passes are identified by name, so in order to return the combined pass we need to set the
+   * name. */
+  Pass::add(PASS_COMBINED, scene->passes, "Combined");
+
+  session->read_bake_tile_cb = function_bind(&BlenderSession::read_render_tile, this, _1);
+  session->write_render_tile_cb = function_bind(&BlenderSession::write_render_tile, this, _1);
 
   if (!session->progress.get_cancel()) {
-    /* update scene */
+    /* Sync scene. */
     BL::Object b_camera_override(b_engine.camera_override());
     sync->sync_camera(b_render, b_camera_override, width, height, "");
     sync->sync_data(
@@ -690,75 +665,43 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
     builtin_images_load();
   }
 
-  BakeData *bake_data = NULL;
+  /* Object might have been disabled for rendering or excluded in some
+   * other way, in that case Blender will report a warning afterwards. */
+  bool object_found = false;
+  foreach (Object *ob, scene->objects) {
+    if (ob->name == b_object.name()) {
+      object_found = true;
+      break;
+    }
+  }
 
-  if (!session->progress.get_cancel()) {
-    /* get buffer parameters */
+  if (object_found && !session->progress.get_cancel()) {
+    /* Get session and buffer parameters. */
     SessionParams session_params = BlenderSync::get_session_params(
         b_engine, b_userpref, b_scene, background);
-    BufferParams buffer_params = BlenderSync::get_buffer_params(
-        b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
+    session_params.progressive_refine = false;
 
-    scene->bake_manager->set_shader_limit((size_t)b_engine.tile_x(), (size_t)b_engine.tile_y());
+    BufferParams buffer_params;
+    buffer_params.width = bake_width;
+    buffer_params.height = bake_height;
+    buffer_params.passes = scene->passes;
 
-    /* set number of samples */
+    /* Update session. */
     session->tile_manager.set_samples(session_params.samples);
     session->reset(buffer_params, session_params.samples);
-    session->update_scene();
-
-    /* find object index. todo: is arbitrary - copied from mesh_displace.cpp */
-    size_t object_index = OBJECT_NONE;
-    int tri_offset = 0;
-
-    for (size_t i = 0; i < scene->objects.size(); i++) {
-      const Object *object = scene->objects[i];
-      const Geometry *geom = object->geometry;
-      if (object->name == b_object.name() && geom->type == Geometry::MESH) {
-        const Mesh *mesh = static_cast<const Mesh *>(geom);
-        object_index = i;
-        tri_offset = mesh->prim_offset;
-        break;
-      }
-    }
-
-    /* Object might have been disabled for rendering or excluded in some
-     * other way, in that case Blender will report a warning afterwards. */
-    if (object_index != OBJECT_NONE) {
-      int object = object_index;
-
-      bake_data = scene->bake_manager->init(object, tri_offset, num_pixels);
-      populate_bake_data(bake_data, object_id, pixel_array, num_pixels);
-    }
-
-    /* set number of samples */
-    session->tile_manager.set_samples(session_params.samples);
-    session->reset(buffer_params, session_params.samples);
-    session->update_scene();
 
     session->progress.set_update_callback(
         function_bind(&BlenderSession::update_bake_progress, this));
   }
 
   /* Perform bake. Check cancel to avoid crash with incomplete scene data. */
-  if (!session->progress.get_cancel() && bake_data) {
-    scene->bake_manager->bake(scene->device,
-                              &scene->dscene,
-                              scene,
-                              session->progress,
-                              shader_type,
-                              bake_pass_filter,
-                              bake_data,
-                              result);
+  if (object_found && !session->progress.get_cancel()) {
+    session->start();
+    session->wait();
   }
 
-  /* free all memory used (host and device), so we wouldn't leave render
-   * engine with extra memory allocated
-   */
-
-  session->device_free();
-
-  delete sync;
-  sync = NULL;
+  session->read_bake_tile_cb = function_null;
+  session->write_render_tile_cb = function_null;
 }
 
 void BlenderSession::do_write_update_render_result(BL::RenderLayer &b_rlay,
@@ -846,7 +789,7 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
 
   /* increase samples, but never decrease */
   session->set_samples(session_params.samples);
-  session->set_denoising_start_sample(session_params.denoising_start_sample);
+  session->set_denoising_start_sample(session_params.denoising.start_sample);
   session->set_pause(session_pause);
 
   /* copy recalc flags, outside of mutex so we can decide to do the real
@@ -879,21 +822,17 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
 
   /* get buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
 
-  if (session_params.device.type != DEVICE_OPTIX &&
-      session_params.device.denoising_devices.empty()) {
-    /* cannot use OptiX denoising when it is not supported by the device. */
-    buffer_params.denoising_data_pass = false;
-  }
-  else {
-    session->set_denoising(buffer_params.denoising_data_pass, true);
+  if (!buffer_params.denoising_data_pass) {
+    session_params.denoising.use = false;
   }
 
+  session->set_denoising(session_params.denoising);
+
+  /* Update film if denoising data was enabled or disabled. */
   if (scene->film->denoising_data_pass != buffer_params.denoising_data_pass) {
     scene->film->denoising_data_pass = buffer_params.denoising_data_pass;
-
-    /* Force a scene and session reset below. */
     scene->film->tag_update(scene);
   }
 
@@ -965,7 +904,7 @@ bool BlenderSession::draw(int w, int h)
       SessionParams session_params = BlenderSync::get_session_params(
           b_engine, b_userpref, b_scene, background);
       BufferParams buffer_params = BlenderSync::get_buffer_params(
-          b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
+          b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
       bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
       if (session_pause == false) {
@@ -983,7 +922,7 @@ bool BlenderSession::draw(int w, int h)
 
   /* draw */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_render, b_v3d, b_rv3d, scene->camera, width, height, session->params.denoising.use);
   DeviceDrawParams draw_params;
 
   if (session->params.display_buffer_linear) {
@@ -1039,7 +978,8 @@ void BlenderSession::update_status_progress()
     remaining_time = (1.0 - (double)progress) * (render_time / (double)progress);
 
   if (background) {
-    scene_status += " | " + scene->name;
+    if (scene)
+      scene_status += " | " + scene->name;
     if (b_rlay_name != "")
       scene_status += ", " + b_rlay_name;
 

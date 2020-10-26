@@ -38,20 +38,15 @@ PyDoc_STRVAR(SVertex_doc,
              "Class to define a vertex of the embedding.\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
+             "            __init__(point_3d, id)\n"
              "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
+             "   Builds a :class:`SVertex` using the default constructor,\n"
+             "   copy constructor or the overloaded constructor which builds"
+             "   a :class:`SVertex` from 3D coordinates and an Id.\n"
              "\n"
              "   :arg brother: A SVertex object.\n"
              "   :type brother: :class:`SVertex`\n"
-             "\n"
-             ".. method:: __init__(point_3d, id)\n"
-             "\n"
-             "   Builds a SVertex from 3D coordinates and an Id.\n"
-             "\n"
              "   :arg point_3d: A three-dimensional vector.\n"
              "   :type point_3d: :class:`mathutils.Vector`\n"
              "   :arg id: An Id object.\n"
@@ -72,7 +67,7 @@ static int SVertex_init(BPy_SVertex *self, PyObject *args, PyObject *kwds)
       self->sv = new SVertex(*(((BPy_SVertex *)obj)->sv));
     }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(
                args, kwds, "O&O!", (char **)kwlist_2, convert_v3, v, &Id_Type, &obj)) {
     Vec3r point_3d(v[0], v[1], v[2]);

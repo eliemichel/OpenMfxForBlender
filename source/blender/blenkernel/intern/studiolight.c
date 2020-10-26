@@ -366,23 +366,22 @@ static float *studiolight_multilayer_convert_pass(ImBuf *ibuf,
   if (channels == 4) {
     return rect;
   }
-  else {
-    float *new_rect = MEM_callocN(sizeof(float[4]) * ibuf->x * ibuf->y, __func__);
 
-    IMB_buffer_float_from_float(new_rect,
-                                rect,
-                                channels,
-                                IB_PROFILE_LINEAR_RGB,
-                                IB_PROFILE_LINEAR_RGB,
-                                false,
-                                ibuf->x,
-                                ibuf->y,
-                                ibuf->x,
-                                ibuf->x);
+  float *new_rect = MEM_callocN(sizeof(float[4]) * ibuf->x * ibuf->y, __func__);
 
-    MEM_freeN(rect);
-    return new_rect;
-  }
+  IMB_buffer_float_from_float(new_rect,
+                              rect,
+                              channels,
+                              IB_PROFILE_LINEAR_RGB,
+                              IB_PROFILE_LINEAR_RGB,
+                              false,
+                              ibuf->x,
+                              ibuf->y,
+                              ibuf->x,
+                              ibuf->x);
+
+  MEM_freeN(rect);
+  return new_rect;
 }
 
 static void studiolight_multilayer_addpass(void *base,
@@ -501,12 +500,10 @@ static void studiolight_create_equirect_radiance_gputexture(StudioLight *sl)
     ImBuf *ibuf = sl->equirect_radiance_buffer;
 
     sl->equirect_radiance_gputexture = GPU_texture_create_2d(
-        ibuf->x, ibuf->y, GPU_RGBA16F, ibuf->rect_float, NULL);
+        "studiolight_radiance", ibuf->x, ibuf->y, 1, GPU_RGBA16F, ibuf->rect_float);
     GPUTexture *tex = sl->equirect_radiance_gputexture;
-    GPU_texture_bind(tex, 0);
     GPU_texture_filter_mode(tex, true);
     GPU_texture_wrap_mode(tex, true, true);
-    GPU_texture_unbind(tex);
   }
   sl->flag |= STUDIOLIGHT_EQUIRECT_RADIANCE_GPUTEXTURE;
 }
@@ -523,16 +520,9 @@ static void studiolight_create_matcap_gputexture(StudioLightImage *sli)
     copy_v3_v3(*offset3, *offset4);
   }
 
-  sli->gputexture = GPU_texture_create_nD(ibuf->x,
-                                          ibuf->y,
-                                          0,
-                                          2,
-                                          gpu_matcap_3components,
-                                          GPU_R11F_G11F_B10F,
-                                          GPU_DATA_FLOAT,
-                                          0,
-                                          false,
-                                          NULL);
+  sli->gputexture = GPU_texture_create_2d("matcap", ibuf->x, ibuf->y, 1, GPU_R11F_G11F_B10F, NULL);
+  GPU_texture_update(sli->gputexture, GPU_DATA_FLOAT, gpu_matcap_3components);
+
   MEM_SAFE_FREE(gpu_matcap_3components);
 }
 
@@ -565,12 +555,10 @@ static void studiolight_create_equirect_irradiance_gputexture(StudioLight *sl)
     BKE_studiolight_ensure_flag(sl, STUDIOLIGHT_EQUIRECT_IRRADIANCE_IMAGE_CALCULATED);
     ImBuf *ibuf = sl->equirect_irradiance_buffer;
     sl->equirect_irradiance_gputexture = GPU_texture_create_2d(
-        ibuf->x, ibuf->y, GPU_RGBA16F, ibuf->rect_float, NULL);
+        "studiolight_irradiance", ibuf->x, ibuf->y, 1, GPU_RGBA16F, ibuf->rect_float);
     GPUTexture *tex = sl->equirect_irradiance_gputexture;
-    GPU_texture_bind(tex, 0);
     GPU_texture_filter_mode(tex, true);
     GPU_texture_wrap_mode(tex, true, true);
-    GPU_texture_unbind(tex);
   }
   sl->flag |= STUDIOLIGHT_EQUIRECT_IRRADIANCE_GPUTEXTURE;
 }
@@ -698,7 +686,7 @@ static void studiolight_calculate_cubemap_vector_weight(
 static void studiolight_spherical_harmonics_calculate_coefficients(StudioLight *sl, float (*sh)[3])
 {
   float weight_accum = 0.0f;
-  memset(sh, 0, sizeof(float) * 3 * STUDIOLIGHT_SH_COEFS_LEN);
+  memset(sh, 0, sizeof(float[3]) * STUDIOLIGHT_SH_COEFS_LEN);
 
   for (int face = 0; face < 6; face++) {
     ITER_PIXELS (float,
@@ -879,7 +867,6 @@ BLI_INLINE void studiolight_spherical_harmonics_eval(StudioLight *sl,
     color[i] = studiolight_spherical_harmonics_geomerics_eval(
         normal, sh[0][i], sh[1][i], sh[2][i], sh[3][i]);
   }
-  return;
 #else
   /* L0 */
   mul_v3_v3fl(color, sl->spherical_harmonics_coefs[0], 0.282095f);
@@ -1234,12 +1221,11 @@ static int studiolight_cmp(const void *a, const void *b)
   if (flagorder1 < flagorder2) {
     return -1;
   }
-  else if (flagorder1 > flagorder2) {
+  if (flagorder1 > flagorder2) {
     return 1;
   }
-  else {
-    return BLI_strcasecmp(sl1->name, sl2->name);
-  }
+
+  return BLI_strcasecmp(sl1->name, sl2->name);
 }
 
 /* icons */
@@ -1250,7 +1236,7 @@ static int studiolight_cmp(const void *a, const void *b)
 static uint alpha_circle_mask(float u, float v, float inner_edge, float outer_edge)
 {
   /* Coords from center. */
-  float co[2] = {u - 0.5f, v - 0.5f};
+  const float co[2] = {u - 0.5f, v - 0.5f};
   float dist = len_v2(co);
   float alpha = 1.0f + (inner_edge - dist) / (outer_edge - inner_edge);
   uint mask = (uint)floorf(255.0f * min_ff(max_ff(alpha, 0.0f), 1.0f));
@@ -1282,7 +1268,7 @@ static void studiolight_radiance_preview(uint *icon_buffer, StudioLight *sl)
     uint alphamask = alpha_circle_mask(dx, dy, 0.5f - texel_size[0], 0.5f);
     if (alphamask != 0) {
       float normal[3], direction[3], color[4];
-      float incoming[3] = {0.0f, 0.0f, -1.0f};
+      const float incoming[3] = {0.0f, 0.0f, -1.0f};
       sphere_normal_from_uv(normal, dx, dy);
       reflect_v3_v3v3(direction, incoming, normal);
       /* We want to see horizon not poles. */
@@ -1430,9 +1416,9 @@ void BKE_studiolight_init(void)
 
   BLI_addtail(&studiolights, sl);
 
-  /* go over the preset folder and add a studiolight for every image with its path */
-  /* for portable installs (where USER and SYSTEM paths are the same),
-   * only go over LOCAL datafiles once */
+  /* Go over the preset folder and add a studio-light for every image with its path. */
+  /* For portable installs (where USER and SYSTEM paths are the same),
+   * only go over LOCAL data-files once. */
   /* Also reserve icon space for it. */
   if (!BKE_appdir_app_is_portable_install()) {
     studiolight_add_files_from_datafolder(BLENDER_USER_DATAFILES,
@@ -1501,10 +1487,9 @@ struct StudioLight *BKE_studiolight_find(const char *name, int flag)
       if ((sl->flag & flag)) {
         return sl;
       }
-      else {
-        /* flags do not match, so use default */
-        return BKE_studiolight_find_default(flag);
-      }
+
+      /* flags do not match, so use default */
+      return BKE_studiolight_find_default(flag);
     }
   }
   /* When not found, use the default studio light */

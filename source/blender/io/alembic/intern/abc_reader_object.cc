@@ -19,9 +19,9 @@
  */
 
 #include "abc_reader_object.h"
+#include "abc_axis_conversion.h"
 #include "abc_util.h"
 
-extern "C" {
 #include "DNA_cachefile_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_modifier_types.h"
@@ -36,17 +36,15 @@ extern "C" {
 #include "BLI_math_geom.h"
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
-}
 
 using Alembic::AbcGeom::IObject;
 using Alembic::AbcGeom::IXform;
 using Alembic::AbcGeom::IXformSchema;
 
+namespace blender::io::alembic {
+
 AbcObjectReader::AbcObjectReader(const IObject &object, ImportSettings &settings)
-    : m_name(""),
-      m_object_name(""),
-      m_data_name(""),
-      m_object(NULL),
+    : m_object(NULL),
       m_iobject(object),
       m_settings(&settings),
       m_min_time(std::numeric_limits<chrono_t>::max()),
@@ -233,7 +231,7 @@ Alembic::AbcGeom::IXform AbcObjectReader::xform()
    * parent Alembic object should contain the transform. */
   IObject abc_parent = m_iobject.getParent();
 
-  /* The archive's top object can be recognised by not having a parent. */
+  /* The archive's top object can be recognized by not having a parent. */
   if (abc_parent.getParent() && IXform::matches(abc_parent.getMetaData())) {
     try {
       return IXform(abc_parent, Alembic::AbcGeom::kWrapExisting);
@@ -295,7 +293,7 @@ void AbcObjectReader::read_matrix(float r_mat[4][4] /* local matrix */,
 
 void AbcObjectReader::addCacheModifier()
 {
-  ModifierData *md = modifier_new(eModifierType_MeshSequenceCache);
+  ModifierData *md = BKE_modifier_new(eModifierType_MeshSequenceCache);
   BLI_addtail(&m_object->modifiers, md);
 
   MeshSeqCacheModifierData *mcmd = reinterpret_cast<MeshSeqCacheModifierData *>(md);
@@ -331,3 +329,5 @@ void AbcObjectReader::decref()
   m_refcount--;
   BLI_assert(m_refcount >= 0);
 }
+
+}  // namespace blender::io::alembic

@@ -117,7 +117,7 @@ static int datadropper_init(bContext *C, wmOperator *op)
    * because this struct has very short lifetime. */
   ddr->idcode_name = TIP_(BKE_idtype_idcode_to_name(ddr->idcode));
 
-  PointerRNA ptr = RNA_property_pointer_get(&ddr->ptr, ddr->prop);
+  const PointerRNA ptr = RNA_property_pointer_get(&ddr->ptr, ddr->prop);
   ddr->init_id = ptr.owner_id;
 
   return true;
@@ -292,10 +292,8 @@ static int datadropper_modal(bContext *C, wmOperator *op, const wmEvent *event)
           /* Could support finished & undo-skip. */
           return is_undo ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
         }
-        else {
-          BKE_report(op->reports, RPT_WARNING, "Failed to set value");
-          return OPERATOR_CANCELLED;
-        }
+        BKE_report(op->reports, RPT_WARNING, "Failed to set value");
+        return OPERATOR_CANCELLED;
       }
     }
   }
@@ -326,9 +324,7 @@ static int datadropper_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED
 
     return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 /* Repeat operator */
@@ -341,9 +337,7 @@ static int datadropper_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static bool datadropper_poll(bContext *C)
@@ -361,12 +355,12 @@ static bool datadropper_poll(bContext *C)
       StructRNA *type = RNA_property_pointer_type(&ptr, prop);
       const short idcode = RNA_type_to_ID_code(type);
       if ((idcode == ID_OB) || OB_DATA_SUPPORT_ID(idcode)) {
-        return 1;
+        return true;
       }
     }
   }
 
-  return 0;
+  return false;
 }
 
 void UI_OT_eyedropper_id(wmOperatorType *ot)

@@ -152,13 +152,13 @@ void OVERLAY_particle_cache_init(OVERLAY_Data *vedata)
 
   sh = OVERLAY_shader_particle_dot();
   pd->particle_dots_grp = grp = DRW_shgroup_create(sh, psl->particle_ps);
-  DRW_shgroup_uniform_block_persistent(grp, "globalsBlock", G_draw.block_ubo);
-  DRW_shgroup_uniform_texture_persistent(grp, "weightTex", G_draw.ramp);
+  DRW_shgroup_uniform_block(grp, "globalsBlock", G_draw.block_ubo);
+  DRW_shgroup_uniform_texture(grp, "weightTex", G_draw.ramp);
 
   sh = OVERLAY_shader_particle_shape();
   pd->particle_shapes_grp = grp = DRW_shgroup_create(sh, psl->particle_ps);
-  DRW_shgroup_uniform_block_persistent(grp, "globalsBlock", G_draw.block_ubo);
-  DRW_shgroup_uniform_texture_persistent(grp, "weightTex", G_draw.ramp);
+  DRW_shgroup_uniform_block(grp, "globalsBlock", G_draw.block_ubo);
+  DRW_shgroup_uniform_texture(grp, "weightTex", G_draw.ramp);
 }
 
 void OVERLAY_particle_cache_populate(OVERLAY_Data *vedata, Object *ob)
@@ -183,7 +183,7 @@ void OVERLAY_particle_cache_populate(OVERLAY_Data *vedata, Object *ob)
       struct GPUBatch *shape = NULL;
       DRWShadingGroup *grp;
 
-      /* TODO(fclem) Here would be a good place for preemptive culling. */
+      /* TODO(fclem): Here would be a good place for preemptive culling. */
 
       /* fclem: Is color even usefull in our modern context? */
       Material *ma = BKE_object_material_get(ob, part->omat);

@@ -54,9 +54,8 @@ static int gpu_shader_tex_white_noise(GPUMaterial *mat,
   if (node->custom1 < ARRAY_SIZE(names) && names[node->custom1]) {
     return GPU_stack_link(mat, node, names[node->custom1], in, out);
   }
-  else {
-    return 0;
-  }
+
+  return 0;
 }
 
 static void node_shader_update_tex_white_noise(bNodeTree *UNUSED(ntree), bNode *node)
@@ -72,7 +71,8 @@ void register_node_type_sh_tex_white_noise(void)
 {
   static bNodeType ntype;
 
-  sh_node_type_base(&ntype, SH_NODE_TEX_WHITE_NOISE, "White Noise Texture", NODE_CLASS_TEXTURE, 0);
+  sh_fn_node_type_base(
+      &ntype, SH_NODE_TEX_WHITE_NOISE, "White Noise Texture", NODE_CLASS_TEXTURE, 0);
   node_type_socket_templates(&ntype, sh_node_tex_white_noise_in, sh_node_tex_white_noise_out);
   node_type_init(&ntype, node_shader_init_tex_white_noise);
   node_type_gpu(&ntype, gpu_shader_tex_white_noise);

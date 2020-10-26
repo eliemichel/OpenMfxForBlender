@@ -76,7 +76,8 @@ void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata)
     DRWState state = DRW_STATE_FIRST_VERTEX_CONVENTION | DRW_STATE_WRITE_COLOR |
                      DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL;
     DRWPass *pass;
-    GPUTexture **depth_tx = ((pd->xray_enabled || pd->xray_opacity > 0.0f) && DRW_state_is_fbo()) ?
+    GPUTexture **depth_tx = ((!pd->xray_enabled || pd->xray_opacity > 0.0f) &&
+                             DRW_state_is_fbo()) ?
                                 &txl->temp_depth_tx :
                                 &txl->dummy_depth_tx;
 
@@ -91,7 +92,7 @@ void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata)
 
     for (int use_coloring = 0; use_coloring < 2; use_coloring++) {
       pd->wires_grp[xray][use_coloring] = grp = DRW_shgroup_create(wires_sh, pass);
-      DRW_shgroup_uniform_block_persistent(grp, "globalsBlock", G_draw.block_ubo);
+      DRW_shgroup_uniform_block(grp, "globalsBlock", G_draw.block_ubo);
       DRW_shgroup_uniform_texture_ref(grp, "depthTex", depth_tx);
       DRW_shgroup_uniform_float_copy(grp, "wireStepParam", pd->shdata.wire_step_param);
       DRW_shgroup_uniform_bool_copy(grp, "useColoring", use_coloring);
@@ -101,12 +102,9 @@ void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata)
       DRW_shgroup_uniform_bool_copy(grp, "isHair", false);
 
       pd->wires_all_grp[xray][use_coloring] = grp = DRW_shgroup_create(wires_sh, pass);
-      DRW_shgroup_uniform_texture_ref(grp, "depthTex", depth_tx);
       DRW_shgroup_uniform_float_copy(grp, "wireStepParam", 1.0f);
 
       pd->wires_hair_grp[xray][use_coloring] = grp = DRW_shgroup_create(wires_sh, pass);
-      /* TODO(fclem) texture ref persist */
-      DRW_shgroup_uniform_texture_ref(grp, "depthTex", depth_tx);
       DRW_shgroup_uniform_bool_copy(grp, "isHair", true);
       DRW_shgroup_uniform_float_copy(grp, "wireStepParam", 10.0f);
     }
@@ -133,7 +131,7 @@ void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata)
 static void wireframe_hair_cache_populate(OVERLAY_Data *vedata, Object *ob, ParticleSystem *psys)
 {
   OVERLAY_PrivateData *pd = vedata->stl->pd;
-  const bool is_xray = (ob->dtx & OB_DRAWXRAY) != 0;
+  const bool is_xray = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
 
   Object *dupli_parent = DRW_object_get_dupli_parent(ob);
   DupliObject *dupli_object = DRW_object_get_dupli(ob);
@@ -157,10 +155,7 @@ static void wireframe_hair_cache_populate(OVERLAY_Data *vedata, Object *ob, Part
 
   const bool use_coloring = true;
   DRWShadingGroup *shgrp = DRW_shgroup_create_sub(pd->wires_hair_grp[is_xray][use_coloring]);
-  DRW_shgroup_uniform_vec4_copy(shgrp, "hairDupliMatrix[0]", dupli_mat[0]);
-  DRW_shgroup_uniform_vec4_copy(shgrp, "hairDupliMatrix[1]", dupli_mat[1]);
-  DRW_shgroup_uniform_vec4_copy(shgrp, "hairDupliMatrix[2]", dupli_mat[2]);
-  DRW_shgroup_uniform_vec4_copy(shgrp, "hairDupliMatrix[3]", dupli_mat[3]);
+  DRW_shgroup_uniform_vec4_array_copy(shgrp, "hairDupliMatrix", dupli_mat, 4);
   DRW_shgroup_call_no_cull(shgrp, hairs, ob);
 }
 
@@ -172,7 +167,7 @@ void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
   OVERLAY_PrivateData *pd = vedata->stl->pd;
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const bool all_wires = (ob->dtx & OB_DRAW_ALL_EDGES) != 0;
-  const bool is_xray = (ob->dtx & OB_DRAWXRAY) != 0;
+  const bool is_xray = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
   const bool is_mesh = ob->type == OB_MESH;
   const bool is_mesh_verts_only = is_mesh && (((Mesh *)ob->data)->totedge == 0 &&
                                               ((Mesh *)ob->data)->totvert > 0);
@@ -200,13 +195,15 @@ void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
     struct GPUBatch *geom = NULL;
     switch (ob->type) {
       case OB_CURVE:
-        if (ob->runtime.curve_cache && BKE_displist_has_faces(&ob->runtime.curve_cache->disp)) {
+        if (!pd->wireframe_mode && !use_wire && ob->runtime.curve_cache &&
+            BKE_displist_has_faces(&ob->runtime.curve_cache->disp)) {
           break;
         }
         geom = DRW_cache_curve_edge_wire_get(ob);
         break;
       case OB_FONT:
-        if (ob->runtime.curve_cache && BKE_displist_has_faces(&ob->runtime.curve_cache->disp)) {
+        if (!pd->wireframe_mode && !use_wire && ob->runtime.curve_cache &&
+            BKE_displist_has_faces(&ob->runtime.curve_cache->disp)) {
           break;
         }
         geom = DRW_cache_text_loose_edges_get(ob);
@@ -235,10 +232,15 @@ void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
     }
   }
 
-  if (use_wire && ob->type == OB_VOLUME) {
-    /* Volume object as points exception. */
-    Volume *volume = ob->data;
-    if (volume->display.wireframe_type == VOLUME_WIREFRAME_POINTS) {
+  if (use_wire && ELEM(ob->type, OB_VOLUME, OB_POINTCLOUD)) {
+    bool draw_as_points = true;
+    if (ob->type == OB_VOLUME) {
+      /* Volume object as points exception. */
+      Volume *volume = ob->data;
+      draw_as_points = volume->display.wireframe_type == VOLUME_WIREFRAME_POINTS;
+    }
+
+    if (draw_as_points) {
       float *color;
       OVERLAY_ExtraCallBuffers *cb = OVERLAY_extra_call_buffer_get(vedata, ob);
       DRW_object_wire_theme_get(ob, draw_ctx->view_layer, &color);
@@ -284,7 +286,7 @@ void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
       }
 
       if (ob->type == OB_GPENCIL) {
-        /* TODO (fclem) Make GPencil objects have correct boundbox. */
+        /* TODO(fclem): Make GPencil objects have correct bound-box. */
         DRW_shgroup_call_no_cull(shgrp, geom, ob);
       }
       else if (use_sculpt_pbvh) {

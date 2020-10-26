@@ -147,17 +147,12 @@ static void wm_keymap_item_properties_update_ot(wmKeyMapItem *kmi)
 
 static void wm_keymap_item_properties_update_ot_from_list(ListBase *km_lb)
 {
-  wmKeyMap *km;
-  wmKeyMapItem *kmi;
-
-  for (km = km_lb->first; km; km = km->next) {
-    wmKeyMapDiffItem *kmdi;
-
-    for (kmi = km->items.first; kmi; kmi = kmi->next) {
+  LISTBASE_FOREACH (wmKeyMap *, km, km_lb) {
+    LISTBASE_FOREACH (wmKeyMapItem *, kmi, &km->items) {
       wm_keymap_item_properties_update_ot(kmi);
     }
 
-    for (kmdi = km->diff_items.first; kmdi; kmdi = kmdi->next) {
+    LISTBASE_FOREACH (wmKeyMapDiffItem *, kmdi, &km->diff_items) {
       if (kmdi->add_item) {
         wm_keymap_item_properties_update_ot(kmdi->add_item);
       }
@@ -321,9 +316,7 @@ bool WM_keyconfig_remove(wmWindowManager *wm, wmKeyConfig *keyconf)
 
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 void WM_keyconfig_clear(wmKeyConfig *keyconf)
@@ -363,7 +356,7 @@ void WM_keyconfig_set_active(wmWindowManager *wm, const char *idname)
   WM_keyconfig_update(wm);
 
   BLI_strncpy(U.keyconfigstr, idname, sizeof(U.keyconfigstr));
-  if (wm->initialized & WM_KEYCONFIG_IS_INITIALIZED) {
+  if (wm->initialized & WM_KEYCONFIG_IS_INIT) {
     U.runtime.is_dirty = true;
   }
 
@@ -448,9 +441,7 @@ bool WM_keymap_remove(wmKeyConfig *keyconf, wmKeyMap *keymap)
 
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 bool WM_keymap_poll(bContext *C, wmKeyMap *keymap)
@@ -551,9 +542,7 @@ bool WM_keymap_remove_item(wmKeyMap *keymap, wmKeyMapItem *kmi)
     WM_keyconfig_update_tag(keymap, NULL);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /** \} */
@@ -627,7 +616,7 @@ static void wm_keymap_diff(
       BLI_addtail(&diff_km->diff_items, kmdi);
     }
 
-    /* sync expanded flag back to original so we don't loose it on repatch */
+    /* sync expanded flag back to original so we don't lose it on repatch */
     if (to_kmi) {
       orig_kmi = WM_keymap_item_find_id(orig_km, kmi->id);
 
@@ -1122,7 +1111,7 @@ const char *WM_key_event_string(const short type, const bool compact)
         if (platform == MACOS) {
           return key_event_glyph_or_text(font_id, IFACE_("Cmd"), "\xe2\x8c\x98");
         }
-        else if (platform == MSWIN) {
+        if (platform == MSWIN) {
           return key_event_glyph_or_text(font_id, IFACE_("Win"), "\xe2\x9d\x96");
         }
         return IFACE_("OS");
@@ -1182,8 +1171,9 @@ int WM_keymap_item_raw_to_string(const short shift,
                                  const int result_len)
 {
 #define ADD_SEP \
-  if (p != buf) \
+  if (p != buf) { \
     *p++ = ' '; \
+  } \
   (void)0
 
   char buf[128];
@@ -1767,13 +1757,13 @@ enum {
 
 static char wm_keymap_update_flag = 0;
 
-void WM_keyconfig_update_tag(wmKeyMap *km, wmKeyMapItem *kmi)
+void WM_keyconfig_update_tag(wmKeyMap *keymap, wmKeyMapItem *kmi)
 {
   /* quick tag to do delayed keymap updates */
   wm_keymap_update_flag |= WM_KEYMAP_UPDATE_RECONFIGURE;
 
-  if (km) {
-    km->flag |= KEYMAP_UPDATE;
+  if (keymap) {
+    keymap->flag |= KEYMAP_UPDATE;
   }
   if (kmi) {
     kmi->flag |= KMI_UPDATE;
@@ -1936,7 +1926,7 @@ void WM_keyconfig_update(wmWindowManager *wm)
  * During event handling this function is called to get the keymap from the final configuration.
  * \{ */
 
-wmKeyMap *WM_keymap_active(wmWindowManager *wm, wmKeyMap *keymap)
+wmKeyMap *WM_keymap_active(const wmWindowManager *wm, wmKeyMap *keymap)
 {
   wmKeyMap *km;
 

@@ -34,8 +34,8 @@
 
 static const char *traceback_filepath(PyTracebackObject *tb, PyObject **coerce)
 {
-  return PyBytes_AS_STRING(
-      (*coerce = PyUnicode_EncodeFSDefault(tb->tb_frame->f_code->co_filename)));
+  *coerce = PyUnicode_EncodeFSDefault(tb->tb_frame->f_code->co_filename);
+  return PyBytes_AS_STRING(*coerce);
 }
 
 /* copied from pythonrun.c, 3.4.0 */
@@ -140,8 +140,8 @@ void python_script_error_jump(const char *filepath, int *lineno, int *offset)
   PyErr_Fetch(&exception, &value, (PyObject **)&tb);
 
   if (exception && PyErr_GivenExceptionMatches(exception, PyExc_SyntaxError)) {
-    /* no traceback available when SyntaxError.
-     * python has no api's to this. reference parse_syntax_error() from pythonrun.c */
+    /* no trace-back available when `SyntaxError`.
+     * python has no API's to this. reference #parse_syntax_error() from pythonrun.c */
     PyErr_NormalizeException(&exception, &value, (PyObject **)&tb);
 
     if (value) { /* should always be true */

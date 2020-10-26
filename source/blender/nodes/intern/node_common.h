@@ -21,10 +21,13 @@
  * \ingroup nodes
  */
 
-#ifndef __NODE_COMMON_H__
-#define __NODE_COMMON_H__
+#pragma once
 
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct bNodeTree;
 
@@ -33,4 +36,6 @@ bool node_group_poll_instance(struct bNode *node, struct bNodeTree *nodetree);
 
 void ntree_update_reroute_nodes(struct bNodeTree *ntree);
 
+#ifdef __cplusplus
+}
 #endif

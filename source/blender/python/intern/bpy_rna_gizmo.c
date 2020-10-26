@@ -63,7 +63,7 @@ static void py_rna_gizmo_handler_get_cb(const wmGizmo *UNUSED(gz),
                                         wmGizmoProperty *gz_prop,
                                         void *value_p)
 {
-  PyGILState_STATE gilstate = PyGILState_Ensure();
+  const PyGILState_STATE gilstate = PyGILState_Ensure();
 
   struct BPyGizmoHandlerUserData *data = gz_prop->custom_func.user_data;
   PyObject *ret = PyObject_CallObject(data->fn_slots[BPY_GIZMO_FN_SLOT_GET], NULL);
@@ -110,7 +110,7 @@ static void py_rna_gizmo_handler_set_cb(const wmGizmo *UNUSED(gz),
                                         wmGizmoProperty *gz_prop,
                                         const void *value_p)
 {
-  PyGILState_STATE gilstate = PyGILState_Ensure();
+  const PyGILState_STATE gilstate = PyGILState_Ensure();
 
   struct BPyGizmoHandlerUserData *data = gz_prop->custom_func.user_data;
 
@@ -159,7 +159,7 @@ static void py_rna_gizmo_handler_range_get_cb(const wmGizmo *UNUSED(gz),
 {
   struct BPyGizmoHandlerUserData *data = gz_prop->custom_func.user_data;
 
-  PyGILState_STATE gilstate = PyGILState_Ensure();
+  const PyGILState_STATE gilstate = PyGILState_Ensure();
 
   PyObject *ret = PyObject_CallObject(data->fn_slots[BPY_GIZMO_FN_SLOT_RANGE_GET], NULL);
   if (ret == NULL) {
@@ -211,7 +211,7 @@ static void py_rna_gizmo_handler_free_cb(const wmGizmo *UNUSED(gz), wmGizmoPrope
 {
   struct BPyGizmoHandlerUserData *data = gz_prop->custom_func.user_data;
 
-  PyGILState_STATE gilstate = PyGILState_Ensure();
+  const PyGILState_STATE gilstate = PyGILState_Ensure();
   for (int i = 0; i < BPY_GIZMO_FN_SLOT_LEN; i++) {
     Py_XDECREF(data->fn_slots[i]);
   }
@@ -234,7 +234,7 @@ PyDoc_STRVAR(
     "   :type range: callable\n");
 static PyObject *bpy_gizmo_target_set_handler(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
 {
-  PyGILState_STATE gilstate = PyGILState_Ensure();
+  const PyGILState_STATE gilstate = PyGILState_Ensure();
 
   struct {
     PyObject *self;
@@ -367,10 +367,10 @@ static PyObject *bpy_gizmo_target_get_value(PyObject *UNUSED(self), PyObject *ar
         WM_gizmo_target_property_float_get_array(gz, gz_prop, value);
         return PyC_Tuple_PackArray_F32(value, array_len);
       }
-      else {
-        float value = WM_gizmo_target_property_float_get(gz, gz_prop);
-        return PyFloat_FromDouble(value);
-      }
+
+      const float value = WM_gizmo_target_property_float_get(gz, gz_prop);
+      return PyFloat_FromDouble(value);
+
       break;
     }
     default: {
@@ -433,14 +433,14 @@ static PyObject *bpy_gizmo_target_set_value(PyObject *UNUSED(self), PyObject *ar
                         "Gizmo target property array") == -1) {
           goto fail;
         }
-        WM_gizmo_target_property_float_set_array(BPy_GetContext(), gz, gz_prop, value);
+        WM_gizmo_target_property_float_set_array(BPY_context_get(), gz, gz_prop, value);
       }
       else {
         float value;
         if ((value = PyFloat_AsDouble(params.value)) == -1.0f && PyErr_Occurred()) {
           goto fail;
         }
-        WM_gizmo_target_property_float_set(BPy_GetContext(), gz, gz_prop, value);
+        WM_gizmo_target_property_float_set(BPY_context_get(), gz, gz_prop, value);
       }
       Py_RETURN_NONE;
     }
@@ -507,7 +507,7 @@ fail:
 
 /** \} */
 
-int BPY_rna_gizmo_module(PyObject *mod_par)
+bool BPY_rna_gizmo_module(PyObject *mod_par)
 {
   static PyMethodDef method_def_array[] = {
       /* Gizmo Target Property Define API */
@@ -541,5 +541,5 @@ int BPY_rna_gizmo_module(PyObject *mod_par)
     PyModule_AddObject(mod_par, name_prefix, func_inst);
   }
 
-  return 0;
+  return false;
 }

@@ -18,16 +18,13 @@
  * \ingroup collada
  */
 
-#ifndef __CAMERAEXPORTER_H__
-#define __CAMERAEXPORTER_H__
+#pragma once
 
 #include "COLLADASWLibraryCameras.h"
 #include "COLLADASWStreamWriter.h"
 
-extern "C" {
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-}
 
 #include "DNA_camera_types.h"
 #include "ExportSettings.h"
@@ -39,8 +36,6 @@ class CamerasExporter : COLLADASW::LibraryCameras {
   void operator()(Object *ob, Scene *sce);
 
  private:
-  bool exportBlenderProfile(COLLADASW::Camera &cla, Camera *cam);
+  bool exportBlenderProfile(COLLADASW::Camera &cm, Camera *cam);
   BCExportSettings &export_settings;
 };
-
-#endif

@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) Blender Foundation.
  * All rights reserved.
  */
-#ifndef __BKE_COLLISION_H__
-#define __BKE_COLLISION_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -64,14 +63,14 @@ typedef enum {
 ////////////////////////////////////////
 /* used for collisions in collision.c */
 typedef struct CollPair {
-  unsigned int face1;  // cloth face
-  unsigned int face2;  // object face
+  unsigned int face1; /* cloth face */
+  unsigned int face2; /* object face */
   float distance;
   float normal[3];
-  float vector[3];     // unnormalized collision vector: p2-p1
-  float pa[3], pb[3];  // collision point p1 on face1, p2 on face2
+  float vector[3];    /* unnormalized collision vector: p2-p1 */
+  float pa[3], pb[3]; /* collision point p1 on face1, p2 on face2 */
   int flag;
-  float time;  // collision time, from 0 up to 1
+  float time; /* collision time, from 0 up to 1 */
 
   /* mesh-mesh collision */
 #ifdef WITH_ELTOPO /*either ap* or bp* can be set, but not both*/
@@ -91,7 +90,7 @@ typedef struct EdgeCollPair {
   float vector[3];
   float time;
   int lastsign;
-  float pa[3], pb[3];  // collision point p1 on face1, p2 on face2
+  float pa[3], pb[3]; /* collision point p1 on face1, p2 on face2 */
 } EdgeCollPair;
 
 /* used for collisions in collision.c */
@@ -101,7 +100,7 @@ typedef struct FaceCollPair {
   float vector[3];
   float time;
   int lastsign;
-  float pa[3], pb[3];  // collision point p1 on face1, p2 on face2
+  float pa[3], pb[3]; /* collision point p1 on face1, p2 on face2 */
 } FaceCollPair;
 
 ////////////////////////////////////////
@@ -127,8 +126,8 @@ void bvhtree_update_from_mvert(BVHTree *bvhtree,
 
 /////////////////////////////////////////////////
 
-// move Collision modifier object inter-frame with step = [0,1]
-// defined in collisions.c
+/* move Collision modifier object inter-frame with step = [0,1]
+ * defined in collisions.c */
 void collision_move_object(struct CollisionModifierData *collmd,
                            const float step,
                            const float prevstep,
@@ -166,7 +165,7 @@ typedef struct ColliderCache {
   struct CollisionModifierData *collmd;
 } ColliderCache;
 
-struct ListBase *BKE_collider_cache_create(struct Depsgraph *scene,
+struct ListBase *BKE_collider_cache_create(struct Depsgraph *depsgraph,
                                            struct Object *self,
                                            struct Collection *collection);
 void BKE_collider_cache_free(struct ListBase **colliders);
@@ -177,6 +176,4 @@ void BKE_collider_cache_free(struct ListBase **colliders);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

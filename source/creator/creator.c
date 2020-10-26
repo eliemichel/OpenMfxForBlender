@@ -43,10 +43,11 @@
 #include "BLI_args.h"
 #include "BLI_string.h"
 #include "BLI_system.h"
+#include "BLI_task.h"
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
-/* mostly init functions */
+/* Mostly init functions. */
 #include "BKE_appdir.h"
 #include "BKE_blender.h"
 #include "BKE_brush.h"
@@ -68,7 +69,7 @@
 
 #include "DEG_depsgraph.h"
 
-#include "IMB_imbuf.h" /* for IMB_init */
+#include "IMB_imbuf.h" /* For #IMB_init. */
 
 #include "RE_engine.h"
 #include "RE_render_ext.h"
@@ -106,28 +107,13 @@
 #  include "sdlew.h"
 #endif
 
-#include "creator_intern.h" /* own include */
+#include "creator_intern.h" /* Own include. */
 
 /* Local Function prototypes. */
-#ifdef WITH_PYTHON_MODULE
-int main_python_enter(int argc, const char **argv);
-void main_python_exit(void);
-#endif
 
-#ifdef WITH_USD
-/**
- * Workaround to make it possible to pass a path at runtime to USD.
- *
- * USD requires some JSON files, and it uses a static constructor to determine the possible
- * file-system paths to find those files. This made it impossible for Blender to pass a path to the
- * USD library at runtime, as the constructor would run before Blender's main() function. We have
- * patched USD (see usd.diff) to avoid that particular static constructor, and have an
- * initialization function instead.
- *
- * This function is implemented in the USD source code, pxr/base/lib/plug/initConfig.cpp.
- */
-void usd_initialise_plugin_path(const char *datafiles_usd_path);
-#endif
+/* -------------------------------------------------------------------- */
+/** \name Local Application State
+ * \{ */
 
 /* written to by 'creator_args.c' */
 struct ApplicationState app_state = {
@@ -141,6 +127,8 @@ struct ApplicationState app_state = {
             .python = 0,
         },
 };
+
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Application Level Callbacks
@@ -157,7 +145,7 @@ static void callback_mem_error(const char *errorStr)
 
 static void main_callback_setup(void)
 {
-  /* Error output from the alloc routines: */
+  /* Error output from the guarded allocation routines. */
   MEM_set_error_callback(callback_mem_error);
 }
 
@@ -198,20 +186,35 @@ static void callback_clg_fatal(void *fp)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Main Function
+/** \name Blender as a Stand-Alone Python Module (bpy)
+ *
+ * While not officially supported, this can be useful for Python developers.
+ * See: https://wiki.blender.org/wiki/Building_Blender/Other/BlenderAsPyModule
  * \{ */
 
 #ifdef WITH_PYTHON_MODULE
-/* allow python module to call main */
+
+/* Called in `bpy_interface.c` when building as a Python module. */
+int main_python_enter(int argc, const char **argv);
+void main_python_exit(void);
+
+/* Rename the 'main' function, allowing Python initialization to call it. */
 #  define main main_python_enter
 static void *evil_C = NULL;
 
 #  ifdef __APPLE__
-/* environ is not available in mac shared libraries */
+/* Environment is not available in macOS shared libraries. */
 #    include <crt_externs.h>
 char **environ = NULL;
-#  endif
-#endif
+#  endif /* __APPLE__ */
+
+#endif /* WITH_PYTHON_MODULE */
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Main Function
+ * \{ */
 
 /**
  * Blender's main function responsibilities are:
@@ -241,24 +244,28 @@ int main(int argc,
 
   /* --- end declarations --- */
 
-  /* ensure we free data on early-exit */
+  /* Ensure we free data on early-exit. */
   struct CreatorAtExitData app_init_data = {NULL};
   BKE_blender_atexit_register(callback_main_atexit, &app_init_data);
 
-  /* Unbuffered stdout makes stdout and stderr better synchronized, and helps
+  /* Un-buffered `stdout` makes `stdout` and `stderr` better synchronized, and helps
    * when stepping through code in a debugger (prints are immediately
-   * visible). */
+   * visible). However disabling buffering causes lock contention on windows
+   * see T76767 for details, since this is a debugging aid, we do not enable
+   * the un-buffered behavior for release builds. */
+#ifndef NDEBUG
   setvbuf(stdout, NULL, _IONBF, 0);
+#endif
 
 #ifdef WIN32
-  /* We delay loading of openmp so we can set the policy here. */
+  /* We delay loading of OPENMP so we can set the policy here. */
 #  if defined(_MSC_VER)
   _putenv_s("OMP_WAIT_POLICY", "PASSIVE");
 #  endif
 
-  /* Win32 Unicode Args */
+  /* Win32 Unicode Arguments. */
   /* NOTE: cannot use guardedalloc malloc here, as it's not yet initialized
-   *       (it depends on the args passed in, which is what we're getting here!)
+   *       (it depends on the arguments passed in, which is what we're getting here!)
    */
   {
     wchar_t **argv_16 = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -290,6 +297,7 @@ int main(int argc,
         break;
       }
     }
+    MEM_init_memleak_detection();
   }
 
 #ifdef BUILD_DATE
@@ -312,7 +320,7 @@ int main(int argc,
   sdlewInit();
 #endif
 
-  /* Initialize logging */
+  /* Initialize logging. */
   CLG_init();
   CLG_fatal_fn_set(callback_clg_fatal);
 
@@ -340,7 +348,7 @@ int main(int argc,
   main_callback_setup();
 
 #if defined(__APPLE__) && !defined(WITH_PYTHON_MODULE) && !defined(WITH_HEADLESS)
-  /* patch to ignore argument finder gives us (pid?) */
+  /* Patch to ignore argument finder gives us (PID?) */
   if (argc == 2 && STREQLEN(argv[1], "-psn_", 5)) {
     extern int GHOST_HACK_getFirstFile(char buf[]);
     static char firstfilebuf[512];
@@ -358,7 +366,7 @@ int main(int argc,
   fpsetmask(0);
 #endif
 
-  /* initialize path to executable */
+  /* Initialize path to executable. */
   BKE_appdir_program_path_init(argv[0]);
 
   BLI_threadapi_init();
@@ -369,7 +377,6 @@ int main(int argc,
   BKE_blender_globals_init(); /* blender.c */
 
   BKE_idtype_init();
-  IMB_init();
   BKE_cachefiles_init();
   BKE_images_init();
   BKE_modifier_init();
@@ -392,6 +399,10 @@ int main(int argc,
 
   main_args_setup(C, ba);
 
+  /* Begin argument parsing, ignore leaks so arguments that call #exit
+   * (such as '--version' & '--help') don't report leaks. */
+  MEM_use_memleak_detection(false);
+
   BLI_argsParse(ba, 1, NULL, NULL);
 
   main_signal_setup();
@@ -400,6 +411,16 @@ int main(int argc,
   /* Using preferences or user startup makes no sense for #WITH_PYTHON_MODULE. */
   G.factory_startup = true;
 #endif
+
+  /* After parsing the first level of arguments as `--env-*` impact BKE_appdir behavior. */
+  BKE_appdir_init();
+
+  /* After parsing number of threads argument. */
+  BLI_task_scheduler_init();
+
+  /* After parsing `--env-system-datafiles` which control where paths are searched
+   * (color-management) uses BKE_appdir to initialize. */
+  IMB_init();
 
 #ifdef WITH_FFMPEG
   IMB_ffmpeg_init();
@@ -411,7 +432,7 @@ int main(int argc,
   RE_engines_init();
   init_nodesystem();
   psys_init_rng();
-  /* end second init */
+  /* End second initialization. */
 
 #if defined(WITH_PYTHON_MODULE) || defined(WITH_HEADLESS)
   /* Python module mode ALWAYS runs in background-mode (for now). */
@@ -431,23 +452,12 @@ int main(int argc,
 
   BKE_materials_init();
 
-#ifdef WITH_USD
-  /* Tell USD which directory to search for its JSON files. If 'datafiles/usd'
-   * does not exist, the USD library will not be able to read or write any files. */
-  usd_initialise_plugin_path(BKE_appdir_folder_id(BLENDER_DATAFILES, "usd"));
-#endif
-
   if (G.background == 0) {
 #ifndef WITH_PYTHON_MODULE
     BLI_argsParse(ba, 2, NULL, NULL);
     BLI_argsParse(ba, 3, NULL, NULL);
 #endif
     WM_init(C, argc, (const char **)argv);
-
-    /* This is properly initialized with user-preferences,
-     * but this is default.
-     * Call after loading the #BLENDER_STARTUP_FILE so we can read #U.tempdir */
-    BKE_tempdir_init(U.tempdir);
   }
   else {
 #ifndef WITH_PYTHON_MODULE
@@ -455,20 +465,8 @@ int main(int argc,
 #endif
 
     WM_init(C, argc, (const char **)argv);
-
-    /* Don't use user preferences #U.tempdir */
-    BKE_tempdir_init(NULL);
   }
-#ifdef WITH_PYTHON
-  /**
-   * \note the #U.pythondir string is NULL until #WM_init() is executed,
-   * so we provide the BPY_ function below to append the user defined
-   * python-dir to Python's `sys.path` at this point.  Simply putting
-   * #WM_init() before #BPY_python_start() crashes Blender at startup.
-   */
-
-  /* TODO - U.pythondir */
-#else
+#ifndef WITH_PYTHON
   printf(
       "\n* WARNING * - Blender compiled without Python!\n"
       "this is not intended for typical usage\n\n");
@@ -479,7 +477,7 @@ int main(int argc,
 
 #ifdef WITH_FREESTYLE
   /* Initialize Freestyle. */
-  FRS_initialize();
+  FRS_init();
   FRS_set_context(C);
 #endif
 
@@ -495,6 +493,9 @@ int main(int argc,
   callback_main_atexit(&app_init_data);
   BKE_blender_atexit_unregister(callback_main_atexit, &app_init_data);
 
+  /* End argument parsing, allow memory leaks to be printed. */
+  MEM_use_memleak_detection(true);
+
   /* Paranoid, avoid accidental re-use. */
 #ifndef WITH_PYTHON_MODULE
   ba = NULL;
@@ -506,11 +507,7 @@ int main(int argc,
   (void)argv;
 #endif
 
-#ifdef WITH_PYTHON_MODULE
-  /* Keep blender in background-mode running. */
-  return 0;
-#endif
-
+#ifndef WITH_PYTHON_MODULE
   if (G.background) {
     /* Using window-manager API in background-mode is a bit odd, but works fine. */
     WM_exit(C);
@@ -519,12 +516,12 @@ int main(int argc,
     if (!G.file_loaded) {
       WM_init_splash(C);
     }
+    WM_main(C);
   }
-
-  WM_main(C);
+#endif /* WITH_PYTHON_MODULE */
 
   return 0;
-} /* end of int main(argc, argv) */
+} /* End of int main(...) function. */
 
 #ifdef WITH_PYTHON_MODULE
 void main_python_exit(void)

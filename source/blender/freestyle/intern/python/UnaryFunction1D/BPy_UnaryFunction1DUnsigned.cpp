@@ -65,13 +65,10 @@ static char UnaryFunction1DUnsigned___doc__[] =
     ":class:`Interface1D` and return an int value.\n"
     "\n"
     ".. method:: __init__()\n"
+    "            __init__(integration_type)\n"
     "\n"
-    "   Default constructor.\n"
-    "\n"
-    ".. method:: __init__(integration_type)\n"
-    "\n"
-    "   Builds a unary 1D function using the integration method given as\n"
-    "   argument.\n"
+    "   Builds a unary 1D function using the default constructor\n"
+    "   or the integration method given as an argument.\n"
     "\n"
     "   :arg integration_type: An integration method.\n"
     "   :type integration_type: :class:`IntegrationType`\n";
@@ -103,9 +100,7 @@ static int UnaryFunction1DUnsigned___init__(BPy_UnaryFunction1DUnsigned *self,
 
 static void UnaryFunction1DUnsigned___dealloc__(BPy_UnaryFunction1DUnsigned *self)
 {
-  if (self->uf1D_unsigned) {
-    delete self->uf1D_unsigned;
-  }
+  delete self->uf1D_unsigned;
   UnaryFunction1D_Type.tp_dealloc((PyObject *)self);
 }
 

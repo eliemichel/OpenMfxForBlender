@@ -39,18 +39,7 @@ PyDoc_STRVAR(
     ".. note::\n"
     "\n"
     "   Classes, methods and attributes that accept vectors also accept other numeric sequences,\n"
-    "   such as tuples, lists."
-    "\n\n"
-    "Submodules:\n"
-    "\n"
-    ".. toctree::\n"
-    "   :maxdepth: 1\n"
-    "\n"
-    "   mathutils.geometry.rst\n"
-    "   mathutils.bvhtree.rst\n"
-    "   mathutils.kdtree.rst\n"
-    "   mathutils.interpolate.rst\n"
-    "   mathutils.noise.rst\n"
+    "   such as tuples, lists.\n"
     "\n"
     "The :mod:`mathutils` module provides the following classes:\n"
     "\n"
@@ -208,7 +197,7 @@ int mathutils_array_parse(
 
   if (size != -1) {
     if (flag & MU_ARRAY_ZERO) {
-      int size_left = array_max - size;
+      const int size_left = array_max - size;
       if (size_left) {
         memset(&array[size], 0, sizeof(float) * size_left);
       }
@@ -249,42 +238,41 @@ int mathutils_array_parse_alloc(float **array,
     memcpy(*array, ((BaseMathObject *)value)->data, size * sizeof(float));
     return size;
   }
-  else
+
 #endif
-  {
-    PyObject *value_fast = NULL;
-    // *array = NULL;
-    int ret;
 
-    /* non list/tuple cases */
-    if (!(value_fast = PySequence_Fast(value, error_prefix))) {
-      /* PySequence_Fast sets the error */
-      return -1;
-    }
+  PyObject *value_fast = NULL;
+  // *array = NULL;
+  int ret;
 
-    size = PySequence_Fast_GET_SIZE(value_fast);
-
-    if (size < array_min) {
-      Py_DECREF(value_fast);
-      PyErr_Format(PyExc_ValueError,
-                   "%.200s: sequence size is %d, expected > %d",
-                   error_prefix,
-                   size,
-                   array_min);
-      return -1;
-    }
-
-    *array = PyMem_Malloc(size * sizeof(float));
-
-    ret = mathutils_array_parse_fast(*array, size, value_fast, error_prefix);
-    Py_DECREF(value_fast);
-
-    if (ret == -1) {
-      PyMem_Free(*array);
-    }
-
-    return ret;
+  /* non list/tuple cases */
+  if (!(value_fast = PySequence_Fast(value, error_prefix))) {
+    /* PySequence_Fast sets the error */
+    return -1;
   }
+
+  size = PySequence_Fast_GET_SIZE(value_fast);
+
+  if (size < array_min) {
+    Py_DECREF(value_fast);
+    PyErr_Format(PyExc_ValueError,
+                 "%.200s: sequence size is %d, expected > %d",
+                 error_prefix,
+                 size,
+                 array_min);
+    return -1;
+  }
+
+  *array = PyMem_Malloc(size * sizeof(float));
+
+  ret = mathutils_array_parse_fast(*array, size, value_fast, error_prefix);
+  Py_DECREF(value_fast);
+
+  if (ret == -1) {
+    PyMem_Free(*array);
+  }
+
+  return ret;
 }
 
 /* parse an array of vectors */
@@ -482,45 +470,41 @@ int mathutils_any_to_rotmat(float rmat[3][3], PyObject *value, const char *error
     if (BaseMath_ReadCallback((BaseMathObject *)value) == -1) {
       return -1;
     }
-    else {
-      eulO_to_mat3(rmat, ((EulerObject *)value)->eul, ((EulerObject *)value)->order);
-      return 0;
-    }
+
+    eulO_to_mat3(rmat, ((EulerObject *)value)->eul, ((EulerObject *)value)->order);
+    return 0;
   }
-  else if (QuaternionObject_Check(value)) {
+  if (QuaternionObject_Check(value)) {
     if (BaseMath_ReadCallback((BaseMathObject *)value) == -1) {
       return -1;
     }
-    else {
-      float tquat[4];
-      normalize_qt_qt(tquat, ((QuaternionObject *)value)->quat);
-      quat_to_mat3(rmat, tquat);
-      return 0;
-    }
+
+    float tquat[4];
+    normalize_qt_qt(tquat, ((QuaternionObject *)value)->quat);
+    quat_to_mat3(rmat, tquat);
+    return 0;
   }
-  else if (MatrixObject_Check(value)) {
+  if (MatrixObject_Check(value)) {
     if (BaseMath_ReadCallback((BaseMathObject *)value) == -1) {
       return -1;
     }
-    else if (((MatrixObject *)value)->num_row < 3 || ((MatrixObject *)value)->num_col < 3) {
+    if (((MatrixObject *)value)->num_row < 3 || ((MatrixObject *)value)->num_col < 3) {
       PyErr_Format(
           PyExc_ValueError, "%.200s: matrix must have minimum 3x3 dimensions", error_prefix);
       return -1;
     }
-    else {
-      matrix_as_3x3(rmat, (MatrixObject *)value);
-      normalize_m3(rmat);
-      return 0;
-    }
+
+    matrix_as_3x3(rmat, (MatrixObject *)value);
+    normalize_m3(rmat);
+    return 0;
   }
-  else {
-    PyErr_Format(PyExc_TypeError,
-                 "%.200s: expected a Euler, Quaternion or Matrix type, "
-                 "found %.200s",
-                 error_prefix,
-                 Py_TYPE(value)->tp_name);
-    return -1;
-  }
+
+  PyErr_Format(PyExc_TypeError,
+               "%.200s: expected a Euler, Quaternion or Matrix type, "
+               "found %.200s",
+               error_prefix,
+               Py_TYPE(value)->tp_name);
+  return -1;
 }
 
 /* ----------------------------------MATRIX FUNCTIONS-------------------- */
@@ -546,12 +530,12 @@ int EXPP_FloatsAreEqual(float af, float bf, int maxDiff)
 {
   /* solid, fast routine across all platforms
    * with constant time behavior */
-  int ai = *(int *)(&af);
-  int bi = *(int *)(&bf);
-  int test = SIGNMASK(ai ^ bi);
+  const int ai = *(int *)(&af);
+  const int bi = *(int *)(&bf);
+  const int test = SIGNMASK(ai ^ bi);
   int diff, v1, v2;
 
-  assert((0 == test) || (0xFFFFFFFF == test));
+  BLI_assert((0 == test) || (0xFFFFFFFF == test));
   diff = (ai ^ (test & 0x7fffffff)) - bi;
   v1 = maxDiff + diff;
   v2 = maxDiff - diff;
@@ -743,7 +727,7 @@ void BaseMathObject_dealloc(BaseMathObject *self)
     BaseMathObject_clear(self);
   }
 
-  Py_TYPE(self)->tp_free(self);  // PyObject_DEL(self); // breaks subtypes
+  Py_TYPE(self)->tp_free(self);  // PyObject_DEL(self); /* breaks subtypes. */
 }
 
 /*----------------------------MODULE INIT-------------------------*/

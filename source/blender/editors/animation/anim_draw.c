@@ -62,67 +62,6 @@
 /* *************************************************** */
 /* CURRENT FRAME DRAWING */
 
-/* Draw current frame number in a little green box beside the current frame indicator */
-void ANIM_draw_cfra_number(const bContext *C, View2D *v2d, short flag)
-{
-  Scene *scene = CTX_data_scene(C);
-  const float time = scene->r.cfra + scene->r.subframe;
-  const float cfra = (float)(time * scene->r.framelen);
-  const bool show_time = (flag & DRAWCFRA_UNIT_SECONDS) != 0;
-
-  const uiFontStyle *fstyle = UI_FSTYLE_WIDGET;
-  uchar col[4];
-  float color[4];
-  float xscale, x, y;
-  char numstr[32] = "  t  "; /* t is the character to start replacing from */
-  float hlen;
-  int slen;
-
-  /* because the frame number text is subject to the same scaling as the contents of the view */
-  UI_view2d_scale_get(v2d, &xscale, NULL);
-  GPU_matrix_push();
-  GPU_matrix_scale_2f(1.0f / xscale, 1.0f);
-
-  /* get timecode string
-   * - padding on str-buf passed so that it doesn't sit on the frame indicator
-   */
-  if (show_time) {
-    BLI_timecode_string_from_time(
-        &numstr[2], sizeof(numstr) - 2, 0, FRA2TIME(cfra), FPS, U.timecode_style);
-  }
-  else {
-    BLI_timecode_string_from_time_seconds(&numstr[2], sizeof(numstr) - 2, 1, cfra);
-  }
-
-  slen = UI_fontstyle_string_width(fstyle, numstr) - 1;
-  hlen = slen * 0.5f;
-
-  /* get starting coordinates for drawing */
-  x = cfra * xscale;
-  y = -0.1f * U.widget_unit;
-
-  /* draw green box around/behind text */
-  UI_GetThemeColor4fv(TH_CFRAME, color);
-  color[3] = 3.0f;
-
-  UI_draw_roundbox_corner_set(UI_CNR_ALL);
-  UI_draw_roundbox_aa(true,
-                      x - hlen - 0.1f * U.widget_unit,
-                      y + 3.0f,
-                      x + hlen + 0.1f * U.widget_unit,
-                      y - 3.0f + U.widget_unit,
-                      0.1f * U.widget_unit,
-                      color);
-
-  /* draw current frame number */
-  UI_GetThemeColor4ubv(TH_TEXT_HI, col);
-  UI_fontstyle_draw_simple(
-      fstyle, x - hlen - 0.15f * U.widget_unit, y + 0.28f * U.widget_unit, numstr, col);
-
-  /* restore view transform */
-  GPU_matrix_pop();
-}
-
 /* General call for drawing current frame indicator in animation editor */
 void ANIM_draw_cfra(const bContext *C, View2D *v2d, short flag)
 {
@@ -159,9 +98,7 @@ void ANIM_draw_previewrange(const bContext *C, View2D *v2d, int end_frame_width)
 
   /* only draw this if preview range is set */
   if (PRVRANGEON) {
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     GPUVertFormat *format = immVertexFormat();
     uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -182,21 +119,22 @@ void ANIM_draw_previewrange(const bContext *C, View2D *v2d, int end_frame_width)
 
     immUnbindProgram();
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 }
 
 /* *************************************************** */
 /* SCENE FRAME RANGE */
 
-/* Draw frame range guides (for scene frame range) in background */
-// TODO: Should we still show these when preview range is enabled?
+/**
+ * Draw frame range guides (for scene frame range) in background.
+ *
+ * TODO: Should we still show these when preview range is enabled?
+ */
 void ANIM_draw_framerange(Scene *scene, View2D *v2d)
 {
   /* draw darkened area outside of active timeline frame range */
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -212,7 +150,7 @@ void ANIM_draw_framerange(Scene *scene, View2D *v2d)
     immRectf(pos, v2d->cur.xmin, v2d->cur.ymin, v2d->cur.xmax, v2d->cur.ymax);
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   /* thin lines where the actual frames are */
   immUniformThemeColorShade(TH_BACK, -60);
@@ -232,8 +170,11 @@ void ANIM_draw_framerange(Scene *scene, View2D *v2d)
 /* *************************************************** */
 /* NLA-MAPPING UTILITIES (required for drawing and also editing keyframes)  */
 
-/* Obtain the AnimData block providing NLA-mapping for the given channel (if applicable) */
-// TODO: do not supply return this if the animdata tells us that there is no mapping to perform
+/**
+ * Obtain the AnimData block providing NLA-mapping for the given channel (if applicable).
+ *
+ * TODO: do not supply return this if the animdata tells us that there is no mapping to perform.
+ */
 AnimData *ANIM_nla_mapping_get(bAnimContext *ac, bAnimListElem *ale)
 {
   /* sanity checks */
@@ -247,7 +188,7 @@ AnimData *ANIM_nla_mapping_get(bAnimContext *ac, bAnimListElem *ale)
   }
 
   /* apart from strictly keyframe-related contexts, this shouldn't even happen */
-  // XXX: nla and channel here may not be necessary...
+  /* XXX: nla and channel here may not be necessary... */
   if (ELEM(ac->datatype,
            ANIMCONT_ACTION,
            ANIMCONT_SHAPEKEY,
@@ -456,12 +397,12 @@ static float normalization_factor_get(Scene *scene, FCurve *fcu, short flag, flo
               v4[0] = bezt->vec[1][0];
               v4[1] = bezt->vec[1][1];
 
-              correct_bezpart(v1, v2, v3, v4);
+              BKE_fcurve_correct_bezpart(v1, v2, v3, v4);
 
               BKE_curve_forward_diff_bezier(
-                  v1[0], v2[0], v3[0], v4[0], data, resol, sizeof(float) * 3);
+                  v1[0], v2[0], v3[0], v4[0], data, resol, sizeof(float[3]));
               BKE_curve_forward_diff_bezier(
-                  v1[1], v2[1], v3[1], v4[1], data + 1, resol, sizeof(float) * 3);
+                  v1[1], v2[1], v3[1], v4[1], data + 1, resol, sizeof(float[3]));
 
               for (int j = 0; j <= resol; ++j) {
                 const float *fp = &data[j * 3];
@@ -534,9 +475,7 @@ float ANIM_unit_mapping_get_factor(Scene *scene, ID *id, FCurve *fcu, short flag
           if (flag & ANIM_UNITCONV_RESTORE) {
             return DEG2RADF(1.0f); /* degrees to radians */
           }
-          else {
-            return RAD2DEGF(1.0f); /* radians to degrees */
-          }
+          return RAD2DEGF(1.0f); /* radians to degrees */
         }
       }
 

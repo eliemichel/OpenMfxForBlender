@@ -194,7 +194,7 @@ class SelectHierarchy(Operator):
             for obj in selected_objects:
                 parent = obj.parent
 
-                if parent:
+                if parent and parent.visible_get():
                     if obj_act == obj:
                         act_new = parent
 
@@ -202,7 +202,7 @@ class SelectHierarchy(Operator):
 
         else:
             for obj in selected_objects:
-                select_new.extend(obj.children)
+                select_new.extend([child for child in obj.children if child.visible_get()])
 
             if select_new:
                 select_new.sort(key=lambda obj_iter: obj_iter.name)
@@ -237,7 +237,7 @@ class SubdivisionSet(Operator):
     )
     relative: BoolProperty(
         name="Relative",
-        description=("Apply the subsurf level as an offset "
+        description=("Apply the subdivision surface level as an offset "
                      "relative to the current level"),
         default=False,
     )
@@ -800,7 +800,7 @@ class TransformsToDeltasAnim(Operator):
                 continue
 
             # first pass over F-Curves: ensure that we don't have conflicting
-            # transforms already (e.g. if this was applied already) [#29110]
+            # transforms already (e.g. if this was applied already) T29110.
             existingFCurves = {}
             for fcu in adt.action.fcurves:
                 # get "delta" path - i.e. the final paths which may clash
@@ -861,7 +861,7 @@ class TransformsToDeltasAnim(Operator):
 class DupliOffsetFromCursor(Operator):
     """Set offset used for collection instances based on cursor position"""
     bl_idname = "object.instance_offset_from_cursor"
-    bl_label = "Set Offset From Cursor"
+    bl_label = "Set Offset from Cursor"
     bl_options = {'INTERNAL', 'UNDO'}
 
     @classmethod

@@ -88,7 +88,8 @@ static void arrow_draw_geom(const ArrowGizmo3D *arrow, const bool select, const 
   const int draw_style = RNA_enum_get(arrow->gizmo.ptr, "draw_style");
   const int draw_options = RNA_enum_get(arrow->gizmo.ptr, "draw_options");
 
-  immBindBuiltinProgram(GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
+  immBindBuiltinProgram(select ? GPU_SHADER_3D_UNIFORM_COLOR :
+                                 GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
 
   float viewport[4];
   GPU_viewport_size_get_f(viewport);
@@ -194,9 +195,9 @@ static void arrow_draw_intern(ArrowGizmo3D *arrow, const bool select, const bool
 
   GPU_matrix_push();
   GPU_matrix_mul(matrix_final);
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   arrow_draw_geom(arrow, select, color);
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   GPU_matrix_pop();
 
@@ -206,9 +207,9 @@ static void arrow_draw_intern(ArrowGizmo3D *arrow, const bool select, const bool
     GPU_matrix_push();
     GPU_matrix_mul(inter->init_matrix_final);
 
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
     arrow_draw_geom(arrow, select, (const float[4]){0.5f, 0.5f, 0.5f, 0.5f});
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
 
     GPU_matrix_pop();
   }
@@ -238,7 +239,7 @@ static int gizmo_arrow_test_select(bContext *UNUSED(C), wmGizmo *gz, const int m
   WM_gizmo_calc_matrix_final(gz, matrix_final);
 
   /* Arrow in pixel space. */
-  float arrow_start[2] = {matrix_final[3][0], matrix_final[3][1]};
+  const float arrow_start[2] = {matrix_final[3][0], matrix_final[3][1]};
   float arrow_end[2];
   {
     float co[3] = {0, 0, arrow_length};

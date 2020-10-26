@@ -21,7 +21,6 @@
 
 #include "util/util_function.h"
 #include "util/util_list.h"
-#include "util/util_task.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -30,10 +29,44 @@ CCL_NAMESPACE_BEGIN
 class Device;
 class RenderBuffers;
 class RenderTile;
+class RenderTileNeighbors;
 class Tile;
+
+enum DenoiserType {
+  DENOISER_NLM = 1,
+  DENOISER_OPTIX = 2,
+  DENOISER_OPENIMAGEDENOISE = 4,
+  DENOISER_NUM,
+
+  DENOISER_NONE = 0,
+  DENOISER_ALL = ~0,
+};
+
+enum DenoiserInput {
+  DENOISER_INPUT_RGB = 1,
+  DENOISER_INPUT_RGB_ALBEDO = 2,
+  DENOISER_INPUT_RGB_ALBEDO_NORMAL = 3,
+
+  DENOISER_INPUT_NUM,
+};
+
+typedef int DenoiserTypeMask;
 
 class DenoiseParams {
  public:
+  /* Apply denoiser to image. */
+  bool use;
+  /* Output denoising data passes (possibly without applying the denoiser). */
+  bool store_passes;
+
+  /* Denoiser type. */
+  DenoiserType type;
+
+  /* Viewport start sample. */
+  int start_sample;
+
+  /** Native Denoiser **/
+
   /* Pixel radius for neighboring pixels to take into account. */
   int radius;
   /* Controls neighbor pixel weighting for the denoising filter. */
@@ -47,18 +80,36 @@ class DenoiseParams {
   int neighbor_frames;
   /* Clamp the input to the range of +-1e8. Should be enough for any legitimate data. */
   bool clamp_input;
-  /* Passes handed over to the OptiX denoiser (default to color + albedo). */
-  int optix_input_passes;
+
+  /** OIDN/Optix Denoiser **/
+
+  /* Passes handed over to the OIDN/OptiX denoiser (default to color + albedo). */
+  DenoiserInput input_passes;
 
   DenoiseParams()
   {
+    use = false;
+    store_passes = false;
+
+    type = DENOISER_NLM;
+
     radius = 8;
     strength = 0.5f;
     feature_strength = 0.5f;
     relative_pca = false;
     neighbor_frames = 2;
     clamp_input = true;
-    optix_input_passes = 2;
+
+    input_passes = DENOISER_INPUT_RGB_ALBEDO_NORMAL;
+
+    start_sample = 0;
+  }
+
+  /* Test if a denoising task needs to run, also to prefilter passes for the native
+   * denoiser when we are not applying denoising to the combined image. */
+  bool need_denoising_task() const
+  {
+    return (use || (store_passes && type == DENOISER_NLM));
   }
 };
 
@@ -75,7 +126,7 @@ class AdaptiveSampling {
   int min_samples;
 };
 
-class DeviceTask : public Task {
+class DeviceTask {
  public:
   typedef enum { RENDER, FILM_CONVERT, SHADER, DENOISE_BUFFER } Type;
   Type type;
@@ -98,8 +149,8 @@ class DeviceTask : public Task {
 
   explicit DeviceTask(Type type = RENDER);
 
-  int get_subtask_count(int num, int max_size = 0);
-  void split(list<DeviceTask> &tasks, int num, int max_size = 0);
+  int get_subtask_count(int num, int max_size = 0) const;
+  void split(list<DeviceTask> &tasks, int num, int max_size = 0) const;
 
   void update_progress(RenderTile *rtile, int pixel_samples = -1);
 
@@ -108,17 +159,13 @@ class DeviceTask : public Task {
   function<void(RenderTile &)> update_tile_sample;
   function<void(RenderTile &)> release_tile;
   function<bool()> get_cancel;
-  function<void(RenderTile *, Device *)> map_neighbor_tiles;
-  function<void(RenderTile *, Device *)> unmap_neighbor_tiles;
+  function<void(RenderTileNeighbors &, Device *)> map_neighbor_tiles;
+  function<void(RenderTileNeighbors &, Device *)> unmap_neighbor_tiles;
 
   uint tile_types;
   DenoiseParams denoising;
   bool denoising_from_render;
   vector<int> denoising_frames;
-
-  bool denoising_do_filter;
-  bool denoising_use_optix;
-  bool denoising_write_passes;
 
   int pass_stride;
   int frame_stride;

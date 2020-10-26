@@ -227,7 +227,7 @@ void ED_node_set_active_viewer_key(SpaceNode *snode)
   }
 }
 
-void snode_group_offset(SpaceNode *snode, float *x, float *y)
+void space_node_group_offset(SpaceNode *snode, float *x, float *y)
 {
   bNodeTreePath *path = snode->treepath.last;
 
@@ -244,7 +244,7 @@ void snode_group_offset(SpaceNode *snode, float *x, float *y)
 
 /* ******************** default callbacks for node space ***************** */
 
-static SpaceLink *node_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *node_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceNode *snode;
@@ -627,7 +627,7 @@ static void node_main_region_init(wmWindowManager *wm, ARegion *region)
 
 static void node_main_region_draw(const bContext *C, ARegion *region)
 {
-  drawnodespace(C, region);
+  node_draw_space(C, region);
 }
 
 /* ************* dropboxes ************* */
@@ -641,9 +641,7 @@ static bool node_ima_drop_poll(bContext *UNUSED(C),
     /* rule might not work? */
     return (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE));
   }
-  else {
-    return WM_drag_ID(drag, ID_IM) != NULL;
-  }
+  return WM_drag_ID(drag, ID_IM) != NULL;
 }
 
 static bool node_mask_drop_poll(bContext *UNUSED(C),
@@ -778,16 +776,17 @@ static void node_region_listener(wmWindow *UNUSED(win),
 
 const char *node_context_dir[] = {
     "selected_nodes", "active_node", "light", "material", "world", NULL};
-
-static int node_context(const bContext *C, const char *member, bContextDataResult *result)
+static int /*eContextResult*/ node_context(const bContext *C,
+                                           const char *member,
+                                           bContextDataResult *result)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
 
   if (CTX_data_dir(member)) {
     CTX_data_dir_set(result, node_context_dir);
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "selected_nodes")) {
+  if (CTX_data_equals(member, "selected_nodes")) {
     bNode *node;
 
     if (snode->edittree) {
@@ -798,46 +797,46 @@ static int node_context(const bContext *C, const char *member, bContextDataResul
       }
     }
     CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "active_node")) {
+  if (CTX_data_equals(member, "active_node")) {
     if (snode->edittree) {
       bNode *node = nodeGetActive(snode->edittree);
       CTX_data_pointer_set(result, &snode->edittree->id, &RNA_Node, node);
     }
 
     CTX_data_type_set(result, CTX_DATA_TYPE_POINTER);
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "node_previews")) {
+  if (CTX_data_equals(member, "node_previews")) {
     if (snode->nodetree) {
       CTX_data_pointer_set(
           result, &snode->nodetree->id, &RNA_NodeInstanceHash, snode->nodetree->previews);
     }
 
     CTX_data_type_set(result, CTX_DATA_TYPE_POINTER);
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "material")) {
+  if (CTX_data_equals(member, "material")) {
     if (snode->id && GS(snode->id->name) == ID_MA) {
       CTX_data_id_pointer_set(result, snode->id);
     }
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "light")) {
+  if (CTX_data_equals(member, "light")) {
     if (snode->id && GS(snode->id->name) == ID_LA) {
       CTX_data_id_pointer_set(result, snode->id);
     }
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "world")) {
+  if (CTX_data_equals(member, "world")) {
     if (snode->id && GS(snode->id->name) == ID_WO) {
       CTX_data_id_pointer_set(result, snode->id);
     }
-    return 1;
+    return CTX_RESULT_OK;
   }
 
-  return 0;
+  return CTX_RESULT_MEMBER_NOT_FOUND;
 }
 
 static void node_widgets(void)
@@ -936,6 +935,10 @@ static void node_space_subtype_item_extend(bContext *C, EnumPropertyItem **item,
   bool free;
   const EnumPropertyItem *item_src = RNA_enum_node_tree_types_itemf_impl(C, &free);
   for (const EnumPropertyItem *item_iter = item_src; item_iter->identifier; item_iter++) {
+    if (!U.experimental.use_new_geometry_nodes &&
+        STREQ(item_iter->identifier, "SimulationNodeTree")) {
+      continue;
+    }
     RNA_enum_item_add(item, totitem, item_iter);
   }
   if (free) {
@@ -952,7 +955,7 @@ void ED_spacetype_node(void)
   st->spaceid = SPACE_NODE;
   strncpy(st->name, "Node", BKE_ST_MAXNAME);
 
-  st->new = node_new;
+  st->create = node_create;
   st->free = node_free;
   st->init = node_init;
   st->duplicate = node_duplicate;

@@ -251,7 +251,7 @@ static int pose_slide_init(bContext *C, wmOperator *op, ePoseSlide_Modes mode)
    */
   BLI_dlrbTree_init(&pso->keys);
 
-  /* initialise numeric input */
+  /* Initialize numeric input. */
   initNumInput(&pso->num);
   pso->num.idx_max = 0; /* one axis */
   pso->num.val_flag[0] |= NUM_NO_NEGATIVE;
@@ -480,7 +480,7 @@ static void pose_slide_apply_props(tPoseSlideOp *pso,
             float tval = (float)RNA_property_boolean_get(&ptr, prop);
             pose_slide_apply_val(pso, fcu, pfl->ob, &tval);
             RNA_property_boolean_set(
-                &ptr, prop, (int)tval);  // XXX: do we need threshold clamping here?
+                &ptr, prop, (int)tval); /* XXX: do we need threshold clamping here? */
             break;
           }
           case PROP_ENUM: {
@@ -681,14 +681,14 @@ static void pose_slide_rest_pose_apply(bContext *C, tPoseSlideOp *pso)
 
     if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_BBONE_SHAPE) && (pchan->flag & POSE_BBONE_SHAPE)) {
       /* bbone properties - they all start a "bbone_" prefix */
-      // TODO Not implemented
+      /* TODO Not implemented */
       // pose_slide_apply_props(pso, pfl, "bbone_");
     }
 
     if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_PROPS) && (pfl->oldprops)) {
       /* Not strictly a transform, but custom properties contribute
        * to the pose produced in many rigs (e.g. the facial rigs used in Sintel). */
-      // TODO Not implemented
+      /* TODO Not implemented */
       // pose_slide_apply_props(pso, pfl, "[\""); /* dummy " for texteditor bugs */
     }
   }
@@ -790,7 +790,7 @@ static void pose_slide_reset(tPoseSlideOp *pso)
 /* ------------------------------------ */
 
 /* draw percentage indicator in header */
-// TODO: Include hints about locks here...
+/* TODO: Include hints about locks here... */
 static void pose_slide_draw_status(tPoseSlideOp *pso)
 {
   char status_str[UI_MAX_DRAW_STR];
@@ -1122,7 +1122,7 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
         do_pose_update = true;
         break;
       }
-      else if (event->val == KM_PRESS) {
+      if (event->val == KM_PRESS) {
         switch (event->type) {
           /* Transform Channel Limits  */
           /* XXX: Replace these hardcoded hotkeys with a modalmap that can be customised */
@@ -1307,11 +1307,10 @@ static int pose_slide_push_invoke(bContext *C, wmOperator *op, const wmEvent *ev
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else {
-    pso = op->customdata;
-  }
 
-  /* initialise percentage so that it won't pop on first mouse move */
+  pso = op->customdata;
+
+  /* Initialize percentage so that it won't pop on first mouse move. */
   pose_slide_mouse_update_percentage(pso, op, event);
 
   /* do common setup work */
@@ -1328,9 +1327,8 @@ static int pose_slide_push_exec(bContext *C, wmOperator *op)
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else {
-    pso = op->customdata;
-  }
+
+  pso = op->customdata;
 
   /* do common exec work */
   return pose_slide_exec_common(C, op, pso);
@@ -1369,11 +1367,10 @@ static int pose_slide_relax_invoke(bContext *C, wmOperator *op, const wmEvent *e
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else {
-    pso = op->customdata;
-  }
 
-  /* initialise percentage so that it won't pop on first mouse move */
+  pso = op->customdata;
+
+  /* Initialize percentage so that it won't pop on first mouse move. */
   pose_slide_mouse_update_percentage(pso, op, event);
 
   /* do common setup work */
@@ -1390,9 +1387,8 @@ static int pose_slide_relax_exec(bContext *C, wmOperator *op)
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else {
-    pso = op->customdata;
-  }
+
+  pso = op->customdata;
 
   /* do common exec work */
   return pose_slide_exec_common(C, op, pso);
@@ -1430,11 +1426,10 @@ static int pose_slide_push_rest_invoke(bContext *C, wmOperator *op, const wmEven
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else {
-    pso = op->customdata;
-  }
 
-  /* initialise percentage so that it won't pop on first mouse move */
+  pso = op->customdata;
+
+  /* Initialize percentage so that it won't pop on first mouse move. */
   pose_slide_mouse_update_percentage(pso, op, event);
 
   /* do common setup work */
@@ -1451,9 +1446,8 @@ static int pose_slide_push_rest_exec(bContext *C, wmOperator *op)
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else {
-    pso = op->customdata;
-  }
+
+  pso = op->customdata;
 
   /* do common exec work */
   return pose_slide_exec_common(C, op, pso);
@@ -1492,11 +1486,10 @@ static int pose_slide_relax_rest_invoke(bContext *C, wmOperator *op, const wmEve
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else {
-    pso = op->customdata;
-  }
 
-  /* initialise percentage so that it won't pop on first mouse move */
+  pso = op->customdata;
+
+  /* Initialize percentage so that it won't pop on first mouse move. */
   pose_slide_mouse_update_percentage(pso, op, event);
 
   /* do common setup work */
@@ -1513,9 +1506,8 @@ static int pose_slide_relax_rest_exec(bContext *C, wmOperator *op)
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else {
-    pso = op->customdata;
-  }
+
+  pso = op->customdata;
 
   /* do common exec work */
   return pose_slide_exec_common(C, op, pso);
@@ -1554,11 +1546,10 @@ static int pose_slide_breakdown_invoke(bContext *C, wmOperator *op, const wmEven
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else {
-    pso = op->customdata;
-  }
 
-  /* initialise percentage so that it won't pop on first mouse move */
+  pso = op->customdata;
+
+  /* Initialize percentage so that it won't pop on first mouse move. */
   pose_slide_mouse_update_percentage(pso, op, event);
 
   /* do common setup work */
@@ -1575,9 +1566,8 @@ static int pose_slide_breakdown_exec(bContext *C, wmOperator *op)
     pose_slide_exit(op);
     return OPERATOR_CANCELLED;
   }
-  else {
-    pso = op->customdata;
-  }
+
+  pso = op->customdata;
 
   /* do common exec work */
   return pose_slide_exec_common(C, op, pso);
@@ -1812,7 +1802,7 @@ static void pose_propagate_fcurve(
    * - if only doing selected keyframes, start from the first one
    */
   if (mode != POSE_PROPAGATE_SELECTED_KEYS) {
-    match = binarysearch_bezt_index(fcu->bezt, startFrame, fcu->totvert, &keyExists);
+    match = BKE_fcurve_bezt_binarysearch_index(fcu->bezt, startFrame, fcu->totvert, &keyExists);
 
     if (fcu->bezt[match].vec[1][0] < startFrame) {
       i = match + 1;

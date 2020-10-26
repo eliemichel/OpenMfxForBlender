@@ -382,7 +382,7 @@ static void init_mv_jit(float *jit, int num, int seed2, float amount)
     x -= (float)floor(x);
   }
 
-  jit2 = MEM_mallocN(12 + 2 * sizeof(float) * num, "initjit");
+  jit2 = MEM_mallocN(12 + sizeof(float[2]) * num, "initjit");
 
   for (i = 0; i < 4; i++) {
     BLI_jitterate1((float(*)[2])jit, (float(*)[2])jit2, num, rad1);
@@ -433,7 +433,7 @@ static void psys_uv_to_w(float u, float v, int quad, float *w)
 }
 
 /* Find the index in "sum" array before "value" is crossed. */
-static int distribute_binary_search(float *sum, int n, float value)
+static int distribute_binary_search(const float *sum, int n, float value)
 {
   int mid, low = 0, high = n - 1;
 
@@ -773,9 +773,7 @@ static void distribute_children_exec(ParticleTask *thread, ChildParticle *cpa, i
   }
 }
 
-static void exec_distribute_parent(TaskPool *__restrict UNUSED(pool),
-                                   void *taskdata,
-                                   int UNUSED(threadid))
+static void exec_distribute_parent(TaskPool *__restrict UNUSED(pool), void *taskdata)
 {
   ParticleTask *task = taskdata;
   ParticleSystem *psys = task->ctx->sim.psys;
@@ -804,9 +802,7 @@ static void exec_distribute_parent(TaskPool *__restrict UNUSED(pool),
   }
 }
 
-static void exec_distribute_child(TaskPool *__restrict UNUSED(pool),
-                                  void *taskdata,
-                                  int UNUSED(threadid))
+static void exec_distribute_child(TaskPool *__restrict UNUSED(pool), void *taskdata)
 {
   ParticleTask *task = taskdata;
   ParticleSystem *psys = task->ctx->sim.psys;
@@ -833,22 +829,20 @@ static int distribute_compare_orig_index(const void *p1, const void *p2, void *u
   if (index1 < index2) {
     return -1;
   }
-  else if (index1 == index2) {
+  if (index1 == index2) {
     /* this pointer comparison appears to make qsort stable for glibc,
      * and apparently on solaris too, makes the renders reproducible */
     if (p1 < p2) {
       return -1;
     }
-    else if (p1 == p2) {
+    if (p1 == p2) {
       return 0;
     }
-    else {
-      return 1;
-    }
-  }
-  else {
+
     return 1;
   }
+
+  return 1;
 }
 
 static void distribute_invalid(ParticleSimulationData *sim, int from)
@@ -948,7 +942,7 @@ static int psys_thread_context_init_distribute(ParticleThreadContext *ctx,
         mesh = final_mesh;
       }
       else {
-        BKE_id_copy_ex(NULL, ob->data, (ID **)&mesh, LIB_ID_COPY_LOCALIZE);
+        mesh = (Mesh *)BKE_id_copy_ex(NULL, ob->data, NULL, LIB_ID_COPY_LOCALIZE);
       }
       BKE_mesh_tessface_ensure(mesh);
 
@@ -996,7 +990,7 @@ static int psys_thread_context_init_distribute(ParticleThreadContext *ctx,
       mesh = final_mesh;
     }
     else {
-      BKE_id_copy_ex(NULL, ob->data, (ID **)&mesh, LIB_ID_COPY_LOCALIZE);
+      mesh = (Mesh *)BKE_id_copy_ex(NULL, ob->data, NULL, LIB_ID_COPY_LOCALIZE);
     }
 
     BKE_mesh_tessface_ensure(mesh);
@@ -1286,7 +1280,7 @@ static int psys_thread_context_init_distribute(ParticleThreadContext *ctx,
       hammersley_create(jit, jitlevel + 1, psys->seed, part->jitfac);
     }
     BLI_array_randomize(
-        jit, 2 * sizeof(float), jitlevel, psys->seed); /* for custom jit or even distribution */
+        jit, sizeof(float[2]), jitlevel, psys->seed); /* for custom jit or even distribution */
   }
 
   /* Setup things for threaded distribution */
@@ -1324,7 +1318,6 @@ static void psys_task_init_distribute(ParticleTask *task, ParticleSimulationData
 
 static void distribute_particles_on_dm(ParticleSimulationData *sim, int from)
 {
-  TaskScheduler *task_scheduler;
   TaskPool *task_pool;
   ParticleThreadContext ctx;
   ParticleTask *tasks;
@@ -1336,8 +1329,7 @@ static void distribute_particles_on_dm(ParticleSimulationData *sim, int from)
     return;
   }
 
-  task_scheduler = BLI_task_scheduler_get();
-  task_pool = BLI_task_pool_create(task_scheduler, &ctx, TASK_PRIORITY_LOW);
+  task_pool = BLI_task_pool_create(&ctx, TASK_PRIORITY_LOW);
 
   totpart = (from == PART_FROM_CHILD ? sim->psys->totchild : sim->psys->totpart);
   psys_tasks_create(&ctx, 0, totpart, &tasks, &numtasks);

@@ -14,17 +14,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_RENDER_MONITOR_H__
-#define __FREESTYLE_RENDER_MONITOR_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
  * \brief Classes defining the basic "Iterator" design pattern
  */
 
-extern "C" {
 #include "render_types.h"
-}
 
 #ifdef WITH_CXX_GUARDEDALLOC
 #  include "MEM_guardedalloc.h"
@@ -73,5 +70,3 @@ class RenderMonitor {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_RENDER_MONITOR_H__

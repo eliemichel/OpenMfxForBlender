@@ -22,13 +22,11 @@
 
 #include "MEM_guardedalloc.h"
 
-extern "C" {
 #include "RE_render_ext.h"
-}
 
 /* An implementation of the Scale3X edge-extrapolation algorithm.
  *
- * Code from GIMP plugin, based on code from Adam D. Moss (adam@gimp.org)
+ * Code from GIMP plugin, based on code from Adam D. Moss <adam@gimp.org>
  * licensed by the MIT license.
  */
 static int extrapolate9(float *E0,
@@ -107,9 +105,9 @@ static int extrapolate9(float *E0,
     }
     return 1;
   }
-  else {
-    return 0;
-  }
+
+  return 0;
+
 #undef PEQ
 #undef PCPY
 }

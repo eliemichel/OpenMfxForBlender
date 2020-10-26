@@ -37,6 +37,8 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
+#include "BLT_translation.h"
+
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_global.h"
@@ -120,11 +122,10 @@ bool ED_view3d_context_user_region(bContext *C, View3D **r_v3d, ARegion **r_regi
         *r_region = region;
         return true;
       }
-      else {
-        if (ED_view3d_area_user_region(area, v3d, r_region)) {
-          *r_v3d = v3d;
-          return true;
-        }
+
+      if (ED_view3d_area_user_region(area, v3d, r_region)) {
+        *r_v3d = v3d;
+        return true;
       }
     }
   }
@@ -261,7 +262,7 @@ void ED_view3d_shade_update(Main *bmain, View3D *v3d, ScrArea *area)
 
 /* ******************** default callbacks for view3d space ***************** */
 
-static SpaceLink *view3d_new(const ScrArea *UNUSED(area), const Scene *scene)
+static SpaceLink *view3d_create(const ScrArea *UNUSED(area), const Scene *scene)
 {
   ARegion *region;
   View3D *v3d;
@@ -460,16 +461,24 @@ static void view3d_main_region_exit(wmWindowManager *wm, ARegion *region)
   ED_view3d_stop_render_preview(wm, region);
 }
 
-static bool view3d_drop_id_in_main_region_poll(bContext *C,
-                                               wmDrag *drag,
-                                               const wmEvent *event,
-                                               ID_Type id_type)
+static ID *view3d_drop_id_in_main_region_poll_id(bContext *C,
+                                                 wmDrag *drag,
+                                                 const wmEvent *event,
+                                                 ID_Type id_type)
 {
   ScrArea *area = CTX_wm_area(C);
   if (ED_region_overlap_isect_any_xy(area, &event->x)) {
     return false;
   }
-  return WM_drag_ID(drag, id_type) != NULL;
+  return WM_drag_ID(drag, id_type);
+}
+
+static bool view3d_drop_id_in_main_region_poll(bContext *C,
+                                               wmDrag *drag,
+                                               const wmEvent *event,
+                                               ID_Type id_type)
+{
+  return (view3d_drop_id_in_main_region_poll_id(C, drag, event, id_type) != NULL);
 }
 
 static bool view3d_ob_drop_poll(bContext *C,
@@ -496,6 +505,21 @@ static bool view3d_mat_drop_poll(bContext *C,
   return view3d_drop_id_in_main_region_poll(C, drag, event, ID_MA);
 }
 
+static bool view3d_object_data_drop_poll(bContext *C,
+                                         wmDrag *drag,
+                                         const wmEvent *event,
+                                         const char **r_tooltip)
+{
+  ID *id = view3d_drop_id_in_main_region_poll_id(C, drag, event, 0);
+  if (id != NULL) {
+    if (BKE_object_obdata_to_type(id) != -1) {
+      *r_tooltip = TIP_("Create object instance from object-data");
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool view3d_ima_drop_poll(bContext *C,
                                  wmDrag *drag,
                                  const wmEvent *event,
@@ -508,9 +532,8 @@ static bool view3d_ima_drop_poll(bContext *C,
     /* rule might not work? */
     return (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE));
   }
-  else {
-    return WM_drag_ID(drag, ID_IM) != NULL;
-  }
+
+  return WM_drag_ID(drag, ID_IM) != NULL;
 }
 
 static bool view3d_ima_bg_is_camera_view(bContext *C)
@@ -593,6 +616,14 @@ static void view3d_id_drop_copy(wmDrag *drag, wmDropBox *drop)
   RNA_string_set(drop->ptr, "name", id->name + 2);
 }
 
+static void view3d_id_drop_copy_with_type(wmDrag *drag, wmDropBox *drop)
+{
+  ID *id = WM_drag_ID(drag, 0);
+
+  RNA_string_set(drop->ptr, "name", id->name + 2);
+  RNA_enum_set(drop->ptr, "type", GS(id->name));
+}
+
 static void view3d_id_path_drop_copy(wmDrag *drag, wmDropBox *drop)
 {
   ID *id = WM_drag_ID(drag, 0);
@@ -618,11 +649,12 @@ static void view3d_lightcache_update(bContext *C)
     return;
   }
 
-  WM_operator_properties_create(&op_ptr, "SCENE_OT_light_cache_bake");
+  wmOperatorType *ot = WM_operatortype_find("SCENE_OT_light_cache_bake", true);
+  WM_operator_properties_create_ptr(&op_ptr, ot);
   RNA_int_set(&op_ptr, "delay", 200);
   RNA_enum_set_identifier(C, &op_ptr, "subset", "DIRTY");
 
-  WM_operator_name_call(C, "SCENE_OT_light_cache_bake", WM_OP_INVOKE_DEFAULT, &op_ptr);
+  WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &op_ptr);
 
   WM_operator_properties_free(&op_ptr);
 }
@@ -643,6 +675,10 @@ static void view3d_dropboxes(void)
                  "OBJECT_OT_collection_instance_add",
                  view3d_collection_drop_poll,
                  view3d_collection_drop_copy);
+  WM_dropbox_add(lb,
+                 "OBJECT_OT_data_instance_add",
+                 view3d_object_data_drop_poll,
+                 view3d_id_drop_copy_with_type);
 }
 
 static void view3d_widgets(void)
@@ -674,6 +710,8 @@ static void view3d_widgets(void)
 
   WM_gizmogrouptype_append(VIEW3D_GGT_ruler);
   WM_gizmotype_append(VIEW3D_GT_ruler_item);
+
+  WM_gizmogrouptype_append(VIEW3D_GGT_placement);
 
   WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_navigate);
   WM_gizmotype_append(VIEW3D_GT_navigate_rotate);
@@ -825,6 +863,7 @@ static void view3d_main_region_listener(
         case ND_POSE:
         case ND_DRAW:
         case ND_MODIFIER:
+        case ND_SHADERFX:
         case ND_CONSTRAINT:
         case ND_KEYS:
         case ND_PARTICLE:
@@ -892,7 +931,7 @@ static void view3d_main_region_listener(
       switch (wmn->data) {
         case ND_SHADING:
         case ND_NODES:
-          /* TODO(sergey) This is a bit too much updates, but needed to
+          /* TODO(sergey): This is a bit too much updates, but needed to
            * have proper material drivers update in the viewport.
            *
            * How to solve?
@@ -1321,9 +1360,7 @@ void ED_view3d_buttons_region_layout_ex(const bContext *C,
     paneltypes = &art->paneltypes;
   }
 
-  const bool vertical = true;
-  ED_region_panels_layout_ex(
-      C, region, paneltypes, contexts_base, -1, vertical, category_override);
+  ED_region_panels_layout_ex(C, region, paneltypes, contexts_base, category_override);
 }
 
 static void view3d_buttons_region_layout(const bContext *C, ARegion *region)
@@ -1381,6 +1418,7 @@ static void view3d_buttons_region_listener(wmWindow *UNUSED(win),
         case ND_DRAW:
         case ND_KEYS:
         case ND_MODIFIER:
+        case ND_SHADERFX:
           ED_region_tag_redraw(region);
           break;
       }
@@ -1450,7 +1488,7 @@ static void view3d_tools_region_init(wmWindowManager *wm, ARegion *region)
 
 static void view3d_tools_region_draw(const bContext *C, ARegion *region)
 {
-  ED_region_panels_ex(C, region, (const char *[]){CTX_data_mode_string(C), NULL}, -1, true);
+  ED_region_panels_ex(C, region, (const char *[]){CTX_data_mode_string(C), NULL});
 }
 
 /* area (not region) level listener */
@@ -1608,7 +1646,7 @@ void ED_spacetype_view3d(void)
   st->spaceid = SPACE_VIEW3D;
   strncpy(st->name, "View3D", BKE_ST_MAXNAME);
 
-  st->new = view3d_new;
+  st->create = view3d_create;
   st->free = view3d_free;
   st->init = view3d_init;
   st->listener = space_view3d_listener;

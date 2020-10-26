@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_VIEW_EDGE_X_BUILDER_H__
-#define __FREESTYLE_VIEW_EDGE_X_BUILDER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -265,7 +264,7 @@ class ViewEdgeXBuilder {
 
   // SHARP //
   /*! checks whether a WEdge has already been processed or not */
-  bool stopSharpViewEdge(WXEdge *iFace);
+  bool stopSharpViewEdge(WXEdge *iEdge);
   int retrieveFaceMarks(WXEdge *iEdge);
   OWXEdge FindNextWEdge(const OWXEdge &iEdge);
   OWXEdge FindPreviousWEdge(const OWXEdge &iEdge);
@@ -292,5 +291,3 @@ class ViewEdgeXBuilder {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_VIEW_EDGE_X_BUILDER_H__

@@ -92,7 +92,7 @@ static GHashKey *_ghashutil_keyalloc(const void *msgctxt, const void *msgid)
 static uint _ghashutil_keyhash(const void *ptr)
 {
   const GHashKey *key = ptr;
-  uint hash = BLI_ghashutil_strhash(key->msgctxt);
+  const uint hash = BLI_ghashutil_strhash(key->msgctxt);
   return hash ^ BLI_ghashutil_strhash(key->msgid);
 }
 
@@ -566,7 +566,7 @@ static PyObject *_py_pgettext(PyObject *args,
 
 PyDoc_STRVAR(
     app_translations_pgettext_doc,
-    ".. method:: pgettext(msgid, msgctxt)\n"
+    ".. method:: pgettext(msgid, msgctxt=None)\n"
     "\n"
     "   Try to translate the given msgid (with optional msgctxt).\n"
     "\n"
@@ -600,7 +600,7 @@ static PyObject *app_translations_pgettext(BlenderAppTranslations *UNUSED(self),
 }
 
 PyDoc_STRVAR(app_translations_pgettext_iface_doc,
-             ".. method:: pgettext_iface(msgid, msgctxt)\n"
+             ".. method:: pgettext_iface(msgid, msgctxt=None)\n"
              "\n"
              "   Try to translate the given msgid (with optional msgctxt), if labels' translation "
              "is enabled.\n"
@@ -622,7 +622,7 @@ static PyObject *app_translations_pgettext_iface(BlenderAppTranslations *UNUSED(
 }
 
 PyDoc_STRVAR(app_translations_pgettext_tip_doc,
-             ".. method:: pgettext_tip(msgid, msgctxt)\n"
+             ".. method:: pgettext_tip(msgid, msgctxt=None)\n"
              "\n"
              "   Try to translate the given msgid (with optional msgctxt), if tooltips' "
              "translation is enabled.\n"
@@ -644,7 +644,7 @@ static PyObject *app_translations_pgettext_tip(BlenderAppTranslations *UNUSED(se
 }
 
 PyDoc_STRVAR(app_translations_pgettext_data_doc,
-             ".. method:: pgettext_data(msgid, msgctxt)\n"
+             ".. method:: pgettext_data(msgid, msgctxt=None)\n"
              "\n"
              "   Try to translate the given msgid (with optional msgctxt), if new data name's "
              "translation is enabled.\n"
@@ -896,7 +896,7 @@ PyObject *BPY_app_translations_struct(void)
 
   /* prevent user from creating new instances */
   BlenderAppTranslationsType.tp_new = NULL;
-  /* without this we can't do set(sys.modules) [#29635] */
+  /* without this we can't do set(sys.modules) T29635. */
   BlenderAppTranslationsType.tp_hash = (hashfunc)_Py_HashPointer;
 
   return ret;

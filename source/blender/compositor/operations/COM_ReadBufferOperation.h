@@ -16,8 +16,7 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_READBUFFEROPERATION_H__
-#define __COM_READBUFFEROPERATION_H__
+#pragma once
 
 #include "COM_MemoryBuffer.h"
 #include "COM_MemoryProxy.h"
@@ -31,7 +30,7 @@ class ReadBufferOperation : public NodeOperation {
   MemoryBuffer *m_buffer;
 
  public:
-  ReadBufferOperation(DataType datetype);
+  ReadBufferOperation(DataType datatype);
   void setMemoryProxy(MemoryProxy *memoryProxy)
   {
     this->m_memoryProxy = memoryProxy;
@@ -73,5 +72,3 @@ class ReadBufferOperation : public NodeOperation {
   void readResolutionFromWriteBuffer();
   void updateMemoryBuffer();
 };
-
-#endif

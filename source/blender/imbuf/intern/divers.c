@@ -35,7 +35,9 @@
 
 #include "MEM_guardedalloc.h"
 
-/************************* Floyd-Steinberg dithering *************************/
+/* -------------------------------------------------------------------- */
+/** \name Floyd-Steinberg dithering
+ * \{ */
 
 typedef struct DitherContext {
   float dither;
@@ -56,7 +58,11 @@ static void clear_dither_context(DitherContext *di)
   MEM_freeN(di);
 }
 
-/************************* Generic Buffer Conversion *************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Generic Buffer Conversion
+ * \{ */
 
 MINLINE void ushort_to_byte_v4(uchar b[4], const unsigned short us[4])
 {
@@ -666,7 +672,7 @@ void IMB_buffer_byte_from_byte(uchar *rect_to,
 
     if (profile_to == profile_from) {
       /* same profile, copy */
-      memcpy(to, from, sizeof(uchar) * 4 * width);
+      memcpy(to, from, sizeof(uchar[4]) * width);
     }
     else if (profile_to == IB_PROFILE_LINEAR_RGB) {
       /* convert to sRGB to linear */
@@ -705,7 +711,11 @@ void IMB_buffer_byte_from_byte(uchar *rect_to,
   }
 }
 
-/****************************** ImBuf Conversion *****************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name ImBuf Conversion
+ * \{ */
 
 void IMB_rect_from_float(ImBuf *ibuf)
 {
@@ -785,10 +795,10 @@ void IMB_float_from_rect(ImBuf *ibuf)
     size_t size;
 
     size = ((size_t)ibuf->x) * ibuf->y;
-    size = size * 4 * sizeof(float);
+    size = sizeof(float[4]) * size;
     ibuf->channels = 4;
 
-    rect_float = MEM_mapallocN(size, "IMB_float_from_rect");
+    rect_float = MEM_callocN(size, "IMB_float_from_rect");
 
     if (rect_float == NULL) {
       return;
@@ -822,7 +832,11 @@ void IMB_float_from_rect(ImBuf *ibuf)
   }
 }
 
-/**************************** Color to Grayscale *****************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Color to Grayscale
+ * \{ */
 
 /* no profile conversion */
 void IMB_color_to_bw(ImBuf *ibuf)
@@ -864,7 +878,11 @@ void IMB_buffer_float_premultiply(float *buf, int width, int height)
   }
 }
 
-/**************************** alter saturation *****************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Alter Saturation
+ * \{ */
 
 void IMB_saturation(ImBuf *ibuf, float sat)
 {
@@ -890,3 +908,5 @@ void IMB_saturation(ImBuf *ibuf, float sat)
     }
   }
 }
+
+/** \} */

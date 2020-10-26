@@ -24,16 +24,15 @@
  * \see dna_defaults.c for details on how to use this system.
  */
 
-#ifndef __DNA_DEFAULTS_H__
-#define __DNA_DEFAULTS_H__
+#pragma once
 
 #include "BLI_utildefines.h"
+
+#include "dna_type_offsets.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "dna_type_offsets.h"
 
 extern const void *DNA_default_table[SDNA_TYPE_MAX];
 
@@ -52,5 +51,3 @@ char *_DNA_struct_default_alloc_impl(const char *data_src, size_t size, const ch
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_DEFAULTS_H__ */

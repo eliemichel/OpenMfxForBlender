@@ -18,8 +18,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_CURVE_DEFAULTS_H__
-#define __DNA_CURVE_DEFAULTS_H__
+#pragma once
 
 /* Struct members on own line. */
 /* clang-format off */
@@ -50,10 +49,9 @@
     .bevfac1_mapping = CU_BEVFAC_MAP_RESOLU, \
     .bevfac2_mapping = CU_BEVFAC_MAP_RESOLU, \
     .bevresol = 4, \
+    .bevel_mode = CU_BEV_MODE_ROUND, \
   }
 
 /** \} */
 
 /* clang-format on */
-
-#endif /* __DNA_CURVE_DEFAULTS_H__ */

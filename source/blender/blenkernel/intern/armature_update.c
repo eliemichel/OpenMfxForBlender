@@ -119,14 +119,12 @@ static void splineik_init_tree_from_pchan(Scene *UNUSED(scene),
   if (segcount == 0) {
     return;
   }
-  else {
-    pchanRoot = pchanChain[segcount - 1];
-  }
+
+  pchanRoot = pchanChain[segcount - 1];
 
   /* perform binding step if required */
   if ((ikData->flag & CONSTRAINT_SPLINEIK_BOUND) == 0) {
     float segmentLen = (1.0f / (float)segcount);
-    int i;
 
     /* setup new empty array for the points list */
     if (ikData->points) {
@@ -141,7 +139,7 @@ static void splineik_init_tree_from_pchan(Scene *UNUSED(scene),
     /* perform binding of the joints to parametric positions along the curve based
      * proportion of the total length that each bone occupies
      */
-    for (i = 0; i < segcount; i++) {
+    for (int i = 0; i < segcount; i++) {
       /* 'head' joints, traveling towards the root of the chain
        * - 2 methods; the one chosen depends on whether we've got usable lengths
        */
@@ -550,11 +548,9 @@ static void splineik_execute_tree(
 
   /* for each pose-tree, execute it if it is spline, otherwise just free it */
   while ((tree = pchan_root->siktree.first) != NULL) {
-    int i;
-
     /* Firstly, calculate the bone matrix the standard way,
      * since this is needed for roll control. */
-    for (i = tree->chainlen - 1; i >= 0; i--) {
+    for (int i = tree->chainlen - 1; i >= 0; i--) {
       BKE_pose_where_is_bone(depsgraph, scene, ob, tree->chain[i], ctime, 1);
     }
 
@@ -566,7 +562,7 @@ static void splineik_execute_tree(
        * - the chain is traversed in the opposite order to storage order (i.e. parent to children)
        *   so that dependencies are correct
        */
-      for (i = tree->chainlen - 1; i >= 0; i--) {
+      for (int i = tree->chainlen - 1; i >= 0; i--) {
         bPoseChannel *pchan = tree->chain[i];
         splineik_evaluate_bone(tree, ob, pchan, i, &state);
       }
@@ -659,7 +655,7 @@ void BKE_pose_eval_init_ik(struct Depsgraph *depsgraph, Scene *scene, Object *ob
     return;
   }
   /* construct the IK tree (standard IK) */
-  BIK_initialize_tree(depsgraph, scene, object, ctime);
+  BIK_init_tree(depsgraph, scene, object, ctime);
   /* construct the Spline IK trees
    * - this is not integrated as an IK plugin, since it should be able
    *   to function in conjunction with standard IK.  */
@@ -717,7 +713,7 @@ void BKE_pose_constraints_evaluate(struct Depsgraph *depsgraph,
   if (armature->flag & ARM_RESTPOS) {
     return;
   }
-  else if (pchan->flag & POSE_IKTREE || pchan->flag & POSE_IKSPLINE) {
+  if (pchan->flag & POSE_IKTREE || pchan->flag & POSE_IKSPLINE) {
     /* IK are being solved separately/ */
   }
   else {

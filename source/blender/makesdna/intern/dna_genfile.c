@@ -32,7 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "MEM_guardedalloc.h"  // for MEM_freeN MEM_mallocN MEM_callocN
+#include "MEM_guardedalloc.h" /* for MEM_freeN MEM_mallocN MEM_callocN */
 
 #include "BLI_endian_switch.h"
 #include "BLI_memarena.h"
@@ -42,7 +42,7 @@
 #include "BLI_ghash.h"
 
 #include "DNA_genfile.h"
-#include "DNA_sdna_types.h"  // for SDNA ;-)
+#include "DNA_sdna_types.h" /* for SDNA ;-) */
 
 /**
  * \section dna_genfile Overview
@@ -109,7 +109,7 @@
  *
  * IMPORTANT:
  *  - Do not use #defines in structs for array lengths, this cannot be read by the dna functions.
- *  - Do not use uint, but unsigned int instead, ushort and ulong are allowed.
+ *  - Do not use `uint`, but unsigned int instead, `ushort` and `ulong` are allowed.
  *  - Only use a long in Blender if you want this to be the size of a pointer. so it is
  *    32 bits or 64 bits, dependent at the cpu architecture.
  *  - Chars are always unsigned
@@ -186,9 +186,8 @@ static bool ispointer(const char *name)
  */
 int DNA_elem_size_nr(const SDNA *sdna, short type, short name)
 {
-  int len;
   const char *cp = sdna->names[name];
-  len = 0;
+  int len = 0;
 
   /* is it a pointer or function pointer? */
   if (ispointer(cp)) {
@@ -207,17 +206,15 @@ int DNA_elem_size_nr(const SDNA *sdna, short type, short name)
 static void printstruct(SDNA *sdna, short strnr)
 {
   /* is for debug */
-  int b, nr;
-  short *sp;
 
-  sp = sdna->structs[strnr];
+  SDNA_Struct *struct_info = sdna->structs[strnr];
+  printf("struct %s\n", sdna->types[struct_info->type]);
 
-  printf("struct %s\n", sdna->types[sp[0]]);
-  nr = sp[1];
-  sp += 2;
-
-  for (b = 0; b < nr; b++, sp += 2) {
-    printf("   %s %s\n", sdna->types[sp[0]], sdna->names[sp[1]]);
+  for (int b = 0; b < struct_info->members_len; b++) {
+    SDNA_StructMember *struct_member = &struct_info->members[b];
+    printf("   %s %s\n",
+           sdna->types[struct_member->type],
+           sdna->names[struct_member->name]);
   }
 }
 #endif
@@ -229,7 +226,7 @@ static int dna_struct_find_nr_ex_impl(
     /* From SDNA struct. */
     const char **types,
     const int UNUSED(types_len),
-    short **const structs,
+    SDNA_Struct **const structs,
     const int structs_len,
 #ifdef WITH_DNA_GHASH
     GHash *structs_map,
@@ -239,8 +236,8 @@ static int dna_struct_find_nr_ex_impl(
     unsigned int *index_last)
 {
   if (*index_last < structs_len) {
-    const short *sp = structs[*index_last];
-    if (STREQ(types[sp[0]], str)) {
+    const SDNA_Struct *struct_info = structs[*index_last];
+    if (STREQ(types[struct_info->type], str)) {
       return *index_last;
     }
   }
@@ -257,8 +254,8 @@ static int dna_struct_find_nr_ex_impl(
 #else
   {
     for (int index = 0; index < structs_len; index++) {
-      const short *sp = structs[index];
-      if (STREQ(types[sp[0]], str)) {
+      const SDNA_Struct *struct_info = structs[index];
+      if (STREQ(types[struct_info->type], str)) {
         *index_last = index;
         return index;
       }
@@ -334,10 +331,9 @@ BLI_INLINE const char *pad_up_4(const char *ptr)
  */
 static bool init_structDNA(SDNA *sdna, bool do_endian_swap, const char **r_error_message)
 {
-  int *data, gravity_fix = -1;
-  short *sp;
+  int gravity_fix = -1;
 
-  data = (int *)sdna->data;
+  int *data = (int *)sdna->data;
 
   /* Clear pointers in case of error. */
   sdna->names = NULL;
@@ -356,149 +352,144 @@ static bool init_structDNA(SDNA *sdna, bool do_endian_swap, const char **r_error
     *r_error_message = "SDNA error in SDNA file";
     return false;
   }
-  else {
-    const char *cp;
+
+  const char *cp;
+
+  data++;
+  /* Names array ('NAME') */
+  if (*data == MAKE_ID('N', 'A', 'M', 'E')) {
+    data++;
+
+    sdna->names_len = *data;
+    if (do_endian_swap) {
+      BLI_endian_switch_int32(&sdna->names_len);
+    }
+    sdna->names_len_alloc = sdna->names_len;
 
     data++;
-    /* Names array ('NAME') */
-    if (*data == MAKE_ID('N', 'A', 'M', 'E')) {
-      data++;
+    sdna->names = MEM_callocN(sizeof(void *) * sdna->names_len, "sdnanames");
+  }
+  else {
+    *r_error_message = "NAME error in SDNA file";
+    return false;
+  }
 
-      sdna->names_len = *data;
-      if (do_endian_swap) {
-        BLI_endian_switch_int32(&sdna->names_len);
+  cp = (char *)data;
+  for (int nr = 0; nr < sdna->names_len; nr++) {
+    sdna->names[nr] = cp;
+
+    /* "float gravity [3]" was parsed wrong giving both "gravity" and
+     * "[3]"  members. we rename "[3]", and later set the type of
+     * "gravity" to "void" so the offsets work out correct */
+    if (*cp == '[' && STREQ(cp, "[3]")) {
+      if (nr && STREQ(sdna->names[nr - 1], "Cvi")) {
+        sdna->names[nr] = "gravity[3]";
+        gravity_fix = nr;
       }
-      sdna->names_len_alloc = sdna->names_len;
-
-      data++;
-      sdna->names = MEM_callocN(sizeof(void *) * sdna->names_len, "sdnanames");
     }
-    else {
-      *r_error_message = "NAME error in SDNA file";
-      return false;
-    }
-
-    cp = (char *)data;
-    for (int nr = 0; nr < sdna->names_len; nr++) {
-      sdna->names[nr] = cp;
-
-      /* "float gravity [3]" was parsed wrong giving both "gravity" and
-       * "[3]"  members. we rename "[3]", and later set the type of
-       * "gravity" to "void" so the offsets work out correct */
-      if (*cp == '[' && strcmp(cp, "[3]") == 0) {
-        if (nr && strcmp(sdna->names[nr - 1], "Cvi") == 0) {
-          sdna->names[nr] = "gravity[3]";
-          gravity_fix = nr;
-        }
-      }
-      while (*cp) {
-        cp++;
-      }
+    while (*cp) {
       cp++;
     }
+    cp++;
+  }
 
-    cp = pad_up_4(cp);
+  cp = pad_up_4(cp);
 
-    /* Type names array ('TYPE') */
-    data = (int *)cp;
-    if (*data == MAKE_ID('T', 'Y', 'P', 'E')) {
-      data++;
+  /* Type names array ('TYPE') */
+  data = (int *)cp;
+  if (*data == MAKE_ID('T', 'Y', 'P', 'E')) {
+    data++;
 
-      sdna->types_len = *data;
-      if (do_endian_swap) {
-        BLI_endian_switch_int32(&sdna->types_len);
-      }
-
-      data++;
-      sdna->types = MEM_callocN(sizeof(void *) * sdna->types_len, "sdnatypes");
-    }
-    else {
-      *r_error_message = "TYPE error in SDNA file";
-      return false;
+    sdna->types_len = *data;
+    if (do_endian_swap) {
+      BLI_endian_switch_int32(&sdna->types_len);
     }
 
-    cp = (char *)data;
-    for (int nr = 0; nr < sdna->types_len; nr++) {
-      /* WARNING! See: DNA_struct_rename_legacy_hack_static_from_alias docs. */
-      sdna->types[nr] = DNA_struct_rename_legacy_hack_static_from_alias(cp);
-      while (*cp) {
-        cp++;
-      }
+    data++;
+    sdna->types = MEM_callocN(sizeof(void *) * sdna->types_len, "sdnatypes");
+  }
+  else {
+    *r_error_message = "TYPE error in SDNA file";
+    return false;
+  }
+
+  cp = (char *)data;
+  for (int nr = 0; nr < sdna->types_len; nr++) {
+    /* WARNING! See: DNA_struct_rename_legacy_hack_static_from_alias docs. */
+    sdna->types[nr] = DNA_struct_rename_legacy_hack_static_from_alias(cp);
+    while (*cp) {
       cp++;
     }
+    cp++;
+  }
 
-    cp = pad_up_4(cp);
+  cp = pad_up_4(cp);
 
-    /* Type lengths array ('TLEN') */
-    data = (int *)cp;
-    if (*data == MAKE_ID('T', 'L', 'E', 'N')) {
-      data++;
-      sp = (short *)data;
-      sdna->types_size = sp;
-
-      if (do_endian_swap) {
-        BLI_endian_switch_int16_array(sp, sdna->types_len);
-      }
-
-      sp += sdna->types_len;
-    }
-    else {
-      *r_error_message = "TLEN error in SDNA file";
-      return false;
-    }
-    /* prevent BUS error */
-    if (sdna->types_len & 1) {
-      sp++;
-    }
-
-    /* Struct array ('STRC') */
-    data = (int *)sp;
-    if (*data == MAKE_ID('S', 'T', 'R', 'C')) {
-      data++;
-
-      sdna->structs_len = *data;
-      if (do_endian_swap) {
-        BLI_endian_switch_int32(&sdna->structs_len);
-      }
-
-      data++;
-      sdna->structs = MEM_callocN(sizeof(void *) * sdna->structs_len, "sdnastrcs");
-    }
-    else {
-      *r_error_message = "STRC error in SDNA file";
-      return false;
-    }
-
+  /* Type lengths array ('TLEN') */
+  data = (int *)cp;
+  short *sp;
+  if (*data == MAKE_ID('T', 'L', 'E', 'N')) {
+    data++;
     sp = (short *)data;
-    for (int nr = 0; nr < sdna->structs_len; nr++) {
-      sdna->structs[nr] = sp;
+    sdna->types_size = sp;
 
-      if (do_endian_swap) {
-        short a;
+    if (do_endian_swap) {
+      BLI_endian_switch_int16_array(sp, sdna->types_len);
+    }
 
-        BLI_endian_switch_int16(&sp[0]);
-        BLI_endian_switch_int16(&sp[1]);
+    sp += sdna->types_len;
+  }
+  else {
+    *r_error_message = "TLEN error in SDNA file";
+    return false;
+  }
+  /* prevent BUS error */
+  if (sdna->types_len & 1) {
+    sp++;
+  }
 
-        a = sp[1];
-        sp += 2;
-        while (a--) {
-          BLI_endian_switch_int16(&sp[0]);
-          BLI_endian_switch_int16(&sp[1]);
-          sp += 2;
-        }
-      }
-      else {
-        sp += 2 * sp[1] + 2;
+  /* Struct array ('STRC') */
+  data = (int *)sp;
+  if (*data == MAKE_ID('S', 'T', 'R', 'C')) {
+    data++;
+
+    sdna->structs_len = *data;
+    if (do_endian_swap) {
+      BLI_endian_switch_int32(&sdna->structs_len);
+    }
+
+    data++;
+    sdna->structs = MEM_callocN(sizeof(SDNA_Struct *) * sdna->structs_len, "sdnastrcs");
+  }
+  else {
+    *r_error_message = "STRC error in SDNA file";
+    return false;
+  }
+
+  sp = (short *)data;
+  for (int nr = 0; nr < sdna->structs_len; nr++) {
+    SDNA_Struct *struct_info = (SDNA_Struct *)sp;
+    sdna->structs[nr] = struct_info;
+
+    if (do_endian_swap) {
+      BLI_endian_switch_int16(&struct_info->type);
+      BLI_endian_switch_int16(&struct_info->members_len);
+
+      for (short a = 0; a < struct_info->members_len; a++) {
+        SDNA_StructMember *member = &struct_info->members[a];
+        BLI_endian_switch_int16(&member->type);
+        BLI_endian_switch_int16(&member->name);
       }
     }
+    sp += 2 + (sizeof(SDNA_StructMember) / sizeof(short)) * struct_info->members_len;
   }
 
   {
     /* second part of gravity problem, setting "gravity" type to void */
     if (gravity_fix > -1) {
       for (int nr = 0; nr < sdna->structs_len; nr++) {
-        sp = sdna->structs[nr];
-        if (strcmp(sdna->types[sp[0]], "ClothSimSettings") == 0) {
+        sp = (short *)sdna->structs[nr];
+        if (STREQ(sdna->types[sp[0]], "ClothSimSettings")) {
           sp[10] = SDNA_TYPE_VOID;
         }
       }
@@ -511,8 +502,9 @@ static bool init_structDNA(SDNA *sdna, bool do_endian_swap, const char **r_error
     sdna->structs_map = BLI_ghash_str_new_ex("init_structDNA gh", sdna->structs_len);
 
     for (intptr_t nr = 0; nr < sdna->structs_len; nr++) {
-      sp = sdna->structs[nr];
-      BLI_ghash_insert(sdna->structs_map, (void *)sdna->types[sp[0]], POINTER_FROM_INT(nr));
+      SDNA_Struct *struct_info = sdna->structs[nr];
+      BLI_ghash_insert(
+          sdna->structs_map, (void *)sdna->types[struct_info->type], POINTER_FROM_INT(nr));
     }
   }
 #endif
@@ -528,12 +520,12 @@ static bool init_structDNA(SDNA *sdna, bool do_endian_swap, const char **r_error
     }
 
     /* finally pointer_size: use struct ListBase to test it, never change the size of it! */
-    sp = sdna->structs[nr];
+    SDNA_Struct *struct_info = sdna->structs[nr];
     /* weird; i have no memory of that... I think I used sizeof(void *) before... (ton) */
 
-    sdna->pointer_size = sdna->types_size[sp[0]] / 2;
+    sdna->pointer_size = sdna->types_size[struct_info->type] / 2;
 
-    if (sp[1] != 2 || (sdna->pointer_size != 4 && sdna->pointer_size != 8)) {
+    if (struct_info->members_len != 2 || (sdna->pointer_size != 4 && sdna->pointer_size != 8)) {
       *r_error_message = "ListBase struct error! Needs it to calculate pointerize.";
       /* well, at least sizeof(ListBase) is error proof! (ton) */
       return false;
@@ -578,16 +570,15 @@ SDNA *DNA_sdna_from_data(const void *data,
   if (init_structDNA(sdna, do_endian_swap, &error_message)) {
     return sdna;
   }
-  else {
-    if (r_error_message == NULL) {
-      fprintf(stderr, "Error decoding blend file SDNA: %s\n", error_message);
-    }
-    else {
-      *r_error_message = error_message;
-    }
-    DNA_sdna_free(sdna);
-    return NULL;
+
+  if (r_error_message == NULL) {
+    fprintf(stderr, "Error decoding blend file SDNA: %s\n", error_message);
   }
+  else {
+    *r_error_message = error_message;
+  }
+  DNA_sdna_free(sdna);
+  return NULL;
 }
 
 /**
@@ -620,333 +611,261 @@ void DNA_sdna_current_free(void)
 /* ******************* HANDLE DNA ***************** */
 
 /**
- * Used by #DNA_struct_get_compareflags (below) to recursively mark all structs
- * containing a field of type structnr as changed between old and current SDNAs.
+ * This function changes compare_flags[old_struct_index] from SDNA_CMP_UNKNOWN to something else.
+ * It might call itself recursively.
  */
-static void recurs_test_compflags(const SDNA *sdna, char *compflags, int structnr)
+static void set_compare_flags_for_struct(const SDNA *oldsdna,
+                                         const SDNA *newsdna,
+                                         char *compare_flags,
+                                         const int old_struct_index)
 {
-  int a, b, typenr, elems;
-  const short *sp;
-  const char *cp;
+  if (compare_flags[old_struct_index] != SDNA_CMP_UNKNOWN) {
+    /* This flag has been initialized already. */
+    return;
+  }
 
-  /* check all structs, test if it's inside another struct */
-  sp = sdna->structs[structnr];
-  typenr = sp[0];
+  SDNA_Struct *old_struct = oldsdna->structs[old_struct_index];
+  const char *struct_name = oldsdna->types[old_struct->type];
 
-  for (a = 0; a < sdna->structs_len; a++) {
-    if ((a != structnr) && (compflags[a] == SDNA_CMP_EQUAL)) {
-      sp = sdna->structs[a];
-      elems = sp[1];
-      sp += 2;
-      for (b = 0; b < elems; b++, sp += 2) {
-        if (sp[0] == typenr) {
-          cp = sdna->names[sp[1]];
-          if (!ispointer(cp)) {
-            compflags[a] = SDNA_CMP_NOT_EQUAL;
-            recurs_test_compflags(sdna, compflags, a);
-          }
+  const int new_struct_index = DNA_struct_find_nr(newsdna, struct_name);
+  if (new_struct_index == -1) {
+    /* Didn't find a matching new struct, so it has been removed. */
+    compare_flags[old_struct_index] = SDNA_CMP_REMOVED;
+    return;
+  }
+
+  SDNA_Struct *new_struct = newsdna->structs[new_struct_index];
+  if (old_struct->members_len != new_struct->members_len) {
+    /* Structs with a different amount of members are not equal. */
+    compare_flags[old_struct_index] = SDNA_CMP_NOT_EQUAL;
+    return;
+  }
+  if (oldsdna->types_size[old_struct->type] != newsdna->types_size[new_struct->type]) {
+    /* Structs that don't have the same size are not equal. */
+    compare_flags[old_struct_index] = SDNA_CMP_NOT_EQUAL;
+    return;
+  }
+
+  /* Compare each member individually. */
+  for (int member_index = 0; member_index < old_struct->members_len; member_index++) {
+    SDNA_StructMember *old_member = &old_struct->members[member_index];
+    SDNA_StructMember *new_member = &new_struct->members[member_index];
+
+    const char *old_type_name = oldsdna->types[old_member->type];
+    const char *new_type_name = newsdna->types[new_member->type];
+    if (!STREQ(old_type_name, new_type_name)) {
+      /* If two members have a different type in the same place, the structs are not equal. */
+      compare_flags[old_struct_index] = SDNA_CMP_NOT_EQUAL;
+      return;
+    }
+
+    const char *old_member_name = oldsdna->names[old_member->name];
+    const char *new_member_name = newsdna->names[new_member->name];
+    if (!STREQ(old_member_name, new_member_name)) {
+      /* If two members have a different name in the same place, the structs are not equal. */
+      compare_flags[old_struct_index] = SDNA_CMP_NOT_EQUAL;
+      return;
+    }
+
+    if (ispointer(old_member_name)) {
+      if (oldsdna->pointer_size != newsdna->pointer_size) {
+        /* When the struct contains a pointer, and the pointer sizes differ, the structs are not
+         * equal. */
+        compare_flags[old_struct_index] = SDNA_CMP_NOT_EQUAL;
+        return;
+      }
+    }
+    else {
+      const int old_member_struct_index = DNA_struct_find_nr(oldsdna, old_type_name);
+      if (old_member_struct_index >= 0) {
+        set_compare_flags_for_struct(oldsdna, newsdna, compare_flags, old_member_struct_index);
+        if (compare_flags[old_member_struct_index] != SDNA_CMP_EQUAL) {
+          /* If an embedded struct is not equal, the parent struct cannot be equal either. */
+          compare_flags[old_struct_index] = SDNA_CMP_NOT_EQUAL;
+          return;
         }
       }
     }
   }
+
+  compare_flags[old_struct_index] = SDNA_CMP_EQUAL;
 }
 
 /**
  * Constructs and returns an array of byte flags with one element for each struct in oldsdna,
- * indicating how it compares to newsdna:
+ * indicating how it compares to newsdna.
  */
 const char *DNA_struct_get_compareflags(const SDNA *oldsdna, const SDNA *newsdna)
 {
-  int a, b;
-  const short *sp_old, *sp_new;
-  const char *str1, *str2;
-  char *compflags;
-
   if (oldsdna->structs_len == 0) {
     printf("error: file without SDNA\n");
     return NULL;
   }
 
-  compflags = MEM_callocN(oldsdna->structs_len, "compflags");
+  char *compare_flags = MEM_mallocN(oldsdna->structs_len, "compare flags");
+  memset(compare_flags, SDNA_CMP_UNKNOWN, oldsdna->structs_len);
 
-  /* we check all structs in 'oldsdna' and compare them with
-   * the structs in 'newsdna'
-   */
-  unsigned int newsdna_index_last = 0;
-
-  for (a = 0; a < oldsdna->structs_len; a++) {
-    sp_old = oldsdna->structs[a];
-
-    /* search for type in cur */
-    int sp_new_index = DNA_struct_find_nr_ex(
-        newsdna, oldsdna->types[sp_old[0]], &newsdna_index_last);
-
-    /* The next indices will almost always match */
-    newsdna_index_last++;
-
-    if (sp_new_index != -1) {
-      sp_new = newsdna->structs[sp_new_index];
-      /* initial assumption */
-      compflags[a] = SDNA_CMP_NOT_EQUAL;
-
-      /* compare length and amount of elems */
-      if (sp_new[1] == sp_old[1]) {
-        if (newsdna->types_size[sp_new[0]] == oldsdna->types_size[sp_old[0]]) {
-
-          /* same length, same amount of elems, now per type and name */
-          b = sp_old[1];
-          sp_old += 2;
-          sp_new += 2;
-          while (b > 0) {
-            str1 = newsdna->types[sp_new[0]];
-            str2 = oldsdna->types[sp_old[0]];
-            if (strcmp(str1, str2) != 0) {
-              break;
-            }
-
-            str1 = newsdna->names[sp_new[1]];
-            str2 = oldsdna->names[sp_old[1]];
-            if (strcmp(str1, str2) != 0) {
-              break;
-            }
-
-            /* same type and same name, now pointersize */
-            if (ispointer(str1)) {
-              if (oldsdna->pointer_size != newsdna->pointer_size) {
-                break;
-              }
-            }
-
-            b--;
-            sp_old += 2;
-            sp_new += 2;
-          }
-          if (b == 0) {
-            /* no differences found */
-            compflags[a] = SDNA_CMP_EQUAL;
-          }
-        }
-      }
-    }
+  /* Set correct flag for every struct. */
+  for (int a = 0; a < oldsdna->structs_len; a++) {
+    set_compare_flags_for_struct(oldsdna, newsdna, compare_flags, a);
+    BLI_assert(compare_flags[a] != SDNA_CMP_UNKNOWN);
   }
 
-  /* first struct in util.h is struct Link, this is skipped in compflags (als # 0).
+  /* first struct in util.h is struct Link, this is skipped in compare_flags (als # 0).
    * was a bug, and this way dirty patched! Solve this later....
    */
-  compflags[0] = SDNA_CMP_EQUAL;
+  compare_flags[0] = SDNA_CMP_EQUAL;
 
-  /* Because structs can be inside structs, we recursively
-   * set flags when a struct is altered
-   */
-  for (a = 0; a < oldsdna->structs_len; a++) {
-    if (compflags[a] == SDNA_CMP_NOT_EQUAL) {
-      recurs_test_compflags(oldsdna, compflags, a);
-    }
-  }
-
+/* This code can be enabled to see which structs have changed. */
 #if 0
-  for (a = 0; a < oldsdna->structs_len; a++) {
-    if (compflags[a] == SDNA_CMP_NOT_EQUAL) {
-      spold = oldsdna->structs[a];
-      printf("changed: %s\n", oldsdna->types[spold[0]]);
+  for (int a = 0; a < oldsdna->structs_len; a++) {
+    if (compare_flags[a] == SDNA_CMP_NOT_EQUAL) {
+      SDNA_Struct *struct_info = oldsdna->structs[a];
+      printf("changed: %s\n", oldsdna->types[struct_info->type]);
     }
   }
 #endif
 
-  return compflags;
-}
-
-/**
- * Converts the name of a primitive type to its enumeration code.
- */
-static eSDNA_Type sdna_type_nr(const char *dna_type)
-{
-  if (STR_ELEM(dna_type, "char", "const char")) {
-    return SDNA_TYPE_CHAR;
-  }
-  else if (STR_ELEM(dna_type, "uchar", "unsigned char")) {
-    return SDNA_TYPE_UCHAR;
-  }
-  else if (STR_ELEM(dna_type, "short")) {
-    return SDNA_TYPE_SHORT;
-  }
-  else if (STR_ELEM(dna_type, "ushort", "unsigned short")) {
-    return SDNA_TYPE_USHORT;
-  }
-  else if (STR_ELEM(dna_type, "int")) {
-    return SDNA_TYPE_INT;
-  }
-  else if (STR_ELEM(dna_type, "float")) {
-    return SDNA_TYPE_FLOAT;
-  }
-  else if (STR_ELEM(dna_type, "double")) {
-    return SDNA_TYPE_DOUBLE;
-  }
-  else if (STR_ELEM(dna_type, "int64_t")) {
-    return SDNA_TYPE_INT64;
-  }
-  else if (STR_ELEM(dna_type, "uint64_t")) {
-    return SDNA_TYPE_UINT64;
-  }
-  /* invalid! */
-  else {
-    return -1;
-  }
+  return compare_flags;
 }
 
 /**
  * Converts a value of one primitive type to another.
- * Note there is no optimization for the case where otype and ctype are the same:
+ *
+ * \note there is no optimization for the case where \a otype and \a ctype are the same:
  * assumption is that caller will handle this case.
  *
- * \param ctype: Name of type to convert to
- * \param otype: Name of type to convert from
- * \param name_array_len: Result of #DNA_elem_array_size for this element.
- * \param curdata: Where to put converted data
- * \param olddata: Data of type otype to convert
+ * \param old_type: Type to convert from.
+ * \param new_type: Type to convert to.
+ * \param array_len: Number of elements to convert.
+ * \param old_data: Buffer containing the old values.
+ * \param new_data: Buffer the converted values will be written to.
  */
-static void cast_elem(
-    const char *ctype, const char *otype, int name_array_len, char *curdata, const char *olddata)
+static void cast_primitive_type(const eSDNA_Type old_type,
+                                const eSDNA_Type new_type,
+                                const int array_len,
+                                const char *old_data,
+                                char *new_data)
 {
-  double val = 0.0;
-  int curlen = 1, oldlen = 1;
-
-  eSDNA_Type ctypenr, otypenr;
-
-  if ((otypenr = sdna_type_nr(otype)) == -1 || (ctypenr = sdna_type_nr(ctype)) == -1) {
-    return;
-  }
-
   /* define lengths */
-  oldlen = DNA_elem_type_size(otypenr);
-  curlen = DNA_elem_type_size(ctypenr);
+  const int oldlen = DNA_elem_type_size(old_type);
+  const int curlen = DNA_elem_type_size(new_type);
 
-  while (name_array_len > 0) {
-    switch (otypenr) {
+  double old_value_f = 0.0;
+  uint64_t old_value_i = 0;
+
+  for (int a = 0; a < array_len; a++) {
+    switch (old_type) {
       case SDNA_TYPE_CHAR:
-        val = *olddata;
+        old_value_i = *old_data;
+        old_value_f = (double)old_value_i;
         break;
       case SDNA_TYPE_UCHAR:
-        val = *((unsigned char *)olddata);
+        old_value_i = *((unsigned char *)old_data);
+        old_value_f = (double)old_value_i;
         break;
       case SDNA_TYPE_SHORT:
-        val = *((short *)olddata);
+        old_value_i = *((short *)old_data);
+        old_value_f = (double)old_value_i;
         break;
       case SDNA_TYPE_USHORT:
-        val = *((unsigned short *)olddata);
+        old_value_i = *((unsigned short *)old_data);
+        old_value_f = (double)old_value_i;
         break;
       case SDNA_TYPE_INT:
-        val = *((int *)olddata);
+        old_value_i = *((int *)old_data);
+        old_value_f = (double)old_value_i;
         break;
       case SDNA_TYPE_FLOAT:
-        val = *((float *)olddata);
+        old_value_f = *((float *)old_data);
+        old_value_i = (uint64_t)(int64_t)old_value_f;
         break;
       case SDNA_TYPE_DOUBLE:
-        val = *((double *)olddata);
+        old_value_f = *((double *)old_data);
+        old_value_i = (uint64_t)(int64_t)old_value_f;
         break;
       case SDNA_TYPE_INT64:
-        val = *((int64_t *)olddata);
+        old_value_i = (uint64_t) * ((int64_t *)old_data);
+        old_value_f = (double)old_value_i;
         break;
       case SDNA_TYPE_UINT64:
-        val = *((uint64_t *)olddata);
+        old_value_i = *((uint64_t *)old_data);
+        old_value_f = (double)old_value_i;
         break;
     }
 
-    switch (ctypenr) {
+    switch (new_type) {
       case SDNA_TYPE_CHAR:
-        *curdata = val;
+        *new_data = (char)old_value_i;
         break;
       case SDNA_TYPE_UCHAR:
-        *((unsigned char *)curdata) = val;
+        *((unsigned char *)new_data) = (unsigned char)old_value_i;
         break;
       case SDNA_TYPE_SHORT:
-        *((short *)curdata) = val;
+        *((short *)new_data) = (short)old_value_i;
         break;
       case SDNA_TYPE_USHORT:
-        *((unsigned short *)curdata) = val;
+        *((unsigned short *)new_data) = (unsigned short)old_value_i;
         break;
       case SDNA_TYPE_INT:
-        *((int *)curdata) = val;
+        *((int *)new_data) = (int)old_value_i;
         break;
       case SDNA_TYPE_FLOAT:
-        if (otypenr < 2) {
-          val /= 255;
+        if (old_type < 2) {
+          old_value_f /= 255.0;
         }
-        *((float *)curdata) = val;
+        *((float *)new_data) = old_value_f;
         break;
       case SDNA_TYPE_DOUBLE:
-        if (otypenr < 2) {
-          val /= 255;
+        if (old_type < 2) {
+          old_value_f /= 255.0;
         }
-        *((double *)curdata) = val;
+        *((double *)new_data) = old_value_f;
         break;
       case SDNA_TYPE_INT64:
-        *((int64_t *)curdata) = val;
+        *((int64_t *)new_data) = (int64_t)old_value_i;
         break;
       case SDNA_TYPE_UINT64:
-        *((uint64_t *)curdata) = val;
+        *((uint64_t *)new_data) = old_value_i;
         break;
     }
 
-    olddata += oldlen;
-    curdata += curlen;
-    name_array_len--;
+    old_data += oldlen;
+    new_data += curlen;
   }
 }
 
-/**
- * Converts pointer values between different sizes. These are only used
- * as lookup keys to identify data blocks in the saved .blend file, not
- * as actual in-memory pointers.
- *
- * \param curlen: Pointer length to convert to
- * \param oldlen: Length of pointers in olddata
- * \param name_array_len: Result of #DNA_elem_array_size for this element.
- * \param curdata: Where to put converted data
- * \param olddata: Data to convert
- */
-static void cast_pointer(
-    int curlen, int oldlen, int name_array_len, char *curdata, const char *olddata)
+static void cast_pointer_32_to_64(const int array_len,
+                                  const uint32_t *old_data,
+                                  uint64_t *new_data)
 {
-  int64_t lval;
+  for (int a = 0; a < array_len; a++) {
+    new_data[a] = old_data[a];
+  }
+}
 
-  while (name_array_len > 0) {
-
-    if (curlen == oldlen) {
-      memcpy(curdata, olddata, curlen);
-    }
-    else if (curlen == 4 && oldlen == 8) {
-      lval = *((int64_t *)olddata);
-
-      /* WARNING: 32-bit Blender trying to load file saved by 64-bit Blender,
-       * pointers may lose uniqueness on truncation! (Hopefully this wont
-       * happen unless/until we ever get to multi-gigabyte .blend files...) */
-      *((int *)curdata) = lval >> 3;
-    }
-    else if (curlen == 8 && oldlen == 4) {
-      *((int64_t *)curdata) = *((int *)olddata);
-    }
-    else {
-      /* for debug */
-      printf("errpr: illegal pointersize!\n");
-    }
-
-    olddata += oldlen;
-    curdata += curlen;
-    name_array_len--;
+static void cast_pointer_64_to_32(const int array_len,
+                                  const uint64_t *old_data,
+                                  uint32_t *new_data)
+{
+  /* WARNING: 32-bit Blender trying to load file saved by 64-bit Blender,
+   * pointers may lose uniqueness on truncation! (Hopefully this wont
+   * happen unless/until we ever get to multi-gigabyte .blend files...) */
+  for (int a = 0; a < array_len; a++) {
+    new_data[a] = old_data[a] >> 3;
   }
 }
 
 /**
  * Equality test on name and oname excluding any array-size suffix.
  */
-static int elem_strcmp(const char *name, const char *oname)
+static bool elem_streq(const char *name, const char *oname)
 {
   int a = 0;
 
   while (1) {
     if (name[a] != oname[a]) {
-      return 1;
+      return false;
     }
     if (name[a] == '[' || oname[a] == '[') {
       break;
@@ -956,18 +875,17 @@ static int elem_strcmp(const char *name, const char *oname)
     }
     a++;
   }
-  return 0;
+  return true;
 }
 
 /**
  * Returns whether the specified field exists according to the struct format
  * pointed to by old.
  *
- * \param sdna: Old SDNA
- * \param type: Current field type name
- * \param name: Current field name
- * \param old: Pointer to struct information in sdna
- * \return true when existing, false otherwise.
+ * \param type: Current field type name.
+ * \param name: Current field name.
+ * \param old: Pointer to struct information in sdna.
+ * \return true when existing, false otherwise..
  */
 static bool elem_exists_impl(
     /* Expand SDNA. */
@@ -976,26 +894,28 @@ static bool elem_exists_impl(
     /* Regular args. */
     const char *type,
     const char *name,
-    const short *old)
+    const SDNA_Struct *old)
 {
-  int a, elemcount;
-  const char *otype, *oname;
-
   /* in old is the old struct */
-  elemcount = old[1];
-  old += 2;
-  for (a = 0; a < elemcount; a++, old += 2) {
-    otype = types[old[0]];
-    oname = names[old[1]];
+  for (int a = 0; a < old->members_len; a++) {
+    const SDNA_StructMember *member = &old->members[a];
+    const char *otype = types[member->type];
+    const char *oname = names[member->name];
 
-    if (elem_strcmp(name, oname) == 0) { /* name equal */
-      return strcmp(type, otype) == 0;   /* type equal */
+    if (elem_streq(name, oname)) { /* name equal */
+      return STREQ(type, otype);   /* type equal */
     }
   }
   return false;
 }
 
-static bool elem_exists(const SDNA *sdna, const char *type, const char *name, const short *old)
+/**
+ * \param sdna: Old SDNA.
+ */
+static bool elem_exists(const SDNA *sdna,
+                        const char *type,
+                        const char *name,
+                        const SDNA_Struct *old)
 {
   return elem_exists_impl(
       /* Expand SDNA. */
@@ -1010,7 +930,7 @@ static bool elem_exists(const SDNA *sdna, const char *type, const char *name, co
 static bool elem_exists_alias(const SDNA *sdna,
                               const char *type,
                               const char *name,
-                              const short *old)
+                              const SDNA_Struct *old)
 {
   return elem_exists_impl(
       /* Expand SDNA. */
@@ -1023,436 +943,662 @@ static bool elem_exists_alias(const SDNA *sdna,
 }
 
 /**
- * Returns the address of the data for the specified field within olddata
- * according to the struct format pointed to by old, or NULL if no such
- * field can be found.
+ * Return the offset in bytes or -1 on failure to find the struct member with its expected type.
  *
- * Passing olddata=NULL doesn't work reliably for existence checks; it will
- * return NULL both when the field is found at offset 0 and when it is not
- * found at all. For field existence checks, use #elem_exists() instead.
+ * \param sdna: Old #SDNA.
+ * \param type: Current field type name.
+ * \param name: Current field name.
+ * \param old: Pointer to struct information in #SDNA.
+ * \return The offset or -1 on failure.
  *
- * \param sdna: Old SDNA
- * \param type: Current field type name
- * \param name: Current field name
- * \param old: Pointer to struct information in sdna
- * \param olddata: Struct data
- * \param sppo: Optional place to return pointer to field info in sdna
- * \return Data address.
+ * \note Use #elem_exists if additional information provided by this function is not needed.
+ *
+ * \note We could have a version of this function that
+ * returns the #SDNA_StructMember currently it's not needed.
  */
-static const char *find_elem(const SDNA *sdna,
-                             const char *type,
-                             const char *name,
-                             const short *old,
-                             const char *olddata,
-                             const short **sppo)
+static int elem_offset(const SDNA *sdna,
+                       const char *type,
+                       const char *name,
+                       const SDNA_Struct *old)
 {
-  int a, elemcount, len;
-  const char *otype, *oname;
-
   /* without arraypart, so names can differ: return old namenr and type */
 
   /* in old is the old struct */
-  elemcount = old[1];
-  old += 2;
-  for (a = 0; a < elemcount; a++, old += 2) {
-
-    otype = sdna->types[old[0]];
-    oname = sdna->names[old[1]];
-
-    len = DNA_elem_size_nr(sdna, old[0], old[1]);
-
-    if (elem_strcmp(name, oname) == 0) { /* name equal */
-      if (strcmp(type, otype) == 0) {    /* type equal */
-        if (sppo) {
-          *sppo = old;
-        }
-        return olddata;
+  int offset = 0;
+  for (int a = 0; a < old->members_len; a++) {
+    const SDNA_StructMember *member = &old->members[a];
+    const char *otype = sdna->types[member->type];
+    const char *oname = sdna->names[member->name];
+    if (elem_streq(name, oname)) { /* name equal */
+      if (STREQ(type, otype)) {    /* type equal */
+        return offset;
       }
-
-      return NULL;
+      break; /* Fail below. */
     }
-
-    olddata += len;
+    offset += DNA_elem_size_nr(sdna, member->type, member->name);
   }
-  return NULL;
+  return -1;
 }
 
-/**
- * Converts the contents of a single field of a struct, of a non-struct type,
- * from oldsdna to newsdna format.
- *
- * \param newsdna: SDNA of current Blender
- * \param oldsdna: SDNA of Blender that saved file
- * \param type: current field type name
- * \param new_name_nr: current field name number.
- * \param curdata: put field data converted to newsdna here
- * \param old: pointer to struct info in oldsdna
- * \param olddata: struct contents laid out according to oldsdna
- */
-static void reconstruct_elem(const SDNA *newsdna,
-                             const SDNA *oldsdna,
-                             const char *type,
-                             const int new_name_nr,
-                             char *curdata,
-                             const short *old,
-                             const char *olddata)
+/* Each struct member belongs to one of the categories below. */
+typedef enum eStructMemberCategory {
+  STRUCT_MEMBER_CATEGORY_STRUCT,
+  STRUCT_MEMBER_CATEGORY_PRIMITIVE,
+  STRUCT_MEMBER_CATEGORY_POINTER,
+} eStructMemberCategory;
+
+static eStructMemberCategory get_struct_member_category(const SDNA *sdna,
+                                                        const SDNA_StructMember *member)
 {
-  /* rules: test for NAME:
-   *      - name equal:
-   *          - cast type
-   *      - name partially equal (array differs)
-   *          - type equal: memcpy
-   *          - type cast (per element).
-   * (nzc 2-4-2001 I want the 'unsigned' bit to be parsed as well. Where
-   * can I force this?)
-   */
-  int a, elemcount, len, countpos, mul;
-  const char *otype, *oname, *cp;
-
-  /* is 'name' an array? */
-  const char *name = newsdna->names[new_name_nr];
-  cp = name;
-  countpos = 0;
-  while (*cp && *cp != '[') {
-    cp++;
-    countpos++;
+  const char *member_name = sdna->names[member->name];
+  if (ispointer(member_name)) {
+    return STRUCT_MEMBER_CATEGORY_POINTER;
   }
-  if (*cp != '[') {
-    countpos = 0;
+  const char *member_type_name = sdna->types[member->type];
+  if (DNA_struct_find(sdna, member_type_name)) {
+    return STRUCT_MEMBER_CATEGORY_STRUCT;
   }
-
-  /* in old is the old struct */
-  elemcount = old[1];
-  old += 2;
-  for (a = 0; a < elemcount; a++, old += 2) {
-    const int old_name_nr = old[1];
-    otype = oldsdna->types[old[0]];
-    oname = oldsdna->names[old[1]];
-    len = DNA_elem_size_nr(oldsdna, old[0], old[1]);
-
-    if (strcmp(name, oname) == 0) { /* name equal */
-
-      if (ispointer(name)) { /* pointer of functionpointer afhandelen */
-        cast_pointer(newsdna->pointer_size,
-                     oldsdna->pointer_size,
-                     newsdna->names_array_len[new_name_nr],
-                     curdata,
-                     olddata);
-      }
-      else if (strcmp(type, otype) == 0) { /* type equal */
-        memcpy(curdata, olddata, len);
-      }
-      else {
-        cast_elem(type, otype, newsdna->names_array_len[new_name_nr], curdata, olddata);
-      }
-
-      return;
-    }
-    else if (countpos != 0) { /* name is an array */
-
-      if (oname[countpos] == '[' && strncmp(name, oname, countpos) == 0) { /* basis equal */
-        const int new_name_array_len = newsdna->names_array_len[new_name_nr];
-        const int old_name_array_len = oldsdna->names_array_len[old_name_nr];
-        const int min_name_array_len = MIN2(new_name_array_len, old_name_array_len);
-
-        if (ispointer(name)) { /* handle pointer or functionpointer */
-          cast_pointer(
-              newsdna->pointer_size, oldsdna->pointer_size, min_name_array_len, curdata, olddata);
-        }
-        else if (strcmp(type, otype) == 0) { /* type equal */
-          /* size of single old array element */
-          mul = len / old_name_array_len;
-          /* smaller of sizes of old and new arrays */
-          mul *= min_name_array_len;
-
-          memcpy(curdata, olddata, mul);
-
-          if (old_name_array_len > new_name_array_len && strcmp(type, "char") == 0) {
-            /* string had to be truncated, ensure it's still null-terminated */
-            curdata[mul - 1] = '\0';
-          }
-        }
-        else {
-          cast_elem(type, otype, min_name_array_len, curdata, olddata);
-        }
-        return;
-      }
-    }
-    olddata += len;
-  }
+  return STRUCT_MEMBER_CATEGORY_PRIMITIVE;
 }
 
-/**
- * Converts the contents of an entire struct from oldsdna to newsdna format.
- *
- * \param newsdna: SDNA of current Blender
- * \param oldsdna: SDNA of Blender that saved file
- * \param compflags:
- *
- * Result from DNA_struct_get_compareflags to avoid needless conversions.
- * \param oldSDNAnr: Index of old struct definition in oldsdna
- * \param data: Struct contents laid out according to oldsdna
- * \param curSDNAnr: Index of current struct definition in newsdna
- * \param cur: Where to put converted struct contents
- */
-static void reconstruct_struct(const SDNA *newsdna,
-                               const SDNA *oldsdna,
-                               const char *compflags,
-
-                               int oldSDNAnr,
-                               const char *data,
-                               int curSDNAnr,
-                               char *cur)
+static int get_member_size_in_bytes(const SDNA *sdna, const SDNA_StructMember *member)
 {
-  /* Recursive!
-   * Per element from cur_struct, read data from old_struct.
-   * If element is a struct, call recursive.
-   */
-  int a, elemcount, elen, eleno, mul, mulo, firststructtypenr;
-  const short *spo, *spc, *sppo;
-  const char *type;
-  const char *cpo;
-  char *cpc;
-  const char *name;
-
-  unsigned int oldsdna_index_last = UINT_MAX;
-  unsigned int cursdna_index_last = UINT_MAX;
-
-  if (oldSDNAnr == -1) {
-    return;
+  const char *name = sdna->names[member->name];
+  const int array_length = sdna->names_array_len[member->name];
+  if (ispointer(name)) {
+    return sdna->pointer_size * array_length;
   }
-  if (curSDNAnr == -1) {
-    return;
-  }
-
-  if (compflags[oldSDNAnr] == SDNA_CMP_EQUAL) {
-    /* if recursive: test for equal */
-    spo = oldsdna->structs[oldSDNAnr];
-    elen = oldsdna->types_size[spo[0]];
-    memcpy(cur, data, elen);
-
-    return;
-  }
-
-  firststructtypenr = *(newsdna->structs[0]);
-
-  spo = oldsdna->structs[oldSDNAnr];
-  spc = newsdna->structs[curSDNAnr];
-
-  elemcount = spc[1];
-
-  spc += 2;
-  cpc = cur;
-  for (a = 0; a < elemcount; a++, spc += 2) { /* convert each field */
-    type = newsdna->types[spc[0]];
-    name = newsdna->names[spc[1]];
-
-    elen = DNA_elem_size_nr(newsdna, spc[0], spc[1]);
-
-    /* Skip pad bytes which must start with '_pad', see makesdna.c 'is_name_legal'.
-     * for exact rules. Note that if we fail to skip a pad byte it's harmless,
-     * this just avoids unnecessary reconstruction. */
-    if (name[0] == '_' || (name[0] == '*' && name[1] == '_')) {
-      cpc += elen;
-    }
-    else if (spc[0] >= firststructtypenr && !ispointer(name)) {
-      /* struct field type */
-
-      /* where does the old struct data start (and is there an old one?) */
-      cpo = (char *)find_elem(oldsdna, type, name, spo, data, &sppo);
-
-      if (cpo) {
-        oldSDNAnr = DNA_struct_find_nr_ex(oldsdna, type, &oldsdna_index_last);
-        curSDNAnr = DNA_struct_find_nr_ex(newsdna, type, &cursdna_index_last);
-
-        /* array! */
-        mul = newsdna->names_array_len[spc[1]];
-        mulo = oldsdna->names_array_len[sppo[1]];
-
-        eleno = DNA_elem_size_nr(oldsdna, sppo[0], sppo[1]);
-
-        elen /= mul;
-        eleno /= mulo;
-
-        while (mul--) {
-          reconstruct_struct(newsdna, oldsdna, compflags, oldSDNAnr, cpo, curSDNAnr, cpc);
-          cpo += eleno;
-          cpc += elen;
-
-          /* new struct array larger than old */
-          mulo--;
-          if (mulo <= 0) {
-            break;
-          }
-        }
-      }
-      else {
-        cpc += elen; /* skip field no longer present */
-      }
-    }
-    else {
-      /* non-struct field type */
-      reconstruct_elem(newsdna, oldsdna, type, spc[1], cpc, spo, data);
-      cpc += elen;
-    }
-  }
+  const int type_size = sdna->types_size[member->type];
+  return type_size * array_length;
 }
 
 /**
  * Does endian swapping on the fields of a struct value.
  *
- * \param oldsdna: SDNA of Blender that saved file
- * \param oldSDNAnr: Index of struct info within oldsdna
- * \param data: Struct data
+ * \param sdna: SDNA of the struct_nr belongs to
+ * \param struct_nr: Index of struct info within sdna
+ * \param data: Struct data that is to be converted
  */
-void DNA_struct_switch_endian(const SDNA *oldsdna, int oldSDNAnr, char *data)
+void DNA_struct_switch_endian(const SDNA *sdna, int struct_nr, char *data)
 {
-  /* Recursive!
-   * If element is a struct, call recursive.
-   */
-  int a, mul, elemcount, elen, elena, firststructtypenr;
-  const short *spo, *spc;
-  char *cur;
-  const char *type, *name;
-  unsigned int oldsdna_index_last = UINT_MAX;
-
-  if (oldSDNAnr == -1) {
+  if (struct_nr == -1) {
     return;
   }
-  firststructtypenr = *(oldsdna->structs[0]);
 
-  spo = spc = oldsdna->structs[oldSDNAnr];
+  const SDNA_Struct *struct_info = sdna->structs[struct_nr];
 
-  elemcount = spo[1];
+  int offset_in_bytes = 0;
+  for (int member_index = 0; member_index < struct_info->members_len; member_index++) {
+    const SDNA_StructMember *member = &struct_info->members[member_index];
+    const eStructMemberCategory member_category = get_struct_member_category(sdna, member);
+    char *member_data = data + offset_in_bytes;
+    const char *member_type_name = sdna->types[member->type];
+    const int member_array_length = sdna->names_array_len[member->name];
 
-  spc += 2;
-  cur = data;
-
-  for (a = 0; a < elemcount; a++, spc += 2) {
-    type = oldsdna->types[spc[0]];
-    name = oldsdna->names[spc[1]];
-    const int old_name_array_len = oldsdna->names_array_len[spc[1]];
-
-    /* DNA_elem_size_nr = including arraysize */
-    elen = DNA_elem_size_nr(oldsdna, spc[0], spc[1]);
-
-    /* test: is type a struct? */
-    if (spc[0] >= firststructtypenr && !ispointer(name)) {
-      /* struct field type */
-      /* where does the old data start (is there one?) */
-      char *cpo = (char *)find_elem(oldsdna, type, name, spo, data, NULL);
-      if (cpo) {
-        oldSDNAnr = DNA_struct_find_nr_ex(oldsdna, type, &oldsdna_index_last);
-
-        mul = old_name_array_len;
-        elena = elen / mul;
-
-        while (mul--) {
-          DNA_struct_switch_endian(oldsdna, oldSDNAnr, cpo);
-          cpo += elena;
+    switch (member_category) {
+      case STRUCT_MEMBER_CATEGORY_STRUCT: {
+        const int substruct_size = sdna->types_size[member->type];
+        const int substruct_nr = DNA_struct_find_nr(sdna, member_type_name);
+        BLI_assert(substruct_nr != -1);
+        for (int a = 0; a < member_array_length; a++) {
+          DNA_struct_switch_endian(sdna, substruct_nr, member_data + a * substruct_size);
         }
+        break;
       }
-    }
-    else {
-      /* non-struct field type */
-      if (ispointer(name)) {
-        if (oldsdna->pointer_size == 8) {
-          BLI_endian_switch_int64_array((int64_t *)cur, old_name_array_len);
-        }
-      }
-      else {
-        if (ELEM(spc[0], SDNA_TYPE_SHORT, SDNA_TYPE_USHORT)) {
-
-          /* exception: variable called blocktype: derived from ID_  */
-          bool skip = false;
-          if (name[0] == 'b' && name[1] == 'l') {
-            if (strcmp(name, "blocktype") == 0) {
-              skip = true;
-            }
+      case STRUCT_MEMBER_CATEGORY_PRIMITIVE: {
+        switch (member->type) {
+          case SDNA_TYPE_SHORT:
+          case SDNA_TYPE_USHORT: {
+            BLI_endian_switch_int16_array((int16_t *)member_data, member_array_length);
+            break;
           }
-
-          if (skip == false) {
-            BLI_endian_switch_int16_array((int16_t *)cur, old_name_array_len);
+          case SDNA_TYPE_INT:
+          case SDNA_TYPE_FLOAT: {
+            /* Note, intentionally ignore long/ulong, because these could be 4 or 8 bytes.
+             * Fortunately, we only use these types for runtime variables and only once for a
+             * struct type that is no longer used. */
+            BLI_endian_switch_int32_array((int32_t *)member_data, member_array_length);
+            break;
+          }
+          case SDNA_TYPE_INT64:
+          case SDNA_TYPE_UINT64:
+          case SDNA_TYPE_DOUBLE: {
+            BLI_endian_switch_int64_array((int64_t *)member_data, member_array_length);
+            break;
+          }
+          default: {
+            break;
           }
         }
-        else if (ELEM(spc[0], SDNA_TYPE_INT, SDNA_TYPE_FLOAT)) {
-          /* note, intentionally ignore long/ulong here these could be 4 or 8 bits,
-           * but turns out we only used for runtime vars and
-           * only once for a struct type that's no longer used. */
-
-          BLI_endian_switch_int32_array((int32_t *)cur, old_name_array_len);
+        break;
+      }
+      case STRUCT_MEMBER_CATEGORY_POINTER: {
+        /* See readfile.c (#bh4_from_bh8 swap endian argument),
+         * this is only done when reducing the size of a pointer from 4 to 8. */
+        if (sizeof(void *) < 8) {
+          if (sdna->pointer_size == 8) {
+            BLI_endian_switch_uint64_array((uint64_t *)member_data, member_array_length);
+          }
         }
-        else if (ELEM(spc[0], SDNA_TYPE_INT64, SDNA_TYPE_UINT64, SDNA_TYPE_DOUBLE)) {
-          BLI_endian_switch_int64_array((int64_t *)cur, old_name_array_len);
-        }
+        break;
       }
     }
-    cur += elen;
+    offset_in_bytes += get_member_size_in_bytes(sdna, member);
+  }
+}
+
+typedef enum eReconstructStepType {
+  RECONSTRUCT_STEP_MEMCPY,
+  RECONSTRUCT_STEP_CAST_PRIMITIVE,
+  RECONSTRUCT_STEP_CAST_POINTER_TO_32,
+  RECONSTRUCT_STEP_CAST_POINTER_TO_64,
+  RECONSTRUCT_STEP_SUBSTRUCT,
+  RECONSTRUCT_STEP_INIT_ZERO,
+} eReconstructStepType;
+
+typedef struct ReconstructStep {
+  eReconstructStepType type;
+  union {
+    struct {
+      int old_offset;
+      int new_offset;
+      int size;
+    } memcpy;
+    struct {
+      int old_offset;
+      int new_offset;
+      int array_len;
+      eSDNA_Type old_type;
+      eSDNA_Type new_type;
+    } cast_primitive;
+    struct {
+      int old_offset;
+      int new_offset;
+      int array_len;
+    } cast_pointer;
+    struct {
+      int old_offset;
+      int new_offset;
+      int array_len;
+      short old_struct_nr;
+      short new_struct_nr;
+    } substruct;
+  } data;
+} ReconstructStep;
+
+typedef struct DNA_ReconstructInfo {
+  const SDNA *oldsdna;
+  const SDNA *newsdna;
+  const char *compare_flags;
+
+  int *step_counts;
+  ReconstructStep **steps;
+} DNA_ReconstructInfo;
+
+static void reconstruct_structs(const DNA_ReconstructInfo *reconstruct_info,
+                                const int blocks,
+                                const int old_struct_nr,
+                                const int new_struct_nr,
+                                const char *old_blocks,
+                                char *new_blocks);
+
+/**
+ * Converts the contents of an entire struct from oldsdna to newsdna format.
+ *
+ * \param reconstruct_info: Preprocessed reconstruct information generated by
+ * #DNA_reconstruct_info_create.
+ * \param new_struct_nr: Index in newsdna->structs of the struct that is being reconstructed.
+ * \param old_block: Memory buffer containing the old struct.
+ * \param new_block: Where to put converted struct contents.
+ */
+static void reconstruct_struct(const DNA_ReconstructInfo *reconstruct_info,
+                               const int new_struct_nr,
+                               const char *old_block,
+                               char *new_block)
+{
+  const ReconstructStep *steps = reconstruct_info->steps[new_struct_nr];
+  const int step_count = reconstruct_info->step_counts[new_struct_nr];
+
+  /* Execute all preprocessed steps. */
+  for (int a = 0; a < step_count; a++) {
+    const ReconstructStep *step = &steps[a];
+    switch (step->type) {
+      case RECONSTRUCT_STEP_MEMCPY:
+        memcpy(new_block + step->data.memcpy.new_offset,
+               old_block + step->data.memcpy.old_offset,
+               step->data.memcpy.size);
+        break;
+      case RECONSTRUCT_STEP_CAST_PRIMITIVE:
+        cast_primitive_type(step->data.cast_primitive.old_type,
+                            step->data.cast_primitive.new_type,
+                            step->data.cast_primitive.array_len,
+                            old_block + step->data.cast_primitive.old_offset,
+                            new_block + step->data.cast_primitive.new_offset);
+        break;
+      case RECONSTRUCT_STEP_CAST_POINTER_TO_32:
+        cast_pointer_64_to_32(step->data.cast_pointer.array_len,
+                              (const uint64_t *)(old_block + step->data.cast_pointer.old_offset),
+                              (uint32_t *)(new_block + step->data.cast_pointer.new_offset));
+        break;
+      case RECONSTRUCT_STEP_CAST_POINTER_TO_64:
+        cast_pointer_32_to_64(step->data.cast_pointer.array_len,
+                              (const uint32_t *)(old_block + step->data.cast_pointer.old_offset),
+                              (uint64_t *)(new_block + step->data.cast_pointer.new_offset));
+        break;
+      case RECONSTRUCT_STEP_SUBSTRUCT:
+        reconstruct_structs(reconstruct_info,
+                            step->data.substruct.array_len,
+                            step->data.substruct.old_struct_nr,
+                            step->data.substruct.new_struct_nr,
+                            old_block + step->data.substruct.old_offset,
+                            new_block + step->data.substruct.new_offset);
+        break;
+      case RECONSTRUCT_STEP_INIT_ZERO:
+        /* Do nothing, because the memory block has been calloced. */
+        break;
+    }
+  }
+}
+
+/** Reconstructs an array of structs. */
+static void reconstruct_structs(const DNA_ReconstructInfo *reconstruct_info,
+                                const int blocks,
+                                const int old_struct_nr,
+                                const int new_struct_nr,
+                                const char *old_blocks,
+                                char *new_blocks)
+{
+  const SDNA_Struct *old_struct = reconstruct_info->oldsdna->structs[old_struct_nr];
+  const SDNA_Struct *new_struct = reconstruct_info->newsdna->structs[new_struct_nr];
+
+  const int old_block_size = reconstruct_info->oldsdna->types_size[old_struct->type];
+  const int new_block_size = reconstruct_info->newsdna->types_size[new_struct->type];
+
+  for (int a = 0; a < blocks; a++) {
+    const char *old_block = old_blocks + a * old_block_size;
+    char *new_block = new_blocks + a * new_block_size;
+    reconstruct_struct(reconstruct_info, new_struct_nr, old_block, new_block);
   }
 }
 
 /**
- * \param newsdna: SDNA of current Blender
- * \param oldsdna: SDNA of Blender that saved file
- * \param compflags:
- *
- * Result from DNA_struct_get_compareflags to avoid needless conversions
- * \param oldSDNAnr: Index of struct info within oldsdna
- * \param blocks: The number of array elements
- * \param data: Array of struct data
- * \return An allocated reconstructed struct
+ * \param reconstruct_info: Information preprocessed by #DNA_reconstruct_info_create.
+ * \param old_struct_nr: Index of struct info within oldsdna.
+ * \param blocks: The number of array elements.
+ * \param old_blocks: Array of struct data.
+ * \return An allocated reconstructed struct.
  */
-void *DNA_struct_reconstruct(const SDNA *newsdna,
-                             const SDNA *oldsdna,
-                             const char *compflags,
-                             int oldSDNAnr,
+void *DNA_struct_reconstruct(const DNA_ReconstructInfo *reconstruct_info,
+                             int old_struct_nr,
                              int blocks,
-                             const void *data)
+                             const void *old_blocks)
 {
-  int a, curSDNAnr, curlen = 0, oldlen;
-  const short *spo, *spc;
-  char *cur, *cpc;
-  const char *cpo;
-  const char *type;
+  const SDNA *oldsdna = reconstruct_info->oldsdna;
+  const SDNA *newsdna = reconstruct_info->newsdna;
 
-  /* oldSDNAnr == structnr, we're looking for the corresponding 'cur' number */
-  spo = oldsdna->structs[oldSDNAnr];
-  type = oldsdna->types[spo[0]];
-  oldlen = oldsdna->types_size[spo[0]];
-  curSDNAnr = DNA_struct_find_nr(newsdna, type);
+  const SDNA_Struct *old_struct = oldsdna->structs[old_struct_nr];
+  const char *type_name = oldsdna->types[old_struct->type];
+  const int new_struct_nr = DNA_struct_find_nr(newsdna, type_name);
 
-  /* init data and alloc */
-  if (curSDNAnr != -1) {
-    spc = newsdna->structs[curSDNAnr];
-    curlen = newsdna->types_size[spc[0]];
-  }
-  if (curlen == 0) {
+  if (new_struct_nr == -1) {
     return NULL;
   }
 
-  cur = MEM_callocN(blocks * curlen, "reconstruct");
-  cpc = cur;
-  cpo = data;
-  for (a = 0; a < blocks; a++) {
-    reconstruct_struct(newsdna, oldsdna, compflags, oldSDNAnr, cpo, curSDNAnr, cpc);
-    cpc += curlen;
-    cpo += oldlen;
+  const SDNA_Struct *new_struct = newsdna->structs[new_struct_nr];
+  const int new_block_size = newsdna->types_size[new_struct->type];
+
+  char *new_blocks = MEM_callocN(blocks * new_block_size, "reconstruct");
+  reconstruct_structs(
+      reconstruct_info, blocks, old_struct_nr, new_struct_nr, old_blocks, new_blocks);
+  return new_blocks;
+}
+
+/** Finds a member in the given struct with the given name. */
+static const SDNA_StructMember *find_member_with_matching_name(const SDNA *sdna,
+                                                               const SDNA_Struct *struct_info,
+                                                               const char *name,
+                                                               int *r_offset)
+{
+  int offset = 0;
+  for (int a = 0; a < struct_info->members_len; a++) {
+    const SDNA_StructMember *member = &struct_info->members[a];
+    const char *member_name = sdna->names[member->name];
+    if (elem_streq(name, member_name)) {
+      *r_offset = offset;
+      return member;
+    }
+    offset += get_member_size_in_bytes(sdna, member);
+  }
+  return NULL;
+}
+
+/** Initializes a single reconstruct step for a member in the new struct. */
+static void init_reconstruct_step_for_member(const SDNA *oldsdna,
+                                             const SDNA *newsdna,
+                                             const char *compare_flags,
+                                             const SDNA_Struct *old_struct,
+                                             const SDNA_StructMember *new_member,
+                                             const int new_member_offset,
+                                             ReconstructStep *r_step)
+{
+
+  /* Find the matching old member. */
+  int old_member_offset;
+  const char *new_name = newsdna->names[new_member->name];
+  const SDNA_StructMember *old_member = find_member_with_matching_name(
+      oldsdna, old_struct, new_name, &old_member_offset);
+
+  if (old_member == NULL) {
+    /* No matching member has been found in the old struct. */
+    r_step->type = RECONSTRUCT_STEP_INIT_ZERO;
+    return;
   }
 
-  return cur;
+  /* Determine the member category of the old an new members. */
+  const eStructMemberCategory new_category = get_struct_member_category(newsdna, new_member);
+  const eStructMemberCategory old_category = get_struct_member_category(oldsdna, old_member);
+
+  if (new_category != old_category) {
+    /* Can only reconstruct the new member based on the old member, when the belong to the same
+     * category. */
+    r_step->type = RECONSTRUCT_STEP_INIT_ZERO;
+    return;
+  }
+
+  const int new_array_length = newsdna->names_array_len[new_member->name];
+  const int old_array_length = oldsdna->names_array_len[old_member->name];
+  const int shared_array_length = MIN2(new_array_length, old_array_length);
+
+  const char *new_type_name = newsdna->types[new_member->type];
+  const char *old_type_name = oldsdna->types[old_member->type];
+
+  switch (new_category) {
+    case STRUCT_MEMBER_CATEGORY_STRUCT: {
+      if (STREQ(new_type_name, old_type_name)) {
+        const int old_struct_nr = DNA_struct_find_nr(oldsdna, old_type_name);
+        BLI_assert(old_struct_nr != -1);
+        enum eSDNA_StructCompare compare_flag = compare_flags[old_struct_nr];
+        BLI_assert(compare_flag != SDNA_CMP_REMOVED);
+        if (compare_flag == SDNA_CMP_EQUAL) {
+          /* The old and new members are identical, just do a memcpy. */
+          r_step->type = RECONSTRUCT_STEP_MEMCPY;
+          r_step->data.memcpy.new_offset = new_member_offset;
+          r_step->data.memcpy.old_offset = old_member_offset;
+          r_step->data.memcpy.size = newsdna->types_size[new_member->type] * shared_array_length;
+        }
+        else {
+          const int new_struct_nr = DNA_struct_find_nr(newsdna, new_type_name);
+          BLI_assert(new_struct_nr != -1);
+
+          /* The old and new members are different, use recursion to reconstruct the
+           * nested struct. */
+          BLI_assert(compare_flag == SDNA_CMP_NOT_EQUAL);
+          r_step->type = RECONSTRUCT_STEP_SUBSTRUCT;
+          r_step->data.substruct.new_offset = new_member_offset;
+          r_step->data.substruct.old_offset = old_member_offset;
+          r_step->data.substruct.array_len = shared_array_length;
+          r_step->data.substruct.new_struct_nr = new_struct_nr;
+          r_step->data.substruct.old_struct_nr = old_struct_nr;
+        }
+      }
+      else {
+        /* Cannot match structs that have different names. */
+        r_step->type = RECONSTRUCT_STEP_INIT_ZERO;
+      }
+      break;
+    }
+    case STRUCT_MEMBER_CATEGORY_PRIMITIVE: {
+      if (STREQ(new_type_name, old_type_name)) {
+        /* Primitives with the same name cannot be different, so just do a memcpy. */
+        r_step->type = RECONSTRUCT_STEP_MEMCPY;
+        r_step->data.memcpy.new_offset = new_member_offset;
+        r_step->data.memcpy.old_offset = old_member_offset;
+        r_step->data.memcpy.size = newsdna->types_size[new_member->type] * shared_array_length;
+      }
+      else {
+        /* The old and new primitive types are different, cast from the old to new type. */
+        r_step->type = RECONSTRUCT_STEP_CAST_PRIMITIVE;
+        r_step->data.cast_primitive.array_len = shared_array_length;
+        r_step->data.cast_primitive.new_offset = new_member_offset;
+        r_step->data.cast_primitive.old_offset = old_member_offset;
+        r_step->data.cast_primitive.new_type = new_member->type;
+        r_step->data.cast_primitive.old_type = old_member->type;
+      }
+      break;
+    }
+    case STRUCT_MEMBER_CATEGORY_POINTER: {
+      if (newsdna->pointer_size == oldsdna->pointer_size) {
+        /* The pointer size is the same, so just do a memcpy. */
+        r_step->type = RECONSTRUCT_STEP_MEMCPY;
+        r_step->data.memcpy.new_offset = new_member_offset;
+        r_step->data.memcpy.old_offset = old_member_offset;
+        r_step->data.memcpy.size = newsdna->pointer_size * shared_array_length;
+      }
+      else if (newsdna->pointer_size == 8 && oldsdna->pointer_size == 4) {
+        /* Need to convert from 32 bit to 64 bit pointers. */
+        r_step->type = RECONSTRUCT_STEP_CAST_POINTER_TO_64;
+        r_step->data.cast_pointer.new_offset = new_member_offset;
+        r_step->data.cast_pointer.old_offset = old_member_offset;
+        r_step->data.cast_pointer.array_len = shared_array_length;
+      }
+      else if (newsdna->pointer_size == 4 && oldsdna->pointer_size == 8) {
+        /* Need to convert from 64 bit to 32 bit pointers. */
+        r_step->type = RECONSTRUCT_STEP_CAST_POINTER_TO_32;
+        r_step->data.cast_pointer.new_offset = new_member_offset;
+        r_step->data.cast_pointer.old_offset = old_member_offset;
+        r_step->data.cast_pointer.array_len = shared_array_length;
+      }
+      else {
+        BLI_assert(!"invalid pointer size");
+        r_step->type = RECONSTRUCT_STEP_INIT_ZERO;
+      }
+      break;
+    }
+  }
+}
+
+/** Useful function when debugging the reconstruct steps. */
+static void print_reconstruct_step(ReconstructStep *step, const SDNA *oldsdna, const SDNA *newsdna)
+{
+  switch (step->type) {
+    case RECONSTRUCT_STEP_INIT_ZERO: {
+      printf("init zero");
+      break;
+    }
+    case RECONSTRUCT_STEP_MEMCPY: {
+      printf("memcpy, size: %d, old offset: %d, new offset: %d",
+             step->data.memcpy.size,
+             step->data.memcpy.old_offset,
+             step->data.memcpy.new_offset);
+      break;
+    }
+    case RECONSTRUCT_STEP_CAST_PRIMITIVE: {
+      printf(
+          "cast element, old type: %d ('%s'), new type: %d ('%s'), old offset: %d, new offset: "
+          "%d, length: %d",
+          (int)step->data.cast_primitive.old_type,
+          oldsdna->types[step->data.cast_primitive.old_type],
+          (int)step->data.cast_primitive.new_type,
+          newsdna->types[step->data.cast_primitive.new_type],
+          step->data.cast_primitive.old_offset,
+          step->data.cast_primitive.new_offset,
+          step->data.cast_primitive.array_len);
+      break;
+    }
+    case RECONSTRUCT_STEP_CAST_POINTER_TO_32: {
+      printf("pointer to 32, old offset: %d, new offset: %d, length: %d",
+             step->data.cast_pointer.old_offset,
+             step->data.cast_pointer.new_offset,
+             step->data.cast_pointer.array_len);
+      break;
+    }
+    case RECONSTRUCT_STEP_CAST_POINTER_TO_64: {
+      printf("pointer to 64, old offset: %d, new offset: %d, length: %d",
+             step->data.cast_pointer.old_offset,
+             step->data.cast_pointer.new_offset,
+             step->data.cast_pointer.array_len);
+      break;
+    }
+    case RECONSTRUCT_STEP_SUBSTRUCT: {
+      printf(
+          "substruct, old offset: %d, new offset: %d, new struct: %d ('%s', size per struct: %d), "
+          "length: %d",
+          step->data.substruct.old_offset,
+          step->data.substruct.new_offset,
+          step->data.substruct.new_struct_nr,
+          newsdna->types[newsdna->structs[step->data.substruct.new_struct_nr]->type],
+          newsdna->types_size[newsdna->structs[step->data.substruct.new_struct_nr]->type],
+          step->data.substruct.array_len);
+      break;
+    }
+  }
+}
+
+/**
+ * Generate an array of reconstruct steps for the given #new_struct. There will be one
+ * reconstruct step for every member.
+ */
+static ReconstructStep *create_reconstruct_steps_for_struct(const SDNA *oldsdna,
+                                                            const SDNA *newsdna,
+                                                            const char *compare_flags,
+                                                            const SDNA_Struct *old_struct,
+                                                            const SDNA_Struct *new_struct)
+{
+  ReconstructStep *steps = MEM_calloc_arrayN(
+      new_struct->members_len, sizeof(ReconstructStep), __func__);
+
+  int new_member_offset = 0;
+  for (int new_member_index = 0; new_member_index < new_struct->members_len; new_member_index++) {
+    const SDNA_StructMember *new_member = &new_struct->members[new_member_index];
+    init_reconstruct_step_for_member(oldsdna,
+                                     newsdna,
+                                     compare_flags,
+                                     old_struct,
+                                     new_member,
+                                     new_member_offset,
+                                     &steps[new_member_index]);
+    new_member_offset += get_member_size_in_bytes(newsdna, new_member);
+  }
+
+  return steps;
+}
+
+/** Compresses an array of reconstruct steps in-place and returns the new step count. */
+static int compress_reconstruct_steps(ReconstructStep *steps, const int old_step_count)
+{
+  int new_step_count = 0;
+  for (int a = 0; a < old_step_count; a++) {
+    ReconstructStep *step = &steps[a];
+    switch (step->type) {
+      case RECONSTRUCT_STEP_INIT_ZERO:
+        /* These steps are simply removed. */
+        break;
+      case RECONSTRUCT_STEP_MEMCPY:
+        if (new_step_count > 0) {
+          /* Try to merge this memcpy step with the previous one. */
+          ReconstructStep *prev_step = &steps[new_step_count - 1];
+          if (prev_step->type == RECONSTRUCT_STEP_MEMCPY) {
+            /* Check if there are no bytes between the blocks to copy. */
+            if (prev_step->data.memcpy.old_offset + prev_step->data.memcpy.size ==
+                    step->data.memcpy.old_offset &&
+                prev_step->data.memcpy.new_offset + prev_step->data.memcpy.size ==
+                    step->data.memcpy.new_offset) {
+              prev_step->data.memcpy.size += step->data.memcpy.size;
+              break;
+            }
+          }
+        }
+        steps[new_step_count] = *step;
+        new_step_count++;
+        break;
+      case RECONSTRUCT_STEP_CAST_PRIMITIVE:
+      case RECONSTRUCT_STEP_CAST_POINTER_TO_32:
+      case RECONSTRUCT_STEP_CAST_POINTER_TO_64:
+      case RECONSTRUCT_STEP_SUBSTRUCT:
+        /* These steps are not changed at all for now. It should be possible to merge consecutive
+         * steps of the same type, but it is not really worth it. */
+        steps[new_step_count] = *step;
+        new_step_count++;
+        break;
+    }
+  }
+  return new_step_count;
+}
+
+/**
+ * Pre-process information about how structs in \a newsdna can be reconstructed from structs in
+ * \a oldsdna. This information is then used to speedup #DNA_struct_reconstruct.
+ */
+DNA_ReconstructInfo *DNA_reconstruct_info_create(const SDNA *oldsdna,
+                                                 const SDNA *newsdna,
+                                                 const char *compare_flags)
+{
+  DNA_ReconstructInfo *reconstruct_info = MEM_callocN(sizeof(DNA_ReconstructInfo), __func__);
+  reconstruct_info->oldsdna = oldsdna;
+  reconstruct_info->newsdna = newsdna;
+  reconstruct_info->compare_flags = compare_flags;
+  reconstruct_info->step_counts = MEM_malloc_arrayN(sizeof(int), newsdna->structs_len, __func__);
+  reconstruct_info->steps = MEM_malloc_arrayN(
+      sizeof(ReconstructStep *), newsdna->structs_len, __func__);
+
+  /* Generate reconstruct steps for all structs. */
+  for (int new_struct_nr = 0; new_struct_nr < newsdna->structs_len; new_struct_nr++) {
+    const SDNA_Struct *new_struct = newsdna->structs[new_struct_nr];
+    const char *new_struct_name = newsdna->types[new_struct->type];
+    const int old_struct_nr = DNA_struct_find_nr(oldsdna, new_struct_name);
+    if (old_struct_nr < 0) {
+      reconstruct_info->steps[new_struct_nr] = NULL;
+      reconstruct_info->step_counts[new_struct_nr] = 0;
+      continue;
+    }
+    const SDNA_Struct *old_struct = oldsdna->structs[old_struct_nr];
+    ReconstructStep *steps = create_reconstruct_steps_for_struct(
+        oldsdna, newsdna, compare_flags, old_struct, new_struct);
+
+    int steps_len = new_struct->members_len;
+    /* Comment the line below to skip the compression for debugging purposes. */
+    steps_len = compress_reconstruct_steps(steps, new_struct->members_len);
+
+    reconstruct_info->steps[new_struct_nr] = steps;
+    reconstruct_info->step_counts[new_struct_nr] = steps_len;
+
+/* This is useful when debugging the reconstruct steps. */
+#if 0
+    printf("%s: \n", new_struct_name);
+    for (int a = 0; a < steps_len; a++) {
+      printf("  ");
+      print_reconstruct_step(&steps[a], oldsdna, newsdna);
+      printf("\n");
+    }
+#endif
+    UNUSED_VARS(print_reconstruct_step);
+  }
+
+  return reconstruct_info;
+}
+
+void DNA_reconstruct_info_free(DNA_ReconstructInfo *reconstruct_info)
+{
+  for (int a = 0; a < reconstruct_info->newsdna->structs_len; a++) {
+    if (reconstruct_info->steps[a] != NULL) {
+      MEM_freeN(reconstruct_info->steps[a]);
+    }
+  }
+  MEM_freeN(reconstruct_info->steps);
+  MEM_freeN(reconstruct_info->step_counts);
+  MEM_freeN(reconstruct_info);
 }
 
 /**
  * Returns the offset of the field with the specified name and type within the specified
- * struct type in sdna.
+ * struct type in #SDNA, -1 on failure.
  */
 int DNA_elem_offset(SDNA *sdna, const char *stype, const char *vartype, const char *name)
 {
   const int SDNAnr = DNA_struct_find_nr(sdna, stype);
-  const short *const spo = sdna->structs[SDNAnr];
-  const char *const cp = find_elem(sdna, vartype, name, spo, NULL, NULL);
   BLI_assert(SDNAnr != -1);
-  return (int)((intptr_t)cp);
+  const SDNA_Struct *const spo = sdna->structs[SDNAnr];
+  return elem_offset(sdna, vartype, name, spo);
 }
 
 bool DNA_struct_find(const SDNA *sdna, const char *stype)
@@ -1468,7 +1614,7 @@ bool DNA_struct_elem_find(const SDNA *sdna,
   const int SDNAnr = DNA_struct_find_nr(sdna, stype);
 
   if (SDNAnr != -1) {
-    const short *const spo = sdna->structs[SDNAnr];
+    const SDNA_Struct *const spo = sdna->structs[SDNAnr];
     const bool found = elem_exists(sdna, vartype, name, spo);
 
     if (found) {
@@ -1487,7 +1633,7 @@ bool DNA_struct_alias_elem_find(const SDNA *sdna,
   const int SDNAnr = DNA_struct_alias_find_nr(sdna, stype);
 
   if (SDNAnr != -1) {
-    const short *const spo = sdna->structs[SDNAnr];
+    const SDNA_Struct *const spo = sdna->structs[SDNAnr];
     const bool found = elem_exists_alias(sdna, vartype, name, spo);
 
     if (found) {
@@ -1532,13 +1678,13 @@ static bool DNA_sdna_patch_struct_nr(SDNA *sdna,
                                      const char *struct_name_new)
 {
   BLI_assert(DNA_struct_find_nr(DNA_sdna_current_get(), struct_name_new) != -1);
-  const short *sp = sdna->structs[struct_name_old_nr];
+  const SDNA_Struct *struct_info = sdna->structs[struct_name_old_nr];
 #ifdef WITH_DNA_GHASH
-  BLI_ghash_remove(sdna->structs_map, (void *)sdna->types[sp[0]], NULL, NULL);
+  BLI_ghash_remove(sdna->structs_map, (void *)sdna->types[struct_info->type], NULL, NULL);
   BLI_ghash_insert(
       sdna->structs_map, (void *)struct_name_new, POINTER_FROM_INT(struct_name_old_nr));
 #endif
-  sdna->types[sp[0]] = struct_name_new;
+  sdna->types[struct_info->type] = struct_name_new;
   return true;
 }
 /**
@@ -1565,9 +1711,10 @@ static bool DNA_sdna_patch_struct_member_nr(SDNA *sdna,
   const int elem_old_len = strlen(elem_old);
   const int elem_new_len = strlen(elem_new);
   BLI_assert(elem_new != NULL);
-  short *sp = sdna->structs[struct_name_nr];
-  for (int elem_index = sp[1]; elem_index > 0; elem_index--, sp += 2) {
-    const char *elem_old_full = sdna->names[sp[1]];
+  SDNA_Struct *sp = sdna->structs[struct_name_nr];
+  for (int elem_index = sp->members_len; elem_index > 0; elem_index--) {
+    SDNA_StructMember *member = &sp->members[elem_index];
+    const char *elem_old_full = sdna->names[member->name];
     /* Start & end offsets in 'elem_old_full'. */
     uint elem_old_full_offset_start;
     if (DNA_elem_id_match(elem_old, elem_old_len, elem_old_full, &elem_old_full_offset_start)) {
@@ -1590,10 +1737,10 @@ static bool DNA_sdna_patch_struct_member_nr(SDNA *sdna,
         sdna->names_array_len = MEM_recallocN(
             (void *)sdna->names_array_len, sizeof(*sdna->names_array_len) * sdna->names_len_alloc);
       }
-      const short name_nr_prev = sp[1];
-      sp[1] = sdna->names_len++;
-      sdna->names[sp[1]] = elem_new_full;
-      sdna->names_array_len[sp[1]] = sdna->names_array_len[name_nr_prev];
+      const short name_nr_prev = member->name;
+      member->name = sdna->names_len++;
+      sdna->names[member->name] = elem_new_full;
+      sdna->names_array_len[member->name] = sdna->names_array_len[name_nr_prev];
 
       return true;
     }
@@ -1627,7 +1774,7 @@ bool DNA_sdna_patch_struct_member(SDNA *sdna,
 
 /**
  * Names are shared between structs which causes problems renaming.
- * Make sure every struct member gets it's own name so renaming only ever impacts a single struct.
+ * Make sure every struct member gets its own name so renaming only ever impacts a single struct.
  *
  * The resulting SDNA is never written to disk.
  */
@@ -1635,8 +1782,8 @@ static void sdna_expand_names(SDNA *sdna)
 {
   int names_expand_len = 0;
   for (int struct_nr = 0; struct_nr < sdna->structs_len; struct_nr++) {
-    const short *sp = sdna->structs[struct_nr];
-    names_expand_len += sp[1];
+    const SDNA_Struct *struct_old = sdna->structs[struct_nr];
+    names_expand_len += struct_old->members_len;
   }
   const char **names_expand = MEM_mallocN(sizeof(*names_expand) * names_expand_len, __func__);
   short *names_array_len_expand = MEM_mallocN(sizeof(*names_array_len_expand) * names_expand_len,
@@ -1645,18 +1792,22 @@ static void sdna_expand_names(SDNA *sdna)
   int names_expand_index = 0;
   for (int struct_nr = 0; struct_nr < sdna->structs_len; struct_nr++) {
     /* We can't edit this memory 'sdna->structs' points to (readonly datatoc file). */
-    const short *sp = sdna->structs[struct_nr];
-    short *sp_expand = BLI_memarena_alloc(sdna->mem_arena, sizeof(short[2]) * (1 + sp[1]));
-    memcpy(sp_expand, sp, sizeof(short[2]) * (1 + sp[1]));
-    sdna->structs[struct_nr] = sp_expand;
-    const int names_len = sp[1];
-    sp += 2;
-    sp_expand += 2;
-    for (int i = 0; i < names_len; i++, sp += 2, sp_expand += 2) {
-      names_expand[names_expand_index] = sdna->names[sp[1]];
-      names_array_len_expand[names_expand_index] = sdna->names_array_len[sp[1]];
+    const SDNA_Struct *struct_old = sdna->structs[struct_nr];
+
+    const int array_size = sizeof(short) * 2 + sizeof(SDNA_StructMember) * struct_old->members_len;
+    SDNA_Struct *struct_new = BLI_memarena_alloc(sdna->mem_arena, array_size);
+    memcpy(struct_new, struct_old, array_size);
+    sdna->structs[struct_nr] = struct_new;
+
+    for (int i = 0; i < struct_old->members_len; i++) {
+      const SDNA_StructMember *member_old = &struct_old->members[i];
+      SDNA_StructMember *member_new = &struct_new->members[i];
+
+      names_expand[names_expand_index] = sdna->names[member_old->name];
+      names_array_len_expand[names_expand_index] = sdna->names_array_len[member_old->name];
+
       BLI_assert(names_expand_index < SHRT_MAX);
-      sp_expand[1] = names_expand_index;
+      member_new->name = names_expand_index;
       names_expand_index++;
     }
   }
@@ -1725,23 +1876,22 @@ void DNA_sdna_alias_data_ensure(SDNA *sdna)
     sdna_expand_names(sdna);
     sdna->alias.names = MEM_mallocN(sizeof(*sdna->alias.names) * sdna->names_len, __func__);
     for (int struct_nr = 0; struct_nr < sdna->structs_len; struct_nr++) {
-      const short *sp = sdna->structs[struct_nr];
-      const char *struct_name_static = sdna->types[sp[0]];
+      const SDNA_Struct *struct_info = sdna->structs[struct_nr];
+      const char *struct_name_static = sdna->types[struct_info->type];
 
       if (use_legacy_hack) {
         struct_name_static = DNA_struct_rename_legacy_hack_alias_from_static(struct_name_static);
       }
 
-      const int dna_struct_names_len = sp[1];
-      sp += 2;
-      for (int a = 0; a < dna_struct_names_len; a++, sp += 2) {
+      for (int a = 0; a < struct_info->members_len; a++) {
+        const SDNA_StructMember *member = &struct_info->members[a];
         const char *elem_alias_full = dna_sdna_alias_from_static_elem_full(
-            sdna, elem_map_alias_from_static, struct_name_static, sdna->names[sp[1]]);
+            sdna, elem_map_alias_from_static, struct_name_static, sdna->names[member->name]);
         if (elem_alias_full != NULL) {
-          sdna->alias.names[sp[1]] = elem_alias_full;
+          sdna->alias.names[member->name] = elem_alias_full;
         }
         else {
-          sdna->alias.names[sp[1]] = sdna->names[sp[1]];
+          sdna->alias.names[member->name] = sdna->names[member->name];
         }
       }
     }
@@ -1761,8 +1911,9 @@ void DNA_sdna_alias_data_ensure_structs_map(SDNA *sdna)
   /* create a ghash lookup to speed up */
   struct GHash *structs_map = BLI_ghash_str_new_ex(__func__, sdna->structs_len);
   for (intptr_t nr = 0; nr < sdna->structs_len; nr++) {
-    const short *sp = sdna->structs[nr];
-    BLI_ghash_insert(structs_map, (void *)sdna->alias.types[sp[0]], POINTER_FROM_INT(nr));
+    const SDNA_Struct *struct_info = sdna->structs[nr];
+    BLI_ghash_insert(
+        structs_map, (void *)sdna->alias.types[struct_info->type], POINTER_FROM_INT(nr));
   }
   sdna->alias.structs_map = structs_map;
 #else

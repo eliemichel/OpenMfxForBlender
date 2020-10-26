@@ -20,7 +20,6 @@
 
 # add_subdirectory(atomic)  # header only
 add_subdirectory(clog)
-add_subdirectory(string)
 add_subdirectory(ghost)
 add_subdirectory(guardedalloc)
 add_subdirectory(libmv)
@@ -31,6 +30,7 @@ add_subdirectory(opensubdiv)
 add_subdirectory(mikktspace)
 add_subdirectory(glew-mx)
 add_subdirectory(eigen)
+add_subdirectory(sky)
 add_subdirectory(openmesheffect)
 
 if(WITH_AUDASPACE)
@@ -76,6 +76,10 @@ endif()
 
 if(WITH_QUADRIFLOW)
   add_subdirectory(quadriflow)
+endif()
+
+if(WITH_CODEC_FFMPEG)
+  add_subdirectory(ffmpeg)
 endif()
 
 if(UNIX AND NOT APPLE)

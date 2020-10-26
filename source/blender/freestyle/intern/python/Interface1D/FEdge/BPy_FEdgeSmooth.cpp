@@ -39,20 +39,14 @@ PyDoc_STRVAR(FEdgeSmooth_doc,
              "a suggestive contour.\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
+             "            __init__(first_vertex, second_vertex)\n"
              "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
+             "   Builds an :class:`FEdgeSmooth` using the default constructor,\n"
+             "   copy constructor, or between two :class:`SVertex`.\n"
              "\n"
              "   :arg brother: An FEdgeSmooth object.\n"
              "   :type brother: :class:`FEdgeSmooth`\n"
-             "\n"
-             ".. method:: __init__(first_vertex, second_vertex)\n"
-             "\n"
-             "   Builds an FEdgeSmooth going from the first to the second.\n"
-             "\n"
              "   :arg first_vertex: The first SVertex object.\n"
              "   :type first_vertex: :class:`SVertex`\n"
              "   :arg second_vertex: The second SVertex object.\n"
@@ -73,7 +67,7 @@ static int FEdgeSmooth_init(BPy_FEdgeSmooth *self, PyObject *args, PyObject *kwd
       self->fes = new FEdgeSmooth(*(((BPy_FEdgeSmooth *)obj1)->fes));
     }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "O!O!",

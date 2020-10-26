@@ -48,9 +48,10 @@ PyDoc_STRVAR(ChainSilhouetteIterator_doc,
              "precedence of the silhouette over the crease criterion.\n"
              "\n"
              ".. method:: __init__(restrict_to_selection=True, begin=None, orientation=True)\n"
+             "            __init__(brother)\n"
              "\n"
              "   Builds a ChainSilhouetteIterator from the first ViewEdge used for\n"
-             "   iteration and its orientation.\n"
+             "   iteration and its orientation or the copy constructor.\n"
              "\n"
              "   :arg restrict_to_selection: Indicates whether to force the chaining\n"
              "      to stay within the set of selected ViewEdges or not.\n"
@@ -62,11 +63,6 @@ PyDoc_STRVAR(ChainSilhouetteIterator_doc,
              "      false, we'll search over the ViewEdges surrounding the ending\n"
              "      ViewVertex of begin.\n"
              "   :type orientation: bool\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
-             "\n"
              "   :arg brother: A ChainSilhouetteIterator object.\n"
              "   :type brother: :class:`ChainSilhouetteIterator`");
 
@@ -91,8 +87,8 @@ static int ChainSilhouetteIterator_init(BPy_ChainSilhouetteIterator *self,
           args, kwds, "O!", (char **)kwlist_1, &ChainSilhouetteIterator_Type, &obj1)) {
     self->cs_it = new ChainSilhouetteIterator(*(((BPy_ChainSilhouetteIterator *)obj1)->cs_it));
   }
-  else if (PyErr_Clear(),
-           (obj1 = obj2 = obj3 = 0),
+  else if ((void)PyErr_Clear(),
+           (void)(obj1 = obj2 = obj3 = 0),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "|O!O&O!",

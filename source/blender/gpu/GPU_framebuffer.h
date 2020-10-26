@@ -19,21 +19,18 @@
 
 /** \file
  * \ingroup gpu
+ *
+ * GPU Framebuffer
+ * - this is a wrapper for an OpenGL framebuffer object (FBO). in practice
+ *   multiple FBO's may be created.
+ * - actual FBO creation & config is deferred until GPU_framebuffer_bind or
+ *   GPU_framebuffer_check_valid to allow creation & config while another
+ *   opengl context is bound (since FBOs are not shared between ogl contexts).
  */
 
-#ifndef __GPU_FRAMEBUFFER_H__
-#define __GPU_FRAMEBUFFER_H__
+#pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-struct GPUTexture;
-
-typedef struct GPUAttachment {
-  struct GPUTexture *tex;
-  int mip, layer;
-} GPUAttachment;
+#include "GPU_texture.h"
 
 typedef enum eGPUFrameBufferBits {
   GPU_COLOR_BIT = (1 << 0),
@@ -41,27 +38,38 @@ typedef enum eGPUFrameBufferBits {
   GPU_STENCIL_BIT = (1 << 2),
 } eGPUFrameBufferBits;
 
+ENUM_OPERATORS(eGPUFrameBufferBits, GPU_STENCIL_BIT)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct GPUAttachment {
+  struct GPUTexture *tex;
+  int layer, mip;
+} GPUAttachment;
+
+typedef enum eGPUBackBuffer {
+  GPU_BACKBUFFER_LEFT = 0,
+  GPU_BACKBUFFER_RIGHT,
+} eGPUBackBuffer;
+
+/** Opaque type hiding blender::gpu::FrameBuffer. */
 typedef struct GPUFrameBuffer GPUFrameBuffer;
+
 typedef struct GPUOffScreen GPUOffScreen;
 
-/* GPU Framebuffer
- * - this is a wrapper for an OpenGL framebuffer object (FBO). in practice
- *   multiple FBO's may be created, to get around limitations on the number
- *   of attached textures and the dimension requirements.
- * - actual FBO creation & config is deferred until GPU_framebuffer_bind or
- *   GPU_framebuffer_check_valid to allow creation & config while another
- *   opengl context is bound (since FBOs are not shared between ogl contexts).
- */
-
-GPUFrameBuffer *GPU_framebuffer_create(void);
+GPUFrameBuffer *GPU_framebuffer_create(const char *name);
 void GPU_framebuffer_free(GPUFrameBuffer *fb);
 void GPU_framebuffer_bind(GPUFrameBuffer *fb);
+void GPU_framebuffer_bind_no_srgb(GPUFrameBuffer *fb);
 void GPU_framebuffer_restore(void);
 
 bool GPU_framebuffer_bound(GPUFrameBuffer *fb);
 bool GPU_framebuffer_check_valid(GPUFrameBuffer *fb, char err_out[256]);
 
 GPUFrameBuffer *GPU_framebuffer_active_get(void);
+GPUFrameBuffer *GPU_framebuffer_back_get(void);
 
 #define GPU_FRAMEBUFFER_FREE_SAFE(fb) \
   do { \
@@ -74,13 +82,8 @@ GPUFrameBuffer *GPU_framebuffer_active_get(void);
 /* Framebuffer setup : You need to call GPU_framebuffer_bind for these
  * to be effective. */
 
-void GPU_framebuffer_texture_attach(GPUFrameBuffer *fb, struct GPUTexture *tex, int slot, int mip);
-void GPU_framebuffer_texture_layer_attach(
-    GPUFrameBuffer *fb, struct GPUTexture *tex, int slot, int layer, int mip);
-void GPU_framebuffer_texture_cubeface_attach(
-    GPUFrameBuffer *fb, struct GPUTexture *tex, int slot, int face, int mip);
+void GPU_framebuffer_texture_attach_ex(GPUFrameBuffer *gpu_fb, GPUAttachment attachment, int slot);
 void GPU_framebuffer_texture_detach(GPUFrameBuffer *fb, struct GPUTexture *tex);
-void GPU_framebuffer_texture_detach_slot(GPUFrameBuffer *fb, struct GPUTexture *tex, int type);
 
 /**
  * How to use #GPU_framebuffer_ensure_config().
@@ -104,7 +107,7 @@ void GPU_framebuffer_texture_detach_slot(GPUFrameBuffer *fb, struct GPUTexture *
 #define GPU_framebuffer_ensure_config(_fb, ...) \
   do { \
     if (*(_fb) == NULL) { \
-      *(_fb) = GPU_framebuffer_create(); \
+      *(_fb) = GPU_framebuffer_create(#_fb); \
     } \
     GPUAttachment config[] = __VA_ARGS__; \
     GPU_framebuffer_config_array(*(_fb), config, (sizeof(config) / sizeof(GPUAttachment))); \
@@ -114,40 +117,48 @@ void GPU_framebuffer_config_array(GPUFrameBuffer *fb, const GPUAttachment *confi
 
 #define GPU_ATTACHMENT_NONE \
   { \
-    .tex = NULL, .layer = -1, .mip = 0, \
+    NULL, -1, 0, \
   }
 #define GPU_ATTACHMENT_LEAVE \
   { \
-    .tex = NULL, .layer = -1, .mip = -1, \
+    NULL, -1, -1, \
   }
 #define GPU_ATTACHMENT_TEXTURE(_tex) \
   { \
-    .tex = _tex, .layer = -1, .mip = 0, \
+    _tex, -1, 0, \
   }
 #define GPU_ATTACHMENT_TEXTURE_MIP(_tex, _mip) \
   { \
-    .tex = _tex, .layer = -1, .mip = _mip, \
+    _tex, -1, _mip, \
   }
 #define GPU_ATTACHMENT_TEXTURE_LAYER(_tex, _layer) \
   { \
-    .tex = _tex, .layer = _layer, .mip = 0, \
+    _tex, _layer, 0, \
   }
 #define GPU_ATTACHMENT_TEXTURE_LAYER_MIP(_tex, _layer, _mip) \
   { \
-    .tex = _tex, .layer = _layer, .mip = _mip, \
+    _tex, _layer, _mip, \
   }
 #define GPU_ATTACHMENT_TEXTURE_CUBEFACE(_tex, _face) \
   { \
-    .tex = _tex, .layer = _face, .mip = 0, \
+    _tex, _face, 0, \
   }
 #define GPU_ATTACHMENT_TEXTURE_CUBEFACE_MIP(_tex, _face, _mip) \
   { \
-    .tex = _tex, .layer = _face, .mip = _mip, \
+    _tex, _face, _mip, \
   }
+
+void GPU_framebuffer_texture_attach(GPUFrameBuffer *fb, GPUTexture *tex, int slot, int mip);
+void GPU_framebuffer_texture_layer_attach(
+    GPUFrameBuffer *fb, GPUTexture *tex, int slot, int layer, int mip);
+void GPU_framebuffer_texture_cubeface_attach(
+    GPUFrameBuffer *fb, GPUTexture *tex, int slot, int face, int mip);
 
 /* Framebuffer operations */
 
 void GPU_framebuffer_viewport_set(GPUFrameBuffer *fb, int x, int y, int w, int h);
+void GPU_framebuffer_viewport_get(GPUFrameBuffer *fb, int r_viewport[4]);
+void GPU_framebuffer_viewport_reset(GPUFrameBuffer *fb);
 
 void GPU_framebuffer_clear(GPUFrameBuffer *fb,
                            eGPUFrameBufferBits buffers,
@@ -175,9 +186,17 @@ void GPU_framebuffer_clear(GPUFrameBuffer *fb,
 
 void GPU_framebuffer_multi_clear(GPUFrameBuffer *fb, const float (*clear_cols)[4]);
 
-void GPU_framebuffer_read_depth(GPUFrameBuffer *fb, int x, int y, int w, int h, float *data);
-void GPU_framebuffer_read_color(
-    GPUFrameBuffer *fb, int x, int y, int w, int h, int channels, int slot, float *data);
+void GPU_framebuffer_read_depth(
+    GPUFrameBuffer *fb, int x, int y, int w, int h, eGPUDataFormat format, void *data);
+void GPU_framebuffer_read_color(GPUFrameBuffer *fb,
+                                int x,
+                                int y,
+                                int w,
+                                int h,
+                                int channels,
+                                int slot,
+                                eGPUDataFormat format,
+                                void *data);
 
 void GPU_framebuffer_blit(GPUFrameBuffer *fb_read,
                           int read_slot,
@@ -191,15 +210,15 @@ void GPU_framebuffer_recursive_downsample(GPUFrameBuffer *fb,
                                           void *userData);
 
 /* GPU OffScreen
- * - wrapper around framebuffer and texture for simple offscreen drawing
+ * - wrapper around frame-buffer and texture for simple off-screen drawing
  */
 
 GPUOffScreen *GPU_offscreen_create(
-    int width, int height, int samples, bool depth, bool high_bitdepth, char err_out[256]);
+    int width, int height, bool depth, bool high_bitdepth, char err_out[256]);
 void GPU_offscreen_free(GPUOffScreen *ofs);
 void GPU_offscreen_bind(GPUOffScreen *ofs, bool save);
 void GPU_offscreen_unbind(GPUOffScreen *ofs, bool restore);
-void GPU_offscreen_read_pixels(GPUOffScreen *ofs, int type, void *pixels);
+void GPU_offscreen_read_pixels(GPUOffScreen *ofs, eGPUDataFormat format, void *pixels);
 void GPU_offscreen_draw_to_screen(GPUOffScreen *ofs, int x, int y);
 int GPU_offscreen_width(const GPUOffScreen *ofs);
 int GPU_offscreen_height(const GPUOffScreen *ofs);
@@ -212,10 +231,12 @@ void GPU_offscreen_viewport_data_get(GPUOffScreen *ofs,
 
 void GPU_clear_color(float red, float green, float blue, float alpha);
 void GPU_clear_depth(float depth);
-void GPU_clear(eGPUFrameBufferBits flags);
+
+void GPU_frontbuffer_read_pixels(
+    int x, int y, int w, int h, int channels, eGPUDataFormat format, void *data);
+
+void GPU_backbuffer_bind(eGPUBackBuffer buffer);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_FRAMEBUFFER_H__ */

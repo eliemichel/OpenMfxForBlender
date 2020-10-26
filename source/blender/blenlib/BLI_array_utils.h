@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_ARRAY_UTILS_H__
-#define __BLI_ARRAY_UTILS_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -38,7 +37,7 @@ void _bli_array_wrap(void *arr, unsigned int arr_len, size_t arr_stride, int dir
 void _bli_array_permute(void *arr,
                         const unsigned int arr_len,
                         const size_t arr_stride,
-                        const unsigned int *index,
+                        const unsigned int *order,
                         void *arr_temp);
 #define BLI_array_permute(arr, arr_len, order) \
   _bli_array_permute(arr, arr_len, sizeof(*(arr)), order, NULL)
@@ -93,5 +92,3 @@ bool _bli_array_is_zeroed(const void *arr, unsigned int arr_len, size_t arr_stri
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_ARRAY_UTILS_H__ */

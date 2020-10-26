@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_STEERABLE_VIEW_MAP_H__
-#define __FREESTYLE_STEERABLE_VIEW_MAP_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -79,7 +78,7 @@ class SteerableViewMap {
    *  \param dir:
    *    The direction
    */
-  unsigned getSVMNumber(const Vec2f &dir);
+  unsigned getSVMNumber(Vec2f dir);
 
   /*! Returns the number of the SVM to which a FEdge belongs most.
    *  \param id:
@@ -156,5 +155,3 @@ class SteerableViewMap {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_STEERABLE_VIEW_MAP_H__

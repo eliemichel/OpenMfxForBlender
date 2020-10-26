@@ -168,7 +168,7 @@ static int gpu_shader_curve_rgb(GPUMaterial *mat,
 
   CurveMapping *cumap = node->storage;
 
-  BKE_curvemapping_initialize(cumap);
+  BKE_curvemapping_init(cumap);
   BKE_curvemapping_table_RGBA(cumap, &array, &size);
   GPUNodeLink *tex = GPU_color_band(mat, size, array, &layer);
 
@@ -215,20 +215,19 @@ static int gpu_shader_curve_rgb(GPUMaterial *mat,
                           GPU_uniform(range_rgba),
                           GPU_uniform(ext_rgba[3]));
   }
-  else {
-    return GPU_stack_link(mat,
-                          node,
-                          "curves_rgb",
-                          in,
-                          out,
-                          tex,
-                          GPU_constant(&layer),
-                          GPU_uniform(range_rgba),
-                          GPU_uniform(ext_rgba[0]),
-                          GPU_uniform(ext_rgba[1]),
-                          GPU_uniform(ext_rgba[2]),
-                          GPU_uniform(ext_rgba[3]));
-  }
+
+  return GPU_stack_link(mat,
+                        node,
+                        "curves_rgb",
+                        in,
+                        out,
+                        tex,
+                        GPU_constant(&layer),
+                        GPU_uniform(range_rgba),
+                        GPU_uniform(ext_rgba[0]),
+                        GPU_uniform(ext_rgba[1]),
+                        GPU_uniform(ext_rgba[2]),
+                        GPU_uniform(ext_rgba[3]));
 }
 
 void register_node_type_sh_curve_rgb(void)

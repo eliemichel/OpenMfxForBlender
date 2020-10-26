@@ -21,8 +21,11 @@
  * \ingroup render
  */
 
-#ifndef __TEXTURE_H__
-#define __TEXTURE_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define BRICONT \
   texres->tin = (texres->tin - 0.5f) * tex->contrast + tex->bright - 0.5f; \
@@ -41,12 +44,15 @@
   texres->tg = tex->gfac * ((texres->tg - 0.5f) * tex->contrast + tex->bright - 0.5f); \
   texres->tb = tex->bfac * ((texres->tb - 0.5f) * tex->contrast + tex->bright - 0.5f); \
   if (!(tex->flag & TEX_NO_CLAMP)) { \
-    if (texres->tr < 0.0f) \
+    if (texres->tr < 0.0f) { \
       texres->tr = 0.0f; \
-    if (texres->tg < 0.0f) \
+    } \
+    if (texres->tg < 0.0f) { \
       texres->tg = 0.0f; \
-    if (texres->tb < 0.0f) \
+    } \
+    if (texres->tb < 0.0f) { \
       texres->tb = 0.0f; \
+    } \
   } \
   if (tex->saturation != 1.0f) { \
     float _hsv[3]; \
@@ -54,12 +60,15 @@
     _hsv[1] *= tex->saturation; \
     hsv_to_rgb(_hsv[0], _hsv[1], _hsv[2], &texres->tr, &texres->tg, &texres->tb); \
     if ((tex->saturation > 1.0f) && !(tex->flag & TEX_NO_CLAMP)) { \
-      if (texres->tr < 0.0f) \
+      if (texres->tr < 0.0f) { \
         texres->tr = 0.0f; \
-      if (texres->tg < 0.0f) \
+      } \
+      if (texres->tg < 0.0f) { \
         texres->tg = 0.0f; \
-      if (texres->tb < 0.0f) \
+      } \
+      if (texres->tb < 0.0f) { \
         texres->tb = 0.0f; \
+      } \
     } \
   } \
   ((void)0)
@@ -95,4 +104,6 @@ void image_sample(struct Image *ima,
                   float result[4],
                   struct ImagePool *pool);
 
-#endif /* __TEXTURE_H__ */
+#ifdef __cplusplus
+}
+#endif

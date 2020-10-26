@@ -22,8 +22,7 @@
  * Declaration of GHOST_SystemWin32 class.
  */
 
-#ifndef __GHOST_SYSTEMWIN32_H__
-#define __GHOST_SYSTEMWIN32_H__
+#pragma once
 
 #ifndef WIN32
 #  error WIN32 only!
@@ -126,7 +125,7 @@ class GHOST_SystemWin32 : public GHOST_System {
    * \param   parentWindow    Parent window
    * \return  The new window (or 0 if creation failed).
    */
-  GHOST_IWindow *createWindow(const STR_String &title,
+  GHOST_IWindow *createWindow(const char *title,
                               GHOST_TInt32 left,
                               GHOST_TInt32 top,
                               GHOST_TUns32 width,
@@ -143,7 +142,7 @@ class GHOST_SystemWin32 : public GHOST_System {
    * Never explicitly delete the window, use disposeContext() instead.
    * \return  The new context (or 0 if creation failed).
    */
-  GHOST_IContext *createOffscreenContext();
+  GHOST_IContext *createOffscreenContext(GHOST_GLSettings glSettings);
 
   /**
    * Dispose of a context.
@@ -212,7 +211,7 @@ class GHOST_SystemWin32 : public GHOST_System {
   GHOST_TSuccess getModifierKeys(GHOST_ModifierKeys &keys) const;
 
   /**
-   * Returns the state of the mouse buttons (ouside the message queue).
+   * Returns the state of the mouse buttons (outside the message queue).
    * \param buttons   The state of the buttons.
    * \return          Indication of success.
    */
@@ -355,7 +354,7 @@ class GHOST_SystemWin32 : public GHOST_System {
    * Process special keys (VK_OEM_*), to see if current key layout
    * gives us anything special, like ! on french AZERTY.
    * \param vKey      The virtual key from hardKey
-   * \param scanCode  The ScanCode of pressed key (simular to PS/2 Set 1)
+   * \param scanCode  The ScanCode of pressed key (similar to PS/2 Set 1)
    */
   GHOST_TKey processSpecialKey(short vKey, short scanCode) const;
 
@@ -488,4 +487,3 @@ inline void GHOST_SystemWin32::handleKeyboardChange(void)
     }
   }
 }
-#endif  // __GHOST_SYSTEMWIN32_H__

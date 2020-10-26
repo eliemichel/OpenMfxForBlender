@@ -38,17 +38,13 @@ PyDoc_STRVAR(Interface0DIterator_doc,
              "this iterator is always obtained from a 1D element.\n"
              "\n"
              ".. method:: __init__(brother)\n"
+             "            __init__(it)\n"
              "\n"
-             "   Copy constructor.\n"
+             "   Construct a nested Interface0DIterator using either the copy constructor\n"
+             "   or the constructor that takes an he argument of a Function0D.\n"
              "\n"
              "   :arg brother: An Interface0DIterator object.\n"
              "   :type brother: :class:`Interface0DIterator`\n"
-             "\n"
-             ".. method:: __init__(it)\n"
-             "\n"
-             "   Construct a nested Interface0DIterator that can be the argument of\n"
-             "   a Function0D.\n"
-             "\n"
              "   :arg it: An iterator object to be nested.\n"
              "   :type it: :class:`SVertexIterator`, :class:`CurvePointIterator`, or\n"
              "      :class:`StrokeVertexIterator`");
@@ -81,14 +77,14 @@ static int Interface0DIterator_init(BPy_Interface0DIterator *self, PyObject *arg
     self->at_start = true;
     self->reversed = false;
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(
                args, kwds, "O!", (char **)kwlist_2, &Interface1D_Type, &inter)) {
     self->if0D_it = new Interface0DIterator(((BPy_Interface1D *)inter)->if1D->verticesBegin());
     self->at_start = true;
     self->reversed = false;
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(
                args, kwds, "O!", (char **)kwlist_3, &Interface0DIterator_Type, &brother)) {
     self->if0D_it = new Interface0DIterator(*(((BPy_Interface0DIterator *)brother)->if0D_it));
@@ -124,7 +120,7 @@ static PyObject *Interface0DIterator_iternext(BPy_Interface0DIterator *self)
       PyErr_SetNone(PyExc_StopIteration);
       return NULL;
     }
-    else if (self->at_start) {
+    if (self->at_start) {
       self->at_start = false;
     }
     else if (self->if0D_it->atLast()) {

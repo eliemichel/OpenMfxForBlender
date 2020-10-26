@@ -29,13 +29,10 @@ set(INC
   ../../makesdna
   ../../makesrna
   ../../render/extern/include
+  ../../sequencer
   ../../windowmanager
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
 )
 
 set(SRC
@@ -61,7 +58,6 @@ else()
   )
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 if(WITH_FREESTYLE)
   list(APPEND INC

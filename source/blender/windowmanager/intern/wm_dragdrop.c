@@ -39,7 +39,6 @@
 #include "BKE_context.h"
 #include "BKE_idtype.h"
 
-#include "GPU_glew.h"
 #include "GPU_shader.h"
 #include "GPU_state.h"
 #include "GPU_viewport.h"
@@ -75,9 +74,7 @@ typedef struct wmDropBoxMap {
 /* spaceid/regionid is zero for window drop maps */
 ListBase *WM_dropboxmap_find(const char *idname, int spaceid, int regionid)
 {
-  wmDropBoxMap *dm;
-
-  for (dm = dropboxes.first; dm; dm = dm->next) {
+  LISTBASE_FOREACH (wmDropBoxMap *, dm, &dropboxes) {
     if (dm->spaceid == spaceid && dm->regionid == regionid) {
       if (STREQLEN(idname, dm->idname, KMAP_MAX_NAME)) {
         return &dm->dropboxes;
@@ -85,7 +82,7 @@ ListBase *WM_dropboxmap_find(const char *idname, int spaceid, int regionid)
     }
   }
 
-  dm = MEM_callocN(sizeof(struct wmDropBoxMap), "dropmap list");
+  wmDropBoxMap *dm = MEM_callocN(sizeof(struct wmDropBoxMap), "dropmap list");
   BLI_strncpy(dm->idname, idname, KMAP_MAX_NAME);
   dm->spaceid = spaceid;
   dm->regionid = regionid;
@@ -100,7 +97,6 @@ wmDropBox *WM_dropbox_add(ListBase *lb,
                           void (*copy)(wmDrag *, wmDropBox *))
 {
   wmDropBox *drop = MEM_callocN(sizeof(wmDropBox), "wmDropBox");
-
   drop->poll = poll;
   drop->copy = copy;
   drop->ot = WM_operatortype_find(idname, 0);
@@ -120,12 +116,9 @@ wmDropBox *WM_dropbox_add(ListBase *lb,
 
 void wm_dropbox_free(void)
 {
-  wmDropBoxMap *dm;
 
-  for (dm = dropboxes.first; dm; dm = dm->next) {
-    wmDropBox *drop;
-
-    for (drop = dm->dropboxes.first; drop; drop = drop->next) {
+  LISTBASE_FOREACH (wmDropBoxMap *, dm, &dropboxes) {
+    LISTBASE_FOREACH (wmDropBox *, drop, &dm->dropboxes) {
       if (drop->ptr) {
         WM_operator_properties_free(drop->ptr);
         MEM_freeN(drop->ptr);
@@ -278,9 +271,8 @@ static void wm_drop_operator_options(bContext *C, wmDrag *drag, const wmEvent *e
 void wm_drags_check_ops(bContext *C, const wmEvent *event)
 {
   wmWindowManager *wm = CTX_wm_manager(C);
-  wmDrag *drag;
 
-  for (drag = wm->drags.first; drag; drag = drag->next) {
+  LISTBASE_FOREACH (wmDrag *, drag, &wm->drags) {
     wm_drop_operator_options(C, drag, event);
   }
 }
@@ -297,7 +289,7 @@ void WM_drag_add_ID(wmDrag *drag, ID *id, ID *from_parent)
       }
       return;
     }
-    else if (GS(drag_id->id->name) != GS(id->name)) {
+    if (GS(drag_id->id->name) != GS(id->name)) {
       BLI_assert(!"All dragged IDs must have the same type");
       return;
     }
@@ -356,7 +348,7 @@ static const char *wm_drag_name(wmDrag *drag)
       if (single) {
         return id->name + 2;
       }
-      else if (id) {
+      if (id) {
         return BKE_idtype_idcode_to_name_plural(GS(id->name));
       }
       break;
@@ -390,25 +382,24 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
 {
   const uiFontStyle *fstyle = UI_FSTYLE_WIDGET;
   wmWindowManager *wm = CTX_wm_manager(C);
-  wmDrag *drag;
   const int winsize_y = WM_window_pixels_y(win);
-  int cursorx, cursory, x, y;
 
-  cursorx = win->eventstate->x;
-  cursory = win->eventstate->y;
+  int cursorx = win->eventstate->x;
+  int cursory = win->eventstate->y;
   if (rect) {
     rect->xmin = rect->xmax = cursorx;
     rect->ymin = rect->ymax = cursory;
   }
 
-  /* XXX todo, multiline drag draws... but maybe not, more types mixed wont work well */
-  GPU_blend(true);
-  for (drag = wm->drags.first; drag; drag = drag->next) {
+  /* Should we support multi-line drag draws? Maybe not, more types mixed wont work well. */
+  GPU_blend(GPU_BLEND_ALPHA);
+  LISTBASE_FOREACH (wmDrag *, drag, &wm->drags) {
     const uchar text_col[] = {255, 255, 255, 255};
     int iconsize = UI_DPI_ICON_SIZE;
     int padding = 4 * UI_DPI_FAC;
 
     /* image or icon */
+    int x, y;
     if (drag->imb) {
       x = cursorx - drag->sx / 2;
       y = cursory - drag->sy / 2;
@@ -424,9 +415,8 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
                                y,
                                drag->imb->x,
                                drag->imb->y,
-                               GL_RGBA,
-                               GL_UNSIGNED_BYTE,
-                               GL_NEAREST,
+                               GPU_RGBA8,
+                               false,
                                drag->imb->rect,
                                drag->scale,
                                drag->scale,
@@ -497,5 +487,5 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
       }
     }
   }
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }

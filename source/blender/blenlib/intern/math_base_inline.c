@@ -38,6 +38,10 @@
 
 #include "BLI_math_base.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* copied from BLI_utildefines.h */
 #ifdef __GNUC__
 #  define UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -356,7 +360,7 @@ MINLINE int divide_floor_i(int a, int b)
 }
 
 /**
- * Integer division that ceils the result, instead of flooring like normal C division.
+ * Integer division that returns the ceiling, instead of flooring like normal C division.
  */
 MINLINE uint divide_ceil_u(uint a, uint b)
 {
@@ -800,5 +804,9 @@ MINLINE unsigned char unit_ushort_to_uchar(unsigned short val)
     (v1)[3] = unit_float_to_uchar_clamp((v2[3])); \
   } \
   ((void)0)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __MATH_BASE_INLINE_C__ */

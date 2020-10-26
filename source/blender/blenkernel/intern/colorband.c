@@ -485,7 +485,7 @@ bool BKE_colorband_evaluate(const ColorBand *coba, float in, float out[4])
       }
       else {
         /* was setting to 0.0 in 2.56 & previous, but this
-         * is incorrect for the last element, see [#26732] */
+         * is incorrect for the last element, see T26732. */
         fac = (a != coba->tot) ? 0.0f : 1.0f;
       }
 
@@ -587,7 +587,7 @@ static int vergcband(const void *a1, const void *a2)
   if (x1->pos > x2->pos) {
     return 1;
   }
-  else if (x1->pos < x2->pos) {
+  if (x1->pos < x2->pos) {
     return -1;
   }
   return 0;
@@ -620,18 +620,17 @@ CBData *BKE_colorband_element_add(struct ColorBand *coba, float position)
   if (coba->tot == MAXCOLORBAND) {
     return NULL;
   }
+
+  CBData *xnew;
+
+  xnew = &coba->data[coba->tot];
+  xnew->pos = position;
+
+  if (coba->tot != 0) {
+    BKE_colorband_evaluate(coba, position, &xnew->r);
+  }
   else {
-    CBData *xnew;
-
-    xnew = &coba->data[coba->tot];
-    xnew->pos = position;
-
-    if (coba->tot != 0) {
-      BKE_colorband_evaluate(coba, position, &xnew->r);
-    }
-    else {
-      zero_v4(&xnew->r);
-    }
+    zero_v4(&xnew->r);
   }
 
   coba->tot++;
@@ -642,24 +641,22 @@ CBData *BKE_colorband_element_add(struct ColorBand *coba, float position)
   return coba->data + coba->cur;
 }
 
-int BKE_colorband_element_remove(struct ColorBand *coba, int index)
+bool BKE_colorband_element_remove(struct ColorBand *coba, int index)
 {
-  int a;
-
   if (coba->tot < 2) {
-    return 0;
+    return false;
   }
 
   if (index < 0 || index >= coba->tot) {
-    return 0;
+    return false;
   }
 
   coba->tot--;
-  for (a = index; a < coba->tot; a++) {
+  for (int a = index; a < coba->tot; a++) {
     coba->data[a] = coba->data[a + 1];
   }
   if (coba->cur) {
     coba->cur--;
   }
-  return 1;
+  return true;
 }

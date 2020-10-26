@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_LIB_OVERRIDE_H__
-#define __BKE_LIB_OVERRIDE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -48,15 +47,17 @@ struct IDOverrideLibrary;
 struct IDOverrideLibraryProperty;
 struct IDOverrideLibraryPropertyOperation;
 struct Main;
+struct Object;
 struct PointerRNA;
 struct PropertyRNA;
-
-void BKE_lib_override_library_enable(const bool do_enable);
-bool BKE_lib_override_library_is_enabled(void);
+struct Scene;
+struct ViewLayer;
 
 struct IDOverrideLibrary *BKE_lib_override_library_init(struct ID *local_id,
                                                         struct ID *reference_id);
-void BKE_lib_override_library_copy(struct ID *dst_id, const struct ID *src_id);
+void BKE_lib_override_library_copy(struct ID *dst_id,
+                                   const struct ID *src_id,
+                                   const bool do_full_copy);
 void BKE_lib_override_library_clear(struct IDOverrideLibrary *override, const bool do_id_user);
 void BKE_lib_override_library_free(struct IDOverrideLibrary **override, const bool do_id_user);
 
@@ -64,6 +65,28 @@ struct ID *BKE_lib_override_library_create_from_id(struct Main *bmain,
                                                    struct ID *reference_id,
                                                    const bool do_tagged_remap);
 bool BKE_lib_override_library_create_from_tag(struct Main *bmain);
+void BKE_lib_override_library_dependencies_tag(struct Main *bmain,
+                                               struct ID *id_root,
+                                               const uint tag,
+                                               const bool do_create_main_relashionships);
+void BKE_lib_override_library_override_group_tag(struct Main *bmain,
+                                                 struct ID *id_root,
+                                                 const uint tag,
+                                                 const bool do_create_main_relashionships);
+bool BKE_lib_override_library_create(struct Main *bmain,
+                                     struct Scene *scene,
+                                     struct ViewLayer *view_layer,
+                                     struct ID *id_root,
+                                     struct ID *id_reference);
+bool BKE_lib_override_library_proxy_convert(struct Main *bmain,
+                                            struct Scene *scene,
+                                            struct ViewLayer *view_layer,
+                                            struct Object *ob_proxy);
+bool BKE_lib_override_library_resync(struct Main *bmain,
+                                     struct Scene *scene,
+                                     struct ViewLayer *view_layer,
+                                     struct ID *id_root);
+void BKE_lib_override_library_delete(struct Main *bmain, struct ID *id_root);
 
 struct IDOverrideLibraryProperty *BKE_lib_override_library_property_find(
     struct IDOverrideLibrary *override, const char *rna_path);
@@ -106,10 +129,11 @@ bool BKE_lib_override_library_property_operation_operands_validate(
 bool BKE_lib_override_library_status_check_local(struct Main *bmain, struct ID *local);
 bool BKE_lib_override_library_status_check_reference(struct Main *bmain, struct ID *local);
 
-bool BKE_lib_override_library_operations_create(struct Main *bmain,
-                                                struct ID *local,
-                                                const bool force_auto);
+bool BKE_lib_override_library_operations_create(struct Main *bmain, struct ID *local);
 void BKE_lib_override_library_main_operations_create(struct Main *bmain, const bool force_auto);
+
+void BKE_lib_override_library_id_reset(struct Main *bmain, struct ID *id_root);
+void BKE_lib_override_library_id_hierarchy_reset(struct Main *bmain, struct ID *id_root);
 
 void BKE_lib_override_library_operations_tag(struct IDOverrideLibraryProperty *override_property,
                                              const short tag,
@@ -130,7 +154,7 @@ void BKE_lib_override_library_main_update(struct Main *bmain);
 /* For now, we just use a temp main list. */
 typedef struct Main OverrideLibraryStorage;
 
-OverrideLibraryStorage *BKE_lib_override_library_operations_store_initialize(void);
+OverrideLibraryStorage *BKE_lib_override_library_operations_store_init(void);
 struct ID *BKE_lib_override_library_operations_store_start(
     struct Main *bmain, OverrideLibraryStorage *override_storage, struct ID *local);
 void BKE_lib_override_library_operations_store_end(OverrideLibraryStorage *override_storage,
@@ -140,5 +164,3 @@ void BKE_lib_override_library_operations_store_finalize(OverrideLibraryStorage *
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_LIB_OVERRIDE_H__ */

@@ -32,24 +32,24 @@
 
 #include "UI_resources.h"
 
-#include "GPU_uniformbuffer.h"
+#include "GPU_uniform_buffer.h"
 
 /* -------------------------------------------------------------------- */
 /** \name World Data
  * \{ */
 
-GPUUniformBuffer *workbench_material_ubo_alloc(WORKBENCH_PrivateData *wpd)
+GPUUniformBuf *workbench_material_ubo_alloc(WORKBENCH_PrivateData *wpd)
 {
-  struct GPUUniformBuffer **ubo = BLI_memblock_alloc(wpd->material_ubo);
+  struct GPUUniformBuf **ubo = BLI_memblock_alloc(wpd->material_ubo);
   if (*ubo == NULL) {
-    *ubo = GPU_uniformbuffer_create(sizeof(WORKBENCH_UBO_Material) * MAX_MATERIAL, NULL, NULL);
+    *ubo = GPU_uniformbuf_create(sizeof(WORKBENCH_UBO_Material) * MAX_MATERIAL);
   }
   return *ubo;
 }
 
 static void workbench_ubo_free(void *elem)
 {
-  GPUUniformBuffer **ubo = elem;
+  GPUUniformBuf **ubo = elem;
   DRW_UBO_FREE_SAFE(*ubo);
 }
 
@@ -78,50 +78,13 @@ static WORKBENCH_ViewLayerData *workbench_view_layer_data_ensure_ex(struct ViewL
     size_t matbuf_size = sizeof(WORKBENCH_UBO_Material) * MAX_MATERIAL;
     (*vldata)->material_ubo_data = BLI_memblock_create_ex(matbuf_size, matbuf_size * 2);
     (*vldata)->material_ubo = BLI_memblock_create_ex(sizeof(void *), sizeof(void *) * 8);
-    (*vldata)->world_ubo = DRW_uniformbuffer_create(sizeof(WORKBENCH_UBO_World), NULL);
+    (*vldata)->world_ubo = GPU_uniformbuf_create_ex(sizeof(WORKBENCH_UBO_World), NULL, "wb_World");
   }
 
   return *vldata;
 }
 
 /* \} */
-
-static void workbench_viewvecs_update(float r_viewvecs[3][4])
-{
-  float invproj[4][4];
-  const bool is_persp = DRW_view_is_persp_get(NULL);
-  DRW_view_winmat_get(NULL, invproj, true);
-
-  /* view vectors for the corners of the view frustum.
-   * Can be used to recreate the world space position easily */
-  copy_v4_fl4(r_viewvecs[0], -1.0f, -1.0f, -1.0f, 1.0f);
-  copy_v4_fl4(r_viewvecs[1], 1.0f, -1.0f, -1.0f, 1.0f);
-  copy_v4_fl4(r_viewvecs[2], -1.0f, 1.0f, -1.0f, 1.0f);
-
-  /* convert the view vectors to view space */
-  for (int i = 0; i < 3; i++) {
-    mul_m4_v4(invproj, r_viewvecs[i]);
-    /* normalized trick see:
-     * http://www.derschmale.com/2014/01/26/reconstructing-positions-from-the-depth-buffer */
-    mul_v3_fl(r_viewvecs[i], 1.0f / r_viewvecs[i][3]);
-    if (is_persp) {
-      mul_v3_fl(r_viewvecs[i], 1.0f / r_viewvecs[i][2]);
-    }
-    r_viewvecs[i][3] = 1.0;
-  }
-
-  /* we need to store the differences */
-  r_viewvecs[1][0] -= r_viewvecs[0][0];
-  r_viewvecs[1][1] = r_viewvecs[2][1] - r_viewvecs[0][1];
-
-  /* calculate a depth offset as well */
-  if (!is_persp) {
-    float vec_far[] = {-1.0f, -1.0f, 1.0f, 1.0f};
-    mul_m4_v4(invproj, vec_far);
-    mul_v3_fl(vec_far, 1.0f / vec_far[3]);
-    r_viewvecs[1][2] = vec_far[2] - r_viewvecs[0][2];
-  }
-}
 
 static void workbench_studiolight_data_update(WORKBENCH_PrivateData *wpd, WORKBENCH_UBO_World *wd)
 {
@@ -160,6 +123,7 @@ static void workbench_studiolight_data_update(WORKBENCH_PrivateData *wpd, WORKBE
       copy_v3_fl3(light->light_direction, 1.0f, 0.0f, 0.0f);
       copy_v3_fl(light->specular_color, 0.0f);
       copy_v3_fl(light->diffuse_color, 0.0f);
+      light->wrapped = 0.0f;
     }
   }
 
@@ -215,14 +179,21 @@ void workbench_private_data_init(WORKBENCH_PrivateData *wpd)
   }
 
   if (!v3d || (v3d->shading.type == OB_RENDER && BKE_scene_uses_blender_workbench(scene))) {
+    short shading_flag = scene->display.shading.flag;
+    if (XRAY_FLAG_ENABLED((&scene->display))) {
+      /* Disable shading options that aren't supported in transparency mode. */
+      shading_flag &= ~(V3D_SHADING_SHADOW | V3D_SHADING_CAVITY | V3D_SHADING_DEPTH_OF_FIELD);
+    }
+
     /* FIXME: This reproduce old behavior when workbench was separated in 2 engines.
      * But this is a workaround for a missing update tagging from operators. */
-    if ((v3d && (XRAY_ENABLED(v3d) != XRAY_ENABLED(&scene->display))) ||
-        (scene->display.shading.flag != wpd->shading.flag)) {
+    if ((XRAY_ENABLED(wpd) != XRAY_ENABLED(&scene->display)) ||
+        (shading_flag != wpd->shading.flag)) {
       wpd->view_updated = true;
     }
 
     wpd->shading = scene->display.shading;
+    wpd->shading.flag = shading_flag;
     if (XRAY_FLAG_ENABLED((&scene->display))) {
       wpd->shading.xray_alpha = XRAY_ALPHA((&scene->display));
     }
@@ -242,14 +213,23 @@ void workbench_private_data_init(WORKBENCH_PrivateData *wpd)
     }
   }
   else {
+    short shading_flag = v3d->shading.flag;
+    if (XRAY_ENABLED(v3d)) {
+      /* Disable shading options that aren't supported in transparency mode. */
+      shading_flag &= ~(V3D_SHADING_SHADOW | V3D_SHADING_CAVITY | V3D_SHADING_DEPTH_OF_FIELD);
+    }
+
     /* FIXME: This reproduce old behavior when workbench was separated in 2 engines.
      * But this is a workaround for a missing update tagging from operators. */
-    if (XRAY_ENABLED(v3d) != XRAY_ENABLED(wpd) || v3d->shading.flag != wpd->shading.flag) {
+    if (XRAY_ENABLED(v3d) != XRAY_ENABLED(wpd) || shading_flag != wpd->shading.flag) {
       wpd->view_updated = true;
     }
 
     wpd->shading = v3d->shading;
+    wpd->shading.flag = shading_flag;
     if (wpd->shading.type < OB_SOLID) {
+      wpd->shading.light = V3D_LIGHTING_FLAT;
+      wpd->shading.color_type = V3D_SHADING_OBJECT_COLOR;
       wpd->shading.xray_alpha = 0.0f;
     }
     else if (XRAY_ENABLED(v3d)) {
@@ -307,9 +287,8 @@ void workbench_update_world_ubo(WORKBENCH_PrivateData *wpd)
   workbench_studiolight_data_update(wpd, &wd);
   workbench_shadow_data_update(wpd, &wd);
   workbench_cavity_data_update(wpd, &wd);
-  workbench_viewvecs_update(wd.viewvecs);
 
-  DRW_uniformbuffer_update(wpd->world_ubo, &wd);
+  GPU_uniformbuf_update(wpd->world_ubo, &wd);
 }
 
 void workbench_update_material_ubos(WORKBENCH_PrivateData *UNUSED(wpd))
@@ -322,9 +301,9 @@ void workbench_update_material_ubos(WORKBENCH_PrivateData *UNUSED(wpd))
   BLI_memblock_iternew(vldata->material_ubo_data, &iter_data);
   WORKBENCH_UBO_Material *matchunk;
   while ((matchunk = BLI_memblock_iterstep(&iter_data))) {
-    GPUUniformBuffer **ubo = BLI_memblock_iterstep(&iter);
+    GPUUniformBuf **ubo = BLI_memblock_iterstep(&iter);
     BLI_assert(*ubo != NULL);
-    GPU_uniformbuffer_update(*ubo, matchunk);
+    GPU_uniformbuf_update(*ubo, matchunk);
   }
 
   BLI_memblock_clear(vldata->material_ubo, workbench_ubo_free);

@@ -18,16 +18,13 @@
  * \ingroup collada
  */
 
-#ifndef __DOCUMENTEXPORTER_H__
-#define __DOCUMENTEXPORTER_H__
+#pragma once
 
 #include "BlenderContext.h"
 #include "collada.h"
 #include "collada_utils.h"
 
-extern "C" {
 #include "DNA_customdata_types.h"
-}
 
 class DocumentExporter {
  public:
@@ -40,5 +37,3 @@ class DocumentExporter {
   BCExportSettings export_settings;
   KeyImageMap key_image_map;
 };
-
-#endif

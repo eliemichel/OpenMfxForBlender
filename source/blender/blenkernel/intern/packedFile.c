@@ -51,6 +51,8 @@
 #include "BKE_sound.h"
 #include "BKE_volume.h"
 
+#include "BLO_read_write.h"
+
 int BKE_packedfile_seek(PackedFile *pf, int offset, int whence)
 {
   int oldseek = -1, seek = 0;
@@ -80,7 +82,7 @@ int BKE_packedfile_seek(PackedFile *pf, int offset, int whence)
     pf->seek = seek;
   }
 
-  return (oldseek);
+  return oldseek;
 }
 
 void BKE_packedfile_rewind(PackedFile *pf)
@@ -108,7 +110,7 @@ int BKE_packedfile_read(PackedFile *pf, void *data, int size)
     size = -1;
   }
 
-  return (size);
+  return size;
 }
 
 int BKE_packedfile_count_all(Main *bmain)
@@ -234,7 +236,7 @@ PackedFile *BKE_packedfile_new(ReportList *reports, const char *filename, const 
 
   // XXX waitcursor(0);
 
-  return (pf);
+  return pf;
 }
 
 /* no libraries for now */
@@ -264,14 +266,16 @@ void BKE_packedfile_pack_all(Main *bmain, ReportList *reports, bool verbose)
   for (vfont = bmain->fonts.first; vfont; vfont = vfont->id.next) {
     if (vfont->packedfile == NULL && !ID_IS_LINKED(vfont) &&
         BKE_vfont_is_builtin(vfont) == false) {
-      vfont->packedfile = BKE_packedfile_new(reports, vfont->name, BKE_main_blendfile_path(bmain));
+      vfont->packedfile = BKE_packedfile_new(
+          reports, vfont->filepath, BKE_main_blendfile_path(bmain));
       tot++;
     }
   }
 
   for (sound = bmain->sounds.first; sound; sound = sound->id.next) {
     if (sound->packedfile == NULL && !ID_IS_LINKED(sound)) {
-      sound->packedfile = BKE_packedfile_new(reports, sound->name, BKE_main_blendfile_path(bmain));
+      sound->packedfile = BKE_packedfile_new(
+          reports, sound->filepath, BKE_main_blendfile_path(bmain));
       tot++;
     }
   }
@@ -363,7 +367,7 @@ int BKE_packedfile_write_to_file(ReportList *reports,
   if (guimode) {
   }  // XXX waitcursor(0);
 
-  return (ret_value);
+  return ret_value;
 }
 
 /**
@@ -413,11 +417,10 @@ enum ePF_FileCompare BKE_packedfile_compare_to_file(const char *ref_file_name,
           ret_val = PF_CMP_DIFFERS;
           break;
         }
-        else {
-          if (memcmp(buf, ((char *)pf->data) + i, len)) {
-            ret_val = PF_CMP_DIFFERS;
-            break;
-          }
+
+        if (memcmp(buf, ((char *)pf->data) + i, len) != 0) {
+          ret_val = PF_CMP_DIFFERS;
+          break;
         }
       }
 
@@ -425,7 +428,7 @@ enum ePF_FileCompare BKE_packedfile_compare_to_file(const char *ref_file_name,
     }
   }
 
-  return (ret_val);
+  return ret_val;
 }
 
 /**
@@ -566,19 +569,19 @@ int BKE_packedfile_unpack_vfont(Main *bmain,
 
   if (vfont != NULL) {
     unpack_generate_paths(
-        vfont->name, (ID *)vfont, absname, localname, sizeof(absname), sizeof(localname));
+        vfont->filepath, (ID *)vfont, absname, localname, sizeof(absname), sizeof(localname));
     newname = BKE_packedfile_unpack_to_file(
         reports, BKE_main_blendfile_path(bmain), absname, localname, vfont->packedfile, how);
     if (newname != NULL) {
       ret_value = RET_OK;
       BKE_packedfile_free(vfont->packedfile);
       vfont->packedfile = NULL;
-      BLI_strncpy(vfont->name, newname, sizeof(vfont->name));
+      BLI_strncpy(vfont->filepath, newname, sizeof(vfont->filepath));
       MEM_freeN(newname);
     }
   }
 
-  return (ret_value);
+  return ret_value;
 }
 
 int BKE_packedfile_unpack_sound(Main *bmain,
@@ -592,11 +595,11 @@ int BKE_packedfile_unpack_sound(Main *bmain,
 
   if (sound != NULL) {
     unpack_generate_paths(
-        sound->name, (ID *)sound, absname, localname, sizeof(absname), sizeof(localname));
+        sound->filepath, (ID *)sound, absname, localname, sizeof(absname), sizeof(localname));
     newname = BKE_packedfile_unpack_to_file(
         reports, BKE_main_blendfile_path(bmain), absname, localname, sound->packedfile, how);
     if (newname != NULL) {
-      BLI_strncpy(sound->name, newname, sizeof(sound->name));
+      BLI_strncpy(sound->filepath, newname, sizeof(sound->filepath));
       MEM_freeN(newname);
 
       BKE_packedfile_free(sound->packedfile);
@@ -608,7 +611,7 @@ int BKE_packedfile_unpack_sound(Main *bmain,
     }
   }
 
-  return (ret_value);
+  return ret_value;
 }
 
 int BKE_packedfile_unpack_image(Main *bmain,
@@ -644,7 +647,7 @@ int BKE_packedfile_unpack_image(Main *bmain,
 
         /* keep the new name in the image for non-pack specific reasons */
         if (how != PF_REMOVE) {
-          BLI_strncpy(ima->name, newname, sizeof(imapf->filepath));
+          BLI_strncpy(ima->filepath, newname, sizeof(imapf->filepath));
         }
         MEM_freeN(newname);
       }
@@ -661,7 +664,7 @@ int BKE_packedfile_unpack_image(Main *bmain,
     BKE_image_signal(bmain, ima, NULL, IMA_SIGNAL_RELOAD);
   }
 
-  return (ret_value);
+  return ret_value;
 }
 
 int BKE_packedfile_unpack_volume(Main *bmain,
@@ -691,7 +694,7 @@ int BKE_packedfile_unpack_volume(Main *bmain,
     }
   }
 
-  return (ret_value);
+  return ret_value;
 }
 
 int BKE_packedfile_unpack_all_libraries(Main *bmain, ReportList *reports)
@@ -701,12 +704,12 @@ int BKE_packedfile_unpack_all_libraries(Main *bmain, ReportList *reports)
   int ret_value = RET_ERROR;
 
   for (lib = bmain->libraries.first; lib; lib = lib->id.next) {
-    if (lib->packedfile && lib->name[0]) {
+    if (lib->packedfile && lib->filepath[0]) {
 
       newname = BKE_packedfile_unpack_to_file(reports,
                                               BKE_main_blendfile_path(bmain),
-                                              lib->filepath,
-                                              lib->filepath,
+                                              lib->filepath_abs,
+                                              lib->filepath_abs,
                                               lib->packedfile,
                                               PF_WRITE_ORIGINAL);
       if (newname != NULL) {
@@ -722,7 +725,7 @@ int BKE_packedfile_unpack_all_libraries(Main *bmain, ReportList *reports)
     }
   }
 
-  return (ret_value);
+  return ret_value;
 }
 
 void BKE_packedfile_pack_all_libraries(Main *bmain, ReportList *reports)
@@ -731,19 +734,19 @@ void BKE_packedfile_pack_all_libraries(Main *bmain, ReportList *reports)
 
   /* test for relativenss */
   for (lib = bmain->libraries.first; lib; lib = lib->id.next) {
-    if (!BLI_path_is_rel(lib->name)) {
+    if (!BLI_path_is_rel(lib->filepath)) {
       break;
     }
   }
 
   if (lib) {
-    BKE_reportf(reports, RPT_ERROR, "Cannot pack absolute file: '%s'", lib->name);
+    BKE_reportf(reports, RPT_ERROR, "Cannot pack absolute file: '%s'", lib->filepath);
     return;
   }
 
   for (lib = bmain->libraries.first; lib; lib = lib->id.next) {
     if (lib->packedfile == NULL) {
-      lib->packedfile = BKE_packedfile_new(reports, lib->name, BKE_main_blendfile_path(bmain));
+      lib->packedfile = BKE_packedfile_new(reports, lib->filepath, BKE_main_blendfile_path(bmain));
     }
   }
 }
@@ -844,10 +847,36 @@ void BKE_packedfile_id_unpack(Main *bmain, ID *id, ReportList *reports, enum ePF
     }
     case ID_LI: {
       Library *li = (Library *)id;
-      BKE_reportf(reports, RPT_ERROR, "Cannot unpack individual Library file, '%s'", li->name);
+      BKE_reportf(reports, RPT_ERROR, "Cannot unpack individual Library file, '%s'", li->filepath);
       break;
     }
     default:
       break;
+  }
+}
+
+void BKE_packedfile_blend_write(BlendWriter *writer, PackedFile *pf)
+{
+  if (pf == NULL) {
+    return;
+  }
+  BLO_write_struct(writer, PackedFile, pf);
+  BLO_write_raw(writer, pf->size, pf->data);
+}
+
+void BKE_packedfile_blend_read(BlendDataReader *reader, PackedFile **pf_p)
+{
+  BLO_read_packed_address(reader, pf_p);
+  PackedFile *pf = *pf_p;
+  if (pf == NULL) {
+    return;
+  }
+
+  BLO_read_packed_address(reader, &pf->data);
+  if (pf->data == NULL) {
+    /* We cannot allow a PackedFile with a NULL data field,
+     * the whole code assumes this is not possible. See T70315. */
+    printf("%s: NULL packedfile data, cleaning up...\n", __func__);
+    MEM_SAFE_FREE(pf);
   }
 }

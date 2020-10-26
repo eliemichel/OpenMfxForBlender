@@ -18,14 +18,12 @@
  * \ingroup collada
  */
 
-#ifndef __ARMATUREIMPORTER_H__
-#define __ARMATUREIMPORTER_H__
+#pragma once
 
 #include "COLLADAFWMorphController.h"
 #include "COLLADAFWNode.h"
 #include "COLLADAFWUniqueId.h"
 
-extern "C" {
 #include "BKE_context.h"
 #include "BKE_key.h"
 
@@ -35,7 +33,6 @@ extern "C" {
 #include "DNA_scene_types.h"
 
 #include "ED_armature.h"
-}
 
 #include "AnimationImporter.h"
 #include "ExtraTags.h"
@@ -64,11 +61,11 @@ class ArmatureImporter : private TransformReader {
   // std::map<int, JointData> joint_index_to_joint_info_map;
   // std::map<COLLADAFW::UniqueId, int> joint_id_to_joint_index_map;
   BoneExtensionManager bone_extension_manager;
-  // int bone_direction_row; // XXX not used
+  // int bone_direction_row; /* XXX not used */
   float leaf_bone_length;
   int totbone;
-  // XXX not used
-  // float min_angle; // minimum angle between bone head-tail and a row of bone matrix
+  /* XXX not used */
+  // float min_angle; /* minimum angle between bone head-tail and a row of bone matrix */
 
 #if 0
   struct ArmatureJoints {
@@ -78,10 +75,10 @@ class ArmatureImporter : private TransformReader {
   std::vector<ArmatureJoints> armature_joints;
 #endif
 
-  Object *empty;  // empty for leaf bones
+  Object *empty; /* empty for leaf bones */
 
   std::map<COLLADAFW::UniqueId, COLLADAFW::UniqueId> geom_uid_by_controller_uid;
-  std::map<COLLADAFW::UniqueId, COLLADAFW::Node *> joint_by_uid;  // contains all joints
+  std::map<COLLADAFW::UniqueId, COLLADAFW::Node *> joint_by_uid; /* contains all joints */
   std::vector<COLLADAFW::Node *> root_joints;
   std::vector<COLLADAFW::Node *> finished_joints;
   std::vector<COLLADAFW::MorphController *> morph_controllers;
@@ -90,11 +87,12 @@ class ArmatureImporter : private TransformReader {
 
   MeshImporterBase *mesh_importer;
 
-  // This is used to store data passed in write_controller_data.
-  // Arrays from COLLADAFW::SkinControllerData lose ownership, so do this class members
-  // so that arrays don't get freed until we free them explicitly.
+  /* This is used to store data passed in write_controller_data.
+   * Arrays from COLLADAFW::SkinControllerData lose ownership, so do this class members
+   * so that arrays don't get freed until we free them explicitly. */
 
-  std::map<COLLADAFW::UniqueId, SkinInfo> skin_by_data_uid;  // data UID = skin controller data UID
+  std::map<COLLADAFW::UniqueId, SkinInfo>
+      skin_by_data_uid; /* data UID = skin controller data UID */
 #if 0
   JointData *get_joint_data(COLLADAFW::Node *node);
 #endif
@@ -156,13 +154,13 @@ class ArmatureImporter : private TransformReader {
 
   void add_root_joint(COLLADAFW::Node *node, Object *parent);
 
-  // here we add bones to armatures, having armatures previously created in write_controller
+  /* here we add bones to armatures, having armatures previously created in write_controller */
   void make_armatures(bContext *C, std::vector<Object *> &objects_to_scale);
 
   void make_shape_keys(bContext *C);
 
 #if 0
-  // link with meshes, create vertex groups, assign weights
+  /* link with meshes, create vertex groups, assign weights */
   void link_armature(Object *ob_arm,
                      const COLLADAFW::UniqueId &geom_id,
                      const COLLADAFW::UniqueId &controller_data_id);
@@ -178,10 +176,8 @@ class ArmatureImporter : private TransformReader {
 
   void get_rna_path_for_joint(COLLADAFW::Node *node, char *joint_path, size_t count);
 
-  // gives a world-space mat
+  /* gives a world-space mat */
   bool get_joint_bind_mat(float m[4][4], COLLADAFW::Node *joint);
 
   void set_tags_map(TagsMap &tags_map);
 };
-
-#endif

@@ -506,9 +506,7 @@ static BMLoop *bm_edge_is_mixed_face_tag(BMLoop *l)
 
     return ((tot_tag == 1) && (tot_untag >= 1)) ? l_tag : NULL;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 static float bm_edge_info_average_length(BMVert *v, SplitEdgeInfo *edge_info)
@@ -530,9 +528,7 @@ static float bm_edge_info_average_length(BMVert *v, SplitEdgeInfo *edge_info)
   if (tot != 0) {
     return len / (float)tot;
   }
-  else {
-    return -1.0f;
-  }
+  return -1.0f;
 }
 
 /**.
@@ -663,9 +659,7 @@ static float bm_edge_info_average_length_with_fallback(
   if (length != -1.0f) {
     return length;
   }
-  else {
-    return bm_edge_info_average_length_fallback(v, edge_info, bm, vert_lengths_p);
-  }
+  return bm_edge_info_average_length_fallback(v, edge_info, bm, vert_lengths_p);
 }
 
 void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
@@ -973,10 +967,10 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
                   is_mid = false;
                 }
 
-                /* distable gives odd results at times, see [#39288] */
+                /* distable gives odd results at times, see T39288. */
 #if 0
                 else if (compare_v3v3(f_a->no, f_b->no, 0.001f) == false) {
-                  /* epsilon increased to fix [#32329] */
+                  /* epsilon increased to fix T32329. */
 
                   /* faces don't touch,
                    * just get cross product of their normals, its *good enough*

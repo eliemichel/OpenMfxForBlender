@@ -23,12 +23,17 @@
 
 #pragma once
 
+#include "DNA_session_uuid_types.h"
+
+#include "BLI_session_uuid.h"
+
 #include "intern/depsgraph_type.h"
 #include "intern/eval/deg_eval_runtime_backup_sequence.h"
 
 struct Scene;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct Depsgraph;
 
@@ -42,8 +47,8 @@ class SequencerBackup {
 
   const Depsgraph *depsgraph;
 
-  typedef map<Sequence *, SequenceBackup> SequencesBackupMap;
-  SequencesBackupMap sequences_backup;
+  Map<SessionUUID, SequenceBackup> sequences_backup;
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

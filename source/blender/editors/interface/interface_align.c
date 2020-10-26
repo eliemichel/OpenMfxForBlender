@@ -24,12 +24,15 @@
 #include "DNA_screen_types.h"
 #include "DNA_userdef_types.h"
 
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_rect.h"
 
 #include "UI_interface.h"
 
 #include "interface_intern.h"
+
+#include "MEM_guardedalloc.h"
 
 #ifdef USE_UIBUT_SPATIAL_ALIGN
 
@@ -120,26 +123,6 @@ bool ui_but_can_align(const uiBut *but)
                                      UI_BTYPE_SEPR_SPACER);
   return (btype_can_align && (BLI_rctf_size_x(&but->rect) > 0.0f) &&
           (BLI_rctf_size_y(&but->rect) > 0.0f));
-}
-
-int ui_but_align_opposite_to_area_align_get(const ARegion *region)
-{
-  const ARegion *align_region = (region->alignment & RGN_SPLIT_PREV && region->prev) ?
-                                    region->prev :
-                                    region;
-
-  switch (RGN_ALIGN_ENUM_FROM_MASK(align_region->alignment)) {
-    case RGN_ALIGN_TOP:
-      return UI_BUT_ALIGN_DOWN;
-    case RGN_ALIGN_BOTTOM:
-      return UI_BUT_ALIGN_TOP;
-    case RGN_ALIGN_LEFT:
-      return UI_BUT_ALIGN_RIGHT;
-    case RGN_ALIGN_RIGHT:
-      return UI_BUT_ALIGN_LEFT;
-  }
-
-  return 0;
 }
 
 /**
@@ -389,7 +372,7 @@ static void ui_block_align_but_to_region(uiBut *but, const ARegion *region)
       rect->xmin = rect->xmax - but_width;
       break;
     default:
-      BLI_assert(0);
+      /* Tabs may be shown in unaligned regions too, they just appear as regular buttons then. */
       break;
   }
 }
@@ -403,7 +386,6 @@ static void ui_block_align_but_to_region(uiBut *but, const ARegion *region)
  */
 void ui_block_align_calc(uiBlock *block, const ARegion *region)
 {
-  uiBut *but;
   int num_buttons = 0;
 
   const int sides_to_ui_but_align_flags[4] = SIDE_TO_UI_BUT_ALIGN;
@@ -411,12 +393,11 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
   ButAlign *butal_array;
   ButAlign *butal, *butal_other;
   int side;
-  int i, j;
 
   /* First loop: we count number of buttons belonging to an align group,
    * and clear their align flag.
    * Tabs get some special treatment here, they get aligned to region border. */
-  for (but = block->buttons.first; but; but = but->next) {
+  LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
     /* special case: tabs need to be aligned to a region border, drawflag tells which one */
     if (but->type == UI_BTYPE_TAB) {
       ui_block_align_but_to_region(but, region);
@@ -436,11 +417,21 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
     return;
   }
 
-  butal_array = alloca(sizeof(*butal_array) * (size_t)num_buttons);
+  /* Note that this is typically less than ~20, and almost always under ~100.
+   * Even so, we can't ensure this value won't exceed available stack memory.
+   * Fallback to allocation instead of using #alloca, see: T78636. */
+  ButAlign butal_array_buf[256];
+  if (num_buttons <= ARRAY_SIZE(butal_array_buf)) {
+    butal_array = butal_array_buf;
+  }
+  else {
+    butal_array = MEM_mallocN(sizeof(*butal_array) * num_buttons, __func__);
+  }
   memset(butal_array, 0, sizeof(*butal_array) * (size_t)num_buttons);
 
   /* Second loop: we initialize our ButAlign data for each button. */
-  for (but = block->buttons.first, butal = butal_array; but; but = but->next) {
+  butal = butal_array;
+  LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
     if (but->alignnr != 0) {
       butal->but = but;
       butal->borders[LEFT] = &but->rect.xmin;
@@ -460,9 +451,11 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
   /* Third loop: for each pair of buttons in the same align group,
    * we compute their potential proximity. Note that each pair is checked only once, and that we
    * break early in case we know all remaining pairs will always be too far away. */
+  int i;
   for (i = 0, butal = butal_array; i < num_buttons; i++, butal++) {
     const short alignnr = butal->but->alignnr;
 
+    int j;
     for (j = i + 1, butal_other = &butal_array[i + 1]; j < num_buttons; j++, butal_other++) {
       const float max_delta = MAX_DELTA;
 
@@ -506,7 +499,7 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
 
         butal->but->drawflag |= align;
         butal_other->but->drawflag |= align_opp;
-        if (butal->dists[side]) {
+        if (!IS_EQF(butal->dists[side], 0.0f)) {
           float *delta = &butal->dists[side];
 
           if (*butal->borders[side] < *butal_other->borders[side_opp]) {
@@ -517,7 +510,7 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
           }
           co = (*butal->borders[side] += *delta);
 
-          if (butal_other->dists[side_opp]) {
+          if (!IS_EQF(butal_other->dists[side_opp], 0.0f)) {
             BLI_assert(butal_other->dists[side_opp] * 0.5f == fabsf(*delta));
             *butal_other->borders[side_opp] = co;
             butal_other->dists[side_opp] = 0.0f;
@@ -535,6 +528,9 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
       }
     }
   }
+  if (butal_array_buf != butal_array) {
+    MEM_freeN(butal_array);
+  }
 }
 
 #  undef SIDE_TO_UI_BUT_ALIGN
@@ -545,9 +541,9 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
 #  undef STITCH
 #  undef MAX_DELTA
 
-#else
+#else /* !USE_UIBUT_SPATIAL_ALIGN */
 
-bool ui_but_can_align(uiBut *but)
+bool ui_but_can_align(const uiBut *but)
 {
   return !ELEM(but->type,
                UI_BTYPE_LABEL,
@@ -563,7 +559,7 @@ static bool buts_are_horiz(uiBut *but1, uiBut *but2)
   float dx, dy;
 
   /* simple case which can fail if buttons shift apart
-   * with proportional layouts, see: [#38602] */
+   * with proportional layouts, see: T38602. */
   if ((but1->rect.ymin == but2->rect.ymin) && (but1->rect.xmin != but2->rect.xmin)) {
     return true;
   }
@@ -730,13 +726,12 @@ static void ui_block_align_calc_but(uiBut *first, short nr)
   }
 }
 
-void ui_block_align_calc(uiBlock *block)
+void ui_block_align_calc(uiBlock *block, const struct ARegion *UNUSED(region))
 {
-  uiBut *but;
   short nr;
 
   /* align buttons with same align nr */
-  for (but = block->buttons.first; but;) {
+  LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
     if (but->alignnr) {
       nr = but->alignnr;
       ui_block_align_calc_but(but, nr);
@@ -755,4 +750,25 @@ void ui_block_align_calc(uiBlock *block)
     }
   }
 }
-#endif
+
+#endif /* !USE_UIBUT_SPATIAL_ALIGN */
+
+int ui_but_align_opposite_to_area_align_get(const ARegion *region)
+{
+  const ARegion *align_region = (region->alignment & RGN_SPLIT_PREV && region->prev) ?
+                                    region->prev :
+                                    region;
+
+  switch (RGN_ALIGN_ENUM_FROM_MASK(align_region->alignment)) {
+    case RGN_ALIGN_TOP:
+      return UI_BUT_ALIGN_DOWN;
+    case RGN_ALIGN_BOTTOM:
+      return UI_BUT_ALIGN_TOP;
+    case RGN_ALIGN_LEFT:
+      return UI_BUT_ALIGN_RIGHT;
+    case RGN_ALIGN_RIGHT:
+      return UI_BUT_ALIGN_LEFT;
+  }
+
+  return 0;
+}

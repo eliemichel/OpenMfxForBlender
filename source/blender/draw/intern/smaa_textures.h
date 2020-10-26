@@ -1,9 +1,9 @@
 /**
- * Copyright (C) 2013 Jorge Jimenez (jorge@iryoku.com)
- * Copyright (C) 2013 Jose I. Echevarria (joseignacioechevarria@gmail.com)
- * Copyright (C) 2013 Belen Masia (bmasia@unizar.es)
- * Copyright (C) 2013 Fernando Navarro (fernandn@microsoft.com)
- * Copyright (C) 2013 Diego Gutierrez (diegog@unizar.es)
+ * Copyright (C) 2013 Jorge Jimenez <jorge@iryoku.com>
+ * Copyright (C) 2013 Jose I. Echevarria <joseignacioechevarria@gmail.com>
+ * Copyright (C) 2013 Belen Masia <bmasia@unizar.es>
+ * Copyright (C) 2013 Fernando Navarro <fernandn@microsoft.com>
+ * Copyright (C) 2013 Diego Gutierrez <diegog@unizar.es>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * this software and associated documentation files (the "Software"), to deal in
@@ -26,8 +26,7 @@
  * SOFTWARE.
  */
 
-#ifndef __SMAA_TEXTURES_H__
-#define __SMAA_TEXTURES_H__
+#pragma once
 
 #define AREATEX_WIDTH 160
 #define AREATEX_HEIGHT 560
@@ -15082,5 +15081,3 @@ static const unsigned char searchTexBytes[] = {
 };
 
 /* clang-format off */
-
-#endif /* __SMAA_TEXTURES_H__ */

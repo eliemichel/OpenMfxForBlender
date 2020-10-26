@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_CURVE_H__
-#define __ED_CURVE_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,7 +65,7 @@ int ED_curve_nurb_select_count(struct View3D *v3d, struct Nurb *nu);
 bool ED_curve_nurb_select_all(const struct Nurb *nu);
 bool ED_curve_nurb_deselect_all(const struct Nurb *nu);
 
-int join_curve_exec(struct bContext *C, struct wmOperator *op);
+int ED_curve_join_objects_exec(struct bContext *C, struct wmOperator *op);
 
 /* editcurve_select.c */
 bool ED_curve_select_check(struct View3D *v3d, struct EditNurb *editnurb);
@@ -111,5 +110,3 @@ void printknots(struct Object *obedit);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_CURVE_H__ */

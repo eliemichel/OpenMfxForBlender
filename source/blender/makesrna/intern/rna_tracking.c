@@ -815,7 +815,7 @@ static void rna_trackingCameras_matrix_from_frame(ID *id,
   MovieTrackingObject *object = find_object_for_reconstruction(tracking, reconstruction);
   BKE_tracking_camera_get_reconstructed_interpolate(tracking, object, framenr, mat);
 
-  memcpy(matrix, mat, sizeof(float) * 16);
+  memcpy(matrix, mat, sizeof(float[4][4]));
 }
 
 #else
@@ -834,22 +834,22 @@ static const EnumPropertyItem tracker_motion_model[] = {
     {TRACK_MOTION_MODEL_TRANSLATION_ROTATION_SCALE,
      "LocRotScale",
      0,
-     "LocRotScale",
+     "Location, Rotation & Scale",
      "Search for markers that are translated, rotated, and scaled between frames"},
     {TRACK_MOTION_MODEL_TRANSLATION_SCALE,
      "LocScale",
      0,
-     "LocScale",
+     "Location & Scale",
      "Search for markers that are translated and scaled between frames"},
     {TRACK_MOTION_MODEL_TRANSLATION_ROTATION,
      "LocRot",
      0,
-     "LocRot",
+     "Location & Rotation",
      "Search for markers that are translated and rotated between frames"},
     {TRACK_MOTION_MODEL_TRANSLATION,
      "Loc",
      0,
-     "Loc",
+     "Location",
      "Search for markers that are translated between frames"},
     {0, NULL, 0, NULL, NULL},
 };
@@ -1036,7 +1036,6 @@ static void rna_def_trackingSettings(BlenderRNA *brna)
   /* default_tracking_motion_model */
   prop = RNA_def_property(srna, "default_motion_model", PROP_ENUM, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_enum_items(prop, tracker_motion_model);
   RNA_def_property_ui_text(prop, "Motion Model", "Default motion model to use for tracking");
 
@@ -1069,7 +1068,6 @@ static void rna_def_trackingSettings(BlenderRNA *brna)
 
   /* default minimal correlation */
   prop = RNA_def_property(srna, "default_correlation_min", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_float_sdna(prop, NULL, "default_minimum_correlation");
   RNA_def_property_range(prop, 0.0f, 1.0f);
@@ -1149,6 +1147,8 @@ static void rna_def_trackingCamera(BlenderRNA *brna)
        "Divisions",
        "Division distortion model which "
        "better represents wide-angle cameras"},
+      {TRACKING_DISTORTION_MODEL_NUKE, "NUKE", 0, "Nuke", "Nuke distortion model"},
+      {TRACKING_DISTORTION_MODEL_BROWN, "BROWN", 0, "Brown", "Brown-Conrady distortion model"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -1202,7 +1202,6 @@ static void rna_def_trackingCamera(BlenderRNA *brna)
   prop = RNA_def_property(srna, "units", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "units");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_enum_items(prop, camera_units_items);
   RNA_def_property_ui_text(prop, "Units", "Units used for camera focal length");
 
@@ -1249,7 +1248,63 @@ static void rna_def_trackingCamera(BlenderRNA *brna)
   prop = RNA_def_property(srna, "division_k2", PROP_FLOAT, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_ui_range(prop, -10, 10, 0.1, 3);
-  RNA_def_property_ui_text(prop, "K2", "First coefficient of second order division distortion");
+  RNA_def_property_ui_text(prop, "K2", "Second coefficient of second order division distortion");
+  RNA_def_property_update(prop, NC_MOVIECLIP | NA_EDITED, "rna_tracking_flushUpdate");
+
+  /* Nuke distortion parameters */
+  prop = RNA_def_property(srna, "nuke_k1", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_range(prop, -10, 10, 0.1, 3);
+  RNA_def_property_ui_text(prop, "K1", "First coefficient of second order Nuke distortion");
+  RNA_def_property_update(prop, NC_MOVIECLIP | NA_EDITED, "rna_tracking_flushUpdate");
+
+  prop = RNA_def_property(srna, "nuke_k2", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_range(prop, -10, 10, 0.1, 3);
+  RNA_def_property_ui_text(prop, "K2", "Second coefficient of second order Nuke distortion");
+  RNA_def_property_update(prop, NC_MOVIECLIP | NA_EDITED, "rna_tracking_flushUpdate");
+
+  /* Brown-Conrady distortion parameters */
+  prop = RNA_def_property(srna, "brown_k1", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_range(prop, -10, 10, 0.1, 3);
+  RNA_def_property_ui_text(
+      prop, "K1", "First coefficient of fourth order Brown-Conrady radial distortion");
+  RNA_def_property_update(prop, NC_MOVIECLIP | NA_EDITED, "rna_tracking_flushUpdate");
+
+  prop = RNA_def_property(srna, "brown_k2", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_range(prop, -10, 10, 0.1, 3);
+  RNA_def_property_ui_text(
+      prop, "K2", "Second coefficient of fourth order Brown-Conrady radial distortion");
+  RNA_def_property_update(prop, NC_MOVIECLIP | NA_EDITED, "rna_tracking_flushUpdate");
+
+  prop = RNA_def_property(srna, "brown_k3", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_range(prop, -10, 10, 0.1, 3);
+  RNA_def_property_ui_text(
+      prop, "K3", "Third coefficient of fourth order Brown-Conrady radial distortion");
+  RNA_def_property_update(prop, NC_MOVIECLIP | NA_EDITED, "rna_tracking_flushUpdate");
+
+  prop = RNA_def_property(srna, "brown_k4", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_range(prop, -10, 10, 0.1, 3);
+  RNA_def_property_ui_text(
+      prop, "K4", "Fourth coefficient of fourth order Brown-Conrady radial distortion");
+  RNA_def_property_update(prop, NC_MOVIECLIP | NA_EDITED, "rna_tracking_flushUpdate");
+
+  prop = RNA_def_property(srna, "brown_p1", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_range(prop, -10, 10, 0.1, 3);
+  RNA_def_property_ui_text(
+      prop, "P1", "First coefficient of second order Brown-Conrady tangential distortion");
+  RNA_def_property_update(prop, NC_MOVIECLIP | NA_EDITED, "rna_tracking_flushUpdate");
+
+  prop = RNA_def_property(srna, "brown_p2", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_range(prop, -10, 10, 0.1, 3);
+  RNA_def_property_ui_text(
+      prop, "P2", "Second coefficient of second order Brown-Conrady tangential distortion");
   RNA_def_property_update(prop, NC_MOVIECLIP | NA_EDITED, "rna_tracking_flushUpdate");
 
   /* pixel aspect */
@@ -2429,7 +2484,7 @@ static void rna_def_trackingDopesheet(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_only_selected", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", TRACKING_DOPE_SELECTED_ONLY);
   RNA_def_property_ui_text(
-      prop, "Only Selected", "Only include channels relating to selected objects and data");
+      prop, "Only Show Selected", "Only include channels relating to selected objects and data");
   RNA_def_property_ui_icon(prop, ICON_RESTRICT_SELECT_OFF, 0);
   RNA_def_property_update(prop, NC_MOVIECLIP | NA_EDITED, "rna_trackingDopesheet_tagUpdate");
 

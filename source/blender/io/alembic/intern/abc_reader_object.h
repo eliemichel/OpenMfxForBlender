@@ -13,20 +13,16 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
+#pragma once
 
 /** \file
  * \ingroup balembic
  */
 
-#ifndef __ABC_READER_OBJECT_H__
-#define __ABC_READER_OBJECT_H__
-
 #include <Alembic/Abc/All.h>
 #include <Alembic/AbcGeom/All.h>
 
-extern "C" {
 #include "DNA_ID.h"
-}
 
 struct CacheFile;
 struct Main;
@@ -34,6 +30,8 @@ struct Mesh;
 struct Object;
 
 using Alembic::AbcCoreAbstract::chrono_t;
+
+namespace blender::io::alembic {
 
 struct ImportSettings {
   bool do_convert_mat;
@@ -168,4 +166,4 @@ class AbcObjectReader {
 
 Imath::M44d get_matrix(const Alembic::AbcGeom::IXformSchema &schema, const float time);
 
-#endif /* __ABC_READER_OBJECT_H__ */
+}  // namespace blender::io::alembic

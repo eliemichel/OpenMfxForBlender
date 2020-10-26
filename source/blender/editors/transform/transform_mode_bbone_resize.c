@@ -87,7 +87,10 @@ static void headerBoneSize(TransInfo *t, const float vec[3], char str[UI_MAX_DRA
   }
 }
 
-static void ElementBoneSize(TransInfo *t, TransDataContainer *tc, TransData *td, float mat[3][3])
+static void ElementBoneSize(TransInfo *t,
+                            TransDataContainer *tc,
+                            TransData *td,
+                            const float mat[3][3])
 {
   float tmat[3][3], smat[3][3], oldy;
   float sizemat[3][3];
@@ -121,7 +124,7 @@ static void applyBoneSize(TransInfo *t, const int UNUSED(mval[2]))
 
     copy_v3_fl(t->values_final, ratio);
 
-    snapGridIncrement(t, t->values_final);
+    transform_snap_increment(t, t->values_final);
 
     if (applyNumInput(&t->num, t->values_final)) {
       constraintNumInput(t, t->values_final);
@@ -132,19 +135,20 @@ static void applyBoneSize(TransInfo *t, const int UNUSED(mval[2]))
 
   if (t->con.applySize) {
     t->con.applySize(t, NULL, NULL, mat);
+    for (i = 0; i < 3; i++) {
+      if (!(t->con.mode & (CON_AXIS0 << i))) {
+        t->values_final[i] = 1.0f;
+      }
+    }
   }
 
-  copy_m3_m3(t->mat, mat);  // used in gizmo
+  copy_m3_m3(t->mat, mat); /* used in gizmo */
 
   headerBoneSize(t, t->values_final, str);
 
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     TransData *td = tc->data;
     for (i = 0; i < tc->data_len; i++, td++) {
-      if (td->flag & TD_NOACTION) {
-        break;
-      }
-
       if (td->flag & TD_SKIP) {
         continue;
       }
@@ -171,11 +175,10 @@ void initBoneSize(TransInfo *t)
   t->num.val_flag[1] |= NUM_NULL_ONE;
   t->num.val_flag[2] |= NUM_NULL_ONE;
   t->num.flag |= NUM_AFFECT_ALL;
-  t->snap[0] = 0.0f;
-  t->snap[1] = 0.1f;
-  t->snap[2] = t->snap[1] * 0.1f;
+  t->snap[0] = 0.1f;
+  t->snap[1] = t->snap[0] * 0.1f;
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   t->num.unit_type[0] = B_UNIT_NONE;
   t->num.unit_type[1] = B_UNIT_NONE;

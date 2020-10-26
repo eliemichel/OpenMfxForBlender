@@ -20,8 +20,7 @@
  * Enums typedef's for use in public headers.
  */
 
-#ifndef __DNA_OBJECT_ENUMS_H__
-#define __DNA_OBJECT_ENUMS_H__
+#pragma once
 
 /** #Object.mode */
 typedef enum eObjectMode {
@@ -61,6 +60,9 @@ typedef enum eDrawType {
 /** Any mode that uses Object.sculpt. */
 #define OB_MODE_ALL_SCULPT (OB_MODE_SCULPT | OB_MODE_VERTEX_PAINT | OB_MODE_WEIGHT_PAINT)
 
+/** Any mode that uses weightpaint. */
+#define OB_MODE_ALL_WEIGHT_PAINT (OB_MODE_WEIGHT_PAINT | OB_MODE_WEIGHT_GPENCIL)
+
 /**
  * Any mode that has data or for Grease Pencil modes, we need to free when switching modes,
  * see: #ED_object_mode_generic_exit
@@ -69,5 +71,3 @@ typedef enum eDrawType {
   (OB_MODE_EDIT | OB_MODE_VERTEX_PAINT | OB_MODE_WEIGHT_PAINT | OB_MODE_SCULPT | OB_MODE_POSE | \
    OB_MODE_PAINT_GPENCIL | OB_MODE_EDIT_GPENCIL | OB_MODE_SCULPT_GPENCIL | \
    OB_MODE_WEIGHT_GPENCIL | OB_MODE_VERTEX_GPENCIL)
-
-#endif /* __DNA_OBJECT_ENUMS_H__ */

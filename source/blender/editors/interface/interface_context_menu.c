@@ -47,7 +47,10 @@
 
 #include "RNA_access.h"
 
-#include "BPY_extern.h"
+#ifdef WITH_PYTHON
+#  include "BPY_extern.h"
+#  include "BPY_extern_run.h"
+#endif
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -88,7 +91,7 @@ static IDProperty *shortcut_property_from_rna(bContext *C, uiBut *but)
 
   /* Create ID property of data path, to pass to the operator. */
   IDProperty *prop;
-  IDPropertyTemplate val = {0};
+  const IDPropertyTemplate val = {0};
   prop = IDP_New(IDP_GROUP, &val, __func__);
   IDP_AddToGroup(prop, IDP_NewString(final_data_path, "data_path", strlen(final_data_path) + 1));
 
@@ -104,7 +107,8 @@ static const char *shortcut_get_operator_property(bContext *C, uiBut *but, IDPro
     *r_prop = (but->opptr && but->opptr->data) ? IDP_CopyProperty(but->opptr->data) : NULL;
     return but->optype->idname;
   }
-  else if (but->rnaprop) {
+
+  if (but->rnaprop) {
     const PropertyType rnaprop_type = RNA_property_type(but->rnaprop);
 
     if (rnaprop_type == PROP_BOOLEAN) {
@@ -115,7 +119,7 @@ static const char *shortcut_get_operator_property(bContext *C, uiBut *but, IDPro
       }
       return "WM_OT_context_toggle";
     }
-    else if (rnaprop_type == PROP_ENUM) {
+    if (rnaprop_type == PROP_ENUM) {
       /* Enum */
       *r_prop = shortcut_property_from_rna(C, but);
       if (*r_prop == NULL) {
@@ -351,7 +355,7 @@ static bUserMenuItem *ui_but_user_menu_find(bContext *C, uiBut *but, bUserMenu *
     return (bUserMenuItem *)ED_screen_user_menu_item_find_operator(
         &um->items, but->optype, prop, but->opcontext);
   }
-  else if (but->rnaprop) {
+  if (but->rnaprop) {
     const char *member_id = WM_context_member_from_ptr(C, &but->rnapoin);
     const char *data_path = RNA_path_from_ID_to_struct(&but->rnapoin);
     const char *member_id_data_path = member_id;
@@ -369,12 +373,10 @@ static bUserMenuItem *ui_but_user_menu_find(bContext *C, uiBut *but, bUserMenu *
     }
     return umi;
   }
-  else if ((mt = UI_but_menutype_get(but))) {
+  if ((mt = UI_but_menutype_get(but))) {
     return (bUserMenuItem *)ED_screen_user_menu_item_find_menu(&um->items, mt);
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 static void ui_but_user_menu_add(bContext *C, uiBut *but, bUserMenu *um)
@@ -408,7 +410,7 @@ static void ui_but_user_menu_add(bContext *C, uiBut *but, bUserMenu *um)
                    "'%s').label",
                    idname);
           char *expr_result = NULL;
-          if (BPY_execute_string_as_string(C, expr_imports, expr, true, &expr_result)) {
+          if (BPY_run_string_as_string(C, expr_imports, expr, __func__, &expr_result)) {
             STRNCPY(drawstr, expr_result);
             MEM_freeN(expr_result);
           }
@@ -546,9 +548,9 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
     const PropertyType type = RNA_property_type(prop);
     const PropertySubType subtype = RNA_property_subtype(prop);
     bool is_anim = RNA_property_animateable(ptr, prop);
-    bool is_editable = RNA_property_editable(ptr, prop);
-    bool is_idprop = RNA_property_is_idprop(prop);
-    bool is_set = RNA_property_is_set(ptr, prop);
+    const bool is_editable = RNA_property_editable(ptr, prop);
+    const bool is_idprop = RNA_property_is_idprop(prop);
+    const bool is_set = RNA_property_is_set(ptr, prop);
 
     /* second slower test,
      * saved people finding keyframe items in menus when its not possible */
@@ -561,7 +563,8 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
     const bool is_array_component = (is_array && but->rnaindex != -1);
     const bool is_whole_array = (is_array && but->rnaindex == -1);
 
-    const int override_status = RNA_property_override_library_status(ptr, prop, -1);
+    const uint override_status = RNA_property_override_library_status(
+        CTX_data_main(C), ptr, prop, -1);
     const bool is_overridable = (override_status & RNA_OVERRIDE_STATUS_OVERRIDABLE) != 0;
 
     /* Set the (button_pointer, button_prop)
@@ -962,7 +965,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
     const PropertyType prop_type = RNA_property_type(but->rnaprop);
     if (((prop_type == PROP_POINTER) ||
          (prop_type == PROP_STRING && but->type == UI_BTYPE_SEARCH_MENU &&
-          but->search_func == ui_rna_collection_search_cb)) &&
+          ((uiButSearch *)but)->items_update_fn == ui_rna_collection_search_update_fn)) &&
         ui_jump_to_target_button_poll(C)) {
       uiItemO(layout,
               CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Jump to Target"),
@@ -1041,7 +1044,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
   if (idname != NULL) {
     uiBlock *block = uiLayoutGetBlock(layout);
     uiBut *but2;
-    int w = uiLayoutGetWidth(layout);
+    const int w = uiLayoutGetWidth(layout);
     wmKeyMap *km;
 
     /* We want to know if this op has a shortcut, be it hotkey or not. */

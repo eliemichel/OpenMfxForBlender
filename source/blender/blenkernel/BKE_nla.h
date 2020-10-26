@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_NLA_H__
-#define __BKE_NLA_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -29,6 +28,7 @@ extern "C" {
 #endif
 
 struct AnimData;
+struct LibraryForeachIDData;
 struct Main;
 struct NlaStrip;
 struct NlaTrack;
@@ -36,6 +36,10 @@ struct Scene;
 struct Speaker;
 struct bAction;
 
+struct BlendDataReader;
+struct BlendExpander;
+struct BlendLibReader;
+struct BlendWriter;
 struct PointerRNA;
 struct PropertyRNA;
 
@@ -61,7 +65,9 @@ struct NlaStrip *BKE_nlastrip_new(struct bAction *act);
 struct NlaStrip *BKE_nlastack_add_strip(struct AnimData *adt, struct bAction *act);
 struct NlaStrip *BKE_nla_add_soundstrip(struct Main *bmain,
                                         struct Scene *scene,
-                                        struct Speaker *spk);
+                                        struct Speaker *speaker);
+
+void BKE_nla_strip_foreach_id(struct NlaStrip *strip, struct LibraryForeachIDData *data);
 
 /* ----------------------------- */
 /* API */
@@ -100,6 +106,7 @@ void BKE_nlastrip_set_active(struct AnimData *adt, struct NlaStrip *strip);
 
 bool BKE_nlastrip_within_bounds(struct NlaStrip *strip, float min, float max);
 void BKE_nlastrip_recalculate_bounds(struct NlaStrip *strip);
+void BKE_nlastrip_recalculate_bounds_sync_action(struct NlaStrip *strip);
 
 void BKE_nlastrip_validate_name(struct AnimData *adt, struct NlaStrip *strip);
 
@@ -143,8 +150,14 @@ enum eNlaTime_ConvertModes {
 
 float BKE_nla_tweakedit_remap(struct AnimData *adt, float cframe, short mode);
 
+/* ----------------------------- */
+/* .blend file API */
+
+void BKE_nla_blend_write(struct BlendWriter *writer, struct ListBase *tracks);
+void BKE_nla_blend_read_data(struct BlendDataReader *reader, struct ListBase *tracks);
+void BKE_nla_blend_read_lib(struct BlendLibReader *reader, struct ID *id, struct ListBase *tracks);
+void BKE_nla_blend_read_expand(struct BlendExpander *expander, struct ListBase *tracks);
+
 #ifdef __cplusplus
 }
-#endif
-
 #endif

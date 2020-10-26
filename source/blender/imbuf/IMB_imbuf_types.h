@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __IMB_IMBUF_TYPES_H__
-#define __IMB_IMBUF_TYPES_H__
+#pragma once
 
 #include "DNA_vec_types.h" /* for rcti */
 
@@ -209,7 +208,7 @@ typedef struct ImBuf {
    */
   float *rect_float;
 
-  /* resolution - pixels per meter */
+  /** Resolution in pixels per meter. Multiply by `0.0254` for DPI. */
   double ppm[2];
 
   /* tiled pixel storage */
@@ -353,5 +352,3 @@ enum {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __IMB_IMBUF_TYPES_H__ */

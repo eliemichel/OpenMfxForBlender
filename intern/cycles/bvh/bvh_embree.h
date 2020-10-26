@@ -50,7 +50,8 @@ class BVHEmbree : public BVH {
   friend class BVH;
   BVHEmbree(const BVHParams &params,
             const vector<Geometry *> &geometry,
-            const vector<Object *> &objects);
+            const vector<Object *> &objects,
+            const Device *device);
 
   virtual void pack_nodes(const BVHNode *) override;
   virtual void refit_nodes() override;
@@ -70,18 +71,16 @@ class BVHEmbree : public BVH {
 
  private:
   void delete_rtcScene();
-  void update_tri_vertex_buffer(RTCGeometry geom_id, const Mesh *mesh);
-  void update_curve_vertex_buffer(RTCGeometry geom_id, const Hair *hair);
+  void set_tri_vertex_buffer(RTCGeometry geom_id, const Mesh *mesh, const bool update);
+  void set_curve_vertex_buffer(RTCGeometry geom_id, const Hair *hair, const bool update);
 
-  static RTCDevice rtc_shared_device;
-  static int rtc_shared_users;
-  static thread_mutex rtc_shared_mutex;
+  RTCDevice rtc_device;
 
   Stats *stats;
   vector<RTCScene> delayed_delete_scenes;
   int curve_subdivisions;
   enum RTCBuildQuality build_quality;
-  bool use_curves, use_ribbons, dynamic_scene;
+  bool dynamic_scene;
 };
 
 CCL_NAMESPACE_END

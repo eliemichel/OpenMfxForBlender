@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -61,18 +61,32 @@
 #include "BLI_math_geom.h"
 #include "BLI_stack.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
+#include "WM_types.h" /* For skin mark clear operator UI. */
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 #include "bmesh.h"
 
@@ -209,9 +223,8 @@ static bool skin_frame_find_contained_faces(const Frame *frame, BMFace *fill_fac
   if (diag) {
     return BM_edge_face_pair(diag, &fill_faces[0], &fill_faces[1]);
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 /* Returns true if hull is successfully built, false otherwise */
@@ -447,7 +460,7 @@ static void node_frames_init(SkinNode *nf, int totframe)
 }
 
 static void create_frame(
-    Frame *frame, const float co[3], const float radius[2], float mat[3][3], float offset)
+    Frame *frame, const float co[3], const float radius[2], const float mat[3][3], float offset)
 {
   float rx[3], ry[3], rz[3];
   int i;
@@ -760,6 +773,11 @@ static EMat *build_edge_mats(const MVertSkin *vs,
 
         *has_valid_root = true;
       }
+      else if (totedge == 0) {
+        /* Vertex-only mesh is valid, mark valid root as well (will display error otherwise). */
+        *has_valid_root = true;
+        break;
+      }
     }
   }
 
@@ -785,7 +803,7 @@ static int calc_edge_subdivisions(const MVert *mvert,
                                   const MEdge *e,
                                   const int *degree)
 {
-  /* prevent memory errors [#38003] */
+  /* prevent memory errors T38003. */
 #define NUM_SUBDIVISIONS_MAX 128
 
   const MVertSkin *evs[2] = {&nodes[e->v1], &nodes[e->v2]};
@@ -801,9 +819,8 @@ static int calc_edge_subdivisions(const MVert *mvert,
     if (v1_branch && v2_branch) {
       return 2;
     }
-    else {
-      return 0;
-    }
+
+    return 0;
   }
 
   avg_radius = half_v2(evs[0]->radius) + half_v2(evs[1]->radius);
@@ -1265,7 +1282,7 @@ static void skin_choose_quad_bridge_order(BMVert *a[4], BMVert *b[4], int best_o
 
     if (len < shortest_len) {
       shortest_len = len;
-      memcpy(best_order, orders[i], sizeof(int) * 4);
+      memcpy(best_order, orders[i], sizeof(int[4]));
     }
   }
 }
@@ -1743,13 +1760,19 @@ static bool skin_output_branch_hulls(
   return result;
 }
 
+typedef enum eSkinErrorFlag {
+  SKIN_ERROR_NO_VALID_ROOT = (1 << 0),
+  SKIN_ERROR_HULL = (1 << 1),
+} eSkinErrorFlag;
+
 static BMesh *build_skin(SkinNode *skin_nodes,
                          int totvert,
                          const MeshElemMap *emap,
                          const MEdge *medge,
                          int totedge,
                          const MDeformVert *input_dvert,
-                         SkinModifierData *smd)
+                         SkinModifierData *smd,
+                         eSkinErrorFlag *r_error)
 {
   SkinOutput so;
   int v;
@@ -1785,7 +1808,7 @@ static BMesh *build_skin(SkinNode *skin_nodes,
   skin_update_merged_vertices(skin_nodes, totvert);
 
   if (!skin_output_branch_hulls(&so, skin_nodes, totvert, emap, medge)) {
-    modifier_setError(&smd->modifier, "Hull error");
+    *r_error |= SKIN_ERROR_HULL;
   }
 
   /* Merge triangles here in the hope of providing better target
@@ -1831,7 +1854,7 @@ static void skin_set_orig_indices(Mesh *mesh)
  * 2) Generate node frames
  * 3) Output vertices and polygons from frames, connections, and hulls
  */
-static Mesh *base_skin(Mesh *origmesh, SkinModifierData *smd)
+static Mesh *base_skin(Mesh *origmesh, SkinModifierData *smd, eSkinErrorFlag *r_error)
 {
   Mesh *result;
   MVertSkin *nodes;
@@ -1861,16 +1884,14 @@ static Mesh *base_skin(Mesh *origmesh, SkinModifierData *smd)
   MEM_freeN(emat);
   emat = NULL;
 
-  bm = build_skin(skin_nodes, totvert, emap, medge, totedge, dvert, smd);
+  bm = build_skin(skin_nodes, totvert, emap, medge, totedge, dvert, smd, r_error);
 
   MEM_freeN(skin_nodes);
   MEM_freeN(emap);
   MEM_freeN(emapmem);
 
   if (!has_valid_root) {
-    modifier_setError(
-        &smd->modifier,
-        "No valid root vertex found (you need one per mesh island you want to skin)");
+    *r_error |= SKIN_ERROR_NO_VALID_ROOT;
   }
 
   if (!bm) {
@@ -1887,7 +1908,7 @@ static Mesh *base_skin(Mesh *origmesh, SkinModifierData *smd)
   return result;
 }
 
-static Mesh *final_skin(SkinModifierData *smd, Mesh *mesh)
+static Mesh *final_skin(SkinModifierData *smd, Mesh *mesh, eSkinErrorFlag *r_error)
 {
   Mesh *result;
 
@@ -1897,7 +1918,7 @@ static Mesh *final_skin(SkinModifierData *smd, Mesh *mesh)
   }
 
   mesh = subdivide_base(mesh);
-  result = base_skin(mesh, smd);
+  result = base_skin(mesh, smd, r_error);
 
   BKE_id_free(NULL, mesh);
   return result;
@@ -1909,19 +1930,33 @@ static void initData(ModifierData *md)
 {
   SkinModifierData *smd = (SkinModifierData *)md;
 
-  /* Enable in editmode by default */
-  md->mode |= eModifierMode_Editmode;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(smd, modifier));
 
-  smd->branch_smoothing = 0;
-  smd->flag = 0;
-  smd->symmetry_axes = MOD_SKIN_SYMM_X;
+  MEMCPY_STRUCT_AFTER(smd, DNA_struct_default_get(SkinModifierData), modifier);
+
+  /* Enable in editmode by default. */
+  md->mode |= eModifierMode_Editmode;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *UNUSED(ctx), Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
-  Mesh *result;
+  eSkinErrorFlag error = 0;
+  Mesh *result = final_skin((SkinModifierData *)md, mesh, &error);
 
-  if (!(result = final_skin((SkinModifierData *)md, mesh))) {
+  if (error & SKIN_ERROR_NO_VALID_ROOT) {
+    error &= ~SKIN_ERROR_NO_VALID_ROOT;
+    BKE_modifier_set_error(
+        ctx->object,
+        md,
+        "No valid root vertex found (you need one per mesh island you want to skin)");
+  }
+  if (error & SKIN_ERROR_HULL) {
+    error &= ~SKIN_ERROR_HULL;
+    BKE_modifier_set_error(ctx->object, md, "Hull error");
+  }
+  BLI_assert(error == 0);
+
+  if (result == NULL) {
     return mesh;
   }
   return result;
@@ -1934,20 +1969,82 @@ static void requiredDataMask(Object *UNUSED(ob),
   r_cddata_masks->vmask |= CD_MASK_MVERT_SKIN | CD_MASK_MDEFORMVERT;
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+  int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  PointerRNA op_ptr;
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "branch_smoothing", 0, NULL, ICON_NONE);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Symmetry"));
+  uiItemR(row, ptr, "use_x_symmetry", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_y_symmetry", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_z_symmetry", toggles_flag, NULL, ICON_NONE);
+
+  uiItemR(layout, ptr, "use_smooth_shade", 0, NULL, ICON_NONE);
+
+  row = uiLayoutRow(layout, false);
+  uiItemO(row, IFACE_("Create Armature"), ICON_NONE, "OBJECT_OT_skin_armature_create");
+  uiItemO(row, NULL, ICON_NONE, "MESH_OT_customdata_skin_add");
+
+  row = uiLayoutRow(layout, false);
+  uiItemFullO(row,
+              "OBJECT_OT_skin_loose_mark_clear",
+              IFACE_("Mark Loose"),
+              ICON_NONE,
+              NULL,
+              WM_OP_EXEC_DEFAULT,
+              0,
+              &op_ptr);
+  RNA_enum_set(&op_ptr, "action", 0); /* SKIN_LOOSE_MARK */
+  uiItemFullO(row,
+              "OBJECT_OT_skin_loose_mark_clear",
+              IFACE_("Clear Loose"),
+              ICON_NONE,
+              NULL,
+              WM_OP_EXEC_DEFAULT,
+              0,
+              &op_ptr);
+  RNA_enum_set(&op_ptr, "action", 1); /* SKIN_LOOSE_CLEAR */
+
+  uiItemO(layout, IFACE_("Mark Root"), ICON_NONE, "OBJECT_OT_skin_root_mark");
+  uiItemO(layout, IFACE_("Equalize Radii"), ICON_NONE, "OBJECT_OT_skin_radii_equalize");
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Skin, panel_draw);
+}
+
 ModifierTypeInfo modifierType_Skin = {
     /* name */ "Skin",
     /* structName */ "SkinModifierData",
     /* structSize */ sizeof(SkinModifierData),
+    /* srna */ &RNA_SkinModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_MOD_SKIN,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -1956,7 +2053,10 @@ ModifierTypeInfo modifierType_Skin = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
+    /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

@@ -92,6 +92,7 @@ class SCENE_PT_unit(SceneButtonsPanel, Panel):
         subcol.prop(unit, "length_unit", text="Length")
         subcol.prop(unit, "mass_unit", text="Mass")
         subcol.prop(unit, "time_unit", text="Time")
+        subcol.prop(unit, "temperature_unit", text="Temperature")
 
 
 class SceneKeyingSetsPanel:
@@ -289,8 +290,6 @@ class SCENE_PT_audio(SceneButtonsPanel, Panel):
         layout.use_property_split = True
 
         scene = context.scene
-        rd = context.scene.render
-        ffmpeg = rd.ffmpeg
 
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
 
@@ -299,17 +298,8 @@ class SCENE_PT_audio(SceneButtonsPanel, Panel):
 
         col.separator()
 
-        col.prop(scene, "audio_distance_model")
-        col.prop(ffmpeg, "audio_channels")
-
-        col.separator()
-
-        col = flow.column()
-        col.prop(ffmpeg, "audio_mixrate", text="Sample Rate")
-
-        col.separator()
-
         col = col.column(align=True)
+        col.prop(scene, "audio_distance_model")
         col.prop(scene, "audio_doppler_speed", text="Doppler Speed")
         col.prop(scene, "audio_doppler_factor", text="Doppler Factor")
 
@@ -396,8 +386,8 @@ class SCENE_PT_rigid_body_world_settings(RigidBodySubPanel, Panel):
             col.prop(rbw, "use_split_impulse")
 
             col = col.column()
-            col.prop(rbw, "steps_per_second", text="Steps Per Second")
-            col.prop(rbw, "solver_iterations", text="Solver Iterations")
+            col.prop(rbw, "substeps_per_frame")
+            col.prop(rbw, "solver_iterations")
 
 
 class SCENE_PT_rigid_body_cache(RigidBodySubPanel, Panel):

@@ -21,9 +21,9 @@
  * \ingroup spbuttons
  */
 
-#ifndef __BUTTONS_INTERN_H__
-#define __BUTTONS_INTERN_H__
+#pragma once
 
+#include "BLI_bitmap.h"
 #include "DNA_listBase.h"
 #include "RNA_types.h"
 
@@ -38,8 +38,15 @@ struct bNodeTree;
 struct uiLayout;
 struct wmOperatorType;
 
-/* Display the context path in the header instead of the main window */
-#define USE_HEADER_CONTEXT_PATH
+struct SpaceProperties_Runtime {
+  /** For filtering properties displayed in the space. */
+  char search_string[UI_MAX_NAME_STR];
+  /**
+   * Bitfield (in the same order as the tabs) for whether each tab has properties
+   * that match the search filter. Only valid when #search_string is set.
+   */
+  BLI_bitmap *tab_search_results;
+};
 
 /* context data */
 
@@ -84,7 +91,6 @@ void buttons_context_compute(const struct bContext *C, struct SpaceProperties *s
 int buttons_context(const struct bContext *C,
                     const char *member,
                     struct bContextDataResult *result);
-void buttons_context_draw(const struct bContext *C, struct uiLayout *layout);
 void buttons_context_register(struct ARegionType *art);
 struct ID *buttons_context_id_path(const struct bContext *C);
 
@@ -94,8 +100,9 @@ extern const char *buttons_context_dir[]; /* doc access */
 void buttons_texture_context_compute(const struct bContext *C, struct SpaceProperties *sbuts);
 
 /* buttons_ops.c */
+void BUTTONS_OT_start_filter(struct wmOperatorType *ot);
+void BUTTONS_OT_clear_filter(struct wmOperatorType *ot);
+void BUTTONS_OT_toggle_pin(struct wmOperatorType *ot);
 void BUTTONS_OT_file_browse(struct wmOperatorType *ot);
 void BUTTONS_OT_directory_browse(struct wmOperatorType *ot);
 void BUTTONS_OT_context_menu(struct wmOperatorType *ot);
-
-#endif /* __BUTTONS_INTERN_H__ */

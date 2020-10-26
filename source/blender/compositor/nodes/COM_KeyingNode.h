@@ -16,8 +16,7 @@
  * Copyright 2012, Blender Foundation.
  */
 
-#ifndef __COM_KEYINGNODE_H__
-#define __COM_KEYINGNODE_H__
+#pragma once
 
 #include "COM_Node.h"
 
@@ -43,7 +42,7 @@ class KeyingNode : public Node {
                                     int distance) const;
   NodeOperationOutput *setupDespill(NodeConverter &converter,
                                     NodeOperationOutput *despillInput,
-                                    NodeInput *inputSrceen,
+                                    NodeInput *inputScreen,
                                     float factor,
                                     float colorBalance) const;
   NodeOperationOutput *setupClip(NodeConverter &converter,
@@ -58,5 +57,3 @@ class KeyingNode : public Node {
   KeyingNode(bNode *editorNode);
   void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
 };
-
-#endif /* __COM_KEYINGNODE_H__ */

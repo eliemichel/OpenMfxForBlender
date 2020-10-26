@@ -13,19 +13,20 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_GPENCIL_MODIFIER_H__
-#define __BKE_GPENCIL_MODIFIER_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
+#include "BLI_compiler_attrs.h"
 #include "DNA_gpencil_modifier_types.h" /* needed for all enum typdefs */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+struct ARegionType;
 struct Depsgraph;
 struct GpencilModifierData;
 struct ID;
@@ -81,11 +82,6 @@ typedef enum {
   eGpencilModifierTypeFlag_NoApply = (1 << 6),
 } GpencilModifierTypeFlag;
 
-/* IMPORTANT! Keep ObjectWalkFunc and IDWalkFunc signatures compatible. */
-typedef void (*GreasePencilObjectWalkFunc)(void *userData,
-                                           struct Object *ob,
-                                           struct Object **obpoin,
-                                           int cb_flag);
 typedef void (*GreasePencilIDWalkFunc)(void *userData,
                                        struct Object *ob,
                                        struct ID **idpoin,
@@ -218,25 +214,12 @@ typedef struct GpencilModifierTypeInfo {
   bool (*dependsOnTime)(struct GpencilModifierData *md);
 
   /**
-   * Should call the given walk function on with a pointer to each Object
-   * pointer that the modifier data stores. This is used for linking on file
-   * load and for unlinking objects or forwarding object references.
-   *
-   * This function is optional.
-   */
-  void (*foreachObjectLink)(struct GpencilModifierData *md,
-                            struct Object *ob,
-                            GreasePencilObjectWalkFunc walk,
-                            void *userData);
-
-  /**
    * Should call the given walk function with a pointer to each ID
    * pointer (i.e. each data-block pointer) that the modifier data
    * stores. This is used for linking on file load and for
    * unlinking data-blocks or forwarding data-block references.
    *
-   * This function is optional. If it is not present, foreachObjectLink
-   * will be used.
+   * This function is optional.
    */
   void (*foreachIDLink)(struct GpencilModifierData *md,
                         struct Object *ob,
@@ -255,33 +238,49 @@ typedef struct GpencilModifierTypeInfo {
                          struct Object *ob,
                          GreasePencilTexWalkFunc walk,
                          void *userData);
+
+  /* Register the panel types for the modifier's UI. */
+  void (*panelRegister)(struct ARegionType *region_type);
 } GpencilModifierTypeInfo;
+
+#define GPENCIL_MODIFIER_TYPE_PANEL_PREFIX "MOD_PT_gpencil_"
 
 /* Initialize modifier's global data (type info and some common global storages). */
 void BKE_gpencil_modifier_init(void);
 
-const GpencilModifierTypeInfo *BKE_gpencil_modifierType_getInfo(GpencilModifierType type);
+void BKE_gpencil_modifierType_panel_id(GpencilModifierType type, char *r_idname);
+const GpencilModifierTypeInfo *BKE_gpencil_modifier_get_info(GpencilModifierType type);
 struct GpencilModifierData *BKE_gpencil_modifier_new(int type);
 void BKE_gpencil_modifier_free_ex(struct GpencilModifierData *md, const int flag);
 void BKE_gpencil_modifier_free(struct GpencilModifierData *md);
 bool BKE_gpencil_modifier_unique_name(struct ListBase *modifiers, struct GpencilModifierData *gmd);
-bool BKE_gpencil_modifier_dependsOnTime(struct GpencilModifierData *md);
-struct GpencilModifierData *BKE_gpencil_modifiers_findByType(struct Object *ob,
-                                                             GpencilModifierType type);
-struct GpencilModifierData *BKE_gpencil_modifiers_findByName(struct Object *ob, const char *name);
-void BKE_gpencil_modifier_copyData_generic(const struct GpencilModifierData *md_src,
+bool BKE_gpencil_modifier_depends_ontime(struct GpencilModifierData *md);
+struct GpencilModifierData *BKE_gpencil_modifiers_findby_type(struct Object *ob,
+                                                              GpencilModifierType type);
+struct GpencilModifierData *BKE_gpencil_modifiers_findby_name(struct Object *ob, const char *name);
+void BKE_gpencil_modifier_copydata_generic(const struct GpencilModifierData *md_src,
                                            struct GpencilModifierData *md_dst);
-void BKE_gpencil_modifier_copyData(struct GpencilModifierData *md,
+void BKE_gpencil_modifier_copydata(struct GpencilModifierData *md,
                                    struct GpencilModifierData *target);
-void BKE_gpencil_modifier_copyData_ex(struct GpencilModifierData *md,
+void BKE_gpencil_modifier_copydata_ex(struct GpencilModifierData *md,
                                       struct GpencilModifierData *target,
                                       const int flag);
-void BKE_gpencil_modifiers_foreachIDLink(struct Object *ob,
-                                         GreasePencilIDWalkFunc walk,
-                                         void *userData);
-void BKE_gpencil_modifiers_foreachTexLink(struct Object *ob,
-                                          GreasePencilTexWalkFunc walk,
-                                          void *userData);
+void BKE_gpencil_modifier_set_error(struct GpencilModifierData *md, const char *format, ...)
+    ATTR_PRINTF_FORMAT(2, 3);
+void BKE_gpencil_modifiers_foreach_ID_link(struct Object *ob,
+                                           GreasePencilIDWalkFunc walk,
+                                           void *userData);
+void BKE_gpencil_modifiers_foreach_tex_link(struct Object *ob,
+                                            GreasePencilTexWalkFunc walk,
+                                            void *userData);
+
+typedef struct GpencilVirtualModifierData {
+  ArmatureGpencilModifierData amd;
+  LatticeGpencilModifierData lmd;
+} GpencilVirtualModifierData;
+
+struct GpencilModifierData *BKE_gpencil_modifiers_get_virtual_modifierlist(
+    const struct Object *ob, struct GpencilVirtualModifierData *data);
 
 bool BKE_gpencil_has_geometry_modifiers(struct Object *ob);
 bool BKE_gpencil_has_time_modifiers(struct Object *ob);
@@ -306,5 +305,3 @@ struct bGPDframe *BKE_gpencil_frame_retime_get(struct Depsgraph *depsgraph,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_GPENCIL_MODIFIER_H__ */

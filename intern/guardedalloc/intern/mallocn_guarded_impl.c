@@ -24,9 +24,12 @@
  */
 
 #include <stdarg.h>
+#include <stddef.h> /* offsetof */
 #include <stdlib.h>
 #include <string.h> /* memcpy */
 #include <sys/types.h>
+
+#include <pthread.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -49,17 +52,6 @@
  * in situations where the leak is predictable */
 
 //#define DEBUG_MEMCOUNTER
-
-/* Only for debugging:
- * defining DEBUG_THREADS will enable check whether memory manager
- * is locked with a mutex when allocation is called from non-main
- * thread.
- *
- * This helps troubleshooting memory issues caused by the fact
- * guarded allocator is not thread-safe, however this check will
- * fail to check allocations from openmp threads.
- */
-//#define DEBUG_THREADS
 
 /* Only for debugging:
  * Defining DEBUG_BACKTRACE will store a backtrace from where
@@ -104,7 +96,7 @@ typedef struct MemHead {
   const char *name;
   const char *nextname;
   int tag2;
-  short mmap;      /* if true, memory was mmapped */
+  short pad1;
   short alignment; /* if non-zero aligned alloc was used
                     * and alignment is stored here.
                     */
@@ -123,24 +115,6 @@ typedef struct MemHead {
 } MemHead;
 
 typedef MemHead MemHeadAligned;
-
-/* for openmp threading asserts, saves time troubleshooting
- * we may need to extend this if blender code starts using MEM_
- * functions inside OpenMP correctly with omp_set_lock() */
-
-#if 0 /* disable for now, only use to debug openmp code which doesn lock threads for malloc */
-#  if defined(_OPENMP) && defined(DEBUG)
-#    include <assert.h>
-#    include <omp.h>
-#    define DEBUG_OMP_MALLOC
-#  endif
-#endif
-
-#ifdef DEBUG_THREADS
-#  include <assert.h>
-#  include <pthread.h>
-static pthread_t mainid;
-#endif
 
 #ifdef DEBUG_BACKTRACE
 #  if defined(__linux__) || defined(__APPLE__)
@@ -180,20 +154,18 @@ static const char *check_memlist(MemHead *memh);
 #define MEMTAG3 MAKE_ID('O', 'C', 'K', '!')
 #define MEMFREE MAKE_ID('F', 'R', 'E', 'E')
 
-#define MEMNEXT(x) ((MemHead *)(((char *)x) - ((char *)&(((MemHead *)0)->next))))
+#define MEMNEXT(x) ((MemHead *)(((char *)x) - offsetof(MemHead, next)))
 
 /* --------------------------------------------------------------------- */
 /* vars                                                                  */
 /* --------------------------------------------------------------------- */
 
 static unsigned int totblock = 0;
-static size_t mem_in_use = 0, mmap_in_use = 0, peak_mem = 0;
+static size_t mem_in_use = 0, peak_mem = 0;
 
 static volatile struct localListBase _membase;
 static volatile struct localListBase *membase = &_membase;
 static void (*error_callback)(const char *) = NULL;
-static void (*thread_lock_callback)(void) = NULL;
-static void (*thread_unlock_callback)(void) = NULL;
 
 static bool malloc_debug_memset = false;
 
@@ -227,46 +199,24 @@ print_error(const char *str, ...)
   va_end(ap);
   buf[sizeof(buf) - 1] = '\0';
 
-  if (error_callback)
+  if (error_callback) {
     error_callback(buf);
-  else
+  }
+  else {
     fputs(buf, stderr);
+  }
 }
+
+static pthread_mutex_t thread_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void mem_lock_thread(void)
 {
-#ifdef DEBUG_THREADS
-  static int initialized = 0;
-
-  if (initialized == 0) {
-    /* assume first allocation happens from main thread */
-    mainid = pthread_self();
-    initialized = 1;
-  }
-
-  if (!pthread_equal(pthread_self(), mainid) && thread_lock_callback == NULL) {
-    assert(!"Memory function is called from non-main thread without lock");
-  }
-#endif
-
-#ifdef DEBUG_OMP_MALLOC
-  assert(omp_in_parallel() == 0);
-#endif
-
-  if (thread_lock_callback)
-    thread_lock_callback();
+  pthread_mutex_lock(&thread_lock);
 }
 
 static void mem_unlock_thread(void)
 {
-#ifdef DEBUG_THREADS
-  if (!pthread_equal(pthread_self(), mainid) && thread_lock_callback == NULL) {
-    assert(!"Thread lock was removed while allocation from thread is in progress");
-  }
-#endif
-
-  if (thread_unlock_callback)
-    thread_unlock_callback();
+  pthread_mutex_unlock(&thread_lock);
 }
 
 bool MEM_guarded_consistency_check(void)
@@ -287,12 +237,6 @@ void MEM_guarded_set_error_callback(void (*func)(const char *))
   error_callback = func;
 }
 
-void MEM_guarded_set_lock_callback(void (*lock)(void), void (*unlock)(void))
-{
-  thread_lock_callback = lock;
-  thread_unlock_callback = unlock;
-}
-
 void MEM_guarded_set_memory_debug(void)
 {
   malloc_debug_memset = true;
@@ -306,9 +250,8 @@ size_t MEM_guarded_allocN_len(const void *vmemh)
     memh--;
     return memh->len;
   }
-  else {
-    return 0;
-  }
+
+  return 0;
 }
 
 void *MEM_guarded_dupallocN(const void *vmemh)
@@ -320,25 +263,22 @@ void *MEM_guarded_dupallocN(const void *vmemh)
     memh--;
 
 #ifndef DEBUG_MEMDUPLINAME
-    if (UNLIKELY(memh->mmap))
-      newp = MEM_guarded_mapallocN(memh->len, "dupli_mapalloc");
-    else if (LIKELY(memh->alignment == 0))
-      newp = MEM_guarded_mapallocN(memh->len, "dupli_mapalloc");
-    else
+    if (LIKELY(memh->alignment == 0)) {
+      newp = MEM_guarded_mallocN(memh->len, "dupli_alloc");
+    }
+    else {
       newp = MEM_guarded_mallocN_aligned(memh->len, (size_t)memh->alignment, "dupli_alloc");
+    }
 
-    if (newp == NULL)
+    if (newp == NULL) {
       return NULL;
+    }
 #else
     {
       MemHead *nmemh;
       char *name = malloc(strlen(memh->name) + 24);
 
-      if (UNLIKELY(memh->mmap)) {
-        sprintf(name, "%s %s", "dupli_mapalloc", memh->name);
-        newp = MEM_guarded_mapallocN(memh->len, name);
-      }
-      else if (LIKELY(memh->alignment == 0)) {
+      if (LIKELY(memh->alignment == 0)) {
         sprintf(name, "%s %s", "dupli_alloc", memh->name);
         newp = MEM_guarded_mallocN(memh->len, name);
       }
@@ -478,7 +418,7 @@ static void make_memhead_header(MemHead *memh, size_t len, const char *str)
   memh->name = str;
   memh->nextname = NULL;
   memh->len = len;
-  memh->mmap = 0;
+  memh->pad1 = 0;
   memh->alignment = 0;
   memh->tag2 = MEMTAG2;
 
@@ -515,8 +455,9 @@ void *MEM_guarded_mallocN(size_t len, const char *str)
 
   if (LIKELY(memh)) {
     make_memhead_header(memh, len, str);
-    if (UNLIKELY(malloc_debug_memset && len))
+    if (UNLIKELY(malloc_debug_memset && len)) {
       memset(memh + 1, 255, len);
+    }
 
 #ifdef DEBUG_MEMCOUNTER
     if (_mallocn_count == DEBUG_MEMCOUNTER_ERROR_VAL)
@@ -587,8 +528,9 @@ void *MEM_guarded_mallocN_aligned(size_t len, size_t alignment, const char *str)
 
     make_memhead_header(memh, len, str);
     memh->alignment = (short)alignment;
-    if (UNLIKELY(malloc_debug_memset && len))
+    if (UNLIKELY(malloc_debug_memset && len)) {
       memset(memh + 1, 255, len);
+    }
 
 #ifdef DEBUG_MEMCOUNTER
     if (_mallocn_count == DEBUG_MEMCOUNTER_ERROR_VAL)
@@ -646,58 +588,6 @@ void *MEM_guarded_calloc_arrayN(size_t len, size_t size, const char *str)
   return MEM_guarded_callocN(total_size, str);
 }
 
-/* note; mmap returns zero'd memory */
-void *MEM_guarded_mapallocN(size_t len, const char *str)
-{
-  MemHead *memh;
-
-  /* on 64 bit, simply use calloc instead, as mmap does not support
-   * allocating > 4 GB on Windows. the only reason mapalloc exists
-   * is to get around address space limitations in 32 bit OSes. */
-  if (sizeof(void *) >= 8)
-    return MEM_guarded_callocN(len, str);
-
-  len = SIZET_ALIGN_4(len);
-
-#if defined(WIN32)
-  /* our windows mmap implementation is not thread safe */
-  mem_lock_thread();
-#endif
-  memh = mmap(NULL,
-              len + sizeof(MemHead) + sizeof(MemTail),
-              PROT_READ | PROT_WRITE,
-              MAP_SHARED | MAP_ANON,
-              -1,
-              0);
-#if defined(WIN32)
-  mem_unlock_thread();
-#endif
-
-  if (memh != (MemHead *)-1) {
-    make_memhead_header(memh, len, str);
-    memh->mmap = 1;
-    atomic_add_and_fetch_z(&mmap_in_use, len);
-    mem_lock_thread();
-    peak_mem = mmap_in_use > peak_mem ? mmap_in_use : peak_mem;
-    mem_unlock_thread();
-#ifdef DEBUG_MEMCOUNTER
-    if (_mallocn_count == DEBUG_MEMCOUNTER_ERROR_VAL)
-      memcount_raise(__func__);
-    memh->_count = _mallocn_count++;
-#endif
-    return (++memh);
-  }
-  else {
-    print_error(
-        "Mapalloc returns null, fallback to regular malloc: "
-        "len=" SIZET_FORMAT " in %s, total %u\n",
-        SIZET_ARG(len),
-        str,
-        (unsigned int)mmap_in_use);
-    return MEM_guarded_callocN(len, str);
-  }
-}
-
 /* Memory statistics print */
 typedef struct MemPrintBlock {
   const char *name;
@@ -718,12 +608,14 @@ static int compare_len(const void *p1, const void *p2)
   const MemPrintBlock *pb1 = (const MemPrintBlock *)p1;
   const MemPrintBlock *pb2 = (const MemPrintBlock *)p2;
 
-  if (pb1->len < pb2->len)
+  if (pb1->len < pb2->len) {
     return 1;
-  else if (pb1->len == pb2->len)
+  }
+  if (pb1->len == pb2->len) {
     return 0;
-  else
-    return -1;
+  }
+
+  return -1;
 }
 
 void MEM_guarded_printmemlist_stats(void)
@@ -753,8 +645,9 @@ void MEM_guarded_printmemlist_stats(void)
   totpb = 0;
 
   membl = membase->first;
-  if (membl)
+  if (membl) {
     membl = MEMNEXT(membl);
+  }
 
   while (membl && pb) {
     pb->name = membl->name;
@@ -765,16 +658,18 @@ void MEM_guarded_printmemlist_stats(void)
     pb++;
 
 #ifdef USE_MALLOC_USABLE_SIZE
-    if (!membl->mmap && membl->alignment == 0) {
+    if (membl->alignment == 0) {
       mem_in_use_slop += (sizeof(MemHead) + sizeof(MemTail) + malloc_usable_size((void *)membl)) -
                          membl->len;
     }
 #endif
 
-    if (membl->next)
+    if (membl->next) {
       membl = MEMNEXT(membl->next);
-    else
+    }
+    else {
       break;
+    }
   }
 
   /* sort by name and add together blocks with the same name */
@@ -786,7 +681,7 @@ void MEM_guarded_printmemlist_stats(void)
     if (a == b) {
       continue;
     }
-    else if (strcmp(printblock[a].name, printblock[b].name) == 0) {
+    if (strcmp(printblock[a].name, printblock[b].name) == 0) {
       printblock[b].len += printblock[a].len;
       printblock[b].items++;
     }
@@ -854,8 +749,9 @@ static void MEM_guarded_printmemlist_internal(int pydict)
   mem_lock_thread();
 
   membl = membase->first;
-  if (membl)
+  if (membl) {
     membl = MEMNEXT(membl);
+  }
 
   if (pydict) {
     print_error("# membase_debug.py\n");
@@ -888,10 +784,12 @@ static void MEM_guarded_printmemlist_internal(int pydict)
       print_memhead_backtrace(membl);
 #endif
     }
-    if (membl->next)
+    if (membl->next) {
       membl = MEMNEXT(membl->next);
-    else
+    }
+    else {
       break;
+    }
   }
   if (pydict) {
     print_error("]\n\n");
@@ -908,15 +806,18 @@ void MEM_guarded_callbackmemlist(void (*func)(void *))
   mem_lock_thread();
 
   membl = membase->first;
-  if (membl)
+  if (membl) {
     membl = MEMNEXT(membl);
+  }
 
   while (membl) {
     func(membl + 1);
-    if (membl->next)
+    if (membl->next) {
       membl = MEMNEXT(membl->next);
-    else
+    }
+    else {
       break;
+    }
   }
 
   mem_unlock_thread();
@@ -996,6 +897,10 @@ void MEM_guarded_freeN(void *vmemh)
     memt = (MemTail *)(((char *)memh) + sizeof(MemHead) + memh->len);
     if (memt->tag3 == MEMTAG3) {
 
+      if (leak_detector_has_run) {
+        MemorY_ErroR(memh->name, free_after_leak_detection_message);
+      }
+
       memh->tag1 = MEMFREE;
       memh->tag2 = MEMFREE;
       memt->tag3 = MEMFREE;
@@ -1007,24 +912,25 @@ void MEM_guarded_freeN(void *vmemh)
     MemorY_ErroR(memh->name, "end corrupt");
     name = check_memlist(memh);
     if (name != NULL) {
-      if (name != memh->name)
+      if (name != memh->name) {
         MemorY_ErroR(name, "is also corrupt");
+      }
     }
   }
   else {
     mem_lock_thread();
     name = check_memlist(memh);
     mem_unlock_thread();
-    if (name == NULL)
+    if (name == NULL) {
       MemorY_ErroR("free", "pointer not in memlist");
-    else
+    }
+    else {
       MemorY_ErroR(name, "error in header");
+    }
   }
 
   totblock--;
   /* here a DUMP should happen */
-
-  return;
 }
 
 /* --------------------------------------------------------------------- */
@@ -1047,10 +953,12 @@ static void addtail(volatile localListBase *listbase, void *vlink)
   link->next = NULL;
   link->prev = listbase->last;
 
-  if (listbase->last)
+  if (listbase->last) {
     ((struct localLink *)listbase->last)->next = link;
-  if (listbase->first == NULL)
+  }
+  if (listbase->first == NULL) {
     listbase->first = link;
+  }
   listbase->last = link;
 }
 
@@ -1067,15 +975,19 @@ static void remlink(volatile localListBase *listbase, void *vlink)
     return;
 #endif
 
-  if (link->next)
+  if (link->next) {
     link->next->prev = link->prev;
-  if (link->prev)
+  }
+  if (link->prev) {
     link->prev->next = link->next;
+  }
 
-  if (listbase->last == link)
+  if (listbase->last == link) {
     listbase->last = link->prev;
-  if (listbase->first == link)
+  }
+  if (listbase->first == link) {
     listbase->first = link->next;
+  }
 }
 
 static void rem_memblock(MemHead *memh)
@@ -1083,10 +995,12 @@ static void rem_memblock(MemHead *memh)
   mem_lock_thread();
   remlink(membase, &memh->next);
   if (memh->prev) {
-    if (memh->next)
+    if (memh->next) {
       MEMNEXT(memh->prev)->nextname = MEMNEXT(memh->next)->name;
-    else
+    }
+    else {
       MEMNEXT(memh->prev)->nextname = NULL;
+    }
   }
   mem_unlock_thread();
 
@@ -1098,27 +1012,14 @@ static void rem_memblock(MemHead *memh)
     free((char *)memh->name);
 #endif
 
-  if (memh->mmap) {
-    atomic_sub_and_fetch_z(&mmap_in_use, memh->len);
-#if defined(WIN32)
-    /* our windows mmap implementation is not thread safe */
-    mem_lock_thread();
-#endif
-    if (munmap(memh, memh->len + sizeof(MemHead) + sizeof(MemTail)))
-      printf("Couldn't unmap memory %s\n", memh->name);
-#if defined(WIN32)
-    mem_unlock_thread();
-#endif
+  if (UNLIKELY(malloc_debug_memset && memh->len)) {
+    memset(memh + 1, 255, memh->len);
+  }
+  if (LIKELY(memh->alignment == 0)) {
+    free(memh);
   }
   else {
-    if (UNLIKELY(malloc_debug_memset && memh->len))
-      memset(memh + 1, 255, memh->len);
-    if (LIKELY(memh->alignment == 0)) {
-      free(memh);
-    }
-    else {
-      aligned_free(MEMHEAD_REAL_PTR(memh));
-    }
+    aligned_free(MEMHEAD_REAL_PTR(memh));
   }
 }
 
@@ -1137,78 +1038,100 @@ static const char *check_memlist(MemHead *memh)
   const char *name;
 
   forw = membase->first;
-  if (forw)
+  if (forw) {
     forw = MEMNEXT(forw);
+  }
   forwok = NULL;
   while (forw) {
-    if (forw->tag1 != MEMTAG1 || forw->tag2 != MEMTAG2)
+    if (forw->tag1 != MEMTAG1 || forw->tag2 != MEMTAG2) {
       break;
+    }
     forwok = forw;
-    if (forw->next)
+    if (forw->next) {
       forw = MEMNEXT(forw->next);
-    else
+    }
+    else {
       forw = NULL;
+    }
   }
 
   back = (MemHead *)membase->last;
-  if (back)
+  if (back) {
     back = MEMNEXT(back);
+  }
   backok = NULL;
   while (back) {
-    if (back->tag1 != MEMTAG1 || back->tag2 != MEMTAG2)
+    if (back->tag1 != MEMTAG1 || back->tag2 != MEMTAG2) {
       break;
+    }
     backok = back;
-    if (back->prev)
+    if (back->prev) {
       back = MEMNEXT(back->prev);
-    else
+    }
+    else {
       back = NULL;
+    }
   }
 
-  if (forw != back)
+  if (forw != back) {
     return ("MORE THAN 1 MEMORYBLOCK CORRUPT");
+  }
 
   if (forw == NULL && back == NULL) {
     /* no wrong headers found then but in search of memblock */
 
     forw = membase->first;
-    if (forw)
+    if (forw) {
       forw = MEMNEXT(forw);
+    }
     forwok = NULL;
     while (forw) {
-      if (forw == memh)
+      if (forw == memh) {
         break;
-      if (forw->tag1 != MEMTAG1 || forw->tag2 != MEMTAG2)
+      }
+      if (forw->tag1 != MEMTAG1 || forw->tag2 != MEMTAG2) {
         break;
+      }
       forwok = forw;
-      if (forw->next)
+      if (forw->next) {
         forw = MEMNEXT(forw->next);
-      else
+      }
+      else {
         forw = NULL;
+      }
     }
-    if (forw == NULL)
+    if (forw == NULL) {
       return NULL;
+    }
 
     back = (MemHead *)membase->last;
-    if (back)
+    if (back) {
       back = MEMNEXT(back);
+    }
     backok = NULL;
     while (back) {
-      if (back == memh)
+      if (back == memh) {
         break;
-      if (back->tag1 != MEMTAG1 || back->tag2 != MEMTAG2)
+      }
+      if (back->tag1 != MEMTAG1 || back->tag2 != MEMTAG2) {
         break;
+      }
       backok = back;
-      if (back->prev)
+      if (back->prev) {
         back = MEMNEXT(back->prev);
-      else
+      }
+      else {
         back = NULL;
+      }
     }
   }
 
-  if (forwok)
+  if (forwok) {
     name = forwok->nextname;
-  else
+  }
+  else {
     name = "No name found";
+  }
 
   if (forw == memh) {
     /* to be sure but this block is removed from the list */
@@ -1238,7 +1161,7 @@ static const char *check_memlist(MemHead *memh)
     return ("Additional error in header");
   }
 
-  return (name);
+  return name;
 }
 
 size_t MEM_guarded_get_peak_memory(void)
@@ -1270,17 +1193,6 @@ size_t MEM_guarded_get_memory_in_use(void)
   return _mem_in_use;
 }
 
-size_t MEM_guarded_get_mapped_memory_in_use(void)
-{
-  size_t _mmap_in_use;
-
-  mem_lock_thread();
-  _mmap_in_use = mmap_in_use;
-  mem_unlock_thread();
-
-  return _mmap_in_use;
-}
-
 unsigned int MEM_guarded_get_memory_blocks_in_use(void)
 {
   unsigned int _totblock;
@@ -1300,8 +1212,7 @@ const char *MEM_guarded_name_ptr(void *vmemh)
     memh--;
     return memh->name;
   }
-  else {
-    return "MEM_guarded_name_ptr(NULL)";
-  }
+
+  return "MEM_guarded_name_ptr(NULL)";
 }
 #endif /* NDEBUG */

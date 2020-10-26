@@ -18,8 +18,7 @@
  * \ingroup modifiers
  */
 
-#ifndef __MOD_MODIFIERTYPES_H__
-#define __MOD_MODIFIERTYPES_H__
+#pragma once
 
 #include "BKE_modifier.h"
 
@@ -86,6 +85,10 @@ extern ModifierTypeInfo modifierType_CorrectiveSmooth;
 extern ModifierTypeInfo modifierType_MeshSequenceCache;
 extern ModifierTypeInfo modifierType_SurfaceDeform;
 extern ModifierTypeInfo modifierType_WeightedNormal;
+extern ModifierTypeInfo modifierType_Simulation;
+extern ModifierTypeInfo modifierType_MeshToVolume;
+extern ModifierTypeInfo modifierType_VolumeDisplace;
+extern ModifierTypeInfo modifierType_VolumeToMesh;
 extern ModifierTypeInfo modifierType_OpenMeshEffect;
 
 /* MOD_util.c */
@@ -94,5 +97,3 @@ void modifier_type_init(ModifierTypeInfo *types[]);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __MOD_MODIFIERTYPES_H__ */

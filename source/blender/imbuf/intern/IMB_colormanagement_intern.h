@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __IMB_COLORMANAGEMENT_INTERN_H__
-#define __IMB_COLORMANAGEMENT_INTERN_H__
+#pragma once
 
 /** \file
  * \ingroup imbuf
@@ -26,6 +25,10 @@
 
 #include "BLI_sys_types.h"
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct ImBuf;
 struct OCIO_ConstProcessorRcPtr;
@@ -123,4 +126,6 @@ void colorspace_set_default_role(char *colorspace, int size, int role);
 void colormanage_imbuf_set_default_spaces(struct ImBuf *ibuf);
 void colormanage_imbuf_make_linear(struct ImBuf *ibuf, const char *from_colorspace);
 
-#endif /* __IMB_COLORMANAGEMENT_INTERN_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -23,6 +23,7 @@
 #include "render/nodes.h"
 #include "render/scene.h"
 #include "render/shader.h"
+#include "render/stats.h"
 #include "render/svm.h"
 
 #include "util/util_foreach.h"
@@ -76,6 +77,12 @@ void SVMShaderManager::device_update(Device *device,
   if (!need_update)
     return;
 
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->svm.times.add_entry({"device_update", time});
+    }
+  });
+
   const int num_shaders = scene->shaders.size();
 
   VLOG(1) << "Total " << num_shaders << " shaders.";
@@ -94,8 +101,7 @@ void SVMShaderManager::device_update(Device *device,
                                  scene,
                                  scene->shaders[i],
                                  &progress,
-                                 &shader_svm_nodes[i]),
-                   false);
+                                 &shader_svm_nodes[i]));
   }
   task_pool.wait_work();
 

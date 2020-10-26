@@ -74,7 +74,6 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 
-#include "GPU_draw.h"
 #include "GPU_immediate.h"
 #include "GPU_state.h"
 
@@ -182,7 +181,7 @@ void imapaint_image_update(
     int h = imapaintpartial.y2 - imapaintpartial.y1;
     if (w && h) {
       /* Testing with partial update in uv editor too */
-      GPU_paint_update_image(image, iuser, imapaintpartial.x1, imapaintpartial.y1, w, h);
+      BKE_image_update_gputexture(image, iuser, imapaintpartial.x1, imapaintpartial.y1, w, h);
     }
   }
 }
@@ -276,28 +275,31 @@ static bool image_paint_poll_ex(bContext *C, bool check_tool)
   Object *obact;
 
   if (!image_paint_brush(C)) {
-    return 0;
+    return false;
   }
 
   obact = CTX_data_active_object(C);
   if ((obact && obact->mode & OB_MODE_TEXTURE_PAINT) && CTX_wm_region_view3d(C)) {
     if (!check_tool || WM_toolsystem_active_tool_is_brush(C)) {
-      return 1;
+      return true;
     }
   }
   else {
     SpaceImage *sima = CTX_wm_space_image(C);
 
     if (sima) {
+      if (sima->image != NULL && ID_IS_LINKED(sima->image)) {
+        return false;
+      }
       ARegion *region = CTX_wm_region(C);
 
       if ((sima->mode == SI_MODE_PAINT) && region->regiontype == RGN_TYPE_WINDOW) {
-        return 1;
+        return true;
       }
     }
   }
 
-  return 0;
+  return false;
 }
 
 static bool image_paint_poll(bContext *C)
@@ -317,12 +319,12 @@ static bool image_paint_2d_clone_poll(bContext *C)
   if (!CTX_wm_region_view3d(C) && image_paint_poll(C)) {
     if (brush && (brush->imagepaint_tool == PAINT_TOOL_CLONE)) {
       if (brush->clone.image) {
-        return 1;
+        return true;
       }
     }
   }
 
-  return 0;
+  return false;
 }
 
 /************************ paint operator ************************/
@@ -439,7 +441,7 @@ static void gradient_draw_line(bContext *UNUSED(C), int x, int y, void *customda
 
   if (pop) {
     GPU_line_smooth(true);
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     GPUVertFormat *format = immVertexFormat();
     uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
@@ -468,7 +470,7 @@ static void gradient_draw_line(bContext *UNUSED(C), int x, int y, void *customda
 
     immUnbindProgram();
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
     GPU_line_smooth(false);
   }
 }
@@ -491,8 +493,8 @@ static PaintOperation *texture_paint_init(bContext *C, wmOperator *op, const flo
     ViewLayer *view_layer = CTX_data_view_layer(C);
     Object *ob = OBACT(view_layer);
     bool uvs, mat, tex, stencil;
-    if (!BKE_paint_proj_mesh_data_check(scene, ob, &uvs, &mat, &tex, &stencil)) {
-      BKE_paint_data_warning(op->reports, uvs, mat, tex, stencil);
+    if (!ED_paint_proj_mesh_data_check(scene, ob, &uvs, &mat, &tex, &stencil)) {
+      ED_paint_data_warning(op->reports, uvs, mat, tex, stencil);
       MEM_freeN(pop);
       WM_event_add_notifier(C, NC_SCENE | ND_TOOLSETTINGS, NULL);
       return NULL;
@@ -511,12 +513,8 @@ static PaintOperation *texture_paint_init(bContext *C, wmOperator *op, const flo
   }
 
   if ((brush->imagepaint_tool == PAINT_TOOL_FILL) && (brush->flag & BRUSH_USE_GRADIENT)) {
-    pop->cursor = WM_paint_cursor_activate(CTX_wm_manager(C),
-                                           SPACE_TYPE_ANY,
-                                           RGN_TYPE_ANY,
-                                           image_paint_poll,
-                                           gradient_draw_line,
-                                           pop);
+    pop->cursor = WM_paint_cursor_activate(
+        SPACE_TYPE_ANY, RGN_TYPE_ANY, image_paint_poll, gradient_draw_line, pop);
   }
 
   settings->imapaint.flag |= IMAGEPAINT_DRAWING;
@@ -655,7 +653,7 @@ static void paint_stroke_done(const bContext *C, struct PaintStroke *stroke)
   }
 
   if (pop->cursor) {
-    WM_paint_cursor_end(CTX_wm_manager(C), pop->cursor);
+    WM_paint_cursor_end(pop->cursor);
   }
 
   ED_image_undo_push_end();
@@ -774,30 +772,29 @@ bool get_imapaint_zoom(bContext *C, float *zoomx, float *zoomy)
     if (sima->mode == SI_MODE_PAINT) {
       ARegion *region = CTX_wm_region(C);
       ED_space_image_get_zoom(sima, region, zoomx, zoomy);
-      return 1;
+      return true;
     }
   }
 
   *zoomx = *zoomy = 1;
 
-  return 0;
+  return false;
 }
 
 /************************ cursor drawing *******************************/
 
-static void toggle_paint_cursor(bContext *C, int enable)
+static void toggle_paint_cursor(Scene *scene, bool enable)
 {
-  wmWindowManager *wm = CTX_wm_manager(C);
-  Scene *scene = CTX_data_scene(C);
   ToolSettings *settings = scene->toolsettings;
+  Paint *p = &settings->imapaint.paint;
 
-  if (settings->imapaint.paintcursor && !enable) {
-    WM_paint_cursor_end(wm, settings->imapaint.paintcursor);
-    settings->imapaint.paintcursor = NULL;
+  if (p->paint_cursor && !enable) {
+    WM_paint_cursor_end(p->paint_cursor);
+    p->paint_cursor = NULL;
     paint_cursor_delete_textures();
   }
   else if (enable) {
-    paint_cursor_start(C, image_paint_poll);
+    paint_cursor_start(p, image_paint_poll);
   }
 }
 
@@ -827,7 +824,7 @@ void ED_space_image_paint_update(Main *bmain, wmWindowManager *wm, Scene *scene)
   if (enabled) {
     BKE_paint_init(bmain, scene, PAINT_MODE_TEXTURE_2D, PAINT_CURSOR_TEXTURE_PAINT);
 
-    paint_cursor_start_explicit(&imapaint->paint, wm, image_paint_poll);
+    paint_cursor_start(&imapaint->paint, image_paint_poll);
   }
   else {
     paint_cursor_delete_textures();
@@ -885,7 +882,7 @@ static int grab_clone_modal(bContext *C, wmOperator *op, const wmEvent *event)
   switch (event->type) {
     case LEFTMOUSE:
     case MIDDLEMOUSE:
-    case RIGHTMOUSE:  // XXX hardcoded
+    case RIGHTMOUSE: /* XXX hardcoded */
       MEM_freeN(op->customdata);
       return OPERATOR_FINISHED;
     case MOUSEMOVE:
@@ -1121,17 +1118,109 @@ void PAINT_OT_sample_color(wmOperatorType *ot)
 
 /******************** texture paint toggle operator ********************/
 
+void ED_object_texture_paint_mode_enter_ex(Main *bmain, Scene *scene, Object *ob)
+{
+  Image *ima = NULL;
+  ImagePaintSettings *imapaint = &scene->toolsettings->imapaint;
+
+  /* This has to stay here to regenerate the texture paint
+   * cache in case we are loading a file */
+  BKE_texpaint_slots_refresh_object(scene, ob);
+
+  ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+
+  /* entering paint mode also sets image to editors */
+  if (imapaint->mode == IMAGEPAINT_MODE_MATERIAL) {
+    /* set the current material active paint slot on image editor */
+    Material *ma = BKE_object_material_get(ob, ob->actcol);
+
+    if (ma && ma->texpaintslot) {
+      ima = ma->texpaintslot[ma->paint_active_slot].ima;
+    }
+  }
+  else if (imapaint->mode == IMAGEPAINT_MODE_IMAGE) {
+    ima = imapaint->canvas;
+  }
+
+  if (ima) {
+    wmWindowManager *wm = bmain->wm.first;
+    for (wmWindow *win = wm->windows.first; win; win = win->next) {
+      const bScreen *screen = WM_window_get_active_screen(win);
+      for (ScrArea *area = screen->areabase.first; area; area = area->next) {
+        SpaceLink *sl = area->spacedata.first;
+        if (sl->spacetype == SPACE_IMAGE) {
+          SpaceImage *sima = (SpaceImage *)sl;
+
+          if (!sima->pin) {
+            ED_space_image_set(bmain, sima, NULL, ima, true);
+          }
+        }
+      }
+    }
+  }
+
+  ob->mode |= OB_MODE_TEXTURE_PAINT;
+
+  BKE_paint_init(bmain, scene, PAINT_MODE_TEXTURE_3D, PAINT_CURSOR_TEXTURE_PAINT);
+
+  BKE_paint_toolslots_brush_validate(bmain, &imapaint->paint);
+
+  if (U.glreslimit != 0) {
+    BKE_image_free_all_gputextures(bmain);
+  }
+  BKE_image_paint_set_mipmap(bmain, 0);
+
+  toggle_paint_cursor(scene, true);
+
+  Mesh *me = BKE_mesh_from_object(ob);
+  BLI_assert(me != NULL);
+  DEG_id_tag_update(&me->id, ID_RECALC_COPY_ON_WRITE);
+  WM_main_add_notifier(NC_SCENE | ND_MODE, scene);
+}
+
+void ED_object_texture_paint_mode_enter(bContext *C)
+{
+  Main *bmain = CTX_data_main(C);
+  Object *ob = CTX_data_active_object(C);
+  Scene *scene = CTX_data_scene(C);
+  ED_object_texture_paint_mode_enter_ex(bmain, scene, ob);
+}
+
+void ED_object_texture_paint_mode_exit_ex(Main *bmain, Scene *scene, Object *ob)
+{
+  ob->mode &= ~OB_MODE_TEXTURE_PAINT;
+
+  if (U.glreslimit != 0) {
+    BKE_image_free_all_gputextures(bmain);
+  }
+  BKE_image_paint_set_mipmap(bmain, 1);
+  toggle_paint_cursor(scene, false);
+
+  Mesh *me = BKE_mesh_from_object(ob);
+  BLI_assert(me != NULL);
+  DEG_id_tag_update(&me->id, ID_RECALC_COPY_ON_WRITE);
+  WM_main_add_notifier(NC_SCENE | ND_MODE, scene);
+}
+
+void ED_object_texture_paint_mode_exit(bContext *C)
+{
+  Main *bmain = CTX_data_main(C);
+  Object *ob = CTX_data_active_object(C);
+  Scene *scene = CTX_data_scene(C);
+  ED_object_texture_paint_mode_exit_ex(bmain, scene, ob);
+}
+
 static bool texture_paint_toggle_poll(bContext *C)
 {
   Object *ob = CTX_data_active_object(C);
   if (ob == NULL || ob->type != OB_MESH) {
-    return 0;
+    return false;
   }
   if (!ob->data || ID_IS_LINKED(ob->data)) {
-    return 0;
+    return false;
   }
 
-  return 1;
+  return true;
 }
 
 static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
@@ -1150,77 +1239,11 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
   }
 
   if (ob->mode & mode_flag) {
-    ob->mode &= ~mode_flag;
-
-    if (U.glreslimit != 0) {
-      GPU_free_images(bmain);
-    }
-    GPU_paint_set_mipmap(bmain, 1);
-
-    toggle_paint_cursor(C, 0);
+    ED_object_texture_paint_mode_exit_ex(bmain, scene, ob);
   }
   else {
-    bScreen *screen;
-    Image *ima = NULL;
-    ImagePaintSettings *imapaint = &scene->toolsettings->imapaint;
-
-    /* This has to stay here to regenerate the texture paint
-     * cache in case we are loading a file */
-    BKE_texpaint_slots_refresh_object(scene, ob);
-
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
-
-    /* entering paint mode also sets image to editors */
-    if (imapaint->mode == IMAGEPAINT_MODE_MATERIAL) {
-      /* set the current material active paint slot on image editor */
-      Material *ma = BKE_object_material_get(ob, ob->actcol);
-
-      if (ma && ma->texpaintslot) {
-        ima = ma->texpaintslot[ma->paint_active_slot].ima;
-      }
-    }
-    else if (imapaint->mode == IMAGEPAINT_MODE_IMAGE) {
-      ima = imapaint->canvas;
-    }
-
-    if (ima) {
-      for (screen = bmain->screens.first; screen; screen = screen->id.next) {
-        ScrArea *area;
-        for (area = screen->areabase.first; area; area = area->next) {
-          SpaceLink *sl;
-          for (sl = area->spacedata.first; sl; sl = sl->next) {
-            if (sl->spacetype == SPACE_IMAGE) {
-              SpaceImage *sima = (SpaceImage *)sl;
-
-              if (!sima->pin) {
-                Object *obedit = CTX_data_edit_object(C);
-                ED_space_image_set(bmain, sima, obedit, ima, true);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    ob->mode |= mode_flag;
-
-    BKE_paint_init(bmain, scene, PAINT_MODE_TEXTURE_3D, PAINT_CURSOR_TEXTURE_PAINT);
-
-    BKE_paint_toolslots_brush_validate(bmain, &imapaint->paint);
-
-    if (U.glreslimit != 0) {
-      GPU_free_images(bmain);
-    }
-    GPU_paint_set_mipmap(bmain, 0);
-
-    toggle_paint_cursor(C, 1);
+    ED_object_texture_paint_mode_enter_ex(bmain, scene, ob);
   }
-
-  Mesh *me = BKE_mesh_from_object(ob);
-  BLI_assert(me != NULL);
-  DEG_id_tag_update(&me->id, ID_RECALC_COPY_ON_WRITE);
-
-  WM_event_add_notifier(C, NC_SCENE | ND_MODE, scene);
 
   WM_msg_publish_rna_prop(mbus, &ob->id, ob, Object, mode);
 
@@ -1278,7 +1301,7 @@ static bool brush_colors_flip_poll(bContext *C)
   else {
     Object *ob = CTX_data_active_object(C);
     if (ob != NULL) {
-      if (ob->mode & (OB_MODE_VERTEX_PAINT | OB_MODE_TEXTURE_PAINT)) {
+      if (ob->mode & (OB_MODE_VERTEX_PAINT | OB_MODE_TEXTURE_PAINT | OB_MODE_SCULPT)) {
         return true;
       }
     }
@@ -1313,7 +1336,7 @@ void ED_imapaint_bucket_fill(struct bContext *C,
 
     ED_image_undo_push_begin(op->type->name, PAINT_MODE_TEXTURE_2D);
 
-    float mouse_init[2] = {mouse[0], mouse[1]};
+    const float mouse_init[2] = {mouse[0], mouse[1]};
     paint_2d_bucket_fill(C, color, NULL, mouse_init, NULL, NULL);
 
     ED_image_undo_push_end();
@@ -1326,11 +1349,11 @@ static bool texture_paint_poll(bContext *C)
 {
   if (texture_paint_toggle_poll(C)) {
     if (CTX_data_active_object(C)->mode & OB_MODE_TEXTURE_PAINT) {
-      return 1;
+      return true;
     }
   }
 
-  return 0;
+  return false;
 }
 
 bool image_texture_paint_poll(bContext *C)

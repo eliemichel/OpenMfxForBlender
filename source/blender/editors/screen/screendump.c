@@ -91,10 +91,8 @@ static int screenshot_data_create(bContext *C, wmOperator *op)
 
     return true;
   }
-  else {
-    op->customdata = NULL;
-    return false;
-  }
+  op->customdata = NULL;
+  return false;
 }
 
 static void screenshot_data_free(wmOperator *op)
@@ -205,9 +203,12 @@ static void screenshot_draw(bContext *UNUSED(C), wmOperator *op)
 {
   uiLayout *layout = op->layout;
   ScreenshotData *scd = op->customdata;
-  PointerRNA ptr;
+
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
 
   /* image template */
+  PointerRNA ptr;
   RNA_pointer_create(NULL, &RNA_ImageFormatSettings, &scd->im_format, &ptr);
   uiTemplateImageSettings(layout, &ptr, false);
 

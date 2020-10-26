@@ -212,10 +212,6 @@ static void envelope_bone_weighting(Object *ob,
 {
   /* Create vertex group weights from envelopes */
 
-  Bone *bone;
-  bDeformGroup *dgroup;
-  float distance;
-  int i, iflip, j;
   bool use_topology = (mesh->editflag & ME_EDIT_MIRROR_TOPO) != 0;
   bool use_mask = false;
 
@@ -225,30 +221,30 @@ static void envelope_bone_weighting(Object *ob,
   }
 
   /* for each vertex in the mesh */
-  for (i = 0; i < mesh->totvert; i++) {
+  for (int i = 0; i < mesh->totvert; i++) {
 
     if (use_mask && !(mesh->mvert[i].flag & SELECT)) {
       continue;
     }
 
-    iflip = (dgroupflip) ? mesh_get_x_mirror_vert(ob, NULL, i, use_topology) : -1;
+    int iflip = (dgroupflip) ? mesh_get_x_mirror_vert(ob, NULL, i, use_topology) : -1;
 
     /* for each skinnable bone */
-    for (j = 0; j < numbones; j++) {
+    for (int j = 0; j < numbones; j++) {
       if (!selected[j]) {
         continue;
       }
 
-      bone = bonelist[j];
-      dgroup = dgrouplist[j];
+      Bone *bone = bonelist[j];
+      bDeformGroup *dgroup = dgrouplist[j];
 
       /* store the distance-factor from the vertex to the bone */
-      distance = distfactor_to_bone(verts[i],
-                                    root[j],
-                                    tip[j],
-                                    bone->rad_head * scale,
-                                    bone->rad_tail * scale,
-                                    bone->dist * scale);
+      float distance = distfactor_to_bone(verts[i],
+                                          root[j],
+                                          tip[j],
+                                          bone->rad_head * scale,
+                                          bone->rad_tail * scale,
+                                          bone->dist * scale);
 
       /* add the vert to the deform group if (weight != 0.0) */
       if (distance != 0.0f) {
@@ -283,11 +279,11 @@ static void add_verts_to_dgroups(ReportList *reports,
    * weights, either through envelopes or using a heat equilibrium.
    *
    * This function can be called both when parenting a mesh to an armature,
-   * or in weightpaint + posemode. In the latter case selection is taken
+   * or in weight-paint + pose-mode. In the latter case selection is taken
    * into account and vertex weights can be mirrored.
    *
    * The mesh vertex positions used are either the final deformed coords
-   * from the evaluated mesh in weightpaint mode, the final subsurf coords
+   * from the evaluated mesh in weight-paint mode, the final sub-surface coords
    * when parenting, or simply the original mesh coords.
    */
 
@@ -300,7 +296,7 @@ static void add_verts_to_dgroups(ReportList *reports,
   Mat4 bbone_array[MAX_BBONE_SUBDIV], *bbone = NULL;
   float(*root)[3], (*tip)[3], (*verts)[3];
   int *selected;
-  int numbones, vertsfilled = 0, i, j, segments = 0;
+  int numbones, vertsfilled = 0, segments = 0;
   const bool wpmode = (ob->mode & OB_MODE_WEIGHT_PAINT);
   struct {
     Object *armob;
@@ -342,11 +338,11 @@ static void add_verts_to_dgroups(ReportList *reports,
 
   /* create an array of root and tip positions transformed into
    * global coords */
-  root = MEM_callocN(numbones * sizeof(float) * 3, "root");
-  tip = MEM_callocN(numbones * sizeof(float) * 3, "tip");
-  selected = MEM_callocN(numbones * sizeof(int), "selected");
+  root = MEM_callocN(sizeof(float[3]) * numbones, "root");
+  tip = MEM_callocN(sizeof(float[3]) * numbones, "tip");
+  selected = MEM_callocN(sizeof(int) * numbones, "selected");
 
-  for (j = 0; j < numbones; j++) {
+  for (int j = 0; j < numbones; j++) {
     bone = bonelist[j];
     dgroup = dgrouplist[j];
 
@@ -418,7 +414,7 @@ static void add_verts_to_dgroups(ReportList *reports,
     BKE_mesh_foreach_mapped_vert_coords_get(me_eval, verts, mesh->totvert);
     vertsfilled = 1;
   }
-  else if (modifiers_findByType(ob, eModifierType_Subsurf)) {
+  else if (BKE_modifiers_findby_type(ob, eModifierType_Subsurf)) {
     /* is subsurf on? Lets use the verts on the limit surface then.
      * = same amount of vertices as mesh, but vertices  moved to the
      * subsurfed position, like for 'optimal'. */
@@ -427,7 +423,7 @@ static void add_verts_to_dgroups(ReportList *reports,
   }
 
   /* transform verts to global space */
-  for (i = 0; i < mesh->totvert; i++) {
+  for (int i = 0; i < mesh->totvert; i++) {
     if (!vertsfilled) {
       copy_v3_v3(verts[i], mesh->mvert[i].co);
     }
@@ -494,7 +490,7 @@ void ED_object_vgroup_calc_from_armature(ReportList *reports,
 
     if (defbase_add) {
       /* its possible there are DWeight's outside the range of the current
-       * objects deform groups, in this case the new groups wont be empty [#33889] */
+       * objects deform groups, in this case the new groups wont be empty T33889. */
       ED_vgroup_data_clamp_range(ob->data, defbase_tot);
     }
   }

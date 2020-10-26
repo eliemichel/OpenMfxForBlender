@@ -14,16 +14,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_EDGESPLIT_H__
-#define __BMESH_EDGESPLIT_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void BM_mesh_edgesplit(BMesh *bm,
                        const bool use_verts,
                        const bool tag_only,
                        const bool copy_select);
 
-#endif /* __BMESH_EDGESPLIT_H__ */
+#ifdef __cplusplus
+}
+#endif

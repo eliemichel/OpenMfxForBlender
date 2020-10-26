@@ -16,8 +16,7 @@
  * Copyright 2012, Blender Foundation.
  */
 
-#ifndef __COM_KEYINGSCREENOPERATION_H__
-#define __COM_KEYINGSCREENOPERATION_H__
+#pragma once
 
 #include <string.h>
 
@@ -28,9 +27,7 @@
 #include "BLI_listbase.h"
 #include "BLI_string.h"
 
-extern "C" {
 #include "BLI_voronoi_2d.h"
-}
 
 /**
  * Class with implementation of green screen gradient rasterization
@@ -85,5 +82,3 @@ class KeyingScreenOperation : public NodeOperation {
 
   void executePixel(float output[4], int x, int y, void *data);
 };
-
-#endif

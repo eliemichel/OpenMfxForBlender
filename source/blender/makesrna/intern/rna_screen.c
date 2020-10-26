@@ -30,6 +30,8 @@
 #include "DNA_screen_types.h"
 #include "DNA_workspace_types.h"
 
+#include "ED_info.h"
+
 const EnumPropertyItem rna_enum_region_type_items[] = {
     {RGN_TYPE_WINDOW, "WINDOW", 0, "Window", ""},
     {RGN_TYPE_HEADER, "HEADER", 0, "Header", ""},
@@ -88,6 +90,12 @@ static bool rna_Screen_is_animation_playing_get(PointerRNA *UNUSED(ptr))
   /* can be NULL on file load, T42619 */
   wmWindowManager *wm = G_MAIN->wm.first;
   return wm ? (ED_screen_animation_playing(wm) != NULL) : 0;
+}
+
+static bool rna_Screen_is_scrubbing_get(PointerRNA *ptr)
+{
+  bScreen *screen = (bScreen *)ptr->data;
+  return screen->scrubbing;
 }
 
 static int rna_region_alignment_get(PointerRNA *ptr)
@@ -223,7 +231,7 @@ static int rna_Area_ui_type_get(PointerRNA *ptr)
    * the area type is changing.
    * So manually do the lookup in those cases, but do not actually change area->type
    * since that prevents a proper exit when the area type is changing.
-   * Logic copied from `ED_area_initialize()`.*/
+   * Logic copied from `ED_area_init()`.*/
   SpaceType *type = area->type;
   if (type == NULL || area_changing) {
     type = BKE_spacetype_from_id(area_type);
@@ -278,6 +286,13 @@ static void rna_View2D_view_to_region(
   else {
     UI_view2d_view_to_region(v2d, x, y, &result[0], &result[1]);
   }
+}
+
+static const char *rna_Screen_statusbar_info_get(struct bScreen *UNUSED(screen),
+                                                 Main *bmain,
+                                                 bContext *C)
+{
+  return ED_info_statusbar_string(bmain, CTX_data_scene(C), CTX_data_view_layer(C));
 }
 
 #else
@@ -354,7 +369,7 @@ static void rna_def_area(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_Area_type_update");
 
   prop = RNA_def_property(srna, "ui_type", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_items(prop, DummyRNA_NULL_items); /* infact dummy */
+  RNA_def_property_enum_items(prop, DummyRNA_NULL_items); /* in fact dummy */
   RNA_def_property_enum_default(prop, SPACE_VIEW3D << 16);
   RNA_def_property_enum_funcs(
       prop, "rna_Area_ui_type_get", "rna_Area_ui_type_set", "rna_Area_ui_type_itemf");
@@ -530,6 +545,9 @@ static void rna_def_screen(BlenderRNA *brna)
   StructRNA *srna;
   PropertyRNA *prop;
 
+  FunctionRNA *func;
+  PropertyRNA *parm;
+
   srna = RNA_def_struct(brna, "Screen", "ID");
   RNA_def_struct_sdna(srna, "Screen"); /* it is actually bScreen but for 2.5 the dna is patched! */
   RNA_def_struct_ui_text(
@@ -548,6 +566,12 @@ static void rna_def_screen(BlenderRNA *brna)
   RNA_def_property_boolean_funcs(prop, "rna_Screen_is_animation_playing_get", NULL);
   RNA_def_property_ui_text(prop, "Animation Playing", "Animation playback is active");
 
+  prop = RNA_def_property(srna, "is_scrubbing", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+  RNA_def_property_boolean_funcs(prop, "rna_Screen_is_scrubbing_get", NULL);
+  RNA_def_property_ui_text(
+      prop, "User is Scrubbing", "True when the user is scrubbing through time");
+
   prop = RNA_def_property(srna, "is_temporary", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_boolean_sdna(prop, NULL, "temp", 1);
@@ -558,10 +582,17 @@ static void rna_def_screen(BlenderRNA *brna)
   RNA_def_property_boolean_funcs(prop, "rna_Screen_fullscreen_get", NULL);
   RNA_def_property_ui_text(prop, "Maximize", "An area is maximized, filling this screen");
 
+  /* Status Bar. */
+
   prop = RNA_def_property(srna, "show_statusbar", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", SCREEN_COLLAPSE_STATUSBAR);
-  RNA_def_property_ui_text(prop, "Show Status Bar", "Show status bar");
+  RNA_def_property_ui_text(prop, "Show Status Bar", "Show Status Bar");
   RNA_def_property_update(prop, 0, "rna_Screen_bar_update");
+
+  func = RNA_def_function(srna, "statusbar_info", "rna_Screen_statusbar_info_get");
+  RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_CONTEXT);
+  parm = RNA_def_string(func, "statusbar_info", NULL, 0, "Status Bar Info", "");
+  RNA_def_function_return(func, parm);
 
   /* Define Anim Playback Areas */
   prop = RNA_def_property(srna, "use_play_top_left_3d_editor", PROP_BOOLEAN, PROP_NONE);

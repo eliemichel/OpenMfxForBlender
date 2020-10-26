@@ -16,16 +16,13 @@
  * Copyright 2013, Blender Foundation.
  */
 
-#ifndef __COM_NODEGRAPH_H__
-#define __COM_NODEGRAPH_H__
+#pragma once
 
 #include <map>
 #include <set>
 #include <vector>
 
-extern "C" {
 #include "DNA_node_types.h"
-}
 
 #ifdef WITH_CXX_GUARDEDALLOC
 #  include "MEM_guardedalloc.h"
@@ -108,7 +105,7 @@ class NodeGraph {
 
   NodeInputs find_inputs(const NodeRange &node_range, bNodeSocket *b_socket);
   NodeOutput *find_output(const NodeRange &node_range, bNodeSocket *b_socket);
-  void add_bNodeLink(const NodeRange &node_range, bNodeLink *bNodeLink);
+  void add_bNodeLink(const NodeRange &node_range, bNodeLink *b_nodelink);
 
   /* **** Special proxy node type conversions **** */
   /* These nodes are not represented in the node graph themselves,
@@ -137,5 +134,3 @@ class NodeGraph {
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:NodeGraph")
 #endif
 };
-
-#endif /* __COM_NODEGRAPH_H__ */

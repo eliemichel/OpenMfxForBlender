@@ -27,6 +27,7 @@ set(INC
   ../makesdna
   ../makesrna
   ../modifiers
+  ../sequencer
   ../windowmanager
   ../../../intern/atomic
   ../../../intern/guardedalloc
@@ -46,6 +47,7 @@ set(SRC
   intern/builder/deg_builder_nodes_view_layer.cc
   intern/builder/deg_builder_pchanmap.cc
   intern/builder/deg_builder_relations.cc
+  intern/builder/deg_builder_relations_drivers.cc
   intern/builder/deg_builder_relations_keys.cc
   intern/builder/deg_builder_relations_rig.cc
   intern/builder/deg_builder_relations_scene.cc
@@ -53,6 +55,12 @@ set(SRC
   intern/builder/deg_builder_remove_noop.cc
   intern/builder/deg_builder_rna.cc
   intern/builder/deg_builder_transitive.cc
+  intern/builder/pipeline.cc
+  intern/builder/pipeline_all_objects.cc
+  intern/builder/pipeline_compositor.cc
+  intern/builder/pipeline_from_ids.cc
+  intern/builder/pipeline_render.cc
+  intern/builder/pipeline_view_layer.cc
   intern/debug/deg_debug.cc
   intern/debug/deg_debug_relations_graphviz.cc
   intern/debug/deg_debug_stats_gnuplot.cc
@@ -104,10 +112,17 @@ set(SRC
   intern/builder/deg_builder_nodes.h
   intern/builder/deg_builder_pchanmap.h
   intern/builder/deg_builder_relations.h
+  intern/builder/deg_builder_relations_drivers.h
   intern/builder/deg_builder_relations_impl.h
   intern/builder/deg_builder_remove_noop.h
   intern/builder/deg_builder_rna.h
   intern/builder/deg_builder_transitive.h
+  intern/builder/pipeline.h
+  intern/builder/pipeline_all_objects.h
+  intern/builder/pipeline_compositor.h
+  intern/builder/pipeline_from_ids.h
+  intern/builder/pipeline_render.h
+  intern/builder/pipeline_view_layer.h
   intern/debug/deg_debug.h
   intern/debug/deg_time_average.h
   intern/eval/deg_eval.h
@@ -145,3 +160,14 @@ set(LIB
 )
 
 blender_add_lib(bf_depsgraph "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+if(WITH_GTESTS)
+  set(TEST_SRC
+    intern/builder/deg_builder_rna_test.cc
+  )
+  set(TEST_LIB
+    bf_depsgraph
+  )
+  include(GTestTesting)
+  blender_add_test_lib(bf_depsgraph_tests "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB}")
+endif()

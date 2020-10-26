@@ -25,15 +25,14 @@
  * Original license from NVIDIA follows.
  */
 
-// This code is in the public domain -- castanyo@yahoo.es
+/* This code is in the public domain -- <castanyo@yahoo.es> */
 
-#ifndef __IMAGE_H__
-#define __IMAGE_H__
+#pragma once
 
 #include "Color.h"
 #include "Common.h"
 
-/// 32 bit RGBA image.
+/** 32 bit RGBA image. */
 class Image {
  public:
   enum Format {
@@ -89,5 +88,3 @@ inline Color32 &Image::pixel(uint x, uint y)
 {
   return pixel(y * width() + x);
 }
-
-#endif /* __IMAGE_H__ */

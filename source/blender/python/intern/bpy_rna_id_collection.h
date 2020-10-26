@@ -18,9 +18,16 @@
  * \ingroup pythonintern
  */
 
-#ifndef __BPY_RNA_ID_COLLECTION_H__
-#define __BPY_RNA_ID_COLLECTION_H__
+#pragma once
 
-int BPY_rna_id_collection_module(PyObject *);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#endif /* __BPY_RNA_ID_COLLECTION_H__ */
+extern PyMethodDef BPY_rna_id_collection_user_map_method_def;
+extern PyMethodDef BPY_rna_id_collection_batch_remove_method_def;
+extern PyMethodDef BPY_rna_id_collection_orphans_purge_method_def;
+
+#ifdef __cplusplus
+}
+#endif

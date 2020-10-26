@@ -34,7 +34,6 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_constraint_types.h"
@@ -44,7 +43,6 @@ extern "C" {
 #include "BKE_action.h"
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
-} /* extern "C" */
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -56,7 +54,8 @@ extern "C" {
 #include "intern/node/deg_node_component.h"
 #include "intern/node/deg_node_operation.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 void DepsgraphNodeBuilder::build_pose_constraints(Object *object,
                                                   bPoseChannel *pchan,
@@ -143,8 +142,7 @@ void DepsgraphNodeBuilder::build_rig(Object *object, bool is_object_visible)
   Scene *scene_cow = get_cow_datablock(scene_);
   Object *object_cow = get_cow_datablock(object);
   OperationNode *op_node;
-  /* Animation and/or drivers linking posebones to base-armature used to
-   * define them.
+  /* Animation and/or drivers linking pose-bones to base-armature used to define them.
    *
    * NOTE: AnimData here is really used to control animated deform properties,
    *       which ideally should be able to be unique across different
@@ -286,7 +284,7 @@ void DepsgraphNodeBuilder::build_rig(Object *object, bool is_object_visible)
   }
 }
 
-void DepsgraphNodeBuilder::build_proxy_rig(Object *object)
+void DepsgraphNodeBuilder::build_proxy_rig(Object *object, bool is_object_visible)
 {
   bArmature *armature = (bArmature *)object->data;
   OperationNode *op_node;
@@ -329,6 +327,11 @@ void DepsgraphNodeBuilder::build_proxy_rig(Object *object)
           &object->id, NodeType::PARAMETERS, OperationCode::PARAMETERS_EVAL, nullptr, pchan->name);
     }
 
+    /* Custom shape. */
+    if (pchan->custom != nullptr) {
+      build_object(-1, pchan->custom, DEG_ID_LINKED_INDIRECTLY, is_object_visible);
+    }
+
     pchan_index++;
   }
   op_node = add_operation_node(&object->id,
@@ -342,4 +345,5 @@ void DepsgraphNodeBuilder::build_proxy_rig(Object *object)
   op_node->set_as_exit();
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

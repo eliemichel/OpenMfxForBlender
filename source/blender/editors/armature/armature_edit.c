@@ -22,8 +22,6 @@
  * \ingroup edarmature
  */
 
-#include <assert.h>
-
 #include "DNA_armature_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_object_types.h"
@@ -140,7 +138,16 @@ void ED_armature_origin_set(
     mul_m4_v3(ob->imat, cent);
   }
   else {
-    if (around == V3D_AROUND_CENTER_MEDIAN) {
+    if (around == V3D_AROUND_CENTER_BOUNDS) {
+      float min[3], max[3];
+      INIT_MINMAX(min, max);
+      for (ebone = arm->edbo->first; ebone; ebone = ebone->next) {
+        minmax_v3v3_v3(min, max, ebone->head);
+        minmax_v3v3_v3(min, max, ebone->tail);
+      }
+      mid_v3_v3v3(cent, min, max);
+    }
+    else { /* #V3D_AROUND_CENTER_MEDIAN. */
       int total = 0;
       zero_v3(cent);
       for (ebone = arm->edbo->first; ebone; ebone = ebone->next) {
@@ -151,15 +158,6 @@ void ED_armature_origin_set(
       if (total) {
         mul_v3_fl(cent, 1.0f / (float)total);
       }
-    }
-    else {
-      float min[3], max[3];
-      INIT_MINMAX(min, max);
-      for (ebone = arm->edbo->first; ebone; ebone = ebone->next) {
-        minmax_v3v3_v3(min, max, ebone->head);
-        minmax_v3v3_v3(min, max, ebone->tail);
-      }
-      mid_v3_v3v3(cent, min, max);
     }
   }
 
@@ -415,7 +413,7 @@ static int armature_calc_roll_exec(bContext *C, wmOperator *op)
         copy_v3_v3(vec, mat[2]);
       }
       else { /* Axis */
-        assert(type <= 5);
+        BLI_assert(type <= 5);
         if (type < 3) {
           vec[type] = 1.0f;
         }
@@ -728,7 +726,8 @@ static int armature_fill_bones_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, "No joints selected");
     return OPERATOR_CANCELLED;
   }
-  else if (mixed_object_error) {
+
+  if (mixed_object_error) {
     BKE_report(op->reports, RPT_ERROR, "Bones for different objects selected");
     BLI_freelistN(&points);
     return OPERATOR_CANCELLED;
@@ -930,9 +929,9 @@ static int armature_switch_direction_exec(bContext *C, wmOperator *UNUSED(op))
     /* ensure that mirror bones will also be operated on */
     armature_tag_select_mirrored(arm);
 
-    /* clear BONE_TRANSFORM flags
-     * - used to prevent duplicate/canceling operations from occurring [#34123]
-     * - BONE_DONE cannot be used here as that's already used for mirroring
+    /* Clear BONE_TRANSFORM flags
+     * - Used to prevent duplicate/canceling operations from occurring T34123.
+     * - #BONE_DONE cannot be used here as that's already used for mirroring.
      */
     armature_clear_swap_done_flags(arm);
 
@@ -948,7 +947,7 @@ static int armature_switch_direction_exec(bContext *C, wmOperator *UNUSED(op))
          */
         parent = ebo->parent;
 
-        /* skip bone if already handled... [#34123] */
+        /* skip bone if already handled, see T34123. */
         if ((ebo->flag & BONE_TRANSFORM) == 0) {
           /* only if selected and editable */
           if (EBONE_VISIBLE(arm, ebo) && EBONE_EDITABLE(ebo)) {
@@ -1093,7 +1092,8 @@ static int armature_align_bones_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, "Operation requires an active bone");
     return OPERATOR_CANCELLED;
   }
-  else if (arm->flag & ARM_MIRROR_EDIT) {
+
+  if (arm->flag & ARM_MIRROR_EDIT) {
     /* For X-Axis Mirror Editing option, we may need a mirror copy of actbone
      * - if there's a mirrored copy of selbone, try to find a mirrored copy of actbone
      *   (i.e.  selbone="child.L" and actbone="parent.L", find "child.R" and "parent.R").

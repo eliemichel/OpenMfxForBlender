@@ -262,8 +262,7 @@ class GRAPH_MT_key(Menu):
         layout = self.layout
 
         layout.menu("GRAPH_MT_key_transform", text="Transform")
-
-        layout.operator_menu_enum("graph.snap", "type", text="Snap")
+        layout.menu("GRAPH_MT_key_snap", text="Snap")
         layout.operator_menu_enum("graph.mirror", "type", text="Mirror")
 
         layout.separator()
@@ -293,7 +292,7 @@ class GRAPH_MT_key(Menu):
 
         # Using the modal operation doesn't make sense for this variant
         # as we do not have a modal mode for it, so just execute it.
-        layout.operator_context = 'EXEC_DEFAULT'
+        layout.operator_context = 'EXEC_REGION_WIN'
         layout.operator("graph.decimate", text="Decimate (Allowed Change)").mode = 'ERROR'
         layout.operator_context = operator_context
 
@@ -317,6 +316,23 @@ class GRAPH_MT_key_transform(Menu):
         layout.operator("transform.transform", text="Extend").mode = 'TIME_EXTEND'
         layout.operator("transform.rotate", text="Rotate")
         layout.operator("transform.resize", text="Scale")
+
+
+class GRAPH_MT_key_snap(Menu):
+    bl_label = "Snap"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("graph.snap", text="Selection to Current Frame").type = 'CFRA'
+        layout.operator("graph.snap", text="Selection to Cursor Value").type = 'VALUE'
+        layout.operator("graph.snap", text="Selection to Nearest Frame").type = 'NEAREST_FRAME'
+        layout.operator("graph.snap", text="Selection to Nearest Second").type = 'NEAREST_SECOND'
+        layout.operator("graph.snap", text="Selection to Nearest Marker").type = 'NEAREST_MARKER'
+        layout.operator("graph.snap", text="Flatten Handles").type = 'HORIZONTAL'
+        layout.separator()
+        layout.operator("graph.frame_jump", text="Cursor to Selection")
+        layout.operator("graph.snap_cursor_value", text="Cursor Value to Selection")
 
 
 class GRAPH_MT_delete(Menu):
@@ -383,12 +399,14 @@ class GRAPH_MT_snap_pie(Menu):
         layout = self.layout
         pie = layout.menu_pie()
 
-        pie.operator("graph.snap", text="Current Frame").type = 'CFRA'
-        pie.operator("graph.snap", text="Cursor Value").type = 'VALUE'
-        pie.operator("graph.snap", text="Nearest Frame").type = 'NEAREST_FRAME'
-        pie.operator("graph.snap", text="Nearest Second").type = 'NEAREST_SECOND'
-        pie.operator("graph.snap", text="Nearest Marker").type = 'NEAREST_MARKER'
+        pie.operator("graph.snap", text="Selection to Current Frame").type = 'CFRA'
+        pie.operator("graph.snap", text="Selection to Cursor Value").type = 'VALUE'
+        pie.operator("graph.snap", text="Selection to Nearest Frame").type = 'NEAREST_FRAME'
+        pie.operator("graph.snap", text="Selection to Nearest Second").type = 'NEAREST_SECOND'
+        pie.operator("graph.snap", text="Selection to Nearest Marker").type = 'NEAREST_MARKER'
         pie.operator("graph.snap", text="Flatten Handles").type = 'HORIZONTAL'
+        pie.operator("graph.frame_jump", text="Cursor to Selection")
+        pie.operator("graph.snap_cursor_value", text="Cursor Value to Selection")
 
 
 class GRAPH_MT_channel_context_menu(Menu):
@@ -441,6 +459,7 @@ classes = (
     GRAPH_MT_channel,
     GRAPH_MT_key,
     GRAPH_MT_key_transform,
+    GRAPH_MT_key_snap,
     GRAPH_MT_delete,
     GRAPH_MT_context_menu,
     GRAPH_MT_channel_context_menu,

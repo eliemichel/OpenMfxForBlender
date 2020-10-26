@@ -22,8 +22,9 @@
  * Declaration of GHOST_EventKey class.
  */
 
-#ifndef __GHOST_EVENTKEY_H__
-#define __GHOST_EVENTKEY_H__
+#pragma once
+
+#include <string.h>
 
 #include "GHOST_Event.h"
 
@@ -82,5 +83,3 @@ class GHOST_EventKey : public GHOST_Event {
   /** The key event data. */
   GHOST_TEventKeyData m_keyEventData;
 };
-
-#endif  // __GHOST_EVENTKEY_H__

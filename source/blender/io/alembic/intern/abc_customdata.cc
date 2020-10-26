@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2016 Kévin Dietrich.
@@ -27,7 +27,6 @@
 #include <algorithm>
 #include <unordered_map>
 
-extern "C" {
 #include "DNA_customdata_types.h"
 #include "DNA_meshdata_types.h"
 
@@ -35,7 +34,6 @@ extern "C" {
 #include "BLI_utildefines.h"
 
 #include "BKE_customdata.h"
-}
 
 /* NOTE: for now only UVs and Vertex Colors are supported for streaming.
  * Although Alembic only allows for a single UV layer per {I|O}Schema, and does
@@ -52,6 +50,7 @@ using Alembic::Abc::V2fArraySample;
 
 using Alembic::AbcGeom::OC4fGeomParam;
 using Alembic::AbcGeom::OV2fGeomParam;
+namespace blender::io::alembic {
 
 static void get_uvs(const CDStreamConfig &config,
                     std::vector<Imath::V2f> &uvs,
@@ -329,7 +328,7 @@ static void read_custom_data_mcols(const std::string &iobject_full_name,
   if (IC3fGeomParam::matches(prop_header)) {
     IC3fGeomParam color_param(arbGeomParams, prop_header.getName());
     IC3fGeomParam::Sample sample;
-    BLI_assert(!strcmp("rgb", color_param.getInterpretation()));
+    BLI_assert(STREQ("rgb", color_param.getInterpretation()));
 
     color_param.getIndexed(sample, iss);
     is_facevarying = sample.getScope() == kFacevaryingScope &&
@@ -342,7 +341,7 @@ static void read_custom_data_mcols(const std::string &iobject_full_name,
   else if (IC4fGeomParam::matches(prop_header)) {
     IC4fGeomParam color_param(arbGeomParams, prop_header.getName());
     IC4fGeomParam::Sample sample;
-    BLI_assert(!strcmp("rgba", color_param.getInterpretation()));
+    BLI_assert(STREQ("rgba", color_param.getInterpretation()));
 
     color_param.getIndexed(sample, iss);
     is_facevarying = sample.getScope() == kFacevaryingScope &&
@@ -487,3 +486,5 @@ void read_custom_data(const std::string &iobject_full_name,
     }
   }
 }
+
+}  // namespace blender::io::alembic

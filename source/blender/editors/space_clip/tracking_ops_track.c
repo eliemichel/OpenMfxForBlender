@@ -46,7 +46,7 @@
 
 #include "DEG_depsgraph.h"
 
-#include "clip_intern.h"  // own include
+#include "clip_intern.h" /* own include */
 #include "tracking_ops_intern.h"
 
 /********************** Track operator *********************/
@@ -214,7 +214,13 @@ static bool track_markers_initjob(bContext *C, TrackMarkersJob *tmj, bool backwa
   return true;
 }
 
-static void track_markers_startjob(void *tmv, short *stop, short *do_update, float *progress)
+static void track_markers_startjob(
+    void *tmv,
+    /* Cannot be const, this function implements wm_jobs_start_callback.
+     * NOLINTNEXTLINE: readability-non-const-parameter. */
+    short *stop,
+    short *do_update,
+    float *progress)
 {
   TrackMarkersJob *tmj = (TrackMarkersJob *)tmv;
   int framenr = tmj->sfra;
@@ -275,7 +281,7 @@ static void track_markers_endjob(void *tmv)
   tmj->clip->tracking_context = NULL;
   tmj->scene->r.cfra = BKE_movieclip_remap_clip_to_scene_frame(tmj->clip, tmj->lastfra);
   if (wm != NULL) {
-    // XXX: ...
+    /* XXX */
     // ED_update_for_newframe(tmj->main, tmj->scene);
   }
 
@@ -358,14 +364,13 @@ static int track_markers(bContext *C, wmOperator *op, bool use_job)
 
     return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    short stop = 0, do_update = 0;
-    float progress = 0.0f;
-    track_markers_startjob(tmj, &stop, &do_update, &progress);
-    track_markers_endjob(tmj);
-    track_markers_freejob(tmj);
-    return OPERATOR_FINISHED;
-  }
+
+  short stop = 0, do_update = 0;
+  float progress = 0.0f;
+  track_markers_startjob(tmj, &stop, &do_update, &progress);
+  track_markers_endjob(tmj);
+  track_markers_freejob(tmj);
+  return OPERATOR_FINISHED;
 }
 
 static int track_markers_exec(bContext *C, wmOperator *op)

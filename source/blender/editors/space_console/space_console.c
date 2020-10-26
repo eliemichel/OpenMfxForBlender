@@ -42,11 +42,11 @@
 #include "UI_view2d.h"
 
 #include "GPU_framebuffer.h"
-#include "console_intern.h"  // own include
+#include "console_intern.h" /* own include */
 
 /* ******************** default callbacks for console space ***************** */
 
-static SpaceLink *console_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *console_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceConsole *sconsole;
@@ -70,7 +70,7 @@ static SpaceLink *console_new(const ScrArea *UNUSED(area), const Scene *UNUSED(s
   region->regiontype = RGN_TYPE_WINDOW;
 
   /* keep in sync with info */
-  region->v2d.scroll |= (V2D_SCROLL_RIGHT);
+  region->v2d.scroll |= V2D_SCROLL_RIGHT;
   region->v2d.align |= V2D_ALIGN_NO_NEG_X | V2D_ALIGN_NO_NEG_Y; /* align bottom left */
   region->v2d.keepofs |= V2D_LOCKOFS_X;
   region->v2d.keepzoom = (V2D_LOCKZOOM_X | V2D_LOCKZOOM_Y | V2D_LIMITZOOM | V2D_KEEPASPECT);
@@ -208,7 +208,6 @@ static void console_main_region_draw(const bContext *C, ARegion *region)
   /* draw entirely, view changes should be handled here */
   SpaceConsole *sc = CTX_wm_space_console(C);
   View2D *v2d = &region->v2d;
-  View2DScrollers *scrollers;
 
   if (BLI_listbase_is_empty(&sc->scrollback)) {
     WM_operator_name_call((bContext *)C, "CONSOLE_OT_banner", WM_OP_EXEC_DEFAULT, NULL);
@@ -216,7 +215,6 @@ static void console_main_region_draw(const bContext *C, ARegion *region)
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
-  GPU_clear(GPU_COLOR_BIT);
 
   /* worlks best with no view2d matrix set */
   UI_view2d_view_ortho(v2d);
@@ -230,9 +228,7 @@ static void console_main_region_draw(const bContext *C, ARegion *region)
   UI_view2d_view_restore(C);
 
   /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
-  UI_view2d_scrollers_draw(v2d, scrollers);
-  UI_view2d_scrollers_free(scrollers);
+  UI_view2d_scrollers_draw(v2d, NULL);
 }
 
 static void console_operatortypes(void)
@@ -315,7 +311,7 @@ void ED_spacetype_console(void)
   st->spaceid = SPACE_CONSOLE;
   strncpy(st->name, "Console", BKE_ST_MAXNAME);
 
-  st->new = console_new;
+  st->create = console_create;
   st->free = console_free;
   st->init = console_init;
   st->duplicate = console_duplicate;

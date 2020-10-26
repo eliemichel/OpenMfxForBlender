@@ -48,20 +48,13 @@ PyDoc_STRVAR(FEdge_doc,
              "from one to the other.\n"
              "\n"
              ".. method:: FEdge()\n"
+             "            FEdge(brother)\n"
              "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: FEdge(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
+             "   Builds an :class:`FEdge` using the default constructor,\n"
+             "   copy constructor, or between two :class:`SVertex` objects.\n"
              "\n"
              "   :arg brother: An FEdge object.\n"
              "   :type brother: :class:`FEdge`\n"
-             "\n"
-             ".. method:: FEdge(first_vertex, second_vertex)\n"
-             "\n"
-             "   Builds an FEdge going from the first vertex to the second.\n"
-             "\n"
              "   :arg first_vertex: The first SVertex.\n"
              "   :type first_vertex: :class:`SVertex`\n"
              "   :arg second_vertex: The second SVertex.\n"
@@ -81,7 +74,7 @@ static int FEdge_init(BPy_FEdge *self, PyObject *args, PyObject *kwds)
       self->fe = new FEdge(*(((BPy_FEdge *)obj1)->fe));
     }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "O!O!",

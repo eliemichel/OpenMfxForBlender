@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_CURVE_TYPES_H__
-#define __DNA_CURVE_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
@@ -32,6 +31,7 @@
 #define MAXTEXTBOX 256 /* used in readfile.c and editfont.c */
 
 struct AnimData;
+struct CurveProfile;
 struct EditFont;
 struct GHash;
 struct Ipo;
@@ -114,9 +114,9 @@ typedef struct BezTriple {
   char ipo;
 
   /** H1, h2: the handle type of the two handles. */
-  char h1, h2;
+  uint8_t h1, h2;
   /** F1, f2, f3: used for selection status. */
-  char f1, f2, f3;
+  uint8_t f1, f2, f3;
 
   /** Hide: used to indicate whether BezTriple is hidden (3D),
    * type of keyframe (eBezTriple_KeyframeType). */
@@ -144,7 +144,9 @@ typedef struct BPoint {
   /** Used for softbody goal weight. */
   float weight;
   /** F1: selection status,  hide: is point hidden or not. */
-  short f1, hide;
+  uint8_t f1;
+  char _pad1[1];
+  short hide;
   /** User-set radius per point for beveling etc. */
   float radius;
   char _pad[4];
@@ -231,6 +233,8 @@ typedef struct Curve {
   struct Key *key;
   struct Material **mat;
 
+  struct CurveProfile *bevel_profile;
+
   /* texture space, copied as one block in editobject.c */
   float loc[3];
   float size[3];
@@ -260,7 +264,8 @@ typedef struct Curve {
 
   char overflow;
   char spacemode, align_y;
-  char _pad[3];
+  char bevel_mode;
+  char _pad[2];
 
   /* font part */
   short lines;
@@ -274,9 +279,12 @@ typedef struct Curve {
   int selstart, selend;
 
   /* text data */
-  /** Number of characters (strinfo). */
-  int len_wchar;
-  /** Number of bytes (str - utf8). */
+  /**
+   * Number of characters (unicode code-points)
+   * This is the length of #Curve.strinfo and the result of `BLI_strlen_utf8(cu->str)`.
+   */
+  int len_char32;
+  /** Number of bytes: `strlen(Curve.str)`. */
   int len;
   char *str;
   struct EditFont *editfont;
@@ -379,6 +387,13 @@ enum {
   CU_ALIGN_Y_CENTER = 2,
   CU_ALIGN_Y_BOTTOM_BASELINE = 3,
   CU_ALIGN_Y_BOTTOM = 4,
+};
+
+/* Curve.bevel_mode */
+enum {
+  CU_BEV_MODE_ROUND = 0,
+  CU_BEV_MODE_OBJECT = 1,
+  CU_BEV_MODE_CURVE_PROFILE = 2,
 };
 
 /* Curve.overflow. */
@@ -496,11 +511,11 @@ typedef enum eBezTriple_KeyframeType {
 #define BEZT_ISSEL_ALL(bezt) \
   (((bezt)->f2 & SELECT) && ((bezt)->f1 & SELECT) && ((bezt)->f3 & SELECT))
 #define BEZT_ISSEL_ALL_HIDDENHANDLES(v3d, bezt) \
-  ((((v3d) != NULL) && ((v3d)->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) == 0) ? \
+  ((((v3d) != NULL) && ((v3d)->overlay.handle_display == CURVE_HANDLE_NONE)) ? \
        (bezt)->f2 & SELECT : \
        BEZT_ISSEL_ALL(bezt))
 #define BEZT_ISSEL_ANY_HIDDENHANDLES(v3d, bezt) \
-  ((((v3d) != NULL) && ((v3d)->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) == 0) ? \
+  ((((v3d) != NULL) && ((v3d)->overlay.handle_display == CURVE_HANDLE_NONE)) ? \
        (bezt)->f2 & SELECT : \
        BEZT_ISSEL_ANY(bezt))
 
@@ -544,5 +559,3 @@ enum {
 
 /* indicates point has been seen during surface duplication */
 #define SURF_SEEN 4
-
-#endif

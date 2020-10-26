@@ -73,12 +73,11 @@ static OPJ_CODEC_FORMAT format_from_header(const unsigned char mem[JP2_FILEHEADE
   if (check_jp2(mem)) {
     return OPJ_CODEC_JP2;
   }
-  else if (check_j2k(mem)) {
+  if (check_j2k(mem)) {
     return OPJ_CODEC_J2K;
   }
-  else {
-    return OPJ_CODEC_UNKNOWN;
-  }
+
+  return OPJ_CODEC_UNKNOWN;
 }
 
 int imb_is_a_jp2(const unsigned char *buf)
@@ -339,15 +338,13 @@ ImBuf *imb_load_jp2_filepath(const char *filepath, int flags, char colorspace[IM
   if (stream) {
     return NULL;
   }
-  else {
-    if (fread(mem, sizeof(mem), 1, p_file) != sizeof(mem)) {
-      opj_stream_destroy(stream);
-      return NULL;
-    }
-    else {
-      fseek(p_file, 0, SEEK_SET);
-    }
+
+  if (fread(mem, sizeof(mem), 1, p_file) != sizeof(mem)) {
+    opj_stream_destroy(stream);
+    return NULL;
   }
+
+  fseek(p_file, 0, SEEK_SET);
 
   const OPJ_CODEC_FORMAT format = format_from_header(mem);
   ImBuf *ibuf = imb_load_jp2_stream(stream, format, flags, colorspace);
@@ -365,7 +362,7 @@ static ImBuf *imb_load_jp2_stream(opj_stream_t *stream,
   }
 
   struct ImBuf *ibuf = NULL;
-  bool use_float = false; /* for precision higher then 8 use float */
+  bool use_float = false; /* for precision higher than 8 use float */
   bool use_alpha = false;
 
   long signed_offsets[4] = {0, 0, 0, 0};
@@ -651,7 +648,7 @@ BLI_INLINE int DOWNSAMPLE_FLOAT_TO_16BIT(const float _val)
 #define COMP_24_CS 1041666   /*Maximum size per color component for 2K & 4K @ 24fps*/
 #define COMP_48_CS 520833    /*Maximum size per color component for 2K @ 48fps*/
 
-static int initialise_4K_poc(opj_poc_t *POC, int numres)
+static int init_4K_poc(opj_poc_t *POC, int numres)
 {
   POC[0].tile = 1;
   POC[0].resno0 = 0;
@@ -750,7 +747,7 @@ static void cinema_setup_encoder(opj_cparameters_t *parameters,
       else {
         parameters->cp_rsiz = DCP_CINEMA2K;
       }
-      parameters->numpocs = initialise_4K_poc(parameters->POC, parameters->numresolution);
+      parameters->numpocs = init_4K_poc(parameters->POC, parameters->numresolution);
       break;
     case OPJ_OFF:
       /* do nothing */
@@ -899,7 +896,7 @@ static opj_image_t *ibuftoimage(ImBuf *ibuf, opj_cparameters_t *parameters)
   h = ibuf->y;
 
   /* initialize image components */
-  memset(&cmptparm, 0, 4 * sizeof(opj_image_cmptparm_t));
+  memset(&cmptparm, 0, sizeof(opj_image_cmptparm_t[4]));
   for (i = 0; i < numcomps; i++) {
     cmptparm[i].prec = prec;
     cmptparm[i].bpp = prec;

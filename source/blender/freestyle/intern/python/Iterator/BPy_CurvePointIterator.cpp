@@ -39,20 +39,14 @@ PyDoc_STRVAR(CurvePointIterator_doc,
              "through the .object attribute.\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
+             "            __init__(step=0.0)\n"
              "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
+             "   Builds a CurvePointIterator object using either the default constructor,\n"
+             "   copy constructor, or the overloaded constructor.\n"
              "\n"
              "   :arg brother: A CurvePointIterator object.\n"
              "   :type brother: :class:`CurvePointIterator`\n"
-             "\n"
-             ".. method:: __init__(step=0.0)\n"
-             "\n"
-             "   Builds a CurvePointIterator object.\n"
-             "\n"
              "   :arg step: A resampling resolution with which the curve is resampled.\n"
              "      If zero, no resampling is done (i.e., the iterator iterates over\n"
              "      initial vertices).\n"
@@ -75,7 +69,8 @@ static int CurvePointIterator_init(BPy_CurvePointIterator *self, PyObject *args,
           *(((BPy_CurvePointIterator *)brother)->cp_it));
     }
   }
-  else if (PyErr_Clear(), PyArg_ParseTupleAndKeywords(args, kwds, "f", (char **)kwlist_2, &step)) {
+  else if ((void)PyErr_Clear(),
+           PyArg_ParseTupleAndKeywords(args, kwds, "f", (char **)kwlist_2, &step)) {
     self->cp_it = new CurveInternal::CurvePointIterator(step);
   }
   else {

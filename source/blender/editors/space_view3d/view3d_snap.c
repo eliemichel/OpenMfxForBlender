@@ -850,12 +850,12 @@ static bool snap_curs_to_sel_ex(bContext *C, float cursor[3])
     return false;
   }
 
-  if (scene->toolsettings->transform_pivot_point == V3D_AROUND_CENTER_MEDIAN) {
-    mul_v3_fl(centroid, 1.0f / (float)count);
-    copy_v3_v3(cursor, centroid);
+  if (scene->toolsettings->transform_pivot_point == V3D_AROUND_CENTER_BOUNDS) {
+    mid_v3_v3v3(cursor, min, max);
   }
   else {
-    mid_v3_v3v3(cursor, min, max);
+    mul_v3_fl(centroid, 1.0f / (float)count);
+    copy_v3_v3(cursor, centroid);
   }
   return true;
 }
@@ -869,9 +869,7 @@ static int snap_curs_to_sel_exec(bContext *C, wmOperator *UNUSED(op))
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void VIEW3D_OT_snap_cursor_to_selected(wmOperatorType *ot)
@@ -921,9 +919,7 @@ static int snap_curs_to_active_exec(bContext *C, wmOperator *UNUSED(op))
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void VIEW3D_OT_snap_cursor_to_active(wmOperatorType *ot)

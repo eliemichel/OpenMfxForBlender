@@ -55,7 +55,7 @@ static void wm_xr_draw_matrices_create(const wmXrDrawData *draw_data,
 
   copy_qt_qt(eye_pose.orientation_quat, draw_view->eye_pose.orientation_quat);
   copy_v3_v3(eye_pose.position, draw_view->eye_pose.position);
-  add_v3_v3(eye_pose.position, draw_data->eye_position_ofs);
+  sub_v3_v3(eye_pose.position, draw_data->eye_position_ofs);
   if ((session_settings->flag & XR_SESSION_USE_POSITION_TRACKING) == 0) {
     sub_v3_v3(eye_pose.position, draw_view->local_pose.position);
   }
@@ -126,7 +126,7 @@ void wm_xr_draw_view(const GHOST_XrDrawViewInfo *draw_view, void *customdata)
   /* In case a framebuffer is still bound from drawing the last eye. */
   GPU_framebuffer_restore();
   /* Some systems have drawing glitches without this. */
-  GPU_clear(GPU_DEPTH_BIT);
+  GPU_clear_depth(1.0f);
 
   /* Draws the view into the surface_data->viewport's framebuffers */
   ED_view3d_draw_offscreen_simple(draw_data->depsgraph,

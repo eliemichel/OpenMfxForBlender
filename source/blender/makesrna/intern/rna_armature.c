@@ -654,7 +654,7 @@ static void rna_Armature_bones_next(CollectionPropertyIterator *iter)
   iter->valid = (internal->link != NULL);
 }
 
-/* not essential, but much faster then the default lookup function */
+/* not essential, but much faster than the default lookup function */
 static int rna_Armature_bones_lookup_string(PointerRNA *ptr, const char *key, PointerRNA *r_ptr)
 {
   bArmature *arm = (bArmature *)ptr->data;
@@ -886,6 +886,8 @@ static void rna_def_bone_common(StructRNA *srna, int editbone)
   }
   RNA_def_property_update(prop, 0, "rna_Bone_update_renamed");
 
+  RNA_define_lib_overridable(true);
+
   /* flags */
   prop = RNA_def_property(srna, "layers", PROP_BOOLEAN, PROP_LAYER_MEMBER);
   RNA_def_property_boolean_sdna(prop, NULL, "layer", 1);
@@ -1116,6 +1118,8 @@ static void rna_def_bone_common(StructRNA *srna, int editbone)
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_PTR_NO_OWNERSHIP);
   RNA_def_property_ui_text(
       prop, "B-Bone End Handle", "Bone that serves as the end handle for the B-Bone curve");
+
+  RNA_define_lib_overridable(false);
 }
 
 /* err... bones should not be directly edited (only editbones should be...) */
@@ -1148,6 +1152,8 @@ static void rna_def_bone(BlenderRNA *brna)
 
   rna_def_bone_common(srna, 0);
   rna_def_bone_curved_common(srna, false, false);
+
+  RNA_define_lib_overridable(true);
 
   /* XXX should we define this in PoseChannel wrapping code instead?
    *     But PoseChannels directly get some of their flags from here... */
@@ -1231,6 +1237,8 @@ static void rna_def_bone(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "Length", "Length of the bone");
 
+  RNA_define_lib_overridable(false);
+
   RNA_api_bone(srna);
 }
 
@@ -1264,6 +1272,7 @@ static void rna_def_edit_bone(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "head", PROP_FLOAT, PROP_TRANSLATION);
   RNA_def_property_float_sdna(prop, NULL, "head");
+  RNA_def_property_ui_range(prop, 0, FLT_MAX, 10, RNA_TRANSLATION_PREC_DEFAULT);
   RNA_def_property_array(prop, 3);
   RNA_def_property_ui_text(prop, "Head", "Location of head end of the bone");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
@@ -1271,6 +1280,7 @@ static void rna_def_edit_bone(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "tail", PROP_FLOAT, PROP_TRANSLATION);
   RNA_def_property_float_sdna(prop, NULL, "tail");
+  RNA_def_property_ui_range(prop, 0, FLT_MAX, 10, RNA_TRANSLATION_PREC_DEFAULT);
   RNA_def_property_array(prop, 3);
   RNA_def_property_ui_text(prop, "Tail", "Location of tail end of the bone");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
@@ -1327,7 +1337,7 @@ static void rna_def_edit_bone(BlenderRNA *brna)
       prop,
       "Editbone Matrix",
       "Matrix combining loc/rot of the bone (head position, direction and roll), "
-      "in armature space (WARNING: does not include/support bone's length/size)");
+      "in armature space (does not include/support bone's length/size)");
   RNA_def_property_float_funcs(prop, "rna_EditBone_matrix_get", "rna_EditBone_matrix_set", NULL);
 
   RNA_api_armature_edit_bone(srna);
@@ -1459,6 +1469,8 @@ static void rna_def_armature(BlenderRNA *brna)
   /* Animation Data */
   rna_def_animdata_common(srna);
 
+  RNA_define_lib_overridable(true);
+
   /* Collections */
   prop = RNA_def_property(srna, "bones", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, NULL, "bonebase", NULL);
@@ -1552,6 +1564,8 @@ static void rna_def_armature(BlenderRNA *brna)
   RNA_def_property_boolean_funcs(prop, "rna_Armature_is_editmode_get", NULL);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "Is Editmode", "True when used in editmode");
+
+  RNA_define_lib_overridable(false);
 }
 
 void RNA_def_armature(BlenderRNA *brna)

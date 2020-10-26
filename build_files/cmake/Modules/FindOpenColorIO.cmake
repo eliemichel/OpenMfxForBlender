@@ -14,12 +14,8 @@
 #=============================================================================
 # Copyright 2012 Blender Foundation.
 #
-# Distributed under the OSI-approved BSD License (the "License");
-# see accompanying file Copyright.txt for details.
-#
-# This software is distributed WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the License for more information.
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
 #=============================================================================
 
 # If OPENCOLORIO_ROOT_DIR was defined in the environment, use it.
@@ -74,7 +70,7 @@ FIND_PACKAGE_HANDLE_STANDARD_ARGS(OpenColorIO DEFAULT_MSG
 IF(OPENCOLORIO_FOUND)
   SET(OPENCOLORIO_LIBRARIES ${_opencolorio_LIBRARIES})
   SET(OPENCOLORIO_INCLUDE_DIRS ${OPENCOLORIO_INCLUDE_DIR})
-ENDIF(OPENCOLORIO_FOUND)
+ENDIF()
 
 MARK_AS_ADVANCED(
   OPENCOLORIO_INCLUDE_DIR

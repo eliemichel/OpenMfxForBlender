@@ -50,8 +50,6 @@
 #  include "DNA_image_types.h"
 #  include "DNA_scene_types.h"
 
-#  include "GPU_glew.h"
-
 #  include "MEM_guardedalloc.h"
 
 static void rna_ImagePackedFile_save(ImagePackedFile *imapf, Main *bmain, ReportList *reports)
@@ -116,7 +114,7 @@ static void rna_Image_save(Image *image, Main *bmain, bContext *C, ReportList *r
   ImBuf *ibuf = BKE_image_acquire_ibuf(image, NULL, &lock);
   if (ibuf) {
     char filename[FILE_MAX];
-    BLI_strncpy(filename, image->name, sizeof(filename));
+    BLI_strncpy(filename, image->filepath, sizeof(filename));
     BLI_path_abs(filename, ID_BLEND_PATH(bmain, &image->id));
 
     /* note, we purposefully ignore packed files here,
@@ -138,7 +136,7 @@ static void rna_Image_save(Image *image, Main *bmain, bContext *C, ReportList *r
                   RPT_ERROR,
                   "Image '%s' could not be saved to '%s'",
                   image->id.name + 2,
-                  image->name);
+                  image->filepath);
     }
   }
   else {
@@ -222,23 +220,24 @@ static int rna_Image_gl_load(Image *image, ReportList *reports, int frame)
   BKE_imageuser_default(&iuser);
   iuser.framenr = frame;
 
-  GPUTexture *tex = GPU_texture_from_blender(image, &iuser, NULL, GL_TEXTURE_2D);
+  GPUTexture *tex = BKE_image_get_gpu_texture(image, &iuser, NULL);
 
   if (tex == NULL) {
     BKE_reportf(reports, RPT_ERROR, "Failed to load image texture '%s'", image->id.name + 2);
-    return (int)GL_INVALID_OPERATION;
+    /* TODO(fclem): this error code makes no sense for vulkan. */
+    return 0x0502; /* GL_INVALID_OPERATION */
   }
 
-  return GL_NO_ERROR;
+  return 0; /* GL_NO_ERROR */
 }
 
 static int rna_Image_gl_touch(Image *image, ReportList *reports, int frame)
 {
-  int error = GL_NO_ERROR;
+  int error = 0; /* GL_NO_ERROR */
 
   BKE_image_tag_time(image);
 
-  if (image->gputexture[TEXTARGET_TEXTURE_2D] == NULL) {
+  if (image->gputexture[TEXTARGET_2D][0] == NULL) {
     error = rna_Image_gl_load(image, reports, frame);
   }
 
@@ -247,7 +246,7 @@ static int rna_Image_gl_touch(Image *image, ReportList *reports, int frame)
 
 static void rna_Image_gl_free(Image *image)
 {
-  GPU_free_image(image);
+  BKE_image_free_gputextures(image);
 
   /* remove the nocollect flag, image is available for garbage collection again */
   image->flag &= ~IMA_NOCOLLECT;
@@ -368,7 +367,7 @@ void RNA_api_image(StructRNA *srna)
                                   NULL,
                                   FILE_MAX,
                                   "File Path",
-                                  "The resulting filepath from the image and it's user");
+                                  "The resulting filepath from the image and its user");
   RNA_def_parameter_flags(parm, PROP_THICK_WRAP, 0); /* needed for string return value */
   RNA_def_function_output(func, parm);
 

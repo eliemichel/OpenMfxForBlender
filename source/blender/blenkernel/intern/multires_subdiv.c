@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2018 Blender Foundation.
@@ -40,7 +40,8 @@ void BKE_multires_subdiv_settings_init(SubdivSettings *settings, const MultiresM
   settings->is_adaptive = true;
   settings->level = settings->is_simple ? 1 : mmd->quality;
   settings->use_creases = (mmd->flags & eMultiresModifierFlag_UseCrease);
-  settings->vtx_boundary_interpolation = SUBDIV_VTX_BOUNDARY_EDGE_ONLY;
+  settings->vtx_boundary_interpolation = BKE_subdiv_vtx_boundary_interpolation_from_subsurf(
+      mmd->boundary_smooth);
   settings->fvar_linear_interpolation = BKE_subdiv_fvar_interpolation_from_uv_smooth(
       mmd->uv_smooth);
 }

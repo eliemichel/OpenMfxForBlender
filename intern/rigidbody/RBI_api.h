@@ -175,7 +175,7 @@ void RB_body_set_linear_velocity(rbRigidBody *body, const float v_in[3]);
 void RB_body_get_angular_velocity(rbRigidBody *body, float v_out[3]);
 void RB_body_set_angular_velocity(rbRigidBody *body, const float v_in[3]);
 
-/* Linear/Angular Factor, used to lock translation/roation axes */
+/* Linear/Angular Factor, used to lock translation/rotation axes */
 void RB_body_set_linear_factor(rbRigidBody *object, float x, float y, float z);
 void RB_body_set_angular_factor(rbRigidBody *object, float x, float y, float z);
 
@@ -200,10 +200,12 @@ void RB_body_set_scale(rbRigidBody *body, const float scale[3]);
 
 /* ............ */
 
-/* Get RigidBody's position as vector */
+/* Get RigidBody's position as a vector */
 void RB_body_get_position(rbRigidBody *body, float v_out[3]);
-/* Get RigidBody's orientation as quaternion */
+/* Get RigidBody's orientation as a quaternion */
 void RB_body_get_orientation(rbRigidBody *body, float v_out[4]);
+/* Get RigidBody's local scale as a vector */
+void RB_body_get_scale(rbRigidBody *object, float v_out[3]);
 
 /* ............ */
 
@@ -237,6 +239,14 @@ void RB_trimesh_finish(rbMeshData *mesh);
 rbCollisionShape *RB_shape_new_trimesh(rbMeshData *mesh);
 /* 2b - GImpact Meshes */
 rbCollisionShape *RB_shape_new_gimpact_mesh(rbMeshData *mesh);
+
+/* Compound Shape ---------------- */
+
+rbCollisionShape *RB_shape_new_compound(void);
+void RB_compound_add_child_shape(rbCollisionShape *collisionShape,
+                                 rbCollisionShape *shape,
+                                 const float loc[3],
+                                 const float rot[4]);
 
 /* Cleanup --------------------------- */
 

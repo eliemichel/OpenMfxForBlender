@@ -26,6 +26,8 @@
 #include "BLI_string_utf8.h"
 #include "BLI_utildefines.h"
 
+#include "BLT_translation.h"
+
 #include "BKE_context.h"
 #include "BKE_scene.h"
 #include "BKE_unit.h"
@@ -36,7 +38,7 @@
 #include "WM_types.h"
 
 #ifdef WITH_PYTHON
-#  include "BPY_extern.h"
+#  include "BPY_extern_run.h"
 #endif
 
 #include "ED_numinput.h"
@@ -134,14 +136,14 @@ void outputNumInput(NumInput *n, char *str, UnitSettings *unit_settings)
           BLI_strncpy(val, "Invalid", sizeof(val));
         }
         else {
-          bUnit_AsString(val,
-                         sizeof(val),
-                         (double)(n->val[i] * fac),
-                         prec,
-                         n->unit_sys,
-                         n->unit_type[i],
-                         true,
-                         false);
+          BKE_unit_value_as_string_adaptive(val,
+                                            sizeof(val),
+                                            (double)(n->val[i] * fac),
+                                            prec,
+                                            n->unit_sys,
+                                            n->unit_type[i],
+                                            true,
+                                            false);
         }
 
         /* +1 because of trailing '\0' */
@@ -163,7 +165,7 @@ void outputNumInput(NumInput *n, char *str, UnitSettings *unit_settings)
         }
         else {
           char tstr[NUM_STR_REP_LEN];
-          bUnit_AsString(
+          BKE_unit_value_as_string_adaptive(
               tstr, ln, (double)n->val[i], prec, n->unit_sys, n->unit_type[i], true, false);
           BLI_snprintf(&str[j * ln], ln, "%s%s%s", cur, tstr, cur);
         }
@@ -239,26 +241,25 @@ bool applyNumInput(NumInput *n, float *vec)
 #endif
     return true;
   }
-  else {
-    /* Else, we set the 'org' values for numinput! */
-    for (j = 0; j <= n->idx_max; j++) {
-      n->val[j] = n->val_org[j] = vec[j];
-    }
-    return false;
+
+  /* Else, we set the 'org' values for numinput! */
+  for (j = 0; j <= n->idx_max; j++) {
+    n->val[j] = n->val_org[j] = vec[j];
   }
+  return false;
 }
 
 static void value_to_editstr(NumInput *n, int idx)
 {
   const int prec = 6; /* editing, higher precision needed. */
-  n->str_cur = bUnit_AsString(n->str,
-                              NUM_STR_REP_LEN,
-                              (double)n->val[idx],
-                              prec,
-                              n->unit_sys,
-                              n->unit_type[idx],
-                              true,
-                              false);
+  n->str_cur = BKE_unit_value_as_string_adaptive(n->str,
+                                                 NUM_STR_REP_LEN,
+                                                 (double)n->val[idx],
+                                                 prec,
+                                                 n->unit_sys,
+                                                 n->unit_type[idx],
+                                                 true,
+                                                 false);
 }
 
 static bool editstr_insert_at_cursor(NumInput *n, const char *buf, const int buf_len)
@@ -278,25 +279,29 @@ static bool editstr_insert_at_cursor(NumInput *n, const char *buf, const int buf
   return true;
 }
 
-bool user_string_to_number(
-    bContext *C, const char *str, const UnitSettings *unit, int type, double *r_value)
+bool user_string_to_number(bContext *C,
+                           const char *str,
+                           const UnitSettings *unit,
+                           int type,
+                           const char *error_prefix,
+                           double *r_value)
 {
 #ifdef WITH_PYTHON
   double unit_scale = BKE_scene_unit_scale(unit, type, 1.0);
-  if (bUnit_ContainsUnit(str, type)) {
+  if (BKE_unit_string_contains_unit(str, type)) {
     char str_unit_convert[256];
     BLI_strncpy(str_unit_convert, str, sizeof(str_unit_convert));
-    bUnit_ReplaceString(
+    BKE_unit_replace_string(
         str_unit_convert, sizeof(str_unit_convert), str, unit_scale, unit->system, type);
 
-    return BPY_execute_string_as_number(C, NULL, str_unit_convert, true, r_value);
+    return BPY_run_string_as_number(C, NULL, str_unit_convert, error_prefix, r_value);
   }
-  else {
-    int success = BPY_execute_string_as_number(C, NULL, str, true, r_value);
-    *r_value *= bUnit_PreferredInputUnitScalar(unit, type);
-    *r_value /= unit_scale;
-    return success;
-  }
+
+  int success = BPY_run_string_as_number(C, NULL, str, error_prefix, r_value);
+  *r_value = BKE_unit_apply_preferred_unit(unit, type, *r_value);
+  *r_value /= unit_scale;
+  return success;
+
 #else
   UNUSED_VARS(C, unit, type);
   *r_value = atof(str);
@@ -309,12 +314,10 @@ static bool editstr_is_simple_numinput(const char ascii)
   if (ascii >= '0' && ascii <= '9') {
     return true;
   }
-  else if (ascii == '.') {
+  if (ascii == '.') {
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
@@ -348,7 +351,7 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
       n->val_flag[idx] |= NUM_EDITED;
       return true;
     }
-    else if (event->ctrl) {
+    if (event->ctrl) {
       n->flag &= ~NUM_EDIT_FULL;
       return true;
     }
@@ -576,7 +579,8 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
     Scene *sce = CTX_data_scene(C);
 
     double val;
-    int success = user_string_to_number(C, n->str, &sce->unit, n->unit_type[idx], &val);
+    int success = user_string_to_number(
+        C, n->str, &sce->unit, n->unit_type[idx], IFACE_("Numeric input evaluation"), &val);
 
     if (success) {
       n->val[idx] = (float)val;

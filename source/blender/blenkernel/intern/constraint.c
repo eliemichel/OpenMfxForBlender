@@ -53,6 +53,7 @@
 
 #include "BKE_action.h"
 #include "BKE_anim_path.h"
+#include "BKE_animsys.h"
 #include "BKE_armature.h"
 #include "BKE_bvhutils.h"
 #include "BKE_cachefile.h"
@@ -62,7 +63,7 @@
 #include "BKE_deform.h"
 #include "BKE_displist.h"
 #include "BKE_editmesh.h"
-#include "BKE_fcurve.h"
+#include "BKE_fcurve_driver.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_lib_id.h"
@@ -536,7 +537,7 @@ static void contarget_get_lattice_mat(Object *ob, const char *substring, float m
       MDeformWeight *dw = BKE_defvert_find_index(dv, defgroup);
       if (dw && dw->weight > 0.0f) {
         /* copy coordinates of point to temporary vector, then add to find average */
-        memcpy(tvec, co ? co : bp->vec, 3 * sizeof(float));
+        memcpy(tvec, co ? co : bp->vec, sizeof(float[3]));
 
         add_v3_v3(vec, tvec);
         grouped++;
@@ -601,8 +602,7 @@ static void constraint_target_to_mat4(Object *ob,
     pchan = BKE_pose_channel_find_name(ob->pose, substring);
     if (pchan) {
       /* Multiply the PoseSpace accumulation/final matrix for this
-       * PoseChannel by the Armature Object's Matrix to get a worldspace
-       * matrix.
+       * PoseChannel by the Armature Object's Matrix to get a world-space matrix.
        */
       bool is_bbone = (pchan->bone) && (pchan->bone->segments > 1) &&
                       (flag & CONSTRAINT_BBONE_SHAPE);
@@ -744,7 +744,7 @@ static void default_get_tarmat_full_bbone(struct Depsgraph *UNUSED(depsgraph),
  * (Hopefully all compilers will be happy with the lines with just a space on them.
  * Those are really just to help this code easier to read).
  */
-// TODO: cope with getting rotation order...
+/* TODO: cope with getting rotation order... */
 #define SINGLETARGET_GET_TARS(con, datatar, datasubtarget, ct, list) \
   { \
     ct = MEM_callocN(sizeof(bConstraintTarget), "tempConstraintTarget"); \
@@ -779,7 +779,7 @@ static void default_get_tarmat_full_bbone(struct Depsgraph *UNUSED(depsgraph),
  * (Hopefully all compilers will be happy with the lines with just a space on them. Those are
  *  really just to help this code easier to read)
  */
-// TODO: cope with getting rotation order...
+/* TODO: cope with getting rotation order... */
 #define SINGLETARGETNS_GET_TARS(con, datatar, ct, list) \
   { \
     ct = MEM_callocN(sizeof(bConstraintTarget), "tempConstraintTarget"); \
@@ -788,9 +788,9 @@ static void default_get_tarmat_full_bbone(struct Depsgraph *UNUSED(depsgraph),
     ct->space = con->tarspace; \
     ct->flag = CONSTRAINT_TAR_TEMP; \
 \
-    if (ct->tar) \
+    if (ct->tar) { \
       ct->type = CONSTRAINT_OBTYPE_OBJECT; \
-\
+    } \
     BLI_addtail(list, ct); \
   } \
   (void)0
@@ -845,7 +845,8 @@ static void childof_new_data(void *cdata)
   bChildOfConstraint *data = (bChildOfConstraint *)cdata;
 
   data->flag = (CHILDOF_LOCX | CHILDOF_LOCY | CHILDOF_LOCZ | CHILDOF_ROTX | CHILDOF_ROTY |
-                CHILDOF_ROTZ | CHILDOF_SIZEX | CHILDOF_SIZEY | CHILDOF_SIZEZ);
+                CHILDOF_ROTZ | CHILDOF_SIZEX | CHILDOF_SIZEY | CHILDOF_SIZEZ |
+                CHILDOF_SET_INVERSE);
   unit_m4(data->invmat);
 }
 
@@ -971,7 +972,7 @@ static void childof_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
   }
 
   /* Multiply together the target (parent) matrix, parent inverse,
-   * and the owner transform matrixto get the effect of this constraint
+   * and the owner transform matrix to get the effect of this constraint
    * (i.e.  owner is 'parented' to parent). */
   float orig_cob_matrix[4][4];
   copy_m4_m4(orig_cob_matrix, cob->matrix);
@@ -1013,8 +1014,8 @@ static void trackto_new_data(void *cdata)
 {
   bTrackToConstraint *data = (bTrackToConstraint *)cdata;
 
-  data->reserved1 = TRACK_Y;
-  data->reserved2 = UP_Z;
+  data->reserved1 = TRACK_nZ;
+  data->reserved2 = UP_Y;
 }
 
 static void trackto_id_looper(bConstraint *con, ConstraintIDFunc func, void *userdata)
@@ -2403,7 +2404,7 @@ static void armdef_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
   }
 }
 
-static void armdef_accumulate_matrix(float obmat[4][4],
+static void armdef_accumulate_matrix(const float obmat[4][4],
                                      const float iobmat[4][4],
                                      const float basemat[4][4],
                                      const float bonemat[4][4],
@@ -2625,7 +2626,7 @@ static void actcon_flush_tars(bConstraint *con, ListBase *list, bool no_copy)
   }
 }
 
-static void actcon_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
+static void actcon_get_tarmat(struct Depsgraph *depsgraph,
                               bConstraint *con,
                               bConstraintOb *cob,
                               bConstraintTarget *ct,
@@ -2633,7 +2634,7 @@ static void actcon_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
 {
   bActionConstraint *data = con->data;
 
-  if (VALID_CONS_TARGET(ct)) {
+  if (VALID_CONS_TARGET(ct) || data->flag & ACTCON_USE_EVAL_TIME) {
     float tempmat[4][4], vec[3];
     float s, t;
     short axis;
@@ -2641,44 +2642,53 @@ static void actcon_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
     /* initialize return matrix */
     unit_m4(ct->matrix);
 
-    /* get the transform matrix of the target */
-    constraint_target_to_mat4(ct->tar,
-                              ct->subtarget,
-                              tempmat,
-                              CONSTRAINT_SPACE_WORLD,
-                              ct->space,
-                              con->flag,
-                              con->headtail);
-
-    /* determine where in transform range target is */
-    /* data->type is mapped as follows for backwards compatibility:
-     * 00,01,02 - rotation (it used to be like this)
-     * 10,11,12 - scaling
-     * 20,21,22 - location
-     */
-    if (data->type < 10) {
-      /* extract rotation (is in whatever space target should be in) */
-      mat4_to_eul(vec, tempmat);
-      mul_v3_fl(vec, RAD2DEGF(1.0f)); /* rad -> deg */
-      axis = data->type;
-    }
-    else if (data->type < 20) {
-      /* extract scaling (is in whatever space target should be in) */
-      mat4_to_size(vec, tempmat);
-      axis = data->type - 10;
+    /* Skip targets if we're using local float property to set action time */
+    if (data->flag & ACTCON_USE_EVAL_TIME) {
+      s = data->eval_time;
     }
     else {
-      /* extract location */
-      copy_v3_v3(vec, tempmat[3]);
-      axis = data->type - 20;
+      /* get the transform matrix of the target */
+      constraint_target_to_mat4(ct->tar,
+                                ct->subtarget,
+                                tempmat,
+                                CONSTRAINT_SPACE_WORLD,
+                                ct->space,
+                                con->flag,
+                                con->headtail);
+
+      /* determine where in transform range target is */
+      /* data->type is mapped as follows for backwards compatibility:
+       * 00,01,02 - rotation (it used to be like this)
+       * 10,11,12 - scaling
+       * 20,21,22 - location
+       */
+      if (data->type < 10) {
+        /* extract rotation (is in whatever space target should be in) */
+        mat4_to_eul(vec, tempmat);
+        mul_v3_fl(vec, RAD2DEGF(1.0f)); /* rad -> deg */
+        axis = data->type;
+      }
+      else if (data->type < 20) {
+        /* extract scaling (is in whatever space target should be in) */
+        mat4_to_size(vec, tempmat);
+        axis = data->type - 10;
+      }
+      else {
+        /* extract location */
+        copy_v3_v3(vec, tempmat[3]);
+        axis = data->type - 20;
+      }
+
+      BLI_assert((unsigned int)axis < 3);
+
+      /* Target defines the animation */
+      s = (vec[axis] - data->min) / (data->max - data->min);
     }
 
-    BLI_assert((unsigned int)axis < 3);
-
-    /* Target defines the animation */
-    s = (vec[axis] - data->min) / (data->max - data->min);
     CLAMP(s, 0, 1);
     t = (s * (data->end - data->start)) + data->start;
+    const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(depsgraph,
+                                                                                      t);
 
     if (G.debug & G_DEBUG) {
       printf("do Action Constraint %s - Ob %s Pchan %s\n",
@@ -2693,7 +2703,7 @@ static void actcon_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
 
       /* evaluate using workob */
       /* FIXME: we don't have any consistent standards on limiting effects on object... */
-      what_does_obaction(cob->ob, &workob, NULL, data->act, NULL, t);
+      what_does_obaction(cob->ob, &workob, NULL, data->act, NULL, &anim_eval_context);
       BKE_object_to_mat4(&workob, ct->matrix);
     }
     else if (cob->type == CONSTRAINT_OBTYPE_BONE) {
@@ -2710,7 +2720,7 @@ static void actcon_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
       tchan->rotmode = pchan->rotmode;
 
       /* evaluate action using workob (it will only set the PoseChannel in question) */
-      what_does_obaction(cob->ob, &workob, &pose, data->act, pchan->name, t);
+      what_does_obaction(cob->ob, &workob, &pose, data->act, pchan->name, &anim_eval_context);
 
       /* convert animation to matrices for use here */
       BKE_pchan_calc_mat(tchan);
@@ -2731,7 +2741,7 @@ static void actcon_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targ
   bActionConstraint *data = con->data;
   bConstraintTarget *ct = targets->first;
 
-  if (VALID_CONS_TARGET(ct)) {
+  if (VALID_CONS_TARGET(ct) || data->flag & ACTCON_USE_EVAL_TIME) {
     switch (data->mix_mode) {
       case ACTCON_MIX_BEFORE:
         mul_m4_m4m4_aligned_scale(cob->matrix, ct->matrix, cob->matrix);
@@ -3809,7 +3819,6 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
     float newloc[3], newrot[3][3], neweul[3], newsize[3];
     float dbuf[4], sval[3];
     float *const dvec = dbuf + 1;
-    int i;
 
     /* obtain target effect */
     switch (data->from) {
@@ -3852,7 +3861,7 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
 
     /* determine where in range current transforms lie */
     if (data->expo) {
-      for (i = 0; i < 3; i++) {
+      for (int i = 0; i < 3; i++) {
         if (from_max[i] - from_min[i]) {
           sval[i] = (dvec[i] - from_min[i]) / (from_max[i] - from_min[i]);
         }
@@ -3863,7 +3872,7 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
     }
     else {
       /* clamp transforms out of range */
-      for (i = 0; i < 3; i++) {
+      for (int i = 0; i < 3; i++) {
         CLAMP(dvec[i], from_min[i], from_max[i]);
         if (from_max[i] - from_min[i]) {
           sval[i] = (dvec[i] - from_min[i]) / (from_max[i] - from_min[i]);
@@ -3879,7 +3888,7 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
       case TRANS_SCALE:
         to_min = data->to_min_scale;
         to_max = data->to_max_scale;
-        for (i = 0; i < 3; i++) {
+        for (int i = 0; i < 3; i++) {
           newsize[i] = to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i]));
         }
         switch (data->mix_mode_scale) {
@@ -3895,7 +3904,7 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
       case TRANS_ROTATION:
         to_min = data->to_min_rot;
         to_max = data->to_max_rot;
-        for (i = 0; i < 3; i++) {
+        for (int i = 0; i < 3; i++) {
           neweul[i] = to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i]));
         }
         switch (data->mix_mode_rot) {
@@ -3922,7 +3931,7 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
       default:
         to_min = data->to_min;
         to_max = data->to_max;
-        for (i = 0; i < 3; i++) {
+        for (int i = 0; i < 3; i++) {
           newloc[i] = (to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i])));
         }
         switch (data->mix_mode_loc) {
@@ -4331,7 +4340,7 @@ static void damptrack_do_transform(float matrix[4][4], const float tarvec_in[3],
      * we may have destroyed that in the process of multiplying the matrix
      */
     unit_m4(tmat);
-    mul_m4_m3m4(tmat, rmat, matrix);  // m1, m3, m2
+    mul_m4_m3m4(tmat, rmat, matrix); /* m1, m3, m2 */
 
     copy_m4_m4(matrix, tmat);
     copy_v3_v3(matrix[3], obloc);
@@ -4568,7 +4577,7 @@ static bConstraintTypeInfo CTI_PIVOT = {
     pivotcon_id_looper,       /* id looper */
     NULL,                     /* copy data */
     NULL,
-    /* new data */       // XXX: might be needed to get 'normal' pivot behavior...
+    /* new data */       /* XXX: might be needed to get 'normal' pivot behavior... */
     pivotcon_get_tars,   /* get constraint targets */
     pivotcon_flush_tars, /* flush constraint targets */
     default_get_tarmat,  /* get target matrix */
@@ -4594,230 +4603,390 @@ static void followtrack_id_looper(bConstraint *con, ConstraintIDFunc func, void 
   func(con, (ID **)&data->depth_ob, false, userdata);
 }
 
-static void followtrack_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *UNUSED(targets))
+static MovieClip *followtrack_tracking_clip_get(bConstraint *con, bConstraintOb *cob)
 {
-  Depsgraph *depsgraph = cob->depsgraph;
-  Scene *scene = cob->scene;
   bFollowTrackConstraint *data = con->data;
-  MovieClip *clip = data->clip;
-  MovieTracking *tracking;
-  MovieTrackingTrack *track;
-  MovieTrackingObject *tracking_object;
-  Object *camob = data->camera ? data->camera : scene->camera;
-
-  float ctime = DEG_get_ctime(depsgraph);
-  float framenr;
 
   if (data->flag & FOLLOWTRACK_ACTIVECLIP) {
-    clip = scene->clip;
+    Scene *scene = cob->scene;
+    return scene->clip;
   }
 
-  if (!clip || !data->track[0] || !camob) {
-    return;
-  }
+  return data->clip;
+}
 
-  tracking = &clip->tracking;
+static MovieTrackingObject *followtrack_tracking_object_get(bConstraint *con, bConstraintOb *cob)
+{
+  MovieClip *clip = followtrack_tracking_clip_get(con, cob);
+  MovieTracking *tracking = &clip->tracking;
+  bFollowTrackConstraint *data = con->data;
 
   if (data->object[0]) {
-    tracking_object = BKE_tracking_object_get_named(tracking, data->object);
+    return BKE_tracking_object_get_named(tracking, data->object);
+  }
+  return BKE_tracking_object_get_camera(tracking);
+}
+
+static Object *followtrack_camera_object_get(bConstraint *con, bConstraintOb *cob)
+{
+  bFollowTrackConstraint *data = con->data;
+
+  if (data->camera == NULL) {
+    Scene *scene = cob->scene;
+    return scene->camera;
+  }
+
+  return data->camera;
+}
+
+typedef struct FollowTrackContext {
+  int flag;
+  int frame_method;
+
+  Depsgraph *depsgraph;
+  Scene *scene;
+
+  MovieClip *clip;
+  Object *camera_object;
+  Object *depth_object;
+
+  MovieTracking *tracking;
+  MovieTrackingObject *tracking_object;
+  MovieTrackingTrack *track;
+
+  float depsgraph_time;
+  float clip_frame;
+} FollowTrackContext;
+
+static bool followtrack_context_init(FollowTrackContext *context,
+                                     bConstraint *con,
+                                     bConstraintOb *cob)
+{
+  bFollowTrackConstraint *data = con->data;
+
+  context->flag = data->flag;
+  context->frame_method = data->frame_method;
+
+  context->depsgraph = cob->depsgraph;
+  context->scene = cob->scene;
+
+  context->clip = followtrack_tracking_clip_get(con, cob);
+  context->camera_object = followtrack_camera_object_get(con, cob);
+  if (context->clip == NULL || context->camera_object == NULL) {
+    return false;
+  }
+  context->depth_object = data->depth_ob;
+
+  context->tracking = &context->clip->tracking;
+  context->tracking_object = followtrack_tracking_object_get(con, cob);
+  if (context->tracking_object == NULL) {
+    return false;
+  }
+
+  context->track = BKE_tracking_track_get_named(
+      context->tracking, context->tracking_object, data->track);
+  if (context->track == NULL) {
+    return false;
+  }
+
+  context->depsgraph_time = DEG_get_ctime(context->depsgraph);
+  context->clip_frame = BKE_movieclip_remap_scene_to_clip_frame(context->clip,
+                                                                context->depsgraph_time);
+
+  return true;
+}
+
+static void followtrack_evaluate_using_3d_position_object(FollowTrackContext *context,
+                                                          bConstraintOb *cob)
+{
+  Object *camera_object = context->camera_object;
+  MovieTracking *tracking = context->tracking;
+  MovieTrackingTrack *track = context->track;
+  MovieTrackingObject *tracking_object = context->tracking_object;
+
+  /* Matrix of the object which is being solved prior to this constraint. */
+  float obmat[4][4];
+  copy_m4_m4(obmat, cob->matrix);
+
+  /* Object matrix of the camera. */
+  float camera_obmat[4][4];
+  copy_m4_m4(camera_obmat, camera_object->obmat);
+
+  /* Calculate inverted matrix of the solved camera at the current time. */
+  float reconstructed_camera_mat[4][4];
+  BKE_tracking_camera_get_reconstructed_interpolate(
+      tracking, tracking_object, context->clip_frame, reconstructed_camera_mat);
+  float reconstructed_camera_mat_inv[4][4];
+  invert_m4_m4(reconstructed_camera_mat_inv, reconstructed_camera_mat);
+
+  mul_m4_series(cob->matrix, obmat, camera_obmat, reconstructed_camera_mat_inv);
+  translate_m4(cob->matrix, track->bundle_pos[0], track->bundle_pos[1], track->bundle_pos[2]);
+}
+
+static void followtrack_evaluate_using_3d_position_camera(FollowTrackContext *context,
+                                                          bConstraintOb *cob)
+{
+  Object *camera_object = context->camera_object;
+  MovieTrackingTrack *track = context->track;
+
+  /* Matrix of the object which is being solved prior to this constraint. */
+  float obmat[4][4];
+  copy_m4_m4(obmat, cob->matrix);
+
+  float reconstructed_camera_mat[4][4];
+  BKE_tracking_get_camera_object_matrix(camera_object, reconstructed_camera_mat);
+
+  mul_m4_m4m4(cob->matrix, obmat, reconstructed_camera_mat);
+  translate_m4(cob->matrix, track->bundle_pos[0], track->bundle_pos[1], track->bundle_pos[2]);
+}
+
+static void followtrack_evaluate_using_3d_position(FollowTrackContext *context, bConstraintOb *cob)
+{
+  MovieTrackingTrack *track = context->track;
+  if ((track->flag & TRACK_HAS_BUNDLE) == 0) {
+    return;
+  }
+
+  if ((context->tracking_object->flag & TRACKING_OBJECT_CAMERA) == 0) {
+    followtrack_evaluate_using_3d_position_object(context, cob);
+    return;
+  }
+
+  followtrack_evaluate_using_3d_position_camera(context, cob);
+}
+
+/* Apply undistortion if it is enabled in constraint settings. */
+static void followtrack_undistort_if_needed(FollowTrackContext *context,
+                                            const int clip_width,
+                                            const int clip_height,
+                                            float marker_position[2])
+{
+  if ((context->flag & FOLLOWTRACK_USE_UNDISTORTION) == 0) {
+    return;
+  }
+
+  /* Undistortion need to happen in pixel space. */
+  marker_position[0] *= clip_width;
+  marker_position[1] *= clip_height;
+
+  BKE_tracking_undistort_v2(
+      context->tracking, clip_width, clip_height, marker_position, marker_position);
+
+  /* Normalize pixel coordinates back. */
+  marker_position[0] /= clip_width;
+  marker_position[1] /= clip_height;
+}
+
+/* Modify the marker position matching the frame fitting method. */
+static void followtrack_fit_frame(FollowTrackContext *context,
+                                  const int clip_width,
+                                  const int clip_height,
+                                  float marker_position[2])
+{
+  if (context->frame_method == FOLLOWTRACK_FRAME_STRETCH) {
+    return;
+  }
+
+  Scene *scene = context->scene;
+  MovieClip *clip = context->clip;
+
+  /* apply clip display aspect */
+  const float w_src = clip_width * clip->aspx;
+  const float h_src = clip_height * clip->aspy;
+
+  const float w_dst = scene->r.xsch * scene->r.xasp;
+  const float h_dst = scene->r.ysch * scene->r.yasp;
+
+  const float asp_src = w_src / h_src;
+  const float asp_dst = w_dst / h_dst;
+
+  if (fabsf(asp_src - asp_dst) < FLT_EPSILON) {
+    return;
+  }
+
+  if ((asp_src > asp_dst) == (context->frame_method == FOLLOWTRACK_FRAME_CROP)) {
+    /* fit X */
+    float div = asp_src / asp_dst;
+    float cent = (float)clip_width / 2.0f;
+
+    marker_position[0] = (((marker_position[0] * clip_width - cent) * div) + cent) / clip_width;
   }
   else {
-    tracking_object = BKE_tracking_object_get_camera(tracking);
-  }
+    /* fit Y */
+    float div = asp_dst / asp_src;
+    float cent = (float)clip_height / 2.0f;
 
-  if (!tracking_object) {
+    marker_position[1] = (((marker_position[1] * clip_height - cent) * div) + cent) / clip_height;
+  }
+}
+
+/* Effectively this is a Z-depth of the object form the movie clip camera.
+ * The idea is to preserve this depth while moving the object in 2D. */
+static float followtrack_distance_from_viewplane_get(FollowTrackContext *context,
+                                                     bConstraintOb *cob)
+{
+  Object *camera_object = context->camera_object;
+
+  float camera_matrix[4][4];
+  BKE_object_where_is_calc_mat4(camera_object, camera_matrix);
+
+  const float z_axis[3] = {0.0f, 0.0f, 1.0f};
+
+  /* Direction of camera's local Z axis in the world space. */
+  float camera_axis[3];
+  mul_v3_mat3_m4v3(camera_axis, camera_matrix, z_axis);
+
+  /* Distance to projection plane. */
+  float vec[3];
+  copy_v3_v3(vec, cob->matrix[3]);
+  sub_v3_v3(vec, camera_matrix[3]);
+
+  float projection[3];
+  project_v3_v3v3(projection, vec, camera_axis);
+
+  return len_v3(projection);
+}
+
+/* For the evaluated constraint object project it to the surface of the depth object. */
+static void followtrack_project_to_depth_object_if_needed(FollowTrackContext *context,
+                                                          bConstraintOb *cob)
+{
+  if (context->depth_object == NULL) {
     return;
   }
 
-  track = BKE_tracking_track_get_named(tracking, tracking_object, data->track);
-
-  if (!track) {
+  Object *depth_object = context->depth_object;
+  Mesh *depth_mesh = BKE_object_get_evaluated_mesh(depth_object);
+  if (depth_mesh == NULL) {
     return;
   }
 
-  framenr = BKE_movieclip_remap_scene_to_clip_frame(clip, ctime);
+  float depth_object_mat_inv[4][4];
+  invert_m4_m4(depth_object_mat_inv, depth_object->obmat);
 
+  float ray_start[3], ray_end[3];
+  mul_v3_m4v3(ray_start, depth_object_mat_inv, context->camera_object->obmat[3]);
+  mul_v3_m4v3(ray_end, depth_object_mat_inv, cob->matrix[3]);
+
+  float ray_direction[3];
+  sub_v3_v3v3(ray_direction, ray_end, ray_start);
+  normalize_v3(ray_direction);
+
+  BVHTreeFromMesh tree_data = NULL_BVHTreeFromMesh;
+  BKE_bvhtree_from_mesh_get(&tree_data, depth_mesh, BVHTREE_FROM_LOOPTRI, 4);
+
+  BVHTreeRayHit hit;
+  hit.dist = BVH_RAYCAST_DIST_MAX;
+  hit.index = -1;
+
+  const int result = BLI_bvhtree_ray_cast(tree_data.tree,
+                                          ray_start,
+                                          ray_direction,
+                                          0.0f,
+                                          &hit,
+                                          tree_data.raycast_callback,
+                                          &tree_data);
+
+  if (result != -1) {
+    mul_v3_m4v3(cob->matrix[3], depth_object->obmat, hit.co);
+  }
+
+  free_bvhtree_from_mesh(&tree_data);
+}
+
+static void followtrack_evaluate_using_2d_position(FollowTrackContext *context, bConstraintOb *cob)
+{
+  Scene *scene = context->scene;
+  MovieClip *clip = context->clip;
+  MovieTrackingTrack *track = context->track;
+  Object *camera_object = context->camera_object;
+  const float clip_frame = context->clip_frame;
+  const float aspect = (scene->r.xsch * scene->r.xasp) / (scene->r.ysch * scene->r.yasp);
+
+  const float object_depth = followtrack_distance_from_viewplane_get(context, cob);
+  if (object_depth < FLT_EPSILON) {
+    return;
+  }
+
+  int clip_width, clip_height;
+  BKE_movieclip_get_size(clip, NULL, &clip_width, &clip_height);
+
+  float marker_position[2];
+  BKE_tracking_marker_get_subframe_position(track, clip_frame, marker_position);
+
+  followtrack_undistort_if_needed(context, clip_width, clip_height, marker_position);
+  followtrack_fit_frame(context, clip_width, clip_height, marker_position);
+
+  float rmat[4][4];
+  CameraParams params;
+  BKE_camera_params_init(&params);
+  BKE_camera_params_from_object(&params, camera_object);
+
+  if (params.is_ortho) {
+    float vec[3];
+    vec[0] = params.ortho_scale * (marker_position[0] - 0.5f + params.shiftx);
+    vec[1] = params.ortho_scale * (marker_position[1] - 0.5f + params.shifty);
+    vec[2] = -object_depth;
+
+    if (aspect > 1.0f) {
+      vec[1] /= aspect;
+    }
+    else {
+      vec[0] *= aspect;
+    }
+
+    float disp[3];
+    mul_v3_m4v3(disp, camera_object->obmat, vec);
+
+    copy_m4_m4(rmat, camera_object->obmat);
+    zero_v3(rmat[3]);
+    mul_m4_m4m4(cob->matrix, cob->matrix, rmat);
+
+    copy_v3_v3(cob->matrix[3], disp);
+  }
+  else {
+    const float d = (object_depth * params.sensor_x) / (2.0f * params.lens);
+
+    float vec[3];
+    vec[0] = d * (2.0f * (marker_position[0] + params.shiftx) - 1.0f);
+    vec[1] = d * (2.0f * (marker_position[1] + params.shifty) - 1.0f);
+    vec[2] = -object_depth;
+
+    if (aspect > 1.0f) {
+      vec[1] /= aspect;
+    }
+    else {
+      vec[0] *= aspect;
+    }
+
+    float disp[3];
+    mul_v3_m4v3(disp, camera_object->obmat, vec);
+
+    /* apply camera rotation so Z-axis would be co-linear */
+    copy_m4_m4(rmat, camera_object->obmat);
+    zero_v3(rmat[3]);
+    mul_m4_m4m4(cob->matrix, cob->matrix, rmat);
+
+    copy_v3_v3(cob->matrix[3], disp);
+  }
+
+  followtrack_project_to_depth_object_if_needed(context, cob);
+}
+
+static void followtrack_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *UNUSED(targets))
+{
+  FollowTrackContext context;
+  if (!followtrack_context_init(&context, con, cob)) {
+    return;
+  }
+
+  bFollowTrackConstraint *data = con->data;
   if (data->flag & FOLLOWTRACK_USE_3D_POSITION) {
-    if (track->flag & TRACK_HAS_BUNDLE) {
-      float obmat[4][4], mat[4][4];
-
-      copy_m4_m4(obmat, cob->matrix);
-
-      if ((tracking_object->flag & TRACKING_OBJECT_CAMERA) == 0) {
-        float imat[4][4];
-
-        copy_m4_m4(mat, camob->obmat);
-
-        BKE_tracking_camera_get_reconstructed_interpolate(
-            tracking, tracking_object, framenr, imat);
-        invert_m4(imat);
-
-        mul_m4_series(cob->matrix, obmat, mat, imat);
-        translate_m4(
-            cob->matrix, track->bundle_pos[0], track->bundle_pos[1], track->bundle_pos[2]);
-      }
-      else {
-        BKE_tracking_get_camera_object_matrix(camob, mat);
-
-        mul_m4_m4m4(cob->matrix, obmat, mat);
-        translate_m4(
-            cob->matrix, track->bundle_pos[0], track->bundle_pos[1], track->bundle_pos[2]);
-      }
-    }
+    followtrack_evaluate_using_3d_position(&context, cob);
+    return;
   }
-  else {
-    float vec[3], disp[3], axis[3], mat[4][4];
-    float aspect = (scene->r.xsch * scene->r.xasp) / (scene->r.ysch * scene->r.yasp);
-    float len, d;
 
-    BKE_object_where_is_calc_mat4(camob, mat);
-
-    /* camera axis */
-    vec[0] = 0.0f;
-    vec[1] = 0.0f;
-    vec[2] = 1.0f;
-    mul_v3_m4v3(axis, mat, vec);
-
-    /* distance to projection plane */
-    copy_v3_v3(vec, cob->matrix[3]);
-    sub_v3_v3(vec, mat[3]);
-    project_v3_v3v3(disp, vec, axis);
-
-    len = len_v3(disp);
-
-    if (len > FLT_EPSILON) {
-      CameraParams params;
-      int width, height;
-      float pos[2], rmat[4][4];
-
-      BKE_movieclip_get_size(clip, NULL, &width, &height);
-      BKE_tracking_marker_get_subframe_position(track, framenr, pos);
-
-      if (data->flag & FOLLOWTRACK_USE_UNDISTORTION) {
-        /* Undistortion need to happen in pixel space. */
-        pos[0] *= width;
-        pos[1] *= height;
-
-        BKE_tracking_undistort_v2(tracking, pos, pos);
-
-        /* Normalize pixel coordinates back. */
-        pos[0] /= width;
-        pos[1] /= height;
-      }
-
-      /* aspect correction */
-      if (data->frame_method != FOLLOWTRACK_FRAME_STRETCH) {
-        float w_src, h_src, w_dst, h_dst, asp_src, asp_dst;
-
-        /* apply clip display aspect */
-        w_src = width * clip->aspx;
-        h_src = height * clip->aspy;
-
-        w_dst = scene->r.xsch * scene->r.xasp;
-        h_dst = scene->r.ysch * scene->r.yasp;
-
-        asp_src = w_src / h_src;
-        asp_dst = w_dst / h_dst;
-
-        if (fabsf(asp_src - asp_dst) >= FLT_EPSILON) {
-          if ((asp_src > asp_dst) == (data->frame_method == FOLLOWTRACK_FRAME_CROP)) {
-            /* fit X */
-            float div = asp_src / asp_dst;
-            float cent = (float)width / 2.0f;
-
-            pos[0] = (((pos[0] * width - cent) * div) + cent) / width;
-          }
-          else {
-            /* fit Y */
-            float div = asp_dst / asp_src;
-            float cent = (float)height / 2.0f;
-
-            pos[1] = (((pos[1] * height - cent) * div) + cent) / height;
-          }
-        }
-      }
-
-      BKE_camera_params_init(&params);
-      BKE_camera_params_from_object(&params, camob);
-
-      if (params.is_ortho) {
-        vec[0] = params.ortho_scale * (pos[0] - 0.5f + params.shiftx);
-        vec[1] = params.ortho_scale * (pos[1] - 0.5f + params.shifty);
-        vec[2] = -len;
-
-        if (aspect > 1.0f) {
-          vec[1] /= aspect;
-        }
-        else {
-          vec[0] *= aspect;
-        }
-
-        mul_v3_m4v3(disp, camob->obmat, vec);
-
-        copy_m4_m4(rmat, camob->obmat);
-        zero_v3(rmat[3]);
-        mul_m4_m4m4(cob->matrix, cob->matrix, rmat);
-
-        copy_v3_v3(cob->matrix[3], disp);
-      }
-      else {
-        d = (len * params.sensor_x) / (2.0f * params.lens);
-
-        vec[0] = d * (2.0f * (pos[0] + params.shiftx) - 1.0f);
-        vec[1] = d * (2.0f * (pos[1] + params.shifty) - 1.0f);
-        vec[2] = -len;
-
-        if (aspect > 1.0f) {
-          vec[1] /= aspect;
-        }
-        else {
-          vec[0] *= aspect;
-        }
-
-        mul_v3_m4v3(disp, camob->obmat, vec);
-
-        /* apply camera rotation so Z-axis would be co-linear */
-        copy_m4_m4(rmat, camob->obmat);
-        zero_v3(rmat[3]);
-        mul_m4_m4m4(cob->matrix, cob->matrix, rmat);
-
-        copy_v3_v3(cob->matrix[3], disp);
-      }
-
-      if (data->depth_ob) {
-        Object *depth_ob = data->depth_ob;
-        Mesh *target_eval = BKE_object_get_evaluated_mesh(depth_ob);
-        if (target_eval) {
-          BVHTreeFromMesh treeData = NULL_BVHTreeFromMesh;
-          BVHTreeRayHit hit;
-          float ray_start[3], ray_end[3], ray_nor[3], imat[4][4];
-          int result;
-
-          invert_m4_m4(imat, depth_ob->obmat);
-
-          mul_v3_m4v3(ray_start, imat, camob->obmat[3]);
-          mul_v3_m4v3(ray_end, imat, cob->matrix[3]);
-
-          sub_v3_v3v3(ray_nor, ray_end, ray_start);
-          normalize_v3(ray_nor);
-
-          BKE_bvhtree_from_mesh_get(&treeData, target_eval, BVHTREE_FROM_LOOPTRI, 4);
-
-          hit.dist = BVH_RAYCAST_DIST_MAX;
-          hit.index = -1;
-
-          result = BLI_bvhtree_ray_cast(
-              treeData.tree, ray_start, ray_nor, 0.0f, &hit, treeData.raycast_callback, &treeData);
-
-          if (result != -1) {
-            mul_v3_m4v3(cob->matrix[3], depth_ob->obmat, hit.co);
-          }
-
-          free_bvhtree_from_mesh(&treeData);
-        }
-      }
-    }
-  }
+  followtrack_evaluate_using_2d_position(&context, cob);
 }
 
 static bConstraintTypeInfo CTI_FOLLOWTRACK = {
@@ -5121,9 +5290,8 @@ const bConstraintTypeInfo *BKE_constraint_typeinfo_from_type(int type)
     /* there shouldn't be any segfaults here... */
     return constraintsTypeInfo[type];
   }
-  else {
-    CLOG_WARN(&LOG, "No valid constraint type-info data available. Type = %i", type);
-  }
+
+  CLOG_WARN(&LOG, "No valid constraint type-info data available. Type = %i", type);
 
   return NULL;
 }
@@ -5137,9 +5305,8 @@ const bConstraintTypeInfo *BKE_constraint_typeinfo_get(bConstraint *con)
   if (con) {
     return BKE_constraint_typeinfo_from_type(con->type);
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 /* ************************* General Constraints API ************************** */
@@ -5221,24 +5388,22 @@ bool BKE_constraint_remove(ListBase *list, bConstraint *con)
     BLI_freelinkN(list, con);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 bool BKE_constraint_remove_ex(ListBase *list, Object *ob, bConstraint *con, bool clear_dep)
 {
   const short type = con->type;
   if (BKE_constraint_remove(list, con)) {
-    /* ITASC needs to be rebuilt once a constraint is removed [#26920] */
+    /* ITASC needs to be rebuilt once a constraint is removed T26920. */
     if (clear_dep && ELEM(type, CONSTRAINT_TYPE_KINEMATIC, CONSTRAINT_TYPE_SPLINEIK)) {
       BIK_clear_data(ob->pose);
     }
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 /* ......... */
@@ -5252,8 +5417,15 @@ static bConstraint *add_new_constraint_internal(const char *name, short type)
 
   /* Set up a generic constraint data-block. */
   con->type = type;
-  con->flag |= CONSTRAINT_EXPAND | CONSTRAINT_OVERRIDE_LIBRARY_LOCAL;
+  con->flag |= CONSTRAINT_OVERRIDE_LIBRARY_LOCAL;
   con->enforce = 1.0f;
+
+  /* Only open the main panel when constraints are created, not the sub-panels. */
+  con->ui_expand_flag = (1 << 0);
+  if (ELEM(type, CONSTRAINT_TYPE_ACTION, CONSTRAINT_TYPE_SPLINEIK)) {
+    /* Expand the two sub-panels in the cases where the main panel barely has any properties. */
+    con->ui_expand_flag |= (1 << 1) | (1 << 2);
+  }
 
   /* Determine a basic name, and info */
   if (cti) {
@@ -5281,17 +5453,10 @@ static bConstraint *add_new_constraint_internal(const char *name, short type)
   return con;
 }
 
-/* if pchan is not NULL then assume we're adding a pose constraint */
-static bConstraint *add_new_constraint(Object *ob,
-                                       bPoseChannel *pchan,
-                                       const char *name,
-                                       short type)
+/* Add a newly created constraint to the constraint list. */
+static void add_new_constraint_to_list(Object *ob, bPoseChannel *pchan, bConstraint *con)
 {
-  bConstraint *con;
   ListBase *list;
-
-  /* add the constraint */
-  con = add_new_constraint_internal(name, type);
 
   /* find the constraint stack - bone or object? */
   list = (pchan) ? (&pchan->constraints) : (&ob->constraints);
@@ -5314,6 +5479,20 @@ static bConstraint *add_new_constraint(Object *ob,
     /* make this constraint the active one */
     BKE_constraints_active_set(list, con);
   }
+}
+
+/* if pchan is not NULL then assume we're adding a pose constraint */
+static bConstraint *add_new_constraint(Object *ob,
+                                       bPoseChannel *pchan,
+                                       const char *name,
+                                       short type)
+{
+  bConstraint *con;
+
+  /* add the constraint */
+  con = add_new_constraint_internal(name, type);
+
+  add_new_constraint_to_list(ob, pchan, con);
 
   /* set type+owner specific immutable settings */
   /* TODO: does action constraint need anything here - i.e. spaceonce? */
@@ -5445,6 +5624,26 @@ bConstraint *BKE_constraint_duplicate_ex(bConstraint *src, const int flag, const
   constraint_copy_data_ex(dst, src, flag, do_extern);
   dst->next = dst->prev = NULL;
   return dst;
+}
+
+/* Add a copy of the given constraint for the given bone */
+bConstraint *BKE_constraint_copy_for_pose(Object *ob, bPoseChannel *pchan, bConstraint *src)
+{
+  if (pchan == NULL) {
+    return NULL;
+  }
+
+  bConstraint *new_con = BKE_constraint_duplicate_ex(src, 0, !ID_IS_LINKED(ob));
+  add_new_constraint_to_list(ob, pchan, new_con);
+  return new_con;
+}
+
+/* Add a copy of the given constraint for the given object */
+bConstraint *BKE_constraint_copy_for_object(Object *ob, bConstraint *src)
+{
+  bConstraint *new_con = BKE_constraint_duplicate_ex(src, 0, !ID_IS_LINKED(ob));
+  add_new_constraint_to_list(ob, NULL, new_con);
+  return new_con;
 }
 
 /* duplicate all of the constraints in a constraint stack */
@@ -5840,7 +6039,7 @@ void BKE_constraints_solve(struct Depsgraph *depsgraph,
      */
     enf = con->enforce;
 
-    /* make copy of worldspace matrix pre-constraint for use with blending later */
+    /* make copy of world-space matrix pre-constraint for use with blending later */
     copy_m4_m4(oldmat, cob->matrix);
 
     /* move owner matrix into right space */
@@ -5861,16 +6060,16 @@ void BKE_constraints_solve(struct Depsgraph *depsgraph,
       cti->flush_constraint_targets(con, &targets, 1);
     }
 
-    /* move owner back into worldspace for next constraint/other business */
+    /* move owner back into world-space for next constraint/other business */
     if ((con->flag & CONSTRAINT_SPACEONCE) == 0) {
       BKE_constraint_mat_convertspace(
           cob->ob, cob->pchan, cob->matrix, con->ownspace, CONSTRAINT_SPACE_WORLD, false);
     }
 
     /* Interpolate the enforcement, to blend result of constraint into final owner transform
-     * - all this happens in worldspace to prevent any weirdness creeping in
+     * - all this happens in world-space to prevent any weirdness creeping in
      *   (T26014 and T25725), since some constraints may not convert the solution back to the input
-     *   space before blending but all are guaranteed to end up in good "worldspace" result.
+     *   space before blending but all are guaranteed to end up in good "world-space" result.
      */
     /* Note: all kind of stuff here before (caused trouble), much easier to just interpolate,
      * or did I miss something? -jahka (r.32105) */

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -28,17 +28,29 @@
 #include "BLI_math.h"
 #include "BLI_uvproject.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_camera_types.h"
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_camera.h"
+#include "BKE_context.h"
 #include "BKE_lib_query.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -50,9 +62,9 @@ static void initData(ModifierData *md)
 {
   UVProjectModifierData *umd = (UVProjectModifierData *)md;
 
-  umd->num_projectors = 1;
-  umd->aspectx = umd->aspecty = 1.0f;
-  umd->scalex = umd->scaley = 1.0f;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(umd, modifier));
+
+  MEMCPY_STRUCT_AFTER(umd, DNA_struct_default_get(UVProjectModifierData), modifier);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -63,23 +75,12 @@ static void requiredDataMask(Object *UNUSED(ob),
   r_cddata_masks->lmask |= CD_MLOOPUV;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
-{
-  UVProjectModifierData *umd = (UVProjectModifierData *)md;
-  int i;
-
-  for (i = 0; i < MOD_UVPROJECT_MAXPROJECTORS; i++) {
-    walk(userData, ob, &umd->projectors[i], IDWALK_CB_NOP);
-  }
-}
-
 static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
-#if 0
   UVProjectModifierData *umd = (UVProjectModifierData *)md;
-#endif
-
-  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+  for (int i = 0; i < MOD_UVPROJECT_MAXPROJECTORS; i++) {
+    walk(userData, ob, (ID **)&umd->projectors[i], IDWALK_CB_NOP);
+  }
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -297,13 +298,15 @@ static Mesh *uvprojectModifier_do(UVProjectModifierData *umd,
     }
   }
 
+  mesh->runtime.is_original = false;
+
   /* Mark tessellated CD layers as dirty. */
   mesh->runtime.cd_dirty_vert |= CD_MASK_TESSLOOPNORMAL;
 
   return mesh;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result;
   UVProjectModifierData *umd = (UVProjectModifierData *)md;
@@ -313,21 +316,62 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   return result;
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *sub;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  PointerRNA obj_data_ptr = RNA_pointer_get(&ob_ptr, "data");
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemPointerR(layout, ptr, "uv_layer", &obj_data_ptr, "uv_layers", NULL, ICON_NONE);
+
+  sub = uiLayoutColumn(layout, true);
+  uiItemR(sub, ptr, "aspect_x", 0, IFACE_("Aspect X"), ICON_NONE);
+  uiItemR(sub, ptr, "aspect_y", 0, IFACE_("Y"), ICON_NONE);
+
+  sub = uiLayoutColumn(layout, true);
+  uiItemR(sub, ptr, "scale_x", 0, IFACE_("Scale X"), ICON_NONE);
+  uiItemR(sub, ptr, "scale_y", 0, IFACE_("Y"), ICON_NONE);
+
+  uiItemR(layout, ptr, "projector_count", 0, IFACE_("Projectors"), ICON_NONE);
+  RNA_BEGIN (ptr, projector_ptr, "projectors") {
+    uiItemR(layout, &projector_ptr, "object", 0, NULL, ICON_NONE);
+  }
+  RNA_END;
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_UVProject, panel_draw);
+}
+
 ModifierTypeInfo modifierType_UVProject = {
     /* name */ "UVProject",
     /* structName */ "UVProjectModifierData",
     /* structSize */ sizeof(UVProjectModifierData),
+    /* srna */ &RNA_UVProjectModifier,
     /* type */ eModifierTypeType_NonGeometrical,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
+    /* icon */ ICON_MOD_UVPROJECT,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -336,8 +380,10 @@ ModifierTypeInfo modifierType_UVProject = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

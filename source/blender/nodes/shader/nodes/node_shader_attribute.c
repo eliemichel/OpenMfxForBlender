@@ -44,28 +44,27 @@ static int node_shader_gpu_attribute(GPUMaterial *mat,
 
   if (GPU_material_is_volume_shader(mat)) {
     if (out[0].hasoutput) {
-      out[0].link = GPU_volume_grid(mat, attr->name);
+      out[0].link = GPU_volume_grid(mat, attr->name, GPU_VOLUME_DEFAULT_0);
     }
     if (out[1].hasoutput) {
-      out[1].link = GPU_volume_grid(mat, attr->name);
+      out[1].link = GPU_volume_grid(mat, attr->name, GPU_VOLUME_DEFAULT_0);
     }
     if (out[2].hasoutput) {
-      out[2].link = GPU_volume_grid(mat, attr->name);
+      out[2].link = GPU_volume_grid(mat, attr->name, GPU_VOLUME_DEFAULT_0);
     }
 
     return 1;
   }
-  else {
-    GPUNodeLink *cd_attr = GPU_attribute(mat, CD_AUTO_FROM_NAME, attr->name);
-    GPU_stack_link(mat, node, "node_attribute", in, out, cd_attr);
 
-    /* for each output. */
-    for (int i = 0; sh_node_attribute_out[i].type != -1; i++) {
-      node_shader_gpu_bump_tex_coord(mat, node, &out[i].link);
-    }
+  GPUNodeLink *cd_attr = GPU_attribute(mat, CD_AUTO_FROM_NAME, attr->name);
+  GPU_stack_link(mat, node, "node_attribute", in, out, cd_attr);
 
-    return 1;
+  /* for each output. */
+  for (int i = 0; sh_node_attribute_out[i].type != -1; i++) {
+    node_shader_gpu_bump_tex_coord(mat, node, &out[i].link);
   }
+
+  return 1;
 }
 
 /* node type definition */

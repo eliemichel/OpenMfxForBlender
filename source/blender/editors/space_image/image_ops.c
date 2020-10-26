@@ -69,7 +69,6 @@
 
 #include "DEG_depsgraph.h"
 
-#include "GPU_draw.h"
 #include "GPU_immediate.h"
 #include "GPU_state.h"
 
@@ -198,11 +197,10 @@ static Image *image_from_context(const bContext *C)
   if (ima) {
     return ima;
   }
-  else {
-    /* Image editor. */
-    SpaceImage *sima = CTX_wm_space_image(C);
-    return (sima) ? sima->image : NULL;
-  }
+
+  /* Image editor. */
+  SpaceImage *sima = CTX_wm_space_image(C);
+  return (sima) ? sima->image : NULL;
 }
 
 static ImageUser *image_user_from_context(const bContext *C)
@@ -214,11 +212,10 @@ static ImageUser *image_user_from_context(const bContext *C)
   if (iuser) {
     return iuser;
   }
-  else {
-    /* Image editor. */
-    SpaceImage *sima = CTX_wm_space_image(C);
-    return (sima) ? &sima->iuser : NULL;
-  }
+
+  /* Image editor. */
+  SpaceImage *sima = CTX_wm_space_image(C);
+  return (sima) ? &sima->iuser : NULL;
 }
 
 static bool image_from_context_has_data_poll(bContext *C)
@@ -273,10 +270,10 @@ static bool space_image_main_area_not_uv_brush_poll(bContext *C)
   ToolSettings *toolsettings = scene->toolsettings;
 
   if (sima && !toolsettings->uvsculpt && (CTX_data_edit_object(C) == NULL)) {
-    return 1;
+    return true;
   }
 
-  return 0;
+  return false;
 }
 
 /** \} */
@@ -359,10 +356,9 @@ static int image_view_pan_invoke(bContext *C, wmOperator *op, const wmEvent *eve
     image_view_pan_exec(C, op);
     return OPERATOR_FINISHED;
   }
-  else {
-    image_view_pan_init(C, op, event);
-    return OPERATOR_RUNNING_MODAL;
-  }
+
+  image_view_pan_init(C, op, event);
+  return OPERATOR_RUNNING_MODAL;
 }
 
 static int image_view_pan_modal(bContext *C, wmOperator *op, const wmEvent *event)
@@ -549,10 +545,9 @@ static int image_view_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *ev
 
     return OPERATOR_FINISHED;
   }
-  else {
-    image_view_zoom_init(C, op, event);
-    return OPERATOR_RUNNING_MODAL;
-  }
+
+  image_view_zoom_init(C, op, event);
+  return OPERATOR_RUNNING_MODAL;
 }
 
 static void image_zoom_apply(ViewZoomData *vpd,
@@ -697,27 +692,26 @@ static int image_view_ndof_invoke(bContext *C, wmOperator *UNUSED(op), const wmE
   if (event->type != NDOF_MOTION) {
     return OPERATOR_CANCELLED;
   }
-  else {
-    SpaceImage *sima = CTX_wm_space_image(C);
-    ARegion *region = CTX_wm_region(C);
-    float pan_vec[3];
 
-    const wmNDOFMotionData *ndof = event->customdata;
-    const float speed = NDOF_PIXELS_PER_SECOND;
+  SpaceImage *sima = CTX_wm_space_image(C);
+  ARegion *region = CTX_wm_region(C);
+  float pan_vec[3];
 
-    WM_event_ndof_pan_get(ndof, pan_vec, true);
+  const wmNDOFMotionData *ndof = event->customdata;
+  const float speed = NDOF_PIXELS_PER_SECOND;
 
-    mul_v2_fl(pan_vec, (speed * ndof->dt) / sima->zoom);
-    pan_vec[2] *= -ndof->dt;
+  WM_event_ndof_pan_get(ndof, pan_vec, true);
 
-    sima_zoom_set_factor(sima, region, 1.0f + pan_vec[2], NULL, false);
-    sima->xof += pan_vec[0];
-    sima->yof += pan_vec[1];
+  mul_v2_fl(pan_vec, (speed * ndof->dt) / sima->zoom);
+  pan_vec[2] *= -ndof->dt;
 
-    ED_region_tag_redraw(region);
+  sima_zoom_set_factor(sima, region, 1.0f + pan_vec[2], NULL, false);
+  sima->xof += pan_vec[0];
+  sima->yof += pan_vec[1];
 
-    return OPERATOR_FINISHED;
-  }
+  ED_region_tag_redraw(region);
+
+  return OPERATOR_FINISHED;
 }
 
 void IMAGE_OT_view_ndof(wmOperatorType *ot)
@@ -826,7 +820,7 @@ void IMAGE_OT_view_all(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "View All";
+  ot->name = "Frame All";
   ot->idname = "IMAGE_OT_view_all";
   ot->description = "View the entire image";
 
@@ -905,7 +899,7 @@ static int image_view_selected_exec(bContext *C, wmOperator *UNUSED(op))
       return OPERATOR_CANCELLED;
     }
   }
-  else if (ED_space_image_check_show_maskedit(sima, view_layer)) {
+  else if (ED_space_image_check_show_maskedit(sima, obedit)) {
     if (!ED_mask_selected_minmax(C, min, max)) {
       return OPERATOR_CANCELLED;
     }
@@ -983,7 +977,7 @@ void IMAGE_OT_view_zoom_in(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "View Zoom In";
+  ot->name = "Zoom In";
   ot->idname = "IMAGE_OT_view_zoom_in";
   ot->description = "Zoom in the image (centered around 2D cursor)";
 
@@ -1042,7 +1036,7 @@ void IMAGE_OT_view_zoom_out(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "View Zoom Out";
+  ot->name = "Zoom Out";
   ot->idname = "IMAGE_OT_view_zoom_out";
   ot->description = "Zoom out the image (centered around 2D cursor)";
 
@@ -1237,7 +1231,7 @@ static Image *image_open_single(Main *bmain,
   if (!exists) {
     /* only image path after save, never ibuf */
     if (is_relative_path) {
-      BLI_path_rel(ima->name, relbase);
+      BLI_path_rel(ima->filepath, relbase);
     }
 
     /* handle multiview images */
@@ -1417,7 +1411,7 @@ static int image_open_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
   }
 
   if (ima) {
-    path = ima->name;
+    path = ima->filepath;
   }
 
   if (RNA_struct_property_is_set(op->ptr, "filepath")) {
@@ -1576,8 +1570,8 @@ static int image_replace_exec(bContext *C, wmOperator *op)
 
   RNA_string_get(op->ptr, "filepath", str);
 
-  /* we cant do much if the str is longer then FILE_MAX :/ */
-  BLI_strncpy(sima->image->name, str, sizeof(sima->image->name));
+  /* we cant do much if the str is longer than FILE_MAX :/ */
+  BLI_strncpy(sima->image->filepath, str, sizeof(sima->image->filepath));
 
   if (sima->image->source == IMA_SRC_GENERATED) {
     sima->image->source = IMA_SRC_FILE;
@@ -1614,10 +1608,10 @@ static int image_replace_invoke(bContext *C, wmOperator *op, const wmEvent *UNUS
   }
 
   if (!RNA_struct_property_is_set(op->ptr, "relative_path")) {
-    RNA_boolean_set(op->ptr, "relative_path", BLI_path_is_rel(sima->image->name));
+    RNA_boolean_set(op->ptr, "relative_path", BLI_path_is_rel(sima->image->filepath));
   }
 
-  image_filesel(C, op, sima->image->name);
+  image_filesel(C, op, sima->image->filepath);
 
   return OPERATOR_RUNNING_MODAL;
 }
@@ -1678,24 +1672,23 @@ static char imtype_best_depth(ImBuf *ibuf, const char imtype)
     }
     return R_IMF_CHAN_DEPTH_8;
   }
-  else {
-    if (depth_ok & R_IMF_CHAN_DEPTH_8) {
-      return R_IMF_CHAN_DEPTH_8;
-    }
-    if (depth_ok & R_IMF_CHAN_DEPTH_12) {
-      return R_IMF_CHAN_DEPTH_12;
-    }
-    if (depth_ok & R_IMF_CHAN_DEPTH_16) {
-      return R_IMF_CHAN_DEPTH_16;
-    }
-    if (depth_ok & R_IMF_CHAN_DEPTH_24) {
-      return R_IMF_CHAN_DEPTH_24;
-    }
-    if (depth_ok & R_IMF_CHAN_DEPTH_32) {
-      return R_IMF_CHAN_DEPTH_32;
-    }
-    return R_IMF_CHAN_DEPTH_8; /* fallback, should not get here */
+
+  if (depth_ok & R_IMF_CHAN_DEPTH_8) {
+    return R_IMF_CHAN_DEPTH_8;
   }
+  if (depth_ok & R_IMF_CHAN_DEPTH_12) {
+    return R_IMF_CHAN_DEPTH_12;
+  }
+  if (depth_ok & R_IMF_CHAN_DEPTH_16) {
+    return R_IMF_CHAN_DEPTH_16;
+  }
+  if (depth_ok & R_IMF_CHAN_DEPTH_24) {
+    return R_IMF_CHAN_DEPTH_24;
+  }
+  if (depth_ok & R_IMF_CHAN_DEPTH_32) {
+    return R_IMF_CHAN_DEPTH_32;
+  }
+  return R_IMF_CHAN_DEPTH_8; /* fallback, should not get here */
 }
 
 static int image_save_options_init(Main *bmain,
@@ -1777,7 +1770,7 @@ static int image_save_options_init(Main *bmain,
 
       /* append UDIM numbering if not present */
       if (ima->source == IMA_SRC_TILED &&
-          (BLI_path_sequence_decode(ima->name, NULL, NULL, NULL) != 1001)) {
+          (BLI_path_sequence_decode(ima->filepath, NULL, NULL, NULL) != 1001)) {
         int len = strlen(opts->filepath);
         STR_CONCAT(opts->filepath, len, ".1001");
       }
@@ -2147,9 +2140,8 @@ static int image_save_exec(bContext *C, wmOperator *op)
   if (ok) {
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+
+  return OPERATOR_CANCELLED;
 }
 
 static int image_save_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
@@ -2160,9 +2152,7 @@ static int image_save_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
     WM_operator_name_call(C, "IMAGE_OT_save_as", WM_OP_INVOKE_DEFAULT, NULL);
     return OPERATOR_CANCELLED;
   }
-  else {
-    return image_save_exec(C, op);
-  }
+  return image_save_exec(C, op);
 }
 
 void IMAGE_OT_save(wmOperatorType *ot)
@@ -2294,14 +2284,12 @@ static bool image_should_be_saved(Image *ima, bool *is_format_writable)
       ELEM(ima->source, IMA_SRC_FILE, IMA_SRC_GENERATED, IMA_SRC_TILED)) {
     return image_should_be_saved_when_modified(ima);
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 static bool image_has_valid_path(Image *ima)
 {
-  return strchr(ima->name, '\\') || strchr(ima->name, '/');
+  return strchr(ima->filepath, '\\') || strchr(ima->filepath, '/');
 }
 
 bool ED_image_should_save_modified(const Main *bmain)
@@ -2336,7 +2324,7 @@ int ED_image_save_all_modified_info(const Main *bmain, ReportList *reports)
                       RPT_WARNING,
                       "Packed library image can't be saved: \"%s\" from \"%s\"",
                       ima->id.name + 2,
-                      ima->id.lib->name);
+                      ima->id.lib->filepath);
         }
       }
       else if (!is_format_writable) {
@@ -2348,19 +2336,21 @@ int ED_image_save_all_modified_info(const Main *bmain, ReportList *reports)
       else {
         if (image_has_valid_path(ima)) {
           num_saveable_images++;
-          if (BLI_gset_haskey(unique_paths, ima->name)) {
+          if (BLI_gset_haskey(unique_paths, ima->filepath)) {
             BKE_reportf(reports,
                         RPT_WARNING,
                         "Multiple images can't be saved to an identical path: \"%s\"",
-                        ima->name);
+                        ima->filepath);
           }
           else {
-            BLI_gset_insert(unique_paths, BLI_strdup(ima->name));
+            BLI_gset_insert(unique_paths, BLI_strdup(ima->filepath));
           }
         }
         else {
-          BKE_reportf(
-              reports, RPT_WARNING, "Image can't be saved, no valid file path: \"%s\"", ima->name);
+          BKE_reportf(reports,
+                      RPT_WARNING,
+                      "Image can't be saved, no valid file path: \"%s\"",
+                      ima->filepath);
         }
       }
     }
@@ -2604,7 +2594,7 @@ static int image_new_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(e
 
 static void image_new_draw(bContext *UNUSED(C), wmOperator *op)
 {
-  uiLayout *split, *col[2];
+  uiLayout *col;
   uiLayout *layout = op->layout;
   PointerRNA ptr;
 #if 0
@@ -2616,33 +2606,18 @@ static void image_new_draw(bContext *UNUSED(C), wmOperator *op)
 
   /* copy of WM_operator_props_dialog_popup() layout */
 
-  split = uiLayoutSplit(layout, 0.5f, false);
-  col[0] = uiLayoutColumn(split, false);
-  col[1] = uiLayoutColumn(split, false);
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
 
-  uiItemL(col[0], IFACE_("Name"), ICON_NONE);
-  uiItemR(col[1], &ptr, "name", 0, "", ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Width"), ICON_NONE);
-  uiItemR(col[1], &ptr, "width", 0, "", ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Height"), ICON_NONE);
-  uiItemR(col[1], &ptr, "height", 0, "", ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Color"), ICON_NONE);
-  uiItemR(col[1], &ptr, "color", 0, "", ICON_NONE);
-
-  uiItemL(col[0], "", ICON_NONE);
-  uiItemR(col[1], &ptr, "alpha", 0, NULL, ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Generated Type"), ICON_NONE);
-  uiItemR(col[1], &ptr, "generated_type", 0, "", ICON_NONE);
-
-  uiItemL(col[0], "", ICON_NONE);
-  uiItemR(col[1], &ptr, "float", 0, NULL, ICON_NONE);
-
-  uiItemL(col[0], "", ICON_NONE);
-  uiItemR(col[1], &ptr, "tiled", 0, NULL, ICON_NONE);
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "name", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "width", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "height", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "color", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "alpha", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "generated_type", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "float", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "tiled", 0, NULL, ICON_NONE);
 
 #if 0
   if (is_multiview) {
@@ -2793,7 +2768,7 @@ static int image_invert_exec(bContext *C, wmOperator *op)
   ED_image_undo_push_end();
 
   /* force GPU reupload, all image is invalid */
-  GPU_free_image(ima);
+  BKE_image_free_gputextures(ima);
 
   WM_event_add_notifier(C, NC_IMAGE | NA_EDITED, ima);
 
@@ -2884,7 +2859,7 @@ static int image_scale_exec(bContext *C, wmOperator *op)
   ED_image_undo_push_end();
 
   /* force GPU reupload, all image is invalid */
-  GPU_free_image(ima);
+  BKE_image_free_gputextures(ima);
 
   DEG_id_tag_update(&ima->id, 0);
   WM_event_add_notifier(C, NC_IMAGE | NA_EDITED, ima);
@@ -2922,16 +2897,16 @@ static bool image_pack_test(bContext *C, wmOperator *op)
   Image *ima = image_from_context(C);
 
   if (!ima) {
-    return 0;
+    return false;
   }
 
   if (ELEM(ima->source, IMA_SRC_SEQUENCE, IMA_SRC_MOVIE, IMA_SRC_TILED)) {
     BKE_report(
         op->reports, RPT_ERROR, "Packing movies, image sequences or tiled images not supported");
-    return 0;
+    return false;
   }
 
-  return 1;
+  return true;
 }
 
 static int image_pack_exec(bContext *C, wmOperator *op)
@@ -3044,7 +3019,7 @@ static int image_unpack_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
   unpack_menu(C,
               "IMAGE_OT_unpack",
               ima->id.name + 2,
-              ima->name,
+              ima->filepath,
               "textures",
               BKE_image_has_packedfile(ima) ?
                   ((ImagePackedFile *)ima->packedfiles.first)->packedfile :
@@ -3714,32 +3689,19 @@ static bool do_fill_tile(PointerRNA *ptr, Image *ima, ImageTile *tile)
 
 static void draw_fill_tile(PointerRNA *ptr, uiLayout *layout)
 {
-  uiLayout *split, *col[2];
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
 
-  split = uiLayoutSplit(layout, 0.5f, false);
-  col[0] = uiLayoutColumn(split, false);
-  col[1] = uiLayoutColumn(split, false);
-
-  uiItemL(col[0], IFACE_("Color"), ICON_NONE);
-  uiItemR(col[1], ptr, "color", 0, "", ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Width"), ICON_NONE);
-  uiItemR(col[1], ptr, "width", 0, "", ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Height"), ICON_NONE);
-  uiItemR(col[1], ptr, "height", 0, "", ICON_NONE);
-
-  uiItemL(col[0], "", ICON_NONE);
-  uiItemR(col[1], ptr, "alpha", 0, NULL, ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Generated Type"), ICON_NONE);
-  uiItemR(col[1], ptr, "generated_type", 0, "", ICON_NONE);
-
-  uiItemL(col[0], "", ICON_NONE);
-  uiItemR(col[1], ptr, "float", 0, NULL, ICON_NONE);
+  uiLayout *col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "color", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "width", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "height", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "alpha", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "generated_type", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "float", 0, NULL, ICON_NONE);
 }
 
-static void initialize_fill_tile(PointerRNA *ptr, Image *ima, ImageTile *tile)
+static void tile_fill_init(PointerRNA *ptr, Image *ima, ImageTile *tile)
 {
   ImageUser iuser;
   BKE_imageuser_default(&iuser);
@@ -3852,36 +3814,30 @@ static int tile_add_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(ev
   }
 
   ImageTile *tile = BLI_findlink(&ima->tiles, ima->active_tile_index);
-  initialize_fill_tile(op->ptr, ima, tile);
+  tile_fill_init(op->ptr, ima, tile);
 
   RNA_int_set(op->ptr, "number", next_number);
   RNA_int_set(op->ptr, "count", 1);
   RNA_string_set(op->ptr, "label", "");
 
-  return WM_operator_props_dialog_popup(C, op, 10 * UI_UNIT_X);
+  return WM_operator_props_dialog_popup(C, op, 300);
 }
 
 static void tile_add_draw(bContext *UNUSED(C), wmOperator *op)
 {
-  uiLayout *split, *col[2];
+  uiLayout *col;
   uiLayout *layout = op->layout;
   PointerRNA ptr;
 
   RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
 
-  split = uiLayoutSplit(layout, 0.5f, false);
-  col[0] = uiLayoutColumn(split, false);
-  col[1] = uiLayoutColumn(split, false);
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
 
-  uiItemL(col[0], IFACE_("Number"), ICON_NONE);
-  uiItemR(col[1], &ptr, "number", 0, "", ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Count"), ICON_NONE);
-  uiItemR(col[1], &ptr, "count", 0, "", ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Label"), ICON_NONE);
-  uiItemR(col[1], &ptr, "label", 0, "", ICON_NONE);
-
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "number", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "count", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "label", 0, NULL, ICON_NONE);
   uiItemR(layout, &ptr, "fill", 0, NULL, ICON_NONE);
 
   if (RNA_boolean_get(&ptr, "fill")) {
@@ -3892,7 +3848,7 @@ static void tile_add_draw(bContext *UNUSED(C), wmOperator *op)
 void IMAGE_OT_tile_add(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Add tile";
+  ot->name = "Add Tile";
   ot->description = "Adds a tile to the image";
   ot->idname = "IMAGE_OT_tile_add";
 
@@ -3953,7 +3909,7 @@ static int tile_remove_exec(bContext *C, wmOperator *UNUSED(op))
 void IMAGE_OT_tile_remove(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Remove tile";
+  ot->name = "Remove Tile";
   ot->description = "Removes a tile from the image";
   ot->idname = "IMAGE_OT_tile_remove";
 
@@ -3998,9 +3954,9 @@ static int tile_fill_exec(bContext *C, wmOperator *op)
 
 static int tile_fill_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-  initialize_fill_tile(op->ptr, CTX_data_edit_image(C), NULL);
+  tile_fill_init(op->ptr, CTX_data_edit_image(C), NULL);
 
-  return WM_operator_props_dialog_popup(C, op, 15 * UI_UNIT_X);
+  return WM_operator_props_dialog_popup(C, op, 300);
 }
 
 static void tile_fill_draw(bContext *UNUSED(C), wmOperator *op)

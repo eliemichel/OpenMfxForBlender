@@ -92,7 +92,7 @@ static void gizmo_calc_rect_view_scale(const wmGizmo *gz, const float dims[3], f
 static void gizmo_calc_rect_view_margin(const wmGizmo *gz, const float dims[3], float margin[3])
 {
   const float handle_size = 0.15f;
-  // XXX, the scale isn't taking offset into account, we need to calculate scale per handle!
+  /* XXX, the scale isn't taking offset into account, we need to calculate scale per handle! */
   // handle_size *= gz->scale_final;
 
   float scale_xyz[3];
@@ -257,7 +257,7 @@ static void cage3d_draw_circle_handles(const RegionView3D *rv3d,
   immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
   immUniformColor3fv(color);
 
-  float sign[3] = {-1.0f, 0.0f, 1.0f};
+  const float sign[3] = {-1.0f, 0.0f, 1.0f};
   for (int x = 0; x < 3; x++) {
     for (int y = 0; y < 3; y++) {
       for (int z = 0; z < 3; z++) {
@@ -303,18 +303,18 @@ static void gizmo_cage3d_draw_intern(
 
   /* Handy for quick testing draw (if it's outside bounds). */
   if (false) {
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
     uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
     immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
     immUniformColor4fv((const float[4]){1, 1, 1, 0.5f});
     float s = 0.5f;
     immRectf(pos, -s, -s, s, s);
     immUnbindProgram();
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   if (select) {
-    /* expand for hotspot */
+    /* Expand for hot-spot. */
 #if 0
     const float size[3] = {
         size_real[0] + margin[0] / 2,
@@ -382,7 +382,7 @@ static void gizmo_cage3d_draw_intern(
       float color[4], black[3] = {0, 0, 0};
       gizmo_color_get(gz, highlight, color);
 
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
 
       cage3d_draw_circle_wire(
           size_real, margin, black, transform_flag, draw_options, gz->line_width + 3.0f);
@@ -395,7 +395,7 @@ static void gizmo_cage3d_draw_intern(
       cage3d_draw_circle_handles(rv3d, matrix_final, size_real, margin, color, true, 40);
       GPU_polygon_smooth(false);
 
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
     else {
       BLI_assert(0);
@@ -516,7 +516,7 @@ static int gizmo_cage3d_modal(bContext *C,
                               (point_local[2] - data->orig_mouse[2]);
   }
   else if (gz->highlight_part == ED_GIZMO_CAGE3D_PART_ROTATE) {
-    /* TODO (if needed) */
+    /* Add this (if we need it). */
   }
   else {
     /* scale */

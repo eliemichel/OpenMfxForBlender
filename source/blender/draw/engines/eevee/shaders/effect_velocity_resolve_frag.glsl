@@ -1,8 +1,13 @@
 
-uniform mat4 currPersinv;
-uniform mat4 pastPersmat;
+#pragma BLENDER_REQUIRE(common_math_lib.glsl)
 
-out vec2 outData;
+uniform sampler2D depthBuffer;
+
+uniform mat4 prevViewProjMatrix;
+uniform mat4 currViewProjMatrixInv;
+uniform mat4 nextViewProjMatrix;
+
+out vec4 outData;
 
 void main()
 {
@@ -12,13 +17,12 @@ void main()
 
   float depth = texelFetch(depthBuffer, texel, 0).r;
 
-  vec3 world_position = project_point(currPersinv, vec3(uv, depth) * 2.0 - 1.0);
-  vec2 uv_history = project_point(pastPersmat, world_position).xy * 0.5 + 0.5;
+  vec3 world_position = project_point(currViewProjMatrixInv, vec3(uv, depth) * 2.0 - 1.0);
+  vec2 uv_prev = project_point(prevViewProjMatrix, world_position).xy * 0.5 + 0.5;
+  vec2 uv_next = project_point(nextViewProjMatrix, world_position).xy * 0.5 + 0.5;
 
-  outData = uv - uv_history;
-
-  /* HACK: Reject lookdev spheres from TAA reprojection. */
-  outData = (depth > 0.0) ? outData : vec2(0.0);
+  outData.xy = uv_prev - uv;
+  outData.zw = uv_next - uv;
 
   /* Encode to unsigned normalized 16bit texture. */
   outData = outData * 0.5 + 0.5;

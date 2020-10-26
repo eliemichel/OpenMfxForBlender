@@ -22,6 +22,7 @@
 
 #include "libmv/logging/logging.h"
 #include "libmv/simple_pipeline/distortion_models.h"
+#include "libmv/simple_pipeline/packed_intrinsics.h"
 
 namespace libmv {
 
@@ -131,6 +132,22 @@ void CameraIntrinsics::ResetLookupGrids() {
   undistort_.Reset();
 }
 
+void CameraIntrinsics::Pack(PackedIntrinsics* packed_intrinsics) const {
+  packed_intrinsics->SetFocalLength(focal_length());
+  packed_intrinsics->SetPrincipalPoint(principal_point_x(),
+                                       principal_point_y());
+}
+
+void CameraIntrinsics::Unpack(const PackedIntrinsics& packed_intrinsics) {
+  SetFocalLength(packed_intrinsics.GetFocalLength(),
+                 packed_intrinsics.GetFocalLength());
+
+  SetPrincipalPoint(packed_intrinsics.GetPrincipalPointX(),
+                    packed_intrinsics.GetPrincipalPointY());
+}
+
+// Polynomial model.
+
 PolynomialCameraIntrinsics::PolynomialCameraIntrinsics()
     : CameraIntrinsics() {
   SetRadialDistortion(0.0, 0.0, 0.0);
@@ -193,6 +210,32 @@ void PolynomialCameraIntrinsics::InvertIntrinsics(
                                   normalized_y);
 }
 
+void PolynomialCameraIntrinsics::Pack(
+    PackedIntrinsics* packed_intrinsics) const {
+  CameraIntrinsics::Pack(packed_intrinsics);
+
+  packed_intrinsics->SetK1(k1());
+  packed_intrinsics->SetK2(k2());
+  packed_intrinsics->SetK3(k3());
+
+  packed_intrinsics->SetP1(p1());
+  packed_intrinsics->SetP2(p2());
+}
+
+void PolynomialCameraIntrinsics::Unpack(
+    const PackedIntrinsics& packed_intrinsics) {
+  CameraIntrinsics::Unpack(packed_intrinsics);
+
+  SetRadialDistortion(packed_intrinsics.GetK1(),
+                      packed_intrinsics.GetK2(),
+                      packed_intrinsics.GetK3());
+
+  SetTangentialDistortion(packed_intrinsics.GetP1(),
+                          packed_intrinsics.GetP2());
+}
+
+// Division model.
+
 DivisionCameraIntrinsics::DivisionCameraIntrinsics()
     : CameraIntrinsics() {
   SetDistortion(0.0, 0.0);
@@ -241,6 +284,179 @@ void DivisionCameraIntrinsics::InvertIntrinsics(double image_x,
                                 normalized_y);
 }
 
+void DivisionCameraIntrinsics::Pack(
+    PackedIntrinsics* packed_intrinsics) const {
+  CameraIntrinsics::Pack(packed_intrinsics);
+
+  packed_intrinsics->SetK1(k1());
+  packed_intrinsics->SetK2(k2());
+}
+
+void DivisionCameraIntrinsics::Unpack(
+    const PackedIntrinsics& packed_intrinsics) {
+  CameraIntrinsics::Unpack(packed_intrinsics);
+
+  SetDistortion(packed_intrinsics.GetK1(), packed_intrinsics.GetK2());
+}
+
+// Nuke model.
+
+NukeCameraIntrinsics::NukeCameraIntrinsics()
+    : CameraIntrinsics() {
+  SetDistortion(0.0, 0.0);
+}
+
+NukeCameraIntrinsics::NukeCameraIntrinsics(
+    const NukeCameraIntrinsics &from)
+    : CameraIntrinsics(from) {
+  SetDistortion(from.k1(), from.k2());
+}
+
+void NukeCameraIntrinsics::SetDistortion(double k1, double k2) {
+  parameters_[OFFSET_K1] = k1;
+  parameters_[OFFSET_K2] = k2;
+  ResetLookupGrids();
+}
+
+void NukeCameraIntrinsics::ApplyIntrinsics(double normalized_x,
+                                           double normalized_y,
+                                           double *image_x,
+                                           double *image_y) const {
+  ApplyNukeDistortionModel(focal_length_x(),
+                           focal_length_y(),
+                           principal_point_x(),
+                           principal_point_y(),
+                           image_width(), image_height(),
+                           k1(), k2(),
+                           normalized_x,
+                           normalized_y,
+                           image_x,
+                           image_y);
+}
+
+void NukeCameraIntrinsics::InvertIntrinsics(double image_x,
+                                                double image_y,
+                                                double *normalized_x,
+                                                double *normalized_y) const {
+  InvertNukeDistortionModel(focal_length_x(),
+                            focal_length_y(),
+                            principal_point_x(),
+                            principal_point_y(),
+                            image_width(), image_height(),
+                            k1(), k2(),
+                            image_x,
+                            image_y,
+                            normalized_x,
+                            normalized_y);
+}
+
+void NukeCameraIntrinsics::Pack(
+    PackedIntrinsics* packed_intrinsics) const {
+  CameraIntrinsics::Pack(packed_intrinsics);
+
+  packed_intrinsics->SetK1(k1());
+  packed_intrinsics->SetK2(k2());
+}
+
+void NukeCameraIntrinsics::Unpack(
+    const PackedIntrinsics& packed_intrinsics) {
+  CameraIntrinsics::Unpack(packed_intrinsics);
+
+  SetDistortion(packed_intrinsics.GetK1(), packed_intrinsics.GetK2());
+}
+
+// Brown model.
+
+BrownCameraIntrinsics::BrownCameraIntrinsics()
+    : CameraIntrinsics() {
+  SetRadialDistortion(0.0, 0.0, 0.0, 0.0);
+  SetTangentialDistortion(0.0, 0.0);
+}
+
+BrownCameraIntrinsics::BrownCameraIntrinsics(
+    const BrownCameraIntrinsics &from)
+    : CameraIntrinsics(from) {
+  SetRadialDistortion(from.k1(), from.k2(), from.k3(), from.k4());
+  SetTangentialDistortion(from.p1(), from.p2());
+}
+
+void BrownCameraIntrinsics::SetRadialDistortion(double k1,
+                                                double k2,
+                                                double k3,
+                                                double k4) {
+  parameters_[OFFSET_K1] = k1;
+  parameters_[OFFSET_K2] = k2;
+  parameters_[OFFSET_K3] = k3;
+  parameters_[OFFSET_K4] = k4;
+  ResetLookupGrids();
+}
+
+void BrownCameraIntrinsics::SetTangentialDistortion(double p1,
+                                                    double p2) {
+  parameters_[OFFSET_P1] = p1;
+  parameters_[OFFSET_P2] = p2;
+  ResetLookupGrids();
+}
+
+void BrownCameraIntrinsics::ApplyIntrinsics(double normalized_x,
+                                            double normalized_y,
+                                            double *image_x,
+                                            double *image_y) const {
+  ApplyBrownDistortionModel(focal_length_x(),
+                            focal_length_y(),
+                            principal_point_x(),
+                            principal_point_y(),
+                            k1(), k2(), k3(), k4(),
+                            p1(), p2(),
+                            normalized_x,
+                            normalized_y,
+                            image_x,
+                            image_y);
+}
+
+void BrownCameraIntrinsics::InvertIntrinsics(
+    double image_x,
+    double image_y,
+    double *normalized_x,
+    double *normalized_y) const {
+  InvertBrownDistortionModel(focal_length_x(),
+                             focal_length_y(),
+                             principal_point_x(),
+                             principal_point_y(),
+                             k1(), k2(), k3(), k4(),
+                             p1(), p2(),
+                             image_x,
+                             image_y,
+                             normalized_x,
+                             normalized_y);
+}
+
+void BrownCameraIntrinsics::Pack(
+    PackedIntrinsics* packed_intrinsics) const {
+  CameraIntrinsics::Pack(packed_intrinsics);
+
+  packed_intrinsics->SetK1(k1());
+  packed_intrinsics->SetK2(k2());
+  packed_intrinsics->SetK3(k3());
+  packed_intrinsics->SetK4(k4());
+
+  packed_intrinsics->SetP1(p1());
+  packed_intrinsics->SetP2(p2());
+}
+
+void BrownCameraIntrinsics::Unpack(
+    const PackedIntrinsics& packed_intrinsics) {
+  CameraIntrinsics::Unpack(packed_intrinsics);
+
+  SetRadialDistortion(packed_intrinsics.GetK1(),
+                      packed_intrinsics.GetK2(),
+                      packed_intrinsics.GetK3(),
+                      packed_intrinsics.GetK4());
+
+  SetTangentialDistortion(packed_intrinsics.GetP1(),
+                          packed_intrinsics.GetP2());
+}
+
 std::ostream& operator <<(std::ostream &os,
                           const CameraIntrinsics &intrinsics) {
   if (intrinsics.focal_length_x() == intrinsics.focal_length_x()) {
@@ -279,6 +495,26 @@ std::ostream& operator <<(std::ostream &os,
             static_cast<const DivisionCameraIntrinsics *>(&intrinsics);
         PRINT_NONZERO_COEFFICIENT(division_intrinsics, k1);
         PRINT_NONZERO_COEFFICIENT(division_intrinsics, k2);
+        break;
+      }
+    case DISTORTION_MODEL_NUKE:
+      {
+        const NukeCameraIntrinsics *nuke_intrinsics =
+            static_cast<const NukeCameraIntrinsics *>(&intrinsics);
+        PRINT_NONZERO_COEFFICIENT(nuke_intrinsics, k1);
+        PRINT_NONZERO_COEFFICIENT(nuke_intrinsics, k2);
+        break;
+      }
+    case DISTORTION_MODEL_BROWN:
+      {
+        const BrownCameraIntrinsics *brown_intrinsics =
+            static_cast<const BrownCameraIntrinsics *>(&intrinsics);
+        PRINT_NONZERO_COEFFICIENT(brown_intrinsics, k1);
+        PRINT_NONZERO_COEFFICIENT(brown_intrinsics, k2);
+        PRINT_NONZERO_COEFFICIENT(brown_intrinsics, k3);
+        PRINT_NONZERO_COEFFICIENT(brown_intrinsics, k4);
+        PRINT_NONZERO_COEFFICIENT(brown_intrinsics, p1);
+        PRINT_NONZERO_COEFFICIENT(brown_intrinsics, p2);
         break;
       }
     default:

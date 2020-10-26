@@ -238,12 +238,11 @@ static void select_editlattice_hook(Object *obedit, HookModifierData *hmd)
 static int return_editcurve_indexar(Object *obedit, int *r_tot, int **r_indexar, float r_cent[3])
 {
   ListBase *editnurb = object_editcurve_get(obedit);
-  Nurb *nu;
   BPoint *bp;
   BezTriple *bezt;
   int *index, a, nr, totvert = 0;
 
-  for (nu = editnurb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, editnurb) {
     if (nu->type == CU_BEZIER) {
       bezt = nu->bezt;
       a = nu->pntsu;
@@ -280,7 +279,7 @@ static int return_editcurve_indexar(Object *obedit, int *r_tot, int **r_indexar,
   nr = 0;
   zero_v3(r_cent);
 
-  for (nu = editnurb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, editnurb) {
     if (nu->type == CU_BEZIER) {
       bezt = nu->bezt;
       a = nu->pntsu;
@@ -377,12 +376,11 @@ static bool object_hook_index_array(Main *bmain,
 static void select_editcurve_hook(Object *obedit, HookModifierData *hmd)
 {
   ListBase *editnurb = object_editcurve_get(obedit);
-  Nurb *nu;
   BPoint *bp;
   BezTriple *bezt;
   int index = 0, a, nr = 0;
 
-  for (nu = editnurb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, editnurb) {
     if (nu->type == CU_BEZIER) {
       bezt = nu->bezt;
       a = nu->pntsu;
@@ -482,27 +480,26 @@ static bool hook_op_edit_poll(bContext *C)
 
   if (obedit) {
     if (ED_operator_editmesh(C)) {
-      return 1;
+      return true;
     }
     if (ED_operator_editsurfcurve(C)) {
-      return 1;
+      return true;
     }
     if (ED_operator_editlattice(C)) {
-      return 1;
+      return true;
     }
-    // if (ED_operator_editmball(C)) return 1;
+    // if (ED_operator_editmball(C)) return true;
   }
 
-  return 0;
+  return false;
 }
 
-static Object *add_hook_object_new(
-    Main *bmain, Scene *scene, ViewLayer *view_layer, View3D *v3d, Object *obedit)
+static Object *add_hook_object_new(Main *bmain, ViewLayer *view_layer, View3D *v3d, Object *obedit)
 {
   Base *basedit;
   Object *ob;
 
-  ob = BKE_object_add(bmain, scene, view_layer, OB_EMPTY, NULL);
+  ob = BKE_object_add(bmain, view_layer, OB_EMPTY, NULL);
 
   basedit = BKE_view_layer_base_find(view_layer, obedit);
   BLI_assert(view_layer->basact->object == ob);
@@ -545,21 +542,21 @@ static int add_hook_object(const bContext *C,
 
   if (mode == OBJECT_ADDHOOK_NEWOB && !ob) {
 
-    ob = add_hook_object_new(bmain, scene, view_layer, v3d, obedit);
+    ob = add_hook_object_new(bmain, view_layer, v3d, obedit);
 
     /* transform cent to global coords for loc */
     mul_v3_m4v3(ob->loc, obedit->obmat, cent);
   }
 
   md = obedit->modifiers.first;
-  while (md && modifierType_getInfo(md->type)->type == eModifierTypeType_OnlyDeform) {
+  while (md && BKE_modifier_get_info(md->type)->type == eModifierTypeType_OnlyDeform) {
     md = md->next;
   }
 
-  hmd = (HookModifierData *)modifier_new(eModifierType_Hook);
+  hmd = (HookModifierData *)BKE_modifier_new(eModifierType_Hook);
   BLI_insertlinkbefore(&obedit->modifiers, md, hmd);
   BLI_snprintf(hmd->modifier.name, sizeof(hmd->modifier.name), "Hook-%s", ob->id.name + 2);
-  modifier_unique_name(&obedit->modifiers, (ModifierData *)hmd);
+  BKE_modifier_unique_name(&obedit->modifiers, (ModifierData *)hmd);
 
   hmd->object = ob;
   hmd->indexar = indexar;
@@ -649,9 +646,7 @@ static int object_add_hook_selob_exec(bContext *C, wmOperator *op)
     WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, obedit);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void OBJECT_OT_hook_add_selob(wmOperatorType *ot)
@@ -690,9 +685,7 @@ static int object_add_hook_newob_exec(bContext *C, wmOperator *op)
     WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, obedit);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void OBJECT_OT_hook_add_newob(wmOperatorType *ot)
@@ -725,7 +718,7 @@ static int object_hook_remove_exec(bContext *C, wmOperator *op)
   /* remove functionality */
 
   BLI_remlink(&ob->modifiers, (ModifierData *)hmd);
-  modifier_free((ModifierData *)hmd);
+  BKE_modifier_free((ModifierData *)hmd);
 
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);

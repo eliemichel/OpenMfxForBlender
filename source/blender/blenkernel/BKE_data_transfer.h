@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
@@ -21,14 +21,13 @@
  * \ingroup bke
  */
 
-#ifndef __BKE_DATA_TRANSFER_H__
-#define __BKE_DATA_TRANSFER_H__
+#pragma once
+
+#include "BKE_customdata.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BKE_customdata.h"
 
 struct Depsgraph;
 struct Object;
@@ -181,5 +180,3 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_DATA_TRANSFER_H__ */

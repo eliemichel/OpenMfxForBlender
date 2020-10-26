@@ -130,7 +130,7 @@ static float edbm_rip_edge_side_measure(
    * from edge midpoint to face center.  offset edge midpoint
    * by a small amount along this vector. */
 
-  /* rather then the face center, get the middle of
+  /* rather than the face center, get the middle of
    * both edge verts connected to this one */
   v1_other = BM_face_other_vert_loop(e_l->f, e->v2, e->v1)->v;
   v2_other = BM_face_other_vert_loop(e_l->f, e->v1, e->v2)->v;
@@ -146,7 +146,7 @@ static float edbm_rip_edge_side_measure(
   sub_v2_v2v2(vec, cent, mid);
   normalize_v2_length(vec, 0.01f);
 
-  /* rather then adding to both verts, subtract from the mouse */
+  /* rather than adding to both verts, subtract from the mouse */
   sub_v2_v2v2(fmval_tweak, fmval, vec);
 
   score = len_v2v2(e_v1_co, e_v2_co);
@@ -155,9 +155,7 @@ static float edbm_rip_edge_side_measure(
       dist_squared_to_line_segment_v2(fmval, e_v1_co, e_v2_co)) {
     return score;
   }
-  else {
-    return -score;
-  }
+  return -score;
 }
 
 /* - Advanced selection handling 'ripsel' functions ----- */
@@ -345,8 +343,11 @@ static BMVert *edbm_ripsel_edloop_pair_start_vert(BMEdge *e)
   return (edbm_ripsel_edge_uid_step(e, &v_test)) ? e->v1 : e->v2;
 }
 
-static void edbm_ripsel_deselect_helper(
-    BMesh *bm, EdgeLoopPair *eloop_pairs, ARegion *region, float projectMat[4][4], float fmval[2])
+static void edbm_ripsel_deselect_helper(BMesh *bm,
+                                        EdgeLoopPair *eloop_pairs,
+                                        ARegion *region,
+                                        float projectMat[4][4],
+                                        const float fmval[2])
 {
   EdgeLoopPair *lp;
 
@@ -433,9 +434,7 @@ static UnorderedLoopPair *edbm_tagged_loop_pairs_to_fill(BMesh *bm)
 
     return uloop_pairs;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 static void edbm_tagged_loop_pairs_do_fill_faces(BMesh *bm, UnorderedLoopPair *uloop_pairs)
@@ -658,89 +657,88 @@ static int edbm_rip_invoke__vert(bContext *C, const wmEvent *event, Object *obed
       /* should never happen */
       return OPERATOR_CANCELLED;
     }
-    else {
-      int vi_best = 0;
 
-      if (ese.ele) {
-        BM_select_history_remove(bm, ese.ele);
-      }
+    int vi_best = 0;
 
-      dist_sq = FLT_MAX;
-
-      /* in the loop below we find the best vertex to drag based on its connected geometry,
-       * either by its face corner, or connected edge (when no faces are attached) */
-      for (i = 0; i < vout_len; i++) {
-
-        if (BM_vert_is_wire(vout[i]) == false) {
-          /* find the best face corner */
-          BM_ITER_ELEM (l, &iter, vout[i], BM_LOOPS_OF_VERT) {
-            if (!BM_elem_flag_test(l->f, BM_ELEM_HIDDEN)) {
-              float l_mid_co[3];
-
-              edbm_calc_loop_co(l, l_mid_co);
-              d = edbm_rip_edgedist_squared(
-                  region, projectMat, v->co, l_mid_co, fmval, INSET_DEFAULT);
-
-              if (d < dist_sq) {
-                dist_sq = d;
-                vi_best = i;
-              }
-            }
-          }
-        }
-        else {
-          BMEdge *e;
-          /* a wire vert, find the best edge */
-          BM_ITER_ELEM (e, &iter, vout[i], BM_EDGES_OF_VERT) {
-            if (!BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
-              float e_mid_co[3];
-
-              mid_v3_v3v3(e_mid_co, e->v1->co, e->v2->co);
-              d = edbm_rip_edgedist_squared(
-                  region, projectMat, v->co, e_mid_co, fmval, INSET_DEFAULT);
-
-              if (d < dist_sq) {
-                dist_sq = d;
-                vi_best = i;
-              }
-            }
-          }
-        }
-      }
-
-      /* vout[0]  == best
-       * vout[1]  == glue
-       * vout[2+] == splice with glue (when vout_len > 2)
-       */
-      if (vi_best != 0) {
-        SWAP(BMVert *, vout[0], vout[vi_best]);
-        vi_best = 0;
-      }
-
-      /* select the vert from the best region */
-      v = vout[vi_best];
-      BM_vert_select_set(bm, v, true);
-
-      if (ese.ele) {
-        BM_select_history_store(bm, v);
-      }
-
-      /* splice all others back together */
-      if (vout_len > 2) {
-        for (i = 2; i < vout_len; i++) {
-          BM_vert_splice(bm, vout[1], vout[i]);
-        }
-      }
-
-      if (do_fill) {
-        /* match extrude vert-order */
-        BM_edge_create(bm, vout[1], vout[0], NULL, BM_CREATE_NOP);
-      }
-
-      MEM_freeN(vout);
-
-      return OPERATOR_FINISHED;
+    if (ese.ele) {
+      BM_select_history_remove(bm, ese.ele);
     }
+
+    dist_sq = FLT_MAX;
+
+    /* in the loop below we find the best vertex to drag based on its connected geometry,
+     * either by its face corner, or connected edge (when no faces are attached) */
+    for (i = 0; i < vout_len; i++) {
+
+      if (BM_vert_is_wire(vout[i]) == false) {
+        /* find the best face corner */
+        BM_ITER_ELEM (l, &iter, vout[i], BM_LOOPS_OF_VERT) {
+          if (!BM_elem_flag_test(l->f, BM_ELEM_HIDDEN)) {
+            float l_mid_co[3];
+
+            edbm_calc_loop_co(l, l_mid_co);
+            d = edbm_rip_edgedist_squared(
+                region, projectMat, v->co, l_mid_co, fmval, INSET_DEFAULT);
+
+            if (d < dist_sq) {
+              dist_sq = d;
+              vi_best = i;
+            }
+          }
+        }
+      }
+      else {
+        BMEdge *e;
+        /* a wire vert, find the best edge */
+        BM_ITER_ELEM (e, &iter, vout[i], BM_EDGES_OF_VERT) {
+          if (!BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
+            float e_mid_co[3];
+
+            mid_v3_v3v3(e_mid_co, e->v1->co, e->v2->co);
+            d = edbm_rip_edgedist_squared(
+                region, projectMat, v->co, e_mid_co, fmval, INSET_DEFAULT);
+
+            if (d < dist_sq) {
+              dist_sq = d;
+              vi_best = i;
+            }
+          }
+        }
+      }
+    }
+
+    /* vout[0]  == best
+     * vout[1]  == glue
+     * vout[2+] == splice with glue (when vout_len > 2)
+     */
+    if (vi_best != 0) {
+      SWAP(BMVert *, vout[0], vout[vi_best]);
+      vi_best = 0;
+    }
+
+    /* select the vert from the best region */
+    v = vout[vi_best];
+    BM_vert_select_set(bm, v, true);
+
+    if (ese.ele) {
+      BM_select_history_store(bm, v);
+    }
+
+    /* splice all others back together */
+    if (vout_len > 2) {
+      for (i = 2; i < vout_len; i++) {
+        BM_vert_splice(bm, vout[1], vout[i]);
+      }
+    }
+
+    if (do_fill) {
+      /* match extrude vert-order */
+      BM_edge_create(bm, vout[1], vout[0], NULL, BM_CREATE_NOP);
+    }
+
+    MEM_freeN(vout);
+
+    return OPERATOR_FINISHED;
   }
 
   if (!e_best) {
@@ -906,7 +904,7 @@ static int edbm_rip_invoke__edge(bContext *C, const wmEvent *event, Object *obed
     BM_ITER_ELEM (e, &eiter, v, BM_EDGES_OF_VERT) {
 
       if (!BM_edge_is_wire(e) && !BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
-        /* important to check selection rather then tag here
+        /* important to check selection rather than tag here
          * else we get feedback loop */
         if (BM_elem_flag_test(e, BM_ELEM_SELECT)) {
           e_best = e;
@@ -1044,7 +1042,7 @@ static int edbm_rip_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     error_disconnected_vertices = false;
 
     /* note on selection:
-     * When calling edge split we operate on tagged edges rather then selected
+     * When calling edge split we operate on tagged edges rather than selected
      * this is important because the edges to operate on are extended by one,
      * but the selection is left alone.
      *
@@ -1052,6 +1050,8 @@ static int edbm_rip_invoke(bContext *C, wmOperator *op, const wmEvent *event)
      * original, so all we do is de-select the far side from the mouse and we have a
      * useful selection for grabbing.
      */
+
+    BM_custom_loop_normals_to_vector_layer(bm);
 
     /* BM_ELEM_SELECT --> BM_ELEM_TAG */
     BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
@@ -1070,6 +1070,8 @@ static int edbm_rip_invoke(bContext *C, wmOperator *op, const wmEvent *event)
       continue;
     }
 
+    BM_custom_loop_normals_from_vector_layer(bm, false);
+
     BLI_assert(singlesel ? (bm->totvertsel > 0) : (bm->totedgesel > 0));
 
     if (bm->totvertsel == 0) {
@@ -1086,15 +1088,15 @@ static int edbm_rip_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     /* Ignore it. */
     return OPERATOR_CANCELLED;
   }
-  else if (error_face_selected) {
+  if (error_face_selected) {
     BKE_report(op->reports, RPT_ERROR, "Cannot rip selected faces");
     return OPERATOR_CANCELLED;
   }
-  else if (error_disconnected_vertices) {
+  if (error_disconnected_vertices) {
     BKE_report(op->reports, RPT_ERROR, "Cannot rip multiple disconnected vertices");
     return OPERATOR_CANCELLED;
   }
-  else if (error_rip_failed) {
+  if (error_rip_failed) {
     BKE_report(op->reports, RPT_ERROR, "Rip failed");
     return OPERATOR_CANCELLED;
   }

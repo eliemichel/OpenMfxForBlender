@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_ERROR_H__
-#define __BMESH_ERROR_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -72,7 +71,7 @@ enum {
 #  define _BMESH_DUMMY_ABORT() (void)0
 #endif
 
-/* this is meant to be higher level then BLI_assert(),
+/* this is meant to be higher level than BLI_assert(),
  * its enabled even when in Release mode*/
 #define BMESH_ASSERT(a) \
   (void)((!(a)) ? ((fprintf(stderr, \
@@ -84,5 +83,3 @@ enum {
                     _BMESH_DUMMY_ABORT(), \
                     NULL)) : \
                   NULL)
-
-#endif /* __BMESH_ERROR_H__ */

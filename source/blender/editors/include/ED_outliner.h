@@ -20,17 +20,16 @@
  * \ingroup editors
  */
 
-#ifndef __ED_OUTLINER_H__
-#define __ED_OUTLINER_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct ListBase;
-struct bContext;
 struct Base;
+struct ListBase;
 struct SpaceOutliner;
+struct bContext;
 
 bool ED_outliner_collections_editor_poll(struct bContext *C);
 
@@ -46,12 +45,11 @@ void ED_outliner_select_sync_from_all_tag(struct bContext *C);
 
 bool ED_outliner_select_sync_is_dirty(const struct bContext *C);
 
-void ED_outliner_select_sync_from_outliner(struct bContext *C, struct SpaceOutliner *soops);
+void ED_outliner_select_sync_from_outliner(struct bContext *C,
+                                           struct SpaceOutliner *space_outliner);
 
 void ED_outliner_select_sync_flag_outliners(const struct bContext *C);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /*  __ED_OUTLINER_H__ */

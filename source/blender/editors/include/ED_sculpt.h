@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_SCULPT_H__
-#define __ED_SCULPT_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,6 +53,14 @@ void ED_sculpt_undosys_type(struct UndoType *ut);
 void ED_sculpt_undo_geometry_begin(struct Object *ob, const char *name);
 void ED_sculpt_undo_geometry_end(struct Object *ob);
 
+/* Face sets. */
+int ED_sculpt_face_sets_find_next_available_id(struct Mesh *mesh);
+void ED_sculpt_face_sets_initialize_none_to_id(struct Mesh *mesh, const int new_id);
+
+int ED_sculpt_face_sets_active_update_and_get(struct bContext *C,
+                                              struct Object *ob,
+                                              const float mval[2]);
+
 /* Undo for changes happening on a base mesh for multires sculpting.
  * if there is no multires sculpt active regular undo is used. */
 void ED_sculpt_undo_push_multires_mesh_begin(struct bContext *C, const char *str);
@@ -62,5 +69,3 @@ void ED_sculpt_undo_push_multires_mesh_end(struct bContext *C, const char *str);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_SCULPT_H__ */

@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) Blender Foundation.
  * All rights reserved.
  */
-#ifndef __BKE_CLOTH_H__
-#define __BKE_CLOTH_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -93,9 +92,10 @@ typedef struct Cloth {
   struct Implicit_Data *implicit; /* our implicit solver connects to this pointer */
   struct EdgeSet *edgeset;        /* used for selfcollisions */
   int last_frame;
-  float initial_mesh_volume;    /* Initial volume of the mesh. Used for pressure */
-  struct MEdge *edges;          /* Used for hair collisions. */
-  struct GHash *sew_edge_graph; /* Sewing edges represented using a GHash */
+  float initial_mesh_volume;      /* Initial volume of the mesh. Used for pressure */
+  float average_acceleration[3];  /* Moving average of overall acceleration. */
+  struct MEdge *edges;            /* Used for hair collisions. */
+  struct EdgeSet *sew_edge_graph; /* Sewing edges represented using a GHash */
 } Cloth;
 
 /**
@@ -193,47 +193,6 @@ typedef struct ClothSpring {
   } \
   ((void)0)
 
-/* SIMULATION FLAGS: goal flags,.. */
-/* These are the bits used in SimSettings.flags. */
-typedef enum {
-  /** Object is only collision object, no cloth simulation is done. */
-  CLOTH_SIMSETTINGS_FLAG_COLLOBJ = (1 << 2),
-  /** DEPRECATED, for versioning only. */
-  CLOTH_SIMSETTINGS_FLAG_GOAL = (1 << 3),
-  /** True if tearing is enabled. */
-  CLOTH_SIMSETTINGS_FLAG_TEARING = (1 << 4),
-  /** True if pressure sim is enabled. */
-  CLOTH_SIMSETTINGS_FLAG_PRESSURE = (1 << 5),
-  /** Use the user defined target volume. */
-  CLOTH_SIMSETTINGS_FLAG_PRESSURE_VOL = (1 << 6),
-  /** True if internal spring generation is enabled. */
-  CLOTH_SIMSETTINGS_FLAG_INTERNAL_SPRINGS = (1 << 7),
-  /** DEPRECATED, for versioning only. */
-  CLOTH_SIMSETTINGS_FLAG_SCALING = (1 << 8),
-  /** Require internal springs to be created between points with opposite normals. */
-  CLOTH_SIMSETTINGS_FLAG_INTERNAL_SPRINGS_NORMAL = (1 << 9),
-  /** Edit cache in edit-mode. */
-  /* CLOTH_SIMSETTINGS_FLAG_CCACHE_EDIT = (1 << 12), */ /* UNUSED */
-  /** Don't allow spring compression. */
-  CLOTH_SIMSETTINGS_FLAG_RESIST_SPRING_COMPRESS = (1 << 13),
-  /** Pull ends of loose edges together. */
-  CLOTH_SIMSETTINGS_FLAG_SEW = (1 << 14),
-  /** Make simulation respect deformations in the base object. */
-  CLOTH_SIMSETTINGS_FLAG_DYNAMIC_BASEMESH = (1 << 15),
-} CLOTH_SIMSETTINGS_FLAGS;
-
-/* ClothSimSettings.bending_model. */
-typedef enum {
-  CLOTH_BENDING_LINEAR = 0,
-  CLOTH_BENDING_ANGULAR = 1,
-} CLOTH_BENDING_MODEL;
-
-/* COLLISION FLAGS */
-typedef enum {
-  CLOTH_COLLSETTINGS_FLAG_ENABLED = (1 << 1), /* enables cloth - object collisions */
-  CLOTH_COLLSETTINGS_FLAG_SELF = (1 << 2),    /* enables selfcollisions */
-} CLOTH_COLLISIONSETTINGS_FLAGS;
-
 /* Spring types as defined in the paper.*/
 typedef enum {
   CLOTH_SPRING_TYPE_STRUCTURAL = (1 << 1),
@@ -281,7 +240,6 @@ int cloth_bvh_collision(struct Depsgraph *depsgraph,
 // needed for modifier.c
 void cloth_free_modifier_extern(struct ClothModifierData *clmd);
 void cloth_free_modifier(struct ClothModifierData *clmd);
-void cloth_init(struct ClothModifierData *clmd);
 void clothModifier_do(struct ClothModifierData *clmd,
                       struct Depsgraph *depsgraph,
                       struct Scene *scene,
@@ -305,6 +263,4 @@ void cloth_parallel_transport_hair_frame(float mat[3][3],
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

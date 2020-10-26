@@ -32,7 +32,8 @@
 #include "BKE_action.h"
 #include "BKE_object.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 ObjectRuntimeBackup::ObjectRuntimeBackup(const Depsgraph * /*depsgraph*/)
     : base_flag(0), base_local_view_bits(0)
@@ -61,21 +62,18 @@ void ObjectRuntimeBackup::init_from_object(Object *object)
   backup_pose_channel_runtime_data(object);
 }
 
-inline ModifierDataBackupID create_modifier_data_id(const ModifierData *modifier_data)
-{
-  return ModifierDataBackupID(modifier_data->orig_modifier_data,
-                              static_cast<ModifierType>(modifier_data->type));
-}
-
 void ObjectRuntimeBackup::backup_modifier_runtime_data(Object *object)
 {
   LISTBASE_FOREACH (ModifierData *, modifier_data, &object->modifiers) {
     if (modifier_data->runtime == nullptr) {
       continue;
     }
+
+    const SessionUUID &session_uuid = modifier_data->session_uuid;
+    BLI_assert(BLI_session_uuid_is_generated(&session_uuid));
+
     BLI_assert(modifier_data->orig_modifier_data != nullptr);
-    ModifierDataBackupID modifier_data_id = create_modifier_data_id(modifier_data);
-    modifier_runtime_data.insert(make_pair(modifier_data_id, modifier_data->runtime));
+    modifier_runtime_data.add(session_uuid, ModifierDataBackup(modifier_data));
     modifier_data->runtime = nullptr;
   }
 }
@@ -84,11 +82,11 @@ void ObjectRuntimeBackup::backup_pose_channel_runtime_data(Object *object)
 {
   if (object->pose != nullptr) {
     LISTBASE_FOREACH (bPoseChannel *, pchan, &object->pose->chanbase) {
-      /* This is nullptr in Edit mode. */
-      if (pchan->orig_pchan != nullptr) {
-        pose_channel_runtime_data[pchan->orig_pchan] = pchan->runtime;
-        BKE_pose_channel_runtime_reset(&pchan->runtime);
-      }
+      const SessionUUID &session_uuid = pchan->runtime.session_uuid;
+      BLI_assert(BLI_session_uuid_is_generated(&session_uuid));
+
+      pose_channel_runtime_data.add(session_uuid, pchan->runtime);
+      BKE_pose_channel_runtime_reset(&pchan->runtime);
     }
   }
 }
@@ -152,23 +150,17 @@ void ObjectRuntimeBackup::restore_modifier_runtime_data(Object *object)
 {
   LISTBASE_FOREACH (ModifierData *, modifier_data, &object->modifiers) {
     BLI_assert(modifier_data->orig_modifier_data != nullptr);
-    ModifierDataBackupID modifier_data_id = create_modifier_data_id(modifier_data);
-    ModifierRuntimeDataBackup::iterator runtime_data_iterator = modifier_runtime_data.find(
-        modifier_data_id);
-    if (runtime_data_iterator != modifier_runtime_data.end()) {
-      modifier_data->runtime = runtime_data_iterator->second;
-      runtime_data_iterator->second = nullptr;
+    const SessionUUID &session_uuid = modifier_data->session_uuid;
+    optional<ModifierDataBackup> backup = modifier_runtime_data.pop_try(session_uuid);
+    if (backup.has_value()) {
+      modifier_data->runtime = backup->runtime;
     }
   }
-  for (ModifierRuntimeDataBackup::value_type value : modifier_runtime_data) {
-    const ModifierDataBackupID modifier_data_id = value.first;
-    void *runtime = value.second;
-    if (value.second == nullptr) {
-      continue;
-    }
-    const ModifierTypeInfo *modifier_type_info = modifierType_getInfo(modifier_data_id.type);
+
+  for (ModifierDataBackup &backup : modifier_runtime_data.values()) {
+    const ModifierTypeInfo *modifier_type_info = BKE_modifier_get_info(backup.type);
     BLI_assert(modifier_type_info != nullptr);
-    modifier_type_info->freeRuntimeData(runtime);
+    modifier_type_info->freeRuntimeData(backup.runtime);
   }
 }
 
@@ -176,20 +168,17 @@ void ObjectRuntimeBackup::restore_pose_channel_runtime_data(Object *object)
 {
   if (object->pose != nullptr) {
     LISTBASE_FOREACH (bPoseChannel *, pchan, &object->pose->chanbase) {
-      /* This is nullptr in Edit mode. */
-      if (pchan->orig_pchan != nullptr) {
-        PoseChannelRuntimeDataBackup::iterator runtime_data_iterator =
-            pose_channel_runtime_data.find(pchan->orig_pchan);
-        if (runtime_data_iterator != pose_channel_runtime_data.end()) {
-          pchan->runtime = runtime_data_iterator->second;
-          pose_channel_runtime_data.erase(runtime_data_iterator);
-        }
+      const SessionUUID &session_uuid = pchan->runtime.session_uuid;
+      optional<bPoseChannel_Runtime> runtime = pose_channel_runtime_data.pop_try(session_uuid);
+      if (runtime.has_value()) {
+        pchan->runtime = *runtime;
       }
     }
   }
-  for (PoseChannelRuntimeDataBackup::value_type &value : pose_channel_runtime_data) {
-    BKE_pose_channel_runtime_free(&value.second);
+  for (bPoseChannel_Runtime &runtime : pose_channel_runtime_data.values()) {
+    BKE_pose_channel_runtime_free(&runtime);
   }
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

@@ -30,10 +30,14 @@
 
 #include "BKE_context.h"
 #include "BKE_mask.h"
-#include "BKE_report.h"
 
 #include "ED_clip.h"
+#include "ED_image.h"
+#include "ED_keyframing.h"
 #include "ED_mask.h"
+
+#include "WM_api.h"
+#include "WM_types.h"
 
 #include "transform.h"
 #include "transform_convert.h"
@@ -134,18 +138,17 @@ static void MaskPointToTransData(Scene *scene,
   invert_m3_m3(parent_inverse_matrix, parent_matrix);
 
   if (is_prop_edit || is_sel_point) {
-    int i;
 
     tdm->point = point;
     copy_m3_m3(tdm->vec, bezt->vec);
 
-    for (i = 0; i < 3; i++) {
+    for (int i = 0; i < 3; i++) {
       copy_m3_m3(tdm->parent_matrix, parent_matrix);
       copy_m3_m3(tdm->parent_inverse_matrix, parent_inverse_matrix);
 
       /* CV coords are scaled by aspects. this is needed for rotations and
        * proportional editing to be consistent with the stretched CV coords
-       * that are displayed. this also means that for display and numinput,
+       * that are displayed. this also means that for display and number-input,
        * and when the CV coords are flushed, these are converted each time */
       mul_v2_m3v2(td2d->loc, parent_matrix, bezt->vec[i]);
       td2d->loc[0] *= asp[0];
@@ -396,11 +399,11 @@ void createTransMaskingData(bContext *C, TransInfo *t)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Masking Transform Flush
+/** \name Recalc TransData Masking
  *
  * \{ */
 
-void flushTransMasking(TransInfo *t)
+static void flushTransMasking(TransInfo *t)
 {
   TransData2D *td;
   TransDataMasking *tdm;
@@ -435,6 +438,57 @@ void flushTransMasking(TransInfo *t)
       else if (tdm->which_handle == MASK_WHICH_HANDLE_RIGHT) {
         tdm->point->bezt.h2 = tdm->orig_handle_type;
       }
+    }
+  }
+}
+
+void recalcData_mask_common(TransInfo *t)
+{
+  Mask *mask = CTX_data_edit_mask(t->context);
+
+  flushTransMasking(t);
+
+  DEG_id_tag_update(&mask->id, 0);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Special After Transform Mask
+ * \{ */
+
+void special_aftertrans_update__mask(bContext *C, TransInfo *t)
+{
+  Mask *mask = NULL;
+
+  if (t->spacetype == SPACE_CLIP) {
+    SpaceClip *sc = t->area->spacedata.first;
+    mask = ED_space_clip_get_mask(sc);
+  }
+  else if (t->spacetype == SPACE_IMAGE) {
+    SpaceImage *sima = t->area->spacedata.first;
+    mask = ED_space_image_get_mask(sima);
+  }
+  else {
+    BLI_assert(0);
+  }
+
+  if (t->scene->nodetree) {
+    /* tracks can be used for stabilization nodes,
+     * flush update for such nodes */
+    // if (nodeUpdateID(t->scene->nodetree, &mask->id))
+    {
+      WM_event_add_notifier(C, NC_MASK | ND_DATA, &mask->id);
+    }
+  }
+
+  /* TODO - dont key all masks... */
+  if (IS_AUTOKEY_ON(t->scene)) {
+    Scene *scene = t->scene;
+
+    if (ED_mask_layer_shape_auto_key_select(mask, CFRA)) {
+      WM_event_add_notifier(C, NC_MASK | ND_DATA, &mask->id);
+      DEG_id_tag_update(&mask->id, 0);
     }
   }
 }

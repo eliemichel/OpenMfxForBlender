@@ -74,7 +74,7 @@ namespace Freestyle {
 
 Controller::Controller()
 {
-  const string sep(Config::DIR_SEP.c_str());
+  const string sep(Config::DIR_SEP);
 #if 0
   const string filename = Config::Path::getInstance()->getHomeDir() + sep + Config::OPTIONS_DIR +
                           sep + Config::OPTIONS_CURRENT_DIRS_FILE;
@@ -316,10 +316,9 @@ int Controller::LoadMesh(Render *re, ViewLayer *view_layer, Depsgraph *depsgraph
       ClearRootNode();
       return 0;
     }
-    else {
-      delete _ViewMap;
-      _ViewMap = NULL;
-    }
+
+    delete _ViewMap;
+    _ViewMap = NULL;
   }
 
   _Chrono.start();
@@ -469,7 +468,7 @@ void Controller::DeleteViewMap(bool freeCache)
 
 void Controller::ComputeViewMap()
 {
-  if (!_ListOfModels.size()) {
+  if (_ListOfModels.empty()) {
     return;
   }
 
@@ -836,9 +835,9 @@ bool Controller::getFaceSmoothness() const
   return _EnableFaceSmoothness;
 }
 
-void Controller::setComputeRidgesAndValleysFlag(bool iBool)
+void Controller::setComputeRidgesAndValleysFlag(bool b)
 {
-  _ComputeRidges = iBool;
+  _ComputeRidges = b;
 }
 
 bool Controller::getComputeRidgesAndValleysFlag() const
@@ -923,19 +922,16 @@ Render *Controller::RenderStrokes(Render *re, bool render)
     cout << "Stroke rendering  : " << d << endl;
 
     uintptr_t mem_in_use = MEM_get_memory_in_use();
-    uintptr_t mmap_in_use = MEM_get_mapped_memory_in_use();
     uintptr_t peak_memory = MEM_get_peak_memory();
 
-    float megs_used_memory = (mem_in_use - mmap_in_use) / (1024.0 * 1024.0);
-    float mmap_used_memory = (mmap_in_use) / (1024.0 * 1024.0);
+    float megs_used_memory = (mem_in_use) / (1024.0 * 1024.0);
     float megs_peak_memory = (peak_memory) / (1024.0 * 1024.0);
 
-    printf("%d objs, %d verts, %d faces, mem %.2fM (%.2fM, peak %.2fM)\n",
+    printf("%d objs, %d verts, %d faces, mem %.2fM (peak %.2fM)\n",
            totmesh,
            freestyle_render->i.totvert,
            freestyle_render->i.totface,
            megs_used_memory,
-           mmap_used_memory,
            megs_peak_memory);
   }
   delete blenderRenderer;

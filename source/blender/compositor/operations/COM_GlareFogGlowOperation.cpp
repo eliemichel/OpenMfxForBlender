@@ -25,7 +25,7 @@
 
 typedef float fREAL;
 
-// returns next highest power of 2 of x, as well it's log2 in L2
+// returns next highest power of 2 of x, as well its log2 in L2
 static unsigned int nextPow2(unsigned int x, unsigned int *L2)
 {
   unsigned int pw, x_notpow2 = x & (x - 1);
@@ -198,7 +198,7 @@ static void FHT2D(
 //------------------------------------------------------------------------------
 
 /* 2D convolution calc, d1 *= d2, M/N - > log2 of width/height */
-static void fht_convolve(fREAL *d1, fREAL *d2, unsigned int M, unsigned int N)
+static void fht_convolve(fREAL *d1, const fREAL *d2, unsigned int M, unsigned int N)
 {
   fREAL a, b;
   unsigned int i, j, k, L, mj, mL;

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -25,10 +25,12 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
 #include "BLI_alloca.h"
 #include "BLI_blenlib.h"
@@ -36,6 +38,8 @@
 #include "BLI_math.h"
 #include "BLI_rand.h"
 #include "BLI_utildefines.h"
+
+#include "BLT_translation.h"
 
 #include "BKE_collection.h"
 #include "BKE_context.h"
@@ -51,6 +55,7 @@
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
+#include "BKE_screen.h"
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
@@ -59,23 +64,27 @@
 #include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph_query.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_ui_common.h"
 #include "MOD_gpencil_util.h"
 
 static void initData(GpencilModifierData *md)
 {
-  MultiplyGpencilModifierData *mmd = (MultiplyGpencilModifierData *)md;
-  mmd->duplications = 3;
-  mmd->distance = 0.1f;
-  mmd->split_angle = DEG2RADF(1.0f);
-  mmd->fading_center = 0.5f;
-  mmd->fading_thickness = 0.5f;
-  mmd->fading_opacity = 0.5f;
+  MultiplyGpencilModifierData *gpmd = (MultiplyGpencilModifierData *)md;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(MultiplyGpencilModifierData), modifier);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
 {
-  BKE_gpencil_modifier_copyData_generic(md, target);
+  BKE_gpencil_modifier_copydata_generic(md, target);
 }
 
 static void minter_v3_v3v3v3_ref(
@@ -136,9 +145,9 @@ static void duplicateStroke(Object *ob,
     normalize_v3(stroke_normal);
   }
 
-  float *t1_array = MEM_callocN(sizeof(float) * 3 * gps->totpoints,
+  float *t1_array = MEM_callocN(sizeof(float[3]) * gps->totpoints,
                                 "duplicate_temp_result_array_1");
-  float *t2_array = MEM_callocN(sizeof(float) * 3 * gps->totpoints,
+  float *t2_array = MEM_callocN(sizeof(float[3]) * gps->totpoints,
                                 "duplicate_temp_result_array_2");
 
   pt = gps->points;
@@ -211,7 +220,7 @@ static void bakeModifier(Main *UNUSED(bmain),
       for (gps = gpf->strokes.first; gps; gps = gps->next) {
         if (!is_stroke_affected_by_modifier(ob,
                                             mmd->layername,
-                                            mmd->materialname,
+                                            mmd->material,
                                             mmd->pass_index,
                                             mmd->layer_pass,
                                             1,
@@ -252,7 +261,7 @@ static void generate_geometry(GpencilModifierData *md, Object *ob, bGPDlayer *gp
   for (gps = gpf->strokes.first; gps; gps = gps->next) {
     if (!is_stroke_affected_by_modifier(ob,
                                         mmd->layername,
-                                        mmd->materialname,
+                                        mmd->material,
                                         mmd->pass_index,
                                         mmd->layer_pass,
                                         1,
@@ -297,8 +306,75 @@ static void generateStrokes(GpencilModifierData *md, Depsgraph *depsgraph, Objec
   }
 }
 
+static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
+{
+  MultiplyGpencilModifierData *mmd = (MultiplyGpencilModifierData *)md;
+
+  walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
+}
+
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "duplicates", 0, NULL, ICON_NONE);
+
+  col = uiLayoutColumn(layout, false);
+  uiLayoutSetActive(layout, RNA_int_get(ptr, "duplicates") > 0);
+  uiItemR(col, ptr, "distance", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "offset", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+
+  gpencil_modifier_panel_end(layout, ptr);
+}
+
+static void fade_header_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  uiItemR(layout, ptr, "use_fade", 0, NULL, ICON_NONE);
+}
+
+static void fade_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiLayoutSetActive(layout, RNA_boolean_get(ptr, "use_fade"));
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "fading_center", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "fading_thickness", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+  uiItemR(col, ptr, "fading_opacity", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+}
+
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  gpencil_modifier_masking_panel_draw(panel, true, false);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = gpencil_modifier_panel_register(
+      region_type, eGpencilModifierType_Multiply, panel_draw);
+  gpencil_modifier_subpanel_register(
+      region_type, "fade", "", fade_header_draw, fade_panel_draw, panel_type);
+  gpencil_modifier_subpanel_register(
+      region_type, "mask", "Influence", NULL, mask_panel_draw, panel_type);
+}
+
 GpencilModifierTypeInfo modifierType_Gpencil_Multiply = {
-    /* name */ "Multiple Strokes",
+    /* name */ "MultipleStrokes",
     /* structName */ "MultiplyGpencilModifierData",
     /* structSize */ sizeof(MultiplyGpencilModifierData),
     /* type */ eGpencilModifierTypeType_Gpencil,
@@ -316,7 +392,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Multiply = {
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ NULL,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
+    /* panelRegister */ panelRegister,
 };

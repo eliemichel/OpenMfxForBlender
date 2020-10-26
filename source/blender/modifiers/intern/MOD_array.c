@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -29,12 +29,17 @@
 
 #include "BLI_math.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_curve_types.h"
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
 #include "BKE_lib_id.h"
@@ -42,7 +47,14 @@
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_object_deform.h"
+#include "BKE_screen.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 #include "DEG_depsgraph.h"
@@ -52,29 +64,22 @@ static void initData(ModifierData *md)
 {
   ArrayModifierData *amd = (ArrayModifierData *)md;
 
-  /* default to 2 duplicates distributed along the x-axis by an
-   * offset of 1 object-width
-   */
-  amd->start_cap = amd->end_cap = amd->curve_ob = amd->offset_ob = NULL;
-  amd->count = 2;
-  zero_v3(amd->offset);
-  amd->scale[0] = 1;
-  amd->scale[1] = amd->scale[2] = 0;
-  amd->length = 0;
-  amd->merge_dist = 0.01;
-  amd->fit_type = MOD_ARR_FIXEDCOUNT;
-  amd->offset_type = MOD_ARR_OFF_RELATIVE;
-  amd->flags = 0;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(amd, modifier));
+
+  MEMCPY_STRUCT_AFTER(amd, DNA_struct_default_get(ArrayModifierData), modifier);
+
+  /* Open the first subpanel by default, it corresspnds to Relative offset which is enabled too. */
+  md->ui_expand_flag = (1 << 0) | (1 << 1);
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   ArrayModifierData *amd = (ArrayModifierData *)md;
 
-  walk(userData, ob, &amd->start_cap, IDWALK_CB_NOP);
-  walk(userData, ob, &amd->end_cap, IDWALK_CB_NOP);
-  walk(userData, ob, &amd->curve_ob, IDWALK_CB_NOP);
-  walk(userData, ob, &amd->offset_ob, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&amd->start_cap, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&amd->end_cap, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&amd->curve_ob, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&amd->offset_ob, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -125,12 +130,11 @@ static int svert_sum_cmp(const void *e1, const void *e2)
   if (sv1->sum_co > sv2->sum_co) {
     return 1;
   }
-  else if (sv1->sum_co < sv2->sum_co) {
+  if (sv1->sum_co < sv2->sum_co) {
     return -1;
   }
-  else {
-    return 0;
-  }
+
+  return 0;
 }
 
 static void svert_from_mvert(SortVertsElem *sv,
@@ -503,7 +507,8 @@ static Mesh *arrayModifier_doArray(ArrayModifierData *amd,
     }
 
     if (offset_is_too_small) {
-      modifier_setError(
+      BKE_modifier_set_error(
+          ctx->object,
           &amd->modifier,
           "The offset is too small, we cannot generate the amount of geometry it would require");
     }
@@ -514,9 +519,10 @@ static Mesh *arrayModifier_doArray(ArrayModifierData *amd,
   else if (((size_t)count * (size_t)chunk_nverts + (size_t)start_cap_nverts +
             (size_t)end_cap_nverts) > max_num_vertices) {
     count = 1;
-    modifier_setError(&amd->modifier,
-                      "The amount of copies is too high, we cannot generate the amount of "
-                      "geometry it would require");
+    BKE_modifier_set_error(ctx->object,
+                           &amd->modifier,
+                           "The amount of copies is too high, we cannot generate the amount of "
+                           "geometry it would require");
   }
 
   if (count < 1) {
@@ -791,7 +797,7 @@ static Mesh *arrayModifier_doArray(ArrayModifierData *amd,
   return result;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   ArrayModifierData *amd = (ArrayModifierData *)md;
   return arrayModifier_doArray(amd, ctx, mesh);
@@ -812,32 +818,208 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   if (amd->curve_ob && amd->curve_ob->type != OB_CURVE) {
     return true;
   }
-  else if (amd->start_cap && amd->start_cap->type != OB_MESH) {
+  if (amd->start_cap && amd->start_cap->type != OB_MESH) {
     return true;
   }
-  else if (amd->end_cap && amd->end_cap->type != OB_MESH) {
+  if (amd->end_cap && amd->end_cap->type != OB_MESH) {
     return true;
   }
 
   return false;
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "fit_type", 0, NULL, ICON_NONE);
+
+  int fit_type = RNA_enum_get(ptr, "fit_type");
+  if (fit_type == MOD_ARR_FIXEDCOUNT) {
+    uiItemR(layout, ptr, "count", 0, NULL, ICON_NONE);
+  }
+  else if (fit_type == MOD_ARR_FITLENGTH) {
+    uiItemR(layout, ptr, "fit_length", 0, NULL, ICON_NONE);
+  }
+  else if (fit_type == MOD_ARR_FITCURVE) {
+    uiItemR(layout, ptr, "curve", 0, NULL, ICON_NONE);
+  }
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void relative_offset_header_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiItemR(layout, ptr, "use_relative_offset", 0, NULL, ICON_NONE);
+}
+
+static void relative_offset_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiLayout *col = uiLayoutColumn(layout, false);
+
+  uiLayoutSetActive(col, RNA_boolean_get(ptr, "use_relative_offset"));
+  uiItemR(col, ptr, "relative_offset_displace", 0, IFACE_("Factor"), ICON_NONE);
+}
+
+static void constant_offset_header_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiItemR(layout, ptr, "use_constant_offset", 0, NULL, ICON_NONE);
+}
+
+static void constant_offset_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiLayout *col = uiLayoutColumn(layout, false);
+
+  uiLayoutSetActive(col, RNA_boolean_get(ptr, "use_constant_offset"));
+  uiItemR(col, ptr, "constant_offset_displace", 0, IFACE_("Distance"), ICON_NONE);
+}
+
+/**
+ * Object offset in a subpanel for consistency with the other offset types.
+ */
+static void object_offset_header_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiItemR(layout, ptr, "use_object_offset", 0, NULL, ICON_NONE);
+}
+
+static void object_offset_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiLayout *col = uiLayoutColumn(layout, false);
+
+  uiLayoutSetActive(col, RNA_boolean_get(ptr, "use_object_offset"));
+  uiItemR(col, ptr, "offset_object", 0, IFACE_("Object"), ICON_NONE);
+}
+
+static void symmetry_panel_header_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiItemR(layout, ptr, "use_merge_vertices", 0, IFACE_("Merge"), ICON_NONE);
+}
+
+static void symmetry_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiLayout *col = uiLayoutColumn(layout, false);
+  uiLayoutSetActive(col, RNA_boolean_get(ptr, "use_merge_vertices"));
+  uiItemR(col, ptr, "merge_threshold", 0, IFACE_("Distance"), ICON_NONE);
+  uiItemR(col, ptr, "use_merge_vertices_cap", 0, IFACE_("First and Last Copies"), ICON_NONE);
+}
+
+static void uv_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, true);
+  uiItemR(col, ptr, "offset_u", UI_ITEM_R_EXPAND, IFACE_("Offset U"), ICON_NONE);
+  uiItemR(col, ptr, "offset_v", UI_ITEM_R_EXPAND, IFACE_("V"), ICON_NONE);
+}
+
+static void caps_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "start_cap", 0, IFACE_("Cap Start"), ICON_NONE);
+  uiItemR(col, ptr, "end_cap", 0, IFACE_("End"), ICON_NONE);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(region_type, eModifierType_Array, panel_draw);
+  modifier_subpanel_register(region_type,
+                             "relative_offset",
+                             "",
+                             relative_offset_header_draw,
+                             relative_offset_draw,
+                             panel_type);
+  modifier_subpanel_register(region_type,
+                             "constant_offset",
+                             "",
+                             constant_offset_header_draw,
+                             constant_offset_draw,
+                             panel_type);
+  modifier_subpanel_register(
+      region_type, "object_offset", "", object_offset_header_draw, object_offset_draw, panel_type);
+  modifier_subpanel_register(
+      region_type, "merge", "", symmetry_panel_header_draw, symmetry_panel_draw, panel_type);
+  modifier_subpanel_register(region_type, "uv", "UVs", NULL, uv_panel_draw, panel_type);
+  modifier_subpanel_register(region_type, "caps", "Caps", NULL, caps_panel_draw, panel_type);
+}
+
 ModifierTypeInfo modifierType_Array = {
     /* name */ "Array",
     /* structName */ "ArrayModifierData",
     /* structSize */ sizeof(ArrayModifierData),
+    /* srna */ &RNA_ArrayModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode |
         eModifierTypeFlag_AcceptsCVs,
+    /* icon */ ICON_MOD_ARRAY,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ NULL,
@@ -846,8 +1028,10 @@ ModifierTypeInfo modifierType_Array = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

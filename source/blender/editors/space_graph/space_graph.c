@@ -60,11 +60,11 @@
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
-#include "graph_intern.h"  // own include
+#include "graph_intern.h" /* own include */
 
 /* ******************** default callbacks for ipo space ***************** */
 
-static SpaceLink *graph_new(const ScrArea *UNUSED(area), const Scene *scene)
+static SpaceLink *graph_create(const ScrArea *UNUSED(area), const Scene *scene)
 {
   ARegion *region;
   SpaceGraph *sipo;
@@ -145,7 +145,7 @@ static void graph_free(SpaceLink *sl)
   }
 
   if (si->runtime.ghost_curves.first) {
-    free_fcurves(&si->runtime.ghost_curves);
+    BKE_fcurves_free(&si->runtime.ghost_curves);
   }
 }
 
@@ -163,7 +163,7 @@ static void graph_init(struct wmWindowManager *wm, ScrArea *area)
   /* force immediate init of any invalid F-Curve colors */
   /* XXX: but, don't do SIPO_TEMP_NEEDCHANSYNC (i.e. channel select state sync)
    * as this is run on each region resize; setting this here will cause selection
-   * state to be lost on area/region resizing. [#35744]
+   * state to be lost on area/region resizing. T35744.
    */
   ED_area_tag_refresh(area);
 }
@@ -200,14 +200,9 @@ static void graph_main_region_draw(const bContext *C, ARegion *region)
   Scene *scene = CTX_data_scene(C);
   bAnimContext ac;
   View2D *v2d = &region->v2d;
-  View2DScrollers *scrollers;
-  float col[3];
-  short cfra_flag = 0;
 
   /* clear and setup matrix */
-  UI_GetThemeColor3fv(TH_BACK, col);
-  GPU_clear_color(col[0], col[1], col[2], 0.0);
-  GPU_clear(GPU_COLOR_BIT);
+  UI_ThemeClearColor(TH_BACK);
 
   UI_view2d_view_ortho(v2d);
 
@@ -251,7 +246,7 @@ static void graph_main_region_draw(const bContext *C, ARegion *region)
 
       /* Draw a green line to indicate the cursor value */
       immUniformThemeColorShadeAlpha(TH_CFRAME, -10, -50);
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
       GPU_line_width(2.0);
 
       immBegin(GPU_PRIM_LINES, 2);
@@ -259,7 +254,7 @@ static void graph_main_region_draw(const bContext *C, ARegion *region)
       immVertex2f(pos, v2d->cur.xmax, y);
       immEnd();
 
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
 
     /* current frame or vertical component of vertical component of the cursor */
@@ -270,7 +265,7 @@ static void graph_main_region_draw(const bContext *C, ARegion *region)
       /* to help differentiate this from the current frame,
        * draw slightly darker like the horizontal one */
       immUniformThemeColorShadeAlpha(TH_CFRAME, -40, -50);
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
       GPU_line_width(2.0);
 
       immBegin(GPU_PRIM_LINES, 2);
@@ -278,18 +273,10 @@ static void graph_main_region_draw(const bContext *C, ARegion *region)
       immVertex2f(pos, x, v2d->cur.ymax);
       immEnd();
 
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
 
     immUnbindProgram();
-  }
-
-  if (sipo->mode != SIPO_MODE_DRIVERS) {
-    /* current frame */
-    if (sipo->flag & SIPO_DRAWTIME) {
-      cfra_flag |= DRAWCFRA_UNIT_SECONDS;
-    }
-    ANIM_draw_cfra(C, v2d, cfra_flag);
   }
 
   /* markers */
@@ -316,12 +303,22 @@ static void graph_main_region_draw(const bContext *C, ARegion *region)
 
   /* time-scrubbing */
   ED_time_scrub_draw(region, scene, display_seconds, false);
+}
+
+static void graph_main_region_draw_overlay(const bContext *C, ARegion *region)
+{
+  /* draw entirely, view changes should be handled here */
+  const SpaceGraph *sipo = CTX_wm_space_graph(C);
+  const Scene *scene = CTX_data_scene(C);
+  const bool draw_vert_line = sipo->mode != SIPO_MODE_DRIVERS;
+  View2D *v2d = &region->v2d;
+
+  /* scrubbing region */
+  ED_time_scrub_draw_current_frame(region, scene, sipo->flag & SIPO_DRAWTIME, draw_vert_line);
 
   /* scrollers */
-  // FIXME: args for scrollers depend on the type of data being shown...
-  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
-  UI_view2d_scrollers_draw(v2d, scrollers);
-  UI_view2d_scrollers_free(scrollers);
+  /* FIXME: args for scrollers depend on the type of data being shown. */
+  UI_view2d_scrollers_draw(v2d, NULL);
 
   /* scale numbers */
   {
@@ -358,13 +355,9 @@ static void graph_channel_region_draw(const bContext *C, ARegion *region)
 {
   bAnimContext ac;
   View2D *v2d = &region->v2d;
-  View2DScrollers *scrollers;
-  float col[3];
 
   /* clear and setup matrix */
-  UI_GetThemeColor3fv(TH_BACK, col);
-  GPU_clear_color(col[0], col[1], col[2], 0.0);
-  GPU_clear(GPU_COLOR_BIT);
+  UI_ThemeClearColor(TH_BACK);
 
   UI_view2d_view_ortho(v2d);
 
@@ -380,9 +373,7 @@ static void graph_channel_region_draw(const bContext *C, ARegion *region)
   UI_view2d_view_restore(C);
 
   /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
-  UI_view2d_scrollers_draw(v2d, scrollers);
-  UI_view2d_scrollers_free(scrollers);
+  UI_view2d_scrollers_draw(v2d, NULL);
 }
 
 /* add handlers, stuff you only do once or on area/region changes */
@@ -624,10 +615,13 @@ static void graph_listener(wmWindow *UNUSED(win),
       }
       break;
 
-      // XXX: restore the case below if not enough updates occur...
-      // default:
-      //  if (wmn->data == ND_KEYS)
-      //      ED_area_tag_redraw(area);
+#if 0 /* XXX: restore the case below if not enough updates occur... */
+    default: {
+      if (wmn->data == ND_KEYS) {
+        ED_area_tag_redraw(area);
+      }
+    }
+#endif
   }
 }
 
@@ -772,7 +766,7 @@ static void graph_refresh(const bContext *C, ScrArea *area)
   }
 
   /* region updates? */
-  // XXX re-sizing y-extents of tot should go here?
+  /* XXX re-sizing y-extents of tot should go here? */
 
   /* Update the state of the animchannels in response to changes from the data they represent
    * NOTE: the temp flag is used to indicate when this needs to be done,
@@ -841,7 +835,7 @@ void ED_spacetype_ipo(void)
   st->spaceid = SPACE_GRAPH;
   strncpy(st->name, "Graph", BKE_ST_MAXNAME);
 
-  st->new = graph_new;
+  st->create = graph_create;
   st->free = graph_free;
   st->init = graph_init;
   st->duplicate = graph_duplicate;
@@ -859,6 +853,7 @@ void ED_spacetype_ipo(void)
   art->regionid = RGN_TYPE_WINDOW;
   art->init = graph_main_region_init;
   art->draw = graph_main_region_draw;
+  art->draw_overlay = graph_main_region_draw_overlay;
   art->listener = graph_region_listener;
   art->message_subscribe = graph_region_message_subscribe;
   art->keymapflag = ED_KEYMAP_VIEW2D | ED_KEYMAP_ANIMATION | ED_KEYMAP_FRAMES;

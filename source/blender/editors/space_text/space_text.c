@@ -53,7 +53,7 @@
 
 /* ******************** default callbacks for text space ***************** */
 
-static SpaceLink *text_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *text_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceText *stext;
@@ -117,7 +117,7 @@ static SpaceLink *text_duplicate(SpaceLink *sl)
 
   /* clear or remove stuff from old */
 
-  stextn->runtime.drawcache = NULL; /* space need it's own cache */
+  stextn->runtime.drawcache = NULL; /* space need its own cache */
 
   return (SpaceLink *)stextn;
 }
@@ -248,22 +248,24 @@ static void text_keymap(struct wmKeyConfig *keyconf)
 
 const char *text_context_dir[] = {"edit_text", NULL};
 
-static int text_context(const bContext *C, const char *member, bContextDataResult *result)
+static int /*eContextResult*/ text_context(const bContext *C,
+                                           const char *member,
+                                           bContextDataResult *result)
 {
   SpaceText *st = CTX_wm_space_text(C);
 
   if (CTX_data_dir(member)) {
     CTX_data_dir_set(result, text_context_dir);
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "edit_text")) {
+  if (CTX_data_equals(member, "edit_text")) {
     if (st->text != NULL) {
       CTX_data_id_pointer_set(result, &st->text->id);
     }
-    return 1;
+    return CTX_RESULT_OK;
   }
 
-  return 0;
+  return CTX_RESULT_MEMBER_NOT_FOUND;
 }
 
 /********************* main region ********************/
@@ -296,7 +298,6 @@ static void text_main_region_draw(const bContext *C, ARegion *region)
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
-  GPU_clear(GPU_COLOR_BIT);
 
   // UI_view2d_view_ortho(v2d);
 
@@ -445,7 +446,7 @@ void ED_spacetype_text(void)
   st->spaceid = SPACE_TEXT;
   strncpy(st->name, "Text", BKE_ST_MAXNAME);
 
-  st->new = text_new;
+  st->create = text_create;
   st->free = text_free;
   st->init = text_init;
   st->duplicate = text_duplicate;

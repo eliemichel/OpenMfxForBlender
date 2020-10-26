@@ -132,13 +132,14 @@ void CLG_logf(CLG_LogType *lg,
               const char *format,
               ...) _CLOG_ATTR_NONNULL(1, 3, 4, 5) _CLOG_ATTR_PRINTF_FORMAT(5, 6);
 
-/* Main initializer and distructor (per session, not logger). */
+/* Main initializer and destructor (per session, not logger). */
 void CLG_init(void);
 void CLG_exit(void);
 
 void CLG_output_set(void *file_handle);
 void CLG_output_use_basename_set(int value);
 void CLG_output_use_timestamp_set(int value);
+void CLG_error_fn_set(void (*error_fn)(void *file_handle));
 void CLG_fatal_fn_set(void (*fatal_fn)(void *file_handle));
 void CLG_backtrace_fn_set(void (*fatal_fn)(void *file_handle));
 
@@ -148,6 +149,8 @@ void CLG_type_filter_exclude(const char *type_filter, int type_filter_len);
 void CLG_level_set(int level);
 
 void CLG_logref_init(CLG_LogRef *clg_ref);
+
+int CLG_color_support_get(CLG_LogRef *clg_ref);
 
 /** Declare outside function, declare as extern in header. */
 #define CLG_LOGREF_DECLARE_GLOBAL(var, id) \

@@ -53,20 +53,16 @@ PyDoc_STRVAR(StrokeAttribute_doc,
              "Vertex.\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
+             "            __init__(red, green, blue, alpha, thickness_right, thickness_left)\n"
+             "            __init__(attribute1, attribute2, t)\n"
              "\n"
-             "   Default constructor.\n"
+             "   Creates a :class:`StrokeAttribute` object using either a default constructor,\n"
+             "   copy constructor, overloaded constructor, or and interpolation constructor\n"
+             "   to interpolate between two :class:`StrokeAttribute` objects.\n"
              "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
-             "\n"
-             "   :arg brother: A StrokeAttribute object.\n"
+             "   :arg brother: A StrokeAttribute object to be used as a copy constructor.\n"
              "   :type brother: :class:`StrokeAttribute`\n"
-             "\n"
-             ".. method:: __init__(red, green, blue, alpha, thickness_right, thickness_left)\n"
-             "\n"
-             "   Build a stroke vertex attribute from a set of parameters.\n"
-             "\n"
              "   :arg red: Red component of a stroke color.\n"
              "   :type red: float\n"
              "   :arg green: Green component of a stroke color.\n"
@@ -79,12 +75,6 @@ PyDoc_STRVAR(StrokeAttribute_doc,
              "   :type thickness_right: float\n"
              "   :arg thickness_left: Stroke thickness on the left.\n"
              "   :type thickness_left: float\n"
-             "\n"
-             ".. method:: __init__(attribute1, attribute2, t)\n"
-             "\n"
-             "   Interpolation constructor. Build a StrokeAttribute from two\n"
-             "   StrokeAttribute objects and an interpolation parameter.\n"
-             "\n"
              "   :arg attribute1: The first StrokeAttribute object.\n"
              "   :type attribute1: :class:`StrokeAttribute`\n"
              "   :arg attribute2: The second StrokeAttribute object.\n"
@@ -110,7 +100,7 @@ static int StrokeAttribute_init(BPy_StrokeAttribute *self, PyObject *args, PyObj
       self->sa = new StrokeAttribute(*(((BPy_StrokeAttribute *)obj1)->sa));
     }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "O!O!f",
@@ -123,7 +113,7 @@ static int StrokeAttribute_init(BPy_StrokeAttribute *self, PyObject *args, PyObj
     self->sa = new StrokeAttribute(
         *(((BPy_StrokeAttribute *)obj1)->sa), *(((BPy_StrokeAttribute *)obj2)->sa), t);
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "ffffff",

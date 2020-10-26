@@ -20,15 +20,21 @@
  * \ingroup editors
  */
 
-#ifndef __ED_BUTTONS_H__
-#define __ED_BUTTONS_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+struct SpaceProperties;
+
+int ED_buttons_tabs_list(struct SpaceProperties *sbuts, short *context_tabs_array);
+bool ED_buttons_tab_has_search_result(struct SpaceProperties *sbuts, const int index);
+
+void ED_buttons_search_string_set(struct SpaceProperties *sbuts, const char *value);
+int ED_buttons_search_string_length(struct SpaceProperties *sbuts);
+const char *ED_buttons_search_string_get(struct SpaceProperties *sbuts);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /*  __ED_BUTTONS_H__ */

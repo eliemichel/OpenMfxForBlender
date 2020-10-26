@@ -18,8 +18,7 @@
  * \ingroup wm
  */
 
-#ifndef __WM_MESSAGE_BUS_H__
-#define __WM_MESSAGE_BUS_H__
+#pragma once
 
 #include "RNA_types.h"
 #include <stdio.h>
@@ -33,6 +32,10 @@ struct wmMsgBus;
 struct wmMsgSubscribeKey;
 struct wmMsgSubscribeValue;
 struct wmMsgSubscribeValueLink;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef void (*wmMsgNotifyFn)(struct bContext *C,
                               struct wmMsgSubscribeKey *msg_key,
@@ -152,7 +155,7 @@ typedef struct wmMsgSubscribeKey_Static {
   wmMsg_Static msg;
 } wmMsgSubscribeKey_Static;
 
-void WM_msgtypeinfo_init_static(wmMsgTypeInfo *msg_type);
+void WM_msgtypeinfo_init_static(wmMsgTypeInfo *msgtype_info);
 
 wmMsgSubscribeKey_Static *WM_msg_lookup_static(struct wmMsgBus *mbus,
                                                const wmMsgParams_Static *msg_key_params);
@@ -205,7 +208,7 @@ typedef struct wmMsgSubscribeKey_RNA {
 #  define _WM_MESSAGE_EXTERN_END
 #endif
 
-void WM_msgtypeinfo_init_rna(wmMsgTypeInfo *msg_type);
+void WM_msgtypeinfo_init_rna(wmMsgTypeInfo *msgtype_info);
 
 wmMsgSubscribeKey_RNA *WM_msg_lookup_rna(struct wmMsgBus *mbus,
                                          const wmMsgParams_RNA *msg_key_params);
@@ -287,4 +290,6 @@ void WM_msg_publish_ID(struct wmMsgBus *mbus, struct ID *id);
   } \
   ((void)0)
 
-#endif /* __WM_MESSAGE_BUS_H__ */
+#ifdef __cplusplus
+}
+#endif

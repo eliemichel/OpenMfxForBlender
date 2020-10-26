@@ -13,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __WM_TOOLSYSTEM_H__
-#define __WM_TOOLSYSTEM_H__
+#pragma once
 
 /** \file
  * \ingroup wm
@@ -77,7 +76,7 @@ void WM_toolsystem_reinit_all(struct bContext *C, struct wmWindow *win);
 void WM_toolsystem_ref_set_from_runtime(struct bContext *C,
                                         struct WorkSpace *workspace,
                                         struct bToolRef *tref,
-                                        const struct bToolRef_Runtime *tool,
+                                        const struct bToolRef_Runtime *tref_rt,
                                         const char *idname);
 
 void WM_toolsystem_ref_sync_from_context(struct Main *bmain,
@@ -140,5 +139,3 @@ void WM_toolsystem_refresh_screen_all(struct Main *bmain);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __WM_TOOLSYSTEM_API_H__ */

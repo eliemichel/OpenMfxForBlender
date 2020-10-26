@@ -18,8 +18,7 @@
  * \ingroup collada
  */
 
-#ifndef __TRANSFORMWRITER_H__
-#define __TRANSFORMWRITER_H__
+#pragma once
 
 #include "COLLADASWNode.h"
 
@@ -42,7 +41,8 @@ class TransformWriter {
   void add_node_transform_identity(COLLADASW::Node &node, BCExportSettings &export_settings);
 
  private:
-  void add_transform(COLLADASW::Node &node, float loc[3], float rot[3], float scale[3]);
+  void add_transform(COLLADASW::Node &node,
+                     const float loc[3],
+                     const float rot[3],
+                     const float scale[3]);
 };
-
-#endif

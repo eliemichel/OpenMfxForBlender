@@ -21,8 +21,7 @@
  * \ingroup modifiers
  */
 
-#ifndef __MOD_GPENCIL_UTIL_H__
-#define __MOD_GPENCIL_UTIL_H__
+#pragma once
 
 struct GHash;
 struct MDeformVert;
@@ -34,7 +33,7 @@ struct bGPDstroke;
 
 bool is_stroke_affected_by_modifier(struct Object *ob,
                                     char *mlayername,
-                                    char *mmaterialname,
+                                    struct Material *material,
                                     const int mpassindex,
                                     const int gpl_passindex,
                                     const int minpoints,
@@ -46,5 +45,3 @@ bool is_stroke_affected_by_modifier(struct Object *ob,
                                     const bool inv4);
 
 float get_modifier_point_weight(struct MDeformVert *dvert, bool inverse, int def_nr);
-
-#endif /* __MOD_GPENCIL_UTIL_H__ */

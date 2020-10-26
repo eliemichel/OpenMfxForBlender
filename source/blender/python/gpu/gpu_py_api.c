@@ -43,9 +43,9 @@
 /** \name Utils to invalidate functions
  * \{ */
 
-bool bpygpu_is_initialized_or_error(void)
+bool bpygpu_is_init_or_error(void)
 {
-  if (!GPU_is_initialized()) {
+  if (!GPU_is_init()) {
     PyErr_SetString(PyExc_SystemError,
                     "GPU functions for drawing are not available in background mode");
 
@@ -106,19 +106,8 @@ success:
  * \{ */
 
 PyDoc_STRVAR(GPU_doc,
-             "This module provides Python wrappers for the GPU implementation in Blender. "
-             "Some higher level functions can be found in the `gpu_extras` module. "
-             "\n\n"
-             "Submodules:\n"
-             "\n"
-             ".. toctree::\n"
-             "   :maxdepth: 1\n"
-             "\n"
-             "   gpu.types.rst\n"
-             "   gpu.shader.rst\n"
-             "   gpu.matrix.rst\n"
-             "   gpu.select.rst\n"
-             "\n");
+             "This module provides Python wrappers for the GPU implementation in Blender.\n"
+             "Some higher level functions can be found in the `gpu_extras` module.");
 static struct PyModuleDef GPU_module_def = {
     PyModuleDef_HEAD_INIT,
     .m_name = "gpu",

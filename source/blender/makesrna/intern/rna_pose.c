@@ -295,6 +295,18 @@ static void rna_PoseChannel_name_set(PointerRNA *ptr, const char *value)
   ED_armature_bone_rename(G_MAIN, ob->data, oldname, newname);
 }
 
+/* See rna_Bone_update_renamed() */
+static void rna_PoseChannel_name_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+{
+  ID *id = ptr->owner_id;
+
+  /* redraw view */
+  WM_main_add_notifier(NC_GEOM | ND_DATA, id);
+
+  /* update animation channels */
+  WM_main_add_notifier(NC_ANIMATION | ND_ANIMCHAN, id);
+}
+
 static PointerRNA rna_PoseChannel_bone_get(PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
@@ -625,6 +637,21 @@ static void rna_PoseChannel_constraints_move(
   WM_main_add_notifier(NC_OBJECT | ND_CONSTRAINT, ob);
 }
 
+static bConstraint *rna_PoseChannel_constraints_copy(ID *id,
+                                                     bPoseChannel *pchan,
+                                                     Main *bmain,
+                                                     PointerRNA *con_ptr)
+{
+  Object *ob = (Object *)id;
+  bConstraint *con = con_ptr->data;
+  bConstraint *new_con = BKE_constraint_copy_for_pose(ob, pchan, con);
+
+  ED_object_constraint_dependency_tag_update(bmain, ob, new_con);
+  WM_main_add_notifier(NC_OBJECT | ND_CONSTRAINT | NA_ADDED, id);
+
+  return new_con;
+}
+
 bool rna_PoseChannel_constraints_override_apply(Main *UNUSED(bmain),
                                                 PointerRNA *ptr_dst,
                                                 PointerRNA *ptr_src,
@@ -784,7 +811,7 @@ static int rna_PoseChannel_rotation_4d_editable(PointerRNA *ptr, int index)
   return PROP_EDITABLE;
 }
 
-/* not essential, but much faster then the default lookup function */
+/* not essential, but much faster than the default lookup function */
 static int rna_PoseBones_lookup_string(PointerRNA *ptr, const char *key, PointerRNA *r_ptr)
 {
   bPose *pose = (bPose *)ptr->data;
@@ -966,6 +993,21 @@ static void rna_def_pose_channel_constraints(BlenderRNA *brna, PropertyRNA *cpro
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_int(func, "to_index", -1, INT_MIN, INT_MAX, "To Index", "Target index", 0, 10000);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+
+  func = RNA_def_function(srna, "copy", "rna_PoseChannel_constraints_copy");
+  RNA_def_function_ui_description(func, "Add a new constraint that is a copy of the given one");
+  RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_SELF_ID);
+  /* constraint to copy */
+  parm = RNA_def_pointer(func,
+                         "constraint",
+                         "Constraint",
+                         "",
+                         "Constraint to copy - may belong to a different object");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
+  RNA_def_parameter_clear_flags(parm, PROP_THICK_WRAP, 0);
+  /* return type */
+  parm = RNA_def_pointer(func, "new_constraint", "Constraint", "", "New constraint");
+  RNA_def_function_return(func, parm);
 }
 
 static void rna_def_pose_channel(BlenderRNA *brna)
@@ -996,6 +1038,7 @@ static void rna_def_pose_channel(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Name", "");
   RNA_def_property_editable_func(prop, "rna_PoseChannel_proxy_editable");
   RNA_def_struct_name_property(srna, prop);
+  RNA_def_property_update(prop, 0, "rna_PoseChannel_name_update");
 
   /* Baked Bone Path cache data */
   rna_def_motionpath_common(srna);

@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_WORLD_H__
-#define __BKE_WORLD_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -32,12 +31,8 @@ struct Main;
 struct World;
 
 struct World *BKE_world_add(struct Main *bmain, const char *name);
-struct World *BKE_world_copy(struct Main *bmain, const struct World *wrld);
-struct World *BKE_world_localize(struct World *wrld);
 void BKE_world_eval(struct Depsgraph *depsgraph, struct World *world);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

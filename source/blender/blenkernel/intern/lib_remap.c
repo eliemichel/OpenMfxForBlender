@@ -73,11 +73,11 @@ typedef struct IDRemap {
 
   /* 'Output' data. */
   short status;
-  /** Number of direct usecases that could not be remapped (e.g.: obdata when in edit mode). */
+  /** Number of direct use cases that could not be remapped (e.g.: obdata when in edit mode). */
   int skipped_direct;
-  /** Number of indirect usecases that could not be remapped. */
+  /** Number of indirect use cases that could not be remapped. */
   int skipped_indirect;
-  /** Number of skipped usecases that refcount the datablock. */
+  /** Number of skipped use cases that refcount the data-block. */
   int skipped_refcounted;
 } IDRemap;
 
@@ -244,17 +244,17 @@ static void libblock_remap_data_preprocess(IDRemap *r_id_remap_data)
       ID *old_id = r_id_remap_data->old_id;
       if (!old_id || GS(old_id->name) == ID_AR) {
         Object *ob = (Object *)r_id_remap_data->id_owner;
-        /* Object's pose holds reference to armature bones... sic */
-        /* Note that in theory, we should have to bother about
-         * linked/non-linked/never-null/etc. flags/states.
+        /* Object's pose holds reference to armature bones. sic */
+        /* Note that in theory, we should have to bother about linked/non-linked/never-null/etc.
+         * flags/states.
          * Fortunately, this is just a tag, so we can accept to 'over-tag' a bit for pose recalc,
          * and avoid another complex and risky condition nightmare like the one we have in
-         * foreach_libblock_remap_callback()... */
+         * foreach_libblock_remap_callback(). */
         if (ob->pose && (!old_id || ob->data == old_id)) {
           BLI_assert(ob->type == OB_ARMATURE);
           ob->pose->flag |= POSE_RECALC;
-          /* We need to clear pose bone pointers immediately, things like undo writefile may be
-           * called before pose is actually recomputed, can lead to segfault... */
+          /* We need to clear pose bone pointers immediately, some code may access those before
+           * pose is actually recomputed, which can lead to segfault. */
           BKE_pose_clear_pointers(ob->pose);
         }
       }
@@ -334,7 +334,7 @@ static void libblock_remap_data_postprocess_obdata_relink(Main *bmain, Object *o
       default:
         break;
     }
-    test_object_modifiers(ob);
+    BKE_modifiers_test_object(ob);
     BKE_object_materials_test(bmain, ob, new_id);
   }
 }
@@ -666,9 +666,10 @@ static int id_relink_to_newid_looper(LibraryIDLinkCallbackData *cb_data)
     /* See: NEW_ID macro */
     if (id->newid) {
       BKE_library_update_ID_link_user(id->newid, id, cb_flag);
-      *id_pointer = id->newid;
+      id = id->newid;
+      *id_pointer = id;
     }
-    else if (id->tag & LIB_TAG_NEW) {
+    if (id->tag & LIB_TAG_NEW) {
       id->tag &= ~LIB_TAG_NEW;
       BKE_libblock_relink_to_newid(id);
     }

@@ -18,8 +18,7 @@
  * \ingroup collada
  */
 
-#ifndef __MATERIALEXPORTER_H__
-#define __MATERIALEXPORTER_H__
+#pragma once
 
 #include <string>
 #include <vector>
@@ -27,12 +26,11 @@
 #include "COLLADASWLibraryMaterials.h"
 #include "COLLADASWStreamWriter.h"
 
-extern "C" {
 #include "BKE_material.h"
+
 #include "DNA_material_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-}
 
 #include "ExportSettings.h"
 #include "GeometryExporter.h"
@@ -53,7 +51,7 @@ class MaterialsExporter : COLLADASW::LibraryMaterials {
 // used in forEachMaterialInScene
 template<class Functor> class ForEachMaterialFunctor {
   std::vector<std::string>
-      mMat;  // contains list of material names, to avoid duplicate calling of f
+      mMat; /* contains list of material names, to avoid duplicate calling of f */
   Functor *f;
 
  public:
@@ -83,8 +81,8 @@ template<class Functor> class ForEachMaterialFunctor {
 };
 
 struct MaterialFunctor {
-  // calls f for each unique material linked to each object in sce
-  // f should have
+  /* calls f for each unique material linked to each object in sce
+   * f should have */
   // void operator()(Material *ma)
   template<class Functor>
   void forEachMaterialInExportSet(Scene *sce, Functor &f, LinkNode *export_set)
@@ -94,5 +92,3 @@ struct MaterialFunctor {
     gf.forEachMeshObjectInExportSet<ForEachMaterialFunctor<Functor>>(sce, matfunc, export_set);
   }
 };
-
-#endif

@@ -17,44 +17,44 @@
 #include <atomic>
 #include <mutex>
 
-#include "BLI_array_cxx.h"
-#include "BLI_array_ref.h"
-#include "BLI_index_range.h"
-#include "BLI_vector.h"
+#include "BLI_array.hh"
+#include "BLI_index_range.hh"
+#include "BLI_span.hh"
+#include "BLI_vector.hh"
 
-namespace BLI {
+namespace blender {
 
-static Vector<Array<uint, 0, RawAllocator>, 1, RawAllocator> arrays;
-static uint current_array_size = 0;
-static uint *current_array = nullptr;
+static RawVector<RawArray<int64_t, 0>> arrays;
+static int64_t current_array_size = 0;
+static int64_t *current_array = nullptr;
 static std::mutex current_array_mutex;
 
-ArrayRef<uint> IndexRange::as_array_ref() const
+Span<int64_t> IndexRange::as_span() const
 {
-  uint min_required_size = m_start + m_size;
+  int64_t min_required_size = start_ + size_;
 
   if (min_required_size <= current_array_size) {
-    return ArrayRef<uint>(current_array + m_start, m_size);
+    return Span<int64_t>(current_array + start_, size_);
   }
 
   std::lock_guard<std::mutex> lock(current_array_mutex);
 
   if (min_required_size <= current_array_size) {
-    return ArrayRef<uint>(current_array + m_start, m_size);
+    return Span<int64_t>(current_array + start_, size_);
   }
 
-  uint new_size = std::max<uint>(1000, power_of_2_max_u(min_required_size));
-  Array<uint, 0, RawAllocator> new_array(new_size);
-  for (uint i = 0; i < new_size; i++) {
+  int64_t new_size = std::max<int64_t>(1000, power_of_2_max_u(min_required_size));
+  RawArray<int64_t, 0> new_array(new_size);
+  for (int64_t i = 0; i < new_size; i++) {
     new_array[i] = i;
   }
   arrays.append(std::move(new_array));
 
-  current_array = arrays.last().begin();
+  current_array = arrays.last().data();
   std::atomic_thread_fence(std::memory_order_seq_cst);
   current_array_size = new_size;
 
-  return ArrayRef<uint>(current_array + m_start, m_size);
+  return Span<int64_t>(current_array + start_, size_);
 }
 
-}  // namespace BLI
+}  // namespace blender

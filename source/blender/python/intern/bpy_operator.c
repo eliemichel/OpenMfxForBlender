@@ -77,7 +77,6 @@ static PyObject *pyop_poll(PyObject *UNUSED(self), PyObject *args)
   wmOperatorType *ot;
   const char *opname;
   PyObject *context_dict = NULL; /* optional args */
-  PyObject *context_dict_back;
   const char *context_str = NULL;
   PyObject *ret;
 
@@ -85,7 +84,7 @@ static PyObject *pyop_poll(PyObject *UNUSED(self), PyObject *args)
 
   /* XXX Todo, work out a better solution for passing on context,
    * could make a tuple from self and pack the name and Context into it... */
-  bContext *C = (bContext *)BPy_GetContext();
+  bContext *C = BPY_context_get();
 
   if (C == NULL) {
     PyErr_SetString(PyExc_RuntimeError, "Context is None, cant poll any operators");
@@ -131,16 +130,25 @@ static PyObject *pyop_poll(PyObject *UNUSED(self), PyObject *args)
     return NULL;
   }
 
-  context_dict_back = CTX_py_dict_get(C);
-  CTX_py_dict_set(C, (void *)context_dict);
-  Py_XINCREF(context_dict); /* so we done loose it */
+  struct bContext_PyState context_py_state;
+  if (context_dict != NULL) {
+    CTX_py_state_push(C, &context_py_state, (void *)context_dict);
+    Py_INCREF(context_dict); /* so we don't lose it */
+  }
 
   /* main purpose of this function */
   ret = WM_operator_poll_context((bContext *)C, ot, context) ? Py_True : Py_False;
 
-  /* restore with original context dict, probably NULL but need this for nested operator calls */
-  Py_XDECREF(context_dict);
-  CTX_py_dict_set(C, (void *)context_dict_back);
+  if (context_dict != NULL) {
+    PyObject *context_dict_test = CTX_py_dict_get(C);
+    if (context_dict_test != context_dict) {
+      Py_DECREF(context_dict_test);
+    }
+    /* Restore with original context dict,
+     * probably NULL but need this for nested operator calls. */
+    Py_DECREF(context_dict);
+    CTX_py_state_pop(C, &context_py_state);
+  }
 
   return Py_INCREF_RET(ret);
 }
@@ -156,7 +164,6 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
   const char *context_str = NULL;
   PyObject *kw = NULL;           /* optional args */
   PyObject *context_dict = NULL; /* optional args */
-  PyObject *context_dict_back;
 
   /* note that context is an int, python does the conversion in this case */
   int context = WM_OP_EXEC_DEFAULT;
@@ -164,7 +171,7 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
 
   /* XXX Todo, work out a better solution for passing on context,
    * could make a tuple from self and pack the name and Context into it... */
-  bContext *C = (bContext *)BPy_GetContext();
+  bContext *C = BPY_context_get();
 
   if (C == NULL) {
     PyErr_SetString(PyExc_RuntimeError, "Context is None, cant poll any operators");
@@ -225,10 +232,16 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
     return NULL;
   }
 
-  context_dict_back = CTX_py_dict_get(C);
-
-  CTX_py_dict_set(C, (void *)context_dict);
-  Py_XINCREF(context_dict); /* so we done loose it */
+  /**
+   * It might be that there is already a Python context override. We don't want to remove that
+   * except when this operator call sets a new override explicitly. This is necessary so that
+   * called operator runs in the same context as the calling code by default.
+   */
+  struct bContext_PyState context_py_state;
+  if (context_dict != NULL) {
+    CTX_py_state_push(C, &context_py_state, (void *)context_dict);
+    Py_INCREF(context_dict); /* so we don't lose it */
+  }
 
   if (WM_operator_poll_context((bContext *)C, ot, context) == false) {
     const char *msg = CTX_wm_operator_poll_msg_get(C);
@@ -307,9 +320,16 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
 #endif
   }
 
-  /* restore with original context dict, probably NULL but need this for nested operator calls */
-  Py_XDECREF(context_dict);
-  CTX_py_dict_set(C, (void *)context_dict_back);
+  if (context_dict != NULL) {
+    PyObject *context_dict_test = CTX_py_dict_get(C);
+    if (context_dict_test != context_dict) {
+      Py_DECREF(context_dict_test);
+    }
+    /* Restore with original context dict,
+     * probably NULL but need this for nested operator calls. */
+    Py_DECREF(context_dict);
+    CTX_py_state_pop(C, &context_py_state);
+  }
 
   if (error_val == -1) {
     return NULL;
@@ -319,7 +339,7 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
    * is freed by clear_globals(), further access will crash blender.
    * Setting context is not needed in this case, only calling because this
    * function corrects bpy.data (internal Main pointer) */
-  BPY_modules_update(C);
+  BPY_modules_update();
 
   /* return operator_ret as a bpy enum */
   return pyrna_enum_bitfield_to_py(rna_enum_operator_return_items, operator_ret);
@@ -339,7 +359,7 @@ static PyObject *pyop_as_string(PyObject *UNUSED(self), PyObject *args)
   char *buf = NULL;
   PyObject *pybuf;
 
-  bContext *C = (bContext *)BPy_GetContext();
+  bContext *C = BPY_context_get();
 
   if (C == NULL) {
     PyErr_SetString(PyExc_RuntimeError,
@@ -429,12 +449,22 @@ static PyObject *pyop_getrna_type(PyObject *UNUSED(self), PyObject *value)
   return (PyObject *)pyrna;
 }
 
+static PyObject *pyop_get_bl_options(PyObject *UNUSED(self), PyObject *value)
+{
+  wmOperatorType *ot;
+  if ((ot = ot_lookup_from_py_string(value, "get_bl_options")) == NULL) {
+    return NULL;
+  }
+  return pyrna_enum_bitfield_to_py(rna_enum_operator_type_flag_items, ot->flag);
+}
+
 static struct PyMethodDef bpy_ops_methods[] = {
     {"poll", (PyCFunction)pyop_poll, METH_VARARGS, NULL},
     {"call", (PyCFunction)pyop_call, METH_VARARGS, NULL},
     {"as_string", (PyCFunction)pyop_as_string, METH_VARARGS, NULL},
     {"dir", (PyCFunction)pyop_dir, METH_NOARGS, NULL},
     {"get_rna_type", (PyCFunction)pyop_getrna_type, METH_O, NULL},
+    {"get_bl_options", (PyCFunction)pyop_get_bl_options, METH_O, NULL},
     {"macro_define", (PyCFunction)PYOP_wrap_macro_define, METH_VARARGS, NULL},
     {NULL, NULL, 0, NULL},
 };

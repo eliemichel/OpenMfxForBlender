@@ -50,6 +50,7 @@ class ViewLayer;
 class Shader;
 class ShaderGraph;
 class ShaderNode;
+class TaskPool;
 
 class BlenderSync {
  public:
@@ -75,7 +76,8 @@ class BlenderSync {
   void sync_view_layer(BL::SpaceView3D &b_v3d, BL::ViewLayer &b_view_layer);
   vector<Pass> sync_render_passes(BL::RenderLayer &b_render_layer,
                                   BL::ViewLayer &b_view_layer,
-                                  bool adaptive_sampling);
+                                  bool adaptive_sampling,
+                                  const DenoiseParams &denoising);
   void sync_integrator();
   void sync_camera(BL::RenderSettings &b_render,
                    BL::Object &b_override,
@@ -94,23 +96,29 @@ class BlenderSync {
 
   /* get parameters */
   static SceneParams get_scene_params(BL::Scene &b_scene, bool background);
-  static SessionParams get_session_params(BL::RenderEngine &b_engine,
-                                          BL::Preferences &b_userpref,
-                                          BL::Scene &b_scene,
-                                          bool background);
+  static SessionParams get_session_params(
+      BL::RenderEngine &b_engine,
+      BL::Preferences &b_userpref,
+      BL::Scene &b_scene,
+      bool background,
+      BL::ViewLayer b_view_layer = BL::ViewLayer(PointerRNA_NULL));
   static bool get_session_pause(BL::Scene &b_scene, bool background);
-  static BufferParams get_buffer_params(BL::Scene &b_scene,
-                                        BL::RenderSettings &b_render,
+  static BufferParams get_buffer_params(BL::RenderSettings &b_render,
                                         BL::SpaceView3D &b_v3d,
                                         BL::RegionView3D &b_rv3d,
                                         Camera *cam,
                                         int width,
-                                        int height);
+                                        int height,
+                                        const bool use_denoiser);
 
   static PassType get_pass_type(BL::RenderPass &b_pass);
   static int get_denoising_pass(BL::RenderPass &b_pass);
 
  private:
+  static DenoiseParams get_denoise_params(BL::Scene &b_scene,
+                                          BL::ViewLayer &b_view_layer,
+                                          bool background);
+
   /* sync */
   void sync_lights(BL::Depsgraph &b_depsgraph, bool update_all);
   void sync_materials(BL::Depsgraph &b_depsgraph, bool update_all);
@@ -138,10 +146,11 @@ class BlenderSync {
                       bool use_particle_hair,
                       bool show_lights,
                       BlenderObjectCulling &culling,
-                      bool *use_portal);
+                      bool *use_portal,
+                      TaskPool *geom_task_pool);
 
   /* Volume */
-  void sync_volume(BL::Object &b_ob, Mesh *mesh, const vector<Shader *> &used_shaders);
+  void sync_volume(BL::Object &b_ob, Volume *volume, const vector<Shader *> &used_shaders);
 
   /* Mesh */
   void sync_mesh(BL::Depsgraph b_depsgraph,
@@ -153,16 +162,12 @@ class BlenderSync {
   /* Hair */
   void sync_hair(BL::Depsgraph b_depsgraph,
                  BL::Object b_ob,
-                 Geometry *geom,
+                 Hair *hair,
                  const vector<Shader *> &used_shaders);
-  void sync_hair_motion(BL::Depsgraph b_depsgraph,
-                        BL::Object b_ob,
-                        Geometry *geom,
-                        int motion_step);
+  void sync_hair_motion(BL::Depsgraph b_depsgraph, BL::Object b_ob, Hair *hair, int motion_step);
   void sync_hair(Hair *hair, BL::Object &b_ob, bool motion, int motion_step = 0);
   void sync_particle_hair(
-      Geometry *geom, BL::Mesh &b_mesh, BL::Object &b_ob, bool motion, int motion_step = 0);
-  void sync_curve_settings();
+      Hair *hair, BL::Mesh &b_mesh, BL::Object &b_ob, bool motion, int motion_step = 0);
   bool object_has_particle_hair(BL::Object b_ob);
 
   /* Camera */
@@ -174,12 +179,15 @@ class BlenderSync {
                           BL::Object &b_ob,
                           BL::Object &b_ob_instance,
                           bool object_updated,
-                          bool use_particle_hair);
+                          bool use_particle_hair,
+                          TaskPool *task_pool);
+
   void sync_geometry_motion(BL::Depsgraph &b_depsgraph,
                             BL::Object &b_ob,
                             Object *object,
                             float motion_time,
-                            bool use_particle_hair);
+                            bool use_particle_hair,
+                            TaskPool *task_pool);
 
   /* Light */
   void sync_light(BL::Object &b_parent,
@@ -205,7 +213,7 @@ class BlenderSync {
   /* util */
   void find_shader(BL::ID &id, vector<Shader *> &used_shaders, Shader *default_shader);
   bool BKE_object_is_modified(BL::Object &b_ob);
-  bool object_is_mesh(BL::Object &b_ob);
+  bool object_is_geometry(BL::Object &b_ob);
   bool object_is_light(BL::Object &b_ob);
 
   /* variables */

@@ -44,30 +44,28 @@
 #  error COM_CURRENT_THREADING_MODEL No threading model selected
 #endif
 
-/// \brief list of all CPUDevices. for every hardware thread an instance of CPUDevice is created
+/** \brief list of all CPUDevices. for every hardware thread an instance of CPUDevice is created */
 static vector<CPUDevice *> g_cpudevices;
 static ThreadLocal(CPUDevice *) g_thread_device;
 
 #if COM_CURRENT_THREADING_MODEL == COM_TM_QUEUE
-/// \brief list of all thread for every CPUDevice in cpudevices a thread exists
+/** \brief list of all thread for every CPUDevice in cpudevices a thread exists. */
 static ListBase g_cputhreads;
 static bool g_cpuInitialized = false;
-/// \brief all scheduled work for the cpu
+/** \brief all scheduled work for the cpu */
 static ThreadQueue *g_cpuqueue;
 static ThreadQueue *g_gpuqueue;
 #  ifdef COM_OPENCL_ENABLED
 static cl_context g_context;
 static cl_program g_program;
-/// \brief list of all OpenCLDevices. for every OpenCL GPU device an instance of OpenCLDevice is
-/// created
+/** \brief list of all OpenCLDevices. for every OpenCL GPU device an instance of OpenCLDevice is
+ * created. */
 static vector<OpenCLDevice *> g_gpudevices;
-/// \brief list of all thread for every GPUDevice in cpudevices a thread exists
+/** \brief list of all thread for every GPUDevice in cpudevices a thread exists. */
 static ListBase g_gputhreads;
-/// \brief all scheduled work for the gpu
-#    ifdef COM_OPENCL_ENABLED
+/** \brief all scheduled work for the GPU. */
 static bool g_openclActive = false;
 static bool g_openclInitialized = false;
-#    endif
 #  endif
 #endif
 
@@ -184,7 +182,7 @@ bool WorkScheduler::hasGPUDevices()
 {
 #if COM_CURRENT_THREADING_MODEL == COM_TM_QUEUE
 #  ifdef COM_OPENCL_ENABLED
-  return g_gpudevices.size() > 0;
+  return !g_gpudevices.empty();
 #  else
   return 0;
 #  endif
@@ -210,7 +208,7 @@ void WorkScheduler::initialize(bool use_opencl, int num_cpu_threads)
   if (g_cpudevices.size() != num_cpu_threads) {
     Device *device;
 
-    while (g_cpudevices.size() > 0) {
+    while (!g_cpudevices.empty()) {
       device = g_cpudevices.back();
       g_cpudevices.pop_back();
       device->deinitialize();
@@ -331,7 +329,7 @@ void WorkScheduler::deinitialize()
   /* deinitialize CPU threads */
   if (g_cpuInitialized) {
     Device *device;
-    while (g_cpudevices.size() > 0) {
+    while (!g_cpudevices.empty()) {
       device = g_cpudevices.back();
       g_cpudevices.pop_back();
       device->deinitialize();
@@ -345,7 +343,7 @@ void WorkScheduler::deinitialize()
   /* deinitialize OpenCL GPU's */
   if (g_openclInitialized) {
     Device *device;
-    while (g_gpudevices.size() > 0) {
+    while (!g_gpudevices.empty()) {
       device = g_gpudevices.back();
       g_gpudevices.pop_back();
       device->deinitialize();

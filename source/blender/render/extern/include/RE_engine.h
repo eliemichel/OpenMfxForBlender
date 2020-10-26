@@ -21,8 +21,7 @@
  * \ingroup render
  */
 
-#ifndef __RE_ENGINE_H__
-#define __RE_ENGINE_H__
+#pragma once
 
 #include "DNA_listBase.h"
 #include "DNA_node_types.h"
@@ -48,6 +47,10 @@ struct ViewLayer;
 struct bNode;
 struct bNodeTree;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* External Engine */
 
 /* RenderEngineType.flag */
@@ -60,6 +63,7 @@ struct bNodeTree;
 #define RE_USE_SHADING_NODES_CUSTOM 64
 #define RE_USE_SPHERICAL_STEREO 128
 #define RE_USE_STEREO_VIEWPORT 256
+#define RE_USE_GPU_CONTEXT 512
 
 /* RenderEngine.flag */
 #define RE_ENGINE_ANIMATION 1
@@ -68,7 +72,6 @@ struct bNodeTree;
 #define RE_ENGINE_DO_UPDATE 8
 #define RE_ENGINE_RENDERING 16
 #define RE_ENGINE_HIGHLIGHT_TILES 32
-#define RE_ENGINE_USED_FOR_VIEWPORT 64
 
 extern ListBase R_engines;
 
@@ -76,7 +79,7 @@ typedef struct RenderEngineType {
   struct RenderEngineType *next, *prev;
 
   /* type info */
-  char idname[64];  // best keep the same size as BKE_ST_MAXNAME
+  char idname[64]; /* best keep the same size as BKE_ST_MAXNAME. */
   char name[64];
   int flag;
 
@@ -87,11 +90,8 @@ typedef struct RenderEngineType {
                struct Object *object,
                const int pass_type,
                const int pass_filter,
-               const int object_id,
-               const struct BakePixel *pixel_array,
-               const int num_pixels,
-               const int depth,
-               void *result);
+               const int width,
+               const int height);
 
   void (*view_update)(struct RenderEngine *engine,
                       const struct bContext *context,
@@ -140,6 +140,13 @@ typedef struct RenderEngine {
 
   struct ReportList *reports;
 
+  struct {
+    const struct BakePixel *pixels;
+    float *result;
+    int width, height, depth;
+    int object_id;
+  } bake;
+
   /* Depsgraph */
   struct Depsgraph *depsgraph;
 
@@ -155,7 +162,6 @@ typedef struct RenderEngine {
 } RenderEngine;
 
 RenderEngine *RE_engine_create(RenderEngineType *type);
-RenderEngine *RE_engine_create_ex(RenderEngineType *type, bool use_for_viewport);
 void RE_engine_free(RenderEngine *engine);
 
 void RE_layer_load_from_file(
@@ -234,4 +240,6 @@ void RE_bake_engine_set_engine_parameters(struct Render *re,
 
 void RE_engine_free_blender_memory(struct RenderEngine *engine);
 
-#endif /* __RE_ENGINE_H__ */
+#ifdef __cplusplus
+}
+#endif

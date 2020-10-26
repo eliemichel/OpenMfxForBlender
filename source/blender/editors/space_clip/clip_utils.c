@@ -50,7 +50,7 @@
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
-#include "clip_intern.h"  // own include
+#include "clip_intern.h" /* own include */
 
 bool clip_graph_value_visible(SpaceClip *sc, eClipCurveValueSource value_source)
 {
@@ -166,7 +166,8 @@ static float calculate_reprojection_error_at_marker(MovieClip *clip,
   reprojected_position[1] = (reprojected_position[1] / (reprojected_position[3] * 2.0f) + 0.5f) *
                             clip_height * aspy;
 
-  BKE_tracking_distort_v2(tracking, reprojected_position, reprojected_position);
+  BKE_tracking_distort_v2(
+      tracking, clip_width, clip_height, reprojected_position, reprojected_position);
 
   marker_position[0] = (marker->pos[0] + track->offset[0]) * clip_width;
   marker_position[1] = (marker->pos[1] + track->offset[1]) * clip_height * aspy;
@@ -296,11 +297,8 @@ void clip_graph_tracking_iterate(SpaceClip *sc,
   MovieClip *clip = ED_space_clip_get_clip(sc);
   MovieTracking *tracking = &clip->tracking;
   ListBase *tracksbase = BKE_tracking_get_active_tracks(tracking);
-  MovieTrackingTrack *track;
 
-  for (track = tracksbase->first; track; track = track->next) {
-    int i;
-
+  LISTBASE_FOREACH (MovieTrackingTrack *, track, tracksbase) {
     if (!include_hidden && (track->flag & TRACK_HIDDEN) != 0) {
       continue;
     }
@@ -309,7 +307,7 @@ void clip_graph_tracking_iterate(SpaceClip *sc,
       continue;
     }
 
-    for (i = 0; i < track->markersnr; i++) {
+    for (int i = 0; i < track->markersnr; i++) {
       MovieTrackingMarker *marker = &track->markers[i];
 
       if (marker->flag & MARKER_DISABLED) {
@@ -414,9 +412,7 @@ void clip_draw_sfra_efra(View2D *v2d, Scene *scene)
   UI_view2d_view_ortho(v2d);
 
   /* currently clip editor supposes that editing clip length is equal to scene frame range */
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
@@ -425,7 +421,7 @@ void clip_draw_sfra_efra(View2D *v2d, Scene *scene)
   immRectf(pos, v2d->cur.xmin, v2d->cur.ymin, (float)SFRA, v2d->cur.ymax);
   immRectf(pos, (float)EFRA, v2d->cur.ymin, v2d->cur.xmax, v2d->cur.ymax);
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   immUniformThemeColorShade(TH_BACK, -60);
 

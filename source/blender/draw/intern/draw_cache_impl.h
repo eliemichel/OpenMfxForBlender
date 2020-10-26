@@ -20,8 +20,7 @@
  * \ingroup draw
  */
 
-#ifndef __DRAW_CACHE_IMPL_H__
-#define __DRAW_CACHE_IMPL_H__
+#pragma once
 
 struct GPUBatch;
 struct GPUIndexBuf;
@@ -31,6 +30,7 @@ struct ListBase;
 struct ModifierData;
 struct PTCacheEdit;
 struct ParticleSystem;
+struct TaskGraph;
 
 struct Curve;
 struct Hair;
@@ -41,6 +41,8 @@ struct PointCloud;
 struct Volume;
 struct bGPdata;
 
+#include "BKE_mesh_types.h"
+
 /* Expose via BKE callbacks */
 void DRW_mball_batch_cache_dirty_tag(struct MetaBall *mb, int mode);
 void DRW_mball_batch_cache_validate(struct MetaBall *mb);
@@ -50,7 +52,7 @@ void DRW_curve_batch_cache_dirty_tag(struct Curve *cu, int mode);
 void DRW_curve_batch_cache_validate(struct Curve *cu);
 void DRW_curve_batch_cache_free(struct Curve *cu);
 
-void DRW_mesh_batch_cache_dirty_tag(struct Mesh *me, int mode);
+void DRW_mesh_batch_cache_dirty_tag(struct Mesh *me, eMeshBatchDirtyMode mode);
 void DRW_mesh_batch_cache_validate(struct Mesh *me);
 void DRW_mesh_batch_cache_free(struct Mesh *me);
 
@@ -143,14 +145,20 @@ int DRW_hair_material_count_get(struct Hair *hair);
 int DRW_pointcloud_material_count_get(struct PointCloud *pointcloud);
 
 struct GPUBatch *DRW_pointcloud_batch_cache_get_dots(struct Object *ob);
+struct GPUBatch *DRW_pointcloud_batch_cache_get_surface(struct Object *ob);
+struct GPUBatch **DRW_cache_pointcloud_surface_shaded_get(struct Object *ob,
+                                                          struct GPUMaterial **gpumat_array,
+                                                          uint gpumat_array_len);
 
 /* Volume */
 int DRW_volume_material_count_get(struct Volume *volume);
 
 struct GPUBatch *DRW_volume_batch_cache_get_wireframes_face(struct Volume *volume);
+struct GPUBatch *DRW_volume_batch_cache_get_selection_surface(struct Volume *volume);
 
 /* Mesh */
-void DRW_mesh_batch_cache_create_requested(struct Object *ob,
+void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
+                                           struct Object *ob,
                                            struct Mesh *me,
                                            const struct Scene *scene,
                                            const bool is_paint_mode,
@@ -168,7 +176,9 @@ struct GPUBatch **DRW_mesh_batch_cache_get_surface_shaded(struct Mesh *me,
 struct GPUBatch **DRW_mesh_batch_cache_get_surface_texpaint(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_surface_texpaint_single(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_surface_vertpaint(struct Mesh *me);
+struct GPUBatch *DRW_mesh_batch_cache_get_surface_sculpt(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_surface_weights(struct Mesh *me);
+struct GPUBatch *DRW_mesh_batch_cache_get_sculpt_overlays(struct Mesh *me);
 /* edit-mesh drawing */
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_triangles(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_vertices(struct Mesh *me);
@@ -197,19 +207,26 @@ struct GPUBatch *DRW_mesh_batch_cache_get_edituv_facedots(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_uv_edges(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_mesh_analysis(struct Mesh *me);
 
+/* For direct data access. */
+struct GPUVertBuf *DRW_mesh_batch_cache_pos_vertbuf_get(struct Mesh *me);
+struct GPUVertBuf *DRW_curve_batch_cache_pos_vertbuf_get(struct Curve *cu);
+struct GPUVertBuf *DRW_mball_batch_cache_pos_vertbuf_get(struct Object *ob);
+
 int DRW_mesh_material_count_get(struct Mesh *me);
+
+/* See 'common_globals_lib.glsl' for duplicate defines. */
 
 /* Edit mesh bitflags (is this the right place?) */
 enum {
   VFLAG_VERT_ACTIVE = 1 << 0,
   VFLAG_VERT_SELECTED = 1 << 1,
-  VFLAG_EDGE_ACTIVE = 1 << 2,
-  VFLAG_EDGE_SELECTED = 1 << 3,
-  VFLAG_EDGE_SEAM = 1 << 4,
-  VFLAG_EDGE_SHARP = 1 << 5,
-  VFLAG_EDGE_FREESTYLE = 1 << 6,
-  /* Beware to not go over 1 << 7 (it's a byte flag)
-   * (see gpu_shader_edit_mesh_overlay_geom.glsl) */
+  VFLAG_VERT_SELECTED_BEZT_HANDLE = 1 << 2,
+  VFLAG_EDGE_ACTIVE = 1 << 3,
+  VFLAG_EDGE_SELECTED = 1 << 4,
+  VFLAG_EDGE_SEAM = 1 << 5,
+  VFLAG_EDGE_SHARP = 1 << 6,
+  VFLAG_EDGE_FREESTYLE = 1 << 7,
+  /* Beware to not go over 1 << 7 (it's a byte flag). */
 };
 
 enum {
@@ -221,8 +238,7 @@ enum {
   VFLAG_EDGE_UV_SELECT = 1 << 5,
   VFLAG_FACE_UV_ACTIVE = 1 << 6,
   VFLAG_FACE_UV_SELECT = 1 << 7,
-  /* Beware to not go over 1 << 7 (it's a byte flag)
-   * (see gpu_shader_edit_mesh_overlay_geom.glsl) */
+  /* Beware to not go over 1 << 7 (it's a byte flag). */
 };
 
 /* Particles */
@@ -241,5 +257,3 @@ struct GPUBatch *DRW_particles_batch_cache_get_edit_inner_points(struct Object *
 struct GPUBatch *DRW_particles_batch_cache_get_edit_tip_points(struct Object *object,
                                                                struct ParticleSystem *psys,
                                                                struct PTCacheEdit *edit);
-
-#endif /* __DRAW_CACHE_IMPL_H__ */

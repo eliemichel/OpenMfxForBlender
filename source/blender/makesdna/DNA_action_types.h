@@ -25,18 +25,18 @@
  * or sequenced in the non-linear-editor (NLA).
  */
 
-#ifndef __DNA_ACTION_TYPES_H__
-#define __DNA_ACTION_TYPES_H__
+#pragma once
+
+#include "DNA_ID.h"
+#include "DNA_listBase.h"
+#include "DNA_session_uuid_types.h"
+#include "DNA_userdef_types.h" /* ThemeWireColor */
+#include "DNA_vec_types.h"
+#include "DNA_view2d_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "DNA_ID.h"
-#include "DNA_listBase.h"
-#include "DNA_userdef_types.h" /* ThemeWireColor */
-#include "DNA_vec_types.h"
-#include "DNA_view2d_types.h"
 
 struct Collection;
 struct GHash;
@@ -188,6 +188,8 @@ struct DualQuat;
 struct Mat4;
 
 typedef struct bPoseChannel_Runtime {
+  SessionUUID session_uuid;
+
   /* Cached dual quaternion for deformation. */
   struct DualQuat deform_dual_quat;
 
@@ -695,7 +697,7 @@ typedef enum eAction_Flags {
 typedef struct bDopeSheet {
   /** Currently ID_SCE (for Dopesheet), and ID_SC (for Grease Pencil). */
   ID *source;
-  /** Cache for channels (only initialized when pinned). */  // XXX not used!
+  /** Cache for channels (only initialized when pinned). */ /* XXX not used! */
   ListBase chanbase;
 
   /** Object group for option to only include objects that belong to this Collection. */
@@ -703,8 +705,9 @@ typedef struct bDopeSheet {
   /** String to search for in displayed names of F-Curves, or NlaTracks/GP Layers/etc. */
   char searchstr[64];
 
-  /** Flags to use for filtering data. */
+  /** Flags to use for filtering data #eAnimFilter_Flags. */
   int filterflag;
+  /** #eDopeSheet_FilterFlag2 */
   int filterflag2;
   /** Standard flags. */
   int flag;
@@ -793,6 +796,8 @@ typedef enum eDopeSheet_Flag {
   ADS_FLAG_FUZZY_NAMES = (1 << 2),
   /** do not sort datablocks (mostly objects) by name (NOTE: potentially expensive operation) */
   ADS_FLAG_NO_DB_SORT = (1 << 3),
+  /** Invert the search filter */
+  ADS_FLAG_INVERT_FILTER = (1 << 4),
 } eDopeSheet_Flag;
 
 typedef struct SpaceAction_Runtime {
@@ -844,7 +849,7 @@ typedef enum eSAction_Flag {
   /* draw time in seconds instead of time in frames */
   SACTION_DRAWTIME = (1 << 2),
   /* don't filter action channels according to visibility */
-  // SACTION_NOHIDE = (1 << 3), // XXX deprecated... old animation system
+  // SACTION_NOHIDE = (1 << 3), /* XXX deprecated... old animation systems. */
   /* don't kill overlapping keyframes after transform */
   SACTION_NOTRANSKEYCULL = (1 << 4),
   /* don't include keyframes that are out of view */
@@ -952,5 +957,3 @@ typedef struct bActionChannel {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_ACTION_TYPES_H__ */

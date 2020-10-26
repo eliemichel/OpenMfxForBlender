@@ -24,13 +24,6 @@
 #ifndef __MALLOCN_INTERN_H__
 #define __MALLOCN_INTERN_H__
 
-/* mmap exception */
-#if defined(WIN32)
-#  include "mmap_win.h"
-#else
-#  include <sys/mman.h>
-#endif
-
 #ifdef __GNUC__
 #  define UNUSED(x) UNUSED_##x __attribute__((__unused__))
 #else
@@ -107,10 +100,17 @@ size_t malloc_usable_size(void *ptr);
 
 #include "mallocn_inline.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define ALIGNED_MALLOC_MINIMUM_ALIGNMENT sizeof(void *)
 
 void *aligned_malloc(size_t size, size_t alignment);
 void aligned_free(void *ptr);
+
+extern bool leak_detector_has_run;
+extern char free_after_leak_detection_message[];
 
 /* Prototypes for counted allocator functions */
 size_t MEM_lockfree_allocN_len(const void *vmemh) ATTR_WARN_UNUSED_RESULT;
@@ -140,19 +140,14 @@ void *MEM_lockfree_mallocN_aligned(size_t len,
                                    size_t alignment,
                                    const char *UNUSED(str)) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT
     ATTR_ALLOC_SIZE(1) ATTR_NONNULL(3);
-void *MEM_lockfree_mapallocN(size_t len,
-                             const char *UNUSED(str)) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT
-    ATTR_ALLOC_SIZE(1) ATTR_NONNULL(2);
 void MEM_lockfree_printmemlist_pydict(void);
 void MEM_lockfree_printmemlist(void);
 void MEM_lockfree_callbackmemlist(void (*func)(void *));
 void MEM_lockfree_printmemlist_stats(void);
 void MEM_lockfree_set_error_callback(void (*func)(const char *));
 bool MEM_lockfree_consistency_check(void);
-void MEM_lockfree_set_lock_callback(void (*lock)(void), void (*unlock)(void));
 void MEM_lockfree_set_memory_debug(void);
 size_t MEM_lockfree_get_memory_in_use(void);
-size_t MEM_lockfree_get_mapped_memory_in_use(void);
 unsigned int MEM_lockfree_get_memory_blocks_in_use(void);
 void MEM_lockfree_reset_peak_memory(void);
 size_t MEM_lockfree_get_peak_memory(void) ATTR_WARN_UNUSED_RESULT;
@@ -188,24 +183,23 @@ void *MEM_guarded_mallocN_aligned(size_t len,
                                   size_t alignment,
                                   const char *UNUSED(str)) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT
     ATTR_ALLOC_SIZE(1) ATTR_NONNULL(3);
-void *MEM_guarded_mapallocN(size_t len,
-                            const char *UNUSED(str)) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT
-    ATTR_ALLOC_SIZE(1) ATTR_NONNULL(2);
 void MEM_guarded_printmemlist_pydict(void);
 void MEM_guarded_printmemlist(void);
 void MEM_guarded_callbackmemlist(void (*func)(void *));
 void MEM_guarded_printmemlist_stats(void);
 void MEM_guarded_set_error_callback(void (*func)(const char *));
 bool MEM_guarded_consistency_check(void);
-void MEM_guarded_set_lock_callback(void (*lock)(void), void (*unlock)(void));
 void MEM_guarded_set_memory_debug(void);
 size_t MEM_guarded_get_memory_in_use(void);
-size_t MEM_guarded_get_mapped_memory_in_use(void);
 unsigned int MEM_guarded_get_memory_blocks_in_use(void);
 void MEM_guarded_reset_peak_memory(void);
 size_t MEM_guarded_get_peak_memory(void) ATTR_WARN_UNUSED_RESULT;
 #ifndef NDEBUG
 const char *MEM_guarded_name_ptr(void *vmemh);
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* __MALLOCN_INTERN_H__ */

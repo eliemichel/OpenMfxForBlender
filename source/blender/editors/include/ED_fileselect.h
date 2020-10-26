@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_FILESELECT_H__
-#define __ED_FILESELECT_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -106,7 +105,7 @@ struct FileSelectParams *ED_fileselect_get_params(struct SpaceFile *sfile);
 short ED_fileselect_set_params(struct SpaceFile *sfile);
 void ED_fileselect_set_params_from_userdef(struct SpaceFile *sfile);
 void ED_fileselect_params_to_userdef(struct SpaceFile *sfile,
-                                     int temp_win_size[],
+                                     const int temp_win_size[],
                                      const bool is_maximized);
 
 void ED_fileselect_reset_params(struct SpaceFile *sfile);
@@ -151,6 +150,7 @@ int ED_file_extension_icon(const char *path);
 
 void ED_file_read_bookmarks(void);
 
+void ED_file_change_dir_ex(struct bContext *C, struct bScreen *screen, struct ScrArea *area);
 void ED_file_change_dir(struct bContext *C);
 
 void ED_file_path_button(struct bScreen *screen,
@@ -200,7 +200,7 @@ void ED_fsmenu_set_category(struct FSMenu *fsmenu,
 
 int ED_fsmenu_get_nentries(struct FSMenu *fsmenu, FSMenuCategory category);
 
-struct FSMenuEntry *ED_fsmenu_get_entry(struct FSMenu *fsmenu, FSMenuCategory category, int index);
+struct FSMenuEntry *ED_fsmenu_get_entry(struct FSMenu *fsmenu, FSMenuCategory category, int idx);
 
 char *ED_fsmenu_entry_get_path(struct FSMenuEntry *fsentry);
 void ED_fsmenu_entry_set_path(struct FSMenuEntry *fsentry, const char *path);
@@ -214,5 +214,3 @@ void ED_fsmenu_entry_set_icon(struct FSMenuEntry *fsentry, const int icon);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_FILESELECT_H__ */

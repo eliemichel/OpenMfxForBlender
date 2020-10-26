@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -22,29 +22,44 @@
  */
 
 #include <stddef.h>
+#include <string.h>
 
 #include "BLI_utildefines.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_editmesh.h"
 #include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_particle.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_query.h"
 
+#include "BLO_read_write.h"
+
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 static void initData(ModifierData *md)
 {
   ParticleSystemModifierData *psmd = (ParticleSystemModifierData *)md;
-  psmd->psys = NULL;
-  psmd->mesh_final = NULL;
-  psmd->mesh_original = NULL;
-  psmd->totdmvert = psmd->totdmedge = psmd->totdmface = 0;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(psmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(psmd, DNA_struct_default_get(ParticleSystemModifierData), modifier);
 }
 static void freeData(ModifierData *md)
 {
@@ -61,7 +76,7 @@ static void freeData(ModifierData *md)
   psmd->totdmvert = psmd->totdmedge = psmd->totdmface = 0;
 
   /* ED_object_modifier_remove may have freed this first before calling
-   * modifier_free (which calls this function) */
+   * BKE_modifier_free (which calls this function) */
   if (psmd->psys) {
     psmd->psys->flag |= PSYS_DELETE;
   }
@@ -74,7 +89,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 #endif
   ParticleSystemModifierData *tpsmd = (ParticleSystemModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   tpsmd->mesh_final = NULL;
   tpsmd->mesh_original = NULL;
@@ -206,7 +221,7 @@ static void deformVerts(ModifierData *md,
   psmd->totdmedge = psmd->mesh_final->totedge;
   psmd->totdmface = psmd->mesh_final->totface;
 
-  if (!(ctx->object->transflag & OB_NO_PSYS_UPDATE)) {
+  {
     struct Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
     psmd->flag &= ~eParticleSystemFlag_psys_updated;
     particle_system_update(
@@ -216,7 +231,7 @@ static void deformVerts(ModifierData *md,
 
   if (DEG_is_active(ctx->depsgraph)) {
     Object *object_orig = DEG_get_original_object(ctx->object);
-    ModifierData *md_orig = modifiers_findByName(object_orig, psmd->modifier.name);
+    ModifierData *md_orig = BKE_modifiers_findby_name(object_orig, psmd->modifier.name);
     BLI_assert(md_orig != NULL);
     ParticleSystemModifierData *psmd_orig = (ParticleSystemModifierData *)md_orig;
     psmd_orig->flag = psmd->flag;
@@ -247,16 +262,66 @@ static void deformVertsEM(ModifierData *md,
 }
 #endif
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  Object *ob = ob_ptr.data;
+  ModifierData *md = (ModifierData *)ptr->data;
+  ParticleSystem *psys = ((ParticleSystemModifierData *)md)->psys;
+
+  uiItemL(layout, IFACE_("Settings are in the particle tab"), ICON_NONE);
+
+  if (!(ob->mode & OB_MODE_PARTICLE_EDIT)) {
+    if (ELEM(psys->part->ren_as, PART_DRAW_GR, PART_DRAW_OB)) {
+      uiItemO(layout,
+              CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Convert"),
+              ICON_NONE,
+              "OBJECT_OT_duplicates_make_real");
+    }
+    else if (psys->part->ren_as == PART_DRAW_PATH) {
+      uiItemO(layout,
+              CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Convert"),
+              ICON_NONE,
+              "OBJECT_OT_modifier_convert");
+    }
+  }
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_ParticleSystem, panel_draw);
+}
+
+static void blendRead(BlendDataReader *reader, ModifierData *md)
+{
+  ParticleSystemModifierData *psmd = (ParticleSystemModifierData *)md;
+
+  psmd->mesh_final = NULL;
+  psmd->mesh_original = NULL;
+  /* This is written as part of ob->particlesystem. */
+  BLO_read_data_address(reader, &psmd->psys);
+  psmd->flag &= ~eParticleSystemFlag_psys_updated;
+  psmd->flag |= eParticleSystemFlag_file_loaded;
+}
+
 ModifierTypeInfo modifierType_ParticleSystem = {
     /* name */ "ParticleSystem",
     /* structName */ "ParticleSystemModifierData",
     /* structSize */ sizeof(ParticleSystemModifierData),
+    /* srna */ &RNA_ParticleSystemModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_UsesPointCache /* |
                           eModifierTypeFlag_SupportsEditmode |
                           eModifierTypeFlag_EnableInEditmode */
     ,
+    /* icon */ ICON_MOD_PARTICLES,
 
     /* copyData */ copyData,
 
@@ -264,7 +329,10 @@ ModifierTypeInfo modifierType_ParticleSystem = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -273,8 +341,10 @@ ModifierTypeInfo modifierType_ParticleSystem = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ blendRead,
 };

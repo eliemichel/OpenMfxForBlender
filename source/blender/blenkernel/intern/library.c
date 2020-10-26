@@ -38,6 +38,7 @@
 
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_packedFile.h"
@@ -53,6 +54,12 @@ static void library_free_data(ID *id)
   }
 }
 
+static void library_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Library *lib = (Library *)id;
+  BKE_LIB_FOREACHID_PROCESS(data, lib->parent, IDWALK_CB_NEVER_SELF);
+}
+
 IDTypeInfo IDType_ID_LI = {
     .id_code = ID_LI,
     .id_filter = 0,
@@ -61,35 +68,43 @@ IDTypeInfo IDType_ID_LI = {
     .name = "Library",
     .name_plural = "libraries",
     .translation_context = BLT_I18NCONTEXT_ID_LIBRARY,
-    .flags = IDTYPE_FLAGS_NO_COPY | IDTYPE_FLAGS_NO_LIBLINKING | IDTYPE_FLAGS_NO_MAKELOCAL,
+    .flags = IDTYPE_FLAGS_NO_COPY | IDTYPE_FLAGS_NO_LIBLINKING | IDTYPE_FLAGS_NO_MAKELOCAL |
+             IDTYPE_FLAGS_NO_ANIMDATA,
 
     .init_data = NULL,
     .copy_data = NULL,
     .free_data = library_free_data,
     .make_local = NULL,
+    .foreach_id = library_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 void BKE_library_filepath_set(Main *bmain, Library *lib, const char *filepath)
 {
   /* in some cases this is used to update the absolute path from the
    * relative */
-  if (lib->name != filepath) {
-    BLI_strncpy(lib->name, filepath, sizeof(lib->name));
+  if (lib->filepath != filepath) {
+    BLI_strncpy(lib->filepath, filepath, sizeof(lib->filepath));
   }
 
-  BLI_strncpy(lib->filepath, filepath, sizeof(lib->filepath));
+  BLI_strncpy(lib->filepath_abs, filepath, sizeof(lib->filepath_abs));
 
-  /* not essential but set filepath is an absolute copy of value which
-   * is more useful if its kept in sync */
-  if (BLI_path_is_rel(lib->filepath)) {
+  /* Not essential but set `filepath_abs` is an absolute copy of value which
+   * is more useful if its kept in sync. */
+  if (BLI_path_is_rel(lib->filepath_abs)) {
     /* note that the file may be unsaved, in this case, setting the
-     * filepath on an indirectly linked path is not allowed from the
+     * `filepath_abs` on an indirectly linked path is not allowed from the
      * outliner, and its not really supported but allow from here for now
      * since making local could cause this to be directly linked - campbell
      */
     /* Never make paths relative to parent lib - reading code (blenloader) always set *all*
-     * lib->name relative to current main, not to their parent for indirectly linked ones. */
+     * `lib->filepath` relative to current main, not to their parent for indirectly linked ones. */
     const char *basepath = BKE_main_blendfile_path(bmain);
-    BLI_path_abs(lib->filepath, basepath);
+    BLI_path_abs(lib->filepath_abs, basepath);
   }
 }

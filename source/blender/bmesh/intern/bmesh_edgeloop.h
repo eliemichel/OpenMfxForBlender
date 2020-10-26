@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BMESH_EDGELOOP_H__
-#define __BMESH_EDGELOOP_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -30,7 +29,7 @@ struct ListBase;
 
 /* multiple edgeloops (ListBase) */
 int BM_mesh_edgeloops_find(BMesh *bm,
-                           struct ListBase *r_lb,
+                           struct ListBase *r_eloops,
                            bool (*test_fn)(BMEdge *, void *user_data),
                            void *user_data);
 bool BM_mesh_edgeloops_find_path(BMesh *bm,
@@ -84,5 +83,3 @@ bool BM_edgeloop_overlap_check(struct BMEdgeLoopStore *el_store_a,
 #define BM_EDGELOOP_NEXT(el_store) \
   (CHECK_TYPE_INLINE(el_store, struct BMEdgeLoopStore *), \
    (struct BMEdgeLoopStore *)((LinkData *)el_store)->next)
-
-#endif /* __BMESH_EDGELOOP_H__ */

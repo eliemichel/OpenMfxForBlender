@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2020 Blender Foundation.
@@ -36,6 +36,7 @@
 
 #include "BKE_brush.h"
 #include "BKE_context.h"
+#include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
@@ -58,6 +59,7 @@
 #include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_sculpt.h"
+#include "ED_undo.h"
 #include "ED_view3d.h"
 #include "paint_intern.h"
 #include "sculpt_intern.h"
@@ -114,29 +116,31 @@ void SCULPT_dyntopo_node_layers_add(SculptSession *ss)
 
   char layer_id[] = "_dyntopo_node_id";
 
-  cd_node_layer_index = CustomData_get_named_layer_index(&ss->bm->vdata, CD_PROP_INT, layer_id);
+  cd_node_layer_index = CustomData_get_named_layer_index(&ss->bm->vdata, CD_PROP_INT32, layer_id);
   if (cd_node_layer_index == -1) {
-    BM_data_layer_add_named(ss->bm, &ss->bm->vdata, CD_PROP_INT, layer_id);
-    cd_node_layer_index = CustomData_get_named_layer_index(&ss->bm->vdata, CD_PROP_INT, layer_id);
+    BM_data_layer_add_named(ss->bm, &ss->bm->vdata, CD_PROP_INT32, layer_id);
+    cd_node_layer_index = CustomData_get_named_layer_index(
+        &ss->bm->vdata, CD_PROP_INT32, layer_id);
   }
 
   ss->cd_vert_node_offset = CustomData_get_n_offset(
       &ss->bm->vdata,
-      CD_PROP_INT,
-      cd_node_layer_index - CustomData_get_layer_index(&ss->bm->vdata, CD_PROP_INT));
+      CD_PROP_INT32,
+      cd_node_layer_index - CustomData_get_layer_index(&ss->bm->vdata, CD_PROP_INT32));
 
   ss->bm->vdata.layers[cd_node_layer_index].flag |= CD_FLAG_TEMPORARY;
 
-  cd_node_layer_index = CustomData_get_named_layer_index(&ss->bm->pdata, CD_PROP_INT, layer_id);
+  cd_node_layer_index = CustomData_get_named_layer_index(&ss->bm->pdata, CD_PROP_INT32, layer_id);
   if (cd_node_layer_index == -1) {
-    BM_data_layer_add_named(ss->bm, &ss->bm->pdata, CD_PROP_INT, layer_id);
-    cd_node_layer_index = CustomData_get_named_layer_index(&ss->bm->pdata, CD_PROP_INT, layer_id);
+    BM_data_layer_add_named(ss->bm, &ss->bm->pdata, CD_PROP_INT32, layer_id);
+    cd_node_layer_index = CustomData_get_named_layer_index(
+        &ss->bm->pdata, CD_PROP_INT32, layer_id);
   }
 
   ss->cd_face_node_offset = CustomData_get_n_offset(
       &ss->bm->pdata,
-      CD_PROP_INT,
-      cd_node_layer_index - CustomData_get_layer_index(&ss->bm->pdata, CD_PROP_INT));
+      CD_PROP_INT32,
+      cd_node_layer_index - CustomData_get_layer_index(&ss->bm->pdata, CD_PROP_INT32));
 
   ss->bm->pdata.layers[cd_node_layer_index].flag |= CD_FLAG_TEMPORARY;
 }
@@ -152,7 +156,7 @@ void SCULPT_dynamic_topology_enable_ex(Main *bmain, Depsgraph *depsgraph, Scene 
   ss->bm_smooth_shading = (scene->toolsettings->sculpt->flags & SCULPT_DYNTOPO_SMOOTH_SHADING) !=
                           0;
 
-  /* Dynamic topology doesn't ensure selection state is valid, so remove [#36280]. */
+  /* Dynamic topology doesn't ensure selection state is valid, so remove T36280. */
   BKE_mesh_mselect_clear(me);
 
   /* Create triangles-only BMesh. */
@@ -249,7 +253,7 @@ static void SCULPT_dynamic_topology_disable_ex(
   /* Clear data. */
   me->flag &= ~ME_SCULPT_DYNAMIC_TOPOLOGY;
 
-  /* Typically valid but with global-undo they can be NULL. [#36234] */
+  /* Typically valid but with global-undo they can be NULL, see: T36234. */
   if (ss->bm) {
     BM_mesh_free(ss->bm);
     ss->bm = NULL;
@@ -283,11 +287,17 @@ void sculpt_dynamic_topology_disable_with_undo(Main *bmain,
                                                Object *ob)
 {
   SculptSession *ss = ob->sculpt;
-  if (ss->bm) {
-    SCULPT_undo_push_begin("Dynamic topology disable");
-    SCULPT_undo_push_node(ob, NULL, SCULPT_UNDO_DYNTOPO_END);
+  if (ss->bm != NULL) {
+    /* May be false in background mode. */
+    const bool use_undo = G.background ? (ED_undo_stack_get() != NULL) : true;
+    if (use_undo) {
+      SCULPT_undo_push_begin("Dynamic topology disable");
+      SCULPT_undo_push_node(ob, NULL, SCULPT_UNDO_DYNTOPO_END);
+    }
     SCULPT_dynamic_topology_disable_ex(bmain, depsgraph, scene, ob, NULL);
-    SCULPT_undo_push_end();
+    if (use_undo) {
+      SCULPT_undo_push_end();
+    }
   }
 }
 
@@ -298,10 +308,16 @@ static void sculpt_dynamic_topology_enable_with_undo(Main *bmain,
 {
   SculptSession *ss = ob->sculpt;
   if (ss->bm == NULL) {
-    SCULPT_undo_push_begin("Dynamic topology enable");
+    /* May be false in background mode. */
+    const bool use_undo = G.background ? (ED_undo_stack_get() != NULL) : true;
+    if (use_undo) {
+      SCULPT_undo_push_begin("Dynamic topology enable");
+    }
     SCULPT_dynamic_topology_enable_ex(bmain, depsgraph, scene, ob);
-    SCULPT_undo_push_node(ob, NULL, SCULPT_UNDO_DYNTOPO_BEGIN);
-    SCULPT_undo_push_end();
+    if (use_undo) {
+      SCULPT_undo_push_node(ob, NULL, SCULPT_UNDO_DYNTOPO_BEGIN);
+      SCULPT_undo_push_end();
+    }
   }
 }
 
@@ -384,12 +400,12 @@ enum eDynTopoWarnFlag SCULPT_dynamic_topology_check(Scene *scene, Object *ob)
 
   {
     VirtualModifierData virtualModifierData;
-    ModifierData *md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
+    ModifierData *md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
 
     /* Exception for shape keys because we can edit those. */
     for (; md; md = md->next) {
-      const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
-      if (!modifier_isEnabled(scene, md, eModifierMode_Realtime)) {
+      const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
+      if (!BKE_modifier_is_enabled(scene, md, eModifierMode_Realtime)) {
         continue;
       }
 

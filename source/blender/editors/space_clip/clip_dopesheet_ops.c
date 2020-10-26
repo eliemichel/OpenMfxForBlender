@@ -43,7 +43,7 @@
 
 #include "UI_view2d.h"
 
-#include "clip_intern.h"  // own include
+#include "clip_intern.h" /* own include */
 
 static bool space_clip_dopesheet_poll(bContext *C)
 {
@@ -204,7 +204,7 @@ static int dopesheet_view_all_exec(bContext *C, wmOperator *UNUSED(op))
 void CLIP_OT_dopesheet_view_all(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View All";
+  ot->name = "Frame All";
   ot->description = "Reset viewable area to show full keyframe range";
   ot->idname = "CLIP_OT_dopesheet_view_all";
 

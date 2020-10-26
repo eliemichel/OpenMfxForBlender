@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __MATHUTILS_H__
-#define __MATHUTILS_H__
+#pragma once
 
 /** \file
  * \ingroup pymathutils
@@ -91,7 +90,7 @@ void BaseMathObject_dealloc(BaseMathObject *self);
 
 PyMODINIT_FUNC PyInit_mathutils(void);
 
-int EXPP_FloatsAreEqual(float A, float B, int floatSteps);
+int EXPP_FloatsAreEqual(float A, float B, int maxDiff);
 int EXPP_VectorsAreEqual(const float *vecA, const float *vecB, int size, int floatSteps);
 
 typedef struct Mathutils_Callback Mathutils_Callback;
@@ -189,11 +188,9 @@ Py_hash_t mathutils_array_hash(const float *float_array, size_t array_len);
 
 #define MU_ARRAY_FLAGS (MU_ARRAY_ZERO | MU_ARRAY_SPILL)
 
-int column_vector_multiplication(float rvec[4], VectorObject *vec, MatrixObject *mat);
+int column_vector_multiplication(float r_vec[4], VectorObject *vec, MatrixObject *mat);
 
 #ifndef MATH_STANDALONE
 /* dynstr as python string utility functions */
 PyObject *mathutils_dynstr_to_py(struct DynStr *ds);
 #endif
-
-#endif /* __MATHUTILS_H__ */

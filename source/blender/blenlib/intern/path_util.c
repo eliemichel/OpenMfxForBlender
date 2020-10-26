@@ -22,7 +22,6 @@
  * \ingroup bli
  */
 
-#include <assert.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -242,7 +241,7 @@ void BLI_path_normalize(const char *relabase, char *path)
 
       /* Note: previous version of following call used an offset of 3 instead of 4,
        * which meant that the "/../home/me" example actually became "home/me".
-       * Using offset of 3 gives behavior consistent with the abovementioned
+       * Using offset of 3 gives behavior consistent with the aforementioned
        * Python routine. */
       memmove(path, path + 3, strlen(path + 3) + 1);
     }
@@ -427,9 +426,8 @@ static int BLI_path_unc_prefix_len(const char *path)
       /* we assume long UNC path like \\?\server\share\folder etc... */
       return 4;
     }
-    else {
-      return 2;
-    }
+
+    return 2;
   }
 
   return 0;
@@ -533,7 +531,7 @@ void BLI_path_rel(char *file, const char *relfile)
     char *ptemp;
     /* fix missing volume name in relative base,
      * can happen with old recent-files.txt files */
-    get_default_root(temp);
+    BLI_windows_get_default_root_dir(temp);
     ptemp = &temp[2];
     if (relfile[0] != '\\' && relfile[0] != '/') {
       ptemp++;
@@ -641,7 +639,7 @@ void BLI_path_rel(char *file, const char *relfile)
     }
 
     /* don't copy the slash at the beginning */
-    r += BLI_strcpy_rlen(r, q + 1);
+    r += BLI_strncpy_rlen(r, q + 1, FILE_MAX - (r - res));
 
 #ifdef WIN32
     BLI_str_replace_char(res + 2, '/', '\\');
@@ -683,7 +681,7 @@ bool BLI_path_suffix(char *string, size_t maxlen, const char *suffix, const char
       has_extension = true;
       break;
     }
-    else if (ELEM(string[a], '/', '\\')) {
+    if (ELEM(string[a], '/', '\\')) {
       break;
     }
   }
@@ -713,9 +711,8 @@ bool BLI_path_parent_dir(char *path)
     strcpy(path, tmp); /* We assume pardir is always shorter... */
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 /**
@@ -764,11 +761,10 @@ static bool stringframe_chars(const char *path, int *char_start, int *char_end)
     *char_end = ch_end;
     return true;
   }
-  else {
-    *char_start = -1;
-    *char_end = -1;
-    return false;
-  }
+
+  *char_start = -1;
+  *char_end = -1;
+  return false;
 }
 
 /**
@@ -1029,8 +1025,8 @@ bool BLI_path_abs(char *path, const char *basepath)
    */
   if (!wasrelative && !BLI_path_is_abs(path)) {
     char *p = path;
-    get_default_root(tmp);
-    // get rid of the slashes at the beginning of the path
+    BLI_windows_get_default_root_dir(tmp);
+    /* Get rid of the slashes at the beginning of the path. */
     while (ELEM(*p, '\\', '/')) {
       p++;
     }
@@ -1302,6 +1298,11 @@ void BLI_setenv_if_new(const char *env, const char *val)
 
 /**
  * Get an env var, result has to be used immediately.
+ *
+ * On windows getenv gets its variables from a static copy of the environment variables taken at
+ * process start-up, causing it to not pick up on environment variables created during runtime.
+ * This function uses an alternative method to get environment variables that does pick up on
+ * runtime environment variables.
  */
 const char *BLI_getenv(const char *env)
 {
@@ -1388,7 +1389,7 @@ void BLI_make_file_string(const char *relabase, char *string, const char *dir, c
         string[3] = '\0';
       }
       else { /* we're out of luck here, guessing the first valid drive, usually c:\ */
-        get_default_root(string);
+        BLI_windows_get_default_root_dir(string);
       }
 
       /* ignore leading slashes */
@@ -1731,9 +1732,8 @@ void BLI_join_dirfile(char *__restrict dst,
     dst[dirlen - 1] = '\0';
     return; /* dir fills the path */
   }
-  else {
-    memcpy(dst, dir, dirlen + 1);
-  }
+
+  memcpy(dst, dir, dirlen + 1);
 
   if (dirlen + 1 >= maxlen) {
     return; /* fills the path */
@@ -1891,32 +1891,31 @@ bool BLI_path_name_at_index(const char *__restrict path,
     }
     return false;
   }
-  else {
-    /* negative number, reverse where -1 is the last element */
-    int index_step = -1;
-    int prev = strlen(path);
-    int i = prev - 1;
-    while (true) {
-      const char c = i >= 0 ? path[i] : '\0';
-      if (ELEM(c, SEP, ALTSEP, '\0')) {
-        if (prev - 1 != i) {
-          i += 1;
-          if (index_step == index) {
-            *r_offset = i;
-            *r_len = prev - i;
-            return true;
-          }
-          index_step -= 1;
+
+  /* negative number, reverse where -1 is the last element */
+  int index_step = -1;
+  int prev = strlen(path);
+  int i = prev - 1;
+  while (true) {
+    const char c = i >= 0 ? path[i] : '\0';
+    if (ELEM(c, SEP, ALTSEP, '\0')) {
+      if (prev - 1 != i) {
+        i += 1;
+        if (index_step == index) {
+          *r_offset = i;
+          *r_len = prev - i;
+          return true;
         }
-        if (c == '\0') {
-          break;
-        }
-        prev = i;
+        index_step -= 1;
       }
-      i -= 1;
+      if (c == '\0') {
+        break;
+      }
+      prev = i;
     }
-    return false;
+    i -= 1;
   }
+  return false;
 }
 
 /**
@@ -1930,7 +1929,7 @@ const char *BLI_path_slash_find(const char *string)
   if (!ffslash) {
     return fbslash;
   }
-  else if (!fbslash) {
+  if (!fbslash) {
     return ffslash;
   }
 
@@ -1948,7 +1947,7 @@ const char *BLI_path_slash_rfind(const char *string)
   if (!lfslash) {
     return lbslash;
   }
-  else if (!lbslash) {
+  if (!lbslash) {
     return lfslash;
   }
 

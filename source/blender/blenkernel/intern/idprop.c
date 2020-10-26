@@ -26,17 +26,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "BLI_endian_switch.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_lib_id.h"
 
 #include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
+
+#include "BLO_read_write.h"
 
 #include "BLI_strict_flags.h"
 
@@ -55,10 +59,10 @@ static size_t idp_size_table[] = {
     1, /*strings*/
     sizeof(int),
     sizeof(float),
-    sizeof(float) * 3,  /*Vector type, deprecated*/
-    sizeof(float) * 16, /*Matrix type, deprecated*/
-    0,                  /*arrays don't have a fixed size*/
-    sizeof(ListBase),   /*Group type*/
+    sizeof(float[3]),  /*Vector type, deprecated*/
+    sizeof(float[16]), /*Matrix type, deprecated*/
+    0,                 /*arrays don't have a fixed size*/
+    sizeof(ListBase),  /*Group type*/
     sizeof(void *),
     sizeof(double),
 };
@@ -75,7 +79,7 @@ static size_t idp_size_table[] = {
 
 /**
  * \note as a start to move away from the stupid IDP_New function, this type
- * has it's own allocation function.
+ * has its own allocation function.
  */
 IDProperty *IDP_NewIDPArray(const char *name)
 {
@@ -91,7 +95,6 @@ IDProperty *IDP_CopyIDPArray(const IDProperty *array, const int flag)
 {
   /* don't use MEM_dupallocN because this may be part of an array */
   IDProperty *narray, *tmp;
-  int i;
 
   BLI_assert(array->type == IDP_IDPARRAY);
 
@@ -99,7 +102,7 @@ IDProperty *IDP_CopyIDPArray(const IDProperty *array, const int flag)
   *narray = *array;
 
   narray->data.pointer = MEM_dupallocN(array->data.pointer);
-  for (i = 0; i < narray->len; i++) {
+  for (int i = 0; i < narray->len; i++) {
     /* ok, the copy functions always allocate a new structure,
      * which doesn't work here.  instead, simply copy the
      * contents of the new structure into the array cell,
@@ -116,11 +119,9 @@ IDProperty *IDP_CopyIDPArray(const IDProperty *array, const int flag)
 
 static void IDP_FreeIDPArray(IDProperty *prop, const bool do_id_user)
 {
-  int i;
-
   BLI_assert(prop->type == IDP_IDPARRAY);
 
-  for (i = 0; i < prop->len; i++) {
+  for (int i = 0; i < prop->len; i++) {
     IDP_FreePropertyContent_ex(GETPROP(prop, i), do_id_user);
   }
 
@@ -172,16 +173,14 @@ void IDP_ResizeIDPArray(IDProperty *prop, int newlen)
   /* first check if the array buffer size has room */
   if (newlen <= prop->totallen) {
     if (newlen < prop->len && prop->totallen - newlen < IDP_ARRAY_REALLOC_LIMIT) {
-      int i;
-
-      for (i = newlen; i < prop->len; i++) {
+      for (int i = newlen; i < prop->len; i++) {
         IDP_FreePropertyContent(GETPROP(prop, i));
       }
 
       prop->len = newlen;
       return;
     }
-    else if (newlen >= prop->len) {
+    if (newlen >= prop->len) {
       prop->len = newlen;
       return;
     }
@@ -190,8 +189,7 @@ void IDP_ResizeIDPArray(IDProperty *prop, int newlen)
   /* free trailing items */
   if (newlen < prop->len) {
     /* newlen is smaller */
-    int i;
-    for (i = newlen; i < prop->len; i++) {
+    for (int i = newlen; i < prop->len; i++) {
       IDP_FreePropertyContent(GETPROP(prop, i));
     }
   }
@@ -534,19 +532,19 @@ void IDP_SyncGroupValues(IDProperty *dest, const IDProperty *src)
   }
 }
 
-void IDP_SyncGroupTypes(IDProperty *dst, const IDProperty *src, const bool do_arraylen)
+void IDP_SyncGroupTypes(IDProperty *dest, const IDProperty *src, const bool do_arraylen)
 {
   IDProperty *prop_dst, *prop_dst_next;
   const IDProperty *prop_src;
 
-  for (prop_dst = dst->data.group.first; prop_dst; prop_dst = prop_dst_next) {
+  for (prop_dst = dest->data.group.first; prop_dst; prop_dst = prop_dst_next) {
     prop_dst_next = prop_dst->next;
     if ((prop_src = IDP_GetPropertyFromGroup((IDProperty *)src, prop_dst->name))) {
       /* check of we should replace? */
       if ((prop_dst->type != prop_src->type || prop_dst->subtype != prop_src->subtype) ||
           (do_arraylen && ELEM(prop_dst->type, IDP_ARRAY, IDP_IDPARRAY) &&
            (prop_src->len != prop_dst->len))) {
-        BLI_insertlinkreplace(&dst->data.group, prop_dst, IDP_CopyProperty(prop_src));
+        BLI_insertlinkreplace(&dest->data.group, prop_dst, IDP_CopyProperty(prop_src));
         IDP_FreeProperty(prop_dst);
       }
       else if (prop_dst->type == IDP_GROUP) {
@@ -554,7 +552,7 @@ void IDP_SyncGroupTypes(IDProperty *dst, const IDProperty *src, const bool do_ar
       }
     }
     else {
-      IDP_FreeFromGroup(dst, prop_dst);
+      IDP_FreeFromGroup(dest, prop_dst);
     }
   }
 }
@@ -732,14 +730,14 @@ void IDP_FreeFromGroup(IDProperty *group, IDProperty *prop)
   IDP_FreeProperty(prop);
 }
 
-IDProperty *IDP_GetPropertyFromGroup(IDProperty *prop, const char *name)
+IDProperty *IDP_GetPropertyFromGroup(const IDProperty *prop, const char *name)
 {
   BLI_assert(prop->type == IDP_GROUP);
 
   return (IDProperty *)BLI_findstring(&prop->data.group, name, offsetof(IDProperty, name));
 }
 /** same as above but ensure type match */
-IDProperty *IDP_GetPropertyTypeFromGroup(IDProperty *prop, const char *name, const char type)
+IDProperty *IDP_GetPropertyTypeFromGroup(const IDProperty *prop, const char *name, const char type)
 {
   IDProperty *idprop = IDP_GetPropertyFromGroup(prop, name);
   return (idprop && idprop->type == type) ? idprop : NULL;
@@ -789,6 +787,19 @@ IDProperty *IDP_CopyProperty(const IDProperty *prop)
   return IDP_CopyProperty_ex(prop, 0);
 }
 
+/**
+ * Copy content from source IDProperty into destination one, freeing destination property's content
+ * first.
+ */
+void IDP_CopyPropertyContent(IDProperty *dst, IDProperty *src)
+{
+  IDProperty *idprop_tmp = IDP_CopyProperty(src);
+  idprop_tmp->prev = dst->prev;
+  idprop_tmp->next = dst->next;
+  SWAP(IDProperty, *dst, *idprop_tmp);
+  IDP_FreeProperty(idprop_tmp);
+}
+
 /* Updates ID pointers after an object has been copied */
 /* TODO Nuke this once its only user has been correctly converted
  * to use generic ID management from BKE_library! */
@@ -836,17 +847,16 @@ IDProperty *IDP_GetProperties(ID *id, const bool create_if_needed)
   if (id->properties) {
     return id->properties;
   }
-  else {
-    if (create_if_needed) {
-      id->properties = MEM_callocN(sizeof(IDProperty), "IDProperty");
-      id->properties->type = IDP_GROUP;
-      /* don't overwrite the data's name and type
-       * some functions might need this if they
-       * don't have a real ID, should be named elsewhere - Campbell */
-      /* strcpy(id->name, "top_level_group");*/
-    }
-    return id->properties;
+
+  if (create_if_needed) {
+    id->properties = MEM_callocN(sizeof(IDProperty), "IDProperty");
+    id->properties->type = IDP_GROUP;
+    /* don't overwrite the data's name and type
+     * some functions might need this if they
+     * don't have a real ID, should be named elsewhere - Campbell */
+    /* strcpy(id->name, "top_level_group");*/
   }
+  return id->properties;
 }
 
 /**
@@ -856,10 +866,10 @@ bool IDP_EqualsProperties_ex(IDProperty *prop1, IDProperty *prop2, const bool is
   if (prop1 == NULL && prop2 == NULL) {
     return true;
   }
-  else if (prop1 == NULL || prop2 == NULL) {
+  if (prop1 == NULL || prop2 == NULL) {
     return is_strict ? false : true;
   }
-  else if (prop1->type != prop2->type) {
+  if (prop1->type != prop2->type) {
     return false;
   }
 
@@ -918,13 +928,12 @@ bool IDP_EqualsProperties_ex(IDProperty *prop1, IDProperty *prop2, const bool is
     case IDP_IDPARRAY: {
       IDProperty *array1 = IDP_IDPArray(prop1);
       IDProperty *array2 = IDP_IDPArray(prop2);
-      int i;
 
       if (prop1->len != prop2->len) {
         return false;
       }
 
-      for (i = 0; i < prop1->len; i++) {
+      for (int i = 0; i < prop1->len; i++) {
         if (!IDP_EqualsProperties_ex(&array1[i], &array2[i], is_strict)) {
           return false;
         }
@@ -950,7 +959,7 @@ bool IDP_EqualsProperties(IDProperty *prop1, IDProperty *prop2)
  * Allocate a new ID.
  *
  * This function takes three arguments: the ID property type, a union which defines
- * it's initial value, and a name.
+ * its initial value, and a name.
  *
  * The union is simple to use; see the top of this header file for its definition.
  * An example of using this function:
@@ -958,7 +967,7 @@ bool IDP_EqualsProperties(IDProperty *prop1, IDProperty *prop2)
  * \code{.c}
  * IDPropertyTemplate val;
  * IDProperty *group, *idgroup, *color;
- * group = IDP_New(IDP_GROUP, val, "group1"); //groups don't need a template.
+ * group = IDP_New(IDP_GROUP, val, "group1"); // groups don't need a template.
  *
  * val.array.len = 4
  * val.array.type = IDP_FLOAT;
@@ -1168,6 +1177,270 @@ void IDP_foreach_property(IDProperty *id_property_root,
     }
     default:
       break; /* Nothing to do here with other types of IDProperties... */
+  }
+}
+
+void IDP_WriteProperty_OnlyData(const IDProperty *prop, BlendWriter *writer);
+
+static void IDP_WriteArray(const IDProperty *prop, BlendWriter *writer)
+{
+  /*REMEMBER to set totalen to len in the linking code!!*/
+  if (prop->data.pointer) {
+    BLO_write_raw(writer, MEM_allocN_len(prop->data.pointer), prop->data.pointer);
+
+    if (prop->subtype == IDP_GROUP) {
+      IDProperty **array = prop->data.pointer;
+      int a;
+
+      for (a = 0; a < prop->len; a++) {
+        IDP_BlendWrite(writer, array[a]);
+      }
+    }
+  }
+}
+
+static void IDP_WriteIDPArray(const IDProperty *prop, BlendWriter *writer)
+{
+  /*REMEMBER to set totalen to len in the linking code!!*/
+  if (prop->data.pointer) {
+    const IDProperty *array = prop->data.pointer;
+    int a;
+
+    BLO_write_struct_array(writer, IDProperty, prop->len, array);
+
+    for (a = 0; a < prop->len; a++) {
+      IDP_WriteProperty_OnlyData(&array[a], writer);
+    }
+  }
+}
+
+static void IDP_WriteString(const IDProperty *prop, BlendWriter *writer)
+{
+  /*REMEMBER to set totalen to len in the linking code!!*/
+  BLO_write_raw(writer, (size_t)prop->len, prop->data.pointer);
+}
+
+static void IDP_WriteGroup(const IDProperty *prop, BlendWriter *writer)
+{
+  IDProperty *loop;
+
+  for (loop = prop->data.group.first; loop; loop = loop->next) {
+    IDP_BlendWrite(writer, loop);
+  }
+}
+
+/* Functions to read/write ID Properties */
+void IDP_WriteProperty_OnlyData(const IDProperty *prop, BlendWriter *writer)
+{
+  switch (prop->type) {
+    case IDP_GROUP:
+      IDP_WriteGroup(prop, writer);
+      break;
+    case IDP_STRING:
+      IDP_WriteString(prop, writer);
+      break;
+    case IDP_ARRAY:
+      IDP_WriteArray(prop, writer);
+      break;
+    case IDP_IDPARRAY:
+      IDP_WriteIDPArray(prop, writer);
+      break;
+  }
+}
+
+void IDP_BlendWrite(BlendWriter *writer, const IDProperty *prop)
+{
+  BLO_write_struct(writer, IDProperty, prop);
+  IDP_WriteProperty_OnlyData(prop, writer);
+}
+
+static void IDP_DirectLinkProperty(IDProperty *prop, BlendDataReader *reader);
+
+static void IDP_DirectLinkIDPArray(IDProperty *prop, BlendDataReader *reader)
+{
+  IDProperty *array;
+
+  /* since we didn't save the extra buffer, set totallen to len */
+  prop->totallen = prop->len;
+  BLO_read_data_address(reader, &prop->data.pointer);
+
+  array = (IDProperty *)prop->data.pointer;
+
+  /* note!, idp-arrays didn't exist in 2.4x, so the pointer will be cleared
+   * there's not really anything we can do to correct this, at least don't crash */
+  if (array == NULL) {
+    prop->len = 0;
+    prop->totallen = 0;
+  }
+
+  for (int i = 0; i < prop->len; i++) {
+    IDP_DirectLinkProperty(&array[i], reader);
+  }
+}
+
+static void IDP_DirectLinkArray(IDProperty *prop, BlendDataReader *reader)
+{
+  IDProperty **array;
+
+  /* since we didn't save the extra buffer, set totallen to len */
+  prop->totallen = prop->len;
+
+  if (prop->subtype == IDP_GROUP) {
+    BLO_read_pointer_array(reader, &prop->data.pointer);
+    array = prop->data.pointer;
+
+    for (int i = 0; i < prop->len; i++) {
+      IDP_DirectLinkProperty(array[i], reader);
+    }
+  }
+  else if (prop->subtype == IDP_DOUBLE) {
+    BLO_read_double_array(reader, prop->len, (double **)&prop->data.pointer);
+  }
+  else {
+    /* also used for floats */
+    BLO_read_int32_array(reader, prop->len, (int **)&prop->data.pointer);
+  }
+}
+
+static void IDP_DirectLinkString(IDProperty *prop, BlendDataReader *reader)
+{
+  /*since we didn't save the extra string buffer, set totallen to len.*/
+  prop->totallen = prop->len;
+  BLO_read_data_address(reader, &prop->data.pointer);
+}
+
+static void IDP_DirectLinkGroup(IDProperty *prop, BlendDataReader *reader)
+{
+  ListBase *lb = &prop->data.group;
+  IDProperty *loop;
+
+  BLO_read_list(reader, lb);
+
+  /*Link child id properties now*/
+  for (loop = prop->data.group.first; loop; loop = loop->next) {
+    IDP_DirectLinkProperty(loop, reader);
+  }
+}
+
+static void IDP_DirectLinkProperty(IDProperty *prop, BlendDataReader *reader)
+{
+  switch (prop->type) {
+    case IDP_GROUP:
+      IDP_DirectLinkGroup(prop, reader);
+      break;
+    case IDP_STRING:
+      IDP_DirectLinkString(prop, reader);
+      break;
+    case IDP_ARRAY:
+      IDP_DirectLinkArray(prop, reader);
+      break;
+    case IDP_IDPARRAY:
+      IDP_DirectLinkIDPArray(prop, reader);
+      break;
+    case IDP_DOUBLE:
+      /* Workaround for doubles.
+       * They are stored in the same field as `int val, val2` in the #IDPropertyData struct,
+       * they have to deal with endianness specifically.
+       *
+       * In theory, val and val2 would've already been swapped
+       * if switch_endian is true, so we have to first un-swap
+       * them then re-swap them as a single 64-bit entity. */
+      if (BLO_read_requires_endian_switch(reader)) {
+        BLI_endian_switch_int32(&prop->data.val);
+        BLI_endian_switch_int32(&prop->data.val2);
+        BLI_endian_switch_int64((int64_t *)&prop->data.val);
+      }
+      break;
+    case IDP_INT:
+    case IDP_FLOAT:
+    case IDP_ID:
+      break; /* Nothing special to do here. */
+    default:
+      /* Unknown IDP type, nuke it (we cannot handle unknown types everywhere in code,
+       * IDP are way too polymorphic to do it safely. */
+      printf(
+          "%s: found unknown IDProperty type %d, reset to Integer one !\n", __func__, prop->type);
+      /* Note: we do not attempt to free unknown prop, we have no way to know how to do that! */
+      prop->type = IDP_INT;
+      prop->subtype = 0;
+      IDP_Int(prop) = 0;
+  }
+}
+
+void IDP_BlendReadData_impl(BlendDataReader *reader, IDProperty **prop, const char *caller_func_id)
+{
+  if (*prop) {
+    if ((*prop)->type == IDP_GROUP) {
+      IDP_DirectLinkGroup(*prop, reader);
+    }
+    else {
+      /* corrupt file! */
+      printf("%s: found non group data, freeing type %d!\n", caller_func_id, (*prop)->type);
+      /* don't risk id, data's likely corrupt. */
+      // IDP_FreePropertyContent(*prop);
+      *prop = NULL;
+    }
+  }
+}
+
+void IDP_BlendReadLib(BlendLibReader *reader, IDProperty *prop)
+{
+  if (!prop) {
+    return;
+  }
+
+  switch (prop->type) {
+    case IDP_ID: /* PointerProperty */
+    {
+      void *newaddr = BLO_read_get_new_id_address(reader, NULL, IDP_Id(prop));
+      if (IDP_Id(prop) && !newaddr && G.debug) {
+        printf("Error while loading \"%s\". Data not found in file!\n", prop->name);
+      }
+      prop->data.pointer = newaddr;
+      break;
+    }
+    case IDP_IDPARRAY: /* CollectionProperty */
+    {
+      IDProperty *idp_array = IDP_IDPArray(prop);
+      for (int i = 0; i < prop->len; i++) {
+        IDP_BlendReadLib(reader, &(idp_array[i]));
+      }
+      break;
+    }
+    case IDP_GROUP: /* PointerProperty */
+    {
+      LISTBASE_FOREACH (IDProperty *, loop, &prop->data.group) {
+        IDP_BlendReadLib(reader, loop);
+      }
+      break;
+    }
+    default:
+      break; /* Nothing to do for other IDProps. */
+  }
+}
+
+void IDP_BlendReadExpand(struct BlendExpander *expander, IDProperty *prop)
+{
+  if (!prop) {
+    return;
+  }
+
+  switch (prop->type) {
+    case IDP_ID:
+      BLO_expand(expander, IDP_Id(prop));
+      break;
+    case IDP_IDPARRAY: {
+      IDProperty *idp_array = IDP_IDPArray(prop);
+      for (int i = 0; i < prop->len; i++) {
+        IDP_BlendReadExpand(expander, &idp_array[i]);
+      }
+      break;
+    }
+    case IDP_GROUP:
+      LISTBASE_FOREACH (IDProperty *, loop, &prop->data.group) {
+        IDP_BlendReadExpand(expander, loop);
+      }
+      break;
   }
 }
 

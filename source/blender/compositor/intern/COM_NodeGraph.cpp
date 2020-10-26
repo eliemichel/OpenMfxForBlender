@@ -18,14 +18,12 @@
 
 #include <cstring>
 
-extern "C" {
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_node_types.h"
 
 #include "BKE_node.h"
-}
 
 #include "COM_CompositorContext.h"
 #include "COM_Converter.h"
@@ -56,10 +54,9 @@ void NodeGraph::from_bNodeTree(const CompositorContext &context, bNodeTree *tree
   add_bNodeTree(context, 0, tree, NODE_INSTANCE_KEY_BASE);
 }
 
-bNodeSocket *NodeGraph::find_b_node_input(bNode *b_group_node, const char *identifier)
+bNodeSocket *NodeGraph::find_b_node_input(bNode *b_node, const char *identifier)
 {
-  for (bNodeSocket *b_sock = (bNodeSocket *)b_group_node->inputs.first; b_sock;
-       b_sock = b_sock->next) {
+  for (bNodeSocket *b_sock = (bNodeSocket *)b_node->inputs.first; b_sock; b_sock = b_sock->next) {
     if (STREQ(b_sock->identifier, identifier)) {
       return b_sock;
     }
@@ -67,10 +64,9 @@ bNodeSocket *NodeGraph::find_b_node_input(bNode *b_group_node, const char *ident
   return NULL;
 }
 
-bNodeSocket *NodeGraph::find_b_node_output(bNode *b_group_node, const char *identifier)
+bNodeSocket *NodeGraph::find_b_node_output(bNode *b_node, const char *identifier)
 {
-  for (bNodeSocket *b_sock = (bNodeSocket *)b_group_node->outputs.first; b_sock;
-       b_sock = b_sock->next) {
+  for (bNodeSocket *b_sock = (bNodeSocket *)b_node->outputs.first; b_sock; b_sock = b_sock->next) {
     if (STREQ(b_sock->identifier, identifier)) {
       return b_sock;
     }
@@ -188,7 +184,7 @@ NodeOutput *NodeGraph::find_output(const NodeRange &node_range, bNodeSocket *b_s
 
 void NodeGraph::add_bNodeLink(const NodeRange &node_range, bNodeLink *b_nodelink)
 {
-  /// \note Ignore invalid links.
+  /** \note Ignore invalid links. */
   if (!(b_nodelink->flag & NODE_LINK_VALID)) {
     return;
   }

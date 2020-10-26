@@ -32,11 +32,9 @@
 #include "DNA_color_types.h"
 #include "MEM_guardedalloc.h"
 
-extern "C" {
 #include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-}
 
 void add_exr_channels(void *exrhandle,
                       const char *layerName,
@@ -131,9 +129,8 @@ static float *init_buffer(unsigned int width, unsigned int height, DataType data
     int size = get_datatype_size(datatype);
     return (float *)MEM_callocN(width * height * size * sizeof(float), "OutputFile buffer");
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 static void write_buffer_rect(rcti *rect,

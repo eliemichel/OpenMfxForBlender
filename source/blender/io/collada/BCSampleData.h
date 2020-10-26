@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BCSAMPLEDATA_H__
-#define __BCSAMPLEDATA_H__
+#pragma once
 
 #include <algorithm>
 #include <map>
@@ -28,15 +27,15 @@
 #include "BCSampleData.h"
 #include "ExportSettings.h"
 
-extern "C" {
 #include "BKE_object.h"
+
 #include "BLI_math_rotation.h"
+
 #include "DNA_armature_types.h"
 #include "DNA_camera_types.h"
 #include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_object_types.h"
-}
 
 typedef std::map<Bone *, BCMatrix *> BCBoneMatrixMap;
 
@@ -54,13 +53,11 @@ class BCSample {
 
   void add_bone_matrix(Bone *bone, Matrix &mat);
 
-  const bool get_value(std::string channel_target, const int array_index, float *val) const;
+  bool get_value(std::string channel_target, const int array_index, float *val) const;
   const BCMatrix &get_matrix() const;
-  const BCMatrix *get_matrix(Bone *bone) const;  // returns NULL if bone is not animated
+  const BCMatrix *get_matrix(Bone *bone) const; /* returns NULL if bone is not animated */
 };
 
 typedef std::map<Object *, BCSample *> BCSampleMap;
 typedef std::map<int, const BCSample *> BCFrameSampleMap;
 typedef std::map<int, const BCMatrix *> BCMatrixSampleMap;
-
-#endif /* __BCSAMPLEDATA_H__ */

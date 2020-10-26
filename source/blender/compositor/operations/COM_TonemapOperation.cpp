@@ -20,9 +20,7 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "IMB_colormanagement.h"
-}
 
 TonemapOperation::TonemapOperation() : NodeOperation()
 {
@@ -87,9 +85,7 @@ void PhotoreceptorTonemapOperation::executePixel(float output[4], int x, int y, 
 void TonemapOperation::deinitExecution()
 {
   this->m_imageReader = NULL;
-  if (this->m_cachedInstance) {
-    delete this->m_cachedInstance;
-  }
+  delete this->m_cachedInstance;
   NodeOperation::deinitMutex();
 }
 

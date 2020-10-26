@@ -14,25 +14,37 @@ endif()
 # Path to Blender and Python executables for all platforms.
 if(MSVC)
   set(TEST_BLENDER_EXE ${TEST_INSTALL_DIR}/blender.exe)
-  set(TEST_PYTHON_EXE "${TEST_INSTALL_DIR}/${BLENDER_VERSION_MAJOR}.${BLENDER_VERSION_MINOR}/python/bin/python$<$<CONFIG:Debug>:_d>")
+  set(_default_test_python_exe "${TEST_INSTALL_DIR}/${BLENDER_VERSION_MAJOR}.${BLENDER_VERSION_MINOR}/python/bin/python$<$<CONFIG:Debug>:_d>")
 elseif(APPLE)
   set(TEST_BLENDER_EXE ${TEST_INSTALL_DIR}/Blender.app/Contents/MacOS/Blender)
-  set(TEST_PYTHON_EXE)
+  set(_default_test_python_exe ${PYTHON_EXECUTABLE})
 else()
   if(WITH_INSTALL_PORTABLE)
     set(TEST_BLENDER_EXE ${TEST_INSTALL_DIR}/blender)
   else()
     set(TEST_BLENDER_EXE ${TEST_INSTALL_DIR}/bin/blender)
   endif()
-  set(TEST_PYTHON_EXE)
+  set(_default_test_python_exe ${PYTHON_EXECUTABLE})
 endif()
+
+# The installation directory's Python is the best one to use. However, it can only be there after the install step,
+# which means that Python will never be there on a fresh system. To suit different needs, the user can pass
+# -DTEST_PYTHON_EXE=/path/to/python to CMake.
+if(NOT TEST_PYTHON_EXE)
+  set(TEST_PYTHON_EXE ${_default_test_python_exe})
+  message(STATUS "Tests: Using Python executable: ${TEST_PYTHON_EXE}")
+elseif(NOT EXISTS ${TEST_PYTHON_EXE})
+  message(FATAL_ERROR "Tests: TEST_PYTHON_EXE ${TEST_PYTHON_EXE} does not exist")
+endif()
+unset(_default_test_python_exe)
+
 
 # For testing with Valgrind
 # set(TEST_BLENDER_EXE valgrind --track-origins=yes --error-limit=no ${TEST_BLENDER_EXE})
 
 # Standard Blender arguments for running tests.
 # Specify exit code so that if a Python script error happens, the test fails.
-set(TEST_BLENDER_EXE_PARAMS --background -noaudio --factory-startup --python-exit-code 1)
+set(TEST_BLENDER_EXE_PARAMS --background -noaudio --factory-startup --debug-memory --debug-exit-on-error --python-exit-code 1)
 
 # Python CTests
 if(WITH_BLENDER AND WITH_PYTHON)

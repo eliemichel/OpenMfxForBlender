@@ -21,8 +21,7 @@
  * \ingroup edtransform
  */
 
-#ifndef __TRANSFORM_H__
-#define __TRANSFORM_H__
+#pragma once
 
 #include "ED_numinput.h"
 #include "ED_transform.h"
@@ -31,14 +30,16 @@
 #include "RE_engine.h"
 
 #include "DNA_listBase.h"
+#include "DNA_object_enums.h"
 
 #include "DEG_depsgraph.h"
+
+#include "transform_data.h"
 
 /* ************************** Types ***************************** */
 
 struct ARegion;
 struct Depsgraph;
-struct EditBone;
 struct NumInput;
 struct Object;
 struct RNG;
@@ -46,20 +47,16 @@ struct ReportList;
 struct Scene;
 struct ScrArea;
 struct SnapObjectContext;
-struct TransData;
 struct TransDataContainer;
 struct TransInfo;
 struct TransSnap;
 struct TransformOrientation;
 struct ViewLayer;
-struct bConstraint;
 struct bContext;
 struct wmEvent;
 struct wmKeyConfig;
 struct wmKeyMap;
 struct wmTimer;
-
-#include "DNA_object_enums.h"
 
 /* transinfo->redraw */
 typedef enum {
@@ -82,7 +79,7 @@ typedef struct TransSnap {
   bool project;
   bool snap_self;
   bool peel;
-  bool snap_spatial_grid;
+  bool use_backface_culling;
   char status;
   /* Snapped Element Type (currently for objects only). */
   char snapElem;
@@ -113,13 +110,8 @@ typedef struct TransSnap {
 } TransSnap;
 
 typedef struct TransCon {
-  short orientation;
   /** Description of the constraint for header_print. */
   char text[50];
-  /** Matrix of the constraint space. */
-  float mtx[3][3];
-  /** Inverse matrix of the constraint space. */
-  float imtx[3][3];
   /** Projection constraint matrix (same as #imtx with some axis == 0). */
   float pmtx[3][3];
   /** Initial mouse value for visual calculation
@@ -139,8 +131,7 @@ typedef struct TransCon {
                    struct TransDataContainer *tc,
                    struct TransData *td,
                    const float in[3],
-                   float out[3],
-                   float pvec[3]);
+                   float out[3]);
   /** Apply function pointer for size transformation. */
   void (*applySize)(struct TransInfo *t,
                     struct TransDataContainer *tc,
@@ -153,175 +144,6 @@ typedef struct TransCon {
                    float vec[3],
                    float *angle);
 } TransCon;
-
-typedef struct TransDataExtension {
-  /** Initial object drot. */
-  float drot[3];
-  // /* Initial object drotAngle,    TODO: not yet implemented */
-  // float drotAngle;
-  // /* Initial object drotAxis, TODO: not yet implemented */
-  // float drotAxis[3];
-  /** Initial object delta quat. */
-  float dquat[4];
-  /** Initial object delta scale. */
-  float dscale[3];
-  /** Rotation of the data to transform. */
-  float *rot;
-  /** Initial rotation. */
-  float irot[3];
-  /** Rotation quaternion of the data to transform. */
-  float *quat;
-  /** Initial rotation quaternion. */
-  float iquat[4];
-  /** Rotation angle of the data to transform. */
-  float *rotAngle;
-  /** Initial rotation angle. */
-  float irotAngle;
-  /** Rotation axis of the data to transform. */
-  float *rotAxis;
-  /** Initial rotation axis. */
-  float irotAxis[4];
-  /** Size of the data to transform. */
-  float *size;
-  /** Initial size. */
-  float isize[3];
-  /** Object matrix. */
-  float obmat[4][4];
-  /** Use instead of #TransData.smtx,
-   * It is the same but without the #Bone.bone_mat, see #TD_PBONE_LOCAL_MTX_C. */
-  float l_smtx[3][3];
-  /** The rotscale matrix of pose bone, to allow using snap-align in translation mode,
-   * when td->mtx is the loc pose bone matrix (and hence can't be used to apply
-   * rotation in some cases, namely when a bone is in "NoLocal" or "Hinge" mode)... */
-  float r_mtx[3][3];
-  /** Inverse of previous one. */
-  float r_smtx[3][3];
-  /** Rotation mode, as defined in #eRotationModes (DNA_action_types.h). */
-  int rotOrder;
-  /** Original object transformation used for rigid bodies. */
-  float oloc[3], orot[3], oquat[4], orotAxis[3], orotAngle;
-} TransDataExtension;
-
-typedef struct TransData2D {
-  /** Location of data used to transform (x,y,0). */
-  float loc[3];
-  /** Pointer to real 2d location of data. */
-  float *loc2d;
-
-  /** Pointer to handle locations, if handles aren't being moved independently. */
-  float *h1, *h2;
-  float ih1[2], ih2[2];
-} TransData2D;
-
-/**
- * Used to store 2 handles for each #TransData in case the other handle wasn't selected.
- * Also to unset temporary flags.
- */
-typedef struct TransDataCurveHandleFlags {
-  char ih1, ih2;
-  char *h1, *h2;
-} TransDataCurveHandleFlags;
-
-/** Used for sequencer transform. */
-typedef struct TransDataSeq {
-  struct Sequence *seq;
-  /** A copy of #Sequence.flag that may be modified for nested strips. */
-  int flag;
-  /** Use this so we can have transform data at the strips start,
-   * but apply correctly to the start frame. */
-  int start_offset;
-  /** one of #SELECT, #SEQ_LEFTSEL and #SEQ_RIGHTSEL. */
-  short sel_flag;
-
-} TransDataSeq;
-
-/**
- * Sequencer transform customdata (stored in #TransCustomDataContainer).
- */
-typedef struct TransSeq {
-  TransDataSeq *tdseq;
-  int min;
-  int max;
-  bool snap_left;
-} TransSeq;
-
-/** Used for NLA transform (stored in #TransData.extra pointer). */
-typedef struct TransDataNla {
-  /** ID-block NLA-data is attached to. */
-  ID *id;
-
-  /** Original NLA-Track that the strip belongs to. */
-  struct NlaTrack *oldTrack;
-  /** Current NLA-Track that the strip belongs to. */
-  struct NlaTrack *nlt;
-
-  /** NLA-strip this data represents. */
-  struct NlaStrip *strip;
-
-  /* dummy values for transform to write in - must have 3 elements... */
-  /** start handle. */
-  float h1[3];
-  /** end handle. */
-  float h2[3];
-
-  /** index of track that strip is currently in. */
-  int trackIndex;
-  /** handle-index: 0 for dummy entry, -1 for start, 1 for end, 2 for both ends. */
-  int handle;
-} TransDataNla;
-
-typedef struct TransData {
-  /** Distance needed to affect element (for Proportionnal Editing). */
-  float dist;
-  /** Distance to the nearest element (for Proportionnal Editing). */
-  float rdist;
-  /** Factor of the transformation (for Proportionnal Editing). */
-  float factor;
-  /** Location of the data to transform. */
-  float *loc;
-  /** Initial location. */
-  float iloc[3];
-  /** Value pointer for special transforms. */
-  float *val;
-  /** Old value. */
-  float ival;
-  /** Individual data center. */
-  float center[3];
-  /** Transformation matrix from data space to global space. */
-  float mtx[3][3];
-  /** Transformation matrix from global space to data space. */
-  float smtx[3][3];
-  /** Axis orientation matrix of the data. */
-  float axismtx[3][3];
-  struct Object *ob;
-  /** For objects/bones, the first constraint in its constraint stack. */
-  struct bConstraint *con;
-  /** For objects, poses. 1 single malloc per TransInfo! */
-  TransDataExtension *ext;
-  /** for curves, stores handle flags for modification/cancel. */
-  TransDataCurveHandleFlags *hdata;
-  /**
-   * Extra data (mirrored element pointer, in editmode mesh to BMVert)
-   * (editbone for roll fixing) (...).
-   */
-  void *extra;
-  /** Various flags. */
-  int flag;
-  /** If set, copy of Object or PoseChannel protection. */
-  short protectflag;
-} TransData;
-
-typedef struct TransDataMirror {
-  /** location of mirrored reference data. */
-  const float *loc_src;
-  /** Location of the data to transform. */
-  float *loc_dst;
-  void *extra;
-  /* `sign` can be -2, -1, 0 or 1. */
-  int sign_x : 2;
-  int sign_y : 2;
-  int sign_z : 2;
-} TransDataMirror;
 
 typedef struct MouseInput {
   void (*apply)(struct TransInfo *t, struct MouseInput *mi, const double mval[2], float output[3]);
@@ -342,7 +164,7 @@ typedef struct MouseInput {
    * to avoid jumping values when its toggled.
    *
    * This works well for scaling drag motion,
-   * but not for rotating around a point (rotaton needs its own custom accumulator)
+   * but not for rotating around a point (rotation needs its own custom accumulator)
    */
   bool use_virtual_mval;
   struct {
@@ -381,29 +203,22 @@ typedef struct TransCustomDataContainer {
 #define TRANS_CUSTOM_DATA_ELEM_MAX (sizeof(TransCustomDataContainer) / sizeof(TransCustomData))
 
 typedef struct TransDataContainer {
-  /**
-   * Use for cases we care about the active, eg: active vert of active mesh.
-   * if set this will _always_ be the first item in the array.
-   */
-  bool is_active;
-
   /** Transformed data (array). */
   TransData *data;
-  /** Total number of transformed data. */
-  int data_len;
-
   /** Transformed data extension (array). */
   TransDataExtension *data_ext;
   /** Transformed data for 2d (array). */
   TransData2D *data_2d;
+  /** Transformed data for mirror elements (array). */
+  TransDataMirror *data_mirror;
+
+  /** Total number of transformed data, data_ext, data_2d. */
+  int data_len;
+  /** Total number of transformed data_mirror. */
+  int data_mirror_len;
 
   struct Object *obedit;
 
-  /**
-   * Store matrix, this avoids having to have duplicate check all over
-   * Typically: 'obedit->obmat' or 'poseobj->obmat', but may be used elsewhere too.
-   */
-  bool use_local_mat;
   float mat[4][4];
   float imat[4][4];
   /** 3x3 copies of matrices above. */
@@ -420,22 +235,27 @@ typedef struct TransDataContainer {
   float center_local[3];
 
   /**
-   * Mirror option
+   * Use for cases we care about the active, eg: active vert of active mesh.
+   * if set this will _always_ be the first item in the array.
    */
-  struct {
-    union {
-      struct {
-        uint axis_x : 1;
-        uint axis_y : 1;
-        uint axis_z : 1;
-      };
-      /* For easy checking. */
-      char use_mirror_any;
+  bool is_active;
+
+  /**
+   * Store matrix, this avoids having to have duplicate check all over
+   * Typically: 'obedit->obmat' or 'poseobj->obmat', but may be used elsewhere too.
+   */
+  bool use_local_mat;
+
+  /**  Mirror option. */
+  union {
+    struct {
+      uint use_mirror_axis_x : 1;
+      uint use_mirror_axis_y : 1;
+      uint use_mirror_axis_z : 1;
     };
-    /** Mirror data array. */
-    TransDataMirror *data;
-    int data_len;
-  } mirror;
+    /* For easy checking. */
+    char use_mirror_axis_any;
+  };
 
   TransCustomDataContainer custom;
 } TransDataContainer;
@@ -443,6 +263,11 @@ typedef struct TransDataContainer {
 typedef struct TransInfo {
   TransDataContainer *data_container;
   int data_container_len;
+
+  /** eTransConvertType
+   * TODO: It should be a member of TransDataContainer. */
+  int data_type;
+
   /** Combine length of all #TransDataContainer.data_len
    * Use to check if nothing is selected or if we have a single selection. */
   int data_len_all;
@@ -457,7 +282,7 @@ typedef struct TransInfo {
   short state;
   /** Current context/options for transform. */
   int options;
-  /** Init value for some transformations (and rotation angle). */
+  /** Initial value for some transformations (and rotation angle). */
   float val;
   void (*transform)(struct TransInfo *, const int[2]);
   /** Transform function pointer. */
@@ -491,10 +316,10 @@ typedef struct TransInfo {
   /** maximum index on the input vector. */
   short idx_max;
   /** Snapping Gears. */
-  float snap[3];
+  float snap[2];
   /** Spatial snapping gears(even when rotating, scaling... etc). */
-  float snap_spatial[3];
-  /** Mouse side of the cfra, 'L', 'R' or 'B' */
+  float snap_spatial[2];
+  /** Mouse side of the current frame, 'L', 'R' or 'B' */
   char frame_side;
 
   /** copy from G.vd, prevents feedback. */
@@ -520,6 +345,7 @@ typedef struct TransInfo {
 
   /** orientation matrix of the current space. */
   float spacemtx[3][3];
+  float spacemtx_inv[3][3];
   /** name of the current space, MAX_NAME. */
   char spacename[64];
 
@@ -531,18 +357,11 @@ typedef struct TransInfo {
   bool is_launch_event_tweak;
 
   struct {
-    /** Orientation type when when we're not constrained.
-     * nearly always global except for rotate which defaults to screen-space orientation. */
-    short unset;
-    /** Orientation to use when a key is pressed. */
-    short user;
-    /* Used when user is global. */
-    short user_alt;
-    short index;
-    short *types[2];
-    /* this gets used when custom_orientation is V3D_ORIENT_CUSTOM */
-    struct TransformOrientation *custom;
-  } orientation;
+    short type;
+    float matrix[3][3];
+  } orient[3];
+  short orient_curr;
+
   /** backup from view3d, to restore on end. */
   short gizmo_flag;
 
@@ -565,15 +384,6 @@ typedef struct TransInfo {
   int orient_axis;
   /** Secondary axis, shear uses this. */
   int orient_axis_ortho;
-
-  /** Often this matrix has similar usage to #TransInfo.spacemtx however this
-   * is used to define extra axes to operate on, not necessarily a space.
-   *
-   * For example, by default rotation operates on the view (`orient_matrix[2]`),
-   * even when the current space isn't set to the view. */
-  float orient_matrix[3][3];
-  /** Don't overwrite when set by operator redo defines the orientation axis. */
-  bool orient_matrix_is_set;
 
   /** remove elements if operator is canceled. */
   bool remove_on_cancel;
@@ -632,52 +442,53 @@ enum {
   T_CURSOR = 1 << 5,
   /** Transform points, having no rotation/scale. */
   T_POINTS = 1 << 6,
-
-  /* empty slot - (1 << 7) */
-
   /** restrictions flags */
-  T_NO_CONSTRAINT = 1 << 8,
-  T_NULL_ONE = 1 << 9,
-  T_NO_ZERO = 1 << 10,
+  T_NO_CONSTRAINT = 1 << 7,
+  T_NULL_ONE = 1 << 8,
+  T_NO_ZERO = 1 << 9,
   T_ALL_RESTRICTIONS = T_NO_CONSTRAINT | T_NULL_ONE | T_NO_ZERO,
 
-  T_PROP_EDIT = 1 << 11,
-  T_PROP_CONNECTED = 1 << 12,
-  T_PROP_PROJECTED = 1 << 13,
+  T_PROP_EDIT = 1 << 10,
+  T_PROP_CONNECTED = 1 << 11,
+  T_PROP_PROJECTED = 1 << 12,
   T_PROP_EDIT_ALL = T_PROP_EDIT | T_PROP_CONNECTED | T_PROP_PROJECTED,
 
-  T_V3D_ALIGN = 1 << 14,
+  T_V3D_ALIGN = 1 << 13,
   /** For 2d views like uv or fcurve. */
-  T_2D_EDIT = 1 << 15,
-  T_CLIP_UV = 1 << 16,
+  T_2D_EDIT = 1 << 14,
+  T_CLIP_UV = 1 << 15,
 
   /** Auto-ik is on. */
-  T_AUTOIK = 1 << 18,
+  T_AUTOIK = 1 << 16,
 
   /** Don't use mirror even if the data-block option is set. */
-  T_NO_MIRROR = 1 << 19,
+  T_NO_MIRROR = 1 << 17,
 
   /** To indicate that the value set in the `value` parameter is the final
    * value of the transformation, modified only by the constrain. */
-  T_INPUT_IS_VALUES_FINAL = 1 << 20,
+  T_INPUT_IS_VALUES_FINAL = 1 << 18,
 
   /** To specify if we save back settings at the end. */
-  T_MODAL = 1 << 21,
+  T_MODAL = 1 << 19,
 
   /** No retopo. */
-  T_NO_PROJECT = 1 << 22,
+  T_NO_PROJECT = 1 << 20,
 
-  T_RELEASE_CONFIRM = 1 << 23,
+  T_RELEASE_CONFIRM = 1 << 21,
 
   /** Alternative transformation. used to add offset to tracking markers. */
-  T_ALT_TRANSFORM = 1 << 24,
+  T_ALT_TRANSFORM = 1 << 22,
 
   /** #TransInfo.center has been set, don't change it. */
-  T_OVERRIDE_CENTER = 1 << 25,
+  T_OVERRIDE_CENTER = 1 << 23,
 
-  T_MODAL_CURSOR_SET = 1 << 26,
+  T_MODAL_CURSOR_SET = 1 << 24,
 
-  T_CLNOR_REBUILD = 1 << 27,
+  T_CLNOR_REBUILD = 1 << 25,
+
+  /* Special Aftertrans. */
+  T_AUTOMERGE = 1 << 26,
+  T_AUTOSPLIT = 1 << 27,
 };
 
 /** #TransInfo.modifiers */
@@ -719,45 +530,6 @@ enum {
   /** Does not reorient vector to face viewport when on. */
   CON_NOFLIP = 1 << 5,
   CON_USER = 1 << 6,
-};
-
-/** #TransData.flag */
-enum {
-  TD_SELECTED = 1 << 0,
-  TD_NOACTION = 1 << 2,
-  TD_USEQUAT = 1 << 3,
-  TD_NOTCONNECTED = 1 << 4,
-  /** Used for scaling of #MetaElem.rad */
-  TD_SINGLESIZE = 1 << 5,
-  /** Scale relative to individual element center */
-  TD_INDIVIDUAL_SCALE = 1 << 8,
-  TD_NOCENTER = 1 << 9,
-  /** #TransData.ext abused for particle key timing. */
-  TD_NO_EXT = 1 << 10,
-  /** don't transform this data */
-  TD_SKIP = 1 << 11,
-  /** if this is a bez triple, we need to restore the handles,
-   * if this is set #TransData.hdata needs freeing */
-  TD_BEZTRIPLE = 1 << 12,
-  /** when this is set, don't apply translation changes to this element */
-  TD_NO_LOC = 1 << 13,
-  /** For Graph Editor autosnap, indicates that point should not undergo autosnapping */
-  TD_NOTIMESNAP = 1 << 14,
-  /** For Graph Editor - curves that can only have int-values
-   * need their keyframes tagged with this. */
-  TD_INTVALUES = 1 << 15,
-  /** For editmode mirror, clamp axis to 0 */
-  TD_MIRROR_EDGE_X = 1 << 16,
-  TD_MIRROR_EDGE_Y = 1 << 17,
-  TD_MIRROR_EDGE_Z = 1 << 18,
-  /** For fcurve handles, move them along with their keyframes */
-  TD_MOVEHANDLE1 = 1 << 19,
-  TD_MOVEHANDLE2 = 1 << 20,
-  /** Exceptional case with pose bone rotating when a parent bone has 'Local Location'
-   * option enabled and rotating also transforms it. */
-  TD_PBONE_LOCAL_MTX_P = 1 << 21,
-  /** Same as above but for a child bone. */
-  TD_PBONE_LOCAL_MTX_C = 1 << 22,
 };
 
 /** #TransSnap.status */
@@ -803,11 +575,10 @@ enum {
   TFM_MODAL_PROPSIZE = 26,
   /* node editor insert offset (aka auto-offset) direction toggle */
   TFM_MODAL_INSERTOFS_TOGGLE_DIR = 27,
-};
 
-/* Hard min/max for proportional size. */
-#define T_PROP_SIZE_MIN 1e-6f
-#define T_PROP_SIZE_MAX 1e12f
+  TFM_MODAL_AUTOCONSTRAINT = 28,
+  TFM_MODAL_AUTOCONSTRAINTPLANE = 29,
+};
 
 bool initTransform(struct bContext *C,
                    struct TransInfo *t,
@@ -921,37 +692,6 @@ void getViewVector(const TransInfo *t, const float coord[3], float vec[3]);
 
 void transform_data_ext_rotate(TransData *td, float mat[3][3], bool use_drot);
 
-/*********************** Transform Orientations ******************************/
-
-void initTransformOrientation(struct bContext *C, TransInfo *t);
-
-/* Those two fill in mat and return non-zero on success */
-bool createSpaceNormal(float mat[3][3], const float normal[3]);
-bool createSpaceNormalTangent(float mat[3][3], const float normal[3], const float tangent[3]);
-
-struct TransformOrientation *addMatrixSpace(struct bContext *C,
-                                            float mat[3][3],
-                                            const char *name,
-                                            const bool overwrite);
-bool applyTransformOrientation(const struct TransformOrientation *ts,
-                               float r_mat[3][3],
-                               char r_name[64]);
-
-enum {
-  ORIENTATION_NONE = 0,
-  ORIENTATION_NORMAL = 1,
-  ORIENTATION_VERT = 2,
-  ORIENTATION_EDGE = 3,
-  ORIENTATION_FACE = 4,
-};
-#define ORIENTATION_USE_PLANE(ty) ELEM(ty, ORIENTATION_NORMAL, ORIENTATION_EDGE, ORIENTATION_FACE)
-
-int getTransformOrientation_ex(const struct bContext *C,
-                               float normal[3],
-                               float plane[3],
-                               const short around);
-int getTransformOrientation(const struct bContext *C, float normal[3], float plane[3]);
-
 void freeCustomNormalArray(TransInfo *t, TransDataContainer *tc, TransCustomData *custom_data);
 
 /* TODO. transform_query.c */
@@ -978,5 +718,3 @@ bool checkUseAxisMatrix(TransInfo *t);
                           *tc_end = (t)->data_container + (t)->data_container_len; \
        th != tc_end; \
        th++, i++)
-
-#endif

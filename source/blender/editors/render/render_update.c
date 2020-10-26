@@ -56,6 +56,7 @@
 #include "RE_pipeline.h"
 
 #include "ED_node.h"
+#include "ED_paint.h"
 #include "ED_render.h"
 #include "ED_view3d.h"
 
@@ -63,7 +64,7 @@
 
 #include "WM_api.h"
 
-#include "render_intern.h"  // own include
+#include "render_intern.h" /* own include */
 
 /***************************** Render Engines ********************************/
 
@@ -134,7 +135,7 @@ void ED_render_scene_update(const DEGEditorUpdateContext *update_ctx, int update
           engine->flag &= ~RE_ENGINE_DO_UPDATE;
           /* NOTE: Important to pass non-updated depsgraph, This is because this function is called
            * from inside dependency graph evaluation. Additionally, if we pass fully evaluated one
-           * we will loose updates stored in the graph. */
+           * we will lose updates stored in the graph. */
           engine->type->view_update(engine, C, CTX_data_depsgraph_pointer(C));
         }
         else {
@@ -178,7 +179,7 @@ void ED_render_engine_area_exit(Main *bmain, ScrArea *area)
   }
 }
 
-void ED_render_engine_changed(Main *bmain)
+void ED_render_engine_changed(Main *bmain, const bool update_scene_data)
 {
   /* on changing the render engine type, clear all running render engines */
   for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
@@ -194,11 +195,11 @@ void ED_render_engine_changed(Main *bmain)
     update_ctx.scene = scene;
     LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
       /* TDODO(sergey): Iterate over depsgraphs instead? */
-      update_ctx.depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
+      update_ctx.depsgraph = BKE_scene_ensure_depsgraph(bmain, scene, view_layer);
       update_ctx.view_layer = view_layer;
       ED_render_id_flush_update(&update_ctx, &scene->id);
     }
-    if (scene->nodetree) {
+    if (scene->nodetree && update_scene_data) {
       ntreeCompositUpdateRLayers(scene->nodetree);
     }
   }
@@ -282,7 +283,7 @@ static void scene_changed(Main *bmain, Scene *scene)
   for (ob = bmain->objects.first; ob; ob = ob->id.next) {
     if (ob->mode & OB_MODE_TEXTURE_PAINT) {
       BKE_texpaint_slots_refresh_object(scene, ob);
-      BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+      ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     }
   }
 }

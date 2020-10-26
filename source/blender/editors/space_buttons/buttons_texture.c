@@ -63,7 +63,6 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
-#include "ED_buttons.h"
 #include "ED_node.h"
 #include "ED_screen.h"
 
@@ -71,7 +70,7 @@
 
 #include "../interface/interface_intern.h"
 
-#include "buttons_intern.h"  // own include
+#include "buttons_intern.h" /* own include */
 
 /************************* Texture User **************************/
 
@@ -236,10 +235,10 @@ static void buttons_texture_users_from_context(ListBase *users,
     int a;
 
     /* modifiers */
-    modifiers_foreachTexLink(ob, buttons_texture_modifier_foreach, users);
+    BKE_modifiers_foreach_tex_link(ob, buttons_texture_modifier_foreach, users);
 
     /* grease pencil modifiers */
-    BKE_gpencil_modifiers_foreachTexLink(ob, buttons_texture_modifier_gpencil_foreach, users);
+    BKE_gpencil_modifiers_foreach_tex_link(ob, buttons_texture_modifier_gpencil_foreach, users);
 
     /* particle systems */
     if (psys && !limited_mode) {
@@ -465,8 +464,8 @@ static void template_texture_user_menu(bContext *C, uiLayout *layout, void *UNUS
 
 void uiTemplateTextureUser(uiLayout *layout, bContext *C)
 {
-  /* texture user selection dropdown menu. the available users have been
-   * gathered before drawing in ButsContextTexture, we merely need to
+  /* Texture user selection drop-down menu. the available users have been
+   * gathered before drawing in #ButsContextTexture, we merely need to
    * display the current item. */
   SpaceProperties *sbuts = CTX_wm_space_properties(C);
   ButsContextTexture *ct = (sbuts) ? sbuts->texuser : NULL;
@@ -545,7 +544,7 @@ static void template_texture_show(bContext *C, void *data_p, void *prop_p)
   }
 }
 
-void uiTemplateTextureShow(uiLayout *layout, bContext *C, PointerRNA *ptr, PropertyRNA *prop)
+void uiTemplateTextureShow(uiLayout *layout, const bContext *C, PointerRNA *ptr, PropertyRNA *prop)
 {
   /* button to quickly show texture in texture tab */
   SpaceProperties *sbuts = CTX_wm_space_properties(C);

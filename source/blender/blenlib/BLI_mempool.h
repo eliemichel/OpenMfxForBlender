@@ -17,19 +17,18 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_MEMPOOL_H__
-#define __BLI_MEMPOOL_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
 
+#include "BLI_compiler_attrs.h"
+#include "BLI_utildefines.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BLI_compiler_attrs.h"
-#include "BLI_utildefines.h"
 
 struct BLI_mempool;
 struct BLI_mempool_chunk;
@@ -97,5 +96,3 @@ void BLI_mempool_iter_threadsafe_free(BLI_mempool_iter *iter_arr) ATTR_NONNULL()
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MEMPOOL_H__ */

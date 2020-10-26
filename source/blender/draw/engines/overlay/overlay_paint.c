@@ -22,6 +22,8 @@
 
 #include "DRW_render.h"
 
+#include "BKE_image.h"
+
 #include "DNA_mesh_types.h"
 
 #include "DEG_depsgraph_query.h"
@@ -34,7 +36,7 @@ static bool paint_object_is_rendered_transparent(View3D *v3d, Object *ob)
   if (v3d->shading.type == OB_WIRE) {
     return true;
   }
-  else if (v3d->shading.type == OB_SOLID) {
+  if (v3d->shading.type == OB_SOLID) {
     if (v3d->shading.flag & V3D_SHADING_XRAY) {
       return true;
     }
@@ -42,8 +44,8 @@ static bool paint_object_is_rendered_transparent(View3D *v3d, Object *ob)
     if (ob && v3d->shading.color_type == V3D_SHADING_OBJECT_COLOR) {
       return ob->color[3] < 1.0f;
     }
-    else if (ob && ob->type == OB_MESH && ob->data &&
-             v3d->shading.color_type == V3D_SHADING_MATERIAL_COLOR) {
+    if (ob && ob->type == OB_MESH && ob->data &&
+        v3d->shading.color_type == V3D_SHADING_MATERIAL_COLOR) {
       Mesh *me = ob->data;
       for (int i = 0; i < me->totcol; i++) {
         Material *mat = me->mat[i];
@@ -63,7 +65,7 @@ void OVERLAY_paint_init(OVERLAY_Data *vedata)
   const DRWContextState *draw_ctx = DRW_context_state_get();
 
   pd->painting.in_front = pd->use_in_front && draw_ctx->obact &&
-                          (draw_ctx->obact->dtx & OB_DRAWXRAY);
+                          (draw_ctx->obact->dtx & OB_DRAW_IN_FRONT);
   pd->painting.alpha_blending = paint_object_is_rendered_transparent(draw_ctx->v3d,
                                                                      draw_ctx->obact);
 }
@@ -104,7 +106,7 @@ void OVERLAY_paint_cache_init(OVERLAY_Data *vedata)
 
         if (pd->painting.alpha_blending) {
           state = DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL;
-          DRW_PASS_CREATE(psl->paint_depth_ps, state);
+          DRW_PASS_CREATE(psl->paint_depth_ps, state | pd->clipping_state);
           sh = OVERLAY_shader_depth_only();
           pd->paint_depth_grp = DRW_shgroup_create(sh, psl->paint_depth_ps);
         }
@@ -136,7 +138,7 @@ void OVERLAY_paint_cache_init(OVERLAY_Data *vedata)
         state = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_EQUAL | DRW_STATE_BLEND_ALPHA;
         DRW_PASS_CREATE(psl->paint_color_ps, state | pd->clipping_state);
 
-        GPUTexture *tex = GPU_texture_from_blender(imapaint->stencil, NULL, NULL, GL_TEXTURE_2D);
+        GPUTexture *tex = BKE_image_get_gpu_texture(imapaint->stencil, NULL, NULL);
 
         const bool mask_premult = (imapaint->stencil->alpha_mode == IMA_ALPHA_PREMUL);
         const bool mask_inverted = (imapaint->flag & IMAGEPAINT_PROJECT_LAYER_STENCIL_INV) != 0;
@@ -254,11 +256,18 @@ void OVERLAY_paint_draw(OVERLAY_Data *vedata)
   OVERLAY_PrivateData *pd = stl->pd;
 
   OVERLAY_PassList *psl = vedata->psl;
+  OVERLAY_FramebufferList *fbl = vedata->fbl;
   DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
 
   if (DRW_state_is_fbo()) {
-    /* Paint overlay needs final color because of multiply blend mode. */
-    GPU_framebuffer_bind(pd->painting.in_front ? dfbl->in_front_fb : dfbl->default_fb);
+    if (pd->painting.alpha_blending) {
+      GPU_framebuffer_bind(pd->painting.in_front ? fbl->overlay_in_front_fb :
+                                                   fbl->overlay_default_fb);
+    }
+    else {
+      /* Paint overlay needs final color because of multiply blend mode. */
+      GPU_framebuffer_bind(pd->painting.in_front ? dfbl->in_front_fb : dfbl->default_fb);
+    }
   }
 
   if (psl->paint_depth_ps) {

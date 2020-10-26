@@ -139,7 +139,7 @@ static int imb_save_dpx_cineon(ImBuf *ibuf, const char *filename, int use_cineon
     /* don't use the float buffer to save 8 bpp picture to prevent color banding
      * (there's no dithering algorithm behind the logImageSetDataRGBA function) */
 
-    fbuf = (float *)MEM_mallocN(ibuf->x * ibuf->y * 4 * sizeof(float),
+    fbuf = (float *)MEM_mallocN(sizeof(float[4]) * ibuf->x * ibuf->y,
                                 "fbuf in imb_save_dpx_cineon");
 
     for (y = 0; y < ibuf->y; y++) {
@@ -158,7 +158,7 @@ static int imb_save_dpx_cineon(ImBuf *ibuf, const char *filename, int use_cineon
       IMB_rect_from_float(ibuf);
     }
 
-    fbuf = (float *)MEM_mallocN(ibuf->x * ibuf->y * 4 * sizeof(float),
+    fbuf = (float *)MEM_mallocN(sizeof(float[4]) * ibuf->x * ibuf->y,
                                 "fbuf in imb_save_dpx_cineon");
     if (fbuf == NULL) {
       printf("DPX/Cineon: error allocating memory.\n");
@@ -183,9 +183,9 @@ static int imb_save_dpx_cineon(ImBuf *ibuf, const char *filename, int use_cineon
   return rvalue;
 }
 
-int imb_save_cineon(struct ImBuf *buf, const char *myfile, int flags)
+int imb_save_cineon(struct ImBuf *buf, const char *filepath, int flags)
 {
-  return imb_save_dpx_cineon(buf, myfile, 1, flags);
+  return imb_save_dpx_cineon(buf, filepath, 1, flags);
 }
 
 int imb_is_cineon(const unsigned char *buf)
@@ -204,9 +204,9 @@ ImBuf *imb_load_cineon(const unsigned char *mem,
   return NULL;
 }
 
-int imb_save_dpx(struct ImBuf *buf, const char *myfile, int flags)
+int imb_save_dpx(struct ImBuf *buf, const char *filepath, int flags)
 {
-  return imb_save_dpx_cineon(buf, myfile, 0, flags);
+  return imb_save_dpx_cineon(buf, filepath, 0, flags);
 }
 
 int imb_is_dpx(const unsigned char *buf)

@@ -16,6 +16,13 @@
 
 /** \file
  * \ingroup blenloader
+ *
+ * This file handles updating the `startup.blend`, this is used when reading old files.
+ *
+ * Unlike regular versioning this makes changes that ensure the startup file
+ * has brushes and other presets setup to take advantage of newer features.
+ *
+ * To update preference defaults see `userdef_default.c`.
  */
 
 #include "MEM_guardedalloc.h"
@@ -106,7 +113,7 @@ static void blo_update_defaults_screen(bScreen *screen,
       /* Some toolbars have been saved as initialized,
        * we don't want them to have odd zoom-level or scrolling set, see: T47047 */
       if (ELEM(region->regiontype, RGN_TYPE_UI, RGN_TYPE_TOOLS, RGN_TYPE_TOOL_PROPS)) {
-        region->v2d.flag &= ~V2D_IS_INITIALISED;
+        region->v2d.flag &= ~V2D_IS_INIT;
       }
     }
 
@@ -174,7 +181,7 @@ static void blo_update_defaults_screen(bScreen *screen,
     }
     else if (area->spacetype == SPACE_SEQ) {
       SpaceSeq *seq = area->spacedata.first;
-      seq->flag |= SEQ_SHOW_MARKERS | SEQ_SHOW_FCURVES;
+      seq->flag |= SEQ_SHOW_MARKERS | SEQ_SHOW_FCURVES | SEQ_ZOOM_TO_FIT;
     }
     else if (area->spacetype == SPACE_TEXT) {
       /* Show syntax and line numbers in Script workspace text editor. */
@@ -197,10 +204,13 @@ static void blo_update_defaults_screen(bScreen *screen,
       v3d->gp_flag |= V3D_GP_SHOW_EDIT_LINES;
       /* Remove dither pattern in wireframe mode. */
       v3d->shading.xray_alpha_wire = 0.0f;
+      v3d->clip_start = 0.01f;
       /* Skip startups that use the viewport color by default. */
       if (v3d->shading.background_type != V3D_SHADING_BACKGROUND_VIEWPORT) {
         copy_v3_fl(v3d->shading.background_color, 0.05f);
       }
+      /* Disable Curve Normals. */
+      v3d->overlay.edit_flag &= ~V3D_OVERLAY_EDIT_CU_NORMALS;
     }
     else if (area->spacetype == SPACE_CLIP) {
       SpaceClip *sclip = area->spacedata.first;
@@ -248,8 +258,7 @@ static void blo_update_defaults_screen(bScreen *screen,
 
 void BLO_update_defaults_workspace(WorkSpace *workspace, const char *app_template)
 {
-  ListBase *layouts = BKE_workspace_layouts_get(workspace);
-  LISTBASE_FOREACH (WorkSpaceLayout *, layout, layouts) {
+  LISTBASE_FOREACH (WorkSpaceLayout *, layout, &workspace->layouts) {
     if (layout->screen) {
       blo_update_defaults_screen(layout->screen, app_template, workspace->id.name + 2);
     }
@@ -268,7 +277,7 @@ void BLO_update_defaults_workspace(WorkSpace *workspace, const char *app_templat
 
     /* For Sculpting template. */
     if (STREQ(workspace->id.name + 2, "Sculpting")) {
-      LISTBASE_FOREACH (WorkSpaceLayout *, layout, layouts) {
+      LISTBASE_FOREACH (WorkSpaceLayout *, layout, &workspace->layouts) {
         bScreen *screen = layout->screen;
         if (screen) {
           LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
@@ -295,7 +304,7 @@ static void blo_update_defaults_scene(Main *bmain, Scene *scene)
 
   /* Don't enable compositing nodes. */
   if (scene->nodetree) {
-    ntreeFreeNestedTree(scene->nodetree);
+    ntreeFreeEmbeddedTree(scene->nodetree);
     MEM_freeN(scene->nodetree);
     scene->nodetree = NULL;
     scene->use_nodes = false;
@@ -313,7 +322,7 @@ static void blo_update_defaults_scene(Main *bmain, Scene *scene)
   copy_v2_fl2(scene->safe_areas.title, 0.1f, 0.05f);
   copy_v2_fl2(scene->safe_areas.action, 0.035f, 0.035f);
 
-  /* Change default cubemap quality. */
+  /* Change default cube-map quality. */
   scene->eevee.gi_filter_quality = 3.0f;
 
   /* Enable Soft Shadows by default. */
@@ -324,7 +333,7 @@ static void blo_update_defaults_scene(Main *bmain, Scene *scene)
   if (ts->gp_sculpt.cur_falloff == NULL) {
     ts->gp_sculpt.cur_falloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
     CurveMapping *gp_falloff_curve = ts->gp_sculpt.cur_falloff;
-    BKE_curvemapping_initialize(gp_falloff_curve);
+    BKE_curvemapping_init(gp_falloff_curve);
     BKE_curvemap_reset(gp_falloff_curve->cm,
                        &gp_falloff_curve->clipr,
                        CURVE_PRESET_GAUSS,
@@ -333,7 +342,7 @@ static void blo_update_defaults_scene(Main *bmain, Scene *scene)
   if (ts->gp_sculpt.cur_primitive == NULL) {
     ts->gp_sculpt.cur_primitive = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
     CurveMapping *gp_primitive_curve = ts->gp_sculpt.cur_primitive;
-    BKE_curvemapping_initialize(gp_primitive_curve);
+    BKE_curvemapping_init(gp_primitive_curve);
     BKE_curvemap_reset(gp_primitive_curve->cm,
                        &gp_primitive_curve->clipr,
                        CURVE_PRESET_BELL,
@@ -489,8 +498,8 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
   LISTBASE_FOREACH (wmWindowManager *, wm, &bmain->wm) {
     LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
       LISTBASE_FOREACH (WorkSpace *, workspace, &bmain->workspaces) {
-        WorkSpaceLayout *layout = BKE_workspace_hook_layout_for_workspace_get(win->workspace_hook,
-                                                                              workspace);
+        WorkSpaceLayout *layout = BKE_workspace_active_layout_for_workspace_get(
+            win->workspace_hook, workspace);
         /* Name all screens by their workspaces (avoids 'Default.###' names). */
         /* Default only has one window. */
         if (layout->screen) {
@@ -606,7 +615,7 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
      * when painting we want to use full color/weight always.
      *
      * Note that sculpt is an exception,
-     * it's values are overwritten by #BKE_brush_sculpt_reset below. */
+     * its values are overwritten by #BKE_brush_sculpt_reset below. */
     brush->alpha = 1.0;
 
     /* Enable antialiasing by default */
@@ -680,6 +689,30 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
       brush->sculpt_tool = SCULPT_TOOL_SLIDE_RELAX;
     }
 
+    brush_name = "Paint";
+    brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
+    if (!brush) {
+      brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
+      id_us_min(&brush->id);
+      brush->sculpt_tool = SCULPT_TOOL_PAINT;
+    }
+
+    brush_name = "Smear";
+    brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
+    if (!brush) {
+      brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
+      id_us_min(&brush->id);
+      brush->sculpt_tool = SCULPT_TOOL_SMEAR;
+    }
+
+    brush_name = "Boundary";
+    brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
+    if (!brush) {
+      brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
+      id_us_min(&brush->id);
+      brush->sculpt_tool = SCULPT_TOOL_BOUNDARY;
+    }
+
     brush_name = "Simplify";
     brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
     if (!brush) {
@@ -694,6 +727,14 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
       brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
       id_us_min(&brush->id);
       brush->sculpt_tool = SCULPT_TOOL_DRAW_FACE_SETS;
+    }
+
+    brush_name = "Multires Displacement Eraser";
+    brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
+    if (!brush) {
+      brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
+      id_us_min(&brush->id);
+      brush->sculpt_tool = SCULPT_TOOL_DISPLACEMENT_ERASER;
     }
 
     /* Use the same tool icon color in the brush cursor */

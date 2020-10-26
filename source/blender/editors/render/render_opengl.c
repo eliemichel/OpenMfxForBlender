@@ -79,7 +79,6 @@
 #include "RNA_define.h"
 
 #include "GPU_framebuffer.h"
-#include "GPU_glew.h"
 #include "GPU_matrix.h"
 
 #include "render_intern.h"
@@ -91,8 +90,8 @@
 #  include "PIL_time.h"
 #endif
 
-// TODO(sergey): Find better approximation of the scheduled frames.
-// For really highres renders it might fail still.
+/* TODO(sergey): Find better approximation of the scheduled frames.
+ * For really highres renders it might fail still. */
 #define MAX_SCHEDULED_FRAMES 8
 
 typedef struct OGLRender {
@@ -144,7 +143,6 @@ typedef struct OGLRender {
   wmTimer *timer; /* use to check if running modal or not (invoke'd or exec'd)*/
   void **movie_ctx_arr;
 
-  TaskScheduler *task_scheduler;
   TaskPool *task_pool;
   bool pool_ok;
   bool is_animation;
@@ -341,7 +339,7 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
       GPU_offscreen_bind(oglrender->ofs, true);
 
       GPU_clear_color(0.0f, 0.0f, 0.0f, 0.0f);
-      GPU_clear(GPU_COLOR_BIT | GPU_DEPTH_BIT);
+      GPU_clear_depth(1.0f);
 
       GPU_matrix_reset();
       wmOrtho2(0, scene->r.xsch, 0, scene->r.ysch);
@@ -351,8 +349,8 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
       ED_annotation_draw_ex(scene, gpd, sizex, sizey, scene->r.cfra, SPACE_SEQ);
       G.f &= ~G_FLAG_RENDER_VIEWPORT;
 
-      gp_rect = MEM_mallocN(sizex * sizey * sizeof(uchar) * 4, "offscreen rect");
-      GPU_offscreen_read_pixels(oglrender->ofs, GL_UNSIGNED_BYTE, gp_rect);
+      gp_rect = MEM_mallocN(sizeof(uchar[4]) * sizex * sizey, "offscreen rect");
+      GPU_offscreen_read_pixels(oglrender->ofs, GPU_DATA_UNSIGNED_BYTE, gp_rect);
 
       for (i = 0; i < sizex * sizey * 4; i += 4) {
         blend_color_mix_byte(&render_rect[i], &render_rect[i], &gp_rect[i]);
@@ -522,6 +520,7 @@ static void screen_opengl_render_apply(const bContext *C, OGLRender *oglrender)
     ibuf->userflags |= IB_DISPLAY_BUFFER_INVALID;
   }
   BKE_image_release_ibuf(oglrender->ima, ibuf, lock);
+  oglrender->ima->gpuflag |= IMA_GPU_REFRESH;
 
   if (oglrender->write_still) {
     screen_opengl_render_write(oglrender);
@@ -547,7 +546,8 @@ static void gather_frames_to_render_for_adt(const OGLRender *oglrender, const An
     }
 
     bool found = false; /* Not interesting, we just want a starting point for the for-loop.*/
-    int key_index = binarysearch_bezt_index(fcu->bezt, frame_start, fcu->totvert, &found);
+    int key_index = BKE_fcurve_bezt_binarysearch_index(
+        fcu->bezt, frame_start, fcu->totvert, &found);
     for (; key_index < fcu->totvert; key_index++) {
       BezTriple *bezt = &fcu->bezt[key_index];
       /* The frame range to render uses integer frame numbers, and the frame
@@ -630,6 +630,7 @@ static int gather_frames_to_render_for_id(LibraryIDLinkCallbackData *cb_data)
     case ID_HA:  /* Hair */
     case ID_PT:  /* PointCloud */
     case ID_VO:  /* Volume */
+    case ID_SIM: /* Simulation */
       break;
 
       /* Blacklist: */
@@ -766,7 +767,7 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
 
   /* corrects render size with actual size, not every card supports non-power-of-two dimensions */
   DRW_opengl_context_enable(); /* Offscreen creation needs to be done in DRW context. */
-  ofs = GPU_offscreen_create(sizex, sizey, 0, true, true, err_out);
+  ofs = GPU_offscreen_create(sizex, sizey, true, true, err_out);
   DRW_opengl_context_disable();
 
   if (!ofs) {
@@ -855,22 +856,16 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
       gather_frames_to_render(C, oglrender);
     }
 
-    TaskScheduler *task_scheduler = BLI_task_scheduler_get();
     if (BKE_imtype_is_movie(scene->r.im_format.imtype)) {
-      task_scheduler = BLI_task_scheduler_create(1);
-      oglrender->task_scheduler = task_scheduler;
-      oglrender->task_pool = BLI_task_pool_create_background(
-          task_scheduler, oglrender, TASK_PRIORITY_LOW);
+      oglrender->task_pool = BLI_task_pool_create_background_serial(oglrender, TASK_PRIORITY_LOW);
     }
     else {
-      oglrender->task_scheduler = NULL;
-      oglrender->task_pool = BLI_task_pool_create(task_scheduler, oglrender, TASK_PRIORITY_LOW);
+      oglrender->task_pool = BLI_task_pool_create(oglrender, TASK_PRIORITY_LOW);
     }
     oglrender->pool_ok = true;
     BLI_spin_init(&oglrender->reports_lock);
   }
   else {
-    oglrender->task_scheduler = NULL;
     oglrender->task_pool = NULL;
   }
   oglrender->num_scheduled_frames = 0;
@@ -886,7 +881,6 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
 
 static void screen_opengl_render_end(bContext *C, OGLRender *oglrender)
 {
-  Main *bmain = CTX_data_main(C);
   Scene *scene = oglrender->scene;
   int i;
 
@@ -909,10 +903,6 @@ static void screen_opengl_render_end(bContext *C, OGLRender *oglrender)
     }
     BLI_task_pool_work_and_wait(oglrender->task_pool);
     BLI_task_pool_free(oglrender->task_pool);
-    /* Depending on various things we might or might not use global scheduler. */
-    if (oglrender->task_scheduler != NULL) {
-      BLI_task_scheduler_free(oglrender->task_scheduler);
-    }
     BLI_spin_end(&oglrender->reports_lock);
   }
   BLI_mutex_end(&oglrender->task_mutex);
@@ -940,7 +930,7 @@ static void screen_opengl_render_end(bContext *C, OGLRender *oglrender)
   if (oglrender->timer) { /* exec will not have a timer */
     Depsgraph *depsgraph = oglrender->depsgraph;
     scene->r.cfra = oglrender->cfrao;
-    BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+    BKE_scene_graph_update_for_newframe(depsgraph);
 
     WM_event_remove_timer(oglrender->wm, oglrender->win, oglrender->timer);
   }
@@ -973,7 +963,7 @@ static void screen_opengl_render_cancel(bContext *C, wmOperator *op)
 }
 
 /* share between invoke and exec */
-static bool screen_opengl_render_anim_initialize(bContext *C, wmOperator *op)
+static bool screen_opengl_render_anim_init(bContext *C, wmOperator *op)
 {
   /* initialize animation */
   OGLRender *oglrender;
@@ -1032,9 +1022,9 @@ typedef struct WriteTaskData {
   Scene tmp_scene;
 } WriteTaskData;
 
-static void write_result_func(TaskPool *__restrict pool, void *task_data_v, int UNUSED(thread_id))
+static void write_result_func(TaskPool *__restrict pool, void *task_data_v)
 {
-  OGLRender *oglrender = (OGLRender *)BLI_task_pool_userdata(pool);
+  OGLRender *oglrender = (OGLRender *)BLI_task_pool_user_data(pool);
   WriteTaskData *task_data = (WriteTaskData *)task_data_v;
   Scene *scene = &task_data->tmp_scene;
   RenderResult *rr = task_data->rr;
@@ -1130,7 +1120,6 @@ static bool schedule_write_result(OGLRender *oglrender, RenderResult *rr)
 
 static bool screen_opengl_render_anim_step(bContext *C, wmOperator *op)
 {
-  Main *bmain = CTX_data_main(C);
   OGLRender *oglrender = op->customdata;
   Scene *scene = oglrender->scene;
   Depsgraph *depsgraph = oglrender->depsgraph;
@@ -1145,7 +1134,7 @@ static bool screen_opengl_render_anim_step(bContext *C, wmOperator *op)
     CFRA++;
   }
   while (CFRA < oglrender->nfra) {
-    BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+    BKE_scene_graph_update_for_newframe(depsgraph);
     CFRA++;
   }
 
@@ -1172,7 +1161,7 @@ static bool screen_opengl_render_anim_step(bContext *C, wmOperator *op)
 
   WM_cursor_time(oglrender->win, scene->r.cfra);
 
-  BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+  BKE_scene_graph_update_for_newframe(depsgraph);
 
   if (view_context) {
     if (oglrender->rv3d->persp == RV3D_CAMOB && oglrender->v3d->camera &&
@@ -1246,9 +1235,8 @@ static int screen_opengl_render_modal(bContext *C, wmOperator *op, const wmEvent
     screen_opengl_render_end(C, op->customdata);
     return OPERATOR_FINISHED;
   }
-  else {
-    ret = screen_opengl_render_anim_step(C, op);
-  }
+
+  ret = screen_opengl_render_anim_step(C, op);
 
   /* stop at the end or on error */
   if (ret == false) {
@@ -1268,7 +1256,7 @@ static int screen_opengl_render_invoke(bContext *C, wmOperator *op, const wmEven
   }
 
   if (anim) {
-    if (!screen_opengl_render_anim_initialize(C, op)) {
+    if (!screen_opengl_render_anim_init(C, op)) {
       return OPERATOR_CANCELLED;
     }
   }
@@ -1301,16 +1289,15 @@ static int screen_opengl_render_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    bool ret = true;
 
-    if (!screen_opengl_render_anim_initialize(C, op)) {
-      return OPERATOR_CANCELLED;
-    }
+  bool ret = true;
 
-    while (ret) {
-      ret = screen_opengl_render_anim_step(C, op);
-    }
+  if (!screen_opengl_render_anim_init(C, op)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  while (ret) {
+    ret = screen_opengl_render_anim_step(C, op);
   }
 
   /* no redraw needed, we leave state as we entered it */

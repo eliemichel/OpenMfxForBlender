@@ -26,8 +26,7 @@
  * Only included in WM_types.h and lower level files.
  */
 
-#ifndef __WM_GIZMO_TYPES_H__
-#define __WM_GIZMO_TYPES_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 
@@ -39,6 +38,10 @@ struct wmGizmoProperty;
 struct wmKeyConfig;
 
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* -------------------------------------------------------------------- */
 /* Enum Typedef's */
@@ -67,28 +70,33 @@ typedef enum eWM_GizmoFlag {
   WM_GIZMO_DRAW_VALUE = (1 << 2),
   WM_GIZMO_HIDDEN = (1 << 3),
   WM_GIZMO_HIDDEN_SELECT = (1 << 4),
+  /** Ignore the key-map for this gizmo. */
+  WM_GIZMO_HIDDEN_KEYMAP = (1 << 5),
   /**
    * When set 'scale_final' value also scales the offset.
    * Use when offset is to avoid screen-space overlap instead of absolute positioning. */
-  WM_GIZMO_DRAW_OFFSET_SCALE = (1 << 5),
+  WM_GIZMO_DRAW_OFFSET_SCALE = (1 << 6),
   /**
    * User should still use 'scale_final' for any handles and UI elements.
    * This simply skips scale when calculating the final matrix.
    * Needed when the gizmo needs to align with the interface underneath it. */
-  WM_GIZMO_DRAW_NO_SCALE = (1 << 6),
+  WM_GIZMO_DRAW_NO_SCALE = (1 << 7),
   /**
-   * Hide the cursor and lock it's position while interacting with this gizmo.
+   * Hide the cursor and lock its position while interacting with this gizmo.
    */
-  WM_GIZMO_MOVE_CURSOR = (1 << 7),
+  WM_GIZMO_MOVE_CURSOR = (1 << 8),
   /** Don't write into the depth buffer when selecting. */
-  WM_GIZMO_SELECT_BACKGROUND = (1 << 8),
+  WM_GIZMO_SELECT_BACKGROUND = (1 << 9),
 
   /** Use the active tools operator properties when running as an operator. */
-  WM_GIZMO_OPERATOR_TOOL_INIT = (1 << 9),
+  WM_GIZMO_OPERATOR_TOOL_INIT = (1 << 10),
 
   /** Don't pass through events to other handlers
-   * (allows click/drag not to have it's events stolen by press events in other keymaps). */
-  WM_GIZMO_EVENT_HANDLE_ALL = (1 << 10),
+   * (allows click/drag not to have its events stolen by press events in other keymaps). */
+  WM_GIZMO_EVENT_HANDLE_ALL = (1 << 11),
+
+  /** Don't use tool-tips for this gizmo (can be distracting). */
+  WM_GIZMO_NO_TOOLTIP = (1 << 12),
 } eWM_GizmoFlag;
 
 /**
@@ -236,7 +244,7 @@ struct wmGizmo {
   int drag_part;
 
   /** Distance to bias this gizmo above others when picking
-   * (in worldspace, scaled by the gizmo scale - when used). */
+   * (in world-space, scaled by the gizmo scale - when used). */
   float select_bias;
 
   /**
@@ -366,7 +374,7 @@ typedef struct wmGizmoType {
   /** Activate a gizmo state when the user clicks on it. */
   wmGizmoFnInvoke invoke;
 
-  /** Called when gizmo tweaking is done - used to free data and reset property when cancelling. */
+  /** Called when gizmo tweaking is done - used to free data and reset property when canceling. */
   wmGizmoFnExit exit;
 
   wmGizmoFnCursorGet cursor_get;
@@ -374,7 +382,7 @@ typedef struct wmGizmoType {
   /** Called when gizmo selection state changes. */
   wmGizmoFnSelectRefresh select_refresh;
 
-  /** Free data (not the gizmo it's self), use when the gizmo allocates it's own members. */
+  /** Free data (not the gizmo itself), use when the gizmo allocates its own members. */
   wmGizmoFnFree free;
 
   /** RNA for properties. */
@@ -501,4 +509,6 @@ typedef enum eWM_GizmoFlagMapDrawStep {
 } eWM_GizmoFlagMapDrawStep;
 #define WM_GIZMOMAP_DRAWSTEP_MAX 2
 
-#endif /* __WM_GIZMO_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

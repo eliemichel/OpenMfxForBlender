@@ -87,7 +87,7 @@ ccl_device_inline int fast_rint(float x)
   /* Single roundps instruction on SSE4.1+ (for gcc/clang at least). */
   return float_to_int(rintf(x));
 #else
-  /* emulate rounding by adding/substracting 0.5. */
+  /* emulate rounding by adding/subtracting 0.5. */
   return float_to_int(x + copysignf(0.5f, x));
 #endif
 }
@@ -445,7 +445,10 @@ ccl_device_inline float fast_expf(float x)
   return fast_exp2f(x / M_LN2_F);
 }
 
-#ifndef __KERNEL_GPU__
+#if defined(__KERNEL_CPU__) && !defined(_MSC_VER)
+/* MSVC seems to have a code-gen bug here in at least SSE41/AVX, see
+ * T78047 and T78869 for details. Just disable for now, it only makes
+ * a small difference in denoising performance. */
 ccl_device float4 fast_exp2f4(float4 x)
 {
   const float4 one = make_float4(1.0f);
@@ -465,6 +468,11 @@ ccl_device float4 fast_exp2f4(float4 x)
 ccl_device_inline float4 fast_expf4(float4 x)
 {
   return fast_exp2f4(x / M_LN2_F);
+}
+#else
+ccl_device_inline float4 fast_expf4(float4 x)
+{
+  return make_float4(fast_expf(x.x), fast_expf(x.y), fast_expf(x.z), fast_expf(x.w));
 }
 #endif
 

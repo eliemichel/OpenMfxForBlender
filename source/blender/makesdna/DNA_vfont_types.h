@@ -24,8 +24,7 @@
  * (unrelated to text used to render the GUI).
  */
 
-#ifndef __DNA_VFONT_TYPES_H__
-#define __DNA_VFONT_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 
@@ -36,7 +35,7 @@ typedef struct VFont {
   ID id;
 
   /** 1024 = FILE_MAX. */
-  char name[1024];
+  char filepath[1024];
 
   struct VFontData *data;
   struct PackedFile *packedfile;
@@ -60,5 +59,3 @@ typedef struct VFont {
 #define FO_CURS_IS_MOTION(mode) (ELEM(mode, FO_CURSUP, FO_CURSDOWN, FO_PAGEUP, FO_PAGEDOWN))
 
 #define FO_BUILTIN_NAME "<builtin>"
-
-#endif /* __DNA_VFONT_TYPES_H__ */

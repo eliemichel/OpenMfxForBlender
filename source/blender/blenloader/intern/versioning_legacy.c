@@ -24,11 +24,11 @@
 #include <limits.h>
 
 #ifndef WIN32
-#  include <unistd.h>  // for read close
+#  include <unistd.h> /* for read close */
 #else
 #  include "BLI_winstuff.h"
 #  include "winsock2.h"
-#  include <io.h>   // for open close read
+#  include <io.h>   /* for open close read */
 #  include <zlib.h> /* odd include order-issue */
 #endif
 
@@ -72,8 +72,8 @@
 #include "BKE_deform.h"
 #include "BKE_fcurve.h"
 #include "BKE_lattice.h"
-#include "BKE_main.h"  // for Main
-#include "BKE_mesh.h"  // for ME_ defines (patching)
+#include "BKE_main.h" /* for Main */
+#include "BKE_mesh.h" /* for ME_ defines (patching) */
 #include "BKE_modifier.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
@@ -102,7 +102,7 @@ static void vcol_to_fcol(Mesh *me)
     return;
   }
 
-  mcoln = mcolmain = MEM_malloc_arrayN(me->totface, 4 * sizeof(int), "mcoln");
+  mcoln = mcolmain = MEM_malloc_arrayN(me->totface, sizeof(int[4]), "mcoln");
   mcol = (uint *)me->mcol;
   mface = me->mface;
   for (a = me->totface; a > 0; a--, mface++) {
@@ -493,6 +493,7 @@ void blo_do_version_old_trackto_to_constraints(Object *ob)
   ob->track = NULL;
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 {
   /* WATCH IT!!!: pointers from libdata have not been converted */
@@ -579,7 +580,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   if (bmain->versionfile <= 109) {
-    /* new variable: gridlines */
+    /* New variable: `gridlines`. */
     bScreen *screen = bmain->screens.first;
     while (screen) {
       ScrArea *area = screen->areabase.first;
@@ -856,8 +857,8 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   if (bmain->versionfile <= 223) {
     VFont *vf;
     for (vf = bmain->fonts.first; vf; vf = vf->id.next) {
-      if (STREQ(vf->name + strlen(vf->name) - 6, ".Bfont")) {
-        strcpy(vf->name, FO_BUILTIN_NAME);
+      if (STREQ(vf->filepath + strlen(vf->filepath) - 6, ".Bfont")) {
+        strcpy(vf->filepath, FO_BUILTIN_NAME);
       }
     }
   }
@@ -885,7 +886,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
 
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
-      sce->r.stereomode = 1;  // no stereo
+      sce->r.stereomode = 1; /* no stereo */
     }
 
     /* some oldfile patch, moved from set_func_space */
@@ -1250,12 +1251,12 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     while (sce) {
       ed = sce->ed;
       if (ed) {
-        SEQ_BEGIN (sce->ed, seq) {
+        SEQ_ALL_BEGIN (sce->ed, seq) {
           if (seq->type == SEQ_TYPE_IMAGE || seq->type == SEQ_TYPE_MOVIE) {
             seq->alpha_mode = SEQ_ALPHA_STRAIGHT;
           }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
 
       sce = sce->id.next;
@@ -1339,7 +1340,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         arm = blo_do_versions_newlibadr(fd, lib, ob->data);
         enum { ARM_DRAWXRAY = (1 << 1) };
         if (arm->flag & ARM_DRAWXRAY) {
-          ob->dtx |= OB_DRAWXRAY;
+          ob->dtx |= OB_DRAW_IN_FRONT;
         }
       }
       else if (ob->type == OB_MESH) {
@@ -1351,7 +1352,8 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         };
 
         if ((me->flag & ME_SUBSURF)) {
-          SubsurfModifierData *smd = (SubsurfModifierData *)modifier_new(eModifierType_Subsurf);
+          SubsurfModifierData *smd = (SubsurfModifierData *)BKE_modifier_new(
+              eModifierType_Subsurf);
 
           smd->levels = MAX2(1, me->subdiv);
           smd->renderLevels = MAX2(1, me->subdivr);
@@ -1371,7 +1373,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
           BLI_addtail(&ob->modifiers, smd);
 
-          modifier_unique_name(&ob->modifiers, (ModifierData *)smd);
+          BKE_modifier_unique_name(&ob->modifiers, (ModifierData *)smd);
         }
       }
 
@@ -1428,18 +1430,19 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         }
       }
 
-      if ((ob->softflag & OB_SB_ENABLE) && !modifiers_findByType(ob, eModifierType_Softbody)) {
+      if ((ob->softflag & OB_SB_ENABLE) &&
+          !BKE_modifiers_findby_type(ob, eModifierType_Softbody)) {
         if (ob->softflag & OB_SB_POSTDEF) {
           md = ob->modifiers.first;
 
-          while (md && modifierType_getInfo(md->type)->type == eModifierTypeType_OnlyDeform) {
+          while (md && BKE_modifier_get_info(md->type)->type == eModifierTypeType_OnlyDeform) {
             md = md->next;
           }
 
-          BLI_insertlinkbefore(&ob->modifiers, md, modifier_new(eModifierType_Softbody));
+          BLI_insertlinkbefore(&ob->modifiers, md, BKE_modifier_new(eModifierType_Softbody));
         }
         else {
-          BLI_addhead(&ob->modifiers, modifier_new(eModifierType_Softbody));
+          BLI_addhead(&ob->modifiers, BKE_modifier_new(eModifierType_Softbody));
         }
 
         ob->softflag &= ~OB_SB_ENABLE;
@@ -1641,9 +1644,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     if (bmain->versionfile == 241) {
       Image *ima;
       for (ima = bmain->images.first; ima; ima = ima->id.next) {
-        if (STREQ(ima->name, "Compositor")) {
+        if (STREQ(ima->filepath, "Compositor")) {
           strcpy(ima->id.name + 2, "Viewer Node");
-          strcpy(ima->name, "Viewer Node");
+          strcpy(ima->filepath, "Viewer Node");
         }
       }
     }
@@ -1956,7 +1959,6 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     Light *la;
     Material *ma;
     ParticleSettings *part;
-    Mesh *me;
     bNodeTree *ntree;
     Tex *tex;
     ModifierData *md;
@@ -2071,30 +2073,13 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       }
     }
 
-    /* Copy over old per-level multires vertex data
-     * into a single vertex array in struct Multires */
-    for (me = bmain->meshes.first; me; me = me->id.next) {
-      if (me->mr && !me->mr->verts) {
-        MultiresLevel *lvl = me->mr->levels.last;
-        if (lvl) {
-          me->mr->verts = lvl->verts;
-          lvl->verts = NULL;
-          /* Don't need the other vert arrays */
-          for (lvl = lvl->prev; lvl; lvl = lvl->prev) {
-            MEM_freeN(lvl->verts);
-            lvl->verts = NULL;
-          }
-        }
-      }
-    }
-
     if (bmain->versionfile != 245 || bmain->subversionfile < 1) {
       for (la = bmain->lights.first; la; la = la->id.next) {
         la->falloff_type = LA_FALLOFF_INVLINEAR;
 
         if (la->curfalloff == NULL) {
           la->curfalloff = BKE_curvemapping_add(1, 0.0f, 1.0f, 1.0f, 0.0f);
-          BKE_curvemapping_initialize(la->curfalloff);
+          BKE_curvemapping_init(la->curfalloff);
         }
       }
     }
@@ -2147,7 +2132,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 2)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 2)) {
     Image *ima;
 
     /* initialize 1:1 Aspect */
@@ -2156,7 +2141,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 4)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 4)) {
     bArmature *arm;
     ModifierData *md;
     Object *ob;
@@ -2174,8 +2159,8 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 5)) {
-    /* foreground color needs to be something other then black */
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 5)) {
+    /* foreground color needs to be something other than black */
     Scene *sce;
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
       sce->r.fg_stamp[0] = sce->r.fg_stamp[1] = sce->r.fg_stamp[2] = 0.8f;
@@ -2184,7 +2169,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 6)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 6)) {
     Scene *sce;
     /* fix frs_sec_base */
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
@@ -2194,7 +2179,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 7)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 7)) {
     Object *ob;
     bPoseChannel *pchan;
 
@@ -2224,7 +2209,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 8)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 8)) {
     Scene *sce;
     Object *ob;
     PartEff *paf = NULL;
@@ -2271,7 +2256,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
         BLI_addtail(&ob->particlesystem, psys);
 
-        md = modifier_new(eModifierType_ParticleSystem);
+        md = BKE_modifier_new(eModifierType_ParticleSystem);
         BLI_snprintf(md->name,
                      sizeof(md->name),
                      "ParticleSystem %i",
@@ -2357,7 +2342,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         }
 
         {
-          FluidsimModifierData *fluidmd = (FluidsimModifierData *)modifiers_findByType(
+          FluidsimModifierData *fluidmd = (FluidsimModifierData *)BKE_modifiers_findby_type(
               ob, eModifierType_Fluidsim);
           if (fluidmd && fluidmd->fss && fluidmd->fss->type == OB_FLUIDSIM_PARTICLE) {
             part->type = PART_FLUID;
@@ -2391,7 +2376,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 10)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 10)) {
     Object *ob;
 
     /* dupliface scale */
@@ -2400,7 +2385,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 11)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 11)) {
     Object *ob;
     bActionStrip *strip;
 
@@ -2434,22 +2419,22 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 14)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 14)) {
     Scene *sce;
     Sequence *seq;
 
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
-      SEQ_BEGIN (sce->ed, seq) {
+      SEQ_ALL_BEGIN (sce->ed, seq) {
         if (seq->blend_mode == 0) {
           seq->blend_opacity = 100.0f;
         }
       }
-      SEQ_END;
+      SEQ_ALL_END;
     }
   }
 
   /* fix broken group lengths in id properties */
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 15)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 15)) {
     idproperties_fix_group_lengths(bmain->scenes);
     idproperties_fix_group_lengths(bmain->libraries);
     idproperties_fix_group_lengths(bmain->objects);
@@ -2478,12 +2463,12 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   /* convert fluids to modifier */
-  if (bmain->versionfile < 246 || (bmain->versionfile == 246 && bmain->subversionfile < 1)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 246, 1)) {
     Object *ob;
 
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
       if (ob->fluidsimSettings) {
-        FluidsimModifierData *fluidmd = (FluidsimModifierData *)modifier_new(
+        FluidsimModifierData *fluidmd = (FluidsimModifierData *)BKE_modifier_new(
             eModifierType_Fluidsim);
         BLI_addhead(&ob->modifiers, (ModifierData *)fluidmd);
 
@@ -2499,7 +2484,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if (bmain->versionfile < 246 || (bmain->versionfile == 246 && bmain->subversionfile < 1)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 246, 1)) {
     Object *ob;
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
       if (ob->pd && (ob->pd->forcefield == PFIELD_WIND)) {
@@ -2509,7 +2494,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   /* set the curve radius interpolation to 2.47 default - easy */
-  if (bmain->versionfile < 247 || (bmain->versionfile == 247 && bmain->subversionfile < 6)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 247, 6)) {
     Curve *cu;
     Nurb *nu;
 
@@ -2529,7 +2514,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if (bmain->versionfile < 248 || (bmain->versionfile == 248 && bmain->subversionfile < 2)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 248, 2)) {
     Scene *sce;
 
     /* Note, these will need to be added for painting */
@@ -2539,7 +2524,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if (bmain->versionfile < 248 || (bmain->versionfile == 248 && bmain->subversionfile < 3)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 248, 3)) {
     bScreen *screen;
 
     /* adjust default settings for Animation Editors */
@@ -2592,12 +2577,12 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     while (sce) {
       ed = sce->ed;
       if (ed) {
-        SEQP_BEGIN (ed, seq) {
+        SEQ_CURRENT_BEGIN (ed, seq) {
           if (seq->strip && seq->strip->proxy) {
             seq->strip->proxy->quality = 90;
           }
         }
-        SEQ_END;
+        SEQ_CURRENT_END;
       }
 
       sce = sce->id.next;

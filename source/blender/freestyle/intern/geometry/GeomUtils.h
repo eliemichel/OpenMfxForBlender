@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GEOMUTILS_H__
-#define __GEOMUTILS_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -248,7 +247,7 @@ void fromImageToRetina(const Vec3r &p, Vec3r &q, const int viewport[4]);
  *    The projection matrix expressed in line major order (OpenGL
  *    matrices are column major ordered)
  */
-void fromRetinaToCamera(const Vec3r &p, Vec3r &q, real z, const real projection_matrix[4][4]);
+void fromRetinaToCamera(const Vec3r &p, Vec3r &q, real focal, const real projection_matrix[4][4]);
 
 /*! Projects from camera coordinates to world coordinates
  *  Returns the point's coordinates expressed in the world's
@@ -266,5 +265,3 @@ void fromCameraToWorld(const Vec3r &p, Vec3r &q, const real model_view_matrix[4]
 }  // end of namespace GeomUtils
 
 } /* namespace Freestyle */
-
-#endif  // __GEOMUTILS_H__

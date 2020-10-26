@@ -16,12 +16,13 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#include "BLI_math.h"
-#include "MEM_guardedalloc.h"
 #include <string.h>
-extern "C" {
+
+#include "MEM_guardedalloc.h"
+
 #include "BLI_jitter_2d.h"
-}
+#include "BLI_math.h"
+
 #include "COM_VectorBlurOperation.h"
 
 /* Defined */
@@ -114,9 +115,8 @@ bool VectorBlurOperation::determineDependingAreaOfInterest(rcti * /*input*/,
     newInput.ymin = 0;
     return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 void VectorBlurOperation::generateVectorBlur(float *data,
@@ -137,7 +137,6 @@ void VectorBlurOperation::generateVectorBlur(float *data,
                           inputImage->getBuffer(),
                           inputSpeed->getBuffer(),
                           inputZ->getBuffer());
-  return;
 }
 
 /* ****************** Spans ******************************* */
@@ -514,7 +513,7 @@ void antialias_tagbuf(int xsize, int ysize, char *rectmove)
 /* we make this into 3 points, center point is (0, 0) */
 /* and offset the center point just enough to make curve go through midpoint */
 
-static void quad_bezier_2d(float *result, float *v1, float *v2, float *ipodata)
+static void quad_bezier_2d(float *result, const float *v1, const float *v2, const float *ipodata)
 {
   float p1[2], p2[2], p3[2];
 
@@ -569,15 +568,15 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
   zspan.zofsy = 0.0f;
 
   /* the buffers */
-  rectz = (float *)MEM_mapallocN(sizeof(float) * xsize * ysize, "zbuf accum");
+  rectz = (float *)MEM_callocN(sizeof(float) * xsize * ysize, "zbuf accum");
   zspan.rectz = (int *)rectz;
 
-  rectmove = (char *)MEM_mapallocN(xsize * ysize, "rectmove");
-  rectdraw = (DrawBufPixel *)MEM_mapallocN(sizeof(DrawBufPixel) * xsize * ysize, "rect draw");
+  rectmove = (char *)MEM_callocN(xsize * ysize, "rectmove");
+  rectdraw = (DrawBufPixel *)MEM_callocN(sizeof(DrawBufPixel) * xsize * ysize, "rect draw");
   zspan.rectdraw = rectdraw;
 
-  rectweight = (float *)MEM_mapallocN(sizeof(float) * xsize * ysize, "rect weight");
-  rectmax = (float *)MEM_mapallocN(sizeof(float) * xsize * ysize, "rect max");
+  rectweight = (float *)MEM_callocN(sizeof(float) * xsize * ysize, "rect weight");
+  rectmax = (float *)MEM_callocN(sizeof(float) * xsize * ysize, "rect max");
 
   /* debug... check if PASS_VECTOR_MAX still is in buffers */
   dvec1 = vecbufrect;
@@ -596,7 +595,7 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
     float minspeed = (float)nbd->minspeed;
     float minspeedsq = minspeed * minspeed;
 
-    minvecbufrect = (float *)MEM_mapallocN(4 * sizeof(float) * xsize * ysize, "minspeed buf");
+    minvecbufrect = (float *)MEM_callocN(sizeof(float[4]) * xsize * ysize, "minspeed buf");
 
     dvec1 = vecbufrect;
     dvec2 = minvecbufrect;
@@ -622,7 +621,7 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
   }
 
   /* make vertex buffer with averaged speed and zvalues */
-  rectvz = (float *)MEM_mapallocN(4 * sizeof(float) * (xsize + 1) * (ysize + 1), "vertices");
+  rectvz = (float *)MEM_callocN(sizeof(float[4]) * (xsize + 1) * (ysize + 1), "vertices");
   dvz = rectvz;
   for (y = 0; y <= ysize; y++) {
 

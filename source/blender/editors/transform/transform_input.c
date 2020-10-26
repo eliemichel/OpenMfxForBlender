@@ -67,7 +67,7 @@ static void InputSpringFlip(TransInfo *t, MouseInput *mi, const double mval[2], 
   InputSpring(t, mi, mval, output);
 
   /* flip scale */
-  /* values can become really big when zoomed in so use longs [#26598] */
+  /* values can become really big when zoomed in so use longs T26598. */
   if (((int64_t)((int)mi->center[0] - mval[0]) * (int64_t)((int)mi->center[0] - mi->imval[0]) +
        (int64_t)((int)mi->center[1] - mval[1]) * (int64_t)((int)mi->center[1] - mi->imval[1])) <
       0) {
@@ -124,8 +124,8 @@ static void InputVerticalRatio(TransInfo *t, MouseInput *mi, const double mval[2
 {
   const int winy = t->region ? t->region->winy : 1;
 
-  /* Flip so dragging up increases (matching viewport zoom). */
-  output[0] = ((mval[1] - mi->imval[1]) / winy) * -2.0f;
+  /* Dragging up increases (matching viewport zoom). */
+  output[0] = ((mval[1] - mi->imval[1]) / winy) * 2.0f;
 }
 
 /** Callback for #INPUT_VERTICAL_ABSOLUTE */
@@ -139,8 +139,8 @@ static void InputVerticalAbsolute(TransInfo *t,
   InputVector(t, mi, mval, vec);
   project_v3_v3v3(vec, vec, t->viewinv[1]);
 
-  /* Flip so dragging up increases (matching viewport zoom). */
-  output[0] = dot_v3v3(t->viewinv[1], vec) * -2.0f;
+  /* Dragging up increases (matching viewport zoom). */
+  output[0] = dot_v3v3(t->viewinv[1], vec) * 2.0f;
 }
 
 /** Callback for #INPUT_CUSTOM_RATIO_FLIP */
@@ -267,7 +267,7 @@ void setCustomPoints(TransInfo *UNUSED(t),
 {
   int *data;
 
-  mi->data = MEM_reallocN(mi->data, sizeof(int) * 4);
+  mi->data = MEM_reallocN(mi->data, sizeof(int[4]));
 
   data = mi->data;
 
@@ -438,7 +438,7 @@ void initMouseInputMode(TransInfo *t, MouseInput *mi, MouseInputMode mode)
   }
 
   /* if we've allocated new data, free the old data
-   * less hassle then checking before every alloc above */
+   * less hassle than checking before every alloc above */
   if (mi_data_prev && (mi_data_prev != mi->data)) {
     MEM_freeN(mi_data_prev);
   }

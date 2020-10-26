@@ -1,44 +1,76 @@
 
-uniform sampler2DArray irradianceGrid;
+#pragma BLENDER_REQUIRE(common_math_lib.glsl)
+#pragma BLENDER_REQUIRE(common_uniforms_lib.glsl)
+#pragma BLENDER_REQUIRE(octahedron_lib.glsl)
 
 #define IRRADIANCE_LIB
 
-#ifdef IRRADIANCE_CUBEMAP
-struct IrradianceData {
-  vec3 color;
-};
-#elif defined(IRRADIANCE_SH_L2)
+/* ---------------------------------------------------------------------- */
+/** \name Structure
+ * \{ */
+
+#if defined(IRRADIANCE_SH_L2)
 struct IrradianceData {
   vec3 shcoefs[9];
 };
+
 #else /* defined(IRRADIANCE_HL2) */
 struct IrradianceData {
   vec3 cubesides[3];
 };
+
 #endif
+
+/** \} */
+
+/* ---------------------------------------------------------------------- */
+/** \name Resources
+ * \{ */
+
+uniform sampler2DArray irradianceGrid;
+
+/** \} */
+
+/* ---------------------------------------------------------------------- */
+/** \name Functions
+ * \{ */
+
+vec4 irradiance_encode(vec3 rgb)
+{
+  float maxRGB = max_v3(rgb);
+  float fexp = ceil(log2(maxRGB));
+  return vec4(rgb / exp2(fexp), (fexp + 128.0) / 255.0);
+}
+
+vec3 irradiance_decode(vec4 data)
+{
+  float fexp = data.a * 255.0 - 128.0;
+  return data.rgb * exp2(fexp);
+}
+
+vec4 visibility_encode(vec2 accum, float range)
+{
+  accum /= range;
+
+  vec4 data;
+  data.x = fract(accum.x);
+  data.y = floor(accum.x) / 255.0;
+  data.z = fract(accum.y);
+  data.w = floor(accum.y) / 255.0;
+
+  return data;
+}
+
+vec2 visibility_decode(vec4 data, float range)
+{
+  return (data.xz + data.yw * 255.0) * range;
+}
 
 IrradianceData load_irradiance_cell(int cell, vec3 N)
 {
   /* Keep in sync with diffuse_filter_probe() */
 
-#if defined(IRRADIANCE_CUBEMAP)
-
-#  define AMBIANT_CUBESIZE 8
-  ivec2 cell_co = ivec2(AMBIANT_CUBESIZE);
-  int cell_per_row = textureSize(irradianceGrid, 0).x / cell_co.x;
-  cell_co.x *= cell % cell_per_row;
-  cell_co.y *= cell / cell_per_row;
-
-  vec2 texelSize = 1.0 / vec2(AMBIANT_CUBESIZE);
-
-  vec2 uvs = mapping_octahedron(N, texelSize);
-  uvs *= vec2(AMBIANT_CUBESIZE) / vec2(textureSize(irradianceGrid, 0));
-  uvs += vec2(cell_co) / vec2(textureSize(irradianceGrid, 0));
-
-  IrradianceData ir;
-  ir.color = texture(irradianceGrid, vec3(uvs, 0.0)).rgb;
-
-#elif defined(IRRADIANCE_SH_L2)
+#if defined(IRRADIANCE_SH_L2)
 
   ivec2 cell_co = ivec2(3, 3);
   int cell_per_row = textureSize(irradianceGrid, 0).x / cell_co.x;
@@ -164,9 +196,7 @@ vec3 hl2_basis(vec3 N, vec3 cubesides[3])
 
 vec3 compute_irradiance(vec3 N, IrradianceData ird)
 {
-#if defined(IRRADIANCE_CUBEMAP)
-  return ird.color;
-#elif defined(IRRADIANCE_SH_L2)
+#if defined(IRRADIANCE_SH_L2)
   return spherical_harmonics_L2(N, ird.shcoefs);
 #else /* defined(IRRADIANCE_HL2) */
   return hl2_basis(N, ird.cubesides);
@@ -178,3 +208,5 @@ vec3 irradiance_from_cell_get(int cell, vec3 ir_dir)
   IrradianceData ir_data = load_irradiance_cell(cell, ir_dir);
   return compute_irradiance(ir_dir, ir_data);
 }
+
+/** \} */

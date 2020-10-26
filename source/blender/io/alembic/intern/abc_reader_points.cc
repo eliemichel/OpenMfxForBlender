@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2016 Kévin Dietrich.
@@ -26,14 +26,13 @@
 #include "abc_reader_transform.h"
 #include "abc_util.h"
 
-extern "C" {
 #include "DNA_mesh_types.h"
+#include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_customdata.h"
 #include "BKE_mesh.h"
 #include "BKE_object.h"
-}
 
 using Alembic::AbcGeom::kWrapExisting;
 using Alembic::AbcGeom::N3fArraySamplePtr;
@@ -44,6 +43,8 @@ using Alembic::AbcGeom::IN3fArrayProperty;
 using Alembic::AbcGeom::IPoints;
 using Alembic::AbcGeom::IPointsSchema;
 using Alembic::AbcGeom::ISampleSelector;
+
+namespace blender::io::alembic {
 
 AbcPointsReader::AbcPointsReader(const Alembic::Abc::IObject &object, ImportSettings &settings)
     : AbcObjectReader(object, settings)
@@ -125,7 +126,7 @@ void read_points_sample(const IPointsSchema &schema,
 
 struct Mesh *AbcPointsReader::read_mesh(struct Mesh *existing_mesh,
                                         const ISampleSelector &sample_sel,
-                                        int /*read_flag*/,
+                                        int read_flag,
                                         const char **err_str)
 {
   IPointsSchema::Sample sample;
@@ -150,8 +151,12 @@ struct Mesh *AbcPointsReader::read_mesh(struct Mesh *existing_mesh,
     new_mesh = BKE_mesh_new_nomain(positions->size(), 0, 0, 0, 0);
   }
 
-  CDStreamConfig config = get_config(new_mesh ? new_mesh : existing_mesh);
+  Mesh *mesh_to_export = new_mesh ? new_mesh : existing_mesh;
+  const bool use_vertex_interpolation = read_flag & MOD_MESHSEQ_INTERPOLATE_VERTICES;
+  CDStreamConfig config = get_config(mesh_to_export, use_vertex_interpolation);
   read_points_sample(m_schema, sample_sel, config);
 
-  return new_mesh ? new_mesh : existing_mesh;
+  return mesh_to_export;
 }
+
+}  // namespace blender::io::alembic

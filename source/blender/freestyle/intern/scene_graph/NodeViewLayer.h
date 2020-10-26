@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_NODE_VIEW_LAYER_H__
-#define __FREESTYLE_NODE_VIEW_LAYER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -24,9 +23,7 @@
 
 #include "Node.h"
 
-extern "C" {
 #include "DNA_scene_types.h" /* for Scene and ViewLayer */
-}
 
 using namespace std;
 
@@ -61,5 +58,3 @@ class NodeViewLayer : public Node {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_NODE_VIEW_LAYER_H__

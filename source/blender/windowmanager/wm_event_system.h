@@ -21,8 +21,7 @@
  * \ingroup wm
  */
 
-#ifndef __WM_EVENT_SYSTEM_H__
-#define __WM_EVENT_SYSTEM_H__
+#pragma once
 
 /* return value of handler-operator call */
 #define WM_HANDLER_CONTINUE 0
@@ -33,6 +32,10 @@
 struct ARegion;
 struct GHOST_TabletData;
 struct ScrArea;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* wmKeyMap is in DNA_windowmanager.h, it's saveable */
 
@@ -165,4 +168,6 @@ void wm_dropbox_free(void);
 void wm_drags_check_ops(bContext *C, const wmEvent *event);
 void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect);
 
-#endif /* __WM_EVENT_SYSTEM_H__ */
+#ifdef __cplusplus
+}
+#endif

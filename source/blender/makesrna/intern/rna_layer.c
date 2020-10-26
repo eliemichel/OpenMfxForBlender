@@ -29,8 +29,6 @@
 
 #include "RE_engine.h"
 
-#include "DRW_engine.h"
-
 #include "WM_api.h"
 #include "WM_types.h"
 
@@ -184,10 +182,7 @@ static PointerRNA rna_ViewLayer_depsgraph_get(PointerRNA *ptr)
   if (GS(id->name) == ID_SCE) {
     Scene *scene = (Scene *)id;
     ViewLayer *view_layer = (ViewLayer *)ptr->data;
-    // NOTE: We don't allocate new depsgraph here, so the bmain is ignored. So it's easier to pass
-    // NULL.
-    // Still weak though.
-    Depsgraph *depsgraph = BKE_scene_get_depsgraph(NULL, scene, view_layer, false);
+    Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer);
     return rna_pointer_inherit_refine(ptr, &RNA_Depsgraph, depsgraph);
   }
   return PointerRNA_NULL;
@@ -206,7 +201,7 @@ static void rna_ViewLayer_update_tagged(ID *id_ptr,
                                         ReportList *reports)
 {
   Scene *scene = (Scene *)id_ptr;
-  Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
+  Depsgraph *depsgraph = BKE_scene_ensure_depsgraph(bmain, scene, view_layer);
 
   if (DEG_is_evaluating(depsgraph)) {
     BKE_report(reports, RPT_ERROR, "Dependency graph update requested during evaluation");
@@ -458,7 +453,7 @@ static void rna_def_layer_objects(BlenderRNA *brna, PropertyRNA *cprop)
                                  NULL);
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_NEVER_UNLINK);
   RNA_def_property_ui_text(prop, "Active Object", "Active object for this layer");
-  /* Could call: ED_object_base_activate(C, rl->basact);
+  /* Could call: `ED_object_base_activate(C, view_layer->basact);`
    * but would be a bad level call and it seems the notifier is enough */
   RNA_def_property_update(prop, NC_SCENE | ND_OB_ACTIVE, NULL);
 

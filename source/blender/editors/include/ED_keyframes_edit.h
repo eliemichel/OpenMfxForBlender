@@ -21,14 +21,13 @@
  * \ingroup editors
  */
 
-#ifndef __ED_KEYFRAMES_EDIT_H__
-#define __ED_KEYFRAMES_EDIT_H__
+#pragma once
+
+#include "ED_anim_api.h" /* for enum eAnimFilter_Flags */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "ED_anim_api.h" /* for enum eAnimFilter_Flags */
 
 struct BezTriple;
 struct FCurve;
@@ -106,8 +105,8 @@ typedef enum eEditKeyframes_Mirror {
 typedef struct KeyframeEdit_LassoData {
   rctf *rectf_scaled;
   const rctf *rectf_view;
-  const int (*mcords)[2];
-  int mcords_tot;
+  const int (*mcoords)[2];
+  int mcoords_len;
 } KeyframeEdit_LassoData;
 
 /* use with BEZT_OK_REGION_CIRCLE */
@@ -340,5 +339,3 @@ short paste_animedit_keys(struct bAnimContext *ac,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_KEYFRAMES_EDIT_H__ */

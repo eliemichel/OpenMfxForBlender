@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FRS_FREESTYLE_H__
-#define __FRS_FREESTYLE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -43,7 +42,7 @@ struct FreestyleGlobals {
 extern struct FreestyleGlobals g_freestyle;
 
 /* Rendering */
-void FRS_initialize(void);
+void FRS_init(void);
 void FRS_set_context(struct bContext *C);
 int FRS_is_freestyle_enabled(struct ViewLayer *view_layer);
 void FRS_init_stroke_renderer(struct Render *re);
@@ -69,5 +68,3 @@ struct Material *FRS_create_stroke_material(struct Main *bmain,
 #ifdef __cplusplus
 }
 #endif
-
-#endif  // __FRS_FREESTYLE_H__

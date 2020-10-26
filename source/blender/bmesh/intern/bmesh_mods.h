@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_MODS_H__
-#define __BMESH_MODS_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -65,7 +64,7 @@ BMVert *BM_edge_collapse(BMesh *bm,
                          const bool do_del,
                          const bool kill_degenerate_faces);
 
-BMVert *BM_edge_split(BMesh *bm, BMEdge *e, BMVert *v, BMEdge **r_e, float percent);
+BMVert *BM_edge_split(BMesh *bm, BMEdge *e, BMVert *v, BMEdge **r_e, float fac);
 
 BMVert *BM_edge_split_n(BMesh *bm, BMEdge *e, int numcuts, BMVert **r_varr);
 
@@ -94,5 +93,3 @@ enum {
 BMVert *BM_face_loop_separate(BMesh *bm, BMLoop *l_sep);
 BMVert *BM_face_loop_separate_multi_isolated(BMesh *bm, BMLoop *l_sep);
 BMVert *BM_face_loop_separate_multi(BMesh *bm, BMLoop **larr, int larr_len);
-
-#endif /* __BMESH_MODS_H__ */

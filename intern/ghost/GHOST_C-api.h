@@ -21,8 +21,7 @@
  * \brief GHOST C-API function and type declarations.
  */
 
-#ifndef __GHOST_C_API_H__
-#define __GHOST_C_API_H__
+#pragma once
 
 #include "GHOST_Types.h"
 
@@ -203,7 +202,8 @@ extern GHOST_WindowHandle GHOST_CreateDialogWindow(GHOST_SystemHandle systemhand
  * \param platform_support_callback An optional callback to check platform support
  * \return A handle to the new context ( == NULL if creation failed).
  */
-extern GHOST_ContextHandle GHOST_CreateOpenGLContext(GHOST_SystemHandle systemhandle);
+extern GHOST_ContextHandle GHOST_CreateOpenGLContext(GHOST_SystemHandle systemhandle,
+                                                     GHOST_GLSettings glSettings);
 
 /**
  * Dispose of a context.
@@ -362,8 +362,8 @@ extern GHOST_TSuccess GHOST_HasCursorShape(GHOST_WindowHandle windowhandle,
  * \param mask The mask data for the cursor.
  * \param sizex The width of the cursor
  * \param sizey The height of the cursor
- * \param hotX The X coordinate of the cursor hotspot.
- * \param hotY The Y coordinate of the cursor hotspot.
+ * \param hotX The X coordinate of the cursor hot-spot.
+ * \param hotY The Y coordinate of the cursor hot-spot.
  * \param canInvertColor Let macOS invert cursor color to match platform convention.
  * \return Indication of success.
  */
@@ -435,7 +435,7 @@ extern GHOST_TSuccess GHOST_SetCursorGrab(GHOST_WindowHandle windowhandle,
  ***************************************************************************************/
 
 /**
- * Returns the state of a modifier key (ouside the message queue).
+ * Returns the state of a modifier key (outside the message queue).
  * \param systemhandle The handle to the system
  * \param mask The modifier key state to retrieve.
  * \param isDown Pointer to return modifier state in.
@@ -446,7 +446,7 @@ extern GHOST_TSuccess GHOST_GetModifierKeyState(GHOST_SystemHandle systemhandle,
                                                 int *isDown);
 
 /**
- * Returns the state of a mouse button (ouside the message queue).
+ * Returns the state of a mouse button (outside the message queue).
  * \param systemhandle The handle to the system
  * \param mask The button state to retrieve.
  * \param isDown Pointer to return button state in.
@@ -1071,6 +1071,4 @@ GHOST_TSuccess GHOST_XrEventsHandle(GHOST_XrContextHandle xr_context);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

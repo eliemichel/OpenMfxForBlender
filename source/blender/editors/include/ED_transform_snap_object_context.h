@@ -18,8 +18,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_TRANSFORM_SNAP_OBJECT_CONTEXT_H__
-#define __ED_TRANSFORM_SNAP_OBJECT_CONTEXT_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -77,11 +76,8 @@ struct SnapObjectParams {
 };
 
 typedef struct SnapObjectContext SnapObjectContext;
-SnapObjectContext *ED_transform_snap_object_context_create(struct Main *bmain,
-                                                           struct Scene *scene,
-                                                           int flag);
-SnapObjectContext *ED_transform_snap_object_context_create_view3d(struct Main *bmain,
-                                                                  struct Scene *scene,
+SnapObjectContext *ED_transform_snap_object_context_create(struct Scene *scene, int flag);
+SnapObjectContext *ED_transform_snap_object_context_create_view3d(struct Scene *scene,
                                                                   int flag,
                                                                   /* extra args for view3d */
                                                                   const struct ARegion *region,
@@ -160,5 +156,3 @@ bool ED_transform_snap_object_project_all_view3d_ex(SnapObjectContext *sctx,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_TRANSFORM_SNAP_OBJECT_CONTEXT_H__ */

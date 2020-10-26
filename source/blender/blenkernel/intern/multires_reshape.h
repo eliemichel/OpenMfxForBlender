@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2020 Blender Foundation.
@@ -21,10 +21,11 @@
  * \ingroup bke
  */
 
-#ifndef __BKE_INTERN_MULTIRES_RESHAPE_H__
-#define __BKE_INTERN_MULTIRES_RESHAPE_H__
+#pragma once
 
 #include "BLI_sys_types.h"
+
+#include "BKE_multires.h"
 
 struct Depsgraph;
 struct GridPaintMask;
@@ -138,7 +139,7 @@ typedef struct ReshapeConstGridElement {
   float mask;
 } ReshapeConstGridElement;
 
-/* ================================================================================================
+/* --------------------------------------------------------------------
  * Construct/destruct reshape context.
  */
 
@@ -156,20 +157,25 @@ bool multires_reshape_context_create_from_object(MultiresReshapeContext *reshape
                                                  struct Object *object,
                                                  struct MultiresModifierData *mmd);
 
+bool multires_reshape_context_create_from_base_mesh(MultiresReshapeContext *reshape_context,
+                                                    struct Depsgraph *depsgraph,
+                                                    struct Object *object,
+                                                    struct MultiresModifierData *mmd);
+
 bool multires_reshape_context_create_from_ccg(MultiresReshapeContext *reshape_context,
                                               struct SubdivCCG *subdiv_ccg,
                                               struct Mesh *base_mesh,
                                               int top_level);
 
-bool multires_reshape_context_create_from_subdivide(MultiresReshapeContext *reshape_context,
-                                                    struct Object *object,
-                                                    struct MultiresModifierData *mmd,
-                                                    int top_level);
+bool multires_reshape_context_create_from_modifier(MultiresReshapeContext *reshape_context,
+                                                   struct Object *object,
+                                                   struct MultiresModifierData *mmd,
+                                                   int top_level);
 
 void multires_reshape_free_original_grids(MultiresReshapeContext *reshape_context);
 void multires_reshape_context_free(MultiresReshapeContext *reshape_context);
 
-/* ================================================================================================
+/* --------------------------------------------------------------------
  * Helper accessors.
  */
 
@@ -214,7 +220,7 @@ ReshapeGridElement multires_reshape_grid_element_for_ptex_coord(
 ReshapeConstGridElement multires_reshape_orig_grid_element_for_grid_coord(
     const MultiresReshapeContext *reshape_context, const GridCoord *grid_coord);
 
-/* ================================================================================================
+/* --------------------------------------------------------------------
  * Sample limit surface of the base mesh.
  */
 
@@ -225,14 +231,14 @@ void multires_reshape_evaluate_limit_at_grid(const MultiresReshapeContext *resha
                                              float r_P[3],
                                              float r_tangent_matrix[3][3]);
 
-/* ================================================================================================
+/* --------------------------------------------------------------------
  * Custom data preparation.
  */
 
 /* Make sure custom data is allocated for the given level. */
 void multires_reshape_ensure_grids(struct Mesh *mesh, const int level);
 
-/* ================================================================================================
+/* --------------------------------------------------------------------
  * Functions specific to reshaping from a set of vertices in a object position.
  */
 
@@ -245,17 +251,21 @@ bool multires_reshape_assign_final_coords_from_vertcos(
     const float (*vert_coords)[3],
     const int num_vert_coords);
 
-/* ================================================================================================
+/* --------------------------------------------------------------------
  * Functions specific to reshaping from CCG.
  */
 
-/* NOTE: Displacement grids to be at least at a reshape level.
+/* Store final object-space coordinates in the displacement grids.
+ * The reason why displacement grids are used for storage is based on memory
+ * footprint optimization.
+ *
+ * NOTE: Displacement grids to be at least at a reshape level.
  *
  * Return truth if all coordinates have been updated. */
 bool multires_reshape_assign_final_coords_from_ccg(const MultiresReshapeContext *reshape_context,
                                                    struct SubdivCCG *subdiv_ccg);
 
-/* ================================================================================================
+/* --------------------------------------------------------------------
  * Functions specific to reshaping from MDISPS.
  */
 
@@ -264,10 +274,10 @@ void multires_reshape_assign_final_coords_from_mdisps(
     const MultiresReshapeContext *reshape_context);
 
 /* Reads from original CD_MIDTSPS, writes to the current mesh CD_MDISPS. */
-void multires_reshape_assign_final_coords_from_orig_mdisps(
+void multires_reshape_assign_final_elements_from_orig_mdisps(
     const MultiresReshapeContext *reshape_context);
 
-/* ================================================================================================
+/* --------------------------------------------------------------------
  * Displacement smooth.
  */
 
@@ -284,9 +294,10 @@ void multires_reshape_smooth_object_grids_with_details(
  *
  * Makes it so surface on top level looks smooth. Details are not preserved
  */
-void multires_reshape_smooth_object_grids(const MultiresReshapeContext *reshape_context);
+void multires_reshape_smooth_object_grids(const MultiresReshapeContext *reshape_context,
+                                          const enum eMultiresSubdivideModeType mode);
 
-/* ================================================================================================
+/* --------------------------------------------------------------------
  * Displacement, space conversion.
  */
 
@@ -297,7 +308,7 @@ void multires_reshape_store_original_grids(MultiresReshapeContext *reshape_conte
 void multires_reshape_object_grids_to_tangent_displacement(
     const MultiresReshapeContext *reshape_context);
 
-/* ================================================================================================
+/* --------------------------------------------------------------------
  * Apply base.
  */
 
@@ -319,5 +330,3 @@ void multires_reshape_apply_base_refine_from_base(MultiresReshapeContext *reshap
  *
  * NOTE: Will re-evaluate all leading modifiers, so it's not cheap. */
 void multires_reshape_apply_base_refine_from_deform(MultiresReshapeContext *reshape_context);
-
-#endif /* __BKE_INTERN_MULTIRES_RESHAPE_H__ */

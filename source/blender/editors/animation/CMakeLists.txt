@@ -24,15 +24,13 @@ set(INC
   ../../gpu
   ../../makesdna
   ../../makesrna
+  ../../sequencer
   ../../windowmanager
   ../../../../intern/clog
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
 
 set(SRC
   anim_channels_defines.c
@@ -69,6 +67,5 @@ if(WITH_PYTHON)
   add_definitions(-DWITH_PYTHON)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_animation "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

@@ -14,14 +14,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLENDER_STROKE_RENDERER_H__
-#define __BLENDER_STROKE_RENDERER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
  */
 
-#include "BLI_map.h"
+#include "BLI_map.hh"
 
 #include "../stroke/StrokeRenderer.h"
 #include "../system/FreestyleConfig.h"
@@ -56,7 +55,7 @@ class BlenderStrokeRenderer : public StrokeRenderer {
     {
     }
     vector<StrokeRep *> strokes;
-    BLI::Map<Material *, int> materials;
+    blender::Map<Material *, int> materials;
     int totvert;
     int totedge;
     int totpoly;
@@ -102,5 +101,3 @@ class BlenderStrokeRenderer : public StrokeRenderer {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __BLENDER_STROKE_RENDERER_H__

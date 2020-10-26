@@ -18,9 +18,14 @@
  * \ingroup pythonintern
  */
 
-#ifndef __BPY_UTILS_UNITS_H__
-#define __BPY_UTILS_UNITS_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 PyObject *BPY_utils_units(void);
 
-#endif /* __BPY_UTILS_UNITS_H__ */
+#ifdef __cplusplus
+}
+#endif

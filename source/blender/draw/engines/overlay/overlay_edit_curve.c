@@ -36,7 +36,8 @@ void OVERLAY_edit_curve_cache_init(OVERLAY_Data *vedata)
   GPUShader *sh;
   DRWState state;
 
-  pd->edit_curve.show_handles = (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) != 0;
+  pd->edit_curve.show_handles = v3d->overlay.handle_display != CURVE_HANDLE_NONE;
+  pd->edit_curve.handle_display = v3d->overlay.handle_display;
   pd->shdata.edit_curve_normal_length = v3d->overlay.normals_length;
 
   /* Run Twice for in-front passes. */
@@ -62,11 +63,13 @@ void OVERLAY_edit_curve_cache_init(OVERLAY_Data *vedata)
     pd->edit_curve_handle_grp = grp = DRW_shgroup_create(sh, psl->edit_curve_handle_ps);
     DRW_shgroup_uniform_block(grp, "globalsBlock", G_draw.block_ubo);
     DRW_shgroup_uniform_bool_copy(grp, "showCurveHandles", pd->edit_curve.show_handles);
+    DRW_shgroup_uniform_int_copy(grp, "curveHandleDisplay", pd->edit_curve.handle_display);
     DRW_shgroup_state_enable(grp, DRW_STATE_BLEND_ALPHA);
 
     sh = OVERLAY_shader_edit_curve_point();
     pd->edit_curve_points_grp = grp = DRW_shgroup_create(sh, psl->edit_curve_handle_ps);
     DRW_shgroup_uniform_bool_copy(grp, "showCurveHandles", pd->edit_curve.show_handles);
+    DRW_shgroup_uniform_int_copy(grp, "curveHandleDisplay", pd->edit_curve.handle_display);
     DRW_shgroup_uniform_block(grp, "globalsBlock", G_draw.block_ubo);
   }
 }
@@ -75,7 +78,7 @@ void OVERLAY_edit_curve_cache_populate(OVERLAY_Data *vedata, Object *ob)
 {
   OVERLAY_PrivateData *pd = vedata->stl->pd;
   bool draw_normals = (pd->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_NORMALS) != 0;
-  bool do_xray = (ob->dtx & OB_DRAWXRAY) != 0;
+  bool do_xray = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
 
   Curve *cu = ob->data;
   struct GPUBatch *geom;

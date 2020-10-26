@@ -52,7 +52,7 @@ void bmo_edgenet_fill_exec(BMesh *bm, BMOperator *op)
   BMO_slot_buffer_hflag_enable(bm, op->slots_in, "edges", BM_EDGE, BM_ELEM_TAG, false);
 
   BM_mesh_elem_hflag_disable_all(bm, BM_FACE, BM_ELEM_TAG, false);
-  BM_mesh_edgenet(bm, true, true);  // TODO, sides
+  BM_mesh_edgenet(bm, true, true); /* TODO, sides */
 
   BMO_slot_buffer_from_enabled_hflag(bm, op, op->slots_out, "faces.out", BM_FACE, BM_ELEM_TAG);
 
@@ -117,7 +117,7 @@ void bmo_edgenet_prepare_exec(BMesh *bm, BMOperator *op)
   BMO_slot_buffer_flag_enable(bm, op->slots_in, "edges", BM_EDGE, EDGE_MARK);
 
   /* validate that each edge has at most one other tagged edge in the
-   * disk cycle around each of it's vertices */
+   * disk cycle around each of its vertices */
   BMO_ITER (e, &siter, op->slots_in, "edges", BM_EDGE) {
     for (i = 0; i < 2; i++) {
       count = BMO_iter_elem_count_flag(bm, BM_EDGES_OF_VERT, (i ? e->v2 : e->v1), EDGE_MARK, true);
@@ -194,10 +194,8 @@ void bmo_edgenet_prepare_exec(BMesh *bm, BMOperator *op)
       BLI_array_free(edges2);
       return;
     }
-    else {
-      edges1 = edges2;
-      edges2 = NULL;
-    }
+    edges1 = edges2;
+    edges2 = NULL;
   }
 
   if (edges2 && BLI_array_len(edges2) > 2 &&
@@ -231,7 +229,7 @@ void bmo_edgenet_prepare_exec(BMesh *bm, BMOperator *op)
       v4 = BM_vert_in_edge(edges2[i - 1], edges2[i]->v1) ? edges2[i]->v2 : edges2[i]->v1;
     }
 
-    /* if there is ever bow-tie quads between two edges the problem is here! [#30367] */
+    /* if there is ever bow-tie quads between two edges the problem is here! T30367. */
 #if 0
     normal_tri_v3(dvec1, v1->co, v2->co, v4->co);
     normal_tri_v3(dvec2, v1->co, v4->co, v3->co);

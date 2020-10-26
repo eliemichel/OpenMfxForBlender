@@ -90,7 +90,7 @@ bool ui_but_is_interactive(const uiBut *but, const bool labeledit)
   if (but->flag & UI_SCROLLED) {
     return false;
   }
-  if ((but->type == UI_BTYPE_TEXT) && (but->dt == UI_EMBOSS_NONE) && !labeledit) {
+  if ((but->type == UI_BTYPE_TEXT) && (but->emboss == UI_EMBOSS_NONE) && !labeledit) {
     return false;
   }
   if ((but->type == UI_BTYPE_LISTROW) && labeledit) {
@@ -107,15 +107,13 @@ bool UI_but_is_utf8(const uiBut *but)
     const int subtype = RNA_property_subtype(but->rnaprop);
     return !(ELEM(subtype, PROP_FILEPATH, PROP_DIRPATH, PROP_FILENAME, PROP_BYTESTRING));
   }
-  else {
-    return !(but->flag & UI_BUT_NO_UTF8);
-  }
+  return !(but->flag & UI_BUT_NO_UTF8);
 }
 
 #ifdef USE_UI_POPOVER_ONCE
 bool ui_but_is_popover_once_compat(const uiBut *but)
 {
-  return ((but->type == UI_BTYPE_BUT) || ui_but_is_toggle(but));
+  return (ELEM(but->type, UI_BTYPE_BUT, UI_BTYPE_DECORATOR) || ui_but_is_toggle(but));
 }
 #endif
 
@@ -171,9 +169,7 @@ int ui_but_icon(const uiBut *but)
   if (but->drawflag & UI_BUT_ICON_REVERSE) {
     return but->icon - but->iconadd;
   }
-  else {
-    return but->icon + but->iconadd;
-  }
+  return but->icon + but->iconadd;
 }
 
 /** \} */
@@ -260,7 +256,7 @@ bool ui_but_contains_point_px_icon(const uiBut *but, ARegion *region, const wmEv
     rect.xmax = rect.xmin + (BLI_rcti_size_y(&rect));
   }
   else {
-    int delta = BLI_rcti_size_x(&rect) - BLI_rcti_size_y(&rect);
+    const int delta = BLI_rcti_size_x(&rect) - BLI_rcti_size_y(&rect);
     rect.xmin += delta / 2;
     rect.xmax -= delta / 2;
   }
@@ -280,7 +276,7 @@ uiBut *ui_but_find_mouse_over_ex(ARegion *region, const int x, const int y, cons
     float mx = x, my = y;
     ui_window_to_block_fl(region, block, &mx, &my);
 
-    for (uiBut *but = block->buttons.last; but; but = but->prev) {
+    LISTBASE_FOREACH_BACKWARD (uiBut *, but, &block->buttons) {
       if (ui_but_is_interactive(but, labeledit)) {
         if (but->pie_dir != UI_RADIAL_NONE) {
           if (ui_but_isect_pie_seg(block, but)) {
@@ -319,7 +315,7 @@ uiBut *ui_but_find_rect_over(const struct ARegion *region, const rcti *rect_px)
   }
 
   /* Currently no need to expose this at the moment. */
-  bool labeledit = true;
+  const bool labeledit = true;
   rctf rect_px_fl;
   BLI_rctf_rcti_copy(&rect_px_fl, rect_px);
   uiBut *butover = NULL;
@@ -328,7 +324,7 @@ uiBut *ui_but_find_rect_over(const struct ARegion *region, const rcti *rect_px)
     rctf rect_block;
     ui_window_to_block_rctf(region, block, &rect_block, &rect_px_fl);
 
-    for (uiBut *but = block->buttons.last; but; but = but->prev) {
+    LISTBASE_FOREACH_BACKWARD (uiBut *, but, &block->buttons) {
       if (ui_but_is_interactive(but, labeledit)) {
         /* No pie menu support. */
         BLI_assert(but->pie_dir == UI_RADIAL_NONE);
@@ -358,7 +354,7 @@ uiBut *ui_list_find_mouse_over_ex(ARegion *region, int x, int y)
   LISTBASE_FOREACH (uiBlock *, block, &region->uiblocks) {
     float mx = x, my = y;
     ui_window_to_block_fl(region, block, &mx, &my);
-    for (uiBut *but = block->buttons.last; but; but = but->prev) {
+    LISTBASE_FOREACH_BACKWARD (uiBut *, but, &block->buttons) {
       if (but->type == UI_BTYPE_LISTBOX && ui_but_contains_pt(but, mx, my)) {
         return but;
       }
@@ -403,14 +399,10 @@ uiBut *ui_but_next(uiBut *but)
 
 uiBut *ui_but_first(uiBlock *block)
 {
-  uiBut *but;
-
-  but = block->buttons.first;
-  while (but) {
+  LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
     if (ui_but_is_editable(but)) {
       return but;
     }
-    but = but->next;
   }
   return NULL;
 }
@@ -435,9 +427,9 @@ bool ui_but_is_cursor_warp(const uiBut *but)
     if (ELEM(but->type,
              UI_BTYPE_NUM,
              UI_BTYPE_NUM_SLIDER,
-             UI_BTYPE_HSVCIRCLE,
              UI_BTYPE_TRACK_PREVIEW,
              UI_BTYPE_HSVCUBE,
+             UI_BTYPE_HSVCIRCLE,
              UI_BTYPE_CURVE,
              UI_BTYPE_CURVEPROFILE)) {
       return true;

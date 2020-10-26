@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_LINESTYLE_H__
-#define __BKE_LINESTYLE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -43,7 +42,6 @@ struct bContext;
 
 void BKE_linestyle_init(struct FreestyleLineStyle *linestyle);
 FreestyleLineStyle *BKE_linestyle_new(struct Main *bmain, const char *name);
-FreestyleLineStyle *BKE_linestyle_copy(struct Main *bmain, const FreestyleLineStyle *linestyle);
 
 FreestyleLineStyle *BKE_linestyle_active_from_view_layer(struct ViewLayer *view_layer);
 
@@ -106,5 +104,3 @@ void BKE_linestyle_default_shader(const struct bContext *C, FreestyleLineStyle *
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_LINESTYLE_H__ */

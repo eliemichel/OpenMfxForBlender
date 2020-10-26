@@ -504,10 +504,10 @@ static void computeCumulativeVisibility(ViewMap *ioViewMap,
       (*ve)->setaShape(0);
       continue;
     }
-    else {
-      ++qiMajority;
-      qiMajority >>= 1;
-    }
+
+    ++qiMajority;
+    qiMajority >>= 1;
+
 #if LOGGING
     if (_global.debug & G_DEBUG_FREESTYLE) {
       cout << "\tqiMajority: " << qiMajority << endl;
@@ -633,7 +633,7 @@ static void computeCumulativeVisibility(ViewMap *ioViewMap,
 
     wFaces.clear();
   }
-  if (iRenderMonitor && vedges.size()) {
+  if (iRenderMonitor && !vedges.empty()) {
     stringstream ss;
     ss << "Freestyle: Visibility computations " << (100 * cnt / vedges.size()) << "%";
     iRenderMonitor->setInfo(ss.str());
@@ -702,10 +702,10 @@ static void computeDetailedVisibility(ViewMap *ioViewMap,
       (*ve)->setaShape(0);
       continue;
     }
-    else {
-      ++qiMajority;
-      qiMajority >>= 1;
-    }
+
+    ++qiMajority;
+    qiMajority >>= 1;
+
 #if LOGGING
     if (_global.debug & G_DEBUG_FREESTYLE) {
       cout << "\tqiMajority: " << qiMajority << endl;
@@ -873,10 +873,9 @@ static void computeFastVisibility(ViewMap *ioViewMap, G &grid, real epsilon)
       (*ve)->setaShape(0);
       continue;
     }
-    else {
-      ++qiMajority;
-      qiMajority >>= 1;
-    }
+
+    ++qiMajority;
+    qiMajority >>= 1;
 
     even_test = true;
     maxIndex = 0;
@@ -1084,7 +1083,7 @@ static inline bool crossesProscenium(real proscenium[4], FEdge *fe)
   return GeomUtils::intersect2dSeg2dArea(min, max, A, B);
 }
 
-static inline bool insideProscenium(real proscenium[4], const Vec3r &point)
+static inline bool insideProscenium(const real proscenium[4], const Vec3r &point)
 {
   return !(point[0] < proscenium[0] || point[0] > proscenium[1] || point[1] < proscenium[2] ||
            point[1] > proscenium[3]);
@@ -2273,10 +2272,10 @@ void ViewMapBuilder::ComputeIntersections(ViewMap *ioViewMap,
 #endif
 }
 
-struct less_SVertex2D : public binary_function<SVertex *, SVertex *, bool> {
+struct less_SVertex2D {
   real epsilon;
 
-  less_SVertex2D(real eps) : binary_function<SVertex *, SVertex *, bool>()
+  less_SVertex2D(real eps)
   {
     epsilon = eps;
   }
@@ -2303,10 +2302,10 @@ struct less_SVertex2D : public binary_function<SVertex *, SVertex *, bool> {
 typedef Segment<FEdge *, Vec3r> segment;
 typedef Intersection<segment> intersection;
 
-struct less_Intersection : public binary_function<intersection *, intersection *, bool> {
+struct less_Intersection {
   segment *edge;
 
-  less_Intersection(segment *iEdge) : binary_function<intersection *, intersection *, bool>()
+  less_Intersection(segment *iEdge)
   {
     edge = iEdge;
   }

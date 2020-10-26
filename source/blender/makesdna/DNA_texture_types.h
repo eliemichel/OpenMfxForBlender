@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_TEXTURE_TYPES_H__
-#define __DNA_TEXTURE_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
@@ -193,7 +192,7 @@ typedef struct Tex {
 
   float cropxmin, cropymin, cropxmax, cropymax;
   int texfilter;
-  int afmax;  // anisotropic filter maximum value, ewa -> max eccentricity, feline -> max probes
+  int afmax; /* anisotropic filter maximum value, ewa -> max eccentricity, feline -> max probes */
   short xrepeat, yrepeat;
   short extend;
 
@@ -319,8 +318,7 @@ typedef struct ColorMapping {
 #define TEX_DERIVATIVEMAP (1 << 14)
 
 /* texfilter */
-// TXF_BOX -> blender's old texture filtering method
-#define TXF_BOX 0
+#define TXF_BOX 0 /* Blender's old texture filtering method. */
 #define TXF_EWA 1
 #define TXF_FELINE 2
 #define TXF_AREA 3
@@ -528,6 +526,4 @@ enum {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

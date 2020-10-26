@@ -7,19 +7,12 @@
 #  OPENSUBDIV_ROOT_DIR, the base directory to search for OpenSubdiv.
 #                        This can also be an environment variable.
 #  OPENSUBDIV_FOUND, if false, do not try to use OpenSubdiv.
-#
-# also defined, but not for general use are
-#  OPENSUBDIV_LIBRARY, where to find the OpenSubdiv library.
 
 #=============================================================================
 # Copyright 2013 Blender Foundation.
 #
-# Distributed under the OSI-approved BSD License (the "License");
-# see accompanying file Copyright.txt for details.
-#
-# This software is distributed WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the License for more information.
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
 #=============================================================================
 
 # If OPENSUBDIV_ROOT_DIR was defined in the environment, use it.
@@ -97,7 +90,7 @@ IF(OPENSUBDIV_FOUND)
   OPENSUBDIV_CHECK_CONTROLLER("cudaEvaluator.h" OPENSUBDIV_HAS_CUDA)
   OPENSUBDIV_CHECK_CONTROLLER("glXFBEvaluator.h" OPENSUBDIV_HAS_GLSL_TRANSFORM_FEEDBACK)
   OPENSUBDIV_CHECK_CONTROLLER("glComputeEvaluator.h" OPENSUBDIV_HAS_GLSL_COMPUTE)
-ENDIF(OPENSUBDIV_FOUND)
+ENDIF()
 
 MARK_AS_ADVANCED(
   OPENSUBDIV_INCLUDE_DIR

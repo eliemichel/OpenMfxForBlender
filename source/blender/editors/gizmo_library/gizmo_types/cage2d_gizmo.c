@@ -626,18 +626,18 @@ static void gizmo_cage2d_draw_intern(wmGizmo *gz,
 
   /* Handy for quick testing draw (if it's outside bounds). */
   if (false) {
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
     uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
     immUniformColor4fv((const float[4]){1, 1, 1, 0.5f});
     float s = 0.5f;
     immRectf(pos, -s, -s, s, s);
     immUnbindProgram();
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   if (select) {
-    /* expand for hotspot */
+    /* Expand for hot-spot. */
     const float size[2] = {size_real[0] + margin[0] / 2, size_real[1] + margin[1] / 2};
 
     if (transform_flag & ED_GIZMO_CAGE2D_XFORM_FLAG_SCALE) {
@@ -694,7 +694,7 @@ static void gizmo_cage2d_draw_intern(wmGizmo *gz,
       bool show = false;
       if (gz->highlight_part == ED_GIZMO_CAGE2D_PART_TRANSLATE) {
         /* Only show if we're drawing the center handle
-         * otherwise the entire rectangle is the hotspot. */
+         * otherwise the entire rectangle is the hot-spot. */
         if (draw_options & ED_GIZMO_CAGE2D_DRAW_FLAG_XFORM_CENTER_HANDLE) {
           show = true;
         }
@@ -722,7 +722,7 @@ static void gizmo_cage2d_draw_intern(wmGizmo *gz,
       float color[4], black[3] = {0, 0, 0};
       gizmo_color_get(gz, highlight, color);
 
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
 
       float outline_line_width = gz->line_width + 3.0f;
       cage2d_draw_circle_wire(&r, margin, black, transform_flag, draw_options, outline_line_width);
@@ -732,7 +732,7 @@ static void gizmo_cage2d_draw_intern(wmGizmo *gz,
       cage2d_draw_circle_handles(&r, margin, color, transform_flag, true);
       cage2d_draw_circle_handles(&r, margin, (const float[3]){0, 0, 0}, transform_flag, false);
 
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
     else {
       BLI_assert(0);
@@ -805,7 +805,7 @@ static int gizmo_cage2d_test_select(bContext *C, wmGizmo *gz, const int mval[2])
     return -1;
   }
 
-  /* expand for hotspot */
+  /* Expand for hots-pot. */
   const float size[2] = {size_real[0] + margin[0] / 2, size_real[1] + margin[1] / 2};
 
   const int transform_flag = RNA_enum_get(gz->ptr, "transform");
@@ -999,7 +999,7 @@ static int gizmo_cage2d_modal(bContext *C,
     if (data->dial == NULL) {
       MUL_V2_V3_M4_FINAL(test_co, data->orig_matrix_offset[3]);
 
-      data->dial = BLI_dial_initialize(test_co, FLT_EPSILON);
+      data->dial = BLI_dial_init(test_co, FLT_EPSILON);
 
       MUL_V2_V3_M4_FINAL(test_co, data->orig_mouse);
       BLI_dial_angle(data->dial, test_co);

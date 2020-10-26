@@ -450,10 +450,10 @@ static bool toolsystem_key_ensure_check(const bToolKey *tkey)
   return false;
 }
 
-int WM_toolsystem_mode_from_spacetype(ViewLayer *view_layer, ScrArea *area, int spacetype)
+int WM_toolsystem_mode_from_spacetype(ViewLayer *view_layer, ScrArea *area, int space_type)
 {
   int mode = -1;
-  switch (spacetype) {
+  switch (space_type) {
     case SPACE_VIEW3D: {
       /* 'area' may be NULL in this case. */
       Object *obact = OBACT(view_layer);
@@ -521,7 +521,7 @@ void WM_toolsystem_refresh_active(bContext *C)
       /* Could skip loop for modes that don't depend on space type. */
       int space_type_mask_handled = 0;
       LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
-        /* Don't change the space type of the active tool, only update it's mode. */
+        /* Don't change the space type of the active tool, only update its mode. */
         const int space_type_mask = (1 << area->spacetype);
         if ((space_type_mask & WM_TOOLSYSTEM_SPACE_MASK) &&
             ((space_type_mask_handled & space_type_mask) == 0)) {

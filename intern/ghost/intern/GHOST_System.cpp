@@ -23,8 +23,8 @@
 
 #include "GHOST_System.h"
 
+#include <chrono>
 #include <stdio.h> /* just for printf */
-#include <time.h>
 
 #include "GHOST_DisplayManager.h"
 #include "GHOST_EventManager.h"
@@ -58,12 +58,9 @@ GHOST_System::~GHOST_System()
 
 GHOST_TUns64 GHOST_System::getMilliSeconds() const
 {
-  GHOST_TUns64 millis = ::clock();
-  if (CLOCKS_PER_SEC != 1000) {
-    millis *= 1000;
-    millis /= CLOCKS_PER_SEC;
-  }
-  return millis;
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
 }
 
 GHOST_ITimerTask *GHOST_System::installTimer(GHOST_TUns64 delay,
@@ -309,12 +306,12 @@ GHOST_TSuccess GHOST_System::init()
   m_windowManager = new GHOST_WindowManager();
   m_eventManager = new GHOST_EventManager();
 
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
   if (m_eventManager) {
     m_eventPrinter = new GHOST_EventPrinter();
     m_eventManager->addConsumer(m_eventPrinter);
   }
-#endif  // GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG
 
   if (m_timerManager && m_windowManager && m_eventManager) {
     return GHOST_kSuccess;
@@ -363,11 +360,11 @@ GHOST_TSuccess GHOST_System::createFullScreenWindow(GHOST_Window **window,
     glSettings.flags |= GHOST_glAlphaBackground;
 
   /* note: don't use getCurrentDisplaySetting() because on X11 we may
-   * be zoomed in and the desktop may be bigger then the viewport. */
+   * be zoomed in and the desktop may be bigger than the viewport. */
   GHOST_ASSERT(m_displayManager,
                "GHOST_System::createFullScreenWindow(): invalid display manager");
   // GHOST_PRINT("GHOST_System::createFullScreenWindow(): creating full-screen window\n");
-  *window = (GHOST_Window *)createWindow(STR_String(""),
+  *window = (GHOST_Window *)createWindow("",
                                          0,
                                          0,
                                          settings.xPixels,

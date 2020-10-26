@@ -38,11 +38,10 @@
 #include "DNA_vec_types.h"
 
 #include "GPU_framebuffer.h"
-#include "GPU_glew.h"
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
 #include "GPU_texture.h"
-#include "GPU_uniformbuffer.h"
+#include "GPU_uniform_buffer.h"
 #include "GPU_viewport.h"
 
 #include "DRW_engine.h"
@@ -113,7 +112,7 @@ struct GPUViewport {
   ColorManagedDisplaySettings display_settings;
   CurveMapping *orig_curve_mapping;
   float dither;
-  /* TODO(fclem) the uvimage display use the viewport but do not set any view transform for the
+  /* TODO(fclem): the uvimage display use the viewport but do not set any view transform for the
    * moment. The end goal would be to let the GPUViewport do the color management. */
   bool do_color_management;
   struct GPUViewportBatch batch;
@@ -381,13 +380,11 @@ GPUTexture *GPU_viewport_texture_pool_query(
     }
   }
 
-  tex = GPU_texture_create_2d(width, height, format, NULL, NULL);
-  GPU_texture_bind(tex, 0);
+  tex = GPU_texture_create_2d("temp_from_pool", width, height, 1, format, NULL);
   /* Doing filtering for depth does not make sense when not doing shadow mapping,
    * and enabling texture filtering on integer texture make them unreadable. */
   bool do_filter = !GPU_texture_depth(tex) && !GPU_texture_integer(tex);
   GPU_texture_filter_mode(tex, do_filter);
-  GPU_texture_unbind(tex);
 
   ViewportTempTexture *tmp_tex = MEM_callocN(sizeof(ViewportTempTexture), "ViewportTempTexture");
   tmp_tex->texture = tex;
@@ -456,16 +453,21 @@ static void gpu_viewport_default_fb_create(GPUViewport *viewport)
   int *size = viewport->size;
   bool ok = true;
 
-  dtxl->color = GPU_texture_create_2d(size[0], size[1], GPU_RGBA16F, NULL, NULL);
-  dtxl->color_overlay = GPU_texture_create_2d(size[0], size[1], GPU_SRGB8_A8, NULL, NULL);
-  if (((viewport->flag & GPU_VIEWPORT_STEREO) != 0)) {
-    dtxl->color_stereo = GPU_texture_create_2d(size[0], size[1], GPU_RGBA16F, NULL, NULL);
-    dtxl->color_overlay_stereo = GPU_texture_create_2d(size[0], size[1], GPU_SRGB8_A8, NULL, NULL);
+  dtxl->color = GPU_texture_create_2d("dtxl_color", UNPACK2(size), 1, GPU_RGBA16F, NULL);
+  dtxl->color_overlay = GPU_texture_create_2d(
+      "dtxl_color_overlay", UNPACK2(size), 1, GPU_SRGB8_A8, NULL);
+
+  if (viewport->flag & GPU_VIEWPORT_STEREO) {
+    dtxl->color_stereo = GPU_texture_create_2d(
+        "dtxl_color_stereo", UNPACK2(size), 1, GPU_RGBA16F, NULL);
+    dtxl->color_overlay_stereo = GPU_texture_create_2d(
+        "dtxl_color_overlay_stereo", UNPACK2(size), 1, GPU_SRGB8_A8, NULL);
   }
 
   /* Can be shared with GPUOffscreen. */
   if (dtxl->depth == NULL) {
-    dtxl->depth = GPU_texture_create_2d(size[0], size[1], GPU_DEPTH24_STENCIL8, NULL, NULL);
+    dtxl->depth = GPU_texture_create_2d(
+        "dtxl_depth", UNPACK2(size), 1, GPU_DEPTH24_STENCIL8, NULL);
   }
 
   if (!dtxl->depth || !dtxl->color) {
@@ -559,10 +561,10 @@ void GPU_viewport_colorspace_set(GPUViewport *viewport,
 {
   /**
    * HACK(fclem): We copy the settings here to avoid use after free if an update frees the scene
-   * and the viewport stays cached (see T75443). But this means the OCIO curvemapping caching
-   * (which is based on CurveMap pointer address) cannot operate correctly and it will create
-   * a different OCIO processor for each viewport. We try to only realloc the curvemap copy if
-   * needed to avoid uneeded cache invalidation.
+   * and the viewport stays cached (see T75443). But this means the OCIO curve-mapping caching
+   * (which is based on #CurveMap pointer address) cannot operate correctly and it will create
+   * a different OCIO processor for each viewport. We try to only reallocate the curve-map copy
+   * if needed to avoid unneeded cache invalidation.
    */
   if (view_settings->curve_mapping) {
     if (viewport->view_settings.curve_mapping) {
@@ -632,13 +634,13 @@ void GPU_viewport_stereo_composite(GPUViewport *viewport, Stereo3dFormat *stereo
   if (settings == S3D_DISPLAY_ANAGLYPH) {
     switch (stereo_format->anaglyph_type) {
       case S3D_ANAGLYPH_REDCYAN:
-        glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_TRUE);
+        GPU_color_mask(false, true, true, true);
         break;
       case S3D_ANAGLYPH_GREENMAGENTA:
-        glColorMask(GL_TRUE, GL_FALSE, GL_TRUE, GL_TRUE);
+        GPU_color_mask(true, false, true, true);
         break;
       case S3D_ANAGLYPH_YELLOWBLUE:
-        glColorMask(GL_FALSE, GL_FALSE, GL_TRUE, GL_TRUE);
+        GPU_color_mask(false, false, true, true);
         break;
     }
   }
@@ -668,7 +670,7 @@ void GPU_viewport_stereo_composite(GPUViewport *viewport, Stereo3dFormat *stereo
   GPU_matrix_pop();
 
   if (settings == S3D_DISPLAY_ANAGLYPH) {
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    GPU_color_mask(true, true, true, true);
   }
 
   GPU_framebuffer_restore();
@@ -877,7 +879,7 @@ void GPU_viewport_unbind_from_offscreen(GPUViewport *viewport,
     return;
   }
 
-  GPU_depth_test(false);
+  GPU_depth_test(GPU_DEPTH_NONE);
   GPU_offscreen_bind(ofs, false);
 
   rctf pos_rect = {
@@ -915,9 +917,8 @@ GPUTexture *GPU_viewport_color_texture(GPUViewport *viewport, int view)
     if (viewport->active_view == view) {
       return dtxl->color;
     }
-    else {
-      return dtxl->color_stereo;
-    }
+
+    return dtxl->color_stereo;
   }
 
   return NULL;
@@ -1024,8 +1025,8 @@ void GPU_viewport_free(GPUViewport *viewport)
   }
 
   for (int i = 0; i < viewport->vmempool.ubo_len; i++) {
-    GPU_uniformbuffer_free(viewport->vmempool.matrices_ubo[i]);
-    GPU_uniformbuffer_free(viewport->vmempool.obinfos_ubo[i]);
+    GPU_uniformbuf_free(viewport->vmempool.matrices_ubo[i]);
+    GPU_uniformbuf_free(viewport->vmempool.obinfos_ubo[i]);
   }
   MEM_SAFE_FREE(viewport->vmempool.matrices_ubo);
   MEM_SAFE_FREE(viewport->vmempool.obinfos_ubo);
@@ -1037,4 +1038,16 @@ void GPU_viewport_free(GPUViewport *viewport)
   gpu_viewport_batch_free(viewport);
 
   MEM_freeN(viewport);
+}
+
+GPUFrameBuffer *GPU_viewport_framebuffer_default_get(GPUViewport *viewport)
+{
+  DefaultFramebufferList *fbl = GPU_viewport_framebuffer_list_get(viewport);
+  return fbl->default_fb;
+}
+
+GPUFrameBuffer *GPU_viewport_framebuffer_overlay_get(GPUViewport *viewport)
+{
+  DefaultFramebufferList *fbl = GPU_viewport_framebuffer_list_get(viewport);
+  return fbl->overlay_fb;
 }

@@ -42,7 +42,7 @@
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
-#include "BKE_fcurve.h"
+#include "BKE_fcurve_driver.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
@@ -207,7 +207,7 @@ static void joined_armature_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data
                       id, dtar->rna_path, "pose.bones", old_name, new_name, 0, 0, false);
                   break; /* no need to try any more names for bone path */
                 }
-                else if (STREQ(dtar->pchan_name, old_name)) {
+                if (STREQ(dtar->pchan_name, old_name)) {
                   /* Change target bone name */
                   BLI_strncpy(dtar->pchan_name, new_name, sizeof(dtar->pchan_name));
                   break; /* no need to try any more names for bone subtarget */
@@ -270,7 +270,7 @@ static void joined_armature_fix_links(
 }
 
 /* join armature exec is exported for use in object->join objects operator... */
-int join_armature_exec(bContext *C, wmOperator *op)
+int ED_armature_join_objects_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
@@ -304,10 +304,14 @@ int join_armature_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  /* Get editbones of active armature to add editbones to */
+  /* Inverse transform for all selected armatures in this object,
+   * See #object_join_exec for detailed comment on why the safe version is used. */
+  invert_m4_m4_safe_ortho(oimat, ob_active->obmat);
+
+  /* Get edit-bones of active armature to add edit-bones to */
   ED_armature_to_edit(arm);
 
-  /* get pose of active object and move it out of posemode */
+  /* Get pose of active object and move it out of pose-mode */
   pose = ob_active->pose;
   ob_active->mode &= ~OB_MODE_POSE;
 
@@ -325,7 +329,7 @@ int join_armature_exec(bContext *C, wmOperator *op)
       afd.tarArm = ob_active;
       afd.names_map = BLI_ghash_str_new("join_armature_adt_fix");
 
-      /* Make a list of editbones in current armature */
+      /* Make a list of edit-bones in current armature */
       ED_armature_to_edit(ob_iter->data);
 
       /* Get Pose of current armature */
@@ -334,7 +338,6 @@ int join_armature_exec(bContext *C, wmOperator *op)
       // BASACT->flag &= ~OB_MODE_POSE;
 
       /* Find the difference matrix */
-      invert_m4_m4(oimat, ob_active->obmat);
       mul_m4_m4m4(mat, oimat, ob_iter->obmat);
 
       /* Copy bones and posechannels from the object to the edit armature */
@@ -384,6 +387,7 @@ int join_armature_exec(bContext *C, wmOperator *op)
         BLI_remlink(curarm->edbo, curbone);
         BLI_addtail(arm->edbo, curbone);
 
+        /* Pose channel is moved from one storage to another, its UUID is still unique. */
         BLI_remlink(&opose->chanbase, pchan);
         BLI_addtail(&pose->chanbase, pchan);
         BKE_pose_channels_hash_free(opose);
@@ -434,6 +438,7 @@ int join_armature_exec(bContext *C, wmOperator *op)
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
+  WM_event_add_notifier(C, NC_SCENE | ND_LAYER_CONTENT, scene);
 
   return OPERATOR_FINISHED;
 }
@@ -549,7 +554,7 @@ static void separated_armature_fix_links(Main *bmain, Object *origArm, Object *n
 
 /* Helper function for armature separating - remove certain bones from the given armature
  * sel: remove selected bones from the armature, otherwise the unselected bones are removed
- * (ob is not in editmode)
+ * (ob is not in edit-mode)
  */
 static void separate_armature_bones(Main *bmain, Object *ob, const bool is_select)
 {
@@ -557,7 +562,7 @@ static void separate_armature_bones(Main *bmain, Object *ob, const bool is_selec
   bPoseChannel *pchan, *pchann;
   EditBone *curbone;
 
-  /* make local set of editbones to manipulate here */
+  /* make local set of edit-bones to manipulate here */
   ED_armature_to_edit(arm);
 
   /* go through pose-channels, checking if a bone should be removed */
@@ -591,7 +596,7 @@ static void separate_armature_bones(Main *bmain, Object *ob, const bool is_selec
         }
       }
 
-      /* free any of the extra-data this pchan might have */
+      /* Free any of the extra-data this pchan might have. */
       BKE_pose_channel_free(pchan);
       BKE_pose_channels_hash_free(ob->pose);
 
@@ -601,7 +606,7 @@ static void separate_armature_bones(Main *bmain, Object *ob, const bool is_selec
     }
   }
 
-  /* exit editmode (recalculates pchans too) */
+  /* Exit edit-mode (recalculates pose-channels too). */
   ED_armature_edit_deselect_all(ob);
   ED_armature_from_edit(bmain, ob->data);
   ED_armature_edit_free(ob->data);
@@ -636,7 +641,7 @@ static int separate_armature_exec(bContext *C, wmOperator *op)
             has_selected_bone = true;
             break;
           }
-          else if (ebone->flag & (BONE_TIPSEL | BONE_ROOTSEL)) {
+          if (ebone->flag & (BONE_TIPSEL | BONE_ROOTSEL)) {
             has_selected_any = true;
           }
         }
@@ -652,15 +657,15 @@ static int separate_armature_exec(bContext *C, wmOperator *op)
     }
 
     /* We are going to do this as follows (unlike every other instance of separate):
-     * 1. Exit editmode +posemode for active armature/base. Take note of what this is.
+     * 1. Exit edit-mode & pose-mode for active armature/base. Take note of what this is.
      * 2. Duplicate base - BASACT is the new one now
      * 3. For each of the two armatures,
-     *    enter editmode -> remove appropriate bones -> exit editmode + recalc.
+     *    enter edit-mode -> remove appropriate bones -> exit edit-mode + recalculate.
      * 4. Fix constraint links
-     * 5. Make original armature active and enter editmode
+     * 5. Make original armature active and enter edit-mode
      */
 
-    /* 1) store starting settings and exit editmode */
+    /* 1) store starting settings and exit edit-mode */
     ob_old->mode &= ~OB_MODE_POSE;
 
     ED_armature_from_edit(bmain, ob_old->data);
@@ -680,7 +685,7 @@ static int separate_armature_exec(bContext *C, wmOperator *op)
     separate_armature_bones(bmain, ob_old, true);
     separate_armature_bones(bmain, ob_new, false);
 
-    /* 4) fix links before depsgraph flushes */  // err... or after?
+    /* 4) fix links before depsgraph flushes, err... or after? */
     separated_armature_fix_links(bmain, ob_old, ob_new);
 
     DEG_id_tag_update(&ob_old->id, ID_RECALC_GEOMETRY); /* this is the original one */
@@ -700,7 +705,7 @@ static int separate_armature_exec(bContext *C, wmOperator *op)
   }
   MEM_freeN(bases);
 
-  /* recalc/redraw + cleanup */
+  /* Recalculate/redraw + cleanup */
   WM_cursor_wait(0);
 
   if (ok) {
@@ -754,7 +759,7 @@ static void bone_connect_to_new_parent(ListBase *edbo,
   float offset[3];
 
   if ((selbone->parent) && (selbone->flag & BONE_CONNECTED)) {
-    selbone->parent->flag &= ~(BONE_TIPSEL);
+    selbone->parent->flag &= ~BONE_TIPSEL;
   }
 
   /* make actbone the parent of selbone */
@@ -816,7 +821,7 @@ static int armature_parent_set_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, "Operation requires an active bone");
     return OPERATOR_CANCELLED;
   }
-  else if (arm->flag & ARM_MIRROR_EDIT) {
+  if (arm->flag & ARM_MIRROR_EDIT) {
     /* For X-Axis Mirror Editing option, we may need a mirror copy of actbone:
      * - If there's a mirrored copy of selbone, try to find a mirrored copy of actbone
      *   (i.e.  selbone="child.L" and actbone="parent.L", find "child.R" and "parent.R").
@@ -956,7 +961,7 @@ static void editbone_clear_parent(EditBone *ebone, int mode)
 {
   if (ebone->parent) {
     /* for nice selection */
-    ebone->parent->flag &= ~(BONE_TIPSEL);
+    ebone->parent->flag &= ~BONE_TIPSEL;
   }
 
   if (mode == 1) {

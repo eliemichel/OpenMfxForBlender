@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __ANIMATIONEXPORTER_H__
-#define __ANIMATIONEXPORTER_H__
+#pragma once
 
 #include <math.h>
 #include <stdio.h>
@@ -23,7 +22,6 @@
 
 #include "BCAnimationCurve.h"
 
-extern "C" {
 #include "DNA_action_types.h"
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
@@ -41,14 +39,13 @@ extern "C" {
 #include "BLI_utildefines.h"
 
 #include "BIK_api.h"
-#include "BKE_action.h"  // pose functions
+#include "BKE_action.h" /* pose functions */
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_fcurve.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
 #include "ED_object.h"
-}
 
 #include "MEM_guardedalloc.h"
 
@@ -72,7 +69,7 @@ extern "C" {
 
 #include "IK_solver.h"
 
-#include <algorithm>  // std::find
+#include <algorithm> /* std::find */
 #include <map>
 #include <vector>
 
@@ -103,7 +100,7 @@ class AnimationExporter : COLLADASW::LibraryAnimations {
 
   bool exportAnimations();
 
-  // called for each exported object
+  /* called for each exported object */
   void operator()(Object *ob);
 
  protected:
@@ -132,8 +129,8 @@ class AnimationExporter : COLLADASW::LibraryAnimations {
                         Object *ob_arm,
                         bPoseChannel *pChan);
 
-  // dae_bone_animation -> add_bone_animation
-  // (blend this into dae_bone_animation)
+  /* dae_bone_animation -> add_bone_animation
+   * (blend this into dae_bone_animation) */
   void dae_bone_animation(std::vector<float> &fra,
                           float *v,
                           int tm_type,
@@ -155,7 +152,7 @@ class AnimationExporter : COLLADASW::LibraryAnimations {
   void exportAnimation(Object *ob, BCAnimationSampler &sampler);
 
   /* export animation as separate trans/rot/scale curves */
-  void export_curve_animation_set(Object *ob, BCAnimationSampler &sampler, bool export_tm_curves);
+  void export_curve_animation_set(Object *ob, BCAnimationSampler &sampler, bool export_as_matrix);
 
   /* export one single curve */
   void export_curve_animation(Object *ob, BCAnimationCurve &curve);
@@ -167,7 +164,7 @@ class AnimationExporter : COLLADASW::LibraryAnimations {
   void export_bone_animations_recursive(Object *ob_arm, Bone *bone, BCAnimationSampler &sampler);
 
   /* Export for one bone */
-  void export_bone_animation(Object *ob, Bone *bone, BCFrames &frames, BCMatrixSampleMap &outmats);
+  void export_bone_animation(Object *ob, Bone *bone, BCFrames &frames, BCMatrixSampleMap &samples);
 
   /* call to the low level collada exporter */
   void export_collada_curve_animation(std::string id,
@@ -182,7 +179,7 @@ class AnimationExporter : COLLADASW::LibraryAnimations {
                                        std::string name,
                                        std::string target,
                                        BCFrames &frames,
-                                       BCMatrixSampleMap &outmats,
+                                       BCMatrixSampleMap &samples,
                                        BC_global_rotation_type global_rotation_type,
                                        Matrix &parentinv);
 
@@ -196,7 +193,7 @@ class AnimationExporter : COLLADASW::LibraryAnimations {
   void close_animation_container(bool has_container);
 
   /* Input and Output sources (single valued) */
-  std::string collada_source_from_values(BC_animation_source_type tm_channel,
+  std::string collada_source_from_values(BC_animation_source_type source_type,
                                          COLLADASW::InputSemantic::Semantics semantic,
                                          std::vector<float> &values,
                                          const std::string &anim_id,
@@ -242,7 +239,7 @@ class AnimationExporter : COLLADASW::LibraryAnimations {
                                            bool *has_tangents);
 
   std::string get_axis_name(std::string channel, int id);
-  const std::string get_collada_name(std::string channel_target) const;
+  std::string get_collada_name(std::string channel_type) const;
   std::string get_collada_sid(const BCAnimationCurve &curve, const std::string axis_name);
 
   /* ===================================== */
@@ -260,5 +257,3 @@ class AnimationExporter : COLLADASW::LibraryAnimations {
   void export_morph_animation(Object *ob, BCAnimationSampler &sampler);
 #endif
 };
-
-#endif /* __ANIMATIONEXPORTER_H__ */

@@ -321,11 +321,16 @@ static bool cast_ray_highpoly(BVHTreeFromMesh *treeData,
                               const float co[3],
                               const float dir[3],
                               const int pixel_id,
-                              const int tot_highpoly)
+                              const int tot_highpoly,
+                              const float max_ray_distance)
 {
   int i;
   int hit_mesh = -1;
-  float hit_distance = FLT_MAX;
+  float hit_distance = max_ray_distance;
+  if (hit_distance == 0.0f) {
+    /* No ray distance set, use maximum. */
+    hit_distance = FLT_MAX;
+  }
 
   BVHTreeRayHit *hits;
   hits = MEM_mallocN(sizeof(BVHTreeRayHit) * tot_highpoly, "Bake Highpoly to Lowpoly: BVH Rays");
@@ -520,6 +525,7 @@ bool RE_bake_pixels_populate_from_objects(struct Mesh *me_low,
                                           const size_t num_pixels,
                                           const bool is_custom_cage,
                                           const float cage_extrusion,
+                                          const float max_ray_distance,
                                           float mat_low[4][4],
                                           float mat_cage[4][4],
                                           struct Mesh *me_cage)
@@ -623,7 +629,8 @@ bool RE_bake_pixels_populate_from_objects(struct Mesh *me_low,
                            co,
                            dir,
                            i,
-                           tot_highpoly)) {
+                           tot_highpoly,
+                           max_ray_distance)) {
       /* if it fails mask out the original pixel array */
       pixel_array_from[i].primitive_id = -1;
     }
@@ -687,14 +694,7 @@ void RE_bake_pixels_populate(Mesh *me,
                              const BakeImages *bake_images,
                              const char *uv_layer)
 {
-  BakeDataZSpan bd;
-  size_t i;
-  int a, p_id;
-
   const MLoopUV *mloopuv;
-  const int tottri = poly_to_tri_count(me->totpoly, me->totloop);
-  MLoopTri *looptri;
-
   if ((uv_layer == NULL) || (uv_layer[0] == '\0')) {
     mloopuv = CustomData_get_layer(&me->ldata, CD_MLOOPUV);
   }
@@ -707,25 +707,26 @@ void RE_bake_pixels_populate(Mesh *me,
     return;
   }
 
+  BakeDataZSpan bd;
   bd.pixel_array = pixel_array;
   bd.zspan = MEM_callocN(sizeof(ZSpan) * bake_images->size, "bake zspan");
 
   /* initialize all pixel arrays so we know which ones are 'blank' */
-  for (i = 0; i < num_pixels; i++) {
+  for (int i = 0; i < num_pixels; i++) {
     pixel_array[i].primitive_id = -1;
     pixel_array[i].object_id = 0;
   }
 
-  for (i = 0; i < bake_images->size; i++) {
+  for (int i = 0; i < bake_images->size; i++) {
     zbuf_alloc_span(&bd.zspan[i], bake_images->data[i].width, bake_images->data[i].height);
   }
 
-  looptri = MEM_mallocN(sizeof(*looptri) * tottri, __func__);
+  const int tottri = poly_to_tri_count(me->totpoly, me->totloop);
+  MLoopTri *looptri = MEM_mallocN(sizeof(*looptri) * tottri, __func__);
 
   BKE_mesh_recalc_looptri(me->mloop, me->mpoly, me->mvert, me->totloop, me->totpoly, looptri);
 
-  p_id = -1;
-  for (i = 0; i < tottri; i++) {
+  for (int i = 0; i < tottri; i++) {
     const MLoopTri *lt = &looptri[i];
     const MPoly *mp = &me->mpoly[lt->poly];
     float vec[3][2];
@@ -737,15 +738,15 @@ void RE_bake_pixels_populate(Mesh *me,
     }
 
     bd.bk_image = &bake_images->data[image_id];
-    bd.primitive_id = ++p_id;
+    bd.primitive_id = i;
 
-    for (a = 0; a < 3; a++) {
+    for (int a = 0; a < 3; a++) {
       const float *uv = mloopuv[lt->tri[a]].uv;
 
       /* Note, workaround for pixel aligned UVs which are common and can screw up our
        * intersection tests where a pixel gets in between 2 faces or the middle of a quad,
        * camera aligned quads also have this problem but they are less common.
-       * Add a small offset to the UVs, fixes bug #18685 - Campbell */
+       * Add a small offset to the UVs, fixes bug T18685 - Campbell */
       vec[a][0] = uv[0] * (float)bd.bk_image->width - (0.5f + 0.001f);
       vec[a][1] = uv[1] * (float)bd.bk_image->height - (0.5f + 0.002f);
     }
@@ -754,7 +755,7 @@ void RE_bake_pixels_populate(Mesh *me,
     zspan_scanconvert(&bd.zspan[image_id], (void *)&bd, vec[0], vec[1], vec[2], store_bake_pixel);
   }
 
-  for (i = 0; i < bake_images->size; i++) {
+  for (int i = 0; i < bake_images->size; i++) {
     zbuf_free_span(&bd.zspan[i]);
   }
 

@@ -76,8 +76,37 @@ static EnumPropertyItem rna_enum_gpencil_onion_modes_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
+static const EnumPropertyItem rna_enum_keyframe_type_items[] = {
+    {BEZT_KEYTYPE_KEYFRAME,
+     "KEYFRAME",
+     ICON_KEYTYPE_KEYFRAME_VEC,
+     "Keyframe",
+     "Normal keyframe - e.g. for key poses"},
+    {BEZT_KEYTYPE_BREAKDOWN,
+     "BREAKDOWN",
+     ICON_KEYTYPE_BREAKDOWN_VEC,
+     "Breakdown",
+     "A breakdown pose - e.g. for transitions between key poses"},
+    {BEZT_KEYTYPE_MOVEHOLD,
+     "MOVING_HOLD",
+     ICON_KEYTYPE_MOVING_HOLD_VEC,
+     "Moving Hold",
+     "A keyframe that is part of a moving hold"},
+    {BEZT_KEYTYPE_EXTREME,
+     "EXTREME",
+     ICON_KEYTYPE_EXTREME_VEC,
+     "Extreme",
+     "An 'extreme' pose, or some other purpose as needed"},
+    {BEZT_KEYTYPE_JITTER,
+     "JITTER",
+     ICON_KEYTYPE_JITTER_VEC,
+     "Jitter",
+     "A filler or baked keyframe for keying on ones, or some other purpose as needed"},
+    {0, NULL, 0, NULL, NULL},
+};
+
 static const EnumPropertyItem rna_enum_onion_keyframe_type_items[] = {
-    {-1, "ALL", ICON_ACTION, "All Types", "Include all Keyframe types"},
+    {-1, "ALL", 0, "All", "Include all Keyframe types"},
     {BEZT_KEYTYPE_KEYFRAME,
      "KEYFRAME",
      ICON_KEYTYPE_KEYFRAME_VEC,
@@ -121,7 +150,7 @@ static const EnumPropertyItem rna_enum_layer_blend_modes_items[] = {
     {eGplBlendMode_Divide, "DIVIDE", 0, "Divide", ""},
     {0, NULL, 0, NULL, NULL}};
 
-static EnumPropertyItem rna_enum_gpencil_caps_modes_items[] = {
+static const EnumPropertyItem rna_enum_gpencil_caps_modes_items[] = {
     {GP_STROKE_CAP_ROUND, "ROUND", 0, "Rounded", ""},
     {GP_STROKE_CAP_FLAT, "FLAT", 0, "Flat", ""},
     {0, NULL, 0, NULL, NULL},
@@ -982,6 +1011,12 @@ static void rna_def_gpencil_stroke_point(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "UV Rotation", "Internal UV factor for dot mode");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
+  prop = RNA_def_property(srna, "uv_fill", PROP_FLOAT, PROP_XYZ);
+  RNA_def_property_float_sdna(prop, NULL, "uv_fill");
+  RNA_def_property_array(prop, 2);
+  RNA_def_property_ui_text(prop, "UV Fill", "Internal UV factor for filling");
+  RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
+
   prop = RNA_def_property(srna, "select", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_SPOINT_SELECT);
   RNA_def_property_boolean_funcs(prop, NULL, "rna_GPencil_stroke_point_select_set");
@@ -1165,7 +1200,7 @@ static void rna_def_gpencil_stroke(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_GPencil_update");
 
   /* Cyclic: Draw a line from end to start point */
-  prop = RNA_def_property(srna, "draw_cyclic", PROP_BOOLEAN, PROP_NONE);
+  prop = RNA_def_property(srna, "use_cyclic", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_STROKE_CYCLIC);
   RNA_def_property_ui_text(prop, "Cyclic", "Enable cyclic drawing, closing the stroke");
   RNA_def_property_update(prop, 0, "rna_GPencil_update");
@@ -1187,7 +1222,6 @@ static void rna_def_gpencil_stroke(BlenderRNA *brna)
    * (this is a special flag for fill brush). */
   prop = RNA_def_property(srna, "is_nofill_stroke", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_STROKE_NOFILL);
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "No Fill", "Special stroke to use as boundary for filling areas");
   RNA_def_property_update(prop, 0, "rna_GPencil_update");
 
@@ -1324,6 +1358,13 @@ static void rna_def_gpencil_frame(BlenderRNA *brna)
   /* XXX note: this cannot occur on the same frame as another sketch */
   RNA_def_property_range(prop, -MAXFRAME, MAXFRAME);
   RNA_def_property_ui_text(prop, "Frame Number", "The frame on which this sketch appears");
+
+  prop = RNA_def_property(srna, "keyframe_type", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, NULL, "key_type");
+  RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
+  RNA_def_property_enum_items(prop, rna_enum_keyframe_type_items);
+  RNA_def_property_ui_text(prop, "Keyframe Type", "Type of keyframe");
+  RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
   /* Flags */
   prop = RNA_def_property(srna, "is_edited", PROP_BOOLEAN, PROP_NONE);
@@ -1664,13 +1705,11 @@ static void rna_def_gpencil_layer(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_mask_layer", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_LAYER_USE_MASK);
-  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_ui_text(prop, "Mask Layer", "Mask pixels from underlying layers drawing");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
   prop = RNA_def_property(srna, "use_lights", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_LAYER_USE_LIGHTS);
-  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_ui_text(
       prop, "Use Lights", "Enable the use of lights on stroke and fill materials");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");

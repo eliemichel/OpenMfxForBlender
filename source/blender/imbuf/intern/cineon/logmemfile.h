@@ -13,7 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Copyright 2006 Joseph Eagar (joeedh@gmail.com)
+ * Copyright 2006 Joseph Eagar <joeedh@gmail.com>
  */
 
 /** \file
@@ -22,8 +22,7 @@
  * Cineon image file format library routines.
  */
 
-#ifndef __LOGMEMFILE_H__
-#define __LOGMEMFILE_H__
+#pragma once
 
 #include "logImageCore.h"
 
@@ -35,5 +34,3 @@ int logimage_fread(void *buffer, size_t size, unsigned int count, LogImageFile *
 int logimage_read_uchar(unsigned char *x, LogImageFile *logFile);
 int logimage_read_ushort(unsigned short *x, LogImageFile *logFile);
 int logimage_read_uint(unsigned int *x, LogImageFile *logFile);
-
-#endif /* __LOGMEMFILE_H__ */

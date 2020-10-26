@@ -54,6 +54,15 @@ class Prefs(bpy.types.KeyConfigPreferences):
         default='PLAY',
         update=update_fn,
     )
+    use_alt_click_leader: BoolProperty(
+        name="Alt Click Tool Prompt",
+        description=(
+            "Tapping Alt (without pressing any other keys) shows a prompt in the status-bar\n"
+            "prompting a second keystroke to activate the tool"
+        ),
+        default=False,
+        update=update_fn,
+    )
     use_select_all_toggle: BoolProperty(
         name="Select All Toggles",
         description=(
@@ -112,14 +121,16 @@ class Prefs(bpy.types.KeyConfigPreferences):
         name="MMB Action",
         items=(
             ('ORBIT', "Orbit",
-             "Orbit",
+             "",
              0),
             ('PAN', "Pan",
-             "Set the view axis where each mouse direction always maps to the same axis",
+             "",
              1),
         ),
         description=(
-            "The action when Middle-Mouse dragging in the viewport. Shift-Middle-Mouse is used for the other action"
+            "The action when Middle-Mouse dragging in the viewport. "
+            "Shift-Middle-Mouse is used for the other action. "
+            "This applies to Track-Pad as well"
         ),
         update=update_fn,
     )
@@ -164,13 +175,16 @@ class Prefs(bpy.types.KeyConfigPreferences):
         col = layout.column()
         col.row().prop(self, "select_mouse", text="Select with Mouse Button", expand=True)
         col.row().prop(self, "spacebar_action", text="Spacebar Action", expand=True)
+
         if is_select_left:
             col.row().prop(self, "gizmo_action", text="Activate Gizmo Event", expand=True)
 
         # Checkboxes sub-layout.
         col = layout.column()
         sub = col.column(align=True)
-        sub.prop(self, "use_select_all_toggle")
+        row = sub.row()
+        row.prop(self, "use_select_all_toggle")
+        row.prop(self, "use_alt_click_leader")
 
         # 3DView settings.
         col = layout.column()
@@ -217,6 +231,7 @@ def load():
                 kc_prefs.select_mouse == 'LEFT' and
                 kc_prefs.gizmo_action == 'DRAG'
             ),
+            use_alt_click_leader=kc_prefs.use_alt_click_leader,
             use_pie_click_drag=kc_prefs.use_pie_click_drag,
         ),
     )

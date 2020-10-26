@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __IMB_INDEXER_H__
-#define __IMB_INDEXER_H__
+#pragma once
 
 /** \file
  * \ingroup imbuf
@@ -31,9 +30,9 @@
 /*
  * separate animation index files to solve the following problems:
  *
- * a) different timecodes within one file (like DTS/PTS, Timecode-Track,
- *    "implicit" timecodes within DV-files and HDV-files etc.)
- * b) seeking difficulties within ffmpeg for files with timestamp holes
+ * a) different time-codes within one file (like DTS/PTS, Time-code-Track,
+ *    "implicit" time-codes within DV-files and HDV-files etc.)
+ * b) seeking difficulties within FFMPEG for files with timestamp holes
  * c) broken files that miss several frames / have varying framerates
  * d) use proxies accordingly
  *
@@ -95,8 +94,8 @@ void IMB_index_builder_proc_frame(anim_index_builder *fp,
 void IMB_index_builder_finish(anim_index_builder *fp, int rollback);
 
 struct anim_index *IMB_indexer_open(const char *name);
-unsigned long long IMB_indexer_get_seek_pos(struct anim_index *idx, int frameno_index);
-unsigned long long IMB_indexer_get_seek_pos_dts(struct anim_index *idx, int frameno_index);
+unsigned long long IMB_indexer_get_seek_pos(struct anim_index *idx, int frame_index);
+unsigned long long IMB_indexer_get_seek_pos_dts(struct anim_index *idx, int frame_index);
 
 int IMB_indexer_get_frame_index(struct anim_index *idx, int frameno);
 unsigned long long IMB_indexer_get_pts(struct anim_index *idx, int frame_index);
@@ -113,5 +112,3 @@ struct anim_index *IMB_anim_open_index(struct anim *anim, IMB_Timecode_Type tc);
 
 int IMB_proxy_size_to_array_index(IMB_Proxy_Size pr_size);
 int IMB_timecode_to_array_index(IMB_Timecode_Type tc);
-
-#endif

@@ -35,6 +35,7 @@
 #include "BKE_editmesh.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_undo_system.h"
@@ -397,9 +398,7 @@ struct UMArrayData {
   UndoMesh *um;
   const UndoMesh *um_ref; /* can be NULL */
 };
-static void um_arraystore_compact_cb(TaskPool *__restrict UNUSED(pool),
-                                     void *taskdata,
-                                     int UNUSED(threadid))
+static void um_arraystore_compact_cb(TaskPool *__restrict UNUSED(pool), void *taskdata)
 {
   struct UMArrayData *um_data = taskdata;
   um_arraystore_compact_with_info(um_data->um, um_data->um_ref);
@@ -510,7 +509,13 @@ static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key)
   }
 #endif
   /* make sure shape keys work */
-  um->me.key = key ? BKE_key_copy_nolib(key) : NULL;
+  if (key != NULL) {
+    um->me.key = (Key *)BKE_id_copy_ex(
+        NULL, &key->id, NULL, LIB_ID_COPY_LOCALIZE | LIB_ID_COPY_NO_ANIMDATA);
+  }
+  else {
+    um->me.key = NULL;
+  }
 
   /* BM_mesh_validate(em->bm); */ /* for troubleshooting */
 
@@ -541,9 +546,7 @@ static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key)
 
 #  ifdef USE_ARRAY_STORE_THREAD
     if (um_arraystore.task_pool == NULL) {
-      TaskScheduler *scheduler = BLI_task_scheduler_get();
-      um_arraystore.task_pool = BLI_task_pool_create_background(
-          scheduler, NULL, TASK_PRIORITY_LOW);
+      um_arraystore.task_pool = BLI_task_pool_create_background(NULL, TASK_PRIORITY_LOW);
     }
 
     struct UMArrayData *um_data = MEM_mallocN(sizeof(*um_data), __func__);
@@ -623,7 +626,7 @@ static void undomesh_to_editmesh(UndoMesh *um, Object *ob, BMEditMesh *em, Key *
       if (kb_act->totelem != um->me.totvert) {
         /* The current mesh has some extra/missing verts compared to the undo, adjust. */
         MEM_SAFE_FREE(kb_act->data);
-        kb_act->data = MEM_mallocN((size_t)(key->elemsize * bm->totvert), __func__);
+        kb_act->data = MEM_mallocN((size_t)(key->elemsize) * bm->totvert, __func__);
         kb_act->totelem = um->me.totvert;
       }
 

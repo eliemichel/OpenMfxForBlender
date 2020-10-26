@@ -226,6 +226,7 @@ static bool edbm_extrude_ex(Object *obedit,
                             char htype,
                             const char hflag,
                             const bool use_normal_flip,
+                            const bool use_dissolve_ortho_edges,
                             const bool use_mirror,
                             const bool use_select_history)
 {
@@ -241,6 +242,7 @@ static bool edbm_extrude_ex(Object *obedit,
 
   BMO_op_init(bm, &extop, BMO_FLAG_DEFAULTS, "extrude_face_region");
   BMO_slot_bool_set(extop.slots_in, "use_normal_flip", use_normal_flip);
+  BMO_slot_bool_set(extop.slots_in, "use_dissolve_ortho_edges", use_dissolve_ortho_edges);
   BMO_slot_bool_set(extop.slots_in, "use_select_history", use_select_history);
   BMO_slot_buffer_from_enabled_hflag(bm, &extop, extop.slots_in, "geom", htype, hflag);
 
@@ -312,7 +314,7 @@ static int edbm_extrude_repeat_exec(bContext *C, wmOperator *op)
     mul_v3_m3v3(offset_local, tmat, offset);
 
     for (int a = 0; a < steps; a++) {
-      edbm_extrude_ex(obedit, em, BM_ALL_NOLOOP, BM_ELEM_SELECT, false, false, true);
+      edbm_extrude_ex(obedit, em, BM_ALL_NOLOOP, BM_ELEM_SELECT, false, false, false, true);
       BMO_op_callf(
           em->bm, BMO_FLAG_DEFAULTS, "translate vec=%v verts=%hv", offset_local, BM_ELEM_SELECT);
     }
@@ -359,6 +361,7 @@ void MESH_OT_extrude_repeat(wmOperatorType *ot)
 static bool edbm_extrude_mesh(Object *obedit, BMEditMesh *em, wmOperator *op)
 {
   const bool use_normal_flip = RNA_boolean_get(op->ptr, "use_normal_flip");
+  const bool use_dissolve_ortho_edges = RNA_boolean_get(op->ptr, "use_dissolve_ortho_edges");
   const char htype = edbm_extrude_htype_from_em_select(em);
   enum { NONE = 0, ELEM_FLAG, VERT_ONLY, EDGE_ONLY } nr;
   bool changed = false;
@@ -401,7 +404,14 @@ static bool edbm_extrude_mesh(Object *obedit, BMEditMesh *em, wmOperator *op)
     case NONE:
       return false;
     case ELEM_FLAG:
-      changed = edbm_extrude_ex(obedit, em, htype, BM_ELEM_SELECT, use_normal_flip, true, true);
+      changed = edbm_extrude_ex(obedit,
+                                em,
+                                htype,
+                                BM_ELEM_SELECT,
+                                use_normal_flip,
+                                use_dissolve_ortho_edges,
+                                true,
+                                true);
       break;
     case VERT_ONLY:
       changed = edbm_extrude_verts_indiv(em, op, BM_ELEM_SELECT);
@@ -414,10 +424,9 @@ static bool edbm_extrude_mesh(Object *obedit, BMEditMesh *em, wmOperator *op)
   if (changed) {
     return true;
   }
-  else {
-    BKE_report(op->reports, RPT_ERROR, "Not a valid selection for extrude");
-    return false;
-  }
+
+  BKE_report(op->reports, RPT_ERROR, "Not a valid selection for extrude");
+  return false;
 }
 
 /* extrude without transform */
@@ -465,6 +474,7 @@ void MESH_OT_extrude_region(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   RNA_def_boolean(ot->srna, "use_normal_flip", false, "Flip Normals", "");
+  RNA_def_boolean(ot->srna, "use_dissolve_ortho_edges", false, "Dissolve Orthogonal Edges", "");
   Transform_Properties(ot, P_NO_DEFAULTS | P_MIRROR_DUMMY);
 }
 
@@ -519,6 +529,7 @@ void MESH_OT_extrude_context(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   RNA_def_boolean(ot->srna, "use_normal_flip", false, "Flip Normals", "");
+  RNA_def_boolean(ot->srna, "use_dissolve_ortho_edges", false, "Dissolve Orthogonal Edges", "");
   Transform_Properties(ot, P_NO_DEFAULTS | P_MIRROR_DUMMY);
 }
 
@@ -803,7 +814,7 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
 
       mul_m4_v3(vc.obedit->obmat, ofs); /* view space */
       ED_view3d_win_to_3d_int(vc.v3d, vc.region, ofs, event->mval, ofs);
-      mul_m4_v3(vc.obedit->imat, ofs);  // back in object space
+      mul_m4_v3(vc.obedit->imat, ofs); /* back in object space */
 
       sub_v3_v3(ofs, local_center);
 
@@ -840,7 +851,7 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
         }
       }
 
-      edbm_extrude_ex(vc.obedit, vc.em, extrude_htype, BM_ELEM_SELECT, false, true, true);
+      edbm_extrude_ex(vc.obedit, vc.em, extrude_htype, BM_ELEM_SELECT, false, false, true, true);
       EDBM_op_callf(
           vc.em, op, "rotate verts=%hv cent=%v matrix=%m3", BM_ELEM_SELECT, local_center, mat);
       EDBM_op_callf(vc.em, op, "translate verts=%hv vec=%v", BM_ELEM_SELECT, ofs);
@@ -854,7 +865,7 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
       copy_v3_v3(local_center, cursor);
       ED_view3d_win_to_3d_int(vc.v3d, vc.region, local_center, event->mval, local_center);
 
-      mul_m4_v3(vc.obedit->imat, local_center);  // back in object space
+      mul_m4_v3(vc.obedit->imat, local_center); /* back in object space */
 
       EDBM_op_init(vc.em, &bmop, op, "create_vert co=%v", local_center);
       BMO_op_exec(vc.em->bm, &bmop);

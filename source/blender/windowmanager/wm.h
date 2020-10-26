@@ -21,14 +21,17 @@
  * \ingroup wm
  */
 
-#ifndef __WM_H__
-#define __WM_H__
+#pragma once
 
 struct ARegion;
 struct ReportList;
 struct wmWindow;
 
 #include "gizmo/wm_gizmo_wmapi.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct wmPaintCursor {
   struct wmPaintCursor *next, *prev;
@@ -80,6 +83,7 @@ void wm_autosave_location(char *filepath);
 
 /* wm_splash_screen.c */
 void WM_OT_splash(wmOperatorType *ot);
+void WM_OT_splash_about(wmOperatorType *ot);
 
 /* wm_stereo.c */
 void wm_stereo3d_draw_sidebyside(wmWindow *win, int view);
@@ -96,4 +100,6 @@ void wm_stereo3d_set_cancel(bContext *C, wmOperator *op);
 void wm_open_init_load_ui(wmOperator *op, bool use_prefs);
 void wm_open_init_use_scripts(wmOperator *op, bool use_prefs);
 
+#ifdef __cplusplus
+}
 #endif

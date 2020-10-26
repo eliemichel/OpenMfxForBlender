@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2020 Blender Foundation.
@@ -175,7 +175,7 @@ static void mask_filter_task_cb(void *__restrict userdata,
         *vd.mask = gain * (*vd.mask) + offset;
         break;
     }
-    CLAMP(*vd.mask, 0.0f, 1.0f);
+    *vd.mask = clamp_f(*vd.mask, 0.0f, 1.0f);
     if (*vd.mask != prev_val) {
       update = true;
     }
@@ -192,7 +192,6 @@ static void mask_filter_task_cb(void *__restrict userdata,
 
 static int sculpt_mask_filter_exec(bContext *C, wmOperator *op)
 {
-  ARegion *region = CTX_wm_region(C);
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
@@ -202,9 +201,9 @@ static int sculpt_mask_filter_exec(bContext *C, wmOperator *op)
   int totnode;
   int filter_type = RNA_enum_get(op->ptr, "filter_type");
 
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, true, true);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, true, true, false);
 
-  SCULPT_vertex_random_access_init(ss);
+  SCULPT_vertex_random_access_ensure(ss);
 
   if (!ob->sculpt->pmap) {
     return OPERATOR_CANCELLED;
@@ -246,9 +245,9 @@ static int sculpt_mask_filter_exec(bContext *C, wmOperator *op)
         .prev_mask = prev_mask,
     };
 
-    PBVHParallelSettings settings;
-    BKE_pbvh_parallel_range_settings(&settings, (sd->flags & SCULPT_USE_OPENMP), totnode);
-    BKE_pbvh_parallel_range(0, totnode, &data, mask_filter_task_cb, &settings);
+    TaskParallelSettings settings;
+    BKE_pbvh_parallel_range_settings(&settings, true, totnode);
+    BLI_task_parallel_range(0, totnode, &data, mask_filter_task_cb, &settings);
 
     if (ELEM(filter_type, MASK_FILTER_GROW, MASK_FILTER_SHRINK)) {
       MEM_freeN(prev_mask);
@@ -259,8 +258,8 @@ static int sculpt_mask_filter_exec(bContext *C, wmOperator *op)
 
   SCULPT_undo_push_end();
 
-  ED_region_tag_redraw(region);
-  WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
+  SCULPT_tag_update_overlays(C);
+
   return OPERATOR_FINISHED;
 }
 
@@ -275,9 +274,9 @@ void SCULPT_mask_filter_smooth_apply(
   };
 
   for (int i = 0; i < smooth_iterations; i++) {
-    PBVHParallelSettings settings;
-    BKE_pbvh_parallel_range_settings(&settings, (sd->flags & SCULPT_USE_OPENMP), totnode);
-    BKE_pbvh_parallel_range(0, totnode, &data, mask_filter_task_cb, &settings);
+    TaskParallelSettings settings;
+    BKE_pbvh_parallel_range_settings(&settings, true, totnode);
+    BLI_task_parallel_range(0, totnode, &data, mask_filter_task_cb, &settings);
   }
 }
 
@@ -432,9 +431,9 @@ static int sculpt_dirty_mask_exec(bContext *C, wmOperator *op)
   Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
   int totnode;
 
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, true, true);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, true, true, false);
 
-  SCULPT_vertex_random_access_init(ss);
+  SCULPT_vertex_random_access_ensure(ss);
 
   if (!ob->sculpt->pmap) {
     return OPERATOR_CANCELLED;
@@ -458,17 +457,17 @@ static int sculpt_dirty_mask_exec(bContext *C, wmOperator *op)
       .max = -FLT_MAX,
   };
 
-  PBVHParallelSettings settings;
-  BKE_pbvh_parallel_range_settings(&settings, (sd->flags & SCULPT_USE_OPENMP), totnode);
+  TaskParallelSettings settings;
+  BKE_pbvh_parallel_range_settings(&settings, true, totnode);
 
   settings.func_reduce = dirty_mask_compute_range_reduce;
   settings.userdata_chunk = &range;
   settings.userdata_chunk_size = sizeof(DirtyMaskRangeData);
 
-  BKE_pbvh_parallel_range(0, totnode, &data, dirty_mask_compute_range_task_cb, &settings);
+  BLI_task_parallel_range(0, totnode, &data, dirty_mask_compute_range_task_cb, &settings);
   data.dirty_mask_min = range.min;
   data.dirty_mask_max = range.max;
-  BKE_pbvh_parallel_range(0, totnode, &data, dirty_mask_apply_task_cb, &settings);
+  BLI_task_parallel_range(0, totnode, &data, dirty_mask_apply_task_cb, &settings);
 
   MEM_SAFE_FREE(nodes);
 

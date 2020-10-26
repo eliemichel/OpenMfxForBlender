@@ -18,8 +18,7 @@
  * \ingroup collada
  */
 
-#ifndef __COLLADA_INTERNAL_H__
-#define __COLLADA_INTERNAL_H__
+#pragma once
 
 #include <map>
 #include <string>
@@ -52,7 +51,7 @@ class UnitConverter {
     Imperial,
   };
 
-  // Initialize with Z_UP, since Blender uses right-handed, z-up
+  /* Initialize with Z_UP, since Blender uses right-handed, z-up */
   UnitConverter();
 
   void read_asset(const COLLADAFW::FileInfo *asset);
@@ -63,7 +62,7 @@ class UnitConverter {
 
   float getLinearMeter(void);
 
-  // TODO need also for angle conversion, time conversion...
+  /* TODO need also for angle conversion, time conversion... */
 
   static void dae_matrix_to_mat4_(float out[4][4], const COLLADABU::Math::Matrix4 &in);
   static void mat4_to_dae(float out[4][4], float in[4][4]);
@@ -94,5 +93,3 @@ extern std::string get_morph_id(Object *ob);
 
 extern std::string get_effect_id(Material *mat);
 extern std::string get_material_id(Material *mat);
-
-#endif /* __COLLADA_INTERNAL_H__ */

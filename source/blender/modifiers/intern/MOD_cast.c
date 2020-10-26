@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -25,32 +25,41 @@
 
 #include "BLI_math.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_query.h"
 
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 static void initData(ModifierData *md)
 {
   CastModifierData *cmd = (CastModifierData *)md;
 
-  cmd->fac = 0.5f;
-  cmd->radius = 0.0f;
-  cmd->size = 0.0f;
-  cmd->flag = MOD_CAST_X | MOD_CAST_Y | MOD_CAST_Z | MOD_CAST_SIZE_FROM_RADIUS;
-  cmd->type = MOD_CAST_TYPE_SPHERE;
-  cmd->defgrp_name[0] = '\0';
-  cmd->object = NULL;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(cmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(cmd, DNA_struct_default_get(CastModifierData), modifier);
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene),
@@ -81,11 +90,11 @@ static void requiredDataMask(Object *UNUSED(ob),
   }
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   CastModifierData *cmd = (CastModifierData *)md;
 
-  walk(userData, ob, &cmd->object, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&cmd->object, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -502,8 +511,13 @@ static void deformVertsEM(ModifierData *md,
     mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
   }
 
-  if (mesh_src) {
+  if (mesh && mesh->runtime.wrapper_type == ME_WRAPPER_TYPE_MDATA) {
     BLI_assert(mesh_src->totvert == numVerts);
+  }
+
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
   }
 
   if (cmd->type == MOD_CAST_TYPE_CUBOID) {
@@ -518,21 +532,66 @@ static void deformVertsEM(ModifierData *md,
   }
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+  int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  PointerRNA cast_object_ptr = RNA_pointer_get(ptr, "object");
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "cast_type", 0, NULL, ICON_NONE);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Axis"));
+  uiItemR(row, ptr, "use_x", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_y", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_z", toggles_flag, NULL, ICON_NONE);
+
+  uiItemR(layout, ptr, "factor", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "radius", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "size", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "use_radius_as_size", 0, NULL, ICON_NONE);
+
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  uiItemR(layout, ptr, "object", 0, NULL, ICON_NONE);
+  if (!RNA_pointer_is_null(&cast_object_ptr)) {
+    uiItemR(layout, ptr, "use_transform", 0, NULL, ICON_NONE);
+  }
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Cast, panel_draw);
+}
+
 ModifierTypeInfo modifierType_Cast = {
     /* name */ "Cast",
     /* structName */ "CastModifierData",
     /* structSize */ sizeof(CastModifierData),
+    /* srna */ &RNA_CastModifier,
     /* type */ eModifierTypeType_OnlyDeform,
-    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
+    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_MOD_CAST,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -541,8 +600,10 @@ ModifierTypeInfo modifierType_Cast = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

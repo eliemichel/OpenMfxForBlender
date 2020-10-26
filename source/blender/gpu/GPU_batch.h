@@ -24,87 +24,84 @@
  * Contains VAOs + VBOs + Shader representing a drawable entity.
  */
 
-#ifndef __GPU_BATCH_H__
-#define __GPU_BATCH_H__
+#pragma once
 
-#include "GPU_element.h"
+#include "BLI_utildefines.h"
+
+#include "GPU_index_buffer.h"
 #include "GPU_shader.h"
-#include "GPU_shader_interface.h"
 #include "GPU_vertex_buffer.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-typedef enum {
-  GPU_BATCH_UNUSED,
-  GPU_BATCH_READY_TO_FORMAT,
-  GPU_BATCH_READY_TO_BUILD,
-  GPU_BATCH_BUILDING,
-  GPU_BATCH_READY_TO_DRAW,
-} GPUBatchPhase;
 
 #define GPU_BATCH_VBO_MAX_LEN 6
 #define GPU_BATCH_INST_VBO_MAX_LEN 2
 #define GPU_BATCH_VAO_STATIC_LEN 3
 #define GPU_BATCH_VAO_DYN_ALLOC_COUNT 16
 
-typedef struct GPUBatch {
-  /* geometry */
+typedef enum eGPUBatchFlag {
+  /** Invalid default state. */
+  GPU_BATCH_INVALID = 0,
 
+  /** GPUVertBuf ownership. (One bit per vbo) */
+  GPU_BATCH_OWNS_VBO = (1 << 0),
+  GPU_BATCH_OWNS_VBO_MAX = (GPU_BATCH_OWNS_VBO << (GPU_BATCH_VBO_MAX_LEN - 1)),
+  GPU_BATCH_OWNS_VBO_ANY = ((GPU_BATCH_OWNS_VBO << GPU_BATCH_VBO_MAX_LEN) - 1),
+  /** Instance GPUVertBuf ownership. (One bit per vbo) */
+  GPU_BATCH_OWNS_INST_VBO = (GPU_BATCH_OWNS_VBO_MAX << 1),
+  GPU_BATCH_OWNS_INST_VBO_MAX = (GPU_BATCH_OWNS_INST_VBO << (GPU_BATCH_INST_VBO_MAX_LEN - 1)),
+  GPU_BATCH_OWNS_INST_VBO_ANY = ((GPU_BATCH_OWNS_INST_VBO << GPU_BATCH_INST_VBO_MAX_LEN) - 1) &
+                                ~GPU_BATCH_OWNS_VBO_ANY,
+  /** GPUIndexBuf ownership. */
+  GPU_BATCH_OWNS_INDEX = (GPU_BATCH_OWNS_INST_VBO_MAX << 1),
+
+  /** Has been initialized. At least one VBO is set. */
+  GPU_BATCH_INIT = (1 << 16),
+  /** Batch is initialized but its VBOs are still being populated. (optional) */
+  GPU_BATCH_BUILDING = (1 << 16),
+  /** Cached data need to be rebuild. (VAO, PSO, ...) */
+  GPU_BATCH_DIRTY = (1 << 17),
+} eGPUBatchFlag;
+
+#define GPU_BATCH_OWNS_NONE GPU_BATCH_INVALID
+
+BLI_STATIC_ASSERT(GPU_BATCH_OWNS_INDEX < GPU_BATCH_INIT,
+                  "eGPUBatchFlag: Error: status flags are shadowed by the ownership bits!")
+
+ENUM_OPERATORS(eGPUBatchFlag, GPU_BATCH_DIRTY)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * IMPORTANT: Do not allocate manually as the real struct is bigger (i.e: GLBatch). This is only
+ * the common and "public" part of the struct. Use the provided allocator.
+ * TODO(fclem): Make the content of this struct hidden and expose getters/setters.
+ **/
+typedef struct GPUBatch {
   /** verts[0] is required, others can be NULL */
   GPUVertBuf *verts[GPU_BATCH_VBO_MAX_LEN];
   /** Instance attributes. */
   GPUVertBuf *inst[GPU_BATCH_INST_VBO_MAX_LEN];
   /** NULL if element list not needed */
   GPUIndexBuf *elem;
-  uint32_t gl_prim_type;
-
-  /* cached values (avoid dereferencing later) */
-  uint32_t vao_id;
-  uint32_t program;
-  const struct GPUShaderInterface *interface;
-
-  /* book-keeping */
-  uint owns_flag;
-  /** used to free all vaos. this implies all vaos were created under the same context. */
-  struct GPUContext *context;
-  GPUBatchPhase phase;
-  bool program_in_use;
-
-  /* Vao management: remembers all geometry state (vertex attribute bindings & element buffer)
-   * for each shader interface. Start with a static number of vaos and fallback to dynamic count
-   * if necessary. Once a batch goes dynamic it does not go back. */
-  bool is_dynamic_vao_count;
-  union {
-    /** Static handle count */
-    struct {
-      const struct GPUShaderInterface *interfaces[GPU_BATCH_VAO_STATIC_LEN];
-      uint32_t vao_ids[GPU_BATCH_VAO_STATIC_LEN];
-    } static_vaos;
-    /** Dynamic handle count */
-    struct {
-      uint count;
-      const struct GPUShaderInterface **interfaces;
-      uint32_t *vao_ids;
-    } dynamic_vaos;
-  };
-
-  /* XXX This is the only solution if we want to have some data structure using
-   * batches as key to identify nodes. We must destroy these nodes with this callback. */
-  void (*free_callback)(struct GPUBatch *, void *);
-  void *callback_data;
+  /** Bookeeping. */
+  eGPUBatchFlag flag;
+  /** Type of geometry to draw. */
+  GPUPrimType prim_type;
+  /** Current assigned shader. DEPRECATED. Here only for uniform binding. */
+  struct GPUShader *shader;
 } GPUBatch;
 
-enum {
-  GPU_BATCH_OWNS_VBO = (1 << 0),
-  /* each vbo index gets bit-shifted */
-  GPU_BATCH_OWNS_INSTANCES = (1 << 30),
-  GPU_BATCH_OWNS_INDEX = (1u << 31u),
-};
-
-GPUBatch *GPU_batch_create_ex(GPUPrimType, GPUVertBuf *, GPUIndexBuf *, uint owns_flag);
-void GPU_batch_init_ex(GPUBatch *, GPUPrimType, GPUVertBuf *, GPUIndexBuf *, uint owns_flag);
+GPUBatch *GPU_batch_calloc(void);
+GPUBatch *GPU_batch_create_ex(GPUPrimType prim,
+                              GPUVertBuf *vert,
+                              GPUIndexBuf *elem,
+                              eGPUBatchFlag owns_flag);
+void GPU_batch_init_ex(GPUBatch *batch,
+                       GPUPrimType prim,
+                       GPUVertBuf *vert,
+                       GPUIndexBuf *elem,
+                       eGPUBatchFlag owns_flag);
 void GPU_batch_copy(GPUBatch *batch_dst, GPUBatch *batch_src);
 
 #define GPU_batch_create(prim, verts, elem) GPU_batch_create_ex(prim, verts, elem, 0)
@@ -115,10 +112,6 @@ void GPU_batch_clear(GPUBatch *);
 
 void GPU_batch_discard(GPUBatch *); /* verts & elem are not discarded */
 
-void GPU_batch_vao_cache_clear(GPUBatch *);
-
-void GPU_batch_callback_free_set(GPUBatch *, void (*callback)(GPUBatch *, void *), void *);
-
 void GPU_batch_instbuf_set(GPUBatch *, GPUVertBuf *, bool own_vbo); /* Instancing */
 void GPU_batch_elembuf_set(GPUBatch *batch, GPUIndexBuf *elem, bool own_ibo);
 
@@ -127,43 +120,41 @@ int GPU_batch_vertbuf_add_ex(GPUBatch *, GPUVertBuf *, bool own_vbo);
 
 #define GPU_batch_vertbuf_add(batch, verts) GPU_batch_vertbuf_add_ex(batch, verts, false)
 
-void GPU_batch_program_set_no_use(GPUBatch *, uint32_t program, const GPUShaderInterface *);
-void GPU_batch_program_set(GPUBatch *, uint32_t program, const GPUShaderInterface *);
-void GPU_batch_program_set_shader(GPUBatch *, GPUShader *shader);
+void GPU_batch_set_shader(GPUBatch *batch, GPUShader *shader);
 void GPU_batch_program_set_imm_shader(GPUBatch *batch);
 void GPU_batch_program_set_builtin(GPUBatch *batch, eGPUBuiltinShader shader_id);
 void GPU_batch_program_set_builtin_with_config(GPUBatch *batch,
                                                eGPUBuiltinShader shader_id,
                                                eGPUShaderConfig sh_cfg);
-/* Entire batch draws with one shader program, but can be redrawn later with another program. */
-/* Vertex shader's inputs must be compatible with the batch's vertex format. */
 
-void GPU_batch_program_use_begin(GPUBatch *); /* call before Batch_Uniform (temp hack?) */
-void GPU_batch_program_use_end(GPUBatch *);
+/* Will only work after setting the batch program. */
+/* TODO(fclem): Theses needs to be replaced by GPU_shader_uniform_* with explicit shader. */
+#define GPU_batch_uniform_1i(batch, name, x) GPU_shader_uniform_1i((batch)->shader, name, x);
+#define GPU_batch_uniform_1b(batch, name, x) GPU_shader_uniform_1b((batch)->shader, name, x);
+#define GPU_batch_uniform_1f(batch, name, x) GPU_shader_uniform_1f((batch)->shader, name, x);
+#define GPU_batch_uniform_2f(batch, name, x, y) GPU_shader_uniform_2f((batch)->shader, name, x, y);
+#define GPU_batch_uniform_3f(batch, name, x, y, z) \
+  GPU_shader_uniform_3f((batch)->shader, name, x, y, z);
+#define GPU_batch_uniform_4f(batch, name, x, y, z, w) \
+  GPU_shader_uniform_4f((batch)->shader, name, x, y, z, w);
+#define GPU_batch_uniform_2fv(batch, name, val) GPU_shader_uniform_2fv((batch)->shader, name, val);
+#define GPU_batch_uniform_3fv(batch, name, val) GPU_shader_uniform_3fv((batch)->shader, name, val);
+#define GPU_batch_uniform_4fv(batch, name, val) GPU_shader_uniform_4fv((batch)->shader, name, val);
+#define GPU_batch_uniform_2fv_array(batch, name, len, val) \
+  GPU_shader_uniform_2fv_array((batch)->shader, name, len, val);
+#define GPU_batch_uniform_4fv_array(batch, name, len, val) \
+  GPU_shader_uniform_4fv_array((batch)->shader, name, len, val);
+#define GPU_batch_uniform_mat4(batch, name, val) \
+  GPU_shader_uniform_mat4((batch)->shader, name, val);
+#define GPU_batch_texture_bind(batch, name, tex) \
+  GPU_texture_bind(tex, GPU_shader_get_texture_binding((batch)->shader, name));
 
-void GPU_batch_uniform_1ui(GPUBatch *, const char *name, uint value);
-void GPU_batch_uniform_1i(GPUBatch *, const char *name, int value);
-void GPU_batch_uniform_1b(GPUBatch *, const char *name, bool value);
-void GPU_batch_uniform_1f(GPUBatch *, const char *name, float value);
-void GPU_batch_uniform_2f(GPUBatch *, const char *name, float x, float y);
-void GPU_batch_uniform_3f(GPUBatch *, const char *name, float x, float y, float z);
-void GPU_batch_uniform_4f(GPUBatch *, const char *name, float x, float y, float z, float w);
-void GPU_batch_uniform_2fv(GPUBatch *, const char *name, const float data[2]);
-void GPU_batch_uniform_3fv(GPUBatch *, const char *name, const float data[3]);
-void GPU_batch_uniform_4fv(GPUBatch *, const char *name, const float data[4]);
-void GPU_batch_uniform_2fv_array(GPUBatch *, const char *name, const int len, const float *data);
-void GPU_batch_uniform_4fv_array(GPUBatch *, const char *name, const int len, const float *data);
-void GPU_batch_uniform_mat4(GPUBatch *, const char *name, const float data[4][4]);
+void GPU_batch_draw(GPUBatch *batch);
+void GPU_batch_draw_range(GPUBatch *batch, int v_first, int v_count);
+void GPU_batch_draw_instanced(GPUBatch *batch, int i_count);
 
-void GPU_batch_draw(GPUBatch *);
-
-/* Needs to be called before GPU_batch_draw_advanced. */
-void GPU_batch_bind(GPUBatch *);
 /* This does not bind/unbind shader and does not call GPU_matrix_bind() */
 void GPU_batch_draw_advanced(GPUBatch *, int v_first, int v_count, int i_first, int i_count);
-
-/* Does not even need batch */
-void GPU_draw_primitive(GPUPrimType, int v_count);
 
 #if 0 /* future plans */
 
@@ -200,19 +191,6 @@ GPUBatch *create_BatchInGeneral(GPUPrimType, VertexBufferStuff, ElementListStuff
 
 #endif /* future plans */
 
-/**
- * #GPUDrawList is an API to do lots of similar draw-calls very fast using multi-draw-indirect.
- * There is a fallback if the feature is not supported.
- */
-typedef struct GPUDrawList GPUDrawList;
-
-GPUDrawList *GPU_draw_list_create(int length);
-void GPU_draw_list_discard(GPUDrawList *list);
-void GPU_draw_list_init(GPUDrawList *list, GPUBatch *batch);
-void GPU_draw_list_command_add(
-    GPUDrawList *list, int v_first, int v_count, int i_first, int i_count);
-void GPU_draw_list_submit(GPUDrawList *list);
-
 void gpu_batch_init(void);
 void gpu_batch_exit(void);
 
@@ -248,5 +226,3 @@ void gpu_batch_exit(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_BATCH_H__ */

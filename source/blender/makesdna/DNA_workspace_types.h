@@ -20,8 +20,7 @@
  * Use API in BKE_workspace.h to edit these.
  */
 
-#ifndef __DNA_WORKSPACE_TYPES_H__
-#define __DNA_WORKSPACE_TYPES_H__
+#pragma once
 
 #include "DNA_scene_types.h"
 
@@ -161,10 +160,15 @@ typedef struct WorkSpaceDataRelation {
   struct WorkSpaceDataRelation *next, *prev;
 
   /** The data used to identify the relation
-   * (e.g. to find screen-layout (= value) from/for a hook). */
+   * (e.g. to find screen-layout (= value) from/for a hook).
+   * Note: Now runtime only. */
   void *parent;
   /** The value for this parent-data/workspace relation. */
   void *value;
+
+  /** Reference to the actual parent window, wmWindow->winid. Used in read/write code. */
+  int parentid;
+  char _pad_0[4];
 } WorkSpaceDataRelation;
 
 /**
@@ -184,5 +188,3 @@ typedef struct WorkSpaceInstanceHook {
 typedef enum eWorkSpaceFlags {
   WORKSPACE_USE_FILTER_BY_ORIGIN = (1 << 1),
 } eWorkSpaceFlags;
-
-#endif /* __DNA_WORKSPACE_TYPES_H__ */

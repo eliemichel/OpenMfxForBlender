@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_DUPLILIST_H__
-#define __BKE_DUPLILIST_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -52,7 +51,7 @@ typedef struct DupliObject {
 
   /* Persistent identifier for a dupli object, for inter-frame matching of
    * objects with motion blur, or inter-update matching for syncing. */
-  int persistent_id[16]; /* 2*MAX_DUPLI_RECUR */
+  int persistent_id[8]; /* MAX_DUPLI_RECUR */
 
   /* Particle this dupli was generated from. */
   struct ParticleSystem *particle_system;
@@ -63,6 +62,4 @@ typedef struct DupliObject {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

@@ -24,6 +24,7 @@
 
 #include "BLI_math.h"
 #include "BLI_memiter.h"
+#include "BLI_rect.h"
 #include "BLI_string.h"
 
 #include "BKE_editmesh.h"
@@ -38,6 +39,7 @@
 #include "DNA_view3d_types.h"
 
 #include "GPU_matrix.h"
+#include "GPU_state.h"
 
 #include "ED_screen.h"
 #include "ED_view3d.h"
@@ -121,75 +123,105 @@ void DRW_text_cache_add(DRWTextStore *dt,
   }
 }
 
-void DRW_text_cache_draw(DRWTextStore *dt, ARegion *region, struct View3D *v3d)
+static void drw_text_cache_draw_ex(DRWTextStore *dt, ARegion *region)
 {
-  RegionView3D *rv3d = region->regiondata;
   ViewCachedString *vos;
-  int tot = 0;
-
-  /* project first and test */
   BLI_memiter_handle it;
+  int col_pack_prev = 0;
+
+  float original_proj[4][4];
+  GPU_matrix_projection_get(original_proj);
+  wmOrtho2_region_pixelspace(region);
+
+  GPU_matrix_push();
+  GPU_matrix_identity_set();
+
+  const int font_id = BLF_default();
+
+  const uiStyle *style = UI_style_get();
+
+  BLF_size(font_id, style->widget.points * U.pixelsize, U.dpi);
+
   BLI_memiter_iter_init(dt->cache_strings, &it);
   while ((vos = BLI_memiter_iter_step(&it))) {
-    if (ED_view3d_project_short_ex(
-            region,
-            (vos->flag & DRW_TEXT_CACHE_GLOBALSPACE) ? rv3d->persmat : rv3d->persmatob,
-            (vos->flag & DRW_TEXT_CACHE_LOCALCLIP) != 0,
-            vos->vec,
-            vos->sco,
-            V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_WIN | V3D_PROJ_TEST_CLIP_NEAR) ==
-        V3D_PROJ_RET_OK) {
-      tot++;
-    }
-    else {
-      vos->sco[0] = IS_CLIPPED;
+    if (vos->sco[0] != IS_CLIPPED) {
+      if (col_pack_prev != vos->col.pack) {
+        BLF_color4ubv(font_id, vos->col.ub);
+        col_pack_prev = vos->col.pack;
+      }
+
+      BLF_position(
+          font_id, (float)(vos->sco[0] + vos->xoffs), (float)(vos->sco[1] + vos->yoffs), 2.0f);
+
+      ((vos->flag & DRW_TEXT_CACHE_ASCII) ? BLF_draw_ascii : BLF_draw)(
+          font_id,
+          (vos->flag & DRW_TEXT_CACHE_STRING_PTR) ? *((const char **)vos->str) : vos->str,
+          vos->str_len);
     }
   }
 
-  if (tot) {
-    int col_pack_prev = 0;
+  GPU_matrix_pop();
+  GPU_matrix_projection_set(original_proj);
+}
 
-    if (RV3D_CLIPPING_ENABLED(v3d, rv3d)) {
-      ED_view3d_clipping_disable();
-    }
-
-    float original_proj[4][4];
-    GPU_matrix_projection_get(original_proj);
-    wmOrtho2_region_pixelspace(region);
-
-    GPU_matrix_push();
-    GPU_matrix_identity_set();
-
-    const int font_id = BLF_default();
-
-    const uiStyle *style = UI_style_get();
-
-    BLF_size(font_id, style->widget.points * U.pixelsize, U.dpi);
-
+void DRW_text_cache_draw(DRWTextStore *dt, ARegion *region, struct View3D *v3d)
+{
+  ViewCachedString *vos;
+  if (v3d) {
+    RegionView3D *rv3d = region->regiondata;
+    int tot = 0;
+    /* project first and test */
+    BLI_memiter_handle it;
     BLI_memiter_iter_init(dt->cache_strings, &it);
     while ((vos = BLI_memiter_iter_step(&it))) {
-      if (vos->sco[0] != IS_CLIPPED) {
-        if (col_pack_prev != vos->col.pack) {
-          BLF_color4ubv(font_id, vos->col.ub);
-          col_pack_prev = vos->col.pack;
-        }
-
-        BLF_position(
-            font_id, (float)(vos->sco[0] + vos->xoffs), (float)(vos->sco[1] + vos->yoffs), 2.0f);
-
-        ((vos->flag & DRW_TEXT_CACHE_ASCII) ? BLF_draw_ascii : BLF_draw)(
-            font_id,
-            (vos->flag & DRW_TEXT_CACHE_STRING_PTR) ? *((const char **)vos->str) : vos->str,
-            vos->str_len);
+      if (ED_view3d_project_short_ex(
+              region,
+              (vos->flag & DRW_TEXT_CACHE_GLOBALSPACE) ? rv3d->persmat : rv3d->persmatob,
+              (vos->flag & DRW_TEXT_CACHE_LOCALCLIP) != 0,
+              vos->vec,
+              vos->sco,
+              V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_WIN | V3D_PROJ_TEST_CLIP_NEAR) ==
+          V3D_PROJ_RET_OK) {
+        tot++;
+      }
+      else {
+        vos->sco[0] = IS_CLIPPED;
       }
     }
 
-    GPU_matrix_pop();
-    GPU_matrix_projection_set(original_proj);
+    if (tot) {
+      /* Disable clipping for text */
+      const bool rv3d_clipping_enabled = RV3D_CLIPPING_ENABLED(v3d, rv3d);
+      if (rv3d_clipping_enabled) {
+        GPU_clip_distances(0);
+      }
 
-    if (RV3D_CLIPPING_ENABLED(v3d, rv3d)) {
-      ED_view3d_clipping_enable();
+      drw_text_cache_draw_ex(dt, region);
+
+      if (rv3d_clipping_enabled) {
+        GPU_clip_distances(6);
+      }
     }
+  }
+  else {
+    /* project first */
+    BLI_memiter_handle it;
+    BLI_memiter_iter_init(dt->cache_strings, &it);
+    View2D *v2d = &region->v2d;
+    float viewmat[4][4];
+    rctf region_space = {0.0f, region->winx, 0.0f, region->winy};
+    BLI_rctf_transform_calc_m4_pivot_min(&v2d->cur, &region_space, viewmat);
+
+    while ((vos = BLI_memiter_iter_step(&it))) {
+      float p[3];
+      copy_v3_v3(p, vos->vec);
+      mul_m4_v3(viewmat, p);
+
+      vos->sco[0] = p[0];
+      vos->sco[1] = p[1];
+    }
+
+    drw_text_cache_draw_ex(dt, region);
   }
 }
 
@@ -200,7 +232,7 @@ void DRW_text_edit_mesh_measure_stats(ARegion *region,
                                       const UnitSettings *unit)
 {
   /* Do not use ascii when using non-default unit system, some unit chars are utf8 (micro, square,
-   * etc.). See bug #36090.
+   * etc.). See bug T36090.
    */
   struct DRWTextStore *dt = DRW_text_cache_ensure();
   const short txt_flag = DRW_TEXT_CACHE_GLOBALSPACE | (unit->system ? 0 : DRW_TEXT_CACHE_ASCII);
@@ -296,13 +328,13 @@ void DRW_text_edit_mesh_measure_stats(ARegion *region,
           }
 
           if (unit->system) {
-            numstr_len = bUnit_AsString2(numstr,
-                                         sizeof(numstr),
-                                         len_v3v3(v1, v2) * unit->scale_length,
-                                         3,
-                                         B_UNIT_LENGTH,
-                                         unit,
-                                         false);
+            numstr_len = BKE_unit_value_as_string(numstr,
+                                                  sizeof(numstr),
+                                                  len_v3v3(v1, v2) * unit->scale_length,
+                                                  3,
+                                                  B_UNIT_LENGTH,
+                                                  unit,
+                                                  false);
           }
           else {
             numstr_len = BLI_snprintf_rlen(numstr, sizeof(numstr), conv_float, len_v3v3(v1, v2));
@@ -395,16 +427,19 @@ void DRW_text_edit_mesh_measure_stats(ARegion *region,
 
     UI_GetThemeColor3ubv(TH_DRAWEXTRA_FACEAREA, col);
 
-    int i, n, numtri;
+    int i, n;
     BMFace *f = NULL;
+    /* Alternative to using `poly_to_tri_count(i, BM_elem_index_get(f->l_first))`
+     * without having to add an extra loop. */
+    int looptri_index = 0;
     BM_ITER_MESH_INDEX (f, &iter, em->bm, BM_FACES_OF_MESH, i) {
+      const int f_looptri_len = f->len - 2;
       if (BM_elem_flag_test(f, BM_ELEM_SELECT)) {
         n = 0;
-        numtri = f->len - 2;
         area = 0;
         zero_v3(vmid);
-        BMLoop *(*l)[3] = &em->looptris[poly_to_tri_count(i, BM_elem_index_get(f->l_first))];
-        for (int j = 0; j < numtri; j++) {
+        BMLoop *(*l)[3] = &em->looptris[looptri_index];
+        for (int j = 0; j < f_looptri_len; j++) {
 
           if (use_coords) {
             copy_v3_v3(v1, vert_coords[BM_elem_index_get(l[j][0]->v)]);
@@ -435,13 +470,14 @@ void DRW_text_edit_mesh_measure_stats(ARegion *region,
         mul_m4_v3(ob->obmat, vmid);
 
         if (unit->system) {
-          numstr_len = bUnit_AsString2(numstr,
-                                       sizeof(numstr),
-                                       (double)(area * unit->scale_length * unit->scale_length),
-                                       3,
-                                       B_UNIT_AREA,
-                                       unit,
-                                       false);
+          numstr_len = BKE_unit_value_as_string(
+              numstr,
+              sizeof(numstr),
+              (double)(area * unit->scale_length * unit->scale_length),
+              3,
+              B_UNIT_AREA,
+              unit,
+              false);
         }
         else {
           numstr_len = BLI_snprintf_rlen(numstr, sizeof(numstr), conv_float, area);
@@ -449,6 +485,7 @@ void DRW_text_edit_mesh_measure_stats(ARegion *region,
 
         DRW_text_cache_add(dt, vmid, numstr, numstr_len, 0, 0, txt_flag, col);
       }
+      looptri_index += f_looptri_len;
     }
   }
 

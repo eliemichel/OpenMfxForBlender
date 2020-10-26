@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -27,26 +27,38 @@
 
 #include "BLI_math.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
 #include "BKE_lib_id.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_particle.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 static void initData(ModifierData *md)
 {
   SmoothModifierData *smd = (SmoothModifierData *)md;
 
-  smd->fac = 0.5f;
-  smd->repeat = 1;
-  smd->flag = MOD_SMOOTH_X | MOD_SMOOTH_Y | MOD_SMOOTH_Z;
-  smd->defgrp_name[0] = '\0';
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(smd, modifier));
+
+  MEMCPY_STRUCT_AFTER(smd, DNA_struct_default_get(SmoothModifierData), modifier);
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene),
@@ -135,7 +147,7 @@ static void smoothModifier_do(
       MDeformVert *dv = dvert;
       for (int i = 0; i < numVerts; i++, dv++) {
         float *vco_orig = vertexCos[i];
-        if (num_accumulated_vecs[0] > 0) {
+        if (num_accumulated_vecs[i] > 0) {
           mul_v3_fl(accumulated_vecs[i], 1.0f / (float)num_accumulated_vecs[i]);
         }
         float *vco_new = accumulated_vecs[i];
@@ -162,7 +174,7 @@ static void smoothModifier_do(
     else { /* no vertex group */
       for (int i = 0; i < numVerts; i++) {
         float *vco_orig = vertexCos[i];
-        if (num_accumulated_vecs[0] > 0) {
+        if (num_accumulated_vecs[i] > 0) {
           mul_v3_fl(accumulated_vecs[i], 1.0f / (float)num_accumulated_vecs[i]);
         }
         float *vco_new = accumulated_vecs[i];
@@ -216,6 +228,9 @@ static void deformVertsEM(ModifierData *md,
   /* mesh_src is needed for vgroups, and taking edges into account. */
   mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
 
+  /* TODO(campbell): use edit-mode data only (remove this line). */
+  BKE_mesh_wrapper_ensure_mdata(mesh_src);
+
   smoothModifier_do(smd, ctx->object, mesh_src, vertexCos, numVerts);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
@@ -223,21 +238,56 @@ static void deformVertsEM(ModifierData *md,
   }
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *row, *col;
+  uiLayout *layout = panel->layout;
+  int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Axis"));
+  uiItemR(row, ptr, "use_x", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_y", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_z", toggles_flag, NULL, ICON_NONE);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "factor", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "iterations", 0, NULL, ICON_NONE);
+
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Smooth, panel_draw);
+}
+
 ModifierTypeInfo modifierType_Smooth = {
     /* name */ "Smooth",
     /* structName */ "SmoothModifierData",
     /* structSize */ sizeof(SmoothModifierData),
+    /* srna */ &RNA_SmoothModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
         eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_MOD_SMOOTH,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -246,8 +296,10 @@ ModifierTypeInfo modifierType_Smooth = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

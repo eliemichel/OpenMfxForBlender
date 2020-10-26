@@ -234,11 +234,10 @@ void wrap_offset(
     if (i - lines < 0) {
       break;
     }
-    else {
-      linep = linep->next;
-      (*offl) += lines - 1;
-      i -= lines;
-    }
+
+    linep = linep->next;
+    (*offl) += lines - 1;
+    i -= lines;
   }
 
   max = wrap_width(st, region);
@@ -849,9 +848,7 @@ int text_get_span_wrap(const SpaceText *st, ARegion *region, TextLine *from, Tex
 
     return ret;
   }
-  else {
-    return txt_get_span(from, to);
-  }
+  return txt_get_span(from, to);
 }
 
 int text_get_total_lines(SpaceText *st, ARegion *region)
@@ -1097,7 +1094,7 @@ static void draw_documentation(const SpaceText *st, ARegion *region)
 
   i = 0;
   br = DOC_WIDTH;
-  lines = 0;  // XXX -doc_scroll;
+  lines = 0;  /* XXX -doc_scroll; */
   for (p = docs; *p; p++) {
     if (*p == '\r' && *(++p) != '\n') {
       *(--p) = '\n'; /* Fix line endings */
@@ -1356,11 +1353,9 @@ static void draw_text_decoration(SpaceText *st, ARegion *region)
       UI_GetThemeColor4fv(TH_TEXT, highlight_color);
       highlight_color[3] = 0.1f;
       immUniformColor4fv(highlight_color);
-      GPU_blend_set_func_separate(
-          GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
       immRecti(pos, 0, y1, region->winx, y2);
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
   }
 
@@ -1405,7 +1400,7 @@ static void draw_brackets(const SpaceText *st, const TextDrawContext *tdc, ARegi
 
   char ch;
 
-  // syntax_highlight must be on or else the format string will be null
+  /* syntax_highlight must be on or else the format string will be null */
   if (!text->curl || !tdc->syntax_highlight) {
     return;
   }
@@ -1612,11 +1607,10 @@ void draw_text_main(SpaceText *st, ARegion *region)
         wrap_skip = st->top - wraplinecount;
         break;
       }
-      else {
-        wraplinecount += lines;
-        tmp = tmp->next;
-        linecount++;
-      }
+
+      wraplinecount += lines;
+      tmp = tmp->next;
+      linecount++;
     }
     else {
       tmp = tmp->next;
@@ -1666,25 +1660,16 @@ void draw_text_main(SpaceText *st, ARegion *region)
     }
 
     if (st->showlinenrs && !wrap_skip) {
-      /* draw line number */
-      if (tmp == text->curl) {
-        UI_FontThemeColor(tdc.font_id, TH_HILITE);
-      }
-      else {
-        UI_FontThemeColor(tdc.font_id, TH_LINENUMBERS);
-      }
-
+      /* Draw line number. */
+      UI_FontThemeColor(tdc.font_id, (tmp == text->curl) ? TH_HILITE : TH_LINENUMBERS);
       BLI_snprintf(linenr,
                    sizeof(linenr),
                    "%*d",
                    st->runtime.line_number_display_digits,
                    i + linecount + 1);
-      /* itoa(i + linecount + 1, linenr, 10); */ /* not ansi-c :/ */
       text_font_draw(&tdc, TXT_NUMCOL_PAD * st->runtime.cwidth_px, y, linenr);
-
-      if (tmp == text->curl) {
-        UI_FontThemeColor(tdc.font_id, TH_TEXT);
-      }
+      /* Change back to text color. */
+      UI_FontThemeColor(tdc.font_id, TH_TEXT);
     }
 
     if (st->wordwrap) {
@@ -1712,9 +1697,9 @@ void draw_text_main(SpaceText *st, ARegion *region)
       UI_GetThemeColor4fv(TH_TEXT, margin_color);
       margin_color[3] = 0.2f;
       immUniformColor4fv(margin_color);
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
       immRecti(pos, margin_column_x, 0, margin_column_x + U.pixelsize, region->winy);
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
       immUnbindProgram();
     }
   }

@@ -28,10 +28,6 @@ set(INC
   ../../../../intern/guardedalloc
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
-
 set(SRC
   buttons_context.c
   buttons_ops.c
@@ -48,14 +44,15 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 if(WITH_FREESTYLE)
   add_definitions(-DWITH_FREESTYLE)
 endif()
 
-if(WITH_NEW_OBJECT_TYPES)
-  add_definitions(-DWITH_NEW_OBJECT_TYPES)
+if(WITH_EXPERIMENTAL_FEATURES)
+  add_definitions(-DWITH_GEOMETRY_NODES)
+  add_definitions(-DWITH_POINT_CLOUD)
+  add_definitions(-DWITH_HAIR_NODES)
 endif()
 
 blender_add_lib(bf_editor_space_buttons "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

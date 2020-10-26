@@ -23,7 +23,6 @@
  * PopUp Menu Region
  */
 
-#include <assert.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,11 +76,10 @@ int ui_but_menu_step(uiBut *but, int direction)
     if (but->menu_step_func) {
       return but->menu_step_func(but->block->evil_C, direction, but->poin);
     }
-    else {
-      const int curval = RNA_property_enum_get(&but->rnapoin, but->rnaprop);
-      return RNA_property_enum_step(
-          but->block->evil_C, &but->rnapoin, but->rnaprop, curval, direction);
-    }
+
+    const int curval = RNA_property_enum_get(&but->rnapoin, but->rnaprop);
+    return RNA_property_enum_step(
+        but->block->evil_C, &but->rnapoin, but->rnaprop, curval, direction);
   }
 
   printf("%s: cannot cycle button '%s'\n", __func__, but->str);
@@ -129,16 +127,16 @@ static uiBut *ui_popup_menu_memory__internal(uiBlock *block, uiBut *but)
     mem[hash_mod] = ui_popup_string_hash(but->str, but->flag & UI_BUT_HAS_SEP_CHAR);
     return NULL;
   }
-  else {
-    /* get */
-    for (but = block->buttons.first; but; but = but->next) {
-      if (mem[hash_mod] == ui_popup_string_hash(but->str, but->flag & UI_BUT_HAS_SEP_CHAR)) {
-        return but;
-      }
-    }
 
-    return NULL;
+  /* get */
+  LISTBASE_FOREACH (uiBut *, but_iter, &block->buttons) {
+    if (mem[hash_mod] ==
+        ui_popup_string_hash(but_iter->str, but_iter->flag & UI_BUT_HAS_SEP_CHAR)) {
+      return but_iter;
+    }
   }
+
+  return NULL;
 }
 
 uiBut *ui_popup_menu_memory_get(uiBlock *block)
@@ -184,7 +182,12 @@ static uiBlock *ui_block_func_POPUP(bContext *C, uiPopupBlockHandle *handle, voi
     pup->block->handle = NULL;
   }
 
-  if (pup->but) {
+  /* Find block minimum width. */
+  if (uiLayoutGetUnitsX(pup->layout) != 0.0f) {
+    /* Use the minimum width from the layout if it's set. */
+    minwidth = uiLayoutGetUnitsX(pup->layout) * UI_UNIT_X;
+  }
+  else if (pup->but) {
     /* minimum width to enforece */
     if (pup->but->drawstr[0]) {
       minwidth = BLI_rctf_size_x(&pup->but->rect);
@@ -193,7 +196,13 @@ static uiBlock *ui_block_func_POPUP(bContext *C, uiPopupBlockHandle *handle, voi
       /* For buttons with no text, use the minimum (typically icon only). */
       minwidth = UI_MENU_WIDTH_MIN;
     }
+  }
+  else {
+    minwidth = UI_MENU_WIDTH_MIN;
+  }
 
+  /* Find block direction. */
+  if (pup->but) {
     if (pup->block->direction != 0) {
       /* allow overriding the direction from menu_func */
       direction = pup->block->direction;
@@ -203,7 +212,6 @@ static uiBlock *ui_block_func_POPUP(bContext *C, uiPopupBlockHandle *handle, voi
     }
   }
   else {
-    minwidth = UI_MENU_WIDTH_MIN;
     direction = UI_DIR_DOWN;
   }
 
@@ -224,7 +232,6 @@ static uiBlock *ui_block_func_POPUP(bContext *C, uiPopupBlockHandle *handle, voi
   UI_block_flag_enable(block, UI_BLOCK_MOVEMOUSE_QUIT);
 
   if (pup->popup) {
-    uiBut *bt;
     int offset[2];
 
     uiBut *but_activate = NULL;
@@ -233,6 +240,7 @@ static uiBlock *ui_block_func_POPUP(bContext *C, uiPopupBlockHandle *handle, voi
     UI_block_direction_set(block, direction);
 
     /* offset the mouse position, possibly based on earlier selection */
+    uiBut *bt;
     if ((block->flag & UI_BLOCK_POPUP_MEMORY) && (bt = ui_popup_menu_memory_get(block))) {
       /* position mouse on last clicked item, at 0.8*width of the
        * button, so it doesn't overlap the text too much, also note
@@ -249,15 +257,16 @@ static uiBlock *ui_block_func_POPUP(bContext *C, uiPopupBlockHandle *handle, voi
       /* position mouse at 0.8*width of the button and below the tile
        * on the first item */
       offset[0] = 0;
-      for (bt = block->buttons.first; bt; bt = bt->next) {
-        offset[0] = min_ii(offset[0], -(bt->rect.xmin + 0.8f * BLI_rctf_size_x(&bt->rect)));
+      LISTBASE_FOREACH (uiBut *, but_iter, &block->buttons) {
+        offset[0] = min_ii(offset[0],
+                           -(but_iter->rect.xmin + 0.8f * BLI_rctf_size_x(&but_iter->rect)));
       }
 
       offset[1] = 2.1 * UI_UNIT_Y;
 
-      for (bt = block->buttons.first; bt; bt = bt->next) {
-        if (ui_but_is_editable(bt)) {
-          but_activate = bt;
+      LISTBASE_FOREACH (uiBut *, but_iter, &block->buttons) {
+        if (ui_but_is_editable(but_iter)) {
+          but_activate = but_iter;
           break;
         }
       }
@@ -276,17 +285,10 @@ static uiBlock *ui_block_func_POPUP(bContext *C, uiPopupBlockHandle *handle, voi
   else {
     /* for a header menu we set the direction automatic */
     if (!pup->slideout && flip) {
-      ScrArea *area = CTX_wm_area(C);
       ARegion *region = CTX_wm_region(C);
-      if (area && region) {
-        if (ELEM(region->regiontype, RGN_TYPE_HEADER, RGN_TYPE_TOOL_HEADER)) {
-          if (RGN_ALIGN_ENUM_FROM_MASK(ED_area_header_alignment(area)) == RGN_ALIGN_BOTTOM) {
-            UI_block_direction_set(block, UI_DIR_UP);
-            UI_block_order_flip(block);
-          }
-        }
-        if (region->regiontype == RGN_TYPE_FOOTER) {
-          if (RGN_ALIGN_ENUM_FROM_MASK(ED_area_footer_alignment(area)) == RGN_ALIGN_BOTTOM) {
+      if (region) {
+        if (RGN_TYPE_IS_HEADER_ANY(region->regiontype)) {
+          if (RGN_ALIGN_ENUM_FROM_MASK(region->alignment) == RGN_ALIGN_BOTTOM) {
             UI_block_direction_set(block, UI_DIR_UP);
             UI_block_order_flip(block);
           }
@@ -337,7 +339,7 @@ uiPopupBlockHandle *ui_popup_menu_create(
 #if 0
     /* if this is an rna button then we can assume its an enum
      * flipping enums is generally not good since the order can be
-     * important [#28786] */
+     * important T28786. */
     if (but->rnaprop && RNA_property_type(but->rnaprop) == PROP_ENUM) {
       pup->block->flag |= UI_BLOCK_NO_FLIP;
     }
@@ -478,13 +480,11 @@ bool UI_popup_menu_end_or_cancel(bContext *C, uiPopupMenu *pup)
     UI_popup_menu_end(C, pup);
     return true;
   }
-  else {
-    UI_block_layout_resolve(pup->block, NULL, NULL);
-    MEM_freeN(pup->block->handle);
-    UI_block_free(C, pup->block);
-    MEM_freeN(pup);
-    return false;
-  }
+  UI_block_layout_resolve(pup->block, NULL, NULL);
+  MEM_freeN(pup->block->handle);
+  UI_block_free(C, pup->block);
+  MEM_freeN(pup);
+  return false;
 }
 
 uiLayout *UI_popup_menu_layout(uiPopupMenu *pup)
@@ -500,8 +500,6 @@ uiLayout *UI_popup_menu_layout(uiPopupMenu *pup)
 
 void UI_popup_menu_reports(bContext *C, ReportList *reports)
 {
-  Report *report;
-
   uiPopupMenu *pup = NULL;
   uiLayout *layout;
 
@@ -509,7 +507,7 @@ void UI_popup_menu_reports(bContext *C, ReportList *reports)
     return;
   }
 
-  for (report = reports->list.first; report; report = report->next) {
+  LISTBASE_FOREACH (Report *, report, &reports->list) {
     int icon;
     const char *msg, *msg_next;
 
@@ -581,21 +579,18 @@ int UI_popup_menu_invoke(bContext *C, const char *idname, ReportList *reports)
 /** \name Popup Block API
  * \{ */
 
-void UI_popup_block_invoke_ex(bContext *C,
-                              uiBlockCreateFunc func,
-                              void *arg,
-                              void (*arg_free)(void *arg),
-                              const char *opname,
-                              int opcontext)
+void UI_popup_block_invoke_ex(
+    bContext *C, uiBlockCreateFunc func, void *arg, void (*arg_free)(void *arg), bool can_refresh)
 {
   wmWindow *window = CTX_wm_window(C);
   uiPopupBlockHandle *handle;
 
   handle = ui_popup_block_create(C, NULL, NULL, func, NULL, arg, arg_free);
   handle->popup = true;
-  handle->can_refresh = true;
-  handle->optype = (opname) ? WM_operatortype_find(opname, 0) : NULL;
-  handle->opcontext = opcontext;
+
+  /* It can be useful to disable refresh (even though it will work)
+   * as this exists text fields which can be disruptive if refresh isn't needed. */
+  handle->can_refresh = can_refresh;
 
   UI_popup_handlers_add(C, &window->modalhandlers, handle, 0);
   UI_block_active_only_flagged_buttons(C, handle->region, handle->region->uiblocks.first);
@@ -607,7 +602,7 @@ void UI_popup_block_invoke(bContext *C,
                            void *arg,
                            void (*arg_free)(void *arg))
 {
-  UI_popup_block_invoke_ex(C, func, arg, arg_free, NULL, WM_OP_INVOKE_DEFAULT);
+  UI_popup_block_invoke_ex(C, func, arg, arg_free, true);
 }
 
 void UI_popup_block_ex(bContext *C,

@@ -17,10 +17,10 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_RAND_H__
-#define __BLI_RAND_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
+#include "BLI_sys_types.h"
 
 /** \file
  * \ingroup bli
@@ -104,16 +104,14 @@ int BLI_rng_thread_rand(RNG_THREAD_ARRAY *rngarr, int thread) ATTR_WARN_UNUSED_R
 
 /** Return the _n_th number of the given low-discrepancy sequence. */
 void BLI_halton_1d(unsigned int prime, double offset, int n, double *r);
-void BLI_halton_2d(unsigned int prime[2], double offset[2], int n, double *r);
-void BLI_halton_3d(unsigned int prime[3], double offset[3], int n, double *r);
+void BLI_halton_2d(const unsigned int prime[2], double offset[2], int n, double *r);
+void BLI_halton_3d(const unsigned int prime[3], double offset[3], int n, double *r);
 void BLI_hammersley_1d(unsigned int n, double *r);
 
 /** Return the whole low-discrepancy sequence up to _n_. */
-void BLI_halton_2d_sequence(unsigned int prime[2], double offset[2], int n, double *r);
+void BLI_halton_2d_sequence(const unsigned int prime[2], double offset[2], int n, double *r);
 void BLI_hammersley_2d_sequence(unsigned int n, double *r);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_RAND_H__ */

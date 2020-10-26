@@ -18,8 +18,7 @@
  * \ingroup pythonintern
  */
 
-#ifndef __BPY_RNA_H__
-#define __BPY_RNA_H__
+#pragma once
 
 /* --- bpy build options --- */
 #ifdef WITH_PYTHON_SAFETY
@@ -66,6 +65,10 @@
 /* --- end bpy build options --- */
 
 struct ID;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 extern PyTypeObject pyrna_struct_meta_idprop_Type;
 extern PyTypeObject pyrna_struct_Type;
@@ -265,4 +268,6 @@ extern PyMethodDef meth_bpy_owner_id_get;
 
 extern BPy_StructRNA *bpy_context_module;
 
+#ifdef __cplusplus
+}
 #endif

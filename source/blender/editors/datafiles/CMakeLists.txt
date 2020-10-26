@@ -336,7 +336,7 @@ set(ICON_NAMES
   force_boid
   force_turbulence
   force_drag
-  force_smokeflow
+  force_fluidflow
   image_plane
   image_background
   image_reference
@@ -638,11 +638,13 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.particle.smooth
   brush.particle.weight
   brush.sculpt.blob
+  brush.sculpt.boundary
   brush.sculpt.clay
   brush.sculpt.clay_strips
   brush.sculpt.clay_thumb
   brush.sculpt.cloth
   brush.sculpt.crease
+  brush.sculpt.displacement_eraser
   brush.sculpt.draw
   brush.sculpt.draw_face_sets
   brush.sculpt.draw_sharp
@@ -713,6 +715,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.mesh.bisect
   ops.mesh.dupli_extrude_cursor
   ops.mesh.extrude_faces_move
+  ops.mesh.extrude_manifold
   ops.mesh.extrude_region_move
   ops.mesh.extrude_region_shrink_fatten
   ops.mesh.inset
@@ -741,9 +744,17 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.pose.breakdowner
   ops.pose.push
   ops.pose.relax
+  ops.sculpt.border_face_set
   ops.sculpt.border_hide
   ops.sculpt.border_mask
+  ops.sculpt.box_trim
+  ops.sculpt.cloth_filter
+  ops.sculpt.face_set_edit
+  ops.sculpt.lasso_face_set
   ops.sculpt.lasso_mask
+  ops.sculpt.lasso_trim
+  ops.sculpt.line_mask
+  ops.sculpt.line_project
   ops.sculpt.mesh_filter
   ops.sequencer.blade
   ops.transform.bone_envelope

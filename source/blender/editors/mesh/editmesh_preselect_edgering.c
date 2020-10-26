@@ -159,7 +159,7 @@ void EDBM_preselect_edgering_draw(struct EditMesh_PreSelEdgeRing *psel, const fl
     return;
   }
 
-  GPU_depth_test(false);
+  GPU_depth_test(GPU_DEPTH_NONE);
 
   GPU_matrix_push();
   GPU_matrix_mul(matrix);
@@ -197,7 +197,7 @@ void EDBM_preselect_edgering_draw(struct EditMesh_PreSelEdgeRing *psel, const fl
   GPU_matrix_pop();
 
   /* Reset default */
-  GPU_depth_test(true);
+  GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
 }
 
 static void view3d_preselect_mesh_edgering_update_verts_from_edge(
@@ -343,12 +343,12 @@ void EDBM_preselect_edgering_update_from_edge(struct EditMesh_PreSelEdgeRing *ps
     BM_mesh_elem_index_ensure(bm, BM_VERT);
   }
 
-  if (BM_edge_is_wire(eed_start)) {
-    view3d_preselect_mesh_edgering_update_verts_from_edge(
+  if (BM_edge_is_any_face_len_test(eed_start, 4)) {
+    view3d_preselect_mesh_edgering_update_edges_from_edge(
         psel, bm, eed_start, previewlines, coords);
   }
   else {
-    view3d_preselect_mesh_edgering_update_edges_from_edge(
+    view3d_preselect_mesh_edgering_update_verts_from_edge(
         psel, bm, eed_start, previewlines, coords);
   }
 }

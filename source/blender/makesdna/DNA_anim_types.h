@@ -21,17 +21,16 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_ANIM_TYPES_H__
-#define __DNA_ANIM_TYPES_H__
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_action_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* ************************************************ */
 /* F-Curve DataTypes */
@@ -264,7 +263,7 @@ typedef struct FMod_Noise {
 
 /* modification modes */
 typedef enum eFMod_Noise_Modifications {
-  /** Modify existing curve, matching it's shape. */
+  /** Modify existing curve, matching its shape. */
   FCM_NOISE_MODIF_REPLACE = 0,
   /** Add noise to the curve. */
   FCM_NOISE_MODIF_ADD,
@@ -507,7 +506,7 @@ typedef struct ChannelDriver {
 
   /** Result of previous evaluation. */
   float curval;
-  // XXX to be implemented... this is like the constraint influence setting
+  /* XXX to be implemented... this is like the constraint influence setting. */
   /** Influence of driver on result. */
   float influence;
 
@@ -538,7 +537,7 @@ typedef enum eDriver_Flags {
   DRIVER_FLAG_INVALID = (1 << 0),
   DRIVER_FLAG_DEPRECATED = (1 << 1),
   /** Driver does replace value, but overrides (for layering of animation over driver) */
-  // TODO: this needs to be implemented at some stage or left out...
+  /* TODO: this needs to be implemented at some stage or left out... */
   // DRIVER_FLAG_LAYERING  = (1 << 2),
   /** Use when the expression needs to be recompiled. */
   DRIVER_FLAG_RECOMPILE = (1 << 3),
@@ -550,6 +549,9 @@ typedef enum eDriver_Flags {
 } eDriver_Flags;
 
 /* F-Curves -------------------------------------- */
+
+/** When #active_keyframe_index is set to this, the FCurve does not have an active keyframe. */
+#define FCURVE_ACTIVE_KEYFRAME_NONE -1
 
 /**
  * FPoint (fpt)
@@ -588,10 +590,18 @@ typedef struct FCurve {
   /** Total number of points which define the curve (i.e. size of arrays in FPoints). */
   unsigned int totvert;
 
+  /**
+   * Index of active keyframe in #bezt for numerical editing in the interface. A value of
+   * #FCURVE_ACTIVE_KEYFRAME_NONE indicates that the FCurve has no active keyframe.
+   *
+   * Do not access directly, use #BKE_fcurve_active_keyframe_index() and
+   * #BKE_fcurve_active_keyframe_set() instead.
+   */
+  int active_keyframe_index;
+
   /* value cache + settings */
   /** Value stored from last time curve was evaluated (not threadsafe, debug display only!). */
   float curval;
-  char _pad2[4];
   /** User-editable settings for this curve. */
   short flag;
   /** Value-extending mode for this curve (does not cover). */
@@ -700,7 +710,7 @@ typedef struct NlaStrip {
   /** Action that is referenced by this strip (strip is 'user' of the action). */
   bAction *act;
 
-  /** F-Curves for controlling this strip's influence and timing */  // TODO: move o.ut?
+  /** F-Curves for controlling this strip's influence and timing */ /* TODO: move out? */
   ListBase fcurves;
   /** F-Curve modifiers to be applied to the entire strip's referenced F-Curves. */
   ListBase modifiers;
@@ -775,8 +785,8 @@ typedef enum eNlaStrip_Flag {
   NLASTRIP_FLAG_ACTIVE = (1 << 0),
   /* NLA strip is selected for editing */
   NLASTRIP_FLAG_SELECT = (1 << 1),
-  //  NLASTRIP_FLAG_SELECT_L      = (1 << 2),   // left handle selected
-  //  NLASTRIP_FLAG_SELECT_R      = (1 << 3),   // right handle selected
+  // NLASTRIP_FLAG_SELECT_L      = (1 << 2),   /* left handle selected. */
+  // NLASTRIP_FLAG_SELECT_R      = (1 << 3),   /* right handle selected. */
 
   /** NLA strip uses the same action that the action being tweaked uses
    * (not set for the tweaking one though). */
@@ -1048,8 +1058,12 @@ typedef struct AnimOverride {
  * See blenkernel/intern/anim_sys.c for details.
  */
 typedef struct AnimData {
-  /** active action - acts as the 'tweaking track' for the NLA */
+  /**
+   * Active action - acts as the 'tweaking track' for the NLA.
+   * Either use BKE_animdata_set_action() to set this, or call BKE_animdata_action_ensure_idroot()
+   * after setting. */
   bAction *action;
+
   /** temp-storage for the 'real' active action (i.e. the one used before the tweaking-action
    * took over to be edited in the Animation Editors)
    */
@@ -1141,5 +1155,3 @@ typedef struct IdAdtTemplate {
 #ifdef __cplusplus
 };
 #endif
-
-#endif /* __DNA_ANIM_TYPES_H__ */

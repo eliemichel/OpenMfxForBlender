@@ -20,8 +20,7 @@
  * BM Inline functions.
  */
 
-#ifndef __BMESH_INLINE_H__
-#define __BMESH_INLINE_H__
+#pragma once
 
 /* stuff for dealing with header flags */
 #define BM_elem_flag_test(ele, hflag) _bm_elem_flag_test(&(ele)->head, hflag)
@@ -101,7 +100,7 @@ BLI_INLINE void _bm_elem_flag_merge_into(BMHeader *head,
  * the mesh structure.
  *
  * To set the elements to valid indices 'BM_mesh_elem_index_ensure' should be used
- * rather then adding inline loops, however there are cases where we still
+ * rather than adding inline loops, however there are cases where we still
  * set the index directly
  *
  * In an attempt to manage this,
@@ -135,5 +134,3 @@ BLI_INLINE int _bm_elem_index_get(const BMHeader *head)
 {
   return head->index;
 }
-
-#endif /* __BMESH_INLINE_H__ */

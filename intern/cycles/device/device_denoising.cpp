@@ -56,8 +56,8 @@ DenoisingTask::DenoisingTask(Device *device, const DeviceTask &task)
     tile_info->frames[i] = task.denoising_frames[i - 1];
   }
 
-  write_passes = task.denoising_write_passes;
-  do_filter = task.denoising_do_filter;
+  do_prefilter = task.denoising.store_passes && task.denoising.type == DENOISER_NLM;
+  do_filter = task.denoising.use && task.denoising.type == DENOISER_NLM;
 }
 
 DenoisingTask::~DenoisingTask()
@@ -71,29 +71,30 @@ DenoisingTask::~DenoisingTask()
   tile_info_mem.free();
 }
 
-void DenoisingTask::set_render_buffer(RenderTile *rtiles)
+void DenoisingTask::set_render_buffer(RenderTileNeighbors &neighbors)
 {
-  for (int i = 0; i < 9; i++) {
-    tile_info->offsets[i] = rtiles[i].offset;
-    tile_info->strides[i] = rtiles[i].stride;
-    tile_info->buffers[i] = rtiles[i].buffer;
+  for (int i = 0; i < RenderTileNeighbors::SIZE; i++) {
+    RenderTile &rtile = neighbors.tiles[i];
+    tile_info->offsets[i] = rtile.offset;
+    tile_info->strides[i] = rtile.stride;
+    tile_info->buffers[i] = rtile.buffer;
   }
-  tile_info->x[0] = rtiles[3].x;
-  tile_info->x[1] = rtiles[4].x;
-  tile_info->x[2] = rtiles[5].x;
-  tile_info->x[3] = rtiles[5].x + rtiles[5].w;
-  tile_info->y[0] = rtiles[1].y;
-  tile_info->y[1] = rtiles[4].y;
-  tile_info->y[2] = rtiles[7].y;
-  tile_info->y[3] = rtiles[7].y + rtiles[7].h;
+  tile_info->x[0] = neighbors.tiles[3].x;
+  tile_info->x[1] = neighbors.tiles[4].x;
+  tile_info->x[2] = neighbors.tiles[5].x;
+  tile_info->x[3] = neighbors.tiles[5].x + neighbors.tiles[5].w;
+  tile_info->y[0] = neighbors.tiles[1].y;
+  tile_info->y[1] = neighbors.tiles[4].y;
+  tile_info->y[2] = neighbors.tiles[7].y;
+  tile_info->y[3] = neighbors.tiles[7].y + neighbors.tiles[7].h;
 
-  target_buffer.offset = rtiles[9].offset;
-  target_buffer.stride = rtiles[9].stride;
-  target_buffer.ptr = rtiles[9].buffer;
+  target_buffer.offset = neighbors.target.offset;
+  target_buffer.stride = neighbors.target.stride;
+  target_buffer.ptr = neighbors.target.buffer;
 
-  if (write_passes && rtiles[9].buffers) {
+  if (do_prefilter && neighbors.target.buffers) {
     target_buffer.denoising_output_offset =
-        rtiles[9].buffers->params.get_denoising_prefiltered_offset();
+        neighbors.target.buffers->params.get_denoising_prefiltered_offset();
   }
   else {
     target_buffer.denoising_output_offset = 0;
@@ -111,7 +112,7 @@ void DenoisingTask::setup_denoising_buffer()
   rect = rect_clip(rect,
                    make_int4(tile_info->x[0], tile_info->y[0], tile_info->x[3], tile_info->y[3]));
 
-  buffer.use_intensity = write_passes || (tile_info->num_frames > 1);
+  buffer.use_intensity = do_prefilter || (tile_info->num_frames > 1);
   buffer.passes = buffer.use_intensity ? 15 : 14;
   buffer.width = rect.z - rect.x;
   buffer.stride = align_up(buffer.width, 4);
@@ -320,12 +321,11 @@ void DenoisingTask::reconstruct()
   functions.solve(target_buffer.ptr);
 }
 
-void DenoisingTask::run_denoising(RenderTile *tile)
+void DenoisingTask::run_denoising(RenderTile &tile)
 {
-  RenderTile rtiles[10];
-  rtiles[4] = *tile;
-  functions.map_neighbor_tiles(rtiles);
-  set_render_buffer(rtiles);
+  RenderTileNeighbors neighbors(tile);
+  functions.map_neighbor_tiles(neighbors);
+  set_render_buffer(neighbors);
 
   setup_denoising_buffer();
 
@@ -343,11 +343,11 @@ void DenoisingTask::run_denoising(RenderTile *tile)
     reconstruct();
   }
 
-  if (write_passes) {
+  if (do_prefilter) {
     write_buffer();
   }
 
-  functions.unmap_neighbor_tiles(rtiles);
+  functions.unmap_neighbor_tiles(neighbors);
 }
 
 CCL_NAMESPACE_END

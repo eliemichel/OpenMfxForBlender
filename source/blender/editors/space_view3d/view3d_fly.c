@@ -16,6 +16,10 @@
 
 /** \file
  * \ingroup spview3d
+ *
+ * Interactive fly navigation modal operator (flying around in space).
+ *
+ * \note Similar logic to `view3d_walk.c` changes here may apply there too.
  */
 
 /* defines VIEW3D_OT_fly modal operator */
@@ -54,6 +58,10 @@
 #include "DEG_depsgraph.h"
 
 #include "view3d_intern.h" /* own include */
+
+/* -------------------------------------------------------------------- */
+/** \name Modal Key-map
+ * \{ */
 
 /* NOTE: these defines are saved in keymap files,
  * do not change values but just add new ones */
@@ -138,6 +146,12 @@ void fly_modal_keymap(wmKeyConfig *keyconf)
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_fly");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Internal Fly Structs
+ * \{ */
+
 typedef struct FlyInfo {
   /* context stuff */
   RegionView3D *rv3d;
@@ -190,7 +204,7 @@ typedef struct FlyInfo {
   float grid;
 
   /* compare between last state */
-  /** Used to accelerate when using the mousewheel a lot. */
+  /** Used to accelerate when using the mouse-wheel a lot. */
   double time_lastwheel;
   /** Time between draws. */
   double time_lastdraw;
@@ -205,11 +219,17 @@ typedef struct FlyInfo {
 
 } FlyInfo;
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Internal Fly Drawing
+ * \{ */
+
 /* prototypes */
 #ifdef WITH_INPUT_NDOF
 static void flyApply_ndof(bContext *C, FlyInfo *fly, bool is_confirm);
 #endif /* WITH_INPUT_NDOF */
-static int flyApply(bContext *C, struct FlyInfo *fly, bool force_autokey);
+static int flyApply(bContext *C, struct FlyInfo *fly, bool is_confirm);
 
 static void drawFlyPixel(const struct bContext *UNUSED(C), ARegion *UNUSED(region), void *arg)
 {
@@ -277,6 +297,12 @@ static void drawFlyPixel(const struct bContext *UNUSED(C), ARegion *UNUSED(regio
   immEnd();
   immUnbindProgram();
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Internal Fly Logic
+ * \{ */
 
 /* FlyInfo->state */
 enum {
@@ -403,7 +429,7 @@ static int flyEnd(bContext *C, FlyInfo *fly)
   if (fly->state == FLY_RUNNING) {
     return OPERATOR_RUNNING_MODAL;
   }
-  else if (fly->state == FLY_CONFIRM) {
+  if (fly->state == FLY_CONFIRM) {
     /* Needed for auto_keyframe. */
 #ifdef WITH_INPUT_NDOF
     if (fly->ndof) {
@@ -592,8 +618,8 @@ static void flyEvent(FlyInfo *fly, const wmEvent *event)
           fly->axis = -1;
         }
         else {
-          /* flip speed rather than stopping, game like motion,
-           * else increase like mousewheel if we're already moving in that direction */
+          /* Flip speed rather than stopping, game like motion,
+           * else increase like mouse-wheel if we're already moving in that direction. */
           if (fly->speed < 0.0f) {
             fly->speed = -fly->speed;
           }
@@ -976,19 +1002,6 @@ static int flyApply(bContext *C, FlyInfo *fly, bool is_confirm)
       interp_v3_v3v3(
           dvec, dvec_tmp, fly->dvec_prev, (1.0f / (1.0f + (time_redraw * FLY_SMOOTH_FAC))));
 
-      if (rv3d->persp == RV3D_CAMOB) {
-        Object *lock_ob = ED_view3d_cameracontrol_object_get(fly->v3d_camera_control);
-        if (lock_ob->protectflag & OB_LOCK_LOCX) {
-          dvec[0] = 0.0;
-        }
-        if (lock_ob->protectflag & OB_LOCK_LOCY) {
-          dvec[1] = 0.0;
-        }
-        if (lock_ob->protectflag & OB_LOCK_LOCZ) {
-          dvec[2] = 0.0;
-        }
-      }
-
       add_v3_v3(rv3d->ofs, dvec);
 
       if (rv3d->persp == RV3D_CAMOB) {
@@ -1033,6 +1046,12 @@ static void flyApply_ndof(bContext *C, FlyInfo *fly, bool is_confirm)
   }
 }
 #endif /* WITH_INPUT_NDOF */
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Fly Operator
+ * \{ */
 
 static int fly_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
@@ -1128,3 +1147,5 @@ void VIEW3D_OT_fly(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_BLOCKING;
 }
+
+/** \} */

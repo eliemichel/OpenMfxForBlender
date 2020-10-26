@@ -58,6 +58,17 @@ GPENCIL_tObject *gpencil_object_cache_add(GPENCIL_PrivateData *pd, Object *ob)
   tgp_ob->is_drawmode3d = (gpd->draw_mode == GP_DRAWMODE_3D) || pd->draw_depth_only;
   tgp_ob->object_scale = mat4_to_scale(ob->obmat);
 
+  /* Check if any material with holdout flag enabled. */
+  tgp_ob->do_mat_holdout = false;
+  for (int i = 0; i < ob->totcol; i++) {
+    MaterialGPencilStyle *gp_style = BKE_gpencil_material_settings(ob, i + 1);
+    if ((gp_style->flag & GP_MATERIAL_IS_STROKE_HOLDOUT) ||
+        ((gp_style->flag & GP_MATERIAL_IS_FILL_HOLDOUT))) {
+      tgp_ob->do_mat_holdout = true;
+      break;
+    }
+  }
+
   /* Find the normal most likely to represent the gpObject. */
   /* TODO: This does not work quite well if you use
    * strokes not aligned with the object axes. Maybe we could try to
@@ -106,7 +117,7 @@ GPENCIL_tObject *gpencil_object_cache_add(GPENCIL_PrivateData *pd, Object *ob)
   copy_v3_v3(tgp_ob->plane_mat[3], center);
 
   /* Add to corresponding list if is in front. */
-  if (ob->dtx & OB_DRAWXRAY) {
+  if (ob->dtx & OB_DRAW_IN_FRONT) {
     BLI_LINKS_APPEND(&pd->tobjects_infront, tgp_ob);
   }
   else {
@@ -132,12 +143,11 @@ static int gpencil_tobject_dist_sort(const void *a, const void *b)
   if (ob_a->camera_z > ob_b->camera_z) {
     return 1;
   }
-  else if (ob_a->camera_z < ob_b->camera_z) {
+  if (ob_a->camera_z < ob_b->camera_z) {
     return -1;
   }
-  else {
-    return 0;
-  }
+
+  return 0;
 }
 
 void gpencil_object_cache_sort(GPENCIL_PrivateData *pd)
@@ -159,7 +169,7 @@ void gpencil_object_cache_sort(GPENCIL_PrivateData *pd)
     }
   }
 
-  /* Join both lists, adding infront. */
+  /* Join both lists, adding in front. */
   if (pd->tobjects_infront.first != NULL) {
     if (pd->tobjects.last != NULL) {
       pd->tobjects.last->next = pd->tobjects_infront.first;
@@ -193,7 +203,7 @@ static float gpencil_layer_final_opacity_get(const GPENCIL_PrivateData *pd,
     if (is_obact && is_fade) {
       return gpl->opacity * pd->fade_layer_opacity;
     }
-    else if (!is_obact && (pd->fade_gp_object_opacity > -1.0f)) {
+    if (!is_obact && (pd->fade_gp_object_opacity > -1.0f)) {
       return gpl->opacity * pd->fade_gp_object_opacity;
     }
   }
@@ -246,7 +256,7 @@ static void gpencil_layer_random_color_get(const Object *ob,
   uint ob_hash = BLI_ghashutil_strhash_p_murmur(ob->id.name);
   uint gpl_hash = BLI_ghashutil_strhash_p_murmur(gpl->info);
   float hue = BLI_hash_int_01(ob_hash * gpl_hash);
-  float hsv[3] = {hue, hsv_saturation, hsv_value};
+  const float hsv[3] = {hue, hsv_saturation, hsv_value};
   hsv_to_rgb_v(hsv, r_color);
 }
 
@@ -258,15 +268,17 @@ GPENCIL_tLayer *gpencil_layer_cache_add(GPENCIL_PrivateData *pd,
 {
   bGPdata *gpd = (bGPdata *)ob->data;
 
-  const bool is_in_front = (ob->dtx & OB_DRAWXRAY);
+  const bool is_in_front = (ob->dtx & OB_DRAW_IN_FRONT);
   const bool is_screenspace = (gpd->flag & GP_DATA_STROKE_KEEPTHICKNESS) != 0;
   const bool overide_vertcol = (pd->v3d_color_type != -1);
   const bool is_vert_col_mode = (pd->v3d_color_type == V3D_SHADING_VERTEX_COLOR) ||
                                 GPENCIL_VERTEX_MODE(gpd) || pd->is_render;
   bool is_masked = (gpl->flag & GP_LAYER_USE_MASK) && !BLI_listbase_is_empty(&gpl->mask_layers);
 
-  float vert_col_opacity = (overide_vertcol) ? (is_vert_col_mode ? 1.0f : 0.0f) :
-                                               gpl->vertex_paint_opacity;
+  float vert_col_opacity = (overide_vertcol) ?
+                               (is_vert_col_mode ? pd->vertex_paint_opacity : 0.0f) :
+                               pd->is_render ? gpl->vertex_paint_opacity :
+                                               pd->vertex_paint_opacity;
   /* Negate thickness sign to tag that strokes are in screen space.
    * Convert to world units (by default, 1 meter = 2000 px). */
   float thickness_scale = (is_screenspace) ? -1.0f : (gpd->pixfactor / GPENCIL_PIXEL_FACTOR);
@@ -287,7 +299,7 @@ GPENCIL_tLayer *gpencil_layer_cache_add(GPENCIL_PrivateData *pd,
   if (is_masked) {
     bool valid_mask = false;
     /* Warning: only GP_MAX_MASKBITS amount of bits.
-     * TODO(fclem) Find a better system without any limitation. */
+     * TODO(fclem): Find a better system without any limitation. */
     tgp_layer->mask_bits = BLI_memblock_alloc(pd->gp_maskbit_pool);
     tgp_layer->mask_invert_bits = BLI_memblock_alloc(pd->gp_maskbit_pool);
     BLI_bitmap_set_all(tgp_layer->mask_bits, false, GP_MAX_MASKBITS);
@@ -381,7 +393,7 @@ GPENCIL_tLayer *gpencil_layer_cache_add(GPENCIL_PrivateData *pd,
     struct GPUShader *sh = GPENCIL_shader_geometry_get();
     DRWShadingGroup *grp = tgp_layer->base_shgrp = DRW_shgroup_create(sh, tgp_layer->geom_ps);
 
-    DRW_shgroup_uniform_texture_persistent(grp, "gpSceneDepthTexture", depth_tex);
+    DRW_shgroup_uniform_texture(grp, "gpSceneDepthTexture", depth_tex);
     DRW_shgroup_uniform_texture_ref(grp, "gpMaskTexture", mask_tex);
     DRW_shgroup_uniform_vec3_copy(grp, "gpNormal", tgp_ob->plane_normal);
     DRW_shgroup_uniform_bool_copy(grp, "strokeOrder3d", tgp_ob->is_drawmode3d);

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLENDERSTYLEMODULE_H__
-#define __BLENDERSTYLEMODULE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -24,11 +23,9 @@
 #include "../stroke/StyleModule.h"
 #include "../system/PythonInterpreter.h"
 
-extern "C" {
 #include "BLI_utildefines.h"  // BLI_assert()
 
 struct Text;
-}
 
 namespace Freestyle {
 
@@ -89,5 +86,3 @@ class BlenderStyleModule : public StyleModule {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __BLENDERSTYLEMODULE_H__

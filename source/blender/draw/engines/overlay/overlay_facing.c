@@ -41,7 +41,7 @@ void OVERLAY_facing_cache_init(OVERLAY_Data *vedata)
 
     GPUShader *sh = OVERLAY_shader_facing();
     pd->facing_grp[i] = DRW_shgroup_create(sh, psl->facing_ps[i]);
-    DRW_shgroup_uniform_block_persistent(pd->facing_grp[i], "globalsBlock", G_draw.block_ubo);
+    DRW_shgroup_uniform_block(pd->facing_grp[i], "globalsBlock", G_draw.block_ubo);
   }
 
   if (!pd->use_in_front) {
@@ -60,7 +60,7 @@ void OVERLAY_facing_cache_populate(OVERLAY_Data *vedata, Object *ob)
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const bool use_sculpt_pbvh = BKE_sculptsession_use_pbvh_draw(ob, draw_ctx->v3d) &&
                                !DRW_state_is_image_render();
-  const bool is_xray = (ob->dtx & OB_DRAWXRAY) != 0;
+  const bool is_xray = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
 
   if (use_sculpt_pbvh) {
     DRW_shgroup_call_sculpt(pd->facing_grp[is_xray], ob, false, false);

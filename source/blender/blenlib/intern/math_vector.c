@@ -30,40 +30,40 @@
 
 //******************************* Interpolation *******************************/
 
-void interp_v2_v2v2(float target[2], const float a[2], const float b[2], const float t)
+void interp_v2_v2v2(float r[2], const float a[2], const float b[2], const float t)
 {
   const float s = 1.0f - t;
 
-  target[0] = s * a[0] + t * b[0];
-  target[1] = s * a[1] + t * b[1];
+  r[0] = s * a[0] + t * b[0];
+  r[1] = s * a[1] + t * b[1];
 }
 
 /* weight 3 2D vectors,
  * 'w' must be unit length but is not a vector, just 3 weights */
 void interp_v2_v2v2v2(
-    float p[2], const float v1[2], const float v2[2], const float v3[2], const float w[3])
+    float r[2], const float a[2], const float b[2], const float c[2], const float t[3])
 {
-  p[0] = v1[0] * w[0] + v2[0] * w[1] + v3[0] * w[2];
-  p[1] = v1[1] * w[0] + v2[1] * w[1] + v3[1] * w[2];
+  r[0] = a[0] * t[0] + b[0] * t[1] + c[0] * t[2];
+  r[1] = a[1] * t[0] + b[1] * t[1] + c[1] * t[2];
 }
 
-void interp_v3_v3v3(float target[3], const float a[3], const float b[3], const float t)
+void interp_v3_v3v3(float r[3], const float a[3], const float b[3], const float t)
 {
   const float s = 1.0f - t;
 
-  target[0] = s * a[0] + t * b[0];
-  target[1] = s * a[1] + t * b[1];
-  target[2] = s * a[2] + t * b[2];
+  r[0] = s * a[0] + t * b[0];
+  r[1] = s * a[1] + t * b[1];
+  r[2] = s * a[2] + t * b[2];
 }
 
-void interp_v4_v4v4(float target[4], const float a[4], const float b[4], const float t)
+void interp_v4_v4v4(float r[4], const float a[4], const float b[4], const float t)
 {
   const float s = 1.0f - t;
 
-  target[0] = s * a[0] + t * b[0];
-  target[1] = s * a[1] + t * b[1];
-  target[2] = s * a[2] + t * b[2];
-  target[3] = s * a[3] + t * b[3];
+  r[0] = s * a[0] + t * b[0];
+  r[1] = s * a[1] + t * b[1];
+  r[2] = s * a[2] + t * b[2];
+  r[3] = s * a[3] + t * b[3];
 }
 
 /**
@@ -267,17 +267,17 @@ void interp_v4_v4v4_char(char target[4], const char a[4], const char b[4], const
   interp_v4_v4v4_uchar((uchar *)target, (const uchar *)a, (const uchar *)b, t);
 }
 
-void mid_v3_v3v3(float v[3], const float v1[3], const float v2[3])
+void mid_v3_v3v3(float r[3], const float a[3], const float b[3])
 {
-  v[0] = 0.5f * (v1[0] + v2[0]);
-  v[1] = 0.5f * (v1[1] + v2[1]);
-  v[2] = 0.5f * (v1[2] + v2[2]);
+  r[0] = 0.5f * (a[0] + b[0]);
+  r[1] = 0.5f * (a[1] + b[1]);
+  r[2] = 0.5f * (a[2] + b[2]);
 }
 
-void mid_v2_v2v2(float v[2], const float v1[2], const float v2[2])
+void mid_v2_v2v2(float r[2], const float a[2], const float b[2])
 {
-  v[0] = 0.5f * (v1[0] + v2[0]);
-  v[1] = 0.5f * (v1[1] + v2[1]);
+  r[0] = 0.5f * (a[0] + b[0]);
+  r[1] = 0.5f * (a[1] + b[1]);
 }
 
 void mid_v3_v3v3v3(float v[3], const float v1[3], const float v2[3], const float v3[3])
@@ -307,7 +307,7 @@ void mid_v3_v3_array(float r[3], const float (*vec_arr)[3], const uint nbr)
 
 /**
  * Specialized function for calculating normals.
- * fastpath for:
+ * Fast-path for:
  *
  * \code{.c}
  * add_v3_v3v3(r, a, b);
@@ -408,12 +408,12 @@ bool is_finite_v4(const float v[4])
  * note that when v1/v2/v3 represent 3 points along a straight line
  * that the angle returned will be pi (180deg), rather then 0.0
  */
-float angle_v3v3v3(const float v1[3], const float v2[3], const float v3[3])
+float angle_v3v3v3(const float a[3], const float b[3], const float c[3])
 {
   float vec1[3], vec2[3];
 
-  sub_v3_v3v3(vec1, v2, v1);
-  sub_v3_v3v3(vec2, v2, v3);
+  sub_v3_v3v3(vec1, b, a);
+  sub_v3_v3v3(vec2, b, c);
   normalize_v3(vec1);
   normalize_v3(vec2);
 
@@ -434,25 +434,25 @@ float cos_v3v3v3(const float p1[3], const float p2[3], const float p3[3])
 }
 
 /* Return the shortest angle in radians between the 2 vectors */
-float angle_v3v3(const float v1[3], const float v2[3])
+float angle_v3v3(const float a[3], const float b[3])
 {
   float vec1[3], vec2[3];
 
-  normalize_v3_v3(vec1, v1);
-  normalize_v3_v3(vec2, v2);
+  normalize_v3_v3(vec1, a);
+  normalize_v3_v3(vec2, b);
 
   return angle_normalized_v3v3(vec1, vec2);
 }
 
-float angle_v2v2v2(const float v1[2], const float v2[2], const float v3[2])
+float angle_v2v2v2(const float a[2], const float b[2], const float c[2])
 {
   float vec1[2], vec2[2];
 
-  vec1[0] = v2[0] - v1[0];
-  vec1[1] = v2[1] - v1[1];
+  vec1[0] = b[0] - a[0];
+  vec1[1] = b[1] - a[1];
 
-  vec2[0] = v2[0] - v3[0];
-  vec2[1] = v2[1] - v3[1];
+  vec2[0] = b[0] - c[0];
+  vec2[1] = b[1] - c[1];
 
   normalize_v2(vec1);
   normalize_v2(vec2);
@@ -474,15 +474,15 @@ float cos_v2v2v2(const float p1[2], const float p2[2], const float p3[2])
 }
 
 /* Return the shortest angle in radians between the 2 vectors */
-float angle_v2v2(const float v1[2], const float v2[2])
+float angle_v2v2(const float a[2], const float b[2])
 {
   float vec1[2], vec2[2];
 
-  vec1[0] = v1[0];
-  vec1[1] = v1[1];
+  vec1[0] = a[0];
+  vec1[1] = a[1];
 
-  vec2[0] = v2[0];
-  vec2[1] = v2[1];
+  vec2[0] = b[0];
+  vec2[1] = b[1];
 
   normalize_v2(vec1);
   normalize_v2(vec2);
@@ -506,28 +506,26 @@ float angle_normalized_v3v3(const float v1[3], const float v2[3])
   if (dot_v3v3(v1, v2) >= 0.0f) {
     return 2.0f * saasin(len_v3v3(v1, v2) / 2.0f);
   }
-  else {
-    float v2_n[3];
-    negate_v3_v3(v2_n, v2);
-    return (float)M_PI - 2.0f * saasin(len_v3v3(v1, v2_n) / 2.0f);
-  }
+
+  float v2_n[3];
+  negate_v3_v3(v2_n, v2);
+  return (float)M_PI - 2.0f * saasin(len_v3v3(v1, v2_n) / 2.0f);
 }
 
-float angle_normalized_v2v2(const float v1[2], const float v2[2])
+float angle_normalized_v2v2(const float a[2], const float b[2])
 {
   /* double check they are normalized */
-  BLI_ASSERT_UNIT_V2(v1);
-  BLI_ASSERT_UNIT_V2(v2);
+  BLI_ASSERT_UNIT_V2(a);
+  BLI_ASSERT_UNIT_V2(b);
 
   /* this is the same as acos(dot_v3v3(v1, v2)), but more accurate */
-  if (dot_v2v2(v1, v2) >= 0.0f) {
-    return 2.0f * saasin(len_v2v2(v1, v2) / 2.0f);
+  if (dot_v2v2(a, b) >= 0.0f) {
+    return 2.0f * saasin(len_v2v2(a, b) / 2.0f);
   }
-  else {
-    float v2_n[2];
-    negate_v2_v2(v2_n, v2);
-    return (float)M_PI - 2.0f * saasin(len_v2v2(v1, v2_n) / 2.0f);
-  }
+
+  float v2_n[2];
+  negate_v2_v2(v2_n, b);
+  return (float)M_PI - 2.0f * saasin(len_v2v2(a, v2_n) / 2.0f);
 }
 
 /**
@@ -671,6 +669,15 @@ void project_v3_v3v3(float out[3], const float p[3], const float v_proj[3])
   out[2] = mul * v_proj[2];
 }
 
+void project_v3_v3v3_db(double out[3], const double p[3], const double v_proj[3])
+{
+  const double mul = dot_v3v3_db(p, v_proj) / dot_v3v3_db(v_proj, v_proj);
+
+  out[0] = mul * v_proj[0];
+  out[1] = mul * v_proj[1];
+  out[2] = mul * v_proj[2];
+}
+
 /**
  * Project \a p onto a unit length \a v_proj
  */
@@ -699,14 +706,14 @@ void project_v3_v3v3_normalized(float out[3], const float p[3], const float v_pr
 /**
  * In this case plane is a 3D vector only (no 4th component).
  *
- * Projecting will make \a c a copy of \a v orthogonal to \a v_plane.
+ * Projecting will make \a out a copy of \a p orthogonal to \a v_plane.
  *
- * \note If \a v is exactly perpendicular to \a v_plane, \a c will just be a copy of \a v.
+ * \note If \a p is exactly perpendicular to \a v_plane, \a out will just be a copy of \a p.
  *
  * \note This function is a convenience to call:
  * \code{.c}
- * project_v3_v3v3(c, v, v_plane);
- * sub_v3_v3v3(c, v, c);
+ * project_v3_v3v3(out, p, v_plane);
+ * sub_v3_v3v3(out, p, out);
  * \endcode
  */
 void project_plane_v3_v3v3(float out[3], const float p[3], const float v_plane[3])
@@ -759,16 +766,16 @@ void project_v3_plane(float out[3], const float plane_no[3], const float plane_c
   sub_v3_v3(out, vector);
 }
 
-/* Returns a vector bisecting the angle at v2 formed by v1, v2 and v3 */
-void bisect_v3_v3v3v3(float out[3], const float v1[3], const float v2[3], const float v3[3])
+/* Returns a vector bisecting the angle at b formed by a, b and c */
+void bisect_v3_v3v3v3(float r[3], const float a[3], const float b[3], const float c[3])
 {
   float d_12[3], d_23[3];
-  sub_v3_v3v3(d_12, v2, v1);
-  sub_v3_v3v3(d_23, v3, v2);
+  sub_v3_v3v3(d_12, b, a);
+  sub_v3_v3v3(d_23, c, b);
   normalize_v3(d_12);
   normalize_v3(d_23);
-  add_v3_v3v3(out, d_12, d_23);
-  normalize_v3(out);
+  add_v3_v3v3(r, d_12, d_23);
+  normalize_v3(r);
 }
 
 /**
@@ -792,6 +799,17 @@ void reflect_v3_v3v3(float out[3], const float v[3], const float normal[3])
   const float dot2 = 2.0f * dot_v3v3(v, normal);
 
   BLI_ASSERT_UNIT_V3(normal);
+
+  out[0] = v[0] - (dot2 * normal[0]);
+  out[1] = v[1] - (dot2 * normal[1]);
+  out[2] = v[2] - (dot2 * normal[2]);
+}
+
+void reflect_v3_v3v3_db(double out[3], const double v[3], const double normal[3])
+{
+  const double dot2 = 2.0 * dot_v3v3_db(v, normal);
+
+  /* BLI_ASSERT_UNIT_V3_DB(normal); this assert is not known? */
 
   out[0] = v[0] - (dot2 * normal[0]);
   out[1] = v[1] - (dot2 * normal[1]);
@@ -947,6 +965,35 @@ void print_vn(const char *str, const float v[], const int n)
     printf(" %.8f", v[i++]);
   }
   printf("\n");
+}
+
+void minmax_v4v4_v4(float min[4], float max[4], const float vec[4])
+{
+  if (min[0] > vec[0]) {
+    min[0] = vec[0];
+  }
+  if (min[1] > vec[1]) {
+    min[1] = vec[1];
+  }
+  if (min[2] > vec[2]) {
+    min[2] = vec[2];
+  }
+  if (min[3] > vec[3]) {
+    min[3] = vec[3];
+  }
+
+  if (max[0] < vec[0]) {
+    max[0] = vec[0];
+  }
+  if (max[1] < vec[1]) {
+    max[1] = vec[1];
+  }
+  if (max[2] < vec[2]) {
+    max[2] = vec[2];
+  }
+  if (max[3] < vec[3]) {
+    max[3] = vec[3];
+  }
 }
 
 void minmax_v3v3_v3(float min[3], float max[3], const float vec[3])

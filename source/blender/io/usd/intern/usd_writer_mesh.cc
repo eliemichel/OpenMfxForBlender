@@ -23,7 +23,6 @@
 #include <pxr/usd/usdShade/material.h>
 #include <pxr/usd/usdShade/materialBindingAPI.h>
 
-extern "C" {
 #include "BLI_assert.h"
 #include "BLI_math_vector.h"
 
@@ -42,9 +41,10 @@ extern "C" {
 #include "DNA_modifier_types.h"
 #include "DNA_object_fluidsim_types.h"
 #include "DNA_particle_types.h"
-}
 
-namespace USD {
+#include <iostream>
+
+namespace blender::io::usd {
 
 USDGenericMeshWriter::USDGenericMeshWriter(const USDExporterContext &ctx) : USDAbstractWriter(ctx)
 {
@@ -52,27 +52,10 @@ USDGenericMeshWriter::USDGenericMeshWriter(const USDExporterContext &ctx) : USDA
 
 bool USDGenericMeshWriter::is_supported(const HierarchyContext *context) const
 {
-  Object *object = context->object;
-  bool is_dupli = context->duplicator != nullptr;
-  int base_flag;
-
-  if (is_dupli) {
-    /* Construct the object's base flags from its dupli-parent, just like is done in
-     * deg_objects_dupli_iterator_next(). Without this, the visibility check below will fail. Doing
-     * this here, instead of a more suitable location in AbstractHierarchyIterator, prevents
-     * copying the Object for every dupli. */
-    base_flag = object->base_flag;
-    object->base_flag = context->duplicator->base_flag | BASE_FROM_DUPLI;
+  if (usd_export_context_.export_params.visible_objects_only) {
+    return context->is_object_visible(usd_export_context_.export_params.evaluation_mode);
   }
-
-  int visibility = BKE_object_visibility(object,
-                                         usd_export_context_.export_params.evaluation_mode);
-
-  if (is_dupli) {
-    object->base_flag = base_flag;
-  }
-
-  return (visibility & OB_VISIBLE_SELF) != 0;
+  return true;
 }
 
 void USDGenericMeshWriter::do_write(HierarchyContext &context)
@@ -81,7 +64,7 @@ void USDGenericMeshWriter::do_write(HierarchyContext &context)
   bool needsfree = false;
   Mesh *mesh = get_export_mesh(object_eval, needsfree);
 
-  if (mesh == NULL) {
+  if (mesh == nullptr) {
     return;
   }
 
@@ -102,7 +85,7 @@ void USDGenericMeshWriter::do_write(HierarchyContext &context)
 
 void USDGenericMeshWriter::free_export_mesh(Mesh *mesh)
 {
-  BKE_id_free(NULL, mesh);
+  BKE_id_free(nullptr, mesh);
 }
 
 struct USDMeshData {
@@ -121,10 +104,10 @@ struct USDMeshData {
   pxr::VtIntArray crease_vertex_indices;
   /* The per-crease or per-edge sharpness for all creases (Usd.Mesh.SHARPNESS_INFINITE for a
    * perfectly sharp crease). Since 'creaseLengths' encodes the number of vertices in each crease,
-   * the number of elements in this array will be either len(creaseLengths) or the sum over all X
-   * of (creaseLengths[X] - 1). Note that while the RI spec allows each crease to have either a
+   * the number of elements in this array will be either 'len(creaseLengths)' or the sum over all X
+   * of '(creaseLengths[X] - 1)'. Note that while the RI spec allows each crease to have either a
    * single sharpness or a value per-edge, USD will encode either a single sharpness per crease on
-   * a mesh, or sharpnesses for all edges making up the creases on a mesh. */
+   * a mesh, or sharpness's for all edges making up the creases on a mesh. */
   pxr::VtFloatArray crease_sharpnesses;
 };
 
@@ -169,33 +152,24 @@ void USDGenericMeshWriter::write_mesh(HierarchyContext &context, Mesh *mesh)
   const pxr::SdfPath &usd_path = usd_export_context_.usd_path;
 
   pxr::UsdGeomMesh usd_mesh = pxr::UsdGeomMesh::Define(stage, usd_path);
+  write_visibility(context, timecode, usd_mesh);
+
   USDMeshData usd_mesh_data;
   get_geometry_data(mesh, usd_mesh_data);
 
   if (usd_export_context_.export_params.use_instancing && context.is_instance()) {
-    // This object data is instanced, just reference the original instead of writing a copy.
-    if (context.export_path == context.original_export_path) {
-      printf("USD ref error: export path is reference path: %s\n", context.export_path.c_str());
-      BLI_assert(!"USD reference error");
+    if (!mark_as_instance(context, usd_mesh.GetPrim())) {
       return;
     }
-    pxr::SdfPath ref_path(context.original_export_path);
-    if (!usd_mesh.GetPrim().GetReferences().AddInternalReference(ref_path)) {
-      /* See this URL for a description fo why referencing may fail"
-       * https://graphics.pixar.com/usd/docs/api/class_usd_references.html#Usd_Failing_References
-       */
-      printf("USD Export warning: unable to add reference from %s to %s, not instancing object\n",
-             context.export_path.c_str(),
-             context.original_export_path.c_str());
-      return;
-    }
+
     /* The material path will be of the form </_materials/{material name}>, which is outside the
-    subtree pointed to by ref_path. As a result, the referenced data is not allowed to point out
-    of its own subtree. It does work when we override the material with exactly the same path,
-    though.*/
+     * sub-tree pointed to by ref_path. As a result, the referenced data is not allowed to point
+     * out of its own sub-tree. It does work when we override the material with exactly the same
+     * path, though.*/
     if (usd_export_context_.export_params.export_materials) {
       assign_materials(context, usd_mesh, usd_mesh_data.face_groups);
     }
+
     return;
   }
 
@@ -206,8 +180,8 @@ void USDGenericMeshWriter::write_mesh(HierarchyContext &context, Mesh *mesh)
                                                                                     true);
 
   if (!attr_points.HasValue()) {
-    // Provide the initial value as default. This makes USD write the value as constant if they
-    // don't change over time.
+    /* Provide the initial value as default. This makes USD write the value as constant if they
+     * don't change over time. */
     attr_points.Set(usd_mesh_data.points, defaultTime);
     attr_face_vertex_counts.Set(usd_mesh_data.face_vertex_counts, defaultTime);
     attr_face_vertex_indices.Set(usd_mesh_data.face_indices, defaultTime);
@@ -247,7 +221,7 @@ void USDGenericMeshWriter::write_mesh(HierarchyContext &context, Mesh *mesh)
   }
   write_surface_velocity(context.object, mesh, usd_mesh);
 
-  // TODO(Sybren): figure out what happens when the face groups change.
+  /* TODO(Sybren): figure out what happens when the face groups change. */
   if (frame_has_been_written_) {
     return;
   }
@@ -337,14 +311,15 @@ void USDGenericMeshWriter::assign_materials(const HierarchyContext &context,
    * which is why we always bind the first material to the entire mesh. See
    * https://github.com/PixarAnimationStudios/USD/issues/542 for more info. */
   bool mesh_material_bound = false;
-  for (short mat_num = 0; mat_num < context.object->totcol; mat_num++) {
+  pxr::UsdShadeMaterialBindingAPI material_binding_api(usd_mesh.GetPrim());
+  for (int mat_num = 0; mat_num < context.object->totcol; mat_num++) {
     Material *material = BKE_object_material_get(context.object, mat_num + 1);
     if (material == nullptr) {
       continue;
     }
 
     pxr::UsdShadeMaterial usd_material = ensure_usd_material(material);
-    usd_material.Bind(usd_mesh.GetPrim());
+    material_binding_api.Bind(usd_material);
 
     /* USD seems to support neither per-material nor per-face-group double-sidedness, so we just
      * use the flag from the first non-empty material slot. */
@@ -367,7 +342,7 @@ void USDGenericMeshWriter::assign_materials(const HierarchyContext &context,
     return;
   }
 
-  // Define a geometry subset per material.
+  /* Define a geometry subset per material. */
   for (const MaterialFaceGroups::value_type &face_group : usd_face_groups) {
     short material_number = face_group.first;
     const pxr::VtIntArray &face_indices = face_group.second;
@@ -380,9 +355,9 @@ void USDGenericMeshWriter::assign_materials(const HierarchyContext &context,
     pxr::UsdShadeMaterial usd_material = ensure_usd_material(material);
     pxr::TfToken material_name = usd_material.GetPath().GetNameToken();
 
-    pxr::UsdShadeMaterialBindingAPI api = pxr::UsdShadeMaterialBindingAPI(usd_mesh);
-    pxr::UsdGeomSubset usd_face_subset = api.CreateMaterialBindSubset(material_name, face_indices);
-    usd_material.Bind(usd_face_subset.GetPrim());
+    pxr::UsdGeomSubset usd_face_subset = material_binding_api.CreateMaterialBindSubset(
+        material_name, face_indices);
+    pxr::UsdShadeMaterialBindingAPI(usd_face_subset.GetPrim()).Bind(usd_material);
   }
 }
 
@@ -441,7 +416,7 @@ void USDGenericMeshWriter::write_surface_velocity(Object *object,
   /* Only velocities from the fluid simulation are exported. This is the most important case,
    * though, as the baked mesh changes topology all the time, and thus computing the velocities
    * at import time in a post-processing step is hard. */
-  ModifierData *md = modifiers_findByType(object, eModifierType_Fluidsim);
+  ModifierData *md = BKE_modifiers_findby_type(object, eModifierType_Fluidsim);
   if (md == nullptr) {
     return;
   }
@@ -450,7 +425,7 @@ void USDGenericMeshWriter::write_surface_velocity(Object *object,
   const bool use_render = (DEG_get_mode(usd_export_context_.depsgraph) == DAG_EVAL_RENDER);
   const ModifierMode required_mode = use_render ? eModifierMode_Render : eModifierMode_Realtime;
   const Scene *scene = DEG_get_evaluated_scene(usd_export_context_.depsgraph);
-  if (!modifier_isEnabled(scene, md, required_mode)) {
+  if (!BKE_modifier_is_enabled(scene, md, required_mode)) {
     return;
   }
   FluidsimModifierData *fsmd = reinterpret_cast<FluidsimModifierData *>(md);
@@ -485,4 +460,4 @@ Mesh *USDMeshWriter::get_export_mesh(Object *object_eval, bool & /*r_needsfree*/
   return BKE_object_get_evaluated_mesh(object_eval);
 }
 
-}  // namespace USD
+}  // namespace blender::io::usd

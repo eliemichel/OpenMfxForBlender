@@ -698,7 +698,7 @@ void GHOST_SystemCocoa::getAllDisplayDimensions(GHOST_TUns32 &width, GHOST_TUns3
   getMainDisplayDimensions(width, height);
 }
 
-GHOST_IWindow *GHOST_SystemCocoa::createWindow(const STR_String &title,
+GHOST_IWindow *GHOST_SystemCocoa::createWindow(const char *title,
                                                GHOST_TInt32 left,
                                                GHOST_TInt32 top,
                                                GHOST_TUns32 width,
@@ -765,7 +765,7 @@ GHOST_IWindow *GHOST_SystemCocoa::createWindow(const STR_String &title,
  * Never explicitly delete the context, use #disposeContext() instead.
  * \return  The new context (or 0 if creation failed).
  */
-GHOST_IContext *GHOST_SystemCocoa::createOffscreenContext()
+GHOST_IContext *GHOST_SystemCocoa::createOffscreenContext(GHOST_GLSettings glSettings)
 {
   GHOST_Context *context = new GHOST_ContextCGL(false, NULL, NULL, NULL);
   if (context->initializeDrawingContext())
@@ -1063,14 +1063,7 @@ GHOST_TSuccess GHOST_SystemCocoa::handleWindowEvent(GHOST_TEventType eventType,
   }
   switch (eventType) {
     case GHOST_kEventWindowClose:
-      // check for index of mainwindow as it would quit blender without dialog and discard
-      if ([windowsList count] > 1 &&
-          window->getCocoaWindow() != [windowsList objectAtIndex:[windowsList count] - 1]) {
-        pushEvent(new GHOST_Event(getMilliSeconds(), GHOST_kEventWindowClose, window));
-      }
-      else {
-        handleQuitRequest();  // -> quit dialog
-      }
+      pushEvent(new GHOST_Event(getMilliSeconds(), GHOST_kEventWindowClose, window));
       break;
     case GHOST_kEventWindowActivate:
       m_windowManager->setActiveWindow(window);
@@ -1256,7 +1249,7 @@ GHOST_TSuccess GHOST_SystemCocoa::handleDraggingEvent(GHOST_TEventType eventType
             [bitmapImage setSize:imgSize];
 
             /* Convert the image in a RGBA 32bit format */
-            /* As Core Graphics does not support contextes with non premutliplied alpha,
+            /* As Core Graphics does not support contexts with non premutliplied alpha,
              we need to get alpha key values in a separate batch */
 
             /* First get RGB values w/o Alpha to avoid pre-multiplication,
@@ -1606,7 +1599,7 @@ GHOST_TSuccess GHOST_SystemCocoa::handleMouseEvent(void *eventPtr)
             window->getClientBounds(bounds);
 
           /* Switch back to Cocoa coordinates orientation
-           * (y=0 at bottom, the same as blender internal btw!), and to client coordinates. */
+           * (y=0 at bottom, the same as blender internal BTW!), and to client coordinates. */
           window->getClientBounds(windowBounds);
           window->screenToClient(bounds.m_l, bounds.m_b, correctedBounds.m_l, correctedBounds.m_t);
           window->screenToClient(bounds.m_r, bounds.m_t, correctedBounds.m_r, correctedBounds.m_b);
@@ -1845,7 +1838,7 @@ GHOST_TSuccess GHOST_SystemCocoa::handleKeyEvent(void *eventPtr)
                                      keyCode,
                                      ascii,
                                      utf8_buf,
-                                     false));
+                                     [event isARepeat]));
 #if 0
         printf("Key down rawCode=0x%x charsIgnoringModifiers=%c keyCode=%u ascii=%i %c utf8=%s\n",
                [event keyCode],

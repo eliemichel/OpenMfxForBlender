@@ -20,14 +20,13 @@
 
 /* simple memory stream functions with buffer overflow check */
 
-#ifndef __STREAM_H__
-#define __STREAM_H__
+#pragma once
 
 struct Stream {
-  unsigned char *mem;  // location in memory
-  unsigned int size;   // size
-  unsigned int pos;    // current position
-  bool failed;         // error occurred when seeking
+  unsigned char *mem; /* location in memory */
+  unsigned int size;  /* size */
+  unsigned int pos;   /* current position */
+  bool failed;        /* error occurred when seeking */
   Stream(unsigned char *m, unsigned int s) : mem(m), size(s), pos(0), failed(false)
   {
   }
@@ -40,5 +39,3 @@ unsigned int mem_read(Stream &mem, unsigned int &i);
 unsigned int mem_read(Stream &mem, unsigned short &i);
 unsigned int mem_read(Stream &mem, unsigned char &i);
 unsigned int mem_read(Stream &mem, unsigned char *i, unsigned int cnt);
-
-#endif /* __STREAM_H__ */

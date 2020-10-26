@@ -38,7 +38,6 @@
  */
 
 #include "node_texture_util.h"
-#include <assert.h>
 
 bool tex_node_poll_default(bNodeType *UNUSED(ntype), bNodeTree *ntree)
 {
@@ -145,14 +144,13 @@ void tex_output(bNode *node,
     /* do not add a delegate if the node is muted */
     return;
   }
+
+  if (!out->data) {
+    /* Freed in tex_end_exec (node.c) */
+    dg = out->data = MEM_mallocN(sizeof(TexDelegate), "tex delegate");
+  }
   else {
-    if (!out->data) {
-      /* Freed in tex_end_exec (node.c) */
-      dg = out->data = MEM_mallocN(sizeof(TexDelegate), "tex delegate");
-    }
-    else {
-      dg = out->data;
-    }
+    dg = out->data;
   }
 
   dg->cdata = cdata;

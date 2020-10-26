@@ -121,7 +121,7 @@ static void init_genrand(ulong s)
     const float range = 32; /* range in both pos/neg direction */
     for (j = 0; j < ARRAY_SIZE(state_offset_vector); j++, state_offset++) {
       /* overflow is fine here */
-      state_offset_vector[j] = (float)(int)(*state_offset) * (1.0f / (INT_MAX / range));
+      state_offset_vector[j] = (float)(int)(*state_offset) * (1.0f / ((float)INT_MAX / range));
     }
   }
 }
@@ -140,11 +140,11 @@ static void next_state(void)
   left = N;
   next = state;
 
-  for (j = N - M + 1; j--; p++) {
+  for (j = N - M + 1; --j; p++) {
     *p = p[M] ^ TWIST(p[0], p[1]);
   }
 
-  for (j = M; j--; p++) {
+  for (j = M; --j; p++) {
     *p = p[M - N] ^ TWIST(p[0], p[1]);
   }
 

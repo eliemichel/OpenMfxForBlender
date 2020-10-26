@@ -25,12 +25,11 @@
  * Original license from NVIDIA follows.
  */
 
-// This code is in the public domain -- castanyo@yahoo.es
+/* This code is in the public domain -- <castanyo@yahoo.es> */
 
-#ifndef __COLOR_H__
-#define __COLOR_H__
+#pragma once
 
-/// 32 bit color stored as BGRA.
+/** 32 bit color stored as BGRA. */
 class Color32 {
  public:
   Color32()
@@ -94,7 +93,7 @@ class Color32 {
   };
 };
 
-/// 16 bit 565 BGR color.
+/** 16 bit 565 BGR color. */
 class Color16 {
  public:
   Color16()
@@ -116,5 +115,3 @@ class Color16 {
     unsigned short u;
   };
 };
-
-#endif /* __COLOR_H__ */

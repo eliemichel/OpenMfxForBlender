@@ -62,7 +62,7 @@
 
 #include "BLF_api.h"
 
-#include "clip_intern.h"  // own include
+#include "clip_intern.h" /* own include */
 
 /*********************** main area drawing *************************/
 
@@ -88,7 +88,7 @@ static int generic_track_get_markersnr(MovieTrackingTrack *track,
   if (track) {
     return track->markersnr;
   }
-  else if (plane_track) {
+  if (plane_track) {
     return plane_track->markersnr;
   }
 
@@ -103,7 +103,7 @@ static int generic_track_get_marker_framenr(MovieTrackingTrack *track,
     BLI_assert(marker_index < track->markersnr);
     return track->markers[marker_index].framenr;
   }
-  else if (plane_track) {
+  if (plane_track) {
     BLI_assert(marker_index < plane_track->markersnr);
     return plane_track->markers[marker_index].framenr;
   }
@@ -119,7 +119,7 @@ static bool generic_track_is_marker_enabled(MovieTrackingTrack *track,
     BLI_assert(marker_index < track->markersnr);
     return (track->markers[marker_index].flag & MARKER_DISABLED) == 0;
   }
-  else if (plane_track) {
+  if (plane_track) {
     return true;
   }
 
@@ -134,7 +134,7 @@ static bool generic_track_is_marker_keyframed(MovieTrackingTrack *track,
     BLI_assert(marker_index < track->markersnr);
     return (track->markers[marker_index].flag & MARKER_TRACKED) == 0;
   }
-  else if (plane_track) {
+  if (plane_track) {
     BLI_assert(marker_index < plane_track->markersnr);
     return (plane_track->markers[marker_index].flag & PLANE_MARKER_TRACKED) == 0;
   }
@@ -153,9 +153,7 @@ static void draw_movieclip_cache(SpaceClip *sc, ARegion *region, MovieClip *clip
   MovieTrackingPlaneTrack *act_plane_track = BKE_tracking_plane_track_get_active(&clip->tracking);
   MovieTrackingReconstruction *reconstruction = BKE_tracking_get_active_reconstruction(tracking);
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   /* cache background */
   ED_region_cache_draw_background(region);
@@ -228,7 +226,7 @@ static void draw_movieclip_cache(SpaceClip *sc, ARegion *region, MovieClip *clip
           ok = true;
           break;
         }
-        else if (cameras[a].framenr > i) {
+        if (cameras[a].framenr > i) {
           break;
         }
 
@@ -245,7 +243,7 @@ static void draw_movieclip_cache(SpaceClip *sc, ARegion *region, MovieClip *clip
     }
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   /* current frame */
   x = (sc->user.framenr - sfra) / (efra - sfra + 1) * region->winx;
@@ -322,7 +320,7 @@ static void draw_movieclip_buffer(const bContext *C,
                                   float zoomy)
 {
   MovieClip *clip = ED_space_clip_get_clip(sc);
-  int filter = GL_LINEAR;
+  bool use_filter = true;
   int x, y;
 
   /* find window pixel coordinates of origin */
@@ -330,9 +328,7 @@ static void draw_movieclip_buffer(const bContext *C,
 
   /* checkerboard for case alpha */
   if (ibuf->planes == 32) {
-    GPU_blend(true);
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     imm_draw_box_checker_2d(x, y, x + zoomx * ibuf->x, y + zoomy * ibuf->y);
   }
@@ -340,13 +336,13 @@ static void draw_movieclip_buffer(const bContext *C,
   /* non-scaled proxy shouldn't use filtering */
   if ((clip->flag & MCLIP_USE_PROXY) == 0 ||
       ELEM(sc->user.render_size, MCLIP_PROXY_RENDER_SIZE_FULL, MCLIP_PROXY_RENDER_SIZE_100)) {
-    filter = GL_NEAREST;
+    use_filter = false;
   }
 
-  ED_draw_imbuf_ctx(C, ibuf, x, y, filter, zoomx * width / ibuf->x, zoomy * height / ibuf->y);
+  ED_draw_imbuf_ctx(C, ibuf, x, y, use_filter, zoomx * width / ibuf->x, zoomy * height / ibuf->y);
 
   if (ibuf->planes == 32) {
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   if (sc->flag & SC_SHOW_METADATA) {
@@ -373,8 +369,7 @@ static void draw_stabilization_border(
 
     /* Exclusive OR allows to get orig value when second operand is 0,
      * and negative of orig value when second operand is 1. */
-    glEnable(GL_COLOR_LOGIC_OP);
-    glLogicOp(GL_XOR);
+    GPU_logic_op_xor_set(true);
 
     GPU_matrix_push();
     GPU_matrix_translate_2f(x, y);
@@ -399,7 +394,7 @@ static void draw_stabilization_border(
 
     GPU_matrix_pop();
 
-    glDisable(GL_COLOR_LOGIC_OP);
+    GPU_logic_op_xor_set(false);
   }
 }
 
@@ -790,15 +785,14 @@ static void draw_marker_areas(SpaceClip *sc,
       immUniform1f("dash_width", 6.0f);
       immUniform1f("dash_factor", 0.5f);
 
-      glEnable(GL_COLOR_LOGIC_OP);
-      glLogicOp(GL_XOR);
+      GPU_logic_op_xor_set(true);
 
       immBegin(GPU_PRIM_LINES, 2);
       immVertex2fv(shdr_pos, pos);
       immVertex2fv(shdr_pos, marker_pos);
       immEnd();
 
-      glDisable(GL_COLOR_LOGIC_OP);
+      GPU_logic_op_xor_set(false);
     }
   }
 
@@ -877,16 +871,11 @@ static void draw_marker_areas(SpaceClip *sc,
 
 static float get_shortest_pattern_side(MovieTrackingMarker *marker)
 {
-  int i, next;
   float len_sq = FLT_MAX;
 
-  for (i = 0; i < 4; i++) {
-    float cur_len;
-
-    next = (i + 1) % 4;
-
-    cur_len = len_squared_v2v2(marker->pattern_corners[i], marker->pattern_corners[next]);
-
+  for (int i = 0; i < 4; i++) {
+    int next = (i + 1) % 4;
+    float cur_len = len_squared_v2v2(marker->pattern_corners[i], marker->pattern_corners[next]);
     len_sq = min_ff(cur_len, len_sq);
   }
 
@@ -989,7 +978,6 @@ static void draw_marker_slide_zones(SpaceClip *sc,
   }
 
   if ((sc->flag & SC_SHOW_MARKER_PATTERN) && ((track->pat_flag & SELECT) == sel || outline)) {
-    int i;
     float pat_min[2], pat_max[2];
     /*      float dx = 12.0f / width, dy = 12.0f / height;*/ /* XXX UNUSED */
     float tilt_ctrl[2];
@@ -999,7 +987,7 @@ static void draw_marker_slide_zones(SpaceClip *sc,
     }
 
     /* pattern's corners sliding squares */
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
       draw_marker_slide_square(marker->pattern_corners[i][0],
                                marker->pattern_corners[i][1],
                                patdx / 1.5f,
@@ -1111,7 +1099,7 @@ static void draw_marker_texts(SpaceClip *sc,
   pos[1] -= fontsize;
 
   if (track->flag & TRACK_HAS_BUNDLE) {
-    BLI_snprintf(str, sizeof(str), "Average error: %.3f", track->error);
+    BLI_snprintf(str, sizeof(str), "Average error: %.2f px", track->error);
     BLF_position(fontid, pos[0], pos[1], 0.0f);
     BLF_draw(fontid, str, sizeof(str));
     pos[1] -= fontsize;
@@ -1203,7 +1191,6 @@ static void draw_plane_marker_image(Scene *scene,
     }
 
     if (display_buffer) {
-      GLuint texid;
       float frame_corners[4][2] = {{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}};
       float perspective_matrix[3][3];
       float gl_matrix[4][4];
@@ -1215,28 +1202,13 @@ static void draw_plane_marker_image(Scene *scene,
 
       if (plane_track->image_opacity != 1.0f || ibuf->planes == 32) {
         transparent = true;
-        GPU_blend(true);
-        GPU_blend_set_func_separate(
-            GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+        GPU_blend(GPU_BLEND_ALPHA);
       }
 
-      glGenTextures(1, (GLuint *)&texid);
-
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, texid);
-
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-      glTexImage2D(GL_TEXTURE_2D,
-                   0,
-                   GL_RGBA8,
-                   ibuf->x,
-                   ibuf->y,
-                   0,
-                   GL_RGBA,
-                   GL_UNSIGNED_BYTE,
-                   display_buffer);
+      GPUTexture *texture = GPU_texture_create_2d(
+          "plane_marker_image", ibuf->x, ibuf->y, 1, GPU_RGBA8, NULL);
+      GPU_texture_update(texture, GPU_DATA_UNSIGNED_BYTE, display_buffer);
+      GPU_texture_filter_mode(texture, false);
 
       GPU_matrix_push();
       GPU_matrix_mul(gl_matrix);
@@ -1246,10 +1218,10 @@ static void draw_plane_marker_image(Scene *scene,
       uint texCoord = GPU_vertformat_attr_add(
           imm_format, "texCoord", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
-      immBindBuiltinProgram(GPU_SHADER_3D_IMAGE_MODULATE_ALPHA);
+      immBindBuiltinProgram(GPU_SHADER_2D_IMAGE_COLOR);
 
-      immUniform1f("alpha", plane_track->image_opacity);
-      immUniform1i("image", 0);
+      immBindTexture("image", texture);
+      immUniformColor4f(1.0f, 1.0f, 1.0f, plane_track->image_opacity);
 
       immBegin(GPU_PRIM_TRI_FAN, 4);
 
@@ -1271,10 +1243,11 @@ static void draw_plane_marker_image(Scene *scene,
 
       GPU_matrix_pop();
 
-      glBindTexture(GL_TEXTURE_2D, 0);
+      GPU_texture_unbind(texture);
+      GPU_texture_free(texture);
 
       if (transparent) {
-        GPU_blend(false);
+        GPU_blend(GPU_BLEND_NONE);
       }
     }
 
@@ -1402,8 +1375,7 @@ static void draw_plane_marker_ex(SpaceClip *sc,
         immUniformColor3fv(selected_color);
       }
 
-      int i;
-      for (i = 0; i < 4; i++) {
+      for (int i = 0; i < 4; i++) {
         draw_marker_slide_square(plane_marker->corners[i][0],
                                  plane_marker->corners[i][1],
                                  3.0f * px[0],
@@ -1523,7 +1495,7 @@ static void draw_tracking_tracks(SpaceClip *sc,
 
     /* undistort */
     if (count) {
-      marker_pos = MEM_callocN(2 * sizeof(float) * count, "draw_tracking_tracks marker_pos");
+      marker_pos = MEM_callocN(sizeof(float[2]) * count, "draw_tracking_tracks marker_pos");
 
       track = tracksbase->first;
       fp = marker_pos;
@@ -1651,7 +1623,7 @@ static void draw_tracking_tracks(SpaceClip *sc,
           pos[0] = (pos[0] / (pos[3] * 2.0f) + 0.5f) * width;
           pos[1] = (pos[1] / (pos[3] * 2.0f) + 0.5f) * height * aspy;
 
-          BKE_tracking_distort_v2(tracking, pos, npos);
+          BKE_tracking_distort_v2(tracking, width, height, pos, npos);
 
           if (npos[0] >= 0.0f && npos[1] >= 0.0f && npos[0] <= width && npos[1] <= height * aspy) {
             vec[0] = (marker->pos[0] + track->offset[0]) * width;
@@ -1730,8 +1702,7 @@ static void draw_distortion(SpaceClip *sc,
 {
   float x, y;
   const int n = 10;
-  int i, j, a;
-  float pos[2], tpos[2], grid[11][11][2];
+  float tpos[2], grid[11][11][2];
   MovieTracking *tracking = &clip->tracking;
   bGPdata *gpd = NULL;
   float aspy = 1.0f / tracking->camera.pixel_aspect;
@@ -1764,7 +1735,7 @@ static void draw_distortion(SpaceClip *sc,
     float val[4][2], idx[4][2];
     float min[2], max[2];
 
-    for (a = 0; a < 4; a++) {
+    for (int a = 0; a < 4; a++) {
       if (a < 2) {
         val[a][a % 2] = FLT_MAX;
       }
@@ -1773,13 +1744,13 @@ static void draw_distortion(SpaceClip *sc,
       }
     }
 
-    zero_v2(pos);
-    for (i = 0; i <= n; i++) {
-      for (j = 0; j <= n; j++) {
+    for (int i = 0; i <= n; i++) {
+      for (int j = 0; j <= n; j++) {
         if (i == 0 || j == 0 || i == n || j == n) {
-          BKE_tracking_distort_v2(tracking, pos, tpos);
+          const float pos[2] = {dx * j, dy * i};
+          BKE_tracking_distort_v2(tracking, width, height, pos, tpos);
 
-          for (a = 0; a < 4; a++) {
+          for (int a = 0; a < 4; a++) {
             int ok;
 
             if (a < 2) {
@@ -1796,59 +1767,49 @@ static void draw_distortion(SpaceClip *sc,
             }
           }
         }
-
-        pos[0] += dx;
       }
-
-      pos[0] = 0.0f;
-      pos[1] += dy;
     }
 
     INIT_MINMAX2(min, max);
 
-    for (a = 0; a < 4; a++) {
-      pos[0] = idx[a][0] * dx;
-      pos[1] = idx[a][1] * dy;
+    for (int a = 0; a < 4; a++) {
+      const float pos[2] = {idx[a][0] * dx, idx[a][1] * dy};
 
-      BKE_tracking_undistort_v2(tracking, pos, tpos);
+      BKE_tracking_undistort_v2(tracking, width, height, pos, tpos);
 
       minmax_v2v2_v2(min, max, tpos);
     }
 
-    copy_v2_v2(pos, min);
     dx = (max[0] - min[0]) / n;
     dy = (max[1] - min[1]) / n;
 
-    for (i = 0; i <= n; i++) {
-      for (j = 0; j <= n; j++) {
-        BKE_tracking_distort_v2(tracking, pos, grid[i][j]);
+    for (int i = 0; i <= n; i++) {
+      for (int j = 0; j <= n; j++) {
+        const float pos[2] = {min[0] + dx * j, min[1] + dy * i};
+
+        BKE_tracking_distort_v2(tracking, width, height, pos, grid[i][j]);
 
         grid[i][j][0] /= width;
         grid[i][j][1] /= height * aspy;
-
-        pos[0] += dx;
       }
-
-      pos[0] = min[0];
-      pos[1] += dy;
     }
 
     immUniformColor3f(1.0f, 0.0f, 0.0f);
 
-    for (i = 0; i <= n; i++) {
+    for (int i = 0; i <= n; i++) {
       immBegin(GPU_PRIM_LINE_STRIP, n + 1);
 
-      for (j = 0; j <= n; j++) {
+      for (int j = 0; j <= n; j++) {
         immVertex2fv(position, grid[i][j]);
       }
 
       immEnd();
     }
 
-    for (j = 0; j <= n; j++) {
+    for (int j = 0; j <= n; j++) {
       immBegin(GPU_PRIM_LINE_STRIP, n + 1);
 
-      for (i = 0; i <= n; i++) {
+      for (int i = 0; i <= n; i++) {
         immVertex2fv(position, grid[i][j]);
       }
 
@@ -1882,8 +1843,8 @@ static void draw_distortion(SpaceClip *sc,
         while (stroke) {
           if (stroke->flag & GP_STROKE_2DSPACE) {
             if (stroke->totpoints > 1) {
-              for (i = 0; i < stroke->totpoints - 1; i++) {
-                float npos[2], dpos[2], len;
+              for (int i = 0; i < stroke->totpoints - 1; i++) {
+                float pos[2], npos[2], dpos[2], len;
                 int steps;
 
                 pos[0] = (stroke->points[i].x + offsx) * width;
@@ -1897,8 +1858,8 @@ static void draw_distortion(SpaceClip *sc,
 
                 /* we want to distort only long straight lines */
                 if (stroke->totpoints == 2) {
-                  BKE_tracking_undistort_v2(tracking, pos, pos);
-                  BKE_tracking_undistort_v2(tracking, npos, npos);
+                  BKE_tracking_undistort_v2(tracking, width, height, pos, pos);
+                  BKE_tracking_undistort_v2(tracking, width, height, npos, npos);
                 }
 
                 sub_v2_v2v2(dpos, npos, pos);
@@ -1906,8 +1867,8 @@ static void draw_distortion(SpaceClip *sc,
 
                 immBegin(GPU_PRIM_LINE_STRIP, steps + 1);
 
-                for (j = 0; j <= steps; j++) {
-                  BKE_tracking_distort_v2(tracking, pos, tpos);
+                for (int j = 0; j <= steps; j++) {
+                  BKE_tracking_distort_v2(tracking, width, height, pos, tpos);
                   immVertex2f(position, tpos[0] / width, tpos[1] / (height * aspy));
 
                   add_v2_v2(pos, dpos);

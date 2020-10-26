@@ -38,23 +38,27 @@
 #include <map>
 #include <set>
 #include <string>
-#include <unordered_map>
 #include <vector>
+
+#include "BLI_map.hh"
+#include "BLI_set.hh"
+#include "BLI_string_ref.hh"
+#include "BLI_vector.hh"
+#include "BLI_vector_set.hh"
 
 struct Depsgraph;
 
 struct CustomData_MeshMasks;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 /* Commonly used types. */
 using std::deque;
-using std::map;
+using std::optional;
 using std::pair;
-using std::set;
 using std::string;
-using std::unordered_map;
-using std::vector;
+using std::unique_ptr;
 
 /* Commonly used functions. */
 using std::make_pair;
@@ -165,4 +169,5 @@ struct DEGCustomDataMeshMasks {
   }
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

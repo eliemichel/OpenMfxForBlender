@@ -108,7 +108,7 @@ static bool weight_from_bones_poll(bContext *C)
 {
   Object *ob = CTX_data_active_object(C);
 
-  return (ob && (ob->mode & OB_MODE_WEIGHT_PAINT) && modifiers_isDeformedByArmature(ob));
+  return (ob && (ob->mode & OB_MODE_WEIGHT_PAINT) && BKE_modifiers_is_deformed_by_armature(ob));
 }
 
 static int weight_from_bones_exec(bContext *C, wmOperator *op)
@@ -116,12 +116,17 @@ static int weight_from_bones_exec(bContext *C, wmOperator *op)
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
   Object *ob = CTX_data_active_object(C);
-  Object *armob = modifiers_isDeformedByArmature(ob);
+  Object *armob = BKE_modifiers_is_deformed_by_armature(ob);
   Mesh *me = ob->data;
   int type = RNA_enum_get(op->ptr, "type");
 
-  ED_object_vgroup_calc_from_armature(
-      op->reports, depsgraph, scene, ob, armob, type, (me->editflag & ME_EDIT_MIRROR_X));
+  ED_object_vgroup_calc_from_armature(op->reports,
+                                      depsgraph,
+                                      scene,
+                                      ob,
+                                      armob,
+                                      type,
+                                      (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY));
 
   DEG_id_tag_update(&me->id, 0);
   DEG_relations_tag_update(CTX_data_main(C));
@@ -232,7 +237,7 @@ static int weight_sample_invoke(bContext *C, wmOperator *op, const wmEvent *even
             vc.obact, defbase_tot, &defbase_tot_sel);
 
         if (defbase_tot_sel > 1) {
-          if (me->editflag & ME_EDIT_MIRROR_X) {
+          if (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) {
             BKE_object_defgroup_mirror_selection(
                 vc.obact, defbase_tot, defbase_sel, defbase_sel, &defbase_tot_sel);
           }
@@ -272,9 +277,7 @@ static int weight_sample_invoke(bContext *C, wmOperator *op, const wmEvent *even
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void PAINT_OT_weight_sample(wmOperatorType *ot)
@@ -460,7 +463,7 @@ static bool weight_paint_set(Object *ob, float paintweight)
   vgroup_active = ob->actdef - 1;
 
   /* if mirror painting, find the other group */
-  if (me->editflag & ME_EDIT_MIRROR_X) {
+  if (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) {
     vgroup_mirror = ED_wpaint_mirror_vgroup_ensure(ob, vgroup_active);
   }
 
@@ -488,7 +491,7 @@ static bool weight_paint_set(Object *ob, float paintweight)
           dw_prev->weight = dw->weight; /* set the undo weight */
           dw->weight = paintweight;
 
-          if (me->editflag & ME_EDIT_MIRROR_X) { /* x mirror painting */
+          if (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) { /* x mirror painting */
             int j = mesh_get_x_mirror_vert(ob, NULL, vidx, topology);
             if (j >= 0) {
               /* copy, not paint again */
@@ -541,9 +544,7 @@ static int weight_paint_set_exec(bContext *C, wmOperator *op)
     ED_region_tag_redraw(CTX_wm_region(C)); /* XXX - should redraw all 3D views */
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void PAINT_OT_weight_set(wmOperatorType *ot)
@@ -598,6 +599,7 @@ typedef struct WPGradient_userData {
 
   /* options */
   bool use_select;
+  bool use_vgroup_restrict;
   short type;
   float weightpaint;
 } WPGradient_userData;
@@ -606,8 +608,13 @@ static void gradientVert_update(WPGradient_userData *grad_data, int index)
 {
   Mesh *me = grad_data->me;
   WPGradient_vertStore *vs = &grad_data->vert_cache->elem[index];
-  float alpha;
 
+  /* Optionally restrict to assigned verices only. */
+  if (grad_data->use_vgroup_restrict && ((vs->flag & VGRAD_STORE_DW_EXIST) == 0)) {
+    return;
+  }
+
+  float alpha;
   if (grad_data->type == WPAINT_GRADIENT_TYPE_LINEAR) {
     alpha = line_point_factor_v2(vs->sco, grad_data->sco_start, grad_data->sco_end);
   }
@@ -761,8 +768,8 @@ static int paint_weight_gradient_exec(bContext *C, wmOperator *op)
   int y_start = RNA_int_get(op->ptr, "ystart");
   int x_end = RNA_int_get(op->ptr, "xend");
   int y_end = RNA_int_get(op->ptr, "yend");
-  float sco_start[2] = {x_start, y_start};
-  float sco_end[2] = {x_end, y_end};
+  const float sco_start[2] = {x_start, y_start};
+  const float sco_end[2] = {x_end, y_end};
   const bool is_interactive = (gesture != NULL);
 
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
@@ -815,10 +822,11 @@ static int paint_weight_gradient_exec(bContext *C, wmOperator *op)
     VPaint *wp = ts->wpaint;
     struct Brush *brush = BKE_paint_brush(&wp->paint);
 
-    BKE_curvemapping_initialize(brush->curve);
+    BKE_curvemapping_init(brush->curve);
 
     data.brush = brush;
     data.weightpaint = BKE_brush_weight_get(scene, brush);
+    data.use_vgroup_restrict = (ts->wpaint->flag & VP_FLAG_VGROUP_RESTRICT) != 0;
   }
 
   ED_view3d_init_mats_rv3d(ob, region->regiondata);

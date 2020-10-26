@@ -26,10 +26,15 @@
 #include "DNA_scene_types.h"
 #include "DNA_workspace_types.h"
 
+#include "BLI_kdopbvh.h"
+#include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_layer.h"
+#include "BKE_main.h"
+#include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_report.h"
@@ -41,12 +46,19 @@
 #include "RNA_access.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "ED_armature.h"
 #include "ED_gpencil.h"
 #include "ED_screen.h"
+#include "ED_transform_snap_object_context.h"
+#include "ED_undo.h"
+#include "ED_view3d.h"
+
+#include "WM_toolsystem.h"
 
 #include "ED_object.h" /* own include */
+#include "object_intern.h"
 
 /* -------------------------------------------------------------------- */
 /** \name High Level Mode Operations
@@ -116,7 +128,7 @@ bool ED_object_mode_compat_test(const Object *ob, eObjectMode mode)
       case OB_SURF:
       case OB_FONT:
       case OB_MBALL:
-        if (mode & (OB_MODE_EDIT)) {
+        if (mode & OB_MODE_EDIT) {
           return true;
         }
         break;
@@ -167,41 +179,6 @@ bool ED_object_mode_compat_set(bContext *C, Object *ob, eObjectMode mode, Report
   return ok;
 }
 
-void ED_object_mode_toggle(bContext *C, eObjectMode mode)
-{
-  if (mode != OB_MODE_OBJECT) {
-    const char *opstring = object_mode_op_string(mode);
-
-    if (opstring) {
-      wmOperatorType *ot = WM_operatortype_find(opstring, false);
-      WM_operator_name_call_ptr(C, ot, WM_OP_EXEC_REGION_WIN, NULL);
-    }
-  }
-}
-
-/* Wrapper for operator  */
-void ED_object_mode_set(bContext *C, eObjectMode mode)
-{
-  wmWindowManager *wm = CTX_wm_manager(C);
-  wm->op_undo_depth++;
-  /* needed so we don't do undo pushes. */
-  ED_object_mode_generic_enter(C, mode);
-  wm->op_undo_depth--;
-}
-
-void ED_object_mode_exit(bContext *C, Depsgraph *depsgraph)
-{
-  struct Main *bmain = CTX_data_main(C);
-  Scene *scene = CTX_data_scene(C);
-  ViewLayer *view_layer = CTX_data_view_layer(C);
-  FOREACH_OBJECT_BEGIN (view_layer, ob) {
-    if (ob->mode & OB_MODE_ALL_MODE_DATA) {
-      ED_object_mode_generic_exit(bmain, depsgraph, scene, ob);
-    }
-  }
-  FOREACH_OBJECT_END;
-}
-
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -212,23 +189,50 @@ void ED_object_mode_exit(bContext *C, Depsgraph *depsgraph)
  *
  * \{ */
 
-bool ED_object_mode_generic_enter(struct bContext *C, eObjectMode object_mode)
+bool ED_object_mode_set_ex(bContext *C, eObjectMode mode, bool use_undo, ReportList *reports)
 {
+  wmWindowManager *wm = CTX_wm_manager(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Object *ob = OBACT(view_layer);
   if (ob == NULL) {
-    return (object_mode == OB_MODE_OBJECT);
+    return (mode == OB_MODE_OBJECT);
   }
-  if (ob->mode == object_mode) {
+
+  if ((ob->type == OB_GPENCIL) && (mode == OB_MODE_EDIT)) {
+    mode = OB_MODE_EDIT_GPENCIL;
+  }
+
+  if (ob->mode == mode) {
     return true;
   }
-  wmOperatorType *ot = WM_operatortype_find("OBJECT_OT_mode_set", false);
-  PointerRNA ptr;
-  WM_operator_properties_create_ptr(&ptr, ot);
-  RNA_enum_set(&ptr, "mode", object_mode);
-  WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr);
-  WM_operator_properties_free(&ptr);
-  return (ob->mode == object_mode);
+
+  if (!ED_object_mode_compat_test(ob, mode)) {
+    return false;
+  }
+
+  const char *opstring = object_mode_op_string((mode == OB_MODE_OBJECT) ? ob->mode : mode);
+  wmOperatorType *ot = WM_operatortype_find(opstring, false);
+
+  if (!use_undo) {
+    wm->op_undo_depth++;
+  }
+  WM_operator_name_call_ptr(C, ot, WM_OP_EXEC_REGION_WIN, NULL);
+  if (!use_undo) {
+    wm->op_undo_depth--;
+  }
+
+  if (ob->mode != mode) {
+    BKE_reportf(reports, RPT_ERROR, "Unable to execute '%s', error changing modes", ot->name);
+    return false;
+  }
+
+  return true;
+}
+
+bool ED_object_mode_set(bContext *C, eObjectMode mode)
+{
+  /* Don't do undo push by default, since this may be called by lower level code. */
+  return ED_object_mode_set_ex(C, mode, true, NULL);
 }
 
 /**
@@ -282,6 +286,18 @@ static bool ed_object_mode_generic_exit_ex(struct Main *bmain,
       ED_object_posemode_exit_ex(bmain, ob);
     }
   }
+  else if (ob->mode & OB_MODE_TEXTURE_PAINT) {
+    if (only_test) {
+      return true;
+    }
+    ED_object_texture_paint_mode_exit_ex(bmain, scene, ob);
+  }
+  else if (ob->mode & OB_MODE_PARTICLE_EDIT) {
+    if (only_test) {
+      return true;
+    }
+    ED_object_particle_edit_mode_exit_ex(scene, ob);
+  }
   else if (ob->type == OB_GPENCIL) {
     /* Accounted for above. */
     BLI_assert((ob->mode & OB_MODE_OBJECT) == 0);
@@ -300,6 +316,75 @@ static bool ed_object_mode_generic_exit_ex(struct Main *bmain,
   return false;
 }
 
+/* When locked, it's almost impossible to select the pose-object
+ * then the mesh-object to enter weight paint mode.
+ * Even when the object mode is not locked this is inconvenient - so allow in either case.
+ *
+ * In this case move our pose object in/out of pose mode.
+ * This is in fits with the convention of selecting multiple objects and entering a mode.
+ */
+static void ed_object_posemode_set_for_weight_paint_ex(bContext *C,
+                                                       Main *bmain,
+                                                       Object *ob_arm,
+                                                       const bool is_mode_set)
+{
+  View3D *v3d = CTX_wm_view3d(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+
+  if (ob_arm != NULL) {
+    const Base *base_arm = BKE_view_layer_base_find(view_layer, ob_arm);
+    if (base_arm && BASE_VISIBLE(v3d, base_arm)) {
+      if (is_mode_set) {
+        if ((ob_arm->mode & OB_MODE_POSE) != 0) {
+          ED_object_posemode_exit_ex(bmain, ob_arm);
+        }
+      }
+      else {
+        /* Only check selected status when entering weight-paint mode
+         * because we may have multiple armature objects.
+         * Selecting one will de-select the other, which would leave it in pose-mode
+         * when exiting weight paint mode. While usable, this looks like inconsistent
+         * behavior from a user perspective. */
+        if (base_arm->flag & BASE_SELECTED) {
+          if ((ob_arm->mode & OB_MODE_POSE) == 0) {
+            ED_object_posemode_enter_ex(bmain, ob_arm);
+          }
+        }
+      }
+    }
+  }
+}
+
+void ED_object_posemode_set_for_weight_paint(bContext *C,
+                                             Main *bmain,
+                                             Object *ob,
+                                             const bool is_mode_set)
+{
+  if (ob->type == OB_GPENCIL) {
+    GpencilVirtualModifierData virtualModifierData;
+    GpencilModifierData *md = BKE_gpencil_modifiers_get_virtual_modifierlist(ob,
+                                                                             &virtualModifierData);
+    for (; md; md = md->next) {
+      if (md->type == eGpencilModifierType_Armature) {
+        ArmatureGpencilModifierData *amd = (ArmatureGpencilModifierData *)md;
+        Object *ob_arm = amd->object;
+        ed_object_posemode_set_for_weight_paint_ex(C, bmain, ob_arm, is_mode_set);
+      }
+    }
+  }
+  else {
+    VirtualModifierData virtualModifierData;
+    ModifierData *md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
+    for (; md; md = md->next) {
+      if (md->type == eModifierType_Armature) {
+        ArmatureModifierData *amd = (ArmatureModifierData *)md;
+        Object *ob_arm = amd->object;
+        ed_object_posemode_set_for_weight_paint_ex(C, bmain, ob_arm, is_mode_set);
+      }
+    }
+  }
+}
+
 void ED_object_mode_generic_exit(struct Main *bmain,
                                  struct Depsgraph *depsgraph,
                                  struct Scene *scene,
@@ -311,6 +396,103 @@ void ED_object_mode_generic_exit(struct Main *bmain,
 bool ED_object_mode_generic_has_data(struct Depsgraph *depsgraph, struct Object *ob)
 {
   return ed_object_mode_generic_exit_ex(NULL, depsgraph, NULL, ob, true);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Switch Object
+ *
+ * Enters the same mode of the current active object in another object,
+ * leaving the mode of the current object.
+ * \{ */
+
+static bool object_switch_object_poll(bContext *C)
+{
+
+  if (!U.experimental.use_switch_object_operator) {
+    return false;
+  }
+
+  if (!CTX_wm_region_view3d(C)) {
+    return false;
+  }
+  const Object *ob = CTX_data_active_object(C);
+  return ob && (ob->mode & (OB_MODE_EDIT | OB_MODE_SCULPT));
+}
+
+static int object_switch_object_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  ARegion *ar = CTX_wm_region(C);
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+
+  Base *base_dst = ED_view3d_give_base_under_cursor(C, event->mval);
+
+  if (base_dst == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
+  Object *ob_dst = base_dst->object;
+  Object *ob_src = CTX_data_active_object(C);
+
+  if (ob_dst == ob_src) {
+    return OPERATOR_CANCELLED;
+  }
+
+  const eObjectMode last_mode = (eObjectMode)ob_src->mode;
+  if (!ED_object_mode_compat_test(ob_dst, last_mode)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  if (!ED_object_mode_set_ex(C, OB_MODE_OBJECT, true, op->reports)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  Object *ob_dst_orig = DEG_get_original_object(ob_dst);
+  Base *base = BKE_view_layer_base_find(view_layer, ob_dst_orig);
+  BKE_view_layer_base_deselect_all(view_layer);
+  BKE_view_layer_base_select_and_set_active(view_layer, base);
+  DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
+
+  /* FIXME: Do a single undo push. */
+  ED_undo_push(C, "Change Active");
+
+  ob_dst_orig = DEG_get_original_object(ob_dst);
+  ED_object_mode_set_ex(C, last_mode, true, op->reports);
+
+  /* Update the viewport rotation origin to the mouse cursor. */
+  if (last_mode & OB_MODE_ALL_PAINT) {
+    float global_loc[3];
+    if (ED_view3d_autodist_simple(ar, event->mval, global_loc, 0, NULL)) {
+      UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
+      copy_v3_v3(ups->average_stroke_accum, global_loc);
+      ups->average_stroke_counter = 1;
+      ups->last_stroke_valid = true;
+    }
+  }
+
+  WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
+  WM_toolsystem_update_from_context_view3d(C);
+
+  return OPERATOR_FINISHED;
+}
+
+void OBJECT_OT_switch_object(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Switch Object";
+  ot->idname = "OBJECT_OT_switch_object";
+  ot->description =
+      "Switches the active object and assigns the same mode to a new one under the mouse cursor, "
+      "leaving the active mode in the current one";
+
+  /* api callbacks */
+  ot->invoke = object_switch_object_invoke;
+  ot->poll = object_switch_object_poll;
+
+  /* Undo push is handled by the operator. */
+  ot->flag = OPTYPE_REGISTER;
 }
 
 /** \} */

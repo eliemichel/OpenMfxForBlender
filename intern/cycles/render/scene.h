@@ -19,9 +19,11 @@
 
 #include "bvh/bvh_params.h"
 
+#include "render/film.h"
 #include "render/image.h"
 #include "render/shader.h"
 
+#include "device/device.h"
 #include "device/device_memory.h"
 
 #include "util/util_param.h"
@@ -57,6 +59,8 @@ class Progress;
 class BakeManager;
 class BakeData;
 class RenderStats;
+class SceneUpdateStats;
+class Volume;
 
 /* Scene Device Data */
 
@@ -168,6 +172,8 @@ class SceneParams {
   bool use_bvh_spatial_split;
   bool use_bvh_unaligned_nodes;
   int num_bvh_time_steps;
+  int hair_subdivisions;
+  CurveShapeType hair_shape;
   bool persistent_data;
   int texture_limit;
 
@@ -181,6 +187,8 @@ class SceneParams {
     use_bvh_spatial_split = false;
     use_bvh_unaligned_nodes = true;
     num_bvh_time_steps = 0;
+    hair_subdivisions = 3;
+    hair_shape = CURVE_RIBBON;
     persistent_data = false;
     texture_limit = 0;
     background = true;
@@ -193,13 +201,20 @@ class SceneParams {
              use_bvh_spatial_split == params.use_bvh_spatial_split &&
              use_bvh_unaligned_nodes == params.use_bvh_unaligned_nodes &&
              num_bvh_time_steps == params.num_bvh_time_steps &&
+             hair_subdivisions == params.hair_subdivisions && hair_shape == params.hair_shape &&
              persistent_data == params.persistent_data && texture_limit == params.texture_limit);
+  }
+
+  int curve_subdivisions()
+  {
+    /* Matching the tesselation rate limit in Embree. */
+    return clamp(1 << hair_subdivisions, 1, 16);
   }
 };
 
 /* Scene */
 
-class Scene {
+class Scene : public NodeOwner {
  public:
   /* Optional name. Is used for logging and reporting. */
   string name;
@@ -218,6 +233,7 @@ class Scene {
   vector<Shader *> shaders;
   vector<Light *> lights;
   vector<ParticleSystem *> particle_systems;
+  vector<Pass> passes;
 
   /* data managers */
   ImageManager *image_manager;
@@ -226,7 +242,6 @@ class Scene {
   GeometryManager *geometry_manager;
   ObjectManager *object_manager;
   ParticleSystemManager *particle_system_manager;
-  CurveSystemManager *curve_system_manager;
   BakeManager *bake_manager;
 
   /* default shaders */
@@ -245,6 +260,9 @@ class Scene {
 
   /* mutex must be locked manually by callers */
   thread_mutex mutex;
+
+  /* scene update statistics */
+  SceneUpdateStats *update_stats;
 
   Scene(const SceneParams &params, Device *device);
   ~Scene();
@@ -266,6 +284,44 @@ class Scene {
 
   void collect_statistics(RenderStats *stats);
 
+  void enable_update_stats();
+
+  bool update(Progress &progress, bool &kernel_switch_needed);
+
+  /* This function is used to create a node of a specified type instead of
+   * calling 'new', and sets the scene as the owner of the node.
+   * The function has overloads that will also add the created node to the right
+   * node array (e.g. Scene::geometry for Geometry nodes) and tag the appropriate
+   * manager for an update.
+   */
+  template<typename T, typename... Args> T *create_node(Args &&... args)
+  {
+    T *node = new T(args...);
+    node->set_owner(this);
+    return node;
+  }
+
+  /* This function is used to delete a node from the scene instead of calling 'delete'
+   * and manually removing the node from the data array. It also tags the
+   * appropriate manager for an update, if any, and checks that the scene is indeed
+   * the owner of the node. Calling this function on a node not owned by the scene
+   * will likely cause a crash which we want in order to detect such cases.
+   */
+  template<typename T> void delete_node(T *node)
+  {
+    assert(node->get_owner() == this);
+    delete_node_impl(node);
+  }
+
+  /* Same as above, but specify the actual owner.
+   */
+  template<typename T> void delete_node(T *node, const NodeOwner *owner)
+  {
+    assert(node->get_owner() == owner);
+    delete_node_impl(node);
+    (void)owner;
+  }
+
  protected:
   /* Check if some heavy data worth logging was updated.
    * Mainly used to suppress extra annoying logging.
@@ -273,7 +329,57 @@ class Scene {
   bool need_data_update();
 
   void free_memory(bool final);
+
+  bool kernels_loaded;
+  DeviceRequestedFeatures loaded_kernel_features;
+
+  bool load_kernels(Progress &progress, bool lock_scene = true);
+
+  /* ** Split kernel routines ** */
+
+  DeviceRequestedFeatures get_requested_device_features();
+
+  /* Maximumnumber of closure during session lifetime. */
+  int max_closure_global;
+
+  /* Get maximum number of closures to be used in kernel. */
+  int get_max_closure_count();
+
+  template<typename T> void delete_node_impl(T *node)
+  {
+    delete node;
+  }
 };
+
+template<> Light *Scene::create_node<Light>();
+
+template<> Mesh *Scene::create_node<Mesh>();
+
+template<> Object *Scene::create_node<Object>();
+
+template<> Hair *Scene::create_node<Hair>();
+
+template<> Volume *Scene::create_node<Volume>();
+
+template<> ParticleSystem *Scene::create_node<ParticleSystem>();
+
+template<> Shader *Scene::create_node<Shader>();
+
+template<> void Scene::delete_node_impl(Light *node);
+
+template<> void Scene::delete_node_impl(Mesh *node);
+
+template<> void Scene::delete_node_impl(Volume *node);
+
+template<> void Scene::delete_node_impl(Hair *node);
+
+template<> void Scene::delete_node_impl(Geometry *node);
+
+template<> void Scene::delete_node_impl(Object *node);
+
+template<> void Scene::delete_node_impl(ParticleSystem *node);
+
+template<> void Scene::delete_node_impl(Shader *node);
 
 CCL_NAMESPACE_END
 

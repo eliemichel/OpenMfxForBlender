@@ -21,10 +21,13 @@
  * \ingroup nodes
  */
 
-#ifndef __NOD_COMMON_H__
-#define __NOD_COMMON_H__
+#pragma once
 
 #include "BKE_node.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void register_node_type_frame(void);
 void register_node_type_reroute(void);
@@ -42,4 +45,6 @@ struct bNodeSocket *node_group_output_find_socket(struct bNode *node, const char
 void node_group_input_update(struct bNodeTree *ntree, struct bNode *node);
 void node_group_output_update(struct bNodeTree *ntree, struct bNode *node);
 
-#endif /* __NOD_COMMON_H__ */
+#ifdef __cplusplus
+}
+#endif

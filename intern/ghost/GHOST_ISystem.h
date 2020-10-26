@@ -24,8 +24,9 @@
  * Contains the doxygen documentation main page.
  */
 
-#ifndef __GHOST_ISYSTEM_H__
-#define __GHOST_ISYSTEM_H__
+#pragma once
+
+#include <stdlib.h>
 
 #include "GHOST_IContext.h"
 #include "GHOST_ITimerTask.h"
@@ -50,7 +51,7 @@ class GHOST_IEventConsumer;
  * Blender.
  * <br><br>
  * Enough history. What does GHOST have to offer?<br>
- * In short: everything that Blender needed from GLUT to run on all it's supported
+ * In short: everything that Blender needed from GLUT to run on all its supported
  * operating systems and some extra's.
  * This includes :
  *
@@ -240,7 +241,7 @@ class GHOST_ISystem {
    * \param parentWindow: Parent (embedder) window
    * \return The new window (or 0 if creation failed).
    */
-  virtual GHOST_IWindow *createWindow(const STR_String &title,
+  virtual GHOST_IWindow *createWindow(const char *title,
                                       GHOST_TInt32 left,
                                       GHOST_TInt32 top,
                                       GHOST_TUns32 width,
@@ -264,7 +265,7 @@ class GHOST_ISystem {
    * Never explicitly delete the context, use disposeContext() instead.
    * \return  The new context (or 0 if creation failed).
    */
-  virtual GHOST_IContext *createOffscreenContext() = 0;
+  virtual GHOST_IContext *createOffscreenContext(GHOST_GLSettings glSettings) = 0;
 
   /**
    * Dispose of a context.
@@ -380,7 +381,7 @@ class GHOST_ISystem {
    ***************************************************************************************/
 
   /**
-   * Returns the state of a modifier key (ouside the message queue).
+   * Returns the state of a modifier key (outside the message queue).
    * \param mask      The modifier key state to retrieve.
    * \param isDown    The state of a modifier key (true == pressed).
    * \return          Indication of success.
@@ -388,7 +389,7 @@ class GHOST_ISystem {
   virtual GHOST_TSuccess getModifierKeyState(GHOST_TModifierKeyMask mask, bool &isDown) const = 0;
 
   /**
-   * Returns the state of a mouse button (ouside the message queue).
+   * Returns the state of a mouse button (outside the message queue).
    * \param mask      The button state to retrieve.
    * \param isDown    Button state.
    * \return          Indication of success.
@@ -492,5 +493,3 @@ class GHOST_ISystem {
   MEM_CXX_CLASS_ALLOC_FUNCS("GHOST:GHOST_ISystem")
 #endif
 };
-
-#endif  // __GHOST_ISYSTEM_H__

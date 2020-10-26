@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_MESH_REMESH_VOXEL_H__
-#define __BKE_MESH_REMESH_VOXEL_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -60,10 +59,9 @@ struct Mesh *BKE_mesh_remesh_quadriflow_to_mesh_nomain(struct Mesh *mesh,
 
 /* Data reprojection functions */
 void BKE_mesh_remesh_reproject_paint_mask(struct Mesh *target, struct Mesh *source);
+void BKE_remesh_reproject_vertex_paint(struct Mesh *target, struct Mesh *source);
 void BKE_remesh_reproject_sculpt_face_sets(struct Mesh *target, struct Mesh *source);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_MESH_REMESH_VOXEL_H__ */

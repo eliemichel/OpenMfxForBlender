@@ -21,6 +21,8 @@
  * \ingroup bke
  */
 
+#include <math.h>
+
 #include "BKE_subdiv.h"
 
 #include "DNA_mesh_types.h"
@@ -122,16 +124,16 @@ BLI_INLINE eAverageWith read_displacement_grid(const MDisps *displacement_grid,
     zero_v3(r_tangent_D);
     return AVERAGE_WITH_NONE;
   }
-  const int x = (grid_u * (grid_size - 1) + 0.5f);
-  const int y = (grid_v * (grid_size - 1) + 0.5f);
+  const int x = roundf(grid_u * (grid_size - 1));
+  const int y = roundf(grid_v * (grid_size - 1));
   copy_v3_v3(r_tangent_D, displacement_grid->disps[y * grid_size + x]);
   if (x == 0 && y == 0) {
     return AVERAGE_WITH_ALL;
   }
-  else if (x == 0) {
+  if (x == 0) {
     return AVERAGE_WITH_PREV;
   }
-  else if (y == 0) {
+  if (y == 0) {
     return AVERAGE_WITH_NEXT;
   }
   return AVERAGE_WITH_NONE;
@@ -321,9 +323,8 @@ static int displacement_get_face_corner(MultiresDisplacementData *data,
     float dummy_corner_u, dummy_corner_v;
     return BKE_subdiv_rotate_quad_to_corner(u, v, &dummy_corner_u, &dummy_corner_v);
   }
-  else {
-    return poly_corner->corner;
-  }
+
+  return poly_corner->corner;
 }
 
 static void initialize(SubdivDisplacement *displacement)

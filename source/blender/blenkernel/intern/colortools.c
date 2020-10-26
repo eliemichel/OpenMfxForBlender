@@ -44,6 +44,8 @@
 #include "IMB_colormanagement.h"
 #include "IMB_imbuf_types.h"
 
+#include "BLO_read_write.h"
+
 /* ********************************* color curve ********************* */
 
 /* ***************** operations on full struct ************* */
@@ -345,8 +347,7 @@ void BKE_curvemap_reset(CurveMap *cuma, const rctf *clipr, int preset, int slope
       cuma->curve[1].y = 1;
       break;
     case CURVE_PRESET_MID9: {
-      int i;
-      for (i = 0; i < cuma->totpoint; i++) {
+      for (int i = 0; i < cuma->totpoint; i++) {
         cuma->curve[i].x = i / ((float)cuma->totpoint - 1);
         cuma->curve[i].y = 0.5;
       }
@@ -419,8 +420,7 @@ void BKE_curvemap_reset(CurveMap *cuma, const rctf *clipr, int preset, int slope
     const int num_points = cuma->totpoint * 2 - 1;
     CurveMapPoint *new_points = MEM_mallocN(num_points * sizeof(CurveMapPoint),
                                             "curve symmetric points");
-    int i;
-    for (i = 0; i < cuma->totpoint; i++) {
+    for (int i = 0; i < cuma->totpoint; i++) {
       const int src_last_point = cuma->totpoint - i - 1;
       const int dst_last_point = num_points - i - 1;
       new_points[i] = cuma->curve[src_last_point];
@@ -601,28 +601,24 @@ static float curvemap_calc_extend(const CurveMapping *cumap,
       /* extrapolate horizontally */
       return first[1];
     }
-    else {
-      if (cuma->ext_in[0] == 0.0f) {
-        return first[1] + cuma->ext_in[1] * 10000.0f;
-      }
-      else {
-        return first[1] + cuma->ext_in[1] * (x - first[0]) / cuma->ext_in[0];
-      }
+
+    if (cuma->ext_in[0] == 0.0f) {
+      return first[1] + cuma->ext_in[1] * 10000.0f;
     }
+
+    return first[1] + cuma->ext_in[1] * (x - first[0]) / cuma->ext_in[0];
   }
-  else if (x >= last[0]) {
+  if (x >= last[0]) {
     if ((cumap->flag & CUMA_EXTEND_EXTRAPOLATE) == 0) {
       /* extrapolate horizontally */
       return last[1];
     }
-    else {
-      if (cuma->ext_out[0] == 0.0f) {
-        return last[1] - cuma->ext_out[1] * 10000.0f;
-      }
-      else {
-        return last[1] + cuma->ext_out[1] * (x - last[0]) / cuma->ext_out[0];
-      }
+
+    if (cuma->ext_out[0] == 0.0f) {
+      return last[1] - cuma->ext_out[1] * 10000.0f;
     }
+
+    return last[1] + cuma->ext_out[1] * (x - last[0]) / cuma->ext_out[0];
   }
   return 0.0f;
 }
@@ -719,21 +715,22 @@ static void curvemap_make_table(const CurveMapping *cumap, CurveMap *cuma)
   float *point = allpoints;
 
   for (int a = 0; a < cuma->totpoint - 1; a++, point += 2 * CM_RESOL) {
-    correct_bezpart(bezt[a].vec[1], bezt[a].vec[2], bezt[a + 1].vec[0], bezt[a + 1].vec[1]);
+    BKE_curve_correct_bezpart(
+        bezt[a].vec[1], bezt[a].vec[2], bezt[a + 1].vec[0], bezt[a + 1].vec[1]);
     BKE_curve_forward_diff_bezier(bezt[a].vec[1][0],
                                   bezt[a].vec[2][0],
                                   bezt[a + 1].vec[0][0],
                                   bezt[a + 1].vec[1][0],
                                   point,
                                   CM_RESOL - 1,
-                                  2 * sizeof(float));
+                                  sizeof(float[2]));
     BKE_curve_forward_diff_bezier(bezt[a].vec[1][1],
                                   bezt[a].vec[2][1],
                                   bezt[a + 1].vec[0][1],
                                   bezt[a + 1].vec[1][1],
                                   point + 1,
                                   CM_RESOL - 1,
-                                  2 * sizeof(float));
+                                  sizeof(float[2]));
   }
 
   /* store first and last handle for extrapolation, unit length */
@@ -868,7 +865,7 @@ static int sort_curvepoints(const void *a1, const void *a2)
   if (x1->x > x2->x) {
     return 1;
   }
-  else if (x1->x < x2->x) {
+  if (x1->x < x2->x) {
     return -1;
   }
   return 0;
@@ -971,28 +968,24 @@ void BKE_curvemapping_changed_all(CurveMapping *cumap)
 /* table should be verified */
 float BKE_curvemap_evaluateF(const CurveMapping *cumap, const CurveMap *cuma, float value)
 {
-  float fi;
-  int i;
-
   /* index in table */
-  fi = (value - cuma->mintable) * cuma->range;
-  i = (int)fi;
+  float fi = (value - cuma->mintable) * cuma->range;
+  int i = (int)fi;
 
   /* fi is table float index and should check against table range i.e. [0.0 CM_TABLE] */
   if (fi < 0.0f || fi > CM_TABLE) {
     return curvemap_calc_extend(cumap, cuma, value, &cuma->table[0].x, &cuma->table[CM_TABLE].x);
   }
-  else {
-    if (i < 0) {
-      return cuma->table[0].y;
-    }
-    if (i >= CM_TABLE) {
-      return cuma->table[CM_TABLE].y;
-    }
 
-    fi = fi - (float)i;
-    return (1.0f - fi) * cuma->table[i].y + (fi)*cuma->table[i + 1].y;
+  if (i < 0) {
+    return cuma->table[0].y;
   }
+  if (i >= CM_TABLE) {
+    return cuma->table[CM_TABLE].y;
+  }
+
+  fi = fi - (float)i;
+  return (1.0f - fi) * cuma->table[i].y + (fi)*cuma->table[i + 1].y;
 }
 
 /* works with curve 'cur' */
@@ -1154,53 +1147,51 @@ void BKE_curvemapping_evaluate_premulRGB(const CurveMapping *cumap,
   vecout_byte[2] = unit_float_to_uchar_clamp(vecout[2]);
 }
 
-int BKE_curvemapping_RGBA_does_something(const CurveMapping *cumap)
+bool BKE_curvemapping_RGBA_does_something(const CurveMapping *cumap)
 {
-  int a;
-
   if (cumap->black[0] != 0.0f) {
-    return 1;
+    return true;
   }
   if (cumap->black[1] != 0.0f) {
-    return 1;
+    return true;
   }
   if (cumap->black[2] != 0.0f) {
-    return 1;
+    return true;
   }
   if (cumap->white[0] != 1.0f) {
-    return 1;
+    return true;
   }
   if (cumap->white[1] != 1.0f) {
-    return 1;
+    return true;
   }
   if (cumap->white[2] != 1.0f) {
-    return 1;
+    return true;
   }
 
-  for (a = 0; a < CM_TOT; a++) {
+  for (int a = 0; a < CM_TOT; a++) {
     if (cumap->cm[a].curve) {
       if (cumap->cm[a].totpoint != 2) {
-        return 1;
+        return true;
       }
 
       if (cumap->cm[a].curve[0].x != 0.0f) {
-        return 1;
+        return true;
       }
       if (cumap->cm[a].curve[0].y != 0.0f) {
-        return 1;
+        return true;
       }
       if (cumap->cm[a].curve[1].x != 1.0f) {
-        return 1;
+        return true;
       }
       if (cumap->cm[a].curve[1].y != 1.0f) {
-        return 1;
+        return true;
       }
     }
   }
-  return 0;
+  return false;
 }
 
-void BKE_curvemapping_initialize(CurveMapping *cumap)
+void BKE_curvemapping_init(CurveMapping *cumap)
 {
   int a;
 
@@ -1235,6 +1226,32 @@ void BKE_curvemapping_table_RGBA(const CurveMapping *cumap, float **array, int *
     if (cumap->cm[3].table) {
       (*array)[a * 4 + 3] = cumap->cm[3].table[a].y;
     }
+  }
+}
+
+void BKE_curvemapping_blend_write(BlendWriter *writer, const CurveMapping *cumap)
+{
+  BLO_write_struct(writer, CurveMapping, cumap);
+  BKE_curvemapping_curves_blend_write(writer, cumap);
+}
+
+void BKE_curvemapping_curves_blend_write(BlendWriter *writer, const CurveMapping *cumap)
+{
+  for (int a = 0; a < CM_TOT; a++) {
+    BLO_write_struct_array(writer, CurveMapPoint, cumap->cm[a].totpoint, cumap->cm[a].curve);
+  }
+}
+
+/* cumap itself has been read already. */
+void BKE_curvemapping_blend_read(BlendDataReader *reader, CurveMapping *cumap)
+{
+  /* flag seems to be able to hang? Maybe old files... not bad to clear anyway */
+  cumap->flag &= ~CUMA_PREMULLED;
+
+  for (int a = 0; a < CM_TOT; a++) {
+    BLO_read_data_address(reader, &cumap->cm[a].curve);
+    cumap->cm[a].table = NULL;
+    cumap->cm[a].premultable = NULL;
   }
 }
 
@@ -1299,10 +1316,10 @@ void BKE_histogram_update_sample_line(Histogram *hist,
   const float *fp;
   unsigned char *cp;
 
-  int x1 = 0.5f + hist->co[0][0] * ibuf->x;
-  int x2 = 0.5f + hist->co[1][0] * ibuf->x;
-  int y1 = 0.5f + hist->co[0][1] * ibuf->y;
-  int y2 = 0.5f + hist->co[1][1] * ibuf->y;
+  int x1 = roundf(hist->co[0][0] * ibuf->x);
+  int x2 = roundf(hist->co[1][0] * ibuf->x);
+  int y1 = roundf(hist->co[0][1] * ibuf->y);
+  int y2 = roundf(hist->co[1][1] * ibuf->y);
 
   struct ColormanageProcessor *cm_processor = NULL;
 
@@ -1383,8 +1400,6 @@ typedef struct ScopesUpdateData {
   struct ColormanageProcessor *cm_processor;
   const unsigned char *display_buffer;
   const int ycc_mode;
-
-  unsigned int *bin_lum, *bin_r, *bin_g, *bin_b, *bin_a;
 } ScopesUpdateData;
 
 typedef struct ScopesUpdateDataChunk {
@@ -1495,23 +1510,24 @@ static void scopes_update_cb(void *__restrict userdata,
   }
 }
 
-static void scopes_update_finalize(void *__restrict userdata, void *__restrict userdata_chunk)
+static void scopes_update_reduce(const void *__restrict UNUSED(userdata),
+                                 void *__restrict chunk_join,
+                                 void *__restrict chunk)
 {
-  const ScopesUpdateData *data = userdata;
-  const ScopesUpdateDataChunk *data_chunk = userdata_chunk;
+  ScopesUpdateDataChunk *join_chunk = chunk_join;
+  const ScopesUpdateDataChunk *data_chunk = chunk;
 
-  unsigned int *bin_lum = data->bin_lum;
-  unsigned int *bin_r = data->bin_r;
-  unsigned int *bin_g = data->bin_g;
-  unsigned int *bin_b = data->bin_b;
-  unsigned int *bin_a = data->bin_a;
+  unsigned int *bin_lum = join_chunk->bin_lum;
+  unsigned int *bin_r = join_chunk->bin_r;
+  unsigned int *bin_g = join_chunk->bin_g;
+  unsigned int *bin_b = join_chunk->bin_b;
+  unsigned int *bin_a = join_chunk->bin_a;
   const unsigned int *bin_lum_c = data_chunk->bin_lum;
   const unsigned int *bin_r_c = data_chunk->bin_r;
   const unsigned int *bin_g_c = data_chunk->bin_g;
   const unsigned int *bin_b_c = data_chunk->bin_b;
   const unsigned int *bin_a_c = data_chunk->bin_a;
 
-  float(*minmax)[2] = data->scopes->minmax;
   const float *min = data_chunk->min;
   const float *max = data_chunk->max;
 
@@ -1524,11 +1540,11 @@ static void scopes_update_finalize(void *__restrict userdata, void *__restrict u
   }
 
   for (int c = 3; c--;) {
-    if (min[c] < minmax[c][0]) {
-      minmax[c][0] = min[c];
+    if (min[c] < join_chunk->min[c]) {
+      join_chunk->min[c] = min[c];
     }
-    if (max[c] > minmax[c][1]) {
-      minmax[c][1] = max[c];
+    if (max[c] > join_chunk->max[c]) {
+      join_chunk->max[c] = max[c];
     }
   }
 }
@@ -1542,7 +1558,6 @@ void BKE_scopes_update(Scopes *scopes,
   unsigned int nl, na, nr, ng, nb;
   double divl, diva, divr, divg, divb;
   const unsigned char *display_buffer = NULL;
-  uint bin_lum[256] = {0}, bin_r[256] = {0}, bin_g[256] = {0}, bin_b[256] = {0}, bin_a[256] = {0};
   int ycc_mode = -1;
   void *cache_handle = NULL;
   struct ColormanageProcessor *cm_processor = NULL;
@@ -1638,11 +1653,6 @@ void BKE_scopes_update(Scopes *scopes,
       .cm_processor = cm_processor,
       .display_buffer = display_buffer,
       .ycc_mode = ycc_mode,
-      .bin_lum = bin_lum,
-      .bin_r = bin_r,
-      .bin_g = bin_g,
-      .bin_b = bin_b,
-      .bin_a = bin_a,
   };
   ScopesUpdateDataChunk data_chunk = {{0}};
   INIT_MINMAX(data_chunk.min, data_chunk.max);
@@ -1652,26 +1662,26 @@ void BKE_scopes_update(Scopes *scopes,
   settings.use_threading = (ibuf->y > 256);
   settings.userdata_chunk = &data_chunk;
   settings.userdata_chunk_size = sizeof(data_chunk);
-  settings.func_finalize = scopes_update_finalize;
+  settings.func_reduce = scopes_update_reduce;
   BLI_task_parallel_range(0, ibuf->y, &data, scopes_update_cb, &settings);
 
   /* convert hist data to float (proportional to max count) */
   nl = na = nr = nb = ng = 0;
   for (a = 0; a < 256; a++) {
-    if (bin_lum[a] > nl) {
-      nl = bin_lum[a];
+    if (data_chunk.bin_lum[a] > nl) {
+      nl = data_chunk.bin_lum[a];
     }
-    if (bin_r[a] > nr) {
-      nr = bin_r[a];
+    if (data_chunk.bin_r[a] > nr) {
+      nr = data_chunk.bin_r[a];
     }
-    if (bin_g[a] > ng) {
-      ng = bin_g[a];
+    if (data_chunk.bin_g[a] > ng) {
+      ng = data_chunk.bin_g[a];
     }
-    if (bin_b[a] > nb) {
-      nb = bin_b[a];
+    if (data_chunk.bin_b[a] > nb) {
+      nb = data_chunk.bin_b[a];
     }
-    if (bin_a[a] > na) {
-      na = bin_a[a];
+    if (data_chunk.bin_a[a] > na) {
+      na = data_chunk.bin_a[a];
     }
   }
   divl = nl ? 1.0 / (double)nl : 1.0;
@@ -1681,11 +1691,11 @@ void BKE_scopes_update(Scopes *scopes,
   divb = nb ? 1.0 / (double)nb : 1.0;
 
   for (a = 0; a < 256; a++) {
-    scopes->hist.data_luma[a] = bin_lum[a] * divl;
-    scopes->hist.data_r[a] = bin_r[a] * divr;
-    scopes->hist.data_g[a] = bin_g[a] * divg;
-    scopes->hist.data_b[a] = bin_b[a] * divb;
-    scopes->hist.data_a[a] = bin_a[a] * diva;
+    scopes->hist.data_luma[a] = data_chunk.bin_lum[a] * divl;
+    scopes->hist.data_r[a] = data_chunk.bin_r[a] * divr;
+    scopes->hist.data_g[a] = data_chunk.bin_g[a] * divg;
+    scopes->hist.data_b[a] = data_chunk.bin_b[a] * divb;
+    scopes->hist.data_a[a] = data_chunk.bin_a[a] * diva;
   }
 
   if (cm_processor) {

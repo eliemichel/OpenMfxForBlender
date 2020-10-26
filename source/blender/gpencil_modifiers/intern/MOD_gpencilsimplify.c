@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -22,39 +22,51 @@
  */
 
 #include <stdio.h>
+#include <string.h> /* For #MEMCPY_STRUCT_AFTER. */
 
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 #include "DNA_vec_types.h"
 
+#include "BKE_context.h"
 #include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
+#include "BKE_lib_query.h"
+#include "BKE_modifier.h"
+#include "BKE_screen.h"
 
 #include "DEG_depsgraph.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_ui_common.h"
 #include "MOD_gpencil_util.h"
 
 static void initData(GpencilModifierData *md)
 {
   SimplifyGpencilModifierData *gpmd = (SimplifyGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  gpmd->step = 1;
-  gpmd->factor = 0.0f;
-  gpmd->length = 0.1f;
-  gpmd->distance = 0.1f;
-  gpmd->layername[0] = '\0';
-  gpmd->materialname[0] = '\0';
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(SimplifyGpencilModifierData), modifier);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
 {
-  BKE_gpencil_modifier_copyData_generic(md, target);
+  BKE_gpencil_modifier_copydata_generic(md, target);
 }
 
 static void deformStroke(GpencilModifierData *md,
@@ -68,10 +80,10 @@ static void deformStroke(GpencilModifierData *md,
 
   if (!is_stroke_affected_by_modifier(ob,
                                       mmd->layername,
-                                      mmd->materialname,
+                                      mmd->material,
                                       mmd->pass_index,
                                       mmd->layer_pass,
-                                      mmd->mode == GP_SIMPLIFY_SAMPLE ? 3 : 4,
+                                      mmd->mode == GP_SIMPLIFY_SAMPLE ? 2 : 4,
                                       gpl,
                                       gps,
                                       mmd->flag & GP_SIMPLIFY_INVERT_LAYER,
@@ -123,6 +135,54 @@ static void bakeModifier(struct Main *UNUSED(bmain),
   }
 }
 
+static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
+{
+  SimplifyGpencilModifierData *mmd = (SimplifyGpencilModifierData *)md;
+
+  walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
+}
+
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  int mode = RNA_enum_get(ptr, "mode");
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "mode", 0, NULL, ICON_NONE);
+
+  if (mode == GP_SIMPLIFY_FIXED) {
+    uiItemR(layout, ptr, "step", 0, NULL, ICON_NONE);
+  }
+  else if (mode == GP_SIMPLIFY_ADAPTIVE) {
+    uiItemR(layout, ptr, "factor", 0, NULL, ICON_NONE);
+  }
+  else if (mode == GP_SIMPLIFY_SAMPLE) {
+    uiItemR(layout, ptr, "length", 0, NULL, ICON_NONE);
+  }
+  else if (mode == GP_SIMPLIFY_MERGE) {
+    uiItemR(layout, ptr, "distance", 0, NULL, ICON_NONE);
+  }
+
+  gpencil_modifier_panel_end(layout, ptr);
+}
+
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  gpencil_modifier_masking_panel_draw(panel, true, false);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = gpencil_modifier_panel_register(
+      region_type, eGpencilModifierType_Simplify, panel_draw);
+  gpencil_modifier_subpanel_register(
+      region_type, "mask", "Influence", NULL, mask_panel_draw, panel_type);
+}
+
 GpencilModifierTypeInfo modifierType_Gpencil_Simplify = {
     /* name */ "Simplify",
     /* structName */ "SimplifyGpencilModifierData",
@@ -142,7 +202,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Simplify = {
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ NULL,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
+    /* panelRegister */ panelRegister,
 };

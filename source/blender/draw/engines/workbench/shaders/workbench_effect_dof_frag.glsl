@@ -1,10 +1,12 @@
+#pragma BLENDER_REQUIRE(common_view_lib.glsl)
+#pragma BLENDER_REQUIRE(common_math_lib.glsl)
+
 /**
  * Separable Hexagonal Bokeh Blur by Colin Barré-Brisebois
  * https://colinbarrebrisebois.com/2017/04/18/hexagonal-bokeh-blur-revisited-part-1-basic-3-pass-version/
  * Converted and adapted from HLSL to GLSL by Clément Foucault
  */
 
-uniform mat4 ProjectionMatrix;
 uniform vec2 invertedViewportSize;
 uniform vec2 nearFar;
 uniform vec3 dofParams;
@@ -21,13 +23,6 @@ uniform sampler2D noiseTex;
 #define dof_aperturesize dofParams.x
 #define dof_distance dofParams.y
 #define dof_invsensorsize dofParams.z
-
-#define M_PI 3.1415926535897932 /* pi */
-
-float max_v4(vec4 v)
-{
-  return max(max(v.x, v.y), max(v.z, v.w));
-}
 
 #define weighted_sum(a, b, c, d, e, e_sum) \
   ((a)*e.x + (b)*e.y + (c)*e.z + (d)*e.w) / max(1e-6, e_sum);
@@ -113,18 +108,22 @@ layout(location = 1) out vec2 outCocs;
 
 void main()
 {
-  ivec4 texel = ivec4(gl_FragCoord.xyxy) * 2 + ivec4(0, 0, 1, 1);
+  vec4 texel = vec4(gl_FragCoord.xyxy) * 2.0 + vec4(0.0, 0.0, 1.0, 1.0);
+  texel = (texel - 0.5) / vec4(textureSize(sceneColorTex, 0).xyxy);
 
-  vec4 color1 = texelFetch(sceneColorTex, texel.xy, 0);
-  vec4 color2 = texelFetch(sceneColorTex, texel.zw, 0);
-  vec4 color3 = texelFetch(sceneColorTex, texel.zy, 0);
-  vec4 color4 = texelFetch(sceneColorTex, texel.xw, 0);
+  /* Using texelFetch can bypass the mip range setting on some platform.
+   * Using texture Lod fix this issue. Note that we need to disable filtering to get the right
+   * texel values. */
+  vec4 color1 = textureLod(sceneColorTex, texel.xy, 0.0);
+  vec4 color2 = textureLod(sceneColorTex, texel.zw, 0.0);
+  vec4 color3 = textureLod(sceneColorTex, texel.zy, 0.0);
+  vec4 color4 = textureLod(sceneColorTex, texel.xw, 0.0);
 
   vec4 depths;
-  vec2 cocs1 = texelFetch(inputCocTex, texel.xy, 0).rg;
-  vec2 cocs2 = texelFetch(inputCocTex, texel.zw, 0).rg;
-  vec2 cocs3 = texelFetch(inputCocTex, texel.zy, 0).rg;
-  vec2 cocs4 = texelFetch(inputCocTex, texel.xw, 0).rg;
+  vec2 cocs1 = textureLod(inputCocTex, texel.xy, 0.0).rg;
+  vec2 cocs2 = textureLod(inputCocTex, texel.zw, 0.0).rg;
+  vec2 cocs3 = textureLod(inputCocTex, texel.zy, 0.0).rg;
+  vec2 cocs4 = textureLod(inputCocTex, texel.xw, 0.0).rg;
 
   vec4 cocs_near = vec4(cocs1.r, cocs2.r, cocs3.r, cocs4.r) * MAX_COC_SIZE;
   vec4 cocs_far = vec4(cocs1.g, cocs2.g, cocs3.g, cocs4.g) * MAX_COC_SIZE;
@@ -343,23 +342,23 @@ void main()
 
 #  define mnmx3(a, b, c) \
     mx3(a, b, c); \
-    s2(a, b);  // 3 exchanges
+    s2(a, b); /* 3 exchanges */
 #  define mnmx4(a, b, c, d) \
     s2(a, b); \
     s2(c, d); \
     s2(a, c); \
-    s2(b, d);  // 4 exchanges
+    s2(b, d); /* 4 exchanges */
 #  define mnmx5(a, b, c, d, e) \
     s2(a, b); \
     s2(c, d); \
     mn3(a, c, e); \
-    mx3(b, d, e);  // 6 exchanges
+    mx3(b, d, e); /* 6 exchanges */
 #  define mnmx6(a, b, c, d, e, f) \
     s2(a, d); \
     s2(b, e); \
     s2(c, f); \
     mn3(a, b, c); \
-    mx3(d, e, f);  // 7 exchanges
+    mx3(d, e, f); /* 7 exchanges */
 
   vec v[9];
 
@@ -391,8 +390,8 @@ void main()
  */
 #ifdef RESOLVE
 
-layout(location = 0) out vec4 finalColorAdd;
-layout(location = 1) out vec4 finalColorMul;
+layout(location = 0, index = 0) out vec4 finalColorAdd;
+layout(location = 0, index = 1) out vec4 finalColorMul;
 
 void main()
 {

@@ -38,7 +38,6 @@
 #include "ED_select_utils.h"
 #include "ED_view3d.h"
 
-#include "GPU_glew.h"
 #include "GPU_matrix.h"
 #include "GPU_select.h"
 #include "GPU_state.h"
@@ -264,11 +263,10 @@ bool WM_gizmomap_minmax(const wmGizmoMap *gzmap,
     }
     return i != 0;
   }
-  else {
-    bool ok = false;
-    BLI_assert(!"TODO");
-    return ok;
-  }
+
+  bool ok = false;
+  BLI_assert(!"TODO");
+  return ok;
 }
 
 /**
@@ -472,10 +470,10 @@ static void gizmos_draw_list(const wmGizmoMap *gzmap, const bContext *C, ListBas
     }
     else {
       if (is_depth) {
-        GPU_depth_test(true);
+        GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
       }
       else {
-        GPU_depth_test(false);
+        GPU_depth_test(GPU_DEPTH_NONE);
       }
       is_depth_prev = is_depth;
     }
@@ -494,7 +492,7 @@ static void gizmos_draw_list(const wmGizmoMap *gzmap, const bContext *C, ListBas
   }
 
   if (is_depth_prev) {
-    GPU_depth_test(false);
+    GPU_depth_test(GPU_DEPTH_NONE);
   }
 }
 
@@ -536,10 +534,10 @@ static void gizmo_draw_select_3d_loop(const bContext *C,
     }
     else {
       if (is_depth) {
-        GPU_depth_test(true);
+        GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
       }
       else {
-        GPU_depth_test(false);
+        GPU_depth_test(GPU_DEPTH_NONE);
       }
       is_depth_prev = is_depth;
     }
@@ -548,7 +546,7 @@ static void gizmo_draw_select_3d_loop(const bContext *C,
       /* pass */
     }
     else {
-      glDepthMask(!is_depth_skip);
+      GPU_depth_mask(!is_depth_skip);
       is_depth_skip_prev = is_depth_skip;
     }
 
@@ -562,10 +560,10 @@ static void gizmo_draw_select_3d_loop(const bContext *C,
   }
 
   if (is_depth_prev) {
-    GPU_depth_test(false);
+    GPU_depth_test(GPU_DEPTH_NONE);
   }
   if (is_depth_skip_prev) {
-    glDepthMask(true);
+    GPU_depth_mask(true);
   }
 }
 
@@ -582,7 +580,7 @@ static int gizmo_find_intersected_3d_intern(wmGizmo **visible_gizmos,
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   rcti rect;
   /* Almost certainly overkill, but allow for many custom gizmos. */
-  GLuint buffer[MAXPICKBUF];
+  uint buffer[MAXPICKBUF];
   short hits;
 
   BLI_rcti_init_pt_radius(&rect, co, hotspot);
@@ -625,7 +623,7 @@ static int gizmo_find_intersected_3d_intern(wmGizmo **visible_gizmos,
 
     GPU_matrix_unproject_with_precalc(&unproj_precalc, co_screen, co_3d_origin);
 
-    GLuint *buf_iter = buffer;
+    uint *buf_iter = buffer;
     int hit_found = -1;
     float dot_best = FLT_MAX;
 
@@ -648,10 +646,9 @@ static int gizmo_find_intersected_3d_intern(wmGizmo **visible_gizmos,
     }
     return hit_found;
   }
-  else {
-    const GLuint *hit_near = GPU_select_buffer_near(buffer, hits);
-    return hit_near ? hit_near[3] : -1;
-  }
+
+  const uint *hit_near = GPU_select_buffer_near(buffer, hits);
+  return hit_near ? hit_near[3] : -1;
 }
 
 /**

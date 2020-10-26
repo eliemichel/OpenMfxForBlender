@@ -99,7 +99,7 @@ static void bm_loop_attrs_copy(
  * If \a no_double is true, then a check is done to see if a face
  * with these vertices already exists and returns it instead.
  *
- * If a pointer to an example face is provided, it's custom data
+ * If a pointer to an example face is provided, its custom data
  * and properties will be copied to the new face.
  *
  * \note The winding of the face is determined by the order
@@ -606,6 +606,48 @@ void BM_mesh_copy_init_customdata(BMesh *bm_dst, BMesh *bm_src, const BMAllocTem
   CustomData_bmesh_init_pool(&bm_dst->pdata, allocsize->totface, BM_FACE);
 }
 
+/**
+ * Similar to #BM_mesh_copy_init_customdata but copies all layers ignoring
+ * flags like #CD_FLAG_NOCOPY.
+ *
+ * \param bm_dst: BMesh whose custom-data layers will be added.
+ * \param bm_src: BMesh whose custom-data layers will be copied.
+ * \param htype: Specifies which custom-data layers will be initiated.
+ * \param allocsize: Initialize the the memory-pool before use (may be an estimate).
+ */
+void BM_mesh_copy_init_customdata_all_layers(BMesh *bm_dst,
+                                             BMesh *bm_src,
+                                             const char htype,
+                                             const BMAllocTemplate *allocsize)
+{
+  if (allocsize == NULL) {
+    allocsize = &bm_mesh_allocsize_default;
+  }
+
+  const char htypes[4] = {BM_VERT, BM_EDGE, BM_LOOP, BM_FACE};
+  BLI_assert(((&bm_dst->vdata + 1) == &bm_dst->edata) &&
+             ((&bm_dst->vdata + 2) == &bm_dst->ldata) && ((&bm_dst->vdata + 3) == &bm_dst->pdata));
+
+  BLI_assert(((&allocsize->totvert + 1) == &allocsize->totedge) &&
+             ((&allocsize->totvert + 2) == &allocsize->totloop) &&
+             ((&allocsize->totvert + 3) == &allocsize->totface));
+
+  for (int i = 0; i < 4; i++) {
+    if (!(htypes[i] & htype)) {
+      continue;
+    }
+    CustomData *dst = &bm_dst->vdata + i;
+    CustomData *src = &bm_src->vdata + i;
+    const int size = *(&allocsize->totvert + i);
+
+    for (int l = 0; l < src->totlayer; l++) {
+      CustomData_add_layer_named(
+          dst, src->layers[l].type, CD_CALLOC, NULL, 0, src->layers[l].name);
+    }
+    CustomData_bmesh_init_pool(dst, size, htypes[i]);
+  }
+}
+
 BMesh *BM_mesh_copy(BMesh *bm_old)
 {
   BMesh *bm_new;
@@ -725,45 +767,45 @@ BMesh *BM_mesh_copy(BMesh *bm_old)
 }
 
 /* ME -> BM */
-char BM_vert_flag_from_mflag(const char meflag)
+char BM_vert_flag_from_mflag(const char mflag)
 {
-  return (((meflag & SELECT) ? BM_ELEM_SELECT : 0) | ((meflag & ME_HIDE) ? BM_ELEM_HIDDEN : 0));
+  return (((mflag & SELECT) ? BM_ELEM_SELECT : 0) | ((mflag & ME_HIDE) ? BM_ELEM_HIDDEN : 0));
 }
-char BM_edge_flag_from_mflag(const short meflag)
+char BM_edge_flag_from_mflag(const short mflag)
 {
-  return (((meflag & SELECT) ? BM_ELEM_SELECT : 0) | ((meflag & ME_SEAM) ? BM_ELEM_SEAM : 0) |
-          ((meflag & ME_EDGEDRAW) ? BM_ELEM_DRAW : 0) |
-          ((meflag & ME_SHARP) == 0 ? BM_ELEM_SMOOTH : 0) | /* invert */
-          ((meflag & ME_HIDE) ? BM_ELEM_HIDDEN : 0));
+  return (((mflag & SELECT) ? BM_ELEM_SELECT : 0) | ((mflag & ME_SEAM) ? BM_ELEM_SEAM : 0) |
+          ((mflag & ME_EDGEDRAW) ? BM_ELEM_DRAW : 0) |
+          ((mflag & ME_SHARP) == 0 ? BM_ELEM_SMOOTH : 0) | /* invert */
+          ((mflag & ME_HIDE) ? BM_ELEM_HIDDEN : 0));
 }
-char BM_face_flag_from_mflag(const char meflag)
+char BM_face_flag_from_mflag(const char mflag)
 {
-  return (((meflag & ME_FACE_SEL) ? BM_ELEM_SELECT : 0) |
-          ((meflag & ME_SMOOTH) ? BM_ELEM_SMOOTH : 0) | ((meflag & ME_HIDE) ? BM_ELEM_HIDDEN : 0));
+  return (((mflag & ME_FACE_SEL) ? BM_ELEM_SELECT : 0) |
+          ((mflag & ME_SMOOTH) ? BM_ELEM_SMOOTH : 0) | ((mflag & ME_HIDE) ? BM_ELEM_HIDDEN : 0));
 }
 
 /* BM -> ME */
-char BM_vert_flag_to_mflag(BMVert *eve)
+char BM_vert_flag_to_mflag(BMVert *v)
 {
-  const char hflag = eve->head.hflag;
+  const char hflag = v->head.hflag;
 
   return (((hflag & BM_ELEM_SELECT) ? SELECT : 0) | ((hflag & BM_ELEM_HIDDEN) ? ME_HIDE : 0));
 }
 
-short BM_edge_flag_to_mflag(BMEdge *eed)
+short BM_edge_flag_to_mflag(BMEdge *e)
 {
-  const char hflag = eed->head.hflag;
+  const char hflag = e->head.hflag;
 
   return (((hflag & BM_ELEM_SELECT) ? SELECT : 0) | ((hflag & BM_ELEM_SEAM) ? ME_SEAM : 0) |
           ((hflag & BM_ELEM_DRAW) ? ME_EDGEDRAW : 0) |
           ((hflag & BM_ELEM_SMOOTH) == 0 ? ME_SHARP : 0) |
           ((hflag & BM_ELEM_HIDDEN) ? ME_HIDE : 0) |
-          ((BM_edge_is_wire(eed)) ? ME_LOOSEEDGE : 0) | /* not typical */
+          ((BM_edge_is_wire(e)) ? ME_LOOSEEDGE : 0) | /* not typical */
           ME_EDGERENDER);
 }
-char BM_face_flag_to_mflag(BMFace *efa)
+char BM_face_flag_to_mflag(BMFace *f)
 {
-  const char hflag = efa->head.hflag;
+  const char hflag = f->head.hflag;
 
   return (((hflag & BM_ELEM_SELECT) ? ME_FACE_SEL : 0) |
           ((hflag & BM_ELEM_SMOOTH) ? ME_SMOOTH : 0) | ((hflag & BM_ELEM_HIDDEN) ? ME_HIDE : 0));

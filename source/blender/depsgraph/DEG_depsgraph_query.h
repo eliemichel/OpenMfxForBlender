@@ -23,8 +23,7 @@
  * Public API for Querying Depsgraph.
  */
 
-#ifndef __DEG_DEPSGRAPH_QUERY_H__
-#define __DEG_DEPSGRAPH_QUERY_H__
+#pragma once
 
 #include "BLI_iterator.h"
 
@@ -55,6 +54,9 @@ struct Scene *DEG_get_input_scene(const Depsgraph *graph);
 
 /* Get view layer that depsgraph was built for. */
 struct ViewLayer *DEG_get_input_view_layer(const Depsgraph *graph);
+
+/* Get bmain that depsgraph was built for. */
+struct Main *DEG_get_bmain(const Depsgraph *graph);
 
 /* Get evaluation mode that depsgraph was built for. */
 eEvaluationMode DEG_get_mode(const Depsgraph *graph);
@@ -111,14 +113,14 @@ struct ID *DEG_get_original_id(struct ID *id);
  *
  * Original IDs are considered all the IDs which are not covered by copy-on-write system and are
  * not out-of-main localized data-blocks. */
-bool DEG_is_original_id(struct ID *id);
-bool DEG_is_original_object(struct Object *object);
+bool DEG_is_original_id(const struct ID *id);
+bool DEG_is_original_object(const struct Object *object);
 
 /* Opposite of the above.
  *
  * If the data-block is not original it must be evaluated, and vice versa. */
-bool DEG_is_evaluated_id(struct ID *id);
-bool DEG_is_evaluated_object(struct Object *object);
+bool DEG_is_evaluated_id(const struct ID *id);
+bool DEG_is_evaluated_object(const struct Object *object);
 
 /* Check whether depsgraph os fully evaluated. This includes the following checks:
  * - Relations are up-to-date.
@@ -261,5 +263,3 @@ void DEG_foreach_ID(const Depsgraph *depsgraph, DEGForeachIDCallback callback, v
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-#endif /* __DEG_DEPSGRAPH_QUERY_H__ */

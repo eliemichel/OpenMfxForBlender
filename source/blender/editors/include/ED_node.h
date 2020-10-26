@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_NODE_H__
-#define __ED_NODE_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,14 +30,13 @@ extern "C" {
 struct ID;
 struct Main;
 struct Scene;
-struct Scene;
 struct ScrArea;
 struct Tex;
 struct View2D;
 struct bContext;
 struct bNode;
+struct bNodeSocket;
 struct bNodeSocketType;
-struct bNodeTree;
 struct bNodeTree;
 struct bNodeTreeType;
 struct bNodeType;
@@ -79,6 +77,10 @@ void ED_node_draw_snap(
     struct View2D *v2d, const float cent[2], float size, NodeBorder border, unsigned int pos);
 
 /* node_draw.c */
+void ED_node_socket_draw(struct bNodeSocket *sock,
+                         const struct rcti *rect,
+                         const float color[4],
+                         float scale);
 void ED_node_tree_update(const struct bContext *C);
 void ED_node_tag_update_id(struct ID *id);
 void ED_node_tag_update_nodetree(struct Main *bmain, struct bNodeTree *ntree, struct bNode *node);
@@ -94,6 +96,7 @@ void ED_node_set_tree_type(struct SpaceNode *snode, struct bNodeTreeType *typein
 bool ED_node_is_compositor(struct SpaceNode *snode);
 bool ED_node_is_shader(struct SpaceNode *snode);
 bool ED_node_is_texture(struct SpaceNode *snode);
+bool ED_node_is_simulation(struct SpaceNode *snode);
 
 void ED_node_shader_default(const struct bContext *C, struct ID *id);
 void ED_node_composit_default(const struct bContext *C, struct Scene *scene);
@@ -117,11 +120,9 @@ void ED_operatormacros_node(void);
 bool ED_space_node_color_sample(struct Main *bmain,
                                 struct SpaceNode *snode,
                                 struct ARegion *region,
-                                int mval[2],
+                                const int mval[2],
                                 float r_col[3]);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_NODE_H__ */

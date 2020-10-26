@@ -34,14 +34,11 @@ set(INC
   ../../../../intern/guardedalloc
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
-
 set(SRC
   interface.c
   interface_align.c
   interface_anim.c
+  interface_button_group.c
   interface_context_menu.c
   interface_draw.c
   interface_eyedropper.c
@@ -68,7 +65,10 @@ set(SRC
   interface_region_tooltip.c
   interface_regions.c
   interface_style.c
+  interface_template_search_menu.c
+  interface_template_search_operator.c
   interface_templates.c
+  interface_undo.c
   interface_utils.c
   interface_widgets.c
   resources.c
@@ -96,10 +96,6 @@ if(WITH_HEADLESS)
   add_definitions(-DWITH_HEADLESS)
 endif()
 
-if(WITH_CYCLES)
-  add_definitions(-DWITH_CYCLES)
-endif()
-
 if(WITH_PYTHON)
   add_definitions(-DWITH_PYTHON)
 endif()
@@ -110,6 +106,5 @@ if(WIN32)
   endif()
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_interface "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

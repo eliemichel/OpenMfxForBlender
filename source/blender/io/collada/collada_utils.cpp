@@ -30,7 +30,6 @@
 
 #include "MEM_guardedalloc.h"
 
-extern "C" {
 #include "DNA_armature_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_customdata_types.h"
@@ -45,6 +44,7 @@ extern "C" {
 #include "BLI_math.h"
 
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
 #include "BKE_customdata.h"
@@ -59,7 +59,6 @@ extern "C" {
 #include "BKE_object.h"
 #include "BKE_scene.h"
 
-#include "ED_armature.h"
 #include "ED_node.h"
 #include "ED_object.h"
 #include "ED_screen.h"
@@ -75,7 +74,6 @@ extern "C" {
 #if 0
 #  include "NOD_common.h"
 #endif
-}
 
 #include "BlenderContext.h"
 #include "ExportSettings.h"
@@ -90,9 +88,8 @@ float bc_get_float_value(const COLLADAFW::FloatOrDoubleArray &array, unsigned in
   if (array.getType() == COLLADAFW::MeshVertexData::DATA_TYPE_FLOAT) {
     return array.getFloatValues()->getData()[index];
   }
-  else {
-    return array.getDoubleValues()->getData()[index];
-  }
+
+  return array.getDoubleValues()->getData()[index];
 }
 
 /* copied from /editors/object/object_relations.c */
@@ -249,7 +246,7 @@ Mesh *bc_get_mesh_copy(BlenderContext &blender_context,
     tmpmesh = (Mesh *)ob->data;
   }
 
-  BKE_id_copy_ex(NULL, &tmpmesh->id, (ID **)&tmpmesh, LIB_ID_COPY_LOCALIZE);
+  tmpmesh = (Mesh *)BKE_id_copy_ex(NULL, &tmpmesh->id, NULL, LIB_ID_COPY_LOCALIZE);
 
   if (triangulate) {
     bc_triangulate_mesh(tmpmesh);
@@ -332,9 +329,8 @@ bool bc_is_root_bone(Bone *aBone, bool deform_bones_only)
     }
     return (aBone == root);
   }
-  else {
-    return !(aBone->parent);
-  }
+
+  return !(aBone->parent);
 }
 
 int bc_get_active_UVLayer(Object *ob)
@@ -530,9 +526,7 @@ BoneExtensionManager::~BoneExtensionManager()
     for (BoneExtensionMap::iterator ext_it = extended_bones->begin();
          ext_it != extended_bones->end();
          ++ext_it) {
-      if (ext_it->second != NULL) {
-        delete ext_it->second;
-      }
+      delete ext_it->second;
     }
     extended_bones->clear();
     delete extended_bones;
@@ -607,7 +601,7 @@ float BoneExtended::get_roll()
   return this->roll;
 }
 
-void BoneExtended::set_tail(float vec[])
+void BoneExtended::set_tail(const float vec[])
 {
   this->tail[0] = vec[0];
   this->tail[1] = vec[1];
@@ -676,8 +670,7 @@ void BoneExtended::set_bone_layers(std::string layerString, std::vector<std::str
 
 std::string BoneExtended::get_bone_layers(int bitfield)
 {
-  std::string result = "";
-  std::string sep = "";
+  std::string sep;
   int bit = 1u;
 
   std::ostringstream ss;
@@ -1327,21 +1320,40 @@ COLLADASW::ColorOrTexture bc_get_base_color(Material *ma)
   if (ma->use_nodes && shader) {
     return bc_get_cot_from_shader(shader, "Base Color", default_color, false);
   }
-  else {
-    return bc_get_cot(default_color);
-  }
+
+  return bc_get_cot(default_color);
 }
 
 COLLADASW::ColorOrTexture bc_get_emission(Material *ma)
 {
-  Color default_color = {0, 0, 0, 1};
+  Color default_color = {0, 0, 0, 1}; /* default black */
   bNode *shader = bc_get_master_shader(ma);
-  if (ma->use_nodes && shader) {
-    return bc_get_cot_from_shader(shader, "Emission", default_color);
+  if (!(ma->use_nodes && shader)) {
+    return bc_get_cot(default_color);
   }
-  else {
-    return bc_get_cot(default_color); /* default black */
+
+  double emission_strength = 0.0;
+  bc_get_float_from_shader(shader, emission_strength, "Emission Strength");
+  if (emission_strength == 0.0) {
+    return bc_get_cot(default_color);
   }
+
+  COLLADASW::ColorOrTexture cot = bc_get_cot_from_shader(shader, "Emission", default_color);
+
+  /* If using texture, emission strength is not supported. */
+  COLLADASW::Color col = cot.getColor();
+  double final_color[3] = {col.getRed(), col.getGreen(), col.getBlue()};
+  mul_v3db_db(final_color, emission_strength);
+
+  /* Collada does not support HDR colors, so clamp to 1 keeping channels proportional. */
+  double max_color = fmax(fmax(final_color[0], final_color[1]), final_color[2]);
+  if (max_color > 1.0) {
+    mul_v3db_db(final_color, 1.0 / max_color);
+  }
+
+  cot.getColor().set(final_color[0], final_color[1], final_color[2], col.getAlpha());
+
+  return cot;
 }
 
 COLLADASW::ColorOrTexture bc_get_ambient(Material *ma)
@@ -1402,7 +1414,7 @@ double bc_get_reflectivity(Material *ma)
   return reflectivity;
 }
 
-double bc_get_float_from_shader(bNode *shader, double &val, std::string nodeid)
+bool bc_get_float_from_shader(bNode *shader, double &val, std::string nodeid)
 {
   bNodeSocket *socket = nodeFindSocket(shader, SOCK_IN, nodeid.c_str());
   if (socket) {
@@ -1424,9 +1436,8 @@ COLLADASW::ColorOrTexture bc_get_cot_from_shader(bNode *shader,
     float *col = dcol->value;
     return bc_get_cot(col, with_alpha);
   }
-  else {
-    return bc_get_cot(default_color, with_alpha);
-  }
+
+  return bc_get_cot(default_color, with_alpha);
 }
 
 bNode *bc_get_master_shader(Material *ma)

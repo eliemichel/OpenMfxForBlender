@@ -13,12 +13,8 @@
 #=============================================================================
 # Copyright 2015 Blender Foundation.
 #
-# Distributed under the OSI-approved BSD License (the "License");
-# see accompanying file Copyright.txt for details.
-#
-# This software is distributed WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the License for more information.
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
 #=============================================================================
 
 # If SDL2_ROOT_DIR was defined in the environment, use it.
@@ -57,7 +53,7 @@ FIND_PACKAGE_HANDLE_STANDARD_ARGS(SDL2 DEFAULT_MSG
 IF(SDL2_FOUND)
   SET(SDL2_LIBRARIES ${SDL2_LIBRARY})
   SET(SDL2_INCLUDE_DIRS ${SDL2_INCLUDE_DIR})
-ENDIF(SDL2_FOUND)
+ENDIF()
 
 MARK_AS_ADVANCED(
   SDL2_INCLUDE_DIR

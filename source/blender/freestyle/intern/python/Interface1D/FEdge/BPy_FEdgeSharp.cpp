@@ -36,26 +36,20 @@ PyDoc_STRVAR(FEdgeSharp_doc,
              "\n"
              "Class defining a sharp FEdge.  A Sharp FEdge corresponds to an initial\n"
              "edge of the input mesh.  It can be a silhouette, a crease or a border.\n"
-             "If it is a crease edge, then it is borded by two faces of the mesh.\n"
+             "If it is a crease edge, then it is bordered by two faces of the mesh.\n"
              "Face a lies on its right whereas Face b lies on its left.  If it is a\n"
              "border edge, then it doesn't have any face on its right, and thus Face\n"
              "a is None.\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
+             "            __init__(first_vertex, second_vertex)\n"
              "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
+             "   Builds an :class:`FEdgeSharp` using the default constructor,\n"
+             "   copy constructor, or between two :class:`SVertex` objects.\n"
              "\n"
              "   :arg brother: An FEdgeSharp object.\n"
              "   :type brother: :class:`FEdgeSharp`\n"
-             "\n"
-             ".. method:: __init__(first_vertex, second_vertex)\n"
-             "\n"
-             "   Builds an FEdgeSharp going from the first vertex to the second.\n"
-             "\n"
              "   :arg first_vertex: The first SVertex object.\n"
              "   :type first_vertex: :class:`SVertex`\n"
              "   :arg second_vertex: The second SVertex object.\n"
@@ -75,7 +69,7 @@ static int FEdgeSharp_init(BPy_FEdgeSharp *self, PyObject *args, PyObject *kwds)
       self->fes = new FEdgeSharp(*(((BPy_FEdgeSharp *)obj1)->fes));
     }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "O!O!",

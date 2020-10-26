@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2016 Kévin Dietrich.
@@ -23,12 +23,10 @@
 
 #include "abc_reader_archive.h"
 
-extern "C" {
 #include "BKE_main.h"
 
 #include "BLI_path_util.h"
 #include "BLI_string.h"
-}
 
 #ifdef WIN32
 #  include "utfconv.h"
@@ -41,12 +39,11 @@ using Alembic::Abc::Exception;
 using Alembic::Abc::IArchive;
 using Alembic::Abc::kWrapExisting;
 
-static IArchive open_archive(const std::string &filename,
-                             const std::vector<std::istream *> &input_streams,
-                             bool &is_hdf5)
-{
-  is_hdf5 = false;
+namespace blender::io::alembic {
 
+static IArchive open_archive(const std::string &filename,
+                             const std::vector<std::istream *> &input_streams)
+{
   try {
     Alembic::AbcCoreOgawa::ReadArchive archive_reader(input_streams);
 
@@ -55,22 +52,7 @@ static IArchive open_archive(const std::string &filename,
   catch (const Exception &e) {
     std::cerr << e.what() << '\n';
 
-#ifdef WITH_ALEMBIC_HDF5
-    try {
-      is_hdf5 = true;
-      Alembic::AbcCoreAbstract::ReadArraySampleCachePtr cache_ptr;
-
-      return IArchive(Alembic::AbcCoreHDF5::ReadArchive(),
-                      filename.c_str(),
-                      ErrorHandler::kThrowPolicy,
-                      cache_ptr);
-    }
-    catch (const Exception &) {
-      std::cerr << e.what() << '\n';
-      return IArchive();
-    }
-#else
-    /* Inspect the file to see whether it's really a HDF5 file. */
+    /* Inspect the file to see whether it's actually a HDF5 file. */
     char header[4]; /* char(0x89) + "HDF" */
     std::ifstream the_file(filename.c_str(), std::ios::in | std::ios::binary);
     if (!the_file) {
@@ -79,20 +61,16 @@ static IArchive open_archive(const std::string &filename,
     else if (!the_file.read(header, sizeof(header))) {
       std::cerr << "Unable to read from " << filename << std::endl;
     }
-    else if (strncmp(header + 1, "HDF", 3)) {
+    else if (strncmp(header + 1, "HDF", 3) != 0) {
       std::cerr << filename << " has an unknown file format, unable to read." << std::endl;
     }
     else {
-      is_hdf5 = true;
       std::cerr << filename << " is in the obsolete HDF5 format, unable to read." << std::endl;
     }
 
     if (the_file.is_open()) {
       the_file.close();
     }
-
-    return IArchive();
-#endif
   }
 
   return IArchive();
@@ -115,18 +93,7 @@ ArchiveReader::ArchiveReader(struct Main *bmain, const char *filename)
 
   m_streams.push_back(&m_infile);
 
-  m_archive = open_archive(abs_filename, m_streams, m_is_hdf5);
-
-  /* We can't open an HDF5 file from a stream, so close it. */
-  if (m_is_hdf5) {
-    m_infile.close();
-    m_streams.clear();
-  }
-}
-
-bool ArchiveReader::is_hdf5() const
-{
-  return m_is_hdf5;
+  m_archive = open_archive(abs_filename, m_streams);
 }
 
 bool ArchiveReader::valid() const
@@ -138,3 +105,5 @@ Alembic::Abc::IObject ArchiveReader::getTop()
 {
   return m_archive.getTop();
 }
+
+}  // namespace blender::io::alembic

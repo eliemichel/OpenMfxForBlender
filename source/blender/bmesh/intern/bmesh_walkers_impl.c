@@ -45,12 +45,10 @@ static bool bmw_mask_check_vert(BMWalker *walker, BMVert *v)
   if ((walker->flag & BMW_FLAG_TEST_HIDDEN) && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
     return false;
   }
-  else if (walker->mask_vert && !BMO_vert_flag_test(walker->bm, v, walker->mask_vert)) {
+  if (walker->mask_vert && !BMO_vert_flag_test(walker->bm, v, walker->mask_vert)) {
     return false;
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 static bool bmw_mask_check_edge(BMWalker *walker, BMEdge *e)
@@ -58,12 +56,10 @@ static bool bmw_mask_check_edge(BMWalker *walker, BMEdge *e)
   if ((walker->flag & BMW_FLAG_TEST_HIDDEN) && BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
     return false;
   }
-  else if (walker->mask_edge && !BMO_edge_flag_test(walker->bm, e, walker->mask_edge)) {
+  if (walker->mask_edge && !BMO_edge_flag_test(walker->bm, e, walker->mask_edge)) {
     return false;
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 static bool bmw_mask_check_face(BMWalker *walker, BMFace *f)
@@ -71,12 +67,10 @@ static bool bmw_mask_check_face(BMWalker *walker, BMFace *f)
   if ((walker->flag & BMW_FLAG_TEST_HIDDEN) && BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
     return false;
   }
-  else if (walker->mask_face && !BMO_face_flag_test(walker->bm, f, walker->mask_face)) {
+  if (walker->mask_face && !BMO_face_flag_test(walker->bm, f, walker->mask_face)) {
     return false;
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 /** \} */
@@ -94,13 +88,9 @@ static bool bmw_edge_is_wire(const BMWalker *walker, const BMEdge *e)
     if (BM_edge_is_wire(e)) {
       return true;
     }
-    else {
-      return BM_edge_is_all_face_flag_test(e, BM_ELEM_HIDDEN, false);
-    }
+    return BM_edge_is_all_face_flag_test(e, BM_ELEM_HIDDEN, false);
   }
-  else {
-    return BM_edge_is_wire(e);
-  }
+  return BM_edge_is_wire(e);
 }
 /** \} */
 
@@ -501,16 +491,15 @@ static void *bmw_LoopShellWireWalker_step(BMWalker *walker)
 
     return l;
   }
-  else {
-    BMEdge *e = (BMEdge *)swalk->curelem;
 
-    BLI_assert(e->head.htype == BM_EDGE);
+  BMEdge *e = (BMEdge *)swalk->curelem;
 
-    bmw_LoopShellWireWalker_visitVert(walker, e->v1, e);
-    bmw_LoopShellWireWalker_visitVert(walker, e->v2, e);
+  BLI_assert(e->head.htype == BM_EDGE);
 
-    return e;
-  }
+  bmw_LoopShellWireWalker_visitVert(walker, e->v1, e);
+  bmw_LoopShellWireWalker_visitVert(walker, e->v2, e);
+
+  return e;
 }
 
 /** \} */
@@ -647,7 +636,7 @@ static void *bmw_ConnectedVertexWalker_step(BMWalker *walker)
  *
  * \note that this doesn't work on non-manifold geometry.
  * it might be better to rewrite this to extract
- * boundary info from the island walker, rather then directly walking
+ * boundary info from the island walker, rather than directly walking
  * over the boundary.  raises an error if it encounters non-manifold geometry.
  *
  * \todo Add restriction flag/callback for wire edges.
@@ -718,7 +707,7 @@ static void *bmw_IslandboundWalker_step(BMWalker *walker)
   if (l == owalk.curloop) {
     return NULL;
   }
-  else if (BLI_gset_haskey(walker->visit_set, l)) {
+  if (BLI_gset_haskey(walker->visit_set, l)) {
     return owalk.curloop;
   }
 
@@ -845,7 +834,7 @@ static void *bmw_IslandManifoldWalker_step(BMWalker *walker)
  * Starts at a tool-flagged edge and walks over the edge loop
  */
 
-/* utility function to see if an edge is apart of an ngon boundary */
+/* utility function to see if an edge is a part of an ngon boundary */
 static bool bm_edge_is_single(BMEdge *e)
 {
   return ((BM_edge_is_boundary(e)) && (e->l->f->len > 4) &&
@@ -1037,7 +1026,7 @@ static void *bmw_EdgeLoopWalker_step(BMWalker *walker)
         /* walk over boundary of faces but stop at corners */
         (owalk.is_single == false && vert_edge_tot > 2) ||
 
-        /* initial edge was a boundary, so is this edge and vertex is only apart of this face
+        /* initial edge was a boundary, so is this edge and vertex is only a part of this face
          * this lets us walk over the boundary of an ngon which is handy */
         (owalk.is_single == true && vert_edge_tot == 2 && BM_edge_is_boundary(e))) {
       /* find next boundary edge in the fan */
@@ -1246,9 +1235,7 @@ static void bmw_EdgeringWalker_begin(BMWalker *walker, void *data)
     lwalk->wireedge = e;
     return;
   }
-  else {
-    lwalk->wireedge = NULL;
-  }
+  lwalk->wireedge = NULL;
 
   BLI_gset_insert(walker->visit_set, lwalk->l->e);
 
@@ -1285,9 +1272,7 @@ static void *bmw_EdgeringWalker_yield(BMWalker *walker)
   if (lwalk->l) {
     return lwalk->l->e;
   }
-  else {
-    return lwalk->wireedge;
-  }
+  return lwalk->wireedge;
 }
 
 static void *bmw_EdgeringWalker_step(BMWalker *walker)

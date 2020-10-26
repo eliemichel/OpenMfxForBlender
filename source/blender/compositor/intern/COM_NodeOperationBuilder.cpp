@@ -16,9 +16,7 @@
  * Copyright 2013, Blender Foundation.
  */
 
-extern "C" {
 #include "BLI_utildefines.h"
-}
 
 #include "COM_Converter.h"
 #include "COM_Debug.h"
@@ -100,9 +98,9 @@ void NodeOperationBuilder::convertToOperations(ExecutionSystem *system)
 
   add_operation_input_constants();
 
-  add_datatype_conversions();
-
   resolve_proxies();
+
+  add_datatype_conversions();
 
   determineResolutions();
 

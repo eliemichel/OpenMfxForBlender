@@ -103,6 +103,8 @@ layout(std140) uniform globalsBlock
   vec4 colorFaceBack;
   vec4 colorFaceFront;
 
+  vec4 colorUVShadow;
+
   vec4 screenVecs[2];
   vec4 sizeViewport; /* Inverted size in zw. */
 
@@ -117,11 +119,12 @@ layout(std140) uniform globalsBlock
   float sizeEdgeFix;
   float sizeFaceDot;
   float sizeChecker;
-
-  float pad_globalsBlock;
+  float sizeVertexGpencil;
 };
 
 #define sizeViewportInv (sizeViewport.zw)
+
+/* See: 'draw_cache_impl.h' for matching includes. */
 
 /* data[0] (1st byte flags) */
 #define FACE_ACTIVE (1 << 0)
@@ -135,8 +138,9 @@ layout(std140) uniform globalsBlock
 /* data[1] (2st byte flags) */
 #define VERT_ACTIVE (1 << 0)
 #define VERT_SELECTED (1 << 1)
-#define EDGE_ACTIVE (1 << 2)
-#define EDGE_SELECTED (1 << 3)
-#define EDGE_SEAM (1 << 4)
-#define EDGE_SHARP (1 << 5)
-#define EDGE_FREESTYLE (1 << 6)
+#define VERT_SELECTED_BEZT_HANDLE (1 << 2)
+#define EDGE_ACTIVE (1 << 3)
+#define EDGE_SELECTED (1 << 4)
+#define EDGE_SEAM (1 << 5)
+#define EDGE_SHARP (1 << 6)
+#define EDGE_FREESTYLE (1 << 7)

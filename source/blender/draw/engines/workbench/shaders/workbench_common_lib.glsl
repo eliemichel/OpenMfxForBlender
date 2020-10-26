@@ -1,6 +1,5 @@
 
 #define EPSILON 0.00001
-#define M_PI 3.14159265358979323846
 
 #define CAVITY_BUFFER_RANGE 4.0
 
@@ -48,7 +47,7 @@ float workbench_float_pair_encode(float v1, float v2)
 {
   // const uint v1_mask = ~(0xFFFFFFFFu << ROUGHNESS_BITS);
   // const uint v2_mask = ~(0xFFFFFFFFu << METALLIC_BITS);
-  /* Same as above because some compiler are dumb af. and think we use mediump int.  */
+  /* Same as above because some compiler are very dumb and think we use medium int. */
   const int v1_mask = 0x1F;
   const int v2_mask = 0x7;
   int iv1 = int(v1 * float(v1_mask));
@@ -60,38 +59,10 @@ void workbench_float_pair_decode(float data, out float v1, out float v2)
 {
   // const uint v1_mask = ~(0xFFFFFFFFu << ROUGHNESS_BITS);
   // const uint v2_mask = ~(0xFFFFFFFFu << METALLIC_BITS);
-  /* Same as above because some compiler are dumb af. and think we use mediump int.  */
+  /* Same as above because some compiler are very dumb and think we use medium int.  */
   const int v1_mask = 0x1F;
   const int v2_mask = 0x7;
   int idata = int(data);
   v1 = float(idata & v1_mask) * (1.0 / float(v1_mask));
   v2 = float(idata >> int(ROUGHNESS_BITS)) * (1.0 / float(v2_mask));
-}
-
-vec3 view_vector_from_screen_uv(vec2 uv, vec4 viewvecs[3], mat4 proj_mat)
-{
-  if (proj_mat[3][3] == 0.0) {
-    return normalize(viewvecs[0].xyz + vec3(uv, 0.0) * viewvecs[1].xyz);
-  }
-  else {
-    return vec3(0.0, 0.0, 1.0);
-  }
-}
-
-vec3 view_position_from_depth(vec2 uvcoords, float depth, vec4 viewvecs[3], mat4 proj_mat)
-{
-  if (proj_mat[3][3] == 0.0) {
-    /* Perspective */
-    float d = 2.0 * depth - 1.0;
-
-    float zview = -proj_mat[3][2] / (d + proj_mat[2][2]);
-
-    return zview * (viewvecs[0].xyz + vec3(uvcoords, 0.0) * viewvecs[1].xyz);
-  }
-  else {
-    /* Orthographic */
-    vec3 offset = vec3(uvcoords, depth);
-
-    return viewvecs[0].xyz + offset * viewvecs[1].xyz;
-  }
 }

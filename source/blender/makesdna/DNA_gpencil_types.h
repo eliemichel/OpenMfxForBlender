@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_GPENCIL_TYPES_H__
-#define __DNA_GPENCIL_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_brush_types.h"
@@ -264,6 +263,10 @@ typedef enum eGPDstroke_Flag {
   /* Flag used to indicate that stroke is used for fill close and must use
    * fill color for stroke and no fill area */
   GP_STROKE_NOFILL = (1 << 8),
+  /* only for use with stroke-buffer (while drawing arrows) */
+  GP_STROKE_USE_ARROW_START = (1 << 12),
+  /* only for use with stroke-buffer (while drawing arrows) */
+  GP_STROKE_USE_ARROW_END = (1 << 13),
   /* Tag for update geometry */
   GP_STROKE_TAG = (1 << 14),
   /* only for use with stroke-buffer (while drawing eraser) */
@@ -276,8 +279,20 @@ typedef enum eGPDstroke_Caps {
   GP_STROKE_CAP_ROUND = 0,
   GP_STROKE_CAP_FLAT = 1,
 
+  /* Keeo last. */
   GP_STROKE_CAP_MAX,
 } GPDstroke_Caps;
+
+/* Arrows ----------------------- */
+
+/* bGPDataRuntime.arrowstyle */
+typedef enum eGPDstroke_Arrowstyle {
+  GP_STROKE_ARROWSTYLE_NONE = 0,
+  GP_STROKE_ARROWSTYLE_SEGMENT = 2,
+  GP_STROKE_ARROWSTYLE_OPEN = 3,
+  GP_STROKE_ARROWSTYLE_CLOSED = 4,
+  GP_STROKE_ARROWSTYLE_SQUARE = 6,
+} eGPDstroke_Arrowstyle;
 
 /* ***************************************** */
 /* GP Frame */
@@ -504,11 +519,15 @@ typedef struct bGPdata_Runtime {
   /** Number of total elements available in cache. */
   int sbuffer_size;
 
-  /** Vertex Color applied to point (while drawing). */
-  float vert_color[4];
-
   /** Vertex Color applied to Fill (while drawing). */
   float vert_color_fill[4];
+
+  /** Arrow points for stroke corners **/
+  float arrow_start[8];
+  float arrow_end[8];
+  /* Arrow style for each corner */
+  int arrow_start_style;
+  int arrow_end_style;
 
   /** Number of control-points for stroke. */
   int tot_cp_points;
@@ -715,10 +734,10 @@ typedef enum eGP_DrawMode {
 #define GPENCIL_ANY_EDIT_MODE(gpd) \
   ((gpd) && ((gpd)->flag & \
              (GP_DATA_STROKE_EDITMODE | GP_DATA_STROKE_SCULPTMODE | GP_DATA_STROKE_WEIGHTMODE)))
-#define GPENCIL_PAINT_MODE(gpd) ((gpd) && (gpd->flag & (GP_DATA_STROKE_PAINTMODE)))
+#define GPENCIL_PAINT_MODE(gpd) ((gpd) && (gpd->flag & GP_DATA_STROKE_PAINTMODE))
 #define GPENCIL_SCULPT_MODE(gpd) ((gpd) && (gpd->flag & GP_DATA_STROKE_SCULPTMODE))
 #define GPENCIL_WEIGHT_MODE(gpd) ((gpd) && (gpd->flag & GP_DATA_STROKE_WEIGHTMODE))
-#define GPENCIL_VERTEX_MODE(gpd) ((gpd) && (gpd->flag & (GP_DATA_STROKE_VERTEXMODE)))
+#define GPENCIL_VERTEX_MODE(gpd) ((gpd) && (gpd->flag & GP_DATA_STROKE_VERTEXMODE))
 #define GPENCIL_SCULPT_OR_WEIGHT_MODE(gpd) \
   ((gpd) && ((gpd)->flag & (GP_DATA_STROKE_SCULPTMODE | GP_DATA_STROKE_WEIGHTMODE)))
 #define GPENCIL_NONE_EDIT_MODE(gpd) \
@@ -736,5 +755,3 @@ typedef enum eGP_DrawMode {
 #define GPENCIL_ANY_VERTEX_MASK(flag) \
   ((flag & (GP_VERTEX_MASK_SELECTMODE_POINT | GP_VERTEX_MASK_SELECTMODE_STROKE | \
             GP_VERTEX_MASK_SELECTMODE_SEGMENT)))
-
-#endif /*  __DNA_GPENCIL_TYPES_H__ */

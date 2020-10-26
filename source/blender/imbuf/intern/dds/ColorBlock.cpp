@@ -25,20 +25,20 @@
  * Original license from NVIDIA follows.
  */
 
-// This code is in the public domain -- castanyo@yahoo.es
+/* This code is in the public domain - <castanyo@yahoo.es> */
 
 #include <ColorBlock.h>
 #include <Common.h>
 #include <Image.h>
 
 #if 0
-// Get approximate luminance.
+/* Get approximate luminance. */
 inline static uint colorLuminance(Color32 c)
 {
   return c.r + c.g + c.b;
 }
 
-// Get the euclidean distance between the given colors.
+/* Get the euclidean distance between the given colors. */
 inline static uint colorDistance(Color32 c0, Color32 c1)
 {
   return (c0.r - c1.r) * (c0.r - c1.r) + (c0.g - c1.g) * (c0.g - c1.g) +
@@ -46,12 +46,12 @@ inline static uint colorDistance(Color32 c0, Color32 c1)
 }
 #endif
 
-/// Default constructor.
+/** Default constructor. */
 ColorBlock::ColorBlock()
 {
 }
 
-/// Init the color block from an array of colors.
+/** Init the color block from an array of colors. */
 ColorBlock::ColorBlock(const uint *linearImage)
 {
   for (uint i = 0; i < 16; i++) {
@@ -59,7 +59,7 @@ ColorBlock::ColorBlock(const uint *linearImage)
   }
 }
 
-/// Init the color block with the contents of the given block.
+/** Init the color block with the contents of the given block. */
 ColorBlock::ColorBlock(const ColorBlock &block)
 {
   for (uint i = 0; i < 16; i++) {
@@ -67,7 +67,7 @@ ColorBlock::ColorBlock(const ColorBlock &block)
   }
 }
 
-/// Initialize this color block.
+/** Initialize this color block. */
 ColorBlock::ColorBlock(const Image *img, uint x, uint y)
 {
   init(img, x, y);
@@ -83,9 +83,9 @@ void ColorBlock::init(uint w, uint h, const uint *data, uint x, uint y)
   const uint bw = MIN(w - x, 4U);
   const uint bh = MIN(h - y, 4U);
 
-  // Blocks that are smaller than 4x4 are handled by repeating the pixels.
-  // @@ That's only correct when block size is 1, 2 or 4, but not with 3. :(
-  // @@ Ideally we should zero the weights of the pixels out of range.
+  /* Blocks that are smaller than 4x4 are handled by repeating the pixels.
+   * @@ That's only correct when block size is 1, 2 or 4, but not with 3. :(
+   * @@ Ideally we should zero the weights of the pixels out of range. */
 
   for (uint i = 0; i < 4; i++) {
     const int by = i % bh;
@@ -104,9 +104,9 @@ void ColorBlock::init(uint w, uint h, const float *data, uint x, uint y)
   const uint bw = MIN(w - x, 4U);
   const uint bh = MIN(h - y, 4U);
 
-  // Blocks that are smaller than 4x4 are handled by repeating the pixels.
-  // @@ That's only correct when block size is 1, 2 or 4, but not with 3. :(
-  // @@ Ideally we should zero the weights of the pixels out of range.
+  /* Blocks that are smaller than 4x4 are handled by repeating the pixels.
+   * @@ That's only correct when block size is 1, 2 or 4, but not with 3. :(
+   * @@ Ideally we should zero the weights of the pixels out of range. */
 
   uint srcPlane = w * h;
 
@@ -120,7 +120,7 @@ void ColorBlock::init(uint w, uint h, const float *data, uint x, uint y)
       Color32 &c = color(e, i);
       c.r = uint8(255 * CLAMP(data[idx + 0 * srcPlane],
                               0.0f,
-                              1.0f));  // @@ Is this the right way to quantize floats to bytes?
+                              1.0f)); /* @@ Is this the right way to quantize floats to bytes? */
       c.g = uint8(255 * CLAMP(data[idx + 1 * srcPlane], 0.0f, 1.0f));
       c.b = uint8(255 * CLAMP(data[idx + 2 * srcPlane], 0.0f, 1.0f));
       c.a = uint8(255 * CLAMP(data[idx + 3 * srcPlane], 0.0f, 1.0f));
@@ -159,7 +159,7 @@ void ColorBlock::swizzle(uint x, uint y, uint z, uint w)
   }
 }
 
-/// Returns true if the block has a single color.
+/** Returns true if the block has a single color. */
 bool ColorBlock::isSingleColor(Color32 mask /*= Color32(0xFF, 0xFF, 0xFF, 0x00)*/) const
 {
   uint u = m_color[0].u & mask.u;
@@ -174,7 +174,7 @@ bool ColorBlock::isSingleColor(Color32 mask /*= Color32(0xFF, 0xFF, 0xFF, 0x00)*
 }
 
 #if 0
-/// Returns true if the block has a single color, ignoring transparent pixels.
+/** Returns true if the block has a single color, ignoring transparent pixels. */
 bool ColorBlock::isSingleColorNoAlpha() const
 {
   Color32 c;
@@ -199,12 +199,12 @@ bool ColorBlock::isSingleColorNoAlpha() const
 #endif
 
 #if 0
-/// Count number of unique colors in this color block.
+/** Count number of unique colors in this color block. */
 uint ColorBlock::countUniqueColors() const
 {
   uint count = 0;
 
-  // @@ This does not have to be o(n^2)
+  /* @@ This does not have to be o(n^2) */
   for (int i = 0; i < 16; i++) {
     bool unique = true;
     for (int j = 0; j < i; j++) {
@@ -223,7 +223,7 @@ uint ColorBlock::countUniqueColors() const
 #endif
 
 #if 0
-/// Get average color of the block.
+/** Get average color of the block. */
 Color32 ColorBlock::averageColor() const
 {
   uint r, g, b, a;
@@ -240,7 +240,7 @@ Color32 ColorBlock::averageColor() const
 }
 #endif
 
-/// Return true if the block is not fully opaque.
+/** Return true if the block is not fully opaque. */
 bool ColorBlock::hasAlpha() const
 {
   for (uint i = 0; i < 16; i++) {
@@ -253,7 +253,7 @@ bool ColorBlock::hasAlpha() const
 
 #if 0
 
-/// Get diameter color range.
+/** Get diameter color range. */
 void ColorBlock::diameterRange(Color32 *start, Color32 *end) const
 {
   Color32 c0, c1;
@@ -274,7 +274,7 @@ void ColorBlock::diameterRange(Color32 *start, Color32 *end) const
   *end = c1;
 }
 
-/// Get luminance color range.
+/** Get luminance color range. */
 void ColorBlock::luminanceRange(Color32 *start, Color32 *end) const
 {
   Color32 minColor, maxColor;
@@ -299,7 +299,7 @@ void ColorBlock::luminanceRange(Color32 *start, Color32 *end) const
   *end = maxColor;
 }
 
-/// Get color range based on the bounding box.
+/** Get color range based on the bounding box. */
 void ColorBlock::boundsRange(Color32 *start, Color32 *end) const
 {
   Color32 minColor(255, 255, 255);
@@ -326,7 +326,7 @@ void ColorBlock::boundsRange(Color32 *start, Color32 *end) const
     }
   }
 
-  // Offset range by 1/16 of the extents
+  /* Offset range by 1/16 of the extents */
   Color32 inset;
   inset.r = (maxColor.r - minColor.r) >> 4;
   inset.g = (maxColor.g - minColor.g) >> 4;
@@ -344,7 +344,7 @@ void ColorBlock::boundsRange(Color32 *start, Color32 *end) const
   *end = maxColor;
 }
 
-/// Get color range based on the bounding box.
+/** Get color range based on the bounding box. */
 void ColorBlock::boundsRangeAlpha(Color32 *start, Color32 *end) const
 {
   Color32 minColor(255, 255, 255, 255);
@@ -377,7 +377,7 @@ void ColorBlock::boundsRangeAlpha(Color32 *start, Color32 *end) const
     }
   }
 
-  // Offset range by 1/16 of the extents
+  /* Offset range by 1/16 of the extents */
   Color32 inset;
   inset.r = (maxColor.r - minColor.r) >> 4;
   inset.g = (maxColor.g - minColor.g) >> 4;
@@ -400,10 +400,10 @@ void ColorBlock::boundsRangeAlpha(Color32 *start, Color32 *end) const
 #endif
 
 #if 0
-/// Sort colors by abosolute value in their 16 bit representation.
+/** Sort colors by abosolute value in their 16 bit representation. */
 void ColorBlock::sortColorsByAbsoluteValue()
 {
-  // Dummy selection sort.
+  /* Dummy selection sort. */
   for (uint a = 0; a < 16; a++) {
     uint max = a;
     Color16 cmax(m_color[a]);
@@ -422,7 +422,7 @@ void ColorBlock::sortColorsByAbsoluteValue()
 #endif
 
 #if 0
-/// Find extreme colors in the given axis.
+/** Find extreme colors in the given axis. */
 void ColorBlock::computeRange(Vector3::Arg axis, Color32 *start, Color32 *end) const
 {
 
@@ -452,7 +452,7 @@ void ColorBlock::computeRange(Vector3::Arg axis, Color32 *start, Color32 *end) c
 #endif
 
 #if 0
-/// Sort colors in the given axis.
+/** Sort colors in the given axis. */
 void ColorBlock::sortColors(const Vector3 &axis)
 {
   float luma_array[16];
@@ -462,7 +462,7 @@ void ColorBlock::sortColors(const Vector3 &axis)
     luma_array[i] = dot(vec, axis);
   }
 
-  // Dummy selection sort.
+  /* Dummy selection sort. */
   for (uint a = 0; a < 16; a++) {
     uint min = a;
     for (uint b = a + 1; b < 16; b++) {
@@ -477,7 +477,7 @@ void ColorBlock::sortColors(const Vector3 &axis)
 #endif
 
 #if 0
-/// Get the volume of the color block.
+/** Get the volume of the color block. */
 float ColorBlock::volume() const
 {
   Box bounds;

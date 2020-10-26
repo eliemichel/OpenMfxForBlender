@@ -37,8 +37,8 @@
 
 #define BASIC_ENGINE "BLENDER_BASIC"
 
-extern char datatoc_conservative_depth_frag_glsl[];
-extern char datatoc_conservative_depth_vert_glsl[];
+extern char datatoc_depth_frag_glsl[];
+extern char datatoc_depth_vert_glsl[];
 extern char datatoc_conservative_depth_geom_glsl[];
 
 extern char datatoc_common_view_lib_glsl[];
@@ -46,7 +46,7 @@ extern char datatoc_common_view_lib_glsl[];
 /* *********** LISTS *********** */
 
 /* GPUViewport.storage
- * Is freed everytime the viewport engine changes */
+ * Is freed every time the viewport engine changes. */
 typedef struct BASIC_StorageList {
   struct BASIC_PrivateData *g_data;
 } BASIC_StorageList;
@@ -91,22 +91,28 @@ static void basic_engine_init(void *UNUSED(vedata))
 
   /* Depth prepass */
   if (!sh_data->depth) {
-    sh_data->depth = DRW_shader_create_3d_depth_only(draw_ctx->sh_cfg);
-
     const GPUShaderConfigData *sh_cfg = &GPU_shader_cfg_data[draw_ctx->sh_cfg];
+
+    sh_data->depth = GPU_shader_create_from_arrays({
+        .vert = (const char *[]){sh_cfg->lib,
+                                 datatoc_common_view_lib_glsl,
+                                 datatoc_depth_vert_glsl,
+                                 NULL},
+        .frag = (const char *[]){datatoc_depth_frag_glsl, NULL},
+        .defs = (const char *[]){sh_cfg->def, NULL},
+    });
+
     sh_data->depth_conservative = GPU_shader_create_from_arrays({
         .vert = (const char *[]){sh_cfg->lib,
                                  datatoc_common_view_lib_glsl,
-                                 datatoc_conservative_depth_vert_glsl,
+                                 datatoc_depth_vert_glsl,
                                  NULL},
         .geom = (const char *[]){sh_cfg->lib,
                                  datatoc_common_view_lib_glsl,
                                  datatoc_conservative_depth_geom_glsl,
                                  NULL},
-        .frag = (const char *[]){datatoc_common_view_lib_glsl,
-                                 datatoc_conservative_depth_frag_glsl,
-                                 NULL},
-        .defs = (const char *[]){sh_cfg->def, NULL},
+        .frag = (const char *[]){datatoc_depth_frag_glsl, NULL},
+        .defs = (const char *[]){sh_cfg->def, "#define CONSERVATIVE_RASTER\n", NULL},
     });
   }
 }
@@ -125,7 +131,7 @@ static void basic_cache_init(void *vedata)
     stl->g_data = MEM_callocN(sizeof(*stl->g_data), __func__);
   }
 
-  /* Twice for normal and infront objects. */
+  /* Twice for normal and in front objects. */
   for (int i = 0; i < 2; i++) {
     DRWState clip_state = (draw_ctx->sh_cfg == GPU_SHADER_CFG_CLIPPED) ? DRW_STATE_CLIP_PLANES : 0;
     DRWState infront_state = (DRW_state_is_select() && (i == 1)) ? DRW_STATE_IN_FRONT_SELECT : 0;
@@ -153,13 +159,13 @@ static void basic_cache_populate(void *vedata, Object *ob)
 {
   BASIC_StorageList *stl = ((BASIC_Data *)vedata)->stl;
 
-  /* TODO(fclem) fix selection of smoke domains. */
+  /* TODO(fclem): fix selection of smoke domains. */
 
   if (!DRW_object_is_renderable(ob) || (ob->dt < OB_SOLID)) {
     return;
   }
 
-  bool do_in_front = (ob->dtx & OB_DRAWXRAY) != 0;
+  bool do_in_front = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
 
   const DRWContextState *draw_ctx = DRW_context_state_get();
   if (ob != draw_ctx->object_edit) {
@@ -233,6 +239,7 @@ static void basic_engine_free(void)
 {
   for (int i = 0; i < GPU_SHADER_CFG_LEN; i++) {
     BASIC_Shaders *sh_data = &e_data.sh_data[i];
+    DRW_SHADER_FREE_SAFE(sh_data->depth);
     DRW_SHADER_FREE_SAFE(sh_data->depth_conservative);
   }
 }

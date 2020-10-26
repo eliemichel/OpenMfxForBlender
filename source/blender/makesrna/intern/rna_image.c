@@ -67,7 +67,6 @@ static const EnumPropertyItem image_source_items[] = {
 
 #  include "BKE_global.h"
 
-#  include "GPU_draw.h"
 #  include "GPU_texture.h"
 
 #  include "IMB_imbuf.h"
@@ -200,7 +199,7 @@ static void rna_Image_gpu_texture_update(Main *UNUSED(bmain),
   Image *ima = (Image *)ptr->owner_id;
 
   if (!G.background) {
-    GPU_free_image(ima);
+    BKE_image_free_gputextures(ima);
   }
 
   WM_main_add_notifier(NC_IMAGE | ND_DISPLAY, &ima->id);
@@ -398,7 +397,7 @@ static void rna_Image_resolution_set(PointerRNA *ptr, const float *values)
 static int rna_Image_bindcode_get(PointerRNA *ptr)
 {
   Image *ima = (Image *)ptr->data;
-  GPUTexture *tex = ima->gputexture[TEXTARGET_TEXTURE_2D][0];
+  GPUTexture *tex = ima->gputexture[TEXTARGET_2D][0];
   return (tex) ? GPU_texture_opengl_bindcode(tex) : 0;
 }
 
@@ -516,7 +515,7 @@ static void rna_Image_pixels_set(PointerRNA *ptr, const float *values)
     ibuf->userflags |= IB_DISPLAY_BUFFER_INVALID | IB_MIPMAP_INVALID;
     BKE_image_mark_dirty(ima, ibuf);
     if (!G.background) {
-      GPU_free_image(ima);
+      BKE_image_free_gputextures(ima);
     }
     WM_main_add_notifier(NC_IMAGE | ND_DISPLAY, &ima->id);
   }
@@ -915,13 +914,13 @@ static void rna_def_image(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "filepath", PROP_STRING, PROP_FILEPATH);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
-  RNA_def_property_string_sdna(prop, NULL, "name");
+  RNA_def_property_string_sdna(prop, NULL, "filepath");
   RNA_def_property_ui_text(prop, "File Name", "Image/Movie file name");
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_reload_update");
 
   /* eek. this is horrible but needed so we can save to a new name without blanking the data :( */
   prop = RNA_def_property(srna, "filepath_raw", PROP_STRING, PROP_FILEPATH);
-  RNA_def_property_string_sdna(prop, NULL, "name");
+  RNA_def_property_string_sdna(prop, NULL, "filepath");
   RNA_def_property_ui_text(prop, "File Name", "Image/Movie file name (without data refreshing)");
 
   prop = RNA_def_property(srna, "file_format", PROP_ENUM, PROP_NONE);
@@ -1097,9 +1096,9 @@ static void rna_def_image(BlenderRNA *brna)
       prop, "Duration", "Duration (in frames) of the image (1 when not a video/sequence)");
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 
-  /* NOTE about pixels/channels/is_floa:
-   * this properties describes how image is stored internally (inside of ImBuf),
-   * not how it was saved to disk or how it'll be saved on disk
+  /* NOTE about pixels/channels/is_float:
+   * These properties describe how the image is stored internally (inside of ImBuf),
+   * not how it was saved to disk or how it'll be saved on disk.
    */
   prop = RNA_def_property(srna, "pixels", PROP_FLOAT, PROP_NONE);
   RNA_def_property_flag(prop, PROP_DYNAMIC);

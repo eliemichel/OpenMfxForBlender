@@ -22,11 +22,9 @@
  * Declaration of GHOST_IContext interface class.
  */
 
-#ifndef __GHOST_IContext_H__
-#define __GHOST_IContext_H__
+#pragma once
 
 #include "GHOST_Types.h"
-#include "STR_String.h"
 
 /**
  * Interface for GHOST context.
@@ -64,5 +62,3 @@ class GHOST_IContext {
   MEM_CXX_CLASS_ALLOC_FUNCS("GHOST:GHOST_IContext")
 #endif
 };
-
-#endif  // __GHOST_IContext_H__

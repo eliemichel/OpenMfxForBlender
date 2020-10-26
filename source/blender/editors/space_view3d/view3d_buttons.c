@@ -44,6 +44,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_customdata.h"
@@ -61,7 +62,6 @@
 
 #include "RNA_access.h"
 
-#include "ED_armature.h"
 #include "ED_mesh.h"
 #include "ED_object.h"
 #include "ED_screen.h"
@@ -126,27 +126,25 @@ static float compute_scale_factor(const float ve_median, const float median)
   if (ve_median <= 0.0f) {
     return 0.0f;
   }
-  else if (ve_median >= 1.0f) {
+  if (ve_median >= 1.0f) {
     return 1.0f;
   }
-  else {
-    /* Scale value to target median. */
-    float median_new = ve_median;
-    float median_orig = ve_median - median; /* Previous median value. */
 
-    /* In case of floating point error. */
-    CLAMP(median_orig, 0.0f, 1.0f);
-    CLAMP(median_new, 0.0f, 1.0f);
+  /* Scale value to target median. */
+  float median_new = ve_median;
+  float median_orig = ve_median - median; /* Previous median value. */
 
-    if (median_new <= median_orig) {
-      /* Scale down. */
-      return median_new / median_orig;
-    }
-    else {
-      /* Scale up, negative to indicate it... */
-      return -(1.0f - median_new) / (1.0f - median_orig);
-    }
+  /* In case of floating point error. */
+  CLAMP(median_orig, 0.0f, 1.0f);
+  CLAMP(median_new, 0.0f, 1.0f);
+
+  if (median_new <= median_orig) {
+    /* Scale down. */
+    return median_new / median_orig;
   }
+
+  /* Scale up, negative to indicate it... */
+  return -(1.0f - median_new) / (1.0f - median_orig);
 }
 
 /**
@@ -285,7 +283,6 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
   else if (ob->type == OB_CURVE || ob->type == OB_SURF) {
     TransformMedian_Curve *median = &median_basis.curve;
     Curve *cu = ob->data;
-    Nurb *nu;
     BPoint *bp;
     BezTriple *bezt;
     int a;
@@ -293,8 +290,7 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
     StructRNA *seltype = NULL;
     void *selp = NULL;
 
-    nu = nurbs->first;
-    while (nu) {
+    LISTBASE_FOREACH (Nurb *, nu, nurbs) {
       if (nu->type == CU_BEZIER) {
         bezt = nu->bezt;
         a = nu->pntsu;
@@ -345,7 +341,6 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
           bp++;
         }
       }
-      nu = nu->next;
     }
 
     if (totcurvedata == 1) {
@@ -474,9 +469,11 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
                     &tfp->ve_median.generic.location[0],
                     -lim,
                     lim,
-                    10,
-                    RNA_TRANSLATION_PREC_DEFAULT,
+                    0,
+                    0,
                     "");
+    UI_but_number_step_size_set(but, 10);
+    UI_but_number_precision_set(but, RNA_TRANSLATION_PREC_DEFAULT);
     UI_but_unit_type_set(but, PROP_UNIT_LENGTH);
     but = uiDefButF(block,
                     UI_BTYPE_NUM,
@@ -489,9 +486,11 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
                     &tfp->ve_median.generic.location[1],
                     -lim,
                     lim,
-                    10,
-                    RNA_TRANSLATION_PREC_DEFAULT,
+                    0,
+                    0,
                     "");
+    UI_but_number_step_size_set(but, 10);
+    UI_but_number_precision_set(but, RNA_TRANSLATION_PREC_DEFAULT);
     UI_but_unit_type_set(but, PROP_UNIT_LENGTH);
     but = uiDefButF(block,
                     UI_BTYPE_NUM,
@@ -504,26 +503,30 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
                     &tfp->ve_median.generic.location[2],
                     -lim,
                     lim,
-                    10,
-                    RNA_TRANSLATION_PREC_DEFAULT,
+                    0,
+                    0,
                     "");
+    UI_but_number_step_size_set(but, 10);
+    UI_but_number_precision_set(but, RNA_TRANSLATION_PREC_DEFAULT);
     UI_but_unit_type_set(but, PROP_UNIT_LENGTH);
 
     if (totcurvebweight == tot) {
-      uiDefButF(block,
-                UI_BTYPE_NUM,
-                B_TRANSFORM_PANEL_MEDIAN,
-                IFACE_("W:"),
-                0,
-                yi -= buth,
-                butw,
-                buth,
-                &(tfp->ve_median.curve.b_weight),
-                0.01,
-                100.0,
-                1,
-                3,
-                "");
+      but = uiDefButF(block,
+                      UI_BTYPE_NUM,
+                      B_TRANSFORM_PANEL_MEDIAN,
+                      IFACE_("W:"),
+                      0,
+                      yi -= buth,
+                      butw,
+                      buth,
+                      &(tfp->ve_median.curve.b_weight),
+                      0.01,
+                      100.0,
+                      0,
+                      0,
+                      "");
+      UI_but_number_step_size_set(but, 1);
+      UI_but_number_precision_set(but, 3);
     }
 
     UI_block_align_begin(block);
@@ -578,51 +581,57 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
                  0,
                  "");
         /* customdata layer added on demand */
-        uiDefButF(block,
-                  UI_BTYPE_NUM,
-                  B_TRANSFORM_PANEL_MEDIAN,
-                  tot == 1 ? IFACE_("Bevel Weight:") : IFACE_("Mean Bevel Weight:"),
-                  0,
-                  yi -= buth + but_margin,
-                  butw,
-                  buth,
-                  &ve_median->bv_weight,
-                  0.0,
-                  1.0,
-                  1,
-                  2,
-                  TIP_("Vertex weight used by Bevel modifier"));
+        but = uiDefButF(block,
+                        UI_BTYPE_NUM,
+                        B_TRANSFORM_PANEL_MEDIAN,
+                        tot == 1 ? IFACE_("Bevel Weight:") : IFACE_("Mean Bevel Weight:"),
+                        0,
+                        yi -= buth + but_margin,
+                        butw,
+                        buth,
+                        &ve_median->bv_weight,
+                        0.0,
+                        1.0,
+                        0,
+                        0,
+                        TIP_("Vertex weight used by Bevel modifier"));
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 2);
       }
       if (has_skinradius) {
         UI_block_align_begin(block);
-        uiDefButF(block,
-                  UI_BTYPE_NUM,
-                  B_TRANSFORM_PANEL_MEDIAN,
-                  tot == 1 ? IFACE_("Radius X:") : IFACE_("Mean Radius X:"),
-                  0,
-                  yi -= buth + but_margin,
-                  butw,
-                  buth,
-                  &ve_median->skin[0],
-                  0.0,
-                  100.0,
-                  1,
-                  3,
-                  TIP_("X radius used by Skin modifier"));
-        uiDefButF(block,
-                  UI_BTYPE_NUM,
-                  B_TRANSFORM_PANEL_MEDIAN,
-                  tot == 1 ? IFACE_("Radius Y:") : IFACE_("Mean Radius Y:"),
-                  0,
-                  yi -= buth + but_margin,
-                  butw,
-                  buth,
-                  &ve_median->skin[1],
-                  0.0,
-                  100.0,
-                  1,
-                  3,
-                  TIP_("Y radius used by Skin modifier"));
+        but = uiDefButF(block,
+                        UI_BTYPE_NUM,
+                        B_TRANSFORM_PANEL_MEDIAN,
+                        tot == 1 ? IFACE_("Radius X:") : IFACE_("Mean Radius X:"),
+                        0,
+                        yi -= buth + but_margin,
+                        butw,
+                        buth,
+                        &ve_median->skin[0],
+                        0.0,
+                        100.0,
+                        0,
+                        0,
+                        TIP_("X radius used by Skin modifier"));
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 3);
+        but = uiDefButF(block,
+                        UI_BTYPE_NUM,
+                        B_TRANSFORM_PANEL_MEDIAN,
+                        tot == 1 ? IFACE_("Radius Y:") : IFACE_("Mean Radius Y:"),
+                        0,
+                        yi -= buth + but_margin,
+                        butw,
+                        buth,
+                        &ve_median->skin[1],
+                        0.0,
+                        100.0,
+                        0,
+                        0,
+                        TIP_("Y radius used by Skin modifier"));
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 3);
         UI_block_align_end(block);
       }
       if (totedgedata) {
@@ -641,119 +650,133 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
                  0,
                  "");
         /* customdata layer added on demand */
-        uiDefButF(block,
-                  UI_BTYPE_NUM,
-                  B_TRANSFORM_PANEL_MEDIAN,
-                  totedgedata == 1 ? IFACE_("Bevel Weight:") : IFACE_("Mean Bevel Weight:"),
-                  0,
-                  yi -= buth + but_margin,
-                  butw,
-                  buth,
-                  &ve_median->be_weight,
-                  0.0,
-                  1.0,
-                  1,
-                  2,
-                  TIP_("Edge weight used by Bevel modifier"));
+        but = uiDefButF(block,
+                        UI_BTYPE_NUM,
+                        B_TRANSFORM_PANEL_MEDIAN,
+                        totedgedata == 1 ? IFACE_("Bevel Weight:") : IFACE_("Mean Bevel Weight:"),
+                        0,
+                        yi -= buth + but_margin,
+                        butw,
+                        buth,
+                        &ve_median->be_weight,
+                        0.0,
+                        1.0,
+                        0,
+                        0,
+                        TIP_("Edge weight used by Bevel modifier"));
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 2);
         /* customdata layer added on demand */
-        uiDefButF(block,
-                  UI_BTYPE_NUM,
-                  B_TRANSFORM_PANEL_MEDIAN,
-                  totedgedata == 1 ? IFACE_("Crease:") : IFACE_("Mean Crease:"),
-                  0,
-                  yi -= buth + but_margin,
-                  butw,
-                  buth,
-                  &ve_median->crease,
-                  0.0,
-                  1.0,
-                  1,
-                  2,
-                  TIP_("Weight used by the Subdivision Surface modifier"));
+        but = uiDefButF(block,
+                        UI_BTYPE_NUM,
+                        B_TRANSFORM_PANEL_MEDIAN,
+                        totedgedata == 1 ? IFACE_("Crease:") : IFACE_("Mean Crease:"),
+                        0,
+                        yi -= buth + but_margin,
+                        butw,
+                        buth,
+                        &ve_median->crease,
+                        0.0,
+                        1.0,
+                        0,
+                        0,
+                        TIP_("Weight used by the Subdivision Surface modifier"));
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 2);
       }
     }
     /* Curve... */
     else if (totcurvedata) {
       TransformMedian_Curve *ve_median = &tfp->ve_median.curve;
       if (totcurvedata == 1) {
-        uiDefButR(block,
-                  UI_BTYPE_NUM,
-                  0,
-                  IFACE_("Weight:"),
-                  0,
-                  yi -= buth + but_margin,
-                  butw,
-                  buth,
-                  &data_ptr,
-                  "weight_softbody",
-                  0,
-                  0.0,
-                  1.0,
-                  1,
-                  3,
-                  NULL);
-        uiDefButR(block,
-                  UI_BTYPE_NUM,
-                  0,
-                  IFACE_("Radius:"),
-                  0,
-                  yi -= buth + but_margin,
-                  butw,
-                  buth,
-                  &data_ptr,
-                  "radius",
-                  0,
-                  0.0,
-                  100.0,
-                  1,
-                  3,
-                  NULL);
-        uiDefButR(block,
-                  UI_BTYPE_NUM,
-                  0,
-                  IFACE_("Tilt:"),
-                  0,
-                  yi -= buth + but_margin,
-                  butw,
-                  buth,
-                  &data_ptr,
-                  "tilt",
-                  0,
-                  -tilt_limit,
-                  tilt_limit,
-                  1,
-                  3,
-                  NULL);
+        but = uiDefButR(block,
+                        UI_BTYPE_NUM,
+                        0,
+                        IFACE_("Weight:"),
+                        0,
+                        yi -= buth + but_margin,
+                        butw,
+                        buth,
+                        &data_ptr,
+                        "weight_softbody",
+                        0,
+                        0.0,
+                        1.0,
+                        0,
+                        0,
+                        NULL);
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 3);
+        but = uiDefButR(block,
+                        UI_BTYPE_NUM,
+                        0,
+                        IFACE_("Radius:"),
+                        0,
+                        yi -= buth + but_margin,
+                        butw,
+                        buth,
+                        &data_ptr,
+                        "radius",
+                        0,
+                        0.0,
+                        100.0,
+                        0,
+                        0,
+                        NULL);
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 3);
+        but = uiDefButR(block,
+                        UI_BTYPE_NUM,
+                        0,
+                        IFACE_("Tilt:"),
+                        0,
+                        yi -= buth + but_margin,
+                        butw,
+                        buth,
+                        &data_ptr,
+                        "tilt",
+                        0,
+                        -tilt_limit,
+                        tilt_limit,
+                        0,
+                        0,
+                        NULL);
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 3);
       }
       else if (totcurvedata > 1) {
-        uiDefButF(block,
-                  UI_BTYPE_NUM,
-                  B_TRANSFORM_PANEL_MEDIAN,
-                  IFACE_("Mean Weight:"),
-                  0,
-                  yi -= buth + but_margin,
-                  butw,
-                  buth,
-                  &ve_median->weight,
-                  0.0,
-                  1.0,
-                  1,
-                  3,
-                  TIP_("Weight used for Soft Body Goal"));
-        uiDefButF(block,
-                  UI_BTYPE_NUM,
-                  B_TRANSFORM_PANEL_MEDIAN,
-                  IFACE_("Mean Radius:"),
-                  0,
-                  yi -= buth + but_margin,
-                  butw,
-                  buth,
-                  &ve_median->radius,
-                  0.0,
-                  100.0,
-                  1,
-                  3,
-                  TIP_("Radius of curve control points"));
+        but = uiDefButF(block,
+                        UI_BTYPE_NUM,
+                        B_TRANSFORM_PANEL_MEDIAN,
+                        IFACE_("Mean Weight:"),
+                        0,
+                        yi -= buth + but_margin,
+                        butw,
+                        buth,
+                        &ve_median->weight,
+                        0.0,
+                        1.0,
+                        0,
+                        0,
+                        TIP_("Weight used for Soft Body Goal"));
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 3);
+        but = uiDefButF(block,
+                        UI_BTYPE_NUM,
+                        B_TRANSFORM_PANEL_MEDIAN,
+                        IFACE_("Mean Radius:"),
+                        0,
+                        yi -= buth + but_margin,
+                        butw,
+                        buth,
+                        &ve_median->radius,
+                        0.0,
+                        100.0,
+                        0,
+                        0,
+                        TIP_("Radius of curve control points"));
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 3);
         but = uiDefButF(block,
                         UI_BTYPE_NUM,
                         B_TRANSFORM_PANEL_MEDIAN,
@@ -765,9 +788,11 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
                         &ve_median->tilt,
                         -tilt_limit,
                         tilt_limit,
-                        1,
-                        3,
+                        0,
+                        0,
                         TIP_("Tilt of curve control points"));
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 3);
         UI_but_unit_type_set(but, PROP_UNIT_ROTATION);
       }
     }
@@ -788,25 +813,29 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
                   0,
                   0.0,
                   1.0,
-                  1,
-                  3,
+                  0,
+                  0,
                   NULL);
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 3);
       }
       else if (totlattdata > 1) {
-        uiDefButF(block,
-                  UI_BTYPE_NUM,
-                  B_TRANSFORM_PANEL_MEDIAN,
-                  IFACE_("Mean Weight:"),
-                  0,
-                  yi -= buth + but_margin,
-                  butw,
-                  buth,
-                  &ve_median->weight,
-                  0.0,
-                  1.0,
-                  1,
-                  3,
-                  TIP_("Weight used for Soft Body Goal"));
+        but = uiDefButF(block,
+                        UI_BTYPE_NUM,
+                        B_TRANSFORM_PANEL_MEDIAN,
+                        IFACE_("Mean Weight:"),
+                        0,
+                        yi -= buth + but_margin,
+                        butw,
+                        buth,
+                        &ve_median->weight,
+                        0.0,
+                        1.0,
+                        0,
+                        0,
+                        TIP_("Weight used for Soft Body Goal"));
+        UI_but_number_step_size_set(but, 1);
+        UI_but_number_precision_set(but, 3);
       }
     }
 
@@ -941,15 +970,13 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
       const TransformMedian_Curve *median = &median_basis.curve,
                                   *ve_median = &ve_median_basis.curve;
       Curve *cu = ob->data;
-      Nurb *nu;
       BPoint *bp;
       BezTriple *bezt;
       int a;
       ListBase *nurbs = BKE_curve_editNurbs_get(cu);
       const float scale_w = compute_scale_factor(ve_median->weight, median->weight);
 
-      nu = nurbs->first;
-      while (nu) {
+      LISTBASE_FOREACH (Nurb *, nu, nurbs) {
         if (nu->type == CU_BEZIER) {
           for (a = nu->pntsu, bezt = nu->bezt; a--; bezt++) {
             if (bezt->f2 & SELECT) {
@@ -1006,8 +1033,6 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
         }
         BKE_nurb_test_2d(nu);
         BKE_nurb_handles_test(nu, true, false); /* test for bezier too */
-
-        nu = nu->next;
       }
     }
     else if ((ob->type == OB_LATTICE) && (apply_vcos || median_basis.lattice.weight)) {
@@ -1073,7 +1098,7 @@ static void v3d_object_dimension_buts(bContext *C, uiLayout *layout, View3D *v3d
     const float lim = FLT_MAX;
     for (int i = 0; i < 3; i++) {
       uiBut *but;
-      char text[3] = {'X' + i, ':', '\0'};
+      const char text[3] = {'X' + i, ':', '\0'};
       but = uiDefButF(block,
                       UI_BTYPE_NUM,
                       B_TRANSFORM_PANEL_DIMS,
@@ -1085,9 +1110,11 @@ static void v3d_object_dimension_buts(bContext *C, uiLayout *layout, View3D *v3d
                       &(tfp->ob_dims[i]),
                       0.0f,
                       lim,
-                      10,
-                      3,
+                      0,
+                      0,
                       "");
+      UI_but_number_step_size_set(but, 10);
+      UI_but_number_precision_set(but, 3);
       UI_but_unit_type_set(but, PROP_UNIT_LENGTH);
     }
     UI_block_align_end(block);
@@ -1117,13 +1144,12 @@ static void do_view3d_vgroup_buttons(bContext *C, void *UNUSED(arg), int event)
     /* not for me */
     return;
   }
-  else {
-    ViewLayer *view_layer = CTX_data_view_layer(C);
-    Object *ob = view_layer->basact->object;
-    ED_vgroup_vert_active_mirror(ob, event - B_VGRP_PNL_EDIT_SINGLE);
-    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-    WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
-  }
+
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  Object *ob = view_layer->basact->object;
+  ED_vgroup_vert_active_mirror(ob, event - B_VGRP_PNL_EDIT_SINGLE);
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
 }
 
 static bool view3d_panel_vgroup_poll(const bContext *C, PanelType *UNUSED(pt))
@@ -1228,9 +1254,11 @@ static void view3d_panel_vgroup(const bContext *C, Panel *panel)
                           &dw->weight,
                           0.0,
                           1.0,
-                          1,
-                          3,
+                          0,
+                          0,
                           "");
+          UI_but_number_step_size_set(but, 1);
+          UI_but_number_precision_set(but, 3);
           UI_but_drawflag_enable(but, UI_BUT_TEXT_LEFT);
           if (locked) {
             lock_count++;
@@ -1477,6 +1505,7 @@ static void v3d_editmetaball_buts(uiLayout *layout, Object *ob)
   uiLayout *col;
 
   if (!mball || !(mball->lastelem)) {
+    uiItemL(layout, IFACE_("Nothing selected"), ICON_NONE);
     return;
   }
 
@@ -1641,14 +1670,13 @@ static int view3d_object_mode_menu(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_WARNING, "No active object found");
     return OPERATOR_CANCELLED;
   }
-  else if (((ob->mode & OB_MODE_EDIT) == 0) && (ELEM(ob->type, OB_ARMATURE))) {
-    ED_object_mode_toggle(C, OB_MODE_POSE);
+  if (((ob->mode & OB_MODE_EDIT) == 0) && (ELEM(ob->type, OB_ARMATURE))) {
+    ED_object_mode_set(C, (ob->mode == OB_MODE_OBJECT) ? OB_MODE_POSE : OB_MODE_OBJECT);
     return OPERATOR_CANCELLED;
   }
-  else {
-    UI_pie_menu_invoke(C, "VIEW3D_MT_object_mode_pie", CTX_wm_window(C)->eventstate);
-    return OPERATOR_CANCELLED;
-  }
+
+  UI_pie_menu_invoke(C, "VIEW3D_MT_object_mode_pie", CTX_wm_window(C)->eventstate);
+  return OPERATOR_CANCELLED;
 }
 
 void VIEW3D_OT_object_mode_pie_or_toggle(wmOperatorType *ot)

@@ -52,7 +52,7 @@
 
 #ifdef RNA_RUNTIME
 static const EnumPropertyItem part_from_items[] = {
-    {PART_FROM_VERT, "VERT", 0, "Verts", ""},
+    {PART_FROM_VERT, "VERT", 0, "Vertices", ""},
     {PART_FROM_FACE, "FACE", 0, "Faces", ""},
     {PART_FROM_VOLUME, "VOLUME", 0, "Volume", ""},
     {0, NULL, 0, NULL, NULL},
@@ -61,7 +61,7 @@ static const EnumPropertyItem part_from_items[] = {
 
 #ifndef RNA_RUNTIME
 static const EnumPropertyItem part_reactor_from_items[] = {
-    {PART_FROM_VERT, "VERT", 0, "Verts", ""},
+    {PART_FROM_VERT, "VERT", 0, "Vertices", ""},
     {PART_FROM_FACE, "FACE", 0, "Faces", ""},
     {PART_FROM_VOLUME, "VOLUME", 0, "Volume", ""},
     {0, NULL, 0, NULL, NULL},
@@ -243,35 +243,87 @@ static void rna_ParticleHairKey_location_object_get(PointerRNA *ptr, float *valu
   }
 }
 
+/* Helper function which returns index of the given hair_key in particle which owns it.
+ * Works with cases when hair_key is coming from the particle which was passed here, and from the
+ * original particle of the given one.
+ *
+ * Such trickery is needed to allow modification of hair keys in the original object using
+ * evaluated particle and object to access proper hair matrix. */
+static int hair_key_index_get(/*const*/ HairKey *hair_key,
+                              /*const*/ ParticleSystemModifierData *modifier,
+                              /*const*/ ParticleData *particle)
+{
+  if (ARRAY_HAS_ITEM(hair_key, particle->hair, particle->totkey)) {
+    return hair_key - particle->hair;
+  }
+
+  const ParticleSystem *particle_system = modifier->psys;
+  const int particle_index = particle - particle_system->particles;
+
+  const ParticleSystemModifierData *original_modifier = (ParticleSystemModifierData *)
+      BKE_modifier_get_original(&modifier->modifier);
+  const ParticleSystem *original_particle_system = original_modifier->psys;
+  const ParticleData *original_particle = &original_particle_system->particles[particle_index];
+
+  if (ARRAY_HAS_ITEM(hair_key, original_particle->hair, original_particle->totkey)) {
+    return hair_key - original_particle->hair;
+  }
+
+  return -1;
+}
+
+/* Set hair_key->co to the given coordinate in object space (the given coordinate will be
+ * converted to the proper space).
+ *
+ * The hair_key can be coming from both original and evaluated object. Object, modifier and
+ * particle are to be from evaluated object, so that all the data needed for hair matrix is
+ * present. */
+static void hair_key_location_object_set(HairKey *hair_key,
+                                         Object *object,
+                                         ParticleSystemModifierData *modifier,
+                                         ParticleData *particle,
+                                         const float src_co[3])
+{
+  Mesh *hair_mesh = (modifier->psys->flag & PSYS_HAIR_DYNAMICS) ? modifier->psys->hair_out_mesh :
+                                                                  NULL;
+
+  if (hair_mesh != NULL) {
+    const int hair_key_index = hair_key_index_get(hair_key, modifier, particle);
+    if (hair_key_index == -1) {
+      return;
+    }
+
+    MVert *mvert = &hair_mesh->mvert[particle->hair_index + (hair_key_index)];
+    copy_v3_v3(mvert->co, src_co);
+    return;
+  }
+
+  float hairmat[4][4];
+  psys_mat_hair_to_object(
+      object, modifier->mesh_final, modifier->psys->part->from, particle, hairmat);
+
+  float imat[4][4];
+  invert_m4_m4(imat, hairmat);
+
+  copy_v3_v3(hair_key->co, src_co);
+  mul_m4_v3(imat, hair_key->co);
+}
+
 static void rna_ParticleHairKey_location_object_set(PointerRNA *ptr, const float *values)
 {
   HairKey *hkey = (HairKey *)ptr->data;
   Object *ob = (Object *)ptr->owner_id;
+
   ParticleSystemModifierData *psmd;
   ParticleData *pa;
-
   rna_ParticleHairKey_location_object_info(ptr, &psmd, &pa);
 
-  if (pa) {
-    Mesh *hair_mesh = (psmd->psys->flag & PSYS_HAIR_DYNAMICS) ? psmd->psys->hair_out_mesh : NULL;
-
-    if (hair_mesh) {
-      MVert *mvert = &hair_mesh->mvert[pa->hair_index + (hkey - pa->hair)];
-      copy_v3_v3(mvert->co, values);
-    }
-    else {
-      float hairmat[4][4];
-      float imat[4][4];
-
-      psys_mat_hair_to_object(ob, psmd->mesh_final, psmd->psys->part->from, pa, hairmat);
-      invert_m4_m4(imat, hairmat);
-      copy_v3_v3(hkey->co, values);
-      mul_m4_v3(imat, hkey->co);
-    }
-  }
-  else {
+  if (pa == NULL) {
     zero_v3(hkey->co);
+    return;
   }
+
+  hair_key_location_object_set(hkey, ob, psmd, pa, values);
 }
 
 static void rna_ParticleHairKey_co_object(HairKey *hairkey,
@@ -299,6 +351,31 @@ static void rna_ParticleHairKey_co_object(HairKey *hairkey,
   else {
     zero_v3(n_co);
   }
+}
+
+static void rna_ParticleHairKey_co_object_set(ID *id,
+                                              HairKey *hair_key,
+                                              Object *object,
+                                              ParticleSystemModifierData *modifier,
+                                              ParticleData *particle,
+                                              float co[3])
+{
+
+  if (particle == NULL) {
+    return;
+  }
+
+  /* Mark particle system as edited, so then particle_system_update() does not reset the hair
+   * keys from path. This behavior is similar to how particle edit mode sets flags. */
+  ParticleSystemModifierData *orig_modifier = (ParticleSystemModifierData *)
+                                                  modifier->modifier.orig_modifier_data;
+  orig_modifier->psys->flag |= PSYS_EDITED;
+
+  hair_key_location_object_set(hair_key, object, modifier, particle, co);
+
+  /* Tag similar to brushes in particle edit mode, so the modifier stack is properly evaluated
+   * with the same particle system recalc flags as during combing. */
+  DEG_id_tag_update(id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_REDO);
 }
 
 static void rna_Particle_uv_on_emitter(ParticleData *particle,
@@ -827,7 +904,7 @@ static void rna_Particle_hair_dynamics_update(Main *bmain, Scene *scene, Pointer
   ParticleSystem *psys = (ParticleSystem *)ptr->data;
 
   if (psys && !psys->clmd) {
-    psys->clmd = (ClothModifierData *)modifier_new(eModifierType_Cloth);
+    psys->clmd = (ClothModifierData *)BKE_modifier_new(eModifierType_Cloth);
     psys->clmd->sim_parms->goalspring = 0.0f;
     psys->clmd->sim_parms->flags |= CLOTH_SIMSETTINGS_FLAG_RESIST_SPRING_COMPRESS;
     psys->clmd->coll_parms->flags &= ~CLOTH_COLLSETTINGS_FLAG_SELF;
@@ -1651,6 +1728,19 @@ static void rna_def_particle_hair_key(BlenderRNA *brna)
       func, "co", 3, NULL, -FLT_MAX, FLT_MAX, "Co", "Exported hairkey location", -1e4, 1e4);
   RNA_def_parameter_flags(parm, PROP_THICK_WRAP, 0);
   RNA_def_function_output(func, parm);
+
+  func = RNA_def_function(srna, "co_object_set", "rna_ParticleHairKey_co_object_set");
+  RNA_def_function_flag(func, FUNC_USE_SELF_ID);
+  RNA_def_function_ui_description(func, "Set hairkey location with particle and modifier data");
+  parm = RNA_def_pointer(func, "object", "Object", "", "Object");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+  parm = RNA_def_pointer(func, "modifier", "ParticleSystemModifier", "", "Particle modifier");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+  parm = RNA_def_pointer(func, "particle", "Particle", "", "hair particle");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+  parm = RNA_def_float_vector(
+      func, "co", 3, NULL, -FLT_MAX, FLT_MAX, "Co", "Specified hairkey location", -1e4, 1e4);
+  RNA_def_parameter_flags(parm, PROP_THICK_WRAP, PARM_REQUIRED);
 }
 
 static void rna_def_particle_key(BlenderRNA *brna)
@@ -1927,7 +2017,7 @@ static void rna_def_fluid_settings(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Elastic Limit",
-      "How much the spring has to be stretched/compressed in order to change it's rest length");
+      "How much the spring has to be stretched/compressed in order to change its rest length");
   RNA_def_property_update(prop, 0, "rna_Particle_reset");
 
   prop = RNA_def_property(srna, "spring_frames", PROP_INT, PROP_NONE);
@@ -2854,7 +2944,6 @@ static void rna_def_particle_settings(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "courant_target", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 0.0001, 10);
-  RNA_def_property_float_default(prop, 0.1);
   RNA_def_property_ui_text(
       prop,
       "Adaptive Subframe Threshold",
@@ -2887,7 +2976,7 @@ static void rna_def_particle_settings(BlenderRNA *brna)
   RNA_def_property_int_sdna(prop, NULL, "userjit");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_range(prop, 0, 1000);
-  RNA_def_property_ui_text(prop, "P/F", "Emission locations / face (0 = automatic)");
+  RNA_def_property_ui_text(prop, "Particles/Face", "Emission locations per face (0 = automatic)");
   RNA_def_property_update(prop, 0, "rna_Particle_reset");
 
   prop = RNA_def_property(srna, "grid_resolution", PROP_INT, PROP_UNSIGNED);
@@ -2957,7 +3046,7 @@ static void rna_def_particle_settings(BlenderRNA *brna)
   prop = RNA_def_property(srna, "tangent_phase", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "tanphase");
   RNA_def_property_range(prop, -1.0f, 1.0f);
-  RNA_def_property_ui_text(prop, "Rot", "Rotate the surface tangent");
+  RNA_def_property_ui_text(prop, "Rotation", "Rotate the surface tangent");
   RNA_def_property_update(prop, 0, "rna_Particle_reset");
 
   prop = RNA_def_property(srna, "reactor_factor", PROP_FLOAT, PROP_NONE);
@@ -3019,7 +3108,7 @@ static void rna_def_particle_settings(BlenderRNA *brna)
   /* physical properties */
   prop = RNA_def_property(srna, "mass", PROP_FLOAT, PROP_UNIT_MASS);
   RNA_def_property_range(prop, 0.00000001f, 100000.0f);
-  RNA_def_property_ui_range(prop, 0.01, 100, 1, 3);
+  RNA_def_property_ui_range(prop, 0.01, 100, 1, 4);
   RNA_def_property_ui_text(prop, "Mass", "Mass of the particles");
   RNA_def_property_update(prop, 0, "rna_Particle_reset");
 
@@ -3349,7 +3438,7 @@ static void rna_def_particle_settings(BlenderRNA *brna)
   prop = RNA_def_property(srna, "keyed_loops", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "keyed_loops");
   RNA_def_property_range(prop, 1.0f, 10000.0f);
-  RNA_def_property_ui_range(prop, 1.0f, 100.0f, 0.1, 3);
+  RNA_def_property_ui_range(prop, 1.0f, 100.0f, 1, 3);
   RNA_def_property_ui_text(prop, "Loop Count", "Number of times the keys are looped");
   RNA_def_property_update(prop, 0, "rna_Particle_redo");
 
@@ -3360,7 +3449,7 @@ static void rna_def_particle_settings(BlenderRNA *brna)
       prop,
       "Use Modifier Stack",
       "Emit particles from mesh with modifiers applied "
-      "(must use same subsurf level for viewport and render for correct results)");
+      "(must use same subdivision surface level for viewport and render for correct results)");
   RNA_def_property_update(prop, 0, "rna_Particle_change_type");
 
   /* draw objects & collections */

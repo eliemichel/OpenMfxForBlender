@@ -18,21 +18,26 @@
 
 #include "mantaio.h"
 
+#if OPENVDB == 1
+#  include "openvdb/openvdb.h"
+#endif
+
 #if NO_ZLIB != 1
 extern "C" {
 #  include <zlib.h>
 }
+#endif
 
-#  if defined(WIN32) || defined(_WIN32)
-#    include <windows.h>
-#    include <string>
-#  endif
+#if defined(WIN32) || defined(_WIN32)
+#  include <windows.h>
+#  include <string>
+#endif
 
 using namespace std;
 
 namespace Manta {
 
-#  if defined(WIN32) || defined(_WIN32)
+#if defined(WIN32) || defined(_WIN32)
 static wstring stringToWstring(const char *str)
 {
   const int length_wc = MultiByteToWideChar(CP_UTF8, 0, str, strlen(str), NULL, 0);
@@ -40,10 +45,11 @@ static wstring stringToWstring(const char *str)
   MultiByteToWideChar(CP_UTF8, 0, str, strlen(str), &strWide[0], length_wc);
   return strWide;
 }
-#  endif
+#endif  // WIN32==1
 
 void *safeGzopen(const char *filename, const char *mode)
 {
+#if NO_ZLIB != 1
   gzFile gzfile;
 
 #  if defined(WIN32) || defined(_WIN32)
@@ -54,7 +60,58 @@ void *safeGzopen(const char *filename, const char *mode)
 #  endif
 
   return gzfile;
+#else
+  debMsg("safeGzopen not supported without zlib", 1);
+  return nullptr;
+#endif  // NO_ZLIB != 1
 }
-#endif
 
-}  // namespace
+#if defined(OPENVDB)
+// Convert from OpenVDB value to Manta value.
+template<class S, class T> void convertFrom(S &in, T *out)
+{
+  errMsg("OpenVDB convertFrom Warning: Unsupported type conversion");
+}
+
+template<> void convertFrom(int &in, int *out)
+{
+  (*out) = in;
+}
+
+template<> void convertFrom(float &in, Real *out)
+{
+  (*out) = (Real)in;
+}
+
+template<> void convertFrom(openvdb::Vec3s &in, Vec3 *out)
+{
+  (*out).x = in.x();
+  (*out).y = in.y();
+  (*out).z = in.z();
+}
+
+// Convert to OpenVDB value from Manta value.
+template<class S, class T> void convertTo(S *out, T &in)
+{
+  errMsg("OpenVDB convertTo Warning: Unsupported type conversion");
+}
+
+template<> void convertTo(int *out, int &in)
+{
+  (*out) = in;
+}
+
+template<> void convertTo(float *out, Real &in)
+{
+  (*out) = (float)in;
+}
+
+template<> void convertTo(openvdb::Vec3s *out, Vec3 &in)
+{
+  (*out).x() = in.x;
+  (*out).y() = in.y;
+  (*out).z() = in.z;
+}
+#endif  // OPENVDB==1
+
+}  // namespace Manta

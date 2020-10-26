@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) Blender Foundation, 2002-2009
@@ -228,8 +228,6 @@ static void HC_relaxation_iteration_uv(BMEditMesh *em,
   }
 
   MEM_freeN(tmp_uvdata);
-
-  return;
 }
 
 static void laplacian_relaxation_iteration_uv(BMEditMesh *em,
@@ -302,8 +300,6 @@ static void laplacian_relaxation_iteration_uv(BMEditMesh *em,
   }
 
   MEM_freeN(tmp_uvdata);
-
-  return;
 }
 
 static void uv_sculpt_stroke_apply(bContext *C,
@@ -476,9 +472,9 @@ static bool uv_edge_compare(const void *a, const void *b)
   const UvEdge *edge2 = b;
 
   if ((edge1->uv1 == edge2->uv1) && (edge1->uv2 == edge2->uv2)) {
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 static UvSculptData *uv_sculpt_stroke_init(bContext *C, wmOperator *op, const wmEvent *event)
@@ -492,7 +488,7 @@ static UvSculptData *uv_sculpt_stroke_init(bContext *C, wmOperator *op, const wm
 
   op->customdata = data;
 
-  BKE_curvemapping_initialize(ts->uvsculpt->paint.brush->curve);
+  BKE_curvemapping_init(ts->uvsculpt->paint.brush->curve);
 
   if (data) {
     int counter = 0, i;

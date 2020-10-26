@@ -542,7 +542,7 @@ static void rna_def_material_greasepencil(BlenderRNA *brna)
   RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_update");
 
   prop = RNA_def_property(srna, "ghost", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_MATERIAL_ONIONSKIN);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_MATERIAL_HIDE_ONIONSKIN);
   RNA_def_property_ui_icon(prop, ICON_GHOST_ENABLED, 0);
   RNA_def_property_ui_text(
       prop, "Show in Ghosts", "Display strokes using this color when showing onion skins");
@@ -562,6 +562,18 @@ static void rna_def_material_greasepencil(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_MATERIAL_DISABLE_STENCIL);
   RNA_def_property_ui_text(
       prop, "Self Overlap", "Disable stencil and overlap self intersections with alpha materials");
+  RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_update");
+
+  prop = RNA_def_property(srna, "use_stroke_holdout", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_MATERIAL_IS_STROKE_HOLDOUT);
+  RNA_def_property_ui_text(
+      prop, "Holdout", "Remove the color from underneath this stroke by using it as a mask");
+  RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_update");
+
+  prop = RNA_def_property(srna, "use_fill_holdout", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_MATERIAL_IS_FILL_HOLDOUT);
+  RNA_def_property_ui_text(
+      prop, "Holdout", "Remove the color from underneath this stroke by using it as a mask");
   RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_update");
 
   prop = RNA_def_property(srna, "show_stroke", PROP_BOOLEAN, PROP_NONE);
@@ -784,6 +796,7 @@ void RNA_def_material(BlenderRNA *brna)
   /* nodetree */
   prop = RNA_def_property(srna, "node_tree", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "nodetree");
+  RNA_def_property_clear_flag(prop, PROP_PTR_NO_OWNERSHIP);
   RNA_def_property_ui_text(prop, "Node Tree", "Node tree for node based materials");
 
   prop = RNA_def_property(srna, "use_nodes", PROP_BOOLEAN, PROP_NONE);

@@ -59,7 +59,7 @@ __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 }
 
 GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
-                                     const STR_String &title,
+                                     const char *title,
                                      GHOST_TInt32 left,
                                      GHOST_TInt32 top,
                                      GHOST_TUns32 width,
@@ -158,7 +158,7 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
       height = rect.bottom - rect.top;
     }
 
-    wchar_t *title_16 = alloc_utf16_from_8((char *)(const char *)title, 0);
+    wchar_t *title_16 = alloc_utf16_from_8((char *)title, 0);
     m_hWnd = ::CreateWindowW(s_windowClassName,                // pointer to registered class name
                              title_16,                         // pointer to window name
                              wintype,                          // window style
@@ -173,7 +173,7 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
     free(title_16);
   }
   else {
-    wchar_t *title_16 = alloc_utf16_from_8((char *)(const char *)title, 0);
+    wchar_t *title_16 = alloc_utf16_from_8((char *)title, 0);
     m_hWnd = ::CreateWindowW(s_windowClassName,     // pointer to registered class name
                              title_16,              // pointer to window name
                              WS_MAXIMIZE,           // window style
@@ -299,7 +299,7 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 
   // Initialize Wintab
   m_wintab.handle = ::LoadLibrary("Wintab32.dll");
-  if (m_wintab.handle) {
+  if (m_wintab.handle && m_system->getTabletAPI() != GHOST_kTabletNative) {
     // Get API functions
     m_wintab.info = (GHOST_WIN32_WTInfo)::GetProcAddress(m_wintab.handle, "WTInfoA");
     m_wintab.open = (GHOST_WIN32_WTOpen)::GetProcAddress(m_wintab.handle, "WTOpenA");
@@ -430,19 +430,18 @@ HWND GHOST_WindowWin32::getHWND() const
   return m_hWnd;
 }
 
-void GHOST_WindowWin32::setTitle(const STR_String &title)
+void GHOST_WindowWin32::setTitle(const char *title)
 {
-  wchar_t *title_16 = alloc_utf16_from_8((char *)(const char *)title, 0);
+  wchar_t *title_16 = alloc_utf16_from_8((char *)title, 0);
   ::SetWindowTextW(m_hWnd, (wchar_t *)title_16);
   free(title_16);
 }
 
-void GHOST_WindowWin32::getTitle(STR_String &title) const
+std::string GHOST_WindowWin32::getTitle() const
 {
   char buf[s_maxTitleLength]; /*CHANGE + never used yet*/
   ::GetWindowText(m_hWnd, buf, s_maxTitleLength);
-  STR_String temp(buf);
-  title = buf;
+  return std::string(buf);
 }
 
 void GHOST_WindowWin32::getWindowBounds(GHOST_Rect &bounds) const

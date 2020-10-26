@@ -10,11 +10,9 @@ out vec4 FragColor;
 
 uniform vec3 planeAxes;
 uniform float gridDistance;
-uniform float meshSize;
+uniform vec3 gridSize;
 uniform float lineKernel = 0.0;
 uniform sampler2D depthBuffer;
-
-#define cameraPos (ViewMatrixInverse[3].xyz)
 
 uniform int gridFlag;
 
@@ -28,7 +26,8 @@ uniform float gridSteps[STEPS_LEN] = float[](0.001, 0.01, 0.1, 1.0, 10.0, 100.0,
 #define PLANE_XY (1 << 4)
 #define PLANE_XZ (1 << 5)
 #define PLANE_YZ (1 << 6)
-#define GRID_BACK (1 << 9) /* grid is behind objects */
+#define GRID_BACK (1 << 9)    /* grid is behind objects */
+#define GRID_CAMERA (1 << 10) /* In camera view */
 
 #define M_1_SQRTPI 0.5641895835477563 /* 1/sqrt(pi) */
 
@@ -74,7 +73,7 @@ vec3 get_axes(vec3 co, vec3 fwidthCos, float line_size)
 
 void main()
 {
-  vec3 wPos = local_pos * meshSize;
+  vec3 wPos = local_pos * gridSize;
   vec3 dFdxPos = dFdx(wPos);
   vec3 dFdyPos = dFdy(wPos);
   vec3 fwidthPos = abs(dFdxPos) + abs(dFdyPos);
@@ -104,7 +103,9 @@ void main()
     fade *= 1.0 - smoothstep(0.0, gridDistance, dist - gridDistance);
   }
   else {
-    dist = abs(gl_FragCoord.z * 2.0 - 1.0);
+    dist = gl_FragCoord.z * 2.0 - 1.0;
+    /* Avoid fading in +Z direction in camera view (see T70193). */
+    dist = ((gridFlag & GRID_CAMERA) != 0) ? clamp(dist, 0.0, 1.0) : abs(dist);
     fade = 1.0 - smoothstep(0.0, 0.5, dist - 0.5);
     dist = 1.0; /* avoid branch after */
 

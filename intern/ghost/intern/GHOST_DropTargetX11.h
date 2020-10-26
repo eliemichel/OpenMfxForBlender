@@ -21,8 +21,7 @@
  * \ingroup GHOST
  */
 
-#ifndef __GHOST_DROPTARGETX11_H__
-#define __GHOST_DROPTARGETX11_H__
+#pragma once
 
 #include "GHOST_SystemX11.h"
 #include "GHOST_WindowX11.h"
@@ -92,7 +91,7 @@ class GHOST_DropTargetX11 {
   /**
    * Fully decode file URL (i.e. converts "file:///a%20b/test" to "/a b/test")
    * \param fileUrl - file path URL to be fully decoded
-   * \return decoded file path (resutl should be free-d)
+   * \return decoded file path (result should be free-d)
    */
   char *FileUrlDecode(char *fileUrl);
 
@@ -126,5 +125,3 @@ class GHOST_DropTargetX11 {
   MEM_CXX_CLASS_ALLOC_FUNCS("GHOST:GHOST_DropTargetX11")
 #endif
 };
-
-#endif  // __GHOST_DROPTARGETX11_H__

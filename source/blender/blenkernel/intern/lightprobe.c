@@ -23,18 +23,23 @@
 
 #include <string.h>
 
+#include "DNA_collection_types.h"
 #include "DNA_defaults.h"
 #include "DNA_lightprobe_types.h"
 #include "DNA_object_types.h"
 
 #include "BLI_utildefines.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_lightprobe.h"
 #include "BKE_main.h"
 
 #include "BLT_translation.h"
+
+#include "BLO_read_write.h"
 
 static void lightprobe_init_data(ID *id)
 {
@@ -43,6 +48,64 @@ static void lightprobe_init_data(ID *id)
 
   MEMCPY_STRUCT_AFTER(probe, DNA_struct_default_get(LightProbe), id);
 }
+
+static void lightprobe_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  LightProbe *probe = (LightProbe *)id;
+
+  BKE_LIB_FOREACHID_PROCESS(data, probe->image, IDWALK_CB_USER);
+  BKE_LIB_FOREACHID_PROCESS(data, probe->visibility_grp, IDWALK_CB_NOP);
+}
+
+static void lightprobe_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  LightProbe *prb = (LightProbe *)id;
+  if (prb->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* write LibData */
+    BLO_write_id_struct(writer, LightProbe, id_address, &prb->id);
+    BKE_id_blend_write(writer, &prb->id);
+
+    if (prb->adt) {
+      BKE_animdata_blend_write(writer, prb->adt);
+    }
+  }
+}
+
+static void lightprobe_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  LightProbe *prb = (LightProbe *)id;
+  BLO_read_data_address(reader, &prb->adt);
+  BKE_animdata_blend_read_data(reader, prb->adt);
+}
+
+static void lightprobe_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  LightProbe *prb = (LightProbe *)id;
+  BLO_read_id_address(reader, prb->id.lib, &prb->visibility_grp);
+}
+
+IDTypeInfo IDType_ID_LP = {
+    .id_code = ID_LP,
+    .id_filter = FILTER_ID_LP,
+    .main_listbase_index = INDEX_ID_LP,
+    .struct_size = sizeof(LightProbe),
+    .name = "LightProbe",
+    .name_plural = "lightprobes",
+    .translation_context = BLT_I18NCONTEXT_ID_LIGHTPROBE,
+    .flags = 0,
+
+    .init_data = lightprobe_init_data,
+    .copy_data = NULL,
+    .free_data = NULL,
+    .make_local = NULL,
+    .foreach_id = lightprobe_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = lightprobe_blend_write,
+    .blend_read_data = lightprobe_blend_read_data,
+    .blend_read_lib = lightprobe_blend_read_lib,
+    .blend_read_expand = NULL,
+};
 
 void BKE_lightprobe_type_set(LightProbe *probe, const short lightprobe_type)
 {
@@ -72,55 +135,7 @@ void *BKE_lightprobe_add(Main *bmain, const char *name)
 {
   LightProbe *probe;
 
-  probe = BKE_libblock_alloc(bmain, ID_LP, name, 0);
-
-  lightprobe_init_data(&probe->id);
+  probe = BKE_id_new(bmain, ID_LP, name);
 
   return probe;
 }
-
-/**
- * Only copy internal data of #LightProbe ID from source
- * to already allocated/initialized destination.
- * You probably never want to use that directly,
- * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
- *
- * WARNING! This function will not handle ID user count!
- *
- * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
- */
-static void lightprobe_copy_data(Main *UNUSED(bmain),
-                                 ID *UNUSED(id_dst),
-                                 const ID *UNUSED(id_src),
-                                 const int UNUSED(flag))
-{
-  /* Nothing to do here. */
-}
-
-LightProbe *BKE_lightprobe_copy(Main *bmain, const LightProbe *probe)
-{
-  LightProbe *probe_copy;
-  BKE_id_copy(bmain, &probe->id, (ID **)&probe_copy);
-  return probe_copy;
-}
-
-static void lightprobe_make_local(Main *bmain, ID *id, const int flags)
-{
-  BKE_lib_id_make_local_generic(bmain, id, flags);
-}
-
-IDTypeInfo IDType_ID_LP = {
-    .id_code = ID_LP,
-    .id_filter = FILTER_ID_LP,
-    .main_listbase_index = INDEX_ID_LP,
-    .struct_size = sizeof(LightProbe),
-    .name = "LightProbe",
-    .name_plural = "lightprobes",
-    .translation_context = BLT_I18NCONTEXT_ID_LIGHTPROBE,
-    .flags = 0,
-
-    .init_data = lightprobe_init_data,
-    .copy_data = lightprobe_copy_data,
-    .free_data = NULL,
-    .make_local = lightprobe_make_local,
-};

@@ -132,7 +132,7 @@ static void ptcache_job_endjob(void *customdata)
   WM_set_locked_interface(job->wm, false);
 
   WM_main_add_notifier(NC_SCENE | ND_FRAME, scene);
-  WM_main_add_notifier(NC_OBJECT | ND_POINTCACHE, job->baker->pid.ob);
+  WM_main_add_notifier(NC_OBJECT | ND_POINTCACHE, job->baker->pid.owner_id);
 }
 
 static void ptcache_free_bake(PointCache *cache)
@@ -356,7 +356,7 @@ void PTCACHE_OT_free_bake(wmOperatorType *ot)
 void PTCACHE_OT_bake_from_cache(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Bake From Cache";
+  ot->name = "Bake from Cache";
   ot->description = "Bake from cache";
   ot->idname = "PTCACHE_OT_bake_from_cache";
 

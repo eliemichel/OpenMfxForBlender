@@ -36,20 +36,20 @@ static int node_shader_gpu_wireframe(GPUMaterial *mat,
                                      GPUNodeStack *in,
                                      GPUNodeStack *out)
 {
+  GPU_material_flag_set(mat, GPU_MATFLAG_BARYCENTRIC);
   /* node->custom1 is use_pixel_size */
   if (node->custom1) {
     return GPU_stack_link(
         mat, node, "node_wireframe_screenspace", in, out, GPU_builtin(GPU_BARYCENTRIC_TEXCO));
   }
-  else {
-    return GPU_stack_link(mat,
-                          node,
-                          "node_wireframe",
-                          in,
-                          out,
-                          GPU_builtin(GPU_BARYCENTRIC_TEXCO),
-                          GPU_builtin(GPU_BARYCENTRIC_DIST));
-  }
+
+  return GPU_stack_link(mat,
+                        node,
+                        "node_wireframe",
+                        in,
+                        out,
+                        GPU_builtin(GPU_BARYCENTRIC_TEXCO),
+                        GPU_builtin(GPU_BARYCENTRIC_DIST));
 }
 
 /* node type definition */

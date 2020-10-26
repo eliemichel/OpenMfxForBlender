@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_PARTICLE_H__
-#define __ED_PARTICLE_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -71,8 +70,8 @@ bool PE_mouse_particles(
 bool PE_box_select(struct bContext *C, const struct rcti *rect, const int sel_op);
 bool PE_circle_select(struct bContext *C, const int sel_op, const int mval[2], float rad);
 int PE_lasso_select(struct bContext *C,
-                    const int mcords[][2],
-                    const short moves,
+                    const int mcoords[][2],
+                    const int mcoords_len,
                     const int sel_op);
 bool PE_deselect_all_visible_ex(struct PTCacheEdit *edit);
 bool PE_deselect_all_visible(struct bContext *C);
@@ -83,5 +82,3 @@ void ED_particle_undosys_type(struct UndoType *ut);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_PARTICLE_H__ */

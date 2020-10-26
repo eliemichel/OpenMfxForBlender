@@ -43,7 +43,6 @@
 
 #define DNA_DEPRECATED_ALLOW
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,6 +53,7 @@
 #include "BLI_ghash.h"
 #include "BLI_memarena.h"
 #include "BLI_sys_types.h" /* for intptr_t support */
+#include "BLI_system.h"    /* for 'BLI_system_backtrace' stub. */
 #include "BLI_utildefines.h"
 
 #include "dna_utils.h"
@@ -98,6 +98,7 @@ static const char *includefiles[] = {
     "DNA_sdna_types.h",
     "DNA_fileglobal_types.h",
     "DNA_sequence_types.h",
+    "DNA_session_uuid_types.h",
     "DNA_effect_types.h",
     "DNA_outliner_types.h",
     "DNA_sound_types.h",
@@ -136,6 +137,8 @@ static const char *includefiles[] = {
     "DNA_hair_types.h",
     "DNA_pointcloud_types.h",
     "DNA_volume_types.h",
+    "DNA_simulation_types.h",
+    "DNA_pointcache_types.h",
 
     /* see comment above before editing! */
 
@@ -215,7 +218,7 @@ void BLI_system_backtrace(FILE *fp)
 /**
  * Ensure type \c str to is in the #types array.
  * \param str: Struct name without any qualifiers.
- * \param len: The struct size in bytes.
+ * \param size: The struct size in bytes.
  * \return Index in the #types array.
  */
 static int add_type(const char *str, int size);
@@ -350,15 +353,13 @@ static bool is_name_legal(const char *name)
 
 static int add_type(const char *str, int size)
 {
-  char *cp;
-
   /* first do validity check */
   if (str[0] == 0) {
     return -1;
   }
-  else if (strchr(str, '*')) {
+  if (strchr(str, '*')) {
     /* note: this is valid C syntax but we can't parse, complain!
-     * 'struct SomeStruct* somevar;' <-- correct but we cant handle right now. */
+     * `struct SomeStruct* some_var;` <-- correct but we cant handle right now. */
     return -1;
   }
 
@@ -366,7 +367,7 @@ static int add_type(const char *str, int size)
 
   /* search through type array */
   for (int index = 0; index < types_len; index++) {
-    if (strcmp(str, types[index]) == 0) {
+    if (STREQ(str, types[index])) {
       if (size) {
         types_size_native[index] = size;
         types_size_32[index] = size;
@@ -378,7 +379,7 @@ static int add_type(const char *str, int size)
 
   /* append new type */
   const int str_size = strlen(str) + 1;
-  cp = BLI_memarena_alloc(mem_arena, str_size);
+  char *cp = BLI_memarena_alloc(mem_arena, str_size);
   memcpy(cp, str, str_size);
   types[types_len] = cp;
   types_size_native[types_len] = size;
@@ -404,8 +405,6 @@ static int add_type(const char *str, int size)
  * */
 static int add_name(const char *str)
 {
-  int nr, i, j, k;
-  char *cp;
   char buf[255]; /* stupid limit, change it :) */
   const char *name;
 
@@ -416,15 +415,15 @@ static int add_name(const char *str)
   }
 
   if (str[0] == '(' && str[1] == '*') {
-    /* we handle function pointer and special array cases here, e.g.
-     * void (*function)(...) and float (*array)[..]. the array case
+    /* We handle function pointer and special array cases here, e.g.
+     * `void (*function)(...)` and `float (*array)[..]`. the array case
      * name is still converted to (array *)() though because it is that
-     * way in old dna too, and works correct with elementsize() */
+     * way in old DNA too, and works correct with #DNA_elem_size_nr. */
     int isfuncptr = (strchr(str + 1, '(')) != NULL;
 
     DEBUG_PRINTF(3, "\t\t\t\t*** Function pointer or multidim array pointer found\n");
     /* functionpointer: transform the type (sometimes) */
-    i = 0;
+    int i = 0;
 
     while (str[i] != ')') {
       buf[i] = str[i];
@@ -434,7 +433,7 @@ static int add_name(const char *str)
     /* Another number we need is the extra slen offset. This extra
      * offset is the overshoot after a space. If there is no
      * space, no overshoot should be calculated. */
-    j = i; /* j at first closing brace */
+    int j = i; /* j at first closing brace */
 
     DEBUG_PRINTF(3, "first brace after offset %d\n", i);
 
@@ -462,7 +461,7 @@ static int add_name(const char *str)
     else if (str[j] == 0) {
       DEBUG_PRINTF(3, "offsetting for space\n");
       /* get additional offset */
-      k = 0;
+      int k = 0;
       while (str[j] != ')') {
         j++;
         k++;
@@ -508,7 +507,7 @@ static int add_name(const char *str)
       buf[i + 2] = ')';
       buf[i + 3] = 0;
     }
-    /* now precede with buf*/
+    /* now proceed with buf*/
     DEBUG_PRINTF(3, "\t\t\t\t\tProposing fp name %s\n", buf);
     name = buf;
   }
@@ -518,8 +517,8 @@ static int add_name(const char *str)
   }
 
   /* search name array */
-  for (nr = 0; nr < names_len; nr++) {
-    if (strcmp(name, names[nr]) == 0) {
+  for (int nr = 0; nr < names_len; nr++) {
+    if (STREQ(name, names[nr])) {
       return nr;
     }
   }
@@ -531,7 +530,7 @@ static int add_name(const char *str)
 
   /* Append new name. */
   const int name_size = strlen(name) + 1;
-  cp = BLI_memarena_alloc(mem_arena, name_size);
+  char *cp = BLI_memarena_alloc(mem_arena, name_size);
   memcpy(cp, name, name_size);
   names[names_len] = cp;
 
@@ -546,19 +545,16 @@ static int add_name(const char *str)
 
 static short *add_struct(int namecode)
 {
-  int len;
-  short *sp;
-
   if (structs_len == 0) {
     structs[0] = structdata;
   }
   else {
-    sp = structs[structs_len - 1];
-    len = sp[1];
+    short *sp = structs[structs_len - 1];
+    const int len = sp[1];
     structs[structs_len] = sp + 2 * len + 2;
   }
 
-  sp = structs[structs_len];
+  short *sp = structs[structs_len];
   sp[0] = namecode;
 
   if (structs_len >= max_array_len) {
@@ -572,21 +568,18 @@ static short *add_struct(int namecode)
 
 static int preprocess_include(char *maindata, const int maindata_len)
 {
-  int a, newlen, comment = 0;
-  char *cp, *temp, *md;
-
   /* note: len + 1, last character is a dummy to prevent
    * comparisons using uninitialized memory */
-  temp = MEM_mallocN(maindata_len + 1, "preprocess_include");
+  char *temp = MEM_mallocN(maindata_len + 1, "preprocess_include");
   temp[maindata_len] = ' ';
 
   memcpy(temp, maindata, maindata_len);
 
   /* remove all c++ comments */
   /* replace all enters/tabs/etc with spaces */
-  cp = temp;
-  a = maindata_len;
-  comment = 0;
+  char *cp = temp;
+  int a = maindata_len;
+  int comment = 0;
   while (a--) {
     if (cp[0] == '/' && cp[1] == '/') {
       comment = 1;
@@ -602,8 +595,8 @@ static int preprocess_include(char *maindata, const int maindata_len)
 
   /* data from temp copy to maindata, remove comments and double spaces */
   cp = temp;
-  md = maindata;
-  newlen = 0;
+  char *md = maindata;
+  int newlen = 0;
   comment = 0;
   a = maindata_len;
   while (a--) {
@@ -690,23 +683,21 @@ static int convert_include(const char *filename)
   /* read include file, skip structs with a '#' before it.
    * store all data in temporal arrays.
    */
-  int maindata_len, count, slen, type, name, strct;
-  short *structpoin, *sp;
-  char *maindata, *mainend, *md, *md1;
-  bool skip_struct;
 
-  md = maindata = read_file_data(filename, &maindata_len);
+  int maindata_len;
+  char *maindata = read_file_data(filename, &maindata_len);
+  char *md = maindata;
   if (maindata_len == -1) {
     fprintf(stderr, "Can't read file %s\n", filename);
     return 1;
   }
 
   maindata_len = preprocess_include(maindata, maindata_len);
-  mainend = maindata + maindata_len - 1;
+  char *mainend = maindata + maindata_len - 1;
 
   /* we look for '{' and then back to 'struct' */
-  count = 0;
-  skip_struct = false;
+  int count = 0;
+  bool skip_struct = false;
   while (count < maindata_len) {
 
     /* code for skipping a struct: two hashes on 2 lines. (preprocess added a space) */
@@ -723,7 +714,7 @@ static int convert_include(const char *filename)
         if (md[-1] == ' ') {
           md[-1] = 0;
         }
-        md1 = md - 2;
+        char *md1 = md - 2;
         while (*md1 != 32) {
           /* to beginning of word */
           md1--;
@@ -733,14 +724,14 @@ static int convert_include(const char *filename)
         /* we've got a struct name when... */
         if (strncmp(md1 - 7, "struct", 6) == 0) {
 
-          strct = add_type(md1, 0);
+          const int strct = add_type(md1, 0);
           if (strct == -1) {
             fprintf(stderr, "File '%s' contains struct we cant parse \"%s\"\n", filename, md1);
             return 1;
           }
 
-          structpoin = add_struct(strct);
-          sp = structpoin + 2;
+          short *structpoin = add_struct(strct);
+          short *sp = structpoin + 2;
 
           DEBUG_PRINTF(1, "\t|\t|-- detected struct %s\n", types[strct]);
 
@@ -777,7 +768,7 @@ static int convert_include(const char *filename)
               }
 
               /* we've got a type! */
-              type = add_type(md1, 0);
+              const int type = add_type(md1, 0);
               if (type == -1) {
                 fprintf(
                     stderr, "File '%s' contains struct we can't parse \"%s\"\n", filename, md1);
@@ -798,11 +789,11 @@ static int convert_include(const char *filename)
                   /* We've got a name. slen needs
                    * correction for function
                    * pointers! */
-                  slen = (int)strlen(md1);
+                  int slen = (int)strlen(md1);
                   if (md1[slen - 1] == ';') {
                     md1[slen - 1] = 0;
 
-                    name = add_name(version_elem_static_from_alias(strct, md1));
+                    const int name = add_name(version_elem_static_from_alias(strct, md1));
                     if (name == -1) {
                       fprintf(stderr,
                               "File '%s' contains struct with name that can't be added \"%s\"\n",
@@ -825,7 +816,7 @@ static int convert_include(const char *filename)
                     break;
                   }
 
-                  name = add_name(version_elem_static_from_alias(strct, md1));
+                  const int name = add_name(version_elem_static_from_alias(strct, md1));
                   if (name == -1) {
                     fprintf(stderr,
                             "File '%s' contains struct with name that can't be added \"%s\"\n",
@@ -901,7 +892,6 @@ static bool check_field_alignment(
 
 static int calculate_struct_sizes(int firststruct, FILE *file_verify, const char *base_directory)
 {
-  int unknown = structs_len, lastunknown;
   bool dna_error = false;
 
   /* Write test to verify sizes are accurate. */
@@ -919,8 +909,9 @@ static int calculate_struct_sizes(int firststruct, FILE *file_verify, const char
   fprintf(file_verify, "\n");
 
   /* Multiple iterations to handle nested structs. */
+  int unknown = structs_len;
   while (unknown) {
-    lastunknown = unknown;
+    const int lastunknown = unknown;
     unknown = 0;
 
     /* check all structs... */
@@ -1073,8 +1064,8 @@ static int calculate_struct_sizes(int firststruct, FILE *file_verify, const char
           types_size_native[structtype] = size_native;
           types_size_32[structtype] = size_32;
           types_size_64[structtype] = size_64;
-          /* two ways to detect if a struct contains a pointer:
-           * has_pointer is set or size_native  doesn't match any of 32/64bit lengths*/
+          /* Two ways to detect if a struct contains a pointer:
+           * has_pointer is set or size_native doesn't match any of 32/64bit lengths. */
           if (has_pointer || size_64 != size_native || size_32 != size_native) {
             if (size_64 % 8) {
               fprintf(stderr,
@@ -1147,12 +1138,9 @@ static int calculate_struct_sizes(int firststruct, FILE *file_verify, const char
 static void dna_write(FILE *file, const void *pntr, const int size)
 {
   static int linelength = 0;
-  int i;
-  const char *data;
+  const char *data = (const char *)pntr;
 
-  data = (const char *)pntr;
-
-  for (i = 0; i < size; i++) {
+  for (int i = 0; i < size; i++) {
     fprintf(file, "%d, ", data[i]);
     linelength++;
     if (linelength >= MAX_DNA_LINE_LENGTH) {
@@ -1164,19 +1152,16 @@ static void dna_write(FILE *file, const void *pntr, const int size)
 
 void print_struct_sizes(void)
 {
-  int a, unknown = structs_len, structtype;
-  /*int lastunknown;*/ /*UNUSED*/
-  const short *structpoin;
+  int unknown = structs_len;
   printf("\n\n*** All detected structs:\n");
 
   while (unknown) {
-    /*lastunknown = unknown;*/ /*UNUSED*/
     unknown = 0;
 
     /* check all structs... */
-    for (a = 0; a < structs_len; a++) {
-      structpoin = structs[a];
-      structtype = structpoin[0];
+    for (int a = 0; a < structs_len; a++) {
+      const short *structpoin = structs[a];
+      const int structtype = structpoin[0];
       printf("\t%s\t:%d\n", types[structtype], types_size_native[structtype]);
     }
   }
@@ -1189,13 +1174,6 @@ static int make_structDNA(const char *base_directory,
                           FILE *file_offsets,
                           FILE *file_verify)
 {
-  int i;
-  const short *sp;
-  /* str contains filenames. Since we now include paths, I stretched       */
-  /* it a bit. Hope this is enough :) -nzc-                                */
-  char str[SDNA_MAX_FILENAME_LENGTH];
-  int firststruct;
-
   if (debugSDNA > 0) {
     fflush(stdout);
     printf("Running makesdna at debug level %d\n", debugSDNA);
@@ -1247,21 +1225,27 @@ static int make_structDNA(const char *base_directory,
   add_type("void", 0);     /* SDNA_TYPE_VOID */
 
   /* the defines above shouldn't be output in the padding file... */
-  firststruct = types_len;
+  const int firststruct = types_len;
 
   /* add all include files defined in the global array                     */
   /* Since the internal file+path name buffer has limited length, I do a   */
   /* little test first...                                                  */
   /* Mind the breaking condition here!                                     */
   DEBUG_PRINTF(0, "\tStart of header scan:\n");
-  for (i = 0; *(includefiles[i]) != '\0'; i++) {
+  int header_count = 0;
+  for (int i = 0; *(includefiles[i]) != '\0'; i++) {
+    header_count++;
+
+    /* str contains filenames. Since we now include paths, I stretched       */
+    /* it a bit. Hope this is enough :) -nzc-                                */
+    char str[SDNA_MAX_FILENAME_LENGTH];
     sprintf(str, "%s%s", base_directory, includefiles[i]);
     DEBUG_PRINTF(0, "\t|-- Converting %s\n", str);
     if (convert_include(str)) {
       return 1;
     }
   }
-  DEBUG_PRINTF(0, "\tFinished scanning %d headers.\n", i);
+  DEBUG_PRINTF(0, "\tFinished scanning %d headers.\n", header_count);
 
   if (calculate_struct_sizes(firststruct, file_verify, base_directory)) {
     /* error */
@@ -1280,7 +1264,7 @@ static int make_structDNA(const char *base_directory,
     }
     printf("\n");
 
-    sp = types_size_native;
+    const short *sp = types_size_native;
     for (a = 0; a < types_len; a++, sp++) {
       printf(" %s %d\n", types[a], *sp);
     }
@@ -1307,13 +1291,12 @@ static int make_structDNA(const char *base_directory,
   }
   else {
     const char nil_bytes[4] = {0};
-    int len, len_align;
 
     dna_write(file, "SDNA", 4);
 
     /* write names */
     dna_write(file, "NAME", 4);
-    len = names_len;
+    int len = names_len;
     dna_write(file, &len, 4);
     /* write array */
     len = 0;
@@ -1322,7 +1305,7 @@ static int make_structDNA(const char *base_directory,
       dna_write(file, names[nr], name_size);
       len += name_size;
     }
-    len_align = (len + 3) & ~3;
+    int len_align = (len + 3) & ~3;
     if (len != len_align) {
       dna_write(file, nil_bytes, len_align - len);
     }
@@ -1358,7 +1341,7 @@ static int make_structDNA(const char *base_directory,
     dna_write(file, &len, 4);
 
     /* calc datablock size */
-    sp = structs[structs_len - 1];
+    const short *sp = structs[structs_len - 1];
     sp += 2 + 2 * (sp[1]);
     len = (intptr_t)((char *)sp - (char *)structs[0]);
     len = (len + 3) & ~3;
@@ -1369,9 +1352,10 @@ static int make_structDNA(const char *base_directory,
   /* write a simple enum with all structs offsets,
    * should only be accessed via SDNA_TYPE_FROM_STRUCT macro */
   {
+    fprintf(file_offsets, "#pragma once\n");
     fprintf(file_offsets, "#define SDNA_TYPE_FROM_STRUCT(id) _SDNA_TYPE_##id\n");
     fprintf(file_offsets, "enum {\n");
-    for (i = 0; i < structs_len; i++) {
+    for (int i = 0; i < structs_len; i++) {
       const short *structpoin = structs[i];
       const int structtype = structpoin[0];
       fprintf(file_offsets,
@@ -1388,7 +1372,7 @@ static int make_structDNA(const char *base_directory,
   {
     GSet *names_unique = BLI_gset_str_new_ex(__func__, 512);
     for (int struct_nr = 0; struct_nr < structs_len; struct_nr++) {
-      sp = structs[struct_nr];
+      const short *sp = structs[struct_nr];
       const char *struct_name = types[sp[0]];
       const int len = sp[1];
       sp += 2;
@@ -1528,12 +1512,21 @@ int main(int argc, char **argv)
 
 #endif /* if 0 */
 
-/* even though DNA supports, 'long' shouldn't be used since it can be either 32 or 64bit,
- * use int or int64_t instead.
+/**
+ * Disable types:
+ *
+ * - 'long': even though DNA supports, 'long' shouldn't be used since it can be either 32 or 64bit,
+ *   use int, int32_t or int64_t instead.
+ * - 'int8_t': as DNA doesn't yet support 'signed char' types,
+ *   all char types are assumed to be unsigned.
+ *   We should be able to support this, it's just not something which has been added yet.
+ *
  * Only valid use would be as a runtime variable if an API expected a long,
- * but so far we dont have this happening. */
+ * but so far we don't have this happening.
+ */
 #ifdef __GNUC__
 #  pragma GCC poison long
+#  pragma GCC poison int8_t
 #endif
 
 #include "DNA_ID.h"
@@ -1583,13 +1576,16 @@ int main(int argc, char **argv)
 #include "DNA_outliner_types.h"
 #include "DNA_packedFile_types.h"
 #include "DNA_particle_types.h"
+#include "DNA_pointcache_types.h"
 #include "DNA_pointcloud_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_sdna_types.h"
 #include "DNA_sequence_types.h"
+#include "DNA_session_uuid_types.h"
 #include "DNA_shader_fx_types.h"
+#include "DNA_simulation_types.h"
 #include "DNA_sound_types.h"
 #include "DNA_space_types.h"
 #include "DNA_speaker_types.h"

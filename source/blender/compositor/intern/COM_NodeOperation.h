@@ -16,18 +16,15 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_NODEOPERATION_H__
-#define __COM_NODEOPERATION_H__
+#pragma once
 
 #include <list>
 #include <sstream>
 #include <string>
 
-extern "C" {
 #include "BLI_math_color.h"
 #include "BLI_math_vector.h"
 #include "BLI_threads.h"
-}
 
 #include "COM_MemoryBuffer.h"
 #include "COM_MemoryProxy.h"
@@ -54,20 +51,20 @@ class NodeOperationOutput;
  */
 typedef enum InputResizeMode {
   /** \brief Center the input image to the center of the working area of the node, no resizing
-     occurs */
+   * occurs */
   COM_SC_CENTER = NS_CR_CENTER,
   /** \brief The bottom left of the input image is the bottom left of the working area of the node,
-     no resizing occurs */
+   * no resizing occurs */
   COM_SC_NO_RESIZE = NS_CR_NONE,
   /** \brief Fit the width of the input image to the width of the working area of the node */
   COM_SC_FIT_WIDTH = NS_CR_FIT_WIDTH,
   /** \brief Fit the height of the input image to the height of the working area of the node */
   COM_SC_FIT_HEIGHT = NS_CR_FIT_HEIGHT,
   /** \brief Fit the width or the height of the input image to the width or height of the working
-     area of the node, image will be larger than the working area */
+   * area of the node, image will be larger than the working area */
   COM_SC_FIT = NS_CR_FIT,
   /** \brief Fit the width and the height of the input image to the width and height of the working
-     area of the node, image will be equally larger than the working area */
+   * area of the node, image will be equally larger than the working area */
   COM_SC_STRETCH = NS_CR_STRETCH,
 } InputResizeMode;
 
@@ -169,7 +166,7 @@ class NodeOperation : public SocketReader {
    * the ExecutionSystem.
    *
    * \see ExecutionSystem
-   * \group check
+   * \ingroup check
    * \param rendering: [true false]
    *  true: rendering
    *  false: editing
@@ -523,5 +520,3 @@ class NodeOperationOutput {
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:NodeOperation")
 #endif
 };
-
-#endif

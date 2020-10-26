@@ -58,7 +58,7 @@
 #include "BLI_fileops.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
-#include "BLI_sys_types.h"  // for intptr_t support
+#include "BLI_sys_types.h" /* for intptr_t support */
 #include "BLI_utildefines.h"
 
 #if 0 /* UNUSED */
@@ -177,8 +177,9 @@ size_t BLI_gzip_mem_to_file_at_pos(
   strm.zfree = Z_NULL;
   strm.opaque = Z_NULL;
   ret = deflateInit(&strm, compression_level);
-  if (ret != Z_OK)
+  if (ret != Z_OK) {
     return 0;
+  }
 
   strm.avail_in = len;
   strm.next_in = (Bytef *)buf;
@@ -224,8 +225,9 @@ size_t BLI_ungzip_file_to_mem_at_pos(void *buf, size_t len, FILE *file, size_t g
   strm.avail_in = 0;
   strm.next_in = Z_NULL;
   ret = inflateInit(&strm);
-  if (ret != Z_OK)
+  if (ret != Z_OK) {
     return 0;
+  }
 
   do {
     strm.avail_in = fread(in, 1, chunk, file);
@@ -558,7 +560,7 @@ int BLI_move(const char *file, const char *to)
 
   /* windows doesn't support moving to a directory
    * it has to be 'mv filename filename' and not
-   * 'mv filename destdir' */
+   * 'mv filename destination_directory' */
 
   BLI_strncpy(str, to, sizeof(str));
   /* points 'to' to a directory ? */
@@ -948,8 +950,8 @@ static int delete_soft(const char *file, const char **error_message)
   char *xdg_current_desktop = getenv("XDG_CURRENT_DESKTOP");
   char *xdg_session_desktop = getenv("XDG_SESSION_DESKTOP");
 
-  if ((xdg_current_desktop != NULL && strcmp(xdg_current_desktop, "KDE") == 0) ||
-      (xdg_session_desktop != NULL && strcmp(xdg_session_desktop, "KDE") == 0)) {
+  if ((xdg_current_desktop != NULL && STREQ(xdg_current_desktop, "KDE")) ||
+      (xdg_session_desktop != NULL && STREQ(xdg_session_desktop, "KDE"))) {
     args[0] = "kioclient5";
     args[1] = "move";
     args[2] = file;
@@ -978,7 +980,7 @@ static int delete_soft(const char *file, const char **error_message)
           "Blender may not support moving files or directories to trash on your system.";
       return -1;
     }
-    else if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus)) {
+    if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus)) {
       *error_message = process_failed;
       return -1;
     }
@@ -1034,12 +1036,10 @@ int BLI_delete(const char *file, bool dir, bool recursive)
   if (recursive) {
     return recursive_operation(file, NULL, NULL, delete_single_file, delete_callback_post);
   }
-  else if (dir) {
+  if (dir) {
     return rmdir(file);
   }
-  else {
-    return remove(file);
-  }
+  return remove(file);
 }
 
 /**
@@ -1182,8 +1182,7 @@ static int copy_single_file(const char *from, const char *to)
 
     return RecursiveOp_Callback_OK;
   }
-  else if (S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode) || S_ISFIFO(st.st_mode) ||
-           S_ISSOCK(st.st_mode)) {
+  if (S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode) || S_ISFIFO(st.st_mode) || S_ISSOCK(st.st_mode)) {
     /* copy special type of file */
     if (mknod(to, st.st_mode, st.st_rdev)) {
       perror("mknod");
@@ -1196,7 +1195,7 @@ static int copy_single_file(const char *from, const char *to)
 
     return RecursiveOp_Callback_OK;
   }
-  else if (!S_ISREG(st.st_mode)) {
+  if (!S_ISREG(st.st_mode)) {
     fprintf(stderr, "Copying of this kind of files isn't supported yet\n");
     return RecursiveOp_Callback_Error;
   }
@@ -1335,7 +1334,7 @@ bool BLI_dir_create_recursive(const char *dirname)
   if (BLI_is_dir(dirname)) {
     return true;
   }
-  else if (BLI_exists(dirname)) {
+  if (BLI_exists(dirname)) {
     return false;
   }
 

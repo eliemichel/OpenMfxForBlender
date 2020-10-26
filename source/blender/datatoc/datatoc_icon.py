@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 # ##### BEGIN GPL LICENSE BLOCK #####
 #
 #  This program is free software; you can redistribute it and/or
@@ -27,7 +26,10 @@ def write_png(buf, width, height):
     import struct
     # reverse the vertical line order and add null bytes at the start
     width_byte_4 = width * 4
-    raw_data = b"".join(b'\x00' + buf[span:span + width_byte_4] for span in range((height - 1) * width * 4, -1, - width_byte_4))
+    raw_data = b"".join(
+        b'\x00' + buf[span:span + width_byte_4]
+        for span in range((height - 1) * width * 4, -1, - width_byte_4)
+    )
 
     def png_pack(png_tag, data):
         chunk_head = png_tag + data
@@ -136,13 +138,7 @@ def icondir_to_png(path_src, file_dst):
 
     # write pixels
     with open(file_dst, 'wb') as f_dst:
-        import sys
-        # py2/3 compat
-        if sys.version.startswith("2"):
-            pixels_data = pixels_canvas.tostring()
-        else:
-            pixels_data = pixels_canvas.tobytes()
-
+        pixels_data = pixels_canvas.tobytes()
         image_data = write_png(pixels_data, canvas_w, canvas_h)
         f_dst.write(image_data)
 

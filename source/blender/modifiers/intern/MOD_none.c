@@ -27,6 +27,10 @@
 
 #include "MOD_modifiertypes.h"
 
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 /* We only need to define isDisabled; because it always returns 1,
  * no other functions will be called
  */
@@ -42,8 +46,10 @@ ModifierTypeInfo modifierType_None = {
     /* name */ "None",
     /* structName */ "ModifierData",
     /* structSize */ sizeof(ModifierData),
+    /* srna */ &RNA_Modifier,
     /* type */ eModifierTypeType_None,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs,
+    /* icon */ ICON_NONE,
 
     /* copyData */ NULL,
 
@@ -51,7 +57,10 @@ ModifierTypeInfo modifierType_None = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ NULL,
     /* requiredDataMask */ NULL,
@@ -60,8 +69,10 @@ ModifierTypeInfo modifierType_None = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ NULL,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

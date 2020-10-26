@@ -20,7 +20,6 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -32,7 +31,6 @@
 #include "BKE_context.h"
 #include "BKE_editmesh.h"
 #include "BKE_global.h"
-#include "BKE_layer.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 
@@ -416,9 +414,9 @@ static int transform_modal(bContext *C, wmOperator *op, const wmEvent *event)
   const enum TfmMode mode_prev = t->mode;
 
 #if defined(WITH_INPUT_NDOF) && 0
-  // stable 2D mouse coords map to different 3D coords while the 3D mouse is active
-  // in other words, 2D deltas are no longer good enough!
-  // disable until individual 'transformers' behave better
+  /* Stable 2D mouse coords map to different 3D coords while the 3D mouse is active
+   * in other words, 2D deltas are no longer good enough!
+   * disable until individual 'transformers' behave better. */
 
   if (event->type == NDOF_MOTION) {
     return OPERATOR_PASS_THROUGH;
@@ -518,22 +516,19 @@ static int transform_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   if ((event == NULL) && RNA_struct_property_is_set(op->ptr, "value")) {
     return transform_exec(C, op);
   }
-  else {
-    /* add temp handler */
-    WM_event_add_modal_handler(C, op);
 
-    op->flag |= OP_IS_MODAL_GRAB_CURSOR;  // XXX maybe we want this with the gizmo only?
+  /* add temp handler */
+  WM_event_add_modal_handler(C, op);
 
-    /* Use when modal input has some transformation to begin with. */
-    {
-      TransInfo *t = op->customdata;
-      if (UNLIKELY(!is_zero_v4(t->values_modal_offset))) {
-        transformApply(C, t);
-      }
-    }
+  op->flag |= OP_IS_MODAL_GRAB_CURSOR; /* XXX maybe we want this with the gizmo only? */
 
-    return OPERATOR_RUNNING_MODAL;
+  /* Use when modal input has some transformation to begin with. */
+  TransInfo *t = op->customdata;
+  if (UNLIKELY(!is_zero_v4(t->values_modal_offset))) {
+    transformApply(C, t);
   }
+
+  return OPERATOR_RUNNING_MODAL;
 }
 
 static bool transform_poll_property(const bContext *UNUSED(C),
@@ -716,6 +711,15 @@ void Transform_Properties(struct wmOperatorType *ot, int flags)
     prop = RNA_def_boolean(ot->srna, "use_accurate", 0, "Accurate", "Use accurate transformation");
     RNA_def_property_flag(prop, PROP_HIDDEN);
   }
+
+  if (flags & P_POST_TRANSFORM) {
+    prop = RNA_def_boolean(ot->srna,
+                           "use_automerge_and_split",
+                           0,
+                           "Auto Merge & Split",
+                           "Forces the use of Auto Merge & Split");
+    RNA_def_property_flag(prop, PROP_HIDDEN);
+  }
 }
 
 static void TRANSFORM_OT_translate(struct wmOperatorType *ot)
@@ -741,7 +745,7 @@ static void TRANSFORM_OT_translate(struct wmOperatorType *ot)
 
   Transform_Properties(ot,
                        P_ORIENT_MATRIX | P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_ALIGN_SNAP |
-                           P_OPTIONS | P_GPENCIL_EDIT | P_CURSOR_EDIT);
+                           P_OPTIONS | P_GPENCIL_EDIT | P_CURSOR_EDIT | P_POST_TRANSFORM);
 }
 
 static void TRANSFORM_OT_resize(struct wmOperatorType *ot)
@@ -884,7 +888,7 @@ static void TRANSFORM_OT_bend(struct wmOperatorType *ot)
 
   /* api callbacks */
   ot->invoke = transform_invoke;
-  // ot->exec   = transform_exec;  // unsupported
+  // ot->exec = transform_exec; /* unsupported */
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
   ot->poll = ED_operator_region_view3d_active;
@@ -989,8 +993,7 @@ static void TRANSFORM_OT_tosphere(struct wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "To Sphere";
-  // added "around mesh center" to differentiate between "MESH_OT_vertices_to_sphere()"
-  ot->description = "Move selected vertices outward in a spherical shape around mesh center";
+  ot->description = "Move selected items outward in a spherical shape around geometric center";
   ot->idname = OP_TOSPHERE;
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
 
@@ -1042,11 +1045,11 @@ static void TRANSFORM_OT_bbone_resize(struct wmOperatorType *ot)
   ot->exec = transform_exec;
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
-  ot->poll = ED_operator_editarmature;
+  ot->poll = ED_operator_object_active;
   ot->poll_property = transform_poll_property;
 
   RNA_def_float_translation(
-      ot->srna, "value", 2, VecOne, -FLT_MAX, FLT_MAX, "Display Size", "", -FLT_MAX, FLT_MAX);
+      ot->srna, "value", 3, VecOne, -FLT_MAX, FLT_MAX, "Display Size", "", -FLT_MAX, FLT_MAX);
 
   WM_operatortype_props_advanced_begin(ot);
 
@@ -1298,7 +1301,7 @@ static int transform_from_gizmo_invoke(bContext *C,
 static void TRANSFORM_OT_from_gizmo(struct wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Transform From Gizmo";
+  ot->name = "Transform from Gizmo";
   ot->description = "Transform selected items by mode type";
   ot->idname = "TRANSFORM_OT_from_gizmo";
   ot->flag = 0;

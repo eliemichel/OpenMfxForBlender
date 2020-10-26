@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_STROKE_REP_H__
-#define __FREESTYLE_STROKE_REP_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -30,10 +29,8 @@
 #  include "MEM_guardedalloc.h"
 #endif
 
-extern "C" {
 #include "DNA_material_types.h"  // for MAX_MTEX
 struct bNodeTree;
-}
 
 namespace Freestyle {
 
@@ -280,5 +277,3 @@ class StrokeRep {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_STROKE_REP_H__

@@ -20,6 +20,9 @@
 #ifdef WITH_OPENVDB
 #  include <openvdb/openvdb.h>
 #endif
+#ifdef WITH_NANOVDB
+#  include <nanovdb/util/GridHandle.h>
+#endif
 
 #include "render/image.h"
 
@@ -43,11 +46,20 @@ class VDBImageLoader : public ImageLoader {
 
   virtual void cleanup() override;
 
+  virtual bool is_vdb_loader() const override;
+
+#ifdef WITH_OPENVDB
+  openvdb::GridBase::ConstPtr get_grid();
+#endif
+
  protected:
   string grid_name;
 #ifdef WITH_OPENVDB
   openvdb::GridBase::ConstPtr grid;
   openvdb::CoordBBox bbox;
+#endif
+#ifdef WITH_NANOVDB
+  nanovdb::GridHandle<> nanogrid;
 #endif
 };
 

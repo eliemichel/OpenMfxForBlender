@@ -183,9 +183,7 @@ static float vert_mask_get(BMVert *v, const int cd_vert_mask_offset)
   if (cd_vert_mask_offset != -1) {
     return BM_ELEM_CD_GET_FLOAT(v, cd_vert_mask_offset);
   }
-  else {
-    return 0.0f;
-  }
+  return 0.0f;
 }
 
 /* Set a vertex's paint-mask value
@@ -817,7 +815,7 @@ void BM_log_redo(BMesh *bm, BMLog *log)
 /* Log a vertex before it is modified
  *
  * Before modifying vertex coordinates, masks, or hflags, call this
- * function to log it's current values. This is better than logging
+ * function to log its current values. This is better than logging
  * after the coordinates have been modified, because only those
  * vertices that are modified need to have their original values
  * stored.

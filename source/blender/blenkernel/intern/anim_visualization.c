@@ -169,7 +169,7 @@ bMotionPath *animviz_verify_motionpaths(ReportList *reports,
   }
 
   /* if there is already a motionpath, just return that,
-   * provided it's settings are ok (saves extra free+alloc)
+   * provided its settings are ok (saves extra free+alloc)
    */
   if (*dst != NULL) {
     int expected_length = avs->path_ef - avs->path_sf;
@@ -184,10 +184,8 @@ bMotionPath *animviz_verify_motionpaths(ReportList *reports,
         /* return/use this as it is already valid length */
         return mpath;
       }
-      else {
-        /* clear the existing path (as the range has changed), and reallocate below */
-        animviz_free_motionpath_cache(mpath);
-      }
+      /* clear the existing path (as the range has changed), and reallocate below */
+      animviz_free_motionpath_cache(mpath);
     }
   }
   else {

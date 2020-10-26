@@ -86,7 +86,7 @@ FileSelectParams *ED_fileselect_get_params(struct SpaceFile *sfile)
 
 /**
  * \note RNA_struct_property_is_set_ex is used here because we want
- *       the previously used settings to be used here rather then overriding them */
+ *       the previously used settings to be used here rather than overriding them */
 short ED_fileselect_set_params(SpaceFile *sfile)
 {
   FileSelectParams *params;
@@ -318,7 +318,7 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 
   folderlist_pushdir(sfile->folders_prev, sfile->params->dir);
 
-  /* switching thumbnails needs to recalc layout [#28809] */
+  /* Switching thumbnails needs to recalc layout T28809. */
   if (sfile->layout) {
     sfile->layout->dirty = true;
   }
@@ -374,7 +374,7 @@ void ED_fileselect_set_params_from_userdef(SpaceFile *sfile)
  * pass its size here so we can store that in the preferences. Otherwise NULL.
  */
 void ED_fileselect_params_to_userdef(SpaceFile *sfile,
-                                     int temp_win_size[2],
+                                     const int temp_win_size[2],
                                      const bool is_maximized)
 {
   UserDef_FileSpaceData *sfile_udata_new = &U.file_space_data;
@@ -438,13 +438,12 @@ int ED_fileselect_layout_numfiles(FileLayout *layout, ARegion *region)
     numfiles = (int)((float)(x_view + x_over) / (float)(x_item));
     return numfiles * layout->rows;
   }
-  else {
-    const int y_item = layout->tile_h + (2 * layout->tile_border_y);
-    const int y_view = (int)(BLI_rctf_size_y(&region->v2d.cur)) - layout->offset_top;
-    const int y_over = y_item - (y_view % y_item);
-    numfiles = (int)((float)(y_view + y_over) / (float)(y_item));
-    return numfiles * layout->flow_columns;
-  }
+
+  const int y_item = layout->tile_h + (2 * layout->tile_border_y);
+  const int y_view = (int)(BLI_rctf_size_y(&region->v2d.cur)) - layout->offset_top;
+  const int y_over = y_item - (y_view % y_item);
+  numfiles = (int)((float)(y_view + y_over) / (float)(y_item));
+  return numfiles * layout->flow_columns;
 }
 
 static bool is_inside(int x, int y, int cols, int rows)
@@ -829,13 +828,23 @@ FileLayout *ED_fileselect_get_layout(struct SpaceFile *sfile, ARegion *region)
   return sfile->layout;
 }
 
-void ED_file_change_dir(bContext *C)
+/**
+ * Support updating the directory even when this isn't the active space
+ * needed so RNA properties update function isn't context sensitive, see T70255.
+ */
+void ED_file_change_dir_ex(bContext *C, bScreen *screen, ScrArea *area)
 {
-  wmWindowManager *wm = CTX_wm_manager(C);
-  SpaceFile *sfile = CTX_wm_space_file(C);
-
+  /* May happen when manipulating non-active spaces. */
+  if (UNLIKELY(area->spacetype != SPACE_FILE)) {
+    return;
+  }
+  SpaceFile *sfile = area->spacedata.first;
   if (sfile->params) {
-    ED_fileselect_clear(wm, CTX_data_scene(C), sfile);
+    wmWindowManager *wm = CTX_wm_manager(C);
+    Scene *scene = WM_windows_scene_get_from_screen(wm, screen);
+    if (LIKELY(scene != NULL)) {
+      ED_fileselect_clear(wm, scene, sfile);
+    }
 
     /* Clear search string, it is very rare to want to keep that filter while changing dir,
      * and usually very annoying to keep it actually! */
@@ -854,23 +863,28 @@ void ED_file_change_dir(bContext *C)
 
     folderlist_pushdir(sfile->folders_prev, sfile->params->dir);
 
-    file_draw_check(C);
+    file_draw_check_ex(C, area);
   }
+}
+
+void ED_file_change_dir(bContext *C)
+{
+  bScreen *screen = CTX_wm_screen(C);
+  ScrArea *area = CTX_wm_area(C);
+  ED_file_change_dir_ex(C, screen, area);
 }
 
 int file_select_match(struct SpaceFile *sfile, const char *pattern, char *matched_file)
 {
   int match = 0;
 
-  int i;
-  FileDirEntry *file;
   int n = filelist_files_ensure(sfile->files);
 
   /* select any file that matches the pattern, this includes exact match
    * if the user selects a single file by entering the filename
    */
-  for (i = 0; i < n; i++) {
-    file = filelist_file(sfile->files, i);
+  for (int i = 0; i < n; i++) {
+    FileDirEntry *file = filelist_file(sfile->files, i);
     /* Do not check whether file is a file or dir here! Causes T44243
      * (we do accept dirs at this stage). */
     if (fnmatch(pattern, file->relpath, 0) == 0) {
@@ -942,9 +956,8 @@ int autocomplete_file(struct bContext *C, char *str, void *UNUSED(arg_v))
   if (str[0] && sfile->files) {
     AutoComplete *autocpl = UI_autocomplete_begin(str, FILE_MAX);
     int nentries = filelist_files_ensure(sfile->files);
-    int i;
 
-    for (i = 0; i < nentries; i++) {
+    for (int i = 0; i < nentries; i++) {
       FileDirEntry *file = filelist_file(sfile->files, i);
       UI_autocomplete_update_name(autocpl, file->relpath);
     }
@@ -956,7 +969,7 @@ int autocomplete_file(struct bContext *C, char *str, void *UNUSED(arg_v))
 
 void ED_fileselect_clear(wmWindowManager *wm, Scene *owner_scene, SpaceFile *sfile)
 {
-  /* only NULL in rare cases - [#29734] */
+  /* only NULL in rare cases - T29734. */
   if (sfile->files) {
     filelist_readjob_stop(wm, owner_scene);
     filelist_freelib(sfile->files);

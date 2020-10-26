@@ -17,14 +17,13 @@
  * All rights reserved.
  */
 
-#ifndef __USD_H__
-#define __USD_H__
+#pragma once
+
+#include "DEG_depsgraph.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "DEG_depsgraph.h"
 
 struct Scene;
 struct bContext;
@@ -36,6 +35,7 @@ struct USDExportParams {
   bool export_normals;
   bool export_materials;
   bool selected_objects_only;
+  bool visible_objects_only;
   bool use_instancing;
   enum eEvaluationMode evaluation_mode;
 };
@@ -59,5 +59,3 @@ int USD_get_version(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __USD_H__ */

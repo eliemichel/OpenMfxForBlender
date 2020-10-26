@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
@@ -26,8 +26,7 @@
  * \note This is deprecated & should eventually be removed.
  */
 
-#ifndef __BKE_CDDERIVEDMESH_H__
-#define __BKE_CDDERIVEDMESH_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,10 +43,8 @@ struct DerivedMesh *CDDM_from_mesh(struct Mesh *mesh);
 
 /* Copies the given DerivedMesh with verts, faces & edges stored as
  * custom element data. */
-struct DerivedMesh *CDDM_copy(struct DerivedMesh *dm);
+struct DerivedMesh *CDDM_copy(struct DerivedMesh *source);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

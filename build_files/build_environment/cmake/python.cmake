@@ -42,13 +42,18 @@ if(WIN32)
     URL_HASH MD5=${PYTHON_HASH}
     PREFIX ${BUILD_DIR}/python
     CONFIGURE_COMMAND ""
-    BUILD_COMMAND cd ${BUILD_DIR}/python/src/external_python/pcbuild/ && set IncludeTkinter=false && call build.bat -e -p ${PYTHON_ARCH} -c ${BUILD_MODE}
+    BUILD_COMMAND cd ${BUILD_DIR}/python/src/external_python/pcbuild/ && set IncludeTkinter=false && call build.bat -e -p x64 -c ${BUILD_MODE}
     INSTALL_COMMAND ${PYTHON_BINARY_INTERNAL} ${PYTHON_SRC}/PC/layout/main.py -b ${PYTHON_SRC}/PCbuild/amd64 -s ${PYTHON_SRC} -t ${PYTHON_SRC}/tmp/  --include-underpth --include-stable --include-pip --include-dev --include-launchers  --include-venv --include-symbols ${PYTHON_EXTRA_INSTLAL_FLAGS} --copy ${LIBDIR}/python
   )
 
 else()
   if(APPLE)
-    # disable functions that can be in 10.13 sdk but aren't available on 10.9 target
+    # Disable functions that can be in 10.13 sdk but aren't available on 10.9 target.
+    #
+    # Disable libintl (gettext library) as it might come from Homebrew, which makes
+    # it so test program compiles, but the Python does not. This is because for Python
+    # we use isysroot, which seems to forbid using libintl.h.
+    # The gettext functionality seems to come from CoreFoundation, so should be all fine.
     set(PYTHON_FUNC_CONFIGS
       export ac_cv_func_futimens=no &&
       export ac_cv_func_utimensat=no &&
@@ -60,13 +65,21 @@ else()
       export ac_cv_func_getentropy=no &&
       export ac_cv_func_mkostemp=no &&
       export ac_cv_func_mkostemps=no &&
-      export ac_cv_func_timingsafe_bcmp=no)
+      export ac_cv_func_timingsafe_bcmp=no &&
+      export ac_cv_header_libintl_h=no &&
+      export ac_cv_lib_intl_textdomain=no
+    )
+    if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+      set(PYTHON_FUNC_CONFIGS ${PYTHON_FUNC_CONFIGS} && export PYTHON_DECIMAL_WITH_MACHINE=ansi64)
+    endif()
     set(PYTHON_CONFIGURE_ENV ${CONFIGURE_ENV} && ${PYTHON_FUNC_CONFIGS})
     set(PYTHON_BINARY ${BUILD_DIR}/python/src/external_python/python.exe)
+    set(PYTHON_PATCH ${PATCH_CMD} --verbose -p1 -d ${BUILD_DIR}/python/src/external_python < ${PATCH_DIR}/python_macos.diff)
   else()
     set(PYTHON_CONFIGURE_ENV ${CONFIGURE_ENV})
     set(PYTHON_BINARY ${BUILD_DIR}/python/src/external_python/python)
-  endif()
+    set(PYTHON_PATCH ${PATCH_CMD} --verbose -p1 -d ${BUILD_DIR}/python/src/external_python < ${PATCH_DIR}/python_linux.diff)
+ endif()
 
   set(PYTHON_CONFIGURE_EXTRA_ARGS "--with-openssl=${LIBDIR}/ssl")
   set(PYTHON_CFLAGS "-I${LIBDIR}/sqlite/include -I${LIBDIR}/bzip2/include -I${LIBDIR}/lzma/include -I${LIBDIR}/zlib/include")
@@ -76,7 +89,6 @@ else()
     export CPPFLAGS=${PYTHON_CFLAGS} &&
     export LDFLAGS=${PYTHON_LDFLAGS} &&
     export PKG_CONFIG_PATH=${LIBDIR}/ffi/lib/pkgconfig)
-  set(PYTHON_PATCH ${PATCH_CMD} --verbose -p1 -d ${BUILD_DIR}/python/src/external_python < ${PATCH_DIR}/python_linux.diff)
 
   ExternalProject_Add(external_python
     URL ${PYTHON_URI}

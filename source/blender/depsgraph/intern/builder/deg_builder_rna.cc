@@ -27,18 +27,15 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "DNA_action_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_key_types.h"
 #include "DNA_object_types.h"
 #include "DNA_sequence_types.h"
-}
 
 #include "BKE_constraint.h"
 
@@ -51,43 +48,40 @@ extern "C" {
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 /* ********************************* ID Data ******************************** */
 
 class RNANodeQueryIDData {
  public:
-  explicit RNANodeQueryIDData(const ID *id) : id_(id), contraint_to_pchan_map_(nullptr)
+  explicit RNANodeQueryIDData(const ID *id) : id_(id), constraint_to_pchan_map_(nullptr)
   {
   }
 
   ~RNANodeQueryIDData()
   {
-    if (contraint_to_pchan_map_ != nullptr) {
-      BLI_ghash_free(contraint_to_pchan_map_, nullptr, nullptr);
-    }
+    delete constraint_to_pchan_map_;
   }
 
   const bPoseChannel *get_pchan_for_constraint(const bConstraint *constraint)
   {
     ensure_constraint_to_pchan_map();
-    return static_cast<bPoseChannel *>(BLI_ghash_lookup(contraint_to_pchan_map_, constraint));
+    return constraint_to_pchan_map_->lookup_default(constraint, nullptr);
   }
 
   void ensure_constraint_to_pchan_map()
   {
-    if (contraint_to_pchan_map_ != nullptr) {
+    if (constraint_to_pchan_map_ != nullptr) {
       return;
     }
     BLI_assert(GS(id_->name) == ID_OB);
     const Object *object = reinterpret_cast<const Object *>(id_);
-    contraint_to_pchan_map_ = BLI_ghash_ptr_new("id data pchan constraint map");
+    constraint_to_pchan_map_ = new Map<const bConstraint *, const bPoseChannel *>();
     if (object->pose != nullptr) {
       LISTBASE_FOREACH (const bPoseChannel *, pchan, &object->pose->chanbase) {
         LISTBASE_FOREACH (const bConstraint *, constraint, &pchan->constraints) {
-          BLI_ghash_insert(contraint_to_pchan_map_,
-                           const_cast<bConstraint *>(constraint),
-                           const_cast<bPoseChannel *>(pchan));
+          constraint_to_pchan_map_->add_new(constraint, pchan);
         }
       }
     }
@@ -99,7 +93,7 @@ class RNANodeQueryIDData {
 
   /* indexed by bConstraint*, returns pose channel which contains that
    * constraint. */
-  GHash *contraint_to_pchan_map_;
+  Map<const bConstraint *, const bPoseChannel *> *constraint_to_pchan_map_;
 };
 
 /* ***************************** Node Identifier **************************** */
@@ -121,26 +115,13 @@ bool RNANodeIdentifier::is_valid() const
 
 /* ********************************** Query ********************************* */
 
-namespace {
-
-void ghash_id_data_free_func(void *value)
-{
-  RNANodeQueryIDData *id_data = static_cast<RNANodeQueryIDData *>(value);
-  OBJECT_GUARDED_DELETE(id_data, RNANodeQueryIDData);
-}
-
-}  // namespace
-
 RNANodeQuery::RNANodeQuery(Depsgraph *depsgraph, DepsgraphBuilder *builder)
-    : depsgraph_(depsgraph),
-      builder_(builder),
-      id_data_map_(BLI_ghash_ptr_new("rna node query id data hash"))
+    : depsgraph_(depsgraph), builder_(builder)
 {
 }
 
 RNANodeQuery::~RNANodeQuery()
 {
-  BLI_ghash_free(id_data_map_, nullptr, ghash_id_data_free_func);
 }
 
 Node *RNANodeQuery::find_node(const PointerRNA *ptr,
@@ -168,6 +149,25 @@ Node *RNANodeQuery::find_node(const PointerRNA *ptr,
                                    node_identifier.operation_name_tag);
 }
 
+bool RNANodeQuery::contains(const char *prop_identifier, const char *rna_path_component)
+{
+  const char *substr = strstr(prop_identifier, rna_path_component);
+  if (substr == nullptr) {
+    return false;
+  }
+
+  // If substr != prop_identifier, it means that the substring is found further in prop_identifier,
+  // and that thus index -1 is a valid memory location.
+  const bool start_ok = substr == prop_identifier || substr[-1] == '.';
+  if (!start_ok) {
+    return false;
+  }
+
+  const size_t component_len = strlen(rna_path_component);
+  const bool end_ok = ELEM(substr[component_len], '\0', '.', '[');
+  return end_ok;
+}
+
 RNANodeIdentifier RNANodeQuery::construct_node_identifier(const PointerRNA *ptr,
                                                           const PropertyRNA *prop,
                                                           RNAPointerSource source)
@@ -190,7 +190,7 @@ RNANodeIdentifier RNANodeQuery::construct_node_identifier(const PointerRNA *ptr,
         reinterpret_cast<const PropertyRNA *>(prop));
     return node_identifier;
   }
-  else if (ptr->type == &RNA_PoseBone) {
+  if (ptr->type == &RNA_PoseBone) {
     const bPoseChannel *pchan = static_cast<const bPoseChannel *>(ptr->data);
     /* Bone - generally, we just want the bone component. */
     node_identifier.type = NodeType::BONE;
@@ -222,7 +222,7 @@ RNANodeIdentifier RNANodeQuery::construct_node_identifier(const PointerRNA *ptr,
     }
     return node_identifier;
   }
-  else if (ptr->type == &RNA_Bone) {
+  if (ptr->type == &RNA_Bone) {
     /* Armature-level bone mapped to Armature Eval, and thus Pose Init.
      * Drivers have special code elsewhere that links them to the pose
      * bone components, instead of using this generic code. */
@@ -236,7 +236,7 @@ RNANodeIdentifier RNANodeQuery::construct_node_identifier(const PointerRNA *ptr,
     }
     return node_identifier;
   }
-  else if (RNA_struct_is_a(ptr->type, &RNA_Constraint)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_Constraint)) {
     const Object *object = reinterpret_cast<const Object *>(ptr->owner_id);
     const bConstraint *constraint = static_cast<const bConstraint *>(ptr->data);
     RNANodeQueryIDData *id_data = ensure_id_data(&object->id);
@@ -256,7 +256,7 @@ RNANodeIdentifier RNANodeQuery::construct_node_identifier(const PointerRNA *ptr,
     }
     return node_identifier;
   }
-  else if (ELEM(ptr->type, &RNA_ConstraintTarget, &RNA_ConstraintTargetBone)) {
+  if (ELEM(ptr->type, &RNA_ConstraintTarget, &RNA_ConstraintTargetBone)) {
     Object *object = reinterpret_cast<Object *>(ptr->owner_id);
     bConstraintTarget *tgt = (bConstraintTarget *)ptr->data;
     /* Check whether is object or bone constraint. */
@@ -302,22 +302,34 @@ RNANodeIdentifier RNANodeQuery::construct_node_identifier(const PointerRNA *ptr,
     if (prop != nullptr) {
       const char *prop_identifier = RNA_property_identifier((PropertyRNA *)prop);
       /* TODO(sergey): How to optimize this? */
-      if (strstr(prop_identifier, "location") || strstr(prop_identifier, "rotation") ||
-          strstr(prop_identifier, "scale") || strstr(prop_identifier, "matrix_")) {
+      if (contains(prop_identifier, "location") || contains(prop_identifier, "matrix_basis") ||
+          contains(prop_identifier, "matrix_channel") ||
+          contains(prop_identifier, "matrix_inverse") ||
+          contains(prop_identifier, "matrix_local") ||
+          contains(prop_identifier, "matrix_parent_inverse") ||
+          contains(prop_identifier, "matrix_world") ||
+          contains(prop_identifier, "rotation_axis_angle") ||
+          contains(prop_identifier, "rotation_euler") ||
+          contains(prop_identifier, "rotation_mode") ||
+          contains(prop_identifier, "rotation_quaternion") || contains(prop_identifier, "scale") ||
+          contains(prop_identifier, "delta_location") ||
+          contains(prop_identifier, "delta_rotation_euler") ||
+          contains(prop_identifier, "delta_rotation_quaternion") ||
+          contains(prop_identifier, "delta_scale")) {
         node_identifier.type = NodeType::TRANSFORM;
         return node_identifier;
       }
-      else if (strstr(prop_identifier, "data")) {
+      if (contains(prop_identifier, "data")) {
         /* We access object.data, most likely a geometry.
          * Might be a bone tho. */
         node_identifier.type = NodeType::GEOMETRY;
         return node_identifier;
       }
-      else if (STREQ(prop_identifier, "hide_viewport") || STREQ(prop_identifier, "hide_render")) {
+      if (STREQ(prop_identifier, "hide_viewport") || STREQ(prop_identifier, "hide_render")) {
         node_identifier.type = NodeType::OBJECT_FROM_LAYER;
         return node_identifier;
       }
-      else if (STREQ(prop_identifier, "dimensions")) {
+      if (STREQ(prop_identifier, "dimensions")) {
         node_identifier.type = NodeType::PARAMETERS;
         node_identifier.operation_code = OperationCode::DIMENSIONS;
         return node_identifier;
@@ -384,12 +396,10 @@ RNANodeIdentifier RNANodeQuery::construct_node_identifier(const PointerRNA *ptr,
 
 RNANodeQueryIDData *RNANodeQuery::ensure_id_data(const ID *id)
 {
-  RNANodeQueryIDData **id_data_ptr;
-  if (!BLI_ghash_ensure_p(
-          id_data_map_, const_cast<ID *>(id), reinterpret_cast<void ***>(&id_data_ptr))) {
-    *id_data_ptr = OBJECT_GUARDED_NEW(RNANodeQueryIDData, id);
-  }
-  return *id_data_ptr;
+  unique_ptr<RNANodeQueryIDData> &id_data = id_data_map_.lookup_or_add_cb(
+      id, [&]() { return std::make_unique<RNANodeQueryIDData>(id); });
+  return id_data.get();
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

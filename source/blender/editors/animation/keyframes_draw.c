@@ -84,9 +84,7 @@ short compare_ak_cfraPtr(void *node, void *data)
   if (val < ak->cfra) {
     return -1;
   }
-  else {
-    return 1;
-  }
+  return 1;
 }
 
 /* --------------- */
@@ -106,18 +104,16 @@ static eKeyframeHandleDrawOpts bezt_handle_type(BezTriple *bezt)
   if (bezt->h1 == HD_AUTO_ANIM && bezt->h2 == HD_AUTO_ANIM) {
     return KEYFRAME_HANDLE_AUTO_CLAMP;
   }
-  else if (ELEM(bezt->h1, HD_AUTO_ANIM, HD_AUTO) && ELEM(bezt->h2, HD_AUTO_ANIM, HD_AUTO)) {
+  if (ELEM(bezt->h1, HD_AUTO_ANIM, HD_AUTO) && ELEM(bezt->h2, HD_AUTO_ANIM, HD_AUTO)) {
     return KEYFRAME_HANDLE_AUTO;
   }
-  else if (bezt->h1 == HD_VECT && bezt->h2 == HD_VECT) {
+  if (bezt->h1 == HD_VECT && bezt->h2 == HD_VECT) {
     return KEYFRAME_HANDLE_VECTOR;
   }
-  else if (ELEM(HD_FREE, bezt->h1, bezt->h2)) {
+  if (ELEM(HD_FREE, bezt->h1, bezt->h2)) {
     return KEYFRAME_HANDLE_FREE;
   }
-  else {
-    return KEYFRAME_HANDLE_ALIGNED;
-  }
+  return KEYFRAME_HANDLE_ALIGNED;
 }
 
 /* Determine if the keyframe is an extreme by comparing with neighbors.
@@ -337,9 +333,8 @@ static void add_bezt_to_keycolumns_list(DLRBT_Tree *keys, BezTripleChain *bezt)
   if (ELEM(NULL, keys, bezt)) {
     return;
   }
-  else {
-    BLI_dlrbTree_add(keys, compare_ak_bezt, nalloc_ak_bezt, nupdate_ak_bezt, bezt);
-  }
+
+  BLI_dlrbTree_add(keys, compare_ak_bezt, nalloc_ak_bezt, nupdate_ak_bezt, bezt);
 }
 
 /* Add the given GPencil Frame to the given 'list' of Keyframes */
@@ -348,9 +343,8 @@ static void add_gpframe_to_keycolumns_list(DLRBT_Tree *keys, bGPDframe *gpf)
   if (ELEM(NULL, keys, gpf)) {
     return;
   }
-  else {
-    BLI_dlrbTree_add(keys, compare_ak_gpframe, nalloc_ak_gpframe, nupdate_ak_gpframe, gpf);
-  }
+
+  BLI_dlrbTree_add(keys, compare_ak_gpframe, nalloc_ak_gpframe, nupdate_ak_gpframe, gpf);
 }
 
 /* Add the given MaskLayerShape Frame to the given 'list' of Keyframes */
@@ -359,13 +353,12 @@ static void add_masklay_to_keycolumns_list(DLRBT_Tree *keys, MaskLayerShape *mas
   if (ELEM(NULL, keys, masklay_shape)) {
     return;
   }
-  else {
-    BLI_dlrbTree_add(keys,
-                     compare_ak_masklayshape,
-                     nalloc_ak_masklayshape,
-                     nupdate_ak_masklayshape,
-                     masklay_shape);
-  }
+
+  BLI_dlrbTree_add(keys,
+                   compare_ak_masklayshape,
+                   nalloc_ak_masklayshape,
+                   nupdate_ak_masklayshape,
+                   masklay_shape);
 }
 
 /* ActKeyBlocks (Long Keyframes) ------------------------------------------ */
@@ -699,7 +692,7 @@ static void draw_keylist(View2D *v2d,
   const float smaller_sz = 0.35f * icon_sz;
   const float ipo_sz = 0.1f * icon_sz;
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   /* locked channels are less strongly shown, as feedback for locked channels in DopeSheet */
   /* TODO: allow this opacity factor to be themed? */
@@ -855,7 +848,7 @@ static void draw_keylist(View2D *v2d,
     }
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }
 
 /* *************************** Channel Drawing Funcs *************************** */
@@ -1078,7 +1071,7 @@ void scene_to_keylist(bDopeSheet *ads, Scene *sce, DLRBT_Tree *keys, int saction
   ac.datatype = ANIMCONT_CHANNEL;
 
   /* get F-Curves to take keyframes from */
-  filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* loop through each F-Curve, grabbing the keyframes */
@@ -1116,7 +1109,7 @@ void ob_to_keylist(bDopeSheet *ads, Object *ob, DLRBT_Tree *keys, int saction_fl
   ac.datatype = ANIMCONT_CHANNEL;
 
   /* get F-Curves to take keyframes from */
-  filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* loop through each F-Curve, grabbing the keyframes */
@@ -1150,7 +1143,7 @@ void cachefile_to_keylist(bDopeSheet *ads,
 
   /* get F-Curves to take keyframes from */
   ListBase anim_data = {NULL, NULL};
-  int filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  int filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* loop through each F-Curve, grabbing the keyframes */

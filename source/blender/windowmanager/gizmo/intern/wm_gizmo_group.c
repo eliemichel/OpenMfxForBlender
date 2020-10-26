@@ -166,12 +166,10 @@ int WM_gizmo_cmp_temp_fl(const void *gz_a_ptr, const void *gz_b_ptr)
   if (gz_a->temp.f < gz_b->temp.f) {
     return -1;
   }
-  else if (gz_a->temp.f > gz_b->temp.f) {
+  if (gz_a->temp.f > gz_b->temp.f) {
     return 1;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 int WM_gizmo_cmp_temp_fl_reverse(const void *gz_a_ptr, const void *gz_b_ptr)
@@ -181,12 +179,10 @@ int WM_gizmo_cmp_temp_fl_reverse(const void *gz_a_ptr, const void *gz_b_ptr)
   if (gz_a->temp.f < gz_b->temp.f) {
     return 1;
   }
-  else if (gz_a->temp.f > gz_b->temp.f) {
+  if (gz_a->temp.f > gz_b->temp.f) {
     return -1;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 static bool wm_gizmo_keymap_uses_event_modifier(wmWindowManager *wm,
@@ -396,10 +392,9 @@ static int gizmo_select_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
 
     return OPERATOR_FINISHED;
   }
-  else {
-    BLI_assert(0);
-    return (OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH);
-  }
+
+  BLI_assert(0);
+  return (OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH);
 }
 
 void GIZMOGROUP_OT_gizmo_select(wmOperatorType *ot)
@@ -449,7 +444,7 @@ static bool gizmo_tweak_start_and_finish(
       wmWindowManager *wm = CTX_wm_manager(C);
       wmOperator *op = WM_operator_last_redo(C);
 
-      /* We may want to enable this, for now the gizmo can manage it's own properties. */
+      /* We may want to enable this, for now the gizmo can manage its own properties. */
 #if 0
       IDP_MergeGroup(gzop->ptr.data, op->properties, false);
 #endif
@@ -476,9 +471,7 @@ static bool gizmo_tweak_start_and_finish(
     }
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 static void gizmo_tweak_finish(bContext *C, wmOperator *op, const bool cancel, bool clear_modal)
@@ -640,7 +633,7 @@ void GIZMOGROUP_OT_gizmo_tweak(wmOperatorType *ot)
   ot->invoke = gizmo_tweak_invoke;
   ot->modal = gizmo_tweak_modal;
 
-  /* TODO(campbell) This causes problems tweaking settings for operators,
+  /* TODO(campbell): This causes problems tweaking settings for operators,
    * need to find a way to support this. */
 #if 0
   ot->flag = OPTYPE_UNDO;
@@ -649,7 +642,7 @@ void GIZMOGROUP_OT_gizmo_tweak(wmOperatorType *ot)
 
 /** \} */
 
-wmKeyMap *wm_gizmogroup_tweak_modal_keymap(wmKeyConfig *kc)
+wmKeyMap *wm_gizmogroup_tweak_modal_keymap(wmKeyConfig *keyconf)
 {
   wmKeyMap *keymap;
   char name[KMAP_MAX_NAME];
@@ -665,14 +658,14 @@ wmKeyMap *wm_gizmogroup_tweak_modal_keymap(wmKeyConfig *kc)
   };
 
   STRNCPY(name, "Generic Gizmo Tweak Modal Map");
-  keymap = WM_modalkeymap_find(kc, name);
+  keymap = WM_modalkeymap_find(keyconf, name);
 
   /* this function is called for each spacetype, only needs to add map once */
   if (keymap && keymap->modal_items) {
     return NULL;
   }
 
-  keymap = WM_modalkeymap_ensure(kc, name, modal_items);
+  keymap = WM_modalkeymap_ensure(keyconf, name, modal_items);
 
   /* items for modal map */
   WM_modalkeymap_add_item(keymap, EVT_ESCKEY, KM_PRESS, KM_ANY, 0, TWEAK_MODAL_CANCEL);

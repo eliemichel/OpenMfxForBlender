@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2020 Blender Foundation.
@@ -28,8 +28,6 @@
 #include "DNA_modifier_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_math_vector.h"
-
 #include "BKE_customdata.h"
 #include "BKE_lib_id.h"
 #include "BKE_mesh.h"
@@ -37,14 +35,16 @@
 #include "BKE_modifier.h"
 #include "BKE_multires.h"
 #include "BKE_subdiv.h"
+#include "BKE_subsurf.h"
+#include "BLI_math_vector.h"
 
 #include "DEG_depsgraph_query.h"
 
 #include "multires_reshape.h"
 
-/* ================================================================================================
- * Reshape from object.
- */
+/* -------------------------------------------------------------------- */
+/** \name Reshape from object
+ * \{ */
 
 bool multiresModifier_reshapeFromVertcos(struct Depsgraph *depsgraph,
                                          struct Object *object,
@@ -93,9 +93,11 @@ bool multiresModifier_reshapeFromObject(struct Depsgraph *depsgraph,
   return result;
 }
 
-/* ================================================================================================
- * Reshape from modifier.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Reshape from modifier
+ * \{ */
 
 bool multiresModifier_reshapeFromDeformModifier(struct Depsgraph *depsgraph,
                                                 struct Object *object,
@@ -119,7 +121,7 @@ bool multiresModifier_reshapeFromDeformModifier(struct Depsgraph *depsgraph,
       .object = object,
       .flag = MOD_APPLY_USECACHE | MOD_APPLY_IGNORE_SIMPLIFY,
   };
-  modwrap_deformVerts(
+  BKE_modifier_deform_verts(
       deform_md, &modifier_ctx, multires_mesh, deformed_verts, multires_mesh->totvert);
   BKE_id_free(NULL, multires_mesh);
 
@@ -133,9 +135,11 @@ bool multiresModifier_reshapeFromDeformModifier(struct Depsgraph *depsgraph,
   return result;
 }
 
-/* ================================================================================================
- * Reshape from grids.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Reshape from grids
+ * \{ */
 
 bool multiresModifier_reshapeFromCCG(const int tot_level,
                                      Mesh *coarse_mesh,
@@ -161,25 +165,36 @@ bool multiresModifier_reshapeFromCCG(const int tot_level,
   return true;
 }
 
-/* ================================================================================================
- * Subdivision.
- */
+/** \} */
 
-void multiresModifier_subdivide(Object *object, MultiresModifierData *mmd)
+/* -------------------------------------------------------------------- */
+/** \name Subdivision
+ * \{ */
+
+void multiresModifier_subdivide(Object *object,
+                                MultiresModifierData *mmd,
+                                const eMultiresSubdivideModeType mode)
 {
   const int top_level = mmd->totlvl + 1;
-  multiresModifier_subdivide_to_level(object, mmd, top_level);
+  multiresModifier_subdivide_to_level(object, mmd, top_level, mode);
 }
 
 void multiresModifier_subdivide_to_level(struct Object *object,
                                          struct MultiresModifierData *mmd,
-                                         const int top_level)
+                                         const int top_level,
+                                         const eMultiresSubdivideModeType mode)
 {
   if (top_level <= mmd->totlvl) {
     return;
   }
 
   Mesh *coarse_mesh = object->data;
+  if (coarse_mesh->totloop == 0) {
+    /* If there are no loops in the mesh implies there is no CD_MDISPS as well. So can early output
+     * from here as there is nothing to subdivide. */
+    return;
+  }
+
   MultiresReshapeContext reshape_context;
 
   /* There was no multires at all, all displacement is at 0. Can simply make sure all mdisps grids
@@ -199,34 +214,48 @@ void multiresModifier_subdivide_to_level(struct Object *object,
    * that the mdisps layer is also synchronized. */
   if (!has_mdisps || top_level == 1 || mmd->totlvl == 0) {
     multires_reshape_ensure_grids(coarse_mesh, top_level);
-    multires_set_tot_level(object, mmd, top_level);
+    if (ELEM(mode, MULTIRES_SUBDIVIDE_LINEAR, MULTIRES_SUBDIVIDE_SIMPLE)) {
+      multires_subdivide_create_tangent_displacement_linear_grids(object, mmd);
+    }
+    else {
+      multires_set_tot_level(object, mmd, top_level);
+    }
     return;
   }
 
   multires_flush_sculpt_updates(object);
 
-  if (!multires_reshape_context_create_from_subdivide(&reshape_context, object, mmd, top_level)) {
+  if (!multires_reshape_context_create_from_modifier(&reshape_context, object, mmd, top_level)) {
     return;
   }
+
   multires_reshape_store_original_grids(&reshape_context);
   multires_reshape_ensure_grids(coarse_mesh, reshape_context.top.level);
-  multires_reshape_assign_final_coords_from_orig_mdisps(&reshape_context);
+  multires_reshape_assign_final_elements_from_orig_mdisps(&reshape_context);
 
   /* Free original grids which makes it so smoothing with details thinks all the details were
    * added against base mesh's limit surface. This is similar behavior to as if we've done all
-   * displacement in sculpt mode at the old top level and then propagated to the new top level. */
+   * displacement in sculpt mode at the old top level and then propagated to the new top level.*/
   multires_reshape_free_original_grids(&reshape_context);
 
-  multires_reshape_smooth_object_grids_with_details(&reshape_context);
+  if (ELEM(mode, MULTIRES_SUBDIVIDE_LINEAR, MULTIRES_SUBDIVIDE_SIMPLE)) {
+    multires_reshape_smooth_object_grids(&reshape_context, mode);
+  }
+  else {
+    multires_reshape_smooth_object_grids_with_details(&reshape_context);
+  }
+
   multires_reshape_object_grids_to_tangent_displacement(&reshape_context);
   multires_reshape_context_free(&reshape_context);
 
   multires_set_tot_level(object, mmd, top_level);
 }
 
-/* ================================================================================================
- * Apply base.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Apply base
+ * \{ */
 
 void multiresModifier_base_apply(struct Depsgraph *depsgraph,
                                  Object *object,
@@ -272,3 +301,5 @@ void multiresModifier_base_apply(struct Depsgraph *depsgraph,
 
   multires_reshape_context_free(&reshape_context);
 }
+
+/** \} */

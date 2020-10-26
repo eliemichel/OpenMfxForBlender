@@ -23,8 +23,11 @@
  * Selection implementations.
  */
 
-#ifndef __GPU_SELECT_PRIVATE_H__
-#define __GPU_SELECT_PRIVATE_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* gpu_select_pick */
 void gpu_select_pick_begin(uint (*buffer)[4], uint bufsize, const rcti *input, char mode);
@@ -44,4 +47,6 @@ uint gpu_select_query_end(void);
 
 #define SELECT_ID_NONE ((uint)0xffffffff)
 
-#endif /* __GPU_SELECT_PRIVATE_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -7,6 +7,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 
 def get_arguments(filepath, output_filepath):
@@ -19,6 +20,8 @@ def get_arguments(filepath, output_filepath):
         "-noaudio",
         "--factory-startup",
         "--enable-autoexec",
+        "--debug-memory",
+        "--debug-exit-on-error",
         filepath,
         "-E", "CYCLES",
         "-o", output_filepath,
@@ -39,6 +42,7 @@ def get_arguments(filepath, output_filepath):
         args.extend(["-f", "1"])
 
     return args
+
 
 def create_argparse():
     parser = argparse.ArgumentParser()
@@ -63,6 +67,12 @@ def main():
     report.set_pixelated(True)
     report.set_reference_dir("cycles_renders")
     report.set_compare_engines('cycles', 'eevee')
+
+    # Increase threshold for motion blur, see T78777.
+    test_dir_name = Path(test_dir).name
+    if test_dir_name == 'motion_blur':
+        report.set_fail_threshold(0.032)
+
     ok = report.run(test_dir, blender, get_arguments, batch=True)
 
     sys.exit(not ok)

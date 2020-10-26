@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_MESH_RUNTIME_H__
-#define __BKE_MESH_RUNTIME_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -49,6 +48,7 @@ void BKE_mesh_runtime_looptri_recalc(struct Mesh *mesh);
 const struct MLoopTri *BKE_mesh_runtime_looptri_ensure(struct Mesh *mesh);
 bool BKE_mesh_runtime_ensure_edit_data(struct Mesh *mesh);
 bool BKE_mesh_runtime_clear_edit_data(struct Mesh *mesh);
+bool BKE_mesh_runtime_reset_edit_data(struct Mesh *mesh);
 void BKE_mesh_runtime_clear_geometry(struct Mesh *mesh);
 void BKE_mesh_runtime_clear_cache(struct Mesh *mesh);
 
@@ -71,21 +71,16 @@ struct Mesh *mesh_get_eval_deform(struct Depsgraph *depsgraph,
                                   struct Object *ob,
                                   const struct CustomData_MeshMasks *dataMask);
 
-struct Mesh *mesh_create_eval_final_render(struct Depsgraph *depsgraph,
-                                           struct Scene *scene,
-                                           struct Object *ob,
-                                           const struct CustomData_MeshMasks *dataMask);
+struct Mesh *mesh_create_eval_final(struct Depsgraph *depsgraph,
+                                    struct Scene *scene,
+                                    struct Object *ob,
+                                    const struct CustomData_MeshMasks *dataMask);
 
 struct Mesh *mesh_create_eval_final_index_render(struct Depsgraph *depsgraph,
                                                  struct Scene *scene,
                                                  struct Object *ob,
                                                  const struct CustomData_MeshMasks *dataMask,
                                                  int index);
-
-struct Mesh *mesh_create_eval_final_view(struct Depsgraph *depsgraph,
-                                         struct Scene *scene,
-                                         struct Object *ob,
-                                         const struct CustomData_MeshMasks *dataMask);
 
 struct Mesh *mesh_create_eval_no_deform(struct Depsgraph *depsgraph,
                                         struct Scene *scene,
@@ -110,5 +105,3 @@ bool BKE_mesh_runtime_is_valid(struct Mesh *me_eval);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_MESH_RUNTIME_H__ */

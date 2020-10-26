@@ -25,19 +25,15 @@
 
 #include "MEM_guardedalloc.h"
 
-extern "C" {
-#include <string.h>  // XXX: memcpy
+#include <string.h> /* XXX: memcpy */
 
-#include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_action.h"  // XXX: BKE_pose_channel_find_name
+#include "BKE_action.h" /* XXX: BKE_pose_channel_find_name */
 #include "BKE_customdata.h"
 #include "BKE_idtype.h"
 #include "BKE_main.h"
-
-} /* extern "C" */
 
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -51,39 +47,47 @@ extern "C" {
 #include "intern/eval/deg_eval_copy_on_write.h"
 #include "intern/node/deg_node_id.h"
 
+namespace deg = blender::deg;
+
 struct Scene *DEG_get_input_scene(const Depsgraph *graph)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
   return deg_graph->scene;
 }
 
 struct ViewLayer *DEG_get_input_view_layer(const Depsgraph *graph)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
   return deg_graph->view_layer;
+}
+
+struct Main *DEG_get_bmain(const Depsgraph *graph)
+{
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
+  return deg_graph->bmain;
 }
 
 eEvaluationMode DEG_get_mode(const Depsgraph *graph)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
   return deg_graph->mode;
 }
 
 float DEG_get_ctime(const Depsgraph *graph)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
   return deg_graph->ctime;
 }
 
 bool DEG_id_type_updated(const Depsgraph *graph, short id_type)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
   return deg_graph->id_type_updated[BKE_idtype_idcode_to_index(id_type)] != 0;
 }
 
 bool DEG_id_type_any_updated(const Depsgraph *graph)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
 
   /* Loop over all ID types. */
   for (int id_type_index = 0; id_type_index < MAX_LIBARRAY; id_type_index++) {
@@ -97,7 +101,7 @@ bool DEG_id_type_any_updated(const Depsgraph *graph)
 
 bool DEG_id_type_any_exists(const Depsgraph *depsgraph, short id_type)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(depsgraph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(depsgraph);
   return deg_graph->id_type_exist[BKE_idtype_idcode_to_index(id_type)] != 0;
 }
 
@@ -112,8 +116,8 @@ uint32_t DEG_get_eval_flags_for_id(const Depsgraph *graph, ID *id)
     return 0;
   }
 
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
-  const DEG::IDNode *id_node = deg_graph->find_id_node(DEG_get_original_id(id));
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
+  const deg::IDNode *id_node = deg_graph->find_id_node(DEG_get_original_id(id));
   if (id_node == nullptr) {
     /* TODO(sergey): Does it mean we need to check set scene? */
     return 0;
@@ -135,8 +139,8 @@ void DEG_get_customdata_mask_for_object(const Depsgraph *graph,
     return;
   }
 
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
-  const DEG::IDNode *id_node = deg_graph->find_id_node(DEG_get_original_id(&ob->id));
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
+  const deg::IDNode *id_node = deg_graph->find_id_node(DEG_get_original_id(&ob->id));
   if (id_node == nullptr) {
     /* TODO(sergey): Does it mean we need to check set scene? */
     return;
@@ -151,17 +155,17 @@ void DEG_get_customdata_mask_for_object(const Depsgraph *graph,
 
 Scene *DEG_get_evaluated_scene(const Depsgraph *graph)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
   Scene *scene_cow = deg_graph->scene_cow;
   /* TODO(sergey): Shall we expand data-block here? Or is it OK to assume
    * that caller is OK with just a pointer in case scene is not updated yet? */
-  BLI_assert(scene_cow != nullptr && DEG::deg_copy_on_write_is_expanded(&scene_cow->id));
+  BLI_assert(scene_cow != nullptr && deg::deg_copy_on_write_is_expanded(&scene_cow->id));
   return scene_cow;
 }
 
 ViewLayer *DEG_get_evaluated_view_layer(const Depsgraph *graph)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
   Scene *scene_cow = DEG_get_evaluated_scene(graph);
   if (scene_cow == nullptr) {
     return nullptr; /* Happens with new, not-yet-built/evaluated graphes. */
@@ -188,8 +192,8 @@ ID *DEG_get_evaluated_id(const Depsgraph *depsgraph, ID *id)
   /* TODO(sergey): This is a duplicate of Depsgraph::get_cow_id(),
    * but here we never do assert, since we don't know nature of the
    * incoming ID data-block. */
-  const DEG::Depsgraph *deg_graph = (const DEG::Depsgraph *)depsgraph;
-  const DEG::IDNode *id_node = deg_graph->find_id_node(id);
+  const deg::Depsgraph *deg_graph = (const deg::Depsgraph *)depsgraph;
+  const deg::IDNode *id_node = deg_graph->find_id_node(id);
   if (id_node == nullptr) {
     return id;
   }
@@ -271,7 +275,7 @@ ID *DEG_get_original_id(ID *id)
   return (ID *)id->orig_id;
 }
 
-bool DEG_is_original_id(ID *id)
+bool DEG_is_original_id(const ID *id)
 {
   /* Some explanation of the logic.
    *
@@ -296,30 +300,30 @@ bool DEG_is_original_id(ID *id)
   return true;
 }
 
-bool DEG_is_original_object(Object *object)
+bool DEG_is_original_object(const Object *object)
 {
   return DEG_is_original_id(&object->id);
 }
 
-bool DEG_is_evaluated_id(ID *id)
+bool DEG_is_evaluated_id(const ID *id)
 {
   return !DEG_is_original_id(id);
 }
 
-bool DEG_is_evaluated_object(Object *object)
+bool DEG_is_evaluated_object(const Object *object)
 {
   return !DEG_is_original_object(object);
 }
 
 bool DEG_is_fully_evaluated(const struct Depsgraph *depsgraph)
 {
-  const DEG::Depsgraph *deg_graph = (const DEG::Depsgraph *)depsgraph;
+  const deg::Depsgraph *deg_graph = (const deg::Depsgraph *)depsgraph;
   /* Check whether relations are up to date. */
   if (deg_graph->need_update) {
     return false;
   }
   /* Check whether IDs are up to date. */
-  if (BLI_gset_len(deg_graph->entry_tags) > 0) {
+  if (!deg_graph->entry_tags.is_empty()) {
     return false;
   }
   return true;

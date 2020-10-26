@@ -40,9 +40,9 @@
 
 #include "MEM_guardedalloc.h"
 
-/* =============================================================================
- * General helpers.
- */
+/* -------------------------------------------------------------------- */
+/** \name General helpers
+ * \{ */
 
 /* Number of ptex faces for a given polygon. */
 BLI_INLINE int num_ptex_faces_per_poly_get(const MPoly *poly)
@@ -75,9 +75,11 @@ BLI_INLINE int ptex_face_resolution_get(const MPoly *poly, int resolution)
   return (poly->totloop == 4) ? (resolution) : ((resolution >> 1) + 1);
 }
 
-/* =============================================================================
- * Context which is passed to all threaded tasks.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Context which is passed to all threaded tasks
+ * \{ */
 
 typedef struct SubdivForeachTaskContext {
   const Mesh *coarse_mesh;
@@ -122,9 +124,11 @@ typedef struct SubdivForeachTaskContext {
   BLI_bitmap *coarse_edges_used_map;
 } SubdivForeachTaskContext;
 
-/* =============================================================================
- * Threading helpers.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Threading helpers
+ * \{ */
 
 static void *subdiv_foreach_tls_alloc(SubdivForeachTaskContext *ctx)
 {
@@ -148,9 +152,11 @@ static void subdiv_foreach_tls_free(SubdivForeachTaskContext *ctx, void *tls)
   MEM_freeN(tls);
 }
 
-/* =============================================================================
- * Initialization.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Initialization
+ * \{ */
 
 /* NOTE: Expects edge map to be zeroed. */
 static void subdiv_foreach_ctx_count(SubdivForeachTaskContext *ctx)
@@ -294,9 +300,11 @@ static void subdiv_foreach_ctx_free(SubdivForeachTaskContext *ctx)
   MEM_freeN(ctx->subdiv_polygon_offset);
 }
 
-/* =============================================================================
- * Vertex traversal process.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Vertex traversal process
+ * \{ */
 
 /* Traversal of corner vertices. They are coming from coarse vertices. */
 
@@ -706,9 +714,11 @@ static void subdiv_foreach_vertices(SubdivForeachTaskContext *ctx, void *tls, co
   }
 }
 
-/* =============================================================================
- * Edge traversal process.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edge traversal process
+ * \{ */
 
 /* TODO(sergey): Coarse edge are always NONE, consider getting rid of it. */
 static int subdiv_foreach_edges_row(SubdivForeachTaskContext *ctx,
@@ -1022,13 +1032,15 @@ static void subdiv_foreach_boundary_edges(SubdivForeachTaskContext *ctx,
       ctx->foreach_context, tls, coarse_edge_index, subdiv_edge_index, v1, v2);
 }
 
-/* =============================================================================
- * Loops traversal.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Loops traversal
+ * \{ */
 
 static void rotate_indices(const int rot, int *a, int *b, int *c, int *d)
 {
-  int values[4] = {*a, *b, *c, *d};
+  const int values[4] = {*a, *b, *c, *d};
   *a = values[(0 - rot + 4) % 4];
   *b = values[(1 - rot + 4) % 4];
   *c = values[(2 - rot + 4) % 4];
@@ -1111,10 +1123,10 @@ static int subdiv_foreach_loops_corner_index(const float u,
   if (u + du <= 0.5f && v + dv <= 0.5f) {
     return 0;
   }
-  else if (u >= 0.5f && v + dv <= 0.5f) {
+  if (u >= 0.5f && v + dv <= 0.5f) {
     return 1;
   }
-  else if (u >= 0.5f && v >= 0.5f) {
+  if (u >= 0.5f && v >= 0.5f) {
     return 2;
   }
   return 3;
@@ -1666,9 +1678,11 @@ static void subdiv_foreach_loops(SubdivForeachTaskContext *ctx, void *tls, int p
   }
 }
 
-/* =============================================================================
- * Polygons traverse process.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Polygons traverse process
+ * \{ */
 
 static void subdiv_foreach_polys(SubdivForeachTaskContext *ctx, void *tls, int poly_index)
 {
@@ -1697,9 +1711,11 @@ static void subdiv_foreach_polys(SubdivForeachTaskContext *ctx, void *tls, int p
   }
 }
 
-/* =============================================================================
- * Loose elements traverse process.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Loose elements traverse process
+ * \{ */
 
 static void subdiv_foreach_loose_vertices_task(void *__restrict userdata,
                                                const int coarse_vertex_index,
@@ -1730,7 +1746,7 @@ static void subdiv_foreach_vertices_of_loose_edges_task(void *__restrict userdat
   const int num_subdiv_vertices_per_coarse_edge = resolution - 2;
   const Mesh *coarse_mesh = ctx->coarse_mesh;
   const MEdge *coarse_edge = &coarse_mesh->medge[coarse_edge_index];
-  /* Subdivion vertices which corresponds to edge's v1 and v2. */
+  /* Subdivision vertices which corresponds to edge's v1 and v2. */
   const int subdiv_v1_index = ctx->vertices_corner_offset + coarse_edge->v1;
   const int subdiv_v2_index = ctx->vertices_corner_offset + coarse_edge->v2;
   /* First subdivided inner vertex of the edge.  */
@@ -1754,9 +1770,11 @@ static void subdiv_foreach_vertices_of_loose_edges_task(void *__restrict userdat
   }
 }
 
-/* =============================================================================
- * Subdivision process entry points.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Subdivision process entry points
+ * \{ */
 
 static void subdiv_foreach_single_geometry_vertices(SubdivForeachTaskContext *ctx, void *tls)
 {
@@ -1838,9 +1856,9 @@ static void subdiv_foreach_boundary_edges_task(void *__restrict userdata,
   subdiv_foreach_boundary_edges(ctx, tls->userdata_chunk, edge_index);
 }
 
-static void subdiv_foreach_finalize(void *__restrict userdata, void *__restrict userdata_chunk)
+static void subdiv_foreach_free(const void *__restrict userdata, void *__restrict userdata_chunk)
 {
-  SubdivForeachTaskContext *ctx = userdata;
+  const SubdivForeachTaskContext *ctx = userdata;
   ctx->foreach_context->user_data_tls_free(userdata_chunk);
 }
 
@@ -1873,7 +1891,7 @@ bool BKE_subdiv_foreach_subdiv_geometry(Subdiv *subdiv,
   parallel_range_settings.userdata_chunk_size = context->user_data_tls_size;
   parallel_range_settings.min_iter_per_thread = 1;
   if (context->user_data_tls_free != NULL) {
-    parallel_range_settings.func_finalize = subdiv_foreach_finalize;
+    parallel_range_settings.func_free = subdiv_foreach_free;
   }
 
   /* TODO(sergey): Possible optimization is to have a single pool and push all
@@ -1908,3 +1926,5 @@ bool BKE_subdiv_foreach_subdiv_geometry(Subdiv *subdiv,
   subdiv_foreach_ctx_free(&ctx);
   return true;
 }
+
+/** \} */

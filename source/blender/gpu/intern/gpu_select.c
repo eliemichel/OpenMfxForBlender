@@ -26,7 +26,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "GPU_glew.h"
 #include "GPU_select.h"
 
 #include "MEM_guardedalloc.h"
@@ -193,7 +192,7 @@ bool GPU_select_is_cached(void)
  */
 
 /**
- * Helper function, nothing special but avoids doing inline since hit's aren't sorted by depth
+ * Helper function, nothing special but avoids doing inline since hits aren't sorted by depth
  * and purpose of 4x buffer indices isn't so clear.
  *
  * Note that comparing depth as uint is fine.
@@ -211,6 +210,24 @@ const uint *GPU_select_buffer_near(const uint *buffer, int hits)
     buffer += 4;
   }
   return buffer_near;
+}
+
+uint GPU_select_buffer_remove_by_id(uint *buffer, int hits, uint select_id)
+{
+  uint *buffer_src = buffer;
+  uint *buffer_dst = buffer;
+  int hits_final = 0;
+  for (int i = 0; i < hits; i++) {
+    if (buffer_src[3] != select_id) {
+      if (buffer_dst != buffer_src) {
+        memcpy(buffer_dst, buffer_src, sizeof(int[4]));
+      }
+      buffer_dst += 4;
+      hits_final += 1;
+    }
+    buffer_src += 4;
+  }
+  return hits_final;
 }
 
 /* Part of the solution copied from `rect_subregion_stride_calc`. */

@@ -20,14 +20,19 @@
  * \ingroup draw
  */
 
-#ifndef __GPENCIL_ENGINE_H__
-#define __GPENCIL_ENGINE_H__
+#pragma once
 
 #include "DNA_gpencil_types.h"
+
+#include "DRW_render.h"
 
 #include "BLI_bitmap.h"
 
 #include "GPU_batch.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 extern DrawEngineType draw_engine_gpencil_type;
 
@@ -75,6 +80,8 @@ typedef struct gpMaterial {
 #define GP_STROKE_TEXTURE_STENCIL (1 << 4)
 #define GP_STROKE_TEXTURE_PREMUL (1 << 5)
 #define GP_STROKE_DOTS (1 << 6)
+#define GP_STROKE_HOLDOUT (1 << 7)
+#define GP_FILL_HOLDOUT (1 << 8)
 #define GP_FILL_TEXTURE_USE (1 << 10)
 #define GP_FILL_TEXTURE_PREMUL (1 << 11)
 #define GP_FILL_TEXTURE_CLIP (1 << 12)
@@ -109,7 +116,7 @@ typedef struct GPENCIL_MaterialPool {
   /* GPU representatin of materials. */
   gpMaterial mat_data[GP_MATERIAL_BUFFER_LEN];
   /* Matching ubo. */
-  struct GPUUniformBuffer *ubo;
+  struct GPUUniformBuf *ubo;
   /* Texture per material. NULL means none. */
   struct GPUTexture *tex_fill[GP_MATERIAL_BUFFER_LEN];
   struct GPUTexture *tex_stroke[GP_MATERIAL_BUFFER_LEN];
@@ -121,7 +128,7 @@ typedef struct GPENCIL_LightPool {
   /* GPU representatin of materials. */
   gpLight light_data[GPENCIL_LIGHT_BUFFER_LEN];
   /* Matching ubo. */
-  struct GPUUniformBuffer *ubo;
+  struct GPUUniformBuf *ubo;
   /* Number of light in the pool. */
   int light_used;
 } GPENCIL_LightPool;
@@ -189,6 +196,10 @@ typedef struct GPENCIL_tObject {
   float plane_mat[4][4];
 
   bool is_drawmode3d;
+
+  /* Use Material Holdout. */
+  bool do_mat_holdout;
+
 } GPENCIL_tObject;
 
 /* *********** LISTS *********** */
@@ -307,6 +318,8 @@ typedef struct GPENCIL_PrivateData {
   float dof_params[2];
   /* Used for DoF Setup. */
   Object *camera;
+  /* Copy of draw_ctx->view_layer for convenience. */
+  struct ViewLayer *view_layer;
   /* Copy of draw_ctx->scene for convenience. */
   struct Scene *scene;
   /* Copy of draw_ctx->vie3d for convenience. */
@@ -361,6 +374,8 @@ typedef struct GPENCIL_PrivateData {
   float xray_alpha;
   /* Mask invert uniform. */
   int mask_invert;
+  /* Vertex Paint opacity. */
+  float vertex_paint_opacity;
 } GPENCIL_PrivateData;
 
 /* geometry batch cache functions */
@@ -381,10 +396,10 @@ void gpencil_material_resources_get(GPENCIL_MaterialPool *first_pool,
                                     int mat_id,
                                     struct GPUTexture **r_tex_stroke,
                                     struct GPUTexture **r_tex_fill,
-                                    struct GPUUniformBuffer **r_ubo_mat);
+                                    struct GPUUniformBuf **r_ubo_mat);
 
 void gpencil_light_ambient_add(GPENCIL_LightPool *lightpool, const float color[3]);
-void gpencil_light_pool_populate(GPENCIL_LightPool *matpool, Object *ob);
+void gpencil_light_pool_populate(GPENCIL_LightPool *lightpool, Object *ob);
 GPENCIL_LightPool *gpencil_light_pool_add(GPENCIL_PrivateData *pd);
 GPENCIL_LightPool *gpencil_light_pool_create(GPENCIL_PrivateData *pd, Object *ob);
 
@@ -394,7 +409,6 @@ void gpencil_vfx_cache_populate(GPENCIL_Data *vedata, Object *ob, GPENCIL_tObjec
 /* Shaders */
 struct GPUShader *GPENCIL_shader_antialiasing(int stage);
 struct GPUShader *GPENCIL_shader_geometry_get(void);
-struct GPUShader *GPENCIL_shader_composite_get(void);
 struct GPUShader *GPENCIL_shader_layer_blend_get(void);
 struct GPUShader *GPENCIL_shader_mask_invert_get(void);
 struct GPUShader *GPENCIL_shader_depth_merge_get(void);
@@ -435,5 +449,6 @@ void GPENCIL_render_to_image(void *vedata,
 void gpencil_light_pool_free(void *storage);
 void gpencil_material_pool_free(void *storage);
 GPENCIL_ViewLayerData *GPENCIL_view_layer_data_ensure(void);
-
-#endif /* __GPENCIL_ENGINE_H__ */
+#ifdef __cplusplus
+}
+#endif

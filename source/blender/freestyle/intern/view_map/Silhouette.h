@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_SILHOUETTE_H__
-#define __FREESTYLE_SILHOUETTE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -431,14 +430,14 @@ class SVertex : public Interface0D {
   const SShape *shape() const;
   float shape_importance() const;
 
-  const int qi() const;
+  int qi() const;
   occluder_container::const_iterator occluders_begin() const;
   occluder_container::const_iterator occluders_end() const;
   bool occluders_empty() const;
   int occluders_size() const;
   const Polygon3r &occludee() const;
   const SShape *occluded_shape() const;
-  const bool occludee_empty() const;
+  bool occludee_empty() const;
   real z_discontinuity() const;
 #if 0
   inline float local_average_depth() const;
@@ -908,7 +907,7 @@ class FEdge : public Interface1D {
   }
 #endif
 
-  const bool occludee_empty() const;
+  bool occludee_empty() const;
   real z_discontinuity() const;
 
 #if 0
@@ -1140,7 +1139,7 @@ Interface0DIterator FEdge::pointsEnd(float /*t*/)
 }
 
 /*! Class defining a sharp FEdge. A Sharp FEdge corresponds to an initial edge of the input mesh.
- *  It can be a silhouette, a crease or a border. If it is a crease edge, then it is borded
+ *  It can be a silhouette, a crease or a border. If it is a crease edge, then it is bordered
  *  by two faces of the mesh. Face a lies on its right whereas Face b lies on its left.
  *  If it is a border edge, then it doesn't have any face on its right, and thus Face a = 0.
  */
@@ -1592,15 +1591,15 @@ class SShape {
 
   /*! Splits an edge into several edges.
    *  The edge's vertices are passed rather than the edge itself. This way, all feature edges
-   * (SILHOUETTE, CREASE, BORDER) are splitted in the same time. The processed edges are flagged as
-   * done (using the userdata flag).One single new vertex is created whereas several splitted edges
+   * (SILHOUETTE, CREASE, BORDER) are split in the same time. The processed edges are flagged as
+   * done (using the user-data flag).One single new vertex is created whereas several split edges
    * might created for the different kinds of edges. These new elements are added to the lists
    *  maintained by the shape.
    *  New chains are also created.
    *    ioA
-   *      The first vertex for the edge that gets splitted
+   *      The first vertex for the edge that gets split.
    *    ioB
-   *      The second vertex for the edge that gets splitted
+   *      The second vertex for the edge that gets split.
    *    iParameters
    *      A vector containing 2D real vectors indicating the parameters giving the intersections
    * coordinates in 3D and in 2D. These intersections points must be sorted from B to A. Each
@@ -1958,5 +1957,3 @@ class SShape {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_SILHOUETTE_H__

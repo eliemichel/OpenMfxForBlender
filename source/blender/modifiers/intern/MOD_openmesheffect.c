@@ -29,20 +29,27 @@
 
 #include "BKE_mesh.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
 #include "MOD_modifiertypes.h"
 
+#include "BLO_read_write.h"
+
 #include "mfxModifier.h"
 
 // Modifier API
 
-static Mesh *applyModifier(struct ModifierData *md,
-                           const struct ModifierEvalContext *ctx,
-                           struct Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md,
+                           const ModifierEvalContext *ctx,
+                           Mesh *mesh)
 {
-  printf("OpenMeshEffectModifier: applyModifier.\n");
+  printf("OpenMeshEffectModifier: modifyMesh.\n");
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
   return mfx_Modifier_do(fxmd, mesh);
 }
@@ -124,22 +131,164 @@ static void freeData(struct ModifierData *md)
   }
 }
 
+#if 0
+
+def OPENMESHEFFECT(self, layout, _ob, md):
+  layout.prop(md, "plugin_path")
+  layout.separator()
+
+  layout.prop(md, "effect_enum")
+  layout.separator()
+
+  PARAM_TYPE_INTEGER = 0
+  PARAM_TYPE_INTEGER_2D = 1
+  PARAM_TYPE_INTEGER_3D = 2
+  PARAM_TYPE_DOUBLE = 3
+  PARAM_TYPE_DOUBLE_2D = 4
+  PARAM_TYPE_DOUBLE_3D = 5
+  PARAM_TYPE_RGB = 6
+  PARAM_TYPE_RGBA = 7
+  PARAM_TYPE_BOOLEAN = 8
+  PARAM_TYPE_CHOICE = 9
+  PARAM_TYPE_STRING = 10
+  PARAM_TYPE_CUSTOM = 11
+  PARAM_TYPE_PUSH_BUTTON = 12
+  PARAM_TYPE_GROUP = 13
+  PARAM_TYPE_PAGE = 14
+
+  for parm in md.parameter_info:
+      row = layout.row(align=True)
+      row.label(text=parm.label)
+      if parm.type == PARAM_TYPE_INTEGER:
+          row.prop(parm, "integer_value", text="")
+      if parm.type == PARAM_TYPE_INTEGER_2D:
+          row.prop(parm, "integer2d_value", text="")
+      if parm.type == PARAM_TYPE_INTEGER_3D:
+          row.prop(parm, "integer3d_value", text="")
+      if parm.type == PARAM_TYPE_DOUBLE:
+          row.prop(parm, "float_value", text="")
+      if parm.type == PARAM_TYPE_DOUBLE_2D:
+          row.prop(parm, "float2d_value", text="")
+      if parm.type == PARAM_TYPE_DOUBLE_3D:
+          row.prop(parm, "float3d_value", text="")
+      if parm.type == PARAM_TYPE_RGB:
+          row.prop(parm, "rgb_value", text="")
+      if parm.type == PARAM_TYPE_RGBA:
+          row.prop(parm, "rgba_value", text="")
+      if parm.type == PARAM_TYPE_BOOLEAN:
+          row.prop(parm, "boolean_value", text="")
+      if parm.type == PARAM_TYPE_STRING:
+          row.prop(parm, "string_value", text="")
+
+#endif
+
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  //bool edge_bevel = RNA_enum_get(ptr, "affect") != MOD_BEVEL_AFFECT_VERTICES;
+  int num_parameters = RNA_int_get(ptr, "num_parameters");
+  OpenMeshEffectParameterInfo * parameter_info = (OpenMeshEffectParameterInfo*)RNA_pointer_get(ptr, "parameter_info");
+
+  uiItemR(layout, ptr, "plugin_path", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemS(layout);
+
+  uiItemR(layout, ptr, "effect_enum", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemS(layout);
+
+  for (int i = 0; i < num_parameters ; ++i)
+  {
+    row = uiLayoutRow(layout, true);
+    uiItemL(col, parameter_info[i].label, 0, NULL, ICON_NONE);
+    switch (parameter_info[i].type) {
+      case PARAM_TYPE_INTEGER:
+        uiItemR(col, ptr, "integer_value", 0, "", ICON_NONE); // IFACE_("")?
+        break;
+      case PARAM_TYPE_INTEGER_2D:
+        uiItemR(col, ptr, "integer2d_value", 0, "", ICON_NONE);
+        break;
+      case PARAM_TYPE_INTEGER_3D:
+        uiItemR(col, ptr, "integer3d_value", 0, "", ICON_NONE);
+        break;
+      case PARAM_TYPE_DOUBLE:
+        uiItemR(col, ptr, "float_value", 0, "", ICON_NONE);
+        break;
+      case PARAM_TYPE_DOUBLE_2D:
+        uiItemR(col, ptr, "float2d_value", 0, "", ICON_NONE);
+        break;
+      case PARAM_TYPE_DOUBLE_3D:
+        uiItemR(col, ptr, "float3d_value", 0, "", ICON_NONE);
+        break;
+      case PARAM_TYPE_RGB:
+        uiItemR(col, ptr, "rgb_value", 0, "", ICON_NONE);
+        break;
+      case PARAM_TYPE_RGBA:
+        uiItemR(col, ptr, "rgba_value", 0, "", ICON_NONE);
+        break;
+      case PARAM_TYPE_BOOLEAN:
+        uiItemR(col, ptr, "boolean_value", 0, "", ICON_NONE);
+        break;
+      case PARAM_TYPE_STRING:
+        uiItemR(col, ptr, "string_value", 0, "", ICON_NONE);
+        break;
+    }
+  }
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(region_type, eModifierType_OpenMeshEffect, panel_draw);
+  modifier_subpanel_register(
+      region_type, "profile", "Profile", NULL, profile_panel_draw, panel_type);
+  modifier_subpanel_register(
+      region_type, "geometry", "Geometry", NULL, geometry_panel_draw, panel_type);
+  modifier_subpanel_register(
+      region_type, "shading", "Shading", NULL, shading_panel_draw, panel_type);
+}
+
+static void blendWrite(BlendWriter *writer, const ModifierData *md)
+{
+  const OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+
+  BLO_write_struct(writer, OpenMeshEffectParameterInfo, fxmd->num_parameters,
+    fxmd->parameter_info);
+}
+
+static void blendRead(BlendDataReader *reader, ModifierData *md)
+{
+  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+
+  fxmd->parameter_info = BLO_read_data_address(reader, fxmd->parameter_info);
+
+  // Effect list will be reloaded from plugin
+  fxmd->num_effects = 0;
+  fxmd->effect_info = NULL;
+}
+
 ModifierTypeInfo modifierType_OpenMeshEffect = {
     /* name */ "Open Mesh Effect",
     /* structName */ "OpenMeshEffectModifierData",
     /* structSize */ sizeof(OpenMeshEffectModifierData),
+    /* srna */ &RNA_OpenMeshEffectModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
-
+    /* icon */ ICON_MOD_ARRAY,
     /* copyData */ copyData,
-
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
-
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
     /* freeData */ freeData,
@@ -147,8 +296,10 @@ ModifierTypeInfo modifierType_OpenMeshEffect = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ dependsOnNormals,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ freeRuntimeData,
+    /* uiPanel */ panelRegister,
+    /* blendWrite */ blendWrite,
+    /* blendRead */ blendRead,
 };

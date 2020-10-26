@@ -31,8 +31,9 @@ COLORS = COLORS_DUMMY
 
 # NOTE: Keep everything lowercase.
 BLACKLIST = (
-  # 'file_to_blacklist.blend',
+    # 'file_to_blacklist.blend',
 )
+
 
 def print_message(message, type=None, status=''):
     if type == 'SUCCESS':
@@ -104,6 +105,8 @@ class Report:
         'reference_dir',
         'idiff',
         'pixelated',
+        'fail_threshold',
+        'fail_percent',
         'verbose',
         'update',
         'failed_tests',
@@ -118,6 +121,8 @@ class Report:
         self.reference_dir = 'reference_renders'
         self.idiff = idiff
         self.compare_engines = None
+        self.fail_threshold = 0.016
+        self.fail_percent = 1
 
         self.pixelated = False
         self.verbose = os.environ.get("BLENDER_VERBOSE") is not None
@@ -135,6 +140,9 @@ class Report:
 
     def set_pixelated(self, pixelated):
         self.pixelated = pixelated
+
+    def set_fail_threshold(self, threshold):
+        self.fail_threshold = threshold
 
     def set_reference_dir(self, reference_dir):
         self.reference_dir = reference_dir
@@ -366,8 +374,8 @@ class Report:
             # Diff images test with threshold.
             command = (
                 self.idiff,
-                "-fail", "0.016",
-                "-failpercent", "1",
+                "-fail", str(self.fail_threshold),
+                "-failpercent", str(self.fail_percent),
                 ref_img,
                 tmp_filepath,
             )
@@ -441,16 +449,17 @@ class Report:
             crash = False
             output = None
             try:
-                output = subprocess.check_output(command)
-            except subprocess.CalledProcessError as e:
-                crash = True
+                completed_process = subprocess.run(command, stdout=subprocess.PIPE)
+                if completed_process.returncode != 0:
+                    crash = True
+                output = completed_process.stdout
             except BaseException as e:
                 crash = True
 
             if verbose:
                 print(" ".join(command))
-                if output:
-                    print(output.decode("utf-8"))
+            if (verbose or crash) and output:
+                print(output.decode("utf-8"))
 
             # Detect missing filepaths and consider those errors
             for filepath, output_filepath in zip(remaining_filepaths[:], output_filepaths):

@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_KDOPBVH_H__
-#define __BLI_KDOPBVH_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -174,6 +173,8 @@ BVHTreeOverlap *BLI_bvhtree_overlap(const BVHTree *tree1,
                                     BVHTree_OverlapCallback callback,
                                     void *userdata);
 
+int *BLI_bvhtree_intersect_plane(BVHTree *tree, float plane[4], uint *r_intersect_tot);
+
 int BLI_bvhtree_get_len(const BVHTree *tree);
 int BLI_bvhtree_get_tree_type(const BVHTree *tree);
 float BLI_bvhtree_get_epsilon(const BVHTree *tree);
@@ -245,7 +246,7 @@ int BLI_bvhtree_find_nearest_projected(BVHTree *tree,
                                        float winsize[2],
                                        float mval[2],
                                        float clip_planes[6][4],
-                                       int clip_num,
+                                       int clip_plane_len,
                                        BVHTreeNearest *nearest,
                                        BVHTree_NearestProjectedCallback callback,
                                        void *userdata);
@@ -262,5 +263,3 @@ extern const float bvhtree_kdop_axes[13][3];
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_KDOPBVH_H__ */

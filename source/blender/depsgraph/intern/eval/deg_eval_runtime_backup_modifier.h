@@ -25,34 +25,18 @@
 
 #include "BKE_modifier.h"
 
-#include "intern/depsgraph_type.h"
-
 struct ModifierData;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
-struct Depsgraph;
-
-/* Identifier used to match modifiers to backup/restore their runtime data.
- * Identification is happening using original modifier data pointer and the
- * modifier type.
- * It is not enough to only pointer, since it's possible to have a situation
- * when modifier is removed and a new one added, and due to memory allocation
- * policy they might have same pointer.
- * By adding type into matching we are at least ensuring that modifier will not
- * try to interpret runtime data created by another modifier type. */
-class ModifierDataBackupID {
+class ModifierDataBackup {
  public:
-  ModifierDataBackupID(const Depsgraph *depsgraph);
-  ModifierDataBackupID(ModifierData *modifier_data, ModifierType type);
+  explicit ModifierDataBackup(ModifierData *modifier_data);
 
-  bool operator<(const ModifierDataBackupID &other) const;
-
-  ModifierData *modifier_data;
   ModifierType type;
+  void *runtime;
 };
 
-/* Storage for backed up runtime modifier data. */
-typedef map<ModifierDataBackupID, void *> ModifierRuntimeDataBackup;
-
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

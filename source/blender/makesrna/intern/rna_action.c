@@ -147,7 +147,7 @@ static FCurve *rna_Action_fcurve_find(bAction *act,
   }
 
   /* Returns NULL if not found. */
-  return list_find_fcurve(&act->curves, data_path, index);
+  return BKE_fcurve_find(&act->curves, data_path, index);
 }
 
 static void rna_Action_fcurve_remove(bAction *act, ReportList *reports, PointerRNA *fcu_ptr)
@@ -164,7 +164,7 @@ static void rna_Action_fcurve_remove(bAction *act, ReportList *reports, PointerR
     }
 
     action_groups_remove_channel(act, fcu);
-    free_fcurve(fcu);
+    BKE_fcurve_free(fcu);
     RNA_POINTER_INVALIDATE(fcu_ptr);
   }
   else {
@@ -174,7 +174,7 @@ static void rna_Action_fcurve_remove(bAction *act, ReportList *reports, PointerR
     }
 
     BLI_remlink(&act->curves, fcu);
-    free_fcurve(fcu);
+    BKE_fcurve_free(fcu);
     RNA_POINTER_INVALIDATE(fcu_ptr);
   }
 
@@ -365,6 +365,12 @@ static void rna_def_dopesheet(BlenderRNA *brna)
   RNA_def_property_ui_icon(prop, ICON_SORTALPHA, 0);
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
 
+  prop = RNA_def_property(srna, "use_filter_invert", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", ADS_FLAG_INVERT_FILTER);
+  RNA_def_property_ui_text(prop, "Invert", "Invert filter search");
+  RNA_def_property_ui_icon(prop, ICON_ZOOM_IN, 0);
+  RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
+
   /* Debug Filtering Settings */
   prop = RNA_def_property(srna, "show_only_errors", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "filterflag", ADS_FILTER_ONLY_ERRORS);
@@ -444,7 +450,7 @@ static void rna_def_dopesheet(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_shapekeys", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "filterflag", ADS_FILTER_NOSHAPEKEYS);
   RNA_def_property_ui_text(
-      prop, "Display Shapekeys", "Include visualization of shape key related animation data");
+      prop, "Display Shape Keys", "Include visualization of shape key related animation data");
   RNA_def_property_ui_icon(prop, ICON_SHAPEKEY_DATA, 0);
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
 
@@ -569,7 +575,6 @@ static void rna_def_dopesheet(BlenderRNA *brna)
   RNA_def_property_ui_icon(prop, ICON_FILE, 0);
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
 
-#  ifdef WITH_NEW_OBJECT_TYPES
   prop = RNA_def_property(srna, "show_hairs", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "filterflag2", ADS_FILTER_NOHAIR);
   RNA_def_property_ui_text(
@@ -583,7 +588,6 @@ static void rna_def_dopesheet(BlenderRNA *brna)
       prop, "Display Point Cloud", "Include visualization of point cloud related animation data");
   RNA_def_property_ui_icon(prop, ICON_OUTLINER_OB_POINTCLOUD, 0);
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
-#  endif
 
   prop = RNA_def_property(srna, "show_volumes", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "filterflag2", ADS_FILTER_NOVOLUME);

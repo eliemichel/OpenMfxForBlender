@@ -13,18 +13,18 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
+#pragma once
 
 /** \file
  * \ingroup balembic
  */
 
-#ifndef __ABC_READER_MESH_H__
-#define __ABC_READER_MESH_H__
-
 #include "abc_customdata.h"
 #include "abc_reader_object.h"
 
 struct Mesh;
+
+namespace blender::io::alembic {
 
 class AbcMeshReader : public AbcObjectReader {
   Alembic::AbcGeom::IPolyMeshSchema m_schema;
@@ -81,6 +81,6 @@ void read_mverts(MVert *mverts,
                  const Alembic::AbcGeom::P3fArraySamplePtr positions,
                  const Alembic::AbcGeom::N3fArraySamplePtr normals);
 
-CDStreamConfig get_config(struct Mesh *mesh);
+CDStreamConfig get_config(struct Mesh *mesh, bool use_vertex_interpolation);
 
-#endif /* __ABC_READER_MESH_H__ */
+}  // namespace blender::io::alembic

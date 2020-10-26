@@ -94,7 +94,7 @@ bool ED_view3d_has_workbench_in_texture_color(const Scene *scene,
     if (v3d->shading.color_type == V3D_SHADING_TEXTURE_COLOR) {
       return true;
     }
-    if (ob->mode == OB_MODE_TEXTURE_PAINT) {
+    if (ob && ob->mode == OB_MODE_TEXTURE_PAINT) {
       return true;
     }
   }
@@ -113,9 +113,7 @@ Camera *ED_view3d_camera_data_get(View3D *v3d, RegionView3D *rv3d)
   if ((rv3d->persp == RV3D_CAMOB) && v3d->camera && (v3d->camera->type == OB_CAMERA)) {
     return v3d->camera->data;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 void ED_view3d_dist_range_get(const View3D *v3d, float r_dist_range[2])
@@ -215,14 +213,14 @@ void view3d_region_operator_needs_opengl(wmWindow *UNUSED(win), ARegion *region)
   else {
     RegionView3D *rv3d = region->regiondata;
 
-    wmViewport(&region->winrct);  // TODO: bad
+    wmViewport(&region->winrct); /* TODO: bad */
     GPU_matrix_projection_set(rv3d->winmat);
     GPU_matrix_set(rv3d->viewmat);
   }
 }
 
 /**
- * Use instead of: ``bglPolygonOffset(rv3d->dist, ...)`` see bug [#37727]
+ * Use instead of: `GPU_polygon_offset(rv3d->dist, ...)` see bug T37727.
  */
 void ED_view3d_polygon_offset(const RegionView3D *rv3d, const float dist)
 {
@@ -243,7 +241,7 @@ void ED_view3d_polygon_offset(const RegionView3D *rv3d, const float dist)
     }
   }
 
-  bglPolygonOffset(viewdist, dist);
+  GPU_polygon_offset(viewdist, dist);
 }
 
 bool ED_view3d_context_activate(bContext *C)
@@ -337,7 +335,7 @@ void ED_view3d_clipping_calc(
  *
  * \{ */
 
-static bool view3d_boundbox_clip_m4(const BoundBox *bb, float persmatob[4][4])
+static bool view3d_boundbox_clip_m4(const BoundBox *bb, const float persmatob[4][4])
 {
   int a, flag = -1, fl;
 
@@ -602,9 +600,7 @@ bool ED_view3d_camera_lock_sync(const Depsgraph *depsgraph, View3D *v3d, RegionV
 
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 bool ED_view3d_camera_autokey(const Scene *scene,
@@ -639,9 +635,7 @@ bool ED_view3d_camera_autokey(const Scene *scene,
 
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /**
@@ -673,9 +667,7 @@ bool ED_view3d_camera_lock_autokey(View3D *v3d,
 
     return ED_view3d_camera_autokey(scene, id_key, C, do_rotate, do_translate);
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /** \} */
@@ -1017,9 +1009,7 @@ bool ED_view3d_autodist(Depsgraph *depsgraph,
     ED_view3d_win_to_3d_int(v3d, region, fallback_depth_pt, mval, mouse_worldloc);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 void ED_view3d_autodist_init(Depsgraph *depsgraph, ARegion *region, View3D *v3d, int mode)
@@ -1038,8 +1028,11 @@ void ED_view3d_autodist_init(Depsgraph *depsgraph, ARegion *region, View3D *v3d,
 }
 
 /* no 4x4 sampling, run #ED_view3d_autodist_init first */
-bool ED_view3d_autodist_simple(
-    ARegion *region, const int mval[2], float mouse_worldloc[3], int margin, float *force_depth)
+bool ED_view3d_autodist_simple(ARegion *region,
+                               const int mval[2],
+                               float mouse_worldloc[3],
+                               int margin,
+                               const float *force_depth)
 {
   float depth;
 
@@ -1084,11 +1077,9 @@ static bool depth_segment_cb(int x, int y, void *userData)
 
   if (depth != FLT_MAX) {
     data->depth = depth;
-    return 0;
+    return false;
   }
-  else {
-    return 1;
-  }
+  return true;
 }
 
 bool ED_view3d_autodist_depth_seg(
@@ -1121,7 +1112,7 @@ bool ED_view3d_autodist_depth_seg(
 /* -------------------------------------------------------------------- */
 /** \name View Radius/Distance Utilities
  *
- * Use to calculate a distance to a point based on it's radius.
+ * Use to calculate a distance to a point based on its radius.
  * \{ */
 
 float ED_view3d_radius_to_dist_persp(const float angle, const float radius)
@@ -1252,7 +1243,9 @@ float ED_view3d_radius_to_dist(const View3D *v3d,
  * \param fallback_dist: The distance to use if the object is too near or in front of \a ofs.
  * \returns A newly calculated distance or the fallback.
  */
-float ED_view3d_offset_distance(float mat[4][4], const float ofs[3], const float fallback_dist)
+float ED_view3d_offset_distance(const float mat[4][4],
+                                const float ofs[3],
+                                const float fallback_dist)
 {
   float pos[4] = {0.0f, 0.0f, 0.0f, 1.0f};
   float dir[4] = {0.0f, 0.0f, 1.0f, 0.0f};
@@ -1383,16 +1376,14 @@ static float view3d_quat_axis[6][4][4] = {
 
 };
 
-bool ED_view3d_quat_from_axis_view(const char view, const char view_axis_roll, float quat[4])
+bool ED_view3d_quat_from_axis_view(const char view, const char view_axis_roll, float r_quat[4])
 {
   BLI_assert(view_axis_roll <= RV3D_VIEW_AXIS_ROLL_270);
   if (RV3D_VIEW_IS_AXIS(view)) {
-    copy_qt_qt(quat, view3d_quat_axis[view - RV3D_VIEW_FRONT][view_axis_roll]);
+    copy_qt_qt(r_quat, view3d_quat_axis[view - RV3D_VIEW_FRONT][view_axis_roll]);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 bool ED_view3d_quat_to_axis_view(const float quat[4],
@@ -1472,7 +1463,7 @@ bool ED_view3d_lock(RegionView3D *rv3d)
  * \param quat: The view rotation, quaternion normally from RegionView3D.viewquat.
  * \param dist: The view distance from ofs, normally from RegionView3D.dist.
  */
-void ED_view3d_from_m4(const float mat[4][4], float ofs[3], float quat[4], float *dist)
+void ED_view3d_from_m4(const float mat[4][4], float ofs[3], float quat[4], const float *dist)
 {
   float nmat[3][3];
 
@@ -1508,7 +1499,7 @@ void ED_view3d_from_m4(const float mat[4][4], float ofs[3], float quat[4], float
  */
 void ED_view3d_to_m4(float mat[4][4], const float ofs[3], const float quat[4], const float dist)
 {
-  float iviewquat[4] = {-quat[0], quat[1], quat[2], quat[3]};
+  const float iviewquat[4] = {-quat[0], quat[1], quat[2], quat[3]};
   float dvec[3] = {0.0f, 0.0f, dist};
 
   quat_to_mat4(mat, iviewquat);
@@ -1575,10 +1566,9 @@ float ED_view3d_depth_read_cached(const ViewContext *vc, const int mval[2])
   if (vd && vd->depths && x > 0 && y > 0 && x < vd->w && y < vd->h) {
     return vd->depths[y * vd->w + x];
   }
-  else {
-    BLI_assert(1.0 <= vd->depth_range[1]);
-    return 1.0f;
-  }
+
+  BLI_assert(1.0 <= vd->depth_range[1]);
+  return 1.0f;
 }
 
 bool ED_view3d_depth_read_cached_normal(const ViewContext *vc,
@@ -1633,9 +1623,7 @@ bool ED_view3d_depth_read_cached_normal(const ViewContext *vc,
   if (normalize_v3(r_normal) != 0.0f) {
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 bool ED_view3d_depth_unproject(const ARegion *region,

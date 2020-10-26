@@ -22,12 +22,13 @@
  * Declaration of GHOST_IWindow interface class.
  */
 
-#ifndef __GHOST_IWINDOW_H__
-#define __GHOST_IWINDOW_H__
+#pragma once
 
 #include "GHOST_Rect.h"
 #include "GHOST_Types.h"
-#include "STR_String.h"
+
+#include <stdlib.h>
+#include <string>
 
 /**
  * Interface for GHOST windows.
@@ -81,13 +82,13 @@ class GHOST_IWindow {
    * Sets the title displayed in the title bar.
    * \param title The title to display in the title bar.
    */
-  virtual void setTitle(const STR_String &title) = 0;
+  virtual void setTitle(const char *title) = 0;
 
   /**
    * Returns the title displayed in the title bar.
    * \param title The title displayed in the title bar.
    */
-  virtual void getTitle(STR_String &title) const = 0;
+  virtual std::string getTitle() const = 0;
 
   /**
    * Returns the window rectangle dimensions.
@@ -285,8 +286,8 @@ class GHOST_IWindow {
    * Set the shape of the cursor to a custom cursor.
    * \param   bitmap  The bitmap data for the cursor.
    * \param   mask    The mask data for the cursor.
-   * \param   hotX    The X coordinate of the cursor hotspot.
-   * \param   hotY    The Y coordinate of the cursor hotspot.
+   * \param   hotX    The X coordinate of the cursor hot-spot.
+   * \param   hotY    The Y coordinate of the cursor hot-spot.
    * \return  Indication of success.
    */
   virtual GHOST_TSuccess setCustomCursorShape(GHOST_TUns8 *bitmap,
@@ -361,5 +362,3 @@ class GHOST_IWindow {
   MEM_CXX_CLASS_ALLOC_FUNCS("GHOST:GHOST_IWindow")
 #endif
 };
-
-#endif  // __GHOST_IWINDOW_H__

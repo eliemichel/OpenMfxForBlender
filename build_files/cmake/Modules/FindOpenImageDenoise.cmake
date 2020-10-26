@@ -14,12 +14,8 @@
 #=============================================================================
 # Copyright 2019 Blender Foundation.
 #
-# Distributed under the OSI-approved BSD License (the "License");
-# see accompanying file Copyright.txt for details.
-#
-# This software is distributed WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the License for more information.
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
 #=============================================================================
 
 # If OPENIMAGEDENOISE_ROOT_DIR was defined in the environment, use it.
@@ -48,7 +44,14 @@ SET(_openimagedenoise_FIND_COMPONENTS
 # These are needed when building statically
 SET(_openimagedenoise_FIND_STATIC_COMPONENTS
   common
+
+  # These additional library names change between versions, we list all of them
+  # so builds work with multiple versions. Missing libraries are skipped.
+  dnnl_cpu
+  dnnl_common
+  dnnl_cpu # Second time because of circular dependency
   mkldnn
+  dnnl
 )
 
 SET(_openimagedenoise_LIBRARIES)

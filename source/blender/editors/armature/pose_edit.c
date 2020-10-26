@@ -279,7 +279,7 @@ static int pose_calculate_paths_invoke(bContext *C, wmOperator *op, const wmEven
   }
 
   /* show popup dialog to allow editing of range... */
-  // FIXME: hardcoded dimensions here are just arbitrary
+  /* FIXME: hard-coded dimensions here are just arbitrary. */
   return WM_operator_props_dialog_popup(C, op, 200);
 }
 
@@ -638,7 +638,7 @@ void POSE_OT_autoside_names(wmOperatorType *ot)
   };
 
   /* identifiers */
-  ot->name = "AutoName by Axis";
+  ot->name = "Auto-Name by Axis";
   ot->idname = "POSE_OT_autoside_names";
   ot->description =
       "Automatically renames the selected bones according to which side of the target axis they "
@@ -742,7 +742,6 @@ static int pose_armature_layers_showall_exec(bContext *C, wmOperator *op)
   int maxLayers = (RNA_boolean_get(op->ptr, "all")) ? 32 : 16;
   /* hardcoded for now - we can only have 32 armature layers, so this should be fine... */
   bool layers[32] = {false};
-  int i;
 
   /* sanity checking */
   if (arm == NULL) {
@@ -755,7 +754,7 @@ static int pose_armature_layers_showall_exec(bContext *C, wmOperator *op)
    */
   RNA_id_pointer_create(&arm->id, &ptr);
 
-  for (i = 0; i < maxLayers; i++) {
+  for (int i = 0; i < maxLayers; i++) {
     layers[i] = 1;
   }
 

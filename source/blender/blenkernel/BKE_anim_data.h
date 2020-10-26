@@ -17,21 +17,25 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_ANIM_DATA_H__
-#define __BKE_ANIM_DATA_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
+#include "BLI_sys_types.h" /* for bool */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "BLI_sys_types.h" /* for bool */
-
 struct AnimData;
+struct BlendDataReader;
+struct BlendExpander;
+struct BlendLibReader;
+struct BlendWriter;
 struct ID;
+struct LibraryForeachIDData;
 struct Main;
 struct ReportList;
 struct bAction;
@@ -52,11 +56,19 @@ struct AnimData *BKE_animdata_add_id(struct ID *id);
 /* Set active action used by AnimData from the given ID-block */
 bool BKE_animdata_set_action(struct ReportList *reports, struct ID *id, struct bAction *act);
 
+bool BKE_animdata_action_editable(const struct AnimData *adt);
+
+/* Ensure that the action's idroot is set correctly given the ID type of the owner.
+ * Return true if it is, false if it was already set to an incompatible type. */
+bool BKE_animdata_action_ensure_idroot(const struct ID *owner, struct bAction *action);
+
 /* Free AnimData */
 void BKE_animdata_free(struct ID *id, const bool do_id_user);
 
 /* Return true if the ID-block has non-empty AnimData. */
 bool BKE_animdata_id_is_animated(const struct ID *id);
+
+void BKE_animdata_foreach_id(struct AnimData *adt, struct LibraryForeachIDData *data);
 
 /* Copy AnimData */
 struct AnimData *BKE_animdata_copy(struct Main *bmain, struct AnimData *adt, const int flag);
@@ -68,7 +80,11 @@ bool BKE_animdata_copy_id(struct Main *bmain,
                           const int flag);
 
 /* Copy AnimData Actions */
-void BKE_animdata_copy_id_action(struct Main *bmain, struct ID *id, const bool set_newid);
+void BKE_animdata_copy_id_action(struct Main *bmain, struct ID *id);
+
+void BKE_animdata_duplicate_id_action(struct Main *bmain,
+                                      struct ID *id,
+                                      const uint duplicate_flags);
 
 /* Merge copies of data from source AnimData block */
 typedef enum eAnimData_MergeCopy_Modes {
@@ -88,8 +104,13 @@ void BKE_animdata_merge_copy(struct Main *bmain,
                              eAnimData_MergeCopy_Modes action_mode,
                              bool fix_drivers);
 
+void BKE_animdata_blend_write(struct BlendWriter *writer, struct AnimData *adt);
+void BKE_animdata_blend_read_data(struct BlendDataReader *reader, struct AnimData *adt);
+void BKE_animdata_blend_read_lib(struct BlendLibReader *reader,
+                                 struct ID *id,
+                                 struct AnimData *adt);
+void BKE_animdata_blend_read_expand(struct BlendExpander *expander, struct AnimData *adt);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_ANIM_DATA_H__*/

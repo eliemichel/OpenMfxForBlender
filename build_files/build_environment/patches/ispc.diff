@@ -1,0 +1,85 @@
+diff -Naur external_ispc/CMakeLists.txt external_ispc_fixed/CMakeLists.txt
+--- external_ispc/CMakeLists.txt	2020-04-23 17:29:06 -0600
++++ external_ispc_fixed/CMakeLists.txt	2020-05-05 09:01:09 -0600
+@@ -389,7 +389,7 @@
+ 
+ # Link against Clang libraries
+ foreach(clangLib ${CLANG_LIBRARY_LIST})
+-    find_library(${clangLib}Path NAMES ${clangLib} HINTS ${LLVM_LIBRARY_DIRS})
++    find_library(${clangLib}Path NAMES ${clangLib} HINTS ${LLVM_LIBRARY_DIRS} ${CLANG_LIBRARY_DIR})
+     list(APPEND CLANG_LIBRARY_FULL_PATH_LIST ${${clangLib}Path})
+ endforeach()
+ target_link_libraries(${PROJECT_NAME} ${CLANG_LIBRARY_FULL_PATH_LIST})
+diff -Naur orig/CMakeLists.txt external_ispc/CMakeLists.txt
+--- orig/CMakeLists.txt 2020-05-05 09:19:11 -0600
++++ external_ispc/CMakeLists.txt        2020-05-05 09:26:44 -0600
+@@ -333,7 +333,7 @@
+
+ # Include directories
+ target_include_directories(${PROJECT_NAME} PRIVATE
+-                           ${LLVM_INCLUDE_DIRS}
++                           ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS}
+                            ${GENX_DEPS_DIR}/include
+                            ${CMAKE_CURRENT_SOURCE_DIR}/src
+                            ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR})
+diff -Naur orig/cmake/GenerateBuiltins.cmake.txt external_ispc/cmake/GenerateBuiltins.cmake.txt
++++ orig/cmake/GenerateBuiltins.cmake	2020-05-25 13:32:40.830803821 +0200
++++ external_ispc/cmake/GenerateBuiltins.cmake	2020-05-25 13:32:40.830803821 +0200
+@@ -97,6 +97,8 @@
+ 
+     if ("${bit}" STREQUAL "32" AND ${arch} STREQUAL "x86")
+         set(target_arch "i686")
++        # Blender: disable 32bit due to build issues on Linux and being unnecessary.
++        set(SKIP ON)
+     elseif ("${bit}" STREQUAL "64" AND ${arch} STREQUAL "x86")
+         set(target_arch "x86_64")
+     elseif ("${bit}" STREQUAL "32" AND ${arch} STREQUAL "arm")
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 46a8db8..f53beef 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -36,8 +36,12 @@
+ cmake_minimum_required(VERSION 3.13)
+ 
+ if (UNIX)
+-    set(CMAKE_C_COMPILER "clang")
+-    set(CMAKE_CXX_COMPILER "clang++")
++    if (NOT CMAKE_C_COMPILER)
++        set(CMAKE_C_COMPILER "clang")
++    endif()
++    if (NOT CMAKE_CXX_COMPILER)
++        set(CMAKE_CXX_COMPILER "clang++")
++    endif()
+ endif()
+ 
+ set(PROJECT_NAME ispc)
+@@ -412,6 +416,29 @@ else()
+     endif()
+ endif()
+ 
++# Link against libstdc++.a which must be provided to the linker after
++# LLVM and CLang libraries.
++# This is needed because some of LLVM/CLang dependencies are using
++# std::make_shared, which is defined in one of those:
++#  - libclang-cpp.so
++#  - libstdc++.a
++# Using the former one is tricky because then generated binary depends
++# on a library which is outside of the LD_LIBRARY_PATH.
++#
++# Hence, using C++ implementation from G++ which seems to work just fine.
++# In fact, from investigation seems that libclang-cpp.so itself is pulling
++# std::_Sp_make_shared_tag from G++'s libstdc++.a.
++if(UNIX AND NOT APPLE)
++    execute_process(
++        COMMAND g++ --print-file-name libstdc++.a
++        OUTPUT_VARIABLE GCC_LIBSTDCXX_A
++        OUTPUT_STRIP_TRAILING_WHITESPACE
++    )
++    if(GCC_LIBSTDCXX_A AND EXISTS ${GCC_LIBSTDCXX_A})
++        target_link_libraries(${PROJECT_NAME} ${GCC_LIBSTDCXX_A})
++    endif()
++endif()
++
+ # Build target for utility checking host ISA
+ if (ISPC_INCLUDE_UTILS)
+     add_executable(check_isa "")

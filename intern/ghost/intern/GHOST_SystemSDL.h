@@ -19,8 +19,7 @@
  * Declaration of GHOST_SystemSDL class.
  */
 
-#ifndef __GHOST_SYSTEMSDL_H__
-#define __GHOST_SYSTEMSDL_H__
+#pragma once
 
 #include "../GHOST_Types.h"
 #include "GHOST_DisplayManagerSDL.h"
@@ -73,14 +72,14 @@ class GHOST_SystemSDL : public GHOST_System {
 
   void getMainDisplayDimensions(GHOST_TUns32 &width, GHOST_TUns32 &height) const;
 
-  GHOST_IContext *createOffscreenContext();
+  GHOST_IContext *createOffscreenContext(GHOST_GLSettings glSettings);
 
   GHOST_TSuccess disposeContext(GHOST_IContext *context);
 
  private:
   GHOST_TSuccess init();
 
-  GHOST_IWindow *createWindow(const STR_String &title,
+  GHOST_IWindow *createWindow(const char *title,
                               GHOST_TInt32 left,
                               GHOST_TInt32 top,
                               GHOST_TUns32 width,
@@ -99,8 +98,6 @@ class GHOST_SystemSDL : public GHOST_System {
 
   void processEvent(SDL_Event *sdl_event);
 
-  /// The vector of windows that need to be updated.
+  /** The vector of windows that need to be updated. */
   std::vector<GHOST_WindowSDL *> m_dirty_windows;
 };
-
-#endif

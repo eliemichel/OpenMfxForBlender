@@ -16,8 +16,7 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_WRAPOPERATION_H__
-#define __COM_WRAPOPERATION_H__
+#pragma once
 
 #include "COM_ReadBufferOperation.h"
 
@@ -26,7 +25,7 @@ class WrapOperation : public ReadBufferOperation {
   int m_wrappingType;
 
  public:
-  WrapOperation(DataType datetype);
+  WrapOperation(DataType datatype);
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
                                         rcti *output);
@@ -38,5 +37,3 @@ class WrapOperation : public ReadBufferOperation {
 
   void setFactorXY(float factorX, float factorY);
 };
-
-#endif

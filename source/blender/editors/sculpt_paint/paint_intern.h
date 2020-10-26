@@ -21,8 +21,7 @@
  * \ingroup edsculpt
  */
 
-#ifndef __PAINT_INTERN_H__
-#define __PAINT_INTERN_H__
+#pragma once
 
 struct ARegion;
 struct Brush;
@@ -90,10 +89,7 @@ void *paint_stroke_mode_data(struct PaintStroke *stroke);
 float paint_stroke_distance_get(struct PaintStroke *stroke);
 void paint_stroke_set_mode_data(struct PaintStroke *stroke, void *mode_data);
 bool paint_poll(struct bContext *C);
-void paint_cursor_start(struct bContext *C, bool (*poll)(struct bContext *C));
-void paint_cursor_start_explicit(struct Paint *p,
-                                 struct wmWindowManager *wm,
-                                 bool (*poll)(struct bContext *C));
+void paint_cursor_start(struct Paint *p, bool (*poll)(struct bContext *C));
 void paint_cursor_delete_textures(void);
 
 /* paint_vertex.c */
@@ -218,15 +214,15 @@ void paint_2d_gradient_fill(const struct bContext *C,
                             void *ps);
 void *paint_proj_new_stroke(struct bContext *C, struct Object *ob, const float mouse[2], int mode);
 void paint_proj_stroke(const struct bContext *C,
-                       void *ps,
-                       const float prevmval_i[2],
-                       const float mval_i[2],
+                       void *ps_handle_p,
+                       const float prev_pos[2],
+                       const float pos[2],
                        const bool eraser,
                        float pressure,
                        float distance,
                        float size);
-void paint_proj_redraw(const struct bContext *C, void *pps, bool final);
-void paint_proj_stroke_done(void *ps);
+void paint_proj_redraw(const struct bContext *C, void *ps_handle_p, bool final);
+void paint_proj_stroke_done(void *ps_handle_p);
 
 void paint_brush_color_get(struct Scene *scene,
                            struct Brush *br,
@@ -344,6 +340,8 @@ typedef enum {
 
 void PAINT_OT_mask_flood_fill(struct wmOperatorType *ot);
 void PAINT_OT_mask_lasso_gesture(struct wmOperatorType *ot);
+void PAINT_OT_mask_box_gesture(struct wmOperatorType *ot);
+void PAINT_OT_mask_line_gesture(struct wmOperatorType *ot);
 
 /* paint_curve.c */
 void PAINTCURVE_OT_new(struct wmOperatorType *ot);
@@ -369,5 +367,3 @@ void paint_delete_blur_kernel(BlurKernel *);
 
 /* paint curve defines */
 #define PAINT_CURVE_NUM_SEGMENTS 40
-
-#endif /* __PAINT_INTERN_H__ */

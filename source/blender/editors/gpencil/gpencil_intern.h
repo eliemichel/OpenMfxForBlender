@@ -21,8 +21,7 @@
  * \ingroup edgpencil
  */
 
-#ifndef __GPENCIL_INTERN_H__
-#define __GPENCIL_INTERN_H__
+#pragma once
 
 #include "DNA_vec_types.h"
 
@@ -67,6 +66,17 @@ struct PropertyRNA;
  */
 
 /* Internal Operator-State Data ------------------------ */
+
+/** Random settings by stroke */
+typedef struct GpRandomSettings {
+  /** Pressure used for evaluated curves. */
+  float pen_press;
+
+  float hsv[3];
+  float pressure;
+  float strength;
+  float uv;
+} GpRandomSettings;
 
 /* Temporary draw data (no draw manager mode) */
 typedef struct tGPDdraw {
@@ -192,6 +202,8 @@ typedef struct tGPDprimitive {
   tGPspoint *points;
   /** number of edges allocated */
   int point_count;
+  /** number of subdivisions. */
+  int subdiv;
   /** stored number of polygon edges */
   int tot_stored_edges;
   /** number of polygon edges */
@@ -230,10 +242,14 @@ typedef struct tGPDprimitive {
 
   /** size in pixels for uv calculation */
   float totpixlen;
+
+  /** Random settings by stroke */
+  GpRandomSettings random_settings;
+
 } tGPDprimitive;
 
 /* Modal Operator Drawing Callbacks ------------------------ */
-void ED_gp_draw_fill(struct tGPDdraw *tgpw);
+void ED_gpencil_draw_fill(struct tGPDdraw *tgpw);
 
 /* ***************************************************** */
 /* Internal API */
@@ -257,83 +273,85 @@ typedef struct GP_SpaceConversion {
   float mat[4][4]; /* transform matrix on the strokes (introduced in [b770964]) */
 } GP_SpaceConversion;
 
-bool gp_stroke_inside_circle(const float mval[2], int rad, int x0, int y0, int x1, int y1);
+bool gpencil_stroke_inside_circle(const float mval[2], int rad, int x0, int y0, int x1, int y1);
 
-void gp_point_conversion_init(struct bContext *C, GP_SpaceConversion *r_gsc);
+void gpencil_point_conversion_init(struct bContext *C, GP_SpaceConversion *r_gsc);
 
-void gp_point_to_xy(const GP_SpaceConversion *gsc,
-                    const struct bGPDstroke *gps,
-                    const struct bGPDspoint *pt,
-                    int *r_x,
-                    int *r_y);
+void gpencil_point_to_xy(const GP_SpaceConversion *gsc,
+                         const struct bGPDstroke *gps,
+                         const struct bGPDspoint *pt,
+                         int *r_x,
+                         int *r_y);
 
-void gp_point_to_xy_fl(const GP_SpaceConversion *gsc,
-                       const bGPDstroke *gps,
-                       const bGPDspoint *pt,
-                       float *r_x,
-                       float *r_y);
+void gpencil_point_to_xy_fl(const GP_SpaceConversion *gsc,
+                            const bGPDstroke *gps,
+                            const bGPDspoint *pt,
+                            float *r_x,
+                            float *r_y);
 
-void gp_point_to_parent_space(const bGPDspoint *pt, const float diff_mat[4][4], bGPDspoint *r_pt);
+void gpencil_point_to_parent_space(const bGPDspoint *pt,
+                                   const float diff_mat[4][4],
+                                   bGPDspoint *r_pt);
 /**
  * Change points position relative to parent object
  */
-void gp_apply_parent(struct Depsgraph *depsgraph,
-                     struct Object *obact,
-                     bGPDlayer *gpl,
-                     bGPDstroke *gps);
+void gpencil_apply_parent(struct Depsgraph *depsgraph,
+                          struct Object *obact,
+                          bGPDlayer *gpl,
+                          bGPDstroke *gps);
 /**
  * Change point position relative to parent object
  */
-void gp_apply_parent_point(struct Depsgraph *depsgraph,
-                           struct Object *obact,
-                           bGPDlayer *gpl,
-                           bGPDspoint *pt);
+void gpencil_apply_parent_point(struct Depsgraph *depsgraph,
+                                struct Object *obact,
+                                bGPDlayer *gpl,
+                                bGPDspoint *pt);
 
-void gp_point_3d_to_xy(const GP_SpaceConversion *gsc,
-                       const short flag,
-                       const float pt[3],
-                       float xy[2]);
+void gpencil_point_3d_to_xy(const GP_SpaceConversion *gsc,
+                            const short flag,
+                            const float pt[3],
+                            float xy[2]);
 
-bool gp_point_xy_to_3d(const GP_SpaceConversion *gsc,
-                       struct Scene *scene,
-                       const float screen_co[2],
-                       float r_out[3]);
+bool gpencil_point_xy_to_3d(const GP_SpaceConversion *gsc,
+                            struct Scene *scene,
+                            const float screen_co[2],
+                            float r_out[3]);
 
 /* helper to convert 2d to 3d */
-void gp_stroke_convertcoords_tpoint(struct Scene *scene,
-                                    struct ARegion *region,
-                                    struct Object *ob,
-                                    const struct tGPspoint *point2D,
-                                    float *depth,
-                                    float out[3]);
+void gpencil_stroke_convertcoords_tpoint(struct Scene *scene,
+                                         struct ARegion *region,
+                                         struct Object *ob,
+                                         const struct tGPspoint *point2D,
+                                         float *depth,
+                                         float out[3]);
 
 /* Poll Callbacks ------------------------------------ */
 /* gpencil_utils.c */
 
-bool gp_add_poll(struct bContext *C);
-bool gp_active_layer_poll(struct bContext *C);
-bool gp_active_brush_poll(struct bContext *C);
-bool gp_brush_crt_presets_poll(bContext *C);
+bool gpencil_add_poll(struct bContext *C);
+bool gpencil_active_layer_poll(struct bContext *C);
+bool gpencil_active_brush_poll(struct bContext *C);
+bool gpencil_brush_create_presets_poll(bContext *C);
 
 /* Copy/Paste Buffer --------------------------------- */
 /* gpencil_edit.c */
 
-extern ListBase gp_strokes_copypastebuf;
+extern ListBase gpencil_strokes_copypastebuf;
 
 /* Build a map for converting between old colornames and destination-color-refs */
-struct GHash *gp_copybuf_validate_colormap(struct bContext *C);
+struct GHash *gpencil_copybuf_validate_colormap(struct bContext *C);
 
 /* Stroke Editing ------------------------------------ */
 
-void gp_stroke_delete_tagged_points(bGPDframe *gpf,
-                                    bGPDstroke *gps,
-                                    bGPDstroke *next_stroke,
-                                    int tag_flags,
-                                    bool select,
-                                    int limit);
-int gp_delete_selected_point_wrap(bContext *C);
+void gpencil_stroke_delete_tagged_points(bGPDframe *gpf,
+                                         bGPDstroke *gps,
+                                         bGPDstroke *next_stroke,
+                                         int tag_flags,
+                                         bool select,
+                                         int limit);
+int gpencil_delete_selected_point_wrap(bContext *C);
 
-void gp_subdivide_stroke(bGPDstroke *gps, const int subdivide);
+void gpencil_subdivide_stroke(bGPDstroke *gps, const int subdivide);
 
 /* Layers Enums -------------------------------------- */
 
@@ -345,6 +363,10 @@ const struct EnumPropertyItem *ED_gpencil_layers_with_new_enum_itemf(struct bCon
                                                                      struct PointerRNA *ptr,
                                                                      struct PropertyRNA *prop,
                                                                      bool *r_free);
+const struct EnumPropertyItem *ED_gpencil_material_enum_itemf(struct bContext *C,
+                                                              struct PointerRNA *ptr,
+                                                              struct PropertyRNA *prop,
+                                                              bool *r_free);
 
 /* ***************************************************** */
 /* Operator Defines */
@@ -464,9 +486,13 @@ void GPENCIL_OT_active_frames_delete_all(struct wmOperatorType *ot);
 void GPENCIL_OT_frame_duplicate(struct wmOperatorType *ot);
 void GPENCIL_OT_frame_clean_fill(struct wmOperatorType *ot);
 void GPENCIL_OT_frame_clean_loose(struct wmOperatorType *ot);
+void GPENCIL_OT_frame_clean_duplicate(struct wmOperatorType *ot);
 
 void GPENCIL_OT_convert(struct wmOperatorType *ot);
+void GPENCIL_OT_bake_mesh_animation(struct wmOperatorType *ot);
+
 void GPENCIL_OT_image_to_grease_pencil(struct wmOperatorType *ot);
+void GPENCIL_OT_trace_image(struct wmOperatorType *ot);
 
 enum {
   GP_STROKE_JOIN = -1,
@@ -530,7 +556,11 @@ void GPENCIL_OT_interpolate_reverse(struct wmOperatorType *ot);
 
 /* primitives ---------- */
 
-void GPENCIL_OT_primitive(struct wmOperatorType *ot);
+void GPENCIL_OT_primitive_box(struct wmOperatorType *ot);
+void GPENCIL_OT_primitive_line(struct wmOperatorType *ot);
+void GPENCIL_OT_primitive_polyline(struct wmOperatorType *ot);
+void GPENCIL_OT_primitive_circle(struct wmOperatorType *ot);
+void GPENCIL_OT_primitive_curve(struct wmOperatorType *ot);
 
 /* vertex groups ------------ */
 void GPENCIL_OT_vertex_group_assign(struct wmOperatorType *ot);
@@ -550,7 +580,8 @@ void GPENCIL_OT_material_reveal(struct wmOperatorType *ot);
 void GPENCIL_OT_material_lock_all(struct wmOperatorType *ot);
 void GPENCIL_OT_material_unlock_all(struct wmOperatorType *ot);
 void GPENCIL_OT_material_lock_unused(struct wmOperatorType *ot);
-void GPENCIL_OT_select_material(struct wmOperatorType *ot);
+void GPENCIL_OT_material_select(struct wmOperatorType *ot);
+void GPENCIL_OT_material_set(struct wmOperatorType *ot);
 void GPENCIL_OT_set_active_material(struct wmOperatorType *ot);
 
 /* convert old 2.7 files to 2.8 */
@@ -640,11 +671,13 @@ struct GP_EditableStrokes_Iter {
           for (bGPDstroke *gps = gpf_->strokes.first; gps; gps = gpsn_) { \
             gpsn_ = gps->next; \
             /* skip strokes that are invalid for current view */ \
-            if (ED_gpencil_stroke_can_use(C, gps) == false) \
+            if (ED_gpencil_stroke_can_use(C, gps) == false) { \
               continue; \
+            } \
             /* check if the color is editable */ \
-            if (ED_gpencil_stroke_color_use(obact_, gpl, gps) == false) \
+            if (ED_gpencil_stroke_color_use(obact_, gpl, gps) == false) { \
               continue; \
+            } \
     /* ... Do Stuff With Strokes ...  */
 
 #define GP_EDITABLE_STROKES_END(gpstroke_iter) \
@@ -679,22 +712,21 @@ struct GP_EditableStrokes_Iter {
     const bool is_multiedit_ = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gpd_); \
     LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd_->layers) { \
       if (BKE_gpencil_layer_is_editable(gpl)) { \
-        bGPDframe *init_gpf_ = gpl->actframe; \
-        if (is_multiedit_) { \
-          init_gpf_ = gpl->frames.first; \
-        } \
+        bGPDframe *init_gpf_ = (is_multiedit_) ? gpl->frames.first : gpl->actframe; \
         for (bGPDframe *gpf_ = init_gpf_; gpf_; gpf_ = gpf_->next) { \
           if ((gpf_ == gpl->actframe) || ((gpf_->flag & GP_FRAME_SELECT) && is_multiedit_)) { \
             BKE_gpencil_parent_matrix_get(depsgraph_, obact_, gpl, gpstroke_iter.diff_mat); \
             invert_m4_m4(gpstroke_iter.inverse_diff_mat, gpstroke_iter.diff_mat); \
             /* loop over strokes */ \
-            for (bGPDstroke *gps = gpf_->strokes.first; gps; gps = gps->next) { \
+            LISTBASE_FOREACH (bGPDstroke *, gps, &gpf_->strokes) { \
               /* skip strokes that are invalid for current view */ \
-              if (ED_gpencil_stroke_can_use(C, gps) == false) \
+              if (ED_gpencil_stroke_can_use(C, gps) == false) { \
                 continue; \
+              } \
               /* check if the color is editable */ \
-              if (ED_gpencil_stroke_color_use(obact_, gpl, gps) == false) \
+              if (ED_gpencil_stroke_color_use(obact_, gpl, gps) == false) { \
                 continue; \
+              } \
     /* ... Do Stuff With Strokes ...  */
 
 #define GP_EVALUATED_STROKES_END(gpstroke_iter) \
@@ -710,5 +742,3 @@ struct GP_EditableStrokes_Iter {
   (void)0
 
 /* ****************************************************** */
-
-#endif /* __GPENCIL_INTERN_H__ */

@@ -89,12 +89,12 @@ static void initialize_posetree(struct Object *UNUSED(ob), bPoseChannel *pchan_t
   for (curchan = pchan_tip; curchan; curchan = curchan->parent) {
     pchan_root = curchan;
 
-    curchan->flag |= POSE_CHAIN;  // don't forget to clear this
+    curchan->flag |= POSE_CHAIN; /* don't forget to clear this */
     chanlist[segcount] = curchan;
     segcount++;
 
     if (segcount == data->rootbone || segcount > 255) {
-      break;  // 255 is weak
+      break; /* 255 is weak */
     }
   }
   if (!segcount) {
@@ -220,7 +220,7 @@ static void make_dmats(bPoseChannel *pchan)
   if (pchan->parent) {
     float iR_parmat[4][4];
     invert_m4_m4(iR_parmat, pchan->parent->pose_mat);
-    mul_m4_m4m4(pchan->chan_mat, iR_parmat, pchan->pose_mat);  // delta mat
+    mul_m4_m4m4(pchan->chan_mat, iR_parmat, pchan->pose_mat); /* delta mat */
   }
   else {
     copy_m4_m4(pchan->chan_mat, pchan->pose_mat);
@@ -231,7 +231,7 @@ static void make_dmats(bPoseChannel *pchan)
 /* formula: pose_mat(b) = pose_mat(b-1) * diffmat(b-1, b) * ik_mat(b) */
 /* to make this work, the diffmats have to be precalculated! Stored in chan_mat */
 static void where_is_ik_bone(bPoseChannel *pchan,
-                             float ik_mat[3][3])  // nr = to detect if this is first bone
+                             float ik_mat[3][3]) /* nr = to detect if this is first bone */
 {
   float vec[3], ikmat[4][4];
 
@@ -412,8 +412,8 @@ static void execute_posetree(struct Depsgraph *depsgraph,
      * segment's basis. otherwise rotation limits do not work on the
      * local transform of the segment itself. */
     copy_m4_m4(rootmat, pchan->parent->pose_mat);
-    /* However, we do not want to get (i.e. reverse) parent's scale, as it generates [#31008]
-     * kind of nasty bugs... */
+    /* However, we do not want to get (i.e. reverse) parent's scale,
+     * as it generates T31008 kind of nasty bugs. */
     normalize_m4(rootmat);
   }
   else {
@@ -452,21 +452,20 @@ static void execute_posetree(struct Depsgraph *depsgraph,
         /* don't solve IK when we are setting the pole angle */
         break;
       }
-      else {
-        mul_m4_m4m4(goal, goalinv, rootmat);
-        copy_v3_v3(polepos, goal[3]);
-        poleconstrain = 1;
 
-        /* for pole targets, we blend the result of the ik solver
-         * instead of the target position, otherwise we can't get
-         * a smooth transition */
-        resultblend = 1;
-        resultinf = target->con->enforce;
+      mul_m4_m4m4(goal, goalinv, rootmat);
+      copy_v3_v3(polepos, goal[3]);
+      poleconstrain = 1;
 
-        if (data->flag & CONSTRAINT_IK_GETANGLE) {
-          poleangledata = data;
-          data->flag &= ~CONSTRAINT_IK_GETANGLE;
-        }
+      /* for pole targets, we blend the result of the ik solver
+       * instead of the target position, otherwise we can't get
+       * a smooth transition */
+      resultblend = 1;
+      resultinf = target->con->enforce;
+
+      if (data->flag & CONSTRAINT_IK_GETANGLE) {
+        poleangledata = data;
+        data->flag &= ~CONSTRAINT_IK_GETANGLE;
       }
     }
 
@@ -584,8 +583,8 @@ static void free_posetree(PoseTree *tree)
   MEM_freeN(tree);
 }
 
-///----------------------------------------
-/// Plugin API for legacy iksolver
+/* ------------------------------
+ * Plugin API for legacy iksolver */
 
 void iksolver_initialize_tree(struct Depsgraph *UNUSED(depsgraph),
                               struct Scene *UNUSED(scene),
@@ -595,8 +594,8 @@ void iksolver_initialize_tree(struct Depsgraph *UNUSED(depsgraph),
   bPoseChannel *pchan;
 
   for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
-    if (pchan->constflag & PCHAN_HAS_IK) {  // flag is set on editing constraints
-      initialize_posetree(ob, pchan);       // will attach it to root!
+    if (pchan->constflag & PCHAN_HAS_IK) { /* flag is set on editing constraints */
+      initialize_posetree(ob, pchan);      /* will attach it to root! */
     }
   }
   ob->pose->flag &= ~POSE_WAS_REBUILT;
@@ -619,7 +618,7 @@ void iksolver_execute_tree(struct Depsgraph *depsgraph,
 
     /* 4. walk over the tree for regular solving */
     for (a = 0; a < tree->totchannel; a++) {
-      if (!(tree->pchan[a]->flag & POSE_DONE)) {  // successive trees can set the flag
+      if (!(tree->pchan[a]->flag & POSE_DONE)) { /* successive trees can set the flag */
         BKE_pose_where_is_bone(depsgraph, scene, ob, tree->pchan[a], ctime, 1);
       }
       /* Tell blender that this channel was controlled by IK,

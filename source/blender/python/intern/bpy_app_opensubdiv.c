@@ -63,7 +63,7 @@ static PyObject *make_opensubdiv_info(void)
 #define SetObjItem(obj) PyStructSequence_SET_ITEM(opensubdiv_info, pos++, obj)
 
 #ifdef WITH_OPENSUBDIV
-  int curversion = openSubdiv_getVersionHex();
+  const int curversion = openSubdiv_getVersionHex();
   SetObjItem(PyBool_FromLong(1));
   SetObjItem(PyC_Tuple_Pack_I32(curversion / 10000, (curversion / 100) % 100, curversion % 100));
   SetObjItem(PyUnicode_FromFormat(
@@ -96,7 +96,7 @@ PyObject *BPY_app_opensubdiv_struct(void)
   /* prevent user from creating new instances */
   BlenderAppOpenSubdivType.tp_init = NULL;
   BlenderAppOpenSubdivType.tp_new = NULL;
-  /* without this we can't do set(sys.modules) [#29635] */
+  /* without this we can't do set(sys.modules) T29635. */
   BlenderAppOpenSubdivType.tp_hash = (hashfunc)_Py_HashPointer;
 
   return ret;

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_RAND_GEN_H__
-#define __FREESTYLE_RAND_GEN_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -35,7 +34,7 @@ namespace Freestyle {
 class RandGen {
  public:
   static real drand48();
-  static void srand48(long value);
+  static void srand48(long seedval);
 
  private:
   static void next();
@@ -46,5 +45,3 @@ class RandGen {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_RAND_GEN_H__

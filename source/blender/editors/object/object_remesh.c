@@ -72,7 +72,6 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
-#include "GPU_draw.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
 #include "GPU_matrix.h"
@@ -87,7 +86,7 @@
 
 #include "BLF_api.h"
 
-#include "object_intern.h"  // own include
+#include "object_intern.h" /* own include */
 
 /* TODO(sebpa): unstable, can lead to unrecoverable errors. */
 // #define USE_MESH_CURVATURE
@@ -100,7 +99,12 @@ static bool object_remesh_poll(bContext *C)
 {
   Object *ob = CTX_data_active_object(C);
 
-  if (ob == NULL) {
+  if (ob == NULL || ob->data == NULL) {
+    return false;
+  }
+
+  if (ID_IS_LINKED(ob) || ID_IS_LINKED(ob->data) || ID_IS_OVERRIDE_LIBRARY(ob->data)) {
+    CTX_wm_operator_poll_msg_set(C, "The remesher cannot worked on linked or override data");
     return false;
   }
 
@@ -114,7 +118,7 @@ static bool object_remesh_poll(bContext *C)
     return false;
   }
 
-  if (modifiers_usesMultires(ob)) {
+  if (BKE_modifiers_uses_multires(ob)) {
     CTX_wm_operator_poll_msg_set(
         C, "The remesher cannot run with a Multires modifier in the modifier stack");
     return false;
@@ -172,6 +176,11 @@ static int voxel_remesh_exec(bContext *C, wmOperator *op)
 
   if (mesh->flag & ME_REMESH_REPROJECT_SCULPT_FACE_SETS) {
     BKE_remesh_reproject_sculpt_face_sets(new_mesh, mesh);
+  }
+
+  if (mesh->flag & ME_REMESH_REPROJECT_VERTEX_COLORS) {
+    BKE_mesh_runtime_clear_geometry(mesh);
+    BKE_remesh_reproject_vertex_paint(new_mesh, mesh);
   }
 
   BKE_mesh_nomain_to_mesh(new_mesh, mesh, ob, &CD_MASK_MESH, true);
@@ -285,7 +294,7 @@ static void voxel_size_edit_draw(const bContext *UNUSED(C), ARegion *UNUSED(ar),
 {
   VoxelSizeEditCustomData *cd = arg;
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   GPU_line_smooth(true);
 
   uint pos3d = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
@@ -338,7 +347,7 @@ static void voxel_size_edit_draw(const bContext *UNUSED(C), ARegion *UNUSED(ar),
   char str[VOXEL_SIZE_EDIT_MAX_STR_LEN];
   short strdrawlen = 0;
 
-  BLI_snprintf(str, VOXEL_SIZE_EDIT_MAX_STR_LEN, "%3.4f%%", cd->voxel_size);
+  BLI_snprintf(str, VOXEL_SIZE_EDIT_MAX_STR_LEN, "%.4f", cd->voxel_size);
   strdrawlen = BLI_strlen_utf8(str);
 
   immUnbindProgram();
@@ -354,7 +363,7 @@ static void voxel_size_edit_draw(const bContext *UNUSED(C), ARegion *UNUSED(ar),
 
   GPU_matrix_pop();
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
   GPU_line_smooth(false);
 }
 
@@ -393,10 +402,11 @@ static int voxel_size_edit_modal(bContext *C, wmOperator *op, const wmEvent *eve
     mesh->remesh_voxel_size = cd->voxel_size;
     MEM_freeN(op->customdata);
     ED_region_tag_redraw(ar);
+    ED_workspace_status_text(C, NULL);
     return OPERATOR_FINISHED;
   }
 
-  float mval[2] = {event->mval[0], event->mval[1]};
+  const float mval[2] = {event->mval[0], event->mval[1]};
 
   float d = cd->init_mval[0] - mval[0];
 
@@ -460,7 +470,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   BoundBox *bb = BKE_mesh_boundbox_get(cd->active_object);
 
   /* Indices of the Bounding Box faces. */
-  int BB_faces[6][4] = {
+  const int BB_faces[6][4] = {
       {3, 0, 4, 7},
       {1, 2, 6, 5},
       {3, 2, 1, 0},
@@ -515,13 +525,15 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   float d_a[3], d_b[3];
   float d_a_proj[2], d_b_proj[2];
   float preview_plane_proj[4][3];
-  float y_axis_proj[2] = {0.0f, 1.0f};
+  const float y_axis_proj[2] = {0.0f, 1.0f};
 
   mid_v3_v3v3(text_pos, cd->preview_plane[0], cd->preview_plane[2]);
 
   /* Project the selected face in the previous step of the Bounding Box. */
   for (int i = 0; i < 4; i++) {
-    ED_view3d_project(ar, cd->preview_plane[i], preview_plane_proj[i]);
+    float preview_plane_world_space[3];
+    mul_v3_m4v3(preview_plane_world_space, active_object->obmat, cd->preview_plane[i]);
+    ED_view3d_project(ar, preview_plane_world_space, preview_plane_proj[i]);
   }
 
   /* Get the initial X and Y axis of the basis from the edges of the Bounding Box face. */
@@ -569,8 +581,10 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   copy_v3_v3(cd->text_mat[3], text_pos);
 
   /* Scale the text.  */
-  unit_m4(scale_mat);
-  scale_m4_fl(scale_mat, 0.0008f);
+  float text_pos_word_space[3];
+  mul_v3_m4v3(text_pos_word_space, active_object->obmat, text_pos);
+  const float pixelsize = ED_view3d_pixel_size(rv3d, text_pos_word_space);
+  scale_m4_fl(scale_mat, pixelsize * 0.5f);
   mul_m4_m4_post(cd->text_mat, scale_mat);
 
   WM_event_add_modal_handler(C, op);
@@ -584,6 +598,11 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   return OPERATOR_RUNNING_MODAL;
 }
 
+static bool voxel_size_edit_poll(bContext *C)
+{
+  return CTX_wm_region_view3d(C) && object_remesh_poll(C);
+}
+
 void OBJECT_OT_voxel_size_edit(wmOperatorType *ot)
 {
   /* identifiers */
@@ -592,7 +611,7 @@ void OBJECT_OT_voxel_size_edit(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_voxel_size_edit";
 
   /* api callbacks */
-  ot->poll = object_remesh_poll;
+  ot->poll = voxel_size_edit_poll;
   ot->invoke = voxel_size_edit_invoke;
   ot->modal = voxel_size_edit_modal;
   ot->cancel = voxel_size_edit_cancel;
@@ -933,9 +952,10 @@ static int quadriflow_remesh_exec(bContext *C, wmOperator *op)
   job->smooth_normals = RNA_boolean_get(op->ptr, "smooth_normals");
 
   /* Update the target face count if symmetry is enabled */
-  Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
-  if (sd && job->use_paint_symmetry) {
-    job->symmetry_axes = (eSymmetryAxes)(sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL);
+  Object *ob = CTX_data_active_object(C);
+  if (ob && job->use_paint_symmetry) {
+    Mesh *mesh = BKE_mesh_from_object(ob);
+    job->symmetry_axes = (eSymmetryAxes)mesh->symmetry;
     for (char i = 0; i < 3; i++) {
       eSymmetryAxes symm_it = (eSymmetryAxes)(1 << i);
       if (job->symmetry_axes & symm_it) {
@@ -1022,7 +1042,7 @@ static bool quadriflow_poll_property(const bContext *C, wmOperator *op, const Pr
     if (STREQ(prop_id, "target_edge_length") && mode != QUADRIFLOW_REMESH_EDGE_LENGTH) {
       return false;
     }
-    else if (STREQ(prop_id, "target_faces")) {
+    if (STREQ(prop_id, "target_faces")) {
       if (mode != QUADRIFLOW_REMESH_FACES) {
         /* Make sure we can edit the target_faces value even if it doesn't start as EDITABLE */
         float area = RNA_float_get(op->ptr, "mesh_area");

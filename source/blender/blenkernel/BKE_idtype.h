@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_IDTYPE_H__
-#define __BKE_IDTYPE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -32,7 +31,12 @@
 extern "C" {
 #endif
 
+struct BlendDataReader;
+struct BlendExpander;
+struct BlendLibReader;
+struct BlendWriter;
 struct ID;
+struct LibraryForeachIDData;
 struct Main;
 
 /** IDTypeInfo.flags. */
@@ -43,9 +47,24 @@ enum {
   IDTYPE_FLAGS_NO_LIBLINKING = 1 << 1,
   /** Indicates that the given IDType does not support making a library-linked ID local. */
   IDTYPE_FLAGS_NO_MAKELOCAL = 1 << 2,
+  /** Indicates that the given IDType does not have animation data. */
+  IDTYPE_FLAGS_NO_ANIMDATA = 1 << 3,
 };
 
-/* ********** Prototypes for IDTypeInfo callbacks. ********** */
+typedef struct IDCacheKey {
+  /* The session UUID of the ID owning the cached data. */
+  unsigned int id_session_uuid;
+  /* Value uniquely identifying the cache within its ID.
+   * Typically the offset of its member in the data-block struct, but can be anything. */
+  size_t offset_in_ID;
+  /* Actual address of the cached data to save and restore. */
+  void *cache_v;
+} IDCacheKey;
+
+uint BKE_idtype_cache_key_hash(const void *key_v);
+bool BKE_idtype_cache_key_cmp(const void *key_a_v, const void *key_b_v);
+
+/* ********** Prototypes for #IDTypeInfo callbacks. ********** */
 
 typedef void (*IDTypeInitDataFunction)(struct ID *id);
 
@@ -60,6 +79,29 @@ typedef void (*IDTypeFreeDataFunction)(struct ID *id);
 /** \param flag: See BKE_lib_id.h's LIB_ID_MAKELOCAL_... flags. */
 typedef void (*IDTypeMakeLocalFunction)(struct Main *bmain, struct ID *id, const int flags);
 
+typedef void (*IDTypeForeachIDFunction)(struct ID *id, struct LibraryForeachIDData *data);
+
+typedef enum eIDTypeInfoCacheCallbackFlags {
+  /** Indicates to the callback that that cache may be stored in the .blend file, so its pointer
+   * should not be cleared at read-time. */
+  IDTYPE_CACHE_CB_FLAGS_PERSISTENT = 1 << 0,
+} eIDTypeInfoCacheCallbackFlags;
+typedef void (*IDTypeForeachCacheFunctionCallback)(struct ID *id,
+                                                   const struct IDCacheKey *cache_key,
+                                                   void **cache_p,
+                                                   uint flags,
+                                                   void *user_data);
+typedef void (*IDTypeForeachCacheFunction)(struct ID *id,
+                                           IDTypeForeachCacheFunctionCallback function_callback,
+                                           void *user_data);
+
+typedef void (*IDTypeBlendWriteFunction)(struct BlendWriter *writer,
+                                         struct ID *id,
+                                         const void *id_address);
+typedef void (*IDTypeBlendReadDataFunction)(struct BlendDataReader *reader, struct ID *id);
+typedef void (*IDTypeBlendReadLibFunction)(struct BlendLibReader *reader, struct ID *id);
+typedef void (*IDTypeBlendReadExpandFunction)(struct BlendExpander *expander, struct ID *id);
+
 typedef struct IDTypeInfo {
   /* ********** General IDType data. ********** */
 
@@ -72,14 +114,14 @@ typedef struct IDTypeInfo {
    * Bitflag matching id_code, used for filtering (e.g. in file browser), see DNA_ID.h's
    * FILTER_ID_XX enums.
    */
-  int64_t id_filter;
+  uint64_t id_filter;
 
   /**
    * Define the position of this data-block type in the virtual list of all data in a Main that is
    * returned by `set_listbasepointers()`.
    * Very important, this has to be unique and below INDEX_ID_MAX, see DNA_ID.h.
    */
-  short main_listbase_index;
+  int main_listbase_index;
 
   /** Memory size of a data-block of that type. */
   size_t struct_size;
@@ -92,7 +134,7 @@ typedef struct IDTypeInfo {
   const char *translation_context;
 
   /** Generic info flags about that data-block type. */
-  int flags;
+  uint32_t flags;
 
   /* ********** ID management callbacks ********** */
 
@@ -121,6 +163,39 @@ typedef struct IDTypeInfo {
    * `BKE_lib_id_make_local_generic()` is enough.
    */
   IDTypeMakeLocalFunction make_local;
+
+  /**
+   * Called by `BKE_library_foreach_ID_link()` to apply a callback over all other ID usages (ID
+   * pointers) of given data-block.
+   */
+  IDTypeForeachIDFunction foreach_id;
+
+  /**
+   * Iterator over all cache pointers of given ID.
+   */
+  IDTypeForeachCacheFunction foreach_cache;
+
+  /* ********** Callbacks for reading and writing .blend files. ********** */
+
+  /**
+   * Write all structs that should be saved in a .blend file.
+   */
+  IDTypeBlendWriteFunction blend_write;
+
+  /**
+   * Update pointers for all structs directly owned by this data block.
+   */
+  IDTypeBlendReadDataFunction blend_read_data;
+
+  /**
+   * Update pointers to other id data blocks.
+   */
+  IDTypeBlendReadLibFunction blend_read_lib;
+
+  /**
+   * Specify which other id data blocks should be loaded when the current one is loaded.
+   */
+  IDTypeBlendReadExpandFunction blend_read_expand;
 } IDTypeInfo;
 
 /* ********** Declaration of each IDTypeInfo. ********** */
@@ -165,6 +240,7 @@ extern IDTypeInfo IDType_ID_LP;
 extern IDTypeInfo IDType_ID_HA;
 extern IDTypeInfo IDType_ID_PT;
 extern IDTypeInfo IDType_ID_VO;
+extern IDTypeInfo IDType_ID_SIM;
 
 extern IDTypeInfo IDType_ID_LINK_PLACEHOLDER;
 
@@ -193,8 +269,14 @@ short BKE_idtype_idcode_from_index(const int index);
 
 short BKE_idtype_idcode_iter_step(int *index);
 
+/* Some helpers/wrappers around callbacks defined in #IDTypeInfo, dealing e.g. with embedded IDs.
+ * XXX Ideally those would rather belong to #BKE_lib_id, but using callback function pointers makes
+ * this hard to do properly if we want to avoid headers includes in headers. */
+
+void BKE_idtype_id_foreach_cache(struct ID *id,
+                                 IDTypeForeachCacheFunctionCallback function_callback,
+                                 void *user_data);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_IDTYPE_H__ */

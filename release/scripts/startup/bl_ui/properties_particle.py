@@ -136,13 +136,13 @@ class PARTICLE_UL_particle_systems(bpy.types.UIList):
             if md:
                 row.prop(
                     md,
-                    "show_render",
+                    "show_viewport",
                     emboss=False,
                     icon_only=True,
                 )
                 row.prop(
                     md,
-                    "show_viewport",
+                    "show_render",
                     emboss=False,
                     icon_only=True,
                 )
@@ -617,7 +617,6 @@ class PARTICLE_PT_rotation(ParticleButtonsPanel, Panel):
         layout = self.layout
         layout.prop(part, "use_rotations", text="")
         layout.enabled = particle_panel_enabled(context, psys)
-
 
     def draw(self, context):
         layout = self.layout

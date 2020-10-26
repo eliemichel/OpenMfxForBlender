@@ -58,7 +58,7 @@ static void rna_Sequence_update_rnafunc(ID *id, Sequence *self, bool do_data)
 {
   if (do_data) {
     BKE_sequencer_update_changed_seq_and_deps((Scene *)id, self, true, true);
-    // new_tstripdata(self); // need 2.6x version of this.
+    // new_tstripdata(self); /* need 2.6x version of this. */
   }
   BKE_sequence_calc((Scene *)id, self);
   BKE_sequence_calc_disp((Scene *)id, self);
@@ -79,7 +79,6 @@ static Sequence *alloc_generic_sequence(
     Editing *ed, const char *name, int frame_start, int channel, int type, const char *file)
 {
   Sequence *seq;
-  Strip *strip;
   StripElem *se;
 
   seq = BKE_sequence_alloc(ed->seqbasep, frame_start, channel, type);
@@ -87,8 +86,7 @@ static Sequence *alloc_generic_sequence(
   BLI_strncpy(seq->name + 2, name, sizeof(seq->name) - 2);
   BKE_sequence_base_unique_name_recursive(&ed->seqbase, seq);
 
-  seq->strip = strip = MEM_callocN(sizeof(Strip), "strip");
-  seq->strip->us = 1;
+  Strip *strip = seq->strip;
 
   if (file) {
     strip->stripdata = se = MEM_callocN(sizeof(StripElem), "stripelem");
@@ -114,7 +112,7 @@ static Sequence *rna_Sequences_new_clip(ID *id,
   Scene *scene = (Scene *)id;
   Sequence *seq;
 
-  seq = alloc_generic_sequence(ed, name, frame_start, channel, SEQ_TYPE_MOVIECLIP, clip->name);
+  seq = alloc_generic_sequence(ed, name, frame_start, channel, SEQ_TYPE_MOVIECLIP, clip->filepath);
   seq->clip = clip;
   seq->len = BKE_movieclip_get_duration(clip);
   id_us_plus((ID *)clip);
@@ -207,33 +205,28 @@ static Sequence *rna_Sequences_new_image(ID *id,
   return seq;
 }
 
-static Sequence *rna_Sequences_new_movie(ID *id,
-                                         Editing *ed,
-                                         ReportList *reports,
-                                         const char *name,
-                                         const char *file,
-                                         int channel,
-                                         int frame_start)
+static Sequence *rna_Sequences_new_movie(
+    ID *id, Editing *ed, const char *name, const char *file, int channel, int frame_start)
 {
   Scene *scene = (Scene *)id;
   Sequence *seq;
   StripAnim *sanim;
 
-  struct anim *an = openanim(file, IB_rect, 0, NULL);
-
-  if (an == NULL) {
-    BKE_report(reports, RPT_ERROR, "Sequences.new_movie: unable to open movie file");
-    return NULL;
-  }
-
   seq = alloc_generic_sequence(ed, name, frame_start, channel, SEQ_TYPE_MOVIE, file);
 
-  sanim = MEM_mallocN(sizeof(StripAnim), "Strip Anim");
-  BLI_addtail(&seq->anims, sanim);
-  sanim->anim = an;
+  struct anim *an = openanim(file, IB_rect, 0, NULL);
+  if (an == NULL) {
+    /* Without anim, the strip gets duration 0, which makes it impossible to select in the UI. */
+    seq->len = 1;
+  }
+  else {
+    sanim = MEM_mallocN(sizeof(StripAnim), "Strip Anim");
+    BLI_addtail(&seq->anims, sanim);
+    sanim->anim = an;
 
-  seq->anim_preseek = IMB_anim_get_preseek(an);
-  seq->len = IMB_anim_get_duration(an, IMB_TC_RECORD_RUN);
+    seq->anim_preseek = IMB_anim_get_preseek(an);
+    seq->len = IMB_anim_get_duration(an, IMB_TC_RECORD_RUN);
+  }
 
   BKE_sequence_calc_disp(scene, seq);
   BKE_sequence_invalidate_cache_composite(scene, seq);
@@ -265,7 +258,8 @@ static Sequence *rna_Sequences_new_sound(ID *id,
     BKE_report(reports, RPT_ERROR, "Sequences.new_sound: unable to open sound file");
     return NULL;
   }
-  seq = alloc_generic_sequence(ed, name, frame_start, channel, SEQ_TYPE_SOUND_RAM, sound->name);
+  seq = alloc_generic_sequence(
+      ed, name, frame_start, channel, SEQ_TYPE_SOUND_RAM, sound->filepath);
   seq->sound = sound;
   seq->len = ceil((double)info.length * FPS);
 
@@ -376,13 +370,14 @@ static void rna_Sequences_remove(
   Sequence *seq = seq_ptr->data;
   Scene *scene = (Scene *)id;
 
-  if (BLI_remlink_safe(&ed->seqbase, seq) == false) {
+  if (BLI_findindex(&ed->seqbase, seq) == -1) {
     BKE_reportf(
         reports, RPT_ERROR, "Sequence '%s' not in scene '%s'", seq->name + 2, scene->id.name + 2);
     return;
   }
 
-  BKE_sequence_free(scene, seq, true);
+  BKE_sequencer_flag_for_removal(scene, &ed->seqbase, seq);
+  BKE_sequencer_remove_flagged_sequences(scene, &ed->seqbase);
   RNA_POINTER_INVALIDATE(seq_ptr);
 
   DEG_relations_tag_update(bmain);
@@ -447,12 +442,34 @@ static void rna_SequenceElements_pop(ID *id, Sequence *seq, ReportList *reports,
   WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, scene);
 }
 
+static void rna_Sequence_invalidate_cache_rnafunc(ID *id, Sequence *self, int type)
+{
+  switch (type) {
+    case SEQ_CACHE_STORE_RAW:
+      BKE_sequence_invalidate_cache_raw((Scene *)id, self);
+      break;
+    case SEQ_CACHE_STORE_PREPROCESSED:
+      BKE_sequence_invalidate_cache_preprocessed((Scene *)id, self);
+      break;
+    case SEQ_CACHE_STORE_COMPOSITE:
+      BKE_sequence_invalidate_cache_composite((Scene *)id, self);
+      break;
+  }
+}
+
 #else
 
 void RNA_api_sequence_strip(StructRNA *srna)
 {
   FunctionRNA *func;
   PropertyRNA *parm;
+
+  static const EnumPropertyItem seq_cahce_type_items[] = {
+      {SEQ_CACHE_STORE_RAW, "RAW", 0, "Raw", ""},
+      {SEQ_CACHE_STORE_PREPROCESSED, "PREPROCESSED", 0, "Preprocessed", ""},
+      {SEQ_CACHE_STORE_COMPOSITE, "COMPOSITE", 0, "Composite", ""},
+      {0, NULL, 0, NULL, NULL},
+  };
 
   func = RNA_def_function(srna, "update", "rna_Sequence_update_rnafunc");
   RNA_def_function_flag(func, FUNC_USE_SELF_ID);
@@ -478,6 +495,13 @@ void RNA_api_sequence_strip(StructRNA *srna)
   func = RNA_def_function(srna, "swap", "rna_Sequence_swap_internal");
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
   parm = RNA_def_pointer(func, "other", "Sequence", "Other", "");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+
+  func = RNA_def_function(srna, "invalidate_cache", "rna_Sequence_invalidate_cache_rnafunc");
+  RNA_def_function_flag(func, FUNC_USE_SELF_ID);
+  RNA_def_function_ui_description(func,
+                                  "Invalidate cached images for strip and all dependent strips");
+  parm = RNA_def_enum(func, "type", seq_cahce_type_items, 0, "Type", "Cache Type");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
 }
 
@@ -639,7 +663,7 @@ void RNA_api_sequences(BlenderRNA *brna, PropertyRNA *cprop)
   RNA_def_function_return(func, parm);
 
   func = RNA_def_function(srna, "new_movie", "rna_Sequences_new_movie");
-  RNA_def_function_flag(func, FUNC_USE_REPORTS | FUNC_USE_SELF_ID);
+  RNA_def_function_flag(func, FUNC_USE_SELF_ID);
   RNA_def_function_ui_description(func, "Add a new movie sequence");
   parm = RNA_def_string(func, "name", "Name", 0, "", "Name for the new sequence");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);

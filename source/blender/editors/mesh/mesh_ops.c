@@ -155,6 +155,8 @@ void ED_operatortypes_mesh(void)
   WM_operatortype_append(MESH_OT_uv_texture_remove);
   WM_operatortype_append(MESH_OT_vertex_color_add);
   WM_operatortype_append(MESH_OT_vertex_color_remove);
+  WM_operatortype_append(MESH_OT_sculpt_vertex_color_add);
+  WM_operatortype_append(MESH_OT_sculpt_vertex_color_remove);
   WM_operatortype_append(MESH_OT_customdata_mask_clear);
   WM_operatortype_append(MESH_OT_customdata_skin_add);
   WM_operatortype_append(MESH_OT_customdata_skin_clear);
@@ -195,6 +197,7 @@ void ED_operatortypes_mesh(void)
   WM_operatortype_append(MESH_OT_symmetry_snap);
 
   WM_operatortype_append(MESH_OT_paint_mask_extract);
+  WM_operatortype_append(MESH_OT_face_set_extract);
   WM_operatortype_append(MESH_OT_paint_mask_slice);
 
   WM_operatortype_append(MESH_OT_point_normals);
@@ -276,6 +279,18 @@ void ED_operatormacros_mesh(void)
   otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
   RNA_boolean_set(otmacro->ptr, "use_proportional_edit", false);
   RNA_boolean_set(otmacro->ptr, "mirror", false);
+
+  ot = WM_operatortype_append_macro(
+      "MESH_OT_extrude_manifold",
+      "Extrude Manifold",
+      "Extrude, dissolves edges whose faces form a flat surface and intersect new edges",
+      OPTYPE_UNDO | OPTYPE_REGISTER);
+  otmacro = WM_operatortype_macro_define(ot, "MESH_OT_extrude_region");
+  RNA_boolean_set(otmacro->ptr, "use_dissolve_ortho_edges", true);
+  otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
+  RNA_boolean_set(otmacro->ptr, "use_proportional_edit", false);
+  RNA_boolean_set(otmacro->ptr, "mirror", false);
+  RNA_boolean_set(otmacro->ptr, "use_automerge_and_split", true);
 
   ot = WM_operatortype_append_macro("MESH_OT_extrude_context_move",
                                     "Extrude Region and Move",

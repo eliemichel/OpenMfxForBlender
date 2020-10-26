@@ -476,9 +476,8 @@ UndoStep *BKE_undosys_step_push_init_with_type(UndoStack *ustack,
     undosys_stack_validate(ustack, false);
     return us;
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 UndoStep *BKE_undosys_step_push_init(UndoStack *ustack, bContext *C, const char *name)
@@ -507,9 +506,7 @@ bool BKE_undosys_step_push_with_type(UndoStack *ustack,
 
   /* Might not be final place for this to be called - probably only want to call it from some
    * undo handlers, not all of them? */
-  if (BKE_lib_override_library_is_enabled()) {
-    BKE_lib_override_library_main_operations_create(G_MAIN, false);
-  }
+  BKE_lib_override_library_main_operations_create(G_MAIN, false);
 
   /* Remove all undos after (also when 'ustack->step_active == NULL'). */
   while (ustack->steps.last != ustack->step_active) {

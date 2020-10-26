@@ -44,12 +44,13 @@ DeviceTask::DeviceTask(Type type_)
       shader_eval_type(0),
       shader_filter(0),
       shader_x(0),
-      shader_w(0)
+      shader_w(0),
+      buffers(nullptr)
 {
   last_update_time = time_dt();
 }
 
-int DeviceTask::get_subtask_count(int num, int max_size)
+int DeviceTask::get_subtask_count(int num, int max_size) const
 {
   if (max_size != 0) {
     int max_size_num;
@@ -77,7 +78,7 @@ int DeviceTask::get_subtask_count(int num, int max_size)
   return num;
 }
 
-void DeviceTask::split(list<DeviceTask> &tasks, int num, int max_size)
+void DeviceTask::split(list<DeviceTask> &tasks, int num, int max_size) const
 {
   num = get_subtask_count(num, max_size);
 

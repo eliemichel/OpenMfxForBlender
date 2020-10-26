@@ -55,17 +55,17 @@ BLI_STATIC_ASSERT(ARRAY_SIZE(bmo_error_messages) == BMERR_TOTAL, "message mismat
 
 /* operator slot type information - size of one element of the type given. */
 const int BMO_OPSLOT_TYPEINFO[BMO_OP_SLOT_TOTAL_TYPES] = {
-    0,                 /*  0: BMO_OP_SLOT_SENTINEL */
-    sizeof(int),       /*  1: BMO_OP_SLOT_BOOL */
-    sizeof(int),       /*  2: BMO_OP_SLOT_INT */
-    sizeof(float),     /*  3: BMO_OP_SLOT_FLT */
-    sizeof(void *),    /*  4: BMO_OP_SLOT_PNT */
-    sizeof(void *),    /*  5: BMO_OP_SLOT_PNT */
-    0,                 /*  6: unused */
-    0,                 /*  7: unused */
-    sizeof(float) * 3, /*  8: BMO_OP_SLOT_VEC */
-    sizeof(void *),    /*  9: BMO_OP_SLOT_ELEMENT_BUF */
-    sizeof(void *),    /* 10: BMO_OP_SLOT_MAPPING */
+    0,                /*  0: BMO_OP_SLOT_SENTINEL */
+    sizeof(int),      /*  1: BMO_OP_SLOT_BOOL */
+    sizeof(int),      /*  2: BMO_OP_SLOT_INT */
+    sizeof(float),    /*  3: BMO_OP_SLOT_FLT */
+    sizeof(void *),   /*  4: BMO_OP_SLOT_PNT */
+    sizeof(void *),   /*  5: BMO_OP_SLOT_PNT */
+    0,                /*  6: unused */
+    0,                /*  7: unused */
+    sizeof(float[3]), /*  8: BMO_OP_SLOT_VEC */
+    sizeof(void *),   /*  9: BMO_OP_SLOT_ELEMENT_BUF */
+    sizeof(void *),   /* 10: BMO_OP_SLOT_MAPPING */
 };
 
 /* Dummy slot so there is something to return when slot name lookup fails */
@@ -368,7 +368,7 @@ void _bmo_slot_copy(BMOpSlot slot_args_src[BMO_OP_MAX_SLOTS],
 /*
  * BMESH OPSTACK SET XXX
  *
- * Sets the value of a slot depending on it's type
+ * Sets the value of a slot depending on its type
  */
 
 void BMO_slot_float_set(BMOpSlot slot_args[BMO_OP_MAX_SLOTS], const char *slot_name, const float f)
@@ -418,7 +418,7 @@ void BMO_slot_mat_set(BMOperator *op,
   }
 
   slot->len = 4;
-  slot->data.p = BLI_memarena_alloc(op->arena, sizeof(float) * 4 * 4);
+  slot->data.p = BLI_memarena_alloc(op->arena, sizeof(float[4][4]));
 
   if (size == 4) {
     copy_m4_m4(slot->data.p, (float(*)[4])mat);
@@ -1501,7 +1501,7 @@ void *BMO_iter_step(BMOIter *iter)
 
     return ele;
   }
-  else if (slot->slot_type == BMO_OP_SLOT_MAPPING) {
+  if (slot->slot_type == BMO_OP_SLOT_MAPPING) {
     void *ret;
 
     if (BLI_ghashIterator_done(&iter->giter) == false) {
@@ -1517,9 +1517,7 @@ void *BMO_iter_step(BMOIter *iter)
 
     return ret;
   }
-  else {
-    BLI_assert(0);
-  }
+  BLI_assert(0);
 
   return NULL;
 }

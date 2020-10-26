@@ -23,80 +23,22 @@
 #include "MEM_guardedalloc.h"
 
 /* all types are needed here, in order to do memory operations */
-#include "DNA_armature_types.h"
-#include "DNA_brush_types.h"
-#include "DNA_cachefile_types.h"
-#include "DNA_camera_types.h"
-#include "DNA_collection_types.h"
-#include "DNA_gpencil_types.h"
-#include "DNA_ipo_types.h"
+#include "DNA_ID.h"
 #include "DNA_key_types.h"
-#include "DNA_lattice_types.h"
-#include "DNA_light_types.h"
-#include "DNA_lightprobe_types.h"
-#include "DNA_linestyle_types.h"
-#include "DNA_mask_types.h"
-#include "DNA_material_types.h"
-#include "DNA_mesh_types.h"
-#include "DNA_meta_types.h"
-#include "DNA_movieclip_types.h"
-#include "DNA_node_types.h"
-#include "DNA_object_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_screen_types.h"
-#include "DNA_sound_types.h"
-#include "DNA_speaker_types.h"
-#include "DNA_text_types.h"
-#include "DNA_vfont_types.h"
-#include "DNA_windowmanager_types.h"
-#include "DNA_workspace_types.h"
-#include "DNA_world_types.h"
 
 #include "BLI_utildefines.h"
 
 #include "BLI_listbase.h"
 
-#include "BKE_action.h"
 #include "BKE_anim_data.h"
-#include "BKE_armature.h"
-#include "BKE_brush.h"
-#include "BKE_cachefile.h"
-#include "BKE_camera.h"
-#include "BKE_collection.h"
-#include "BKE_curve.h"
-#include "BKE_font.h"
-#include "BKE_gpencil.h"
 #include "BKE_idprop.h"
 #include "BKE_idtype.h"
-#include "BKE_image.h"
-#include "BKE_ipo.h"
 #include "BKE_key.h"
-#include "BKE_lattice.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_override.h"
 #include "BKE_lib_remap.h"
 #include "BKE_library.h"
-#include "BKE_light.h"
-#include "BKE_lightprobe.h"
-#include "BKE_linestyle.h"
 #include "BKE_main.h"
-#include "BKE_mask.h"
-#include "BKE_material.h"
-#include "BKE_mball.h"
-#include "BKE_mesh.h"
-#include "BKE_movieclip.h"
-#include "BKE_node.h"
-#include "BKE_object.h"
-#include "BKE_paint.h"
-#include "BKE_particle.h"
-#include "BKE_scene.h"
-#include "BKE_screen.h"
-#include "BKE_sound.h"
-#include "BKE_speaker.h"
-#include "BKE_text.h"
-#include "BKE_texture.h"
-#include "BKE_workspace.h"
-#include "BKE_world.h"
 
 #include "lib_intern.h"
 
@@ -114,10 +56,12 @@ void BKE_libblock_free_data(ID *id, const bool do_id_user)
   if (id->properties) {
     IDP_FreePropertyContent_ex(id->properties, do_id_user);
     MEM_freeN(id->properties);
+    id->properties = NULL;
   }
 
   if (id->override_library) {
     BKE_lib_override_library_free(&id->override_library, do_id_user);
+    id->override_library = NULL;
   }
 
   BKE_animdata_free(id, do_id_user);
@@ -202,8 +146,14 @@ void BKE_id_free_ex(Main *bmain, void *idv, int flag, const bool use_flag_from_i
   }
 #endif
 
+  Key *key = ((flag & LIB_ID_FREE_NO_MAIN) == 0) ? BKE_key_from_id(id) : NULL;
+
   if ((flag & LIB_ID_FREE_NO_USER_REFCOUNT) == 0) {
     BKE_libblock_relink_ex(bmain, id, NULL, NULL, 0);
+  }
+
+  if ((flag & LIB_ID_FREE_NO_MAIN) == 0 && key != NULL) {
+    BKE_id_free_ex(bmain, &key->id, flag, use_flag_from_idtag);
   }
 
   BKE_libblock_free_datablock(id, flag);
@@ -311,7 +261,9 @@ static void id_delete(Main *bmain, const bool do_tagged_deletion)
     bool keep_looping = true;
     while (keep_looping) {
       ID *id, *id_next;
-      ID *last_remapped_id = tagged_deleted_ids.last;
+      /* Marked volatile to avoid a macOS Clang optimization bug. See T81077.
+       * #last_remapped_id.next is assumed to be NULL by optimizer which is wrong. */
+      volatile ID *last_remapped_id = tagged_deleted_ids.last;
       keep_looping = false;
 
       /* First tag and remove from Main all datablocks directly from target lib.
@@ -327,8 +279,8 @@ static void id_delete(Main *bmain, const bool do_tagged_deletion)
             BLI_remlink(lb, id);
             BLI_addtail(&tagged_deleted_ids, id);
             /* Do not tag as no_main now, we want to unlink it first (lower-level ID management
-             * code has some specific handling of 'nom main'
-             * IDs that would be a problem in that case). */
+             * code has some specific handling of 'no main' IDs that would be a problem in that
+             * case). */
             id->tag |= tag;
             keep_looping = true;
           }

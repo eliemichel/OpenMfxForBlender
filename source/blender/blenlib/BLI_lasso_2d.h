@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_LASSO_2D_H__
-#define __BLI_LASSO_2D_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -30,14 +29,14 @@ extern "C" {
 
 struct rcti;
 
-void BLI_lasso_boundbox(struct rcti *rect, const int mcords[][2], const unsigned int moves);
-bool BLI_lasso_is_point_inside(const int mcords[][2],
-                               const unsigned int moves,
+void BLI_lasso_boundbox(struct rcti *rect, const int mcoords[][2], const unsigned int mcoords_len);
+bool BLI_lasso_is_point_inside(const int mcoords[][2],
+                               const unsigned int mcoords_len,
                                const int sx,
                                const int sy,
                                const int error_value);
-bool BLI_lasso_is_edge_inside(const int mcords[][2],
-                              const unsigned int moves,
+bool BLI_lasso_is_edge_inside(const int mcoords[][2],
+                              const unsigned int mcoords_len,
                               int x0,
                               int y0,
                               int x1,
@@ -47,5 +46,3 @@ bool BLI_lasso_is_edge_inside(const int mcords[][2],
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_LASSO_2D_H__ */

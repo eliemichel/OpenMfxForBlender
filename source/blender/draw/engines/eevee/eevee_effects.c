@@ -26,28 +26,13 @@
 
 #include "BKE_global.h" /* for G.debug_value */
 
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
 #include "GPU_platform.h"
 #include "GPU_state.h"
 #include "GPU_texture.h"
 #include "eevee_private.h"
 
 static struct {
-  /* Downsample Depth */
-  struct GPUShader *minz_downlevel_sh;
-  struct GPUShader *maxz_downlevel_sh;
-  struct GPUShader *minz_downdepth_sh;
-  struct GPUShader *maxz_downdepth_sh;
-  struct GPUShader *minz_downdepth_layer_sh;
-  struct GPUShader *maxz_downdepth_layer_sh;
-  struct GPUShader *maxz_copydepth_layer_sh;
-  struct GPUShader *minz_copydepth_sh;
-  struct GPUShader *maxz_copydepth_sh;
-
-  /* Simple Downsample */
-  struct GPUShader *downsample_sh;
-  struct GPUShader *downsample_cube_sh;
-
   /* These are just references, not actually allocated */
   struct GPUTexture *depth_src;
   struct GPUTexture *color_src;
@@ -55,49 +40,6 @@ static struct {
   int depth_src_layer;
   float cube_texel_size;
 } e_data = {NULL}; /* Engine data */
-
-extern char datatoc_common_uniforms_lib_glsl[];
-extern char datatoc_common_view_lib_glsl[];
-extern char datatoc_bsdf_common_lib_glsl[];
-extern char datatoc_effect_minmaxz_frag_glsl[];
-extern char datatoc_effect_downsample_frag_glsl[];
-extern char datatoc_effect_downsample_cube_frag_glsl[];
-extern char datatoc_lightprobe_vert_glsl[];
-extern char datatoc_lightprobe_geom_glsl[];
-
-static void eevee_create_shader_downsample(void)
-{
-  e_data.downsample_sh = DRW_shader_create_fullscreen(datatoc_effect_downsample_frag_glsl, NULL);
-  e_data.downsample_cube_sh = DRW_shader_create(datatoc_lightprobe_vert_glsl,
-                                                datatoc_lightprobe_geom_glsl,
-                                                datatoc_effect_downsample_cube_frag_glsl,
-                                                NULL);
-
-  e_data.minz_downlevel_sh = DRW_shader_create_fullscreen(datatoc_effect_minmaxz_frag_glsl,
-                                                          "#define MIN_PASS\n");
-  e_data.maxz_downlevel_sh = DRW_shader_create_fullscreen(datatoc_effect_minmaxz_frag_glsl,
-                                                          "#define MAX_PASS\n");
-  e_data.minz_downdepth_sh = DRW_shader_create_fullscreen(datatoc_effect_minmaxz_frag_glsl,
-                                                          "#define MIN_PASS\n");
-  e_data.maxz_downdepth_sh = DRW_shader_create_fullscreen(datatoc_effect_minmaxz_frag_glsl,
-                                                          "#define MAX_PASS\n");
-  e_data.minz_downdepth_layer_sh = DRW_shader_create_fullscreen(datatoc_effect_minmaxz_frag_glsl,
-                                                                "#define MIN_PASS\n"
-                                                                "#define LAYERED\n");
-  e_data.maxz_downdepth_layer_sh = DRW_shader_create_fullscreen(datatoc_effect_minmaxz_frag_glsl,
-                                                                "#define MAX_PASS\n"
-                                                                "#define LAYERED\n");
-  e_data.maxz_copydepth_layer_sh = DRW_shader_create_fullscreen(datatoc_effect_minmaxz_frag_glsl,
-                                                                "#define MAX_PASS\n"
-                                                                "#define COPY_DEPTH\n"
-                                                                "#define LAYERED\n");
-  e_data.minz_copydepth_sh = DRW_shader_create_fullscreen(datatoc_effect_minmaxz_frag_glsl,
-                                                          "#define MIN_PASS\n"
-                                                          "#define COPY_DEPTH\n");
-  e_data.maxz_copydepth_sh = DRW_shader_create_fullscreen(datatoc_effect_minmaxz_frag_glsl,
-                                                          "#define MAX_PASS\n"
-                                                          "#define COPY_DEPTH\n");
-}
 
 #define SETUP_BUFFER(tex, fb, fb_color) \
   { \
@@ -138,22 +80,18 @@ void EEVEE_effects_init(EEVEE_ViewLayerData *sldata,
   DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
 
   const float *viewport_size = DRW_viewport_size_get();
-  int size_fs[2] = {(int)viewport_size[0], (int)viewport_size[1]};
-
-  /* Shaders */
-  if (!e_data.downsample_sh) {
-    eevee_create_shader_downsample();
-  }
+  const int size_fs[2] = {(int)viewport_size[0], (int)viewport_size[1]};
 
   if (!stl->effects) {
     stl->effects = MEM_callocN(sizeof(EEVEE_EffectsInfo), "EEVEE_EffectsInfo");
+    stl->effects->taa_render_sample = 1;
   }
 
   effects = stl->effects;
 
   effects->enabled_effects = 0;
   effects->enabled_effects |= (G.debug_value == 9) ? EFFECT_VELOCITY_BUFFER : 0;
-  effects->enabled_effects |= EEVEE_motion_blur_init(sldata, vedata, camera);
+  effects->enabled_effects |= EEVEE_motion_blur_init(sldata, vedata);
   effects->enabled_effects |= EEVEE_bloom_init(sldata, vedata);
   effects->enabled_effects |= EEVEE_depth_of_field_init(sldata, vedata, camera);
   effects->enabled_effects |= EEVEE_temporal_sampling_init(sldata, vedata);
@@ -194,14 +132,14 @@ void EEVEE_effects_init(EEVEE_ViewLayerData *sldata,
   }
 
   if (fbl->downsample_fb == NULL) {
-    fbl->downsample_fb = GPU_framebuffer_create();
+    fbl->downsample_fb = GPU_framebuffer_create("downsample_fb");
   }
 
   /**
    * Compute Mipmap texel alignment.
    */
   for (int i = 0; i < 10; i++) {
-    int mip_size[2];
+    int mip_size[3];
     GPU_texture_get_mipmap_size(txl->color, i, mip_size);
     common_data->mip_ratio[i][0] = viewport_size[0] / (mip_size[0] * powf(2.0f, i));
     common_data->mip_ratio[i][1] = viewport_size[1] / (mip_size[1] * powf(2.0f, i));
@@ -225,10 +163,13 @@ void EEVEE_effects_init(EEVEE_ViewLayerData *sldata,
    */
   if ((effects->enabled_effects & EFFECT_VELOCITY_BUFFER) != 0) {
     effects->velocity_tx = DRW_texture_pool_query_2d(
-        size_fs[0], size_fs[1], GPU_RG16, &draw_engine_eevee_type);
+        size_fs[0], size_fs[1], GPU_RGBA16, &draw_engine_eevee_type);
 
-    /* TODO output objects velocity during the mainpass. */
-    // GPU_framebuffer_texture_attach(fbl->main_fb, effects->velocity_tx, 1, 0);
+    GPU_framebuffer_ensure_config(&fbl->velocity_fb,
+                                  {
+                                      GPU_ATTACHMENT_TEXTURE(dtxl->depth),
+                                      GPU_ATTACHMENT_TEXTURE(effects->velocity_tx),
+                                  });
 
     GPU_framebuffer_ensure_config(
         &fbl->velocity_resolve_fb,
@@ -280,7 +221,7 @@ void EEVEE_effects_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
   {
     DRW_PASS_CREATE(psl->color_downsample_ps, DRW_STATE_WRITE_COLOR);
-    grp = DRW_shgroup_create(e_data.downsample_sh, psl->color_downsample_ps);
+    grp = DRW_shgroup_create(EEVEE_shaders_effect_downsample_sh_get(), psl->color_downsample_ps);
     DRW_shgroup_uniform_texture_ref(grp, "source", &e_data.color_src);
     DRW_shgroup_uniform_float(grp, "fireflyFactor", &sldata->common_data.ssr_firefly_fac, 1);
     DRW_shgroup_call(grp, quad, NULL);
@@ -288,7 +229,8 @@ void EEVEE_effects_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
   {
     DRW_PASS_CREATE(psl->color_downsample_cube_ps, DRW_STATE_WRITE_COLOR);
-    grp = DRW_shgroup_create(e_data.downsample_cube_sh, psl->color_downsample_cube_ps);
+    grp = DRW_shgroup_create(EEVEE_shaders_effect_downsample_cube_sh_get(),
+                             psl->color_downsample_cube_ps);
     DRW_shgroup_uniform_texture_ref(grp, "source", &e_data.color_src);
     DRW_shgroup_uniform_float(grp, "texelSize", &e_data.cube_texel_size, 1);
     DRW_shgroup_uniform_int_copy(grp, "Layer", 0);
@@ -298,45 +240,50 @@ void EEVEE_effects_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   {
     /* Perform min/max downsample */
     DRW_PASS_CREATE(psl->maxz_downlevel_ps, downsample_write | DRW_STATE_DEPTH_ALWAYS);
-    grp = DRW_shgroup_create(e_data.maxz_downlevel_sh, psl->maxz_downlevel_ps);
+    grp = DRW_shgroup_create(EEVEE_shaders_effect_maxz_downlevel_sh_get(), psl->maxz_downlevel_ps);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &txl->maxzbuffer);
     DRW_shgroup_call(grp, quad, NULL);
 
     /* Copy depth buffer to halfres top level of HiZ */
 
     DRW_PASS_CREATE(psl->maxz_downdepth_ps, downsample_write | DRW_STATE_DEPTH_ALWAYS);
-    grp = DRW_shgroup_create(e_data.maxz_downdepth_sh, psl->maxz_downdepth_ps);
+    grp = DRW_shgroup_create(EEVEE_shaders_effect_maxz_downdepth_sh_get(), psl->maxz_downdepth_ps);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
     DRW_shgroup_call(grp, quad, NULL);
 
     DRW_PASS_CREATE(psl->maxz_downdepth_layer_ps, downsample_write | DRW_STATE_DEPTH_ALWAYS);
-    grp = DRW_shgroup_create(e_data.maxz_downdepth_layer_sh, psl->maxz_downdepth_layer_ps);
+    grp = DRW_shgroup_create(EEVEE_shaders_effect_maxz_downdepth_layer_sh_get(),
+                             psl->maxz_downdepth_layer_ps);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
     DRW_shgroup_uniform_int(grp, "depthLayer", &e_data.depth_src_layer, 1);
     DRW_shgroup_call(grp, quad, NULL);
 
     DRW_PASS_CREATE(psl->maxz_copydepth_ps, downsample_write | DRW_STATE_DEPTH_ALWAYS);
-    grp = DRW_shgroup_create(e_data.maxz_copydepth_sh, psl->maxz_copydepth_ps);
+    grp = DRW_shgroup_create(EEVEE_shaders_effect_maxz_copydepth_sh_get(), psl->maxz_copydepth_ps);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
     DRW_shgroup_call(grp, quad, NULL);
 
     DRW_PASS_CREATE(psl->maxz_copydepth_layer_ps, downsample_write | DRW_STATE_DEPTH_ALWAYS);
-    grp = DRW_shgroup_create(e_data.maxz_copydepth_layer_sh, psl->maxz_copydepth_layer_ps);
+    grp = DRW_shgroup_create(EEVEE_shaders_effect_maxz_copydepth_layer_sh_get(),
+                             psl->maxz_copydepth_layer_ps);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
     DRW_shgroup_uniform_int(grp, "depthLayer", &e_data.depth_src_layer, 1);
     DRW_shgroup_call(grp, quad, NULL);
   }
 
   if ((effects->enabled_effects & EFFECT_VELOCITY_BUFFER) != 0) {
+    EEVEE_MotionBlurData *mb_data = &effects->motion_blur;
+
     /* This pass compute camera motions to the non moving objects. */
     DRW_PASS_CREATE(psl->velocity_resolve, DRW_STATE_WRITE_COLOR);
     grp = DRW_shgroup_create(EEVEE_shaders_velocity_resolve_sh_get(), psl->velocity_resolve);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
-    DRW_shgroup_uniform_block(
-        grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
-    DRW_shgroup_uniform_mat4(grp, "currPersinv", effects->velocity_curr_persinv);
-    DRW_shgroup_uniform_mat4(grp, "pastPersmat", effects->velocity_past_persmat);
+    DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
+
+    DRW_shgroup_uniform_mat4(grp, "prevViewProjMatrix", mb_data->camera[MB_PREV].persmat);
+    DRW_shgroup_uniform_mat4(grp, "currViewProjMatrixInv", mb_data->camera[MB_CURR].persinv);
+    DRW_shgroup_uniform_mat4(grp, "nextViewProjMatrix", mb_data->camera[MB_NEXT].persmat);
     DRW_shgroup_call(grp, quad, NULL);
   }
 }
@@ -425,7 +372,7 @@ void EEVEE_create_minmax_buffer(EEVEE_Data *vedata, GPUTexture *depth_src, int l
   int minmax_size[3], depth_size[3];
   GPU_texture_get_mipmap_size(depth_src, 0, depth_size);
   GPU_texture_get_mipmap_size(txl->maxzbuffer, 0, minmax_size);
-  bool is_full_res_minmaxz = (minmax_size[0] == depth_size[0] && minmax_size[1] == depth_size[1]);
+  bool is_full_res_minmaxz = equals_v2v2_int(minmax_size, depth_size);
 
   DRW_stats_group_start("Max buffer");
   /* Copy depth buffer to max texture top level */
@@ -480,7 +427,7 @@ void EEVEE_downsample_buffer(EEVEE_Data *vedata, GPUTexture *texture_src, int le
 }
 
 /**
- * Simple down-sampling algorithm for cubemap. Reconstruct mip chain up to mip level.
+ * Simple down-sampling algorithm for cube-map. Reconstruct mip chain up to mip level.
  */
 void EEVEE_downsample_cube_buffer(EEVEE_Data *vedata, GPUTexture *texture_src, int level)
 {
@@ -502,17 +449,19 @@ static void EEVEE_velocity_resolve(EEVEE_Data *vedata)
   EEVEE_FramebufferList *fbl = vedata->fbl;
   EEVEE_StorageList *stl = vedata->stl;
   EEVEE_EffectsInfo *effects = stl->effects;
-  struct DRWView *view = effects->taa_view;
 
   if ((effects->enabled_effects & EFFECT_VELOCITY_BUFFER) != 0) {
     DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
     e_data.depth_src = dtxl->depth;
-    DRW_view_persmat_get(view, effects->velocity_curr_persinv, true);
 
     GPU_framebuffer_bind(fbl->velocity_resolve_fb);
     DRW_draw_pass(psl->velocity_resolve);
+
+    if (psl->velocity_object) {
+      GPU_framebuffer_bind(fbl->velocity_fb);
+      DRW_draw_pass(psl->velocity_object);
+    }
   }
-  DRW_view_persmat_get(view, effects->velocity_past_persmat, false);
 }
 
 void EEVEE_draw_effects(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
@@ -530,6 +479,7 @@ void EEVEE_draw_effects(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   effects->target_buffer = fbl->effect_color_fb; /* next target to render to */
 
   /* Post process stack (order matters) */
+  EEVEE_velocity_resolve(vedata);
   EEVEE_motion_blur_draw(vedata);
   EEVEE_depth_of_field_draw(vedata);
 
@@ -538,7 +488,6 @@ void EEVEE_draw_effects(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
    * Velocity resolve use a hack to exclude lookdev
    * spheres from creating shimmering re-projection vectors. */
   EEVEE_lookdev_draw(vedata);
-  EEVEE_velocity_resolve(vedata);
 
   EEVEE_temporal_sampling_draw(vedata);
   EEVEE_bloom_draw(vedata);
@@ -574,20 +523,4 @@ void EEVEE_draw_effects(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     stl->g_data->valid_double_buffer = (txl->color_double_buffer != NULL);
     stl->g_data->valid_taa_history = (txl->taa_history != NULL);
   }
-}
-
-void EEVEE_effects_free(void)
-{
-  DRW_SHADER_FREE_SAFE(e_data.downsample_sh);
-  DRW_SHADER_FREE_SAFE(e_data.downsample_cube_sh);
-
-  DRW_SHADER_FREE_SAFE(e_data.minz_downlevel_sh);
-  DRW_SHADER_FREE_SAFE(e_data.maxz_downlevel_sh);
-  DRW_SHADER_FREE_SAFE(e_data.minz_downdepth_sh);
-  DRW_SHADER_FREE_SAFE(e_data.maxz_downdepth_sh);
-  DRW_SHADER_FREE_SAFE(e_data.minz_downdepth_layer_sh);
-  DRW_SHADER_FREE_SAFE(e_data.maxz_downdepth_layer_sh);
-  DRW_SHADER_FREE_SAFE(e_data.maxz_copydepth_layer_sh);
-  DRW_SHADER_FREE_SAFE(e_data.minz_copydepth_sh);
-  DRW_SHADER_FREE_SAFE(e_data.maxz_copydepth_sh);
 }

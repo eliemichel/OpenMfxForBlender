@@ -297,7 +297,38 @@ static void join_mesh_single(Depsgraph *depsgraph,
   *mpoly_pp += me->totpoly;
 }
 
-int join_mesh_exec(bContext *C, wmOperator *op)
+/* Face Sets IDs are a sparse sequence, so this function offsets all the IDs by face_set_offset and
+ * updates face_set_offset with the maximum ID value. This way, when used in multiple meshes, all
+ * of them will have different IDs for their Face Sets. */
+static void mesh_join_offset_face_sets_ID(const Mesh *mesh, int *face_set_offset)
+{
+  if (!mesh->totpoly) {
+    return;
+  }
+
+  int *face_sets = CustomData_get_layer(&mesh->pdata, CD_SCULPT_FACE_SETS);
+  if (!face_sets) {
+    return;
+  }
+
+  int max_face_set = 0;
+  for (int f = 0; f < mesh->totpoly; f++) {
+    /* As face sets encode the visibility in the integer sign, the offset needs to be added or
+     * subtracted depending on the initial sign of the integer to get the new ID. */
+    if (abs(face_sets[f]) <= *face_set_offset) {
+      if (face_sets[f] > 0) {
+        face_sets[f] += *face_set_offset;
+      }
+      else {
+        face_sets[f] -= *face_set_offset;
+      }
+    }
+    max_face_set = max_ii(max_face_set, abs(face_sets[f]));
+  }
+  *face_set_offset = max_face_set;
+}
+
+int ED_mesh_join_objects_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
@@ -414,14 +445,14 @@ int join_mesh_exec(bContext *C, wmOperator *op)
    */
   if (key) {
     /* make a duplicate copy that will only be used here... (must remember to free it!) */
-    nkey = BKE_key_copy(bmain, key);
+    nkey = (Key *)BKE_id_copy(bmain, &key->id);
 
     /* for all keys in old block, clear data-arrays */
     for (kb = key->block.first; kb; kb = kb->next) {
       if (kb->data) {
         MEM_freeN(kb->data);
       }
-      kb->data = MEM_callocN(sizeof(float) * 3 * totvert, "join_shapekey");
+      kb->data = MEM_callocN(sizeof(float[3]) * totvert, "join_shapekey");
       kb->totelem = totvert;
     }
   }
@@ -431,7 +462,13 @@ int join_mesh_exec(bContext *C, wmOperator *op)
     key->type = KEY_RELATIVE;
   }
 
-  /* First pass over objects: Copying materials, vertex-groups & face-maps across. */
+  /* Update face_set_id_offset with the face set data in the active object first. This way the Face
+   * Sets IDs in the active object are not the ones that are modified. */
+  Mesh *mesh_active = BKE_mesh_from_object(ob);
+  int face_set_id_offset = 0;
+  mesh_join_offset_face_sets_ID(mesh_active, &face_set_id_offset);
+
+  /* Copy materials, vertex-groups, face sets & face-maps across objects. */
   CTX_DATA_BEGIN (C, Object *, ob_iter, selected_editable_objects) {
     /* only act if a mesh, and not the one we're joining to */
     if ((ob != ob_iter) && (ob_iter->type == OB_MESH)) {
@@ -462,6 +499,8 @@ int join_mesh_exec(bContext *C, wmOperator *op)
       if (ob->fmaps.first && ob->actfmap == 0) {
         ob->actfmap = 1;
       }
+
+      mesh_join_offset_face_sets_ID(me, &face_set_id_offset);
 
       if (me->totvert) {
         /* Add this object's materials to the base one's if they don't exist already
@@ -511,7 +550,7 @@ int join_mesh_exec(bContext *C, wmOperator *op)
               BKE_keyblock_copy_settings(kbn, kb);
 
               /* adjust settings to fit (allocate a new data-array) */
-              kbn->data = MEM_callocN(sizeof(float) * 3 * totvert, "joined_shapekey");
+              kbn->data = MEM_callocN(sizeof(float[3]) * totvert, "joined_shapekey");
               kbn->totelem = totvert;
             }
 
@@ -551,8 +590,9 @@ int join_mesh_exec(bContext *C, wmOperator *op)
   loopofs = 0;
   polyofs = 0;
 
-  /* inverse transform for all selected meshes in this object */
-  invert_m4_m4(imat, ob->obmat);
+  /* Inverse transform for all selected meshes in this object,
+   * See #object_join_exec for detailed comment on why the safe version is used. */
+  invert_m4_m4_safe_ortho(imat, ob->obmat);
 
   /* Add back active mesh first.
    * This allows to keep things similar as they were, as much as possible
@@ -702,16 +742,19 @@ int join_mesh_exec(bContext *C, wmOperator *op)
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
+  WM_event_add_notifier(C, NC_SCENE | ND_LAYER_CONTENT, scene);
 
   return OPERATOR_FINISHED;
 }
 
-/*********************** JOIN AS SHAPES ***************************/
+/* -------------------------------------------------------------------- */
+/** \name Join as Shapes
+ * \{ */
 
 /* Append selected meshes vertex locations as shapes of the active mesh,
  * return 0 if no join is made (error) and 1 of the join is done */
 
-int join_mesh_shapes_exec(bContext *C, wmOperator *op)
+int ED_mesh_shapes_join_objects_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
@@ -796,6 +839,8 @@ int join_mesh_shapes_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
 /** \name Mesh Topology Mirror API
  * \{ */
@@ -846,7 +891,8 @@ void ED_mesh_mirror_topo_table_end(Object *UNUSED(ob))
   ED_mesh_mirrtopo_free(&mesh_topo_store);
 }
 
-static int ed_mesh_mirror_topo_table_update(Object *ob, Mesh *me_eval)
+/* Returns true on success. */
+static bool ed_mesh_mirror_topo_table_update(Object *ob, Mesh *me_eval)
 {
   Mesh *me_mirror;
   BMEditMesh *em_mirror;
@@ -855,7 +901,7 @@ static int ed_mesh_mirror_topo_table_update(Object *ob, Mesh *me_eval)
   if (ED_mesh_mirrtopo_recalc_check(em_mirror, me_mirror, &mesh_topo_store)) {
     ED_mesh_mirror_topo_table_begin(ob, me_eval);
   }
-  return 0;
+  return true;
 }
 
 /** \} */
@@ -876,7 +922,7 @@ static int mesh_get_x_mirror_vert_spatial(Object *ob, Mesh *me_eval, int index)
 
 static int mesh_get_x_mirror_vert_topo(Object *ob, Mesh *mesh, int index)
 {
-  if (ed_mesh_mirror_topo_table_update(ob, mesh) == -1) {
+  if (!ed_mesh_mirror_topo_table_update(ob, mesh)) {
     return -1;
   }
 
@@ -888,9 +934,7 @@ int mesh_get_x_mirror_vert(Object *ob, Mesh *me_eval, int index, const bool use_
   if (use_topology) {
     return mesh_get_x_mirror_vert_topo(ob, me_eval, index);
   }
-  else {
-    return mesh_get_x_mirror_vert_spatial(ob, me_eval, index);
-  }
+  return mesh_get_x_mirror_vert_spatial(ob, me_eval, index);
 }
 
 static BMVert *editbmesh_get_x_mirror_vert_spatial(Object *ob, BMEditMesh *em, const float co[3])
@@ -920,7 +964,7 @@ static BMVert *editbmesh_get_x_mirror_vert_topo(Object *ob,
                                                 int index)
 {
   intptr_t poinval;
-  if (ed_mesh_mirror_topo_table_update(ob, NULL) == -1) {
+  if (!ed_mesh_mirror_topo_table_update(ob, NULL)) {
     return NULL;
   }
 
@@ -959,9 +1003,7 @@ BMVert *editbmesh_get_x_mirror_vert(Object *ob,
   if (use_topology) {
     return editbmesh_get_x_mirror_vert_topo(ob, em, eve, index);
   }
-  else {
-    return editbmesh_get_x_mirror_vert_spatial(ob, em, co);
-  }
+  return editbmesh_get_x_mirror_vert_spatial(ob, em, co);
 }
 
 /**
@@ -1024,7 +1066,7 @@ static float *editmesh_get_mirror_uv(
     BMFace *efa;
 
     BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
-      uv_poly_center(efa, cent, cd_loop_uv_offset);
+      BM_face_uv_calc_center_median(efa, cd_loop_uv_offset, cent);
 
       if ((fabsf(cent[0] - cent_vec[0]) < 0.001f) && (fabsf(cent[1] - cent_vec[1]) < 0.001f)) {
         BMIter liter;
@@ -1068,13 +1110,13 @@ static int mirror_facerotation(MFace *a, MFace *b)
     if (a->v1 == b->v1 && a->v2 == b->v2 && a->v3 == b->v3 && a->v4 == b->v4) {
       return 0;
     }
-    else if (a->v4 == b->v1 && a->v1 == b->v2 && a->v2 == b->v3 && a->v3 == b->v4) {
+    if (a->v4 == b->v1 && a->v1 == b->v2 && a->v2 == b->v3 && a->v3 == b->v4) {
       return 1;
     }
-    else if (a->v3 == b->v1 && a->v4 == b->v2 && a->v1 == b->v3 && a->v2 == b->v4) {
+    if (a->v3 == b->v1 && a->v4 == b->v2 && a->v1 == b->v3 && a->v2 == b->v4) {
       return 2;
     }
-    else if (a->v2 == b->v1 && a->v3 == b->v2 && a->v4 == b->v3 && a->v1 == b->v4) {
+    if (a->v2 == b->v1 && a->v3 == b->v2 && a->v4 == b->v3 && a->v1 == b->v4) {
       return 3;
     }
   }
@@ -1082,10 +1124,10 @@ static int mirror_facerotation(MFace *a, MFace *b)
     if (a->v1 == b->v1 && a->v2 == b->v2 && a->v3 == b->v3) {
       return 0;
     }
-    else if (a->v3 == b->v1 && a->v1 == b->v2 && a->v2 == b->v3) {
+    if (a->v3 == b->v1 && a->v1 == b->v2 && a->v2 == b->v3) {
       return 1;
     }
-    else if (a->v2 == b->v1 && a->v3 == b->v2 && a->v1 == b->v3) {
+    if (a->v2 == b->v1 && a->v3 == b->v2 && a->v1 == b->v3) {
       return 2;
     }
   }
@@ -1115,7 +1157,7 @@ int *mesh_get_x_mirror_faces(Object *ob, BMEditMesh *em, Mesh *me_eval)
   int a;
 
   mirrorverts = MEM_callocN(sizeof(int) * totvert, "MirrorVerts");
-  mirrorfaces = MEM_callocN(sizeof(int) * 2 * totface, "MirrorFaces");
+  mirrorfaces = MEM_callocN(sizeof(int[2]) * totface, "MirrorFaces");
 
   mvert = me_eval ? me_eval->mvert : me->mvert;
   mface = me_eval ? me_eval->mface : me->mface;
@@ -1464,9 +1506,7 @@ MDeformVert *ED_mesh_active_dvert_get_ob(Object *ob, int *r_index)
   if (index == -1 || me->dvert == NULL) {
     return NULL;
   }
-  else {
-    return me->dvert + index;
-  }
+  return me->dvert + index;
 }
 
 MDeformVert *ED_mesh_active_dvert_get_only(Object *ob)
@@ -1475,13 +1515,9 @@ MDeformVert *ED_mesh_active_dvert_get_only(Object *ob)
     if (ob->mode & OB_MODE_EDIT) {
       return ED_mesh_active_dvert_get_em(ob, NULL);
     }
-    else {
-      return ED_mesh_active_dvert_get_ob(ob, NULL);
-    }
+    return ED_mesh_active_dvert_get_ob(ob, NULL);
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 void EDBM_mesh_stats_multi(struct Object **objects,

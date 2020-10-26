@@ -23,13 +23,13 @@
 
 #pragma once
 
+#include "BLI_ghash.h"
 #include "BLI_sys_types.h"
 #include "DNA_ID.h"
 #include "intern/node/deg_node.h"
 
-struct GHash;
-
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct ComponentNode;
 
@@ -51,6 +51,7 @@ const char *linkedStateAsString(eDepsNode_LinkedState_Type linked_state);
 struct IDNode : public Node {
   struct ComponentIDKey {
     ComponentIDKey(NodeType type, const char *name = "");
+    uint64_t hash() const;
     bool operator==(const ComponentIDKey &other) const;
 
     NodeType type;
@@ -82,7 +83,7 @@ struct IDNode : public Node {
   ID *id_cow;
 
   /* Hash to make it faster to look up components. */
-  GHash *components;
+  Map<ComponentIDKey, ComponentNode *> components;
 
   /* Additional flags needed for scene evaluation.
    * TODO(sergey): Only needed for until really granular updates
@@ -115,4 +116,5 @@ struct IDNode : public Node {
   DEG_DEPSNODE_DECLARE;
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

@@ -74,14 +74,6 @@ void sequencer_operatortypes(void)
   WM_operatortype_append(SEQUENCER_OT_copy);
   WM_operatortype_append(SEQUENCER_OT_paste);
 
-  WM_operatortype_append(SEQUENCER_OT_view_all);
-  WM_operatortype_append(SEQUENCER_OT_view_selected);
-  WM_operatortype_append(SEQUENCER_OT_view_frame);
-  WM_operatortype_append(SEQUENCER_OT_view_all_preview);
-  WM_operatortype_append(SEQUENCER_OT_view_toggle);
-  WM_operatortype_append(SEQUENCER_OT_view_zoom_ratio);
-  WM_operatortype_append(SEQUENCER_OT_view_ghost_border);
-
   WM_operatortype_append(SEQUENCER_OT_rebuild_proxy);
   WM_operatortype_append(SEQUENCER_OT_enable_proxies);
   WM_operatortype_append(SEQUENCER_OT_change_effect_input);
@@ -99,6 +91,7 @@ void sequencer_operatortypes(void)
   WM_operatortype_append(SEQUENCER_OT_select_linked);
   WM_operatortype_append(SEQUENCER_OT_select_handles);
   WM_operatortype_append(SEQUENCER_OT_select_side);
+  WM_operatortype_append(SEQUENCER_OT_select_side_of_frame);
   WM_operatortype_append(SEQUENCER_OT_select_box);
   WM_operatortype_append(SEQUENCER_OT_select_grouped);
 
@@ -119,6 +112,12 @@ void sequencer_operatortypes(void)
 
   /* sequencer_view.h */
   WM_operatortype_append(SEQUENCER_OT_sample);
+  WM_operatortype_append(SEQUENCER_OT_view_all);
+  WM_operatortype_append(SEQUENCER_OT_view_frame);
+  WM_operatortype_append(SEQUENCER_OT_view_all_preview);
+  WM_operatortype_append(SEQUENCER_OT_view_zoom_ratio);
+  WM_operatortype_append(SEQUENCER_OT_view_selected);
+  WM_operatortype_append(SEQUENCER_OT_view_ghost_border);
 }
 
 void sequencer_keymap(wmKeyConfig *keyconf)

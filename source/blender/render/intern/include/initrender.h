@@ -21,8 +21,11 @@
  * \ingroup render
  */
 
-#ifndef __INITRENDER_H__
-#define __INITRENDER_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* Functions */
 
@@ -30,4 +33,6 @@ void RE_parts_init(Render *re);
 void RE_parts_free(Render *re);
 void RE_parts_clamp(Render *re);
 
-#endif /* __INITRENDER_H__ */
+#ifdef __cplusplus
+}
+#endif

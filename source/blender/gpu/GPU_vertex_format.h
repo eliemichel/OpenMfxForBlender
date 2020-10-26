@@ -23,8 +23,7 @@
  * GPU vertex format
  */
 
-#ifndef __GPU_VERTEX_FORMAT_H__
-#define __GPU_VERTEX_FORMAT_H__
+#pragma once
 
 #include "BLI_assert.h"
 #include "BLI_compiler_compat.h"
@@ -42,7 +41,7 @@ extern "C" {
 #define GPU_MAX_SAFE_ATTR_NAME 12
 
 typedef enum {
-  GPU_COMP_I8,
+  GPU_COMP_I8 = 0,
   GPU_COMP_U8,
   GPU_COMP_I16,
   GPU_COMP_U16,
@@ -52,17 +51,21 @@ typedef enum {
   GPU_COMP_F32,
 
   GPU_COMP_I10,
+  /* Warning! adjust GPUVertAttr if changing. */
 } GPUVertCompType;
 
 typedef enum {
-  GPU_FETCH_FLOAT,
+  GPU_FETCH_FLOAT = 0,
   GPU_FETCH_INT,
   GPU_FETCH_INT_TO_FLOAT_UNIT, /* 127 (ubyte) -> 0.5 (and so on for other int types) */
   GPU_FETCH_INT_TO_FLOAT,      /* 127 (any int type) -> 127.0 */
+  /* Warning! adjust GPUVertAttr if changing. */
 } GPUVertFetchMode;
 
 typedef struct GPUVertAttr {
+  /* GPUVertFetchMode */
   uint fetch_mode : 2;
+  /* GPUVertCompType */
   uint comp_type : 3;
   /* 1 to 4 or 8 or 12 or 16 */
   uint comp_len : 5;
@@ -72,8 +75,6 @@ typedef struct GPUVertAttr {
   uint offset : 11;
   /* up to GPU_VERT_ATTR_MAX_NAMES */
   uint name_len : 3;
-  uint gl_comp_type;
-  /* -- 8 Bytes -- */
   uchar names[GPU_VERT_ATTR_MAX_NAMES];
 } GPUVertAttr;
 
@@ -101,12 +102,11 @@ typedef struct GPUVertFormat {
   char names[GPU_VERT_ATTR_NAMES_BUF_LEN];
 } GPUVertFormat;
 
-struct GPUShaderInterface;
+struct GPUShader;
 
 void GPU_vertformat_clear(GPUVertFormat *);
 void GPU_vertformat_copy(GPUVertFormat *dest, const GPUVertFormat *src);
-void GPU_vertformat_from_interface(GPUVertFormat *format,
-                                   const struct GPUShaderInterface *shaderface);
+void GPU_vertformat_from_shader(GPUVertFormat *format, const struct GPUShader *shader);
 
 uint GPU_vertformat_attr_add(
     GPUVertFormat *, const char *name, GPUVertCompType, uint comp_len, GPUVertFetchMode);
@@ -124,6 +124,10 @@ BLI_INLINE const char *GPU_vertformat_attr_name_get(const GPUVertFormat *format,
 {
   return format->names + attr->names[n_idx];
 }
+
+/* WARNING: Can only rename using a string with same character count.
+ * WARNING: This removes all other aliases of this attrib */
+void GPU_vertformat_attr_rename(GPUVertFormat *format, int attr, const char *new_name);
 
 void GPU_vertformat_safe_attr_name(const char *attr_name, char *r_safe_name, uint max_len);
 
@@ -194,5 +198,3 @@ BLI_INLINE GPUPackedNormal GPU_normal_convert_i10_s3(const short data[3])
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_VERTEX_FORMAT_H__ */

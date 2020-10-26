@@ -18,8 +18,7 @@
  * \ingroup bke
  */
 
-#ifndef __CCGSUBSURF_INTERN_H__
-#define __CCGSUBSURF_INTERN_H__
+#pragma once
 
 /**
  * Definitions which defines internal behavior of CCGSubSurf.
@@ -157,9 +156,6 @@ typedef enum {
   eSyncState_Edge,
   eSyncState_Face,
   eSyncState_Partial,
-#ifdef WITH_OPENSUBDIV
-  eSyncState_OpenSubdiv,
-#endif
 } SyncState;
 
 struct CCGSubSurf {
@@ -202,58 +198,6 @@ struct CCGSubSurf {
   int lenTempArrays;
   CCGVert **tempVerts;
   CCGEdge **tempEdges;
-
-#ifdef WITH_OPENSUBDIV
-  /* Skip grids means no CCG geometry is created and subsurf is possible
-   * to be completely done on GPU.
-   */
-  bool skip_grids;
-
-  /* ** GPU backend. ** */
-
-  /* Compute device used by GL mesh. */
-  short osd_compute;
-  /* Coarse (base mesh) vertex coordinates.
-   *
-   * Filled in from the modifier stack and passed to OpenSubdiv compute
-   * on mesh display.
-   */
-  float (*osd_coarse_coords)[3];
-  int osd_num_coarse_coords;
-  /* Denotes whether coarse positions in the GL mesh are invalid.
-   * Used to avoid updating GL mesh coords on every redraw.
-   */
-  bool osd_coarse_coords_invalid;
-
-  /* GL mesh descriptor, used for refinement and draw. */
-  struct OpenSubdiv_GLMesh *osd_mesh;
-  /* Refiner which is used to create GL mesh.
-   *
-   * Refiner is created from the modifier stack and used later from the main
-   * thread to construct GL mesh to avoid threaded access to GL.
-   */
-  struct OpenSubdiv_TopologyRefiner
-      *osd_topology_refiner; /* Only used at synchronization stage. */
-  /* Denotes whether osd_mesh is invalid now due to topology changes and needs
-   * to be reconstructed.
-   *
-   * Reconstruction happens from main thread due to OpenGL communication.
-   */
-  bool osd_mesh_invalid;
-  /* Vertex array used for osd_mesh draw. */
-  unsigned int osd_vao;
-
-  /* ** CPU backend. ** */
-
-  /* Limit evaluator, used to evaluate CCG. */
-  struct OpenSubdiv_Evaluator *osd_evaluator;
-  /* Next PTex face index, used while CCG synchronization
-   * to fill in PTex index of CCGFace.
-   */
-  int osd_next_face_ptex_index;
-
-  bool osd_subdiv_uvs;
-#endif
 };
 
 /* ** Utility macros ** */
@@ -322,16 +266,6 @@ void ccgSubSurf__sync_legacy(CCGSubSurf *ss);
 
 void ccgSubSurf__sync_opensubdiv(CCGSubSurf *ss);
 
-/* Delayed free routines. Will do actual free if called from
- * main thread and schedule free for later free otherwise.
- */
-
-#ifdef WITH_OPENSUBDIV
-void ccgSubSurf__delete_osdGLMesh(struct OpenSubdiv_GLMesh *osd_mesh);
-void ccgSubSurf__delete_vertex_array(unsigned int vao);
-void ccgSubSurf__delete_pending(void);
-#endif
-
 /* * CCGSubSurf_opensubdiv_converter.c * */
 
 struct OpenSubdiv_Converter;
@@ -351,5 +285,3 @@ void ccgSubSurf__dumpCoords(CCGSubSurf *ss);
 #endif
 
 #include "CCGSubSurf_inline.h"
-
-#endif /* __CCGSUBSURF_INTERN_H__ */

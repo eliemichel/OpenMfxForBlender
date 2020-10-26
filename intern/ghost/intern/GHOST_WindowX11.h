@@ -22,8 +22,7 @@
  * Declaration of GHOST_WindowX11 class.
  */
 
-#ifndef __GHOST_WINDOWX11_H__
-#define __GHOST_WINDOWX11_H__
+#pragma once
 
 #include "GHOST_Window.h"
 #include <X11/Xlib.h>
@@ -37,7 +36,6 @@
 
 #include <map>
 
-class STR_String;
 class GHOST_SystemX11;
 
 #ifdef WITH_XDND
@@ -69,7 +67,7 @@ class GHOST_WindowX11 : public GHOST_Window {
    */
   GHOST_WindowX11(GHOST_SystemX11 *system,
                   Display *display,
-                  const STR_String &title,
+                  const char *title,
                   GHOST_TInt32 left,
                   GHOST_TInt32 top,
                   GHOST_TUns32 width,
@@ -85,9 +83,9 @@ class GHOST_WindowX11 : public GHOST_Window {
 
   bool getValid() const;
 
-  void setTitle(const STR_String &title);
+  void setTitle(const char *title);
 
-  void getTitle(STR_String &title) const;
+  std::string getTitle() const;
 
   void getWindowBounds(GHOST_Rect &bounds) const;
 
@@ -227,7 +225,7 @@ class GHOST_WindowX11 : public GHOST_Window {
                                             bool canInvertColor);
 
  private:
-  /// Force use of public constructor.
+  /* Force use of public constructor. */
 
   GHOST_WindowX11();
 
@@ -289,5 +287,3 @@ class GHOST_WindowX11 : public GHOST_Window {
   void motifFullScreen(bool set);
   bool motifIsFullScreen() const;
 };
-
-#endif  // __GHOST_WINDOWX11_H__

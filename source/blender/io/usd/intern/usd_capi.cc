@@ -20,19 +20,20 @@
 #include "usd.h"
 #include "usd_hierarchy_iterator.h"
 
+#include <pxr/base/plug/registry.h>
 #include <pxr/pxr.h>
 #include <pxr/usd/usd/stage.h>
 #include <pxr/usd/usdGeom/tokens.h>
 
 #include "MEM_guardedalloc.h"
 
-extern "C" {
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph_query.h"
 
 #include "DNA_scene_types.h"
 
+#include "BKE_appdir.h"
 #include "BKE_blender_version.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
@@ -44,9 +45,8 @@ extern "C" {
 
 #include "WM_api.h"
 #include "WM_types.h"
-}
 
-namespace USD {
+namespace blender::io::usd {
 
 struct ExportJobData {
   Main *bmain;
@@ -59,7 +59,27 @@ struct ExportJobData {
   bool export_ok;
 };
 
-static void export_startjob(void *customdata, short *stop, short *do_update, float *progress)
+static void ensure_usd_plugin_path_registered(void)
+{
+  static bool plugin_path_registered = false;
+  if (plugin_path_registered) {
+    return;
+  }
+  plugin_path_registered = true;
+
+  /* Tell USD which directory to search for its JSON files. If 'datafiles/usd'
+   * does not exist, the USD library will not be able to read or write any files. */
+  const std::string blender_usd_datafiles = BKE_appdir_folder_id(BLENDER_DATAFILES, "usd");
+  /* The trailing slash indicates to the USD library that the path is a directory. */
+  pxr::PlugRegistry::GetInstance().RegisterPlugins(blender_usd_datafiles + "/");
+}
+
+static void export_startjob(void *customdata,
+                            /* Cannot be const, this function implements wm_jobs_start_callback.
+                             * NOLINTNEXTLINE: readability-non-const-parameter. */
+                            short *stop,
+                            short *do_update,
+                            float *progress)
 {
   ExportJobData *data = static_cast<ExportJobData *>(customdata);
   data->export_ok = false;
@@ -68,16 +88,20 @@ static void export_startjob(void *customdata, short *stop, short *do_update, flo
   WM_set_locked_interface(data->wm, true);
   G.is_break = false;
 
-  // Construct the depsgraph for exporting.
+  /* Construct the depsgraph for exporting. */
   Scene *scene = DEG_get_input_scene(data->depsgraph);
-  ViewLayer *view_layer = DEG_get_input_view_layer(data->depsgraph);
-  DEG_graph_build_from_view_layer(data->depsgraph, data->bmain, scene, view_layer);
+  if (data->params.visible_objects_only) {
+    DEG_graph_build_from_view_layer(data->depsgraph);
+  }
+  else {
+    DEG_graph_build_for_all_objects(data->depsgraph);
+  }
   BKE_scene_graph_update_tagged(data->depsgraph, data->bmain);
 
   *progress = 0.0f;
   *do_update = true;
 
-  // For restoring the current frame after exporting animation is done.
+  /* For restoring the current frame after exporting animation is done. */
   const int orig_frame = CFRA;
 
   pxr::UsdStageRefPtr usd_stage = pxr::UsdStage::CreateNew(data->filename);
@@ -96,7 +120,7 @@ static void export_startjob(void *customdata, short *stop, short *do_update, flo
   usd_stage->GetRootLayer()->SetDocumentation(std::string("Blender v") +
                                               BKE_blender_version_string());
 
-  // Set up the stage for animated data.
+  /* Set up the stage for animated data. */
   if (data->params.export_animation) {
     usd_stage->SetTimeCodesPerSecond(FPS);
     usd_stage->SetStartTimeCode(scene->r.sfra);
@@ -106,7 +130,7 @@ static void export_startjob(void *customdata, short *stop, short *do_update, flo
   USDHierarchyIterator iter(data->depsgraph, usd_stage, data->params);
 
   if (data->params.export_animation) {
-    // Writing the animated frames is not 100% of the work, but it's our best guess.
+    /* Writing the animated frames is not 100% of the work, but it's our best guess. */
     float progress_per_frame = 1.0f / std::max(1, (scene->r.efra - scene->r.sfra + 1));
 
     for (float frame = scene->r.sfra; frame <= scene->r.efra; frame++) {
@@ -114,10 +138,10 @@ static void export_startjob(void *customdata, short *stop, short *do_update, flo
         break;
       }
 
-      // Update the scene for the next frame to render.
+      /* Update the scene for the next frame to render. */
       scene->r.cfra = static_cast<int>(frame);
       scene->r.subframe = frame - scene->r.cfra;
-      BKE_scene_graph_update_for_newframe(data->depsgraph, data->bmain);
+      BKE_scene_graph_update_for_newframe(data->depsgraph);
 
       iter.set_export_frame(frame);
       iter.iterate_and_write();
@@ -127,17 +151,17 @@ static void export_startjob(void *customdata, short *stop, short *do_update, flo
     }
   }
   else {
-    // If we're not animating, a single iteration over all objects is enough.
+    /* If we're not animating, a single iteration over all objects is enough. */
     iter.iterate_and_write();
   }
 
   iter.release_writers();
   usd_stage->GetRootLayer()->Save();
 
-  // Finish up by going back to the keyframe that was current before we started.
+  /* Finish up by going back to the keyframe that was current before we started. */
   if (CFRA != orig_frame) {
     CFRA = orig_frame;
-    BKE_scene_graph_update_for_newframe(data->depsgraph, data->bmain);
+    BKE_scene_graph_update_for_newframe(data->depsgraph);
   }
 
   data->export_ok = true;
@@ -159,7 +183,7 @@ static void export_endjob(void *customdata)
   WM_set_locked_interface(data->wm, false);
 }
 
-}  // namespace USD
+}  // namespace blender::io::usd
 
 bool USD_export(bContext *C,
                 const char *filepath,
@@ -169,8 +193,10 @@ bool USD_export(bContext *C,
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Scene *scene = CTX_data_scene(C);
 
-  USD::ExportJobData *job = static_cast<USD::ExportJobData *>(
-      MEM_mallocN(sizeof(USD::ExportJobData), "ExportJobData"));
+  blender::io::usd::ensure_usd_plugin_path_registered();
+
+  blender::io::usd::ExportJobData *job = static_cast<blender::io::usd::ExportJobData *>(
+      MEM_mallocN(sizeof(blender::io::usd::ExportJobData), "ExportJobData"));
 
   job->bmain = CTX_data_main(C);
   job->wm = CTX_wm_manager(C);
@@ -188,7 +214,11 @@ bool USD_export(bContext *C,
     /* setup job */
     WM_jobs_customdata_set(wm_job, job, MEM_freeN);
     WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_FRAME, NC_SCENE | ND_FRAME);
-    WM_jobs_callbacks(wm_job, USD::export_startjob, NULL, NULL, USD::export_endjob);
+    WM_jobs_callbacks(wm_job,
+                      blender::io::usd::export_startjob,
+                      nullptr,
+                      nullptr,
+                      blender::io::usd::export_endjob);
 
     WM_jobs_start(CTX_wm_manager(C), wm_job);
   }
@@ -197,8 +227,8 @@ bool USD_export(bContext *C,
     short stop = 0, do_update = 0;
     float progress = 0.f;
 
-    USD::export_startjob(job, &stop, &do_update, &progress);
-    USD::export_endjob(job);
+    blender::io::usd::export_startjob(job, &stop, &do_update, &progress);
+    blender::io::usd::export_endjob(job);
     export_ok = job->export_ok;
 
     MEM_freeN(job);

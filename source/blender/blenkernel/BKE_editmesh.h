@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_EDITMESH_H__
-#define __BKE_EDITMESH_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -46,7 +45,7 @@ struct Scene;
  * This structure is used for mesh edit-mode.
  *
  * through this, you get access to both the edit #BMesh,
- * it's tessellation, and various stuff that doesn't belong in the BMesh
+ * its tessellation, and various stuff that doesn't belong in the BMesh
  * struct itself.
  *
  * the entire derivedmesh and modifier system works with this structure,
@@ -100,6 +99,13 @@ float (*BKE_editmesh_vert_coords_alloc(struct Depsgraph *depsgraph,
                                        struct Object *ob,
                                        int *r_vert_len))[3];
 float (*BKE_editmesh_vert_coords_alloc_orco(BMEditMesh *em, int *r_vert_len))[3];
+const float (*BKE_editmesh_vert_coords_when_deformed(struct Depsgraph *depsgraph,
+                                                     struct BMEditMesh *em,
+                                                     struct Scene *scene,
+                                                     struct Object *obedit,
+                                                     int *r_vert_len,
+                                                     bool *r_is_alloc))[3];
+
 void BKE_editmesh_lnorspace_update(BMEditMesh *em, struct Mesh *me);
 void BKE_editmesh_ensure_autosmooth(BMEditMesh *em, struct Mesh *me);
 struct BoundBox *BKE_editmesh_cage_boundbox_get(BMEditMesh *em);
@@ -107,5 +113,3 @@ struct BoundBox *BKE_editmesh_cage_boundbox_get(BMEditMesh *em);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_EDITMESH_H__ */

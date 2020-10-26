@@ -26,6 +26,7 @@
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_constraint_types.h"
+#include "DNA_gpencil_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -37,6 +38,7 @@
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_layer.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
@@ -112,7 +114,7 @@ void ED_pose_bone_select(Object *ob, bPoseChannel *pchan, bool select)
   bArmature *arm;
 
   /* sanity checks */
-  // XXX: actually, we can probably still get away with no object - at most we have no updates
+  /* XXX: actually, we can probably still get away with no object - at most we have no updates */
   if (ELEM(NULL, ob, ob->pose, pchan, pchan->bone)) {
     return;
   }
@@ -131,7 +133,7 @@ void ED_pose_bone_select(Object *ob, bPoseChannel *pchan, bool select)
       arm->act_bone = NULL;
     }
 
-    // TODO: select and activate corresponding vgroup?
+    /* TODO: select and activate corresponding vgroup? */
     ED_pose_bone_select_tag_update(ob);
   }
 }
@@ -172,7 +174,7 @@ bool ED_armature_pose_select_pick_with_buffer(ViewLayer *view_layer,
      * note, special exception for armature mode so we can do multi-select
      * we could check for multi-select explicitly but think its fine to
      * always give predictable behavior in weight paint mode - campbell */
-    if ((ob_act == NULL) || ((ob_act != ob) && (ob_act->mode & OB_MODE_WEIGHT_PAINT) == 0)) {
+    if ((ob_act == NULL) || ((ob_act != ob) && (ob_act->mode & OB_MODE_ALL_WEIGHT_PAINT) == 0)) {
       /* when we are entering into posemode via toggle-select,
        * from another active object - always select the bone. */
       if (!extend && !deselect && toggle) {
@@ -225,7 +227,7 @@ bool ED_armature_pose_select_pick_with_buffer(ViewLayer *view_layer,
 
     if (ob_act) {
       /* in weightpaint we select the associated vertex group too */
-      if (ob_act->mode & OB_MODE_WEIGHT_PAINT) {
+      if (ob_act->mode & OB_MODE_ALL_WEIGHT_PAINT) {
         if (nearBone == arm->act_bone) {
           ED_vgroup_select_by_name(ob_act, nearBone->name);
           DEG_id_tag_update(&ob_act->id, ID_RECALC_GEOMETRY);
@@ -261,17 +263,39 @@ void ED_armature_pose_select_in_wpaint_mode(ViewLayer *view_layer, Base *base_se
 {
   BLI_assert(base_select && (base_select->object->type == OB_ARMATURE));
   Object *ob_active = OBACT(view_layer);
-  BLI_assert(ob_active && (ob_active->mode & OB_MODE_WEIGHT_PAINT));
-  VirtualModifierData virtualModifierData;
-  ModifierData *md = modifiers_getVirtualModifierList(ob_active, &virtualModifierData);
-  for (; md; md = md->next) {
-    if (md->type == eModifierType_Armature) {
-      ArmatureModifierData *amd = (ArmatureModifierData *)md;
-      Object *ob_arm = amd->object;
-      if (ob_arm != NULL) {
-        Base *base_arm = BKE_view_layer_base_find(view_layer, ob_arm);
-        if ((base_arm != NULL) && (base_arm != base_select) && (base_arm->flag & BASE_SELECTED)) {
-          ED_object_base_select(base_arm, BA_DESELECT);
+  BLI_assert(ob_active && (ob_active->mode & OB_MODE_ALL_WEIGHT_PAINT));
+
+  if (ob_active->type == OB_GPENCIL) {
+    GpencilVirtualModifierData virtualModifierData;
+    GpencilModifierData *md = BKE_gpencil_modifiers_get_virtual_modifierlist(ob_active,
+                                                                             &virtualModifierData);
+    for (; md; md = md->next) {
+      if (md->type == eGpencilModifierType_Armature) {
+        ArmatureGpencilModifierData *agmd = (ArmatureGpencilModifierData *)md;
+        Object *ob_arm = agmd->object;
+        if (ob_arm != NULL) {
+          Base *base_arm = BKE_view_layer_base_find(view_layer, ob_arm);
+          if ((base_arm != NULL) && (base_arm != base_select) &&
+              (base_arm->flag & BASE_SELECTED)) {
+            ED_object_base_select(base_arm, BA_DESELECT);
+          }
+        }
+      }
+    }
+  }
+  else {
+    VirtualModifierData virtualModifierData;
+    ModifierData *md = BKE_modifiers_get_virtual_modifierlist(ob_active, &virtualModifierData);
+    for (; md; md = md->next) {
+      if (md->type == eModifierType_Armature) {
+        ArmatureModifierData *amd = (ArmatureModifierData *)md;
+        Object *ob_arm = amd->object;
+        if (ob_arm != NULL) {
+          Base *base_arm = BKE_view_layer_base_find(view_layer, ob_arm);
+          if ((base_arm != NULL) && (base_arm != base_select) &&
+              (base_arm->flag & BASE_SELECTED)) {
+            ED_object_base_select(base_arm, BA_DESELECT);
+          }
         }
       }
     }
@@ -1016,7 +1040,7 @@ static bool pose_select_same_keyingset(bContext *C, ReportList *reports, bool ex
     BKE_report(reports, RPT_ERROR, "No active Keying Set to use");
     return false;
   }
-  else if (ANIM_validate_keyingset(C, NULL, ks) != 0) {
+  if (ANIM_validate_keyingset(C, NULL, ks) != 0) {
     if (ks->paths.first == NULL) {
       if ((ks->flag & KEYINGSET_ABSOLUTE) == 0) {
         BKE_report(reports,
@@ -1129,9 +1153,7 @@ static int pose_select_grouped_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void POSE_OT_select_grouped(wmOperatorType *ot)

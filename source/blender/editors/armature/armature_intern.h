@@ -21,8 +21,7 @@
  * \ingroup edarmature
  */
 
-#ifndef __ARMATURE_INTERN_H__
-#define __ARMATURE_INTERN_H__
+#pragma once
 
 /* internal exports only */
 struct wmOperatorType;
@@ -224,25 +223,27 @@ void POSE_OT_propagate(struct wmOperatorType *ot);
  * but some tools still have a bit of overlap which makes things messy -- Feb 2013
  */
 
-EditBone *make_boneList(struct ListBase *edbo, struct ListBase *bones, struct Bone *actBone);
+struct EditBone *make_boneList(struct ListBase *edbo,
+                               struct ListBase *bones,
+                               struct Bone *actBone);
 
 /* duplicate method */
 void preEditBoneDuplicate(struct ListBase *editbones);
 void postEditBoneDuplicate(struct ListBase *editbones, struct Object *ob);
-struct EditBone *duplicateEditBone(struct EditBone *curBone,
+struct EditBone *duplicateEditBone(struct EditBone *cur_bone,
                                    const char *name,
                                    struct ListBase *editbones,
                                    struct Object *ob);
 
 /* duplicate method (cross objects) */
 /* editbones is the target list */
-struct EditBone *duplicateEditBoneObjects(struct EditBone *curBone,
+struct EditBone *duplicateEditBoneObjects(struct EditBone *cur_bone,
                                           const char *name,
                                           struct ListBase *editbones,
                                           struct Object *src_ob,
                                           struct Object *dst_ob);
 
-EditBone *add_points_bone(struct Object *obedit, float head[3], float tail[3]);
+struct EditBone *add_points_bone(struct Object *obedit, float head[3], float tail[3]);
 void bone_free(struct bArmature *arm, struct EditBone *bone);
 
 void armature_tag_select_mirrored(struct bArmature *arm);
@@ -250,10 +251,10 @@ void armature_select_mirrored_ex(struct bArmature *arm, const int flag);
 void armature_select_mirrored(struct bArmature *arm);
 void armature_tag_unselect(struct bArmature *arm);
 
-EditBone *ED_armature_pick_ebone(struct bContext *C,
-                                 const int xy[2],
-                                 bool findunsel,
-                                 struct Base **r_base);
+struct EditBone *ED_armature_pick_ebone(struct bContext *C,
+                                        const int xy[2],
+                                        bool findunsel,
+                                        struct Base **r_base);
 struct bPoseChannel *ED_armature_pick_pchan(struct bContext *C,
                                             const int xy[2],
                                             bool findunsel,
@@ -289,5 +290,3 @@ int bone_looper(struct Object *ob,
                 struct Bone *bone,
                 void *data,
                 int (*bone_func)(struct Object *, struct Bone *, void *));
-
-#endif /* __ARMATURE_INTERN_H__ */

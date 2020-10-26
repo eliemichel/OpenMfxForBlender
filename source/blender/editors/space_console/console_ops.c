@@ -131,7 +131,7 @@ static bool console_line_cursor_set(ConsoleLine *cl, int cursor)
   return true;
 }
 
-#if 0  // XXX unused
+#if 0 /* XXX unused */
 static void console_lb_debug__internal(ListBase *lb)
 {
   ConsoleLine *cl;
@@ -287,12 +287,11 @@ static bool console_line_column_from_index(
     *r_col = offset - pos;
     return true;
   }
-  else {
-    *r_cl = NULL;
-    *r_cl_offset = -1;
-    *r_col = -1;
-    return false;
-  }
+
+  *r_cl = NULL;
+  *r_cl_offset = -1;
+  *r_col = -1;
+  return false;
 }
 
 /* static funcs for text editing */
@@ -403,9 +402,8 @@ static int console_insert_exec(bContext *C, wmOperator *op)
   if (len == 0) {
     return OPERATOR_CANCELLED;
   }
-  else {
-    console_select_offset(sc, len);
-  }
+
+  console_select_offset(sc, len);
 
   console_textview_update_rect(sc, region);
   ED_area_tag_redraw(CTX_wm_area(C));
@@ -417,7 +415,8 @@ static int console_insert_exec(bContext *C, wmOperator *op)
 
 static int console_insert_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  // if (!RNA_struct_property_is_set(op->ptr, "text")) { /* always set from keymap XXX */
+  /* Note, the "text" property is always set from key-map,
+   * so we can't use #RNA_struct_property_is_set, check the length instead. */
   if (!RNA_string_length(op->ptr, "text")) {
     /* if alt/ctrl/super are pressed pass through except for utf8 character event
      * (when input method are used for utf8 inputs, the user may assign key event
@@ -426,21 +425,20 @@ static int console_insert_invoke(bContext *C, wmOperator *op, const wmEvent *eve
     if ((event->ctrl || event->oskey) && !event->utf8_buf[0]) {
       return OPERATOR_PASS_THROUGH;
     }
-    else {
-      char str[BLI_UTF8_MAX + 1];
-      size_t len;
 
-      if (event->utf8_buf[0]) {
-        len = BLI_str_utf8_size_safe(event->utf8_buf);
-        memcpy(str, event->utf8_buf, len);
-      }
-      else {
-        /* in theory, ghost can set value to extended ascii here */
-        len = BLI_str_utf8_from_unicode(event->ascii, str);
-      }
-      str[len] = '\0';
-      RNA_string_set(op->ptr, "text", str);
+    char str[BLI_UTF8_MAX + 1];
+    size_t len;
+
+    if (event->utf8_buf[0]) {
+      len = BLI_str_utf8_size_safe(event->utf8_buf);
+      memcpy(str, event->utf8_buf, len);
     }
+    else {
+      /* in theory, ghost can set value to extended ascii here */
+      len = BLI_str_utf8_from_unicode(event->ascii, str);
+    }
+    str[len] = '\0';
+    RNA_string_set(op->ptr, "text", str);
   }
   return console_insert_exec(C, op);
 }
@@ -674,9 +672,8 @@ static int console_delete_exec(bContext *C, wmOperator *op)
   if (!done) {
     return OPERATOR_CANCELLED;
   }
-  else {
-    console_select_offset(sc, -stride);
-  }
+
+  console_select_offset(sc, -stride);
 
   console_textview_update_rect(sc, region);
   ED_area_tag_redraw(CTX_wm_area(C));
@@ -1112,7 +1109,7 @@ typedef struct SetConsoleCursor {
   int sel_init;
 } SetConsoleCursor;
 
-// TODO, cursor placement without selection
+/* TODO, cursor placement without selection */
 static void console_cursor_set_to_pos(
     SpaceConsole *sc, ARegion *region, SetConsoleCursor *scu, const int mval[2], int UNUSED(sel))
 {

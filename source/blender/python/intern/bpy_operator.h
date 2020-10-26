@@ -18,8 +18,11 @@
  * \ingroup pythonintern
  */
 
-#ifndef __BPY_OPERATOR_H__
-#define __BPY_OPERATOR_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 extern PyTypeObject pyop_base_Type;
 
@@ -31,4 +34,6 @@ typedef struct {
 
 PyObject *BPY_operator_module(void);
 
+#ifdef __cplusplus
+}
 #endif

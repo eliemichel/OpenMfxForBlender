@@ -1,3 +1,11 @@
+
+#pragma BLENDER_REQUIRE(common_view_lib.glsl)
+#pragma BLENDER_REQUIRE(common_math_lib.glsl)
+#pragma BLENDER_REQUIRE(common_uniforms_lib.glsl)
+
+uniform sampler2D maxzBuffer;
+uniform sampler2DArray planarDepth;
+
 #define MAX_STEP 256
 
 float sample_depth(vec2 uv, int index, float lod)
@@ -8,6 +16,7 @@ float sample_depth(vec2 uv, int index, float lod)
   }
   else {
 #endif
+    lod = clamp(floor(lod), 0.0, 8.0);
     /* Correct UVs for mipmaping mis-alignment */
     uv *= mipRatio[int(lod) + hizMipOffset];
     return textureLod(maxzBuffer, uv, lod).r;
@@ -96,7 +105,9 @@ void prepare_raycast(vec3 ray_origin,
 
   /* If the line is degenerate, make it cover at least one pixel
    * to not have to handle zero-pixel extent as a special case later */
-  ss_step.xy += vec2((dot(ss_step.xy, ss_step.xy) < 0.00001) ? 0.001 : 0.0);
+  if (dot(ss_step.xy, ss_step.xy) < 0.00001) {
+    ss_step.xy = vec2(0.0, 0.0001);
+  }
 
   /* Make ss_step cover one pixel. */
   ss_step /= max(abs(ss_step.x), abs(ss_step.y));
@@ -104,9 +115,10 @@ void prepare_raycast(vec3 ray_origin,
 
   /* Clip to segment's end. */
   max_time /= length(ss_step.xyz);
-
   /* Clipping to frustum sides. */
   max_time = min(max_time, line_unit_box_intersect_dist(ss_start.xyz, ss_step.xyz));
+  /* Avoid no iteration. */
+  max_time = max(max_time, 1.0);
 
   /* Convert to texture coords. Z component included
    * since this is how it's stored in the depth buffer.
@@ -132,7 +144,7 @@ void prepare_raycast(vec3 ray_origin,
 
 // #define GROUPED_FETCHES /* is still slower, need to see where is the bottleneck. */
 /* Return the hit position, and negate the z component (making it positive) if not hit occurred. */
-/* __ray_dir__ is the ray direction premultiplied by it's maximum length */
+/* __ray_dir__ is the ray direction premultiplied by its maximum length */
 vec3 raycast(int index,
              vec3 ray_origin,
              vec3 ray_dir,
@@ -164,7 +176,8 @@ vec3 raycast(int index,
   float iter;
   for (iter = 1.0; !hit && (ray_time < max_time) && (iter < MAX_STEP); iter++) {
     /* Minimum stride of 2 because we are using half res minmax zbuffer. */
-    float stride = max(1.0, iter * trace_quality) * 2.0;
+    /* WORKAROUND: Factor is a bit higher than 2 to avoid some banding. To investigate. */
+    float stride = max(1.0, iter * trace_quality) * (2.0 + 0.05);
     float lod = log2(stride * 0.5 * trace_quality) * lod_fac;
     ray_time += stride;
 
@@ -225,9 +238,10 @@ vec3 raycast(int index,
 #endif
   }
 
-  if (discard_backface) {
-    /* Discard backface hits */
-    hit = hit && (prev_delta > 0.0);
+  /* Discard backface hits. Only do this if the ray traveled enough to avoid loosing intricate
+   * contact reflections. This is only used for SSReflections. */
+  if (discard_backface && prev_delta < 0.0 && curr_time > 4.1) {
+    hit = false;
   }
 
   /* Reject hit if background. */
@@ -250,7 +264,7 @@ float screen_border_mask(vec2 hit_co)
 {
   const float margin = 0.003;
   float atten = ssrBorderFac + margin; /* Screen percentage */
-  hit_co = smoothstep(margin, atten, hit_co) * (1 - smoothstep(1.0 - atten, 1.0 - margin, hit_co));
+  hit_co = smoothstep(0.0, atten, hit_co) * (1.0 - smoothstep(1.0 - atten, 1.0, hit_co));
 
   float screenfade = hit_co.x * hit_co.y;
 

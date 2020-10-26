@@ -23,12 +23,13 @@
 
 #pragma once
 
-struct GHash;
+#include "intern/depsgraph_type.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct RootPChanMap {
-  /* ctor and dtor - Create and free the internal map respectively. */
+  /* Constructor and destructor - Create and free the internal map respectively. */
   RootPChanMap();
   ~RootPChanMap();
 
@@ -42,13 +43,12 @@ struct RootPChanMap {
   bool has_common_root(const char *bone1, const char *bone2) const;
 
  protected:
-  /* The actual map:
-   * - Keys are "strings" (const char *) - not dynamically allocated.
-   * - Values are "sets" (const char *) - not dynamically allocated.
-   *
-   * We don't use the C++ maps here, as it's more convenient to use
-   * Blender's GHash and be able to compare by-value instead of by-ref. */
-  struct GHash *map_;
+  /**
+   * The strings are only referenced by this map. Users of RootPChanMap have to make sure that the
+   * life-time of the strings is long enough.
+   */
+  Map<StringRefNull, Set<StringRefNull>> map_;
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

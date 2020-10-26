@@ -24,6 +24,8 @@
 using libmv::CameraIntrinsics;
 using libmv::DivisionCameraIntrinsics;
 using libmv::PolynomialCameraIntrinsics;
+using libmv::NukeCameraIntrinsics;
+using libmv::BrownCameraIntrinsics;
 
 libmv_CameraIntrinsics *libmv_cameraIntrinsicsNew(
     const libmv_CameraIntrinsicsOptions* libmv_camera_intrinsics_options) {
@@ -53,6 +55,22 @@ libmv_CameraIntrinsics *libmv_cameraIntrinsicsCopy(
           static_cast<const DivisionCameraIntrinsics*>(orig_intrinsics);
         new_intrinsics = LIBMV_OBJECT_NEW(DivisionCameraIntrinsics,
                                           *division_intrinsics);
+        break;
+      }
+    case libmv::DISTORTION_MODEL_NUKE:
+      {
+        const NukeCameraIntrinsics *nuke_intrinsics =
+          static_cast<const NukeCameraIntrinsics*>(orig_intrinsics);
+        new_intrinsics = LIBMV_OBJECT_NEW(NukeCameraIntrinsics,
+                                          *nuke_intrinsics);
+        break;
+      }
+    case libmv::DISTORTION_MODEL_BROWN:
+      {
+        const BrownCameraIntrinsics *brown_intrinsics =
+          static_cast<const BrownCameraIntrinsics*>(orig_intrinsics);
+        new_intrinsics = LIBMV_OBJECT_NEW(BrownCameraIntrinsics,
+                                          *brown_intrinsics);
         break;
       }
     default:
@@ -136,6 +154,54 @@ void libmv_cameraIntrinsicsUpdate(
         break;
       }
 
+    case LIBMV_DISTORTION_MODEL_NUKE:
+      {
+        assert(camera_intrinsics->GetDistortionModelType() ==
+               libmv::DISTORTION_MODEL_NUKE);
+
+        NukeCameraIntrinsics *nuke_intrinsics =
+          (NukeCameraIntrinsics *) camera_intrinsics;
+
+        double k1 = libmv_camera_intrinsics_options->nuke_k1;
+        double k2 = libmv_camera_intrinsics_options->nuke_k2;
+
+        if (nuke_intrinsics->k1() != k1 ||
+            nuke_intrinsics->k2() != k2) {
+          nuke_intrinsics->SetDistortion(k1, k2);
+        }
+
+        break;
+      }
+
+    case LIBMV_DISTORTION_MODEL_BROWN:
+      {
+        assert(camera_intrinsics->GetDistortionModelType() ==
+               libmv::DISTORTION_MODEL_BROWN);
+
+        BrownCameraIntrinsics *brown_intrinsics =
+          (BrownCameraIntrinsics *) camera_intrinsics;
+
+        double k1 = libmv_camera_intrinsics_options->brown_k1;
+        double k2 = libmv_camera_intrinsics_options->brown_k2;
+        double k3 = libmv_camera_intrinsics_options->brown_k3;
+        double k4 = libmv_camera_intrinsics_options->brown_k4;
+
+        if (brown_intrinsics->k1() != k1 ||
+            brown_intrinsics->k2() != k2 ||
+            brown_intrinsics->k3() != k3 ||
+            brown_intrinsics->k4() != k4) {
+          brown_intrinsics->SetRadialDistortion(k1, k2, k3, k4);
+        }
+
+        double p1 = libmv_camera_intrinsics_options->brown_p1;
+        double p2 = libmv_camera_intrinsics_options->brown_p2;
+
+        if (brown_intrinsics->p1() != p1 || brown_intrinsics->p2() != p2) {
+          brown_intrinsics->SetTangentialDistortion(p1, p2);
+        }
+        break;
+      }
+
     default:
       assert(!"Unknown distortion model");
   }
@@ -186,6 +252,32 @@ void libmv_cameraIntrinsicsExtractOptions(
           LIBMV_DISTORTION_MODEL_DIVISION;
         camera_intrinsics_options->division_k1 = division_intrinsics->k1();
         camera_intrinsics_options->division_k2 = division_intrinsics->k2();
+        break;
+      }
+
+    case libmv::DISTORTION_MODEL_NUKE:
+      {
+        const NukeCameraIntrinsics *nuke_intrinsics =
+          static_cast<const NukeCameraIntrinsics *>(camera_intrinsics);
+        camera_intrinsics_options->distortion_model =
+          LIBMV_DISTORTION_MODEL_NUKE;
+        camera_intrinsics_options->nuke_k1 = nuke_intrinsics->k1();
+        camera_intrinsics_options->nuke_k2 = nuke_intrinsics->k2();
+        break;
+      }
+
+    case libmv::DISTORTION_MODEL_BROWN:
+      {
+        const BrownCameraIntrinsics *brown_intrinsics =
+          static_cast<const BrownCameraIntrinsics *>(camera_intrinsics);
+        camera_intrinsics_options->distortion_model =
+          LIBMV_DISTORTION_MODEL_BROWN;
+        camera_intrinsics_options->brown_k1 = brown_intrinsics->k1();
+        camera_intrinsics_options->brown_k2 = brown_intrinsics->k2();
+        camera_intrinsics_options->brown_k3 = brown_intrinsics->k3();
+        camera_intrinsics_options->brown_k4 = brown_intrinsics->k4();
+        camera_intrinsics_options->brown_p1 = brown_intrinsics->p1();
+        camera_intrinsics_options->brown_p2 = brown_intrinsics->p2();
         break;
       }
 
@@ -316,6 +408,34 @@ static void libmv_cameraIntrinsicsFillFromOptions(
         break;
       }
 
+    case LIBMV_DISTORTION_MODEL_NUKE:
+      {
+        NukeCameraIntrinsics *nuke_intrinsics =
+          static_cast<NukeCameraIntrinsics*>(camera_intrinsics);
+
+        nuke_intrinsics->SetDistortion(
+            camera_intrinsics_options->nuke_k1,
+            camera_intrinsics_options->nuke_k2);
+        break;
+      }
+
+    case LIBMV_DISTORTION_MODEL_BROWN:
+      {
+        BrownCameraIntrinsics *brown_intrinsics =
+          static_cast<BrownCameraIntrinsics*>(camera_intrinsics);
+
+        brown_intrinsics->SetRadialDistortion(
+            camera_intrinsics_options->brown_k1,
+            camera_intrinsics_options->brown_k2,
+            camera_intrinsics_options->brown_k3,
+            camera_intrinsics_options->brown_k4);
+        brown_intrinsics->SetTangentialDistortion(
+          camera_intrinsics_options->brown_p1,
+          camera_intrinsics_options->brown_p2);
+
+        break;
+      }
+
     default:
       assert(!"Unknown distortion model");
   }
@@ -330,6 +450,12 @@ CameraIntrinsics* libmv_cameraIntrinsicsCreateFromOptions(
       break;
     case LIBMV_DISTORTION_MODEL_DIVISION:
       camera_intrinsics = LIBMV_OBJECT_NEW(DivisionCameraIntrinsics);
+      break;
+    case LIBMV_DISTORTION_MODEL_NUKE:
+      camera_intrinsics = LIBMV_OBJECT_NEW(NukeCameraIntrinsics);
+      break;
+    case LIBMV_DISTORTION_MODEL_BROWN:
+      camera_intrinsics = LIBMV_OBJECT_NEW(BrownCameraIntrinsics);
       break;
     default:
       assert(!"Unknown distortion model");

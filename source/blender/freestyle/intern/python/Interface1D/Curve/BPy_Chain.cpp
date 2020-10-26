@@ -40,20 +40,14 @@ PyDoc_STRVAR(Chain_doc,
              "Splitting and Creation processes.\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
+             "            __init__(id)\n"
              "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
+             "   Builds a :class:`Chain` using the default constructor,\n"
+             "   copy constructor or from an :class:`Id`.\n"
              "\n"
              "   :arg brother: A Chain object.\n"
              "   :type brother: :class:`Chain`\n"
-             "\n"
-             ".. method:: __init__(id)\n"
-             "\n"
-             "   Builds a chain from its Id.\n"
-             "\n"
              "   :arg id: An Id object.\n"
              "   :type id: :class:`Id`");
 
@@ -71,7 +65,7 @@ static int Chain_init(BPy_Chain *self, PyObject *args, PyObject *kwds)
       self->c = new Chain(*(((BPy_Chain *)obj)->c));
     }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist_2, &Id_Type, &obj)) {
     self->c = new Chain(*(((BPy_Id *)obj)->id));
   }

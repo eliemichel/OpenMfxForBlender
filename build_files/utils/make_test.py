@@ -12,6 +12,7 @@ from make_utils import call
 
 # Parse arguments
 
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ctest-command", default="ctest")
@@ -21,6 +22,7 @@ def parse_arguments():
     parser.add_argument("--config", default="")
     parser.add_argument("build_directory")
     return parser.parse_args()
+
 
 args = parse_arguments()
 git_command = args.git_command
@@ -40,7 +42,8 @@ if make_utils.command_missing(git_command):
 
 # Test if we are building a specific release version.
 branch = make_utils.git_branch(git_command)
-release_version = make_utils.git_branch_release_version(branch)
+tag = make_utils.git_tag(git_command)
+release_version = make_utils.git_branch_release_version(branch, tag)
 lib_tests_dirpath = os.path.join('..', 'lib', "tests")
 
 if not os.path.exists(lib_tests_dirpath):

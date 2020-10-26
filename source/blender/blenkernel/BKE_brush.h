@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_BRUSH_H__
-#define __BKE_BRUSH_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -53,7 +52,6 @@ struct Brush *BKE_brush_add_gpencil(struct Main *bmain,
 bool BKE_brush_delete(struct Main *bmain, struct Brush *brush);
 void BKE_brush_init_gpencil_settings(struct Brush *brush);
 struct Brush *BKE_brush_first_search(struct Main *bmain, const eObjectMode ob_mode);
-struct Brush *BKE_brush_copy(struct Main *bmain, const struct Brush *brush);
 
 void BKE_brush_sculpt_reset(struct Brush *brush);
 
@@ -114,10 +112,12 @@ const float *BKE_brush_secondary_color_get(const struct Scene *scene, const stru
 void BKE_brush_color_set(struct Scene *scene, struct Brush *brush, const float color[3]);
 
 int BKE_brush_size_get(const struct Scene *scene, const struct Brush *brush);
-void BKE_brush_size_set(struct Scene *scene, struct Brush *brush, int value);
+void BKE_brush_size_set(struct Scene *scene, struct Brush *brush, int size);
 
 float BKE_brush_unprojected_radius_get(const struct Scene *scene, const struct Brush *brush);
-void BKE_brush_unprojected_radius_set(struct Scene *scene, struct Brush *brush, float value);
+void BKE_brush_unprojected_radius_set(struct Scene *scene,
+                                      struct Brush *brush,
+                                      float unprojected_radius);
 
 float BKE_brush_alpha_get(const struct Scene *scene, const struct Brush *brush);
 void BKE_brush_alpha_set(struct Scene *scene, struct Brush *brush, float alpha);
@@ -156,6 +156,4 @@ void BKE_brush_debug_print_state(struct Brush *br);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

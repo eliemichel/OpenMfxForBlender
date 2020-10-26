@@ -1,0 +1,36 @@
+# The warnings below are disabled because they are too pedantic and not worth fixing.
+# Some of them will be enabled as part of the Clang-Tidy task, see T78535.
+
+Checks:  >
+  -*,
+  readability-*,
+  -readability-uppercase-literal-suffix,
+  -readability-magic-numbers,
+  -readability-isolate-declaration,
+  -readability-convert-member-functions-to-static,
+  -readability-implicit-bool-conversion,
+  -readability-avoid-const-params-in-decls,
+  -readability-simplify-boolean-expr,
+  -readability-make-member-function-const,
+
+  -readability-misleading-indentation,
+
+  -readability-redundant-member-init,
+  -readability-use-anyofallof,
+
+  -readability-function-cognitive-complexity,
+
+  bugprone-*,
+  -bugprone-narrowing-conversions,
+  -bugprone-unhandled-self-assignment,
+  -bugprone-branch-clone,
+  -bugprone-macro-parentheses,
+  -bugprone-reserved-identifier,
+
+  -bugprone-sizeof-expression,
+  -bugprone-integer-division,
+
+  -bugprone-exception-escape,
+  -bugprone-redundant-branch-condition,
+
+WarningsAsErrors: '*'

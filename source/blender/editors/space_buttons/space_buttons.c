@@ -26,12 +26,17 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_bitmap.h"
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
+#include "BKE_gpencil_modifier.h" /* Types for registering panels. */
+#include "BKE_modifier.h"
 #include "BKE_screen.h"
+#include "BKE_shader_fx.h"
 
+#include "ED_buttons.h"
 #include "ED_screen.h"
 #include "ED_space_api.h"
 #include "ED_view3d.h" /* To draw toolbar UI. */
@@ -44,15 +49,16 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
+#include "UI_interface.h"
 #include "UI_resources.h"
-
-#include "GPU_glew.h"
 
 #include "buttons_intern.h" /* own include */
 
-/* ******************** default callbacks for buttons space ***************** */
+/* -------------------------------------------------------------------- */
+/** \name Default Callbacks for Properties Space
+ * \{ */
 
-static SpaceLink *buttons_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *buttons_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceProperties *sbuts;
@@ -107,20 +113,38 @@ static void buttons_free(SpaceLink *sl)
     BLI_freelistN(&ct->users);
     MEM_freeN(ct);
   }
+
+  if (sbuts->runtime != NULL) {
+    MEM_SAFE_FREE(sbuts->runtime->tab_search_results);
+    MEM_freeN(sbuts->runtime);
+  }
 }
 
 /* spacetype; init callback */
-static void buttons_init(struct wmWindowManager *UNUSED(wm), ScrArea *UNUSED(area))
+static void buttons_init(struct wmWindowManager *UNUSED(wm), ScrArea *area)
 {
+  SpaceProperties *sbuts = (SpaceProperties *)area->spacedata.first;
+
+  if (sbuts->runtime == NULL) {
+    sbuts->runtime = MEM_mallocN(sizeof(SpaceProperties_Runtime), __func__);
+    sbuts->runtime->search_string[0] = '\0';
+    sbuts->runtime->tab_search_results = BLI_BITMAP_NEW(BCONTEXT_TOT * 2, __func__);
+  }
 }
 
 static SpaceLink *buttons_duplicate(SpaceLink *sl)
 {
+  SpaceProperties *sfile_old = (SpaceProperties *)sl;
   SpaceProperties *sbutsn = MEM_dupallocN(sl);
 
   /* clear or remove stuff from old */
   sbutsn->path = NULL;
   sbutsn->texuser = NULL;
+  if (sfile_old->runtime != NULL) {
+    sbutsn->runtime = MEM_dupallocN(sfile_old->runtime);
+    sbutsn->runtime->search_string[0] = '\0';
+    sbutsn->runtime->tab_search_results = BLI_BITMAP_NEW(BCONTEXT_TOT, __func__);
+  }
 
   return (SpaceLink *)sbutsn;
 }
@@ -136,72 +160,337 @@ static void buttons_main_region_init(wmWindowManager *wm, ARegion *region)
   WM_event_add_keymap_handler(&region->handlers, keymap);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Property Editor Layout
+ * \{ */
+
+/**
+ * Fills an array with the tab context values for the properties editor. -1 signals a separator.
+ *
+ * \return The total number of items in the array returned.
+ */
+int ED_buttons_tabs_list(SpaceProperties *sbuts, short *context_tabs_array)
+{
+  int length = 0;
+  if (sbuts->pathflag & (1 << BCONTEXT_TOOL)) {
+    context_tabs_array[length] = BCONTEXT_TOOL;
+    length++;
+  }
+  if (length != 0) {
+    context_tabs_array[length] = -1;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_RENDER)) {
+    context_tabs_array[length] = BCONTEXT_RENDER;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_OUTPUT)) {
+    context_tabs_array[length] = BCONTEXT_OUTPUT;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_VIEW_LAYER)) {
+    context_tabs_array[length] = BCONTEXT_VIEW_LAYER;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_SCENE)) {
+    context_tabs_array[length] = BCONTEXT_SCENE;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_WORLD)) {
+    context_tabs_array[length] = BCONTEXT_WORLD;
+    length++;
+  }
+  if (length != 0) {
+    context_tabs_array[length] = -1;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_OBJECT)) {
+    context_tabs_array[length] = BCONTEXT_OBJECT;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_MODIFIER)) {
+    context_tabs_array[length] = BCONTEXT_MODIFIER;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_SHADERFX)) {
+    context_tabs_array[length] = BCONTEXT_SHADERFX;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_PARTICLE)) {
+    context_tabs_array[length] = BCONTEXT_PARTICLE;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_PHYSICS)) {
+    context_tabs_array[length] = BCONTEXT_PHYSICS;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_CONSTRAINT)) {
+    context_tabs_array[length] = BCONTEXT_CONSTRAINT;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_DATA)) {
+    context_tabs_array[length] = BCONTEXT_DATA;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_BONE)) {
+    context_tabs_array[length] = BCONTEXT_BONE;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_BONE_CONSTRAINT)) {
+    context_tabs_array[length] = BCONTEXT_BONE_CONSTRAINT;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_MATERIAL)) {
+    context_tabs_array[length] = BCONTEXT_MATERIAL;
+    length++;
+  }
+  if (length != 0) {
+    context_tabs_array[length] = -1;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_TEXTURE)) {
+    context_tabs_array[length] = BCONTEXT_TEXTURE;
+    length++;
+  }
+
+  return length;
+}
+
+static const char *buttons_main_region_context_string(const short mainb)
+{
+  switch (mainb) {
+    case BCONTEXT_SCENE:
+      return "scene";
+    case BCONTEXT_RENDER:
+      return "render";
+    case BCONTEXT_OUTPUT:
+      return "output";
+    case BCONTEXT_VIEW_LAYER:
+      return "view_layer";
+    case BCONTEXT_WORLD:
+      return "world";
+    case BCONTEXT_OBJECT:
+      return "object";
+    case BCONTEXT_DATA:
+      return "data";
+    case BCONTEXT_MATERIAL:
+      return "material";
+    case BCONTEXT_TEXTURE:
+      return "texture";
+    case BCONTEXT_PARTICLE:
+      return "particle";
+    case BCONTEXT_PHYSICS:
+      return "physics";
+    case BCONTEXT_BONE:
+      return "bone";
+    case BCONTEXT_MODIFIER:
+      return "modifier";
+    case BCONTEXT_SHADERFX:
+      return "shaderfx";
+    case BCONTEXT_CONSTRAINT:
+      return "constraint";
+    case BCONTEXT_BONE_CONSTRAINT:
+      return "bone_constraint";
+    case BCONTEXT_TOOL:
+      return "tool";
+  }
+
+  /* All the cases should be handled. */
+  BLI_assert(false);
+  return "";
+}
+
 static void buttons_main_region_layout_properties(const bContext *C,
                                                   SpaceProperties *sbuts,
                                                   ARegion *region)
 {
   buttons_context_compute(C, sbuts);
 
-  const char *contexts[2] = {NULL, NULL};
+  const char *contexts[2] = {buttons_main_region_context_string(sbuts->mainb), NULL};
 
-  switch (sbuts->mainb) {
-    case BCONTEXT_SCENE:
-      contexts[0] = "scene";
-      break;
-    case BCONTEXT_RENDER:
-      contexts[0] = "render";
-      break;
-    case BCONTEXT_OUTPUT:
-      contexts[0] = "output";
-      break;
-    case BCONTEXT_VIEW_LAYER:
-      contexts[0] = "view_layer";
-      break;
-    case BCONTEXT_WORLD:
-      contexts[0] = "world";
-      break;
-    case BCONTEXT_OBJECT:
-      contexts[0] = "object";
-      break;
-    case BCONTEXT_DATA:
-      contexts[0] = "data";
-      break;
-    case BCONTEXT_MATERIAL:
-      contexts[0] = "material";
-      break;
-    case BCONTEXT_TEXTURE:
-      contexts[0] = "texture";
-      break;
-    case BCONTEXT_PARTICLE:
-      contexts[0] = "particle";
-      break;
-    case BCONTEXT_PHYSICS:
-      contexts[0] = "physics";
-      break;
-    case BCONTEXT_BONE:
-      contexts[0] = "bone";
-      break;
-    case BCONTEXT_MODIFIER:
-      contexts[0] = "modifier";
-      break;
-    case BCONTEXT_SHADERFX:
-      contexts[0] = "shaderfx";
-      break;
-    case BCONTEXT_CONSTRAINT:
-      contexts[0] = "constraint";
-      break;
-    case BCONTEXT_BONE_CONSTRAINT:
-      contexts[0] = "bone_constraint";
-      break;
-    case BCONTEXT_TOOL:
-      contexts[0] = "tool";
-      break;
+  ED_region_panels_layout_ex(C, region, &region->type->paneltypes, contexts, NULL);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Property Search Access API
+ * \{ */
+
+const char *ED_buttons_search_string_get(SpaceProperties *sbuts)
+{
+  return sbuts->runtime->search_string;
+}
+
+int ED_buttons_search_string_length(struct SpaceProperties *sbuts)
+{
+  return BLI_strnlen(sbuts->runtime->search_string, sizeof(sbuts->runtime->search_string));
+}
+
+void ED_buttons_search_string_set(SpaceProperties *sbuts, const char *value)
+{
+  BLI_strncpy(sbuts->runtime->search_string, value, sizeof(sbuts->runtime->search_string));
+}
+
+bool ED_buttons_tab_has_search_result(SpaceProperties *sbuts, const int index)
+{
+  return BLI_BITMAP_TEST(sbuts->runtime->tab_search_results, index);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name "Off Screen" Layout Generation for Property Search
+ * \{ */
+
+static bool property_search_for_context(const bContext *C, ARegion *region, SpaceProperties *sbuts)
+{
+  const char *contexts[2] = {buttons_main_region_context_string(sbuts->mainb), NULL};
+
+  if (sbuts->mainb == BCONTEXT_TOOL) {
+    return false;
   }
 
-  const bool vertical = true;
-  ED_region_panels_layout_ex(
-      C, region, &region->type->paneltypes, contexts, sbuts->mainb, vertical, NULL);
+  buttons_context_compute(C, sbuts);
+  return ED_region_property_search(C, region, &region->type->paneltypes, contexts, NULL);
 }
+
+static void property_search_move_to_next_tab_with_results(SpaceProperties *sbuts,
+                                                          const short *context_tabs_array,
+                                                          const int tabs_len)
+{
+  /* As long as all-tab search in the tool is disabled in the tool context, don't move from it. */
+  if (sbuts->mainb == BCONTEXT_TOOL) {
+    return;
+  }
+
+  int current_tab_index = 0;
+  for (int i = 0; i < tabs_len; i++) {
+    if (sbuts->mainb == context_tabs_array[i]) {
+      current_tab_index = i;
+      break;
+    }
+  }
+
+  /* Try the tabs after the current tab. */
+  for (int i = current_tab_index; i < tabs_len; i++) {
+    if (BLI_BITMAP_TEST(sbuts->runtime->tab_search_results, i)) {
+      sbuts->mainbuser = context_tabs_array[i];
+      return;
+    }
+  }
+
+  /* Try the tabs before the current tab. */
+  for (int i = 0; i < current_tab_index; i++) {
+    if (BLI_BITMAP_TEST(sbuts->runtime->tab_search_results, i)) {
+      sbuts->mainbuser = context_tabs_array[i];
+      return;
+    }
+  }
+}
+
+static void property_search_all_tabs(const bContext *C,
+                                     SpaceProperties *sbuts,
+                                     ARegion *region_original,
+                                     const short *context_tabs_array,
+                                     const int tabs_len)
+{
+  /* Use local copies of the area and duplicate the region as a mainly-paranoid protection
+   * against changing any of the space / region data while running the search. */
+  ScrArea *area_original = CTX_wm_area(C);
+  ScrArea area_copy = *area_original;
+  ARegion *region_copy = BKE_area_region_copy(area_copy.type, region_original);
+  CTX_wm_area_set((bContext *)C, &area_copy);
+  CTX_wm_region_set((bContext *)C, region_copy);
+
+  SpaceProperties sbuts_copy = *sbuts;
+  sbuts_copy.path = NULL;
+  sbuts_copy.texuser = NULL;
+  sbuts_copy.runtime = MEM_dupallocN(sbuts->runtime);
+  sbuts_copy.runtime->tab_search_results = NULL;
+  BLI_listbase_clear(&area_copy.spacedata);
+  BLI_addtail(&area_copy.spacedata, &sbuts_copy);
+
+  /* Loop through the tabs added to the properties editor. */
+  for (int i = 0; i < tabs_len; i++) {
+    /* -1 corresponds to a spacer. */
+    if (context_tabs_array[i] == -1) {
+      continue;
+    }
+
+    /* Handle search for the current tab in the normal layout pass. */
+    if (context_tabs_array[i] == sbuts->mainb) {
+      continue;
+    }
+
+    sbuts_copy.mainb = sbuts_copy.mainbo = sbuts_copy.mainbuser = context_tabs_array[i];
+
+    /* Actually do the search and store the result in the bitmap. */
+    BLI_BITMAP_SET(sbuts->runtime->tab_search_results,
+                   i,
+                   property_search_for_context(C, region_copy, &sbuts_copy));
+
+    UI_blocklist_free(C, &region_copy->uiblocks);
+  }
+
+  BKE_area_region_free(area_copy.type, region_copy);
+  MEM_freeN(region_copy);
+  buttons_free((SpaceLink *)&sbuts_copy);
+
+  CTX_wm_area_set((bContext *)C, area_original);
+  CTX_wm_region_set((bContext *)C, region_original);
+}
+
+/**
+ * Handle property search for the layout pass, including finding which tabs have
+ * search results and switching if the current tab doesn't have a result.
+ */
+static void buttons_main_region_property_search(const bContext *C,
+                                                SpaceProperties *sbuts,
+                                                ARegion *region)
+{
+  /* Theoretical maximum of every context shown with a spacer between every tab. */
+  short context_tabs_array[BCONTEXT_TOT * 2];
+  int tabs_len = ED_buttons_tabs_list(sbuts, context_tabs_array);
+
+  property_search_all_tabs(C, sbuts, region, context_tabs_array, tabs_len);
+
+  /* Check whether the current tab has a search match. */
+  bool current_tab_has_search_match = false;
+  LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+    if (UI_panel_is_active(panel) && UI_panel_matches_search_filter(panel)) {
+      current_tab_has_search_match = true;
+    }
+  }
+
+  /* Find which index in the list the current tab corresponds to. */
+  int current_tab_index = -1;
+  for (int i = 0; i < tabs_len; i++) {
+    if (context_tabs_array[i] == sbuts->mainb) {
+      current_tab_index = i;
+    }
+  }
+  BLI_assert(current_tab_index != -1);
+
+  /* Update the tab search match flag for the current tab. */
+  BLI_BITMAP_SET(
+      sbuts->runtime->tab_search_results, current_tab_index, current_tab_has_search_match);
+
+  /* Move to the next tab with a result */
+  if (!current_tab_has_search_match) {
+    if (region->flag & RGN_FLAG_SEARCH_FILTER_UPDATE) {
+      property_search_move_to_next_tab_with_results(sbuts, context_tabs_array, tabs_len);
+    }
+  }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Main Region Layout and Listener
+ * \{ */
 
 static void buttons_main_region_layout(const bContext *C, ARegion *region)
 {
@@ -213,6 +502,10 @@ static void buttons_main_region_layout(const bContext *C, ARegion *region)
   }
   else {
     buttons_main_region_layout_properties(C, sbuts, region);
+  }
+
+  if (region->flag & RGN_FLAG_SEARCH_FILTER_ACTIVE) {
+    buttons_main_region_property_search(C, sbuts, region);
   }
 
   sbuts->mainbo = sbuts->mainb;
@@ -236,6 +529,9 @@ static void buttons_main_region_listener(wmWindow *UNUSED(win),
 
 static void buttons_operatortypes(void)
 {
+  WM_operatortype_append(BUTTONS_OT_start_filter);
+  WM_operatortype_append(BUTTONS_OT_clear_filter);
+  WM_operatortype_append(BUTTONS_OT_toggle_pin);
   WM_operatortype_append(BUTTONS_OT_context_menu);
   WM_operatortype_append(BUTTONS_OT_file_browse);
   WM_operatortype_append(BUTTONS_OT_directory_browse);
@@ -246,17 +542,15 @@ static void buttons_keymap(struct wmKeyConfig *keyconf)
   WM_keymap_ensure(keyconf, "Property Editor", SPACE_PROPERTIES, 0);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Header Region Callbacks
+ * \{ */
+
 /* add handlers, stuff you only do once or on area/region changes */
 static void buttons_header_region_init(wmWindowManager *UNUSED(wm), ARegion *region)
 {
-#ifdef USE_HEADER_CONTEXT_PATH
-  /* Reinsert context buttons header-type at the end of the list so it's drawn last. */
-  HeaderType *context_ht = BLI_findstring(
-      &region->type->headertypes, "BUTTONS_HT_context", offsetof(HeaderType, idname));
-  BLI_remlink(&region->type->headertypes, context_ht);
-  BLI_addtail(&region->type->headertypes, context_ht);
-#endif
-
   ED_region_header_init(region);
 }
 
@@ -296,11 +590,13 @@ static void buttons_header_region_message_subscribe(const bContext *UNUSED(C),
   if (sbuts->mainb == BCONTEXT_TOOL) {
     WM_msg_subscribe_rna_anon_prop(mbus, WorkSpace, tools, &msg_sub_value_region_tag_redraw);
   }
-
-#ifdef USE_HEADER_CONTEXT_PATH
-  WM_msg_subscribe_rna_anon_prop(mbus, SpaceProperties, context, &msg_sub_value_region_tag_redraw);
-#endif
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Navigation Region Callbacks
+ * \{ */
 
 static void buttons_navigation_bar_region_init(wmWindowManager *wm, ARegion *region)
 {
@@ -350,6 +646,12 @@ static void buttons_area_redraw(ScrArea *area, short buttons)
     ED_area_tag_redraw(area);
   }
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Area-Level Code
+ * \{ */
 
 /* reused! */
 static void buttons_area_listener(wmWindow *UNUSED(win),
@@ -419,6 +721,9 @@ static void buttons_area_listener(wmWindow *UNUSED(win),
           buttons_area_redraw(area, BCONTEXT_CONSTRAINT);
           buttons_area_redraw(area, BCONTEXT_BONE_CONSTRAINT);
           break;
+        case ND_SHADERFX:
+          buttons_area_redraw(area, BCONTEXT_SHADERFX);
+          break;
         case ND_PARTICLE:
           if (wmn->action == NA_EDITED) {
             buttons_area_redraw(area, BCONTEXT_PARTICLE);
@@ -431,13 +736,6 @@ static void buttons_area_listener(wmWindow *UNUSED(win),
           buttons_area_redraw(area, BCONTEXT_PHYSICS);
           /* Needed to refresh context path when changing active particle system index. */
           buttons_area_redraw(area, BCONTEXT_PARTICLE);
-          break;
-        case ND_SHADING:
-        case ND_SHADING_DRAW:
-        case ND_SHADING_LINKS:
-        case ND_SHADING_PREVIEW:
-          /* currently works by redraws... if preview is set, it (re)starts job */
-          sbuts->preview = 1;
           break;
         default:
           /* Not all object RNA props have a ND_ notifier (yet) */
@@ -494,6 +792,10 @@ static void buttons_area_listener(wmWindow *UNUSED(win),
       if (wmn->data == ND_SPACE_PROPERTIES) {
         ED_area_tag_redraw(area);
       }
+      else if (wmn->data == ND_SPACE_CHANGED) {
+        ED_area_tag_redraw(area);
+        sbuts->preview = 1;
+      }
       break;
     case NC_ID:
       if (wmn->action == NA_RENAME) {
@@ -534,6 +836,12 @@ static void buttons_area_listener(wmWindow *UNUSED(win),
         sbuts->preview = 1;
       }
       break;
+    case NC_SCREEN:
+      if (wmn->data == ND_LAYOUTSET) {
+        ED_area_tag_redraw(area);
+        sbuts->preview = 1;
+      }
+      break;
 #ifdef WITH_FREESTYLE
     case NC_LINESTYLE:
       ED_area_tag_redraw(area);
@@ -560,8 +868,8 @@ static void buttons_id_remap(ScrArea *UNUSED(area), SpaceLink *slink, ID *old_id
 
   if (sbuts->path) {
     ButsContextPath *path = sbuts->path;
-    int i;
 
+    int i;
     for (i = 0; i < path->len; i++) {
       if (path->ptr[i].owner_id == old_id) {
         break;
@@ -600,6 +908,12 @@ static void buttons_id_remap(ScrArea *UNUSED(area), SpaceLink *slink, ID *old_id
   }
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Space Type Initialization
+ * \{ */
+
 /* only called once, from space/spacetypes.c */
 void ED_spacetype_buttons(void)
 {
@@ -609,7 +923,7 @@ void ED_spacetype_buttons(void)
   st->spaceid = SPACE_PROPERTIES;
   strncpy(st->name, "Buttons", BKE_ST_MAXNAME);
 
-  st->new = buttons_new;
+  st->create = buttons_create;
   st->free = buttons_free;
   st->init = buttons_init;
   st->duplicate = buttons_duplicate;
@@ -627,10 +941,32 @@ void ED_spacetype_buttons(void)
   art->draw = ED_region_panels_draw;
   art->listener = buttons_main_region_listener;
   art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES;
-#ifndef USE_HEADER_CONTEXT_PATH
   buttons_context_register(art);
-#endif
   BLI_addhead(&st->regiontypes, art);
+
+  /* Register the panel types from modifiers. The actual panels are built per modifier rather
+   * than per modifier type. */
+  for (ModifierType i = 0; i < NUM_MODIFIER_TYPES; i++) {
+    const ModifierTypeInfo *mti = BKE_modifier_get_info(i);
+    if (mti != NULL && mti->panelRegister != NULL) {
+      mti->panelRegister(art);
+    }
+  }
+  for (int i = 0; i < NUM_GREASEPENCIL_MODIFIER_TYPES; i++) {
+    const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(i);
+    if (mti != NULL && mti->panelRegister != NULL) {
+      mti->panelRegister(art);
+    }
+  }
+  for (int i = 0; i < NUM_SHADER_FX_TYPES; i++) {
+    if (i == eShaderFxType_Light_deprecated) {
+      continue;
+    }
+    const ShaderFxTypeInfo *fxti = BKE_shaderfx_get_info(i);
+    if (fxti != NULL && fxti->panelRegister != NULL) {
+      fxti->panelRegister(art);
+    }
+  }
 
   /* regions: header */
   art = MEM_callocN(sizeof(ARegionType), "spacetype buttons region");
@@ -641,9 +977,6 @@ void ED_spacetype_buttons(void)
   art->init = buttons_header_region_init;
   art->draw = buttons_header_region_draw;
   art->message_subscribe = buttons_header_region_message_subscribe;
-#ifdef USE_HEADER_CONTEXT_PATH
-  buttons_context_register(art);
-#endif
   BLI_addhead(&st->regiontypes, art);
 
   /* regions: navigation bar */
@@ -659,3 +992,5 @@ void ED_spacetype_buttons(void)
 
   BKE_spacetype_register(st);
 }
+
+/** \} */

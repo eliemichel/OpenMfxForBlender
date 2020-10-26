@@ -18,8 +18,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_VIEW3D_DEFAULTS_H__
-#define __DNA_VIEW3D_DEFAULTS_H__
+#pragma once
 
 /* Struct members on own line. */
 /* clang-format off */
@@ -53,6 +52,7 @@
   { \
     .wireframe_threshold = 1.0f, \
     .xray_alpha_bone = 0.5f, \
+    .fade_alpha = 0.40f, \
     .texture_paint_mode_opacity = 1.0f, \
     .weight_paint_mode_opacity = 1.0f, \
     .vertex_paint_mode_opacity = 1.0f, \
@@ -64,8 +64,8 @@
     .edit_flag = V3D_OVERLAY_EDIT_FACES | V3D_OVERLAY_EDIT_SEAMS | \
                              V3D_OVERLAY_EDIT_SHARP | V3D_OVERLAY_EDIT_FREESTYLE_EDGE | \
                              V3D_OVERLAY_EDIT_FREESTYLE_FACE | V3D_OVERLAY_EDIT_EDGES | \
-                             V3D_OVERLAY_EDIT_CREASES | V3D_OVERLAY_EDIT_BWEIGHTS | \
-                             V3D_OVERLAY_EDIT_CU_HANDLES | V3D_OVERLAY_EDIT_CU_NORMALS, \
+                             V3D_OVERLAY_EDIT_CREASES | V3D_OVERLAY_EDIT_BWEIGHTS, \
+    .handle_display = CURVE_HANDLE_SELECTED, \
  \
     .gpencil_paper_opacity = 0.5f, \
     .gpencil_grid_opacity = 0.9f, \
@@ -114,5 +114,3 @@
 /** \} */
 
 /* clang-format on */
-
-#endif /* __DNA_VIEW3D_DEFAULTS_H__ */

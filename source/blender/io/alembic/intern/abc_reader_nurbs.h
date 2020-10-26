@@ -13,15 +13,15 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
+#pragma once
 
 /** \file
  * \ingroup balembic
  */
 
-#ifndef __ABC_READER_NURBS_H__
-#define __ABC_READER_NURBS_H__
-
 #include "abc_reader_object.h"
+
+namespace blender::io::alembic {
 
 class AbcNurbsReader : public AbcObjectReader {
   std::vector<std::pair<Alembic::AbcGeom::INuPatchSchema, Alembic::Abc::IObject>> m_schemas;
@@ -37,4 +37,4 @@ class AbcNurbsReader : public AbcObjectReader {
   void getNurbsPatches(const Alembic::Abc::IObject &obj);
 };
 
-#endif /* __ABC_READER_NURBS_H__ */
+}  // namespace blender::io::alembic

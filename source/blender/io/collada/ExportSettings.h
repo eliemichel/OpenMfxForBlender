@@ -18,8 +18,10 @@
  * \ingroup collada
  */
 
-#ifndef __EXPORTSETTINGS_H__
-#define __EXPORTSETTINGS_H__
+#pragma once
+
+#include "BLI_linklist.h"
+#include "BlenderContext.h"
 
 #ifdef __cplusplus
 #  include "BCMath.h"
@@ -27,9 +29,6 @@
 
 extern "C" {
 #endif
-
-#include "BLI_linklist.h"
-#include "BlenderContext.h"
 
 typedef enum BC_export_mesh_type {
   BC_MESH_TYPE_VIEW,
@@ -289,7 +288,5 @@ class BCExportSettings {
     return bc_is_base_node(get_export_set(), ob, get_view_layer());
   }
 };
-
-#endif
 
 #endif

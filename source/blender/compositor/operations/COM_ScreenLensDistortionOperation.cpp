@@ -18,12 +18,11 @@
 
 #include "COM_ScreenLensDistortionOperation.h"
 
-extern "C" {
 #include "BLI_math.h"
 #include "BLI_rand.h"
 #include "BLI_utildefines.h"
+
 #include "PIL_time.h"
-}
 
 ScreenLensDistortionOperation::ScreenLensDistortionOperation() : NodeOperation()
 {
@@ -125,9 +124,8 @@ bool ScreenLensDistortionOperation::get_delta(float r_sq,
     distort_uv(uv, t, delta);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 void ScreenLensDistortionOperation::accumulate(MemoryBuffer *buffer,

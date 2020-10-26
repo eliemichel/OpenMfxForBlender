@@ -81,7 +81,7 @@ struct rbRigidBody {
 };
 
 struct rbVert {
-  float x, y, z;
+  btScalar x, y, z;
 };
 struct rbTri {
   int v0, v1, v2;
@@ -98,6 +98,8 @@ struct rbMeshData {
 struct rbCollisionShape {
   btCollisionShape *cshape;
   rbMeshData *mesh;
+  rbCollisionShape **compoundChildShapes;
+  int compoundChilds;
 };
 
 struct rbFilterCallback : public btOverlapFilterCallback {
@@ -218,8 +220,8 @@ void RB_dworld_step_simulation(rbDynamicsWorld *world,
  * Exports entire dynamics world to Bullet's "*.bullet" binary format
  * which is similar to Blender's SDNA system.
  *
- * \param world Dynamics world to write to file
- * \param filename Assumed to be a valid filename, with .bullet extension
+ * \param world: Dynamics world to write to file
+ * \param filename: Assumed to be a valid filename, with .bullet extension
  */
 void RB_dworld_export(rbDynamicsWorld *world, const char *filename)
 {
@@ -331,6 +333,7 @@ rbRigidBody *RB_body_new(rbCollisionShape *shape, const float loc[3], const floa
   rbRigidBody *object = new rbRigidBody;
   /* current transform */
   btTransform trans;
+  trans.setIdentity();
   trans.setOrigin(btVector3(loc[0], loc[1], loc[2]));
   trans.setRotation(btQuaternion(rot[1], rot[2], rot[3], rot[0]));
 
@@ -353,8 +356,8 @@ void RB_body_delete(rbRigidBody *object)
 
   /* motion state */
   btMotionState *ms = body->getMotionState();
-  if (ms)
-    delete ms;
+
+  delete ms;
 
   /* collision shape is done elsewhere... */
 
@@ -396,8 +399,9 @@ float RB_body_get_mass(rbRigidBody *object)
    */
   float value = (float)body->getInvMass();
 
-  if (value)
+  if (value) {
     value = 1.0f / value;
+  }
 
   return value;
 }
@@ -413,6 +417,10 @@ void RB_body_set_mass(rbRigidBody *object, float value)
     shape->calculateLocalInertia(value, localInertia);
   }
 
+  btVector3 minAabb, maxAabb;
+  btTransform ident;
+  ident.setIdentity();
+  body->getCollisionShape()->getAabb(ident, minAabb, maxAabb);
   body->setMassProps(value, localInertia);
   body->updateInertiaTensor();
 }
@@ -544,10 +552,12 @@ void RB_body_set_angular_factor(rbRigidBody *object, float x, float y, float z)
 void RB_body_set_kinematic_state(rbRigidBody *object, int kinematic)
 {
   btRigidBody *body = object->body;
-  if (kinematic)
+  if (kinematic) {
     body->setCollisionFlags(body->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
-  else
+  }
+  else {
     body->setCollisionFlags(body->getCollisionFlags() & ~btCollisionObject::CF_KINEMATIC_OBJECT);
+  }
 }
 
 /* ............ */
@@ -555,10 +565,12 @@ void RB_body_set_kinematic_state(rbRigidBody *object, int kinematic)
 void RB_body_set_activation_state(rbRigidBody *object, int use_deactivation)
 {
   btRigidBody *body = object->body;
-  if (use_deactivation)
+  if (use_deactivation) {
     body->forceActivationState(ACTIVE_TAG);
-  else
+  }
+  else {
     body->setActivationState(DISABLE_DEACTIVATION);
+  }
 }
 void RB_body_activate(rbRigidBody *object)
 {
@@ -597,6 +609,7 @@ void RB_body_set_loc_rot(rbRigidBody *object, const float loc[3], const float ro
 
   /* set transform matrix */
   btTransform trans;
+  trans.setIdentity();
   trans.setOrigin(btVector3(loc[0], loc[1], loc[2]));
   trans.setRotation(btQuaternion(rot[1], rot[2], rot[3], rot[0]));
 
@@ -613,8 +626,9 @@ void RB_body_set_scale(rbRigidBody *object, const float scale[3])
     cshape->setLocalScaling(btVector3(scale[0], scale[1], scale[2]));
 
     /* GIimpact shapes have to be updated to take scaling into account */
-    if (cshape->getShapeType() == GIMPACT_SHAPE_PROXYTYPE)
+    if (cshape->getShapeType() == GIMPACT_SHAPE_PROXYTYPE) {
       ((btGImpactMeshShape *)cshape)->updateBound();
+    }
   }
 }
 
@@ -633,6 +647,16 @@ void RB_body_get_orientation(rbRigidBody *object, float v_out[4])
   btRigidBody *body = object->body;
 
   copy_quat_btquat(v_out, body->getWorldTransform().getRotation());
+}
+
+void RB_body_get_scale(rbRigidBody *object, float v_out[3])
+{
+  btRigidBody *body = object->body;
+
+  btCollisionShape *cshape = body->getCollisionShape();
+  /* The body should have a collision shape when we try to set the scale. */
+  btAssert(cshape);
+  copy_v3_btvec3(v_out, cshape->getLocalScaling());
 }
 
 /* ............ */
@@ -655,6 +679,8 @@ rbCollisionShape *RB_shape_new_box(float x, float y, float z)
   rbCollisionShape *shape = new rbCollisionShape;
   shape->cshape = new btBoxShape(btVector3(x, y, z));
   shape->mesh = NULL;
+  shape->compoundChilds = 0;
+  shape->compoundChildShapes = NULL;
   return shape;
 }
 
@@ -663,6 +689,8 @@ rbCollisionShape *RB_shape_new_sphere(float radius)
   rbCollisionShape *shape = new rbCollisionShape;
   shape->cshape = new btSphereShape(radius);
   shape->mesh = NULL;
+  shape->compoundChilds = 0;
+  shape->compoundChildShapes = NULL;
   return shape;
 }
 
@@ -671,6 +699,8 @@ rbCollisionShape *RB_shape_new_capsule(float radius, float height)
   rbCollisionShape *shape = new rbCollisionShape;
   shape->cshape = new btCapsuleShapeZ(radius, height);
   shape->mesh = NULL;
+  shape->compoundChilds = 0;
+  shape->compoundChildShapes = NULL;
   return shape;
 }
 
@@ -679,6 +709,8 @@ rbCollisionShape *RB_shape_new_cone(float radius, float height)
   rbCollisionShape *shape = new rbCollisionShape;
   shape->cshape = new btConeShapeZ(radius, height);
   shape->mesh = NULL;
+  shape->compoundChilds = 0;
+  shape->compoundChildShapes = NULL;
   return shape;
 }
 
@@ -687,6 +719,8 @@ rbCollisionShape *RB_shape_new_cylinder(float radius, float height)
   rbCollisionShape *shape = new rbCollisionShape;
   shape->cshape = new btCylinderShapeZ(btVector3(radius, radius, height));
   shape->mesh = NULL;
+  shape->compoundChilds = 0;
+  shape->compoundChildShapes = NULL;
   return shape;
 }
 
@@ -709,6 +743,8 @@ rbCollisionShape *RB_shape_new_convex_hull(
 
   shape->cshape = hull_shape;
   shape->mesh = NULL;
+  shape->compoundChilds = 0;
+  shape->compoundChildShapes = NULL;
   return shape;
 }
 
@@ -758,7 +794,7 @@ void RB_trimesh_finish(rbMeshData *mesh)
                                                      (int *)mesh->triangles,
                                                      sizeof(rbTri),
                                                      mesh->num_vertices,
-                                                     (float *)mesh->vertices,
+                                                     (btScalar *)mesh->vertices,
                                                      sizeof(rbVert));
 }
 
@@ -773,6 +809,8 @@ rbCollisionShape *RB_shape_new_trimesh(rbMeshData *mesh)
 
   shape->cshape = new btScaledBvhTriangleMeshShape(unscaledShape, btVector3(1.0f, 1.0f, 1.0f));
   shape->mesh = mesh;
+  shape->compoundChilds = 0;
+  shape->compoundChildShapes = NULL;
   return shape;
 }
 
@@ -783,8 +821,9 @@ void RB_shape_trimesh_update(rbCollisionShape *shape,
                              float min[3],
                              float max[3])
 {
-  if (shape->mesh == NULL || num_verts != shape->mesh->num_vertices)
+  if (shape->mesh == NULL || num_verts != shape->mesh->num_vertices) {
     return;
+  }
 
   for (int i = 0; i < num_verts; i++) {
     float *vert = (float *)(((char *)vertices + i * vert_stride));
@@ -813,7 +852,44 @@ rbCollisionShape *RB_shape_new_gimpact_mesh(rbMeshData *mesh)
 
   shape->cshape = gimpactShape;
   shape->mesh = mesh;
+  shape->compoundChilds = 0;
+  shape->compoundChildShapes = NULL;
   return shape;
+}
+
+/* Compound Shape ---------------- */
+
+rbCollisionShape *RB_shape_new_compound()
+{
+  rbCollisionShape *shape = new rbCollisionShape;
+  btCompoundShape *compoundShape = new btCompoundShape();
+
+  shape->cshape = compoundShape;
+  shape->mesh = NULL;
+  shape->compoundChilds = 0;
+  shape->compoundChildShapes = NULL;
+  return shape;
+}
+
+void RB_compound_add_child_shape(rbCollisionShape *parentShape,
+                                 rbCollisionShape *shape,
+                                 const float loc[3],
+                                 const float rot[4])
+{
+  /* set transform matrix */
+  btTransform trans;
+  trans.setIdentity();
+  trans.setOrigin(btVector3(loc[0], loc[1], loc[2]));
+  trans.setRotation(btQuaternion(rot[1], rot[2], rot[3], rot[0]));
+
+  btCompoundShape *compoundShape = (btCompoundShape *)(parentShape->cshape);
+  compoundShape->addChildShape(trans, shape->cshape);
+
+  /* Store shapes for deletion later */
+  parentShape->compoundChildShapes = (rbCollisionShape **)(realloc(
+      parentShape->compoundChildShapes,
+      sizeof(rbCollisionShape *) * (++parentShape->compoundChilds)));
+  parentShape->compoundChildShapes[parentShape->compoundChilds - 1] = shape;
 }
 
 /* Cleanup --------------------------- */
@@ -823,12 +899,22 @@ void RB_shape_delete(rbCollisionShape *shape)
   if (shape->cshape->getShapeType() == SCALED_TRIANGLE_MESH_SHAPE_PROXYTYPE) {
     btBvhTriangleMeshShape *child_shape =
         ((btScaledBvhTriangleMeshShape *)shape->cshape)->getChildShape();
-    if (child_shape)
-      delete child_shape;
+
+    delete child_shape;
   }
-  if (shape->mesh)
+  if (shape->mesh) {
     RB_trimesh_data_delete(shape->mesh);
+  }
   delete shape->cshape;
+
+  /* Delete compound child shapes if there are any */
+  for (int i = 0; i < shape->compoundChilds; i++) {
+    RB_shape_delete(shape->compoundChildShapes[i]);
+  }
+  if (shape->compoundChildShapes != NULL) {
+    free(shape->compoundChildShapes);
+  }
+
   delete shape;
 }
 
@@ -873,6 +959,7 @@ static void make_constraint_transforms(btTransform &transform1,
                                        float orn[4])
 {
   btTransform pivot_transform = btTransform();
+  pivot_transform.setIdentity();
   pivot_transform.setOrigin(btVector3(pivot[0], pivot[1], pivot[2]));
   pivot_transform.setRotation(btQuaternion(orn[1], orn[2], orn[3], orn[0]));
 

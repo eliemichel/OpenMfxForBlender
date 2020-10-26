@@ -92,7 +92,7 @@ class ImageSlotTextureNode : public TextureNode {
 class ImageTextureNode : public ImageSlotTextureNode {
  public:
   SHADER_NODE_NO_CLONE_CLASS(ImageTextureNode)
-  ShaderNode *clone() const;
+  ShaderNode *clone(ShaderGraph *graph) const;
   void attributes(Shader *shader, AttributeRequestSet *attributes);
   bool has_attribute_dependency()
   {
@@ -126,7 +126,7 @@ class ImageTextureNode : public ImageSlotTextureNode {
 class EnvironmentTextureNode : public ImageSlotTextureNode {
  public:
   SHADER_NODE_NO_CLONE_CLASS(EnvironmentTextureNode)
-  ShaderNode *clone() const;
+  ShaderNode *clone(ShaderGraph *graph) const;
   void attributes(Shader *shader, AttributeRequestSet *attributes);
   bool has_attribute_dependency()
   {
@@ -168,7 +168,23 @@ class SkyTextureNode : public TextureNode {
   float3 sun_direction;
   float turbidity;
   float ground_albedo;
+  bool sun_disc;
+  float sun_size;
+  float sun_intensity;
+  float sun_elevation;
+  float sun_rotation;
+  float altitude;
+  float air_density;
+  float dust_density;
+  float ozone_density;
   float3 vector;
+  ImageHandle handle;
+
+  float get_sun_size()
+  {
+    /* Clamping for numerical precision. */
+    return fmaxf(sun_size, 0.0005f);
+  }
 };
 
 class OutputNode : public ShaderNode {
@@ -348,7 +364,7 @@ class PointDensityTextureNode : public ShaderNode {
   }
 
   ~PointDensityTextureNode();
-  ShaderNode *clone() const;
+  ShaderNode *clone(ShaderGraph *graph) const;
   void attributes(Shader *shader, AttributeRequestSet *attributes);
   bool has_attribute_dependency()
   {
@@ -384,7 +400,7 @@ class IESLightNode : public TextureNode {
   SHADER_NODE_NO_CLONE_CLASS(IESLightNode)
 
   ~IESLightNode();
-  ShaderNode *clone() const;
+  ShaderNode *clone(ShaderGraph *graph) const;
   virtual int get_group()
   {
     return NODE_GROUP_LEVEL_2;
@@ -564,6 +580,7 @@ class PrincipledBsdfNode : public BsdfBaseNode {
   ClosureType distribution, distribution_orig;
   ClosureType subsurface_method;
   float3 emission;
+  float emission_strength;
   float alpha;
 
   bool has_integrator_dependency();
@@ -1485,10 +1502,10 @@ class SetNormalNode : public ShaderNode {
 
 class OSLNode : public ShaderNode {
  public:
-  static OSLNode *create(size_t num_inputs, const OSLNode *from = NULL);
+  static OSLNode *create(ShaderGraph *graph, size_t num_inputs, const OSLNode *from = NULL);
   ~OSLNode();
 
-  ShaderNode *clone() const;
+  ShaderNode *clone(ShaderGraph *graph) const;
 
   char *input_default_value();
   void add_input(ustring name, SocketType::Type type);

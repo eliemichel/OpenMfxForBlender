@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_VIEW3D_OFFSCREEN_H__
-#define __ED_VIEW3D_OFFSCREEN_H__
+#pragma once
 
 #include "DNA_object_enums.h"
 #include "DNA_view3d_types.h"
@@ -49,8 +48,8 @@ void ED_view3d_draw_offscreen(struct Depsgraph *depsgraph,
                               struct ARegion *region,
                               int winx,
                               int winy,
-                              float viewmat[4][4],
-                              float winmat[4][4],
+                              const float viewmat[4][4],
+                              const float winmat[4][4],
                               bool is_image_render,
                               bool do_sky,
                               bool is_persp,
@@ -65,8 +64,8 @@ void ED_view3d_draw_offscreen_simple(struct Depsgraph *depsgraph,
                                      int winx,
                                      int winy,
                                      unsigned int draw_flags,
-                                     float viewmat[4][4],
-                                     float winmat[4][4],
+                                     const float viewmat[4][4],
+                                     const float winmat[4][4],
                                      float clip_start,
                                      float clip_end,
                                      bool is_image_render,
@@ -106,5 +105,3 @@ struct ImBuf *ED_view3d_draw_offscreen_imbuf_simple(struct Depsgraph *depsgraph,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_VIEW3D_H__ */

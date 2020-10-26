@@ -96,9 +96,8 @@ static bool keyingset_poll_activePath_edit(bContext *C)
   if (scene->active_keyingset <= 0) {
     return 0;
   }
-  else {
-    ks = BLI_findlink(&scene->keyingsets, scene->active_keyingset - 1);
-  }
+
+  ks = BLI_findlink(&scene->keyingsets, scene->active_keyingset - 1);
 
   /* there must be an active KeyingSet and an active path */
   return ((ks) && (ks->paths.first) && (ks->active_path > 0));
@@ -158,13 +157,13 @@ static int remove_active_keyingset_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, "No active Keying Set to remove");
     return OPERATOR_CANCELLED;
   }
-  else if (scene->active_keyingset < 0) {
+
+  if (scene->active_keyingset < 0) {
     BKE_report(op->reports, RPT_ERROR, "Cannot remove built in keying set");
     return OPERATOR_CANCELLED;
   }
-  else {
-    ks = BLI_findlink(&scene->keyingsets, scene->active_keyingset - 1);
-  }
+
+  ks = BLI_findlink(&scene->keyingsets, scene->active_keyingset - 1);
 
   /* free KeyingSet's data, then remove it from the scene */
   BKE_keyingset_free(ks);
@@ -207,16 +206,15 @@ static int add_empty_ks_path_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, "No active Keying Set to add empty path to");
     return OPERATOR_CANCELLED;
   }
-  else {
-    ks = BLI_findlink(&scene->keyingsets, scene->active_keyingset - 1);
-  }
+
+  ks = BLI_findlink(&scene->keyingsets, scene->active_keyingset - 1);
 
   /* don't use the API method for this, since that checks on values... */
   ksp = MEM_callocN(sizeof(KS_Path), "KeyingSetPath Empty");
   BLI_addtail(&ks->paths, ksp);
   ks->active_path = BLI_listbase_count(&ks->paths);
 
-  ksp->groupmode = KSP_GROUP_KSNAME;  // XXX?
+  ksp->groupmode = KSP_GROUP_KSNAME; /* XXX? */
   ksp->idtype = ID_OB;
   ksp->flag = KSP_FLAG_WHOLE_ARRAY;
 
@@ -414,13 +412,13 @@ static int remove_keyingset_button_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, "No active Keying Set to remove property from");
     return OPERATOR_CANCELLED;
   }
-  else if (scene->active_keyingset < 0) {
+
+  if (scene->active_keyingset < 0) {
     BKE_report(op->reports, RPT_ERROR, "Cannot remove property from built in keying set");
     return OPERATOR_CANCELLED;
   }
-  else {
-    ks = BLI_findlink(&scene->keyingsets, scene->active_keyingset - 1);
-  }
+
+  ks = BLI_findlink(&scene->keyingsets, scene->active_keyingset - 1);
 
   if (ptr.owner_id && ptr.data && prop) {
     path = RNA_path_from_ID_to_property(&ptr, prop);
@@ -688,9 +686,7 @@ KeyingSet *ANIM_scene_get_active_keyingset(const Scene *scene)
   if (scene->active_keyingset > 0) {
     return BLI_findlink(&scene->keyingsets, scene->active_keyingset - 1);
   }
-  else {
-    return BLI_findlink(&builtin_keyingsets, (-scene->active_keyingset) - 1);
-  }
+  return BLI_findlink(&builtin_keyingsets, (-scene->active_keyingset) - 1);
 }
 
 /* Get the index of the Keying Set provided, for the given Scene */
@@ -722,9 +718,7 @@ int ANIM_scene_get_keyingset_index(Scene *scene, KeyingSet *ks)
   if (index != -1) {
     return -(index + 1);
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 /* Get Keying Set to use for Auto-Keyframing some transforms */
@@ -737,12 +731,10 @@ KeyingSet *ANIM_get_keyingset_for_autokeying(const Scene *scene, const char *tra
   if (IS_AUTOKEY_FLAG(scene, ONLYKEYINGSET) && (scene->active_keyingset)) {
     return ANIM_scene_get_active_keyingset(scene);
   }
-  else if (IS_AUTOKEY_FLAG(scene, INSERTAVAIL)) {
+  if (IS_AUTOKEY_FLAG(scene, INSERTAVAIL)) {
     return ANIM_builtin_keyingset_get_named(NULL, ANIM_KS_AVAILABLE_ID);
   }
-  else {
-    return ANIM_builtin_keyingset_get_named(NULL, transformKSName);
-  }
+  return ANIM_builtin_keyingset_get_named(NULL, transformKSName);
 }
 
 /* Menu of All Keying Sets ----------------------------- */
@@ -976,14 +968,15 @@ eModifyKey_Returns ANIM_validate_keyingset(bContext *C, ListBase *dsources, Keyi
       }
 
       /* if we don't have any paths now, then this still qualifies as invalid context */
-      // FIXME: we need some error conditions (to be retrieved from the iterator why this failed!)
+      /* FIXME: we need some error conditions (to be retrieved from the iterator why this failed!)
+       */
       if (BLI_listbase_is_empty(&ks->paths)) {
         return MODIFYKEY_INVALID_CONTEXT;
       }
     }
     else {
       /* poll callback tells us that KeyingSet is useless in current context */
-      // FIXME: the poll callback needs to give us more info why
+      /* FIXME: the poll callback needs to give us more info why */
       return MODIFYKEY_INVALID_CONTEXT;
     }
   }
@@ -1128,6 +1121,9 @@ int ANIM_apply_keyingset(
     /* for each possible index, perform operation
      * - assume that arraylen is greater than index
      */
+    Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+    const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(depsgraph,
+                                                                                      cfra);
     for (; i < arraylen; i++) {
       /* action to take depends on mode */
       if (mode == MODIFYKEY_MODE_INSERT) {
@@ -1138,7 +1134,7 @@ int ANIM_apply_keyingset(
                                         groupname,
                                         ksp->rna_path,
                                         i,
-                                        cfra,
+                                        &anim_eval_context,
                                         keytype,
                                         &nla_cache,
                                         kflag2);
@@ -1154,7 +1150,7 @@ int ANIM_apply_keyingset(
       {
         Object *ob = (Object *)ksp->id;
 
-        // XXX: only object transforms?
+        /* XXX: only object transforms? */
         DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
         break;
       }

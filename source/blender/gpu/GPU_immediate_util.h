@@ -20,8 +20,7 @@
  * Utility drawing functions (rough equivalent to OpenGL's GLU)
  */
 
-#ifndef __GPU_IMMEDIATE_UTIL_H__
-#define __GPU_IMMEDIATE_UTIL_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,9 +44,9 @@ void imm_draw_circle_wire_2d(uint shdr_pos, float x, float y, float radius, int 
 void imm_draw_circle_fill_2d(uint shdr_pos, float x, float y, float radius, int nsegments);
 
 void imm_draw_circle_wire_aspect_2d(
-    uint shdr_pos, float x, float y, float radius_x, float radius_y, int nsegments);
+    uint shdr_pos, float x, float y, float rad_x, float rad_y, int nsegments);
 void imm_draw_circle_fill_aspect_2d(
-    uint shdr_pos, float x, float y, float radius_x, float radius_y, int nsegments);
+    uint shdr_pos, float x, float y, float rad_x, float rad_y, int nsegments);
 
 /* use this version when GPUVertFormat has a vec3 position */
 void imm_draw_circle_wire_3d(uint pos, float x, float y, float radius, int nsegments);
@@ -61,8 +60,8 @@ void imm_draw_circle_partial_wire_2d(
 void imm_draw_disk_partial_fill_2d(uint pos,
                                    float x,
                                    float y,
-                                   float radius_inner,
-                                   float radius_outer,
+                                   float rad_inner,
+                                   float rad_outer,
                                    int nsegments,
                                    float start,
                                    float sweep);
@@ -70,6 +69,13 @@ void imm_draw_disk_partial_fill_2d(uint pos,
 void imm_draw_box_wire_2d(uint pos, float x1, float y1, float x2, float y2);
 void imm_draw_box_wire_3d(uint pos, float x1, float y1, float x2, float y2);
 
+void imm_draw_box_checker_2d_ex(float x1,
+                                float y1,
+                                float x2,
+                                float y2,
+                                const float color_primary[4],
+                                const float color_secondary[4],
+                                int checker_size);
 void imm_draw_box_checker_2d(float x1, float y1, float x2, float y2);
 
 void imm_draw_cube_fill_3d(uint pos, const float co[3], const float aspect[3]);
@@ -85,5 +91,3 @@ void imm_draw_cylinder_fill_3d(
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_IMMEDIATE_UTIL_H__ */

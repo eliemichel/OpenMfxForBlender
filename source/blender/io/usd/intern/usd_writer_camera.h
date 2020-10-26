@@ -16,12 +16,11 @@
  * The Original Code is Copyright (C) 2019 Blender Foundation.
  * All rights reserved.
  */
-#ifndef __USD_WRITER_CAMERA_H__
-#define __USD_WRITER_CAMERA_H__
+#pragma once
 
 #include "usd_writer_abstract.h"
 
-namespace USD {
+namespace blender::io::usd {
 
 /* Writer for writing camera data to UsdGeomCamera. */
 class USDCameraWriter : public USDAbstractWriter {
@@ -33,6 +32,4 @@ class USDCameraWriter : public USDAbstractWriter {
   virtual void do_write(HierarchyContext &context) override;
 };
 
-}  // namespace USD
-
-#endif /* __USD_WRITER_CAMERA_H__ */
+}  // namespace blender::io::usd

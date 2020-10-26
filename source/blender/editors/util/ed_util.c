@@ -58,7 +58,6 @@
 #include "DEG_depsgraph.h"
 
 #include "ED_armature.h"
-#include "ED_buttons.h"
 #include "ED_image.h"
 #include "ED_mesh.h"
 #include "ED_node.h"
@@ -92,7 +91,7 @@ void ED_editors_init_for_undo(Main *bmain)
         Scene *scene = WM_window_get_active_scene(win);
 
         BKE_texpaint_slots_refresh_object(scene, ob);
-        BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+        ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
       }
     }
   }
@@ -123,10 +122,10 @@ void ED_editors_init(bContext *C)
     if (mode == OB_MODE_OBJECT) {
       continue;
     }
-    else if (BKE_object_has_mode_data(ob, mode)) {
+    if (BKE_object_has_mode_data(ob, mode)) {
       continue;
     }
-    else if (ob->type == OB_GPENCIL) {
+    if (ob->type == OB_GPENCIL) {
       /* For multi-edit mode we may already have mode data (grease pencil does not need it).
        * However we may have a non-active object stuck in a grease-pencil edit mode. */
       if (ob != obact) {
@@ -153,10 +152,10 @@ void ED_editors_init(bContext *C)
             ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, true, reports);
           }
           else if (mode == OB_MODE_VERTEX_PAINT) {
-            ED_object_vpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+            ED_object_vpaintmode_enter_ex(bmain, depsgraph, scene, ob);
           }
           else if (mode == OB_MODE_WEIGHT_PAINT) {
-            ED_object_wpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+            ED_object_wpaintmode_enter_ex(bmain, depsgraph, scene, ob);
           }
           else {
             BLI_assert(0);
@@ -174,7 +173,7 @@ void ED_editors_init(bContext *C)
       else {
         /* TODO(campbell): avoid operator calls. */
         if (obact == ob) {
-          ED_object_mode_toggle(C, mode);
+          ED_object_mode_set(C, mode);
         }
       }
     }

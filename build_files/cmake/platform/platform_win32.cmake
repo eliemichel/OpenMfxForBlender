@@ -51,6 +51,10 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     endif()
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \"${CLANG_OPENMP_LIB}\"")
   endif()
+  if(WITH_WINDOWS_STRIPPED_PDB)
+    message(WARNING "stripped pdb not supported with clang, disabling..")
+    set(WITH_WINDOWS_STRIPPED_PDB Off)
+  endif()
 endif()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ${WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS})
@@ -107,12 +111,13 @@ endif()
 unset(_min_ver)
 
 # needed for some MSVC installations
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SAFESEH:NO")
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /SAFESEH:NO")
-set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO")
+# 4099 : PDB 'filename' was not found with 'object/library'
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SAFESEH:NO /ignore:4099")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /SAFESEH:NO /ignore:4099")
+set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO /ignore:4099")
 
 list(APPEND PLATFORM_LINKLIBS
-  ws2_32 vfw32 winmm kernel32 user32 gdi32 comdlg32 Comctl32
+  ws2_32 vfw32 winmm kernel32 user32 gdi32 comdlg32 Comctl32 version
   advapi32 shfolder shell32 ole32 oleaut32 uuid psapi Dbghelp Shlwapi
 )
 
@@ -131,10 +136,22 @@ add_definitions(
 # MSVC11 needs _ALLOW_KEYWORD_MACROS to build
 add_definitions(-D_ALLOW_KEYWORD_MACROS)
 
+# RTTI is on by default even without this switch
+# however having it in the CXX Flags makes it difficult
+# to remove for individual files that want to disable it
+# using the /GR- flag without generating a build warning
+# that both /GR and /GR- are specified.
+remove_cc_flag("/GR")
+
 # We want to support Windows 7 level ABI
 add_definitions(-D_WIN32_WINNT=0x601)
 include(build_files/cmake/platform/platform_win32_bundle_crt.cmake)
-remove_cc_flag("/MDd" "/MD")
+remove_cc_flag("/MDd" "/MD" "/Zi")
+
+if(WITH_WINDOWS_PDB)
+  set(PDB_INFO_OVERRIDE_FLAGS "/Z7")
+  set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
+endif()
 
 if(MSVC_CLANG) # Clangs version of cl doesn't support all flags
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARN_FLAGS} /nologo /J /Gd /EHsc -Wno-unused-command-line-argument -Wno-microsoft-enum-forward-reference ")
@@ -151,27 +168,42 @@ if(MSVC_VERSION GREATER 1911 AND NOT MSVC_CLANG)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:twoPhase-")
 endif()
 
+if(WITH_WINDOWS_SCCACHE AND CMAKE_VS_MSBUILD_COMMAND)
+    message(WARNING "Disabling sccache, sccache is not supported with msbuild")
+    set(WITH_WINDOWS_SCCACHE Off)
+endif()
 
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd /ZI")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MDd /ZI")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD")
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MD")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} /MD")
-set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} /MD")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /MD")
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /MD")
+if(WITH_WINDOWS_SCCACHE)
+    set(CMAKE_C_COMPILER_LAUNCHER sccache)
+    set(CMAKE_CXX_COMPILER_LAUNCHER sccache)
+    set(SYMBOL_FORMAT /Z7)
+else()
+    unset(CMAKE_C_COMPILER_LAUNCHER)
+    unset(CMAKE_CXX_COMPILER_LAUNCHER)
+    set(SYMBOL_FORMAT /ZI)
+endif()
 
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd ${SYMBOL_FORMAT}")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MDd ${SYMBOL_FORMAT}")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD ${PDB_INFO_OVERRIDE_FLAGS}")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MD ${PDB_INFO_OVERRIDE_FLAGS}")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} /MD ${PDB_INFO_OVERRIDE_FLAGS}")
+set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} /MD ${PDB_INFO_OVERRIDE_FLAGS}")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /MD ${SYMBOL_FORMAT}")
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /MD ${SYMBOL_FORMAT}")
+unset(SYMBOL_FORMAT)
 # JMC is available on msvc 15.8 (1915) and up
 if(MSVC_VERSION GREATER 1914 AND NOT MSVC_CLANG)
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /JMC")
 endif()
 
-set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /SUBSYSTEM:CONSOLE /STACK:2097152,70656 /INCREMENTAL:NO ")
+set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /SUBSYSTEM:CONSOLE /STACK:2097152")
 set(PLATFORM_LINKFLAGS_RELEASE "/NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:libcmtd.lib /NODEFAULTLIB:msvcrtd.lib")
 set(PLATFORM_LINKFLAGS_DEBUG "${PLATFORM_LINKFLAGS_DEBUG} /IGNORE:4099 /NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:libcmtd.lib")
 
 # Ignore meaningless for us linker warnings.
 set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /ignore:4049 /ignore:4217 /ignore:4221")
+set(PLATFORM_LINKFLAGS_RELEASE "${PLATFORM_LINKFLAGS} ${PDB_INFO_OVERRIDE_LINKER_FLAGS}")
 set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} /ignore:4221")
 
 if(CMAKE_CL_64)
@@ -209,7 +241,7 @@ endif()
 
 # Mark libdir as system headers with a lower warn level, to resolve some warnings
 # that we have very little control over
-if(MSVC_VERSION GREATER_EQUAL 1914 AND NOT MSVC_CLANG)
+if(MSVC_VERSION GREATER_EQUAL 1914 AND NOT MSVC_CLANG AND NOT WITH_WINDOWS_SCCACHE)
   add_compile_options(/experimental:external /external:templates- /external:I "${LIBDIR}" /external:W0)
 endif()
 
@@ -391,9 +423,6 @@ if(WITH_BOOST)
   if(WITH_INTERNATIONAL)
     list(APPEND boost_extra_libs locale)
   endif()
-  if(WITH_OPENVDB)
-    list(APPEND boost_extra_libs iostreams)
-  endif()
   set(Boost_USE_STATIC_RUNTIME ON) # prefix lib
   set(Boost_USE_MULTITHREADED ON) # suffix -mt
   set(Boost_USE_STATIC_LIBS ON) # suffix -s
@@ -453,7 +482,7 @@ if(WITH_OPENIMAGEIO)
   set(OPENIMAGEIO_DEFINITIONS "-DUSE_TBB=0")
   set(OPENCOLORIO_DEFINITIONS "-DOCIO_STATIC_BUILD")
   set(OPENIMAGEIO_IDIFF "${OPENIMAGEIO}/bin/idiff.exe")
-  add_definitions(-DOIIO_STATIC_BUILD)
+  add_definitions(-DOIIO_STATIC_DEFINE)
   add_definitions(-DOIIO_NO_SSE=1)
 endif()
 
@@ -499,12 +528,16 @@ if(WITH_OPENCOLORIO)
 endif()
 
 if(WITH_OPENVDB)
-  set(BLOSC_LIBRARIES optimized ${LIBDIR}/blosc/lib/libblosc.lib debug ${LIBDIR}/blosc/lib/libblosc_d.lib)
   set(OPENVDB ${LIBDIR}/openVDB)
   set(OPENVDB_LIBPATH ${OPENVDB}/lib)
   set(OPENVDB_INCLUDE_DIRS ${OPENVDB}/include)
-  set(OPENVDB_LIBRARIES optimized ${OPENVDB_LIBPATH}/openvdb.lib debug ${OPENVDB_LIBPATH}/openvdb_d.lib ${BLOSC_LIBRARIES})
-  set(OPENVDB_DEFINITIONS -DNOMINMAX -DOPENVDB_STATICLIB -D_USE_MATH_DEFINES)
+  set(OPENVDB_LIBRARIES optimized ${OPENVDB_LIBPATH}/openvdb.lib debug ${OPENVDB_LIBPATH}/openvdb_d.lib )
+  set(OPENVDB_DEFINITIONS -DNOMINMAX -D_USE_MATH_DEFINES)
+endif()
+
+if(WITH_NANOVDB)
+  set(NANOVDB ${LIBDIR}/nanoVDB)
+  set(NANOVDB_INCLUDE_DIR ${NANOVDB}/include)
 endif()
 
 if(WITH_OPENIMAGEDENOISE)
@@ -514,10 +547,10 @@ if(WITH_OPENIMAGEDENOISE)
   set(OPENIMAGEDENOISE_LIBRARIES
     optimized ${OPENIMAGEDENOISE_LIBPATH}/OpenImageDenoise.lib
     optimized ${OPENIMAGEDENOISE_LIBPATH}/common.lib
-    optimized ${OPENIMAGEDENOISE_LIBPATH}/mkldnn.lib
+    optimized ${OPENIMAGEDENOISE_LIBPATH}/dnnl.lib
     debug ${OPENIMAGEDENOISE_LIBPATH}/OpenImageDenoise_d.lib
     debug ${OPENIMAGEDENOISE_LIBPATH}/common_d.lib
-    debug ${OPENIMAGEDENOISE_LIBPATH}/mkldnn_d.lib)
+    debug ${OPENIMAGEDENOISE_LIBPATH}/dnnl_d.lib)
   set(OPENIMAGEDENOISE_DEFINITIONS)
 endif()
 
@@ -537,7 +570,7 @@ if(WITH_IMAGE_OPENJPEG)
 endif()
 
 if(WITH_OPENSUBDIV)
-  set(OPENSUBDIV_INCLUDE_DIR ${LIBDIR}/opensubdiv/include)
+  set(OPENSUBDIV_INCLUDE_DIRS ${LIBDIR}/opensubdiv/include)
   set(OPENSUBDIV_LIBPATH ${LIBDIR}/opensubdiv/lib)
   set(OPENSUBDIV_LIBRARIES
     optimized ${OPENSUBDIV_LIBPATH}/osdCPU.lib
@@ -572,7 +605,7 @@ if(WITH_SYSTEM_AUDASPACE)
 endif()
 
 if(WITH_TBB)
-  set(TBB_LIBRARIES optimized ${LIBDIR}/tbb/lib/tbb.lib debug ${LIBDIR}/tbb/lib/tbb_debug.lib)
+  set(TBB_LIBRARIES optimized ${LIBDIR}/tbb/lib/tbb.lib debug ${LIBDIR}/tbb/lib/debug/tbb_debug.lib)
   set(TBB_INCLUDE_DIR ${LIBDIR}/tbb/include)
   set(TBB_INCLUDE_DIRS ${TBB_INCLUDE_DIR})
   if(WITH_TBB_MALLOC_PROXY)
@@ -687,14 +720,24 @@ if(WINDOWS_PYTHON_DEBUG)
     string(REPLACE "/" "\\" _group_path "${_source_path}")
     source_group("${_group_path}" FILES "${_source}")
   endforeach()
-  # Include the user scripts from the profile folder in the blender_python_user_scripts project.
-  set(USER_SCRIPTS_ROOT "$ENV{appdata}/blender foundation/blender/${BLENDER_VERSION}")
+  
+  # If the user scripts env var is set, include scripts from there otherwise
+  # include user scripts in the profile folder.
+  if(DEFINED ENV{BLENDER_USER_SCRIPTS})
+    message(STATUS "Including user scripts from environment BLENDER_USER_SCRIPTS=$ENV{BLENDER_USER_SCRIPTS}")
+    set(USER_SCRIPTS_ROOT "$ENV{BLENDER_USER_SCRIPTS}")
+  else()
+    message(STATUS "Including user scripts from the profile folder")
+    # Include the user scripts from the profile folder in the blender_python_user_scripts project.
+    set(USER_SCRIPTS_ROOT "$ENV{appdata}/blender foundation/blender/${BLENDER_VERSION}/scripts")
+  endif()
+  
   file(TO_CMAKE_PATH ${USER_SCRIPTS_ROOT} USER_SCRIPTS_ROOT)
-  FILE(GLOB_RECURSE inFiles "${USER_SCRIPTS_ROOT}/scripts/*.*" )
+  FILE(GLOB_RECURSE inFiles "${USER_SCRIPTS_ROOT}/*.*" )
   ADD_CUSTOM_TARGET(blender_python_user_scripts SOURCES ${inFiles})
   foreach(_source IN ITEMS ${inFiles})
     get_filename_component(_source_path "${_source}" PATH)
-    string(REPLACE "${USER_SCRIPTS_ROOT}/scripts" "" _source_path "${_source_path}")
+    string(REPLACE "${USER_SCRIPTS_ROOT}" "" _source_path "${_source_path}")
     string(REPLACE "/" "\\" _group_path "${_source_path}")
     source_group("${_group_path}" FILES "${_source}")
   endforeach()
@@ -724,4 +767,17 @@ if(WITH_XR_OPENXR)
     message(WARNING "OpenXR-SDK was not found, disabling WITH_XR_OPENXR")
     set(WITH_XR_OPENXR OFF)
   endif()
+endif()
+
+if(WITH_GMP)
+  set(GMP_INCLUDE_DIRS ${LIBDIR}/gmp/include)
+  set(GMP_LIBRARIES ${LIBDIR}/gmp/lib/libgmp-10.lib optimized ${LIBDIR}/gmp/lib/libgmpxx.lib debug ${LIBDIR}/gmp/lib/libgmpxx_d.lib)
+  set(GMP_ROOT_DIR ${LIBDIR}/gmp)
+  set(GMP_FOUND On)
+endif()
+
+if(WITH_POTRACE)
+  set(POTRACE_INCLUDE_DIRS ${LIBDIR}/potrace/include)
+  set(POTRACE_LIBRARIES ${LIBDIR}/potrace/lib/potrace.lib)
+  set(POTRACE_FOUND On)
 endif()

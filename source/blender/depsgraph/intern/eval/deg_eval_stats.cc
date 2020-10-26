@@ -23,7 +23,6 @@
 
 #include "intern/eval/deg_eval_stats.h"
 
-#include "BLI_ghash.h"
 #include "BLI_utildefines.h"
 
 #include "intern/depsgraph.h"
@@ -33,7 +32,8 @@
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 void deg_eval_stats_aggregate(Depsgraph *graph)
 {
@@ -41,10 +41,9 @@ void deg_eval_stats_aggregate(Depsgraph *graph)
    * Those are not filled in by the evaluation engine. */
   for (Node *node : graph->id_nodes) {
     IDNode *id_node = (IDNode *)node;
-    GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components) {
+    for (ComponentNode *comp_node : id_node->components.values()) {
       comp_node->stats.reset_current();
     }
-    GHASH_FOREACH_END();
     id_node->stats.reset_current();
   }
   /* Now accumulate operation timings to components and IDs. */
@@ -56,4 +55,5 @@ void deg_eval_stats_aggregate(Depsgraph *graph)
   }
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

@@ -39,6 +39,7 @@
 
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
+#include "GPU_texture.h"
 
 #ifdef __APPLE__
 #  include "GPU_state.h"
@@ -47,30 +48,6 @@
 #include "UI_interface.h"
 
 /* ******************************************** */
-
-static int get_cached_work_texture(int *r_w, int *r_h)
-{
-  static GLint texid = -1;
-  static int tex_w = 256;
-  static int tex_h = 256;
-
-  if (texid == -1) {
-    glGenTextures(1, (GLuint *)&texid);
-
-    glBindTexture(GL_TEXTURE_2D, texid);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-  }
-
-  *r_w = tex_w;
-  *r_h = tex_h;
-  return texid;
-}
 
 static void immDrawPixelsTexSetupAttributes(IMMDrawPixelsTexState *state)
 {
@@ -83,7 +60,7 @@ static void immDrawPixelsTexSetupAttributes(IMMDrawPixelsTexState *state)
 /* To be used before calling immDrawPixelsTex
  * Default shader is GPU_SHADER_2D_IMAGE_COLOR
  * You can still set uniforms with :
- * GPU_shader_uniform_int(shader, GPU_shader_get_uniform_ensure(shader, "name"), 0);
+ * GPU_shader_uniform_int(shader, GPU_shader_get_uniform(shader, "name"), 0);
  * */
 IMMDrawPixelsTexState immDrawPixelsTexSetup(int builtin)
 {
@@ -118,9 +95,8 @@ void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
                                      float y,
                                      int img_w,
                                      int img_h,
-                                     int format,
-                                     int type,
-                                     int zoomfilter,
+                                     eGPUTextureFormat gpu_format,
+                                     bool use_filter,
                                      void *rect,
                                      float scaleX,
                                      float scaleY,
@@ -130,28 +106,38 @@ void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
                                      float clip_max_y,
                                      float xzoom,
                                      float yzoom,
-                                     float color[4])
+                                     const float color[4])
 {
-  uchar *uc_rect = (uchar *)rect;
-  const float *f_rect = (float *)rect;
-  int subpart_x, subpart_y, tex_w, tex_h;
+  int subpart_x, subpart_y, tex_w = 256, tex_h = 256;
   int seamless, offset_x, offset_y, nsubparts_x, nsubparts_y;
-  int texid = get_cached_work_texture(&tex_w, &tex_h);
   int components;
   const bool use_clipping = ((clip_min_x < clip_max_x) && (clip_min_y < clip_max_y));
-  float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+  const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 
-  GLint unpack_row_length;
-  glGetIntegerv(GL_UNPACK_ROW_LENGTH, &unpack_row_length);
+  if (ELEM(gpu_format, GPU_RGBA8, GPU_RGBA16F)) {
+    components = 4;
+  }
+  else if (ELEM(gpu_format, GPU_RGB16F)) {
+    components = 3;
+  }
+  else if (ELEM(gpu_format, GPU_R8, GPU_R16F)) {
+    components = 1;
+  }
+  else {
+    BLI_assert(!"Incompatible format passed to immDrawPixels");
+    return;
+  }
 
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, img_w);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, texid);
+  const bool use_float_data = ELEM(gpu_format, GPU_RGBA16F, GPU_RGB16F, GPU_R16F);
+  eGPUDataFormat gpu_data = (use_float_data) ? GPU_DATA_FLOAT : GPU_DATA_UNSIGNED_BYTE;
+  size_t stride = components * ((use_float_data) ? sizeof(float) : sizeof(uchar));
 
-  /* don't want nasty border artifacts */
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, zoomfilter);
+  GPUTexture *tex = GPU_texture_create_2d("immDrawPixels", tex_w, tex_h, 1, gpu_format, NULL);
+
+  GPU_texture_filter_mode(tex, use_filter);
+  GPU_texture_wrap_mode(tex, false, true);
+
+  GPU_texture_bind(tex, 0);
 
   /* setup seamless 2=on, 0=off */
   seamless = ((tex_w < img_w || tex_h < img_h) && tex_w > 2 && tex_h > 2) ? 2 : 0;
@@ -162,38 +148,15 @@ void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
   nsubparts_x = (img_w + (offset_x - 1)) / (offset_x);
   nsubparts_y = (img_h + (offset_y - 1)) / (offset_y);
 
-  if (format == GL_RGBA) {
-    components = 4;
-  }
-  else if (format == GL_RGB) {
-    components = 3;
-  }
-  else if (format == GL_RED) {
-    components = 1;
-  }
-  else {
-    BLI_assert(!"Incompatible format passed to glaDrawPixelsTexScaled");
-    return;
-  }
-
-  if (type == GL_FLOAT) {
-    /* need to set internal format to higher range float */
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, tex_w, tex_h, 0, format, GL_FLOAT, NULL);
-  }
-  else {
-    /* switch to 8bit RGBA for byte buffer */
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0, format, GL_UNSIGNED_BYTE, NULL);
-  }
-
-  uint pos = state->pos, texco = state->texco;
-
   /* optional */
   /* NOTE: Shader could be null for GLSL OCIO drawing, it is fine, since
    * it does not need color.
    */
-  if (state->shader != NULL && GPU_shader_get_uniform_ensure(state->shader, "color") != -1) {
+  if (state->shader != NULL && GPU_shader_get_uniform(state->shader, "color") != -1) {
     immUniformColor4fv((color) ? color : white);
   }
+
+  GPU_unpack_row_length_set(img_w);
 
   for (subpart_y = 0; subpart_y < nsubparts_y; subpart_y++) {
     for (subpart_x = 0; subpart_x < nsubparts_x; subpart_x++) {
@@ -212,141 +175,68 @@ void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
         continue;
       }
 
+      int right = subpart_w - offset_right;
+      int top = subpart_h - offset_top;
+      int bottom = 0 + offset_bot;
+      int left = 0 + offset_left;
+
       if (use_clipping) {
-        if (rast_x + (float)(subpart_w - offset_right) * xzoom * scaleX < clip_min_x ||
-            rast_y + (float)(subpart_h - offset_top) * yzoom * scaleY < clip_min_y) {
+        if (rast_x + right * xzoom * scaleX < clip_min_x ||
+            rast_y + top * yzoom * scaleY < clip_min_y) {
           continue;
         }
-        if (rast_x + (float)offset_left * xzoom > clip_max_x ||
-            rast_y + (float)offset_bot * yzoom > clip_max_y) {
+        if (rast_x + left * xzoom > clip_max_x || rast_y + bottom * yzoom > clip_max_y) {
           continue;
         }
       }
 
-      if (type == GL_FLOAT) {
-        glTexSubImage2D(GL_TEXTURE_2D,
-                        0,
-                        0,
-                        0,
-                        subpart_w,
-                        subpart_h,
-                        format,
-                        GL_FLOAT,
-                        &f_rect[((size_t)subpart_y) * offset_y * img_w * components +
-                                subpart_x * offset_x * components]);
+      {
+        int src_y = subpart_y * offset_y;
+        int src_x = subpart_x * offset_x;
 
-        /* add an extra border of pixels so linear looks ok at edges of full image */
+#define DATA(_y, _x) ((char *)rect + stride * ((size_t)(_y)*img_w + (_x)))
+        {
+          void *data = DATA(src_y, src_x);
+          GPU_texture_update_sub(tex, gpu_data, data, 0, 0, 0, subpart_w, subpart_h, 0);
+        }
+        /* Add an extra border of pixels so linear interpolation looks ok
+         * at edges of full image. */
         if (subpart_w < tex_w) {
-          glTexSubImage2D(GL_TEXTURE_2D,
-                          0,
-                          subpart_w,
-                          0,
-                          1,
-                          subpart_h,
-                          format,
-                          GL_FLOAT,
-                          &f_rect[((size_t)subpart_y) * offset_y * img_w * components +
-                                  (subpart_x * offset_x + subpart_w - 1) * components]);
+          void *data = DATA(src_y, src_x + subpart_w - 1);
+          const int offset[2] = {subpart_w, 0};
+          const int extent[2] = {1, subpart_h};
+          GPU_texture_update_sub(tex, gpu_data, data, UNPACK2(offset), 0, UNPACK2(extent), 0);
         }
         if (subpart_h < tex_h) {
-          glTexSubImage2D(
-              GL_TEXTURE_2D,
-              0,
-              0,
-              subpart_h,
-              subpart_w,
-              1,
-              format,
-              GL_FLOAT,
-              &f_rect[(((size_t)subpart_y) * offset_y + subpart_h - 1) * img_w * components +
-                      subpart_x * offset_x * components]);
+          void *data = DATA(src_y + subpart_h - 1, src_x);
+          const int offset[2] = {0, subpart_h};
+          const int extent[2] = {subpart_w, 1};
+          GPU_texture_update_sub(tex, gpu_data, data, UNPACK2(offset), 0, UNPACK2(extent), 0);
         }
-        if (subpart_w < tex_w && subpart_h < tex_h) {
-          glTexSubImage2D(
-              GL_TEXTURE_2D,
-              0,
-              subpart_w,
-              subpart_h,
-              1,
-              1,
-              format,
-              GL_FLOAT,
-              &f_rect[(((size_t)subpart_y) * offset_y + subpart_h - 1) * img_w * components +
-                      (subpart_x * offset_x + subpart_w - 1) * components]);
-        }
-      }
-      else {
-        glTexSubImage2D(GL_TEXTURE_2D,
-                        0,
-                        0,
-                        0,
-                        subpart_w,
-                        subpart_h,
-                        format,
-                        GL_UNSIGNED_BYTE,
-                        &uc_rect[((size_t)subpart_y) * offset_y * img_w * components +
-                                 subpart_x * offset_x * components]);
 
-        if (subpart_w < tex_w) {
-          glTexSubImage2D(GL_TEXTURE_2D,
-                          0,
-                          subpart_w,
-                          0,
-                          1,
-                          subpart_h,
-                          format,
-                          GL_UNSIGNED_BYTE,
-                          &uc_rect[((size_t)subpart_y) * offset_y * img_w * components +
-                                   (subpart_x * offset_x + subpart_w - 1) * components]);
-        }
-        if (subpart_h < tex_h) {
-          glTexSubImage2D(
-              GL_TEXTURE_2D,
-              0,
-              0,
-              subpart_h,
-              subpart_w,
-              1,
-              format,
-              GL_UNSIGNED_BYTE,
-              &uc_rect[(((size_t)subpart_y) * offset_y + subpart_h - 1) * img_w * components +
-                       subpart_x * offset_x * components]);
-        }
         if (subpart_w < tex_w && subpart_h < tex_h) {
-          glTexSubImage2D(
-              GL_TEXTURE_2D,
-              0,
-              subpart_w,
-              subpart_h,
-              1,
-              1,
-              format,
-              GL_UNSIGNED_BYTE,
-              &uc_rect[(((size_t)subpart_y) * offset_y + subpart_h - 1) * img_w * components +
-                       (subpart_x * offset_x + subpart_w - 1) * components]);
+          void *data = DATA(src_y + subpart_h - 1, src_x + subpart_w - 1);
+          const int offset[2] = {subpart_w, subpart_h};
+          const int extent[2] = {1, 1};
+          GPU_texture_update_sub(tex, gpu_data, data, UNPACK2(offset), 0, UNPACK2(extent), 0);
         }
+#undef DATA
       }
+
+      uint pos = state->pos, texco = state->texco;
 
       immBegin(GPU_PRIM_TRI_FAN, 4);
-      immAttr2f(texco, (float)(0 + offset_left) / tex_w, (float)(0 + offset_bot) / tex_h);
-      immVertex2f(pos, rast_x + (float)offset_left * xzoom, rast_y + (float)offset_bot * yzoom);
+      immAttr2f(texco, left / (float)tex_w, bottom / (float)tex_h);
+      immVertex2f(pos, rast_x + offset_left * xzoom, rast_y + offset_bot * yzoom);
 
-      immAttr2f(texco, (float)(subpart_w - offset_right) / tex_w, (float)(0 + offset_bot) / tex_h);
-      immVertex2f(pos,
-                  rast_x + (float)(subpart_w - offset_right) * xzoom * scaleX,
-                  rast_y + (float)offset_bot * yzoom);
+      immAttr2f(texco, right / (float)tex_w, bottom / (float)tex_h);
+      immVertex2f(pos, rast_x + right * xzoom * scaleX, rast_y + offset_bot * yzoom);
 
-      immAttr2f(texco,
-                (float)(subpart_w - offset_right) / tex_w,
-                (float)(subpart_h - offset_top) / tex_h);
-      immVertex2f(pos,
-                  rast_x + (float)(subpart_w - offset_right) * xzoom * scaleX,
-                  rast_y + (float)(subpart_h - offset_top) * yzoom * scaleY);
+      immAttr2f(texco, right / (float)tex_w, top / (float)tex_h);
+      immVertex2f(pos, rast_x + right * xzoom * scaleX, rast_y + top * yzoom * scaleY);
 
-      immAttr2f(texco, (float)(0 + offset_left) / tex_w, (float)(subpart_h - offset_top) / tex_h);
-      immVertex2f(pos,
-                  rast_x + (float)offset_left * xzoom,
-                  rast_y + (float)(subpart_h - offset_top) * yzoom * scaleY);
+      immAttr2f(texco, left / (float)tex_w, top / (float)tex_h);
+      immVertex2f(pos, rast_x + offset_left * xzoom, rast_y + top * yzoom * scaleY);
       immEnd();
 
       /* NOTE: Weirdly enough this is only required on macOS. Without this there is some sort of
@@ -363,8 +253,11 @@ void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
     immUnbindProgram();
   }
 
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, unpack_row_length);
+  GPU_texture_unbind(tex);
+  GPU_texture_free(tex);
+
+  /* Restore default. */
+  GPU_unpack_row_length_set(0);
 }
 
 void immDrawPixelsTexScaled(IMMDrawPixelsTexState *state,
@@ -372,24 +265,22 @@ void immDrawPixelsTexScaled(IMMDrawPixelsTexState *state,
                             float y,
                             int img_w,
                             int img_h,
-                            int format,
-                            int type,
-                            int zoomfilter,
+                            eGPUTextureFormat gpu_format,
+                            bool use_filter,
                             void *rect,
                             float scaleX,
                             float scaleY,
                             float xzoom,
                             float yzoom,
-                            float color[4])
+                            const float color[4])
 {
   immDrawPixelsTexScaled_clipping(state,
                                   x,
                                   y,
                                   img_w,
                                   img_h,
-                                  format,
-                                  type,
-                                  zoomfilter,
+                                  gpu_format,
+                                  use_filter,
                                   rect,
                                   scaleX,
                                   scaleY,
@@ -407,22 +298,20 @@ void immDrawPixelsTex(IMMDrawPixelsTexState *state,
                       float y,
                       int img_w,
                       int img_h,
-                      int format,
-                      int type,
-                      int zoomfilter,
+                      eGPUTextureFormat gpu_format,
+                      bool use_filter,
                       void *rect,
                       float xzoom,
                       float yzoom,
-                      float color[4])
+                      const float color[4])
 {
   immDrawPixelsTexScaled_clipping(state,
                                   x,
                                   y,
                                   img_w,
                                   img_h,
-                                  format,
-                                  type,
-                                  zoomfilter,
+                                  gpu_format,
+                                  use_filter,
                                   rect,
                                   1.0f,
                                   1.0f,
@@ -440,9 +329,8 @@ void immDrawPixelsTex_clipping(IMMDrawPixelsTexState *state,
                                float y,
                                int img_w,
                                int img_h,
-                               int format,
-                               int type,
-                               int zoomfilter,
+                               eGPUTextureFormat gpu_format,
+                               bool use_filter,
                                void *rect,
                                float clip_min_x,
                                float clip_min_y,
@@ -450,16 +338,15 @@ void immDrawPixelsTex_clipping(IMMDrawPixelsTexState *state,
                                float clip_max_y,
                                float xzoom,
                                float yzoom,
-                               float color[4])
+                               const float color[4])
 {
   immDrawPixelsTexScaled_clipping(state,
                                   x,
                                   y,
                                   img_w,
                                   img_h,
-                                  format,
-                                  type,
-                                  zoomfilter,
+                                  gpu_format,
+                                  use_filter,
                                   rect,
                                   1.0f,
                                   1.0f,
@@ -472,76 +359,13 @@ void immDrawPixelsTex_clipping(IMMDrawPixelsTexState *state,
                                   color);
 }
 
-/* *************** glPolygonOffset hack ************* */
-
-float bglPolygonOffsetCalc(const float winmat[16], float viewdist, float dist)
-{
-  /* Seems like we have a factor of 2 more offset than 2.79 for some reason. Correct for this. */
-  dist *= 0.5f;
-
-  if (winmat[15] > 0.5f) {
-#if 1
-    return 0.00001f * dist * viewdist;  // ortho tweaking
-#else
-    static float depth_fac = 0.0f;
-    if (depth_fac == 0.0f) {
-      int depthbits;
-      glGetIntegerv(GL_DEPTH_BITS, &depthbits);
-      depth_fac = 1.0f / (float)((1 << depthbits) - 1);
-    }
-    offs = (-1.0 / winmat[10]) * dist * depth_fac;
-
-    UNUSED_VARS(viewdist);
-#endif
-  }
-  else {
-    /* This adjustment effectively results in reducing the Z value by 0.25%.
-     *
-     * winmat[14] actually evaluates to `-2 * far * near / (far - near)`,
-     * is very close to -0.2 with default clip range,
-     * and is used as the coefficient multiplied by `w / z`,
-     * thus controlling the z dependent part of the depth value.
-     */
-    return winmat[14] * -0.0025f * dist;
-  }
-}
-
-/**
- * \note \a viewdist is only for ortho at the moment.
- */
-void bglPolygonOffset(float viewdist, float dist)
-{
-  static float winmat[16], offset = 0.0f;
-
-  if (dist != 0.0f) {
-    // glEnable(GL_POLYGON_OFFSET_FILL);
-    // glPolygonOffset(-1.0, -1.0);
-
-    /* hack below is to mimic polygon offset */
-    GPU_matrix_projection_get(winmat);
-
-    /* dist is from camera to center point */
-
-    float offs = bglPolygonOffsetCalc(winmat, viewdist, dist);
-
-    winmat[14] -= offs;
-    offset += offs;
-  }
-  else {
-    winmat[14] += offset;
-    offset = 0.0;
-  }
-
-  GPU_matrix_projection_set(winmat);
-}
-
 /* **** Color management helper functions for GLSL display/transform ***** */
 
 /* Draw given image buffer on a screen using GLSL for display transform */
 void ED_draw_imbuf_clipping(ImBuf *ibuf,
                             float x,
                             float y,
-                            int zoomfilter,
+                            bool use_filter,
                             ColorManagedViewSettings *view_settings,
                             ColorManagedDisplaySettings *display_settings,
                             float clip_min_x,
@@ -591,13 +415,13 @@ void ED_draw_imbuf_clipping(ImBuf *ibuf,
 
     if (ok) {
       if (ibuf->rect_float) {
-        int format = 0;
+        eGPUTextureFormat format = 0;
 
         if (ibuf->channels == 3) {
-          format = GL_RGB;
+          format = GPU_RGB16F;
         }
         else if (ibuf->channels == 4) {
-          format = GL_RGBA;
+          format = GPU_RGBA16F;
         }
         else {
           BLI_assert(!"Incompatible number of channels for GLSL display");
@@ -610,8 +434,7 @@ void ED_draw_imbuf_clipping(ImBuf *ibuf,
                                     ibuf->x,
                                     ibuf->y,
                                     format,
-                                    GL_FLOAT,
-                                    zoomfilter,
+                                    use_filter,
                                     ibuf->rect_float,
                                     clip_min_x,
                                     clip_min_y,
@@ -629,9 +452,8 @@ void ED_draw_imbuf_clipping(ImBuf *ibuf,
                                   y,
                                   ibuf->x,
                                   ibuf->y,
-                                  GL_RGBA,
-                                  GL_UNSIGNED_BYTE,
-                                  zoomfilter,
+                                  GPU_RGBA8,
+                                  use_filter,
                                   ibuf->rect,
                                   clip_min_x,
                                   clip_min_y,
@@ -663,9 +485,8 @@ void ED_draw_imbuf_clipping(ImBuf *ibuf,
                                 y,
                                 ibuf->x,
                                 ibuf->y,
-                                GL_RGBA,
-                                GL_UNSIGNED_BYTE,
-                                zoomfilter,
+                                GPU_RGBA8,
+                                use_filter,
                                 display_buffer,
                                 clip_min_x,
                                 clip_min_y,
@@ -683,7 +504,7 @@ void ED_draw_imbuf_clipping(ImBuf *ibuf,
 void ED_draw_imbuf(ImBuf *ibuf,
                    float x,
                    float y,
-                   int zoomfilter,
+                   bool use_filter,
                    ColorManagedViewSettings *view_settings,
                    ColorManagedDisplaySettings *display_settings,
                    float zoom_x,
@@ -692,7 +513,7 @@ void ED_draw_imbuf(ImBuf *ibuf,
   ED_draw_imbuf_clipping(ibuf,
                          x,
                          y,
-                         zoomfilter,
+                         use_filter,
                          view_settings,
                          display_settings,
                          0.0f,
@@ -707,7 +528,7 @@ void ED_draw_imbuf_ctx_clipping(const bContext *C,
                                 ImBuf *ibuf,
                                 float x,
                                 float y,
-                                int zoomfilter,
+                                bool use_filter,
                                 float clip_min_x,
                                 float clip_min_y,
                                 float clip_max_x,
@@ -723,7 +544,7 @@ void ED_draw_imbuf_ctx_clipping(const bContext *C,
   ED_draw_imbuf_clipping(ibuf,
                          x,
                          y,
-                         zoomfilter,
+                         use_filter,
                          view_settings,
                          display_settings,
                          clip_min_x,
@@ -735,9 +556,9 @@ void ED_draw_imbuf_ctx_clipping(const bContext *C,
 }
 
 void ED_draw_imbuf_ctx(
-    const bContext *C, ImBuf *ibuf, float x, float y, int zoomfilter, float zoom_x, float zoom_y)
+    const bContext *C, ImBuf *ibuf, float x, float y, bool use_filter, float zoom_x, float zoom_y)
 {
-  ED_draw_imbuf_ctx_clipping(C, ibuf, x, y, zoomfilter, 0.0f, 0.0f, 0.0f, 0.0f, zoom_x, zoom_y);
+  ED_draw_imbuf_ctx_clipping(C, ibuf, x, y, use_filter, 0.0f, 0.0f, 0.0f, 0.0f, zoom_x, zoom_y);
 }
 
 int ED_draw_imbuf_method(ImBuf *ibuf)
@@ -745,15 +566,13 @@ int ED_draw_imbuf_method(ImBuf *ibuf)
   if (U.image_draw_method == IMAGE_DRAW_METHOD_AUTO) {
     /* Use faster GLSL when CPU to GPU transfer is unlikely to be a bottleneck,
      * otherwise do color management on CPU side. */
-    const size_t threshold = 2048 * 2048 * 4 * sizeof(float);
+    const size_t threshold = sizeof(float[4]) * 2048 * 2048;
     const size_t data_size = (ibuf->rect_float) ? sizeof(float) : sizeof(uchar);
     const size_t size = ibuf->x * ibuf->y * ibuf->channels * data_size;
 
     return (size > threshold) ? IMAGE_DRAW_METHOD_2DTEXTURE : IMAGE_DRAW_METHOD_GLSL;
   }
-  else {
-    return U.image_draw_method;
-  }
+  return U.image_draw_method;
 }
 
 /* don't move to GPU_immediate_util.h because this uses user-prefs

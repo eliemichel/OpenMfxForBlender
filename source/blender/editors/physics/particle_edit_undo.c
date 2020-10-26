@@ -21,7 +21,6 @@
  * \ingroup edphys
  */
 
-#include <assert.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,7 +56,6 @@
 static void undoptcache_from_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
 {
   PTCacheEditPoint *point;
-  int i;
 
   size_t mem_used_prev = MEM_get_memory_in_use();
 
@@ -68,7 +66,7 @@ static void undoptcache_from_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
 
     pa = undo->particles = MEM_dupallocN(edit->psys->particles);
 
-    for (i = 0; i < edit->totpoint; i++, pa++) {
+    for (int i = 0; i < edit->totpoint; i++, pa++) {
       pa->hair = MEM_dupallocN(pa->hair);
     }
 
@@ -81,7 +79,7 @@ static void undoptcache_from_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
     pm = undo->mem_cache.first;
 
     for (; pm; pm = pm->next) {
-      for (i = 0; i < BPHYS_TOT_DATA; i++) {
+      for (int i = 0; i < BPHYS_TOT_DATA; i++) {
         pm->data[i] = MEM_dupallocN(pm->data[i]);
       }
     }
@@ -90,7 +88,7 @@ static void undoptcache_from_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
   point = undo->points = MEM_dupallocN(edit->points);
   undo->totpoint = edit->totpoint;
 
-  for (i = 0; i < edit->totpoint; i++, point++) {
+  for (int i = 0; i < edit->totpoint; i++, point++) {
     point->keys = MEM_dupallocN(point->keys);
     /* no need to update edit key->co & key->time pointers here */
   }
@@ -253,7 +251,7 @@ static void particle_undosys_step_decode(struct bContext *C,
 {
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   /* TODO(campbell): undo_system: use low-level API to set mode. */
-  ED_object_mode_set(C, OB_MODE_PARTICLE_EDIT);
+  ED_object_mode_set_ex(C, OB_MODE_PARTICLE_EDIT, false, NULL);
   BLI_assert(particle_undosys_poll(C));
 
   ParticleUndoStep *us = (ParticleUndoStep *)us_p;

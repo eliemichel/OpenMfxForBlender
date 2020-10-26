@@ -361,24 +361,34 @@ void imm_draw_box_wire_3d(uint pos, float x1, float y1, float x2, float y2)
 /**
  * Draw a standard checkerboard to indicate transparent backgrounds.
  */
-void imm_draw_box_checker_2d(float x1, float y1, float x2, float y2)
+void imm_draw_box_checker_2d_ex(float x1,
+                                float y1,
+                                float x2,
+                                float y2,
+                                const float color_primary[4],
+                                const float color_secondary[4],
+                                int checker_size)
 {
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-  float checker_primary[4];
-  float checker_secondary[4];
-  int checker_size = UI_GetThemeValue(TH_TRANSPARENT_CHECKER_SIZE);
 
   immBindBuiltinProgram(GPU_SHADER_2D_CHECKER);
-  UI_GetThemeColor4fv(TH_TRANSPARENT_CHECKER_PRIMARY, checker_primary);
-  UI_GetThemeColor4fv(TH_TRANSPARENT_CHECKER_SECONDARY, checker_secondary);
 
-  immUniform4fv("color1", checker_primary);
-  immUniform4fv("color2", checker_secondary);
+  immUniform4fv("color1", color_primary);
+  immUniform4fv("color2", color_secondary);
   immUniform1i("size", checker_size);
 
   immRectf(pos, x1, y1, x2, y2);
 
   immUnbindProgram();
+}
+void imm_draw_box_checker_2d(float x1, float y1, float x2, float y2)
+{
+  float checker_primary[4];
+  float checker_secondary[4];
+  UI_GetThemeColor4fv(TH_TRANSPARENT_CHECKER_PRIMARY, checker_primary);
+  UI_GetThemeColor4fv(TH_TRANSPARENT_CHECKER_SECONDARY, checker_secondary);
+  int checker_size = UI_GetThemeValue(TH_TRANSPARENT_CHECKER_SIZE);
+  imm_draw_box_checker_2d_ex(x1, y1, x2, y2, checker_primary, checker_secondary, checker_size);
 }
 
 void imm_draw_cube_fill_3d(uint pos, const float co[3], const float aspect[3])
@@ -450,10 +460,10 @@ void imm_draw_cylinder_fill_normal_3d(
       float h1 = height * ((float)j / (float)stacks);
       float h2 = height * ((float)(j + 1) / (float)stacks);
 
-      float v1[3] = {r1 * cos2, r1 * sin2, h1};
-      float v2[3] = {r2 * cos2, r2 * sin2, h2};
-      float v3[3] = {r2 * cos1, r2 * sin1, h2};
-      float v4[3] = {r1 * cos1, r1 * sin1, h1};
+      const float v1[3] = {r1 * cos2, r1 * sin2, h1};
+      const float v2[3] = {r2 * cos2, r2 * sin2, h2};
+      const float v3[3] = {r2 * cos1, r2 * sin1, h2};
+      const float v4[3] = {r1 * cos1, r1 * sin1, h1};
       float n1[3], n2[3];
 
       /* calc normals */
@@ -506,10 +516,10 @@ void imm_draw_cylinder_wire_3d(
       float h1 = height * ((float)j / (float)stacks);
       float h2 = height * ((float)(j + 1) / (float)stacks);
 
-      float v1[3] = {r1 * cos2, r1 * sin2, h1};
-      float v2[3] = {r2 * cos2, r2 * sin2, h2};
-      float v3[3] = {r2 * cos1, r2 * sin1, h2};
-      float v4[3] = {r1 * cos1, r1 * sin1, h1};
+      const float v1[3] = {r1 * cos2, r1 * sin2, h1};
+      const float v2[3] = {r2 * cos2, r2 * sin2, h2};
+      const float v3[3] = {r2 * cos1, r2 * sin1, h2};
+      const float v4[3] = {r1 * cos1, r1 * sin1, h1};
 
       immVertex3fv(pos, v1);
       immVertex3fv(pos, v2);
@@ -544,10 +554,10 @@ void imm_draw_cylinder_fill_3d(
       float h1 = height * ((float)j / (float)stacks);
       float h2 = height * ((float)(j + 1) / (float)stacks);
 
-      float v1[3] = {r1 * cos2, r1 * sin2, h1};
-      float v2[3] = {r2 * cos2, r2 * sin2, h2};
-      float v3[3] = {r2 * cos1, r2 * sin1, h2};
-      float v4[3] = {r1 * cos1, r1 * sin1, h1};
+      const float v1[3] = {r1 * cos2, r1 * sin2, h1};
+      const float v2[3] = {r2 * cos2, r2 * sin2, h2};
+      const float v3[3] = {r2 * cos1, r2 * sin1, h2};
+      const float v4[3] = {r1 * cos1, r1 * sin1, h1};
 
       /* first tri */
       immVertex3fv(pos, v1);

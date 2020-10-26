@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_VOLUME_RENDER_H__
-#define __BKE_VOLUME_RENDER_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -35,19 +34,18 @@ struct VolumeGrid;
 
 /* Dense Voxels */
 
-bool BKE_volume_grid_dense_bounds(const struct Volume *volume,
+typedef struct DenseFloatVolumeGrid {
+  VolumeGridType type;
+  int resolution[3];
+  float texture_to_object[4][4];
+  int channels;
+  float *voxels;
+} DenseFloatVolumeGrid;
+
+bool BKE_volume_grid_dense_floats(const struct Volume *volume,
                                   struct VolumeGrid *volume_grid,
-                                  int64_t min[3],
-                                  int64_t max[3]);
-void BKE_volume_grid_dense_transform_matrix(const struct VolumeGrid *volume_grid,
-                                            const int64_t min[3],
-                                            const int64_t max[3],
-                                            float matrix[4][4]);
-void BKE_volume_grid_dense_voxels(const struct Volume *volume,
-                                  struct VolumeGrid *volume_grid,
-                                  const int64_t min[3],
-                                  const int64_t max[3],
-                                  float *voxels);
+                                  DenseFloatVolumeGrid *r_dense_grid);
+void BKE_volume_dense_float_grid_clear(DenseFloatVolumeGrid *dense_grid);
 
 /* Wireframe */
 
@@ -59,12 +57,20 @@ void BKE_volume_grid_wireframe(const struct Volume *volume,
                                BKE_volume_wireframe_cb cb,
                                void *cb_userdata);
 
+/* Selection Surface */
+
+typedef void (*BKE_volume_selection_surface_cb)(
+    void *userdata, float (*verts)[3], int (*tris)[3], int totvert, int tottris);
+
+void BKE_volume_grid_selection_surface(const struct Volume *volume,
+                                       struct VolumeGrid *volume_grid,
+                                       BKE_volume_selection_surface_cb cb,
+                                       void *cb_userdata);
+
 /* Render */
 
 float BKE_volume_density_scale(const struct Volume *volume, const float matrix[4][4]);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

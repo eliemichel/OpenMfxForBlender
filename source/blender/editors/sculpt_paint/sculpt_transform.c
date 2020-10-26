@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2020 Blender Foundation.
@@ -71,12 +71,12 @@ void ED_sculpt_init_transform(struct bContext *C)
   copy_v4_v4(ss->init_pivot_rot, ss->pivot_rot);
 
   SCULPT_undo_push_begin("Transform");
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false, false);
 
   ss->pivot_rot[3] = 1.0f;
 
-  SCULPT_vertex_random_access_init(ss);
-  SCULPT_filter_cache_init(ob, sd);
+  SCULPT_vertex_random_access_ensure(ss);
+  SCULPT_filter_cache_init(C, ob, sd, SCULPT_UNDO_COORDS);
 }
 
 static void sculpt_transform_task_cb(void *__restrict userdata,
@@ -124,10 +124,10 @@ void ED_sculpt_update_modal_transform(struct bContext *C)
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
-  const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
 
-  SCULPT_vertex_random_access_init(ss);
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false);
+  SCULPT_vertex_random_access_ensure(ss);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false, false);
 
   SculptThreadedTaskData data = {
       .sd = sd,
@@ -177,10 +177,9 @@ void ED_sculpt_update_modal_transform(struct bContext *C)
     mul_m4_m4m4(data.transform_mats[i], pivot_mat, data.transform_mats[i]);
   }
 
-  PBVHParallelSettings settings;
-  BKE_pbvh_parallel_range_settings(
-      &settings, (sd->flags & SCULPT_USE_OPENMP), ss->filter_cache->totnode);
-  BKE_pbvh_parallel_range(
+  TaskParallelSettings settings;
+  BKE_pbvh_parallel_range_settings(&settings, true, ss->filter_cache->totnode);
+  BLI_task_parallel_range(
       0, ss->filter_cache->totnode, &data, sculpt_transform_task_cb, &settings);
 
   if (ss->deform_modifiers_active || ss->shapekey_active) {
@@ -199,7 +198,7 @@ void ED_sculpt_end_transform(struct bContext *C)
   }
   /* Force undo push to happen even inside transform operator, since the sculpt
    * undo system works separate from regular undo and this is require to properly
-   * finish an undo step also when cancelling. */
+   * finish an undo step also when canceling. */
   const bool use_nested_undo = true;
   SCULPT_undo_push_end_ex(use_nested_undo);
   SCULPT_flush_update_done(C, ob, SCULPT_UPDATE_COORDS);
@@ -244,16 +243,15 @@ static EnumPropertyItem prop_sculpt_pivot_position_types[] = {
 
 static int sculpt_set_pivot_position_exec(bContext *C, wmOperator *op)
 {
-  Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
   ARegion *region = CTX_wm_region(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
-  const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
 
   int mode = RNA_enum_get(op->ptr, "mode");
 
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, true);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, true, false);
 
   /* Pivot to center. */
   if (mode == SCULPT_PIVOT_POSITION_ORIGIN) {
@@ -326,6 +324,12 @@ static int sculpt_set_pivot_position_exec(bContext *C, wmOperator *op)
 
     MEM_SAFE_FREE(nodes);
   }
+
+  /* Update the viewport navigation rotation origin. */
+  UnifiedPaintSettings *ups = &CTX_data_tool_settings(C)->unified_paint_settings;
+  copy_v3_v3(ups->average_stroke_accum, ss->pivot_pos);
+  ups->average_stroke_counter = 1;
+  ups->last_stroke_valid = true;
 
   ED_region_tag_redraw(region);
   WM_event_add_notifier(C, NC_GEOM | ND_SELECT, ob->data);

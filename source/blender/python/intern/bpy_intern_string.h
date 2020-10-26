@@ -14,12 +14,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BPY_INTERN_STRING_H__
-#define __BPY_INTERN_STRING_H__
+#pragma once
 
 /** \file
  * \ingroup pythonintern
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void bpy_intern_string_init(void);
 void bpy_intern_string_exit(void);
@@ -41,4 +44,6 @@ extern PyObject *bpy_intern_str_register;
 extern PyObject *bpy_intern_str_self;
 extern PyObject *bpy_intern_str_unregister;
 
-#endif /* __BPY_INTERN_STRING_H__ */
+#ifdef __cplusplus
+}
+#endif

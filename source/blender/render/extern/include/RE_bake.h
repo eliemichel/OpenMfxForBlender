@@ -21,13 +21,16 @@
  * \ingroup render
  */
 
-#ifndef __RE_BAKE_H__
-#define __RE_BAKE_H__
+#pragma once
 
 struct Depsgraph;
 struct ImBuf;
 struct Mesh;
 struct Render;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct BakeImage {
   struct Image *image;
@@ -67,7 +70,7 @@ bool RE_bake_engine(struct Render *re,
                     struct Object *object,
                     const int object_id,
                     const BakePixel pixel_array[],
-                    const size_t num_pixels,
+                    const BakeImages *bake_images,
                     const int depth,
                     const eScenePassType pass_type,
                     const int pass_filter,
@@ -84,6 +87,7 @@ bool RE_bake_pixels_populate_from_objects(struct Mesh *me_low,
                                           const size_t num_pixels,
                                           const bool is_custom_cage,
                                           const float cage_extrusion,
+                                          const float max_ray_distance,
                                           float mat_low[4][4],
                                           float mat_cage[4][4],
                                           struct Mesh *me_cage);
@@ -119,4 +123,6 @@ void RE_bake_normal_world_to_world(const BakePixel pixel_array[],
 
 void RE_bake_ibuf_clear(struct Image *image, const bool is_tangent);
 
-#endif /* __RE_BAKE_H__ */
+#ifdef __cplusplus
+}
+#endif

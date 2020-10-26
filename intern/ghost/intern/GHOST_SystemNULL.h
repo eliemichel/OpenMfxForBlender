@@ -19,8 +19,7 @@
  * Declaration of GHOST_SystemNULL class.
  */
 
-#ifndef __GHOST_SYSTEMNULL_H__
-#define __GHOST_SYSTEMNULL_H__
+#pragma once
 
 #include "../GHOST_Types.h"
 #include "GHOST_DisplayManagerNULL.h"
@@ -82,7 +81,7 @@ class GHOST_SystemNULL : public GHOST_System {
   void getAllDisplayDimensions(GHOST_TUns32 &width, GHOST_TUns32 &height) const
   { /* nop */
   }
-  GHOST_IContext *createOffscreenContext()
+  GHOST_IContext *createOffscreenContext(GHOST_GLSettings glSettings)
   {
     return NULL;
   }
@@ -106,7 +105,7 @@ class GHOST_SystemNULL : public GHOST_System {
     return GHOST_kFailure;
   }
 
-  GHOST_IWindow *createWindow(const STR_String &title,
+  GHOST_IWindow *createWindow(const char *title,
                               GHOST_TInt32 left,
                               GHOST_TInt32 top,
                               GHOST_TUns32 width,
@@ -130,5 +129,3 @@ class GHOST_SystemNULL : public GHOST_System {
                                 ((glSettings.flags & GHOST_glStereoVisual) != 0));
   }
 };
-
-#endif /* __GHOST_SYSTEMNULL_H__ */

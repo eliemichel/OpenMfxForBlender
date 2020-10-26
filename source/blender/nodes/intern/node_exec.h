@@ -21,8 +21,7 @@
  * \ingroup nodes
  */
 
-#ifndef __NODE_EXEC_H__
-#define __NODE_EXEC_H__
+#pragma once
 
 #include "DNA_listBase.h"
 
@@ -33,6 +32,10 @@
 #include "node_util.h"
 
 #include "RNA_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct bNode;
 struct bNodeStack;
@@ -98,4 +101,6 @@ struct bNodeTreeExec *ntreeTexBeginExecTree_internal(struct bNodeExecContext *co
                                                      bNodeInstanceKey parent_key);
 void ntreeTexEndExecTree_internal(struct bNodeTreeExec *exec);
 
+#ifdef __cplusplus
+}
 #endif

@@ -34,7 +34,7 @@ if(NOT WITH_HEADLESS)
   set(SRC
     datatoc_icon.c
   )
-  setup_platform_linker_flags()
+  setup_platform_linker_flags(datatoc)
   if(WIN32)
     include_directories(
       ../blenlib
@@ -52,9 +52,13 @@ if(NOT WITH_HEADLESS)
   endif()
 
   include_directories(${PNG_INCLUDE_DIRS})
-  link_directories(${PNG_LIBPATH} ${ZLIB_LIBPATH})
+  if(NOT APPLE)
+    # APPLE plaform uses full paths for linking libraries.
+    link_directories(${PNG_LIBPATH} ${ZLIB_LIBPATH})
+  endif()
 
   add_executable(datatoc_icon ${SRC})
+  setup_platform_linker_flags(datatoc_icon)
 
   target_link_libraries(datatoc_icon ${PNG_LIBRARIES} ${ZLIB_LIBRARIES})
   # PNG library uses pow() and floow(), so seems -lm is required for proper

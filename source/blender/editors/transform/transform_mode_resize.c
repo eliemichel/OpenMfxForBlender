@@ -44,6 +44,39 @@
 /** \name Transform Resize
  * \{ */
 
+static float ResizeBetween(TransInfo *t, const float p1[3], const float p2[3])
+{
+  float d1[3], d2[3], len_d1;
+
+  sub_v3_v3v3(d1, p1, t->center_global);
+  sub_v3_v3v3(d2, p2, t->center_global);
+
+  if (t->con.applyRot != NULL && (t->con.mode & CON_APPLY)) {
+    mul_m3_v3(t->con.pmtx, d1);
+    mul_m3_v3(t->con.pmtx, d2);
+  }
+
+  project_v3_v3v3(d1, d1, d2);
+
+  len_d1 = len_v3(d1);
+
+  /* Use 'invalid' dist when `center == p1` (after projecting),
+   * in this case scale will _never_ move the point in relation to the center,
+   * so it makes no sense to take it into account when scaling. see: T46503 */
+  return len_d1 != 0.0f ? len_v3(d2) / len_d1 : TRANSFORM_DIST_INVALID;
+}
+
+static void ApplySnapResize(TransInfo *t, float vec[3])
+{
+  float point[3];
+  getSnapPoint(t, point);
+
+  float dist = ResizeBetween(t, t->tsnap.snapTarget, point);
+  if (dist != TRANSFORM_DIST_INVALID) {
+    copy_v3_fl(vec, dist);
+  }
+}
+
 static void applyResize(TransInfo *t, const int UNUSED(mval[2]))
 {
   float mat[3][3];
@@ -58,7 +91,7 @@ static void applyResize(TransInfo *t, const int UNUSED(mval[2]))
 
     copy_v3_fl(t->values_final, ratio);
 
-    snapGridIncrement(t, t->values_final);
+    transform_snap_increment(t, t->values_final);
 
     if (applyNumInput(&t->num, t->values_final)) {
       constraintNumInput(t, t->values_final);
@@ -88,15 +121,11 @@ static void applyResize(TransInfo *t, const int UNUSED(mval[2]))
     headerResize(t, t->values_final, str);
   }
 
-  copy_m3_m3(t->mat, mat);  // used in gizmo
+  copy_m3_m3(t->mat, mat); /* used in gizmo */
 
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     TransData *td = tc->data;
     for (i = 0; i < tc->data_len; i++, td++) {
-      if (td->flag & TD_NOACTION) {
-        break;
-      }
-
       if (td->flag & TD_SKIP) {
         continue;
       }
@@ -123,7 +152,7 @@ static void applyResize(TransInfo *t, const int UNUSED(mval[2]))
       /* vertices in the radius of the brush end */
       /* outside the clipping area               */
       /* XXX HACK - dg */
-      if (t->flag & T_PROP_EDIT_ALL) {
+      if (t->flag & T_PROP_EDIT) {
         clipUVData(t);
       }
     }
@@ -138,6 +167,8 @@ void initResize(TransInfo *t)
 {
   t->mode = TFM_RESIZE;
   t->transform = applyResize;
+  t->tsnap.applySnap = ApplySnapResize;
+  t->tsnap.distance = ResizeBetween;
 
   initMouseInputMode(t, &t->mouse, INPUT_SPRING_FLIP);
 
@@ -157,11 +188,10 @@ void initResize(TransInfo *t)
 
   t->idx_max = 2;
   t->num.idx_max = 2;
-  t->snap[0] = 0.0f;
-  t->snap[1] = 0.1f;
-  t->snap[2] = t->snap[1] * 0.1f;
+  t->snap[0] = 0.1f;
+  t->snap[1] = t->snap[0] * 0.1f;
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   t->num.unit_type[0] = B_UNIT_NONE;
   t->num.unit_type[1] = B_UNIT_NONE;

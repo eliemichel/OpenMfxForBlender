@@ -61,6 +61,7 @@ static PyStructSequence_Field app_builtopts_info_fields[] = {
     {"usd", NULL},
     {"fluid", NULL},
     {"xr_openxr", NULL},
+    {"potrace", NULL},
     {NULL},
 };
 
@@ -282,6 +283,12 @@ static PyObject *make_builtopts_info(void)
   SetObjIncref(Py_False);
 #endif
 
+#ifdef WITH_POTRACE
+  SetObjIncref(Py_True);
+#else
+  SetObjIncref(Py_False);
+#endif
+
 #undef SetObjIncref
 
   return builtopts_info;
@@ -299,7 +306,7 @@ PyObject *BPY_app_build_options_struct(void)
   BlenderAppBuildOptionsType.tp_init = NULL;
   BlenderAppBuildOptionsType.tp_new = NULL;
   BlenderAppBuildOptionsType.tp_hash = (hashfunc)
-      _Py_HashPointer; /* without this we can't do set(sys.modules) [#29635] */
+      _Py_HashPointer; /* without this we can't do set(sys.modules) T29635. */
 
   return ret;
 }

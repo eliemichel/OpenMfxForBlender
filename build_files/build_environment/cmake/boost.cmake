@@ -19,17 +19,6 @@
 set(BOOST_ADDRESS_MODEL 64)
 
 if(WIN32)
-  if("${CMAKE_SIZEOF_VOID_P}" EQUAL "8")
-    set(PYTHON_ARCH x64)
-    set(PYTHON_ARCH2 win-AMD64)
-    set(PYTHON_OUTPUTDIR ${BUILD_DIR}/python/src/external_python/pcbuild/amd64/)
-  else()
-    set(PYTHON_ARCH x86)
-    set(PYTHON_ARCH2 win32)
-    set(PYTHON_OUTPUTDIR ${BUILD_DIR}/python/src/external_python/pcbuild/win32/)
-    set(BOOST_ADDRESS_MODEL 32)
-  endif()
-
   set(BOOST_TOOLSET toolset=msvc-14.1)
   set(BOOST_COMPILER_STRING -vc141)
 
@@ -44,7 +33,7 @@ if(WIN32)
 elseif(APPLE)
   set(BOOST_CONFIGURE_COMMAND ./bootstrap.sh)
   set(BOOST_BUILD_COMMAND ./b2)
-  set(BOOST_BUILD_OPTIONS toolset=darwin cxxflags=${PLATFORM_CXXFLAGS} linkflags=${PLATFORM_LDFLAGS} visibility=global --disable-icu boost.locale.icu=off)
+  set(BOOST_BUILD_OPTIONS toolset=clang-darwin cxxflags=${PLATFORM_CXXFLAGS} linkflags=${PLATFORM_LDFLAGS} visibility=global --disable-icu boost.locale.icu=off)
   set(BOOST_HARVEST_CMD echo .)
   set(BOOST_PATCH_COMMAND echo .)
 else()
@@ -57,6 +46,21 @@ else()
     set(BOOST_ADDRESS_MODEL 64)
   else()
     set(BOOST_ADDRESS_MODEL 32)
+  endif()
+endif()
+
+if(WITH_BOOST_PYTHON)
+  set(JAM_FILE ${BUILD_DIR}/boost.user-config.jam)
+  configure_file(${PATCH_DIR}/boost.user.jam.in ${JAM_FILE})
+  set(BOOST_PYTHON_OPTIONS
+    --with-python
+    --user-config=${JAM_FILE}
+  )
+  if(WIN32 AND BUILD_MODE STREQUAL Debug)
+    set(BOOST_PYTHON_OPTIONS
+      ${BOOST_PYTHON_OPTIONS}
+      define=BOOST_DEBUG_PYTHON
+    )
   endif()
 endif()
 
@@ -76,6 +80,7 @@ set(BOOST_OPTIONS
   -sNO_LZMA=1
   -sNO_ZSTD=1
   ${BOOST_TOOLSET}
+  ${BOOST_PYTHON_OPTIONS}
 )
 
 string(TOLOWER ${BUILD_MODE} BOOST_BUILD_TYPE)
@@ -92,3 +97,11 @@ ExternalProject_Add(external_boost
   BUILD_IN_SOURCE 1
   INSTALL_COMMAND "${BOOST_HARVEST_CMD}"
 )
+
+if(WITH_BOOST_PYTHON)
+  add_dependencies(
+    external_boost
+    external_python
+    external_numpy
+  )
+endif()

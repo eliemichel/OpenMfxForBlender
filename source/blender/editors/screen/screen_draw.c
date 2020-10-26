@@ -45,10 +45,8 @@ static void draw_horizontal_join_shape(ScrArea *area, char dir, uint pos)
 {
   const float width = screen_geom_area_width(area) - 1;
   const float height = screen_geom_area_height(area) - 1;
-  vec2f points[10];
-  short i;
-  float w, h;
 
+  float w, h;
   if (height < width) {
     h = height / 8;
     w = height / 4;
@@ -58,6 +56,7 @@ static void draw_horizontal_join_shape(ScrArea *area, char dir, uint pos)
     w = width / 4;
   }
 
+  vec2f points[10];
   points[0].x = area->v1->vec.x;
   points[0].y = area->v1->vec.y + height / 2;
 
@@ -91,7 +90,7 @@ static void draw_horizontal_join_shape(ScrArea *area, char dir, uint pos)
   if (dir == 'l') {
     /* when direction is left, then we flip direction of arrow */
     float cx = area->v1->vec.x + width;
-    for (i = 0; i < 10; i++) {
+    for (int i = 0; i < 10; i++) {
       points[i].x -= cx;
       points[i].x = -points[i].x;
       points[i].x += area->v1->vec.x;
@@ -100,7 +99,7 @@ static void draw_horizontal_join_shape(ScrArea *area, char dir, uint pos)
 
   immBegin(GPU_PRIM_TRI_FAN, 5);
 
-  for (i = 0; i < 5; i++) {
+  for (int i = 0; i < 5; i++) {
     immVertex2f(pos, points[i].x, points[i].y);
   }
 
@@ -108,7 +107,7 @@ static void draw_horizontal_join_shape(ScrArea *area, char dir, uint pos)
 
   immBegin(GPU_PRIM_TRI_FAN, 5);
 
-  for (i = 4; i < 8; i++) {
+  for (int i = 4; i < 8; i++) {
     immVertex2f(pos, points[i].x, points[i].y);
   }
 
@@ -126,10 +125,8 @@ static void draw_vertical_join_shape(ScrArea *area, char dir, uint pos)
 {
   const float width = screen_geom_area_width(area) - 1;
   const float height = screen_geom_area_height(area) - 1;
-  vec2f points[10];
-  short i;
-  float w, h;
 
+  float w, h;
   if (height < width) {
     h = height / 4;
     w = height / 8;
@@ -139,6 +136,7 @@ static void draw_vertical_join_shape(ScrArea *area, char dir, uint pos)
     w = width / 8;
   }
 
+  vec2f points[10];
   points[0].x = area->v1->vec.x + width / 2;
   points[0].y = area->v3->vec.y;
 
@@ -172,7 +170,7 @@ static void draw_vertical_join_shape(ScrArea *area, char dir, uint pos)
   if (dir == 'u') {
     /* when direction is up, then we flip direction of arrow */
     float cy = area->v1->vec.y + height;
-    for (i = 0; i < 10; i++) {
+    for (int i = 0; i < 10; i++) {
       points[i].y -= cy;
       points[i].y = -points[i].y;
       points[i].y += area->v1->vec.y;
@@ -181,7 +179,7 @@ static void draw_vertical_join_shape(ScrArea *area, char dir, uint pos)
 
   immBegin(GPU_PRIM_TRI_FAN, 5);
 
-  for (i = 0; i < 5; i++) {
+  for (int i = 0; i < 5; i++) {
     immVertex2f(pos, points[i].x, points[i].y);
   }
 
@@ -189,7 +187,7 @@ static void draw_vertical_join_shape(ScrArea *area, char dir, uint pos)
 
   immBegin(GPU_PRIM_TRI_FAN, 5);
 
-  for (i = 4; i < 8; i++) {
+  for (int i = 4; i < 8; i++) {
     immVertex2f(pos, points[i].x, points[i].y);
   }
 
@@ -217,12 +215,13 @@ static void draw_join_shape(ScrArea *area, char dir, uint pos)
 
 static void do_vert_pair(GPUVertBuf *vbo, uint pos, uint *vidx, int corner, int i)
 {
-  float inter[2], exter[2];
+  float inter[2];
   inter[0] = cosf(corner * M_PI_2 + (i * M_PI_2 / (CORNER_RESOLUTION - 1.0f)));
   inter[1] = sinf(corner * M_PI_2 + (i * M_PI_2 / (CORNER_RESOLUTION - 1.0f)));
 
   /* Snap point to edge */
   float div = 1.0f / max_ff(fabsf(inter[0]), fabsf(inter[1]));
+  float exter[2];
   mul_v2_v2fl(exter, inter, div);
   exter[0] = roundf(exter[0]);
   exter[1] = roundf(exter[1]);
@@ -296,8 +295,7 @@ static GPUBatch *batch_screen_edges_get(int *corner_len)
  */
 static void scrarea_draw_shape_dark(ScrArea *area, char dir, uint pos)
 {
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
   immUniformColor4ub(0, 0, 0, 50);
 
   draw_join_shape(area, dir, pos);
@@ -308,10 +306,8 @@ static void scrarea_draw_shape_dark(ScrArea *area, char dir, uint pos)
  */
 static void scrarea_draw_shape_light(ScrArea *area, char UNUSED(dir), uint pos)
 {
-  GPU_blend_set_func(GPU_DST_COLOR, GPU_SRC_ALPHA);
-  /* value 181 was hardly computed: 181~105 */
-  immUniformColor4ub(255, 255, 255, 50);
-  /* draw_join_shape(area, dir); */
+  GPU_blend(GPU_BLEND_ALPHA);
+  immUniformColor4ub(255, 255, 255, 25);
 
   immRectf(pos, area->v1->vec.x, area->v1->vec.y, area->v3->vec.x, area->v3->vec.y);
 }
@@ -343,6 +339,7 @@ static void drawscredge_area_draw(
   }
 
   GPUBatch *batch = batch_screen_edges_get(NULL);
+  GPU_batch_program_set_builtin(batch, GPU_SHADER_2D_AREA_EDGES);
   GPU_batch_uniform_4fv(batch, "rect", (float *)&rect);
   GPU_batch_draw(batch);
 }
@@ -381,11 +378,9 @@ void ED_screen_draw_edges(wmWindow *win)
   float col[4], corner_scale, edge_thickness;
   int verts_per_corner = 0;
 
-  ScrArea *area;
-
   rcti scissor_rect;
   BLI_rcti_init_minmax(&scissor_rect);
-  for (area = screen->areabase.first; area; area = area->next) {
+  LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
     BLI_rcti_do_minmax_v(&scissor_rect, (int[2]){area->v1->vec.x, area->v1->vec.y});
     BLI_rcti_do_minmax_v(&scissor_rect, (int[2]){area->v3->vec.x, area->v3->vec.y});
   }
@@ -404,7 +399,7 @@ void ED_screen_draw_edges(wmWindow *win)
   /* It seems that all areas gets smaller when pixelsize is > 1.
    * So in order to avoid missing pixels we just disable de scissors. */
   if (U.pixelsize <= 1.0f) {
-    glEnable(GL_SCISSOR_TEST);
+    GPU_scissor_test(true);
   }
 
   UI_GetThemeColor4fv(TH_EDITOR_OUTLINE, col);
@@ -412,9 +407,7 @@ void ED_screen_draw_edges(wmWindow *win)
   corner_scale = U.pixelsize * 8.0f;
   edge_thickness = corner_scale * 0.21f;
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   GPUBatch *batch = batch_screen_edges_get(&verts_per_corner);
   GPU_batch_program_set_builtin(batch, GPU_SHADER_2D_AREA_EDGES);
@@ -422,14 +415,14 @@ void ED_screen_draw_edges(wmWindow *win)
   GPU_batch_uniform_1f(batch, "scale", corner_scale);
   GPU_batch_uniform_4fv(batch, "color", col);
 
-  for (area = screen->areabase.first; area; area = area->next) {
+  LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
     drawscredge_area(area, winsize_x, winsize_y, edge_thickness);
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   if (U.pixelsize <= 1.0f) {
-    glDisable(GL_SCISSOR_TEST);
+    GPU_scissor_test(false);
   }
 }
 
@@ -469,12 +462,12 @@ void ED_screen_draw_join_shape(ScrArea *sa1, ScrArea *sa2)
         break;
     }
 
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     scrarea_draw_shape_dark(sa2, dir, pos);
     scrarea_draw_shape_light(sa1, dira, pos);
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   immUnbindProgram();
@@ -486,9 +479,7 @@ void ED_screen_draw_split_preview(ScrArea *area, const int dir, const float fac)
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
   /* splitpoint */
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   immUniformColor4ub(255, 255, 255, 100);
 
@@ -530,7 +521,7 @@ void ED_screen_draw_split_preview(ScrArea *area, const int dir, const float fac)
     immEnd();
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   immUnbindProgram();
 }
@@ -611,15 +602,15 @@ static void screen_preview_draw(const bScreen *screen, int size_x, int size_y)
 void ED_screen_preview_render(const bScreen *screen, int size_x, int size_y, uint *r_rect)
 {
   char err_out[256] = "unknown";
-  GPUOffScreen *offscreen = GPU_offscreen_create(size_x, size_y, 0, true, false, err_out);
+  GPUOffScreen *offscreen = GPU_offscreen_create(size_x, size_y, true, false, err_out);
 
   GPU_offscreen_bind(offscreen, true);
-  GPU_clear_color(0.0, 0.0, 0.0, 0.0);
-  GPU_clear(GPU_COLOR_BIT | GPU_DEPTH_BIT);
+  GPU_clear_color(0.0f, 0.0f, 0.0f, 0.0f);
+  GPU_clear_depth(1.0f);
 
   screen_preview_draw(screen, size_x, size_y);
 
-  GPU_offscreen_read_pixels(offscreen, GL_UNSIGNED_BYTE, r_rect);
+  GPU_offscreen_read_pixels(offscreen, GPU_DATA_UNSIGNED_BYTE, r_rect);
   GPU_offscreen_unbind(offscreen, true);
 
   GPU_offscreen_free(offscreen);

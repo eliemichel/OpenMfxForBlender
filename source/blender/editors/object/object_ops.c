@@ -71,6 +71,8 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_paths_range_update);
   WM_operatortype_append(OBJECT_OT_forcefield_toggle);
 
+  WM_operatortype_append(OBJECT_OT_switch_object);
+
   WM_operatortype_append(OBJECT_OT_parent_set);
   WM_operatortype_append(OBJECT_OT_parent_no_inverse_set);
   WM_operatortype_append(OBJECT_OT_parent_clear);
@@ -79,6 +81,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_track_clear);
   WM_operatortype_append(OBJECT_OT_make_local);
   WM_operatortype_append(OBJECT_OT_make_override_library);
+  WM_operatortype_append(OBJECT_OT_convert_proxy_to_override);
   WM_operatortype_append(OBJECT_OT_make_single_user);
   WM_operatortype_append(OBJECT_OT_make_links_scene);
   WM_operatortype_append(OBJECT_OT_make_links_data);
@@ -109,16 +112,15 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_light_add);
   WM_operatortype_append(OBJECT_OT_camera_add);
   WM_operatortype_append(OBJECT_OT_speaker_add);
-#ifdef WITH_NEW_OBJECT_TYPES
   WM_operatortype_append(OBJECT_OT_hair_add);
   WM_operatortype_append(OBJECT_OT_pointcloud_add);
-#endif
   WM_operatortype_append(OBJECT_OT_volume_add);
   WM_operatortype_append(OBJECT_OT_volume_import);
   WM_operatortype_append(OBJECT_OT_add);
   WM_operatortype_append(OBJECT_OT_add_named);
   WM_operatortype_append(OBJECT_OT_effector_add);
   WM_operatortype_append(OBJECT_OT_collection_instance_add);
+  WM_operatortype_append(OBJECT_OT_data_instance_add);
   WM_operatortype_append(OBJECT_OT_metaball_add);
   WM_operatortype_append(OBJECT_OT_duplicates_make_real);
   WM_operatortype_append(OBJECT_OT_duplicate);
@@ -130,13 +132,17 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_modifier_remove);
   WM_operatortype_append(OBJECT_OT_modifier_move_up);
   WM_operatortype_append(OBJECT_OT_modifier_move_down);
+  WM_operatortype_append(OBJECT_OT_modifier_move_to_index);
   WM_operatortype_append(OBJECT_OT_modifier_apply);
+  WM_operatortype_append(OBJECT_OT_modifier_apply_as_shapekey);
   WM_operatortype_append(OBJECT_OT_modifier_convert);
   WM_operatortype_append(OBJECT_OT_modifier_copy);
   WM_operatortype_append(OBJECT_OT_multires_subdivide);
   WM_operatortype_append(OBJECT_OT_multires_reshape);
   WM_operatortype_append(OBJECT_OT_multires_higher_levels_delete);
   WM_operatortype_append(OBJECT_OT_multires_base_apply);
+  WM_operatortype_append(OBJECT_OT_multires_unsubdivide);
+  WM_operatortype_append(OBJECT_OT_multires_rebuild_subdiv);
   WM_operatortype_append(OBJECT_OT_multires_external_save);
   WM_operatortype_append(OBJECT_OT_multires_external_pack);
   WM_operatortype_append(OBJECT_OT_skin_root_mark);
@@ -149,6 +155,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_gpencil_modifier_remove);
   WM_operatortype_append(OBJECT_OT_gpencil_modifier_move_up);
   WM_operatortype_append(OBJECT_OT_gpencil_modifier_move_down);
+  WM_operatortype_append(OBJECT_OT_gpencil_modifier_move_to_index);
   WM_operatortype_append(OBJECT_OT_gpencil_modifier_apply);
   WM_operatortype_append(OBJECT_OT_gpencil_modifier_copy);
 
@@ -157,6 +164,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_shaderfx_remove);
   WM_operatortype_append(OBJECT_OT_shaderfx_move_up);
   WM_operatortype_append(OBJECT_OT_shaderfx_move_down);
+  WM_operatortype_append(OBJECT_OT_shaderfx_move_to_index);
 
   WM_operatortype_append(OBJECT_OT_correctivesmooth_bind);
   WM_operatortype_append(OBJECT_OT_meshdeform_bind);
@@ -176,6 +184,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(CONSTRAINT_OT_delete);
   WM_operatortype_append(CONSTRAINT_OT_move_up);
   WM_operatortype_append(CONSTRAINT_OT_move_down);
+  WM_operatortype_append(CONSTRAINT_OT_move_to_index);
   WM_operatortype_append(CONSTRAINT_OT_stretchto_reset);
   WM_operatortype_append(CONSTRAINT_OT_limitdistance_reset);
   WM_operatortype_append(CONSTRAINT_OT_childof_set_inverse);

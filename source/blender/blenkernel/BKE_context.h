@@ -17,14 +17,14 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_CONTEXT_H__
-#define __BKE_CONTEXT_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
 #include "DNA_listBase.h"
+#include "DNA_object_enums.h"
 #include "RNA_types.h"
 
 #ifdef __cplusplus
@@ -66,8 +66,6 @@ struct bScreen;
 struct wmWindow;
 struct wmWindowManager;
 
-#include "DNA_object_enums.h"
-
 /* Structs */
 
 struct bContext;
@@ -76,9 +74,26 @@ typedef struct bContext bContext;
 struct bContextDataResult;
 typedef struct bContextDataResult bContextDataResult;
 
-typedef int (*bContextDataCallback)(const bContext *C,
-                                    const char *member,
-                                    bContextDataResult *result);
+/* Result of context lookups.
+ * The specific values are important, and used implicitly in ctx_data_get(). Some functions also
+ * still accept/return `int` instead, to ensure that the compiler uses the correct storage size
+ * when mixing C/C++ code. */
+typedef enum eContextResult {
+  /* The context member was found, and its data is available. */
+  CTX_RESULT_OK = 1,
+
+  /* The context member was not found. */
+  CTX_RESULT_MEMBER_NOT_FOUND = 0,
+
+  /* The context member was found, but its data is not available.
+   * For example, "active_bone" is a valid context member, but has not data in Object mode. */
+  CTX_RESULT_NO_DATA = -1,
+} eContextResult;
+
+/* Function mapping a context member name to its value. */
+typedef int /*eContextResult*/ (*bContextDataCallback)(const bContext *C,
+                                                       const char *member,
+                                                       bContextDataResult *result);
 
 typedef struct bContextStoreEntry {
   struct bContextStoreEntry *next, *prev;
@@ -140,7 +155,14 @@ bool CTX_py_init_get(bContext *C);
 void CTX_py_init_set(bContext *C, bool value);
 
 void *CTX_py_dict_get(const bContext *C);
-void CTX_py_dict_set(bContext *C, void *value);
+void *CTX_py_dict_get_orig(const bContext *C);
+
+struct bContext_PyState {
+  void *py_context;
+  void *py_context_orig;
+};
+void CTX_py_state_push(bContext *C, struct bContext_PyState *pystate, void *value);
+void CTX_py_state_pop(bContext *C, struct bContext_PyState *pystate);
 
 /* Window Manager Context */
 
@@ -208,7 +230,7 @@ ListBase CTX_data_dir_get_ex(const bContext *C,
                              const bool use_rna,
                              const bool use_all);
 ListBase CTX_data_dir_get(const bContext *C);
-int CTX_data_get(
+int /*eContextResult*/ CTX_data_get(
     const bContext *C, const char *member, PointerRNA *r_ptr, ListBase *r_lb, short *r_type);
 
 void CTX_data_id_pointer_set(bContextDataResult *result, struct ID *id);
@@ -217,7 +239,7 @@ void CTX_data_pointer_set(bContextDataResult *result, struct ID *id, StructRNA *
 void CTX_data_id_list_add(bContextDataResult *result, struct ID *id);
 void CTX_data_list_add(bContextDataResult *result, struct ID *id, StructRNA *type, void *data);
 
-void CTX_data_dir_set(bContextDataResult *result, const char **member);
+void CTX_data_dir_set(bContextDataResult *result, const char **dir);
 
 void CTX_data_type_set(struct bContextDataResult *result, short type);
 short CTX_data_type_get(struct bContextDataResult *result);
@@ -264,7 +286,7 @@ enum eContextObjectMode CTX_data_mode_enum_ex(const struct Object *obedit,
 enum eContextObjectMode CTX_data_mode_enum(const bContext *C);
 
 void CTX_data_main_set(bContext *C, struct Main *bmain);
-void CTX_data_scene_set(bContext *C, struct Scene *bmain);
+void CTX_data_scene_set(bContext *C, struct Scene *scene);
 
 int CTX_data_selected_editable_objects(const bContext *C, ListBase *list);
 int CTX_data_selected_editable_bases(const bContext *C, ListBase *list);
@@ -313,6 +335,8 @@ int CTX_data_visible_gpencil_layers(const bContext *C, ListBase *list);
 int CTX_data_editable_gpencil_layers(const bContext *C, ListBase *list);
 int CTX_data_editable_gpencil_strokes(const bContext *C, ListBase *list);
 
+bool CTX_wm_interface_locked(const bContext *C);
+
 /* Gets pointer to the dependency graph.
  * If it doesn't exist yet, it will be allocated.
  *
@@ -344,6 +368,4 @@ struct Depsgraph *CTX_data_depsgraph_on_load(const bContext *C);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

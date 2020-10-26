@@ -142,19 +142,15 @@ static char paintcurve_point_side_index(const BezTriple *bezt,
     if ((bezt->f1 & SELECT) == (bezt->f3 & SELECT)) {
       return is_first ? SEL_F1 : SEL_F3;
     }
-    else if (bezt->f1 & SELECT) {
+    if (bezt->f1 & SELECT) {
       return SEL_F1;
     }
-    else if (bezt->f3 & SELECT) {
+    if (bezt->f3 & SELECT) {
       return SEL_F3;
     }
-    else {
-      return fallback;
-    }
+    return fallback;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 /******************* Operators *********************************/
@@ -193,23 +189,20 @@ static void paintcurve_point_add(bContext *C, wmOperator *op, const int loc[2])
   Paint *p = BKE_paint_get_active_from_context(C);
   Brush *br = p->brush;
   Main *bmain = CTX_data_main(C);
-  PaintCurve *pc;
-  PaintCurvePoint *pcp;
   wmWindow *window = CTX_wm_window(C);
   ARegion *region = CTX_wm_region(C);
-  float vec[3] = {loc[0], loc[1], 0.0};
-  int add_index;
-  int i;
+  const float vec[3] = {loc[0], loc[1], 0.0};
 
-  pc = br->paint_curve;
+  PaintCurve *pc = br->paint_curve;
   if (!pc) {
     br->paint_curve = pc = BKE_paint_curve_add(bmain, "PaintCurve");
   }
 
   ED_paintcurve_undo_push_begin(op->type->name);
 
-  pcp = MEM_mallocN((pc->tot_points + 1) * sizeof(PaintCurvePoint), "PaintCurvePoint");
-  add_index = pc->add_index;
+  PaintCurvePoint *pcp = MEM_mallocN((pc->tot_points + 1) * sizeof(PaintCurvePoint),
+                                     "PaintCurvePoint");
+  int add_index = pc->add_index;
 
   if (pc->points) {
     if (add_index > 0) {
@@ -233,7 +226,7 @@ static void paintcurve_point_add(bContext *C, wmOperator *op, const int loc[2])
   copy_v3_v3(pcp[add_index].bez.vec[2], vec);
 
   /* last step, clear selection from all bezier handles expect the next */
-  for (i = 0; i < pc->tot_points; i++) {
+  for (int i = 0; i < pc->tot_points; i++) {
     pcp[i].bez.f1 = pcp[i].bez.f2 = pcp[i].bez.f3 = 0;
   }
 
@@ -255,7 +248,7 @@ static void paintcurve_point_add(bContext *C, wmOperator *op, const int loc[2])
 
 static int paintcurve_add_point_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  int loc[2] = {event->mval[0], event->mval[1]};
+  const int loc[2] = {event->mval[0], event->mval[1]};
   paintcurve_point_add(C, op, loc);
   RNA_int_set_array(op->ptr, "location", loc);
   return OPERATOR_FINISHED;
@@ -484,16 +477,14 @@ static bool paintcurve_point_select(
 
 static int paintcurve_select_point_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  int loc[2] = {UNPACK2(event->mval)};
+  const int loc[2] = {UNPACK2(event->mval)};
   bool toggle = RNA_boolean_get(op->ptr, "toggle");
   bool extend = RNA_boolean_get(op->ptr, "extend");
   if (paintcurve_point_select(C, op, loc, toggle, extend)) {
     RNA_int_set_array(op->ptr, "location", loc);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static int paintcurve_select_point_exec(bContext *C, wmOperator *op)

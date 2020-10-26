@@ -27,6 +27,7 @@
  * but we'll keep it here for the time being. (nzc)
  */
 
+#include <math.h>
 #include <stdlib.h>
 
 #include "MEM_guardedalloc.h"
@@ -75,6 +76,7 @@ void IMB_convert_rgba_to_abgr(struct ImBuf *ibuf)
     }
   }
 }
+
 static void pixel_from_buffer(struct ImBuf *ibuf, unsigned char **outI, float **outF, int x, int y)
 
 {
@@ -89,7 +91,9 @@ static void pixel_from_buffer(struct ImBuf *ibuf, unsigned char **outI, float **
   }
 }
 
-/* BICUBIC Interpolation */
+/* -------------------------------------------------------------------- */
+/** \name Bi-Cubic Interpolation
+ * \{ */
 
 void bicubic_interpolation_color(
     struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v)
@@ -117,7 +121,12 @@ void bicubic_interpolation(ImBuf *in, ImBuf *out, float u, float v, int xout, in
   bicubic_interpolation_color(in, outI, outF, u, v);
 }
 
-/* BILINEAR INTERPOLATION */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Bi-Linear Interpolation
+ * \{ */
+
 void bilinear_interpolation_color(
     struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v)
 {
@@ -200,12 +209,11 @@ void bilinear_interpolation_color_wrap(
     row3I = (unsigned char *)in->rect + ((size_t)in->x) * y1 * 4 + 4 * x2;
     row4I = (unsigned char *)in->rect + ((size_t)in->x) * y2 * 4 + 4 * x2;
 
-    /* need to add 0.5 to avoid rounding down (causes darken with the smear brush)
-     * tested with white images and this should not wrap back to zero */
-    outI[0] = (ma_mb * row1I[0] + a_mb * row3I[0] + ma_b * row2I[0] + a_b * row4I[0]) + 0.5f;
-    outI[1] = (ma_mb * row1I[1] + a_mb * row3I[1] + ma_b * row2I[1] + a_b * row4I[1]) + 0.5f;
-    outI[2] = (ma_mb * row1I[2] + a_mb * row3I[2] + ma_b * row2I[2] + a_b * row4I[2]) + 0.5f;
-    outI[3] = (ma_mb * row1I[3] + a_mb * row3I[3] + ma_b * row2I[3] + a_b * row4I[3]) + 0.5f;
+    /* Tested with white images and this should not wrap back to zero. */
+    outI[0] = roundf(ma_mb * row1I[0] + a_mb * row3I[0] + ma_b * row2I[0] + a_b * row4I[0]);
+    outI[1] = roundf(ma_mb * row1I[1] + a_mb * row3I[1] + ma_b * row2I[1] + a_b * row4I[1]);
+    outI[2] = roundf(ma_mb * row1I[2] + a_mb * row3I[2] + ma_b * row2I[2] + a_b * row4I[2]);
+    outI[3] = roundf(ma_mb * row1I[3] + a_mb * row3I[3] + ma_b * row2I[3] + a_b * row4I[3]);
   }
 }
 
@@ -224,8 +232,13 @@ void bilinear_interpolation(ImBuf *in, ImBuf *out, float u, float v, int xout, i
   bilinear_interpolation_color(in, outI, outF, u, v);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Nearest Interpolation
+ * \{ */
+
 /* function assumes out to be zero'ed, only does RGBA */
-/* NEAREST INTERPOLATION */
 void nearest_interpolation_color(
     struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v)
 {
@@ -321,7 +334,7 @@ void nearest_interpolation_color_wrap(
   }
 }
 
-void nearest_interpolation(ImBuf *in, ImBuf *out, float x, float y, int xout, int yout)
+void nearest_interpolation(ImBuf *in, ImBuf *out, float u, float v, int xout, int yout)
 {
   unsigned char *outI = NULL;
   float *outF = NULL;
@@ -333,14 +346,16 @@ void nearest_interpolation(ImBuf *in, ImBuf *out, float x, float y, int xout, in
   /* gcc warns these could be uninitialized, but its ok. */
   pixel_from_buffer(out, &outI, &outF, xout, yout);
 
-  nearest_interpolation_color(in, outI, outF, x, y);
+  nearest_interpolation_color(in, outI, outF, u, v);
 }
 
-/*********************** Threaded image processing *************************/
+/* -------------------------------------------------------------------- */
+/** \name Threaded Image Processing
+ * \{ */
 
-static void processor_apply_func(TaskPool *__restrict pool, void *taskdata, int UNUSED(threadid))
+static void processor_apply_func(TaskPool *__restrict pool, void *taskdata)
 {
-  void (*do_thread)(void *) = (void (*)(void *))BLI_task_pool_userdata(pool);
+  void (*do_thread)(void *) = (void (*)(void *))BLI_task_pool_user_data(pool);
   do_thread(taskdata);
 }
 
@@ -353,14 +368,13 @@ void IMB_processor_apply_threaded(
 {
   const int lines_per_task = 64;
 
-  TaskScheduler *task_scheduler = BLI_task_scheduler_get();
   TaskPool *task_pool;
 
   void *handles;
   int total_tasks = (buffer_lines + lines_per_task - 1) / lines_per_task;
   int i, start_line;
 
-  task_pool = BLI_task_pool_create(task_scheduler, do_thread, TASK_PRIORITY_LOW);
+  task_pool = BLI_task_pool_create(do_thread, TASK_PRIORITY_LOW);
 
   handles = MEM_callocN(handle_size * total_tasks, "processor apply threaded handles");
 
@@ -399,11 +413,9 @@ typedef struct ScanlineGlobalData {
   int total_scanlines;
 } ScanlineGlobalData;
 
-static void processor_apply_scanline_func(TaskPool *__restrict pool,
-                                          void *taskdata,
-                                          int UNUSED(threadid))
+static void processor_apply_scanline_func(TaskPool *__restrict pool, void *taskdata)
 {
-  ScanlineGlobalData *data = BLI_task_pool_userdata(pool);
+  ScanlineGlobalData *data = BLI_task_pool_user_data(pool);
   int start_scanline = POINTER_AS_INT(taskdata);
   int num_scanlines = min_ii(data->scanlines_per_task, data->total_scanlines - start_scanline);
   data->do_thread(data->custom_data, start_scanline, num_scanlines);
@@ -420,8 +432,7 @@ void IMB_processor_apply_threaded_scanlines(int total_scanlines,
   data.scanlines_per_task = scanlines_per_task;
   data.total_scanlines = total_scanlines;
   const int total_tasks = (total_scanlines + scanlines_per_task - 1) / scanlines_per_task;
-  TaskScheduler *task_scheduler = BLI_task_scheduler_get();
-  TaskPool *task_pool = BLI_task_pool_create(task_scheduler, &data, TASK_PRIORITY_LOW);
+  TaskPool *task_pool = BLI_task_pool_create(&data, TASK_PRIORITY_LOW);
   for (int i = 0, start_line = 0; i < total_tasks; i++) {
     BLI_task_pool_push(
         task_pool, processor_apply_scanline_func, POINTER_FROM_INT(start_line), false, NULL);
@@ -435,7 +446,11 @@ void IMB_processor_apply_threaded_scanlines(int total_scanlines,
   BLI_task_pool_free(task_pool);
 }
 
-/* Alpha-under */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Alpha-under
+ * \{ */
 
 void IMB_alpha_under_color_float(float *rect_float, int x, int y, float backcol[3])
 {
@@ -443,24 +458,15 @@ void IMB_alpha_under_color_float(float *rect_float, int x, int y, float backcol[
   float *fp = rect_float;
 
   while (a--) {
-    if (fp[3] == 0.0f) {
-      copy_v3_v3(fp, backcol);
-    }
-    else {
-      float mul = 1.0f - fp[3];
-
-      fp[0] += mul * backcol[0];
-      fp[1] += mul * backcol[1];
-      fp[2] += mul * backcol[2];
-    }
-
+    const float mul = 1.0f - fp[3];
+    madd_v3_v3fl(fp, backcol, mul);
     fp[3] = 1.0f;
 
     fp += 4;
   }
 }
 
-void IMB_alpha_under_color_byte(unsigned char *rect, int x, int y, float backcol[3])
+void IMB_alpha_under_color_byte(unsigned char *rect, int x, int y, const float backcol[3])
 {
   size_t a = ((size_t)x) * y;
   unsigned char *cp = rect;
@@ -489,6 +495,12 @@ void IMB_alpha_under_color_byte(unsigned char *rect, int x, int y, float backcol
   }
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Sample Pixel
+ * \{ */
+
 /* Sample pixel of image using NEAREST method. */
 void IMB_sampleImageAtLocation(ImBuf *ibuf, float x, float y, bool make_linear_rgb, float color[4])
 {
@@ -504,3 +516,5 @@ void IMB_sampleImageAtLocation(ImBuf *ibuf, float x, float y, bool make_linear_r
     }
   }
 }
+
+/** \} */

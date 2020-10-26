@@ -222,7 +222,7 @@ void AnimationExporter::export_matrix_animation(Object *ob, BCAnimationSampler &
 
   std::vector<float> frames;
   sampler.get_object_frames(frames, ob);
-  if (frames.size() > 0) {
+  if (!frames.empty()) {
     BCMatrixSampleMap samples;
     bool is_animated = sampler.get_object_samples(samples, ob);
     if (keep_flat_curves || is_animated) {
@@ -230,7 +230,7 @@ void AnimationExporter::export_matrix_animation(Object *ob, BCAnimationSampler &
       std::string name = encode_xml(id_name(ob));
       std::string action_name = (action == NULL) ? name + "-action" : id_name(action);
       std::string channel_type = "transform";
-      std::string axis = "";
+      std::string axis;
       std::string id = bc_get_action_id(action_name, name, channel_type, axis);
 
       std::string target = translate_id(name) + '/' + channel_type;
@@ -264,7 +264,7 @@ void AnimationExporter::export_bone_animations_recursive(Object *ob,
   std::vector<float> frames;
   sampler.get_bone_frames(frames, ob, bone);
 
-  if (frames.size()) {
+  if (!frames.empty()) {
     BCMatrixSampleMap samples;
     bool is_animated = sampler.get_bone_samples(samples, ob, bone);
     if (keep_flat_curves || is_animated) {
@@ -395,15 +395,15 @@ bool AnimationExporter::is_bone_deform_group(Bone *bone)
     return true;
   }
   /* Check child bones */
-  else {
-    for (Bone *child = (Bone *)bone->childbase.first; child; child = child->next) {
-      /* loop through all the children until deform bone is found, and then return */
-      is_def = is_bone_deform_group(child);
-      if (is_def) {
-        return true;
-      }
+
+  for (Bone *child = (Bone *)bone->childbase.first; child; child = child->next) {
+    /* loop through all the children until deform bone is found, and then return */
+    is_def = is_bone_deform_group(child);
+    if (is_def) {
+      return true;
     }
   }
+
   /* no deform bone found in children also */
   return false;
 }
@@ -542,7 +542,7 @@ void AnimationExporter::add_source_parameters(COLLADASW::SourceBase::ParameterNa
         param.push_back("ANGLE");
       }
       else {
-        if (axis != "") {
+        if (!axis.empty()) {
           param.push_back(axis);
         }
         else if (transform) {
@@ -771,7 +771,7 @@ std::string AnimationExporter::collada_linear_interpolation_source(int tot,
   return source_id;
 }
 
-const std::string AnimationExporter::get_collada_name(std::string channel_type) const
+std::string AnimationExporter::get_collada_name(std::string channel_type) const
 {
   /*
    * Translation table to map FCurve animation types to Collada animation.
@@ -836,16 +836,15 @@ std::string AnimationExporter::get_collada_sid(const BCAnimationCurve &curve,
 
   bool is_angle = curve.is_rotation_curve();
 
-  if (tm_name.size()) {
+  if (!tm_name.empty()) {
     if (is_angle) {
       return tm_name + std::string(axis_name) + ".ANGLE";
     }
-    else if (axis_name != "") {
+    if (!axis_name.empty()) {
       return tm_name + "." + std::string(axis_name);
     }
-    else {
-      return tm_name;
-    }
+
+    return tm_name;
   }
 
   return tm_name;

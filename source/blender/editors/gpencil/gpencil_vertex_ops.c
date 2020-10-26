@@ -74,7 +74,7 @@ static const EnumPropertyItem gpencil_modesEnumPropertyItem_mode[] = {
 };
 
 /* Poll callback for stroke vertex paint operator. */
-static bool gp_vertexpaint_mode_poll(bContext *C)
+static bool gpencil_vertexpaint_mode_poll(bContext *C)
 {
   ToolSettings *ts = CTX_data_tool_settings(C);
   Object *ob = CTX_data_active_object(C);
@@ -97,7 +97,7 @@ static bool gp_vertexpaint_mode_poll(bContext *C)
   return false;
 }
 
-static int gp_vertexpaint_brightness_contrast_exec(bContext *C, wmOperator *op)
+static int gpencil_vertexpaint_brightness_contrast_exec(bContext *C, wmOperator *op)
 {
   Object *ob = CTX_data_active_object(C);
   bGPdata *gpd = (bGPdata *)ob->data;
@@ -178,8 +178,8 @@ void GPENCIL_OT_vertex_color_brightness_contrast(wmOperatorType *ot)
   ot->description = "Adjust vertex color brightness/contrast";
 
   /* api callbacks */
-  ot->exec = gp_vertexpaint_brightness_contrast_exec;
-  ot->poll = gp_vertexpaint_mode_poll;
+  ot->exec = gpencil_vertexpaint_brightness_contrast_exec;
+  ot->poll = gpencil_vertexpaint_mode_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -192,7 +192,7 @@ void GPENCIL_OT_vertex_color_brightness_contrast(wmOperatorType *ot)
   RNA_def_property_ui_range(prop, min, max, 1, 1);
 }
 
-static int gp_vertexpaint_hsv_exec(bContext *C, wmOperator *op)
+static int gpencil_vertexpaint_hsv_exec(bContext *C, wmOperator *op)
 {
   Object *ob = CTX_data_active_object(C);
   bGPdata *gpd = (bGPdata *)ob->data;
@@ -273,8 +273,8 @@ void GPENCIL_OT_vertex_color_hsv(wmOperatorType *ot)
   ot->description = "Adjust vertex color HSV values";
 
   /* api callbacks */
-  ot->exec = gp_vertexpaint_hsv_exec;
-  ot->poll = gp_vertexpaint_mode_poll;
+  ot->exec = gpencil_vertexpaint_hsv_exec;
+  ot->poll = gpencil_vertexpaint_mode_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -286,7 +286,7 @@ void GPENCIL_OT_vertex_color_hsv(wmOperatorType *ot)
   RNA_def_float(ot->srna, "v", 1.0f, 0.0f, 2.0f, "Value", "", 0.0f, 2.0f);
 }
 
-static int gp_vertexpaint_invert_exec(bContext *C, wmOperator *op)
+static int gpencil_vertexpaint_invert_exec(bContext *C, wmOperator *op)
 {
   Object *ob = CTX_data_active_object(C);
   bGPdata *gpd = (bGPdata *)ob->data;
@@ -344,8 +344,8 @@ void GPENCIL_OT_vertex_color_invert(wmOperatorType *ot)
   ot->description = "Invert RGB values";
 
   /* api callbacks */
-  ot->exec = gp_vertexpaint_invert_exec;
-  ot->poll = gp_vertexpaint_mode_poll;
+  ot->exec = gpencil_vertexpaint_invert_exec;
+  ot->poll = gpencil_vertexpaint_mode_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -354,7 +354,7 @@ void GPENCIL_OT_vertex_color_invert(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "mode", gpencil_modesEnumPropertyItem_mode, 0, "Mode", "");
 }
 
-static int gp_vertexpaint_levels_exec(bContext *C, wmOperator *op)
+static int gpencil_vertexpaint_levels_exec(bContext *C, wmOperator *op)
 {
   Object *ob = CTX_data_active_object(C);
   bGPdata *gpd = (bGPdata *)ob->data;
@@ -413,8 +413,8 @@ void GPENCIL_OT_vertex_color_levels(wmOperatorType *ot)
   ot->description = "Adjust levels of vertex colors";
 
   /* api callbacks */
-  ot->exec = gp_vertexpaint_levels_exec;
-  ot->poll = gp_vertexpaint_mode_poll;
+  ot->exec = gpencil_vertexpaint_levels_exec;
+  ot->poll = gpencil_vertexpaint_mode_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -428,13 +428,13 @@ void GPENCIL_OT_vertex_color_levels(wmOperatorType *ot)
       ot->srna, "gain", 1.0f, 0.0f, FLT_MAX, "Gain", "Value to multiply colors by", 0.0f, 10.0f);
 }
 
-static int gp_vertexpaint_set_exec(bContext *C, wmOperator *op)
+static int gpencil_vertexpaint_set_exec(bContext *C, wmOperator *op)
 {
   ToolSettings *ts = CTX_data_tool_settings(C);
   Object *ob = CTX_data_active_object(C);
   bGPdata *gpd = (bGPdata *)ob->data;
   Paint *paint = &ts->gp_vertexpaint->paint;
-  Brush *brush = brush = paint->brush;
+  Brush *brush = paint->brush;
 
   bool changed = false;
   int i;
@@ -485,8 +485,8 @@ void GPENCIL_OT_vertex_color_set(wmOperatorType *ot)
   ot->description = "Set active color to all selected vertex";
 
   /* api callbacks */
-  ot->exec = gp_vertexpaint_set_exec;
-  ot->poll = gp_vertexpaint_mode_poll;
+  ot->exec = gpencil_vertexpaint_set_exec;
+  ot->poll = gpencil_vertexpaint_mode_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -497,7 +497,9 @@ void GPENCIL_OT_vertex_color_set(wmOperatorType *ot)
 }
 
 /* Helper to extract color from vertex color to create a palette. */
-static bool gp_extract_palette_from_vertex(bContext *C, const bool selected, const int threshold)
+static bool gpencil_extract_palette_from_vertex(bContext *C,
+                                                const bool selected,
+                                                const int threshold)
 {
   Main *bmain = CTX_data_main(C);
   Object *ob = CTX_data_active_object(C);
@@ -657,7 +659,7 @@ static uint get_material_type(MaterialGPencilStyle *gp_style,
   return r_i;
 }
 
-static bool gp_material_to_vertex_poll(bContext *C)
+static bool gpencil_material_to_vertex_poll(bContext *C)
 {
   /* only supported with grease pencil objects */
   Object *ob = CTX_data_active_object(C);
@@ -668,7 +670,7 @@ static bool gp_material_to_vertex_poll(bContext *C)
   return true;
 }
 
-static int gp_material_to_vertex_exec(bContext *C, wmOperator *op)
+static int gpencil_material_to_vertex_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   Object *ob = CTX_data_active_object(C);
@@ -680,7 +682,6 @@ static int gp_material_to_vertex_exec(bContext *C, wmOperator *op)
   char name[32] = "";
   Material *ma = NULL;
   GPMatArray *mat_elm = NULL;
-  int i;
 
   bool changed = false;
 
@@ -742,6 +743,7 @@ static int gp_material_to_vertex_exec(bContext *C, wmOperator *op)
 
           /* Check if material exist. */
           bool found = false;
+          int i;
           for (i = 0; i < totmat; i++) {
             mat_elm = &mat_table[i];
             if (mat_elm->ma == NULL) {
@@ -794,6 +796,7 @@ static int gp_material_to_vertex_exec(bContext *C, wmOperator *op)
 
         /* Update all points. */
         bGPDspoint *pt;
+        int i;
         for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
           copy_v3_v3(pt->vert_color, gp_style->stroke_rgba);
           pt->vert_color[3] = 1.0f;
@@ -814,7 +817,7 @@ static int gp_material_to_vertex_exec(bContext *C, wmOperator *op)
 
   /* Generate a Palette. */
   if (palette) {
-    gp_extract_palette_from_vertex(C, selected, 1);
+    gpencil_extract_palette_from_vertex(C, selected, 1);
   }
 
   /* Clean unused materials. */
@@ -834,8 +837,8 @@ void GPENCIL_OT_material_to_vertex_color(wmOperatorType *ot)
   ot->description = "Replace materials in strokes with Vertex Color";
 
   /* api callbacks */
-  ot->exec = gp_material_to_vertex_exec;
-  ot->poll = gp_material_to_vertex_poll;
+  ot->exec = gpencil_material_to_vertex_exec;
+  ot->poll = gpencil_material_to_vertex_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -852,7 +855,7 @@ void GPENCIL_OT_material_to_vertex_color(wmOperatorType *ot)
 }
 
 /* Extract Palette from Vertex Color. */
-static bool gp_extract_palette_vertex_poll(bContext *C)
+static bool gpencil_extract_palette_vertex_poll(bContext *C)
 {
   /* only supported with grease pencil objects */
   Object *ob = CTX_data_active_object(C);
@@ -863,12 +866,12 @@ static bool gp_extract_palette_vertex_poll(bContext *C)
   return true;
 }
 
-static int gp_extract_palette_vertex_exec(bContext *C, wmOperator *op)
+static int gpencil_extract_palette_vertex_exec(bContext *C, wmOperator *op)
 {
   const bool selected = RNA_boolean_get(op->ptr, "selected");
   const int threshold = RNA_int_get(op->ptr, "threshold");
 
-  if (gp_extract_palette_from_vertex(C, selected, threshold)) {
+  if (gpencil_extract_palette_from_vertex(C, selected, threshold)) {
     BKE_reportf(op->reports, RPT_INFO, "Palette created");
   }
   else {
@@ -886,8 +889,8 @@ void GPENCIL_OT_extract_palette_vertex(wmOperatorType *ot)
   ot->description = "Extract all colors used in Grease Pencil Vertex and create a Palette";
 
   /* api callbacks */
-  ot->exec = gp_extract_palette_vertex_exec;
-  ot->poll = gp_extract_palette_vertex_poll;
+  ot->exec = gpencil_extract_palette_vertex_exec;
+  ot->poll = gpencil_extract_palette_vertex_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

@@ -23,6 +23,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_bitmap.h"
 #include "BLI_kdtree.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
@@ -63,7 +64,7 @@ static const EnumPropertyItem prop_similar_types[] = {
     {SIMVERT_NORMAL, "NORMAL", 0, "Normal", ""},
     {SIMVERT_FACE, "FACE", 0, "Amount of Adjacent Faces", ""},
     {SIMVERT_VGROUP, "VGROUP", 0, "Vertex Groups", ""},
-    {SIMVERT_EDGE, "EDGE", 0, "Amount of connecting edges", ""},
+    {SIMVERT_EDGE, "EDGE", 0, "Amount of Connecting Edges", ""},
 
     {SIMEDGE_LENGTH, "LENGTH", 0, "Length", ""},
     {SIMEDGE_DIR, "DIR", 0, "Direction", ""},
@@ -82,7 +83,7 @@ static const EnumPropertyItem prop_similar_types[] = {
     {SIMFACE_SIDES, "SIDES", 0, "Polygon Sides", ""},
     {SIMFACE_PERIMETER, "PERIMETER", 0, "Perimeter", ""},
     {SIMFACE_NORMAL, "NORMAL", 0, "Normal", ""},
-    {SIMFACE_COPLANAR, "COPLANAR", 0, "Co-planar", ""},
+    {SIMFACE_COPLANAR, "COPLANAR", 0, "Coplanar", ""},
     {SIMFACE_SMOOTH, "SMOOTH", 0, "Flat/Smooth", ""},
     {SIMFACE_FACEMAP, "FACE_MAP", 0, "Face-Map", ""},
 #ifdef WITH_FREESTYLE
@@ -244,9 +245,7 @@ static int similar_face_select_exec(bContext *C, wmOperator *op)
         if (custom_data_offset == -1) {
           continue;
         }
-        else {
-          gset_array[ob_index] = BLI_gset_ptr_new("Select similar face: facemap gset");
-        }
+        gset_array[ob_index] = BLI_gset_ptr_new("Select similar face: facemap gset");
       }
     }
 
@@ -1007,7 +1006,9 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
     BMEditMesh *em = BKE_editmesh_from_object(ob);
     BMesh *bm = em->bm;
     int cd_dvert_offset = -1;
-    int dvert_selected = 0;
+    BLI_bitmap *defbase_selected = NULL;
+    int defbase_len = 0;
+
     invert_m4_m4(ob->imat, ob->obmat);
 
     if (bm->totvertsel == 0) {
@@ -1019,6 +1020,11 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
       if (cd_dvert_offset == -1) {
         continue;
       }
+      defbase_len = BLI_listbase_count(&ob->defbase);
+      if (defbase_len == 0) {
+        continue;
+      }
+      defbase_selected = BLI_BITMAP_NEW(defbase_len, __func__);
     }
 
     BMVert *vert; /* Mesh vertex. */
@@ -1048,7 +1054,9 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
 
             for (int i = 0; i < dvert->totweight; i++, dw++) {
               if (dw->weight > 0.0f) {
-                dvert_selected |= (1 << dw->def_nr);
+                if (LIKELY(dw->def_nr < defbase_len)) {
+                  BLI_BITMAP_ENABLE(defbase_selected, dw->def_nr);
+                }
               }
             }
             break;
@@ -1059,14 +1067,16 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
 
     if (type == SIMVERT_VGROUP) {
       /* We store the names of the vertex groups, so we can select
-       * vertex groups with the same name in  different objects. */
-      const int dvert_tot = BLI_listbase_count(&ob->defbase);
-      for (int i = 0; i < dvert_tot; i++) {
-        if (dvert_selected & (1 << i)) {
-          bDeformGroup *dg = BLI_findlink(&ob->defbase, i);
+       * vertex groups with the same name in different objects. */
+
+      int i = 0;
+      LISTBASE_FOREACH (bDeformGroup *, dg, &ob->defbase) {
+        if (BLI_BITMAP_TEST(defbase_selected, i)) {
           BLI_gset_add(gset, dg->name);
         }
+        i += 1;
       }
+      MEM_freeN(defbase_selected);
     }
   }
 
@@ -1082,32 +1092,42 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
     BLI_kdtree_3d_balance(tree_3d);
   }
 
-  /* Run .the BM operators. */
+  /* Run the matching operations. */
   for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *ob = objects[ob_index];
     BMEditMesh *em = BKE_editmesh_from_object(ob);
     BMesh *bm = em->bm;
     bool changed = false;
     int cd_dvert_offset = -1;
-    int dvert_selected = 0;
+    BLI_bitmap *defbase_selected = NULL;
+    int defbase_len = 0;
 
     if (type == SIMVERT_VGROUP) {
       cd_dvert_offset = CustomData_get_offset(&bm->vdata, CD_MDEFORMVERT);
       if (cd_dvert_offset == -1) {
         continue;
       }
+      defbase_len = BLI_listbase_count(&ob->defbase);
+      if (defbase_len == 0) {
+        continue;
+      }
 
       /* We map back the names of the vertex groups to their corresponding indices
        * for this object. This is fast, and keep the logic for each vertex very simple. */
+
+      defbase_selected = BLI_BITMAP_NEW(defbase_len, __func__);
+      bool found_any = false;
       GSetIterator gs_iter;
       GSET_ITER (gs_iter, gset) {
         const char *name = BLI_gsetIterator_getKey(&gs_iter);
         int vgroup_id = BLI_findstringindex(&ob->defbase, name, offsetof(bDeformGroup, name));
         if (vgroup_id != -1) {
-          dvert_selected |= (1 << vgroup_id);
+          BLI_BITMAP_ENABLE(defbase_selected, vgroup_id);
+          found_any = true;
         }
       }
-      if (dvert_selected == 0) {
+      if (found_any == false) {
+        MEM_freeN(defbase_selected);
         continue;
       }
     }
@@ -1167,9 +1187,11 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
 
             for (int i = 0; i < dvert->totweight; i++, dw++) {
               if (dw->weight > 0.0f) {
-                if (dvert_selected & (1 << dw->def_nr)) {
-                  select = true;
-                  break;
+                if (LIKELY(dw->def_nr < defbase_len)) {
+                  if (BLI_BITMAP_TEST(defbase_selected, dw->def_nr)) {
+                    select = true;
+                    break;
+                  }
                 }
               }
             }
@@ -1182,6 +1204,10 @@ static int similar_vert_select_exec(bContext *C, wmOperator *op)
           changed = true;
         }
       }
+    }
+
+    if (type == SIMVERT_VGROUP) {
+      MEM_freeN(defbase_selected);
     }
 
     if (changed) {
@@ -1221,12 +1247,10 @@ static int edbm_select_similar_exec(bContext *C, wmOperator *op)
   if (type < 100) {
     return similar_vert_select_exec(C, op);
   }
-  else if (type < 200) {
+  if (type < 200) {
     return similar_edge_select_exec(C, op);
   }
-  else {
-    return similar_face_select_exec(C, op);
-  }
+  return similar_face_select_exec(C, op);
 }
 
 static const EnumPropertyItem *select_similar_type_itemf(bContext *C,

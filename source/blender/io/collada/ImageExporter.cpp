@@ -21,7 +21,6 @@
 #include "COLLADABUURI.h"
 #include "COLLADASWImage.h"
 
-extern "C" {
 #include "DNA_image_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_texture_types.h"
@@ -37,7 +36,6 @@ extern "C" {
 #include "BLI_string.h"
 
 #include "IMB_imbuf_types.h"
-}
 
 #include "ImageExporter.h"
 #include "MaterialExporter.h"
@@ -57,7 +55,7 @@ void ImagesExporter::export_UV_Image(Image *image, bool use_copies)
 
   ImBuf *imbuf = BKE_image_acquire_ibuf(image, NULL, NULL);
   if (!imbuf) {
-    fprintf(stderr, "Collada export: image does not exist:\n%s\n", image->name);
+    fprintf(stderr, "Collada export: image does not exist:\n%s\n", image->filepath);
     return;
   }
 
@@ -106,7 +104,7 @@ void ImagesExporter::export_UV_Image(Image *image, bool use_copies)
   else {
 
     /* make absolute source path */
-    BLI_strncpy(source_path, image->name, sizeof(source_path));
+    BLI_strncpy(source_path, image->filepath, sizeof(source_path));
     BLI_path_abs(source_path, ID_BLEND_PATH_FROM_GLOBAL(&image->id));
     BLI_path_normalize(NULL, source_path);
 

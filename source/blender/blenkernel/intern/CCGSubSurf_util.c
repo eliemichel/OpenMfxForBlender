@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "BLI_sys_types.h"  // for intptr_t support
+#include "BLI_sys_types.h" /* for intptr_t support */
 #include "MEM_guardedalloc.h"
 
 #include "BLI_utildefines.h" /* for BLI_assert */
@@ -304,7 +304,7 @@ void ccgSubSurf__dumpCoords(CCGSubSurf *ss)
         }
         for (x = 0; x < gridSize; x++) {
           float *co = FACE_getIECo(f, subdivLevels, S, x);
-          printf("face index=%d. cornder=%d, ie_index=%d, coord=(%f, %f, %f)\n",
+          printf("face index=%d. corner=%d, ie_index=%d, coord=(%f, %f, %f)\n",
                  index,
                  S,
                  x,

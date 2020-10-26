@@ -45,7 +45,7 @@
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
-#include "clip_intern.h"  // own include
+#include "clip_intern.h" /* own include */
 
 typedef struct TrackMotionCurveUserData {
   SpaceClip *sc;
@@ -192,7 +192,7 @@ static void draw_tracks_motion_and_error_curves(View2D *v2d, SpaceClip *sc, uint
   }
 
   /* Draw graph lines. */
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   clip_graph_tracking_values_iterate(sc,
                                      (sc->flag & SC_SHOW_GRAPH_SEL_ONLY) != 0,
                                      (sc->flag & SC_SHOW_GRAPH_HIDDEN) != 0,
@@ -200,7 +200,7 @@ static void draw_tracks_motion_and_error_curves(View2D *v2d, SpaceClip *sc, uint
                                      tracking_segment_point_cb,
                                      tracking_segment_start_cb,
                                      tracking_segment_end_cb);
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   /* Selected knot handles on top of curves. */
   if (draw_knots) {
@@ -220,31 +220,46 @@ static void draw_frame_curves(SpaceClip *sc, uint pos)
   MovieClip *clip = ED_space_clip_get_clip(sc);
   MovieTracking *tracking = &clip->tracking;
   MovieTrackingReconstruction *reconstruction = BKE_tracking_get_active_reconstruction(tracking);
-  int i, lines = 0, prevfra = 0;
+
+  int previous_frame;
+  float previous_error;
+  bool have_previous_point = false;
+
+  /* Indicates whether immBegin() was called. */
+  bool is_lines_segment_open = false;
 
   immUniformColor3f(0.0f, 0.0f, 1.0f);
 
-  for (i = 0; i < reconstruction->camnr; i++) {
+  for (int i = 0; i < reconstruction->camnr; i++) {
     MovieReconstructedCamera *camera = &reconstruction->cameras[i];
-    int framenr;
 
-    if (lines && camera->framenr != prevfra + 1) {
-      immEnd();
-      lines = 0;
+    const int current_frame = BKE_movieclip_remap_clip_to_scene_frame(clip, camera->framenr);
+    const float current_error = camera->error;
+
+    if (have_previous_point && current_frame != previous_frame + 1) {
+      if (is_lines_segment_open) {
+        immEnd();
+        is_lines_segment_open = false;
+      }
+      have_previous_point = false;
     }
 
-    if (!lines) {
-      immBeginAtMost(GPU_PRIM_LINE_STRIP, reconstruction->camnr);
-      lines = 1;
+    if (have_previous_point) {
+      if (!is_lines_segment_open) {
+        immBeginAtMost(GPU_PRIM_LINE_STRIP, reconstruction->camnr);
+        is_lines_segment_open = true;
+
+        immVertex2f(pos, previous_frame, previous_error);
+      }
+      immVertex2f(pos, current_frame, current_error);
     }
 
-    framenr = BKE_movieclip_remap_clip_to_scene_frame(clip, camera->framenr);
-    immVertex2f(pos, framenr, camera->error);
-
-    prevfra = camera->framenr;
+    previous_frame = current_frame;
+    previous_error = current_error;
+    have_previous_point = true;
   }
 
-  if (lines) {
+  if (is_lines_segment_open) {
     immEnd();
   }
 }

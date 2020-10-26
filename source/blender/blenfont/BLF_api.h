@@ -21,8 +21,7 @@
  * \ingroup blf
  */
 
-#ifndef __BLF_API_H__
-#define __BLF_API_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 #include "BLI_sys_types.h"
@@ -41,10 +40,6 @@ struct rcti;
 
 int BLF_init(void);
 void BLF_exit(void);
-void BLF_default_dpi(int dpi);
-void BLF_default_set(int fontid);
-int BLF_default(void);      /* get default font ID so we can pass it to other functions */
-void BLF_batch_reset(void); /* call when changing opengl context. */
 
 void BLF_cache_clear(void);
 
@@ -79,7 +74,7 @@ void BLF_color4f(int fontid, float r, float g, float b, float a);
 void BLF_color4fv(int fontid, const float rgba[4]);
 void BLF_color3f(int fontid, float r, float g, float b);
 void BLF_color3fv_alpha(int fontid, const float rgb[3], float alpha);
-/* also available: UI_FontThemeColor(fontid, colorid) */
+/* Also available: `UI_FontThemeColor(fontid, colorid)`. */
 
 /* Set a 4x4 matrix to be multiplied before draw the text.
  * Remember that you need call BLF_enable(BLF_MATRIX)
@@ -94,18 +89,11 @@ void BLF_color3fv_alpha(int fontid, const float rgb[3], float alpha);
  */
 void BLF_matrix(int fontid, const float m[16]);
 
-/* Batch drawcalls together as long as
- * the modelview matrix and the font remain unchanged. */
+/* Batch draw-calls together as long as
+ * the model-view matrix and the font remain unchanged. */
 void BLF_batch_draw_begin(void);
 void BLF_batch_draw_flush(void);
 void BLF_batch_draw_end(void);
-
-/* Draw the string using the default font, size and dpi. */
-void BLF_draw_default(float x, float y, float z, const char *str, size_t len) ATTR_NONNULL();
-void BLF_draw_default_ascii(float x, float y, float z, const char *str, size_t len) ATTR_NONNULL();
-
-/* Set size and DPI, and return default font ID. */
-int BLF_set_default(void);
 
 /* Draw the string using the current font. */
 void BLF_draw_ex(int fontid, const char *str, size_t len, struct ResultBLF *r_info)
@@ -117,9 +105,11 @@ void BLF_draw_ascii(int fontid, const char *str, size_t len) ATTR_NONNULL(2);
 int BLF_draw_mono(int fontid, const char *str, size_t len, int cwidth) ATTR_NONNULL(2);
 
 typedef bool (*BLF_GlyphBoundsFn)(const char *str,
-                                  const size_t str_ofs,
-                                  const struct rcti *glyph_bounds,
+                                  const size_t str_step_ofs,
+                                  const struct rcti *glyph_step_bounds,
                                   const int glyph_advance_x,
+                                  const struct rctf *glyph_bounds,
+                                  const int glyph_bearing[2],
                                   void *user_data);
 
 void BLF_boundbox_foreach_glyph_ex(int fontid,
@@ -257,6 +247,16 @@ void BLF_thumb_preview(const char *filename,
                        int h,
                        int channels) ATTR_NONNULL();
 
+/* blf_default.c */
+void BLF_default_dpi(int dpi);
+void BLF_default_set(int fontid);
+int BLF_default(void); /* get default font ID so we can pass it to other functions */
+/* Draw the string using the default font, size and dpi. */
+void BLF_draw_default(float x, float y, float z, const char *str, size_t len) ATTR_NONNULL();
+void BLF_draw_default_ascii(float x, float y, float z, const char *str, size_t len) ATTR_NONNULL();
+/* Set size and DPI, and return default font ID. */
+int BLF_set_default(void);
+
 /* blf_font_default.c */
 int BLF_load_default(const bool unique);
 int BLF_load_mono_default(const bool unique);
@@ -277,6 +277,8 @@ void BLF_state_print(int fontid);
 #define BLF_HINTING_NONE (1 << 8)
 #define BLF_HINTING_SLIGHT (1 << 9)
 #define BLF_HINTING_FULL (1 << 10)
+#define BLF_BOLD (1 << 11)
+#define BLF_ITALIC (1 << 12)
 
 #define BLF_DRAW_STR_DUMMY_MAX 1024
 
@@ -301,5 +303,3 @@ struct ResultBLF {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLF_API_H__ */

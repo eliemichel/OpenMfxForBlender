@@ -72,9 +72,10 @@ void BKE_copybuffer_tag_ID(ID *id)
  */
 bool BKE_copybuffer_save(Main *bmain_src, const char *filename, ReportList *reports)
 {
-  const int write_flags = G_FILE_RELATIVE_REMAP;
+  const int write_flags = 0;
+  const eBLO_WritePathRemap remap_mode = BLO_WRITE_PATH_REMAP_RELATIVE;
 
-  bool retval = BKE_blendfile_write_partial(bmain_src, filename, write_flags, reports);
+  bool retval = BKE_blendfile_write_partial(bmain_src, filename, write_flags, remap_mode, reports);
 
   BKE_blendfile_write_partial_end(bmain_src);
 
@@ -92,14 +93,17 @@ bool BKE_copybuffer_read(Main *bmain_dst,
     return false;
   }
   /* Here appending/linking starts. */
-  Main *mainl = BLO_library_link_begin(bmain_dst, &bh, libname);
+  const int flag = 0;
+  struct LibraryLink_Params liblink_params;
+  BLO_library_link_params_init(&liblink_params, bmain_dst, flag);
+  Main *mainl = BLO_library_link_begin(&bh, libname, &liblink_params);
   BLO_library_link_copypaste(mainl, bh, id_types_mask);
-  BLO_library_link_end(mainl, &bh, 0, NULL, NULL, NULL, NULL);
+  BLO_library_link_end(mainl, &bh, &liblink_params);
   /* Mark all library linked objects to be updated. */
   BKE_main_lib_objects_recalc_all(bmain_dst);
   IMB_colormanagement_check_file_config(bmain_dst);
   /* Append, rather than linking. */
-  Library *lib = BLI_findstring(&bmain_dst->libraries, libname, offsetof(Library, filepath));
+  Library *lib = BLI_findstring(&bmain_dst->libraries, libname, offsetof(Library, filepath_abs));
   BKE_library_make_local(bmain_dst, lib, NULL, true, false);
   /* Important we unset, otherwise these object wont
    * link into other scenes from this blend file.
@@ -143,18 +147,20 @@ int BKE_copybuffer_paste(bContext *C,
   BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, true);
 
   /* here appending/linking starts */
-  mainl = BLO_library_link_begin(bmain, &bh, libname);
+  struct LibraryLink_Params liblink_params;
+  BLO_library_link_params_init_with_context(&liblink_params, bmain, flag, scene, view_layer, v3d);
+  mainl = BLO_library_link_begin(&bh, libname, &liblink_params);
 
   const int num_pasted = BLO_library_link_copypaste(mainl, bh, id_types_mask);
 
-  BLO_library_link_end(mainl, &bh, flag, bmain, scene, view_layer, v3d);
+  BLO_library_link_end(mainl, &bh, &liblink_params);
 
   /* mark all library linked objects to be updated */
   BKE_main_lib_objects_recalc_all(bmain);
   IMB_colormanagement_check_file_config(bmain);
 
   /* append, rather than linking */
-  lib = BLI_findstring(&bmain->libraries, libname, offsetof(Library, filepath));
+  lib = BLI_findstring(&bmain->libraries, libname, offsetof(Library, filepath_abs));
   BKE_library_make_local(bmain, lib, NULL, true, false);
 
   /* important we unset, otherwise these object wont

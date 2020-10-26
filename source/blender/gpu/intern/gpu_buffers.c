@@ -34,9 +34,11 @@
 #include "BLI_hash.h"
 #include "BLI_math.h"
 #include "BLI_math_color.h"
+#include "BLI_math_color_blend.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_meshdata_types.h"
+#include "DNA_userdef_types.h"
 
 #include "BKE_DerivedMesh.h"
 #include "BKE_ccg.h"
@@ -151,13 +153,14 @@ static bool gpu_pbvh_vert_buf_data_set(GPU_PBVH_Buffers *buffers, uint vert_len)
     /* Initialize vertex buffer (match 'VertexBufferFormat'). */
     buffers->vert_buf = GPU_vertbuf_create_with_format_ex(&g_vbo_id.format, GPU_USAGE_STATIC);
   }
-  if (buffers->vert_buf->data == NULL || buffers->vert_buf->vertex_len != vert_len) {
+  if (GPU_vertbuf_get_data(buffers->vert_buf) == NULL ||
+      GPU_vertbuf_get_vertex_len(buffers->vert_buf) != vert_len) {
     /* Allocate buffer if not allocated yet or size changed. */
     GPU_vertbuf_data_alloc(buffers->vert_buf, vert_len);
   }
 #endif
 
-  return buffers->vert_buf->data != NULL;
+  return GPU_vertbuf_get_data(buffers->vert_buf) != NULL;
 }
 
 static void gpu_pbvh_batch_init(GPU_PBVH_Buffers *buffers, GPUPrimType prim)
@@ -192,24 +195,6 @@ static void gpu_pbvh_batch_init(GPU_PBVH_Buffers *buffers, GPUPrimType prim)
 /** \name Mesh PBVH
  * \{ */
 
-/* Returns the Face Set random color for rendering in the overlay given its ID and a color seed. */
-#define GOLDEN_RATIO_CONJUGATE 0.618033988749895f
-static void face_set_overlay_color_get(const int face_set, const int seed, uchar *r_color)
-{
-  float rgba[4];
-  float random_mod_hue = GOLDEN_RATIO_CONJUGATE * (abs(face_set) + (seed % 10));
-  random_mod_hue = random_mod_hue - floorf(random_mod_hue);
-  const float random_mod_sat = BLI_hash_int_01(abs(face_set) + seed + 1);
-  const float random_mod_val = BLI_hash_int_01(abs(face_set) + seed + 2);
-  hsv_to_rgb(random_mod_hue,
-             0.6f + (random_mod_sat * 0.25f),
-             1.0f - (random_mod_val * 0.35f),
-             &rgba[0],
-             &rgba[1],
-             &rgba[2]);
-  rgba_float_to_uchar(r_color, rgba);
-}
-
 static bool gpu_pbvh_is_looptri_visible(const MLoopTri *lt,
                                         const MVert *mvert,
                                         const MLoop *mloop,
@@ -227,12 +212,14 @@ void GPU_pbvh_mesh_buffers_update(GPU_PBVH_Buffers *buffers,
                                   const int *sculpt_face_sets,
                                   const int face_sets_color_seed,
                                   const int face_sets_color_default,
+                                  const MPropCol *vtcol,
                                   const int update_flags)
 {
   const bool show_mask = vmask && (update_flags & GPU_PBVH_BUFFERS_SHOW_MASK) != 0;
-  const bool show_vcol = vcol && (update_flags & GPU_PBVH_BUFFERS_SHOW_VCOL) != 0;
   const bool show_face_sets = sculpt_face_sets &&
                               (update_flags & GPU_PBVH_BUFFERS_SHOW_SCULPT_FACE_SETS) != 0;
+  const bool show_vcol = (vcol || (vtcol && U.experimental.use_sculpt_vertex_colors)) &&
+                         (update_flags & GPU_PBVH_BUFFERS_SHOW_VCOL) != 0;
   bool empty_mask = true;
   bool default_face_set = true;
 
@@ -244,8 +231,8 @@ void GPU_pbvh_mesh_buffers_update(GPU_PBVH_Buffers *buffers,
       GPUVertBufRaw pos_step = {0};
       GPUVertBufRaw nor_step = {0};
       GPUVertBufRaw msk_step = {0};
-      GPUVertBufRaw col_step = {0};
       GPUVertBufRaw fset_step = {0};
+      GPUVertBufRaw col_step = {0};
 
       GPU_vertbuf_attr_get_raw_data(buffers->vert_buf, g_vbo_id.pos, &pos_step);
       GPU_vertbuf_attr_get_raw_data(buffers->vert_buf, g_vbo_id.nor, &nor_step);
@@ -285,7 +272,7 @@ void GPU_pbvh_mesh_buffers_update(GPU_PBVH_Buffers *buffers,
           const int fset = abs(sculpt_face_sets[lt->poly]);
           /* Skip for the default color Face Set to render it white. */
           if (fset != face_sets_color_default) {
-            face_set_overlay_color_get(fset, face_sets_color_seed, face_set_color);
+            BKE_paint_face_set_overlay_color_get(fset, face_sets_color_seed, face_set_color);
             default_face_set = false;
           }
         }
@@ -312,25 +299,33 @@ void GPU_pbvh_mesh_buffers_update(GPU_PBVH_Buffers *buffers,
 
           *(uchar *)GPU_vertbuf_raw_step(&msk_step) = cmask;
           empty_mask = empty_mask && (cmask == 0);
-
+          /* Vertex Colors. */
           if (show_vcol) {
-            const uint loop_index = lt->tri[j];
-            const MLoopCol *mcol = &vcol[loop_index];
-            ushort scol[4];
-            scol[0] = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mcol->r]);
-            scol[1] = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mcol->g]);
-            scol[2] = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mcol->b]);
-            scol[3] = unit_float_to_ushort_clamp(mcol->a * (1.0f / 255.0f));
-            memcpy(GPU_vertbuf_raw_step(&col_step), scol, sizeof(scol));
+            ushort scol[4] = {USHRT_MAX, USHRT_MAX, USHRT_MAX, USHRT_MAX};
+            if (vtcol && U.experimental.use_sculpt_vertex_colors) {
+              scol[0] = unit_float_to_ushort_clamp(vtcol[vtri[j]].color[0]);
+              scol[1] = unit_float_to_ushort_clamp(vtcol[vtri[j]].color[1]);
+              scol[2] = unit_float_to_ushort_clamp(vtcol[vtri[j]].color[2]);
+              scol[3] = unit_float_to_ushort_clamp(vtcol[vtri[j]].color[3]);
+              memcpy(GPU_vertbuf_raw_step(&col_step), scol, sizeof(scol));
+            }
+            else {
+              const uint loop_index = lt->tri[j];
+              const MLoopCol *mcol = &vcol[loop_index];
+              scol[0] = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mcol->r]);
+              scol[1] = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mcol->g]);
+              scol[2] = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mcol->b]);
+              scol[3] = unit_float_to_ushort_clamp(mcol->a * (1.0f / 255.0f));
+              memcpy(GPU_vertbuf_raw_step(&col_step), scol, sizeof(scol));
+            }
           }
-
           /* Face Sets. */
-          memcpy(GPU_vertbuf_raw_step(&fset_step), face_set_color, sizeof(uchar) * 3);
+          memcpy(GPU_vertbuf_raw_step(&fset_step), face_set_color, sizeof(uchar[3]));
         }
       }
-
-      gpu_pbvh_batch_init(buffers, GPU_PRIM_TRIS);
     }
+
+    gpu_pbvh_batch_init(buffers, GPU_PRIM_TRIS);
   }
 
   /* Get material index from the first face of this buffer. */
@@ -440,7 +435,7 @@ GPU_PBVH_Buffers *GPU_pbvh_mesh_buffers_build(const MPoly *mpoly,
 static void gpu_pbvh_grid_fill_index_buffers(GPU_PBVH_Buffers *buffers,
                                              SubdivCCG *UNUSED(subdiv_ccg),
                                              const int *UNUSED(face_sets),
-                                             int *grid_indices,
+                                             const int *grid_indices,
                                              uint visible_quad_len,
                                              int totgrid,
                                              int gridsize)
@@ -571,7 +566,7 @@ static void gpu_pbvh_grid_fill_index_buffers(GPU_PBVH_Buffers *buffers,
 
 void GPU_pbvh_grid_buffers_update_free(GPU_PBVH_Buffers *buffers,
                                        const struct DMFlagMat *grid_flag_mats,
-                                       int *grid_indices)
+                                       const int *grid_indices)
 {
   const bool smooth = grid_flag_mats[grid_indices[0]].flag & ME_SMOOTH;
 
@@ -659,7 +654,7 @@ void GPU_pbvh_grid_buffers_update(GPU_PBVH_Buffers *buffers,
         const int fset = abs(sculpt_face_sets[face_index]);
         /* Skip for the default color Face Set to render it white. */
         if (fset != face_sets_color_default) {
-          face_set_overlay_color_get(fset, face_sets_color_seed, face_set_color);
+          BKE_paint_face_set_overlay_color_get(fset, face_sets_color_seed, face_set_color);
           default_face_set = false;
         }
       }
@@ -683,7 +678,7 @@ void GPU_pbvh_grid_buffers_update(GPU_PBVH_Buffers *buffers,
             }
 
             if (show_vcol) {
-              ushort vcol[4] = {USHRT_MAX, USHRT_MAX, USHRT_MAX, USHRT_MAX};
+              const ushort vcol[4] = {USHRT_MAX, USHRT_MAX, USHRT_MAX, USHRT_MAX};
               GPU_vertbuf_attr_set(buffers->vert_buf, g_vbo_id.col, vbo_index, &vcol);
             }
 
@@ -737,7 +732,7 @@ void GPU_pbvh_grid_buffers_update(GPU_PBVH_Buffers *buffers,
               empty_mask = empty_mask && (cmask == 0);
             }
 
-            ushort vcol[4] = {USHRT_MAX, USHRT_MAX, USHRT_MAX, USHRT_MAX};
+            const ushort vcol[4] = {USHRT_MAX, USHRT_MAX, USHRT_MAX, USHRT_MAX};
             GPU_vertbuf_attr_set(buffers->vert_buf, g_vbo_id.col, vbo_index + 0, &vcol);
             GPU_vertbuf_attr_set(buffers->vert_buf, g_vbo_id.col, vbo_index + 1, &vcol);
             GPU_vertbuf_attr_set(buffers->vert_buf, g_vbo_id.col, vbo_index + 2, &vcol);
@@ -820,12 +815,12 @@ static void gpu_bmesh_vert_to_buffer_copy(BMVert *v,
   }
 
   if (show_vcol) {
-    ushort vcol[4] = {USHRT_MAX, USHRT_MAX, USHRT_MAX, USHRT_MAX};
+    const ushort vcol[4] = {USHRT_MAX, USHRT_MAX, USHRT_MAX, USHRT_MAX};
     GPU_vertbuf_attr_set(vert_buf, g_vbo_id.col, v_index, &vcol);
   }
 
   /* Add default face sets color to avoid artifacts. */
-  uchar face_set[3] = {UCHAR_MAX, UCHAR_MAX, UCHAR_MAX};
+  const uchar face_set[3] = {UCHAR_MAX, UCHAR_MAX, UCHAR_MAX};
   GPU_vertbuf_attr_set(vert_buf, g_vbo_id.fset, v_index, &face_set);
 }
 
@@ -1071,9 +1066,8 @@ GPUBatch *GPU_pbvh_buffers_batch_get(GPU_PBVH_Buffers *buffers, bool fast, bool 
   if (wires) {
     return (fast && buffers->lines_fast) ? buffers->lines_fast : buffers->lines;
   }
-  else {
-    return (fast && buffers->triangles_fast) ? buffers->triangles_fast : buffers->triangles;
-  }
+
+  return (fast && buffers->triangles_fast) ? buffers->triangles_fast : buffers->triangles;
 }
 
 bool GPU_pbvh_buffers_has_overlays(GPU_PBVH_Buffers *buffers)
@@ -1108,7 +1102,7 @@ void GPU_pbvh_buffers_update_flush(GPU_PBVH_Buffers *buffers)
   }
 
   /* Force flushing to the GPU. */
-  if (buffers->vert_buf && buffers->vert_buf->data) {
+  if (buffers->vert_buf && GPU_vertbuf_get_data(buffers->vert_buf)) {
     GPU_vertbuf_use(buffers->vert_buf);
   }
 }

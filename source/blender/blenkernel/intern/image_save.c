@@ -73,7 +73,7 @@ static void image_save_post(ReportList *reports,
 
   if (opts->do_newpath) {
     BLI_strncpy(ibuf->name, filepath, sizeof(ibuf->name));
-    BLI_strncpy(ima->name, filepath, sizeof(ima->name));
+    BLI_strncpy(ima->filepath, filepath, sizeof(ima->filepath));
   }
 
   ibuf->userflags &= ~IB_BITMAPDIRTY;
@@ -106,7 +106,7 @@ static void image_save_post(ReportList *reports,
   /* only image path, never ibuf */
   if (opts->relative) {
     const char *relbase = ID_BLEND_PATH(opts->bmain, &ima->id);
-    BLI_path_rel(ima->name, relbase); /* only after saving */
+    BLI_path_rel(ima->filepath, relbase); /* only after saving */
   }
 
   ColorManagedColorspaceSettings old_colorspace_settings;
@@ -135,7 +135,7 @@ static void imbuf_save_post(ImBuf *ibuf, ImBuf *colormanaged_ibuf)
 
 /**
  * \return success.
- * \note ``ima->name`` and ``ibuf->name`` should end up the same.
+ * \note ``ima->filepath`` and ``ibuf->name`` should end up the same.
  * \note for multiview the first ``ibuf`` is important to get the settings.
  */
 static bool image_save_single(ReportList *reports,
@@ -252,7 +252,6 @@ static bool image_save_single(ReportList *reports,
   }
   /* individual multiview images */
   else if (imf->views_format == R_IMF_VIEWS_INDIVIDUAL) {
-    int i;
     unsigned char planes = ibuf->planes;
     const int totviews = (rr ? BLI_listbase_count(&rr->views) : BLI_listbase_count(&ima->views));
 
@@ -260,7 +259,7 @@ static bool image_save_single(ReportList *reports,
       BKE_image_release_ibuf(ima, ibuf, lock);
     }
 
-    for (i = 0; i < totviews; i++) {
+    for (int i = 0; i < totviews; i++) {
       char filepath[FILE_MAX];
       bool ok_view = false;
       const char *view = rr ? ((RenderView *)BLI_findlink(&rr->views, i))->name :
@@ -324,12 +323,11 @@ static bool image_save_single(ReportList *reports,
 
       unsigned char planes = ibuf->planes;
       const char *names[2] = {STEREO_LEFT_NAME, STEREO_RIGHT_NAME};
-      int i;
 
       /* we need to get the specific per-view buffers */
       BKE_image_release_ibuf(ima, ibuf, lock);
 
-      for (i = 0; i < 2; i++) {
+      for (int i = 0; i < 2; i++) {
         ImageUser view_iuser;
 
         if (iuser) {
@@ -382,7 +380,7 @@ static bool image_save_single(ReportList *reports,
 
       IMB_freeImBuf(ibuf);
 
-      for (i = 0; i < 2; i++) {
+      for (int i = 0; i < 2; i++) {
         IMB_freeImBuf(ibuf_stereo[i]);
       }
     }

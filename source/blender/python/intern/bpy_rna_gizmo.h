@@ -18,9 +18,14 @@
  * \ingroup pythonintern
  */
 
-#ifndef __BPY_RNA_GIZMO_H__
-#define __BPY_RNA_GIZMO_H__
+#pragma once
 
-int BPY_rna_gizmo_module(PyObject *);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#endif /* __BPY_RNA_GIZMO_H__ */
+bool BPY_rna_gizmo_module(PyObject *);
+
+#ifdef __cplusplus
+}
+#endif

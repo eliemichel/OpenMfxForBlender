@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-// Author: Sergey Sharybin (sergey.vfx@gmail.com)
+// Author: Sergey Sharybin <sergey.vfx@gmail.com>
 
 #ifndef __BUILD_CONFIG_H__
 #define __BUILD_CONFIG_H__
@@ -96,7 +96,7 @@
 #elif defined(__QNXNTO__)
 #  define OS_QNX 1
 #elif defined(__asmjs__) || defined(__wasm__)
-#  define OS_ASMJS
+#  define OS_ASMJS 1
 #else
 #  error Please add support for your platform in build_config.h
 #endif

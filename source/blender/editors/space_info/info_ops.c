@@ -161,7 +161,7 @@ static int pack_all_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(ev
   Main *bmain = CTX_data_main(C);
   Image *ima;
 
-  // first check for dirty images
+  /* First check for dirty images. */
   for (ima = bmain->images.first; ima; ima = ima->id.next) {
     if (BKE_image_is_dirty(ima)) {
       break;
@@ -568,13 +568,13 @@ static int update_reports_display_invoke(bContext *C, wmOperator *UNUSED(op), co
 
   /* set target color based on report type */
   if (report->type & RPT_ERROR_ALL) {
-    UI_GetThemeColorType3fv(TH_INFO_REPORT_ERROR, SPACE_INFO, target_col);
+    UI_GetThemeColorType3fv(TH_INFO_ERROR, SPACE_INFO, target_col);
   }
   else if (report->type & RPT_WARNING_ALL) {
-    UI_GetThemeColorType3fv(TH_INFO_REPORT_WARNING, SPACE_INFO, target_col);
+    UI_GetThemeColorType3fv(TH_INFO_WARNING, SPACE_INFO, target_col);
   }
   else if (report->type & RPT_INFO_ALL) {
-    UI_GetThemeColorType3fv(TH_INFO_REPORT_INFO, SPACE_INFO, target_col);
+    UI_GetThemeColorType3fv(TH_INFO_INFO, SPACE_INFO, target_col);
   }
   target_col[3] = 0.65f;
 

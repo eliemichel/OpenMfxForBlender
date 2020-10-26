@@ -40,46 +40,29 @@ PyDoc_STRVAR(
     "Class to define a stroke vertex.\n"
     "\n"
     ".. method:: __init__()\n"
+    "            __init__(brother)\n"
+    "            __init__(first_vertex, second_vertex, t3d)\n"
+    "            __init__(point)\n"
+    "            __init__(svertex)\n"
+    "            __init__(svertex, attribute)\n"
     "\n"
-    "   Default constructor.\n"
-    "\n"
-    ".. method:: __init__(brother)\n"
-    "\n"
-    "   Copy constructor.\n"
+    "   Builds a :class:`StrokeVertex` using the default constructor,\n"
+    "   copy constructor, from 2 :class:`StrokeVertex` and an interpolation parameter,\n"
+    "   from a CurvePoint, from a SVertex, or a :class:`SVertex`"
+    "   and a :class:`StrokeAttribute` object.\n"
     "\n"
     "   :arg brother: A StrokeVertex object.\n"
     "   :type brother: :class:`StrokeVertex`\n"
-    "\n"
-    ".. method:: __init__(first_vertex, second_vertex, t3d)\n"
-    "\n"
-    "   Build a stroke vertex from 2 stroke vertices and an interpolation\n"
-    "   parameter.\n"
-    "\n"
     "   :arg first_vertex: The first StrokeVertex.\n"
     "   :type first_vertex: :class:`StrokeVertex`\n"
     "   :arg second_vertex: The second StrokeVertex.\n"
     "   :type second_vertex: :class:`StrokeVertex`\n"
     "   :arg t3d: An interpolation parameter.\n"
     "   :type t3d: float\n"
-    "\n"
-    ".. method:: __init__(point)\n"
-    "\n"
-    "   Build a stroke vertex from a CurvePoint\n"
-    "\n"
     "   :arg point: A CurvePoint object.\n"
     "   :type point: :class:`CurvePoint`\n"
-    "\n"
-    ".. method:: __init__(svertex)\n"
-    "\n"
-    "   Build a stroke vertex from a SVertex\n"
-    "\n"
     "   :arg svertex: An SVertex object.\n"
     "   :type svertex: :class:`SVertex`\n"
-    "\n"
-    ".. method:: __init__(svertex, attribute)\n"
-    "\n"
-    "   Build a stroke vertex from an SVertex and a StrokeAttribute object.\n"
-    "\n"
     "   :arg svertex: An SVertex object.\n"
     "   :type svertex: :class:`SVertex`\n"
     "   :arg attribute: A StrokeAttribute object.\n"
@@ -107,7 +90,7 @@ static int StrokeVertex_init(BPy_StrokeVertex *self, PyObject *args, PyObject *k
       self->sv = new StrokeVertex(*(((BPy_StrokeVertex *)obj1)->sv));
     }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "O!O!f",
@@ -129,7 +112,7 @@ static int StrokeVertex_init(BPy_StrokeVertex *self, PyObject *args, PyObject *k
     }
     self->sv = new StrokeVertex(sv1, sv2, t3d);
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(
                args, kwds, "O!", (char **)kwlist_3, &CurvePoint_Type, &obj1)) {
     CurvePoint *cp = ((BPy_CurvePoint *)obj1)->cp;
@@ -139,8 +122,8 @@ static int StrokeVertex_init(BPy_StrokeVertex *self, PyObject *args, PyObject *k
     }
     self->sv = new StrokeVertex(cp);
   }
-  else if (PyErr_Clear(),
-           (obj2 = 0),
+  else if ((void)PyErr_Clear(),
+           (void)(obj2 = 0),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "O!|O!",

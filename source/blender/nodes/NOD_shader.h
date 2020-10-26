@@ -21,10 +21,13 @@
  * \ingroup nodes
  */
 
-#ifndef __NOD_SHADER_H__
-#define __NOD_SHADER_H__
+#pragma once
 
 #include "BKE_node.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 extern struct bNodeTreeType *ntreeType_Shader;
 
@@ -139,4 +142,6 @@ void register_node_type_sh_tex_white_noise(void);
 
 void register_node_type_sh_custom_group(bNodeType *ntype);
 
+#ifdef __cplusplus
+}
 #endif

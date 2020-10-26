@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_SCREEN_TYPES_H__
-#define __ED_SCREEN_TYPES_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -131,7 +130,7 @@ enum {
    */
   AZONE_FULLSCREEN,
   /**
-   * Hotspot azone around scroll-bars to show/hide them.
+   * Hot-spot #AZone around scroll-bars to show/hide them.
    * Only show the scroll-bars when the cursor is close.
    */
   AZONE_REGION_SCROLL,
@@ -140,5 +139,3 @@ enum {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_SCREEN_TYPES_H__ */

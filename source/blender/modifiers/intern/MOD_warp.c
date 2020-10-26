@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -26,37 +26,51 @@
 
 #include "BLI_math.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_action.h" /* BKE_pose_channel_find_name */
 #include "BKE_colortools.h"
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
 #include "BKE_texture.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "BLO_read_write.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
 #include "RE_shader_ext.h"
 
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 static void initData(ModifierData *md)
 {
   WarpModifierData *wmd = (WarpModifierData *)md;
 
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(wmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(wmd, DNA_struct_default_get(WarpModifierData), modifier);
+
   wmd->curfalloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-  wmd->texture = NULL;
-  wmd->strength = 1.0f;
-  wmd->falloff_radius = 1.0f;
-  wmd->falloff_type = eWarp_Falloff_Smooth;
-  wmd->flag = 0;
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
@@ -64,7 +78,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   const WarpModifierData *wmd = (const WarpModifierData *)md;
   WarpModifierData *twmd = (WarpModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   twmd->curfalloff = BKE_curvemapping_copy(wmd->curfalloff);
 }
@@ -109,9 +123,8 @@ static bool dependsOnTime(ModifierData *md)
   if (wmd->texture) {
     return BKE_texture_dependsOnTime(wmd->texture);
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 static void freeData(ModifierData *md)
@@ -129,22 +142,14 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return !(wmd->object_from && wmd->object_to);
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
-{
-  WarpModifierData *wmd = (WarpModifierData *)md;
-
-  walk(userData, ob, &wmd->object_from, IDWALK_CB_NOP);
-  walk(userData, ob, &wmd->object_to, IDWALK_CB_NOP);
-  walk(userData, ob, &wmd->map_object, IDWALK_CB_NOP);
-}
-
 static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   WarpModifierData *wmd = (WarpModifierData *)md;
 
   walk(userData, ob, (ID **)&wmd->texture, IDWALK_CB_USER);
-
-  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+  walk(userData, ob, (ID **)&wmd->object_from, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&wmd->object_to, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&wmd->map_object, IDWALK_CB_NOP);
 }
 
 static void foreachTexLink(ModifierData *md, Object *ob, TexWalkFunc walk, void *userData)
@@ -222,7 +227,7 @@ static void warpModifier_do(WarpModifierData *wmd,
   }
 
   if (wmd->curfalloff) {
-    BKE_curvemapping_initialize(wmd->curfalloff);
+    BKE_curvemapping_init(wmd->curfalloff);
   }
 
   invert_m4_m4(obinv, ob->obmat);
@@ -266,8 +271,9 @@ static void warpModifier_do(WarpModifierData *wmd,
       /* skip if no vert group found */
       if (defgrp_index != -1) {
         dv = &dvert[i];
-        weight = invert_vgroup ? 1.0f - BKE_defvert_find_weight(dv, defgrp_index) * strength :
-                                 BKE_defvert_find_weight(dv, defgrp_index) * strength;
+        weight = (invert_vgroup ? (1.0f - BKE_defvert_find_weight(dv, defgrp_index)) :
+                                  BKE_defvert_find_weight(dv, defgrp_index)) *
+                 strength;
         if (weight <= 0.0f) {
           continue;
         }
@@ -381,6 +387,11 @@ static void deformVertsEM(ModifierData *md,
     mesh_src = MOD_deform_mesh_eval_get(ctx->object, em, mesh, NULL, numVerts, false, false);
   }
 
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  }
+
   warpModifier_do(wmd, ctx, mesh_src, vertexCos, numVerts);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
@@ -388,20 +399,147 @@ static void deformVertsEM(ModifierData *md,
   }
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, true);
+  uiItemR(col, ptr, "object_from", 0, NULL, ICON_NONE);
+  PointerRNA from_obj_ptr = RNA_pointer_get(ptr, "object_from");
+  if (!RNA_pointer_is_null(&from_obj_ptr) && RNA_enum_get(&from_obj_ptr, "type") == OB_ARMATURE) {
+
+    PointerRNA from_obj_data_ptr = RNA_pointer_get(&from_obj_ptr, "data");
+    uiItemPointerR(col, ptr, "bone_from", &from_obj_data_ptr, "bones", IFACE_("Bone"), ICON_NONE);
+  }
+
+  col = uiLayoutColumn(layout, true);
+  uiItemR(col, ptr, "object_to", 0, NULL, ICON_NONE);
+  PointerRNA to_obj_ptr = RNA_pointer_get(ptr, "object_to");
+  if (!RNA_pointer_is_null(&to_obj_ptr) && RNA_enum_get(&to_obj_ptr, "type") == OB_ARMATURE) {
+    PointerRNA to_obj_data_ptr = RNA_pointer_get(&to_obj_ptr, "data");
+    uiItemPointerR(col, ptr, "bone_to", &to_obj_data_ptr, "bones", IFACE_("Bone"), ICON_NONE);
+  }
+
+  uiItemR(layout, ptr, "use_volume_preserve", 0, NULL, ICON_NONE);
+
+  uiItemR(layout, ptr, "strength", 0, NULL, ICON_NONE);
+
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void falloff_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  bool use_falloff = (RNA_enum_get(ptr, "falloff_type") != eWarp_Falloff_None);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "falloff_type", 0, NULL, ICON_NONE);
+
+  if (use_falloff) {
+    uiItemR(layout, ptr, "falloff_radius", 0, NULL, ICON_NONE);
+  }
+
+  if (use_falloff && RNA_enum_get(ptr, "falloff_type") == eWarp_Falloff_Curve) {
+    uiTemplateCurveMapping(layout, ptr, "falloff_curve", 0, false, false, false, false);
+  }
+}
+
+static void texture_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  int texture_coords = RNA_enum_get(ptr, "texture_coords");
+
+  uiTemplateID(layout, C, ptr, "texture", "texture.new", NULL, NULL, 0, ICON_NONE, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "texture_coords", 0, IFACE_("Coordinates"), ICON_NONE);
+  if (texture_coords == MOD_DISP_MAP_OBJECT) {
+    uiItemR(col, ptr, "texture_coords_object", 0, IFACE_("Object"), ICON_NONE);
+    PointerRNA texture_coords_obj_ptr = RNA_pointer_get(ptr, "texture_coords_object");
+    if (!RNA_pointer_is_null(&texture_coords_obj_ptr) &&
+        (RNA_enum_get(&texture_coords_obj_ptr, "type") == OB_ARMATURE)) {
+      PointerRNA texture_coords_obj_data_ptr = RNA_pointer_get(&texture_coords_obj_ptr, "data");
+      uiItemPointerR(col,
+                     ptr,
+                     "texture_coords_bone",
+                     &texture_coords_obj_data_ptr,
+                     "bones",
+                     IFACE_("Bone"),
+                     ICON_NONE);
+    }
+  }
+  else if (texture_coords == MOD_DISP_MAP_UV && RNA_enum_get(&ob_ptr, "type") == OB_MESH) {
+    PointerRNA obj_data_ptr = RNA_pointer_get(&ob_ptr, "data");
+    uiItemPointerR(col, ptr, "uv_layer", &obj_data_ptr, "uv_layers", NULL, ICON_NONE);
+  }
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(region_type, eModifierType_Warp, panel_draw);
+  modifier_subpanel_register(
+      region_type, "falloff", "Falloff", NULL, falloff_panel_draw, panel_type);
+  modifier_subpanel_register(
+      region_type, "texture", "Texture", NULL, texture_panel_draw, panel_type);
+}
+
+static void blendWrite(BlendWriter *writer, const ModifierData *md)
+{
+  const WarpModifierData *tmd = (const WarpModifierData *)md;
+
+  if (tmd->curfalloff) {
+    BKE_curvemapping_blend_write(writer, tmd->curfalloff);
+  }
+}
+
+static void blendRead(BlendDataReader *reader, ModifierData *md)
+{
+  WarpModifierData *tmd = (WarpModifierData *)md;
+
+  BLO_read_data_address(reader, &tmd->curfalloff);
+  if (tmd->curfalloff) {
+    BKE_curvemapping_blend_read(reader, tmd->curfalloff);
+  }
+}
+
 ModifierTypeInfo modifierType_Warp = {
     /* name */ "Warp",
     /* structName */ "WarpModifierData",
     /* structSize */ sizeof(WarpModifierData),
+    /* srna */ &RNA_WarpModifier,
     /* type */ eModifierTypeType_OnlyDeform,
-    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
+    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_MOD_WARP,
     /* copyData */ copyData,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -410,8 +548,10 @@ ModifierTypeInfo modifierType_Warp = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ foreachTexLink,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ blendWrite,
+    /* blendRead */ blendRead,
 };

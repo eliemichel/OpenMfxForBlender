@@ -182,9 +182,9 @@ static void re_camera_params_get(Render *re, CameraParams *params)
   re->viewplane = params->viewplane;
 }
 
-void RE_SetOverrideCamera(Render *re, Object *camera)
+void RE_SetOverrideCamera(Render *re, Object *cam_ob)
 {
-  re->camera_override = camera;
+  re->camera_override = cam_ob;
 }
 
 static void re_camera_params_stereo3d(Render *re, CameraParams *params, Object *cam_ob)
@@ -211,14 +211,14 @@ void RE_SetCamera(Render *re, Object *cam_ob)
   re_camera_params_get(re, &params);
 }
 
-void RE_GetCameraWindow(struct Render *re, struct Object *camera, float mat[4][4])
+void RE_GetCameraWindow(struct Render *re, struct Object *camera, float r_winmat[4][4])
 {
   RE_SetCamera(re, camera);
-  copy_m4_m4(mat, re->winmat);
+  copy_m4_m4(r_winmat, re->winmat);
 }
 
 /* Must be called after RE_GetCameraWindow(), does not change re->winmat. */
-void RE_GetCameraWindowWithOverscan(struct Render *re, float mat[4][4], float overscan)
+void RE_GetCameraWindowWithOverscan(struct Render *re, float overscan, float r_winmat[4][4])
 {
   CameraParams params;
   params.is_ortho = re->winmat[3][3] != 0.0f;
@@ -233,12 +233,12 @@ void RE_GetCameraWindowWithOverscan(struct Render *re, float mat[4][4], float ov
   params.viewplane.ymin -= overscan;
   params.viewplane.ymax += overscan;
   BKE_camera_params_compute_matrix(&params);
-  copy_m4_m4(mat, params.winmat);
+  copy_m4_m4(r_winmat, params.winmat);
 }
 
-void RE_GetCameraModelMatrix(Render *re, struct Object *camera, float r_mat[4][4])
+void RE_GetCameraModelMatrix(Render *re, struct Object *camera, float r_modelmat[4][4])
 {
-  BKE_camera_multiview_model_matrix(&re->r, camera, re->viewname, r_mat);
+  BKE_camera_multiview_model_matrix(&re->r, camera, re->viewname, r_modelmat);
 }
 
 /* ~~~~~~~~~~~~~~~~ part (tile) calculus ~~~~~~~~~~~~~~~~~~~~~~ */
@@ -270,8 +270,6 @@ void RE_parts_init(Render *re)
 
   /* this is render info for caller, is not reset when parts are freed! */
   re->i.totpart = 0;
-  re->i.curpart = 0;
-  re->i.partsdone = 0;
 
   /* just for readable code.. */
   xminb = re->disprect.xmin;

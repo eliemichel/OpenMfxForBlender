@@ -1,4 +1,7 @@
 
+#pragma BLENDER_REQUIRE(common_view_lib.glsl)
+#pragma BLENDER_REQUIRE(lightprobe_lib.glsl)
+
 flat in int pid;
 in vec2 quadCoord;
 

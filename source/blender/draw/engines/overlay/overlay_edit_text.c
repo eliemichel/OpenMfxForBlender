@@ -38,7 +38,8 @@ void OVERLAY_edit_text_cache_init(OVERLAY_Data *vedata)
   GPUShader *sh;
   DRWState state;
 
-  pd->edit_curve.show_handles = (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) != 0;
+  pd->edit_curve.show_handles = v3d->overlay.handle_display != CURVE_HANDLE_NONE;
+  pd->edit_curve.handle_display = v3d->overlay.handle_display;
   pd->shdata.edit_curve_normal_length = v3d->overlay.normals_length;
 
   /* Run Twice for in-front passes. */
@@ -52,19 +53,28 @@ void OVERLAY_edit_text_cache_init(OVERLAY_Data *vedata)
     DRW_shgroup_uniform_vec4_copy(grp, "color", G_draw.block.colorWire);
   }
   {
-    state = DRW_STATE_WRITE_COLOR | DRW_STATE_LOGIC_INVERT;
+    state = DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ALPHA;
     DRW_PASS_CREATE(psl->edit_text_overlay_ps, state | pd->clipping_state);
 
     sh = OVERLAY_shader_uniform_color();
     pd->edit_text_overlay_grp = grp = DRW_shgroup_create(sh, psl->edit_text_overlay_ps);
 
-    DRW_shgroup_uniform_vec4_copy(grp, "color", (float[4]){1.0f, 1.0f, 1.0f, 1.0f});
+    DRW_shgroup_uniform_vec4(grp, "color", pd->edit_text.overlay_color, 1);
+
+    state = DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_MUL | DRW_STATE_DEPTH_GREATER_EQUAL |
+            pd->clipping_state;
+    DRW_PASS_INSTANCE_CREATE(psl->edit_text_darken_ps, psl->edit_text_overlay_ps, state);
+  }
+  {
+    /* Create view which will render everything (hopefully) behind the text geometry. */
+    DRWView *default_view = (DRWView *)DRW_view_default_get();
+    pd->view_edit_text = DRW_view_create_with_zoffset(default_view, draw_ctx->rv3d, -5.0f);
   }
 }
 
 /* Use 2D quad corners to create a matrix that set
  * a [-1..1] quad at the right position. */
-static void v2_quad_corners_to_mat4(float corners[4][2], float r_mat[4][4])
+static void v2_quad_corners_to_mat4(const float corners[4][2], float r_mat[4][4])
 {
   unit_m4(r_mat);
   sub_v2_v2v2(r_mat[0], corners[1], corners[0]);
@@ -172,7 +182,7 @@ void OVERLAY_edit_text_cache_populate(OVERLAY_Data *vedata, Object *ob)
   OVERLAY_PrivateData *pd = vedata->stl->pd;
   Curve *cu = ob->data;
   struct GPUBatch *geom;
-  bool do_in_front = (ob->dtx & OB_DRAWXRAY) != 0;
+  bool do_in_front = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
 
   bool has_surface = (cu->flag & (CU_FRONT | CU_BACK)) || cu->ext1 != 0.0f || cu->ext2 != 0.0f;
   if ((cu->flag & CU_FAST) || !has_surface) {
@@ -192,16 +202,24 @@ void OVERLAY_edit_text_cache_populate(OVERLAY_Data *vedata, Object *ob)
 
 void OVERLAY_edit_text_draw(OVERLAY_Data *vedata)
 {
+  OVERLAY_PrivateData *pd = vedata->stl->pd;
   OVERLAY_PassList *psl = vedata->psl;
-  DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
+  OVERLAY_FramebufferList *fbl = vedata->fbl;
 
   if (DRW_state_is_fbo()) {
-    /* Text overlay need final color for color inversion. */
-    GPU_framebuffer_bind(dfbl->default_fb);
+    GPU_framebuffer_bind(fbl->overlay_default_fb);
   }
 
   DRW_draw_pass(psl->edit_text_wire_ps[0]);
   DRW_draw_pass(psl->edit_text_wire_ps[1]);
 
+  DRW_view_set_active(pd->view_edit_text);
+
+  /* Alpha blended. */
+  copy_v4_fl4(pd->edit_text.overlay_color, 0.8f, 0.8f, 0.8f, 0.5f);
   DRW_draw_pass(psl->edit_text_overlay_ps);
+
+  /* Multiply previous result where depth test fail. */
+  copy_v4_fl4(pd->edit_text.overlay_color, 0.0f, 0.0f, 0.0f, 1.0f);
+  DRW_draw_pass(psl->edit_text_darken_ps);
 }

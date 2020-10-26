@@ -98,6 +98,14 @@ void ED_undo_push(bContext *C, const char *str)
   if (steps <= 0) {
     return;
   }
+  if (G.background) {
+    /* Python developers may have explicitly created the undo stack in background mode,
+     * otherwise allow it to be NULL, see: T60934.
+     * Otherwise it must never be NULL, even when undo is disabled. */
+    if (wm->undo_stack == NULL) {
+      return;
+    }
+  }
 
   /* Only apply limit if this is the last undo step. */
   if (wm->undo_stack->step_active && (wm->undo_stack->step_active->next == NULL)) {
@@ -356,11 +364,11 @@ bool ED_undo_is_legacy_compatible_for_property(struct bContext *C, ID *id)
     if (obact != NULL) {
       if (obact->mode & OB_MODE_ALL_PAINT) {
         /* Don't store property changes when painting
-         * (only do undo pushes on brush strokes which each paint operator handles on it's own). */
+         * (only do undo pushes on brush strokes which each paint operator handles on its own). */
         CLOG_INFO(&LOG, 1, "skipping undo for paint-mode");
         return false;
       }
-      else if (obact->mode & OB_MODE_EDIT) {
+      if (obact->mode & OB_MODE_EDIT) {
         if ((id == NULL) || (obact->data == NULL) ||
             (GS(id->name) != GS(((ID *)obact->data)->name))) {
           /* No undo push on id type mismatch in edit-mode. */
@@ -577,7 +585,7 @@ int ED_undo_operator_repeat(bContext *C, wmOperator *op)
     if ((WM_operator_repeat_check(C, op)) && (WM_operator_poll(C, op->type)) &&
         /* note, undo/redo cant run if there are jobs active,
          * check for screen jobs only so jobs like material/texture/world preview
-         * (which copy their data), wont stop redo, see [#29579]],
+         * (which copy their data), wont stop redo, see T29579],
          *
          * note, - WM_operator_check_ui_enabled() jobs test _must_ stay in sync with this */
         (WM_jobs_test(wm, scene, WM_JOB_TYPE_ANY) == 0)) {
@@ -633,7 +641,7 @@ void ED_undo_operator_repeat_cb(bContext *C, void *arg_op, void *UNUSED(arg_unus
   ED_undo_operator_repeat(C, (wmOperator *)arg_op);
 }
 
-void ED_undo_operator_repeat_cb_evt(bContext *C, void *arg_op, int UNUSED(arg_event))
+void ED_undo_operator_repeat_cb_evt(bContext *C, void *arg_op, int UNUSED(arg_unused))
 {
   ED_undo_operator_repeat(C, (wmOperator *)arg_op);
 }

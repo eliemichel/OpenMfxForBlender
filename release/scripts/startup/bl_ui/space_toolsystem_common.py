@@ -36,7 +36,7 @@ __all__ = (
 # Support reloading icons.
 if "_icon_cache" in locals():
     release = bpy.app.icons.release
-    for icon_value in _icon_cache.values():
+    for icon_value in set(_icon_cache.values()):
         if icon_value != 0:
             release(icon_value)
     del release
@@ -271,17 +271,21 @@ class ToolSelectPanelHelper:
                     yield item, i
                     i += 1
 
-    # Special internal function, gives use items that contain keymaps.
     @staticmethod
-    def _tools_flatten_with_keymap(tools):
+    def _tools_flatten_with_dynamic(tools, *, context):
+        """
+        Expands dynamic items, indices aren't aligned with other flatten functions.
+        The context may be None, use as signal to return all items.
+        """
         for item_parent in tools:
             if item_parent is None:
-                continue
+                yield None
             for item in item_parent if (type(item_parent) is tuple) else (item_parent,):
-                # skip None or generator function
-                if item is None or _item_is_fn(item):
-                    continue
-                if item.keymap is not None:
+                if item is None:
+                    yield None
+                elif _item_is_fn(item):
+                    yield from ToolSelectPanelHelper._tools_flatten_with_dynamic(item(context), context=context)
+                else:
                     yield item
 
     @classmethod
@@ -321,7 +325,7 @@ class ToolSelectPanelHelper:
             if item is not None:
                 if type(item) is tuple:
                     if item[0].idname == idname:
-                        index = cls._tool_group_active.get(item[0].idname, 0)
+                        index = cls._tool_group_active_get_from_item(item)
                         return (item[index], index)
                 else:
                     if item.idname == idname:
@@ -337,7 +341,7 @@ class ToolSelectPanelHelper:
             if item is not None:
                 if type(item) is tuple:
                     if item[0].idname == idname:
-                        index = cls._tool_group_active.get(item[0].idname, 0)
+                        index = cls._tool_group_active_get_from_item(item)
                         return (item[index], index, item)
                 else:
                     if item.idname == idname:
@@ -390,13 +394,26 @@ class ToolSelectPanelHelper:
             if item is not None:
                 if i == tool_index:
                     if type(item) is tuple:
-                        index = cls._tool_group_active.get(item[0].idname, 0)
+                        index = cls._tool_group_active_get_from_item(item)
                         item = item[index]
                     else:
                         index = -1
                     return (item, index)
                 i += 1
         return None, -1
+
+    @classmethod
+    def _tool_group_active_get_from_item(cls, item):
+        index = cls._tool_group_active.get(item[0].idname, 0)
+        # Can happen in the case a group is dynamic.
+        #
+        # NOTE(Campbell): that in this case it's possible the order could change too,
+        # So if we want to support this properly we will need to switch away from using
+        # an index and instead use an ID.
+        # Currently this is such a rare case occurrence that a range check is OK for now.
+        if index >= len(item):
+            index = 0
+        return index
 
     @classmethod
     def _tool_group_active_set_by_id(cls, context, idname_group, idname):
@@ -450,7 +467,7 @@ class ToolSelectPanelHelper:
 
     @classmethod
     def _km_action_simple(cls, kc_default, kc, context_descr, label, keymap_fn):
-        km_idname = f"{cls.keymap_prefix:s} {context_descr:s}, {label:s}"
+        km_idname = "%s %s, %s" % (cls.keymap_prefix, context_descr, label)
         km = kc.keymaps.get(km_idname)
         km_kwargs = dict(space_type=cls.bl_space_type, region_type='WINDOW', tool=True)
         if km is None:
@@ -484,8 +501,12 @@ class ToolSelectPanelHelper:
             else:
                 context_descr = context_mode.replace("_", " ").title()
 
-            for item in cls._tools_flatten_with_keymap(tools):
+            for item in cls._tools_flatten_with_dynamic(tools, context=None):
+                if item is None:
+                    continue
                 keymap_data = item.keymap
+                if keymap_data is None:
+                    continue
                 if callable(keymap_data[0]):
                     cls._km_action_simple(kc_default, kc_default, context_descr, item.label, keymap_data)
 
@@ -498,8 +519,13 @@ class ToolSelectPanelHelper:
 
         for context_mode_test, tools in cls.tools_all():
             if context_mode_test == context_mode:
-                for item in cls._tools_flatten_with_keymap(tools):
-                    km_name = item.keymap[0]
+                for item in cls._tools_flatten(tools):
+                    if item is None:
+                        continue
+                    keymap_data = item.keymap
+                    if keymap_data is None:
+                        continue
+                    km_name = keymap_data[0]
                     # print((km.name, cls.bl_space_type, 'WINDOW', []))
 
                     if km_name in visited:
@@ -650,7 +676,7 @@ class ToolSelectPanelHelper:
                     # not ideal, write this every time :S
                     cls._tool_group_active[item[0].idname] = index
                 else:
-                    index = cls._tool_group_active.get(item[0].idname, 0)
+                    index = cls._tool_group_active_get_from_item(item)
 
                 item = item[index]
                 use_menu = True
@@ -807,7 +833,8 @@ class ToolSelectPanelHelper:
         if is_active_tool:
             index_current = -1
         else:
-            index_current = cls._tool_group_active.get(item_group[0].idname, 0)
+            index_current = cls._tool_group_active_get_from_item(item_group)
+
         for i, sub_item in enumerate(item_group):
             is_active = (i == index_current)
 
@@ -857,7 +884,7 @@ class ToolSelectPanelHelper:
         if is_active_tool:
             index_current = -1
         else:
-            index_current = cls._tool_group_active.get(item_group[0].idname, 0)
+            index_current = cls._tool_group_active_get_from_item(item_group)
         for i, sub_item in enumerate(item_group):
             is_active = (i == index_current)
             props = pie.operator(
@@ -1009,7 +1036,7 @@ def activate_by_id_or_cycle(context, space_type, idname, *, offset=1, as_fallbac
     id_current = ""
     for item_group in cls.tools_from_context(context):
         if type(item_group) is tuple:
-            index_current = cls._tool_group_active.get(item_group[0].idname, 0)
+            index_current = cls._tool_group_active_get_from_item(item_group)
             for sub_item in item_group:
                 if sub_item.idname == idname:
                     id_current = item_group[index_current].idname

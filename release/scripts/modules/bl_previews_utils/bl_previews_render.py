@@ -135,6 +135,9 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
         scene.render.filepath = os.path.join(bpy.app.tempdir, 'TEMP_preview_render.png')
         scene.render.use_overwrite = True
         scene.render.use_stamp = False
+        scene.render.threads_mode = 'AUTO'
+        scene.render.tile_x = RENDER_PREVIEW_SIZE // 4
+        scene.render.tile_y = RENDER_PREVIEW_SIZE // 4
 
         image = bpy.data.images.new("TEMP_render_image", RENDER_PREVIEW_SIZE, RENDER_PREVIEW_SIZE, alpha=True)
         image.source = 'FILE'
@@ -211,7 +214,8 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
                     bpy.data.lights.remove(bpy.data.lights[render_context.light_data, None])
                 else:
                     rna_backup_restore(light, render_context.backup_light)
-                    rna_backup_restore(bpy.data.lights[render_context.light_data, None], render_context.backup_light_data)
+                    rna_backup_restore(bpy.data.lights[render_context.light_data,
+                                                       None], render_context.backup_light_data)
             except Exception as e:
                 print("ERROR:", e)
                 success = False
@@ -229,7 +233,8 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
     def object_bbox_merge(bbox, ob, ob_space, offset_matrix):
         # Take collections instances into account (including linked one in this case).
         if ob.type == 'EMPTY' and ob.instance_type == 'COLLECTION':
-            grp_objects = tuple((ob.name, ob.library.filepath if ob.library else None) for ob in ob.instance_collection.all_objects)
+            grp_objects = tuple((ob.name, ob.library.filepath if ob.library else None)
+                                for ob in ob.instance_collection.all_objects)
             if (len(grp_objects) == 0):
                 ob_bbox = ob.bound_box
             else:
@@ -314,7 +319,7 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
     do_save = True
 
     if do_data_intern:
-        bpy.ops.wm.previews_clear(id_type='SHADING')
+        bpy.ops.wm.previews_clear(id_type={'SHADING'})
         bpy.ops.wm.previews_ensure()
 
     render_contexts = {}
@@ -390,7 +395,10 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
             bpy.context.window.scene = scene
 
             bpy.ops.object.collection_instance_add(collection=grp.name)
-            grp_ob = next((ob for ob in scene.objects if ob.instance_collection and ob.instance_collection.name == grp.name))
+            grp_ob = next((
+                ob for ob in scene.objects
+                if ob.instance_collection and ob.instance_collection.name == grp.name
+            ))
             grp_obname = grp_ob.name
             bpy.context.view_layer.update()
 
@@ -439,7 +447,7 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
 
 def do_clear_previews(do_objects, do_collections, do_scenes, do_data_intern):
     if do_data_intern:
-        bpy.ops.wm.previews_clear(id_type='SHADING')
+        bpy.ops.wm.previews_clear(id_type={'SHADING'})
 
     if do_objects:
         for ob in ids_nolib(bpy.data.objects):
@@ -470,7 +478,8 @@ def main():
     # Get rid of Blender args!
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 
-    parser = argparse.ArgumentParser(description="Use Blender to generate previews for currently open Blender file's items.")
+    parser = argparse.ArgumentParser(
+        description="Use Blender to generate previews for currently open Blender file's items.")
     parser.add_argument('--clear', default=False, action="store_true",
                         help="Clear previews instead of generating them.")
     parser.add_argument('--no_backups', default=False, action="store_true",
@@ -505,7 +514,7 @@ def main():
 
 
 if __name__ == "__main__":
-    print("\n\n *** Running {} *** \n".format(__file__))
-    print(" *** Blend file {} *** \n".format(bpy.data.filepath))
+    print("\n\n *** Running %s *** \n" % __file__)
+    print(" *** Blend file %s *** \n" % bpy.data.filepath)
     main()
     bpy.ops.wm.quit_blender()

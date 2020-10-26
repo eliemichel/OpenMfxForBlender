@@ -21,8 +21,7 @@
  * \ingroup sptext
  */
 
-#ifndef __TEXT_FORMAT_H__
-#define __TEXT_FORMAT_H__
+#pragma once
 
 /* *** Flatten String *** */
 typedef struct FlattenString {
@@ -62,7 +61,7 @@ typedef struct TextFormatType {
   char (*format_identifier)(const char *string);
 
   /* Formats the specified line. If do_next is set, the process will move on to
-   * the succeeding line if it is affected (eg. multiline strings). Format strings
+   * the succeeding line if it is affected (eg. multi-line strings). Format strings
    * may contain any of the following characters:
    *
    * It is terminated with a null-terminator '\0' followed by a continuation
@@ -110,5 +109,3 @@ void ED_text_format_register_pov_ini(void);
 
 #define STR_LITERAL_STARTSWITH(str, str_literal, len_var) \
   (strncmp(str, str_literal, len_var = (sizeof(str_literal) - 1)) == 0)
-
-#endif /* __TEXT_FORMAT_H__ */

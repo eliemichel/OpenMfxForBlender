@@ -48,12 +48,10 @@ PyDoc_STRVAR(StrokeVertexIterator_doc,
              "by calling Interface0DIterator(it).\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
              "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
+             "   Creates a :class:`StrokeVertexIterator` using either the\n"
+             "   default constructor or the copy constructor.\n"
              "\n"
              "   :arg brother: A StrokeVertexIterator object.\n"
              "   :type brother: :class:`StrokeVertexIterator`");
@@ -74,7 +72,7 @@ static int StrokeVertexIterator_init(BPy_StrokeVertexIterator *self,
     self->at_start = ((BPy_StrokeVertexIterator *)brother)->at_start;
   }
 
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(
                args, kwds, "|O!", (char **)kwlist_2, &Stroke_Type, &stroke)) {
     if (!stroke) {
@@ -125,7 +123,7 @@ static PyObject *StrokeVertexIterator_iternext(BPy_StrokeVertexIterator *self)
     }
     /* If at the start of the iterator, only return the object
      * and don't increment, to keep for-loops in sync */
-    else if (self->at_start) {
+    if (self->at_start) {
       self->at_start = false;
     }
     /* If sv_it.atLast() is true, the iterator is currently pointing to the final valid element.

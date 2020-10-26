@@ -273,7 +273,7 @@ static void image_sample_apply(bContext *C, wmOperator *op, const wmEvent *event
       }
     }
 
-    // XXX node curve integration ..
+    /* XXX node curve integration. */
 #if 0
     {
       ScrArea *sa, *cur = curarea;
@@ -305,7 +305,7 @@ static void sequencer_sample_apply(bContext *C, wmOperator *op, const wmEvent *e
   Scene *scene = CTX_data_scene(C);
   SpaceSeq *sseq = (SpaceSeq *)CTX_wm_space_data(C);
   ARegion *region = CTX_wm_region(C);
-  ImBuf *ibuf = sequencer_ibuf_get(bmain, depsgraph, scene, sseq, CFRA, 0, NULL);
+  ImBuf *ibuf = sequencer_ibuf_get(bmain, region, depsgraph, scene, sseq, CFRA, 0, NULL);
   ImageSampleInfo *info = op->customdata;
   float fx, fy;
 
@@ -447,15 +447,16 @@ void ED_imbuf_sample_draw(const bContext *C, ARegion *region, void *arg_info)
           (float[2]){event->x - region->winrct.xmin, event->y - region->winrct.ymin},
           (float)(info->sample_size / 2.0f) * sima->zoom);
 
-      glEnable(GL_COLOR_LOGIC_OP);
-      glLogicOp(GL_XOR);
+      GPU_logic_op_xor_set(true);
+
       GPU_line_width(1.0f);
       imm_draw_box_wire_2d(pos,
                            (float)sample_rect_fl.xmin,
                            (float)sample_rect_fl.ymin,
                            (float)sample_rect_fl.xmax,
                            (float)sample_rect_fl.ymax);
-      glDisable(GL_COLOR_LOGIC_OP);
+
+      GPU_logic_op_xor_set(false);
 
       immUnbindProgram();
     }
@@ -511,7 +512,7 @@ int ED_imbuf_sample_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   switch (event->type) {
     case LEFTMOUSE:
-    case RIGHTMOUSE:  // XXX hardcoded
+    case RIGHTMOUSE: /* XXX hardcoded */
       if (event->val == KM_RELEASE) {
         ED_imbuf_sample_exit(C, op);
         return OPERATOR_CANCELLED;

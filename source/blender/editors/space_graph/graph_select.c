@@ -85,26 +85,26 @@ typedef enum eGraphVertIndex {
 } eGraphVertIndex;
 
 /* Tolerance for absolute radius (in pixels) of the vert from the cursor to use */
-// TODO: perhaps this should depend a bit on the size that the user set the vertices to be?
+/* TODO: perhaps this should depend a bit on the size that the user set the vertices to be? */
 #define GVERTSEL_TOL (10 * U.pixelsize)
 
 /* ....... */
 
 /* check if its ok to select a handle */
-// XXX also need to check for int-values only?
+/* XXX also need to check for int-values only? */
 static bool fcurve_handle_sel_check(SpaceGraph *sipo, BezTriple *bezt)
 {
   if (sipo->flag & SIPO_NOHANDLES) {
-    return 0;
+    return false;
   }
   if ((sipo->flag & SIPO_SELVHANDLESONLY) && BEZT_ISSEL_ANY(bezt) == 0) {
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 /* check if the given vertex is within bounds or not */
-// TODO: should we return if we hit something?
+/* TODO: should we return if we hit something? */
 static void nearest_fcurve_vert_store(ListBase *matches,
                                       View2D *v2d,
                                       FCurve *fcu,
@@ -158,7 +158,7 @@ static void nearest_fcurve_vert_store(ListBase *matches,
 
       nvi->frame = bezt->vec[1][0]; /* currently in global time... */
 
-      nvi->sel = BEZT_ISSEL_ANY(bezt);  // XXX... should this use the individual verts instead?
+      nvi->sel = BEZT_ISSEL_ANY(bezt); /* XXX... should this use the individual verts instead? */
 
       /* add to list of matches if appropriate... */
       if (replace == 0) {
@@ -188,7 +188,7 @@ static void get_nearest_fcurve_verts_list(bAnimContext *ac, const int mval[2], L
    */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
   if (sipo->flag &
-      SIPO_SELCUVERTSONLY) {  // FIXME: this should really be check for by the filtering code...
+      SIPO_SELCUVERTSONLY) { /* FIXME: this should really be check for by the filtering code... */
     filter |= ANIMFILTER_SEL;
   }
   mapping_flag |= ANIM_get_normalization_flags(ac);
@@ -257,7 +257,7 @@ static void get_nearest_fcurve_verts_list(bAnimContext *ac, const int mval[2], L
       }
     }
     else if (fcu->fpt) {
-      // TODO; do this for samples too
+      /* TODO; do this for samples too */
     }
 
     /* un-apply NLA mapping from all the keyframes */
@@ -298,11 +298,10 @@ static tNearestVertInfo *get_best_nearest_fcurve_vert(ListBase *matches)
       BLI_remlink(matches, nvi);
       return nvi;
     }
-    else {
-      /* if vert is selected, we've got what we want... */
-      if (nvi->sel) {
-        found = 1;
-      }
+
+    /* if vert is selected, we've got what we want... */
+    if (nvi->sel) {
+      found = 1;
     }
   }
 
@@ -760,8 +759,8 @@ static int graphkeys_lassoselect_exec(bContext *C, wmOperator *op)
   }
 
   data_lasso.rectf_view = &rect_fl;
-  data_lasso.mcords = WM_gesture_lasso_path_to_array(C, op, &data_lasso.mcords_tot);
-  if (data_lasso.mcords == NULL) {
+  data_lasso.mcoords = WM_gesture_lasso_path_to_array(C, op, &data_lasso.mcoords_len);
+  if (data_lasso.mcoords == NULL) {
     return OPERATOR_CANCELLED;
   }
 
@@ -782,13 +781,13 @@ static int graphkeys_lassoselect_exec(bContext *C, wmOperator *op)
   }
 
   /* get settings from operator */
-  BLI_lasso_boundbox(&rect, data_lasso.mcords, data_lasso.mcords_tot);
+  BLI_lasso_boundbox(&rect, data_lasso.mcoords, data_lasso.mcoords_len);
   BLI_rctf_rcti_copy(&rect_fl, &rect);
 
   /* apply box_select action */
   box_select_graphkeys(&ac, &rect_fl, BEZT_OK_REGION_LASSO, selectmode, incl_handles, &data_lasso);
 
-  MEM_freeN((void *)data_lasso.mcords);
+  MEM_freeN((void *)data_lasso.mcoords);
 
   /* send notifier that keyframe selection has changed */
   WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_SELECTED, NULL);
@@ -1472,7 +1471,7 @@ static int mouse_graph_keys(bAnimContext *ac,
      * doesn't depend on this
      */
     if ((sipo->flag & SIPO_SELCUVERTSONLY) == 0) {
-      ANIM_deselect_anim_channels(ac, ac->data, ac->datatype, 0, ACHANNEL_SETFLAG_CLEAR);
+      ANIM_anim_channels_select_set(ac, ACHANNEL_SETFLAG_CLEAR);
     }
   }
 
@@ -1481,23 +1480,26 @@ static int mouse_graph_keys(bAnimContext *ac,
   }
 
   /* if points can be selected on this F-Curve */
-  // TODO: what about those with no keyframes?
+  /* TODO: what about those with no keyframes? */
+  bool something_was_selected = false;
   if (!curves_only && ((nvi->fcu->flag & FCURVE_PROTECTED) == 0)) {
     /* only if there's keyframe */
     if (nvi->bezt) {
       bezt = nvi->bezt; /* Used to check `bezt` selection is set. */
-      /* depends on selection mode */
       if (select_mode == SELECT_INVERT) {
         if (nvi->hpoint == NEAREST_HANDLE_KEY) {
           bezt->f2 ^= SELECT;
+          something_was_selected = (bezt->f2 & SELECT);
         }
         else if (nvi->hpoint == NEAREST_HANDLE_LEFT) {
           /* toggle selection */
           bezt->f1 ^= SELECT;
+          something_was_selected = (bezt->f1 & SELECT);
         }
         else {
           /* toggle selection */
           bezt->f3 ^= SELECT;
+          something_was_selected = (bezt->f3 & SELECT);
         }
       }
       else {
@@ -1510,10 +1512,15 @@ static int mouse_graph_keys(bAnimContext *ac,
         else {
           bezt->f3 |= SELECT;
         }
+        something_was_selected = true;
+      }
+
+      if (!run_modal && BEZT_ISSEL_ANY(bezt) && !already_selected) {
+        BKE_fcurve_active_keyframe_set(nvi->fcu, bezt);
       }
     }
     else if (nvi->fpt) {
-      // TODO: need to handle sample points
+      /* TODO: need to handle sample points */
     }
   }
   else {
@@ -1556,10 +1563,11 @@ static int mouse_graph_keys(bAnimContext *ac,
     }
   }
 
-  /* set active F-Curve (NOTE: sync the filter flags with findnearest_fcurve_vert) */
-  /* needs to be called with (sipo->flag & SIPO_SELCUVERTSONLY)
+  /* Set active F-Curve when something was actually selected (so not on a deselect), except when
+   * dragging the selected keys. Needs to be called with (sipo->flag & SIPO_SELCUVERTSONLY),
    * otherwise the active flag won't be set T26452. */
-  if (nvi->fcu->flag & FCURVE_SELECTED) {
+  if (!run_modal && (nvi->fcu->flag & FCURVE_SELECTED) && something_was_selected) {
+    /* NOTE: Sync the filter flags with findnearest_fcurve_vert. */
     int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
     ANIM_set_active_channel(ac, ac->data, ac->datatype, filter, nvi->fcu, nvi->ctype);
   }
@@ -1606,7 +1614,7 @@ static int graphkeys_mselect_column(bAnimContext *ac,
   }
 
   /* get frame number on which elements should be selected */
-  // TODO: should we restrict to integer frames only?
+  /* TODO: should we restrict to integer frames only? */
   selx = nvi->frame;
 
   if (select_mode != SELECT_REPLACE) {
@@ -1736,7 +1744,7 @@ void GRAPH_OT_clickselect(wmOperatorType *ot)
                          0,
                          "Extend Select",
                          "Toggle keyframe selection instead of leaving newly selected "
-                         "keyframes only");  // SHIFTKEY
+                         "keyframes only"); /* SHIFTKEY */
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
   prop = RNA_def_boolean(ot->srna,
@@ -1751,14 +1759,14 @@ void GRAPH_OT_clickselect(wmOperatorType *ot)
                          0,
                          "Column Select",
                          "Select all keyframes that occur on the same frame as the one under "
-                         "the mouse");  // ALTKEY
+                         "the mouse"); /* ALTKEY */
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
   prop = RNA_def_boolean(ot->srna,
                          "curves",
                          0,
                          "Only Curves",
-                         "Select all the keyframes in the curve");  // CTRLKEY + ALTKEY
+                         "Select all the keyframes in the curve"); /* CTRLKEY + ALTKEY */
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 

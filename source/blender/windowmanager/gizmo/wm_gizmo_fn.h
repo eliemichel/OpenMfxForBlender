@@ -20,12 +20,15 @@
  * Callback function definitions, needed for both Types & API headers.
  */
 
-#ifndef __WM_GIZMO_FN_H__
-#define __WM_GIZMO_FN_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 
 struct wmMsgBus;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* wmGizmoGroup */
 typedef bool (*wmGizmoGroupFnPoll)(const struct bContext *,
@@ -85,4 +88,6 @@ typedef struct wmGizmoPropertyFnParams {
   void *user_data;
 } wmGizmoPropertyFnParams;
 
-#endif /* __WM_GIZMO_FN_H__ */
+#ifdef __cplusplus
+}
+#endif

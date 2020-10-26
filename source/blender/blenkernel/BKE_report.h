@@ -14,22 +14,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_REPORT_H__
-#define __BKE_REPORT_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #include <stdio.h>
 
 #include "BLI_compiler_attrs.h"
 #include "BLI_utildefines.h"
 #include "DNA_windowmanager_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* Reporting Information and Errors
  *
@@ -68,6 +67,4 @@ bool BKE_report_write_file(const char *filepath, ReportList *reports, const char
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

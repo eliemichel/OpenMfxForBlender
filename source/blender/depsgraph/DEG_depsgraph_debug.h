@@ -23,8 +23,7 @@
  * Public API for Querying and Filtering Depsgraph
  */
 
-#ifndef __DEG_DEPSGRAPH_DEBUG_H__
-#define __DEG_DEPSGRAPH_DEBUG_H__
+#pragma once
 
 #include <stdio.h>
 
@@ -56,10 +55,10 @@ void DEG_stats_simple(const struct Depsgraph *graph,
 /* ************************************************ */
 /* Diagram-Based Graph Debugging */
 
-void DEG_debug_relations_graphviz(const struct Depsgraph *graph, FILE *stream, const char *label);
+void DEG_debug_relations_graphviz(const struct Depsgraph *graph, FILE *fp, const char *label);
 
 void DEG_debug_stats_gnuplot(const struct Depsgraph *graph,
-                             FILE *stream,
+                             FILE *fp,
                              const char *label,
                              const char *output_filename);
 
@@ -80,5 +79,3 @@ bool DEG_debug_consistency_check(struct Depsgraph *graph);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-#endif /* __DEG_DEPSGRAPH_DEBUG_H__ */

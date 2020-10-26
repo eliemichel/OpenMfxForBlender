@@ -19,7 +19,7 @@
 /** \file
  * \ingroup draw_engine
  *
- * Anti-aliasing:
+ * Anti-Aliasing:
  *
  * We use SMAA (Smart Morphological Anti-Aliasing) as a fast antialiasing solution.
  *
@@ -112,17 +112,15 @@ int workbench_antialiasing_sample_count_get(WORKBENCH_PrivateData *wpd)
     /* Only draw using SMAA or no AA when navigating. */
     return min_ii(wpd->preferences->viewport_aa, 1);
   }
-  else if (DRW_state_is_image_render()) {
+  if (DRW_state_is_image_render()) {
     if (draw_ctx->v3d) {
       return scene->display.viewport_aa;
     }
-    else {
-      return scene->display.render_aa;
-    }
+
+    return scene->display.render_aa;
   }
-  else {
-    return wpd->preferences->viewport_aa;
-  }
+
+  return wpd->preferences->viewport_aa;
 }
 
 void workbench_antialiasing_view_updated(WORKBENCH_Data *vedata)
@@ -244,35 +242,16 @@ void workbench_antialiasing_engine_init(WORKBENCH_Data *vedata)
 
     /* TODO could be shared for all viewports. */
     if (txl->smaa_search_tx == NULL) {
-      txl->smaa_search_tx = GPU_texture_create_nD(SEARCHTEX_WIDTH,
-                                                  SEARCHTEX_HEIGHT,
-                                                  0,
-                                                  2,
-                                                  searchTexBytes,
-                                                  GPU_R8,
-                                                  GPU_DATA_UNSIGNED_BYTE,
-                                                  0,
-                                                  false,
-                                                  NULL);
+      txl->smaa_search_tx = GPU_texture_create_2d(
+          "smaa_search", SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, 1, GPU_R8, NULL);
+      GPU_texture_update(txl->smaa_search_tx, GPU_DATA_UNSIGNED_BYTE, searchTexBytes);
 
-      txl->smaa_area_tx = GPU_texture_create_nD(AREATEX_WIDTH,
-                                                AREATEX_HEIGHT,
-                                                0,
-                                                2,
-                                                areaTexBytes,
-                                                GPU_RG8,
-                                                GPU_DATA_UNSIGNED_BYTE,
-                                                0,
-                                                false,
-                                                NULL);
+      txl->smaa_area_tx = GPU_texture_create_2d(
+          "smaa_area", AREATEX_WIDTH, AREATEX_HEIGHT, 1, GPU_RG8, NULL);
+      GPU_texture_update(txl->smaa_area_tx, GPU_DATA_UNSIGNED_BYTE, areaTexBytes);
 
-      GPU_texture_bind(txl->smaa_search_tx, 0);
       GPU_texture_filter_mode(txl->smaa_search_tx, true);
-      GPU_texture_unbind(txl->smaa_search_tx);
-
-      GPU_texture_bind(txl->smaa_area_tx, 0);
       GPU_texture_filter_mode(txl->smaa_area_tx, true);
-      GPU_texture_unbind(txl->smaa_area_tx);
     }
   }
   else {
@@ -308,7 +287,7 @@ void workbench_antialiasing_cache_init(WORKBENCH_Data *vedata)
 
   const float *size = DRW_viewport_size_get();
   const float *sizeinv = DRW_viewport_invert_size_get();
-  float metrics[4] = {sizeinv[0], sizeinv[1], size[0], size[1]};
+  const float metrics[4] = {sizeinv[0], sizeinv[1], size[0], size[1]};
 
   {
     /* Stage 1: Edge detection. */
@@ -366,53 +345,52 @@ bool workbench_antialiasing_setup(WORKBENCH_Data *vedata)
     /* TAA accumulation has finish. Just copy the result back */
     return false;
   }
-  else {
-    const float *viewport_size = DRW_viewport_size_get();
-    const DRWView *default_view = DRW_view_default_get();
-    float *transform_offset;
 
-    switch (wpd->taa_sample_len) {
-      default:
-      case 5:
-        transform_offset = e_data.jitter_5[min_ii(wpd->taa_sample, 5)];
-        break;
-      case 8:
-        transform_offset = e_data.jitter_8[min_ii(wpd->taa_sample, 8)];
-        break;
-      case 11:
-        transform_offset = e_data.jitter_11[min_ii(wpd->taa_sample, 11)];
-        break;
-      case 16:
-        transform_offset = e_data.jitter_16[min_ii(wpd->taa_sample, 16)];
-        break;
-      case 32:
-        transform_offset = e_data.jitter_32[min_ii(wpd->taa_sample, 32)];
-        break;
-    }
+  const float *viewport_size = DRW_viewport_size_get();
+  const DRWView *default_view = DRW_view_default_get();
+  float *transform_offset;
 
-    /* construct new matrices from transform delta */
-    float winmat[4][4], viewmat[4][4], persmat[4][4];
-    DRW_view_winmat_get(default_view, winmat, false);
-    DRW_view_viewmat_get(default_view, viewmat, false);
-    DRW_view_persmat_get(default_view, persmat, false);
-
-    window_translate_m4(winmat,
-                        persmat,
-                        transform_offset[0] / viewport_size[0],
-                        transform_offset[1] / viewport_size[1]);
-
-    if (wpd->view) {
-      /* When rendering just update the view. This avoids recomputing the culling. */
-      DRW_view_update_sub(wpd->view, viewmat, winmat);
-    }
-    else {
-      /* TAA is not making a big change to the matrices.
-       * Reuse the main view culling by creating a sub-view. */
-      wpd->view = DRW_view_create_sub(default_view, viewmat, winmat);
-    }
-    DRW_view_set_active(wpd->view);
-    return true;
+  switch (wpd->taa_sample_len) {
+    default:
+    case 5:
+      transform_offset = e_data.jitter_5[min_ii(wpd->taa_sample, 5)];
+      break;
+    case 8:
+      transform_offset = e_data.jitter_8[min_ii(wpd->taa_sample, 8)];
+      break;
+    case 11:
+      transform_offset = e_data.jitter_11[min_ii(wpd->taa_sample, 11)];
+      break;
+    case 16:
+      transform_offset = e_data.jitter_16[min_ii(wpd->taa_sample, 16)];
+      break;
+    case 32:
+      transform_offset = e_data.jitter_32[min_ii(wpd->taa_sample, 32)];
+      break;
   }
+
+  /* construct new matrices from transform delta */
+  float winmat[4][4], viewmat[4][4], persmat[4][4];
+  DRW_view_winmat_get(default_view, winmat, false);
+  DRW_view_viewmat_get(default_view, viewmat, false);
+  DRW_view_persmat_get(default_view, persmat, false);
+
+  window_translate_m4(winmat,
+                      persmat,
+                      transform_offset[0] / viewport_size[0],
+                      transform_offset[1] / viewport_size[1]);
+
+  if (wpd->view) {
+    /* When rendering just update the view. This avoids recomputing the culling. */
+    DRW_view_update_sub(wpd->view, viewmat, winmat);
+  }
+  else {
+    /* TAA is not making a big change to the matrices.
+     * Reuse the main view culling by creating a sub-view. */
+    wpd->view = DRW_view_create_sub(default_view, viewmat, winmat);
+  }
+  DRW_view_set_active(wpd->view);
+  return true;
 }
 
 void workbench_antialiasing_draw_pass(WORKBENCH_Data *vedata)

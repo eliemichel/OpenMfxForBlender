@@ -21,8 +21,7 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_VIEWPORT_H__
-#define __GPU_VIEWPORT_H__
+#pragma once
 
 #include <stdbool.h>
 
@@ -41,6 +40,8 @@ extern "C" {
 
 typedef struct GPUViewport GPUViewport;
 
+struct GPUFrameBuffer;
+
 /* Contains memory pools information */
 typedef struct ViewportMemoryPool {
   struct BLI_memblock *commands;
@@ -54,8 +55,8 @@ typedef struct ViewportMemoryPool {
   struct BLI_memblock *views;
   struct BLI_memblock *passes;
   struct BLI_memblock *images;
-  struct GPUUniformBuffer **matrices_ubo;
-  struct GPUUniformBuffer **obinfos_ubo;
+  struct GPUUniformBuf **matrices_ubo;
+  struct GPUUniformBuf **obinfos_ubo;
   uint ubo_len;
 } ViewportMemoryPool;
 
@@ -128,7 +129,7 @@ ViewportMemoryPool *GPU_viewport_mempool_get(GPUViewport *viewport);
 struct DRWInstanceDataList *GPU_viewport_instance_data_list_get(GPUViewport *viewport);
 
 void *GPU_viewport_engine_data_create(GPUViewport *viewport, void *engine_type);
-void *GPU_viewport_engine_data_get(GPUViewport *viewport, void *engine_type);
+void *GPU_viewport_engine_data_get(GPUViewport *viewport, void *engine_handle);
 void *GPU_viewport_framebuffer_list_get(GPUViewport *viewport);
 void GPU_viewport_stereo_composite(GPUViewport *viewport, Stereo3dFormat *stereo_format);
 void *GPU_viewport_texture_list_get(GPUViewport *viewport);
@@ -151,8 +152,9 @@ GPUTexture *GPU_viewport_texture_pool_query(
 bool GPU_viewport_engines_data_validate(GPUViewport *viewport, void **engine_handle_array);
 void GPU_viewport_cache_release(GPUViewport *viewport);
 
+struct GPUFrameBuffer *GPU_viewport_framebuffer_default_get(GPUViewport *viewport);
+struct GPUFrameBuffer *GPU_viewport_framebuffer_overlay_get(GPUViewport *viewport);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif  // __GPU_VIEWPORT_H__

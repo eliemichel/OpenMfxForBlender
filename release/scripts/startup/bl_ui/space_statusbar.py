@@ -31,17 +31,19 @@ class STATUSBAR_HT_header(Header):
 
         layout.separator_spacer()
 
-        # messages
+        # Messages
         layout.template_reports_banner()
+
+        # Progress Bar
         layout.template_running_jobs()
 
         layout.separator_spacer()
 
-        # stats
-        scene = context.scene
-        view_layer = context.view_layer
+        row = layout.row()
+        row.alignment = 'RIGHT'
 
-        layout.label(text=scene.statistics(view_layer), translate=False)
+        # Stats & Info
+        row.label(text=context.screen.statusbar_info(), translate=False)
 
 
 classes = (

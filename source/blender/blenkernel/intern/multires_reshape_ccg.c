@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2020 Blender Foundation.
@@ -58,7 +58,7 @@ bool multires_reshape_assign_final_coords_from_ccg(const MultiresReshapeContext 
         BLI_assert(grid_element.displacement != NULL);
         memcpy(grid_element.displacement,
                CCG_grid_elem_co(&reshape_level_key, ccg_grid, x, y),
-               sizeof(float) * 3);
+               sizeof(float[3]));
 
         if (reshape_level_key.has_mask) {
           BLI_assert(grid_element.mask != NULL);

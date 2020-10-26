@@ -163,7 +163,7 @@ void BM_face_calc_tessellation(const BMFace *f,
     float(*projverts)[2] = BLI_array_alloca(projverts, f->len);
     int j;
 
-    axis_dominant_v3_to_m3(axis_mat, f->no);
+    axis_dominant_v3_to_m3_negate(axis_mat, f->no);
 
     j = 0;
     l_iter = l_first;
@@ -174,7 +174,7 @@ void BM_face_calc_tessellation(const BMFace *f,
     } while ((l_iter = l_iter->next) != l_first);
 
     /* complete the loop */
-    BLI_polyfill_calc(projverts, f->len, -1, r_index);
+    BLI_polyfill_calc(projverts, f->len, 1, r_index);
   }
 }
 
@@ -667,7 +667,7 @@ void BM_face_calc_center_median_weighted(const BMFace *f, float r_cent[3])
 /**
  * \brief POLY ROTATE PLANE
  *
- * Rotates a polygon so that it's
+ * Rotates a polygon so that its
  * normal is pointing towards the mesh Z axis
  */
 void poly_rotate_plane(const float normal[3], float (*verts)[3], const uint nverts)
@@ -743,9 +743,7 @@ bool BM_vert_calc_normal_ex(const BMVert *v, const char hflag, float r_no[3])
     normalize_v3(r_no);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 bool BM_vert_calc_normal(const BMVert *v, float r_no[3])
@@ -773,9 +771,7 @@ bool BM_vert_calc_normal(const BMVert *v, float r_no[3])
     normalize_v3(r_no);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 void BM_vert_normal_update_all(BMVert *v)
@@ -893,7 +889,7 @@ float BM_face_calc_normal_vcos(const BMesh *bm,
  * Calculate a normal from a vertex cloud.
  *
  * \note We could make a higher quality version that takes all vertices into account.
- * Currently it finds 4 outer most points returning it's normal.
+ * Currently it finds 4 outer most points returning its normal.
  */
 void BM_verts_calc_normal_from_cloud_ex(
     BMVert **varr, int varr_len, float r_normal[3], float r_center[3], int *r_index_tangent)

@@ -79,13 +79,10 @@ static char UnaryFunction1DVoid___doc__[] =
     ":class:`Interface1D`.\n"
     "\n"
     ".. method:: __init__()\n"
+    "             __init__(integration_type)\n"
     "\n"
-    "   Default constructor.\n"
-    "\n"
-    ".. method:: __init__(integration_type)\n"
-    "\n"
-    "   Builds a unary 1D function using the integration method given as\n"
-    "   argument.\n"
+    "   Builds a unary 1D function using either a default constructor\n"
+    "   or the integration method given as an argument.\n"
     "\n"
     "   :arg integration_type: An integration method.\n"
     "   :type integration_type: :class:`IntegrationType`\n";
@@ -116,9 +113,7 @@ static int UnaryFunction1DVoid___init__(BPy_UnaryFunction1DVoid *self,
 
 static void UnaryFunction1DVoid___dealloc__(BPy_UnaryFunction1DVoid *self)
 {
-  if (self->uf1D_void) {
-    delete self->uf1D_void;
-  }
+  delete self->uf1D_void;
   UnaryFunction1D_Type.tp_dealloc((PyObject *)self);
 }
 

@@ -66,13 +66,11 @@ static void draw_background(const rcti *rect)
 
   immUniformThemeColor(TH_TIME_SCRUB_BACKGROUND);
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   immRectf(pos, rect->xmin, rect->ymin, rect->xmax, rect->ymax);
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   immUnbindProgram();
 }
@@ -92,10 +90,11 @@ static void draw_current_frame(const Scene *scene,
                                bool display_seconds,
                                const View2D *v2d,
                                const rcti *scrub_region_rect,
-                               int current_frame)
+                               int current_frame,
+                               float sub_frame,
+                               bool draw_line)
 {
   const uiFontStyle *fstyle = UI_FSTYLE_WIDGET;
-  const uchar color[] = {255, 255, 255, 255};
   int frame_x = UI_view2d_view_to_region_x(v2d, current_frame);
 
   char frame_str[64];
@@ -106,6 +105,22 @@ static void draw_current_frame(const Scene *scene,
 
   float bg_color[4];
   UI_GetThemeColorShade4fv(TH_CFRAME, -5, bg_color);
+
+  if (draw_line) {
+    /* Draw vertical line to from the bottom of the current frame box to the bottom of the screen.
+     */
+    const float subframe_x = UI_view2d_view_to_region_x(v2d, current_frame + sub_frame);
+    GPUVertFormat *format = immVertexFormat();
+    uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+    immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+    immUniformThemeColor(TH_CFRAME);
+    immRectf(pos,
+             subframe_x - U.pixelsize,
+             scrub_region_rect->ymax - box_padding,
+             subframe_x + U.pixelsize,
+             0.0f);
+    immUnbindProgram();
+  }
 
   UI_draw_roundbox_corner_set(UI_CNR_ALL);
 
@@ -127,11 +142,35 @@ static void draw_current_frame(const Scene *scene,
                       4 * UI_DPI_FAC,
                       bg_color);
 
+  uchar text_color[4];
+  UI_GetThemeColor4ubv(TH_HEADER_TEXT_HI, text_color);
   UI_fontstyle_draw_simple(fstyle,
                            frame_x - text_width / 2 + U.pixelsize / 2,
                            get_centered_text_y(scrub_region_rect),
                            frame_str,
-                           color);
+                           text_color);
+}
+
+void ED_time_scrub_draw_current_frame(const ARegion *region,
+                                      const Scene *scene,
+                                      bool display_seconds,
+                                      bool draw_line)
+{
+  const View2D *v2d = &region->v2d;
+  GPU_matrix_push_projection();
+  wmOrtho2_region_pixelspace(region);
+
+  rcti scrub_region_rect;
+  get_time_scrub_region_rect(region, &scrub_region_rect);
+
+  draw_current_frame(scene,
+                     display_seconds,
+                     v2d,
+                     &scrub_region_rect,
+                     scene->r.cfra,
+                     scene->r.subframe,
+                     draw_line);
+  GPU_matrix_pop_projection();
 }
 
 void ED_time_scrub_draw(const ARegion *region,
@@ -160,8 +199,6 @@ void ED_time_scrub_draw(const ARegion *region,
         region, v2d, &numbers_rect, scene, display_seconds, TH_TEXT);
   }
 
-  draw_current_frame(scene, display_seconds, v2d, &scrub_region_rect, scene->r.cfra);
-
   GPU_matrix_pop_projection();
 }
 
@@ -189,23 +226,30 @@ void ED_time_scrub_channel_search_draw(const bContext *C, ARegion *region, bDope
   immRectf(pos, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
   immUnbindProgram();
 
-  uiBlock *block = UI_block_begin(C, region, __func__, UI_EMBOSS);
-
   PointerRNA ptr;
   RNA_pointer_create(&CTX_wm_screen(C)->id, &RNA_DopeSheet, dopesheet, &ptr);
-  PropertyRNA *prop = RNA_struct_find_property(&ptr, "filter_text");
 
-  int padding = 2 * UI_DPI_FAC;
-  uiDefAutoButR(block,
-                &ptr,
-                prop,
-                -1,
-                "",
-                ICON_NONE,
-                rect.xmin + padding,
-                rect.ymin + padding,
-                BLI_rcti_size_x(&rect) - 2 * padding,
-                BLI_rcti_size_y(&rect) - 2 * padding);
+  const uiStyle *style = UI_style_get_dpi();
+  const float padding_x = 2 * UI_DPI_FAC;
+  const float padding_y = UI_DPI_FAC;
+
+  uiBlock *block = UI_block_begin(C, region, __func__, UI_EMBOSS);
+  uiLayout *layout = UI_block_layout(block,
+                                     UI_LAYOUT_VERTICAL,
+                                     UI_LAYOUT_HEADER,
+                                     rect.xmin + padding_x,
+                                     rect.ymin + UI_UNIT_Y + padding_y,
+                                     BLI_rcti_size_x(&rect) - 2 * padding_x,
+                                     1,
+                                     0,
+                                     style);
+  uiLayoutSetScaleY(layout, (UI_UNIT_Y - padding_y) / UI_UNIT_Y);
+  UI_block_layout_set_current(block, layout);
+  UI_block_align_begin(block);
+  uiItemR(layout, &ptr, "filter_text", 0, "", ICON_NONE);
+  uiItemR(layout, &ptr, "use_filter_invert", 0, "", ICON_ARROW_LEFTRIGHT);
+  UI_block_align_end(block);
+  UI_block_layout_resolve(block, NULL, NULL);
 
   UI_block_end(C, block);
   UI_block_draw(C, block);

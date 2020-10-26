@@ -21,8 +21,7 @@
  * \ingroup sptext
  */
 
-#ifndef __TEXT_INTERN_H__
-#define __TEXT_INTERN_H__
+#pragma once
 
 /* internal exports only */
 
@@ -83,7 +82,7 @@ void wrap_offset(const struct SpaceText *st,
                  int *offc);
 void wrap_offset_in_line(const struct SpaceText *st,
                          struct ARegion *region,
-                         struct TextLine *linep,
+                         struct TextLine *linein,
                          int cursin,
                          int *offl,
                          int *offc);
@@ -92,7 +91,7 @@ int text_get_char_pos(const struct SpaceText *st, const char *line, int cur);
 void text_drawcache_tag_update(struct SpaceText *st, int full);
 void text_free_caches(struct SpaceText *st);
 
-int text_do_suggest_select(struct SpaceText *st, struct ARegion *region);
+bool text_do_suggest_select(struct SpaceText *st, struct ARegion *region, const int mval[2]);
 void text_pop_suggest_list(void);
 
 int text_get_visible_lines(const struct SpaceText *st, struct ARegion *region, const char *str);
@@ -181,5 +180,3 @@ void TEXT_OT_autocomplete(struct wmOperatorType *ot);
 
 /* space_text.c */
 extern const char *text_context_dir[]; /* doc access */
-
-#endif /* __TEXT_INTERN_H__ */

@@ -65,7 +65,7 @@ NodeGroup *BlenderFileLoader::Load()
     // Adjust clipping start/end and set up a Z offset when the viewport preview
     // is used with the orthographic view.  In this case, _re->clip_start is negative,
     // while Freestyle assumes that imported mesh data are in the camera coordinate
-    // system with the view point located at origin [bug #36009].
+    // system with the view point located at origin [bug T36009].
     _z_near = -0.001f;
     _z_offset = _re->clip_start + _z_near;
     _z_far = -_re->clip_end + _z_offset;
@@ -222,7 +222,7 @@ void BlenderFileLoader::clipTriangle(int numTris,
                                      bool em1,
                                      bool em2,
                                      bool em3,
-                                     int clip[3])
+                                     const int clip[3])
 {
   float *v[3], *n[3];
   bool em[3];
@@ -684,7 +684,7 @@ void BlenderFileLoader::insertShapeNode(Object *ob, Mesh *me, int id)
     if (v0 == v1 || v0 == v2 || v1 == v2) {
       continue;  // do nothing for now
     }
-    else if (GeomUtils::distPointSegment<Vec3r>(v0, v1, v2) < 1.0e-6) {
+    if (GeomUtils::distPointSegment<Vec3r>(v0, v1, v2) < 1.0e-6) {
       detri.viP = vi0;
       detri.viA = vi1;
       detri.viB = vi2;
@@ -746,7 +746,7 @@ void BlenderFileLoader::insertShapeNode(Object *ob, Mesh *me, int id)
     detriList.push_back(detri);
   }
 
-  if (detriList.size() > 0) {
+  if (!detriList.empty()) {
     vector<detri_t>::iterator v;
     for (v = detriList.begin(); v != detriList.end(); v++) {
       detri_t detri = (*v);
@@ -795,7 +795,7 @@ void BlenderFileLoader::insertShapeNode(Object *ob, Mesh *me, int id)
   // sets the id of the rep
   rep->setId(Id(id, 0));
   rep->setName(ob->id.name + 2);
-  rep->setLibraryPath(ob->id.lib ? ob->id.lib->name : "");
+  rep->setLibraryPath(ob->id.lib ? ob->id.lib->filepath : "");
 
   const BBox<Vec3r> bbox = BBox<Vec3r>(Vec3r(ls.minBBox[0], ls.minBBox[1], ls.minBBox[2]),
                                        Vec3r(ls.maxBBox[0], ls.maxBBox[1], ls.maxBBox[2]));

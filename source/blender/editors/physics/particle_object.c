@@ -104,7 +104,7 @@ void OBJECT_OT_particle_system_add(wmOperatorType *ot)
   ot->description = "Add a particle system";
 
   /* api callbacks */
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
   ot->exec = particle_system_add_exec;
 
   /* flags */
@@ -151,7 +151,7 @@ void OBJECT_OT_particle_system_remove(wmOperatorType *ot)
   ot->description = "Remove the selected particle system";
 
   /* api callbacks */
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
   ot->exec = particle_system_remove_exec;
 
   /* flags */
@@ -180,7 +180,7 @@ static int new_particle_settings_exec(bContext *C, wmOperator *UNUSED(op))
 
   /* add or copy particle setting */
   if (psys->part) {
-    part = BKE_particlesettings_copy(bmain, psys->part);
+    part = (ParticleSettings *)BKE_id_copy(bmain, &psys->part->id);
   }
   else {
     part = BKE_particlesettings_add(bmain, "ParticleSettings");
@@ -691,7 +691,7 @@ void PARTICLE_OT_disconnect_hair(wmOperatorType *ot)
   ot->flag = OPTYPE_UNDO;
 
   RNA_def_boolean(
-      ot->srna, "all", 0, "All hair", "Disconnect all hair systems from the emitter mesh");
+      ot->srna, "all", 0, "All Hair", "Disconnect all hair systems from the emitter mesh");
 }
 
 /* from/to_world_space : whether from/to particles are in world or hair space
@@ -721,7 +721,7 @@ static bool remap_hair_emitter(Depsgraph *depsgraph,
   MVert *mvert;
   Mesh *mesh, *target_mesh;
   int numverts;
-  int i, k;
+  int k;
   float from_ob_imat[4][4], to_ob_imat[4][4];
   float from_imat[4][4], to_imat[4][4];
 
@@ -754,7 +754,7 @@ static bool remap_hair_emitter(Depsgraph *depsgraph,
     return false;
   }
   /* don't modify the original vertices */
-  BKE_id_copy_ex(NULL, &mesh->id, (ID **)&mesh, LIB_ID_COPY_LOCALIZE);
+  mesh = (Mesh *)BKE_id_copy_ex(NULL, &mesh->id, NULL, LIB_ID_COPY_LOCALIZE);
 
   /* BMESH_ONLY, deform dm may not have tessface */
   BKE_mesh_tessface_ensure(mesh);
@@ -763,7 +763,7 @@ static bool remap_hair_emitter(Depsgraph *depsgraph,
   mvert = mesh->mvert;
 
   /* convert to global coordinates */
-  for (i = 0; i < numverts; i++) {
+  for (int i = 0; i < numverts; i++) {
     mul_m4_v3(to_mat, mvert[i].co);
   }
 
@@ -780,6 +780,7 @@ static bool remap_hair_emitter(Depsgraph *depsgraph,
     return false;
   }
 
+  int i;
   for (i = 0, tpa = target_psys->particles, pa = psys->particles; i < target_psys->totpart;
        i++, tpa++, pa++) {
     float from_co[3];
@@ -980,7 +981,7 @@ void PARTICLE_OT_connect_hair(wmOperatorType *ot)
   /* No REGISTER, redo does not work due to missing update, see T47750. */
   ot->flag = OPTYPE_UNDO;
 
-  RNA_def_boolean(ot->srna, "all", 0, "All hair", "Connect all hair systems to the emitter mesh");
+  RNA_def_boolean(ot->srna, "all", 0, "All Hair", "Connect all hair systems to the emitter mesh");
 }
 
 /************************ particle system copy operator *********************/
@@ -1064,7 +1065,7 @@ static void remove_particle_systems_from_object(Object *ob_to)
              eModifierType_DynamicPaint,
              eModifierType_Fluid)) {
       BLI_remlink(&ob_to->modifiers, md);
-      modifier_free(md);
+      BKE_modifier_free(md);
     }
   }
 
@@ -1138,13 +1139,13 @@ static bool copy_particle_systems_to_object(const bContext *C,
     psys_unique_name(ob_to, psys, psys->name);
 
     /* add a particle system modifier for each system */
-    md = modifier_new(eModifierType_ParticleSystem);
+    md = BKE_modifier_new(eModifierType_ParticleSystem);
     psmd = (ParticleSystemModifierData *)md;
     /* push on top of the stack, no use trying to reproduce old stack order */
     BLI_addtail(&ob_to->modifiers, md);
 
     BLI_snprintf(md->name, sizeof(md->name), "ParticleSystem %i", i);
-    modifier_unique_name(&ob_to->modifiers, (ModifierData *)psmd);
+    BKE_modifier_unique_name(&ob_to->modifiers, (ModifierData *)psmd);
 
     psmd->psys = psys;
 
@@ -1154,7 +1155,7 @@ static bool copy_particle_systems_to_object(const bContext *C,
 
     if (duplicate_settings) {
       id_us_min(&psys->part->id);
-      psys->part = BKE_particlesettings_copy(bmain, psys->part);
+      psys->part = (ParticleSettings *)BKE_id_copy(bmain, &psys->part->id);
     }
   }
   MEM_freeN(tmp_psys);
@@ -1210,7 +1211,7 @@ static bool copy_particle_systems_to_object(const bContext *C,
 static bool copy_particle_systems_poll(bContext *C)
 {
   Object *ob;
-  if (!ED_operator_object_active_editable(C)) {
+  if (!ED_operator_object_active_local_editable(C)) {
     return false;
   }
 
@@ -1311,7 +1312,7 @@ void PARTICLE_OT_copy_particle_systems(wmOperatorType *ot)
 
 static bool duplicate_particle_systems_poll(bContext *C)
 {
-  if (!ED_operator_object_active_editable(C)) {
+  if (!ED_operator_object_active_local_editable(C)) {
     return false;
   }
   Object *ob = ED_object_active_context(C);

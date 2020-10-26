@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_QUERY_H__
-#define __BMESH_QUERY_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -47,6 +46,8 @@ BMLoop *BM_face_other_edge_loop(BMFace *f, BMEdge *e, BMVert *v) ATTR_WARN_UNUSE
     ATTR_NONNULL();
 BMLoop *BM_loop_other_edge_loop(BMLoop *l, BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 BMLoop *BM_face_other_vert_loop(BMFace *f, BMVert *v_prev, BMVert *v) ATTR_WARN_UNUSED_RESULT
+    ATTR_NONNULL();
+BMLoop *BM_loop_other_vert_loop_by_edge(BMLoop *l, BMEdge *e) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
 BMLoop *BM_loop_other_vert_loop(BMLoop *l, BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 BMLoop *BM_vert_step_fan_loop(BMLoop *l, BMEdge **e_step) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
@@ -142,7 +143,17 @@ float BM_loop_calc_face_normal(const BMLoop *l, float r_normal[3]) ATTR_NONNULL(
 float BM_loop_calc_face_normal_safe(const BMLoop *l, float r_normal[3]) ATTR_NONNULL();
 float BM_loop_calc_face_normal_safe_ex(const BMLoop *l, const float epsilon, float r_normal[3])
     ATTR_NONNULL();
-void BM_loop_calc_face_direction(const BMLoop *l, float r_normal[3]);
+float BM_loop_calc_face_normal_safe_vcos_ex(const BMLoop *l,
+                                            const float normal_fallback[3],
+                                            float const (*vertexCos)[3],
+                                            const float epsilon_sq,
+                                            float r_normal[3]) ATTR_NONNULL();
+float BM_loop_calc_face_normal_safe_vcos(const BMLoop *l,
+                                         const float normal_fallback[3],
+                                         float const (*vertexCos)[3],
+                                         float r_normal[3]) ATTR_NONNULL();
+
+void BM_loop_calc_face_direction(const BMLoop *l, float r_dir[3]);
 void BM_loop_calc_face_tangent(const BMLoop *l, float r_tangent[3]);
 
 float BM_edge_calc_face_angle_ex(const BMEdge *e, const float fallback) ATTR_WARN_UNUSED_RESULT
@@ -161,7 +172,6 @@ float BM_edge_calc_face_angle_with_imat3(const BMEdge *e,
 float BM_edge_calc_face_angle_signed(const BMEdge *e) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 void BM_edge_calc_face_tangent(const BMEdge *e, const BMLoop *e_loop, float r_tangent[3])
     ATTR_NONNULL();
-
 float BM_vert_calc_edge_angle(const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 float BM_vert_calc_edge_angle_ex(const BMVert *v, const float fallback) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
@@ -175,7 +185,7 @@ float BM_vert_calc_median_tagged_edge_length(const BMVert *v) ATTR_WARN_UNUSED_R
 BMLoop *BM_face_find_shortest_loop(BMFace *f) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 BMLoop *BM_face_find_longest_loop(BMFace *f) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
-BMEdge *BM_edge_exists(BMVert *v1, BMVert *v2) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+BMEdge *BM_edge_exists(BMVert *v_a, BMVert *v_b) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 BMEdge *BM_edge_find_double(BMEdge *e) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
 BMFace *BM_face_exists(BMVert **varr, int len) ATTR_NONNULL(1);
@@ -233,6 +243,9 @@ bool BM_face_is_any_vert_flag_test(const BMFace *f, const char hflag) ATTR_WARN_
 bool BM_face_is_any_edge_flag_test(const BMFace *f, const char hflag) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
 
+bool BM_edge_is_any_face_len_test(const BMEdge *e, const int len) ATTR_WARN_UNUSED_RESULT
+    ATTR_NONNULL();
+
 bool BM_face_is_normal_valid(const BMFace *f) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
 double BM_mesh_calc_volume(BMesh *bm, bool is_signed) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
@@ -262,5 +275,3 @@ int BM_mesh_calc_edge_groups_as_arrays(BMesh *bm,
 float bmesh_subd_falloff_calc(const int falloff, float val) ATTR_WARN_UNUSED_RESULT;
 
 #include "bmesh_query_inline.h"
-
-#endif /* __BMESH_QUERY_H__ */

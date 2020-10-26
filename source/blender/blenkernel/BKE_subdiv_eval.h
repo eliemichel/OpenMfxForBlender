@@ -21,8 +21,7 @@
  * \ingroup bke
  */
 
-#ifndef __BKE_SUBDIV_EVAL_H__
-#define __BKE_SUBDIV_EVAL_H__
+#pragma once
 
 #include "BLI_sys_types.h"
 
@@ -83,7 +82,7 @@ void BKE_subdiv_eval_face_varying(struct Subdiv *subdiv,
                                   const int ptex_face_index,
                                   const float u,
                                   const float v,
-                                  float r_varying[2]);
+                                  float r_face_varying[2]);
 
 /* NOTE: Expects derivatives to be correct.
  *
@@ -149,5 +148,3 @@ void BKE_subdiv_eval_limit_patch_resolution_point_and_short_normal(struct Subdiv
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_SUBDIV_EVAL_H__ */

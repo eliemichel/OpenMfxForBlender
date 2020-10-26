@@ -35,7 +35,6 @@
 
 #include "MEM_guardedalloc.h"
 
-extern "C" {
 #include "BLI_blenlib.h"
 
 #include "IMB_allocimbuf.h"
@@ -43,7 +42,6 @@ extern "C" {
 #include "IMB_colormanagement_intern.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-}
 
 OIIO_NAMESPACE_USING
 
@@ -184,10 +182,10 @@ int imb_save_photoshop(struct ImBuf *ibuf, const char * /*name*/, int flags)
               << " currently not supported" << std::endl;
     imb_addencodedbufferImBuf(ibuf);
     ibuf->encodedsize = 0;
-    return (0);
+    return 0;
   }
 
-  return (0);
+  return 0;
 }
 
 struct ImBuf *imb_load_photoshop(const char *filename, int flags, char colorspace[IM_MAX_SPACE])
@@ -201,7 +199,7 @@ struct ImBuf *imb_load_photoshop(const char *filename, int flags, char colorspac
 
   /* load image from file through OIIO */
   if (imb_is_a_photoshop(filename) == 0) {
-    return (NULL);
+    return NULL;
   }
 
   colorspace_set_default_role(colorspace, IM_MAX_SPACE, COLOR_ROLE_DEFAULT_BYTE);
@@ -292,4 +290,4 @@ int OIIO_getVersionHex(void)
   return openimageio_version();
 }
 
-}  // export "C"
+} /* export "C" */

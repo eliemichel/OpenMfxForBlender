@@ -21,8 +21,7 @@
  * \ingroup blt
  */
 
-#ifndef __BLT_TRANSLATION_H__
-#define __BLT_TRANSLATION_H__
+#pragma once
 
 #include "BLI_utildefines.h" /* for bool type */
 
@@ -65,9 +64,9 @@ bool BLT_lang_is_ime_supported(void);
 #  define IFACE_(msgid) msgid
 #  define TIP_(msgid) msgid
 #  define DATA_(msgid) msgid
-#  define CTX_IFACE_(context, msgid) msgid
-#  define CTX_TIP_(context, msgid) msgid
-#  define CTX_DATA_(context, msgid) msgid
+#  define CTX_IFACE_(context, msgid) ((void)(0 ? (context) : 0), msgid)
+#  define CTX_TIP_(context, msgid) ((void)(0 ? (context) : 0), msgid)
+#  define CTX_DATA_(context, msgid) ((void)(0 ? (context) : 0), msgid)
 #endif
 
 /* Helper macro, when we want to define a same msgid for multiple msgctxt...
@@ -122,6 +121,7 @@ bool BLT_lang_is_ime_supported(void);
 #define BLT_I18NCONTEXT_ID_IMAGE "Image"
 /*#define BLT_I18NCONTEXT_ID_IPO                  "Ipo"*/ /* Deprecated */
 #define BLT_I18NCONTEXT_ID_SHAPEKEY "Key"
+#define BLT_I18NCONTEXT_ID_SIMULATION "Simulation"
 #define BLT_I18NCONTEXT_ID_LIGHT "Light"
 #define BLT_I18NCONTEXT_ID_LIBRARY "Library"
 #define BLT_I18NCONTEXT_ID_LATTICE "Lattice"
@@ -202,6 +202,7 @@ typedef struct {
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SCENE, "id_scene"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SCREEN, "id_screen"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SEQUENCE, "id_sequence"), \
+        BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SIMULATION, "id_simulation"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SPEAKER, "id_speaker"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SOUND, "id_sound"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_TEXTURE, "id_texture"), \
@@ -219,5 +220,3 @@ typedef struct {
 #ifdef __cplusplus
 };
 #endif
-
-#endif /* __BLT_TRANSLATION_H__ */

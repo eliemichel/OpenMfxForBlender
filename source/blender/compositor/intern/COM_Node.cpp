@@ -18,11 +18,9 @@
 
 #include <string.h>
 
-extern "C" {
 #include "BKE_node.h"
 
 #include "RNA_access.h"
-}
 
 #include "COM_ExecutionSystem.h"
 #include "COM_NodeOperation.h"
@@ -132,12 +130,12 @@ bNodeSocket *Node::getEditorInputSocket(int editorNodeInputSocketIndex)
   }
   return NULL;
 }
-bNodeSocket *Node::getEditorOutputSocket(int editorNodeInputSocketIndex)
+bNodeSocket *Node::getEditorOutputSocket(int editorNodeOutputSocketIndex)
 {
   bNodeSocket *bSock = (bNodeSocket *)this->getbNode()->outputs.first;
   int index = 0;
   while (bSock != NULL) {
-    if (index == editorNodeInputSocketIndex) {
+    if (index == editorNodeOutputSocketIndex) {
       return bSock;
     }
     index++;

@@ -10,15 +10,14 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
  * All rights reserved.
  */
 
-#ifndef __IO_ALEMBIC_H__
-#define __IO_ALEMBIC_H__
+#pragma once
 
 /** \file
  * \ingroup editor/io
@@ -28,5 +27,3 @@ struct wmOperatorType;
 
 void WM_OT_alembic_export(struct wmOperatorType *ot);
 void WM_OT_alembic_import(struct wmOperatorType *ot);
-
-#endif /* __IO_ALEMBIC_H__ */

@@ -23,12 +23,9 @@
  * Implementation of tools for debugging the depsgraph
  */
 
-#include "BLI_ghash.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "DNA_scene_types.h"
-} /* extern "C" */
 
 #include "DNA_object_types.h"
 
@@ -45,27 +42,29 @@ extern "C" {
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_time.h"
 
+namespace deg = blender::deg;
+
 void DEG_debug_flags_set(Depsgraph *depsgraph, int flags)
 {
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
+  deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(depsgraph);
   deg_graph->debug.flags = flags;
 }
 
 int DEG_debug_flags_get(const Depsgraph *depsgraph)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(depsgraph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(depsgraph);
   return deg_graph->debug.flags;
 }
 
 void DEG_debug_name_set(struct Depsgraph *depsgraph, const char *name)
 {
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
+  deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(depsgraph);
   deg_graph->debug.name = name;
 }
 
 const char *DEG_debug_name_get(struct Depsgraph *depsgraph)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(depsgraph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(depsgraph);
   return deg_graph->debug.name.c_str();
 }
 
@@ -73,8 +72,8 @@ bool DEG_debug_compare(const struct Depsgraph *graph1, const struct Depsgraph *g
 {
   BLI_assert(graph1 != nullptr);
   BLI_assert(graph2 != nullptr);
-  const DEG::Depsgraph *deg_graph1 = reinterpret_cast<const DEG::Depsgraph *>(graph1);
-  const DEG::Depsgraph *deg_graph2 = reinterpret_cast<const DEG::Depsgraph *>(graph2);
+  const deg::Depsgraph *deg_graph1 = reinterpret_cast<const deg::Depsgraph *>(graph1);
+  const deg::Depsgraph *deg_graph2 = reinterpret_cast<const deg::Depsgraph *>(graph2);
   if (deg_graph1->operations.size() != deg_graph2->operations.size()) {
     return false;
   }
@@ -94,7 +93,7 @@ bool DEG_debug_graph_relations_validate(Depsgraph *graph,
 {
   Depsgraph *temp_depsgraph = DEG_graph_new(bmain, scene, view_layer, DEG_get_mode(graph));
   bool valid = true;
-  DEG_graph_build_from_view_layer(temp_depsgraph, bmain, scene, view_layer);
+  DEG_graph_build_from_view_layer(temp_depsgraph);
   if (!DEG_debug_compare(temp_depsgraph, graph)) {
     fprintf(stderr, "ERROR! Depsgraph wasn't tagged for update when it should have!\n");
     BLI_assert(!"This should not happen!");
@@ -106,18 +105,18 @@ bool DEG_debug_graph_relations_validate(Depsgraph *graph,
 
 bool DEG_debug_consistency_check(Depsgraph *graph)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
   /* Validate links exists in both directions. */
-  for (DEG::OperationNode *node : deg_graph->operations) {
-    for (DEG::Relation *rel : node->outlinks) {
+  for (deg::OperationNode *node : deg_graph->operations) {
+    for (deg::Relation *rel : node->outlinks) {
       int counter1 = 0;
-      for (DEG::Relation *tmp_rel : node->outlinks) {
+      for (deg::Relation *tmp_rel : node->outlinks) {
         if (tmp_rel == rel) {
           counter1++;
         }
       }
       int counter2 = 0;
-      for (DEG::Relation *tmp_rel : rel->to->inlinks) {
+      for (deg::Relation *tmp_rel : rel->to->inlinks) {
         if (tmp_rel == rel) {
           counter2++;
         }
@@ -133,16 +132,16 @@ bool DEG_debug_consistency_check(Depsgraph *graph)
     }
   }
 
-  for (DEG::OperationNode *node : deg_graph->operations) {
-    for (DEG::Relation *rel : node->inlinks) {
+  for (deg::OperationNode *node : deg_graph->operations) {
+    for (deg::Relation *rel : node->inlinks) {
       int counter1 = 0;
-      for (DEG::Relation *tmp_rel : node->inlinks) {
+      for (deg::Relation *tmp_rel : node->inlinks) {
         if (tmp_rel == rel) {
           counter1++;
         }
       }
       int counter2 = 0;
-      for (DEG::Relation *tmp_rel : rel->from->outlinks) {
+      for (deg::Relation *tmp_rel : rel->from->outlinks) {
         if (tmp_rel == rel) {
           counter2++;
         }
@@ -156,19 +155,19 @@ bool DEG_debug_consistency_check(Depsgraph *graph)
   }
 
   /* Validate node valency calculated in both directions. */
-  for (DEG::OperationNode *node : deg_graph->operations) {
+  for (deg::OperationNode *node : deg_graph->operations) {
     node->num_links_pending = 0;
     node->custom_flags = 0;
   }
 
-  for (DEG::OperationNode *node : deg_graph->operations) {
+  for (deg::OperationNode *node : deg_graph->operations) {
     if (node->custom_flags) {
       printf("Node %s is twice in the operations!\n", node->identifier().c_str());
       return false;
     }
-    for (DEG::Relation *rel : node->outlinks) {
-      if (rel->to->type == DEG::NodeType::OPERATION) {
-        DEG::OperationNode *to = (DEG::OperationNode *)rel->to;
+    for (deg::Relation *rel : node->outlinks) {
+      if (rel->to->type == deg::NodeType::OPERATION) {
+        deg::OperationNode *to = (deg::OperationNode *)rel->to;
         BLI_assert(to->num_links_pending < to->inlinks.size());
         ++to->num_links_pending;
       }
@@ -176,10 +175,10 @@ bool DEG_debug_consistency_check(Depsgraph *graph)
     node->custom_flags = 1;
   }
 
-  for (DEG::OperationNode *node : deg_graph->operations) {
+  for (deg::OperationNode *node : deg_graph->operations) {
     int num_links_pending = 0;
-    for (DEG::Relation *rel : node->inlinks) {
-      if (rel->from->type == DEG::NodeType::OPERATION) {
+    for (deg::Relation *rel : node->inlinks) {
+      if (rel->from->type == deg::NodeType::OPERATION) {
         num_links_pending++;
       }
     }
@@ -198,17 +197,17 @@ bool DEG_debug_consistency_check(Depsgraph *graph)
 /* ------------------------------------------------ */
 
 /**
- * Obtain simple statistics about the complexity of the depsgraph
- * \param[out] r_outer       The number of outer nodes in the graph
- * \param[out] r_operations  The number of operation nodes in the graph
- * \param[out] r_relations   The number of relations between (executable) nodes in the graph
+ * Obtain simple statistics about the complexity of the depsgraph.
+ * \param[out] r_outer:      The number of outer nodes in the graph
+ * \param[out] r_operations: The number of operation nodes in the graph
+ * \param[out] r_relations:  The number of relations between (executable) nodes in the graph
  */
 void DEG_stats_simple(const Depsgraph *graph,
                       size_t *r_outer,
                       size_t *r_operations,
                       size_t *r_relations)
 {
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(graph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
 
   /* number of operations */
   if (r_operations) {
@@ -222,18 +221,17 @@ void DEG_stats_simple(const Depsgraph *graph,
     size_t tot_outer = 0;
     size_t tot_rels = 0;
 
-    for (DEG::IDNode *id_node : deg_graph->id_nodes) {
+    for (deg::IDNode *id_node : deg_graph->id_nodes) {
       tot_outer++;
-      GHASH_FOREACH_BEGIN (DEG::ComponentNode *, comp_node, id_node->components) {
+      for (deg::ComponentNode *comp_node : id_node->components.values()) {
         tot_outer++;
-        for (DEG::OperationNode *op_node : comp_node->operations) {
+        for (deg::OperationNode *op_node : comp_node->operations) {
           tot_rels += op_node->inlinks.size();
         }
       }
-      GHASH_FOREACH_END();
     }
 
-    DEG::TimeSourceNode *time_source = deg_graph->find_time_source();
+    deg::TimeSourceNode *time_source = deg_graph->find_time_source();
     if (time_source != nullptr) {
       tot_rels += time_source->inlinks.size();
     }
@@ -247,13 +245,13 @@ void DEG_stats_simple(const Depsgraph *graph,
   }
 }
 
-static DEG::string depsgraph_name_for_logging(struct Depsgraph *depsgraph)
+static deg::string depsgraph_name_for_logging(struct Depsgraph *depsgraph)
 {
   const char *name = DEG_debug_name_get(depsgraph);
   if (name[0] == '\0') {
     return "";
   }
-  return "[" + DEG::string(name) + "]: ";
+  return "[" + deg::string(name) + "]: ";
 }
 
 void DEG_debug_print_begin(struct Depsgraph *depsgraph)
@@ -274,9 +272,9 @@ void DEG_debug_print_eval(struct Depsgraph *depsgraph,
           depsgraph_name_for_logging(depsgraph).c_str(),
           function_name,
           object_name,
-          DEG::color_for_pointer(object_address).c_str(),
+          deg::color_for_pointer(object_address).c_str(),
           object_address,
-          DEG::color_end().c_str());
+          deg::color_end().c_str());
   fflush(stdout);
 }
 
@@ -296,14 +294,14 @@ void DEG_debug_print_eval_subdata(struct Depsgraph *depsgraph,
           depsgraph_name_for_logging(depsgraph).c_str(),
           function_name,
           object_name,
-          DEG::color_for_pointer(object_address).c_str(),
+          deg::color_for_pointer(object_address).c_str(),
           object_address,
-          DEG::color_end().c_str(),
+          deg::color_end().c_str(),
           subdata_comment,
           subdata_name,
-          DEG::color_for_pointer(subdata_address).c_str(),
+          deg::color_for_pointer(subdata_address).c_str(),
           subdata_address,
-          DEG::color_end().c_str());
+          deg::color_end().c_str());
   fflush(stdout);
 }
 
@@ -324,15 +322,15 @@ void DEG_debug_print_eval_subdata_index(struct Depsgraph *depsgraph,
           depsgraph_name_for_logging(depsgraph).c_str(),
           function_name,
           object_name,
-          DEG::color_for_pointer(object_address).c_str(),
+          deg::color_for_pointer(object_address).c_str(),
           object_address,
-          DEG::color_end().c_str(),
+          deg::color_end().c_str(),
           subdata_comment,
           subdata_name,
           subdata_index,
-          DEG::color_for_pointer(subdata_address).c_str(),
+          deg::color_for_pointer(subdata_address).c_str(),
           subdata_address,
-          DEG::color_end().c_str());
+          deg::color_end().c_str());
   fflush(stdout);
 }
 
@@ -352,14 +350,14 @@ void DEG_debug_print_eval_parent_typed(struct Depsgraph *depsgraph,
           depsgraph_name_for_logging(depsgraph).c_str(),
           function_name,
           object_name,
-          DEG::color_for_pointer(object_address).c_str(),
+          deg::color_for_pointer(object_address).c_str(),
           object_address,
-          DEG::color_end().c_str(),
+          deg::color_end().c_str(),
           parent_comment,
           parent_name,
-          DEG::color_for_pointer(parent_address).c_str(),
+          deg::color_for_pointer(parent_address).c_str(),
           parent_address,
-          DEG::color_end().c_str());
+          deg::color_end().c_str());
   fflush(stdout);
 }
 
@@ -377,9 +375,9 @@ void DEG_debug_print_eval_time(struct Depsgraph *depsgraph,
           depsgraph_name_for_logging(depsgraph).c_str(),
           function_name,
           object_name,
-          DEG::color_for_pointer(object_address).c_str(),
+          deg::color_for_pointer(object_address).c_str(),
           object_address,
-          DEG::color_end().c_str(),
+          deg::color_end().c_str(),
           time);
   fflush(stdout);
 }

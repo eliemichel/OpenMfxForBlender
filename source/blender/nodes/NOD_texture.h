@@ -21,10 +21,13 @@
  * \ingroup nodes
  */
 
-#ifndef __NOD_TEXTURE_H__
-#define __NOD_TEXTURE_H__
+#pragma once
 
 #include "BKE_node.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 extern struct bNodeTreeType *ntreeType_Texture;
 
@@ -71,4 +74,6 @@ void register_node_type_tex_proc_noise(void);
 void register_node_type_tex_proc_stucci(void);
 void register_node_type_tex_proc_distnoise(void);
 
+#ifdef __cplusplus
+}
 #endif

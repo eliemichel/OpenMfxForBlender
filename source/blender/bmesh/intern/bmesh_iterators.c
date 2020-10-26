@@ -206,10 +206,9 @@ void *BM_iter_as_arrayN(BMesh *bm,
     }
     return array;
   }
-  else {
-    *r_len = 0;
-    return NULL;
-  }
+
+  *r_len = 0;
+  return NULL;
 }
 
 void *BMO_iter_as_arrayN(BMOpSlot slot_args[BMO_OP_MAX_SLOTS],
@@ -244,10 +243,9 @@ void *BMO_iter_as_arrayN(BMOpSlot slot_args[BMO_OP_MAX_SLOTS],
     *r_len = i;
     return array;
   }
-  else {
-    *r_len = 0;
-    return NULL;
-  }
+
+  *r_len = 0;
+  return NULL;
 }
 
 int BM_iter_mesh_bitmap_from_filter(const char itype,
@@ -411,7 +409,7 @@ int BM_iter_mesh_count_flag(const char itype, BMesh *bm, const char hflag, const
  * VERT OF MESH CALLBACKS
  */
 
-/* see bug [#36923] for why we need this,
+/* see bug T36923 for why we need this,
  * allow adding but not removing, this isnt _totally_ safe since
  * you could add/remove within the same loop, but catches common cases
  */

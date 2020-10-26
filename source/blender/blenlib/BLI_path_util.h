@@ -16,19 +16,18 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BLI_PATH_UTIL_H__
-#define __BLI_PATH_UTIL_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
 
+#include "BLI_compiler_attrs.h"
+#include "BLI_utildefines.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BLI_compiler_attrs.h"
-#include "BLI_utildefines.h"
 
 void BLI_setenv(const char *env, const char *val) ATTR_NONNULL(1);
 void BLI_setenv_if_new(const char *env, const char *val) ATTR_NONNULL(1);
@@ -44,7 +43,7 @@ const char *BLI_path_extension(const char *filepath) ATTR_NONNULL();
 
 void BLI_path_append(char *__restrict dst, const size_t maxlen, const char *__restrict file)
     ATTR_NONNULL();
-void BLI_join_dirfile(char *__restrict string,
+void BLI_join_dirfile(char *__restrict dst,
                       const size_t maxlen,
                       const char *__restrict dir,
                       const char *__restrict file) ATTR_NONNULL();
@@ -78,7 +77,10 @@ bool BLI_path_extension_glob_validate(char *ext_fnmatch) ATTR_NONNULL();
 bool BLI_path_extension_replace(char *path, size_t maxlen, const char *ext) ATTR_NONNULL();
 bool BLI_path_extension_ensure(char *path, size_t maxlen, const char *ext) ATTR_NONNULL();
 bool BLI_path_filename_ensure(char *filepath, size_t maxlen, const char *filename) ATTR_NONNULL();
-int BLI_path_sequence_decode(const char *string, char *head, char *start, unsigned short *numlen);
+int BLI_path_sequence_decode(const char *string,
+                             char *head,
+                             char *tail,
+                             unsigned short *r_num_len);
 void BLI_path_sequence_encode(
     char *string, const char *head, const char *tail, unsigned short numlen, int pic);
 
@@ -158,5 +160,3 @@ bool BLI_path_suffix(char *string, size_t maxlen, const char *suffix, const char
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_PATH_UTIL_H__ */

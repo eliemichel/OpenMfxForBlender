@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_INPAINTOPERATION_H__
-#define __COM_INPAINTOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 class InpaintSimpleOperation : public NodeOperation {
@@ -34,7 +34,7 @@ class InpaintSimpleOperation : public NodeOperation {
 
   int *m_pixelorder;
   int m_area_size;
-  short *m_manhatten_distance;
+  short *m_manhattan_distance;
 
  public:
   InpaintSimpleOperation();
@@ -65,12 +65,10 @@ class InpaintSimpleOperation : public NodeOperation {
                                         rcti *output);
 
  private:
-  void calc_manhatten_distance();
+  void calc_manhattan_distance();
   void clamp_xy(int &x, int &y);
   float *get_pixel(int x, int y);
   int mdist(int x, int y);
   bool next_pixel(int &x, int &y, int &curr, int iters);
   void pix_step(int x, int y);
 };
-
-#endif

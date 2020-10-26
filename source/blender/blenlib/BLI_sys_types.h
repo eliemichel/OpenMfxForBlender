@@ -31,8 +31,7 @@
  * For these rogue platforms, we make the typedefs ourselves.
  */
 
-#ifndef __BLI_SYS_TYPES_H__
-#define __BLI_SYS_TYPES_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,7 +72,7 @@ typedef uint64_t u_int64_t;
 #include <stddef.h> /* size_t define */
 
 #ifndef __cplusplus
-#  if defined(__APPLE__)
+#  if defined(__APPLE__) || defined(__NetBSD__)
 /* The <uchar.h> standard header is missing on macOS. */
 typedef unsigned int char32_t;
 #  else
@@ -89,5 +88,3 @@ typedef unsigned char uchar;
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* eof */

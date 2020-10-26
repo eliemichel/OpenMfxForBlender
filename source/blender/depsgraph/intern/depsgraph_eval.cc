@@ -25,16 +25,13 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "BKE_scene.h"
 
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-} /* extern "C" */
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -48,44 +45,39 @@ extern "C" {
 
 #include "intern/depsgraph.h"
 
-/* Evaluate all nodes tagged for updating. */
-void DEG_evaluate_on_refresh(Main *bmain, Depsgraph *graph)
+namespace deg = blender::deg;
+
+static void deg_flush_updates_and_refresh(deg::Depsgraph *deg_graph)
 {
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(graph);
-  deg_graph->ctime = BKE_scene_frame_get(deg_graph->scene);
-  /* Update time on primary timesource. */
-  DEG::TimeSourceNode *tsrc = deg_graph->find_time_source();
-  tsrc->cfra = deg_graph->ctime;
-  /* Update time in scene. */
+  /* Update the time on the cow scene. */
   if (deg_graph->scene_cow) {
     BKE_scene_frame_set(deg_graph->scene_cow, deg_graph->ctime);
   }
-  DEG::deg_graph_flush_updates(bmain, deg_graph);
-  DEG::deg_evaluate_on_refresh(deg_graph);
-  deg_graph->need_update_time = false;
+
+  deg::deg_graph_flush_updates(deg_graph);
+  deg::deg_evaluate_on_refresh(deg_graph);
+}
+
+/* Evaluate all nodes tagged for updating. */
+void DEG_evaluate_on_refresh(Depsgraph *graph)
+{
+  deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(graph);
+  const Scene *scene = DEG_get_input_scene(graph);
+  const float ctime = BKE_scene_frame_get(scene);
+
+  if (ctime != deg_graph->ctime) {
+    deg_graph->tag_time_source();
+    deg_graph->ctime = ctime;
+  }
+
+  deg_flush_updates_and_refresh(deg_graph);
 }
 
 /* Frame-change happened for root scene that graph belongs to. */
-void DEG_evaluate_on_framechange(Main *bmain, Depsgraph *graph, float ctime)
+void DEG_evaluate_on_framechange(Depsgraph *graph, float ctime)
 {
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(graph);
+  deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(graph);
+  deg_graph->tag_time_source();
   deg_graph->ctime = ctime;
-  /* Update time on primary timesource. */
-  DEG::TimeSourceNode *tsrc = deg_graph->find_time_source();
-  tsrc->cfra = ctime;
-  deg_graph->need_update_time = true;
-  DEG::deg_graph_flush_updates(bmain, deg_graph);
-  /* Update time in scene. */
-  if (deg_graph->scene_cow) {
-    BKE_scene_frame_set(deg_graph->scene_cow, deg_graph->ctime);
-  }
-  /* Perform recalculation updates. */
-  DEG::deg_evaluate_on_refresh(deg_graph);
-  deg_graph->need_update_time = false;
-}
-
-bool DEG_needs_eval(Depsgraph *graph)
-{
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(graph);
-  return BLI_gset_len(deg_graph->entry_tags) != 0 || deg_graph->need_update_time;
+  deg_flush_updates_and_refresh(deg_graph);
 }

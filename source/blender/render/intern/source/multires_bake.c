@@ -157,7 +157,7 @@ static void init_bake_rast(MBakeRast *bake_rast,
 
 static void flush_pixel(const MResolvePixelData *data, const int x, const int y)
 {
-  float st[2] = {(x + 0.5f) / data->w, (y + 0.5f) / data->h};
+  const float st[2] = {(x + 0.5f) / data->w, (y + 0.5f) / data->h};
   const float *st0, *st1, *st2;
   const float *tang0, *tang1, *tang2;
   float no0[3], no1[3], no2[3];
@@ -1319,8 +1319,11 @@ static void bake_ibuf_filter(ImBuf *ibuf, char *mask, const int filter)
   }
 }
 
-static void bake_ibuf_normalize_displacement(
-    ImBuf *ibuf, float *displacement, char *mask, float displacement_min, float displacement_max)
+static void bake_ibuf_normalize_displacement(ImBuf *ibuf,
+                                             const float *displacement,
+                                             const char *mask,
+                                             float displacement_min,
+                                             float displacement_max)
 {
   int i;
   const float *current_displacement = displacement;

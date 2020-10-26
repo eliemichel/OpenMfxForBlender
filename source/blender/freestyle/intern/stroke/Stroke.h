@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_STROKE_H__
-#define __FREESTYLE_STROKE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -836,7 +835,7 @@ class Stroke : public Interface1D {
 
   // embedding vertex iterator
   const_vertex_iterator vertices_begin() const;
-  vertex_iterator vertices_begin(float t = 0.0f);
+  vertex_iterator vertices_begin(float sampling = 0.0f);
   const_vertex_iterator vertices_end() const;
   vertex_iterator vertices_end();
 
@@ -894,5 +893,3 @@ Stroke::Stroke(InputVertexIterator iBegin, InputVertexIterator iEnd)
 }
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_STROKE_H__

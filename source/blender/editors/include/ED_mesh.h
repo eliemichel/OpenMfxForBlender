@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_MESH_H__
-#define __ED_MESH_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,8 +46,6 @@ struct ReportList;
 struct Scene;
 struct UndoType;
 struct UvMapVert;
-struct UvMapVert;
-struct UvVertMap;
 struct UvVertMap;
 struct View3D;
 struct ViewContext;
@@ -62,6 +59,7 @@ void EDBM_verts_mirror_cache_begin_ex(struct BMEditMesh *em,
                                       const int axis,
                                       const bool use_self,
                                       const bool use_select,
+                                      const bool respecthide,
                                       const bool use_topology,
                                       float maxdist,
                                       int *r_index);
@@ -69,7 +67,8 @@ void EDBM_verts_mirror_cache_begin(struct BMEditMesh *em,
                                    const int axis,
                                    const bool use_self,
                                    const bool use_select,
-                                   const bool use_toplogy);
+                                   const bool respecthide,
+                                   const bool use_topology);
 void EDBM_verts_mirror_apply(struct BMEditMesh *em, const int sel_from, const int sel_to);
 struct BMVert *EDBM_verts_mirror_get(struct BMEditMesh *em, struct BMVert *v);
 struct BMEdge *EDBM_verts_mirror_get_edge(struct BMEditMesh *em, struct BMEdge *e);
@@ -112,7 +111,7 @@ struct UvElementMap *BM_uv_element_map_create(struct BMesh *bm,
                                               const bool uv_selected,
                                               const bool use_winding,
                                               const bool do_islands);
-void BM_uv_element_map_free(struct UvElementMap *vmap);
+void BM_uv_element_map_free(struct UvElementMap *element_map);
 struct UvElement *BM_uv_element_get(struct UvElementMap *map,
                                     struct BMFace *efa,
                                     struct BMLoop *l);
@@ -125,7 +124,6 @@ struct BMFace *EDBM_uv_active_face_get(struct BMEditMesh *em,
 void BM_uv_vert_map_free(struct UvVertMap *vmap);
 struct UvMapVert *BM_uv_vert_map_at_index(struct UvVertMap *vmap, unsigned int v);
 struct UvVertMap *BM_uv_vert_map_create(struct BMesh *bm,
-                                        const float limit[2],
                                         const bool use_select,
                                         const bool use_winding);
 
@@ -426,6 +424,15 @@ bool ED_mesh_color_remove_index(struct Mesh *me, const int n);
 bool ED_mesh_color_remove_active(struct Mesh *me);
 bool ED_mesh_color_remove_named(struct Mesh *me, const char *name);
 
+bool ED_mesh_sculpt_color_ensure(struct Mesh *me, const char *name);
+int ED_mesh_sculpt_color_add(struct Mesh *me,
+                             const char *name,
+                             const bool active_set,
+                             const bool do_init);
+bool ED_mesh_sculpt_color_remove_index(struct Mesh *me, const int n);
+bool ED_mesh_sculpt_color_remove_active(struct Mesh *me);
+bool ED_mesh_sculpt_color_remove_named(struct Mesh *me, const char *name);
+
 void ED_mesh_report_mirror(struct wmOperator *op, int totmirr, int totfail);
 void ED_mesh_report_mirror_ex(struct wmOperator *op, int totmirr, int totfail, char selectmode);
 
@@ -445,8 +452,8 @@ void EDBM_redo_state_restore(struct BMBackup, struct BMEditMesh *em, int recalct
 void EDBM_redo_state_free(struct BMBackup *, struct BMEditMesh *em, int recalctess);
 
 /* *** meshtools.c *** */
-int join_mesh_exec(struct bContext *C, struct wmOperator *op);
-int join_mesh_shapes_exec(struct bContext *C, struct wmOperator *op);
+int ED_mesh_join_objects_exec(struct bContext *C, struct wmOperator *op);
+int ED_mesh_shapes_join_objects_exec(struct bContext *C, struct wmOperator *op);
 
 /* mirror lookup api */
 /* Spatial Mirror */
@@ -511,5 +518,3 @@ void EDBM_mesh_elem_index_ensure_multi(struct Object **objects,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_MESH_H__ */

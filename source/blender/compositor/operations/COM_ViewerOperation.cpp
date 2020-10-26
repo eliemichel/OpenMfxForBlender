@@ -28,11 +28,9 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-extern "C" {
 #include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-}
 
 ViewerOperation::ViewerOperation() : NodeOperation()
 {
@@ -192,7 +190,7 @@ void ViewerOperation::updateImage(rcti *rect)
                                     rect->ymin,
                                     rect->xmax,
                                     rect->ymax);
-
+  this->m_image->gpuflag |= IMA_GPU_REFRESH;
   this->updateDraw();
 }
 
@@ -201,7 +199,6 @@ CompositorPriority ViewerOperation::getRenderPriority() const
   if (this->isActiveViewerOutput()) {
     return COM_PRIORITY_HIGH;
   }
-  else {
-    return COM_PRIORITY_LOW;
-  }
+
+  return COM_PRIORITY_LOW;
 }

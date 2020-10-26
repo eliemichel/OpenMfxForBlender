@@ -34,7 +34,6 @@
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "DNA_linestyle_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
@@ -43,7 +42,6 @@ extern "C" {
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
-} /* extern "C" */
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -58,7 +56,8 @@ extern "C" {
 
 #include "intern/depsgraph_type.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 void DepsgraphRelationBuilder::build_layer_collections(ListBase *lb)
 {
@@ -98,14 +97,14 @@ void DepsgraphRelationBuilder::build_view_layer(Scene *scene,
    * do nullptr-pointer check of the base, so it's fine to pass original one. */
   LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     if (need_pull_base_into_graph(base)) {
-      build_object(base, base->object);
+      build_object(base->object);
     }
   }
 
   build_layer_collections(&view_layer->layer_collections);
 
   if (scene->camera != nullptr) {
-    build_object(nullptr, scene->camera);
+    build_object(scene->camera);
   }
   /* Rigidbody. */
   if (scene->rigidbody_world != nullptr) {
@@ -155,4 +154,5 @@ void DepsgraphRelationBuilder::build_view_layer(Scene *scene,
   }
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

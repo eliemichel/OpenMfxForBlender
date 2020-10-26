@@ -20,11 +20,45 @@
 
 # Libraries configuration for Apple.
 
-set(MACOSX_DEPLOYMENT_TARGET "10.11")
+if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+  set(MACOSX_DEPLOYMENT_TARGET 11.00)
+else()
+  set(MACOSX_DEPLOYMENT_TARGET 10.13)
+endif()
 
 macro(find_package_wrapper)
 # do nothing, just satisfy the macro
 endmacro()
+
+function(print_found_status
+  lib_name
+  lib_path
+  )
+
+  if(FIRST_RUN)
+    if(lib_path)
+      message(STATUS "Found ${lib_name}: ${lib_path}")
+    else()
+      message(WARNING "Could NOT find ${lib_name}")
+    endif()
+  endif()
+endfunction()
+
+# ------------------------------------------------------------------------
+# Find system provided libraries.
+
+# Find system ZLIB, not the pre-compiled one supplied with OpenCollada.
+set(ZLIB_ROOT /usr)
+find_package(ZLIB REQUIRED)
+find_package(BZip2 REQUIRED)
+list(APPEND ZLIB_LIBRARIES ${BZIP2_LIBRARIES})
+
+if(WITH_OPENAL)
+  find_package(OpenAL)
+  if(NOT OPENAL_FOUND)
+    set(WITH_OPENAL OFF)
+  endif()
+endif()
 
 if(NOT DEFINED LIBDIR)
   set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/darwin)
@@ -38,22 +72,15 @@ if(NOT EXISTS "${LIBDIR}/")
   message(FATAL_ERROR "Mac OSX requires pre-compiled libs at: '${LIBDIR}'")
 endif()
 
-if(WITH_OPENAL)
-  find_package(OpenAL)
-  if(OPENAL_FOUND)
-    set(WITH_OPENAL ON)
-  else()
-    set(WITH_OPENAL OFF)
-  endif()
+# -------------------------------------------------------------------------
+# Find precompiled libraries, and avoid system or user-installed ones.
+
+if(EXISTS ${LIBDIR})
+  without_system_libs_begin()
 endif()
 
 if(WITH_ALEMBIC)
-  set(ALEMBIC ${LIBDIR}/alembic)
-  set(ALEMBIC_INCLUDE_DIR ${ALEMBIC}/include)
-  set(ALEMBIC_INCLUDE_DIRS ${ALEMBIC_INCLUDE_DIR})
-  set(ALEMBIC_LIBPATH ${ALEMBIC}/lib)
-  set(ALEMBIC_LIBRARIES Alembic)
-  set(ALEMBIC_FOUND ON)
+  find_package(Alembic)
 endif()
 
 if(WITH_USD)
@@ -64,30 +91,38 @@ if(WITH_USD)
 endif()
 
 if(WITH_OPENSUBDIV)
-  set(OPENSUBDIV ${LIBDIR}/opensubdiv)
-  set(OPENSUBDIV_LIBPATH ${OPENSUBDIV}/lib)
-  find_library(OSD_LIB_CPU NAMES osdCPU PATHS ${OPENSUBDIV_LIBPATH})
-  find_library(OSD_LIB_GPU NAMES osdGPU PATHS ${OPENSUBDIV_LIBPATH})
-  set(OPENSUBDIV_INCLUDE_DIR ${OPENSUBDIV}/include)
-  set(OPENSUBDIV_INCLUDE_DIRS ${OPENSUBDIV_INCLUDE_DIR})
-  list(APPEND OPENSUBDIV_LIBRARIES ${OSD_LIB_CPU} ${OSD_LIB_GPU})
+  find_package(OpenSubdiv)
 endif()
 
 if(WITH_JACK)
   find_library(JACK_FRAMEWORK
     NAMES jackmp
   )
-  set(JACK_INCLUDE_DIRS ${JACK_FRAMEWORK}/headers)
   if(NOT JACK_FRAMEWORK)
     set(WITH_JACK OFF)
+  else()
+    set(JACK_INCLUDE_DIRS ${JACK_FRAMEWORK}/headers)
   endif()
 endif()
 
 if(WITH_CODEC_SNDFILE)
-  set(LIBSNDFILE ${LIBDIR}/sndfile)
-  set(LIBSNDFILE_INCLUDE_DIRS ${LIBSNDFILE}/include)
-  set(LIBSNDFILE_LIBRARIES sndfile FLAC ogg vorbis vorbisenc)
-  set(LIBSNDFILE_LIBPATH ${LIBSNDFILE}/lib ${LIBDIR}/ffmpeg/lib)  # TODO, deprecate
+  find_package(SndFile)
+  find_library(_sndfile_FLAC_LIBRARY NAMES flac HINTS ${LIBDIR}/sndfile/lib)
+  find_library(_sndfile_OGG_LIBRARY NAMES ogg HINTS ${LIBDIR}/ffmpeg/lib)
+  find_library(_sndfile_VORBIS_LIBRARY NAMES vorbis HINTS ${LIBDIR}/ffmpeg/lib)
+  find_library(_sndfile_VORBISENC_LIBRARY NAMES vorbisenc HINTS ${LIBDIR}/ffmpeg/lib)
+  list(APPEND LIBSNDFILE_LIBRARIES
+    ${_sndfile_FLAC_LIBRARY}
+    ${_sndfile_OGG_LIBRARY}
+    ${_sndfile_VORBIS_LIBRARY}
+    ${_sndfile_VORBISENC_LIBRARY}
+  )
+
+  print_found_status("SndFile libraries" "${LIBSNDFILE_LIBRARIES}")
+  unset(_sndfile_FLAC_LIBRARY)
+  unset(_sndfile_OGG_LIBRARY)
+  unset(_sndfile_VORBIS_LIBRARY)
+  unset(_sndfile_VORBISENC_LIBRARY)
 endif()
 
 if(WITH_PYTHON)
@@ -126,54 +161,27 @@ if(WITH_PYTHON)
 endif()
 
 if(WITH_FFTW3)
-  set(FFTW3 ${LIBDIR}/fftw3)
-  set(FFTW3_INCLUDE_DIRS ${FFTW3}/include)
-  set(FFTW3_LIBRARIES fftw3)
-  set(FFTW3_LIBPATH ${FFTW3}/lib)
+  find_package(Fftw3)
 endif()
 
-set(ZLIB /usr)
-set(ZLIB_INCLUDE_DIRS "${ZLIB}/include")
-set(ZLIB_LIBRARIES z bz2)
-
-set(PNG_LIBRARIES png ${ZLIB_LIBRARIES})
-set(JPEG_LIBRARIES jpeg)
-
-set(FREETYPE ${LIBDIR}/freetype)
-set(FREETYPE_INCLUDE_DIRS ${FREETYPE}/include ${FREETYPE}/include/freetype2)
-set(FREETYPE_LIBPATH ${FREETYPE}/lib)
-set(FREETYPE_LIBRARY freetype)
+find_package(Freetype REQUIRED)
 
 if(WITH_IMAGE_OPENEXR)
-  set(OPENEXR ${LIBDIR}/openexr)
-  set(OPENEXR_INCLUDE_DIR ${OPENEXR}/include)
-  set(OPENEXR_INCLUDE_DIRS ${OPENEXR_INCLUDE_DIR} ${OPENEXR}/include/OpenEXR)
-  set(OPENEXR_LIBRARIES
-    Iex
-    Half
-    IlmImf
-    Imath
-    IlmThread)
-  set(OPENEXR_LIBPATH ${OPENEXR}/lib)
+  find_package(OpenEXR)
 endif()
 
 if(WITH_CODEC_FFMPEG)
-  set(FFMPEG ${LIBDIR}/ffmpeg)
-  set(FFMPEG_INCLUDE_DIRS ${FFMPEG}/include)
-  set(FFMPEG_LIBRARIES
+  set(FFMPEG_FIND_COMPONENTS
     avcodec avdevice avformat avutil
-    mp3lame swscale x264 xvidcore
-    theora theoradec theoraenc
-    vorbis vorbisenc vorbisfile ogg opus
-    vpx swresample)
-  set(FFMPEG_LIBPATH ${FFMPEG}/lib)
+    mp3lame ogg opus swresample swscale
+    theora theoradec theoraenc vorbis vorbisenc
+    vorbisfile vpx x264 xvidcore)
+  find_package(FFmpeg)
 endif()
 
 if(WITH_IMAGE_OPENJPEG OR WITH_CODEC_FFMPEG)
   # use openjpeg from libdir that is linked into ffmpeg
-  set(OPENJPEG ${LIBDIR}/openjpeg)
-  set(OPENJPEG_INCLUDE_DIRS ${OPENJPEG}/include)
-  set(OPENJPEG_LIBRARIES ${OPENJPEG}/lib/libopenjp2.a)
+  find_package(OpenJPEG)
 endif()
 
 find_library(SYSTEMSTUBS_LIBRARY
@@ -186,7 +194,7 @@ if(SYSTEMSTUBS_LIBRARY)
   list(APPEND PLATFORM_LINKLIBS SystemStubs)
 endif()
 
-set(PLATFORM_CFLAGS "-pipe -funsigned-char")
+set(PLATFORM_CFLAGS "${PLATFORM_CFLAGS} -pipe -funsigned-char")
 set(PLATFORM_LINKFLAGS
   "-fexceptions -framework CoreServices -framework Foundation -framework IOKit -framework AppKit -framework Cocoa -framework Carbon -framework AudioUnit -framework AudioToolbox -framework CoreAudio -framework Metal -framework QuartzCore"
 )
@@ -203,77 +211,58 @@ if(WITH_PYTHON_MODULE OR WITH_PYTHON_FRAMEWORK)
 endif()
 
 if(WITH_OPENCOLLADA)
-  set(OPENCOLLADA ${LIBDIR}/opencollada)
-
-  set(OPENCOLLADA_INCLUDE_DIRS
-    ${LIBDIR}/opencollada/include/COLLADAStreamWriter
-    ${LIBDIR}/opencollada/include/COLLADABaseUtils
-    ${LIBDIR}/opencollada/include/COLLADAFramework
-    ${LIBDIR}/opencollada/include/COLLADASaxFrameworkLoader
-    ${LIBDIR}/opencollada/include/GeneratedSaxParser
-  )
-
-  set(OPENCOLLADA_LIBPATH ${OPENCOLLADA}/lib)
-  set(OPENCOLLADA_LIBRARIES
-    OpenCOLLADASaxFrameworkLoader
-    -lOpenCOLLADAFramework
-    -lOpenCOLLADABaseUtils
-    -lOpenCOLLADAStreamWriter
-    -lMathMLSolver
-    -lGeneratedSaxParser
-    -lbuffer -lftoa -lUTF
-  )
-  # PCRE and XML2 are bundled with OpenCollada.
-  set(PCRE_LIBRARIES pcre)
-  set(XML2_LIBRARIES xml2)
+  find_package(OpenCOLLADA)
+  find_library(PCRE_LIBRARIES NAMES pcre HINTS ${LIBDIR}/opencollada/lib)
+  find_library(XML2_LIBRARIES NAMES xml2 HINTS ${LIBDIR}/opencollada/lib)
+  print_found_status("PCRE" "${PCRE_LIBRARIES}")
+  print_found_status("XML2" "${XML2_LIBRARIES}")
 endif()
 
 if(WITH_SDL)
-  set(SDL ${LIBDIR}/sdl)
-  set(SDL_INCLUDE_DIR ${SDL}/include)
-  set(SDL_LIBRARY SDL2)
-  set(SDL_LIBPATH ${SDL}/lib)
+  find_package(SDL2)
+  set(SDL_INCLUDE_DIR ${SDL2_INCLUDE_DIRS})
+  set(SDL_LIBRARY ${SDL2_LIBRARIES})
   set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -framework ForceFeedback")
 endif()
 
-set(PNG "${LIBDIR}/png")
-set(PNG_INCLUDE_DIRS "${PNG}/include")
-set(PNG_LIBPATH ${PNG}/lib)
+set(PNG_ROOT ${LIBDIR}/png)
+find_package(PNG REQUIRED)
 
-set(JPEG "${LIBDIR}/jpeg")
-set(JPEG_INCLUDE_DIR "${JPEG}/include")
-set(JPEG_LIBPATH ${JPEG}/lib)
+set(JPEG_ROOT ${LIBDIR}/jpeg)
+find_package(JPEG REQUIRED)
 
 if(WITH_IMAGE_TIFF)
-  set(TIFF ${LIBDIR}/tiff)
-  set(TIFF_INCLUDE_DIR ${TIFF}/include)
-  set(TIFF_LIBRARY tiff)
-  set(TIFF_LIBPATH ${TIFF}/lib)
+  set(TIFF_ROOT ${LIBDIR}/tiff)
+  find_package(TIFF)
+  if(NOT TIFF_FOUND)
+    message(WARNING "TIFF not found, disabling WITH_IMAGE_TIFF")
+    set(WITH_IMAGE_TIFF OFF)
+  endif()
 endif()
 
 if(WITH_BOOST)
-  set(BOOST ${LIBDIR}/boost)
-  set(BOOST_INCLUDE_DIR ${BOOST}/include)
-  set(BOOST_POSTFIX)
-  set(BOOST_LIBRARIES
-    boost_date_time${BOOST_POSTFIX}
-    boost_filesystem${BOOST_POSTFIX}
-    boost_regex${BOOST_POSTFIX}
-    boost_system${BOOST_POSTFIX}
-    boost_thread${BOOST_POSTFIX}
-    boost_wave${BOOST_POSTFIX}
-  )
+  set(Boost_NO_BOOST_CMAKE ON)
+  set(BOOST_ROOT ${LIBDIR}/boost)
+  set(Boost_NO_SYSTEM_PATHS ON)
+  set(_boost_FIND_COMPONENTS date_time filesystem regex system thread wave)
   if(WITH_INTERNATIONAL)
-    list(APPEND BOOST_LIBRARIES boost_locale${BOOST_POSTFIX})
+    list(APPEND _boost_FIND_COMPONENTS locale)
   endif()
   if(WITH_CYCLES_NETWORK)
-    list(APPEND BOOST_LIBRARIES boost_serialization${BOOST_POSTFIX})
+    list(APPEND _boost_FIND_COMPONENTS serialization)
   endif()
   if(WITH_OPENVDB)
-    list(APPEND BOOST_LIBRARIES boost_iostreams${BOOST_POSTFIX})
+    list(APPEND _boost_FIND_COMPONENTS iostreams)
   endif()
-  set(BOOST_LIBPATH ${BOOST}/lib)
+  find_package(Boost COMPONENTS ${_boost_FIND_COMPONENTS})
+
+  set(BOOST_LIBRARIES ${Boost_LIBRARIES})
+  set(BOOST_INCLUDE_DIR ${Boost_INCLUDE_DIRS})
   set(BOOST_DEFINITIONS)
+
+  mark_as_advanced(Boost_LIBRARIES)
+  mark_as_advanced(Boost_INCLUDE_DIRS)
+  unset(_boost_FIND_COMPONENTS)
 endif()
 
 if(WITH_INTERNATIONAL OR WITH_CODEC_FFMPEG)
@@ -281,10 +270,8 @@ if(WITH_INTERNATIONAL OR WITH_CODEC_FFMPEG)
 endif()
 
 if(WITH_OPENIMAGEIO)
-  set(OPENIMAGEIO ${LIBDIR}/openimageio)
-  set(OPENIMAGEIO_INCLUDE_DIRS ${OPENIMAGEIO}/include)
-  set(OPENIMAGEIO_LIBRARIES
-    ${OPENIMAGEIO}/lib/libOpenImageIO.a
+  find_package(OpenImageIO)
+  list(APPEND OPENIMAGEIO_LIBRARIES
     ${PNG_LIBRARIES}
     ${JPEG_LIBRARIES}
     ${TIFF_LIBRARY}
@@ -292,69 +279,30 @@ if(WITH_OPENIMAGEIO)
     ${OPENJPEG_LIBRARIES}
     ${ZLIB_LIBRARIES}
   )
-  set(OPENIMAGEIO_LIBPATH
-    ${OPENIMAGEIO}/lib
-    ${JPEG_LIBPATH}
-    ${PNG_LIBPATH}
-    ${TIFF_LIBPATH}
-    ${OPENEXR_LIBPATH}
-    ${ZLIB_LIBPATH}
-  )
   set(OPENIMAGEIO_DEFINITIONS "-DOIIO_STATIC_BUILD")
   set(OPENIMAGEIO_IDIFF "${LIBDIR}/openimageio/bin/idiff")
 endif()
 
 if(WITH_OPENCOLORIO)
-  set(OPENCOLORIO ${LIBDIR}/opencolorio)
-  set(OPENCOLORIO_INCLUDE_DIRS ${OPENCOLORIO}/include)
-  set(OPENCOLORIO_LIBRARIES OpenColorIO tinyxml yaml-cpp)
-  set(OPENCOLORIO_LIBPATH ${OPENCOLORIO}/lib)
+  find_package(OpenColorIO)
 endif()
 
 if(WITH_OPENVDB)
-  set(OPENVDB ${LIBDIR}/openvdb)
-  set(OPENVDB_INCLUDE_DIRS ${OPENVDB}/include)
-  set(OPENVDB_LIBRARIES openvdb blosc)
-  set(OPENVDB_LIBPATH ${LIBDIR}/openvdb/lib)
+  find_package(OpenVDB)
+  find_library(BLOSC_LIBRARIES NAMES blosc HINTS ${LIBDIR}/openvdb/lib)
+  print_found_status("Blosc" "${BLOSC_LIBRARIES}")
+  list(APPEND OPENVDB_LIBRARIES ${BLOSC_LIBRARIES})
   set(OPENVDB_DEFINITIONS)
 endif()
 
-if(WITH_LLVM)
-  set(LLVM_ROOT_DIR ${LIBDIR}/llvm)
-  if(EXISTS "${LLVM_ROOT_DIR}/bin/llvm-config")
-    set(LLVM_CONFIG "${LLVM_ROOT_DIR}/bin/llvm-config")
-  else()
-    set(LLVM_CONFIG llvm-config)
-  endif()
-  execute_process(COMMAND ${LLVM_CONFIG} --version
-      OUTPUT_VARIABLE LLVM_VERSION
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-  execute_process(COMMAND ${LLVM_CONFIG} --prefix
-      OUTPUT_VARIABLE LLVM_ROOT_DIR
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-  execute_process(COMMAND ${LLVM_CONFIG} --includedir
-      OUTPUT_VARIABLE LLVM_INCLUDE_DIRS
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-  execute_process(COMMAND ${LLVM_CONFIG} --libdir
-      OUTPUT_VARIABLE LLVM_LIBPATH
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-  find_library(LLVM_LIBRARY
-          NAMES LLVMAnalysis # first of a whole bunch of libs to get
-          PATHS ${LLVM_LIBPATH})
+if(WITH_NANOVDB)
+  set(NANOVDB ${LIBDIR}/nanovdb)
+  set(NANOVDB_INCLUDE_DIR ${NANOVDB}/include)
+endif()
 
-  if(LLVM_LIBRARY AND LLVM_ROOT_DIR AND LLVM_LIBPATH)
-    if(LLVM_STATIC)
-      # if static LLVM libraries were requested, use llvm-config to generate
-      # the list of what libraries we need, and substitute that in the right
-      # way for LLVM_LIBRARY.
-      execute_process(COMMAND ${LLVM_CONFIG} --libfiles
-          OUTPUT_VARIABLE LLVM_LIBRARY
-          OUTPUT_STRIP_TRAILING_WHITESPACE)
-      string(REPLACE ".a /" ".a;/" LLVM_LIBRARY ${LLVM_LIBRARY})
-    else()
-      set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -lLLVM-3.4")
-    endif()
-  else()
+if(WITH_LLVM)
+  find_package(LLVM)
+  if(NOT LLVM_FOUND)
     message(FATAL_ERROR "LLVM not found.")
   endif()
 endif()
@@ -369,8 +317,9 @@ if(WITH_CYCLES_OSL)
   list(APPEND OSL_LIBRARIES ${OSL_LIB_COMP} -force_load ${OSL_LIB_EXEC} ${OSL_LIB_QUERY})
   find_path(OSL_INCLUDE_DIR OSL/oslclosure.h PATHS ${CYCLES_OSL}/include)
   find_program(OSL_COMPILER NAMES oslc PATHS ${CYCLES_OSL}/bin)
+  find_path(OSL_SHADER_DIR NAMES stdosl.h PATHS ${CYCLES_OSL}/shaders)
 
-  if(OSL_INCLUDE_DIR AND OSL_LIBRARIES AND OSL_COMPILER)
+  if(OSL_INCLUDE_DIR AND OSL_LIBRARIES AND OSL_COMPILER AND OSL_SHADER_DIR)
     set(OSL_FOUND TRUE)
   else()
     message(STATUS "OSL not found")
@@ -378,9 +327,28 @@ if(WITH_CYCLES_OSL)
   endif()
 endif()
 
+if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+  set(WITH_CYCLES_EMBREE OFF)
+  set(WITH_OPENIMAGEDENOISE OFF)
+  set(WITH_CPU_SSE OFF)
+endif()
+
 if(WITH_CYCLES_EMBREE)
   find_package(Embree 3.8.0 REQUIRED)
-  set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
+  # Increase stack size for Embree, only works for executables.
+  if(NOT WITH_PYTHON_MODULE)
+    set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
+  endif()
+
+  # Embree static library linking can mix up SSE and AVX symbols, causing
+  # crashes on macOS systems with older CPUs that don't have AVX. Using
+  # force load avoids that. The Embree shared library does not suffer from
+  # this problem, precisely because linking a shared library uses force load.
+  set(_embree_libraries_force_load)
+  foreach(_embree_library ${EMBREE_LIBRARIES})
+    list(APPEND _embree_libraries_force_load "-Wl,-force_load,${_embree_library}")
+  endforeach()
+  set(EMBREE_LIBRARIES ${_embree_libraries_force_load})
 endif()
 
 if(WITH_OPENIMAGEDENOISE)
@@ -396,9 +364,17 @@ if(WITH_TBB)
   find_package(TBB)
 endif()
 
+if(WITH_POTRACE)
+  find_package(Potrace)
+  if(NOT POTRACE_FOUND)
+    message(WARNING "potrace not found, disabling WITH_POTRACE")
+    set(WITH_POTRACE OFF)
+  endif()
+endif()
+
 # CMake FindOpenMP doesn't know about AppleClang before 3.12, so provide custom flags.
 if(WITH_OPENMP)
-  if(CMAKE_C_COMPILER_ID MATCHES "AppleClang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "7.0")
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "7.0")
     # Use OpenMP from our precompiled libraries.
     message(STATUS "Using ${LIBDIR}/openmp for OpenMP")
     set(OPENMP_CUSTOM ON)
@@ -408,24 +384,47 @@ if(WITH_OPENMP)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L'${LIBDIR}/openmp/lib' -lomp")
 
     # Copy libomp.dylib to allow executables like datatoc and tests to work.
+    # `@executable_path/../Resources/lib/` is a default dylib search path.
+    # For single config generator datatoc, tests etc.
     execute_process(
       COMMAND mkdir -p ${CMAKE_BINARY_DIR}/Resources/lib
       COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/Resources/lib/libomp.dylib
     )
+    # For multi-config generator datatoc, etc.
     execute_process(
       COMMAND mkdir -p ${CMAKE_BINARY_DIR}/bin/Resources/lib
       COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/bin/Resources/lib/libomp.dylib
+    )
+    # For multi-config generator tests.
+    execute_process(
+      COMMAND mkdir -p ${CMAKE_BINARY_DIR}/bin/tests/Resources/lib
+      COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/bin/tests/Resources/lib/libomp.dylib
     )
   endif()
 endif()
 
 if(WITH_XR_OPENXR)
-  find_package(OpenXR-SDK)
-  if(NOT OPENXR_SDK_FOUND)
+  find_package(XR_OpenXR_SDK)
+  if(NOT XR_OPENXR_SDK_FOUND)
     message(WARNING "OpenXR-SDK was not found, disabling WITH_XR_OPENXR")
     set(WITH_XR_OPENXR OFF)
   endif()
 endif()
+
+if(WITH_GMP)
+  find_package(GMP)
+  if(NOT GMP_FOUND)
+    message(WARNING "GMP not found, disabling WITH_GMP")
+    set(WITH_GMP OFF)
+  endif()
+endif()
+
+if(EXISTS ${LIBDIR})
+  without_system_libs_end()
+endif()
+
+# ---------------------------------------------------------------------
+# Set compiler and linker flags.
 
 set(EXETYPE MACOSX_BUNDLE)
 
@@ -439,8 +438,8 @@ if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64" OR CMAKE_OSX_ARCHITECTURES MATCHES "
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -ftree-vectorize  -fvariable-expansion-in-unroller")
   endif()
 else()
-  set(CMAKE_C_FLAGS_RELEASE "-mdynamic-no-pic -fno-strict-aliasing")
-  set(CMAKE_CXX_FLAGS_RELEASE "-mdynamic-no-pic -fno-strict-aliasing")
+  set(CMAKE_C_FLAGS_RELEASE "-O2 -mdynamic-no-pic -fno-strict-aliasing")
+  set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic -fno-strict-aliasing")
 endif()
 
 if(${XCODE_VERSION} VERSION_EQUAL 5 OR ${XCODE_VERSION} VERSION_GREATER 5)

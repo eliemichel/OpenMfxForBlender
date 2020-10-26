@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_MATERIAL_TYPES_H__
-#define __DNA_MATERIAL_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
@@ -112,7 +111,7 @@ typedef enum eMaterialGPencilStyle_Flag {
   /* protected from further editing */
   GP_MATERIAL_LOCKED = (1 << 2),
   /* do onion skinning */
-  GP_MATERIAL_ONIONSKIN = (1 << 3),
+  GP_MATERIAL_HIDE_ONIONSKIN = (1 << 3),
   /* clamp texture */
   GP_MATERIAL_TEX_CLAMP = (1 << 4),
   /* mix fill texture */
@@ -129,6 +128,10 @@ typedef enum eMaterialGPencilStyle_Flag {
   GP_MATERIAL_STROKE_TEX_MIX = (1 << 11),
   /* disable stencil clipping (overlap) */
   GP_MATERIAL_DISABLE_STENCIL = (1 << 12),
+  /* Material used as stroke masking. */
+  GP_MATERIAL_IS_STROKE_HOLDOUT = (1 << 13),
+  /* Material used as fill masking. */
+  GP_MATERIAL_IS_FILL_HOLDOUT = (1 << 14),
 } eMaterialGPencilStyle_Flag;
 
 typedef enum eMaterialGPencilStyle_Mode {
@@ -324,35 +327,34 @@ enum {
 /* blend_shadow */
 enum {
   MA_BS_NONE = 0,
-  MA_BS_SOLID,
-  MA_BS_CLIP,
-  MA_BS_HASHED,
+  MA_BS_SOLID = 1,
+  MA_BS_CLIP = 2,
+  MA_BS_HASHED = 3,
 };
 
 /* Grease Pencil Stroke styles */
 enum {
   GP_MATERIAL_STROKE_STYLE_SOLID = 0,
-  GP_MATERIAL_STROKE_STYLE_TEXTURE,
+  GP_MATERIAL_STROKE_STYLE_TEXTURE = 1,
 };
 
 /* Grease Pencil Fill styles */
 enum {
   GP_MATERIAL_FILL_STYLE_SOLID = 0,
-  GP_MATERIAL_FILL_STYLE_GRADIENT,
-  GP_MATERIAL_FILL_STYLE_CHECKER, /* DEPRECATED (only for convert old files) */
-  GP_MATERIAL_FILL_STYLE_TEXTURE,
+  GP_MATERIAL_FILL_STYLE_GRADIENT = 1,
+  GP_MATERIAL_FILL_STYLE_CHECKER = 2, /* DEPRECATED (only for convert old files) */
+  GP_MATERIAL_FILL_STYLE_TEXTURE = 3,
 };
 
 /* Grease Pencil Gradient Types */
 enum {
   GP_MATERIAL_GRADIENT_LINEAR = 0,
-  GP_MATERIAL_GRADIENT_RADIAL,
+  GP_MATERIAL_GRADIENT_RADIAL = 1,
 };
 
 /* Grease Pencil Follow Drawing Modes */
 enum {
   GP_MATERIAL_FOLLOW_PATH = 0,
-  GP_MATERIAL_FOLLOW_OBJ,
-  GP_MATERIAL_FOLLOW_FIXED,
+  GP_MATERIAL_FOLLOW_OBJ = 1,
+  GP_MATERIAL_FOLLOW_FIXED = 2,
 };
-#endif

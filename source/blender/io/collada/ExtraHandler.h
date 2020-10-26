@@ -18,10 +18,9 @@
  * \ingroup collada
  */
 
-#ifndef __EXTRAHANDLER_H__
-#define __EXTRAHANDLER_H__
+#pragma once
 
-#include <algorithm>  // sort()
+#include <algorithm> /* sort() */
 #include <map>
 #include <string>
 #include <vector>
@@ -79,5 +78,3 @@ class ExtraHandler : public COLLADASaxFWL::IExtraDataCallbackHandler {
   ExtraTags *currentExtraTags;
   std::string currentElement;
 };
-
-#endif /* __EXTRAHANDLER_H__ */

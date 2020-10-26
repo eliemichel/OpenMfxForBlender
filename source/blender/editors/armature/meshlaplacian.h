@@ -20,8 +20,7 @@
  * \ingroup edarmature
  */
 
-#ifndef __MESHLAPLACIAN_H__
-#define __MESHLAPLACIAN_H__
+#pragma once
 
 //#define RIGID_DEFORM
 
@@ -56,8 +55,8 @@ void heat_bone_weighting(struct Object *ob,
                          struct bDeformGroup **dgroupflip,
                          float (*root)[3],
                          float (*tip)[3],
-                         int *selected,
-                         const char **error);
+                         const int *selected,
+                         const char **error_str);
 
 #ifdef RIGID_DEFORM
 /* As-Rigid-As-Possible Deformation */
@@ -70,5 +69,3 @@ void rigid_deform_end(int cancel);
 /* Harmonic Coordinates */
 
 /* ED_mesh_deform_bind_callback(...) defined in ED_armature.h */
-
-#endif

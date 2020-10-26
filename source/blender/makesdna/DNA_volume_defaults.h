@@ -18,8 +18,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_VOLUME_DEFAULTS_H__
-#define __DNA_VOLUME_DEFAULTS_H__
+#pragma once
 
 /* Struct members on own line. */
 /* clang-format off */
@@ -33,6 +32,7 @@
     .density = 1.0f, \
     .wireframe_type = VOLUME_WIREFRAME_BOXES, \
     .wireframe_detail = VOLUME_WIREFRAME_COARSE, \
+    .slice_depth = 0.5f, \
   }
 
 #define _DNA_DEFAULT_VolumeRender \
@@ -55,5 +55,3 @@
 /** \} */
 
 /* clang-format on */
-
-#endif /* __DNA_VOLUME_DEFAULTS_H__ */

@@ -25,31 +25,30 @@
  * Original license from NVIDIA follows.
  */
 
-// Copyright NVIDIA Corporation 2007 -- Ignacio Castano <icastano@nvidia.com>
-//
-// Permission is hereby granted, free of charge, to any person
-// obtaining a copy of this software and associated documentation
-// files (the "Software"), to deal in the Software without
-// restriction, including without limitation the rights to use,
-// copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the
-// Software is furnished to do so, subject to the following
-// conditions:
-//
-// The above copyright notice and this permission notice shall be
-// included in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-// OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-// HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-// OTHER DEALINGS IN THE SOFTWARE.
+/* Copyright NVIDIA Corporation 2007 -- Ignacio Castano <icastano@nvidia.com>
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE. */
 
-#ifndef __DIRECTDRAWSURFACE_H__
-#define __DIRECTDRAWSURFACE_H__
+#pragma once
 
 #include <ColorBlock.h>
 #include <Common.h>
@@ -74,7 +73,7 @@ struct DDSCaps {
   uint caps4;
 };
 
-/// DDS file header for DX10.
+/** DDS file header for DX10. */
 struct DDSHeader10 {
   uint dxgiFormat;
   uint resourceDimension;
@@ -83,7 +82,7 @@ struct DDSHeader10 {
   uint reserved;
 };
 
-/// DDS file header.
+/** DDS file header. */
 struct DDSHeader {
   uint fourcc;
   uint size;
@@ -99,7 +98,7 @@ struct DDSHeader {
   uint notused;
   DDSHeader10 header10;
 
-  // Helper methods.
+  /* Helper methods. */
   DDSHeader();
 
   void setWidth(uint w);
@@ -133,7 +132,7 @@ struct DDSHeader {
   uint d3d9Format() const;
 };
 
-/// DirectDraw Surface. (DDS)
+/** DirectDraw Surface. (DDS) */
 class DirectDrawSurface {
  public:
   DirectDrawSurface(unsigned char *mem, uint size);
@@ -176,7 +175,7 @@ class DirectDrawSurface {
   void readBlock(ColorBlock *rgba);
 
  private:
-  Stream stream;  // memory where DDS file resides
+  Stream stream; /* Memory where DDS file resides. */
   DDSHeader header;
 };
 
@@ -184,5 +183,3 @@ void mem_read(Stream &mem, DDSPixelFormat &pf);
 void mem_read(Stream &mem, DDSCaps &caps);
 void mem_read(Stream &mem, DDSHeader &header);
 void mem_read(Stream &mem, DDSHeader10 &header);
-
-#endif /* __DIRECTDRAWSURFACE_H__ */

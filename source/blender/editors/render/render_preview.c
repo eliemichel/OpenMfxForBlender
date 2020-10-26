@@ -82,7 +82,6 @@
 
 #include "BIF_glutil.h"
 
-#include "GPU_glew.h"
 #include "GPU_shader.h"
 
 #include "RE_engine.h"
@@ -112,7 +111,7 @@ ImBuf *get_brush_icon(Brush *brush)
     if (brush->flag & BRUSH_CUSTOM_ICON) {
 
       if (brush->icon_filepath[0]) {
-        // first use the path directly to try and load the file
+        /* First use the path directly to try and load the file. */
 
         BLI_strncpy(path, brush->icon_filepath, sizeof(brush->icon_filepath));
         BLI_path_abs(path, ID_BLEND_PATH_FROM_GLOBAL(&brush->id));
@@ -120,7 +119,7 @@ ImBuf *get_brush_icon(Brush *brush)
         /* use default colorspaces for brushes */
         brush->icon_imbuf = IMB_loadiffname(path, flags, NULL);
 
-        // otherwise lets try to find it in other directories
+        /* otherwise lets try to find it in other directories */
         if (!(brush->icon_imbuf)) {
           folder = BKE_appdir_folder_id(BLENDER_DATAFILES, "brushicons");
 
@@ -326,7 +325,13 @@ static World *preview_get_localized_world(ShaderPreview *sp, World *world)
   if (sp->worldcopy != NULL) {
     return sp->worldcopy;
   }
-  sp->worldcopy = BKE_world_localize(world);
+
+  ID *id_copy = BKE_id_copy_ex(NULL,
+                               &world->id,
+                               NULL,
+                               LIB_ID_CREATE_LOCAL | LIB_ID_COPY_LOCALIZE |
+                                   LIB_ID_COPY_NO_ANIMDATA);
+  sp->worldcopy = (World *)id_copy;
   BLI_addtail(&sp->pr_main->worlds, sp->worldcopy);
   return sp->worldcopy;
 }
@@ -340,13 +345,13 @@ static ID *duplicate_ids(ID *id)
 
   switch (GS(id->name)) {
     case ID_MA:
-      return (ID *)BKE_material_localize((Material *)id);
     case ID_TE:
-      return (ID *)BKE_texture_localize((Tex *)id);
     case ID_LA:
-      return (ID *)BKE_light_localize((Light *)id);
-    case ID_WO:
-      return (ID *)BKE_world_localize((World *)id);
+    case ID_WO: {
+      ID *id_copy = BKE_id_copy_ex(
+          NULL, id, NULL, LIB_ID_CREATE_LOCAL | LIB_ID_COPY_LOCALIZE | LIB_ID_COPY_NO_ANIMDATA);
+      return id_copy;
+    }
     case ID_IM:
     case ID_BR:
     case ID_SCR:
@@ -632,18 +637,8 @@ static bool ed_preview_draw_rect(ScrArea *area, int split, int first, rcti *rect
         }
 
         IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_COLOR);
-        immDrawPixelsTex(&state,
-                         fx,
-                         fy,
-                         rres.rectx,
-                         rres.recty,
-                         GL_RGBA,
-                         GL_UNSIGNED_BYTE,
-                         GL_NEAREST,
-                         rect_byte,
-                         1.0f,
-                         1.0f,
-                         NULL);
+        immDrawPixelsTex(
+            &state, fx, fy, rres.rectx, rres.recty, GPU_RGBA8, false, rect_byte, 1.0f, 1.0f, NULL);
 
         MEM_freeN(rect_byte);
 
@@ -775,7 +770,7 @@ static void shader_preview_texture(ShaderPreview *sp, Tex *tex, Scene *sce, Rend
   /* Create buffer in empty RenderView created in the init step. */
   RenderResult *rr = RE_AcquireResultWrite(re);
   RenderView *rv = (RenderView *)rr->views.first;
-  rv->rectf = MEM_callocN(sizeof(float) * 4 * width * height, "texture render result");
+  rv->rectf = MEM_callocN(sizeof(float[4]) * width * height, "texture render result");
   RE_ReleaseResult(re);
 
   /* Get texture image pool (if any) */
@@ -801,7 +796,7 @@ static void shader_preview_texture(ShaderPreview *sp, Tex *tex, Scene *sce, Rend
       rect_float[0] = texres.tr;
       rect_float[1] = texres.tg;
       rect_float[2] = texres.tb;
-      rect_float[3] = 1.0f;
+      rect_float[3] = texres.talpha ? texres.ta : 1.0f;
 
       rect_float += 4;
     }
@@ -886,7 +881,7 @@ static void shader_preview_render(ShaderPreview *sp, ID *id, int split, int firs
     sce->display.render_aa = SCE_DISPLAY_AA_SAMPLES_8;
   }
 
-  /* callbacs are cleared on GetRender() */
+  /* Callbacks are cleared on GetRender(). */
   if (ELEM(sp->pr_method, PR_BUTS_RENDER, PR_NODE_RENDER)) {
     RE_display_update_cb(re, sp, shader_preview_update);
   }
@@ -912,7 +907,7 @@ static void shader_preview_render(ShaderPreview *sp, ID *id, int split, int firs
 
   /* handle results */
   if (sp->pr_method == PR_ICON_RENDER) {
-    // char *rct= (char *)(sp->pr_rect + 32*16 + 16);
+    // char *rct = (char *)(sp->pr_rect + 32 * 16 + 16);
 
     if (sp->pr_rect) {
       RE_ResultGet32(re, sp->pr_rect);
@@ -922,12 +917,14 @@ static void shader_preview_render(ShaderPreview *sp, ID *id, int split, int firs
   /* unassign the pointers, reset vars */
   preview_prepare_scene(sp->bmain, sp->scene, NULL, GS(id->name), sp);
 
-  /* XXX bad exception, end-exec is not being called in render, because it uses local main */
-  //  if (idtype == ID_TE) {
-  //      Tex *tex= (Tex *)id;
-  //      if (tex->use_nodes && tex->nodetree)
-  //          ntreeEndExecTree(tex->nodetree);
-  //  }
+  /* XXX bad exception, end-exec is not being called in render, because it uses local main. */
+#if 0
+  if (idtype == ID_TE) {
+    Tex *tex = (Tex *)id;
+    if (tex->use_nodes && tex->nodetree)
+      ntreeEndExecTree(tex->nodetree);
+  }
+#endif
 }
 
 /* runs inside thread for material and icons */
@@ -1088,7 +1085,7 @@ static void icon_preview_startjob(void *customdata, short *stop, short *do_updat
     int source = deferred_data[0];
     char *path = &deferred_data[1];
 
-    //      printf("generating deferred %d×%d preview for %s\n", sp->sizex, sp->sizey, path);
+    // printf("generating deferred %d×%d preview for %s\n", sp->sizex, sp->sizey, path);
 
     thumb = IMB_thumb_manage(path, THB_LARGE, source);
 
@@ -1345,6 +1342,9 @@ void ED_preview_icon_render(Main *bmain, Scene *scene, ID *id, uint *rect, int s
   icon_preview_endjob(&ip);
 
   BLI_freelistN(&ip.sizes);
+  if (ip.id_copy != NULL) {
+    preview_id_copy_free(ip.id_copy);
+  }
 }
 
 void ED_preview_icon_job(

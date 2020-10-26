@@ -79,8 +79,8 @@ static bool workbench_render_framebuffers_init(void)
    * the other views will reuse these buffers */
   if (dtxl->color == NULL) {
     BLI_assert(dtxl->depth == NULL);
-    dtxl->color = GPU_texture_create_2d(size[0], size[1], GPU_RGBA16F, NULL, NULL);
-    dtxl->depth = GPU_texture_create_2d(size[0], size[1], GPU_DEPTH24_STENCIL8, NULL, NULL);
+    dtxl->color = GPU_texture_create_2d("txl.color", UNPACK2(size), 1, GPU_RGBA16F, NULL);
+    dtxl->depth = GPU_texture_create_2d("txl.depth", UNPACK2(size), 1, GPU_DEPTH24_STENCIL8, NULL);
   }
 
   if (!(dtxl->depth && dtxl->color)) {
@@ -124,6 +124,7 @@ static void workbench_render_result_z(struct RenderLayer *rl,
                                rect->ymin,
                                BLI_rcti_size_x(rect),
                                BLI_rcti_size_y(rect),
+                               GPU_DATA_FLOAT,
                                rp->rect);
 
     float winmat[4][4];
@@ -212,6 +213,7 @@ void workbench_render(void *ved, RenderEngine *engine, RenderLayer *render_layer
                              BLI_rcti_size_y(rect),
                              4,
                              0,
+                             GPU_DATA_FLOAT,
                              rp->rect);
 
   workbench_render_result_z(render_layer, viewname, rect);

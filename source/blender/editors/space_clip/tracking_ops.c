@@ -511,24 +511,23 @@ static int mouse_to_tilt_distance_squared(const MovieTrackingMarker *marker,
 
 static bool slide_check_corners(float (*corners)[2])
 {
-  int i, next, prev;
   float cross = 0.0f;
-  float p[2] = {0.0f, 0.0f};
+  const float p[2] = {0.0f, 0.0f};
 
   if (!isect_point_quad_v2(p, corners[0], corners[1], corners[2], corners[3])) {
     return false;
   }
 
-  for (i = 0; i < 4; i++) {
-    float v1[2], v2[2], cur_cross;
+  for (int i = 0; i < 4; i++) {
+    float v1[2], v2[2];
 
-    next = (i + 1) % 4;
-    prev = (4 + i - 1) % 4;
+    int next = (i + 1) % 4;
+    int prev = (4 + i - 1) % 4;
 
     sub_v2_v2v2(v1, corners[i], corners[prev]);
     sub_v2_v2v2(v2, corners[next], corners[i]);
 
-    cur_cross = cross_v2v2(v1, v2);
+    float cur_cross = cross_v2v2(v1, v2);
 
     if (fabsf(cur_cross) > FLT_EPSILON) {
       if (cross == 0.0f) {
@@ -599,7 +598,7 @@ MovieTrackingTrack *tracking_marker_check_slide(
          */
         min_distance_squared = distance_squared;
 
-        /* If search area is visible, check how close to it's sliding
+        /* If search area is visible, check how close to its sliding
          * zones mouse is.
          */
         if (sc->flag & SC_SHOW_MARKER_SEARCH) {
@@ -861,7 +860,7 @@ static int slide_marker_modal(bContext *C, wmOperator *op, const wmEvent *event)
           BKE_tracking_marker_clamp(data->marker, CLAMP_PAT_DIM);
         }
         else if (data->action == SLIDE_ACTION_OFFSET) {
-          float d[2] = {dx, dy};
+          const float d[2] = {dx, dy};
           for (int a = 0; a < data->track->markersnr; a++) {
             add_v2_v2v2(data->track->markers[a].pos, data->old_markers[a], d);
           }
@@ -940,7 +939,7 @@ static int slide_marker_modal(bContext *C, wmOperator *op, const wmEvent *event)
           BKE_tracking_marker_clamp(data->marker, CLAMP_SEARCH_DIM);
         }
         else if (data->area == TRACK_AREA_SEARCH) {
-          float d[2] = {dx, dy};
+          const float d[2] = {dx, dy};
           add_v2_v2v2(data->min, data->old_search_min, d);
           add_v2_v2v2(data->max, data->old_search_max, d);
         }
@@ -1044,13 +1043,13 @@ static int clear_track_path_exec(bContext *C, wmOperator *op)
 void CLIP_OT_clear_track_path(wmOperatorType *ot)
 {
   static const EnumPropertyItem clear_path_actions[] = {
-      {TRACK_CLEAR_UPTO, "UPTO", 0, "Clear up-to", "Clear path up to current frame"},
+      {TRACK_CLEAR_UPTO, "UPTO", 0, "Clear Up To", "Clear path up to current frame"},
       {TRACK_CLEAR_REMAINED,
        "REMAINED",
        0,
-       "Clear remained",
+       "Clear Remained",
        "Clear path at remaining frames (after current)"},
-      {TRACK_CLEAR_ALL, "ALL", 0, "Clear all", "Clear the whole path"},
+      {TRACK_CLEAR_ALL, "ALL", 0, "Clear All", "Clear the whole path"},
       {0, NULL, 0, NULL, NULL},
   };
 

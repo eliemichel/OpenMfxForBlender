@@ -53,7 +53,7 @@ static void applyGPShrinkFatten(TransInfo *t, const int UNUSED(mval[2]))
 
   ratio = t->values[0];
 
-  snapGridIncrement(t, &ratio);
+  transform_snap_increment(t, &ratio);
 
   applyNumInput(&t->num, &ratio);
 
@@ -73,10 +73,6 @@ static void applyGPShrinkFatten(TransInfo *t, const int UNUSED(mval[2]))
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     TransData *td = tc->data;
     for (i = 0; i < tc->data_len; i++, td++) {
-      if (td->flag & TD_NOACTION) {
-        break;
-      }
-
       if (td->flag & TD_SKIP) {
         continue;
       }
@@ -104,11 +100,10 @@ void initGPShrinkFatten(TransInfo *t)
 
   t->idx_max = 0;
   t->num.idx_max = 0;
-  t->snap[0] = 0.0f;
-  t->snap[1] = 0.1f;
-  t->snap[2] = t->snap[1] * 0.1f;
+  t->snap[0] = 0.1f;
+  t->snap[1] = t->snap[0] * 0.1f;
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   t->num.unit_type[0] = B_UNIT_NONE;
 

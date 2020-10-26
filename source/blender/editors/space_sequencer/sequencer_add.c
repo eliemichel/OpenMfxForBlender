@@ -151,7 +151,7 @@ static int sequencer_generic_invoke_xy_guess_channel(bContext *C, int type)
   int proximity = INT_MAX;
 
   if (!ed || !ed->seqbasep) {
-    return 2;
+    return 1;
   }
 
   for (seq = ed->seqbasep->first; seq; seq = seq->next) {
@@ -165,7 +165,7 @@ static int sequencer_generic_invoke_xy_guess_channel(bContext *C, int type)
   if (tgt) {
     return tgt->machine + 1;
   }
-  return 2;
+  return 1;
 }
 
 static void sequencer_generic_invoke_xy__internal(bContext *C, wmOperator *op, int flag, int type)
@@ -182,7 +182,7 @@ static void sequencer_generic_invoke_xy__internal(bContext *C, wmOperator *op, i
   RNA_int_set(op->ptr, "frame_start", cfra);
 
   if ((flag & SEQPROP_ENDFRAME) && RNA_struct_property_is_set(op->ptr, "frame_end") == 0) {
-    RNA_int_set(op->ptr, "frame_end", cfra + 25);  // XXX arbitrary but ok for now.
+    RNA_int_set(op->ptr, "frame_end", cfra + 25); /* XXX arbitrary but ok for now. */
   }
 
   if (!(flag & SEQPROP_NOPATHS)) {
@@ -581,10 +581,10 @@ static int sequencer_add_generic_strip_exec(bContext *C, wmOperator *op, SeqLoad
 
       seq = seq_load_fn(C, ed->seqbasep, &seq_load);
       if (seq) {
-        sequencer_add_apply_overlap(C, op, seq);
         if (seq_load.seq_sound) {
           sequencer_add_apply_overlap(C, op, seq_load.seq_sound);
         }
+        sequencer_add_apply_overlap(C, op, seq);
       }
     }
     RNA_END;
@@ -594,10 +594,10 @@ static int sequencer_add_generic_strip_exec(bContext *C, wmOperator *op, SeqLoad
     seq = seq_load_fn(C, ed->seqbasep, &seq_load);
 
     if (seq) {
-      sequencer_add_apply_overlap(C, op, seq);
       if (seq_load.seq_sound) {
         sequencer_add_apply_overlap(C, op, seq_load.seq_sound);
       }
+      sequencer_add_apply_overlap(C, op, seq);
     }
   }
 
@@ -655,7 +655,7 @@ static int sequencer_add_movie_strip_invoke(bContext *C,
   Scene *scene = CTX_data_scene(C);
   Editing *ed = BKE_sequencer_editing_get(scene, false);
 
-  /* Only enable "use_framerate" if there aren't any existing strips, unless overriden by user. */
+  /* Only enable "use_framerate" if there aren't any existing strips, unless overridden by user. */
   if (ed && ed->seqbasep && ed->seqbasep->first) {
     RNA_boolean_set(op->ptr, "use_framerate", false);
   }
@@ -823,7 +823,6 @@ int sequencer_image_seq_get_minmax_frame(wmOperator *op,
 void sequencer_image_seq_reserve_frames(
     wmOperator *op, StripElem *se, int len, int minframe, int numdigits)
 {
-  int i;
   char *filename = NULL;
   RNA_BEGIN (op->ptr, itemptr, "files") {
     filename = RNA_string_get_alloc(&itemptr, "name", NULL, 0);
@@ -837,7 +836,7 @@ void sequencer_image_seq_reserve_frames(
     /* Strip the frame from filename and substitute with `#`. */
     BLI_path_frame_strip(filename, ext);
 
-    for (i = 0; i < len; i++, se++) {
+    for (int i = 0; i < len; i++, se++) {
       BLI_strncpy(filename_stripped, filename, sizeof(filename_stripped));
       BLI_path_frame(filename_stripped, minframe + i, numdigits);
       BLI_snprintf(se->name, sizeof(se->name), "%s%s", filename_stripped, ext);

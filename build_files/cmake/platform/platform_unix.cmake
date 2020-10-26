@@ -36,6 +36,11 @@ if(NOT DEFINED LIBDIR)
   elseif(EXISTS ${LIBDIR_CENTOS7_ABI})
     set(LIBDIR ${LIBDIR_CENTOS7_ABI})
     set(WITH_CXX11_ABI OFF)
+
+    if(CMAKE_COMPILER_IS_GNUCC AND
+       CMAKE_C_COMPILER_VERSION VERSION_LESS 9.3)
+      message(FATAL_ERROR "GCC version must be at least 9.3 for precompiled libraries, found ${CMAKE_C_COMPILER_VERSION}")
+    endif()
   endif()
 
   # Avoid namespace pollustion.
@@ -47,12 +52,19 @@ if(EXISTS ${LIBDIR})
   message(STATUS "Using pre-compiled LIBDIR: ${LIBDIR}")
 
   file(GLOB LIB_SUBDIRS ${LIBDIR}/*)
+  # Ignore Mesa software OpenGL libraries, they are not intended to be
+  # linked against but to optionally override at runtime.
+  list(REMOVE_ITEM LIB_SUBDIRS ${LIBDIR}/mesa)
   # NOTE: Make sure "proper" compiled zlib comes first before the one
   # which is a part of OpenCollada. They have different ABI, and we
   # do need to use the official one.
   set(CMAKE_PREFIX_PATH ${LIBDIR}/zlib ${LIB_SUBDIRS})
   set(WITH_STATIC_LIBS ON)
-  set(WITH_OPENMP_STATIC ON)
+  # OpenMP usually can't be statically linked into shared libraries,
+  # due to not being compiled with position independent code.
+  if(NOT WITH_PYTHON_MODULE)
+    set(WITH_OPENMP_STATIC ON)
+  endif()
   set(Boost_NO_BOOST_CMAKE ON)
   set(BOOST_ROOT ${LIBDIR}/boost)
   set(BOOST_LIBRARYDIR ${LIBDIR}/boost/lib)
@@ -229,10 +241,10 @@ endif()
 
 if(WITH_CYCLES_OSL)
   set(CYCLES_OSL ${LIBDIR}/osl CACHE PATH "Path to OpenShadingLanguage installation")
-  if(NOT OSL_ROOT)
+  if(EXISTS ${CYCLES_OSL} AND NOT OSL_ROOT)
     set(OSL_ROOT ${CYCLES_OSL})
   endif()
-  find_package_wrapper(OpenShadingLanguage)
+  find_package_wrapper(OSL)
   if(OSL_FOUND)
     if(${OSL_LIBRARY_VERSION_MAJOR} EQUAL "1" AND ${OSL_LIBRARY_VERSION_MINOR} LESS "6")
       # Note: --whole-archive is needed to force loading of all symbols in liboslexec,
@@ -252,6 +264,7 @@ endif()
 if(WITH_OPENVDB)
   find_package_wrapper(OpenVDB)
   find_package_wrapper(Blosc)
+
   if(NOT OPENVDB_FOUND)
     set(WITH_OPENVDB OFF)
     set(WITH_OPENVDB_BLOSC OFF)
@@ -262,17 +275,20 @@ if(WITH_OPENVDB)
   endif()
 endif()
 
+if(WITH_NANOVDB)
+  find_package_wrapper(NanoVDB)
+
+  if(NOT NANOVDB_FOUND)
+    set(WITH_NANOVDB OFF)
+    message(STATUS "NanoVDB not found, disabling it")
+  endif()
+endif()
+
 if(WITH_ALEMBIC)
   find_package_wrapper(Alembic)
 
-  if(WITH_ALEMBIC_HDF5)
-    set(HDF5_ROOT_DIR ${LIBDIR}/hdf5)
-    find_package_wrapper(HDF5)
-  endif()
-
-  if(NOT ALEMBIC_FOUND OR (WITH_ALEMBIC_HDF5 AND NOT HDF5_FOUND))
+  if(NOT ALEMBIC_FOUND)
     set(WITH_ALEMBIC OFF)
-    set(WITH_ALEMBIC_HDF5 OFF)
   endif()
 endif()
 
@@ -429,10 +445,26 @@ if(WITH_TBB)
 endif()
 
 if(WITH_XR_OPENXR)
-  find_package(XR-OpenXR-SDK)
+  find_package(XR_OpenXR_SDK)
   if(NOT XR_OPENXR_SDK_FOUND)
     message(WARNING "OpenXR-SDK not found, disabling WITH_XR_OPENXR")
     set(WITH_XR_OPENXR OFF)
+  endif()
+endif()
+
+if(WITH_GMP)
+  find_package_wrapper(GMP)
+  if(NOT GMP_FOUND)
+    message(WARNING "GMP not found, disabling WITH_GMP")
+    set(WITH_GMP OFF)
+  endif()
+endif()
+
+if(WITH_POTRACE)
+  find_package_wrapper(Potrace)
+  if(NOT POTRACE_FOUND)
+    message(WARNING "potrace not found, disabling WITH_POTRACE")
+    set(WITH_POTRACE OFF)
   endif()
 endif()
 
@@ -505,7 +537,27 @@ if(WITH_SYSTEM_AUDASPACE)
   endif()
 endif()
 
-if(WITH_X11)
+if(WITH_GHOST_WAYLAND)
+  find_package(PkgConfig)
+  pkg_check_modules(wayland-client REQUIRED wayland-client>=1.12)
+  pkg_check_modules(wayland-egl REQUIRED wayland-egl)
+  pkg_check_modules(wayland-scanner REQUIRED wayland-scanner)
+  pkg_check_modules(xkbcommon REQUIRED xkbcommon)
+  pkg_check_modules(wayland-cursor REQUIRED wayland-cursor)
+
+  set(WITH_GL_EGL ON)
+
+  if(WITH_GHOST_WAYLAND)
+    list(APPEND PLATFORM_LINKLIBS
+      ${wayland-client_LIBRARIES}
+      ${wayland-egl_LIBRARIES}
+      ${xkbcommon_LIBRARIES}
+      ${wayland-cursor_LIBRARIES}
+    )
+  endif()
+endif()
+
+if(WITH_GHOST_X11)
   find_package(X11 REQUIRED)
 
   find_path(X11_XF86keysym_INCLUDE_PATH X11/XF86keysym.h ${X11_INC_SEARCH_PATH})
@@ -563,6 +615,14 @@ endif()
 if(CMAKE_COMPILER_IS_GNUCC)
   set(PLATFORM_CFLAGS "-pipe -fPIC -funsigned-char -fno-strict-aliasing")
 
+  # `maybe-uninitialized` is unreliable in release builds, but fine in debug builds.
+  set(GCC_EXTRA_FLAGS_RELEASE "-Wno-maybe-uninitialized")
+  set(CMAKE_C_FLAGS_RELEASE          "${GCC_EXTRA_FLAGS_RELEASE} ${CMAKE_C_FLAGS_RELEASE}")
+  set(CMAKE_C_FLAGS_RELWITHDEBINFO   "${GCC_EXTRA_FLAGS_RELEASE} ${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+  set(CMAKE_CXX_FLAGS_RELEASE        "${GCC_EXTRA_FLAGS_RELEASE} ${CMAKE_CXX_FLAGS_RELEASE}")
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${GCC_EXTRA_FLAGS_RELEASE} ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+  unset(GCC_EXTRA_FLAGS_RELEASE)
+
   if(WITH_LINKER_GOLD)
     execute_process(
       COMMAND ${CMAKE_C_COMPILER} -fuse-ld=gold -Wl,--version
@@ -572,6 +632,19 @@ if(CMAKE_COMPILER_IS_GNUCC)
       set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
     else()
       message(STATUS "GNU gold linker isn't available, using the default system linker.")
+    endif()
+    unset(LD_VERSION)
+  endif()
+
+  if(WITH_LINKER_LLD)
+    execute_process(
+      COMMAND ${CMAKE_C_COMPILER} -fuse-ld=lld -Wl,--version
+      ERROR_QUIET OUTPUT_VARIABLE LD_VERSION)
+    if("${LD_VERSION}" MATCHES "LLD")
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fuse-ld=lld")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=lld")
+    else()
+      message(STATUS "LLD linker isn't available, using the default system linker.")
     endif()
     unset(LD_VERSION)
   endif()

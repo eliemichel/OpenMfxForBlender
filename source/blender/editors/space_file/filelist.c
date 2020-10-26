@@ -359,12 +359,24 @@ enum {
 
 static ImBuf *gSpecialFileImages[SPECIAL_IMG_MAX];
 
-static void filelist_readjob_main(
-    struct FileList *, const char *, short *, short *, float *, ThreadMutex *);
-static void filelist_readjob_lib(
-    struct FileList *, const char *, short *, short *, float *, ThreadMutex *);
-static void filelist_readjob_dir(
-    struct FileList *, const char *, short *, short *, float *, ThreadMutex *);
+static void filelist_readjob_main(FileList *filelist,
+                                  const char *main_name,
+                                  short *stop,
+                                  short *do_update,
+                                  float *progress,
+                                  ThreadMutex *lock);
+static void filelist_readjob_lib(FileList *filelist,
+                                 const char *main_name,
+                                 short *stop,
+                                 short *do_update,
+                                 float *progress,
+                                 ThreadMutex *lock);
+static void filelist_readjob_dir(FileList *filelist,
+                                 const char *main_name,
+                                 short *stop,
+                                 short *do_update,
+                                 float *progress,
+                                 ThreadMutex *lock);
 
 /* helper, could probably go in BKE actually? */
 static int groupname_to_code(const char *group);
@@ -625,11 +637,10 @@ static bool is_hidden_dot_filename(const char *filename, FileListInternEntry *fi
   if (filename[0] == '.' && !ELEM(filename[1], '.', '\0')) {
     return true; /* ignore .file */
   }
-  else {
-    int len = strlen(filename);
-    if ((len > 0) && (filename[len - 1] == '~')) {
-      return true; /* ignore file~ */
-    }
+
+  int len = strlen(filename);
+  if ((len > 0) && (filename[len - 1] == '~')) {
+    return true; /* ignore file~ */
   }
 
   /* filename might actually be a piece of path, in which case we have to check all its parts. */
@@ -932,11 +943,9 @@ void filelist_init_icons(void)
 
 void filelist_free_icons(void)
 {
-  int i;
-
   BLI_assert(G.background == false);
 
-  for (i = 0; i < SPECIAL_IMG_MAX; i++) {
+  for (int i = 0; i < SPECIAL_IMG_MAX; i++) {
     IMB_freeImBuf(gSpecialFileImages[i]);
     gSpecialFileImages[i] = NULL;
   }
@@ -999,50 +1008,52 @@ static int filelist_geticon_ex(FileDirEntry *file,
     if (FILENAME_IS_PARENT(file->relpath)) {
       return is_main ? ICON_FILE_PARENT : ICON_NONE;
     }
-    else if (typeflag & FILE_TYPE_APPLICATIONBUNDLE) {
+    if (typeflag & FILE_TYPE_APPLICATIONBUNDLE) {
       return ICON_UGLYPACKAGE;
     }
-    else if (typeflag & FILE_TYPE_BLENDER) {
+    if (typeflag & FILE_TYPE_BLENDER) {
       return ICON_FILE_BLEND;
     }
-    else if (is_main) {
+    if (is_main) {
       /* Do not return icon for folders if icons are not 'main' draw type
        * (e.g. when used over previews). */
       return (file->attributes & FILE_ATTR_ANY_LINK) ? ICON_FOLDER_REDIRECT : ICON_FILE_FOLDER;
     }
-    else {
 
-      /* If this path is in System list or path cache then use that icon. */
-      struct FSMenu *fsmenu = ED_fsmenu_get();
-      FSMenuCategory categories[] = {
-          FS_CATEGORY_SYSTEM_BOOKMARKS,
-          FS_CATEGORY_OTHER,
-      };
+    /* If this path is in System list or path cache then use that icon. */
+    struct FSMenu *fsmenu = ED_fsmenu_get();
+    FSMenuCategory categories[] = {
+        FS_CATEGORY_SYSTEM,
+        FS_CATEGORY_SYSTEM_BOOKMARKS,
+        FS_CATEGORY_OTHER,
+    };
 
-      for (int i = 0; i < ARRAY_SIZE(categories); i++) {
-        FSMenuEntry *tfsm = ED_fsmenu_get_category(fsmenu, categories[i]);
-        char fullpath[FILE_MAX_LIBEXTRA];
+    for (int i = 0; i < ARRAY_SIZE(categories); i++) {
+      FSMenuEntry *tfsm = ED_fsmenu_get_category(fsmenu, categories[i]);
+      char fullpath[FILE_MAX_LIBEXTRA];
+      char *target = fullpath;
+      if (file->redirection_path) {
+        target = file->redirection_path;
+      }
+      else {
         BLI_join_dirfile(fullpath, sizeof(fullpath), root, file->relpath);
         BLI_path_slash_ensure(fullpath);
-        for (; tfsm; tfsm = tfsm->next) {
-          if (STREQ(tfsm->path, fullpath)) {
-            /* Never want a little folder inside a large one. */
-            return (tfsm->icon == ICON_FILE_FOLDER) ? ICON_NONE : tfsm->icon;
-          }
+      }
+      for (; tfsm; tfsm = tfsm->next) {
+        if (STREQ(tfsm->path, target)) {
+          /* Never want a little folder inside a large one. */
+          return (tfsm->icon == ICON_FILE_FOLDER) ? ICON_NONE : tfsm->icon;
         }
       }
     }
 
-    if (file->attributes & FILE_ATTR_ANY_LINK) {
-      return ICON_LOOP_FORWARDS;
-    }
-    else if (file->attributes & FILE_ATTR_OFFLINE) {
+    if (file->attributes & FILE_ATTR_OFFLINE) {
       return ICON_ERROR;
     }
-    else if (file->attributes & FILE_ATTR_TEMPORARY) {
+    if (file->attributes & FILE_ATTR_TEMPORARY) {
       return ICON_FILE_CACHE;
     }
-    else if (file->attributes & FILE_ATTR_SYSTEM) {
+    if (file->attributes & FILE_ATTR_SYSTEM) {
       return ICON_SYSTEM;
     }
   }
@@ -1050,50 +1061,50 @@ static int filelist_geticon_ex(FileDirEntry *file,
   if (typeflag & FILE_TYPE_BLENDER) {
     return ICON_FILE_BLEND;
   }
-  else if (typeflag & FILE_TYPE_BLENDER_BACKUP) {
+  if (typeflag & FILE_TYPE_BLENDER_BACKUP) {
     return ICON_FILE_BACKUP;
   }
-  else if (typeflag & FILE_TYPE_IMAGE) {
+  if (typeflag & FILE_TYPE_IMAGE) {
     return ICON_FILE_IMAGE;
   }
-  else if (typeflag & FILE_TYPE_MOVIE) {
+  if (typeflag & FILE_TYPE_MOVIE) {
     return ICON_FILE_MOVIE;
   }
-  else if (typeflag & FILE_TYPE_PYSCRIPT) {
+  if (typeflag & FILE_TYPE_PYSCRIPT) {
     return ICON_FILE_SCRIPT;
   }
-  else if (typeflag & FILE_TYPE_SOUND) {
+  if (typeflag & FILE_TYPE_SOUND) {
     return ICON_FILE_SOUND;
   }
-  else if (typeflag & FILE_TYPE_FTFONT) {
+  if (typeflag & FILE_TYPE_FTFONT) {
     return ICON_FILE_FONT;
   }
-  else if (typeflag & FILE_TYPE_BTX) {
+  if (typeflag & FILE_TYPE_BTX) {
     return ICON_FILE_BLANK;
   }
-  else if (typeflag & FILE_TYPE_COLLADA) {
+  if (typeflag & FILE_TYPE_COLLADA) {
     return ICON_FILE_3D;
   }
-  else if (typeflag & FILE_TYPE_ALEMBIC) {
+  if (typeflag & FILE_TYPE_ALEMBIC) {
     return ICON_FILE_3D;
   }
-  else if (typeflag & FILE_TYPE_USD) {
+  if (typeflag & FILE_TYPE_USD) {
     return ICON_FILE_3D;
   }
-  else if (typeflag & FILE_TYPE_VOLUME) {
+  if (typeflag & FILE_TYPE_VOLUME) {
     return ICON_FILE_VOLUME;
   }
-  else if (typeflag & FILE_TYPE_OBJECT_IO) {
+  if (typeflag & FILE_TYPE_OBJECT_IO) {
     return ICON_FILE_3D;
   }
-  else if (typeflag & FILE_TYPE_TEXT) {
+  if (typeflag & FILE_TYPE_TEXT) {
     return ICON_FILE_TEXT;
   }
-  else if (typeflag & FILE_TYPE_ARCHIVE) {
+  if (typeflag & FILE_TYPE_ARCHIVE) {
     return ICON_FILE_ARCHIVE;
   }
-  else if (typeflag & FILE_TYPE_BLENDERLIB) {
-    const int ret = UI_idcode_icon_get(file->blentype);
+  if (typeflag & FILE_TYPE_BLENDERLIB) {
+    const int ret = UI_icon_from_idcode(file->blentype);
     if (ret != ICON_NONE) {
       return ret;
     }
@@ -1114,7 +1125,7 @@ static void parent_dir_until_exists_or_default_root(char *dir)
 {
   if (!BLI_path_parent_dir_until_exists(dir)) {
 #ifdef WIN32
-    get_default_root(dir);
+    BLI_windows_get_default_root_dir(dir);
 #else
     strcpy(dir, "/");
 #endif
@@ -1129,9 +1140,7 @@ static bool filelist_checkdir_dir(struct FileList *UNUSED(filelist),
     parent_dir_until_exists_or_default_root(r_dir);
     return true;
   }
-  else {
-    return BLI_is_dir(r_dir);
-  }
+  return BLI_is_dir(r_dir);
 }
 
 static bool filelist_checkdir_lib(struct FileList *UNUSED(filelist),
@@ -1264,11 +1273,9 @@ static void filelist_intern_free(FileListIntern *filelist_intern)
   MEM_SAFE_FREE(filelist_intern->filtered);
 }
 
-static void filelist_cache_preview_runf(TaskPool *__restrict pool,
-                                        void *taskdata,
-                                        int UNUSED(threadid))
+static void filelist_cache_preview_runf(TaskPool *__restrict pool, void *taskdata)
 {
-  FileListEntryCache *cache = BLI_task_pool_userdata(pool);
+  FileListEntryCache *cache = BLI_task_pool_user_data(pool);
   FileListEntryPreviewTaskData *preview_taskdata = taskdata;
   FileListEntryPreview *preview = preview_taskdata->preview;
 
@@ -1306,9 +1313,7 @@ static void filelist_cache_preview_runf(TaskPool *__restrict pool,
   //  printf("%s: End (%d)...\n", __func__, threadid);
 }
 
-static void filelist_cache_preview_freef(TaskPool *__restrict UNUSED(pool),
-                                         void *taskdata,
-                                         int UNUSED(threadid))
+static void filelist_cache_preview_freef(TaskPool *__restrict UNUSED(pool), void *taskdata)
 {
   FileListEntryPreviewTaskData *preview_taskdata = taskdata;
   FileListEntryPreview *preview = preview_taskdata->preview;
@@ -1327,9 +1332,7 @@ static void filelist_cache_preview_freef(TaskPool *__restrict UNUSED(pool),
 static void filelist_cache_preview_ensure_running(FileListEntryCache *cache)
 {
   if (!cache->previews_pool) {
-    TaskScheduler *scheduler = BLI_task_scheduler_get();
-
-    cache->previews_pool = BLI_task_pool_create_background(scheduler, cache, TASK_PRIORITY_LOW);
+    cache->previews_pool = BLI_task_pool_create_background(cache, TASK_PRIORITY_LOW);
     cache->previews_done = BLI_thread_queue_init();
 
     IMB_thumb_locks_acquire();
@@ -1381,8 +1384,15 @@ static void filelist_cache_previews_push(FileList *filelist, FileDirEntry *entry
       (entry->typeflag & (FILE_TYPE_IMAGE | FILE_TYPE_MOVIE | FILE_TYPE_FTFONT |
                           FILE_TYPE_BLENDER | FILE_TYPE_BLENDER_BACKUP | FILE_TYPE_BLENDERLIB))) {
     FileListEntryPreview *preview = MEM_mallocN(sizeof(*preview), __func__);
-    BLI_join_dirfile(
-        preview->path, sizeof(preview->path), filelist->filelist.root, entry->relpath);
+
+    if (entry->redirection_path) {
+      BLI_strncpy(preview->path, entry->redirection_path, FILE_MAXDIR);
+    }
+    else {
+      BLI_join_dirfile(
+          preview->path, sizeof(preview->path), filelist->filelist.root, entry->relpath);
+    }
+
     preview->index = index;
     preview->flags = entry->typeflag;
     preview->img = NULL;
@@ -2101,7 +2111,7 @@ void filelist_cache_previews_set(FileList *filelist, const bool use_previews)
     return;
   }
   /* Do not start preview work while listing, gives nasty flickering! */
-  else if (use_previews && (filelist->flags & FL_IS_READY)) {
+  if (use_previews && (filelist->flags & FL_IS_READY)) {
     cache->flags |= FLC_PREVIEWS_ACTIVE;
 
     BLI_assert((cache->previews_pool == NULL) && (cache->previews_done == NULL));
@@ -2200,7 +2210,7 @@ static bool file_is_blend_backup(const char *str)
     }
   }
 
-  return (retval);
+  return retval;
 }
 
 /* TODO: Maybe we should move this to BLI?
@@ -2210,77 +2220,68 @@ int ED_path_extension_type(const char *path)
   if (BLO_has_bfile_extension(path)) {
     return FILE_TYPE_BLENDER;
   }
-  else if (file_is_blend_backup(path)) {
+  if (file_is_blend_backup(path)) {
     return FILE_TYPE_BLENDER_BACKUP;
   }
-  else if (BLI_path_extension_check(path, ".app")) {
+  if (BLI_path_extension_check(path, ".app")) {
     return FILE_TYPE_APPLICATIONBUNDLE;
   }
-  else if (BLI_path_extension_check(path, ".py")) {
+  if (BLI_path_extension_check(path, ".py")) {
     return FILE_TYPE_PYSCRIPT;
   }
-  else if (BLI_path_extension_check_n(path,
-                                      ".txt",
-                                      ".glsl",
-                                      ".osl",
-                                      ".data",
-                                      ".pov",
-                                      ".ini",
-                                      ".mcr",
-                                      ".inc",
-                                      ".fountain",
-                                      NULL)) {
+  if (BLI_path_extension_check_n(path,
+                                 ".txt",
+                                 ".glsl",
+                                 ".osl",
+                                 ".data",
+                                 ".pov",
+                                 ".ini",
+                                 ".mcr",
+                                 ".inc",
+                                 ".fountain",
+                                 NULL)) {
     return FILE_TYPE_TEXT;
   }
-  else if (BLI_path_extension_check_n(path, ".ttf", ".ttc", ".pfb", ".otf", ".otc", NULL)) {
+  if (BLI_path_extension_check_n(path, ".ttf", ".ttc", ".pfb", ".otf", ".otc", NULL)) {
     return FILE_TYPE_FTFONT;
   }
-  else if (BLI_path_extension_check(path, ".btx")) {
+  if (BLI_path_extension_check(path, ".btx")) {
     return FILE_TYPE_BTX;
   }
-  else if (BLI_path_extension_check(path, ".dae")) {
+  if (BLI_path_extension_check(path, ".dae")) {
     return FILE_TYPE_COLLADA;
   }
-  else if (BLI_path_extension_check(path, ".abc")) {
+  if (BLI_path_extension_check(path, ".abc")) {
     return FILE_TYPE_ALEMBIC;
   }
-  else if (BLI_path_extension_check_n(path, ".usd", ".usda", ".usdc", NULL)) {
+  if (BLI_path_extension_check_n(path, ".usd", ".usda", ".usdc", NULL)) {
     return FILE_TYPE_USD;
   }
-  else if (BLI_path_extension_check(path, ".vdb")) {
+  if (BLI_path_extension_check(path, ".vdb")) {
     return FILE_TYPE_VOLUME;
   }
-  else if (BLI_path_extension_check(path, ".zip")) {
+  if (BLI_path_extension_check(path, ".zip")) {
     return FILE_TYPE_ARCHIVE;
   }
-  else if (BLI_path_extension_check_n(path, ".obj", ".3ds", ".fbx", ".glb", ".gltf", NULL)) {
+  if (BLI_path_extension_check_n(path, ".obj", ".3ds", ".fbx", ".glb", ".gltf", NULL)) {
     return FILE_TYPE_OBJECT_IO;
   }
-  else if (BLI_path_extension_check_array(path, imb_ext_image)) {
+  if (BLI_path_extension_check_array(path, imb_ext_image)) {
     return FILE_TYPE_IMAGE;
   }
-  else if (BLI_path_extension_check(path, ".ogg")) {
+  if (BLI_path_extension_check(path, ".ogg")) {
     if (IMB_isanim(path)) {
       return FILE_TYPE_MOVIE;
     }
-    else {
-      return FILE_TYPE_SOUND;
-    }
+    return FILE_TYPE_SOUND;
   }
-  else if (BLI_path_extension_check_array(path, imb_ext_movie)) {
+  if (BLI_path_extension_check_array(path, imb_ext_movie)) {
     return FILE_TYPE_MOVIE;
   }
-  else if (BLI_path_extension_check_array(path, imb_ext_audio)) {
+  if (BLI_path_extension_check_array(path, imb_ext_audio)) {
     return FILE_TYPE_SOUND;
   }
   return 0;
-}
-
-static int file_extension_type(const char *dir, const char *relpath)
-{
-  char path[FILE_MAX];
-  BLI_join_dirfile(path, sizeof(path), dir, relpath);
-  return ED_path_extension_type(path);
 }
 
 int ED_file_extension_icon(const char *path)
@@ -2481,7 +2482,8 @@ static int filelist_readjob_list_dir(const char *root,
 {
   struct direntry *files;
   int nbr_files, nbr_entries = 0;
-  char path[FILE_MAX];
+  /* Full path of the item. */
+  char full_path[FILE_MAX];
 
   nbr_files = BLI_filelist_dir_contents(root, &files);
   if (files) {
@@ -2497,38 +2499,57 @@ static int filelist_readjob_list_dir(const char *root,
       entry->relpath = MEM_dupallocN(files[i].relname);
       entry->st = files[i].s;
 
-      BLI_join_dirfile(path, sizeof(path), root, entry->relpath);
+      BLI_join_dirfile(full_path, FILE_MAX, root, entry->relpath);
+      char *target = full_path;
 
-      /* Set file type. */
-      if (S_ISDIR(files[i].s.st_mode)) {
+      /* Set initial file type and attributes. */
+      entry->attributes = BLI_file_attributes(full_path);
+      if (S_ISDIR(files[i].s.st_mode)
+#ifdef __APPLE__
+          && !(ED_path_extension_type(full_path) & FILE_TYPE_APPLICATIONBUNDLE)
+#endif
+      ) {
         entry->typeflag = FILE_TYPE_DIR;
       }
-      else if (do_lib && BLO_has_bfile_extension(entry->relpath)) {
-        /* If we are considering .blend files as libs, promote them to directory status. */
-        entry->typeflag = FILE_TYPE_BLENDER;
-        /* prevent current file being used as acceptable dir */
-        if (BLI_path_cmp(main_name, path) != 0) {
-          entry->typeflag |= FILE_TYPE_DIR;
+
+      /* Is this a file that points to another file? */
+      if (entry->attributes & FILE_ATTR_ALIAS) {
+        entry->redirection_path = MEM_callocN(FILE_MAXDIR, __func__);
+        if (BLI_file_alias_target(full_path, entry->redirection_path)) {
+          if (BLI_is_dir(entry->redirection_path)) {
+            entry->typeflag = FILE_TYPE_DIR;
+            BLI_path_slash_ensure(entry->redirection_path);
+          }
+          else {
+            entry->typeflag = ED_path_extension_type(entry->redirection_path);
+          }
+          target = entry->redirection_path;
+#ifdef WIN32
+          /* On Windows don't show ".lnk" extension for valid shortcuts. */
+          BLI_path_extension_replace(entry->relpath, FILE_MAXDIR, "");
+#endif
         }
-      }
-      /* Otherwise, do not check extensions for directories! */
-      else if (!(entry->typeflag & FILE_TYPE_DIR)) {
-        entry->typeflag = file_extension_type(root, entry->relpath);
-        if (filter_glob[0] && BLI_path_extension_check_glob(entry->relpath, filter_glob)) {
-          entry->typeflag |= FILE_TYPE_OPERATOR;
+        else {
+          MEM_freeN(entry->redirection_path);
+          entry->redirection_path = NULL;
+          entry->attributes |= FILE_ATTR_HIDDEN;
         }
       }
 
-      /* Set file attributes. */
-      entry->attributes = BLI_file_attributes(path);
-      if (entry->attributes & FILE_ATTR_ALIAS) {
-        entry->redirection_path = MEM_callocN(FILE_MAXDIR, __func__);
-        if (BLI_file_alias_target(entry->redirection_path, path)) {
-          if (BLI_is_dir(entry->redirection_path)) {
-            entry->typeflag = FILE_TYPE_DIR;
+      if (!(entry->typeflag & FILE_TYPE_DIR)) {
+        if (do_lib && BLO_has_bfile_extension(target)) {
+          /* If we are considering .blend files as libs, promote them to directory status. */
+          entry->typeflag = FILE_TYPE_BLENDER;
+          /* prevent current file being used as acceptable dir */
+          if (BLI_path_cmp(main_name, target) != 0) {
+            entry->typeflag |= FILE_TYPE_DIR;
           }
-          else
-            entry->typeflag = ED_path_extension_type(entry->redirection_path);
+        }
+        else {
+          entry->typeflag = ED_path_extension_type(target);
+          if (filter_glob[0] && BLI_path_extension_check_glob(target, filter_glob)) {
+            entry->typeflag |= FILE_TYPE_OPERATOR;
+          }
         }
       }
 
@@ -2623,7 +2644,7 @@ static void filelist_readjob_main_recursive(Main *bmain, FileList *filelist)
   ListBase *lb;
   int a, fake, idcode, ok, totlib, totbl;
 
-  // filelist->type = FILE_MAIN; // XXX TODO: add modes to filebrowser
+  // filelist->type = FILE_MAIN; /* XXX TODO: add modes to filebrowser */
 
   BLI_assert(filelist->filelist.entries == NULL);
 
@@ -2641,9 +2662,9 @@ static void filelist_readjob_main_recursive(Main *bmain, FileList *filelist)
   if (filelist->dir[0] == 0) {
     /* make directories */
 #  ifdef WITH_FREESTYLE
-		filelist->filelist.nbr_entries = 27;
+    filelist->filelist.nbr_entries = 27;
 #  else
-		filelist->filelist.nbr_entries = 26;
+    filelist->filelist.nbr_entries = 26;
 #  endif
     filelist_resize(filelist, filelist->filelist.nbr_entries);
 
@@ -2674,11 +2695,11 @@ static void filelist_readjob_main_recursive(Main *bmain, FileList *filelist)
     filelist->filelist.entries[20].entry->relpath = BLI_strdup("Action");
     filelist->filelist.entries[21].entry->relpath = BLI_strdup("NodeTree");
     filelist->filelist.entries[22].entry->relpath = BLI_strdup("Speaker");
-		filelist->filelist.entries[23].entry->relpath = BLI_strdup("Hair");
-		filelist->filelist.entries[24].entry->relpath = BLI_strdup("Point Cloud");
-		filelist->filelist.entries[25].entry->relpath = BLI_strdup("Volume");
+    filelist->filelist.entries[23].entry->relpath = BLI_strdup("Hair");
+    filelist->filelist.entries[24].entry->relpath = BLI_strdup("Point Cloud");
+    filelist->filelist.entries[25].entry->relpath = BLI_strdup("Volume");
 #  ifdef WITH_FREESTYLE
-		filelist->filelist.entries[26].entry->relpath = BLI_strdup("FreestyleLineStyle");
+    filelist->filelist.entries[26].entry->relpath = BLI_strdup("FreestyleLineStyle");
 #  endif
   }
   else {
@@ -2726,7 +2747,7 @@ static void filelist_readjob_main_recursive(Main *bmain, FileList *filelist)
           }
           else {
             char relname[FILE_MAX + (MAX_ID_NAME - 2) + 3];
-            BLI_snprintf(relname, sizeof(relname), "%s | %s", id->lib->name, id->name + 2);
+            BLI_snprintf(relname, sizeof(relname), "%s | %s", id->lib->filepath, id->name + 2);
             files->entry->relpath = BLI_strdup(relname);
           }
 //                  files->type |= S_IFREG;
@@ -2790,7 +2811,7 @@ static void filelist_readjob_main_recursive(Main *bmain, FileList *filelist)
 static void filelist_readjob_do(const bool do_lib,
                                 FileList *filelist,
                                 const char *main_name,
-                                short *stop,
+                                const short *stop,
                                 short *do_update,
                                 float *progress,
                                 ThreadMutex *lock)

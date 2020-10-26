@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -28,6 +28,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_ghash.h"
 #include "BLI_utildefines.h"
 
 #include "CLG_log.h"
@@ -35,12 +36,31 @@
 #include "BLT_translation.h"
 
 #include "DNA_ID.h"
+#include "DNA_node_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_main.h"
+#include "BKE_node.h"
 
 #include "BKE_idtype.h"
 
 // static CLG_LogRef LOG = {"bke.idtype"};
+
+uint BKE_idtype_cache_key_hash(const void *key_v)
+{
+  const IDCacheKey *key = key_v;
+  size_t hash = BLI_ghashutil_uinthash(key->id_session_uuid);
+  hash = BLI_ghashutil_combine_hash(hash, BLI_ghashutil_uinthash((uint)key->offset_in_ID));
+  return (uint)BLI_ghashutil_combine_hash(hash, BLI_ghashutil_ptrhash(key->cache_v));
+}
+
+bool BKE_idtype_cache_key_cmp(const void *key_a_v, const void *key_b_v)
+{
+  const IDCacheKey *key_a = key_a_v;
+  const IDCacheKey *key_b = key_b_v;
+  return (key_a->id_session_uuid != key_b->id_session_uuid) ||
+         (key_a->offset_in_ID != key_b->offset_in_ID) || (key_a->cache_v != key_b->cache_v);
+}
 
 static IDTypeInfo *id_types[MAX_LIBARRAY] = {NULL};
 
@@ -92,6 +112,7 @@ static void id_type_init(void)
   INIT_TYPE(ID_HA);
   INIT_TYPE(ID_PT);
   INIT_TYPE(ID_VO);
+  INIT_TYPE(ID_SIM);
 
   /* Special naughty boy... */
   BLI_assert(IDType_ID_LINK_PLACEHOLDER.main_listbase_index == INDEX_ID_NULL);
@@ -114,9 +135,8 @@ const IDTypeInfo *BKE_idtype_get_info_from_idcode(const short id_code)
       id_types[id_index]->name[0] != '\0') {
     return id_types[id_index];
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 const IDTypeInfo *BKE_idtype_get_info_from_id(const ID *id)
@@ -135,10 +155,10 @@ static const IDTypeInfo *idtype_get_info_from_name(const char *idtype_name)
   return NULL;
 }
 
-/* Various helpers/wrappers around IDTypeInfo structure. */
+/* Various helpers/wrappers around #IDTypeInfo structure. */
 
 /**
- * Convert an idcode into a name.
+ * Convert an \a idcode into a name.
  *
  * \param idcode: The code to convert.
  * \return A static string representing the name of
@@ -152,7 +172,7 @@ const char *BKE_idtype_idcode_to_name(const short idcode)
 }
 
 /**
- * Convert an idcode into a name (plural).
+ * Convert an \a idcode into a name (plural).
  *
  * \param idcode: The code to convert.
  * \return A static string representing the name of
@@ -166,7 +186,7 @@ const char *BKE_idtype_idcode_to_name_plural(const short idcode)
 }
 
 /**
- * Convert an idcode into its translations' context.
+ * Convert an \a idcode into its translations' context.
  *
  * \param idcode: The code to convert.
  * \return A static string representing the i18n context of the code.
@@ -179,10 +199,10 @@ const char *BKE_idtype_idcode_to_translation_context(const short idcode)
 }
 
 /**
- * Convert an IDType name into an idcode (ie. ID_SCE)
+ * Convert an ID-type name into an \a idcode (ie. #ID_SCE)
  *
- * \param idtype_name: The IDType's 'user visible name' to convert.
- * \return The idcode for the name, or 0 if invalid.
+ * \param idtype_name: The ID-type's "user visible name" to convert.
+ * \return The \a idcode for the name, or 0 if invalid.
  */
 short BKE_idtype_idcode_from_name(const char *idtype_name)
 {
@@ -216,7 +236,7 @@ bool BKE_idtype_idcode_is_linkable(const short idcode)
 }
 
 /**
- * Convert an idcode into an idfilter (e.g. ID_OB -> FILTER_ID_OB).
+ * Convert an \a idcode into an \a idfilter (e.g. ID_OB -> FILTER_ID_OB).
  */
 uint64_t BKE_idtype_idcode_to_idfilter(const short idcode)
 {
@@ -251,6 +271,7 @@ uint64_t BKE_idtype_idcode_to_idfilter(const short idcode)
     CASE_IDFILTER(PT);
     CASE_IDFILTER(LP);
     CASE_IDFILTER(SCE);
+    CASE_IDFILTER(SIM);
     CASE_IDFILTER(SPK);
     CASE_IDFILTER(SO);
     CASE_IDFILTER(TE);
@@ -267,7 +288,7 @@ uint64_t BKE_idtype_idcode_to_idfilter(const short idcode)
 }
 
 /**
- * Convert an idfilter into an idcode (e.g. FILTER_ID_OB -> ID_OB).
+ * Convert an \a idfilter into an \a idcode (e.g. #FILTER_ID_OB -> #ID_OB).
  */
 short BKE_idtype_idcode_from_idfilter(const uint64_t idfilter)
 {
@@ -302,6 +323,7 @@ short BKE_idtype_idcode_from_idfilter(const uint64_t idfilter)
     CASE_IDFILTER(PT);
     CASE_IDFILTER(LP);
     CASE_IDFILTER(SCE);
+    CASE_IDFILTER(SIM);
     CASE_IDFILTER(SPK);
     CASE_IDFILTER(SO);
     CASE_IDFILTER(TE);
@@ -317,7 +339,7 @@ short BKE_idtype_idcode_from_idfilter(const uint64_t idfilter)
 }
 
 /**
- * Convert an idcode into an index (e.g. ID_OB -> INDEX_ID_OB).
+ * Convert an \a idcode into an index (e.g. #ID_OB -> #INDEX_ID_OB).
  */
 int BKE_idtype_idcode_to_index(const short idcode)
 {
@@ -356,6 +378,7 @@ int BKE_idtype_idcode_to_index(const short idcode)
     CASE_IDINDEX(LP);
     CASE_IDINDEX(SCE);
     CASE_IDINDEX(SCR);
+    CASE_IDINDEX(SIM);
     CASE_IDINDEX(SPK);
     CASE_IDINDEX(SO);
     CASE_IDINDEX(TE);
@@ -378,7 +401,7 @@ int BKE_idtype_idcode_to_index(const short idcode)
 }
 
 /**
- * Get an idcode from an index (e.g. INDEX_ID_OB -> ID_OB).
+ * Get an \a idcode from an index (e.g. #INDEX_ID_OB -> #ID_OB).
  */
 short BKE_idtype_idcode_from_index(const int index)
 {
@@ -417,6 +440,7 @@ short BKE_idtype_idcode_from_index(const int index)
     CASE_IDCODE(LP);
     CASE_IDCODE(SCE);
     CASE_IDCODE(SCR);
+    CASE_IDCODE(SIM);
     CASE_IDCODE(SPK);
     CASE_IDCODE(SO);
     CASE_IDCODE(TE);
@@ -447,4 +471,41 @@ short BKE_idtype_idcode_from_index(const int index)
 short BKE_idtype_idcode_iter_step(int *index)
 {
   return (*index < ARRAY_SIZE(id_types)) ? BKE_idtype_idcode_from_index((*index)++) : 0;
+}
+
+/**
+ * Wrapper around #IDTypeInfo foreach_cache that also handles embedded IDs.
+ */
+void BKE_idtype_id_foreach_cache(struct ID *id,
+                                 IDTypeForeachCacheFunctionCallback function_callback,
+                                 void *user_data)
+{
+  const IDTypeInfo *type_info = BKE_idtype_get_info_from_id(id);
+  if (type_info->foreach_cache != NULL) {
+    type_info->foreach_cache(id, function_callback, user_data);
+  }
+
+  /* Handle 'private IDs'. */
+  bNodeTree *nodetree = ntreeFromID(id);
+  if (nodetree != NULL) {
+    type_info = BKE_idtype_get_info_from_id(&nodetree->id);
+    if (type_info == NULL) {
+      /* Very old .blend file seem to have empty names for their embedded node trees, see
+       * `blo_do_versions_250()`. Assume those are nodetrees then. */
+      type_info = BKE_idtype_get_info_from_idcode(ID_NT);
+    }
+    if (type_info->foreach_cache != NULL) {
+      type_info->foreach_cache(&nodetree->id, function_callback, user_data);
+    }
+  }
+
+  if (GS(id->name) == ID_SCE) {
+    Scene *scene = (Scene *)id;
+    if (scene->master_collection != NULL) {
+      type_info = BKE_idtype_get_info_from_id(&scene->master_collection->id);
+      if (type_info->foreach_cache != NULL) {
+        type_info->foreach_cache(&scene->master_collection->id, function_callback, user_data);
+      }
+    }
+  }
 }

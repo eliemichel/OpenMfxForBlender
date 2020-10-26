@@ -21,13 +21,16 @@
 set(INC
   .
   composite
+  function
   intern
   shader
+  simulation
   texture
   ../blenkernel
   ../blenlib
   ../blentranslation
   ../depsgraph
+  ../functions
   ../gpu
   ../imbuf
   ../makesdna
@@ -35,11 +38,9 @@ set(INC
   ../render/extern/include
   ../../../intern/glew-mx
   ../../../intern/guardedalloc
+  ../../../intern/sky/include
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
 
 set(SRC
   composite/nodes/node_composite_alphaOver.c
@@ -127,6 +128,15 @@ set(SRC
   composite/node_composite_tree.c
   composite/node_composite_util.c
 
+  function/nodes/node_fn_boolean_math.cc
+  function/nodes/node_fn_combine_strings.cc
+  function/nodes/node_fn_float_compare.cc
+  function/nodes/node_fn_group_instance_id.cc
+  function/nodes/node_fn_object_transforms.cc
+  function/nodes/node_fn_random_float.cc
+  function/nodes/node_fn_switch.cc
+  function/node_function_util.cc
+
   shader/nodes/node_shader_add_shader.c
   shader/nodes/node_shader_ambient_occlusion.c
   shader/nodes/node_shader_attribute.c
@@ -148,7 +158,7 @@ set(SRC
   shader/nodes/node_shader_bsdf_velvet.c
   shader/nodes/node_shader_bump.c
   shader/nodes/node_shader_camera.c
-  shader/nodes/node_shader_clamp.c
+  shader/nodes/node_shader_clamp.cc
   shader/nodes/node_shader_common.c
   shader/nodes/node_shader_curves.c
   shader/nodes/node_shader_displacement.c
@@ -165,9 +175,9 @@ set(SRC
   shader/nodes/node_shader_layer_weight.c
   shader/nodes/node_shader_light_falloff.c
   shader/nodes/node_shader_light_path.c
-  shader/nodes/node_shader_map_range.c
+  shader/nodes/node_shader_map_range.cc
   shader/nodes/node_shader_mapping.c
-  shader/nodes/node_shader_math.c
+  shader/nodes/node_shader_math.cc
   shader/nodes/node_shader_mixRgb.c
   shader/nodes/node_shader_mix_shader.c
   shader/nodes/node_shader_normal.c
@@ -182,8 +192,8 @@ set(SRC
   shader/nodes/node_shader_rgb.c
   shader/nodes/node_shader_script.c
   shader/nodes/node_shader_sepcombHSV.c
-  shader/nodes/node_shader_sepcombRGB.c
-  shader/nodes/node_shader_sepcombXYZ.c
+  shader/nodes/node_shader_sepcombRGB.cc
+  shader/nodes/node_shader_sepcombXYZ.cc
   shader/nodes/node_shader_shaderToRgb.c
   shader/nodes/node_shader_squeeze.c
   shader/nodes/node_shader_subsurface_scattering.c
@@ -204,11 +214,11 @@ set(SRC
   shader/nodes/node_shader_tex_white_noise.c
   shader/nodes/node_shader_uvAlongStroke.c
   shader/nodes/node_shader_uvmap.c
-  shader/nodes/node_shader_valToRgb.c
-  shader/nodes/node_shader_value.c
+  shader/nodes/node_shader_valToRgb.cc
+  shader/nodes/node_shader_value.cc
   shader/nodes/node_shader_vectTransform.c
   shader/nodes/node_shader_vector_displacement.c
-  shader/nodes/node_shader_vector_math.c
+  shader/nodes/node_shader_vector_math.cc
   shader/nodes/node_shader_vector_rotate.c
   shader/nodes/node_shader_vertex_color.c
   shader/nodes/node_shader_volume_absorption.c
@@ -219,6 +229,10 @@ set(SRC
   shader/nodes/node_shader_wireframe.c
   shader/node_shader_tree.c
   shader/node_shader_util.c
+
+  simulation/nodes/node_sim_common.cc
+  simulation/node_simulation_tree.cc
+  simulation/node_simulation_util.cc
 
   texture/nodes/node_texture_at.c
   texture/nodes/node_texture_bricks.c
@@ -246,18 +260,30 @@ set(SRC
   texture/node_texture_tree.c
   texture/node_texture_util.c
 
+  intern/derived_node_tree.cc
   intern/node_common.c
   intern/node_exec.c
-  intern/node_socket.c
+  intern/node_socket.cc
+  intern/node_tree_dependencies.cc
+  intern/node_tree_multi_function.cc
+  intern/node_tree_ref.cc
   intern/node_util.c
 
   composite/node_composite_util.h
+  function/node_function_util.hh
   shader/node_shader_util.h
+  simulation/node_simulation_util.h
   texture/node_texture_util.h
 
   NOD_common.h
   NOD_composite.h
+  NOD_derived_node_tree.hh
+  NOD_function.h
+  NOD_node_tree_dependencies.hh
+  NOD_node_tree_multi_function.hh
+  NOD_node_tree_ref.hh
   NOD_shader.h
+  NOD_simulation.h
   NOD_socket.h
   NOD_static_types.h
   NOD_texture.h
@@ -267,6 +293,8 @@ set(SRC
 )
 
 set(LIB
+  bf_functions
+  bf_intern_sky
 )
 
 if(WITH_PYTHON)
@@ -298,7 +326,6 @@ if(WITH_COMPOSITOR)
   add_definitions(-DWITH_COMPOSITOR)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 if(WITH_FREESTYLE)
   add_definitions(-DWITH_FREESTYLE)

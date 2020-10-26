@@ -87,12 +87,12 @@ static void action_set_activemarker(void *UNUSED(a), void *UNUSED(b), void *UNUS
  *  It acts as a kind of "glorified clipboard for poses", allowing for naming of poses.
  *
  * Features:
- * - PoseLibs are simply normal Actions.
- * - Each "pose" is simply a set of keyframes that occur on a particular frame.
- *   - A set of TimeMarkers that belong to each Action, help 'label' where a 'pose' can be
+ * - Pose-libs are simply normal Actions.
+ * - Each "pose" is simply a set of key-frames that occur on a particular frame.
+ *   - A set of #TimeMarker that belong to each Action, help 'label' where a 'pose' can be
  *     found in the Action.
- * - The Scrollwheel or PageUp/Down buttons when used in a special mode or after pressing/holding
- *   [a modifier] key, cycles through the poses available for the active pose's poselib,
+ * - The Scroll-wheel or PageUp/Down buttons when used in a special mode or after pressing/holding
+ *   [a modifier] key, cycles through the poses available for the active pose's pose-lib,
  *   allowing the animator to preview what action best suits that pose.
  */
 /* ************************************************************* */
@@ -113,7 +113,7 @@ static int poselib_get_free_index(bAction *act)
 
   /* As poses are not stored in chronological order, we must iterate over this list
    * a few times until we don't make any new discoveries (mostly about the lower bound).
-   * Prevents problems with deleting then trying to add new poses [#27412]
+   * Prevents problems with deleting then trying to add new poses T27412.
    */
   do {
     changed = false;
@@ -141,9 +141,7 @@ static int poselib_get_free_index(bAction *act)
   if (low < high) {
     return (low + 1);
   }
-  else {
-    return (high + 1);
-  }
+  return (high + 1);
 }
 
 /* returns the active pose for a poselib */
@@ -152,9 +150,7 @@ static TimeMarker *poselib_get_active_pose(bAction *act)
   if ((act) && (act->active_marker)) {
     return BLI_findlink(&act->markers, act->active_marker - 1);
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 /* Get object that Pose Lib should be found on */
@@ -173,9 +169,7 @@ static Object *get_poselib_object(bContext *C)
   if (area && (area->spacetype == SPACE_PROPERTIES)) {
     return ED_object_context(C);
   }
-  else {
-    return BKE_object_pose_armature_get(CTX_data_active_object(C));
-  }
+  return BKE_object_pose_armature_get(CTX_data_active_object(C));
 }
 
 /* Poll callback for operators that require existing PoseLib data (with poses) to work */
@@ -221,12 +215,10 @@ static bAction *poselib_validate(Main *bmain, Object *ob)
   if (ELEM(NULL, ob, ob->pose)) {
     return NULL;
   }
-  else if (ob->poselib == NULL) {
+  if (ob->poselib == NULL) {
     return poselib_init_new(bmain, ob);
   }
-  else {
-    return ob->poselib;
-  }
+  return ob->poselib;
 }
 
 /* ************************************************************* */
@@ -697,12 +689,11 @@ static int poselib_rename_invoke(bContext *C, wmOperator *op, const wmEvent *eve
     BKE_report(op->reports, RPT_ERROR, "Invalid index for pose");
     return OPERATOR_CANCELLED;
   }
-  else {
-    /* Use the existing name of the marker as the name,
-     * and use the active marker as the one to rename. */
-    RNA_enum_set(op->ptr, "pose", act->active_marker - 1);
-    RNA_string_set(op->ptr, "name", marker->name);
-  }
+
+  /* Use the existing name of the marker as the name,
+   * and use the active marker as the one to rename. */
+  RNA_enum_set(op->ptr, "pose", act->active_marker - 1);
+  RNA_string_set(op->ptr, "name", marker->name);
 
   /* part to sync with other similar operators... */
   return WM_operator_props_popup_confirm(C, op, event);
@@ -1032,7 +1023,8 @@ static void poselib_backup_free_data(tPoseLib_PreviewData *pld)
  * - gets the string to print in the header
  * - this code is based on the code for extract_pose_from_action in blenkernel/action.c
  */
-static void poselib_apply_pose(tPoseLib_PreviewData *pld)
+static void poselib_apply_pose(tPoseLib_PreviewData *pld,
+                               const AnimationEvalContext *anim_eval_context)
 {
   PointerRNA *ptr = &pld->rna_ptr;
   bArmature *arm = pld->arm;
@@ -1058,6 +1050,8 @@ static void poselib_apply_pose(tPoseLib_PreviewData *pld)
   group_ok_cb = ANIM_editkeyframes_ok(BEZT_OK_FRAMERANGE);
   ked.f1 = ((float)frame) - 0.5f;
   ked.f2 = ((float)frame) + 0.5f;
+  AnimationEvalContext anim_context_at_frame = BKE_animsys_eval_context_construct_at(
+      anim_eval_context, frame);
 
   /* start applying - only those channels which have a key at this point in time! */
   for (agrp = act->groups.first; agrp; agrp = agrp->next) {
@@ -1084,7 +1078,7 @@ static void poselib_apply_pose(tPoseLib_PreviewData *pld)
         }
 
         if (ok) {
-          animsys_evaluate_action_group(ptr, act, agrp, (float)frame);
+          animsys_evaluate_action_group(ptr, act, agrp, &anim_context_at_frame);
         }
       }
     }
@@ -1159,7 +1153,11 @@ static void poselib_preview_apply(bContext *C, wmOperator *op)
     /* pose should be the right one to draw (unless we're temporarily not showing it) */
     if ((pld->flag & PL_PREVIEW_SHOWORIGINAL) == 0) {
       RNA_int_set(op->ptr, "pose_index", BLI_findindex(&pld->act->markers, pld->marker));
-      poselib_apply_pose(pld);
+      struct Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+
+      const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(
+          depsgraph, 0.0f /* poselib_apply_pose() determines its own evaluation time. */);
+      poselib_apply_pose(pld, &anim_eval_context);
     }
     else {
       RNA_int_set(op->ptr, "pose_index", -2); /* -2 means don't apply any pose */
@@ -1755,9 +1753,7 @@ static int poselib_preview_exit(bContext *C, wmOperator *op)
   if (ELEM(exit_state, PL_PREVIEW_CANCEL, PL_PREVIEW_ERROR)) {
     return OPERATOR_CANCELLED;
   }
-  else {
-    return OPERATOR_FINISHED;
-  }
+  return OPERATOR_FINISHED;
 }
 
 /* Cancel previewing operation (called when exiting Blender) */
@@ -1860,7 +1856,7 @@ void POSELIB_OT_browse_interactive(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
 
   /* properties */
-  // TODO: make the pose_index into a proper enum instead of a cryptic int...
+  /* TODO: make the pose_index into a proper enum instead of a cryptic int. */
   ot->prop = RNA_def_int(
       ot->srna,
       "pose_index",
@@ -1872,7 +1868,7 @@ void POSELIB_OT_browse_interactive(wmOperatorType *ot)
       0,
       INT_MAX);
 
-  // XXX: percentage vs factor?
+  /* XXX: percentage vs factor? */
   /* not used yet */
 #if 0
   RNA_def_float_factor(ot->srna,

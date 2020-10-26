@@ -31,15 +31,12 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_console.h"
-#include "BLI_ghash.h"
 #include "BLI_hash.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "BKE_global.h"
 #include "BKE_idtype.h"
 #include "BKE_scene.h"
-}
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_debug.h"
@@ -58,18 +55,14 @@ extern "C" {
 #include "intern/node/deg_node_operation.h"
 #include "intern/node/deg_node_time.h"
 
-namespace DEG {
+namespace deg = blender::deg;
 
-/* TODO(sergey): Find a better place for this. */
-template<typename T> static void remove_from_vector(vector<T> *vector, const T &value)
-{
-  vector->erase(std::remove(vector->begin(), vector->end(), value), vector->end());
-}
+namespace blender {
+namespace deg {
 
 Depsgraph::Depsgraph(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluationMode mode)
     : time_source(nullptr),
       need_update(true),
-      need_update_time(false),
       bmain(bmain),
       scene(scene),
       view_layer(view_layer),
@@ -81,21 +74,17 @@ Depsgraph::Depsgraph(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluati
       is_render_pipeline_depsgraph(false)
 {
   BLI_spin_init(&lock);
-  id_hash = BLI_ghash_ptr_new("Depsgraph id hash");
-  entry_tags = BLI_gset_ptr_new("Depsgraph entry_tags");
   memset(id_type_updated, 0, sizeof(id_type_updated));
   memset(id_type_exist, 0, sizeof(id_type_exist));
   memset(physics_relations, 0, sizeof(physics_relations));
+
+  add_time_source();
 }
 
 Depsgraph::~Depsgraph()
 {
   clear_id_nodes();
-  BLI_ghash_free(id_hash, nullptr, nullptr);
-  BLI_gset_free(entry_tags, nullptr);
-  if (time_source != nullptr) {
-    OBJECT_GUARDED_DELETE(time_source, TimeSourceNode);
-  }
+  delete time_source;
   BLI_spin_end(&lock);
 }
 
@@ -115,9 +104,14 @@ TimeSourceNode *Depsgraph::find_time_source() const
   return time_source;
 }
 
+void Depsgraph::tag_time_source()
+{
+  time_source->tag_update(this, DEG_UPDATE_SOURCE_TIME);
+}
+
 IDNode *Depsgraph::find_id_node(const ID *id) const
 {
-  return reinterpret_cast<IDNode *>(BLI_ghash_lookup(id_hash, id));
+  return id_hash.lookup_default(id, nullptr);
 }
 
 IDNode *Depsgraph::add_id_node(ID *id, ID *id_cow_hint)
@@ -132,8 +126,8 @@ IDNode *Depsgraph::add_id_node(ID *id, ID *id_cow_hint)
      *
      * NOTE: We address ID nodes by the original ID pointer they are
      * referencing to. */
-    BLI_ghash_insert(id_hash, id, id_node);
-    id_nodes.push_back(id_node);
+    id_hash.add_new(id, id_node);
+    id_nodes.append(id_node);
 
     id_type_exist[BKE_idtype_idcode_to_index(GS(id->name))] = 1;
   }
@@ -167,10 +161,10 @@ void Depsgraph::clear_id_nodes()
   clear_id_nodes_conditional([](ID_Type id_type) { return id_type != ID_PA; });
 
   for (IDNode *id_node : id_nodes) {
-    OBJECT_GUARDED_DELETE(id_node, IDNode);
+    delete id_node;
   }
   /* Clear containers. */
-  BLI_ghash_clear(id_hash, nullptr, nullptr);
+  id_hash.clear();
   id_nodes.clear();
   /* Clear physics relation caches. */
   clear_physics_relations(this);
@@ -198,7 +192,7 @@ Relation *Depsgraph::add_new_relation(Node *from, Node *to, const char *descript
 #endif
 
   /* Create new relation, and add it to the graph. */
-  rel = OBJECT_GUARDED_NEW(Relation, from, to, description);
+  rel = new Relation(from, to, description);
   rel->flag |= flags;
   return rel;
 }
@@ -233,16 +227,14 @@ void Depsgraph::add_entry_tag(OperationNode *node)
    * from.
    * NOTE: this is necessary since we have several thousand nodes to play
    * with. */
-  BLI_gset_insert(entry_tags, node);
+  entry_tags.add(node);
 }
 
 void Depsgraph::clear_all_nodes()
 {
   clear_id_nodes();
-  if (time_source != nullptr) {
-    OBJECT_GUARDED_DELETE(time_source, TimeSourceNode);
-    time_source = nullptr;
-  }
+  delete time_source;
+  time_source = nullptr;
 }
 
 ID *Depsgraph::get_cow_id(const ID *id_orig) const
@@ -271,7 +263,8 @@ ID *Depsgraph::get_cow_id(const ID *id_orig) const
   return id_node->id_cow;
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender
 
 /* **************** */
 /* Public Graph API */
@@ -279,9 +272,8 @@ ID *Depsgraph::get_cow_id(const ID *id_orig) const
 /* Initialize a new Depsgraph */
 Depsgraph *DEG_graph_new(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluationMode mode)
 {
-  DEG::Depsgraph *deg_depsgraph = OBJECT_GUARDED_NEW(
-      DEG::Depsgraph, bmain, scene, view_layer, mode);
-  DEG::register_graph(deg_depsgraph);
+  deg::Depsgraph *deg_depsgraph = new deg::Depsgraph(bmain, scene, view_layer, mode);
+  deg::register_graph(deg_depsgraph);
   return reinterpret_cast<Depsgraph *>(deg_depsgraph);
 }
 
@@ -292,11 +284,11 @@ void DEG_graph_replace_owners(struct Depsgraph *depsgraph,
                               Scene *scene,
                               ViewLayer *view_layer)
 {
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
+  deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(depsgraph);
 
   const bool do_update_register = deg_graph->bmain != bmain;
   if (do_update_register && deg_graph->bmain != NULL) {
-    DEG::unregister_graph(deg_graph);
+    deg::unregister_graph(deg_graph);
   }
 
   deg_graph->bmain = bmain;
@@ -304,7 +296,7 @@ void DEG_graph_replace_owners(struct Depsgraph *depsgraph,
   deg_graph->view_layer = view_layer;
 
   if (do_update_register) {
-    DEG::register_graph(deg_graph);
+    deg::register_graph(deg_graph);
   }
 }
 
@@ -314,15 +306,15 @@ void DEG_graph_free(Depsgraph *graph)
   if (graph == nullptr) {
     return;
   }
-  using DEG::Depsgraph;
-  DEG::Depsgraph *deg_depsgraph = reinterpret_cast<DEG::Depsgraph *>(graph);
-  DEG::unregister_graph(deg_depsgraph);
-  OBJECT_GUARDED_DELETE(deg_depsgraph, Depsgraph);
+  using deg::Depsgraph;
+  deg::Depsgraph *deg_depsgraph = reinterpret_cast<deg::Depsgraph *>(graph);
+  deg::unregister_graph(deg_depsgraph);
+  delete deg_depsgraph;
 }
 
-bool DEG_is_evaluating(struct Depsgraph *depsgraph)
+bool DEG_is_evaluating(const struct Depsgraph *depsgraph)
 {
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(depsgraph);
   return deg_graph->is_evaluating;
 }
 
@@ -335,19 +327,19 @@ bool DEG_is_active(const struct Depsgraph *depsgraph)
      * cases. */
     return false;
   }
-  const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(depsgraph);
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(depsgraph);
   return deg_graph->is_active;
 }
 
 void DEG_make_active(struct Depsgraph *depsgraph)
 {
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
+  deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(depsgraph);
   deg_graph->is_active = true;
   /* TODO(sergey): Copy data from evaluated state to original. */
 }
 
 void DEG_make_inactive(struct Depsgraph *depsgraph)
 {
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
+  deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(depsgraph);
   deg_graph->is_active = false;
 }

@@ -100,14 +100,14 @@ CLOSURE_FLOAT3_PARAM(DiffuseClosure, params.N),
     BSDF_CLOSURE_CLASS_END(AshikhminVelvet, ashikhmin_velvet)
 
         BSDF_CLOSURE_CLASS_BEGIN(AshikhminShirley,
-                                 ashikhmin_shirley_aniso,
+                                 ashikhmin_shirley,
                                  MicrofacetBsdf,
                                  LABEL_GLOSSY | LABEL_REFLECT)
             CLOSURE_FLOAT3_PARAM(AshikhminShirleyClosure, params.N),
     CLOSURE_FLOAT3_PARAM(AshikhminShirleyClosure, params.T),
     CLOSURE_FLOAT_PARAM(AshikhminShirleyClosure, params.alpha_x),
     CLOSURE_FLOAT_PARAM(AshikhminShirleyClosure, params.alpha_y),
-    BSDF_CLOSURE_CLASS_END(AshikhminShirley, ashikhmin_shirley_aniso)
+    BSDF_CLOSURE_CLASS_END(AshikhminShirley, ashikhmin_shirley)
 
         BSDF_CLOSURE_CLASS_BEGIN(DiffuseToon, diffuse_toon, ToonBsdf, LABEL_DIFFUSE)
             CLOSURE_FLOAT3_PARAM(DiffuseToonClosure, params.N),
@@ -121,41 +121,41 @@ CLOSURE_FLOAT3_PARAM(DiffuseClosure, params.N),
     CLOSURE_FLOAT_PARAM(GlossyToonClosure, params.smooth),
     BSDF_CLOSURE_CLASS_END(GlossyToon, glossy_toon)
 
+        BSDF_CLOSURE_CLASS_BEGIN(MicrofacetGGXIsotropic,
+                                 microfacet_ggx_isotropic,
+                                 MicrofacetBsdf,
+                                 LABEL_GLOSSY | LABEL_REFLECT)
+            CLOSURE_FLOAT3_PARAM(MicrofacetGGXIsotropicClosure, params.N),
+    CLOSURE_FLOAT_PARAM(MicrofacetGGXIsotropicClosure, params.alpha_x),
+    BSDF_CLOSURE_CLASS_END(MicrofacetGGXIsotropic, microfacet_ggx_isotropic)
+
         BSDF_CLOSURE_CLASS_BEGIN(MicrofacetGGX,
                                  microfacet_ggx,
                                  MicrofacetBsdf,
                                  LABEL_GLOSSY | LABEL_REFLECT)
             CLOSURE_FLOAT3_PARAM(MicrofacetGGXClosure, params.N),
+    CLOSURE_FLOAT3_PARAM(MicrofacetGGXClosure, params.T),
     CLOSURE_FLOAT_PARAM(MicrofacetGGXClosure, params.alpha_x),
+    CLOSURE_FLOAT_PARAM(MicrofacetGGXClosure, params.alpha_y),
     BSDF_CLOSURE_CLASS_END(MicrofacetGGX, microfacet_ggx)
 
-        BSDF_CLOSURE_CLASS_BEGIN(MicrofacetGGXAniso,
-                                 microfacet_ggx_aniso,
+        BSDF_CLOSURE_CLASS_BEGIN(MicrofacetBeckmannIsotropic,
+                                 microfacet_beckmann_isotropic,
                                  MicrofacetBsdf,
                                  LABEL_GLOSSY | LABEL_REFLECT)
-            CLOSURE_FLOAT3_PARAM(MicrofacetGGXAnisoClosure, params.N),
-    CLOSURE_FLOAT3_PARAM(MicrofacetGGXAnisoClosure, params.T),
-    CLOSURE_FLOAT_PARAM(MicrofacetGGXAnisoClosure, params.alpha_x),
-    CLOSURE_FLOAT_PARAM(MicrofacetGGXAnisoClosure, params.alpha_y),
-    BSDF_CLOSURE_CLASS_END(MicrofacetGGXAniso, microfacet_ggx_aniso)
+            CLOSURE_FLOAT3_PARAM(MicrofacetBeckmannIsotropicClosure, params.N),
+    CLOSURE_FLOAT_PARAM(MicrofacetBeckmannIsotropicClosure, params.alpha_x),
+    BSDF_CLOSURE_CLASS_END(MicrofacetBeckmannIsotropic, microfacet_beckmann_isotropic)
 
         BSDF_CLOSURE_CLASS_BEGIN(MicrofacetBeckmann,
                                  microfacet_beckmann,
                                  MicrofacetBsdf,
                                  LABEL_GLOSSY | LABEL_REFLECT)
             CLOSURE_FLOAT3_PARAM(MicrofacetBeckmannClosure, params.N),
+    CLOSURE_FLOAT3_PARAM(MicrofacetBeckmannClosure, params.T),
     CLOSURE_FLOAT_PARAM(MicrofacetBeckmannClosure, params.alpha_x),
+    CLOSURE_FLOAT_PARAM(MicrofacetBeckmannClosure, params.alpha_y),
     BSDF_CLOSURE_CLASS_END(MicrofacetBeckmann, microfacet_beckmann)
-
-        BSDF_CLOSURE_CLASS_BEGIN(MicrofacetBeckmannAniso,
-                                 microfacet_beckmann_aniso,
-                                 MicrofacetBsdf,
-                                 LABEL_GLOSSY | LABEL_REFLECT)
-            CLOSURE_FLOAT3_PARAM(MicrofacetBeckmannAnisoClosure, params.N),
-    CLOSURE_FLOAT3_PARAM(MicrofacetBeckmannAnisoClosure, params.T),
-    CLOSURE_FLOAT_PARAM(MicrofacetBeckmannAnisoClosure, params.alpha_x),
-    CLOSURE_FLOAT_PARAM(MicrofacetBeckmannAnisoClosure, params.alpha_y),
-    BSDF_CLOSURE_CLASS_END(MicrofacetBeckmannAniso, microfacet_beckmann_aniso)
 
         BSDF_CLOSURE_CLASS_BEGIN(MicrofacetGGXRefraction,
                                  microfacet_ggx_refraction,
@@ -362,13 +362,16 @@ void OSLShader::register_closures(OSLShadingSystem *ss_)
                    id++,
                    closure_bsdf_transparent_params(),
                    closure_bsdf_transparent_prepare);
+
   register_closure(
-      ss, "microfacet_ggx", id++, bsdf_microfacet_ggx_params(), bsdf_microfacet_ggx_prepare);
+      ss, "microfacet", id++, closure_bsdf_microfacet_params(), closure_bsdf_microfacet_prepare);
   register_closure(ss,
-                   "microfacet_ggx_aniso",
+                   "microfacet_ggx",
                    id++,
-                   bsdf_microfacet_ggx_aniso_params(),
-                   bsdf_microfacet_ggx_aniso_prepare);
+                   bsdf_microfacet_ggx_isotropic_params(),
+                   bsdf_microfacet_ggx_isotropic_prepare);
+  register_closure(
+      ss, "microfacet_ggx_aniso", id++, bsdf_microfacet_ggx_params(), bsdf_microfacet_ggx_prepare);
   register_closure(ss,
                    "microfacet_ggx_refraction",
                    id++,
@@ -417,13 +420,13 @@ void OSLShader::register_closures(OSLShadingSystem *ss_)
   register_closure(ss,
                    "microfacet_beckmann",
                    id++,
-                   bsdf_microfacet_beckmann_params(),
-                   bsdf_microfacet_beckmann_prepare);
+                   bsdf_microfacet_beckmann_isotropic_params(),
+                   bsdf_microfacet_beckmann_isotropic_prepare);
   register_closure(ss,
                    "microfacet_beckmann_aniso",
                    id++,
-                   bsdf_microfacet_beckmann_aniso_params(),
-                   bsdf_microfacet_beckmann_aniso_prepare);
+                   bsdf_microfacet_beckmann_params(),
+                   bsdf_microfacet_beckmann_prepare);
   register_closure(ss,
                    "microfacet_beckmann_refraction",
                    id++,
@@ -432,8 +435,8 @@ void OSLShader::register_closures(OSLShadingSystem *ss_)
   register_closure(ss,
                    "ashikhmin_shirley",
                    id++,
-                   bsdf_ashikhmin_shirley_aniso_params(),
-                   bsdf_ashikhmin_shirley_aniso_prepare);
+                   bsdf_ashikhmin_shirley_params(),
+                   bsdf_ashikhmin_shirley_prepare);
   register_closure(
       ss, "ashikhmin_velvet", id++, bsdf_ashikhmin_velvet_params(), bsdf_ashikhmin_velvet_prepare);
   register_closure(
@@ -507,6 +510,82 @@ bool CBSDFClosure::skip(const ShaderData *sd, int path_flag, int scattering)
 
   return false;
 }
+
+/* Standard Microfacet Closure */
+
+class MicrofacetClosure : public CBSDFClosure {
+ public:
+  MicrofacetBsdf params;
+  ustring distribution;
+  int refract;
+
+  void setup(ShaderData *sd, int path_flag, float3 weight)
+  {
+    static ustring u_ggx("ggx");
+    static ustring u_default("default");
+
+    const int label = (refract) ? LABEL_TRANSMIT : LABEL_REFLECT;
+    if (skip(sd, path_flag, LABEL_GLOSSY | label)) {
+      return;
+    }
+
+    MicrofacetBsdf *bsdf = (MicrofacetBsdf *)bsdf_alloc_osl(
+        sd, sizeof(MicrofacetBsdf), weight, &params);
+
+    if (!bsdf) {
+      return;
+    }
+
+    /* GGX */
+    if (distribution == u_ggx || distribution == u_default) {
+      if (!refract) {
+        if (params.alpha_x == params.alpha_y) {
+          /* Isotropic */
+          sd->flag |= bsdf_microfacet_ggx_isotropic_setup(bsdf);
+        }
+        else {
+          /* Anisotropic */
+          sd->flag |= bsdf_microfacet_ggx_setup(bsdf);
+        }
+      }
+      else {
+        sd->flag |= bsdf_microfacet_ggx_refraction_setup(bsdf);
+      }
+    }
+    /* Beckmann */
+    else {
+      if (!refract) {
+        if (params.alpha_x == params.alpha_y) {
+          /* Isotropic */
+          sd->flag |= bsdf_microfacet_beckmann_isotropic_setup(bsdf);
+        }
+        else {
+          /* Anisotropic */
+          sd->flag |= bsdf_microfacet_beckmann_setup(bsdf);
+        }
+      }
+      else {
+        sd->flag |= bsdf_microfacet_beckmann_refraction_setup(bsdf);
+      }
+    }
+  }
+};
+
+ClosureParam *closure_bsdf_microfacet_params()
+{
+  static ClosureParam params[] = {CLOSURE_STRING_PARAM(MicrofacetClosure, distribution),
+                                  CLOSURE_FLOAT3_PARAM(MicrofacetClosure, params.N),
+                                  CLOSURE_FLOAT3_PARAM(MicrofacetClosure, params.T),
+                                  CLOSURE_FLOAT_PARAM(MicrofacetClosure, params.alpha_x),
+                                  CLOSURE_FLOAT_PARAM(MicrofacetClosure, params.alpha_y),
+                                  CLOSURE_FLOAT_PARAM(MicrofacetClosure, params.ior),
+                                  CLOSURE_INT_PARAM(MicrofacetClosure, refract),
+                                  CLOSURE_STRING_KEYPARAM(MicrofacetClosure, label, "label"),
+                                  CLOSURE_FINISH_PARAM(MicrofacetClosure)};
+
+  return params;
+}
+CCLOSURE_PREPARE(closure_bsdf_microfacet_prepare, MicrofacetClosure)
 
 /* GGX closures with Fresnel */
 
@@ -582,7 +661,7 @@ class MicrofacetGGXAnisoFresnelClosure : public MicrofacetFresnelClosure {
       return;
     }
 
-    sd->flag |= bsdf_microfacet_ggx_aniso_fresnel_setup(bsdf, sd);
+    sd->flag |= bsdf_microfacet_ggx_fresnel_setup(bsdf, sd);
   }
 };
 
@@ -676,7 +755,7 @@ class MicrofacetMultiGGXAnisoClosure : public MicrofacetMultiClosure {
     }
 
     bsdf->ior = 0.0f;
-    sd->flag |= bsdf_microfacet_multi_ggx_aniso_setup(bsdf);
+    sd->flag |= bsdf_microfacet_multi_ggx_setup(bsdf);
   }
 };
 
@@ -801,7 +880,7 @@ class MicrofacetMultiGGXAnisoFresnelClosure : public MicrofacetMultiFresnelClosu
       return;
     }
 
-    sd->flag |= bsdf_microfacet_multi_ggx_aniso_fresnel_setup(bsdf, sd);
+    sd->flag |= bsdf_microfacet_multi_ggx_fresnel_setup(bsdf, sd);
   }
 };
 

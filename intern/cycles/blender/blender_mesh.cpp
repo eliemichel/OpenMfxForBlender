@@ -278,25 +278,59 @@ static void mikk_compute_tangents(
   genTangSpaceDefault(&context);
 }
 
+/* Create sculpt vertex color attributes. */
+static void attr_create_sculpt_vertex_color(Scene *scene,
+                                            Mesh *mesh,
+                                            BL::Mesh &b_mesh,
+                                            bool subdivision)
+{
+  BL::Mesh::sculpt_vertex_colors_iterator l;
+
+  for (b_mesh.sculpt_vertex_colors.begin(l); l != b_mesh.sculpt_vertex_colors.end(); ++l) {
+    const bool active_render = l->active_render();
+    AttributeStandard vcol_std = (active_render) ? ATTR_STD_VERTEX_COLOR : ATTR_STD_NONE;
+    ustring vcol_name = ustring(l->name().c_str());
+
+    const bool need_vcol = mesh->need_attribute(scene, vcol_name) ||
+                           mesh->need_attribute(scene, vcol_std);
+
+    if (!need_vcol) {
+      continue;
+    }
+
+    AttributeSet &attributes = (subdivision) ? mesh->subd_attributes : mesh->attributes;
+    Attribute *vcol_attr = attributes.add(vcol_name, TypeRGBA, ATTR_ELEMENT_VERTEX);
+    vcol_attr->std = vcol_std;
+
+    float4 *cdata = vcol_attr->data_float4();
+    int numverts = b_mesh.vertices.length();
+
+    for (int i = 0; i < numverts; i++) {
+      *(cdata++) = get_float4(l->data[i].color());
+    }
+  }
+}
+
 /* Create vertex color attributes. */
 static void attr_create_vertex_color(Scene *scene, Mesh *mesh, BL::Mesh &b_mesh, bool subdivision)
 {
-  if (subdivision) {
-    BL::Mesh::vertex_colors_iterator l;
+  BL::Mesh::vertex_colors_iterator l;
 
-    for (b_mesh.vertex_colors.begin(l); l != b_mesh.vertex_colors.end(); ++l) {
-      const bool active_render = l->active_render();
-      AttributeStandard vcol_std = (active_render) ? ATTR_STD_VERTEX_COLOR : ATTR_STD_NONE;
-      ustring vcol_name = ustring(l->name().c_str());
+  for (b_mesh.vertex_colors.begin(l); l != b_mesh.vertex_colors.end(); ++l) {
+    const bool active_render = l->active_render();
+    AttributeStandard vcol_std = (active_render) ? ATTR_STD_VERTEX_COLOR : ATTR_STD_NONE;
+    ustring vcol_name = ustring(l->name().c_str());
 
-      const bool need_vcol = mesh->need_attribute(scene, vcol_name) ||
-                             mesh->need_attribute(scene, vcol_std);
+    const bool need_vcol = mesh->need_attribute(scene, vcol_name) ||
+                           mesh->need_attribute(scene, vcol_std);
 
-      if (!need_vcol) {
-        continue;
-      }
+    if (!need_vcol) {
+      continue;
+    }
 
-      Attribute *vcol_attr = NULL;
+    Attribute *vcol_attr = NULL;
+
+    if (subdivision) {
       if (active_render) {
         vcol_attr = mesh->subd_attributes.add(vcol_std, vcol_name);
       }
@@ -316,22 +350,7 @@ static void attr_create_vertex_color(Scene *scene, Mesh *mesh, BL::Mesh &b_mesh,
         }
       }
     }
-  }
-  else {
-    BL::Mesh::vertex_colors_iterator l;
-    for (b_mesh.vertex_colors.begin(l); l != b_mesh.vertex_colors.end(); ++l) {
-      const bool active_render = l->active_render();
-      AttributeStandard vcol_std = (active_render) ? ATTR_STD_VERTEX_COLOR : ATTR_STD_NONE;
-      ustring vcol_name = ustring(l->name().c_str());
-
-      const bool need_vcol = mesh->need_attribute(scene, vcol_name) ||
-                             mesh->need_attribute(scene, vcol_std);
-
-      if (!need_vcol) {
-        continue;
-      }
-
-      Attribute *vcol_attr = NULL;
+    else {
       if (active_render) {
         vcol_attr = mesh->attributes.add(vcol_std, vcol_name);
       }
@@ -828,6 +847,7 @@ static void create_mesh(Scene *scene,
    */
   attr_create_pointiness(scene, mesh, b_mesh, subdivision);
   attr_create_vertex_color(scene, mesh, b_mesh, subdivision);
+  attr_create_sculpt_vertex_color(scene, mesh, b_mesh, subdivision);
   attr_create_random_per_island(scene, mesh, b_mesh, subdivision);
 
   if (subdivision) {
@@ -902,6 +922,68 @@ static void create_subd_mesh(Scene *scene,
 }
 
 /* Sync */
+
+static BL::MeshSequenceCacheModifier object_mesh_cache_find(BL::Object &b_ob)
+{
+  if (b_ob.modifiers.length() > 0) {
+    BL::Modifier b_mod = b_ob.modifiers[b_ob.modifiers.length() - 1];
+
+    if (b_mod.type() == BL::Modifier::type_MESH_SEQUENCE_CACHE) {
+      BL::MeshSequenceCacheModifier mesh_cache = BL::MeshSequenceCacheModifier(b_mod);
+
+      if (MeshSequenceCacheModifier_has_velocity_get(&mesh_cache.ptr)) {
+        return mesh_cache;
+      }
+    }
+  }
+
+  return BL::MeshSequenceCacheModifier(PointerRNA_NULL);
+}
+
+static void sync_mesh_cached_velocities(BL::Object &b_ob, Scene *scene, Mesh *mesh)
+{
+  if (scene->need_motion() == Scene::MOTION_NONE)
+    return;
+
+  BL::MeshSequenceCacheModifier b_mesh_cache = object_mesh_cache_find(b_ob);
+
+  if (!b_mesh_cache) {
+    return;
+  }
+
+  if (!MeshSequenceCacheModifier_read_velocity_get(&b_mesh_cache.ptr)) {
+    return;
+  }
+
+  const size_t numverts = mesh->verts.size();
+
+  if (b_mesh_cache.vertex_velocities.length() != numverts) {
+    return;
+  }
+
+  /* Find or add attribute */
+  float3 *P = &mesh->verts[0];
+  Attribute *attr_mP = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
+
+  if (!attr_mP) {
+    attr_mP = mesh->attributes.add(ATTR_STD_MOTION_VERTEX_POSITION);
+  }
+
+  /* Only export previous and next frame, we don't have any in between data. */
+  float motion_times[2] = {-1.0f, 1.0f};
+  for (int step = 0; step < 2; step++) {
+    const float relative_time = motion_times[step] * scene->motion_shutter_time() * 0.5f;
+    float3 *mP = attr_mP->data_float3() + step * numverts;
+
+    BL::MeshSequenceCacheModifier::vertex_velocities_iterator vvi;
+    int i = 0;
+
+    for (b_mesh_cache.vertex_velocities.begin(vvi); vvi != b_mesh_cache.vertex_velocities.end();
+         ++vvi, ++i) {
+      mP[i] = P[i] + get_float3(vvi->velocity()) * relative_time;
+    }
+  }
+}
 
 static void sync_mesh_fluid_motion(BL::Object &b_ob, Scene *scene, Mesh *mesh)
 {
@@ -982,6 +1064,9 @@ void BlenderSync::sync_mesh(BL::Depsgraph b_depsgraph,
     }
   }
 
+  /* cached velocities (e.g. from alembic archive) */
+  sync_mesh_cached_velocities(b_ob, scene, mesh);
+
   /* mesh fluid motion mantaflow */
   sync_mesh_fluid_motion(b_ob, scene, mesh);
 
@@ -1000,6 +1085,12 @@ void BlenderSync::sync_mesh_motion(BL::Depsgraph b_depsgraph,
   /* Fluid motion blur already exported. */
   BL::FluidDomainSettings b_fluid_domain = object_fluid_liquid_domain_find(b_ob);
   if (b_fluid_domain) {
+    return;
+  }
+
+  /* Cached motion blur already exported. */
+  BL::MeshSequenceCacheModifier mesh_cache = object_mesh_cache_find(b_ob);
+  if (mesh_cache) {
     return;
   }
 

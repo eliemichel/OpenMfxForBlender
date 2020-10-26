@@ -13,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_UNDO_SYSTEM_H__
-#define __BKE_UNDO_SYSTEM_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -120,7 +119,9 @@ typedef struct UndoType {
 
   /**
    * \note When freeing all steps,
-   * free from the last since #MemFileUndoType will merge with the next undo type in the list. */
+   * free from the last since #BKE_UNDOSYS_TYPE_MEMFILE
+   * will merge with the next undo type in the list.
+   */
   void (*step_free)(UndoStep *us);
 
   void (*step_foreach_ID_ref)(UndoStep *us,
@@ -210,5 +211,3 @@ void BKE_undosys_print(UndoStack *ustack);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_UNDO_SYSTEM_H__ */

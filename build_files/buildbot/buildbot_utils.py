@@ -24,6 +24,7 @@ import re
 import subprocess
 import sys
 
+
 def is_tool(name):
     """Check whether `name` is on PATH and marked as executable."""
 
@@ -32,43 +33,47 @@ def is_tool(name):
 
     return which(name) is not None
 
+
 class Builder:
-    def __init__(self, name, branch):
+    def __init__(self, name, branch, codesign):
         self.name = name
         self.branch = branch
         self.is_release_branch = re.match("^blender-v(.*)-release$", branch) is not None
+        self.codesign = codesign
 
         # Buildbot runs from build/ directory
         self.blender_dir = os.path.abspath(os.path.join('..', 'blender.git'))
-        self.build_dir = os.path.abspath(os.path.join('..', 'build', name))
-        self.install_dir = os.path.abspath(os.path.join('..', 'install', name))
+        self.build_dir = os.path.abspath(os.path.join('..', 'build'))
+        self.install_dir = os.path.abspath(os.path.join('..', 'install'))
         self.upload_dir = os.path.abspath(os.path.join('..', 'install'))
 
         # Detect platform
         if name.startswith('mac'):
             self.platform = 'mac'
-            self.command_prefix =  []
+            self.command_prefix = []
         elif name.startswith('linux'):
             self.platform = 'linux'
             if is_tool('scl'):
-                self.command_prefix =  ['scl', 'enable', 'devtoolset-6', '--']
+                self.command_prefix = ['scl', 'enable', 'devtoolset-9', '--']
             else:
-                self.command_prefix =  []
+                self.command_prefix = []
         elif name.startswith('win'):
             self.platform = 'win'
-            self.command_prefix =  []
+            self.command_prefix = []
         else:
             raise ValueError('Unkonw platform for builder ' + self.platform)
 
         # Always 64 bit now
         self.bits = 64
 
+
 def create_builder_from_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('builder_name')
     parser.add_argument('branch', default='master', nargs='?')
+    parser.add_argument("--codesign", action="store_true")
     args = parser.parse_args()
-    return Builder(args.builder_name, args.branch)
+    return Builder(args.builder_name, args.branch, args.codesign)
 
 
 class VersionInfo:
@@ -102,7 +107,7 @@ class VersionInfo:
 
     def _parse_header_file(self, filename, define):
         import re
-        regex = re.compile("^#\s*define\s+%s\s+(.*)" % define)
+        regex = re.compile(r"^#\s*define\s+%s\s+(.*)" % define)
         with open(filename, "r") as file:
             for l in file:
                 match = regex.match(l)

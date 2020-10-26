@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __DNA_LINESTYLE_TYPES_H__
-#define __DNA_LINESTYLE_TYPES_H__
+#pragma once
 
 /** \file
  * \ingroup DNA
@@ -32,7 +31,7 @@
 #endif
 
 /* texco (also in DNA_material_types.h) */
-#define TEXCO_STROKE 16 /* actually it's UV */
+#define TEXCO_STROKE 16 /* actually its UV */
 
 struct AnimData;
 struct ColorBand;
@@ -576,5 +575,3 @@ typedef struct FreestyleLineStyle {
   ListBase thickness_modifiers;
   ListBase geometry_modifiers;
 } FreestyleLineStyle;
-
-#endif

@@ -18,14 +18,13 @@
  * \ingroup imbdds
  */
 
-#ifndef __DDS_API_H__
-#define __DDS_API_H__
+#pragma once
+
+#include "../../IMB_imbuf.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "../../IMB_imbuf.h"
 
 int imb_is_a_dds(const unsigned char *mem); /* use only first 32 bytes of mem */
 int imb_save_dds(struct ImBuf *ibuf, const char *name, int flags);
@@ -37,5 +36,3 @@ struct ImBuf *imb_load_dds(const unsigned char *mem,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DDS_API_H */

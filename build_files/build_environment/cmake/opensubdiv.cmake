@@ -36,7 +36,7 @@ if(WIN32)
   set(OPENSUBDIV_EXTRA_ARGS
     ${OPENSUBDIV_EXTRA_ARGS}
     -DTBB_INCLUDE_DIR=${LIBDIR}/tbb/include
-    -DTBB_LIBRARIES=${LIBDIR}/tbb/lib/tbb_static.lib
+    -DTBB_LIBRARIES=${LIBDIR}/tbb/lib/tbb.lib
     -DCLEW_INCLUDE_DIR=${LIBDIR}/clew/include/CL
     -DCLEW_LIBRARY=${LIBDIR}/clew/lib/clew${LIBEXT}
     -DCUEW_INCLUDE_DIR=${LIBDIR}/cuew/include
@@ -67,7 +67,7 @@ endif()
 ExternalProject_Add(external_opensubdiv
   URL ${OPENSUBDIV_URI}
   DOWNLOAD_DIR ${DOWNLOAD_DIR}
-  URL_HASH MD5=${OPENSUBDIV_Hash}
+  URL_HASH MD5=${OPENSUBDIV_HASH}
   PREFIX ${BUILD_DIR}/opensubdiv
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${LIBDIR}/opensubdiv -Wno-dev ${DEFAULT_CMAKE_FLAGS} ${OPENSUBDIV_EXTRA_ARGS}
   INSTALL_DIR ${LIBDIR}/opensubdiv

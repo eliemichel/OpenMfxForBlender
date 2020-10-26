@@ -21,8 +21,7 @@
  * \ingroup blf
  */
 
-#ifndef __BLF_INTERNAL_H__
-#define __BLF_INTERNAL_H__
+#pragma once
 
 struct FontBLF;
 struct GlyphBLF;
@@ -31,7 +30,6 @@ struct ResultBLF;
 struct rctf;
 struct rcti;
 
-void blf_batch_draw_vao_clear(void);
 void blf_batch_draw_begin(struct FontBLF *font);
 void blf_batch_draw(void);
 
@@ -44,6 +42,8 @@ char *blf_dir_metrics_search(const char *filename);
 
 int blf_font_init(void);
 void blf_font_exit(void);
+
+bool blf_font_id_is_valid(int fontid);
 
 void blf_draw_buffer__start(struct FontBLF *font);
 void blf_draw_buffer__end(void);
@@ -103,9 +103,11 @@ void blf_font_boundbox_foreach_glyph(struct FontBLF *font,
                                      const char *str,
                                      size_t len,
                                      bool (*user_fn)(const char *str,
-                                                     const size_t str_ofs,
-                                                     const struct rcti *glyph_bounds,
+                                                     const size_t str_step_ofs,
+                                                     const struct rcti *glyph_step_bounds,
                                                      const int glyph_advance_x,
+                                                     const struct rctf *glyph_bounds,
+                                                     const int glyph_bearing[2],
                                                      void *user_data),
                                      void *user_data,
                                      struct ResultBLF *r_info);
@@ -149,5 +151,3 @@ extern FT_Error FT_New_Face__win32_compat(FT_Library library,
                                           FT_Face *aface);
 #  endif
 #endif
-
-#endif /* __BLF_INTERNAL_H__ */

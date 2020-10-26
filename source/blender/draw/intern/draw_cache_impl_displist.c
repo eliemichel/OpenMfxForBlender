@@ -37,7 +37,7 @@
 #include "BKE_displist_tangent.h"
 
 #include "GPU_batch.h"
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
 
 #include "draw_cache_inline.h"
 
@@ -236,8 +236,8 @@ void DRW_vertbuf_create_wiredata(GPUVertBuf *vbo, const int vert_len)
   GPU_vertbuf_init_with_format(vbo, &format);
   GPU_vertbuf_data_alloc(vbo, vert_len);
 
-  if (vbo->format.stride == 1) {
-    memset(vbo->data, 0xFF, (size_t)vert_len);
+  if (GPU_vertbuf_get_format(vbo)->stride == 1) {
+    memset(GPU_vertbuf_get_data(vbo), 0xFF, (size_t)vert_len);
   }
   else {
     GPUVertBufRaw wd_step;
@@ -444,7 +444,7 @@ static void displist_surf_fnors_ensure(const DispList *dl, float (**fnors)[3])
   int u_len = dl->nr - ((dl->flag & DL_CYCL_U) ? 0 : 1);
   int v_len = dl->parts - ((dl->flag & DL_CYCL_V) ? 0 : 1);
   const float(*verts)[3] = (float(*)[3])dl->verts;
-  float(*nor_flat)[3] = MEM_mallocN(sizeof(float) * 3 * u_len * v_len, __func__);
+  float(*nor_flat)[3] = MEM_mallocN(sizeof(float[3]) * u_len * v_len, __func__);
   *fnors = nor_flat;
 
   SURFACE_QUAD_ITER_BEGIN (dl) {

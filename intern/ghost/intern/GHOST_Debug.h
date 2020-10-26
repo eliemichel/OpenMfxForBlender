@@ -22,8 +22,7 @@
  * Macro's used in GHOST debug target.
  */
 
-#ifndef __GHOST_DEBUG_H__
-#define __GHOST_DEBUG_H__
+#pragma once
 
 #ifdef _MSC_VER
 #  ifdef DEBUG
@@ -33,15 +32,11 @@
 #endif
 
 #ifdef WITH_GHOST_DEBUG
-#  define GHOST_DEBUG  // spit ghost events to stdout
-#endif                 // WITH_GHOST_DEBUG
-
-#ifdef GHOST_DEBUG
 #  include <iostream>
 #  include <stdio.h>  //for printf()
-#endif                // GHOST_DEBUG
+#endif                // WITH_GHOST_DEBUG
 
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
 #  define GHOST_PRINT(x) \
     { \
       std::cout << x; \
@@ -52,10 +47,10 @@
       printf(x, __VA_ARGS__); \
     } \
     (void)0
-#else  // GHOST_DEBUG
+#else  // WITH_GHOST_DEBUG
 #  define GHOST_PRINT(x)
 #  define GHOST_PRINTF(x, ...)
-#endif  // GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG
 
 #ifdef WITH_ASSERT_ABORT
 #  include <stdio.h>   //for fprintf()
@@ -70,7 +65,7 @@
       } \
     } \
     (void)0
-#elif defined(GHOST_DEBUG)
+#elif defined(WITH_GHOST_DEBUG)
 #  define GHOST_ASSERT(x, info) \
     { \
       if (!(x)) { \
@@ -80,8 +75,6 @@
       } \
     } \
     (void)0
-#else  // GHOST_DEBUG
+#else  // WITH_GHOST_DEBUG
 #  define GHOST_ASSERT(x, info) ((void)0)
-#endif  // GHOST_DEBUG
-
-#endif  // __GHOST_DEBUG_H__
+#endif  // WITH_GHOST_DEBUG

@@ -82,7 +82,7 @@ bool ED_wpaint_ensure_data(bContext *C,
   /* this happens on a Bone select, when no vgroup existed yet */
   if (ob->actdef <= 0) {
     Object *modob;
-    if ((modob = modifiers_isDeformedByArmature(ob))) {
+    if ((modob = BKE_modifiers_is_deformed_by_armature(ob))) {
       Bone *actbone = ((bArmature *)modob->data)->act_bone;
       if (actbone) {
         bPoseChannel *pchan = BKE_pose_channel_find_name(modob->pose, actbone->name);
@@ -118,7 +118,7 @@ bool ED_wpaint_ensure_data(bContext *C,
   }
 
   if (flag & WPAINT_ENSURE_MIRROR) {
-    if (me->editflag & ME_EDIT_MIRROR_X) {
+    if (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) {
       int mirror = ED_wpaint_mirror_vgroup_ensure(ob, ob->actdef - 1);
       if (vgroup_index) {
         vgroup_index->mirror = mirror;

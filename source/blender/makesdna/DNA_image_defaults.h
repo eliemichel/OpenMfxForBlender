@@ -18,8 +18,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_IMAGE_DEFAULTS_H__
-#define __DNA_IMAGE_DEFAULTS_H__
+#pragma once
 
 /* Struct members on own line. */
 /* clang-format off */
@@ -37,10 +36,10 @@
     .gen_type = IMA_GENTYPE_GRID, \
  \
     .gpuframenr = INT_MAX, \
+    .gpu_pass = SHRT_MAX, \
+    .gpu_layer = SHRT_MAX, \
   }
 
 /** \} */
 
 /* clang-format on */
-
-#endif /* __DNA_IMAGE_DEFAULTS_H__ */

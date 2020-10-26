@@ -44,40 +44,28 @@ PyDoc_STRVAR(CurvePoint_doc,
              "given resolution.\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
+             "            __init__(first_vertex, second_vertex, t2d)\n"
+             "            __init__(first_point, second_point, t2d)\n"
              "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
+             "   Builds a CurvePoint using the default constructor, copy constructor,\n"
+             "   or one of the overloaded constructors. The over loaded constructors\n"
+             "   can either take two :class:`SVertex` or two :class:`CurvePoint`\n"
+             "   objects and an interpolation parameter\n"
              "\n"
              "   :arg brother: A CurvePoint object.\n"
              "   :type brother: :class:`CurvePoint`\n"
-             "\n"
-             ".. method:: __init__(first_vertex, second_vertex, t2d)\n"
-             "\n"
-             "   Builds a CurvePoint from two SVertex objects and an interpolation parameter.\n"
-             "\n"
              "   :arg first_vertex: The first SVertex.\n"
              "   :type first_vertex: :class:`SVertex`\n"
              "   :arg second_vertex: The second SVertex.\n"
              "   :type second_vertex: :class:`SVertex`\n"
-             "   :arg t2d: A 2D interpolation parameter used to linearly interpolate\n"
-             "             first_vertex and second_vertex.\n"
-             "   :type t2d: float\n"
-             "\n"
-             ".. method:: __init__(first_point, second_point, t2d)\n"
-             "\n"
-             "   Builds a CurvePoint from two CurvePoint objects and an interpolation\n"
-             "   parameter.\n"
-             "\n"
              "   :arg first_point: The first CurvePoint.\n"
              "   :type first_point: :class:`CurvePoint`\n"
              "   :arg second_point: The second CurvePoint.\n"
              "   :type second_point: :class:`CurvePoint`\n"
-             "   :arg t2d: The 2D interpolation parameter used to linearly interpolate\n"
-             "             first_point and second_point.\n"
-             "   :type t2d: float");
+             "   :arg t2d: A 2D interpolation parameter used to linearly interpolate\n"
+             "             first_vertex and second_vertex or first_point and second_point.\n"
+             "   :type t2d: float\n");
 
 static int CurvePoint_init(BPy_CurvePoint *self, PyObject *args, PyObject *kwds)
 {
@@ -95,7 +83,7 @@ static int CurvePoint_init(BPy_CurvePoint *self, PyObject *args, PyObject *kwds)
       self->cp = new CurvePoint(*(((BPy_CurvePoint *)obj1)->cp));
     }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "O!O!f",
@@ -107,7 +95,7 @@ static int CurvePoint_init(BPy_CurvePoint *self, PyObject *args, PyObject *kwds)
                                        &t2d)) {
     self->cp = new CurvePoint(((BPy_SVertex *)obj1)->sv, ((BPy_SVertex *)obj2)->sv, t2d);
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "O!O!f",

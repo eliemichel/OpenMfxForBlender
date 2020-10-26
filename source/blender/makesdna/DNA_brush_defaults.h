@@ -18,8 +18,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_BRUSH_DEFAULTS_H__
-#define __DNA_BRUSH_DEFAULTS_H__
+#pragma once
 
 #include "DNA_texture_defaults.h"
 
@@ -47,6 +46,7 @@
     .crease_pinch_factor = 0.5f, \
     .normal_radius_factor = 0.5f, \
     .area_radius_factor = 0.5f, \
+    .disconnected_distance_max = 0.1f, \
     .sculpt_plane = SCULPT_DISP_DIR_AREA, \
     .cloth_damping = 0.01, \
     .cloth_mass = 1, \
@@ -115,5 +115,3 @@
 /** \} */
 
 /* clang-format on */
-
-#endif /* __DNA_BRUSH_DEFAULTS_H__ */

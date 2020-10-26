@@ -18,14 +18,12 @@
  * \ingroup collada
  */
 
-#ifndef __SCENEEXPORTER_H__
-#define __SCENEEXPORTER_H__
+#pragma once
 
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-extern "C" {
 #include "DNA_action_types.h"
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
@@ -47,7 +45,6 @@ extern "C" {
 #include "BLI_fileops.h"
 #include "BLI_path_util.h"
 #include "ED_keyframing.h"
-}
 
 #include "COLLADASWAsset.h"
 #include "COLLADASWBaseInputElement.h"
@@ -83,8 +80,6 @@ extern "C" {
 #include "ArmatureExporter.h"
 #include "ExportSettings.h"
 
-extern void bc_get_children(std::vector<Object *> &child_set, Object *ob, ViewLayer *view_layer);
-
 class SceneExporter : COLLADASW::LibraryVisualScenes,
                       protected TransformWriter,
                       protected InstanceWriter {
@@ -112,5 +107,3 @@ class SceneExporter : COLLADASW::LibraryVisualScenes,
   void writeNodeList(std::vector<Object *> &child_objects, Object *parent);
   void writeNode(Object *ob);
 };
-
-#endif

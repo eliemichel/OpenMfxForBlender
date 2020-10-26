@@ -16,15 +16,14 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COMPOSITOR_H__
-#define __COM_COMPOSITOR_H__
+#pragma once
+
+#include "DNA_color_types.h"
+#include "DNA_node_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "DNA_color_types.h"
-#include "DNA_node_types.h"
 
 /* Keep ascii art. */
 /* clang-format off */
@@ -295,8 +294,6 @@ extern "C" {
  *
  * \section executePixel executing a pixel
  * Finally the last step, the node functionality :)
- *
- * \page newnode Creating new nodes
  */
 
 /**
@@ -365,5 +362,3 @@ void COM_deinitialize(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __COM_COMPOSITOR_H__ */

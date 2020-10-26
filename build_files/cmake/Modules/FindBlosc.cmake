@@ -14,12 +14,8 @@
 #=============================================================================
 # Copyright 2018 Blender Foundation.
 #
-# Distributed under the OSI-approved BSD License (the "License");
-# see accompanying file Copyright.txt for details.
-#
-# This software is distributed WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the License for more information.
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
 #=============================================================================
 
 # If BLOSC_ROOT_DIR was defined in the environment, use it.
@@ -53,7 +49,7 @@ FIND_LIBRARY(BLOSC_LIBRARY
 # handle the QUIETLY and REQUIRED arguments and set BLOSC_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(BLOSC DEFAULT_MSG
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(Blosc DEFAULT_MSG
     BLOSC_LIBRARY BLOSC_INCLUDE_DIR)
 
 IF(BLOSC_FOUND)

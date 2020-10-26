@@ -30,6 +30,11 @@ else()
   set(CLANG_GENERATOR "Unix Makefiles")
 endif()
 
+if(APPLE)
+  set(CLANG_EXTRA_ARGS ${CLANG_EXTRA_ARGS}
+    -DLIBXML2_LIBRARY=${LIBDIR}/xml2/lib/libxml2.a
+  )
+endif()
 
 ExternalProject_Add(external_clang
   URL ${CLANG_URI}
@@ -59,3 +64,11 @@ add_dependencies(
   external_clang
   ll
 )
+
+# We currently do not build libxml2 on Windows.
+if(NOT WIN32)
+  add_dependencies(
+    external_clang
+    external_xml2
+  )
+endif()

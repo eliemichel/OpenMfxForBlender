@@ -52,7 +52,7 @@ class BufferParams {
   /* passes */
   vector<Pass> passes;
   bool denoising_data_pass;
-  /* If only some light path types should be denoised, an additional pass is needed. */
+  /* If only some light path types should be target, an additional pass is needed. */
   bool denoising_clean_pass;
   /* When we're prefiltering the passes during rendering, we need to keep both the
    * original and the prefiltered data around because neighboring tiles might still
@@ -92,6 +92,7 @@ class RenderBuffers {
       const string &name, float exposure, int sample, int components, float *pixels);
   bool get_denoising_pass_rect(
       int offset, float exposure, int sample, int components, float *pixels);
+  bool set_pass_rect(PassType type, int components, float *pixels, int samples);
 };
 
 /* Display Buffer
@@ -130,7 +131,7 @@ class DisplayBuffer {
 
 class RenderTile {
  public:
-  typedef enum { PATH_TRACE = (1 << 0), DENOISE = (1 << 1) } Task;
+  typedef enum { PATH_TRACE = (1 << 0), BAKE = (1 << 1), DENOISE = (1 << 2) } Task;
 
   Task task;
   int x, y, w, h;
@@ -148,6 +149,50 @@ class RenderTile {
   RenderBuffers *buffers;
 
   RenderTile();
+
+  int4 bounds() const
+  {
+    return make_int4(x,      /* xmin */
+                     y,      /* ymin */
+                     x + w,  /* xmax */
+                     y + h); /* ymax */
+  }
+};
+
+/* Render Tile Neighbors
+ * Set of neighboring tiles used for denoising. Tile order:
+ *  0 1 2
+ *  3 4 5
+ *  6 7 8 */
+
+class RenderTileNeighbors {
+ public:
+  static const int SIZE = 9;
+  static const int CENTER = 4;
+
+  RenderTile tiles[SIZE];
+  RenderTile target;
+
+  RenderTileNeighbors(const RenderTile &center)
+  {
+    tiles[CENTER] = center;
+  }
+
+  int4 bounds() const
+  {
+    return make_int4(tiles[3].x,               /* xmin */
+                     tiles[1].y,               /* ymin */
+                     tiles[5].x + tiles[5].w,  /* xmax */
+                     tiles[7].y + tiles[7].h); /* ymax */
+  }
+
+  void set_bounds_from_center()
+  {
+    tiles[3].x = tiles[CENTER].x;
+    tiles[1].y = tiles[CENTER].y;
+    tiles[5].x = tiles[CENTER].x + tiles[CENTER].w;
+    tiles[7].y = tiles[CENTER].y + tiles[CENTER].h;
+  }
 };
 
 CCL_NAMESPACE_END

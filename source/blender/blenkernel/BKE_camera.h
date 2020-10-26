@@ -17,12 +17,11 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_CAMERA_H__
-#define __BKE_CAMERA_H__
+#pragma once
 
 /** \file
  * \ingroup bke
- * \brief Camera datablock and utility functions.
+ * \brief Camera data-block and utility functions.
  */
 #ifdef __cplusplus
 extern "C" {
@@ -41,7 +40,6 @@ struct rctf;
 /* Camera Datablock */
 
 void *BKE_camera_add(struct Main *bmain, const char *name);
-struct Camera *BKE_camera_copy(struct Main *bmain, const struct Camera *cam);
 
 /* Camera Usage */
 
@@ -91,7 +89,7 @@ typedef struct CameraParams {
 #define CAMERA_PARAM_ZOOM_INIT_PERSP 2.0f
 
 void BKE_camera_params_init(CameraParams *params);
-void BKE_camera_params_from_object(CameraParams *params, const struct Object *camera);
+void BKE_camera_params_from_object(CameraParams *params, const struct Object *cam_ob);
 void BKE_camera_params_from_view3d(CameraParams *params,
                                    struct Depsgraph *depsgraph,
                                    const struct View3D *v3d,
@@ -166,6 +164,4 @@ void BKE_camera_background_image_clear(struct Camera *cam);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

@@ -18,8 +18,7 @@
  * \ingroup modifiers
  */
 
-#ifndef __MOD_UTIL_H__
-#define __MOD_UTIL_H__
+#pragma once
 
 /* so modifier types match their defines */
 #include "MOD_modifiertypes.h"
@@ -40,12 +39,12 @@ void MOD_get_texture_coords(struct MappingInfoModifierData *dmd,
                             float (*cos)[3],
                             float (*r_texco)[3]);
 
-void MOD_previous_vcos_store(struct ModifierData *md, float (*vertexCos)[3]);
+void MOD_previous_vcos_store(struct ModifierData *md, const float (*vert_coords)[3]);
 
 struct Mesh *MOD_deform_mesh_eval_get(struct Object *ob,
                                       struct BMEditMesh *em,
                                       struct Mesh *mesh,
-                                      float (*vertexCos)[3],
+                                      const float (*vertexCos)[3],
                                       const int num_verts,
                                       const bool use_normals,
                                       const bool use_orco);
@@ -60,4 +59,3 @@ void MOD_depsgraph_update_object_bone_relation(struct DepsNodeHandle *node,
                                                struct Object *object,
                                                const char *bonename,
                                                const char *description);
-#endif /* __MOD_UTIL_H__ */

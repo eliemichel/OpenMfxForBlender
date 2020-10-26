@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_VOLUME_H__
-#define __BKE_VOLUME_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -29,6 +28,7 @@ struct BoundBox;
 struct Depsgraph;
 struct Main;
 struct Object;
+struct ReportList;
 struct Scene;
 struct Volume;
 struct VolumeGridVector;
@@ -41,7 +41,6 @@ void BKE_volumes_init(void);
 
 void BKE_volume_init_grids(struct Volume *volume);
 void *BKE_volume_add(struct Main *bmain, const char *name);
-struct Volume *BKE_volume_copy(struct Main *bmain, const struct Volume *volume);
 
 struct BoundBox *BKE_volume_boundbox_get(struct Object *ob);
 
@@ -141,6 +140,16 @@ struct VolumeGrid *BKE_volume_grid_add(struct Volume *volume,
                                        VolumeGridType type);
 void BKE_volume_grid_remove(struct Volume *volume, struct VolumeGrid *grid);
 
+/* Simplify */
+int BKE_volume_simplify_level(const struct Depsgraph *depsgraph);
+float BKE_volume_simplify_factor(const struct Depsgraph *depsgraph);
+
+/* File Save */
+bool BKE_volume_save(struct Volume *volume,
+                     struct Main *bmain,
+                     struct ReportList *reports,
+                     const char *filepath);
+
 #ifdef __cplusplus
 }
 #endif
@@ -152,12 +161,55 @@ void BKE_volume_grid_remove(struct Volume *volume, struct VolumeGrid *grid);
 
 #if defined(__cplusplus) && defined(WITH_OPENVDB)
 #  include <openvdb/openvdb.h>
+#  include <openvdb/points/PointDataGrid.h>
+
 openvdb::GridBase::ConstPtr BKE_volume_grid_openvdb_for_metadata(const struct VolumeGrid *grid);
 openvdb::GridBase::ConstPtr BKE_volume_grid_openvdb_for_read(const struct Volume *volume,
                                                              struct VolumeGrid *grid);
 openvdb::GridBase::Ptr BKE_volume_grid_openvdb_for_write(const struct Volume *volume,
                                                          struct VolumeGrid *grid,
                                                          const bool clear);
-#endif
+
+VolumeGridType BKE_volume_grid_type_openvdb(const openvdb::GridBase::Ptr &grid);
+
+template<typename OpType>
+auto BKE_volume_grid_type_operation(const VolumeGridType grid_type, OpType &&op)
+{
+  switch (grid_type) {
+    case VOLUME_GRID_FLOAT:
+      return op.template operator()<openvdb::FloatGrid>();
+    case VOLUME_GRID_VECTOR_FLOAT:
+      return op.template operator()<openvdb::Vec3fGrid>();
+    case VOLUME_GRID_BOOLEAN:
+      return op.template operator()<openvdb::BoolGrid>();
+    case VOLUME_GRID_DOUBLE:
+      return op.template operator()<openvdb::DoubleGrid>();
+    case VOLUME_GRID_INT:
+      return op.template operator()<openvdb::Int32Grid>();
+    case VOLUME_GRID_INT64:
+      return op.template operator()<openvdb::Int64Grid>();
+    case VOLUME_GRID_VECTOR_INT:
+      return op.template operator()<openvdb::Vec3IGrid>();
+    case VOLUME_GRID_VECTOR_DOUBLE:
+      return op.template operator()<openvdb::Vec3dGrid>();
+    case VOLUME_GRID_STRING:
+      return op.template operator()<openvdb::StringGrid>();
+    case VOLUME_GRID_MASK:
+      return op.template operator()<openvdb::MaskGrid>();
+    case VOLUME_GRID_POINTS:
+      return op.template operator()<openvdb::points::PointDataGrid>();
+    case VOLUME_GRID_UNKNOWN:
+      break;
+  }
+
+  /* Should never be called. */
+  BLI_assert(!"should never be reached");
+  return op.template operator()<openvdb::FloatGrid>();
+}
+
+openvdb::GridBase::Ptr BKE_volume_grid_create_with_changed_resolution(
+    const VolumeGridType grid_type,
+    const openvdb::GridBase &old_grid,
+    const float resolution_factor);
 
 #endif

@@ -44,7 +44,7 @@ class AbstractConstraintTests(unittest.TestCase):
             collection = top_collection.children[self.layer_collection]
             collection.exclude = False
 
-    def assert_matrix(self, actual_matrix, expect_matrix, object_name: str, places=6, delta=None):
+    def assert_matrix(self, actual_matrix, expect_matrix, object_name: str, places=None, delta=1e-6):
         """Asserts that the matrices almost equal."""
         self.assertEqual(len(actual_matrix), 4, 'Expected a 4x4 matrix')
 
@@ -85,7 +85,7 @@ class AbstractConstraintTests(unittest.TestCase):
         actual = self.bone_matrix(object_name, bone_name)
         self.assert_matrix(actual, expect, object_name)
 
-    def constraint_context(self, constraint_name: str, owner_name: str='') -> dict:
+    def constraint_context(self, constraint_name: str, owner_name: str = '') -> dict:
         """Return a context suitable for calling object constraint operators.
 
         Assumes the owner is called "{constraint_name}.owner" if owner_name=''.
@@ -100,7 +100,7 @@ class AbstractConstraintTests(unittest.TestCase):
         }
         return context
 
-    def bone_constraint_context(self, constraint_name: str, owner_name: str='', bone_name: str='') -> dict:
+    def bone_constraint_context(self, constraint_name: str, owner_name: str = '', bone_name: str = '') -> dict:
         """Return a context suitable for calling bone constraint operators.
 
         Assumes the owner's object is called "{constraint_name}.owner" if owner_name=''.

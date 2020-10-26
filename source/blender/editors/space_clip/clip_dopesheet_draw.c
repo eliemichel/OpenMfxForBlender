@@ -49,7 +49,9 @@
 
 #include "clip_intern.h" /* own include */
 
-static void track_channel_color(MovieTrackingTrack *track, float default_color[3], float color[3])
+static void track_channel_color(MovieTrackingTrack *track,
+                                const float default_color[3],
+                                float color[3])
 {
   if (track->flag & TRACK_CUSTOMCOLOR) {
     float bg[3];
@@ -118,7 +120,7 @@ void clip_draw_dopesheet_main(SpaceClip *sc, ARegion *region, Scene *scene)
     MovieTrackingDopesheet *dopesheet = &tracking->dopesheet;
     MovieTrackingDopesheetChannel *channel;
     float strip[4], selected_strip[4];
-    float height = (dopesheet->tot_channel * CHANNEL_STEP) + (CHANNEL_HEIGHT);
+    float height = (dopesheet->tot_channel * CHANNEL_STEP) + CHANNEL_HEIGHT;
 
     uint keyframe_len = 0;
 
@@ -140,7 +142,7 @@ void clip_draw_dopesheet_main(SpaceClip *sc, ARegion *region, Scene *scene)
     strip[3] = 0.5f;
     selected_strip[3] = 1.0f;
 
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     clip_draw_dopesheet_background(region, clip, pos_id);
 
@@ -286,7 +288,7 @@ void clip_draw_dopesheet_main(SpaceClip *sc, ARegion *region, Scene *scene)
       immUnbindProgram();
     }
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 }
 
@@ -305,7 +307,7 @@ void clip_draw_dopesheet_channels(const bContext *C, ARegion *region)
 
   MovieTracking *tracking = &clip->tracking;
   MovieTrackingDopesheet *dopesheet = &tracking->dopesheet;
-  int height = (dopesheet->tot_channel * CHANNEL_STEP) + (CHANNEL_HEIGHT);
+  int height = (dopesheet->tot_channel * CHANNEL_STEP) + CHANNEL_HEIGHT;
 
   if (height > BLI_rcti_size_y(&v2d->mask)) {
     /* don't use totrect set, as the width stays the same
@@ -387,7 +389,7 @@ void clip_draw_dopesheet_channels(const bContext *C, ARegion *region)
   PropertyRNA *chan_prop_lock = RNA_struct_type_find_property(&RNA_MovieTrackingTrack, "lock");
   BLI_assert(chan_prop_lock);
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   for (channel = dopesheet->channels.first; channel; channel = channel->next) {
     float yminc = (float)(y - CHANNEL_HEIGHT_HALF);
     float ymaxc = (float)(y + CHANNEL_HEIGHT_HALF);
@@ -424,7 +426,7 @@ void clip_draw_dopesheet_channels(const bContext *C, ARegion *region)
     /* adjust y-position for next one */
     y -= CHANNEL_STEP;
   }
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   UI_block_end(C, block);
   UI_block_draw(C, block);

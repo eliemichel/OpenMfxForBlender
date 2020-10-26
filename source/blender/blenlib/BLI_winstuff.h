@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_WINSTUFF_H__
-#define __BLI_WINSTUFF_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -28,6 +27,8 @@
 #ifndef _WIN32
 #  error "This include is for Windows only!"
 #endif
+
+#include "BLI_sys_types.h"
 
 #define WIN32_LEAN_AND_MEAN
 
@@ -83,10 +84,11 @@ typedef unsigned int mode_t;
 /* python uses HAVE_SSIZE_T */
 #  ifndef HAVE_SSIZE_T
 #    define HAVE_SSIZE_T 1
-typedef long ssize_t;
+typedef SSIZE_T ssize_t;
 #  endif
 #endif
 
+/* Directory reading compatibility with UNIX. */
 struct dirent {
   int d_ino;
   int d_off;
@@ -100,16 +102,13 @@ typedef struct __dirstream DIR;
 DIR *opendir(const char *path);
 struct dirent *readdir(DIR *dp);
 int closedir(DIR *dp);
-
-void RegisterBlendExtension(void);
-void get_default_root(char *root);
-int check_file_chars(char *filename);
 const char *dirname(char *path);
 
-int BLI_getInstallationDir(char *str);
+/* Windows utility functions. */
+void BLI_windows_register_blend_extension(const bool background);
+void BLI_windows_get_default_root_dir(char *root_dir);
+int BLI_windows_get_executable_dir(char *str);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_WINSTUFF_H__ */

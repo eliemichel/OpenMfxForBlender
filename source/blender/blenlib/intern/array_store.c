@@ -189,7 +189,7 @@
  */
 #  define BCHUNK_SIZE_MIN_DIV 8
 
-/* Disallow chunks bigger then the regular chunk size scaled by this value
+/* Disallow chunks bigger than the regular chunk size scaled by this value
  * note: must be at least 2!
  * however, this code runs wont run in tests unless its ~1.1 ugh.
  * so lower only to check splitting works.
@@ -355,9 +355,7 @@ static bool bchunk_data_compare(const BChunk *chunk,
   if (offset + (size_t)chunk->data_len <= data_base_len) {
     return (memcmp(&data_base[offset], chunk->data, chunk->data_len) == 0);
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /** \} */
@@ -525,7 +523,7 @@ static void bchunk_list_calc_trim_len(const BArrayInfo *info,
 
 #ifdef USE_MERGE_CHUNKS
   /* avoid creating too-small chunks
-   * more efficient then merging after */
+   * more efficient than merging after */
   if (data_len > info->chunk_byte_size) {
     data_last_chunk_len = (data_trim_len % info->chunk_byte_size);
     data_trim_len = data_trim_len - data_last_chunk_len;
@@ -893,20 +891,18 @@ static hash_key key_from_chunk_ref(const BArrayInfo *info,
 #  endif
     return key;
   }
-  else {
-    /* corner case - we're too small, calculate the key each time. */
+  /* corner case - we're too small, calculate the key each time. */
 
-    hash_array_from_cref(info, cref, info->accum_read_ahead_bytes, hash_store);
-    hash_accum_single(hash_store, hash_store_len, info->accum_steps);
-    hash_key key = hash_store[0];
+  hash_array_from_cref(info, cref, info->accum_read_ahead_bytes, hash_store);
+  hash_accum_single(hash_store, hash_store_len, info->accum_steps);
+  hash_key key = hash_store[0];
 
 #  ifdef USE_HASH_TABLE_KEY_CACHE
-    if (UNLIKELY(key == HASH_TABLE_KEY_UNSET)) {
-      key = HASH_TABLE_KEY_FALLBACK;
-    }
-#  endif
-    return key;
+  if (UNLIKELY(key == HASH_TABLE_KEY_UNSET)) {
+    key = HASH_TABLE_KEY_FALLBACK;
   }
+#  endif
+  return key;
 }
 
 static const BChunkRef *table_lookup(const BArrayInfo *info,
@@ -1083,9 +1079,7 @@ static BChunkList *bchunk_list_from_data_merge(const BArrayInfo *info,
       if (cref == cref_match_first) {
         break;
       }
-      else {
-        cref = cref->next;
-      }
+      cref = cref->next;
     }
     /* happens when bytes are removed from the end of the array */
     if (chunk_size_step == data_len_original) {

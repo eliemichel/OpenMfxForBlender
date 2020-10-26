@@ -86,7 +86,7 @@ struct wmJob {
    * This performs the actual parallel work.
    * Executed in worker thread(s).
    */
-  void (*startjob)(void *, short *stop, short *do_update, float *progress);
+  wm_jobs_start_callback startjob;
   /**
    * Called if thread defines so (see `do_update` flag), and max once per timer step.
    * Executed in main thread.
@@ -159,24 +159,22 @@ static void wm_job_main_thread_yield(wmJob *wm_job)
  */
 static wmJob *wm_job_find(wmWindowManager *wm, void *owner, const int job_type)
 {
-  wmJob *wm_job;
-
   if (owner && job_type) {
-    for (wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
+    LISTBASE_FOREACH (wmJob *, wm_job, &wm->jobs) {
       if (wm_job->owner == owner && wm_job->job_type == job_type) {
         return wm_job;
       }
     }
   }
   else if (owner) {
-    for (wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
+    LISTBASE_FOREACH (wmJob *, wm_job, &wm->jobs) {
       if (wm_job->owner == owner) {
         return wm_job;
       }
     }
   }
   else if (job_type) {
-    for (wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
+    LISTBASE_FOREACH (wmJob *, wm_job, &wm->jobs) {
       if (wm_job->job_type == job_type) {
         return wm_job;
       }
@@ -344,9 +342,7 @@ void *WM_jobs_customdata_get(wmJob *wm_job)
   if (!wm_job->customdata) {
     return wm_job->run_customdata;
   }
-  else {
-    return wm_job->customdata;
-  }
+  return wm_job->customdata;
 }
 
 void WM_jobs_customdata_set(wmJob *wm_job, void *customdata, void (*free)(void *))
@@ -378,7 +374,7 @@ void WM_jobs_delay_start(wmJob *wm_job, double delay_time)
 }
 
 void WM_jobs_callbacks(wmJob *wm_job,
-                       void (*startjob)(void *, short *, short *, float *),
+                       wm_jobs_start_callback startjob,
                        void (*initjob)(void *),
                        void (*update)(void *),
                        void (*endjob)(void *))
@@ -445,7 +441,11 @@ static void wm_jobs_test_suspend_stop(wmWindowManager *wm, wmJob *test)
 
   /* Possible suspend ourselves, waiting for other jobs, or de-suspend. */
   test->suspended = suspend;
-  // if (suspend) printf("job suspended: %s\n", test->name);
+#if 0
+  if (suspend) {
+    printf("job suspended: %s\n", test->name);
+  }
+#endif
 }
 
 /**
@@ -681,8 +681,14 @@ void wm_jobs_timer(wmWindowManager *wm, wmTimer *wt)
           wm_job->run_customdata = NULL;
           wm_job->run_free = NULL;
 
-          // if (wm_job->stop) printf("job ready but stopped %s\n", wm_job->name);
-          // else printf("job finished %s\n", wm_job->name);
+#if 0
+          if (wm_job->stop) {
+            printf("job ready but stopped %s\n", wm_job->name);
+          }
+          else {
+            printf("job finished %s\n", wm_job->name);
+          }
+#endif
 
           if (G.debug & G_DEBUG_JOBS) {
             printf("Job '%s' finished in %f seconds\n",

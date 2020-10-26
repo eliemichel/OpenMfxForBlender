@@ -25,7 +25,8 @@
 
 #include "DNA_scene_types.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 void DepsgraphRelationBuilder::build_scene_render(Scene *scene, ViewLayer *view_layer)
 {
@@ -43,7 +44,7 @@ void DepsgraphRelationBuilder::build_scene_render(Scene *scene, ViewLayer *view_
     build_scene_speakers(scene, view_layer);
   }
   if (scene->camera != nullptr) {
-    build_object(nullptr, scene->camera);
+    build_object(scene->camera);
   }
 }
 
@@ -58,6 +59,10 @@ void DepsgraphRelationBuilder::build_scene_parameters(Scene *scene)
       &scene->id, NodeType::PARAMETERS, OperationCode::PARAMETERS_EXIT);
   OperationKey scene_eval_key(&scene->id, NodeType::PARAMETERS, OperationCode::SCENE_EVAL);
   add_relation(parameters_eval_key, scene_eval_key, "Parameters -> Scene Eval");
+
+  LISTBASE_FOREACH (TimeMarker *, marker, &scene->markers) {
+    build_idproperties(marker->prop);
+  }
 }
 
 void DepsgraphRelationBuilder::build_scene_compositor(Scene *scene)
@@ -71,4 +76,5 @@ void DepsgraphRelationBuilder::build_scene_compositor(Scene *scene)
   build_nodetree(scene->nodetree);
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

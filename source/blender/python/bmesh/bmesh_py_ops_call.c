@@ -82,7 +82,7 @@ static int bpy_slot_from_py_elem_check(BPy_BMElem *value,
                  Py_TYPE(value)->tp_name);
     return -1;
   }
-  else if (value->bm == NULL) {
+  if (value->bm == NULL) {
     PyErr_Format(PyExc_TypeError,
                  "%.200s: keyword \"%.200s\" %.200s invalidated element",
                  opname,
@@ -90,7 +90,7 @@ static int bpy_slot_from_py_elem_check(BPy_BMElem *value,
                  descr);
     return -1;
   }
-  else if (value->bm != bm) { /* we may want to make this check optional by setting 'bm' to NULL */
+  if (value->bm != bm) { /* we may want to make this check optional by setting 'bm' to NULL */
     PyErr_Format(PyExc_TypeError,
                  "%.200s: keyword \"%.200s\" %.200s invalidated element",
                  opname,
@@ -127,7 +127,7 @@ static int bpy_slot_from_py_elemseq_check(BPy_BMGeneric *value,
                  descr);
     return -1;
   }
-  else if (value->bm != bm) { /* we may want to make this check optional by setting 'bm' to NULL */
+  if (value->bm != bm) { /* we may want to make this check optional by setting 'bm' to NULL */
     PyErr_Format(PyExc_TypeError,
                  "%.200s: keyword \"%.200s\" %.200s, invalidated sequence",
                  opname,
@@ -135,7 +135,7 @@ static int bpy_slot_from_py_elemseq_check(BPy_BMGeneric *value,
                  descr);
     return -1;
   }
-  else if ((htype_py & htype_bmo) == 0) {
+  if ((htype_py & htype_bmo) == 0) {
     char str_bmo[32];
     char str_py[32];
     PyErr_Format(PyExc_TypeError,
@@ -175,9 +175,8 @@ static int bpy_slot_from_py(BMesh *bm,
                      Py_TYPE(value)->tp_name);
         return -1;
       }
-      else {
-        BMO_SLOT_AS_BOOL(slot) = param;
-      }
+
+      BMO_SLOT_AS_BOOL(slot) = param;
 
       break;
     }
@@ -223,14 +222,13 @@ static int bpy_slot_from_py(BMesh *bm,
                        Py_TYPE(value)->tp_name);
           return -1;
         }
-        else {
-          BMO_SLOT_AS_INT(slot) = param;
-        }
+
+        BMO_SLOT_AS_INT(slot) = param;
       }
       break;
     }
     case BMO_OP_SLOT_FLT: {
-      float param = PyFloat_AsDouble(value);
+      const float param = PyFloat_AsDouble(value);
       if (param == -1 && PyErr_Occurred()) {
         PyErr_Format(PyExc_TypeError,
                      "%.200s: keyword \"%.200s\" expected a float, not %.200s",
@@ -239,9 +237,9 @@ static int bpy_slot_from_py(BMesh *bm,
                      Py_TYPE(value)->tp_name);
         return -1;
       }
-      else {
-        BMO_SLOT_AS_FLOAT(slot) = param;
-      }
+
+      BMO_SLOT_AS_FLOAT(slot) = param;
+
       break;
     }
     case BMO_OP_SLOT_MAT: {
@@ -842,7 +840,7 @@ PyObject *BPy_BMO_call(BPy_BMeshOpFunc *self, PyObject *args, PyObject *kw)
       {
         char slot_name_strip[MAX_SLOTNAME];
         const char *ch = strchr(slot->slot_name, '.'); /* can't fail! */
-        int tot = ch - slot->slot_name;
+        const int tot = ch - slot->slot_name;
         BLI_assert(ch != NULL);
         memcpy(slot_name_strip, slot->slot_name, tot);
         slot_name_strip[tot] = '\0';

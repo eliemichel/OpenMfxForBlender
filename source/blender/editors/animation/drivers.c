@@ -40,6 +40,7 @@
 #include "BKE_animsys.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
+#include "BKE_fcurve_driver.h"
 #include "BKE_report.h"
 
 #include "DEG_depsgraph.h"
@@ -91,7 +92,7 @@ FCurve *verify_driver_fcurve(ID *id,
    * - add if not found and allowed to add one
    * TODO: add auto-grouping support? how this works will need to be resolved
    */
-  fcu = list_find_fcurve(&adt->drivers, rna_path, array_index);
+  fcu = BKE_fcurve_find(&adt->drivers, rna_path, array_index);
 
   if (fcu == NULL && creation_mode != DRIVER_FCURVE_LOOKUP_ONLY) {
     /* use default settings to make a F-Curve */
@@ -109,7 +110,7 @@ struct FCurve *alloc_driver_fcurve(const char rna_path[],
                                    const int array_index,
                                    eDriverFCurveCreationMode creation_mode)
 {
-  FCurve *fcu = MEM_callocN(sizeof(FCurve), "FCurve");
+  FCurve *fcu = BKE_fcurve_create();
 
   fcu->flag = (FCURVE_VISIBLE | FCURVE_SELECTED);
   fcu->auto_smoothing = U.auto_smoothing_new;
@@ -354,9 +355,8 @@ int ANIM_add_driver_with_target(ReportList *reports,
       int src_len = (RNA_property_array_check(prop)) ? RNA_property_array_length(&ptr2, prop2) : 1;
 
       int len = MIN2(dst_len, src_len);
-      int i;
 
-      for (i = 0; i < len; i++) {
+      for (int i = 0; i < len; i++) {
         done_tot += add_driver_with_target(reports,
                                            dst_id,
                                            dst_path,
@@ -377,9 +377,8 @@ int ANIM_add_driver_with_target(ReportList *reports,
     case CREATEDRIVER_MAPPING_1_N: /* 1-N - Specified target index for all */
     default: {
       int len = (RNA_property_array_check(prop)) ? RNA_property_array_length(&ptr, prop) : 1;
-      int i;
 
-      for (i = 0; i < len; i++) {
+      for (int i = 0; i < len; i++) {
         done_tot += add_driver_with_target(reports,
                                            dst_id,
                                            dst_path,
@@ -569,13 +568,13 @@ bool ANIM_remove_driver(ReportList *UNUSED(reports),
       /* step through all drivers, removing all of those with the same base path */
       FCurve *fcu_iter = adt->drivers.first;
 
-      while ((fcu = iter_step_fcurve(fcu_iter, rna_path)) != NULL) {
+      while ((fcu = BKE_fcurve_iter_step(fcu_iter, rna_path)) != NULL) {
         /* store the next fcurve for looping  */
         fcu_iter = fcu->next;
 
         /* remove F-Curve from driver stack, then free it */
         BLI_remlink(&adt->drivers, fcu);
-        free_fcurve(fcu);
+        BKE_fcurve_free(fcu);
 
         /* done successfully */
         success = true;
@@ -589,7 +588,7 @@ bool ANIM_remove_driver(ReportList *UNUSED(reports),
       fcu = verify_driver_fcurve(id, rna_path, array_index, DRIVER_FCURVE_LOOKUP_ONLY);
       if (fcu) {
         BLI_remlink(&adt->drivers, fcu);
-        free_fcurve(fcu);
+        BKE_fcurve_free(fcu);
 
         success = true;
       }
@@ -610,7 +609,7 @@ void ANIM_drivers_copybuf_free(void)
 {
   /* free the buffer F-Curve if it exists, as if it were just another F-Curve */
   if (channeldriver_copypaste_buf) {
-    free_fcurve(channeldriver_copypaste_buf);
+    BKE_fcurve_free(channeldriver_copypaste_buf);
   }
   channeldriver_copypaste_buf = NULL;
 }
@@ -661,7 +660,7 @@ bool ANIM_copy_driver(
     fcu->rna_path = NULL;
 
     /* make a copy of the F-Curve with */
-    channeldriver_copypaste_buf = copy_fcurve(fcu);
+    channeldriver_copypaste_buf = BKE_fcurve_copy(fcu);
 
     /* restore the path */
     fcu->rna_path = tmp_path;
@@ -884,9 +883,12 @@ void ANIM_copy_as_driver(struct ID *target_id, const char *target_path, const ch
 
 /* Add Driver - Enum Defines ------------------------- */
 
-/* Mapping Types enum for operators */
-/* NOTE: Used by ANIM_OT_driver_button_add and UI_OT_eyedropper_driver */
-// XXX: These names need reviewing
+/**
+ * Mapping Types enum for operators.
+ * \note Used by #ANIM_OT_driver_button_add and #UI_OT_eyedropper_driver.
+ *
+ * XXX: These names need reviewing.
+ */
 EnumPropertyItem prop_driver_create_mapping_types[] = {
     {CREATEDRIVER_MAPPING_1_N,
      "SINGLE_MANY",
@@ -980,7 +982,8 @@ static bool add_driver_button_poll(bContext *C)
   }
 
   /* Don't do anything if there is an fcurve for animation without a driver. */
-  FCurve *fcu = rna_get_fcurve_context_ui(C, &ptr, prop, index, NULL, NULL, &driven, &special);
+  FCurve *fcu = BKE_fcurve_find_by_rna_context_ui(
+      C, &ptr, prop, index, NULL, NULL, &driven, &special);
   return (fcu == NULL || fcu->driver);
 }
 
@@ -1014,13 +1017,11 @@ static int add_driver_button_none(bContext *C, wmOperator *op, short mapping_typ
     /* send updates */
     UI_context_update_anim_flag(C);
     DEG_relations_tag_update(CTX_data_main(C));
-    WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL);  // XXX
+    WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL); /* XXX */
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static int add_driver_button_menu_exec(bContext *C, wmOperator *op)
@@ -1030,16 +1031,15 @@ static int add_driver_button_menu_exec(bContext *C, wmOperator *op)
     /* Just create driver with no targets */
     return add_driver_button_none(C, op, mapping_type);
   }
-  else {
-    /* Create Driver using Eyedropper */
-    wmOperatorType *ot = WM_operatortype_find("UI_OT_eyedropper_driver", true);
 
-    /* XXX: We assume that it's fine to use the same set of properties,
-     * since they're actually the same. */
-    WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, op->ptr);
+  /* Create Driver using Eyedropper */
+  wmOperatorType *ot = WM_operatortype_find("UI_OT_eyedropper_driver", true);
 
-    return OPERATOR_FINISHED;
-  }
+  /* XXX: We assume that it's fine to use the same set of properties,
+   * since they're actually the same. */
+  WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, op->ptr);
+
+  return OPERATOR_FINISHED;
 }
 
 /* Show menu or create drivers */
@@ -1052,12 +1052,11 @@ static int add_driver_button_menu_invoke(bContext *C, wmOperator *op, const wmEv
     /* Mapping Type is Set - Directly go into creating drivers */
     return add_driver_button_menu_exec(C, op);
   }
-  else {
-    /* Show menu */
-    // TODO: This should get filtered by the enum filter
-    /* important to execute in the region we're currently in */
-    return WM_menu_invoke_ex(C, op, WM_OP_INVOKE_DEFAULT);
-  }
+
+  /* Show menu */
+  /* TODO: This should get filtered by the enum filter. */
+  /* important to execute in the region we're currently in. */
+  return WM_menu_invoke_ex(C, op, WM_OP_INVOKE_DEFAULT);
 }
 
 static void UNUSED_FUNCTION(ANIM_OT_driver_button_add_menu)(wmOperatorType *ot)
@@ -1171,7 +1170,7 @@ static int remove_driver_button_exec(bContext *C, wmOperator *op)
     /* send updates */
     UI_context_update_anim_flag(C);
     DEG_relations_tag_update(CTX_data_main(C));
-    WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL);  // XXX
+    WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL); /* XXX */
   }
 
   return (changed) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
@@ -1187,7 +1186,7 @@ void ANIM_OT_driver_button_remove(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = remove_driver_button_exec;
-  // op->poll = ??? // TODO: need to have some driver to be able to do this...
+  /* TODO: `op->poll` need to have some driver to be able to do this. */
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -1224,7 +1223,7 @@ void ANIM_OT_driver_button_edit(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = edit_driver_button_exec;
-  // op->poll = ??? // TODO: need to have some driver to be able to do this...
+  /* TODO: `op->poll` need to have some driver to be able to do this. */
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -1268,7 +1267,7 @@ void ANIM_OT_copy_driver_button(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = copy_driver_button_exec;
-  // op->poll = ??? // TODO: need to have some driver to be able to do this...
+  /* TODO: `op->poll` need to have some driver to be able to do this. */
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -1299,7 +1298,7 @@ static int paste_driver_button_exec(bContext *C, wmOperator *op)
 
       DEG_id_tag_update(ptr.owner_id, ID_RECALC_ANIMATION);
 
-      WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME_PROP, NULL);  // XXX
+      WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME_PROP, NULL); /* XXX */
 
       MEM_freeN(path);
     }
@@ -1318,7 +1317,7 @@ void ANIM_OT_paste_driver_button(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = paste_driver_button_exec;
-  // op->poll = ??? // TODO: need to have some driver to be able to do this...
+  /* TODO: `op->poll` need to have some driver to be able to do this. */
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;

@@ -10,15 +10,14 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2019 Blender Foundation.
  * All rights reserved.
  */
 
-#ifndef __IO_USD_H__
-#define __IO_USD_H__
+#pragma once
 
 /** \file
  * \ingroup editor/io
@@ -27,5 +26,3 @@
 struct wmOperatorType;
 
 void WM_OT_usd_export(struct wmOperatorType *ot);
-
-#endif /* __IO_USD_H__ */

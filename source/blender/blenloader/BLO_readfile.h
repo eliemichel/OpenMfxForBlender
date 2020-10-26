@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BLO_READFILE_H__
-#define __BLO_READFILE_H__
+#pragma once
 
 #include "BLI_sys_types.h"
 
@@ -48,6 +47,18 @@ struct wmWindowManager;
 
 typedef struct BlendHandle BlendHandle;
 
+typedef struct WorkspaceConfigFileData {
+  struct Main *main; /* has to be freed when done reading file data */
+
+  struct ListBase workspaces;
+} WorkspaceConfigFileData;
+
+/* -------------------------------------------------------------------- */
+/** \name BLO Read File API
+ *
+ * \see #BLO_write_file for file writing.
+ * \{ */
+
 typedef enum eBlenFileType {
   BLENFILETYPE_BLEND = 1,
   /* BLENFILETYPE_PUB = 2, */     /* UNUSED */
@@ -68,12 +79,6 @@ typedef struct BlendFileData {
 
   eBlenFileType type;
 } BlendFileData;
-
-typedef struct WorkspaceConfigFileData {
-  struct Main *main; /* has to be freed when done reading file data */
-
-  struct ListBase workspaces;
-} WorkspaceConfigFileData;
 
 struct BlendFileReadParams {
   uint skip_flags : 3; /* eBLOReadSkip */
@@ -108,6 +113,12 @@ BlendFileData *BLO_read_from_memfile(struct Main *oldmain,
 
 void BLO_blendfiledata_free(BlendFileData *bfd);
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name BLO Blend File Handle API
+ * \{ */
+
 BlendHandle *BLO_blendhandle_from_file(const char *filepath, struct ReportList *reports);
 BlendHandle *BLO_blendhandle_from_memory(const void *mem, int memsize);
 
@@ -119,7 +130,7 @@ struct LinkNode *BLO_blendhandle_get_linkable_groups(BlendHandle *bh);
 
 void BLO_blendhandle_close(BlendHandle *bh);
 
-/***/
+/** \} */
 
 #define BLO_GROUP_MAX 32
 #define BLO_EMBEDDED_STARTUP_BLEND "<startup.blend>"
@@ -127,32 +138,76 @@ void BLO_blendhandle_close(BlendHandle *bh);
 bool BLO_has_bfile_extension(const char *str);
 bool BLO_library_path_explode(const char *path, char *r_dir, char **r_group, char **r_name);
 
-/* Options controlling behavior of append/link code.
- * Note: merged with 'user-level' options from operators etc. in 16 lower bits
- *       (see eFileSel_Params_Flag in DNA_space_types.h). */
-typedef enum BLO_LibLinkFlags {
-  /* Generate a placeholder (empty ID) if not found in current lib file. */
-  BLO_LIBLINK_USE_PLACEHOLDERS = 1 << 16,
-  /* Force loaded ID to be tagged as LIB_TAG_INDIRECT (used in reload context only). */
-  BLO_LIBLINK_FORCE_INDIRECT = 1 << 17,
-} BLO_LinkFlags;
+/* -------------------------------------------------------------------- */
+/** \name BLO Blend File Linking API
+ * \{ */
 
-struct Main *BLO_library_link_begin(struct Main *mainvar, BlendHandle **bh, const char *filepath);
+/**
+ * Options controlling behavior of append/link code.
+ * \note merged with 'user-level' options from operators etc. in 16 lower bits
+ * (see #eFileSel_Params_Flag in DNA_space_types.h).
+ */
+typedef enum eBLOLibLinkFlags {
+  /** Generate a placeholder (empty ID) if not found in current lib file. */
+  BLO_LIBLINK_USE_PLACEHOLDERS = 1 << 16,
+  /** Force loaded ID to be tagged as #LIB_TAG_INDIRECT (used in reload context only). */
+  BLO_LIBLINK_FORCE_INDIRECT = 1 << 17,
+  /**
+   * When set, tag ID types that pass the internal check #library_link_idcode_needs_tag_check
+   *
+   * Currently this is only used to instantiate objects in the scene.
+   * Set this from #BLO_library_link_params_init_with_context so callers
+   * don't need to remember to set this flag.
+   */
+  BLO_LIBLINK_NEEDS_ID_TAG_DOIT = 1 << 18,
+} eBLOLibLinkFlags;
+
+/**
+ * Struct for passing arguments to
+ * #BLO_library_link_begin, #BLO_library_link_named_part & #BLO_library_link_end.
+ * Wrap these in parameters since it's important both functions receive matching values.
+ */
+struct LibraryLink_Params {
+  /** The current main database, e.g. #G_MAIN or `CTX_data_main(C)`. */
+  struct Main *bmain;
+  /** Options for linking, used for instantiating. */
+  int flag;
+  /** Context for instancing objects (optional, no instantiation will be performed when NULL). */
+  struct {
+    /** The scene in which to instantiate objects/collections. */
+    struct Scene *scene;
+    /** The scene layer in which to instantiate objects/collections. */
+    struct ViewLayer *view_layer;
+    /** The active 3D viewport (only used to define local-view). */
+    const struct View3D *v3d;
+  } context;
+};
+
+void BLO_library_link_params_init(struct LibraryLink_Params *params,
+                                  struct Main *bmain,
+                                  const int flag);
+void BLO_library_link_params_init_with_context(struct LibraryLink_Params *params,
+                                               struct Main *bmain,
+                                               const int flag,
+                                               struct Scene *scene,
+                                               struct ViewLayer *view_layer,
+                                               const struct View3D *v3d);
+
+struct Main *BLO_library_link_begin(BlendHandle **bh,
+                                    const char *filepath,
+                                    const struct LibraryLink_Params *params);
 struct ID *BLO_library_link_named_part(struct Main *mainl,
                                        BlendHandle **bh,
                                        const short idcode,
-                                       const char *name);
-struct ID *BLO_library_link_named_part_ex(
-    struct Main *mainl, BlendHandle **bh, const short idcode, const char *name, const int flag);
+                                       const char *name,
+                                       const struct LibraryLink_Params *params);
 void BLO_library_link_end(struct Main *mainl,
                           BlendHandle **bh,
-                          int flag,
-                          struct Main *bmain,
-                          struct Scene *scene,
-                          struct ViewLayer *view_layer,
-                          const struct View3D *v3d);
+                          const struct LibraryLink_Params *params);
 
 int BLO_library_link_copypaste(struct Main *mainl, BlendHandle *bh, const uint64_t id_types_mask);
+
+/** \} */
 
 void *BLO_library_read_struct(struct FileData *fd, struct BHead *bh, const char *blockname);
 
@@ -161,19 +216,22 @@ void blo_lib_link_restore(struct Main *oldmain,
                           struct Main *newmain,
                           struct wmWindowManager *curwm,
                           struct Scene *curscene,
-                          struct ViewLayer *cur_render_layer);
+                          struct ViewLayer *cur_view_layer);
 
 typedef void (*BLOExpandDoitCallback)(void *fdhandle, struct Main *mainvar, void *idv);
 
 void BLO_main_expander(BLOExpandDoitCallback expand_doit_func);
 void BLO_expand_main(void *fdhandle, struct Main *mainvar);
 
-/* Update defaults in startup.blend & userprefs.blend, without having to save and embed it */
-void BLO_update_defaults_startup_blend(struct Main *mainvar, const char *app_template);
+/**
+ * Update defaults in startup.blend, without having to save and embed it.
+ * \note defaults for preferences are stored in `userdef_default.c` and can be updated there.
+ */
+void BLO_update_defaults_startup_blend(struct Main *bmain, const char *app_template);
 void BLO_update_defaults_workspace(struct WorkSpace *workspace, const char *app_template);
 
-/* Version patch user preferences. */
-void BLO_version_defaults_userpref_blend(struct Main *mainvar, struct UserDef *userdef);
+/* Disable unwanted experimental feature settings on startup. */
+void BLO_sanitize_experimental_features_userpref_blend(struct UserDef *userdef);
 
 struct BlendThumbnail *BLO_thumbnail_from_file(const char *filepath);
 
@@ -184,5 +242,3 @@ extern const struct UserDef U_default;
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLO_READFILE_H__ */

@@ -31,8 +31,7 @@ class FILEBROWSER_HT_header(Header):
         if st.active_operator is None:
             layout.template_header()
 
-        layout.menu("FILEBROWSER_MT_view")
-        layout.menu("FILEBROWSER_MT_select")
+        FILEBROWSER_MT_editor_menus.draw_collapsible(context, layout)
 
         # can be None when save/reload with a file selector open
 
@@ -44,7 +43,8 @@ class FILEBROWSER_HT_header(Header):
 class FILEBROWSER_PT_display(Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'HEADER'
-    bl_label = "Display"
+    bl_label = "Display Settings"  # Shows as tooltip in popover
+    bl_ui_units_x = 10
 
     @classmethod
     def poll(cls, context):
@@ -57,32 +57,27 @@ class FILEBROWSER_PT_display(Panel):
         space = context.space_data
         params = space.params
 
-        layout.label(text="Display as")
-        layout.column().prop(params, "display_type", expand=True)
-
         layout.use_property_split = True
         layout.use_property_decorate = False  # No animation.
 
         if params.display_type == 'THUMBNAIL':
             layout.prop(params, "display_size", text="Size")
         else:
-            layout.prop(params, "show_details_size", text="Size")
-            layout.prop(params, "show_details_datetime", text="Date")
+            col = layout.column(heading="Columns", align=True)
+            col.prop(params, "show_details_size", text="Size")
+            col.prop(params, "show_details_datetime", text="Date")
 
         layout.prop(params, "recursion_level", text="Recursions")
 
-        layout.use_property_split = False
-        layout.separator()
-
-        layout.label(text="Sort by")
-        layout.column().prop(params, "sort_method", expand=True)
+        layout.column().prop(params, "sort_method", text="Sort By", expand=True)
         layout.prop(params, "use_sort_invert")
 
 
 class FILEBROWSER_PT_filter(Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'HEADER'
-    bl_label = "Filter"
+    bl_label = "Filter Settings"  # Shows as tooltip in popover
+    bl_ui_units_x = 8
 
     @classmethod
     def poll(cls, context):
@@ -96,16 +91,12 @@ class FILEBROWSER_PT_filter(Panel):
         params = space.params
         is_lib_browser = params.use_library_browsing
 
-        row = layout.row(align=True)
-        row.prop(params, "use_filter", text="", toggle=0)
-        row.label(text="Filter")
-
         col = layout.column()
         col.active = params.use_filter
 
         row = col.row()
         row.label(icon='FILE_FOLDER')
-        row.prop(params, "use_filter_folder", text="Folders", toggle=0)
+        row.prop(params, "use_filter_folder", text="Folders", toggle=False)
 
         if params.filter_glob:
             col.label(text=params.filter_glob)
@@ -113,33 +104,33 @@ class FILEBROWSER_PT_filter(Panel):
             row = col.row()
             row.label(icon='FILE_BLEND')
             row.prop(params, "use_filter_blender",
-                     text=".blend Files", toggle=0)
+                     text=".blend Files", toggle=False)
             row = col.row()
             row.label(icon='FILE_BACKUP')
             row.prop(params, "use_filter_backup",
-                     text="Backup .blend Files", toggle=0)
+                     text="Backup .blend Files", toggle=False)
             row = col.row()
             row.label(icon='FILE_IMAGE')
-            row.prop(params, "use_filter_image", text="Image Files", toggle=0)
+            row.prop(params, "use_filter_image", text="Image Files", toggle=False)
             row = col.row()
             row.label(icon='FILE_MOVIE')
-            row.prop(params, "use_filter_movie", text="Movie Files", toggle=0)
+            row.prop(params, "use_filter_movie", text="Movie Files", toggle=False)
             row = col.row()
             row.label(icon='FILE_SCRIPT')
             row.prop(params, "use_filter_script",
-                     text="Script Files", toggle=0)
+                     text="Script Files", toggle=False)
             row = col.row()
             row.label(icon='FILE_FONT')
-            row.prop(params, "use_filter_font", text="Font Files", toggle=0)
+            row.prop(params, "use_filter_font", text="Font Files", toggle=False)
             row = col.row()
             row.label(icon='FILE_SOUND')
-            row.prop(params, "use_filter_sound", text="Sound Files", toggle=0)
+            row.prop(params, "use_filter_sound", text="Sound Files", toggle=False)
             row = col.row()
             row.label(icon='FILE_TEXT')
-            row.prop(params, "use_filter_text", text="Text Files", toggle=0)
+            row.prop(params, "use_filter_text", text="Text Files", toggle=False)
             row = col.row()
             row.label(icon='FILE_VOLUME')
-            row.prop(params, "use_filter_volume", text="Volume Files", toggle=0)
+            row.prop(params, "use_filter_volume", text="Volume Files", toggle=False)
 
         col.separator()
 
@@ -147,7 +138,7 @@ class FILEBROWSER_PT_filter(Panel):
             row = col.row()
             row.label(icon='BLANK1')  # Indentation
             row.prop(params, "use_filter_blendid",
-                     text="Blender IDs", toggle=0)
+                     text="Blender IDs", toggle=False)
             if params.use_filter_blendid:
                 row = col.row()
                 row.label(icon='BLANK1')  # Indentation
@@ -384,22 +375,13 @@ class FILEBROWSER_PT_directory_path(Panel):
         subsubrow.scale_x = 0.6
         subsubrow.prop(params, "filter_search", text="", icon='VIEWZOOM')
 
-        # Uses prop_with_popover() as popover() only adds the triangle icon in headers.
-        subrow.prop_with_popover(
-            params,
-            "display_type",
-            panel="FILEBROWSER_PT_display",
-            text="",
-            icon_only=True,
-        )
-        subrow.prop_with_popover(
-            params,
-            "display_type",
-            panel="FILEBROWSER_PT_filter",
-            text="",
-            icon='FILTER',
-            icon_only=True,
-        )
+        subsubrow = subrow.row(align=True)
+        subsubrow.prop(params, "display_type", expand=True, icon_only=True)
+        subsubrow.popover("FILEBROWSER_PT_display", text="")
+
+        subsubrow = subrow.row(align=True)
+        subsubrow.prop(params, "use_filter", toggle=True, icon='FILTER', icon_only=True)
+        subsubrow.popover("FILEBROWSER_PT_filter", text="")
 
         if space.active_operator:
             subrow.operator(
@@ -408,6 +390,17 @@ class FILEBROWSER_PT_directory_path(Panel):
                 icon='PREFERENCES',
                 depress=self.is_option_region_visible(context, space)
             ).region_type = 'TOOL_PROPS'
+
+
+class FILEBROWSER_MT_editor_menus(Menu):
+    bl_idname = "FILEBROWSER_MT_editor_menus"
+    bl_label = ""
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.menu("FILEBROWSER_MT_view")
+        layout.menu("FILEBROWSER_MT_select")
 
 
 class FILEBROWSER_MT_view(Menu):
@@ -501,6 +494,7 @@ classes = (
     FILEBROWSER_PT_bookmarks_recents,
     FILEBROWSER_PT_advanced_filter,
     FILEBROWSER_PT_directory_path,
+    FILEBROWSER_MT_editor_menus,
     FILEBROWSER_MT_view,
     FILEBROWSER_MT_select,
     FILEBROWSER_MT_context_menu,
