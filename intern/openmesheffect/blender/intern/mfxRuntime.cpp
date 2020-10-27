@@ -249,10 +249,12 @@ Mesh * OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
 
   ofxhost_cook(plugin, this->effect_instance);
 
-  // Free mesh on Blender side
+  // Free mesh on Blender side -> nope, ModifierTypeInfo's doc says a modifier must not free its input
+  /*
   if (NULL != output_data.blender_mesh && output_data.blender_mesh != output_data.source_mesh) {
     BKE_mesh_free(output_data.source_mesh);
   }
+  */
 
   this->set_message_in_rna(fxmd);
 

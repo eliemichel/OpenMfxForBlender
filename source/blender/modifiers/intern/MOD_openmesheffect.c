@@ -135,57 +135,6 @@ static void freeData(struct ModifierData *md)
   }
 }
 
-#if 0
-
-def OPENMESHEFFECT(self, layout, _ob, md):
-  layout.prop(md, "plugin_path")
-  layout.separator()
-
-  layout.prop(md, "effect_enum")
-  layout.separator()
-
-  PARAM_TYPE_INTEGER = 0
-  PARAM_TYPE_INTEGER_2D = 1
-  PARAM_TYPE_INTEGER_3D = 2
-  PARAM_TYPE_DOUBLE = 3
-  PARAM_TYPE_DOUBLE_2D = 4
-  PARAM_TYPE_DOUBLE_3D = 5
-  PARAM_TYPE_RGB = 6
-  PARAM_TYPE_RGBA = 7
-  PARAM_TYPE_BOOLEAN = 8
-  PARAM_TYPE_CHOICE = 9
-  PARAM_TYPE_STRING = 10
-  PARAM_TYPE_CUSTOM = 11
-  PARAM_TYPE_PUSH_BUTTON = 12
-  PARAM_TYPE_GROUP = 13
-  PARAM_TYPE_PAGE = 14
-
-  for parm in md.parameter_info:
-      row = layout.row(align=True)
-      row.label(text=parm.label)
-      if parm.type == PARAM_TYPE_INTEGER:
-          row.prop(parm, "integer_value", text="")
-      if parm.type == PARAM_TYPE_INTEGER_2D:
-          row.prop(parm, "integer2d_value", text="")
-      if parm.type == PARAM_TYPE_INTEGER_3D:
-          row.prop(parm, "integer3d_value", text="")
-      if parm.type == PARAM_TYPE_DOUBLE:
-          row.prop(parm, "float_value", text="")
-      if parm.type == PARAM_TYPE_DOUBLE_2D:
-          row.prop(parm, "float2d_value", text="")
-      if parm.type == PARAM_TYPE_DOUBLE_3D:
-          row.prop(parm, "float3d_value", text="")
-      if parm.type == PARAM_TYPE_RGB:
-          row.prop(parm, "rgb_value", text="")
-      if parm.type == PARAM_TYPE_RGBA:
-          row.prop(parm, "rgba_value", text="")
-      if parm.type == PARAM_TYPE_BOOLEAN:
-          row.prop(parm, "boolean_value", text="")
-      if parm.type == PARAM_TYPE_STRING:
-          row.prop(parm, "string_value", text="")
-
-#endif
-
 static void panel_draw(const bContext *C, Panel *panel)
 {
   uiLayout *row;
