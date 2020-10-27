@@ -23,6 +23,7 @@
 #define __MFX_PARAMETERS_H__
 
 #include "properties.h"
+#include "mfxParamType.h"
 
 union OfxParamValueStruct {
     void *as_pointer;
@@ -32,30 +33,6 @@ union OfxParamValueStruct {
     double as_double;
     bool as_bool;
 };
-
-/**
- * Enum version of kOfxParamType* constants, used rather than strings for
- * efficiency reasons.
- * TODO: Expose to PYTHON
- */
-typedef enum ParamType {
-    PARAM_TYPE_UNKNOWN = -1,
-    PARAM_TYPE_INTEGER,
-    PARAM_TYPE_INTEGER_2D,
-    PARAM_TYPE_INTEGER_3D,
-    PARAM_TYPE_DOUBLE,
-    PARAM_TYPE_DOUBLE_2D,
-    PARAM_TYPE_DOUBLE_3D,
-    PARAM_TYPE_RGB,
-    PARAM_TYPE_RGBA,
-    PARAM_TYPE_BOOLEAN,
-    PARAM_TYPE_CHOICE,
-    PARAM_TYPE_STRING,
-    PARAM_TYPE_CUSTOM,
-    PARAM_TYPE_PUSH_BUTTON,
-    PARAM_TYPE_GROUP,
-    PARAM_TYPE_PAGE,
-} ParamType;
 
 // // OfxParamStruct
 

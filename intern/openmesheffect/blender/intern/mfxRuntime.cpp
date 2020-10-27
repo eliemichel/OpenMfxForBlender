@@ -35,6 +35,7 @@
 
 #include "BKE_mesh.h" // BKE_mesh_new_nomain
 #include "BKE_main.h" // BKE_main_blendfile_path_from_global
+#include "BKE_modifier.h" // BKE_modifier_set_error
 
 #include "BLI_math_vector.h"
 #include "BLI_string.h"
@@ -130,7 +131,7 @@ void OpenMeshEffectRuntime::set_message_in_rna(OpenMeshEffectModifierData *fxmd)
   }
 
   if (type == OfxMessageType::Error || type == OfxMessageType::Fatal) {
-    modifier_setError(&fxmd->modifier, this->effect_instance->message);
+    BKE_modifier_set_error(NULL, &fxmd->modifier, this->effect_instance->message);
   }
 }
 

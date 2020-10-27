@@ -23,11 +23,12 @@
 
 #include "MEM_guardedalloc.h"
 
-#include <stdio.h>
-
 #include "BLI_utildefines.h"
 
-#include "BKE_mesh.h"
+#include "DNA_mesh_types.h"
+#include "BKE_context.h"
+#include "BKE_screen.h"
+#include "BKE_modifier.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -36,8 +37,11 @@
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_screen_types.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
+#include "MOD_util.h"
 
 #include "BLO_read_write.h"
 
@@ -76,9 +80,9 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   // which I don't want to depend on mfxModifier.h
   mfx_Modifier_reload_effect_info(fxmd);
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
-  mfx_Modifier_copyData(fxmd, tfxmd);
+  mfx_Modifier_copydata(fxmd, tfxmd);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -190,50 +194,55 @@ static void panel_draw(const bContext *C, Panel *panel)
   PointerRNA ob_ptr;
   PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
-  //bool edge_bevel = RNA_enum_get(ptr, "affect") != MOD_BEVEL_AFFECT_VERTICES;
-  int num_parameters = RNA_int_get(ptr, "num_parameters");
-  OpenMeshEffectParameterInfo * parameter_info = (OpenMeshEffectParameterInfo*)RNA_pointer_get(ptr, "parameter_info");
-
   uiItemR(layout, ptr, "plugin_path", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
   uiItemS(layout);
 
-  uiItemR(layout, ptr, "effect_enum", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "effect_enum", 0, NULL, ICON_NONE);
   uiItemS(layout);
 
-  for (int i = 0; i < num_parameters ; ++i)
-  {
+  char *label;
+  int type;
+  CollectionPropertyIterator iter;
+  for (RNA_collection_begin(ptr, "parameter_info", &iter); iter.valid;
+       RNA_property_collection_next(&iter)) {
+    PointerRNA param_ptr = iter.ptr;
     row = uiLayoutRow(layout, true);
-    uiItemL(col, parameter_info[i].label, 0, NULL, ICON_NONE);
-    switch (parameter_info[i].type) {
+
+    label = RNA_string_get_alloc(&param_ptr, "label", NULL, 0);
+    uiItemL(row, label, ICON_NONE);
+    MEM_freeN(label);
+    
+    type = RNA_int_get(&param_ptr, "type");
+    switch (type) {
       case PARAM_TYPE_INTEGER:
-        uiItemR(col, ptr, "integer_value", 0, "", ICON_NONE); // IFACE_("")?
+        uiItemR(row, ptr, "integer_value", 0, "", ICON_NONE);  // IFACE_("")?
         break;
       case PARAM_TYPE_INTEGER_2D:
-        uiItemR(col, ptr, "integer2d_value", 0, "", ICON_NONE);
+        uiItemR(row, ptr, "integer2d_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_INTEGER_3D:
-        uiItemR(col, ptr, "integer3d_value", 0, "", ICON_NONE);
+        uiItemR(row, ptr, "integer3d_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_DOUBLE:
-        uiItemR(col, ptr, "float_value", 0, "", ICON_NONE);
+        uiItemR(row, ptr, "float_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_DOUBLE_2D:
-        uiItemR(col, ptr, "float2d_value", 0, "", ICON_NONE);
+        uiItemR(row, ptr, "float2d_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_DOUBLE_3D:
-        uiItemR(col, ptr, "float3d_value", 0, "", ICON_NONE);
+        uiItemR(row, ptr, "float3d_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_RGB:
-        uiItemR(col, ptr, "rgb_value", 0, "", ICON_NONE);
+        uiItemR(row, ptr, "rgb_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_RGBA:
-        uiItemR(col, ptr, "rgba_value", 0, "", ICON_NONE);
+        uiItemR(row, ptr, "rgba_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_BOOLEAN:
-        uiItemR(col, ptr, "boolean_value", 0, "", ICON_NONE);
+        uiItemR(row, ptr, "boolean_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_STRING:
-        uiItemR(col, ptr, "string_value", 0, "", ICON_NONE);
+        uiItemR(row, ptr, "string_value", 0, "", ICON_NONE);
         break;
     }
   }
@@ -244,27 +253,23 @@ static void panel_draw(const bContext *C, Panel *panel)
 static void panelRegister(ARegionType *region_type)
 {
   PanelType *panel_type = modifier_panel_register(region_type, eModifierType_OpenMeshEffect, panel_draw);
-  modifier_subpanel_register(
-      region_type, "profile", "Profile", NULL, profile_panel_draw, panel_type);
-  modifier_subpanel_register(
-      region_type, "geometry", "Geometry", NULL, geometry_panel_draw, panel_type);
-  modifier_subpanel_register(
-      region_type, "shading", "Shading", NULL, shading_panel_draw, panel_type);
 }
 
 static void blendWrite(BlendWriter *writer, const ModifierData *md)
 {
   const OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
 
-  BLO_write_struct(writer, OpenMeshEffectParameterInfo, fxmd->num_parameters,
-    fxmd->parameter_info);
+  BLO_write_struct_array_by_id(writer,
+                               BLO_get_struct_id(writer, OpenMeshEffectParameterInfo),
+                               fxmd->num_parameters,
+                               fxmd->parameter_info);
 }
 
 static void blendRead(BlendDataReader *reader, ModifierData *md)
 {
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
 
-  fxmd->parameter_info = BLO_read_data_address(reader, fxmd->parameter_info);
+  fxmd->parameter_info = BLO_read_data_address(reader, &fxmd->parameter_info);
 
   // Effect list will be reloaded from plugin
   fxmd->num_effects = 0;

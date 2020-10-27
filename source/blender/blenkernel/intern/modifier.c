@@ -415,7 +415,7 @@ void BKE_modifier_set_error(const Object *ob, ModifierData *md, const char *_for
   }
 #endif
 
-  CLOG_ERROR(&LOG, "Object: \"%s\", Modifier: \"%s\", %s", ob->id.name + 2, md->name, md->error);
+  CLOG_ERROR(&LOG, "Object: \"%s\", Modifier: \"%s\", %s", NULL == ob ? "?" : ob->id.name + 2, md->name, md->error);
 }
 
 /* used for buttons, to find out if the 'draw deformed in editmode' option is

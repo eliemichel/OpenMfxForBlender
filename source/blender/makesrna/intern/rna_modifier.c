@@ -1612,7 +1612,7 @@ static int rna_MeshSequenceCacheModifier_read_velocity_get(PointerRNA *ptr)
   return false;
   UNUSED_VARS(ptr);
 #  endif
-
+}
 
 static void rna_OpenMeshEffect_effect_info_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
@@ -7535,6 +7535,8 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
   RNA_def_struct_sdna(srna, "OpenMeshEffectModifierData");
   RNA_def_struct_ui_icon(srna, ICON_MOD_ARRAY);
 
+  RNA_define_lib_overridable(true);
+
   prop = RNA_def_property(srna, "plugin_path", PROP_STRING, PROP_FILEPATH);
   RNA_def_property_ui_text(prop,
                            "Plugin Path",
@@ -7743,6 +7745,8 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
                                 "rna_OpenMeshEffectParameterInfo_string_value_set");
   RNA_def_property_ui_text(prop, "String Value", "");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  RNA_define_lib_overridable(false);
 }
 
 void RNA_def_modifier(BlenderRNA *brna)

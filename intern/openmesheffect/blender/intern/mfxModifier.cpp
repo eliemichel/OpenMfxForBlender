@@ -32,6 +32,7 @@
 
 #include "BKE_main.h"  // BKE_main_blendfile_path_from_global
 #include "BKE_mesh.h"  // BKE_mesh_new_nomain
+#include "BKE_modifier.h"  // BKE_modifier_setError
 
 #include "BLI_math_vector.h"
 #include "BLI_path_util.h"
@@ -57,7 +58,7 @@ static OpenMeshEffectRuntime *ensure_runtime(OpenMeshEffectModifierData *fxmd) {
   runtime->set_effect_index(fxmd->effect_index);
 
   if (false == runtime->is_plugin_valid()) {
-    modifier_setError(&fxmd->modifier, "Could not load ofx plugins!");
+    BKE_modifier_set_error(NULL, &fxmd->modifier, "Could not load ofx plugins!");
   }
 
   printf("==/ ensure_runtime\n");
@@ -114,7 +115,7 @@ Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   return output_mesh;
 }
 
-void mfx_Modifier_copyData(OpenMeshEffectModifierData *source, OpenMeshEffectModifierData *destination)
+void mfx_Modifier_copydata(OpenMeshEffectModifierData *source, OpenMeshEffectModifierData *destination)
 {
   if (source->parameter_info) {
     destination->parameter_info = (OpenMeshEffectParameterInfo*)MEM_dupallocN(

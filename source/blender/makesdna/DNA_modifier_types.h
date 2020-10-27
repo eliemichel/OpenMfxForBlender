@@ -94,14 +94,11 @@ typedef enum ModifierType {
   eModifierType_WeightedNormal = 54,
   eModifierType_Weld = 55,
   eModifierType_Fluid = 56,
-<<<<<<< HEAD
-  eModifierType_OpenMeshEffect = 57,
-=======
   eModifierType_Simulation = 57,
   eModifierType_MeshToVolume = 58,
   eModifierType_VolumeDisplace = 59,
   eModifierType_VolumeToMesh = 60,
->>>>>>> master
+  eModifierType_OpenMeshEffect = 61,
   NUM_MODIFIER_TYPES,
 } ModifierType;
 

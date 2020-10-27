@@ -37,6 +37,8 @@
 extern "C" {
 #endif
 
+#include "../host/mfxParamType.h"
+
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
@@ -79,7 +81,7 @@ Mesh *mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh);
  * Copy parameter_info, effect_info.
  * Must be called *after* blender's modifier_copyData_generic()
  */
-void mfx_Modifier_copyData(OpenMeshEffectModifierData *source,
+void mfx_Modifier_copydata(OpenMeshEffectModifierData *source,
                            OpenMeshEffectModifierData *destination);
 
 #ifdef __cplusplus
