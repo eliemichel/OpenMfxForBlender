@@ -70,6 +70,6 @@ OfxStatus getFaceAttribute(OfxMeshHandle mesh, const char *name, Attribute *attr
 OfxStatus copyAttribute(Attribute *destination, const Attribute *source, int start, int count);
 
 // !global!
-PluginRuntime gRuntime;
+extern PluginRuntime gRuntime;
 
 #endif // __MFX_PLUGIN_SUPPORT_H__

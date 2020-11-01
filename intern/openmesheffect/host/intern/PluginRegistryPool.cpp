@@ -16,7 +16,8 @@
 
 #include "PluginRegistryPool.h"
 
-#include <cassert>
+#include <assert.h>
+#include <string.h>
 
 // // PluginRegistryPoolEntry
 

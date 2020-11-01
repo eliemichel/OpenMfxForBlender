@@ -25,6 +25,8 @@
 #include "properties.h"
 #include "mfxParamType.h"
 
+#include <stddef.h> // size_t
+
 union OfxParamValueStruct {
     void *as_pointer;
     const char *as_const_char;
