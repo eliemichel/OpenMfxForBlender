@@ -17,6 +17,7 @@
 #include "PluginRegistryPool.h"
 
 #include <cassert>
+#include <cstring>
 
 // // PluginRegistryPoolEntry
 
