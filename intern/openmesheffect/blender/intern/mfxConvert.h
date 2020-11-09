@@ -32,8 +32,8 @@ void copy_parameter_value_to_rna(OpenMeshEffectParameterInfo *rna,
                                  const OfxPropertyStruct * prop);
 
 void copy_parameter_minmax_to_rna(int rna_type,
-                                  int int_rna[],
-                                  float float_rna[],
+                                  int &int_rna,
+                                  float &float_rna,
                                   const OfxPropertyStruct *prop);
 
 void copy_parameter_value_to_rna(OpenMeshEffectParameterInfo *rna,

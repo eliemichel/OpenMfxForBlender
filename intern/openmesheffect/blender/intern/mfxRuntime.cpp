@@ -329,16 +329,14 @@ void OpenMeshEffectRuntime::reload_parameter_info(OpenMeshEffectModifierData *fx
 
     // Handle boundaries
     // (TODO: there must be some factorization possible)
-    for (int k = 0; k < 4; ++k) {
-      rna.int_min[k] = -INT_MAX;
-      rna.int_softmin[k] = -INT_MAX;
-      rna.int_max[k] = INT_MAX;
-      rna.int_softmax[k] = INT_MAX;
-      rna.float_min[k] = -FLT_MAX;
-      rna.float_softmin[k] = -FLT_MAX;
-      rna.float_max[k] = FLT_MAX;
-      rna.float_softmax[k] = FLT_MAX;
-    }
+    rna.int_min = INT_MIN;
+    rna.int_softmin = INT_MIN;
+    rna.int_max = INT_MAX;
+    rna.int_softmax = INT_MAX;
+    rna.float_min = FLT_MIN;
+    rna.float_softmin = FLT_MIN;
+    rna.float_max = FLT_MAX;
+    rna.float_softmax = FLT_MAX;
 
     int min_idx = props.find_property(kOfxParamPropMin);
     if (min_idx > -1) {

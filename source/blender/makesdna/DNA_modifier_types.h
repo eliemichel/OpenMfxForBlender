@@ -2332,15 +2332,15 @@ typedef struct OpenMeshEffectParameterInfo {
   /** MOD_OPENMESHEFFECT_MAX_STRING_VALUE */
   char string_value[1024];
   /** Used for Double, Double2D, Double3D, RGB, RGBA */
-  float float_min[4];
-  float float_softmin[4];
-  float float_max[4];
-  float float_softmax[4];
+  float float_min;
+  float float_softmin;
+  float float_max;
+  float float_softmax;
   /** Used for Integer, Integer2D, Integer3D, Boolean, Choice index */
-  int int_min[4];
-  int int_softmin[4];
-  int int_max[4];
-  int int_softmax[4];
+  int int_min;
+  int int_softmin;
+  int int_max;
+  int int_softmax;
 } OpenMeshEffectParameterInfo;
 
 #define MOD_OPENMESHEFFECT_MAX_PARAMETER_NAME 256

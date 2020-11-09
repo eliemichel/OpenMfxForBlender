@@ -1779,12 +1779,10 @@ static void rna_OpenMeshEffectParameterInfo_integer_value_range(
     PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax)
 {
   OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
-  for (int k = 0; k < 1; ++k) {
-    min[k] = parm->int_min[k];
-    softmin[k] = parm->int_softmin[k];
-    max[k] = parm->int_max[k];
-    softmax[k] = parm->int_softmax[k];
-  }
+  *min = parm->int_min;
+  *softmin = parm->int_softmin;
+  *max = parm->int_max;
+  *softmax = parm->int_softmax;
 }
 
 static void rna_OpenMeshEffectParameterInfo_integer2d_value_get(PointerRNA *ptr, int *value)
@@ -1799,18 +1797,6 @@ static void rna_OpenMeshEffectParameterInfo_integer2d_value_set(PointerRNA *ptr,
   copy_v2_v2_int(parm->integer_vec_value, value);
 }
 
-static void rna_OpenMeshEffectParameterInfo_integer2d_value_range(
-    PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax)
-{
-  OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
-  for (int k = 0; k < 2; ++k) {
-    min[k] = parm->int_min[k];
-    softmin[k] = parm->int_softmin[k];
-    max[k] = parm->int_max[k];
-    softmax[k] = parm->int_softmax[k];
-  }
-}
-
 static void rna_OpenMeshEffectParameterInfo_integer3d_value_get(PointerRNA *ptr, int *value)
 {
   OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
@@ -1821,18 +1807,6 @@ static void rna_OpenMeshEffectParameterInfo_integer3d_value_set(PointerRNA *ptr,
 {
   OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
   copy_v3_v3_int(parm->integer_vec_value, value);
-}
-
-static void rna_OpenMeshEffectParameterInfo_integer3d_value_range(
-    PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax)
-{
-  OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
-  for (int k = 0; k < 3; ++k) {
-    min[k] = parm->int_min[k];
-    softmin[k] = parm->int_softmin[k];
-    max[k] = parm->int_max[k];
-    softmax[k] = parm->int_softmax[k];
-  }
 }
 
 static void rna_OpenMeshEffectParameterInfo_float_value_get(PointerRNA *ptr, float *value)
@@ -1851,12 +1825,10 @@ static void rna_OpenMeshEffectParameterInfo_float_value_range(
     PointerRNA *ptr, float *min, float *max, float *softmin, float *softmax)
 {
   OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
-  for (int k = 0; k < 1; ++k) {
-    min[k] = parm->float_min[k];
-    softmin[k] = parm->float_softmin[k];
-    max[k] = parm->float_max[k];
-    softmax[k] = parm->float_softmax[k];
-  }
+  *min = parm->float_min;
+  *softmin = parm->float_softmin;
+  *max = parm->float_max;
+  *softmax = parm->float_softmax;
 }
 static void rna_OpenMeshEffectParameterInfo_float2d_value_get(PointerRNA *ptr, float *value)
 {
@@ -1868,18 +1840,6 @@ static void rna_OpenMeshEffectParameterInfo_float2d_value_set(PointerRNA *ptr, c
 {
   OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
   copy_v2_v2(parm->float_vec_value, value);
-}
-
-static void rna_OpenMeshEffectParameterInfo_float2d_value_range(
-    PointerRNA *ptr, float *min, float *max, float *softmin, float *softmax)
-{
-  OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
-  for (int k = 0; k < 2; ++k) {
-    min[k] = parm->float_min[k];
-    softmin[k] = parm->float_softmin[k];
-    max[k] = parm->float_max[k];
-    softmax[k] = parm->float_softmax[k];
-  }
 }
 
 static void rna_OpenMeshEffectParameterInfo_float3d_value_get(PointerRNA *ptr, float *value)
@@ -1894,18 +1854,6 @@ static void rna_OpenMeshEffectParameterInfo_float3d_value_set(PointerRNA *ptr, c
   copy_v3_v3(parm->float_vec_value, value);
 }
 
-static void rna_OpenMeshEffectParameterInfo_float3d_value_range(
-    PointerRNA *ptr, float *min, float *max, float *softmin, float *softmax)
-{
-  OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
-  for (int k = 0; k < 3; ++k) {
-    min[k] = parm->float_min[k];
-    softmin[k] = parm->float_softmin[k];
-    max[k] = parm->float_max[k];
-    softmax[k] = parm->float_softmax[k];
-  }
-}
-
 static void rna_OpenMeshEffectParameterInfo_float4d_value_get(PointerRNA *ptr, float *value)
 {
   OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
@@ -1916,18 +1864,6 @@ static void rna_OpenMeshEffectParameterInfo_float4d_value_set(PointerRNA *ptr, c
 {
   OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
   copy_v4_v4(parm->float_vec_value, value);
-}
-
-static void rna_OpenMeshEffectParameterInfo_float4d_value_range(
-    PointerRNA *ptr, float *min, float *max, float *softmin, float *softmax)
-{
-  OpenMeshEffectParameterInfo *parm = (OpenMeshEffectParameterInfo *)ptr->data;
-  for (int k = 0; k < 4; ++k) {
-    min[k] = parm->float_min[k];
-    softmin[k] = parm->float_softmin[k];
-    max[k] = parm->float_max[k];
-    softmax[k] = parm->float_softmax[k];
-  }
 }
 
 static void rna_OpenMeshEffectParameterInfo_boolean_value_get(PointerRNA *ptr, bool *value)
@@ -7665,7 +7601,7 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
   RNA_def_property_int_funcs(prop,
                              "rna_OpenMeshEffectParameterInfo_integer2d_value_get",
                              "rna_OpenMeshEffectParameterInfo_integer2d_value_set",
-                             "rna_OpenMeshEffectParameterInfo_integer2d_value_range");
+                             "rna_OpenMeshEffectParameterInfo_integer_value_range");
 
   prop = RNA_def_property(srna, "integer3d_value", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "integer_vec_value");
@@ -7675,7 +7611,7 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
   RNA_def_property_int_funcs(prop,
                              "rna_OpenMeshEffectParameterInfo_integer3d_value_get",
                              "rna_OpenMeshEffectParameterInfo_integer3d_value_set",
-                             "rna_OpenMeshEffectParameterInfo_integer3d_value_range");
+                             "rna_OpenMeshEffectParameterInfo_integer_value_range");
   
   prop = RNA_def_property(srna, "float_value", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "float_vec_value");
@@ -7695,7 +7631,7 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
   RNA_def_property_float_funcs(prop,
                                "rna_OpenMeshEffectParameterInfo_float2d_value_get",
                                "rna_OpenMeshEffectParameterInfo_float2d_value_set",
-                               "rna_OpenMeshEffectParameterInfo_float2d_value_range");
+                               "rna_OpenMeshEffectParameterInfo_float_value_range");
 
   prop = RNA_def_property(srna, "float3d_value", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "float_vec_value");
@@ -7705,7 +7641,7 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
   RNA_def_property_float_funcs(prop,
                                "rna_OpenMeshEffectParameterInfo_float3d_value_get",
                                "rna_OpenMeshEffectParameterInfo_float3d_value_set",
-                               "rna_OpenMeshEffectParameterInfo_float3d_value_range");
+                               "rna_OpenMeshEffectParameterInfo_float_value_range");
 
   prop = RNA_def_property(srna, "rgb_value", PROP_FLOAT, PROP_COLOR);
   RNA_def_property_float_sdna(prop, NULL, "float_vec_value");
@@ -7716,7 +7652,7 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
   RNA_def_property_float_funcs(prop,
                                "rna_OpenMeshEffectParameterInfo_float3d_value_get",
                                "rna_OpenMeshEffectParameterInfo_float3d_value_set",
-                               "rna_OpenMeshEffectParameterInfo_float3d_value_range");
+                               "rna_OpenMeshEffectParameterInfo_float_value_range");
 
   prop = RNA_def_property(srna, "rgba_value", PROP_FLOAT, PROP_COLOR);
   RNA_def_property_float_sdna(prop, NULL, "float_vec_value");
@@ -7727,7 +7663,7 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
   RNA_def_property_float_funcs(prop,
                                "rna_OpenMeshEffectParameterInfo_float4d_value_get",
                                "rna_OpenMeshEffectParameterInfo_float4d_value_set",
-                               "rna_OpenMeshEffectParameterInfo_float4d_value_range");
+                               "rna_OpenMeshEffectParameterInfo_float_value_range");
 
   prop = RNA_def_property(srna, "boolean_value", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "integer_vec_value", 0);

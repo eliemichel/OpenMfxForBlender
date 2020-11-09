@@ -164,34 +164,34 @@ static void panel_draw(const bContext *C, Panel *panel)
     type = RNA_int_get(&param_ptr, "type");
     switch (type) {
       case PARAM_TYPE_INTEGER:
-        uiItemR(row, ptr, "integer_value", 0, "", ICON_NONE);  // IFACE_("")?
+        uiItemR(row, &param_ptr, "integer_value", 0, "", ICON_NONE);  // IFACE_("")?
         break;
       case PARAM_TYPE_INTEGER_2D:
-        uiItemR(row, ptr, "integer2d_value", 0, "", ICON_NONE);
+        uiItemR(row, &param_ptr, "integer2d_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_INTEGER_3D:
-        uiItemR(row, ptr, "integer3d_value", 0, "", ICON_NONE);
+        uiItemR(row, &param_ptr, "integer3d_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_DOUBLE:
-        uiItemR(row, ptr, "float_value", 0, "", ICON_NONE);
+        uiItemR(row, &param_ptr, "float_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_DOUBLE_2D:
-        uiItemR(row, ptr, "float2d_value", 0, "", ICON_NONE);
+        uiItemR(row, &param_ptr, "float2d_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_DOUBLE_3D:
-        uiItemR(row, ptr, "float3d_value", 0, "", ICON_NONE);
+        uiItemR(row, &param_ptr, "float3d_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_RGB:
-        uiItemR(row, ptr, "rgb_value", 0, "", ICON_NONE);
+        uiItemR(row, &param_ptr, "rgb_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_RGBA:
-        uiItemR(row, ptr, "rgba_value", 0, "", ICON_NONE);
+        uiItemR(row, &param_ptr, "rgba_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_BOOLEAN:
-        uiItemR(row, ptr, "boolean_value", 0, "", ICON_NONE);
+        uiItemR(row, &param_ptr, "boolean_value", 0, "", ICON_NONE);
         break;
       case PARAM_TYPE_STRING:
-        uiItemR(row, ptr, "string_value", 0, "", ICON_NONE);
+        uiItemR(row, &param_ptr, "string_value", 0, "", ICON_NONE);
         break;
     }
   }
