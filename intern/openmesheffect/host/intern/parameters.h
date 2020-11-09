@@ -27,6 +27,8 @@
 
 #include <stddef.h> // size_t
 
+#include <cstddef>
+
 union OfxParamValueStruct {
     void *as_pointer;
     const char *as_const_char;
