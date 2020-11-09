@@ -407,8 +407,8 @@ void BKE_modifier_set_error(const Object *ob, ModifierData *md, const char *_for
   md->error = BLI_strdup(buffer);
 
 #ifndef NDEBUG
-  if ((md->mode & eModifierMode_Virtual) == 0) {
-    /* Ensure correct object is passed in. */
+  if ((md->mode & eModifierMode_Virtual) == 0 && NULL != ob) {
+    /* Ensure correct object is passed in, if any. */
     const Object *ob_orig = (Object *)DEG_get_original_id((ID *)&ob->id);
     const ModifierData *md_orig = md->orig_modifier_data ? md->orig_modifier_data : md;
     BLI_assert(BLI_findindex(&ob_orig->modifiers, md_orig) != -1);
