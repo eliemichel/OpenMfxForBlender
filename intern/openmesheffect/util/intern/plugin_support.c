@@ -20,6 +20,8 @@
 
 #define MFX_ENSURE(op) status = op; if (kOfxStatOK != status) return status;
 
+PluginRuntime gRuntime;
+
 enum AttributeType mfxAttrAsEnum(const char *attr_type)
 {
   if (0 == strcmp(attr_type, kOfxMeshAttribTypeUByte)) {
