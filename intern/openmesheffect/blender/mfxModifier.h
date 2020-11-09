@@ -75,7 +75,7 @@ void mfx_Modifier_free_runtime_data(void *runtime_data);
 /**
  * Actually run the modifier, calling the cook action of the plugin
  */
-Mesh *mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh);
+Mesh *mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh, Object *object);
 
 /**
  * Copy parameter_info, effect_info.

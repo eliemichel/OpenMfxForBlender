@@ -201,7 +201,9 @@ void OpenMeshEffectRuntime::try_restore_rna_parameter_values(OpenMeshEffectModif
   }
 }
 
-Mesh * OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
+Mesh *OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd,
+                                  Mesh *mesh,
+                                  Object *object)
 {
   if (false == this->ensure_effect_instance()) {
     printf("failed to get effect instance\n");
@@ -236,6 +238,7 @@ Mesh * OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   input_data.is_input = true;
   input_data.blender_mesh = mesh;
   input_data.source_mesh = NULL;
+  input_data.object = object;
   propertySuite->propSetPointer(
       &input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&input_data);
 
@@ -244,6 +247,7 @@ Mesh * OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
   output_data.is_input = false;
   output_data.blender_mesh = NULL;
   output_data.source_mesh = mesh;
+  output_data.object = object;
   propertySuite->propSetPointer(
       &output->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&output_data);
 

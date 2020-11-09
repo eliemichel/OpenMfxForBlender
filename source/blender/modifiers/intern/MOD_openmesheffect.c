@@ -55,7 +55,7 @@ static Mesh *modifyMesh(ModifierData *md,
 {
   printf("OpenMeshEffectModifier: modifyMesh.\n");
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
-  return mfx_Modifier_do(fxmd, mesh);
+  return mfx_Modifier_do(fxmd, mesh, ctx->object);
 }
 
 static void initData(struct ModifierData *md)

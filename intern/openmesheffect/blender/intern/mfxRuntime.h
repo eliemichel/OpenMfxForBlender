@@ -85,7 +85,7 @@ class OpenMeshEffectRuntime {
   /**
    * Actually apply the modifier
    */
-  Mesh * cook(OpenMeshEffectModifierData *fxmd, Mesh *mesh);
+  Mesh *cook(OpenMeshEffectModifierData *fxmd, Mesh *mesh, Object *object);
 
   /**
    * Reload the list of effects contaiend in the plugin

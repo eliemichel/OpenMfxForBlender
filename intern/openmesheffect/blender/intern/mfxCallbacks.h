@@ -26,6 +26,7 @@
 #include "ofxMeshEffect.h"
 
 #include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
 
 /**
  * Data shared as a blind handle from Blender GPL code to host code
@@ -38,6 +39,7 @@ typedef struct MeshInternalData {
   // from which copying some flags and stuff.
   Mesh *blender_mesh;
   Mesh *source_mesh;
+  Object *object;
 } MeshInternalData;
 
 /**

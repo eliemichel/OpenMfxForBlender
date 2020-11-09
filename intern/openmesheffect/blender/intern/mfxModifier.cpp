@@ -104,12 +104,12 @@ void mfx_Modifier_free_runtime_data(void * runtime_data)
   printf("==/ mfx_Modifier_free_runtime_data\n");
 }
 
-Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh)
+Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh, Object *object)
 {
   printf("== mfx_Modifier_do on data %p\n", fxmd);
 
   OpenMeshEffectRuntime *runtime = ensure_runtime(fxmd);
-  Mesh *output_mesh = runtime->cook(fxmd, mesh);
+  Mesh *output_mesh = runtime->cook(fxmd, mesh, object);
 
   printf("==/ mfx_Modifier_do\n");
   return output_mesh;

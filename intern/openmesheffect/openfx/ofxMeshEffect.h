@@ -113,7 +113,7 @@ attributes include a position for points, a point index for vertices and a verte
 #define kOfxMeshAttribVertexPoint "OfxMeshAttribVertexPoint"
 
 /** @brief Name of the face attribute for vertex count.
- *
+ * 
  * This is ignored if the mesh's \ref kOfxMeshPropConstantFaceCount property is different from -1.
  */
 #define kOfxMeshAttribFaceCounts "OfxMeshAttribFaceCounts"
@@ -206,7 +206,7 @@ These are the list of actions passed to a mesh effect plugin's main function. Fo
 
 \pre
      -  \ref kOfxActionCreateInstance has been called on the instance
-
+     
  @returns
      -  \ref kOfxStatOK, the effect cooked normally
      -  \ref kOfxStatErrMemory, in which case the action may be called again after
@@ -266,7 +266,7 @@ These are the list of actions passed to a mesh effect plugin's main function. Fo
 */
 /*@{*/
 /**
-   \defgroup MeshEffectPropDefines Mesh Effect Property Definitions
+   \defgroup MeshEffectPropDefines Mesh Effect Property Definitions 
 
 These are the list of properties used by the Mesh Effects API.
 */
@@ -376,10 +376,22 @@ enabling speed-ups on host side. This property is -1 when faces have a varying n
  */
 #define kOfxMeshPropConstantFaceCount "OfxMeshPropConstantFaceCount"
 
+/** @brief Matrix converting the mesh's local coordinates into world coordinates
+
+    - Type - pointer X 1
+    - Property Set - a mesh instance (read only)
+
+This points to an array of 16 doubles representing a transform matrix in row major order.
+Some mesh effect inputs may be used only for their location or matrix. Some others might
+ignore this property as they operate in local coordinates. This pointer may be NULL in which
+case the transform is assumed to be the identity.
+ */
+#define kOfxMeshPropTransformMatrix "OfxMeshPropTransformMatrix"
+
 /**  @brief The data pointer of an attribute.
 
-    - Type - int X 1
-    - Property Set - a mesh attribute (read only)
+    - Type - pointer X 1
+    - Property Set - a mesh attribute
 
 This property contains a pointer to memory where attribute data is stored, whose size depend on the
 attribute attachment (point/vertex/face/mesh) and attribute type (int, float, vector, etc.)
@@ -463,8 +475,8 @@ typedef struct OfxMeshEffectSuiteV1 {
   - ::kOfxStatErrUnknown    - if the type is unknown
   */
   OfxStatus (*getPropertySet)(OfxMeshEffectHandle meshEffect,
-                              OfxPropertySetHandle *propHandle);
-
+            OfxPropertySetHandle *propHandle);
+  
   /** @brief Retrieves the parameter set for the given mesh effect
 
   \arg meshEffect   mesh effect to get the property set for
@@ -478,28 +490,28 @@ typedef struct OfxMeshEffectSuiteV1 {
   - ::kOfxStatErrUnknown    - if the type is unknown
   */
   OfxStatus (*getParamSet)(OfxMeshEffectHandle meshEffect,
-                           OfxParamSetHandle *paramSet);
+         OfxParamSetHandle *paramSet);
 
-  /** @brief Define an input to the effect.
-
+  /** @brief Define an input to the effect. 
+      
    \arg pluginHandle - the handle passed into 'describeInContext' action
    \arg name - unique name of the input to define
    \arg propertySet - a property handle for the input descriptor will be returned here
 
    This function defines an input to a host, the returned property set is used to describe
    various aspects of the input to the host. Note that this does not create an input instance.
-
+   
 \pre
  - we are inside the describe in context action.
 
   @returns
   */
   OfxStatus (*inputDefine)(OfxMeshEffectHandle meshEffect,
-                           const char *name,
-                           OfxPropertySetHandle *propertySet);
+        const char *name,  
+        OfxPropertySetHandle *propertySet);
 
-  /** @brief Get the propery handle of the named geometry input in the given instance
-
+  /** @brief Get the propery handle of the named geometry input in the given instance 
+   
    \arg meshEffect - an instance handle to the plugin
    \arg name        - name of the input, previously used in an input define call
    \arg input        - where to return the input
@@ -517,15 +529,15 @@ typedef struct OfxMeshEffectSuiteV1 {
  - create instance action called,
  - \e name passed to inputDefine for this context,
  - not inside describe or describe in context actions.
-
+ 
 \post
  - handle will be valid for the life time of the instance.
 
   */
   OfxStatus (*inputGetHandle)(OfxMeshEffectHandle meshEffect,
-                              const char *name,
-                              OfxMeshInputHandle *input,
-                              OfxPropertySetHandle *propertySet);
+           const char *name,
+           OfxMeshInputHandle *input,
+           OfxPropertySetHandle *propertySet);
 
   /** @brief Retrieves the property set for a given input
 
@@ -540,7 +552,7 @@ typedef struct OfxMeshEffectSuiteV1 {
   - ::kOfxStatErrUnknown    - if the type is unknown
   */
   OfxStatus (*inputGetPropertySet)(OfxMeshInputHandle input,
-                                   OfxPropertySetHandle *propHandle);
+          OfxPropertySetHandle *propHandle);
 
   /** @brief Get a handle for a mesh in an input at the indicated time
 
@@ -658,7 +670,7 @@ By default, the attribute data is not owned by the mesh (kOfxMeshAttribPropIsOwn
   - ::kOfxStatErrUnknown    - if the type is unknown
   */
   OfxStatus (*meshGetPropertySet)(OfxMeshHandle mesh,
-                                  OfxPropertySetHandle *propHandle);
+          OfxPropertySetHandle *propHandle);
 
 /** @brief Allocate memory of a mesh in an output input
 
