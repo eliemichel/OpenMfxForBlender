@@ -157,6 +157,7 @@ bool OfxPropertySetStruct::check_property_context(PropertySetContext context, Pr
       (0 == strcmp(property, kOfxMeshPropFaceCount)    && type == PROP_TYPE_INT)     ||
       (0 == strcmp(property, kOfxMeshPropNoLooseEdge)  && type == PROP_TYPE_INT)     ||
       (0 == strcmp(property, kOfxMeshPropConstantFaceCount) && type == PROP_TYPE_INT) ||
+      (0 == strcmp(property, kOfxMeshPropTransformMatrix) && type == PROP_TYPE_POINTER) ||
       false
     );
     case PropertySetContext::Param:
