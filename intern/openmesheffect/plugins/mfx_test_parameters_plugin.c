@@ -29,6 +29,13 @@
 #include <stdbool.h>
 #include <string.h>
 
+
+#define MFX_CHECK(expr) \
+  status = runtime->expr; \
+  if (kOfxStatOK != status) { \
+    printf("%s returned error status: %d (%s)\n", #expr, status, getOfxStateName(status)); \
+  }
+
 typedef struct PluginRuntime {
     OfxHost *host;
     OfxPropertySuiteV1 *propertySuite;
@@ -57,81 +64,70 @@ static OfxStatus plugin0_describe(const PluginRuntime *runtime, OfxMeshEffectHan
     OfxStatus status;
     OfxPropertySetHandle propHandle;
 
-    status = runtime->meshEffectSuite->getPropertySet(meshEffect, &propHandle);
-    printf("Suite method 'getPropertySet' returned status %d (%s)\n", status, getOfxStateName(status));
+    MFX_CHECK(meshEffectSuite->getPropertySet(meshEffect, &propHandle));
 
-    status = runtime->propertySuite->propSetString(propHandle, kOfxMeshEffectPropContext, 0, kOfxMeshEffectContextFilter);
-    printf("Suite method 'propSetString' returned status %d (%s)\n", status, getOfxStateName(status));
+    MFX_CHECK(propertySuite->propSetString(propHandle, kOfxMeshEffectPropContext, 0, kOfxMeshEffectContextFilter));
 
     // Shall move into "describe in context" when it will exist
     OfxPropertySetHandle inputProperties;
-    status = runtime->meshEffectSuite->inputDefine(meshEffect, kOfxMeshMainInput, &inputProperties);
-    printf("Suite method 'inputDefine' returned status %d (%s)\n", status, getOfxStateName(status));
+    MFX_CHECK(meshEffectSuite->inputDefine(meshEffect, kOfxMeshMainInput, NULL, &inputProperties));
 
-    status = runtime->propertySuite->propSetString(inputProperties, kOfxPropLabel, 0, "Main Input");
-    printf("Suite method 'propSetString' returned status %d (%s)\n", status, getOfxStateName(status));
+    MFX_CHECK(propertySuite->propSetString(inputProperties, kOfxPropLabel, 0, "Main Input"));
+
+    //MFX_CHECK(propertySuite->propSetInt(inputProperties, kOfxInputPropRequireTransformMatrix, 0, 1));
 
     OfxPropertySetHandle outputProperties;
-    status = runtime->meshEffectSuite->inputDefine(meshEffect, kOfxMeshMainOutput, &outputProperties); // yes, output are also "inputs", I should change this name in the API
-    printf("Suite method 'inputDefine' returned status %d (%s)\n", status, getOfxStateName(status));
+    MFX_CHECK(meshEffectSuite->inputDefine(meshEffect, kOfxMeshMainOutput, NULL, &outputProperties));
 
-    status = runtime->propertySuite->propSetString(outputProperties, kOfxPropLabel, 0, "Main Output");
-    printf("Suite method 'propSetString' returned status %d (%s)\n", status, getOfxStateName(status));
+    MFX_CHECK(propertySuite->propSetString(outputProperties, kOfxPropLabel, 0, "Main Output"));
 
     // Declare parameters
     OfxParamSetHandle parameters;
-    status = runtime->meshEffectSuite->getParamSet(meshEffect, &parameters);
-    printf("Suite method 'getParamSet' returned status %d (%s)\n", status, getOfxStateName(status));
+    MFX_CHECK(meshEffectSuite->getParamSet(meshEffect, &parameters));
 
     OfxPropertySetHandle paramProps;
 
-    status = runtime->parameterSuite->paramDefine(parameters, kOfxParamTypeInteger, "Count", &paramProps);
+    MFX_CHECK(parameterSuite->paramDefine(parameters, kOfxParamTypeInteger, "Count", &paramProps));
     runtime->propertySuite->propSetInt(paramProps, kOfxParamPropDefault, 0, 15);
 
-    status = runtime->parameterSuite->paramDefine(parameters, kOfxParamTypeInteger2D, "Count2D", &paramProps);
+    MFX_CHECK(parameterSuite->paramDefine(parameters, kOfxParamTypeInteger2D, "Count2D", &paramProps));
     int int2D[2] = { 25, 87 };
     runtime->propertySuite->propSetIntN(paramProps, kOfxParamPropDefault, 2, int2D);
 
-    status = runtime->parameterSuite->paramDefine(parameters, kOfxParamTypeInteger3D, "Count3D", &paramProps);
+    MFX_CHECK(parameterSuite->paramDefine(parameters, kOfxParamTypeInteger3D, "Count3D", &paramProps));
     int int3D[3] = { 12, 45, 1569 };
     runtime->propertySuite->propSetIntN(paramProps, kOfxParamPropDefault, 3, int3D);
 
-    status = runtime->parameterSuite->paramDefine(parameters, kOfxParamTypeDouble, "Distance", &paramProps);
+    MFX_CHECK(parameterSuite->paramDefine(parameters, kOfxParamTypeDouble, "Distance", &paramProps));
     runtime->propertySuite->propSetDouble(paramProps, kOfxParamPropDefault, 0, 17.0);
     runtime->propertySuite->propSetDouble(paramProps, kOfxParamPropMin, 0, -10.0);
     runtime->propertySuite->propSetDouble(paramProps, kOfxParamPropMax, 0, 110.0);
     runtime->propertySuite->propSetDouble(paramProps, kOfxParamPropDisplayMin, 0, 0.0);
     runtime->propertySuite->propSetDouble(paramProps, kOfxParamPropDisplayMax, 0, 100.0);
 
-    status = runtime->parameterSuite->paramDefine(parameters, kOfxParamTypeDouble2D, "Vector2D", &paramProps);
+    MFX_CHECK(parameterSuite->paramDefine(parameters, kOfxParamTypeDouble2D, "Vector2D", &paramProps));
     double double2D[2] = { 12.89, 1.02369 };
     runtime->propertySuite->propSetDoubleN(paramProps, kOfxParamPropDefault, 2, double2D);
 
-    status = runtime->parameterSuite->paramDefine(parameters, kOfxParamTypeDouble3D, "Vector3D", &paramProps);
+    MFX_CHECK(parameterSuite->paramDefine(parameters, kOfxParamTypeDouble3D, "Vector3D", &paramProps));
     double double3D[3] = { -159.51, 0.00416, 2257896.123 };
     runtime->propertySuite->propSetDoubleN(paramProps, kOfxParamPropDefault, 3, double3D);
 
-    status = runtime->parameterSuite->paramDefine(parameters, kOfxParamTypeRGB, "Color", &paramProps);
+    MFX_CHECK(parameterSuite->paramDefine(parameters, kOfxParamTypeRGB, "Color", &paramProps));
     double rgb[3] = { 0.025363, 0.608, 0.62 };
     runtime->propertySuite->propSetDoubleN(paramProps, kOfxParamPropDefault, 3, rgb);
 
-    status = runtime->parameterSuite->paramDefine(parameters, kOfxParamTypeRGBA, "RGBA Color", &paramProps);
+    MFX_CHECK(parameterSuite->paramDefine(parameters, kOfxParamTypeRGBA, "RGBA Color", &paramProps));
     double rgba[4] = { 0.72, 0.058068, 0.14, 0.5 };
     runtime->propertySuite->propSetDoubleN(paramProps, kOfxParamPropDefault, 4, rgba);
 
-    status = runtime->parameterSuite->paramDefine(parameters, kOfxParamTypeBoolean, "Enable Option", &paramProps);
+    MFX_CHECK(parameterSuite->paramDefine(parameters, kOfxParamTypeBoolean, "Enable Option", &paramProps));
     runtime->propertySuite->propSetInt(paramProps, kOfxParamPropDefault, 0, (int)true);
 
-    status = runtime->parameterSuite->paramDefine(parameters, kOfxParamTypeString, "Description", &paramProps);
+    MFX_CHECK(parameterSuite->paramDefine(parameters, kOfxParamTypeString, "Description", &paramProps));
     runtime->propertySuite->propSetString(paramProps, kOfxParamPropDefault, 0, "Description here!");
 
     return kOfxStatOK;
-}
-
-#define MFX_CHECK(expr) \
-status = runtime->expr; \
-if (kOfxStatOK != status) { \
-  printf("%s returned error status: %d\n", #expr, status); \
 }
 
 static OfxStatus plugin0_cook(PluginRuntime *runtime, OfxMeshEffectHandle meshEffect) {

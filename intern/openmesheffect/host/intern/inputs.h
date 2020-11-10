@@ -41,6 +41,7 @@ struct OfxMeshInputStruct {
  public:
   const char *name;
   OfxPropertySetStruct properties;
+  OfxAttributeSetStruct requested_attributes; // not technically attributes, e.g. data info are not used
   OfxMeshStruct mesh;
   OfxHost *host; // weak pointer, do not deep copy
 };

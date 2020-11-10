@@ -38,12 +38,20 @@ OfxStatus getPropertySet(OfxMeshEffectHandle meshEffect, OfxPropertySetHandle *p
 OfxStatus getParamSet(OfxMeshEffectHandle meshEffect, OfxParamSetHandle *paramSet);
 OfxStatus inputDefine(OfxMeshEffectHandle meshEffect,
                       const char *name,
+                      OfxMeshInputHandle *input,
                       OfxPropertySetHandle *propertySet);
 OfxStatus inputGetHandle(OfxMeshEffectHandle meshEffect,
                          const char *name,
                          OfxMeshInputHandle *input,
                          OfxPropertySetHandle *propertySet);
 OfxStatus inputGetPropertySet(OfxMeshInputHandle input, OfxPropertySetHandle *propHandle);
+OfxStatus inputRequestAttribute(OfxMeshInputHandle input,
+                                const char *attachment,
+                                const char *name,
+                                int componentCount,
+                                const char *type,
+                                const char *semantic,
+                                int mandatory);
 OfxStatus inputGetMesh(OfxMeshInputHandle input,
                        OfxTime time,
                        OfxMeshHandle *meshHandle,
@@ -56,6 +64,7 @@ OfxStatus attributeDefine(OfxMeshHandle meshHandle,
                           const char *name,
                           int componentCount,
                           const char *type,
+                          const char *semantic,
                           OfxPropertySetHandle *attributeHandle);
 OfxStatus meshGetAttribute(OfxMeshHandle meshHandle,
                            const char *attachment,

@@ -50,6 +50,7 @@ const OfxMeshEffectSuiteV1 gMeshEffectSuiteV1 = {
     /* inputDefine */ inputDefine,
     /* inputGetHandle */ inputGetHandle,
     /* inputGetPropertySet */ inputGetPropertySet,
+    /* inputRequestAttribute */ inputRequestAttribute,
     /* inputGetMesh */ inputGetMesh,
     /* inputReleaseMesh */ inputReleaseMesh,
     /* attributeDefine */ attributeDefine,
@@ -72,6 +73,7 @@ OfxStatus getParamSet(OfxMeshEffectHandle meshEffect, OfxParamSetHandle *paramSe
 
 OfxStatus inputDefine(OfxMeshEffectHandle meshEffect,
                       const char *name,
+                      OfxMeshInputHandle *input,
                       OfxPropertySetHandle *propertySet)
 {
   printf("Defining input '%s' on OfxMeshEffectHandle %p\n", name, meshEffect);
@@ -79,7 +81,12 @@ OfxStatus inputDefine(OfxMeshEffectHandle meshEffect,
   meshEffect->inputs.inputs[i]->host = meshEffect->host;
   propSetPointer(
       &meshEffect->inputs.inputs[i]->mesh.properties, kOfxMeshPropInternalData, 0, NULL);
-  *propertySet = &(meshEffect->inputs.inputs[i]->properties);
+  if (NULL != input) {
+    *input = meshEffect->inputs.inputs[i];
+  }
+  if (NULL != propertySet) {
+    *propertySet = &(meshEffect->inputs.inputs[i]->properties);
+  }
   return kOfxStatOK;
 }
 
@@ -105,6 +112,46 @@ OfxStatus inputGetPropertySet(OfxMeshInputHandle input, OfxPropertySetHandle *pr
   return kOfxStatOK;
 }
 
+OfxStatus inputRequestAttribute(OfxMeshInputHandle input,
+    const char* attachment,
+    const char* name,
+    int componentCount,
+    const char* type,
+    const char* semantic,
+    int mandatory)
+{
+  if (componentCount < 1 || componentCount > 4) {
+    return kOfxStatErrValue;
+  }
+  if (0 != strcmp(type, kOfxMeshAttribTypeInt) && 0 != strcmp(type, kOfxMeshAttribTypeFloat) &&
+      0 != strcmp(type, kOfxMeshAttribTypeUByte)) {
+    return kOfxStatErrValue;
+  }
+
+  if (0 != strcmp(semantic, kOfxMeshAttribSemanticTextureCoordinate) &&
+      0 != strcmp(semantic, kOfxMeshAttribSemanticNormal) &&
+      0 != strcmp(semantic, kOfxMeshAttribSemanticColor) &&
+      0 != strcmp(semantic, kOfxMeshAttribSemanticWeight)) {
+    return kOfxStatErrValue;
+  }
+
+  AttributeAttachment intAttachment = mfxToInternalAttribAttachment(attachment);
+  if (intAttachment == ATTR_ATTACH_INVALID) {
+    return kOfxStatErrBadIndex;
+  }
+
+  int i = input->requested_attributes.ensure(intAttachment, name);
+
+  OfxPropertySetStruct *attributeProperties =
+      &input->requested_attributes.attributes[i]->properties;
+  propSetInt(attributeProperties, kOfxMeshAttribPropComponentCount, 0, componentCount);
+  propSetString(attributeProperties, kOfxMeshAttribPropType, 0, type);
+  propSetString(attributeProperties, kOfxMeshAttribPropSemantic, 0, semantic);
+  propSetInt(attributeProperties, kMeshAttribRequestPropMandatory, 0, mandatory);
+
+  return kOfxStatOK;
+}
+
 OfxStatus inputGetMesh(OfxMeshInputHandle input,
                        OfxTime time,
                        OfxMeshHandle *meshHandle,
@@ -124,18 +171,21 @@ OfxStatus inputGetMesh(OfxMeshInputHandle input,
                   kOfxMeshAttribPointPosition,
                   3,
                   kOfxMeshAttribTypeFloat,
+                  NULL,
                   NULL);
   attributeDefine(inputMeshHandle,
                   kOfxMeshAttribVertex,
                   kOfxMeshAttribVertexPoint,
                   1,
                   kOfxMeshAttribTypeInt,
+                  NULL,
                   NULL);
   attributeDefine(inputMeshHandle,
                   kOfxMeshAttribFace,
                   kOfxMeshAttribFaceCounts,
                   1,
                   kOfxMeshAttribTypeInt,
+                  NULL,
                   NULL);
 
   // Call internal callback before actually getting data
@@ -195,14 +245,25 @@ OfxStatus attributeDefine(OfxMeshHandle meshHandle,
                           const char *name,
                           int componentCount,
                           const char *type,
+                          const char *semantic,
                           OfxPropertySetHandle *attributeHandle)
 {
   if (componentCount < 1 || componentCount > 4) {
     return kOfxStatErrValue;
   }
-  if (0 != strcmp(type, kOfxMeshAttribTypeInt) && 0 != strcmp(type, kOfxMeshAttribTypeFloat) &&
+  if (0 != strcmp(type, kOfxMeshAttribTypeInt) &&
+      0 != strcmp(type, kOfxMeshAttribTypeFloat) &&
       0 != strcmp(type, kOfxMeshAttribTypeUByte)) {
     return kOfxStatErrValue;
+  }
+
+  if (NULL != semantic) {
+    if (0 != strcmp(semantic, kOfxMeshAttribSemanticTextureCoordinate) &&
+        0 != strcmp(semantic, kOfxMeshAttribSemanticNormal) &&
+        0 != strcmp(semantic, kOfxMeshAttribSemanticColor) &&
+        0 != strcmp(semantic, kOfxMeshAttribSemanticWeight)) {
+      return kOfxStatErrValue;
+    }
   }
 
   AttributeAttachment intAttachment = mfxToInternalAttribAttachment(attachment);
@@ -216,6 +277,7 @@ OfxStatus attributeDefine(OfxMeshHandle meshHandle,
   propSetPointer(attributeProperties, kOfxMeshAttribPropData, 0, NULL);
   propSetInt(attributeProperties, kOfxMeshAttribPropComponentCount, 0, componentCount);
   propSetString(attributeProperties, kOfxMeshAttribPropType, 0, type);
+  propSetString(attributeProperties, kOfxMeshAttribPropSemantic, 0, semantic);
   propSetInt(attributeProperties, kOfxMeshAttribPropIsOwner, 0, 1);
 
   if (attributeHandle) {

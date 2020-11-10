@@ -69,6 +69,7 @@ OfxStatus propSetString(OfxPropertySetHandle properties,
     return kOfxStatErrBadIndex;
   }
   int i = properties->ensure_property(property);
+  // FIXME: there is an obvious problem here for prop values that are not global strings...
   properties->properties[i]->value[index].as_const_char = value;
   return kOfxStatOK;
 }

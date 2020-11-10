@@ -46,11 +46,11 @@ static OfxStatus describe(OfxMeshEffectHandle descriptor) {
     const OfxPropertySuiteV1 *propertySuite = gRuntime.propertySuite;
 
     OfxPropertySetHandle inputProperties;
-    meshEffectSuite->inputDefine(descriptor, kOfxMeshMainInput, &inputProperties);
+    meshEffectSuite->inputDefine(descriptor, kOfxMeshMainInput, NULL, &inputProperties);
     propertySuite->propSetString(inputProperties, kOfxPropLabel, 0, "Main Input");
 
     OfxPropertySetHandle outputProperties;
-    meshEffectSuite->inputDefine(descriptor, kOfxMeshMainOutput, &outputProperties);
+    meshEffectSuite->inputDefine(descriptor, kOfxMeshMainOutput, NULL, &outputProperties);
     propertySuite->propSetString(outputProperties, kOfxPropLabel, 0, "Main Output");
 
     return kOfxStatOK;
@@ -99,7 +99,7 @@ static OfxStatus cook(OfxMeshEffectHandle instance) {
     if (kOfxStatOK == status) {
       printf("found!\n");
       propertySuite->propGetPointer(vcolor_attrib, kOfxMeshAttribPropData, 0, (void**)&vcolor_data);
-      meshEffectSuite->attributeDefine(output_mesh, kOfxMeshAttribVertex, "uv0", 2, kOfxMeshAttribTypeFloat, &uv_attrib);
+      meshEffectSuite->attributeDefine(output_mesh, kOfxMeshAttribVertex, "uv0", 2, kOfxMeshAttribTypeFloat, &uv_attrib, kOfxMeshAttribSemanticTextureCoordinate);
       propertySuite->propSetInt(uv_attrib, kOfxMeshAttribPropIsOwner, 0, 1);
     }
 

@@ -43,11 +43,11 @@ static OfxStatus describe(OfxMeshEffectHandle descriptor) {
     const OfxParameterSuiteV1 *parameterSuite = gRuntime.parameterSuite;
 
     OfxPropertySetHandle inputProperties;
-    meshEffectSuite->inputDefine(descriptor, kOfxMeshMainInput, &inputProperties);
+    meshEffectSuite->inputDefine(descriptor, kOfxMeshMainInput, NULL, &inputProperties);
     propertySuite->propSetString(inputProperties, kOfxPropLabel, 0, "Main Input");
 
     OfxPropertySetHandle outputProperties;
-    meshEffectSuite->inputDefine(descriptor, kOfxMeshMainOutput, &outputProperties);
+    meshEffectSuite->inputDefine(descriptor, kOfxMeshMainOutput, NULL, &outputProperties);
     propertySuite->propSetString(outputProperties, kOfxPropLabel, 0, "Main Output");
 
     OfxParamSetHandle parameters;

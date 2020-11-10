@@ -57,10 +57,17 @@ Contains the part of the API that relates to mesh processing. This is what is ca
 typedef struct OfxMeshEffectStruct *OfxMeshEffectHandle;
 
 /** @brief Blind declaration of an OFX mesh effect input
+ 
+    An "input" is a slot of the effect that can actually also be an output. Such a slot can require at describe
+    time specific information from the host so that the host can cook it again every time these information
+    change (e.g. if the effect depends on the location of the object -- its \ref kOfxMeshPropTransformMatrix) and
+    to only transfer geometry attributes that are actually needed by this effect.
 */
 typedef struct OfxMeshInputStruct *OfxMeshInputHandle;
 
 /** @brief Blind declaration of an OFX geometry data
+ 
+    A mesh is the data that flows through the inputs at cook time. They are not available at describe time.
 */
 typedef struct OfxMeshStruct *OfxMeshHandle;
 
@@ -129,6 +136,34 @@ attributes include a position for points, a point index for vertices and a verte
 /** @brief Attribute type float 32 bit
  */
 #define kOfxMeshAttribTypeFloat "OfxMeshAttribTypeFloat"
+
+/** @brief Attribute semantic for texture coordinates (sometimes called "UV")
+
+Such attribute is usually attached to vertices (or sometimes to points), has 2 floats or 3 floats
+(when using Udims) and is softly limited to the (0,1) range for each.
+ */
+#define kOfxMeshAttribSemanticTextureCoordinate "OfxMeshAttribSemanticTextureCoordinate"
+
+/** @brief Attribute semantic for normal vectors
+
+Such attribute is usually a 3 float unit (i.e. normalized) vector attached to vertices or points,
+but may also be computed for faces. They represent the orthogonal to the local surface and are used
+for instance for shading.
+ */
+#define kOfxMeshAttribSemanticNormal "OfxMeshAttribSemanticNormal"
+
+/** @brief Attribute semantic for colors
+
+Colors can be attached to any entity. They are may be 3 or 4 floats softly limited to the (0,1) range,
+or 3 or 4 integers/ubyte in the (0,255) range, or 1 integer encoding an RGBA color on its bytes.
+ */
+#define kOfxMeshAttribSemanticColor "OfxMeshAttribSemanticColor"
+
+/** @brief Attribute semantic for weights
+
+Weights are simple scalar values (i.e. 1-component floats), often softly limited to the (0,1) range.
+ */
+#define kOfxMeshAttribSemanticWeight "OfxMeshAttribSemanticWeight"
 
 /*@}*/
 
@@ -435,9 +470,25 @@ An attribute can have between 1 and 4 components.
     - Type - string X 1
     - Property Set - a mesh attribute (read only)
 
-An attribute can have type kOfxMeshAttribTypeFloat or kOfxMeshAttribTypeInt
+Possible values are \ref kOfxMeshAttribTypeFloat, \ref kOfxMeshAttribTypeInt
+or \ref kOfxMeshAttribTypeUByte
 */
 #define kOfxMeshAttribPropType "OfxMeshAttribPropType"
+
+/**  @brief The semantic of an attribute.
+
+    - Type - string X 1
+    - Property Set - a mesh attribute (read only)
+
+Attributes have a type (float, int) and a component count (1 to 4) and may have a semantic flag
+telling what their intended use out of the effect would be. These are the constant starting by
+\e kOfxMeshAttribSemantic*
+
+Possible values are \ref kOfxMeshAttribSemanticTextureCoordinate,
+\ref kOfxMeshAttribSemanticNormal, \ref kOfxMeshAttribSemanticColor
+or \ref kOfxMeshAttribSemanticWeight
+*/
+#define kOfxMeshAttribPropSemantic "OfxMeshAttribPropSemantic"
 
 /*@}*/
 /*@}*/
@@ -495,11 +546,13 @@ typedef struct OfxMeshEffectSuiteV1 {
   /** @brief Define an input to the effect. 
       
    \arg pluginHandle - the handle passed into 'describeInContext' action
-   \arg name - unique name of the input to define
-   \arg propertySet - a property handle for the input descriptor will be returned here
+   \arg name         - unique name of the input to define
+   \arg input        - where to return the input (if not NULL)
+   \arg propertySet  - a property handle for the input descriptor will be returned here (if not NULL)
 
    This function defines an input to a host, the returned property set is used to describe
-   various aspects of the input to the host. Note that this does not create an input instance.
+   various aspects of the input to the host.
+   The input handle can be used to request specific attributes.
    
 \pre
  - we are inside the describe in context action.
@@ -507,7 +560,8 @@ typedef struct OfxMeshEffectSuiteV1 {
   @returns
   */
   OfxStatus (*inputDefine)(OfxMeshEffectHandle meshEffect,
-        const char *name,  
+        const char *name,
+        OfxMeshInputHandle *input,
         OfxPropertySetHandle *propertySet);
 
   /** @brief Get the propery handle of the named geometry input in the given instance 
@@ -528,10 +582,11 @@ typedef struct OfxMeshEffectSuiteV1 {
 \pre
  - create instance action called,
  - \e name passed to inputDefine for this context,
- - not inside describe or describe in context actions.
  
 \post
- - handle will be valid for the life time of the instance.
+ - if meshEffect is a descriptor (i.e. we are inside the describe or describe in context actions), handle
+   will be valid until the end of the action.
+ - otherwise, if meshEffect is an instance, handle will be valid for the life time of the instance.
 
   */
   OfxStatus (*inputGetHandle)(OfxMeshEffectHandle meshEffect,
@@ -553,6 +608,48 @@ typedef struct OfxMeshEffectSuiteV1 {
   */
   OfxStatus (*inputGetPropertySet)(OfxMeshInputHandle input,
           OfxPropertySetHandle *propHandle);
+
+  /** @brief Notify the host that this effect depends on a given attribute on the specified input
+
+      \arg input            - the input to request an attribute for
+      \arg attachment       - attribute attachment (see \ref MeshAttrib)
+      \arg name             - attribute name
+      \arg componentCount   - number of components in the attribute, from 1 to 4 (1 is a scalar
+                              attribute, 2 is a vector2, etc.)
+      \arg type             - type of the attribute data (float or int, see \ref MeshAttrib)
+      \arg semantic        - optional semantic of the attribute data (see \ref MeshAttrib), might be NULL
+      \arg mandatory        - whether the attribute is mandatory or not.
+
+  Requesting an attribute ensures that it will indeed be present in the mesh at cook time only if \e mandatory
+  is set to 1. Otherwise, it is the responsibility of the effect, to handle the default value.
+
+  For mandatory attributes, the component count at cook time can be equal or larger than the requested size,
+  and for non mandatory ones, it is allowed to be lower. It is the responsibility of the effect to extrapole
+  the missing components from the available ones.
+
+  The effect should also be ready to handle attributes that it did not requested but that the host decided
+  to feed it (likely because they are needed by other effects located downstream).
+
+  \pre
+      - called from inside the describe or describe in context action
+      - input was returned by inputGetHandle
+      - inputRequestAttribute was not called with the same \e attachement and \e name combination
+  
+  @returns
+      - ::kOfxStatOK     - the mesh was successfully fetched and returned in the handle,
+      - ::kOfxStatFailed - the mesh could not be fetched because it does not exist in the input at the indicated time, the plugin
+                           should continue operation, but assume the mesh was empty.
+      - ::kOfxStatErrBadHandle - the input handle was invalid,
+      - ::kOfxStatErrMemory - the host had not enough memory to complete the operation, plugin should abort whatever it was doing.
+
+  */
+  OfxStatus (*inputRequestAttribute)(OfxMeshInputHandle input,
+                                     const char *attachment,
+                                     const char *name,
+                                     int componentCount,
+                                     const char *type,
+                                     const char *semantic,
+                                     int mandatory);
 
   /** @brief Get a handle for a mesh in an input at the indicated time
 
@@ -607,6 +704,7 @@ If inputGetMesh is called twice with the same parameters, then two separate mesh
       \arg componentCount   - number of components in the attribute, from 1 to 4 (1 is a scalar
                               attribute, 2 is a vector2, etc.)
       \arg type             - type of the attribute data (float or int, see \ref MeshAttrib)
+      \arg semantic        - optional semantic of the attribute data (see \ref MeshAttrib), might be NULL
       \arg attributeHandle  - property set for returning attribute properties, might be NULL.
 
 \pre
@@ -630,6 +728,7 @@ By default, the attribute data is not owned by the mesh (kOfxMeshAttribPropIsOwn
                               const char *name,
                               int componentCount,
                               const char *type,
+                              const char *semantic,
                               OfxPropertySetHandle *attributeHandle);
 
   /** @brief Get an attribute handle from a mesh

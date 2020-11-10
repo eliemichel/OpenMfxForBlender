@@ -65,3 +65,7 @@ typedef OfxStatus (*BeforeMeshReleaseCbFunc)(OfxHost*, OfxMeshHandle);
 
 typedef OfxStatus (*BeforeMeshGetCbFunc)(OfxHost*, OfxMeshHandle);
 
+/**
+ * Internal property on attributes that are used to store attribute requests
+ */
+#define kMeshAttribRequestPropMandatory "MeshAttribRequestPropMandatory"

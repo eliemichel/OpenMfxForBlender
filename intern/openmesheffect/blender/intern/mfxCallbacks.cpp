@@ -211,8 +211,13 @@ OfxStatus Converter::blenderToMfx(OfxMeshHandle ofx_mesh) const
 
     if (0 == blender_loose_edge_count) {
       // reuse host buffer, kOfxMeshPropNoLooseEdge optimization
-      MFX_CHECK(mes->attributeDefine(
-          ofx_mesh, kOfxMeshAttribVertex, name, 3, kOfxMeshAttribTypeUByte, &vcolor_attrib));
+      MFX_CHECK(mes->attributeDefine(ofx_mesh,
+                                     kOfxMeshAttribVertex,
+                                     name,
+                                     3,
+                                     kOfxMeshAttribTypeUByte,
+                                     kOfxMeshAttribSemanticColor,
+                                     &vcolor_attrib));
       MFX_CHECK(ps->propSetInt(vcolor_attrib, kOfxMeshAttribPropIsOwner, 0, 0));
       MFX_CHECK(
           ps->propSetPointer(vcolor_attrib, kOfxMeshAttribPropData, 0, (void *)&vcolor_data[0].r));
@@ -220,8 +225,13 @@ OfxStatus Converter::blenderToMfx(OfxMeshHandle ofx_mesh) const
     }
     else if (blender_loop_count > 0) {
       // request new buffer to copy data from existing polys, fill default values for edges
-      MFX_CHECK(mes->attributeDefine(
-          ofx_mesh, kOfxMeshAttribVertex, name, 3, kOfxMeshAttribTypeUByte, &vcolor_attrib));
+      MFX_CHECK(mes->attributeDefine(ofx_mesh,
+                                     kOfxMeshAttribVertex,
+                                     name,
+                                     3,
+                                     kOfxMeshAttribTypeUByte,
+                                     kOfxMeshAttribSemanticColor,
+                                     &vcolor_attrib));
       MFX_CHECK(ps->propSetInt(vcolor_attrib, kOfxMeshAttribPropIsOwner, 0, 1));
     }
     else {
@@ -243,17 +253,26 @@ OfxStatus Converter::blenderToMfx(OfxMeshHandle ofx_mesh) const
 
     if (0 == blender_loose_edge_count) {
       // reuse host buffer, kOfxMeshPropNoLooseEdge optimization
-      MFX_CHECK(mes->attributeDefine(
-          ofx_mesh, kOfxMeshAttribVertex, name, 2, kOfxMeshAttribTypeFloat, &uv_attrib));
+      MFX_CHECK(mes->attributeDefine(ofx_mesh,
+                                     kOfxMeshAttribVertex,
+                                     name,
+                                     2,
+                                     kOfxMeshAttribTypeFloat,
+                                     kOfxMeshAttribSemanticTextureCoordinate,
+                                     &uv_attrib));
       MFX_CHECK(ps->propSetInt(uv_attrib, kOfxMeshAttribPropIsOwner, 0, 0));
-      MFX_CHECK(
-          ps->propSetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void *)&uv_data[0].uv[0]));
+      MFX_CHECK(ps->propSetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void *)&uv_data[0].uv[0]));
       MFX_CHECK(ps->propSetInt(uv_attrib, kOfxMeshAttribPropStride, 0, sizeof(MLoopUV)));
     }
     else if (blender_loop_count > 0) {
       // request new buffer to copy data from existing polys, fill default values for edges
-      MFX_CHECK(mes->attributeDefine(
-          ofx_mesh, kOfxMeshAttribVertex, name, 2, kOfxMeshAttribTypeFloat, &uv_attrib));
+      MFX_CHECK(mes->attributeDefine(ofx_mesh,
+                                     kOfxMeshAttribVertex,
+                                     name,
+                                     2,
+                                     kOfxMeshAttribTypeFloat,
+                                     kOfxMeshAttribSemanticTextureCoordinate,
+                                     &uv_attrib));
       MFX_CHECK(ps->propSetInt(uv_attrib, kOfxMeshAttribPropIsOwner, 0, 1));
     }
     else {

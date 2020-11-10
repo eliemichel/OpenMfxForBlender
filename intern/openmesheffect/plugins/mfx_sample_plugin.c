@@ -57,14 +57,14 @@ static OfxStatus plugin0_describe(const PluginRuntime *runtime, OfxMeshEffectHan
 
     // Shall move into "describe in context" when it will exist
     OfxPropertySetHandle inputProperties;
-    status = runtime->meshEffectSuite->inputDefine(meshEffect, kOfxMeshMainInput, &inputProperties);
+    status = runtime->meshEffectSuite->inputDefine(meshEffect, kOfxMeshMainInput, NULL, &inputProperties);
     printf("Suite method 'inputDefine' returned status %d (%s)\n", status, getOfxStateName(status));
 
     status = runtime->propertySuite->propSetString(inputProperties, kOfxPropLabel, 0, "Main Input");
     printf("Suite method 'propSetString' returned status %d (%s)\n", status, getOfxStateName(status));
 
     OfxPropertySetHandle outputProperties;
-    status = runtime->meshEffectSuite->inputDefine(meshEffect, kOfxMeshMainOutput, &outputProperties); // yes, output are also "inputs", I should change this name in the API
+    status = runtime->meshEffectSuite->inputDefine(meshEffect, kOfxMeshMainOutput, NULL, &outputProperties); // yes, output are also "inputs", I should change this name in the API
     printf("Suite method 'inputDefine' returned status %d (%s)\n", status, getOfxStateName(status));
 
     status = runtime->propertySuite->propSetString(outputProperties, kOfxPropLabel, 0, "Main Output");
