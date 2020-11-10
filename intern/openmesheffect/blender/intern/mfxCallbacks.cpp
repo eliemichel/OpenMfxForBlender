@@ -660,12 +660,13 @@ void Converter::propSetTransformMatrix(OfxPropertySetHandle properties, const Ob
   assert(NULL != object);
   double *matrix = new double[16];
 
-#pragma omp parallel for
+// #pragma omp parallel for
   for (int i = 0; i < 16; ++i) {
-    matrix[i] = static_cast<double>(object->obmat[i / 4][i % 4]);
+    // convert to OpenMeshEffect's row-major order from Blender's column-major
+    matrix[i] = static_cast<double>(object->obmat[i % 4][i / 4]);
   }
 
-  MFX_CHECK(ps->propSetPointer(properties, kOfxMeshPropTransformMatrix, 0, (void **)&matrix));
+  MFX_CHECK(ps->propSetPointer(properties, kOfxMeshPropTransformMatrix, 0, (void *)matrix));
 }
 
 void Converter::propFreeTransformMatrix(OfxPropertySetHandle properties) const
