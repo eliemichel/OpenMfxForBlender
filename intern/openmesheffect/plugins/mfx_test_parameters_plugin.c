@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Elie Michel
+ * Copyright 2019 - 2020 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 
 /**
- * Test plugin using all supported paremeters types.
+ * Test plugin using all supported parameters types.
  */
 
 #include "util/ofx_util.h"
@@ -128,6 +128,12 @@ static OfxStatus plugin0_describe(const PluginRuntime *runtime, OfxMeshEffectHan
     return kOfxStatOK;
 }
 
+#define MFX_CHECK(expr) \
+status = runtime->expr; \
+if (kOfxStatOK != status) { \
+  printf("%s returned error status: %d\n", #expr, status); \
+}
+
 static OfxStatus plugin0_cook(PluginRuntime *runtime, OfxMeshEffectHandle meshEffect) {
     OfxStatus status;
     OfxParamSetHandle parameters;
@@ -139,46 +145,64 @@ static OfxStatus plugin0_cook(PluginRuntime *runtime, OfxMeshEffectHandle meshEf
 
     printf("Cooking Test Parameters Plugin...\n");
 
-    status = runtime->meshEffectSuite->getParamSet(meshEffect, &parameters);
+    OfxMeshInputHandle input;
+    OfxPropertySetHandle inputMeshProperties;
+    OfxTime time = 0;
+    OfxMeshHandle inputMesh;
+    MFX_CHECK(meshEffectSuite->inputGetHandle(meshEffect, kOfxMeshMainInput, &input, NULL));
+    MFX_CHECK(meshEffectSuite->inputGetMesh(input, time, &inputMesh, &inputMeshProperties));
+    double *matrix;
+    MFX_CHECK(propertySuite->propGetPointer(inputMeshProperties, kOfxMeshPropTransformMatrix, 0, (void **)&matrix));
+    printf("Input transform matrix: [\n");
+    for (int i = 0; i < 4; ++i) {
+      printf("[%f, %f, %f, %f],\n",
+              matrix[4 * i + 0],
+              matrix[4 * i + 1],
+              matrix[4 * i + 2],
+              matrix[4 * i + 3]);
+    }
+    printf("]\n");
 
-    status = runtime->parameterSuite->paramGetHandle(parameters, "Count", &param, NULL);
-    status = runtime->parameterSuite->paramGetValue(param, &i1);
+    MFX_CHECK(meshEffectSuite->getParamSet(meshEffect, &parameters));
+
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "Count", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &i1));
     printf(" - Parameter 'Count' (kOfxParamTypeInteger): %d\n", i1);
 
-    status = runtime->parameterSuite->paramGetHandle(parameters, "Count2D", &param, NULL);
-    status = runtime->parameterSuite->paramGetValue(param, &i1, &i2);
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "Count2D", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &i1, &i2));
     printf(" - Parameter 'Count2D' (kOfxParamTypeInteger2D): (%d, %d)\n", i1, i2);
 
-    status = runtime->parameterSuite->paramGetHandle(parameters, "Count3D", &param, NULL);
-    status = runtime->parameterSuite->paramGetValue(param, &i1, &i2, &i3);
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "Count3D", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &i1, &i2, &i3));
     printf(" - Parameter 'Count3D' (kOfxParamTypeInteger3D): (%d, %d, %d)\n", i1, i2, i3);
 
-    status = runtime->parameterSuite->paramGetHandle(parameters, "Distance", &param, NULL);
-    status = runtime->parameterSuite->paramGetValue(param, &d1);
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "Distance", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &d1));
     printf(" - Parameter 'Distance' (kOfxParamTypeDouble): %f\n", d1);
 
-    status = runtime->parameterSuite->paramGetHandle(parameters, "Vector2D", &param, NULL);
-    status = runtime->parameterSuite->paramGetValue(param, &d1, &d2);
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "Vector2D", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &d1, &d2));
     printf(" - Parameter 'Vector2D' (kOfxParamTypeDouble2D): (%f, %f)\n", d1, d2);
 
-    status = runtime->parameterSuite->paramGetHandle(parameters, "Vector3D", &param, NULL);
-    status = runtime->parameterSuite->paramGetValue(param, &d1, &d2, &d3);
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "Vector3D", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &d1, &d2, &d3));
     printf(" - Parameter 'Vector3D' (kOfxParamTypeDouble3D): (%f, %f, %f)\n", d1, d2, d3);
 
-    status = runtime->parameterSuite->paramGetHandle(parameters, "Color", &param, NULL);
-    status = runtime->parameterSuite->paramGetValue(param, &d1, &d2, &d3);
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "Color", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &d1, &d2, &d3));
     printf(" - Parameter 'Color' (kOfxParamTypeRGB): (%f, %f, %f)\n", d1, d2, d3);
 
-    status = runtime->parameterSuite->paramGetHandle(parameters, "RGBA Color", &param, NULL);
-    status = runtime->parameterSuite->paramGetValue(param, &d1, &d2, &d3, &d4);
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "RGBA Color", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &d1, &d2, &d3, &d4));
     printf(" - Parameter 'RGBA Color' (kOfxParamTypeRGBA): (%f, %f, %f, %f)\n", d1, d2, d3, d4);
 
-    status = runtime->parameterSuite->paramGetHandle(parameters, "Enable Option", &param, NULL);
-    status = runtime->parameterSuite->paramGetValue(param, &b);
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "Enable Option", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &b));
     printf(" - Parameter 'Enable Option' (kOfxParamTypeBoolean): (%s)\n", b ? "true" : "false");
 
-    status = runtime->parameterSuite->paramGetHandle(parameters, "Description", &param, NULL);
-    status = runtime->parameterSuite->paramGetValue(param, &str);
+    MFX_CHECK(parameterSuite->paramGetHandle(parameters, "Description", &param, NULL));
+    MFX_CHECK(parameterSuite->paramGetValue(param, &str));
     printf(" - Parameter 'Description' (kOfxParamTypeString): (%s)\n", str);
 
     // Also test messaging system
