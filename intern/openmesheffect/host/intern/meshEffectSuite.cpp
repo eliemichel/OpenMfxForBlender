@@ -164,6 +164,7 @@ OfxStatus inputGetMesh(OfxMeshInputHandle input,
   propSetInt(inputMeshProperties, kOfxMeshPropPointCount, 0, 0);
   propSetInt(inputMeshProperties, kOfxMeshPropVertexCount, 0, 0);
   propSetInt(inputMeshProperties, kOfxMeshPropFaceCount, 0, 0);
+  propSetInt(inputMeshProperties, kOfxMeshPropAttributeCount, 0, 0);
 
   // Default attributes
   attributeDefine(inputMeshHandle,
@@ -279,6 +280,10 @@ OfxStatus attributeDefine(OfxMeshHandle meshHandle,
   propSetString(attributeProperties, kOfxMeshAttribPropType, 0, type);
   propSetString(attributeProperties, kOfxMeshAttribPropSemantic, 0, semantic);
   propSetInt(attributeProperties, kOfxMeshAttribPropIsOwner, 0, 1);
+
+  // Keep attribute count up-to-date
+  propSetInt(
+      &meshHandle->properties, kOfxMeshPropAttributeCount, 0, meshHandle->attributes.num_attributes);
 
   if (attributeHandle) {
     *attributeHandle = attributeProperties;
