@@ -29,6 +29,7 @@
 #include "BKE_context.h"
 #include "BKE_screen.h"
 #include "BKE_modifier.h"
+#include "BKE_anim_data.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
