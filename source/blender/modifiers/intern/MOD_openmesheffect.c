@@ -63,11 +63,13 @@ static void initData(struct ModifierData *md)
 {
   printf("OpenMeshEffectModifier: initData.\n");
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
-  fxmd->effect_index = -1;
+  fxmd->active_effect_index = -1;
   fxmd->num_effects = 0;
-  fxmd->effect_info = NULL;
+  fxmd->effects = NULL;
   fxmd->num_parameters = 0;
-  fxmd->parameter_info = NULL;
+  fxmd->parameters = NULL;
+  fxmd->num_extra_inputs = 0;
+  fxmd->extra_inputs = NULL;
   fxmd->message[0] = '\0';
 }
 
@@ -127,12 +129,19 @@ static void freeData(struct ModifierData *md)
   freeRuntimeData(md->runtime);
   md->runtime = NULL;
 
-  if (fxmd->parameter_info) {
-    MEM_freeN(fxmd->parameter_info);
+  if (fxmd->parameters) {
+    MEM_freeN(fxmd->parameters);
+    fxmd->parameters = NULL;
   }
 
-  if (fxmd->effect_info) {
-    MEM_freeN(fxmd->effect_info);
+  if (fxmd->extra_inputs) {
+    MEM_freeN(fxmd->extra_inputs);
+    fxmd->extra_inputs = NULL;
+  }
+
+  if (fxmd->effects) {
+    MEM_freeN(fxmd->effects);
+    fxmd->effects = NULL;
   }
 }
 
@@ -151,9 +160,17 @@ static void panel_draw(const bContext *C, Panel *panel)
   uiItemS(layout);
 
   char *label;
-  int type;
   CollectionPropertyIterator iter;
-  for (RNA_collection_begin(ptr, "parameter_info", &iter); iter.valid;
+  for (RNA_collection_begin(ptr, "extra_inputs", &iter); iter.valid;
+       RNA_property_collection_next(&iter)) {
+    PointerRNA input_ptr = iter.ptr;
+    label = RNA_string_get_alloc(&input_ptr, "label", NULL, 0);
+    uiItemR(layout, &input_ptr, "connected_object", 0, label, ICON_NONE);
+    MEM_freeN(label);
+  }
+
+  int type;
+  for (RNA_collection_begin(ptr, "parameters", &iter); iter.valid;
        RNA_property_collection_next(&iter)) {
     PointerRNA param_ptr = iter.ptr;
     row = uiLayoutRow(layout, true);
@@ -210,20 +227,25 @@ static void blendWrite(BlendWriter *writer, const ModifierData *md)
   const OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
 
   BLO_write_struct_array_by_id(writer,
-                               BLO_get_struct_id(writer, OpenMeshEffectParameterInfo),
+                               BLO_get_struct_id(writer, OpenMeshEffectParameter),
                                fxmd->num_parameters,
-                               fxmd->parameter_info);
+                               fxmd->parameters);
+  BLO_write_struct_array_by_id(writer,
+                               BLO_get_struct_id(writer, OpenMeshEffectInput),
+                               fxmd->num_extra_inputs,
+                               fxmd->extra_inputs);
 }
 
 static void blendRead(BlendDataReader *reader, ModifierData *md)
 {
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
 
-  fxmd->parameter_info = BLO_read_data_address(reader, &fxmd->parameter_info);
+  fxmd->parameters = BLO_read_data_address(reader, &fxmd->parameters);
+  fxmd->extra_inputs = BLO_read_data_address(reader, &fxmd->extra_inputs);
 
   // Effect list will be reloaded from plugin
   fxmd->num_effects = 0;
-  fxmd->effect_info = NULL;
+  fxmd->effects = NULL;
 }
 
 ModifierTypeInfo modifierType_OpenMeshEffect = {

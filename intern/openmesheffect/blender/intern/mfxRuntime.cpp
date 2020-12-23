@@ -113,7 +113,7 @@ void OpenMeshEffectRuntime::get_parameters_from_rna(OpenMeshEffectModifierData *
 {
   OfxParamHandle *parameters = this->effect_instance->parameters.parameters;
   for (int i = 0 ; i < fxmd->num_parameters ; ++i) {
-    copy_parameter_value_from_rna(parameters[i], fxmd->parameter_info + i);
+    copy_parameter_value_from_rna(parameters[i], fxmd->parameters + i);
   }
 }
 
@@ -126,8 +126,8 @@ void OpenMeshEffectRuntime::set_message_in_rna(OpenMeshEffectModifierData *fxmd)
   OfxMessageType type = this->effect_instance->messageType;
 
   if (type != OfxMessageType::Invalid) {
-    BLI_strncpy(fxmd->message, this->effect_instance->message, 1024);
-    fxmd->message[1023] = '\0';
+    BLI_strncpy(fxmd->message, this->effect_instance->message, MOD_OPENMESHEFFECT_MAX_MESSAGE);
+    fxmd->message[MOD_OPENMESHEFFECT_MAX_MESSAGE - 1] = '\0';
   }
 
   if (type == OfxMessageType::Error || type == OfxMessageType::Fatal) {
@@ -184,7 +184,7 @@ void OpenMeshEffectRuntime::save_rna_parameter_values(OpenMeshEffectModifierData
 {
   m_saved_parameter_values.clear();
   for (int i = 0; i < fxmd->num_parameters; ++i) {
-    OpenMeshEffectParameterInfo* rna = fxmd->parameter_info + i;
+    OpenMeshEffectParameter* rna = fxmd->parameters + i;
     std::string key = std::string(rna->name);
     copy_parameter_value_from_rna(&m_saved_parameter_values[key], rna);
   }
@@ -193,7 +193,7 @@ void OpenMeshEffectRuntime::save_rna_parameter_values(OpenMeshEffectModifierData
 void OpenMeshEffectRuntime::try_restore_rna_parameter_values(OpenMeshEffectModifierData *fxmd)
 {
   for (int i = 0; i < fxmd->num_parameters; ++i) {
-    OpenMeshEffectParameterInfo *rna = fxmd->parameter_info + i;
+    OpenMeshEffectParameter *rna = fxmd->parameters + i;
     std::string key = std::string(rna->name);
     if (m_saved_parameter_values.count(key)) {
       copy_parameter_value_to_rna(rna, &m_saved_parameter_values[key]);
@@ -268,9 +268,9 @@ Mesh *OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd,
 void OpenMeshEffectRuntime::reload_effect_info(OpenMeshEffectModifierData *fxmd)
 {
   // Free previous info
-  if (NULL != fxmd->effect_info) {
-    MEM_freeN(fxmd->effect_info);
-    fxmd->effect_info = NULL;
+  if (NULL != fxmd->effects) {
+    MEM_freeN(fxmd->effects);
+    fxmd->effects = NULL;
     fxmd->num_effects = 0;
   }
 
@@ -279,41 +279,40 @@ void OpenMeshEffectRuntime::reload_effect_info(OpenMeshEffectModifierData *fxmd)
   }
 
   fxmd->num_effects = this->registry->num_plugins;
-  fxmd->effect_info = (OpenMeshEffectEffectInfo *)MEM_calloc_arrayN(
-      sizeof(OpenMeshEffectEffectInfo), fxmd->num_effects, "mfx effect info");
+  fxmd->effects = (OpenMeshEffectEffect *)MEM_calloc_arrayN(
+      sizeof(OpenMeshEffectEffect), fxmd->num_effects, "mfx effect info");
 
   for (int i = 0; i < fxmd->num_effects; ++i) {
     // Get asset name
     const char *name = this->registry->plugins[i]->pluginIdentifier;
     printf("Loading %s to RNA\n", name);
-    strncpy(fxmd->effect_info[i].name, name, sizeof(fxmd->effect_info[i].name));
+    strncpy(fxmd->effects[i].name, name, sizeof(fxmd->effects[i].name));
   }
 }
 
-void OpenMeshEffectRuntime::reload_parameter_info(OpenMeshEffectModifierData *fxmd)
+void OpenMeshEffectRuntime::reload_parameters(OpenMeshEffectModifierData *fxmd)
 {
   // Reset parameter DNA
-  if (NULL != fxmd->parameter_info) {
+  if (NULL != fxmd->parameters) {
     save_rna_parameter_values(fxmd);
-    MEM_freeN(fxmd->parameter_info);
-    fxmd->parameter_info = NULL;
+    MEM_freeN(fxmd->parameters);
+    fxmd->parameters = NULL;
     fxmd->num_parameters = 0;
   }
 
   if (NULL == this->effect_desc) {
-    printf("==/ mfx_Modifier_on_asset_changed\n");
     return;
   }
 
   OfxParamSetHandle parameters = &this->effect_desc->parameters;
 
   fxmd->num_parameters = parameters->num_parameters;
-  fxmd->parameter_info = (OpenMeshEffectParameterInfo *)MEM_calloc_arrayN(
-      sizeof(OpenMeshEffectParameterInfo), fxmd->num_parameters, "openmesheffect parameter info");
+  fxmd->parameters = (OpenMeshEffectParameter *)MEM_calloc_arrayN(
+      sizeof(OpenMeshEffectParameter), fxmd->num_parameters, "openmesheffect parameter info");
 
   for (int i = 0; i < fxmd->num_parameters; ++i) {
     const OfxPropertySetStruct & props = parameters->parameters[i]->properties;
-    OpenMeshEffectParameterInfo &rna = fxmd->parameter_info[i];
+    OpenMeshEffectParameter &rna = fxmd->parameters[i];
 
     int script_name_idx = props.find_property(kOfxParamPropScriptName);
     int label_idx = props.find_property(kOfxPropLabel);
@@ -380,6 +379,46 @@ void OpenMeshEffectRuntime::reload_parameter_info(OpenMeshEffectModifierData *fx
   }
 
   try_restore_rna_parameter_values(fxmd);
+}
+
+void OpenMeshEffectRuntime::reload_extra_inputs(OpenMeshEffectModifierData *fxmd)
+{
+  // Reset parameter DNA
+  if (NULL != fxmd->extra_inputs) {
+    // save_rna_parameter_values(fxmd); // TODO
+    MEM_freeN(fxmd->extra_inputs);
+    fxmd->extra_inputs = NULL;
+    fxmd->num_extra_inputs = 0;
+  }
+
+  if (NULL == this->effect_desc) {
+    return;
+  }
+
+  OfxMeshInputSetStruct *inputs = &this->effect_desc->inputs;
+
+  fxmd->num_extra_inputs = min_ii(0, inputs->num_inputs - 1);
+  fxmd->extra_inputs = (OpenMeshEffectInput *)MEM_calloc_arrayN(
+      sizeof(OpenMeshEffectInput), fxmd->num_extra_inputs, "openmesheffect extra input info");
+
+  for (int i = 0; i < fxmd->num_extra_inputs; ++i) {
+    const OfxPropertySetStruct &props = inputs->inputs[i + 1]->properties;
+    OpenMeshEffectInput &rna = fxmd->extra_inputs[i];
+
+    int label_idx = props.find_property(kOfxPropLabel);
+
+    const char *input_name = inputs->inputs[i + 1]->name;
+    const char *label_name = (label_idx != -1) ?
+                                 props.properties[label_idx]->value->as_const_char :
+                                 input_name;
+
+    strncpy(rna.name, input_name, sizeof(rna.name));
+    strncpy(rna.label, label_name, sizeof(rna.label));
+
+    rna.connected_object = NULL;
+  }
+
+  // try_restore_rna_input_values(fxmd); // TODO
 }
 
 // ----------------------------------------------------------------------------

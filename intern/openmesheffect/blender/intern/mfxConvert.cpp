@@ -22,7 +22,7 @@
 #include <iostream>
 #include <cstring>
 
-void copy_parameter_value_from_rna(OfxParamHandle param, const OpenMeshEffectParameterInfo *rna)
+void copy_parameter_value_from_rna(OfxParamHandle param, const OpenMeshEffectParameter *rna)
 {
   param->type = static_cast<ParamType>(rna->type);
   switch (rna->type) {
@@ -62,7 +62,7 @@ void copy_parameter_value_from_rna(OfxParamHandle param, const OpenMeshEffectPar
   }
 }
 
-void copy_parameter_value_to_rna(OpenMeshEffectParameterInfo *rna, const OfxPropertyStruct *prop)
+void copy_parameter_value_to_rna(OpenMeshEffectParameter *rna, const OfxPropertyStruct *prop)
 {
   switch (rna->type) {
     case PARAM_TYPE_INTEGER_3D:
@@ -128,7 +128,7 @@ void copy_parameter_minmax_to_rna(int rna_type,
   }
 }
 
-void copy_parameter_value_to_rna(OpenMeshEffectParameterInfo *rna, const OfxParamHandle param)
+void copy_parameter_value_to_rna(OpenMeshEffectParameter *rna, const OfxParamHandle param)
 {
   rna->type = static_cast<int>(param->type);
   switch (rna->type) {

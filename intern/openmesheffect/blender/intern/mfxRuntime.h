@@ -93,9 +93,14 @@ class OpenMeshEffectRuntime {
   void reload_effect_info(OpenMeshEffectModifierData *fxmd);
 
   /**
-   * Reload the list of parameters contaiend in the current effect
+   * Reload the list of parameters of the current effect
    */
-  void reload_parameter_info(OpenMeshEffectModifierData *fxmd);
+  void reload_parameters(OpenMeshEffectModifierData *fxmd);
+
+  /**
+   * Reload the list of extra inputs of the current effect
+   */
+  void reload_extra_inputs(OpenMeshEffectModifierData *fxmd);
 
  public:
   /**

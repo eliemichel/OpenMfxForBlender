@@ -2309,16 +2309,16 @@ typedef enum VolumeToMeshFlag {
   VOLUME_TO_MESH_USE_SMOOTH_SHADE = 1 << 0,
 } VolumeToMeshFlag;
 
-/** OpenMeshEffectModifierData->effect_info */
-typedef struct OpenMeshEffectEffectInfo {
-  /** MOD_OPENMESHEFFECT_MAX_ASSET_NAME */
+/** OpenMeshEffectModifierData->effects */
+typedef struct OpenMeshEffectEffect {
+  /** MOD_OPENMESHEFFECT_MAX_EFFECT_NAME */
   char name[256];
-} OpenMeshEffectEffectInfo;
+} OpenMeshEffectEffect;
 
-#define MOD_OPENMESHEFFECT_MAX_ASSET_NAME 256
+#define MOD_OPENMESHEFFECT_MAX_EFFECT_NAME 256
 
-/** OpenMeshEffectModifierData->parameter_info */
-typedef struct OpenMeshEffectParameterInfo {
+/** OpenMeshEffectModifierData->parameters */
+typedef struct OpenMeshEffectParameter {
   /** MOD_OPENMESHEFFECT_MAX_PARAMETER_NAME */
   char name[256];
   /** MOD_OPENMESHEFFECT_MAX_PARAMETER_LABEL */
@@ -2341,27 +2341,44 @@ typedef struct OpenMeshEffectParameterInfo {
   int int_softmin;
   int int_max;
   int int_softmax;
-} OpenMeshEffectParameterInfo;
+} OpenMeshEffectParameter;
 
 #define MOD_OPENMESHEFFECT_MAX_PARAMETER_NAME 256
 #define MOD_OPENMESHEFFECT_MAX_PARAMETER_LABEL 256
 #define MOD_OPENMESHEFFECT_MAX_STRING_VALUE 1024
+
+/** OpenMeshEffectModifierData->extra_inputs */
+typedef struct OpenMeshEffectInput {
+  /** MOD_OPENMESHEFFECT_MAX_INPUT_NAME */
+  char name[256];
+  /** MOD_OPENMESHEFFECT_MAX_INPUT_LABEL */
+  char label[256];
+  /** The object connected to this input */
+  struct Object *connected_object;
+} OpenMeshEffectInput;
+
+#define MOD_OPENMESHEFFECT_MAX_INPUT_NAME 256
+#define MOD_OPENMESHEFFECT_MAX_INPUT_LABEL 256
 
 typedef struct OpenMeshEffectModifierData {
   ModifierData modifier;
 
   /** 1024 = FILE_MAX. */
   char plugin_path[1024];
-  int effect_index, _pad0;
+  int active_effect_index, _pad0;
 
   /* Runtime. */
-  OpenMeshEffectEffectInfo *effect_info;
   int num_effects, _pad1;
-  OpenMeshEffectParameterInfo *parameter_info;
-  int num_parameters, _pad2;
+  int num_parameters, num_extra_inputs;
+  OpenMeshEffectEffect *effects;
+  OpenMeshEffectParameter *parameters;
+  OpenMeshEffectInput *extra_inputs;
 
+  /** MOD_OPENMESHEFFECT_MAX_MESSAGE */
   char message[1024];
 } OpenMeshEffectModifierData;
+
+#define MOD_OPENMESHEFFECT_MAX_MESSAGE 1024
 
 #ifdef __cplusplus
 }

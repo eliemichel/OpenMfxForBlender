@@ -44,8 +44,7 @@
  * (idempotent)
  */
 static OpenMeshEffectRuntime *ensure_runtime(OpenMeshEffectModifierData *fxmd) {
-  printf("== ensure_runtime on data %p\n", fxmd);
-
+  
   // Init
   OpenMeshEffectRuntime *runtime = (OpenMeshEffectRuntime *)fxmd->modifier.runtime;
   if (NULL == runtime) {
@@ -55,75 +54,69 @@ static OpenMeshEffectRuntime *ensure_runtime(OpenMeshEffectModifierData *fxmd) {
 
   // Update
   runtime->set_plugin_path(fxmd->plugin_path);
-  runtime->set_effect_index(fxmd->effect_index);
+  runtime->set_effect_index(fxmd->active_effect_index);
 
   if (false == runtime->is_plugin_valid()) {
     BKE_modifier_set_error(NULL, &fxmd->modifier, "Could not load ofx plugins!");
   }
 
-  printf("==/ ensure_runtime\n");
   return (OpenMeshEffectRuntime *)fxmd->modifier.runtime;
 }
 
 void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd) {
-  printf("== mfx_Modifier_reload_effect_info on data %p\n", fxmd);
 
   OpenMeshEffectRuntime *runtime = ensure_runtime(fxmd);
   runtime->reload_effect_info(fxmd);
 
-  printf("==/ mfx_Modifier_reload_effect_info\n");
 }
 
 void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd) {
-  printf("== mfx_Modifier_on_plugin_changed on data %p\n", fxmd);
 
   mfx_Modifier_reload_effect_info(fxmd);
   mfx_Modifier_on_effect_changed(fxmd);
 
-  printf("==/ mfx_Modifier_on_plugin_changed\n");
 }
 
 void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd) {
-  printf("==. mfx_Modifier_on_asset_changed on data %p\n", fxmd);
-
+  
   OpenMeshEffectRuntime *runtime = ensure_runtime(fxmd);
-  runtime->reload_parameter_info(fxmd);
+  runtime->reload_parameters(fxmd);
+  runtime->reload_extra_inputs(fxmd);
 
-  printf("==/ mfx_Modifier_on_asset_changed on data %p\n", fxmd);
+
 }
 
 void mfx_Modifier_free_runtime_data(void * runtime_data)
 {
-  printf("== mfx_Modifier_free_runtime_data\n");
-
+  
   OpenMeshEffectRuntime * runtime = (OpenMeshEffectRuntime *)runtime_data;
   if (NULL != runtime) {
     delete runtime;
   }
   
-  printf("==/ mfx_Modifier_free_runtime_data\n");
 }
 
 Mesh * mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh, Object *object)
 {
-  printf("== mfx_Modifier_do on data %p\n", fxmd);
-
+  
   OpenMeshEffectRuntime *runtime = ensure_runtime(fxmd);
   Mesh *output_mesh = runtime->cook(fxmd, mesh, object);
 
-  printf("==/ mfx_Modifier_do\n");
   return output_mesh;
 }
 
 void mfx_Modifier_copydata(OpenMeshEffectModifierData *source, OpenMeshEffectModifierData *destination)
 {
-  if (source->parameter_info) {
-    destination->parameter_info = (OpenMeshEffectParameterInfo*)MEM_dupallocN(
-        source->parameter_info);
+  if (source->parameters) {
+    destination->parameters = (OpenMeshEffectParameter *)MEM_dupallocN(source->parameters);
   }
 
-  if (source->effect_info) {
-    destination->effect_info = (OpenMeshEffectEffectInfo*)MEM_dupallocN(source->effect_info);
+  if (source->extra_inputs) {
+    destination->extra_inputs = (OpenMeshEffectInput *)MEM_dupallocN(source->extra_inputs);
+  }
+
+  if (source->effects) {
+    destination->effects = (OpenMeshEffectEffect *)MEM_dupallocN(source->effects);
   }
 
   OpenMeshEffectRuntime *runtime = (OpenMeshEffectRuntime *)source->modifier.runtime;
