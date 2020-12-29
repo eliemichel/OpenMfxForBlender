@@ -30,6 +30,7 @@
 #include "BKE_screen.h"
 #include "BKE_modifier.h"
 #include "BKE_anim_data.h"
+#include "BKE_lib_query.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -54,14 +55,12 @@ static Mesh *modifyMesh(ModifierData *md,
                            const ModifierEvalContext *ctx,
                            Mesh *mesh)
 {
-  printf("OpenMeshEffectModifier: modifyMesh.\n");
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
   return mfx_Modifier_do(fxmd, mesh, ctx->object);
 }
 
 static void initData(struct ModifierData *md)
 {
-  printf("OpenMeshEffectModifier: initData.\n");
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
   fxmd->active_effect_index = -1;
   fxmd->num_effects = 0;
@@ -75,7 +74,6 @@ static void initData(struct ModifierData *md)
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
 {
-  printf("OpenMeshEffectModifier: copyData.\n");
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
   OpenMeshEffectModifierData *tfxmd = (OpenMeshEffectModifierData *)target;
 
@@ -100,6 +98,26 @@ static void requiredDataMask(Object *UNUSED(ob),
   r_cddata_masks->lmask |= CD_MLOOPCOL;
 }
 
+static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
+{
+  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+  bool do_add_own_transform = false; // TODO: if depend on main input's transform turn this true
+  for (int i = 0; i < fxmd->num_extra_inputs; i++) {
+    // TODO: replace "&& false" by a test of whether input transform is needed
+    if (NULL != fxmd->extra_inputs[i].connected_object && true) {
+      DEG_add_object_relation(ctx->node,
+                              fxmd->extra_inputs[i].connected_object,
+                              DEG_OB_COMP_TRANSFORM,
+                              "OpenMeshEffect Modifier Input");
+      do_add_own_transform = true;
+    }
+  }
+
+  if (do_add_own_transform) {
+    DEG_add_modifier_to_transform_relation(ctx->node, "OpenMeshEffect Modifier Self");
+  }
+}
+
 static bool dependsOnTime(struct ModifierData *md)
 {
   // TODO: May depend on the OFX file
@@ -112,18 +130,24 @@ static bool dependsOnNormals(struct ModifierData *md)
   return true;
 }
 
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
+{
+  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+  for (int i = 0; i < fxmd->num_extra_inputs; i++) {
+    walk(userData, ob, (ID **)&fxmd->extra_inputs[i].connected_object, IDWALK_CB_NOP);
+  }
+}
+
 static void freeRuntimeData(void *runtime_data)
 {
   if (runtime_data == NULL) {
     return;
   }
-  printf("freeRuntimeData on pointer %p.\n", runtime_data);
   mfx_Modifier_free_runtime_data(runtime_data);
 }
 
 static void freeData(struct ModifierData *md)
 {
-  printf("OpenMeshEffectModifier: freeData.\n");
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
 
   freeRuntimeData(md->runtime);
@@ -226,14 +250,19 @@ static void blendWrite(BlendWriter *writer, const ModifierData *md)
 {
   const OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
 
-  BLO_write_struct_array_by_id(writer,
-                               BLO_get_struct_id(writer, OpenMeshEffectParameter),
-                               fxmd->num_parameters,
-                               fxmd->parameters);
-  BLO_write_struct_array_by_id(writer,
-                               BLO_get_struct_id(writer, OpenMeshEffectInput),
-                               fxmd->num_extra_inputs,
-                               fxmd->extra_inputs);
+  printf("At write, extra inputs are:\n");
+  for (int i = 0; i < fxmd->num_extra_inputs; ++i) {
+    printf(" - %p\n", fxmd->extra_inputs[i].connected_object);
+  }
+
+  BLO_write_struct_array(writer,
+                         OpenMeshEffectParameter,
+                         fxmd->num_parameters,
+                         fxmd->parameters);
+  BLO_write_struct_array(writer,
+                         OpenMeshEffectInput,
+                         fxmd->num_extra_inputs,
+                         fxmd->extra_inputs);
 }
 
 static void blendRead(BlendDataReader *reader, ModifierData *md)
@@ -242,6 +271,23 @@ static void blendRead(BlendDataReader *reader, ModifierData *md)
 
   fxmd->parameters = BLO_read_data_address(reader, &fxmd->parameters);
   fxmd->extra_inputs = BLO_read_data_address(reader, &fxmd->extra_inputs);
+
+  printf("At read, before remap, extra inputs are:\n");
+  for (int i = 0; i < fxmd->num_extra_inputs; ++i) {
+    printf(" - %p\n", fxmd->extra_inputs[i].connected_object);
+  }
+
+  // FIXME: For some reason the look up table used by BLO_read_get_new_data_address
+  // is not ready yet at this stage.
+  for (int i = 0; i < fxmd->num_extra_inputs; ++i) {
+    fxmd->extra_inputs[i].connected_object = BLO_read_get_new_data_address(
+        reader, fxmd->extra_inputs[i].connected_object);
+  }
+
+  printf("At read, after remap, extra inputs are:\n");
+  for (int i = 0; i < fxmd->num_extra_inputs; ++i) {
+    printf(" - %p\n", fxmd->extra_inputs[i].connected_object);
+  }
 
   // Effect list will be reloaded from plugin
   fxmd->num_effects = 0;
@@ -270,10 +316,10 @@ ModifierTypeInfo modifierType_OpenMeshEffect = {
     /* requiredDataMask */ requiredDataMask,
     /* freeData */ freeData,
     /* isDisabled */ NULL,
-    /* updateDepsgraph */ NULL,
+    /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ dependsOnNormals,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ freeRuntimeData,
     /* uiPanel */ panelRegister,

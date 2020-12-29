@@ -242,6 +242,25 @@ Mesh *OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd,
   propertySuite->propSetPointer(
       &input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&input_data);
 
+  // Same for extra inputs
+  for (int i = 0; i < fxmd->num_extra_inputs; ++i) {
+    Object *object = fxmd->extra_inputs[i].connected_object;
+    if (NULL == object) {
+      continue;
+    }
+    // TODO: get mesh only if needed
+    Mesh *mesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(object, false);
+    MeshInternalData input_data;
+    input_data.is_input = true;
+    input_data.blender_mesh = mesh;
+    input_data.source_mesh = NULL;
+    input_data.object = object;
+
+    OfxMeshInputHandle input;
+    meshEffectSuite->inputGetHandle(this->effect_instance, fxmd->extra_inputs[i].name, &input, NULL);
+    propertySuite->propSetPointer(&input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&input_data);
+  }
+
   // Set output mesh data binding, used by before/after callbacks
   MeshInternalData output_data;
   output_data.is_input = false;
@@ -397,17 +416,30 @@ void OpenMeshEffectRuntime::reload_extra_inputs(OpenMeshEffectModifierData *fxmd
 
   OfxMeshInputSetStruct *inputs = &this->effect_desc->inputs;
 
-  fxmd->num_extra_inputs = min_ii(0, inputs->num_inputs - 1);
+  fxmd->num_extra_inputs = 0;
+  for (int i = 0; i < inputs->num_inputs; ++i) {
+    if (0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainInput) ||
+        0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainOutput)) {
+      continue;
+    }
+    ++fxmd->num_extra_inputs;
+  }
+
   fxmd->extra_inputs = (OpenMeshEffectInput *)MEM_calloc_arrayN(
       sizeof(OpenMeshEffectInput), fxmd->num_extra_inputs, "openmesheffect extra input info");
 
-  for (int i = 0; i < fxmd->num_extra_inputs; ++i) {
-    const OfxPropertySetStruct &props = inputs->inputs[i + 1]->properties;
-    OpenMeshEffectInput &rna = fxmd->extra_inputs[i];
+  OpenMeshEffectInput *current_input = fxmd->extra_inputs;
+  for (int i = 0; i < inputs->num_inputs; ++i) {
+    if (0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainInput) ||
+        0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainOutput)) {
+      continue;
+    }
+    const OfxPropertySetStruct &props = inputs->inputs[i]->properties;
+    OpenMeshEffectInput &rna = *current_input;
 
     int label_idx = props.find_property(kOfxPropLabel);
 
-    const char *input_name = inputs->inputs[i + 1]->name;
+    const char *input_name = inputs->inputs[i]->name;
     const char *label_name = (label_idx != -1) ?
                                  props.properties[label_idx]->value->as_const_char :
                                  input_name;
@@ -416,6 +448,7 @@ void OpenMeshEffectRuntime::reload_extra_inputs(OpenMeshEffectModifierData *fxmd
     strncpy(rna.label, label_name, sizeof(rna.label));
 
     rna.connected_object = NULL;
+    ++current_input;
   }
 
   // try_restore_rna_input_values(fxmd); // TODO

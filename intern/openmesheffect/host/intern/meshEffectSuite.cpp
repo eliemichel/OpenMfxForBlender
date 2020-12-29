@@ -195,7 +195,11 @@ OfxStatus inputGetMesh(OfxMeshInputHandle input,
   if (NULL != host) {
     propGetPointer(host->host, kOfxHostPropBeforeMeshGetCb, 0, (void **)&beforeMeshGetCb);
     if (NULL != beforeMeshGetCb) {
-      beforeMeshGetCb(host, inputMeshHandle);
+      OfxStatus status = beforeMeshGetCb(host, inputMeshHandle);
+      if (kOfxStatOK != status) {
+        *meshHandle = NULL;
+        return status;
+      }
     }
   }
 

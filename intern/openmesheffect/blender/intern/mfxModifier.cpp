@@ -82,8 +82,6 @@ void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd) {
   OpenMeshEffectRuntime *runtime = ensure_runtime(fxmd);
   runtime->reload_parameters(fxmd);
   runtime->reload_extra_inputs(fxmd);
-
-
 }
 
 void mfx_Modifier_free_runtime_data(void * runtime_data)
