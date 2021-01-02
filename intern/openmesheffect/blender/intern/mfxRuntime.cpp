@@ -1,6 +1,6 @@
 /**
  * Open Mesh Effect modifier for Blender
- * Copyright (C) 2019 - 2020 Elie Michel
+ * Copyright (C) 2019 - 2021 Elie Michel
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -448,10 +448,35 @@ void OpenMeshEffectRuntime::reload_extra_inputs(OpenMeshEffectModifierData *fxmd
     strncpy(rna.label, label_name, sizeof(rna.label));
 
     rna.connected_object = NULL;
+    rna.request_transform = false;
     ++current_input;
   }
 
   // try_restore_rna_input_values(fxmd); // TODO
+}
+
+
+void OpenMeshEffectRuntime::set_input_prop_in_rna(OpenMeshEffectModifierData *fxmd)
+{
+  if (NULL == this->effect_desc) {
+    return;
+  }
+  printf("set_input_prop_in_rna\n");
+  OfxMeshInputSetStruct *inputs = &this->effect_desc->inputs;
+
+  OpenMeshEffectInput *current_input = fxmd->extra_inputs;
+  for (int i = 0; i < inputs->num_inputs; ++i) {
+    if (0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainInput) ||
+        0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainOutput)) {
+      continue;
+    }
+    const OfxPropertySetStruct &props = inputs->inputs[i]->properties;
+    OpenMeshEffectInput &rna = *current_input;
+
+    int request_transform_idx = props.find_property(kOfxInputPropRequestTransform);
+    rna.request_transform = props.properties[request_transform_idx]->value->as_int != 0;
+    ++current_input;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -476,11 +501,6 @@ void OpenMeshEffectRuntime::free_effect_instance()
   if (is_plugin_valid() && -1 != this->effect_index) {
     OfxPlugin *plugin = this->registry->plugins[this->effect_index];
     OfxPluginStatus status = this->registry->status[this->effect_index];
-
-    printf("runtime_free_effect_instance: plugin = %p, registry.plugins = %p, rd = %p\n",
-           plugin,
-           this->registry,
-           this);
 
     if (NULL != this->effect_instance) {
       ofxhost_destroy_instance(plugin, this->effect_instance);

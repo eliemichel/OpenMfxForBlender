@@ -60,6 +60,8 @@ static OpenMeshEffectRuntime *ensure_runtime(OpenMeshEffectModifierData *fxmd) {
     BKE_modifier_set_error(NULL, &fxmd->modifier, "Could not load ofx plugins!");
   }
 
+  runtime->set_input_prop_in_rna(fxmd);
+
   return (OpenMeshEffectRuntime *)fxmd->modifier.runtime;
 }
 
@@ -121,4 +123,9 @@ void mfx_Modifier_copydata(OpenMeshEffectModifierData *source, OpenMeshEffectMod
   if (NULL != runtime) {
     runtime->set_message_in_rna(destination);
   }
+}
+
+void mfx_Modifier_before_updateDepsgraph(OpenMeshEffectModifierData *fxmd)
+{
+  ensure_runtime(fxmd);
 }

@@ -84,6 +84,8 @@ Mesh *mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh, Object *obje
 void mfx_Modifier_copydata(OpenMeshEffectModifierData *source,
                            OpenMeshEffectModifierData *destination);
 
+void mfx_Modifier_before_updateDepsgraph(OpenMeshEffectModifierData *fxmd);
+
 #ifdef __cplusplus
 }
 #endif

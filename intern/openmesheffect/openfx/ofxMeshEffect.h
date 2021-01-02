@@ -423,6 +423,17 @@ case the transform is assumed to be the identity.
  */
 #define kOfxMeshPropTransformMatrix "OfxMeshPropTransformMatrix"
 
+/** @brief Whether the input depend on the transform matrix of the mesh
+
+    - Type - bool X 1
+    - Property Set - an input's property set
+
+Can be set in describe mode to tell the host to fill in the \see OfxMeshPropTransformMatrix
+property at cook time. This will also trigger recooking every time this input's transform changes.
+Default to false.
+ */
+#define kOfxInputPropRequestTransform "OfxInputPropRequestTransform"
+
 /**  @brief The data pointer of an attribute.
 
     - Type - pointer X 1

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Elie Michel
+ * Copyright 2019-2021 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -122,6 +122,10 @@ int OfxPropertySetStruct::ensure_property(const char *property)
 
 void OfxPropertySetStruct::deep_copy_from(const OfxPropertySetStruct &other)
 {
+  while (num_properties > 0) {
+    remove_property(0);
+  }
+
   append_properties(other.num_properties);
   for (int i = 0 ; i < this->num_properties ; ++i) {
     this->properties[i]->deep_copy_from(*other.properties[i]);
@@ -140,6 +144,7 @@ bool OfxPropertySetStruct::check_property_context(PropertySetContext context, Pr
     case PropertySetContext::Input:
     return (
       (0 == strcmp(property, kOfxPropLabel) && type == PROP_TYPE_STRING) ||
+      (0 == strcmp(property, kOfxInputPropRequestTransform) && type == PROP_TYPE_INT) ||
       false
     );
     case PropertySetContext::Host:

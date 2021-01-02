@@ -15,7 +15,7 @@
  */
 
 #include "inputs.h"
-
+#include "ofxMeshEffect.h"
 #include <cstring>
 
 // // OfxInputStruct
@@ -23,7 +23,10 @@
 OfxMeshInputStruct::OfxMeshInputStruct()
     : properties(PropertySetContext::Input)
     , host(nullptr)
-{}
+{
+  int i = properties.ensure_property(kOfxInputPropRequestTransform);
+  properties.properties[i]->value[0].as_int = 0;
+}
 
 OfxMeshInputStruct::~OfxMeshInputStruct()
 {}

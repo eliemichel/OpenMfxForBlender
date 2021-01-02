@@ -102,6 +102,11 @@ class OpenMeshEffectRuntime {
    */
   void reload_extra_inputs(OpenMeshEffectModifierData *fxmd);
 
+  /**
+   * Update input properties (e.g. request_transform) from the current effect descriptor
+   */
+  void set_input_prop_in_rna(OpenMeshEffectModifierData *fxmd);
+
  public:
   /**
    * Path to the OFX plug-in bundle.

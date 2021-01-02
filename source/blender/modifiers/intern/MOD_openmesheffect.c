@@ -100,11 +100,16 @@ static void requiredDataMask(Object *UNUSED(ob),
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
+  printf("updateDepsgraph\n");
   OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+  mfx_Modifier_before_updateDepsgraph(fxmd);
+
   bool do_add_own_transform = false; // TODO: if depend on main input's transform turn this true
   for (int i = 0; i < fxmd->num_extra_inputs; i++) {
-    // TODO: replace "&& false" by a test of whether input transform is needed
-    if (NULL != fxmd->extra_inputs[i].connected_object && true) {
+    printf(" - fxmd->extra_inputs[%d].request_transform = %d\n",
+           i,
+           fxmd->extra_inputs[i].request_transform);
+    if (NULL != fxmd->extra_inputs[i].connected_object && fxmd->extra_inputs[i].request_transform) {
       DEG_add_object_relation(ctx->node,
                               fxmd->extra_inputs[i].connected_object,
                               DEG_OB_COMP_TRANSFORM,

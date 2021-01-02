@@ -2355,6 +2355,9 @@ typedef struct OpenMeshEffectInput {
   char label[256];
   /** The object connected to this input */
   struct Object *connected_object;
+  /** (bool) */
+  short request_transform;
+  char _pad[6];
 } OpenMeshEffectInput;
 
 #define MOD_OPENMESHEFFECT_MAX_INPUT_NAME 256
