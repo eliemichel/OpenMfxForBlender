@@ -24,7 +24,11 @@ OfxMeshInputStruct::OfxMeshInputStruct()
     : properties(PropertySetContext::Input)
     , host(nullptr)
 {
-  int i = properties.ensure_property(kOfxInputPropRequestTransform);
+  int i;
+  i = properties.ensure_property(kOfxInputPropRequestGeometry);
+  properties.properties[i]->value[0].as_int = 1;
+
+  i = properties.ensure_property(kOfxInputPropRequestTransform);
   properties.properties[i]->value[0].as_int = 0;
 }
 

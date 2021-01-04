@@ -136,6 +136,12 @@ OfxStatus Converter::blenderToMfx(OfxMeshHandle ofx_mesh) const
   }
   blender_mesh = internal_data->blender_mesh;
 
+  if (NULL == internal_data->object) {
+    // This is the way to tell the plugin that there is no object connected to the input,
+    // maybe we should find something clearer.
+    return kOfxStatErrBadHandle;
+  }
+
   propSetTransformMatrix(&ofx_mesh->properties, internal_data->object);
 
   if (false == internal_data->is_input) {

@@ -7592,6 +7592,11 @@ static void rna_def_modifier_openmesheffect_input(BlenderRNA *brna)
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
+  prop = RNA_def_property(srna, "request_geometry", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+  RNA_def_property_ui_text(prop, "Request Geometry", "Whether this input depends on the object's baked mesh data");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
   prop = RNA_def_property(srna, "request_transform", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "Request Transform", "Whether this input depends on the object's transform");

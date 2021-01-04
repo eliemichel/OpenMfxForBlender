@@ -106,14 +106,21 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 
   bool do_add_own_transform = false; // TODO: if depend on main input's transform turn this true
   for (int i = 0; i < fxmd->num_extra_inputs; i++) {
-    printf(" - fxmd->extra_inputs[%d].request_transform = %d\n",
-           i,
-           fxmd->extra_inputs[i].request_transform);
-    if (NULL != fxmd->extra_inputs[i].connected_object && fxmd->extra_inputs[i].request_transform) {
+    if (NULL == fxmd->extra_inputs[i].connected_object) {
+      continue;
+    }
+    if (fxmd->extra_inputs[i].request_geometry) {
+      DEG_add_object_relation(ctx->node,
+                              fxmd->extra_inputs[i].connected_object,
+                              DEG_OB_COMP_GEOMETRY,
+                              "OpenMeshEffect Modifier Input Geometry");
+      do_add_own_transform = true;
+    }
+    if (fxmd->extra_inputs[i].request_transform) {
       DEG_add_object_relation(ctx->node,
                               fxmd->extra_inputs[i].connected_object,
                               DEG_OB_COMP_TRANSFORM,
-                              "OpenMeshEffect Modifier Input");
+                              "OpenMeshEffect Modifier Input Transform");
       do_add_own_transform = true;
     }
   }

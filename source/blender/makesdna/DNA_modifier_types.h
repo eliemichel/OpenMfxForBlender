@@ -2355,9 +2355,11 @@ typedef struct OpenMeshEffectInput {
   char label[256];
   /** The object connected to this input */
   struct Object *connected_object;
-  /** (bool) */
+  /** (bool) Whether the input need the object's baked mesh */
+  short request_geometry;
+  /** (bool) Whether the input need the object's transform */
   short request_transform;
-  char _pad[6];
+  char _pad[4];
 } OpenMeshEffectInput;
 
 #define MOD_OPENMESHEFFECT_MAX_INPUT_NAME 256

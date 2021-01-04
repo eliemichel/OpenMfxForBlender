@@ -423,6 +423,16 @@ case the transform is assumed to be the identity.
  */
 #define kOfxMeshPropTransformMatrix "OfxMeshPropTransformMatrix"
 
+/** @brief Whether the input depend on the mesh geometry
+
+    - Type - bool X 1
+    - Property Set - an input's property set
+
+Default to true, may be switched to false when the input is used solely for its transform
+(in which case \see kOfxInputPropRequestTransform is turned true).
+ */
+#define kOfxInputPropRequestGeometry "OfxInputPropRequestGeometry"
+
 /** @brief Whether the input depend on the transform matrix of the mesh
 
     - Type - bool X 1

@@ -41,6 +41,8 @@
 #include "BLI_string.h"
 #include "BLI_path_util.h"
 
+#include <vector>
+
 // ----------------------------------------------------------------------------
 // Public
 
@@ -243,22 +245,24 @@ Mesh *OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd,
       &input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&input_data);
 
   // Same for extra inputs
+  // allocate here so that it last until after the call to ofxhost_cook
+  std::vector<MeshInternalData> extra_input_data(fxmd->num_extra_inputs);
   for (int i = 0; i < fxmd->num_extra_inputs; ++i) {
-    Object *object = fxmd->extra_inputs[i].connected_object;
-    if (NULL == object) {
-      continue;
-    }
-    // TODO: get mesh only if needed
-    Mesh *mesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(object, false);
-    MeshInternalData input_data;
-    input_data.is_input = true;
-    input_data.blender_mesh = mesh;
-    input_data.source_mesh = NULL;
-    input_data.object = object;
-
     OfxMeshInputHandle input;
     meshEffectSuite->inputGetHandle(this->effect_instance, fxmd->extra_inputs[i].name, &input, NULL);
-    propertySuite->propSetPointer(&input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&input_data);
+
+    Object *object = fxmd->extra_inputs[i].connected_object;
+
+    // TODO: get mesh only if needed
+    Mesh *mesh = fxmd->extra_inputs[i].request_geometry && NULL != object
+        ? BKE_modifier_get_evaluated_mesh_from_evaluated_object(object, false)
+        : NULL;
+    extra_input_data[i].is_input = true;
+    extra_input_data[i].blender_mesh = mesh;
+    extra_input_data[i].source_mesh = NULL;
+    extra_input_data[i].object = object;
+
+    propertySuite->propSetPointer(&input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&extra_input_data[i]);
   }
 
   // Set output mesh data binding, used by before/after callbacks
@@ -448,11 +452,15 @@ void OpenMeshEffectRuntime::reload_extra_inputs(OpenMeshEffectModifierData *fxmd
     strncpy(rna.label, label_name, sizeof(rna.label));
 
     rna.connected_object = NULL;
+    rna.request_geometry = true;
     rna.request_transform = false;
     ++current_input;
   }
 
-  // try_restore_rna_input_values(fxmd); // TODO
+  // Regular blender loading mechanism should be enough, but is not working for some reason, so
+  // TODO handle this manyally (based on object name? Dirty but would work it around...)
+  // try_restore_rna_input_values(fxmd);
+  set_input_prop_in_rna(fxmd);
 }
 
 
@@ -461,7 +469,6 @@ void OpenMeshEffectRuntime::set_input_prop_in_rna(OpenMeshEffectModifierData *fx
   if (NULL == this->effect_desc) {
     return;
   }
-  printf("set_input_prop_in_rna\n");
   OfxMeshInputSetStruct *inputs = &this->effect_desc->inputs;
 
   OpenMeshEffectInput *current_input = fxmd->extra_inputs;
@@ -472,6 +479,9 @@ void OpenMeshEffectRuntime::set_input_prop_in_rna(OpenMeshEffectModifierData *fx
     }
     const OfxPropertySetStruct &props = inputs->inputs[i]->properties;
     OpenMeshEffectInput &rna = *current_input;
+
+    int request_geometry_idx = props.find_property(kOfxInputPropRequestGeometry);
+    rna.request_geometry = props.properties[request_geometry_idx]->value->as_int != 0;
 
     int request_transform_idx = props.find_property(kOfxInputPropRequestTransform);
     rna.request_transform = props.properties[request_transform_idx]->value->as_int != 0;
