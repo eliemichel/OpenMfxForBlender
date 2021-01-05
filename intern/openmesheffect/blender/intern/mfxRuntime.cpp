@@ -253,7 +253,7 @@ Mesh *OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd,
 
     Object *object = fxmd->extra_inputs[i].connected_object;
 
-    // TODO: get mesh only if needed
+    // TODO: get an evaluated object out of object? Object *object_eval = DEG_get_evaluated_object(depsgraph, object);
     Mesh *mesh = fxmd->extra_inputs[i].request_geometry && NULL != object
         ? BKE_modifier_get_evaluated_mesh_from_evaluated_object(object, false)
         : NULL;
