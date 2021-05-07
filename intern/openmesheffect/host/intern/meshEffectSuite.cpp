@@ -97,6 +97,7 @@ OfxStatus inputGetHandle(OfxMeshEffectHandle meshEffect,
 {
   int i = meshEffect->inputs.find(name);
   if (-1 == i) {
+    *input = NULL;
     return kOfxStatErrUnknown;  // bad name
   }
   *input = meshEffect->inputs.inputs[i];
@@ -232,7 +233,7 @@ OfxStatus inputReleaseMesh(OfxMeshHandle meshHandle)
     propGetPointer(&attribute->properties, kOfxMeshAttribPropData, 0, &data);
     propGetInt(&attribute->properties, kOfxMeshAttribPropIsOwner, 0, &is_owner);
     if (is_owner && NULL != data) {
-      delete[] static_cast<char*>(data);  // delete on void* is undefined behaviour
+      delete static_cast<char*>(data);  // delete on void* is undefined behaviour
     }
     propSetPointer(&attribute->properties, kOfxMeshAttribPropData, 0, NULL);
     propSetInt(&attribute->properties, kOfxMeshAttribPropIsOwner, 0, 0);

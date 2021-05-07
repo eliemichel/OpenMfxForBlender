@@ -236,13 +236,15 @@ Mesh *OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd,
   }
 
   // Set input mesh data binding, used by before/after callbacks
-  MeshInternalData input_data;
-  input_data.is_input = true;
-  input_data.blender_mesh = mesh;
-  input_data.source_mesh = NULL;
-  input_data.object = object;
-  propertySuite->propSetPointer(
-      &input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&input_data);
+  MeshInternalData input_data; // must remain in scope
+  if (NULL != input) {
+    input_data.is_input = true;
+    input_data.blender_mesh = mesh;
+    input_data.source_mesh = NULL;
+    input_data.object = object;
+    propertySuite->propSetPointer(
+        &input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&input_data);
+  }
 
   // Same for extra inputs
   // allocate here so that it last until after the call to ofxhost_cook
