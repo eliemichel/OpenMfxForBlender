@@ -49,6 +49,8 @@
 
 #include "mfxModifier.h"
 
+#include <stdio.h>
+
 // Modifier API
 
 static Mesh *modifyMesh(ModifierData *md,

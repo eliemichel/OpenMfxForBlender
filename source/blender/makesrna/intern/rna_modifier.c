@@ -1732,11 +1732,11 @@ static char *rna_OpenMeshEffectParameter_path(PointerRNA *ptr)
   }
 
   char mod_name_esc[sizeof(owner_md->name) * 2];
-  BLI_strescape(mod_name_esc, owner_md->name, sizeof(mod_name_esc));
+  BLI_str_escape(mod_name_esc, owner_md->name, sizeof(mod_name_esc));
 
   // Eventually we could index parameters by name (requires adding a method to the param collection)
   //char param_name_esc[sizeof(parm->name) * 2];
-  //BLI_strescape(param_name_esc, parm->name, sizeof(param_name_esc));
+  //BLI_str_escape(param_name_esc, parm->name, sizeof(param_name_esc));
   //return BLI_sprintfN("modifiers[\"%s\"].parameter_info[\"%s\"]", mod_name_esc, param_name_esc);
 
   return BLI_sprintfN("modifiers[\"%s\"].parameters[%d]", mod_name_esc, param_index);
