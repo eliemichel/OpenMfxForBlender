@@ -67,7 +67,7 @@
 #include "BKE_scene.h"
 #include "BKE_texture.h"
 
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 #include "BLO_read_write.h"
 
@@ -219,11 +219,16 @@ IDTypeInfo IDType_ID_TE = {
     .make_local = NULL,
     .foreach_id = texture_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = texture_blend_write,
     .blend_read_data = texture_blend_read_data,
     .blend_read_lib = texture_blend_read_lib,
     .blend_read_expand = texture_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* Utils for all IDs using those texture slots. */

@@ -158,7 +158,6 @@ void wm_gizmomap_select_array_remove(wmGizmoMap *gzmap, wmGizmo *gz)
 
 /* -------------------------------------------------------------------- */
 /** \name wmGizmoMap
- *
  * \{ */
 
 static wmGizmoMap *wm_gizmomap_new_from_type_ex(struct wmGizmoMapType *gzmap_type,
@@ -732,15 +731,6 @@ wmGizmo *wm_gizmomap_highlight_find(wmGizmoMap *gzmap,
   BLI_buffer_declare_static(wmGizmo *, visible_3d_gizmos, BLI_BUFFER_NOP, 128);
   bool do_step[WM_GIZMOMAP_DRAWSTEP_MAX];
 
-  int mval[2] = {UNPACK2(event->mval)};
-
-  /* Ensure for drag events we use the location where the user clicked.
-   * Without this click-dragging on a gizmo can accidentally act on the wrong gizmo. */
-  if (ISTWEAK(event->type) || (event->val == KM_CLICK_DRAG)) {
-    mval[0] += event->x - event->prevclickx;
-    mval[1] += event->y - event->prevclicky;
-  }
-
   for (int i = 0; i < ARRAY_SIZE(do_step); i++) {
     do_step[i] = WM_gizmo_context_check_drawstep(C, i);
   }
@@ -776,7 +766,7 @@ wmGizmo *wm_gizmomap_highlight_find(wmGizmoMap *gzmap,
         }
         else if (step == WM_GIZMOMAP_DRAWSTEP_2D) {
           if ((gz = wm_gizmogroup_find_intersected_gizmo(
-                   wm, gzgroup, C, event_modifier, mval, r_part))) {
+                   wm, gzgroup, C, event_modifier, event->mval, r_part))) {
             break;
           }
         }
@@ -788,7 +778,7 @@ wmGizmo *wm_gizmomap_highlight_find(wmGizmoMap *gzmap,
     /* 2D gizmos get priority. */
     if (gz == NULL) {
       gz = gizmo_find_intersected_3d(
-          C, mval, visible_3d_gizmos.data, visible_3d_gizmos.count, r_part);
+          C, event->mval, visible_3d_gizmos.data, visible_3d_gizmos.count, r_part);
     }
   }
   BLI_buffer_free(&visible_3d_gizmos);
@@ -942,7 +932,7 @@ bool WM_gizmomap_select_all(bContext *C, wmGizmoMap *gzmap, const int action)
       changed = wm_gizmomap_deselect_all(gzmap);
       break;
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       break;
   }
 
@@ -1156,7 +1146,7 @@ ListBase *wm_gizmomap_groups_get(wmGizmoMap *gzmap)
   return &gzmap->groups;
 }
 
-void WM_gizmomap_message_subscribe(bContext *C,
+void WM_gizmomap_message_subscribe(const bContext *C,
                                    wmGizmoMap *gzmap,
                                    ARegion *region,
                                    struct wmMsgBus *mbus)
@@ -1182,7 +1172,6 @@ void WM_gizmomap_message_subscribe(bContext *C,
 
 /* -------------------------------------------------------------------- */
 /** \name Tooltip Handling
- *
  * \{ */
 
 struct ARegion *WM_gizmomap_tooltip_init(struct bContext *C,
@@ -1211,7 +1200,6 @@ struct ARegion *WM_gizmomap_tooltip_init(struct bContext *C,
 
 /* -------------------------------------------------------------------- */
 /** \name wmGizmoMapType
- *
  * \{ */
 
 wmGizmoMapType *WM_gizmomaptype_find(const struct wmGizmoMapType_Params *gzmap_params)
@@ -1261,9 +1249,6 @@ void wm_gizmomaptypes_free(void)
  */
 void wm_gizmos_keymap(wmKeyConfig *keyconf)
 {
-  /* we add this item-less keymap once and use it to group gizmo-group keymaps into it */
-  WM_keymap_ensure(keyconf, "Gizmos", 0, 0);
-
   LISTBASE_FOREACH (wmGizmoMapType *, gzmap_type, &gizmomaptypes) {
     LISTBASE_FOREACH (wmGizmoGroupTypeRef *, gzgt_ref, &gzmap_type->grouptype_refs) {
       wm_gizmogrouptype_setup_keymap(gzgt_ref->type, keyconf);
@@ -1277,7 +1262,6 @@ void wm_gizmos_keymap(wmKeyConfig *keyconf)
 
 /* -------------------------------------------------------------------- */
 /** \name Updates for Dynamic Type Registration
- *
  * \{ */
 
 void WM_gizmoconfig_update_tag_group_type_init(wmGizmoMapType *gzmap_type, wmGizmoGroupType *gzgt)

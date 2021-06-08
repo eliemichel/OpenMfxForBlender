@@ -50,7 +50,7 @@
 
 #include "GPU_material.h"
 
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 #include "NOD_common.h"
 
@@ -388,7 +388,7 @@ static void ntree_shader_groups_expand_inputs(bNodeTree *localtree)
 
     if (is_group || is_group_output) {
       LISTBASE_FOREACH (bNodeSocket *, socket, &node->inputs) {
-        if (socket->link != NULL) {
+        if (socket->link != NULL && !(socket->link->flag & NODE_LINK_MUTED)) {
           bNodeLink *link = socket->link;
           /* Fix the case where the socket is actually converting the data. (see T71374)
            * We only do the case of lossy conversion to float.*/
@@ -557,12 +557,14 @@ static bool ntree_shader_has_displacement(bNodeTree *ntree,
     /* Non-cycles node is used as an output. */
     return false;
   }
-  if (displacement->link != NULL) {
+
+  if ((displacement->link != NULL) && !(displacement->link->flag & NODE_LINK_MUTED)) {
     *r_node = displacement->link->fromnode;
     *r_socket = displacement->link->fromsock;
     *r_link = displacement->link;
+    return true;
   }
-  return displacement->link != NULL;
+  return false;
 }
 
 static void ntree_shader_relink_node_normal(bNodeTree *ntree,
@@ -903,6 +905,16 @@ void ntreeGPUMaterialNodes(bNodeTree *localtree,
   /* Duplicate bump height branches for manual derivatives.
    */
   nodeChainIterBackwards(localtree, output, ntree_shader_bump_branches, localtree, 0);
+  LISTBASE_FOREACH (bNode *, node, &localtree->nodes) {
+    if (node->type == SH_NODE_OUTPUT_AOV) {
+      nodeChainIterBackwards(localtree, node, ntree_shader_bump_branches, localtree, 0);
+      nTreeTags tags = {
+          .ssr_id = 1.0,
+          .sss_id = 1.0,
+      };
+      ntree_shader_tag_nodes(localtree, node, &tags);
+    }
+  }
 
   /* TODO(fclem): consider moving this to the gpu shader tree evaluation. */
   nTreeTags tags = {
@@ -913,6 +925,11 @@ void ntreeGPUMaterialNodes(bNodeTree *localtree,
 
   exec = ntreeShaderBeginExecTree(localtree);
   ntreeExecGPUNodes(exec, mat, output);
+  LISTBASE_FOREACH (bNode *, node, &localtree->nodes) {
+    if (node->type == SH_NODE_OUTPUT_AOV) {
+      ntreeExecGPUNodes(exec, mat, node);
+    }
+  }
   ntreeShaderEndExecTree(exec);
 
   /* EEVEE: Find which material domain was used (volume, surface ...). */
@@ -1012,31 +1029,4 @@ void ntreeShaderEndExecTree(bNodeTreeExec *exec)
     /* XXX clear nodetree backpointer to exec data, same problem as noted in ntreeBeginExecTree */
     ntree->execdata = NULL;
   }
-}
-
-/* TODO: left over from Blender Internal, could reuse for new texture nodes. */
-bool ntreeShaderExecTree(bNodeTree *ntree, int thread)
-{
-  ShaderCallData scd;
-  bNodeThreadStack *nts = NULL;
-  bNodeTreeExec *exec = ntree->execdata;
-  int compat;
-
-  /* ensure execdata is only initialized once */
-  if (!exec) {
-    BLI_thread_lock(LOCK_NODES);
-    if (!ntree->execdata) {
-      ntree->execdata = ntreeShaderBeginExecTree(ntree);
-    }
-    BLI_thread_unlock(LOCK_NODES);
-
-    exec = ntree->execdata;
-  }
-
-  nts = ntreeGetThreadStack(exec, thread);
-  compat = ntreeExecThreadNodes(exec, nts, &scd, thread);
-  ntreeReleaseThreadStack(nts);
-
-  /* if compat is zero, it has been using non-compatible nodes */
-  return compat;
 }

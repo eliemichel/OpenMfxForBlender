@@ -172,7 +172,7 @@ static void HC_relaxation_iteration_uv(BMEditMesh *em,
 
   for (i = 0; i < sculptdata->totalUniqueUvs; i++) {
     copy_v2_v2(diff, tmp_uvdata[i].sum_co);
-    mul_v2_fl(diff, 1.f / tmp_uvdata[i].ncounter);
+    mul_v2_fl(diff, 1.0f / tmp_uvdata[i].ncounter);
     copy_v2_v2(tmp_uvdata[i].p, diff);
 
     tmp_uvdata[i].b[0] = diff[0] - sculptdata->uv[i].uv[0];
@@ -260,7 +260,7 @@ static void laplacian_relaxation_iteration_uv(BMEditMesh *em,
    * here it is not needed since we translate along the UV plane always. */
   for (i = 0; i < sculptdata->totalUniqueUvs; i++) {
     copy_v2_v2(tmp_uvdata[i].p, tmp_uvdata[i].sum_co);
-    mul_v2_fl(tmp_uvdata[i].p, 1.f / tmp_uvdata[i].ncounter);
+    mul_v2_fl(tmp_uvdata[i].p, 1.0f / tmp_uvdata[i].ncounter);
   }
 
   for (i = 0; i < sculptdata->totalUniqueUvs; i++) {
@@ -543,7 +543,7 @@ static UvSculptData *uv_sculpt_stroke_init(bContext *C, wmOperator *op, const wm
     /* we need to find the active island here */
     if (do_island_optimization) {
       UvElement *element;
-      UvNearestHit hit = UV_NEAREST_HIT_INIT;
+      UvNearestHit hit = UV_NEAREST_HIT_INIT_MAX(&region->v2d);
       uv_find_nearest_vert(scene, obedit, co, 0.0f, &hit);
 
       element = BM_uv_element_get(data->elementMap, hit.efa, hit.l);

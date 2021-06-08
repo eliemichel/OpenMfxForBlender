@@ -157,10 +157,17 @@ typedef enum ShaderNodeType {
    * match the switch case order in svm.h. */
 } ShaderNodeType;
 
+typedef enum NodeAttributeOutputType {
+  NODE_ATTR_OUTPUT_FLOAT3 = 0,
+  NODE_ATTR_OUTPUT_FLOAT,
+  NODE_ATTR_OUTPUT_FLOAT_ALPHA,
+} NodeAttributeOutputType;
+
 typedef enum NodeAttributeType {
   NODE_ATTR_FLOAT = 0,
   NODE_ATTR_FLOAT2,
   NODE_ATTR_FLOAT3,
+  NODE_ATTR_FLOAT4,
   NODE_ATTR_RGBA,
   NODE_ATTR_MATRIX
 } NodeAttributeType;
@@ -198,8 +205,8 @@ typedef enum NodeHairInfo {
   NODE_INFO_CURVE_IS_STRAND,
   NODE_INFO_CURVE_INTERCEPT,
   NODE_INFO_CURVE_THICKNESS,
-  /*fade for minimum hair width transpency*/
-  /*NODE_INFO_CURVE_FADE,*/
+  /* Fade for minimum hair width transiency. */
+  // NODE_INFO_CURVE_FADE,
   NODE_INFO_CURVE_TANGENT_NORMAL,
   NODE_INFO_CURVE_RANDOM,
 } NodeHairInfo;
@@ -332,6 +339,8 @@ typedef enum NodeVectorMathType {
   NODE_VECTOR_MATH_SINE,
   NODE_VECTOR_MATH_COSINE,
   NODE_VECTOR_MATH_TANGENT,
+  NODE_VECTOR_MATH_REFRACT,
+  NODE_VECTOR_MATH_FACEFORWARD,
 } NodeVectorMathType;
 
 typedef enum NodeClampType {

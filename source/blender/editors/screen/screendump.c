@@ -199,9 +199,10 @@ static bool screenshot_draw_check_prop(PointerRNA *UNUSED(ptr),
   return !(STREQ(prop_id, "filepath"));
 }
 
-static void screenshot_draw(bContext *UNUSED(C), wmOperator *op)
+static void screenshot_draw(bContext *C, wmOperator *op)
 {
   uiLayout *layout = op->layout;
+  wmWindowManager *wm = CTX_wm_manager(C);
   ScreenshotData *scd = op->customdata;
 
   uiLayoutSetPropSep(layout, true);
@@ -213,7 +214,7 @@ static void screenshot_draw(bContext *UNUSED(C), wmOperator *op)
   uiTemplateImageSettings(layout, &ptr, false);
 
   /* main draw call */
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
+  RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
   uiDefAutoButsRNA(
       layout, &ptr, screenshot_draw_check_prop, NULL, NULL, UI_BUT_LABEL_ALIGN_NONE, false);
 }
@@ -229,7 +230,6 @@ static bool screenshot_poll(bContext *C)
 
 void SCREEN_OT_screenshot(wmOperatorType *ot)
 {
-  /* weak: opname starting with 'save' makes filewindow give save-over */
   ot->name = "Save Screenshot";
   ot->idname = "SCREEN_OT_screenshot";
   ot->description = "Capture a picture of the active area or whole Blender window";
@@ -249,7 +249,7 @@ void SCREEN_OT_screenshot(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
   RNA_def_boolean(ot->srna,
                   "full",
                   1,

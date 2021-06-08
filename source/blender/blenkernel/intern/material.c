@@ -267,11 +267,16 @@ IDTypeInfo IDType_ID_MA = {
     .make_local = NULL,
     .foreach_id = material_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = material_blend_write,
     .blend_read_data = material_blend_read_data,
     .blend_read_lib = material_blend_read_lib,
     .blend_read_expand = material_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 void BKE_gpencil_material_attr_init(Material *ma)

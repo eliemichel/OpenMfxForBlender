@@ -140,4 +140,20 @@ TEST(index_range, AsSpan)
   EXPECT_EQ(span[3], 7);
 }
 
+TEST(index_range, constexpr_)
+{
+  constexpr IndexRange range = IndexRange(1, 1);
+  std::array<int, range[0]> compiles = {1};
+  BLI_STATIC_ASSERT(range.size() == 1, "");
+  EXPECT_EQ(compiles[0], 1);
+}
+
+TEST(index_range, GenericAlgorithms)
+{
+  IndexRange range{4, 10};
+  EXPECT_TRUE(std::any_of(range.begin(), range.end(), [](int v) { return v == 6; }));
+  EXPECT_FALSE(std::any_of(range.begin(), range.end(), [](int v) { return v == 20; }));
+  EXPECT_EQ(std::count_if(range.begin(), range.end(), [](int v) { return v < 7; }), 3);
+}
+
 }  // namespace blender::tests

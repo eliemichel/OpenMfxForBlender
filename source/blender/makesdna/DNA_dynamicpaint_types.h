@@ -21,6 +21,11 @@
 #pragma once
 
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct PaintSurfaceData;
 
 /* surface format */
@@ -236,6 +241,13 @@ enum {
 typedef struct DynamicPaintBrushSettings {
   /** For fast RNA access. */
   struct DynamicPaintModifierData *pmd;
+
+  /**
+   * \note Storing the particle system pointer here is very weak, as it prevents modifiers' data
+   * copying to be self-sufficient (extra external code needs to ensure the pointer remains valid
+   * when the modifier data is copied from one object to another). See e.g.
+   * `BKE_object_copy_particlesystems` or `BKE_object_copy_modifier`.
+   */
   struct ParticleSystem *psys;
 
   int flags;
@@ -261,3 +273,7 @@ typedef struct DynamicPaintBrushSettings {
   float wave_factor, wave_clamp;
   float max_velocity, smudge_strength;
 } DynamicPaintBrushSettings;
+
+#ifdef __cplusplus
+}
+#endif

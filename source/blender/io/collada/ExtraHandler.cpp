@@ -19,18 +19,15 @@
  */
 
 #include "BLI_string.h"
-#include <stddef.h>
+#include <cstddef>
 
 #include "ExtraHandler.h"
 
-ExtraHandler::ExtraHandler(DocumentImporter *dimp, AnimationImporter *aimp) : currentExtraTags(0)
+ExtraHandler::ExtraHandler(DocumentImporter *dimp, AnimationImporter *aimp)
+    : currentExtraTags(nullptr)
 {
   this->dimp = dimp;
   this->aimp = aimp;
-}
-
-ExtraHandler::~ExtraHandler()
-{
 }
 
 bool ExtraHandler::elementBegin(const char *elementName, const char **attributes)
@@ -50,7 +47,7 @@ bool ExtraHandler::textData(const char *text, size_t textLength)
 {
   char buf[1024];
 
-  if (currentElement.length() == 0 || currentExtraTags == 0) {
+  if (currentElement.length() == 0 || currentExtraTags == nullptr) {
     return false;
   }
 
@@ -64,7 +61,7 @@ bool ExtraHandler::parseElement(const char *profileName,
                                 const COLLADAFW::UniqueId &uniqueId)
 {
   /* implement for backwards compatibility, new version added object parameter */
-  return parseElement(profileName, elementHash, uniqueId, NULL);
+  return parseElement(profileName, elementHash, uniqueId, nullptr);
 }
 
 bool ExtraHandler::parseElement(const char *profileName,

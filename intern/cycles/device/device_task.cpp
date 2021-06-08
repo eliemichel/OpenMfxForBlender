@@ -45,7 +45,16 @@ DeviceTask::DeviceTask(Type type_)
       shader_filter(0),
       shader_x(0),
       shader_w(0),
-      buffers(nullptr)
+      buffers(nullptr),
+      tile_types(0),
+      denoising_from_render(false),
+      pass_stride(0),
+      frame_stride(0),
+      target_pass_stride(0),
+      pass_denoising_data(0),
+      pass_denoising_clean(0),
+      need_finish_queue(false),
+      integrator_branched(false)
 {
   last_update_time = time_dt();
 }
@@ -144,41 +153,20 @@ AdaptiveSampling::AdaptiveSampling() : use(true), adaptive_step(0), min_samples(
 }
 
 /* Render samples in steps that align with the adaptive filtering. */
-int AdaptiveSampling::align_static_samples(int samples) const
+int AdaptiveSampling::align_samples(int sample, int num_samples) const
 {
-  if (samples > adaptive_step) {
-    /* Make multiple of adaptive_step. */
-    while (samples % adaptive_step != 0) {
-      samples--;
-    }
+  int end_sample = sample + num_samples;
+
+  /* Round down end sample to the nearest sample that needs filtering. */
+  end_sample &= ~(adaptive_step - 1);
+
+  if (end_sample <= sample) {
+    /* In order to reach the next sample that needs filtering, we'd need
+     * to increase num_samples. We don't do that in this function, so
+     * just keep it as is and don't filter this time around. */
+    return num_samples;
   }
-  else if (samples < adaptive_step) {
-    /* Make divisor of adaptive_step. */
-    while (adaptive_step % samples != 0) {
-      samples--;
-    }
-  }
-
-  return max(samples, 1);
-}
-
-/* Render samples in steps that align with the adaptive filtering, with the
- * suggested number of samples dynamically changing. */
-int AdaptiveSampling::align_dynamic_samples(int offset, int samples) const
-{
-  /* Round so that we end up on multiples of adaptive_samples. */
-  samples += offset;
-
-  if (samples > adaptive_step) {
-    /* Make multiple of adaptive_step. */
-    while (samples % adaptive_step != 0) {
-      samples--;
-    }
-  }
-
-  samples -= offset;
-
-  return max(samples, 1);
+  return end_sample - sample;
 }
 
 bool AdaptiveSampling::need_filter(int sample) const

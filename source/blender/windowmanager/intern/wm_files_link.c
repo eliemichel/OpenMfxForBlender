@@ -229,6 +229,7 @@ static void wm_link_do(WMLinkAppendData *lapp_data,
   Library *lib;
 
   const int flag = lapp_data->flag;
+  const int id_tag_extra = 0;
 
   LinkNode *liblink, *itemlink;
   int lib_idx, item_idx;
@@ -255,7 +256,7 @@ static void wm_link_do(WMLinkAppendData *lapp_data,
     /* here appending/linking starts */
     struct LibraryLink_Params liblink_params;
     BLO_library_link_params_init_with_context(
-        &liblink_params, bmain, flag, scene, view_layer, v3d);
+        &liblink_params, bmain, flag, id_tag_extra, scene, view_layer, v3d);
 
     mainl = BLO_library_link_begin(&bh, libname, &liblink_params);
     lib = mainl->curlib;
@@ -598,7 +599,7 @@ void WM_OT_link(wmOperatorType *ot)
                                  WM_FILESEL_FILEPATH | WM_FILESEL_DIRECTORY | WM_FILESEL_FILENAME |
                                      WM_FILESEL_RELPATH | WM_FILESEL_FILES | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 
   wm_link_append_properties_common(ot, true);
 }
@@ -622,14 +623,14 @@ void WM_OT_append(wmOperatorType *ot)
                                  WM_FILESEL_FILEPATH | WM_FILESEL_DIRECTORY | WM_FILESEL_FILENAME |
                                      WM_FILESEL_FILES | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 
   wm_link_append_properties_common(ot, false);
   RNA_def_boolean(ot->srna,
                   "set_fake",
                   false,
                   "Fake User",
-                  "Set Fake User for appended items (except Objects and Groups)");
+                  "Set \"Fake User\" for appended items (except objects and collections)");
   RNA_def_boolean(
       ot->srna,
       "use_recursive",
@@ -749,7 +750,7 @@ static void lib_relocate_do_remap(Main *bmain,
     /* In some cases, new_id might become direct link, remove parent of library in this case. */
     if (new_id->lib->parent && (new_id->tag & LIB_TAG_INDIRECT) == 0) {
       if (do_reload) {
-        BLI_assert(0); /* Should not happen in 'pure' reload case... */
+        BLI_assert_unreachable(); /* Should not happen in 'pure' reload case... */
       }
       new_id->lib->parent = NULL;
     }
@@ -804,7 +805,7 @@ static void lib_relocate_do(Main *bmain,
                             ReportList *reports,
                             const bool do_reload)
 {
-  ListBase *lbarray[MAX_LIBARRAY];
+  ListBase *lbarray[INDEX_ID_MAX];
   int lba_idx;
 
   LinkNode *itemlink;
@@ -1172,7 +1173,7 @@ void WM_OT_lib_relocate(wmOperatorType *ot)
                                  WM_FILESEL_FILEPATH | WM_FILESEL_DIRECTORY | WM_FILESEL_FILENAME |
                                      WM_FILESEL_FILES | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 static int wm_lib_reload_exec(bContext *C, wmOperator *op)
@@ -1202,7 +1203,7 @@ void WM_OT_lib_reload(wmOperatorType *ot)
                                  WM_FILESEL_FILEPATH | WM_FILESEL_DIRECTORY | WM_FILESEL_FILENAME |
                                      WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /** \} */

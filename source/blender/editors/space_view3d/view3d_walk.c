@@ -48,7 +48,7 @@
 #include "ED_space_api.h"
 #include "ED_transform_snap_object_context.h"
 
-#include "PIL_time.h" /* smoothview */
+#include "PIL_time.h" /* Smooth-view. */
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -473,8 +473,8 @@ enum {
 };
 
 /* keep the previous speed until user changes userpreferences */
-static float base_speed = -1.f;
-static float userdef_speed = -1.f;
+static float base_speed = -1.0f;
+static float userdef_speed = -1.0f;
 
 static bool initWalkInfo(bContext *C, WalkInfo *walk, wmOperator *op)
 {
@@ -521,8 +521,9 @@ static bool initWalkInfo(bContext *C, WalkInfo *walk, wmOperator *op)
   walk->speed = 0.0f;
   walk->is_fast = false;
   walk->is_slow = false;
-  walk->grid = (walk->scene->unit.system == USER_UNIT_NONE) ? 1.f :
-                                                              1.f / walk->scene->unit.scale_length;
+  walk->grid = (walk->scene->unit.system == USER_UNIT_NONE) ?
+                   1.0f :
+                   1.0f / walk->scene->unit.scale_length;
 
   /* user preference settings */
   walk->teleport.duration = U.walk_navigation.teleport_time;
@@ -585,11 +586,7 @@ static bool initWalkInfo(bContext *C, WalkInfo *walk, wmOperator *op)
       walk->scene, 0, walk->region, walk->v3d);
 
   walk->v3d_camera_control = ED_view3d_cameracontrol_acquire(
-      walk->depsgraph,
-      walk->scene,
-      walk->v3d,
-      walk->rv3d,
-      (U.uiflag & USER_CAM_LOCK_NO_PARENT) == 0);
+      walk->depsgraph, walk->scene, walk->v3d, walk->rv3d);
 
   /* center the mouse */
   walk->center_mval[0] = walk->region->winx * 0.5f;
@@ -711,8 +708,8 @@ static void walkEvent(bContext *C, WalkInfo *walk, const wmEvent *event)
       walk->is_cursor_absolute = true;
       copy_v2_v2_int(walk->prev_mval, event->mval);
       copy_v2_v2_int(walk->center_mval, event->mval);
-      /* without this we can't turn 180d */
-      CLAMP_MIN(walk->mouse_speed, 4.0f);
+      /* Without this we can't turn 180d with the default speed of 1.0. */
+      walk->mouse_speed *= 4.0f;
     }
 #endif /* USE_TABLET_SUPPORT */
 
@@ -875,7 +872,7 @@ static void walkEvent(bContext *C, WalkInfo *walk, const wmEvent *event)
           /* delta time */
           t = (float)(PIL_check_seconds_timer() - walk->teleport.initial_time);
 
-          /* reduce the veolocity, if JUMP wasn't hold for long enough */
+          /* Reduce the velocity, if JUMP wasn't hold for long enough. */
           t = min_ff(t, JUMP_TIME_MAX);
           walk->speed_jump = JUMP_SPEED_MIN +
                              t * (JUMP_SPEED_MAX - JUMP_SPEED_MIN) / JUMP_TIME_MAX;

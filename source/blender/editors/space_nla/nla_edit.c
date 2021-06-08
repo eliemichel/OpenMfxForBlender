@@ -62,14 +62,14 @@
 #include "DEG_depsgraph_build.h"
 
 #include "UI_interface.h"
-#include "UI_resources.h"
 #include "UI_view2d.h"
 
 #include "nla_intern.h"  /* own include */
 #include "nla_private.h" /* FIXME... maybe this shouldn't be included? */
 
-/* *********************************************** */
-/* Utilities exported to other places... */
+/* -------------------------------------------------------------------- */
+/** \name Public Utilities
+ * \{ */
 
 /* Perform validation for blending/extend settings */
 void ED_nla_postop_refresh(bAnimContext *ac)
@@ -93,13 +93,17 @@ void ED_nla_postop_refresh(bAnimContext *ac)
   ANIM_animdata_freelist(&anim_data);
 }
 
-/* *********************************************** */
+/** \} */
+
 /* 'Special' Editing */
 
-/* ******************** Tweak-Mode Operators ***************************** */
 /* 'Tweak mode' allows the action referenced by the active NLA-strip to be edited
  * as if it were the normal Active-Action of its AnimData block.
  */
+
+/* -------------------------------------------------------------------- */
+/** \name Enable Tweak-Mode Operator
+ * \{ */
 
 static int nlaedit_enable_tweakmode_exec(bContext *C, wmOperator *op)
 {
@@ -196,7 +200,11 @@ void NLA_OT_tweakmode_enter(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
-/* ------------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Disable Tweak-Mode Operator
+ * \{ */
 
 /* NLA Editor internal API function for exiting tweakmode */
 bool nlaedit_disable_tweakmode(bAnimContext *ac, bool do_solo)
@@ -215,7 +223,7 @@ bool nlaedit_disable_tweakmode(bAnimContext *ac, bool do_solo)
     return false;
   }
 
-  /* for each AnimData block with NLA-data, try exitting tweak-mode */
+  /* For each AnimData block with NLA-data, try exiting tweak-mode. */
   for (ale = anim_data.first; ale; ale = ale->next) {
     AnimData *adt = ale->data;
 
@@ -298,10 +306,13 @@ void NLA_OT_tweakmode_exit(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
-/* *********************************************** */
+/** \} */
+
 /* NLA Strips Range Stuff */
 
-/* *************************** Calculate Range ************************** */
+/* -------------------------------------------------------------------- */
+/** \name Calculate NLA Strip Range
+ * \{ */
 
 /* Get the min/max strip extents */
 static void get_nlastrip_extents(bAnimContext *ac, float *min, float *max, const bool only_sel)
@@ -355,7 +366,11 @@ static void get_nlastrip_extents(bAnimContext *ac, float *min, float *max, const
   }
 }
 
-/* ****************** Automatic Preview-Range Operator ****************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Automatic Preview-Range Operator
+ * \{ */
 
 static int nlaedit_previewrange_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -402,23 +417,27 @@ void NLA_OT_previewrange_set(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ****************** View-All Operator ****************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View-All Operator
+ * \{ */
 
 /**
  * Find the extents of the active channel
  *
- * \param[out] min: Bottom y-extent of channel.
- * \param[out] max: Top y-extent of channel.
- * \return Success of finding a selected channel
+ * \param r_min: Bottom y-extent of channel.
+ * \param r_max: Top y-extent of channel.
+ * \return Success of finding a selected channel.
  */
-static bool nla_channels_get_selected_extents(bAnimContext *ac, float *min, float *max)
+static bool nla_channels_get_selected_extents(bAnimContext *ac, float *r_min, float *r_max)
 {
   ListBase anim_data = {NULL, NULL};
   bAnimListElem *ale;
   int filter;
 
   SpaceNla *snla = (SpaceNla *)ac->sl;
-  /* NOTE: not bool, since we want prioritise individual channels over expanders */
+  /* NOTE: not bool, since we want prioritize individual channels over expanders. */
   short found = 0;
 
   /* get all items - we need to do it this way */
@@ -435,14 +454,14 @@ static bool nla_channels_get_selected_extents(bAnimContext *ac, float *min, floa
     if (acf && acf->has_setting(ac, ale, ACHANNEL_SETTING_SELECT) &&
         ANIM_channel_setting_get(ac, ale, ACHANNEL_SETTING_SELECT)) {
       /* update best estimate */
-      *min = ymax - NLACHANNEL_HEIGHT(snla);
-      *max = ymax;
+      *r_min = ymax - NLACHANNEL_HEIGHT(snla);
+      *r_max = ymax;
 
       /* is this high enough priority yet? */
       found = acf->channel_role;
 
       /* only stop our search when we've found an actual channel
-       * - datablock expanders get less priority so that we don't abort prematurely
+       * - data-block expanders get less priority so that we don't abort prematurely
        */
       if (found == ACHANNEL_ROLE_CHANNEL) {
         break;
@@ -550,7 +569,11 @@ void NLA_OT_view_selected(wmOperatorType *ot)
   ot->flag = 0;
 }
 
-/* *********************************************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View-Frame Operator
+ * \{ */
 
 static int nlaedit_viewframe_exec(bContext *C, wmOperator *op)
 {
@@ -574,12 +597,16 @@ void NLA_OT_view_frame(wmOperatorType *ot)
   ot->flag = 0;
 }
 
-/* *********************************************** */
+/** \} */
+
 /* NLA Editing Operations (Constructive/Destructive) */
 
-/* ******************** Add Action-Clip Operator ***************************** */
-/* Add a new Action-Clip strip to the active track
- * (or the active block if no space in the track) */
+/* -------------------------------------------------------------------- */
+/** \name Add Action-Clip Operator
+ *
+ * Add a new Action-Clip strip to the active track
+ * (or the active block if no space in the track).
+ * \{ */
 
 /* add the specified action as new strip */
 static int nlaedit_add_actionclip_exec(bContext *C, wmOperator *op)
@@ -649,6 +676,7 @@ static int nlaedit_add_actionclip_exec(bContext *C, wmOperator *op)
     NlaTrack *nlt = (NlaTrack *)ale->data;
     AnimData *adt = ale->adt;
     NlaStrip *strip = NULL;
+    const bool is_liboverride = ID_IS_OVERRIDE_LIBRARY(ale->id);
 
     /* Sanity check: only apply actions of the right type for this ID.
      * NOTE: in the case that this hasn't been set,
@@ -671,12 +699,12 @@ static int nlaedit_add_actionclip_exec(bContext *C, wmOperator *op)
     strip->start = cfra;
 
     /* firstly try adding strip to our current track, but if that fails, add to a new track */
-    if (BKE_nlatrack_add_strip(nlt, strip) == 0) {
+    if (BKE_nlatrack_add_strip(nlt, strip, is_liboverride) == 0) {
       /* trying to add to the current failed (no space),
        * so add a new track to the stack, and add to that...
        */
-      nlt = BKE_nlatrack_add(adt, NULL);
-      BKE_nlatrack_add_strip(nlt, strip);
+      nlt = BKE_nlatrack_add(adt, NULL, is_liboverride);
+      BKE_nlatrack_add_strip(nlt, strip, is_liboverride);
     }
 
     /* auto-name it */
@@ -692,7 +720,7 @@ static int nlaedit_add_actionclip_exec(bContext *C, wmOperator *op)
   DEG_relations_tag_update(ac.bmain);
 
   /* set notifier that things have changed */
-  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_ADDED, NULL);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -724,8 +752,13 @@ void NLA_OT_actionclip_add(wmOperatorType *ot)
   ot->prop = prop;
 }
 
-/* ******************** Add Transition Operator ***************************** */
-/* Add a new transition strip between selected strips */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Add Transition Operator
+ *
+ * Add a new transition strip between selected strips.
+ * \{ */
 
 static int nlaedit_add_transition_exec(bContext *C, wmOperator *op)
 {
@@ -822,7 +855,7 @@ static int nlaedit_add_transition_exec(bContext *C, wmOperator *op)
     ED_nla_postop_refresh(&ac);
 
     /* set notifier that things have changed */
-    WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+    WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_ADDED, NULL);
 
     /* done */
     return OPERATOR_FINISHED;
@@ -849,8 +882,11 @@ void NLA_OT_transition_add(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Add Sound Clip Operator ***************************** */
-/* Add a new sound clip */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Add Sound Clip Operator
+ * \{ */
 
 static int nlaedit_add_sound_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -886,6 +922,7 @@ static int nlaedit_add_sound_exec(bContext *C, wmOperator *UNUSED(op))
     AnimData *adt = ale->adt;
     NlaTrack *nlt = (NlaTrack *)ale->data;
     NlaStrip *strip;
+    const bool is_liboverride = ID_IS_OVERRIDE_LIBRARY(ale->id);
 
     /* does this belong to speaker - assumed to live on Object level only */
     if ((GS(ale->id->name) != ID_OB) || (ob->type != OB_SPEAKER)) {
@@ -899,12 +936,12 @@ static int nlaedit_add_sound_exec(bContext *C, wmOperator *UNUSED(op))
     strip->end += cfra;
 
     /* firstly try adding strip to our current track, but if that fails, add to a new track */
-    if (BKE_nlatrack_add_strip(nlt, strip) == 0) {
+    if (BKE_nlatrack_add_strip(nlt, strip, is_liboverride) == 0) {
       /* trying to add to the current failed (no space),
        * so add a new track to the stack, and add to that...
        */
-      nlt = BKE_nlatrack_add(adt, NULL);
-      BKE_nlatrack_add_strip(nlt, strip);
+      nlt = BKE_nlatrack_add(adt, NULL, is_liboverride);
+      BKE_nlatrack_add_strip(nlt, strip, is_liboverride);
     }
 
     /* auto-name it */
@@ -918,7 +955,7 @@ static int nlaedit_add_sound_exec(bContext *C, wmOperator *UNUSED(op))
   ED_nla_postop_refresh(&ac);
 
   /* set notifier that things have changed */
-  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_ADDED, NULL);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -939,8 +976,13 @@ void NLA_OT_soundclip_add(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Add Meta-Strip Operator ***************************** */
-/* Add new meta-strips incorporating the selected strips */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Add Meta-Strip Operator
+ *
+ * Add new meta-strips incorporating the selected strips.
+ * \{ */
 
 /* add the specified action as new strip */
 static int nlaedit_add_meta_exec(bContext *C, wmOperator *UNUSED(op))
@@ -966,6 +1008,11 @@ static int nlaedit_add_meta_exec(bContext *C, wmOperator *UNUSED(op))
     AnimData *adt = ale->adt;
     NlaStrip *strip;
 
+    if (BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nlt)) {
+      /* No making metastrips in non-local tracks of override data. */
+      continue;
+    }
+
     /* create meta-strips from the continuous chains of selected strips */
     BKE_nlastrips_make_metas(&nlt->strips, 0);
 
@@ -985,7 +1032,7 @@ static int nlaedit_add_meta_exec(bContext *C, wmOperator *UNUSED(op))
   ANIM_animdata_freelist(&anim_data);
 
   /* set notifier that things have changed */
-  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_ADDED, NULL);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -1006,8 +1053,13 @@ void NLA_OT_meta_add(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Remove Meta-Strip Operator ***************************** */
-/* Separate out the strips held by the selected meta-strips */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Remove Meta-Strip Operator
+ *
+ * Separate out the strips held by the selected meta-strips.
+ * \{ */
 
 static int nlaedit_remove_meta_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -1030,6 +1082,11 @@ static int nlaedit_remove_meta_exec(bContext *C, wmOperator *UNUSED(op))
   for (ale = anim_data.first; ale; ale = ale->next) {
     NlaTrack *nlt = (NlaTrack *)ale->data;
 
+    if (BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nlt)) {
+      /* No removing metastrips from non-local tracks of override data. */
+      continue;
+    }
+
     /* clear all selected meta-strips, regardless of whether they are temporary or not */
     BKE_nlastrips_clear_metas(&nlt->strips, 1, 0);
 
@@ -1041,7 +1098,7 @@ static int nlaedit_remove_meta_exec(bContext *C, wmOperator *UNUSED(op))
   ANIM_animdata_freelist(&anim_data);
 
   /* set notifier that things have changed */
-  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_REMOVED, NULL);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -1062,10 +1119,14 @@ void NLA_OT_meta_remove(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Duplicate Strips Operator ************************** */
-/* Duplicates the selected NLA-Strips, putting them on new tracks above the one
- * the originals were housed in.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Duplicate Strips Operator
+ *
+ * Duplicates the selected NLA-Strips,
+ * putting them on new tracks above the one the originals were housed in.
+ * \{ */
 
 static int nlaedit_duplicate_exec(bContext *C, wmOperator *op)
 {
@@ -1096,6 +1157,11 @@ static int nlaedit_duplicate_exec(bContext *C, wmOperator *op)
     NlaStrip *strip, *nstrip, *next;
     NlaTrack *track;
 
+    /* Note: We allow this operator in override context because it is almost always (from possible
+     * default user interactions) paired with the transform one, which will ensure that the new
+     * strip ends up in a valid (local) track. */
+
+    const bool is_liboverride = ID_IS_OVERRIDE_LIBRARY(ale->id);
     for (strip = nlt->strips.first; strip; strip = next) {
       next = strip->next;
 
@@ -1106,13 +1172,13 @@ static int nlaedit_duplicate_exec(bContext *C, wmOperator *op)
 
         /* in case there's no space in the track above,
          * or we haven't got a reference to it yet, try adding */
-        if (BKE_nlatrack_add_strip(nlt->next, nstrip) == 0) {
+        if (BKE_nlatrack_add_strip(nlt->next, nstrip, is_liboverride) == 0) {
           /* need to add a new track above the one above the current one
            * - if the current one is the last one, nlt->next will be NULL, which defaults to adding
            *   at the top of the stack anyway...
            */
-          track = BKE_nlatrack_add(adt, nlt->next);
-          BKE_nlatrack_add_strip(track, nstrip);
+          track = BKE_nlatrack_add(adt, nlt->next, is_liboverride);
+          BKE_nlatrack_add_strip(track, nstrip, is_liboverride);
         }
 
         /* deselect the original and the active flag */
@@ -1138,7 +1204,7 @@ static int nlaedit_duplicate_exec(bContext *C, wmOperator *op)
     }
 
     /* set notifier that things have changed */
-    WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+    WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_ADDED, NULL);
 
     /* done */
     return OPERATOR_FINISHED;
@@ -1184,8 +1250,13 @@ void NLA_OT_duplicate(wmOperatorType *ot)
   RNA_def_enum(ot->srna, "mode", rna_enum_transform_mode_types, TFM_TRANSLATION, "Mode", "");
 }
 
-/* ******************** Delete Strips Operator ***************************** */
-/* Deletes the selected NLA-Strips */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Delete Strips Operator
+ *
+ * Deletes the selected NLA-Strips.
+ * \{ */
 
 static int nlaedit_delete_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -1208,6 +1279,11 @@ static int nlaedit_delete_exec(bContext *C, wmOperator *UNUSED(op))
   for (ale = anim_data.first; ale; ale = ale->next) {
     NlaTrack *nlt = (NlaTrack *)ale->data;
     NlaStrip *strip, *nstrip;
+
+    if (BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nlt)) {
+      /* No deletion of strips in non-local tracks of override data. */
+      continue;
+    }
 
     for (strip = nlt->strips.first; strip; strip = nstrip) {
       nstrip = strip->next;
@@ -1238,7 +1314,7 @@ static int nlaedit_delete_exec(bContext *C, wmOperator *UNUSED(op))
   DEG_relations_tag_update(ac.bmain);
 
   /* set notifier that things have changed */
-  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_REMOVED, NULL);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -1259,11 +1335,17 @@ void NLA_OT_delete(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Split Strips Operator ***************************** */
-/* Splits the selected NLA-Strips into two strips at the midpoint of the strip */
-/* TODO's?
- *  - multiple splits
- *  - variable-length splits? */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Split Strips Operator
+ *
+ * Splits the selected NLA-Strips into two strips at the midpoint of the strip.
+ *
+ * TODO's?
+ * - multiple splits
+ * - variable-length splits?
+ * \{ */
 
 /* split a given Action-Clip strip */
 static void nlaedit_split_strip_actclip(
@@ -1359,6 +1441,11 @@ static int nlaedit_split_exec(bContext *C, wmOperator *UNUSED(op))
     AnimData *adt = ale->adt;
     NlaStrip *strip, *next;
 
+    if (BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nlt)) {
+      /* No splitting of strips in non-local tracks of override data. */
+      continue;
+    }
+
     for (strip = nlt->strips.first; strip; strip = next) {
       next = strip->next;
 
@@ -1388,7 +1475,7 @@ static int nlaedit_split_exec(bContext *C, wmOperator *UNUSED(op))
   ED_nla_postop_refresh(&ac);
 
   /* set notifier that things have changed */
-  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_ADDED, NULL);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -1409,11 +1496,15 @@ void NLA_OT_split(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* *********************************************** */
+/** \} */
+
 /* NLA Editing Operations (Modifying) */
 
-/* ******************** Toggle Muting Operator ************************** */
-/* Toggles whether strips are muted or not */
+/* -------------------------------------------------------------------- */
+/** \name Toggle Muting Operator
+ *
+ * Toggles whether strips are muted or not.
+ * \{ */
 
 static int nlaedit_toggle_mute_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -1476,8 +1567,13 @@ void NLA_OT_mute_toggle(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Swap Strips Operator ************************** */
-/* Tries to exchange strips within their owner tracks */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Swap Strips Operator
+ *
+ * Tries to exchange strips within their owner tracks.
+ * \{ */
 
 static int nlaedit_swap_exec(bContext *C, wmOperator *op)
 {
@@ -1502,8 +1598,14 @@ static int nlaedit_swap_exec(bContext *C, wmOperator *op)
 
     NlaStrip *strip, *stripN = NULL;
     NlaStrip *area = NULL, *sb = NULL;
+    const bool is_liboverride = ID_IS_OVERRIDE_LIBRARY(ale->id);
 
-    /* make temporary metastrips so that entire islands of selections can be moved around */
+    if (BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nlt)) {
+      /* No re-ordering of strips within non-local tracks of override data. */
+      continue;
+    }
+
+    /* Make temporary meta-strips so that entire islands of selections can be moved around. */
     BKE_nlastrips_make_metas(&nlt->strips, 1);
 
     /* special case: if there is only 1 island
@@ -1610,8 +1712,8 @@ static int nlaedit_swap_exec(bContext *C, wmOperator *op)
       }
 
       /* add strips back to track now */
-      BKE_nlatrack_add_strip(nlt, area);
-      BKE_nlatrack_add_strip(nlt, sb);
+      BKE_nlatrack_add_strip(nlt, area, is_liboverride);
+      BKE_nlatrack_add_strip(nlt, sb, is_liboverride);
     }
 
     /* clear (temp) metastrips */
@@ -1626,6 +1728,7 @@ static int nlaedit_swap_exec(bContext *C, wmOperator *op)
 
   /* set notifier that things have changed */
   WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA_ORDER, NULL);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -1646,8 +1749,13 @@ void NLA_OT_swap(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Move Strips Up Operator ************************** */
-/* Tries to move the selected strips into the track above if possible. */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Move Strips Up Operator
+ *
+ * Tries to move the selected strips into the track above if possible.
+ * \{ */
 
 static int nlaedit_move_up_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -1674,8 +1782,16 @@ static int nlaedit_move_up_exec(bContext *C, wmOperator *UNUSED(op))
     NlaTrack *nltn = nlt->next;
     NlaStrip *strip, *stripn;
 
+    const bool is_liboverride = ID_IS_OVERRIDE_LIBRARY(ale->id);
+
     /* if this track has no tracks after it, skip for now... */
     if (nltn == NULL) {
+      continue;
+    }
+
+    if (BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nlt) ||
+        BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nltn)) {
+      /* No moving of strips in non-local tracks of override data. */
       continue;
     }
 
@@ -1689,7 +1805,7 @@ static int nlaedit_move_up_exec(bContext *C, wmOperator *UNUSED(op))
           /* remove from its current track, and add to the one above
            * (it 'should' work, so no need to worry) */
           BLI_remlink(&nlt->strips, strip);
-          BKE_nlatrack_add_strip(nltn, strip);
+          BKE_nlatrack_add_strip(nltn, strip, is_liboverride);
         }
       }
     }
@@ -1703,6 +1819,7 @@ static int nlaedit_move_up_exec(bContext *C, wmOperator *UNUSED(op))
 
   /* set notifier that things have changed */
   WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA_ORDER, NULL);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -1723,8 +1840,13 @@ void NLA_OT_move_up(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Move Strips Down Operator ************************** */
-/* Tries to move the selected strips into the track above if possible. */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Move Strips Down Operator
+ *
+ * Tries to move the selected strips into the track above if possible.
+ * \{ */
 
 static int nlaedit_move_down_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -1751,8 +1873,16 @@ static int nlaedit_move_down_exec(bContext *C, wmOperator *UNUSED(op))
     NlaTrack *nltp = nlt->prev;
     NlaStrip *strip, *stripn;
 
+    const bool is_liboverride = ID_IS_OVERRIDE_LIBRARY(ale->id);
+
     /* if this track has no tracks before it, skip for now... */
     if (nltp == NULL) {
+      continue;
+    }
+
+    if (BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nlt) ||
+        BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nltp)) {
+      /* No moving of strips in non-local tracks of override data. */
       continue;
     }
 
@@ -1766,7 +1896,7 @@ static int nlaedit_move_down_exec(bContext *C, wmOperator *UNUSED(op))
           /* remove from its current track, and add to the one above
            * (it 'should' work, so no need to worry) */
           BLI_remlink(&nlt->strips, strip);
-          BKE_nlatrack_add_strip(nltp, strip);
+          BKE_nlatrack_add_strip(nltp, strip, is_liboverride);
         }
       }
     }
@@ -1780,6 +1910,7 @@ static int nlaedit_move_down_exec(bContext *C, wmOperator *UNUSED(op))
 
   /* set notifier that things have changed */
   WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA_ORDER, NULL);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -1800,8 +1931,13 @@ void NLA_OT_move_down(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Sync Action Length Operator ***************************** */
-/* Recalculate the extents of the action ranges used for the selected strips  */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Sync Action Length Operator
+ *
+ * Recalculate the extents of the action ranges used for the selected strips.
+ * \{ */
 
 static int nlaedit_sync_actlen_exec(bContext *C, wmOperator *op)
 {
@@ -1889,8 +2025,13 @@ void NLA_OT_action_sync_length(wmOperatorType *ot)
                              "Only sync the active length for the active strip");
 }
 
-/* ******************** Make Single User ********************************* */
-/* Ensure that each strip has its own action */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Make Single User
+ *
+ * Ensure that each strip has its own action.
+ * \{ */
 
 static int nlaedit_make_single_user_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -1953,7 +2094,7 @@ static int nlaedit_make_single_user_exec(bContext *C, wmOperator *UNUSED(op))
   }
 
   /* set notifier that things have changed */
-  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_ADDED, NULL);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -1975,8 +2116,13 @@ void NLA_OT_make_single_user(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Apply Scale Operator ***************************** */
-/* Reset the scaling of the selected strips to 1.0f */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Apply Scale Operator
+ *
+ * Reset the scaling of the selected strips to 1.0f.
+ * \{ */
 
 /* apply scaling to keyframe */
 static short bezt_apply_nlamapping(KeyframeEditData *ked, BezTriple *bezt)
@@ -2023,11 +2169,11 @@ static int nlaedit_apply_scale_exec(bContext *C, wmOperator *UNUSED(op))
       /* strip must be selected, and must be action-clip only
        * (transitions don't have scale) */
       if ((strip->flag & NLASTRIP_FLAG_SELECT) && (strip->type == NLASTRIP_TYPE_CLIP)) {
-        /* if the referenced action is used by other strips,
-         * make this strip use its own copy */
-        if (strip->act == NULL) {
+        if (strip->act == NULL || ID_IS_OVERRIDE_LIBRARY(strip->act) || ID_IS_LINKED(strip->act)) {
           continue;
         }
+        /* if the referenced action is used by other strips,
+         * make this strip use its own copy */
         if (strip->act->id.us > 1) {
           /* make a copy of the Action to work on */
           bAction *act = (bAction *)BKE_id_copy(bmain, &strip->act->id);
@@ -2088,8 +2234,13 @@ void NLA_OT_apply_scale(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Clear Scale Operator ***************************** */
-/* Reset the scaling of the selected strips to 1.0f */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Scale Operator
+ *
+ * Reset the scaling of the selected strips to 1.0f.
+ * \{ */
 
 static int nlaedit_clear_scale_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -2153,17 +2304,22 @@ void NLA_OT_clear_scale(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Snap Strips Operator ************************** */
-/* Moves the start-point of the selected strips to the specified places */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Snap Strips Operator
+ *
+ * Moves the start-point of the selected strips to the specified places.
+ * \{ */
 
 /* defines for snap keyframes tool */
 static const EnumPropertyItem prop_nlaedit_snap_types[] = {
-    {NLAEDIT_SNAP_CFRA, "CFRA", 0, "Current Frame", ""},
+    {NLAEDIT_SNAP_CFRA, "CFRA", 0, "Selection to Current Frame", ""},
     /* XXX as single entry? */
-    {NLAEDIT_SNAP_NEAREST_FRAME, "NEAREST_FRAME", 0, "Nearest Frame", ""},
+    {NLAEDIT_SNAP_NEAREST_FRAME, "NEAREST_FRAME", 0, "Selection to Nearest Frame", ""},
     /* XXX as single entry? */
-    {NLAEDIT_SNAP_NEAREST_SECOND, "NEAREST_SECOND", 0, "Nearest Second", ""},
-    {NLAEDIT_SNAP_NEAREST_MARKER, "NEAREST_MARKER", 0, "Nearest Marker", ""},
+    {NLAEDIT_SNAP_NEAREST_SECOND, "NEAREST_SECOND", 0, "Selection to Nearest Second", ""},
+    {NLAEDIT_SNAP_NEAREST_MARKER, "NEAREST_MARKER", 0, "Selection to Nearest Marker", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -2192,6 +2348,8 @@ static int nlaedit_snap_exec(bContext *C, wmOperator *op)
   scene = ac.scene;
   secf = (float)FPS;
 
+  bool any_added = false;
+
   /* since we may add tracks, perform this in reverse order */
   for (ale = anim_data.last; ale; ale = ale->prev) {
     ListBase tmp_strips = {NULL, NULL};
@@ -2199,6 +2357,8 @@ static int nlaedit_snap_exec(bContext *C, wmOperator *op)
     NlaTrack *nlt = (NlaTrack *)ale->data;
     NlaStrip *strip, *stripn;
     NlaTrack *track;
+
+    const bool is_liboverride = ID_IS_OVERRIDE_LIBRARY(ale->id);
 
     /* create meta-strips from the continuous chains of selected strips */
     BKE_nlastrips_make_metas(&nlt->strips, 1);
@@ -2255,14 +2415,16 @@ static int nlaedit_snap_exec(bContext *C, wmOperator *op)
       BLI_remlink(&tmp_strips, strip);
 
       /* in case there's no space in the current track, try adding */
-      if (BKE_nlatrack_add_strip(nlt, strip) == 0) {
+      if (BKE_nlatrack_add_strip(nlt, strip, is_liboverride) == 0) {
         /* need to add a new track above the current one */
-        track = BKE_nlatrack_add(adt, nlt);
-        BKE_nlatrack_add_strip(track, strip);
+        track = BKE_nlatrack_add(adt, nlt, is_liboverride);
+        BKE_nlatrack_add_strip(track, strip, is_liboverride);
 
         /* clear temp meta-strips on this new track,
          * as we may not be able to get back to it */
         BKE_nlastrips_clear_metas(&track->strips, 0, 1);
+
+        any_added = true;
       }
     }
 
@@ -2282,6 +2444,9 @@ static int nlaedit_snap_exec(bContext *C, wmOperator *op)
 
   /* set notifier that things have changed */
   WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  if (any_added) {
+    WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_ADDED, NULL);
+  }
 
   /* done */
   return OPERATOR_FINISHED;
@@ -2306,10 +2471,13 @@ void NLA_OT_snap(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "type", prop_nlaedit_snap_types, 0, "Type", "");
 }
 
-/* *********************************************** */
+/** \} */
+
 /* NLA Modifiers */
 
-/* ******************** Add F-Modifier Operator *********************** */
+/* -------------------------------------------------------------------- */
+/** \name Add F-Modifier Operator
+ * \{ */
 
 static const EnumPropertyItem *nla_fmodifier_itemf(bContext *C,
                                                    PointerRNA *UNUSED(ptr),
@@ -2374,6 +2542,11 @@ static int nla_fmodifier_add_exec(bContext *C, wmOperator *op)
   for (ale = anim_data.first; ale; ale = ale->next) {
     NlaTrack *nlt = (NlaTrack *)ale->data;
     NlaStrip *strip;
+
+    if (BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nlt)) {
+      /* No adding f-modifiers to strips in non-local tracks of override data. */
+      continue;
+    }
 
     for (strip = nlt->strips.first; strip; strip = strip->next) {
       /* can F-Modifier be added to the current strip? */
@@ -2450,7 +2623,11 @@ void NLA_OT_fmodifier_add(wmOperatorType *ot)
                   "Only add a F-Modifier of the specified type to the active strip");
 }
 
-/* ******************** Copy F-Modifiers Operator *********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Copy F-Modifiers Operator
+ * \{ */
 
 static int nla_fmodifier_copy_exec(bContext *C, wmOperator *op)
 {
@@ -2525,7 +2702,11 @@ void NLA_OT_fmodifier_copy(wmOperatorType *ot)
 #endif
 }
 
-/* ******************** Paste F-Modifiers Operator *********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Paste F-Modifiers Operator
+ * \{ */
 
 static int nla_fmodifier_paste_exec(bContext *C, wmOperator *op)
 {
@@ -2551,6 +2732,11 @@ static int nla_fmodifier_paste_exec(bContext *C, wmOperator *op)
   for (ale = anim_data.first; ale; ale = ale->next) {
     NlaTrack *nlt = (NlaTrack *)ale->data;
     NlaStrip *strip;
+
+    if (BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nlt)) {
+      /* No pasting in non-local tracks of override data. */
+      continue;
+    }
 
     for (strip = nlt->strips.first; strip; strip = strip->next) {
       /* can F-Modifier be added to the current strip? */
@@ -2612,4 +2798,4 @@ void NLA_OT_fmodifier_paste(wmOperatorType *ot)
       "Replace existing F-Modifiers, instead of just appending to the end of the existing list");
 }
 
-/* *********************************************** */
+/** \} */

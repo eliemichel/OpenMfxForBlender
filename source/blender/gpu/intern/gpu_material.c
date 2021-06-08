@@ -313,7 +313,7 @@ static float eval_profile(float r, short falloff_type, float sharpness, float pa
 {
   r = fabsf(r);
 
-  if (falloff_type == SHD_SUBSURFACE_BURLEY || falloff_type == SHD_SUBSURFACE_RANDOM_WALK) {
+  if (ELEM(falloff_type, SHD_SUBSURFACE_BURLEY, SHD_SUBSURFACE_RANDOM_WALK)) {
     return burley_profile(r, param) / BURLEY_TRUNCATE_CDF;
   }
   if (falloff_type == SHD_SUBSURFACE_CUBIC) {
@@ -353,7 +353,7 @@ static void compute_sss_kernel(
   /* Christensen-Burley fitting */
   float l[3], d[3];
 
-  if (falloff_type == SHD_SUBSURFACE_BURLEY || falloff_type == SHD_SUBSURFACE_RANDOM_WALK) {
+  if (ELEM(falloff_type, SHD_SUBSURFACE_BURLEY, SHD_SUBSURFACE_RANDOM_WALK)) {
     mul_v3_v3fl(l, rad, 0.25f * M_1_PI);
     const float A = 1.0f;
     const float s = 1.9f - A + 3.5f * (A - 0.8f) * (A - 0.8f);
@@ -584,11 +584,25 @@ ListBase GPU_material_volume_grids(GPUMaterial *material)
   return material->graph.volume_grids;
 }
 
+GPUUniformAttrList *GPU_material_uniform_attributes(GPUMaterial *material)
+{
+  GPUUniformAttrList *attrs = &material->graph.uniform_attrs;
+  return attrs->count > 0 ? attrs : NULL;
+}
+
 void GPU_material_output_link(GPUMaterial *material, GPUNodeLink *link)
 {
   if (!material->graph.outlink) {
     material->graph.outlink = link;
   }
+}
+
+void GPU_material_add_output_link_aov(GPUMaterial *material, GPUNodeLink *link, int hash)
+{
+  GPUNodeGraphOutputLink *aov_link = MEM_callocN(sizeof(GPUNodeGraphOutputLink), __func__);
+  aov_link->outlink = link;
+  aov_link->hash = hash;
+  BLI_addtail(&material->graph.outlink_aovs, aov_link);
 }
 
 GPUNodeGraph *gpu_material_node_graph(GPUMaterial *material)
@@ -789,14 +803,11 @@ void GPU_material_compile(GPUMaterial *mat)
 
 void GPU_materials_free(Main *bmain)
 {
-  Material *ma;
-  World *wo;
-
-  for (ma = bmain->materials.first; ma; ma = ma->id.next) {
+  LISTBASE_FOREACH (Material *, ma, &bmain->materials) {
     GPU_material_free(&ma->gpumaterial);
   }
 
-  for (wo = bmain->worlds.first; wo; wo = wo->id.next) {
+  LISTBASE_FOREACH (World *, wo, &bmain->worlds) {
     GPU_material_free(&wo->gpumaterial);
   }
 

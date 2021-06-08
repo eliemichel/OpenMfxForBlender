@@ -27,31 +27,33 @@ namespace libmv {
 
 /**
  * 2D homography transformation estimation.
- * 
+ *
  * This function estimates the homography transformation from a list of 2D
  * correspondences which represents either:
  *
  * - 3D points on a plane, with a general moving camera.
  * - 3D points with a rotating camera (pure rotation).
  * - 3D points + different planar projections
- * 
- * \param x1 The first 2xN or 3xN matrix of euclidean or homogeneous points.
- * \param x2 The second 2xN or 3xN matrix of euclidean or homogeneous points.
- * \param  H The 3x3 homography transformation matrix (8 dof) such that
- *               x2 = H * x1   with       |a b c| 
- *                                    H = |d e f|
- *                                        |g h 1| 
- * \param expected_precision The expected precision in order for instance 
+ *
+ * \param x1: The first 2xN or 3xN matrix of euclidean or homogeneous points.
+ * \param x2: The second 2xN or 3xN matrix of euclidean or homogeneous points.
+ * \param H: The 3x3 homography transformation matrix (8 dof) such that
+ * <pre>
+ * x2 = H * x1   with       |a b c|
+ *                      H = |d e f|
+ *                          |g h 1|
+ * </pre>
+ * \param expected_precision: The expected precision in order for instance
  *                           to accept almost homography matrices.
  *
  * \return True if the transformation estimation has succeeded.
  * \note There must be at least 4 non-colinear points.
  */
-bool Homography2DFromCorrespondencesLinear(const Mat &x1,
-                                           const Mat &x2,
-                                           Mat3 *H,
-                                           double expected_precision =
-                                             EigenDouble::dummy_precision());
+bool Homography2DFromCorrespondencesLinear(
+    const Mat& x1,
+    const Mat& x2,
+    Mat3* H,
+    double expected_precision = EigenDouble::dummy_precision());
 
 /**
  * This structure contains options that controls how the homography
@@ -99,10 +101,10 @@ struct EstimateHomographyOptions {
  * refinement.
  */
 bool EstimateHomography2DFromCorrespondences(
-    const Mat &x1,
-    const Mat &x2,
-    const EstimateHomographyOptions &options,
-    Mat3 *H);
+    const Mat& x1,
+    const Mat& x2,
+    const EstimateHomographyOptions& options,
+    Mat3* H);
 
 /**
  * 3D Homography transformation estimation.
@@ -113,32 +115,34 @@ bool EstimateHomography2DFromCorrespondences(
  * \param[in] x1 The first 4xN matrix of homogeneous points
  * \param[in] x2 The second 4xN matrix of homogeneous points
  * \param[out] H The 4x4 homography transformation matrix (15 dof) such that
- *               x2 = H * x1   with       |a b c d| 
- *                                    H = |e f g h|
- *                                        |i j k l|
- *                                        |m n o 1| 
- * \param[in] expected_precision The expected precision in order for instance 
+ * <pre>
+ * x2 = H * x1   with       |a b c d|
+ *                      H = |e f g h|
+ *                          |i j k l|
+ *                          |m n o 1|
+ * </pre>
+ * \param[in] expected_precision The expected precision in order for instance
  *        to accept almost homography matrices.
  *
  * \return true if the transformation estimation has succeeded
  *
- * \note Need at least 5 non coplanar points 
+ * \note Need at least 5 non coplanar points
  * \note Points coordinates must be in homogeneous coordinates
  */
-bool Homography3DFromCorrespondencesLinear(const Mat &x1,
-                                           const Mat &x2,
-                                           Mat4 *H,
-                                           double expected_precision =
-                                             EigenDouble::dummy_precision());
+bool Homography3DFromCorrespondencesLinear(
+    const Mat& x1,
+    const Mat& x2,
+    Mat4* H,
+    double expected_precision = EigenDouble::dummy_precision());
 
 /**
  * Calculate symmetric geometric cost:
  *
  * D(H * x1, x2)^2 + D(H^-1 * x2, x1)
  */
-double SymmetricGeometricDistance(const Mat3 &H,
-                                  const Vec2 &x1,
-                                  const Vec2 &x2);
+double SymmetricGeometricDistance(const Mat3& H,
+                                  const Vec2& x1,
+                                  const Vec2& x2);
 
 }  // namespace libmv
 

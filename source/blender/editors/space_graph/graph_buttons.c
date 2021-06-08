@@ -105,6 +105,16 @@ static bool graph_panel_context(const bContext *C, bAnimListElem **ale, FCurve *
   return true;
 }
 
+FCurve *ANIM_graph_context_fcurve(const bContext *C)
+{
+  FCurve *fcu;
+  if (!graph_panel_context(C, NULL, &fcu)) {
+    return NULL;
+  }
+
+  return fcu;
+}
+
 static bool graph_panel_poll(const bContext *C, PanelType *UNUSED(pt))
 {
   return graph_panel_context(C, NULL, NULL);
@@ -181,7 +191,7 @@ static void graph_panel_properties(const bContext *C, Panel *panel)
   }
 
   /* F-Curve pointer */
-  RNA_pointer_create(ale->id, &RNA_FCurve, fcu, &fcu_ptr);
+  RNA_pointer_create(ale->fcurve_owner_id, &RNA_FCurve, fcu, &fcu_ptr);
 
   /* user-friendly 'name' for F-Curve */
   col = uiLayoutColumn(layout, false);
@@ -309,7 +319,7 @@ static void graphedit_activekey_left_handle_coord_cb(bContext *C, void *fcu_ptr,
   /* perform normal updates NOW */
   graphedit_activekey_handles_cb(C, fcu_ptr, bezt_ptr);
 
-  /* restore selection state so that no-one notices this hack */
+  /* restore selection state so that no one notices this hack */
   bezt->f1 = f1;
   bezt->f3 = f3;
 }
@@ -331,7 +341,7 @@ static void graphedit_activekey_right_handle_coord_cb(bContext *C, void *fcu_ptr
   /* perform normal updates NOW */
   graphedit_activekey_handles_cb(C, fcu_ptr, bezt_ptr);
 
-  /* restore selection state so that no-one notices this hack */
+  /* restore selection state so that no one notices this hack */
   bezt->f1 = f1;
   bezt->f3 = f3;
 }
@@ -366,7 +376,7 @@ static void graph_panel_key_properties(const bContext *C, Panel *panel)
     int unit = B_UNIT_NONE;
 
     /* RNA pointer to keyframe, to allow editing */
-    RNA_pointer_create(ale->id, &RNA_Keyframe, bezt, &bezt_ptr);
+    RNA_pointer_create(ale->fcurve_owner_id, &RNA_Keyframe, bezt, &bezt_ptr);
 
     /* get property that F-Curve affects, for some unit-conversion magic */
     RNA_id_pointer_create(ale->id, &id_ptr);
@@ -423,13 +433,14 @@ static void graph_panel_key_properties(const bContext *C, Panel *panel)
                       but_max_width,
                       UI_UNIT_Y,
                       &bezt_ptr,
-                      "co",
+                      "co_ui",
                       0,
                       0,
                       0,
                       0,
                       0,
                       NULL);
+      UI_but_func_set(but, graphedit_activekey_update_cb, fcu, bezt);
 
       uiItemL_respect_property_split(col, IFACE_("Value"), ICON_NONE);
       but = uiDefButR(block,
@@ -441,7 +452,7 @@ static void graph_panel_key_properties(const bContext *C, Panel *panel)
                       but_max_width,
                       UI_UNIT_Y,
                       &bezt_ptr,
-                      "co",
+                      "co_ui",
                       1,
                       0,
                       0,
@@ -450,8 +461,6 @@ static void graph_panel_key_properties(const bContext *C, Panel *panel)
                       NULL);
       UI_but_func_set(but, graphedit_activekey_update_cb, fcu, bezt);
       UI_but_unit_type_set(but, unit);
-
-      UI_but_func_set(but, graphedit_activekey_update_cb, fcu, bezt);
     }
 
     /* previous handle - only if previous was Bezier interpolation */
@@ -1313,6 +1322,16 @@ static void graph_panel_drivers_popover(const bContext *C, Panel *panel)
 /* All the drawing code is in editors/animation/fmodifier_ui.c */
 
 #define B_FMODIFIER_REDRAW 20
+/** The start of FModifier panels registered for the graph editor. */
+#define GRAPH_FMODIFIER_PANEL_PREFIX "GRAPH"
+
+static void graph_fmodifier_panel_id(void *fcm_link, char *r_name)
+{
+  FModifier *fcm = (FModifier *)fcm_link;
+  eFModifier_Types type = fcm->type;
+  const FModifierTypeInfo *fmi = get_fmodifier_typeinfo(type);
+  BLI_snprintf(r_name, BKE_ST_MAXNAME, "%s_PT_%s", GRAPH_FMODIFIER_PANEL_PREFIX, fmi->name);
+}
 
 static void do_graph_region_modifier_buttons(bContext *C, void *UNUSED(arg), int event)
 {
@@ -1328,10 +1347,8 @@ static void graph_panel_modifiers(const bContext *C, Panel *panel)
 {
   bAnimListElem *ale;
   FCurve *fcu;
-  FModifier *fcm;
-  uiLayout *col, *row;
+  uiLayout *row;
   uiBlock *block;
-  bool active;
 
   if (!graph_panel_context(C, &ale, &fcu)) {
     return;
@@ -1356,14 +1373,7 @@ static void graph_panel_modifiers(const bContext *C, Panel *panel)
     uiItemO(row, "", ICON_PASTEDOWN, "GRAPH_OT_fmodifier_paste");
   }
 
-  active = !(fcu->flag & FCURVE_MOD_OFF);
-  /* draw each modifier */
-  for (fcm = fcu->modifiers.first; fcm; fcm = fcm->next) {
-    col = uiLayoutColumn(panel->layout, true);
-    uiLayoutSetActive(col, active);
-
-    ANIM_uiTemplate_fmodifier_draw(col, ale->fcurve_owner_id, &fcu->modifiers, fcm);
-  }
+  ANIM_fmodifier_panels(C, ale->fcurve_owner_id, &fcu->modifiers, graph_fmodifier_panel_id);
 
   MEM_freeN(ale);
 }
@@ -1427,9 +1437,13 @@ void graph_buttons_register(ARegionType *art)
   strcpy(pt->label, N_("Modifiers"));
   strcpy(pt->category, "Modifiers");
   strcpy(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
+  pt->flag = PANEL_TYPE_NO_HEADER;
   pt->draw = graph_panel_modifiers;
   pt->poll = graph_panel_poll;
   BLI_addtail(&art->paneltypes, pt);
+
+  ANIM_modifier_panels_register_graph_and_NLA(art, GRAPH_FMODIFIER_PANEL_PREFIX, graph_panel_poll);
+  ANIM_modifier_panels_register_graph_only(art, GRAPH_FMODIFIER_PANEL_PREFIX, graph_panel_poll);
 
   pt = MEM_callocN(sizeof(PanelType), "spacetype graph panel view");
   strcpy(pt->idname, "GRAPH_PT_view");

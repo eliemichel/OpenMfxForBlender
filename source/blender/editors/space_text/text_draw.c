@@ -285,7 +285,7 @@ void wrap_offset(
           end += max;
           chop = 1;
         }
-        else if (ch == ' ' || ch == '-') {
+        else if (ELEM(ch, ' ', '-')) {
           end = i + 1;
           chop = 0;
           if (linep == linein && i >= cursin) {
@@ -362,7 +362,7 @@ void wrap_offset_in_line(
         end += max;
         chop = 1;
       }
-      else if (ch == ' ' || ch == '-') {
+      else if (ELEM(ch, ' ', '-')) {
         end = i + 1;
         chop = 0;
         if (i >= cursin) {
@@ -483,7 +483,7 @@ static int text_draw_wrapped(const SpaceText *st,
         break;
       }
     }
-    else if (str[mi] == ' ' || str[mi] == '-') {
+    else if (ELEM(str[mi], ' ', '-')) {
       wrap = i + 1;
       mend = mi + 1;
     }
@@ -722,7 +722,7 @@ static void text_update_drawcache(SpaceText *st, ARegion *region)
 
 void text_drawcache_tag_update(SpaceText *st, int full)
 {
-  /* this happens if text editor ops are caled from python */
+  /* This happens if text editor ops are called from Python. */
   if (st == NULL) {
     return;
   }
@@ -820,7 +820,7 @@ int text_get_visible_lines(const SpaceText *st, ARegion *region, const char *str
         start = MIN2(end, i);
         end += max;
       }
-      else if (ch == ' ' || ch == '-') {
+      else if (ELEM(ch, ' ', '-')) {
         end = i + 1;
       }
 
@@ -886,7 +886,7 @@ static void calc_text_rcts(SpaceText *st, ARegion *region, rcti *scroll, rcti *b
   scroll->ymin = pix_top_margin;
   scroll->ymax = pix_available;
 
-  /* when re-sizing a view-port with the bar at the bottom to a greater height
+  /* when re-sizing a 2D Viewport with the bar at the bottom to a greater height
    * more blank lines will be added */
   if (ltexth + blank_lines < st->top + st->runtime.viewlines) {
     blank_lines = st->top + st->runtime.viewlines - ltexth;
@@ -923,12 +923,12 @@ static void calc_text_rcts(SpaceText *st, ARegion *region, rcti *scroll, rcti *b
     hlstart = (lhlstart * pix_available) / ltexth;
     hlend = (lhlend * pix_available) / ltexth;
 
-    /* the scrollbar is non-linear sized */
+    /* The scrollbar is non-linear sized. */
     if (pix_bardiff > 0) {
       /* the start of the highlight is in the current viewport */
       if (st->runtime.viewlines && lhlstart >= st->top &&
           lhlstart <= st->top + st->runtime.viewlines) {
-        /* speed the progresion of the start of the highlight through the scrollbar */
+        /* Speed the progression of the start of the highlight through the scrollbar. */
         hlstart = (((pix_available - pix_bardiff) * lhlstart) / ltexth) +
                   (pix_bardiff * (lhlstart - st->top) / st->runtime.viewlines);
       }
@@ -949,7 +949,7 @@ static void calc_text_rcts(SpaceText *st, ARegion *region, rcti *scroll, rcti *b
       /* the end of the highlight is in the current viewport */
       if (st->runtime.viewlines && lhlend >= st->top &&
           lhlend <= st->top + st->runtime.viewlines) {
-        /* speed the progresion of the end of the highlight through the scrollbar */
+        /* Speed the progression of the end of the highlight through the scrollbar. */
         hlend = (((pix_available - pix_bardiff) * lhlend) / ltexth) +
                 (pix_bardiff * (lhlend - st->top) / st->runtime.viewlines);
       }
@@ -1010,13 +1010,16 @@ static void draw_textscroll(const SpaceText *st, rcti *scroll, rcti *back)
                       BLI_rcti_size_y(&st->runtime.scroll_region_select));
   UI_GetThemeColor3fv(TH_HILITE, col);
   col[3] = 0.18f;
-  UI_draw_roundbox_aa(true,
-                      st->runtime.scroll_region_select.xmin + 1,
-                      st->runtime.scroll_region_select.ymin,
-                      st->runtime.scroll_region_select.xmax - 1,
-                      st->runtime.scroll_region_select.ymax,
-                      rad,
-                      col);
+  UI_draw_roundbox_aa(
+      &(const rctf){
+          .xmin = st->runtime.scroll_region_select.xmin + 1,
+          .xmax = st->runtime.scroll_region_select.xmax - 1,
+          .ymin = st->runtime.scroll_region_select.ymin,
+          .ymax = st->runtime.scroll_region_select.ymax,
+      },
+      true,
+      rad,
+      col);
 }
 
 /*********************** draw documentation *******************************/
@@ -1180,7 +1183,14 @@ static void draw_suggestion_list(const SpaceText *st, const TextDrawContext *tdc
   }
 
   /* not needed but stands out nicer */
-  UI_draw_box_shadow(220, x, y - boxh, x + boxw, y);
+  UI_draw_box_shadow(
+      &(const rctf){
+          .xmin = x,
+          .xmax = x + boxw,
+          .ymin = y - boxh,
+          .ymax = y,
+      },
+      220);
 
   uint pos = GPU_vertformat_attr_add(
       immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
@@ -1423,7 +1433,7 @@ static void draw_brackets(const SpaceText *st, const TextDrawContext *tdc, ARegi
   find = -b;
   stack = 0;
 
-  /* Don't highlight backets if syntax HL is off or bracket in string or comment. */
+  /* Don't highlight brackets if syntax HL is off or bracket in string or comment. */
   if (!linep->format || linep->format[fc] == FMT_TYPE_STRING ||
       linep->format[fc] == FMT_TYPE_COMMENT) {
     return;
@@ -1729,7 +1739,7 @@ void text_update_character_width(SpaceText *st)
 
 /* Moves the view to the cursor location,
  * also used to make sure the view isn't outside the file */
-void text_scroll_to_cursor(SpaceText *st, ARegion *region, const bool center)
+void ED_text_scroll_to_cursor(SpaceText *st, ARegion *region, const bool center)
 {
   Text *text;
   int i, x, winx = region->winx;
@@ -1808,7 +1818,7 @@ void text_scroll_to_cursor__area(SpaceText *st, ScrArea *area, const bool center
   region = BKE_area_find_region_type(area, RGN_TYPE_WINDOW);
 
   if (region) {
-    text_scroll_to_cursor(st, region, center);
+    ED_text_scroll_to_cursor(st, region, center);
   }
 }
 

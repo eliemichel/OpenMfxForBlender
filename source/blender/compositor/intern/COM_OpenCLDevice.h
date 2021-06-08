@@ -25,7 +25,7 @@ class OpenCLDevice;
 #include "COM_WorkScheduler.h"
 #include "clew.h"
 
-using std::list;
+namespace blender::compositor {
 
 /**
  * \brief device representing an GPU OpenCL device.
@@ -68,25 +68,15 @@ class OpenCLDevice : public Device {
    */
   OpenCLDevice(cl_context context, cl_device_id device, cl_program program, cl_int vendorId);
 
-  /**
-   * \brief initialize the device
-   * During initialization the OpenCL cl_command_queue is created
-   * the command queue is stored in the field queue.
-   * \see queue
-   */
-  bool initialize();
+  OpenCLDevice(OpenCLDevice &&other) noexcept;
 
-  /**
-   * \brief de-initialize the device
-   * During de-initialization the command queue is cleared
-   */
-  void deinitialize();
+  ~OpenCLDevice();
 
   /**
    * \brief execute a WorkPackage
    * \param work: the WorkPackage to execute
    */
-  void execute(WorkPackage *work);
+  void execute(WorkPackage *work) override;
 
   /**
    * \brief determine an image format
@@ -107,13 +97,13 @@ class OpenCLDevice : public Device {
   cl_mem COM_clAttachMemoryBufferToKernelParameter(cl_kernel kernel,
                                                    int parameterIndex,
                                                    int offsetIndex,
-                                                   list<cl_mem> *cleanup,
+                                                   std::list<cl_mem> *cleanup,
                                                    MemoryBuffer **inputMemoryBuffers,
                                                    SocketReader *reader);
   cl_mem COM_clAttachMemoryBufferToKernelParameter(cl_kernel kernel,
                                                    int parameterIndex,
                                                    int offsetIndex,
-                                                   list<cl_mem> *cleanup,
+                                                   std::list<cl_mem> *cleanup,
                                                    MemoryBuffer **inputMemoryBuffers,
                                                    ReadBufferOperation *reader);
   void COM_clAttachMemoryBufferOffsetToKernelParameter(cl_kernel kernel,
@@ -130,5 +120,7 @@ class OpenCLDevice : public Device {
                           MemoryBuffer *outputMemoryBuffer,
                           int offsetIndex,
                           NodeOperation *operation);
-  cl_kernel COM_clCreateKernel(const char *kernelname, list<cl_kernel> *clKernelsToCleanUp);
+  cl_kernel COM_clCreateKernel(const char *kernelname, std::list<cl_kernel> *clKernelsToCleanUp);
 };
+
+}  // namespace blender::compositor

@@ -52,7 +52,6 @@
 
 /* -------------------------------------------------------------------- */
 /** \name Mesh Element (Vert/Edge/Face) Pre-Select Gizmo API
- *
  * \{ */
 
 typedef struct MeshElemGizmo3D {
@@ -282,7 +281,6 @@ static void GIZMO_GT_mesh_preselect_elem_3d(wmGizmoType *gzt)
 
 /* -------------------------------------------------------------------- */
 /** \name Mesh Edge-Ring Pre-Select Gizmo API
- *
  * \{ */
 
 typedef struct MeshEdgeRingGizmo3D {
@@ -439,7 +437,6 @@ static void GIZMO_GT_mesh_preselect_edgering_3d(wmGizmoType *gzt)
 
 /* -------------------------------------------------------------------- */
 /** \name Gizmo API
- *
  * \{ */
 
 void ED_gizmotypes_preselect_3d(void)
@@ -453,7 +450,7 @@ void ED_gizmotypes_preselect_3d(void)
 /* -------------------------------------------------------------------- */
 /** \name Gizmo Accessors
  *
- * This avoids each user of the gizmo needing to write their own look-ups to access
+ * This avoids each user of the gizmo needing to write their own lookups to access
  * the information from this gizmo.
  * \{ */
 

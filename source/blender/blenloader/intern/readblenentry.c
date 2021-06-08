@@ -40,6 +40,7 @@
 #include "DNA_genfile.h"
 #include "DNA_sdna_types.h"
 
+#include "BKE_icons.h"
 #include "BKE_idtype.h"
 #include "BKE_main.h"
 
@@ -134,9 +135,13 @@ void BLO_blendhandle_print_sizes(BlendHandle *bh, void *fp)
  * \param bh: The blendhandle to access.
  * \param ofblocktype: The type of names to get.
  * \param tot_names: The length of the returned list.
- * \return A BLI_linklist of strings. The string links should be freed with malloc.
+ * \param use_assets_only: Only list IDs marked as assets.
+ * \return A BLI_linklist of strings. The string links should be freed with #MEM_freeN().
  */
-LinkNode *BLO_blendhandle_get_datablock_names(BlendHandle *bh, int ofblocktype, int *tot_names)
+LinkNode *BLO_blendhandle_get_datablock_names(BlendHandle *bh,
+                                              int ofblocktype,
+                                              const bool use_assets_only,
+                                              int *r_tot_names)
 {
   FileData *fd = (FileData *)bh;
   LinkNode *names = NULL;
@@ -146,8 +151,11 @@ LinkNode *BLO_blendhandle_get_datablock_names(BlendHandle *bh, int ofblocktype, 
   for (bhead = blo_bhead_first(fd); bhead; bhead = blo_bhead_next(fd, bhead)) {
     if (bhead->code == ofblocktype) {
       const char *idname = blo_bhead_id_name(fd, bhead);
+      if (use_assets_only && blo_bhead_id_asset_data_address(fd, bhead) == NULL) {
+        continue;
+      }
 
-      BLI_linklist_prepend(&names, strdup(idname + 2));
+      BLI_linklist_prepend(&names, BLI_strdup(idname + 2));
       tot++;
     }
     else if (bhead->code == ENDB) {
@@ -155,8 +163,55 @@ LinkNode *BLO_blendhandle_get_datablock_names(BlendHandle *bh, int ofblocktype, 
     }
   }
 
-  *tot_names = tot;
+  *r_tot_names = tot;
   return names;
+}
+
+/**
+ * Gets the names and asset-data (if ID is an asset) of all the data-blocks in a file of a certain
+ * type (e.g. all the scene names in a file).
+ *
+ * \param bh: The blendhandle to access.
+ * \param ofblocktype: The type of names to get.
+ * \param tot_info_items: The length of the returned list.
+ * \return A BLI_linklist of BLODataBlockInfo *. The links and #BLODataBlockInfo.asset_data should
+ *         be freed with MEM_freeN.
+ */
+LinkNode *BLO_blendhandle_get_datablock_info(BlendHandle *bh,
+                                             int ofblocktype,
+                                             int *r_tot_info_items)
+{
+  FileData *fd = (FileData *)bh;
+  LinkNode *infos = NULL;
+  BHead *bhead;
+  int tot = 0;
+
+  for (bhead = blo_bhead_first(fd); bhead; bhead = blo_bhead_next(fd, bhead)) {
+    if (bhead->code == ofblocktype) {
+      struct BLODataBlockInfo *info = MEM_mallocN(sizeof(*info), __func__);
+      const char *name = blo_bhead_id_name(fd, bhead) + 2;
+
+      STRNCPY(info->name, name);
+
+      /* Lastly, read asset data from the following blocks. */
+      info->asset_data = blo_bhead_id_asset_data_address(fd, bhead);
+      if (info->asset_data) {
+        bhead = blo_read_asset_data_block(fd, bhead, &info->asset_data);
+        /* blo_read_asset_data_block() reads all DATA heads and already advances bhead to the next
+         * non-DATA one. Go back, so the loop doesn't skip the non-DATA head. */
+        bhead = blo_bhead_prev(fd, bhead);
+      }
+
+      BLI_linklist_prepend(&infos, info);
+      tot++;
+    }
+    else if (bhead->code == ENDB) {
+      break;
+    }
+  }
+
+  *r_tot_info_items = tot;
+  return infos;
 }
 
 /**
@@ -165,10 +220,10 @@ LinkNode *BLO_blendhandle_get_datablock_names(BlendHandle *bh, int ofblocktype, 
  *
  * \param bh: The blendhandle to access.
  * \param ofblocktype: The type of names to get.
- * \param tot_prev: The length of the returned list.
+ * \param r_tot_prev: The length of the returned list.
  * \return A BLI_linklist of PreviewImage. The PreviewImage links should be freed with malloc.
  */
-LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *tot_prev)
+LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *r_tot_prev)
 {
   FileData *fd = (FileData *)bh;
   LinkNode *previews = NULL;
@@ -190,6 +245,7 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
         case ID_OB:  /* fall through */
         case ID_GR:  /* fall through */
         case ID_SCE: /* fall through */
+        case ID_AC:  /* fall through */
           new_prv = MEM_callocN(sizeof(PreviewImage), "newpreview");
           BLI_linklist_prepend(&previews, new_prv);
           tot++;
@@ -203,6 +259,7 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
       if (looking) {
         if (bhead->SDNAnr == DNA_struct_find_nr(fd->filesdna, "PreviewImage")) {
           prv = BLO_library_read_struct(fd, bhead, "PreviewImage");
+
           if (prv) {
             memcpy(new_prv, prv, sizeof(PreviewImage));
             if (prv->rect[0] && prv->w[0] && prv->h[0]) {
@@ -217,6 +274,7 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
               new_prv->rect[0] = NULL;
               new_prv->w[0] = new_prv->h[0] = 0;
             }
+            BKE_previewimg_finish(new_prv, 0);
 
             if (prv->rect[1] && prv->w[1] && prv->h[1]) {
               bhead = blo_bhead_next(fd, bhead);
@@ -230,6 +288,7 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
               new_prv->rect[1] = NULL;
               new_prv->w[1] = new_prv->h[1] = 0;
             }
+            BKE_previewimg_finish(new_prv, 1);
             MEM_freeN(prv);
           }
         }
@@ -245,7 +304,7 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
     }
   }
 
-  *tot_prev = tot;
+  *r_tot_prev = tot;
   return previews;
 }
 
@@ -254,7 +313,7 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
  * (e.g. "Scene", "Mesh", "Light", etc.).
  *
  * \param bh: The blendhandle to access.
- * \return A BLI_linklist of strings. The string links should be freed with malloc.
+ * \return A BLI_linklist of strings. The string links should be freed with #MEM_freeN().
  */
 LinkNode *BLO_blendhandle_get_linkable_groups(BlendHandle *bh)
 {
@@ -272,7 +331,7 @@ LinkNode *BLO_blendhandle_get_linkable_groups(BlendHandle *bh)
         const char *str = BKE_idtype_idcode_to_name(bhead->code);
 
         if (BLI_gset_add(gathered, (void *)str)) {
-          BLI_linklist_prepend(&names, strdup(str));
+          BLI_linklist_prepend(&names, BLI_strdup(str));
         }
       }
     }

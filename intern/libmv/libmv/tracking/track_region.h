@@ -19,6 +19,7 @@
 // IN THE SOFTWARE.
 
 #ifndef LIBMV_TRACKING_TRACK_REGION_H_
+#define LIBMV_TRACKING_TRACK_REGION_H_
 
 #include "libmv/image/image.h"
 #include "libmv/image/sample.h"
@@ -28,6 +29,12 @@ namespace libmv {
 
 struct TrackRegionOptions {
   TrackRegionOptions();
+
+  enum Direction {
+    FORWARD,
+    BACKWARD,
+  };
+  Direction direction;
 
   enum Mode {
     TRANSLATION,
@@ -40,7 +47,7 @@ struct TrackRegionOptions {
   Mode mode;
 
   // Minimum normalized cross-correlation necessary between the final tracked
-  // positoin of the patch on the destination image and the reference patch
+  // position of the patch on the destination image and the reference patch
   // needed to declare tracking success. If the minimum correlation is not met,
   // then TrackResult::termination is INSUFFICIENT_CORRELATION.
   double minimum_correlation;
@@ -54,7 +61,7 @@ struct TrackRegionOptions {
 
   // If true, apply a brute-force translation-only search before attempting the
   // full search. This is not enabled if the destination image ("image2") is
-  // too small; in that case eithen the basin of attraction is close enough
+  // too small; in that case either the basin of attraction is close enough
   // that the nearby minima is correct, or the search area is too small.
   bool use_brute_initialization;
 
@@ -107,7 +114,7 @@ struct TrackRegionOptions {
   // If non-null, this is used as the pattern mask. It should match the size of
   // image1, even though only values inside the image1 quad are examined. The
   // values must be in the range 0.0 to 0.1.
-  FloatImage *image1_mask;
+  FloatImage* image1_mask;
 };
 
 struct TrackRegionResult {
@@ -128,8 +135,7 @@ struct TrackRegionResult {
   Termination termination;
 
   bool is_usable() {
-    return termination == CONVERGENCE ||
-           termination == NO_CONVERGENCE;
+    return termination == CONVERGENCE || termination == NO_CONVERGENCE;
   }
 
   int num_iterations;
@@ -140,12 +146,14 @@ struct TrackRegionResult {
 };
 
 // Always needs 4 correspondences.
-void TrackRegion(const FloatImage &image1,
-                 const FloatImage &image2,
-                 const double *x1, const double *y1,
-                 const TrackRegionOptions &options,
-                 double *x2, double *y2,
-                 TrackRegionResult *result);
+void TrackRegion(const FloatImage& image1,
+                 const FloatImage& image2,
+                 const double* x1,
+                 const double* y1,
+                 const TrackRegionOptions& options,
+                 double* x2,
+                 double* y2,
+                 TrackRegionResult* result);
 
 // Sample a "canonical" version of the passed planar patch, using bilinear
 // sampling. The passed corners must be within the image, and have at least two
@@ -156,11 +164,15 @@ void TrackRegion(const FloatImage &image1,
 // the size of image.
 // Warped coordinates of marker's position would be returned in
 // warped_position_x and warped_position_y
-bool SamplePlanarPatch(const FloatImage &image,
-                       const double *xs, const double *ys,
-                       int num_samples_x, int num_samples_y,
-                       FloatImage *mask, FloatImage *patch,
-                       double *warped_position_x, double *warped_position_y);
+bool SamplePlanarPatch(const FloatImage& image,
+                       const double* xs,
+                       const double* ys,
+                       int num_samples_x,
+                       int num_samples_y,
+                       FloatImage* mask,
+                       FloatImage* patch,
+                       double* warped_position_x,
+                       double* warped_position_y);
 
 }  // namespace libmv
 

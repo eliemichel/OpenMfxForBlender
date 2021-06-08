@@ -20,11 +20,21 @@
 
 # <pep8 compliant>
 
+# Note: this code should be cleaned up / refactored.
+
 import sys
 if sys.version_info.major < 3:
     print("\nPython3.x needed, found %s.\nAborting!\n" %
           sys.version.partition(" ")[0])
     sys.exit(1)
+
+import os
+from os.path import (
+    dirname,
+    join,
+    normpath,
+    splitext,
+)
 
 from cmake_consistency_check_config import (
     IGNORE_SOURCE,
@@ -35,21 +45,35 @@ from cmake_consistency_check_config import (
     BUILD_DIR,
 )
 
+from typing import (
+    Callable,
+    Dict,
+    Generator,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+)
 
-import os
-from os.path import join, dirname, normpath, splitext
 
 global_h = set()
 global_c = set()
-global_refs = {}
+global_refs: Dict[str, List[Tuple[str, int]]] = {}
+
+# Flatten `IGNORE_SOURCE_MISSING` to avoid nested looping.
+IGNORE_SOURCE_MISSING_FLAT = [
+    (k, ignore_path) for k, ig_list in IGNORE_SOURCE_MISSING
+    for ignore_path in ig_list
+]
 
 # Ignore cmake file, path pairs.
-global_ignore_source_missing = {}
-for k, v in IGNORE_SOURCE_MISSING:
+global_ignore_source_missing: Dict[str, List[str]] = {}
+for k, v in IGNORE_SOURCE_MISSING_FLAT:
     global_ignore_source_missing.setdefault(k, []).append(v)
+del IGNORE_SOURCE_MISSING_FLAT
 
 
-def replace_line(f, i, text, keep_indent=True):
+def replace_line(f: str, i: int, text: str, keep_indent: bool = True) -> None:
     file_handle = open(f, 'r')
     data = file_handle.readlines()
     file_handle.close()
@@ -64,7 +88,10 @@ def replace_line(f, i, text, keep_indent=True):
     file_handle.close()
 
 
-def source_list(path, filename_check=None):
+def source_list(
+        path: str,
+        filename_check: Optional[Callable[[str], bool]] = None,
+) -> Generator[str, None, None]:
     for dirpath, dirnames, filenames in os.walk(path):
         # skip '.git'
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
@@ -75,37 +102,37 @@ def source_list(path, filename_check=None):
 
 
 # extension checking
-def is_cmake(filename):
+def is_cmake(filename: str) -> bool:
     ext = splitext(filename)[1]
     return (ext == ".cmake") or (filename == "CMakeLists.txt")
 
 
-def is_c_header(filename):
+def is_c_header(filename: str) -> bool:
     ext = splitext(filename)[1]
     return (ext in {".h", ".hpp", ".hxx", ".hh"})
 
 
-def is_c(filename):
+def is_c(filename: str) -> bool:
     ext = splitext(filename)[1]
     return (ext in {".c", ".cpp", ".cxx", ".m", ".mm", ".rc", ".cc", ".inl"})
 
 
-def is_c_any(filename):
+def is_c_any(filename: str) -> bool:
     return is_c(filename) or is_c_header(filename)
 
 
-def cmake_get_src(f):
+def cmake_get_src(f: str) -> None:
 
     sources_h = []
     sources_c = []
 
     filen = open(f, "r", encoding="utf8")
-    it = iter(filen)
+    it: Optional[Iterator[str]] = iter(filen)
     found = False
     i = 0
     # print(f)
 
-    def is_definition(l, f, i, name):
+    def is_definition(l: str, f: str, i: int, name: str) -> bool:
         if l.startswith("unset("):
             return False
 
@@ -118,6 +145,7 @@ def cmake_get_src(f):
             if l.endswith(")"):
                 raise Exception("strict formatting not kept 'list(APPEND %s...)' on 1 line %s:%d" % (name, f, i))
             return True
+        return False
 
     while it is not None:
         context_name = ""
@@ -178,6 +206,8 @@ def cmake_get_src(f):
 
                     if not l:
                         pass
+                    elif l in local_ignore_source_missing:
+                        local_ignore_source_missing.remove(l)
                     elif l.startswith("$"):
                         if context_name == "SRC":
                             # assume if it ends with context_name we know about it
@@ -227,10 +257,7 @@ def cmake_get_src(f):
                                     # replace_line(f, i - 1, new_path_rel)
 
                             else:
-                                if l in local_ignore_source_missing:
-                                    local_ignore_source_missing.remove(l)
-                                else:
-                                    raise Exception("non existent include %s:%d -> %s" % (f, i, new_file))
+                                raise Exception("non existent include %s:%d -> %s" % (f, i, new_file))
 
                         # print(new_file)
 
@@ -257,23 +284,23 @@ def cmake_get_src(f):
     filen.close()
 
 
-def is_ignore_source(f, ignore_used):
-    for index, ig in enumerate(IGNORE_SOURCE):
-        if ig in f:
+def is_ignore_source(f: str, ignore_used: List[bool]) -> bool:
+    for index, ignore_path in enumerate(IGNORE_SOURCE):
+        if ignore_path in f:
             ignore_used[index] = True
             return True
     return False
 
 
-def is_ignore_cmake(f, ignore_used):
-    for index, ig in enumerate(IGNORE_CMAKE):
-        if ig in f:
+def is_ignore_cmake(f: str, ignore_used: List[bool]) -> bool:
+    for index, ignore_path in enumerate(IGNORE_CMAKE):
+        if ignore_path in f:
             ignore_used[index] = True
             return True
     return False
 
 
-def main():
+def main() -> None:
 
     print("Scanning:", SOURCE_DIR)
 
@@ -298,7 +325,7 @@ def main():
                 for cf, i in refs:
                     errs.append((cf, i))
             else:
-                raise Exception("CMake referenecs missing, internal error, aborting!")
+                raise Exception("CMake references missing, internal error, aborting!")
             is_err = True
 
     errs.sort()
@@ -309,7 +336,7 @@ def main():
         # print("sed '%dd' '%s' > '%s.tmp' ; mv '%s.tmp' '%s'" % (i, cf, cf, cf, cf))
 
     if is_err:
-        raise Exception("CMake referenecs missing files, aborting!")
+        raise Exception("CMake references missing files, aborting!")
     del is_err
     del errs
 
@@ -320,7 +347,7 @@ def main():
             if cf not in global_c:
                 print("missing_c: ", cf)
 
-            # check if automake builds a corrasponding .o file.
+            # Check if automake builds a corresponding .o file.
             '''
             if cf in global_c:
                 out1 = os.path.splitext(cf)[0] + ".o"
@@ -347,7 +374,7 @@ def main():
                     if "extern" not in f:
                         i = 1
                         try:
-                            for l in open(f, "r", encoding="utf8"):
+                            for _ in open(f, "r", encoding="utf8"):
                                 i += 1
                         except UnicodeDecodeError:
                             print("Non utf8: %s:%d" % (f, i))
@@ -356,21 +383,21 @@ def main():
 
     # Check ignores aren't stale
     print("\nCheck for unused 'IGNORE_SOURCE' paths...")
-    for index, ig in enumerate(IGNORE_SOURCE):
+    for index, ignore_path in enumerate(IGNORE_SOURCE):
         if not ignore_used_source[index]:
-            print("unused ignore: %r" % ig)
+            print("unused ignore: %r" % ignore_path)
 
     # Check ignores aren't stale
     print("\nCheck for unused 'IGNORE_SOURCE_MISSING' paths...")
     for k, v in sorted(global_ignore_source_missing.items()):
-        for ig in v:
-            print("unused ignore: %r -> %r" % (ig, k))
+        for ignore_path in v:
+            print("unused ignore: %r -> %r" % (ignore_path, k))
 
     # Check ignores aren't stale
     print("\nCheck for unused 'IGNORE_CMAKE' paths...")
-    for index, ig in enumerate(IGNORE_CMAKE):
+    for index, ignore_path in enumerate(IGNORE_CMAKE):
         if not ignore_used_cmake[index]:
-            print("unused ignore: %r" % ig)
+            print("unused ignore: %r" % ignore_path)
 
 
 if __name__ == "__main__":

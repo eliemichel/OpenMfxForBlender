@@ -152,6 +152,7 @@ void RNA_def_animation(struct BlenderRNA *brna);
 void RNA_def_animviz(struct BlenderRNA *brna);
 void RNA_def_armature(struct BlenderRNA *brna);
 void RNA_def_attribute(struct BlenderRNA *brna);
+void RNA_def_asset(struct BlenderRNA *brna);
 void RNA_def_boid(struct BlenderRNA *brna);
 void RNA_def_brush(struct BlenderRNA *brna);
 void RNA_def_cachefile(struct BlenderRNA *brna);
@@ -263,7 +264,7 @@ void rna_def_mtex_common(struct BlenderRNA *brna,
                          const char *update,
                          const char *update_index);
 void rna_def_texpaint_slots(struct BlenderRNA *brna, struct StructRNA *srna);
-void rna_def_view_layer_common(struct StructRNA *srna, const bool scene);
+void rna_def_view_layer_common(struct BlenderRNA *brna, struct StructRNA *srna, const bool scene);
 
 void rna_def_actionbone_group_common(struct StructRNA *srna,
                                      int update_flag,
@@ -345,6 +346,10 @@ void rna_ViewLayer_material_override_update(struct Main *bmain,
 void rna_ViewLayer_pass_update(struct Main *bmain,
                                struct Scene *activescene,
                                struct PointerRNA *ptr);
+void rna_ViewLayer_active_aov_index_range(
+    PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax);
+int rna_ViewLayer_active_aov_index_get(PointerRNA *ptr);
+void rna_ViewLayer_active_aov_index_set(PointerRNA *ptr, int value);
 
 /* named internal so as not to conflict with obj.update() rna func */
 void rna_Object_internal_update_data(struct Main *bmain,
@@ -419,9 +424,10 @@ void RNA_api_window(struct StructRNA *srna);
 void RNA_api_wm(struct StructRNA *srna);
 void RNA_api_space_node(struct StructRNA *srna);
 void RNA_api_space_text(struct StructRNA *srna);
+void RNA_api_space_filebrowser(struct StructRNA *srna);
 void RNA_api_region_view3d(struct StructRNA *srna);
 void RNA_api_texture(struct StructRNA *srna);
-void RNA_api_sequences(BlenderRNA *brna, PropertyRNA *cprop);
+void RNA_api_sequences(BlenderRNA *brna, PropertyRNA *cprop, const bool metastrip);
 void RNA_api_sequence_elements(BlenderRNA *brna, PropertyRNA *cprop);
 void RNA_api_sound(struct StructRNA *srna);
 void RNA_api_vfont(struct StructRNA *srna);

@@ -53,36 +53,38 @@ typedef struct img_folder {
   float *rates;
 } img_fol_t;
 
-enum {
-  DCP_CINEMA2K = 3,
-  DCP_CINEMA4K = 4,
-};
-
-static bool check_jp2(const unsigned char *mem) /* J2K_CFMT */
+static bool check_jp2(const unsigned char *mem, const size_t size) /* J2K_CFMT */
 {
+  if (size < sizeof(JP2_HEAD)) {
+    return false;
+  }
   return memcmp(JP2_HEAD, mem, sizeof(JP2_HEAD)) ? 0 : 1;
 }
 
-static bool check_j2k(const unsigned char *mem) /* J2K_CFMT */
+static bool check_j2k(const unsigned char *mem, const size_t size) /* J2K_CFMT */
 {
+  if (size < sizeof(J2K_HEAD)) {
+    return false;
+  }
   return memcmp(J2K_HEAD, mem, sizeof(J2K_HEAD)) ? 0 : 1;
 }
 
-static OPJ_CODEC_FORMAT format_from_header(const unsigned char mem[JP2_FILEHEADER_SIZE])
+static OPJ_CODEC_FORMAT format_from_header(const unsigned char mem[JP2_FILEHEADER_SIZE],
+                                           const size_t size)
 {
-  if (check_jp2(mem)) {
+  if (check_jp2(mem, size)) {
     return OPJ_CODEC_JP2;
   }
-  if (check_j2k(mem)) {
+  if (check_j2k(mem, size)) {
     return OPJ_CODEC_J2K;
   }
 
   return OPJ_CODEC_UNKNOWN;
 }
 
-int imb_is_a_jp2(const unsigned char *buf)
+bool imb_is_a_jp2(const unsigned char *buf, size_t size)
 {
-  return (check_jp2(buf) || check_j2k(buf));
+  return (check_jp2(buf, size) || check_j2k(buf, size));
 }
 
 /**
@@ -126,6 +128,7 @@ static void info_callback(const char *msg, void *client_data)
   } \
   (void)0
 
+/* -------------------------------------------------------------------- */
 /** \name Buffer Stream
  * \{ */
 
@@ -217,6 +220,7 @@ static opj_stream_t *opj_stream_create_from_buffer(struct BufInfo *p_file,
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name File Stream
  * \{ */
 
@@ -315,7 +319,7 @@ ImBuf *imb_load_jp2(const unsigned char *mem,
                     int flags,
                     char colorspace[IM_MAX_SPACE])
 {
-  const OPJ_CODEC_FORMAT format = (size > JP2_FILEHEADER_SIZE) ? format_from_header(mem) :
+  const OPJ_CODEC_FORMAT format = (size > JP2_FILEHEADER_SIZE) ? format_from_header(mem, size) :
                                                                  OPJ_CODEC_UNKNOWN;
   struct BufInfo buf_wrapper = {
       .buf = mem,
@@ -346,7 +350,7 @@ ImBuf *imb_load_jp2_filepath(const char *filepath, int flags, char colorspace[IM
 
   fseek(p_file, 0, SEEK_SET);
 
-  const OPJ_CODEC_FORMAT format = format_from_header(mem);
+  const OPJ_CODEC_FORMAT format = format_from_header(mem, sizeof(mem));
   ImBuf *ibuf = imb_load_jp2_stream(stream, format, flags, colorspace);
   opj_stream_destroy(stream);
   return ibuf;
@@ -472,7 +476,7 @@ static ImBuf *imb_load_jp2_stream(opj_stream_t *stream,
       r = image->comps[0].data;
       a = (use_alpha) ? image->comps[1].data : NULL;
 
-      /* grayscale 12bits+ */
+      /* Gray-scale 12bits+ */
       if (use_alpha) {
         a = image->comps[1].data;
         PIXEL_LOOPER_BEGIN (rect_float) {
@@ -496,7 +500,7 @@ static ImBuf *imb_load_jp2_stream(opj_stream_t *stream,
       g = image->comps[1].data;
       b = image->comps[2].data;
 
-      /* rgb or rgba 12bits+ */
+      /* RGB or RGBA 12bits+ */
       if (use_alpha) {
         a = image->comps[3].data;
         PIXEL_LOOPER_BEGIN (rect_float) {
@@ -547,7 +551,7 @@ static ImBuf *imb_load_jp2_stream(opj_stream_t *stream,
       g = image->comps[1].data;
       b = image->comps[2].data;
 
-      /* 8bit rgb or rgba */
+      /* 8bit RGB or RGBA */
       if (use_alpha) {
         a = image->comps[3].data;
         PIXEL_LOOPER_BEGIN (rect_uchar) {
@@ -724,7 +728,7 @@ static void cinema_setup_encoder(opj_cparameters_t *parameters,
         parameters->cp_rsiz = OPJ_STD_RSIZ;
       }
       else {
-        parameters->cp_rsiz = DCP_CINEMA2K;
+        parameters->cp_rsiz = OPJ_CINEMA2K;
       }
       break;
 
@@ -745,7 +749,7 @@ static void cinema_setup_encoder(opj_cparameters_t *parameters,
         parameters->cp_rsiz = OPJ_STD_RSIZ;
       }
       else {
-        parameters->cp_rsiz = DCP_CINEMA2K;
+        parameters->cp_rsiz = OPJ_CINEMA4K;
       }
       parameters->numpocs = init_4K_poc(parameters->POC, parameters->numresolution);
       break;
@@ -1192,22 +1196,22 @@ static opj_image_t *ibuftoimage(ImBuf *ibuf, opj_cparameters_t *parameters)
   return image;
 }
 
-int imb_save_jp2_stream(struct ImBuf *ibuf, opj_stream_t *stream, int flags);
+bool imb_save_jp2_stream(struct ImBuf *ibuf, opj_stream_t *stream, int flags);
 
-int imb_save_jp2(struct ImBuf *ibuf, const char *filepath, int flags)
+bool imb_save_jp2(struct ImBuf *ibuf, const char *filepath, int flags)
 {
   opj_stream_t *stream = opj_stream_create_from_file(
       filepath, OPJ_J2K_STREAM_CHUNK_SIZE, false, NULL);
   if (stream == NULL) {
     return 0;
   }
-  int ret = imb_save_jp2_stream(ibuf, stream, flags);
+  const bool ok = imb_save_jp2_stream(ibuf, stream, flags);
   opj_stream_destroy(stream);
-  return ret;
+  return ok;
 }
 
 /* Found write info at http://users.ece.gatech.edu/~slabaugh/personal/c/bitmapUnix.c */
-int imb_save_jp2_stream(struct ImBuf *ibuf, opj_stream_t *stream, int UNUSED(flags))
+bool imb_save_jp2_stream(struct ImBuf *ibuf, opj_stream_t *stream, int UNUSED(flags))
 {
   int quality = ibuf->foptions.quality;
 
@@ -1228,7 +1232,7 @@ int imb_save_jp2_stream(struct ImBuf *ibuf, opj_stream_t *stream, int UNUSED(fla
   image = ibuftoimage(ibuf, &parameters);
 
   opj_codec_t *codec = NULL;
-  int ok = false;
+  bool ok = false;
   /* JP2 format output */
   {
     /* get a JP2 compressor handle */

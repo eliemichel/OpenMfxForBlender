@@ -1106,19 +1106,8 @@ static void poselib_keytag_pose(bContext *C, Scene *scene, tPoseLib_PreviewData 
     if (pchan) {
       if (!any_bone_selected || ((pchan->bone) && (pchan->bone->flag & BONE_SELECTED))) {
         if (autokey) {
-          /* add datasource override for the PoseChannel, to be used later */
+          /* Add data-source override for the PoseChannel, to be used later. */
           ANIM_relative_keyingset_add_source(&dsources, &pld->ob->id, &RNA_PoseBone, pchan);
-
-          /* clear any unkeyed tags */
-          if (pchan->bone) {
-            pchan->bone->flag &= ~BONE_UNKEYED;
-          }
-        }
-        else {
-          /* add unkeyed tags */
-          if (pchan->bone) {
-            pchan->bone->flag |= BONE_UNKEYED;
-          }
         }
       }
     }
@@ -1142,7 +1131,7 @@ static void poselib_preview_apply(bContext *C, wmOperator *op)
 
   /* only recalc pose (and its dependencies) if pose has changed */
   if (pld->redraw == PL_PREVIEW_REDRAWALL) {
-    /* don't clear pose if firsttime */
+    /* Don't clear pose if first time. */
     if ((pld->flag & PL_PREVIEW_FIRSTTIME) == 0) {
       poselib_backup_restore(pld);
     }
@@ -1321,10 +1310,10 @@ static void poselib_preview_get_next(tPoseLib_PreviewData *pld, int step)
 }
 
 /* specially handle events for searching */
-static void poselib_preview_handle_search(tPoseLib_PreviewData *pld, ushort event, char ascii)
+static void poselib_preview_handle_search(tPoseLib_PreviewData *pld, ushort event_type, char ascii)
 {
   /* try doing some form of string manipulation first */
-  switch (event) {
+  switch (event_type) {
     case EVT_BACKSPACEKEY:
       if (pld->searchstr[0] && pld->search_cursor) {
         short len = strlen(pld->searchstr);

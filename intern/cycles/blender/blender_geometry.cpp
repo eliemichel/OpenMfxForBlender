@@ -42,6 +42,34 @@ static Geometry::Type determine_geom_type(BL::Object &b_ob, bool use_particle_ha
   return Geometry::MESH;
 }
 
+array<Node *> BlenderSync::find_used_shaders(BL::Object &b_ob)
+{
+  BL::Material material_override = view_layer.material_override;
+  Shader *default_shader = (b_ob.type() == BL::Object::type_VOLUME) ? scene->default_volume :
+                                                                      scene->default_surface;
+
+  array<Node *> used_shaders;
+
+  for (BL::MaterialSlot &b_slot : b_ob.material_slots) {
+    if (material_override) {
+      find_shader(material_override, used_shaders, default_shader);
+    }
+    else {
+      BL::ID b_material(b_slot.material());
+      find_shader(b_material, used_shaders, default_shader);
+    }
+  }
+
+  if (used_shaders.size() == 0) {
+    if (material_override)
+      find_shader(material_override, used_shaders, default_shader);
+    else
+      used_shaders.push_back_slow(default_shader);
+  }
+
+  return used_shaders;
+}
+
 Geometry *BlenderSync::sync_geometry(BL::Depsgraph &b_depsgraph,
                                      BL::Object &b_ob,
                                      BL::Object &b_ob_instance,
@@ -52,32 +80,11 @@ Geometry *BlenderSync::sync_geometry(BL::Depsgraph &b_depsgraph,
   /* Test if we can instance or if the object is modified. */
   BL::ID b_ob_data = b_ob.data();
   BL::ID b_key_id = (BKE_object_is_modified(b_ob)) ? b_ob_instance : b_ob_data;
-  BL::Material material_override = view_layer.material_override;
-  Shader *default_shader = (b_ob.type() == BL::Object::type_VOLUME) ? scene->default_volume :
-                                                                      scene->default_surface;
   Geometry::Type geom_type = determine_geom_type(b_ob, use_particle_hair);
   GeometryKey key(b_key_id.ptr.data, geom_type);
 
   /* Find shader indices. */
-  vector<Shader *> used_shaders;
-
-  BL::Object::material_slots_iterator slot;
-  for (b_ob.material_slots.begin(slot); slot != b_ob.material_slots.end(); ++slot) {
-    if (material_override) {
-      find_shader(material_override, used_shaders, default_shader);
-    }
-    else {
-      BL::ID b_material(slot->material());
-      find_shader(b_material, used_shaders, default_shader);
-    }
-  }
-
-  if (used_shaders.size() == 0) {
-    if (material_override)
-      find_shader(material_override, used_shaders, default_shader);
-    else
-      used_shaders.push_back(default_shader);
-  }
+  array<Node *> used_shaders = find_used_shaders(b_ob);
 
   /* Ensure we only sync instanced geometry once. */
   Geometry *geom = geometry_map.find(key);
@@ -114,7 +121,7 @@ Geometry *BlenderSync::sync_geometry(BL::Depsgraph &b_depsgraph,
     }
     /* Test if shaders changed, these can be object level so geometry
      * does not get tagged for recalc. */
-    else if (geom->used_shaders != used_shaders) {
+    else if (geom->get_used_shaders() != used_shaders) {
       ;
     }
     else {
@@ -122,8 +129,9 @@ Geometry *BlenderSync::sync_geometry(BL::Depsgraph &b_depsgraph,
        * because the shader needs different geometry attributes. */
       bool attribute_recalc = false;
 
-      foreach (Shader *shader, geom->used_shaders) {
-        if (shader->need_update_geometry) {
+      foreach (Node *node, geom->get_used_shaders()) {
+        Shader *shader = static_cast<Shader *>(node);
+        if (shader->need_update_geometry()) {
           attribute_recalc = true;
         }
       }
@@ -138,6 +146,9 @@ Geometry *BlenderSync::sync_geometry(BL::Depsgraph &b_depsgraph,
 
   geom->name = ustring(b_ob_data.name().c_str());
 
+  /* Store the shaders immediately for the object attribute code. */
+  geom->set_used_shaders(used_shaders);
+
   auto sync_func = [=]() mutable {
     if (progress.get_cancel())
       return;
@@ -146,15 +157,15 @@ Geometry *BlenderSync::sync_geometry(BL::Depsgraph &b_depsgraph,
 
     if (geom_type == Geometry::HAIR) {
       Hair *hair = static_cast<Hair *>(geom);
-      sync_hair(b_depsgraph, b_ob, hair, used_shaders);
+      sync_hair(b_depsgraph, b_ob, hair);
     }
     else if (geom_type == Geometry::VOLUME) {
       Volume *volume = static_cast<Volume *>(geom);
-      sync_volume(b_ob, volume, used_shaders);
+      sync_volume(b_ob, volume);
     }
     else {
       Mesh *mesh = static_cast<Mesh *>(geom);
-      sync_mesh(b_depsgraph, b_ob, mesh, used_shaders);
+      sync_mesh(b_depsgraph, b_ob, mesh);
     }
   };
 
@@ -177,7 +188,7 @@ void BlenderSync::sync_geometry_motion(BL::Depsgraph &b_depsgraph,
                                        TaskPool *task_pool)
 {
   /* Ensure we only sync instanced geometry once. */
-  Geometry *geom = object->geometry;
+  Geometry *geom = object->get_geometry();
 
   if (geometry_motion_synced.find(geom) != geometry_motion_synced.end())
     return;

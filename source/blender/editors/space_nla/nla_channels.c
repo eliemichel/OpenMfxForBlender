@@ -161,7 +161,7 @@ static int mouse_nla_channels(
         }
 
         /* change active object - regardless of whether it is now selected [T37883] */
-        ED_object_base_activate(C, base); /* adds notifier */
+        ED_object_base_activate_with_mode_exit_if_needed(C, base); /* adds notifier */
 
         if ((adt) && (adt->flag & ADT_UI_SELECTED)) {
           adt->flag |= ADT_UI_ACTIVE;
@@ -292,7 +292,7 @@ static int mouse_nla_channels(
           /* TODO: make this use the operator instead of calling the function directly
            * however, calling the operator requires that we supply the args,
            * and that works with proper buttons only */
-          BKE_nla_action_pushdown(adt);
+          BKE_nla_action_pushdown(adt, ID_IS_OVERRIDE_LIBRARY(ale->id));
         }
         else {
           /* when in tweakmode, this button becomes the toggle for mapped editing */
@@ -516,7 +516,7 @@ static int nlachannels_pushdown_exec(bContext *C, wmOperator *op)
   }
 
   /* 'push-down' action - only usable when not in TweakMode */
-  BKE_nla_action_pushdown(adt);
+  BKE_nla_action_pushdown(adt, ID_IS_OVERRIDE_LIBRARY(id));
 
   struct Main *bmain = CTX_data_main(C);
   DEG_id_tag_update_ex(bmain, id, ID_RECALC_ANIMATION);
@@ -586,7 +586,7 @@ static int nla_action_unlink_exec(bContext *C, wmOperator *op)
   }
 
   /* do unlinking */
-  if (adt && adt->action) {
+  if (adt->action) {
     bool force_delete = RNA_boolean_get(op->ptr, "force_delete");
     ED_animedit_unlink_action(C, adt_ptr.owner_id, adt, adt->action, op->reports, force_delete);
   }
@@ -594,11 +594,11 @@ static int nla_action_unlink_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-static int nla_action_unlink_invoke(bContext *C, wmOperator *op, const wmEvent *evt)
+static int nla_action_unlink_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   /* NOTE: this is hardcoded to match the behavior for the unlink button
    * (in interface_templates.c) */
-  RNA_boolean_set(op->ptr, "force_delete", evt->shift != 0);
+  RNA_boolean_set(op->ptr, "force_delete", event->shift != 0);
   return nla_action_unlink_exec(C, op);
 }
 
@@ -621,7 +621,7 @@ void NLA_OT_action_unlink(wmOperatorType *ot)
                          "force_delete",
                          false,
                          "Force Delete",
-                         "Clear Fake User and remove copy stashed in this datablock's NLA stack");
+                         "Clear Fake User and remove copy stashed in this data-block's NLA stack");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
@@ -648,19 +648,21 @@ bool nlaedit_add_tracks_existing(bAnimContext *ac, bool above_sel)
       NlaTrack *nlt = (NlaTrack *)ale->data;
       AnimData *adt = ale->adt;
 
+      const bool is_liboverride = ID_IS_OVERRIDE_LIBRARY(ale->id);
+
       /* check if just adding a new track above this one,
        * or whether we're adding a new one to the top of the stack that this one belongs to
        */
       if (above_sel) {
         /* just add a new one above this one */
-        BKE_nlatrack_add(adt, nlt);
+        BKE_nlatrack_add(adt, nlt, is_liboverride);
         ale->update = ANIM_UPDATE_DEPS;
         added = true;
       }
       else if ((lastAdt == NULL) || (adt != lastAdt)) {
         /* add one track to the top of the owning AnimData's stack,
          * then don't add anymore to this stack */
-        BKE_nlatrack_add(adt, NULL);
+        BKE_nlatrack_add(adt, NULL, is_liboverride);
         lastAdt = adt;
         ale->update = ANIM_UPDATE_DEPS;
         added = true;
@@ -698,7 +700,7 @@ bool nlaedit_add_tracks_empty(bAnimContext *ac)
     /* ensure it is empty */
     if (BLI_listbase_is_empty(&adt->nla_tracks)) {
       /* add new track to this AnimData block then */
-      BKE_nlatrack_add(adt, NULL);
+      BKE_nlatrack_add(adt, NULL, ID_IS_OVERRIDE_LIBRARY(ale->id));
       ale->update = ANIM_UPDATE_DEPS;
       added = true;
     }
@@ -733,7 +735,7 @@ static int nlaedit_add_tracks_exec(bContext *C, wmOperator *op)
     DEG_relations_tag_update(CTX_data_main(C));
 
     /* set notifier that things have changed */
-    WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+    WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_ADDED, NULL);
 
     /* done */
     return OPERATOR_FINISHED;
@@ -796,6 +798,11 @@ static int nlaedit_delete_tracks_exec(bContext *C, wmOperator *UNUSED(op))
       NlaTrack *nlt = (NlaTrack *)ale->data;
       AnimData *adt = ale->adt;
 
+      if (BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nlt)) {
+        /* No deletion of non-local tracks of override data. */
+        continue;
+      }
+
       /* if track is currently 'solo', then AnimData should have its
        * 'has solo' flag disabled
        */
@@ -816,7 +823,7 @@ static int nlaedit_delete_tracks_exec(bContext *C, wmOperator *UNUSED(op))
   DEG_relations_tag_update(ac.bmain);
 
   /* set notifier that things have changed */
-  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_REMOVED, NULL);
 
   /* done */
   return OPERATOR_FINISHED;

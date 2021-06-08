@@ -39,9 +39,9 @@
 #include "intern/bmesh_private.h"
 
 /* -------------------------------------------------------------------- */
-/* Face Split Edge-Net */
-
-/** \name BM_face_split_edgenet and helper functions.
+/** \name Face Split Edge-Net
+ *
+ * #BM_face_split_edgenet and helper functions.
  *
  * \note Don't use #BM_edge_is_wire or #BM_edge_is_boundary
  * since we need to take flagged faces into account.
@@ -702,9 +702,9 @@ bool BM_face_split_edgenet(BMesh *bm,
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/* Face Split Edge-Net Connect Islands */
-
-/** \name BM_face_split_edgenet_connect_islands and helper functions.
+/** \name Face Split Edge-Net Connect Islands
+ *
+ * #BM_face_split_edgenet_connect_islands and helper functions.
  *
  * Connect isolated mesh 'islands' so they form legal regions from which we can create faces.
  *
@@ -1566,7 +1566,7 @@ bool BM_face_split_edgenet_connect_islands(BMesh *bm,
     for (uint g_index = 1; g_index < group_arr_len; g_index++) {
       struct EdgeGroupIsland *g = group_arr[g_index];
 
-      /* the range of verts this group uses in 'verts_arr' (not uncluding the last index) */
+      /* The range of verts this group uses in 'verts_arr' (not including the last index). */
       vert_range[0] = vert_range[1];
       vert_range[1] += g->vert_len;
 

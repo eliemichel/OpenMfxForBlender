@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 /** \file
  * \ingroup bli
@@ -35,14 +34,14 @@
 
 /******************************** Color Space ********************************/
 
-#  ifdef __SSE2__
+#  ifdef BLI_HAVE_SSE2
 
 MALWAYS_INLINE __m128 srgb_to_linearrgb_v4_simd(const __m128 c)
 {
   __m128 cmp = _mm_cmplt_ps(c, _mm_set1_ps(0.04045f));
   __m128 lt = _mm_max_ps(_mm_mul_ps(c, _mm_set1_ps(1.0f / 12.92f)), _mm_set1_ps(0.0f));
   __m128 gtebase = _mm_mul_ps(_mm_add_ps(c, _mm_set1_ps(0.055f)),
-                              _mm_set1_ps(1.0f / 1.055f)); /* fma */
+                              _mm_set1_ps(1.0f / 1.055f)); /* FMA. */
   __m128 gte = _bli_math_fastpow24(gtebase);
   return _bli_math_blend_sse(cmp, lt, gte);
 }
@@ -76,7 +75,7 @@ MINLINE void linearrgb_to_srgb_v3_v3(float srgb[3], const float linear[3])
   srgb[2] = r[2];
 }
 
-#  else  /* __SSE2__ */
+#  else  /* BLI_HAVE_SSE2 */
 
 MINLINE void srgb_to_linearrgb_v3_v3(float linear[3], const float srgb[3])
 {
@@ -91,7 +90,7 @@ MINLINE void linearrgb_to_srgb_v3_v3(float srgb[3], const float linear[3])
   srgb[1] = linearrgb_to_srgb(linear[1]);
   srgb[2] = linearrgb_to_srgb(linear[2]);
 }
-#  endif /* __SSE2__ */
+#  endif /* BLI_HAVE_SSE2 */
 
 MINLINE void srgb_to_linearrgb_v4(float linear[4], const float srgb[4])
 {
@@ -261,6 +260,7 @@ MINLINE void cpack_cpy_3ub(unsigned char r_col[3], const unsigned int pack)
   r_col[2] = ((pack) >> 16) & 0xFF;
 }
 
+/* -------------------------------------------------------------------- */
 /** \name RGB/Grayscale Functions
  *
  * \warning

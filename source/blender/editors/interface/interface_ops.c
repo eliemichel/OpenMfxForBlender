@@ -72,6 +72,7 @@
 #include "BKE_main.h"
 #include "BLI_ghash.h"
 #include "ED_screen.h"
+#include "ED_text.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Copy Data Path Operator
@@ -901,7 +902,7 @@ bool UI_context_copy_to_selected_list(bContext *C,
             MEM_freeN(link);
           }
           else {
-            /* avoid prepending 'data' to the path */
+            /* Avoid prepending 'data' to the path. */
             RNA_id_pointer_create(id_data, &link->ptr);
           }
 
@@ -1223,7 +1224,7 @@ typedef struct uiEditSourceStore {
 
 typedef struct uiEditSourceButStore {
   char py_dbg_fn[FILE_MAX];
-  int py_dbg_ln;
+  int py_dbg_line_number;
 } uiEditSourceButStore;
 
 /* should only ever be set while the edit source operator is running */
@@ -1276,24 +1277,37 @@ void UI_editsource_active_but_test(uiBut *but)
   struct uiEditSourceButStore *but_store = MEM_callocN(sizeof(uiEditSourceButStore), __func__);
 
   const char *fn;
-  int lineno = -1;
+  int line_number = -1;
 
 #  if 0
   printf("comparing buttons: '%s' == '%s'\n", but->drawstr, ui_editsource_info->but_orig.drawstr);
 #  endif
 
-  PyC_FileAndNum_Safe(&fn, &lineno);
+  PyC_FileAndNum_Safe(&fn, &line_number);
 
-  if (lineno != -1) {
+  if (line_number != -1) {
     BLI_strncpy(but_store->py_dbg_fn, fn, sizeof(but_store->py_dbg_fn));
-    but_store->py_dbg_ln = lineno;
+    but_store->py_dbg_line_number = line_number;
   }
   else {
     but_store->py_dbg_fn[0] = '\0';
-    but_store->py_dbg_ln = -1;
+    but_store->py_dbg_line_number = -1;
   }
 
   BLI_ghash_insert(ui_editsource_info->hash, but, but_store);
+}
+
+/**
+ * Remove the editsource data for \a old_but and reinsert it for \a new_but. Use when the button
+ * was reallocated, e.g. to have a new type (#ui_but_change_type()).
+ */
+void UI_editsource_but_replace(const uiBut *old_but, uiBut *new_but)
+{
+  uiEditSourceButStore *but_store = BLI_ghash_lookup(ui_editsource_info->hash, old_but);
+  if (but_store) {
+    BLI_ghash_remove(ui_editsource_info->hash, old_but, NULL, NULL);
+    BLI_ghash_insert(ui_editsource_info->hash, new_but, but_store);
+  }
 }
 
 static int editsource_text_edit(bContext *C,
@@ -1316,7 +1330,6 @@ static int editsource_text_edit(bContext *C,
 
   if (text == NULL) {
     text = BKE_text_load(bmain, filepath, BKE_main_blendfile_path(bmain));
-    id_us_ensure_real(&text->id);
   }
 
   if (text == NULL) {
@@ -1324,18 +1337,23 @@ static int editsource_text_edit(bContext *C,
     return OPERATOR_CANCELLED;
   }
 
+  txt_move_toline(text, line - 1, false);
+
   /* naughty!, find text area to set, not good behavior
    * but since this is a dev tool lets allow it - campbell */
   ScrArea *area = BKE_screen_find_big_area(CTX_wm_screen(C), SPACE_TEXT, 0);
   if (area) {
     SpaceText *st = area->spacedata.first;
+    ARegion *region = BKE_area_find_region_type(area, RGN_TYPE_WINDOW);
     st->text = text;
+    if (region) {
+      ED_text_scroll_to_cursor(st, region, true);
+    }
   }
   else {
     BKE_reportf(op->reports, RPT_INFO, "See '%s' in the text editor", text->id.name + 2);
   }
 
-  txt_move_toline(text, line - 1, false);
   WM_event_add_notifier(C, NC_TEXT | ND_CURSOR, text);
 
   return OPERATOR_FINISHED;
@@ -1362,7 +1380,9 @@ static int editsource_exec(bContext *C, wmOperator *op)
 
     /* redraw and get active button python info */
     ED_region_do_layout(C, region);
+    WM_draw_region_viewport_bind(region);
     ED_region_do_draw(C, region);
+    WM_draw_region_viewport_unbind(region);
     region->do_draw = false;
 
     for (BLI_ghashIterator_init(&ghi, ui_editsource_info->hash);
@@ -1376,8 +1396,8 @@ static int editsource_exec(bContext *C, wmOperator *op)
     }
 
     if (but_store) {
-      if (but_store->py_dbg_ln != -1) {
-        ret = editsource_text_edit(C, op, but_store->py_dbg_fn, but_store->py_dbg_ln);
+      if (but_store->py_dbg_line_number != -1) {
+        ret = editsource_text_edit(C, op, but_store->py_dbg_fn, but_store->py_dbg_line_number);
       }
       else {
         BKE_report(

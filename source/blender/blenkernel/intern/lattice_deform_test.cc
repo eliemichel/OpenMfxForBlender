@@ -51,6 +51,7 @@ static void test_lattice_deform_init(LatticeDeformTestContext *ctx,
     ctx->coords[index][2] = (rng->get_float() - 0.5f) * 10;
   }
   IDType_ID_LT.init_data(&ctx->lattice.id);
+  strcpy(ctx->lattice.id.name, "LTLattice");
   IDType_ID_OB.init_data(&ctx->ob_lattice.id);
   ctx->ob_lattice.type = OB_LATTICE;
   ctx->ob_lattice.data = &ctx->lattice;
@@ -83,7 +84,7 @@ static void test_lattice_deform_free(LatticeDeformTestContext *ctx)
 TEST(lattice_deform_performance, performance_no_dvert_1)
 {
   const int32_t num_items = 1;
-  LatticeDeformTestContext ctx = {{{0}}};
+  LatticeDeformTestContext ctx = {{{nullptr}}};
   RandomNumberGenerator rng;
   test_lattice_deform_init(&ctx, &rng, num_items);
   test_lattice_deform(&ctx, num_items);
@@ -92,7 +93,7 @@ TEST(lattice_deform_performance, performance_no_dvert_1)
 TEST(lattice_deform_performance, performance_no_dvert_1000)
 {
   const int32_t num_items = 1000;
-  LatticeDeformTestContext ctx = {{{0}}};
+  LatticeDeformTestContext ctx = {{{nullptr}}};
   RandomNumberGenerator rng;
   test_lattice_deform_init(&ctx, &rng, num_items);
   test_lattice_deform(&ctx, num_items);
@@ -101,7 +102,7 @@ TEST(lattice_deform_performance, performance_no_dvert_1000)
 TEST(lattice_deform_performance, performance_no_dvert_10000)
 {
   const int32_t num_items = 10000;
-  LatticeDeformTestContext ctx = {{{0}}};
+  LatticeDeformTestContext ctx = {{{nullptr}}};
   RandomNumberGenerator rng;
   test_lattice_deform_init(&ctx, &rng, num_items);
   test_lattice_deform(&ctx, num_items);
@@ -110,7 +111,7 @@ TEST(lattice_deform_performance, performance_no_dvert_10000)
 TEST(lattice_deform_performance, performance_no_dvert_100000)
 {
   const int32_t num_items = 100000;
-  LatticeDeformTestContext ctx = {{{0}}};
+  LatticeDeformTestContext ctx = {{{nullptr}}};
   RandomNumberGenerator rng;
   test_lattice_deform_init(&ctx, &rng, num_items);
   test_lattice_deform(&ctx, num_items);
@@ -119,7 +120,7 @@ TEST(lattice_deform_performance, performance_no_dvert_100000)
 TEST(lattice_deform_performance, performance_no_dvert_1000000)
 {
   const int32_t num_items = 1000000;
-  LatticeDeformTestContext ctx = {{{0}}};
+  LatticeDeformTestContext ctx = {{{nullptr}}};
   RandomNumberGenerator rng;
   test_lattice_deform_init(&ctx, &rng, num_items);
   test_lattice_deform(&ctx, num_items);
@@ -128,7 +129,7 @@ TEST(lattice_deform_performance, performance_no_dvert_1000000)
 TEST(lattice_deform_performance, performance_no_dvert_10000000)
 {
   const int32_t num_items = 10000000;
-  LatticeDeformTestContext ctx = {{{0}}};
+  LatticeDeformTestContext ctx = {{{nullptr}}};
   RandomNumberGenerator rng;
   test_lattice_deform_init(&ctx, &rng, num_items);
   test_lattice_deform(&ctx, num_items);

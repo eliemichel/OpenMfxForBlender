@@ -51,7 +51,7 @@ static inline int sampler_binding(int32_t program,
                                   int32_t uniform_location,
                                   int *sampler_len)
 {
-  /* Identify sampler uniforms and asign sampler units to them. */
+  /* Identify sampler uniforms and assign sampler units to them. */
   GLint type;
   glGetActiveUniformsiv(program, 1, &uniform_index, GL_UNIFORM_TYPE, &type);
 
@@ -106,7 +106,7 @@ static inline int image_binding(int32_t program,
                                 int32_t uniform_location,
                                 int *image_len)
 {
-  /* Identify image uniforms and asign image units to them. */
+  /* Identify image uniforms and assign image units to them. */
   GLint type;
   glGetActiveUniformsiv(program, 1, &uniform_index, GL_UNIFORM_TYPE, &type);
 
@@ -133,7 +133,7 @@ static inline int image_binding(int32_t program,
 
 GLShaderInterface::GLShaderInterface(GLuint program)
 {
-  /* Necessary to make glUniform works. */
+  /* Necessary to make #glUniform works. */
   glUseProgram(program);
 
   GLint max_attr_name_len = 0, attr_len = 0;
@@ -267,7 +267,7 @@ GLShaderInterface::GLShaderInterface(GLuint program)
   for (int32_t u_int = 0; u_int < GPU_NUM_UNIFORM_BLOCKS; u_int++) {
     GPUUniformBlockBuiltin u = static_cast<GPUUniformBlockBuiltin>(u_int);
     const ShaderInput *block = this->ubo_get(builtin_uniform_block_name(u));
-    builtin_blocks_[u] = (block != NULL) ? block->binding : -1;
+    builtin_blocks_[u] = (block != nullptr) ? block->binding : -1;
   }
 
   MEM_freeN(uniforms_from_blocks);
@@ -285,7 +285,7 @@ GLShaderInterface::GLShaderInterface(GLuint program)
 GLShaderInterface::~GLShaderInterface()
 {
   for (auto *ref : refs_) {
-    if (ref != NULL) {
+    if (ref != nullptr) {
       ref->remove(this);
     }
   }

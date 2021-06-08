@@ -32,6 +32,7 @@
 #include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 
 #include "BKE_context.h"
@@ -105,9 +106,7 @@ static void smoothModifier_do(
   uint *num_accumulated_vecs = MEM_calloc_arrayN(
       (size_t)numVerts, sizeof(*num_accumulated_vecs), __func__);
   if (!num_accumulated_vecs) {
-    if (accumulated_vecs) {
-      MEM_freeN(accumulated_vecs);
-    }
+    MEM_freeN(accumulated_vecs);
     return;
   }
 
@@ -286,7 +285,7 @@ ModifierTypeInfo modifierType_Smooth = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ NULL,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,

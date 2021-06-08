@@ -48,11 +48,17 @@
 #include "MOD_modifiertypes.h"
 #include "MOD_ui_common.h"
 
-static Mesh *triangulate_mesh(Mesh *mesh,
-                              const int quad_method,
-                              const int ngon_method,
-                              const int min_vertices,
-                              const int flag)
+Mesh *triangulate_mesh(Mesh *mesh,
+                       const int quad_method,
+                       const int ngon_method,
+                       const int min_vertices,
+                       const int flag);
+
+Mesh *triangulate_mesh(Mesh *mesh,
+                       const int quad_method,
+                       const int ngon_method,
+                       const int min_vertices,
+                       const int flag)
 {
   Mesh *result;
   BMesh *bm;
@@ -171,7 +177,7 @@ ModifierTypeInfo modifierType_Triangulate = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,

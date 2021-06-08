@@ -287,16 +287,19 @@ typedef struct bPoseChannel {
   short rotmode;
   char _pad[2];
 
-  /** Matrix result of loc/quat/size, and where we put deform in, see next line */
+  /**
+   * Matrix result of location/rotation/scale components & constraints.
+   * This is the dynamic component of `pose_mat` (without #Bone.arm_mat).
+   */
   float chan_mat[4][4];
   /**
-   * Constraints accumulate here. in the end, pose_mat = bone->arm_mat * chan_mat
+   * Constraints accumulate here. in the end, `pose_mat = bone->arm_mat * chan_mat`
    * this matrix is object space.
    */
   float pose_mat[4][4];
   /** For display, pose_mat with bone length applied. */
   float disp_mat[4][4];
-  /** For display, pose_mat with bone length applied and translated to tai.l*/
+  /** For display, pose_mat with bone length applied and translated to tail. */
   float disp_tail_mat[4][4];
   /**
    * Inverse result of constraints.
@@ -653,7 +656,7 @@ typedef enum eActionGroup_Flag {
  * that affects a group of related settings (as defined by the user).
  */
 typedef struct bAction {
-  /** ID-serialisation for relinking. */
+  /** ID-serialization for relinking. */
   ID id;
 
   /** Function-curves (FCurve). */
@@ -676,6 +679,8 @@ typedef struct bAction {
    */
   int idroot;
   char _pad[4];
+
+  PreviewImage *preview;
 } bAction;
 
 /* Flags for the action */
@@ -857,7 +862,7 @@ typedef enum eSAction_Flag {
   /* show pose-markers (local to action) in Action Editor mode  */
   SACTION_POSEMARKERS_SHOW = (1 << 6),
   /* don't draw action channels using group colors (where applicable) */
-  SACTION_NODRAWGCOLORS = (1 << 7),
+  /* SACTION_NODRAWGCOLORS = (1 << 7), DEPRECATED */
   /* SACTION_NODRAWCFRANUM = (1 << 8), DEPRECATED */
   /* don't perform realtime updates */
   SACTION_NOREALTIMEUPDATES = (1 << 10),

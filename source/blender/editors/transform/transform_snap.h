@@ -25,8 +25,6 @@
 /* For enum. */
 #include "DNA_space_types.h"
 
-struct SnapObjectParams;
-
 bool peelObjectsTransform(struct TransInfo *t,
                           const float mval[2],
                           const bool use_peel_object,
@@ -56,6 +54,7 @@ void snapFrameTransform(struct TransInfo *t,
 
 bool transformModeUseSnap(const TransInfo *t);
 
+bool transform_snap_increment_ex(TransInfo *t, bool use_local_space, float *r_val);
 bool transform_snap_increment(TransInfo *t, float *val);
 bool transform_snap_grid(TransInfo *t, float *val);
 

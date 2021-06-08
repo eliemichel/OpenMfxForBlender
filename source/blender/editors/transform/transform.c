@@ -85,7 +85,8 @@ bool transdata_check_local_islands(TransInfo *t, short around)
 
 void setTransformViewMatrices(TransInfo *t)
 {
-  if (t->spacetype == SPACE_VIEW3D && t->region && t->region->regiontype == RGN_TYPE_WINDOW) {
+  if (!(t->options & CTX_PAINT_CURVE) && (t->spacetype == SPACE_VIEW3D) && t->region &&
+      (t->region->regiontype == RGN_TYPE_WINDOW)) {
     RegionView3D *rv3d = t->region->regiondata;
 
     copy_m4_m4(t->viewmat, rv3d->viewmat);
@@ -134,7 +135,7 @@ void setTransformViewAspect(TransInfo *t, float r_aspect[3])
     }
   }
   else if (t->spacetype == SPACE_GRAPH) {
-    /* depemds on context of usage */
+    /* Depends on context of usage. */
   }
 }
 
@@ -439,7 +440,7 @@ static void viewRedrawForce(const bContext *C, TransInfo *t)
     }
     else {
       /* Do we need more refined tags? */
-      if (t->flag & T_POSE) {
+      if (t->options & CTX_POSE_BONE) {
         WM_event_add_notifier(C, NC_OBJECT | ND_POSE, NULL);
       }
       else {
@@ -470,7 +471,7 @@ static void viewRedrawForce(const bContext *C, TransInfo *t)
   }
   else if (t->spacetype == SPACE_SEQ) {
     WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, NULL);
-    /* Keyframes on strips has been moved, so make sure related editos are informed. */
+    /* Key-frames on strips has been moved, so make sure related editors are informed. */
     WM_event_add_notifier(C, NC_ANIMATION, NULL);
   }
   else if (t->spacetype == SPACE_IMAGE) {
@@ -483,7 +484,7 @@ static void viewRedrawForce(const bContext *C, TransInfo *t)
       wmWindow *window = CTX_wm_window(C);
       WM_paint_cursor_tag_redraw(window, t->region);
     }
-    else if (t->flag & T_CURSOR) {
+    else if (t->options & CTX_CURSOR) {
       ED_area_tag_redraw(t->area);
     }
     else {
@@ -599,7 +600,8 @@ static bool transform_modal_item_poll(const wmOperator *op, int value)
     case TFM_MODAL_AXIS_Z:
     case TFM_MODAL_PLANE_X:
     case TFM_MODAL_PLANE_Y:
-    case TFM_MODAL_PLANE_Z: {
+    case TFM_MODAL_PLANE_Z:
+    case TFM_MODAL_AUTOCONSTRAINTPLANE: {
       if (t->flag & T_NO_CONSTRAINT) {
         return false;
       }
@@ -632,6 +634,14 @@ static bool transform_modal_item_poll(const wmOperator *op, int value)
     case TFM_MODAL_AUTOIK_LEN_INC:
     case TFM_MODAL_AUTOIK_LEN_DEC: {
       if ((t->flag & T_AUTOIK) == 0) {
+        return false;
+      }
+      break;
+    }
+    case TFM_MODAL_TRANSLATE:
+    case TFM_MODAL_ROTATE:
+    case TFM_MODAL_RESIZE: {
+      if (!transform_mode_is_changeable(t->mode)) {
         return false;
       }
       break;
@@ -684,13 +694,12 @@ wmKeyMap *transform_modal_keymap(wmKeyConfig *keyconf)
       {TFM_MODAL_ROTATE, "ROTATE", 0, "Rotate", ""},
       {TFM_MODAL_RESIZE, "RESIZE", 0, "Resize", ""},
       {TFM_MODAL_AUTOCONSTRAINT, "AUTOCONSTRAIN", 0, "Automatic Constraint", ""},
-      {TFM_MODAL_AUTOCONSTRAINTPLANE, "AUTOCONSTRAINPLANE", 0, "Automatic Constraint", ""},
+      {TFM_MODAL_AUTOCONSTRAINTPLANE, "AUTOCONSTRAINPLANE", 0, "Automatic Constraint Plane", ""},
+      {TFM_MODAL_PRECISION, "PRECISION", 0, "Precision Mode", ""},
       {0, NULL, 0, NULL, NULL},
   };
 
-  wmKeyMap *keymap = WM_modalkeymap_find(keyconf, "Transform Modal Map");
-
-  keymap = WM_modalkeymap_ensure(keyconf, "Transform Modal Map", modal_items);
+  wmKeyMap *keymap = WM_modalkeymap_ensure(keyconf, "Transform Modal Map", modal_items);
   keymap->poll_modal_item = transform_modal_item_poll;
 
   /* Default modal map values:
@@ -713,74 +722,94 @@ wmKeyMap *transform_modal_keymap(wmKeyConfig *keyconf)
   return keymap;
 }
 
-static void transform_event_xyz_constraint(TransInfo *t, short key_type, bool is_plane)
+static bool transform_event_modal_constraint(TransInfo *t, short modal_type)
 {
-  if (!(t->flag & T_NO_CONSTRAINT)) {
-    char cmode = constraintModeToChar(t);
-    int constraint_axis, constraint_plane;
-    const bool edit_2d = (t->flag & T_2D_EDIT) != 0;
-    const char *msg1 = "", *msg2 = "", *msg3 = "";
-    char axis;
-
-    /* Initialize */
-    switch (key_type) {
-      case EVT_XKEY:
-        msg1 = TIP_("along X");
-        msg2 = TIP_("along %s X");
-        msg3 = TIP_("locking %s X");
-        axis = 'X';
-        constraint_axis = CON_AXIS0;
-        break;
-      case EVT_YKEY:
-        msg1 = TIP_("along Y");
-        msg2 = TIP_("along %s Y");
-        msg3 = TIP_("locking %s Y");
-        axis = 'Y';
-        constraint_axis = CON_AXIS1;
-        break;
-      case EVT_ZKEY:
-        msg1 = TIP_("along Z");
-        msg2 = TIP_("along %s Z");
-        msg3 = TIP_("locking %s Z");
-        axis = 'Z';
-        constraint_axis = CON_AXIS2;
-        break;
-      default:
-        /* Invalid key */
-        return;
-    }
-    constraint_plane = ((CON_AXIS0 | CON_AXIS1 | CON_AXIS2) & (~constraint_axis));
-
-    if (edit_2d && (key_type != EVT_ZKEY)) {
-      if (cmode == axis) {
-        stopConstraint(t);
-      }
-      else {
-        setUserConstraint(t, constraint_axis, msg1);
-      }
-    }
-    else if (!edit_2d) {
-      short orient_index = 1;
-      if (t->orient_curr == 0 || ELEM(cmode, '\0', axis)) {
-        /* Successive presses on existing axis, cycle orientation modes. */
-        orient_index = (short)((t->orient_curr + 1) % (int)ARRAY_SIZE(t->orient));
-      }
-
-      transform_orientations_current_set(t, orient_index);
-      if (orient_index == 0) {
-        stopConstraint(t);
-      }
-      else {
-        if (is_plane == false) {
-          setUserConstraint(t, constraint_axis, msg2);
-        }
-        else {
-          setUserConstraint(t, constraint_plane, msg3);
-        }
-      }
-    }
-    t->redraw |= TREDRAW_HARD;
+  if (t->flag & T_NO_CONSTRAINT) {
+    return false;
   }
+
+  if (t->flag & T_2D_EDIT && ELEM(modal_type, TFM_MODAL_AXIS_Z, TFM_MODAL_PLANE_Z)) {
+    return false;
+  }
+
+  int constraint_curr = -1;
+
+  if (t->modifiers & (MOD_CONSTRAINT_SELECT_AXIS | MOD_CONSTRAINT_SELECT_PLANE)) {
+    t->modifiers &= ~(MOD_CONSTRAINT_SELECT_AXIS | MOD_CONSTRAINT_SELECT_PLANE);
+
+    /* Avoid changing orientation in this case. */
+    constraint_curr = -2;
+  }
+  else if (t->con.mode & CON_APPLY) {
+    constraint_curr = t->con.mode & (CON_AXIS0 | CON_AXIS1 | CON_AXIS2);
+  }
+
+  int constraint_new;
+  const char *msg_2d = "", *msg_3d = "";
+
+  /* Initialize */
+  switch (modal_type) {
+    case TFM_MODAL_AXIS_X:
+      msg_2d = TIP_("along X");
+      msg_3d = TIP_("along %s X");
+      constraint_new = CON_AXIS0;
+      break;
+    case TFM_MODAL_AXIS_Y:
+      msg_2d = TIP_("along Y");
+      msg_3d = TIP_("along %s Y");
+      constraint_new = CON_AXIS1;
+      break;
+    case TFM_MODAL_AXIS_Z:
+      msg_2d = TIP_("along Z");
+      msg_3d = TIP_("along %s Z");
+      constraint_new = CON_AXIS2;
+      break;
+    case TFM_MODAL_PLANE_X:
+      msg_3d = TIP_("locking %s X");
+      constraint_new = CON_AXIS1 | CON_AXIS2;
+      break;
+    case TFM_MODAL_PLANE_Y:
+      msg_3d = TIP_("locking %s Y");
+      constraint_new = CON_AXIS0 | CON_AXIS2;
+      break;
+    case TFM_MODAL_PLANE_Z:
+      msg_3d = TIP_("locking %s Z");
+      constraint_new = CON_AXIS0 | CON_AXIS1;
+      break;
+    default:
+      /* Invalid key */
+      return false;
+  }
+
+  if (t->flag & T_2D_EDIT) {
+    BLI_assert(modal_type < TFM_MODAL_PLANE_X);
+    if (constraint_new == CON_AXIS2) {
+      return false;
+    }
+    if (constraint_curr == constraint_new) {
+      stopConstraint(t);
+    }
+    else {
+      setUserConstraint(t, constraint_new, msg_2d);
+    }
+  }
+  else {
+    short orient_index = 1;
+    if (t->orient_curr == O_DEFAULT || ELEM(constraint_curr, -1, constraint_new)) {
+      /* Successive presses on existing axis, cycle orientation modes. */
+      orient_index = (short)((t->orient_curr + 1) % (int)ARRAY_SIZE(t->orient));
+    }
+
+    transform_orientations_current_set(t, orient_index);
+    if (orient_index == 0) {
+      stopConstraint(t);
+    }
+    else {
+      setUserConstraint(t, constraint_new, msg_3d);
+    }
+  }
+  t->redraw |= TREDRAW_HARD;
+  return true;
 }
 
 int transformEvent(TransInfo *t, const wmEvent *event)
@@ -789,8 +818,6 @@ int transformEvent(TransInfo *t, const wmEvent *event)
   const int modifiers_prev = t->modifiers;
   const int mode_prev = t->mode;
 
-  t->redraw |= handleMouseInput(t, &t->mouse, event);
-
   /* Handle modal numinput events first, if already activated. */
   if (((event->val == KM_PRESS) || (event->type == EVT_MODAL_MAP)) && hasNumInput(&t->num) &&
       handleNumInput(t->context, &(t->num), event)) {
@@ -798,7 +825,7 @@ int transformEvent(TransInfo *t, const wmEvent *event)
     handled = true;
   }
   else if (event->type == MOUSEMOVE) {
-    if (t->modifiers & (MOD_CONSTRAINT_SELECT | MOD_CONSTRAINT_PLANE)) {
+    if (t->modifiers & (MOD_CONSTRAINT_SELECT_AXIS | MOD_CONSTRAINT_SELECT_PLANE)) {
       t->con.mode |= CON_SELECT;
     }
 
@@ -866,11 +893,6 @@ int transformEvent(TransInfo *t, const wmEvent *event)
             handled = true;
           }
         }
-        else if (t->mode == TFM_SEQ_SLIDE) {
-          t->flag ^= T_ALT_TRANSFORM;
-          t->redraw |= TREDRAW_HARD;
-          handled = true;
-        }
         else if (transform_mode_is_changeable(t->mode)) {
           restoreTransObjects(t);
           resetTransModal(t);
@@ -883,7 +905,7 @@ int transformEvent(TransInfo *t, const wmEvent *event)
         break;
       case TFM_MODAL_ROTATE:
         /* only switch when... */
-        if (!(t->options & CTX_TEXTURE) && !(t->options & (CTX_MOVIECLIP | CTX_MASK))) {
+        if (!(t->options & CTX_TEXTURE_SPACE) && !(t->options & (CTX_MOVIECLIP | CTX_MASK))) {
           if (transform_mode_is_changeable(t->mode)) {
             restoreTransObjects(t);
             resetTransModal(t);
@@ -911,11 +933,6 @@ int transformEvent(TransInfo *t, const wmEvent *event)
             t->redraw |= TREDRAW_HARD;
             handled = true;
           }
-        }
-        else if (t->mode == TFM_SHRINKFATTEN) {
-          t->flag ^= T_ALT_TRANSFORM;
-          t->redraw |= TREDRAW_HARD;
-          handled = true;
         }
         else if (transform_mode_is_changeable(t->mode)) {
           /* Scale isn't normally very useful after extrude along normals, see T39756 */
@@ -949,44 +966,12 @@ int transformEvent(TransInfo *t, const wmEvent *event)
         handled = true;
         break;
       case TFM_MODAL_AXIS_X:
-        if (!(t->flag & T_NO_CONSTRAINT)) {
-          transform_event_xyz_constraint(t, EVT_XKEY, false);
-          t->redraw |= TREDRAW_HARD;
-          handled = true;
-        }
-        break;
       case TFM_MODAL_AXIS_Y:
-        if ((t->flag & T_NO_CONSTRAINT) == 0) {
-          transform_event_xyz_constraint(t, EVT_YKEY, false);
-          t->redraw |= TREDRAW_HARD;
-          handled = true;
-        }
-        break;
       case TFM_MODAL_AXIS_Z:
-        if ((t->flag & (T_NO_CONSTRAINT)) == 0) {
-          transform_event_xyz_constraint(t, EVT_ZKEY, false);
-          t->redraw |= TREDRAW_HARD;
-          handled = true;
-        }
-        break;
       case TFM_MODAL_PLANE_X:
-        if ((t->flag & (T_NO_CONSTRAINT | T_2D_EDIT)) == 0) {
-          transform_event_xyz_constraint(t, EVT_XKEY, true);
-          t->redraw |= TREDRAW_HARD;
-          handled = true;
-        }
-        break;
       case TFM_MODAL_PLANE_Y:
-        if ((t->flag & (T_NO_CONSTRAINT | T_2D_EDIT)) == 0) {
-          transform_event_xyz_constraint(t, EVT_YKEY, true);
-          t->redraw |= TREDRAW_HARD;
-          handled = true;
-        }
-        break;
       case TFM_MODAL_PLANE_Z:
-        if ((t->flag & (T_NO_CONSTRAINT | T_2D_EDIT)) == 0) {
-          transform_event_xyz_constraint(t, EVT_ZKEY, true);
-          t->redraw |= TREDRAW_HARD;
+        if (transform_event_modal_constraint(t, event->val)) {
           handled = true;
         }
         break;
@@ -1082,30 +1067,56 @@ int transformEvent(TransInfo *t, const wmEvent *event)
         break;
       case TFM_MODAL_AUTOCONSTRAINT:
       case TFM_MODAL_AUTOCONSTRAINTPLANE:
-        if ((t->flag & T_NO_CONSTRAINT) == 0) {
-          /* exception for switching to dolly, or trackball, in camera view */
-          if (t->flag & T_CAMERA) {
-            if (t->mode == TFM_TRANSLATION) {
-              setLocalConstraint(t, (CON_AXIS2), TIP_("along local Z"));
-            }
-            else if (t->mode == TFM_ROTATION) {
-              restoreTransObjects(t);
-              transform_mode_init(t, NULL, TFM_TRACKBALL);
-            }
+        if ((t->flag & T_RELEASE_CONFIRM) && (event->prevval == KM_RELEASE) &&
+            event->prevtype == t->launch_event) {
+          /* Confirm transform if launch key is released after mouse move. */
+          t->state = TRANS_CONFIRM;
+        }
+        else if ((t->flag & T_NO_CONSTRAINT) == 0) {
+          if (t->modifiers & (MOD_CONSTRAINT_SELECT_AXIS | MOD_CONSTRAINT_SELECT_PLANE)) {
+            /* Confirm. */
+            postSelectConstraint(t);
+            t->modifiers &= ~(MOD_CONSTRAINT_SELECT_AXIS | MOD_CONSTRAINT_SELECT_PLANE);
           }
           else {
-            t->modifiers |= (event->val == TFM_MODAL_AUTOCONSTRAINT) ? MOD_CONSTRAINT_SELECT :
-                                                                       MOD_CONSTRAINT_PLANE;
-            if (t->con.mode & CON_APPLY) {
-              stopConstraint(t);
+            if (t->options & CTX_CAMERA) {
+              /* Exception for switching to dolly, or trackball, in camera view. */
+              if (t->mode == TFM_TRANSLATION) {
+                setLocalConstraint(t, (CON_AXIS2), TIP_("along local Z"));
+              }
+              else if (t->mode == TFM_ROTATION) {
+                restoreTransObjects(t);
+                transform_mode_init(t, NULL, TFM_TRACKBALL);
+              }
             }
             else {
-              initSelectConstraint(t);
-              postSelectConstraint(t);
+              t->modifiers |= (event->val == TFM_MODAL_AUTOCONSTRAINT) ?
+                                  MOD_CONSTRAINT_SELECT_AXIS :
+                                  MOD_CONSTRAINT_SELECT_PLANE;
+              if (t->con.mode & CON_APPLY) {
+                stopConstraint(t);
+              }
+              else {
+                initSelectConstraint(t);
+                postSelectConstraint(t);
+              }
             }
           }
           t->redraw |= TREDRAW_HARD;
           handled = true;
+        }
+        break;
+      case TFM_MODAL_PRECISION:
+        if (event->prevval == KM_PRESS) {
+          t->modifiers |= MOD_PRECISION;
+          /* Shift is modifier for higher precision transform. */
+          t->mouse.precision = 1;
+          t->redraw |= TREDRAW_HARD;
+        }
+        else if (event->prevval == KM_RELEASE) {
+          t->modifiers &= ~MOD_PRECISION;
+          t->mouse.precision = 0;
+          t->redraw |= TREDRAW_HARD;
         }
         break;
       /* Those two are only handled in transform's own handler, see T44634! */
@@ -1203,21 +1214,6 @@ int transformEvent(TransInfo *t, const wmEvent *event)
           handled = true;
         }
         break;
-      default: {
-        /* Disable modifiers. */
-        int modifiers = t->modifiers;
-        modifiers &= ~MOD_CONSTRAINT_SELECT;
-        modifiers &= ~MOD_CONSTRAINT_PLANE;
-        if (modifiers != t->modifiers) {
-          if (t->modifiers & (MOD_CONSTRAINT_SELECT | MOD_CONSTRAINT_PLANE)) {
-            postSelectConstraint(t);
-          }
-          t->modifiers = modifiers;
-          t->redraw |= TREDRAW_HARD;
-          handled = true;
-        }
-        break;
-      }
     }
 
     /* confirm transform if launch key is released after mouse move */
@@ -1277,7 +1273,7 @@ bool calculateTransformCenter(bContext *C, int centerMode, float cent3d[3], floa
 
   createTransData(C, t); /* make TransData structs from selection */
 
-  t->around = centerMode; /* override userdefined mode */
+  t->around = centerMode; /* override user-defined mode. */
 
   if (t->data_len_all == 0) {
     success = false;
@@ -1410,7 +1406,7 @@ static void drawTransformPixel(const struct bContext *C, ARegion *region, void *
      */
     if ((U.autokey_flag & AUTOKEY_FLAG_NOWARNING) == 0) {
       if (region == t->region) {
-        if (t->flag & (T_OBJECT | T_POSE)) {
+        if (t->options & (CTX_OBJECT | CTX_POSE_BONE)) {
           if (ob && autokeyframe_cfra_can_key(scene, &ob->id)) {
             drawAutoKeyWarning(t, region);
           }
@@ -1427,25 +1423,6 @@ void saveTransform(bContext *C, TransInfo *t, wmOperator *op)
 {
   ToolSettings *ts = CTX_data_tool_settings(C);
   PropertyRNA *prop;
-
-  if (!(t->con.mode & CON_APPLY) && (t->flag & T_MODAL) &&
-      ELEM(t->mode, TFM_TRANSLATION, TFM_RESIZE)) {
-    /* When redoing these modes the first time, it's more convenient to save
-     * in the Global orientation. */
-    if (t->mode == TFM_TRANSLATION) {
-      mul_m3_v3(t->spacemtx, t->values_final);
-    }
-    else {
-      float tmat[3][3], sizemat[3][3];
-      size_to_mat3(sizemat, t->values_final);
-      mul_m3_m3m3(tmat, t->spacemtx, sizemat);
-      mat3_to_size(t->values_final, tmat);
-    }
-
-    BLI_assert(t->orient_curr == 0);
-    unit_m3(t->spacemtx);
-    t->orient[0].type = V3D_ORIENT_GLOBAL;
-  }
 
   /* Save back mode in case we're in the generic operator */
   if ((prop = RNA_struct_find_property(op->ptr, "mode"))) {
@@ -1626,11 +1603,9 @@ void saveTransform(bContext *C, TransInfo *t, wmOperator *op)
 static void initSnapSpatial(TransInfo *t, float r_snap[2])
 {
   if (t->spacetype == SPACE_VIEW3D) {
-    RegionView3D *rv3d = t->region->regiondata;
-
-    if (rv3d) {
+    if (t->region->regiondata) {
       View3D *v3d = t->area->spacedata.first;
-      r_snap[0] = ED_view3d_grid_view_scale(t->scene, v3d, rv3d, NULL) * 1.0f;
+      r_snap[0] = ED_view3d_grid_view_scale(t->scene, v3d, t->region, NULL) * 1.0f;
       r_snap[1] = r_snap[0] * 0.1f;
     }
   }
@@ -1682,7 +1657,7 @@ bool initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   if ((prop = RNA_struct_find_property(op->ptr, "texture_space")) &&
       RNA_property_is_set(op->ptr, prop)) {
     if (RNA_property_boolean_get(op->ptr, prop)) {
-      options |= CTX_TEXTURE;
+      options |= CTX_TEXTURE_SPACE;
     }
   }
 
@@ -1949,7 +1924,7 @@ int transformEnd(bContext *C, TransInfo *t)
 
   t->context = C;
 
-  if (t->state != TRANS_STARTING && t->state != TRANS_RUNNING) {
+  if (!ELEM(t->state, TRANS_STARTING, TRANS_RUNNING)) {
     /* handle restoring objects */
     if (t->state == TRANS_CANCEL) {
       exit_code = OPERATOR_CANCELLED;

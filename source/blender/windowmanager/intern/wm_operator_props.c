@@ -48,6 +48,30 @@ void WM_operator_properties_confirm_or_exec(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
+/**
+ * Extends rna_enum_fileselect_params_sort_items with a default item for operators to use.
+ */
+static const EnumPropertyItem *wm_operator_properties_filesel_sort_items_itemf(
+    struct bContext *UNUSED(C), PointerRNA *UNUSED(ptr), PropertyRNA *UNUSED(prop), bool *r_free)
+{
+  EnumPropertyItem *items;
+  const EnumPropertyItem default_item = {
+      FILE_SORT_DEFAULT,
+      "DEFAULT",
+      0,
+      "Default",
+      "Automatically determine sort method for files",
+  };
+  int totitem = 0;
+
+  RNA_enum_item_add(&items, &totitem, &default_item);
+  RNA_enum_items_add(&items, &totitem, rna_enum_fileselect_params_sort_items);
+  RNA_enum_item_end(&items, &totitem);
+  *r_free = true;
+
+  return items;
+}
+
 /* default properties for fileselect */
 void WM_operator_properties_filesel(wmOperatorType *ot,
                                     int filter,
@@ -174,6 +198,8 @@ void WM_operator_properties_filesel(wmOperatorType *ot,
       ot->srna, "filter_blenlib", (filter & FILE_TYPE_BLENDERLIB) != 0, "Filter Blender IDs", "");
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 
+  /* TODO asset only filter? */
+
   prop = RNA_def_int(
       ot->srna,
       "filemode",
@@ -204,8 +230,8 @@ void WM_operator_properties_filesel(wmOperatorType *ot,
   prop = RNA_def_enum(ot->srna, "display_type", file_display_items, display, "Display Type", "");
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 
-  prop = RNA_def_enum(
-      ot->srna, "sort_method", rna_enum_file_sort_items, sort, "File sorting mode", "");
+  prop = RNA_def_enum(ot->srna, "sort_method", DummyRNA_NULL_items, sort, "File sorting mode", "");
+  RNA_def_enum_funcs(prop, wm_operator_properties_filesel_sort_items_itemf);
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
@@ -258,15 +284,15 @@ void WM_operator_properties_select_action_simple(wmOperatorType *ot,
  */
 void WM_operator_properties_select_random(wmOperatorType *ot)
 {
-  RNA_def_float_percentage(ot->srna,
-                           "percent",
-                           50.f,
-                           0.0f,
-                           100.0f,
-                           "Percent",
-                           "Percentage of objects to select randomly",
-                           0.f,
-                           100.0f);
+  RNA_def_float_factor(ot->srna,
+                       "ratio",
+                       0.5f,
+                       0.0f,
+                       1.0f,
+                       "Ratio",
+                       "Portion of items to select randomly",
+                       0.0f,
+                       1.0f);
   RNA_def_int(ot->srna,
               "seed",
               0,
@@ -408,7 +434,7 @@ void WM_operator_properties_select_operation_simple(wmOperatorType *ot)
 void WM_operator_properties_select_walk_direction(wmOperatorType *ot)
 {
   static const EnumPropertyItem direction_items[] = {
-      {UI_SELECT_WALK_UP, "UP", 0, "Prev", ""},
+      {UI_SELECT_WALK_UP, "UP", 0, "Previous", ""},
       {UI_SELECT_WALK_DOWN, "DOWN", 0, "Next", ""},
       {UI_SELECT_WALK_LEFT, "LEFT", 0, "Left", ""},
       {UI_SELECT_WALK_RIGHT, "RIGHT", 0, "Right", ""},

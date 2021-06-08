@@ -840,12 +840,14 @@ static void update_mapping_node_fcurve_rna_path_callback(ID *UNUSED(id),
     fcurve->rna_path = BLI_sprintfN("%s.%s", data->nodePath, "inputs[3].default_value");
   }
   else if (data->minimumNode && BLI_str_endswith(old_fcurve_rna_path, "max")) {
-    fcurve->rna_path = BLI_sprintfN(
-        "nodes[\"%s\"].%s", data->minimumNode->name, "inputs[1].default_value");
+    char node_name_esc[sizeof(data->minimumNode->name) * 2];
+    BLI_str_escape(node_name_esc, data->minimumNode->name, sizeof(node_name_esc));
+    fcurve->rna_path = BLI_sprintfN("nodes[\"%s\"].%s", node_name_esc, "inputs[1].default_value");
   }
   else if (data->maximumNode && BLI_str_endswith(old_fcurve_rna_path, "min")) {
-    fcurve->rna_path = BLI_sprintfN(
-        "nodes[\"%s\"].%s", data->maximumNode->name, "inputs[1].default_value");
+    char node_name_esc[sizeof(data->maximumNode->name) * 2];
+    BLI_str_escape(node_name_esc, data->maximumNode->name, sizeof(node_name_esc));
+    fcurve->rna_path = BLI_sprintfN("nodes[\"%s\"].%s", node_name_esc, "inputs[1].default_value");
   }
 
   if (fcurve->rna_path != old_fcurve_rna_path) {
@@ -955,7 +957,10 @@ static void update_mapping_node_inputs_and_properties(bNodeTree *ntree)
       MEM_freeN(node->storage);
       node->storage = NULL;
 
-      char *nodePath = BLI_sprintfN("nodes[\"%s\"]", node->name);
+      char node_name_esc[sizeof(node->name) * 2];
+      BLI_str_escape(node_name_esc, node->name, sizeof(node_name_esc));
+
+      char *nodePath = BLI_sprintfN("nodes[\"%s\"]", node_name_esc);
       MappingNodeFCurveCallbackData data = {nodePath, minimumNode, maximumNode};
       BKE_fcurves_id_cb(&ntree->id, update_mapping_node_fcurve_rna_path_callback, &data);
       MEM_freeN(nodePath);
@@ -1197,8 +1202,7 @@ static void update_voronoi_node_square_distance(bNodeTree *ntree)
       NodeTexVoronoi *tex = (NodeTexVoronoi *)node->storage;
       bNodeSocket *sockDistance = nodeFindSocket(node, SOCK_OUT, "Distance");
       if (tex->distance == SHD_VORONOI_EUCLIDEAN &&
-          (tex->feature == SHD_VORONOI_F1 || tex->feature == SHD_VORONOI_F2) &&
-          socket_is_used(sockDistance)) {
+          (ELEM(tex->feature, SHD_VORONOI_F1, SHD_VORONOI_F2)) && socket_is_used(sockDistance)) {
         bNode *multiplyNode = nodeAddStaticNode(NULL, ntree, SH_NODE_MATH);
         multiplyNode->custom1 = NODE_MATH_MULTIPLY;
         multiplyNode->locx = node->locx + node->width + 20.0f;
@@ -1237,7 +1241,7 @@ static void update_noise_and_wave_distortion(bNodeTree *ntree)
   bool need_update = false;
 
   LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
-    if (node->type == SH_NODE_TEX_NOISE || node->type == SH_NODE_TEX_WAVE) {
+    if (ELEM(node->type, SH_NODE_TEX_NOISE, SH_NODE_TEX_WAVE)) {
 
       bNodeSocket *sockDistortion = nodeFindSocket(node, SOCK_IN, "Distortion");
       float *distortion = cycles_node_socket_float_value(sockDistortion);
@@ -1416,7 +1420,7 @@ void do_versions_after_linking_cycles(Main *bmain)
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 64)) {
-    /* Unfiy Cycles and Eevee settings. */
+    /* Unify Cycles and Eevee settings. */
     Scene *scene = bmain->scenes.first;
     const char *engine = (scene) ? scene->r.engine : "CYCLES";
 

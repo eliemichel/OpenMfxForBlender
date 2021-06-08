@@ -203,7 +203,7 @@ static void draw_vertical_join_shape(ScrArea *area, char dir, uint pos)
  */
 static void draw_join_shape(ScrArea *area, char dir, uint pos)
 {
-  if (dir == 'u' || dir == 'd') {
+  if (ELEM(dir, 'u', 'd')) {
     draw_vertical_join_shape(area, dir, pos);
   }
   else {
@@ -478,7 +478,7 @@ void ED_screen_draw_split_preview(ScrArea *area, const int dir, const float fac)
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
-  /* splitpoint */
+  /* Split-point. */
   GPU_blend(GPU_BLEND_ALPHA);
 
   immUniformColor4ub(255, 255, 255, 100);
@@ -610,7 +610,7 @@ void ED_screen_preview_render(const bScreen *screen, int size_x, int size_y, uin
 
   screen_preview_draw(screen, size_x, size_y);
 
-  GPU_offscreen_read_pixels(offscreen, GPU_DATA_UNSIGNED_BYTE, r_rect);
+  GPU_offscreen_read_pixels(offscreen, GPU_DATA_UBYTE, r_rect);
   GPU_offscreen_unbind(offscreen, true);
 
   GPU_offscreen_free(offscreen);

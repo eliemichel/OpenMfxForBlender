@@ -35,9 +35,7 @@
 #include "transform_mode.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (Align) */
-
-/** \name Transform Align
+/** \name Transform (Align)
  * \{ */
 
 static void applyAlign(TransInfo *t, const int UNUSED(mval[2]))
@@ -57,7 +55,7 @@ static void applyAlign(TransInfo *t, const int UNUSED(mval[2]))
       }
 
       /* around local centers */
-      if (t->flag & (T_OBJECT | T_POSE)) {
+      if (t->options & (CTX_OBJECT | CTX_POSE_BONE)) {
         copy_v3_v3(tc->center_local, td->center);
       }
       else {

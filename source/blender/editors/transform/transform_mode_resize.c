@@ -39,9 +39,7 @@
 #include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (Resize) */
-
-/** \name Transform Resize
+/** \name Transform (Resize)
  * \{ */
 
 static float ResizeBetween(TransInfo *t, const float p1[3], const float p2[3])
@@ -134,7 +132,7 @@ static void applyResize(TransInfo *t, const int UNUSED(mval[2]))
     }
   }
 
-  /* evil hack - redo resize if cliping needed */
+  /* Evil hack - redo resize if clipping needed. */
   if (t->flag & T_CLIP_UV && clipUVTransform(t, t->values_final, 1)) {
     size_to_mat3(mat, t->values_final);
 
@@ -196,5 +194,7 @@ void initResize(TransInfo *t)
   t->num.unit_type[0] = B_UNIT_NONE;
   t->num.unit_type[1] = B_UNIT_NONE;
   t->num.unit_type[2] = B_UNIT_NONE;
+
+  transform_mode_default_modal_orientation_set(t, V3D_ORIENT_GLOBAL);
 }
 /** \} */

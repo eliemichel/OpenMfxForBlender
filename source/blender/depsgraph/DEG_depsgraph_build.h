@@ -39,8 +39,8 @@ struct Main;
 struct Object;
 struct Scene;
 struct Simulation;
-struct ViewLayer;
 struct bNodeTree;
+struct Collection;
 
 #include "BLI_sys_types.h"
 
@@ -138,9 +138,18 @@ void DEG_add_object_relation(struct DepsNodeHandle *node_handle,
                              struct Object *object,
                              eDepsObjectComponentType component,
                              const char *description);
+void DEG_add_collection_geometry_relation(struct DepsNodeHandle *node_handle,
+                                          struct Collection *collection,
+                                          const char *description);
+void DEG_add_collection_geometry_customdata_mask(struct DepsNodeHandle *node_handle,
+                                                 struct Collection *collection,
+                                                 const struct CustomData_MeshMasks *masks);
 void DEG_add_simulation_relation(struct DepsNodeHandle *node_handle,
                                  struct Simulation *simulation,
                                  const char *description);
+void DEG_add_node_tree_relation(struct DepsNodeHandle *node_handle,
+                                struct bNodeTree *node_tree,
+                                const char *description);
 void DEG_add_bone_relation(struct DepsNodeHandle *handle,
                            struct Object *object,
                            const char *bone_name,
@@ -179,6 +188,8 @@ void DEG_add_customdata_mask(struct DepsNodeHandle *handle,
 
 struct ID *DEG_get_id_from_handle(struct DepsNodeHandle *node_handle);
 struct Depsgraph *DEG_get_graph_from_handle(struct DepsNodeHandle *node_handle);
+
+bool DEG_object_has_geometry_component(struct Object *object);
 
 /* ************************************************ */
 

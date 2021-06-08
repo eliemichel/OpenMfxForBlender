@@ -54,6 +54,7 @@
 #include "BKE_constraint.h"
 #include "BKE_deform.h"
 #include "BKE_fcurve.h"
+#include "BKE_icons.h"
 #include "BKE_idprop.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
@@ -61,6 +62,7 @@
 #include "BKE_main.h"
 #include "BKE_object.h"
 
+#include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
 #include "BIK_api.h"
@@ -100,10 +102,7 @@ static CLG_LogRef LOG = {"bke.action"};
  *
  * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
-static void action_copy_data(Main *UNUSED(bmain),
-                             ID *id_dst,
-                             const ID *id_src,
-                             const int UNUSED(flag))
+static void action_copy_data(Main *UNUSED(bmain), ID *id_dst, const ID *id_src, const int flag)
 {
   bAction *action_dst = (bAction *)id_dst;
   const bAction *action_src = (const bAction *)id_src;
@@ -144,6 +143,13 @@ static void action_copy_data(Main *UNUSED(bmain),
       }
     }
   }
+
+  if (flag & LIB_ID_COPY_NO_PREVIEW) {
+    action_dst->preview = NULL;
+  }
+  else {
+    BKE_previewimg_id_copy(&action_dst->id, &action_src->id);
+  }
 }
 
 /** Free (or release) any data used by this action (does not free the action itself). */
@@ -160,6 +166,8 @@ static void action_free_data(struct ID *id)
 
   /* Free pose-references (aka local markers). */
   BLI_freelistN(&action->markers);
+
+  BKE_previewimg_free(&action->preview);
 }
 
 static void action_foreach_id(ID *id, LibraryForeachIDData *data)
@@ -191,6 +199,8 @@ static void action_blend_write(BlendWriter *writer, ID *id, const void *id_addre
     LISTBASE_FOREACH (TimeMarker *, marker, &act->markers) {
       BLO_write_struct(writer, TimeMarker, marker);
     }
+
+    BKE_previewimg_blend_write(writer, act->preview);
   }
 }
 
@@ -217,6 +227,9 @@ static void action_blend_read_data(BlendDataReader *reader, ID *id)
     BLO_read_data_address(reader, &agrp->channels.first);
     BLO_read_data_address(reader, &agrp->channels.last);
   }
+
+  BLO_read_data_address(reader, &act->preview);
+  BKE_previewimg_blend_read(reader, act->preview);
 }
 
 static void blend_read_lib_constraint_channels(BlendLibReader *reader, ID *id, ListBase *chanbase)
@@ -290,11 +303,16 @@ IDTypeInfo IDType_ID_AC = {
     .make_local = NULL,
     .foreach_id = action_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = action_blend_write,
     .blend_read_data = action_blend_read_data,
     .blend_read_lib = action_blend_read_lib,
     .blend_read_expand = action_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* ***************** Library data level operations on action ************** */
@@ -606,7 +624,7 @@ bPoseChannel *BKE_pose_channel_find_name(const bPose *pose, const char *name)
     return BLI_ghash_lookup(pose->chanhash, (const void *)name);
   }
 
-  return BLI_findstring(&((const bPose *)pose)->chanbase, name, offsetof(bPoseChannel, name));
+  return BLI_findstring(&pose->chanbase, name, offsetof(bPoseChannel, name));
 }
 
 /**
@@ -1298,30 +1316,6 @@ void BKE_pose_tag_update_constraint_flags(bPose *pose)
   pose->flag |= POSE_CONSTRAINTS_NEED_UPDATE_FLAGS;
 }
 
-/* Clears all BONE_UNKEYED flags for every pose channel in every pose
- * This should only be called on frame changing, when it is acceptable to
- * do this. Otherwise, these flags should not get cleared as poses may get lost.
- */
-void framechange_poses_clear_unkeyed(Main *bmain)
-{
-  Object *ob;
-  bPose *pose;
-  bPoseChannel *pchan;
-
-  /* This needs to be done for each object that has a pose */
-  /* TODO: proxies may/may not be correctly handled here... (this needs checking) */
-  for (ob = bmain->objects.first; ob; ob = ob->id.next) {
-    /* we only need to do this on objects with a pose */
-    if ((pose = ob->pose)) {
-      for (pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
-        if (pchan->bone) {
-          pchan->bone->flag &= ~BONE_UNKEYED;
-        }
-      }
-    }
-  }
-}
-
 /* ************************** Bone Groups ************************** */
 
 /* Adds a new bone-group (name may be NULL) */
@@ -1843,4 +1837,175 @@ void BKE_pose_check_uuids_unique_and_report(const bPose *pose)
   }
 
   BLI_gset_free(used_uuids, NULL);
+}
+
+void BKE_pose_blend_write(BlendWriter *writer, bPose *pose, bArmature *arm)
+{
+  /* Write each channel */
+  if (pose == NULL) {
+    return;
+  }
+
+  BLI_assert(arm != NULL);
+
+  /* Write channels */
+  LISTBASE_FOREACH (bPoseChannel *, chan, &pose->chanbase) {
+    /* Write ID Properties -- and copy this comment EXACTLY for easy finding
+     * of library blocks that implement this.*/
+    if (chan->prop) {
+      IDP_BlendWrite(writer, chan->prop);
+    }
+
+    BKE_constraint_blend_write(writer, &chan->constraints);
+
+    animviz_motionpath_blend_write(writer, chan->mpath);
+
+    /* Prevent crashes with autosave,
+     * when a bone duplicated in edit-mode has not yet been assigned to its pose-channel.
+     * Also needed with memundo, in some cases we can store a step before pose has been
+     * properly rebuilt from previous undo step. */
+    Bone *bone = (pose->flag & POSE_RECALC) ? BKE_armature_find_bone_name(arm, chan->name) :
+                                              chan->bone;
+    if (bone != NULL) {
+      /* gets restored on read, for library armatures */
+      chan->selectflag = bone->flag & BONE_SELECTED;
+    }
+
+    BLO_write_struct(writer, bPoseChannel, chan);
+  }
+
+  /* Write groups */
+  LISTBASE_FOREACH (bActionGroup *, grp, &pose->agroups) {
+    BLO_write_struct(writer, bActionGroup, grp);
+  }
+
+  /* write IK param */
+  if (pose->ikparam) {
+    const char *structname = BKE_pose_ikparam_get_name(pose);
+    if (structname) {
+      BLO_write_struct_by_name(writer, structname, pose->ikparam);
+    }
+  }
+
+  /* Write this pose */
+  BLO_write_struct(writer, bPose, pose);
+}
+
+void BKE_pose_blend_read_data(BlendDataReader *reader, bPose *pose)
+{
+  if (!pose) {
+    return;
+  }
+
+  BLO_read_list(reader, &pose->chanbase);
+  BLO_read_list(reader, &pose->agroups);
+
+  pose->chanhash = NULL;
+  pose->chan_array = NULL;
+
+  LISTBASE_FOREACH (bPoseChannel *, pchan, &pose->chanbase) {
+    BKE_pose_channel_runtime_reset(&pchan->runtime);
+    BKE_pose_channel_session_uuid_generate(pchan);
+
+    pchan->bone = NULL;
+    BLO_read_data_address(reader, &pchan->parent);
+    BLO_read_data_address(reader, &pchan->child);
+    BLO_read_data_address(reader, &pchan->custom_tx);
+
+    BLO_read_data_address(reader, &pchan->bbone_prev);
+    BLO_read_data_address(reader, &pchan->bbone_next);
+
+    BKE_constraint_blend_read_data(reader, &pchan->constraints);
+
+    BLO_read_data_address(reader, &pchan->prop);
+    IDP_BlendDataRead(reader, &pchan->prop);
+
+    BLO_read_data_address(reader, &pchan->mpath);
+    if (pchan->mpath) {
+      animviz_motionpath_blend_read_data(reader, pchan->mpath);
+    }
+
+    BLI_listbase_clear(&pchan->iktree);
+    BLI_listbase_clear(&pchan->siktree);
+
+    /* in case this value changes in future, clamp else we get undefined behavior */
+    CLAMP(pchan->rotmode, ROT_MODE_MIN, ROT_MODE_MAX);
+
+    pchan->draw_data = NULL;
+  }
+  pose->ikdata = NULL;
+  if (pose->ikparam != NULL) {
+    BLO_read_data_address(reader, &pose->ikparam);
+  }
+}
+
+void BKE_pose_blend_read_lib(BlendLibReader *reader, Object *ob, bPose *pose)
+{
+  bArmature *arm = ob->data;
+
+  if (!pose || !arm) {
+    return;
+  }
+
+  /* always rebuild to match proxy or lib changes, but on Undo */
+  bool rebuild = false;
+
+  if (!BLO_read_lib_is_undo(reader)) {
+    if (ob->proxy || ob->id.lib != arm->id.lib) {
+      rebuild = true;
+    }
+  }
+
+  if (ob->proxy) {
+    /* sync proxy layer */
+    if (pose->proxy_layer) {
+      arm->layer = pose->proxy_layer;
+    }
+
+    /* sync proxy active bone */
+    if (pose->proxy_act_bone[0]) {
+      Bone *bone = BKE_armature_find_bone_name(arm, pose->proxy_act_bone);
+      if (bone) {
+        arm->act_bone = bone;
+      }
+    }
+  }
+
+  LISTBASE_FOREACH (bPoseChannel *, pchan, &pose->chanbase) {
+    BKE_constraint_blend_read_lib(reader, (ID *)ob, &pchan->constraints);
+
+    pchan->bone = BKE_armature_find_bone_name(arm, pchan->name);
+
+    IDP_BlendReadLib(reader, pchan->prop);
+
+    BLO_read_id_address(reader, ob->id.lib, &pchan->custom);
+    if (UNLIKELY(pchan->bone == NULL)) {
+      rebuild = true;
+    }
+    else if ((ob->id.lib == NULL) && arm->id.lib) {
+      /* local pose selection copied to armature, bit hackish */
+      pchan->bone->flag &= ~BONE_SELECTED;
+      pchan->bone->flag |= pchan->selectflag;
+    }
+  }
+
+  if (rebuild) {
+    Main *bmain = BLO_read_lib_get_main(reader);
+    DEG_id_tag_update_ex(
+        bmain, &ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_ANIMATION);
+    BKE_pose_tag_recalc(bmain, pose);
+  }
+}
+
+void BKE_pose_blend_read_expand(BlendExpander *expander, bPose *pose)
+{
+  if (!pose) {
+    return;
+  }
+
+  LISTBASE_FOREACH (bPoseChannel *, chan, &pose->chanbase) {
+    BKE_constraint_blend_read_expand(expander, &chan->constraints);
+    IDP_BlendReadExpand(expander, chan->prop);
+    BLO_expand(expander, chan->custom);
+  }
 }

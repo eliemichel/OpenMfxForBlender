@@ -22,7 +22,6 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
-#include "BKE_object.h"
 
 #include "DNA_object_types.h"
 
@@ -45,14 +44,17 @@
 /** \name View3D Navigation Gizmo Group
  * \{ */
 
-/* Offset from screen edge. */
-#define GIZMO_OFFSET_FAC 1.2f
 /* Size of main icon. */
-#define GIZMO_SIZE 80
-/* Factor for size of smaller button. */
-#define GIZMO_MINI_FAC 0.35f
-/* How much mini buttons offset from the primary. */
-#define GIZMO_MINI_OFFSET_FAC 0.38f
+#define GIZMO_SIZE U.gizmo_size_navigate_v3d
+
+/* Main gizmo offset from screen edges in unscaled pixels. */
+#define GIZMO_OFFSET 10.0f
+
+/* Width of smaller buttons in unscaled pixels. */
+#define GIZMO_MINI_SIZE 28.0f
+
+/* Margin around the smaller buttons. */
+#define GIZMO_MINI_OFFSET 2.0f
 
 enum {
   GZ_INDEX_MOVE = 0,
@@ -78,32 +80,32 @@ static struct NavigateGizmoInfo g_navigate_params[GZ_INDEX_TOTAL] = {
     {
         .opname = "VIEW3D_OT_move",
         .gizmo = "GIZMO_GT_button_2d",
-        ICON_VIEW_PAN,
+        .icon = ICON_VIEW_PAN,
     },
     {
         .opname = "VIEW3D_OT_rotate",
         .gizmo = "VIEW3D_GT_navigate_rotate",
-        0,
+        .icon = ICON_NONE,
     },
     {
         .opname = "VIEW3D_OT_zoom",
         .gizmo = "GIZMO_GT_button_2d",
-        ICON_VIEW_ZOOM,
+        .icon = ICON_VIEW_ZOOM,
     },
     {
         .opname = "VIEW3D_OT_view_persportho",
         .gizmo = "GIZMO_GT_button_2d",
-        ICON_VIEW_PERSPECTIVE,
+        .icon = ICON_VIEW_PERSPECTIVE,
     },
     {
         .opname = "VIEW3D_OT_view_persportho",
         .gizmo = "GIZMO_GT_button_2d",
-        ICON_VIEW_ORTHO,
+        .icon = ICON_VIEW_ORTHO,
     },
     {
         .opname = "VIEW3D_OT_view_camera",
         .gizmo = "GIZMO_GT_button_2d",
-        ICON_VIEW_CAMERA,
+        .icon = ICON_VIEW_CAMERA,
     },
 };
 
@@ -114,7 +116,7 @@ struct NavigateWidgetGroup {
     rcti rect_visible;
     struct {
       char is_persp;
-      char is_camera;
+      bool is_camera;
       char viewlock;
     } rv3d;
   } state;
@@ -174,8 +176,8 @@ static void WIDGETGROUP_navigate_setup(const bContext *C, wmGizmoGroup *gzgroup)
     }
 
     /* may be overwritten later */
-    gz->scale_basis = (GIZMO_SIZE * GIZMO_MINI_FAC) / 2;
-    if (info->icon != 0) {
+    gz->scale_basis = GIZMO_MINI_SIZE / 2.0f;
+    if (info->icon != ICON_NONE) {
       PropertyRNA *prop = RNA_struct_find_property(gz->ptr, "icon");
       RNA_property_enum_set(gz->ptr, prop, info->icon);
       RNA_enum_set(
@@ -212,7 +214,7 @@ static void WIDGETGROUP_navigate_setup(const bContext *C, wmGizmoGroup *gzgroup)
 
   {
     wmGizmo *gz = navgroup->gz_array[GZ_INDEX_ROTATE];
-    gz->scale_basis = GIZMO_SIZE / 2;
+    gz->scale_basis = GIZMO_SIZE / 2.0f;
     const char mapping[6] = {
         RV3D_VIEW_LEFT,
         RV3D_VIEW_RIGHT,
@@ -248,6 +250,9 @@ static void WIDGETGROUP_navigate_draw_prepare(const bContext *C, wmGizmoGroup *g
 
   const rcti *rect_visible = ED_region_visible_rect(region);
 
+  /* Ensure types match so bits are never lost on assignment. */
+  CHECK_TYPE_PAIR(navgroup->state.rv3d.viewlock, rv3d->viewlock);
+
   if ((navgroup->state.rect_visible.xmax == rect_visible->xmax) &&
       (navgroup->state.rect_visible.ymax == rect_visible->ymax) &&
       (navgroup->state.rv3d.is_persp == rv3d->is_persp) &&
@@ -263,9 +268,8 @@ static void WIDGETGROUP_navigate_draw_prepare(const bContext *C, wmGizmoGroup *g
 
   const bool show_navigate = (U.uiflag & USER_SHOW_GIZMO_NAVIGATE) != 0;
   const bool show_rotate_gizmo = (U.mini_axis_type == USER_MINI_AXIS_TYPE_GIZMO);
-  const float icon_size = GIZMO_SIZE;
-  const float icon_offset = (icon_size * 0.52f) * GIZMO_OFFSET_FAC * UI_DPI_FAC;
-  const float icon_offset_mini = icon_size * GIZMO_MINI_OFFSET_FAC * UI_DPI_FAC;
+  const float icon_offset = ((GIZMO_SIZE / 2.0f) + GIZMO_OFFSET) * UI_DPI_FAC;
+  const float icon_offset_mini = (GIZMO_MINI_SIZE + GIZMO_MINI_OFFSET) * UI_DPI_FAC;
   const float co_rotate[2] = {
       rect_visible->xmax - icon_offset,
       rect_visible->ymax - icon_offset,

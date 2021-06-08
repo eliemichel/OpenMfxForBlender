@@ -34,8 +34,6 @@
 
 #include <sys/sysctl.h>
 
-/* clang-format off */
-
 #pragma mark Cocoa window delegate object
 
 @interface CocoaWindowDelegate : NSObject <NSWindowDelegate>
@@ -120,8 +118,8 @@
 
 - (void)windowDidResize:(NSNotification *)notification
 {
-  //if (![[notification object] inLiveResize]) {
-  //Send event only once, at end of resize operation (when user has released mouse button)
+  // if (![[notification object] inLiveResize]) {
+  // Send event only once, at end of resize operation (when user has released mouse button)
   systemCocoa->handleWindowEvent(GHOST_kEventWindowSize, associatedWindow);
   //}
   /* Live resize, send event, gets handled in wm_window.c.
@@ -139,7 +137,7 @@
 
 - (BOOL)windowShouldClose:(id)sender;
 {
-  //Let Blender close the window rather than closing immediately
+  // Let Blender close the window rather than closing immediately
   systemCocoa->handleWindowEvent(GHOST_kEventWindowClose, associatedWindow);
   return false;
 }
@@ -178,7 +176,7 @@
   return (associatedWindow->isDialog() || !systemCocoa->hasDialogWindow());
 }
 
-//The drag'n'drop dragging destination methods
+// The drag'n'drop dragging destination methods
 - (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)sender
 {
   NSPoint mouseLocation = [sender draggingLocation];
@@ -193,7 +191,7 @@
   else
     return NSDragOperationNone;
 
-  associatedWindow->setAcceptDragOperation(TRUE);  //Drag operation is accepted by default
+  associatedWindow->setAcceptDragOperation(TRUE);  // Drag operation is accepted by default
   systemCocoa->handleDraggingEvent(GHOST_kEventDraggingEntered,
                                    m_draggedObjectType,
                                    associatedWindow,
@@ -205,7 +203,7 @@
 
 - (BOOL)wantsPeriodicDraggingUpdates
 {
-  return NO;  //No need to overflow blender event queue. Events shall be sent only on changes
+  return NO;  // No need to overflow blender event queue. Events shall be sent only on changes
 }
 
 - (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender
@@ -288,8 +286,6 @@
 
 #pragma mark initialization / finalization
 
-/* clang-format on */
-
 GHOST_WindowCocoa::GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
                                      const char *title,
                                      GHOST_TInt32 left,
@@ -335,11 +331,6 @@ GHOST_WindowCocoa::GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
                                             styleMask:styleMask
                                               backing:NSBackingStoreBuffered
                                                 defer:NO];
-
-  if (m_window == nil) {
-    [pool drain];
-    return;
-  }
 
   [m_window setSystemAndWindowCocoa:systemCocoa windowCocoa:this];
 
@@ -404,7 +395,7 @@ GHOST_WindowCocoa::GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
   [m_window setAcceptsMouseMovedEvents:YES];
 
   NSView *contentview = [m_window contentView];
-  [contentview setAcceptsTouchEvents:YES];
+  [contentview setAllowedTouchTypes:(NSTouchTypeMaskDirect | NSTouchTypeMaskIndirect)];
 
   [m_window registerForDraggedTypes:[NSArray arrayWithObjects:NSFilenamesPboardType,
                                                               NSStringPboardType,
@@ -869,28 +860,26 @@ GHOST_TSuccess GHOST_WindowCocoa::setProgressBar(float progress)
     NSImage *dockIcon = [[NSImage alloc] initWithSize:NSMakeSize(128, 128)];
 
     [dockIcon lockFocus];
-    NSRect progressBox = {{4, 4}, {120, 16}};
 
     [[NSImage imageNamed:@"NSApplicationIcon"] drawAtPoint:NSZeroPoint
                                                   fromRect:NSZeroRect
                                                  operation:NSCompositingOperationSourceOver
                                                   fraction:1.0];
 
-    // Track & Outline
-    [[NSColor blackColor] setFill];
-    NSRectFill(progressBox);
+    NSRect progressRect = {{8, 8}, {112, 14}};
+    NSBezierPath *progressPath;
 
-    [[NSColor whiteColor] set];
-    NSFrameRect(progressBox);
+    /* Draw white track. */
+    [[[NSColor whiteColor] colorWithAlphaComponent:0.6] setFill];
+    progressPath = [NSBezierPath bezierPathWithRoundedRect:progressRect xRadius:7 yRadius:7];
+    [progressPath fill];
 
-    // Progress fill
-    progressBox = NSInsetRect(progressBox, 1, 1);
-
-    progressBox.size.width = progressBox.size.width * progress;
-    NSGradient *gradient = [[NSGradient alloc] initWithStartingColor:[NSColor darkGrayColor]
-                                                         endingColor:[NSColor lightGrayColor]];
-    [gradient drawInRect:progressBox angle:90];
-    [gradient release];
+    /* Black progress fill. */
+    [[[NSColor blackColor] colorWithAlphaComponent:0.7] setFill];
+    progressRect = NSInsetRect(progressRect, 2, 2);
+    progressRect.size.width *= progress;
+    progressPath = [NSBezierPath bezierPathWithRoundedRect:progressRect xRadius:5 yRadius:5];
+    [progressPath fill];
 
     [dockIcon unlockFocus];
 
@@ -907,8 +896,8 @@ GHOST_TSuccess GHOST_WindowCocoa::setProgressBar(float progress)
 static void postNotification()
 {
   NSUserNotification *notification = [[NSUserNotification alloc] init];
-  notification.title = @"Blender progress notification";
-  notification.informativeText = @"Calculation is finished";
+  notification.title = @"Blender Progress Notification";
+  notification.informativeText = @"Calculation is finished.";
   notification.soundName = NSUserNotificationDefaultSoundName;
   [[NSUserNotificationCenter defaultUserNotificationCenter] deliverNotification:notification];
   [notification release];
@@ -1142,7 +1131,8 @@ GHOST_TSuccess GHOST_WindowCocoa::hasCursorShape(GHOST_TStandardCursor shape)
   return success;
 }
 
-/** Reverse the bits in a GHOST_TUns8
+/* Reverse the bits in a GHOST_TUns8 */
+#if 0
 static GHOST_TUns8 uns8ReverseBits(GHOST_TUns8 ch)
 {
   ch= ((ch >> 1) & 0x55) | ((ch << 1) & 0xAA);
@@ -1150,7 +1140,7 @@ static GHOST_TUns8 uns8ReverseBits(GHOST_TUns8 ch)
   ch= ((ch >> 4) & 0x0F) | ((ch << 4) & 0xF0);
   return ch;
 }
-*/
+#endif
 
 /** Reverse the bits in a GHOST_TUns16 */
 static GHOST_TUns16 uns16ReverseBits(GHOST_TUns16 shrt)

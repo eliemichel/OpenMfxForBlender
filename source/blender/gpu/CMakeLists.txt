@@ -313,6 +313,7 @@ data_to_c_simple(shaders/material/gpu_shader_material_noise.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_normal.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_normal_map.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_object_info.glsl SRC)
+data_to_c_simple(shaders/material/gpu_shader_material_output_aov.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_output_material.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_output_world.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_particle_info.glsl SRC)
@@ -362,9 +363,6 @@ data_to_c_simple(shaders/gpu_shader_gpencil_stroke_vert.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_gpencil_stroke_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_gpencil_stroke_geom.glsl SRC)
 
-data_to_c_simple(shaders/gpu_shader_gpencil_fill_vert.glsl SRC)
-data_to_c_simple(shaders/gpu_shader_gpencil_fill_frag.glsl SRC)
-
 data_to_c_simple(shaders/gpu_shader_cfg_world_clip_lib.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_colorspace_lib.glsl SRC)
 
@@ -382,6 +380,10 @@ if(WITH_IMAGE_DDS)
 endif()
 
 blender_add_lib(bf_gpu "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+if(CXX_WARN_NO_SUGGEST_OVERRIDE)
+  target_compile_options(bf_gpu PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wsuggest-override>)
+endif()
 
 if(WITH_GTESTS)
   if(WITH_OPENGL_DRAW_TESTS)

@@ -57,6 +57,8 @@ static CLG_LogRef LOG = {"gpu.shader"};
 using namespace blender;
 using namespace blender::gpu;
 
+static bool gpu_shader_srgb_uniform_dirty_get();
+
 /* -------------------------------------------------------------------- */
 /** \name Debug functions
  * \{ */
@@ -106,7 +108,7 @@ void Shader::print_log(Span<const char *> sources, char *log, const char *stage,
     error_line = error_char = -1;
     if (log_line[0] >= '0' && log_line[0] <= '9') {
       error_line = (int)strtol(log_line, &error_line_number_end, 10);
-      /* Try to fetch the error caracter (not always available). */
+      /* Try to fetch the error character (not always available). */
       if (ELEM(error_line_number_end[0], '(', ':') && error_line_number_end[1] != ' ') {
         error_char = (int)strtol(error_line_number_end + 1, &log_line, 10);
       }
@@ -166,6 +168,11 @@ void Shader::print_log(Span<const char *> sources, char *log, const char *stage,
           found_line_id = true;
           break;
         }
+/* TODO(fclem) Make this an option to display N lines before error. */
+#if 0 /* Uncomment to print shader file up to the error line to have more context. */
+        BLI_dynstr_appendf(dynstr, "%5d | ", src_line_index);
+        BLI_dynstr_nappend(dynstr, src_line, (src_line_end + 1) - src_line);
+#endif
         /* Continue to next line. */
         src_line = src_line_end + 1;
         src_line_index++;
@@ -291,7 +298,7 @@ GPUShader *GPU_shader_create_ex(const char *vertcode,
                                 const char *shname)
 {
   /* At least a vertex shader and a fragment shader are required. */
-  BLI_assert((fragcode != NULL) && (vertcode != NULL));
+  BLI_assert((fragcode != nullptr) && (vertcode != nullptr));
 
   Shader *shader = GPUBackend::get()->shader_alloc(shname);
 
@@ -342,14 +349,14 @@ GPUShader *GPU_shader_create_ex(const char *vertcode,
     shader->geometry_shader_from_glsl(sources);
   }
 
-  if (tf_names != NULL && tf_count > 0) {
+  if (tf_names != nullptr && tf_count > 0) {
     BLI_assert(tf_type != GPU_SHADER_TFB_NONE);
     shader->transform_feedback_names_set(Span<const char *>(tf_names, tf_count), tf_type);
   }
 
   if (!shader->finalize()) {
     delete shader;
-    return NULL;
+    return nullptr;
   };
 
   return wrap(shader);
@@ -374,7 +381,7 @@ GPUShader *GPU_shader_create(const char *vertcode,
                              const char *shname)
 {
   return GPU_shader_create_ex(
-      vertcode, fragcode, geomcode, libcode, defines, GPU_SHADER_TFB_NONE, NULL, 0, shname);
+      vertcode, fragcode, geomcode, libcode, defines, GPU_SHADER_TFB_NONE, nullptr, 0, shname);
 }
 
 GPUShader *GPU_shader_create_from_python(const char *vertcode,
@@ -383,17 +390,24 @@ GPUShader *GPU_shader_create_from_python(const char *vertcode,
                                          const char *libcode,
                                          const char *defines)
 {
-  char *libcodecat = NULL;
+  char *libcodecat = nullptr;
 
-  if (libcode == NULL) {
+  if (libcode == nullptr) {
     libcode = datatoc_gpu_shader_colorspace_lib_glsl;
   }
   else {
     libcode = libcodecat = BLI_strdupcat(libcode, datatoc_gpu_shader_colorspace_lib_glsl);
   }
 
-  GPUShader *sh = GPU_shader_create_ex(
-      vertcode, fragcode, geomcode, libcode, defines, GPU_SHADER_TFB_NONE, NULL, 0, "pyGPUShader");
+  GPUShader *sh = GPU_shader_create_ex(vertcode,
+                                       fragcode,
+                                       geomcode,
+                                       libcode,
+                                       defines,
+                                       GPU_SHADER_TFB_NONE,
+                                       nullptr,
+                                       0,
+                                       "pyGPUShader");
 
   MEM_SAFE_FREE(libcodecat);
   return sh;
@@ -402,9 +416,9 @@ GPUShader *GPU_shader_create_from_python(const char *vertcode,
 static const char *string_join_array_maybe_alloc(const char **str_arr, bool *r_is_alloc)
 {
   bool is_alloc = false;
-  if (str_arr == NULL) {
+  if (str_arr == nullptr) {
     *r_is_alloc = false;
-    return NULL;
+    return nullptr;
   }
   /* Skip empty strings (avoid alloc if we can). */
   while (str_arr[0] && str_arr[0][0] == '\0') {
@@ -450,7 +464,7 @@ struct GPUShader *GPU_shader_create_from_arrays_impl(
   struct {
     const char *str;
     bool is_alloc;
-  } str_dst[4] = {{0}};
+  } str_dst[4] = {{nullptr}};
   const char **str_src[4] = {params->vert, params->frag, params->geom, params->defs};
 
   for (int i = 0; i < ARRAY_SIZE(str_src); i++) {
@@ -461,11 +475,11 @@ struct GPUShader *GPU_shader_create_from_arrays_impl(
   BLI_snprintf(name, sizeof(name), "%s_%d", func, line);
 
   GPUShader *sh = GPU_shader_create(
-      str_dst[0].str, str_dst[1].str, str_dst[2].str, NULL, str_dst[3].str, name);
+      str_dst[0].str, str_dst[1].str, str_dst[2].str, nullptr, str_dst[3].str, name);
 
-  for (int i = 0; i < ARRAY_SIZE(str_dst); i++) {
-    if (str_dst[i].is_alloc) {
-      MEM_freeN((void *)str_dst[i].str);
+  for (auto &i : str_dst) {
+    if (i.is_alloc) {
+      MEM_freeN((void *)i.str);
     }
   }
   return sh;
@@ -489,9 +503,13 @@ void GPU_shader_bind(GPUShader *gpu_shader)
     GPU_matrix_bind(gpu_shader);
     GPU_shader_set_srgb_uniform(gpu_shader);
   }
-
-  if (GPU_matrix_dirty_get()) {
-    GPU_matrix_bind(gpu_shader);
+  else {
+    if (gpu_shader_srgb_uniform_dirty_get()) {
+      GPU_shader_set_srgb_uniform(gpu_shader);
+    }
+    if (GPU_matrix_dirty_get()) {
+      GPU_matrix_bind(gpu_shader);
+    }
   }
 }
 
@@ -502,7 +520,7 @@ void GPU_shader_unbind(void)
   if (ctx->shader) {
     ctx->shader->unbind();
   }
-  ctx->shader = NULL;
+  ctx->shader = nullptr;
 #endif
 }
 
@@ -584,11 +602,10 @@ int GPU_shader_get_attribute(GPUShader *shader, const char *name)
 /** \name Getters
  * \{ */
 
-/* Clement : Temp */
-int GPU_shader_get_program(GPUShader *UNUSED(shader))
+/* DEPRECATED: Kept only because of BGL API */
+int GPU_shader_get_program(GPUShader *shader)
 {
-  /* TODO fixme */
-  return (int)0;
+  return unwrap(shader)->program_handle_get();
 }
 
 /** \} */
@@ -704,6 +721,12 @@ void GPU_shader_uniform_4fv_array(GPUShader *sh, const char *name, int len, cons
  * \{ */
 
 static int g_shader_builtin_srgb_transform = 0;
+static bool g_shader_builtin_srgb_is_dirty = false;
+
+static bool gpu_shader_srgb_uniform_dirty_get(void)
+{
+  return g_shader_builtin_srgb_is_dirty;
+}
 
 void GPU_shader_set_srgb_uniform(GPUShader *shader)
 {
@@ -711,11 +734,15 @@ void GPU_shader_set_srgb_uniform(GPUShader *shader)
   if (loc != -1) {
     GPU_shader_uniform_vector_int(shader, loc, 1, 1, &g_shader_builtin_srgb_transform);
   }
+  g_shader_builtin_srgb_is_dirty = false;
 }
 
 void GPU_shader_set_framebuffer_srgb_target(int use_srgb_to_linear)
 {
-  g_shader_builtin_srgb_transform = use_srgb_to_linear;
+  if (g_shader_builtin_srgb_transform != use_srgb_to_linear) {
+    g_shader_builtin_srgb_transform = use_srgb_to_linear;
+    g_shader_builtin_srgb_is_dirty = true;
+  }
 }
 
 /** \} */

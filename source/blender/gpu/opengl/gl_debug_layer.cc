@@ -30,7 +30,7 @@
 
 #include "gl_debug.hh"
 
-typedef void *GPUvoidptr;
+using GPUvoidptr = void *;
 
 #define GPUvoidptr_set void *ret =
 #define GPUvoidptr_ret return ret
@@ -42,7 +42,7 @@ typedef void *GPUvoidptr;
 #define void_ret
 
 #define DEBUG_FUNC_DECLARE(pfn, rtn_type, fn, ...) \
-  pfn real_##fn; \
+  static pfn real_##fn; \
   static rtn_type GLAPIENTRY debug_##fn(ARG_LIST(__VA_ARGS__)) \
   { \
     debug::check_gl_error("generated before " #fn); \
@@ -53,8 +53,8 @@ typedef void *GPUvoidptr;
 
 namespace blender::gpu::debug {
 
-/* List of wrapped functions. We dont have to support all of them.
- * Some functions might be declared as extern in GLEW. We cannot override them in this case.
+/* List of wrapped functions. We don't have to support all of them.
+ * Some functions might be declared as `extern` in GLEW. We cannot override them in this case.
  * Keep the list in alphabetical order. */
 
 /* Avoid very long declarations. */
@@ -105,10 +105,12 @@ DEBUG_FUNC_DECLARE(PFNGLUSEPROGRAMPROC, void, glUseProgram, GLuint, program);
 
 #undef DEBUG_FUNC_DECLARE
 
-/* Init a fallback layer (to KHR_debug) that covers only some functions.
- * We override the functions pointers by our own implementation that just checks glGetError.
- * Some additional functions (not overridable) are covered inside the header using wrappers. */
-void init_debug_layer(void)
+/**
+ * Initialize a fallback layer (to KHR_debug) that covers only some functions.
+ * We override the functions pointers by our own implementation that just checks #glGetError.
+ * Some additional functions (not overridable) are covered inside the header using wrappers.
+ */
+void init_debug_layer()
 {
 #define DEBUG_WRAP(function) \
   do { \

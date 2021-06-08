@@ -76,6 +76,16 @@ template<
      */
     typename Allocator = GuardedAllocator>
 class Vector {
+ public:
+  using value_type = T;
+  using pointer = T *;
+  using const_pointer = const T *;
+  using reference = T &;
+  using const_reference = const T &;
+  using iterator = T *;
+  using const_iterator = const T *;
+  using size_type = int64_t;
+
  private:
   /**
    * Use pointers instead of storing the size explicitly. This reduces the number of instructions
@@ -315,13 +325,13 @@ class Vector {
     return MutableSpan<T>(begin_, this->size());
   }
 
-  template<typename U, typename std::enable_if_t<is_convertible_pointer_v<T, U>> * = nullptr>
+  template<typename U, typename std::enable_if_t<is_span_convertible_pointer_v<T, U>> * = nullptr>
   operator Span<U>() const
   {
     return Span<U>(begin_, this->size());
   }
 
-  template<typename U, typename std::enable_if_t<is_convertible_pointer_v<T, U>> * = nullptr>
+  template<typename U, typename std::enable_if_t<is_span_convertible_pointer_v<T, U>> * = nullptr>
   operator MutableSpan<U>()
   {
     return MutableSpan<U>(begin_, this->size());
@@ -877,6 +887,16 @@ class Vector {
   IndexRange index_range() const
   {
     return IndexRange(this->size());
+  }
+
+  friend bool operator==(const Vector &a, const Vector &b)
+  {
+    return a.as_span() == b.as_span();
+  }
+
+  friend bool operator!=(const Vector &a, const Vector &b)
+  {
+    return !(a == b);
   }
 
   /**

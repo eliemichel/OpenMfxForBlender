@@ -34,8 +34,11 @@ extern "C" {
 #  define USE_GEOM_SHADER_WORKAROUND 0
 #endif
 
-/* Needed for eSpaceImage_UVDT_Stretch */
+/* Needed for eSpaceImage_UVDT_Stretch and eMaskOverlayMode */
+#include "DNA_mask_types.h"
 #include "DNA_space_types.h"
+/* Forward declarations */
+struct ImBuf;
 
 typedef struct OVERLAY_FramebufferList {
   struct GPUFrameBuffer *overlay_default_fb;
@@ -77,6 +80,7 @@ typedef struct OVERLAY_PassList {
   DRWPass *edit_curve_handle_ps;
   DRWPass *edit_gpencil_ps;
   DRWPass *edit_gpencil_gizmos_ps;
+  DRWPass *edit_gpencil_curve_ps;
   DRWPass *edit_lattice_ps;
   DRWPass *edit_mesh_depth_ps[2];
   DRWPass *edit_mesh_verts_ps[2];
@@ -94,6 +98,8 @@ typedef struct OVERLAY_PassList {
   DRWPass *edit_uv_faces_ps;
   DRWPass *edit_uv_stretching_ps;
   DRWPass *edit_uv_tiled_image_borders_ps;
+  DRWPass *edit_uv_stencil_ps;
+  DRWPass *edit_uv_mask_ps;
   DRWPass *extra_ps[2];
   DRWPass *extra_blend_ps;
   DRWPass *extra_centers_ps;
@@ -103,11 +109,13 @@ typedef struct OVERLAY_PassList {
   DRWPass *fade_ps[2];
   DRWPass *grid_ps;
   DRWPass *image_background_ps;
+  DRWPass *image_background_scene_ps;
   DRWPass *image_empties_ps;
   DRWPass *image_empties_back_ps;
   DRWPass *image_empties_blend_ps;
   DRWPass *image_empties_front_ps;
   DRWPass *image_foreground_ps;
+  DRWPass *image_foreground_scene_ps;
   DRWPass *metaball_ps[2];
   DRWPass *motion_paths_ps;
   DRWPass *outlines_prepass_ps;
@@ -138,6 +146,7 @@ typedef struct OVERLAY_ShadingData {
   int zneg_flag;
   /** Wireframe */
   float wire_step_param;
+  float wire_opacity;
   /** Edit Curve */
   float edit_curve_normal_length;
   /** Edit Mesh */
@@ -249,6 +258,8 @@ typedef struct OVERLAY_PrivateData {
   DRWShadingGroup *edit_lattice_wires_grp;
   DRWShadingGroup *edit_gpencil_points_grp;
   DRWShadingGroup *edit_gpencil_wires_grp;
+  DRWShadingGroup *edit_gpencil_curve_handle_grp;
+  DRWShadingGroup *edit_gpencil_curve_points_grp;
   DRWShadingGroup *edit_mesh_depth_grp[2];
   DRWShadingGroup *edit_mesh_faces_grp[2];
   DRWShadingGroup *edit_mesh_faces_cage_grp[2];
@@ -312,7 +323,7 @@ typedef struct OVERLAY_PrivateData {
 
   View3DOverlay overlay;
   enum eContextObjectMode ctx_mode;
-  bool is_image_editor;
+  char space_type;
   bool clear_in_front;
   bool use_in_front;
   bool wireframe_mode;
@@ -357,23 +368,38 @@ typedef struct OVERLAY_PrivateData {
     bool do_uv_stretching_overlay;
     bool do_tiled_image_overlay;
     bool do_tiled_image_border_overlay;
+    bool do_stencil_overlay;
+    bool do_mask_overlay;
 
     bool do_faces;
     bool do_face_dots;
 
     float uv_opacity;
+
+    int image_size[2];
+    float image_aspect[2];
+
     /* edge drawing */
     OVERLAY_UVLineStyle line_style;
     float dash_length;
     int do_smooth_wire;
 
     /* stretching overlay */
-    float aspect[2];
+    float uv_aspect[2];
     eSpaceImage_UVDT_Stretch draw_type;
     ListBase totals;
     float total_area_ratio;
     float total_area_ratio_inv;
 
+    /* stencil overlay */
+    struct Image *stencil_image;
+    struct ImBuf *stencil_ibuf;
+    void *stencil_lock;
+
+    /* mask overlay */
+    Mask *mask;
+    eMaskOverlayMode mask_overlay_mode;
+    GPUTexture *mask_texture;
   } edit_uv;
   struct {
     bool transparent;
@@ -529,7 +555,7 @@ void OVERLAY_edit_particle_draw(OVERLAY_Data *vedata);
 
 void OVERLAY_edit_uv_init(OVERLAY_Data *vedata);
 void OVERLAY_edit_uv_cache_init(OVERLAY_Data *vedata);
-void OVERLAY_edit_uv_cache_populate(OVERLAY_Data *vedata, Object *ob);
+void OVERLAY_edit_uv_cache_finish(OVERLAY_Data *vedata);
 void OVERLAY_edit_uv_draw(OVERLAY_Data *vedata);
 
 void OVERLAY_extra_cache_init(OVERLAY_Data *vedata);
@@ -592,6 +618,7 @@ void OVERLAY_image_empty_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_image_cache_finish(OVERLAY_Data *vedata);
 void OVERLAY_image_draw(OVERLAY_Data *vedata);
 void OVERLAY_image_background_draw(OVERLAY_Data *vedata);
+void OVERLAY_image_scene_background_draw(OVERLAY_Data *vedata);
 void OVERLAY_image_in_front_draw(OVERLAY_Data *vedata);
 
 void OVERLAY_metaball_cache_init(OVERLAY_Data *vedata);
@@ -673,6 +700,8 @@ GPUShader *OVERLAY_shader_edit_uv_verts_get(void);
 GPUShader *OVERLAY_shader_edit_uv_stretching_area_get(void);
 GPUShader *OVERLAY_shader_edit_uv_stretching_angle_get(void);
 GPUShader *OVERLAY_shader_edit_uv_tiled_image_borders_get(void);
+GPUShader *OVERLAY_shader_edit_uv_stencil_image(void);
+GPUShader *OVERLAY_shader_edit_uv_mask_image(void);
 GPUShader *OVERLAY_shader_extra(bool is_select);
 GPUShader *OVERLAY_shader_extra_groundline(void);
 GPUShader *OVERLAY_shader_extra_wire(bool use_object, bool is_select);

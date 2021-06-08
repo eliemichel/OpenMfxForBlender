@@ -949,7 +949,7 @@ void BKE_mesh_to_pointcloud(Main *bmain, Depsgraph *depsgraph, Scene *UNUSED(sce
   BKE_object_free_derived_caches(ob);
 }
 
-void BKE_mesh_from_pointcloud(PointCloud *pointcloud, Mesh *me)
+void BKE_mesh_from_pointcloud(const PointCloud *pointcloud, Mesh *me)
 {
   BLI_assert(pointcloud != NULL);
 
@@ -978,6 +978,14 @@ void BKE_mesh_from_pointcloud(PointCloud *pointcloud, Mesh *me)
 
   /* Delete Position attribute since it is now in vertex coordinates. */
   CustomData_free_layer(&me->vdata, CD_PROP_FLOAT3, me->totvert, layer_idx);
+}
+
+void BKE_mesh_edges_set_draw_render(Mesh *mesh)
+{
+  MEdge *med = mesh->medge;
+  for (int i = 0; i < mesh->totedge; i++, med++) {
+    med->flag |= ME_EDGEDRAW | ME_EDGERENDER;
+  }
 }
 
 void BKE_pointcloud_to_mesh(Main *bmain, Depsgraph *depsgraph, Scene *UNUSED(scene), Object *ob)
@@ -1057,6 +1065,7 @@ static void curve_to_mesh_eval_ensure(Object *object)
   Curve *curve = (Curve *)object->data;
   Curve remapped_curve = *curve;
   Object remapped_object = *object;
+  remapped_object.runtime.bb = NULL;
   remapped_object.data = &remapped_curve;
 
   /* Clear all modifiers for the bevel object.
@@ -1069,6 +1078,7 @@ static void curve_to_mesh_eval_ensure(Object *object)
   Object bevel_object = {{NULL}};
   if (remapped_curve.bevobj != NULL) {
     bevel_object = *remapped_curve.bevobj;
+    bevel_object.runtime.bb = NULL;
     BLI_listbase_clear(&bevel_object.modifiers);
     remapped_curve.bevobj = &bevel_object;
   }
@@ -1077,6 +1087,7 @@ static void curve_to_mesh_eval_ensure(Object *object)
   Object taper_object = {{NULL}};
   if (remapped_curve.taperobj != NULL) {
     taper_object = *remapped_curve.taperobj;
+    taper_object.runtime.bb = NULL;
     BLI_listbase_clear(&taper_object.modifiers);
     remapped_curve.taperobj = &taper_object;
   }
@@ -1098,6 +1109,10 @@ static void curve_to_mesh_eval_ensure(Object *object)
   if (mesh_eval != NULL) {
     BKE_object_eval_assign_data(&remapped_object, &mesh_eval->id, true);
   }
+
+  MEM_SAFE_FREE(remapped_object.runtime.bb);
+  MEM_SAFE_FREE(taper_object.runtime.bb);
+  MEM_SAFE_FREE(bevel_object.runtime.bb);
 
   BKE_object_free_curve_cache(&bevel_object);
   BKE_object_free_curve_cache(&taper_object);
@@ -1184,7 +1199,9 @@ static Mesh *mesh_new_from_mesh(Object *object, Mesh *mesh)
   return mesh_result;
 }
 
-static Mesh *mesh_new_from_mesh_object_with_layers(Depsgraph *depsgraph, Object *object)
+static Mesh *mesh_new_from_mesh_object_with_layers(Depsgraph *depsgraph,
+                                                   Object *object,
+                                                   const bool preserve_origindex)
 {
   if (DEG_is_original_id(&object->id)) {
     return mesh_new_from_mesh(object, (Mesh *)object->data);
@@ -1201,16 +1218,23 @@ static Mesh *mesh_new_from_mesh_object_with_layers(Depsgraph *depsgraph, Object 
 
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
   CustomData_MeshMasks mask = CD_MASK_MESH;
+  if (preserve_origindex) {
+    mask.vmask |= CD_MASK_ORIGINDEX;
+    mask.emask |= CD_MASK_ORIGINDEX;
+    mask.lmask |= CD_MASK_ORIGINDEX;
+    mask.pmask |= CD_MASK_ORIGINDEX;
+  }
   Mesh *result = mesh_create_eval_final(depsgraph, scene, &object_for_eval, &mask);
   return result;
 }
 
 static Mesh *mesh_new_from_mesh_object(Depsgraph *depsgraph,
                                        Object *object,
-                                       bool preserve_all_data_layers)
+                                       const bool preserve_all_data_layers,
+                                       const bool preserve_origindex)
 {
-  if (preserve_all_data_layers) {
-    return mesh_new_from_mesh_object_with_layers(depsgraph, object);
+  if (preserve_all_data_layers || preserve_origindex) {
+    return mesh_new_from_mesh_object_with_layers(depsgraph, object, preserve_origindex);
   }
   Mesh *mesh_input = object->data;
   /* If we are in edit mode, use evaluated mesh from edit structure, matching to what
@@ -1221,7 +1245,10 @@ static Mesh *mesh_new_from_mesh_object(Depsgraph *depsgraph,
   return mesh_new_from_mesh(object, mesh_input);
 }
 
-Mesh *BKE_mesh_new_from_object(Depsgraph *depsgraph, Object *object, bool preserve_all_data_layers)
+Mesh *BKE_mesh_new_from_object(Depsgraph *depsgraph,
+                               Object *object,
+                               const bool preserve_all_data_layers,
+                               const bool preserve_origindex)
 {
   Mesh *new_mesh = NULL;
   switch (object->type) {
@@ -1234,7 +1261,8 @@ Mesh *BKE_mesh_new_from_object(Depsgraph *depsgraph, Object *object, bool preser
       new_mesh = mesh_new_from_mball_object(object);
       break;
     case OB_MESH:
-      new_mesh = mesh_new_from_mesh_object(depsgraph, object, preserve_all_data_layers);
+      new_mesh = mesh_new_from_mesh_object(
+          depsgraph, object, preserve_all_data_layers, preserve_origindex);
       break;
     default:
       /* Object does not have geometry data. */
@@ -1299,7 +1327,7 @@ Mesh *BKE_mesh_new_from_object_to_bmain(Main *bmain,
 {
   BLI_assert(ELEM(object->type, OB_FONT, OB_CURVE, OB_SURF, OB_MBALL, OB_MESH));
 
-  Mesh *mesh = BKE_mesh_new_from_object(depsgraph, object, preserve_all_data_layers);
+  Mesh *mesh = BKE_mesh_new_from_object(depsgraph, object, preserve_all_data_layers, false);
   if (mesh == NULL) {
     /* Unable to convert the object to a mesh, return an empty one. */
     Mesh *mesh_in_bmain = BKE_mesh_add(bmain, ((ID *)object->data)->name + 2);
@@ -1399,7 +1427,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
                                            Scene *scene,
                                            Object *ob_eval,
                                            ModifierData *md_eval,
-                                           int build_shapekey_layers)
+                                           const bool build_shapekey_layers)
 {
   Mesh *me = ob_eval->runtime.data_orig ? ob_eval->runtime.data_orig : ob_eval->data;
   const ModifierTypeInfo *mti = BKE_modifier_get_info(md_eval->type);
@@ -1452,7 +1480,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
   return result;
 }
 
-/* This is a Mesh-based copy of the same function in DerivedMesh.c */
+/* This is a Mesh-based copy of the same function in DerivedMesh.cc */
 static void shapekey_layers_to_keyblocks(Mesh *mesh_src, Mesh *mesh_dst, int actshape_uid)
 {
   KeyBlock *kb;
@@ -1626,6 +1654,10 @@ void BKE_mesh_nomain_to_mesh(Mesh *mesh_src,
     if (totloop == mesh_dst->totloop) {
       MDisps *mdisps = CustomData_get_layer(&mesh_dst->ldata, CD_MDISPS);
       CustomData_add_layer(&tmp.ldata, CD_MDISPS, alloctype, mdisps, totloop);
+      if (alloctype == CD_ASSIGN) {
+        /* Assign NULL to prevent double-free. */
+        CustomData_set_layer(&mesh_dst->ldata, CD_MDISPS, NULL);
+      }
     }
   }
 
@@ -1656,6 +1688,11 @@ void BKE_mesh_nomain_to_mesh(Mesh *mesh_src,
   MEM_SAFE_FREE(tmp.mselect);
   tmp.totselect = 0;
   tmp.texflag &= ~ME_AUTOSPACE_EVALUATED;
+
+  /* Clear any run-time data.
+   * Even though this mesh wont typically have run-time data, the Python API can for e.g.
+   * create loop-triangle cache here, which is confusing when left in the mesh, see: T81136. */
+  BKE_mesh_runtime_clear_geometry(&tmp);
 
   /* skip the listbase */
   MEMCPY_STRUCT_AFTER(mesh_dst, &tmp, id.prev);

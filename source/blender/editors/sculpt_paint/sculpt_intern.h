@@ -39,7 +39,6 @@
 struct AutomaskingCache;
 struct KeyBlock;
 struct Object;
-struct SculptPoseIKChainSegment;
 struct SculptUndoNode;
 struct bContext;
 
@@ -170,6 +169,10 @@ int SCULPT_active_vertex_get(SculptSession *ss);
 const float *SCULPT_active_vertex_co_get(SculptSession *ss);
 void SCULPT_active_vertex_normal_get(SculptSession *ss, float normal[3]);
 
+/* Returns PBVH deformed vertices array if shape keys or deform modifiers are used, otherwise
+ * returns mesh original vertices array. */
+struct MVert *SCULPT_mesh_deformed_mverts_get(SculptSession *ss);
+
 /* Fake Neighbors */
 
 #define FAKE_NEIGHBOR_NONE -1
@@ -183,6 +186,8 @@ void SCULPT_fake_neighbors_free(struct Object *ob);
 void SCULPT_boundary_info_ensure(Object *object);
 /* Boundary Info needs to be initialized in order to use this function. */
 bool SCULPT_vertex_is_boundary(const SculptSession *ss, const int index);
+
+void SCULPT_connected_components_ensure(Object *ob);
 
 /* Sculpt Visibility API */
 
@@ -297,6 +302,7 @@ void SCULPT_floodfill_add_initial_with_symmetry(struct Sculpt *sd,
                                                 int index,
                                                 float radius);
 void SCULPT_floodfill_add_initial(SculptFloodFill *flood, int index);
+void SCULPT_floodfill_add_and_skip_initial(SculptFloodFill *flood, int index);
 void SCULPT_floodfill_execute(
     struct SculptSession *ss,
     SculptFloodFill *flood,
@@ -357,6 +363,21 @@ float *SCULPT_boundary_automasking_init(Object *ob,
                                         eBoundaryAutomaskMode mode,
                                         int propagation_steps,
                                         float *automask_factor);
+
+/* Geodesic distances. */
+
+/* Returns an array indexed by vertex index containing the geodesic distance to the closest vertex
+in the initial vertex set. The caller is responsible for freeing the array.
+Geodesic distances will only work when used with PBVH_FACES, for other types of PBVH it will
+fallback to euclidean distances to one of the initial vertices in the set. */
+float *SCULPT_geodesic_distances_create(struct Object *ob,
+                                        struct GSet *initial_vertices,
+                                        const float limit_radius);
+float *SCULPT_geodesic_from_vertex_and_symm(struct Sculpt *sd,
+                                            struct Object *ob,
+                                            const int vertex,
+                                            const float limit_radius);
+float *SCULPT_geodesic_from_vertex(Object *ob, const int vertex, const float limit_radius);
 
 /* Filters. */
 void SCULPT_filter_cache_init(struct bContext *C, Object *ob, Sculpt *sd, const int undo_type);
@@ -419,6 +440,10 @@ void SCULPT_cloth_plane_falloff_preview_draw(const uint gpuattr,
                                              const float outline_col[3],
                                              float outline_alpha);
 
+PBVHNode **SCULPT_cloth_brush_affected_nodes_gather(SculptSession *ss,
+                                                    Brush *brush,
+                                                    int *r_totnode);
+
 BLI_INLINE bool SCULPT_is_cloth_deform_brush(const Brush *brush)
 {
   return (brush->sculpt_tool == SCULPT_TOOL_CLOTH && ELEM(brush->cloth_deform_type,
@@ -428,6 +453,38 @@ BLI_INLINE bool SCULPT_is_cloth_deform_brush(const Brush *brush)
           * constraints instead of applying forces. */
          (brush->sculpt_tool != SCULPT_TOOL_CLOTH &&
           brush->deform_target == BRUSH_DEFORM_TARGET_CLOTH_SIM);
+}
+
+BLI_INLINE bool SCULPT_tool_needs_all_pbvh_nodes(const Brush *brush)
+{
+  if (brush->sculpt_tool == SCULPT_TOOL_ELASTIC_DEFORM) {
+    /* Elastic deformations in any brush need all nodes to avoid artifacts as the effect
+     * of the Kelvinlet is not constrained by the radius. */
+    return true;
+  }
+
+  if (brush->sculpt_tool == SCULPT_TOOL_POSE) {
+    /* Pose needs all nodes because it applies all symmetry iterations at the same time
+     * and the IK chain can grow to any area of the model. */
+    /* TODO: This can be optimized by filtering the nodes after calculating the chain. */
+    return true;
+  }
+
+  if (brush->sculpt_tool == SCULPT_TOOL_BOUNDARY) {
+    /* Boundary needs all nodes because it is not possible to know where the boundary
+     * deformation is going to be propagated before calculating it. */
+    /* TODO: after calculating the boundary info in the first iteration, it should be
+     * possible to get the nodes that have vertices included in any boundary deformation
+     * and cache them. */
+    return true;
+  }
+
+  if (brush->sculpt_tool == SCULPT_TOOL_SNAKE_HOOK &&
+      brush->snake_hook_deform_type == BRUSH_SNAKE_HOOK_DEFORM_ELASTIC) {
+    /* Snake hook in elastic deform type has same requirements as the elastic deform tool. */
+    return true;
+  }
+  return false;
 }
 
 /* Pose Brush. */
@@ -472,7 +529,7 @@ void SCULPT_boundary_edges_preview_draw(const uint gpuattr,
                                         const float outline_alpha);
 void SCULPT_boundary_pivot_line_preview_draw(const uint gpuattr, struct SculptSession *ss);
 
-/* Multiplane Scrape Brush. */
+/* Multi-plane Scrape Brush. */
 void SCULPT_do_multiplane_scrape_brush(Sculpt *sd, Object *ob, PBVHNode **nodes, int totnode);
 void SCULPT_multiplane_scrape_preview_draw(const uint gpuattr,
                                            Brush *brush,
@@ -735,6 +792,9 @@ typedef struct SculptThreadedTaskData {
   int face_set;
   int filter_undo_type;
 
+  int mask_init_mode;
+  int mask_init_seed;
+
   ThreadMutex mutex;
 
 } SculptThreadedTaskData;
@@ -887,6 +947,10 @@ typedef struct StrokeCache {
 
   float (*prev_colors)[4];
 
+  /* Multires Displacement Smear. */
+  float (*prev_displacement)[3];
+  float (*limit_surface_co)[3];
+
   /* The rest is temporary storage that isn't saved as a property */
 
   bool first_time; /* Beginning of stroke may do some things special */
@@ -1011,9 +1075,166 @@ typedef enum SculptFilterOrientation {
   SCULPT_FILTER_ORIENTATION_VIEW = 2,
 } SculptFilterOrientation;
 
+/* Defines how transform tools are going to apply its displacement. */
+typedef enum SculptTransformDisplacementMode {
+  /* Displaces the elements from their original coordinates. */
+  SCULPT_TRANSFORM_DISPLACEMENT_ORIGINAL = 0,
+  /* Displaces the elements incrementally from their previous position. */
+  SCULPT_TRANSFORM_DISPLACEMENT_INCREMENTAL = 1,
+} SculptTransformDisplacementMode;
+
 void SCULPT_filter_to_orientation_space(float r_v[3], struct FilterCache *filter_cache);
 void SCULPT_filter_to_object_space(float r_v[3], struct FilterCache *filter_cache);
 void SCULPT_filter_zero_disabled_axis_components(float r_v[3], struct FilterCache *filter_cache);
+
+/* Sculpt Expand. */
+typedef enum eSculptExpandFalloffType {
+  SCULPT_EXPAND_FALLOFF_GEODESIC,
+  SCULPT_EXPAND_FALLOFF_TOPOLOGY,
+  SCULPT_EXPAND_FALLOFF_TOPOLOGY_DIAGONALS,
+  SCULPT_EXPAND_FALLOFF_NORMALS,
+  SCULPT_EXPAND_FALLOFF_SPHERICAL,
+  SCULPT_EXPAND_FALLOFF_BOUNDARY_TOPOLOGY,
+  SCULPT_EXPAND_FALLOFF_BOUNDARY_FACE_SET,
+  SCULPT_EXPAND_FALLOFF_ACTIVE_FACE_SET,
+} eSculptExpandFalloffType;
+
+typedef enum eSculptExpandTargetType {
+  SCULPT_EXPAND_TARGET_MASK,
+  SCULPT_EXPAND_TARGET_FACE_SETS,
+  SCULPT_EXPAND_TARGET_COLORS,
+} eSculptExpandTargetType;
+
+typedef enum eSculptExpandRecursionType {
+  SCULPT_EXPAND_RECURSION_TOPOLOGY,
+  SCULPT_EXPAND_RECURSION_GEODESICS,
+} eSculptExpandRecursionType;
+
+#define EXPAND_SYMM_AREAS 8
+
+typedef struct ExpandCache {
+  /* Target data elements that the expand operation will affect. */
+  eSculptExpandTargetType target;
+
+  /* Falloff data. */
+  eSculptExpandFalloffType falloff_type;
+
+  /* Indexed by vertex index, precalculated falloff value of that vertex (without any falloff
+   * editing modification applied). */
+  float *vert_falloff;
+  /* Max falloff value in *vert_falloff. */
+  float max_vert_falloff;
+
+  /* Indexed by base mesh poly index, precalculated falloff value of that face. These values are
+   * calculated from the per vertex falloff (*vert_falloff) when needed. */
+  float *face_falloff;
+  float max_face_falloff;
+
+  /* Falloff value of the active element (vertex or base mesh face) that Expand will expand to. */
+  float active_falloff;
+
+  /* When set to true, expand skips all falloff computations and considers all elements as enabled.
+   */
+  bool all_enabled;
+
+  /* Initial mouse and cursor data from where the current falloff started. This data can be changed
+   * during the execution of Expand by moving the origin. */
+  float initial_mouse_move[2];
+  float initial_mouse[2];
+  int initial_active_vertex;
+  int initial_active_face_set;
+
+  /* Maximum number of vertices allowed in the SculptSession for previewing the falloff using
+   * geodesic distances. */
+  int max_geodesic_move_preview;
+
+  /* Original falloff type before starting the move operation. */
+  eSculptExpandFalloffType move_original_falloff_type;
+  /* Falloff type using when moving the origin for preview. */
+  eSculptExpandFalloffType move_preview_falloff_type;
+
+  /* Face set ID that is going to be used when creating a new Face Set. */
+  int next_face_set;
+
+  /* Face Set ID of the Face set selected for editing. */
+  int update_face_set;
+
+  /* Mouse position since the last time the origin was moved. Used for reference when moving the
+   * initial position of Expand. */
+  float original_mouse_move[2];
+
+  /* Active components checks. */
+  /* Indexed by symmetry pass index, contains the connected component ID found in
+   * SculptSession->vertex_info.connected_component. Other connected components not found in this
+   * array will be ignored by Expand. */
+  int active_connected_components[EXPAND_SYMM_AREAS];
+
+  /* Snapping. */
+  /* GSet containing all Face Sets IDs that Expand will use to snap the new data. */
+  GSet *snap_enabled_face_sets;
+
+  /* Texture distortion data. */
+  Brush *brush;
+  struct Scene *scene;
+  struct MTex *mtex;
+
+  /* Controls how much texture distortion will be applied to the current falloff */
+  float texture_distortion_strength;
+
+  /* Cached PBVH nodes. This allows to skip gathering all nodes from the PBVH each time expand
+   * needs to update the state of the elements. */
+  PBVHNode **nodes;
+  int totnode;
+
+  /* Expand state options. */
+
+  /* Number of loops (times that the falloff is going to be repeated). */
+  int loop_count;
+
+  /* Invert the falloff result. */
+  bool invert;
+
+  /* When set to true, preserves the previous state of the data and adds the new one on top. */
+  bool preserve;
+
+  /* When set to true, the mask or colors will be applied as a gradient. */
+  bool falloff_gradient;
+
+  /* When set to true, Expand will use the Brush falloff curve data to shape the gradient. */
+  bool brush_gradient;
+
+  /* When set to true, Expand will move the origin (initial active vertex and cursor position)
+   * instead of updating the active vertex and active falloff. */
+  bool move;
+
+  /* When set to true, Expand will snap the new data to the Face Sets IDs found in
+   * *original_face_sets. */
+  bool snap;
+
+  /* When set to true, Expand will use the current Face Set ID to modify an existing Face Set
+   * instead of creating a new one. */
+  bool modify_active_face_set;
+
+  /* When set to true, Expand will reposition the sculpt pivot to the boundary of the expand result
+   * after finishing the operation. */
+  bool reposition_pivot;
+
+  /* Color target data type related data. */
+  float fill_color[4];
+  short blend_mode;
+
+  /* Face Sets at the first step of the expand operation, before starting modifying the active
+   * vertex and active falloff. These are not the original Face Sets of the sculpt before starting
+   * the operator as they could have been modified by Expand when initializing the operator and
+   * before starting changing the active vertex. These Face Sets are used for restoring and
+   * checking the Face Sets state while the Expand operation modal runs. */
+  int *initial_face_sets;
+
+  /* Original data of the sculpt as it was before running the Expand operator. */
+  float *original_mask;
+  int *original_face_sets;
+  float (*original_colors)[4];
+} ExpandCache;
 
 typedef struct FilterCache {
   bool enabled_axis[3];
@@ -1036,7 +1257,7 @@ typedef struct FilterCache {
   float *sharpen_factor;
   float (*detail_directions)[3];
 
-  /* Filter orientaiton. */
+  /* Filter orientation. */
   SculptFilterOrientation orientation;
   float obmat[4][4];
   float obmat_inv[4][4];
@@ -1068,6 +1289,9 @@ typedef struct FilterCache {
 
   int active_face_set;
 
+  /* Transform. */
+  SculptTransformDisplacementMode transform_displacement_mode;
+
   /* Auto-masking. */
   AutomaskingCache *automasking;
 } FilterCache;
@@ -1081,7 +1305,7 @@ void SCULPT_cache_free(StrokeCache *cache);
 SculptUndoNode *SCULPT_undo_push_node(Object *ob, PBVHNode *node, SculptUndoType type);
 SculptUndoNode *SCULPT_undo_get_node(PBVHNode *node);
 SculptUndoNode *SCULPT_undo_get_first_node(void);
-void SCULPT_undo_push_begin(const char *name);
+void SCULPT_undo_push_begin(struct Object *ob, const char *name);
 void SCULPT_undo_push_end(void);
 void SCULPT_undo_push_end_ex(const bool use_nested_undo);
 
@@ -1095,6 +1319,10 @@ bool SCULPT_get_redraw_rect(struct ARegion *region,
                             rcti *rect);
 
 /* Operators. */
+
+/* Expand. */
+void SCULPT_OT_expand(struct wmOperatorType *ot);
+void sculpt_expand_modal_keymap(struct wmKeyConfig *keyconf);
 
 /* Gestures. */
 void SCULPT_OT_face_set_lasso_gesture(struct wmOperatorType *ot);
@@ -1131,10 +1359,14 @@ void SCULPT_OT_dirty_mask(struct wmOperatorType *ot);
 /* Mask and Face Sets Expand. */
 void SCULPT_OT_mask_expand(struct wmOperatorType *ot);
 
+/* Mask Init. */
+void SCULPT_OT_mask_init(struct wmOperatorType *ot);
+
 /* Detail size. */
 void SCULPT_OT_detail_flood_fill(struct wmOperatorType *ot);
 void SCULPT_OT_sample_detail_size(struct wmOperatorType *ot);
 void SCULPT_OT_set_detail_size(struct wmOperatorType *ot);
+void SCULPT_OT_dyntopo_detail_size_edit(struct wmOperatorType *ot);
 
 /* Dyntopo. */
 void SCULPT_OT_dynamic_topology_toggle(struct wmOperatorType *ot);

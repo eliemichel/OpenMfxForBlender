@@ -32,7 +32,9 @@ extern "C" {
 
 struct Base;
 struct BoundBox;
+struct Curve;
 struct Depsgraph;
+struct GeometrySet;
 struct GpencilModifierData;
 struct HookGpencilModifierData;
 struct HookModifierData;
@@ -68,6 +70,10 @@ void BKE_object_free_curve_cache(struct Object *ob);
 void BKE_object_free_derived_caches(struct Object *ob);
 void BKE_object_free_caches(struct Object *object);
 
+void BKE_object_preview_geometry_set_add(struct Object *ob,
+                                         const uint64_t key,
+                                         struct GeometrySet *geometry_set);
+
 void BKE_object_modifier_hook_reset(struct Object *ob, struct HookModifierData *hmd);
 void BKE_object_modifier_gpencil_hook_reset(struct Object *ob,
                                             struct HookGpencilModifierData *hmd);
@@ -75,12 +81,23 @@ bool BKE_object_modifier_gpencil_use_time(struct Object *ob, struct GpencilModif
 
 bool BKE_object_shaderfx_use_time(struct Object *ob, struct ShaderFxData *md);
 
+bool BKE_object_supports_modifiers(const struct Object *ob);
 bool BKE_object_support_modifier_type_check(const struct Object *ob, int modifier_type);
 
-bool BKE_object_copy_modifier(struct Object *ob_dst,
+/* Active modifier. */
+void BKE_object_modifier_set_active(struct Object *ob, struct ModifierData *md);
+struct ModifierData *BKE_object_active_modifier(const struct Object *ob);
+
+bool BKE_object_copy_modifier(struct Main *bmain,
+                              struct Scene *scene,
+                              struct Object *ob_dst,
                               const struct Object *ob_src,
                               struct ModifierData *md);
 bool BKE_object_copy_gpencil_modifier(struct Object *ob_dst, struct GpencilModifierData *md);
+bool BKE_object_modifier_stack_copy(struct Object *ob_dst,
+                                    const struct Object *ob_src,
+                                    const bool do_copy_all,
+                                    const int flag_subdata);
 void BKE_object_link_modifiers(struct Object *ob_dst, const struct Object *ob_src);
 void BKE_object_free_modifiers(struct Object *ob, const int flag);
 void BKE_object_free_shaderfx(struct Object *ob, const int flag);
@@ -191,6 +208,8 @@ struct Base **BKE_object_pose_base_array_get(struct ViewLayer *view_layer,
                                              unsigned int *r_bases_len);
 
 void BKE_object_get_parent_matrix(struct Object *ob, struct Object *par, float r_parentmat[4][4]);
+
+/* Compute object world transform and store it in ob->obmat. */
 void BKE_object_where_is_calc(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob);
 void BKE_object_where_is_calc_ex(struct Depsgraph *depsgraph,
                                  struct Scene *scene,
@@ -281,7 +300,6 @@ void BKE_object_eval_uber_data(struct Depsgraph *depsgraph,
                                struct Object *ob);
 void BKE_object_eval_assign_data(struct Object *object, struct ID *data, bool is_owned);
 
-void BKE_object_eval_boundbox(struct Depsgraph *depsgraph, struct Object *object);
 void BKE_object_sync_to_original(struct Depsgraph *depsgraph, struct Object *object);
 
 void BKE_object_eval_ptcache_reset(struct Depsgraph *depsgraph,
@@ -322,6 +340,12 @@ bool BKE_object_obdata_texspace_get(struct Object *ob,
 struct Mesh *BKE_object_get_evaluated_mesh(struct Object *object);
 struct Mesh *BKE_object_get_pre_modified_mesh(struct Object *object);
 struct Mesh *BKE_object_get_original_mesh(struct Object *object);
+
+/* Lattice accessors.
+ * These functions return either the regular lattice, or the edit-mode lattice,
+ * whichever is currently in use. */
+struct Lattice *BKE_object_get_lattice(const struct Object *object);
+struct Lattice *BKE_object_get_evaluated_lattice(const struct Object *object);
 
 int BKE_object_insert_ptcache(struct Object *ob);
 void BKE_object_delete_ptcache(struct Object *ob, int index);
@@ -412,7 +436,30 @@ struct Mesh *BKE_object_to_mesh(struct Depsgraph *depsgraph,
 
 void BKE_object_to_mesh_clear(struct Object *object);
 
+/* This is an utility function for Python's object.to_curve().
+ * The result is owned by the object.
+ *
+ * The curve will be freed when object is re-evaluated or is destroyed. It is possible to force
+ * clear memory used by this curve by calling BKE_object_to_curve_clear().
+ *
+ * If apply_modifiers is true and the object is a curve one, then spline deform modifiers are
+ * applied on the curve control points.
+ */
+struct Curve *BKE_object_to_curve(struct Object *object,
+                                  struct Depsgraph *depsgraph,
+                                  bool apply_modifiers);
+
+void BKE_object_to_curve_clear(struct Object *object);
+
 void BKE_object_check_uuids_unique_and_report(const struct Object *object);
+
+void BKE_object_modifiers_lib_link_common(void *userData,
+                                          struct Object *ob,
+                                          struct ID **idpoin,
+                                          int cb_flag);
+
+struct PartEff;
+struct PartEff *BKE_object_do_version_give_parteff_245(struct Object *ob);
 
 #ifdef __cplusplus
 }

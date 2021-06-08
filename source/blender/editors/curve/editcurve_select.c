@@ -501,7 +501,7 @@ void CURVE_OT_de_select_first(wmOperatorType *ot)
   ot->idname = "CURVE_OT_de_select_first";
   ot->description = "(De)select first of visible part of each NURBS";
 
-  /* api cfirstbacks */
+  /* api callbacks */
   ot->exec = de_select_first_exec;
   ot->poll = ED_operator_editcurve;
 
@@ -535,7 +535,7 @@ void CURVE_OT_de_select_last(wmOperatorType *ot)
   ot->idname = "CURVE_OT_de_select_last";
   ot->description = "(De)select last of visible part of each NURBS";
 
-  /* api clastbacks */
+  /* api callbacks */
   ot->exec = de_select_last_exec;
   ot->poll = ED_operator_editcurve;
 
@@ -578,8 +578,8 @@ static int de_select_all_exec(bContext *C, wmOperator *op)
         changed = ED_curve_deselect_all(cu->editnurb);
         break;
       case SEL_INVERT:
-        changed = ED_curve_select_swap(cu->editnurb,
-                                       v3d->overlay.handle_display == CURVE_HANDLE_NONE);
+        changed = ED_curve_select_swap(
+            cu->editnurb, (v3d && (v3d->overlay.handle_display == CURVE_HANDLE_NONE)));
         break;
     }
 
@@ -1242,7 +1242,7 @@ static void curve_select_random(ListBase *editnurb, float randfac, int seed, boo
 static int curve_select_random_exec(bContext *C, wmOperator *op)
 {
   const bool select = (RNA_enum_get(op->ptr, "action") == SEL_SELECT);
-  const float randfac = RNA_float_get(op->ptr, "percent") / 100.0f;
+  const float randfac = RNA_float_get(op->ptr, "ratio");
   const int seed = WM_operator_properties_select_random_seed_increment_get(op);
 
   ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -1422,9 +1422,7 @@ void CURVE_OT_select_nth(wmOperatorType *ot)
 }
 
 /* -------------------------------------------------------------------- */
-/* Select Similar */
-
-/** \name Select Similar
+/** \name Select Similar Operator
  * \{ */
 
 static const EnumPropertyItem curve_prop_similar_compare_types[] = {
@@ -1786,9 +1784,7 @@ void CURVE_OT_select_similar(wmOperatorType *ot)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/* Select Shortest Path */
-
-/** \name Select Path
+/** \name Select Shortest Path Operator
  * \{ */
 
 static float curve_calc_dist_pair(const Nurb *nu, int a, int b)
@@ -1994,7 +1990,7 @@ static int edcu_shortest_path_pick_invoke(bContext *C, wmOperator *op, const wmE
     ED_object_base_activate(C, basact);
   }
 
-  DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
+  DEG_id_tag_update(obedit->data, ID_RECALC_SELECT | ID_RECALC_COPY_ON_WRITE);
   WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
   return OPERATOR_FINISHED;
 }

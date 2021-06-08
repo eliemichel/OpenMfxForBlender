@@ -44,6 +44,8 @@
 
 #include "BLO_readfile.h"
 
+#include "MEM_guardedalloc.h"
+
 #include "bpy_capi_utils.h"
 #include "bpy_library.h"
 
@@ -66,9 +68,13 @@ typedef struct {
   BlendHandle *blo_handle;
   int flag;
   PyObject *dict;
+  /* Borrowed reference to the `bmain`, taken from the RNA instance of #RNA_BlendDataLibraries.
+   * Defaults to #G.main, Otherwise use a temporary #Main when `bmain_is_temp` is true. */
+  Main *bmain;
+  bool bmain_is_temp;
 } BPy_Library;
 
-static PyObject *bpy_lib_load(PyObject *self, PyObject *args, PyObject *kwds);
+static PyObject *bpy_lib_load(BPy_PropertyRNA *self, PyObject *args, PyObject *kwds);
 static PyObject *bpy_lib_enter(BPy_Library *self);
 static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *args);
 static PyObject *bpy_lib_dir(BPy_Library *self);
@@ -92,7 +98,7 @@ static PyTypeObject bpy_lib_Type = {
     0,                                        /* tp_itemsize */
     /* methods */
     (destructor)bpy_lib_dealloc, /* tp_dealloc */
-    (printfunc)NULL,             /* printfunc tp_print; */
+    0,                           /* tp_vectorcall_offset */
     NULL,                        /* getattrfunc tp_getattr; */
     NULL,                        /* setattrfunc tp_setattr; */
     NULL,
@@ -112,8 +118,8 @@ static PyTypeObject bpy_lib_Type = {
     NULL, /* reprfunc tp_str; */
 
     /* will only use these if this is a subtype of a py class */
-    NULL /*PyObject_GenericGetAttr is assigned later */, /* getattrofunc tp_getattro; */
-    NULL,                                                /* setattrofunc tp_setattro; */
+    PyObject_GenericGetAttr, /* getattrofunc tp_getattro; */
+    NULL,                    /* setattrofunc tp_setattro; */
 
     /* Functions to access object as input/output buffer */
     NULL, /* PyBufferProcs *tp_as_buffer; */
@@ -167,7 +173,7 @@ static PyTypeObject bpy_lib_Type = {
 
 PyDoc_STRVAR(
     bpy_lib_load_doc,
-    ".. method:: load(filepath, link=False, relative=False)\n"
+    ".. method:: load(filepath, link=False, relative=False, assets_only=False)\n"
     "\n"
     "   Returns a context manager which exposes 2 library objects on entering.\n"
     "   Each object has attributes matching bpy.data which are lists of strings to be linked.\n"
@@ -177,18 +183,29 @@ PyDoc_STRVAR(
     "   :arg link: When False reference to the original file is lost.\n"
     "   :type link: bool\n"
     "   :arg relative: When True the path is stored relative to the open blend file.\n"
-    "   :type relative: bool\n");
-static PyObject *bpy_lib_load(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
+    "   :type relative: bool\n"
+    "   :arg assets_only: If True, only list data-blocks marked as assets.\n"
+    "   :type assets_only: bool\n");
+static PyObject *bpy_lib_load(BPy_PropertyRNA *self, PyObject *args, PyObject *kw)
 {
-  Main *bmain = CTX_data_main(BPY_context_get());
+  Main *bmain_base = CTX_data_main(BPY_context_get());
+  Main *bmain = self->ptr.data; /* Typically #G_MAIN */
   BPy_Library *ret;
   const char *filename = NULL;
-  bool is_rel = false, is_link = false;
+  bool is_rel = false, is_link = false, use_assets_only = false;
 
-  static const char *_keywords[] = {"filepath", "link", "relative", NULL};
-  static _PyArg_Parser _parser = {"s|O&O&:load", _keywords, 0};
-  if (!_PyArg_ParseTupleAndKeywordsFast(
-          args, kw, &_parser, &filename, PyC_ParseBool, &is_link, PyC_ParseBool, &is_rel)) {
+  static const char *_keywords[] = {"filepath", "link", "relative", "assets_only", NULL};
+  static _PyArg_Parser _parser = {"s|O&O&O&:load", _keywords, 0};
+  if (!_PyArg_ParseTupleAndKeywordsFast(args,
+                                        kw,
+                                        &_parser,
+                                        &filename,
+                                        PyC_ParseBool,
+                                        &is_link,
+                                        PyC_ParseBool,
+                                        &is_rel,
+                                        PyC_ParseBool,
+                                        &use_assets_only)) {
     return NULL;
   }
 
@@ -198,10 +215,14 @@ static PyObject *bpy_lib_load(PyObject *UNUSED(self), PyObject *args, PyObject *
   BLI_strncpy(ret->abspath, filename, sizeof(ret->abspath));
   BLI_path_abs(ret->abspath, BKE_main_blendfile_path(bmain));
 
-  ret->blo_handle = NULL;
-  ret->flag = ((is_link ? FILE_LINK : 0) | (is_rel ? FILE_RELPATH : 0));
+  ret->bmain = bmain;
+  ret->bmain_is_temp = (bmain != bmain_base);
 
-  ret->dict = _PyDict_NewPresized(MAX_LIBARRAY);
+  ret->blo_handle = NULL;
+  ret->flag = ((is_link ? FILE_LINK : 0) | (is_rel ? FILE_RELPATH : 0) |
+               (use_assets_only ? FILE_ASSETS_ONLY : 0));
+
+  ret->dict = _PyDict_NewPresized(INDEX_ID_MAX);
 
   return (PyObject *)ret;
 }
@@ -212,7 +233,8 @@ static PyObject *_bpy_names(BPy_Library *self, int blocktype)
   LinkNode *l, *names;
   int totnames;
 
-  names = BLO_blendhandle_get_datablock_names(self->blo_handle, blocktype, &totnames);
+  names = BLO_blendhandle_get_datablock_names(
+      self->blo_handle, blocktype, (self->flag & FILE_ASSETS_ONLY) != 0, &totnames);
   list = PyList_New(totnames);
 
   if (names) {
@@ -221,7 +243,7 @@ static PyObject *_bpy_names(BPy_Library *self, int blocktype)
       PyList_SET_ITEM(list, counter, PyUnicode_FromString((char *)l->link));
       counter++;
     }
-    BLI_linklist_free(names, free); /* free linklist *and* each node's data */
+    BLI_linklist_freeN(names); /* free linklist *and* each node's data */
   }
 
   return list;
@@ -231,7 +253,7 @@ static PyObject *bpy_lib_enter(BPy_Library *self)
 {
   PyObject *ret;
   BPy_Library *self_from;
-  PyObject *from_dict = _PyDict_NewPresized(MAX_LIBARRAY);
+  PyObject *from_dict = _PyDict_NewPresized(INDEX_ID_MAX);
   ReportList reports;
 
   BKE_reports_init(&reports, RPT_STORE);
@@ -319,7 +341,7 @@ static void bpy_lib_exit_warn_type(BPy_Library *self, PyObject *item)
 
 static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 {
-  Main *bmain = CTX_data_main(BPY_context_get());
+  Main *bmain = self->bmain;
   Main *mainl = NULL;
   const int err = 0;
   const bool do_append = ((self->flag & FILE_LINK) == 0);
@@ -327,8 +349,9 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
   BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, true);
 
   /* here appending/linking starts */
+  const int id_tag_extra = self->bmain_is_temp ? LIB_TAG_TEMP_MAIN : 0;
   struct LibraryLink_Params liblink_params;
-  BLO_library_link_params_init(&liblink_params, bmain, self->flag);
+  BLO_library_link_params_init(&liblink_params, bmain, self->flag, id_tag_extra);
 
   mainl = BLO_library_link_begin(&(self->blo_handle), self->relpath, &liblink_params);
 
@@ -347,7 +370,7 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
           for (i = 0; i < size; i++) {
             PyObject *item_src = PyList_GET_ITEM(ls, i);
             PyObject *item_dst; /* must be set below */
-            const char *item_idname = _PyUnicode_AsString(item_src);
+            const char *item_idname = PyUnicode_AsUTF8(item_src);
 
             // printf("  %s\n", item_idname);
 
@@ -355,6 +378,12 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
               ID *id = BLO_library_link_named_part(
                   mainl, &(self->blo_handle), idcode, item_idname, &liblink_params);
               if (id) {
+
+                if (self->bmain_is_temp) {
+                  /* If this fails, #LibraryLink_Params.id_tag_extra is not being applied. */
+                  BLI_assert(id->tag & LIB_TAG_TEMP_MAIN);
+                }
+
 #ifdef USE_RNA_DATABLOCKS
                 /* swap name for pointer to the id */
                 item_dst = PyCapsule_New((void *)id, NULL, NULL);
@@ -463,16 +492,12 @@ static PyObject *bpy_lib_dir(BPy_Library *self)
 PyMethodDef BPY_library_load_method_def = {
     "load",
     (PyCFunction)bpy_lib_load,
-    METH_STATIC | METH_VARARGS | METH_KEYWORDS,
+    METH_VARARGS | METH_KEYWORDS,
     bpy_lib_load_doc,
 };
 
 int BPY_library_load_type_ready(void)
 {
-
-  /* some compilers don't like accessing this directly, delay assignment */
-  bpy_lib_Type.tp_getattro = PyObject_GenericGetAttr;
-
   if (PyType_Ready(&bpy_lib_Type) < 0) {
     return -1;
   }

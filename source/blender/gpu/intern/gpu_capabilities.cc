@@ -49,10 +49,11 @@ int GPU_max_texture_size(void)
   return GCaps.max_texture_size;
 }
 
-int GPU_texture_size_with_limit(int res)
+int GPU_texture_size_with_limit(int res, bool limit_gl_texture_size)
 {
   int size = GPU_max_texture_size();
-  int reslimit = (U.glreslimit != 0) ? min_ii(U.glreslimit, size) : size;
+  int reslimit = (limit_gl_texture_size && (U.glreslimit != 0)) ? min_ii(U.glreslimit, size) :
+                                                                  size;
   return min_ii(reslimit, res);
 }
 
@@ -100,6 +101,11 @@ bool GPU_crappy_amd_driver(void)
 {
   /* Currently are the same drivers with the `unused_fb_slot` problem. */
   return GCaps.broken_amd_driver;
+}
+
+bool GPU_use_hq_normals_workaround(void)
+{
+  return GCaps.use_hq_normals_workaround;
 }
 
 bool GPU_shader_image_load_store_support(void)

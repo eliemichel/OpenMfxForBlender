@@ -65,8 +65,9 @@
 
 #include "armature_intern.h"
 
-/* ********************************************** */
-/* Pose Apply */
+/* -------------------------------------------------------------------- */
+/** \name Apply Pose as Rest Pose
+ * \{ */
 
 /* helper for apply_armature_pose2bones - fixes parenting of objects
  * that are bone-parented to armature */
@@ -171,9 +172,6 @@ static void applyarmature_transfer_properties(EditBone *curbone,
   unit_qt(pchan->quat);
   unit_axis_angle(pchan->rotAxis, &pchan->rotAngle);
   pchan->size[0] = pchan->size[1] = pchan->size[2] = 1.0f;
-
-  /* Set anim lock. */
-  curbone->flag |= BONE_UNKEYED;
 }
 
 /* Adjust the current edit position of the bone using the pose space matrix. */
@@ -225,7 +223,7 @@ static void applyarmature_process_selected_recursive(bArmature *arm,
   ApplyArmature_ParentState new_pstate = {.bone = bone};
 
   if (BLI_findptr(selected, pchan, offsetof(CollectionPointerLink, ptr.data))) {
-    /* SELECTED BONE: Snap to final pose transform minus unapplied parent effects.
+    /* SELECTED BONE: Snap to final pose transform minus un-applied parent effects.
      *
      * I.e. bone position with accumulated parent effects but no local
      * transformation will match the original final pose_mat.
@@ -500,42 +498,71 @@ void POSE_OT_armature_apply(wmOperatorType *ot)
                   "Only apply the selected bones (with propagation to children)");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Apply Visual Transform Operator
+ * \{ */
+
 /* set the current pose as the restpose */
 static int pose_visual_transform_apply_exec(bContext *C, wmOperator *UNUSED(op))
 {
   ViewLayer *view_layer = CTX_data_view_layer(C);
   View3D *v3d = CTX_wm_view3d(C);
-  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+
+  /* Needed to ensure #bPoseChannel.pose_mat are up to date. */
+  CTX_data_ensure_evaluated_depsgraph(C);
 
   FOREACH_OBJECT_IN_MODE_BEGIN (view_layer, v3d, OB_ARMATURE, OB_MODE_POSE, ob) {
-    /* Loop over all selected pchan's.
-     *
-     * TODO, loop over children before parents if multiple bones
-     * at once are to be predictable*/
-    FOREACH_PCHAN_SELECTED_IN_OBJECT_BEGIN (ob, pchan) {
-      const Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
-      bPoseChannel *pchan_eval = BKE_pose_channel_find_name(ob_eval->pose, pchan->name);
-      float delta_mat[4][4];
+    const bArmature *arm = ob->data;
 
-      /* chan_mat already contains the delta transform from rest pose to pose-mode pose
+    int chanbase_len = BLI_listbase_count(&ob->pose->chanbase);
+    /* Storage for the calculated matrices to prevent reading from modified values.
+     * NOTE: this could be avoided if children were always calculated before parents
+     * however ensuring this is involved and doesn't give any significant advantage. */
+    struct {
+      float matrix[4][4];
+      bool is_set;
+    } *pchan_xform_array = MEM_mallocN(sizeof(*pchan_xform_array) * chanbase_len, __func__);
+    bool changed = false;
+
+    int i;
+    LISTBASE_FOREACH_INDEX (bPoseChannel *, pchan, &ob->pose->chanbase, i) {
+      if (!((pchan->bone->flag & BONE_SELECTED) && PBONE_VISIBLE(arm, pchan->bone))) {
+        pchan_xform_array[i].is_set = false;
+        continue;
+      }
+
+      /* `chan_mat` already contains the delta transform from rest pose to pose-mode pose
        * as that is baked into there so that B-Bones will work. Once we've set this as the
-       * new raw-transform components, don't recalc the poses yet, otherwise IK result will
-       * change, thus changing the result we may be trying to record.
-       */
-      /* XXX For some reason, we can't use pchan->chan_mat here, gives odd rotation/offset
-       * (see T38251).
-       * Using pchan->pose_mat and bringing it back in bone space seems to work as expected!
-       */
-      BKE_armature_mat_pose_to_bone(pchan_eval, pchan_eval->pose_mat, delta_mat);
+       * new raw-transform components, don't recalculate the poses yet, otherwise IK result will
+       * change, thus changing the result we may be trying to record. */
 
-      BKE_pchan_apply_mat4(pchan, delta_mat, true);
+      /* NOTE: For some reason `pchan->chan_mat` can't be used here as it gives odd
+       * rotation/offset, see T38251.
+       * Using `pchan->pose_mat` and bringing it back in bone space seems to work as expected!
+       * This matches how visual key-framing works. */
+      BKE_armature_mat_pose_to_bone(pchan, pchan->pose_mat, pchan_xform_array[i].matrix);
+      pchan_xform_array[i].is_set = true;
+      changed = true;
     }
-    FOREACH_PCHAN_SELECTED_IN_OBJECT_END;
 
-    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+    if (changed) {
+      /* Perform separately to prevent feedback loop. */
+      LISTBASE_FOREACH_INDEX (bPoseChannel *, pchan, &ob->pose->chanbase, i) {
+        if (!pchan_xform_array[i].is_set) {
+          continue;
+        }
+        BKE_pchan_apply_mat4(pchan, pchan_xform_array[i].matrix, true);
+      }
 
-    /* note, notifier might evolve */
-    WM_event_add_notifier(C, NC_OBJECT | ND_POSE, ob);
+      DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+
+      /* note, notifier might evolve */
+      WM_event_add_notifier(C, NC_OBJECT | ND_POSE, ob);
+    }
+
+    MEM_freeN(pchan_xform_array);
   }
   FOREACH_OBJECT_IN_MODE_END;
 
@@ -557,8 +584,11 @@ void POSE_OT_visual_transform_apply(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ********************************************** */
-/* Copy/Paste */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Copy/Paste Utilities
+ * \{ */
 
 /* This function is used to indicate that a bone is selected
  * and needs to be included in copy buffer (used to be for inserting keys)
@@ -733,7 +763,11 @@ static bPoseChannel *pose_bone_do_paste(Object *ob,
   return pchan;
 }
 
-/* ---- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Copy Pose Operator
+ * \{ */
 
 static int pose_copy_exec(bContext *C, wmOperator *op)
 {
@@ -799,7 +833,11 @@ void POSE_OT_copy(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER;
 }
 
-/* ---- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Paste Pose Operator
+ * \{ */
 
 static int pose_paste_exec(bContext *C, wmOperator *op)
 {
@@ -913,8 +951,11 @@ void POSE_OT_paste(wmOperatorType *ot)
                   "Only paste the stored pose on to selected bones in the current pose");
 }
 
-/* ********************************************** */
-/* Clear Pose Transforms */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Pose Transforms Utilities
+ * \{ */
 
 /* clear scale of pose-channel */
 static void pchan_clear_scale(bPoseChannel *pchan)
@@ -934,6 +975,18 @@ static void pchan_clear_scale(bPoseChannel *pchan)
   pchan->scale_in_x = pchan->scale_in_y = 1.0f;
   pchan->scale_out_x = pchan->scale_out_y = 1.0f;
 }
+/* Clear the scale. When X-mirror is enabled,
+ * also clear the scale of the mirrored pose channel. */
+static void pchan_clear_scale_with_mirrored(const bPose *pose, bPoseChannel *pchan)
+{
+  if (pose->flag & POSE_MIRROR_EDIT) {
+    bPoseChannel *pchan_mirror = BKE_pose_channel_get_mirrored(pose, pchan->name);
+    if (pchan_mirror != NULL) {
+      pchan_clear_scale(pchan_mirror);
+    }
+  }
+  pchan_clear_scale(pchan);
+}
 
 /* clear location of pose-channel */
 static void pchan_clear_loc(bPoseChannel *pchan)
@@ -947,6 +1000,18 @@ static void pchan_clear_loc(bPoseChannel *pchan)
   if ((pchan->protectflag & OB_LOCK_LOCZ) == 0) {
     pchan->loc[2] = 0.0f;
   }
+}
+/* Clear the Location. When X-mirror is enabled,
+ * also clear the location of the mirrored pose channel. */
+static void pchan_clear_loc_with_mirrored(const bPose *pose, bPoseChannel *pchan)
+{
+  if (pose->flag & POSE_MIRROR_EDIT) {
+    bPoseChannel *pchan_mirror = BKE_pose_channel_get_mirrored(pose, pchan->name);
+    if (pchan_mirror != NULL) {
+      pchan_clear_loc(pchan_mirror);
+    }
+  }
+  pchan_clear_loc(pchan);
 }
 
 /* clear rotation of pose-channel */
@@ -1075,13 +1140,25 @@ static void pchan_clear_rot(bPoseChannel *pchan)
   pchan->curve_out_x = 0.0f;
   pchan->curve_out_y = 0.0f;
 }
+/* Clear the rotation. When X-mirror is enabled,
+ * also clear the rotation of the mirrored pose channel. */
+static void pchan_clear_rot_with_mirrored(const bPose *pose, bPoseChannel *pchan)
+{
+  if (pose->flag & POSE_MIRROR_EDIT) {
+    bPoseChannel *pchan_mirror = BKE_pose_channel_get_mirrored(pose, pchan->name);
+    if (pchan_mirror != NULL) {
+      pchan_clear_rot(pchan_mirror);
+    }
+  }
+  pchan_clear_rot(pchan);
+}
 
 /* clear loc/rot/scale of pose-channel */
-static void pchan_clear_transforms(bPoseChannel *pchan)
+static void pchan_clear_transforms(const bPose *pose, bPoseChannel *pchan)
 {
-  pchan_clear_loc(pchan);
-  pchan_clear_rot(pchan);
-  pchan_clear_scale(pchan);
+  pchan_clear_loc_with_mirrored(pose, pchan);
+  pchan_clear_rot_with_mirrored(pose, pchan);
+  pchan_clear_scale_with_mirrored(pose, pchan);
 }
 
 /* --------------- */
@@ -1089,7 +1166,7 @@ static void pchan_clear_transforms(bPoseChannel *pchan)
 /* generic exec for clear-pose operators */
 static int pose_clear_transform_generic_exec(bContext *C,
                                              wmOperator *op,
-                                             void (*clear_func)(bPoseChannel *),
+                                             void (*clear_func)(const bPose *, bPoseChannel *),
                                              const char default_ksName[])
 {
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
@@ -1115,28 +1192,18 @@ static int pose_clear_transform_generic_exec(bContext *C,
 
     FOREACH_PCHAN_SELECTED_IN_OBJECT_BEGIN (ob_iter, pchan) {
       /* run provided clearing function */
-      clear_func(pchan);
+      clear_func(ob_iter->pose, pchan);
       changed = true;
 
       /* do auto-keyframing as appropriate */
       if (autokeyframe_cfra_can_key(scene, &ob_iter->id)) {
-        /* clear any unkeyed tags */
-        if (pchan->bone) {
-          pchan->bone->flag &= ~BONE_UNKEYED;
-        }
         /* tag for autokeying later */
         ANIM_relative_keyingset_add_source(&dsources, &ob_iter->id, &RNA_PoseBone, pchan);
 
 #if 1 /* XXX: Ugly Hack - Run clearing function on evaluated copy of pchan */
         bPoseChannel *pchan_eval = BKE_pose_channel_find_name(ob_eval->pose, pchan->name);
-        clear_func(pchan_eval);
+        clear_func(ob_iter->pose, pchan_eval);
 #endif
-      }
-      else {
-        /* add unkeyed tags */
-        if (pchan->bone) {
-          pchan->bone->flag |= BONE_UNKEYED;
-        }
       }
     }
     FOREACH_PCHAN_SELECTED_IN_OBJECT_END;
@@ -1171,11 +1238,16 @@ static int pose_clear_transform_generic_exec(bContext *C,
   return changed_multi ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
 
-/* --------------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Pose Scale Operator
+ * \{ */
 
 static int pose_clear_scale_exec(bContext *C, wmOperator *op)
 {
-  return pose_clear_transform_generic_exec(C, op, pchan_clear_scale, ANIM_KS_SCALING_ID);
+  return pose_clear_transform_generic_exec(
+      C, op, pchan_clear_scale_with_mirrored, ANIM_KS_SCALING_ID);
 }
 
 void POSE_OT_scale_clear(wmOperatorType *ot)
@@ -1193,9 +1265,16 @@ void POSE_OT_scale_clear(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Pose Rotation Operator
+ * \{ */
+
 static int pose_clear_rot_exec(bContext *C, wmOperator *op)
 {
-  return pose_clear_transform_generic_exec(C, op, pchan_clear_rot, ANIM_KS_ROTATION_ID);
+  return pose_clear_transform_generic_exec(
+      C, op, pchan_clear_rot_with_mirrored, ANIM_KS_ROTATION_ID);
 }
 
 void POSE_OT_rot_clear(wmOperatorType *ot)
@@ -1213,9 +1292,16 @@ void POSE_OT_rot_clear(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Pose Location Operator
+ * \{ */
+
 static int pose_clear_loc_exec(bContext *C, wmOperator *op)
 {
-  return pose_clear_transform_generic_exec(C, op, pchan_clear_loc, ANIM_KS_LOCATION_ID);
+  return pose_clear_transform_generic_exec(
+      C, op, pchan_clear_loc_with_mirrored, ANIM_KS_LOCATION_ID);
 }
 
 void POSE_OT_loc_clear(wmOperatorType *ot)
@@ -1232,6 +1318,12 @@ void POSE_OT_loc_clear(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Pose Transforms Operator
+ * \{ */
 
 static int pose_clear_transforms_exec(bContext *C, wmOperator *op)
 {
@@ -1255,8 +1347,11 @@ void POSE_OT_transforms_clear(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ********************************************** */
-/* Clear User Transforms */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear User Transforms Operator
+ * \{ */
 
 static int pose_clear_user_transforms_exec(bContext *C, wmOperator *op)
 {
@@ -1336,3 +1431,5 @@ void POSE_OT_user_transforms_clear(wmOperatorType *ot)
   /* properties */
   RNA_def_boolean(ot->srna, "only_selected", true, "Only Selected", "Only visible/selected bones");
 }
+
+/** \} */

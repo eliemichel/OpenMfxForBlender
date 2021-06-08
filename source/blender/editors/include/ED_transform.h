@@ -32,7 +32,6 @@ extern "C" {
 struct Object;
 struct bContext;
 struct wmKeyConfig;
-struct wmMsgBus;
 struct wmOperatorType;
 
 void ED_keymap_transform(struct wmKeyConfig *keyconf);
@@ -41,7 +40,7 @@ void transform_operatortypes(void);
 /* ******************** Macros & Prototypes *********************** */
 
 /* MODE AND NUMINPUT FLAGS */
-enum TfmMode {
+typedef enum {
   TFM_INIT = -1,
   TFM_DUMMY,
   TFM_TRANSLATION,
@@ -78,29 +77,11 @@ enum TfmMode {
   TFM_BONE_ENVELOPE_DIST,
   TFM_NORMAL_ROTATION,
   TFM_GPENCIL_OPACITY,
-};
-
-/* TRANSFORM CONTEXTS */
-#define CTX_NONE 0
-#define CTX_TEXTURE (1 << 0)
-#define CTX_EDGE (1 << 1)
-#define CTX_NO_PET (1 << 2)
-#define CTX_NO_MIRROR (1 << 3)
-#define CTX_AUTOCONFIRM (1 << 4)
-#define CTX_MOVIECLIP (1 << 6)
-#define CTX_MASK (1 << 7)
-#define CTX_PAINT_CURVE (1 << 8)
-#define CTX_GPENCIL_STROKES (1 << 9)
-#define CTX_CURSOR (1 << 10)
-/** When transforming object's, adjust the object data so it stays in the same place. */
-#define CTX_OBMODE_XFORM_OBDATA (1 << 11)
-/** Transform object parents without moving their children. */
-#define CTX_OBMODE_XFORM_SKIP_CHILDREN (1 << 12)
+} eTfmMode;
 
 /* Standalone call to get the transformation center corresponding to the current situation
  * returns 1 if successful, 0 otherwise (usually means there's no selection)
- * (if 0 is returns, *vec is unmodified)
- * */
+ * (if false is returns, `cent3d` is unmodified). */
 bool calculateTransformCenter(struct bContext *C,
                               int centerMode,
                               float cent3d[3],
@@ -108,7 +89,6 @@ bool calculateTransformCenter(struct bContext *C,
 
 struct Object;
 struct Scene;
-struct wmGizmoGroup;
 struct wmGizmoGroupType;
 
 /* UNUSED */
@@ -171,8 +151,7 @@ short ED_transform_calc_orientation_from_type_ex(const struct bContext *C,
                                                  struct RegionView3D *rv3d,
                                                  struct Object *ob,
                                                  struct Object *obedit,
-                                                 const short orientation_type,
-                                                 int orientation_index_custom,
+                                                 const short orientation_index,
                                                  const int pivot_point);
 
 /* transform gizmos */
@@ -206,8 +185,7 @@ struct TransformCalcParams {
   uint use_only_center : 1;
   uint use_local_axis : 1;
   /* Use 'Scene.orientation_type' when zero, otherwise subtract one and use. */
-  ushort orientation_type;
-  ushort orientation_index_custom;
+  ushort orientation_index;
 };
 int ED_transform_calc_gizmo_stats(const struct bContext *C,
                                   const struct TransformCalcParams *params,

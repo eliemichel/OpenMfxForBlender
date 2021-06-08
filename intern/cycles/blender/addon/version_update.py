@@ -15,6 +15,7 @@
 #
 
 # <pep8 compliant>
+from __future__ import annotations
 
 import bpy
 import math
@@ -108,7 +109,7 @@ def do_versions(self):
         library_versions.setdefault(library.version, []).append(library)
 
     # Do versioning per library, since they might have different versions.
-    max_need_versioning = (2, 80, 41)
+    max_need_versioning = (2, 93, 7)
     for version, libraries in library_versions.items():
         if version > max_need_versioning:
             continue
@@ -193,6 +194,40 @@ def do_versions(self):
                     cscene.blur_glossy = 0.0
                 if not cscene.is_property_set("sample_clamp_indirect"):
                     cscene.sample_clamp_indirect = 0.0
+
+            if version <= (2, 92, 4):
+                if scene.render.engine == 'CYCLES':
+                  for view_layer in scene.view_layers:
+                    cview_layer = view_layer.cycles
+                    view_layer.use_pass_cryptomatte_object = cview_layer.get("use_pass_crypto_object", False)
+                    view_layer.use_pass_cryptomatte_material = cview_layer.get("use_pass_crypto_material", False)
+                    view_layer.use_pass_cryptomatte_asset = cview_layer.get("use_pass_crypto_asset", False)
+                    view_layer.pass_cryptomatte_depth = cview_layer.get("pass_crypto_depth", 6)
+                    view_layer.use_pass_cryptomatte_accurate = cview_layer.get("pass_crypto_accurate", True)
+
+            if version <= (2, 93, 7):
+                if scene.render.engine == 'CYCLES':
+                  for view_layer in scene.view_layers:
+                    cview_layer = view_layer.cycles
+                    for caov in cview_layer.get("aovs", []):
+                        aov_name = caov.get("name", "AOV")
+                        if aov_name in view_layer.aovs:
+                            continue
+                        baov = view_layer.aovs.add()
+                        baov.name = caov.get("name", "AOV")
+                        baov.type = "COLOR" if caov.get("type", 1) == 1 else "VALUE"
+
+            if version <= (2, 93, 16):
+                cscene = scene.cycles
+                ao_bounces = cscene.get("ao_bounces", 0)
+                ao_bounces_render = cscene.get("ao_bounces_render", 0)
+                if scene.render.use_simplify and (ao_bounces or ao_bounces_render):
+                    cscene.use_fast_gi = True
+                    cscene.ao_bounces = ao_bounces
+                    cscene.ao_bounces_render = ao_bounces_render
+                else:
+                    cscene.ao_bounces = 1
+                    cscene.ao_bounces_render = 1
 
         # Lamps
         for light in bpy.data.lights:

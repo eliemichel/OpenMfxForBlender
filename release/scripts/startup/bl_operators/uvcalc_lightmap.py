@@ -568,8 +568,7 @@ def unwrap(operator, context, **kwargs):
     meshes = list({
         me for obj in context.selected_objects
         if obj.type == 'MESH'
-        for me in (obj.data,)
-        if me.polygons and me.library is None
+        if (me := obj.data).polygons and me.library is None
     })
 
     if not meshes:
@@ -615,8 +614,8 @@ class LightMapPack(Operator):
     PREF_PACK_IN_ONE: BoolProperty(
         name="Share Texture Space",
         description=(
-            "Objects Share texture space, map all objects "
-            "into 1 uvmap"
+            "Objects share texture space, map all objects "
+            "into a single UV map"
         ),
         default=True,
     )
@@ -635,14 +634,14 @@ class LightMapPack(Operator):
     )
     PREF_IMG_PX_SIZE: IntProperty(
         name="Image Size",
-        description="Width and Height for the new image",
+        description="Width and height for the new image",
         min=64, max=5000,
         default=512,
     )
     # UV Packing...
     PREF_BOX_DIV: IntProperty(
         name="Pack Quality",
-        description="Pre Packing before the complex boxpack",
+        description="Pre-packing before the complex boxpack",
         min=1, max=48,
         default=12,
     )

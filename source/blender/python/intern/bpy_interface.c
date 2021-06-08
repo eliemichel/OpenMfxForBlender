@@ -45,6 +45,7 @@
 #include "bpy_capi_utils.h"
 #include "bpy_intern_string.h"
 #include "bpy_path.h"
+#include "bpy_props.h"
 #include "bpy_rna.h"
 #include "bpy_traceback.h"
 
@@ -80,6 +81,7 @@
 
 /* Logging types to use anywhere in the Python modules. */
 CLG_LOGREF_DECLARE_GLOBAL(BPY_LOG_CONTEXT, "bpy.context");
+CLG_LOGREF_DECLARE_GLOBAL(BPY_LOG_INTERFACE, "bpy.interface");
 CLG_LOGREF_DECLARE_GLOBAL(BPY_LOG_RNA, "bpy.rna");
 
 /* for internal use, when starting and ending python scripts */
@@ -194,10 +196,14 @@ void BPY_context_dict_clear_members_array(void **dict_p,
 
   PyObject *dict = *dict_p;
   BLI_assert(PyDict_Check(dict));
+
+  /* Use #PyDict_Pop instead of #PyDict_DelItemString to avoid setting the exception,
+   * while supported it's good to avoid for low level functions like this that run often. */
   for (uint i = 0; i < context_members_len; i++) {
-    if (PyDict_DelItemString(dict, context_members[i])) {
-      PyErr_Clear();
-    }
+    PyObject *key = PyUnicode_FromString(context_members[i]);
+    PyObject *item = _PyDict_Pop(dict, key, Py_None);
+    Py_DECREF(key);
+    Py_DECREF(item);
   }
 
   if (use_gil) {
@@ -299,59 +305,156 @@ static struct _inittab bpy_internal_modules[] = {
     {NULL, NULL},
 };
 
+#ifndef WITH_PYTHON_MODULE
+/**
+ * Convenience function for #BPY_python_start.
+ *
+ * These should happen so rarely that having comprehensive errors isn't needed.
+ * For example if `sys.argv` fails to allocate memory.
+ *
+ * Show an error just to avoid silent failure in the unlikely event something goes wrong,
+ * in this case a developer will need to track down the root cause.
+ */
+static void pystatus_exit_on_error(PyStatus status)
+{
+  if (UNLIKELY(PyStatus_Exception(status))) {
+    fputs("Internal error initializing Python!\n", stderr);
+    /* This calls `exit`. */
+    Py_ExitStatusException(status);
+  }
+}
+#endif
+
 /* call BPY_context_set first */
 void BPY_python_start(bContext *C, int argc, const char **argv)
 {
 #ifndef WITH_PYTHON_MODULE
-  PyThreadState *py_tstate = NULL;
-  const char *py_path_bundle = BKE_appdir_folder_id(BLENDER_SYSTEM_PYTHON, NULL);
 
-  /* Not essential but nice to set our name. */
+  /* #PyPreConfig (early-configuration).  */
   {
-    const char *program_path = BKE_appdir_program_path();
-    wchar_t program_path_wchar[FILE_MAX];
-    BLI_strncpy_wchar_from_utf8(program_path_wchar, program_path, ARRAY_SIZE(program_path_wchar));
-    Py_SetProgramName(program_path_wchar);
-  }
+    PyPreConfig preconfig;
+    PyStatus status;
 
-  /* must run before python initializes */
-  PyImport_ExtendInittab(bpy_internal_modules);
-
-  /* allow to use our own included python */
-  PyC_SetHomePath(py_path_bundle);
-
-  /* Without this the `sys.stdout` may be set to 'ascii'
-   * (it is on my system at least), where printing unicode values will raise
-   * an error, this is highly annoying, another stumbling block for developers,
-   * so use a more relaxed error handler and enforce utf-8 since the rest of
-   * Blender is utf-8 too - campbell */
-  Py_SetStandardStreamEncoding("utf-8", "surrogateescape");
-
-  /* Suppress error messages when calculating the module search path.
-   * While harmless, it's noisy. */
-  Py_FrozenFlag = 1;
-
-  /* Only use the systems environment variables and site when explicitly requested.
-   * Since an incorrect 'PYTHONPATH' causes difficult to debug errors, see: T72807. */
-  Py_IgnoreEnvironmentFlag = !py_use_system_env;
-  Py_NoUserSiteDirectory = !py_use_system_env;
-
-  /* Initialize Python (also acquires lock). */
-  Py_Initialize();
-
-  // PySys_SetArgv(argc, argv);  /* broken in py3, not a huge deal */
-  /* sigh, why do python guys not have a (char **) version anymore? */
-  {
-    int i;
-    PyObject *py_argv = PyList_New(argc);
-    for (i = 0; i < argc; i++) {
-      /* should fix bug T20021 - utf path name problems, by replacing
-       * PyUnicode_FromString, with this one */
-      PyList_SET_ITEM(py_argv, i, PyC_UnicodeFromByte(argv[i]));
+    if (py_use_system_env) {
+      PyPreConfig_InitPythonConfig(&preconfig);
+    }
+    else {
+      /* Only use the systems environment variables and site when explicitly requested.
+       * Since an incorrect 'PYTHONPATH' causes difficult to debug errors, see: T72807.
+       * An alternative to setting `preconfig.use_environment = 0` */
+      PyPreConfig_InitIsolatedConfig(&preconfig);
     }
 
-    PySys_SetObject("argv", py_argv);
-    Py_DECREF(py_argv);
+    /* Force `utf-8` on all platforms, since this is what's used for Blender's internal strings,
+     * providing consistent encoding behavior across all Blender installations.
+     *
+     * This also uses the `surrogateescape` error handler ensures any unexpected bytes are escaped
+     * instead of raising an error.
+     *
+     * Without this `sys.getfilesystemencoding()` and `sys.stdout` for example may be set to ASCII
+     * or some other encoding - where printing some `utf-8` values will raise an error.
+     *
+     * This can cause scripts to fail entirely on some systems.
+     *
+     * This assignment is the equivalent of enabling the `PYTHONUTF8` environment variable.
+     * See `PEP-540` for details on exactly what this changes. */
+    preconfig.utf8_mode = true;
+
+    /* Note that there is no reason to call #Py_PreInitializeFromBytesArgs here
+     * as this is only used so that command line arguments can be handled by Python itself,
+     * not for setting `sys.argv` (handled below). */
+    status = Py_PreInitialize(&preconfig);
+    pystatus_exit_on_error(status);
+  }
+
+  /* Must run before python initializes, but after #PyPreConfig. */
+  PyImport_ExtendInittab(bpy_internal_modules);
+
+  /* #PyConfig (initialize Python). */
+  {
+    PyConfig config;
+    PyStatus status;
+    bool has_python_executable = false;
+
+    PyConfig_InitPythonConfig(&config);
+
+    /* Suppress error messages when calculating the module search path.
+     * While harmless, it's noisy. */
+    config.pathconfig_warnings = 0;
+
+    /* When using the system's Python, allow the site-directory as well. */
+    config.user_site_directory = py_use_system_env;
+
+    /* While `sys.argv` is set, we don't want Python to interpret it. */
+    config.parse_argv = 0;
+    status = PyConfig_SetBytesArgv(&config, argc, (char *const *)argv);
+    pystatus_exit_on_error(status);
+
+    /* Needed for Python's initialization for portable Python installations.
+     * We could use #Py_SetPath, but this overrides Python's internal logic
+     * for calculating it's own module search paths.
+     *
+     * `sys.executable` is overwritten after initialization to the Python binary. */
+    {
+      const char *program_path = BKE_appdir_program_path();
+      status = PyConfig_SetBytesString(&config, &config.program_name, program_path);
+      pystatus_exit_on_error(status);
+    }
+
+    /* Setting the program name is important so the 'multiprocessing' module
+     * can launch new Python instances. */
+    {
+      char program_path[FILE_MAX];
+      if (BKE_appdir_program_python_search(
+              program_path, sizeof(program_path), PY_MAJOR_VERSION, PY_MINOR_VERSION)) {
+        status = PyConfig_SetBytesString(&config, &config.executable, program_path);
+        pystatus_exit_on_error(status);
+        has_python_executable = true;
+      }
+      else {
+        /* Set to `sys.executable = None` below (we can't do before Python is initialized). */
+        fprintf(stderr,
+                "Unable to find the python binary, "
+                "the multiprocessing module may not be functional!\n");
+      }
+    }
+
+    /* Allow to use our own included Python. `py_path_bundle` may be NULL. */
+    {
+      const char *py_path_bundle = BKE_appdir_folder_id(BLENDER_SYSTEM_PYTHON, NULL);
+      if (py_path_bundle != NULL) {
+
+#  ifdef __APPLE__
+        /* Mac-OS allows file/directory names to contain `:` character
+         * (represented as `/` in the Finder) but current Python lib (as of release 3.1.1)
+         * doesn't handle these correctly. */
+        if (strchr(py_path_bundle, ':')) {
+          fprintf(stderr,
+                  "Warning! Blender application is located in a path containing ':' or '/' chars\n"
+                  "This may make python import function fail\n");
+        }
+#  endif /* __APPLE__ */
+
+        status = PyConfig_SetBytesString(&config, &config.home, py_path_bundle);
+        pystatus_exit_on_error(status);
+      }
+      else {
+        /* Common enough to use the system Python on Linux/Unix, warn on other systems. */
+#  if defined(__APPLE__) || defined(_WIN32)
+        fprintf(stderr,
+                "Bundled Python not found and is expected on this platform "
+                "(the 'install' target may have not been built)\n");
+#  endif
+      }
+    }
+
+    /* Initialize Python (also acquires lock). */
+    status = Py_InitializeFromConfig(&config);
+    pystatus_exit_on_error(status);
+
+    if (!has_python_executable) {
+      PySys_SetObject("executable", Py_None);
+    }
   }
 
 #  ifdef WITH_FLUID
@@ -400,8 +503,16 @@ void BPY_python_start(bContext *C, int argc, const char **argv)
   /* py module runs atexit when bpy is freed */
   BPY_atexit_register(); /* this can init any time */
 
-  py_tstate = PyGILState_GetThisThreadState();
-  PyEval_ReleaseThread(py_tstate);
+  /* Free the lock acquired (implicitly) when Python is initialized. */
+  PyEval_ReleaseThread(PyGILState_GetThisThreadState());
+
+#endif
+
+#ifdef WITH_PYTHON_MODULE
+  /* Disable all add-ons at exit, not essential, it just avoids resource leaks, see T71362. */
+  BPY_run_string_eval(C,
+                      (const char *[]){"atexit", "addon_utils", NULL},
+                      "atexit.register(addon_utils.disable_all)");
 #endif
 }
 
@@ -412,6 +523,9 @@ void BPY_python_end(void)
 
   /* finalizing, no need to grab the state, except when we are a module */
   gilstate = PyGILState_Ensure();
+
+  /* Decrement user counts of all callback functions. */
+  BPY_rna_props_clear_all();
 
   /* free other python data. */
   pyrna_free_types();
@@ -480,8 +594,8 @@ void BPY_python_backtrace(FILE *fp)
     PyFrameObject *frame = tstate->frame;
     do {
       const int line = PyCode_Addr2Line(frame->f_code, frame->f_lasti);
-      const char *filename = _PyUnicode_AsString(frame->f_code->co_filename);
-      const char *funcname = _PyUnicode_AsString(frame->f_code->co_name);
+      const char *filename = PyUnicode_AsUTF8(frame->f_code->co_filename);
+      const char *funcname = PyUnicode_AsUTF8(frame->f_code->co_name);
       fprintf(fp, "  File \"%s\", line %d in %s\n", filename, line, funcname);
     } while ((frame = frame->f_back));
   }
@@ -497,7 +611,7 @@ void BPY_DECREF(void *pyob_ptr)
 void BPY_DECREF_RNA_INVALIDATE(void *pyob_ptr)
 {
   const PyGILState_STATE gilstate = PyGILState_Ensure();
-  const int do_invalidate = (Py_REFCNT((PyObject *)pyob_ptr) > 1);
+  const bool do_invalidate = (Py_REFCNT((PyObject *)pyob_ptr) > 1);
   Py_DECREF((PyObject *)pyob_ptr);
   if (do_invalidate) {
     pyrna_invalidate(pyob_ptr);
@@ -673,7 +787,7 @@ static void bpy_module_delay_init(PyObject *bpy_proxy)
   /* updating the module dict below will lose the reference to __file__ */
   PyObject *filename_obj = PyModule_GetFilenameObject(bpy_proxy);
 
-  const char *filename_rel = _PyUnicode_AsString(filename_obj); /* can be relative */
+  const char *filename_rel = PyUnicode_AsUTF8(filename_obj); /* can be relative */
   char filename_abs[1024];
 
   BLI_strncpy(filename_abs, filename_rel, sizeof(filename_abs));

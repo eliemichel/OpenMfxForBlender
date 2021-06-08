@@ -265,7 +265,10 @@ bool ui_but_contains_point_px_icon(const uiBut *but, ARegion *region, const wmEv
 }
 
 /* x and y are only used in case event is NULL... */
-uiBut *ui_but_find_mouse_over_ex(ARegion *region, const int x, const int y, const bool labeledit)
+uiBut *ui_but_find_mouse_over_ex(const ARegion *region,
+                                 const int x,
+                                 const int y,
+                                 const bool labeledit)
 {
   uiBut *butover = NULL;
 
@@ -303,7 +306,7 @@ uiBut *ui_but_find_mouse_over_ex(ARegion *region, const int x, const int y, cons
   return butover;
 }
 
-uiBut *ui_but_find_mouse_over(ARegion *region, const wmEvent *event)
+uiBut *ui_but_find_mouse_over(const ARegion *region, const wmEvent *event)
 {
   return ui_but_find_mouse_over_ex(region, event->x, event->y, event->ctrl != 0);
 }
@@ -442,6 +445,36 @@ bool ui_but_is_cursor_warp(const uiBut *but)
 bool ui_but_contains_password(const uiBut *but)
 {
   return but->rnaprop && (RNA_property_subtype(but->rnaprop) == PROP_PASSWORD);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Button (#uiBut) Text
+ * \{ */
+
+size_t ui_but_drawstr_len_without_sep_char(const uiBut *but)
+{
+  if (but->flag & UI_BUT_HAS_SEP_CHAR) {
+    const char *str_sep = strrchr(but->drawstr, UI_SEP_CHAR);
+    if (str_sep != NULL) {
+      return (str_sep - but->drawstr);
+    }
+  }
+  return strlen(but->drawstr);
+}
+
+size_t ui_but_tip_len_only_first_line(const uiBut *but)
+{
+  if (but->tip == NULL) {
+    return 0;
+  }
+
+  const char *str_sep = strchr(but->tip, '\n');
+  if (str_sep != NULL) {
+    return (str_sep - but->tip);
+  }
+  return strlen(but->tip);
 }
 
 /** \} */

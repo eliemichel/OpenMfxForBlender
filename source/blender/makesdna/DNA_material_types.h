@@ -27,6 +27,10 @@
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef MAX_MTEX
 #  define MAX_MTEX 18
 #endif
@@ -41,11 +45,11 @@ struct bNodeTree;
 typedef struct TexPaintSlot {
   /** Image to be painted on. */
   struct Image *ima;
-  /** Customdata index for uv layer, MAX_NAM.E*/
+  /** Custom-data index for uv layer, #MAX_NAME. */
   char *uvname;
   /** Do we have a valid image and UV map. */
   int valid;
-  /** Copy of node inteporlation setting. */
+  /** Copy of node interpolation setting. */
   int interp;
 } TexPaintSlot;
 
@@ -99,7 +103,8 @@ typedef struct MaterialGPencilStyle {
   float mix_stroke_factor;
   /** Mode used to align Dots and Boxes with stroke drawing path and object rotation */
   int alignment_mode;
-  char _pad[4];
+  /** Rotation for texture for Dots and Squares. */
+  float alignment_rotation;
 } MaterialGPencilStyle;
 
 /* MaterialGPencilStyle->flag */
@@ -139,6 +144,16 @@ typedef enum eMaterialGPencilStyle_Mode {
   GP_MATERIAL_MODE_DOT = 1,
   GP_MATERIAL_MODE_SQUARE = 2,
 } eMaterialGPencilStyle_Mode;
+
+typedef struct MaterialLineArt {
+  int flags; /* eMaterialLineArtFlags */
+  unsigned char transparency_mask;
+  unsigned char _pad[3];
+} MaterialLineArt;
+
+typedef enum eMaterialLineArtFlags {
+  LRT_MATERIAL_TRANSPARENCY_ENABLED = (1 << 0),
+} eMaterialLineArtFlags;
 
 typedef struct Material {
   ID id;
@@ -205,6 +220,7 @@ typedef struct Material {
 
   /** Grease pencil color. */
   struct MaterialGPencilStyle *gp_style;
+  struct MaterialLineArt lineart;
 } Material;
 
 /* **************** MATERIAL ********************* */
@@ -358,3 +374,7 @@ enum {
   GP_MATERIAL_FOLLOW_OBJ = 1,
   GP_MATERIAL_FOLLOW_FIXED = 2,
 };
+
+#ifdef __cplusplus
+}
+#endif

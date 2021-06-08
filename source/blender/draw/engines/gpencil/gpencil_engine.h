@@ -39,10 +39,7 @@ extern DrawEngineType draw_engine_gpencil_type;
 struct GPENCIL_Data;
 struct GPENCIL_StorageList;
 struct GPUBatch;
-struct GPUVertBuf;
-struct GPUVertFormat;
 struct GpencilBatchCache;
-struct MaterialGPencilStyle;
 struct Object;
 struct RenderEngine;
 struct RenderLayer;
@@ -62,7 +59,7 @@ typedef struct gpMaterial {
   float stroke_color[4];
   float fill_color[4];
   float fill_mix_color[4];
-  float fill_uv_transform[3][2], _pad0[2];
+  float fill_uv_transform[3][2], alignment_rot_cos, alignment_rot_sin;
   float stroke_texture_mix;
   float stroke_u_scale;
   float fill_texture_mix;
@@ -113,7 +110,7 @@ BLI_STATIC_ASSERT_ALIGN(gpLight, 16)
 typedef struct GPENCIL_MaterialPool {
   /* Linklist. */
   struct GPENCIL_MaterialPool *next;
-  /* GPU representatin of materials. */
+  /* GPU representation of materials. */
   gpMaterial mat_data[GP_MATERIAL_BUFFER_LEN];
   /* Matching ubo. */
   struct GPUUniformBuf *ubo;
@@ -125,7 +122,7 @@ typedef struct GPENCIL_MaterialPool {
 } GPENCIL_MaterialPool;
 
 typedef struct GPENCIL_LightPool {
-  /* GPU representatin of materials. */
+  /* GPU representation of materials. */
   gpLight light_data[GPENCIL_LIGHT_BUFFER_LEN];
   /* Matching ubo. */
   struct GPUUniformBuf *ubo;
@@ -154,7 +151,7 @@ typedef struct GPENCIL_tVfx {
   /** Linklist */
   struct GPENCIL_tVfx *next;
   DRWPass *vfx_ps;
-  /* Framebuffer reference since it may not be allocated yet. */
+  /* Frame-buffer reference since it may not be allocated yet. */
   GPUFrameBuffer **target_fb;
 } GPENCIL_tVfx;
 
@@ -345,6 +342,8 @@ typedef struct GPENCIL_PrivateData {
 
   /* Display onion skinning */
   bool do_onion;
+  /* Playing animation */
+  bool playing;
   /* simplify settings */
   bool simplify_fill;
   bool simplify_fx;
@@ -353,7 +352,7 @@ typedef struct GPENCIL_PrivateData {
   bool use_lighting;
   /* Use physical lights or just ambient lighting. */
   bool use_lights;
-  /* Do we need additional framebuffers? */
+  /* Do we need additional frame-buffers? */
   bool use_layer_fb;
   bool use_object_fb;
   bool use_mask_fb;

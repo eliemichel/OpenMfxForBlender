@@ -20,6 +20,8 @@
 
 #include "COM_MixOperation.h"
 
+namespace blender::compositor {
+
 /**
  * this program converts an input color to an output value.
  * it assumes we are in sRGB color space.
@@ -38,12 +40,12 @@ class ChannelMatteOperation : public NodeOperation {
   float m_limit_range;
 
   /** ids to use for the operations (max and simple)
-   * alpha = in[ids[0]] - max(in[ids[1]], in[ids[2]])
+   * alpha = in[ids[0]] - MAX2(in[ids[1]], in[ids[2]])
    * the simple operation is using:
    * alpha = in[ids[0]] - in[ids[1]]
    * but to use the same formula and operation for both we do:
    * ids[2] = ids[1]
-   * alpha = in[ids[0]] - max(in[ids[1]], in[ids[2]])
+   * alpha = in[ids[0]] - MAX2(in[ids[1]], in[ids[2]])
    */
   int m_ids[3];
 
@@ -54,12 +56,12 @@ class ChannelMatteOperation : public NodeOperation {
   ChannelMatteOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
-  void initExecution();
-  void deinitExecution();
+  void initExecution() override;
+  void deinitExecution() override;
 
   void setSettings(NodeChroma *nodeChroma, const int custom2)
   {
@@ -70,3 +72,5 @@ class ChannelMatteOperation : public NodeOperation {
     this->m_matte_channel = custom2;
   }
 };
+
+}  // namespace blender::compositor

@@ -41,6 +41,7 @@
 #include "DNA_collection_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -177,7 +178,7 @@ static void gpencil_strokepoint_convertcoords(bContext *C,
 
   /* apply parent transform */
   float fpt[3];
-  BKE_gpencil_parent_matrix_get(depsgraph, obact, gpl, diff_mat);
+  BKE_gpencil_layer_transform_matrix_get(depsgraph, obact, gpl, diff_mat);
   mul_v3_m4v3(fpt, diff_mat, &source_pt->x);
   copy_v3_v3(&pt->x, fpt);
 
@@ -369,7 +370,7 @@ static int gpencil_find_end_of_stroke_idx(tGpTimingData *gtd,
 static void gpencil_stroke_path_animation_preprocess_gaps(tGpTimingData *gtd,
                                                           RNG *rng,
                                                           int *nbr_gaps,
-                                                          float *tot_gaps_time)
+                                                          float *r_tot_gaps_time)
 {
   float delta_time = 0.0f;
 
@@ -386,10 +387,10 @@ static void gpencil_stroke_path_animation_preprocess_gaps(tGpTimingData *gtd,
   }
   gtd->tot_time -= delta_time;
 
-  *tot_gaps_time = (float)(*nbr_gaps) * gtd->gap_duration;
-  gtd->tot_time += *tot_gaps_time;
+  *r_tot_gaps_time = (float)(*nbr_gaps) * gtd->gap_duration;
+  gtd->tot_time += *r_tot_gaps_time;
   if (G.debug & G_DEBUG) {
-    printf("%f, %f, %f, %d\n", gtd->tot_time, delta_time, *tot_gaps_time, *nbr_gaps);
+    printf("%f, %f, %f, %d\n", gtd->tot_time, delta_time, *r_tot_gaps_time, *nbr_gaps);
   }
   if (gtd->gap_randomness > 0.0f) {
     BLI_rng_srandom(rng, gtd->seed);
@@ -1312,7 +1313,7 @@ static void gpencil_layer_to_curve(bContext *C,
   Scene *scene = CTX_data_scene(C);
 
   bGPDframe *gpf = BKE_gpencil_layer_frame_get(gpl, CFRA, GP_GETFRAME_USE_PREV);
-  bGPDstroke *gps, *prev_gps = NULL;
+  bGPDstroke *prev_gps = NULL;
   Object *ob;
   Curve *cu;
   Nurb *nu = NULL;
@@ -1353,7 +1354,10 @@ static void gpencil_layer_to_curve(bContext *C,
   gtd->inittime = ((bGPDstroke *)gpf->strokes.first)->inittime;
 
   /* add points to curve */
-  for (gps = gpf->strokes.first; gps; gps = gps->next) {
+  LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+    if (gps->totpoints < 1) {
+      continue;
+    }
     const bool add_start_point = (link_strokes && !(prev_gps));
     const bool add_end_point = (link_strokes && !(gps->next));
 
@@ -1616,9 +1620,13 @@ static bool gpencil_convert_poll_property(const bContext *UNUSED(C),
   const bool valid_timing = RNA_boolean_get(ptr, "use_timing_data");
 
   /* Always show those props */
-  if (STREQ(prop_id, "type") || STREQ(prop_id, "use_normalize_weights") ||
-      STREQ(prop_id, "radius_multiplier") || STREQ(prop_id, "use_link_strokes") ||
-      STREQ(prop_id, "bevel_depth") || STREQ(prop_id, "bevel_resolution")) {
+  if (STR_ELEM(prop_id,
+               "type",
+               "use_normalize_weights",
+               "radius_multiplier",
+               "use_link_strokes",
+               "bevel_depth",
+               "bevel_resolution")) {
     return true;
   }
 
@@ -1635,7 +1643,7 @@ static bool gpencil_convert_poll_property(const bContext *UNUSED(C),
 
     if (timing_mode != GP_STROKECONVERT_TIMING_NONE) {
       /* Only show when link_stroke is true and stroke timing is enabled */
-      if (STREQ(prop_id, "frame_range") || STREQ(prop_id, "start_frame")) {
+      if (STR_ELEM(prop_id, "frame_range", "start_frame")) {
         return true;
       }
 
@@ -1851,12 +1859,13 @@ static int image_to_gpencil_exec(bContext *C, wmOperator *op)
   bGPdata *gpd = (bGPdata *)ob->data;
   bGPDlayer *gpl = BKE_gpencil_layer_addnew(gpd, "Image Layer", true);
   bGPDframe *gpf = BKE_gpencil_frame_addnew(gpl, CFRA);
-  done = BKE_gpencil_from_image(sima, gpf, size, is_mask);
+  done = BKE_gpencil_from_image(sima, gpd, gpf, size, is_mask);
 
   if (done) {
     /* Delete any selected point. */
     LISTBASE_FOREACH_MUTABLE (bGPDstroke *, gps, &gpf->strokes) {
-      gpencil_stroke_delete_tagged_points(gpf, gps, gps->next, GP_SPOINT_SELECT, false, 0);
+      BKE_gpencil_stroke_delete_tagged_points(
+          gpd, gpf, gps, gps->next, GP_SPOINT_SELECT, false, 0);
     }
 
     BKE_reportf(op->reports, RPT_INFO, "Object created");

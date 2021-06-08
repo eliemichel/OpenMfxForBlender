@@ -281,7 +281,7 @@ typedef struct ThemeSpace {
   unsigned char edge_seam[4], edge_sharp[4], edge_facesel[4], edge_crease[4], edge_bevel[4];
   /** Solid faces. */
   unsigned char face[4], face_select[4], face_back[4], face_front[4];
-  /**  selected color. */
+  /** Selected color. */
   unsigned char face_dot[4];
   unsigned char extra_edge_len[4], extra_edge_angle[4], extra_face_angle[4], extra_face_area[4];
   unsigned char normal[4];
@@ -334,6 +334,7 @@ typedef struct ThemeSpace {
   unsigned char nodeclass_vector[4], nodeclass_texture[4];
   unsigned char nodeclass_shader[4], nodeclass_script[4];
   unsigned char nodeclass_pattern[4], nodeclass_layout[4];
+  unsigned char nodeclass_geometry[4], nodeclass_attribute[4];
 
   /** For sequence editor. */
   unsigned char movie[4], movieclip[4], mask[4], image[4], scene[4], audio[4];
@@ -374,7 +375,7 @@ typedef struct ThemeSpace {
   /** Two uses, for uvs with modifier applied on mesh and uvs during painting. */
   unsigned char uv_shadow[4];
 
-  /** Outliner - filter match. */
+  /** Search filter match, used for property search and in the outliner. */
   unsigned char match[4];
   /** Outliner - selected item. */
   unsigned char selected_highlight[4];
@@ -491,6 +492,7 @@ typedef struct bTheme {
   ThemeSpace space_clip;
   ThemeSpace space_topbar;
   ThemeSpace space_statusbar;
+  ThemeSpace space_spreadsheet;
 
   /* 20 sets of bone colors for this theme */
   ThemeWireColor tarm[20];
@@ -506,7 +508,7 @@ typedef struct bTheme {
 #define UI_THEMESPACE_START(btheme) \
   (CHECK_TYPE_INLINE(btheme, bTheme *), &((btheme)->space_properties))
 #define UI_THEMESPACE_END(btheme) \
-  (CHECK_TYPE_INLINE(btheme, bTheme *), (&((btheme)->space_statusbar) + 1))
+  (CHECK_TYPE_INLINE(btheme, bTheme *), (&((btheme)->space_spreadsheet) + 1))
 
 typedef struct bAddon {
   struct bAddon *next, *prev;
@@ -568,6 +570,13 @@ enum {
   USER_MENU_TYPE_PROP = 4,
 };
 
+typedef struct bUserAssetLibrary {
+  struct bUserAssetLibrary *next, *prev;
+
+  char name[64];   /* MAX_NAME */
+  char path[1024]; /* FILE_MAX */
+} bUserAssetLibrary;
+
 typedef struct SolidLight {
   int flag;
   float smooth;
@@ -589,6 +598,7 @@ typedef struct WalkNavigation {
 } WalkNavigation;
 
 typedef struct UserDef_Runtime {
+  /** Mark as changed so the preferences are saved on exit. */
   char is_dirty;
   char _pad0[7];
 } UserDef_Runtime;
@@ -625,17 +635,18 @@ typedef struct UserDef_FileSpaceData {
 typedef struct UserDef_Experimental {
   /* Debug options, always available. */
   char use_undo_legacy;
+  char no_override_auto_resync;
   char use_cycles_debug;
   char SANITIZE_AFTER_HERE;
   /* The following options are automatically sanitized (set to 0)
    * when the release cycle is not alpha. */
-  char use_new_geometry_nodes;
   char use_new_hair_type;
   char use_new_point_cloud_type;
   char use_sculpt_vertex_colors;
-  char use_switch_object_operator;
   char use_sculpt_tools_tilt;
-  char _pad[7];
+  char use_asset_browser;
+  char use_override_templates;
+  char _pad[6];
   /** `makesdna` does not allow empty structs. */
 } UserDef_Experimental;
 
@@ -664,6 +675,21 @@ typedef struct UserDef {
   /** 768 = FILE_MAXDIR. */
   char render_cachedir[768];
   char textudir[768];
+  /**
+   * Optional user location for scripts.
+   *
+   * This supports the same layout as Blender's scripts directory `release/scripts`.
+   *
+   * \note Unlike most paths, changing this is not fully supported at run-time,
+   * requiring a restart to properly take effect. Supporting this would cause complications as
+   * the script path can contain `startup`, `addons` & `modules` etc. properly unwinding the
+   * Python environment to the state it _would_ have been in gets complicated.
+   *
+   * Although this is partially supported as the `sys.path` is refreshed when loading preferences.
+   * This is done to support #PREFERENCES_OT_copy_prev which is available to the user when they
+   * launch with a new version of Blender. In this case setting the script path on top of
+   * factory settings will work without problems.
+   */
   char pythondir[768];
   char sounddir[768];
   char i18ndir[768];
@@ -681,8 +707,7 @@ typedef struct UserDef {
   short versions;
   short dbl_click_time;
 
-  char _pad0[2];
-  char wheellinescroll;
+  char _pad0[3];
   char mini_axis_type;
   /** #eUserpref_UI_Flag. */
   int uiflag;
@@ -739,6 +764,8 @@ typedef struct UserDef {
   struct ListBase autoexec_paths;
   /** #bUserMenu. */
   struct ListBase user_menus;
+  /** #bUserAssetLibrary */
+  struct ListBase asset_libraries;
 
   char keyconfigstr[64];
 
@@ -752,8 +779,12 @@ typedef struct UserDef {
   char _pad13[4];
   struct SolidLight light_param[4];
   float light_ambient[3];
-  char _pad3[4];
-  short gizmo_flag, gizmo_size;
+  char gizmo_flag;
+  /** Generic gizmo size. */
+  char gizmo_size;
+  /** Navigate gizmo size. */
+  char gizmo_size_navigate_v3d;
+  char _pad3[5];
   short edit_studio_light;
   short lookdev_sphere_size;
   short vbotimeout, vbocollectrate;
@@ -825,12 +856,12 @@ typedef struct UserDef {
   short autokey_mode;
   /** Flags for autokeying. */
   short autokey_flag;
+  /** Flags for animation. */
+  short animation_flag;
 
   /** Options for text rendering. */
   char text_render;
   char navigation_mode;
-
-  char _pad9[2];
 
   /** Turn-table rotation amount per-pixel in radians. Scaled with DPI. */
   float view_rotate_sensitivity_turntable;
@@ -890,7 +921,7 @@ typedef struct UserDef {
   int sequencer_disk_cache_compression; /* eUserpref_DiskCacheCompression */
   int sequencer_disk_cache_size_limit;
   short sequencer_disk_cache_flag;
-  char _pad5[2];
+  short sequencer_proxy_setup; /* eUserpref_SeqProxySetup */
 
   float collection_instance_empty_size;
   char _pad10[3];
@@ -999,8 +1030,11 @@ typedef enum ePathCompare_Flag {
 
 /** #UserDef.viewzoom */
 typedef enum eViewZoom_Style {
-  USER_ZOOM_CONT = 0,
+  /** Update zoom continuously with a timer while dragging the cursor. */
+  USER_ZOOM_CONTINUE = 0,
+  /** Map changes in distance from the view center to zoom. */
   USER_ZOOM_SCALE = 1,
+  /** Map horizontal/vertical motion to zoom. */
   USER_ZOOM_DOLLY = 2,
 } eViewZoom_Style;
 
@@ -1045,7 +1079,7 @@ typedef enum eUserpref_UI_Flag {
   USER_HIDE_DOT = (1 << 16),
   USER_SHOW_GIZMO_NAVIGATE = (1 << 17),
   USER_SHOW_VIEWPORTNAME = (1 << 18),
-  USER_CAM_LOCK_NO_PARENT = (1 << 19),
+  USER_UIFLAG_UNUSED_3 = (1 << 19), /* Cleared. */
   USER_ZOOM_TO_MOUSEPOS = (1 << 20),
   USER_SHOW_FPS = (1 << 21),
   USER_UIFLAG_UNUSED_22 = (1 << 22), /* cleared */
@@ -1072,7 +1106,7 @@ typedef enum eUserpref_UI_Flag {
 typedef enum eUserpref_UI_Flag2 {
   USER_UIFLAG2_UNUSED_0 = (1 << 0), /* cleared */
   USER_REGION_OVERLAP = (1 << 1),
-  USER_TRACKPAD_NATURAL = (1 << 2),
+  USER_UIFLAG2_UNUSED_2 = (1 << 2),
   USER_UIFLAG2_UNUSED_3 = (1 << 3), /* dirty */
 } eUserpref_UI_Flag2;
 
@@ -1146,6 +1180,15 @@ typedef enum eAutokey_Flag {
   ANIMRECORD_FLAG_WITHNLA = (1 << 10),
 } eAutokey_Flag;
 
+/**
+ * Animation flags
+ * #UserDef.animation_flag, used for animation flags that aren't covered by more specific flags
+ * (like eAutokey_Flag).
+ */
+typedef enum eUserpref_Anim_Flags {
+  USER_ANIM_SHOW_CHANNEL_GROUP_COLORS = (1 << 0),
+} eUserpref_Anim_Flags;
+
 /** #UserDef.transopts */
 typedef enum eUserpref_Translation_Flags {
   USER_TR_TOOLTIPS = (1 << 0),
@@ -1181,7 +1224,7 @@ typedef enum eDupli_ID_Flags {
 
   USER_DUP_OBDATA = (~0) & ((1 << 24) - 1),
 
-  /* Those are not exposed as user preferences, only used internaly. */
+  /* Those are not exposed as user preferences, only used internally. */
   USER_DUP_OBJECT = (1 << 24),
   /* USER_DUP_COLLECTION = (1 << 25), */ /* UNUSED, keep because we may implement. */
 
@@ -1342,6 +1385,11 @@ typedef enum eUserpref_DiskCacheCompression {
   USER_SEQ_DISK_CACHE_COMPRESSION_LOW = 1,
   USER_SEQ_DISK_CACHE_COMPRESSION_HIGH = 2,
 } eUserpref_DiskCacheCompression;
+
+typedef enum eUserpref_SeqProxySetup {
+  USER_SEQ_PROXY_SETUP_MANUAL = 0,
+  USER_SEQ_PROXY_SETUP_AUTOMATIC = 1,
+} eUserpref_SeqProxySetup;
 
 /* Locale Ids. Auto will try to get local from OS. Our default is English though. */
 /** #UserDef.language */

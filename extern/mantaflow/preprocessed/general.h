@@ -242,6 +242,39 @@ inline bool c_isnan(float c)
   return d != d;
 }
 
+//! Swap so that a<b
+template<class T> inline void sort(T &a, T &b)
+{
+  if (a > b)
+    std::swap(a, b);
+}
+
+//! Swap so that a<b<c
+template<class T> inline void sort(T &a, T &b, T &c)
+{
+  if (a > b)
+    std::swap(a, b);
+  if (a > c)
+    std::swap(a, c);
+  if (b > c)
+    std::swap(b, c);
+}
+
+//! Swap so that a<b<c<d
+template<class T> inline void sort(T &a, T &b, T &c, T &d)
+{
+  if (a > b)
+    std::swap(a, b);
+  if (c > d)
+    std::swap(c, d);
+  if (a > c)
+    std::swap(a, c);
+  if (b > d)
+    std::swap(b, d);
+  if (b > c)
+    std::swap(b, c);
+}
+
 }  // namespace Manta
 
 #endif

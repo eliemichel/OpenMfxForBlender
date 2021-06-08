@@ -141,7 +141,7 @@ Nurb *ED_curve_add_nurbs_primitive(
   BKE_nurbList_flag_set(editnurb, SELECT, false);
 
   /* these types call this function to return a Nurb */
-  if (stype != CU_PRIM_TUBE && stype != CU_PRIM_DONUT) {
+  if (!ELEM(stype, CU_PRIM_TUBE, CU_PRIM_DONUT)) {
     nu = (Nurb *)MEM_callocN(sizeof(Nurb), "addNurbprim");
     nu->type = cutype;
     nu->resolu = cu->resolu;
@@ -380,10 +380,10 @@ Nurb *ED_curve_add_nurbs_primitive(
 
         mul_mat3_m4_v3(mat, vec);
 
-        ed_editnurb_translate_flag(editnurb, SELECT, vec);
+        ed_editnurb_translate_flag(editnurb, SELECT, vec, CU_IS_2D(cu));
         ed_editnurb_extrude_flag(cu->editnurb, SELECT);
         mul_v3_fl(vec, -2.0f);
-        ed_editnurb_translate_flag(editnurb, SELECT, vec);
+        ed_editnurb_translate_flag(editnurb, SELECT, vec, CU_IS_2D(cu));
 
         BLI_remlink(editnurb, nu);
 
@@ -397,8 +397,8 @@ Nurb *ED_curve_add_nurbs_primitive(
       break;
     case CU_PRIM_SPHERE: /* sphere */
       if (cutype == CU_NURBS) {
-        const float tmp_cent[3] = {0.f, 0.f, 0.f};
-        const float tmp_vec[3] = {0.f, 0.f, 1.f};
+        const float tmp_cent[3] = {0.0f, 0.0f, 0.0f};
+        const float tmp_vec[3] = {0.0f, 0.0f, 1.0f};
 
         nu->pntsu = 5;
         nu->pntsv = 1;
@@ -451,8 +451,8 @@ Nurb *ED_curve_add_nurbs_primitive(
       break;
     case CU_PRIM_DONUT: /* torus */
       if (cutype == CU_NURBS) {
-        const float tmp_cent[3] = {0.f, 0.f, 0.f};
-        const float tmp_vec[3] = {0.f, 0.f, 1.f};
+        const float tmp_cent[3] = {0.0f, 0.0f, 0.0f};
+        const float tmp_vec[3] = {0.0f, 0.0f, 1.0f};
 
         xzproj = 1;
         nu = ED_curve_add_nurbs_primitive(C, obedit, mat, CU_NURBS | CU_PRIM_CIRCLE, 0);
@@ -492,15 +492,13 @@ Nurb *ED_curve_add_nurbs_primitive(
   BLI_assert(nu != NULL);
 
   if (nu) { /* should always be set */
-    if ((obedit->type != OB_SURF) && ((cu->flag & CU_3D) == 0)) {
-      nu->flag |= CU_2D;
-    }
-
     nu->flag |= CU_SMOOTH;
     cu->actnu = BLI_listbase_count(editnurb);
     cu->actvert = CU_ACT_NONE;
 
-    BKE_nurb_test_2d(nu);
+    if (CU_IS_2D(cu)) {
+      BKE_nurb_project_2d(nu);
+    }
   }
 
   return nu;

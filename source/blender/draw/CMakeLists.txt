@@ -25,6 +25,7 @@ set(INC
   ../blenfont
   ../blenkernel
   ../blenlib
+  ../blenloader
   ../blentranslation
   ../bmesh
   ../depsgraph
@@ -35,13 +36,16 @@ set(INC
   ../makesdna
   ../makesrna
   ../nodes
-  ../render/extern/include
-  ../render/intern/include
+  ../render
+  ../render/intern
   ../windowmanager
 
   ../../../intern/atomic
   ../../../intern/glew-mx
   ../../../intern/guardedalloc
+
+  # dna_type_offsets.h
+  ${CMAKE_CURRENT_BINARY_DIR}/../makesdna/intern
 )
 
 set(SRC
@@ -76,6 +80,7 @@ set(SRC
   engines/image/image_engine.c
   engines/image/image_shader.c
   engines/eevee/eevee_bloom.c
+  engines/eevee/eevee_cryptomatte.c
   engines/eevee/eevee_data.c
   engines/eevee/eevee_depth_of_field.c
   engines/eevee/eevee_effects.c
@@ -85,6 +90,7 @@ set(SRC
   engines/eevee/eevee_lights.c
   engines/eevee/eevee_lookdev.c
   engines/eevee/eevee_lut.c
+  engines/eevee/eevee_lut_gen.c
   engines/eevee/eevee_materials.c
   engines/eevee/eevee_mist.c
   engines/eevee/eevee_motion_blur.c
@@ -192,7 +198,6 @@ set(LIB
 
 data_to_c_simple(engines/eevee/shaders/ambient_occlusion_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/background_vert.glsl SRC)
-data_to_c_simple(engines/eevee/shaders/closure_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/common_uniforms_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/common_utiltex_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lights_lib.glsl SRC)
@@ -210,10 +215,28 @@ data_to_c_simple(engines/eevee/shaders/lightprobe_grid_fill_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_planar_display_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_planar_display_vert.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lookdev_world_frag.glsl SRC)
-data_to_c_simple(engines/eevee/shaders/closure_lit_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/closure_eval_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/closure_eval_diffuse_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/closure_eval_glossy_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/closure_eval_refraction_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/closure_eval_translucent_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/closure_type_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_bloom_frag.glsl SRC)
-data_to_c_simple(engines/eevee/shaders/effect_dof_vert.glsl SRC)
-data_to_c_simple(engines/eevee/shaders/effect_dof_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_dof_bokeh_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_dof_dilate_tiles_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_dof_downsample_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_dof_filter_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_dof_flatten_tiles_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_dof_gather_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_dof_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_dof_reduce_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_dof_resolve_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_dof_scatter_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_dof_scatter_vert.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_dof_setup_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_reflection_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_reflection_resolve_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_reflection_trace_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_downsample_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_downsample_cube_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_gtao_frag.glsl SRC)
@@ -222,7 +245,6 @@ data_to_c_simple(engines/eevee/shaders/effect_velocity_tile_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_minmaxz_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_mist_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_motion_blur_frag.glsl SRC)
-data_to_c_simple(engines/eevee/shaders/effect_ssr_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_subsurface_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_translucency_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_temporal_aa.glsl SRC)
@@ -243,9 +265,11 @@ data_to_c_simple(engines/eevee/shaders/irradiance_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/octahedron_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/cubemap_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/bsdf_sampling_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/random_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/raytrace_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/renderpass_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/renderpass_postprocess_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/cryptomatte_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/ltc_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/ssr_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/surface_frag.glsl SRC)
@@ -373,6 +397,8 @@ data_to_c_simple(engines/overlay/shaders/edit_uv_verts_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_uv_verts_frag.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_uv_faces_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_uv_face_dots_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_uv_image_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_uv_image_mask_frag.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_uv_stretching_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_uv_tiled_image_borders_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/extra_frag.glsl SRC)
@@ -445,6 +471,9 @@ endif()
 
 
 blender_add_lib(bf_draw "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+# Needed so we can use dna_type_offsets.h for defaults initialization.
+add_dependencies(bf_draw bf_dna)
 
 if(WITH_GTESTS)
   if(WITH_OPENGL_DRAW_TESTS)

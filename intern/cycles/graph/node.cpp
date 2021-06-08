@@ -35,7 +35,7 @@ Node::Node(const NodeType *type_, ustring name_) : name(name_), type(type_)
   assert(type);
 
   owner = nullptr;
-  socket_modified = ~0;
+  tag_modified();
 
   /* assign non-empty name, convenient for debugging */
   if (name.empty()) {
@@ -50,11 +50,6 @@ Node::Node(const NodeType *type_, ustring name_) : name(name_), type(type_)
 
 Node::~Node()
 {
-}
-
-template<typename T> static T &get_socket_value(const Node *node, const SocketType &socket)
-{
-  return (T &)*(((char *)node) + socket.struct_offset);
 }
 
 #ifndef NDEBUG
@@ -387,6 +382,87 @@ void Node::copy_value(const SocketType &socket, const Node &other, const SocketT
   }
 }
 
+void Node::set_value(const SocketType &socket, const Node &other, const SocketType &other_socket)
+{
+  assert(socket.type == other_socket.type);
+  (void)other_socket;
+
+  if (socket.is_array()) {
+    switch (socket.type) {
+      case SocketType::BOOLEAN_ARRAY:
+        set(socket, get_socket_value<array<bool>>(&other, socket));
+        break;
+      case SocketType::FLOAT_ARRAY:
+        set(socket, get_socket_value<array<float>>(&other, socket));
+        break;
+      case SocketType::INT_ARRAY:
+        set(socket, get_socket_value<array<int>>(&other, socket));
+        break;
+      case SocketType::COLOR_ARRAY:
+      case SocketType::VECTOR_ARRAY:
+      case SocketType::POINT_ARRAY:
+      case SocketType::NORMAL_ARRAY:
+        set(socket, get_socket_value<array<float3>>(&other, socket));
+        break;
+      case SocketType::POINT2_ARRAY:
+        set(socket, get_socket_value<array<float2>>(&other, socket));
+        break;
+      case SocketType::STRING_ARRAY:
+        set(socket, get_socket_value<array<ustring>>(&other, socket));
+        break;
+      case SocketType::TRANSFORM_ARRAY:
+        set(socket, get_socket_value<array<Transform>>(&other, socket));
+        break;
+      case SocketType::NODE_ARRAY:
+        set(socket, get_socket_value<array<Node *>>(&other, socket));
+        break;
+      default:
+        assert(0);
+        break;
+    }
+  }
+  else {
+    switch (socket.type) {
+      case SocketType::BOOLEAN:
+        set(socket, get_socket_value<bool>(&other, socket));
+        break;
+      case SocketType::FLOAT:
+        set(socket, get_socket_value<float>(&other, socket));
+        break;
+      case SocketType::INT:
+        set(socket, get_socket_value<int>(&other, socket));
+        break;
+      case SocketType::UINT:
+        set(socket, get_socket_value<uint>(&other, socket));
+        break;
+      case SocketType::COLOR:
+      case SocketType::VECTOR:
+      case SocketType::POINT:
+      case SocketType::NORMAL:
+        set(socket, get_socket_value<float3>(&other, socket));
+        break;
+      case SocketType::POINT2:
+        set(socket, get_socket_value<float2>(&other, socket));
+        break;
+      case SocketType::STRING:
+        set(socket, get_socket_value<ustring>(&other, socket));
+        break;
+      case SocketType::ENUM:
+        set(socket, get_socket_value<int>(&other, socket));
+        break;
+      case SocketType::TRANSFORM:
+        set(socket, get_socket_value<Transform>(&other, socket));
+        break;
+      case SocketType::NODE:
+        set(socket, get_socket_value<Node *>(&other, socket));
+        break;
+      default:
+        assert(0);
+        break;
+    }
+  }
+}
+
 template<typename T>
 static bool is_array_equal(const Node *node, const Node *other, const SocketType &socket)
 {
@@ -709,7 +785,7 @@ bool Node::is_modified()
 
 void Node::tag_modified()
 {
-  socket_modified = ~0u;
+  socket_modified = ~0ull;
 }
 
 void Node::clear_modified()

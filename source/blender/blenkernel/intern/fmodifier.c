@@ -32,6 +32,7 @@
 #include "CLG_log.h"
 
 #include "DNA_anim_types.h"
+#include "DNA_screen_types.h"
 
 #include "BLT_translation.h"
 
@@ -623,7 +624,7 @@ static void fcm_cycles_new_data(void *mdata)
 static float fcm_cycles_time(
     FCurve *fcu, FModifier *fcm, float UNUSED(cvalue), float evaltime, void *storage_)
 {
-  FMod_Cycles *data = (FMod_Cycles *)fcm->data;
+  const FMod_Cycles *data = (FMod_Cycles *)fcm->data;
   tFCMED_Cycles *storage = storage_;
   float prevkey[2], lastkey[2], cycyofs = 0.0f;
   short side = 0, mode = 0;
@@ -640,10 +641,14 @@ static float fcm_cycles_time(
     return evaltime;
   }
 
+  if (fcu == NULL || (fcu->bezt == NULL && fcu->fpt == NULL)) {
+    return evaltime;
+  }
+
   /* calculate new evaltime due to cyclic interpolation */
-  if (fcu && fcu->bezt) {
-    BezTriple *prevbezt = fcu->bezt;
-    BezTriple *lastbezt = prevbezt + fcu->totvert - 1;
+  if (fcu->bezt) {
+    const BezTriple *prevbezt = fcu->bezt;
+    const BezTriple *lastbezt = prevbezt + fcu->totvert - 1;
 
     prevkey[0] = prevbezt->vec[1][0];
     prevkey[1] = prevbezt->vec[1][1];
@@ -651,18 +656,16 @@ static float fcm_cycles_time(
     lastkey[0] = lastbezt->vec[1][0];
     lastkey[1] = lastbezt->vec[1][1];
   }
-  else if (fcu && fcu->fpt) {
-    FPoint *prevfpt = fcu->fpt;
-    FPoint *lastfpt = prevfpt + fcu->totvert - 1;
+  else {
+    BLI_assert(fcu->fpt != NULL);
+    const FPoint *prevfpt = fcu->fpt;
+    const FPoint *lastfpt = prevfpt + fcu->totvert - 1;
 
     prevkey[0] = prevfpt->vec[0];
     prevkey[1] = prevfpt->vec[1];
 
     lastkey[0] = lastfpt->vec[0];
     lastkey[1] = lastfpt->vec[1];
-  }
-  else {
-    return evaltime;
   }
 
   /* check if modifier will do anything
@@ -691,12 +694,9 @@ static float fcm_cycles_time(
 
   /* find relative place within a cycle */
   {
-    float cycdx = 0, cycdy = 0;
-    float cycle = 0, cyct = 0;
-
     /* calculate period and amplitude (total height) of a cycle */
-    cycdx = lastkey[0] - prevkey[0];
-    cycdy = lastkey[1] - prevkey[1];
+    const float cycdx = lastkey[0] - prevkey[0];
+    const float cycdy = lastkey[1] - prevkey[1];
 
     /* check if cycle is infinitely small, to be point of being impossible to use */
     if (cycdx == 0) {
@@ -704,10 +704,10 @@ static float fcm_cycles_time(
     }
 
     /* calculate the 'number' of the cycle */
-    cycle = ((float)side * (evaltime - ofs) / cycdx);
+    const float cycle = ((float)side * (evaltime - ofs) / cycdx);
 
     /* calculate the time inside the cycle */
-    cyct = fmod(evaltime - ofs, cycdx);
+    const float cyct = fmod(evaltime - ofs, cycdx);
 
     /* check that cyclic is still enabled for the specified time */
     if (cycles == 0) {
@@ -824,7 +824,8 @@ static void fcm_noise_evaluate(
    * - 0.1 is passed as the 'z' value, otherwise evaluation fails for size = phase = 1
    *   with evaltime being an integer (which happens when evaluating on frame by frame basis)
    */
-  noise = BLI_turbulence(data->size, evaltime - data->offset, data->phase, 0.1f, data->depth);
+  noise = BLI_noise_turbulence(
+      data->size, evaltime - data->offset, data->phase, 0.1f, data->depth);
 
   /* combine the noise with existing motion data */
   switch (data->modification) {
@@ -1133,7 +1134,7 @@ FModifier *add_fmodifier(ListBase *modifiers, int type, FCurve *owner_fcu)
   /* add modifier itself */
   fcm = MEM_callocN(sizeof(FModifier), "F-Curve Modifier");
   fcm->type = type;
-  fcm->flag = FMODIFIER_FLAG_EXPANDED;
+  fcm->ui_expand_flag = UI_PANEL_DATA_EXPAND_ROOT; /* Expand the main panel, not the sub-panels. */
   fcm->curve = owner_fcu;
   fcm->influence = 1.0f;
   BLI_addtail(modifiers, fcm);

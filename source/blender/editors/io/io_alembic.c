@@ -35,19 +35,16 @@
 
 #  include "MEM_guardedalloc.h"
 
-#  include "DNA_mesh_types.h"
 #  include "DNA_modifier_types.h"
 #  include "DNA_object_types.h"
 #  include "DNA_scene_types.h"
 #  include "DNA_space_types.h"
 
 #  include "BKE_context.h"
-#  include "BKE_global.h"
 #  include "BKE_main.h"
 #  include "BKE_report.h"
 
 #  include "BLI_listbase.h"
-#  include "BLI_math_vector.h"
 #  include "BLI_path_util.h"
 #  include "BLI_string.h"
 #  include "BLI_utildefines.h"
@@ -243,9 +240,10 @@ static void ui_alembic_export_settings(uiLayout *layout, PointerRNA *imfptr)
 
 static void wm_alembic_export_draw(bContext *C, wmOperator *op)
 {
+  wmWindowManager *wm = CTX_wm_manager(C);
   PointerRNA ptr;
 
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
+  RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
 
   /* Conveniently set start and end frame to match the scene's frame range. */
   Scene *scene = CTX_data_scene(C);
@@ -292,7 +290,7 @@ void WM_OT_alembic_export(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 
   RNA_def_int(ot->srna,
               "start",
@@ -428,7 +426,7 @@ void WM_OT_alembic_export(wmOperatorType *ot)
                   "triangulate",
                   false,
                   "Triangulate",
-                  "Export Polygons (Quads & NGons) as Triangles");
+                  "Export polygons (quads and n-gons) as triangles");
 
   RNA_def_enum(ot->srna,
                "quad_method",
@@ -439,10 +437,10 @@ void WM_OT_alembic_export(wmOperatorType *ot)
 
   RNA_def_enum(ot->srna,
                "ngon_method",
-               rna_enum_modifier_triangulate_quad_method_items,
+               rna_enum_modifier_triangulate_ngon_method_items,
                MOD_TRIANGULATE_NGON_BEAUTY,
-               "Polygon Method",
-               "Method for splitting the polygons into triangles");
+               "N-gon Method",
+               "Method for splitting the n-gons into triangles");
 
   RNA_def_boolean(ot->srna,
                   "export_hair",
@@ -596,11 +594,12 @@ static void ui_alembic_import_settings(uiLayout *layout, PointerRNA *imfptr)
   uiItemR(col, imfptr, "validate_meshes", 0, NULL, ICON_NONE);
 }
 
-static void wm_alembic_import_draw(bContext *UNUSED(C), wmOperator *op)
+static void wm_alembic_import_draw(bContext *C, wmOperator *op)
 {
+  wmWindowManager *wm = CTX_wm_manager(C);
   PointerRNA ptr;
 
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
+  RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
   ui_alembic_import_settings(op->layout, &ptr);
 }
 
@@ -677,7 +676,7 @@ void WM_OT_alembic_import(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 
   RNA_def_float(
       ot->srna,

@@ -145,7 +145,7 @@ static void solve_camera_freejob(void *scv)
     BKE_reportf(scj->reports,
                 RPT_INFO,
                 "Average re-projection error: %.2f px",
-                tracking->reconstruction.error);
+                BKE_tracking_get_active_reconstruction(tracking)->error);
   }
 
   /* Set currently solved clip as active for scene. */
@@ -244,7 +244,7 @@ static int solve_camera_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
   G.is_break = false;
 
   WM_jobs_start(CTX_wm_manager(C), wm_job);
-  WM_cursor_wait(0);
+  WM_cursor_wait(false);
 
   /* add modal handler for ESC */
   WM_event_add_modal_handler(C, op);

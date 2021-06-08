@@ -126,6 +126,28 @@ float BM_face_uv_calc_cross(const BMFace *f, const int cd_loop_uv_offset)
   return cross_poly_v2(uvs, f->len);
 }
 
+void BM_face_uv_minmax(const BMFace *f, float min[2], float max[2], const int cd_loop_uv_offset)
+{
+  const BMLoop *l_iter;
+  const BMLoop *l_first;
+  l_iter = l_first = BM_FACE_FIRST_LOOP(f);
+  do {
+    const MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l_iter, cd_loop_uv_offset);
+    minmax_v2v2_v2(min, max, luv->uv);
+  } while ((l_iter = l_iter->next) != l_first);
+}
+
+void BM_face_uv_transform(BMFace *f, const float matrix[2][2], const int cd_loop_uv_offset)
+{
+  BMLoop *l_iter;
+  BMLoop *l_first;
+  l_iter = l_first = BM_FACE_FIRST_LOOP(f);
+  do {
+    MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l_iter, cd_loop_uv_offset);
+    mul_m2_v2(matrix, luv->uv);
+  } while ((l_iter = l_iter->next) != l_first);
+}
+
 /**
  * Check if two loops that share an edge also have the same UV coordinates.
  */
@@ -180,4 +202,23 @@ bool BM_edge_uv_share_vert_check(BMEdge *e, BMLoop *l_a, BMLoop *l_b, const int 
   }
 
   return true;
+}
+
+/**
+ * Check if the point is inside the UV face.
+ */
+bool BM_face_uv_point_inside_test(const BMFace *f, const float co[2], const int cd_loop_uv_offset)
+{
+  float(*projverts)[2] = BLI_array_alloca(projverts, f->len);
+
+  BMLoop *l_iter;
+  int i;
+
+  BLI_assert(BM_face_is_normal_valid(f));
+
+  for (i = 0, l_iter = BM_FACE_FIRST_LOOP(f); i < f->len; i++, l_iter = l_iter->next) {
+    copy_v2_v2(projverts[i], BM_ELEM_CD_GET_VOID_P(l_iter, cd_loop_uv_offset));
+  }
+
+  return isect_point_poly_v2(co, projverts, f->len, false);
 }

@@ -25,7 +25,7 @@
  * Original license from NVIDIA follows.
  */
 
-// This code is in the public domain -- castanyo@yahoo.es
+// This code is in the public domain -- <castanyo@yahoo.es>
 
 #pragma once
 
@@ -34,7 +34,7 @@
 
 /** Uncompressed 4x4 color block. */
 struct ColorBlock {
-  ColorBlock();
+  ColorBlock() = default;
   ColorBlock(const uint *linearImage);
   ColorBlock(const ColorBlock &block);
   ColorBlock(const Image *img, uint x, uint y);

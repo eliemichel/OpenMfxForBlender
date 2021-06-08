@@ -20,10 +20,13 @@
 
 set(SRC_DNA_INC
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_ID.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_ID_enums.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_action_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_anim_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_armature_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_asset_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_boid_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_brush_enums.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_brush_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_cachefile_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_camera_types.h
@@ -53,6 +56,7 @@ set(SRC_DNA_INC
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_layer_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_light_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_lightprobe_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_lineart_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_linestyle_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_listBase.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_mask_types.h

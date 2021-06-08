@@ -749,8 +749,8 @@ static bool ed_marker_move_use_time(MarkerMove *mm)
       ((mm->slink->spacetype == SPACE_ACTION) &&
        (((SpaceAction *)mm->slink)->flag & SACTION_DRAWTIME)) ||
       ((mm->slink->spacetype == SPACE_GRAPH) &&
-       !(((SpaceGraph *)mm->slink)->flag & SIPO_DRAWTIME)) ||
-      ((mm->slink->spacetype == SPACE_NLA) && !(((SpaceNla *)mm->slink)->flag & SNLA_DRAWTIME))) {
+       (((SpaceGraph *)mm->slink)->flag & SIPO_DRAWTIME)) ||
+      ((mm->slink->spacetype == SPACE_NLA) && (((SpaceNla *)mm->slink)->flag & SNLA_DRAWTIME))) {
     return true;
   }
 
@@ -762,9 +762,9 @@ static void ed_marker_move_update_header(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   MarkerMove *mm = op->customdata;
   TimeMarker *marker, *selmarker = NULL;
-  const int offs = RNA_int_get(op->ptr, "frames");
+  const int ofs = RNA_int_get(op->ptr, "frames");
   char str[UI_MAX_DRAW_STR];
-  char str_offs[NUM_STR_REP_LEN];
+  char str_ofs[NUM_STR_REP_LEN];
   int totmark;
   const bool use_time = ed_marker_move_use_time(mm);
 
@@ -776,27 +776,27 @@ static void ed_marker_move_update_header(bContext *C, wmOperator *op)
   }
 
   if (hasNumInput(&mm->num)) {
-    outputNumInput(&mm->num, str_offs, &scene->unit);
+    outputNumInput(&mm->num, str_ofs, &scene->unit);
   }
   else if (use_time) {
-    BLI_snprintf(str_offs, sizeof(str_offs), "%.2f", FRA2TIME(offs));
+    BLI_snprintf(str_ofs, sizeof(str_ofs), "%.2f", FRA2TIME(ofs));
   }
   else {
-    BLI_snprintf(str_offs, sizeof(str_offs), "%d", offs);
+    BLI_snprintf(str_ofs, sizeof(str_ofs), "%d", ofs);
   }
 
   if (totmark == 1 && selmarker) {
     /* we print current marker value */
     if (use_time) {
       BLI_snprintf(
-          str, sizeof(str), TIP_("Marker %.2f offset %s"), FRA2TIME(selmarker->frame), str_offs);
+          str, sizeof(str), TIP_("Marker %.2f offset %s"), FRA2TIME(selmarker->frame), str_ofs);
     }
     else {
-      BLI_snprintf(str, sizeof(str), TIP_("Marker %d offset %s"), selmarker->frame, str_offs);
+      BLI_snprintf(str, sizeof(str), TIP_("Marker %d offset %s"), selmarker->frame, str_ofs);
     }
   }
   else {
-    BLI_snprintf(str, sizeof(str), TIP_("Marker offset %s"), str_offs);
+    BLI_snprintf(str, sizeof(str), TIP_("Marker offset %s"), str_ofs);
   }
 
   ED_area_status_text(CTX_wm_area(C), str);
@@ -907,12 +907,12 @@ static void ed_marker_move_apply(bContext *C, wmOperator *op)
 #endif
   MarkerMove *mm = op->customdata;
   TimeMarker *marker;
-  int a, offs;
+  int a, ofs;
 
-  offs = RNA_int_get(op->ptr, "frames");
+  ofs = RNA_int_get(op->ptr, "frames");
   for (a = 0, marker = mm->markers->first; marker; marker = marker->next) {
     if (marker->flag & SELECT) {
-      marker->frame = mm->oldframe[a] + offs;
+      marker->frame = mm->oldframe[a] + ofs;
       a++;
     }
   }
@@ -1210,6 +1210,7 @@ static void select_marker_camera_switch(
 {
 #ifdef DURIAN_CAMERA_SWITCH
   if (camera) {
+    BLI_assert(CTX_data_mode_enum(C) == CTX_MODE_OBJECT);
     Scene *scene = CTX_data_scene(C);
     ViewLayer *view_layer = CTX_data_view_layer(C);
     Base *base;
@@ -1281,6 +1282,15 @@ static int ed_marker_select_exec(bContext *C, wmOperator *op)
   bool camera = false;
 #ifdef DURIAN_CAMERA_SWITCH
   camera = RNA_boolean_get(op->ptr, "camera");
+  if (camera) {
+    /* Supporting mode switching from this operator doesn't seem so useful.
+     * So only allow setting the active camera in object-mode. */
+    if (CTX_data_mode_enum(C) != CTX_MODE_OBJECT) {
+      BKE_report(
+          op->reports, RPT_WARNING, "Selecting the camera is only supported in object mode");
+      camera = false;
+    }
+  }
 #endif
   int mval[2];
   mval[0] = RNA_int_get(op->ptr, "mouse_x");

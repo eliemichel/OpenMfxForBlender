@@ -24,6 +24,8 @@
 
 #include "BLI_sys_types.h"
 
+struct GPUUniformBuf;
+
 namespace blender {
 namespace gpu {
 
@@ -36,7 +38,7 @@ namespace gpu {
 /**
  * Implementation of Uniform Buffers.
  * Base class which is then specialized for each implementation (GL, VK, ...).
- **/
+ */
 class UniformBuf {
  protected:
   /** Data size in bytes. */
@@ -63,7 +65,7 @@ class UniformBuf {
   }
 };
 
-/* Syntacting suggar. */
+/* Syntactic sugar. */
 static inline GPUUniformBuf *wrap(UniformBuf *vert)
 {
   return reinterpret_cast<GPUUniformBuf *>(vert);

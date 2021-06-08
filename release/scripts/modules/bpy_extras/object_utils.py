@@ -17,6 +17,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8-80 compliant>
+from __future__ import annotations
 
 __all__ = (
     "add_object_align_init",
@@ -31,7 +32,6 @@ __all__ = (
 import bpy
 
 from bpy.props import (
-    BoolProperty,
     FloatVectorProperty,
     EnumProperty,
 )
@@ -49,7 +49,7 @@ def add_object_align_init(context, operator):
     :rtype: :class:`mathutils.Matrix`
     """
 
-    from mathutils import Matrix, Vector, Euler
+    from mathutils import Matrix, Vector
     properties = operator.properties if operator is not None else None
 
     space_data = context.space_data
@@ -112,7 +112,6 @@ def object_data_add(context, obdata, operator=None, name=None):
     :return: the newly created object in the scene.
     :rtype: :class:`bpy.types.Object`
     """
-    scene = context.scene
     layer = context.view_layer
     layer_collection = context.layer_collection or layer.active_layer_collection
     scene_collection = layer_collection.collection
@@ -172,16 +171,15 @@ class AddObjectHelper:
         if self.align == 'WORLD':
             self.rotation.zero()
 
-    align_items = (
-        ('WORLD', "World", "Align the new object to the world"),
-        ('VIEW', "View", "Align the new object to the view"),
-        ('CURSOR', "3D Cursor", "Use the 3D cursor orientation for the new object")
-    )
     align: EnumProperty(
         name="Align",
-        items=align_items,
+        items=(
+            ('WORLD', "World", "Align the new object to the world"),
+            ('VIEW', "View", "Align the new object to the view"),
+            ('CURSOR', "3D Cursor", "Use the 3D cursor orientation for the new object"),
+        ),
         default='WORLD',
-        update=align_update_callback,
+        update=AddObjectHelper.align_update_callback,
     )
     location: FloatVectorProperty(
         name="Location",
@@ -215,12 +213,13 @@ def object_add_grid_scale_apply_operator(operator, context):
     """
     Scale an operators distance values by the grid size.
     """
+    # This is a Python version of the C function `WM_operator_view3d_unit_defaults`.
     grid_scale = object_add_grid_scale(context)
 
     properties = operator.properties
     properties_def = properties.bl_rna.properties
     for prop_id in properties_def.keys():
-        if not properties.is_property_set(prop_id):
+        if not properties.is_property_set(prop_id, ghost=False):
             prop_def = properties_def[prop_id]
             if prop_def.unit == 'LENGTH' and prop_def.subtype == 'DISTANCE':
                 setattr(operator, prop_id,

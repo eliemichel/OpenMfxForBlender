@@ -25,6 +25,10 @@
 
 #include "DNA_defs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * This struct contains all the global data required to run a simulation.
  * At the time of this writing, this structure contains data appropriate
@@ -48,7 +52,7 @@ typedef struct ClothSimSettings {
   float Cvi;
   /** Gravity/external force vector. */
   float gravity[3];
-  /** This is the duration of our time step, computed..   */
+  /** This is the duration of our time step, computed. */
   float dt;
   /** The mass of the entire cloth. */
   float mass;
@@ -74,9 +78,9 @@ typedef struct ClothSimSettings {
   float time_scale;
   /** See SB. */
   float maxgoal;
-  /** Scaling of effector forces (see softbody_calc_forces)..*/
+  /** Scaling of effector forces (see #softbody_calc_forces). */
   float eff_force_scale;
-  /** Scaling of effector wind (see softbody_calc_forces)..   */
+  /** Scaling of effector wind (see #softbody_calc_forces). */
   float eff_wind_scale;
   float sim_time_old;
   float defgoal;
@@ -100,16 +104,19 @@ typedef struct ClothSimSettings {
   float shrink_max;
 
   /* Air pressure */
-  /* The uniform pressure that is constanty applied to the mesh. Can be negative */
+  /** The uniform pressure that is constantly applied to the mesh. Can be negative. */
   float uniform_pressure_force;
-  /* User set volume. This is the volume the mesh wants to expand to (the equilibrium volume). */
+  /** User set volume. This is the volume the mesh wants to expand to (the equilibrium volume). */
   float target_volume;
-  /* The scaling factor to apply to the actual pressure.
-   * pressure=( (current_volume/target_volume) - 1 + uniform_pressure_force) *
-   * pressure_factor */
+  /**
+   * The scaling factor to apply to the actual pressure.
+   * `pressure = ((current_volume/target_volume) - 1 + uniform_pressure_force) * pressure_factor`
+   */
   float pressure_factor;
-  /* Density of the fluid inside or outside the object for use in the hydrostatic pressure
-   * gradient. */
+  /**
+   * Density of the fluid inside or outside the object
+   * for use in the hydro-static pressure gradient.
+   */
   float fluid_density;
   short vgroup_pressure;
   char _pad7[6];
@@ -162,9 +169,9 @@ typedef struct ClothSimSettings {
   /** Mechanical damping of shear springs. */
   float shear_damp;
 
-  /** The maximum lenght an internal spring can have during creation. */
+  /** The maximum length an internal spring can have during creation. */
   float internal_spring_max_length;
-  /** How much the interal spring can diverge from the vertex normal during creation. */
+  /** How much the internal spring can diverge from the vertex normal during creation. */
   float internal_spring_max_diversion;
   /** Vertex group for scaling structural stiffness. */
   short vgroup_intern;
@@ -236,9 +243,11 @@ typedef struct ClothCollSettings {
   char _pad[4];
   /** Only use colliders from this group of objects. */
   struct Collection *group;
-  /** Vgroup to paint which vertices are used for self collisions. */
+  /** Vgroup to paint which vertices are not used for self collisions. */
   short vgroup_selfcol;
-  char _pad2[6];
+  /** Vgroup to paint which vertices are not used for object collisions. */
+  short vgroup_objcol;
+  char _pad2[4];
   /** Impulse clamp for object collisions. */
   float clamp;
   /** Impulse clamp for self collisions. */
@@ -250,3 +259,7 @@ typedef enum {
   CLOTH_COLLSETTINGS_FLAG_ENABLED = (1 << 1), /* enables cloth - object collisions */
   CLOTH_COLLSETTINGS_FLAG_SELF = (1 << 2),    /* enables selfcollisions */
 } CLOTH_COLLISIONSETTINGS_FLAGS;
+
+#ifdef __cplusplus
+}
+#endif

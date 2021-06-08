@@ -23,7 +23,7 @@
  * \note Does not *fix* anything, only reports found errors.
  */
 
-#include <string.h> /* for strrchr strncmp strstr */
+#include <string.h> /* for #strrchr #strncmp #strstr */
 
 #include "BLI_utildefines.h"
 
@@ -60,7 +60,7 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
 
   blo_split_main(&mainlist, bmain);
 
-  ListBase *lbarray[MAX_LIBARRAY];
+  ListBase *lbarray[INDEX_ID_MAX];
   int i = set_listbasepointers(bmain, lbarray);
   while (i--) {
     for (ID *id = lbarray[i]->first; id != NULL; id = id->next) {
@@ -112,7 +112,7 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
       }
 
       int totnames = 0;
-      LinkNode *names = BLO_blendhandle_get_datablock_names(bh, GS(id->name), &totnames);
+      LinkNode *names = BLO_blendhandle_get_datablock_names(bh, GS(id->name), false, &totnames);
       for (; id != NULL; id = id->next) {
         if (id->lib == NULL) {
           is_valid = false;
@@ -148,7 +148,7 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
         }
       }
 
-      BLI_linklist_free(names, free);
+      BLI_linklist_freeN(names);
     }
 
     BLO_blendhandle_close(bh);

@@ -3,8 +3,13 @@
 #pragma BLENDER_REQUIRE(common_hair_lib.glsl)
 #pragma BLENDER_REQUIRE(common_utiltex_lib.glsl)
 
-#pragma BLENDER_REQUIRE(closure_lib.glsl)
-#pragma BLENDER_REQUIRE(closure_lit_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_type_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_eval_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_eval_diffuse_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_eval_glossy_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_eval_translucent_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_eval_refraction_lib.glsl)
+
 #pragma BLENDER_REQUIRE(surface_lib.glsl)
 #pragma BLENDER_REQUIRE(volumetric_lib.glsl)
 
@@ -74,7 +79,7 @@ void main()
 #endif
 
 #ifndef USE_ALPHA_BLEND
-  float alpha_div = 1.0 / max(1e-8, alpha);
+  float alpha_div = safe_rcp(alpha);
   outRadiance.rgb *= alpha_div;
   ssrData.rgb *= alpha_div;
 #  ifdef USE_SSS

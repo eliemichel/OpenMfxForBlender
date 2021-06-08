@@ -122,9 +122,6 @@ EditBone *ED_armature_ebone_add_primitive(Object *obedit_arm, float length, bool
   return bone;
 }
 
-/* previously addvert_armature */
-/* the ctrl-click method */
-
 /**
  * Note this is already ported to multi-objects as it is.
  * Since only the active bone is extruded even for single objects,
@@ -306,8 +303,7 @@ static EditBone *get_named_editbone(ListBase *edbo, const char *name)
   return NULL;
 }
 
-/* Call this before doing any duplications
- * */
+/* Call this before doing any duplications. */
 void preEditBoneDuplicate(ListBase *editbones)
 {
   /* clear temp */
@@ -453,10 +449,13 @@ static void updateDuplicateActionConstraintSettings(EditBone *dup_bone,
 
   float mat[4][4];
 
+  bConstraintOb cob = {.depsgraph = NULL, .scene = NULL, .ob = ob, .pchan = NULL};
+  BKE_constraint_custom_object_space_get(cob.space_obj_world_matrix, curcon);
+
   unit_m4(mat);
   bPoseChannel *target_pchan = BKE_pose_channel_find_name(ob->pose, act_con->subtarget);
   BKE_constraint_mat_convertspace(
-      ob, target_pchan, mat, curcon->tarspace, CONSTRAINT_SPACE_LOCAL, false);
+      ob, target_pchan, &cob, mat, curcon->tarspace, CONSTRAINT_SPACE_LOCAL, false);
 
   float max_axis_val = 0;
   int max_axis = 0;
@@ -515,7 +514,8 @@ static void updateDuplicateActionConstraintSettings(EditBone *dup_bone,
   /* See if there is any channels that uses this bone */
   ListBase ani_curves;
   BLI_listbase_clear(&ani_curves);
-  if (BKE_fcurves_filter(&ani_curves, &act->curves, "pose.bones[", orig_bone->name)) {
+  if ((act != NULL) &&
+      BKE_fcurves_filter(&ani_curves, &act->curves, "pose.bones[", orig_bone->name)) {
     /* Create a copy and mirror the animation */
     for (LinkData *ld = ani_curves.first; ld; ld = ld->next) {
       FCurve *old_curve = ld->data;
@@ -605,8 +605,11 @@ static void updateDuplicateLocRotConstraintSettings(Object *ob,
 
   unit_m4(local_mat);
 
+  bConstraintOb cob = {.depsgraph = NULL, .scene = NULL, .ob = ob, .pchan = pchan};
+  BKE_constraint_custom_object_space_get(cob.space_obj_world_matrix, curcon);
+
   BKE_constraint_mat_convertspace(
-      ob, pchan, local_mat, curcon->ownspace, CONSTRAINT_SPACE_LOCAL, false);
+      ob, pchan, &cob, local_mat, curcon->ownspace, CONSTRAINT_SPACE_LOCAL, false);
 
   if (curcon->type == CONSTRAINT_TYPE_ROTLIMIT) {
     /* Zero out any location translation */
@@ -657,9 +660,12 @@ static void updateDuplicateTransformConstraintSettings(Object *ob,
 
   float target_mat[4][4], own_mat[4][4], imat[4][4];
 
+  bConstraintOb cob = {.depsgraph = NULL, .scene = NULL, .ob = ob, .pchan = pchan};
+  BKE_constraint_custom_object_space_get(cob.space_obj_world_matrix, curcon);
+
   unit_m4(own_mat);
   BKE_constraint_mat_convertspace(
-      ob, pchan, own_mat, curcon->ownspace, CONSTRAINT_SPACE_LOCAL, false);
+      ob, pchan, &cob, own_mat, curcon->ownspace, CONSTRAINT_SPACE_LOCAL, false);
 
   /* ###Source map mirroring### */
   float old_min, old_max;
@@ -717,7 +723,7 @@ static void updateDuplicateTransformConstraintSettings(Object *ob,
   bPoseChannel *target_pchan = BKE_pose_channel_find_name(ob->pose, trans->subtarget);
   unit_m4(target_mat);
   BKE_constraint_mat_convertspace(
-      ob, target_pchan, target_mat, curcon->tarspace, CONSTRAINT_SPACE_LOCAL, false);
+      ob, target_pchan, &cob, target_mat, curcon->tarspace, CONSTRAINT_SPACE_LOCAL, false);
 
   invert_m4_m4(imat, target_mat);
   /* convert values into local object space */
@@ -1608,7 +1614,7 @@ void ARMATURE_OT_bone_primitive_add(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Add Bone";
   ot->idname = "ARMATURE_OT_bone_primitive_add";
-  ot->description = "Add a new bone located at the 3D-Cursor";
+  ot->description = "Add a new bone located at the 3D cursor";
 
   /* api callbacks */
   ot->exec = armature_bone_primitive_add_exec;

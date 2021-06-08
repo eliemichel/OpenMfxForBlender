@@ -49,7 +49,7 @@ static void imb_gpu_get_format(const ImBuf *ibuf,
                          !IMB_colormanagement_space_is_scene_linear(ibuf->rect_colorspace));
   high_bitdepth = (!(ibuf->flags & IB_halffloat) && high_bitdepth);
 
-  *r_data_format = (float_rect) ? GPU_DATA_FLOAT : GPU_DATA_UNSIGNED_BYTE;
+  *r_data_format = (float_rect) ? GPU_DATA_FLOAT : GPU_DATA_UBYTE;
 
   if (float_rect) {
     *r_texture_format = high_bitdepth ? GPU_RGBA32F : GPU_RGBA16F;
@@ -86,8 +86,8 @@ static bool IMB_gpu_get_compressed_format(const ImBuf *ibuf, eGPUTextureFormat *
 
 /**
  * Apply colormanagement and scale buffer if needed.
- * *r_freedata is set to true if the returned buffer need to be manually freed.
- **/
+ * `*r_freedata` is set to true if the returned buffer need to be manually freed.
+ */
 static void *imb_gpu_get_data(const ImBuf *ibuf,
                               const bool do_rescale,
                               const int rescale_size[2],
@@ -219,10 +219,12 @@ void IMB_update_gpu_texture_sub(GPUTexture *tex,
 GPUTexture *IMB_create_gpu_texture(const char *name,
                                    ImBuf *ibuf,
                                    bool use_high_bitdepth,
-                                   bool use_premult)
+                                   bool use_premult,
+                                   bool limit_gl_texture_size)
 {
   GPUTexture *tex = NULL;
-  const int size[2] = {GPU_texture_size_with_limit(ibuf->x), GPU_texture_size_with_limit(ibuf->y)};
+  int size[2] = {GPU_texture_size_with_limit(ibuf->x, limit_gl_texture_size),
+                 GPU_texture_size_with_limit(ibuf->y, limit_gl_texture_size)};
   bool do_rescale = (ibuf->x != size[0]) || (ibuf->y != size[1]);
 
 #ifdef WITH_DDS
@@ -263,10 +265,16 @@ GPUTexture *IMB_create_gpu_texture(const char *name,
   const bool compress_as_srgb = (tex_format == GPU_SRGB8_A8);
   bool freebuf = false;
 
-  void *data = imb_gpu_get_data(ibuf, do_rescale, size, compress_as_srgb, use_premult, &freebuf);
-
   /* Create Texture. */
   tex = GPU_texture_create_2d(name, UNPACK2(size), 9999, tex_format, NULL);
+  if (tex == NULL) {
+    size[0] = max_ii(1, size[0] / 2);
+    size[1] = max_ii(1, size[1] / 2);
+    tex = GPU_texture_create_2d(name, UNPACK2(size), 9999, tex_format, NULL);
+    do_rescale = true;
+  }
+  BLI_assert(tex != NULL);
+  void *data = imb_gpu_get_data(ibuf, do_rescale, size, compress_as_srgb, use_premult, &freebuf);
   GPU_texture_update(tex, data_format, data);
 
   GPU_texture_anisotropic_filter(tex, true);

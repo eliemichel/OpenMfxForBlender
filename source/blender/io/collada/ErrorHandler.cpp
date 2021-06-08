@@ -26,17 +26,12 @@
 
 #include "GeneratedSaxParserParserError.h"
 
-#include <string.h>
+#include <cstring>
 
 #include "BLI_utildefines.h"
 
 //--------------------------------------------------------------------
 ErrorHandler::ErrorHandler() : mError(false)
-{
-}
-
-//--------------------------------------------------------------------
-ErrorHandler::~ErrorHandler()
 {
 }
 

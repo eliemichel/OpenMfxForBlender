@@ -31,6 +31,7 @@
 #include "BLI_linklist.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
+#include "BLI_string.h"
 
 #include "BLT_translation.h"
 
@@ -59,7 +60,11 @@
 #include "NOD_socket.h"
 #include "node_intern.h" /* own include */
 
-static bool node_group_operator_active(bContext *C)
+/* -------------------------------------------------------------------- */
+/** \name Local Utilities
+ * \{ */
+
+static bool node_group_operator_active_poll(bContext *C)
 {
   if (ED_operator_node_active(C)) {
     SpaceNode *snode = CTX_wm_space_node(C);
@@ -68,10 +73,11 @@ static bool node_group_operator_active(bContext *C)
      * Disabled otherwise to allow pynodes define their own operators
      * with same keymap.
      */
-    if (STREQ(snode->tree_idname, "ShaderNodeTree") ||
-        STREQ(snode->tree_idname, "CompositorNodeTree") ||
-        STREQ(snode->tree_idname, "TextureNodeTree") ||
-        STREQ(snode->tree_idname, "SimulationNodeTree")) {
+    if (STR_ELEM(snode->tree_idname,
+                 "ShaderNodeTree",
+                 "CompositorNodeTree",
+                 "TextureNodeTree",
+                 "GeometryNodeTree")) {
       return true;
     }
   }
@@ -88,7 +94,7 @@ static bool node_group_operator_editable(bContext *C)
      * with same keymap.
      */
     if (ED_node_is_shader(snode) || ED_node_is_compositor(snode) || ED_node_is_texture(snode) ||
-        ED_node_is_simulation(snode)) {
+        ED_node_is_geometry(snode)) {
       return true;
     }
   }
@@ -101,7 +107,7 @@ static const char *group_ntree_idname(bContext *C)
   return snode->tree_idname;
 }
 
-static const char *group_node_idname(bContext *C)
+const char *node_group_idname(bContext *C)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
 
@@ -114,8 +120,8 @@ static const char *group_node_idname(bContext *C)
   if (ED_node_is_texture(snode)) {
     return "TextureNodeGroup";
   }
-  if (ED_node_is_simulation(snode)) {
-    return "SimulationNodeGroup";
+  if (ED_node_is_geometry(snode)) {
+    return "GeometryNodeGroup";
   }
 
   return "";
@@ -132,12 +138,16 @@ static bNode *node_group_get_active(bContext *C, const char *node_idname)
   return NULL;
 }
 
-/* ***************** Edit Group operator ************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Group Operator
+ * \{ */
 
 static int node_group_edit_exec(bContext *C, wmOperator *op)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
-  const char *node_idname = group_node_idname(C);
+  const char *node_idname = node_group_idname(C);
   const bool exit = RNA_boolean_get(op->ptr, "exit");
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
@@ -169,7 +179,7 @@ void NODE_OT_group_edit(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = node_group_edit_exec;
-  ot->poll = node_group_operator_active;
+  ot->poll = node_group_operator_active_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -177,10 +187,16 @@ void NODE_OT_group_edit(wmOperatorType *ot)
   RNA_def_boolean(ot->srna, "exit", false, "Exit", "");
 }
 
-/* ******************** Ungroup operator ********************** */
+/** \} */
 
-/* The given paths will be owned by the returned instance. Both pointers are allowed to point to
- * the same string. */
+/* -------------------------------------------------------------------- */
+/** \name Ungroup Operator
+ * \{ */
+
+/**
+ * The given paths will be owned by the returned instance.
+ * Both pointers are allowed to point to the same string.
+ */
 static AnimationBasePathChange *animation_basepath_change_new(const char *src_basepath,
                                                               const char *dst_basepath)
 {
@@ -384,7 +400,7 @@ static int node_group_ungroup_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   SpaceNode *snode = CTX_wm_space_node(C);
-  const char *node_idname = group_node_idname(C);
+  const char *node_idname = node_group_idname(C);
 
   ED_preview_kill_jobs(CTX_wm_manager(C), bmain);
 
@@ -422,7 +438,11 @@ void NODE_OT_group_ungroup(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Separate operator ********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Separate Operator
+ * \{ */
 
 /* returns 1 if its OK */
 static int node_group_separate_selected(
@@ -634,7 +654,11 @@ void NODE_OT_group_separate(wmOperatorType *ot)
   RNA_def_enum(ot->srna, "type", node_group_separate_types, NODE_GS_COPY, "Type", "");
 }
 
-/* ****************** Make Group operator ******************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Make Group Operator
+ * \{ */
 
 static bool node_group_make_use_node(bNode *node, bNode *gnode)
 {
@@ -655,8 +679,19 @@ static bool node_group_make_test_selected(bNodeTree *ntree,
   /* check poll functions for selected nodes */
   LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node_group_make_use_node(node, gnode)) {
-      if (node->typeinfo->poll_instance && !node->typeinfo->poll_instance(node, ngroup)) {
-        BKE_reportf(reports, RPT_WARNING, "Can not add node '%s' in a group", node->name);
+      const char *disabled_hint = NULL;
+      if (node->typeinfo->poll_instance &&
+          !node->typeinfo->poll_instance(node, ngroup, &disabled_hint)) {
+        if (disabled_hint) {
+          BKE_reportf(reports,
+                      RPT_WARNING,
+                      "Can not add node '%s' in a group:\n  %s",
+                      node->name,
+                      disabled_hint);
+        }
+        else {
+          BKE_reportf(reports, RPT_WARNING, "Can not add node '%s' in a group", node->name);
+        }
         ok = false;
         break;
       }
@@ -989,7 +1024,7 @@ static int node_group_make_exec(bContext *C, wmOperator *op)
   SpaceNode *snode = CTX_wm_space_node(C);
   bNodeTree *ntree = snode->edittree;
   const char *ntree_idname = group_ntree_idname(C);
-  const char *node_idname = group_node_idname(C);
+  const char *node_idname = node_group_idname(C);
   Main *bmain = CTX_data_main(C);
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
@@ -1006,6 +1041,9 @@ static int node_group_make_exec(bContext *C, wmOperator *op)
     nodeSetActive(ntree, gnode);
     if (ngroup) {
       ED_node_tree_push(snode, ngroup, gnode);
+      LISTBASE_FOREACH (bNode *, node, &ngroup->nodes) {
+        sort_multi_input_socket_links(snode, node, NULL, NULL);
+      }
       ntreeUpdateTree(bmain, ngroup);
     }
   }
@@ -1015,7 +1053,7 @@ static int node_group_make_exec(bContext *C, wmOperator *op)
   snode_notify(C, snode);
   snode_dag_update(C, snode);
 
-  /* We broke relations in node tree, need to rebuild them in the grahes. */
+  /* We broke relations in node tree, need to rebuild them in the graphs. */
   DEG_relations_tag_update(bmain);
 
   return OPERATOR_FINISHED;
@@ -1036,13 +1074,17 @@ void NODE_OT_group_make(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ****************** Group Insert operator ******************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Group Insert Operator
+ * \{ */
 
 static int node_group_insert_exec(bContext *C, wmOperator *op)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
   bNodeTree *ntree = snode->edittree;
-  const char *node_idname = group_node_idname(C);
+  const char *node_idname = node_group_idname(C);
   Main *bmain = CTX_data_main(C);
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
@@ -1086,3 +1128,5 @@ void NODE_OT_group_insert(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
+
+/** \} */

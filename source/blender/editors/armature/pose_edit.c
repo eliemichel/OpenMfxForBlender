@@ -149,7 +149,7 @@ bool ED_object_posemode_exit(bContext *C, Object *ob)
   return ok;
 }
 
-/* if a selected or active bone is protected, throw error (oonly if warn == 1) and return 1 */
+/* if a selected or active bone is protected, throw error (only if warn == 1) and return 1 */
 /* only_selected == 1: the active bone is allowed to be protected */
 #if 0 /* UNUSED 2.5 */
 static bool pose_has_protected_selected(Object *ob, short warn)
@@ -476,9 +476,9 @@ static int pose_clear_paths_exec(bContext *C, wmOperator *op)
 }
 
 /* operator callback/wrapper */
-static int pose_clear_paths_invoke(bContext *C, wmOperator *op, const wmEvent *evt)
+static int pose_clear_paths_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  if ((evt->shift) && !RNA_struct_property_is_set(op->ptr, "only_selected")) {
+  if ((event->shift) && !RNA_struct_property_is_set(op->ptr, "only_selected")) {
     RNA_boolean_set(op->ptr, "only_selected", true);
   }
   return pose_clear_paths_exec(C, op);
@@ -593,8 +593,8 @@ void POSE_OT_flip_names(wmOperatorType *ot)
                   "do_strip_numbers",
                   false,
                   "Strip Numbers",
-                  "Try to remove right-most dot-number from flipped names "
-                  "(WARNING: may result in incoherent naming in some cases)");
+                  "Try to remove right-most dot-number from flipped names.\n"
+                  "Warning: May result in incoherent naming in some cases");
 }
 
 /* ------------------ */
@@ -897,6 +897,20 @@ static int pose_bone_layers_exec(bContext *C, wmOperator *op)
   RNA_boolean_get_array(op->ptr, "layers", layers);
 
   Object *prev_ob = NULL;
+
+  /* Make sure that the pose bone data is up to date.
+   * (May not always be the case after undo/redo e.g.).
+   */
+  struct Main *bmain = CTX_data_main(C);
+  wmWindow *win = CTX_wm_window(C);
+  View3D *v3d = CTX_wm_view3d(C); /* This may be NULL in a lot of cases. */
+  ViewLayer *view_layer = WM_window_get_active_view_layer(win);
+
+  FOREACH_OBJECT_IN_MODE_BEGIN (view_layer, v3d, OB_ARMATURE, OB_MODE_POSE, ob_iter) {
+    bArmature *arm = ob_iter->data;
+    BKE_pose_ensure(bmain, ob_iter, arm, true);
+  }
+  FOREACH_OBJECT_IN_MODE_END;
 
   /* set layers of pchans based on the values set in the operator props */
   CTX_DATA_BEGIN_WITH_ID (C, bPoseChannel *, pchan, selected_pose_bones, Object *, ob) {

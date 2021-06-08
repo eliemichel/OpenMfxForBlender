@@ -50,11 +50,7 @@
 
 #include "DEG_depsgraph.h"
 
-#include "ED_screen.h"
-
 #include "view3d_intern.h" /* own include */
-
-#include "BLI_strict_flags.h"
 
 typedef struct View3DCameraControl {
 
@@ -127,8 +123,7 @@ Object *ED_view3d_cameracontrol_object_get(View3DCameraControl *vctrl)
 struct View3DCameraControl *ED_view3d_cameracontrol_acquire(Depsgraph *depsgraph,
                                                             Scene *scene,
                                                             View3D *v3d,
-                                                            RegionView3D *rv3d,
-                                                            const bool use_parent_root)
+                                                            RegionView3D *rv3d)
 {
   View3DCameraControl *vctrl;
 
@@ -139,7 +134,8 @@ struct View3DCameraControl *ED_view3d_cameracontrol_acquire(Depsgraph *depsgraph
   vctrl->ctx_v3d = v3d;
   vctrl->ctx_rv3d = rv3d;
 
-  vctrl->use_parent_root = use_parent_root;
+  vctrl->use_parent_root = v3d->camera != NULL &&
+                           v3d->camera->transflag & OB_TRANSFORM_ADJUST_ROOT_PARENT_FOR_VIEW_LOCK;
 
   vctrl->persp_backup = rv3d->persp;
   vctrl->dist_backup = rv3d->dist;
@@ -153,7 +149,7 @@ struct View3DCameraControl *ED_view3d_cameracontrol_acquire(Depsgraph *depsgraph
 
   if (rv3d->persp == RV3D_CAMOB) {
     Object *ob_back;
-    if (use_parent_root && (vctrl->root_parent = v3d->camera->parent)) {
+    if (vctrl->use_parent_root && (vctrl->root_parent = v3d->camera->parent)) {
       while (vctrl->root_parent->parent) {
         vctrl->root_parent = vctrl->root_parent->parent;
       }

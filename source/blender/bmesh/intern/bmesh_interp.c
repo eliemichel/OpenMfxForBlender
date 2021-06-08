@@ -342,8 +342,12 @@ static void mdisp_axis_from_quad(const float v1[3],
   normalize_v3(r_axis_y);
 }
 
-/* tl is loop to project onto, l is loop whose internal displacement, co, is being
- * projected.  x and y are location in loop's mdisps grid of point co. */
+/**
+ * \param l_src: is loop whose internal displacement.
+ * \param l_dst: is loop to project onto.
+ * \param p: The point being projected.
+ * \param r_axis_x, r_axis_y: The location in loop's #CD_MDISPS grid of point `p`.
+ */
 static bool mdisp_in_mdispquad(BMLoop *l_src,
                                BMLoop *l_dst,
                                const float l_dst_f_center[3],
@@ -935,7 +939,7 @@ void BM_data_layer_free(BMesh *bm, CustomData *data, int type)
   data->pool = NULL;
 
   has_layer = CustomData_free_layer_active(data, type, 0);
-  /* assert because its expensive to realloc - better not do if layer isnt present */
+  /* Assert because its expensive to realloc - better not do if layer isn't present. */
   BLI_assert(has_layer != false);
   UNUSED_VARS_NDEBUG(has_layer);
 
@@ -957,7 +961,7 @@ void BM_data_layer_free_n(BMesh *bm, CustomData *data, int type, int n)
   data->pool = NULL;
 
   has_layer = CustomData_free_layer(data, type, 0, CustomData_get_layer_index_n(data, type, n));
-  /* assert because its expensive to realloc - better not do if layer isnt present */
+  /* Assert because its expensive to realloc - better not do if layer isn't present. */
   BLI_assert(has_layer != false);
   UNUSED_VARS_NDEBUG(has_layer);
 
@@ -1027,6 +1031,7 @@ void BM_elem_float_data_set(CustomData *cd, void *element, int type, const float
   }
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Loop interpolation functions: BM_vert_loop_groups_data_layer_***
  *
  * Handling loop custom-data such as UV's, while keeping contiguous fans is rather tedious.

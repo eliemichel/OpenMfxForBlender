@@ -72,6 +72,12 @@ const EnumPropertyItem rna_enum_window_cursor_items[] = {
 
 #  include "WM_types.h"
 
+/* Needed since RNA doesn't use `const` in function signatures. */
+static bool rna_KeyMapItem_compare(struct wmKeyMapItem *k1, struct wmKeyMapItem *k2)
+{
+  return WM_keymap_item_compare(k1, k2);
+}
+
 static void rna_KeyMapItem_to_string(wmKeyMapItem *kmi, bool compact, char *result)
 {
   WM_keymap_item_to_string(kmi, compact, result, UI_MAX_SHORTCUT_STR);
@@ -156,7 +162,7 @@ static void rna_gizmo_group_type_unlink_delayed(ReportList *reports, const char 
   }
 }
 
-/* placeholder data for final implementation of a true progressbar */
+/* Placeholder data for final implementation of a true progress-bar. */
 static struct wmStaticProgress {
   float min;
   float max;
@@ -641,11 +647,6 @@ static wmEvent *rna_Window_event_add_simulate(wmWindow *win,
   e.alt = alt;
   e.oskey = oskey;
 
-  e.prevx = win->eventstate->x;
-  e.prevy = win->eventstate->y;
-  e.prevval = win->eventstate->val;
-  e.prevtype = win->eventstate->type;
-
   e.ascii = '\0';
   e.utf8_buf[0] = '\0';
   if (unicode != NULL) {
@@ -722,7 +723,7 @@ void RNA_api_window(StructRNA *srna)
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
   parm = RNA_def_enum(func, "type", rna_enum_event_type_items, 0, "Type", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  parm = RNA_def_enum(func, "value", rna_enum_event_value_items, 0, "Value", "");
+  parm = RNA_def_enum(func, "value", rna_enum_event_value_all_items, 0, "Value", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_string(func, "unicode", NULL, 0, "", "");
   RNA_def_parameter_clear_flags(parm, PROP_NEVER_NULL, 0);
@@ -1103,7 +1104,7 @@ void RNA_api_keymapitem(StructRNA *srna)
   FunctionRNA *func;
   PropertyRNA *parm;
 
-  func = RNA_def_function(srna, "compare", "WM_keymap_item_compare");
+  func = RNA_def_function(srna, "compare", "rna_KeyMapItem_compare");
   parm = RNA_def_pointer(func, "item", "KeyMapItem", "Item", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_boolean(func, "result", 0, "Comparison result", "");
@@ -1127,7 +1128,7 @@ void RNA_api_keymapitems(StructRNA *srna)
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_enum(func, "type", rna_enum_event_type_items, 0, "Type", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  parm = RNA_def_enum(func, "value", rna_enum_event_value_items, 0, "Value", "");
+  parm = RNA_def_enum(func, "value", rna_enum_event_value_all_items, 0, "Value", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   RNA_def_boolean(func, "any", 0, "Any", "");
   RNA_def_boolean(func, "shift", 0, "Shift", "");
@@ -1151,7 +1152,7 @@ void RNA_api_keymapitems(StructRNA *srna)
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_enum(func, "type", rna_enum_event_type_items, 0, "Type", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  parm = RNA_def_enum(func, "value", rna_enum_event_value_items, 0, "Value", "");
+  parm = RNA_def_enum(func, "value", rna_enum_event_value_all_items, 0, "Value", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   RNA_def_boolean(func, "any", 0, "Any", "");
   RNA_def_boolean(func, "shift", 0, "Shift", "");
@@ -1215,6 +1216,11 @@ void RNA_api_keymaps(StructRNA *srna)
 
   func = RNA_def_function(srna, "new", "rna_keymap_new"); /* add_keymap */
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
+  RNA_def_function_ui_description(
+      func,
+      "Ensure the keymap exists. This will return the one with the given name/space type/region "
+      "type, or create a new one if it does not exist yet.");
+
   parm = RNA_def_string(func, "name", NULL, 0, "Name", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   RNA_def_enum(func, "space_type", rna_enum_space_type_items, SPACE_EMPTY, "Space Type", "");

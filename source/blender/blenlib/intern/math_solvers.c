@@ -15,7 +15,7 @@
  *
  * The Original Code is Copyright (C) 2015 by Blender Foundation.
  * All rights reserved.
- * */
+ */
 
 /** \file
  * \ingroup bli
@@ -137,9 +137,24 @@ bool BLI_tridiagonal_solve_cyclic(
     return false;
   }
 
+  /* Degenerate case not handled correctly by the generic formula. */
+  if (count == 1) {
+    r_x[0] = d[0] / (a[0] + b[0] + c[0]);
+
+    return isfinite(r_x[0]);
+  }
+
+  /* Degenerate case that works but can be simplified. */
+  if (count == 2) {
+    float a2[2] = {0, a[1] + c[1]};
+    float c2[2] = {a[0] + c[0], 0};
+
+    return BLI_tridiagonal_solve(a2, b, c2, d, r_x, count);
+  }
+
+  /* If not really cyclic, fall back to the simple solver. */
   float a0 = a[0], cN = c[count - 1];
 
-  /* if not really cyclic, fall back to the simple solver */
   if (a0 == 0.0f && cN == 0.0f) {
     return BLI_tridiagonal_solve(a, b, c, d, r_x, count);
   }
@@ -152,7 +167,7 @@ bool BLI_tridiagonal_solve_cyclic(
     return false;
   }
 
-  /* prepare the noncyclic system; relies on tridiagonal_solve ignoring values */
+  /* Prepare the non-cyclic system; relies on tridiagonal_solve ignoring values. */
   memcpy(b2, b, bytes);
   b2[0] -= a0;
   b2[count - 1] -= cN;

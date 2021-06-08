@@ -25,6 +25,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -53,7 +54,7 @@
 
 #include "RE_multires_bake.h"
 #include "RE_pipeline.h"
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 #include "PIL_time.h"
 
@@ -97,7 +98,6 @@ typedef struct MultiresBakerJobData {
     int len;
   } ob_image;
   DerivedMesh *lores_dm, *hires_dm;
-  bool simple;
   int lvl, tot_lvl;
   ListBase images;
 } MultiresBakerJobData;
@@ -247,7 +247,7 @@ static DerivedMesh *multiresbake_create_loresdm(Scene *scene, Object *ob, int *l
   return dm;
 }
 
-static DerivedMesh *multiresbake_create_hiresdm(Scene *scene, Object *ob, int *lvl, bool *simple)
+static DerivedMesh *multiresbake_create_hiresdm(Scene *scene, Object *ob, int *lvl)
 {
   Mesh *me = (Mesh *)ob->data;
   MultiresModifierData *mmd = get_multires_modifier(scene, ob, 0);
@@ -264,7 +264,6 @@ static DerivedMesh *multiresbake_create_hiresdm(Scene *scene, Object *ob, int *l
   CustomData_set_only_copy(&cddm->polyData, CD_MASK_BAREMESH.pmask);
 
   *lvl = mmd->totlvl;
-  *simple = mmd->simple != 0;
 
   tmp_mmd.lvl = mmd->totlvl;
   tmp_mmd.sculptlvl = mmd->totlvl;
@@ -386,7 +385,7 @@ static int multiresbake_image_exec_locked(bContext *C, wmOperator *op)
     bkr.ob_image.array = bake_object_image_get_array(ob);
     bkr.ob_image.len = ob->totcol;
 
-    bkr.hires_dm = multiresbake_create_hiresdm(scene, ob, &bkr.tot_lvl, &bkr.simple);
+    bkr.hires_dm = multiresbake_create_hiresdm(scene, ob, &bkr.tot_lvl);
     bkr.lores_dm = multiresbake_create_loresdm(scene, ob, &bkr.lvl);
 
     RE_multires_bake_images(&bkr);
@@ -441,7 +440,7 @@ static void init_multiresbake_job(bContext *C, MultiresBakeJob *bkj)
     data->ob_image.len = ob->totcol;
 
     /* create low-resolution DM (to bake to) and hi-resolution DM (to bake from) */
-    data->hires_dm = multiresbake_create_hiresdm(scene, ob, &data->tot_lvl, &data->simple);
+    data->hires_dm = multiresbake_create_hiresdm(scene, ob, &data->tot_lvl);
     data->lores_dm = multiresbake_create_loresdm(scene, ob, &lvl);
     data->lvl = lvl;
 
@@ -491,7 +490,6 @@ static void multiresbake_startjob(void *bkv, short *stop, short *do_update, floa
     bkr.hires_dm = data->hires_dm;
     bkr.tot_lvl = data->tot_lvl;
     bkr.lvl = data->lvl;
-    bkr.simple = data->simple;
 
     /* needed for proper progress bar */
     bkr.tot_obj = tot_obj;
@@ -574,7 +572,7 @@ static int multiresbake_image_exec(bContext *C, wmOperator *op)
   G.is_break = false;
 
   WM_jobs_start(CTX_wm_manager(C), wm_job);
-  WM_cursor_wait(0);
+  WM_cursor_wait(false);
 
   /* add modal handler for ESC */
   WM_event_add_modal_handler(C, op);

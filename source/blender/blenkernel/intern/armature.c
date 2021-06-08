@@ -324,11 +324,16 @@ IDTypeInfo IDType_ID_AR = {
     .make_local = NULL,
     .foreach_id = armature_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = armature_blend_write,
     .blend_read_data = armature_blend_read_data,
     .blend_read_lib = armature_blend_read_lib,
     .blend_read_expand = armature_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /** \} */
@@ -576,7 +581,7 @@ void BKE_armature_transform(bArmature *arm, const float mat[4][4], const bool do
 /* -------------------------------------------------------------------- */
 /** \name Armature Bone Find by Name
  *
- * Using fast #GHash look-ups when available.
+ * Using fast #GHash lookups when available.
  * \{ */
 
 static Bone *get_named_bone_bonechildren(ListBase *lb, const char *name)
@@ -799,7 +804,7 @@ bool bone_autoside_name(
     while (changed) { /* remove extensions */
       changed = false;
       if (len > 2 && basename[len - 2] == '.') {
-        if (basename[len - 1] == 'L' || basename[len - 1] == 'R') { /* L R */
+        if (ELEM(basename[len - 1], 'L', 'R')) { /* L R */
           basename[len - 2] = '\0';
           len -= 2;
           changed = true;
@@ -1460,7 +1465,11 @@ void BKE_pchan_bbone_segments_cache_compute(bPoseChannel *pchan)
                   tmat,
                   b_bone_mats[0].mat);
 
-    mat4_to_dquat(&b_bone_dual_quats[a], bone->arm_mat, b_bone_mats[a + 1].mat);
+    /* Compute the orthonormal object space rest matrix of the segment. */
+    mul_m4_m4m4(tmat, bone->arm_mat, b_bone_rest[a].mat);
+    normalize_m4(tmat);
+
+    mat4_to_dquat(&b_bone_dual_quats[a], tmat, b_bone_mats[a + 1].mat);
   }
 }
 
@@ -1522,14 +1531,6 @@ void BKE_pchan_bbone_deform_segment_index(const bPoseChannel *pchan,
 /* -------------------------------------------------------------------- */
 /** \name Bone Space to Space Conversion API
  * \{ */
-
-void get_objectspace_bone_matrix(struct Bone *bone,
-                                 float M_accumulatedMatrix[4][4],
-                                 int UNUSED(root),
-                                 int UNUSED(posed))
-{
-  copy_m4_m4(M_accumulatedMatrix, bone->arm_mat);
-}
 
 /* Convert World-Space Matrix to Pose-Space Matrix */
 void BKE_armature_mat_world_to_pose(Object *ob, const float inmat[4][4], float outmat[4][4])
@@ -1690,7 +1691,7 @@ void BKE_bone_parent_transform_calc_from_matrices(int bone_flag,
             break;
 
           default:
-            BLI_assert(false);
+            BLI_assert_unreachable();
         }
       }
       /* If removing parent pose rotation: */
@@ -1722,7 +1723,7 @@ void BKE_bone_parent_transform_calc_from_matrices(int bone_flag,
             break;
 
           default:
-            BLI_assert(false);
+            BLI_assert_unreachable();
         }
       }
 
@@ -1883,9 +1884,8 @@ void BKE_armature_mat_pose_to_bone_ex(struct Depsgraph *depsgraph,
    * bone loc/sca/rot is ignored, scene and frame are not used. */
   BKE_pose_where_is_bone(depsgraph, NULL, ob, &work_pchan, 0.0f, false);
 
-  /* find the matrix, need to remove the bone transforms first so this is
-   * calculated as a matrix to set rather than a difference ontop of what's
-   * already there. */
+  /* Find the matrix, need to remove the bone transforms first so this is calculated
+   * as a matrix to set rather than a difference on top of what's already there. */
   unit_m4(outmat);
   BKE_pchan_apply_mat4(&work_pchan, outmat, false);
 
@@ -1924,7 +1924,7 @@ void BKE_pchan_rot_to_mat3(const bPoseChannel *pchan, float r_mat[3][3])
 {
   /* rotations may either be quats, eulers (with various rotation orders), or axis-angle */
   if (pchan->rotmode > 0) {
-    /* euler rotations (will cause gimble lock,
+    /* Euler rotations (will cause gimbal lock,
      * but this can be alleviated a bit with rotation orders) */
     eulO_to_mat3(r_mat, pchan->eul, pchan->rotmode);
   }
@@ -1937,7 +1937,7 @@ void BKE_pchan_rot_to_mat3(const bPoseChannel *pchan, float r_mat[3][3])
     float quat[4];
 
     /* NOTE: we now don't normalize the stored values anymore,
-     * since this was kindof evil in some cases but if this proves to be too problematic,
+     * since this was kind of evil in some cases but if this proves to be too problematic,
      * switch back to the old system of operating directly on the stored copy. */
     normalize_qt_qt(quat, pchan->quat);
     quat_to_mat3(r_mat, quat);
@@ -2154,50 +2154,50 @@ void mat3_vec_to_roll(const float mat[3][3], const float vec[3], float *r_roll)
  */
 void vec_roll_to_mat3_normalized(const float nor[3], const float roll, float r_mat[3][3])
 {
-#define THETA_THRESHOLD_NEGY 1.0e-9f
-#define THETA_THRESHOLD_NEGY_CLOSE 1.0e-5f
+  const float THETA_SAFE = 1.0e-5f;     /* theta above this value are always safe to use. */
+  const float THETA_CRITICAL = 1.0e-9f; /* above this is safe under certain conditions. */
 
-  float theta;
+  const float x = nor[0];
+  const float y = nor[1];
+  const float z = nor[2];
+
+  const float theta = 1.0f + y;
+  const float theta_alt = x * x + z * z;
   float rMatrix[3][3], bMatrix[3][3];
 
   BLI_ASSERT_UNIT_V3(nor);
 
-  theta = 1.0f + nor[1];
-
-  /* With old algo, 1.0e-13f caused T23954 and T31333, 1.0e-6f caused T27675 and T30438,
-   * so using 1.0e-9f as best compromise.
-   *
-   * New algo is supposed much more precise, since less complex computations are performed,
-   * but it uses two different threshold values...
-   *
-   * Note: When theta is close to zero, we have to check we do have non-null X/Z components as well
-   *       (due to float precision errors, we can have nor = (0.0, 0.99999994, 0.0)...).
+  /* When theta is close to zero (nor is aligned close to negative Y Axis),
+   * we have to check we do have non-null X/Z components as well.
+   * Also, due to float precision errors, nor can be (0.0, -0.99999994, 0.0) which results
+   * in theta being close to zero. This will cause problems when theta is used as divisor.
    */
-  if (theta > THETA_THRESHOLD_NEGY_CLOSE || ((nor[0] || nor[2]) && theta > THETA_THRESHOLD_NEGY)) {
-    /* nor is *not* -Y.
+  if (theta > THETA_SAFE || ((x || z) && theta > THETA_CRITICAL)) {
+    /* nor is *not* aligned to negative Y-axis (0,-1,0).
      * We got these values for free... so be happy with it... ;)
      */
-    bMatrix[0][1] = -nor[0];
-    bMatrix[1][0] = nor[0];
-    bMatrix[1][1] = nor[1];
-    bMatrix[1][2] = nor[2];
-    bMatrix[2][1] = -nor[2];
-    if (theta > THETA_THRESHOLD_NEGY_CLOSE) {
-      /* If nor is far enough from -Y, apply the general case. */
-      bMatrix[0][0] = 1 - nor[0] * nor[0] / theta;
-      bMatrix[2][2] = 1 - nor[2] * nor[2] / theta;
-      bMatrix[2][0] = bMatrix[0][2] = -nor[0] * nor[2] / theta;
+
+    bMatrix[0][1] = -x;
+    bMatrix[1][0] = x;
+    bMatrix[1][1] = y;
+    bMatrix[1][2] = z;
+    bMatrix[2][1] = -z;
+
+    if (theta > THETA_SAFE) {
+      /* nor differs significantly from negative Y axis (0,-1,0): apply the general case. */
+      bMatrix[0][0] = 1 - x * x / theta;
+      bMatrix[2][2] = 1 - z * z / theta;
+      bMatrix[2][0] = bMatrix[0][2] = -x * z / theta;
     }
     else {
-      /* If nor is too close to -Y, apply the special case. */
-      theta = nor[0] * nor[0] + nor[2] * nor[2];
-      bMatrix[0][0] = (nor[0] + nor[2]) * (nor[0] - nor[2]) / -theta;
+      /* nor is close to negative Y axis (0,-1,0): apply the special case. */
+      bMatrix[0][0] = (x + z) * (x - z) / -theta_alt;
       bMatrix[2][2] = -bMatrix[0][0];
-      bMatrix[2][0] = bMatrix[0][2] = 2.0f * nor[0] * nor[2] / theta;
+      bMatrix[2][0] = bMatrix[0][2] = 2.0f * x * z / theta_alt;
     }
   }
   else {
-    /* If nor is -Y, simple symmetry by Z axis. */
+    /* nor is very close to negative Y axis (0,-1,0): use simple symmetry by Z axis. */
     unit_m3(bMatrix);
     bMatrix[0][0] = bMatrix[1][1] = -1.0;
   }
@@ -2207,9 +2207,6 @@ void vec_roll_to_mat3_normalized(const float nor[3], const float roll, float r_m
 
   /* Combine and output result */
   mul_m3_m3m3(r_mat, rMatrix, bMatrix);
-
-#undef THETA_THRESHOLD_NEGY
-#undef THETA_THRESHOLD_NEGY_CLOSE
 }
 
 void vec_roll_to_mat3(const float vec[3], const float roll, float r_mat[3][3])
@@ -2441,17 +2438,42 @@ static void pose_proxy_sync(Object *ob, Object *from, int layer_protected)
   }
 }
 
-static int rebuild_pose_bone(bPose *pose, Bone *bone, bPoseChannel *parchan, int counter)
+/**
+ * \param r_last_visited_bone_p: The last bone handled by the last call to this function.
+ */
+static int rebuild_pose_bone(
+    bPose *pose, Bone *bone, bPoseChannel *parchan, int counter, Bone **r_last_visited_bone_p)
 {
   bPoseChannel *pchan = BKE_pose_channel_verify(pose, bone->name); /* verify checks and/or adds */
 
   pchan->bone = bone;
   pchan->parent = parchan;
 
+  /* We ensure the current pchan is immediately after the one we just generated/updated in the
+   * previous call to `rebuild_pose_bone`.
+   *
+   * It may be either the parent, the previous sibling, or the last
+   * (grand-(grand-(...)))-child (as processed by the recursive, depth-first nature of this
+   * function) of the previous sibling.
+   *
+   * Note: In most cases there is nothing to do here, but pose list may get out of order when some
+   * bones are added, removed or moved in the armature data. */
+  bPoseChannel *pchan_prev = pchan->prev;
+  const Bone *last_visited_bone = *r_last_visited_bone_p;
+  if ((pchan_prev == NULL && last_visited_bone != NULL) ||
+      (pchan_prev != NULL && pchan_prev->bone != last_visited_bone)) {
+    pchan_prev = last_visited_bone != NULL ?
+                     BKE_pose_channel_find_name(pose, last_visited_bone->name) :
+                     NULL;
+    BLI_remlink(&pose->chanbase, pchan);
+    BLI_insertlinkafter(&pose->chanbase, pchan_prev, pchan);
+  }
+
+  *r_last_visited_bone_p = pchan->bone;
   counter++;
 
   for (bone = bone->childbase.first; bone; bone = bone->next) {
-    counter = rebuild_pose_bone(pose, bone, pchan, counter);
+    counter = rebuild_pose_bone(pose, bone, pchan, counter, r_last_visited_bone_p);
     /* for quick detecting of next bone in chain, only b-bone uses it now */
     if (bone->flag & BONE_CONNECTED) {
       pchan->child = BKE_pose_channel_find_name(pose, bone->name);
@@ -2493,6 +2515,17 @@ void BKE_pchan_rebuild_bbone_handles(bPose *pose, bPoseChannel *pchan)
   pchan->bbone_next = pose_channel_find_bone(pose, pchan->bone->bbone_next);
 }
 
+void BKE_pose_channels_clear_with_null_bone(bPose *pose, const bool do_id_user)
+{
+  LISTBASE_FOREACH_MUTABLE (bPoseChannel *, pchan, &pose->chanbase) {
+    if (pchan->bone == NULL) {
+      BKE_pose_channel_free_ex(pchan, do_id_user);
+      BKE_pose_channels_hash_free(pose);
+      BLI_freelinkN(&pose->chanbase, pchan);
+    }
+  }
+}
+
 /**
  * Only after leave editmode, duplicating, validating older files, library syncing.
  *
@@ -2504,7 +2537,7 @@ void BKE_pose_rebuild(Main *bmain, Object *ob, bArmature *arm, const bool do_id_
 {
   Bone *bone;
   bPose *pose;
-  bPoseChannel *pchan, *next;
+  bPoseChannel *pchan;
   int counter = 0;
 
   /* only done here */
@@ -2521,19 +2554,13 @@ void BKE_pose_rebuild(Main *bmain, Object *ob, bArmature *arm, const bool do_id_
   BKE_pose_clear_pointers(pose);
 
   /* first step, check if all channels are there */
+  Bone *prev_bone = NULL;
   for (bone = arm->bonebase.first; bone; bone = bone->next) {
-    counter = rebuild_pose_bone(pose, bone, NULL, counter);
+    counter = rebuild_pose_bone(pose, bone, NULL, counter, &prev_bone);
   }
 
   /* and a check for garbage */
-  for (pchan = pose->chanbase.first; pchan; pchan = next) {
-    next = pchan->next;
-    if (pchan->bone == NULL) {
-      BKE_pose_channel_free_ex(pchan, do_id_user);
-      BKE_pose_channels_hash_free(pose);
-      BLI_freelinkN(&pose->chanbase, pchan);
-    }
-  }
+  BKE_pose_channels_clear_with_null_bone(pose, do_id_user);
 
   BKE_pose_channels_hash_make(pose);
 

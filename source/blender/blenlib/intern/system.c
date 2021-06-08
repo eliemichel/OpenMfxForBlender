@@ -71,7 +71,7 @@ int BLI_cpu_support_sse2(void)
 #endif
 }
 
-/* Windows stackwalk lives in system_win32.c */
+/* Windows stack-walk lives in system_win32.c */
 #if !defined(_MSC_VER)
 /**
  * Write a backtrace into a file for systems which support it.
@@ -128,6 +128,7 @@ static void __cpuid(
       : "a"(selector)
       : "ebx");
 #  else
+  (void)selector;
   data[0] = data[1] = data[2] = data[3] = 0;
 #  endif
 }

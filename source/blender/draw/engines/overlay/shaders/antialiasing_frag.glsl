@@ -134,7 +134,8 @@ void main()
     fragColor *= line_coverage(dist, line_kernel);
   }
 
-  /* We dont order fragments but use alpha over/alpha under based on current minimum frag depth. */
+  /* We don't order fragments but use alpha over/alpha under based on current minimum frag depth.
+   */
   neighbor_blend(coverage.x, depths.x, neightbor_col0, depth, fragColor);
   neighbor_blend(coverage.y, depths.y, neightbor_col1, depth, fragColor);
   neighbor_blend(coverage.z, depths.z, neightbor_col2, depth, fragColor);
@@ -146,7 +147,7 @@ void main()
     vec4 lines = vec4(neightbor_line0.z, neightbor_line1.z, neightbor_line2.z, neightbor_line3.z);
     /* Count number of line neighbors. */
     float blend = dot(vec4(0.25), step(0.001, lines));
-    /* Only do blend if there is more than 2 neighbor. This avoid loosing too much AA. */
+    /* Only do blend if there are more than 2 neighbors. This avoids losing too much AA. */
     blend = clamp(blend * 2.0 - 1.0, 0.0, 1.0);
     fragColor = mix(fragColor, fragColor / fragColor.a, blend);
   }

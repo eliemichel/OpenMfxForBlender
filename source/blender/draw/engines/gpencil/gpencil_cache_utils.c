@@ -62,7 +62,7 @@ GPENCIL_tObject *gpencil_object_cache_add(GPENCIL_PrivateData *pd, Object *ob)
   tgp_ob->do_mat_holdout = false;
   for (int i = 0; i < ob->totcol; i++) {
     MaterialGPencilStyle *gp_style = BKE_gpencil_material_settings(ob, i + 1);
-    if ((gp_style->flag & GP_MATERIAL_IS_STROKE_HOLDOUT) ||
+    if (((gp_style != NULL) && (gp_style->flag & GP_MATERIAL_IS_STROKE_HOLDOUT)) ||
         ((gp_style->flag & GP_MATERIAL_IS_FILL_HOLDOUT))) {
       tgp_ob->do_mat_holdout = true;
       break;
@@ -270,12 +270,12 @@ GPENCIL_tLayer *gpencil_layer_cache_add(GPENCIL_PrivateData *pd,
 
   const bool is_in_front = (ob->dtx & OB_DRAW_IN_FRONT);
   const bool is_screenspace = (gpd->flag & GP_DATA_STROKE_KEEPTHICKNESS) != 0;
-  const bool overide_vertcol = (pd->v3d_color_type != -1);
+  const bool override_vertcol = (pd->v3d_color_type != -1);
   const bool is_vert_col_mode = (pd->v3d_color_type == V3D_SHADING_VERTEX_COLOR) ||
                                 GPENCIL_VERTEX_MODE(gpd) || pd->is_render;
   bool is_masked = (gpl->flag & GP_LAYER_USE_MASK) && !BLI_listbase_is_empty(&gpl->mask_layers);
 
-  float vert_col_opacity = (overide_vertcol) ?
+  float vert_col_opacity = (override_vertcol) ?
                                (is_vert_col_mode ? pd->vertex_paint_opacity : 0.0f) :
                                pd->is_render ? gpl->vertex_paint_opacity :
                                                pd->vertex_paint_opacity;
@@ -365,7 +365,7 @@ GPENCIL_tLayer *gpencil_layer_cache_add(GPENCIL_PrivateData *pd,
     DRW_shgroup_call_procedural_triangles(grp, NULL, 1);
 
     if (gpl->blend_mode == eGplBlendMode_HardLight) {
-      /* We cannot do custom blending on MultiTarget framebuffers.
+      /* We cannot do custom blending on Multi-Target frame-buffers.
        * Workaround by doing 2 passes. */
       grp = DRW_shgroup_create(sh, tgp_layer->blend_ps);
       DRW_shgroup_state_disable(grp, DRW_STATE_BLEND_MUL);

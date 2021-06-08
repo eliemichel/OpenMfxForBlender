@@ -128,6 +128,8 @@ void drw_resource_buffer_finish(ViewportMemoryPool *vmempool)
     GPU_uniformbuf_update(vmempool->obinfos_ubo[i], data_infos);
   }
 
+  DRW_uniform_attrs_pool_flush_all(vmempool->obattrs_ubo_pool);
+
   /* Aligned alloc to avoid unaligned memcpy. */
   DRWCommandChunk *chunk_tmp = MEM_mallocN_aligned(sizeof(DRWCommandChunk), 16, "tmp call chunk");
   DRWCommandChunk *chunk;
@@ -208,6 +210,9 @@ static void drw_shgroup_uniform_create_ex(DRWShadingGroup *shgroup,
     case DRW_UNIFORM_TEXTURE_REF:
       uni->texture_ref = (GPUTexture **)value;
       uni->sampler_state = sampler_state;
+      break;
+    case DRW_UNIFORM_BLOCK_OBATTRS:
+      uni->uniform_attrs = (GPUUniformAttrList *)value;
       break;
     default:
       uni->pvalue = (const float *)value;
@@ -611,6 +616,15 @@ static DRWResourceHandle drw_resource_handle(DRWShadingGroup *shgroup,
     }
   }
 
+  if (shgroup->uniform_attrs) {
+    drw_uniform_attrs_pool_update(DST.vmempool->obattrs_ubo_pool,
+                                  shgroup->uniform_attrs,
+                                  &DST.ob_handle,
+                                  ob,
+                                  DST.dupli_parent,
+                                  DST.dupli_source);
+  }
+
   return DST.ob_handle;
 }
 
@@ -964,7 +978,7 @@ static void drw_sculpt_get_frustum_planes(Object *ob, float planes[6][4])
 
 static void drw_sculpt_generate_calls(DRWSculptCallbackData *scd)
 {
-  /* PBVH should always exist for non-empty meshes, created by depsgrah eval. */
+  /* PBVH should always exist for non-empty meshes, created by depsgraph eval. */
   PBVH *pbvh = (scd->ob->sculpt) ? scd->ob->sculpt->pbvh : NULL;
   if (!pbvh) {
     return;
@@ -1184,6 +1198,7 @@ void DRW_buffer_add_entry_array(DRWCallBuffer *callbuf, const void *attr[], uint
 static void drw_shgroup_init(DRWShadingGroup *shgroup, GPUShader *shader)
 {
   shgroup->uniforms = NULL;
+  shgroup->uniform_attrs = NULL;
 
   int view_ubo_location = GPU_shader_get_builtin_block(shader, GPU_UNIFORM_BLOCK_VIEW);
   int model_ubo_location = GPU_shader_get_builtin_block(shader, GPU_UNIFORM_BLOCK_MODEL);
@@ -1328,6 +1343,13 @@ void DRW_shgroup_add_material_resources(DRWShadingGroup *grp, struct GPUMaterial
   GPUUniformBuf *ubo = GPU_material_uniform_buffer_get(material);
   if (ubo != NULL) {
     DRW_shgroup_uniform_block(grp, GPU_UBO_BLOCK_NAME, ubo);
+  }
+
+  GPUUniformAttrList *uattrs = GPU_material_uniform_attributes(material);
+  if (uattrs != NULL) {
+    int loc = GPU_shader_get_uniform_block_binding(grp->shader, GPU_ATTRIBUTE_UBO_BLOCK_NAME);
+    drw_shgroup_uniform_create_ex(grp, loc, DRW_UNIFORM_BLOCK_OBATTRS, uattrs, 0, 0, 1);
+    grp->uniform_attrs = uattrs;
   }
 }
 
@@ -1579,10 +1601,10 @@ static void draw_frustum_bound_sphere_calc(const BoundBox *bbox,
 
     /* Detect which of the corner of the far clipping plane is the farthest to the origin */
     float nfar[4];               /* most extreme far point in NDC space */
-    float farxy[2];              /* farpoint projection onto the near plane */
+    float farxy[2];              /* far-point projection onto the near plane */
     float farpoint[3] = {0.0f};  /* most extreme far point in camera coordinate */
     float nearpoint[3];          /* most extreme near point in camera coordinate */
-    float farcenter[3] = {0.0f}; /* center of far cliping plane in camera coordinate */
+    float farcenter[3] = {0.0f}; /* center of far clipping plane in camera coordinate */
     float F = -1.0f, N;          /* square distance of far and near point to origin */
     float f, n; /* distance of far and near point to z axis. f is always > 0 but n can be < 0 */
     float e, s; /* far and near clipping distance (<0) */
@@ -1751,7 +1773,7 @@ DRWView *DRW_view_create_sub(const DRWView *parent_view,
  * DRWView Update:
  * This is meant to be done on existing views when rendering in a loop and there is no
  * need to allocate more DRWViews.
- **/
+ */
 
 /* Update matrices of a view created with DRW_view_create_sub. */
 void DRW_view_update_sub(DRWView *view, const float viewmat[4][4], const float winmat[4][4])

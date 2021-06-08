@@ -856,7 +856,7 @@ static const EnumPropertyItem tracker_motion_model[] = {
 
 static const EnumPropertyItem pattern_match_items[] = {
     {TRACK_MATCH_KEYFRAME, "KEYFRAME", 0, "Keyframe", "Track pattern from keyframe to next frame"},
-    {TRACK_MATCH_PREVFRAME,
+    {TRACK_MATCH_PREVIOS_FRAME,
      "PREV_FRAME",
      0,
      "Previous frame",
@@ -889,38 +889,6 @@ static void rna_def_trackingSettings(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL},
   };
 
-  static const EnumPropertyItem refine_items[] = {
-      {0, "NONE", 0, "Nothing", "Do not refine camera intrinsics"},
-      {REFINE_FOCAL_LENGTH, "FOCAL_LENGTH", 0, "Focal Length", "Refine focal length"},
-      {REFINE_FOCAL_LENGTH | REFINE_RADIAL_DISTORTION_K1,
-       "FOCAL_LENGTH_RADIAL_K1",
-       0,
-       "Focal length, K1",
-       "Refine focal length and radial distortion K1"},
-      {REFINE_FOCAL_LENGTH | REFINE_RADIAL_DISTORTION_K1 | REFINE_RADIAL_DISTORTION_K2,
-       "FOCAL_LENGTH_RADIAL_K1_K2",
-       0,
-       "Focal length, K1, K2",
-       "Refine focal length and radial distortion K1 and K2"},
-      {REFINE_FOCAL_LENGTH | REFINE_PRINCIPAL_POINT | REFINE_RADIAL_DISTORTION_K1 |
-           REFINE_RADIAL_DISTORTION_K2,
-       "FOCAL_LENGTH_PRINCIPAL_POINT_RADIAL_K1_K2",
-       0,
-       "Focal Length, Optical Center, K1, K2",
-       "Refine focal length, optical center and radial distortion K1 and K2"},
-      {REFINE_FOCAL_LENGTH | REFINE_PRINCIPAL_POINT,
-       "FOCAL_LENGTH_PRINCIPAL_POINT",
-       0,
-       "Focal Length, Optical Center",
-       "Refine focal length and optical center"},
-      {REFINE_RADIAL_DISTORTION_K1 | REFINE_RADIAL_DISTORTION_K2,
-       "RADIAL_K1_K2",
-       0,
-       "K1, K2",
-       "Refine radial distortion K1 and K2"},
-      {0, NULL, 0, NULL, NULL},
-  };
-
   srna = RNA_def_struct(brna, "MovieTrackingSettings", NULL);
   RNA_def_struct_ui_text(srna, "Movie tracking settings", "Match moving settings");
 
@@ -943,11 +911,35 @@ static void rna_def_trackingSettings(BlenderRNA *brna)
                            "Automatically select keyframes when solving camera/object motion");
 
   /* intrinsics refinement during bundle adjustment */
-  prop = RNA_def_property(srna, "refine_intrinsics", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_sdna(prop, NULL, "refine_camera_intrinsics");
+
+  prop = RNA_def_property(srna, "refine_intrinsics_focal_length", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "refine_camera_intrinsics", REFINE_FOCAL_LENGTH);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_enum_items(prop, refine_items);
-  RNA_def_property_ui_text(prop, "Refine", "Refine intrinsics during camera solving");
+  RNA_def_property_ui_text(
+      prop, "Refine Focal Length", "Refine focal length during camera solving");
+
+  prop = RNA_def_property(srna, "refine_intrinsics_principal_point", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "refine_camera_intrinsics", REFINE_PRINCIPAL_POINT);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_text(
+      prop, "Refine Principal Point", "Refine principal point during camera solving");
+
+  prop = RNA_def_property(srna, "refine_intrinsics_radial_distortion", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "refine_camera_intrinsics", REFINE_RADIAL_DISTORTION);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_text(prop,
+                           "Refine Radial",
+                           "Refine radial coefficients of distortion model during camera solving");
+
+  prop = RNA_def_property(
+      srna, "refine_intrinsics_tangential_distortion", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(
+      prop, NULL, "refine_camera_intrinsics", REFINE_TANGENTIAL_DISTORTION);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_text(
+      prop,
+      "Refine Tangential",
+      "Refine tangential coefficients of distortion model during camera solving");
 
   /* tool settings */
 
@@ -983,22 +975,6 @@ static void rna_def_trackingSettings(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_enum_items(prop, cleanup_items);
   RNA_def_property_ui_text(prop, "Action", "Cleanup action to execute");
-
-  /* ** default tracker settings ** */
-  prop = RNA_def_property(srna, "show_default_expanded", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", TRACKING_SETTINGS_SHOW_DEFAULT_EXPANDED);
-  RNA_def_property_ui_text(
-      prop, "Show Expanded", "Show default options expanded in the user interface");
-  RNA_def_property_ui_icon(prop, ICON_DISCLOSURE_TRI_RIGHT, 1);
-
-  /* ** extra tracker settings ** */
-  prop = RNA_def_property(srna, "show_extra_expanded", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", TRACKING_SETTINGS_SHOW_EXTRA_EXPANDED);
-  RNA_def_property_ui_text(
-      prop, "Show Expanded", "Show extra options expanded in the user interface");
-  RNA_def_property_ui_icon(prop, ICON_DISCLOSURE_TRI_RIGHT, 1);
 
   /* solver settings */
   prop = RNA_def_property(srna, "use_tripod_solver", PROP_BOOLEAN, PROP_NONE);
@@ -1194,7 +1170,7 @@ static void rna_def_trackingCamera(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "focal");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_range(prop, 0.0f, FLT_MAX);
-  RNA_def_property_ui_range(prop, 0.0f, 5000.f, 1, 2);
+  RNA_def_property_ui_range(prop, 0.0f, 5000.0f, 1, 2);
   RNA_def_property_ui_text(prop, "Focal Length", "Camera's focal length");
   RNA_def_property_update(prop, NC_MOVIECLIP | NA_EDITED, NULL);
 
@@ -2025,7 +2001,7 @@ static void rna_def_trackingStabilization(BlenderRNA *brna)
                            "Explicitly scale resulting frame to compensate zoom of original shot");
   RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, "rna_tracking_flushUpdate");
 
-  /* autoscale */
+  /* Auto-scale. */
   prop = RNA_def_property(srna, "use_autoscale", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", TRACKING_AUTOSCALE);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
@@ -2391,6 +2367,7 @@ static void rna_def_trackingObject(BlenderRNA *brna)
   RNA_def_property_int_sdna(prop, NULL, "keyframe1");
   RNA_def_property_ui_text(
       prop, "Keyframe A", "First keyframe used for reconstruction initialization");
+  RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, NULL);
 
   /* keyframe_b */
   prop = RNA_def_property(srna, "keyframe_b", PROP_INT, PROP_NONE);
@@ -2398,6 +2375,7 @@ static void rna_def_trackingObject(BlenderRNA *brna)
   RNA_def_property_int_sdna(prop, NULL, "keyframe2");
   RNA_def_property_ui_text(
       prop, "Keyframe B", "Second keyframe used for reconstruction initialization");
+  RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, NULL);
 }
 
 static void rna_def_trackingObjects(BlenderRNA *brna, PropertyRNA *cprop)

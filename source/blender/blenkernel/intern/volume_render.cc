@@ -104,7 +104,7 @@ static void create_texture_to_object_matrix(const openvdb::Mat4d &grid_transform
 #endif
 
 bool BKE_volume_grid_dense_floats(const Volume *volume,
-                                  VolumeGrid *volume_grid,
+                                  const VolumeGrid *volume_grid,
                                   DenseFloatVolumeGrid *r_dense_grid)
 {
 #ifdef WITH_OPENVDB
@@ -123,7 +123,7 @@ bool BKE_volume_grid_dense_floats(const Volume *volume,
   const int channels = BKE_volume_grid_channels(volume_grid);
   const int elem_size = sizeof(float) * channels;
   float *voxels = static_cast<float *>(MEM_malloc_arrayN(num_voxels, elem_size, __func__));
-  if (voxels == NULL) {
+  if (voxels == nullptr) {
     return false;
   }
 
@@ -143,7 +143,7 @@ bool BKE_volume_grid_dense_floats(const Volume *volume,
 
 void BKE_volume_dense_float_grid_clear(DenseFloatVolumeGrid *dense_grid)
 {
-  if (dense_grid->voxels != NULL) {
+  if (dense_grid->voxels != nullptr) {
     MEM_freeN(dense_grid->voxels);
   }
 }
@@ -334,12 +334,12 @@ static void boxes_to_cube_mesh(blender::Span<openvdb::CoordBBox> boxes,
 #endif
 
 void BKE_volume_grid_wireframe(const Volume *volume,
-                               VolumeGrid *volume_grid,
+                               const VolumeGrid *volume_grid,
                                BKE_volume_wireframe_cb cb,
                                void *cb_userdata)
 {
   if (volume->display.wireframe_type == VOLUME_WIREFRAME_NONE) {
-    cb(cb_userdata, NULL, NULL, 0, 0);
+    cb(cb_userdata, nullptr, nullptr, 0, 0);
     return;
   }
 
@@ -386,7 +386,7 @@ void BKE_volume_grid_wireframe(const Volume *volume,
 
 #else
   UNUSED_VARS(volume, volume_grid);
-  cb(cb_userdata, NULL, NULL, 0, 0);
+  cb(cb_userdata, nullptr, nullptr, 0, 0);
 #endif
 }
 
@@ -411,7 +411,7 @@ static void grow_triangles(blender::MutableSpan<blender::float3> verts,
 #endif /* WITH_OPENVDB */
 
 void BKE_volume_grid_selection_surface(const Volume *volume,
-                                       VolumeGrid *volume_grid,
+                                       const VolumeGrid *volume_grid,
                                        BKE_volume_selection_surface_cb cb,
                                        void *cb_userdata)
 {
@@ -432,7 +432,7 @@ void BKE_volume_grid_selection_surface(const Volume *volume,
   cb(cb_userdata, (float(*)[3])verts.data(), (int(*)[3])tris.data(), verts.size(), tris.size());
 #else
   UNUSED_VARS(volume, volume_grid);
-  cb(cb_userdata, NULL, NULL, 0, 0);
+  cb(cb_userdata, nullptr, nullptr, 0, 0);
 #endif
 }
 

@@ -274,10 +274,10 @@ void mul_m4_m4m4(float R[4][4], const float A[4][4], const float B[4][4])
 
 void mul_m4_m4m4_uniq(float R[4][4], const float A[4][4], const float B[4][4])
 {
-  BLI_assert(R != A && R != B);
+  BLI_assert(!ELEM(R, A, B));
 
   /* matrix product: R[j][k] = A[j][i] . B[i][k] */
-#ifdef __SSE2__
+#ifdef BLI_HAVE_SSE2
   __m128 A0 = _mm_loadu_ps(A[0]);
   __m128 A1 = _mm_loadu_ps(A[1]);
   __m128 A2 = _mm_loadu_ps(A[2]);
@@ -319,7 +319,7 @@ void mul_m4_m4m4_uniq(float R[4][4], const float A[4][4], const float B[4][4])
 
 void mul_m4_m4m4_db_uniq(double R[4][4], const double A[4][4], const double B[4][4])
 {
-  BLI_assert(R != A && R != B);
+  BLI_assert(!ELEM(R, A, B));
 
   /* matrix product: R[j][k] = A[j][i] . B[i][k] */
 
@@ -347,7 +347,7 @@ void mul_m4_m4m4_db_uniq(double R[4][4], const double A[4][4], const double B[4]
 void mul_m4db_m4db_m4fl_uniq(double R[4][4], const double A[4][4], const float B[4][4])
 {
   /* Remove second check since types don't match. */
-  BLI_assert(R != A /* && R != B */);
+  BLI_assert(!ELEM(R, A /*, B */));
 
   /* matrix product: R[j][k] = A[j][i] . B[i][k] */
 
@@ -419,7 +419,7 @@ void mul_m3_m3_post(float R[3][3], const float B[3][3])
 
 void mul_m3_m3m3_uniq(float R[3][3], const float A[3][3], const float B[3][3])
 {
-  BLI_assert(R != A && R != B);
+  BLI_assert(!ELEM(R, A, B));
 
   R[0][0] = B[0][0] * A[0][0] + B[0][1] * A[1][0] + B[0][2] * A[2][0];
   R[0][1] = B[0][0] * A[0][1] + B[0][1] * A[1][1] + B[0][2] * A[2][1];
@@ -535,8 +535,10 @@ void mul_m3_m4m4(float R[3][3], const float A[4][4], const float B[4][4])
   R[2][2] = B[2][0] * A[0][2] + B[2][1] * A[1][2] + B[2][2] * A[2][2];
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Macro helpers for: mul_m3_series
  * \{ */
+
 void _va_mul_m3_series_3(float r[3][3], const float m1[3][3], const float m2[3][3])
 {
   mul_m3_m3m3(r, m1, m2);
@@ -621,8 +623,10 @@ void _va_mul_m3_series_9(float r[3][3],
 }
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Macro helpers for: mul_m4_series
  * \{ */
+
 void _va_mul_m4_series_3(float r[4][4], const float m1[4][4], const float m2[4][4])
 {
   mul_m4_m4m4(r, m1, m2);
@@ -1696,6 +1700,89 @@ void orthogonalize_m4_stable(float R[4][4], int axis, bool normalize)
   }
 }
 
+/* -------------------------------------------------------------------- */
+/** \name Orthogonalize Matrix Zeroed Axes
+ *
+ * Set any zeroed axes to an orthogonal vector in relation to the other axes.
+ *
+ * Typically used so matrix inversion can be performed.
+ *
+ * \note If an object has a zero scaled axis, this function can be used to "clean" the matrix
+ * to behave as if the scale on that axis was `unit_length`. So it can be inverted
+ * or used in matrix multiply without creating degenerate matrices, see: T50103
+ * \{ */
+
+/**
+ * \return true if any axis needed to be modified.
+ */
+static bool orthogonalize_m3_zero_axes_impl(float *mat[3], const float unit_length)
+{
+  enum { X = 1 << 0, Y = 1 << 1, Z = 1 << 2 };
+  int flag = 0;
+  for (int i = 0; i < 3; i++) {
+    flag |= (len_squared_v3(mat[i]) == 0.0f) ? (1 << i) : 0;
+  }
+
+  /* Either all or none are zero, either way we can't properly resolve this
+   * since we need to fill invalid axes from valid ones. */
+  if (ELEM(flag, 0, X | Y | Z)) {
+    return false;
+  }
+
+  switch (flag) {
+    case X | Y: {
+      ortho_v3_v3(mat[1], mat[2]);
+      ATTR_FALLTHROUGH;
+    }
+    case X: {
+      cross_v3_v3v3(mat[0], mat[1], mat[2]);
+      break;
+    }
+
+    case Y | Z: {
+      ortho_v3_v3(mat[2], mat[0]);
+      ATTR_FALLTHROUGH;
+    }
+    case Y: {
+      cross_v3_v3v3(mat[1], mat[0], mat[2]);
+      break;
+    }
+
+    case Z | X: {
+      ortho_v3_v3(mat[0], mat[1]);
+      ATTR_FALLTHROUGH;
+    }
+    case Z: {
+      cross_v3_v3v3(mat[2], mat[0], mat[1]);
+      break;
+    }
+    default: {
+      BLI_assert(0); /* Unreachable! */
+    }
+  }
+
+  for (int i = 0; i < 3; i++) {
+    if (flag & (1 << i)) {
+      if (UNLIKELY(normalize_v3_length(mat[i], unit_length) == 0.0f)) {
+        mat[i][i] = unit_length;
+      }
+    }
+  }
+
+  return true;
+}
+
+bool orthogonalize_m3_zero_axes(float m[3][3], const float unit_length)
+{
+  return orthogonalize_m3_zero_axes_impl((float *[3]){UNPACK3(m)}, unit_length);
+}
+bool orthogonalize_m4_zero_axes(float m[4][4], const float unit_length)
+{
+  return orthogonalize_m3_zero_axes_impl((float *[3]){UNPACK3(m)}, unit_length);
+}
+
+/** \} */
+
 bool is_orthogonal_m3(const float m[3][3])
 {
   int i, j;
@@ -2136,6 +2223,16 @@ void mat3_to_rot_size(float rot[3][3], float size[3], const float mat3[3][3])
   }
 }
 
+void mat4_to_rot(float rot[3][3], const float wmat[4][4])
+{
+  normalize_v3_v3(rot[0], wmat[0]);
+  normalize_v3_v3(rot[1], wmat[1]);
+  normalize_v3_v3(rot[2], wmat[2]);
+  if (UNLIKELY(is_negative_m3(rot))) {
+    negate_m3(rot);
+  }
+}
+
 void mat4_to_loc_rot_size(float loc[3], float rot[3][3], float size[3], const float wmat[4][4])
 {
   float mat3[3][3]; /* wmat -> 3x3 */
@@ -2219,11 +2316,29 @@ void scale_m4_fl(float R[4][4], float scale)
   R[3][0] = R[3][1] = R[3][2] = 0.0;
 }
 
+void translate_m3(float mat[3][3], float tx, float ty)
+{
+  mat[2][0] += (tx * mat[0][0] + ty * mat[1][0]);
+  mat[2][1] += (tx * mat[0][1] + ty * mat[1][1]);
+}
+
 void translate_m4(float mat[4][4], float Tx, float Ty, float Tz)
 {
   mat[3][0] += (Tx * mat[0][0] + Ty * mat[1][0] + Tz * mat[2][0]);
   mat[3][1] += (Tx * mat[0][1] + Ty * mat[1][1] + Tz * mat[2][1]);
   mat[3][2] += (Tx * mat[0][2] + Ty * mat[1][2] + Tz * mat[2][2]);
+}
+
+void rotate_m3(float mat[3][3], const float angle)
+{
+  const float angle_cos = cosf(angle);
+  const float angle_sin = sinf(angle);
+
+  for (int col = 0; col < 3; col++) {
+    float temp = angle_cos * mat[0][col] + angle_sin * mat[1][col];
+    mat[1][col] = -angle_sin * mat[0][col] + angle_cos * mat[1][col];
+    mat[0][col] = temp;
+  }
 }
 
 /* TODO: enum for axis? */
@@ -2271,6 +2386,12 @@ void rotate_m4(float mat[4][4], const char axis, const float angle)
   }
 }
 
+void rescale_m3(float mat[3][3], const float scale[2])
+{
+  mul_v3_fl(mat[0], scale[0]);
+  mul_v3_fl(mat[1], scale[1]);
+}
+
 /** Scale a matrix in-place. */
 void rescale_m4(float mat[4][4], const float scale[3])
 {
@@ -2299,6 +2420,20 @@ void transform_pivot_set_m4(float mat[4][4], const float pivot[3])
   /* invert the matrix */
   negate_v3(tmat[3]);
   mul_m4_m4m4(mat, mat, tmat);
+}
+
+void transform_pivot_set_m3(float mat[3][3], const float pivot[2])
+{
+  float tmat[3][3];
+
+  unit_m3(tmat);
+
+  copy_v2_v2(tmat[2], pivot);
+  mul_m3_m3m3(mat, tmat, mat);
+
+  /* invert the matrix */
+  negate_v2(tmat[2]);
+  mul_m3_m3m3(mat, mat, tmat);
 }
 
 void blend_m3_m3m3(float out[3][3],
@@ -2478,6 +2613,21 @@ bool equals_m4m4(const float mat1[4][4], const float mat2[4][4])
 {
   return (equals_v4v4(mat1[0], mat2[0]) && equals_v4v4(mat1[1], mat2[1]) &&
           equals_v4v4(mat1[2], mat2[2]) && equals_v4v4(mat1[3], mat2[3]));
+}
+
+/**
+ * Make a 3x3 matrix out of 3 transform components.
+ * Matrices are made in the order: `loc * rot * scale`
+ */
+void loc_rot_size_to_mat3(float R[3][3],
+                          const float loc[2],
+                          const float angle,
+                          const float size[2])
+{
+  unit_m3(R);
+  translate_m3(R, loc[0], loc[1]);
+  rotate_m3(R, angle);
+  rescale_m3(R, size);
 }
 
 /**
@@ -2863,7 +3013,7 @@ void svd_m4(float U[4][4], float s[4], float V[4][4], float A_[4][4])
         if (ks == k) {
           break;
         }
-        t = (ks != p ? fabsf(e[ks]) : 0.f) + (ks != k + 1 ? fabsf(e[ks - 1]) : 0.0f);
+        t = (ks != p ? fabsf(e[ks]) : 0.0f) + (ks != k + 1 ? fabsf(e[ks - 1]) : 0.0f);
         if (fabsf(s[ks]) <= eps * t) {
           s[ks] = 0.0f;
           break;
@@ -3129,68 +3279,6 @@ void invert_m4_m4_safe(float Ainv[4][4], const float A[4][4])
  * \{ */
 
 /**
- * Return true if invert should be attempted again.
- *
- * \note Takes an array of points to be usable from 3x3 and 4x4 matrices.
- */
-static bool invert_m3_m3_safe_ortho_prepare(float *mat[3])
-{
-  enum { X = 1 << 0, Y = 1 << 1, Z = 1 << 2 };
-  int flag = 0;
-  for (int i = 0; i < 3; i++) {
-    flag |= (len_squared_v3(mat[i]) == 0.0f) ? (1 << i) : 0;
-  }
-
-  /* Either all or none are zero, either way we can't properly resolve this
-   * since we need to fill invalid axes from valid ones. */
-  if (ELEM(flag, 0, X | Y | Z)) {
-    return false;
-  }
-
-  switch (flag) {
-    case X | Y: {
-      ortho_v3_v3(mat[1], mat[2]);
-      ATTR_FALLTHROUGH;
-    }
-    case X: {
-      cross_v3_v3v3(mat[0], mat[1], mat[2]);
-      break;
-    }
-
-    case Y | Z: {
-      ortho_v3_v3(mat[2], mat[0]);
-      ATTR_FALLTHROUGH;
-    }
-    case Y: {
-      cross_v3_v3v3(mat[1], mat[0], mat[2]);
-      break;
-    }
-
-    case Z | X: {
-      ortho_v3_v3(mat[0], mat[1]);
-      ATTR_FALLTHROUGH;
-    }
-    case Z: {
-      cross_v3_v3v3(mat[2], mat[0], mat[1]);
-      break;
-    }
-    default: {
-      BLI_assert(0); /* Unreachable! */
-    }
-  }
-
-  for (int i = 0; i < 3; i++) {
-    if (flag & (1 << i)) {
-      if (UNLIKELY(normalize_v3(mat[i]) == 0.0f)) {
-        mat[i][i] = 1.0f;
-      }
-    }
-  }
-
-  return true;
-}
-
-/**
  * A safe version of invert that uses valid axes, calculating the zero'd axis
  * based on the non-zero ones.
  *
@@ -3201,8 +3289,7 @@ void invert_m4_m4_safe_ortho(float Ainv[4][4], const float A[4][4])
   if (UNLIKELY(!invert_m4_m4(Ainv, A))) {
     float Atemp[4][4];
     copy_m4_m4(Atemp, A);
-    if (UNLIKELY(!(invert_m3_m3_safe_ortho_prepare((float *[3]){UNPACK3(Atemp)}) &&
-                   invert_m4_m4(Ainv, Atemp)))) {
+    if (UNLIKELY(!(orthogonalize_m4_zero_axes(Atemp, 1.0f) && invert_m4_m4(Ainv, Atemp)))) {
       unit_m4(Ainv);
     }
   }
@@ -3213,8 +3300,7 @@ void invert_m3_m3_safe_ortho(float Ainv[3][3], const float A[3][3])
   if (UNLIKELY(!invert_m3_m3(Ainv, A))) {
     float Atemp[3][3];
     copy_m3_m3(Atemp, A);
-    if (UNLIKELY(!(invert_m3_m3_safe_ortho_prepare((float *[3]){UNPACK3(Atemp)}) &&
-                   invert_m3_m3(Ainv, Atemp)))) {
+    if (UNLIKELY(!(orthogonalize_m3_zero_axes(Atemp, 1.0f) && invert_m3_m3(Ainv, Atemp)))) {
       unit_m3(Ainv);
     }
   }

@@ -65,7 +65,8 @@ static void eevee_lookdev_hdri_preview_init(EEVEE_Data *vedata, EEVEE_ViewLayerD
   Scene *scene = draw_ctx->scene;
   DRWShadingGroup *grp;
 
-  struct GPUBatch *sphere = DRW_cache_sphere_get();
+  const EEVEE_EffectsInfo *effects = vedata->stl->effects;
+  struct GPUBatch *sphere = DRW_cache_sphere_get(effects->sphere_lod);
   int mat_options = VAR_MAT_MESH | VAR_MAT_LOOKDEV;
 
   DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_ALWAYS |
@@ -95,24 +96,13 @@ static void eevee_lookdev_hdri_preview_init(EEVEE_Data *vedata, EEVEE_ViewLayerD
   }
 }
 
-void EEVEE_lookdev_cache_init(EEVEE_Data *vedata,
-                              EEVEE_ViewLayerData *sldata,
-                              DRWPass *pass,
-                              EEVEE_LightProbesInfo *pinfo,
-                              DRWShadingGroup **r_shgrp)
+void EEVEE_lookdev_init(EEVEE_Data *vedata)
 {
   EEVEE_StorageList *stl = vedata->stl;
-  EEVEE_TextureList *txl = vedata->txl;
   EEVEE_EffectsInfo *effects = stl->effects;
-  EEVEE_PrivateData *g_data = stl->g_data;
   const DRWContextState *draw_ctx = DRW_context_state_get();
   /* The view will be NULL when rendering previews. */
   const View3D *v3d = draw_ctx->v3d;
-  const Scene *scene = draw_ctx->scene;
-
-  const bool probe_render = pinfo != NULL;
-
-  effects->lookdev_view = NULL;
 
   if (eevee_hdri_preview_overlay_enabled(v3d)) {
     /* Viewport / Spheres size. */
@@ -137,14 +127,50 @@ void EEVEE_lookdev_cache_init(EEVEE_Data *vedata,
 
     if (sphere_size != effects->sphere_size || rect->xmax != effects->anchor[0] ||
         rect->ymin != effects->anchor[1]) {
+      /* Make sphere resolution adaptive to viewport_scale, dpi and lookdev_sphere_size */
+      float res_scale = clamp_f(
+          (U.lookdev_sphere_size / 400.0f) * viewport_scale * U.dpi_fac, 0.1f, 1.0f);
+
+      if (res_scale > 0.7f) {
+        effects->sphere_lod = DRW_LOD_HIGH;
+      }
+      else if (res_scale > 0.25f) {
+        effects->sphere_lod = DRW_LOD_MEDIUM;
+      }
+      else {
+        effects->sphere_lod = DRW_LOD_LOW;
+      }
       /* If sphere size or anchor point moves, reset TAA to avoid ghosting issue.
        * This needs to happen early because we are changing taa_current_sample. */
       effects->sphere_size = sphere_size;
       effects->anchor[0] = rect->xmax;
       effects->anchor[1] = rect->ymin;
+      stl->g_data->valid_double_buffer = false;
       EEVEE_temporal_sampling_reset(vedata);
     }
+  }
+}
 
+void EEVEE_lookdev_cache_init(EEVEE_Data *vedata,
+                              EEVEE_ViewLayerData *sldata,
+                              DRWPass *pass,
+                              EEVEE_LightProbesInfo *pinfo,
+                              DRWShadingGroup **r_shgrp)
+{
+  EEVEE_StorageList *stl = vedata->stl;
+  EEVEE_TextureList *txl = vedata->txl;
+  EEVEE_EffectsInfo *effects = stl->effects;
+  EEVEE_PrivateData *g_data = stl->g_data;
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  /* The view will be NULL when rendering previews. */
+  const View3D *v3d = draw_ctx->v3d;
+  const Scene *scene = draw_ctx->scene;
+
+  const bool probe_render = pinfo != NULL;
+
+  effects->lookdev_view = NULL;
+
+  if (eevee_hdri_preview_overlay_enabled(v3d)) {
     eevee_lookdev_hdri_preview_init(vedata, sldata);
   }
 
@@ -318,7 +344,7 @@ void EEVEE_lookdev_draw(EEVEE_Data *vedata)
 
     DRW_view_set_active(effects->lookdev_view);
 
-    /* Find the right framebuffers to render to. */
+    /* Find the right frame-buffers to render to. */
     GPUFrameBuffer *fb = (effects->target_buffer == fbl->effect_color_fb) ? fbl->main_fb :
                                                                             fbl->effect_fb;
 

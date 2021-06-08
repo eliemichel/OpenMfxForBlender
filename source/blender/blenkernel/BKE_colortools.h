@@ -59,6 +59,7 @@ enum {
   CURVEMAP_SLOPE_POS_NEG = 2,
 };
 
+void BKE_curvemapping_reset_view(struct CurveMapping *cumap);
 void BKE_curvemap_reset(struct CurveMap *cuma, const struct rctf *clipr, int preset, int slope);
 void BKE_curvemap_remove(struct CurveMap *cuma, const short flag);
 bool BKE_curvemap_remove_point(struct CurveMap *cuma, struct CurveMapPoint *cmp);
@@ -138,6 +139,11 @@ void BKE_color_managed_view_settings_init_default(
 void BKE_color_managed_view_settings_copy(struct ColorManagedViewSettings *new_settings,
                                           const struct ColorManagedViewSettings *settings);
 void BKE_color_managed_view_settings_free(struct ColorManagedViewSettings *settings);
+
+void BKE_color_managed_view_settings_blend_write(struct BlendWriter *writer,
+                                                 struct ColorManagedViewSettings *settings);
+void BKE_color_managed_view_settings_blend_read_data(struct BlendDataReader *reader,
+                                                     struct ColorManagedViewSettings *settings);
 
 void BKE_color_managed_colorspace_settings_init(
     struct ColorManagedColorspaceSettings *colorspace_settings);

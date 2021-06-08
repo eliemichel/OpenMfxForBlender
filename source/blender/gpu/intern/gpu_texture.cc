@@ -49,14 +49,14 @@ Texture::Texture(const char *name)
   }
 
   for (int i = 0; i < ARRAY_SIZE(fb_); i++) {
-    fb_[i] = NULL;
+    fb_[i] = nullptr;
   }
 }
 
 Texture::~Texture()
 {
   for (int i = 0; i < ARRAY_SIZE(fb_); i++) {
-    if (fb_[i] != NULL) {
+    if (fb_[i] != nullptr) {
       fb_[i]->attachment_remove(fb_attachment_[i]);
     }
   }
@@ -142,7 +142,7 @@ bool Texture::init_buffer(GPUVertBuf *vbo, eGPUTextureFormat format)
 void Texture::attach_to(FrameBuffer *fb, GPUAttachmentType type)
 {
   for (int i = 0; i < ARRAY_SIZE(fb_); i++) {
-    if (fb_[i] == NULL) {
+    if (fb_[i] == nullptr) {
       fb_attachment_[i] = type;
       fb_[i] = fb;
       return;
@@ -156,7 +156,7 @@ void Texture::detach_from(FrameBuffer *fb)
   for (int i = 0; i < ARRAY_SIZE(fb_); i++) {
     if (fb_[i] == fb) {
       fb_[i]->attachment_remove(fb_attachment_[i]);
-      fb_[i] = NULL;
+      fb_[i] = nullptr;
       return;
     }
   }
@@ -226,7 +226,7 @@ static inline GPUTexture *gpu_texture_create(const char *name,
 
   if (!success) {
     delete tex;
-    return NULL;
+    return nullptr;
   }
   if (pixels) {
     tex->update(data_format, pixels);
@@ -295,7 +295,7 @@ GPUTexture *GPU_texture_create_compressed_2d(
 
   if (!success) {
     delete tex;
-    return NULL;
+    return nullptr;
   }
   if (data) {
     size_t ofs = 0;
@@ -320,7 +320,7 @@ GPUTexture *GPU_texture_create_from_vertbuf(const char *name, GPUVertBuf *vert)
   bool success = tex->init_buffer(vert, tex_format);
   if (!success) {
     delete tex;
-    return NULL;
+    return nullptr;
   }
   return reinterpret_cast<GPUTexture *>(tex);
 }
@@ -383,7 +383,7 @@ void *GPU_texture_read(GPUTexture *tex_, eGPUDataFormat data_format, int miplvl)
  */
 void GPU_texture_clear(GPUTexture *tex, eGPUDataFormat data_format, const void *data)
 {
-  BLI_assert(data != NULL); /* Do not accept NULL as parameter. */
+  BLI_assert(data != nullptr); /* Do not accept NULL as parameter. */
   reinterpret_cast<Texture *>(tex)->clear(data_format, data);
 }
 
@@ -605,6 +605,22 @@ void GPU_texture_get_mipmap_size(GPUTexture *tex, int lvl, int *r_size)
 void GPU_samplers_update(void)
 {
   GPUBackend::get()->samplers_update();
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name GPU texture utilities
+ * \{ */
+
+size_t GPU_texture_component_len(eGPUTextureFormat tex_format)
+{
+  return to_component_len(tex_format);
+}
+
+size_t GPU_texture_dataformat_size(eGPUDataFormat data_format)
+{
+  return to_bytesize(data_format);
 }
 
 /** \} */

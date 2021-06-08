@@ -1,6 +1,6 @@
 
 /* Keep the same value of `BEZIER_HANDLE` in `draw_cache_imp_curve.c` */
-#define BEZIER_HANDLE 1 << 3
+#define BEZIER_HANDLE (1 << 3)
 
 /* Keep the same value in `handle_display` in `DNA_view3d_types.h` */
 #define CURVE_HANDLE_SELECTED 0
@@ -17,21 +17,23 @@ void main()
 {
   GPU_INTEL_VERTEX_SHADER_WORKAROUND
 
+  /* Reuse the FREESTYLE flag to determine is GPencil. */
+  bool is_gpencil = ((data & EDGE_FREESTYLE) != 0);
   if ((data & VERT_SELECTED) != 0) {
     if ((data & VERT_ACTIVE) != 0) {
       finalColor = colorEditMeshActive;
     }
     else {
-      finalColor = colorVertexSelect;
+      finalColor = (!is_gpencil) ? colorVertexSelect : colorGpencilVertexSelect;
     }
   }
   else {
-    finalColor = colorVertex;
+    finalColor = (!is_gpencil) ? colorVertex : colorGpencilVertex;
   }
 
   vec3 world_pos = point_object_to_world(pos);
   gl_Position = point_world_to_ndc(world_pos);
-  gl_PointSize = sizeVertex * 2.0;
+  gl_PointSize = (!is_gpencil) ? sizeVertex * 2.0 : sizeVertexGpencil * 2.0;
 #ifdef USE_WORLD_CLIP_PLANES
   world_clip_planes_calc_clip_distance(world_pos);
 #endif

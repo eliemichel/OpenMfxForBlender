@@ -1090,8 +1090,8 @@ struct extrapolateVelConvectiveBC : public KernelBase {
                  Real timeStep) const
   {
     if (flags.isOutflow(i, j, k)) {
-      Vec3 bulkVel = getBulkVel(flags, vel, i, j, k);
-      int dim = flags.is3D() ? 3 : 2;
+      const Vec3 bulkVel = getBulkVel(flags, vel, i, j, k);
+      const int dim = flags.is3D() ? 3 : 2;
       const Vec3i cur = Vec3i(i, j, k);
       Vec3i low, up, flLow, flUp;
       int cnt = 0;
@@ -1099,8 +1099,8 @@ struct extrapolateVelConvectiveBC : public KernelBase {
       for (int c = 0; c < dim; c++) {
         low = up = flLow = flUp = cur;
         Real factor = timeStep *
-                      max((Real)1.0, bulkVel[c]);  // prevent the extrapolated velocity from
-                                                   // exploding when bulk velocity below 1
+                      max((Real)1.0, abs(bulkVel[c]));  // prevent the extrapolated velocity from
+                                                        // exploding when bulk velocity below 1
         low[c] = flLow[c] = cur[c] - 1;
         up[c] = flUp[c] = cur[c] + 1;
         // iterate over bWidth to allow for extrapolation into more distant outflow cells;
@@ -1336,7 +1336,7 @@ static PyObject *_W_0(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "resetPhiInObs", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       const FlagGrid &flags = *_args.getPtr<FlagGrid>("flags", 0, &_lock);
@@ -1476,7 +1476,7 @@ static PyObject *_W_1(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "advectSemiLagrange", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       const FlagGrid *flags = _args.getPtr<FlagGrid>("flags", 0, &_lock);

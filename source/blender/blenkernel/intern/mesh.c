@@ -173,24 +173,53 @@ static void mesh_foreach_id(ID *id, LibraryForeachIDData *data)
 static void mesh_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   Mesh *mesh = (Mesh *)id;
-  if (mesh->id.us > 0 || BLO_write_is_undo(writer)) {
-    /* cache only - don't write */
-    mesh->mface = NULL;
-    mesh->totface = 0;
-    memset(&mesh->fdata, 0, sizeof(mesh->fdata));
-    memset(&mesh->runtime, 0, sizeof(mesh->runtime));
-
+  const bool is_undo = BLO_write_is_undo(writer);
+  if (mesh->id.us > 0 || is_undo) {
     CustomDataLayer *vlayers = NULL, vlayers_buff[CD_TEMP_CHUNK_SIZE];
     CustomDataLayer *elayers = NULL, elayers_buff[CD_TEMP_CHUNK_SIZE];
     CustomDataLayer *flayers = NULL, flayers_buff[CD_TEMP_CHUNK_SIZE];
     CustomDataLayer *llayers = NULL, llayers_buff[CD_TEMP_CHUNK_SIZE];
     CustomDataLayer *players = NULL, players_buff[CD_TEMP_CHUNK_SIZE];
 
-    CustomData_blend_write_prepare(&mesh->vdata, &vlayers, vlayers_buff, ARRAY_SIZE(vlayers_buff));
-    CustomData_blend_write_prepare(&mesh->edata, &elayers, elayers_buff, ARRAY_SIZE(elayers_buff));
+    /* cache only - don't write */
+    mesh->mface = NULL;
+    mesh->totface = 0;
+    memset(&mesh->fdata, 0, sizeof(mesh->fdata));
+    memset(&mesh->runtime, 0, sizeof(mesh->runtime));
     flayers = flayers_buff;
-    CustomData_blend_write_prepare(&mesh->ldata, &llayers, llayers_buff, ARRAY_SIZE(llayers_buff));
-    CustomData_blend_write_prepare(&mesh->pdata, &players, players_buff, ARRAY_SIZE(players_buff));
+
+    /* Do not store actual geometry data in case this is a library override ID. */
+    if (ID_IS_OVERRIDE_LIBRARY(mesh) && !is_undo) {
+      mesh->mvert = NULL;
+      mesh->totvert = 0;
+      memset(&mesh->vdata, 0, sizeof(mesh->vdata));
+      vlayers = vlayers_buff;
+
+      mesh->medge = NULL;
+      mesh->totedge = 0;
+      memset(&mesh->edata, 0, sizeof(mesh->edata));
+      elayers = elayers_buff;
+
+      mesh->mloop = NULL;
+      mesh->totloop = 0;
+      memset(&mesh->ldata, 0, sizeof(mesh->ldata));
+      llayers = llayers_buff;
+
+      mesh->mpoly = NULL;
+      mesh->totpoly = 0;
+      memset(&mesh->pdata, 0, sizeof(mesh->pdata));
+      players = players_buff;
+    }
+    else {
+      CustomData_blend_write_prepare(
+          &mesh->vdata, &vlayers, vlayers_buff, ARRAY_SIZE(vlayers_buff));
+      CustomData_blend_write_prepare(
+          &mesh->edata, &elayers, elayers_buff, ARRAY_SIZE(elayers_buff));
+      CustomData_blend_write_prepare(
+          &mesh->ldata, &llayers, llayers_buff, ARRAY_SIZE(llayers_buff));
+      CustomData_blend_write_prepare(
+          &mesh->pdata, &players, players_buff, ARRAY_SIZE(players_buff));
+    }
 
     BLO_write_id_struct(writer, Mesh, id_address, &mesh->id);
     BKE_id_blend_write(writer, &mesh->id);
@@ -328,11 +357,16 @@ IDTypeInfo IDType_ID_ME = {
     .make_local = NULL,
     .foreach_id = mesh_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = mesh_blend_write,
     .blend_read_data = mesh_blend_read_data,
     .blend_read_lib = mesh_blend_read_lib,
     .blend_read_expand = mesh_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 enum {
@@ -814,9 +848,7 @@ static void mesh_tessface_clear_intern(Mesh *mesh, int free_customdata)
 
 Mesh *BKE_mesh_add(Main *bmain, const char *name)
 {
-  Mesh *me;
-
-  me = BKE_id_new(bmain, ID_ME, name);
+  Mesh *me = BKE_id_new(bmain, ID_ME, name);
 
   return me;
 }
@@ -849,7 +881,7 @@ Mesh *BKE_mesh_new_nomain(
       NULL, ID_ME, BKE_idtype_idcode_to_name(ID_ME), LIB_ID_CREATE_LOCALIZE);
   BKE_libblock_init_empty(&mesh->id);
 
-  /* don't use CustomData_reset(...); because we dont want to touch customdata */
+  /* Don't use CustomData_reset(...); because we don't want to touch custom-data. */
   copy_vn_i(mesh->vdata.typemap, CD_NUMTYPES, -1);
   copy_vn_i(mesh->edata.typemap, CD_NUMTYPES, -1);
   copy_vn_i(mesh->fdata.typemap, CD_NUMTYPES, -1);
@@ -879,6 +911,7 @@ void BKE_mesh_copy_settings(Mesh *me_dst, const Mesh *me_src)
   me_dst->remesh_voxel_size = me_src->remesh_voxel_size;
   me_dst->remesh_voxel_adaptivity = me_src->remesh_voxel_adaptivity;
   me_dst->remesh_mode = me_src->remesh_mode;
+  me_dst->symmetry = me_src->symmetry;
 
   me_dst->face_sets_color_seed = me_src->face_sets_color_seed;
   me_dst->face_sets_color_default = me_src->face_sets_color_default;
@@ -909,7 +942,7 @@ Mesh *BKE_mesh_new_nomain_from_template_ex(const Mesh *me_src,
 
   Mesh *me_dst = BKE_id_new_nomain(ID_ME, NULL);
 
-  me_dst->mselect = MEM_dupallocN(me_dst->mselect);
+  me_dst->mselect = MEM_dupallocN(me_src->mselect);
 
   me_dst->totvert = verts_len;
   me_dst->totedge = edges_len;
@@ -975,10 +1008,9 @@ BMesh *BKE_mesh_to_bmesh_ex(const Mesh *me,
                             const struct BMeshCreateParams *create_params,
                             const struct BMeshFromMeshParams *convert_params)
 {
-  BMesh *bm;
   const BMAllocTemplate allocsize = BMALLOC_TEMPLATE_FROM_ME(me);
 
-  bm = BM_mesh_create(&allocsize, create_params);
+  BMesh *bm = BM_mesh_create(&allocsize, create_params);
   BM_mesh_bm_from_me(bm, me, convert_params);
 
   return bm;
@@ -1130,17 +1162,14 @@ void BKE_mesh_texspace_copy_from_object(Mesh *me, Object *ob)
 float (*BKE_mesh_orco_verts_get(Object *ob))[3]
 {
   Mesh *me = ob->data;
-  MVert *mvert = NULL;
   Mesh *tme = me->texcomesh ? me->texcomesh : me;
-  int a, totvert;
-  float(*vcos)[3] = NULL;
 
   /* Get appropriate vertex coordinates */
-  vcos = MEM_calloc_arrayN(me->totvert, sizeof(*vcos), "orco mesh");
-  mvert = tme->mvert;
-  totvert = min_ii(tme->totvert, me->totvert);
+  float(*vcos)[3] = MEM_calloc_arrayN(me->totvert, sizeof(*vcos), "orco mesh");
+  MVert *mvert = tme->mvert;
+  int totvert = min_ii(tme->totvert, me->totvert);
 
-  for (a = 0; a < totvert; a++, mvert++) {
+  for (int a = 0; a < totvert; a++, mvert++) {
     copy_v3_v3(vcos[a], mvert->co);
   }
 
@@ -1150,18 +1179,17 @@ float (*BKE_mesh_orco_verts_get(Object *ob))[3]
 void BKE_mesh_orco_verts_transform(Mesh *me, float (*orco)[3], int totvert, int invert)
 {
   float loc[3], size[3];
-  int a;
 
   BKE_mesh_texspace_get(me->texcomesh ? me->texcomesh : me, loc, size);
 
   if (invert) {
-    for (a = 0; a < totvert; a++) {
+    for (int a = 0; a < totvert; a++) {
       float *co = orco[a];
       madd_v3_v3v3v3(co, loc, co, size);
     }
   }
   else {
-    for (a = 0; a < totvert; a++) {
+    for (int a = 0; a < totvert; a++) {
       float *co = orco[a];
       co[0] = (co[0] - loc[0]) / size[0];
       co[1] = (co[1] - loc[1]) / size[1];
@@ -1192,7 +1220,7 @@ int test_index_face(MFace *mface, CustomData *fdata, int mfindex, int nr)
   }
 
   /* Check corrupt cases, bow-tie geometry,
-   * cant handle these because edge data wont exist so just return 0. */
+   * can't handle these because edge data won't exist so just return 0. */
   if (nr == 3) {
     if (
         /* real edges */
@@ -1242,7 +1270,6 @@ int test_index_face(MFace *mface, CustomData *fdata, int mfindex, int nr)
 
 Mesh *BKE_mesh_from_object(Object *ob)
 {
-
   if (ob == NULL) {
     return NULL;
   }
@@ -1382,8 +1409,7 @@ void BKE_mesh_smooth_flag_set(Mesh *me, const bool use_smooth)
  */
 int poly_find_loop_from_vert(const MPoly *poly, const MLoop *loopstart, uint vert)
 {
-  int j;
-  for (j = 0; j < poly->totloop; j++, loopstart++) {
+  for (int j = 0; j < poly->totloop; j++, loopstart++) {
     if (loopstart->v == vert) {
       return j;
     }
@@ -1495,8 +1521,11 @@ void BKE_mesh_transform(Mesh *me, const float mat[4][4], bool do_keys)
 
 void BKE_mesh_translate(Mesh *me, const float offset[3], const bool do_keys)
 {
+  MVert *mvert = CustomData_duplicate_referenced_layer(&me->vdata, CD_MVERT, me->totvert);
+  /* If the referenced layer has been re-allocated need to update pointers stored in the mesh. */
+  BKE_mesh_update_customdata_pointers(me, false);
+
   int i = me->totvert;
-  MVert *mvert;
   for (mvert = me->mvert; i--; mvert++) {
     add_v3_v3(mvert->co, offset);
   }
@@ -1647,11 +1676,9 @@ void BKE_mesh_mselect_validate(Mesh *me)
  */
 int BKE_mesh_mselect_find(Mesh *me, int index, int type)
 {
-  int i;
-
   BLI_assert(ELEM(type, ME_VSEL, ME_ESEL, ME_FSEL));
 
-  for (i = 0; i < me->totselect; i++) {
+  for (int i = 0; i < me->totselect; i++) {
     if ((me->mselect[i].index == index) && (me->mselect[i].type == type)) {
       return i;
     }

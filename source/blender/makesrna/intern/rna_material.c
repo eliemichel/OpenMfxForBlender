@@ -24,6 +24,8 @@
 #include "DNA_material_types.h"
 #include "DNA_texture_types.h"
 
+#include "BLI_math.h"
+
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
@@ -123,6 +125,14 @@ static void rna_MaterialGpencil_update(Main *bmain, Scene *scene, PointerRNA *pt
   }
 
   WM_main_add_notifier(NC_GPENCIL | ND_DATA, ma);
+}
+
+static void rna_MaterialLineArt_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+{
+  Material *ma = (Material *)ptr->owner_id;
+  /* Need to tag geometry for line art modifier updates. */
+  DEG_id_tag_update(&ma->id, ID_RECALC_GEOMETRY);
+  WM_main_add_notifier(NC_MATERIAL | ND_SHADING_DRAW, ma);
 }
 
 static void rna_Material_draw_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
@@ -594,6 +604,16 @@ static void rna_def_material_greasepencil(BlenderRNA *brna)
       prop, "Alignment", "Defines how align Dots and Boxes with drawing path and object rotation");
   RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_update");
 
+  /* Rotation of texture for Dots or Strokes. */
+  prop = RNA_def_property(srna, "alignment_rotation", PROP_FLOAT, PROP_ANGLE);
+  RNA_def_property_float_sdna(prop, NULL, "alignment_rotation");
+  RNA_def_property_float_default(prop, 0.0f);
+  RNA_def_property_range(prop, -DEG2RADF(90.0f), DEG2RADF(90.0f));
+  RNA_def_property_ui_range(prop, -DEG2RADF(90.0f), DEG2RADF(90.0f), 10, 3);
+  RNA_def_property_ui_text(
+      prop, "Rotation", "Additional rotation applied to dots and square strokes");
+  RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_update");
+
   /* pass index for future compositing and editing tools */
   prop = RNA_def_property(srna, "pass_index", PROP_INT, PROP_UNSIGNED);
   RNA_def_property_int_sdna(prop, NULL, "index");
@@ -604,7 +624,7 @@ static void rna_def_material_greasepencil(BlenderRNA *brna)
   prop = RNA_def_property(srna, "mode", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_bitflag_sdna(prop, NULL, "mode");
   RNA_def_property_enum_items(prop, gpcolordata_mode_types_items);
-  RNA_def_property_ui_text(prop, "Mode Type", "Select draw mode for stroke");
+  RNA_def_property_ui_text(prop, "Line Type", "Select line type for strokes");
   RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_update");
 
   /* stroke style */
@@ -659,6 +679,29 @@ static void rna_def_material_greasepencil(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Is Fill Visible", "True when opacity of fill is set high enough to be visible");
 }
+static void rna_def_material_lineart(BlenderRNA *brna)
+{
+  StructRNA *srna;
+  PropertyRNA *prop;
+
+  srna = RNA_def_struct(brna, "MaterialLineArt", NULL);
+  RNA_def_struct_sdna(srna, "MaterialLineArt");
+  RNA_def_struct_ui_text(srna, "Material Line Art", "");
+
+  prop = RNA_def_property(srna, "use_transparency", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_default(prop, 0);
+  RNA_def_property_boolean_sdna(prop, NULL, "flags", LRT_MATERIAL_TRANSPARENCY_ENABLED);
+  RNA_def_property_ui_text(
+      prop, "Use Transparency", "Use transparency mask from this material in line art");
+  RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialLineArt_update");
+
+  prop = RNA_def_property(srna, "use_transparency_mask", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_default(prop, 0);
+  RNA_def_property_boolean_sdna(prop, NULL, "transparency_mask", 1);
+  RNA_def_property_array(prop, 8);
+  RNA_def_property_ui_text(prop, "Mask", "");
+  RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialLineArt_update");
+}
 
 void RNA_def_material(BlenderRNA *brna)
 {
@@ -671,7 +714,7 @@ void RNA_def_material(BlenderRNA *brna)
       {MA_SPHERE, "SPHERE", ICON_MATSPHERE, "Sphere", "Sphere"},
       {MA_CUBE, "CUBE", ICON_MATCUBE, "Cube", "Cube"},
       {MA_HAIR, "HAIR", ICON_HAIR, "Hair", "Hair strands"},
-      {MA_SHADERBALL, "SHADERBALL", ICON_MATSHADERBALL, "Shader Ball", "Shader Ball"},
+      {MA_SHADERBALL, "SHADERBALL", ICON_MATSHADERBALL, "Shader Ball", "Shader ball"},
       {MA_CLOTH, "CLOTH", ICON_MATCLOTH, "Cloth", "Cloth"},
       {MA_FLUID, "FLUID", ICON_MATFLUID, "Fluid", "Fluid"},
       {0, NULL, 0, NULL, NULL},
@@ -797,6 +840,8 @@ void RNA_def_material(BlenderRNA *brna)
   prop = RNA_def_property(srna, "node_tree", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "nodetree");
   RNA_def_property_clear_flag(prop, PROP_PTR_NO_OWNERSHIP);
+  /* XXX: remove once overrides in material node trees are supported. */
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_IGNORE);
   RNA_def_property_ui_text(prop, "Node Tree", "Node tree for node based materials");
 
   prop = RNA_def_property(srna, "use_nodes", PROP_BOOLEAN, PROP_NONE);
@@ -824,7 +869,13 @@ void RNA_def_material(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Is Grease Pencil", "True if this material has grease pencil data");
 
+  /* line art */
+  prop = RNA_def_property(srna, "lineart", PROP_POINTER, PROP_NONE);
+  RNA_def_property_pointer_sdna(prop, NULL, "lineart");
+  RNA_def_property_ui_text(prop, "Line Art Settings", "Line art settings for material");
+
   rna_def_material_greasepencil(brna);
+  rna_def_material_lineart(brna);
 
   RNA_api_material(srna);
 }

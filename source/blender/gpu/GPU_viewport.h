@@ -38,6 +38,7 @@ extern "C" {
 #define GPU_INFO_SIZE 512 /* IMA_MAX_RENDER_TEXT */
 #define GLA_PIXEL_OFS 0.375f
 
+typedef struct GHash GHash;
 typedef struct GPUViewport GPUViewport;
 
 struct GPUFrameBuffer;
@@ -57,6 +58,7 @@ typedef struct ViewportMemoryPool {
   struct BLI_memblock *images;
   struct GPUUniformBuf **matrices_ubo;
   struct GPUUniformBuf **obinfos_ubo;
+  struct GHash *obattrs_ubo_pool;
   uint ubo_len;
 } ViewportMemoryPool;
 
@@ -112,7 +114,8 @@ void GPU_viewport_draw_to_screen(GPUViewport *viewport, int view, const rcti *re
 void GPU_viewport_draw_to_screen_ex(GPUViewport *viewport,
                                     int view,
                                     const rcti *rect,
-                                    bool display_colorspace);
+                                    bool display_colorspace,
+                                    bool do_overlay_merge);
 void GPU_viewport_free(GPUViewport *viewport);
 
 void GPU_viewport_colorspace_set(GPUViewport *viewport,
@@ -123,7 +126,8 @@ void GPU_viewport_colorspace_set(GPUViewport *viewport,
 void GPU_viewport_bind_from_offscreen(GPUViewport *viewport, struct GPUOffScreen *ofs);
 void GPU_viewport_unbind_from_offscreen(GPUViewport *viewport,
                                         struct GPUOffScreen *ofs,
-                                        bool display_colorspace);
+                                        bool display_colorspace,
+                                        bool do_overlay_merge);
 
 ViewportMemoryPool *GPU_viewport_mempool_get(GPUViewport *viewport);
 struct DRWInstanceDataList *GPU_viewport_instance_data_list_get(GPUViewport *viewport);

@@ -36,19 +36,21 @@ extern PyTypeObject BPy_IDGroup_Type;
 #define BPy_IDGroup_CheckExact(v) (Py_TYPE(v) == &BPy_IDGroup_Type)
 
 typedef struct BPy_IDProperty {
-  PyObject_VAR_HEAD struct ID *id; /* can be NULL */
-  struct IDProperty *prop;         /* must be second member */
+  PyObject_VAR_HEAD
+  struct ID *id;           /* can be NULL */
+  struct IDProperty *prop; /* must be second member */
   struct IDProperty *parent;
-  PyObject *data_wrap;
 } BPy_IDProperty;
 
 typedef struct BPy_IDArray {
-  PyObject_VAR_HEAD struct ID *id; /* can be NULL */
-  struct IDProperty *prop;         /* must be second member */
+  PyObject_VAR_HEAD
+  struct ID *id;           /* can be NULL */
+  struct IDProperty *prop; /* must be second member */
 } BPy_IDArray;
 
 typedef struct BPy_IDGroup_Iter {
-  PyObject_VAR_HEAD BPy_IDProperty *group;
+  PyObject_VAR_HEAD
+  BPy_IDProperty *group;
   struct IDProperty *cur;
   int mode;
 } BPy_IDGroup_Iter;
@@ -58,6 +60,7 @@ PyObject *BPy_Wrap_GetValues(struct ID *id, struct IDProperty *prop);
 PyObject *BPy_Wrap_GetItems(struct ID *id, struct IDProperty *prop);
 int BPy_Wrap_SetMapItem(struct IDProperty *prop, PyObject *key, PyObject *val);
 
+PyObject *BPy_IDGroup_MapDataToPy(struct IDProperty *prop);
 PyObject *BPy_IDGroup_WrapData(struct ID *id, struct IDProperty *prop, struct IDProperty *parent);
 bool BPy_IDProperty_Map_ValidateAndCreate(PyObject *key, struct IDProperty *group, PyObject *ob);
 

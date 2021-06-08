@@ -56,7 +56,7 @@
     .flags = 0, \
     .val_flags = MOD_BEVEL_AMT_OFFSET, \
     .profile_type = MOD_BEVEL_PROFILE_SUPERELLIPSE, \
-    .lim_flags = 0, \
+    .lim_flags = MOD_BEVEL_ANGLE, \
     .e_flags = 0, \
     .mat = -1, \
     .edge_flags = 0, \
@@ -179,6 +179,7 @@
     .loop_count = 2, \
     .group = NULL, \
     .vgroup_selfcol = 0, \
+    .vgroup_objcol = 0, \
     .clamp = 0.0f, \
     .self_clamp = 0.0f, \
   }
@@ -235,7 +236,7 @@
     .flag = 0, \
   }
 
-/* Defines are scattered accross too many files, they need to be moved to DNA. */
+/* Defines are scattered across too many files, they need to be moved to DNA. */
 #if 0
 #define _DNA_DEFAULT_DataTransferModifierData \
   { \
@@ -413,7 +414,8 @@
   { \
     .cache_file = NULL, \
     .object_path = "", \
-    .read_flag = MOD_MESHSEQ_READ_VERT | MOD_MESHSEQ_READ_POLY | MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR, \
+    .read_flag = MOD_MESHSEQ_READ_VERT | MOD_MESHSEQ_READ_POLY | MOD_MESHSEQ_READ_UV | \
+                 MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_INTERPOLATE_VERTICES, \
     .velocity_scale = 1.0f, \
     .reader = NULL, \
     .reader_object_path = "", \
@@ -427,6 +429,7 @@
   { \
     .flag = MOD_MIR_AXIS_X | MOD_MIR_VGROUP, \
     .tolerance = 0.001f, \
+    .bisect_threshold = 0.001f, \
     .uv_offset = {0.0f, 0.0f}, \
     .uv_offset_copy = {0.0f, 0.0f}, \
     .mirror_ob = NULL, \
@@ -438,9 +441,8 @@
     .sculptlvl = 0, \
     .renderlvl = 0, \
     .totlvl = 0, \
-    .simple = 0, \
     .flags = eMultiresModifierFlag_UseCrease | eMultiresModifierFlag_ControlEdges, \
-    .uv_smooth = SUBSURF_UV_SMOOTH_PRESERVE_CORNERS, \
+    .uv_smooth = SUBSURF_UV_SMOOTH_PRESERVE_BOUNDARIES, \
     .quality = 4, \
     .boundary_smooth = SUBSURF_BOUNDARY_SMOOTH_ALL, \
   }
@@ -504,8 +506,8 @@
     .random_position = 0.0f, \
     .rotation = 0.0f, \
     .random_rotation = 0.0f, \
-    .particle_offset = 1.0f, \
-    .particle_amount = 0.0f, \
+    .particle_offset = 0.0f, \
+    .particle_amount = 1.0f, \
     .index_layer_name = "", \
     .value_layer_name = "", \
   }
@@ -574,7 +576,7 @@
     .flag = 0, \
   }
 
-#define _DNA_DEFAULT_SimulationModifierData \
+#define _DNA_DEFAULT_NodesModifierData \
   { 0 }
 
 #define _DNA_DEFAULT_SkinModifierData \
@@ -622,7 +624,7 @@
     .levels = 1, \
     .renderLevels = 2, \
     .flags = eSubsurfModifierFlag_UseCrease | eSubsurfModifierFlag_ControlEdges, \
-    .uv_smooth = SUBSURF_UV_SMOOTH_PRESERVE_CORNERS, \
+    .uv_smooth = SUBSURF_UV_SMOOTH_PRESERVE_BOUNDARIES, \
     .quality = 3, \
     .boundary_smooth = SUBSURF_BOUNDARY_SMOOTH_ALL, \
     .emCache = NULL, \
@@ -802,6 +804,7 @@
 #define _DNA_DEFAULT_WeldModifierData \
   { \
     .merge_dist = 0.001f, \
+    .mode = MOD_WELD_MODE_ALL, \
     .defgrp_name = "", \
   }
 

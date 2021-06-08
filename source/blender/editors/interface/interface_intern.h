@@ -31,6 +31,10 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ARegion;
 struct AnimationEvalContext;
 struct CurveMapping;
@@ -62,9 +66,9 @@ struct wmTimer;
 #define UI_MENU_SUBMENU_PADDING (6 * UI_DPI_FAC)
 
 /* menu scrolling */
-#define UI_MENU_SCROLL_ARROW 12
-#define UI_MENU_SCROLL_MOUSE (UI_MENU_SCROLL_ARROW + 2)
-#define UI_MENU_SCROLL_PAD 4
+#define UI_MENU_SCROLL_ARROW (12 * UI_DPI_FAC)
+#define UI_MENU_SCROLL_MOUSE (UI_MENU_SCROLL_ARROW + 2 * UI_DPI_FAC)
+#define UI_MENU_SCROLL_PAD (4 * UI_DPI_FAC)
 
 /* panel limits */
 #define UI_PANEL_MINX 100
@@ -220,8 +224,8 @@ struct uiBut {
   const char *disabled_info;
 
   BIFIconID icon;
-  /** emboss: UI_EMBOSS, UI_EMBOSS_NONE ... etc, copied from the #uiBlock.emboss */
-  char emboss;
+  /** Copied from the #uiBlock.emboss */
+  eUIEmbossType emboss;
   /** direction in a pie menu, used for collision detection (RadialDirection) */
   signed char pie_dir;
   /** could be made into a single flag */
@@ -316,6 +320,12 @@ typedef struct uiButSearch {
 
   struct PointerRNA rnasearchpoin;
   struct PropertyRNA *rnasearchprop;
+
+  /**
+   * The search box only provides suggestions, it does not force
+   * the string to match one of the search items when applying.
+   */
+  bool results_are_suggestions;
 } uiButSearch;
 
 /** Derived struct for #UI_BTYPE_DECORATOR */
@@ -378,11 +388,20 @@ typedef struct uiButExtraOpIcon {
 
 typedef struct ColorPicker {
   struct ColorPicker *next, *prev;
-  /** Color data, may be HSV or HSL. */
-  float color_data[3];
-  /** Initial color data (detect changes). */
-  float color_data_init[3];
+
+  /** Color in HSV or HSL, in color picking color space. Used for HSV cube,
+   * circle and slider widgets. The color picking space is perceptually
+   * linear for intuitive editing. */
+  float hsv_perceptual[3];
+  /** Initial color data (to detect changes). */
+  float hsv_perceptual_init[3];
   bool is_init;
+
+  /** HSV or HSL color in scene linear color space value used for number
+   * buttons. This is scene linear so that there is a clear correspondence
+   * to the scene linear RGB values. */
+  float hsv_scene_linear[3];
+
   /** Cubic saturation for the color wheel. */
   bool use_color_cubic;
   bool use_color_lock;
@@ -405,8 +424,8 @@ struct PieMenuData {
   float last_pos[2];
   double duration_gesture;
   int flags;
-  /** initial event used to fire the pie menu, store here so we can query for release */
-  int event;
+  /** Initial event used to fire the pie menu, store here so we can query for release */
+  short event_type;
   float alphafac;
 };
 
@@ -493,21 +512,21 @@ struct uiBlock {
   char direction;
   /** UI_BLOCK_THEME_STYLE_* */
   char theme_style;
-  /** UI_EMBOSS, UI_EMBOSS_NONE ... etc, copied to #uiBut.emboss */
-  char emboss;
+  /** Copied to #uiBut.emboss */
+  eUIEmbossType emboss;
   bool auto_open;
   char _pad[5];
   double auto_open_last;
 
   const char *lockstr;
 
-  char lock;
+  bool lock;
   /** to keep blocks while drawing and free them afterwards */
-  char active;
+  bool active;
   /** to avoid tooltip after click */
-  char tooltipdisabled;
+  bool tooltipdisabled;
   /** UI_block_end done? */
-  char endblock;
+  bool endblock;
 
   /** for doing delayed */
   eBlockBoundsCalc bounds_type;
@@ -516,7 +535,7 @@ struct uiBlock {
   /** for doing delayed */
   int bounds, minbounds;
 
-  /** pulldowns, to detect outside, can differ per case how it is created */
+  /** pull-downs, to detect outside, can differ per case how it is created. */
   rctf safety;
   /** uiSafetyRct list */
   ListBase saferct;
@@ -628,6 +647,8 @@ extern bool ui_but_menu_draw_as_popover(const uiBut *but);
 void ui_but_range_set_hard(uiBut *but);
 void ui_but_range_set_soft(uiBut *but);
 
+bool ui_but_context_poll_operator(struct bContext *C, struct wmOperatorType *ot, const uiBut *but);
+
 extern void ui_but_update(uiBut *but);
 extern void ui_but_update_edited(uiBut *but);
 extern bool ui_but_is_float(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
@@ -650,7 +671,7 @@ void ui_block_cm_to_display_space_v3(uiBlock *block, float pixel[3]);
 /* interface_regions.c */
 
 struct uiKeyNavLock {
-  /* set when we're using keyinput */
+  /* Set when we're using key-input. */
   bool is_keynav;
   /* only used to check if we've moved the cursor */
   int event_xy[2];
@@ -734,21 +755,20 @@ struct uiPopupBlockHandle {
 /* exposed as public API in UI_interface.h */
 
 /* interface_region_color_picker.c */
-void ui_rgb_to_color_picker_compat_v(const float rgb[3], float r_cp[3]);
-void ui_rgb_to_color_picker_v(const float rgb[3], float r_cp[3]);
-void ui_color_picker_to_rgb_v(const float r_cp[3], float rgb[3]);
-void ui_color_picker_to_rgb(float r_cp0, float r_cp1, float r_cp2, float *r, float *g, float *b);
+void ui_color_picker_rgb_to_hsv_compat(const float rgb[3], float r_cp[3]);
+void ui_color_picker_rgb_to_hsv(const float rgb[3], float r_cp[3]);
+void ui_color_picker_hsv_to_rgb(const float r_cp[3], float rgb[3]);
 
 bool ui_but_is_color_gamma(uiBut *but);
 
-void ui_scene_linear_to_color_picker_space(uiBut *but, float rgb[3]);
-void ui_color_picker_to_scene_linear_space(uiBut *but, float rgb[3]);
+void ui_scene_linear_to_perceptual_space(uiBut *but, float rgb[3]);
+void ui_perceptual_to_scene_linear_space(uiBut *but, float rgb[3]);
 
 uiBlock *ui_block_func_COLOR(struct bContext *C, uiPopupBlockHandle *handle, void *arg_but);
 ColorPicker *ui_block_colorpicker_create(struct uiBlock *block);
 
 /* interface_region_search.c */
-/* Searchbox for string button */
+/* Search-box for string button. */
 struct ARegion *ui_searchbox_create_generic(struct bContext *C,
                                             struct ARegion *butregion,
                                             uiButSearch *search_but);
@@ -943,7 +963,7 @@ typedef struct uiWidgetBaseParameters {
   /* We pack alpha check and discard factor in alpha_discard.
    * If the value is negative then we do alpha check.
    * The absolute value itself is the discard factor.
-   * Initialize value to 1.0.f if you don't want discard */
+   * Initialize value to 1.0f if you don't want discard. */
   float alpha_discard;
   float tria_type;
   float _pad[3];
@@ -975,7 +995,7 @@ const struct uiWidgetColors *ui_tooltip_get_theme(void);
 
 void ui_draw_widget_menu_back_color(const rcti *rect, bool use_shadow, const float color[4]);
 void ui_draw_widget_menu_back(const rcti *rect, bool use_shadow);
-void ui_draw_tooltip_background(const struct uiStyle *UNUSED(style), uiBlock *block, rcti *rect);
+void ui_draw_tooltip_background(const struct uiStyle *style, uiBlock *block, rcti *rect);
 
 extern void ui_draw_but(const struct bContext *C,
                         struct ARegion *region,
@@ -983,20 +1003,35 @@ extern void ui_draw_but(const struct bContext *C,
                         uiBut *but,
                         rcti *rect);
 
+/**
+ * Info about what the separator character separates, used to decide between different drawing
+ * styles. E.g. we never want a shortcut string to be clipped, but other hint strings can be
+ * clipped.
+ */
+typedef enum {
+  UI_MENU_ITEM_SEPARATOR_NONE,
+  /** Separator is used to indicate shortcut string of this item. Shortcut string will not get
+   * clipped. */
+  UI_MENU_ITEM_SEPARATOR_SHORTCUT,
+  /** Separator is used to indicate some additional hint to display for this item. Hint string will
+   * get clipped before the normal text. */
+  UI_MENU_ITEM_SEPARATOR_HINT,
+} uiMenuItemSeparatorType;
 void ui_draw_menu_item(const struct uiFontStyle *fstyle,
                        rcti *rect,
                        const char *name,
                        int iconid,
                        int state,
-                       bool use_sep,
+                       uiMenuItemSeparatorType separator_type,
                        int *r_xmax);
 void ui_draw_preview_item(
     const struct uiFontStyle *fstyle, rcti *rect, const char *name, int iconid, int state);
 
 #define UI_TEXT_MARGIN_X 0.4f
 #define UI_POPUP_MARGIN (UI_DPI_FAC * 12)
-/* margin at top of screen for popups */
-#define UI_POPUP_MENU_TOP (int)(8 * UI_DPI_FAC)
+/* Margin at top of screen for popups. Note this value must be sufficient
+   to draw a popover arrow to avoid cropping it. */
+#define UI_POPUP_MENU_TOP (int)(10 * UI_DPI_FAC)
 
 #define UI_PIXEL_AA_JITTER 8
 extern const float ui_pixel_jitter[UI_PIXEL_AA_JITTER][2];
@@ -1030,7 +1065,7 @@ void ui_item_menutype_func(struct bContext *C, struct uiLayout *layout, void *ar
 void ui_item_paneltype_func(struct bContext *C, struct uiLayout *layout, void *arg_pt);
 
 /* interface_button_group.c */
-void ui_block_new_button_group(uiBlock *block, short flag);
+void ui_block_new_button_group(uiBlock *block, uiButtonGroupFlag flag);
 void ui_button_group_add_but(uiBlock *block, uiBut *but);
 void ui_button_group_replace_but_ptr(uiBlock *block, const void *old_but_ptr, uiBut *new_but);
 void ui_block_free_button_groups(uiBlock *block);
@@ -1075,11 +1110,11 @@ bool ui_but_contains_point_px(const uiBut *but, const struct ARegion *region, in
 uiBut *ui_list_find_mouse_over(struct ARegion *region,
                                const struct wmEvent *event) ATTR_WARN_UNUSED_RESULT;
 
-uiBut *ui_but_find_mouse_over_ex(struct ARegion *region,
+uiBut *ui_but_find_mouse_over_ex(const struct ARegion *region,
                                  const int x,
                                  const int y,
                                  const bool labeledit) ATTR_WARN_UNUSED_RESULT;
-uiBut *ui_but_find_mouse_over(struct ARegion *region,
+uiBut *ui_but_find_mouse_over(const struct ARegion *region,
                               const struct wmEvent *event) ATTR_WARN_UNUSED_RESULT;
 uiBut *ui_but_find_rect_over(const struct ARegion *region,
                              const rcti *rect_px) ATTR_WARN_UNUSED_RESULT;
@@ -1087,6 +1122,9 @@ uiBut *ui_but_find_rect_over(const struct ARegion *region,
 uiBut *ui_list_find_mouse_over_ex(struct ARegion *region, int x, int y) ATTR_WARN_UNUSED_RESULT;
 
 bool ui_but_contains_password(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
+
+size_t ui_but_drawstr_len_without_sep_char(const uiBut *but);
+size_t ui_but_tip_len_only_first_line(const uiBut *but);
 
 uiBut *ui_but_prev(uiBut *but) ATTR_WARN_UNUSED_RESULT;
 uiBut *ui_but_next(uiBut *but) ATTR_WARN_UNUSED_RESULT;
@@ -1167,10 +1205,15 @@ typedef struct uiRNACollectionSearch {
 void ui_rna_collection_search_update_fn(const struct bContext *C,
                                         void *arg,
                                         const char *str,
-                                        uiSearchItems *items);
+                                        uiSearchItems *items,
+                                        const bool is_first);
 
 /* interface_ops.c */
 bool ui_jump_to_target_button_poll(struct bContext *C);
 
 /* interface_queries.c */
 void ui_interface_tag_script_reload_queries(void);
+
+#ifdef __cplusplus
+}
+#endif

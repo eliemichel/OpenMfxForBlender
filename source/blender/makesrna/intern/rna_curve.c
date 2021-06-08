@@ -75,6 +75,10 @@ const EnumPropertyItem rna_enum_keyframe_handle_type_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
+/**
+ * \note this is a near exact duplicate of `gpencil_interpolation_type_items`,
+ * Changes here will likely apply there too.
+ */
 const EnumPropertyItem rna_enum_beztriple_interpolation_mode_items[] = {
     /* interpolation */
     {0, "", 0, N_("Interpolation"), "Standard transitions between keyframes"},
@@ -353,9 +357,8 @@ static void rna_Curve_dimension_set(PointerRNA *ptr, int value)
   }
   else {
     cu->flag &= ~CU_3D;
+    BKE_curve_dimension_update(cu);
   }
-
-  BKE_curve_curve_dimension_update(cu);
 }
 
 static const EnumPropertyItem *rna_Curve_fill_mode_itemf(bContext *UNUSED(C),
@@ -717,10 +720,6 @@ static Nurb *rna_Curve_spline_new(Curve *cu, int type)
   nu->resolv = cu->resolv;
   nu->flag = CU_SMOOTH;
 
-  if ((cu->flag & CU_3D) == 0) {
-    nu->flag |= CU_2D;
-  }
-
   BLI_addtail(BKE_curve_nurbs_get(cu), nu);
 
   return nu;
@@ -872,7 +871,7 @@ static void rna_def_bpoint(BlenderRNA *brna)
 
   /* Boolean values */
   prop = RNA_def_property(srna, "select", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "f1", 0);
+  RNA_def_property_boolean_sdna(prop, NULL, "f1", SELECT);
   RNA_def_property_ui_text(prop, "Select", "Selection status");
   RNA_def_property_update(prop, 0, "rna_Curve_update_data");
 
@@ -1031,6 +1030,14 @@ static void rna_def_path(BlenderRNA *UNUSED(brna), StructRNA *srna)
   RNA_def_property_ui_text(prop, "Follow", "Make curve path children to rotate along the path");
   RNA_def_property_update(prop, 0, "rna_Curve_update_data");
 
+  prop = RNA_def_property(srna, "use_path_clamp", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", CU_PATH_CLAMP);
+  RNA_def_property_ui_text(
+      prop,
+      "Clamp",
+      "Clamp the curve path children so they can't travel past the start/end point of the curve");
+  RNA_def_property_update(prop, 0, "rna_Curve_update_data");
+
   prop = RNA_def_property(srna, "use_stretch", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", CU_STRETCH);
   RNA_def_property_ui_text(prop,
@@ -1142,7 +1149,7 @@ static void rna_def_font(BlenderRNA *UNUSED(brna), StructRNA *srna)
   RNA_def_property_float_sdna(prop, NULL, "fsize");
   RNA_def_property_range(prop, 0.0001f, 10000.0f);
   RNA_def_property_ui_range(prop, 0.01, 10, 1, 3);
-  RNA_def_property_ui_text(prop, "Font size", "");
+  RNA_def_property_ui_text(prop, "Font Size", "");
   RNA_def_property_update(prop, 0, "rna_Curve_update_data");
 
   prop = RNA_def_property(srna, "small_caps_scale", PROP_FLOAT, PROP_NONE);
@@ -1208,7 +1215,7 @@ static void rna_def_font(BlenderRNA *UNUSED(brna), StructRNA *srna)
 
   prop = RNA_def_property(srna, "active_textbox", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "actbox");
-  RNA_def_property_ui_text(prop, "The active text box", "");
+  RNA_def_property_ui_text(prop, "Active Text Box", "");
   RNA_def_property_int_funcs(prop, NULL, NULL, "rna_Curve_active_textbox_index_range");
 
   /* strings */
@@ -1572,6 +1579,25 @@ static void rna_def_curve(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL},
   };
 
+  static const EnumPropertyItem curve_taper_radius_mode_items[] = {
+      {CU_TAPER_RADIUS_OVERRIDE,
+       "OVERRIDE",
+       0,
+       "Override",
+       "Override the radius of the spline point with the taper radius"},
+      {CU_TAPER_RADIUS_MULTIPLY,
+       "MULTIPLY",
+       0,
+       "Multiply",
+       "Multiply the radius of the spline point by the taper radius"},
+      {CU_TAPER_RADIUS_ADD,
+       "ADD",
+       0,
+       "Add",
+       "Add the radius of the bevel point to the taper radius"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   srna = RNA_def_struct(brna, "Curve", "ID");
   RNA_def_struct_ui_text(srna, "Curve", "Curve data-block storing curves, splines and NURBS");
   RNA_def_struct_ui_icon(srna, ICON_CURVE_DATA);
@@ -1751,6 +1777,15 @@ static void rna_def_curve(BlenderRNA *brna)
   RNA_def_property_enum_sdna(prop, NULL, "twist_mode");
   RNA_def_property_enum_items(prop, curve_twist_mode_items);
   RNA_def_property_ui_text(prop, "Twist Method", "The type of tilt calculation for 3D Curves");
+  RNA_def_property_update(prop, 0, "rna_Curve_update_data");
+
+  prop = RNA_def_property(srna, "taper_radius_mode", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, NULL, "taper_radius_mode");
+  RNA_def_property_enum_items(prop, curve_taper_radius_mode_items);
+  RNA_def_property_ui_text(prop,
+                           "Taper Radius",
+                           "Determine how the effective radius of the spline point is computed "
+                           "when a taper object is specified");
   RNA_def_property_update(prop, 0, "rna_Curve_update_data");
 
   prop = RNA_def_property(srna, "bevel_factor_mapping_start", PROP_ENUM, PROP_NONE);

@@ -199,11 +199,16 @@ IDTypeInfo IDType_ID_WO = {
     .make_local = NULL,
     .foreach_id = world_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = world_blend_write,
     .blend_read_data = world_blend_read_data,
     .blend_read_lib = world_blend_read_lib,
     .blend_read_expand = world_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 World *BKE_world_add(Main *bmain, const char *name)

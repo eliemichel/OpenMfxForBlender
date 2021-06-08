@@ -208,8 +208,11 @@
     .gtao_factor = 1.0f, \
     .gtao_quality = 0.25f, \
  \
+    .bokeh_overblur = 5.0f, \
     .bokeh_max_size = 100.0f, \
     .bokeh_threshold = 1.0f, \
+    .bokeh_neighbor_max = 10.0f, \
+    .bokeh_denoise_fac = 0.75f, \
  \
     .bloom_color = {1.0f, 1.0f, 1.0f}, \
     .bloom_threshold = 0.8f, \
@@ -281,6 +284,15 @@
     .count = 10, \
   }
 
+#define _DNA_DEFAULTS_UnifiedPaintSettings \
+  { \
+    .size = 50, \
+    .unprojected_radius = 0.29, \
+    .alpha = 0.5f, \
+    .weight = 0.5f, \
+    .flag = UNIFIED_PAINT_SIZE | UNIFIED_PAINT_ALPHA, \
+  }
+
 #define _DNA_DEFAULTS_ParticleEditSettings \
   { \
     .flag = PE_KEEP_LENGTHS | PE_LOCK_FIRST | PE_DEFLECT_EMITTER | PE_AUTO_VELOCITY, \
@@ -342,6 +354,8 @@
     .snap_transform_mode_flag = SCE_SNAP_TRANSFORM_MODE_TRANSLATE, \
  \
     .curve_paint_settings = _DNA_DEFAULTS_CurvePaintSettings, \
+ \
+    .unified_paint_settings = _DNA_DEFAULTS_UnifiedPaintSettings, \
  \
     .statvis = _DNA_DEFAULTS_MeshStatVis, \
  \

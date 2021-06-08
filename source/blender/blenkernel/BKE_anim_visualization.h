@@ -26,6 +26,8 @@
 extern "C" {
 #endif
 
+struct BlendDataReader;
+struct BlendWriter;
 struct Object;
 struct ReportList;
 struct Scene;
@@ -47,6 +49,9 @@ struct bMotionPath *animviz_verify_motionpaths(struct ReportList *reports,
                                                struct Scene *scene,
                                                struct Object *ob,
                                                struct bPoseChannel *pchan);
+
+void animviz_motionpath_blend_write(struct BlendWriter *writer, struct bMotionPath *mpath);
+void animviz_motionpath_blend_read_data(struct BlendDataReader *reader, struct bMotionPath *mpath);
 
 #ifdef __cplusplus
 }

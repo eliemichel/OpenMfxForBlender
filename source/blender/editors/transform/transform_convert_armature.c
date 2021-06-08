@@ -99,15 +99,7 @@ static void autokeyframe_pose(
   bPoseChannel *pchan;
   FCurve *fcu;
 
-  /* TODO: this should probably be done per channel instead. */
   if (!autokeyframe_cfra_can_key(scene, id)) {
-    /* tag channels that should have unkeyed data */
-    for (pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
-      if (pchan->bone->flag & BONE_TRANSFORM) {
-        /* tag this channel */
-        pchan->bone->flag |= BONE_UNKEYED;
-      }
-    }
     return;
   }
 
@@ -139,9 +131,6 @@ static void autokeyframe_pose(
 
     ListBase dsources = {NULL, NULL};
 
-    /* clear any 'unkeyed' flag it may have */
-    pchan->bone->flag &= ~BONE_UNKEYED;
-
     /* add datasource override for the camera object */
     ANIM_relative_keyingset_add_source(&dsources, id, &RNA_PoseBone, pchan);
 
@@ -164,21 +153,21 @@ static void autokeyframe_pose(
           /* only if bone name matches too...
            * NOTE: this will do constraints too, but those are ok to do here too?
            */
-          if (pchanName && STREQ(pchanName, pchan->name)) {
-            insert_keyframe(bmain,
-                            reports,
-                            id,
-                            act,
-                            ((fcu->grp) ? (fcu->grp->name) : (NULL)),
-                            fcu->rna_path,
-                            fcu->array_index,
-                            &anim_eval_context,
-                            ts->keyframe_type,
-                            &nla_cache,
-                            flag);
-          }
-
           if (pchanName) {
+            if (STREQ(pchanName, pchan->name)) {
+              insert_keyframe(bmain,
+                              reports,
+                              id,
+                              act,
+                              ((fcu->grp) ? (fcu->grp->name) : (NULL)),
+                              fcu->rna_path,
+                              fcu->array_index,
+                              &anim_eval_context,
+                              ts->keyframe_type,
+                              &nla_cache,
+                              flag);
+            }
+
             MEM_freeN(pchanName);
           }
         }
@@ -444,7 +433,7 @@ static short pose_grab_with_ik(Main *bmain, Object *ob)
   for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
     if (pchan->bone->layer & arm->layer) {
       if (pchan->bone->flag & (BONE_SELECTED | BONE_TRANSFORM_MIRROR)) {
-        /* Rule: no IK for solitatry (unconnected) bones */
+        /* Rule: no IK for solitary (unconnected) bones. */
         for (bonec = pchan->bone->childbase.first; bonec; bonec = bonec->next) {
           if (bonec->flag & BONE_CONNECTED) {
             break;
@@ -672,7 +661,7 @@ static void add_pose_transdata(TransInfo *t, bPoseChannel *pchan, Object *ob, Tr
     }
   }
 
-  /* for axismat we use bone's own transform */
+  /* For `axismtx` we use bone's own transform. */
   copy_m3_m4(pmat, pchan->pose_mat);
   mul_m3_m3m3(td->axismtx, omat, pmat);
   normalize_m3(td->axismtx);
@@ -870,8 +859,6 @@ void createTransPose(TransInfo *t)
       t->mode = TFM_RESIZE;
     }
   }
-
-  t->flag |= T_POSE;
 }
 
 void createTransArmatureVerts(TransInfo *t)
@@ -1343,7 +1330,7 @@ static void pose_transform_mirror_update(TransInfo *t, TransDataContainer *tc, O
     }
     BKE_pchan_apply_mat4(pchan, pchan_mtx_final, false);
 
-    /* Set flag to let autokeyframe know to keyframe the mirrred bone. */
+    /* Set flag to let auto key-frame know to key-frame the mirrored bone. */
     pchan->bone->flag |= BONE_TRANSFORM_MIRROR;
 
     /* In this case we can do target-less IK grabbing. */
@@ -1354,7 +1341,7 @@ static void pose_transform_mirror_update(TransInfo *t, TransDataContainer *tc, O
       }
       mul_v3_m4v3(data->grabtarget, flip_mtx, td->loc);
       if (pid) {
-        /* TODO(germano): Realitve Mirror support */
+        /* TODO(germano): Relative Mirror support. */
       }
       data->flag |= CONSTRAINT_IK_AUTO;
       /* Add a temporary auto IK constraint here, as we will only temporarily active this
@@ -1504,7 +1491,7 @@ static void bone_children_clear_transflag(int mode, short around, ListBase *lb)
     if ((bone->flag & BONE_HINGE) && (bone->flag & BONE_CONNECTED)) {
       bone->flag |= BONE_HINGE_CHILD_TRANSFORM;
     }
-    else if ((bone->flag & BONE_TRANSFORM) && (mode == TFM_ROTATION || mode == TFM_TRACKBALL) &&
+    else if ((bone->flag & BONE_TRANSFORM) && (ELEM(mode, TFM_ROTATION, TFM_TRACKBALL)) &&
              (around == V3D_AROUND_LOCAL_ORIGINS)) {
       bone->flag |= BONE_TRANSFORM_CHILD;
     }

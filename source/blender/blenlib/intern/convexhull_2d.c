@@ -28,7 +28,7 @@
 #include "BLI_strict_flags.h"
 #include "BLI_utildefines.h"
 
-/* Copyright 2001, softSurfer (www.softsurfer.com)
+/* Copyright 2001, softSurfer (http://www.softsurfer.com)
  * This code may be freely used and modified for any purpose
  * providing that this copyright notice is included with it.
  * SoftSurfer makes no warranty for this code, and cannot be held
@@ -37,6 +37,7 @@
  * http://softsurfer.com/Archive/algorithm_0203/algorithm_0203.htm
  */
 
+/* -------------------------------------------------------------------- */
 /** \name Main Convex-Hull Calculation
  * \{ */
 
@@ -227,9 +228,9 @@ int BLI_convexhull_2d(const float (*points)[2], const int n, int r_points[])
 
 /** \} */
 
-/* -------------------------------------------------------------------- */
 /* Helper functions */
 
+/* -------------------------------------------------------------------- */
 /** \name Utility Convex-Hull Functions
  * \{ */
 

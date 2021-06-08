@@ -335,7 +335,7 @@ BMFace *BM_face_create_ngon_verts(BMesh *bm,
         /* we want to use the reverse winding to the existing order */
         BM_edge_ordered_verts(edge_arr[i], &test_v2, &test_v1);
         winding[(vert_arr[i_prev] == test_v2)]++;
-        BLI_assert(vert_arr[i_prev] == test_v2 || vert_arr[i_prev] == test_v1);
+        BLI_assert(ELEM(vert_arr[i_prev], test_v2, test_v1));
       }
     }
 
@@ -613,7 +613,7 @@ void BM_mesh_copy_init_customdata(BMesh *bm_dst, BMesh *bm_src, const BMAllocTem
  * \param bm_dst: BMesh whose custom-data layers will be added.
  * \param bm_src: BMesh whose custom-data layers will be copied.
  * \param htype: Specifies which custom-data layers will be initiated.
- * \param allocsize: Initialize the the memory-pool before use (may be an estimate).
+ * \param allocsize: Initialize the memory-pool before use (may be an estimate).
  */
 void BM_mesh_copy_init_customdata_all_layers(BMesh *bm_dst,
                                              BMesh *bm_src,

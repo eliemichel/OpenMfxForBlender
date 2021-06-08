@@ -53,13 +53,14 @@
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
-#include "BKE_sequencer.h"
 #include "BKE_studiolight.h"
 
 #include "DEG_depsgraph.h"
 
 #include "RE_pipeline.h"
-#include "RE_render_ext.h"
+#include "RE_texture.h"
+
+#include "SEQ_sequencer.h"
 
 #include "BLF_api.h"
 
@@ -99,7 +100,7 @@ void BKE_blender_free(void)
 
   IMB_moviecache_destruct();
 
-  free_nodesystem();
+  BKE_node_system_exit();
 }
 
 /** \} */
@@ -295,6 +296,7 @@ void BKE_blender_userdef_data_free(UserDef *userdef, bool clear_fonts)
   }
 
   BLI_freelistN(&userdef->autoexec_paths);
+  BLI_freelistN(&userdef->asset_libraries);
 
   BLI_freelistN(&userdef->uistyles);
   BLI_freelistN(&userdef->uifonts);
@@ -415,7 +417,7 @@ void BKE_blender_atexit_unregister(void (*func)(void *user_data), const void *us
       free(ae);
       return;
     }
-    ae_p = &ae;
+    ae_p = &ae->next;
     ae = ae->next;
   }
 }

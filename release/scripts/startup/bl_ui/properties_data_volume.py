@@ -63,7 +63,7 @@ class DATA_PT_volume_file(DataButtonsPanel, Panel):
 
         layout.prop(volume, "filepath", text="")
 
-        if len(volume.filepath):
+        if volume.filepath:
             layout.use_property_split = True
             layout.use_property_decorate = False
 
@@ -76,7 +76,7 @@ class DATA_PT_volume_file(DataButtonsPanel, Panel):
                 col.prop(volume, "sequence_mode", text="Mode")
 
         error_msg = volume.grids.error_message
-        if len(error_msg):
+        if error_msg:
             layout.separator()
             col = layout.column(align=True)
             col.label(text="Failed to load volume:")
@@ -84,10 +84,11 @@ class DATA_PT_volume_file(DataButtonsPanel, Panel):
 
 
 class VOLUME_UL_grids(UIList):
-    def draw_item(self, context, layout, data, grid, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, grid, _icon, _active_data, _active_propname, _index):
         name = grid.name
         data_type = grid.bl_rna.properties['data_type'].enum_items[grid.data_type]
 
+        layout.emboss = 'NONE'
         layout.label(text=name)
         row = layout.row()
         row.alignment = 'RIGHT'

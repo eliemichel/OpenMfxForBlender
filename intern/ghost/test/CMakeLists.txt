@@ -16,7 +16,7 @@ cmake_minimum_required(VERSION 3.5)
 
 project(GhostMultiTest)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/../../..//build_files/cmake/Modules")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/../../../build_files/cmake/Modules")
 
 set(WITH_GUARDEDALLOC ON)
 
@@ -233,8 +233,8 @@ else()
   set(GLEW_INCLUDE_PATH "${CMAKE_SOURCE_DIR}/extern/glew/include")
 endif()
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${PLATFORM_CFLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${PLATFORM_CFLAGS}")
+string(APPEND CMAKE_C_FLAGS " ${PLATFORM_CFLAGS}")
+string(APPEND CMAKE_CXX_FLAGS " ${PLATFORM_CFLAGS}")
 
 # -----------------------------------------------------------------------------
 # Executables

@@ -21,7 +21,7 @@
 static bNodeSocketTemplate fn_node_random_float_in[] = {
     {SOCK_FLOAT, N_("Min"), 0.0f, 0.0f, 0.0f, 0.0f, -10000.0f, 10000.0f, PROP_NONE},
     {SOCK_FLOAT, N_("Max"), 1.0f, 0.0f, 0.0f, 0.0f, -10000.0f, 10000.0f, PROP_NONE},
-    {SOCK_INT, N_("Seed")},
+    {SOCK_INT, N_("Seed"), 0, 0, 0, 0, -10000, 10000},
     {-1, ""},
 };
 
@@ -31,33 +31,37 @@ static bNodeSocketTemplate fn_node_random_float_out[] = {
 };
 
 class RandomFloatFunction : public blender::fn::MultiFunction {
- private:
-  uint32_t function_seed_;
-
  public:
-  RandomFloatFunction(uint32_t function_seed) : function_seed_(function_seed)
+  RandomFloatFunction()
   {
-    blender::fn::MFSignatureBuilder signature = this->get_builder("Random float");
+    static blender::fn::MFSignature signature = create_signature();
+    this->set_signature(&signature);
+  }
+
+  static blender::fn::MFSignature create_signature()
+  {
+    blender::fn::MFSignatureBuilder signature{"Random float"};
     signature.single_input<float>("Min");
     signature.single_input<float>("Max");
     signature.single_input<int>("Seed");
     signature.single_output<float>("Value");
+    return signature.build();
   }
 
   void call(blender::IndexMask mask,
             blender::fn::MFParams params,
             blender::fn::MFContext UNUSED(context)) const override
   {
-    blender::fn::VSpan<float> min_values = params.readonly_single_input<float>(0, "Min");
-    blender::fn::VSpan<float> max_values = params.readonly_single_input<float>(1, "Max");
-    blender::fn::VSpan<int> seeds = params.readonly_single_input<int>(2, "Seed");
+    const blender::VArray<float> &min_values = params.readonly_single_input<float>(0, "Min");
+    const blender::VArray<float> &max_values = params.readonly_single_input<float>(1, "Max");
+    const blender::VArray<int> &seeds = params.readonly_single_input<int>(2, "Seed");
     blender::MutableSpan<float> values = params.uninitialized_single_output<float>(3, "Value");
 
     for (int64_t i : mask) {
       const float min_value = min_values[i];
       const float max_value = max_values[i];
       const int seed = seeds[i];
-      const float value = BLI_hash_int_01(static_cast<uint32_t>(seed) ^ function_seed_);
+      const float value = BLI_hash_int_01(static_cast<uint32_t>(seed));
       values[i] = value * (max_value - min_value) + min_value;
     }
   }
@@ -66,16 +70,7 @@ class RandomFloatFunction : public blender::fn::MultiFunction {
 static void fn_node_random_float_expand_in_mf_network(
     blender::nodes::NodeMFNetworkBuilder &builder)
 {
-  uint32_t function_seed = 1746872341u;
-  const blender::nodes::DNode &node = builder.dnode();
-  const blender::DefaultHash<blender::StringRefNull> hasher;
-  function_seed = 33 * function_seed + hasher(node.name());
-  for (const blender::nodes::DParentNode *parent = node.parent(); parent != nullptr;
-       parent = parent->parent()) {
-    function_seed = 33 * function_seed + hasher(parent->node_ref().name());
-  }
-
-  builder.construct_and_set_matching_fn<RandomFloatFunction>(function_seed);
+  builder.construct_and_set_matching_fn<RandomFloatFunction>();
 }
 
 void register_node_type_fn_random_float()

@@ -45,14 +45,11 @@
 #include "BKE_deform.h"
 #include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
-#include "BKE_layer.h"
 #include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
-
-#include "MEM_guardedalloc.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -228,6 +225,7 @@ static void deformStroke(GpencilModifierData *md,
                                       mmd->flag & GP_HOOK_INVERT_MATERIAL)) {
     return;
   }
+  bGPdata *gpd = ob->data;
 
   /* init struct */
   tData.curfalloff = mmd->curfalloff;
@@ -273,7 +271,7 @@ static void deformStroke(GpencilModifierData *md,
     gpencil_hook_co_apply(&tData, weight, pt);
   }
   /* Calc geometry data. */
-  BKE_gpencil_stroke_geometry_update(gps);
+  BKE_gpencil_stroke_geometry_update(gpd, gps);
 }
 
 /* FIXME: Ideally we be doing this on a copy of the main depsgraph
@@ -329,7 +327,9 @@ static bool isDisabled(GpencilModifierData *md, int UNUSED(userRenderParams))
   return !mmd->object;
 }
 
-static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
+static void updateDepsgraph(GpencilModifierData *md,
+                            const ModifierUpdateDepsgraphContext *ctx,
+                            const int UNUSED(mode))
 {
   HookGpencilModifierData *lmd = (HookGpencilModifierData *)md;
   if (lmd->object != NULL) {

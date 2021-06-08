@@ -22,7 +22,7 @@
  * \ingroup edgpencil
  */
 
-/* allow to use deprecated functionality */
+/* Allow using deprecated functionality. */
 #define DNA_DEPRECATED_ALLOW
 
 #include <stdio.h>
@@ -33,16 +33,13 @@
 #include "BLI_math.h"
 
 #include "DNA_gpencil_types.h"
-#include "DNA_meshdata_types.h"
+#include "DNA_material_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BKE_brush.h"
 #include "BKE_context.h"
-#include "BKE_deform.h"
 #include "BKE_gpencil.h"
 #include "BKE_main.h"
-#include "BKE_material.h"
 #include "BKE_object.h"
 
 #include "WM_api.h"
@@ -52,7 +49,6 @@
 #include "RNA_define.h"
 
 #include "ED_gpencil.h"
-#include "ED_object.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"

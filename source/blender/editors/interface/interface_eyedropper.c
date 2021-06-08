@@ -24,8 +24,6 @@
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
-#include "BLI_blenlib.h"
-
 #include "BKE_context.h"
 #include "BKE_screen.h"
 
@@ -105,26 +103,46 @@ wmKeyMap *eyedropper_colorband_modal_keymap(wmKeyConfig *keyconf)
  */
 /** \name Generic Shared Functions
  * \{ */
-
-void eyedropper_draw_cursor_text(const struct bContext *C, const ARegion *region, const char *name)
+static void eyedropper_draw_cursor_text_ex(const int x, const int y, const char *name)
 {
   const uiFontStyle *fstyle = UI_FSTYLE_WIDGET;
-  wmWindow *win = CTX_wm_window(C);
-  int x = win->eventstate->x;
-  int y = win->eventstate->y;
+
   const float col_fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
   const float col_bg[4] = {0.0f, 0.0f, 0.0f, 0.2f};
+
+  UI_fontstyle_draw_simple_backdrop(fstyle, x, y + U.widget_unit, name, col_fg, col_bg);
+}
+
+void eyedropper_draw_cursor_text_window(const struct wmWindow *window, const char *name)
+{
+  if (name[0] == '\0') {
+    return;
+  }
+
+  const int x = window->eventstate->x;
+  const int y = window->eventstate->y;
+
+  eyedropper_draw_cursor_text_ex(x, y, name);
+}
+
+void eyedropper_draw_cursor_text_region(const struct bContext *C,
+                                        const ARegion *region,
+                                        const char *name)
+{
+  wmWindow *win = CTX_wm_window(C);
+  const int x = win->eventstate->x;
+  const int y = win->eventstate->y;
 
   if ((name[0] == '\0') || (BLI_rcti_isect_pt(&region->winrct, x, y) == false)) {
     return;
   }
 
-  x = x - region->winrct.xmin;
-  y = y - region->winrct.ymin;
+  const int mval[2] = {
+    x - region->winrct.xmin,
+    y - region->winrct.ymin,
+  };
 
-  y += U.widget_unit;
-
-  UI_fontstyle_draw_simple_backdrop(fstyle, x, y, name, col_fg, col_bg);
+  eyedropper_draw_cursor_text_ex(mval[0], mval[1], name);
 }
 
 /**
@@ -140,7 +158,7 @@ uiBut *eyedropper_get_property_button_under_mouse(bContext *C, const wmEvent *ev
 {
   bScreen *screen = CTX_wm_screen(C);
   ScrArea *area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, event->x, event->y);
-  ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_ANY, event->x, event->y);
+  const ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_ANY, event->x, event->y);
 
   uiBut *but = ui_but_find_mouse_over(region, event);
 

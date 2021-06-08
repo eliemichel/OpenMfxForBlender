@@ -53,7 +53,6 @@
 #  include "BKE_linestyle.h"
 #  include "BKE_movieclip.h"
 #  include "BKE_node.h"
-#  include "BKE_sequencer.h"
 
 #  include "DEG_depsgraph.h"
 
@@ -61,6 +60,8 @@
 
 #  include "IMB_colormanagement.h"
 #  include "IMB_imbuf.h"
+
+#  include "SEQ_sequencer.h"
 
 /**
  * Set both handle types for all selected points in the profile-- faster than changing types
@@ -279,6 +280,9 @@ static void rna_def_curveprofile(BlenderRNA *brna)
 
   func = RNA_def_function(srna, "update", "rna_CurveProfile_update");
   RNA_def_function_ui_description(func, "Refresh internal data, remove doubles and clip points");
+
+  func = RNA_def_function(srna, "reset_view", "BKE_curveprofile_reset_view");
+  RNA_def_function_ui_description(func, "Reset the curve profile grid to its clipping size");
 
   func = RNA_def_function(srna, "initialize", "rna_CurveProfile_initialize");
   parm = RNA_def_int(func,

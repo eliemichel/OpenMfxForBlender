@@ -43,6 +43,7 @@
 #include "BKE_curve.h"
 #include "BKE_duplilist.h"
 #include "BKE_editmesh.h"
+#include "BKE_geometry_set.h"
 #include "BKE_layer.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
@@ -415,10 +416,12 @@ static void iter_snap_objects(SnapObjectContext *sctx,
     }
 
     Object *obj_eval = DEG_get_evaluated_object(depsgraph, base->object);
-    if (obj_eval->transflag & OB_DUPLI) {
-      DupliObject *dupli_ob;
+    if (obj_eval->transflag & OB_DUPLI ||
+        (obj_eval->runtime.geometry_set_eval != NULL &&
+         BKE_geometry_set_has_instances(obj_eval->runtime.geometry_set_eval))) {
       ListBase *lb = object_duplilist(depsgraph, sctx->scene, obj_eval);
-      for (dupli_ob = lb->first; dupli_ob; dupli_ob = dupli_ob->next) {
+      for (DupliObject *dupli_ob = lb->first; dupli_ob; dupli_ob = dupli_ob->next) {
+        BLI_assert(DEG_is_evaluated_object(dupli_ob->ob));
         sob_callback(sctx,
                      dupli_ob->ob,
                      dupli_ob->mat,
@@ -1959,7 +1962,7 @@ static short snapCurve(SnapData *snapdata,
   int clip_plane_len = snapdata->clip_plane_len;
 
   if (snapdata->has_occlusion_plane) {
-    /* We snap to vertices even if coccluded. */
+    /* We snap to vertices even if occluded. */
     clip_planes++;
     clip_plane_len--;
   }
@@ -2231,16 +2234,11 @@ static short snapMesh(SnapObjectContext *sctx,
                       int *r_index)
 {
   BLI_assert(snapdata->snap_to_flag != SCE_SNAP_MODE_FACE);
-
-  if ((snapdata->snap_to_flag & ~SCE_SNAP_MODE_FACE) == SCE_SNAP_MODE_VERTEX) {
-    if (me->totvert == 0) {
-      return 0;
-    }
+  if (me->totvert == 0) {
+    return 0;
   }
-  else {
-    if (me->totedge == 0) {
-      return 0;
-    }
+  if (me->totedge == 0 && !(snapdata->snap_to_flag & SCE_SNAP_MODE_VERTEX)) {
+    return 0;
   }
 
   float lpmat[4][4];
@@ -3026,7 +3024,11 @@ static short transform_snap_context_project_view3d_mixed_impl(
 
   bool has_hit = false;
   Object *ob = NULL;
-  float loc[3], no[3], obmat[4][4];
+  float loc[3];
+  /* Not all snapping callbacks set the normal,
+   * initialize this since any hit copies both the `loc` and `no`. */
+  float no[3] = {0.0f, 0.0f, 0.0f};
+  float obmat[4][4];
   int index = -1;
 
   const ARegion *region = sctx->v3d_data.region;

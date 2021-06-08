@@ -39,24 +39,24 @@
 #include "gl_drawlist.hh"
 #include "gl_primitive.hh"
 
-#include <limits.h>
+#include <climits>
 
 using namespace blender::gpu;
 
-typedef struct GLDrawCommand {
+struct GLDrawCommand {
   GLuint v_count;
   GLuint i_count;
   GLuint v_first;
   GLuint i_first;
-} GLDrawCommand;
+};
 
-typedef struct GLDrawCommandIndexed {
+struct GLDrawCommandIndexed {
   GLuint v_count;
   GLuint i_count;
   GLuint v_first;
   GLuint base_index;
   GLuint i_first;
-} GLDrawCommandIndexed;
+};
 
 #define MDI_ENABLED (buffer_size_ != 0)
 #define MDI_DISABLED (buffer_size_ == 0)
@@ -65,13 +65,13 @@ typedef struct GLDrawCommandIndexed {
 GLDrawList::GLDrawList(int length)
 {
   BLI_assert(length > 0);
-  batch_ = NULL;
+  batch_ = nullptr;
   buffer_id_ = 0;
   command_len_ = 0;
+  base_index_ = 0;
   command_offset_ = 0;
-  data_offset_ = 0;
   data_size_ = 0;
-  data_ = NULL;
+  data_ = nullptr;
 
   if (GLContext::multi_draw_indirect_support) {
     /* Alloc the biggest possible command list, which is indexed. */
@@ -81,6 +81,8 @@ GLDrawList::GLDrawList(int length)
     /* Indicates MDI is not supported. */
     buffer_size_ = 0;
   }
+  /* Force buffer specification on first init. */
+  data_offset_ = buffer_size_;
 }
 
 GLDrawList::~GLDrawList()
@@ -88,12 +90,12 @@ GLDrawList::~GLDrawList()
   GLContext::buf_free(buffer_id_);
 }
 
-void GLDrawList::init(void)
+void GLDrawList::init()
 {
   BLI_assert(GLContext::get());
   BLI_assert(MDI_ENABLED);
-  BLI_assert(data_ == NULL);
-  batch_ = NULL;
+  BLI_assert(data_ == nullptr);
+  batch_ = nullptr;
   command_len_ = 0;
 
   if (buffer_id_ == 0) {
@@ -104,10 +106,11 @@ void GLDrawList::init(void)
 
   glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer_id_);
   /* If buffer is full, orphan buffer data and start fresh. */
-  // if (command_offset_ >= data_size_) {
-  glBufferData(GL_DRAW_INDIRECT_BUFFER, buffer_size_, NULL, GL_DYNAMIC_DRAW);
-  data_offset_ = 0;
-  // }
+  size_t command_size = MDI_INDEXED ? sizeof(GLDrawCommandIndexed) : sizeof(GLDrawCommand);
+  if (data_offset_ + command_size > buffer_size_) {
+    glBufferData(GL_DRAW_INDIRECT_BUFFER, buffer_size_, nullptr, GL_DYNAMIC_DRAW);
+    data_offset_ = 0;
+  }
   /* Map the remaining range. */
   GLbitfield flag = GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT | GL_MAP_FLUSH_EXPLICIT_BIT;
   data_size_ = buffer_size_ - data_offset_;
@@ -123,7 +126,7 @@ void GLDrawList::append(GPUBatch *gpu_batch, int i_first, int i_count)
     return;
   }
 
-  if (data_ == NULL) {
+  if (data_ == nullptr) {
     this->init();
   }
 
@@ -151,7 +154,6 @@ void GLDrawList::append(GPUBatch *gpu_batch, int i_first, int i_count)
     cmd->i_count = i_count;
     cmd->base_index = base_index_;
     cmd->i_first = i_first;
-    command_offset_ += sizeof(GLDrawCommandIndexed);
   }
   else {
     GLDrawCommand *cmd = reinterpret_cast<GLDrawCommand *>(data_ + command_offset_);
@@ -159,17 +161,20 @@ void GLDrawList::append(GPUBatch *gpu_batch, int i_first, int i_count)
     cmd->v_count = v_count_;
     cmd->i_count = i_count;
     cmd->i_first = i_first;
-    command_offset_ += sizeof(GLDrawCommand);
   }
 
+  size_t command_size = MDI_INDEXED ? sizeof(GLDrawCommandIndexed) : sizeof(GLDrawCommand);
+
+  command_offset_ += command_size;
   command_len_++;
 
-  if (command_offset_ >= data_size_) {
+  /* Check if we can fit at least one other command. */
+  if (command_offset_ + command_size > data_size_) {
     this->submit();
   }
 }
 
-void GLDrawList::submit(void)
+void GLDrawList::submit()
 {
   if (command_len_ == 0) {
     return;
@@ -177,12 +182,14 @@ void GLDrawList::submit(void)
   /* Something's wrong if we get here without MDI support. */
   BLI_assert(MDI_ENABLED);
   BLI_assert(data_);
-  BLI_assert(GLContext::get()->shader != NULL);
+  BLI_assert(GLContext::get()->shader != nullptr);
+
+  size_t command_size = MDI_INDEXED ? sizeof(GLDrawCommandIndexed) : sizeof(GLDrawCommand);
 
   /* Only do multi-draw indirect if doing more than 2 drawcall. This avoids the overhead of
    * buffer mapping if scene is not very instance friendly. BUT we also need to take into
    * account the case where only a few instances are needed to finish filling a call buffer. */
-  const bool is_finishing_a_buffer = (command_offset_ >= data_size_);
+  const bool is_finishing_a_buffer = (command_offset_ + command_size > data_size_);
   if (command_len_ > 2 || is_finishing_a_buffer) {
     GLenum prim = to_gl(batch_->prim_type);
     void *offset = (void *)data_offset_;
@@ -190,7 +197,7 @@ void GLDrawList::submit(void)
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer_id_);
     glFlushMappedBufferRange(GL_DRAW_INDIRECT_BUFFER, 0, command_offset_);
     glUnmapBuffer(GL_DRAW_INDIRECT_BUFFER);
-    data_ = NULL; /* Unmapped */
+    data_ = nullptr; /* Unmapped */
     data_offset_ += command_offset_;
 
     batch_->bind(0);
@@ -227,7 +234,7 @@ void GLDrawList::submit(void)
   /* Do not submit this buffer again. */
   command_len_ = 0;
   /* Avoid keeping reference to the batch. */
-  batch_ = NULL;
+  batch_ = nullptr;
 }
 
 /** \} */

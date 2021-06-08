@@ -21,6 +21,7 @@
  * Accessed via the #WM_OT_search_menu operator.
  */
 
+#include <stdio.h>
 #include <string.h>
 
 #include "MEM_guardedalloc.h"
@@ -429,8 +430,8 @@ static void menu_items_from_all_operators(bContext *C, struct MenuSearch_Data *d
 /**
  * Create #MenuSearch_Data by inspecting the current context, this uses two methods:
  *
- * - Look-up pre-defined editor-menus.
- * - Look-up key-map items which call menus.
+ * - Look up predefined editor-menus.
+ * - Look up key-map items which call menus.
  */
 static struct MenuSearch_Data *menu_items_from_ui_create(
     bContext *C, wmWindow *win, ScrArea *area_init, ARegion *region_init, bool include_all_areas)
@@ -509,11 +510,19 @@ static struct MenuSearch_Data *menu_items_from_ui_create(
   const char *global_menu_prefix = NULL;
 
   if (include_all_areas) {
+    bScreen *screen = WM_window_get_active_screen(win);
+
     /* First create arrays for ui_type. */
     PropertyRNA *prop_ui_type = NULL;
     {
+      /* This must be a valid pointer, with only it's type checked. */
+      ScrArea area_dummy = {
+          /* Anything besides #SPACE_EMPTY is fine,
+           * as this value is only included in the enum when set. */
+          .spacetype = SPACE_TOPBAR,
+      };
       PointerRNA ptr;
-      RNA_pointer_create(NULL, &RNA_Area, NULL, &ptr);
+      RNA_pointer_create(&screen->id, &RNA_Area, &area_dummy, &ptr);
       prop_ui_type = RNA_struct_find_property(&ptr, "ui_type");
       RNA_property_enum_items(C,
                               &ptr,
@@ -528,7 +537,6 @@ static struct MenuSearch_Data *menu_items_from_ui_create(
       }
     }
 
-    bScreen *screen = WM_window_get_active_screen(win);
     LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
       ARegion *region = BKE_area_find_region_type(area, RGN_TYPE_WINDOW);
       if (region != NULL) {
@@ -642,6 +650,7 @@ static struct MenuSearch_Data *menu_items_from_ui_create(
           SPACE_MENU_NOP(SPACE_SCRIPT);
           SPACE_MENU_NOP(SPACE_STATUSBAR);
           SPACE_MENU_NOP(SPACE_TOPBAR);
+          SPACE_MENU_NOP(SPACE_SPREADSHEET);
         }
       }
       for (int i = 0; i < idname_array_len; i++) {
@@ -990,7 +999,8 @@ static void menu_search_exec_fn(bContext *C, void *UNUSED(arg1), void *arg2)
 static void menu_search_update_fn(const bContext *UNUSED(C),
                                   void *arg,
                                   const char *str,
-                                  uiSearchItems *items)
+                                  uiSearchItems *items,
+                                  const bool UNUSED(is_first))
 {
   struct MenuSearch_Data *data = arg;
 
@@ -1001,7 +1011,7 @@ static void menu_search_update_fn(const bContext *UNUSED(C),
   }
 
   struct MenuSearch_Item **filtered_items;
-  int filtered_amount = BLI_string_search_query(search, str, (void ***)&filtered_items);
+  const int filtered_amount = BLI_string_search_query(search, str, (void ***)&filtered_items);
 
   for (int i = 0; i < filtered_amount; i++) {
     struct MenuSearch_Item *item = filtered_items[i];
@@ -1069,6 +1079,7 @@ static bool ui_search_menu_create_context_menu(struct bContext *C,
 
 static struct ARegion *ui_search_menu_create_tooltip(struct bContext *C,
                                                      struct ARegion *region,
+                                                     const rcti *UNUSED(item_rect),
                                                      void *arg,
                                                      void *active)
 {
@@ -1137,6 +1148,7 @@ void UI_but_func_menu_search(uiBut *but)
                          ui_searchbox_create_menu,
                          menu_search_update_fn,
                          data,
+                         false,
                          menu_search_arg_free_fn,
                          menu_search_exec_fn,
                          NULL);

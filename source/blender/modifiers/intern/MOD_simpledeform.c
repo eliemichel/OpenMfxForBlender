@@ -170,10 +170,12 @@ static void simpleDeform_bend(const float factor,
   sint = sinf(theta);
   cost = cosf(theta);
 
+  /* NOTE: the operations below a susceptible to float precision errors
+   * regarding the order of operations, take care when changing, see: T85470 */
   switch (axis) {
     case 0:
       r_co[0] = x;
-      r_co[1] = (y - 1.0f / factor) * cost + 1.0f / factor;
+      r_co[1] = y * cost + (1.0f - cost) / factor;
       r_co[2] = -(y - 1.0f / factor) * sint;
       {
         r_co[0] += dcut[0];
@@ -182,7 +184,7 @@ static void simpleDeform_bend(const float factor,
       }
       break;
     case 1:
-      r_co[0] = (x - 1.0f / factor) * cost + 1.0f / factor;
+      r_co[0] = x * cost + (1.0f - cost) / factor;
       r_co[1] = y;
       r_co[2] = -(x - 1.0f / factor) * sint;
       {
@@ -193,7 +195,7 @@ static void simpleDeform_bend(const float factor,
       break;
     default:
       r_co[0] = -(y - 1.0f / factor) * sint;
-      r_co[1] = (y - 1.0f / factor) * cost + 1.0f / factor;
+      r_co[1] = y * cost + (1.0f - cost) / factor;
       r_co[2] = z;
       {
         r_co[0] += cost * dcut[0];
@@ -256,7 +258,7 @@ static void SimpleDeformModifier_do(SimpleDeformModifierData *smd,
 
   smd->limit[0] = min_ff(smd->limit[0], smd->limit[1]); /* Upper limit >= than lower limit */
 
-  /* Calculate matrixs do convert between coordinate spaces */
+  /* Calculate matrix to convert between coordinate spaces. */
   if (smd->origin != NULL) {
     transf = &tmp_transf;
     BLI_SPACE_TRANSFORM_SETUP(transf, ob, smd->origin);
@@ -314,7 +316,7 @@ static void SimpleDeformModifier_do(SimpleDeformModifierData *smd,
       simpleDeform_callback = simpleDeform_stretch;
       break;
     default:
-      return; /* No simpledeform mode? */
+      return; /* No simple-deform mode? */
   }
 
   if (smd->mode == MOD_SIMPLEDEFORM_MODE_BEND) {
@@ -552,7 +554,7 @@ ModifierTypeInfo modifierType_SimpleDeform = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ NULL,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,

@@ -27,7 +27,7 @@
  * This module offers import/export of several graphical file formats.
  * \ingroup imbuf
  *
- * \page IMB Imbuf module external interface
+ * \page IMB ImBuf module external interface
  * \section imb_about About the IMB module
  *
  * External interface of the IMage Buffer module. This module offers
@@ -382,6 +382,8 @@ bool IMB_anim_can_produce_frames(const struct anim *anim);
 int ismovie(const char *filepath);
 void IMB_anim_set_preseek(struct anim *anim, int preseek);
 int IMB_anim_get_preseek(struct anim *anim);
+int IMB_anim_get_image_width(struct anim *anim);
+int IMB_anim_get_image_height(struct anim *anim);
 
 /**
  *
@@ -466,27 +468,29 @@ void IMB_scaleImBuf_threaded(struct ImBuf *ibuf, unsigned int newx, unsigned int
  *
  * \attention Defined in writeimage.c
  */
-short IMB_saveiff(struct ImBuf *ibuf, const char *filepath, int flags);
+bool IMB_saveiff(struct ImBuf *ibuf, const char *filepath, int flags);
 bool IMB_prepare_write_ImBuf(const bool isfloat, struct ImBuf *ibuf);
 
 /**
  *
  * \attention Defined in util.c
  */
-bool IMB_ispic(const char *name);
-int IMB_ispic_type(const char *name);
+bool IMB_ispic(const char *filepath);
+bool IMB_ispic_type_matches(const char *filepath, int filetype);
+int IMB_ispic_type_from_memory(const unsigned char *buf, const size_t buf_size);
+int IMB_ispic_type(const char *filepath);
 
 /**
  *
  * \attention Defined in util.c
  */
-bool IMB_isanim(const char *name);
+bool IMB_isanim(const char *filepath);
 
 /**
  *
  * \attention Defined in util.c
  */
-int imb_get_anim_type(const char *name);
+int imb_get_anim_type(const char *filepath);
 
 /**
  *
@@ -684,6 +688,8 @@ void IMB_rectfill_area(struct ImBuf *ibuf,
                        int x2,
                        int y2,
                        struct ColorManagedDisplay *display);
+void IMB_rectfill_area_replace(
+    const struct ImBuf *ibuf, const float col[4], int x1, int y1, int x2, int y2);
 void IMB_rectfill_alpha(struct ImBuf *ibuf, const float value);
 
 /* This should not be here, really,
@@ -739,7 +745,8 @@ const char *IMB_ffmpeg_last_error(void);
 struct GPUTexture *IMB_create_gpu_texture(const char *name,
                                           struct ImBuf *ibuf,
                                           bool use_high_bitdepth,
-                                          bool use_premult);
+                                          bool use_premult,
+                                          bool limit_gl_texture_size);
 struct GPUTexture *IMB_touch_gpu_texture(
     const char *name, struct ImBuf *ibuf, int w, int h, int layers, bool use_high_bitdepth);
 void IMB_update_gpu_texture_sub(struct GPUTexture *tex,

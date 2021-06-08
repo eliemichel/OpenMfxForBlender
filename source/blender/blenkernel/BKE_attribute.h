@@ -35,18 +35,16 @@ extern "C" {
 struct CustomData;
 struct CustomDataLayer;
 struct ID;
-struct PointerRNA;
 struct ReportList;
 
 /* Attribute.domain */
 typedef enum AttributeDomain {
-  ATTR_DOMAIN_VERTEX = 0,  /* Mesh Vertex */
-  ATTR_DOMAIN_EDGE = 1,    /* Mesh Edge */
-  ATTR_DOMAIN_CORNER = 2,  /* Mesh Corner */
-  ATTR_DOMAIN_POLYGON = 3, /* Mesh Polygon */
-
-  ATTR_DOMAIN_POINT = 4, /* Hair or PointCloud Point */
-  ATTR_DOMAIN_CURVE = 5, /* Hair Curve */
+  ATTR_DOMAIN_AUTO = -1,  /* Use for nodes to choose automatically based on other data. */
+  ATTR_DOMAIN_POINT = 0,  /* Mesh, Hair or PointCloud Point */
+  ATTR_DOMAIN_EDGE = 1,   /* Mesh Edge */
+  ATTR_DOMAIN_CORNER = 2, /* Mesh Corner */
+  ATTR_DOMAIN_FACE = 3,   /* Mesh Face */
+  ATTR_DOMAIN_CURVE = 4,  /* Hair Curve */
 
   ATTR_DOMAIN_NUM
 } AttributeDomain;

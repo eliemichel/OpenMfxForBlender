@@ -68,8 +68,7 @@
 #include "DEG_depsgraph_physics.h"
 #include "DEG_depsgraph_query.h"
 
-#include "RE_render_ext.h"
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 EffectorWeights *BKE_effector_add_weights(Collection *collection)
 {
@@ -162,13 +161,13 @@ static void precalculate_effector(struct Depsgraph *depsgraph, EffectorCache *ef
   if (eff->pd->forcefield == PFIELD_GUIDE && eff->ob->type == OB_CURVE) {
     Curve *cu = eff->ob->data;
     if (cu->flag & CU_PATH) {
-      if (eff->ob->runtime.curve_cache == NULL || eff->ob->runtime.curve_cache->path == NULL ||
-          eff->ob->runtime.curve_cache->path->data == NULL) {
+      if (eff->ob->runtime.curve_cache == NULL ||
+          eff->ob->runtime.curve_cache->anim_path_accum_length == NULL) {
         BKE_displist_make_curveTypes(depsgraph, eff->scene, eff->ob, false, false);
       }
 
-      if (eff->ob->runtime.curve_cache->path && eff->ob->runtime.curve_cache->path->data) {
-        where_on_path(
+      if (eff->ob->runtime.curve_cache->anim_path_accum_length) {
+        BKE_where_on_path(
             eff->ob, 0.0, eff->guide_loc, eff->guide_dir, NULL, &eff->guide_radius, NULL);
         mul_m4_v3(eff->ob->obmat, eff->guide_loc);
         mul_mat3_m4_v3(eff->ob->obmat, eff->guide_dir);
@@ -271,11 +270,71 @@ void BKE_effector_relations_free(ListBase *lb)
   }
 }
 
+/* Check that the force field isn't disabled via its flags. */
+static bool is_effector_enabled(PartDeflect *pd, bool use_rotation)
+{
+  switch (pd->forcefield) {
+    case PFIELD_BOID:
+    case PFIELD_GUIDE:
+      return true;
+
+    case PFIELD_TEXTURE:
+      return (pd->flag & PFIELD_DO_LOCATION) != 0 && pd->tex != NULL;
+
+    default:
+      if (use_rotation) {
+        return (pd->flag & (PFIELD_DO_LOCATION | PFIELD_DO_ROTATION)) != 0;
+      }
+      else {
+        return (pd->flag & PFIELD_DO_LOCATION) != 0;
+      }
+  }
+}
+
+/* Check that the force field won't have zero effect due to strength settings. */
+static bool is_effector_nonzero_strength(PartDeflect *pd)
+{
+  if (pd->f_strength != 0.0f) {
+    return true;
+  }
+
+  if (pd->forcefield == PFIELD_TEXTURE) {
+    return false;
+  }
+
+  if (pd->f_noise > 0.0f || pd->f_flow != 0.0f) {
+    return true;
+  }
+
+  switch (pd->forcefield) {
+    case PFIELD_BOID:
+    case PFIELD_GUIDE:
+      return true;
+
+    case PFIELD_VORTEX:
+      return pd->shape != PFIELD_SHAPE_POINT;
+
+    case PFIELD_DRAG:
+      return pd->f_damp != 0.0f;
+
+    default:
+      return false;
+  }
+}
+
+/* Check if the force field will affect its user. */
+static bool is_effector_relevant(PartDeflect *pd, EffectorWeights *weights, bool use_rotation)
+{
+  return (weights->weight[pd->forcefield] != 0.0f) && is_effector_enabled(pd, use_rotation) &&
+         is_effector_nonzero_strength(pd);
+}
+
 /* Create effective list of effectors from relations built beforehand. */
 ListBase *BKE_effectors_create(Depsgraph *depsgraph,
                                Object *ob_src,
                                ParticleSystem *psys_src,
-                               EffectorWeights *weights)
+                               EffectorWeights *weights,
+                               bool use_rotation)
 {
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
   ListBase *relations = DEG_get_effector_relations(depsgraph, weights->group);
@@ -300,7 +359,8 @@ ListBase *BKE_effectors_create(Depsgraph *depsgraph,
       }
 
       PartDeflect *pd = (relation->pd == relation->psys->part->pd) ? part->pd : part->pd2;
-      if (weights->weight[pd->forcefield] == 0.0f) {
+
+      if (!is_effector_relevant(pd, weights, use_rotation)) {
         continue;
       }
 
@@ -311,7 +371,7 @@ ListBase *BKE_effectors_create(Depsgraph *depsgraph,
       if (ob == ob_src) {
         continue;
       }
-      if (weights->weight[ob->pd->forcefield] == 0.0f) {
+      if (!is_effector_relevant(ob->pd, weights, use_rotation)) {
         continue;
       }
       if (ob->pd->shape == PFIELD_SHAPE_POINTS && BKE_object_get_evaluated_mesh(ob) == NULL) {
@@ -699,8 +759,8 @@ int get_effector_data(EffectorCache *eff,
       copy_v3_v3(efd->loc, state.co);
 
       /* rather than use the velocity use rotated x-axis (defaults to velocity) */
-      efd->nor[0] = 1.f;
-      efd->nor[1] = efd->nor[2] = 0.f;
+      efd->nor[0] = 1.0f;
+      efd->nor[1] = efd->nor[2] = 0.0f;
       mul_qt_v3(state.rot, efd->nor);
 
       if (real_velocity) {
@@ -904,7 +964,9 @@ static void do_texture_effector(EffectorCache *eff,
     madd_v3_v3fl(force, efd->nor, fac);
   }
 
-  add_v3_v3(total_force, force);
+  if (eff->pd->flag & PFIELD_DO_LOCATION) {
+    add_v3_v3(total_force, force);
+  }
 }
 static void do_physical_effector(EffectorCache *eff,
                                  EffectorData *efd,
@@ -919,6 +981,7 @@ static void do_physical_effector(EffectorCache *eff,
   float strength = pd->f_strength;
   float damp = pd->f_damp;
   float noise_factor = pd->f_noise;
+  float flow_falloff = efd->falloff;
 
   if (noise_factor > 0.0f) {
     strength += wind_func(rng, noise_factor);
@@ -1009,9 +1072,12 @@ static void do_physical_effector(EffectorCache *eff,
       else {
         add_v3_v3v3(temp, efd->vec_to_point2, efd->nor2);
       }
-      force[0] = -1.0f + 2.0f * BLI_gTurbulence(pd->f_size, temp[0], temp[1], temp[2], 2, 0, 2);
-      force[1] = -1.0f + 2.0f * BLI_gTurbulence(pd->f_size, temp[1], temp[2], temp[0], 2, 0, 2);
-      force[2] = -1.0f + 2.0f * BLI_gTurbulence(pd->f_size, temp[2], temp[0], temp[1], 2, 0, 2);
+      force[0] = -1.0f + 2.0f * BLI_noise_generic_turbulence(
+                                    pd->f_size, temp[0], temp[1], temp[2], 2, 0, 2);
+      force[1] = -1.0f + 2.0f * BLI_noise_generic_turbulence(
+                                    pd->f_size, temp[1], temp[2], temp[0], 2, 0, 2);
+      force[2] = -1.0f + 2.0f * BLI_noise_generic_turbulence(
+                                    pd->f_size, temp[2], temp[0], temp[1], 2, 0, 2);
       mul_v3_fl(force, strength * efd->falloff);
       break;
     case PFIELD_DRAG:
@@ -1025,6 +1091,7 @@ static void do_physical_effector(EffectorCache *eff,
       break;
     case PFIELD_FLUIDFLOW:
       zero_v3(force);
+      flow_falloff = 0;
 #ifdef WITH_FLUID
       if (pd->f_source) {
         float density;
@@ -1034,8 +1101,7 @@ static void do_physical_effector(EffectorCache *eff,
             influence *= density;
           }
           mul_v3_fl(force, influence);
-          /* apply flow */
-          madd_v3_v3fl(total_force, point->vel, -pd->f_flow * influence);
+          flow_falloff = influence;
         }
       }
 #endif
@@ -1045,9 +1111,8 @@ static void do_physical_effector(EffectorCache *eff,
   if (pd->flag & PFIELD_DO_LOCATION) {
     madd_v3_v3fl(total_force, force, 1.0f / point->vel_to_sec);
 
-    if (ELEM(pd->forcefield, PFIELD_HARMONIC, PFIELD_DRAG, PFIELD_FLUIDFLOW) == 0 &&
-        pd->f_flow != 0.0f) {
-      madd_v3_v3fl(total_force, point->vel, -pd->f_flow * efd->falloff);
+    if (!ELEM(pd->forcefield, PFIELD_HARMONIC, PFIELD_DRAG) && pd->f_flow != 0.0f) {
+      madd_v3_v3fl(total_force, point->vel, -pd->f_flow * flow_falloff);
     }
   }
 

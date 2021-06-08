@@ -21,6 +21,7 @@ extern "C" {
 
 #include "BLI_array.hh"
 #include "BLI_double2.hh"
+#include "BLI_math_boolean.hh"
 #include "BLI_math_mpq.hh"
 #include "BLI_mpq2.hh"
 #include "BLI_vector.hh"
@@ -667,7 +668,7 @@ template<typename T> void crosssegs_test()
   if (out.vert.size() == 5) {
     int v_intersect = -1;
     for (int i = 0; i < 5; i++) {
-      if (i != v0_out && i != v1_out && i != v2_out && i != v3_out) {
+      if (!ELEM(i, v0_out, v1_out, v2_out, v3_out)) {
         EXPECT_EQ(v_intersect, -1);
         v_intersect = i;
       }
@@ -1513,7 +1514,7 @@ TEST(delaunay_d, CintTwoFace)
   input.edges_len = 0;
   input.faces_len = 2;
   input.vert_coords = vert_coords;
-  input.edges = NULL;
+  input.edges = nullptr;
   input.faces = faces;
   input.faces_len_table = faces_len;
   input.faces_start_table = faces_start;
@@ -1660,10 +1661,10 @@ void rand_delaunay_test(int test_kind,
             }
           }
           for (int i = 0; i < size; ++i) {
-            /* Horizontal edges: connect p(i,0) to p(i,size-1). */
+            /* Horizontal edges: connect `p(i,0)` to `p(i,size-1)`. */
             in.edge[i].first = i * size;
             in.edge[i].second = i * size + size - 1;
-            /* Vertical edges: conntect p(0,i) to p(size-1,i). */
+            /* Vertical edges: connect `p(0,i)` to `p(size-1,i)`. */
             in.edge[size + i].first = i;
             in.edge[size + i].second = (size - 1) * size + i;
           }
@@ -1694,9 +1695,9 @@ void rand_delaunay_test(int test_kind,
             in.vert[ib][1] = T(sin(angle2));
             in.vert[ic][0] = T((param * cos(angle3)));
             in.vert[ic][1] = T((param * sin(angle3)));
-            /* Put the coordinates in ccw order. */
+            /* Put the coordinates in CCW order. */
             in.face[i].append(ia);
-            int orient = vec2<T>::orient2d(in.vert[ia], in.vert[ib], in.vert[ic]);
+            int orient = orient2d(in.vert[ia], in.vert[ib], in.vert[ic]);
             if (orient >= 0) {
               in.face[i].append(ib);
               in.face[i].append(ic);

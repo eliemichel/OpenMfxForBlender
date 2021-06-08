@@ -81,20 +81,17 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   }
 }
 
-static Mesh *mirrorModifier__doMirror(MirrorModifierData *mmd,
-                                      const ModifierEvalContext *ctx,
-                                      Object *ob,
-                                      Mesh *mesh)
+static Mesh *mirrorModifier__doMirror(MirrorModifierData *mmd, Object *ob, Mesh *mesh)
 {
   Mesh *result = mesh;
 
   /* check which axes have been toggled and mirror accordingly */
   if (mmd->flag & MOD_MIR_AXIS_X) {
-    result = BKE_mesh_mirror_apply_mirror_on_axis(mmd, ctx, ob, result, 0);
+    result = BKE_mesh_mirror_apply_mirror_on_axis_for_modifier(mmd, ob, result, 0);
   }
   if (mmd->flag & MOD_MIR_AXIS_Y) {
     Mesh *tmp = result;
-    result = BKE_mesh_mirror_apply_mirror_on_axis(mmd, ctx, ob, result, 1);
+    result = BKE_mesh_mirror_apply_mirror_on_axis_for_modifier(mmd, ob, result, 1);
     if (tmp != mesh) {
       /* free intermediate results */
       BKE_id_free(NULL, tmp);
@@ -102,7 +99,7 @@ static Mesh *mirrorModifier__doMirror(MirrorModifierData *mmd,
   }
   if (mmd->flag & MOD_MIR_AXIS_Z) {
     Mesh *tmp = result;
-    result = BKE_mesh_mirror_apply_mirror_on_axis(mmd, ctx, ob, result, 2);
+    result = BKE_mesh_mirror_apply_mirror_on_axis_for_modifier(mmd, ob, result, 2);
     if (tmp != mesh) {
       /* free intermediate results */
       BKE_id_free(NULL, tmp);
@@ -117,7 +114,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   Mesh *result;
   MirrorModifierData *mmd = (MirrorModifierData *)md;
 
-  result = mirrorModifier__doMirror(mmd, ctx, ctx->object, mesh);
+  result = mirrorModifier__doMirror(mmd, ctx->object, mesh);
 
   if (result != mesh) {
     result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
@@ -167,6 +164,13 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
   sub = uiLayoutRow(row, true);
   uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_mirror_merge"));
   uiItemR(sub, ptr, "merge_threshold", 0, "", ICON_NONE);
+
+  bool is_bisect_set[3];
+  RNA_boolean_get_array(ptr, "use_bisect_axis", is_bisect_set);
+
+  sub = uiLayoutRow(col, true);
+  uiLayoutSetActive(sub, is_bisect_set[0] || is_bisect_set[1] || is_bisect_set[2]);
+  uiItemR(sub, ptr, "bisect_threshold", 0, IFACE_("Bisect Distance"), ICON_NONE);
 
   modifier_panel_end(layout, ptr);
 }
@@ -234,7 +238,7 @@ ModifierTypeInfo modifierType_Mirror = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,

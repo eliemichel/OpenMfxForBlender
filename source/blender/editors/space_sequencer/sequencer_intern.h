@@ -47,7 +47,7 @@ void sequencer_draw_preview(const struct bContext *C,
                             struct Scene *scene,
                             struct ARegion *region,
                             struct SpaceSeq *sseq,
-                            int cfra,
+                            int timeline_frame,
                             int offset,
                             bool draw_overlay,
                             bool draw_backdrop);
@@ -64,14 +64,13 @@ struct ImBuf *sequencer_ibuf_get(struct Main *bmain,
                                  struct Depsgraph *depsgraph,
                                  struct Scene *scene,
                                  struct SpaceSeq *sseq,
-                                 int cfra,
+                                 int timeline_frame,
                                  int frame_ofs,
                                  const char *viewname);
 
 /* sequencer_edit.c */
 struct View2D;
 void seq_rectf(struct Sequence *seq, struct rctf *rectf);
-void boundbox_seq(struct Scene *scene, struct rctf *rect);
 struct Sequence *find_nearest_seq(struct Scene *scene,
                                   struct View2D *v2d,
                                   int *hand,
@@ -80,7 +79,7 @@ struct Sequence *find_neighboring_sequence(struct Scene *scene,
                                            struct Sequence *test,
                                            int lr,
                                            int sel);
-void recurs_sel_seq(struct Sequence *seqm);
+void recurs_sel_seq(struct Sequence *seq_meta);
 int seq_effect_find_selected(struct Scene *scene,
                              struct Sequence *activeseq,
                              int type,
@@ -145,6 +144,8 @@ void SEQUENCER_OT_enable_proxies(struct wmOperatorType *ot);
 void SEQUENCER_OT_export_subtitles(struct wmOperatorType *ot);
 
 void SEQUENCER_OT_set_range_to_strips(struct wmOperatorType *ot);
+void SEQUENCER_OT_strip_transform_clear(struct wmOperatorType *ot);
+void SEQUENCER_OT_strip_transform_fit(struct wmOperatorType *ot);
 
 /* sequencer_select.c */
 void SEQUENCER_OT_select_all(struct wmOperatorType *ot);

@@ -38,6 +38,7 @@ struct View2D;
 
 void file_calc_previews(const bContext *C, ARegion *region);
 void file_draw_list(const bContext *C, ARegion *region);
+bool file_draw_hint_if_invalid(const SpaceFile *sfile, const ARegion *region);
 
 void file_draw_check_ex(bContext *C, struct ScrArea *area);
 void file_draw_check(bContext *C);
@@ -74,6 +75,7 @@ void FILE_OT_rename(struct wmOperatorType *ot);
 void FILE_OT_smoothscroll(struct wmOperatorType *ot);
 void FILE_OT_filepath_drop(struct wmOperatorType *ot);
 void FILE_OT_start_filter(struct wmOperatorType *ot);
+void FILE_OT_view_selected(struct wmOperatorType *ot);
 
 void file_directory_enter_handle(bContext *C, void *arg_unused, void *arg_but);
 void file_filename_enter_handle(bContext *C, void *arg_unused, void *arg_but);
@@ -90,6 +92,7 @@ void file_sfile_to_operator(struct Main *bmain, struct wmOperator *op, struct Sp
 void file_operator_to_sfile(struct Main *bmain, struct SpaceFile *sfile, struct wmOperator *op);
 
 /* filesel.c */
+void fileselect_refresh_params(struct SpaceFile *sfile);
 void fileselect_file_set(SpaceFile *sfile, const int index);
 bool file_attribute_column_type_enabled(const FileSelectParams *params,
                                         FileAttributeColumnType column);
@@ -110,9 +113,26 @@ int autocomplete_file(struct bContext *C, char *str, void *arg_v);
 
 void file_params_renamefile_activate(struct SpaceFile *sfile, struct FileSelectParams *params);
 
+typedef void *onReloadFnData;
+typedef void (*onReloadFn)(struct SpaceFile *space_data, onReloadFnData custom_data);
+typedef struct SpaceFile_Runtime {
+  /* Called once after the file browser has reloaded. Reset to NULL after calling.
+   * Use file_on_reload_callback_register() to register a callback. */
+  onReloadFn on_reload;
+  onReloadFnData on_reload_custom_data;
+} SpaceFile_Runtime;
+
+/* Register an on-reload callback function. Note that there can only be one such function at a
+ * time; registering a new one will overwrite the previous one. */
+void file_on_reload_callback_register(struct SpaceFile *sfile,
+                                      onReloadFn callback,
+                                      onReloadFnData custom_data);
+
 /* file_panels.c */
 void file_tool_props_region_panels_register(struct ARegionType *art);
 void file_execute_region_panels_register(struct ARegionType *art);
 
 /* file_utils.c */
 void file_tile_boundbox(const ARegion *region, FileLayout *layout, const int file, rcti *r_bounds);
+
+void file_path_to_ui_path(const char *path, char *r_pathi, int max_size);

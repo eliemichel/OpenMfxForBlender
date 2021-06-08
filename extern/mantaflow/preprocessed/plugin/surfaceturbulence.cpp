@@ -2055,7 +2055,7 @@ static PyObject *_W_0(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "particleSurfaceTurbulence", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       const FlagGrid &flags = *_args.getPtr<FlagGrid>("flags", 0, &_lock);
@@ -2145,8 +2145,7 @@ void PbRegister_particleSurfaceTurbulence()
 void debugCheckParts(const BasicParticleSystem &parts, const FlagGrid &flags)
 {
   for (int idx = 0; idx < parts.size(); idx++) {
-    Vec3i p = toVec3i(parts.getPos(idx));
-    if (!flags.isInBounds(p)) {
+    if (!flags.isInBounds(parts.getPos(idx))) {
       debMsg("bad position??? " << idx << " " << parts.getPos(idx), 1);
       exit(1);
     }
@@ -2159,7 +2158,7 @@ static PyObject *_W_1(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "debugCheckParts", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       const BasicParticleSystem &parts = *_args.getPtr<BasicParticleSystem>("parts", 0, &_lock);

@@ -60,6 +60,19 @@ function(list_assert_duplicates
   unset(_len_after)
 endfunction()
 
+# Adds a native path separator to the end of the path:
+#
+# - 'example' -> 'example/'
+# - '/example///' -> '/example/'
+#
+macro(path_ensure_trailing_slash
+  path_new path_input
+  )
+  file(TO_NATIVE_PATH "/" _path_sep)
+  string(REGEX REPLACE "[${_path_sep}]+$" "" ${path_new} ${path_input})
+  set(${path_new} "${${path_new}}${_path_sep}")
+  unset(_path_sep)
+endmacro()
 
 # foo_bar.spam --> foo_barMySuffix.spam
 macro(file_suffix
@@ -183,7 +196,7 @@ function(blender_user_header_search_paths
     foreach(_INC ${includes})
       get_filename_component(_ABS_INC ${_INC} ABSOLUTE)
       # _ALL_INCS is a space-separated string of file paths in quotes.
-      set(_ALL_INCS "${_ALL_INCS} \"${_ABS_INC}\"")
+      string(APPEND _ALL_INCS " \"${_ABS_INC}\"")
     endforeach()
     set_target_properties(${name} PROPERTIES XCODE_ATTRIBUTE_USER_HEADER_SEARCH_PATHS "${_ALL_INCS}")
   endif()
@@ -250,11 +263,11 @@ macro(add_cc_flags_custom_test
   string(TOUPPER ${name} _name_upper)
   if(DEFINED CMAKE_C_FLAGS_${_name_upper})
     message(STATUS "Using custom CFLAGS: CMAKE_C_FLAGS_${_name_upper} in \"${CMAKE_CURRENT_SOURCE_DIR}\"")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${_name_upper}}" ${ARGV1})
+    string(APPEND CMAKE_C_FLAGS " ${CMAKE_C_FLAGS_${_name_upper}}" ${ARGV1})
   endif()
   if(DEFINED CMAKE_CXX_FLAGS_${_name_upper})
     message(STATUS "Using custom CXXFLAGS: CMAKE_CXX_FLAGS_${_name_upper} in \"${CMAKE_CURRENT_SOURCE_DIR}\"")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_name_upper}}" ${ARGV1})
+    string(APPEND CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS_${_name_upper}}" ${ARGV1})
   endif()
   unset(_name_upper)
 
@@ -374,6 +387,43 @@ function(blender_add_lib
   set_property(GLOBAL APPEND PROPERTY BLENDER_LINK_LIBS ${name})
 endfunction()
 
+function(blender_add_test_suite)
+  if(ARGC LESS 1)
+    message(FATAL_ERROR "No arguments supplied to blender_add_test_suite()")
+  endif()
+
+  # Parse the arguments
+  set(oneValueArgs TARGET SUITE_NAME)
+  set(multiValueArgs SOURCES)
+  cmake_parse_arguments(ARGS "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+  # Figure out the release dir, as some tests need files from there.
+  GET_BLENDER_TEST_INSTALL_DIR(TEST_INSTALL_DIR)
+  if(APPLE)
+    set(_test_release_dir ${TEST_INSTALL_DIR}/Blender.app/Contents/Resources/${BLENDER_VERSION})
+  else()
+    if(WIN32 OR WITH_INSTALL_PORTABLE)
+      set(_test_release_dir ${TEST_INSTALL_DIR}/${BLENDER_VERSION})
+    else()
+      set(_test_release_dir ${TEST_INSTALL_DIR}/share/blender/${BLENDER_VERSION})
+    endif()
+  endif()
+
+  # Define a test case with our custom gtest_add_tests() command.
+  include(GTest)
+  gtest_add_tests(
+    TARGET ${ARGS_TARGET}
+    SOURCES "${ARGS_SOURCES}"
+    TEST_PREFIX ${ARGS_SUITE_NAME}
+    WORKING_DIRECTORY "${TEST_INSTALL_DIR}"
+    EXTRA_ARGS
+      --test-assets-dir "${CMAKE_SOURCE_DIR}/../lib/tests"
+      --test-release-dir "${_test_release_dir}"
+  )
+
+  unset(_test_release_dir)
+endfunction()
+
 # Add tests for a Blender library, to be called in tandem with blender_add_lib().
 # The tests will be part of the blender_test executable (see tests/gtests/runner).
 function(blender_add_test_lib
@@ -407,6 +457,12 @@ function(blender_add_test_lib
   blender_add_lib__impl(${name} "${sources}" "${includes}" "${includes_sys}" "${library_deps}")
 
   set_property(GLOBAL APPEND PROPERTY BLENDER_TEST_LIBS ${name})
+
+  blender_add_test_suite(
+    TARGET blender_test
+    SUITE_NAME ${name}
+    SOURCES "${sources}"
+  )
 endfunction()
 
 
@@ -440,14 +496,10 @@ function(blender_add_test_executable
     SKIP_ADD_TEST
   )
 
-  include(GTest)
-  set(_GOOGLETEST_DISCOVER_TESTS_SCRIPT
-    ${CMAKE_SOURCE_DIR}/build_files/cmake/Modules/GTestAddTests.cmake
-  )
-
-  gtest_discover_tests(${name}_test
-    DISCOVERY_MODE PRE_TEST
-    WORKING_DIRECTORY "${TEST_INSTALL_DIR}"
+  blender_add_test_suite(
+    TARGET ${name}_test
+    SUITE_NAME ${name}
+    SOURCES "${sources}"
   )
 endfunction()
 
@@ -515,6 +567,9 @@ function(SETUP_LIBDIRS)
     endif()
     if(WITH_JACK AND NOT WITH_JACK_DYNLOAD)
       link_directories(${JACK_LIBPATH})
+    endif()
+    if(WITH_PULSEAUDIO AND NOT WITH_PULSEAUDIO_DYNLOAD)
+      link_directories(${LIBPULSE_LIBPATH})
     endif()
     if(WITH_CODEC_SNDFILE)
       link_directories(${LIBSNDFILE_LIBPATH})
@@ -615,12 +670,6 @@ macro(TEST_SSE_SUPPORT
       #include <xmmintrin.h>
       int main(void) { __m128 v = _mm_setzero_ps(); return 0; }"
     SUPPORT_SSE_BUILD)
-
-    if(SUPPORT_SSE_BUILD)
-      message(STATUS "SSE Support: detected.")
-    else()
-      message(STATUS "SSE Support: missing.")
-    endif()
   endif()
 
   if(NOT DEFINED SUPPORT_SSE2_BUILD)
@@ -629,15 +678,19 @@ macro(TEST_SSE_SUPPORT
       #include <emmintrin.h>
       int main(void) { __m128d v = _mm_setzero_pd(); return 0; }"
     SUPPORT_SSE2_BUILD)
-
-    if(SUPPORT_SSE2_BUILD)
-      message(STATUS "SSE2 Support: detected.")
-    else()
-      message(STATUS "SSE2 Support: missing.")
-    endif()
   endif()
 
   unset(CMAKE_REQUIRED_FLAGS)
+endmacro()
+
+macro(TEST_NEON_SUPPORT)
+  if(NOT DEFINED SUPPORT_NEON_BUILD)
+    include(CheckCXXSourceCompiles)
+    check_cxx_source_compiles(
+      "#include <arm_neon.h>
+       int main() {return vaddvq_s32(vdupq_n_s32(1));}"
+      SUPPORT_NEON_BUILD)
+  endif()
 endmacro()
 
 # Only print message if running CMake first time
@@ -674,14 +727,14 @@ endmacro()
 macro(add_c_flag
   flag)
 
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${flag}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}")
+  string(APPEND CMAKE_C_FLAGS " ${flag}")
+  string(APPEND CMAKE_CXX_FLAGS " ${flag}")
 endmacro()
 
 macro(add_cxx_flag
   flag)
 
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}")
+  string(APPEND CMAKE_CXX_FLAGS " ${flag}")
 endmacro()
 
 macro(remove_strict_flags)
@@ -868,6 +921,10 @@ function(get_blender_version)
 
   math(EXPR _out_version_major "${_out_version} / 100")
   math(EXPR _out_version_minor "${_out_version} % 100")
+
+  # Zero pad the minor version so `_out_version_minor` is always two characters.
+  # This is needed if the minor version is a single digit.
+  string(REGEX REPLACE "^([0-9])$" "0\\1" _out_version_minor "${_out_version_minor}")
 
   # output vars
   set(BLENDER_VERSION "${_out_version_major}.${_out_version_minor}" PARENT_SCOPE)
@@ -1125,6 +1182,7 @@ endfunction()
 
 function(find_python_package
   package
+  relative_include_dir
   )
 
   string(TOUPPER ${package} _upper_package)
@@ -1155,8 +1213,11 @@ function(find_python_package
         site-packages
         dist-packages
         vendor-packages
-       NO_DEFAULT_PATH
+      NO_DEFAULT_PATH
+      DOC
+        "Path to python site-packages or dist-packages containing '${package}' module"
     )
+    mark_as_advanced(PYTHON_${_upper_package}_PATH)
 
     if(NOT EXISTS "${PYTHON_${_upper_package}_PATH}")
       message(WARNING
@@ -1174,6 +1235,50 @@ function(find_python_package
       set(WITH_PYTHON_INSTALL_${_upper_package} OFF PARENT_SCOPE)
     else()
       message(STATUS "${package} found at '${PYTHON_${_upper_package}_PATH}'")
+
+      if(NOT "${relative_include_dir}" STREQUAL "")
+        set(_relative_include_dir "${package}/${relative_include_dir}")
+        unset(PYTHON_${_upper_package}_INCLUDE_DIRS CACHE)
+        find_path(PYTHON_${_upper_package}_INCLUDE_DIRS
+          NAMES
+            "${_relative_include_dir}"
+          HINTS
+            "${PYTHON_LIBPATH}/"
+            "${PYTHON_LIBPATH}/python${PYTHON_VERSION}/"
+            "${PYTHON_LIBPATH}/python${_PY_VER_MAJOR}/"
+          PATH_SUFFIXES
+            "site-packages/"
+            "dist-packages/"
+            "vendor-packages/"
+          NO_DEFAULT_PATH
+          DOC
+            "Path to python site-packages or dist-packages containing '${package}' module header files"
+        )
+        mark_as_advanced(PYTHON_${_upper_package}_INCLUDE_DIRS)
+
+        if(NOT EXISTS "${PYTHON_${_upper_package}_INCLUDE_DIRS}")
+          message(WARNING
+            "Python package '${package}' include dir path could not be found in:\n"
+            "'${PYTHON_LIBPATH}/python${PYTHON_VERSION}/site-packages/${_relative_include_dir}', "
+            "'${PYTHON_LIBPATH}/python${_PY_VER_MAJOR}/site-packages/${_relative_include_dir}', "
+            "'${PYTHON_LIBPATH}/python${PYTHON_VERSION}/dist-packages/${_relative_include_dir}', "
+            "'${PYTHON_LIBPATH}/python${_PY_VER_MAJOR}/dist-packages/${_relative_include_dir}', "
+            "'${PYTHON_LIBPATH}/python${PYTHON_VERSION}/vendor-packages/${_relative_include_dir}', "
+            "'${PYTHON_LIBPATH}/python${_PY_VER_MAJOR}/vendor-packages/${_relative_include_dir}', "
+            "\n"
+            "The 'WITH_PYTHON_${_upper_package}' option will be disabled.\n"
+            "The build will be usable, only add-ons that depend on this package won't be functional."
+          )
+          set(WITH_PYTHON_${_upper_package} OFF PARENT_SCOPE)
+        else()
+          set(_temp "${PYTHON_${_upper_package}_INCLUDE_DIRS}/${package}/${relative_include_dir}")
+          unset(PYTHON_${_upper_package}_INCLUDE_DIRS CACHE)
+          set(PYTHON_${_upper_package}_INCLUDE_DIRS "${_temp}"
+              CACHE PATH "Path to the include directory of the ${package} module")
+
+          message(STATUS "${package} include files found at '${PYTHON_${_upper_package}_INCLUDE_DIRS}'")
+        endif()
+      endif()
     endif()
   endif()
 endfunction()

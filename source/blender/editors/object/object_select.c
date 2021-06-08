@@ -143,6 +143,23 @@ void ED_object_base_activate(bContext *C, Base *base)
   ED_object_base_active_refresh(CTX_data_main(C), scene, view_layer);
 }
 
+void ED_object_base_activate_with_mode_exit_if_needed(bContext *C, Base *base)
+{
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+
+  /* Currently we only need to be concerned with edit-mode. */
+  Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
+  if (obedit) {
+    Object *ob = base->object;
+    if (((ob->mode & OB_MODE_EDIT) == 0) || (obedit->type != ob->type)) {
+      Main *bmain = CTX_data_main(C);
+      Scene *scene = CTX_data_scene(C);
+      ED_object_editmode_exit_multi_ex(bmain, scene, view_layer, EM_FREEDATA);
+    }
+  }
+  ED_object_base_activate(C, base);
+}
+
 bool ED_object_base_deselect_all_ex(ViewLayer *view_layer,
                                     View3D *v3d,
                                     int action,
@@ -300,7 +317,7 @@ bool ED_object_jump_to_object(bContext *C, Object *ob, const bool UNUSED(reveal_
 /**
  * Select and make the target object and bone active.
  * Switches to Pose mode if in Object mode so the selection is visible.
- * Unhides the target bone and bone layer if necessary.
+ * Un-hides the target bone and bone layer if necessary.
  *
  * \returns false if object not in layer, bone not found, or other error
  */
@@ -770,12 +787,12 @@ static const EnumPropertyItem prop_select_grouped_types[] = {
     {OBJECT_GRPSEL_CHILDREN_RECURSIVE, "CHILDREN_RECURSIVE", 0, "Children", ""},
     {OBJECT_GRPSEL_CHILDREN, "CHILDREN", 0, "Immediate Children", ""},
     {OBJECT_GRPSEL_PARENT, "PARENT", 0, "Parent", ""},
-    {OBJECT_GRPSEL_SIBLINGS, "SIBLINGS", 0, "Siblings", "Shared Parent"},
+    {OBJECT_GRPSEL_SIBLINGS, "SIBLINGS", 0, "Siblings", "Shared parent"},
     {OBJECT_GRPSEL_TYPE, "TYPE", 0, "Type", "Shared object type"},
     {OBJECT_GRPSEL_COLLECTION, "COLLECTION", 0, "Collection", "Shared collection"},
     {OBJECT_GRPSEL_HOOK, "HOOK", 0, "Hook", ""},
-    {OBJECT_GRPSEL_PASS, "PASS", 0, "Pass", "Render pass Index"},
-    {OBJECT_GRPSEL_COLOR, "COLOR", 0, "Color", "Object Color"},
+    {OBJECT_GRPSEL_PASS, "PASS", 0, "Pass", "Render pass index"},
+    {OBJECT_GRPSEL_COLOR, "COLOR", 0, "Color", "Object color"},
     {OBJECT_GRPSEL_KEYINGSET,
      "KEYINGSET",
      0,
@@ -1294,7 +1311,8 @@ void OBJECT_OT_select_mirror(wmOperatorType *ot)
 
   /* identifiers */
   ot->name = "Select Mirror";
-  ot->description = "Select the Mirror objects of the selected object eg. L.sword -> R.sword";
+  ot->description =
+      "Select the mirror objects of the selected object e.g. \"L.sword\" and \"R.sword\"";
   ot->idname = "OBJECT_OT_select_mirror";
 
   /* api callbacks */
@@ -1436,7 +1454,7 @@ void OBJECT_OT_select_less(wmOperatorType *ot)
 
 static int object_select_random_exec(bContext *C, wmOperator *op)
 {
-  const float randfac = RNA_float_get(op->ptr, "percent") / 100.0f;
+  const float randfac = RNA_float_get(op->ptr, "ratio");
   const int seed = WM_operator_properties_select_random_seed_increment_get(op);
   const bool select = (RNA_enum_get(op->ptr, "action") == SEL_SELECT);
 

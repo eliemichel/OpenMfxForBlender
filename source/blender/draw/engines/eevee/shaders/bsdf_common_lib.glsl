@@ -1,6 +1,11 @@
 
 #pragma BLENDER_REQUIRE(common_math_lib.glsl)
 
+vec3 diffuse_dominant_dir(vec3 bent_normal)
+{
+  return bent_normal;
+}
+
 vec3 specular_dominant_dir(vec3 N, vec3 V, float roughness)
 {
   vec3 R = -reflect(V, N);
@@ -15,6 +20,7 @@ float ior_from_f0(float f0)
   return (-f - 1.0) / (f - 1.0);
 }
 
+/* Simplified form of F_eta(eta, 1.0). */
 float f0_from_ior(float eta)
 {
   float A = (eta - 1.0) / (eta + 1.0);
@@ -47,30 +53,21 @@ float F_eta(float eta, float cos_theta)
    * the refracted direction */
   float c = abs(cos_theta);
   float g = eta * eta - 1.0 + c * c;
-  float result;
-
   if (g > 0.0) {
     g = sqrt(g);
-    vec2 g_c = vec2(g) + vec2(c, -c);
-    float A = g_c.y / g_c.x;
-    A *= A;
-    g_c *= c;
-    float B = (g_c.y - 1.0) / (g_c.x + 1.0);
-    B *= B;
-    result = 0.5 * A * (1.0 + B);
+    float A = (g - c) / (g + c);
+    float B = (c * (g + c) - 1.0) / (c * (g - c) + 1.0);
+    return 0.5 * A * A * (1.0 + B * B);
   }
-  else {
-    result = 1.0; /* TIR (no refracted component) */
-  }
-
-  return result;
+  /* Total internal reflections. */
+  return 1.0;
 }
 
 /* Fresnel color blend base on fresnel factor */
 vec3 F_color_blend(float eta, float fresnel, vec3 f0_color)
 {
-  float f0 = F_eta(eta, 1.0);
-  float fac = saturate((fresnel - f0) / max(1e-8, 1.0 - f0));
+  float f0 = f0_from_ior(eta);
+  float fac = saturate((fresnel - f0) / (1.0 - f0));
   return mix(f0_color, vec3(1.0), fac);
 }
 
@@ -79,7 +76,7 @@ vec3 F_brdf_single_scatter(vec3 f0, vec3 f90, vec2 lut)
 {
   /* Unreal specular matching : if specular color is below 2% intensity,
    * treat as shadowning */
-  return saturate(50.0 * dot(f0, vec3(0.3, 0.6, 0.1))) * lut.y * abs(f90) + lut.x * f0;
+  return lut.y * f90 + lut.x * f0;
 }
 
 /* Multi-scattering brdf approximation from :
@@ -87,11 +84,7 @@ vec3 F_brdf_single_scatter(vec3 f0, vec3 f90, vec2 lut)
  * by Carmelo J. Fdez-Agüera. */
 vec3 F_brdf_multi_scatter(vec3 f0, vec3 f90, vec2 lut)
 {
-  vec3 FssEss = F_brdf_single_scatter(f0, f90, lut);
-  /* Hack to avoid many more shader variations. */
-  if (f90.g < 0.0) {
-    return FssEss;
-  }
+  vec3 FssEss = lut.y * f90 + lut.x * f0;
 
   float Ess = lut.x + lut.y;
   float Ems = 1.0 - Ess;
@@ -102,8 +95,6 @@ vec3 F_brdf_multi_scatter(vec3 f0, vec3 f90, vec2 lut)
   return FssEss + Fms * Ems;
 }
 
-#define F_brdf(f0, f90, lut) F_brdf_multi_scatter(f0, f90, lut)
-
 /* GGX */
 float D_ggx_opti(float NH, float a2)
 {
@@ -111,7 +102,7 @@ float D_ggx_opti(float NH, float a2)
   return M_PI * tmp * tmp; /* Doing RCP and mul a2 at the end */
 }
 
-float G1_Smith_GGX(float NX, float a2)
+float G1_Smith_GGX_opti(float NX, float a2)
 {
   /* Using Brian Karis approach and refactoring by NX/NX
    * this way the (2*NL)*(2*NV) in G = G1(V) * G1(L) gets canceled by the brdf denominator 4*NL*NV
@@ -131,7 +122,7 @@ float bsdf_ggx(vec3 N, vec3 L, vec3 V, float roughness)
   float NL = max(dot(N, L), 1e-8);
   float NV = max(dot(N, V), 1e-8);
 
-  float G = G1_Smith_GGX(NV, a2) * G1_Smith_GGX(NL, a2); /* Doing RCP at the end */
+  float G = G1_Smith_GGX_opti(NV, a2) * G1_Smith_GGX_opti(NL, a2); /* Doing RCP at the end */
   float D = D_ggx_opti(NH, a2);
 
   /* Denominator is canceled by G1_Smith */
@@ -144,7 +135,61 @@ void accumulate_light(vec3 light, float fac, inout vec4 accum)
   accum += vec4(light, 1.0) * min(fac, (1.0 - accum.a));
 }
 
-/* ----------- Cone Aperture Approximation --------- */
+/* Same thing as Cycles without the comments to make it shorter. */
+vec3 ensure_valid_reflection(vec3 Ng, vec3 I, vec3 N)
+{
+  vec3 R = -reflect(I, N);
+
+  /* Reflection rays may always be at least as shallow as the incoming ray. */
+  float threshold = min(0.9 * dot(Ng, I), 0.025);
+  if (dot(Ng, R) >= threshold) {
+    return N;
+  }
+
+  float NdotNg = dot(N, Ng);
+  vec3 X = normalize(N - NdotNg * Ng);
+
+  float Ix = dot(I, X), Iz = dot(I, Ng);
+  float Ix2 = sqr(Ix), Iz2 = sqr(Iz);
+  float a = Ix2 + Iz2;
+
+  float b = sqrt(Ix2 * (a - sqr(threshold)));
+  float c = Iz * threshold + a;
+
+  float fac = 0.5 / a;
+  float N1_z2 = fac * (b + c), N2_z2 = fac * (-b + c);
+  bool valid1 = (N1_z2 > 1e-5) && (N1_z2 <= (1.0 + 1e-5));
+  bool valid2 = (N2_z2 > 1e-5) && (N2_z2 <= (1.0 + 1e-5));
+
+  vec2 N_new;
+  if (valid1 && valid2) {
+    /* If both are possible, do the expensive reflection-based check. */
+    vec2 N1 = vec2(safe_sqrt(1.0 - N1_z2), safe_sqrt(N1_z2));
+    vec2 N2 = vec2(safe_sqrt(1.0 - N2_z2), safe_sqrt(N2_z2));
+
+    float R1 = 2.0 * (N1.x * Ix + N1.y * Iz) * N1.y - Iz;
+    float R2 = 2.0 * (N2.x * Ix + N2.y * Iz) * N2.y - Iz;
+
+    valid1 = (R1 >= 1e-5);
+    valid2 = (R2 >= 1e-5);
+    if (valid1 && valid2) {
+      N_new = (R1 < R2) ? N1 : N2;
+    }
+    else {
+      N_new = (R1 > R2) ? N1 : N2;
+    }
+  }
+  else if (valid1 || valid2) {
+    float Nz2 = valid1 ? N1_z2 : N2_z2;
+    N_new = vec2(safe_sqrt(1.0 - Nz2), safe_sqrt(Nz2));
+  }
+  else {
+    return Ng;
+  }
+  return N_new.x * X + N_new.y * Ng;
+}
+
+/* ----------- Cone angle Approximation --------- */
 
 /* Return a fitted cone angle given the input roughness */
 float cone_cosine(float r)

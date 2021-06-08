@@ -21,9 +21,7 @@
 
 #include "GeomUtils.h"
 
-namespace Freestyle {
-
-namespace GeomUtils {
+namespace Freestyle::GeomUtils {
 
 // This internal procedure is defined below.
 bool intersect2dSegPoly(Vec2r *seg, Vec2r *poly, unsigned n);
@@ -437,12 +435,12 @@ bool overlapTriangleBox(Vec3r &boxcenter, Vec3r &boxhalfsize, Vec3r triverts[3])
 // Tomas Möller
 // Prosolvia Clarus AB
 // Sweden
-// tompa@clarus.se
+// <tompa@clarus.se>
 //
 // Ben Trumbore
 // Cornell University
 // Ithaca, New York
-// wbt@graphics.cornell.edu
+// <wbt@graphics.cornell.edu>
 bool intersectRayTriangle(const Vec3r &orig,
                           const Vec3r &dir,
                           const Vec3r &v0,
@@ -846,6 +844,4 @@ inline void fromCoordAToCoordB(const Vec3r &p, Vec3r &q, const real transform[4]
   }
 }
 
-}  // end of namespace GeomUtils
-
-} /* namespace Freestyle */
+}  // namespace Freestyle::GeomUtils

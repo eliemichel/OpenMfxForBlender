@@ -244,11 +244,38 @@ class TOPBAR_MT_app(Menu):
 class TOPBAR_MT_file_cleanup(Menu):
     bl_label = "Clean Up"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
         layout.separator()
 
-        layout.operator("outliner.orphans_purge")
+        op_props = layout.operator("outliner.orphans_purge", text="Unused Data-Blocks")
+        op_props.do_local_ids = True
+        op_props.do_linked_ids = True
+        op_props.do_recursive = False
+        op_props = layout.operator("outliner.orphans_purge", text="Recursive Unused Data-Blocks")
+        op_props.do_local_ids = True
+        op_props.do_linked_ids = True
+        op_props.do_recursive = True
+
+        layout.separator()
+        op_props = layout.operator("outliner.orphans_purge", text="Unused Linked Data-Blocks")
+        op_props.do_local_ids = False
+        op_props.do_linked_ids = True
+        op_props.do_recursive = False
+        op_props = layout.operator("outliner.orphans_purge", text="Recursive Unused Linked Data-Blocks")
+        op_props.do_local_ids = False
+        op_props.do_linked_ids = True
+        op_props.do_recursive = True
+
+        layout.separator()
+        op_props = layout.operator("outliner.orphans_purge", text="Unused Local Data-Blocks")
+        op_props.do_local_ids = True
+        op_props.do_linked_ids = False
+        op_props.do_recursive = False
+        op_props = layout.operator("outliner.orphans_purge", text="Recursive Unused Local Data-Blocks")
+        op_props.do_local_ids = True
+        op_props.do_linked_ids = False
+        op_props.do_recursive = True
 
 
 class TOPBAR_MT_file(Menu):
@@ -442,13 +469,15 @@ class TOPBAR_MT_file_import(Menu):
         if bpy.app.build_options.alembic:
             self.layout.operator("wm.alembic_import", text="Alembic (.abc)")
 
+        self.layout.operator("wm.gpencil_import_svg", text="SVG as Grease Pencil")
+
 
 class TOPBAR_MT_file_export(Menu):
     bl_idname = "TOPBAR_MT_file_export"
     bl_label = "Export"
     bl_owner_use_filter = False
 
-    def draw(self, context):
+    def draw(self, _context):
         if bpy.app.build_options.collada:
             self.layout.operator("wm.collada_export",
                                  text="Collada (Default) (.dae)")
@@ -457,6 +486,13 @@ class TOPBAR_MT_file_export(Menu):
         if bpy.app.build_options.usd:
             self.layout.operator(
                 "wm.usd_export", text="Universal Scene Description (.usd, .usdc, .usda)")
+
+        # Pugixml lib dependency
+        if bpy.app.build_options.pugixml:
+            self.layout.operator("wm.gpencil_export_svg", text="Grease Pencil as SVG")
+        # Haru lib dependency
+        if bpy.app.build_options.haru:
+            self.layout.operator("wm.gpencil_export_pdf", text="Grease Pencil as PDF")
 
 
 class TOPBAR_MT_file_external_data(Menu):
@@ -567,7 +603,7 @@ class TOPBAR_MT_edit(Menu):
         props.name = "TOPBAR_PT_name"
         props.keep_open = False
 
-        layout.operator("wm.batch_rename")
+        layout.operator("wm.batch_rename", text="Batch Rename...")
 
         layout.separator()
 

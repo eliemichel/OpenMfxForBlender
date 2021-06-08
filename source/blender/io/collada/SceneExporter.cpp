@@ -86,8 +86,7 @@ void SceneExporter::writeNodeList(std::vector<Object *> &child_objects, Object *
    * I really prefer to enforce the export of hidden
    * elements in an object hierarchy. When the children of
    * the hidden elements are exported as well. */
-  for (int i = 0; i < child_objects.size(); i++) {
-    Object *child = child_objects[i];
+  for (auto *child : child_objects) {
     writeNode(child);
     if (bc_is_marked(child)) {
       bc_remove_mark(child);
@@ -107,7 +106,7 @@ void SceneExporter::writeNode(Object *ob)
   bool armature_exported = false;
   Object *ob_arm = bc_get_assigned_armature(ob);
 
-  if (ob_arm != NULL) {
+  if (ob_arm != nullptr) {
     armature_exported = bc_is_in_Export_set(
         this->export_settings.get_export_set(), ob_arm, view_layer);
     if (armature_exported && bc_is_marked(ob_arm)) {
@@ -207,7 +206,7 @@ void SceneExporter::writeNode(Object *ob)
            * No real mapping in the .dae
            * Need support for multiple target objects also. */
           const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_get(con);
-          ListBase targets = {NULL, NULL};
+          ListBase targets = {nullptr, nullptr};
           if (cti && cti->get_constraint_targets) {
 
             bConstraintTarget *ct;
@@ -222,7 +221,7 @@ void SceneExporter::writeNode(Object *ob)
             }
 
             if (cti->flush_constraint_targets) {
-              cti->flush_constraint_targets(con, &targets, 1);
+              cti->flush_constraint_targets(con, &targets, true);
             }
           }
 

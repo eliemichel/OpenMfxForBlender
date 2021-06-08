@@ -25,7 +25,7 @@
 /*----------- bmop error system ----------*/
 
 /* pushes an error onto the bmesh error stack.
- * if msg is null, then the default message for the errorcode is used.*/
+ * if msg is null, then the default message for the `errcode` is used. */
 void BMO_error_raise(BMesh *bm, BMOperator *owner, int errcode, const char *msg);
 
 /* gets the topmost error from the stack.
@@ -33,7 +33,7 @@ void BMO_error_raise(BMesh *bm, BMOperator *owner, int errcode, const char *msg)
 int BMO_error_get(BMesh *bm, const char **msg, BMOperator **op);
 bool BMO_error_occurred(BMesh *bm);
 
-/* same as geterror, only pops the error off the stack as well */
+/* Same as #BMO_error_get, only pops the error off the stack as well. */
 int BMO_error_pop(BMesh *bm, const char **msg, BMOperator **op);
 void BMO_error_clear(BMesh *bm);
 

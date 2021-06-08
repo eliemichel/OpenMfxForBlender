@@ -85,8 +85,7 @@ static void sculpt_mask_expand_cancel(bContext *C, wmOperator *op)
     }
     else {
       PBVHVertexIter vd;
-      BKE_pbvh_vertex_iter_begin(ss->pbvh, node, vd, PBVH_ITER_UNIQUE)
-      {
+      BKE_pbvh_vertex_iter_begin (ss->pbvh, node, vd, PBVH_ITER_UNIQUE) {
         *vd.mask = ss->filter_cache->prev_mask[vd.index];
       }
       BKE_pbvh_vertex_iter_end;
@@ -114,8 +113,7 @@ static void sculpt_expand_task_cb(void *__restrict userdata,
   PBVHVertexIter vd;
   int update_it = data->mask_expand_update_it;
 
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, node, vd, PBVH_ITER_ALL)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, node, vd, PBVH_ITER_ALL) {
     int vi = vd.index;
     float final_mask = *vd.mask;
     if (data->mask_expand_use_normals) {
@@ -227,8 +225,7 @@ static int sculpt_mask_expand_modal(bContext *C, wmOperator *op, const wmEvent *
 
       for (int n = 0; n < ss->filter_cache->totnode; n++) {
         PBVHVertexIter vd;
-        BKE_pbvh_vertex_iter_begin(ss->pbvh, ss->filter_cache->nodes[n], vd, PBVH_ITER_UNIQUE)
-        {
+        BKE_pbvh_vertex_iter_begin (ss->pbvh, ss->filter_cache->nodes[n], vd, PBVH_ITER_UNIQUE) {
           const float mask = (vd.mask) ? *vd.mask : 0.0f;
           if (mask < (0.5f + threshold) && mask > (0.5f - threshold)) {
             if (SCULPT_check_vertex_pivot_symmetry(
@@ -378,7 +375,7 @@ static int sculpt_mask_expand_invoke(bContext *C, wmOperator *op, const wmEvent 
 
   BKE_pbvh_search_gather(pbvh, NULL, NULL, &ss->filter_cache->nodes, &ss->filter_cache->totnode);
 
-  SCULPT_undo_push_begin("Mask Expand");
+  SCULPT_undo_push_begin(ob, "Mask Expand");
 
   if (create_face_set) {
     SCULPT_undo_push_node(ob, ss->filter_cache->nodes[0], SCULPT_UNDO_FACE_SETS);
@@ -499,8 +496,8 @@ void SCULPT_OT_mask_expand(wmOperatorType *ot)
                              true,
                              "Update Pivot Position",
                              "Set the pivot position to the mask border after creating the mask");
-  ot->prop = RNA_def_int(ot->srna, "smooth_iterations", 2, 0, 10, "Smooth iterations", "", 0, 10);
-  ot->prop = RNA_def_int(ot->srna, "mask_speed", 5, 1, 10, "Mask speed", "", 1, 10);
+  ot->prop = RNA_def_int(ot->srna, "smooth_iterations", 2, 0, 10, "Smooth Iterations", "", 0, 10);
+  ot->prop = RNA_def_int(ot->srna, "mask_speed", 5, 1, 10, "Mask Speed", "", 1, 10);
 
   ot->prop = RNA_def_boolean(ot->srna,
                              "use_normals",

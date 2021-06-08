@@ -118,7 +118,7 @@ static PyObject *_W_0(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "smoothMesh", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Mesh &mesh = *_args.getPtr<Mesh>("mesh", 0, &_lock);
@@ -234,10 +234,10 @@ void subdivideMesh(
       normalize(ne2);
 
       // Real thisArea = sqrMag(cross(-e2,e0));
-      // small angle approximation says sin(x) = arcsin(x) = x,
-      // arccos(x) = pi/2 - arcsin(x),
-      // cos(x) = dot(A,B),
-      // so angle is approximately 1 - dot(A,B).
+      //  small angle approximation says sin(x) = arcsin(x) = x,
+      //  arccos(x) = pi/2 - arcsin(x),
+      //  cos(x) = dot(A,B),
+      //  so angle is approximately 1 - dot(A,B).
       Real angle[3];
       angle[0] = 1.0 - dot(ne0, -ne2);
       angle[1] = 1.0 - dot(ne1, -ne0);
@@ -657,7 +657,7 @@ static PyObject *_W_1(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "subdivideMesh", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Mesh &mesh = *_args.getPtr<Mesh>("mesh", 0, &_lock);
@@ -752,7 +752,7 @@ static PyObject *_W_2(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "killSmallComponents", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Mesh &mesh = *_args.getPtr<Mesh>("mesh", 0, &_lock);

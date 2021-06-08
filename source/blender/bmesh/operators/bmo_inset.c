@@ -531,7 +531,7 @@ static float bm_edge_info_average_length(BMVert *v, SplitEdgeInfo *edge_info)
   return -1.0f;
 }
 
-/**.
+/**
  * Fill in any vertices that are in the inset region but not connected to an edge being inset.
  *
  *
@@ -967,7 +967,7 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
                   is_mid = false;
                 }
 
-                /* distable gives odd results at times, see T39288. */
+                /* Disable since this gives odd results at times, see T39288. */
 #if 0
                 else if (compare_v3v3(f_a->no, f_b->no, 0.001f) == false) {
                   /* epsilon increased to fix T32329. */

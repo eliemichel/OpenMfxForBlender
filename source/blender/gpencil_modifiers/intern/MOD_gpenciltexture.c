@@ -34,13 +34,10 @@
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 
-#include "BKE_colortools.h"
 #include "BKE_context.h"
 #include "BKE_deform.h"
-#include "BKE_gpencil.h"
 #include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_lib_query.h"
@@ -82,6 +79,7 @@ static void deformStroke(GpencilModifierData *md,
 {
   TextureGpencilModifierData *mmd = (TextureGpencilModifierData *)md;
   const int def_nr = BKE_object_defgroup_name_index(ob, mmd->vgname);
+  bGPdata *gpd = ob->data;
 
   if (!is_stroke_affected_by_modifier(ob,
                                       mmd->layername,
@@ -97,15 +95,15 @@ static void deformStroke(GpencilModifierData *md,
                                       mmd->flag & GP_TEX_INVERT_MATERIAL)) {
     return;
   }
-  if ((mmd->mode == FILL) || (mmd->mode == STROKE_AND_FILL)) {
+  if (ELEM(mmd->mode, FILL, STROKE_AND_FILL)) {
     gps->uv_rotation += mmd->fill_rotation;
     gps->uv_translation[0] += mmd->fill_offset[0];
     gps->uv_translation[1] += mmd->fill_offset[1];
     gps->uv_scale *= mmd->fill_scale;
-    BKE_gpencil_stroke_geometry_update(gps);
+    BKE_gpencil_stroke_geometry_update(gpd, gps);
   }
 
-  if ((mmd->mode == STROKE) || (mmd->mode == STROKE_AND_FILL)) {
+  if (ELEM(mmd->mode, STROKE, STROKE_AND_FILL)) {
     float totlen = 1.0f;
     if (mmd->fit_method == GP_TEX_FIT_STROKE) {
       totlen = 0.0f;
@@ -127,6 +125,7 @@ static void deformStroke(GpencilModifierData *md,
       pt->uv_fac /= totlen;
       pt->uv_fac *= mmd->uv_scale;
       pt->uv_fac += mmd->uv_offset;
+      pt->uv_rot += mmd->alignment_rotation;
     }
   }
 }
@@ -171,6 +170,7 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
     col = uiLayoutColumn(layout, false);
     uiItemR(col, ptr, "fit_method", 0, IFACE_("Stroke Fit Method"), ICON_NONE);
     uiItemR(col, ptr, "uv_offset", 0, NULL, ICON_NONE);
+    uiItemR(col, ptr, "alignment_rotation", 0, NULL, ICON_NONE);
     uiItemR(col, ptr, "uv_scale", 0, IFACE_("Scale"), ICON_NONE);
   }
 

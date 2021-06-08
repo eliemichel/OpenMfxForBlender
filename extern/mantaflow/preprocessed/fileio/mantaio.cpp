@@ -51,7 +51,7 @@ static PyObject *_W_0(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "load", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       const string &name = _args.get<string>("name", 0, &_lock);
@@ -83,7 +83,10 @@ int save(const string &name,
          bool skipDeletedParts = false,
          int compression = COMPRESSION_ZIP,
          bool precisionHalf = true,
-         int precision = PRECISION_HALF)
+         int precision = PRECISION_HALF,
+         float clip = 1e-4,
+         const Grid<Real> *clipGrid = nullptr,
+         const bool meta = false)
 {
 
   if (!precisionHalf) {
@@ -102,7 +105,8 @@ int save(const string &name,
   else if (ext == ".vol")
     return writeGridsVol(name, &objects);
   if (ext == ".vdb")
-    return writeObjectsVDB(name, &objects, worldSize, skipDeletedParts, compression, precision);
+    return writeObjectsVDB(
+        name, &objects, worldSize, skipDeletedParts, compression, precision, clip, clipGrid, meta);
   else if (ext == ".npz")
     return writeGridsNumpy(name, &objects);
   else if (ext == ".txt")
@@ -118,7 +122,7 @@ static PyObject *_W_1(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "save", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       const string &name = _args.get<string>("name", 0, &_lock);
@@ -129,8 +133,19 @@ static PyObject *_W_1(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
       int compression = _args.getOpt<int>("compression", 4, COMPRESSION_ZIP, &_lock);
       bool precisionHalf = _args.getOpt<bool>("precisionHalf", 5, true, &_lock);
       int precision = _args.getOpt<int>("precision", 6, PRECISION_HALF, &_lock);
-      _retval = toPy(
-          save(name, objects, worldSize, skipDeletedParts, compression, precisionHalf, precision));
+      float clip = _args.getOpt<float>("clip", 7, 1e-4, &_lock);
+      const Grid<Real> *clipGrid = _args.getPtrOpt<Grid<Real>>("clipGrid", 8, nullptr, &_lock);
+      const bool meta = _args.getOpt<bool>("meta", 9, false, &_lock);
+      _retval = toPy(save(name,
+                          objects,
+                          worldSize,
+                          skipDeletedParts,
+                          compression,
+                          precisionHalf,
+                          precision,
+                          clip,
+                          clipGrid,
+                          meta));
       _args.check();
     }
     pbFinalizePlugin(parent, "save", !noTiming);

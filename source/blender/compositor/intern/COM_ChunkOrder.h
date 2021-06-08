@@ -18,37 +18,28 @@
 
 #pragma once
 
-#include "COM_ChunkOrderHotspot.h"
-class ChunkOrder {
- private:
-  unsigned int m_number;
-  int m_x;
-  int m_y;
-  double m_distance;
+#ifdef WITH_CXX_GUARDEDALLOC
+#  include "MEM_guardedalloc.h"
+#endif
 
- public:
-  ChunkOrder();
-  void determineDistance(ChunkOrderHotspot **hotspots, unsigned int numberOfHotspots);
+#include "COM_ChunkOrderHotspot.h"
+
+namespace blender::compositor {
+
+/** Helper to determine the order how chunks are prioritized during execution. */
+struct ChunkOrder {
+  unsigned int index = 0;
+  int x = 0;
+  int y = 0;
+  double distance = 0.0;
+
   friend bool operator<(const ChunkOrder &a, const ChunkOrder &b);
 
-  void setChunkNumber(unsigned int chunknumber)
-  {
-    this->m_number = chunknumber;
-  }
-  void setX(int x)
-  {
-    this->m_x = x;
-  }
-  void setY(int y)
-  {
-    this->m_y = y;
-  }
-  unsigned int getChunkNumber()
-  {
-    return this->m_number;
-  }
-  double getDistance()
-  {
-    return this->m_distance;
-  }
+  void update_distance(ChunkOrderHotspot *hotspots, unsigned int len_hotspots);
+
+#ifdef WITH_CXX_GUARDEDALLOC
+  MEM_CXX_CLASS_ALLOC_FUNCS("COM:ChunkOrderHotspot")
+#endif
 };
+
+}  // namespace blender::compositor

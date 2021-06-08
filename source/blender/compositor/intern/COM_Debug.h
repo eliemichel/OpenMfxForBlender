@@ -21,10 +21,12 @@
 #include <map>
 #include <string>
 
+#include "COM_NodeOperation.h"
 #include "COM_defines.h"
 
+namespace blender::compositor {
+
 class Node;
-class NodeOperation;
 class ExecutionSystem;
 class ExecutionGroup;
 
@@ -55,7 +57,7 @@ class DebugInfo {
 #ifdef COM_DEBUG
  protected:
   static int graphviz_operation(const ExecutionSystem *system,
-                                const NodeOperation *operation,
+                                NodeOperation *operation,
                                 const ExecutionGroup *group,
                                 char *str,
                                 int maxlen);
@@ -69,10 +71,17 @@ class DebugInfo {
 
  private:
   static int m_file_index;
-  static NodeNameMap m_node_names;        /**< map nodes to usable names for debug output */
-  static OpNameMap m_op_names;            /**< map operations to usable names for debug output */
-  static std::string m_current_node_name; /**< base name for all operations added by a node */
-  static std::string m_current_op_name;   /**< base name for automatic sub-operations */
-  static GroupStateMap m_group_states;    /**< for visualizing group states */
+  /** Map nodes to usable names for debug output. */
+  static NodeNameMap m_node_names;
+  /** Map operations to usable names for debug output. */
+  static OpNameMap m_op_names;
+  /** Base name for all operations added by a node. */
+  static std::string m_current_node_name;
+  /** Base name for automatic sub-operations. */
+  static std::string m_current_op_name;
+  /** For visualizing group states. */
+  static GroupStateMap m_group_states;
 #endif
 };
+
+}  // namespace blender::compositor

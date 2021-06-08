@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 #pragma once
 
@@ -117,6 +116,9 @@ MINLINE float sasqrt(float fac);
 
 MINLINE float interpf(float a, float b, float t);
 MINLINE double interpd(double a, double b, double t);
+
+MINLINE float ratiof(float min, float max, float pos);
+MINLINE double ratiod(double min, double max, double pos);
 
 /* NOTE: Compilers will upcast all types smaller than int to int when performing arithmetic
  * operation. */
@@ -218,6 +220,9 @@ MINLINE unsigned int round_db_to_uint_clamp(double a);
 
 int pow_i(int base, int exp);
 double double_round(double x, int ndigits);
+
+float floor_power_of_10(float f);
+float ceil_power_of_10(float f);
 
 #ifdef BLI_MATH_GCC_WARN_PRAGMA
 #  pragma GCC diagnostic pop

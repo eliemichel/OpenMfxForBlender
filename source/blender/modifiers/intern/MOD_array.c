@@ -39,6 +39,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 
+#include "BKE_anim_path.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
@@ -68,8 +69,9 @@ static void initData(ModifierData *md)
 
   MEMCPY_STRUCT_AFTER(amd, DNA_struct_default_get(ArrayModifierData), modifier);
 
-  /* Open the first subpanel by default, it corresspnds to Relative offset which is enabled too. */
-  md->ui_expand_flag = (1 << 0) | (1 << 1);
+  /* Open the first sub-panel by default,
+   * it corresponds to Relative offset which is enabled too. */
+  md->ui_expand_flag = UI_PANEL_DATA_EXPAND_ROOT | UI_SUBPANEL_DATA_EXPAND_1;
 }
 
 static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
@@ -470,9 +472,9 @@ static Mesh *arrayModifier_doArray(ArrayModifierData *amd,
   if (amd->fit_type == MOD_ARR_FITCURVE && amd->curve_ob != NULL) {
     Object *curve_ob = amd->curve_ob;
     CurveCache *curve_cache = curve_ob->runtime.curve_cache;
-    if (curve_cache != NULL && curve_cache->path != NULL) {
+    if (curve_cache != NULL && curve_cache->anim_path_accum_length != NULL) {
       float scale_fac = mat4_to_scale(curve_ob->obmat);
-      length = scale_fac * curve_cache->path->totdist;
+      length = scale_fac * BKE_anim_path_get_length(curve_cache);
     }
   }
 
@@ -481,7 +483,7 @@ static Mesh *arrayModifier_doArray(ArrayModifierData *amd,
 
   /* calculate the maximum number of copies which will fit within the
    * prescribed length */
-  if (amd->fit_type == MOD_ARR_FITLENGTH || amd->fit_type == MOD_ARR_FITCURVE) {
+  if (ELEM(amd->fit_type, MOD_ARR_FITLENGTH, MOD_ARR_FITCURVE)) {
     const float float_epsilon = 1e-6f;
     bool offset_is_too_small = false;
     float dist = len_v3(offset[3]);
@@ -1018,7 +1020,7 @@ ModifierTypeInfo modifierType_Array = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,

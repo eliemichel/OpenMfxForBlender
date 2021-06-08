@@ -133,7 +133,7 @@ class SelectCamera(Operator):
         scene = context.scene
         view_layer = context.view_layer
         view = context.space_data
-        if view.type == 'VIEW_3D' and view.use_local_camera:
+        if view and view.type == 'VIEW_3D' and view.use_local_camera:
             camera = view.camera
         else:
             camera = scene.camera
@@ -223,7 +223,7 @@ class SelectHierarchy(Operator):
 
 
 class SubdivisionSet(Operator):
-    """Sets a Subdivision Surface Level (1-5)"""
+    """Sets a Subdivision Surface level (1 to 5)"""
 
     bl_idname = "object.subdivision_set"
     bl_label = "Subdivision Set"
@@ -566,7 +566,7 @@ class JoinUVs(Operator):
                                     uv_other = mesh_other.uv_layers.active
                                     if not uv_other:
                                         self.report({'ERROR'}, "Could not add "
-                                                    "a new UV map tp object "
+                                                    "a new UV map to object "
                                                     "'%s' (Mesh '%s')\n"
                                                     % (obj_other.name,
                                                        mesh_other.name,
@@ -888,7 +888,7 @@ class LoadImageAsEmpty:
     filter_folder: BoolProperty(default=True, options={'HIDDEN', 'SKIP_SAVE'})
 
     view_align: BoolProperty(
-        name="Align to view",
+        name="Align to View",
         default=True,
     )
 

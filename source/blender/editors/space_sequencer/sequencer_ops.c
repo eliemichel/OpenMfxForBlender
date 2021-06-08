@@ -29,12 +29,7 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_markers.h"
-#include "ED_select_utils.h"
 #include "ED_sequencer.h"
-#include "ED_transform.h" /* Transform keymap. */
-
-#include "BKE_sequencer.h"
 
 #include "sequencer_intern.h"
 
@@ -81,6 +76,8 @@ void sequencer_operatortypes(void)
   WM_operatortype_append(SEQUENCER_OT_change_path);
 
   WM_operatortype_append(SEQUENCER_OT_set_range_to_strips);
+  WM_operatortype_append(SEQUENCER_OT_strip_transform_clear);
+  WM_operatortype_append(SEQUENCER_OT_strip_transform_fit);
 
   /* sequencer_select.c */
   WM_operatortype_append(SEQUENCER_OT_select_all);

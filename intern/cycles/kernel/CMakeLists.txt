@@ -423,7 +423,7 @@ if(WITH_CYCLES_CUDA_BINARIES)
 
     set(cuda_kernel_src "/kernels/cuda/${name}.cu")
 
-    set(cuda_flags
+    set(cuda_flags ${flags}
       -D CCL_NAMESPACE_BEGIN=
       -D CCL_NAMESPACE_END=
       -D NVCC
@@ -545,11 +545,11 @@ endif()
 # OptiX PTX modules
 
 if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
-  foreach(input ${SRC_OPTIX_KERNELS})
-    get_filename_component(input_we ${input} NAME_WE)
+  macro(CYCLES_OPTIX_KERNEL_ADD name flags)
+    set(input "kernels/optix/kernel_optix.cu")
+    set(output "${CMAKE_CURRENT_BINARY_DIR}/${name}.ptx")
 
-    set(output "${CMAKE_CURRENT_BINARY_DIR}/${input_we}.ptx")
-    set(cuda_flags
+    set(cuda_flags ${flags}
       -I "${OPTIX_INCLUDE_DIR}"
       -I "${CMAKE_CURRENT_SOURCE_DIR}/.."
       -I "${CMAKE_CURRENT_SOURCE_DIR}/kernels/cuda"
@@ -625,7 +625,10 @@ if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
     list(APPEND optix_ptx ${output})
 
     delayed_install("${CMAKE_CURRENT_BINARY_DIR}" "${output}" ${CYCLES_INSTALL_PATH}/lib)
-  endforeach()
+  endmacro()
+
+  CYCLES_OPTIX_KERNEL_ADD(kernel_optix "-D __NO_SHADER_RAYTRACE__")
+  CYCLES_OPTIX_KERNEL_ADD(kernel_optix_shader_raytrace "--keep-device-functions")
 
   add_custom_target(cycles_kernel_optix ALL DEPENDS ${optix_ptx})
   cycles_set_solution_folder(cycles_kernel_optix)
@@ -649,13 +652,13 @@ include_directories(SYSTEM ${INC_SYS})
 if(WITH_COMPILER_ASAN)
   if(CMAKE_COMPILER_IS_GNUCC AND (NOT WITH_CYCLES_KERNEL_ASAN))
     # GCC hangs compiling the big kernel files with asan and release, so disable by default.
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-sanitize=all")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-sanitize=vptr")
+    string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " -fno-sanitize=all")
+    string(APPEND CMAKE_CXX_FLAGS_DEBUG " -fno-sanitize=vptr")
   elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
     # With OSL, Cycles disables rtti in some modules, wich then breaks at linking
     # when trying to use vptr sanitizer (included into 'undefined' general option).
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-sanitize=vptr")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-sanitize=vptr")
+    string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " -fno-sanitize=vptr")
+    string(APPEND CMAKE_CXX_FLAGS_DEBUG " -fno-sanitize=vptr")
   endif()
 endif()
 

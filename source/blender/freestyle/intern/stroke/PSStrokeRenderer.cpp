@@ -24,7 +24,7 @@
 
 namespace Freestyle {
 
-PSStrokeRenderer::PSStrokeRenderer(const char *iFileName) : StrokeRenderer()
+PSStrokeRenderer::PSStrokeRenderer(const char *iFileName)
 {
   if (!iFileName) {
     iFileName = "freestyle.ps";
@@ -39,11 +39,6 @@ PSStrokeRenderer::PSStrokeRenderer(const char *iFileName) : StrokeRenderer()
   _ofstream << "%%BoundingBox: " << 0 << " " << 0 << " " << Canvas::getInstance()->width() << " "
             << Canvas::getInstance()->height() << endl;
   _ofstream << "%%EndComments" << endl;
-}
-
-PSStrokeRenderer::~PSStrokeRenderer()
-{
-  Close();
 }
 
 void PSStrokeRenderer::RenderStrokeRep(StrokeRep *iStrokeRep) const
@@ -87,13 +82,6 @@ void PSStrokeRenderer::RenderStrokeRepBasic(StrokeRep *iStrokeRep) const
       ++v[1];
       ++v[2];
     }
-  }
-}
-
-void PSStrokeRenderer::Close()
-{
-  if (_ofstream.is_open()) {
-    _ofstream.close();
   }
 }
 

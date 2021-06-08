@@ -36,6 +36,10 @@
 /* Hum ... Not really nice... but needed for spacebuts. */
 #include "DNA_view2d_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct BLI_mempool;
 struct FileLayout;
 struct FileList;
@@ -59,9 +63,14 @@ struct wmTimer;
 /* Defined in `buttons_intern.h`. */
 typedef struct SpaceProperties_Runtime SpaceProperties_Runtime;
 
-/* TODO 2.8: We don't write the global areas to files currently. Uncomment
- * define to enable writing (should become the default in a bit). */
-//#define WITH_GLOBAL_AREA_WRITING
+/* Defined in `node_intern.h`. */
+typedef struct SpaceNode_Runtime SpaceNode_Runtime;
+
+/* Defined in `file_intern.h`. */
+typedef struct SpaceFile_Runtime SpaceFile_Runtime;
+
+/* Defined in `spreadsheet_intern.hh`. */
+typedef struct SpaceSpreadsheet_Runtime SpaceSpreadsheet_Runtime;
 
 /* -------------------------------------------------------------------- */
 /** \name SpaceLink (Base)
@@ -152,8 +161,11 @@ typedef struct SpaceProperties {
   short mainb, mainbo, mainbuser;
   /** Preview is signal to refresh. */
   short preview;
-  char _pad[5];
+  char _pad[4];
   char flag;
+
+  /* eSpaceButtons_OutlinerSync */
+  char outliner_sync;
 
   /** Runtime. */
   void *path;
@@ -216,6 +228,7 @@ typedef enum eSpaceButtons_Context {
   BCONTEXT_TOOL = 14,
   BCONTEXT_SHADERFX = 15,
   BCONTEXT_OUTPUT = 16,
+  BCONTEXT_COLLECTION = 17,
 
   /* Keep last. */
   BCONTEXT_TOT,
@@ -232,11 +245,21 @@ typedef enum eSpaceButtons_Flag {
   SB_SHADING_CONTEXT = (1 << 4),
 } eSpaceButtons_Flag;
 
+/* SpaceProperties.outliner_sync */
+typedef enum eSpaceButtons_OutlinerSync {
+  PROPERTIES_SYNC_AUTO = 0,
+  PROPERTIES_SYNC_NEVER = 1,
+  PROPERTIES_SYNC_ALWAYS = 2,
+} eSpaceButtons_OutlinerSync;
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Outliner
  * \{ */
+
+/* Defined in `outliner_intern.h`. */
+typedef struct SpaceOutliner_Runtime SpaceOutliner_Runtime;
 
 /* Outliner */
 typedef struct SpaceOutliner {
@@ -276,10 +299,7 @@ typedef struct SpaceOutliner {
   char show_restrict_flags;
   short filter_id_type;
 
-  /**
-   * Pointers to treestore elements, grouped by (id, type, nr)
-   * in hashtable for faster searching */
-  void *treehash;
+  SpaceOutliner_Runtime *runtime;
 } SpaceOutliner;
 
 /* SpaceOutliner.flag */
@@ -295,13 +315,16 @@ typedef enum eSpaceOutliner_Flag {
 
 /* SpaceOutliner.filter */
 typedef enum eSpaceOutliner_Filter {
-  SO_FILTER_SEARCH = (1 << 0),   /* Run-time flag. */
-  SO_FILTER_UNUSED_1 = (1 << 1), /* cleared */
+  SO_FILTER_SEARCH = (1 << 0), /* Run-time flag. */
+  SO_FILTER_CLEARED_1 = (1 << 1),
+  SO_FILTER_NO_LIB_OVERRIDE = SO_FILTER_CLEARED_1, /* re-use */
   SO_FILTER_NO_OBJECT = (1 << 2),
   SO_FILTER_NO_OB_CONTENT = (1 << 3), /* Not only mesh, but modifiers, constraints, ... */
   SO_FILTER_NO_CHILDREN = (1 << 4),
 
   SO_FILTER_UNUSED_5 = (1 << 5), /* cleared */
+  /** Show overrides that are defined/controlled by Blender. */
+  SO_FILTER_SHOW_SYSTEM_OVERRIDES = SO_FILTER_UNUSED_5, /* re-use */
   SO_FILTER_NO_OB_MESH = (1 << 6),
   SO_FILTER_NO_OB_ARMATURE = (1 << 7),
   SO_FILTER_NO_OB_EMPTY = (1 << 8),
@@ -309,9 +332,9 @@ typedef enum eSpaceOutliner_Filter {
   SO_FILTER_NO_OB_CAMERA = (1 << 10),
   SO_FILTER_NO_OB_OTHERS = (1 << 11),
 
-  SO_FILTER_UNUSED_12 = (1 << 12),         /* cleared */
-  SO_FILTER_OB_STATE_VISIBLE = (1 << 13),  /* Not set via DNA. */
-  SO_FILTER_OB_STATE_HIDDEN = (1 << 14),   /* Not set via DNA. */
+  SO_FILTER_OB_STATE_SELECTABLE = (1 << 12), /* Not set via DNA. */
+  SO_FILTER_OB_STATE_VISIBLE = (1 << 13),    /* Not set via DNA. */
+  SO_FILTER_OB_STATE_INVERSE = (1 << 14),
   SO_FILTER_OB_STATE_SELECTED = (1 << 15), /* Not set via DNA. */
   SO_FILTER_OB_STATE_ACTIVE = (1 << 16),   /* Not set via DNA. */
   SO_FILTER_NO_COLLECTION = (1 << 17),
@@ -324,20 +347,21 @@ typedef enum eSpaceOutliner_Filter {
    SO_FILTER_NO_OB_LAMP | SO_FILTER_NO_OB_CAMERA | SO_FILTER_NO_OB_OTHERS)
 
 #define SO_FILTER_OB_STATE \
-  (SO_FILTER_OB_STATE_VISIBLE | SO_FILTER_OB_STATE_HIDDEN | SO_FILTER_OB_STATE_SELECTED | \
-   SO_FILTER_OB_STATE_ACTIVE)
+  (SO_FILTER_OB_STATE_VISIBLE | SO_FILTER_OB_STATE_SELECTED | SO_FILTER_OB_STATE_ACTIVE | \
+   SO_FILTER_OB_STATE_SELECTABLE)
 
 #define SO_FILTER_ANY \
   (SO_FILTER_NO_OB_CONTENT | SO_FILTER_NO_CHILDREN | SO_FILTER_OB_TYPE | SO_FILTER_OB_STATE | \
-   SO_FILTER_NO_COLLECTION)
+   SO_FILTER_NO_COLLECTION | SO_FILTER_NO_LIB_OVERRIDE)
 
 /* SpaceOutliner.filter_state */
 typedef enum eSpaceOutliner_StateFilter {
   SO_FILTER_OB_ALL = 0,
   SO_FILTER_OB_VISIBLE = 1,
-  SO_FILTER_OB_HIDDEN = 2,
+  SO_FILTER_OB_HIDDEN = 2, /* deprecated */
   SO_FILTER_OB_SELECTED = 3,
   SO_FILTER_OB_ACTIVE = 4,
+  SO_FILTER_OB_SELECTABLE = 5,
 } eSpaceOutliner_StateFilter;
 
 /* SpaceOutliner.show_restrict_flags */
@@ -369,6 +393,7 @@ typedef enum eSpaceOutliner_Mode {
   /* SO_KEYMAP         = 13, */ /* deprecated! */
   SO_ID_ORPHANS = 14,
   SO_VIEW_LAYER = 15,
+  SO_OVERRIDES_LIBRARY = 16,
 } eSpaceOutliner_Mode;
 
 /* SpaceOutliner.storeflag */
@@ -468,12 +493,13 @@ typedef enum eGraphEdit_Flag {
   /* don't draw curves with AA ("beauty-draw") for performance */
   SIPO_BEAUTYDRAW_OFF = (1 << 12),
   /* draw grouped channels with colors set in group */
-  SIPO_NODRAWGCOLORS = (1 << 13),
+  /* SIPO_NODRAWGCOLORS = (1 << 13), DEPRECATED */
   /* normalize curves on display */
   SIPO_NORMALIZE = (1 << 14),
   SIPO_NORMALIZE_FREEZE = (1 << 15),
   /* show markers region */
   SIPO_SHOW_MARKERS = (1 << 16),
+  SIPO_NO_DRAW_EXTRAPOLATION = (1 << 17),
 } eGraphEdit_Flag;
 
 /* SpaceGraph.mode (Graph Editor Mode) */
@@ -603,6 +629,7 @@ typedef enum eSpaceSeq_RegionType {
 typedef enum eSpaceSeq_DrawFlag {
   SEQ_DRAW_BACKDROP = (1 << 0),
   SEQ_DRAW_OFFSET_EXT = (1 << 1),
+  SEQ_DRAW_TRANSFORM_PREVIEW = (1 << 2),
 } eSpaceSeq_DrawFlag;
 
 /* SpaceSeq.flag */
@@ -620,6 +647,11 @@ typedef enum eSpaceSeq_Flag {
   SEQ_SHOW_METADATA = (1 << 10),
   SEQ_SHOW_MARKERS = (1 << 11), /* show markers region */
   SEQ_ZOOM_TO_FIT = (1 << 12),
+  SEQ_SHOW_STRIP_OVERLAY = (1 << 13),
+  SEQ_SHOW_STRIP_NAME = (1 << 14),
+  SEQ_SHOW_STRIP_SOURCE = (1 << 15),
+  SEQ_SHOW_STRIP_DURATION = (1 << 16),
+  SEQ_USE_PROXIES = (1 << 17),
 } eSpaceSeq_Flag;
 
 /* SpaceSeq.view */
@@ -663,6 +695,24 @@ typedef enum eSpaceSeq_OverlayType {
 /** \name File Selector
  * \{ */
 
+/**
+ * Information to identify a asset library. May be either one of the predefined types (current
+ * 'Main', builtin library, project library), or a custom type as defined in the Preferences.
+ *
+ * If the type is set to #FILE_ASSET_LIBRARY_CUSTOM, idname must have the name to identify the
+ * custom library. Otherwise idname is not used.
+ */
+typedef struct FileSelectAssetLibraryUID {
+  short type; /* eFileAssetLibrary_Type */
+  char _pad[2];
+  /**
+   * If showing a custom asset library (#FILE_ASSET_LIBRARY_CUSTOM), this is the index of the
+   * #bUserAssetLibrary within #UserDef.asset_libraries.
+   * Should be ignored otherwise (but better set to -1 then, for sanity and debugging).
+   */
+  int custom_library_index;
+} FileSelectAssetLibraryUID;
+
 /* Config and Input for File Selector */
 typedef struct FileSelectParams {
   /** Title, also used for the text of the execute button. */
@@ -697,7 +747,7 @@ typedef struct FileSelectParams {
 
   /* short */
   /** XXXXX for now store type here, should be moved to the operator. */
-  short type;
+  short type; /* eFileSelectType */
   /** Settings for filter, hiding dots files. */
   short flag;
   /** Sort order. */
@@ -707,6 +757,7 @@ typedef struct FileSelectParams {
   /** Details toggles (file size, creation date, etc.) */
   char details_flags;
   char _pad2[3];
+
   /** Filter when (flags & FILE_FILTER) is true. */
   int filter;
 
@@ -722,6 +773,32 @@ typedef struct FileSelectParams {
   /* XXX --- end unused -- */
 } FileSelectParams;
 
+/**
+ * File selection parameters for asset browsing mode, with #FileSelectParams as base.
+ */
+typedef struct FileAssetSelectParams {
+  FileSelectParams base_params;
+
+  FileSelectAssetLibraryUID asset_library;
+} FileAssetSelectParams;
+
+/**
+ * A wrapper to store previous and next folder lists (#FolderList) for a specific browse mode
+ * (#eFileBrowse_Mode).
+ */
+typedef struct FileFolderHistory {
+  struct FileFolderLists *next, *prev;
+
+  /** The browse mode this prev/next folder-lists are created for. */
+  char browse_mode; /* eFileBrowse_Mode */
+  char _pad[7];
+
+  /** Holds the list of previous directories to show. */
+  ListBase folders_prev;
+  /** Holds the list of next directories (pushed from previous) to show. */
+  ListBase folders_next;
+} FileFolderHistory;
+
 /* File Browser */
 typedef struct SpaceFile {
   SpaceLink *next, *prev;
@@ -732,19 +809,41 @@ typedef struct SpaceFile {
   char _pad0[6];
   /* End 'SpaceLink' header. */
 
-  char _pad1[4];
+  /** Is this a File Browser or an Asset Browser? */
+  char browse_mode; /* eFileBrowse_Mode */
+  char _pad1[1];
+
+  short tags;
+
   int scroll_offset;
 
-  /** Config and input for file select. */
-  struct FileSelectParams *params;
+  /** Config and input for file select. One for each browse-mode, to keep them independent. */
+  FileSelectParams *params;
+  FileAssetSelectParams *asset_params;
 
-  /** Holds the list of files to show. */
+  void *_pad2;
+
+  /**
+   * Holds the list of files to show.
+   * Currently recreated when browse-mode changes. Could be per browse-mode to avoid refreshes.
+   */
   struct FileList *files;
 
-  /** Holds the list of previous directories to show. */
+  /**
+   * Holds the list of previous directories to show. Owned by `folder_histories` below.
+   */
   ListBase *folders_prev;
-  /** Holds the list of next directories (pushed from previous) to show. */
+  /**
+   * Holds the list of next directories (pushed from previous) to show. Owned by
+   * `folder_histories` below.
+   */
   ListBase *folders_next;
+
+  /**
+   * This actually owns the prev/next folder-lists above. On browse-mode change, the lists of the
+   * new mode get assigned to the above.
+   */
+  ListBase folder_histories; /* FileFolderHistory */
 
   /* operator that is invoking fileselect
    * op->exec() will be called on the 'Load' button.
@@ -760,11 +859,43 @@ typedef struct SpaceFile {
 
   short recentnr, bookmarknr;
   short systemnr, system_bookmarknr;
+
+  SpaceFile_Runtime *runtime;
 } SpaceFile;
+
+/* SpaceFile.browse_mode (File Space Browsing Mode) */
+typedef enum eFileBrowse_Mode {
+  /* Regular Blender File Browser */
+  FILE_BROWSE_MODE_FILES = 0,
+  /* Asset Browser */
+  FILE_BROWSE_MODE_ASSETS = 1,
+} eFileBrowse_Mode;
+
+typedef enum eFileAssetLibrary_Type {
+  /* For the future. Display assets bundled with Blender by default. */
+  // FILE_ASSET_LIBRARY_BUNDLED = 0,
+  /** Display assets from the current session (current "Main"). */
+  FILE_ASSET_LIBRARY_LOCAL = 1,
+  /* For the future. Display assets for the current project. */
+  // FILE_ASSET_LIBRARY_PROJECT = 2,
+
+  /** Display assets from custom asset libraries, as defined in the preferences
+   * (#bUserAssetLibrary). The name will be taken from #FileSelectParams.asset_library.idname
+   * then.
+   * In RNA, we add the index of the custom library to this to identify it by index. So keep
+   * this last! */
+  FILE_ASSET_LIBRARY_CUSTOM = 100,
+} eFileAssetLibrary_Type;
 
 /* FileSelectParams.display */
 enum eFileDisplayType {
+  /** Internal (not exposed to users): Keep whatever display type was used during the last File
+   * Browser use, or the default if no such record is found. Use this unless there's a good reason
+   * to set a specific display type. */
   FILE_DEFAULTDISPLAY = 0,
+
+  /* User selectable choices. */
+
   FILE_VERTICALDISPLAY = 1,
   FILE_HORIZONTALDISPLAY = 2,
   FILE_IMGDISPLAY = 3,
@@ -772,11 +903,24 @@ enum eFileDisplayType {
 
 /* FileSelectParams.sort */
 enum eFileSortType {
-  FILE_SORT_NONE = 0,
+  /** Internal (not exposed to users): Sort by whatever was sorted by during the last File Browser
+   * use, or the default if no such record is found. Use this unless there's a good reason to set a
+   * specific sort order. */
+  FILE_SORT_DEFAULT = 0,
+
+  /* User selectable choices. */
+
   FILE_SORT_ALPHA = 1,
   FILE_SORT_EXTENSION = 2,
   FILE_SORT_TIME = 3,
   FILE_SORT_SIZE = 4,
+};
+
+/* SpaceFile.tags */
+enum eFileTags {
+  /** Tag the space as having to update files representing or containing main data. Must be set
+   * after file read and undo/redo. */
+  FILE_TAG_REBUILD_MAIN_FILES = (1 << 0),
 };
 
 /* FileSelectParams.details_flags */
@@ -794,12 +938,15 @@ enum eFileDetails {
 #define FILE_MAX_LIBEXTRA (FILE_MAX + MAX_ID_NAME)
 
 /* filesel types */
-#define FILE_UNIX 8
-#define FILE_BLENDER 8 /* don't display relative paths */
-#define FILE_SPECIAL 9
+typedef enum eFileSelectType {
+  FILE_LOADLIB = 1,
+  FILE_MAIN = 2,
+  FILE_MAIN_ASSET = 3,
 
-#define FILE_LOADLIB 1
-#define FILE_MAIN 2
+  FILE_UNIX = 8,
+  FILE_BLENDER = 8, /* don't display relative paths */
+  FILE_SPECIAL = 9,
+} eFileSelectType;
 
 /* filesel op property -> action */
 typedef enum eFileSel_Action {
@@ -827,6 +974,7 @@ typedef enum eFileSel_Params_Flag {
   FILE_SORT_INVERT = (1 << 11),
   FILE_HIDE_TOOL_PROPS = (1 << 12),
   FILE_CHECK_EXISTING = (1 << 13),
+  FILE_ASSETS_ONLY = (1 << 14),
 } eFileSel_Params_Flag;
 
 /* sfile->params->rename_flag */
@@ -870,6 +1018,7 @@ typedef enum eFileSel_File_Types {
   FILE_TYPE_USD = (1 << 18),
   FILE_TYPE_VOLUME = (1 << 19),
 
+  FILE_TYPE_ASSET = (1 << 28),
   /** An FS directory (i.e. S_ISDIR on its path is true). */
   FILE_TYPE_DIR = (1 << 30),
   FILE_TYPE_BLENDERLIB = (1u << 31),
@@ -953,6 +1102,8 @@ typedef struct FileDirEntry {
   struct FileDirEntry *next, *prev;
 
   int uuid[4];
+  /* Name needs freeing if FILE_ENTRY_NAME_FREE is set. Otherwise this is a direct pointer to a
+   * name buffer. */
   char *name;
   char *description;
 
@@ -970,9 +1121,16 @@ typedef struct FileDirEntry {
   /** Optional argument for shortcuts, aliases etc. */
   char *redirection_path;
 
-  /** TODO: make this a real ID pointer? */
-  void *poin;
-  struct ImBuf *image;
+  /** When showing local IDs (FILE_MAIN, FILE_MAIN_ASSET), ID this file represents. Note comment
+   * for FileListInternEntry.local_data, the same applies here! */
+  ID *id;
+  /** If this file represents an asset, its asset data is here. Note that we may show assets of
+   * external files in which case this is set but not the id above.
+   * Note comment for FileListInternEntry.local_data, the same applies here! */
+  struct AssetMetaData *asset_data;
+
+  /* The icon_id for the preview image. */
+  int preview_icon_id;
 
   /* Tags are for info only, most of filtering is done in asset engine. */
   char **tags;
@@ -1024,6 +1182,7 @@ enum {
 /* FileDirEntry.flags */
 enum {
   FILE_ENTRY_INVALID_PREVIEW = 1 << 0, /* The preview for this entry could not be generated. */
+  FILE_ENTRY_NAME_FREE = 1 << 1,
 };
 
 /** \} */
@@ -1364,6 +1523,7 @@ typedef struct bNodeTreePath {
 
   /** MAX_NAME. */
   char node_name[64];
+  char display_name[64];
 } bNodeTreePath;
 
 typedef struct SpaceNode {
@@ -1380,19 +1540,17 @@ typedef struct SpaceNode {
 
   /** Context, no need to save in file? well... pinning... */
   struct ID *id, *from;
-  /** Menunr: browse id block in header. */
+
   short flag;
-  char _pad1[2];
-  /** Internal state variables. */
-  float aspect;
-  char _pad2[4];
+
+  /** Direction for offsetting nodes on insertion. */
+  char insert_ofs_dir;
+  char _pad1;
 
   /** Offset for drawing the backdrop. */
   float xof, yof;
   /** Zoom for backdrop. */
   float zoom;
-  /** Mouse pos for drawing socketless link and adding nodes. */
-  float cursor[2];
 
   /**
    * XXX nodetree pointer info is all in the path stack now,
@@ -1403,33 +1561,25 @@ typedef struct SpaceNode {
    */
   ListBase treepath;
 
-  struct bNodeTree *nodetree, *edittree;
+  /* The tree farthest down in the group hierarchy. */
+  struct bNodeTree *edittree;
+
+  struct bNodeTree *nodetree;
 
   /* tree type for the current node tree */
   char tree_idname[64];
   /** Treetype: as same nodetree->type. */
   int treetype DNA_DEPRECATED;
-  char _pad3[4];
 
   /** Texfrom object, world or brush. */
   short texfrom;
   /** Shader from object or world. */
   short shaderfrom;
-  /** Currently on 0/1, for auto compo. */
-  short recalc;
-
-  /** Direction for offsetting nodes on insertion. */
-  char insert_ofs_dir;
-  char _pad4;
-
-  /** Temporary data for modal linking operator. */
-  ListBase linkdrag;
-  /* XXX hack for translate_attach op-macros to pass data from transform op to insert_offset op */
-  /** Temporary data for node insert offset (in UI called Auto-offset). */
-  struct NodeInsertOfsData *iofsd;
 
   /** Grease-pencil data. */
   struct bGPdata *gpd;
+
+  SpaceNode_Runtime *runtime;
 } SpaceNode;
 
 /* SpaceNode.flag */
@@ -1672,10 +1822,6 @@ typedef enum eSpaceClip_GPencil_Source {
 /** \name Top Bar
  * \{ */
 
-/* These two lines with # tell makesdna this struct can be excluded.
- * Should be: #ifndef WITH_GLOBAL_AREA_WRITING */
-#
-#
 typedef struct SpaceTopBar {
   SpaceLink *next, *prev;
   /** Storage of regions for inactive spaces. */
@@ -1692,10 +1838,6 @@ typedef struct SpaceTopBar {
 /** \name Status Bar
  * \{ */
 
-/* These two lines with # tell makesdna this struct can be excluded.
- * Should be: #ifndef WITH_GLOBAL_AREA_WRITING */
-#
-#
 typedef struct SpaceStatusBar {
   SpaceLink *next, *prev;
   /** Storage of regions for inactive spaces. */
@@ -1705,6 +1847,115 @@ typedef struct SpaceStatusBar {
   char _pad0[6];
   /* End 'SpaceLink' header. */
 } SpaceStatusBar;
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Spreadsheet
+ * \{ */
+
+typedef struct SpreadsheetColumnID {
+  char *name;
+} SpreadsheetColumnID;
+
+typedef struct SpreadsheetColumn {
+  struct SpreadsheetColumn *next, *prev;
+  /**
+   * Identifies the data in the column.
+   * This is a pointer instead of a struct to make it easier if we want to "subclass"
+   * #SpreadsheetColumnID in the future for different kinds of ids.
+   */
+  SpreadsheetColumnID *id;
+} SpreadsheetColumn;
+
+/**
+ * An item in SpaceSpreadsheet.context_path.
+ * This is a bases struct for the structs below.
+ */
+typedef struct SpreadsheetContext {
+  struct SpreadsheetContext *next, *prev;
+  /* eSpaceSpreadsheet_ContextType. */
+  int type;
+  char _pad[4];
+} SpreadsheetContext;
+
+typedef struct SpreadsheetContextObject {
+  SpreadsheetContext base;
+  struct Object *object;
+} SpreadsheetContextObject;
+
+typedef struct SpreadsheetContextModifier {
+  SpreadsheetContext base;
+  char *modifier_name;
+} SpreadsheetContextModifier;
+
+typedef struct SpreadsheetContextNode {
+  SpreadsheetContext base;
+  char *node_name;
+} SpreadsheetContextNode;
+
+typedef struct SpaceSpreadsheet {
+  SpaceLink *next, *prev;
+  /** Storage of regions for inactive spaces. */
+  ListBase regionbase;
+  char spacetype;
+  char link_flag;
+  char _pad0[6];
+  /* End 'SpaceLink' header. */
+
+  /* List of #SpreadsheetColumn. */
+  ListBase columns;
+
+  /**
+   * List of #SpreadsheetContext.
+   * This is a path to the data that is displayed in the spreadsheet.
+   * It can be set explicitely by an action of the user (e.g. clicking the preview icon in a
+   * geometry node) or it can be derived from context automatically based on some heuristic.
+   */
+  ListBase context_path;
+
+  /* eSpaceSpreadsheet_FilterFlag. */
+  uint8_t filter_flag;
+
+  /* #GeometryComponentType. */
+  uint8_t geometry_component_type;
+  /* #AttributeDomain. */
+  uint8_t attribute_domain;
+  /* eSpaceSpreadsheet_ObjectContext. */
+  uint8_t object_eval_state;
+
+  /* eSpaceSpreadsheet_Flag. */
+  uint32_t flag;
+
+  SpaceSpreadsheet_Runtime *runtime;
+} SpaceSpreadsheet;
+
+typedef enum eSpaceSpreadsheet_Flag {
+  SPREADSHEET_FLAG_PINNED = (1 << 0),
+  SPREADSHEET_FLAG_CONTEXT_PATH_COLLAPSED = (1 << 1),
+} eSpaceSpreadsheet_Flag;
+
+typedef enum eSpaceSpreadsheet_FilterFlag {
+  SPREADSHEET_FILTER_SELECTED_ONLY = (1 << 0),
+} eSpaceSpreadsheet_FilterFlag;
+
+typedef enum eSpaceSpreadsheet_ObjectEvalState {
+  SPREADSHEET_OBJECT_EVAL_STATE_EVALUATED = 0,
+  SPREADSHEET_OBJECT_EVAL_STATE_ORIGINAL = 1,
+} eSpaceSpreadsheet_Context;
+
+typedef enum eSpaceSpreadsheet_ContextType {
+  SPREADSHEET_CONTEXT_OBJECT = 0,
+  SPREADSHEET_CONTEXT_MODIFIER = 1,
+  SPREADSHEET_CONTEXT_NODE = 2,
+} eSpaceSpreadsheet_ContextType;
+
+/**
+ * We can't just use UI_UNIT_X, because it does not take `widget.points` into account, which
+ * modifies the width of text as well.
+ */
+#define SPREADSHEET_WIDTH_UNIT \
+  (UI_UNIT_X * UI_style_get_dpi()->widget.points / (float)UI_DEFAULT_TEXT_POINTS)
 
 /** \} */
 
@@ -1745,8 +1996,9 @@ typedef enum eSpace_Type {
   SPACE_CLIP = 20,
   SPACE_TOPBAR = 21,
   SPACE_STATUSBAR = 22,
+  SPACE_SPREADSHEET = 23
 
-#define SPACE_TYPE_LAST SPACE_STATUSBAR
+#define SPACE_TYPE_LAST SPACE_SPREADSHEET
 } eSpace_Type;
 
 /* use for function args */
@@ -1755,3 +2007,7 @@ typedef enum eSpace_Type {
 #define IMG_SIZE_FALLBACK 256
 
 /** \} */
+
+#ifdef __cplusplus
+}
+#endif

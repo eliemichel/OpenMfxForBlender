@@ -24,17 +24,16 @@
 
 #pragma once
 
+struct BMEditMesh;
+struct BMesh;
 struct BezTriple;
 struct FCurve;
 struct ListBase;
 struct Object;
 struct TransData;
-struct TransDataContainer;
 struct TransDataCurveHandleFlags;
 struct TransInfo;
 struct bContext;
-struct bKinematicConstraint;
-struct bPoseChannel;
 
 /* transform_convert.c */
 void transform_autoik_update(TransInfo *t, short mode);
@@ -50,35 +49,8 @@ void mesh_customdatacorrect_init(TransInfo *t);
 
 /* transform_convert_sequencer.c */
 int transform_convert_sequencer_get_snap_bound(TransInfo *t);
-
+void transform_convert_sequencer_channel_clamp(TransInfo *t);
 /********************* intern **********************/
-
-typedef enum eTransConvertType {
-  TC_NONE = 0,
-  TC_ACTION_DATA,
-  TC_POSE,
-  TC_ARMATURE_VERTS,
-  TC_CURSOR_IMAGE,
-  TC_CURSOR_VIEW3D,
-  TC_CURVE_VERTS,
-  TC_GRAPH_EDIT_DATA,
-  TC_GPENCIL,
-  TC_LATTICE_VERTS,
-  TC_MASKING_DATA,
-  TC_MBALL_VERTS,
-  TC_MESH_VERTS,
-  TC_MESH_EDGES,
-  TC_MESH_UV,
-  TC_NLA_DATA,
-  TC_NODE_DATA,
-  TC_OBJECT,
-  TC_OBJECT_TEXSPACE,
-  TC_PAINT_CURVE_VERTS,
-  TC_PARTICLE_VERTS,
-  TC_SCULPT,
-  TC_SEQ_DATA,
-  TC_TRACKING_DATA,
-} eTransConvertType;
 
 /* transform_convert.c */
 bool transform_mode_use_local_origins(const TransInfo *t);
@@ -139,12 +111,65 @@ void special_aftertrans_update__mask(bContext *C, TransInfo *t);
 void createTransMBallVerts(TransInfo *t);
 
 /* transform_convert_mesh.c */
+struct TransIslandData {
+  float (*center)[3];
+  float (*axismtx)[3][3];
+  int island_tot;
+  int *island_vert_map;
+};
+
+struct MirrorDataVert {
+  int index;
+  int flag;
+};
+
+struct TransMirrorData {
+  struct MirrorDataVert *vert_map;
+  int mirror_elem_len;
+};
+
+struct TransMeshDataCrazySpace {
+  float (*quats)[4];
+  float (*defmats)[3][3];
+};
+
+void transform_convert_mesh_islands_calc(struct BMEditMesh *em,
+                                         const bool calc_single_islands,
+                                         const bool calc_island_center,
+                                         const bool calc_island_axismtx,
+                                         struct TransIslandData *r_island_data);
+void transform_convert_mesh_islanddata_free(struct TransIslandData *island_data);
+void transform_convert_mesh_connectivity_distance(struct BMesh *bm,
+                                                  const float mtx[3][3],
+                                                  float *dists,
+                                                  int *index);
+void transform_convert_mesh_mirrordata_calc(struct BMEditMesh *em,
+                                            const bool use_select,
+                                            const bool use_topology,
+                                            const bool mirror_axis[3],
+                                            struct TransMirrorData *r_mirror_data);
+void transform_convert_mesh_mirrordata_free(struct TransMirrorData *mirror_data);
+void transform_convert_mesh_crazyspace_detect(TransInfo *t,
+                                              struct TransDataContainer *tc,
+                                              struct BMEditMesh *em,
+                                              struct TransMeshDataCrazySpace *r_crazyspace_data);
+void transform_convert_mesh_crazyspace_transdata_set(const float mtx[3][3],
+                                                     const float smtx[3][3],
+                                                     const float defmat[3][3],
+                                                     const float quat[4],
+                                                     struct TransData *r_td);
+void transform_convert_mesh_crazyspace_free(struct TransMeshDataCrazySpace *r_crazyspace_data);
+
 void createTransEditVerts(TransInfo *t);
 void recalcData_mesh(TransInfo *t);
 void special_aftertrans_update__mesh(bContext *C, TransInfo *t);
 
 /* transform_convert_mesh_edge.c */
 void createTransEdge(TransInfo *t);
+
+/* transform_convert_mesh_skin.c */
+void createTransMeshSkin(TransInfo *t);
+void recalcData_mesh_skin(TransInfo *t);
 
 /* transform_convert_mesh_uv.c */
 void createTransUVs(bContext *C, TransInfo *t);
@@ -162,16 +187,19 @@ void special_aftertrans_update__node(bContext *C, TransInfo *t);
 
 /* transform_convert_object.c */
 void createTransObject(bContext *C, TransInfo *t);
-void createTransTexspace(TransInfo *t);
 void recalcData_objects(TransInfo *t);
 void special_aftertrans_update__object(bContext *C, TransInfo *t);
+
+/* transform_convert_object_texspace.c */
+void createTransTexspace(TransInfo *t);
+void recalcData_texspace(TransInfo *t);
 
 /* transform_convert_paintcurve.c */
 void createTransPaintCurveVerts(bContext *C, TransInfo *t);
 void flushTransPaintCurve(TransInfo *t);
 
 /* transform_convert_particle.c */
-void createTransParticleVerts(bContext *C, TransInfo *t);
+void createTransParticleVerts(TransInfo *t);
 void recalcData_particles(TransInfo *t);
 
 /* transform_convert_sculpt.c */

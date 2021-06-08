@@ -68,6 +68,7 @@
 #include "ED_mask.h"
 #include "ED_render.h"
 #include "ED_screen.h"
+#include "ED_util.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -82,7 +83,6 @@ static void draw_render_info(
     const bContext *C, Scene *scene, Image *ima, ARegion *region, float zoomx, float zoomy)
 {
   Render *re = RE_GetSceneRender(scene);
-  RenderData *rd = RE_engine_get_render_data(re);
   Scene *stats_scene = ED_render_job_get_scene(C);
   if (stats_scene == NULL) {
     stats_scene = CTX_data_scene(C);
@@ -111,6 +111,7 @@ static void draw_render_info(
       GPU_matrix_translate_2f(x, y);
       GPU_matrix_scale_2f(zoomx, zoomy);
 
+      RenderData *rd = RE_engine_get_render_data(re);
       if (rd->mode & R_BORDER) {
         /* TODO: round or floor instead of casting to int */
         GPU_matrix_translate_2f((int)(-rd->border.xmin * rd->xsch * rd->size * 0.01f),
@@ -466,7 +467,7 @@ static void sima_draw_zbuf_pixels(
 {
   const float red[4] = {1.0f, 0.0f, 0.0f, 0.0f};
 
-  /* Slowwww */
+  /* Very slow! */
   float *rectf = MEM_mallocN(rectx * recty * sizeof(float), "temp");
   for (int a = rectx * recty - 1; a >= 0; a--) {
     /* zbuffer values are signed, so we need to shift color range */
@@ -741,46 +742,6 @@ void draw_image_sample_line(SpaceImage *sima)
   }
 }
 
-static void draw_image_paint_helpers(
-    const bContext *C, ARegion *region, Scene *scene, float zoomx, float zoomy)
-{
-  Brush *brush;
-  int x, y;
-  ImBuf *ibuf;
-
-  brush = BKE_paint_brush(&scene->toolsettings->imapaint.paint);
-
-  if (brush && (brush->imagepaint_tool == PAINT_TOOL_CLONE) && brush->clone.image) {
-    ibuf = BKE_image_acquire_ibuf(brush->clone.image, NULL, NULL);
-
-    if (ibuf) {
-      void *cache_handle = NULL;
-      float col[4] = {1.0f, 1.0f, 1.0f, brush->clone.alpha};
-      UI_view2d_view_to_region(
-          &region->v2d, brush->clone.offset[0], brush->clone.offset[1], &x, &y);
-
-      uchar *display_buffer = IMB_display_buffer_acquire_ctx(C, ibuf, &cache_handle);
-
-      if (!display_buffer) {
-        BKE_image_release_ibuf(brush->clone.image, ibuf, NULL);
-        IMB_display_buffer_release(cache_handle);
-        return;
-      }
-
-      GPU_blend(GPU_BLEND_ALPHA);
-
-      IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_COLOR);
-      immDrawPixelsTex(
-          &state, x, y, ibuf->x, ibuf->y, GPU_RGBA8, false, display_buffer, zoomx, zoomy, col);
-
-      GPU_blend(GPU_BLEND_NONE);
-
-      BKE_image_release_ibuf(brush->clone.image, ibuf, NULL);
-      IMB_display_buffer_release(cache_handle);
-    }
-  }
-}
-
 static void draw_udim_tile_grid(uint pos_attr,
                                 uint color_attr,
                                 ARegion *region,
@@ -914,7 +875,7 @@ void draw_image_main(const bContext *C, ARegion *region)
 
   if (show_stereo3d) {
     if (show_multilayer) {
-      /* update multiindex and pass for the current eye */
+      /* Update multi-index and pass for the current eye. */
       BKE_image_multilayer_index(ima->rr, &sima->iuser);
     }
     else {
@@ -1007,24 +968,13 @@ void draw_image_main(const bContext *C, ARegion *region)
 void draw_image_main_helpers(const bContext *C, ARegion *region)
 {
   SpaceImage *sima = CTX_wm_space_image(C);
-  Scene *scene = CTX_data_scene(C);
-  Image *ima;
-  float zoomx, zoomy;
-  bool show_viewer, show_render, show_paint;
+  Image *ima = ED_space_image(sima);
 
-  ima = ED_space_image(sima);
-  ED_space_image_get_zoom(sima, region, &zoomx, &zoomy);
-
-  show_viewer = (ima && ima->source == IMA_SRC_VIEWER) != 0;
-  show_render = (show_viewer && ima->type == IMA_TYPE_R_RESULT) != 0;
-  show_paint = (ima && (sima->mode == SI_MODE_PAINT) && (show_viewer == false) &&
-                (show_render == false));
-  /* paint helpers */
-  if (show_paint) {
-    draw_image_paint_helpers(C, region, scene, zoomx, zoomy);
-  }
-  /* render info */
+  const bool show_viewer = (ima && ima->source == IMA_SRC_VIEWER) != 0;
+  const bool show_render = (show_viewer && ima->type == IMA_TYPE_R_RESULT) != 0;
   if (ima && show_render) {
+    float zoomx, zoomy;
+    ED_space_image_get_zoom(sima, region, &zoomx, &zoomy);
     draw_render_info(C, sima->iuser.scene, ima, region, zoomx, zoomy);
   }
 }

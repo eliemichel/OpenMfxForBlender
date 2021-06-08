@@ -25,16 +25,7 @@
 
 #include "DNA_ID.h"
 
-namespace blender {
-namespace deg {
-
-BuilderMap::BuilderMap()
-{
-}
-
-BuilderMap::~BuilderMap()
-{
-}
+namespace blender::deg {
 
 bool BuilderMap::checkIsBuilt(ID *id, int tag) const
 {
@@ -59,5 +50,4 @@ int BuilderMap::getIDTag(ID *id) const
   return id_tags_.lookup_default(id, 0);
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

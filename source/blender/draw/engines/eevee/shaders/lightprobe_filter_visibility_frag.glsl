@@ -1,4 +1,5 @@
 
+#pragma BLENDER_REQUIRE(random_lib.glsl)
 #pragma BLENDER_REQUIRE(common_math_geom_lib.glsl)
 #pragma BLENDER_REQUIRE(bsdf_sampling_lib.glsl)
 #pragma BLENDER_REQUIRE(irradiance_lib.glsl)
@@ -12,6 +13,9 @@ uniform float nearClip;
 uniform float farClip;
 uniform float visibilityRange;
 uniform float visibilityBlur;
+
+uniform float sampleCount;
+uniform float;
 
 out vec4 FragColor;
 
@@ -77,13 +81,15 @@ void main()
   vec2 accum = vec2(0.0);
 
   for (float i = 0; i < sampleCount; i++) {
-    vec3 sample = sample_cone(i, M_PI_2 * visibilityBlur, cos, T, B);
-    float depth = texture(probeDepth, sample).r;
-    depth = get_world_distance(depth, sample);
+    vec3 Xi = rand2d_to_cylinder(hammersley_2d(i, sampleCount));
+
+    vec3 samp = sample_uniform_cone(Xi, M_PI_2 * visibilityBlur, cos, T, B);
+    float depth = texture(probeDepth, samp).r;
+    depth = get_world_distance(depth, samp);
     accum += vec2(depth, depth * depth);
   }
 
-  accum *= invSampleCount;
+  accum /= sampleCount;
   accum = abs(accum);
 
   /* Encode to normalized RGBA 8 */

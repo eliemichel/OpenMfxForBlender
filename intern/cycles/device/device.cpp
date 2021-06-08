@@ -17,6 +17,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "bvh/bvh2.h"
+
 #include "device/device.h"
 #include "device/device_intern.h"
 
@@ -364,6 +366,19 @@ void Device::draw_pixels(device_memory &rgba,
   }
 }
 
+void Device::build_bvh(BVH *bvh, Progress &progress, bool refit)
+{
+  assert(bvh->params.bvh_layout == BVH_LAYOUT_BVH2);
+
+  BVH2 *const bvh2 = static_cast<BVH2 *>(bvh);
+  if (refit) {
+    bvh2->refit(progress);
+  }
+  else {
+    bvh2->build(progress, &stats);
+  }
+}
+
 Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
 {
 #ifdef WITH_MULTI
@@ -375,7 +390,7 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
   }
 #endif
 
-  Device *device;
+  Device *device = NULL;
 
   switch (info.type) {
     case DEVICE_CPU:
@@ -385,16 +400,12 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
     case DEVICE_CUDA:
       if (device_cuda_init())
         device = device_cuda_create(info, stats, profiler, background);
-      else
-        device = NULL;
       break;
 #endif
 #ifdef WITH_OPTIX
     case DEVICE_OPTIX:
       if (device_optix_init())
         device = device_optix_create(info, stats, profiler, background);
-      else
-        device = NULL;
       break;
 #endif
 #ifdef WITH_NETWORK
@@ -406,12 +417,14 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
     case DEVICE_OPENCL:
       if (device_opencl_init())
         device = device_opencl_create(info, stats, profiler, background);
-      else
-        device = NULL;
       break;
 #endif
     default:
-      return NULL;
+      break;
+  }
+
+  if (device == NULL) {
+    device = device_dummy_create(info, stats, profiler, background);
   }
 
   return device;
@@ -549,6 +562,14 @@ vector<DeviceInfo> Device::available_devices(uint mask)
   return devices;
 }
 
+DeviceInfo Device::dummy_device(const string &error_msg)
+{
+  DeviceInfo info;
+  info.type = DEVICE_DUMMY;
+  info.error_msg = error_msg;
+  return info;
+}
+
 string Device::device_capabilities(uint mask)
 {
   thread_scoped_lock lock(device_mutex);
@@ -598,7 +619,9 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
   info.num = 0;
 
   info.has_half_images = true;
+  info.has_nanovdb = true;
   info.has_volume_decoupled = true;
+  info.has_branched_path = true;
   info.has_adaptive_stop_per_sample = true;
   info.has_osl = true;
   info.has_profiling = true;
@@ -643,7 +666,9 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
 
     /* Accumulate device info. */
     info.has_half_images &= device.has_half_images;
+    info.has_nanovdb &= device.has_nanovdb;
     info.has_volume_decoupled &= device.has_volume_decoupled;
+    info.has_branched_path &= device.has_branched_path;
     info.has_adaptive_stop_per_sample &= device.has_adaptive_stop_per_sample;
     info.has_osl &= device.has_osl;
     info.has_profiling &= device.has_profiling;

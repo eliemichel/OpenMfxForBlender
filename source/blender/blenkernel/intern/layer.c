@@ -18,6 +18,9 @@
  * \ingroup bke
  */
 
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
 #include <string.h>
 
 #include "BLI_listbase.h"
@@ -54,7 +57,11 @@
 
 #include "DRW_engine.h"
 
+#include "RE_engine.h"
+
 #include "MEM_guardedalloc.h"
+
+#include "BLO_read_write.h"
 
 /* Set of flags which are dependent on a collection settings. */
 static const short g_base_collection_flags = (BASE_VISIBLE_DEPSGRAPH | BASE_VISIBLE_VIEWLAYER |
@@ -170,6 +177,8 @@ static ViewLayer *view_layer_add(const char *name)
   view_layer->layflag = 0x7FFF; /* solid ztra halo edge strand */
   view_layer->passflag = SCE_PASS_COMBINED | SCE_PASS_Z;
   view_layer->pass_alpha_threshold = 0.5f;
+  view_layer->cryptomatte_levels = 6;
+  view_layer->cryptomatte_flag = VIEW_LAYER_CRYPTOMATTE_ACCURATE;
   BKE_freestyle_config_init(&view_layer->freestyle_config);
 
   return view_layer;
@@ -274,6 +283,8 @@ void BKE_view_layer_free_ex(ViewLayer *view_layer, const bool do_id_user)
     }
   }
   BLI_freelistN(&view_layer->drawdata);
+  BLI_freelistN(&view_layer->aovs);
+  view_layer->active_aov = NULL;
 
   MEM_SAFE_FREE(view_layer->stats);
 
@@ -362,7 +373,13 @@ static void view_layer_bases_hash_create(ViewLayer *view_layer)
 
       LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
         if (base->object) {
-          BLI_ghash_insert(hash, base->object, base);
+          /* Some processes, like ID remapping, may lead to having several bases with the same
+           * object. So just take the first one here, and ignore all others
+           * (#BKE_layer_collection_sync will clean this up anyway). */
+          void **val_pp;
+          if (!BLI_ghash_ensure_p(hash, base->object, &val_pp)) {
+            *val_pp = base;
+          }
         }
       }
 
@@ -401,6 +418,28 @@ void BKE_view_layer_base_select_and_set_active(struct ViewLayer *view_layer, Bas
 }
 
 /**************************** Copy View Layer and Layer Collections ***********************/
+static void layer_aov_copy_data(ViewLayer *view_layer_dst,
+                                const ViewLayer *view_layer_src,
+                                ListBase *aovs_dst,
+                                const ListBase *aovs_src)
+{
+  if (aovs_src != NULL) {
+    BLI_duplicatelist(aovs_dst, aovs_src);
+  }
+
+  ViewLayerAOV *aov_dst = aovs_dst->first;
+  const ViewLayerAOV *aov_src = aovs_src->first;
+
+  while (aov_dst != NULL) {
+    BLI_assert(aov_src);
+    if (aov_src == view_layer_src->active_aov) {
+      view_layer_dst->active_aov = aov_dst;
+    }
+
+    aov_dst = aov_dst->next;
+    aov_src = aov_src->next;
+  }
+}
 
 static void layer_collections_copy_data(ViewLayer *view_layer_dst,
                                         const ViewLayer *view_layer_src,
@@ -470,6 +509,10 @@ void BKE_view_layer_copy_data(Scene *scene_dst,
 
   LayerCollection *lc_scene_dst = view_layer_dst->layer_collections.first;
   lc_scene_dst->collection = scene_dst->master_collection;
+
+  BLI_listbase_clear(&view_layer_dst->aovs);
+  layer_aov_copy_data(
+      view_layer_dst, view_layer_src, &view_layer_dst->aovs, &view_layer_src->aovs);
 
   if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0) {
     id_us_plus((ID *)view_layer_dst->mat_override);
@@ -841,6 +884,21 @@ static void layer_collection_sync(ViewLayer *view_layer,
       lc->runtime_flag |= LAYER_COLLECTION_HAS_OBJECTS;
     }
   }
+
+  /* Free potentially remaining unused layer collections in old list.
+   * NOTE: While this does not happen in typical situations, some corner cases (like remapping
+   * several different collections to a single one) can lead to this list having extra unused
+   * items. */
+  LISTBASE_FOREACH_MUTABLE (LayerCollection *, lc, lb_layer_collections) {
+    if (lc == view_layer->active_collection) {
+      view_layer->active_collection = NULL;
+    }
+
+    /* Free recursively. */
+    layer_collection_free(view_layer, lc);
+    BLI_freelinkN(lb_layer_collections, lc);
+  }
+  BLI_assert(BLI_listbase_is_empty(lb_layer_collections));
 
   /* Replace layer collection list with new one. */
   *lb_layer_collections = new_lb_layer;
@@ -1250,7 +1308,7 @@ void BKE_layer_collection_local_sync(ViewLayer *view_layer, const View3D *v3d)
 }
 
 /**
- * Sync the local collection for all the view-ports.
+ * Sync the local collection for all the 3D Viewports.
  */
 void BKE_layer_collection_local_sync_all(const Main *bmain)
 {
@@ -1445,12 +1503,9 @@ static LayerCollection *find_layer_collection_by_scene_collection(LayerCollectio
 LayerCollection *BKE_layer_collection_first_from_scene_collection(ViewLayer *view_layer,
                                                                   const Collection *collection)
 {
-  for (LayerCollection *layer_collection = view_layer->layer_collections.first;
-       layer_collection != NULL;
-       layer_collection = layer_collection->next) {
+  LISTBASE_FOREACH (LayerCollection *, layer_collection, &view_layer->layer_collections) {
     LayerCollection *found = find_layer_collection_by_scene_collection(layer_collection,
                                                                        collection);
-
     if (found != NULL) {
       return found;
     }
@@ -1830,3 +1885,249 @@ void BKE_layer_eval_view_layer_indexed(struct Depsgraph *depsgraph,
   BLI_assert(view_layer != NULL);
   layer_eval_view_layer(depsgraph, scene, view_layer);
 }
+
+static void write_layer_collections(BlendWriter *writer, ListBase *lb)
+{
+  LISTBASE_FOREACH (LayerCollection *, lc, lb) {
+    BLO_write_struct(writer, LayerCollection, lc);
+
+    write_layer_collections(writer, &lc->layer_collections);
+  }
+}
+
+void BKE_view_layer_blend_write(BlendWriter *writer, ViewLayer *view_layer)
+{
+  BLO_write_struct(writer, ViewLayer, view_layer);
+  BLO_write_struct_list(writer, Base, &view_layer->object_bases);
+
+  if (view_layer->id_properties) {
+    IDP_BlendWrite(writer, view_layer->id_properties);
+  }
+
+  LISTBASE_FOREACH (FreestyleModuleConfig *, fmc, &view_layer->freestyle_config.modules) {
+    BLO_write_struct(writer, FreestyleModuleConfig, fmc);
+  }
+
+  LISTBASE_FOREACH (FreestyleLineSet *, fls, &view_layer->freestyle_config.linesets) {
+    BLO_write_struct(writer, FreestyleLineSet, fls);
+  }
+  LISTBASE_FOREACH (ViewLayerAOV *, aov, &view_layer->aovs) {
+    BLO_write_struct(writer, ViewLayerAOV, aov);
+  }
+  write_layer_collections(writer, &view_layer->layer_collections);
+}
+
+static void direct_link_layer_collections(BlendDataReader *reader, ListBase *lb, bool master)
+{
+  BLO_read_list(reader, lb);
+  LISTBASE_FOREACH (LayerCollection *, lc, lb) {
+#ifdef USE_COLLECTION_COMPAT_28
+    BLO_read_data_address(reader, &lc->scene_collection);
+#endif
+
+    /* Master collection is not a real data-lock. */
+    if (master) {
+      BLO_read_data_address(reader, &lc->collection);
+    }
+
+    direct_link_layer_collections(reader, &lc->layer_collections, false);
+  }
+}
+
+void BKE_view_layer_blend_read_data(BlendDataReader *reader, ViewLayer *view_layer)
+{
+  view_layer->stats = NULL;
+  BLO_read_list(reader, &view_layer->object_bases);
+  BLO_read_data_address(reader, &view_layer->basact);
+
+  direct_link_layer_collections(reader, &view_layer->layer_collections, true);
+  BLO_read_data_address(reader, &view_layer->active_collection);
+
+  BLO_read_data_address(reader, &view_layer->id_properties);
+  IDP_BlendDataRead(reader, &view_layer->id_properties);
+
+  BLO_read_list(reader, &(view_layer->freestyle_config.modules));
+  BLO_read_list(reader, &(view_layer->freestyle_config.linesets));
+
+  BLO_read_list(reader, &view_layer->aovs);
+  BLO_read_data_address(reader, &view_layer->active_aov);
+
+  BLI_listbase_clear(&view_layer->drawdata);
+  view_layer->object_bases_array = NULL;
+  view_layer->object_bases_hash = NULL;
+}
+
+static void lib_link_layer_collection(BlendLibReader *reader,
+                                      Library *lib,
+                                      LayerCollection *layer_collection,
+                                      bool master)
+{
+  /* Master collection is not a real data-lock. */
+  if (!master) {
+    BLO_read_id_address(reader, lib, &layer_collection->collection);
+  }
+
+  LISTBASE_FOREACH (
+      LayerCollection *, layer_collection_nested, &layer_collection->layer_collections) {
+    lib_link_layer_collection(reader, lib, layer_collection_nested, false);
+  }
+}
+
+void BKE_view_layer_blend_read_lib(BlendLibReader *reader, Library *lib, ViewLayer *view_layer)
+{
+  LISTBASE_FOREACH (FreestyleModuleConfig *, fmc, &view_layer->freestyle_config.modules) {
+    BLO_read_id_address(reader, lib, &fmc->script);
+  }
+
+  LISTBASE_FOREACH (FreestyleLineSet *, fls, &view_layer->freestyle_config.linesets) {
+    BLO_read_id_address(reader, lib, &fls->linestyle);
+    BLO_read_id_address(reader, lib, &fls->group);
+  }
+
+  LISTBASE_FOREACH_MUTABLE (Base *, base, &view_layer->object_bases) {
+    /* we only bump the use count for the collection objects */
+    BLO_read_id_address(reader, lib, &base->object);
+
+    if (base->object == NULL) {
+      /* Free in case linked object got lost. */
+      BLI_freelinkN(&view_layer->object_bases, base);
+      if (view_layer->basact == base) {
+        view_layer->basact = NULL;
+      }
+    }
+  }
+
+  LISTBASE_FOREACH (LayerCollection *, layer_collection, &view_layer->layer_collections) {
+    lib_link_layer_collection(reader, lib, layer_collection, true);
+  }
+
+  BLO_read_id_address(reader, lib, &view_layer->mat_override);
+
+  IDP_BlendReadLib(reader, view_layer->id_properties);
+}
+
+/* -------------------------------------------------------------------- */
+/** \name Shader AOV
+ * \{ */
+
+static void viewlayer_aov_make_name_unique(ViewLayer *view_layer)
+{
+  ViewLayerAOV *aov = view_layer->active_aov;
+  if (aov == NULL) {
+    return;
+  }
+  BLI_uniquename(
+      &view_layer->aovs, aov, DATA_("AOV"), '.', offsetof(ViewLayerAOV, name), sizeof(aov->name));
+}
+
+static void viewlayer_aov_active_set(ViewLayer *view_layer, ViewLayerAOV *aov)
+{
+  if (aov != NULL) {
+    BLI_assert(BLI_findindex(&view_layer->aovs, aov) != -1);
+    view_layer->active_aov = aov;
+  }
+  else {
+    view_layer->active_aov = NULL;
+  }
+}
+
+struct ViewLayerAOV *BKE_view_layer_add_aov(struct ViewLayer *view_layer)
+{
+  ViewLayerAOV *aov;
+  aov = MEM_callocN(sizeof(ViewLayerAOV), __func__);
+  aov->type = AOV_TYPE_COLOR;
+  BLI_strncpy(aov->name, DATA_("AOV"), sizeof(aov->name));
+  BLI_addtail(&view_layer->aovs, aov);
+  viewlayer_aov_active_set(view_layer, aov);
+  viewlayer_aov_make_name_unique(view_layer);
+  return aov;
+}
+
+void BKE_view_layer_remove_aov(ViewLayer *view_layer, ViewLayerAOV *aov)
+{
+  BLI_assert(BLI_findindex(&view_layer->aovs, aov) != -1);
+  BLI_assert(aov != NULL);
+  if (view_layer->active_aov == aov) {
+    if (aov->next) {
+      viewlayer_aov_active_set(view_layer, aov->next);
+    }
+    else {
+      viewlayer_aov_active_set(view_layer, aov->prev);
+    }
+  }
+  BLI_freelinkN(&view_layer->aovs, aov);
+}
+
+void BKE_view_layer_set_active_aov(ViewLayer *view_layer, ViewLayerAOV *aov)
+{
+  viewlayer_aov_active_set(view_layer, aov);
+}
+
+static void bke_view_layer_verify_aov_cb(void *userdata,
+                                         Scene *UNUSED(scene),
+                                         ViewLayer *UNUSED(view_layer),
+                                         const char *name,
+                                         int UNUSED(channels),
+                                         const char *UNUSED(chanid),
+                                         eNodeSocketDatatype UNUSED(type))
+{
+  GHash *name_count = userdata;
+  void **value_p;
+  void *key = BLI_strdup(name);
+
+  if (!BLI_ghash_ensure_p(name_count, key, &value_p)) {
+    *value_p = POINTER_FROM_INT(1);
+  }
+  else {
+    int value = POINTER_AS_INT(*value_p);
+    value++;
+    *value_p = POINTER_FROM_INT(value);
+    MEM_freeN(key);
+  }
+}
+
+/* Update the naming and conflicts of the AOVs.
+ *
+ * Name must be unique between all AOVs.
+ * Conflicts with render passes will show a conflict icon. Reason is that switching a render
+ * engine or activating a render pass could lead to other conflicts that wouldn't be that clear
+ * for the user. */
+void BKE_view_layer_verify_aov(struct RenderEngine *engine,
+                               struct Scene *scene,
+                               struct ViewLayer *view_layer)
+{
+  viewlayer_aov_make_name_unique(view_layer);
+
+  GHash *name_count = BLI_ghash_str_new(__func__);
+  RE_engine_update_render_passes(
+      engine, scene, view_layer, bke_view_layer_verify_aov_cb, name_count);
+  LISTBASE_FOREACH (ViewLayerAOV *, aov, &view_layer->aovs) {
+    void **value_p = BLI_ghash_lookup(name_count, aov->name);
+    int count = POINTER_AS_INT(value_p);
+    SET_FLAG_FROM_TEST(aov->flag, count > 1, AOV_CONFLICT);
+  }
+  BLI_ghash_free(name_count, MEM_freeN, NULL);
+}
+
+/* Check if the given view layer has at least one valid AOV. */
+bool BKE_view_layer_has_valid_aov(ViewLayer *view_layer)
+{
+  LISTBASE_FOREACH (ViewLayerAOV *, aov, &view_layer->aovs) {
+    if ((aov->flag & AOV_CONFLICT) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+ViewLayer *BKE_view_layer_find_with_aov(struct Scene *scene, struct ViewLayerAOV *aov)
+{
+  LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
+    if (BLI_findindex(&view_layer->aovs, aov) != -1) {
+      return view_layer;
+    }
+  }
+  return NULL;
+}
+
+/** \} */

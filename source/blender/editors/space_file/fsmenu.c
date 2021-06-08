@@ -171,6 +171,8 @@ static GHash *fsmenu_xdg_user_dirs_parse(const char *home)
       }
     }
   }
+  fclose(fp);
+
   return xdg_map;
 }
 
@@ -579,10 +581,10 @@ void fsmenu_read_bookmarks(struct FSMenu *fsmenu, const char *filename)
   name[0] = '\0';
 
   while (fgets(line, sizeof(line), fp) != NULL) { /* read a line */
-    if (STREQLEN(line, "[Bookmarks]", 11)) {
+    if (STRPREFIX(line, "[Bookmarks]")) {
       category = FS_CATEGORY_BOOKMARKS;
     }
-    else if (STREQLEN(line, "[Recent]", 8)) {
+    else if (STRPREFIX(line, "[Recent]")) {
       category = FS_CATEGORY_RECENT;
     }
     else if (line[0] == '!') {

@@ -24,12 +24,14 @@
 #pragma once
 
 #include "DNA_listBase.h"
-#include "DNA_screen_types.h"
-#include "DNA_userdef_types.h"
-#include "DNA_vec_types.h"
-#include "DNA_xr_types.h"
+#include "DNA_screen_types.h" /* for #ScrAreaMap */
+#include "DNA_xr_types.h"     /* for #XrSessionSettings */
 
 #include "DNA_ID.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* defined here: */
 struct wmWindow;
@@ -152,8 +154,8 @@ typedef struct wmWindowManager {
   /** Operator registry. */
   ListBase operators;
 
-  /** Refresh/redraw wmNotifier structs. */
-  ListBase queue;
+  /** Refresh/redraw #wmNotifier structs. */
+  ListBase notifier_queue;
 
   /** Information and error reports. */
   struct ReportList reports;
@@ -213,7 +215,7 @@ enum {
   (WM_OUTLINER_SYNC_SELECT_FROM_OBJECT | WM_OUTLINER_SYNC_SELECT_FROM_EDIT_BONE | \
    WM_OUTLINER_SYNC_SELECT_FROM_POSE_BONE | WM_OUTLINER_SYNC_SELECT_FROM_SEQUENCE)
 
-#define WM_KEYCONFIG_STR_DEFAULT "blender"
+#define WM_KEYCONFIG_STR_DEFAULT "Blender"
 
 /* IME is win32 only! */
 #if !defined(WIN32) && !defined(DNA_DEPRECATED)
@@ -249,13 +251,14 @@ typedef struct wmWindow {
 
   struct bScreen *screen DNA_DEPRECATED;
 
+  /** Winid also in screens, is for retrieving this window after read. */
+  int winid;
   /** Window coords. */
   short posx, posy, sizex, sizey;
   /** Borderless, full. */
   char windowstate;
   /** Set to 1 if an active window, for quick rejects. */
   char active;
-  char _pad0[4];
   /** Current mouse cursor type. */
   short cursor;
   /** Previous cursor when setting modal one. */
@@ -269,16 +272,28 @@ typedef struct wmWindow {
   char addmousemove;
   char tag_cursor_refresh;
 
-  /** Winid also in screens, is for retrieving this window after read. */
-  int winid;
+  /* Track the state of the event queue,
+   * these store the state that needs to be kept between handling events in the queue. */
+  /** Enable when #KM_PRESS events are not handled (keyboard/mouse-buttons only). */
+  char event_queue_check_click;
+  /** Enable when #KM_PRESS events are not handled (keyboard/mouse-buttons only). */
+  char event_queue_check_drag;
+  /**
+   * Enable when the drag was handled,
+   * to avoid mouse-motion continually triggering drag events which are not handled
+   * but add overhead to gizmo handling (for example), see T87511.
+   */
+  char event_queue_check_drag_handled;
+
+  char _pad0[1];
 
   /** Internal, lock pie creation from this event until released. */
-  short lock_pie_event;
+  short pie_event_type_lock;
   /**
    * Exception to the above rule for nested pies, store last pie event for operators
    * that spawn a new pie right after destruction of last pie.
    */
-  short last_pie_event;
+  short pie_event_type_last;
 
   /** Storage for event system. */
   struct wmEvent *eventstate;
@@ -290,8 +305,8 @@ typedef struct wmWindow {
    * Currently WIN32, runtime-only data. */
   struct wmIMEData *ime_data;
 
-  /** All events (ghost level events were handled). */
-  ListBase queue;
+  /** All events #wmEvent (ghost level events were handled). */
+  ListBase event_queue;
   /** Window+screen handlers, handled last. */
   ListBase handlers;
   /** Priority handlers, handled first. */
@@ -353,7 +368,7 @@ typedef struct wmKeyMapItem {
   short val;
   /** Oskey is apple or windowskey, value denotes order of pressed. */
   short shift, ctrl, alt, oskey;
-  /** Rawkey modifier. */
+  /** Raw-key modifier. */
   short keymodifier;
 
   /* flag: inactive, expanded */
@@ -365,7 +380,12 @@ typedef struct wmKeyMapItem {
   /** Unique identifier. Positive for kmi that override builtins, negative otherwise. */
   short id;
   char _pad[2];
-  /** Rna pointer to access properties. */
+  /**
+   * RNA pointer to access properties.
+   *
+   * \note The `ptr.owner_id` value must be NULL, as a signal not to use the context
+   * when running property callbacks such as ENUM item functions.
+   */
   struct PointerRNA *ptr;
 } wmKeyMapItem;
 
@@ -470,7 +490,7 @@ typedef struct wmKeyConfig {
 
   /** Unique name. */
   char idname[64];
-  /** Idname of configuration this is derives from, "" if none. */
+  /** ID-name of configuration this is derives from, "" if none. */
   char basename[64];
 
   ListBase keymaps;
@@ -569,3 +589,7 @@ enum {
    * (the regiontype is maintained to prevent errors) */
   OP_IS_MODAL_CURSOR_REGION = (1 << 3),
 };
+
+#ifdef __cplusplus
+}
+#endif

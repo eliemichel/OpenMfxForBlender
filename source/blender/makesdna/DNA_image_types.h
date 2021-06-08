@@ -27,6 +27,10 @@
 #include "DNA_color_types.h" /* for color management */
 #include "DNA_defs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct GPUTexture;
 struct MovieCache;
 struct PackedFile;
@@ -115,6 +119,10 @@ typedef struct ImageTile {
 /* #define IMA_UNUSED_2         (1 << 2) */
 #define IMA_NEED_FRAME_RECALC (1 << 3)
 #define IMA_SHOW_STEREO (1 << 4)
+/* Do not limit the resolution by the limit texture size option in the user preferences.
+ * Images in the image editor or used as a backdrop are always shown using the maximum
+ * possible resolution. */
+#define IMA_SHOW_MAX_RESOLUTION (1 << 5)
 
 /* Used to get the correct gpu texture from an Image datablock. */
 typedef enum eGPUTextureTarget {
@@ -147,11 +155,13 @@ typedef struct Image {
   int lastframe;
 
   /* GPU texture flag. */
+  /* Contains `ImagePartialRefresh`. */
+  ListBase gpu_refresh_areas;
   int gpuframenr;
   short gpuflag;
   short gpu_pass;
   short gpu_layer;
-  short gpu_slot;
+  short gpu_view;
   char _pad2[4];
 
   /** Deprecated. */
@@ -219,8 +229,12 @@ enum {
 enum {
   /** GPU texture needs to be refreshed. */
   IMA_GPU_REFRESH = (1 << 0),
+  /** GPU texture needs to be partially refreshed. */
+  IMA_GPU_PARTIAL_REFRESH = (1 << 1),
   /** All mipmap levels in OpenGL texture set? */
-  IMA_GPU_MIPMAP_COMPLETE = (1 << 1),
+  IMA_GPU_MIPMAP_COMPLETE = (1 << 2),
+  /** Current texture resolution won't be limited by the GL Texture Limit user preference. */
+  IMA_GPU_MAX_RESOLUTION = (1 << 3),
 };
 
 /* Image.source, where the image comes from */
@@ -267,3 +281,7 @@ enum {
   IMA_ALPHA_CHANNEL_PACKED = 2,
   IMA_ALPHA_IGNORE = 3,
 };
+
+#ifdef __cplusplus
+}
+#endif

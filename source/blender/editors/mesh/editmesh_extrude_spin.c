@@ -24,6 +24,7 @@
 #include "DNA_object_types.h"
 
 #include "BLI_math.h"
+#include "BLI_string.h"
 
 #include "BKE_context.h"
 #include "BKE_editmesh.h"
@@ -32,16 +33,12 @@
 
 #include "RNA_access.h"
 #include "RNA_define.h"
-#include "RNA_enum_types.h"
 
-#include "WM_api.h"
 #include "WM_types.h"
 
 #include "ED_mesh.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
-
-#include "UI_resources.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -172,7 +169,7 @@ static bool edbm_spin_poll_property(const bContext *UNUSED(C),
   const bool dupli = RNA_boolean_get(op->ptr, "dupli");
 
   if (dupli) {
-    if (STREQ(prop_id, "use_auto_merge") || STREQ(prop_id, "use_normal_flip")) {
+    if (STR_ELEM(prop_id, "use_auto_merge", "use_normal_flip")) {
       return false;
     }
   }

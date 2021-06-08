@@ -552,9 +552,12 @@ static void separated_armature_fix_links(Main *bmain, Object *origArm, Object *n
   }
 }
 
-/* Helper function for armature separating - remove certain bones from the given armature
- * sel: remove selected bones from the armature, otherwise the unselected bones are removed
- * (ob is not in edit-mode)
+/**
+ * Helper function for armature separating - remove certain bones from the given armature.
+ *
+ * \param ob: Armature object (must not be is not in edit-mode).
+ * \param is_select: remove selected bones from the armature,
+ * otherwise the unselected bones are removed.
  */
 static void separate_armature_bones(Main *bmain, Object *ob, const bool is_select)
 {
@@ -621,7 +624,7 @@ static int separate_armature_exec(bContext *C, wmOperator *op)
   bool ok = false;
 
   /* set wait cursor in case this takes a while */
-  WM_cursor_wait(1);
+  WM_cursor_wait(true);
 
   uint bases_len = 0;
   Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(
@@ -706,7 +709,7 @@ static int separate_armature_exec(bContext *C, wmOperator *op)
   MEM_freeN(bases);
 
   /* Recalculate/redraw + cleanup */
-  WM_cursor_wait(0);
+  WM_cursor_wait(false);
 
   if (ok) {
     BKE_report(op->reports, RPT_INFO, "Separated bones");
@@ -948,7 +951,7 @@ void ARMATURE_OT_parent_set(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   RNA_def_enum(
-      ot->srna, "type", prop_editarm_make_parent_types, 0, "ParentType", "Type of parenting");
+      ot->srna, "type", prop_editarm_make_parent_types, 0, "Parent Type", "Type of parenting");
 }
 
 static const EnumPropertyItem prop_editarm_clear_parent_types[] = {
@@ -1029,7 +1032,7 @@ void ARMATURE_OT_parent_clear(wmOperatorType *ot)
                           "type",
                           prop_editarm_clear_parent_types,
                           0,
-                          "ClearType",
+                          "Clear Type",
                           "What way to clear parenting");
 }
 

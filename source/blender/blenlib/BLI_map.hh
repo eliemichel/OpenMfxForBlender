@@ -120,6 +120,9 @@ template<
      */
     typename Allocator = GuardedAllocator>
 class Map {
+ public:
+  using size_type = int64_t;
+
  private:
   /**
    * Slots are either empty, occupied or removed. The number of occupied slots can be computed by
@@ -230,19 +233,25 @@ class Map {
    */
   void add_new(const Key &key, const Value &value)
   {
-    this->add_new__impl(key, value, hash_(key));
+    this->add_new_as(key, value);
   }
   void add_new(const Key &key, Value &&value)
   {
-    this->add_new__impl(key, std::move(value), hash_(key));
+    this->add_new_as(key, std::move(value));
   }
   void add_new(Key &&key, const Value &value)
   {
-    this->add_new__impl(std::move(key), value, hash_(key));
+    this->add_new_as(std::move(key), value);
   }
   void add_new(Key &&key, Value &&value)
   {
-    this->add_new__impl(std::move(key), std::move(value), hash_(key));
+    this->add_new_as(std::move(key), std::move(value));
+  }
+  template<typename ForwardKey, typename ForwardValue>
+  void add_new_as(ForwardKey &&key, ForwardValue &&value)
+  {
+    this->add_new__impl(
+        std::forward<ForwardKey>(key), std::forward<ForwardValue>(value), hash_(key));
   }
 
   /**
@@ -617,6 +626,9 @@ class Map {
    * This uses the "curiously recurring template pattern" (CRTP).
    */
   template<typename SubIterator> struct BaseIterator {
+    using iterator_category = std::forward_iterator_tag;
+    using difference_type = std::ptrdiff_t;
+
     Slot *slots_;
     int64_t total_slots_;
     int64_t current_slot_;
@@ -636,11 +648,23 @@ class Map {
       return *this;
     }
 
+    BaseIterator operator++(int) const
+    {
+      BaseIterator copied_iterator = *this;
+      ++copied_iterator;
+      return copied_iterator;
+    }
+
     friend bool operator!=(const BaseIterator &a, const BaseIterator &b)
     {
       BLI_assert(a.slots_ == b.slots_);
       BLI_assert(a.total_slots_ == b.total_slots_);
       return a.current_slot_ != b.current_slot_;
+    }
+
+    friend bool operator==(const BaseIterator &a, const BaseIterator &b)
+    {
+      return !(a != b);
     }
 
     SubIterator begin() const
@@ -666,6 +690,10 @@ class Map {
 
   class KeyIterator final : public BaseIterator<KeyIterator> {
    public:
+    using value_type = Key;
+    using pointer = const Key *;
+    using reference = const Key &;
+
     KeyIterator(const Slot *slots, int64_t total_slots, int64_t current_slot)
         : BaseIterator<KeyIterator>(slots, total_slots, current_slot)
     {
@@ -679,6 +707,10 @@ class Map {
 
   class ValueIterator final : public BaseIterator<ValueIterator> {
    public:
+    using value_type = Value;
+    using pointer = const Value *;
+    using reference = const Value &;
+
     ValueIterator(const Slot *slots, int64_t total_slots, int64_t current_slot)
         : BaseIterator<ValueIterator>(slots, total_slots, current_slot)
     {
@@ -692,6 +724,10 @@ class Map {
 
   class MutableValueIterator final : public BaseIterator<MutableValueIterator> {
    public:
+    using value_type = Value;
+    using pointer = Value *;
+    using reference = Value &;
+
     MutableValueIterator(const Slot *slots, int64_t total_slots, int64_t current_slot)
         : BaseIterator<MutableValueIterator>(slots, total_slots, current_slot)
     {
@@ -720,6 +756,10 @@ class Map {
 
   class ItemIterator final : public BaseIterator<ItemIterator> {
    public:
+    using value_type = Item;
+    using pointer = Item *;
+    using reference = Item &;
+
     ItemIterator(const Slot *slots, int64_t total_slots, int64_t current_slot)
         : BaseIterator<ItemIterator>(slots, total_slots, current_slot)
     {
@@ -734,6 +774,10 @@ class Map {
 
   class MutableItemIterator final : public BaseIterator<MutableItemIterator> {
    public:
+    using value_type = MutableItem;
+    using pointer = MutableItem *;
+    using reference = MutableItem &;
+
     MutableItemIterator(const Slot *slots, int64_t total_slots, int64_t current_slot)
         : BaseIterator<MutableItemIterator>(slots, total_slots, current_slot)
     {
@@ -1010,7 +1054,7 @@ class Map {
           return;
         }
         else {
-          auto return_value = create_value(value_ptr);
+          auto &&return_value = create_value(value_ptr);
           slot.occupy_no_value(std::forward<ForwardKey>(key), hash);
           occupied_and_removed_slots_++;
           return return_value;

@@ -51,6 +51,10 @@ typedef enum {
 #define NODE_GRID_STEPS 5
 
 /* space_node.c */
+
+void ED_node_cursor_location_get(const struct SpaceNode *snode, float value[2]);
+void ED_node_cursor_location_set(struct SpaceNode *snode, const float value[2]);
+
 int ED_node_tree_path_length(struct SpaceNode *snode);
 void ED_node_tree_path_get(struct SpaceNode *snode, char *value);
 void ED_node_tree_path_get_fixedbuf(struct SpaceNode *snode, char *value, int max_length);
@@ -76,7 +80,7 @@ void ED_node_sample_set(const float col[4]);
 void ED_node_draw_snap(
     struct View2D *v2d, const float cent[2], float size, NodeBorder border, unsigned int pos);
 
-/* node_draw.c */
+/* node_draw.cc */
 void ED_node_socket_draw(struct bNodeSocket *sock,
                          const struct rcti *rect,
                          const float color[4],
@@ -96,7 +100,7 @@ void ED_node_set_tree_type(struct SpaceNode *snode, struct bNodeTreeType *typein
 bool ED_node_is_compositor(struct SpaceNode *snode);
 bool ED_node_is_shader(struct SpaceNode *snode);
 bool ED_node_is_texture(struct SpaceNode *snode);
-bool ED_node_is_simulation(struct SpaceNode *snode);
+bool ED_node_is_geometry(struct SpaceNode *snode);
 
 void ED_node_shader_default(const struct bContext *C, struct ID *id);
 void ED_node_composit_default(const struct bContext *C, struct Scene *scene);
@@ -117,6 +121,11 @@ void ED_node_composite_job(const struct bContext *C,
 void ED_operatormacros_node(void);
 
 /* node_view.c */
+bool ED_space_node_get_position(struct Main *bmain,
+                                struct SpaceNode *snode,
+                                struct ARegion *region,
+                                const int mval[2],
+                                float fpos[2]);
 bool ED_space_node_color_sample(struct Main *bmain,
                                 struct SpaceNode *snode,
                                 struct ARegion *region,

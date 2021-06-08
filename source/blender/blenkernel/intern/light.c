@@ -202,11 +202,16 @@ IDTypeInfo IDType_ID_LA = {
     .make_local = NULL,
     .foreach_id = light_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = light_blend_write,
     .blend_read_data = light_blend_read_data,
     .blend_read_lib = light_blend_read_lib,
     .blend_read_expand = light_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 Light *BKE_light_add(Main *bmain, const char *name)

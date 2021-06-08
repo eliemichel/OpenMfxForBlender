@@ -127,7 +127,7 @@ static void rna_def_light(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, rna_enum_light_type_items);
-  RNA_def_property_ui_text(prop, "Type", "Type of Light");
+  RNA_def_property_ui_text(prop, "Type", "Type of light");
   RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_ID_LIGHT);
   RNA_def_property_update(prop, 0, "rna_Light_draw_update");
 
@@ -150,9 +150,23 @@ static void rna_def_light(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "specular_factor", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "spec_fac");
-  RNA_def_property_range(prop, 0.0f, 9999.0f);
+  RNA_def_property_range(prop, 0.0f, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.01, 2);
   RNA_def_property_ui_text(prop, "Specular Factor", "Specular reflection multiplier");
+  RNA_def_property_update(prop, 0, "rna_Light_update");
+
+  prop = RNA_def_property(srna, "diffuse_factor", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "diff_fac");
+  RNA_def_property_range(prop, 0.0f, FLT_MAX);
+  RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.01, 2);
+  RNA_def_property_ui_text(prop, "Diffuse Factor", "Diffuse reflection multiplier");
+  RNA_def_property_update(prop, 0, "rna_Light_update");
+
+  prop = RNA_def_property(srna, "volume_factor", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "volume_fac");
+  RNA_def_property_range(prop, 0.0f, FLT_MAX);
+  RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.01, 2);
+  RNA_def_property_ui_text(prop, "Volume Factor", "Volume light multiplier");
   RNA_def_property_update(prop, 0, "rna_Light_update");
 
   prop = RNA_def_property(srna, "use_custom_distance", PROP_BOOLEAN, PROP_NONE);
@@ -466,6 +480,15 @@ static void rna_def_area_light(BlenderRNA *brna)
       "Size Y",
       "Size of the area of the area light in the Y direction for rectangle shapes");
   RNA_def_property_update(prop, 0, "rna_Light_draw_update");
+
+  prop = RNA_def_property(srna, "spread", PROP_FLOAT, PROP_ANGLE);
+  RNA_def_property_float_sdna(prop, NULL, "area_spread");
+  RNA_def_property_range(prop, DEG2RADF(1.0f), DEG2RADF(180.0f));
+  RNA_def_property_ui_text(
+      prop,
+      "Spread",
+      "How widely the emitted light fans out, as in the case of a gridded softbox");
+  RNA_def_property_update(prop, 0, "rna_Light_draw_update");
 }
 
 static void rna_def_spot_light(BlenderRNA *brna)
@@ -504,7 +527,7 @@ static void rna_def_spot_light(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Show Cone",
-      "Draw transparent cone in 3D view to visualize which objects are contained in it");
+      "Display transparent cone in 3D view to visualize which objects are contained in it");
   RNA_def_property_update(prop, 0, "rna_Light_draw_update");
 }
 

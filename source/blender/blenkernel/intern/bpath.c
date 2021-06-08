@@ -23,7 +23,7 @@
  * - passing output paths to the visitor?, like render out.
  * - passing sequence strips with many images.
  * - passing directory paths - visitors don't know which path is a dir or a file.
- * */
+ */
 
 #include <sys/stat.h>
 
@@ -73,11 +73,12 @@
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
-#include "BKE_sequencer.h"
 
 #include "BKE_bpath.h" /* own include */
 
 #include "CLG_log.h"
+
+#include "SEQ_iterator.h"
 
 #ifndef _MSC_VER
 #  include "BLI_strict_flags.h"
@@ -782,7 +783,7 @@ void BKE_bpath_traverse_main(Main *bmain,
                              const int flag,
                              void *bpath_user_data)
 {
-  ListBase *lbarray[MAX_LIBARRAY];
+  ListBase *lbarray[INDEX_ID_MAX];
   int a = set_listbasepointers(bmain, lbarray);
   while (a--) {
     BKE_bpath_traverse_id_list(bmain, lbarray[a], visit_cb, flag, bpath_user_data);

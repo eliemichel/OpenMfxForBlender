@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 /** \file
  * \ingroup bli
@@ -1418,7 +1417,7 @@ int isect_seg_seg_v2_lambda_mu_db(const double v1[2],
 
 /**
  * \param l1, l2: Coordinates (point of line).
- * \param sp, r:  Coordinate and radius (sphere).
+ * \param sp, r: Coordinate and radius (sphere).
  * \return r_p1, r_p2: Intersection coordinates.
  *
  * \note The order of assignment for intersection points (\a r_p1, \a r_p2) is predictable,
@@ -1439,12 +1438,12 @@ int isect_line_sphere_v3(const float l1[3],
   /* adapted for use in blender by Campbell Barton - 2011
    *
    * atelier iebele abel - 2001
-   * atelier@iebele.nl
+   * <atelier@iebele.nl>
    * http://www.iebele.nl
    *
    * sphere_line_intersection function adapted from:
    * http://astronomy.swin.edu.au/pbourke/geometry/sphereline
-   * Paul Bourke pbourke@swin.edu.au
+   * Paul Bourke <pbourke@swin.edu.au>
    */
 
   const float ldir[3] = {
@@ -2295,6 +2294,81 @@ bool isect_plane_plane_v3(const float plane_a[4],
   }
 
   return false;
+}
+
+/**
+ * Intersect all planes, calling `callback_fn` for each point that intersects
+ * 3 of the planes that isn't outside any of the other planes.
+ *
+ * This can be thought of as calculating a convex-hull from an array of planes.
+ *
+ * \param eps_coplanar: Epsilon for testing if two planes are aligned (co-planar).
+ * \param eps_isect: Epsilon for testing of a point is behind any of the planes.
+ *
+ * \warning As complexity is a little under `O(N^3)`, this is only suitable for small arrays.
+ *
+ * \note This function could be optimized by some spatial structure.
+ */
+bool isect_planes_v3_fn(
+    const float planes[][4],
+    const int planes_len,
+    const float eps_coplanar,
+    const float eps_isect,
+    void (*callback_fn)(const float co[3], int i, int j, int k, void *user_data),
+    void *user_data)
+{
+  bool found = false;
+
+  float n1n2[3], n2n3[3], n3n1[3];
+
+  for (int i = 0; i < planes_len; i++) {
+    const float *n1 = planes[i];
+    for (int j = i + 1; j < planes_len; j++) {
+      const float *n2 = planes[j];
+      cross_v3_v3v3(n1n2, n1, n2);
+      if (len_squared_v3(n1n2) <= eps_coplanar) {
+        continue;
+      }
+      for (int k = j + 1; k < planes_len; k++) {
+        const float *n3 = planes[k];
+        cross_v3_v3v3(n2n3, n2, n3);
+        if (len_squared_v3(n2n3) <= eps_coplanar) {
+          continue;
+        }
+
+        cross_v3_v3v3(n3n1, n3, n1);
+        if (len_squared_v3(n3n1) <= eps_coplanar) {
+          continue;
+        }
+        const float quotient = -dot_v3v3(n1, n2n3);
+        if (fabsf(quotient) < eps_coplanar) {
+          continue;
+        }
+        const float co_test[3] = {
+            ((n2n3[0] * n1[3]) + (n3n1[0] * n2[3]) + (n1n2[0] * n3[3])) / quotient,
+            ((n2n3[1] * n1[3]) + (n3n1[1] * n2[3]) + (n1n2[1] * n3[3])) / quotient,
+            ((n2n3[2] * n1[3]) + (n3n1[2] * n2[3]) + (n1n2[2] * n3[3])) / quotient,
+        };
+        int i_test;
+        for (i_test = 0; i_test < planes_len; i_test++) {
+          const float *np_test = planes[i_test];
+          if (((dot_v3v3(np_test, co_test) + np_test[3]) > eps_isect)) {
+            /* For low epsilon values the point could intersect it's own plane. */
+            if (!ELEM(i_test, i, j, k)) {
+              break;
+            }
+          }
+        }
+
+        if (i_test == planes_len) { /* ok */
+          callback_fn(co_test, i, j, k, user_data);
+          found = true;
+        }
+      }
+    }
+  }
+
+  return found;
 }
 
 /**
@@ -3812,7 +3886,7 @@ void interp_weights_quad_v3(float w[4],
  * - 0 if the point is outside of triangle.
  * - 1 if the point is inside triangle.
  * - 2 if it's on the edge.
- * */
+ */
 int barycentric_inside_triangle_v2(const float w[3])
 {
   if (IN_RANGE(w[0], 0.0f, 1.0f) && IN_RANGE(w[1], 0.0f, 1.0f) && IN_RANGE(w[2], 0.0f, 1.0f)) {
@@ -4181,6 +4255,7 @@ int interp_sparse_array(float *array, const int list_size, const float skipval)
   return 1;
 }
 
+/* -------------------------------------------------------------------- */
 /** \name interp_weights_poly_v2, v3
  * \{ */
 
@@ -4811,8 +4886,8 @@ void window_translate_m4(float winmat[4][4], float perspmat[4][4], const float x
     len1 = (1.0f / len_v3(v1));
     len2 = (1.0f / len_v3(v2));
 
-    winmat[2][0] += len1 * winmat[0][0] * x;
-    winmat[2][1] += len2 * winmat[1][1] * y;
+    winmat[2][0] -= len1 * winmat[0][0] * x;
+    winmat[2][1] -= len2 * winmat[1][1] * y;
   }
   else {
     winmat[3][0] += x;
@@ -5158,7 +5233,7 @@ void map_to_sphere(float *r_u, float *r_v, const float x, const float y, const f
   len = sqrtf(x * x + y * y + z * z);
   if (len > 0.0f) {
     if (UNLIKELY(x == 0.0f && y == 0.0f)) {
-      *r_u = 0.0f; /* othwise domain error */
+      *r_u = 0.0f; /* Otherwise domain error. */
     }
     else {
       *r_u = (1.0f - atan2f(x, y) / (float)M_PI) / 2.0f;
@@ -5461,7 +5536,7 @@ void vcloud_estimate_transform_v3(const int list_size,
       /* build 'projection' matrix */
       for (a = 0; a < list_size; a++) {
         sub_v3_v3v3(va, rpos[a], accu_rcom);
-        /* mul_v3_fl(va, bp->mass);  mass needs renormalzation here ?? */
+        /* mul_v3_fl(va, bp->mass);  mass needs re-normalization here ?? */
         sub_v3_v3v3(vb, pos[a], accu_com);
         /* mul_v3_fl(va, rp->mass); */
         m[0][0] += va[0] * vb[0];
@@ -5495,11 +5570,11 @@ void vcloud_estimate_transform_v3(const int list_size,
       stunt[0] = q[0][0];
       stunt[1] = q[1][1];
       stunt[2] = q[2][2];
-      /* renormalizing for numeric stability */
-      mul_m3_fl(q, 1.f / len_v3(stunt));
+      /* Re-normalizing for numeric stability. */
+      mul_m3_fl(q, 1.0f / len_v3(stunt));
 
-      /* this is pretty much Polardecompose 'inline' the algo based on Higham's thesis */
-      /* without the far case ... but seems to work here pretty neat                   */
+      /* This is pretty much Polar-decompose 'inline' the algorithm based on Higham's thesis
+       * without the far case ... but seems to work here pretty neat. */
       odet = 0.0f;
       ndet = determinant_m3_array(q);
       while ((odet - ndet) * (odet - ndet) > eps && i < imax) {
@@ -5761,7 +5836,7 @@ bool form_factor_visible_quad(const float p[3],
   return true;
 }
 
-/* altivec optimization, this works, but is unused */
+/* `AltiVec` optimization, this works, but is unused. */
 
 #if 0
 #  include <Accelerate/Accelerate.h>
@@ -5832,7 +5907,7 @@ static float ff_quad_form_factor(float *p, float *n, float *q0, float *q1, float
 
 #if 0
 
-#  include <xmmintrin.h>
+#  include "BLI_simd.h"
 
 static __m128 sse_approx_acos(__m128 x)
 {
@@ -6050,7 +6125,7 @@ bool is_quad_convex_v3(const float v1[3], const float v2[3], const float v3[3], 
 
 bool is_quad_convex_v2(const float v1[2], const float v2[2], const float v3[2], const float v4[2])
 {
-  /* linetests, the 2 diagonals have to instersect to be convex */
+  /* Line-tests, the 2 diagonals have to intersect to be convex. */
   return (isect_seg_seg_v2(v1, v3, v2, v4) > 0);
 }
 
@@ -6158,7 +6233,7 @@ float cubic_tangent_factor_circle_v3(const float tan_l[3], const float tan_r[3])
     return (1.0f / 3.0f) * 0.75f;
   }
   if (tan_dot < -1.0f + eps) {
-    /* parallele tangents (half-circle) */
+    /* Parallel tangents (half-circle). */
     return (1.0f / 2.0f);
   }
 
@@ -6169,4 +6244,57 @@ float cubic_tangent_factor_circle_v3(const float tan_l[3], const float tan_r[3])
   const float angle_sin = sinf(angle);
   const float angle_cos = cosf(angle);
   return ((1.0f - angle_cos) / (angle_sin * 2.0f)) / angle_sin;
+}
+
+/**
+ * Utility for computing approximate geodesic distances on triangle meshes.
+ *
+ * Given triangle with vertex coordinates v0, v1, v2, and known geodesic distances
+ * dist1 and dist2 at v1 and v2, estimate a geodesic distance at vertex v0.
+ *
+ * From "Dart Throwing on Surfaces", EGSR 2009. Section 7, Geodesic Dart Throwing.
+ */
+float geodesic_distance_propagate_across_triangle(
+    const float v0[3], const float v1[3], const float v2[3], const float dist1, const float dist2)
+{
+  /* Vectors along triangle edges. */
+  float v10[3], v12[3];
+  sub_v3_v3v3(v10, v0, v1);
+  sub_v3_v3v3(v12, v2, v1);
+
+  if (dist1 != 0.0f && dist2 != 0.0f) {
+    /* Local coordinate system in the triangle plane. */
+    float u[3], v[3], n[3];
+    const float d12 = normalize_v3_v3(u, v12);
+
+    if (d12 * d12 > 0.0f) {
+      cross_v3_v3v3(n, v12, v10);
+      normalize_v3(n);
+      cross_v3_v3v3(v, n, u);
+
+      /* v0 in local coordinates */
+      const float v0_[2] = {dot_v3v3(v10, u), fabsf(dot_v3v3(v10, v))};
+
+      /* Compute virtual source point in local coordinates, that we estimate the geodesic
+       * distance is being computed from. See figure 9 in the paper for the derivation. */
+      const float a = 0.5f * (1.0f + (dist1 * dist1 - dist2 * dist2) / (d12 * d12));
+      const float hh = dist1 * dist1 - a * a * d12 * d12;
+
+      if (hh > 0.0f) {
+        const float h = sqrtf(hh);
+        const float S_[2] = {a * d12, -h};
+
+        /* Only valid if the line between the source point and v0 crosses
+         * the edge between v1 and v2. */
+        const float x_intercept = S_[0] + h * (v0_[0] - S_[0]) / (v0_[1] + h);
+        if (x_intercept >= 0.0f && x_intercept <= d12) {
+          return len_v2v2(S_, v0_);
+        }
+      }
+    }
+  }
+
+  /* Fall back to Dijsktra approximation in trivial case, or if no valid source
+   * point found that connects to v0 across the triangle. */
+  return min_ff(dist1 + len_v3(v10), dist2 + len_v3v3(v0, v2));
 }

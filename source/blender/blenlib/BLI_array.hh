@@ -60,6 +60,16 @@ template<
      */
     typename Allocator = GuardedAllocator>
 class Array {
+ public:
+  using value_type = T;
+  using pointer = T *;
+  using const_pointer = const T *;
+  using reference = T &;
+  using const_reference = const T &;
+  using iterator = T *;
+  using const_iterator = const T *;
+  using size_type = int64_t;
+
  private:
   /** The beginning of the array. It might point into the inline buffer. */
   T *data_;
@@ -220,13 +230,13 @@ class Array {
     return MutableSpan<T>(data_, size_);
   }
 
-  template<typename U, typename std::enable_if_t<is_convertible_pointer_v<T, U>> * = nullptr>
+  template<typename U, typename std::enable_if_t<is_span_convertible_pointer_v<T, U>> * = nullptr>
   operator Span<U>() const
   {
     return Span<U>(data_, size_);
   }
 
-  template<typename U, typename std::enable_if_t<is_convertible_pointer_v<T, U>> * = nullptr>
+  template<typename U, typename std::enable_if_t<is_span_convertible_pointer_v<T, U>> * = nullptr>
   operator MutableSpan<U>()
   {
     return MutableSpan<U>(data_, size_);

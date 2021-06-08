@@ -26,6 +26,8 @@
 
 #include "RE_pipeline.h"
 
+namespace blender::compositor {
+
 /**
  * Base class for all renderlayeroperations
  *
@@ -68,7 +70,8 @@ class RenderLayersProg : public NodeOperation {
   /**
    * Determine the output resolution. The resolution is retrieved from the Renderer
    */
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override;
 
   /**
    * retrieve the reference to the float buffer of the renderer.
@@ -94,7 +97,7 @@ class RenderLayersProg : public NodeOperation {
   {
     this->m_scene = scene;
   }
-  Scene *getScene()
+  Scene *getScene() const
   {
     return this->m_scene;
   }
@@ -106,7 +109,7 @@ class RenderLayersProg : public NodeOperation {
   {
     this->m_layerId = layerId;
   }
-  short getLayerId()
+  short getLayerId() const
   {
     return this->m_layerId;
   }
@@ -118,9 +121,11 @@ class RenderLayersProg : public NodeOperation {
   {
     return this->m_viewName;
   }
-  void initExecution();
-  void deinitExecution();
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void initExecution() override;
+  void deinitExecution() override;
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
+
+  std::unique_ptr<MetaData> getMetaData() override;
 };
 
 class RenderLayersAOOperation : public RenderLayersProg {
@@ -129,7 +134,7 @@ class RenderLayersAOOperation : public RenderLayersProg {
       : RenderLayersProg(passName, type, elementsize)
   {
   }
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };
 
 class RenderLayersAlphaProg : public RenderLayersProg {
@@ -138,7 +143,7 @@ class RenderLayersAlphaProg : public RenderLayersProg {
       : RenderLayersProg(passName, type, elementsize)
   {
   }
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };
 
 class RenderLayersDepthProg : public RenderLayersProg {
@@ -147,5 +152,7 @@ class RenderLayersDepthProg : public RenderLayersProg {
       : RenderLayersProg(passName, type, elementsize)
   {
   }
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };
+
+}  // namespace blender::compositor

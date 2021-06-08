@@ -198,8 +198,15 @@ class RENDER_PT_eevee_depth_of_field(RenderButtonsPanel, Panel):
 
         col = layout.column()
         col.prop(props, "bokeh_max_size")
-        # Not supported yet
-        # col.prop(props, "bokeh_threshold")
+        col.prop(props, "bokeh_threshold")
+        col.prop(props, "bokeh_neighbor_max")
+        col.prop(props, "bokeh_denoise_fac")
+        col.prop(props, "use_bokeh_high_quality_slight_defocus")
+        col.prop(props, "use_bokeh_jittered")
+
+        col = layout.column()
+        col.active = props.use_bokeh_jittered
+        col.prop(props, "bokeh_overblur")
 
 
 class RENDER_PT_eevee_bloom(RenderButtonsPanel, Panel):
@@ -486,14 +493,12 @@ class RENDER_PT_eevee_film(RenderButtonsPanel, Panel):
         col.prop(rd, "film_transparent", text="Transparent")
 
         col = layout.column(align=False, heading="Overscan")
-        col.use_property_decorate = False
         row = col.row(align=True)
         sub = row.row(align=True)
         sub.prop(props, "use_overscan", text="")
         sub = sub.row(align=True)
         sub.active = props.use_overscan
         sub.prop(props, "overscan_size", text="")
-        row.prop_decorator(props, "overscan_size")
 
 
 class RENDER_PT_eevee_hair(RenderButtonsPanel, Panel):

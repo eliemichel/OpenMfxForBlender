@@ -20,6 +20,8 @@
 
 #include "COM_NodeOperation.h"
 
+namespace blender::compositor {
+
 class BoxMaskOperation : public NodeOperation {
  private:
   /**
@@ -39,19 +41,19 @@ class BoxMaskOperation : public NodeOperation {
   BoxMaskOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   void setData(NodeBoxMask *data)
   {
@@ -63,3 +65,5 @@ class BoxMaskOperation : public NodeOperation {
     this->m_maskType = maskType;
   }
 };
+
+}  // namespace blender::compositor

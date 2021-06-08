@@ -71,7 +71,7 @@ ENUM_OPERATORS(eGPUTextureType, GPU_TEXTURE_CUBE_ARRAY)
 /**
  * Implementation of Textures.
  * Base class which is then specialized for each implementation (GL, VK, ...).
- **/
+ */
 class Texture {
  public:
   /** Internal Sampler state. */
@@ -83,11 +83,11 @@ class Texture {
 
  protected:
   /* ---- Texture format (immutable after init). ---- */
-  /** Width & Height & Depth. For cubemap arrays, d is number of facelayers. */
+  /** Width & Height & Depth. For cube-map arrays, d is number of face-layers. */
   int w_, h_, d_;
   /** Internal data format. */
   eGPUTextureFormat format_;
-  /** Format caracteristics. */
+  /** Format characteristics. */
   eGPUTextureFormatFlag format_flag_;
   /** Texture type. */
   eGPUTextureType type_;
@@ -101,7 +101,7 @@ class Texture {
   /** For debugging */
   char name_[DEBUG_NAME_LEN];
 
-  /** Framebuffer references to update on deletion. */
+  /** Frame-buffer references to update on deletion. */
   GPUAttachmentType fb_attachment_[GPU_TEX_MAX_FBO_ATTACHED];
   FrameBuffer *fb_[GPU_TEX_MAX_FBO_ATTACHED];
 
@@ -245,7 +245,7 @@ class Texture {
   virtual bool init_internal(GPUVertBuf *vbo) = 0;
 };
 
-/* Syntacting suggar. */
+/* Syntactic sugar. */
 static inline GPUTexture *wrap(Texture *vert)
 {
   return reinterpret_cast<GPUTexture *>(vert);
@@ -283,6 +283,7 @@ inline size_t to_bytesize(eGPUTextureFormat format)
     case GPU_RGBA8UI:
     case GPU_RGBA8:
     case GPU_SRGB8_A8:
+    case GPU_RGB10_A2:
     case GPU_R11F_G11F_B10F:
     case GPU_R32F:
     case GPU_R32UI:
@@ -368,6 +369,7 @@ inline int to_component_len(eGPUTextureFormat format)
     case GPU_RGBA16:
     case GPU_RGBA32F:
     case GPU_SRGB8_A8:
+    case GPU_RGB10_A2:
       return 4;
     case GPU_RGB16F:
     case GPU_R11F_G11F_B10F:
@@ -384,22 +386,28 @@ inline int to_component_len(eGPUTextureFormat format)
   }
 }
 
-inline size_t to_bytesize(eGPUTextureFormat tex_format, eGPUDataFormat data_format)
+inline size_t to_bytesize(eGPUDataFormat data_format)
 {
   switch (data_format) {
-    case GPU_DATA_UNSIGNED_BYTE:
-      return 1 * to_component_len(tex_format);
+    case GPU_DATA_UBYTE:
+      return 1;
     case GPU_DATA_FLOAT:
     case GPU_DATA_INT:
-    case GPU_DATA_UNSIGNED_INT:
-      return 4 * to_component_len(tex_format);
-    case GPU_DATA_UNSIGNED_INT_24_8:
+    case GPU_DATA_UINT:
+      return 4;
+    case GPU_DATA_UINT_24_8:
     case GPU_DATA_10_11_11_REV:
+    case GPU_DATA_2_10_10_10_REV:
       return 4;
     default:
       BLI_assert(!"Data format incorrect or unsupported\n");
       return 0;
   }
+}
+
+inline size_t to_bytesize(eGPUTextureFormat tex_format, eGPUDataFormat data_format)
+{
+  return to_component_len(tex_format) * to_bytesize(data_format);
 }
 
 /* Definitely not complete, edit according to the gl specification. */
@@ -412,12 +420,12 @@ inline bool validate_data_format(eGPUTextureFormat tex_format, eGPUDataFormat da
       return data_format == GPU_DATA_FLOAT;
     case GPU_DEPTH24_STENCIL8:
     case GPU_DEPTH32F_STENCIL8:
-      return data_format == GPU_DATA_UNSIGNED_INT_24_8;
+      return data_format == GPU_DATA_UINT_24_8;
     case GPU_R8UI:
     case GPU_R16UI:
     case GPU_RG16UI:
     case GPU_R32UI:
-      return data_format == GPU_DATA_UNSIGNED_INT;
+      return data_format == GPU_DATA_UINT;
     case GPU_RG16I:
     case GPU_R16I:
       return data_format == GPU_DATA_INT;
@@ -426,7 +434,9 @@ inline bool validate_data_format(eGPUTextureFormat tex_format, eGPUDataFormat da
     case GPU_RGBA8:
     case GPU_RGBA8UI:
     case GPU_SRGB8_A8:
-      return ELEM(data_format, GPU_DATA_UNSIGNED_BYTE, GPU_DATA_FLOAT);
+      return ELEM(data_format, GPU_DATA_UBYTE, GPU_DATA_FLOAT);
+    case GPU_RGB10_A2:
+      return ELEM(data_format, GPU_DATA_2_10_10_10_REV, GPU_DATA_FLOAT);
     case GPU_R11F_G11F_B10F:
       return ELEM(data_format, GPU_DATA_10_11_11_REV, GPU_DATA_FLOAT);
     default:
@@ -444,12 +454,12 @@ inline eGPUDataFormat to_data_format(eGPUTextureFormat tex_format)
       return GPU_DATA_FLOAT;
     case GPU_DEPTH24_STENCIL8:
     case GPU_DEPTH32F_STENCIL8:
-      return GPU_DATA_UNSIGNED_INT_24_8;
+      return GPU_DATA_UINT_24_8;
     case GPU_R8UI:
     case GPU_R16UI:
     case GPU_RG16UI:
     case GPU_R32UI:
-      return GPU_DATA_UNSIGNED_INT;
+      return GPU_DATA_UINT;
     case GPU_RG16I:
     case GPU_R16I:
       return GPU_DATA_INT;
@@ -458,7 +468,9 @@ inline eGPUDataFormat to_data_format(eGPUTextureFormat tex_format)
     case GPU_RGBA8:
     case GPU_RGBA8UI:
     case GPU_SRGB8_A8:
-      return GPU_DATA_UNSIGNED_BYTE;
+      return GPU_DATA_UBYTE;
+    case GPU_RGB10_A2:
+      return GPU_DATA_2_10_10_10_REV;
     case GPU_R11F_G11F_B10F:
       return GPU_DATA_10_11_11_REV;
     default:
@@ -540,7 +552,18 @@ static inline eGPUTextureFormat to_texture_format(const GPUVertFormat *format)
         case GPU_COMP_I16:
           return GPU_RGBA16I;
         case GPU_COMP_U16:
-          return GPU_RGBA16UI;
+          /* Note: Checking the fetch mode to select the right GPU texture format. This can be
+           * added to other formats as well. */
+          switch (format->attrs[0].fetch_mode) {
+            case GPU_FETCH_INT:
+              return GPU_RGBA16UI;
+            case GPU_FETCH_INT_TO_FLOAT_UNIT:
+              return GPU_RGBA16;
+            case GPU_FETCH_INT_TO_FLOAT:
+              return GPU_RGBA16F;
+            case GPU_FETCH_FLOAT:
+              return GPU_RGBA16F;
+          }
         case GPU_COMP_I32:
           return GPU_RGBA32I;
         case GPU_COMP_U32:

@@ -66,6 +66,17 @@
 #define VCLASS_EMPTY_AXES_SHADOW (1 << 13)
 #define VCLASS_EMPTY_SIZE (1 << 14)
 
+/* Sphere shape resolution */
+/* Low */
+#define DRW_SPHERE_SHAPE_LATITUDE_LOW 32
+#define DRW_SPHERE_SHAPE_LONGITUDE_LOW 24
+/* Medium */
+#define DRW_SPHERE_SHAPE_LATITUDE_MEDIUM 64
+#define DRW_SPHERE_SHAPE_LONGITUDE_MEDIUM 48
+/* High */
+#define DRW_SPHERE_SHAPE_LATITUDE_HIGH 80
+#define DRW_SPHERE_SHAPE_LONGITUDE_HIGH 60
+
 typedef struct Vert {
   float pos[3];
   int class;
@@ -88,7 +99,6 @@ static struct DRWShapeCache {
   GPUBatch *drw_quad;
   GPUBatch *drw_quad_wires;
   GPUBatch *drw_grid;
-  GPUBatch *drw_sphere;
   GPUBatch *drw_plain_axes;
   GPUBatch *drw_single_arrow;
   GPUBatch *drw_cube;
@@ -140,6 +150,7 @@ static struct DRWShapeCache {
   GPUBatch *drw_particle_circle;
   GPUBatch *drw_particle_axis;
   GPUBatch *drw_gpencil_dummy_quad;
+  GPUBatch *drw_sphere_lod[DRW_LOD_MAX];
 } SHC = {NULL};
 
 void DRW_shape_cache_free(void)
@@ -473,11 +484,30 @@ static void sphere_lat_lon_vert(GPUVertBuf *vbo, int *v_ofs, float lat, float lo
   (*v_ofs)++;
 }
 
-GPUBatch *DRW_cache_sphere_get(void)
+GPUBatch *DRW_cache_sphere_get(const eDRWLevelOfDetail level_of_detail)
 {
-  if (!SHC.drw_sphere) {
-    const int lat_res = 32;
-    const int lon_res = 24;
+  BLI_assert(level_of_detail >= DRW_LOD_LOW && level_of_detail < DRW_LOD_MAX);
+
+  if (!SHC.drw_sphere_lod[level_of_detail]) {
+    int lat_res;
+    int lon_res;
+
+    switch (level_of_detail) {
+      case DRW_LOD_LOW:
+        lat_res = DRW_SPHERE_SHAPE_LATITUDE_LOW;
+        lon_res = DRW_SPHERE_SHAPE_LONGITUDE_LOW;
+        break;
+      case DRW_LOD_MEDIUM:
+        lat_res = DRW_SPHERE_SHAPE_LATITUDE_MEDIUM;
+        lon_res = DRW_SPHERE_SHAPE_LONGITUDE_MEDIUM;
+        break;
+      case DRW_LOD_HIGH:
+        lat_res = DRW_SPHERE_SHAPE_LATITUDE_HIGH;
+        lon_res = DRW_SPHERE_SHAPE_LONGITUDE_HIGH;
+        break;
+      default:
+        return NULL;
+    }
 
     GPUVertFormat format = extra_vert_format();
     GPU_vertformat_attr_add(&format, "nor", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
@@ -508,9 +538,10 @@ GPUBatch *DRW_cache_sphere_get(void)
       }
     }
 
-    SHC.drw_sphere = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
+    SHC.drw_sphere_lod[level_of_detail] = GPU_batch_create_ex(
+        GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
   }
-  return SHC.drw_sphere;
+  return SHC.drw_sphere_lod[level_of_detail];
 }
 
 /** \} */
@@ -904,8 +935,15 @@ GPUVertBuf *DRW_cache_object_pos_vertbuf_get(Object *ob)
 
 int DRW_cache_object_material_count_get(struct Object *ob)
 {
+  short type = ob->type;
+
   Mesh *me = BKE_object_get_evaluated_mesh(ob);
-  short type = (me != NULL) ? OB_MESH : ob->type;
+  if (me != NULL && type != OB_POINTCLOUD) {
+    /* Some object types (e.g. curves) can have a Curve in ob->data, but will be rendered as mesh.
+     * For point clouds this never happens. Ideally this check would happen at another level and we
+     * would just have to care about ob->data here. */
+    type = OB_MESH;
+  }
 
   switch (type) {
     case OB_MESH:
@@ -1294,7 +1332,7 @@ GPUBatch *DRW_cache_field_vortex_get(void)
 #undef SPIRAL_RESOL
 }
 
-/* Screenaligned circle. */
+/* Screen-aligned circle. */
 GPUBatch *DRW_cache_field_curve_get(void)
 {
 #define CIRCLE_RESOL 32
@@ -1383,7 +1421,7 @@ GPUBatch *DRW_cache_field_cone_limit_get(void)
 #undef CIRCLE_RESOL
 }
 
-/* Screenaligned dashed circle */
+/* Screen-aligned dashed circle */
 GPUBatch *DRW_cache_field_sphere_limit_get(void)
 {
 #define CIRCLE_RESOL 32
@@ -1694,8 +1732,8 @@ GPUBatch *DRW_cache_speaker_get(void)
       copy_v3_fl3(v, r, 0.0f, z);
       GPU_vertbuf_attr_set(vbo, attr_id.pos, vidx++, v);
       for (int i = 1; i < segments; i++) {
-        float x = cosf(2.f * (float)M_PI * i / segments) * r;
-        float y = sinf(2.f * (float)M_PI * i / segments) * r;
+        float x = cosf(2.0f * (float)M_PI * i / segments) * r;
+        float y = sinf(2.0f * (float)M_PI * i / segments) * r;
         copy_v3_fl3(v, x, y, z);
         GPU_vertbuf_attr_set(vbo, attr_id.pos, vidx++, v);
         GPU_vertbuf_attr_set(vbo, attr_id.pos, vidx++, v);
@@ -2389,7 +2427,7 @@ GPUBatch *DRW_cache_bone_stick_get(void)
     /* Bone rectangle */
     pos[0] = 0.0f;
     for (int i = 0; i < 6; i++) {
-      pos[1] = (i == 0 || i == 3) ? 0.0f : ((i < 3) ? 1.0f : -1.0f);
+      pos[1] = (ELEM(i, 0, 3)) ? 0.0f : ((i < 3) ? 1.0f : -1.0f);
       flag = ((i < 2 || i > 4) ? POS_HEAD : POS_TAIL) | ((i == 0 || i == 3) ? 0 : COL_WIRE) |
              COL_BONE | POS_BONE;
       GPU_vertbuf_attr_set(vbo, attr_id.pos, v, pos);
@@ -2463,14 +2501,14 @@ static float axis_marker[8][2] = {
     {-1.0f * S_X, -1.0f * S_Y},
     {-1.0f * S_X, 1.0f * S_Y}
 #else /* diamond */
-    {-S_X, 0.f},
-    {0.f, S_Y},
-    {0.f, S_Y},
-    {S_X, 0.f},
-    {S_X, 0.f},
-    {0.f, -S_Y},
-    {0.f, -S_Y},
-    {-S_X, 0.f}
+    {-S_X, 0.0f},
+    {0.0f, S_Y},
+    {0.0f, S_Y},
+    {S_X, 0.0f},
+    {S_X, 0.0f},
+    {0.0f, -S_Y},
+    {0.0f, -S_Y},
+    {-S_X, 0.0f}
 #endif
 };
 #define MARKER_LEN (sizeof(axis_marker) / (sizeof(float[2])))
@@ -3354,7 +3392,7 @@ GPUBatch *DRW_cache_particles_get_prim(int type)
 
         int v = 0;
         int flag = VCLASS_EMPTY_AXES;
-        /* Set minimum to 0.001f so we can easilly normalize to get the color. */
+        /* Set minimum to 0.001f so we can easily normalize to get the color. */
         GPU_vertbuf_vert_set(vbo, v++, &(Vert){{0.0f, 0.0001f, 0.0f}, flag});
         GPU_vertbuf_vert_set(vbo, v++, &(Vert){{0.0f, 2.0f, 0.0f}, flag});
         GPU_vertbuf_vert_set(vbo, v++, &(Vert){{0.0001f, 0.0f, 0.0f}, flag});
@@ -3559,7 +3597,7 @@ void drw_batch_cache_generate_requested(Object *ob)
         DRW_mesh_batch_cache_create_requested(
             DST.task_graph, ob, mesh_eval, scene, is_paint_mode, use_hide);
       }
-      DRW_curve_batch_cache_create_requested(ob);
+      DRW_curve_batch_cache_create_requested(ob, scene);
       break;
     /* TODO all cases */
     default:

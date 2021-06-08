@@ -52,7 +52,6 @@
 #  include "BKE_linestyle.h"
 #  include "BKE_movieclip.h"
 #  include "BKE_node.h"
-#  include "BKE_sequencer.h"
 
 #  include "DEG_depsgraph.h"
 
@@ -60,6 +59,9 @@
 
 #  include "IMB_colormanagement.h"
 #  include "IMB_imbuf.h"
+
+#  include "SEQ_iterator.h"
+#  include "SEQ_relations.h"
 
 static int rna_CurveMapping_curves_length(PointerRNA *ptr)
 {
@@ -183,7 +185,11 @@ static char *rna_ColorRamp_path(PointerRNA *ptr)
         char *node_path;
 
         for (node = ntree->nodes.first; node; node = node->next) {
-          if (ELEM(node->type, SH_NODE_VALTORGB, CMP_NODE_VALTORGB, TEX_NODE_VALTORGB)) {
+          if (ELEM(node->type,
+                   SH_NODE_VALTORGB,
+                   CMP_NODE_VALTORGB,
+                   TEX_NODE_VALTORGB,
+                   GEO_NODE_ATTRIBUTE_COLOR_RAMP)) {
             if (node->storage == ptr->data) {
               /* all node color ramp properties called 'color_ramp'
                * prepend path from ID to the node
@@ -310,7 +316,11 @@ static void rna_ColorRamp_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *
         bNode *node;
 
         for (node = ntree->nodes.first; node; node = node->next) {
-          if (ELEM(node->type, SH_NODE_VALTORGB, CMP_NODE_VALTORGB, TEX_NODE_VALTORGB)) {
+          if (ELEM(node->type,
+                   SH_NODE_VALTORGB,
+                   CMP_NODE_VALTORGB,
+                   TEX_NODE_VALTORGB,
+                   GEO_NODE_ATTRIBUTE_COLOR_RAMP)) {
             ED_node_tag_update_nodetree(bmain, ntree, node);
           }
         }
@@ -607,14 +617,14 @@ static void rna_ColorManagedColorspaceSettings_reload_update(Main *bmain,
     MovieClip *clip = (MovieClip *)id;
 
     DEG_id_tag_update(&clip->id, ID_RECALC_SOURCE);
-    BKE_sequence_invalidate_movieclip_strips(bmain, clip);
+    SEQ_relations_invalidate_movieclip_strips(bmain, clip);
 
     WM_main_add_notifier(NC_MOVIECLIP | ND_DISPLAY, &clip->id);
     WM_main_add_notifier(NC_MOVIECLIP | NA_EDITED, &clip->id);
   }
   else if (GS(id->name) == ID_SCE) {
     Scene *scene = (Scene *)id;
-    BKE_sequence_invalidate_scene_strips(bmain, scene);
+    SEQ_relations_invalidate_scene_strips(bmain, scene);
 
     if (scene->ed) {
       ColorManagedColorspaceSettings *colorspace_settings = (ColorManagedColorspaceSettings *)
@@ -633,18 +643,18 @@ static void rna_ColorManagedColorspaceSettings_reload_update(Main *bmain,
       }
 
       if (seq_found) {
-        BKE_sequence_free_anim(seq);
+        SEQ_relations_sequence_free_anim(seq);
 
         if (seq->strip->proxy && seq->strip->proxy->anim) {
           IMB_free_anim(seq->strip->proxy->anim);
           seq->strip->proxy->anim = NULL;
         }
 
-        BKE_sequence_invalidate_cache_preprocessed(scene, seq);
+        SEQ_relations_invalidate_cache_preprocessed(scene, seq);
       }
       else {
         SEQ_ALL_BEGIN (scene->ed, seq) {
-          BKE_sequence_free_anim(seq);
+          SEQ_relations_sequence_free_anim(seq);
         }
         SEQ_ALL_END;
       }
@@ -886,6 +896,9 @@ static void rna_def_curvemapping(BlenderRNA *brna)
   func = RNA_def_function(srna, "update", "BKE_curvemapping_changed_all");
   RNA_def_function_ui_description(func, "Update curve mapping after making changes");
 
+  func = RNA_def_function(srna, "reset_view", "BKE_curvemapping_reset_view");
+  RNA_def_function_ui_description(func, "Reset the curve mapping grid to its clipping size");
+
   func = RNA_def_function(srna, "initialize", "rna_CurveMap_initialize");
   RNA_def_function_ui_description(func, "Initialize curve");
 
@@ -941,6 +954,7 @@ static void rna_def_color_ramp_element(BlenderRNA *brna)
   prop = RNA_def_property(srna, "position", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "pos");
   RNA_def_property_range(prop, 0, 1);
+  RNA_def_property_ui_range(prop, 0, 1, 1, 3);
   RNA_def_property_ui_text(prop, "Position", "Set position of selected color stop");
   RNA_def_property_update(prop, 0, "rna_ColorRamp_update");
 }
@@ -1096,7 +1110,7 @@ static void rna_def_histogram(BlenderRNA *brna)
   prop = RNA_def_property(srna, "mode", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "mode");
   RNA_def_property_enum_items(prop, prop_mode_items);
-  RNA_def_property_ui_text(prop, "Mode", "Channels to display when drawing the histogram");
+  RNA_def_property_ui_text(prop, "Mode", "Channels to display in the histogram");
 
   prop = RNA_def_property(srna, "show_line", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", HISTO_FLAG_LINE);

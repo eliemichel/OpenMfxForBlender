@@ -36,7 +36,7 @@ namespace {
 
 /* Mapping from ID.name to set of export hierarchy path. Duplicated objects can be exported
  * multiple times with different export paths, hence the set. */
-typedef std::map<std::string, std::set<std::string>> used_writers;
+using used_writers = std::map<std::string, std::set<std::string>>;
 
 class TestHierarchyWriter : public AbstractHierarchyWriter {
  public:
@@ -73,7 +73,7 @@ class TestingHierarchyIterator : public AbstractHierarchyIterator {
   explicit TestingHierarchyIterator(Depsgraph *depsgraph) : AbstractHierarchyIterator(depsgraph)
   {
   }
-  virtual ~TestingHierarchyIterator()
+  ~TestingHierarchyIterator() override
   {
     release_writers();
   }
@@ -106,13 +106,13 @@ class AbstractHierarchyIteratorTest : public BlendfileLoadingBaseTest {
  protected:
   TestingHierarchyIterator *iterator;
 
-  virtual void SetUp()
+  void SetUp() override
   {
     BlendfileLoadingBaseTest::SetUp();
     iterator = nullptr;
   }
 
-  virtual void TearDown()
+  void TearDown() override
   {
     iterator_free();
     BlendfileLoadingBaseTest::TearDown();
@@ -272,7 +272,7 @@ TEST_F(AbstractHierarchyIteratorTest, ExportSubsetTest)
   /* Even when only asking an export of transforms, on the first frame everything should be
    * exported. */
   {
-    ExportSubset export_subset = {0};
+    ExportSubset export_subset = {false};
     export_subset.transforms = true;
     export_subset.shapes = false;
     iterator->set_export_subset(export_subset);
@@ -296,7 +296,7 @@ TEST_F(AbstractHierarchyIteratorTest, ExportSubsetTest)
 
   /* Third iteration, should only write data now. */
   {
-    ExportSubset export_subset = {0};
+    ExportSubset export_subset = {false};
     export_subset.transforms = false;
     export_subset.shapes = true;
     iterator->set_export_subset(export_subset);
@@ -311,7 +311,7 @@ TEST_F(AbstractHierarchyIteratorTest, ExportSubsetTest)
 
   /* Fourth iteration, should export everything now. */
   {
-    ExportSubset export_subset = {0};
+    ExportSubset export_subset = {false};
     export_subset.transforms = true;
     export_subset.shapes = true;
     iterator->set_export_subset(export_subset);

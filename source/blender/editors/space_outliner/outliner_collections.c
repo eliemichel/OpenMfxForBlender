@@ -28,6 +28,7 @@
 
 #include "BKE_collection.h"
 #include "BKE_context.h"
+#include "BKE_idtype.h"
 #include "BKE_layer.h"
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
@@ -47,8 +48,6 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
-
-#include "UI_resources.h"
 
 #include "outliner_intern.h" /* own include */
 
@@ -70,7 +69,7 @@ bool outliner_is_collection_tree_element(const TreeElement *te)
            TSE_VIEW_COLLECTION_BASE)) {
     return true;
   }
-  if (tselem->type == 0 && te->idcode == ID_GR) {
+  if ((tselem->type == TSE_SOME_ID) && te->idcode == ID_GR) {
     return true;
   }
 
@@ -93,7 +92,7 @@ Collection *outliner_collection_from_tree_element(const TreeElement *te)
     Scene *scene = (Scene *)tselem->id;
     return scene->master_collection;
   }
-  if (tselem->type == 0 && te->idcode == ID_GR) {
+  if ((tselem->type == TSE_SOME_ID) && (te->idcode == ID_GR)) {
     return (Collection *)tselem->id;
   }
 
@@ -110,7 +109,7 @@ TreeTraversalAction outliner_find_selected_collections(TreeElement *te, void *cu
     return TRAVERSE_CONTINUE;
   }
 
-  if (tselem->type || (tselem->id && GS(tselem->id->name) != ID_GR)) {
+  if ((tselem->type != TSE_SOME_ID) || (tselem->id && GS(tselem->id->name) != ID_GR)) {
     return TRAVERSE_SKIP_CHILDS;
   }
 
@@ -126,7 +125,7 @@ TreeTraversalAction outliner_find_selected_objects(TreeElement *te, void *custom
     return TRAVERSE_CONTINUE;
   }
 
-  if (tselem->type || (tselem->id == NULL) || (GS(tselem->id->name) != ID_OB)) {
+  if ((tselem->type != TSE_SOME_ID) || (tselem->id == NULL) || (GS(tselem->id->name) != ID_OB)) {
     return TRAVERSE_SKIP_CHILDS;
   }
 
@@ -346,7 +345,7 @@ void outliner_collection_delete(
 
     /* Test in case collection got deleted as part of another one. */
     if (BLI_findindex(&bmain->collections, collection) != -1) {
-      /* We cannot allow to delete collections that are indirectly linked,
+      /* We cannot allow deleting collections that are indirectly linked,
        * or that are used by (linked to...) other linked scene/collection. */
       bool skip = false;
       if (ID_IS_LINKED(collection)) {
@@ -361,8 +360,14 @@ void outliner_collection_delete(
               break;
             }
             if (parent->flag & COLLECTION_IS_MASTER) {
-              Scene *parent_scene = BKE_collection_master_scene_search(bmain, parent);
-              if (ID_IS_LINKED(parent_scene)) {
+              BLI_assert(parent->id.flag & LIB_EMBEDDED_DATA);
+
+              const IDTypeInfo *id_type = BKE_idtype_get_info_from_id(&parent->id);
+              BLI_assert(id_type->owner_get != NULL);
+
+              ID *scene_owner = id_type->owner_get(bmain, &parent->id);
+              BLI_assert(GS(scene_owner->name) == ID_SCE);
+              if (ID_IS_LINKED(scene_owner)) {
                 skip = true;
                 break;
               }
@@ -592,11 +597,18 @@ static int collection_duplicate_exec(bContext *C, wmOperator *op)
                                                                       scene->master_collection;
   }
   else if (parent != NULL && (parent->flag & COLLECTION_IS_MASTER) != 0) {
-    Scene *scene = BKE_collection_master_scene_search(bmain, parent);
-    BLI_assert(scene != NULL);
-    if (ID_IS_LINKED(scene) || ID_IS_OVERRIDE_LIBRARY(scene)) {
-      scene = CTX_data_scene(C);
-      parent = ID_IS_LINKED(scene) ? NULL : scene->master_collection;
+    BLI_assert(parent->id.flag & LIB_EMBEDDED_DATA);
+
+    const IDTypeInfo *id_type = BKE_idtype_get_info_from_id(&parent->id);
+    BLI_assert(id_type->owner_get != NULL);
+
+    Scene *scene_owner = (Scene *)id_type->owner_get(bmain, &parent->id);
+    BLI_assert(scene_owner != NULL);
+    BLI_assert(GS(scene_owner->id.name) == ID_SCE);
+
+    if (ID_IS_LINKED(scene_owner) || ID_IS_OVERRIDE_LIBRARY(scene_owner)) {
+      scene_owner = CTX_data_scene(C);
+      parent = ID_IS_LINKED(scene_owner) ? NULL : scene_owner->master_collection;
     }
   }
 
@@ -1353,7 +1365,7 @@ void OUTLINER_OT_collection_enable(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Enable Collection";
   ot->idname = "OUTLINER_OT_collection_enable";
-  ot->description = "Enable viewport drawing in the view layers";
+  ot->description = "Enable viewport display in the view layers";
 
   /* api callbacks */
   ot->exec = collection_flag_exec;
@@ -1368,7 +1380,7 @@ void OUTLINER_OT_collection_disable(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Disable Collection";
   ot->idname = "OUTLINER_OT_collection_disable";
-  ot->description = "Disable viewport drawing in the view layers";
+  ot->description = "Disable viewport display in the view layers";
 
   /* api callbacks */
   ot->exec = collection_flag_exec;
@@ -1444,7 +1456,7 @@ static TreeTraversalAction outliner_hide_find_data_to_edit(TreeElement *te, void
       BLI_gset_add(data->collections_to_edit, lc);
     }
   }
-  else if (tselem->type == 0 && te->idcode == ID_OB) {
+  else if ((tselem->type == TSE_SOME_ID) && (te->idcode == ID_OB)) {
     Object *ob = (Object *)tselem->id;
     Base *base = BKE_view_layer_base_find(data->view_layer, ob);
     BLI_gset_add(data->bases_to_edit, base);

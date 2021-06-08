@@ -308,9 +308,16 @@ void ED_gpencil_trace_data_to_strokes(Main *bmain,
           if (gps->totpoints == 0) {
             add_point(gps, scalef, offset, c[n - 1][2].x, c[n - 1][2].y);
           }
+          else {
+            add_point(gps, scalef, offset, last[0], last[1]);
+          }
+
           add_point(gps, scalef, offset, c[i][1].x, c[i][1].y);
 
           add_point(gps, scalef, offset, c[i][2].x, c[i][2].y);
+
+          last[0] = c[i][2].x;
+          last[1] = c[i][2].y;
           break;
         }
         case POTRACE_CURVETO: {
@@ -352,13 +359,14 @@ void ED_gpencil_trace_data_to_strokes(Main *bmain,
      * long stroke. Here the length is checked and removed if the length is too big. */
     float length = BKE_gpencil_stroke_length(gps, true);
     if (length <= MAX_LENGTH) {
+      bGPdata *gpd = ob->data;
       if (sample > 0.0f) {
         /* Resample stroke. Don't need to call to BKE_gpencil_stroke_geometry_update() because
          * the sample function already call that. */
-        BKE_gpencil_stroke_sample(gps, sample, false);
+        BKE_gpencil_stroke_sample(gpd, gps, sample, false);
       }
       else {
-        BKE_gpencil_stroke_geometry_update(gps);
+        BKE_gpencil_stroke_geometry_update(gpd, gps);
       }
     }
     else {

@@ -785,7 +785,7 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
       l = v->l;
       luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
       uv = luv->uv;
-      uv_vert_sel = luv->flag & MLOOPUV_VERTSEL;
+      uv_vert_sel = uvedit_uv_select_test(scene, l, cd_loop_uv_offset);
 
       lastv = NULL;
       iterv = vlist;
@@ -796,7 +796,7 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
         l = iterv->l;
         luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
         uv2 = luv->uv;
-        uv2_vert_sel = luv->flag & MLOOPUV_VERTSEL;
+        uv2_vert_sel = uvedit_uv_select_test(scene, l, cd_loop_uv_offset);
 
         /* Check if the uv loops share the same selection state (if not, they are not connected as
          * they have been ripped or other edit commands have separated them). */
@@ -1139,6 +1139,11 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
 
     if (use_topology) {
       v_mirr = cache_mirr_intptr_as_bmvert(mesh_topo_store.index_lookup, i);
+      if (v_mirr != NULL) {
+        if (respecthide && BM_elem_flag_test(v_mirr, BM_ELEM_HIDDEN)) {
+          v_mirr = NULL;
+        }
+      }
     }
     else {
       int i_mirr;

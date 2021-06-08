@@ -52,9 +52,9 @@ class GLVaoCache {
   GLContext *context_ = NULL;
   /** Last interface this batch was drawn with. */
   GLShaderInterface *interface_ = NULL;
-  /** Cached vao for the last interface. */
+  /** Cached VAO for the last interface. */
   GLuint vao_id_ = 0;
-  /** Used whend arb_base_instance is not supported. */
+  /** Used when arb_base_instance is not supported. */
   GLuint vao_base_instance_ = 0;
   int base_instance_ = 0;
 
@@ -96,9 +96,6 @@ class GLBatch : public Batch {
   GLVaoCache vao_cache_;
 
  public:
-  GLBatch();
-  ~GLBatch();
-
   void draw(int v_first, int v_count, int i_first, int i_count) override;
   void bind(int i_first);
 

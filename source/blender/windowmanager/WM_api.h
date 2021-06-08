@@ -129,6 +129,9 @@ void WM_windows_scene_data_sync(const ListBase *win_lb, struct Scene *scene) ATT
 struct Scene *WM_windows_scene_get_from_screen(const struct wmWindowManager *wm,
                                                const struct bScreen *screen)
     ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
+struct ViewLayer *WM_windows_view_layer_get_from_screen(const struct wmWindowManager *wm,
+                                                        const struct bScreen *screen)
+    ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
 struct WorkSpace *WM_windows_workspace_get_from_screen(const wmWindowManager *wm,
                                                        const struct bScreen *screen)
     ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
@@ -168,15 +171,24 @@ void WM_opengl_context_dispose(void *context);
 void WM_opengl_context_activate(void *context);
 void WM_opengl_context_release(void *context);
 
-struct wmWindow *WM_window_open(struct bContext *C, const struct rcti *rect);
-struct wmWindow *WM_window_open_temp(struct bContext *C,
-                                     const char *title,
-                                     int x,
-                                     int y,
-                                     int sizex,
-                                     int sizey,
-                                     int space_type,
-                                     bool dialog);
+/* WM_window_open alignment */
+typedef enum WindowAlignment {
+  WIN_ALIGN_ABSOLUTE = 0,
+  WIN_ALIGN_LOCATION_CENTER,
+  WIN_ALIGN_PARENT_CENTER,
+} WindowAlignment;
+
+struct wmWindow *WM_window_open(struct bContext *C,
+                                const char *title,
+                                int x,
+                                int y,
+                                int sizex,
+                                int sizey,
+                                int space_type,
+                                bool dialog,
+                                bool temp,
+                                WindowAlignment alignment);
+
 void WM_window_set_dpi(const wmWindow *win);
 
 bool WM_stereo3d_enabled(struct wmWindow *win, bool only_fullscreen_test);
@@ -185,7 +197,7 @@ bool WM_stereo3d_enabled(struct wmWindow *win, bool only_fullscreen_test);
 void WM_file_autoexec_init(const char *filepath);
 bool WM_file_read(struct bContext *C, const char *filepath, struct ReportList *reports);
 void WM_autosave_init(struct wmWindowManager *wm);
-void WM_recover_last_session(struct bContext *C, struct ReportList *reports);
+bool WM_recover_last_session(struct bContext *C, struct ReportList *reports);
 void WM_file_tag_modified(void);
 
 struct ID *WM_file_append_datablock(struct Main *bmain,
@@ -215,6 +227,9 @@ struct wmPaintCursor *WM_paint_cursor_activate(
     void *customdata);
 
 bool WM_paint_cursor_end(struct wmPaintCursor *handle);
+void WM_paint_cursor_remove_by_type(struct wmWindowManager *wm,
+                                    void *draw_fn,
+                                    void (*free)(void *));
 void WM_paint_cursor_tag_redraw(struct wmWindow *win, struct ARegion *region);
 
 void WM_cursor_warp(struct wmWindow *win, int x, int y);
@@ -668,19 +683,29 @@ struct wmDrag *WM_event_start_drag(
     struct bContext *C, int icon, int type, void *poin, double value, unsigned int flags);
 void WM_event_drag_image(struct wmDrag *, struct ImBuf *, float scale, int sx, int sy);
 void WM_drag_free(struct wmDrag *drag);
+void WM_drag_data_free(int dragtype, void *poin);
 void WM_drag_free_list(struct ListBase *lb);
 
 struct wmDropBox *WM_dropbox_add(
     ListBase *lb,
     const char *idname,
     bool (*poll)(struct bContext *, struct wmDrag *, const struct wmEvent *event, const char **),
-    void (*copy)(struct wmDrag *, struct wmDropBox *));
+    void (*copy)(struct wmDrag *, struct wmDropBox *),
+    void (*cancel)(struct Main *, struct wmDrag *, struct wmDropBox *));
 ListBase *WM_dropboxmap_find(const char *idname, int spaceid, int regionid);
 
 /* ID drag and drop */
-void WM_drag_add_ID(struct wmDrag *drag, struct ID *id, struct ID *from_parent);
-struct ID *WM_drag_ID(const struct wmDrag *drag, short idcode);
-struct ID *WM_drag_ID_from_event(const struct wmEvent *event, short idcode);
+void WM_drag_add_local_ID(struct wmDrag *drag, struct ID *id, struct ID *from_parent);
+struct ID *WM_drag_get_local_ID(const struct wmDrag *drag, short idcode);
+struct ID *WM_drag_get_local_ID_from_event(const struct wmEvent *event, short idcode);
+bool WM_drag_is_ID_type(const struct wmDrag *drag, int idcode);
+
+struct wmDragAsset *WM_drag_get_asset_data(const struct wmDrag *drag, int idcode);
+struct ID *WM_drag_get_local_ID_or_import_from_asset(const struct wmDrag *drag, int idcode);
+
+void WM_drag_free_imported_drag_ID(struct Main *bmain,
+                                   struct wmDrag *drag,
+                                   struct wmDropBox *drop);
 
 /* Set OpenGL viewport and scissor */
 void wmViewport(const struct rcti *winrct);
@@ -702,7 +727,7 @@ enum {
 };
 
 /**
- * Identifying jobs by owner alone is unreliable, this isnt saved,
+ * Identifying jobs by owner alone is unreliable, this isn't saved,
  * order can change (keep 0 for 'any').
  */
 enum {
@@ -729,6 +754,8 @@ enum {
   WM_JOB_TYPE_LIGHT_BAKE,
   WM_JOB_TYPE_FSMENU_BOOKMARK_VALIDATE,
   WM_JOB_TYPE_QUADRIFLOW_REMESH,
+  WM_JOB_TYPE_TRACE_IMAGE,
+  WM_JOB_TYPE_LINEART,
   /* add as needed, bake, seq proxy build
    * if having hard coded values is a problem */
 };
@@ -834,6 +861,7 @@ int WM_event_modifier_flag(const struct wmEvent *event);
 
 bool WM_event_is_modal_tweak_exit(const struct wmEvent *event, int tweak_event);
 bool WM_event_is_last_mousemove(const struct wmEvent *event);
+bool WM_event_is_mouse_drag(const struct wmEvent *event);
 
 int WM_event_drag_threshold(const struct wmEvent *event);
 bool WM_event_drag_test(const struct wmEvent *event, const int prev_xy[2]);
@@ -855,6 +883,9 @@ void WM_event_ndof_to_quat(const struct wmNDOFMotionData *ndof, float q[4]);
 
 float WM_event_tablet_data(const struct wmEvent *event, int *pen_flip, float tilt[2]);
 bool WM_event_is_tablet(const struct wmEvent *event);
+
+int WM_event_absolute_delta_x(const struct wmEvent *event);
+int WM_event_absolute_delta_y(const struct wmEvent *event);
 
 #ifdef WITH_INPUT_IME
 bool WM_event_is_ime_switch(const struct wmEvent *event);

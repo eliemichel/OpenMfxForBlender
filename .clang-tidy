@@ -15,7 +15,6 @@ Checks:  >
 
   -readability-misleading-indentation,
 
-  -readability-redundant-member-init,
   -readability-use-anyofallof,
 
   -readability-function-cognitive-complexity,
@@ -30,7 +29,19 @@ Checks:  >
   -bugprone-sizeof-expression,
   -bugprone-integer-division,
 
-  -bugprone-exception-escape,
   -bugprone-redundant-branch-condition,
 
-WarningsAsErrors: '*'
+  modernize-*,
+  -modernize-use-auto,
+  -modernize-use-trailing-return-type,
+  -modernize-avoid-c-arrays,
+  -modernize-use-nodiscard,
+  -modernize-loop-convert,
+  -modernize-pass-by-value,
+  # Cannot be enabled yet, because using raw string literals in tests breaks
+  # the windows compiler currently.
+  -modernize-raw-string-literal
+
+CheckOptions:
+  - key: modernize-use-default-member-init.UseAssignment
+    value: 1

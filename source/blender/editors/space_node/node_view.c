@@ -52,10 +52,11 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 
-#include "NOD_composite.h"
 #include "node_intern.h" /* own include */
 
-/* **************** View All Operator ************** */
+/* -------------------------------------------------------------------- */
+/** \name View All Operator
+ * \{ */
 
 int space_node_view_flag(
     bContext *C, SpaceNode *snode, ARegion *region, const int node_flag, const int smooth_viewtx)
@@ -151,6 +152,12 @@ void NODE_OT_view_all(wmOperatorType *ot)
   ot->flag = 0;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View Selected Operator
+ * \{ */
+
 static int node_view_selected_exec(bContext *C, wmOperator *op)
 {
   ARegion *region = CTX_wm_region(C);
@@ -178,7 +185,11 @@ void NODE_OT_view_selected(wmOperatorType *ot)
   ot->flag = 0;
 }
 
-/* **************** Background Image Operators ************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Background Image Operators
+ * \{ */
 
 typedef struct NodeViewMove {
   int mvalo[2];
@@ -271,7 +282,7 @@ void NODE_OT_backimage_move(wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "Background Image Move";
-  ot->description = "Move Node backdrop";
+  ot->description = "Move node backdrop";
   ot->idname = "NODE_OT_backimage_move";
 
   /* api callbacks */
@@ -284,6 +295,12 @@ void NODE_OT_backimage_move(wmOperatorType *ot)
   ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Background Image Zoom
+ * \{ */
+
 static int backimage_zoom_exec(bContext *C, wmOperator *op)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
@@ -293,6 +310,7 @@ static int backimage_zoom_exec(bContext *C, wmOperator *op)
   snode->zoom *= fac;
   ED_region_tag_redraw(region);
   WM_main_add_notifier(NC_NODE | ND_DISPLAY, NULL);
+  WM_main_add_notifier(NC_SPACE | ND_SPACE_NODE_VIEW, NULL);
 
   return OPERATOR_FINISHED;
 }
@@ -315,6 +333,12 @@ void NODE_OT_backimage_zoom(wmOperatorType *ot)
   /* internal */
   RNA_def_float(ot->srna, "factor", 1.2f, 0.0f, 10.0f, "Factor", "", 0.0f, 10.0f);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Background Image Fit
+ * \{ */
 
 static int backimage_fit_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -372,7 +396,11 @@ void NODE_OT_backimage_fit(wmOperatorType *ot)
   ot->flag = OPTYPE_BLOCKING;
 }
 
-/******************** sample backdrop operator ********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Sample Backdrop Operator
+ * \{ */
 
 typedef struct ImageSampleInfo {
   ARegionType *art;
@@ -413,6 +441,32 @@ static void sample_draw(const bContext *C, ARegion *region, void *arg_info)
                        info->zp,
                        info->zfp);
   }
+}
+
+/* Returns mouse position in image space. */
+bool ED_space_node_get_position(
+    Main *bmain, SpaceNode *snode, struct ARegion *ar, const int mval[2], float fpos[2])
+{
+  if (!ED_node_is_compositor(snode) || (snode->flag & SNODE_BACKDRAW) == 0) {
+    return false;
+  }
+
+  void *lock;
+  Image *ima = BKE_image_ensure_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
+  ImBuf *ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
+  if (!ibuf) {
+    BKE_image_release_ibuf(ima, ibuf, lock);
+    return false;
+  }
+
+  /* map the mouse coords to the backdrop image space */
+  float bufx = ibuf->x * snode->zoom;
+  float bufy = ibuf->y * snode->zoom;
+  fpos[0] = (bufx > 0.0f ? ((float)mval[0] - 0.5f * ar->winx - snode->xof) / bufx + 0.5f : 0.0f);
+  fpos[1] = (bufy > 0.0f ? ((float)mval[1] - 0.5f * ar->winy - snode->yof) / bufy + 0.5f : 0.0f);
+
+  BKE_image_release_ibuf(ima, ibuf, lock);
+  return true;
 }
 
 /* Returns color in linear space, matching ED_space_image_color_sample().
@@ -642,3 +696,5 @@ void NODE_OT_backimage_sample(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_BLOCKING;
 }
+
+/** \} */

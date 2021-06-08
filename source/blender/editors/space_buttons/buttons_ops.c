@@ -127,7 +127,7 @@ static int toggle_pin_exec(bContext *C, wmOperator *UNUSED(op))
   bScreen *screen = CTX_wm_screen(C);
   RNA_pointer_create(&screen->id, &RNA_SpaceProperties, sbuts, &sbuts_ptr);
 
-  /* Create the new ID pointer and set the the pin ID with RNA
+  /* Create the new ID pointer and set the pin ID with RNA
    * so we can use the property's RNA update functionality. */
   ID *new_id = (sbuts->flag & SB_PIN_CONTEXT) ? buttons_context_id_path(C) : NULL;
   PointerRNA new_id_ptr;
@@ -217,7 +217,7 @@ static int file_browse_exec(bContext *C, wmOperator *op)
     BLI_path_abs(path, id ? ID_BLEND_PATH(bmain, id) : BKE_main_blendfile_path(bmain));
 
     if (BLI_is_dir(path)) {
-      /* Do this first so '//' isnt converted to '//\' on windows. */
+      /* Do this first so '//' isn't converted to '//\' on windows. */
       BLI_path_slash_ensure(path);
       if (is_relative) {
         BLI_strncpy(path, str, FILE_MAX);
@@ -338,7 +338,7 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
         is_relative = BLI_path_is_rel(str);
       }
 
-      if (UNLIKELY(ptr.data == &U)) {
+      if (UNLIKELY(ptr.data == &U || is_userdef)) {
         is_relative = false;
       }
 
@@ -360,7 +360,7 @@ void BUTTONS_OT_file_browse(wmOperatorType *ot)
   /* Identifiers. */
   ot->name = "Accept";
   ot->description =
-      "Open a file browser, Hold Shift to open the file, Alt to browse containing directory";
+      "Open a file browser, hold Shift to open the file, Alt to browse containing directory";
   ot->idname = "BUTTONS_OT_file_browse";
 
   /* Callbacks. */
@@ -378,7 +378,7 @@ void BUTTONS_OT_file_browse(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /* Second operator, only difference from BUTTONS_OT_file_browse is WM_FILESEL_DIRECTORY. */
@@ -387,7 +387,7 @@ void BUTTONS_OT_directory_browse(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Accept";
   ot->description =
-      "Open a directory browser, Hold Shift to open the file, Alt to browse containing directory";
+      "Open a directory browser, hold Shift to open the file, Alt to browse containing directory";
   ot->idname = "BUTTONS_OT_directory_browse";
 
   /* api callbacks */
@@ -405,7 +405,7 @@ void BUTTONS_OT_directory_browse(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_DIRECTORY | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /** \} */

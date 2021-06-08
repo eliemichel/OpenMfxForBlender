@@ -31,7 +31,7 @@ ccl_device float3 background_map_sample(KernelGlobals *kg, float randu, float ra
   int res_y = kernel_data.background.map_res_y;
   int cdf_width = res_x + 1;
 
-  /* this is basically std::lower_bound as used by pbrt */
+  /* This is basically std::lower_bound as used by PBRT. */
   int first = 0;
   int count = res_y;
 
@@ -58,7 +58,7 @@ ccl_device float3 background_map_sample(KernelGlobals *kg, float randu, float ra
   float dv = inverse_lerp(cdf_v.y, cdf_next_v.y, randv);
   float v = (index_v + dv) / res_y;
 
-  /* this is basically std::lower_bound as used by pbrt */
+  /* This is basically std::lower_bound as used by PBRT. */
   first = 0;
   count = res_x;
   while (count > 0) {
@@ -277,7 +277,7 @@ ccl_device float3 background_portal_sample(KernelGlobals *kg,
     portal--;
   }
 
-  return make_float3(0.0f, 0.0f, 0.0f);
+  return zero_float3();
 }
 
 ccl_device_inline float3 background_sun_sample(KernelGlobals *kg,

@@ -184,7 +184,7 @@ CUDADevice::CUDADevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
 
   functions.loaded = false;
 
-  /* Intialize CUDA. */
+  /* Initialize CUDA. */
   CUresult result = cuInit(0);
   if (result != CUDA_SUCCESS) {
     set_error(string_printf("Failed to initialize CUDA runtime (%s)", cuewErrorString(result)));
@@ -718,8 +718,10 @@ void CUDADevice::init_host_memory()
 void CUDADevice::load_texture_info()
 {
   if (need_texture_info) {
-    texture_info.copy_to_device();
+    /* Unset flag before copying, so this does not loop indefinitely if the copy below calls
+     * into 'move_textures_to_host' (which calls 'load_texture_info' again). */
     need_texture_info = false;
+    texture_info.copy_to_device();
   }
 }
 
@@ -740,6 +742,7 @@ void CUDADevice::move_textures_to_host(size_t size, bool for_texture)
     size_t max_size = 0;
     bool max_is_image = false;
 
+    thread_scoped_lock lock(cuda_mem_map_mutex);
     foreach (CUDAMemMap::value_type &pair, cuda_mem_map) {
       device_memory &mem = *pair.first;
       CUDAMem *cmem = &pair.second;
@@ -771,6 +774,7 @@ void CUDADevice::move_textures_to_host(size_t size, bool for_texture)
         max_mem = &mem;
       }
     }
+    lock.unlock();
 
     /* Move to host memory. This part is mutex protected since
      * multiple CUDA devices could be moving the memory. The
@@ -850,7 +854,7 @@ CUDADevice::CUDAMem *CUDADevice::generic_alloc(device_memory &mem, size_t pitch_
 
   void *shared_pointer = 0;
 
-  if (mem_alloc_result != CUDA_SUCCESS && can_map_host) {
+  if (mem_alloc_result != CUDA_SUCCESS && can_map_host && mem.type != MEM_DEVICE_ONLY) {
     if (mem.shared_pointer) {
       /* Another device already allocated host memory. */
       mem_alloc_result = CUDA_SUCCESS;
@@ -873,8 +877,14 @@ CUDADevice::CUDAMem *CUDADevice::generic_alloc(device_memory &mem, size_t pitch_
   }
 
   if (mem_alloc_result != CUDA_SUCCESS) {
-    status = " failed, out of device and host memory";
-    set_error("System is out of GPU and shared host memory");
+    if (mem.type == MEM_DEVICE_ONLY) {
+      status = " failed, out of device memory";
+      set_error("System is out of GPU memory");
+    }
+    else {
+      status = " failed, out of device and host memory";
+      set_error("System is out of GPU and shared host memory");
+    }
   }
 
   if (mem.name) {
@@ -892,6 +902,7 @@ CUDADevice::CUDAMem *CUDADevice::generic_alloc(device_memory &mem, size_t pitch_
   }
 
   /* Insert into map of allocations. */
+  thread_scoped_lock lock(cuda_mem_map_mutex);
   CUDAMem *cmem = &cuda_mem_map[&mem];
   if (shared_pointer != 0) {
     /* Replace host pointer with our host allocation. Only works if
@@ -933,6 +944,7 @@ void CUDADevice::generic_copy_to(device_memory &mem)
   /* If use_mapped_host of mem is false, the current device only uses device memory allocated by
    * cuMemAlloc regardless of mem.host_pointer and mem.shared_pointer, and should copy data from
    * mem.host_pointer. */
+  thread_scoped_lock lock(cuda_mem_map_mutex);
   if (!cuda_mem_map[&mem].use_mapped_host || mem.host_pointer != mem.shared_pointer) {
     const CUDAContextScope scope(this);
     cuda_assert(
@@ -944,6 +956,7 @@ void CUDADevice::generic_free(device_memory &mem)
 {
   if (mem.device_pointer) {
     CUDAContextScope scope(this);
+    thread_scoped_lock lock(cuda_mem_map_mutex);
     const CUDAMem &cmem = cuda_mem_map[&mem];
 
     /* If cmem.use_mapped_host is true, reference counting is used
@@ -1009,7 +1022,6 @@ void CUDADevice::mem_copy_to(device_memory &mem)
     if (!mem.device_pointer) {
       generic_alloc(mem);
     }
-
     generic_copy_to(mem);
   }
 }
@@ -1048,6 +1060,7 @@ void CUDADevice::mem_zero(device_memory &mem)
 
   /* If use_mapped_host of mem is false, mem.device_pointer currently refers to device memory
    * regardless of mem.host_pointer and mem.shared_pointer. */
+  thread_scoped_lock lock(cuda_mem_map_mutex);
   if (!cuda_mem_map[&mem].use_mapped_host || mem.host_pointer != mem.shared_pointer) {
     const CUDAContextScope scope(this);
     cuda_assert(cuMemsetD8((CUdeviceptr)mem.device_pointer, 0, mem.memory_size()));
@@ -1171,6 +1184,7 @@ void CUDADevice::tex_alloc(device_texture &mem)
   size_t dst_pitch = src_pitch;
 
   if (!mem.is_resident(this)) {
+    thread_scoped_lock lock(cuda_mem_map_mutex);
     cmem = &cuda_mem_map[&mem];
     cmem->texobject = 0;
 
@@ -1220,6 +1234,7 @@ void CUDADevice::tex_alloc(device_texture &mem)
     mem.device_size = size;
     stats.mem_alloc(size);
 
+    thread_scoped_lock lock(cuda_mem_map_mutex);
     cmem = &cuda_mem_map[&mem];
     cmem->texobject = 0;
     cmem->array = array_3d;
@@ -1305,6 +1320,9 @@ void CUDADevice::tex_alloc(device_texture &mem)
     texDesc.filterMode = filter_mode;
     texDesc.flags = CU_TRSF_NORMALIZED_COORDINATES;
 
+    thread_scoped_lock lock(cuda_mem_map_mutex);
+    cmem = &cuda_mem_map[&mem];
+
     cuda_assert(cuTexObjectCreate(&cmem->texobject, &resDesc, &texDesc, NULL));
 
     texture_info[slot].data = (uint64_t)cmem->texobject;
@@ -1318,6 +1336,7 @@ void CUDADevice::tex_free(device_texture &mem)
 {
   if (mem.device_pointer) {
     CUDAContextScope scope(this);
+    thread_scoped_lock lock(cuda_mem_map_mutex);
     const CUDAMem &cmem = cuda_mem_map[&mem];
 
     if (cmem.texobject) {
@@ -1339,6 +1358,7 @@ void CUDADevice::tex_free(device_texture &mem)
       cuda_mem_map.erase(cuda_mem_map.find(&mem));
     }
     else {
+      lock.unlock();
       generic_free(mem);
     }
   }
@@ -1911,18 +1931,19 @@ void CUDADevice::render(DeviceTask &task, RenderTile &rtile, device_vector<WorkT
   }
 
   uint step_samples = divide_up(min_blocks * num_threads_per_block, wtile->w * wtile->h);
-  if (task.adaptive_sampling.use) {
-    step_samples = task.adaptive_sampling.align_static_samples(step_samples);
-  }
 
   /* Render all samples. */
   int start_sample = rtile.start_sample;
   int end_sample = rtile.start_sample + rtile.num_samples;
 
-  for (int sample = start_sample; sample < end_sample; sample += step_samples) {
+  for (int sample = start_sample; sample < end_sample;) {
     /* Setup and copy work tile to device. */
     wtile->start_sample = sample;
-    wtile->num_samples = min(step_samples, end_sample - sample);
+    wtile->num_samples = step_samples;
+    if (task.adaptive_sampling.use) {
+      wtile->num_samples = task.adaptive_sampling.align_samples(sample, step_samples);
+    }
+    wtile->num_samples = min(wtile->num_samples, end_sample - sample);
     work_tiles.copy_to_device();
 
     CUdeviceptr d_work_tiles = (CUdeviceptr)work_tiles.device_pointer;
@@ -1944,7 +1965,8 @@ void CUDADevice::render(DeviceTask &task, RenderTile &rtile, device_vector<WorkT
     cuda_assert(cuCtxSynchronize());
 
     /* Update progress. */
-    rtile.sample = sample + wtile->num_samples;
+    sample += wtile->num_samples;
+    rtile.sample = sample;
     task.update_progress(&rtile, rtile.w * rtile.h * wtile->num_samples);
 
     if (task.get_cancel()) {

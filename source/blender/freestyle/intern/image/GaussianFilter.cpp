@@ -19,7 +19,7 @@
  * \brief Class to perform gaussian filtering operations on an image
  */
 
-#include <stdlib.h>
+#include <cstdlib>
 
 #include "GaussianFilter.h"
 
@@ -28,7 +28,7 @@ namespace Freestyle {
 GaussianFilter::GaussianFilter(float iSigma)
 {
   _sigma = iSigma;
-  _mask = 0;
+  _mask = nullptr;
   computeMask();
 }
 

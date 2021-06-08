@@ -27,11 +27,9 @@
 extern "C" {
 #endif
 
-struct GPUTexture;
-struct GPUUniformBuf;
 struct GPUVertBuf;
 
-/** Opaque type hidding blender::gpu::Shader */
+/** Opaque type hiding #blender::gpu::Shader */
 typedef struct GPUShader GPUShader;
 
 typedef enum eGPUShaderTFBType {
@@ -412,6 +410,9 @@ void GPU_shader_free_builtin_shaders(void);
 /* Hardware limit is 16. Position attribute is always needed so we reduce to 15.
  * This makes sure the GPUVertexFormat name buffer does not overflow. */
 #define GPU_MAX_ATTR 15
+
+/* Determined by the maximum uniform buffer size divided by chunk size. */
+#define GPU_MAX_UNIFORM_ATTR 8
 
 #ifdef __cplusplus
 }

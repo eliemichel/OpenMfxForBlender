@@ -32,7 +32,7 @@
 #include "gl_backend.hh"
 #include "gl_debug.hh"
 #include "gl_state.hh"
-#include "gpu_vertex_buffer_private.hh" /* TODO shoud be gl_vertex_buffer.hh */
+#include "gpu_vertex_buffer_private.hh" /* TODO should be `gl_vertex_buffer.hh` */
 
 #include "gl_texture.hh"
 
@@ -44,7 +44,7 @@ namespace blender::gpu {
 
 GLTexture::GLTexture(const char *name) : Texture(name)
 {
-  BLI_assert(GLContext::get() != NULL);
+  BLI_assert(GLContext::get() != nullptr);
 
   glGenTextures(1, &tex_id_);
 }
@@ -55,7 +55,7 @@ GLTexture::~GLTexture()
     GPU_framebuffer_free(framebuffer_);
   }
   GLContext *ctx = GLContext::get();
-  if (ctx != NULL && is_bound_) {
+  if (ctx != nullptr && is_bound_) {
     /* This avoid errors when the texture is still inside the bound texture array. */
     ctx->state_manager->texture_unbind(this);
   }
@@ -63,7 +63,7 @@ GLTexture::~GLTexture()
 }
 
 /* Return true on success. */
-bool GLTexture::init_internal(void)
+bool GLTexture::init_internal()
 {
   if ((format_ == GPU_DEPTH24_STENCIL8) && GPU_depth_blitting_workaround()) {
     /* MacOS + Radeon Pro fails to blit depth on GPU_DEPTH24_STENCIL8
@@ -148,7 +148,7 @@ void GLTexture::ensure_mipmaps(int miplvl)
     if (type_ == GPU_TEXTURE_CUBE) {
       for (int i = 0; i < d; i++) {
         GLenum target = GL_TEXTURE_CUBE_MAP_POSITIVE_X + i;
-        glTexImage2D(target, mip, internal_format, w, h, 0, gl_format, gl_type, NULL);
+        glTexImage2D(target, mip, internal_format, w, h, 0, gl_format, gl_type, nullptr);
       }
     }
     else if (format_flag_ & GPU_FORMAT_COMPRESSED) {
@@ -156,13 +156,13 @@ void GLTexture::ensure_mipmaps(int miplvl)
       switch (dimensions) {
         default:
         case 1:
-          glCompressedTexImage1D(target_, mip, internal_format, w, 0, size, NULL);
+          glCompressedTexImage1D(target_, mip, internal_format, w, 0, size, nullptr);
           break;
         case 2:
-          glCompressedTexImage2D(target_, mip, internal_format, w, h, 0, size, NULL);
+          glCompressedTexImage2D(target_, mip, internal_format, w, h, 0, size, nullptr);
           break;
         case 3:
-          glCompressedTexImage3D(target_, mip, internal_format, w, h, d, 0, size, NULL);
+          glCompressedTexImage3D(target_, mip, internal_format, w, h, d, 0, size, nullptr);
           break;
       }
     }
@@ -170,13 +170,13 @@ void GLTexture::ensure_mipmaps(int miplvl)
       switch (dimensions) {
         default:
         case 1:
-          glTexImage1D(target_, mip, internal_format, w, 0, gl_format, gl_type, NULL);
+          glTexImage1D(target_, mip, internal_format, w, 0, gl_format, gl_type, nullptr);
           break;
         case 2:
-          glTexImage2D(target_, mip, internal_format, w, h, 0, gl_format, gl_type, NULL);
+          glTexImage2D(target_, mip, internal_format, w, h, 0, gl_format, gl_type, nullptr);
           break;
         case 3:
-          glTexImage3D(target_, mip, internal_format, w, h, d, 0, gl_format, gl_type, NULL);
+          glTexImage3D(target_, mip, internal_format, w, h, d, 0, gl_format, gl_type, nullptr);
           break;
       }
     }
@@ -231,7 +231,7 @@ void GLTexture::update_sub(
     int mip, int offset[3], int extent[3], eGPUDataFormat type, const void *data)
 {
   BLI_assert(validate_data_format(format_, type));
-  BLI_assert(data != NULL);
+  BLI_assert(data != nullptr);
 
   this->ensure_mipmaps(mip);
 
@@ -290,22 +290,24 @@ void GLTexture::update_sub(
   }
 }
 
-/** This will create the mipmap images and populate them with filtered data from base level.
+/**
+ * This will create the mipmap images and populate them with filtered data from base level.
+ *
  * WARNING: Depth textures are not populated but they have their mips correctly defined.
  * WARNING: This resets the mipmap range.
  */
-void GLTexture::generate_mipmap(void)
+void GLTexture::generate_mipmap()
 {
   this->ensure_mipmaps(9999);
-  /* Some drivers have bugs when using glGenerateMipmap with depth textures (see T56789).
+  /* Some drivers have bugs when using #glGenerateMipmap with depth textures (see T56789).
    * In this case we just create a complete texture with mipmaps manually without
    * down-sampling. You must initialize the texture levels using other methods like
-   * GPU_framebuffer_recursive_downsample(). */
+   * #GPU_framebuffer_recursive_downsample(). */
   if (format_flag_ & GPU_FORMAT_DEPTH) {
     return;
   }
 
-  /* Downsample from mip 0 using implementation. */
+  /* Down-sample from mip 0 using implementation. */
   if (GLContext::direct_state_access_support) {
     glGenerateTextureMipmap(tex_id_);
   }
@@ -440,7 +442,7 @@ void GLTexture::mip_range_set(int min, int max)
   }
 }
 
-struct GPUFrameBuffer *GLTexture::framebuffer_get(void)
+struct GPUFrameBuffer *GLTexture::framebuffer_get()
 {
   if (framebuffer_) {
     return framebuffer_;
@@ -461,7 +463,7 @@ struct GPUFrameBuffer *GLTexture::framebuffer_get(void)
 
 GLuint GLTexture::samplers_[GPU_SAMPLER_MAX] = {0};
 
-void GLTexture::samplers_init(void)
+void GLTexture::samplers_init()
 {
   glGenSamplers(GPU_SAMPLER_MAX, samplers_);
   for (int i = 0; i <= GPU_SAMPLER_ICON - 1; i++) {
@@ -489,7 +491,7 @@ void GLTexture::samplers_init(void)
      * - GL_TEXTURE_MIN_LOD is -1000.
      * - GL_TEXTURE_MAX_LOD is 1000.
      * - GL_TEXTURE_LOD_BIAS is 0.0f.
-     **/
+     */
 
     char sampler_name[128] = "\0\0";
     SNPRINTF(sampler_name,
@@ -517,7 +519,7 @@ void GLTexture::samplers_init(void)
   debug::object_label(GL_SAMPLER, icon_sampler, "icons");
 }
 
-void GLTexture::samplers_update(void)
+void GLTexture::samplers_update()
 {
   if (!GLContext::texture_filter_anisotropic_support) {
     return;
@@ -536,7 +538,7 @@ void GLTexture::samplers_update(void)
   }
 }
 
-void GLTexture::samplers_free(void)
+void GLTexture::samplers_free()
 {
   glDeleteSamplers(GPU_SAMPLER_MAX, samplers_);
 }
@@ -617,13 +619,13 @@ bool GLTexture::proxy_check(int mip)
     switch (dimensions) {
       default:
       case 1:
-        glCompressedTexImage1D(gl_proxy, mip, size[0], 0, gl_format, img_size, NULL);
+        glCompressedTexImage1D(gl_proxy, mip, size[0], 0, gl_format, img_size, nullptr);
         break;
       case 2:
-        glCompressedTexImage2D(gl_proxy, mip, UNPACK2(size), 0, gl_format, img_size, NULL);
+        glCompressedTexImage2D(gl_proxy, mip, UNPACK2(size), 0, gl_format, img_size, nullptr);
         break;
       case 3:
-        glCompressedTexImage3D(gl_proxy, mip, UNPACK3(size), 0, gl_format, img_size, NULL);
+        glCompressedTexImage3D(gl_proxy, mip, UNPACK3(size), 0, gl_format, img_size, nullptr);
         break;
     }
   }
@@ -631,13 +633,15 @@ bool GLTexture::proxy_check(int mip)
     switch (dimensions) {
       default:
       case 1:
-        glTexImage1D(gl_proxy, mip, internal_format, size[0], 0, gl_format, gl_type, NULL);
+        glTexImage1D(gl_proxy, mip, internal_format, size[0], 0, gl_format, gl_type, nullptr);
         break;
       case 2:
-        glTexImage2D(gl_proxy, mip, internal_format, UNPACK2(size), 0, gl_format, gl_type, NULL);
+        glTexImage2D(
+            gl_proxy, mip, internal_format, UNPACK2(size), 0, gl_format, gl_type, nullptr);
         break;
       case 3:
-        glTexImage3D(gl_proxy, mip, internal_format, UNPACK3(size), 0, gl_format, gl_type, NULL);
+        glTexImage3D(
+            gl_proxy, mip, internal_format, UNPACK3(size), 0, gl_format, gl_type, nullptr);
         break;
     }
   }
@@ -649,7 +653,7 @@ bool GLTexture::proxy_check(int mip)
 
 /** \} */
 
-void GLTexture::check_feedback_loop(void)
+void GLTexture::check_feedback_loop()
 {
   /* Recursive down sample workaround break this check.
    * See #recursive_downsample() for more information. */
@@ -679,7 +683,7 @@ void GLTexture::check_feedback_loop(void)
 }
 
 /* TODO(fclem): Legacy. Should be removed at some point. */
-uint GLTexture::gl_bindcode_get(void) const
+uint GLTexture::gl_bindcode_get() const
 {
   return tex_id_;
 }

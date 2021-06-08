@@ -257,7 +257,7 @@ static char *rna_LineStyle_color_modifier_path(PointerRNA *ptr)
 {
   LineStyleModifier *m = (LineStyleModifier *)ptr->data;
   char name_esc[sizeof(m->name) * 2];
-  BLI_strescape(name_esc, m->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, m->name, sizeof(name_esc));
   return BLI_sprintfN("color_modifiers[\"%s\"]", name_esc);
 }
 
@@ -265,7 +265,7 @@ static char *rna_LineStyle_alpha_modifier_path(PointerRNA *ptr)
 {
   LineStyleModifier *m = (LineStyleModifier *)ptr->data;
   char name_esc[sizeof(m->name) * 2];
-  BLI_strescape(name_esc, m->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, m->name, sizeof(name_esc));
   return BLI_sprintfN("alpha_modifiers[\"%s\"]", name_esc);
 }
 
@@ -273,7 +273,7 @@ static char *rna_LineStyle_thickness_modifier_path(PointerRNA *ptr)
 {
   LineStyleModifier *m = (LineStyleModifier *)ptr->data;
   char name_esc[sizeof(m->name) * 2];
-  BLI_strescape(name_esc, m->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, m->name, sizeof(name_esc));
   return BLI_sprintfN("thickness_modifiers[\"%s\"]", name_esc);
 }
 
@@ -281,7 +281,7 @@ static char *rna_LineStyle_geometry_modifier_path(PointerRNA *ptr)
 {
   LineStyleModifier *m = (LineStyleModifier *)ptr->data;
   char name_esc[sizeof(m->name) * 2];
-  BLI_strescape(name_esc, m->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, m->name, sizeof(name_esc));
   return BLI_sprintfN("geometry_modifiers[\"%s\"]", name_esc);
 }
 
@@ -1573,7 +1573,7 @@ static void rna_def_linestyle_modifiers(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "pivot_u", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "pivot_u");
-  RNA_def_property_range(prop, 0.f, 1.f);
+  RNA_def_property_range(prop, 0.0f, 1.0f);
   RNA_def_property_ui_text(prop,
                            "Stroke Point Parameter",
                            "Pivot in terms of the stroke point parameter u (0 <= u <= 1)");
@@ -1920,7 +1920,7 @@ static void rna_def_linestyle(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "thickness_ratio", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "thickness_ratio");
-  RNA_def_property_range(prop, 0.f, 1.f);
+  RNA_def_property_range(prop, 0.0f, 1.0f);
   RNA_def_property_ui_text(
       prop,
       "Thickness Ratio",

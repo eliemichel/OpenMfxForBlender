@@ -41,6 +41,7 @@
 #include "BLT_translation.h"
 
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -72,6 +73,7 @@
 #include "UI_view2d.h"
 
 #include "ED_gpencil.h"
+#include "ED_keyframing.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
 
@@ -303,7 +305,7 @@ static void gpencil_update_geometry(bGPdata *gpd)
 
       LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
         if (gps->flag & GP_STROKE_TAG) {
-          BKE_gpencil_stroke_geometry_update(gps);
+          BKE_gpencil_stroke_geometry_update(gpd, gps);
           gps->flag &= ~GP_STROKE_TAG;
         }
       }
@@ -1010,7 +1012,7 @@ static void gpencil_brush_clone_add(bContext *C, tGP_BrushEditData *gso)
 
       bGPDlayer *gpl = NULL;
       /* Try to use original layer. */
-      if (gps->runtime.tmp_layerinfo != NULL) {
+      if (gps->runtime.tmp_layerinfo[0] != '\0') {
         gpl = BKE_gpencil_layer_named_get(gpd, gps->runtime.tmp_layerinfo);
       }
 
@@ -1018,10 +1020,14 @@ static void gpencil_brush_clone_add(bContext *C, tGP_BrushEditData *gso)
       if (gpl == NULL) {
         gpl = CTX_data_active_gpencil_layer(C);
       }
-      bGPDframe *gpf = BKE_gpencil_layer_frame_get(gpl, CFRA, GP_GETFRAME_ADD_NEW);
+      bGPDframe *gpf = BKE_gpencil_layer_frame_get(
+          gpl, CFRA, IS_AUTOKEY_ON(scene) ? GP_GETFRAME_ADD_NEW : GP_GETFRAME_USE_PREV);
+      if (gpf == NULL) {
+        continue;
+      }
 
       /* Make a new stroke */
-      new_stroke = BKE_gpencil_stroke_duplicate(gps, true);
+      new_stroke = BKE_gpencil_stroke_duplicate(gps, true, true);
 
       new_stroke->next = new_stroke->prev = NULL;
       BLI_addtail(&gpf->strokes, new_stroke);
@@ -1333,6 +1339,10 @@ static void gpencil_sculpt_brush_init_stroke(bContext *C, tGP_BrushEditData *gso
 
   /* go through each layer, and ensure that we've got a valid frame to use */
   LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+    if (!IS_AUTOKEY_ON(scene) && (gpl->actframe == NULL)) {
+      continue;
+    }
+
     /* only editable and visible layers are considered */
     if (BKE_gpencil_layer_is_editable(gpl) && (gpl->actframe != NULL)) {
       bGPDframe *gpf = gpl->actframe;
@@ -1342,7 +1352,7 @@ static void gpencil_sculpt_brush_init_stroke(bContext *C, tGP_BrushEditData *gso
        * - This is useful when animating as it saves that "uh-oh" moment when you realize you've
        *   spent too much time editing the wrong frame.
        */
-      if (gpf->framenum != cfra) {
+      if ((IS_AUTOKEY_ON(scene)) && (gpf->framenum != cfra)) {
         BKE_gpencil_frame_addcopy(gpl, cfra);
         /* Need tag to recalculate evaluated data to avoid crashes. */
         DEG_id_tag_update(&gso->gpd->id, ID_RECALC_GEOMETRY | ID_RECALC_COPY_ON_WRITE);
@@ -1439,11 +1449,6 @@ static bool gpencil_sculpt_brush_do_stroke(tGP_BrushEditData *gso,
   bool include_last = false;
   bool changed = false;
   float rot_eval = 0.0f;
-
-  /* Check if the stroke collide with brush. */
-  if (!ED_gpencil_stroke_check_collision(gsc, gps, gso->mval, radius, diff_mat)) {
-    return false;
-  }
 
   if (gps->totpoints == 1) {
     bGPDspoint pt_temp;
@@ -1574,7 +1579,15 @@ static bool gpencil_sculpt_brush_do_frame(bContext *C,
   bool changed = false;
   bool redo_geom = false;
   Object *ob = gso->object;
+  bGPdata *gpd = ob->data;
   char tool = gso->brush->gpencil_sculpt_tool;
+  GP_SpaceConversion *gsc = &gso->gsc;
+  Brush *brush = gso->brush;
+  const int radius = (brush->flag & GP_BRUSH_USE_PRESSURE) ? gso->brush->size * gso->pressure :
+                                                             gso->brush->size;
+  /* Calc bound box matrix. */
+  float bound_mat[4][4];
+  BKE_gpencil_layer_transform_matrix_get(gso->depsgraph, gso->object, gpl, bound_mat);
 
   LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
     /* skip strokes that are invalid for current view */
@@ -1582,7 +1595,12 @@ static bool gpencil_sculpt_brush_do_frame(bContext *C,
       continue;
     }
     /* check if the color is editable */
-    if (ED_gpencil_stroke_color_use(ob, gpl, gps) == false) {
+    if (ED_gpencil_stroke_material_editable(ob, gpl, gps) == false) {
+      continue;
+    }
+
+    /* Check if the stroke collide with brush. */
+    if (!ED_gpencil_stroke_check_collision(gsc, gps, gso->mval, radius, bound_mat)) {
       continue;
     }
 
@@ -1672,7 +1690,7 @@ static bool gpencil_sculpt_brush_do_frame(bContext *C,
         MaterialGPencilStyle *gp_style = BKE_gpencil_material_settings(ob, gps->mat_nr + 1);
         /* Update active frame now, only if material has fill. */
         if (gp_style->flag & GP_MATERIAL_FILL_SHOW) {
-          BKE_gpencil_stroke_geometry_update(gps_active);
+          BKE_gpencil_stroke_geometry_update(gpd, gps_active);
         }
         else {
           gpencil_recalc_geometry_tag(gps_active);
@@ -1740,7 +1758,8 @@ static bool gpencil_sculpt_brush_apply_standard(bContext *C, tGP_BrushEditData *
 
     /* calculate difference matrix */
     float diff_mat[4][4];
-    BKE_gpencil_parent_matrix_get(depsgraph, obact, gpl, diff_mat);
+    BKE_gpencil_layer_transform_matrix_get(depsgraph, obact, gpl, diff_mat);
+    mul_m4_m4m4(diff_mat, diff_mat, gpl->layer_invmat);
 
     /* Active Frame or MultiFrame? */
     if (gso->is_multiframe) {

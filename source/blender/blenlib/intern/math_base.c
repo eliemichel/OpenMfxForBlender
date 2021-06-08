@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 /** \file
  * \ingroup bli
@@ -78,4 +77,40 @@ double double_round(double x, int ndigits)
 
   /* if computation resulted in overflow, raise OverflowError */
   return z;
+}
+
+/**
+ * Floor to the nearest power of 10, e.g.:
+ * - 15.0 -> 10.0
+ * - 0.015 -> 0.01
+ * - 1.0 -> 1.0
+ *
+ * \param f: Value to floor, must be over 0.0.
+ * \note If we wanted to support signed values we could if this becomes necessary.
+ */
+float floor_power_of_10(float f)
+{
+  BLI_assert(!(f < 0.0f));
+  if (f != 0.0f) {
+    return 1.0f / (powf(10.0f, ceilf(log10f(1.0f / f))));
+  }
+  return 0.0f;
+}
+
+/**
+ * Ceiling to the nearest power of 10, e.g.:
+ * - 15.0 -> 100.0
+ * - 0.015 -> 0.1
+ * - 1.0 -> 1.0
+ *
+ * \param f: Value to ceiling, must be over 0.0.
+ * \note If we wanted to support signed values we could if this becomes necessary.
+ */
+float ceil_power_of_10(float f)
+{
+  BLI_assert(!(f < 0.0f));
+  if (f != 0.0f) {
+    return 1.0f / (powf(10.0f, floorf(log10f(1.0f / f))));
+  }
+  return 0.0f;
 }

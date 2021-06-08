@@ -28,6 +28,10 @@
 #include "DNA_listBase.h"
 #include "DNA_vec_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MAXTEXTBOX 256 /* used in readfile.c and editfont.c */
 
 struct AnimData;
@@ -43,32 +47,13 @@ struct VFont;
 /* These two Lines with # tell makesdna this struct can be excluded. */
 #
 #
-typedef struct PathPoint {
-  /** Grr, cant get rid of tilt yet. */
-  float vec[4];
-  float quat[4];
-  float radius, weight;
-} PathPoint;
-
-/* These two Lines with # tell makesdna this struct can be excluded. */
-#
-#
-typedef struct Path {
-  struct PathPoint *data;
-  int len;
-  float totdist;
-} Path;
-
-/* These two Lines with # tell makesdna this struct can be excluded. */
-#
-#
 typedef struct BevPoint {
   float vec[3], tilt, radius, weight, offset;
   /** 2D Only. */
   float sina, cosa;
   /** 3D Only. */
   float dir[3], tan[3], quat[4];
-  short split_tag, dupe_tag;
+  short dupe_tag;
 } BevPoint;
 
 /* These two Lines with # tell makesdna this struct can be excluded. */
@@ -129,8 +114,8 @@ typedef struct BezTriple {
   /** BEZT_IPO_ELASTIC. */
   float amplitude, period;
 
-  /** F5: used for auto handle to distinguish between normal handle and exception (extrema). */
-  char f5;
+  /** Used during auto handle calculation to mark special cases (local extremes). */
+  char auto_handle_type;
   char _pad[3];
 } BezTriple;
 
@@ -265,7 +250,12 @@ typedef struct Curve {
   char overflow;
   char spacemode, align_y;
   char bevel_mode;
-  char _pad[2];
+  /**
+   * Determine how the effective radius of the bevel point is computed when a taper object is
+   * specified. The effective radius is a function of the bevel point radius and the taper radius.
+   */
+  char taper_radius_mode;
+  char _pad;
 
   /* font part */
   short lines;
@@ -338,7 +328,7 @@ enum {
   CU_BACK = 1 << 2,
   CU_PATH = 1 << 3,
   CU_FOLLOW = 1 << 4,
-  /* CU_UV_ORCO = 1 << 5, */ /* DEPRECATED */
+  CU_PATH_CLAMP = 1 << 5,
   CU_DEFORM_BOUNDS_OFF = 1 << 6,
   CU_STRETCH = 1 << 7,
   /* CU_OFFS_PATHDIST   = 1 << 8, */  /* DEPRECATED */
@@ -396,6 +386,16 @@ enum {
   CU_BEV_MODE_CURVE_PROFILE = 2,
 };
 
+/** #Curve.taper_radius_mode */
+enum {
+  /** Override the radius of the bevel point with the taper radius. */
+  CU_TAPER_RADIUS_OVERRIDE = 0,
+  /** Multiply the radius of the bevel point by the taper radius. */
+  CU_TAPER_RADIUS_MULTIPLY = 1,
+  /** Add the radius of the bevel point to the taper radius. */
+  CU_TAPER_RADIUS_ADD = 2,
+};
+
 /* Curve.overflow. */
 enum {
   CU_OVERFLOW_NONE = 0,
@@ -406,7 +406,6 @@ enum {
 /* Nurb.flag */
 enum {
   CU_SMOOTH = 1 << 0,
-  CU_2D = 1 << 3, /* moved from type since 2.4x */
 };
 
 /* Nurb.type */
@@ -461,10 +460,14 @@ typedef enum eBezTriple_Handle {
   HD_ALIGN_DOUBLESIDE = 5, /* align handles, displayed both of them. used for masks */
 } eBezTriple_Handle;
 
-/* f5 (beztriple) */
+/* auto_handle_type (beztriple) */
 typedef enum eBezTriple_Auto_Type {
+  /* Normal automatic handle that can be refined further. */
   HD_AUTOTYPE_NORMAL = 0,
-  HD_AUTOTYPE_SPECIAL = 1,
+  /* Handle locked horizontal due to being an Auto Clamped local
+   * extreme or a curve endpoint with Constant extrapolation.
+   * Further smoothing is disabled. */
+  HD_AUTOTYPE_LOCKED_FINAL = 1,
 } eBezTriple_Auto_Type;
 
 /* interpolation modes (used only for BezTriple->ipo) */
@@ -519,6 +522,10 @@ typedef enum eBezTriple_KeyframeType {
        (bezt)->f2 & SELECT : \
        BEZT_ISSEL_ANY(bezt))
 
+#define BEZT_ISSEL_IDX(bezt, i) \
+  ((i == 0 && (bezt)->f1 & SELECT) || (i == 1 && (bezt)->f2 & SELECT) || \
+   (i == 2 && (bezt)->f3 & SELECT))
+
 #define BEZT_SEL_ALL(bezt) \
   { \
     (bezt)->f1 |= SELECT; \
@@ -533,6 +540,49 @@ typedef enum eBezTriple_KeyframeType {
     (bezt)->f3 &= ~SELECT; \
   } \
   ((void)0)
+#define BEZT_SEL_INVERT(bezt) \
+  { \
+    (bezt)->f1 ^= SELECT; \
+    (bezt)->f2 ^= SELECT; \
+    (bezt)->f3 ^= SELECT; \
+  } \
+  ((void)0)
+
+#define BEZT_SEL_IDX(bezt, i) \
+  { \
+    switch (i) { \
+      case 0: \
+        (bezt)->f1 |= SELECT; \
+        break; \
+      case 1: \
+        (bezt)->f2 |= SELECT; \
+        break; \
+      case 2: \
+        (bezt)->f3 |= SELECT; \
+        break; \
+      default: \
+        break; \
+    } \
+  } \
+  ((void)0)
+
+#define BEZT_DESEL_IDX(bezt, i) \
+  { \
+    switch (i) { \
+      case 0: \
+        (bezt)->f1 &= ~SELECT; \
+        break; \
+      case 1: \
+        (bezt)->f2 &= ~SELECT; \
+        break; \
+      case 2: \
+        (bezt)->f3 &= ~SELECT; \
+        break; \
+      default: \
+        break; \
+    } \
+  } \
+  ((void)0)
 
 #define BEZT_IS_AUTOH(bezt) \
   (ELEM((bezt)->h1, HD_AUTO, HD_AUTO_ANIM) && ELEM((bezt)->h2, HD_AUTO, HD_AUTO_ANIM))
@@ -545,10 +595,10 @@ enum {
   CU_CHINFO_BOLD = 1 << 0,
   CU_CHINFO_ITALIC = 1 << 1,
   CU_CHINFO_UNDERLINE = 1 << 2,
-  /** wordwrap occurred here */
+  /** Word-wrap occurred here. */
   CU_CHINFO_WRAP = 1 << 3,
   CU_CHINFO_SMALLCAPS = 1 << 4,
-  /** set at runtime, checks if case switching is needed */
+  /** Set at runtime, checks if case switching is needed. */
   CU_CHINFO_SMALLCAPS_CHECK = 1 << 5,
   /** Set at runtime, indicates char that doesn't fit in text boxes. */
   CU_CHINFO_OVERFLOW = 1 << 6,
@@ -559,3 +609,7 @@ enum {
 
 /* indicates point has been seen during surface duplication */
 #define SURF_SEEN 4
+
+#ifdef __cplusplus
+}
+#endif

@@ -32,7 +32,7 @@
  * Every function that adds a set of buttons must create another group,
  * then #ui_def_but adds buttons to the current group (the last).
  */
-void ui_block_new_button_group(uiBlock *block, short flag)
+void ui_block_new_button_group(uiBlock *block, uiButtonGroupFlag flag)
 {
   /* Don't create a new group if there is a "lock" on new groups. */
   if (!BLI_listbase_is_empty(&block->button_groups)) {
@@ -75,7 +75,6 @@ void ui_block_free_button_groups(uiBlock *block)
   }
 }
 
-/* This function should be removed whenever #ui_layout_replace_but_ptr is removed. */
 void ui_button_group_replace_but_ptr(uiBlock *block, const void *old_but_ptr, uiBut *new_but)
 {
   LISTBASE_FOREACH (uiButtonGroup *, button_group, &block->button_groups) {
@@ -86,9 +85,6 @@ void ui_button_group_replace_but_ptr(uiBlock *block, const void *old_but_ptr, ui
       }
     }
   }
-
-  /* The button should be in a group. */
-  BLI_assert(false);
 }
 
 /** \} */

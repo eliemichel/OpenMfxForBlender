@@ -94,7 +94,7 @@ typedef enum ModifierType {
   eModifierType_WeightedNormal = 54,
   eModifierType_Weld = 55,
   eModifierType_Fluid = 56,
-  eModifierType_Simulation = 57,
+  eModifierType_Nodes = 57,
   eModifierType_MeshToVolume = 58,
   eModifierType_VolumeDisplace = 59,
   eModifierType_VolumeToMesh = 60,
@@ -122,7 +122,7 @@ typedef struct ModifierData {
   int type, mode;
   char _pad0[4];
   short flag;
-  /* An "expand" bit for each of the modifier's (sub)panels. */
+  /* An "expand" bit for each of the modifier's (sub)panels (uiPanelDataExpansion). */
   short ui_expand_flag;
   /** MAX_NAME. */
   char name[64];
@@ -144,6 +144,11 @@ typedef enum {
   eModifierFlag_OverrideLibrary_Local = (1 << 0),
   /* This modifier does not own its caches, but instead shares them with another modifier. */
   eModifierFlag_SharedCaches = (1 << 1),
+  /**
+   * This modifier is the object's active modifier. Used for context in the node editor.
+   * Only one modifier on an object should have this flag set.
+   */
+  eModifierFlag_Active = (1 << 2),
 } ModifierFlag;
 
 /* not a real modifier */
@@ -364,6 +369,8 @@ typedef struct MirrorModifierData {
   short axis DNA_DEPRECATED;
   short flag;
   float tolerance;
+  float bisect_threshold;
+  char _pad[4];
   float uv_offset[2];
   float uv_offset_copy[2];
   struct Object *mirror_ob;
@@ -633,7 +640,7 @@ typedef struct DecimateModifierData {
 
 enum {
   MOD_DECIM_FLAG_INVERT_VGROUP = (1 << 0),
-  /** for collapse only. dont convert tri pairs back to quads */
+  /** For collapse only. don't convert triangle pairs back to quads. */
   MOD_DECIM_FLAG_TRIANGULATE = (1 << 1),
   /** for dissolve only. collapse all verts between 2 faces */
   MOD_DECIM_FLAG_ALL_BOUNDARY_VERTS = (1 << 2),
@@ -900,6 +907,7 @@ enum {
   eBooleanModifierFlag_Self = (1 << 0),
   eBooleanModifierFlag_Object = (1 << 1),
   eBooleanModifierFlag_Collection = (1 << 2),
+  eBooleanModifierFlag_HoleTolerant = (1 << 3),
 };
 
 /* bm_flag only used when G_DEBUG. */
@@ -980,6 +988,12 @@ enum {
 typedef struct ParticleSystemModifierData {
   ModifierData modifier;
 
+  /**
+   * \note Storing the particle system pointer here is very weak, as it prevents modifiers' data
+   * copying to be self-sufficient (extra external code needs to ensure the pointer remains valid
+   * when the modifier data is copied from one object to another). See e.g.
+   * `BKE_object_copy_particlesystems` or `BKE_object_copy_modifier`.
+   */
   struct ParticleSystem *psys;
   /** Final Mesh - its topology may differ from orig mesh. */
   struct Mesh *mesh_final;
@@ -1050,7 +1064,8 @@ typedef struct MultiresModifierData {
   ModifierData modifier;
 
   char lvl, sculptlvl, renderlvl, totlvl;
-  char simple, flags, _pad[2];
+  char simple DNA_DEPRECATED;
+  char flags, _pad[2];
   short quality;
   short uv_smooth;
   short boundary_smooth;
@@ -1219,12 +1234,14 @@ typedef struct SolidifyModifierData {
   char defgrp_name[64];
   char shell_defgrp_name[64];
   char rim_defgrp_name[64];
-  /** New surface offset leve.l*/
+  /** New surface offset level. */
   float offset;
-  /** Midpoint of the offset . */
+  /** Midpoint of the offset. */
   float offset_fac;
-  /** factor for the minimum weight to use when vgroups are used,
-   * avoids 0.0 weights giving duplicate geometry */
+  /**
+   * Factor for the minimum weight to use when vertex-groups are used,
+   * avoids 0.0 weights giving duplicate geometry.
+   */
   float offset_fac_vg;
   /** Clamp offset based on surrounding geometry. */
   float offset_clamp;
@@ -1584,6 +1601,10 @@ typedef struct WeightVGProximityModifierData {
   /** Name of vertex group to modify/weight. MAX_VGROUP_NAME. */
   char defgrp_name[64];
 
+  /* Mapping stuff. */
+  /** The custom mapping curve!. */
+  struct CurveMapping *cmap_curve;
+
   /* Proximity modes. */
   int proximity_mode;
   int proximity_flags;
@@ -1704,7 +1725,7 @@ typedef enum eRemeshModifierMode {
 typedef struct RemeshModifierData {
   ModifierData modifier;
 
-  /* floodfill option, controls how small components can be before they are removed */
+  /** Flood-fill option, controls how small components can be before they are removed. */
   float threshold;
 
   /* ratio between size of model and grid */
@@ -1995,13 +2016,20 @@ typedef struct WeldModifierData {
   /* Name of vertex group to use to mask, MAX_VGROUP_NAME. */
   char defgrp_name[64];
 
-  short flag;
+  char mode;
+  char flag;
   char _pad[2];
 } WeldModifierData;
 
 /* WeldModifierData->flag */
 enum {
   MOD_WELD_INVERT_VGROUP = (1 << 0),
+};
+
+/* #WeldModifierData.mode */
+enum {
+  MOD_WELD_MODE_ALL = 0,
+  MOD_WELD_MODE_CONNECTED = 1,
 };
 
 typedef struct DataTransferModifierData {
@@ -2220,9 +2248,16 @@ enum {
 #define MOD_MESHSEQ_READ_ALL \
   (MOD_MESHSEQ_READ_VERT | MOD_MESHSEQ_READ_POLY | MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)
 
-typedef struct SimulationModifierData {
+typedef struct NodesModifierSettings {
+  /* This stores data that is passed into the node group. */
+  struct IDProperty *properties;
+} NodesModifierSettings;
+
+typedef struct NodesModifierData {
   ModifierData modifier;
-} SimulationModifierData;
+  struct bNodeTree *node_group;
+  struct NodesModifierSettings settings;
+} NodesModifierData;
 
 typedef struct MeshToVolumeModifierData {
   ModifierData modifier;

@@ -69,7 +69,7 @@ typedef struct DDSData {
  * See T46524. */
 
 /** #ImBuf.ftype flag, main image types. */
-enum eImbTypes {
+enum eImbFileType {
   IMB_FTYPE_PNG = 1,
   IMB_FTYPE_TGA = 2,
   IMB_FTYPE_JPG = 3,
@@ -97,6 +97,9 @@ enum eImbTypes {
   IMB_FTYPE_DDS = 13,
 #endif
 };
+
+/* Only for readability. */
+#define IMB_FTYPE_NONE 0
 
 /* ibuf->foptions flag, type specific options.
  * Some formats include compression rations on some bits */
@@ -173,12 +176,12 @@ typedef enum eImBufFlags {
 
 /** \} */
 typedef struct ImBuf {
-  struct ImBuf *next, *prev; /**< allow lists of ImBufs, for caches or flipbooks */
+  struct ImBuf *next, *prev; /** < allow lists of #ImBufs, for caches or flip-books. */
 
   /* dimensions */
   /** Width and Height of our image buffer.
    * Should be 'unsigned int' since most formats use this.
-   * but this is problematic with texture math in imagetexture.c
+   * but this is problematic with texture math in `imagetexture.c`
    * avoid problems and use int. - campbell */
   int x, y;
 
@@ -243,7 +246,7 @@ typedef struct ImBuf {
 
   /* file information */
   /** file type we are going to save as */
-  enum eImbTypes ftype;
+  enum eImbFileType ftype;
   /** file format specific flags */
   ImbFormatOptions foptions;
   /** filename associated with this image */

@@ -706,11 +706,10 @@ static bool edit_constraint_poll_generic(bContext *C,
     return false;
   }
 
-  if (ID_IS_OVERRIDE_LIBRARY(ob) && !is_liboverride_allowed) {
-    if ((con == NULL) || (con->flag & CONSTRAINT_OVERRIDE_LIBRARY_LOCAL) == 0) {
-      CTX_wm_operator_poll_msg_set(C, "Cannot edit constraints coming from library override");
-      return false;
-    }
+  if (!is_liboverride_allowed && BKE_constraint_is_nonlocal_in_liboverride(ob, con)) {
+    CTX_wm_operator_poll_msg_set(
+        C, "Cannot edit constraints coming from linked data in a library override");
+    return false;
   }
 
   return true;
@@ -1009,7 +1008,7 @@ void CONSTRAINT_OT_childof_set_inverse(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Set Inverse";
   ot->idname = "CONSTRAINT_OT_childof_set_inverse";
-  ot->description = "Set inverse correction for ChildOf constraint";
+  ot->description = "Set inverse correction for Child Of constraint";
 
   /* callbacks */
   ot->invoke = childof_set_inverse_invoke;
@@ -1058,7 +1057,7 @@ void CONSTRAINT_OT_childof_clear_inverse(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Clear Inverse";
   ot->idname = "CONSTRAINT_OT_childof_clear_inverse";
-  ot->description = "Clear inverse correction for ChildOf constraint";
+  ot->description = "Clear inverse correction for Child Of constraint";
 
   /* callbacks */
   ot->invoke = childof_clear_inverse_invoke;
@@ -1264,7 +1263,7 @@ void CONSTRAINT_OT_objectsolver_set_inverse(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Set Inverse";
   ot->idname = "CONSTRAINT_OT_objectsolver_set_inverse";
-  ot->description = "Set inverse correction for ObjectSolver constraint";
+  ot->description = "Set inverse correction for Object Solver constraint";
 
   /* callbacks */
   ot->invoke = objectsolver_set_inverse_invoke;
@@ -1320,7 +1319,7 @@ void CONSTRAINT_OT_objectsolver_clear_inverse(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Clear Inverse";
   ot->idname = "CONSTRAINT_OT_objectsolver_clear_inverse";
-  ot->description = "Clear inverse correction for ObjectSolver constraint";
+  ot->description = "Clear inverse correction for Object Solver constraint";
 
   /* callbacks */
   ot->invoke = objectsolver_clear_inverse_invoke;
@@ -1681,7 +1680,7 @@ static int constraint_move_to_index_invoke(bContext *C, wmOperator *op, const wm
 void CONSTRAINT_OT_move_to_index(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Move Constraint To Index";
+  ot->name = "Move Constraint to Index";
   ot->idname = "CONSTRAINT_OT_move_to_index";
   ot->description =
       "Change the constraint's position in the list so it evaluates after the set number of "
@@ -1782,7 +1781,7 @@ void OBJECT_OT_constraints_clear(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Clear Object Constraints";
   ot->idname = "OBJECT_OT_constraints_clear";
-  ot->description = "Clear all the constraints for the active Object only";
+  ot->description = "Clear all the constraints for the active object only";
 
   /* callbacks */
   ot->exec = object_constraints_clear_exec;
@@ -2219,7 +2218,7 @@ static const EnumPropertyItem *object_constraint_add_itemf(bContext *UNUSED(C),
   int totitem = 0;
 
   while (item->identifier) {
-    if ((item->value != CONSTRAINT_TYPE_KINEMATIC) && (item->value != CONSTRAINT_TYPE_SPLINEIK)) {
+    if (!ELEM(item->value, CONSTRAINT_TYPE_KINEMATIC, CONSTRAINT_TYPE_SPLINEIK)) {
       RNA_enum_item_add(&object_constraint_items, &totitem, item);
     }
     item++;
@@ -2268,7 +2267,7 @@ void OBJECT_OT_constraint_add_with_targets(wmOperatorType *ot)
   ot->name = "Add Constraint (with Targets)";
   ot->description =
       "Add a constraint to the active object, with target (where applicable) set to the "
-      "selected Objects/Bones";
+      "selected objects/bones";
   ot->idname = "OBJECT_OT_constraint_add_with_targets";
 
   /* api callbacks */

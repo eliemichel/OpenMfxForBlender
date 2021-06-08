@@ -112,7 +112,7 @@ static OArchive *create_archive(std::ofstream *abc_ostream,
  *
  * If 'time_relative' is true, samples are returned as time (in seconds) from params.frame_start.
  * If 'time_relative' is false, samples are returned as fractional frames from 0.
- * */
+ */
 static void get_shutter_samples(double scene_fps,
                                 const AlembicExportParams &params,
                                 int nr_of_samples,
@@ -141,13 +141,13 @@ static TimeSamplingPtr create_time_sampling(double scene_fps,
   std::vector<double> samples;
 
   if (params.frame_start == params.frame_end) {
-    return TimeSamplingPtr(new TimeSampling());
+    return TimeSamplingPtr(new TimeSampling());  // NOLINT: modernize-make-shared
   }
 
   get_shutter_samples(scene_fps, params, nr_of_samples, true, samples);
 
   TimeSamplingType ts(static_cast<uint32_t>(samples.size()), 1.0 / scene_fps);
-  return TimeSamplingPtr(new TimeSampling(ts, samples));
+  return TimeSamplingPtr(new TimeSampling(ts, samples));  // NOLINT: modernize-make-shared
 }
 
 static void get_frames(double scene_fps,

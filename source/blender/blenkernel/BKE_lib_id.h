@@ -51,7 +51,6 @@
 extern "C" {
 #endif
 
-struct BlendDataReader;
 struct BlendWriter;
 struct GHash;
 struct ID;
@@ -105,6 +104,10 @@ enum {
    * specific code in some copy cases (mostly for node trees). */
   LIB_ID_CREATE_LOCAL = 1 << 9,
 
+  /** Create for the depsgraph, when set #LIB_TAG_COPIED_ON_WRITE must be set.
+   * Internally this is used to share some pointers instead of duplicating them. */
+  LIB_ID_COPY_SET_COPIED_ON_WRITE = 1 << 10,
+
   /* *** Specific options to some ID types or usages. *** */
   /* *** May be ignored by unrelated ID copying functions. *** */
   /** Object only, needed by make_local code. */
@@ -117,6 +120,8 @@ enum {
   LIB_ID_COPY_NO_ANIMDATA = 1 << 19,
   /** Mesh: Reference CD data layers instead of doing real copy - USE WITH CAUTION! */
   LIB_ID_COPY_CD_REFERENCE = 1 << 20,
+  /** Do not copy id->override_library, used by ID datablock override routines. */
+  LIB_ID_COPY_NO_LIB_OVERRIDE = 1 << 21,
 
   /* *** XXX Hackish/not-so-nice specific behaviors needed for some corner cases. *** */
   /* *** Ideally we should not have those, but we need them for now... *** */
@@ -137,7 +142,8 @@ enum {
   LIB_ID_CREATE_LOCALIZE = LIB_ID_CREATE_NO_MAIN | LIB_ID_CREATE_NO_USER_REFCOUNT |
                            LIB_ID_CREATE_NO_DEG_TAG,
   /** Generate a local copy, outside of bmain, to work on (used by COW e.g.). */
-  LIB_ID_COPY_LOCALIZE = LIB_ID_CREATE_LOCALIZE | LIB_ID_COPY_NO_PREVIEW | LIB_ID_COPY_CACHES,
+  LIB_ID_COPY_LOCALIZE = LIB_ID_CREATE_LOCALIZE | LIB_ID_COPY_NO_PREVIEW | LIB_ID_COPY_CACHES |
+                         LIB_ID_COPY_NO_LIB_OVERRIDE,
 };
 
 void BKE_libblock_copy_ex(struct Main *bmain,
@@ -201,7 +207,7 @@ void BKE_id_free(struct Main *bmain, void *idv);
 void BKE_id_free_us(struct Main *bmain, void *idv) ATTR_NONNULL();
 
 void BKE_id_delete(struct Main *bmain, void *idv) ATTR_NONNULL();
-void BKE_id_multi_tagged_delete(struct Main *bmain) ATTR_NONNULL();
+size_t BKE_id_multi_tagged_delete(struct Main *bmain) ATTR_NONNULL();
 
 void BKE_libblock_management_main_add(struct Main *bmain, void *idv);
 void BKE_libblock_management_main_remove(struct Main *bmain, void *idv);
@@ -220,7 +226,7 @@ void id_fake_user_set(struct ID *id);
 void id_fake_user_clear(struct ID *id);
 void BKE_id_clear_newpoin(struct ID *id);
 
-/** Flags to control make local code behaviour. */
+/** Flags to control make local code behavior. */
 enum {
   /** Making that ID local is part of making local a whole library. */
   LIB_ID_MAKELOCAL_FULL_LIBRARY = 1 << 0,
@@ -297,6 +303,8 @@ void BKE_id_tag_set_atomic(struct ID *id, int tag);
 void BKE_id_tag_clear_atomic(struct ID *id, int tag);
 
 bool BKE_id_is_in_global_main(struct ID *id);
+
+bool BKE_id_can_be_asset(const struct ID *id);
 
 void BKE_id_ordered_list(struct ListBase *ordered_lb, const struct ListBase *lb);
 void BKE_id_reorder(const struct ListBase *lb, struct ID *id, struct ID *relative, bool after);

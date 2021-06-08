@@ -24,7 +24,7 @@
 
 #include "COM_NodeGraph.h"
 
-using std::vector;
+namespace blender::compositor {
 
 class CompositorContext;
 
@@ -64,28 +64,18 @@ class NodeOperationBuilder {
     }
   };
 
-  typedef std::vector<NodeOperation *> Operations;
-  typedef std::vector<Link> Links;
-  typedef std::vector<ExecutionGroup *> Groups;
-
-  typedef std::map<NodeOperationInput *, NodeInput *> InputSocketMap;
-  typedef std::map<NodeOutput *, NodeOperationOutput *> OutputSocketMap;
-
-  typedef std::vector<NodeOperationInput *> OpInputs;
-  typedef std::map<NodeInput *, OpInputs> OpInputInverseMap;
-
  private:
   const CompositorContext *m_context;
   NodeGraph m_graph;
 
-  Operations m_operations;
-  Links m_links;
-  Groups m_groups;
+  Vector<NodeOperation *> m_operations;
+  Vector<Link> m_links;
+  Vector<ExecutionGroup *> m_groups;
 
   /** Maps operation inputs to node inputs */
-  InputSocketMap m_input_map;
+  Map<NodeOperationInput *, NodeInput *> m_input_map;
   /** Maps node outputs to operation outputs */
-  OutputSocketMap m_output_map;
+  Map<NodeOutput *, NodeOperationOutput *> m_output_map;
 
   Node *m_current_node;
 
@@ -97,7 +87,6 @@ class NodeOperationBuilder {
 
  public:
   NodeOperationBuilder(const CompositorContext *context, bNodeTree *b_nodetree);
-  ~NodeOperationBuilder();
 
   const CompositorContext &context() const
   {
@@ -129,19 +118,23 @@ class NodeOperationBuilder {
     return m_active_viewer;
   }
 
- protected:
-  static NodeInput *find_node_input(const InputSocketMap &map, NodeOperationInput *op_input);
-  static const OpInputs &find_operation_inputs(const OpInputInverseMap &map,
-                                               NodeInput *node_input);
-  static NodeOperationOutput *find_operation_output(const OutputSocketMap &map,
-                                                    NodeOutput *node_output);
+  const Vector<NodeOperation *> &get_operations() const
+  {
+    return m_operations;
+  }
 
+  const Vector<Link> &get_links() const
+  {
+    return m_links;
+  }
+
+ protected:
   /** Add datatype conversion where needed */
   void add_datatype_conversions();
 
   /** Construct a constant value operation for every unconnected input */
   void add_operation_input_constants();
-  void add_input_constant_value(NodeOperationInput *input, NodeInput *node_input);
+  void add_input_constant_value(NodeOperationInput *input, const NodeInput *node_input);
 
   /** Replace proxy operations with direct links */
   void resolve_proxies();
@@ -150,7 +143,7 @@ class NodeOperationBuilder {
   void determineResolutions();
 
   /** Helper function to store connected inputs for replacement */
-  OpInputs cache_output_links(NodeOperationOutput *output) const;
+  Vector<NodeOperationInput *> cache_output_links(NodeOperationOutput *output) const;
   /** Find a connected write buffer operation to an OpOutput */
   WriteBufferOperation *find_attached_write_buffer_operation(NodeOperationOutput *output) const;
   /** Add read/write buffer operations around complex operations */
@@ -175,3 +168,8 @@ class NodeOperationBuilder {
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:NodeCompilerImpl")
 #endif
 };
+
+std::ostream &operator<<(std::ostream &os, const NodeOperationBuilder &builder);
+std::ostream &operator<<(std::ostream &os, const NodeOperationBuilder::Link &link);
+
+}  // namespace blender::compositor

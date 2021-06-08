@@ -19,7 +19,6 @@
 
 # <pep8-80 compliant>
 
-import bpy
 from bpy.types import Operator
 from mathutils import Vector
 
@@ -358,7 +357,7 @@ from bpy.props import (
 
 
 class AlignObjects(Operator):
-    """Align Objects"""
+    """Align objects"""
     bl_idname = "object.align"
     bl_label = "Align Objects"
     bl_options = {'REGISTER', 'UNDO'}
@@ -366,9 +365,9 @@ class AlignObjects(Operator):
     bb_quality: BoolProperty(
         name="High Quality",
         description=(
-            "Enables high quality calculation of the "
+            "Enables high quality but slow calculation of the "
             "bounding box for perfect results on complex "
-            "shape meshes with rotation/scale (Slow)"
+            "shape meshes with rotation/scale"
         ),
         default=True,
     )
@@ -386,7 +385,7 @@ class AlignObjects(Operator):
         name="Relative To",
         description="Reference location to align to",
         items=(
-            ('OPT_1', "Scene Origin", "Use the Scene Origin as the position for the selected objects to align to"),
+            ('OPT_1', "Scene Origin", "Use the scene origin as the position for the selected objects to align to"),
             ('OPT_2', "3D Cursor", "Use the 3D cursor as the position for the selected objects to align to"),
             ('OPT_3', "Selection", "Use the selected objects as the position for the selected objects to align to"),
             ('OPT_4', "Active", "Use the active object as the position for the selected objects to align to"),

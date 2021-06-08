@@ -21,6 +21,8 @@
 #include "COM_NodeOperation.h"
 #include "DNA_light_types.h"
 
+namespace blender::compositor {
+
 class GlareThresholdOperation : public NodeOperation {
  private:
   /**
@@ -37,24 +39,27 @@ class GlareThresholdOperation : public NodeOperation {
   GlareThresholdOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   void setGlareSettings(NodeGlare *settings)
   {
     this->m_settings = settings;
   }
 
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override;
 };
+
+}  // namespace blender::compositor

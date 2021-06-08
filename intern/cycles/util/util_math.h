@@ -349,7 +349,7 @@ ccl_device_inline float fractf(float x)
   return x - floorf(x);
 }
 
-/* Adapted from godotengine math_funcs.h. */
+/* Adapted from godot-engine math_funcs.h. */
 ccl_device_inline float wrapf(float value, float max, float min)
 {
   float range = max - min;
@@ -385,7 +385,7 @@ ccl_device_inline float nonzerof(float f, float eps)
     return f;
 }
 
-/* Signum function testing for zero. Matches GLSL and OSL functions. */
+/* `signum` function testing for zero. Matches GLSL and OSL functions. */
 ccl_device_inline float compatible_signf(float f)
 {
   if (f == 0.0f) {
@@ -754,7 +754,7 @@ ccl_device_inline float2 map_to_sphere(const float3 co)
   float u, v;
   if (l > 0.0f) {
     if (UNLIKELY(co.x == 0.0f && co.y == 0.0f)) {
-      u = 0.0f; /* othwise domain error */
+      u = 0.0f; /* Otherwise domain error. */
     }
     else {
       u = (1.0f - atan2f(co.x, co.y) / M_PI_F) / 2.0f;
@@ -788,7 +788,7 @@ ccl_device_inline float compare_floats(float a, float b, float abs_diff, int ulp
 }
 
 /* Calculate the angle between the two vectors a and b.
- * The usual approach acos(dot(a, b)) has severe precision issues for small angles,
+ * The usual approach `acos(dot(a, b))` has severe precision issues for small angles,
  * which are avoided by this method.
  * Based on "Mangled Angles" from https://people.eecs.berkeley.edu/~wkahan/Mindless.pdf
  */

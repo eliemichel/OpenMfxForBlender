@@ -36,6 +36,7 @@
 #include "BLT_translation.h"
 
 #include "DNA_ID.h"
+#include "DNA_collection_types.h"
 #include "DNA_node_types.h"
 #include "DNA_scene_types.h"
 
@@ -62,7 +63,7 @@ bool BKE_idtype_cache_key_cmp(const void *key_a_v, const void *key_b_v)
          (key_a->offset_in_ID != key_b->offset_in_ID) || (key_a->cache_v != key_b->cache_v);
 }
 
-static IDTypeInfo *id_types[MAX_LIBARRAY] = {NULL};
+static IDTypeInfo *id_types[INDEX_ID_MAX] = {NULL};
 
 static void id_type_init(void)
 {

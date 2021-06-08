@@ -256,6 +256,11 @@ static void modifier_ops_extra_draw(bContext *C, uiLayout *layout, void *md_v)
             "OBJECT_OT_modifier_copy");
   }
 
+  uiItemO(layout,
+          CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy to Selected"),
+          0,
+          "OBJECT_OT_modifier_copy_to_selected");
+
   uiItemS(layout);
 
   /* Move to first. */
@@ -307,10 +312,16 @@ static void modifier_panel_header(const bContext *C, Panel *panel)
 
   /* Modifier Icon. */
   sub = uiLayoutRow(layout, true);
+  uiLayoutSetEmboss(sub, UI_EMBOSS_NONE);
   if (mti->isDisabled && mti->isDisabled(scene, md, 0)) {
     uiLayoutSetRedAlert(sub, true);
   }
-  uiItemL(sub, "", RNA_struct_ui_icon(ptr->type));
+  uiItemStringO(sub,
+                "",
+                RNA_struct_ui_icon(ptr->type),
+                "OBJECT_OT_modifier_set_active",
+                "modifier",
+                md->name);
 
   row = uiLayoutRow(layout, true);
 
@@ -333,15 +344,39 @@ static void modifier_panel_header(const bContext *C, Panel *panel)
     }
   } /* Tessellation point for curve-typed objects. */
   else if (ELEM(ob->type, OB_CURVE, OB_SURF, OB_FONT)) {
-    if (mti->type != eModifierTypeType_Constructive) {
+    /* Some modifiers can work with pre-tessellated curves only. */
+    if (ELEM(md->type, eModifierType_Hook, eModifierType_Softbody, eModifierType_MeshDeform)) {
+      /* Add button (appearing to be ON) and add tip why this cant be changed. */
+      sub = uiLayoutRow(row, true);
+      uiBlock *block = uiLayoutGetBlock(sub);
+      static int apply_on_spline_always_on_hack = eModifierMode_ApplyOnSpline;
+      uiBut *but = uiDefIconButBitI(block,
+                                    UI_BTYPE_TOGGLE,
+                                    eModifierMode_ApplyOnSpline,
+                                    0,
+                                    ICON_SURFACE_DATA,
+                                    0,
+                                    0,
+                                    UI_UNIT_X - 2,
+                                    UI_UNIT_Y,
+                                    &apply_on_spline_always_on_hack,
+                                    0.0,
+                                    0.0,
+                                    0.0,
+                                    0.0,
+                                    TIP_("Apply on Spline"));
+      UI_but_disable(
+          but, TIP_("This modifier can only deform control points, not the filled curve/surface"));
+      buttons_number++;
+    }
+    else if (mti->type != eModifierTypeType_Constructive) {
       /* Constructive modifiers tessellates curve before applying. */
       uiItemR(row, ptr, "use_apply_on_spline", 0, "", ICON_NONE);
       buttons_number++;
     }
   }
   /* Collision and Surface are always enabled, hide buttons. */
-  if (((md->type != eModifierType_Collision) || !(ob->pd && ob->pd->deflect)) &&
-      (md->type != eModifierType_Surface)) {
+  if (!ELEM(md->type, eModifierType_Collision, eModifierType_Surface)) {
     if (mti->flags & eModifierTypeFlag_SupportsEditmode) {
       sub = uiLayoutRow(row, true);
       uiLayoutSetActive(sub, (md->mode & eModifierMode_Realtime));
@@ -399,16 +434,13 @@ static void modifier_panel_header(const bContext *C, Panel *panel)
  */
 PanelType *modifier_panel_register(ARegionType *region_type, ModifierType type, PanelDrawFn draw)
 {
-  /* Get the name for the modifier's panel. */
-  char panel_idname[BKE_ST_MAXNAME];
-  BKE_modifier_type_panel_id(type, panel_idname);
+  PanelType *panel_type = MEM_callocN(sizeof(PanelType), __func__);
 
-  PanelType *panel_type = MEM_callocN(sizeof(PanelType), panel_idname);
-
-  BLI_strncpy(panel_type->idname, panel_idname, BKE_ST_MAXNAME);
+  BKE_modifier_type_panel_id(type, panel_type->idname);
   BLI_strncpy(panel_type->label, "", BKE_ST_MAXNAME);
   BLI_strncpy(panel_type->context, "modifier", BKE_ST_MAXNAME);
   BLI_strncpy(panel_type->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA, BKE_ST_MAXNAME);
+  BLI_strncpy(panel_type->active_property, "is_active", BKE_ST_MAXNAME);
 
   panel_type->draw_header = modifier_panel_header;
   panel_type->draw = draw;
@@ -416,7 +448,7 @@ PanelType *modifier_panel_register(ARegionType *region_type, ModifierType type, 
 
   /* Give the panel the special flag that says it was built here and corresponds to a
    * modifier rather than a #PanelType. */
-  panel_type->flag = PNL_LAYOUT_HEADER_EXPAND | PNL_DRAW_BOX | PNL_INSTANCED;
+  panel_type->flag = PANEL_TYPE_HEADER_EXPAND | PANEL_TYPE_DRAW_BOX | PANEL_TYPE_INSTANCED;
   panel_type->reorder = modifier_reorder;
   panel_type->get_list_data_expand_flag = get_modifier_expand_flag;
   panel_type->set_list_data_expand_flag = set_modifier_expand_flag;
@@ -439,21 +471,18 @@ PanelType *modifier_subpanel_register(ARegionType *region_type,
                                       PanelDrawFn draw,
                                       PanelType *parent)
 {
-  /* Create the subpanel's ID name. */
-  char panel_idname[BKE_ST_MAXNAME];
-  BLI_snprintf(panel_idname, BKE_ST_MAXNAME, "%s_%s", parent->idname, name);
+  PanelType *panel_type = MEM_callocN(sizeof(PanelType), __func__);
 
-  PanelType *panel_type = MEM_callocN(sizeof(PanelType), panel_idname);
-
-  BLI_strncpy(panel_type->idname, panel_idname, BKE_ST_MAXNAME);
+  BLI_snprintf(panel_type->idname, BKE_ST_MAXNAME, "%s_%s", parent->idname, name);
   BLI_strncpy(panel_type->label, label, BKE_ST_MAXNAME);
   BLI_strncpy(panel_type->context, "modifier", BKE_ST_MAXNAME);
   BLI_strncpy(panel_type->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA, BKE_ST_MAXNAME);
+  BLI_strncpy(panel_type->active_property, "is_active", BKE_ST_MAXNAME);
 
   panel_type->draw_header = draw_header;
   panel_type->draw = draw;
   panel_type->poll = modifier_ui_poll;
-  panel_type->flag = (PNL_DEFAULT_CLOSED | PNL_DRAW_BOX);
+  panel_type->flag = (PANEL_TYPE_DEFAULT_CLOSED | PANEL_TYPE_DRAW_BOX);
 
   BLI_assert(parent != NULL);
   BLI_strncpy(panel_type->parent_id, parent->idname, BKE_ST_MAXNAME);

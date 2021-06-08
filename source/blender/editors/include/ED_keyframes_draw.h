@@ -95,6 +95,8 @@ typedef enum eActKeyBlock_Hold {
   ACTKEYBLOCK_FLAG_ANY_HOLD = (1 << 2),
   /* The curve segment uses non-bezier interpolation */
   ACTKEYBLOCK_FLAG_NON_BEZIER = (1 << 3),
+  /* The block is grease pencil */
+  ACTKEYBLOCK_FLAG_GPENCIL = (1 << 4),
 } eActKeyBlock_Flag;
 
 /* *********************** Keyframe Drawing ****************************** */
@@ -255,9 +257,7 @@ void gpencil_to_keylist(struct bDopeSheet *ads,
 /* Grease Pencil Layer */
 void gpl_to_keylist(struct bDopeSheet *ads, struct bGPDlayer *gpl, struct DLRBT_Tree *keys);
 /* Mask */
-void mask_to_keylist(struct bDopeSheet *UNUSED(ads),
-                     struct MaskLayer *masklay,
-                     struct DLRBT_Tree *keys);
+void mask_to_keylist(struct bDopeSheet *ads, struct MaskLayer *masklay, struct DLRBT_Tree *keys);
 
 /* ActKeyColumn API ---------------- */
 /* Comparator callback used for ActKeyColumns and cframe float-value pointer */

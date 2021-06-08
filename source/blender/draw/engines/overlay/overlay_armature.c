@@ -1293,11 +1293,15 @@ static void draw_axes(ArmatureDrawContext *ctx,
     float length = pchan->bone->length;
     copy_m4_m4(axis_mat, pchan->custom_tx ? pchan->custom_tx->pose_mat : pchan->pose_mat);
     rescale_m4(axis_mat, (float[3]){length, length, length});
+    translate_m4(axis_mat, 0.0, arm->axes_position - 1.0, 0.0);
 
     drw_shgroup_bone_axes(ctx, axis_mat, final_col);
   }
   else {
-    drw_shgroup_bone_axes(ctx, BONE_VAR(eBone, pchan, disp_mat), final_col);
+    float disp_mat[4][4];
+    copy_m4_m4(disp_mat, BONE_VAR(eBone, pchan, disp_mat));
+    translate_m4(disp_mat, 0.0, arm->axes_position - 1.0, 0.0);
+    drw_shgroup_bone_axes(ctx, disp_mat, final_col);
   }
 }
 
@@ -1691,13 +1695,13 @@ static void draw_bone_degrees_of_freedom(ArmatureDrawContext *ctx, bPoseChannel 
 
   unit_m4(posetrans);
   translate_m4(posetrans, pchan->pose_mat[3][0], pchan->pose_mat[3][1], pchan->pose_mat[3][2]);
-  /* in parent-bone pose space... */
+  /* In parent-bone pose space... */
   if (pchan->parent) {
     copy_m4_m4(tmp, pchan->parent->pose_mat);
     zero_v3(tmp[3]);
     mul_m4_m4m4(posetrans, posetrans, tmp);
   }
-  /* ... but own restspace */
+  /* ... but own rest-space. */
   mul_m4_m4m3(posetrans, posetrans, pchan->bone->bone_mat);
 
   float scale = pchan->bone->length * pchan->size[1];

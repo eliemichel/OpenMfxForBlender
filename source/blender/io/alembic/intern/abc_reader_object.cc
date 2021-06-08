@@ -44,13 +44,13 @@ using Alembic::AbcGeom::IXformSchema;
 namespace blender::io::alembic {
 
 AbcObjectReader::AbcObjectReader(const IObject &object, ImportSettings &settings)
-    : m_object(NULL),
+    : m_object(nullptr),
       m_iobject(object),
       m_settings(&settings),
       m_min_time(std::numeric_limits<chrono_t>::max()),
       m_max_time(std::numeric_limits<chrono_t>::min()),
       m_refcount(0),
-      parent_reader(NULL)
+      parent_reader(nullptr)
 {
   m_name = object.getFullName();
   std::vector<std::string> parts;
@@ -95,10 +95,6 @@ void AbcObjectReader::determine_inherits_xform()
   else {
     m_inherits_xform = ixform_parent && m_inherits_xform;
   }
-}
-
-AbcObjectReader::~AbcObjectReader()
-{
 }
 
 const IObject &AbcObjectReader::iobject() const
@@ -203,7 +199,7 @@ void AbcObjectReader::setupObjectTransform(const float time)
 
   if (!is_constant) {
     bConstraint *con = BKE_constraint_add_for_object(
-        m_object, NULL, CONSTRAINT_TYPE_TRANSFORM_CACHE);
+        m_object, nullptr, CONSTRAINT_TYPE_TRANSFORM_CACHE);
     bTransformCacheConstraint *data = static_cast<bTransformCacheConstraint *>(con->data);
     BLI_strncpy(data->object_path, m_iobject.getFullName().c_str(), FILE_MAX);
 

@@ -57,6 +57,13 @@ typedef struct FModifier {
   short type;
   /** Settings for the modifier. */
   short flag;
+  /**
+   * Expansion state for the modifier panel and its sub-panels, stored as a bit-field
+   * in depth-first order. (Maximum of `sizeof(short)` total panels).
+   */
+  short ui_expand_flag;
+
+  char _pad[6];
 
   /** The amount that the modifier should influence the value. */
   float influence;
@@ -82,7 +89,7 @@ typedef enum eFModifier_Types {
   FMODIFIER_TYPE_ENVELOPE = 3,
   FMODIFIER_TYPE_CYCLES = 4,
   FMODIFIER_TYPE_NOISE = 5,
-  /** Unimplemented - for applying: fft, high/low pass filters, etc. */
+  /** Unimplemented - for applying: FFT, high/low pass filters, etc. */
   FMODIFIER_TYPE_FILTER = 6,
   FMODIFIER_TYPE_PYTHON = 7,
   FMODIFIER_TYPE_LIMITS = 8,
@@ -96,8 +103,10 @@ typedef enum eFModifier_Types {
 typedef enum eFModifier_Flags {
   /** Modifier is not able to be evaluated for some reason, and should be skipped (internal). */
   FMODIFIER_FLAG_DISABLED = (1 << 0),
-  /** Modifier's data is expanded (in UI). */
+#ifdef DNA_DEPRECATED_ALLOW
+  /** Modifier's data is expanded (in UI). Deprecated, use `ui_expand_flag`. */
   FMODIFIER_FLAG_EXPANDED = (1 << 1),
+#endif
   /** Modifier is active one (in UI) for editing purposes. */
   FMODIFIER_FLAG_ACTIVE = (1 << 2),
   /** User wants modifier to be skipped. */
@@ -438,9 +447,10 @@ typedef enum eDriverVar_Types {
   /** 'final' transform for object/bones */
   DVAR_TYPE_TRANSFORM_CHAN,
 
-  /** Maximum number of variable types.
+  /**
+   * Maximum number of variable types.
    *
-   * \note This must always be th last item in this list,
+   * \note This must always be the last item in this list,
    * so add new types above this line.
    */
   MAX_DVAR_TYPES,
@@ -612,9 +622,18 @@ typedef struct FCurve {
   char _pad[3];
 
   /* RNA - data link */
-  /** If applicable, the index of the RNA-array item to get. */
+  /**
+   * When the RNA property from `rna_path` is an array, use this to access the array index.
+   *
+   * \note This may be negative (as it wasn't prevented in 2.91 and older).
+   * Currently it silently fails to resolve the data-path in this case.
+   */
   int array_index;
-  /** RNA-path to resolve data-access. */
+  /**
+   * RNA-path to resolve data-access, see: #RNA_path_resolve_property.
+   *
+   * \note String look-ups for collection and custom-properties are escaped using #BLI_str_escape.
+   */
   char *rna_path;
 
   /* curve coloring (for editor) */
@@ -875,6 +894,10 @@ typedef enum eNlaTrack_Flag {
   /** track is not allowed to execute,
    * usually as result of tweaking being enabled (internal flag) */
   NLATRACK_DISABLED = (1 << 10),
+
+  /** This NLA track is added to an override ID, which means it is fully editable.
+   * Irrelevant in case the owner ID is not an override. */
+  NLATRACK_OVERRIDELIBRARY_LOCAL = 1 << 16,
 } eNlaTrack_Flag;
 
 /* ************************************ */

@@ -96,6 +96,7 @@
 #include "ED_select_utils.h"
 
 #include "UI_interface.h"
+#include "UI_resources.h"
 
 #include "GPU_matrix.h"
 
@@ -596,7 +597,7 @@ static bool do_lasso_select_objects(ViewContext *vc,
   }
 
   for (base = vc->view_layer->object_bases.first; base; base = base->next) {
-    if (BASE_SELECTABLE(v3d, base)) { /* use this to avoid un-needed lasso lookups */
+    if (BASE_SELECTABLE(v3d, base)) { /* Use this to avoid unnecessary lasso look-ups. */
       const bool is_select = base->flag & BASE_SELECTED;
       const bool is_inside = ((ED_view3d_project_base(vc->region, base) == V3D_PROJ_RET_OK) &&
                               BLI_lasso_is_point_inside(
@@ -1432,6 +1433,8 @@ void VIEW3D_OT_select_lasso(wmOperatorType *ot)
 typedef struct SelMenuItemF {
   char idname[MAX_ID_NAME - 2];
   int icon;
+  Base *base_ptr;
+  void *item_ptr;
 } SelMenuItemF;
 
 #define SEL_MENU_SIZE 22
@@ -1447,7 +1450,7 @@ static const EnumPropertyItem *object_select_menu_enum_itemf(bContext *C,
   int totitem = 0;
   int i = 0;
 
-  /* don't need context but avoid docgen using this */
+  /* Don't need context but avoid API doc-generation using this. */
   if (C == NULL || object_mouse_select_menu_data[i].idname[0] == '\0') {
     return DummyRNA_NULL_items;
   }
@@ -1580,7 +1583,7 @@ static Base *object_mouse_select_menu(bContext *C,
 {
   short baseCount = 0;
   bool ok;
-  LinkNode *linklist = NULL;
+  LinkNodePair linklist = {NULL, NULL};
 
   /* handle base->object->select_id */
   CTX_DATA_BEGIN (C, Base *, base, selectable_bases) {
@@ -1608,7 +1611,7 @@ static Base *object_mouse_select_menu(bContext *C,
 
     if (ok) {
       baseCount++;
-      BLI_linklist_prepend(&linklist, base);
+      BLI_linklist_append(&linklist, base);
 
       if (baseCount == SEL_MENU_SIZE) {
         break;
@@ -1621,8 +1624,8 @@ static Base *object_mouse_select_menu(bContext *C,
     return NULL;
   }
   if (baseCount == 1) {
-    Base *base = (Base *)linklist->link;
-    BLI_linklist_free(linklist, NULL);
+    Base *base = (Base *)linklist.list->link;
+    BLI_linklist_free(linklist.list, NULL);
     return base;
   }
 
@@ -1632,7 +1635,7 @@ static Base *object_mouse_select_menu(bContext *C,
 
   memset(object_mouse_select_menu_data, 0, sizeof(object_mouse_select_menu_data));
 
-  for (node = linklist, i = 0; node; node = node->next, i++) {
+  for (node = linklist.list, i = 0; node; node = node->next, i++) {
     Base *base = node->link;
     Object *ob = base->object;
     const char *name = ob->id.name + 2;
@@ -1651,8 +1654,229 @@ static Base *object_mouse_select_menu(bContext *C,
   WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr);
   WM_operator_properties_free(&ptr);
 
-  BLI_linklist_free(linklist, NULL);
+  BLI_linklist_free(linklist.list, NULL);
   return NULL;
+}
+
+static int bone_select_menu_exec(bContext *C, wmOperator *op)
+{
+  const int name_index = RNA_enum_get(op->ptr, "name");
+  const bool extend = RNA_boolean_get(op->ptr, "extend");
+  const bool deselect = RNA_boolean_get(op->ptr, "deselect");
+  const bool toggle = RNA_boolean_get(op->ptr, "toggle");
+
+  View3D *v3d = CTX_wm_view3d(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  const Base *oldbasact = BASACT(view_layer);
+
+  Base *basact = object_mouse_select_menu_data[name_index].base_ptr;
+
+  if (basact == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
+  BLI_assert(BASE_SELECTABLE(v3d, basact));
+
+  if (basact->object->mode == OB_MODE_EDIT) {
+    EditBone *ebone = (EditBone *)object_mouse_select_menu_data[name_index].item_ptr;
+    ED_armature_edit_select_pick_bone(C, basact, ebone, BONE_SELECTED, extend, deselect, toggle);
+  }
+  else {
+    bPoseChannel *pchan = (bPoseChannel *)object_mouse_select_menu_data[name_index].item_ptr;
+    ED_armature_pose_select_pick_bone(
+        view_layer, v3d, basact->object, pchan->bone, extend, deselect, toggle);
+  }
+
+  /* Weak but ensures we activate the menu again before using the enum. */
+  memset(object_mouse_select_menu_data, 0, sizeof(object_mouse_select_menu_data));
+
+  /* We make the armature selected:
+   * Not-selected active object in posemode won't work well for tools. */
+  ED_object_base_select(basact, BA_SELECT);
+
+  WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, basact->object);
+  WM_event_add_notifier(C, NC_OBJECT | ND_BONE_ACTIVE, basact->object);
+
+  /* In weight-paint, we use selected bone to select vertex-group,
+   * so don't switch to new active object. */
+  if (oldbasact && (oldbasact->object->mode & OB_MODE_ALL_WEIGHT_PAINT)) {
+    /* Prevent activating.
+     * Selection causes this to be considered the 'active' pose in weight-paint mode.
+     * Eventually this limitation may be removed.
+     * For now, de-select all other pose objects deforming this mesh. */
+    ED_armature_pose_select_in_wpaint_mode(view_layer, basact);
+
+    basact = NULL;
+  }
+
+  /* Undo? */
+  Scene *scene = CTX_data_scene(C);
+  DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
+  DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
+  WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
+
+  ED_outliner_select_sync_from_object_tag(C);
+
+  return OPERATOR_FINISHED;
+}
+
+void VIEW3D_OT_bone_select_menu(wmOperatorType *ot)
+{
+  PropertyRNA *prop;
+
+  /* identifiers */
+  ot->name = "Select Menu";
+  ot->description = "Menu bone selection";
+  ot->idname = "VIEW3D_OT_bone_select_menu";
+
+  /* api callbacks */
+  ot->invoke = WM_menu_invoke;
+  ot->exec = bone_select_menu_exec;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  /* keyingset to use (dynamic enum) */
+  prop = RNA_def_enum(ot->srna, "name", DummyRNA_NULL_items, 0, "Bone Name", "");
+  RNA_def_enum_funcs(prop, object_select_menu_enum_itemf);
+  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_ENUM_NO_TRANSLATE);
+  ot->prop = prop;
+
+  RNA_def_boolean(ot->srna, "extend", 0, "Extend", "");
+  RNA_def_boolean(ot->srna, "deselect", 0, "Deselect", "");
+  RNA_def_boolean(ot->srna, "toggle", 0, "Toggle", "");
+}
+static bool bone_mouse_select_menu(bContext *C,
+                                   const uint *buffer,
+                                   const int hits,
+                                   const bool is_editmode,
+                                   const bool extend,
+                                   const bool deselect,
+                                   const bool toggle)
+{
+  BLI_assert(buffer);
+
+  short baseCount = 0;
+  LinkNodePair base_list = {NULL, NULL};
+  LinkNodePair bone_list = {NULL, NULL};
+  GSet *added_bones = BLI_gset_ptr_new("Bone mouse select menu");
+
+  /* Select logic taken from ed_armature_pick_bone_from_selectbuffer_impl in armature_select.c */
+  for (int a = 0; a < hits; a++) {
+    void *bone_ptr = NULL;
+    Base *bone_base = NULL;
+    uint hitresult = buffer[3 + (a * 4)];
+
+    if (!(hitresult & BONESEL_ANY)) {
+      /* To avoid including objects in selection. */
+      continue;
+    }
+
+    hitresult &= ~BONESEL_ANY;
+    const uint hit_object = hitresult & 0xFFFF;
+
+    /* Find the hit bone base (armature object). */
+    CTX_DATA_BEGIN (C, Base *, base, selectable_bases) {
+      if (base->object->runtime.select_id == hit_object) {
+        bone_base = base;
+        break;
+      }
+    }
+    CTX_DATA_END;
+
+    if (!bone_base) {
+      continue;
+    }
+
+    /* Determine what the current bone is */
+    if (is_editmode) {
+      EditBone *ebone;
+      const uint hit_bone = (hitresult & ~BONESEL_ANY) >> 16;
+      bArmature *arm = bone_base->object->data;
+      ebone = BLI_findlink(arm->edbo, hit_bone);
+      if (ebone && !(ebone->flag & BONE_UNSELECTABLE)) {
+        bone_ptr = ebone;
+      }
+    }
+    else {
+      bPoseChannel *pchan;
+      const uint hit_bone = (hitresult & ~BONESEL_ANY) >> 16;
+      pchan = BLI_findlink(&bone_base->object->pose->chanbase, hit_bone);
+      if (pchan && !(pchan->bone->flag & BONE_UNSELECTABLE)) {
+        bone_ptr = pchan;
+      }
+    }
+
+    if (!bone_ptr) {
+      continue;
+    }
+    /* We can hit a bone multiple times, so make sure we are not adding an already included bone
+     * to the list.*/
+    const bool is_duplicate_bone = BLI_gset_haskey(added_bones, bone_ptr);
+
+    if (!is_duplicate_bone) {
+      baseCount++;
+      BLI_linklist_append(&base_list, bone_base);
+      BLI_linklist_append(&bone_list, bone_ptr);
+      BLI_gset_insert(added_bones, bone_ptr);
+
+      if (baseCount == SEL_MENU_SIZE) {
+        break;
+      }
+    }
+  }
+
+  BLI_gset_free(added_bones, NULL);
+
+  if (baseCount == 0) {
+    return false;
+  }
+  if (baseCount == 1) {
+    BLI_linklist_free(base_list.list, NULL);
+    BLI_linklist_free(bone_list.list, NULL);
+    return false;
+  }
+
+  /* UI, full in static array values that we later use in an enum function */
+  LinkNode *bone_node, *base_node;
+  int i;
+
+  memset(object_mouse_select_menu_data, 0, sizeof(object_mouse_select_menu_data));
+
+  for (base_node = base_list.list, bone_node = bone_list.list, i = 0; bone_node;
+       base_node = base_node->next, bone_node = bone_node->next, i++) {
+    char *name;
+
+    object_mouse_select_menu_data[i].base_ptr = base_node->link;
+
+    if (is_editmode) {
+      EditBone *ebone = bone_node->link;
+      object_mouse_select_menu_data[i].item_ptr = ebone;
+      name = ebone->name;
+    }
+    else {
+      bPoseChannel *pchan = bone_node->link;
+      object_mouse_select_menu_data[i].item_ptr = pchan;
+      name = pchan->name;
+    }
+
+    BLI_strncpy(object_mouse_select_menu_data[i].idname, name, MAX_ID_NAME - 2);
+    object_mouse_select_menu_data[i].icon = ICON_BONE_DATA;
+  }
+
+  wmOperatorType *ot = WM_operatortype_find("VIEW3D_OT_bone_select_menu", false);
+  PointerRNA ptr;
+
+  WM_operator_properties_create_ptr(&ptr, ot);
+  RNA_boolean_set(&ptr, "extend", extend);
+  RNA_boolean_set(&ptr, "deselect", deselect);
+  RNA_boolean_set(&ptr, "toggle", toggle);
+  WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr);
+  WM_operator_properties_free(&ptr);
+
+  BLI_linklist_free(base_list.list, NULL);
+  BLI_linklist_free(bone_list.list, NULL);
+  return true;
 }
 
 static bool selectbuffer_has_bones(const uint *buffer, const uint hits)
@@ -1673,8 +1897,8 @@ static int selectbuffer_ret_hits_15(uint *UNUSED(buffer), const int hits15)
 
 static int selectbuffer_ret_hits_9(uint *buffer, const int hits15, const int hits9)
 {
-  const int offs = 4 * hits15;
-  memcpy(buffer, buffer + offs, 4 * hits9 * sizeof(uint));
+  const int ofs = 4 * hits15;
+  memcpy(buffer, buffer + ofs, 4 * hits9 * sizeof(uint));
   return hits9;
 }
 
@@ -1683,8 +1907,8 @@ static int selectbuffer_ret_hits_5(uint *buffer,
                                    const int hits9,
                                    const int hits5)
 {
-  const int offs = 4 * hits15 + 4 * hits9;
-  memcpy(buffer, buffer + offs, 4 * hits5 * sizeof(uint));
+  const int ofs = 4 * hits15 + 4 * hits9;
+  memcpy(buffer, buffer + ofs, 4 * hits5 * sizeof(uint));
   return hits5;
 }
 
@@ -1726,30 +1950,30 @@ static int mixed_bones_object_selectbuffer(ViewContext *vc,
     goto finally;
   }
   else if (hits15 > 0) {
-    int offs;
+    int ofs;
     has_bones15 = selectbuffer_has_bones(buffer, hits15);
 
-    offs = 4 * hits15;
+    ofs = 4 * hits15;
     BLI_rcti_init_pt_radius(&rect, mval, 9);
     hits9 = view3d_opengl_select(
-        vc, buffer + offs, MAXPICKBUF - offs, &rect, select_mode, select_filter);
+        vc, buffer + ofs, MAXPICKBUF - ofs, &rect, select_mode, select_filter);
     if (hits9 == 1) {
       hits = selectbuffer_ret_hits_9(buffer, hits15, hits9);
       goto finally;
     }
     else if (hits9 > 0) {
-      has_bones9 = selectbuffer_has_bones(buffer + offs, hits9);
+      has_bones9 = selectbuffer_has_bones(buffer + ofs, hits9);
 
-      offs += 4 * hits9;
+      ofs += 4 * hits9;
       BLI_rcti_init_pt_radius(&rect, mval, 5);
       hits5 = view3d_opengl_select(
-          vc, buffer + offs, MAXPICKBUF - offs, &rect, select_mode, select_filter);
+          vc, buffer + ofs, MAXPICKBUF - ofs, &rect, select_mode, select_filter);
       if (hits5 == 1) {
         hits = selectbuffer_ret_hits_5(buffer, hits15, hits9, hits5);
         goto finally;
       }
       else if (hits5 > 0) {
-        has_bones5 = selectbuffer_has_bones(buffer + offs, hits5);
+        has_bones5 = selectbuffer_has_bones(buffer + ofs, hits5);
       }
     }
 
@@ -1827,7 +2051,7 @@ static int mixed_bones_object_selectbuffer_extended(ViewContext *vc,
 /**
  * \param has_bones: When true, skip non-bone hits, also allow bases to be used
  * that are visible but not select-able,
- * since you may be in pose mode with an an unselect-able object.
+ * since you may be in pose mode with an unselect-able object.
  *
  * \return the active base or NULL.
  */
@@ -2054,11 +2278,9 @@ static bool ed_object_select_pick(bContext *C,
       while (base) {
         if (BASE_SELECTABLE(v3d, base)) {
           float screen_co[2];
-          if (ED_view3d_project_float_global(region,
-                                             base->object->obmat[3],
-                                             screen_co,
-                                             V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_WIN |
-                                                 V3D_PROJ_TEST_CLIP_NEAR) == V3D_PROJ_RET_OK) {
+          if (ED_view3d_project_float_global(
+                  region, base->object->obmat[3], screen_co, V3D_PROJ_TEST_CLIP_DEFAULT) ==
+              V3D_PROJ_RET_OK) {
             float dist_temp = len_manhattan_v2v2(mval_fl, screen_co);
             if (base == oldbasact) {
               dist_temp += 10.0f;
@@ -2115,7 +2337,13 @@ static bool ed_object_select_pick(bContext *C,
 
       /* note; shift+alt goes to group-flush-selecting */
       if (enumerate) {
-        basact = object_mouse_select_menu(C, &vc, buffer, hits, mval, extend, deselect, toggle);
+        if (has_bones &&
+            bone_mouse_select_menu(C, buffer, hits, false, extend, deselect, toggle)) {
+          basact = NULL;
+        }
+        else {
+          basact = object_mouse_select_menu(C, &vc, buffer, hits, mval, extend, deselect, toggle);
+        }
       }
       else {
         basact = mouse_select_eval_buffer(&vc, buffer, hits, startbase, has_bones, do_nearest);
@@ -2412,7 +2640,20 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
       }
     }
     else if (obedit->type == OB_ARMATURE) {
-      retval = ED_armature_edit_select_pick(C, location, extend, deselect, toggle);
+      if (enumerate) {
+        Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+        ViewContext vc;
+        ED_view3d_viewcontext_init(C, &vc, depsgraph);
+
+        uint buffer[MAXPICKBUF];
+        const int hits = mixed_bones_object_selectbuffer(
+            &vc, buffer, location, VIEW3D_SELECT_FILTER_NOP, false, true);
+        retval = bone_mouse_select_menu(C, buffer, hits, true, extend, deselect, toggle);
+      }
+      if (!retval) {
+        retval = ED_armature_edit_select_pick(C, location, extend, deselect, toggle);
+      }
+
       if (!retval && deselect_all) {
         retval = ED_armature_edit_deselect_all_visible_multi(C);
       }
@@ -2457,13 +2698,16 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
   else if (obact && BKE_paint_select_face_test(obact)) {
     retval = paintface_mouse_select(C, obact, location, extend, deselect, toggle);
     if (!retval && deselect_all) {
-      retval = paintface_deselect_all_visible(C, CTX_data_active_object(C), SEL_DESELECT, false);
+      retval = paintface_deselect_all_visible(C, CTX_data_active_object(C), SEL_DESELECT, true);
     }
   }
   else if (BKE_paint_select_vert_test(obact)) {
     retval = ed_wpaint_vertex_select_pick(C, location, extend, deselect, toggle, obact);
     if (!retval && deselect_all) {
       retval = paintvert_deselect_all_visible(obact, SEL_DESELECT, false);
+      if (retval) {
+        paintvert_tag_select_update(C, obact);
+      }
     }
   }
   else {
@@ -2491,8 +2735,7 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
   }
 
   /* Pass-through allows tweaks
-   * FINISHED to signal one operator worked
-   * */
+   * FINISHED to signal one operator worked */
   if (retval) {
     WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
     return OPERATOR_PASS_THROUGH | OPERATOR_FINISHED;
@@ -2532,12 +2775,12 @@ void VIEW3D_OT_select(wmOperatorType *ot)
       "center",
       0,
       "Center",
-      "Use the object center when selecting, in edit-mode used to extend object selection");
+      "Use the object center when selecting, in edit mode used to extend object selection");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
   prop = RNA_def_boolean(
       ot->srna, "enumerate", 0, "Enumerate", "List objects under the mouse (object mode only)");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
-  prop = RNA_def_boolean(ot->srna, "object", 0, "Object", "Use object selection (edit-mode only)");
+  prop = RNA_def_boolean(ot->srna, "object", 0, "Object", "Use object selection (edit mode only)");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
   prop = RNA_def_int_vector(ot->srna,
@@ -4052,11 +4295,9 @@ static bool object_circle_select(ViewContext *vc,
   for (base = FIRSTBASE(view_layer); base; base = base->next) {
     if (BASE_SELECTABLE(v3d, base) && ((base->flag & BASE_SELECTED) != select_flag)) {
       float screen_co[2];
-      if (ED_view3d_project_float_global(vc->region,
-                                         base->object->obmat[3],
-                                         screen_co,
-                                         V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_WIN |
-                                             V3D_PROJ_TEST_CLIP_NEAR) == V3D_PROJ_RET_OK) {
+      if (ED_view3d_project_float_global(
+              vc->region, base->object->obmat[3], screen_co, V3D_PROJ_TEST_CLIP_DEFAULT) ==
+          V3D_PROJ_RET_OK) {
         if (len_squared_v2v2(mval_fl, screen_co) <= radius_squared) {
           ED_object_base_select(base, select ? BA_SELECT : BA_DESELECT);
           changed = true;

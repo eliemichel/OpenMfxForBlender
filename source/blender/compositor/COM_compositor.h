@@ -102,27 +102,27 @@ extern "C" {
  * ExecutionGroups that have no viewer-node,
  * will use a default one.
  * There are several possible chunk orders
- *  - [@ref OrderOfChunks.COM_TO_CENTER_OUT]:
+ *  - [@ref ChunkOrdering.CenterOut]:
  *    Start calculating from a configurable point and order by nearest chunk.
- *  - [@ref OrderOfChunks.COM_TO_RANDOM]:
+ *  - [@ref ChunkOrdering.Random]:
  *    Randomize all chunks.
- *  - [@ref OrderOfChunks.COM_TO_TOP_DOWN]:
+ *  - [@ref ChunkOrdering.TopDown]:
  *    Start calculation from the bottom to the top of the image.
- *  - [@ref OrderOfChunks.COM_TO_RULE_OF_THIRDS]:
+ *  - [@ref ChunkOrdering.RuleOfThirds]:
  *    Experimental order based on 9 hot-spots in the image.
  *
  * When the chunk-order is determined, the first few chunks will be checked if they can be scheduled.
  * Chunks can have three states:
- *  - [@ref ChunkExecutionState.COM_ES_NOT_SCHEDULED]:
+ *  - [@ref eWorkPackageState.NotScheduled]:
  *    Chunk is not yet scheduled, or dependencies are not met.
- *  - [@ref ChunkExecutionState.COM_ES_SCHEDULED]:
+ *  - [@ref eWorkPackageState.Scheduled]:
  *    All dependencies are met, chunk is scheduled, but not finished.
- *  - [@ref ChunkExecutionState.COM_ES_EXECUTED]:
+ *  - [@ref eWorkPackageState.Executed]:
  *    Chunk is finished.
  *
  * \see ExecutionGroup.execute
  * \see ViewerOperation.getChunkOrder
- * \see OrderOfChunks
+ * \see ChunkOrdering
  *
  * \section interest Area of interest
  * An ExecutionGroup can have dependencies to other ExecutionGroup's.
@@ -250,8 +250,8 @@ extern "C" {
  *
  * \subsection singlethread Single threaded
  * For debugging reasons the multi-threading can be disabled.
- * This is done by changing the COM_CURRENT_THREADING_MODEL
- * to COM_TM_NOTHREAD. When compiling the work-scheduler
+ * This is done by changing the `COM_threading_model`
+ * to `ThreadingModel::SingleThreaded`. When compiling the work-scheduler
  * will be changes to support no threading and run everything on the CPU.
  *
  * \section devices Devices
@@ -268,8 +268,8 @@ extern "C" {
  * When an ExecutionGroup schedules a Chunk the schedule method of the WorkScheduler
  * The Workscheduler determines if the chunk can be run on an OpenCLDevice
  * (and that there are available OpenCLDevice).
- * If this is the case the chunk will be added to the worklist for OpenCLDevice's
- * otherwise the chunk will be added to the worklist of CPUDevices.
+ * If this is the case the chunk will be added to the work-list for OpenCLDevice's
+ * otherwise the chunk will be added to the work-list of CPUDevices.
  *
  * A thread will read the work-list and sends a workpackage to its device.
  *
@@ -298,7 +298,7 @@ extern "C" {
 
 /**
  * \brief The main method that is used to execute the compositor tree.
- * It can be executed during editing (blenkernel/node.c) or rendering
+ * It can be executed during editing (blenkernel/node.cc) or rendering
  * (renderer/pipeline.c)
  *
  * \param rd: [struct RenderData]
@@ -339,9 +339,9 @@ extern "C" {
  */
 /* clang-format off */
 
-void COM_execute(RenderData *rd,
+void COM_execute(RenderData *render_data,
                  Scene *scene,
-                 bNodeTree *editingtree,
+                 bNodeTree *node_tree,
                  int rendering,
                  const ColorManagedViewSettings *viewSettings,
                  const ColorManagedDisplaySettings *displaySettings,

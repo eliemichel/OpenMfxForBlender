@@ -114,6 +114,7 @@ enum {
   BMW_FACELOOP,
   BMW_EDGERING,
   BMW_EDGEBOUNDARY,
+  BMW_EDGELOOP_NONMANIFOLD,
   /* BMW_RING, */
   BMW_LOOPDATA_ISLAND,
   BMW_ISLANDBOUND,
@@ -122,7 +123,7 @@ enum {
   BMW_CONNECTED_VERTEX,
   /* end of array index enum vals */
 
-  /* do not intitialze function pointers and struct size in BMW_init */
+  /* Do not initialize function pointers and struct size in #BMW_init. */
   BMW_CUSTOM,
   BMW_MAXWALKERS,
 };

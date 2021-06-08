@@ -20,7 +20,7 @@ set(SSL_CONFIGURE_COMMAND ./Configure)
 set(SSL_PATCH_CMD echo .)
 
 if(APPLE)
-   set(SSL_OS_COMPILER "blender-darwin-${CMAKE_OSX_ARCHITECTURES}")
+  set(SSL_OS_COMPILER "blender-darwin-${CMAKE_OSX_ARCHITECTURES}")
 else()
   if("${CMAKE_SIZEOF_VOID_P}" EQUAL "8")
     set(SSL_EXTRA_ARGS enable-ec_nistp_64_gcc_128)
@@ -31,9 +31,9 @@ else()
 endif()
 
 ExternalProject_Add(external_ssl
-  URL ${SSL_URI}
+  URL file://${PACKAGE_DIR}/${SSL_FILE}
   DOWNLOAD_DIR ${DOWNLOAD_DIR}
-  URL_HASH SHA256=${SSL_HASH}
+  URL_HASH ${SSL_HASH_TYPE}=${SSL_HASH}
   PREFIX ${BUILD_DIR}/ssl
   PATCH_COMMAND ${SSL_PATCH_CMD}
   CONFIGURE_COMMAND ${CONFIGURE_ENV} && cd ${BUILD_DIR}/ssl/src/external_ssl/ && ${SSL_CONFIGURE_COMMAND} --prefix=${LIBDIR}/ssl

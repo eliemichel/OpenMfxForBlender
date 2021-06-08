@@ -123,7 +123,7 @@ void CTX_free(bContext *C)
 
 /* store */
 
-bContextStore *CTX_store_add(ListBase *contexts, const char *name, PointerRNA *ptr)
+bContextStore *CTX_store_add(ListBase *contexts, const char *name, const PointerRNA *ptr)
 {
   /* ensure we have a context to put the entry in, if it was already used
    * we have to copy the context to ensure */
@@ -176,6 +176,11 @@ bContextStore *CTX_store_add_all(ListBase *contexts, bContextStore *context)
   }
 
   return ctx;
+}
+
+bContextStore *CTX_store_get(bContext *C)
+{
+  return C->wm.store;
 }
 
 void CTX_store_set(bContext *C, bContextStore *store)
@@ -313,7 +318,7 @@ static eContextResult ctx_data_get(bContext *C, const char *member, bContextData
    *
    * Values in order of importance
    * (0, -1, 1) - Where 1 is highest priority
-   * */
+   */
   if (done != 1 && recursion < 1 && C->wm.store) {
     C->data.recursion = 1;
 
@@ -909,6 +914,15 @@ struct SpaceTopBar *CTX_wm_space_topbar(const bContext *C)
   return NULL;
 }
 
+struct SpaceSpreadsheet *CTX_wm_space_spreadsheet(const bContext *C)
+{
+  ScrArea *area = CTX_wm_area(C);
+  if (area && area->spacetype == SPACE_SPREADSHEET) {
+    return area->spacedata.first;
+  }
+  return NULL;
+}
+
 void CTX_wm_manager_set(bContext *C, wmWindowManager *wm)
 {
   C->wm.manager = wm;
@@ -1200,6 +1214,11 @@ ToolSettings *CTX_data_tool_settings(const bContext *C)
   }
 
   return NULL;
+}
+
+int CTX_data_selected_ids(const bContext *C, ListBase *list)
+{
+  return ctx_data_collection_get(C, "selected_ids", list);
 }
 
 int CTX_data_selected_nodes(const bContext *C, ListBase *list)

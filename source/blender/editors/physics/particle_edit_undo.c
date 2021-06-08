@@ -27,6 +27,8 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "CLG_log.h"
+
 #include "DNA_meshdata_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_windowmanager_types.h"
@@ -44,10 +46,14 @@
 #include "ED_object.h"
 #include "ED_particle.h"
 #include "ED_physics.h"
+#include "ED_undo.h"
 
 #include "particle_edit_utildefines.h"
 
 #include "physics_intern.h"
+
+/** Only needed this locally. */
+static CLG_LogRef LOG = {"ed.undo.particle_edit"};
 
 /* -------------------------------------------------------------------- */
 /** \name Undo Conversion
@@ -166,18 +172,19 @@ static void undoptcache_to_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
       for (i = 0; i < BPHYS_TOT_DATA; i++) {
         pm->data[i] = MEM_dupallocN(pm->data[i]);
       }
-      BKE_ptcache_mem_pointers_init(pm);
+      void *cur[BPHYS_TOT_DATA];
+      BKE_ptcache_mem_pointers_init(pm, cur);
 
       LOOP_POINTS {
         LOOP_KEYS {
           if ((int)key->ftime == (int)pm->frame) {
-            key->co = pm->cur[BPHYS_DATA_LOCATION];
-            key->vel = pm->cur[BPHYS_DATA_VELOCITY];
-            key->rot = pm->cur[BPHYS_DATA_ROTATION];
+            key->co = cur[BPHYS_DATA_LOCATION];
+            key->vel = cur[BPHYS_DATA_VELOCITY];
+            key->rot = cur[BPHYS_DATA_ROTATION];
             key->time = &key->ftime;
           }
         }
-        BKE_ptcache_mem_pointers_incr(pm);
+        BKE_ptcache_mem_pointers_incr(cur);
       }
     }
   }
@@ -246,30 +253,37 @@ static bool particle_undosys_step_encode(struct bContext *C,
 static void particle_undosys_step_decode(struct bContext *C,
                                          struct Main *UNUSED(bmain),
                                          UndoStep *us_p,
-                                         int UNUSED(dir),
+                                         const eUndoStepDir UNUSED(dir),
                                          bool UNUSED(is_final))
 {
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
-  /* TODO(campbell): undo_system: use low-level API to set mode. */
-  ED_object_mode_set_ex(C, OB_MODE_PARTICLE_EDIT, false, NULL);
-  BLI_assert(particle_undosys_poll(C));
 
   ParticleUndoStep *us = (ParticleUndoStep *)us_p;
   Scene *scene = us->scene_ref.ptr;
   Object *ob = us->object_ref.ptr;
+
+  ED_object_particle_edit_mode_enter_ex(depsgraph, scene, ob);
+
   PTCacheEdit *edit = PE_get_current(depsgraph, scene, ob);
-  if (edit) {
-    undoptcache_to_editcache(&us->data, edit);
-    ParticleEditSettings *pset = &scene->toolsettings->particle;
-    if ((pset->flag & PE_DRAW_PART) != 0) {
-      psys_free_path_cache(NULL, edit);
-      BKE_particle_batch_cache_dirty_tag(edit->psys, BKE_PARTICLE_BATCH_DIRTY_ALL);
-    }
-    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-  }
-  else {
+
+  /* While this shouldn't happen, entering particle edit-mode uses a more complex
+   * setup compared to most other modes which we can't ensure succeeds. */
+  if (UNLIKELY(edit == NULL)) {
     BLI_assert(0);
+    return;
   }
+
+  undoptcache_to_editcache(&us->data, edit);
+  ParticleEditSettings *pset = &scene->toolsettings->particle;
+  if ((pset->flag & PE_DRAW_PART) != 0) {
+    psys_free_path_cache(NULL, edit);
+    BKE_particle_batch_cache_dirty_tag(edit->psys, BKE_PARTICLE_BATCH_DIRTY_ALL);
+  }
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+
+  ED_undo_object_set_active_or_warn(scene, CTX_data_view_layer(C), ob, us_p->name, &LOG);
+
+  BLI_assert(particle_undosys_poll(C));
 }
 
 static void particle_undosys_step_free(UndoStep *us_p)
@@ -298,7 +312,7 @@ void ED_particle_undosys_type(UndoType *ut)
 
   ut->step_foreach_ID_ref = particle_undosys_foreach_ID_ref;
 
-  ut->use_context = true;
+  ut->flags = UNDOTYPE_FLAG_NEED_CONTEXT_FOR_ENCODE;
 
   ut->step_size = sizeof(ParticleUndoStep);
 }

@@ -74,7 +74,7 @@ class Shape : public PbClass {
       Shape *pbo = dynamic_cast<Shape *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Shape::applyToGrid", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         GridBase *grid = _args.getPtr<GridBase>("grid", 0, &_lock);
@@ -104,7 +104,7 @@ class Shape : public PbClass {
       Shape *pbo = dynamic_cast<Shape *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Shape::applyToGridSmooth", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         GridBase *grid = _args.getPtr<GridBase>("grid", 0, &_lock);
@@ -133,7 +133,7 @@ class Shape : public PbClass {
       Shape *pbo = dynamic_cast<Shape *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Shape::computeLevelset", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -157,7 +157,7 @@ class Shape : public PbClass {
       Shape *pbo = dynamic_cast<Shape *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Shape::collideMesh", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         Mesh &mesh = *_args.getPtr<Mesh>("mesh", 0, &_lock);
@@ -186,7 +186,7 @@ class Shape : public PbClass {
       Shape *pbo = dynamic_cast<Shape *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Shape::getCenter", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -212,7 +212,7 @@ class Shape : public PbClass {
       Shape *pbo = dynamic_cast<Shape *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Shape::setCenter", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         const Vec3 &center = _args.get<Vec3>("center", 0, &_lock);
@@ -241,7 +241,7 @@ class Shape : public PbClass {
       Shape *pbo = dynamic_cast<Shape *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Shape::getExtent", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -269,6 +269,7 @@ class Shape : public PbClass {
 
  protected:
   GridType mType;
+
  public:
   PbArgs _args;
 }
@@ -319,6 +320,7 @@ class NullShape : public Shape {
   {
     gridSetConst<Real>(phi, 1000.0f);
   }
+
  public:
   PbArgs _args;
 }
@@ -394,6 +396,7 @@ class Box : public Shape {
 
  protected:
   Vec3 mP0, mP1;
+
  public:
   PbArgs _args;
 }
@@ -455,6 +458,7 @@ class Sphere : public Shape {
  protected:
   Vec3 mCenter, mScale;
   Real mRadius;
+
  public:
   PbArgs _args;
 }
@@ -504,7 +508,7 @@ class Cylinder : public Shape {
       Cylinder *pbo = dynamic_cast<Cylinder *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Cylinder::setRadius", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         Real r = _args.get<Real>("r", 0, &_lock);
@@ -534,7 +538,7 @@ class Cylinder : public Shape {
       Cylinder *pbo = dynamic_cast<Cylinder *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Cylinder::setZ", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         Vec3 z = _args.get<Vec3>("z", 0, &_lock);
@@ -579,6 +583,7 @@ class Cylinder : public Shape {
  protected:
   Vec3 mCenter, mZDir;
   Real mRadius, mZ;
+
  public:
   PbArgs _args;
 }
@@ -655,6 +660,7 @@ class Slope : public Shape {
   Real mAnglexy, mAngleyz;
   Real mOrigin;
   Vec3 mGs;
+
  public:
   PbArgs _args;
 }

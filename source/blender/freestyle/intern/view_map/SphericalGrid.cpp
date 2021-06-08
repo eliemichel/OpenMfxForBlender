@@ -38,14 +38,6 @@ namespace Freestyle {
 // Cell
 /////////
 
-SphericalGrid::Cell::Cell()
-{
-}
-
-SphericalGrid::Cell::~Cell()
-{
-}
-
 void SphericalGrid::Cell::setDimensions(real x, real y, real sizeX, real sizeY)
 {
   const real epsilon = 1.0e-06;
@@ -87,10 +79,6 @@ SphericalGrid::Iterator::Iterator(SphericalGrid &grid, Vec3r &center, real /*eps
   _current = _cell->faces.begin();
 }
 
-SphericalGrid::Iterator::~Iterator()
-{
-}
-
 // SphericalGrid
 /////////////////
 
@@ -121,9 +109,7 @@ SphericalGrid::SphericalGrid(OccluderSource &source,
   }
 }
 
-SphericalGrid::~SphericalGrid()
-{
-}
+SphericalGrid::~SphericalGrid() = default;
 
 void SphericalGrid::assignCells(OccluderSource & /*source*/,
                                 GridDensityProvider &density,
@@ -154,7 +140,7 @@ void SphericalGrid::assignCells(OccluderSource & /*source*/,
       Vec3r point = SphericalGrid::Transform::sphericalProjection((*f)->center3d());
       unsigned i, j;
       getCellCoordinates(point, i, j);
-      if (_cells[i * _cellsY + j] == NULL) {
+      if (_cells[i * _cellsY + j] == nullptr) {
         // This is an uninitialized cell
         real x, y, width, height;
 
@@ -178,7 +164,7 @@ void SphericalGrid::distributePolygons(OccluderSource &source)
   unsigned long nKeptFaces = 0;
 
   for (source.begin(); source.isValid(); source.next()) {
-    OccluderData *occluder = NULL;
+    OccluderData *occluder = nullptr;
 
     try {
       if (insertOccluder(source, occluder)) {
@@ -236,10 +222,6 @@ const Vec3r &SphericalGrid::viewpoint() const
 bool SphericalGrid::enableQI() const
 {
   return _enableQI;
-}
-
-SphericalGrid::Transform::Transform() : GridHelpers::Transform()
-{
 }
 
 Vec3r SphericalGrid::Transform::operator()(const Vec3r &point) const

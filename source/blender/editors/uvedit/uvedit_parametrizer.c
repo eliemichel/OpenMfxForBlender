@@ -895,7 +895,7 @@ static PBool p_edge_implicit_seam(PEdge *e, PEdge *ep)
   return P_FALSE;
 }
 
-static PBool p_edge_has_pair(PHandle *handle, PEdge *e, PBool impl, PEdge **r_pair)
+static PBool p_edge_has_pair(PHandle *handle, PEdge *e, PBool topology_from_uvs, PEdge **r_pair)
 {
   PHashKey key;
   PEdge *pe;
@@ -920,7 +920,8 @@ static PBool p_edge_has_pair(PHandle *handle, PEdge *e, PBool impl, PEdge **r_pa
           ((v1->u.key == key2) && (v2->u.key == key1))) {
 
         /* don't connect seams and t-junctions */
-        if ((pe->flag & PEDGE_SEAM) || *r_pair || (impl && p_edge_implicit_seam(e, pe))) {
+        if ((pe->flag & PEDGE_SEAM) || *r_pair ||
+            (topology_from_uvs && p_edge_implicit_seam(e, pe))) {
           *r_pair = NULL;
           return P_FALSE;
         }
@@ -943,11 +944,14 @@ static PBool p_edge_has_pair(PHandle *handle, PEdge *e, PBool impl, PEdge **r_pa
   return (*r_pair != NULL);
 }
 
-static PBool p_edge_connect_pair(PHandle *handle, PEdge *e, PBool impl, PEdge ***stack)
+static PBool p_edge_connect_pair(PHandle *handle,
+                                 PEdge *e,
+                                 PBool topology_from_uvs,
+                                 PEdge ***stack)
 {
   PEdge *pair = NULL;
 
-  if (!e->pair && p_edge_has_pair(handle, e, impl, &pair)) {
+  if (!e->pair && p_edge_has_pair(handle, e, topology_from_uvs, &pair)) {
     if (e->vert == pair->vert) {
       p_face_flip(pair->face);
     }
@@ -964,7 +968,7 @@ static PBool p_edge_connect_pair(PHandle *handle, PEdge *e, PBool impl, PEdge **
   return (e->pair != NULL);
 }
 
-static int p_connect_pairs(PHandle *handle, PBool impl)
+static int p_connect_pairs(PHandle *handle, PBool topology_from_uvs)
 {
   PEdge **stackbase = MEM_mallocN(sizeof(*stackbase) * phash_size(handle->hash_faces),
                                   "Pstackbase");
@@ -974,7 +978,7 @@ static int p_connect_pairs(PHandle *handle, PBool impl)
   PChart *chart = handle->construction_chart;
   int ncharts = 0;
 
-  /* connect pairs, count edges, set vertex-edge pointer to a pairless edge */
+  /* Connect pairs, count edges, set vertex-edge pointer to a pair-less edge. */
   for (first = chart->faces; first; first = first->nextlink) {
     if (first->flag & PFACE_CONNECTED) {
       continue;
@@ -995,13 +999,13 @@ static int p_connect_pairs(PHandle *handle, PBool impl)
       /* assign verts to charts so we can sort them later */
       f->u.chart = ncharts;
 
-      if (!p_edge_connect_pair(handle, e, impl, &stack)) {
+      if (!p_edge_connect_pair(handle, e, topology_from_uvs, &stack)) {
         e->vert->edge = e;
       }
-      if (!p_edge_connect_pair(handle, e1, impl, &stack)) {
+      if (!p_edge_connect_pair(handle, e1, topology_from_uvs, &stack)) {
         e1->vert->edge = e1;
       }
-      if (!p_edge_connect_pair(handle, e2, impl, &stack)) {
+      if (!p_edge_connect_pair(handle, e2, topology_from_uvs, &stack)) {
         e2->vert->edge = e2;
       }
     }
@@ -1970,7 +1974,7 @@ static PBool p_collapse_allowed_geometric(PEdge *edge, PEdge *pair)
     b[1] = p_vec_angle(v2->co, v1->co, keepv->co);
     b[2] = M_PI - b[0] - b[1];
 
-    /* abf criterion 1: avoid sharp and obtuse angles */
+    /* ABF criterion 1: avoid sharp and obtuse angles. */
     minangle = 15.0f * M_PI / 180.0f;
     maxangle = M_PI - minangle;
 
@@ -1987,7 +1991,7 @@ static PBool p_collapse_allowed_geometric(PEdge *edge, PEdge *pair)
   } while (e && (e != oldv->edge));
 
   if (p_vert_interior(oldv)) {
-    /* hlscm criterion: angular defect smaller than threshold */
+    /* HLSCM criterion: angular defect smaller than threshold. */
     if (fabsf(angulardefect) > (float)(M_PI * 30.0 / 180.0)) {
       return P_FALSE;
     }
@@ -1996,12 +2000,12 @@ static PBool p_collapse_allowed_geometric(PEdge *edge, PEdge *pair)
     PVert *v1 = p_boundary_edge_next(oldv->edge)->vert;
     PVert *v2 = p_boundary_edge_prev(oldv->edge)->vert;
 
-    /* abf++ criterion 2: avoid collapsing verts inwards */
+    /* ABF++ criterion 2: avoid collapsing verts inwards. */
     if (p_vert_interior(keepv)) {
       return P_FALSE;
     }
 
-    /* don't collapse significant boundary changes */
+    /* Don't collapse significant boundary changes. */
     angle = p_vec_angle(v1->co, oldv->co, v2->co);
     if (angle < (M_PI * 160.0 / 180.0)) {
       return P_FALSE;
@@ -3833,7 +3837,7 @@ static void p_chart_rotate_fit_aabb(PChart *chart)
 
 /* Area Smoothing */
 
-/* 2d bsp tree for inverse mapping - that's a bit silly */
+/* 2d BSP tree for inverse mapping - that's a bit silly. */
 
 typedef struct SmoothTriangle {
   float co1[2], co2[2], co3[2];
@@ -4284,7 +4288,7 @@ static void p_smooth(PChart *chart)
   MEM_freeN(hedges);
   MEM_freeN(vedges);
 
-  /* create bsp */
+  /* Create BSP. */
   t = triangles = MEM_mallocN(sizeof(SmoothTriangle) * esize * 2, "PSmoothTris");
   trip = tri = MEM_mallocN(sizeof(SmoothTriangle *) * esize * 2, "PSmoothTriP");
 
@@ -4407,8 +4411,7 @@ void param_delete(ParamHandle *handle)
   PHandle *phandle = (PHandle *)handle;
   int i;
 
-  param_assert((phandle->state == PHANDLE_STATE_ALLOCATED) ||
-               (phandle->state == PHANDLE_STATE_CONSTRUCTED));
+  param_assert(ELEM(phandle->state, PHANDLE_STATE_ALLOCATED, PHANDLE_STATE_CONSTRUCTED));
 
   for (i = 0; i < phandle->ncharts; i++) {
     p_chart_delete(phandle->charts[i]);
@@ -4507,7 +4510,7 @@ void param_face_add(ParamHandle *handle,
 
   param_assert(phash_lookup(phandle->hash_faces, key) == NULL);
   param_assert(phandle->state == PHANDLE_STATE_ALLOCATED);
-  param_assert((nverts == 3) || (nverts == 4));
+  param_assert(ELEM(nverts, 3, 4));
 
   if (nverts > 4) {
     /* ngon */
@@ -4543,7 +4546,10 @@ void param_edge_set_seam(ParamHandle *handle, ParamKey *vkeys)
   }
 }
 
-void param_construct_end(ParamHandle *handle, ParamBool fill, ParamBool impl)
+void param_construct_end(ParamHandle *handle,
+                         ParamBool fill,
+                         ParamBool topology_from_uvs,
+                         int *count_fail)
 {
   PHandle *phandle = (PHandle *)handle;
   PChart *chart = phandle->construction_chart;
@@ -4552,7 +4558,7 @@ void param_construct_end(ParamHandle *handle, ParamBool fill, ParamBool impl)
 
   param_assert(phandle->state == PHANDLE_STATE_ALLOCATED);
 
-  phandle->ncharts = p_connect_pairs(phandle, (PBool)impl);
+  phandle->ncharts = p_connect_pairs(phandle, (PBool)topology_from_uvs);
   phandle->charts = p_split_charts(phandle, chart, phandle->ncharts);
 
   p_chart_delete(phandle->construction_chart);
@@ -4569,8 +4575,11 @@ void param_construct_end(ParamHandle *handle, ParamBool fill, ParamBool impl)
 
     p_chart_boundaries(chart, &nboundaries, &outer);
 
-    if (!impl && nboundaries == 0) {
+    if (!topology_from_uvs && nboundaries == 0) {
       p_chart_delete(chart);
+      if (count_fail != NULL) {
+        *count_fail += 1;
+      }
       continue;
     }
 
@@ -4608,12 +4617,11 @@ void param_lscm_begin(ParamHandle *handle, ParamBool live, ParamBool abf)
   }
 }
 
-void param_lscm_solve(ParamHandle *handle)
+void param_lscm_solve(ParamHandle *handle, int *count_changed, int *count_failed)
 {
   PHandle *phandle = (PHandle *)handle;
   PChart *chart;
   int i;
-  PBool result;
 
   param_assert(phandle->state == PHANDLE_STATE_LSCM);
 
@@ -4621,7 +4629,7 @@ void param_lscm_solve(ParamHandle *handle)
     chart = phandle->charts[i];
 
     if (chart->u.lscm.context) {
-      result = p_chart_lscm_solve(phandle, chart);
+      const PBool result = p_chart_lscm_solve(phandle, chart);
 
       if (result && !(chart->flag & PCHART_HAS_PINS)) {
         p_chart_rotate_minimum_area(chart);
@@ -4633,6 +4641,17 @@ void param_lscm_solve(ParamHandle *handle)
 
       if (!result || !(chart->flag & PCHART_HAS_PINS)) {
         p_chart_lscm_end(chart);
+      }
+
+      if (result) {
+        if (count_changed != NULL) {
+          *count_changed += 1;
+        }
+      }
+      else {
+        if (count_failed != NULL) {
+          *count_failed += 1;
+        }
       }
     }
   }

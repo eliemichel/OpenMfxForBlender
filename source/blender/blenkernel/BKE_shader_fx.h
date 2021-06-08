@@ -19,7 +19,6 @@
  * \ingroup bke
  */
 
-#include "BKE_customdata.h"
 #include "BLI_compiler_attrs.h"
 #include "DNA_shader_fx_types.h" /* needed for all enum typdefs */
 
@@ -28,6 +27,9 @@ extern "C" {
 #endif
 
 struct ARegionType;
+struct BlendDataReader;
+struct BlendLibReader;
+struct BlendWriter;
 struct ID;
 struct ListBase;
 struct ModifierUpdateDepsgraphContext;
@@ -147,10 +149,11 @@ typedef struct ShaderFxTypeInfo {
 
 #define SHADERFX_TYPE_PANEL_PREFIX "FX_PT_"
 
-/* Initialize  global data (type info and some common global storages). */
+/* Initialize  global data (type info and some common global storage). */
 void BKE_shaderfx_init(void);
 
 void BKE_shaderfxType_panel_id(ShaderFxType type, char *r_idname);
+void BKE_shaderfx_panel_expand(struct ShaderFxData *fx);
 const ShaderFxTypeInfo *BKE_shaderfx_get_info(ShaderFxType type);
 struct ShaderFxData *BKE_shaderfx_new(int type);
 void BKE_shaderfx_free_ex(struct ShaderFxData *fx, const int flag);
@@ -168,6 +171,10 @@ void BKE_shaderfx_copy(struct ListBase *dst, const struct ListBase *src);
 void BKE_shaderfx_foreach_ID_link(struct Object *ob, ShaderFxIDWalkFunc walk, void *userData);
 
 bool BKE_shaderfx_has_gpencil(struct Object *ob);
+
+void BKE_shaderfx_blend_write(struct BlendWriter *writer, struct ListBase *fxbase);
+void BKE_shaderfx_blend_read_data(struct BlendDataReader *reader, struct ListBase *lb);
+void BKE_shaderfx_blend_read_lib(struct BlendLibReader *reader, struct Object *ob);
 
 #ifdef __cplusplus
 }

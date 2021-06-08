@@ -34,7 +34,7 @@ namespace gpu {
 
 /**
  * Implementation of shader compilation and uniforms handling using OpenGL.
- **/
+ */
 class GLShader : public Shader {
  private:
   /** Handle for full program (links shader stages below). */
@@ -70,6 +70,9 @@ class GLShader : public Shader {
   void uniform_int(int location, int comp_len, int array_size, const int *data) override;
 
   void vertformat_from_shader(GPUVertFormat *format) const override;
+
+  /* DEPRECATED: Kept only because of BGL API. */
+  int program_handle_get(void) const override;
 
  private:
   char *glsl_patch_get(void);

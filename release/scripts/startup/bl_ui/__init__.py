@@ -67,6 +67,7 @@ _modules = [
     "properties_scene",
     "properties_texture",
     "properties_world",
+    "properties_collection",
 
     # Generic Space Modules
     #
@@ -86,6 +87,7 @@ _modules = [
     "space_outliner",
     "space_properties",
     "space_sequencer",
+    "space_spreadsheet",
     "space_statusbar",
     "space_text",
     "space_time",

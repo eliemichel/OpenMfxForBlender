@@ -22,6 +22,8 @@
 
 #include "DNA_collection_types.h"
 
+#include "DNA_lineart_types.h"
+
 #include "BLI_utildefines.h"
 
 #include "RNA_define.h"
@@ -275,7 +277,7 @@ static bool rna_Collection_children_override_apply(Main *bmain,
   Collection *coll_dst = (Collection *)ptr_dst->owner_id;
 
   if (ptr_item_dst->type == NULL || ptr_item_src->type == NULL) {
-    BLI_assert(0 && "invalid source or destination sub-collection.");
+    /* This can happen when reference and overrides differ, just ignore then. */
     return false;
   }
 
@@ -344,6 +346,31 @@ static void rna_Collection_flag_update(Main *bmain, Scene *scene, PointerRNA *pt
   WM_main_add_notifier(NC_SCENE | ND_OB_SELECT, scene);
 }
 
+static int rna_Collection_color_tag_get(struct PointerRNA *ptr)
+{
+  Collection *collection = (Collection *)ptr->data;
+
+  return collection->color_tag;
+}
+
+static void rna_Collection_color_tag_set(struct PointerRNA *ptr, int value)
+{
+  Collection *collection = (Collection *)ptr->data;
+
+  if (collection->flag & COLLECTION_IS_MASTER) {
+    return;
+  }
+
+  collection->color_tag = value;
+}
+
+static void rna_Collection_color_tag_update(Main *UNUSED(bmain),
+                                            Scene *scene,
+                                            PointerRNA *UNUSED(ptr))
+{
+  WM_main_add_notifier(NC_SCENE | ND_LAYER_CONTENT, scene);
+}
+
 #else
 
 /* collection.objects */
@@ -407,7 +434,7 @@ void RNA_def_collections(BlenderRNA *brna)
 
   srna = RNA_def_struct(brna, "Collection", "ID");
   RNA_def_struct_ui_text(srna, "Collection", "Collection of Object data-blocks");
-  RNA_def_struct_ui_icon(srna, ICON_GROUP);
+  RNA_def_struct_ui_icon(srna, ICON_OUTLINER_COLLECTION);
   /* This is done on save/load in readfile.c,
    * removed if no objects are in the collection and not in a scene. */
   RNA_def_struct_clear_flag(srna, STRUCT_ID_REFCOUNT);
@@ -492,11 +519,42 @@ void RNA_def_collections(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Disable in Renders", "Globally disable in renders");
   RNA_def_property_update(prop, NC_SCENE | ND_LAYER_CONTENT, "rna_Collection_flag_update");
 
+  static const EnumPropertyItem rna_collection_lineart_usage[] = {
+      {COLLECTION_LRT_INCLUDE,
+       "INCLUDE",
+       0,
+       "Include",
+       "Generate feature lines for this collection"},
+      {COLLECTION_LRT_OCCLUSION_ONLY,
+       "OCCLUSION_ONLY",
+       0,
+       "Occlusion Only",
+       "Only use the collection to produce occlusion"},
+      {COLLECTION_LRT_EXCLUDE, "EXCLUDE", 0, "Exclude", "Don't use this collection in line art"},
+      {COLLECTION_LRT_INTERSECTION_ONLY,
+       "INTERSECTION_ONLY",
+       0,
+       "Intersection Only",
+       "Only generate intersection lines for this collection"},
+      {COLLECTION_LRT_NO_INTERSECTION,
+       "NO_INTERSECTION",
+       0,
+       "No Intersection",
+       "Include this collection but do not generate intersection lines"},
+      {0, NULL, 0, NULL, NULL}};
+
+  prop = RNA_def_property(srna, "lineart_usage", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, rna_collection_lineart_usage);
+  RNA_def_property_ui_text(prop, "Usage", "How to use this collection in line art");
+  RNA_def_property_update(prop, NC_SCENE, NULL);
+
   prop = RNA_def_property(srna, "color_tag", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "color_tag");
+  RNA_def_property_enum_funcs(
+      prop, "rna_Collection_color_tag_get", "rna_Collection_color_tag_set", NULL);
   RNA_def_property_enum_items(prop, rna_enum_collection_color_items);
   RNA_def_property_ui_text(prop, "Collection Color", "Color tag for a collection");
-  RNA_def_property_update(prop, NC_SCENE | ND_LAYER_CONTENT, NULL);
+  RNA_def_property_update(prop, NC_SCENE | ND_LAYER_CONTENT, "rna_Collection_color_tag_update");
 
   RNA_define_lib_overridable(false);
 }

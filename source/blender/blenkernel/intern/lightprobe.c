@@ -100,11 +100,16 @@ IDTypeInfo IDType_ID_LP = {
     .make_local = NULL,
     .foreach_id = lightprobe_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = lightprobe_blend_write,
     .blend_read_data = lightprobe_blend_read_data,
     .blend_read_lib = lightprobe_blend_read_lib,
     .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 void BKE_lightprobe_type_set(LightProbe *probe, const short lightprobe_type)

@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 /** \file
  * \ingroup bli
@@ -162,6 +161,7 @@ void interp_v2_v2v2_slerp_safe(float target[2], const float a[2], const float b[
   }
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Cubic curve interpolation (bezier spline).
  * \{ */
 
@@ -278,6 +278,12 @@ void mid_v2_v2v2(float r[2], const float a[2], const float b[2])
 {
   r[0] = 0.5f * (a[0] + b[0]);
   r[1] = 0.5f * (a[1] + b[1]);
+}
+
+void mid_v2_v2v2v2(float v[2], const float v1[2], const float v2[2], const float v3[2])
+{
+  v[0] = (v1[0] + v2[0] + v3[0]) / 3.0f;
+  v[1] = (v1[1] + v2[1] + v3[1]) / 3.0f;
 }
 
 void mid_v3_v3v3v3(float v[3], const float v1[3], const float v2[3], const float v3[3])
@@ -1395,6 +1401,7 @@ void copy_vn_fl(float *array_tar, const int size, const float val)
   }
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Double precision versions 'db'.
  * \{ */
 

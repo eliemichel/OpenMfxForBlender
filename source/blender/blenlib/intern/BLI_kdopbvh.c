@@ -94,7 +94,7 @@ struct BVHTree {
   BVHNode *nodearray;  /* pre-alloc branch nodes */
   BVHNode **nodechild; /* pre-alloc children for nodes */
   float *nodebv;       /* pre-alloc bounding-volumes for nodes */
-  float epsilon;       /* epslion is used for inflation of the k-dop      */
+  float epsilon;       /* Epsilon is used for inflation of the K-DOP. */
   int totleaf;         /* leafs */
   int totbranch;
   axis_t start_axis, stop_axis; /* bvhtree_kdop_axes array indices according to axis */
@@ -365,7 +365,7 @@ static void create_kdop_hull(
   int k;
   axis_t axis_iter;
 
-  /* don't init boudings for the moving case */
+  /* Don't initialize bounds for the moving case */
   if (!moving) {
     node_minmax_init(tree, node);
   }
@@ -573,9 +573,9 @@ typedef struct BVHBuildHelper {
   int tree_type;
   int totleafs;
 
-  /** Min number of leafs that are archievable from a node at depth N */
+  /** Min number of leafs that are achievable from a node at depth `N`. */
   int leafs_per_child[32];
-  /** Number of nodes at depth N (tree_type^N) */
+  /** Number of nodes at depth `N (tree_type^N)`. */
   int branches_on_level[32];
 
   /** Number of leafs that are placed on the level that is not 100% filled */
@@ -1076,6 +1076,25 @@ float BLI_bvhtree_get_epsilon(const BVHTree *tree)
   return tree->epsilon;
 }
 
+/**
+ * This function returns the bounding box of the BVH tree.
+ */
+void BLI_bvhtree_get_bounding_box(BVHTree *tree, float r_bb_min[3], float r_bb_max[3])
+{
+  BVHNode *root = tree->nodes[tree->totleaf];
+  if (root != NULL) {
+    const float bb_min[3] = {root->bv[0], root->bv[2], root->bv[4]};
+    const float bb_max[3] = {root->bv[1], root->bv[3], root->bv[5]};
+    copy_v3_v3(r_bb_min, bb_min);
+    copy_v3_v3(r_bb_max, bb_max);
+  }
+  else {
+    BLI_assert(false);
+    zero_v3(r_bb_min);
+    zero_v3(r_bb_max);
+  }
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -1293,7 +1312,7 @@ BVHTreeOverlap *BLI_bvhtree_overlap_ex(
   bool use_threading = (flag & BVH_OVERLAP_USE_THREADING) != 0 &&
                        (tree1->totleaf > KDOPBVH_THREAD_LEAF_THRESHOLD);
 
-  /* `RETURN_PAIRS` was not implemented without `max_interations`. */
+  /* 'RETURN_PAIRS' was not implemented without 'max_interactions'. */
   BLI_assert(overlap_pairs || max_interactions);
 
   const int root_node_len = BLI_bvhtree_overlap_thread_num(tree1);

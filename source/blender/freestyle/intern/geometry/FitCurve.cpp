@@ -20,9 +20,9 @@
  * \brief from "Graphics Gems", Academic Press, 1990
  */
 
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>  // for malloc and free
-#include <math.h>
-#include <stdio.h>
 
 #include "FitCurve.h"
 
@@ -30,7 +30,7 @@ using namespace std;
 
 namespace Freestyle {
 
-typedef Vector2 *BezierCurve;
+using BezierCurve = Vector2 *;
 
 /* Forward declarations */
 static double *Reparameterize(Vector2 *d, int first, int last, double *u, BezierCurve bezCurve);
@@ -134,7 +134,7 @@ static BezierCurve GenerateBezier(
   double alpha_l; /* Alpha values, left and right */
   double alpha_r;
   Vector2 tmp;          /* Utility variable */
-  BezierCurve bezCurve; /* RETURN bezier curve ctl pts */
+  BezierCurve bezCurve; /* RETURN bezier curve control points. */
 
   bezCurve = (Vector2 *)malloc(4 * sizeof(Vector2));
   nPts = last - first + 1;
@@ -462,10 +462,6 @@ static Vector2 V2SubII(Vector2 a, Vector2 b)
 
 //------------------------- WRAPPER -----------------------------//
 
-FitCurveWrapper::FitCurveWrapper()
-{
-}
-
 FitCurveWrapper::~FitCurveWrapper()
 {
   _vertices.clear();
@@ -493,7 +489,7 @@ void FitCurveWrapper::FitCurve(vector<Vec2d> &data, vector<Vec2d> &oCurve, doubl
 
   // copy results
   for (vector<Vector2>::iterator v = _vertices.begin(), vend = _vertices.end(); v != vend; ++v) {
-    oCurve.push_back(Vec2d(v->x(), v->y()));
+    oCurve.emplace_back(v->x(), v->y());
   }
 }
 

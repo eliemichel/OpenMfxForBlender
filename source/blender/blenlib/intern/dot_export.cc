@@ -221,7 +221,7 @@ void Attributes::export__as_bracket_list(std::stringstream &ss) const
   ss << "[";
   attributes_.foreach_item([&](StringRef key, StringRef value) {
     if (StringRef(value).startswith("<")) {
-      /* Don't draw the quotes, this is an html-like value. */
+      /* Don't draw the quotes, this is an HTML-like value. */
       ss << key << "=" << value << ", ";
     }
     else {
@@ -275,10 +275,10 @@ NodeWithSocketsRef::NodeWithSocketsRef(Node &node,
 {
   std::stringstream ss;
 
-  ss << "<<table border=\"0\" cellspacing=\"3\">";
+  ss << R"(<<table border="0" cellspacing="3">)";
 
   /* Header */
-  ss << "<tr><td colspan=\"3\" align=\"center\"><b>";
+  ss << R"(<tr><td colspan="3" align="center"><b>)";
   ss << ((name.size() == 0) ? "No Name" : name);
   ss << "</b></td></tr>";
 
@@ -291,7 +291,7 @@ NodeWithSocketsRef::NodeWithSocketsRef(Node &node,
       if (name.size() == 0) {
         name = "No Name";
       }
-      ss << "<td align=\"left\" port=\"in" << i << "\">";
+      ss << R"(<td align="left" port="in)" << i << "\">";
       ss << name;
       ss << "</td>";
     }
@@ -304,7 +304,7 @@ NodeWithSocketsRef::NodeWithSocketsRef(Node &node,
       if (name.size() == 0) {
         name = "No Name";
       }
-      ss << "<td align=\"right\" port=\"out" << i << "\">";
+      ss << R"(<td align="right" port="out)" << i << "\">";
       ss << name;
       ss << "</td>";
     }

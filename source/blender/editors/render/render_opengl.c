@@ -54,7 +54,6 @@
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_sequencer.h"
 #include "BKE_writeavi.h"
 
 #include "DEG_depsgraph.h"
@@ -77,6 +76,8 @@
 
 #include "RNA_access.h"
 #include "RNA_define.h"
+
+#include "SEQ_render.h"
 
 #include "GPU_framebuffer.h"
 #include "GPU_matrix.h"
@@ -350,7 +351,7 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
       G.f &= ~G_FLAG_RENDER_VIEWPORT;
 
       gp_rect = MEM_mallocN(sizeof(uchar[4]) * sizex * sizey, "offscreen rect");
-      GPU_offscreen_read_pixels(oglrender->ofs, GPU_DATA_UNSIGNED_BYTE, gp_rect);
+      GPU_offscreen_read_pixels(oglrender->ofs, GPU_DATA_UBYTE, gp_rect);
 
       for (i = 0; i < sizex * sizey * 4; i += 4) {
         blend_color_mix_byte(&render_rect[i], &render_rect[i], &gp_rect[i]);
@@ -362,13 +363,10 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
     }
   }
   else {
-    /* shouldnt suddenly give errors mid-render but possible */
+    /* shouldn't suddenly give errors mid-render but possible */
     char err_out[256] = "unknown";
     ImBuf *ibuf_view;
     const int alpha_mode = (draw_sky) ? R_ADDSKY : R_ALPHAPREMUL;
-    eImBufFlags imbuf_flags = oglrender->color_depth <= R_IMF_CHAN_DEPTH_8 ? IB_rect :
-                                                                             IB_rectfloat;
-
     if (view_context) {
       ibuf_view = ED_view3d_draw_offscreen_imbuf(depsgraph,
                                                  scene,
@@ -377,9 +375,10 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
                                                  region,
                                                  sizex,
                                                  sizey,
-                                                 imbuf_flags,
+                                                 IB_rectfloat,
                                                  alpha_mode,
                                                  viewname,
+                                                 true,
                                                  oglrender->ofs,
                                                  err_out);
 
@@ -396,7 +395,7 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
                                                         scene->camera,
                                                         oglrender->sizex,
                                                         oglrender->sizey,
-                                                        imbuf_flags,
+                                                        IB_rectfloat,
                                                         V3D_OFSDRAW_SHOW_ANNOTATION,
                                                         alpha_mode,
                                                         viewname,
@@ -488,19 +487,19 @@ static void screen_opengl_render_apply(const bContext *C, OGLRender *oglrender)
     SpaceSeq *sseq = oglrender->sseq;
     int chanshown = sseq ? sseq->chanshown : 0;
 
-    BKE_sequencer_new_render_data(oglrender->bmain,
-                                  oglrender->depsgraph,
-                                  scene,
-                                  oglrender->sizex,
-                                  oglrender->sizey,
-                                  100,
-                                  false,
-                                  &context);
+    SEQ_render_new_render_data(oglrender->bmain,
+                               oglrender->depsgraph,
+                               scene,
+                               oglrender->sizex,
+                               oglrender->sizey,
+                               SEQ_RENDER_SIZE_SCENE,
+                               false,
+                               &context);
 
     for (view_id = 0; view_id < oglrender->views_len; view_id++) {
       context.view_id = view_id;
       context.gpu_offscreen = oglrender->ofs;
-      oglrender->seq_data.ibufs_arr[view_id] = BKE_sequencer_give_ibuf(&context, CFRA, chanshown);
+      oglrender->seq_data.ibufs_arr[view_id] = SEQ_render_give_ibuf(&context, CFRA, chanshown);
     }
   }
 

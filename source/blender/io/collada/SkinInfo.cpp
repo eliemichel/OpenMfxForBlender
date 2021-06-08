@@ -21,7 +21,7 @@
 #include <algorithm>
 
 #if !defined(WIN32)
-#  include <stdint.h>
+#  include <cstdint>
 #endif
 
 /* COLLADABU_ASSERT, may be able to remove later */
@@ -55,10 +55,7 @@ template<class T> static const char *bc_get_joint_name(T *node)
 /* This is used to store data passed in write_controller_data.
  * Arrays from COLLADAFW::SkinControllerData lose ownership, so do this class members
  * so that arrays don't get freed until we free them explicitly. */
-SkinInfo::SkinInfo()
-{
-  /* pass */
-}
+SkinInfo::SkinInfo() = default;
 
 SkinInfo::SkinInfo(const SkinInfo &skin)
     : weights(skin.weights),
@@ -75,7 +72,7 @@ SkinInfo::SkinInfo(const SkinInfo &skin)
   transfer_int_array_data_const(skin.joint_indices, joint_indices);
 }
 
-SkinInfo::SkinInfo(UnitConverter *conv) : unit_converter(conv), ob_arm(NULL), parent(NULL)
+SkinInfo::SkinInfo(UnitConverter *conv) : unit_converter(conv), ob_arm(nullptr), parent(nullptr)
 {
 }
 
@@ -157,7 +154,7 @@ void SkinInfo::set_controller(const COLLADAFW::SkinController *co)
 /* called from write_controller */
 Object *SkinInfo::create_armature(Main *bmain, Scene *scene, ViewLayer *view_layer)
 {
-  ob_arm = bc_add_object(bmain, scene, view_layer, OB_ARMATURE, NULL);
+  ob_arm = bc_add_object(bmain, scene, view_layer, OB_ARMATURE, nullptr);
   return ob_arm;
 }
 
@@ -228,7 +225,8 @@ void SkinInfo::link_armature(bContext *C,
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
 
-  ModifierData *md = ED_object_modifier_add(NULL, bmain, scene, ob, NULL, eModifierType_Armature);
+  ModifierData *md = ED_object_modifier_add(
+      nullptr, bmain, scene, ob, nullptr, eModifierType_Armature);
   ArmatureModifierData *amd = (ArmatureModifierData *)md;
   amd->object = ob_arm;
 
@@ -248,7 +246,7 @@ void SkinInfo::link_armature(bContext *C,
   DEG_id_tag_update(&obn->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
 #endif
   copy_m4_m4(ob->obmat, bind_shape_matrix);
-  BKE_object_apply_mat4(ob, ob->obmat, 0, 0);
+  BKE_object_apply_mat4(ob, ob->obmat, false, false);
 
   amd->deformflag = ARM_DEF_VGROUP;
 

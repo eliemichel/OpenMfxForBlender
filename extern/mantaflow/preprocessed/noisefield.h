@@ -64,7 +64,7 @@ class WaveletNoiseField : public PbClass {
   {
     if (mNoiseTile && !mNoiseReferenceCount) {
       delete mNoiseTile;
-      mNoiseTile = NULL;
+      mNoiseTile = nullptr;
     }
   };
 
@@ -236,6 +236,7 @@ class WaveletNoiseField : public PbClass {
   static int randomSeed;
   // global reference count for noise tile
   static std::atomic<int> mNoiseReferenceCount;
+
  public:
   PbArgs _args;
 }

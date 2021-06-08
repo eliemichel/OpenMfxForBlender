@@ -18,15 +18,18 @@
 
 #pragma once
 
+#include "BLI_vector.hh"
+
 #include <map>
 #include <set>
-#include <vector>
 
 #include "DNA_node_types.h"
 
 #ifdef WITH_CXX_GUARDEDALLOC
 #  include "MEM_guardedalloc.h"
 #endif
+
+namespace blender::compositor {
 
 class CompositorContext;
 class Node;
@@ -39,43 +42,27 @@ class NodeOutput;
  */
 class NodeGraph {
  public:
-  class Link {
-   private:
-    NodeOutput *m_from;
-    NodeInput *m_to;
+  struct Link {
+    NodeOutput *from;
+    NodeInput *to;
 
-   public:
-    Link(NodeOutput *from, NodeInput *to) : m_from(from), m_to(to)
+    Link(NodeOutput *from, NodeInput *to) : from(from), to(to)
     {
-    }
-
-    NodeOutput *getFromSocket() const
-    {
-      return m_from;
-    }
-    NodeInput *getToSocket() const
-    {
-      return m_to;
     }
   };
 
-  typedef std::vector<Node *> Nodes;
-  typedef Nodes::iterator NodeIterator;
-  typedef std::vector<Link> Links;
-
  private:
-  Nodes m_nodes;
-  Links m_links;
+  Vector<Node *> m_nodes;
+  Vector<Link> m_links;
 
  public:
-  NodeGraph();
   ~NodeGraph();
 
-  const Nodes &nodes() const
+  const Vector<Node *> &nodes() const
   {
     return m_nodes;
   }
-  const Links &links() const
+  const Vector<Link> &links() const
   {
     return m_links;
   }
@@ -83,8 +70,7 @@ class NodeGraph {
   void from_bNodeTree(const CompositorContext &context, bNodeTree *tree);
 
  protected:
-  typedef std::pair<NodeIterator, NodeIterator> NodeRange;
-  typedef std::vector<NodeInput *> NodeInputs;
+  typedef std::pair<Vector<Node *>::iterator, Vector<Node *>::iterator> NodeRange;
 
   static bNodeSocket *find_b_node_input(bNode *b_node, const char *identifier);
   static bNodeSocket *find_b_node_output(bNode *b_node, const char *identifier);
@@ -103,7 +89,6 @@ class NodeGraph {
                  bNodeInstanceKey key,
                  bool is_active_group);
 
-  NodeInputs find_inputs(const NodeRange &node_range, bNodeSocket *b_socket);
   NodeOutput *find_output(const NodeRange &node_range, bNodeSocket *b_socket);
   void add_bNodeLink(const NodeRange &node_range, bNodeLink *b_nodelink);
 
@@ -134,3 +119,5 @@ class NodeGraph {
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:NodeGraph")
 #endif
 };
+
+}  // namespace blender::compositor

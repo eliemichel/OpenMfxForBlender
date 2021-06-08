@@ -69,8 +69,8 @@ void wm_window_swap_buffers(wmWindow *win);
 void wm_window_set_swap_interval(wmWindow *win, int interval);
 bool wm_window_get_swap_interval(wmWindow *win, int *intervalOut);
 
-void wm_get_cursor_position(wmWindow *win, int *x, int *y);
-void wm_cursor_position_from_ghost(wmWindow *win, int *x, int *y);
+void wm_cursor_position_get(wmWindow *win, int *r_x, int *r_y);
+void wm_cursor_position_from_ghost(wmWindow *win, int *r_x, int *r_y);
 void wm_cursor_position_to_ghost(wmWindow *win, int *x, int *y);
 
 #ifdef WITH_INPUT_IME
@@ -86,6 +86,7 @@ void wm_quit_with_optional_confirmation_prompt(bContext *C, wmWindow *win) ATTR_
 int wm_window_new_exec(bContext *C, struct wmOperator *op);
 int wm_window_new_main_exec(bContext *C, struct wmOperator *op);
 
+void wm_test_autorun_revert_action_set(struct wmOperatorType *ot, struct PointerRNA *ptr);
 void wm_test_autorun_warning(bContext *C);
 
 #ifdef __cplusplus

@@ -52,6 +52,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_dynstr.h"
+#include "BLI_endian_switch.h"
 #include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
 
@@ -68,11 +69,14 @@
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_nla.h"
-#include "BKE_sequencer.h"
 
 #include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
+
+#include "SEQ_iterator.h"
+
+#include "BLO_read_write.h"
 
 #ifdef WIN32
 #  include "BLI_math_base.h" /* M_PI */
@@ -109,6 +113,69 @@ static void ipo_free_data(ID *id)
   }
 }
 
+static void ipo_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Ipo *ipo = (Ipo *)id;
+
+  BLO_read_list(reader, &(ipo->curve));
+
+  LISTBASE_FOREACH (IpoCurve *, icu, &ipo->curve) {
+    BLO_read_data_address(reader, &icu->bezt);
+    BLO_read_data_address(reader, &icu->bp);
+    BLO_read_data_address(reader, &icu->driver);
+
+    /* Undo generic endian switching. */
+    if (BLO_read_requires_endian_switch(reader)) {
+      BLI_endian_switch_int16(&icu->blocktype);
+      if (icu->driver != NULL) {
+
+        /* Undo generic endian switching. */
+        if (BLO_read_requires_endian_switch(reader)) {
+          BLI_endian_switch_int16(&icu->blocktype);
+          if (icu->driver != NULL) {
+            BLI_endian_switch_int16(&icu->driver->blocktype);
+          }
+        }
+      }
+
+      /* Undo generic endian switching. */
+      if (BLO_read_requires_endian_switch(reader)) {
+        BLI_endian_switch_int16(&ipo->blocktype);
+        if (icu->driver != NULL) {
+          BLI_endian_switch_int16(&icu->driver->blocktype);
+        }
+      }
+    }
+  }
+
+  /* Undo generic endian switching. */
+  if (BLO_read_requires_endian_switch(reader)) {
+    BLI_endian_switch_int16(&ipo->blocktype);
+  }
+}
+
+static void ipo_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Ipo *ipo = (Ipo *)id;
+
+  LISTBASE_FOREACH (IpoCurve *, icu, &ipo->curve) {
+    if (icu->driver) {
+      BLO_read_id_address(reader, ipo->id.lib, &icu->driver->ob);
+    }
+  }
+}
+
+static void ipo_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  Ipo *ipo = (Ipo *)id;
+
+  LISTBASE_FOREACH (IpoCurve *, icu, &ipo->curve) {
+    if (icu->driver) {
+      BLO_expand(expander, icu->driver->ob);
+    }
+  }
+}
+
 IDTypeInfo IDType_ID_IP = {
     .id_code = ID_IP,
     .id_filter = 0,
@@ -126,11 +193,16 @@ IDTypeInfo IDType_ID_IP = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = NULL,
-    .blend_read_data = NULL,
-    .blend_read_lib = NULL,
-    .blend_read_expand = NULL,
+    .blend_read_data = ipo_blend_read_data,
+    .blend_read_lib = ipo_blend_read_lib,
+    .blend_read_expand = ipo_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* *************************************************** */
@@ -398,7 +470,9 @@ static char *shapekey_adrcodes_to_paths(ID *id, int adrcode, int *UNUSED(array_i
     /* setting that we alter is the "value" (i.e. keyblock.curval) */
     if (kb) {
       /* Use the keyblock name, escaped, so that path lookups for this will work */
-      BLI_snprintf(buf, sizeof(buf), "key_blocks[\"%s\"].value", kb->name);
+      char kb_name_esc[sizeof(kb->name) * 2];
+      BLI_str_escape(kb_name_esc, kb->name, sizeof(kb_name_esc));
+      BLI_snprintf(buf, sizeof(buf), "key_blocks[\"%s\"].value", kb_name_esc);
     }
     else {
       /* Fallback - Use the adrcode as index directly, so that this can be manually fixed */
@@ -1049,7 +1123,7 @@ static char *get_rna_access(ID *id,
           propname = "speed_fader";
           break;
         case SEQ_FAC_OPACITY:
-          propname = "blend_opacity";
+          propname = "blend_alpha";
           break;
       }
       /* XXX this doesn't seem to be included anywhere in sequencer RNA... */
@@ -1091,7 +1165,12 @@ static char *get_rna_access(ID *id,
   /* note, strings are not escapted and they should be! */
   if ((actname && actname[0]) && (constname && constname[0])) {
     /* Constraint in Pose-Channel */
-    BLI_snprintf(buf, sizeof(buf), "pose.bones[\"%s\"].constraints[\"%s\"]", actname, constname);
+    char actname_esc[sizeof(((bActionChannel *)NULL)->name) * 2];
+    char constname_esc[sizeof(((bConstraint *)NULL)->name) * 2];
+    BLI_str_escape(actname_esc, actname, sizeof(actname_esc));
+    BLI_str_escape(constname_esc, constname, sizeof(constname_esc));
+    BLI_snprintf(
+        buf, sizeof(buf), "pose.bones[\"%s\"].constraints[\"%s\"]", actname_esc, constname_esc);
   }
   else if (actname && actname[0]) {
     if ((blocktype == ID_OB) && STREQ(actname, "Object")) {
@@ -1105,16 +1184,22 @@ static char *get_rna_access(ID *id,
     }
     else {
       /* Pose-Channel */
-      BLI_snprintf(buf, sizeof(buf), "pose.bones[\"%s\"]", actname);
+      char actname_esc[sizeof(((bActionChannel *)NULL)->name) * 2];
+      BLI_str_escape(actname_esc, actname, sizeof(actname_esc));
+      BLI_snprintf(buf, sizeof(buf), "pose.bones[\"%s\"]", actname_esc);
     }
   }
   else if (constname && constname[0]) {
     /* Constraint in Object */
-    BLI_snprintf(buf, sizeof(buf), "constraints[\"%s\"]", constname);
+    char constname_esc[sizeof(((bConstraint *)NULL)->name) * 2];
+    BLI_str_escape(constname_esc, constname, sizeof(constname_esc));
+    BLI_snprintf(buf, sizeof(buf), "constraints[\"%s\"]", constname_esc);
   }
   else if (seq) {
     /* Sequence names in Scene */
-    BLI_snprintf(buf, sizeof(buf), "sequence_editor.sequences_all[\"%s\"]", seq->name + 2);
+    char seq_name_esc[(sizeof(seq->name) - 2) * 2];
+    BLI_str_escape(seq_name_esc, seq->name + 2, sizeof(seq_name_esc));
+    BLI_snprintf(buf, sizeof(buf), "sequence_editor.sequences_all[\"%s\"]", seq_name_esc);
   }
   else {
     buf[0] = '\0'; /* empty string */
@@ -1930,12 +2015,12 @@ static void nlastrips_to_animdata(ID *id, ListBase *strips)
       }
 
       /* try to add this strip to the current NLA-Track (i.e. the 'last' one on the stack atm) */
-      if (BKE_nlatrack_add_strip(nlt, strip) == 0) {
+      if (BKE_nlatrack_add_strip(nlt, strip, false) == 0) {
         /* trying to add to the current failed (no space),
          * so add a new track to the stack, and add to that...
          */
-        nlt = BKE_nlatrack_add(adt, NULL);
-        BKE_nlatrack_add_strip(nlt, strip);
+        nlt = BKE_nlatrack_add(adt, NULL, false);
+        BKE_nlatrack_add_strip(nlt, strip, false);
       }
 
       /* ensure that strip has a name */

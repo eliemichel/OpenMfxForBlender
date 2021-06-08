@@ -28,6 +28,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
+#include "BLI_string.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
@@ -50,8 +51,6 @@
 
 #include "ED_object.h"
 
-#include "UI_interface.h"
-
 #include "object_intern.h"
 
 /* All possible data to transfer.
@@ -64,7 +63,7 @@ static const EnumPropertyItem DT_layer_items[] = {
      0,
      "Vertex Group(s)",
      "Transfer active or all vertex groups"},
-#if 0 /* XXX For now, would like to finish/merge work from 2014 gsoc first. */
+#if 0 /* XXX For now, would like to finish/merge work from 2014 GSOC first. */
     {DT_TYPE_SHAPEKEY, "SHAPEKEYS", 0, "Shapekey(s)", "Transfer active or all shape keys"},
 #endif
 /* XXX When SkinModifier is enabled,
@@ -562,32 +561,45 @@ static bool data_transfer_poll_property(const bContext *UNUSED(C),
     return false;
   }
 
-  if (STREQ(prop_id, "use_object_transform") && use_auto_transform) {
-    return false;
+  if (STREQ(prop_id, "use_object_transform")) {
+    if (use_auto_transform) {
+      return false;
+    }
   }
-  if (STREQ(prop_id, "max_distance") && !use_max_distance) {
-    return false;
+  else if (STREQ(prop_id, "max_distance")) {
+    if (!use_max_distance) {
+      return false;
+    }
   }
-  if (STREQ(prop_id, "islands_precision") && !DT_DATATYPE_IS_LOOP(data_type)) {
-    return false;
+  else if (STREQ(prop_id, "islands_precision")) {
+    if (!DT_DATATYPE_IS_LOOP(data_type)) {
+      return false;
+    }
   }
-
-  if (STREQ(prop_id, "vert_mapping") && !DT_DATATYPE_IS_VERT(data_type)) {
-    return false;
+  else if (STREQ(prop_id, "vert_mapping")) {
+    if (!DT_DATATYPE_IS_VERT(data_type)) {
+      return false;
+    }
   }
-  if (STREQ(prop_id, "edge_mapping") && !DT_DATATYPE_IS_EDGE(data_type)) {
-    return false;
+  else if (STREQ(prop_id, "edge_mapping")) {
+    if (!DT_DATATYPE_IS_EDGE(data_type)) {
+      return false;
+    }
   }
-  if (STREQ(prop_id, "loop_mapping") && !DT_DATATYPE_IS_LOOP(data_type)) {
-    return false;
+  else if (STREQ(prop_id, "loop_mapping")) {
+    if (!DT_DATATYPE_IS_LOOP(data_type)) {
+      return false;
+    }
   }
-  if (STREQ(prop_id, "poly_mapping") && !DT_DATATYPE_IS_POLY(data_type)) {
-    return false;
+  else if (STREQ(prop_id, "poly_mapping")) {
+    if (!DT_DATATYPE_IS_POLY(data_type)) {
+      return false;
+    }
   }
-
-  if ((STREQ(prop_id, "layers_select_src") || STREQ(prop_id, "layers_select_dst")) &&
-      !DT_DATATYPE_IS_MULTILAYERS(data_type)) {
-    return false;
+  else if (STR_ELEM(prop_id, "layers_select_src", "layers_select_dst")) {
+    if (!DT_DATATYPE_IS_MULTILAYERS(data_type)) {
+      return false;
+    }
   }
 
   /* Else, show it! */
@@ -603,7 +615,7 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
   ot->name = "Transfer Mesh Data";
   ot->idname = "OBJECT_OT_data_transfer";
   ot->description =
-      "Transfer data layer(s) (weights, edge sharp, ...) from active to selected meshes";
+      "Transfer data layer(s) (weights, edge sharp, etc.) from active to selected meshes";
 
   /* API callbacks.*/
   ot->poll = data_transfer_poll;
@@ -672,7 +684,8 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
       false,
       "Auto Transform",
       "Automatically compute transformation to get the best possible match between source and "
-      "destination meshes (WARNING: results will never be as good as manual matching of objects)");
+      "destination meshes.\n"
+      "Warning: Results will never be as good as manual matching of objects");
   RNA_def_boolean(ot->srna,
                   "use_object_transform",
                   true,
@@ -850,7 +863,7 @@ static int datalayout_transfer_exec(bContext *C, wmOperator *op)
 
 static int datalayout_transfer_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  if (edit_modifier_invoke_properties(C, op, NULL, NULL)) {
+  if (edit_modifier_invoke_properties(C, op)) {
     return datalayout_transfer_exec(C, op);
   }
   return WM_menu_invoke(C, op, event);

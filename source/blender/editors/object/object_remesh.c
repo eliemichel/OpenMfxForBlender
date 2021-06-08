@@ -190,6 +190,7 @@ static int voxel_remesh_exec(bContext *C, wmOperator *op)
   }
 
   if (ob->mode == OB_MODE_SCULPT) {
+    BKE_sculpt_ensure_orig_mesh_data(CTX_data_scene(C), ob);
     ED_sculpt_undo_geometry_end(ob);
   }
 
@@ -326,7 +327,7 @@ static void voxel_size_edit_draw(const bContext *UNUSED(C), ARegion *UNUSED(ar),
   const float total_len = len_v3v3(cd->preview_plane[0], cd->preview_plane[1]);
   const int tot_lines = (int)(total_len / cd->voxel_size);
 
-  /* Smoothstep to reduce the alpha of the grid as the line number increases. */
+  /* Smooth-step to reduce the alpha of the grid as the line number increases. */
   const float a = VOXEL_SIZE_EDIT_MAX_GRIDS_LINES * 0.1f;
   const float b = VOXEL_SIZE_EDIT_MAX_GRIDS_LINES;
   const float x = clamp_f((tot_lines - a) / (b - a), 0.0f, 1.0);
@@ -369,10 +370,10 @@ static void voxel_size_edit_draw(const bContext *UNUSED(C), ARegion *UNUSED(ar),
 
 static void voxel_size_edit_cancel(bContext *C, wmOperator *op)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   VoxelSizeEditCustomData *cd = op->customdata;
 
-  ED_region_draw_cb_exit(ar->type, cd->draw_handle);
+  ED_region_draw_cb_exit(region->type, cd->draw_handle);
 
   MEM_freeN(op->customdata);
 
@@ -381,7 +382,7 @@ static void voxel_size_edit_cancel(bContext *C, wmOperator *op)
 
 static int voxel_size_edit_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   VoxelSizeEditCustomData *cd = op->customdata;
   Object *active_object = cd->active_object;
   Mesh *mesh = (Mesh *)active_object->data;
@@ -390,7 +391,7 @@ static int voxel_size_edit_modal(bContext *C, wmOperator *op, const wmEvent *eve
   if ((event->type == EVT_ESCKEY && event->val == KM_PRESS) ||
       (event->type == RIGHTMOUSE && event->val == KM_PRESS)) {
     voxel_size_edit_cancel(C, op);
-    ED_region_tag_redraw(ar);
+    ED_region_tag_redraw(region);
     return OPERATOR_FINISHED;
   }
 
@@ -398,10 +399,10 @@ static int voxel_size_edit_modal(bContext *C, wmOperator *op, const wmEvent *eve
   if ((event->type == LEFTMOUSE && event->val == KM_RELEASE) ||
       (event->type == EVT_RETKEY && event->val == KM_PRESS) ||
       (event->type == EVT_PADENTER && event->val == KM_PRESS)) {
-    ED_region_draw_cb_exit(ar->type, cd->draw_handle);
+    ED_region_draw_cb_exit(region->type, cd->draw_handle);
     mesh->remesh_voxel_size = cd->voxel_size;
     MEM_freeN(op->customdata);
-    ED_region_tag_redraw(ar);
+    ED_region_tag_redraw(region);
     ED_workspace_status_text(C, NULL);
     return OPERATOR_FINISHED;
   }
@@ -443,13 +444,13 @@ static int voxel_size_edit_modal(bContext *C, wmOperator *op, const wmEvent *eve
 
   cd->voxel_size = clamp_f(cd->voxel_size, 0.0001f, 1.0f);
 
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw(region);
   return OPERATOR_RUNNING_MODAL;
 }
 
 static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   Object *active_object = CTX_data_active_object(C);
   Mesh *mesh = (Mesh *)active_object->data;
 
@@ -458,7 +459,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
 
   /* Initial operator Custom Data setup. */
   cd->draw_handle = ED_region_draw_cb_activate(
-      ar->type, voxel_size_edit_draw, cd, REGION_DRAW_POST_VIEW);
+      region->type, voxel_size_edit_draw, cd, REGION_DRAW_POST_VIEW);
   cd->active_object = active_object;
   cd->init_mval[0] = event->mval[0];
   cd->init_mval[1] = event->mval[1];
@@ -466,7 +467,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   cd->voxel_size = mesh->remesh_voxel_size;
   op->customdata = cd;
 
-  /* Select the front facing face of the mesh boundig box. */
+  /* Select the front facing face of the mesh bounding box. */
   BoundBox *bb = BKE_mesh_boundbox_get(cd->active_object);
 
   /* Indices of the Bounding Box faces. */
@@ -533,7 +534,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   for (int i = 0; i < 4; i++) {
     float preview_plane_world_space[3];
     mul_v3_m4v3(preview_plane_world_space, active_object->obmat, cd->preview_plane[i]);
-    ED_view3d_project(ar, preview_plane_world_space, preview_plane_proj[i]);
+    ED_view3d_project(region, preview_plane_world_space, preview_plane_proj[i]);
   }
 
   /* Get the initial X and Y axis of the basis from the edges of the Bounding Box face. */
@@ -589,7 +590,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
 
   WM_event_add_modal_handler(C, op);
 
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw(region);
 
   const char *status_str = TIP_(
       "Move the mouse to change the voxel size. LMB: confirm size, ESC/RMB: cancel");
@@ -645,9 +646,10 @@ typedef struct QuadriFlowJob {
   short *stop, *do_update;
   float *progress;
 
+  Scene *scene;
   int target_faces;
   int seed;
-  bool use_paint_symmetry;
+  bool use_mesh_symmetry;
   eSymmetryAxes symmetry_axes;
 
   bool use_preserve_sharp;
@@ -736,7 +738,7 @@ static int quadriflow_break_job(void *customdata)
   return should_break;
 }
 
-/* called by oceanbake, wmJob sends notifier */
+/** Called by ocean-bake, #wmJob sends notifier. */
 static void quadriflow_update_job(void *customdata, float progress, int *cancel)
 {
   QuadriFlowJob *qj = customdata;
@@ -773,7 +775,7 @@ static Mesh *remesh_symmetry_bisect(Mesh *mesh, eSymmetryAxes symmetry_axes)
       zero_v3(plane_no);
       plane_no[axis] = -1.0f;
       mesh_bisect_temp = mesh_bisect;
-      mesh_bisect = BKE_mesh_mirror_bisect_on_mirror_plane(
+      mesh_bisect = BKE_mesh_mirror_bisect_on_mirror_plane_for_modifier(
           &mmd, mesh_bisect, axis, plane_co, plane_no);
       if (mesh_bisect_temp != mesh_bisect) {
         BKE_id_free(NULL, mesh_bisect_temp);
@@ -803,7 +805,7 @@ static Mesh *remesh_symmetry_mirror(Object *ob, Mesh *mesh, eSymmetryAxes symmet
       mmd.flag = 0;
       mmd.flag &= MOD_MIR_AXIS_X << i;
       mesh_mirror_temp = mesh_mirror;
-      mesh_mirror = BKE_mesh_mirror_apply_mirror_on_axis(&mmd, NULL, ob, mesh_mirror, axis);
+      mesh_mirror = BKE_mesh_mirror_apply_mirror_on_axis_for_modifier(&mmd, ob, mesh_mirror, axis);
       if (mesh_mirror_temp != mesh_mirror) {
         BKE_id_free(NULL, mesh_mirror_temp);
       }
@@ -849,7 +851,7 @@ static void quadriflow_start_job(void *customdata, short *stop, short *do_update
       qj->target_faces,
       qj->seed,
       qj->use_preserve_sharp,
-      (qj->use_preserve_boundary || qj->use_paint_symmetry),
+      (qj->use_preserve_boundary || qj->use_mesh_symmetry),
 #ifdef USE_MESH_CURVATURE
       qj->use_mesh_curvature,
 #else
@@ -885,13 +887,14 @@ static void quadriflow_start_job(void *customdata, short *stop, short *do_update
   BKE_mesh_nomain_to_mesh(new_mesh, mesh, ob, &CD_MASK_MESH, true);
 
   if (qj->smooth_normals) {
-    if (qj->use_paint_symmetry) {
+    if (qj->use_mesh_symmetry) {
       BKE_mesh_calc_normals(ob->data);
     }
     BKE_mesh_smooth_flag_set(ob->data, true);
   }
 
   if (ob->mode == OB_MODE_SCULPT) {
+    BKE_sculpt_ensure_orig_mesh_data(qj->scene, ob);
     ED_sculpt_undo_geometry_end(ob);
   }
 
@@ -935,11 +938,12 @@ static int quadriflow_remesh_exec(bContext *C, wmOperator *op)
   QuadriFlowJob *job = MEM_mallocN(sizeof(QuadriFlowJob), "QuadriFlowJob");
 
   job->owner = CTX_data_active_object(C);
+  job->scene = CTX_data_scene(C);
 
   job->target_faces = RNA_int_get(op->ptr, "target_faces");
   job->seed = RNA_int_get(op->ptr, "seed");
 
-  job->use_paint_symmetry = RNA_boolean_get(op->ptr, "use_paint_symmetry");
+  job->use_mesh_symmetry = RNA_boolean_get(op->ptr, "use_mesh_symmetry");
 
   job->use_preserve_sharp = RNA_boolean_get(op->ptr, "use_preserve_sharp");
   job->use_preserve_boundary = RNA_boolean_get(op->ptr, "use_preserve_boundary");
@@ -953,7 +957,7 @@ static int quadriflow_remesh_exec(bContext *C, wmOperator *op)
 
   /* Update the target face count if symmetry is enabled */
   Object *ob = CTX_data_active_object(C);
-  if (ob && job->use_paint_symmetry) {
+  if (ob && job->use_mesh_symmetry) {
     Mesh *mesh = BKE_mesh_from_object(ob);
     job->symmetry_axes = (eSymmetryAxes)mesh->symmetry;
     for (char i = 0; i < 3; i++) {
@@ -964,7 +968,7 @@ static int quadriflow_remesh_exec(bContext *C, wmOperator *op)
     }
   }
   else {
-    job->use_paint_symmetry = false;
+    job->use_mesh_symmetry = false;
     job->symmetry_axes = 0;
   }
 
@@ -978,7 +982,7 @@ static int quadriflow_remesh_exec(bContext *C, wmOperator *op)
     quadriflow_free_job(job);
   }
   else {
-    /* Non blocking call. For when the operator has been called from the gui */
+    /* Non blocking call. For when the operator has been called from the GUI. */
     job->is_nonblocking_job = true;
 
     wmJob *wm_job = WM_jobs_get(CTX_wm_manager(C),
@@ -1105,10 +1109,10 @@ void OBJECT_OT_quadriflow_remesh(wmOperatorType *ot)
 
   /* properties */
   RNA_def_boolean(ot->srna,
-                  "use_paint_symmetry",
+                  "use_mesh_symmetry",
                   true,
-                  "Use Paint Symmetry",
-                  "Generates a symmetrical mesh using the paint symmetry configuration");
+                  "Use Mesh Symmetry",
+                  "Generates a symmetrical mesh using the mesh symmetry configuration");
 
   RNA_def_boolean(ot->srna,
                   "use_preserve_sharp",

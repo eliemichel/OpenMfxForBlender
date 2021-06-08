@@ -57,12 +57,15 @@ typedef struct DRWCommandsState {
   /* Resource location. */
   int obmats_loc;
   int obinfos_loc;
+  int obattrs_loc;
   int baseinst_loc;
   int chunkid_loc;
   int resourceid_loc;
   /* Legacy matrix support. */
   int obmat_loc;
   int obinv_loc;
+  /* Uniform Attributes. */
+  DRWSparseUniformBuf *obattrs_ubo;
   /* Selection ID state. */
   GPUVertBuf *select_buf;
   uint select_id;
@@ -203,6 +206,9 @@ void drw_state_set(DRWState state)
     case DRW_STATE_LOGIC_INVERT:
       blend = GPU_BLEND_INVERT;
       break;
+    case DRW_STATE_BLEND_ALPHA_UNDER_PREMUL:
+      blend = GPU_BLEND_ALPHA_UNDER_PREMUL;
+      break;
     default:
       blend = GPU_BLEND_NONE;
       break;
@@ -260,13 +266,13 @@ static void drw_stencil_state_set(uint write_mask, uint reference, uint compare_
    * - (compare_mask & reference) is what is tested against (compare_mask & stencil_value)
    *   stencil_value being the value stored in the stencil buffer.
    * - (write-mask & reference) is what gets written if the test condition is fulfilled.
-   **/
+   */
   GPU_stencil_write_mask_set(write_mask);
   GPU_stencil_reference_set(reference);
   GPU_stencil_compare_mask_set(compare_mask);
 }
 
-/* Reset state to not interfer with other UI drawcall */
+/* Reset state to not interfere with other UI draw-call. */
 void DRW_state_reset_ex(DRWState state)
 {
   DST.state = ~state;
@@ -338,7 +344,7 @@ void DRW_state_reset(void)
   /* Should stay constant during the whole rendering. */
   GPU_point_size(5);
   GPU_line_smooth(false);
-  /* Bypass U.pixelsize factor by using a factor of 0.0f. Will be clamped to 1.0f. */
+  /* Bypass #U.pixelsize factor by using a factor of 0.0f. Will be clamped to 1.0f. */
   GPU_line_width(0.0f);
 }
 
@@ -648,6 +654,12 @@ static void draw_update_uniforms(DRWShadingGroup *shgroup,
           state->obinfos_loc = uni->location;
           GPU_uniformbuf_bind(DST.vmempool->obinfos_ubo[0], uni->location);
           break;
+        case DRW_UNIFORM_BLOCK_OBATTRS:
+          state->obattrs_loc = uni->location;
+          state->obattrs_ubo = DRW_uniform_attrs_pool_find_ubo(DST.vmempool->obattrs_ubo_pool,
+                                                               uni->uniform_attrs);
+          DRW_sparse_uniform_buffer_bind(state->obattrs_ubo, 0, uni->location);
+          break;
         case DRW_UNIFORM_RESOURCE_CHUNK:
           state->chunkid_loc = uni->location;
           GPU_shader_uniform_int(shgroup->shader, uni->location, 0);
@@ -762,6 +774,10 @@ static void draw_call_resource_bind(DRWCommandsState *state, const DRWResourceHa
       GPU_uniformbuf_unbind(DST.vmempool->obinfos_ubo[state->resource_chunk]);
       GPU_uniformbuf_bind(DST.vmempool->obinfos_ubo[chunk], state->obinfos_loc);
     }
+    if (state->obattrs_loc != -1) {
+      DRW_sparse_uniform_buffer_unbind(state->obattrs_ubo, state->resource_chunk);
+      DRW_sparse_uniform_buffer_bind(state->obattrs_ubo, chunk, state->obattrs_loc);
+    }
     state->resource_chunk = chunk;
   }
 
@@ -839,7 +855,7 @@ static void draw_call_batching_do(DRWShadingGroup *shgroup,
                                   DRWCommandsState *state,
                                   DRWCommandDraw *call)
 {
-  /* If any condition requires to interupt the merging. */
+  /* If any condition requires to interrupt the merging. */
   bool neg_scale = DRW_handle_negative_scale_get(&call->handle);
   int chunk = DRW_handle_chunk_get(&call->handle);
   int id = DRW_handle_id_get(&call->handle);
@@ -884,6 +900,9 @@ static void draw_call_batching_finish(DRWShadingGroup *shgroup, DRWCommandsState
   if (state->obinfos_loc != -1) {
     GPU_uniformbuf_unbind(DST.vmempool->obinfos_ubo[state->resource_chunk]);
   }
+  if (state->obattrs_loc != -1) {
+    DRW_sparse_uniform_buffer_unbind(state->obattrs_ubo, state->resource_chunk);
+  }
 }
 
 static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
@@ -893,11 +912,13 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
   DRWCommandsState state = {
       .obmats_loc = -1,
       .obinfos_loc = -1,
+      .obattrs_loc = -1,
       .baseinst_loc = -1,
       .chunkid_loc = -1,
       .resourceid_loc = -1,
       .obmat_loc = -1,
       .obinv_loc = -1,
+      .obattrs_ubo = NULL,
       .drw_state_enabled = 0,
       .drw_state_disabled = 0,
   };

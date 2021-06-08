@@ -77,12 +77,12 @@ static bool bm_vert_dissolve_fan_test(BMVert *v)
 
 static bool bm_vert_dissolve_fan(BMesh *bm, BMVert *v)
 {
-  /* collapse under 2 conditions.
+  /* Collapse under 2 conditions:
    * - vert connects to 4 manifold edges (and 4 faces).
    * - vert connects to 1 manifold edge, 2 boundary edges (and 2 faces).
    *
    * This covers boundary verts of a quad grid and center verts.
-   * note that surrounding faces dont have to be quads.
+   * note that surrounding faces don't have to be quads.
    */
 
   BMIter iter;
@@ -110,7 +110,7 @@ static bool bm_vert_dissolve_fan(BMesh *bm, BMVert *v)
   if (tot_edge == 2) {
     /* check for 2 wire verts only */
     if (tot_edge_wire == 2) {
-      return (BM_vert_collapse_edge(bm, v->e, v, true, true) != NULL);
+      return (BM_vert_collapse_edge(bm, v->e, v, true, true, true) != NULL);
     }
   }
   else if (tot_edge == 4) {

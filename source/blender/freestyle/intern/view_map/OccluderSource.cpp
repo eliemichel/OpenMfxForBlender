@@ -33,9 +33,7 @@ OccluderSource::OccluderSource(const GridHelpers::Transform &t, WingedEdge &we)
   begin();
 }
 
-OccluderSource::~OccluderSource()
-{
-}
+OccluderSource::~OccluderSource() = default;
 
 void OccluderSource::buildCachedPolygon()
 {
@@ -97,7 +95,7 @@ bool OccluderSource::isValid()
 
 WFace *OccluderSource::getWFace()
 {
-  return valid ? *currentFace : NULL;
+  return valid ? *currentFace : nullptr;
 }
 
 Polygon3r OccluderSource::getCameraSpacePolygon()

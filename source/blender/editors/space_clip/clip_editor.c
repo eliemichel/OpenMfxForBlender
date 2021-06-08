@@ -67,7 +67,11 @@
 
 #include "clip_intern.h" /* own include */
 
-/* ******** operactor poll functions ******** */
+#include "PIL_time.h"
+
+/* -------------------------------------------------------------------- */
+/** \name Operator Poll Functions
+ * \{ */
 
 bool ED_space_clip_poll(bContext *C)
 {
@@ -128,7 +132,11 @@ bool ED_space_clip_maskedit_mask_poll(bContext *C)
   return false;
 }
 
-/* ******** common editing functions ******** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Common Editing Functions
+ * \{ */
 
 void ED_space_clip_get_size(SpaceClip *sc, int *width, int *height)
 {
@@ -263,6 +271,23 @@ ImBuf *ED_space_clip_get_stable_buffer(SpaceClip *sc, float loc[2], float *scale
   return NULL;
 }
 
+bool ED_space_clip_get_position(struct SpaceClip *sc,
+                                struct ARegion *ar,
+                                int mval[2],
+                                float fpos[2])
+{
+  ImBuf *ibuf = ED_space_clip_get_buffer(sc);
+  if (!ibuf) {
+    return false;
+  }
+
+  /* map the mouse coords to the backdrop image space */
+  ED_clip_mouse_pos(sc, ar, mval, fpos);
+
+  IMB_freeImBuf(ibuf);
+  return true;
+}
+
 /* Returns color in linear space, matching ED_space_image_color_sample(). */
 bool ED_space_clip_color_sample(SpaceClip *sc, ARegion *region, int mval[2], float r_col[3])
 {
@@ -327,118 +352,18 @@ void ED_clip_update_frame(const Main *mainp, int cfra)
   }
 }
 
-static bool selected_tracking_boundbox(SpaceClip *sc, float min[2], float max[2])
+bool ED_clip_view_selection(const bContext *C, ARegion *UNUSED(region), bool fit)
 {
-  MovieClip *clip = ED_space_clip_get_clip(sc);
-  MovieTrackingTrack *track;
-  int width, height;
-  bool ok = false;
-  ListBase *tracksbase = BKE_tracking_get_active_tracks(&clip->tracking);
-  int framenr = ED_space_clip_get_clip_frame_number(sc);
-
-  INIT_MINMAX2(min, max);
-
-  ED_space_clip_get_size(sc, &width, &height);
-
-  track = tracksbase->first;
-  while (track) {
-    if (TRACK_VIEW_SELECTED(sc, track)) {
-      MovieTrackingMarker *marker = BKE_tracking_marker_get(track, framenr);
-
-      if (marker) {
-        float pos[3];
-
-        pos[0] = marker->pos[0] + track->offset[0];
-        pos[1] = marker->pos[1] + track->offset[1];
-        pos[2] = 0.0f;
-
-        /* undistortion happens for normalized coords */
-        if (sc->user.render_flag & MCLIP_PROXY_RENDER_UNDISTORT) {
-          /* undistortion happens for normalized coords */
-          ED_clip_point_undistorted_pos(sc, pos, pos);
-        }
-
-        pos[0] *= width;
-        pos[1] *= height;
-
-        mul_v3_m4v3(pos, sc->stabmat, pos);
-
-        minmax_v2v2_v2(min, max, pos);
-
-        ok = true;
-      }
-    }
-
-    track = track->next;
-  }
-
-  return ok;
-}
-
-static bool selected_boundbox(const bContext *C, float min[2], float max[2])
-{
-  SpaceClip *sc = CTX_wm_space_clip(C);
-  if (sc->mode == SC_MODE_TRACKING) {
-    return selected_tracking_boundbox(sc, min, max);
-  }
-
-  if (ED_mask_selected_minmax(C, min, max)) {
-    MovieClip *clip = ED_space_clip_get_clip(sc);
-    int width, height;
-    ED_space_clip_get_size(sc, &width, &height);
-    BKE_mask_coord_to_movieclip(clip, &sc->user, min, min);
-    BKE_mask_coord_to_movieclip(clip, &sc->user, max, max);
-    min[0] *= width;
-    min[1] *= height;
-    max[0] *= width;
-    max[1] *= height;
-    return true;
-  }
-  return false;
-}
-
-bool ED_clip_view_selection(const bContext *C, ARegion *region, bool fit)
-{
-  SpaceClip *sc = CTX_wm_space_clip(C);
-  int w, h, frame_width, frame_height;
-  float min[2], max[2];
-
-  ED_space_clip_get_size(sc, &frame_width, &frame_height);
-
-  if ((frame_width == 0) || (frame_height == 0) || (sc->clip == NULL)) {
+  float offset_x, offset_y;
+  float zoom;
+  if (!clip_view_calculate_view_selection(C, fit, &offset_x, &offset_y, &zoom)) {
     return false;
   }
 
-  if (!selected_boundbox(C, min, max)) {
-    return false;
-  }
-
-  /* center view */
-  clip_view_center_to_point(
-      sc, (max[0] + min[0]) / (2 * frame_width), (max[1] + min[1]) / (2 * frame_height));
-
-  w = max[0] - min[0];
-  h = max[1] - min[1];
-
-  /* set zoom to see all selection */
-  if (w > 0 && h > 0) {
-    int width, height;
-    float zoomx, zoomy, newzoom, aspx, aspy;
-
-    ED_space_clip_get_aspect(sc, &aspx, &aspy);
-
-    width = BLI_rcti_size_x(&region->winrct) + 1;
-    height = BLI_rcti_size_y(&region->winrct) + 1;
-
-    zoomx = (float)width / w / aspx;
-    zoomy = (float)height / h / aspy;
-
-    newzoom = 1.0f / power_of_2(1.0f / min_ff(zoomx, zoomy));
-
-    if (fit || sc->zoom > newzoom) {
-      sc->zoom = newzoom;
-    }
-  }
+  SpaceClip *sc = CTX_wm_space_clip(C);
+  sc->xof = offset_x;
+  sc->yof = offset_y;
+  sc->zoom = zoom;
 
   return true;
 }
@@ -638,7 +563,11 @@ bool ED_space_clip_check_show_maskedit(SpaceClip *sc)
   return false;
 }
 
-/* ******** clip editing functions ******** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clip Editing Functions
+ * \{ */
 
 MovieClip *ED_space_clip_get_clip(SpaceClip *sc)
 {
@@ -675,7 +604,7 @@ void ED_space_clip_set_clip(bContext *C, bScreen *screen, SpaceClip *sc, MovieCl
               }
             }
             else {
-              if (cur_sc->clip == old_clip || cur_sc->clip == NULL) {
+              if (ELEM(cur_sc->clip, old_clip, NULL)) {
                 cur_sc->clip = clip;
               }
             }
@@ -695,7 +624,11 @@ void ED_space_clip_set_clip(bContext *C, bScreen *screen, SpaceClip *sc, MovieCl
   }
 }
 
-/* ******** masking editing functions ******** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Masking Editing Functions
+ * \{ */
 
 Mask *ED_space_clip_get_mask(SpaceClip *sc)
 {
@@ -713,10 +646,23 @@ void ED_space_clip_set_mask(bContext *C, SpaceClip *sc, Mask *mask)
   }
 }
 
-/* ******** pre-fetching functions ******** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Pre-Fetching Functions
+ * \{ */
 
 typedef struct PrefetchJob {
+  /* Clip into which cache the frames will be prefetched into. */
   MovieClip *clip;
+
+  /* Local copy of the clip which is used to decouple reading in a way which does not require
+   * threading lock which might "conflict" with the main thread,
+   *
+   * Used, for example, for animation prefetching (`clip->anim` can not be used from multiple
+   * threads and main thread might need it). */
+  MovieClip *clip_local;
+
   int start_frame, current_frame, end_frame;
   short render_size, render_flag;
 } PrefetchJob;
@@ -968,11 +914,15 @@ static void start_prefetch_threads(MovieClip *clip,
   BLI_spin_end(&queue.spin);
 }
 
-static bool prefetch_movie_frame(
-    MovieClip *clip, int frame, short render_size, short render_flag, short *stop)
+/* NOTE: Reading happens from `clip_local` into `clip->cache`. */
+static bool prefetch_movie_frame(MovieClip *clip,
+                                 MovieClip *clip_local,
+                                 int frame,
+                                 short render_size,
+                                 short render_flag,
+                                 short *stop)
 {
   MovieClipUser user = {0};
-  ImBuf *ibuf;
 
   if (check_prefetch_break() || *stop) {
     return false;
@@ -983,7 +933,7 @@ static bool prefetch_movie_frame(
   user.render_flag = render_flag;
 
   if (!BKE_movieclip_has_cached_frame(clip, &user)) {
-    ibuf = BKE_movieclip_anim_ibuf_for_frame(clip, &user);
+    ImBuf *ibuf = BKE_movieclip_anim_ibuf_for_frame_no_lock(clip_local, &user);
 
     if (ibuf) {
       int result;
@@ -1007,6 +957,7 @@ static bool prefetch_movie_frame(
 }
 
 static void do_prefetch_movie(MovieClip *clip,
+                              MovieClip *clip_local,
                               int start_frame,
                               int current_frame,
                               int end_frame,
@@ -1021,7 +972,7 @@ static void do_prefetch_movie(MovieClip *clip,
 
   /* read frames starting from current frame up to scene end frame */
   for (frame = current_frame; frame <= end_frame; frame++) {
-    if (!prefetch_movie_frame(clip, frame, render_size, render_flag, stop)) {
+    if (!prefetch_movie_frame(clip, clip_local, frame, render_size, render_flag, stop)) {
       return;
     }
 
@@ -1033,7 +984,7 @@ static void do_prefetch_movie(MovieClip *clip,
 
   /* read frames starting from current frame up to scene start frame */
   for (frame = current_frame; frame >= start_frame; frame--) {
-    if (!prefetch_movie_frame(clip, frame, render_size, render_flag, stop)) {
+    if (!prefetch_movie_frame(clip, clip_local, frame, render_size, render_flag, stop)) {
       return;
     }
 
@@ -1063,6 +1014,7 @@ static void prefetch_startjob(void *pjv, short *stop, short *do_update, float *p
   else if (pj->clip->source == MCLIP_SRC_MOVIE) {
     /* read movie in a single thread */
     do_prefetch_movie(pj->clip,
+                      pj->clip_local,
                       pj->start_frame,
                       pj->current_frame,
                       pj->end_frame,
@@ -1080,6 +1032,13 @@ static void prefetch_startjob(void *pjv, short *stop, short *do_update, float *p
 static void prefetch_freejob(void *pjv)
 {
   PrefetchJob *pj = pjv;
+
+  MovieClip *clip_local = pj->clip_local;
+  if (clip_local != NULL) {
+    BKE_libblock_free_datablock(&clip_local->id, 0);
+    BKE_libblock_free_data(&clip_local->id, false);
+    MEM_freeN(clip_local);
+  }
 
   MEM_freeN(pj);
 }
@@ -1168,6 +1127,12 @@ void clip_start_prefetch_job(const bContext *C)
   pj->render_size = sc->user.render_size;
   pj->render_flag = sc->user.render_flag;
 
+  /* Create a local copy of the clip, so that video file (clip->anim) access can happen without
+   * acquiring the lock which will interfere with the main thread. */
+  if (pj->clip->source == MCLIP_SRC_MOVIE) {
+    BKE_id_copy_ex(NULL, (ID *)&pj->clip->id, (ID **)&pj->clip_local, LIB_ID_COPY_LOCALIZE);
+  }
+
   WM_jobs_customdata_set(wm_job, pj, prefetch_freejob);
   WM_jobs_timer(wm_job, 0.2, NC_MOVIECLIP | ND_DISPLAY, 0);
   WM_jobs_callbacks(wm_job, prefetch_startjob, NULL, NULL, NULL);
@@ -1177,3 +1142,49 @@ void clip_start_prefetch_job(const bContext *C)
   /* and finally start the job */
   WM_jobs_start(CTX_wm_manager(C), wm_job);
 }
+
+void ED_clip_view_lock_state_store(const bContext *C, ClipViewLockState *state)
+{
+  SpaceClip *space_clip = CTX_wm_space_clip(C);
+  BLI_assert(space_clip != NULL);
+
+  state->offset_x = space_clip->xof;
+  state->offset_y = space_clip->yof;
+  state->zoom = space_clip->zoom;
+
+  state->lock_offset_x = 0.0f;
+  state->lock_offset_y = 0.0f;
+
+  if ((space_clip->flag & SC_LOCK_SELECTION) == 0) {
+    return;
+  }
+
+  if (!clip_view_calculate_view_selection(
+          C, false, &state->offset_x, &state->offset_y, &state->zoom)) {
+    return;
+  }
+
+  state->lock_offset_x = space_clip->xlockof;
+  state->lock_offset_y = space_clip->ylockof;
+}
+
+void ED_clip_view_lock_state_restore_no_jump(const bContext *C, const ClipViewLockState *state)
+{
+  SpaceClip *space_clip = CTX_wm_space_clip(C);
+  BLI_assert(space_clip != NULL);
+
+  if ((space_clip->flag & SC_LOCK_SELECTION) == 0) {
+    return;
+  }
+
+  float offset_x, offset_y;
+  float zoom;
+  if (!clip_view_calculate_view_selection(C, false, &offset_x, &offset_y, &zoom)) {
+    return;
+  }
+
+  space_clip->xlockof = state->offset_x + state->lock_offset_x - offset_x;
+  space_clip->ylockof = state->offset_y + state->lock_offset_y - offset_y;
+}
+
+/** \} */

@@ -36,6 +36,7 @@ struct ARegion;
 struct DRWInstanceDataList;
 struct Depsgraph;
 struct DrawEngineType;
+struct GHash;
 struct GPUMaterial;
 struct GPUOffScreen;
 struct GPUViewport;
@@ -117,8 +118,7 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
 void DRW_draw_depth_loop(struct Depsgraph *depsgraph,
                          struct ARegion *region,
                          struct View3D *v3d,
-                         struct GPUViewport *viewport,
-                         bool use_opengl_context);
+                         struct GPUViewport *viewport);
 void DRW_draw_depth_loop_gpencil(struct Depsgraph *depsgraph,
                                  struct ARegion *region,
                                  struct View3D *v3d,
@@ -140,6 +140,7 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
 /* This is here because GPUViewport needs it */
 struct DRWInstanceDataList *DRW_instance_data_list_create(void);
 void DRW_instance_data_list_free(struct DRWInstanceDataList *idatalist);
+void DRW_uniform_attrs_pool_free(struct GHash *table);
 
 void DRW_render_context_enable(struct Render *render);
 void DRW_render_context_disable(struct Render *render);

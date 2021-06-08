@@ -101,7 +101,7 @@ static PyObject *_W_0(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "calcSecDeriv2d", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       const Grid<Real> &v = *_args.getPtr<Grid<Real>>("v", 0, &_lock);
@@ -206,7 +206,7 @@ static PyObject *_W_1(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "totalSum", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Grid<Real> &height = *_args.getPtr<Grid<Real>>("height", 0, &_lock);
@@ -243,7 +243,7 @@ static PyObject *_W_2(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "normalizeSumTo", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Grid<Real> &height = *_args.getPtr<Grid<Real>>("height", 0, &_lock);
@@ -423,10 +423,15 @@ void cgSolveWE(const FlagGrid &flags,
 
   const int maxIter = (int)(cgMaxIterFac * flags.getSize().max()) * (flags.is3D() ? 1 : 4);
   GridCgInterface *gcg;
-  if (flags.is3D())
-    gcg = new GridCg<ApplyMatrix>(out, rhs, residual, search, flags, tmp, &A0, &Ai, &Aj, &Ak);
-  else
-    gcg = new GridCg<ApplyMatrix2D>(out, rhs, residual, search, flags, tmp, &A0, &Ai, &Aj, &Ak);
+  vector<Grid<Real> *> matA{&A0, &Ai, &Aj};
+
+  if (flags.is3D()) {
+    matA.push_back(&Ak);
+    gcg = new GridCg<ApplyMatrix>(out, rhs, residual, search, flags, tmp, matA);
+  }
+  else {
+    gcg = new GridCg<ApplyMatrix2D>(out, rhs, residual, search, flags, tmp, matA);
+  }
 
   gcg->setAccuracy(cgAccuracy);
 
@@ -449,7 +454,7 @@ static PyObject *_W_3(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "cgSolveWE", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       const FlagGrid &flags = *_args.getPtr<FlagGrid>("flags", 0, &_lock);

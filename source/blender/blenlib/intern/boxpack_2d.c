@@ -97,6 +97,7 @@ BLI_INLINE int quad_flag(uint q)
 #define TL 2
 #define BR 3
 
+/* -------------------------------------------------------------------- */
 /** \name Box Accessor Functions
  * \{ */
 
@@ -121,6 +122,7 @@ static float box_ymax_get(const BoxPack *box)
 }
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Box Placement
  * \{ */
 
@@ -165,6 +167,7 @@ static void box_ymax_set(BoxPack *box, const float f)
 }
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Box Utils
  * \{ */
 
@@ -203,6 +206,7 @@ static void vert_bias_update(BoxVert *v)
     printf("\tBox Debug i %i, w:%.3f h:%.3f x:%.3f y:%.3f\n", b->index, b->w, b->h, b->x, b->y)
 #endif
 
+/* -------------------------------------------------------------------- */
 /** \name Box/Vert Sorting
  * \{ */
 
@@ -381,7 +385,7 @@ void BLI_box_pack_2d(BoxPack *boxarray, const uint len, float *r_tot_x, float *r
   box++; /* next box, needed for the loop below */
   /* ...done packing the first box */
 
-  /* Main boxpacking loop */
+  /* Main box-packing loop */
   for (box_index = 1; box_index < len; box_index++, box++) {
 
     /* These floats are used for sorting re-sorting */
@@ -410,8 +414,7 @@ void BLI_box_pack_2d(BoxPack *boxarray, const uint len, float *r_tot_x, float *r
 
       /* This vert has a free quadrant
        * Test if we can place the box here
-       * vert->free & quad_flags[j] - Checks
-       * */
+       * `vert->free & quad_flags[j]` - Checks. */
 
       for (j = 0; (j < 4) && isect; j++) {
         if (vert->free & quad_flag(j)) {

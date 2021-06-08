@@ -26,6 +26,10 @@
 #include "DNA_customdata_types.h"
 #include "DNA_listBase.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* -------------------------------------------------------------------- */
 /** \name Geometry Elements
  * \{ */
@@ -267,6 +271,9 @@ typedef struct MIntProperty {
 typedef struct MStringProperty {
   char s[255], s_len;
 } MStringProperty;
+typedef struct MBoolProperty {
+  uint8_t b;
+} MBoolProperty;
 
 /** \} */
 
@@ -336,7 +343,7 @@ enum {
 };
 
 /**
- * \note While alpha is currently is not in the view-port,
+ * \note While alpha is not currently in the 3D Viewport,
  * this may eventually be added back, keep this value set to 255.
  */
 typedef struct MLoopCol {
@@ -410,7 +417,6 @@ typedef struct OrigSpaceLoop {
 
 typedef struct FreestyleEdge {
   char flag;
-  char _pad[3];
 } FreestyleEdge;
 
 /** #FreestyleEdge.flag */
@@ -420,7 +426,6 @@ enum {
 
 typedef struct FreestyleFace {
   char flag;
-  char _pad[3];
 } FreestyleFace;
 
 /** #FreestyleFace.flag */
@@ -519,3 +524,7 @@ typedef struct MRecast {
 } MRecast;
 
 /** \} */
+
+#ifdef __cplusplus
+}
+#endif

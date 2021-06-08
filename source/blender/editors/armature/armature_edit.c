@@ -126,12 +126,12 @@ void ED_armature_origin_set(
   bArmature *arm = ob->data;
   float cent[3];
 
-  /* Put the armature into editmode */
+  /* Put the armature into edit-mode. */
   if (is_editmode == false) {
     ED_armature_to_edit(arm);
   }
 
-  /* Find the centerpoint */
+  /* Find the center-point. */
   if (centermode == 2) {
     copy_v3_v3(cent, cursor);
     invert_m4_m4(ob->imat, ob->obmat);
@@ -173,7 +173,7 @@ void ED_armature_origin_set(
     ED_armature_edit_free(arm);
   }
 
-  /* Adjust object location for new centerpoint */
+  /* Adjust object location for new center-point. */
   if (centermode && (is_editmode == false)) {
     mul_mat3_m4_v3(ob->obmat, cent); /* omit translation part */
     add_v3_v3(ob->loc, cent);
@@ -876,7 +876,7 @@ void ARMATURE_OT_fill(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Fill Between Joints";
   ot->idname = "ARMATURE_OT_fill";
-  ot->description = "Add bone between selected joint(s) and/or 3D-Cursor";
+  ot->description = "Add bone between selected joint(s) and/or 3D cursor";
 
   /* callbacks */
   ot->exec = armature_fill_bones_exec;
@@ -1014,7 +1014,7 @@ void ARMATURE_OT_switch_direction(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Switch Direction";
   ot->idname = "ARMATURE_OT_switch_direction";
-  ot->description = "Change the direction that a chain of bones points in (head <-> tail swap)";
+  ot->description = "Change the direction that a chain of bones points in (head and tail swap)";
 
   /* api callbacks */
   ot->exec = armature_switch_direction_exec;

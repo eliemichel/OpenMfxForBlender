@@ -56,9 +56,7 @@
 #include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (Edge Slide) */
-
-/** \name Transform Edge Slide
+/** \name Transform (Edge Slide)
  * \{ */
 
 typedef struct TransDataEdgeSlideVert {
@@ -145,7 +143,7 @@ static BMEdge *get_other_edge(BMVert *v, BMEdge *e)
   return NULL;
 }
 
-/* interpoaltes along a line made up of 2 segments (used for edge slide) */
+/* Interpolates along a line made up of 2 segments (used for edge slide). */
 static void interp_line_v3_v3v3v3(
     float p[3], const float v1[3], const float v2[3], const float v3[3], float t)
 {
@@ -946,7 +944,7 @@ static EdgeSlideData *createEdgeSlideVerts_single_side(TransInfo *t, TransDataCo
   /* over alloc */
   sv_array = MEM_callocN(sizeof(TransDataEdgeSlideVert) * bm->totvertsel, "sv_array");
 
-  /* same loop for all loops, weak but we dont connect loops in this case */
+  /* Same loop for all loops, weak but we don't connect loops in this case. */
   loop_nr = 1;
 
   sv_table = MEM_mallocN(sizeof(*sv_table) * bm->totvert, __func__);

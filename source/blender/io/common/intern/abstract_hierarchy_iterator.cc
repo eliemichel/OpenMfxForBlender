@@ -19,10 +19,10 @@
 #include "IO_abstract_hierarchy_iterator.h"
 #include "dupli_parent_finder.hh"
 
+#include <climits>
+#include <cstdio>
 #include <iostream>
-#include <limits.h>
 #include <sstream>
-#include <stdio.h>
 #include <string>
 
 #include "BKE_anim_data.h"
@@ -137,10 +137,6 @@ AbstractHierarchyWriter *EnsuredWriter::operator->()
   return writer_;
 }
 
-AbstractHierarchyWriter::~AbstractHierarchyWriter()
-{
-}
-
 bool AbstractHierarchyWriter::check_is_animated(const HierarchyContext &context) const
 {
   const Object *object = context.object;
@@ -182,7 +178,7 @@ bool AbstractHierarchyWriter::check_has_deforming_physics(const HierarchyContext
 }
 
 AbstractHierarchyIterator::AbstractHierarchyIterator(Depsgraph *depsgraph)
-    : depsgraph_(depsgraph), writers_(), export_subset_({true, true})
+    : depsgraph_(depsgraph), export_subset_({true, true})
 {
 }
 
@@ -400,7 +396,7 @@ static bool remove_weak_subtrees(const HierarchyContext *context,
 
 void AbstractHierarchyIterator::export_graph_prune()
 {
-  /* Take a copy of the map so that we can modify while recursing. */
+  /* Take a copy of the map so that we can modify while recusing. */
   ExportGraph unpruned_export_graph = export_graph_;
   remove_weak_subtrees(HierarchyContext::root(), export_graph_, unpruned_export_graph);
 }

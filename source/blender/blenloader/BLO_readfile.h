@@ -18,6 +18,7 @@
  */
 #pragma once
 
+#include "BLI_listbase.h"
 #include "BLI_sys_types.h"
 
 /** \file
@@ -84,8 +85,8 @@ struct BlendFileReadParams {
   uint skip_flags : 3; /* eBLOReadSkip */
   uint is_startup : 1;
 
-  /** Whether we are reading the memfile for an undo (< 0) or a redo (> 0). */
-  int undo_direction : 2;
+  /** Whether we are reading the memfile for an undo or a redo. */
+  int undo_direction; /* eUndoStepDir */
 };
 
 /* skip reading some data-block types (may want to skip screen data too). */
@@ -119,13 +120,23 @@ void BLO_blendfiledata_free(BlendFileData *bfd);
 /** \name BLO Blend File Handle API
  * \{ */
 
+struct BLODataBlockInfo {
+  char name[64]; /* MAX_NAME */
+  struct AssetMetaData *asset_data;
+};
+
 BlendHandle *BLO_blendhandle_from_file(const char *filepath, struct ReportList *reports);
 BlendHandle *BLO_blendhandle_from_memory(const void *mem, int memsize);
 
 struct LinkNode *BLO_blendhandle_get_datablock_names(BlendHandle *bh,
                                                      int ofblocktype,
-                                                     int *tot_names);
-struct LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *tot_prev);
+
+                                                     const bool use_assets_only,
+                                                     int *r_tot_names);
+struct LinkNode *BLO_blendhandle_get_datablock_info(BlendHandle *bh,
+                                                    int ofblocktype,
+                                                    int *r_tot_info_items);
+struct LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *r_tot_prev);
 struct LinkNode *BLO_blendhandle_get_linkable_groups(BlendHandle *bh);
 
 void BLO_blendhandle_close(BlendHandle *bh);
@@ -172,6 +183,8 @@ struct LibraryLink_Params {
   struct Main *bmain;
   /** Options for linking, used for instantiating. */
   int flag;
+  /** Additional tag for #ID.tag. */
+  int id_tag_extra;
   /** Context for instancing objects (optional, no instantiation will be performed when NULL). */
   struct {
     /** The scene in which to instantiate objects/collections. */
@@ -185,10 +198,12 @@ struct LibraryLink_Params {
 
 void BLO_library_link_params_init(struct LibraryLink_Params *params,
                                   struct Main *bmain,
-                                  const int flag);
+                                  const int flag,
+                                  const int id_tag_extra);
 void BLO_library_link_params_init_with_context(struct LibraryLink_Params *params,
                                                struct Main *bmain,
                                                const int flag,
+                                               const int id_tag_extra,
                                                struct Scene *scene,
                                                struct ViewLayer *view_layer,
                                                const struct View3D *v3d);
@@ -206,6 +221,29 @@ void BLO_library_link_end(struct Main *mainl,
                           const struct LibraryLink_Params *params);
 
 int BLO_library_link_copypaste(struct Main *mainl, BlendHandle *bh, const uint64_t id_types_mask);
+
+/**
+ * Struct for temporarily loading datablocks from a blend file.
+ */
+typedef struct TempLibraryContext {
+  /** Temporary main used for library data. */
+  struct Main *bmain_lib;
+  /** Temporary main used to load data into (currently initialized from `real_main`). */
+  struct Main *bmain_base;
+  struct BlendHandle *blendhandle;
+  struct LibraryLink_Params liblink_params;
+  struct Library *lib;
+
+  /* The ID datablock that was loaded. Is NULL if loading failed. */
+  struct ID *temp_id;
+} TempLibraryContext;
+
+TempLibraryContext *BLO_library_temp_load_id(struct Main *real_main,
+                                             const char *blend_file_path,
+                                             const short idcode,
+                                             const char *idname,
+                                             struct ReportList *reports);
+void BLO_library_temp_free(TempLibraryContext *temp_lib_ctx);
 
 /** \} */
 

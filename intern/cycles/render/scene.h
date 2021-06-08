@@ -36,8 +36,10 @@
 
 CCL_NAMESPACE_BEGIN
 
+class AlembicProcedural;
 class AttributeRequestSet;
 class Background;
+class BVH;
 class Camera;
 class Device;
 class DeviceInfo;
@@ -52,6 +54,8 @@ class Object;
 class ObjectManager;
 class ParticleSystemManager;
 class ParticleSystem;
+class Procedural;
+class ProceduralManager;
 class CurveSystemManager;
 class Shader;
 class ShaderManager;
@@ -174,7 +178,6 @@ class SceneParams {
   int num_bvh_time_steps;
   int hair_subdivisions;
   CurveShapeType hair_shape;
-  bool persistent_data;
   int texture_limit;
 
   bool background;
@@ -189,7 +192,6 @@ class SceneParams {
     num_bvh_time_steps = 0;
     hair_subdivisions = 3;
     hair_shape = CURVE_RIBBON;
-    persistent_data = false;
     texture_limit = 0;
     background = true;
   }
@@ -202,7 +204,7 @@ class SceneParams {
              use_bvh_unaligned_nodes == params.use_bvh_unaligned_nodes &&
              num_bvh_time_steps == params.num_bvh_time_steps &&
              hair_subdivisions == params.hair_subdivisions && hair_shape == params.hair_shape &&
-             persistent_data == params.persistent_data && texture_limit == params.texture_limit);
+             texture_limit == params.texture_limit);
   }
 
   int curve_subdivisions()
@@ -220,6 +222,7 @@ class Scene : public NodeOwner {
   string name;
 
   /* data */
+  BVH *bvh;
   Camera *camera;
   Camera *dicing_camera;
   LookupTables *lookup_tables;
@@ -234,6 +237,7 @@ class Scene : public NodeOwner {
   vector<Light *> lights;
   vector<ParticleSystem *> particle_systems;
   vector<Pass> passes;
+  vector<Procedural *> procedurals;
 
   /* data managers */
   ImageManager *image_manager;
@@ -243,6 +247,7 @@ class Scene : public NodeOwner {
   ObjectManager *object_manager;
   ParticleSystemManager *particle_system_manager;
   BakeManager *bake_manager;
+  ProceduralManager *procedural_manager;
 
   /* default shaders */
   Shader *default_surface;
@@ -322,6 +327,18 @@ class Scene : public NodeOwner {
     (void)owner;
   }
 
+  /* Remove all nodes in the set from the appropriate data arrays, and tag the
+   * specific managers for an update. This assumes that the scene owns the nodes.
+   */
+  template<typename T> void delete_nodes(const set<T *> &nodes)
+  {
+    delete_nodes(nodes, this);
+  }
+
+  /* Same as above, but specify the actual owner of all the nodes in the set.
+   */
+  template<typename T> void delete_nodes(const set<T *> &nodes, const NodeOwner *owner);
+
  protected:
   /* Check if some heavy data worth logging was updated.
    * Mainly used to suppress extra annoying logging.
@@ -339,7 +356,7 @@ class Scene : public NodeOwner {
 
   DeviceRequestedFeatures get_requested_device_features();
 
-  /* Maximumnumber of closure during session lifetime. */
+  /* Maximum number of closure during session lifetime. */
   int max_closure_global;
 
   /* Get maximum number of closures to be used in kernel. */
@@ -365,6 +382,8 @@ template<> ParticleSystem *Scene::create_node<ParticleSystem>();
 
 template<> Shader *Scene::create_node<Shader>();
 
+template<> AlembicProcedural *Scene::create_node<AlembicProcedural>();
+
 template<> void Scene::delete_node_impl(Light *node);
 
 template<> void Scene::delete_node_impl(Mesh *node);
@@ -380,6 +399,22 @@ template<> void Scene::delete_node_impl(Object *node);
 template<> void Scene::delete_node_impl(ParticleSystem *node);
 
 template<> void Scene::delete_node_impl(Shader *node);
+
+template<> void Scene::delete_node_impl(Procedural *node);
+
+template<> void Scene::delete_node_impl(AlembicProcedural *node);
+
+template<> void Scene::delete_nodes(const set<Light *> &nodes, const NodeOwner *owner);
+
+template<> void Scene::delete_nodes(const set<Geometry *> &nodes, const NodeOwner *owner);
+
+template<> void Scene::delete_nodes(const set<Object *> &nodes, const NodeOwner *owner);
+
+template<> void Scene::delete_nodes(const set<ParticleSystem *> &nodes, const NodeOwner *owner);
+
+template<> void Scene::delete_nodes(const set<Shader *> &nodes, const NodeOwner *owner);
+
+template<> void Scene::delete_nodes(const set<Procedural *> &nodes, const NodeOwner *owner);
 
 CCL_NAMESPACE_END
 

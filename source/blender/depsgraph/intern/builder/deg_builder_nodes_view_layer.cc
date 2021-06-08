@@ -25,8 +25,8 @@
 
 #include "intern/builder/deg_builder_nodes.h"
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 
 #include "MEM_guardedalloc.h"
 
@@ -34,6 +34,7 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
+#include "DNA_collection_types.h"
 #include "DNA_freestyle_types.h"
 #include "DNA_layer_types.h"
 #include "DNA_linestyle_types.h"
@@ -55,8 +56,7 @@
 #include "intern/node/deg_node_component.h"
 #include "intern/node/deg_node_operation.h"
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 void DepsgraphNodeBuilder::build_layer_collections(ListBase *lb)
 {
@@ -160,11 +160,12 @@ void DepsgraphNodeBuilder::build_view_layer(Scene *scene,
     build_scene_sequencer(scene);
   }
   /* Collections. */
-  add_operation_node(
-      &scene->id,
-      NodeType::LAYER_COLLECTIONS,
-      OperationCode::VIEW_LAYER_EVAL,
-      function_bind(BKE_layer_eval_view_layer_indexed, _1, scene_cow, view_layer_index_));
+  add_operation_node(&scene->id,
+                     NodeType::LAYER_COLLECTIONS,
+                     OperationCode::VIEW_LAYER_EVAL,
+                     [view_layer_index = view_layer_index_, scene_cow](::Depsgraph *depsgraph) {
+                       BKE_layer_eval_view_layer_indexed(depsgraph, scene_cow, view_layer_index);
+                     });
   /* Parameters evaluation for scene relations mainly. */
   build_scene_compositor(scene);
   build_scene_parameters(scene);
@@ -175,5 +176,4 @@ void DepsgraphNodeBuilder::build_view_layer(Scene *scene,
   }
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

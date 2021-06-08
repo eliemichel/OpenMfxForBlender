@@ -20,6 +20,8 @@
 
 #include "COM_NodeOperation.h"
 
+namespace blender::compositor {
+
 class DoubleEdgeMaskOperation : public NodeOperation {
  private:
   /**
@@ -27,7 +29,7 @@ class DoubleEdgeMaskOperation : public NodeOperation {
    */
   SocketReader *m_inputOuterMask;
   SocketReader *m_inputInnerMask;
-  bool m_adjecentOnly;
+  bool m_adjacentOnly;
   bool m_keepInside;
   float *m_cachedInstance;
 
@@ -36,32 +38,34 @@ class DoubleEdgeMaskOperation : public NodeOperation {
 
   void doDoubleEdgeMask(float *imask, float *omask, float *res);
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
-  void *initializeTileData(rcti *rect);
+  void *initializeTileData(rcti *rect) override;
 
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
+                                        rcti *output) override;
 
-  void setAdjecentOnly(bool adjecentOnly)
+  void setAdjecentOnly(bool adjacentOnly)
   {
-    this->m_adjecentOnly = adjecentOnly;
+    this->m_adjacentOnly = adjacentOnly;
   }
   void setKeepInside(bool keepInside)
   {
     this->m_keepInside = keepInside;
   }
 };
+
+}  // namespace blender::compositor

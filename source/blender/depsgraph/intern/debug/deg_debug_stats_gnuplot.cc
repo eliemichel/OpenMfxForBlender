@@ -38,8 +38,7 @@
 
 namespace deg = blender::deg;
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 namespace {
 
 struct DebugContext {
@@ -88,7 +87,7 @@ string gnuplotify_name(const string &name)
   for (int i = 0; i < length; i++) {
     const char ch = name[i];
     if (ch == '_') {
-      result += "\\\\\\";
+      result += R"(\\\)";
     }
     result += ch;
   }
@@ -149,8 +148,7 @@ void deg_debug_stats_gnuplot(const DebugContext &ctx)
 }
 
 }  // namespace
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg
 
 void DEG_debug_stats_gnuplot(const Depsgraph *depsgraph,
                              FILE *fp,

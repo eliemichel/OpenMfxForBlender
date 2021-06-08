@@ -73,7 +73,7 @@
 /* ************************************************************************** */
 /* POSE MARKERS STUFF */
 
-/* *************************** Localise Markers ***************************** */
+/* *************************** Localize Markers ***************************** */
 
 /* ensure that there is:
  * 1) an active action editor
@@ -312,17 +312,17 @@ void ACTION_OT_previewrange_set(wmOperatorType *ot)
 /**
  * Find the extents of the active channel
  *
- * \param[out] min: Bottom y-extent of channel
- * \param[out] max: Top y-extent of channel
- * \return Success of finding a selected channel
+ * \param r_min: Bottom y-extent of channel.
+ * \param r_max: Top y-extent of channel.
+ * \return Success of finding a selected channel.
  */
-static bool actkeys_channels_get_selected_extents(bAnimContext *ac, float *min, float *max)
+static bool actkeys_channels_get_selected_extents(bAnimContext *ac, float *r_min, float *r_max)
 {
   ListBase anim_data = {NULL, NULL};
   bAnimListElem *ale;
   int filter;
 
-  /* NOTE: not bool, since we want prioritise individual channels over expanders */
+  /* NOTE: not bool, since we want prioritize individual channels over expanders. */
   short found = 0;
 
   /* get all items - we need to do it this way */
@@ -339,14 +339,14 @@ static bool actkeys_channels_get_selected_extents(bAnimContext *ac, float *min, 
     if (acf && acf->has_setting(ac, ale, ACHANNEL_SETTING_SELECT) &&
         ANIM_channel_setting_get(ac, ale, ACHANNEL_SETTING_SELECT)) {
       /* update best estimate */
-      *min = ymax - ACHANNEL_HEIGHT(ac);
-      *max = ymax;
+      *r_min = ymax - ACHANNEL_HEIGHT(ac);
+      *r_max = ymax;
 
       /* is this high enough priority yet? */
       found = acf->channel_role;
 
       /* only stop our search when we've found an actual channel
-       * - datablock expanders get less priority so that we don't abort prematurely
+       * - data-block expanders get less priority so that we don't abort prematurely
        */
       if (found == ACHANNEL_ROLE_CHANNEL) {
         break;
@@ -648,6 +648,19 @@ static int actkeys_paste_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
+static char *actkeys_paste_description(bContext *UNUSED(C),
+                                       wmOperatorType *UNUSED(op),
+                                       PointerRNA *ptr)
+{
+  /* Custom description if the 'flipped' option is used. */
+  if (RNA_boolean_get(ptr, "flipped")) {
+    return BLI_strdup("Paste keyframes from mirrored bones if they exist");
+  }
+
+  /* Use the default description in the other cases. */
+  return NULL;
+}
+
 void ACTION_OT_paste(wmOperatorType *ot)
 {
   PropertyRNA *prop;
@@ -660,6 +673,7 @@ void ACTION_OT_paste(wmOperatorType *ot)
 
   /* api callbacks */
   //  ot->invoke = WM_operator_props_popup; // better wait for action redo panel
+  ot->get_description = actkeys_paste_description;
   ot->exec = actkeys_paste_exec;
   ot->poll = ED_operator_action_active;
 
@@ -1036,12 +1050,13 @@ void ACTION_OT_delete(wmOperatorType *ot)
   ot->description = "Remove all selected keyframes";
 
   /* api callbacks */
-  ot->invoke = WM_operator_confirm;
+  ot->invoke = WM_operator_confirm_or_exec;
   ot->exec = actkeys_delete_exec;
   ot->poll = ED_operator_action_active;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  WM_operator_properties_confirm_or_exec(ot);
 }
 
 /* ******************** Clean Keyframes Operator ************************* */
@@ -1665,7 +1680,7 @@ static int actkeys_framejump_exec(bContext *C, wmOperator *UNUSED(op))
   if (ked.i1) {
     Scene *scene = ac.scene;
     CFRA = round_fl_to_int(ked.f1 / ked.i1);
-    SUBFRA = 0.f;
+    SUBFRA = 0.0f;
   }
 
   /* set notifier that things have changed */
@@ -1696,23 +1711,23 @@ static const EnumPropertyItem prop_actkeys_snap_types[] = {
     {ACTKEYS_SNAP_CFRA,
      "CFRA",
      0,
-     "Current Frame",
+     "Selection to Current Frame",
      "Snap selected keyframes to the current frame"},
     {ACTKEYS_SNAP_NEAREST_FRAME,
      "NEAREST_FRAME",
      0,
-     "Nearest Frame",
-     "Snap selected keyframes to the nearest (whole) frame (use to fix accidental sub-frame "
+     "Selection to Nearest Frame",
+     "Snap selected keyframes to the nearest (whole) frame (use to fix accidental subframe "
      "offsets)"},
     {ACTKEYS_SNAP_NEAREST_SECOND,
      "NEAREST_SECOND",
      0,
-     "Nearest Second",
+     "Selection to Nearest Second",
      "Snap selected keyframes to the nearest second"},
     {ACTKEYS_SNAP_NEAREST_MARKER,
      "NEAREST_MARKER",
      0,
-     "Nearest Marker",
+     "Selection to Nearest Marker",
      "Snap selected keyframes to the nearest marker"},
     {0, NULL, 0, NULL, NULL},
 };
@@ -1827,7 +1842,7 @@ static const EnumPropertyItem prop_actkeys_mirror_types[] = {
     {ACTKEYS_MIRROR_XAXIS,
      "XAXIS",
      0,
-     "By Values Over Value=0",
+     "By Values Over Zero Value",
      "Flip values of selected keyframes (i.e. negative values become positive, and vice versa)"},
     {ACTKEYS_MIRROR_MARKER,
      "MARKER",

@@ -25,6 +25,7 @@
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
 #include "BLI_system.h"
+#include "BLI_threads.h"
 
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
@@ -47,10 +48,13 @@
 
 #include "GPU_batch.h"
 #include "GPU_batch_presets.h"
+#include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
 #include "GPU_platform.h"
 #include "GPU_state.h"
+
+#include "DRW_engine.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -68,8 +72,8 @@
 #include "IMB_imbuf_types.h"
 
 #include "NOD_composite.h"
+#include "NOD_geometry.h"
 #include "NOD_shader.h"
-#include "NOD_simulation.h"
 #include "NOD_texture.h"
 #include "node_intern.h" /* own include */
 
@@ -186,7 +190,10 @@ static void node_buts_curvecol(uiLayout *layout, bContext *UNUSED(C), PointerRNA
     cumap->flag &= ~CUMA_DRAW_SAMPLE;
   }
 
-  uiTemplateCurveMapping(layout, ptr, "mapping", 'c', false, false, false, true);
+  /* "Tone" (Standard/Film-like) only used in the Compositor. */
+  bNodeTree *ntree = (bNodeTree *)ptr->owner_id;
+  uiTemplateCurveMapping(
+      layout, ptr, "mapping", 'c', false, false, false, (ntree->type == NTREE_COMPOSIT));
 }
 
 static void node_buts_normal(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
@@ -199,42 +206,6 @@ static void node_buts_normal(uiLayout *layout, bContext *UNUSED(C), PointerRNA *
 
   uiItemR(layout, &sockptr, "default_value", DEFAULT_FLAGS, "", ICON_NONE);
 }
-
-#if 0 /* not used in 2.5x yet */
-static void node_browse_tex_cb(bContext *C, void *ntree_v, void *node_v)
-{
-  Main *bmain = CTX_data_main(C);
-  bNodeTree *ntree = ntree_v;
-  bNode *node = node_v;
-  Tex *tex;
-
-  if (node->menunr < 1) {
-    return;
-  }
-
-  if (node->id) {
-    id_us_min(node->id);
-    node->id = NULL;
-  }
-  tex = BLI_findlink(&bmain->tex, node->menunr - 1);
-
-  node->id = &tex->id;
-  id_us_plus(node->id);
-  BLI_strncpy(node->name, node->id->name + 2, sizeof(node->name));
-
-  nodeSetActive(ntree, node);
-
-  if (ntree->type == NTREE_TEXTURE) {
-    ntreeTexCheckCyclics(ntree);
-  }
-
-  // allqueue(REDRAWBUTSSHADING, 0);
-  // allqueue(REDRAWNODE, 0);
-  NodeTagChanged(ntree, node);
-
-  node->menunr = 0;
-}
-#endif
 
 static void node_buts_texture(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
@@ -470,7 +441,7 @@ static void node_draw_frame(const bContext *C,
 
   const rctf *rct = &node->totr;
   UI_draw_roundbox_corner_set(UI_CNR_ALL);
-  UI_draw_roundbox_aa(true, rct->xmin, rct->ymin, rct->xmax, rct->ymax, BASIS_RAD, color);
+  UI_draw_roundbox_aa(rct, true, BASIS_RAD, color);
 
   /* outline active and selected emphasis */
   if (node->flag & SELECT) {
@@ -481,11 +452,11 @@ static void node_draw_frame(const bContext *C,
       UI_GetThemeColorShadeAlpha4fv(TH_SELECT, 0, -40, color);
     }
 
-    UI_draw_roundbox_aa(false, rct->xmin, rct->ymin, rct->xmax, rct->ymax, BASIS_RAD, color);
+    UI_draw_roundbox_aa(rct, false, BASIS_RAD, color);
   }
 
   /* label */
-  node_draw_frame_label(ntree, node, snode->aspect);
+  node_draw_frame_label(ntree, node, snode->runtime->aspect);
 
   UI_block_end(C, node->block);
   UI_block_draw(C, node->block);
@@ -588,7 +559,7 @@ static void node_draw_reroute(const bContext *C,
   if (node->flag & SELECT) {
     GPU_blend(GPU_BLEND_ALPHA);
     GPU_line_smooth(true);
-    /* using different shades of TH_TEXT_HI for the empasis, like triangle */
+    /* Using different shades of #TH_TEXT_HI for the emphasis, like triangle. */
     if (node->flag & NODE_ACTIVE) {
       UI_GetThemeColorShadeAlpha4fv(TH_TEXT_HI, 0, -40, debug_color);
     }
@@ -672,7 +643,8 @@ static void node_buts_image_user(uiLayout *layout,
                                  PointerRNA *ptr,
                                  PointerRNA *imaptr,
                                  PointerRNA *iuserptr,
-                                 bool compositor)
+                                 const bool show_layer_selection,
+                                 const bool show_color_management)
 {
   if (!imaptr->data) {
     return;
@@ -706,20 +678,22 @@ static void node_buts_image_user(uiLayout *layout,
     uiItemR(col, ptr, "use_auto_refresh", DEFAULT_FLAGS, NULL, ICON_NONE);
   }
 
-  if (compositor && RNA_enum_get(imaptr, "type") == IMA_TYPE_MULTILAYER &&
+  if (show_layer_selection && RNA_enum_get(imaptr, "type") == IMA_TYPE_MULTILAYER &&
       RNA_boolean_get(ptr, "has_layers")) {
     col = uiLayoutColumn(layout, false);
     uiItemR(col, ptr, "layer", DEFAULT_FLAGS, NULL, ICON_NONE);
   }
 
-  uiLayout *split = uiLayoutSplit(layout, 0.5f, true);
-  PointerRNA colorspace_settings_ptr = RNA_pointer_get(imaptr, "colorspace_settings");
-  uiItemL(split, IFACE_("Color Space"), ICON_NONE);
-  uiItemR(split, &colorspace_settings_ptr, "name", DEFAULT_FLAGS, "", ICON_NONE);
+  if (show_color_management) {
+    uiLayout *split = uiLayoutSplit(layout, 0.5f, true);
+    PointerRNA colorspace_settings_ptr = RNA_pointer_get(imaptr, "colorspace_settings");
+    uiItemL(split, IFACE_("Color Space"), ICON_NONE);
+    uiItemR(split, &colorspace_settings_ptr, "name", DEFAULT_FLAGS, "", ICON_NONE);
 
-  /* Avoid losing changes image is painted. */
-  if (BKE_image_is_dirty(imaptr->data)) {
-    uiLayoutSetEnabled(split, false);
+    /* Avoid losing changes image is painted. */
+    if (BKE_image_is_dirty(imaptr->data)) {
+      uiLayoutSetEnabled(split, false);
+    }
   }
 }
 
@@ -748,6 +722,7 @@ static void node_shader_buts_vect_transform(uiLayout *layout, bContext *UNUSED(C
 
 static void node_shader_buts_attribute(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
+  uiItemR(layout, ptr, "attribute_type", DEFAULT_FLAGS, IFACE_("Type"), ICON_NONE);
   uiItemR(layout, ptr, "attribute_name", DEFAULT_FLAGS, IFACE_("Name"), ICON_NONE);
 }
 
@@ -784,7 +759,7 @@ static void node_shader_buts_tex_image(uiLayout *layout, bContext *C, PointerRNA
   /* note: image user properties used directly here, unlike compositor image node,
    * which redefines them in the node struct RNA to get proper updates.
    */
-  node_buts_image_user(layout, C, &iuserptr, &imaptr, &iuserptr, false);
+  node_buts_image_user(layout, C, &iuserptr, &imaptr, &iuserptr, false, true);
 }
 
 static void node_shader_buts_tex_image_ex(uiLayout *layout, bContext *C, PointerRNA *ptr)
@@ -813,7 +788,7 @@ static void node_shader_buts_tex_environment(uiLayout *layout, bContext *C, Poin
   uiItemR(layout, ptr, "interpolation", DEFAULT_FLAGS, "", ICON_NONE);
   uiItemR(layout, ptr, "projection", DEFAULT_FLAGS, "", ICON_NONE);
 
-  node_buts_image_user(layout, C, &iuserptr, &imaptr, &iuserptr, false);
+  node_buts_image_user(layout, C, &iuserptr, &imaptr, &iuserptr, false, true);
 }
 
 static void node_shader_buts_tex_environment_ex(uiLayout *layout, bContext *C, PointerRNA *ptr)
@@ -1402,7 +1377,7 @@ static void node_composit_buts_image(uiLayout *layout, bContext *C, PointerRNA *
 
   PointerRNA imaptr = RNA_pointer_get(ptr, "image");
 
-  node_buts_image_user(layout, C, ptr, &imaptr, &iuserptr, true);
+  node_buts_image_user(layout, C, ptr, &imaptr, &iuserptr, true, true);
 
   node_buts_image_views(layout, C, ptr, &imaptr);
 }
@@ -1551,6 +1526,17 @@ static void node_composit_buts_defocus(uiLayout *layout, bContext *C, PointerRNA
   sub = uiLayoutColumn(col, false);
   uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_zbuffer") == false);
   uiItemR(sub, ptr, "z_scale", DEFAULT_FLAGS, NULL, ICON_NONE);
+}
+
+static void node_composit_buts_antialiasing(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+  uiLayout *col;
+
+  col = uiLayoutColumn(layout, false);
+
+  uiItemR(col, ptr, "threshold", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "contrast_limit", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "corner_rounding", 0, NULL, ICON_NONE);
 }
 
 /* qdn: glare node */
@@ -1908,6 +1894,7 @@ static void node_composit_buts_file_output_ex(uiLayout *layout, bContext *C, Poi
   PointerRNA active_input_ptr, op_ptr;
   uiLayout *row, *col;
   const bool multilayer = RNA_enum_get(&imfptr, "file_format") == R_IMF_IMTYPE_MULTILAYER;
+  const bool is_exr = RNA_enum_get(&imfptr, "file_format") == R_IMF_IMTYPE_OPENEXR;
   const bool is_multiview = (scene->r.scemode & R_MULTIVIEW) != 0;
 
   node_composit_buts_file_output(layout, C, ptr);
@@ -2015,8 +2002,15 @@ static void node_composit_buts_file_output_ex(uiLayout *layout, bContext *C, Poi
       uiItemL(col, IFACE_("Format:"), ICON_NONE);
       uiItemR(col, &active_input_ptr, "use_node_format", DEFAULT_FLAGS, NULL, ICON_NONE);
 
+      const bool is_socket_exr = RNA_enum_get(&imfptr, "file_format") == R_IMF_IMTYPE_OPENEXR;
+      const bool use_node_format = RNA_boolean_get(&active_input_ptr, "use_node_format");
+
+      if ((!is_exr && use_node_format) || (!is_socket_exr && !use_node_format)) {
+        uiItemR(col, &active_input_ptr, "save_as_render", DEFAULT_FLAGS, NULL, ICON_NONE);
+      }
+
       col = uiLayoutColumn(layout, false);
-      uiLayoutSetActive(col, RNA_boolean_get(&active_input_ptr, "use_node_format") == false);
+      uiLayoutSetActive(col, use_node_format == false);
       uiTemplateImageSettings(col, &imfptr, false);
 
       if (is_multiview) {
@@ -2320,6 +2314,11 @@ static void node_composit_buts_colorcorrection_ex(uiLayout *layout,
   row = uiLayoutRow(layout, false);
   uiItemR(row, ptr, "midtones_start", DEFAULT_FLAGS, NULL, ICON_NONE);
   uiItemR(row, ptr, "midtones_end", DEFAULT_FLAGS, NULL, ICON_NONE);
+}
+
+static void node_composit_buts_set_alpha(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+  uiItemR(layout, ptr, "mode", DEFAULT_FLAGS, NULL, ICON_NONE);
 }
 
 static void node_composit_buts_switch(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
@@ -2680,25 +2679,62 @@ static void node_composit_buts_sunbeams(uiLayout *layout, bContext *UNUSED(C), P
   uiItemR(layout, ptr, "ray_length", DEFAULT_FLAGS | UI_ITEM_R_SLIDER, NULL, ICON_NONE);
 }
 
-static void node_composit_buts_cryptomatte(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+static void node_composit_buts_cryptomatte_legacy(uiLayout *layout,
+                                                  bContext *UNUSED(C),
+                                                  PointerRNA *ptr)
 {
   uiLayout *col = uiLayoutColumn(layout, true);
 
   uiItemL(col, IFACE_("Matte Objects:"), ICON_NONE);
 
   uiLayout *row = uiLayoutRow(col, true);
-  uiTemplateCryptoPicker(row, ptr, "add");
-  uiTemplateCryptoPicker(row, ptr, "remove");
+  uiTemplateCryptoPicker(row, ptr, "add", ICON_ADD);
+  uiTemplateCryptoPicker(row, ptr, "remove", ICON_REMOVE);
 
   uiItemR(col, ptr, "matte_id", DEFAULT_FLAGS, "", ICON_NONE);
 }
 
-static void node_composit_buts_cryptomatte_ex(uiLayout *layout,
-                                              bContext *UNUSED(C),
-                                              PointerRNA *UNUSED(ptr))
+static void node_composit_buts_cryptomatte_legacy_ex(uiLayout *layout,
+                                                     bContext *UNUSED(C),
+                                                     PointerRNA *UNUSED(ptr))
 {
   uiItemO(layout, IFACE_("Add Crypto Layer"), ICON_ADD, "NODE_OT_cryptomatte_layer_add");
   uiItemO(layout, IFACE_("Remove Crypto Layer"), ICON_REMOVE, "NODE_OT_cryptomatte_layer_remove");
+}
+
+static void node_composit_buts_cryptomatte(uiLayout *layout, bContext *C, PointerRNA *ptr)
+{
+  bNode *node = ptr->data;
+
+  uiLayout *row = uiLayoutRow(layout, true);
+  uiItemR(row, ptr, "source", DEFAULT_FLAGS | UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+
+  uiLayout *col = uiLayoutColumn(layout, false);
+  if (node->custom1 == CMP_CRYPTOMATTE_SRC_RENDER) {
+    uiTemplateID(col, C, ptr, "scene", NULL, NULL, NULL, UI_TEMPLATE_ID_FILTER_ALL, false, NULL);
+  }
+  else {
+    uiTemplateID(
+        col, C, ptr, "image", NULL, "IMAGE_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false, NULL);
+
+    NodeCryptomatte *crypto = (NodeCryptomatte *)node->storage;
+    PointerRNA imaptr = RNA_pointer_get(ptr, "image");
+    PointerRNA iuserptr;
+    RNA_pointer_create((ID *)ptr->owner_id, &RNA_ImageUser, &crypto->iuser, &iuserptr);
+    uiLayoutSetContextPointer(layout, "image_user", &iuserptr);
+
+    node_buts_image_user(col, C, ptr, &imaptr, &iuserptr, false, false);
+    node_buts_image_views(col, C, ptr, &imaptr);
+  }
+
+  col = uiLayoutColumn(layout, true);
+  uiItemR(col, ptr, "layer_name", 0, "", ICON_NONE);
+  uiItemL(col, IFACE_("Matte ID:"), ICON_NONE);
+
+  row = uiLayoutRow(col, true);
+  uiItemR(row, ptr, "matte_id", DEFAULT_FLAGS, "", ICON_NONE);
+  uiTemplateCryptoPicker(row, ptr, "add", ICON_ADD);
+  uiTemplateCryptoPicker(row, ptr, "remove", ICON_REMOVE);
 }
 
 static void node_composit_buts_brightcontrast(uiLayout *layout,
@@ -2713,9 +2749,12 @@ static void node_composit_buts_denoise(uiLayout *layout, bContext *UNUSED(C), Po
 #ifndef WITH_OPENIMAGEDENOISE
   uiItemL(layout, IFACE_("Disabled, built without OpenImageDenoise"), ICON_ERROR);
 #else
+  /* Always supported through Accelerate framework BNNS on macOS. */
+#  ifndef __APPLE__
   if (!BLI_cpu_support_sse41()) {
     uiItemL(layout, IFACE_("Disabled, CPU with SSE4.1 is required"), ICON_ERROR);
   }
+#  endif
 #endif
 
   uiItemR(layout, ptr, "use_hdr", DEFAULT_FLAGS, NULL, ICON_NONE);
@@ -2773,6 +2812,9 @@ static void node_composit_set_butfunc(bNodeType *ntype)
       break;
     case CMP_NODE_DEFOCUS:
       ntype->draw_buttons = node_composit_buts_defocus;
+      break;
+    case CMP_NODE_ANTIALIASING:
+      ntype->draw_buttons = node_composit_buts_antialiasing;
       break;
     case CMP_NODE_GLARE:
       ntype->draw_buttons = node_composit_buts_glare;
@@ -2899,6 +2941,9 @@ static void node_composit_set_butfunc(bNodeType *ntype)
       ntype->draw_buttons = node_composit_buts_colorcorrection;
       ntype->draw_buttons_ex = node_composit_buts_colorcorrection_ex;
       break;
+    case CMP_NODE_SETALPHA:
+      ntype->draw_buttons = node_composit_buts_set_alpha;
+      break;
     case CMP_NODE_SWITCH:
       ntype->draw_buttons = node_composit_buts_switch;
       break;
@@ -2950,7 +2995,10 @@ static void node_composit_set_butfunc(bNodeType *ntype)
       break;
     case CMP_NODE_CRYPTOMATTE:
       ntype->draw_buttons = node_composit_buts_cryptomatte;
-      ntype->draw_buttons_ex = node_composit_buts_cryptomatte_ex;
+      break;
+    case CMP_NODE_CRYPTOMATTE_LEGACY:
+      ntype->draw_buttons = node_composit_buts_cryptomatte_legacy;
+      ntype->draw_buttons_ex = node_composit_buts_cryptomatte_legacy_ex;
       break;
     case CMP_NODE_BRIGHTCONTRAST:
       ntype->draw_buttons = node_composit_buts_brightcontrast;
@@ -3138,46 +3186,6 @@ static void node_texture_set_butfunc(bNodeType *ntype)
   }
 }
 
-/* ****************** BUTTON CALLBACKS FOR SIMULATION NODES ***************** */
-
-static void node_simulation_set_butfunc(bNodeType *UNUSED(ntype))
-{
-}
-
-/* ****************** BUTTON CALLBACKS FOR FUNCTION NODES ***************** */
-
-static void node_function_buts_boolean_math(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
-{
-  uiItemR(layout, ptr, "operation", DEFAULT_FLAGS, "", ICON_NONE);
-}
-
-static void node_function_buts_float_compare(uiLayout *layout,
-                                             bContext *UNUSED(C),
-                                             PointerRNA *ptr)
-{
-  uiItemR(layout, ptr, "operation", DEFAULT_FLAGS, "", ICON_NONE);
-}
-
-static void node_function_buts_switch(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
-{
-  uiItemR(layout, ptr, "data_type", DEFAULT_FLAGS, "", ICON_NONE);
-}
-
-static void node_function_set_butfunc(bNodeType *ntype)
-{
-  switch (ntype->type) {
-    case FN_NODE_BOOLEAN_MATH:
-      ntype->draw_buttons = node_function_buts_boolean_math;
-      break;
-    case FN_NODE_FLOAT_COMPARE:
-      ntype->draw_buttons = node_function_buts_float_compare;
-      break;
-    case FN_NODE_SWITCH:
-      ntype->draw_buttons = node_function_buts_switch;
-      break;
-  }
-}
-
 /* ****** init draw callbacks for all tree types, only called in usiblender.c, once ************ */
 
 static void node_property_update_default(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
@@ -3277,8 +3285,6 @@ void ED_node_init_butfuncs(void)
     ntype->draw_nodetype_prepare = node_update_default;
     ntype->select_area_func = node_select_area_default;
     ntype->tweak_area_func = node_tweak_area_default;
-    ntype->draw_buttons = NULL;
-    ntype->draw_buttons_ex = NULL;
     ntype->resize_area_func = node_resize_area_default;
 
     node_common_set_butfunc(ntype);
@@ -3286,8 +3292,6 @@ void ED_node_init_butfuncs(void)
     node_composit_set_butfunc(ntype);
     node_shader_set_butfunc(ntype);
     node_texture_set_butfunc(ntype);
-    node_simulation_set_butfunc(ntype);
-    node_function_set_butfunc(ntype);
 
     /* define update callbacks for socket properties */
     node_template_properties_update(ntype);
@@ -3298,7 +3302,7 @@ void ED_node_init_butfuncs(void)
   ntreeType_Composite->ui_icon = ICON_NODE_COMPOSITING;
   ntreeType_Shader->ui_icon = ICON_NODE_MATERIAL;
   ntreeType_Texture->ui_icon = ICON_NODE_TEXTURE;
-  ntreeType_Simulation->ui_icon = ICON_PHYSICS; /* TODO: Use correct icon. */
+  ntreeType_Geometry->ui_icon = ICON_NODETREE;
 }
 
 void ED_init_custom_node_type(bNodeType *ntype)
@@ -3317,18 +3321,22 @@ void ED_init_custom_node_socket_type(bNodeSocketType *stype)
   stype->draw = node_socket_button_label;
 }
 
+static const float virtual_node_socket_color[4] = {0.2, 0.2, 0.2, 1.0};
+
 /* maps standard socket integer type to a color */
 static const float std_node_socket_colors[][4] = {
     {0.63, 0.63, 0.63, 1.0}, /* SOCK_FLOAT */
     {0.39, 0.39, 0.78, 1.0}, /* SOCK_VECTOR */
     {0.78, 0.78, 0.16, 1.0}, /* SOCK_RGBA */
     {0.39, 0.78, 0.39, 1.0}, /* SOCK_SHADER */
-    {0.70, 0.65, 0.19, 1.0}, /* SOCK_BOOLEAN */
+    {0.80, 0.65, 0.84, 1.0}, /* SOCK_BOOLEAN */
     {0.0, 0.0, 0.0, 1.0},    /*__SOCK_MESH (deprecated) */
-    {0.06, 0.52, 0.15, 1.0}, /* SOCK_INT */
-    {0.39, 0.39, 0.39, 1.0}, /* SOCK_STRING */
-    {0.40, 0.10, 0.10, 1.0}, /* SOCK_OBJECT */
-    {0.10, 0.40, 0.10, 1.0}, /* SOCK_IMAGE */
+    {0.25, 0.75, 0.26, 1.0}, /* SOCK_INT */
+    {0.44, 0.70, 1.00, 1.0}, /* SOCK_STRING */
+    {0.93, 0.62, 0.36, 1.0}, /* SOCK_OBJECT */
+    {0.89, 0.76, 0.43, 1.0}, /* SOCK_IMAGE */
+    {0.00, 0.84, 0.64, 1.0}, /* SOCK_GEOMETRY */
+    {0.96, 0.96, 0.96, 1.0}, /* SOCK_COLLECTION */
 };
 
 /* common color callbacks for standard types */
@@ -3437,11 +3445,24 @@ static void std_node_socket_draw(
         }
       }
       break;
-    case SOCK_RGBA:
-    case SOCK_STRING: {
-      uiLayout *row = uiLayoutSplit(layout, 0.5f, false);
+    case SOCK_RGBA: {
+      uiLayout *row = uiLayoutSplit(layout, 0.4f, false);
       uiItemL(row, text, 0);
       uiItemR(row, ptr, "default_value", DEFAULT_FLAGS, "", 0);
+      break;
+    }
+    case SOCK_STRING: {
+      uiLayout *row = uiLayoutSplit(layout, 0.4f, false);
+      uiItemL(row, text, 0);
+
+      const bNodeTree *node_tree = (const bNodeTree *)node_ptr->owner_id;
+      if (node_tree->type == NTREE_GEOMETRY) {
+        node_geometry_add_attribute_search_button(C, node_tree, node, ptr, row);
+      }
+      else {
+        uiItemR(row, ptr, "default_value", DEFAULT_FLAGS, "", 0);
+      }
+
       break;
     }
     case SOCK_OBJECT: {
@@ -3449,6 +3470,10 @@ static void std_node_socket_draw(
       break;
     }
     case SOCK_IMAGE: {
+      uiItemR(layout, ptr, "default_value", DEFAULT_FLAGS, text, 0);
+      break;
+    }
+    case SOCK_COLLECTION: {
       uiItemR(layout, ptr, "default_value", DEFAULT_FLAGS, text, 0);
       break;
     }
@@ -3462,37 +3487,35 @@ static void std_node_socket_interface_draw(bContext *UNUSED(C), uiLayout *layout
 {
   bNodeSocket *sock = ptr->data;
   int type = sock->typeinfo->type;
-  /*int subtype = sock->typeinfo->subtype;*/
+
+  uiLayout *col = uiLayoutColumn(layout, false);
 
   switch (type) {
     case SOCK_FLOAT: {
-      uiLayout *row;
-      uiItemR(layout, ptr, "default_value", DEFAULT_FLAGS, NULL, 0);
-      row = uiLayoutRow(layout, true);
-      uiItemR(row, ptr, "min_value", DEFAULT_FLAGS, IFACE_("Min"), 0);
-      uiItemR(row, ptr, "max_value", DEFAULT_FLAGS, IFACE_("Max"), 0);
+      uiItemR(col, ptr, "default_value", DEFAULT_FLAGS, IFACE_("Default"), ICON_NONE);
+      uiLayout *sub = uiLayoutColumn(col, true);
+      uiItemR(sub, ptr, "min_value", DEFAULT_FLAGS, IFACE_("Min"), ICON_NONE);
+      uiItemR(sub, ptr, "max_value", DEFAULT_FLAGS, IFACE_("Max"), ICON_NONE);
       break;
     }
     case SOCK_INT: {
-      uiLayout *row;
-      uiItemR(layout, ptr, "default_value", DEFAULT_FLAGS, NULL, 0);
-      row = uiLayoutRow(layout, true);
-      uiItemR(row, ptr, "min_value", DEFAULT_FLAGS, IFACE_("Min"), 0);
-      uiItemR(row, ptr, "max_value", DEFAULT_FLAGS, IFACE_("Max"), 0);
+      uiItemR(col, ptr, "default_value", DEFAULT_FLAGS, IFACE_("Default"), ICON_NONE);
+      uiLayout *sub = uiLayoutColumn(col, true);
+      uiItemR(sub, ptr, "min_value", DEFAULT_FLAGS, IFACE_("Min"), ICON_NONE);
+      uiItemR(sub, ptr, "max_value", DEFAULT_FLAGS, IFACE_("Max"), ICON_NONE);
       break;
     }
     case SOCK_VECTOR: {
-      uiLayout *row;
-      uiItemR(layout, ptr, "default_value", UI_ITEM_R_EXPAND, NULL, DEFAULT_FLAGS);
-      row = uiLayoutRow(layout, true);
-      uiItemR(row, ptr, "min_value", DEFAULT_FLAGS, IFACE_("Min"), 0);
-      uiItemR(row, ptr, "max_value", DEFAULT_FLAGS, IFACE_("Max"), 0);
+      uiItemR(col, ptr, "default_value", UI_ITEM_R_EXPAND, IFACE_("Default"), ICON_NONE);
+      uiLayout *sub = uiLayoutColumn(col, true);
+      uiItemR(sub, ptr, "min_value", DEFAULT_FLAGS, IFACE_("Min"), ICON_NONE);
+      uiItemR(sub, ptr, "max_value", DEFAULT_FLAGS, IFACE_("Max"), ICON_NONE);
       break;
     }
     case SOCK_BOOLEAN:
     case SOCK_RGBA:
     case SOCK_STRING: {
-      uiItemR(layout, ptr, "default_value", DEFAULT_FLAGS, NULL, 0);
+      uiItemR(col, ptr, "default_value", DEFAULT_FLAGS, IFACE_("Default"), 0);
       break;
     }
   }
@@ -3513,8 +3536,7 @@ static void node_socket_virtual_draw_color(bContext *UNUSED(C),
                                            PointerRNA *UNUSED(node_ptr),
                                            float *r_color)
 {
-  /* alpha = 0, empty circle */
-  zero_v4(r_color);
+  copy_v4_v4(r_color, virtual_node_socket_color);
 }
 
 void ED_init_node_socket_type_virtual(bNodeSocketType *stype)
@@ -3533,8 +3555,6 @@ void draw_nodespace_back_pix(const bContext *C,
   Main *bmain = CTX_data_main(C);
   bNodeInstanceKey active_viewer_key = (snode->nodetree ? snode->nodetree->active_viewer_key :
                                                           NODE_INSTANCE_KEY_NONE);
-  float shuffle[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-
   GPU_matrix_push_projection();
   GPU_matrix_push();
   wmOrtho2_region_pixelspace(region);
@@ -3551,73 +3571,28 @@ void draw_nodespace_back_pix(const bContext *C,
     return;
   }
 
+  GPU_matrix_push_projection();
+  GPU_matrix_push();
+
+  /* The draw manager is used to draw the backdrop image. */
+  GPUFrameBuffer *old_fb = GPU_framebuffer_active_get();
+  GPU_framebuffer_restore();
+  BLI_thread_lock(LOCK_DRAW_IMAGE);
+  DRW_draw_view(C);
+  BLI_thread_unlock(LOCK_DRAW_IMAGE);
+  GPU_framebuffer_bind_no_srgb(old_fb);
+  /* Draw manager changes the depth state. Set it back to NONE. Without this the node preview
+   * images aren't drawn correctly. */
+  GPU_depth_test(GPU_DEPTH_NONE);
+
   void *lock;
   Image *ima = BKE_image_ensure_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
   ImBuf *ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
   if (ibuf) {
-    GPU_matrix_push_projection();
-    GPU_matrix_push();
-
     /* somehow the offset has to be calculated inverse */
     wmOrtho2_region_pixelspace(region);
-
     const float x = (region->winx - snode->zoom * ibuf->x) / 2 + snode->xof;
     const float y = (region->winy - snode->zoom * ibuf->y) / 2 + snode->yof;
-
-    if (ibuf->rect || ibuf->rect_float) {
-      uchar *display_buffer = NULL;
-      void *cache_handle = NULL;
-
-      if (snode->flag & (SNODE_SHOW_R | SNODE_SHOW_G | SNODE_SHOW_B | SNODE_SHOW_ALPHA)) {
-
-        display_buffer = IMB_display_buffer_acquire_ctx(C, ibuf, &cache_handle);
-
-        if (snode->flag & SNODE_SHOW_R) {
-          shuffle[0] = 1.0f;
-        }
-        else if (snode->flag & SNODE_SHOW_G) {
-          shuffle[1] = 1.0f;
-        }
-        else if (snode->flag & SNODE_SHOW_B) {
-          shuffle[2] = 1.0f;
-        }
-        else {
-          shuffle[3] = 1.0f;
-        }
-
-        IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR);
-        GPU_shader_uniform_vector(
-            state.shader, GPU_shader_get_uniform(state.shader, "shuffle"), 4, 1, shuffle);
-
-        immDrawPixelsTex(&state,
-                         x,
-                         y,
-                         ibuf->x,
-                         ibuf->y,
-                         GPU_RGBA8,
-                         false,
-                         display_buffer,
-                         snode->zoom,
-                         snode->zoom,
-                         NULL);
-
-        GPU_shader_unbind();
-      }
-      else if (snode->flag & SNODE_USE_ALPHA) {
-        GPU_blend(GPU_BLEND_ALPHA);
-
-        ED_draw_imbuf_ctx(C, ibuf, x, y, false, snode->zoom, snode->zoom);
-
-        GPU_blend(GPU_BLEND_NONE);
-      }
-      else {
-        ED_draw_imbuf_ctx(C, ibuf, x, y, false, snode->zoom, snode->zoom);
-      }
-
-      if (cache_handle) {
-        IMB_display_buffer_release(cache_handle);
-      }
-    }
 
     /** \note draw selected info on backdrop */
     if (snode->edittree) {
@@ -3651,27 +3626,26 @@ void draw_nodespace_back_pix(const bContext *C,
         immUnbindProgram();
       }
     }
-
-    GPU_matrix_pop_projection();
-    GPU_matrix_pop();
   }
 
   BKE_image_release_ibuf(ima, ibuf, lock);
+  GPU_matrix_pop_projection();
+  GPU_matrix_pop();
 }
 
 /* return quadratic beziers points for a given nodelink and clip if v2d is not NULL. */
-static bool node_link_bezier_handles(View2D *v2d,
-                                     SpaceNode *snode,
-                                     bNodeLink *link,
-                                     float vec[4][2])
+bool node_link_bezier_handles(const View2D *v2d,
+                              const SpaceNode *snode,
+                              const bNodeLink *link,
+                              float vec[4][2])
 {
   float cursor[2] = {0.0f, 0.0f};
 
   /* this function can be called with snode null (via cut_links_intersect) */
-  /* XXX map snode->cursor back to view space */
+  /* XXX map snode->runtime->cursor back to view space */
   if (snode) {
-    cursor[0] = snode->cursor[0] * UI_DPI_FAC;
-    cursor[1] = snode->cursor[1] * UI_DPI_FAC;
+    cursor[0] = snode->runtime->cursor[0] * UI_DPI_FAC;
+    cursor[1] = snode->runtime->cursor[1] * UI_DPI_FAC;
   }
 
   /* in v0 and v3 we put begin/end points */
@@ -3679,6 +3653,13 @@ static bool node_link_bezier_handles(View2D *v2d,
   if (link->fromsock) {
     vec[0][0] = link->fromsock->locx;
     vec[0][1] = link->fromsock->locy;
+    if (link->fromsock->flag & SOCK_MULTI_INPUT) {
+      node_link_calculate_multi_input_position(link->fromsock->locx,
+                                               link->fromsock->locy,
+                                               link->fromsock->total_inputs - 1,
+                                               link->fromsock->total_inputs,
+                                               vec[0]);
+    }
     fromreroute = (link->fromnode && link->fromnode->type == NODE_REROUTE);
   }
   else {
@@ -3691,6 +3672,13 @@ static bool node_link_bezier_handles(View2D *v2d,
   if (link->tosock) {
     vec[3][0] = link->tosock->locx;
     vec[3][1] = link->tosock->locy;
+    if (!(link->tonode->flag & NODE_HIDDEN) && link->tosock->flag & SOCK_MULTI_INPUT) {
+      node_link_calculate_multi_input_position(link->tosock->locx,
+                                               link->tosock->locy,
+                                               link->multi_input_socket_index,
+                                               link->tosock->total_inputs,
+                                               vec[3]);
+    }
     toreroute = (link->tonode && link->tonode->type == NODE_REROUTE);
   }
   else {
@@ -3755,8 +3743,11 @@ static bool node_link_bezier_handles(View2D *v2d,
 }
 
 /* if v2d not NULL, it clips and returns 0 if not visible */
-bool node_link_bezier_points(
-    View2D *v2d, SpaceNode *snode, bNodeLink *link, float coord_array[][2], int resol)
+bool node_link_bezier_points(const View2D *v2d,
+                             const SpaceNode *snode,
+                             const bNodeLink *link,
+                             float coord_array[][2],
+                             const int resol)
 {
   float vec[4][2];
 
@@ -3777,17 +3768,21 @@ bool node_link_bezier_points(
 #define LINK_WIDTH (2.5f * UI_DPI_FAC)
 #define ARROW_SIZE (7 * UI_DPI_FAC)
 
+/* Reroute arrow shape and mute bar. These are expanded here and shrunk in the glsl code.
+ * See: gpu_shader_2D_nodelink_vert.glsl */
 static float arrow_verts[3][2] = {{-1.0f, 1.0f}, {0.0f, 0.0f}, {-1.0f, -1.0f}};
 static float arrow_expand_axis[3][2] = {{0.7071f, 0.7071f}, {M_SQRT2, 0.0f}, {0.7071f, -0.7071f}};
+static float mute_verts[3][2] = {{0.7071f, 1.0f}, {0.7071f, 0.0f}, {0.7071f, -1.0f}};
+static float mute_expand_axis[3][2] = {{1.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, -0.0f}};
 
 static struct {
   GPUBatch *batch;        /* for batching line together */
   GPUBatch *batch_single; /* for single line */
   GPUVertBuf *inst_vbo;
   uint p0_id, p1_id, p2_id, p3_id;
-  uint colid_id;
+  uint colid_id, muted_id;
   GPUVertBufRaw p0_step, p1_step, p2_step, p3_step;
-  GPUVertBufRaw colid_step;
+  GPUVertBufRaw colid_step, muted_step;
   uint count;
   bool enabled;
 } g_batch_link = {0};
@@ -3800,6 +3795,8 @@ static void nodelink_batch_reset(void)
   GPU_vertbuf_attr_get_raw_data(g_batch_link.inst_vbo, g_batch_link.p3_id, &g_batch_link.p3_step);
   GPU_vertbuf_attr_get_raw_data(
       g_batch_link.inst_vbo, g_batch_link.colid_id, &g_batch_link.colid_step);
+  GPU_vertbuf_attr_get_raw_data(
+      g_batch_link.inst_vbo, g_batch_link.muted_id, &g_batch_link.muted_step);
   g_batch_link.count = 0;
 }
 
@@ -3827,6 +3824,8 @@ static void nodelink_batch_init(void)
   int vcount = LINK_RESOL * 2; /* curve */
   vcount += 2;                 /* restart strip */
   vcount += 3 * 2;             /* arrow */
+  vcount += 2;                 /* restart strip */
+  vcount += 3 * 2;             /* mute */
   vcount *= 2;                 /* shadow */
   vcount += 2;                 /* restart strip */
   GPU_vertbuf_data_alloc(vbo, vcount);
@@ -3870,6 +3869,25 @@ static void nodelink_batch_init(void)
     }
 
     /* restart */
+    set_nodelink_vertex(vbo, uv_id, pos_id, expand_id, v++, uv, pos, exp);
+
+    uv[0] = 127;
+    uv[1] = 0;
+    copy_v2_v2(pos, mute_verts[0]);
+    copy_v2_v2(exp, mute_expand_axis[0]);
+    set_nodelink_vertex(vbo, uv_id, pos_id, expand_id, v++, uv, pos, exp);
+    /* bar */
+    for (int i = 0; i < 3; ++i) {
+      uv[1] = 0;
+      copy_v2_v2(pos, mute_verts[i]);
+      copy_v2_v2(exp, mute_expand_axis[i]);
+      set_nodelink_vertex(vbo, uv_id, pos_id, expand_id, v++, uv, pos, exp);
+
+      uv[1] = 255;
+      set_nodelink_vertex(vbo, uv_id, pos_id, expand_id, v++, uv, pos, exp);
+    }
+
+    /* restart */
     if (k == 0) {
       set_nodelink_vertex(vbo, uv_id, pos_id, expand_id, v++, uv, pos, exp);
     }
@@ -3893,6 +3911,8 @@ static void nodelink_batch_init(void)
       &format_inst, "P3", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   g_batch_link.colid_id = GPU_vertformat_attr_add(
       &format_inst, "colid_doarrow", GPU_COMP_U8, 4, GPU_FETCH_INT);
+  g_batch_link.muted_id = GPU_vertformat_attr_add(
+      &format_inst, "domuted", GPU_COMP_U8, 2, GPU_FETCH_INT);
   g_batch_link.inst_vbo = GPU_vertbuf_create_with_format_ex(&format_inst, GPU_USAGE_STREAM);
   /* Alloc max count but only draw the range we need. */
   GPU_vertbuf_data_alloc(g_batch_link.inst_vbo, NODELINK_GROUP_SIZE);
@@ -3919,7 +3939,7 @@ static char nodelink_get_color_id(int th_col)
   return 0;
 }
 
-static void nodelink_batch_draw(SpaceNode *snode)
+static void nodelink_batch_draw(const SpaceNode *snode)
 {
   if (g_batch_link.count == 0) {
     return;
@@ -3939,7 +3959,7 @@ static void nodelink_batch_draw(SpaceNode *snode)
 
   GPU_batch_program_set_builtin(g_batch_link.batch, GPU_SHADER_2D_NODELINK_INST);
   GPU_batch_uniform_4fv_array(g_batch_link.batch, "colors", 6, colors);
-  GPU_batch_uniform_1f(g_batch_link.batch, "expandSize", snode->aspect * LINK_WIDTH);
+  GPU_batch_uniform_1f(g_batch_link.batch, "expandSize", snode->runtime->aspect * LINK_WIDTH);
   GPU_batch_uniform_1f(g_batch_link.batch, "arrowSize", ARROW_SIZE);
   GPU_batch_draw(g_batch_link.batch);
 
@@ -3959,7 +3979,7 @@ void nodelink_batch_end(SpaceNode *snode)
   g_batch_link.enabled = false;
 }
 
-static void nodelink_batch_add_link(SpaceNode *snode,
+static void nodelink_batch_add_link(const SpaceNode *snode,
                                     const float p0[2],
                                     const float p1[2],
                                     const float p2[2],
@@ -3967,12 +3987,13 @@ static void nodelink_batch_add_link(SpaceNode *snode,
                                     int th_col1,
                                     int th_col2,
                                     int th_col3,
-                                    bool drawarrow)
+                                    bool drawarrow,
+                                    bool drawmuted)
 {
   /* Only allow these colors. If more is needed, you need to modify the shader accordingly. */
   BLI_assert(ELEM(th_col1, TH_WIRE_INNER, TH_WIRE, TH_ACTIVE, TH_EDGE_SELECT, TH_REDALERT));
   BLI_assert(ELEM(th_col2, TH_WIRE_INNER, TH_WIRE, TH_ACTIVE, TH_EDGE_SELECT, TH_REDALERT));
-  BLI_assert(ELEM(th_col3, TH_WIRE, -1));
+  BLI_assert(ELEM(th_col3, TH_WIRE, TH_REDALERT, -1));
 
   g_batch_link.count++;
   copy_v2_v2(GPU_vertbuf_raw_step(&g_batch_link.p0_step), p0);
@@ -3984,6 +4005,8 @@ static void nodelink_batch_add_link(SpaceNode *snode,
   colid[1] = nodelink_get_color_id(th_col2);
   colid[2] = nodelink_get_color_id(th_col3);
   colid[3] = drawarrow;
+  char *muted = GPU_vertbuf_raw_step(&g_batch_link.muted_step);
+  muted[0] = drawmuted;
 
   if (g_batch_link.count == NODELINK_GROUP_SIZE) {
     nodelink_batch_draw(snode);
@@ -3991,23 +4014,27 @@ static void nodelink_batch_add_link(SpaceNode *snode,
 }
 
 /* don't do shadows if th_col3 is -1. */
-void node_draw_link_bezier(
-    View2D *v2d, SpaceNode *snode, bNodeLink *link, int th_col1, int th_col2, int th_col3)
+void node_draw_link_bezier(const View2D *v2d,
+                           const SpaceNode *snode,
+                           const bNodeLink *link,
+                           int th_col1,
+                           int th_col2,
+                           int th_col3)
 {
   float vec[4][2];
-
+  const bool highlighted = link->flag & NODE_LINK_TEMP_HIGHLIGHT;
   if (node_link_bezier_handles(v2d, snode, link, vec)) {
     int drawarrow = ((link->tonode && (link->tonode->type == NODE_REROUTE)) &&
                      (link->fromnode && (link->fromnode->type == NODE_REROUTE)));
-
+    int drawmuted = (link->flag & NODE_LINK_MUTED);
     if (g_batch_link.batch == NULL) {
       nodelink_batch_init();
     }
 
-    if (g_batch_link.enabled) {
+    if (g_batch_link.enabled && !highlighted) {
       /* Add link to batch. */
       nodelink_batch_add_link(
-          snode, vec[0], vec[1], vec[2], vec[3], th_col1, th_col2, th_col3, drawarrow);
+          snode, vec[0], vec[1], vec[2], vec[3], th_col1, th_col2, th_col3, drawarrow, drawmuted);
     }
     else {
       /* Draw single link. */
@@ -4018,13 +4045,20 @@ void node_draw_link_bezier(
       UI_GetThemeColor4fv(th_col1, colors[1]);
       UI_GetThemeColor4fv(th_col2, colors[2]);
 
+      if (highlighted) {
+        float link_preselection_highlight_color[4];
+        UI_GetThemeColor4fv(TH_SELECT, link_preselection_highlight_color);
+        copy_v4_v4(colors[2], link_preselection_highlight_color);
+      }
+
       GPUBatch *batch = g_batch_link.batch_single;
       GPU_batch_program_set_builtin(batch, GPU_SHADER_2D_NODELINK);
       GPU_batch_uniform_2fv_array(batch, "bezierPts", 4, vec);
       GPU_batch_uniform_4fv_array(batch, "colors", 3, colors);
-      GPU_batch_uniform_1f(batch, "expandSize", snode->aspect * LINK_WIDTH);
+      GPU_batch_uniform_1f(batch, "expandSize", snode->runtime->aspect * LINK_WIDTH);
       GPU_batch_uniform_1f(batch, "arrowSize", ARROW_SIZE);
       GPU_batch_uniform_1i(batch, "doArrow", drawarrow);
+      GPU_batch_uniform_1i(batch, "doMuted", drawmuted);
       GPU_batch_draw(batch);
     }
   }
@@ -4057,8 +4091,11 @@ void node_draw_link(View2D *v2d, SpaceNode *snode, bNodeLink *link)
       if (link->flag & NODE_LINKFLAG_HILITE) {
         th_col1 = th_col2 = TH_ACTIVE;
       }
+      else if (link->flag & NODE_LINK_MUTED) {
+        th_col1 = th_col2 = TH_REDALERT;
+      }
       else {
-        /* regular link */
+        /* Regular link, highlight if connected to selected node. */
         if (link->fromnode && link->fromnode->flag & SELECT) {
           th_col1 = TH_EDGE_SELECT;
         }
@@ -4068,7 +4105,8 @@ void node_draw_link(View2D *v2d, SpaceNode *snode, bNodeLink *link)
       }
     }
     else {
-      th_col1 = th_col2 = TH_REDALERT;
+      /* Invalid link. */
+      th_col1 = th_col2 = th_col3 = TH_REDALERT;
       // th_col3 = -1; /* no shadow */
     }
   }

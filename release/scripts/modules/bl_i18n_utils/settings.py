@@ -30,7 +30,11 @@ import os
 import sys
 import types
 
-import bpy
+try:
+    import bpy
+except ModuleNotFoundError:
+    print("Could not import bpy, some features are not available when not run from Blender.")
+    bpy = None
 
 ###############################################################################
 # MISC
@@ -98,8 +102,10 @@ LANGUAGES = (
     (47, "Slovak (Slovenčina)", "sk_SK"),
 )
 
-# Default context, in py!
-DEFAULT_CONTEXT = bpy.app.translations.contexts.default
+# Default context, in py (keep in sync with `BLT_translation.h`)!
+if bpy is not None:
+    assert(bpy.app.translations.contexts.default == "*")
+DEFAULT_CONTEXT = "*"
 
 # Name of language file used by Blender to generate translations' menu.
 LANGUAGES_FILE = "languages"
@@ -347,6 +353,7 @@ WARN_MSGID_NOT_CAPITALIZED_ALLOWED = {
     "wav",
     "wmOwnerID '%s' not in workspace '%s'",
     "y",
+    "y = (Ax + B)",
     # Sub-strings.
     "available with",
     "brown fox",
@@ -498,6 +505,7 @@ MO_FILE_NAME = DOMAIN + ".mo"
 # Where to search for py files that may contain ui strings (relative to one of the 'resource_path' of Blender).
 CUSTOM_PY_UI_FILES = [
     os.path.join("scripts", "startup", "bl_ui"),
+    os.path.join("scripts", "startup", "bl_operators"),
     os.path.join("scripts", "modules", "rna_prop_ui.py"),
 ]
 

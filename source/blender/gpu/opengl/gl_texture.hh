@@ -1,4 +1,3 @@
-
 /*
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,13 +19,6 @@
 
 /** \file
  * \ingroup gpu
- *
- * GPU Framebuffer
- * - this is a wrapper for an OpenGL framebuffer object (FBO). in practice
- *   multiple FBO's may be created.
- * - actual FBO creation & config is deferred until GPU_framebuffer_bind or
- *   GPU_framebuffer_check_valid to allow creation & config while another
- *   opengl context is bound (since FBOs are not shared between ogl contexts).
  */
 
 #pragma once
@@ -166,6 +158,8 @@ inline GLenum to_gl_internal_format(eGPUTextureFormat format)
     case GPU_R16:
       return GL_R16;
     /* Special formats texture & renderbuffer */
+    case GPU_RGB10_A2:
+      return GL_RGB10_A2;
     case GPU_R11F_G11F_B10F:
       return GL_R11F_G11F_B10F;
     case GPU_DEPTH32F_STENCIL8:
@@ -282,12 +276,14 @@ inline GLenum to_gl(eGPUDataFormat format)
       return GL_FLOAT;
     case GPU_DATA_INT:
       return GL_INT;
-    case GPU_DATA_UNSIGNED_INT:
+    case GPU_DATA_UINT:
       return GL_UNSIGNED_INT;
-    case GPU_DATA_UNSIGNED_BYTE:
+    case GPU_DATA_UBYTE:
       return GL_UNSIGNED_BYTE;
-    case GPU_DATA_UNSIGNED_INT_24_8:
+    case GPU_DATA_UINT_24_8:
       return GL_UNSIGNED_INT_24_8;
+    case GPU_DATA_2_10_10_10_REV:
+      return GL_UNSIGNED_INT_2_10_10_10_REV;
     case GPU_DATA_10_11_11_REV:
       return GL_UNSIGNED_INT_10F_11F_11F_REV;
     default:
@@ -341,6 +337,7 @@ inline GLenum to_gl_data_format(eGPUTextureFormat format)
     case GPU_RGBA16:
     case GPU_RGBA16F:
     case GPU_RGBA32F:
+    case GPU_RGB10_A2:
       return GL_RGBA;
     case GPU_DEPTH24_STENCIL8:
     case GPU_DEPTH32F_STENCIL8:

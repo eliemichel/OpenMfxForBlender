@@ -61,22 +61,6 @@ Session::Session(const SessionParams &params_)
 
   TaskScheduler::init(params.threads);
 
-  /* Create CPU/GPU devices. */
-  device = Device::create(params.device, stats, profiler, params.background);
-
-  /* Create buffers for interactive rendering. */
-  if (params.background && !params.write_render_cb) {
-    buffers = NULL;
-    display = NULL;
-  }
-  else {
-    buffers = new RenderBuffers(device);
-    display = new DisplayBuffer(device, params.display_buffer_linear);
-  }
-
-  /* Validate denoising parameters. */
-  set_denoising(params.denoising);
-
   session_thread = NULL;
   scene = NULL;
 
@@ -90,27 +74,33 @@ Session::Session(const SessionParams &params_)
   gpu_draw_ready = false;
   gpu_need_display_buffer_update = false;
   pause = false;
+
+  buffers = NULL;
+  display = NULL;
+
+  /* Validate denoising parameters. */
+  set_denoising(params.denoising);
+
+  /* Create CPU/GPU devices. */
+  device = Device::create(params.device, stats, profiler, params.background);
+
+  if (!device->error_message().empty()) {
+    progress.set_error(device->error_message());
+    return;
+  }
+
+  /* Create buffers for interactive rendering. */
+  if (!(params.background && !params.write_render_cb)) {
+    buffers = new RenderBuffers(device);
+    display = new DisplayBuffer(device, params.display_buffer_linear);
+  }
 }
 
 Session::~Session()
 {
-  if (session_thread) {
-    /* wait for session thread to end */
-    progress.set_cancel("Exiting");
+  cancel();
 
-    gpu_need_display_buffer_update = false;
-    gpu_need_display_buffer_update_cond.notify_all();
-
-    {
-      thread_scoped_lock pause_lock(pause_mutex);
-      pause = false;
-    }
-    pause_cond.notify_all();
-
-    wait();
-  }
-
-  if (params.write_render_cb) {
+  if (buffers && params.write_render_cb) {
     /* Copy to display buffer and write out image if requested */
     delete display;
 
@@ -139,6 +129,25 @@ void Session::start()
 {
   if (!session_thread) {
     session_thread = new thread(function_bind(&Session::run, this));
+  }
+}
+
+void Session::cancel()
+{
+  if (session_thread) {
+    /* wait for session thread to end */
+    progress.set_cancel("Exiting");
+
+    gpu_need_display_buffer_update = false;
+    gpu_need_display_buffer_update_cond.notify_all();
+
+    {
+      thread_scoped_lock pause_lock(pause_mutex);
+      pause = false;
+    }
+    pause_cond.notify_all();
+
+    wait();
   }
 }
 
@@ -234,11 +243,6 @@ void Session::run_gpu()
       }
     }
 
-    /* Don't go in pause mode when image was rendered with preview kernels
-     * When feature kernels become available the session will be reset. */
-    else if (no_tiles && kernel_state == DEVICE_KERNEL_WAITING_FOR_FEATURE_KERNEL) {
-      time_sleep(0.1);
-    }
     else if (no_tiles && kernel_state == DEVICE_KERNEL_FEATURE_KERNEL_AVAILABLE) {
       reset_gpu(tile_manager.params, params.samples);
     }
@@ -378,6 +382,62 @@ bool Session::draw_cpu(BufferParams &buffer_params, DeviceDrawParams &draw_param
   return false;
 }
 
+bool Session::steal_tile(RenderTile &rtile, Device *tile_device, thread_scoped_lock &tile_lock)
+{
+  /* Devices that can get their tiles stolen don't steal tiles themselves.
+   * Additionally, if there are no stealable tiles in flight, give up here. */
+  if (tile_device->info.type == DEVICE_CPU || stealable_tiles == 0) {
+    return false;
+  }
+
+  /* Wait until no other thread is trying to steal a tile. */
+  while (tile_stealing_state != NOT_STEALING && stealable_tiles > 0) {
+    /* Someone else is currently trying to get a tile.
+     * Wait on the condition variable and try later. */
+    tile_steal_cond.wait(tile_lock);
+  }
+  /* If another thread stole the last stealable tile in the meantime, give up. */
+  if (stealable_tiles == 0) {
+    return false;
+  }
+
+  /* There are stealable tiles in flight, so signal that one should be released. */
+  tile_stealing_state = WAITING_FOR_TILE;
+
+  /* Wait until a device notices the signal and releases its tile. */
+  while (tile_stealing_state != GOT_TILE && stealable_tiles > 0) {
+    tile_steal_cond.wait(tile_lock);
+  }
+  /* If the last stealable tile finished on its own, give up. */
+  if (tile_stealing_state != GOT_TILE) {
+    tile_stealing_state = NOT_STEALING;
+    return false;
+  }
+
+  /* Successfully stole a tile, now move it to the new device. */
+  rtile = stolen_tile;
+  rtile.buffers->buffer.move_device(tile_device);
+  rtile.buffer = rtile.buffers->buffer.device_pointer;
+  rtile.stealing_state = RenderTile::NO_STEALING;
+  rtile.num_samples -= (rtile.sample - rtile.start_sample);
+  rtile.start_sample = rtile.sample;
+
+  tile_stealing_state = NOT_STEALING;
+
+  /* Poke any threads which might be waiting for NOT_STEALING above. */
+  tile_steal_cond.notify_one();
+
+  return true;
+}
+
+bool Session::get_tile_stolen()
+{
+  /* If tile_stealing_state is WAITING_FOR_TILE, atomically set it to RELEASING_TILE
+   * and return true. */
+  TileStealingState expected = WAITING_FOR_TILE;
+  return tile_stealing_state.compare_exchange_weak(expected, RELEASING_TILE);
+}
+
 bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_types)
 {
   if (progress.get_cancel()) {
@@ -394,11 +454,20 @@ bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_typ
   int device_num = device->device_number(tile_device);
 
   while (!tile_manager.next_tile(tile, device_num, tile_types)) {
+    /* Can only steal tiles on devices that support rendering
+     * This is because denoising tiles cannot be stolen (see below)
+     */
+    if ((tile_types & (RenderTile::PATH_TRACE | RenderTile::BAKE)) &&
+        steal_tile(rtile, tile_device, tile_lock)) {
+      return true;
+    }
+
     /* Wait for denoising tiles to become available */
     if ((tile_types & RenderTile::DENOISE) && !progress.get_cancel() && tile_manager.has_tiles()) {
       denoising_cond.wait(tile_lock);
       continue;
     }
+
     return false;
   }
 
@@ -411,15 +480,23 @@ bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_typ
   rtile.num_samples = tile_manager.state.num_samples;
   rtile.resolution = tile_manager.state.resolution_divider;
   rtile.tile_index = tile->index;
+  rtile.stealing_state = RenderTile::NO_STEALING;
 
   if (tile->state == Tile::DENOISE) {
     rtile.task = RenderTile::DENOISE;
   }
-  else if (read_bake_tile_cb) {
-    rtile.task = RenderTile::BAKE;
-  }
   else {
-    rtile.task = RenderTile::PATH_TRACE;
+    if (tile_device->info.type == DEVICE_CPU) {
+      stealable_tiles++;
+      rtile.stealing_state = RenderTile::CAN_BE_STOLEN;
+    }
+
+    if (read_bake_tile_cb) {
+      rtile.task = RenderTile::BAKE;
+    }
+    else {
+      rtile.task = RenderTile::PATH_TRACE;
+    }
   }
 
   tile_lock.unlock();
@@ -458,6 +535,14 @@ bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_typ
     tile->buffers = new RenderBuffers(tile_device);
     tile->buffers->reset(buffer_params);
   }
+  else if (tile->buffers->buffer.device != tile_device) {
+    /* Move buffer to current tile device again in case it was stolen before.
+     * Not needed for denoising since that already handles mapping of tiles and
+     * neighbors to its own device. */
+    if (rtile.task != RenderTile::DENOISE) {
+      tile->buffers->buffer.move_device(tile_device);
+    }
+  }
 
   tile->buffers->map_neighbor_copied = false;
 
@@ -469,11 +554,13 @@ bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_typ
 
   if (read_bake_tile_cb) {
     /* This will read any passes needed as input for baking. */
-    {
-      thread_scoped_lock tile_lock(tile_mutex);
-      read_bake_tile_cb(rtile);
+    if (tile_manager.state.sample == tile_manager.range_start_sample) {
+      {
+        thread_scoped_lock tile_lock(tile_mutex);
+        read_bake_tile_cb(rtile);
+      }
+      rtile.buffers->buffer.copy_to_device();
     }
-    rtile.buffers->buffer.copy_to_device();
   }
   else {
     /* This will tag tile as IN PROGRESS in blender-side render pipeline,
@@ -503,6 +590,26 @@ void Session::update_tile_sample(RenderTile &rtile)
 void Session::release_tile(RenderTile &rtile, const bool need_denoise)
 {
   thread_scoped_lock tile_lock(tile_mutex);
+
+  if (rtile.stealing_state != RenderTile::NO_STEALING) {
+    stealable_tiles--;
+    if (rtile.stealing_state == RenderTile::WAS_STOLEN) {
+      /* If the tile is being stolen, don't release it here - the new device will pick up where
+       * the old one left off. */
+
+      assert(tile_stealing_state == RELEASING_TILE);
+      assert(rtile.sample < rtile.start_sample + rtile.num_samples);
+
+      tile_stealing_state = GOT_TILE;
+      stolen_tile = rtile;
+      tile_steal_cond.notify_all();
+      return;
+    }
+    else if (stealable_tiles == 0) {
+      /* If this was the last stealable tile, wake up any threads still waiting for one. */
+      tile_steal_cond.notify_all();
+    }
+  }
 
   progress.add_finished_tile(rtile.task == RenderTile::DENOISE);
 
@@ -650,11 +757,6 @@ void Session::run_cpu()
       }
     }
 
-    /* Don't go in pause mode when preview kernels are used
-     * When feature kernels become available the session will be reset. */
-    else if (no_tiles && kernel_state == DEVICE_KERNEL_WAITING_FOR_FEATURE_KERNEL) {
-      time_sleep(0.1);
-    }
     else if (no_tiles && kernel_state == DEVICE_KERNEL_FEATURE_KERNEL_AVAILABLE) {
       reset_cpu(tile_manager.params, params.samples);
     }
@@ -811,6 +913,8 @@ void Session::reset_(BufferParams &buffer_params, int samples)
   }
 
   tile_manager.reset(buffer_params, samples);
+  stealable_tiles = 0;
+  tile_stealing_state = NOT_STEALING;
   progress.reset_sample();
 
   bool show_progress = params.background || tile_manager.get_num_effective_samples() != INT_MAX;
@@ -918,25 +1022,15 @@ bool Session::update_scene()
   int height = tile_manager.state.buffer.full_height;
   int resolution = tile_manager.state.resolution_divider;
 
-  if (width != cam->width || height != cam->height || resolution != cam->resolution) {
-    cam->width = width;
-    cam->height = height;
-    cam->resolution = resolution;
-    cam->tag_update();
-  }
+  cam->set_screen_size_and_resolution(width, height, resolution);
 
   /* number of samples is needed by multi jittered
    * sampling pattern and by baking */
   Integrator *integrator = scene->integrator;
   BakeManager *bake_manager = scene->bake_manager;
 
-  if (integrator->sampling_pattern != SAMPLING_PATTERN_SOBOL || bake_manager->get_baking()) {
-    int aa_samples = tile_manager.num_samples;
-
-    if (aa_samples != integrator->aa_samples) {
-      integrator->aa_samples = aa_samples;
-      integrator->tag_update(scene);
-    }
+  if (integrator->get_sampling_pattern() != SAMPLING_PATTERN_SOBOL || bake_manager->get_baking()) {
+    integrator->set_aa_samples(tile_manager.num_samples);
   }
 
   bool kernel_switch_needed = false;
@@ -1028,7 +1122,7 @@ bool Session::render_need_denoise(bool &delayed)
   /* Viewport render. */
 
   /* It can happen that denoising was already enabled, but the scene still needs an update. */
-  if (scene->film->need_update || !scene->film->denoising_data_offset) {
+  if (scene->film->is_modified() || !scene->film->get_denoising_data_offset()) {
     return false;
   }
 
@@ -1071,10 +1165,12 @@ void Session::render(bool need_denoise)
   task.get_cancel = function_bind(&Progress::get_cancel, &this->progress);
   task.update_tile_sample = function_bind(&Session::update_tile_sample, this, _1);
   task.update_progress_sample = function_bind(&Progress::add_samples, &this->progress, _1, _2);
+  task.get_tile_stolen = function_bind(&Session::get_tile_stolen, this);
   task.need_finish_queue = params.progressive_refine;
-  task.integrator_branched = scene->integrator->method == Integrator::BRANCHED_PATH;
+  task.integrator_branched = scene->integrator->get_method() == Integrator::BRANCHED_PATH;
 
-  task.adaptive_sampling.use = (scene->integrator->sampling_pattern == SAMPLING_PATTERN_PMJ) &&
+  task.adaptive_sampling.use = (scene->integrator->get_sampling_pattern() ==
+                                SAMPLING_PATTERN_PMJ) &&
                                scene->dscene.data.film.pass_adaptive_aux_buffer;
   task.adaptive_sampling.min_samples = scene->dscene.data.integrator.adaptive_min_samples;
   task.adaptive_sampling.adaptive_step = scene->dscene.data.integrator.adaptive_step;
@@ -1085,10 +1181,10 @@ void Session::render(bool need_denoise)
   if (need_denoise) {
     task.denoising = params.denoising;
 
-    task.pass_stride = scene->film->pass_stride;
+    task.pass_stride = scene->film->get_pass_stride();
     task.target_pass_stride = task.pass_stride;
-    task.pass_denoising_data = scene->film->denoising_data_offset;
-    task.pass_denoising_clean = scene->film->denoising_clean_offset;
+    task.pass_denoising_data = scene->film->get_denoising_data_offset();
+    task.pass_denoising_clean = scene->film->get_denoising_clean_offset();
 
     task.denoising_from_render = true;
 

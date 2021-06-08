@@ -49,6 +49,7 @@
 #include "DNA_nla_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_fluidsim_types.h"
+#include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_sdna_types.h"
@@ -75,9 +76,12 @@
 #include "BKE_main.h" /* for Main */
 #include "BKE_mesh.h" /* for ME_ defines (patching) */
 #include "BKE_modifier.h"
+#include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
-#include "BKE_sequencer.h"
+
+#include "SEQ_iterator.h"
+#include "SEQ_sequencer.h"
 
 #include "NOD_socket.h"
 
@@ -460,20 +464,6 @@ static void do_version_constraints_245(ListBase *lb)
   }
 }
 
-PartEff *blo_do_version_give_parteff_245(Object *ob)
-{
-  PartEff *paf;
-
-  paf = ob->effect.first;
-  while (paf) {
-    if (paf->type == EFF_PARTICLE) {
-      return paf;
-    }
-    paf = paf->next;
-  }
-  return NULL;
-}
-
 /* NOTE: this version patch is intended for versions < 2.52.2,
  * but was initially introduced in 2.27 already. */
 void blo_do_version_old_trackto_to_constraints(Object *ob)
@@ -717,7 +707,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     Object *ob = bmain->objects.first;
     PartEff *paf;
     while (ob) {
-      paf = blo_do_version_give_parteff_245(ob);
+      paf = BKE_object_do_version_give_parteff_245(ob);
       if (paf) {
         if (paf->staticstep == 0) {
           paf->staticstep = 5;
@@ -1252,7 +1242,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       ed = sce->ed;
       if (ed) {
         SEQ_ALL_BEGIN (sce->ed, seq) {
-          if (seq->type == SEQ_TYPE_IMAGE || seq->type == SEQ_TYPE_MOVIE) {
+          if (ELEM(seq->type, SEQ_TYPE_IMAGE, SEQ_TYPE_MOVIE)) {
             seq->alpha_mode = SEQ_ALPHA_STRAIGHT;
           }
         }
@@ -1327,13 +1317,13 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         }
       }
 
-      /* btw. armature_rebuild_pose is further only called on leave editmode */
+      /* Note: #BKE_pose_rebuild is further only called on leave edit-mode. */
       if (ob->type == OB_ARMATURE) {
         if (ob->pose) {
           BKE_pose_tag_recalc(bmain, ob->pose);
         }
 
-        /* cannot call stuff now (pointers!), done in setup_app_data */
+        /* Cannot call stuff now (pointers!), done in #setup_app_data. */
         ob->id.recalc |= ID_RECALC_ALL;
 
         /* new generic xray option */
@@ -1475,7 +1465,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         }
       }
 
-      paf = blo_do_version_give_parteff_245(ob);
+      paf = BKE_object_do_version_give_parteff_245(ob);
       if (paf) {
         if (paf->disp == 0) {
           paf->disp = 100;
@@ -2232,7 +2222,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       }
 
       /* convert old particles to new system */
-      if ((paf = blo_do_version_give_parteff_245(ob))) {
+      if ((paf = BKE_object_do_version_give_parteff_245(ob))) {
         ParticleSystem *psys;
         ModifierData *md;
         ParticleSystemModifierData *psmd;
@@ -2389,7 +2379,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     Object *ob;
     bActionStrip *strip;
 
-    /* nla-strips - scale */
+    /* NLA-strips - scale. */
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
       for (strip = ob->nlastrips.first; strip; strip = strip->next) {
         float length, actlength, repeat;
@@ -2571,18 +2561,16 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
   if (bmain->versionfile < 249 && bmain->subversionfile < 2) {
     Scene *sce = bmain->scenes.first;
-    Sequence *seq;
     Editing *ed;
 
     while (sce) {
       ed = sce->ed;
       if (ed) {
-        SEQ_CURRENT_BEGIN (ed, seq) {
+        LISTBASE_FOREACH (Sequence *, seq, SEQ_active_seqbase_get(ed)) {
           if (seq->strip && seq->strip->proxy) {
             seq->strip->proxy->quality = 90;
           }
         }
-        SEQ_CURRENT_END;
       }
 
       sce = sce->id.next;

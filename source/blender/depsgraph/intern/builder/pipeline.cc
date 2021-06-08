@@ -30,19 +30,13 @@
 #include "deg_builder_relations.h"
 #include "deg_builder_transitive.h"
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 AbstractBuilderPipeline::AbstractBuilderPipeline(::Depsgraph *graph)
     : deg_graph_(reinterpret_cast<Depsgraph *>(graph)),
       bmain_(deg_graph_->bmain),
       scene_(deg_graph_->scene),
-      view_layer_(deg_graph_->view_layer),
-      builder_cache_()
-{
-}
-
-AbstractBuilderPipeline::~AbstractBuilderPipeline()
+      view_layer_(deg_graph_->view_layer)
 {
 }
 
@@ -100,7 +94,7 @@ void AbstractBuilderPipeline::build_step_finalize()
   if (G.debug_value == 799) {
     deg_graph_transitive_reduction(deg_graph_);
   }
-  /* Store pointers to commonly used valuated datablocks. */
+  /* Store pointers to commonly used evaluated datablocks. */
   deg_graph_->scene_cow = (Scene *)deg_graph_->get_cow_id(&deg_graph_->scene->id);
   /* Flush visibility layer and re-schedule nodes for update. */
   deg_graph_build_finalize(bmain_, deg_graph_);
@@ -125,5 +119,4 @@ unique_ptr<DepsgraphRelationBuilder> AbstractBuilderPipeline::construct_relation
   return std::make_unique<DepsgraphRelationBuilder>(bmain_, deg_graph_, &builder_cache_);
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

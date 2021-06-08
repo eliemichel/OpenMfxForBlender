@@ -122,17 +122,7 @@ void VIEW3D_OT_walk(struct wmOperatorType *ot);
 void view3d_main_region_draw(const struct bContext *C, struct ARegion *region);
 void view3d_draw_region_info(const struct bContext *C, struct ARegion *region);
 
-void ED_view3d_draw_depth(struct Depsgraph *depsgraph,
-                          struct ARegion *region,
-                          View3D *v3d,
-                          bool alphaoverride);
-
 /* view3d_draw_legacy.c */
-void ED_view3d_draw_depth_gpencil(struct Depsgraph *depsgraph,
-                                  Scene *scene,
-                                  struct ARegion *region,
-                                  View3D *v3d);
-
 void ED_view3d_draw_select_loop(struct Depsgraph *depsgraph,
                                 ViewContext *vc,
                                 Scene *scene,
@@ -156,6 +146,7 @@ void VIEW3D_OT_select_circle(struct wmOperatorType *ot);
 void VIEW3D_OT_select_box(struct wmOperatorType *ot);
 void VIEW3D_OT_select_lasso(struct wmOperatorType *ot);
 void VIEW3D_OT_select_menu(struct wmOperatorType *ot);
+void VIEW3D_OT_bone_select_menu(struct wmOperatorType *ot);
 
 /* view3d_view.c */
 void VIEW3D_OT_smoothview(struct wmOperatorType *ot);
@@ -170,10 +161,16 @@ bool ED_view3d_boundbox_clip_ex(const RegionView3D *rv3d,
                                 float obmat[4][4]);
 bool ED_view3d_boundbox_clip(RegionView3D *rv3d, const struct BoundBox *bb);
 
+/**
+ * Parameters for setting the new 3D Viewport state.
+ *
+ * Each of the struct members may be NULL to signify they aren't to be adjusted.
+ */
 typedef struct V3D_SmoothParams {
   struct Object *camera_old, *camera;
   const float *ofs, *quat, *dist, *lens;
-  /* alternate rotation center (ofs = must be NULL) */
+
+  /** Alternate rotation center, when set `ofs` must be NULL. */
   const float *dyn_ofs;
 } V3D_SmoothParams;
 
@@ -222,8 +219,7 @@ void view3d_buttons_register(struct ARegionType *art);
 struct View3DCameraControl *ED_view3d_cameracontrol_acquire(struct Depsgraph *depsgraph,
                                                             Scene *scene,
                                                             View3D *v3d,
-                                                            RegionView3D *rv3d,
-                                                            const bool use_parent_root);
+                                                            RegionView3D *rv3d);
 void ED_view3d_cameracontrol_update(struct View3DCameraControl *vctrl,
                                     const bool use_autokey,
                                     struct bContext *C,

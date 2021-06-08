@@ -189,8 +189,8 @@ static void ringsel_finish(bContext *C, wmOperator *op)
       const int seltype = is_edge_wire ? SUBDIV_SELECT_INNER :
                                          is_single ? SUBDIV_SELECT_NONE : SUBDIV_SELECT_LOOPCUT;
 
-      /* Enable gridfill, so that intersecting loopcut works as one would expect.
-       * Note though that it will break edgeslide in this specific case.
+      /* Enable grid-fill, so that intersecting loop-cut works as one would expect.
+       * Note though that it will break edge-slide in this specific case.
        * See T31939. */
       BM_mesh_esubdivide(em->bm,
                          BM_ELEM_SELECT,
@@ -222,7 +222,7 @@ static void ringsel_finish(bContext *C, wmOperator *op)
       else if (is_macro && (cuts > 1) && (em->selectmode & SCE_SELECT_VERTEX)) {
         EDBM_selectmode_disable(lcd->vc.scene, em, SCE_SELECT_VERTEX, SCE_SELECT_EDGE);
       }
-      /* force edge slide to edge select mode in in face select mode */
+      /* Force edge slide to edge select mode in face select mode. */
       else if (EDBM_selectmode_disable(lcd->vc.scene, em, SCE_SELECT_FACE, SCE_SELECT_EDGE)) {
         /* pass, the change will flush selection */
       }

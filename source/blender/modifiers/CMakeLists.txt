@@ -29,9 +29,11 @@ set(INC
   ../bmesh
   ../depsgraph
   ../editors/include
+  ../functions
   ../makesdna
   ../makesrna
-  ../render/extern/include
+  ../nodes
+  ../render
   ../windowmanager
   ../../../intern/eigen
   ../../../intern/guardedalloc
@@ -49,7 +51,7 @@ set(SRC
   intern/MOD_armature.c
   intern/MOD_array.c
   intern/MOD_bevel.c
-  intern/MOD_boolean.c
+  intern/MOD_boolean.cc
   intern/MOD_build.c
   intern/MOD_cast.c
   intern/MOD_cloth.c
@@ -77,6 +79,7 @@ set(SRC
   intern/MOD_meshsequencecache.c
   intern/MOD_mirror.c
   intern/MOD_multires.c
+  intern/MOD_nodes.cc
   intern/MOD_none.c
   intern/MOD_normal_edit.c
   intern/MOD_ocean.c
@@ -88,7 +91,6 @@ set(SRC
   intern/MOD_shapekey.c
   intern/MOD_shrinkwrap.c
   intern/MOD_simpledeform.c
-  intern/MOD_simulation.cc
   intern/MOD_skin.c
   intern/MOD_smooth.c
   intern/MOD_softbody.c
@@ -116,6 +118,7 @@ set(SRC
   intern/MOD_wireframe.c
 
   MOD_modifiertypes.h
+  MOD_nodes.h
   intern/MOD_meshcache_util.h
   intern/MOD_solidify_util.h
   intern/MOD_ui_common.h
@@ -181,11 +184,19 @@ endif()
 
 if(WITH_GMP)
   add_definitions(-DWITH_GMP)
+
+  list(APPEND INC_SYS
+    ${GMP_INCLUDE_DIRS}
+  )
+
+  list(APPEND LIB
+    ${GMP_LIBRARIES}
+  )
 endif()
 
 if(WITH_OPENVDB)
   list(APPEND INC
-     ../../../intern/openvdb
+    ../../../intern/openvdb
   )
   list(APPEND INC_SYS
     ${OPENVDB_INCLUDE_DIRS}

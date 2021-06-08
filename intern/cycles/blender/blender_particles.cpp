@@ -31,15 +31,15 @@ bool BlenderSync::sync_dupli_particle(BL::Object &b_ob,
                                       BL::DepsgraphObjectInstance &b_instance,
                                       Object *object)
 {
-  /* test if this dupli was generated from a particle sytem */
+  /* Test if this dupli was generated from a particle system. */
   BL::ParticleSystem b_psys = b_instance.particle_system();
   if (!b_psys)
     return false;
 
-  object->hide_on_missing_motion = true;
+  object->set_hide_on_missing_motion(true);
 
   /* test if we need particle data */
-  if (!object->geometry->need_attribute(scene, ATTR_STD_PARTICLE))
+  if (!object->get_geometry()->need_attribute(scene, ATTR_STD_PARTICLE))
     return false;
 
   /* don't handle child particles yet */
@@ -53,11 +53,11 @@ bool BlenderSync::sync_dupli_particle(BL::Object &b_ob,
   ParticleSystem *psys;
 
   bool first_use = !particle_system_map.is_used(key);
-  bool need_update = particle_system_map.add_or_update(
-      scene, &psys, b_ob, b_instance.object(), key);
+  bool need_update = particle_system_map.add_or_update(&psys, b_ob, b_instance.object(), key);
 
   /* no update needed? */
-  if (!need_update && !object->geometry->need_update && !scene->object_manager->need_update)
+  if (!need_update && !object->get_geometry()->is_modified() &&
+      !scene->object_manager->need_update())
     return true;
 
   /* first time used in this sync loop? clear and tag update */
@@ -81,10 +81,11 @@ bool BlenderSync::sync_dupli_particle(BL::Object &b_ob,
 
   psys->particles.push_back_slow(pa);
 
-  if (object->particle_index != psys->particles.size() - 1)
-    scene->object_manager->tag_update(scene);
-  object->particle_system = psys;
-  object->particle_index = psys->particles.size() - 1;
+  object->set_particle_system(psys);
+  object->set_particle_index(psys->particles.size() - 1);
+
+  if (object->particle_index_is_modified())
+    scene->object_manager->tag_update(scene, ObjectManager::PARTICLE_MODIFIED);
 
   /* return that this object has particle data */
   return true;

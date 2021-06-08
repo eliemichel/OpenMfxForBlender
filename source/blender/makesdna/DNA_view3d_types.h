@@ -39,6 +39,10 @@ struct wmTimer;
 #include "DNA_object_types.h"
 #include "DNA_view3d_enums.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct RegionView3D {
 
   /** GL_PROJECTION matrix. */
@@ -188,6 +192,7 @@ typedef struct View3DShading {
 
   /* Render pass displayed in the viewport. Is an `eScenePassType` where one bit is set */
   int render_pass;
+  char aov_name[64];
 
   struct IDProperty *prop;
   void *_pad2;
@@ -223,6 +228,7 @@ typedef struct View3DOverlay {
 
   /** Other settings. */
   float wireframe_threshold;
+  float wireframe_opacity;
 
   /** Grease pencil settings. */
   float gpencil_paper_opacity;
@@ -233,7 +239,6 @@ typedef struct View3DOverlay {
   float gpencil_vertex_paint_opacity;
   /** Handles display type for curves. */
   int handle_display;
-  char _pad[4];
 } View3DOverlay;
 
 /* View3DOverlay->handle_display */
@@ -362,7 +367,7 @@ typedef struct View3D {
 #define V3D_LOCAL_COLLECTIONS (1 << 0)
 #define V3D_FLAG_UNUSED_1 (1 << 1) /* cleared */
 #define V3D_HIDE_HELPLINES (1 << 2)
-#define V3D_INVALID_BACKBUF (1 << 3)
+#define V3D_FLAG_UNUSED_2 (1 << 3) /* cleared */
 #define V3D_XR_SESSION_MIRROR (1 << 4)
 
 #define V3D_FLAG_UNUSED_10 (1 << 10) /* cleared */
@@ -375,6 +380,8 @@ typedef struct View3D {
 enum {
   /** The 3D view which the XR session was created in is flagged with this. */
   V3D_RUNTIME_XR_SESSION_ROOT = (1 << 0),
+  /** Some operators override the depth buffer for dedicated occlusion operations. */
+  V3D_RUNTIME_DEPTHBUF_OVERRIDDEN = (1 << 1),
 };
 
 /** #RegionView3D.persp */
@@ -635,3 +642,7 @@ enum {
 /** #BKE_screen_view3d_zoom_to_fac() values above */
 #define RV3D_CAMZOOM_MIN_FACTOR 0.1657359312880714853f
 #define RV3D_CAMZOOM_MAX_FACTOR 44.9852813742385702928f
+
+#ifdef __cplusplus
+}
+#endif

@@ -430,7 +430,7 @@ int insert_bezt_fcurve(FCurve *fcu, const BezTriple *bezt, eInsertKeyFlags flag)
         }
       }
     }
-    /* keyframing modes allow to not replace keyframe */
+    /* Keyframing modes allow not replacing the keyframe. */
     else if ((flag & INSERTKEY_REPLACE) == 0) {
       /* insert new - if we're not restricted to replacing keyframes only */
       BezTriple *newb = MEM_callocN((fcu->totvert + 1) * sizeof(BezTriple), "beztriple");
@@ -483,7 +483,8 @@ int insert_bezt_fcurve(FCurve *fcu, const BezTriple *bezt, eInsertKeyFlags flag)
   return i;
 }
 
-/** Update the FCurve to allow insertion of `bezt` without modifying the curve shape.
+/**
+ * Update the FCurve to allow insertion of `bezt` without modifying the curve shape.
  *
  * Checks whether it is necessary to apply Bezier subdivision due to involvement of non-auto
  * handles. If necessary, changes `bezt` handles from Auto to Aligned.
@@ -614,7 +615,7 @@ int insert_vert_fcurve(
     return -1;
   }
 
-  /* set handletype and interpolation */
+  /* Set handle-type and interpolation. */
   if ((fcu->totvert > 2) && (flag & INSERTKEY_REPLACE) == 0) {
     BezTriple *bezt = (fcu->bezt + a);
 
@@ -639,7 +640,7 @@ int insert_vert_fcurve(
 
   /* don't recalculate handles if fast is set
    * - this is a hack to make importers faster
-   * - we may calculate twice (due to autohandle needing to be calculated twice)
+   * - we may calculate twice (due to auto-handle needing to be calculated twice)
    */
   if ((flag & INSERTKEY_FAST) == 0) {
     calchandles_fcurve(fcu);
@@ -1384,7 +1385,7 @@ static AnimationEvalContext nla_time_remap(const AnimationEvalContext *anim_eval
   if (adt && adt->action == act) {
     /* Get NLA context for value remapping. */
     *r_nla_context = BKE_animsys_get_nla_keyframing_context(
-        nla_cache, id_ptr, adt, anim_eval_context, false);
+        nla_cache, id_ptr, adt, anim_eval_context);
 
     /* Apply NLA-mapping to frame. */
     const float remapped_frame = BKE_nla_tweakedit_remap(
@@ -2236,20 +2237,18 @@ static int clear_anim_v3d_exec(bContext *C, wmOperator *UNUSED(op))
         /* in pose mode, only delete the F-Curve if it belongs to a selected bone */
         if (ob->mode & OB_MODE_POSE) {
           if ((fcu->rna_path) && strstr(fcu->rna_path, "pose.bones[")) {
-            bPoseChannel *pchan;
-            char *bone_name;
 
             /* get bone-name, and check if this bone is selected */
-            bone_name = BLI_str_quoted_substrN(fcu->rna_path, "pose.bones[");
-            pchan = BKE_pose_channel_find_name(ob->pose, bone_name);
+            char *bone_name = BLI_str_quoted_substrN(fcu->rna_path, "pose.bones[");
             if (bone_name) {
+              bPoseChannel *pchan = BKE_pose_channel_find_name(ob->pose, bone_name);
               MEM_freeN(bone_name);
-            }
 
-            /* delete if bone is selected*/
-            if ((pchan) && (pchan->bone)) {
-              if (pchan->bone->flag & BONE_SELECTED) {
-                can_delete = true;
+              /* delete if bone is selected*/
+              if ((pchan) && (pchan->bone)) {
+                if (pchan->bone->flag & BONE_SELECTED) {
+                  can_delete = true;
+                }
               }
             }
           }
@@ -2342,13 +2341,12 @@ static int delete_key_v3d_exec(bContext *C, wmOperator *op)
          * In object mode, we're dealing with the entire object.
          */
         if ((ob->mode & OB_MODE_POSE) && strstr(fcu->rna_path, "pose.bones[\"")) {
-          bPoseChannel *pchan;
-          char *bone_name;
+          bPoseChannel *pchan = NULL;
 
           /* get bone-name, and check if this bone is selected */
-          bone_name = BLI_str_quoted_substrN(fcu->rna_path, "pose.bones[");
-          pchan = BKE_pose_channel_find_name(ob->pose, bone_name);
+          char *bone_name = BLI_str_quoted_substrN(fcu->rna_path, "pose.bones[");
           if (bone_name) {
+            pchan = BKE_pose_channel_find_name(ob->pose, bone_name);
             MEM_freeN(bone_name);
           }
 
@@ -3037,17 +3035,7 @@ bool ED_autokeyframe_pchan(
     ANIM_apply_keyingset(C, &dsources, NULL, ks, MODIFYKEY_MODE_INSERT, (float)CFRA);
     BLI_freelistN(&dsources);
 
-    /* clear any unkeyed tags */
-    if (pchan->bone) {
-      pchan->bone->flag &= ~BONE_UNKEYED;
-    }
-
     return true;
-  }
-
-  /* add unkeyed tags */
-  if (pchan->bone) {
-    pchan->bone->flag |= BONE_UNKEYED;
   }
 
   return false;

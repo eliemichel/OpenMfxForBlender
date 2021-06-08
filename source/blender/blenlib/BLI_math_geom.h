@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 #pragma once
 
@@ -357,6 +356,14 @@ bool isect_plane_plane_v3(const float plane_a[4],
                           const float plane_b[4],
                           float r_isect_co[3],
                           float r_isect_no[3]) ATTR_WARN_UNUSED_RESULT;
+
+bool isect_planes_v3_fn(
+    const float planes[][4],
+    const int planes_len,
+    const float eps_coplanar,
+    const float eps_isect,
+    void (*callback_fn)(const float co[3], int i, int j, int k, void *user_data),
+    void *user_data);
 
 /* line/ray triangle */
 bool isect_line_segment_tri_v3(const float p1[3],
@@ -817,6 +824,11 @@ MINLINE float shell_v2v2_mid_normalized_to_dist(const float a[2], const float b[
 /********************************* Cubic (Bezier) *******************************/
 
 float cubic_tangent_factor_circle_v3(const float tan_l[3], const float tan_r[3]);
+
+/********************************** Geodesics *********************************/
+
+float geodesic_distance_propagate_across_triangle(
+    const float v0[3], const float v1[3], const float v2[3], const float dist1, const float dist2);
 
 /**************************** Inline Definitions ******************************/
 

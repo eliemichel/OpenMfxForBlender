@@ -28,13 +28,13 @@ CCL_NAMESPACE_BEGIN
 
 Attribute::Attribute(
     ustring name, TypeDesc type, AttributeElement element, Geometry *geom, AttributePrimitive prim)
-    : name(name), std(ATTR_STD_NONE), type(type), element(element), flags(0)
+    : name(name), std(ATTR_STD_NONE), type(type), element(element), flags(0), modified(true)
 {
   /* string and matrix not supported! */
   assert(type == TypeDesc::TypeFloat || type == TypeDesc::TypeColor ||
          type == TypeDesc::TypePoint || type == TypeDesc::TypeVector ||
          type == TypeDesc::TypeNormal || type == TypeDesc::TypeMatrix || type == TypeFloat2 ||
-         type == TypeRGBA);
+         type == TypeFloat4 || type == TypeRGBA);
 
   if (element == ATTR_ELEMENT_VOXEL) {
     buffer.resize(sizeof(ImageHandle));
@@ -82,6 +82,8 @@ void Attribute::add(const float &f)
 
   for (size_t i = 0; i < size; i++)
     buffer.push_back(data[i]);
+
+  modified = true;
 }
 
 void Attribute::add(const uchar4 &f)
@@ -93,6 +95,8 @@ void Attribute::add(const uchar4 &f)
 
   for (size_t i = 0; i < size; i++)
     buffer.push_back(data[i]);
+
+  modified = true;
 }
 
 void Attribute::add(const float2 &f)
@@ -104,6 +108,8 @@ void Attribute::add(const float2 &f)
 
   for (size_t i = 0; i < size; i++)
     buffer.push_back(data[i]);
+
+  modified = true;
 }
 
 void Attribute::add(const float3 &f)
@@ -115,6 +121,8 @@ void Attribute::add(const float3 &f)
 
   for (size_t i = 0; i < size; i++)
     buffer.push_back(data[i]);
+
+  modified = true;
 }
 
 void Attribute::add(const Transform &f)
@@ -126,6 +134,8 @@ void Attribute::add(const Transform &f)
 
   for (size_t i = 0; i < size; i++)
     buffer.push_back(data[i]);
+
+  modified = true;
 }
 
 void Attribute::add(const char *data)
@@ -134,6 +144,26 @@ void Attribute::add(const char *data)
 
   for (size_t i = 0; i < size; i++)
     buffer.push_back(data[i]);
+
+  modified = true;
+}
+
+void Attribute::set_data_from(Attribute &&other)
+{
+  assert(other.std == std);
+  assert(other.type == type);
+  assert(other.element == element);
+
+  this->flags = other.flags;
+
+  if (this->buffer.size() != other.buffer.size()) {
+    this->buffer = std::move(other.buffer);
+    modified = true;
+  }
+  else if (memcmp(this->data(), other.data(), other.buffer.size()) != 0) {
+    this->buffer = std::move(other.buffer);
+    modified = true;
+  }
 }
 
 size_t Attribute::data_sizeof() const
@@ -167,62 +197,62 @@ size_t Attribute::element_size(Geometry *geom, AttributePrimitive prim) const
       size = 1;
       break;
     case ATTR_ELEMENT_VERTEX:
-      if (geom->type == Geometry::MESH || geom->type == Geometry::VOLUME) {
+      if (geom->geometry_type == Geometry::MESH || geom->geometry_type == Geometry::VOLUME) {
         Mesh *mesh = static_cast<Mesh *>(geom);
-        size = mesh->verts.size() + mesh->num_ngons;
+        size = mesh->get_verts().size() + mesh->get_num_ngons();
         if (prim == ATTR_PRIM_SUBD) {
-          size -= mesh->num_subd_verts;
+          size -= mesh->get_num_subd_verts();
         }
       }
       break;
     case ATTR_ELEMENT_VERTEX_MOTION:
-      if (geom->type == Geometry::MESH) {
+      if (geom->geometry_type == Geometry::MESH) {
         Mesh *mesh = static_cast<Mesh *>(geom);
-        size = (mesh->verts.size() + mesh->num_ngons) * (mesh->motion_steps - 1);
+        size = (mesh->get_verts().size() + mesh->get_num_ngons()) * (mesh->get_motion_steps() - 1);
         if (prim == ATTR_PRIM_SUBD) {
-          size -= mesh->num_subd_verts * (mesh->motion_steps - 1);
+          size -= mesh->get_num_subd_verts() * (mesh->get_motion_steps() - 1);
         }
       }
       break;
     case ATTR_ELEMENT_FACE:
-      if (geom->type == Geometry::MESH || geom->type == Geometry::VOLUME) {
+      if (geom->geometry_type == Geometry::MESH || geom->geometry_type == Geometry::VOLUME) {
         Mesh *mesh = static_cast<Mesh *>(geom);
         if (prim == ATTR_PRIM_GEOMETRY) {
           size = mesh->num_triangles();
         }
         else {
-          size = mesh->subd_faces.size() + mesh->num_ngons;
+          size = mesh->get_num_subd_faces() + mesh->get_num_ngons();
         }
       }
       break;
     case ATTR_ELEMENT_CORNER:
     case ATTR_ELEMENT_CORNER_BYTE:
-      if (geom->type == Geometry::MESH) {
+      if (geom->geometry_type == Geometry::MESH) {
         Mesh *mesh = static_cast<Mesh *>(geom);
         if (prim == ATTR_PRIM_GEOMETRY) {
           size = mesh->num_triangles() * 3;
         }
         else {
-          size = mesh->subd_face_corners.size() + mesh->num_ngons;
+          size = mesh->get_subd_face_corners().size() + mesh->get_num_ngons();
         }
       }
       break;
     case ATTR_ELEMENT_CURVE:
-      if (geom->type == Geometry::HAIR) {
+      if (geom->geometry_type == Geometry::HAIR) {
         Hair *hair = static_cast<Hair *>(geom);
         size = hair->num_curves();
       }
       break;
     case ATTR_ELEMENT_CURVE_KEY:
-      if (geom->type == Geometry::HAIR) {
+      if (geom->geometry_type == Geometry::HAIR) {
         Hair *hair = static_cast<Hair *>(geom);
-        size = hair->curve_keys.size();
+        size = hair->get_curve_keys().size();
       }
       break;
     case ATTR_ELEMENT_CURVE_KEY_MOTION:
-      if (geom->type == Geometry::HAIR) {
+      if (geom->geometry_type == Geometry::HAIR) {
         Hair *hair = static_cast<Hair *>(geom);
-        size = hair->curve_keys.size() * (hair->motion_steps - 1);
+        size = hair->get_curve_keys().size() * (hair->get_motion_steps() - 1);
       }
       break;
     default:
@@ -410,6 +440,7 @@ Attribute *AttributeSet::add(ustring name, TypeDesc type, AttributeElement eleme
 
   Attribute new_attr(name, type, element, geometry, prim);
   attributes.emplace_back(std::move(new_attr));
+  modified = true;
   return &attributes.back();
 }
 
@@ -431,6 +462,7 @@ void AttributeSet::remove(ustring name)
 
     for (it = attributes.begin(); it != attributes.end(); it++) {
       if (&*it == attr) {
+        modified = true;
         attributes.erase(it);
         return;
       }
@@ -445,7 +477,7 @@ Attribute *AttributeSet::add(AttributeStandard std, ustring name)
   if (name == ustring())
     name = Attribute::standard_name(std);
 
-  if (geometry->type == Geometry::MESH) {
+  if (geometry->geometry_type == Geometry::MESH) {
     switch (std) {
       case ATTR_STD_VERTEX_NORMAL:
         attr = add(name, TypeDesc::TypeNormal, ATTR_ELEMENT_VERTEX);
@@ -496,7 +528,7 @@ Attribute *AttributeSet::add(AttributeStandard std, ustring name)
         break;
     }
   }
-  else if (geometry->type == Geometry::VOLUME) {
+  else if (geometry->geometry_type == Geometry::VOLUME) {
     switch (std) {
       case ATTR_STD_VERTEX_NORMAL:
         attr = add(name, TypeDesc::TypeNormal, ATTR_ELEMENT_VERTEX);
@@ -521,7 +553,7 @@ Attribute *AttributeSet::add(AttributeStandard std, ustring name)
         break;
     }
   }
-  else if (geometry->type == Geometry::HAIR) {
+  else if (geometry->geometry_type == Geometry::HAIR) {
     switch (std) {
       case ATTR_STD_UV:
         attr = add(name, TypeFloat2, ATTR_ELEMENT_CURVE);
@@ -576,6 +608,7 @@ void AttributeSet::remove(AttributeStandard std)
 
     for (it = attributes.begin(); it != attributes.end(); it++) {
       if (&*it == attr) {
+        modified = true;
         attributes.erase(it);
         return;
       }
@@ -625,6 +658,48 @@ void AttributeSet::clear(bool preserve_voxel_data)
   else {
     attributes.clear();
   }
+}
+
+void AttributeSet::update(AttributeSet &&new_attributes)
+{
+  /* add or update old_attributes based on the new_attributes */
+  foreach (Attribute &attr, new_attributes.attributes) {
+    Attribute *nattr = add(attr.name, attr.type, attr.element);
+    nattr->std = attr.std;
+    nattr->set_data_from(std::move(attr));
+  }
+
+  /* remove any attributes not on new_attributes */
+  list<Attribute>::iterator it;
+  for (it = attributes.begin(); it != attributes.end();) {
+    if (it->std != ATTR_STD_NONE) {
+      if (new_attributes.find(it->std) == nullptr) {
+        modified = true;
+        attributes.erase(it++);
+        continue;
+      }
+    }
+    else if (it->name != "") {
+      if (new_attributes.find(it->name) == nullptr) {
+        modified = true;
+        attributes.erase(it++);
+        continue;
+      }
+    }
+
+    it++;
+  }
+
+  /* If all attributes were replaced, transform is no longer applied. */
+  geometry->transform_applied = false;
+}
+
+void AttributeSet::clear_modified()
+{
+  foreach (Attribute &attr, attributes) {
+    attr.modified = false;
+  }
+  modified = false;
 }
 
 /* AttributeRequest */

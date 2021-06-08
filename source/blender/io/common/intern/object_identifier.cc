@@ -21,7 +21,7 @@
 #include "BKE_duplilist.h"
 
 extern "C" {
-#include <limits.h> /* For INT_MAX. */
+#include <climits> /* For INT_MAX. */
 }
 #include <cstring>
 #include <sstream>
@@ -32,15 +32,6 @@ ObjectIdentifier::ObjectIdentifier(Object *object,
                                    Object *duplicated_by,
                                    const PersistentID &persistent_id)
     : object(object), duplicated_by(duplicated_by), persistent_id(persistent_id)
-{
-}
-
-ObjectIdentifier::ObjectIdentifier(const ObjectIdentifier &other)
-    : object(other.object), duplicated_by(other.duplicated_by), persistent_id(other.persistent_id)
-{
-}
-
-ObjectIdentifier::~ObjectIdentifier()
 {
 }
 

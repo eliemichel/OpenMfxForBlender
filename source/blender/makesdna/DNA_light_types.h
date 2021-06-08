@@ -26,6 +26,10 @@
 #include "DNA_ID.h"
 #include "DNA_defs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef MAX_MTEX
 #  define MAX_MTEX 18
 #endif
@@ -66,9 +70,9 @@ typedef struct Light {
 
   short area_shape;
   float area_size, area_sizey, area_sizez;
+  float area_spread;
 
   float sun_angle;
-  char _pad3[4];
 
   /* texact is for buttons */
   short texact, shadhalostep;
@@ -89,6 +93,7 @@ typedef struct Light {
   float contact_spread; /* DEPRECATED kept for compatibility. */
   float contact_thickness;
 
+  float diff_fac, volume_fac;
   float spec_fac, att_dist;
 
   /* preview */
@@ -154,3 +159,7 @@ typedef struct Light {
 /* #define LA_AREA_BOX  3 */ /* UNUSED */
 #define LA_AREA_DISK 4
 #define LA_AREA_ELLIPSE 5
+
+#ifdef __cplusplus
+}
+#endif

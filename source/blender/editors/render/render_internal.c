@@ -29,6 +29,7 @@
 
 #include "BLI_listbase.h"
 #include "BLI_math.h"
+#include "BLI_rect.h"
 #include "BLI_threads.h"
 #include "BLI_timecode.h"
 #include "BLI_utildefines.h"
@@ -42,14 +43,10 @@
 #include "DNA_userdef_types.h"
 #include "DNA_view3d_types.h"
 
-#include "BKE_blender_undo.h"
-#include "BKE_blender_version.h"
-#include "BKE_camera.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
-#include "BKE_layer.h"
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
@@ -57,20 +54,15 @@
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
-#include "BKE_sequencer.h"
-#include "BKE_undo_system.h"
 
 #include "DEG_depsgraph.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_object.h"
 #include "ED_render.h"
 #include "ED_screen.h"
-#include "ED_undo.h"
 #include "ED_util.h"
-#include "ED_view3d.h"
 
 #include "BIF_glutil.h"
 
@@ -83,7 +75,7 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 
-#include "BLO_undofile.h"
+#include "SEQ_relations.h"
 
 #include "render_intern.h"
 
@@ -120,72 +112,90 @@ typedef struct RenderJob {
 } RenderJob;
 
 /* called inside thread! */
+static bool image_buffer_calc_tile_rect(const RenderResult *rr,
+                                        const ImBuf *ibuf,
+                                        volatile rcti *renrect,
+                                        rcti *r_ibuf_rect,
+                                        int *r_offset_x,
+                                        int *r_offset_y)
+{
+  int tile_y, tile_height, tile_x, tile_width;
+
+  /* if renrect argument, we only refresh scanlines */
+  if (renrect) {
+    /* if (tile_height == recty), rendering of layer is ready,
+     * we should not draw, other things happen... */
+    if (rr->renlay == NULL || renrect->ymax >= rr->recty) {
+      return false;
+    }
+
+    /* tile_x here is first subrect x coord, tile_width defines subrect width */
+    tile_x = renrect->xmin;
+    tile_width = renrect->xmax - tile_x;
+    if (tile_width < 2) {
+      return false;
+    }
+
+    tile_y = renrect->ymin;
+    tile_height = renrect->ymax - tile_y;
+    if (tile_height < 2) {
+      return false;
+    }
+    renrect->ymin = renrect->ymax;
+  }
+  else {
+    tile_x = tile_y = 0;
+    tile_width = rr->rectx;
+    tile_height = rr->recty;
+  }
+
+  /* tile_x tile_y is in tile coords. transform to ibuf */
+  int offset_x = rr->tilerect.xmin;
+  if (offset_x >= ibuf->x) {
+    return false;
+  }
+  int offset_y = rr->tilerect.ymin;
+  if (offset_y >= ibuf->y) {
+    return false;
+  }
+
+  if (offset_x + tile_width > ibuf->x) {
+    tile_width = ibuf->x - offset_x;
+  }
+  if (offset_y + tile_height > ibuf->y) {
+    tile_height = ibuf->y - offset_y;
+  }
+
+  if (tile_width < 1 || tile_height < 1) {
+    return false;
+  }
+
+  r_ibuf_rect->xmax = tile_x + tile_width;
+  r_ibuf_rect->ymax = tile_y + tile_height;
+  r_ibuf_rect->xmin = tile_x;
+  r_ibuf_rect->ymin = tile_y;
+  *r_offset_x = offset_x;
+  *r_offset_y = offset_y;
+  return true;
+}
+
 static void image_buffer_rect_update(RenderJob *rj,
                                      RenderResult *rr,
                                      ImBuf *ibuf,
                                      ImageUser *iuser,
-                                     volatile rcti *renrect,
+                                     const rcti *tile_rect,
+                                     int offset_x,
+                                     int offset_y,
                                      const char *viewname)
 {
   Scene *scene = rj->scene;
   const float *rectf = NULL;
-  int ymin, ymax, xmin, xmax;
-  int rymin, rxmin;
   int linear_stride, linear_offset_x, linear_offset_y;
   ColorManagedViewSettings *view_settings;
   ColorManagedDisplaySettings *display_settings;
 
   if (ibuf->userflags & IB_DISPLAY_BUFFER_INVALID) {
-    /* The whole image buffer it so be color managed again anyway. */
-    return;
-  }
-
-  /* if renrect argument, we only refresh scanlines */
-  if (renrect) {
-    /* if (ymax == recty), rendering of layer is ready,
-     * we should not draw, other things happen... */
-    if (rr->renlay == NULL || renrect->ymax >= rr->recty) {
-      return;
-    }
-
-    /* xmin here is first subrect x coord, xmax defines subrect width */
-    xmin = renrect->xmin + rr->crop;
-    xmax = renrect->xmax - xmin + rr->crop;
-    if (xmax < 2) {
-      return;
-    }
-
-    ymin = renrect->ymin + rr->crop;
-    ymax = renrect->ymax - ymin + rr->crop;
-    if (ymax < 2) {
-      return;
-    }
-    renrect->ymin = renrect->ymax;
-  }
-  else {
-    xmin = ymin = rr->crop;
-    xmax = rr->rectx - 2 * rr->crop;
-    ymax = rr->recty - 2 * rr->crop;
-  }
-
-  /* xmin ymin is in tile coords. transform to ibuf */
-  rxmin = rr->tilerect.xmin + xmin;
-  if (rxmin >= ibuf->x) {
-    return;
-  }
-  rymin = rr->tilerect.ymin + ymin;
-  if (rymin >= ibuf->y) {
-    return;
-  }
-
-  if (rxmin + xmax > ibuf->x) {
-    xmax = ibuf->x - rxmin;
-  }
-  if (rymin + ymax > ibuf->y) {
-    ymax = ibuf->y - rymin;
-  }
-
-  if (xmax < 1 || ymax < 1) {
+    /* The whole image buffer is to be color managed again anyway. */
     return;
   }
 
@@ -229,10 +239,10 @@ static void image_buffer_rect_update(RenderJob *rj,
       return;
     }
 
-    rectf += 4 * (rr->rectx * ymin + xmin);
+    rectf += 4 * (rr->rectx * tile_rect->ymin + tile_rect->xmin);
     linear_stride = rr->rectx;
-    linear_offset_x = rxmin;
-    linear_offset_y = rymin;
+    linear_offset_x = offset_x;
+    linear_offset_y = offset_y;
   }
   else {
     rectf = ibuf->rect_float;
@@ -252,10 +262,10 @@ static void image_buffer_rect_update(RenderJob *rj,
                                     linear_offset_y,
                                     view_settings,
                                     display_settings,
-                                    rxmin,
-                                    rymin,
-                                    rxmin + xmax,
-                                    rymin + ymax);
+                                    offset_x,
+                                    offset_y,
+                                    offset_x + BLI_rcti_size_x(tile_rect),
+                                    offset_y + BLI_rcti_size_y(tile_rect));
 }
 
 /* ****************************** render invoking ***************** */
@@ -343,7 +353,7 @@ static int screen_render_exec(bContext *C, wmOperator *op)
    * otherwise, invalidated cache entries can make their way into
    * the output rendering. We can't put that into RE_RenderFrame,
    * since sequence rendering can call that recursively... (peter) */
-  BKE_sequencer_cache_cleanup(scene);
+  SEQ_cache_cleanup(scene);
 
   RE_SetReports(re, op->reports);
 
@@ -435,20 +445,6 @@ static void make_renderinfo_string(const RenderStats *rs,
     }
   }
   else {
-    if (rs->totvert || rs->totface || rs->totlamp) {
-      spos += sprintf(spos, "| ");
-    }
-
-    if (rs->totvert) {
-      spos += sprintf(spos, TIP_("Ve:%d "), rs->totvert);
-    }
-    if (rs->totface) {
-      spos += sprintf(spos, TIP_("Fa:%d "), rs->totface);
-    }
-    if (rs->totlamp) {
-      spos += sprintf(spos, TIP_("Li:%d "), rs->totlamp);
-    }
-
     if (rs->mem_peak == 0.0f) {
       spos += sprintf(spos, TIP_("| Mem:%.2fM (Peak %.2fM) "), megs_used_memory, megs_peak_memory);
     }
@@ -578,9 +574,12 @@ static void image_rect_update(void *rjv, RenderResult *rr, volatile rcti *renrec
     return;
   }
   if (rj->image_outdated) {
-    /* update entire render */
+    /* Free all render buffer caches when switching slots, with lock to ensure main
+     * thread is not drawing the buffer at the same time. */
     rj->image_outdated = false;
-    BKE_image_signal(rj->main, ima, NULL, IMA_SIGNAL_COLORMANAGE);
+    ibuf = BKE_image_acquire_ibuf(ima, &rj->iuser, &lock);
+    BKE_image_free_buffers(ima);
+    BKE_image_release_ibuf(ima, ibuf, lock);
     *(rj->do_update) = true;
     return;
   }
@@ -591,8 +590,16 @@ static void image_rect_update(void *rjv, RenderResult *rr, volatile rcti *renrec
 
   /* update part of render */
   render_image_update_pass_and_layer(rj, rr, &rj->iuser);
+  rcti tile_rect;
+  int offset_x;
+  int offset_y;
   ibuf = BKE_image_acquire_ibuf(ima, &rj->iuser, &lock);
   if (ibuf) {
+    if (!image_buffer_calc_tile_rect(rr, ibuf, renrect, &tile_rect, &offset_x, &offset_y)) {
+      BKE_image_release_ibuf(ima, ibuf, lock);
+      return;
+    }
+
     /* Don't waste time on CPU side color management if
      * image will be displayed using GLSL.
      *
@@ -602,9 +609,10 @@ static void image_rect_update(void *rjv, RenderResult *rr, volatile rcti *renrec
      */
     if (!rj->supports_glsl_draw || ibuf->channels == 1 ||
         ED_draw_imbuf_method(ibuf) != IMAGE_DRAW_METHOD_GLSL) {
-      image_buffer_rect_update(rj, rr, ibuf, &rj->iuser, renrect, viewname);
+      image_buffer_rect_update(rj, rr, ibuf, &rj->iuser, &tile_rect, offset_x, offset_y, viewname);
     }
-    ima->gpuflag |= IMA_GPU_REFRESH;
+    BKE_image_update_gputexture_delayed(
+        ima, ibuf, offset_x, offset_y, BLI_rcti_size_x(&tile_rect), BLI_rcti_size_y(&tile_rect));
 
     /* make jobs timer to send notifier */
     *(rj->do_update) = true;
@@ -783,8 +791,10 @@ static int render_breakjob(void *rjv)
   return 0;
 }
 
-/* for exec() when there is no render job
- * note: this wont check for the escape key being pressed, but doing so isnt threadsafe */
+/**
+ * For exec() when there is no render job
+ * note: this wont check for the escape key being pressed, but doing so isn't thread-safe.
+ */
 static int render_break(void *UNUSED(rjv))
 {
   if (G.is_break) {
@@ -795,7 +805,7 @@ static int render_break(void *UNUSED(rjv))
 
 /* runs in thread, no cursor setting here works. careful with notifiers too (malloc conflicts) */
 /* maybe need a way to get job send notifier? */
-static void render_drawlock(void *rjv, int lock)
+static void render_drawlock(void *rjv, bool lock)
 {
   RenderJob *rj = rjv;
 
@@ -920,7 +930,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
 
   /* Reports are done inside check function, and it will return false if there are other strips to
    * render. */
-  if ((scene->r.scemode & R_DOSEQ) && BKE_sequencer_check_scene_recursion(scene, op->reports)) {
+  if ((scene->r.scemode & R_DOSEQ) && SEQ_relations_check_scene_recursion(scene, op->reports)) {
     return OPERATOR_CANCELLED;
   }
 
@@ -933,7 +943,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
   }
 
   /* handle UI stuff */
-  WM_cursor_wait(1);
+  WM_cursor_wait(true);
 
   /* flush sculpt and editmode changes */
   ED_editors_flush_edits_ex(bmain, true, false);
@@ -942,7 +952,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
    * otherwise, invalidated cache entries can make their way into
    * the output rendering. We can't put that into RE_RenderFrame,
    * since sequence rendering can call that recursively... (peter) */
-  BKE_sequencer_cache_cleanup(scene);
+  SEQ_cache_cleanup(scene);
 
   /* store spare
    * get view3d layer, local layer, make this nice api call to render
@@ -1053,7 +1063,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
 
   WM_jobs_start(CTX_wm_manager(C), wm_job);
 
-  WM_cursor_wait(0);
+  WM_cursor_wait(false);
   WM_event_add_notifier(C, NC_SCENE | ND_RENDER_RESULT, scene);
 
   /* we set G.is_rendering here already instead of only in the job, this ensure
@@ -1083,7 +1093,7 @@ void RENDER_OT_render(wmOperatorType *ot)
   ot->cancel = screen_render_cancel;
   ot->exec = screen_render_exec;
 
-  /* this isn't needed, causes failer in background mode */
+  /* This isn't needed, causes failure in background mode. */
 #if 0
   ot->poll = ED_operator_screenactive;
 #endif

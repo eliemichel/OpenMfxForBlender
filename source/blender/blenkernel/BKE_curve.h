@@ -22,7 +22,9 @@
  * \ingroup bke
  */
 
-#include "DNA_scene_types.h"
+#include "BLI_sys_types.h"
+
+#include "DNA_listBase.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,7 +40,6 @@ struct MDeformVert;
 struct Main;
 struct Nurb;
 struct Object;
-struct Path;
 struct TextBox;
 struct rctf;
 
@@ -48,7 +49,13 @@ typedef struct CurveCache {
   ListBase disp;
   ListBase bev;
   ListBase deformed_nurbs;
-  struct Path *path;
+  /* This array contains the accumulative length of the curve segments.
+   * So you can see this as a "total distance traveled" along the curve.
+   * The first entry is the length between point 0 and 1 while the last is the
+   * total length of the curve.
+   *
+   * Used by #BKE_where_on_path. */
+  const float *anim_path_accum_length;
 } CurveCache;
 
 /* Definitions needed for shape keys */
@@ -67,16 +74,16 @@ typedef struct CVKeyIndex {
 #define SEGMENTSU(nu) (((nu)->flagu & CU_NURB_CYCLIC) ? (nu)->pntsu : (nu)->pntsu - 1)
 #define SEGMENTSV(nu) (((nu)->flagv & CU_NURB_CYCLIC) ? (nu)->pntsv : (nu)->pntsv - 1)
 
-#define CU_DO_TILT(cu, nu) ((((nu)->flag & CU_2D) && ((cu)->flag & CU_3D) == 0) ? 0 : 1)
 #define CU_DO_RADIUS(cu, nu) \
-  ((CU_DO_TILT(cu, nu) || ((cu)->flag & CU_PATH_RADIUS) || (cu)->bevobj || (cu)->ext1 != 0.0f || \
+  ((((cu)->flag & (CU_PATH_RADIUS | CU_3D)) || (cu)->bevobj || (cu)->ext1 != 0.0f || \
     (cu)->ext2 != 0.0f) ? \
        1 : \
        0)
 
+#define CU_IS_2D(cu) (((cu)->flag & CU_3D) == 0)
+
 /* not 3d and not unfilled */
-#define CU_DO_2DFILL(cu) \
-  ((((cu)->flag & CU_3D) == 0) && (((cu)->flag & (CU_FRONT | CU_BACK)) != 0))
+#define CU_DO_2DFILL(cu) (CU_IS_2D(cu) && (((cu)->flag & (CU_FRONT | CU_BACK)) != 0))
 
 /* ** Curve ** */
 void BKE_curve_editfont_free(struct Curve *cu);
@@ -84,7 +91,7 @@ void BKE_curve_init(struct Curve *cu, const short curve_type);
 struct Curve *BKE_curve_add(struct Main *bmain, const char *name, int type);
 short BKE_curve_type_get(const struct Curve *cu);
 void BKE_curve_type_test(struct Object *ob);
-void BKE_curve_curve_dimension_update(struct Curve *cu);
+void BKE_curve_dimension_update(struct Curve *cu);
 
 struct BoundBox *BKE_curve_boundbox_get(struct Object *ob);
 
@@ -106,7 +113,7 @@ void BKE_curve_transform(struct Curve *cu,
                          const bool do_props);
 void BKE_curve_translate(struct Curve *cu, const float offset[3], const bool do_keys);
 void BKE_curve_material_index_remove(struct Curve *cu, int index);
-bool BKE_curve_material_index_used(struct Curve *cu, int index);
+bool BKE_curve_material_index_used(const struct Curve *cu, int index);
 void BKE_curve_material_index_clear(struct Curve *cu);
 bool BKE_curve_material_index_validate(struct Curve *cu);
 void BKE_curve_material_remap(struct Curve *cu, const unsigned int *remap, unsigned int remap_len);
@@ -123,8 +130,10 @@ void BKE_curve_nurb_vert_active_set(struct Curve *cu, const struct Nurb *nu, con
 bool BKE_curve_nurb_vert_active_get(struct Curve *cu, struct Nurb **r_nu, void **r_vert);
 void BKE_curve_nurb_vert_active_validate(struct Curve *cu);
 
-float (*BKE_curve_nurbs_vert_coords_alloc(struct ListBase *lb, int *r_vert_len))[3];
-void BKE_curve_nurbs_vert_coords_get(struct ListBase *lb, float (*vert_coords)[3], int vert_len);
+float (*BKE_curve_nurbs_vert_coords_alloc(const struct ListBase *lb, int *r_vert_len))[3];
+void BKE_curve_nurbs_vert_coords_get(const struct ListBase *lb,
+                                     float (*vert_coords)[3],
+                                     int vert_len);
 
 void BKE_curve_nurbs_vert_coords_apply_with_mat4(struct ListBase *lb,
                                                  const float (*vert_coords)[3],
@@ -135,7 +144,7 @@ void BKE_curve_nurbs_vert_coords_apply(struct ListBase *lb,
                                        const float (*vert_coords)[3],
                                        const bool constrain_2d);
 
-float (*BKE_curve_nurbs_key_vert_coords_alloc(struct ListBase *lb,
+float (*BKE_curve_nurbs_key_vert_coords_alloc(const struct ListBase *lb,
                                               float *key,
                                               int *r_vert_len))[3];
 void BKE_curve_nurbs_key_vert_tilts_apply(struct ListBase *lb, const float *key);
@@ -164,8 +173,8 @@ void BKE_curve_correct_bezpart(const float v1[2], float v2[2], float v3[2], cons
 
 bool BKE_nurbList_index_get_co(struct ListBase *editnurb, const int index, float r_co[3]);
 
-int BKE_nurbList_verts_count(struct ListBase *nurb);
-int BKE_nurbList_verts_count_without_handles(struct ListBase *nurb);
+int BKE_nurbList_verts_count(const struct ListBase *nurb);
+int BKE_nurbList_verts_count_without_handles(const struct ListBase *nurb);
 
 void BKE_nurbList_free(struct ListBase *lb);
 void BKE_nurbList_duplicate(struct ListBase *lb1, const struct ListBase *lb2);
@@ -182,8 +191,8 @@ void BKE_nurb_free(struct Nurb *nu);
 struct Nurb *BKE_nurb_duplicate(const struct Nurb *nu);
 struct Nurb *BKE_nurb_copy(struct Nurb *src, int pntsu, int pntsv);
 
-void BKE_nurb_test_2d(struct Nurb *nu);
-void BKE_nurb_minmax(struct Nurb *nu, bool use_radius, float min[3], float max[3]);
+void BKE_nurb_project_2d(struct Nurb *nu);
+void BKE_nurb_minmax(const struct Nurb *nu, bool use_radius, float min[3], float max[3]);
 float BKE_nurb_calc_length(const struct Nurb *nu, int resolution);
 
 void BKE_nurb_makeFaces(
@@ -318,8 +327,8 @@ void BKE_curve_deform_coords(const struct Object *ob_curve,
                              const short flag,
                              const short defaxis);
 
-void BKE_curve_deform_coords_with_editmesh(const Object *ob_curve,
-                                           const Object *ob_target,
+void BKE_curve_deform_coords_with_editmesh(const struct Object *ob_curve,
+                                           const struct Object *ob_target,
                                            float (*vert_coords)[3],
                                            const int vert_coords_len,
                                            const int defgrp_index,
@@ -335,6 +344,18 @@ void BKE_curve_deform_co(const struct Object *ob_curve,
                          float r_mat[3][3]);
 
 /** \} */
+
+/* curve_convert.c */
+
+/* Create a new curve from the given object at its current state. This only works for curve and
+ * text objects, otherwise NULL is returned.
+ *
+ * If apply_modifiers is true and the object is a curve one, then spline deform modifiers are
+ * applied on the control points of the splines.
+ */
+struct Curve *BKE_curve_new_from_object(struct Object *object,
+                                        struct Depsgraph *depsgraph,
+                                        bool apply_modifiers);
 
 #ifdef __cplusplus
 }

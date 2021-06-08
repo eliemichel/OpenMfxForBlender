@@ -52,20 +52,18 @@ struct rcti;
 struct uiBlock;
 struct uiLayout;
 struct wmKeyConfig;
-struct wmMsgBus;
 struct wmMsgSubscribeKey;
 struct wmMsgSubscribeValue;
 struct wmNotifier;
 struct wmOperatorType;
+struct wmRegionListenerParams;
+struct wmRegionMessageSubscribeParams;
+struct wmSpaceTypeListenerParams;
 struct wmWindow;
 struct wmWindowManager;
 
 /* regions */
-void ED_region_do_listen(struct wmWindow *win,
-                         struct ScrArea *area,
-                         struct ARegion *region,
-                         struct wmNotifier *note,
-                         const Scene *scene);
+void ED_region_do_listen(struct wmRegionListenerParams *params);
 void ED_region_do_layout(struct bContext *C, struct ARegion *region);
 void ED_region_do_draw(struct bContext *C, struct ARegion *region);
 void ED_region_exit(struct bContext *C, struct ARegion *region);
@@ -124,8 +122,6 @@ void ED_region_info_draw_multiline(ARegion *region,
                                    const char *text_array[],
                                    float fill_color[4],
                                    const bool full_redraw);
-void ED_region_image_metadata_draw(
-    int x, int y, struct ImBuf *ibuf, const rctf *frame, float zoomx, float zoomy);
 void ED_region_image_metadata_panel_draw(struct ImBuf *ibuf, struct uiLayout *layout);
 void ED_region_grid_draw(struct ARegion *region, float zoomx, float zoomy, float x0, float y0);
 float ED_region_blend_alpha(struct ARegion *region);
@@ -144,29 +140,11 @@ void ED_area_do_msg_notify_tag_refresh(struct bContext *C,
                                        struct wmMsgSubscribeKey *msg_key,
                                        struct wmMsgSubscribeValue *msg_val);
 
-void ED_area_do_mgs_subscribe_for_tool_header(const struct bContext *C,
-                                              struct WorkSpace *workspace,
-                                              struct Scene *scene,
-                                              struct bScreen *screen,
-                                              struct ScrArea *area,
-                                              struct ARegion *region,
-                                              struct wmMsgBus *mbus);
-void ED_area_do_mgs_subscribe_for_tool_ui(const struct bContext *C,
-                                          struct WorkSpace *workspace,
-                                          struct Scene *scene,
-                                          struct bScreen *screen,
-                                          struct ScrArea *area,
-                                          struct ARegion *region,
-                                          struct wmMsgBus *mbus);
+void ED_area_do_mgs_subscribe_for_tool_header(const struct wmRegionMessageSubscribeParams *params);
+void ED_area_do_mgs_subscribe_for_tool_ui(const struct wmRegionMessageSubscribeParams *params);
 
 /* message bus */
-void ED_region_message_subscribe(struct bContext *C,
-                                 struct WorkSpace *workspace,
-                                 struct Scene *scene,
-                                 struct bScreen *screen,
-                                 struct ScrArea *area,
-                                 struct ARegion *region,
-                                 struct wmMsgBus *mbus);
+void ED_region_message_subscribe(struct wmRegionMessageSubscribeParams *params);
 
 /* spaces */
 void ED_spacetypes_keymap(struct wmKeyConfig *keyconf);
@@ -178,7 +156,7 @@ void ED_area_exit(struct bContext *C, struct ScrArea *area);
 int ED_screen_area_active(const struct bContext *C);
 void ED_screen_global_areas_refresh(struct wmWindow *win);
 void ED_screen_global_areas_sync(struct wmWindow *win);
-void ED_area_do_listen(struct wmWindow *win, ScrArea *area, struct wmNotifier *note, Scene *scene);
+void ED_area_do_listen(struct wmSpaceTypeListenerParams *params);
 void ED_area_tag_redraw(ScrArea *area);
 void ED_area_tag_redraw_no_rebuild(ScrArea *area);
 void ED_area_tag_redraw_regiontype(ScrArea *area, int type);
@@ -199,6 +177,7 @@ int ED_region_global_size_y(void);
 void ED_area_update_region_sizes(struct wmWindowManager *wm,
                                  struct wmWindow *win,
                                  struct ScrArea *area);
+bool ED_area_has_shared_border(struct ScrArea *a, struct ScrArea *b);
 
 ScrArea *ED_screen_areas_iter_first(const struct wmWindow *win, const bScreen *screen);
 ScrArea *ED_screen_areas_iter_next(const bScreen *screen, const ScrArea *area);
@@ -238,6 +217,7 @@ void ED_screen_restore_temp_type(struct bContext *C, ScrArea *area);
 ScrArea *ED_screen_full_newspace(struct bContext *C, ScrArea *area, int type);
 void ED_screen_full_prevspace(struct bContext *C, ScrArea *area);
 void ED_screen_full_restore(struct bContext *C, ScrArea *area);
+ScrArea *ED_screen_state_maximized_create(struct bContext *C);
 struct ScrArea *ED_screen_state_toggle(struct bContext *C,
                                        struct wmWindow *win,
                                        struct ScrArea *area,
@@ -324,6 +304,7 @@ void ED_operatortypes_workspace(void);
 
 /* operators; context poll callbacks */
 bool ED_operator_screenactive(struct bContext *C);
+bool ED_operator_screenactive_nobackground(struct bContext *C);
 bool ED_operator_screen_mainwinactive(struct bContext *C);
 bool ED_operator_areaactive(struct bContext *C);
 bool ED_operator_regionactive(struct bContext *C);
@@ -425,13 +406,8 @@ void ED_region_cache_draw_cached_segments(struct ARegion *region,
                                           const int efra);
 
 /* area_utils.c */
-void ED_region_generic_tools_region_message_subscribe(const struct bContext *C,
-                                                      struct WorkSpace *workspace,
-                                                      struct Scene *scene,
-                                                      struct bScreen *screen,
-                                                      struct ScrArea *area,
-                                                      struct ARegion *region,
-                                                      struct wmMsgBus *mbus);
+void ED_region_generic_tools_region_message_subscribe(
+    const struct wmRegionMessageSubscribeParams *params);
 int ED_region_generic_tools_region_snap_size(const struct ARegion *region, int size, int axis);
 
 /* area_query.c */

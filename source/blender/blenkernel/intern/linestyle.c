@@ -760,11 +760,16 @@ IDTypeInfo IDType_ID_LS = {
     .make_local = NULL,
     .foreach_id = linestyle_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = linestyle_blend_write,
     .blend_read_data = linestyle_blend_read_data,
     .blend_read_lib = linestyle_blend_read_lib,
     .blend_read_expand = linestyle_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 static const char *modifier_name[LS_MODIFIER_NUM] = {
@@ -2015,7 +2020,7 @@ char *BKE_linestyle_path_to_color_ramp(FreestyleLineStyle *linestyle, ColorBand 
 
     if (found) {
       char name_esc[sizeof(m->name) * 2];
-      BLI_strescape(name_esc, m->name, sizeof(name_esc));
+      BLI_str_escape(name_esc, m->name, sizeof(name_esc));
       return BLI_sprintfN("color_modifiers[\"%s\"].color_ramp", name_esc);
     }
   }

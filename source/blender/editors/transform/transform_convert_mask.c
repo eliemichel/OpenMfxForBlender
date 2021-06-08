@@ -57,7 +57,6 @@ typedef struct TransDataMasking {
 
 /* -------------------------------------------------------------------- */
 /** \name Masking Transform Creation
- *
  * \{ */
 
 static void MaskHandleToTransData(MaskSplinePoint *point,
@@ -400,7 +399,6 @@ void createTransMaskingData(bContext *C, TransInfo *t)
 
 /* -------------------------------------------------------------------- */
 /** \name Recalc TransData Masking
- *
  * \{ */
 
 static void flushTransMasking(TransInfo *t)
@@ -482,7 +480,7 @@ void special_aftertrans_update__mask(bContext *C, TransInfo *t)
     }
   }
 
-  /* TODO - dont key all masks... */
+  /* TODO: don't key all masks. */
   if (IS_AUTOKEY_ON(t->scene)) {
     Scene *scene = t->scene;
 

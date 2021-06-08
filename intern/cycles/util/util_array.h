@@ -131,6 +131,14 @@ template<typename T, size_t alignment = MIN_ALIGNMENT_CPU_DATA_TYPES> class arra
     }
   }
 
+  void set_data(T *ptr_, size_t datasize)
+  {
+    clear();
+    data_ = ptr_;
+    datasize_ = datasize;
+    capacity_ = datasize;
+  }
+
   T *steal_pointer()
   {
     T *ptr = data_;
@@ -211,6 +219,26 @@ template<typename T, size_t alignment = MIN_ALIGNMENT_CPU_DATA_TYPES> class arra
   {
     assert(i < datasize_);
     return data_[i];
+  }
+
+  T *begin()
+  {
+    return data_;
+  }
+
+  const T *begin() const
+  {
+    return data_;
+  }
+
+  T *end()
+  {
+    return data_ + datasize_;
+  }
+
+  const T *end() const
+  {
+    return data_ + datasize_;
   }
 
   void reserve(size_t newcapacity)

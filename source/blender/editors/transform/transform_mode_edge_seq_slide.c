@@ -32,20 +32,33 @@
 #include "ED_screen.h"
 
 #include "WM_api.h"
+#include "WM_types.h"
 
 #include "UI_interface.h"
+#include "UI_view2d.h"
 
 #include "BLT_translation.h"
 
 #include "transform.h"
+#include "transform_convert.h"
 #include "transform_mode.h"
 #include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (Sequencer Slide) */
-
-/** \name Transform Sequencer Slide
+/** \name Transform (Sequencer Slide)
  * \{ */
+
+static eRedrawFlag seq_slide_handleEvent(struct TransInfo *t, const wmEvent *event)
+{
+  BLI_assert(t->mode == TFM_SEQ_SLIDE);
+  const wmKeyMapItem *kmi = t->custom.mode.data;
+  if (kmi && event->type == kmi->type && event->val == kmi->val) {
+    /* Allows the "Expand to Fit" effect to be enabled as a toggle. */
+    t->flag ^= T_ALT_TRANSFORM;
+    return TREDRAW_HARD;
+  }
+  return TREDRAW_NOTHING;
+}
 
 static void headerSeqSlide(TransInfo *t, const float val[2], char str[UI_MAX_DRAW_STR])
 {
@@ -62,12 +75,11 @@ static void headerSeqSlide(TransInfo *t, const float val[2], char str[UI_MAX_DRA
   ofs += BLI_snprintf(
       str + ofs, UI_MAX_DRAW_STR - ofs, TIP_("Sequence Slide: %s%s, ("), &tvec[0], t->con.text);
 
-  if (t->keymap) {
-    wmKeyMapItem *kmi = WM_modalkeymap_find_propvalue(t->keymap, TFM_MODAL_TRANSLATE);
-    if (kmi) {
-      ofs += WM_keymap_item_to_string(kmi, false, str + ofs, UI_MAX_DRAW_STR - ofs);
-    }
+  const wmKeyMapItem *kmi = t->custom.mode.data;
+  if (kmi) {
+    ofs += WM_keymap_item_to_string(kmi, false, str + ofs, UI_MAX_DRAW_STR - ofs);
   }
+
   ofs += BLI_snprintf(str + ofs,
                       UI_MAX_DRAW_STR - ofs,
                       TIP_(" or Alt) Expand to fit %s"),
@@ -93,9 +105,10 @@ static void applySeqSlideValue(TransInfo *t, const float val[2])
 static void applySeqSlide(TransInfo *t, const int mval[2])
 {
   char str[UI_MAX_DRAW_STR];
-  float values_final[2] = {0.0f};
+  float values_final[3] = {0.0f};
 
   snapSequenceBounds(t, mval);
+  transform_convert_sequencer_channel_clamp(t);
   if (applyNumInput(&t->num, values_final)) {
     if (t->con.mode & CON_APPLY) {
       if (t->con.mode & CON_AXIS0) {
@@ -128,6 +141,7 @@ static void applySeqSlide(TransInfo *t, const int mval[2])
 void initSeqSlide(TransInfo *t)
 {
   t->transform = applySeqSlide;
+  t->handleEvent = seq_slide_handleEvent;
 
   initMouseInputMode(t, &t->mouse, INPUT_VECTOR);
 
@@ -144,5 +158,10 @@ void initSeqSlide(TransInfo *t)
    * (supporting frames in addition to "natural" time...). */
   t->num.unit_type[0] = B_UNIT_NONE;
   t->num.unit_type[1] = B_UNIT_NONE;
+
+  if (t->keymap) {
+    /* Workaround to use the same key as the modal keymap. */
+    t->custom.mode.data = (void *)WM_modalkeymap_find_propvalue(t->keymap, TFM_MODAL_TRANSLATE);
+  }
 }
 /** \} */

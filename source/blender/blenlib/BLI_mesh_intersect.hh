@@ -95,7 +95,7 @@ struct Plane {
   /* Test equality on the exact fields. */
   bool operator==(const Plane &other) const;
 
-  /* Hash onthe exact fields. */
+  /* Hash on the exact fields. */
   uint64_t hash() const;
 
   void make_canonical();
@@ -144,7 +144,7 @@ struct Face : NonCopyable {
   /* Test equality of verts, in same positions. */
   bool operator==(const Face &other) const;
 
-  /* Test equaliy faces allowing cyclic shifts. */
+  /* Test equality faces allowing cyclic shifts. */
   bool cyclic_equal(const Face &other) const;
 
   FacePos next_pos(FacePos p) const
@@ -327,8 +327,14 @@ class IMesh {
    * Replace face at given index with one that elides the
    * vertices at the positions in face_pos_erase that are true.
    * Use arena to allocate the new face in.
+   * This may end up setting the face at f_index to NULL.
+   * Return true if that is so, else return false.
+   * The caller may want to use remove_null_faces if any face
+   * was removed, to avoid the need to check for null faces later.
    */
-  void erase_face_positions(int f_index, Span<bool> face_pos_erase, IMeshArena *arena);
+  bool erase_face_positions(int f_index, Span<bool> face_pos_erase, IMeshArena *arena);
+
+  void remove_null_faces();
 };
 
 std::ostream &operator<<(std::ostream &os, const IMesh &mesh);
@@ -350,6 +356,9 @@ IMesh trimesh_nary_intersect(const IMesh &tm_in,
                              std::function<int(int)> shape_fn,
                              bool use_self,
                              IMeshArena *arena);
+
+/** Return an IMesh that is a triangulation of a mesh with general polygonal faces. */
+IMesh triangulate_polymesh(IMesh &imesh, IMeshArena *arena);
 
 /** This has the side effect of populating verts in the #IMesh. */
 void write_obj_mesh(IMesh &m, const std::string &objname);

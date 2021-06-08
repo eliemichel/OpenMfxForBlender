@@ -34,7 +34,7 @@ namespace blender::gpu {
 
 class Immediate {
  public:
-  /** Pointer to the mapped buffer data for the currect vertex. */
+  /** Pointer to the mapped buffer data for the current vertex. */
   uchar *vertex_data = NULL;
   /** Current vertex index. */
   uint vertex_idx = 0;
@@ -47,21 +47,21 @@ class Immediate {
 
   /** Current draw call specification. */
   GPUPrimType prim_type = GPU_PRIM_NONE;
-  GPUVertFormat vertex_format;
+  GPUVertFormat vertex_format = {};
   GPUShader *shader = NULL;
-  /** Enforce strict vertex count (disabled when using immBeginAtMost). */
+  /** Enforce strict vertex count (disabled when using #immBeginAtMost). */
   bool strict_vertex_len = true;
 
-  /** Batch in construction when using immBeginBatch. */
+  /** Batch in construction when using #immBeginBatch. */
   GPUBatch *batch = NULL;
 
   /** Wide Line workaround. */
 
   /** Previously bound shader to restore after drawing. */
-  GPUShader *prev_shader = NULL;
+  eGPUBuiltinShader prev_builtin_shader = GPU_SHADER_TEXT;
   /** Builtin shader index. Used to test if the workaround can be done. */
   eGPUBuiltinShader builtin_shader_bound = GPU_SHADER_TEXT;
-  /** Uniform color: Kept here to update the wideline shader just before immBegin. */
+  /** Uniform color: Kept here to update the wide-line shader just before #immBegin. */
   float uniform_color[4];
 
  public:

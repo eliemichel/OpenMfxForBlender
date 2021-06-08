@@ -47,8 +47,7 @@ namespace dot = blender::dot;
 /* ****************** */
 /* Graphviz Debugging */
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 /* Only one should be enabled, defines whether graphviz nodes
  * get colored by individual types or classes.
@@ -185,7 +184,7 @@ static void deg_debug_graphviz_legend(DotExportContext &ctx)
 
   std::stringstream ss;
   ss << "<";
-  ss << "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">";
+  ss << R"(<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">)";
   ss << "<TR><TD COLSPAN=\"2\"><B>Legend</B></TD></TR>";
 
 #ifdef COLOR_SCHEME_NODE_CLASS
@@ -510,8 +509,7 @@ static void deg_debug_graphviz_graph_relations(DotExportContext &ctx, const Deps
   }
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg
 
 void DEG_debug_relations_graphviz(const Depsgraph *graph, FILE *fp, const char *label)
 {

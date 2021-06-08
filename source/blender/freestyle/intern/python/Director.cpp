@@ -56,6 +56,8 @@
 #include "UnaryFunction1D/BPy_UnaryFunction1DVec3f.h"
 #include "UnaryFunction1D/BPy_UnaryFunction1DVectorViewShape.h"
 
+using namespace Freestyle;
+
 // BinaryPredicate0D: __call__
 int Director_BPy_BinaryPredicate0D___call__(BinaryPredicate0D *bp0D,
                                             Interface0D &i1,
@@ -195,7 +197,7 @@ int Director_BPy_ChainingIterator_init(ChainingIterator *c_it)
     PyErr_SetString(PyExc_RuntimeError, "Reference to Python object (py_c_it) not initialized");
     return -1;
   }
-  PyObject *result = PyObject_CallMethod((PyObject *)c_it->py_c_it, "init", NULL);
+  PyObject *result = PyObject_CallMethod((PyObject *)c_it->py_c_it, "init", nullptr);
   if (!result) {
     return -1;
   }
@@ -222,7 +224,7 @@ int Director_BPy_ChainingIterator_traverse(ChainingIterator *c_it, AdjacencyIter
     c_it->result = ((BPy_ViewEdge *)result)->ve;
   }
   else if (result == Py_None) {
-    c_it->result = NULL;
+    c_it->result = nullptr;
   }
   else {
     PyErr_SetString(PyExc_RuntimeError, "traverse method returned a wrong value");

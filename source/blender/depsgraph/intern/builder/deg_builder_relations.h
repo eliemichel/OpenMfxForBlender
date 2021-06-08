@@ -45,7 +45,6 @@
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 
-struct Base;
 struct CacheFile;
 struct Camera;
 struct Collection;
@@ -198,6 +197,9 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
   void add_special_eval_flag(ID *id, uint32_t flag);
 
   virtual void build_id(ID *id);
+
+  /* Build function for ID types that do not need their own build_xxx() function. */
+  virtual void build_generic_id(ID *id);
 
   virtual void build_idproperties(IDProperty *id_property);
 

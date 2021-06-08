@@ -48,13 +48,12 @@
 #include "BKE_pointcache.h"
 #include "BKE_simulation.h"
 
+#include "NOD_geometry.h"
 #include "NOD_node_tree_multi_function.hh"
-#include "NOD_simulation.h"
 
 #include "BLI_map.hh"
 #include "BLT_translation.h"
 
-#include "FN_attributes_ref.hh"
 #include "FN_multi_function_network_evaluation.hh"
 #include "FN_multi_function_network_optimization.hh"
 
@@ -70,7 +69,7 @@ static void simulation_init_data(ID *id)
 
   MEMCPY_STRUCT_AFTER(simulation, DNA_struct_default_get(Simulation), id);
 
-  bNodeTree *ntree = ntreeAddTree(nullptr, "Simulation Nodetree", ntreeType_Simulation->idname);
+  bNodeTree *ntree = ntreeAddTree(nullptr, "Geometry Nodetree", ntreeType_Geometry->idname);
   simulation->nodetree = ntree;
 }
 
@@ -165,12 +164,17 @@ IDTypeInfo IDType_ID_SIM = {
     /* free_data */ simulation_free_data,
     /* make_local */ nullptr,
     /* foreach_id */ simulation_foreach_id,
-    /* foreach_cache */ NULL,
+    /* foreach_cache */ nullptr,
+    /* owner_get */ nullptr,
 
     /* blend_write */ simulation_blend_write,
     /* blend_read_data */ simulation_blend_read_data,
     /* blend_read_lib */ simulation_blend_read_lib,
     /* blend_read_expand */ simulation_blend_read_expand,
+
+    /* blend_read_undo_preserve */ nullptr,
+
+    /* lib_override_apply_post */ nullptr,
 };
 
 void *BKE_simulation_add(Main *bmain, const char *name)

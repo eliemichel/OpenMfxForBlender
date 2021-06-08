@@ -57,8 +57,7 @@
 
 namespace deg = blender::deg;
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 Depsgraph::Depsgraph(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluationMode mode)
     : time_source(nullptr),
@@ -71,7 +70,8 @@ Depsgraph::Depsgraph(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluati
       scene_cow(nullptr),
       is_active(false),
       is_evaluating(false),
-      is_render_pipeline_depsgraph(false)
+      is_render_pipeline_depsgraph(false),
+      use_editors_update(false)
 {
   BLI_spin_init(&lock);
   memset(id_type_updated, 0, sizeof(id_type_updated));
@@ -134,12 +134,21 @@ IDNode *Depsgraph::add_id_node(ID *id, ID *id_cow_hint)
   return id_node;
 }
 
-void Depsgraph::clear_id_nodes_conditional(const std::function<bool(ID_Type id_type)> &filter)
+template<typename FilterFunc>
+static void clear_id_nodes_conditional(Depsgraph::IDDepsNodes *id_nodes, const FilterFunc &filter)
 {
-  for (IDNode *id_node : id_nodes) {
+  for (IDNode *id_node : *id_nodes) {
     if (id_node->id_cow == nullptr) {
       /* This means builder "stole" ownership of the copy-on-written
        * datablock for her own dirty needs. */
+      continue;
+    }
+    if (id_node->id_cow == id_node->id_orig) {
+      /* Copy-on-write version is not needed for this ID type.
+       *
+       * NOTE: Is important to not de-reference the original datablock here because it might be
+       * freed already (happens during main database free when some IDs are freed prior to a
+       * scene). */
       continue;
     }
     if (!deg_copy_on_write_is_expanded(id_node->id_cow)) {
@@ -157,8 +166,8 @@ void Depsgraph::clear_id_nodes()
   /* Free memory used by ID nodes. */
 
   /* Stupid workaround to ensure we free IDs in a proper order. */
-  clear_id_nodes_conditional([](ID_Type id_type) { return id_type == ID_SCE; });
-  clear_id_nodes_conditional([](ID_Type id_type) { return id_type != ID_PA; });
+  clear_id_nodes_conditional(&id_nodes, [](ID_Type id_type) { return id_type == ID_SCE; });
+  clear_id_nodes_conditional(&id_nodes, [](ID_Type id_type) { return id_type != ID_PA; });
 
   for (IDNode *id_node : id_nodes) {
     delete id_node;
@@ -263,8 +272,7 @@ ID *Depsgraph::get_cow_id(const ID *id_orig) const
   return id_node->id_cow;
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg
 
 /* **************** */
 /* Public Graph API */
@@ -278,7 +286,9 @@ Depsgraph *DEG_graph_new(Main *bmain, Scene *scene, ViewLayer *view_layer, eEval
 }
 
 /* Replace the "owner" pointers (currently Main/Scene/ViewLayer) of this depsgraph.
- * Used during undo steps when we do want to re-use the old depsgraph data as much as possible. */
+ * Used for:
+ * - Undo steps when we do want to re-use the old depsgraph data as much as possible.
+ * - Rendering where we want to re-use objects between different view layers. */
 void DEG_graph_replace_owners(struct Depsgraph *depsgraph,
                               Main *bmain,
                               Scene *scene,
@@ -287,7 +297,7 @@ void DEG_graph_replace_owners(struct Depsgraph *depsgraph,
   deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(depsgraph);
 
   const bool do_update_register = deg_graph->bmain != bmain;
-  if (do_update_register && deg_graph->bmain != NULL) {
+  if (do_update_register && deg_graph->bmain != nullptr) {
     deg::unregister_graph(deg_graph);
   }
 

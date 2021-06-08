@@ -17,6 +17,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8-80 compliant>
+from __future__ import annotations
 
 if "bpy" in locals():
     from importlib import reload
@@ -198,7 +199,7 @@ class ANIM_OT_keying_set_export(Operator):
 
 
 class NLA_OT_bake(Operator):
-    """Bake all selected objects loc/scale/rotation animation to an action"""
+    """Bake all selected objects location/scale/rotation animation to an action"""
     bl_idname = "nla.bake"
     bl_label = "Bake Action"
     bl_options = {'REGISTER', 'UNDO'}
@@ -247,6 +248,11 @@ class NLA_OT_bake(Operator):
         "(useful for baking only part of bones in an armature)",
         default=False,
     )
+    clean_curves: BoolProperty(
+        name="Clean Curves",
+        description="After baking curves, remove redundant keys",
+        default=False,
+    )
     bake_types: EnumProperty(
         name="Bake Data",
         description="Which data's transformations to bake",
@@ -282,7 +288,7 @@ class NLA_OT_bake(Operator):
             do_visual_keying=self.visual_keying,
             do_constraint_clear=self.clear_constraints,
             do_parents_clear=self.clear_parents,
-            do_clean=True,
+            do_clean=self.clean_curves,
         )
 
         if not any(actions):
@@ -302,7 +308,7 @@ class NLA_OT_bake(Operator):
 
 
 class ClearUselessActions(Operator):
-    """Mark actions with no F-Curves for deletion after save & reload of """ \
+    """Mark actions with no F-Curves for deletion after save and reload of """ \
         """file preserving \"action libraries\""""
     bl_idname = "anim.clear_useless_actions"
     bl_label = "Clear Useless Actions"
@@ -342,14 +348,15 @@ class ClearUselessActions(Operator):
 
 
 class UpdateAnimatedTransformConstraint(Operator):
-    """Update fcurves/drivers affecting Transform constraints (use it with files from 2.70 and earlier)"""
+    """Update f-curves/drivers affecting Transform constraints (use it with files from 2.70 and earlier)"""
     bl_idname = "anim.update_animated_transform_constraints"
     bl_label = "Update Animated Transform Constraints"
     bl_options = {'REGISTER', 'UNDO'}
 
     use_convert_to_radians: BoolProperty(
         name="Convert to Radians",
-        description="Convert fcurves/drivers affecting rotations to radians (Warning: use this only once!)",
+        description="Convert f-curves/drivers affecting rotations to radians.\n"
+                    "Warning: Use this only once",
         default=True,
     )
 

@@ -97,7 +97,9 @@ static float edbm_rip_linedist(
 }
 #endif
 
-/* calculaters a point along the loop tangent which can be used to measure against edges */
+/**
+ * Calculates a point along the loop tangent which can be used to measure against edges.
+ */
 static void edbm_calc_loop_co(BMLoop *l, float l_mid_co[3])
 {
   BM_loop_calc_face_tangent(l, l_mid_co);
@@ -384,7 +386,7 @@ static void edbm_ripsel_deselect_helper(BMesh *bm,
  * use for rebuilding face-fill
  *
  * \note the method currently used fails for edges with 3+ face users and gives
- *       nasty holes in the mesh, there isnt a good way of knowing ahead of time
+ *       nasty holes in the mesh, there isn't a good way of knowing ahead of time
  *       which loops will be split apart (its possible to figure out but quite involved).
  *       So for now this is a known limitation of current rip-fill option.
  */
@@ -880,6 +882,7 @@ static int edbm_rip_invoke__edge(bContext *C, const wmEvent *event, Object *obed
   BMLoop *l;
   BMEdge *e_best;
   BMVert *v;
+  const int totvert_orig = bm->totvert;
   const int totedge_orig = bm->totedge;
   float projectMat[4][4], fmval[3] = {event->mval[0], event->mval[1]};
 
@@ -988,7 +991,7 @@ static int edbm_rip_invoke__edge(bContext *C, const wmEvent *event, Object *obed
     MEM_freeN(fill_uloop_pairs);
   }
 
-  if (totedge_orig == bm->totedge) {
+  if ((totvert_orig == bm->totvert) && (totedge_orig == bm->totedge)) {
     return OPERATOR_CANCELLED;
   }
 

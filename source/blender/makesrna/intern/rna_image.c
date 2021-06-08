@@ -128,6 +128,17 @@ static void rna_Image_colormanage_update(Main *bmain, Scene *UNUSED(scene), Poin
   WM_main_add_notifier(NC_IMAGE | NA_EDITED, &ima->id);
 }
 
+static void rna_Image_alpha_mode_update(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+  Image *ima = (Image *)ptr->owner_id;
+  /* When operating on a generated image, avoid re-generating when changing the alpha-mode
+   * as it doesn't impact generated images, causing them to reload pixel data, see T82785. */
+  if (ima->source == IMA_SRC_GENERATED) {
+    return;
+  }
+  rna_Image_colormanage_update(bmain, scene, ptr);
+}
+
 static void rna_Image_views_format_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
   Image *ima = (Image *)ptr->owner_id;
@@ -235,7 +246,8 @@ static int rna_Image_file_format_get(PointerRNA *ptr)
 {
   Image *image = (Image *)ptr->data;
   ImBuf *ibuf = BKE_image_acquire_ibuf(image, NULL, NULL);
-  int imtype = BKE_image_ftype_to_imtype(ibuf ? ibuf->ftype : 0, ibuf ? &ibuf->foptions : NULL);
+  int imtype = BKE_image_ftype_to_imtype(ibuf ? ibuf->ftype : IMB_FTYPE_NONE,
+                                         ibuf ? &ibuf->foptions : NULL);
 
   BKE_image_release_ibuf(image, ibuf, NULL);
 
@@ -597,6 +609,7 @@ static void rna_render_slots_active_set(PointerRNA *ptr,
     int index = BLI_findindex(&image->renderslots, slot);
     if (index != -1) {
       image->render_slot = index;
+      image->gpuflag |= IMA_GPU_REFRESH;
     }
   }
 }
@@ -612,6 +625,7 @@ static void rna_render_slots_active_index_set(PointerRNA *ptr, int value)
   Image *image = (Image *)ptr->owner_id;
   int num_slots = BLI_listbase_count(&image->renderslots);
   image->render_slot = value;
+  image->gpuflag |= IMA_GPU_REFRESH;
   CLAMP(image->render_slot, 0, num_slots - 1);
 }
 
@@ -1018,7 +1032,7 @@ static void rna_def_image(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_generated_float", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "gen_flag", IMA_GEN_FLOAT);
-  RNA_def_property_ui_text(prop, "Float Buffer", "Generate floating point buffer");
+  RNA_def_property_ui_text(prop, "Float Buffer", "Generate floating-point buffer");
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_generated_update");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
@@ -1034,7 +1048,7 @@ static void rna_def_image(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "aspx");
   RNA_def_property_array(prop, 2);
   RNA_def_property_range(prop, 0.1f, FLT_MAX);
-  RNA_def_property_ui_range(prop, 0.1f, 5000.f, 1, 2);
+  RNA_def_property_ui_range(prop, 0.1f, 5000.0f, 1, 2);
   RNA_def_property_ui_text(
       prop, "Display Aspect", "Display Aspect for this image, does not affect rendering");
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, NULL);
@@ -1103,7 +1117,7 @@ static void rna_def_image(BlenderRNA *brna)
   prop = RNA_def_property(srna, "pixels", PROP_FLOAT, PROP_NONE);
   RNA_def_property_flag(prop, PROP_DYNAMIC);
   RNA_def_property_multi_array(prop, 1, NULL);
-  RNA_def_property_ui_text(prop, "Pixels", "Image pixels in floating point values");
+  RNA_def_property_ui_text(prop, "Pixels", "Image pixels in floating-point values");
   RNA_def_property_dynamic_array_funcs(prop, "rna_Image_pixels_get_length");
   RNA_def_property_float_funcs(prop, "rna_Image_pixels_get", "rna_Image_pixels_set", NULL);
 
@@ -1115,7 +1129,8 @@ static void rna_def_image(BlenderRNA *brna)
   prop = RNA_def_property(srna, "is_float", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_funcs(prop, "rna_Image_is_float_get", NULL);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  RNA_def_property_ui_text(prop, "Is Float", "True if this image is stored in float buffer");
+  RNA_def_property_ui_text(
+      prop, "Is Float", "True if this image is stored in floating-point buffer");
 
   prop = RNA_def_property(srna, "colorspace_settings", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "colorspace_settings");
@@ -1129,13 +1144,13 @@ static void rna_def_image(BlenderRNA *brna)
                            "Alpha Mode",
                            "Representation of alpha in the image file, to convert to and from "
                            "when saving and loading the image");
-  RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_colormanage_update");
+  RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_alpha_mode_update");
 
   prop = RNA_def_property(srna, "use_half_precision", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", IMA_HIGH_BITDEPTH);
   RNA_def_property_ui_text(prop,
                            "Half Float Precision",
-                           "Use 16bits per channel to lower the memory usage during rendering");
+                           "Use 16 bits per channel to lower the memory usage during rendering");
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_gpu_texture_update");
 
   /* multiview */

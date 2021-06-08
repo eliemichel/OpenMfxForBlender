@@ -396,6 +396,24 @@ static void rna_CollSettings_selfcol_vgroup_set(PointerRNA *ptr, const char *val
   rna_object_vgroup_name_index_set(ptr, value, &coll->vgroup_selfcol);
 }
 
+static void rna_CollSettings_objcol_vgroup_get(PointerRNA *ptr, char *value)
+{
+  ClothCollSettings *coll = (ClothCollSettings *)ptr->data;
+  rna_object_vgroup_name_index_get(ptr, value, coll->vgroup_objcol);
+}
+
+static int rna_CollSettings_objcol_vgroup_length(PointerRNA *ptr)
+{
+  ClothCollSettings *coll = (ClothCollSettings *)ptr->data;
+  return rna_object_vgroup_name_index_length(ptr, coll->vgroup_objcol);
+}
+
+static void rna_CollSettings_objcol_vgroup_set(PointerRNA *ptr, const char *value)
+{
+  ClothCollSettings *coll = (ClothCollSettings *)ptr->data;
+  rna_object_vgroup_name_index_set(ptr, value, &coll->vgroup_objcol);
+}
+
 static PointerRNA rna_ClothSettings_rest_shape_key_get(PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
@@ -439,7 +457,7 @@ static char *rna_ClothSettings_path(PointerRNA *ptr)
 
   if (md) {
     char name_esc[sizeof(md->name) * 2];
-    BLI_strescape(name_esc, md->name, sizeof(name_esc));
+    BLI_str_escape(name_esc, md->name, sizeof(name_esc));
     return BLI_sprintfN("modifiers[\"%s\"].settings", name_esc);
   }
   else {
@@ -454,7 +472,7 @@ static char *rna_ClothCollisionSettings_path(PointerRNA *ptr)
 
   if (md) {
     char name_esc[sizeof(md->name) * 2];
-    BLI_strescape(name_esc, md->name, sizeof(name_esc));
+    BLI_str_escape(name_esc, md->name, sizeof(name_esc));
     return BLI_sprintfN("modifiers[\"%s\"].collision_settings", name_esc);
   }
   else {
@@ -634,6 +652,7 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
   prop = RNA_def_property(srna, "mass", PROP_FLOAT, PROP_UNIT_MASS);
   RNA_def_property_range(prop, 0.0f, FLT_MAX);
   RNA_def_property_ui_text(prop, "Vertex Mass", "The mass of each vertex on the cloth material");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, 0, "rna_cloth_update");
 
   prop = RNA_def_property(srna, "vertex_group_mass", PROP_STRING, PROP_NONE);
@@ -1163,7 +1182,18 @@ static void rna_def_cloth_collision_settings(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Selfcollision Vertex Group",
-      "Vertex group to define vertices which are not used during self collisions");
+      "Triangles with all vertices in this group are not used during self collisions");
+  RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+  prop = RNA_def_property(srna, "vertex_group_object_collisions", PROP_STRING, PROP_NONE);
+  RNA_def_property_string_funcs(prop,
+                                "rna_CollSettings_objcol_vgroup_get",
+                                "rna_CollSettings_objcol_vgroup_length",
+                                "rna_CollSettings_objcol_vgroup_set");
+  RNA_def_property_ui_text(
+      prop,
+      "Collision Vertex Group",
+      "Triangles with all vertices in this group are not used during object collisions");
   RNA_def_property_update(prop, 0, "rna_cloth_update");
 
   prop = RNA_def_property(srna, "self_impulse_clamp", PROP_FLOAT, PROP_NONE);

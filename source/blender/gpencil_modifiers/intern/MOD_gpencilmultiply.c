@@ -32,33 +32,18 @@
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 
-#include "BLI_alloca.h"
 #include "BLI_blenlib.h"
-#include "BLI_linklist.h"
 #include "BLI_math.h"
-#include "BLI_rand.h"
 #include "BLI_utildefines.h"
 
-#include "BLT_translation.h"
-
-#include "BKE_collection.h"
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
-#include "BKE_layer.h"
 #include "BKE_lib_query.h"
 #include "BKE_main.h"
-#include "BKE_mesh.h"
-#include "BKE_mesh_mapping.h"
 #include "BKE_modifier.h"
-#include "BKE_object.h"
-#include "BKE_scene.h"
 #include "BKE_screen.h"
-
-#include "bmesh.h"
-#include "bmesh_tools.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -129,6 +114,7 @@ static void duplicateStroke(Object *ob,
                             float fading_thickness,
                             float fading_opacity)
 {
+  bGPdata *gpd = ob->data;
   int i;
   bGPDstroke *new_gps = NULL;
   float stroke_normal[3];
@@ -172,7 +158,7 @@ static void duplicateStroke(Object *ob,
    * to be processed, since we duplicate its data. */
   for (i = count - 1; i >= 0; i--) {
     if (i != 0) {
-      new_gps = BKE_gpencil_stroke_duplicate(gps, true);
+      new_gps = BKE_gpencil_stroke_duplicate(gps, true, true);
       BLI_addtail(results, new_gps);
     }
     else {
@@ -199,7 +185,7 @@ static void duplicateStroke(Object *ob,
   }
   /* Calc geometry data. */
   if (new_gps != NULL) {
-    BKE_gpencil_stroke_geometry_update(new_gps);
+    BKE_gpencil_stroke_geometry_update(gpd, new_gps);
   }
   MEM_freeN(t1_array);
   MEM_freeN(t2_array);

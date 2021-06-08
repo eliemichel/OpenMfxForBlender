@@ -26,6 +26,7 @@
 #include "BLI_math.h"
 
 #include "BKE_context.h"
+#include "BKE_curve.h"
 #include "BKE_mask.h"
 
 #include "DEG_depsgraph.h"
@@ -202,7 +203,7 @@ static void finSelectedSplinePoint(MaskLayer *mask_layer,
       MaskSplinePoint *cur_point = &cur_spline->points[i];
 
       if (MASKPOINT_ISSEL_ANY(cur_point)) {
-        if (*spline != NULL && *spline != cur_spline) {
+        if (!ELEM(*spline, NULL, cur_spline)) {
           *spline = NULL;
           *point = NULL;
           return;
@@ -507,6 +508,9 @@ static int add_vertex_handle_cyclic(
 
 static int add_vertex_exec(bContext *C, wmOperator *op)
 {
+  MaskViewLockState lock_state;
+  ED_mask_view_lock_state_store(C, &lock_state);
+
   Mask *mask = CTX_data_edit_mask(C);
   if (mask == NULL) {
     /* if there's no active mask, create one */
@@ -547,6 +551,8 @@ static int add_vertex_exec(bContext *C, wmOperator *op)
   }
 
   DEG_id_tag_update(&mask->id, ID_RECALC_GEOMETRY);
+
+  ED_mask_view_lock_state_restore_no_jump(C, &lock_state);
 
   return OPERATOR_FINISHED;
 }
@@ -687,9 +693,39 @@ void MASK_OT_add_feather_vertex(wmOperatorType *ot)
 
 /******************** common primitive functions *********************/
 
+static BezTriple *points_to_bezier(const float (*points)[2],
+                                   const int num_points,
+                                   const char handle_type,
+                                   const float scale,
+                                   const float location[2])
+{
+  BezTriple *bezier_points = MEM_calloc_arrayN(num_points, sizeof(BezTriple), __func__);
+  for (int i = 0; i < num_points; i++) {
+    copy_v2_v2(bezier_points[i].vec[1], points[i]);
+    mul_v2_fl(bezier_points[i].vec[1], scale);
+    add_v2_v2(bezier_points[i].vec[1], location);
+
+    bezier_points[i].h1 = handle_type;
+    bezier_points[i].h2 = handle_type;
+  }
+
+  for (int i = 0; i < num_points; i++) {
+    BKE_nurb_handle_calc(&bezier_points[i],
+                         &bezier_points[(i - 1 + num_points) % num_points],
+                         &bezier_points[(i + 1) % num_points],
+                         false,
+                         false);
+  }
+
+  return bezier_points;
+}
+
 static int create_primitive_from_points(
     bContext *C, wmOperator *op, const float (*points)[2], int num_points, char handle_type)
 {
+  MaskViewLockState lock_state;
+  ED_mask_view_lock_state_store(C, &lock_state);
+
   ScrArea *area = CTX_wm_area(C);
   int size = RNA_float_get(op->ptr, "size");
 
@@ -726,24 +762,24 @@ static int create_primitive_from_points(
 
   const int spline_index = BKE_mask_layer_shape_spline_to_index(mask_layer, new_spline);
 
+  BezTriple *bezier_points = points_to_bezier(points, num_points, handle_type, scale, location);
+
   for (int i = 0; i < num_points; i++) {
     new_spline->tot_point = i + 1;
 
     MaskSplinePoint *new_point = &new_spline->points[i];
     BKE_mask_parent_init(&new_point->parent);
 
-    copy_v2_v2(new_point->bezt.vec[1], points[i]);
-    mul_v2_fl(new_point->bezt.vec[1], scale);
-    add_v2_v2(new_point->bezt.vec[1], location);
+    new_point->bezt = bezier_points[i];
 
-    new_point->bezt.h1 = handle_type;
-    new_point->bezt.h2 = handle_type;
     BKE_mask_point_select_set(new_point, true);
 
     if (mask_layer->splines_shapes.first) {
-      BKE_mask_layer_shape_changed_add(mask_layer, spline_index + i, true, true);
+      BKE_mask_layer_shape_changed_add(mask_layer, spline_index + i, true, false);
     }
   }
+
+  MEM_freeN(bezier_points);
 
   if (added_mask) {
     WM_event_add_notifier(C, NC_MASK | NA_ADDED, NULL);
@@ -751,6 +787,8 @@ static int create_primitive_from_points(
   WM_event_add_notifier(C, NC_MASK | NA_EDITED, mask);
 
   DEG_id_tag_update(&mask->id, ID_RECALC_GEOMETRY);
+
+  ED_mask_view_lock_state_restore_no_jump(C, &lock_state);
 
   return OPERATOR_FINISHED;
 }

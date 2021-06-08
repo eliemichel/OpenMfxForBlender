@@ -98,12 +98,12 @@ static void wm_paintcursor_draw(bContext *C, ScrArea *area, ARegion *region)
     return;
   }
 
-  LISTBASE_FOREACH (wmPaintCursor *, pc, &wm->paintcursors) {
+  LISTBASE_FOREACH_MUTABLE (wmPaintCursor *, pc, &wm->paintcursors) {
     if ((pc->space_type != SPACE_TYPE_ANY) && (area->spacetype != pc->space_type)) {
       continue;
     }
 
-    if ((pc->region_type != RGN_TYPE_ANY) && (region->regiontype != pc->region_type)) {
+    if (!ELEM(pc->region_type, RGN_TYPE_ANY, region->regiontype)) {
       continue;
     }
 
@@ -117,7 +117,7 @@ static void wm_paintcursor_draw(bContext *C, ScrArea *area, ARegion *region)
 
       if (ELEM(win->grabcursor, GHOST_kGrabWrap, GHOST_kGrabHide)) {
         int x = 0, y = 0;
-        wm_get_cursor_position(win, &x, &y);
+        wm_cursor_position_get(win, &x, &y);
         pc->draw(C, x, y, pc->customdata);
       }
       else {
@@ -216,13 +216,6 @@ static bool wm_draw_region_stereo_set(Main *bmain,
   }
 
   return false;
-}
-
-static void wm_area_mark_invalid_backbuf(ScrArea *area)
-{
-  if (area->spacetype == SPACE_VIEW3D) {
-    ((View3D *)area->spacedata.first)->flag |= V3D_INVALID_BACKBUF;
-  }
 }
 
 static void wm_region_test_gizmo_do_draw(bContext *C,
@@ -346,7 +339,7 @@ static const char *wm_area_name(ScrArea *area)
     SPACE_NAME(SPACE_TOPBAR);
     SPACE_NAME(SPACE_STATUSBAR);
     default:
-      return "Unkown Space";
+      return "Unknown Space";
   }
 }
 
@@ -739,7 +732,6 @@ static void wm_draw_window_offscreen(bContext *C, wmWindow *win, bool stereo)
       }
     }
 
-    wm_area_mark_invalid_backbuf(area);
     CTX_wm_area_set(C, NULL);
 
     GPU_debug_group_end();

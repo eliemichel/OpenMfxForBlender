@@ -38,7 +38,6 @@ using std::vector;
 struct MANTA {
  public:
   MANTA(int *res, struct FluidModifierData *fmd);
-  MANTA(){};
   virtual ~MANTA();
 
   /* Mirroring Mantaflow structures for particle data (pVel also used for mesh vert vels). */
@@ -68,6 +67,7 @@ struct MANTA {
   bool initColorsHigh(struct FluidModifierData *fmd = nullptr);
   bool initLiquid(FluidModifierData *fmd = nullptr);
   bool initLiquidMesh(FluidModifierData *fmd = nullptr);
+  bool initLiquidViscosity(FluidModifierData *fmd = nullptr);
   bool initObstacle(FluidModifierData *fmd = nullptr);
   bool initCurvature(FluidModifierData *fmd = nullptr);
   bool initGuiding(FluidModifierData *fmd = nullptr);
@@ -105,8 +105,8 @@ struct MANTA {
   bool bakeGuiding(FluidModifierData *fmd, int framenr);
 
   /* IO for Mantaflow scene script. */
-  void exportSmokeScript(struct FluidModifierData *fmd);
-  void exportLiquidScript(struct FluidModifierData *fmd);
+  bool exportSmokeScript(struct FluidModifierData *fmd);
+  bool exportLiquidScript(struct FluidModifierData *fmd);
 
   /* Check cache status by frame. */
   bool hasConfig(FluidModifierData *fmd, int framenr);
@@ -745,7 +745,7 @@ struct MANTA {
   unordered_map<string, string> mRNAMap;
 
   /* The ID of the solver objects will be incremented for every new object. */
-  int mCurrentID;
+  const int mCurrentID;
 
   bool mUsingHeat;
   bool mUsingColors;
@@ -758,6 +758,7 @@ struct MANTA {
   bool mUsingNoise;
   bool mUsingMesh;
   bool mUsingDiffusion;
+  bool mUsingViscosity;
   bool mUsingMVel;
   bool mUsingLiquid;
   bool mUsingSmoke;
@@ -775,7 +776,7 @@ struct MANTA {
   int mResX;
   int mResY;
   int mResZ;
-  int mMaxRes;
+  const int mMaxRes;
 
   int mResXNoise;
   int mResYNoise;

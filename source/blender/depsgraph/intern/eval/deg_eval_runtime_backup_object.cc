@@ -32,8 +32,7 @@
 #include "BKE_action.h"
 #include "BKE_object.h"
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 ObjectRuntimeBackup::ObjectRuntimeBackup(const Depsgraph * /*depsgraph*/)
     : base_flag(0), base_local_view_bits(0)
@@ -56,7 +55,7 @@ void ObjectRuntimeBackup::init_from_object(Object *object)
   /* Make a backup of base flags. */
   base_flag = object->base_flag;
   base_local_view_bits = object->base_local_view_bits;
-  /* Backup tuntime data of all modifiers. */
+  /* Backup runtime data of all modifiers. */
   backup_modifier_runtime_data(object);
   /* Backup runtime data of all pose channels. */
   backup_pose_channel_runtime_data(object);
@@ -99,7 +98,7 @@ void ObjectRuntimeBackup::restore_to_object(Object *object)
   object->runtime = runtime;
   object->runtime.data_orig = data_orig;
   object->runtime.bb = bb;
-  if (object->type == OB_MESH && data_eval != nullptr) {
+  if (ELEM(object->type, OB_MESH, OB_LATTICE) && data_eval != nullptr) {
     if (object->id.recalc & ID_RECALC_GEOMETRY) {
       /* If geometry is tagged for update it means, that part of
        * evaluated mesh are not valid anymore. In this case we can not
@@ -180,5 +179,4 @@ void ObjectRuntimeBackup::restore_pose_channel_runtime_data(Object *object)
   }
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

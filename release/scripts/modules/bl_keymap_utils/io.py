@@ -74,9 +74,11 @@ def kmi_args_as_data(kmi):
         s.append(f"\"key_modifier\": '{kmi.key_modifier}'")
 
     if kmi.repeat:
-        if kmi.map_type == 'KEYBOARD':
-            if kmi.value in {'PRESS', 'ANY'}:
-                s.append("\"repeat\": True")
+        if (
+                (kmi.map_type == 'KEYBOARD' and kmi.value in {'PRESS', 'ANY'}) or
+                (kmi.map_type == 'TEXTINPUT')
+        ):
+            s.append("\"repeat\": True")
 
     return "{" + ", ".join(s) + "}"
 
@@ -164,7 +166,7 @@ def keyconfig_export_as_data(wm, kc, filepath, *, all_keymaps=False):
     # not essential, just convenient to order them predictably.
     export_keymaps.sort(key=lambda k: k[0].name)
 
-    with open(filepath, "w") as fh:
+    with open(filepath, "w", encoding="utf-8") as fh:
         fw = fh.write
 
         # Use the file version since it includes the sub-version
@@ -222,12 +224,21 @@ def keyconfig_export_as_data(wm, kc, filepath, *, all_keymaps=False):
         fw("]\n")
         fw("\n\n")
         fw("if __name__ == \"__main__\":\n")
+
+        # We could remove this in the future, as loading new key-maps in older Blender versions
+        # makes less and less sense as Blender changes.
+        fw("    # Only add keywords that are supported.\n")
+        fw("    from bpy.app import version as blender_version\n")
+        fw("    keywords = {}\n")
+        fw("    if blender_version >= (2, 92, 0):\n")
+        fw("        keywords[\"keyconfig_version\"] = keyconfig_version\n")
+
         fw("    import os\n")
         fw("    from bl_keymap_utils.io import keyconfig_import_from_data\n")
         fw("    keyconfig_import_from_data(\n")
         fw("        os.path.splitext(os.path.basename(__file__))[0],\n")
         fw("        keyconfig_data,\n")
-        fw("        keyconfig_version=keyconfig_version,\n")
+        fw("        **keywords,\n")
         fw("    )\n")
 
 

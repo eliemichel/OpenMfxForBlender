@@ -33,7 +33,6 @@
 #include "DNA_material_types.h"
 
 struct Material;
-struct Object;
 
 namespace blender::io::usd {
 
@@ -50,7 +49,6 @@ class USDAbstractWriter : public AbstractHierarchyWriter {
 
  public:
   USDAbstractWriter(const USDExporterContext &usd_export_context);
-  virtual ~USDAbstractWriter();
 
   virtual void write(HierarchyContext &context) override;
 

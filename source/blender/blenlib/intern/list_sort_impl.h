@@ -17,13 +17,13 @@
 /** \file
  * \ingroup bli
  *
- * Common implementation of linked-list a non-recursive mergesort.
+ * Common implementation of linked-list a non-recursive merge-sort.
  *
- * Originally from Mono's eglib, adapted for portable inclusion.
+ * Originally from Mono's `eglib`, adapted for portable inclusion.
  * This file is to be directly included in C-source,
  * with defines to control its use.
  *
- * This code requires a typedef named `SORT_IMPL_LINKTYPE` for the list node.
+ * This code requires a `typedef` named `SORT_IMPL_LINKTYPE` for the list node.
  * It is assumed that the list type is the type of a pointer to a list
  * node, and that the node has a field named 'next' that implements to
  * the linked list.  No additional invariant is maintained
@@ -205,7 +205,7 @@ BLI_INLINE list_node *sweep_up(struct SortInfo *si, list_node *list, unsigned in
  * The 'ranks' array essentially captures the recursion stack of a mergesort.
  * The merge tree is built in a bottom-up manner.  The control loop for
  * updating the 'ranks' array is analogous to incrementing a binary integer,
- * and the `O(n)` time for counting upto n translates to `O(n)` merges when
+ * and the `O(n)` time for counting `upto` n translates to `O(n)` merges when
  * inserting `rank-0` lists.
  * When we plug in the sizes of the lists involved in those merges,
  * we get the `O(n log n)` time for the sort.

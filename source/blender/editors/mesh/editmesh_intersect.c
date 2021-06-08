@@ -121,11 +121,10 @@ static void edbm_intersect_select(BMEditMesh *em, struct Mesh *me, bool do_selec
 }
 
 /* -------------------------------------------------------------------- */
-/* Cut intersections into geometry */
-
 /** \name Simple Intersect (self-intersect)
- * \{
- */
+ *
+ * Cut intersections into geometry.
+ * \{ */
 
 enum {
   ISECT_SEL = 0,
@@ -205,8 +204,16 @@ static int edbm_intersect_exec(bContext *C, wmOperator *op)
 
     if (exact) {
       int nshapes = use_self ? 1 : 2;
-      has_isect = BM_mesh_boolean_knife(
-          em->bm, em->looptris, em->tottri, test_fn, NULL, nshapes, use_self, use_separate_all);
+      has_isect = BM_mesh_boolean_knife(em->bm,
+                                        em->looptris,
+                                        em->tottri,
+                                        test_fn,
+                                        NULL,
+                                        nshapes,
+                                        use_self,
+                                        use_separate_all,
+                                        false,
+                                        true);
     }
     else {
       has_isect = BM_mesh_intersect(em->bm,
@@ -244,13 +251,14 @@ static int edbm_intersect_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-static void edbm_intersect_ui(bContext *UNUSED(C), wmOperator *op)
+static void edbm_intersect_ui(bContext *C, wmOperator *op)
 {
   uiLayout *layout = op->layout;
+  wmWindowManager *wm = CTX_wm_manager(C);
   uiLayout *row;
   PointerRNA ptr;
 
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
+  RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
 
   bool use_exact = RNA_enum_get(&ptr, "solver") == ISECT_SOLVER_EXACT;
 
@@ -296,8 +304,8 @@ void MESH_OT_intersect(struct wmOperatorType *ot)
   };
 
   static const EnumPropertyItem isect_intersect_solver_items[] = {
-      {ISECT_SOLVER_FAST, "FAST", 0, "Fast", "Faster Solver, some limitations"},
-      {ISECT_SOLVER_EXACT, "EXACT", 0, "Exact", "Exact Solver, slower, handles more cases"},
+      {ISECT_SOLVER_FAST, "FAST", 0, "Fast", "Faster solver, some limitations"},
+      {ISECT_SOLVER_EXACT, "EXACT", 0, "Exact", "Exact solver, slower, handles more cases"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -316,7 +324,7 @@ void MESH_OT_intersect(struct wmOperatorType *ot)
   RNA_def_enum(
       ot->srna, "separate_mode", isect_separate_items, ISECT_SEPARATE_CUT, "Separate Mode", "");
   RNA_def_float_distance(
-      ot->srna, "threshold", 0.000001f, 0.0, 0.01, "Merge threshold", "", 0.0, 0.001);
+      ot->srna, "threshold", 0.000001f, 0.0, 0.01, "Merge Threshold", "", 0.0, 0.001);
   RNA_def_enum(ot->srna,
                "solver",
                isect_intersect_solver_items,
@@ -331,15 +339,11 @@ void MESH_OT_intersect(struct wmOperatorType *ot)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/* Boolean (a kind of intersect) */
-
 /** \name Boolean Intersect
  *
  * \note internally this is nearly exactly the same as 'MESH_OT_intersect',
  * however from a user perspective they are quite different, so expose as different tools.
- *
- * \{
- */
+ * \{ */
 
 static int edbm_intersect_boolean_exec(bContext *C, wmOperator *op)
 {
@@ -373,8 +377,16 @@ static int edbm_intersect_boolean_exec(bContext *C, wmOperator *op)
     }
 
     if (use_exact) {
-      has_isect = BM_mesh_boolean(
-          em->bm, em->looptris, em->tottri, test_fn, NULL, 2, use_self, boolean_operation);
+      has_isect = BM_mesh_boolean(em->bm,
+                                  em->looptris,
+                                  em->tottri,
+                                  test_fn,
+                                  NULL,
+                                  2,
+                                  use_self,
+                                  true,
+                                  false,
+                                  boolean_operation);
     }
     else {
       has_isect = BM_mesh_intersect(em->bm,
@@ -406,13 +418,14 @@ static int edbm_intersect_boolean_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-static void edbm_intersect_boolean_ui(bContext *UNUSED(C), wmOperator *op)
+static void edbm_intersect_boolean_ui(bContext *C, wmOperator *op)
 {
   uiLayout *layout = op->layout;
   uiLayout *row;
+  wmWindowManager *wm = CTX_wm_manager(C);
   PointerRNA ptr;
 
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
+  RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
 
   bool use_exact = RNA_enum_get(&ptr, "solver") == ISECT_SOLVER_EXACT;
 
@@ -444,8 +457,8 @@ void MESH_OT_intersect_boolean(struct wmOperatorType *ot)
   };
 
   static const EnumPropertyItem isect_boolean_solver_items[] = {
-      {ISECT_SOLVER_FAST, "FAST", 0, "Fast", "Faster Solver, some limitations"},
-      {ISECT_SOLVER_EXACT, "EXACT", 0, "Exact", "Exact Solver, slower, handles more cases"},
+      {ISECT_SOLVER_FAST, "FAST", 0, "Fast", "Faster solver, some limitations"},
+      {ISECT_SOLVER_EXACT, "EXACT", 0, "Exact", "Exact solver, slower, handles more cases"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -464,7 +477,7 @@ void MESH_OT_intersect_boolean(struct wmOperatorType *ot)
                "operation",
                isect_boolean_operation_items,
                BMESH_ISECT_BOOLEAN_DIFFERENCE,
-               "Boolean operation",
+               "Boolean Operation",
                "Which boolean operation to apply");
   RNA_def_boolean(ot->srna,
                   "use_swap",
@@ -473,7 +486,7 @@ void MESH_OT_intersect_boolean(struct wmOperatorType *ot)
                   "Use with difference intersection to swap which side is kept");
   RNA_def_boolean(ot->srna, "use_self", false, "Self", "Do self-union or self-intersection");
   RNA_def_float_distance(
-      ot->srna, "threshold", 0.000001f, 0.0, 0.01, "Merge threshold", "", 0.0, 0.001);
+      ot->srna, "threshold", 0.000001f, 0.0, 0.01, "Merge Threshold", "", 0.0, 0.001);
   RNA_def_enum(ot->srna,
                "solver",
                isect_boolean_solver_items,
@@ -488,9 +501,7 @@ void MESH_OT_intersect_boolean(struct wmOperatorType *ot)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/* Face Split by Edges */
-
-/** \name Face/Edge Split
+/** \name Face Split by Edges
  * \{ */
 
 static void bm_face_split_by_edges(BMesh *bm,

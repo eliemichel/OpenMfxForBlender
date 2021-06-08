@@ -46,6 +46,7 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_fluidsim_types.h"
+#include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_sdna_types.h"
@@ -73,9 +74,10 @@
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_screen.h"
-#include "BKE_sequencer.h"
 #include "BKE_sound.h"
 #include "BKE_texture.h"
+
+#include "SEQ_iterator.h"
 
 #include "NOD_socket.h"
 
@@ -266,7 +268,7 @@ static void area_add_window_regions(ScrArea *area, SpaceLink *sl, ListBase *lb)
     /* and we split view3d */
     switch (sl->spacetype) {
       case SPACE_VIEW3D:
-        blo_do_versions_view3d_split_250((View3D *)sl, lb);
+        BKE_screen_view3d_do_versions_250((View3D *)sl, lb);
         break;
 
       case SPACE_OUTLINER: {
@@ -410,7 +412,7 @@ static void do_versions_windowmanager_2_50(bScreen *screen)
 
     area_add_window_regions(area, area->spacedata.first, &area->regionbase);
 
-    /* space imageselect is deprecated */
+    /* Space image-select is deprecated. */
     for (sl = area->spacedata.first; sl; sl = sl->next) {
       if (sl->spacetype == SPACE_IMASEL) {
         sl->spacetype = SPACE_EMPTY; /* spacedata then matches */
@@ -447,7 +449,9 @@ static void versions_gpencil_add_main(ListBase *lb, ID *id, const char *name)
   BKE_id_new_name_validate(lb, id, name);
   /* alphabetic insertion: is in BKE_id_new_name_validate */
 
-  BKE_lib_libblock_session_uuid_ensure(id);
+  if ((id->tag & LIB_TAG_TEMP_MAIN) == 0) {
+    BKE_lib_libblock_session_uuid_ensure(id);
+  }
 
   if (G.debug & G_DEBUG) {
     printf("Converted GPencil to ID: %s\n", id->name + 2);
@@ -775,7 +779,6 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
       Nurb *nu;
 
       for (nu = cu->nurb.first; nu; nu = nu->next) {
-        nu->flag |= (nu->type & CU_2D);
         nu->type &= CU_TYPE;
       }
     }
@@ -1165,7 +1168,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
         if (md->type == eModifierType_Cloth) {
           ClothModifierData *clmd = (ClothModifierData *)md;
           if (clmd->sim_parms->velocity_smooth < 0.01f) {
-            clmd->sim_parms->velocity_smooth = 0.f;
+            clmd->sim_parms->velocity_smooth = 0.0f;
           }
         }
       }
@@ -1500,9 +1503,9 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
         while (node) {
           if (node->type == CMP_NODE_COLORBALANCE) {
             NodeColorBalance *n = (NodeColorBalance *)node->storage;
-            n->lift[0] += 1.f;
-            n->lift[1] += 1.f;
-            n->lift[2] += 1.f;
+            n->lift[0] += 1.0f;
+            n->lift[1] += 1.0f;
+            n->lift[2] += 1.0f;
           }
           node = node->next;
         }
@@ -1515,9 +1518,9 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
       while (node) {
         if (node->type == CMP_NODE_COLORBALANCE) {
           NodeColorBalance *n = (NodeColorBalance *)node->storage;
-          n->lift[0] += 1.f;
-          n->lift[1] += 1.f;
-          n->lift[2] += 1.f;
+          n->lift[0] += 1.0f;
+          n->lift[1] += 1.0f;
+          n->lift[2] += 1.0f;
         }
 
         node = node->next;
@@ -1835,7 +1838,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
       }
 
       part->flag &= ~PART_HAIR_REGROW; /* this was a deprecated flag before */
-      part->kink_amp_clump = 1.f;      /* keep old files looking similar */
+      part->kink_amp_clump = 1.0f;     /* keep old files looking similar */
     }
 
     for (screen = bmain->screens.first; screen; screen = screen->id.next) {

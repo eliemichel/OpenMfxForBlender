@@ -25,7 +25,6 @@ from bpy.props import (
     BoolProperty,
     EnumProperty,
     FloatProperty,
-    FloatVectorProperty,
     IntProperty,
 )
 
@@ -134,7 +133,7 @@ class QuickExplode(ObjectModeOperator, Operator):
         default='EXPLODE',
     )
     amount: IntProperty(
-        name="Amount of pieces",
+        name="Number of Pieces",
         min=2, max=10000,
         soft_min=2, soft_max=10000,
         default=100,
@@ -337,7 +336,7 @@ class QuickSmoke(ObjectModeOperator, Operator):
         items=(
             ('SMOKE', "Smoke", ""),
             ('FIRE', "Fire", ""),
-            ('BOTH', "Smoke + Fire", ""),
+            ('BOTH', "Smoke & Fire", ""),
         ),
         default='SMOKE',
     )
@@ -442,6 +441,7 @@ class QuickSmoke(ObjectModeOperator, Operator):
 
 
 class QuickLiquid(Operator):
+    """Make selected objects liquid"""
     bl_idname = "object.quick_liquid"
     bl_label = "Quick Liquid"
     bl_options = {'REGISTER', 'UNDO'}
@@ -496,7 +496,7 @@ class QuickLiquid(Operator):
             obj_bb_minmax(obj, min_co, max_co)
 
         # add the liquid domain object
-        bpy.ops.mesh.primitive_cube_add()
+        bpy.ops.mesh.primitive_cube_add(align='WORLD')
         obj = context.active_object
         obj.name = "Liquid Domain"
 
@@ -572,6 +572,7 @@ class QuickLiquid(Operator):
         node_absorption.inputs["Color"].default_value = (0.8, 0.9, 1.0, 1.0)
 
         return {'FINISHED'}
+
 
 classes = (
     QuickExplode,

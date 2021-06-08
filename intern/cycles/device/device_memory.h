@@ -238,6 +238,7 @@ class device_memory {
 
   /* Only create through subclasses. */
   device_memory(Device *device, const char *name, MemoryType type);
+  device_memory(device_memory &&other) noexcept;
 
   /* No copying allowed. */
   device_memory(const device_memory &) = delete;
@@ -259,6 +260,8 @@ class device_memory {
   device_ptr original_device_ptr;
   size_t original_device_size;
   Device *original_device;
+  bool need_realloc_;
+  bool modified;
 };
 
 /* Device Only Memory
@@ -268,11 +271,15 @@ class device_memory {
 
 template<typename T> class device_only_memory : public device_memory {
  public:
-  device_only_memory(Device *device, const char *name)
-      : device_memory(device, name, MEM_DEVICE_ONLY)
+  device_only_memory(Device *device, const char *name, bool allow_host_memory_fallback = false)
+      : device_memory(device, name, allow_host_memory_fallback ? MEM_READ_WRITE : MEM_DEVICE_ONLY)
   {
     data_type = device_type_traits<T>::data_type;
     data_elements = max(device_type_traits<T>::num_elements, 1);
+  }
+
+  device_only_memory(device_only_memory &&other) noexcept : device_memory(std::move(other))
+  {
   }
 
   virtual ~device_only_memory()
@@ -329,6 +336,8 @@ template<typename T> class device_vector : public device_memory {
   {
     data_type = device_type_traits<T>::data_type;
     data_elements = device_type_traits<T>::num_elements;
+    modified = true;
+    need_realloc_ = true;
 
     assert(data_elements > 0);
   }
@@ -347,6 +356,7 @@ template<typename T> class device_vector : public device_memory {
       device_free();
       host_free();
       host_pointer = host_alloc(sizeof(T) * new_size);
+      modified = true;
       assert(device_pointer == 0);
     }
 
@@ -400,6 +410,19 @@ template<typename T> class device_vector : public device_memory {
     assert(device_pointer == 0);
   }
 
+  void give_data(array<T> &to)
+  {
+    device_free();
+
+    to.set_data((T *)host_pointer, data_size);
+    data_size = 0;
+    data_width = 0;
+    data_height = 0;
+    data_depth = 0;
+    host_pointer = 0;
+    assert(device_pointer == 0);
+  }
+
   /* Free device and host memory. */
   void free()
   {
@@ -411,10 +434,40 @@ template<typename T> class device_vector : public device_memory {
     data_height = 0;
     data_depth = 0;
     host_pointer = 0;
+    modified = true;
+    need_realloc_ = true;
     assert(device_pointer == 0);
   }
 
-  size_t size()
+  void free_if_need_realloc(bool force_free)
+  {
+    if (need_realloc_ || force_free) {
+      free();
+    }
+  }
+
+  bool is_modified() const
+  {
+    return modified;
+  }
+
+  bool need_realloc()
+  {
+    return need_realloc_;
+  }
+
+  void tag_modified()
+  {
+    modified = true;
+  }
+
+  void tag_realloc()
+  {
+    need_realloc_ = true;
+    tag_modified();
+  }
+
+  size_t size() const
   {
     return data_size;
   }
@@ -432,7 +485,24 @@ template<typename T> class device_vector : public device_memory {
 
   void copy_to_device()
   {
-    device_copy_to();
+    if (data_size != 0) {
+      device_copy_to();
+    }
+  }
+
+  void copy_to_device_if_modified()
+  {
+    if (!modified) {
+      return;
+    }
+
+    copy_to_device();
+  }
+
+  void clear_modified()
+  {
+    modified = false;
+    need_realloc_ = false;
   }
 
   void copy_from_device()
@@ -448,6 +518,14 @@ template<typename T> class device_vector : public device_memory {
   void zero_to_device()
   {
     device_zero();
+  }
+
+  void move_device(Device *new_device)
+  {
+    copy_from_device();
+    device_free();
+    device = new_device;
+    copy_to_device();
   }
 
  protected:

@@ -42,14 +42,27 @@ if(UNIX)
     -DSQLITE_MAX_VARIABLE_NUMBER=250000 \
     -fPIC")
   set(SQLITE_CONFIGURE_ENV ${SQLITE_CONFIGURE_ENV} && export LDFLAGS=${SQLITE_LDFLAGS} && export CFLAGS=${SQLITE_CFLAGS})
-  set(SQLITE_CONFIGURATION_ARGS ${SQLITE_CONFIGURATION_ARGS} --enable-threadsafe --enable-load-extension --enable-json1 --enable-fts4 --enable-fts5
-      --enable-shared=no)
+  set(SQLITE_CONFIGURATION_ARGS
+    ${SQLITE_CONFIGURATION_ARGS}
+    --enable-threadsafe
+    --enable-load-extension
+    --enable-json1
+    --enable-fts4
+    --enable-fts5
+    # While building `tcl` is harmless, it causes problems when the install step
+    # tries to copy the files into the system path.
+    # Since this isn't required by Python or Blender this can be disabled.
+    # Note that Debian (for example), splits this off into a separate package,
+    # so it's safe to turn off.
+    --disable-tcl
+    --enable-shared=no
+  )
 endif()
 
 ExternalProject_Add(external_sqlite
-  URL ${SQLITE_URI}
+  URL file://${PACKAGE_DIR}/${SQLITE_FILE}
   DOWNLOAD_DIR ${DOWNLOAD_DIR}
-  URL_HASH SHA1=${SQLITE_HASH}
+  URL_HASH ${SQLITE_HASH_TYPE}=${SQLITE_HASH}
   PREFIX ${BUILD_DIR}/sqlite
   PATCH_COMMAND ${PATCH_CMD} -p 1 -d ${BUILD_DIR}/sqlite/src/external_sqlite < ${PATCH_DIR}/sqlite.diff
   CONFIGURE_COMMAND ${SQLITE_CONFIGURE_ENV} && cd ${BUILD_DIR}/sqlite/src/external_sqlite/ && ${CONFIGURE_COMMAND} --prefix=${LIBDIR}/sqlite ${SQLITE_CONFIGURATION_ARGS}

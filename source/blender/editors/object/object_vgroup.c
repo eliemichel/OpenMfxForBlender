@@ -736,14 +736,19 @@ const EnumPropertyItem *ED_object_vgroup_selection_itemf_helper(const bContext *
     RNA_enum_items_add_value(&item, &totitem, WT_vertex_group_select_item, WT_VGROUP_ACTIVE);
   }
 
-  if (BKE_object_pose_armature_get(ob)) {
-    if (selection_mask & (1 << WT_VGROUP_BONE_SELECT)) {
-      RNA_enum_items_add_value(
-          &item, &totitem, WT_vertex_group_select_item, WT_VGROUP_BONE_SELECT);
+  if (ob) {
+    if (BKE_object_pose_armature_get(ob)) {
+      if (selection_mask & (1 << WT_VGROUP_BONE_SELECT)) {
+        RNA_enum_items_add_value(
+            &item, &totitem, WT_vertex_group_select_item, WT_VGROUP_BONE_SELECT);
+      }
     }
-    if (selection_mask & (1 << WT_VGROUP_BONE_DEFORM)) {
-      RNA_enum_items_add_value(
-          &item, &totitem, WT_vertex_group_select_item, WT_VGROUP_BONE_DEFORM);
+
+    if (BKE_modifiers_is_deformed_by_armature(ob)) {
+      if (selection_mask & (1 << WT_VGROUP_BONE_DEFORM)) {
+        RNA_enum_items_add_value(
+            &item, &totitem, WT_vertex_group_select_item, WT_VGROUP_BONE_DEFORM);
+      }
     }
   }
 
@@ -783,7 +788,7 @@ static void vgroup_operator_subset_select_props(wmOperatorType *ot, bool use_act
                       DummyRNA_NULL_items,
                       use_active ? WT_VGROUP_ACTIVE : WT_VGROUP_ALL,
                       "Subset",
-                      "Define which subset of Groups shall be used");
+                      "Define which subset of groups shall be used");
 
   if (use_active) {
     RNA_def_enum_funcs(prop, rna_vertex_group_with_single_itemf);
@@ -1746,7 +1751,7 @@ static bool *vgroup_selected_get(Object *ob)
     /* Mirror the selection if X Mirror is enabled. */
     Mesh *me = BKE_mesh_from_object(ob);
 
-    if (me && (me->symmetry & ME_SYMMETRY_X) != 0) {
+    if (me && ME_USING_MIRROR_X_VERTEX_GROUPS(me)) {
       BKE_object_defgroup_mirror_selection(ob, defbase_tot, mask, mask, &sel_count);
     }
   }
@@ -2417,7 +2422,7 @@ void ED_vgroup_mirror(Object *ob,
 
       BM_mesh_elem_hflag_disable_all(em->bm, BM_VERT, BM_ELEM_TAG, false);
 
-      /* Go through the list of editverts and assign them */
+      /* Go through the list of edit-vertices and assign them. */
       BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
         if (!BM_elem_flag_test(eve, BM_ELEM_TAG)) {
           if ((eve_mirr = EDBM_verts_mirror_get(em, eve))) {
@@ -2597,7 +2602,7 @@ static void vgroup_assign_verts(Object *ob, const float weight)
 
       cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
 
-      /* Go through the list of editverts and assign them */
+      /* Go through the list of edit-vertices and assign them. */
       BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
         if (BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
           MDeformVert *dv;
@@ -2664,12 +2669,23 @@ static void vgroup_assign_verts(Object *ob, const float weight)
 static bool vertex_group_supported_poll_ex(bContext *C, const Object *ob)
 {
   if (!ED_operator_object_active_local_editable_ex(C, ob)) {
+    CTX_wm_operator_poll_msg_set(C, "No active editable object");
     return false;
   }
+
+  if (!OB_TYPE_SUPPORT_VGROUP(ob->type)) {
+    CTX_wm_operator_poll_msg_set(C, "Object type does not support vertex groups");
+    return false;
+  }
+
+  /* Data checks. */
   const ID *data = ob->data;
-  return (OB_TYPE_SUPPORT_VGROUP(ob->type) &&
-          /* Data checks. */
-          (data != NULL) && !ID_IS_LINKED(data) && !ID_IS_OVERRIDE_LIBRARY(data));
+  if (data == NULL || ID_IS_LINKED(data) || ID_IS_OVERRIDE_LIBRARY(data)) {
+    CTX_wm_operator_poll_msg_set(C, "Object type \"%s\" does not have editable data");
+    return false;
+  }
+
+  return true;
 }
 
 static bool vertex_group_supported_poll(bContext *C)
@@ -2678,32 +2694,61 @@ static bool vertex_group_supported_poll(bContext *C)
   return vertex_group_supported_poll_ex(C, ob);
 }
 
+static bool vertex_group_poll_ex(bContext *C, Object *ob)
+{
+  if (!vertex_group_supported_poll_ex(C, ob)) {
+    return false;
+  }
+
+  if (BLI_listbase_is_empty(&ob->defbase)) {
+    CTX_wm_operator_poll_msg_set(C, "Object has no vertex groups");
+    return false;
+  }
+
+  return true;
+}
+
 static bool vertex_group_poll(bContext *C)
 {
   Object *ob = ED_object_context(C);
-
-  return (vertex_group_supported_poll(C) && ob->defbase.first);
+  return vertex_group_poll_ex(C, ob);
 }
 
-static bool vertex_group_mesh_poll(bContext *C)
+static bool vertex_group_mesh_poll_ex(bContext *C, Object *ob)
 {
-  Object *ob = ED_object_context(C);
+  if (!vertex_group_poll_ex(C, ob)) {
+    return false;
+  }
 
-  return (vertex_group_poll(C) && ob->type == OB_MESH);
+  if (ob->type != OB_MESH) {
+    CTX_wm_operator_poll_msg_set(C, "Only mesh objects are supported");
+    return false;
+  }
+
+  return true;
 }
 
-static bool UNUSED_FUNCTION(vertex_group_mesh_supported_poll)(bContext *C)
+static bool vertex_group_mesh_with_dvert_poll(bContext *C)
 {
   Object *ob = ED_object_context(C);
+  if (!vertex_group_mesh_poll_ex(C, ob)) {
+    return false;
+  }
 
-  return (vertex_group_supported_poll(C) && ob->type == OB_MESH);
+  Mesh *me = ob->data;
+  if (me->dvert == NULL) {
+    CTX_wm_operator_poll_msg_set(C, "The active mesh object has no vertex group data");
+    return false;
+  }
+
+  return true;
 }
 
 static bool UNUSED_FUNCTION(vertex_group_poll_edit)(bContext *C)
 {
   Object *ob = ED_object_context(C);
 
-  if (!vertex_group_supported_poll(C)) {
+  if (!vertex_group_supported_poll_ex(C, ob)) {
     return false;
   }
 
@@ -2717,7 +2762,7 @@ static bool vertex_group_vert_poll_ex(bContext *C,
 {
   Object *ob = ED_object_context(C);
 
-  if (!vertex_group_supported_poll(C)) {
+  if (!vertex_group_supported_poll_ex(C, ob)) {
     return false;
   }
 
@@ -2770,7 +2815,7 @@ static bool vertex_group_vert_select_unlocked_poll(bContext *C)
 {
   Object *ob = ED_object_context(C);
 
-  if (!vertex_group_supported_poll(C)) {
+  if (!vertex_group_supported_poll_ex(C, ob)) {
     return false;
   }
 
@@ -2791,7 +2836,7 @@ static bool vertex_group_vert_select_mesh_poll(bContext *C)
 {
   Object *ob = ED_object_context(C);
 
-  if (!vertex_group_supported_poll(C)) {
+  if (!vertex_group_supported_poll_ex(C, ob)) {
     return false;
   }
 
@@ -3165,9 +3210,9 @@ void OBJECT_OT_vertex_group_levels(wmOperatorType *ot)
 
   vgroup_operator_subset_select_props(ot, true);
   RNA_def_float(
-      ot->srna, "offset", 0.f, -1.0, 1.0, "Offset", "Value to add to weights", -1.0f, 1.f);
+      ot->srna, "offset", 0.0f, -1.0, 1.0, "Offset", "Value to add to weights", -1.0f, 1.0f);
   RNA_def_float(
-      ot->srna, "gain", 1.f, 0.f, FLT_MAX, "Gain", "Value to multiply weights by", 0.0f, 10.f);
+      ot->srna, "gain", 1.0f, 0.0f, FLT_MAX, "Gain", "Value to multiply weights by", 0.0f, 10.0f);
 }
 
 /** \} */
@@ -3313,7 +3358,7 @@ void OBJECT_OT_vertex_group_fix(wmOperatorType *ot)
       "groups' weights (this tool may be slow for many vertices)";
 
   /* api callbacks */
-  ot->poll = vertex_group_mesh_poll;
+  ot->poll = vertex_group_mesh_with_dvert_poll;
   ot->exec = vertex_group_fix_exec;
 
   /* flags */
@@ -3329,7 +3374,7 @@ void OBJECT_OT_vertex_group_fix(wmOperatorType *ot)
                 10.0f);
   RNA_def_float(ot->srna,
                 "strength",
-                1.f,
+                1.0f,
                 -2.0f,
                 FLT_MAX,
                 "Strength",
@@ -3345,7 +3390,7 @@ void OBJECT_OT_vertex_group_fix(wmOperatorType *ot)
       "Change Sensitivity",
       "Change the amount weights are altered with each iteration: lower values are slower",
       0.05f,
-      1.f);
+      1.0f);
 }
 
 /** \} */
@@ -3940,6 +3985,10 @@ static const EnumPropertyItem *vgroup_itemf(bContext *C,
                                             PropertyRNA *UNUSED(prop),
                                             bool *r_free)
 {
+  if (C == NULL) {
+    return DummyRNA_NULL_items;
+  }
+
   Object *ob = ED_object_context(C);
   EnumPropertyItem tmp = {0, "", 0, "", ""};
   EnumPropertyItem *item = NULL;
@@ -4184,7 +4233,7 @@ void OBJECT_OT_vertex_group_sort(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-  RNA_def_enum(ot->srna, "sort_type", vgroup_sort_type, SORT_TYPE_NAME, "Sort type", "Sort type");
+  RNA_def_enum(ot->srna, "sort_type", vgroup_sort_type, SORT_TYPE_NAME, "Sort Type", "Sort type");
 }
 
 /** \} */

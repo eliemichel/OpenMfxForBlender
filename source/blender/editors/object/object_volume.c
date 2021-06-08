@@ -23,9 +23,6 @@
 
 #include <string.h>
 
-#include "MEM_guardedalloc.h"
-
-#include "BLI_fileops.h"
 #include "BLI_listbase.h"
 #include "BLI_math_base.h"
 #include "BLI_path_util.h"
@@ -60,7 +57,7 @@ static Object *object_volume_add(bContext *C, wmOperator *op, const char *name)
   float loc[3], rot[3];
 
   if (!ED_object_add_generic_get_opts(C, op, 'Z', loc, rot, NULL, NULL, &local_view_bits, NULL)) {
-    return false;
+    return NULL;
   }
   return ED_object_add_type(C, OB_VOLUME, name, loc, rot, false, local_view_bits);
 }
@@ -184,7 +181,7 @@ void OBJECT_OT_volume_import(wmOperatorType *ot)
                                  WM_FILESEL_FILEPATH | WM_FILESEL_DIRECTORY | WM_FILESEL_FILES |
                                      WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 
   RNA_def_boolean(
       ot->srna,

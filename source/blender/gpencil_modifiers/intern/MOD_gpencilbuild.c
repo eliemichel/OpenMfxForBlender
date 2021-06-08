@@ -56,7 +56,6 @@
 
 #include "MOD_gpencil_modifiertypes.h"
 #include "MOD_gpencil_ui_common.h"
-#include "MOD_gpencil_util.h"
 
 static void initData(GpencilModifierData *md)
 {
@@ -115,7 +114,8 @@ static void gpf_clear_all_strokes(bGPDframe *gpf)
  *
  * Note: This won't be called if all points are present/removed
  */
-static void reduce_stroke_points(bGPDstroke *gps,
+static void reduce_stroke_points(bGPdata *gpd,
+                                 bGPDstroke *gps,
                                  const int num_points,
                                  const eBuildGpencil_Transition transition)
 {
@@ -180,7 +180,7 @@ static void reduce_stroke_points(bGPDstroke *gps,
   gps->totpoints = num_points;
 
   /* Calc geometry data. */
-  BKE_gpencil_stroke_geometry_update(gps);
+  BKE_gpencil_stroke_geometry_update(gpd, gps);
 }
 
 /* --------------------------------------------- */
@@ -197,7 +197,10 @@ typedef struct tStrokeBuildDetails {
 } tStrokeBuildDetails;
 
 /* Sequential - Show strokes one after the other */
-static void build_sequential(BuildGpencilModifierData *mmd, bGPDframe *gpf, float fac)
+static void build_sequential(BuildGpencilModifierData *mmd,
+                             bGPdata *gpd,
+                             bGPDframe *gpf,
+                             float fac)
 {
   const size_t tot_strokes = BLI_listbase_count(&gpf->strokes);
   bGPDstroke *gps;
@@ -236,25 +239,25 @@ static void build_sequential(BuildGpencilModifierData *mmd, bGPDframe *gpf, floa
   size_t last_visible = 0;
 
   switch (mmd->transition) {
-    /* Show in forward order
-     *  - As fac increases, the number of visible points increases
-     */
+      /* Show in forward order
+       *  - As fac increases, the number of visible points increases
+       */
     case GP_BUILD_TRANSITION_GROW:
       first_visible = 0; /* always visible */
       last_visible = (size_t)roundf(totpoints * fac);
       break;
 
-    /* Hide in reverse order
-     *  - As fac increases, the number of points visible at the end decreases
-     */
+      /* Hide in reverse order
+       *  - As fac increases, the number of points visible at the end decreases
+       */
     case GP_BUILD_TRANSITION_SHRINK:
       first_visible = 0; /* always visible (until last point removed) */
       last_visible = (size_t)(totpoints * (1.0f - fac));
       break;
 
-    /* Hide in forward order
-     *  - As fac increases, the early points start getting hidden
-     */
+      /* Hide in forward order
+       *  - As fac increases, the early points start getting hidden
+       */
     case GP_BUILD_TRANSITION_FADE:
       first_visible = (size_t)(totpoints * fac);
       last_visible = totpoints; /* i.e. visible until the end, unless first overlaps this */
@@ -278,12 +281,12 @@ static void build_sequential(BuildGpencilModifierData *mmd, bGPDframe *gpf, floa
       else if (first_visible > cell->start_idx) {
         /* Starts partway through this stroke */
         int num_points = cell->end_idx - first_visible;
-        reduce_stroke_points(cell->gps, num_points, mmd->transition);
+        reduce_stroke_points(gpd, cell->gps, num_points, mmd->transition);
       }
       else {
         /* Ends partway through this stroke */
         int num_points = last_visible - cell->start_idx;
-        reduce_stroke_points(cell->gps, num_points, mmd->transition);
+        reduce_stroke_points(gpd, cell->gps, num_points, mmd->transition);
       }
     }
   }
@@ -295,7 +298,10 @@ static void build_sequential(BuildGpencilModifierData *mmd, bGPDframe *gpf, floa
 /* --------------------------------------------- */
 
 /* Concurrent - Show multiple strokes at once */
-static void build_concurrent(BuildGpencilModifierData *mmd, bGPDframe *gpf, float fac)
+static void build_concurrent(BuildGpencilModifierData *mmd,
+                             bGPdata *gpd,
+                             bGPDframe *gpf,
+                             float fac)
 {
   bGPDstroke *gps, *gps_next;
   int max_points = 0;
@@ -390,16 +396,14 @@ static void build_concurrent(BuildGpencilModifierData *mmd, bGPDframe *gpf, floa
     }
     else if (num_points < gps->totpoints) {
       /* Remove some points */
-      reduce_stroke_points(gps, num_points, mmd->transition);
+      reduce_stroke_points(gpd, gps, num_points, mmd->transition);
     }
   }
 }
 
 /* --------------------------------------------- */
-static void generate_geometry(GpencilModifierData *md,
-                              Depsgraph *depsgraph,
-                              bGPDlayer *gpl,
-                              bGPDframe *gpf)
+static void generate_geometry(
+    GpencilModifierData *md, Depsgraph *depsgraph, bGPdata *gpd, bGPDlayer *gpl, bGPDframe *gpf)
 {
   BuildGpencilModifierData *mmd = (BuildGpencilModifierData *)md;
   const bool reverse = (mmd->transition != GP_BUILD_TRANSITION_GROW);
@@ -504,11 +508,11 @@ static void generate_geometry(GpencilModifierData *md,
   /* Time management mode */
   switch (mmd->mode) {
     case GP_BUILD_MODE_SEQUENTIAL:
-      build_sequential(mmd, gpf, fac);
+      build_sequential(mmd, gpd, gpf, fac);
       break;
 
     case GP_BUILD_MODE_CONCURRENT:
-      build_concurrent(mmd, gpf, fac);
+      build_concurrent(mmd, gpd, gpf, fac);
       break;
 
     default:
@@ -530,7 +534,7 @@ static void generateStrokes(GpencilModifierData *md, Depsgraph *depsgraph, Objec
     if (gpf == NULL) {
       continue;
     }
-    generate_geometry(md, depsgraph, gpl, gpf);
+    generate_geometry(md, depsgraph, gpd, gpl, gpf);
   }
 }
 
@@ -560,10 +564,12 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
   uiItemS(layout);
 
   row = uiLayoutRowWithHeading(layout, true, IFACE_("Use Factor"));
+  uiLayoutSetPropDecorate(row, false);
   uiItemR(row, ptr, "use_percentage", 0, "", ICON_NONE);
   sub = uiLayoutRow(row, true);
   uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_percentage"));
   uiItemR(sub, ptr, "percentage_factor", 0, "", ICON_NONE);
+  uiItemDecoratorR(row, ptr, "percentage_factor", 0);
 
   /* Check for incompatible time modifier. */
   Object *ob = ob_ptr.data;

@@ -22,8 +22,6 @@
  * \ingroup bke
  */
 
-#include "DNA_modifier_types.h"
-
 #include "BLI_utildefines.h"
 
 #ifdef __cplusplus
@@ -123,7 +121,8 @@ void BKE_effector_relations_free(struct ListBase *lb);
 struct ListBase *BKE_effectors_create(struct Depsgraph *depsgraph,
                                       struct Object *ob_src,
                                       struct ParticleSystem *psys_src,
-                                      struct EffectorWeights *weights);
+                                      struct EffectorWeights *weights,
+                                      bool use_rotation);
 void BKE_effectors_apply(struct ListBase *effectors,
                          struct ListBase *colliders,
                          struct EffectorWeights *weights,
@@ -147,7 +146,7 @@ float effector_falloff(struct EffectorCache *eff,
                        struct EffectorData *efd,
                        struct EffectedPoint *point,
                        struct EffectorWeights *weights);
-int closest_point_on_surface(SurfaceModifierData *surmd,
+int closest_point_on_surface(struct SurfaceModifierData *surmd,
                              const float co[3],
                              float surface_co[3],
                              float surface_nor[3],

@@ -372,7 +372,7 @@ static float wpaint_blend(const VPaint *wp,
   if (do_flip) {
     switch (blend) {
       case IMB_BLEND_MIX:
-        paintval = 1.f - paintval;
+        paintval = 1.0f - paintval;
         break;
       case IMB_BLEND_ADD:
         blend = IMB_BLEND_SUB;
@@ -415,7 +415,12 @@ static float wpaint_undo_lock_relative(
   /* In auto-normalize mode, or when there is no unlocked weight,
    * compute based on locked weight. */
   if (auto_normalize || free_weight <= 0.0f) {
-    weight *= (1.0f - locked_weight);
+    if (locked_weight < 1.0f - VERTEX_WEIGHT_LOCK_EPSILON) {
+      weight *= (1.0f - locked_weight);
+    }
+    else {
+      weight = 0;
+    }
   }
   else {
     /* When dealing with full unlocked weight, don't paint, as it is always displayed as 1. */
@@ -518,7 +523,7 @@ static bool do_weight_paint_normalize_all_locked(MDeformVert *dvert,
     return false;
   }
 
-  if (lock_weight >= 1.0f) {
+  if (lock_weight >= 1.0f - VERTEX_WEIGHT_LOCK_EPSILON) {
     /* locked groups make it impossible to fully normalize,
      * zero out what we can and return false */
     for (i = dvert->totweight, dw = dvert->dw; i != 0; i--, dw++) {
@@ -764,8 +769,8 @@ static void do_weight_paint_vertex_single(
   MDeformVert *dv_mirr;
   MDeformWeight *dw_mirr;
 
-  /* from now on we can check if mirrors enabled if this var is -1 and not bother with the flag */
-  if (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) {
+  /* Check if we should mirror vertex groups (X-axis). */
+  if (ME_USING_MIRROR_X_VERTEX_GROUPS(me)) {
     index_mirr = mesh_get_x_mirror_vert(ob, NULL, index, topology);
     vgroup_mirr = wpi->mirror.index;
 
@@ -779,7 +784,25 @@ static void do_weight_paint_vertex_single(
     index_mirr = vgroup_mirr = -1;
   }
 
-  if (wp->flag & VP_FLAG_VGROUP_RESTRICT) {
+  /* Check if painting should create new deform weight entries. */
+  bool restrict_to_existing = (wp->flag & VP_FLAG_VGROUP_RESTRICT) != 0;
+
+  if (wpi->do_lock_relative || wpi->do_auto_normalize) {
+    /* Without do_lock_relative only dw_rel_locked is reliable, while dw_rel_free may be fake 0. */
+    dw_rel_free = BKE_defvert_total_selected_weight(dv, wpi->defbase_tot, wpi->vgroup_unlocked);
+    dw_rel_locked = BKE_defvert_total_selected_weight(dv, wpi->defbase_tot, wpi->vgroup_locked);
+    CLAMP(dw_rel_locked, 0.0f, 1.0f);
+
+    /* Do not create entries if there is not enough free weight to paint.
+     * This logic is the same as in wpaint_undo_lock_relative and auto-normalize. */
+    if (wpi->do_auto_normalize || dw_rel_free <= 0.0f) {
+      if (dw_rel_locked >= 1.0f - VERTEX_WEIGHT_LOCK_EPSILON) {
+        restrict_to_existing = true;
+      }
+    }
+  }
+
+  if (restrict_to_existing) {
     dw = BKE_defvert_find_index(dv, wpi->active.index);
   }
   else {
@@ -827,10 +850,6 @@ static void do_weight_paint_vertex_single(
 
   /* Handle weight caught up in locked defgroups for Lock Relative. */
   if (wpi->do_lock_relative) {
-    dw_rel_free = BKE_defvert_total_selected_weight(dv, wpi->defbase_tot, wpi->vgroup_unlocked);
-    dw_rel_locked = BKE_defvert_total_selected_weight(dv, wpi->defbase_tot, wpi->vgroup_locked);
-    CLAMP(dw_rel_locked, 0.0f, 1.0f);
-
     weight_cur = BKE_defvert_calc_lock_relative_weight(weight_cur, dw_rel_locked, dw_rel_free);
   }
 
@@ -960,11 +979,11 @@ static void do_weight_paint_vertex_multi(
   float curw, curw_real, oldw, neww, change, curw_mirr, change_mirr;
   float dw_rel_free, dw_rel_locked;
 
-  /* from now on we can check if mirrors enabled if this var is -1 and not bother with the flag */
-  if (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) {
+  /* Check if we should mirror vertex groups (X-axis). */
+  if (ME_USING_MIRROR_X_VERTEX_GROUPS(me)) {
     index_mirr = mesh_get_x_mirror_vert(ob, NULL, index, topology);
 
-    if (index_mirr != -1 && index_mirr != index) {
+    if (!ELEM(index_mirr, -1, index)) {
       dv_mirr = &me->dvert[index_mirr];
     }
     else {
@@ -1610,7 +1629,7 @@ static bool wpaint_stroke_test_start(bContext *C, wmOperator *op, const float mo
     int i;
     bDeformGroup *dg;
 
-    if (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) {
+    if (ME_USING_MIRROR_X_VERTEX_GROUPS(me)) {
       BKE_object_defgroup_mirror_selection(
           ob, defbase_tot, defbase_sel, defbase_sel, &defbase_tot_sel);
     }
@@ -1658,6 +1677,10 @@ static bool wpaint_stroke_test_start(bContext *C, wmOperator *op, const float mo
           wpd->lock_flags, wpd->vgroup_validmap, wpd->active.index) &&
       (!wpd->do_multipaint || BKE_object_defgroup_check_lock_relative_multi(
                                   defbase_tot, wpd->lock_flags, defbase_sel, defbase_tot_sel))) {
+    wpd->do_lock_relative = true;
+  }
+
+  if (wpd->do_lock_relative || (ts->auto_normalize && wpd->lock_flags && !wpd->do_multipaint)) {
     bool *unlocked = MEM_dupallocN(wpd->vgroup_validmap);
 
     if (wpd->lock_flags) {
@@ -1668,7 +1691,6 @@ static bool wpaint_stroke_test_start(bContext *C, wmOperator *op, const float mo
     }
 
     wpd->vgroup_unlocked = unlocked;
-    wpd->do_lock_relative = true;
   }
 
   if (wpd->do_multipaint && ts->auto_normalize) {
@@ -1819,8 +1841,7 @@ static void do_wpaint_brush_blur_task_cb_ex(void *__restrict userdata,
 
   /* For each vertex */
   PBVHVertexIter vd;
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
     /* Test to see if the vertex coordinates are within the spherical brush region. */
     if (sculpt_brush_test_sq_fn(&test, vd.co)) {
       /* For grid based pbvh, take the vert whose loop corresponds to the current grid.
@@ -1916,8 +1937,7 @@ static void do_wpaint_brush_smear_task_cb_ex(void *__restrict userdata,
 
     /* For each vertex */
     PBVHVertexIter vd;
-    BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-    {
+    BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
       /* Test to see if the vertex coordinates are within the spherical brush region. */
       if (sculpt_brush_test_sq_fn(&test, vd.co)) {
         /* For grid based pbvh, take the vert whose loop corresponds to the current grid.
@@ -2023,8 +2043,7 @@ static void do_wpaint_brush_draw_task_cb_ex(void *__restrict userdata,
 
   /* For each vertex */
   PBVHVertexIter vd;
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
     /* Test to see if the vertex coordinates are within the spherical brush region. */
     if (sculpt_brush_test_sq_fn(&test, vd.co)) {
       /* Note: grids are 1:1 with corners (aka loops).
@@ -2092,8 +2111,7 @@ static void do_wpaint_brush_calc_average_weight_cb_ex(
 
   /* For each vertex */
   PBVHVertexIter vd;
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
     /* Test to see if the vertex coordinates are within the spherical brush region. */
     if (sculpt_brush_test_sq_fn(&test, vd.co)) {
       const float angle_cos = (use_normal && vd.no) ? dot_vf3vs3(sculpt_normal_frontface, vd.no) :
@@ -2173,7 +2191,7 @@ static void wpaint_paint_leaves(bContext *C,
 
   /* NOTE: current mirroring code cannot be run in parallel */
   TaskParallelSettings settings;
-  const bool use_threading = ((me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) == 0);
+  const bool use_threading = !ME_USING_MIRROR_X_VERTEX_GROUPS(me);
   BKE_pbvh_parallel_range_settings(&settings, use_threading, totnode);
 
   switch ((eBrushWeightPaintTool)brush->weightpaint_tool) {
@@ -2304,6 +2322,13 @@ static void wpaint_do_symmetrical_brush_actions(
 
   cache->symmetry = symm;
 
+  if (me->editflag & ME_EDIT_MIRROR_VERTEX_GROUPS) {
+    /* We don't do any symmetry strokes when mirroring vertex groups. */
+    copy_v3_v3(cache->true_last_location, cache->true_location);
+    cache->is_last_valid = true;
+    return;
+  }
+
   /* symm is a bit combination of XYZ - 1 is mirror
    * X; 2 is Y; 3 is XY; 4 is Z; 5 is XZ; 6 is YZ; 7 is XYZ */
   for (i = 1; i <= symm; i++) {
@@ -2383,7 +2408,8 @@ static void wpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
   wpi.vgroup_unlocked = wpd->vgroup_unlocked;
   wpi.do_flip = RNA_boolean_get(itemptr, "pen_flip");
   wpi.do_multipaint = wpd->do_multipaint;
-  wpi.do_auto_normalize = ((ts->auto_normalize != 0) && (wpi.vgroup_validmap != NULL));
+  wpi.do_auto_normalize = ((ts->auto_normalize != 0) && (wpi.vgroup_validmap != NULL) &&
+                           (wpi.do_multipaint || wpi.vgroup_validmap[wpi.active.index]));
   wpi.do_lock_relative = wpd->do_lock_relative;
   wpi.is_normalized = wpi.do_auto_normalize || wpi.do_lock_relative;
   wpi.brush_alpha_value = brush_alpha_value;
@@ -2787,8 +2813,7 @@ static void do_vpaint_brush_calc_average_color_cb_ex(void *__restrict userdata,
 
   /* For each vertex */
   PBVHVertexIter vd;
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
     /* Test to see if the vertex coordinates are within the spherical brush region. */
     if (sculpt_brush_test_sq_fn(&test, vd.co)) {
       const int v_index = has_grids ? data->me->mloop[vd.grid_indices[vd.g]].v :
@@ -2857,8 +2882,7 @@ static void do_vpaint_brush_draw_task_cb_ex(void *__restrict userdata,
 
   /* For each vertex */
   PBVHVertexIter vd;
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
     /* Test to see if the vertex coordinates are within the spherical brush region. */
     if (sculpt_brush_test_sq_fn(&test, vd.co)) {
       /* Note: Grids are 1:1 with corners (aka loops).
@@ -2956,8 +2980,7 @@ static void do_vpaint_brush_blur_task_cb_ex(void *__restrict userdata,
 
   /* For each vertex */
   PBVHVertexIter vd;
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
     /* Test to see if the vertex coordinates are within the spherical brush region. */
     if (sculpt_brush_test_sq_fn(&test, vd.co)) {
       /* For grid based pbvh, take the vert whose loop corresponds to the current grid.
@@ -3080,8 +3103,7 @@ static void do_vpaint_brush_smear_task_cb_ex(void *__restrict userdata,
 
     /* For each vertex */
     PBVHVertexIter vd;
-    BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-    {
+    BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
       /* Test to see if the vertex coordinates are within the spherical brush region. */
       if (sculpt_brush_test_sq_fn(&test, vd.co)) {
         /* For grid based pbvh, take the vert whose loop corresponds to the current grid.

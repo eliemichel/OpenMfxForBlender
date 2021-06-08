@@ -27,6 +27,7 @@ from bpy.types import (
 
 from bl_ui.properties_grease_pencil_common import (
     GreasePencilLayerMasksPanel,
+    GreasePencilLayerTransformPanel,
     GreasePencilLayerAdjustmentsPanel,
     GreasePencilLayerRelationsPanel,
     GreasePencilLayerDisplayPanel,
@@ -321,7 +322,7 @@ class DOPESHEET_MT_editor_menus(Menu):
         if st.mode != 'GPENCIL':
             layout.menu("DOPESHEET_MT_key")
         else:
-            layout.menu("DOPESHEET_MT_gpencil_frame")
+            layout.menu("DOPESHEET_MT_gpencil_key")
 
 
 class DOPESHEET_MT_view(Menu):
@@ -347,7 +348,6 @@ class DOPESHEET_MT_view(Menu):
         col.active = context.space_data.mode != 'SHAPEKEY'
         col.prop(st, "show_sliders")
 
-        layout.prop(st, "show_group_colors")
         layout.prop(st, "show_interpolation")
         layout.prop(st, "show_extremes")
         layout.prop(st, "use_auto_merge_keyframes")
@@ -556,8 +556,8 @@ class DOPESHEET_MT_gpencil_channel(Menu):
         layout.operator_menu_enum("anim.channels_move", "direction", text="Move...")
 
 
-class DOPESHEET_MT_gpencil_frame(Menu):
-    bl_label = "Frame"
+class DOPESHEET_MT_gpencil_key(Menu):
+    bl_label = "Key"
 
     def draw(self, _context):
         layout = self.layout
@@ -567,15 +567,14 @@ class DOPESHEET_MT_gpencil_frame(Menu):
         layout.operator_menu_enum("action.mirror", "type", text="Mirror")
 
         layout.separator()
-        layout.operator("action.duplicate")
-        layout.operator("action.delete")
+        layout.operator("action.keyframe_insert")
 
         layout.separator()
-        layout.operator("action.keyframe_type")
+        layout.operator("action.delete")
+        layout.operator("gpencil.interpolate_reverse")
 
-        # layout.separator()
-        # layout.operator("action.copy")
-        # layout.operator("action.paste")
+        layout.separator()
+        layout.operator("action.keyframe_type", text="Keyframe Type")
 
 
 class DOPESHEET_MT_delete(Menu):
@@ -597,6 +596,7 @@ class DOPESHEET_MT_context_menu(Menu):
 
     def draw(self, _context):
         layout = self.layout
+        st = _context.space_data
 
         layout.operator_context = 'INVOKE_DEFAULT'
 
@@ -607,16 +607,26 @@ class DOPESHEET_MT_context_menu(Menu):
         layout.separator()
 
         layout.operator_menu_enum("action.keyframe_type", "type", text="Keyframe Type")
-        layout.operator_menu_enum("action.handle_type", "type", text="Handle Type")
-        layout.operator_menu_enum("action.interpolation_type", "type", text="Interpolation Mode")
-        layout.operator_menu_enum("action.easing_type", "type", text="Easing Mode")
+
+        if st.mode != 'GPENCIL':
+           layout.operator_menu_enum("action.handle_type", "type", text="Handle Type")
+           layout.operator_menu_enum("action.interpolation_type", "type", text="Interpolation Mode")
+           layout.operator_menu_enum("action.easing_type", "type", text="Easing Mode")
 
         layout.separator()
 
         layout.operator("action.keyframe_insert").type = 'SEL'
         layout.operator("action.duplicate_move")
+
+        if st.mode == 'GPENCIL':
+            layout.separator()
+
         layout.operator_context = 'EXEC_REGION_WIN'
         layout.operator("action.delete")
+
+        if st.mode == 'GPENCIL':
+           layout.operator("gpencil.interpolate_reverse")
+           layout.operator("gpencil.frame_clean_duplicate", text="Delete Duplicate Frames")
 
         layout.separator()
 
@@ -629,6 +639,9 @@ class DOPESHEET_MT_channel_context_menu(Menu):
 
     def draw(self, context):
         layout = self.layout
+
+        # This menu is used from the graph editor too.
+        is_graph_editor = context.area.type == 'GRAPH_EDITOR'
 
         layout.operator("anim.channels_setting_enable", text="Mute Channels").type = 'MUTE'
         layout.operator("anim.channels_setting_disable", text="Unmute Channels").type = 'MUTE'
@@ -643,7 +656,7 @@ class DOPESHEET_MT_channel_context_menu(Menu):
         layout.separator()
         layout.operator("anim.channels_editable_toggle")
 
-        if bpy.ops.graph.extrapolation_type.poll(context.copy()):
+        if is_graph_editor:
             operator = "graph.extrapolation_type"
         else:
             operator = "action.extrapolation_type"
@@ -668,10 +681,10 @@ class DOPESHEET_MT_snap_pie(Menu):
         layout = self.layout
         pie = layout.menu_pie()
 
-        pie.operator("action.snap", text="Current Frame").type = 'CFRA'
-        pie.operator("action.snap", text="Nearest Frame").type = 'NEAREST_FRAME'
-        pie.operator("action.snap", text="Nearest Second").type = 'NEAREST_SECOND'
-        pie.operator("action.snap", text="Nearest Marker").type = 'NEAREST_MARKER'
+        pie.operator("action.snap", text="Selection to Current Frame").type = 'CFRA'
+        pie.operator("action.snap", text="Selection to Nearest Frame").type = 'NEAREST_FRAME'
+        pie.operator("action.snap", text="Selection to Nearest Second").type = 'NEAREST_SECOND'
+        pie.operator("action.snap", text="Selection to Nearest Marker").type = 'NEAREST_MARKER'
 
 
 class LayersDopeSheetPanel:
@@ -725,6 +738,12 @@ class DOPESHEET_PT_gpencil_layer_masks(LayersDopeSheetPanel, GreasePencilLayerMa
     bl_options = {'DEFAULT_CLOSED'}
 
 
+class DOPESHEET_PT_gpencil_layer_transform(LayersDopeSheetPanel, GreasePencilLayerTransformPanel, Panel):
+    bl_label = "Transform"
+    bl_parent_id = 'DOPESHEET_PT_gpencil_mode'
+    bl_options = {'DEFAULT_CLOSED'}
+
+
 class DOPESHEET_PT_gpencil_layer_adjustments(LayersDopeSheetPanel, GreasePencilLayerAdjustmentsPanel, Panel):
     bl_label = "Adjustments"
     bl_parent_id = 'DOPESHEET_PT_gpencil_mode'
@@ -753,7 +772,7 @@ classes = (
     DOPESHEET_MT_key,
     DOPESHEET_MT_key_transform,
     DOPESHEET_MT_gpencil_channel,
-    DOPESHEET_MT_gpencil_frame,
+    DOPESHEET_MT_gpencil_key,
     DOPESHEET_MT_delete,
     DOPESHEET_MT_context_menu,
     DOPESHEET_MT_channel_context_menu,
@@ -761,6 +780,7 @@ classes = (
     DOPESHEET_PT_filters,
     DOPESHEET_PT_gpencil_mode,
     DOPESHEET_PT_gpencil_layer_masks,
+    DOPESHEET_PT_gpencil_layer_transform,
     DOPESHEET_PT_gpencil_layer_adjustments,
     DOPESHEET_PT_gpencil_layer_relations,
     DOPESHEET_PT_gpencil_layer_display,

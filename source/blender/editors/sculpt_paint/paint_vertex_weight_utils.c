@@ -118,7 +118,7 @@ bool ED_wpaint_ensure_data(bContext *C,
   }
 
   if (flag & WPAINT_ENSURE_MIRROR) {
-    if (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) {
+    if (ME_USING_MIRROR_X_VERTEX_GROUPS(me)) {
       int mirror = ED_wpaint_mirror_vgroup_ensure(ob, ob->actdef - 1);
       if (vgroup_index) {
         vgroup_index->mirror = mirror;
@@ -273,10 +273,15 @@ BLI_INLINE float wval_exclusion(float weight, float paintval, float fac)
   return temp * fac + weight * mfac;
 }
 
-/* vpaint has 'vpaint_blend_tool' */
-/* result is not clamped from [0-1] */
+/**
+ * \param weight: Typically the current weight: #MDeformWeight.weight
+ *
+ * \return The final weight, note that this is _not_ clamped from [0-1].
+ * Clamping must be done on the final #MDeformWeight.weight
+ *
+ * \note vertex-paint has an equivalent function: #ED_vpaint_blend_tool
+ */
 float ED_wpaint_blend_tool(const int tool,
-                           /* dw->weight */
                            const float weight,
                            const float paintval,
                            const float alpha)

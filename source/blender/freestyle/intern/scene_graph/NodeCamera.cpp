@@ -19,8 +19,8 @@
  * \brief Class to represent a light node
  */
 
-#include <math.h>
-#include <string.h>  // for memcpy
+#include <cmath>
+#include <cstring>  // for memcpy
 
 #include "NodeCamera.h"
 
@@ -103,17 +103,6 @@ NodeOrthographicCamera::NodeOrthographicCamera(
   projection_matrix_[7] = -(top + bottom) / (top - bottom);
   projection_matrix_[10] = -2.0 / (zFar - zNear);
   projection_matrix_[11] = -(zFar + zNear) / (zFar - zNear);
-}
-
-NodeOrthographicCamera::NodeOrthographicCamera(const NodeOrthographicCamera &iBrother)
-    : NodeCamera(iBrother),
-      left_(iBrother.left_),
-      right_(iBrother.right_),
-      bottom_(iBrother.bottom_),
-      top_(iBrother.top_),
-      zNear_(iBrother.zNear_),
-      zFar_(iBrother.zFar_)
-{
 }
 
 NodePerspectiveCamera::NodePerspectiveCamera() : NodeCamera(NodeCamera::PERSPECTIVE)

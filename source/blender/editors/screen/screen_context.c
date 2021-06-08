@@ -48,13 +48,14 @@
 #include "BKE_gpencil.h"
 #include "BKE_layer.h"
 #include "BKE_object.h"
-#include "BKE_sequencer.h"
 
 #include "RNA_access.h"
 
 #include "ED_anim_api.h"
 #include "ED_armature.h"
 #include "ED_gpencil.h"
+
+#include "SEQ_sequencer.h"
 
 #include "UI_interface.h"
 #include "WM_api.h"
@@ -603,7 +604,7 @@ static eContextResult screen_ctx_sequences(const bContext *C, bContextDataResult
 {
   wmWindow *win = CTX_wm_window(C);
   Scene *scene = WM_window_get_active_scene(win);
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
   if (ed) {
     LISTBASE_FOREACH (Sequence *, seq, ed->seqbasep) {
       CTX_data_list_add(result, &scene->id, &RNA_Sequence, seq);
@@ -617,7 +618,7 @@ static eContextResult screen_ctx_selected_sequences(const bContext *C, bContextD
 {
   wmWindow *win = CTX_wm_window(C);
   Scene *scene = WM_window_get_active_scene(win);
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
   if (ed) {
     LISTBASE_FOREACH (Sequence *, seq, ed->seqbasep) {
       if (seq->flag & SELECT) {
@@ -634,7 +635,7 @@ static eContextResult screen_ctx_selected_editable_sequences(const bContext *C,
 {
   wmWindow *win = CTX_wm_window(C);
   Scene *scene = WM_window_get_active_scene(win);
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
   if (ed) {
     LISTBASE_FOREACH (Sequence *, seq, ed->seqbasep) {
       if (seq->flag & SELECT && !(seq->flag & SEQ_LOCK)) {
@@ -648,8 +649,6 @@ static eContextResult screen_ctx_selected_editable_sequences(const bContext *C,
 }
 static eContextResult screen_ctx_selected_nla_strips(const bContext *C, bContextDataResult *result)
 {
-  wmWindow *win = CTX_wm_window(C);
-  Scene *scene = WM_window_get_active_scene(win);
   bAnimContext ac;
   if (ANIM_animdata_get_context(C, &ac) != 0) {
     ListBase anim_data = {NULL, NULL};
@@ -662,7 +661,7 @@ static eContextResult screen_ctx_selected_nla_strips(const bContext *C, bContext
       NlaTrack *nlt = (NlaTrack *)ale->data;
       LISTBASE_FOREACH (NlaStrip *, strip, &nlt->strips) {
         if (strip->flag & NLASTRIP_FLAG_SELECT) {
-          CTX_data_list_add(result, &scene->id, &RNA_NlaStrip, strip);
+          CTX_data_list_add(result, ale->id, &RNA_NlaStrip, strip);
         }
       }
     }
@@ -867,7 +866,7 @@ static eContextResult screen_ctx_editable_gpencil_strokes(const bContext *C,
           LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
             if (ED_gpencil_stroke_can_use_direct(area, gps)) {
               /* check if the color is editable */
-              if (ED_gpencil_stroke_color_use(obact, gpl, gps) == false) {
+              if (ED_gpencil_stroke_material_editable(obact, gpl, gps) == false) {
                 continue;
               }
 
@@ -1003,6 +1002,11 @@ static eContextResult screen_ctx_selected_editable_keyframes(const bContext *C,
       }
 
       fcurve = (FCurve *)ale->data;
+      if (fcurve->bezt == NULL) {
+        /* Skip baked FCurves. */
+        continue;
+      }
+
       for (i = 0, bezt = fcurve->bezt; i < fcurve->totvert; i++, bezt++) {
         if ((bezt->f2 & SELECT) == 0) {
           continue;

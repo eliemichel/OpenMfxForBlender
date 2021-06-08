@@ -27,12 +27,12 @@
 extern "C" {
 #endif
 
+struct ARegion;
 struct ARegionType;
 struct BMEditMesh;
 struct BMFace;
 struct BMLoop;
 struct BMesh;
-struct Depsgraph;
 struct Image;
 struct ImageUser;
 struct Main;
@@ -216,8 +216,10 @@ struct BMLoop *ED_uvedit_active_vert_loop_get(struct BMesh *bm);
 void ED_uvedit_active_edge_loop_set(struct BMesh *bm, struct BMLoop *l);
 struct BMLoop *ED_uvedit_active_edge_loop_get(struct BMesh *bm);
 
-char ED_uvedit_select_mode_get(const Scene *scene);
-void ED_uvedit_select_sync_flush(const ToolSettings *ts, struct BMEditMesh *em, const bool select);
+char ED_uvedit_select_mode_get(const struct Scene *scene);
+void ED_uvedit_select_sync_flush(const struct ToolSettings *ts,
+                                 struct BMEditMesh *em,
+                                 const bool select);
 
 /* uvedit_unwrap_ops.c */
 void ED_uvedit_live_unwrap_begin(struct Scene *scene, struct Object *obedit);
@@ -232,6 +234,21 @@ void ED_image_draw_cursor(struct ARegion *region, const float cursor[2]);
 
 /* uvedit_buttons.c */
 void ED_uvedit_buttons_register(struct ARegionType *art);
+
+/* uvedit_islands.c */
+struct UVPackIsland_Params {
+  uint rotate : 1;
+  /** -1 not to align to axis, otherwise 0,1 for X,Y. */
+  int rotate_align_axis : 2;
+  uint only_selected_uvs : 1;
+  uint only_selected_faces : 1;
+  uint use_seams : 1;
+  uint correct_aspect : 1;
+};
+void ED_uvedit_pack_islands_multi(const struct Scene *scene,
+                                  Object **objects,
+                                  const uint objects_len,
+                                  const struct UVPackIsland_Params *params);
 
 #ifdef __cplusplus
 }

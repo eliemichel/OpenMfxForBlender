@@ -47,6 +47,8 @@
 #include "kernel/osl/osl_globals.h"
 // clang-format on
 
+#include "bvh/bvh_embree.h"
+
 #include "render/buffers.h"
 #include "render/coverage.h"
 
@@ -188,6 +190,7 @@ class CPUDevice : public Device {
 #endif
   thread_spin_lock oidn_task_lock;
 #ifdef WITH_EMBREE
+  RTCScene embree_scene = NULL;
   RTCDevice embree_device;
 #endif
 
@@ -393,8 +396,7 @@ class CPUDevice : public Device {
                 << string_human_readable_size(mem.memory_size()) << ")";
       }
 
-      if (mem.type == MEM_DEVICE_ONLY) {
-        assert(!mem.host_pointer);
+      if (mem.type == MEM_DEVICE_ONLY || !mem.host_pointer) {
         size_t alignment = MIN_ALIGNMENT_CPU_DATA_TYPES;
         void *data = util_aligned_malloc(mem.memory_size(), alignment);
         mem.device_pointer = (device_ptr)data;
@@ -456,7 +458,7 @@ class CPUDevice : public Device {
       tex_free((device_texture &)mem);
     }
     else if (mem.device_pointer) {
-      if (mem.type == MEM_DEVICE_ONLY) {
+      if (mem.type == MEM_DEVICE_ONLY || !mem.host_pointer) {
         util_aligned_free((void *)mem.device_pointer);
       }
       mem.device_pointer = 0;
@@ -472,6 +474,15 @@ class CPUDevice : public Device {
 
   virtual void const_copy_to(const char *name, void *host, size_t size) override
   {
+#if WITH_EMBREE
+    if (strcmp(name, "__data") == 0) {
+      assert(size <= sizeof(KernelData));
+
+      // Update scene handle (since it is different for each device on multi devices)
+      KernelData *const data = (KernelData *)host;
+      data->bvh.scene = embree_scene;
+    }
+#endif
     kernel_const_copy(&kernel_globals, name, host, size);
   }
 
@@ -537,13 +548,26 @@ class CPUDevice : public Device {
 #endif
   }
 
-  void *bvh_device() const override
+  void build_bvh(BVH *bvh, Progress &progress, bool refit) override
   {
 #ifdef WITH_EMBREE
-    return embree_device;
-#else
-    return NULL;
+    if (bvh->params.bvh_layout == BVH_LAYOUT_EMBREE ||
+        bvh->params.bvh_layout == BVH_LAYOUT_MULTI_OPTIX_EMBREE) {
+      BVHEmbree *const bvh_embree = static_cast<BVHEmbree *>(bvh);
+      if (refit) {
+        bvh_embree->refit(progress);
+      }
+      else {
+        bvh_embree->build(progress, &stats, embree_device);
+      }
+
+      if (bvh->params.top_level) {
+        embree_scene = bvh_embree->scene;
+      }
+    }
+    else
 #endif
+      Device::build_bvh(bvh, progress, refit);
   }
 
   void thread_run(DeviceTask &task)
@@ -895,8 +919,7 @@ class CPUDevice : public Device {
         ccl_global float *buffer = render_buffer + index * kernel_data.film.pass_stride;
         if (buffer[kernel_data.film.pass_sample_count] < 0.0f) {
           buffer[kernel_data.film.pass_sample_count] = -buffer[kernel_data.film.pass_sample_count];
-          float sample_multiplier = tile.sample / max((float)tile.start_sample + 1.0f,
-                                                      buffer[kernel_data.film.pass_sample_count]);
+          float sample_multiplier = tile.sample / buffer[kernel_data.film.pass_sample_count];
           if (sample_multiplier != 1.0f) {
             kernel_adaptive_post_adjust(kg, buffer, sample_multiplier);
           }
@@ -927,9 +950,14 @@ class CPUDevice : public Device {
     SIMD_SET_FLUSH_TO_ZERO;
 
     for (int sample = start_sample; sample < end_sample; sample++) {
-      if (task.get_cancel() || task_pool.canceled()) {
+      if (task.get_cancel() || TaskPool::canceled()) {
         if (task.need_finish_queue == false)
           break;
+      }
+
+      if (tile.stealing_state == RenderTile::CAN_BE_STOLEN && task.get_tile_stolen()) {
+        tile.stealing_state = RenderTile::WAS_STOLEN;
+        break;
       }
 
       if (tile.task == RenderTile::PATH_TRACE) {
@@ -967,7 +995,7 @@ class CPUDevice : public Device {
       coverage.finalize();
     }
 
-    if (task.adaptive_sampling.use) {
+    if (task.adaptive_sampling.use && (tile.stealing_state != RenderTile::WAS_STOLEN)) {
       adaptive_sampling_post(tile, kg);
     }
   }
@@ -1220,7 +1248,7 @@ class CPUDevice : public Device {
 
   void thread_render(DeviceTask &task)
   {
-    if (task_pool.canceled()) {
+    if (TaskPool::canceled()) {
       if (task.need_finish_queue == false)
         return;
     }
@@ -1290,7 +1318,7 @@ class CPUDevice : public Device {
 
       task.release_tile(tile);
 
-      if (task_pool.canceled()) {
+      if (TaskPool::canceled()) {
         if (task.need_finish_queue == false)
           break;
       }
@@ -1387,7 +1415,7 @@ class CPUDevice : public Device {
                         task.offset,
                         sample);
 
-      if (task.get_cancel() || task_pool.canceled())
+      if (task.get_cancel() || TaskPool::canceled())
         break;
 
       task.update_progress(NULL);
@@ -1626,6 +1654,7 @@ void device_cpu_info(vector<DeviceInfo> &devices)
   info.has_adaptive_stop_per_sample = true;
   info.has_osl = true;
   info.has_half_images = true;
+  info.has_nanovdb = true;
   info.has_profiling = true;
   info.denoisers = DENOISER_NLM;
   if (openimagedenoise_supported()) {

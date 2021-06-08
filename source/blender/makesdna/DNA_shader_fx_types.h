@@ -23,6 +23,10 @@
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct DRWShadingGroup;
 
 /* WARNING ALERT! TYPEDEF VALUES ARE WRITTEN IN FILES! SO DO NOT CHANGE!
@@ -65,7 +69,7 @@ typedef struct ShaderFxData {
   int type, mode;
   char _pad0[4];
   short flag;
-  /* Expansion for shader effect panels and sub-panels. */
+  /* An "expand" bit for each of the constraint's (sub)panels (uiPanelDataExpansion). */
   short ui_expand_flag;
   /** MAX_NAME. */
   char name[64];
@@ -251,3 +255,7 @@ typedef struct WaveShaderFxData {
   char _pad[4];
   ShaderFxData_Runtime runtime;
 } WaveShaderFxData;
+
+#ifdef __cplusplus
+}
+#endif

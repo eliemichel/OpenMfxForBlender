@@ -48,7 +48,7 @@ OIIO_NAMESPACE_USING
 using std::string;
 using std::unique_ptr;
 
-typedef unsigned char uchar;
+using uchar = unsigned char;
 
 template<class T, class Q>
 static void fill_all_channels(T *pixels, int width, int height, int components, Q alpha)
@@ -101,7 +101,7 @@ static ImBuf *imb_oiio_load_image(
         IMB_freeImBuf(ibuf);
       }
 
-      return NULL;
+      return nullptr;
     }
   }
   catch (const std::exception &exc) {
@@ -110,7 +110,7 @@ static ImBuf *imb_oiio_load_image(
       IMB_freeImBuf(ibuf);
     }
 
-    return NULL;
+    return nullptr;
   }
 
   /* ImBuf always needs 4 channels */
@@ -141,7 +141,7 @@ static ImBuf *imb_oiio_load_image_float(
         IMB_freeImBuf(ibuf);
       }
 
-      return NULL;
+      return nullptr;
     }
   }
   catch (const std::exception &exc) {
@@ -150,7 +150,7 @@ static ImBuf *imb_oiio_load_image_float(
       IMB_freeImBuf(ibuf);
     }
 
-    return NULL;
+    return nullptr;
   }
 
   /* ImBuf always needs 4 channels */
@@ -163,16 +163,13 @@ static ImBuf *imb_oiio_load_image_float(
 
 extern "C" {
 
-int imb_is_a_photoshop(const char *filename)
+bool imb_is_a_photoshop(const unsigned char *mem, size_t size)
 {
-  const char *photoshop_extension[] = {
-      ".psd",
-      ".pdd",
-      ".psb",
-      NULL,
-  };
-
-  return BLI_path_extension_check_array(filename, photoshop_extension);
+  const unsigned char magic[4] = {'8', 'B', 'P', 'S'};
+  if (size < sizeof(magic)) {
+    return false;
+  }
+  return memcmp(magic, mem, sizeof(magic)) == 0;
 }
 
 int imb_save_photoshop(struct ImBuf *ibuf, const char * /*name*/, int flags)
@@ -190,7 +187,7 @@ int imb_save_photoshop(struct ImBuf *ibuf, const char * /*name*/, int flags)
 
 struct ImBuf *imb_load_photoshop(const char *filename, int flags, char colorspace[IM_MAX_SPACE])
 {
-  struct ImBuf *ibuf = NULL;
+  struct ImBuf *ibuf = nullptr;
   int width, height, components;
   bool is_float, is_alpha, is_half;
   int basesize;
@@ -198,8 +195,8 @@ struct ImBuf *imb_load_photoshop(const char *filename, int flags, char colorspac
   const bool is_colorspace_manually_set = (colorspace[0] != '\0');
 
   /* load image from file through OIIO */
-  if (imb_is_a_photoshop(filename) == 0) {
-    return NULL;
+  if (IMB_ispic_type_matches(filename, IMB_FTYPE_PSD) == 0) {
+    return nullptr;
   }
 
   colorspace_set_default_role(colorspace, IM_MAX_SPACE, COLOR_ROLE_DEFAULT_BYTE);
@@ -208,7 +205,7 @@ struct ImBuf *imb_load_photoshop(const char *filename, int flags, char colorspac
   if (!in) {
     std::cerr << __func__ << ": ImageInput::create() failed:" << std::endl
               << OIIO_NAMESPACE::geterror() << std::endl;
-    return NULL;
+    return nullptr;
   }
 
   ImageSpec spec, config;
@@ -217,7 +214,7 @@ struct ImBuf *imb_load_photoshop(const char *filename, int flags, char colorspac
   if (!in->open(filename, spec, config)) {
     std::cerr << __func__ << ": ImageInput::open() failed:" << std::endl
               << in->geterror() << std::endl;
-    return NULL;
+    return nullptr;
   }
 
   if (!is_colorspace_manually_set) {
@@ -248,7 +245,7 @@ struct ImBuf *imb_load_photoshop(const char *filename, int flags, char colorspac
     if (in) {
       in->close();
     }
-    return NULL;
+    return nullptr;
   }
 
   if (is_float) {
@@ -263,7 +260,7 @@ struct ImBuf *imb_load_photoshop(const char *filename, int flags, char colorspac
   }
 
   if (!ibuf) {
-    return NULL;
+    return nullptr;
   }
 
   /* ImBuf always needs 4 channels */
@@ -281,7 +278,7 @@ struct ImBuf *imb_load_photoshop(const char *filename, int flags, char colorspac
       IMB_freeImBuf(ibuf);
     }
 
-    return NULL;
+    return nullptr;
   }
 }
 

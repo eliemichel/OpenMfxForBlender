@@ -21,7 +21,6 @@
  * \ingroup edmesh
  */
 
-#include "DNA_modifier_types.h"
 #include "DNA_scene_types.h"
 
 #include "RNA_access.h"
@@ -30,9 +29,7 @@
 #include "WM_types.h"
 
 #include "ED_mesh.h"
-#include "ED_object.h"
 #include "ED_screen.h"
-#include "ED_select_utils.h"
 
 #include "mesh_intern.h" /* own include */
 
@@ -133,7 +130,7 @@ void ED_operatortypes_mesh(void)
   WM_operatortype_append(MESH_OT_loop_multi_select);
   WM_operatortype_append(MESH_OT_mark_seam);
   WM_operatortype_append(MESH_OT_mark_sharp);
-#ifdef WITH_FREESTYLE
+#if defined(WITH_FREESTYLE)
   WM_operatortype_append(MESH_OT_mark_freestyle_edge);
 #endif
   WM_operatortype_append(MESH_OT_vertices_smooth);

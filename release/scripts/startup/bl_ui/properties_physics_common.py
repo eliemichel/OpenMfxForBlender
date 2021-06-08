@@ -38,16 +38,16 @@ class PhysicButtonsPanel:
 def physics_add(layout, md, name, type, typeicon, toggles):
     row = layout.row(align=True)
     if md:
-        row.context_pointer_set("modifier", md)
         row.operator(
             "object.modifier_remove",
             text=name,
             text_ctxt=i18n_contexts.default,
             icon='X',
-        )
+        ).modifier = md.name
         if toggles:
             row.prop(md, "show_viewport", text="")
             row.prop(md, "show_render", text="")
+        return row
     else:
         row.operator(
             "object.modifier_add",
@@ -73,10 +73,6 @@ class PHYSICS_PT_add(PhysicButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
 
-        row = layout.row(align=True)
-        row.alignment = 'LEFT'
-        row.label(text="Enable physics for:")
-
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
 
         obj = context.object
@@ -89,7 +85,10 @@ class PHYSICS_PT_add(PhysicButtonsPanel, Panel):
             col.operator("object.forcefield_toggle", text="Force Field", icon='X')
 
         if obj.type == 'MESH':
-            physics_add(col, context.collision, "Collision", 'COLLISION', 'MOD_PHYSICS', False)
+            row = physics_add(col, context.collision, "Collision", 'COLLISION', 'MOD_PHYSICS', False)
+            if row and obj.collision:
+                row.prop(obj.collision, "use", text="", icon='HIDE_OFF' if obj.collision.use else 'HIDE_ON')
+
             physics_add(col, context.cloth, "Cloth", 'CLOTH', 'MOD_CLOTH', True)
             physics_add(col, context.dynamic_paint, "Dynamic Paint", 'DYNAMIC_PAINT', 'MOD_DYNAMICPAINT', True)
 
@@ -126,6 +125,7 @@ def point_cache_ui(self, cache, enabled, cachetype):
     layout.context_pointer_set("point_cache", cache)
 
     is_saved = bpy.data.is_saved
+    is_liboverride = cache.id_data.override_library is not None
 
     # NOTE: TODO temporarily used until the animate properties are properly skipped.
     layout.use_property_decorate = False  # No animation (remove this later on).
@@ -221,7 +221,9 @@ def point_cache_ui(self, cache, enabled, cachetype):
         col = flow.column()
         col.active = can_bake
 
-        if cache.is_baked is True:
+        if is_liboverride and not cache.use_disk_cache:
+            col.operator("ptcache.bake", icon='ERROR', text="Bake (Disk Cache mandatory)")
+        elif cache.is_baked is True:
             col.operator("ptcache.free_bake", text="Delete Bake")
         else:
             col.operator("ptcache.bake", text="Bake").bake = True

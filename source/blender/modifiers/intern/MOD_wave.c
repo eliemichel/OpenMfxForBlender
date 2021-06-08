@@ -51,7 +51,8 @@
 #include "RNA_access.h"
 
 #include "MEM_guardedalloc.h"
-#include "RE_shader_ext.h"
+
+#include "RE_texture.h"
 
 #include "MOD_modifiertypes.h"
 #include "MOD_ui_common.h"
@@ -490,7 +491,7 @@ ModifierTypeInfo modifierType_Wave = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ NULL,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,

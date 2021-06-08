@@ -85,26 +85,26 @@ static void do_color_smooth_task_cb_exec(void *__restrict userdata,
       ss, &test, data->brush->falloff_shape);
   const int thread_id = BLI_task_parallel_thread_id(tls);
 
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
-    if (sculpt_brush_test_sq_fn(&test, vd.co)) {
-      const float fade = bstrength * SCULPT_brush_strength_factor(ss,
-                                                                  brush,
-                                                                  vd.co,
-                                                                  sqrtf(test.dist),
-                                                                  vd.no,
-                                                                  vd.fno,
-                                                                  vd.mask ? *vd.mask : 0.0f,
-                                                                  vd.index,
-                                                                  thread_id);
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
+    if (!sculpt_brush_test_sq_fn(&test, vd.co)) {
+      continue;
+    }
+    const float fade = bstrength * SCULPT_brush_strength_factor(ss,
+                                                                brush,
+                                                                vd.co,
+                                                                sqrtf(test.dist),
+                                                                vd.no,
+                                                                vd.fno,
+                                                                vd.mask ? *vd.mask : 0.0f,
+                                                                vd.index,
+                                                                thread_id);
 
-      float smooth_color[4];
-      SCULPT_neighbor_color_average(ss, smooth_color, vd.index);
-      blend_color_interpolate_float(vd.col, vd.col, smooth_color, fade);
+    float smooth_color[4];
+    SCULPT_neighbor_color_average(ss, smooth_color, vd.index);
+    blend_color_interpolate_float(vd.col, vd.col, smooth_color, fade);
 
-      if (vd.mvert) {
-        vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
-      }
+    if (vd.mvert) {
+      vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
     }
   }
   BKE_pbvh_vertex_iter_end;
@@ -138,8 +138,7 @@ static void do_paint_brush_task_cb_ex(void *__restrict userdata,
                                  BKE_brush_color_get(ss->scene, brush));
   IMB_colormanagement_srgb_to_scene_linear_v3(brush_color);
 
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
     SCULPT_orig_vert_data_update(&orig_data, &vd);
 
     bool affect_vertex = false;
@@ -153,46 +152,49 @@ static void do_paint_brush_task_cb_ex(void *__restrict userdata,
       distance_to_stroke_location = sqrtf(test.dist);
     }
 
-    if (affect_vertex) {
-      float fade = bstrength * SCULPT_brush_strength_factor(ss,
-                                                            brush,
-                                                            vd.co,
-                                                            distance_to_stroke_location,
-                                                            vd.no,
-                                                            vd.fno,
-                                                            vd.mask ? *vd.mask : 0.0f,
-                                                            vd.index,
-                                                            thread_id);
-
-      /* Density. */
-      float noise = 1.0f;
-      const float density = ss->cache->paint_brush.density;
-      if (density < 1.0f) {
-        const float hash_noise = BLI_hash_int_01(ss->cache->density_seed * 1000 * vd.index);
-        if (hash_noise > density) {
-          noise = density * hash_noise;
-          fade = fade * noise;
-        }
-      }
-
-      /* Brush paint color, brush test falloff and flow. */
-      float paint_color[4];
-      float wet_mix_color[4];
-      float buffer_color[4];
-
-      mul_v4_v4fl(paint_color, brush_color, fade * ss->cache->paint_brush.flow);
-      mul_v4_v4fl(wet_mix_color, data->wet_mix_sampled_color, fade * ss->cache->paint_brush.flow);
-
-      /* Interpolate with the wet_mix color for wet paint mixing. */
-      blend_color_interpolate_float(
-          paint_color, paint_color, wet_mix_color, ss->cache->paint_brush.wet_mix);
-      blend_color_mix_float(color_buffer->color[vd.i], color_buffer->color[vd.i], paint_color);
-
-      /* Final mix over the original color using brush alpha. */
-      mul_v4_v4fl(buffer_color, color_buffer->color[vd.i], brush->alpha);
-
-      IMB_blend_color_float(vd.col, orig_data.col, buffer_color, brush->blend);
+    if (!affect_vertex) {
+      continue;
     }
+
+    float fade = bstrength * SCULPT_brush_strength_factor(ss,
+                                                          brush,
+                                                          vd.co,
+                                                          distance_to_stroke_location,
+                                                          vd.no,
+                                                          vd.fno,
+                                                          vd.mask ? *vd.mask : 0.0f,
+                                                          vd.index,
+                                                          thread_id);
+
+    /* Density. */
+    float noise = 1.0f;
+    const float density = ss->cache->paint_brush.density;
+    if (density < 1.0f) {
+      const float hash_noise = BLI_hash_int_01(ss->cache->density_seed * 1000 * vd.index);
+      if (hash_noise > density) {
+        noise = density * hash_noise;
+        fade = fade * noise;
+      }
+    }
+
+    /* Brush paint color, brush test falloff and flow. */
+    float paint_color[4];
+    float wet_mix_color[4];
+    float buffer_color[4];
+
+    mul_v4_v4fl(paint_color, brush_color, fade * ss->cache->paint_brush.flow);
+    mul_v4_v4fl(wet_mix_color, data->wet_mix_sampled_color, fade * ss->cache->paint_brush.flow);
+
+    /* Interpolate with the wet_mix color for wet paint mixing. */
+    blend_color_interpolate_float(
+        paint_color, paint_color, wet_mix_color, ss->cache->paint_brush.wet_mix);
+    blend_color_mix_float(color_buffer->color[vd.i], color_buffer->color[vd.i], paint_color);
+
+    /* Final mix over the original color using brush alpha. */
+    mul_v4_v4fl(buffer_color, color_buffer->color[vd.i], brush->alpha);
+
+    IMB_blend_color_float(vd.col, orig_data.col, buffer_color, brush->blend);
+
     CLAMP4(vd.col, 0.0f, 1.0f);
 
     if (vd.mvert) {
@@ -220,12 +222,16 @@ static void do_sample_wet_paint_task_cb(void *__restrict userdata,
   SculptBrushTestFn sculpt_brush_test_sq_fn = SCULPT_brush_test_init_with_falloff_shape(
       ss, &test, data->brush->falloff_shape);
 
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
-    if (sculpt_brush_test_sq_fn(&test, vd.co)) {
-      add_v4_v4(swptd->color, vd.col);
-      swptd->tot_samples++;
+  test.radius *= data->brush->wet_paint_radius_factor;
+  test.radius_squared = test.radius * test.radius;
+
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
+    if (!sculpt_brush_test_sq_fn(&test, vd.co)) {
+      continue;
     }
+
+    add_v4_v4(swptd->color, vd.col);
+    swptd->tot_samples++;
   }
   BKE_pbvh_vertex_iter_end;
 }
@@ -375,61 +381,62 @@ static void do_smear_brush_task_cb_exec(void *__restrict userdata,
       ss, &test, data->brush->falloff_shape);
   const int thread_id = BLI_task_parallel_thread_id(tls);
 
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
-    if (sculpt_brush_test_sq_fn(&test, vd.co)) {
-      const float fade = bstrength * SCULPT_brush_strength_factor(ss,
-                                                                  brush,
-                                                                  vd.co,
-                                                                  sqrtf(test.dist),
-                                                                  vd.no,
-                                                                  vd.fno,
-                                                                  vd.mask ? *vd.mask : 0.0f,
-                                                                  vd.index,
-                                                                  thread_id);
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
+    if (!sculpt_brush_test_sq_fn(&test, vd.co)) {
+      continue;
+    }
+    const float fade = bstrength * SCULPT_brush_strength_factor(ss,
+                                                                brush,
+                                                                vd.co,
+                                                                sqrtf(test.dist),
+                                                                vd.no,
+                                                                vd.fno,
+                                                                vd.mask ? *vd.mask : 0.0f,
+                                                                vd.index,
+                                                                thread_id);
 
-      float current_disp[3];
-      float current_disp_norm[3];
-      float interp_color[4];
-      copy_v4_v4(interp_color, ss->cache->prev_colors[vd.index]);
+    float current_disp[3];
+    float current_disp_norm[3];
+    float interp_color[4];
+    copy_v4_v4(interp_color, ss->cache->prev_colors[vd.index]);
 
-      switch (brush->smear_deform_type) {
-        case BRUSH_SMEAR_DEFORM_DRAG:
-          sub_v3_v3v3(current_disp, ss->cache->location, ss->cache->last_location);
-          break;
-        case BRUSH_SMEAR_DEFORM_PINCH:
-          sub_v3_v3v3(current_disp, ss->cache->location, vd.co);
-          break;
-        case BRUSH_SMEAR_DEFORM_EXPAND:
-          sub_v3_v3v3(current_disp, vd.co, ss->cache->location);
-          break;
+    switch (brush->smear_deform_type) {
+      case BRUSH_SMEAR_DEFORM_DRAG:
+        sub_v3_v3v3(current_disp, ss->cache->location, ss->cache->last_location);
+        break;
+      case BRUSH_SMEAR_DEFORM_PINCH:
+        sub_v3_v3v3(current_disp, ss->cache->location, vd.co);
+        break;
+      case BRUSH_SMEAR_DEFORM_EXPAND:
+        sub_v3_v3v3(current_disp, vd.co, ss->cache->location);
+        break;
+    }
+    normalize_v3_v3(current_disp_norm, current_disp);
+    mul_v3_v3fl(current_disp, current_disp_norm, ss->cache->bstrength);
+
+    SculptVertexNeighborIter ni;
+    SCULPT_VERTEX_NEIGHBORS_ITER_BEGIN (ss, vd.index, ni) {
+      float vertex_disp[3];
+      float vertex_disp_norm[3];
+      sub_v3_v3v3(vertex_disp, SCULPT_vertex_co_get(ss, ni.index), vd.co);
+      const float *neighbor_color = ss->cache->prev_colors[ni.index];
+      normalize_v3_v3(vertex_disp_norm, vertex_disp);
+      if (dot_v3v3(current_disp_norm, vertex_disp_norm) >= 0.0f) {
+        continue;
       }
-      normalize_v3_v3(current_disp_norm, current_disp);
-      mul_v3_v3fl(current_disp, current_disp_norm, ss->cache->bstrength);
+      const float color_interp = clamp_f(
+          -dot_v3v3(current_disp_norm, vertex_disp_norm), 0.0f, 1.0f);
+      float color_mix[4];
+      copy_v4_v4(color_mix, neighbor_color);
+      mul_v4_fl(color_mix, color_interp * fade);
+      blend_color_mix_float(interp_color, interp_color, color_mix);
+    }
+    SCULPT_VERTEX_NEIGHBORS_ITER_END(ni);
 
-      SculptVertexNeighborIter ni;
-      SCULPT_VERTEX_NEIGHBORS_ITER_BEGIN (ss, vd.index, ni) {
-        float vertex_disp[3];
-        float vertex_disp_norm[3];
-        sub_v3_v3v3(vertex_disp, SCULPT_vertex_co_get(ss, ni.index), vd.co);
-        const float *neighbor_color = ss->cache->prev_colors[ni.index];
-        normalize_v3_v3(vertex_disp_norm, vertex_disp);
-        if (dot_v3v3(current_disp_norm, vertex_disp_norm) < 0.0f) {
-          const float color_interp = clamp_f(
-              -dot_v3v3(current_disp_norm, vertex_disp_norm), 0.0f, 1.0f);
-          float color_mix[4];
-          copy_v4_v4(color_mix, neighbor_color);
-          mul_v4_fl(color_mix, color_interp * fade);
-          blend_color_mix_float(interp_color, interp_color, color_mix);
-        }
-      }
-      SCULPT_VERTEX_NEIGHBORS_ITER_END(ni);
+    blend_color_interpolate_float(vd.col, ss->cache->prev_colors[vd.index], interp_color, fade);
 
-      blend_color_interpolate_float(vd.col, ss->cache->prev_colors[vd.index], interp_color, fade);
-
-      if (vd.mvert) {
-        vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
-      }
+    if (vd.mvert) {
+      vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
     }
   }
   BKE_pbvh_vertex_iter_end;
@@ -443,8 +450,7 @@ static void do_smear_store_prev_colors_task_cb_exec(void *__restrict userdata,
   SculptSession *ss = data->ob->sculpt;
 
   PBVHVertexIter vd;
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
     copy_v4_v4(ss->cache->prev_colors[vd.index], SCULPT_vertex_color_get(ss, vd.index));
   }
   BKE_pbvh_vertex_iter_end;

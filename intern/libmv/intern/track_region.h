@@ -24,14 +24,20 @@
 extern "C" {
 #endif
 
+typedef enum libmv_TrackRegionDirection {
+  LIBMV_TRACK_REGION_FORWARD,
+  LIBMV_TRACK_REGION_BACKWARD,
+} libmv_TrackRegionDirection;
+
 typedef struct libmv_TrackRegionOptions {
+  libmv_TrackRegionDirection direction;
   int motion_model;
   int num_iterations;
   int use_brute;
   int use_normalization;
   double minimum_correlation;
   double sigma;
-  float *image1_mask;
+  float* image1_mask;
 } libmv_TrackRegionOptions;
 
 typedef struct libmv_TrackRegionResult {
@@ -42,9 +48,9 @@ typedef struct libmv_TrackRegionResult {
 
 #ifdef __cplusplus
 namespace libmv {
-  struct TrackRegionOptions;
-  struct TrackRegionResult;
-}
+struct TrackRegionOptions;
+struct TrackRegionResult;
+}  // namespace libmv
 void libmv_configureTrackRegionOptions(
     const libmv_TrackRegionOptions& options,
     libmv::TrackRegionOptions* track_region_options);

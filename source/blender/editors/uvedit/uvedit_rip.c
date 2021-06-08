@@ -169,7 +169,7 @@ static BMLoop *bm_loop_find_other_fan_loop_with_visible_face(BMLoop *l_src,
       l_other = l_other->prev;
     }
     else {
-      BLI_assert(0);
+      BLI_assert_unreachable();
     }
   }
   return l_other;
@@ -189,7 +189,7 @@ static BMLoop *bm_vert_step_fan_loop_uv(BMLoop *l, BMEdge **e_step, const int cd
     l_next = l;
   }
   else {
-    BLI_assert(0);
+    BLI_assert_unreachable();
     return NULL;
   }
 
@@ -938,10 +938,10 @@ static int uv_rip_exec(bContext *C, wmOperator *op)
 
 static int uv_rip_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   float co[2];
 
-  UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &co[0], &co[1]);
+  UI_view2d_region_to_view(&region->v2d, event->mval[0], event->mval[1], &co[0], &co[1]);
   RNA_float_set_array(op->ptr, "location", co);
 
   return uv_rip_exec(C, op);

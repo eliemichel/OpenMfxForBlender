@@ -110,6 +110,8 @@ void BKE_toolsettings_free(struct ToolSettings *toolsettings);
 struct Scene *BKE_scene_duplicate(struct Main *bmain, struct Scene *sce, eSceneCopyMethod type);
 void BKE_scene_groups_relink(struct Scene *sce);
 
+bool BKE_scene_can_be_removed(const struct Main *bmain, const struct Scene *scene);
+
 bool BKE_scene_has_view_layer(const struct Scene *scene, const struct ViewLayer *layer);
 struct Scene *BKE_scene_find_from_collection(const struct Main *bmain,
                                              const struct Collection *collection);
@@ -138,6 +140,8 @@ struct TransformOrientationSlot *BKE_scene_orientation_slot_get(struct Scene *sc
 void BKE_scene_orientation_slot_set_index(struct TransformOrientationSlot *orient_slot,
                                           int orientation);
 int BKE_scene_orientation_slot_get_index(const struct TransformOrientationSlot *orient_slot);
+int BKE_scene_orientation_get_index(struct Scene *scene, int slot_index);
+int BKE_scene_orientation_get_index_from_flag(struct Scene *scene, int flag);
 
 /* **  Scene evaluation ** */
 
@@ -148,6 +152,7 @@ void BKE_scene_graph_update_tagged(struct Depsgraph *depsgraph, struct Main *bma
 void BKE_scene_graph_evaluated_ensure(struct Depsgraph *depsgraph, struct Main *bmain);
 
 void BKE_scene_graph_update_for_newframe(struct Depsgraph *depsgraph);
+void BKE_scene_graph_update_for_newframe_ex(struct Depsgraph *depsgraph, const bool clear_recalc);
 
 void BKE_scene_view_layer_graph_evaluated_ensure(struct Main *bmain,
                                                  struct Scene *scene,
@@ -221,7 +226,8 @@ void BKE_scene_free_depsgraph_hash(struct Scene *scene);
 void BKE_scene_free_view_layer_depsgraph(struct Scene *scene, struct ViewLayer *view_layer);
 
 /* Do not allocate new depsgraph. */
-struct Depsgraph *BKE_scene_get_depsgraph(struct Scene *scene, struct ViewLayer *view_layer);
+struct Depsgraph *BKE_scene_get_depsgraph(const struct Scene *scene,
+                                          const struct ViewLayer *view_layer);
 /* Allocate new depsgraph if necessary. */
 struct Depsgraph *BKE_scene_ensure_depsgraph(struct Main *bmain,
                                              struct Scene *scene,

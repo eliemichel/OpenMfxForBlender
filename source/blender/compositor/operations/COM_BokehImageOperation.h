@@ -20,6 +20,8 @@
 
 #include "COM_NodeOperation.h"
 
+namespace blender::compositor {
+
 /**
  * \brief The BokehImageOperation class is an operation that creates an image useful to mimic the
  *internals of a camera.
@@ -55,7 +57,7 @@ class BokehImageOperation : public NodeOperation {
   NodeBokehImage *m_data;
 
   /**
-   * \brief precalced center of the image
+   * \brief precalculate center of the image
    */
   float m_center[2];
 
@@ -87,7 +89,7 @@ class BokehImageOperation : public NodeOperation {
   /**
    * \brief determine the coordinate of a flap corner.
    *
-   * \param r: result in bokehimage space are stored [x,y]
+   * \param r: result in bokeh-image space are stored [x,y]
    * \param flapNumber: the flap number to calculate
    * \param distance: the lens distance is used to simulate lens shifts
    */
@@ -108,25 +110,26 @@ class BokehImageOperation : public NodeOperation {
   BokehImageOperation();
 
   /**
-   * \brief the inner loop of this program
+   * \brief The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
   /**
    * \brief Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * \brief Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   /**
    * \brief determine the resolution of this operation. currently fixed at [COM_BLUR_BOKEH_PIXELS,
    * COM_BLUR_BOKEH_PIXELS] \param resolution: \param preferredResolution:
    */
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override;
 
   /**
    * \brief set the node data
@@ -149,3 +152,5 @@ class BokehImageOperation : public NodeOperation {
     this->m_deleteData = true;
   }
 };
+
+}  // namespace blender::compositor

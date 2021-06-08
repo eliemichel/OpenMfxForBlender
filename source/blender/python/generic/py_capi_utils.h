@@ -18,6 +18,7 @@
  * \ingroup pygen
  */
 
+/* Use a define instead of `#pragma once` because of `bmesh_py_types.h` */
 #ifndef __PY_CAPI_UTILS_H__
 #define __PY_CAPI_UTILS_H__
 
@@ -84,10 +85,8 @@ PyObject *PyC_DefaultNameSpace(const char *filename);
 void PyC_RunQuicky(const char *filepath, int n, ...);
 bool PyC_NameSpace_ImportArray(PyObject *py_dict, const char *imports[]);
 
-void PyC_MainModule_Backup(PyObject **main_mod);
+void PyC_MainModule_Backup(PyObject **r_main_mod);
 void PyC_MainModule_Restore(PyObject *main_mod);
-
-void PyC_SetHomePath(const char *py_path_bundle);
 
 bool PyC_IsInterpreterActive(void);
 
@@ -141,6 +140,8 @@ struct PyC_StringEnum {
 };
 
 int PyC_ParseStringEnum(PyObject *o, void *p);
+const char *PyC_StringEnum_FindIDFromValue(const struct PyC_StringEnumItems *items,
+                                           const int value);
 
 int PyC_CheckArgs_DeepCopy(PyObject *args);
 

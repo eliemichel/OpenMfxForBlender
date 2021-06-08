@@ -33,10 +33,11 @@ static int aa_samples(Scene *scene, Object *object, ShaderEvalType type)
   }
   else if (type == SHADER_EVAL_NORMAL) {
     /* Only antialias normal if mesh has bump mapping. */
-    if (object->geometry) {
-      foreach (Shader *shader, object->geometry->used_shaders) {
+    if (object->get_geometry()) {
+      foreach (Node *node, object->get_geometry()->get_used_shaders()) {
+        Shader *shader = static_cast<Shader *>(node);
         if (shader->has_bump) {
-          return scene->integrator->aa_samples;
+          return scene->integrator->get_aa_samples();
         }
       }
     }
@@ -44,7 +45,7 @@ static int aa_samples(Scene *scene, Object *object, ShaderEvalType type)
     return 1;
   }
   else {
-    return scene->integrator->aa_samples;
+    return scene->integrator->get_aa_samples();
   }
 }
 
@@ -77,7 +78,7 @@ BakeManager::BakeManager()
   type = SHADER_EVAL_BAKE;
   pass_filter = 0;
 
-  need_update = true;
+  need_update_ = true;
 }
 
 BakeManager::~BakeManager()
@@ -112,10 +113,10 @@ void BakeManager::set(Scene *scene,
   }
 
   /* create device and update scene */
-  scene->film->tag_update(scene);
-  scene->integrator->tag_update(scene);
+  scene->film->tag_modified();
+  scene->integrator->tag_update(scene, Integrator::UPDATE_ALL);
 
-  need_update = true;
+  need_update_ = true;
 }
 
 void BakeManager::device_update(Device * /*device*/,
@@ -123,7 +124,7 @@ void BakeManager::device_update(Device * /*device*/,
                                 Scene *scene,
                                 Progress & /* progress */)
 {
-  if (!need_update)
+  if (!need_update())
     return;
 
   scoped_callback_timer timer([scene](double time) {
@@ -140,8 +141,8 @@ void BakeManager::device_update(Device * /*device*/,
 
   int object_index = 0;
   foreach (Object *object, scene->objects) {
-    const Geometry *geom = object->geometry;
-    if (object->name == object_name && geom->type == Geometry::MESH) {
+    const Geometry *geom = object->get_geometry();
+    if (object->name == object_name && geom->geometry_type == Geometry::MESH) {
       kbake->object_index = object_index;
       kbake->tri_offset = geom->prim_offset;
       kintegrator->aa_samples = aa_samples(scene, object, type);
@@ -151,11 +152,21 @@ void BakeManager::device_update(Device * /*device*/,
     object_index++;
   }
 
-  need_update = false;
+  need_update_ = false;
 }
 
 void BakeManager::device_free(Device * /*device*/, DeviceScene * /*dscene*/)
 {
+}
+
+void BakeManager::tag_update()
+{
+  need_update_ = true;
+}
+
+bool BakeManager::need_update() const
+{
+  return need_update_;
 }
 
 CCL_NAMESPACE_END

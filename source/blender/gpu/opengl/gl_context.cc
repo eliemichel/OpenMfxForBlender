@@ -108,7 +108,7 @@ GLContext::~GLContext()
   BLI_assert(orphaned_vertarrays_.is_empty());
   /* For now don't allow GPUFrameBuffers to be reuse in another context. */
   BLI_assert(framebuffers_.is_empty());
-  /* Delete vaos so the batch can be reused in another context. */
+  /* Delete VAO's so the batch can be reused in another context. */
   for (GLVaoCache *cache : vao_caches_) {
     cache->clear();
   }
@@ -121,7 +121,7 @@ GLContext::~GLContext()
 /** \name Activate / Deactivate context
  * \{ */
 
-void GLContext::activate(void)
+void GLContext::activate()
 {
   /* Make sure no other context is already bound to this thread. */
   BLI_assert(is_active_ == false);
@@ -160,7 +160,7 @@ void GLContext::activate(void)
   immActivate();
 }
 
-void GLContext::deactivate(void)
+void GLContext::deactivate()
 {
   immDeactivate();
   is_active_ = false;
@@ -172,12 +172,12 @@ void GLContext::deactivate(void)
 /** \name Flush, Finish & sync
  * \{ */
 
-void GLContext::flush(void)
+void GLContext::flush()
 {
   glFlush();
 }
 
-void GLContext::finish(void)
+void GLContext::finish()
 {
   glFinish();
 }
@@ -191,7 +191,7 @@ void GLContext::finish(void)
  * In this case we delay the deletion until the context is bound again.
  * \{ */
 
-void GLSharedOrphanLists::orphans_clear(void)
+void GLSharedOrphanLists::orphans_clear()
 {
   /* Check if any context is active on this thread! */
   BLI_assert(GLContext::get());
@@ -208,7 +208,7 @@ void GLSharedOrphanLists::orphans_clear(void)
   lists_mutex.unlock();
 };
 
-void GLContext::orphans_clear(void)
+void GLContext::orphans_clear()
 {
   /* Check if context has been activated by another thread! */
   BLI_assert(this->is_active_on_thread());
@@ -312,7 +312,7 @@ void GLContext::memory_statistics_get(int *r_total_mem, int *r_free_mem)
 {
   /* TODO(merwin): use Apple's platform API to get this info. */
   if (GLEW_NVX_gpu_memory_info) {
-    /* Teturned value in Kb. */
+    /* Returned value in Kb. */
     glGetIntegerv(GL_GPU_MEMORY_INFO_TOTAL_AVAILABLE_MEMORY_NVX, r_total_mem);
     glGetIntegerv(GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX, r_free_mem);
   }

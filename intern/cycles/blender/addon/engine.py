@@ -15,6 +15,7 @@
 #
 
 # <pep8 compliant>
+from __future__ import annotations
 
 
 def _is_using_buggy_driver():
@@ -270,19 +271,19 @@ def list_render_passes(scene, srl):
     if crl.use_pass_volume_indirect:           yield ("VolumeInd",                     "RGB", 'COLOR')
 
     # Cryptomatte passes.
-    crypto_depth = (crl.pass_crypto_depth + 1) // 2
-    if crl.use_pass_crypto_object:
+    crypto_depth = (srl.pass_cryptomatte_depth + 1) // 2
+    if srl.use_pass_cryptomatte_object:
         for i in range(0, crypto_depth):
             yield ("CryptoObject" + '{:02d}'.format(i), "RGBA", 'COLOR')
-    if crl.use_pass_crypto_material:
+    if srl.use_pass_cryptomatte_material:
         for i in range(0, crypto_depth):
             yield ("CryptoMaterial" + '{:02d}'.format(i), "RGBA", 'COLOR')
-    if srl.cycles.use_pass_crypto_asset:
+    if srl.use_pass_cryptomatte_asset:
         for i in range(0, crypto_depth):
             yield ("CryptoAsset" + '{:02d}'.format(i), "RGBA", 'COLOR')
 
     # Denoising passes.
-    if crl.use_denoising or crl.denoising_store_passes:
+    if (scene.cycles.use_denoising and crl.use_denoising) or crl.denoising_store_passes:
         yield ("Noisy Image", "RGBA", 'COLOR')
         if crl.denoising_store_passes:
             yield ("Denoising Normal",          "XYZ", 'VECTOR')
@@ -301,7 +302,7 @@ def list_render_passes(scene, srl):
                     yield ("Denoising Clean", "RGB", 'COLOR')
 
     # Custom AOV passes.
-    for aov in crl.aovs:
+    for aov in srl.aovs:
         if aov.type == 'VALUE':
             yield (aov.name, "X", 'VALUE')
         else:
@@ -309,22 +310,5 @@ def list_render_passes(scene, srl):
 
 
 def register_passes(engine, scene, view_layer):
-    # Detect duplicate render pass names, first one wins.
-    listed = set()
     for name, channelids, channeltype in list_render_passes(scene, view_layer):
-        if name not in listed:
-            engine.register_pass(scene, view_layer, name, len(channelids), channelids, channeltype)
-            listed.add(name)
-
-
-def detect_conflicting_passes(scene, view_layer):
-    # Detect conflicting render pass names for UI.
-    counter = {}
-    for name, _, _ in list_render_passes(scene, view_layer):
-        counter[name] = counter.get(name, 0) + 1
-
-    for aov in view_layer.cycles.aovs:
-        if counter[aov.name] > 1:
-            aov.conflict = "Conflicts with another render pass with the same name"
-        else:
-            aov.conflict = ""
+        engine.register_pass(scene, view_layer, name, len(channelids), channelids, channeltype)

@@ -46,10 +46,10 @@
 
 #  include "ED_clip.h"
 
-#  include "BKE_sequencer.h"
-
 #  include "DNA_screen_types.h"
 #  include "DNA_space_types.h"
+
+#  include "SEQ_relations.h"
 
 static void rna_MovieClip_reload_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
@@ -76,7 +76,7 @@ static void rna_MovieClip_use_proxy_update(Main *bmain, Scene *UNUSED(scene), Po
 {
   MovieClip *clip = (MovieClip *)ptr->owner_id;
   BKE_movieclip_clear_cache(clip);
-  BKE_sequence_invalidate_movieclip_strips(bmain, clip);
+  SEQ_relations_invalidate_movieclip_strips(bmain, clip);
 }
 
 static void rna_MovieClipUser_proxy_render_settings_update(Main *bmain,
@@ -105,7 +105,7 @@ static void rna_MovieClipUser_proxy_render_settings_update(Main *bmain,
 
             if (clip && (clip->flag & MCLIP_USE_PROXY)) {
               BKE_movieclip_clear_cache(clip);
-              BKE_sequence_invalidate_movieclip_strips(bmain, clip);
+              SEQ_relations_invalidate_movieclip_strips(bmain, clip);
             }
 
             break;
@@ -290,7 +290,7 @@ static void rna_def_moviecliUser(BlenderRNA *brna)
   RNA_def_property_enum_items(prop, clip_render_size_items);
   RNA_def_property_ui_text(prop,
                            "Proxy Render Size",
-                           "Draw preview using full resolution or different proxy resolutions");
+                           "Display preview using full resolution or different proxy resolutions");
   RNA_def_property_update(
       prop, NC_MOVIECLIP | ND_DISPLAY, "rna_MovieClipUser_proxy_render_settings_update");
 

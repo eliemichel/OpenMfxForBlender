@@ -20,6 +20,8 @@
 
 #include "COM_MixOperation.h"
 
+namespace blender::compositor {
+
 /**
  * this program converts an input color to an output value.
  * it assumes we are in sRGB color space.
@@ -35,12 +37,14 @@ class AlphaOverMixedOperation : public MixBaseOperation {
   AlphaOverMixedOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
   void setX(float x)
   {
     this->m_x = x;
   }
 };
+
+}  // namespace blender::compositor

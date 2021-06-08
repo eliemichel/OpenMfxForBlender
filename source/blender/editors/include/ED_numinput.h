@@ -99,6 +99,7 @@ bool hasNumInput(const NumInput *n);
 bool applyNumInput(NumInput *n, float *vec);
 bool handleNumInput(struct bContext *C, NumInput *n, const struct wmEvent *event);
 
+/** Share with `TFM_MODAL_CANCEL` in `transform.h`. */
 #define NUM_MODAL_INCREMENT_UP 18
 #define NUM_MODAL_INCREMENT_DOWN 19
 
@@ -106,8 +107,9 @@ bool user_string_to_number(bContext *C,
                            const char *str,
                            const struct UnitSettings *unit,
                            int type,
-                           const char *error_prefix,
-                           double *r_value);
+                           double *r_value,
+                           const bool use_single_line_error,
+                           char **r_error);
 
 /** \} */
 

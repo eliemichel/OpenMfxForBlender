@@ -31,6 +31,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_math.h"
+#include "BLI_simd.h"
 #include "BLI_task.h"
 #include "BLI_utildefines.h"
 
@@ -46,12 +47,9 @@
 #include "BKE_key.h"
 #include "BKE_lattice.h"
 #include "BKE_modifier.h"
+#include "BKE_object.h"
 
 #include "BKE_deform.h"
-
-#ifdef __SSE2__
-#  include <emmintrin.h>
-#endif
 
 /* -------------------------------------------------------------------- */
 /** \name Lattice Deform API
@@ -72,7 +70,7 @@ typedef struct LatticeDeformData {
 LatticeDeformData *BKE_lattice_deform_data_create(const Object *oblatt, const Object *ob)
 {
   /* we make an array with all differences */
-  Lattice *lt = oblatt->data;
+  Lattice *lt = BKE_object_get_lattice(oblatt);
   BPoint *bp;
   DispList *dl = oblatt->runtime.curve_cache ?
                      BKE_displist_find(&oblatt->runtime.curve_cache->disp, DL_VERTS) :
@@ -86,9 +84,6 @@ LatticeDeformData *BKE_lattice_deform_data_create(const Object *oblatt, const Ob
   float latmat[4][4];
   LatticeDeformData *lattice_deform_data;
 
-  if (lt->editlatt) {
-    lt = lt->editlatt->latt;
-  }
   bp = lt->def;
 
   const int32_t num_points = lt->pntsu * lt->pntsv * lt->pntsw;
@@ -117,7 +112,7 @@ LatticeDeformData *BKE_lattice_deform_data_create(const Object *oblatt, const Ob
   int defgrp_index = -1;
   const MDeformVert *dvert = BKE_lattice_deform_verts_get(oblatt);
   if (lt->vgroup[0] && dvert) {
-    defgrp_index = BKE_object_defgroup_name_index(ob, lt->vgroup);
+    defgrp_index = BKE_object_defgroup_name_index(oblatt, lt->vgroup);
 
     if (defgrp_index != -1) {
       lattice_weights = MEM_malloc_arrayN(sizeof(float), num_points, "lattice_weights");
@@ -169,9 +164,9 @@ void BKE_lattice_deform_data_eval_co(LatticeDeformData *lattice_deform_data,
   int ui, vi, wi, uu, vv, ww;
 
   /* vgroup influence */
-  float co_prev[3], weight_blend = 0.0f;
+  float co_prev[4] = {0}, weight_blend = 0.0f;
   copy_v3_v3(co_prev, co);
-#ifdef __SSE2__
+#ifdef BLI_HAVE_SSE2
   __m128 co_vec = _mm_loadu_ps(co_prev);
 #endif
 
@@ -232,13 +227,19 @@ void BKE_lattice_deform_data_eval_co(LatticeDeformData *lattice_deform_data,
         u = v * tu[uu - ui + 1];
         idx_u = CLAMPIS(uu, 0, idx_u_max);
         const int idx = idx_w + idx_v + idx_u;
-#ifdef __SSE2__
+#ifdef BLI_HAVE_SSE2
         {
           __m128 weight_vec = _mm_set1_ps(u);
-          /* This will load one extra element, this is ok because
-           * we ignore that part of register anyway.
-           */
-          __m128 lattice_vec = _mm_loadu_ps(&latticedata[idx * 3]);
+          /* We need to address special case for last item to avoid accessing invalid memory. */
+          __m128 lattice_vec;
+          if (idx * 3 == idx_w_max) {
+            copy_v3_v3((float *)&lattice_vec, &latticedata[idx * 3]);
+          }
+          else {
+            /* When not on last item, we can safely access one extra float, it will be ignored
+             * anyway. */
+            lattice_vec = _mm_loadu_ps(&latticedata[idx * 3]);
+          }
           co_vec = _mm_add_ps(co_vec, _mm_mul_ps(lattice_vec, weight_vec));
         }
 #else
@@ -250,7 +251,7 @@ void BKE_lattice_deform_data_eval_co(LatticeDeformData *lattice_deform_data,
       }
     }
   }
-#ifdef __SSE2__
+#ifdef BLI_HAVE_SSE2
   {
     copy_v3_v3(co, (float *)&co_vec);
   }

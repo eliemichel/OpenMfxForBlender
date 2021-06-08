@@ -246,8 +246,7 @@ void WM_cursor_wait(bool val)
 void WM_cursor_grab_enable(wmWindow *win, int wrap, bool hide, int bounds[4])
 {
   /* Only grab cursor when not running debug.
-   * It helps not to get a stuck WM when hitting a breakpoint
-   * */
+   * It helps not to get a stuck WM when hitting a break-point. */
   GHOST_TGrabCursorMode mode = GHOST_kGrabNormal;
   GHOST_TAxisFlag mode_axis = GHOST_kAxisX | GHOST_kGrabAxisY;
 
@@ -304,7 +303,7 @@ static void wm_cursor_warp_relative(wmWindow *win, int x, int y)
 {
   /* note: don't use wmEvent coords because of continuous grab T36409. */
   int cx, cy;
-  wm_get_cursor_position(win, &cx, &cy);
+  wm_cursor_position_get(win, &cx, &cy);
   WM_cursor_warp(win, cx + x, cy + y);
 }
 
@@ -521,13 +520,37 @@ void wm_init_cursor_data(void)
   BlenderCursor[WM_CURSOR_WAIT] = &WaitCursor;
   END_CURSOR_BLOCK;
 
+  /********************** Mute Cursor ***********************/
+  BEGIN_CURSOR_BLOCK;
+  static char mute_bitmap[] = {
+      0x00, 0x00, 0x22, 0x00, 0x14, 0x00, 0x08, 0x03, 0x14, 0x03, 0x22,
+      0x03, 0x00, 0x03, 0x00, 0x03, 0xf8, 0x7c, 0xf8, 0x7c, 0x00, 0x03,
+      0x00, 0x03, 0x00, 0x03, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00,
+  };
+
+  static char mute_mask[] = {
+      0x63, 0x00, 0x77, 0x00, 0x3e, 0x03, 0x1c, 0x03, 0x3e, 0x03, 0x77,
+      0x03, 0x63, 0x03, 0x80, 0x07, 0xfc, 0xfc, 0xfc, 0xfc, 0x80, 0x07,
+      0x00, 0x03, 0x00, 0x03, 0x00, 0x03, 0x00, 0x03, 0x00, 0x03,
+  };
+
+  static BCursor MuteCursor = {
+      mute_bitmap,
+      mute_mask,
+      9,
+      8,
+      true,
+  };
+
+  BlenderCursor[WM_CURSOR_MUTE] = &MuteCursor;
+  END_CURSOR_BLOCK;
+
   /****************** Normal Cross Cursor ************************/
   BEGIN_CURSOR_BLOCK;
   static char cross_bitmap[] = {
       0x00, 0x00, 0x80, 0x01, 0x80, 0x01, 0x80, 0x01, 0x80, 0x01, 0x80,
       0x01, 0x00, 0x00, 0x3e, 0x7c, 0x3e, 0x7c, 0x00, 0x00, 0x80, 0x01,
       0x80, 0x01, 0x80, 0x01, 0x80, 0x01, 0x80, 0x01, 0x00, 0x00,
-
   };
 
   static char cross_mask[] = {

@@ -28,25 +28,21 @@
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 
-#include "BLT_translation.h"
-
 #include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 
-#include "BKE_action.h"
 #include "BKE_colorband.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h"
 #include "BKE_deform.h"
-#include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
-#include "BKE_layer.h"
 #include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
@@ -310,7 +306,9 @@ static bool isDisabled(GpencilModifierData *md, int UNUSED(userRenderParams))
   return !mmd->object;
 }
 
-static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
+static void updateDepsgraph(GpencilModifierData *md,
+                            const ModifierUpdateDepsgraphContext *ctx,
+                            const int UNUSED(mode))
 {
   TintGpencilModifierData *lmd = (TintGpencilModifierData *)md;
   if (lmd->object != NULL) {

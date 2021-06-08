@@ -24,6 +24,9 @@
 #include "DNA_node_types.h"
 
 #include "RE_engine.h"
+#include "RE_pipeline.h"
+
+namespace blender::compositor {
 
 /**
  * \brief ImageNode
@@ -32,16 +35,19 @@
 class ImageNode : public Node {
  private:
   NodeOperation *doMultilayerCheck(NodeConverter &converter,
-                                   RenderLayer *rl,
+                                   RenderLayer *render_layer,
+                                   RenderPass *render_pass,
                                    Image *image,
                                    ImageUser *user,
                                    int framenumber,
                                    int outputsocketIndex,
-                                   int passindex,
                                    int view,
                                    DataType datatype) const;
 
  public:
   ImageNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
+
+}  // namespace blender::compositor

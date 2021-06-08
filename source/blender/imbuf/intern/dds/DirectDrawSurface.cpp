@@ -52,9 +52,9 @@
 #include <DirectDrawSurface.h>
 #include <PixelFormat.h>
 
-#include <math.h>   /* sqrt */
-#include <stdio.h>  /* printf */
-#include <stdlib.h> /* malloc */
+#include <cmath>   /* sqrt */
+#include <cstdio>  /* printf */
+#include <cstdlib> /* malloc */
 #include <sys/types.h>
 
 /*** declarations ***/
@@ -890,10 +890,6 @@ DirectDrawSurface::DirectDrawSurface(unsigned char *mem, uint size) : stream(mem
   }
 }
 
-DirectDrawSurface::~DirectDrawSurface()
-{
-}
-
 bool DirectDrawSurface::isValid() const
 {
   if (header.fourcc != FOURCC_DDS || header.size != 124) {
@@ -1130,7 +1126,7 @@ void *DirectDrawSurface::readData(uint &rsize)
 
   if (stream.failed) {
     free(data);
-    data = NULL;
+    data = nullptr;
     rsize = 0;
   }
 

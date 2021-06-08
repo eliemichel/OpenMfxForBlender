@@ -320,47 +320,62 @@ void quat_to_mat4(float m[4][4], const float q[4])
 
 void mat3_normalized_to_quat(float q[4], const float mat[3][3])
 {
-  double tr, s;
-
   BLI_ASSERT_UNIT_M3(mat);
 
-  tr = 0.25 * (double)(1.0f + mat[0][0] + mat[1][1] + mat[2][2]);
+  /* Check the trace of the matrix - bad precision if close to -1. */
+  const float trace = mat[0][0] + mat[1][1] + mat[2][2];
 
-  if (tr > (double)1e-4f) {
-    s = sqrt(tr);
-    q[0] = (float)s;
-    s = 1.0 / (4.0 * s);
-    q[1] = (float)((double)(mat[1][2] - mat[2][1]) * s);
-    q[2] = (float)((double)(mat[2][0] - mat[0][2]) * s);
-    q[3] = (float)((double)(mat[0][1] - mat[1][0]) * s);
+  if (trace > 0) {
+    float s = 2.0f * sqrtf(1.0f + trace);
+
+    q[0] = 0.25f * s;
+
+    s = 1.0f / s;
+
+    q[1] = (mat[1][2] - mat[2][1]) * s;
+    q[2] = (mat[2][0] - mat[0][2]) * s;
+    q[3] = (mat[0][1] - mat[1][0]) * s;
   }
   else {
+    /* Find the biggest diagonal element to choose the best formula.
+     * Here trace should also be always >= 0, avoiding bad precision. */
     if (mat[0][0] > mat[1][1] && mat[0][0] > mat[2][2]) {
-      s = 2.0f * sqrtf(1.0f + mat[0][0] - mat[1][1] - mat[2][2]);
-      q[1] = (float)(0.25 * s);
+      float s = 2.0f * sqrtf(1.0f + mat[0][0] - mat[1][1] - mat[2][2]);
 
-      s = 1.0 / s;
-      q[0] = (float)((double)(mat[1][2] - mat[2][1]) * s);
-      q[2] = (float)((double)(mat[1][0] + mat[0][1]) * s);
-      q[3] = (float)((double)(mat[2][0] + mat[0][2]) * s);
+      q[1] = 0.25f * s;
+
+      s = 1.0f / s;
+
+      q[0] = (mat[1][2] - mat[2][1]) * s;
+      q[2] = (mat[1][0] + mat[0][1]) * s;
+      q[3] = (mat[2][0] + mat[0][2]) * s;
     }
     else if (mat[1][1] > mat[2][2]) {
-      s = 2.0f * sqrtf(1.0f + mat[1][1] - mat[0][0] - mat[2][2]);
-      q[2] = (float)(0.25 * s);
+      float s = 2.0f * sqrtf(1.0f + mat[1][1] - mat[0][0] - mat[2][2]);
 
-      s = 1.0 / s;
-      q[0] = (float)((double)(mat[2][0] - mat[0][2]) * s);
-      q[1] = (float)((double)(mat[1][0] + mat[0][1]) * s);
-      q[3] = (float)((double)(mat[2][1] + mat[1][2]) * s);
+      q[2] = 0.25f * s;
+
+      s = 1.0f / s;
+
+      q[0] = (mat[2][0] - mat[0][2]) * s;
+      q[1] = (mat[1][0] + mat[0][1]) * s;
+      q[3] = (mat[2][1] + mat[1][2]) * s;
     }
     else {
-      s = 2.0f * sqrtf(1.0f + mat[2][2] - mat[0][0] - mat[1][1]);
-      q[3] = (float)(0.25 * s);
+      float s = 2.0f * sqrtf(1.0f + mat[2][2] - mat[0][0] - mat[1][1]);
 
-      s = 1.0 / s;
-      q[0] = (float)((double)(mat[0][1] - mat[1][0]) * s);
-      q[1] = (float)((double)(mat[2][0] + mat[0][2]) * s);
-      q[2] = (float)((double)(mat[2][1] + mat[1][2]) * s);
+      q[3] = 0.25f * s;
+
+      s = 1.0f / s;
+
+      q[0] = (mat[0][1] - mat[1][0]) * s;
+      q[1] = (mat[2][0] + mat[0][2]) * s;
+      q[2] = (mat[2][1] + mat[1][2]) * s;
+    }
+
+    /* Make sure w is nonnegative for a canonical result. */
+    if (q[0] < 0) {
+      negate_v4(q);
     }
   }
 
@@ -546,9 +561,19 @@ void rotation_between_quats_to_quat(float q[4], const float q1[4], const float q
  * \param r_twist: if not NULL, receives the twist quaternion.
  * \returns twist angle.
  */
-float quat_split_swing_and_twist(const float q[4], int axis, float r_swing[4], float r_twist[4])
+float quat_split_swing_and_twist(const float q_in[4], int axis, float r_swing[4], float r_twist[4])
 {
   BLI_assert(axis >= 0 && axis <= 2);
+
+  /* The calculation requires a canonical quaternion. */
+  float q[4];
+
+  if (q_in[0] < 0) {
+    negate_v4_v4(q, q_in);
+  }
+  else {
+    copy_v4_v4(q, q_in);
+  }
 
   /* Half-twist angle can be computed directly. */
   float t = atan2f(q[axis + 1], q[0]);
@@ -569,7 +594,7 @@ float quat_split_swing_and_twist(const float q[4], int axis, float r_swing[4], f
       BLI_assert(fabsf(r_swing[axis + 1]) < BLI_ASSERT_UNIT_EPSILON);
     }
 
-    /* Output twist last just in case q ovelaps r_twist. */
+    /* Output twist last just in case q overlaps r_twist. */
     if (r_twist) {
       r_twist[0] = cos_t;
       zero_v3(r_twist + 1);
@@ -1556,7 +1581,7 @@ void quat_to_compatible_eul(float eul[3], const float oldrot[3], const float qua
  * was adapted from
  *      ANSI C code from the article
  *      "Euler Angle Conversion"
- *      by Ken Shoemake, shoemake@graphics.cis.upenn.edu
+ *      by Ken Shoemake <shoemake@graphics.cis.upenn.edu>
  *      in "Graphics Gems IV", Academic Press, 1994
  * for use in Blender
  */

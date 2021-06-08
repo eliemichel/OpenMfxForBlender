@@ -34,12 +34,10 @@ struct ARegion;
 struct ImBuf;
 struct Image;
 struct ImageUser;
-struct LinkNodePair;
 struct Main;
 struct ReportList;
 struct Scene;
 struct SpaceImage;
-struct ViewLayer;
 struct bContext;
 struct wmOperator;
 struct wmWindowManager;
@@ -55,10 +53,12 @@ void ED_space_image_auto_set(const struct bContext *C, struct SpaceImage *sima);
 struct Mask *ED_space_image_get_mask(struct SpaceImage *sima);
 void ED_space_image_set_mask(struct bContext *C, struct SpaceImage *sima, struct Mask *mask);
 
-bool ED_space_image_color_sample(struct SpaceImage *sima,
+bool ED_space_image_get_position(struct SpaceImage *sima,
                                  struct ARegion *region,
                                  int mval[2],
-                                 float r_col[3]);
+                                 float fpos[2]);
+bool ED_space_image_color_sample(
+    struct SpaceImage *sima, struct ARegion *region, int mval[2], float r_col[3], bool *r_is_data);
 struct ImBuf *ED_space_image_acquire_buffer(struct SpaceImage *sima, void **r_lock, int tile);
 int ED_space_image_get_display_channel_mask(struct ImBuf *ibuf);
 void ED_space_image_release_buffer(struct SpaceImage *sima, struct ImBuf *ibuf, void *lock);

@@ -315,8 +315,6 @@ static bool view3d_ruler_item_mousemove(struct Depsgraph *depsgraph,
   const float eps_bias = 0.0002f;
   float dist_px = MVAL_MAX_PX_DIST * U.pixelsize; /* snap dist */
 
-  WM_gizmo_set_flag(snap_gizmo, WM_GIZMO_HIDDEN, true);
-
   if (ruler_item) {
     RulerInteraction *inter = ruler_item->gz.interaction_data;
     float *co = ruler_item->co[inter->co_index];
@@ -388,11 +386,11 @@ static bool view3d_ruler_item_mousemove(struct Depsgraph *depsgraph,
             snap_gizmo->ptr, ruler_info->snap_data.prop_prevpoint, prev_point);
       }
 
-      short snap_elem = ED_gizmotypes_snap_3d_update(
-          snap_gizmo, depsgraph, ruler_info->region, v3d, ruler_info->wm, mval_fl, co, NULL);
+      ED_gizmotypes_snap_3d_update(
+          snap_gizmo, depsgraph, ruler_info->region, v3d, ruler_info->wm, mval_fl);
 
-      if (snap_elem) {
-        WM_gizmo_set_flag(snap_gizmo, WM_GIZMO_HIDDEN, false);
+      if (ED_gizmotypes_snap_3d_is_enabled(snap_gizmo)) {
+        ED_gizmotypes_snap_3d_data_get(snap_gizmo, co, NULL, NULL, NULL);
       }
     }
     return true;
@@ -554,9 +552,9 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
   RulerItem *ruler_item = (RulerItem *)gz;
   ARegion *region = ruler_info->region;
   RegionView3D *rv3d = region->regiondata;
-  const float cap_size = 4.0f;
-  const float bg_margin = 4.0f * U.pixelsize;
-  const float arc_size = 64.0f * U.pixelsize;
+  const float cap_size = 4.0f * U.dpi_fac;
+  const float bg_margin = 4.0f * U.dpi_fac;
+  const float arc_size = 64.0f * U.dpi_fac;
 #define ARC_STEPS 24
   const int arc_steps = ARC_STEPS;
   const float color_act[4] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -1074,7 +1072,6 @@ static void gizmo_ruler_exit(bContext *C, wmGizmo *gz, const bool cancel)
 
   if (!cancel) {
     if (ruler_info->state == RULER_STATE_DRAG) {
-      WM_gizmo_set_flag(ruler_info->snap_data.gizmo, WM_GIZMO_HIDDEN, false);
       RNA_property_unset(ruler_info->snap_data.gizmo->ptr, ruler_info->snap_data.prop_prevpoint);
       ruler_state_set(ruler_info, RULER_STATE_NORMAL);
     }
@@ -1082,9 +1079,7 @@ static void gizmo_ruler_exit(bContext *C, wmGizmo *gz, const bool cancel)
     view3d_ruler_to_gpencil(C, gzgroup);
   }
 
-  if (gz) {
-    MEM_SAFE_FREE(gz->interaction_data);
-  }
+  MEM_SAFE_FREE(gz->interaction_data);
 
   ruler_state_set(ruler_info, RULER_STATE_NORMAL);
 }

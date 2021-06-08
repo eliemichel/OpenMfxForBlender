@@ -35,15 +35,9 @@ namespace Freestyle {
 /*                                */
 /**********************************/
 
-TextureManager *StrokeRenderer::_textureManager = 0;
+TextureManager *StrokeRenderer::_textureManager = nullptr;
 
-StrokeRenderer::StrokeRenderer()
-{
-}
-
-StrokeRenderer::~StrokeRenderer()
-{
-}
+StrokeRenderer::~StrokeRenderer() = default;
 
 bool StrokeRenderer::loadTextures()
 {
@@ -59,7 +53,7 @@ bool StrokeRenderer::loadTextures()
 /*                                */
 /**********************************/
 
-TextureManager *TextureManager::_pInstance = 0;
+TextureManager *TextureManager::_pInstance = nullptr;
 
 string TextureManager::_patterns_path;
 
@@ -77,7 +71,7 @@ TextureManager::~TextureManager()
   if (!_brushesMap.empty()) {
     _brushesMap.clear();
   }
-  _pInstance = 0;
+  _pInstance = nullptr;
 }
 
 void TextureManager::load()

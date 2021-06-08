@@ -119,7 +119,6 @@ class GRAPH_MT_view(Menu):
         layout.prop(st, "use_realtime_update")
         layout.prop(st, "show_cursor")
         layout.prop(st, "show_sliders")
-        layout.prop(st, "show_group_colors")
         layout.prop(st, "use_auto_merge_keyframes")
 
         if st.mode != 'DRIVERS':
@@ -130,6 +129,8 @@ class GRAPH_MT_view(Menu):
         layout.prop(st, "use_beauty_drawing")
 
         layout.separator()
+
+        layout.prop(st, "show_extrapolation")
 
         layout.prop(st, "show_handles")
 
@@ -301,6 +302,7 @@ class GRAPH_MT_key(Menu):
         layout.operator("graph.smooth")
         layout.operator("graph.sample")
         layout.operator("graph.bake")
+        layout.operator("graph.unbake")
 
         layout.separator()
         layout.operator("graph.euler_filter", text="Discontinuity (Euler) Filter")

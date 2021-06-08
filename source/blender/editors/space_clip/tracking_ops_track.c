@@ -24,13 +24,15 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_math.h"
+#include "BLI_string.h"
 #include "BLI_utildefines.h"
+
+#include "BLT_translation.h"
 
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_movieclip.h"
-#include "BKE_report.h"
 #include "BKE_tracking.h"
 
 #include "WM_api.h"
@@ -185,7 +187,7 @@ static bool track_markers_initjob(bContext *C, TrackMarkersJob *tmj, bool backwa
     }
   }
 
-  tmj->context = BKE_autotrack_context_new(clip, &sc->user, backwards, true);
+  tmj->context = BKE_autotrack_context_new(clip, &sc->user, backwards);
 
   clip->tracking_context = tmj->context;
 
@@ -357,7 +359,7 @@ static int track_markers(bContext *C, wmOperator *op, bool use_job)
     G.is_break = false;
 
     WM_jobs_start(CTX_wm_manager(C), wm_job);
-    WM_cursor_wait(0);
+    WM_cursor_wait(false);
 
     /* Add modal handler for ESC. */
     WM_event_add_modal_handler(C, op);
@@ -399,6 +401,28 @@ static int track_markers_modal(bContext *C, wmOperator *UNUSED(op), const wmEven
   return OPERATOR_PASS_THROUGH;
 }
 
+static char *track_markers_desc(bContext *UNUSED(C), wmOperatorType *UNUSED(op), PointerRNA *ptr)
+{
+  const bool backwards = RNA_boolean_get(ptr, "backwards");
+  const bool sequence = RNA_boolean_get(ptr, "sequence");
+
+  if (backwards && sequence) {
+    return BLI_strdup(TIP_("Track the selected markers backward for the entire clip"));
+  }
+  if (backwards && !sequence) {
+    return BLI_strdup(TIP_("Track the selected markers backward by one frame"));
+  }
+  if (!backwards && sequence) {
+    return BLI_strdup(TIP_("Track the selected markers forward for the entire clip"));
+  }
+  if (!backwards && !sequence) {
+    return BLI_strdup(TIP_("Track the selected markers forward by one frame"));
+  }
+
+  /* Use default description. */
+  return NULL;
+}
+
 void CLIP_OT_track_markers(wmOperatorType *ot)
 {
   /* identifiers */
@@ -411,6 +435,7 @@ void CLIP_OT_track_markers(wmOperatorType *ot)
   ot->invoke = track_markers_invoke;
   ot->modal = track_markers_modal;
   ot->poll = ED_space_clip_tracking_poll;
+  ot->get_description = track_markers_desc;
 
   /* flags */
   ot->flag = OPTYPE_UNDO;

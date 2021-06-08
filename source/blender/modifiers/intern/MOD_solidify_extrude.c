@@ -26,6 +26,7 @@
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -215,7 +216,7 @@ Mesh *MOD_solidify_extrude_modifyMesh(ModifierData *md, const ModifierEvalContex
       numVerts, sizeof(*old_vert_arr), "old_vert_arr in solidify");
 
   uint *edge_users = NULL;
-  char *edge_order = NULL;
+  int *edge_order = NULL;
 
   float(*vert_nors)[3] = NULL;
   float(*poly_nors)[3] = NULL;

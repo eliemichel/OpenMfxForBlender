@@ -162,7 +162,8 @@ typedef enum {
 } GHOST_TDrawingContextType;
 
 typedef enum {
-  GHOST_kButtonMaskLeft = 0,
+  GHOST_kButtonMaskNone,
+  GHOST_kButtonMaskLeft,
   GHOST_kButtonMaskMiddle,
   GHOST_kButtonMaskRight,
   GHOST_kButtonMaskButton4,
@@ -469,6 +470,8 @@ typedef struct {
   GHOST_TInt32 deltaX;
   /** The y-delta (currently only for scroll subtype) of the trackpad event */
   GHOST_TInt32 deltaY;
+  /** The delta is inverted from the device due to system preferences. */
+  char isDirectionInverted;
 } GHOST_TEventTrackpadData;
 
 typedef enum {
@@ -562,12 +565,22 @@ typedef struct {
   char is_repeat;
 } GHOST_TEventKeyData;
 
+typedef enum {
+  GHOST_kUserSpecialDirDesktop,
+  GHOST_kUserSpecialDirDocuments,
+  GHOST_kUserSpecialDirDownloads,
+  GHOST_kUserSpecialDirMusic,
+  GHOST_kUserSpecialDirPictures,
+  GHOST_kUserSpecialDirVideos,
+  /* Can be extended as needed. */
+} GHOST_TUserSpecialDirTypes;
+
 typedef struct {
   /** Number of pixels on a line. */
   GHOST_TUns32 xPixels;
   /** Number of lines. */
   GHOST_TUns32 yPixels;
-  /** Numberof bits per pixel. */
+  /** Number of bits per pixel. */
   GHOST_TUns32 bpp;
   /** Refresh rate (in Hertz). */
   GHOST_TUns32 frequency;
@@ -584,8 +597,8 @@ typedef int GHOST_TEmbedderWindowID;
 
 /**
  * A timer task callback routine.
- * \param task The timer task object.
- * \param time The current time.
+ * \param task: The timer task object.
+ * \param time: The current time.
  */
 #ifdef __cplusplus
 class GHOST_ITimerTask;

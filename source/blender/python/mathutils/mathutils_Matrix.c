@@ -499,7 +499,7 @@ static PyObject *C_Matrix_Rotation(PyObject *cls, PyObject *args)
   }
 
   if (vec && PyUnicode_Check(vec)) {
-    axis = _PyUnicode_AsString((PyObject *)vec);
+    axis = PyUnicode_AsUTF8((PyObject *)vec);
     if (axis == NULL || axis[0] == '\0' || axis[1] != '\0' || axis[0] < 'X' || axis[0] > 'Z') {
       PyErr_SetString(PyExc_ValueError,
                       "Matrix.Rotation(): "
@@ -514,7 +514,7 @@ static PyObject *C_Matrix_Rotation(PyObject *cls, PyObject *args)
 
   angle = angle_wrap_rad(angle);
 
-  if (matSize != 2 && matSize != 3 && matSize != 4) {
+  if (!ELEM(matSize, 2, 3, 4)) {
     PyErr_SetString(PyExc_ValueError,
                     "Matrix.Rotation(): "
                     "can only return a 2x2 3x3 or 4x4 matrix");
@@ -653,7 +653,7 @@ static PyObject *C_Matrix_Scale(PyObject *cls, PyObject *args)
   if (!PyArg_ParseTuple(args, "fi|O:Matrix.Scale", &factor, &matSize, &vec)) {
     return NULL;
   }
-  if (matSize != 2 && matSize != 3 && matSize != 4) {
+  if (!ELEM(matSize, 2, 3, 4)) {
     PyErr_SetString(PyExc_ValueError,
                     "Matrix.Scale(): "
                     "can only return a 2x2 3x3 or 4x4 matrix");
@@ -759,7 +759,7 @@ static PyObject *C_Matrix_OrthoProjection(PyObject *cls, PyObject *args)
   if (!PyArg_ParseTuple(args, "Oi:Matrix.OrthoProjection", &axis, &matSize)) {
     return NULL;
   }
-  if (matSize != 2 && matSize != 3 && matSize != 4) {
+  if (!ELEM(matSize, 2, 3, 4)) {
     PyErr_SetString(PyExc_ValueError,
                     "Matrix.OrthoProjection(): "
                     "can only return a 2x2 3x3 or 4x4 matrix");
@@ -768,7 +768,7 @@ static PyObject *C_Matrix_OrthoProjection(PyObject *cls, PyObject *args)
 
   if (PyUnicode_Check(axis)) { /* ortho projection onto cardinal plane */
     Py_ssize_t plane_len;
-    const char *plane = _PyUnicode_AsStringAndSize(axis, &plane_len);
+    const char *plane = PyUnicode_AsUTF8AndSize(axis, &plane_len);
     if (matSize == 2) {
       if (plane_len == 1 && plane[0] == 'X') {
         mat[0] = 1.0f;
@@ -895,7 +895,7 @@ static PyObject *C_Matrix_Shear(PyObject *cls, PyObject *args)
   if (!PyArg_ParseTuple(args, "siO:Matrix.Shear", &plane, &matSize, &fac)) {
     return NULL;
   }
-  if (matSize != 2 && matSize != 3 && matSize != 4) {
+  if (!ELEM(matSize, 2, 3, 4)) {
     PyErr_SetString(PyExc_ValueError,
                     "Matrix.Shear(): "
                     "can only return a 2x2 3x3 or 4x4 matrix");
@@ -1049,7 +1049,8 @@ static void adjoint_matrix_n(float *mat_dst, const float *mat_src, const ushort 
       break;
     }
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
+      break;
   }
 }
 
@@ -1159,7 +1160,7 @@ static void matrix_invert_safe_internal(const MatrixObject *self, float *r_mat)
         break;
       }
       default:
-        BLI_assert(0);
+        BLI_assert_unreachable();
     }
   }
 

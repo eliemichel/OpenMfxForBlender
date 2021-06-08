@@ -29,7 +29,6 @@
 #include "DNA_material_types.h"
 
 struct IDProperty;
-struct Material;
 struct Object;
 
 namespace blender::io::alembic {
@@ -51,7 +50,6 @@ class ABCAbstractWriter : public AbstractHierarchyWriter {
 
  public:
   explicit ABCAbstractWriter(const ABCWriterConstructorArgs &args);
-  virtual ~ABCAbstractWriter();
 
   virtual void write(HierarchyContext &context) override;
 

@@ -47,7 +47,7 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 
-#include "RE_render_ext.h"
+#include "RE_texture.h"
 
 #include "BLI_hash.h"
 
@@ -140,7 +140,7 @@ static void compute_eigenstuff(struct OceanResult *ocr, float jxx, float jzz, fl
  * instead of Complex.h
  * in fftw.h "fftw_complex" typedefed as double[2]
  * below you can see functions are needed to work with such complex numbers.
- * */
+ */
 static void init_complex(fftw_complex cmpl, float real, float image)
 {
   cmpl[0] = real;
@@ -911,8 +911,12 @@ void BKE_ocean_init(struct Ocean *o,
   for (i = 0; i < o->_M; i++) {
     for (j = 0; j < o->_N; j++) {
       /* This ensures we get a value tied to the surface location, avoiding dramatic surface
-       * change with changing resolution. */
-      int new_seed = seed + BLI_hash_int_2d(o->_kx[i] * 360.0f, o->_kz[j] * 360.0f);
+       * change with changing resolution.
+       * Explicitly cast to signed int first to ensure consistent behavior on all processors,
+       * since behavior of float to unsigned int cast is undefined in C. */
+      const int hash_x = o->_kx[i] * 360.0f;
+      const int hash_z = o->_kz[j] * 360.0f;
+      int new_seed = seed + BLI_hash_int_2d(hash_x, hash_z);
 
       BLI_rng_seed(rng, new_seed);
       float r1 = gaussRand(rng);

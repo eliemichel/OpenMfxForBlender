@@ -22,7 +22,7 @@
  * Based on utf-8 decoder stress-test (https://www.cl.cam.ac.uk/~mgk25/ucs/examples/UTF-8-test.txt)
  *     by Markus Kuhn <http://www.cl.cam.ac.uk/~mgk25/> - 2015-08-28 - CC BY 4.0
  */
-const char *utf8_invalid_tests[][3] = {
+static const char *utf8_invalid_tests[][3] = {
 /*    1  Some correct UTF-8 text. */
     {"You should see the Greek word 'kosme':       \"\xce\xba\xe1\xbd\xb9\xcf\x83\xce\xbc\xce\xb5\"                    |",
      "You should see the Greek word 'kosme':       \"\xce\xba\xe1\xbd\xb9\xcf\x83\xce\xbc\xce\xb5\"                    |", "\x00"},
@@ -262,14 +262,14 @@ const char *utf8_invalid_tests[][3] = {
     /* For now, we ignore those, they do not seem to be crucial anyway... */
 /*    5.3.3  U+FDD0 .. U+FDEF
  *    5.3.4  U+nFFFE U+nFFFF (for n = 1..10) */
-    {NULL, NULL, NULL},
+    {nullptr, nullptr, nullptr},
 };
 /* clang-format on */
 
 /* BLI_utf8_invalid_strip (and indirectly, BLI_utf8_invalid_byte). */
 TEST(string, Utf8InvalidBytes)
 {
-  for (int i = 0; utf8_invalid_tests[i][0] != NULL; i++) {
+  for (int i = 0; utf8_invalid_tests[i][0] != nullptr; i++) {
     const char *tst = utf8_invalid_tests[i][0];
     const char *tst_stripped = utf8_invalid_tests[i][1];
     const int num_errors = (int)utf8_invalid_tests[i][2][0];

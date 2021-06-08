@@ -260,10 +260,12 @@ static RigidBodyOb *rigidbody_copy_object(const Object *ob, const int flag)
   RigidBodyOb *rboN = NULL;
 
   if (ob->rigidbody_object) {
+    const bool is_orig = (flag & LIB_ID_COPY_SET_COPIED_ON_WRITE) == 0;
+
     /* just duplicate the whole struct first (to catch all the settings) */
     rboN = MEM_dupallocN(ob->rigidbody_object);
 
-    if ((flag & LIB_ID_CREATE_NO_MAIN) == 0) {
+    if (is_orig) {
       /* This is a regular copy, and not a CoW copy for depsgraph evaluation */
       rboN->shared = MEM_callocN(sizeof(*rboN->shared), "RigidBodyOb_Shared");
     }
@@ -1720,7 +1722,7 @@ static void rigidbody_update_sim_ob(
     ListBase *effectors;
 
     /* get effectors present in the group specified by effector_weights */
-    effectors = BKE_effectors_create(depsgraph, ob, NULL, effector_weights);
+    effectors = BKE_effectors_create(depsgraph, ob, NULL, effector_weights, false);
     if (effectors) {
       float eff_force[3] = {0.0f, 0.0f, 0.0f};
       float eff_loc[3], eff_vel[3];

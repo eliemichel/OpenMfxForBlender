@@ -51,10 +51,11 @@ bool BlenderSync::BKE_object_is_modified(BL::Object &b_ob)
   }
   else {
     /* object level material links */
-    BL::Object::material_slots_iterator slot;
-    for (b_ob.material_slots.begin(slot); slot != b_ob.material_slots.end(); ++slot)
-      if (slot->link() == BL::MaterialSlot::link_OBJECT)
+    for (BL::MaterialSlot &b_slot : b_ob.material_slots) {
+      if (b_slot.link() == BL::MaterialSlot::link_OBJECT) {
         return true;
+      }
+    }
   }
 
   return false;
@@ -95,7 +96,49 @@ bool BlenderSync::object_is_light(BL::Object &b_ob)
   return (b_ob_data && b_ob_data.is_a(&RNA_Light));
 }
 
-/* Object */
+void BlenderSync::sync_object_motion_init(BL::Object &b_parent, BL::Object &b_ob, Object *object)
+{
+  /* Initialize motion blur for object, detecting if it's enabled and creating motion
+   * steps array if so. */
+  array<Transform> motion;
+  object->set_motion(motion);
+
+  Scene::MotionType need_motion = scene->need_motion();
+  if (need_motion == Scene::MOTION_NONE || !object->get_geometry()) {
+    return;
+  }
+
+  Geometry *geom = object->get_geometry();
+  geom->set_use_motion_blur(false);
+  geom->set_motion_steps(0);
+
+  uint motion_steps;
+
+  if (need_motion == Scene::MOTION_BLUR) {
+    motion_steps = object_motion_steps(b_parent, b_ob, Object::MAX_MOTION_STEPS);
+    geom->set_motion_steps(motion_steps);
+    if (motion_steps && object_use_deform_motion(b_parent, b_ob)) {
+      geom->set_use_motion_blur(true);
+    }
+  }
+  else {
+    motion_steps = 3;
+    geom->set_motion_steps(motion_steps);
+  }
+
+  motion.resize(motion_steps, transform_empty());
+
+  if (motion_steps) {
+    motion[motion_steps / 2] = object->get_tfm();
+
+    /* update motion socket before trying to access object->motion_time */
+    object->set_motion(motion);
+
+    for (size_t step = 0; step < motion_steps; step++) {
+      motion_times.insert(object->motion_time(step));
+    }
+  }
+}
 
 Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
                                  BL::ViewLayer &b_view_layer,
@@ -199,11 +242,13 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
       /* Set transform at matching motion time step. */
       int time_index = object->motion_step(motion_time);
       if (time_index >= 0) {
-        object->motion[time_index] = tfm;
+        array<Transform> motion = object->get_motion();
+        motion[time_index] = tfm;
+        object->set_motion(motion);
       }
 
       /* mesh deformation */
-      if (object->geometry)
+      if (object->get_geometry())
         sync_geometry_motion(b_depsgraph,
                              b_ob_instance,
                              object,
@@ -216,47 +261,37 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   }
 
   /* test if we need to sync */
-  bool object_updated = false;
-
-  if (object_map.add_or_update(scene, &object, b_ob, b_parent, key))
-    object_updated = true;
+  bool object_updated = object_map.add_or_update(&object, b_ob, b_parent, key) ||
+                        (tfm != object->get_tfm());
 
   /* mesh sync */
   /* b_ob is owned by the iterator and will go out of scope at the end of the block.
    * b_ob_instance is the original object and will remain valid for deferred geometry
    * sync. */
-  object->geometry = sync_geometry(b_depsgraph,
-                                   b_ob_instance,
-                                   b_ob_instance,
-                                   object_updated,
-                                   use_particle_hair,
-                                   object_geom_task_pool);
+  Geometry *geometry = sync_geometry(b_depsgraph,
+                                     b_ob_instance,
+                                     b_ob_instance,
+                                     object_updated,
+                                     use_particle_hair,
+                                     object_geom_task_pool);
+  object->set_geometry(geometry);
 
   /* special case not tracked by object update flags */
 
-  /* holdout */
-  if (use_holdout != object->use_holdout) {
-    object->use_holdout = use_holdout;
-    scene->object_manager->tag_update(scene);
+  if (sync_object_attributes(b_instance, object)) {
     object_updated = true;
   }
 
-  if (visibility != object->visibility) {
-    object->visibility = visibility;
-    object_updated = true;
-  }
+  /* holdout */
+  object->set_use_holdout(use_holdout);
+
+  object->set_visibility(visibility);
 
   bool is_shadow_catcher = get_boolean(cobject, "is_shadow_catcher");
-  if (is_shadow_catcher != object->is_shadow_catcher) {
-    object->is_shadow_catcher = is_shadow_catcher;
-    object_updated = true;
-  }
+  object->set_is_shadow_catcher(is_shadow_catcher);
 
   float shadow_terminator_offset = get_float(cobject, "shadow_terminator_offset");
-  if (shadow_terminator_offset != object->shadow_terminator_offset) {
-    object->shadow_terminator_offset = shadow_terminator_offset;
-    object_updated = true;
-  }
+  object->set_shadow_terminator_offset(shadow_terminator_offset);
 
   /* sync the asset name for Cryptomatte */
   BL::Object parent = b_ob.parent();
@@ -270,70 +305,35 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   else {
     parent_name = b_ob.name();
   }
-  if (object->asset_name != parent_name) {
-    object->asset_name = parent_name;
-    object_updated = true;
-  }
+  object->set_asset_name(parent_name);
 
   /* object sync
    * transform comparison should not be needed, but duplis don't work perfect
    * in the depsgraph and may not signal changes, so this is a workaround */
-  if (object_updated || (object->geometry && object->geometry->need_update) ||
-      tfm != object->tfm) {
+  if (object->is_modified() || object_updated ||
+      (object->get_geometry() && object->get_geometry()->is_modified())) {
     object->name = b_ob.name().c_str();
-    object->pass_id = b_ob.pass_index();
-    object->color = get_float3(b_ob.color());
-    object->tfm = tfm;
-    object->motion.clear();
-
-    /* motion blur */
-    Scene::MotionType need_motion = scene->need_motion();
-    if (need_motion != Scene::MOTION_NONE && object->geometry) {
-      Geometry *geom = object->geometry;
-      geom->use_motion_blur = false;
-      geom->motion_steps = 0;
-
-      uint motion_steps;
-
-      if (need_motion == Scene::MOTION_BLUR) {
-        motion_steps = object_motion_steps(b_parent, b_ob, Object::MAX_MOTION_STEPS);
-        geom->motion_steps = motion_steps;
-        if (motion_steps && object_use_deform_motion(b_parent, b_ob)) {
-          geom->use_motion_blur = true;
-        }
-      }
-      else {
-        motion_steps = 3;
-        geom->motion_steps = motion_steps;
-      }
-
-      object->motion.clear();
-      object->motion.resize(motion_steps, transform_empty());
-
-      if (motion_steps) {
-        object->motion[motion_steps / 2] = tfm;
-
-        for (size_t step = 0; step < motion_steps; step++) {
-          motion_times.insert(object->motion_time(step));
-        }
-      }
-    }
+    object->set_pass_id(b_ob.pass_index());
+    object->set_color(get_float3(b_ob.color()));
+    object->set_tfm(tfm);
 
     /* dupli texture coordinates and random_id */
     if (is_instance) {
-      object->dupli_generated = 0.5f * get_float3(b_instance.orco()) -
-                                make_float3(0.5f, 0.5f, 0.5f);
-      object->dupli_uv = get_float2(b_instance.uv());
-      object->random_id = b_instance.random_id();
+      object->set_dupli_generated(0.5f * get_float3(b_instance.orco()) -
+                                  make_float3(0.5f, 0.5f, 0.5f));
+      object->set_dupli_uv(get_float2(b_instance.uv()));
+      object->set_random_id(b_instance.random_id());
     }
     else {
-      object->dupli_generated = make_float3(0.0f, 0.0f, 0.0f);
-      object->dupli_uv = make_float2(0.0f, 0.0f);
-      object->random_id = hash_uint2(hash_string(object->name.c_str()), 0);
+      object->set_dupli_generated(zero_float3());
+      object->set_dupli_uv(zero_float2());
+      object->set_random_id(hash_uint2(hash_string(object->name.c_str()), 0));
     }
 
     object->tag_update(scene);
   }
+
+  sync_object_motion_init(b_parent, b_ob, object);
 
   if (is_instance) {
     /* Sync possible particle data. */
@@ -341,6 +341,136 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   }
 
   return object;
+}
+
+/* This function mirrors drw_uniform_property_lookup in draw_instance_data.cpp */
+static bool lookup_property(BL::ID b_id, const string &name, float4 *r_value)
+{
+  PointerRNA ptr;
+  PropertyRNA *prop;
+
+  if (!RNA_path_resolve(&b_id.ptr, name.c_str(), &ptr, &prop)) {
+    return false;
+  }
+
+  if (prop == NULL) {
+    return false;
+  }
+
+  PropertyType type = RNA_property_type(prop);
+  int arraylen = RNA_property_array_length(&ptr, prop);
+
+  if (arraylen == 0) {
+    float value;
+
+    if (type == PROP_FLOAT)
+      value = RNA_property_float_get(&ptr, prop);
+    else if (type == PROP_INT)
+      value = RNA_property_int_get(&ptr, prop);
+    else
+      return false;
+
+    *r_value = make_float4(value, value, value, 1.0f);
+    return true;
+  }
+  else if (type == PROP_FLOAT && arraylen <= 4) {
+    *r_value = make_float4(0.0f, 0.0f, 0.0f, 1.0f);
+    RNA_property_float_get_array(&ptr, prop, &r_value->x);
+    return true;
+  }
+
+  return false;
+}
+
+/* This function mirrors drw_uniform_attribute_lookup in draw_instance_data.cpp */
+static float4 lookup_instance_property(BL::DepsgraphObjectInstance &b_instance,
+                                       const string &name,
+                                       bool use_instancer)
+{
+  string idprop_name = string_printf("[\"%s\"]", name.c_str());
+  float4 value;
+
+  /* If requesting instance data, check the parent particle system and object. */
+  if (use_instancer && b_instance.is_instance()) {
+    BL::ParticleSystem b_psys = b_instance.particle_system();
+
+    if (b_psys) {
+      if (lookup_property(b_psys.settings(), idprop_name, &value) ||
+          lookup_property(b_psys.settings(), name, &value)) {
+        return value;
+      }
+    }
+    if (lookup_property(b_instance.parent(), idprop_name, &value) ||
+        lookup_property(b_instance.parent(), name, &value)) {
+      return value;
+    }
+  }
+
+  /* Check the object and mesh. */
+  BL::Object b_ob = b_instance.object();
+  BL::ID b_data = b_ob.data();
+
+  if (lookup_property(b_ob, idprop_name, &value) || lookup_property(b_ob, name, &value) ||
+      lookup_property(b_data, idprop_name, &value) || lookup_property(b_data, name, &value)) {
+    return value;
+  }
+
+  return make_float4(0.0f);
+}
+
+bool BlenderSync::sync_object_attributes(BL::DepsgraphObjectInstance &b_instance, Object *object)
+{
+  /* Find which attributes are needed. */
+  AttributeRequestSet requests = object->get_geometry()->needed_attributes();
+
+  /* Delete attributes that became unnecessary. */
+  vector<ParamValue> &attributes = object->attributes;
+  bool changed = false;
+
+  for (int i = attributes.size() - 1; i >= 0; i--) {
+    if (!requests.find(attributes[i].name())) {
+      attributes.erase(attributes.begin() + i);
+      changed = true;
+    }
+  }
+
+  /* Update attribute values. */
+  foreach (AttributeRequest &req, requests.requests) {
+    ustring name = req.name;
+
+    std::string real_name;
+    BlenderAttributeType type = blender_attribute_name_split_type(name, &real_name);
+
+    if (type != BL::ShaderNodeAttribute::attribute_type_GEOMETRY) {
+      bool use_instancer = (type == BL::ShaderNodeAttribute::attribute_type_INSTANCER);
+      float4 value = lookup_instance_property(b_instance, real_name, use_instancer);
+
+      /* Try finding the existing attribute value. */
+      ParamValue *param = NULL;
+
+      for (size_t i = 0; i < attributes.size(); i++) {
+        if (attributes[i].name() == name) {
+          param = &attributes[i];
+          break;
+        }
+      }
+
+      /* Replace or add the value. */
+      ParamValue new_param(name, TypeDesc::TypeFloat4, 1, &value);
+      assert(new_param.datasize() == sizeof(value));
+
+      if (!param) {
+        changed = true;
+        attributes.push_back(new_param);
+      }
+      else if (memcmp(param->data(), &value, sizeof(value)) != 0) {
+        changed = true;
+        *param = new_param;
+      }
+    }
+  }
+
+  return changed;
 }
 
 /* Object Loop */
@@ -435,10 +565,10 @@ void BlenderSync::sync_objects(BL::Depsgraph &b_depsgraph,
     sync_background_light(b_v3d, use_portal);
 
     /* handle removed data and modified pointers */
-    light_map.post_sync(scene);
-    geometry_map.post_sync(scene);
-    object_map.post_sync(scene);
-    particle_system_map.post_sync(scene);
+    light_map.post_sync();
+    geometry_map.post_sync();
+    object_map.post_sync();
+    particle_system_map.post_sync();
   }
 
   if (motion)
@@ -461,20 +591,18 @@ void BlenderSync::sync_motion(BL::RenderSettings &b_render,
   if (b_override)
     b_cam = b_override;
 
-  Camera prevcam = *(scene->camera);
-
   int frame_center = b_scene.frame_current();
   float subframe_center = b_scene.frame_subframe();
   float frame_center_delta = 0.0f;
 
   if (scene->need_motion() != Scene::MOTION_PASS &&
-      scene->camera->motion_position != Camera::MOTION_POSITION_CENTER) {
-    float shuttertime = scene->camera->shuttertime;
-    if (scene->camera->motion_position == Camera::MOTION_POSITION_END) {
+      scene->camera->get_motion_position() != Camera::MOTION_POSITION_CENTER) {
+    float shuttertime = scene->camera->get_shuttertime();
+    if (scene->camera->get_motion_position() == Camera::MOTION_POSITION_END) {
       frame_center_delta = -shuttertime * 0.5f;
     }
     else {
-      assert(scene->camera->motion_position == Camera::MOTION_POSITION_START);
+      assert(scene->camera->get_motion_position() == Camera::MOTION_POSITION_START);
       frame_center_delta = shuttertime * 0.5f;
     }
 
@@ -487,7 +615,7 @@ void BlenderSync::sync_motion(BL::RenderSettings &b_render,
     if (b_cam) {
       sync_camera_motion(b_render, b_cam, width, height, 0.0f);
     }
-    sync_objects(b_depsgraph, b_v3d, 0.0f);
+    sync_objects(b_depsgraph, b_v3d);
   }
 
   /* Insert motion times from camera. Motion times from other objects
@@ -535,10 +663,6 @@ void BlenderSync::sync_motion(BL::RenderSettings &b_render,
   python_thread_state_restore(python_thread_state);
   b_engine.frame_set(frame_center, subframe_center);
   python_thread_state_save(python_thread_state);
-
-  /* tag camera for motion update */
-  if (scene->camera->motion_modified(prevcam))
-    scene->camera->tag_update();
 }
 
 CCL_NAMESPACE_END

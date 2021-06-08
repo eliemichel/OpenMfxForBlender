@@ -31,7 +31,6 @@
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
-#include "DNA_packedFile_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
 #include "DNA_sound_types.h"
@@ -46,12 +45,13 @@
 #include "BKE_packedFile.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_sequencer.h"
 #include "BKE_sound.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+
+#include "SEQ_iterator.h"
 
 #include "UI_interface.h"
 
@@ -170,7 +170,7 @@ static void SOUND_OT_open(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
   RNA_def_boolean(ot->srna, "cache", false, "Cache", "Cache the sound in memory");
   RNA_def_boolean(ot->srna, "mono", false, "Mono", "Merge all the sound's channels into one");
 }
@@ -197,7 +197,7 @@ static void SOUND_OT_open_mono(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
   RNA_def_boolean(ot->srna, "cache", false, "Cache", "Cache the sound in memory");
   RNA_def_boolean(ot->srna, "mono", true, "Mono", "Mixdown the sound to mono");
 }
@@ -258,7 +258,7 @@ static void sound_update_animation_flags(Scene *scene)
   scene->id.tag |= LIB_TAG_DOIT;
 
   SEQ_ALL_BEGIN (scene->ed, seq) {
-    BKE_sequencer_recursive_apply(seq, sound_update_animation_flags_fn, scene);
+    SEQ_iterator_recursive_apply(seq, sound_update_animation_flags_fn, scene);
   }
   SEQ_ALL_END;
 
@@ -511,34 +511,33 @@ static bool sound_mixdown_draw_check_prop(PointerRNA *UNUSED(ptr),
                                           void *UNUSED(user_data))
 {
   const char *prop_id = RNA_property_identifier(prop);
-  return !(STREQ(prop_id, "filepath") || STREQ(prop_id, "directory") ||
-           STREQ(prop_id, "filename"));
+  return !(STR_ELEM(prop_id, "filepath", "directory", "filename"));
 }
 
 static void sound_mixdown_draw(bContext *C, wmOperator *op)
 {
   static const EnumPropertyItem pcm_format_items[] = {
-      {AUD_FORMAT_U8, "U8", 0, "U8", "8 bit unsigned"},
-      {AUD_FORMAT_S16, "S16", 0, "S16", "16 bit signed"},
+      {AUD_FORMAT_U8, "U8", 0, "U8", "8-bit unsigned"},
+      {AUD_FORMAT_S16, "S16", 0, "S16", "16-bit signed"},
 #  ifdef WITH_SNDFILE
-      {AUD_FORMAT_S24, "S24", 0, "S24", "24 bit signed"},
+      {AUD_FORMAT_S24, "S24", 0, "S24", "24-bit signed"},
 #  endif
-      {AUD_FORMAT_S32, "S32", 0, "S32", "32 bit signed"},
-      {AUD_FORMAT_FLOAT32, "F32", 0, "F32", "32 bit floating point"},
-      {AUD_FORMAT_FLOAT64, "F64", 0, "F64", "64 bit floating point"},
+      {AUD_FORMAT_S32, "S32", 0, "S32", "32-bit signed"},
+      {AUD_FORMAT_FLOAT32, "F32", 0, "F32", "32-bit floating-point"},
+      {AUD_FORMAT_FLOAT64, "F64", 0, "F64", "64-bit floating-point"},
       {0, NULL, 0, NULL, NULL},
   };
 
   static const EnumPropertyItem mp3_format_items[] = {
-      {AUD_FORMAT_S16, "S16", 0, "S16", "16 bit signed"},
-      {AUD_FORMAT_S32, "S32", 0, "S32", "32 bit signed"},
+      {AUD_FORMAT_S16, "S16", 0, "S16", "16-bit signed"},
+      {AUD_FORMAT_S32, "S32", 0, "S32", "32-bit signed"},
       {0, NULL, 0, NULL, NULL},
   };
 
 #  ifdef WITH_SNDFILE
   static const EnumPropertyItem flac_format_items[] = {
-      {AUD_FORMAT_S16, "S16", 0, "S16", "16 bit signed"},
-      {AUD_FORMAT_S24, "S24", 0, "S24", "24 bit signed"},
+      {AUD_FORMAT_S16, "S16", 0, "S16", "16-bit signed"},
+      {AUD_FORMAT_S24, "S24", 0, "S24", "24-bit signed"},
       {0, NULL, 0, NULL, NULL},
   };
 #  endif
@@ -672,12 +671,12 @@ static void SOUND_OT_mixdown(wmOperatorType *ot)
 {
 #ifdef WITH_AUDASPACE
   static const EnumPropertyItem format_items[] = {
-      {AUD_FORMAT_U8, "U8", 0, "U8", "8 bit unsigned"},
-      {AUD_FORMAT_S16, "S16", 0, "S16", "16 bit signed"},
-      {AUD_FORMAT_S24, "S24", 0, "S24", "24 bit signed"},
-      {AUD_FORMAT_S32, "S32", 0, "S32", "32 bit signed"},
-      {AUD_FORMAT_FLOAT32, "F32", 0, "F32", "32 bit floating point"},
-      {AUD_FORMAT_FLOAT64, "F64", 0, "F64", "64 bit floating point"},
+      {AUD_FORMAT_U8, "U8", 0, "U8", "8-bit unsigned"},
+      {AUD_FORMAT_S16, "S16", 0, "S16", "16-bit signed"},
+      {AUD_FORMAT_S24, "S24", 0, "S24", "24-bit signed"},
+      {AUD_FORMAT_S32, "S32", 0, "S32", "32-bit signed"},
+      {AUD_FORMAT_FLOAT32, "F32", 0, "F32", "32-bit floating-point"},
+      {AUD_FORMAT_FLOAT64, "F64", 0, "F64", "64-bit floating-point"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -721,7 +720,7 @@ static void SOUND_OT_mixdown(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 #ifdef WITH_AUDASPACE
   RNA_def_int(
       ot->srna,
@@ -877,7 +876,7 @@ static void SOUND_OT_unpack(wmOperatorType *ot)
   /* properties */
   RNA_def_enum(
       ot->srna, "method", rna_enum_unpack_method_items, PF_USE_LOCAL, "Method", "How to unpack");
-  /* XXX, weark!, will fail with library, name collisions */
+  /* XXX: weak!, will fail with library, name collisions */
   RNA_def_string(
       ot->srna, "id", NULL, MAX_ID_NAME - 2, "Sound Name", "Sound data-block name to unpack");
 }

@@ -33,29 +33,21 @@
 #include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 
 #include "BKE_context.h"
-#include "BKE_deform.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
-#include "BKE_layer.h"
 #include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
-#include "BKE_object.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
 
-#include "MEM_guardedalloc.h"
-
 #include "UI_interface.h"
 #include "UI_resources.h"
-
-#include "RNA_access.h"
 
 #include "MOD_gpencil_modifiertypes.h"
 #include "MOD_gpencil_ui_common.h"
@@ -151,7 +143,7 @@ static void generate_geometry(GpencilModifierData *md, Object *ob, bGPDlayer *gp
                                            mmd->flag & GP_MIRROR_INVERT_PASS,
                                            mmd->flag & GP_MIRROR_INVERT_LAYERPASS,
                                            mmd->flag & GP_MIRROR_INVERT_MATERIAL)) {
-          gps_new = BKE_gpencil_stroke_duplicate(gps, true);
+          gps_new = BKE_gpencil_stroke_duplicate(gps, true, true);
           update_position(ob, mmd, gps_new, xi);
           BLI_addtail(&gpf->strokes, gps_new);
         }
@@ -207,7 +199,9 @@ static bool isDisabled(GpencilModifierData *UNUSED(md), int UNUSED(userRenderPar
   return false;
 }
 
-static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
+static void updateDepsgraph(GpencilModifierData *md,
+                            const ModifierUpdateDepsgraphContext *ctx,
+                            const int UNUSED(mode))
 {
   MirrorGpencilModifierData *lmd = (MirrorGpencilModifierData *)md;
   if (lmd->object != NULL) {

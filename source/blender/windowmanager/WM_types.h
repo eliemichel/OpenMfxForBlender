@@ -287,6 +287,9 @@ typedef struct wmNotifier {
 #define NC_TEXT (12 << 24)
 #define NC_WORLD (13 << 24)
 #define NC_ANIMATION (14 << 24)
+/* When passing a space as reference data with this (e.g. `WM_event_add_notifier(..., space)`),
+ * the notifier will only be sent to this space. That avoids unnecessary updates for unrelated
+ * spaces. */
 #define NC_SPACE (15 << 24)
 #define NC_GEOM (16 << 24)
 #define NC_NODE (17 << 24)
@@ -298,6 +301,8 @@ typedef struct wmNotifier {
 #define NC_LINESTYLE (23 << 24)
 #define NC_CAMERA (24 << 24)
 #define NC_LIGHTPROBE (25 << 24)
+/* Changes to asset data in the current .blend. */
+#define NC_ASSET (26 << 24)
 
 /* data type, 256 entries is enough, it can overlap */
 #define NOTE_DATA 0x00FF0000
@@ -310,6 +315,7 @@ typedef struct wmNotifier {
 #define ND_JOB (5 << 16)
 #define ND_UNDO (6 << 16)
 #define ND_XR_DATA_CHANGED (7 << 16)
+#define ND_LIB_OVERRIDE_CHANGED (8 << 16)
 
 /* NC_SCREEN */
 #define ND_LAYOUTBROWSE (1 << 16)
@@ -364,6 +370,8 @@ typedef struct wmNotifier {
 #define ND_DRAW_RENDER_VIEWPORT \
   (31 << 16) /* for camera & sequencer viewport update, also /w NC_SCENE */
 #define ND_SHADERFX (32 << 16)
+/* For updating motion paths in 3dview. */
+#define ND_DRAW_ANIMVIZ (33 << 16)
 
 /* NC_MATERIAL Material */
 #define ND_SHADING (30 << 16)
@@ -389,6 +397,7 @@ typedef struct wmNotifier {
 #define ND_NLA (73 << 16)
 #define ND_NLA_ACTCHANGE (74 << 16)
 #define ND_FCURVES_ORDER (75 << 16)
+#define ND_NLA_ORDER (76 << 16)
 
 /* NC_GPENCIL */
 #define ND_GPENCIL_EDITMODE (85 << 16)
@@ -408,20 +417,22 @@ typedef struct wmNotifier {
 #define ND_SPACE_IMAGE (4 << 16)
 #define ND_SPACE_FILE_PARAMS (5 << 16)
 #define ND_SPACE_FILE_LIST (6 << 16)
-#define ND_SPACE_NODE (7 << 16)
-#define ND_SPACE_OUTLINER (8 << 16)
-#define ND_SPACE_VIEW3D (9 << 16)
-#define ND_SPACE_PROPERTIES (10 << 16)
-#define ND_SPACE_TEXT (11 << 16)
-#define ND_SPACE_TIME (12 << 16)
-#define ND_SPACE_GRAPH (13 << 16)
-#define ND_SPACE_DOPESHEET (14 << 16)
-#define ND_SPACE_NLA (15 << 16)
-#define ND_SPACE_SEQUENCER (16 << 16)
-#define ND_SPACE_NODE_VIEW (17 << 16)
-#define ND_SPACE_CHANGED (18 << 16) /*sent to a new editor type after it's replaced an old one*/
-#define ND_SPACE_CLIP (19 << 16)
-#define ND_SPACE_FILE_PREVIEW (20 << 16)
+#define ND_SPACE_ASSET_PARAMS (7 << 16)
+#define ND_SPACE_NODE (8 << 16)
+#define ND_SPACE_OUTLINER (9 << 16)
+#define ND_SPACE_VIEW3D (10 << 16)
+#define ND_SPACE_PROPERTIES (11 << 16)
+#define ND_SPACE_TEXT (12 << 16)
+#define ND_SPACE_TIME (13 << 16)
+#define ND_SPACE_GRAPH (14 << 16)
+#define ND_SPACE_DOPESHEET (15 << 16)
+#define ND_SPACE_NLA (16 << 16)
+#define ND_SPACE_SEQUENCER (17 << 16)
+#define ND_SPACE_NODE_VIEW (18 << 16)
+#define ND_SPACE_CHANGED (19 << 16) /*sent to a new editor type after it's replaced an old one*/
+#define ND_SPACE_CLIP (20 << 16)
+#define ND_SPACE_FILE_PREVIEW (21 << 16)
+#define ND_SPACE_SPREADSHEET (22 << 16)
 
 /* subtype, 256 entries too */
 #define NOTE_SUBTYPE 0x0000FF00
@@ -456,6 +467,7 @@ typedef struct wmNotifier {
 #define NA_SELECTED 6
 #define NA_ACTIVATED 7
 #define NA_PAINTING 8
+#define NA_JOB_FINISHED 9
 
 /* ************** Gesture Manager data ************** */
 
@@ -538,17 +550,36 @@ typedef struct wmTabletData {
 /**
  * Each event should have full modifier state.
  * event comes from event manager and from keymap.
+ *
+ *
+ * Previous State
+ * ==============
+ *
+ * Events hold information about the previous event,
+ * this is used for detecting click and double-click events (the timer is needed for double-click).
+ * See #wm_event_add_ghostevent for implementation details.
+ *
+ * Notes:
+ *
+ * - The previous values are only set for mouse button and keyboard events.
+ *   See: #ISMOUSE_BUTTON & #ISKEYBOARD macros.
+ *
+ * - Previous x/y are exceptions: #wmEvent.prevx & #wmEvent.prevy
+ *   these are set on mouse motion, see #MOUSEMOVE & track-pad events.
+ *
+ * - Modal key-map handling sets `prevval` & `prevtype` to `val` & `type`,
+ *   this allows modal keys-maps to check the original values (needed in some cases).
  */
 typedef struct wmEvent {
   struct wmEvent *next, *prev;
 
-  /** Event code itself (short, is also in keymap). */
+  /** Event code itself (short, is also in key-map). */
   short type;
-  /** Press, release, scrollvalue. */
+  /** Press, release, scroll-value. */
   short val;
   /** Mouse pointer position, screen coord. */
   int x, y;
-  /** Region mouse position, name convention pre 2.5 :). */
+  /** Region relative mouse position (name convention before Blender 2.5). */
   int mval[2];
   /**
    * From, ghost if utf8 is enabled for the platform,
@@ -567,34 +598,44 @@ typedef struct wmEvent {
    */
   char is_repeat;
 
-  /** Previous state, used for double click and the 'click'. */
+  /** The previous value of `type`. */
   short prevtype;
+  /** The previous value of `val`. */
   short prevval;
-  int prevx, prevy;
+  /** The time when the key is pressed, see #PIL_check_seconds_timer. */
   double prevclicktime;
+  /** The location when the key is pressed (used to enforce drag thresholds). */
   int prevclickx, prevclicky;
+  /**
+   * The previous value of #wmEvent.x #wmEvent.y,
+   * Unlike other previous state variables, this is set on any mouse motion.
+   * Use `prevclickx` & `prevclicky` for the value at time of pressing.
+   */
+  int prevx, prevy;
 
   /** Modifier states. */
   /** 'oskey' is apple or windows-key, value denotes order of pressed. */
   short shift, ctrl, alt, oskey;
-  /** rawkey modifier. */
+  /** Raw-key modifier (allow using any key as a modifier). */
   short keymodifier;
-
-  /** Set in case a #KM_PRESS went by unhandled. */
-  char check_click;
-  char check_drag;
 
   /** Tablet info, available for mouse move and button events. */
   wmTabletData tablet;
 
-  /* custom data */
+  /* Custom data. */
   /** Custom data type, stylus, 6dof, see wm_event_types.h */
   short custom;
   short customdatafree;
   int pad2;
-  /** Ascii, unicode, mouse coords, angles, vectors, dragdrop info. */
+  /** Ascii, unicode, mouse-coords, angles, vectors, NDOF data, drag-drop info. */
   void *customdata;
 
+  /**
+   * True if the operating system inverted the delta x/y values and resulting
+   * `prevx`, `prevy` values, for natural scroll direction.
+   * For absolute scroll direction, the delta must be negated again.
+   */
+  char is_direction_inverted;
 } wmEvent;
 
 /**
@@ -830,12 +871,13 @@ typedef void (*wmPaintCursorDraw)(struct bContext *C, int, int, void *customdata
 /* *************** Drag and drop *************** */
 
 #define WM_DRAG_ID 0
-#define WM_DRAG_RNA 1
-#define WM_DRAG_PATH 2
-#define WM_DRAG_NAME 3
-#define WM_DRAG_VALUE 4
-#define WM_DRAG_COLOR 5
-#define WM_DRAG_DATASTACK 6
+#define WM_DRAG_ASSET 1
+#define WM_DRAG_RNA 2
+#define WM_DRAG_PATH 3
+#define WM_DRAG_NAME 4
+#define WM_DRAG_VALUE 5
+#define WM_DRAG_COLOR 6
+#define WM_DRAG_DATASTACK 7
 
 typedef enum wmDragFlags {
   WM_DRAG_NOP = 0,
@@ -849,6 +891,13 @@ typedef struct wmDragID {
   struct ID *id;
   struct ID *from_parent;
 } wmDragID;
+
+typedef struct wmDragAsset {
+  char name[64]; /* MAX_NAME */
+  /* Always freed. */
+  const char *path;
+  int id_type;
+} wmDragAsset;
 
 typedef struct wmDrag {
   struct wmDrag *next, *prev;
@@ -885,6 +934,12 @@ typedef struct wmDropBox {
 
   /** Before exec, this copies drag info to #wmDrop properties. */
   void (*copy)(struct wmDrag *, struct wmDropBox *);
+
+  /**
+   * If the operator is cancelled (returns `OPERATOR_CANCELLED`), this can be used for cleanup of
+   * `copy()` resources.
+   */
+  void (*cancel)(struct Main *, struct wmDrag *, struct wmDropBox *);
 
   /**
    * If poll succeeds, operator is called.

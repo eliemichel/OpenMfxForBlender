@@ -19,6 +19,9 @@
 
 #include "RNA_enum_types.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
 #include "node_function_util.hh"
 
 static bNodeSocketTemplate fn_node_boolean_math_in[] = {
@@ -31,6 +34,11 @@ static bNodeSocketTemplate fn_node_boolean_math_out[] = {
     {SOCK_BOOLEAN, N_("Boolean")},
     {-1, ""},
 };
+
+static void fn_node_boolean_math_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+  uiItemR(layout, ptr, "operation", 0, "", ICON_NONE);
+}
 
 static void node_boolean_math_update(bNodeTree *UNUSED(ntree), bNode *node)
 {
@@ -81,10 +89,11 @@ void register_node_type_fn_boolean_math()
 {
   static bNodeType ntype;
 
-  fn_node_type_base(&ntype, FN_NODE_BOOLEAN_MATH, "Boolean Math", 0, 0);
+  fn_node_type_base(&ntype, FN_NODE_BOOLEAN_MATH, "Boolean Math", NODE_CLASS_CONVERTOR, 0);
   node_type_socket_templates(&ntype, fn_node_boolean_math_in, fn_node_boolean_math_out);
   node_type_label(&ntype, node_boolean_math_label);
   node_type_update(&ntype, node_boolean_math_update);
   ntype.expand_in_mf_network = node_boolean_expand_in_mf_network;
+  ntype.draw_buttons = fn_node_boolean_math_layout;
   nodeRegisterType(&ntype);
 }

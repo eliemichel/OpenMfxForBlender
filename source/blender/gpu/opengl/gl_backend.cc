@@ -38,7 +38,7 @@ namespace blender::gpu {
 /** \name Platform
  * \{ */
 
-void GLBackend::platform_init(void)
+void GLBackend::platform_init()
 {
   BLI_assert(!GPG.initialized);
   GPG.initialized = true;
@@ -96,6 +96,11 @@ void GLBackend::platform_init(void)
     GPG.device = GPU_DEVICE_SOFTWARE;
     GPG.driver = GPU_DRIVER_SOFTWARE;
   }
+  else if (strstr(vendor, "Apple")) {
+    /* Apple Silicon. */
+    GPG.device = GPU_DEVICE_APPLE;
+    GPG.driver = GPU_DRIVER_OFFICIAL;
+  }
   else if (strstr(renderer, "Apple Software Renderer")) {
     GPG.device = GPU_DEVICE_SOFTWARE;
     GPG.driver = GPU_DRIVER_SOFTWARE;
@@ -130,12 +135,19 @@ void GLBackend::platform_init(void)
         GPG.support_level = GPU_SUPPORT_LEVEL_LIMITED;
       }
     }
+    if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_ANY)) {
+      /* Platform seems to work when SB backend is disabled. This can be done
+       * by adding the environment variable `R600_DEBUG=nosb`. */
+      if (strstr(renderer, "AMD CEDAR")) {
+        GPG.support_level = GPU_SUPPORT_LEVEL_LIMITED;
+      }
+    }
   }
   GPG.create_key(GPG.support_level, vendor, renderer, version);
   GPG.create_gpu_name(vendor, renderer, version);
 }
 
-void GLBackend::platform_exit(void)
+void GLBackend::platform_exit()
 {
   BLI_assert(GPG.initialized);
   GPG.clear();
@@ -147,7 +159,7 @@ void GLBackend::platform_exit(void)
 /** \name Capabilities
  * \{ */
 
-static bool detect_mip_render_workaround(void)
+static bool detect_mip_render_workaround()
 {
   int cube_size = 2;
   float clear_color[4] = {1.0f, 0.5f, 0.0f, 0.0f};
@@ -192,7 +204,7 @@ static bool detect_mip_render_workaround(void)
   return enable_workaround;
 }
 
-static void detect_workarounds(void)
+static void detect_workarounds()
 {
   const char *vendor = (const char *)glGetString(GL_VENDOR);
   const char *renderer = (const char *)glGetString(GL_RENDERER);
@@ -227,10 +239,6 @@ static void detect_workarounds(void)
     return;
   }
 
-  /* Some Intel drivers have issues with using mips as framebuffer targets if
-   * GL_TEXTURE_MAX_LEVEL is higher than the target mip.
-   * Only check at the end after all other workarounds because this uses the drawing code. */
-  GCaps.mip_render_workaround = detect_mip_render_workaround();
   /* Limit support for GLEW_ARB_base_instance to OpenGL 4.0 and higher. NVIDIA Quadro FX 4800
    * (TeraScale) report that they support GLEW_ARB_base_instance, but the driver does not support
    * GLEW_ARB_draw_indirect as it has an OpenGL3 context what also matches the minimum needed
@@ -241,16 +249,18 @@ static void detect_workarounds(void)
   if (!GLEW_VERSION_4_0) {
     GLContext::base_instance_support = false;
   }
-  /* The renderers include:
-   *   Mobility Radeon HD 5000;
-   *   Radeon HD 7500M;
-   *   Radeon HD 7570M;
-   *   Radeon HD 7600M;
-   * And many others... */
   if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_WIN, GPU_DRIVER_OFFICIAL) &&
       (strstr(version, "4.5.13399") || strstr(version, "4.5.13417") ||
-       strstr(version, "4.5.13422"))) {
+       strstr(version, "4.5.13422") || strstr(version, "4.5.13467"))) {
+    /* The renderers include:
+     *   Radeon HD 5000;
+     *   Radeon HD 7500M;
+     *   Radeon HD 7570M;
+     *   Radeon HD 7600M;
+     *   Radeon R5 Graphics;
+     * And others... */
     GLContext::unused_fb_slot_workaround = true;
+    GCaps.mip_render_workaround = true;
     GCaps.shader_image_load_store_support = false;
     GCaps.broken_amd_driver = true;
   }
@@ -266,6 +276,22 @@ static void detect_workarounds(void)
       strstr(version, "Mesa 19.3.4")) {
     GCaps.shader_image_load_store_support = false;
     GCaps.broken_amd_driver = true;
+  }
+  /* See T82856: AMD drivers since 20.11 running on a polaris architecture doesn't support the
+   * `GL_INT_2_10_10_10_REV` data type correctly. This data type is used to pack normals and flags.
+   * The work around uses `GPU_RGBA16I`.
+   */
+  if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_ANY, GPU_DRIVER_OFFICIAL)) {
+    if (strstr(renderer, " RX 460 ") || strstr(renderer, " RX 470 ") ||
+        strstr(renderer, " RX 480 ") || strstr(renderer, " RX 490 ") ||
+        strstr(renderer, " RX 560 ") || strstr(renderer, " RX 560X ") ||
+        strstr(renderer, " RX 570 ") || strstr(renderer, " RX 580 ") ||
+        strstr(renderer, " RX 580X ") || strstr(renderer, " RX 590 ") ||
+        strstr(renderer, " RX550/550 ") || strstr(renderer, "(TM) 520 ") ||
+        strstr(renderer, "(TM) 530 ") || strstr(renderer, "(TM) 535 ") ||
+        strstr(renderer, " R5 ") || strstr(renderer, " R7 ") || strstr(renderer, " R9 ")) {
+      GCaps.use_hq_normals_workaround = true;
+    }
   }
   /* There is an issue with the #glBlitFramebuffer on MacOS with radeon pro graphics.
    * Blitting depth with#GL_DEPTH24_STENCIL8 is buggy so the workaround is to use
@@ -283,7 +309,7 @@ static void detect_workarounds(void)
   if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_OFFICIAL) && !GLEW_VERSION_4_5) {
     GLContext::copy_image_support = false;
   }
-  /* Special fix for theses specific GPUs.
+  /* Special fix for these specific GPUs.
    * Without this workaround, blender crashes on startup. (see T72098) */
   if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_OFFICIAL) &&
       (strstr(renderer, "HD Graphics 620") || strstr(renderer, "HD Graphics 630"))) {
@@ -342,7 +368,14 @@ static void detect_workarounds(void)
     }
   }
 
-  /* Disable multidraw if the base instance cannot be read. */
+  /* Some Intel drivers have issues with using mips as frame-buffer targets if
+   * GL_TEXTURE_MAX_LEVEL is higher than the target MIP.
+   * Only check at the end after all other workarounds because this uses the drawing code.
+   * Also after device/driver flags to avoid the check that causes pre GCN Radeon to crash. */
+  if (GCaps.mip_render_workaround == false) {
+    GCaps.mip_render_workaround = detect_mip_render_workaround();
+  }
+  /* Disable multi-draw if the base instance cannot be read. */
   if (GLContext::shader_draw_parameters_support == false) {
     GLContext::multi_draw_indirect_support = false;
   }
@@ -350,7 +383,7 @@ static void detect_workarounds(void)
   if (GLContext::debug_layer_support == false) {
     GLContext::debug_layer_workaround = true;
   }
-}
+}  // namespace blender::gpu
 
 /** Internal capabilities. */
 GLint GLContext::max_cubemap_size = 0;
@@ -376,7 +409,7 @@ bool GLContext::debug_layer_workaround = false;
 bool GLContext::unused_fb_slot_workaround = false;
 float GLContext::derivative_signs[2] = {1.0f, 1.0f};
 
-void GLBackend::capabilities_init(void)
+void GLBackend::capabilities_init()
 {
   BLI_assert(GLEW_VERSION_3_3);
   /* Common Capabilities. */

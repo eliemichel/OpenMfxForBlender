@@ -47,7 +47,9 @@ enum {
   REFINE_BACKWARD = 1 << 1,
 };
 
-/**** Group ****/
+/* -------------------------------------------------------------------- */
+/** \name Node Group
+ * \{ */
 
 bNodeSocket *node_group_find_input_socket(bNode *groupnode, const char *identifier)
 {
@@ -77,12 +79,12 @@ void node_group_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int ma
   BLI_strncpy(label, (node->id) ? node->id->name + 2 : IFACE_("Missing Data-Block"), maxlen);
 }
 
-bool node_group_poll_instance(bNode *node, bNodeTree *nodetree)
+bool node_group_poll_instance(bNode *node, bNodeTree *nodetree, const char **disabled_hint)
 {
-  if (node->typeinfo->poll(node->typeinfo, nodetree)) {
+  if (node->typeinfo->poll(node->typeinfo, nodetree, disabled_hint)) {
     bNodeTree *grouptree = (bNodeTree *)node->id;
     if (grouptree) {
-      return nodeGroupPoll(nodetree, grouptree);
+      return nodeGroupPoll(nodetree, grouptree, disabled_hint);
     }
 
     return true; /* without a linked node tree, group node is always ok */
@@ -91,25 +93,27 @@ bool node_group_poll_instance(bNode *node, bNodeTree *nodetree)
   return false;
 }
 
-int nodeGroupPoll(bNodeTree *nodetree, bNodeTree *grouptree)
+bool nodeGroupPoll(bNodeTree *nodetree, bNodeTree *grouptree, const char **r_disabled_hint)
 {
   bNode *node;
-  int valid = 1;
+  bool valid = true;
 
   /* unspecified node group, generally allowed
    * (if anything, should be avoided on operator level)
    */
   if (grouptree == NULL) {
-    return 1;
+    return true;
   }
 
   if (nodetree == grouptree) {
-    return 0;
+    *r_disabled_hint = "Nesting a node group inside of itself is not allowed";
+    return false;
   }
 
   for (node = grouptree->nodes.first; node; node = node->next) {
-    if (node->typeinfo->poll_instance && !node->typeinfo->poll_instance(node, nodetree)) {
-      valid = 0;
+    if (node->typeinfo->poll_instance &&
+        !node->typeinfo->poll_instance(node, nodetree, r_disabled_hint)) {
+      valid = false;
       break;
     }
   }
@@ -186,6 +190,10 @@ void node_group_update(struct bNodeTree *ntree, struct bNode *node)
   if (node->id == NULL) {
     nodeRemoveAllSockets(ntree, node);
   }
+  else if ((ID_IS_LINKED(node->id) && (node->id->tag & LIB_TAG_MISSING))) {
+    /* Missing datablock, leave sockets unchanged so that when it comes back
+     * the links remain valid. */
+  }
   else {
     bNodeTree *ngroup = (bNodeTree *)node->id;
     group_verify_socket_list(ntree, node, &ngroup->inputs, &node->inputs, SOCK_IN);
@@ -193,7 +201,11 @@ void node_group_update(struct bNodeTree *ntree, struct bNode *node)
   }
 }
 
-/**** FRAME ****/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Node Frame
+ * \{ */
 
 static void node_frame_init(bNodeTree *UNUSED(ntree), bNode *node)
 {
@@ -219,7 +231,11 @@ void register_node_type_frame(void)
   nodeRegisterType(ntype);
 }
 
-/* **************** REROUTE ******************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Node Re-Route
+ * \{ */
 
 /* simple, only a single input and output here */
 static void node_reroute_update_internal_links(bNodeTree *ntree, bNode *node)
@@ -403,7 +419,11 @@ void BKE_node_tree_unlink_id(ID *id, struct bNodeTree *ntree)
   }
 }
 
-/**** GROUP_INPUT / GROUP_OUTPUT ****/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Node #GROUP_INPUT / #GROUP_OUTPUT
+ * \{ */
 
 static void node_group_input_init(bNodeTree *ntree, bNode *node)
 {
@@ -599,3 +619,5 @@ void register_node_type_group_output(void)
 
   nodeRegisterType(ntype);
 }
+
+/** \} */

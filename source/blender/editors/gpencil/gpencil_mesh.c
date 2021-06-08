@@ -36,9 +36,8 @@
 #include "BKE_anim_data.h"
 #include "BKE_context.h"
 #include "BKE_duplilist.h"
-#include "BKE_global.h"
-#include "BKE_gpencil.h"
 #include "BKE_gpencil_geom.h"
+#include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_object.h"
@@ -191,7 +190,6 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   ARegion *region = CTX_wm_region(C);
   View3D *v3d = CTX_wm_view3d(C);
-  Object *ob_gpencil = NULL;
 
   ListBase ob_selected_list = {NULL, NULL};
   gpencil_bake_ob_list(C, depsgraph, scene, &ob_selected_list);
@@ -222,10 +220,26 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   const float offset = RNA_float_get(op->ptr, "offset");
   const int frame_offset = RNA_int_get(op->ptr, "frame_target") - frame_start;
   const int project_type = RNA_enum_get(op->ptr, "project_type");
-  ob_gpencil = (Object *)RNA_pointer_get(op->ptr, "target").data;
+  eGP_TargetObjectMode target = RNA_enum_get(op->ptr, "target");
 
-  /* Create a new grease pencil object in origin. */
+  /* Create a new grease pencil object in origin or reuse selected. */
+  Object *ob_gpencil = NULL;
   bool newob = false;
+
+  if (target == GP_TARGET_OB_SELECTED) {
+    ob_gpencil = BKE_view_layer_non_active_selected_object(CTX_data_view_layer(C), v3d);
+    if (ob_gpencil != NULL) {
+      if (ob_gpencil->type != OB_GPENCIL) {
+        BKE_report(op->reports, RPT_WARNING, "Target object not a grease pencil, ignoring!");
+        ob_gpencil = NULL;
+      }
+      else if (BKE_object_obdata_is_libdata(ob_gpencil)) {
+        BKE_report(op->reports, RPT_WARNING, "Target object library-data, ignoring!");
+        ob_gpencil = NULL;
+      }
+    }
+  }
+
   if (ob_gpencil == NULL) {
     ushort local_view_bits = (v3d && v3d->localvd) ? v3d->local_view_uuid : 0;
     const float loc[3] = {0.0f, 0.0f, 0.0f};
@@ -237,13 +251,16 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   gpd->draw_mode = (project_type == GP_REPROJECT_KEEP) ? GP_DRAWMODE_3D : GP_DRAWMODE_2D;
 
   /* Set cursor to indicate working. */
-  WM_cursor_wait(1);
+  WM_cursor_wait(true);
 
   GP_SpaceConversion gsc = {NULL};
   SnapObjectContext *sctx = NULL;
   if (project_type != GP_REPROJECT_KEEP) {
     /* Init space conversion stuff. */
     gpencil_point_conversion_init(C, &gsc);
+    /* Move the grease pencil object to conversion data. */
+    gsc.ob = ob_gpencil;
+
     /* Init snap context for geometry projection. */
     sctx = ED_transform_snap_object_context_create_view3d(scene, 0, region, CTX_wm_view3d(C));
 
@@ -301,7 +318,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
                                use_seams,
                                use_faces);
 
-      /* Reproject all untaged created strokes. */
+      /* Reproject all un-tagged created strokes. */
       if (project_type != GP_REPROJECT_KEEP) {
         LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
           bGPDframe *gpf = gpl->actframe;
@@ -368,7 +385,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
 
   /* Reset cursor. */
-  WM_cursor_wait(0);
+  WM_cursor_wait(false);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -383,10 +400,6 @@ static int gpencil_bake_mesh_animation_invoke(bContext *C,
   return WM_operator_props_dialog_popup(C, op, 250);
 }
 
-static bool rna_GPencil_object_poll(PointerRNA *UNUSED(ptr), PointerRNA value)
-{
-  return ((Object *)value.owner_id)->type == OB_GPENCIL;
-}
 void GPENCIL_OT_bake_mesh_animation(wmOperatorType *ot)
 {
   static const EnumPropertyItem reproject_type[] = {
@@ -408,12 +421,18 @@ void GPENCIL_OT_bake_mesh_animation(wmOperatorType *ot)
       {0, NULL, 0, NULL, NULL},
   };
 
+  static const EnumPropertyItem target_object_modes[] = {
+      {GP_TARGET_OB_NEW, "NEW", 0, "New Object", ""},
+      {GP_TARGET_OB_SELECTED, "SELECTED", 0, "Selected Object", ""},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   PropertyRNA *prop;
 
   /* identifiers */
   ot->name = "Bake Mesh Animation to Grease Pencil";
   ot->idname = "GPENCIL_OT_bake_mesh_animation";
-  ot->description = "Bake Mesh Animation to Grease Pencil strokes";
+  ot->description = "Bake mesh animation to grease pencil strokes";
 
   /* callbacks */
   ot->invoke = gpencil_bake_mesh_animation_invoke;
@@ -424,12 +443,12 @@ void GPENCIL_OT_bake_mesh_animation(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
-  ot->prop = RNA_def_pointer_runtime(ot->srna,
-                                     "target",
-                                     &RNA_Object,
-                                     "Target Object",
-                                     "Target grease pencil object. Leave empty for new object");
-  RNA_def_property_poll_runtime(ot->prop, rna_GPencil_object_poll);
+  ot->prop = RNA_def_enum(ot->srna,
+                          "target",
+                          target_object_modes,
+                          GP_TARGET_OB_NEW,
+                          "Target Object",
+                          "Target grease pencil");
   RNA_def_property_flag(ot->prop, PROP_SKIP_SAVE);
 
   prop = RNA_def_int(

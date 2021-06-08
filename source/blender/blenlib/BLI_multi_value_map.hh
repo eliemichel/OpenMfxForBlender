@@ -38,6 +38,9 @@
 namespace blender {
 
 template<typename Key, typename Value> class MultiValueMap {
+ public:
+  using size_type = int64_t;
+
  private:
   using MapType = Map<Key, Vector<Value>>;
   MapType map_;
@@ -70,6 +73,12 @@ template<typename Key, typename Value> class MultiValueMap {
     vector.append(std::forward<ForwardValue>(value));
   }
 
+  void add_non_duplicates(const Key &key, const Value &value)
+  {
+    Vector<Value> &vector = map_.lookup_or_add_default_as(key);
+    vector.append_non_duplicates(value);
+  }
+
   /**
    * Add all given values to the key.
    */
@@ -99,6 +108,22 @@ template<typename Key, typename Value> class MultiValueMap {
     const Vector<Value> *vector = map_.lookup_ptr_as(key);
     if (vector != nullptr) {
       return vector->as_span();
+    }
+    return {};
+  }
+
+  /**
+   * Get a mutable span to all the values that are stored for the given key.
+   */
+  MutableSpan<Value> lookup(const Key &key)
+  {
+    return this->lookup_as(key);
+  }
+  template<typename ForwardKey> MutableSpan<Value> lookup_as(const ForwardKey &key)
+  {
+    Vector<Value> *vector = map_.lookup_ptr_as(key);
+    if (vector != nullptr) {
+      return vector->as_mutable_span();
     }
     return {};
   }

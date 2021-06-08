@@ -47,9 +47,15 @@
 #include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_scene.h"
-#include "BKE_sequencer.h"
 
-#include "sequencer.h"
+#include "SEQ_prefetch.h"
+#include "SEQ_relations.h"
+#include "SEQ_render.h"
+#include "SEQ_sequencer.h"
+
+#include "image_cache.h"
+#include "prefetch.h"
+#include "strip_time.h"
 
 /**
  * Sequencer Cache Design Notes
@@ -141,7 +147,6 @@ typedef struct SeqCache {
   struct BLI_mempool *keys_pool;
   struct BLI_mempool *items_pool;
   struct SeqCacheKey *last_key;
-  size_t memory_used;
   SeqDiskCache *disk_cache;
 } SeqCache;
 
@@ -157,17 +162,20 @@ typedef struct SeqCacheKey {
   struct SeqCacheKey *link_next; /* Used for linking intermediate items to final frame. */
   struct Sequence *seq;
   SeqRenderData context;
-  float nfra;
-  float cost;         /* In short: render time(s) divided by playback frame duration(s) */
-  bool is_temp_cache; /* this cache entry will be freed before rendering next frame */
-  /* ID of task for asigning temp cache entries to particular task(thread, etc.) */
+  float frame_index;    /* Usually same as timeline_frame. Mapped to media for RAW entries. */
+  float timeline_frame; /* Only for reference - used for freeing when cache is full. */
+  float cost;           /* In short: render time(s) divided by playback frame duration(s) */
+  bool is_temp_cache;   /* this cache entry will be freed before rendering next frame */
+  /* ID of task for assigning temp cache entries to particular task(thread, etc.) */
   eSeqTaskId task_id;
   int type;
 } SeqCacheKey;
 
 static ThreadMutex cache_create_lock = BLI_MUTEX_INITIALIZER;
-static float seq_cache_cfra_to_frame_index(Sequence *seq, float cfra);
-static float seq_cache_frame_index_to_cfra(Sequence *seq, float nfra);
+static float seq_cache_timeline_frame_to_frame_index(Sequence *seq,
+                                                     float timeline_frame,
+                                                     int type);
+static float seq_cache_frame_index_to_timeline_frame(Sequence *seq, float frame_index);
 
 static char *seq_disk_cache_base_dir(void)
 {
@@ -344,15 +352,18 @@ static void seq_disk_cache_update_file(SeqDiskCache *disk_cache, char *path)
 }
 
 /* Path format:
- * <cache dir>/<project name>/<scene name>-<timestamp>/<seq name>/DCACHE_FNAME_FORMAT
+ * <cache dir>/<project name>_seq_cache/<scene name>-<timestamp>/<seq name>/DCACHE_FNAME_FORMAT
  */
 
 static void seq_disk_cache_get_project_dir(SeqDiskCache *disk_cache, char *path, size_t path_len)
 {
-  char main_name[FILE_MAX];
-  BLI_split_file_part(BKE_main_blendfile_path(disk_cache->bmain), main_name, sizeof(main_name));
+  char cache_dir[FILE_MAX];
+  BLI_split_file_part(BKE_main_blendfile_path(disk_cache->bmain), cache_dir, sizeof(cache_dir));
+  /* Use suffix, so that the cache directory name does not conflict with the bmain's blend file. */
+  const char *suffix = "_seq_cache";
+  strncat(cache_dir, suffix, sizeof(cache_dir) - strlen(cache_dir) - 1);
   BLI_strncpy(path, seq_disk_cache_base_dir(), path_len);
-  BLI_path_append(path, path_len, main_name);
+  BLI_path_append(path, path_len, cache_dir);
 }
 
 static void seq_disk_cache_get_dir(
@@ -378,7 +389,7 @@ static void seq_disk_cache_get_file_path(SeqDiskCache *disk_cache,
                                          size_t path_len)
 {
   seq_disk_cache_get_dir(disk_cache, key->context.scene, key->seq, path, path_len);
-  int frameno = (int)key->nfra / DCACHE_IMAGES_PER_FILE;
+  int frameno = (int)key->frame_index / DCACHE_IMAGES_PER_FILE;
   char cache_filename[FILE_MAXFILE];
   sprintf(cache_filename,
           DCACHE_FNAME_FORMAT,
@@ -413,11 +424,14 @@ static void seq_disk_cache_handle_versioning(SeqDiskCache *disk_cache)
   BLI_strncpy(path_version_file, path, sizeof(path_version_file));
   BLI_path_append(path_version_file, sizeof(path_version_file), "cache_version");
 
-  if (BLI_exists(path)) {
+  if (BLI_exists(path) && BLI_is_dir(path)) {
     FILE *file = BLI_fopen(path_version_file, "r");
 
     if (file) {
-      fscanf(file, "%d", &version);
+      const int num_items_read = fscanf(file, "%d", &version);
+      if (num_items_read == 0) {
+        version = -1;
+      }
       fclose(file);
     }
 
@@ -447,8 +461,9 @@ static void seq_disk_cache_delete_invalid_files(SeqDiskCache *disk_cache,
     next_file = cache_file->next;
     if (cache_file->cache_type & invalidate_types) {
       if (STREQ(cache_dir, cache_file->dir)) {
-        int cfra_start = seq_cache_frame_index_to_cfra(seq, cache_file->start_frame);
-        if (cfra_start > range_start && cfra_start <= range_end) {
+        int timeline_frame_start = seq_cache_frame_index_to_timeline_frame(
+            seq, cache_file->start_frame);
+        if (timeline_frame_start > range_start && timeline_frame_start <= range_end) {
           seq_disk_cache_delete_file(disk_cache, cache_file);
         }
       }
@@ -501,10 +516,15 @@ static size_t inflate_file_to_imbuf(ImBuf *ibuf, FILE *file, DiskCacheHeaderEntr
       ibuf->rect_float, header_entry->size_raw, file, header_entry->offset);
 }
 
-static void seq_disk_cache_read_header(FILE *file, DiskCacheHeader *header)
+static bool seq_disk_cache_read_header(FILE *file, DiskCacheHeader *header)
 {
   fseek(file, 0, 0);
-  fread(header, sizeof(*header), 1, file);
+  const size_t num_items_read = fread(header, sizeof(*header), 1, file);
+  if (num_items_read < 1) {
+    BLI_assert(!"unable to read disk cache header");
+    perror("unable to read disk cache header");
+    return false;
+  }
 
   for (int i = 0; i < DCACHE_IMAGES_PER_FILE; i++) {
     if ((ENDIAN_ORDER == B_ENDIAN) && header->entry[i].encoding == 0) {
@@ -514,6 +534,8 @@ static void seq_disk_cache_read_header(FILE *file, DiskCacheHeader *header)
       BLI_endian_switch_uint64(&header->entry[i].size_raw);
     }
   }
+
+  return true;
 }
 
 static size_t seq_disk_cache_write_header(FILE *file, DiskCacheHeader *header)
@@ -555,7 +577,7 @@ static int seq_disk_cache_add_header_entry(SeqCacheKey *key, ImBuf *ibuf, DiskCa
   }
 
   header->entry[i].offset = offset;
-  header->entry[i].frameno = key->nfra;
+  header->entry[i].frameno = key->frame_index;
 
   /* Store colorspace name of ibuf. */
   const char *colorspace_name;
@@ -576,7 +598,7 @@ static int seq_disk_cache_add_header_entry(SeqCacheKey *key, ImBuf *ibuf, DiskCa
 static int seq_disk_cache_get_header_entry(SeqCacheKey *key, DiskCacheHeader *header)
 {
   for (int i = 0; i < DCACHE_IMAGES_PER_FILE; i++) {
-    if (header->entry[i].frameno == key->nfra) {
+    if (header->entry[i].frameno == key->frame_index) {
       return i;
     }
   }
@@ -600,10 +622,18 @@ static bool seq_disk_cache_write_file(SeqDiskCache *disk_cache, SeqCacheKey *key
     seq_disk_cache_add_file_to_list(disk_cache, path);
   }
 
+  DiskCacheFile *cache_file = seq_disk_cache_get_file_entry_by_path(disk_cache, path);
   DiskCacheHeader header;
   memset(&header, 0, sizeof(header));
-  seq_disk_cache_read_header(file, &header);
+  /* #BLI_make_existing_file() above may create an empty file. This is fine, don't attempt reading
+   * the header in that case. */
+  if (cache_file->fstat.st_size != 0 && !seq_disk_cache_read_header(file, &header)) {
+    fclose(file);
+    seq_disk_cache_delete_file(disk_cache, cache_file);
+    return false;
+  }
   int entry_index = seq_disk_cache_add_header_entry(key, ibuf, &header);
+
   size_t bytes_written = deflate_imbuf_to_file(
       ibuf, file, seq_disk_cache_compression_level(), &header.entry[entry_index]);
 
@@ -635,7 +665,10 @@ static ImBuf *seq_disk_cache_read_file(SeqDiskCache *disk_cache, SeqCacheKey *ke
     return NULL;
   }
 
-  seq_disk_cache_read_header(file, &header);
+  if (!seq_disk_cache_read_header(file, &header)) {
+    fclose(file);
+    return NULL;
+  }
   int entry_index = seq_disk_cache_get_header_entry(key, &header);
 
   /* Item not found. */
@@ -712,7 +745,7 @@ static unsigned int seq_cache_hashhash(const void *key_)
   const SeqCacheKey *key = key_;
   unsigned int rval = seq_hash_render_data(&key->context);
 
-  rval ^= *(const unsigned int *)&key->nfra;
+  rval ^= *(const unsigned int *)&key->frame_index;
   rval += key->type;
   rval ^= ((intptr_t)key->seq) << 6;
 
@@ -724,18 +757,25 @@ static bool seq_cache_hashcmp(const void *a_, const void *b_)
   const SeqCacheKey *a = a_;
   const SeqCacheKey *b = b_;
 
-  return ((a->seq != b->seq) || (a->nfra != b->nfra) || (a->type != b->type) ||
+  return ((a->seq != b->seq) || (a->frame_index != b->frame_index) || (a->type != b->type) ||
           seq_cmp_render_data(&a->context, &b->context));
 }
 
-static float seq_cache_cfra_to_frame_index(Sequence *seq, float cfra)
+static float seq_cache_timeline_frame_to_frame_index(Sequence *seq, float timeline_frame, int type)
 {
-  return cfra - seq->start;
+  /* With raw images, map timeline_frame to strip input media frame range. This means that static
+   * images or extended frame range of movies will only generate one cache entry. No special
+   * treatment in converting frame index to timeline_frame is needed. */
+  if (type == SEQ_CACHE_STORE_RAW) {
+    return seq_give_frame_index(seq, timeline_frame);
+  }
+
+  return timeline_frame - seq->start;
 }
 
-static float seq_cache_frame_index_to_cfra(Sequence *seq, float nfra)
+static float seq_cache_frame_index_to_timeline_frame(Sequence *seq, float frame_index)
 {
-  return nfra + seq->start;
+  return frame_index + seq->start;
 }
 
 static SeqCache *seq_cache_get_from_scene(Scene *scene)
@@ -779,31 +819,71 @@ static void seq_cache_keyfree(void *val)
 static void seq_cache_valfree(void *val)
 {
   SeqCacheItem *item = (SeqCacheItem *)val;
-  SeqCache *cache = item->cache_owner;
 
   if (item->ibuf) {
-    cache->memory_used -= IMB_get_size_in_memory(item->ibuf);
     IMB_freeImBuf(item->ibuf);
   }
 
   BLI_mempool_free(item->cache_owner->items_pool, item);
 }
 
-static void seq_cache_put(SeqCache *cache, SeqCacheKey *key, ImBuf *ibuf)
+static int get_stored_types_flag(Scene *scene, SeqCacheKey *key)
 {
+  int flag;
+  if (key->seq->cache_flag & SEQ_CACHE_OVERRIDE) {
+    flag = key->seq->cache_flag;
+  }
+  else {
+    flag = scene->ed->cache_flag;
+  }
+
+  /* SEQ_CACHE_STORE_FINAL_OUT can not be overridden by strip cache */
+  flag |= (scene->ed->cache_flag & SEQ_CACHE_STORE_FINAL_OUT);
+
+  return flag;
+}
+
+static void seq_cache_put_ex(Scene *scene, SeqCacheKey *key, ImBuf *ibuf)
+{
+  SeqCache *cache = seq_cache_get_from_scene(scene);
   SeqCacheItem *item;
   item = BLI_mempool_alloc(cache->items_pool);
   item->cache_owner = cache;
   item->ibuf = ibuf;
 
+  const int stored_types_flag = get_stored_types_flag(scene, key);
+
+  /* Item stored for later use. */
+  if (stored_types_flag & key->type) {
+    key->is_temp_cache = false;
+    key->link_prev = cache->last_key;
+  }
+
+  /* Store pointer to last cached key. */
+  SeqCacheKey *temp_last_key = cache->last_key;
+
   if (BLI_ghash_reinsert(cache->hash, key, item, seq_cache_keyfree, seq_cache_valfree)) {
     IMB_refImBuf(ibuf);
-    cache->last_key = key;
-    cache->memory_used += IMB_get_size_in_memory(ibuf);
+
+    if (!key->is_temp_cache) {
+      cache->last_key = key;
+    }
+  }
+
+  /* Set last_key's reference to this key so we can look up chain backwards.
+   * Item is already put in cache, so cache->last_key points to current key.
+   */
+  if (!key->is_temp_cache && temp_last_key) {
+    temp_last_key->link_next = cache->last_key;
+  }
+
+  /* Reset linking. */
+  if (key->type == SEQ_CACHE_STORE_FINAL_OUT) {
+    cache->last_key = NULL;
   }
 }
 
-static ImBuf *seq_cache_get(SeqCache *cache, SeqCacheKey *key)
+static ImBuf *seq_cache_get_ex(SeqCache *cache, SeqCacheKey *key)
 {
   SeqCacheItem *item = BLI_ghash_lookup(cache->hash, key);
 
@@ -842,21 +922,18 @@ static SeqCacheKey *seq_cache_choose_key(Scene *scene, SeqCacheKey *lkey, SeqCac
    * We could use temp cache as a shield and later make it a non-temporary entry,
    * but it is not worth of increasing system complexity.
    */
-  if (scene->ed->cache_flag & SEQ_CACHE_PREFETCH_ENABLE &&
-      BKE_sequencer_prefetch_job_is_running(scene)) {
+  if (scene->ed->cache_flag & SEQ_CACHE_PREFETCH_ENABLE && seq_prefetch_job_is_running(scene)) {
     int pfjob_start, pfjob_end;
-    BKE_sequencer_prefetch_get_time_range(scene, &pfjob_start, &pfjob_end);
+    seq_prefetch_get_time_range(scene, &pfjob_start, &pfjob_end);
 
     if (lkey) {
-      int lkey_cfra = seq_cache_frame_index_to_cfra(lkey->seq, lkey->nfra);
-      if (lkey_cfra < pfjob_start || lkey_cfra > pfjob_end) {
+      if (lkey->timeline_frame < pfjob_start || lkey->timeline_frame > pfjob_end) {
         return lkey;
       }
     }
 
     if (rkey) {
-      int rkey_cfra = seq_cache_frame_index_to_cfra(rkey->seq, rkey->nfra);
-      if (rkey_cfra < pfjob_start || rkey_cfra > pfjob_end) {
+      if (rkey->timeline_frame < pfjob_start || rkey->timeline_frame > pfjob_end) {
         return rkey;
       }
     }
@@ -865,17 +942,14 @@ static SeqCacheKey *seq_cache_choose_key(Scene *scene, SeqCacheKey *lkey, SeqCac
   }
 
   if (rkey && lkey) {
-    int lkey_cfra = seq_cache_frame_index_to_cfra(lkey->seq, lkey->nfra);
-    int rkey_cfra = seq_cache_frame_index_to_cfra(rkey->seq, rkey->nfra);
-
-    if (lkey_cfra > rkey_cfra) {
+    if (lkey->timeline_frame > rkey->timeline_frame) {
       SeqCacheKey *swapkey = lkey;
       lkey = rkey;
       rkey = swapkey;
     }
 
-    int l_diff = scene->r.cfra - lkey_cfra;
-    int r_diff = rkey_cfra - scene->r.cfra;
+    int l_diff = scene->r.cfra - lkey->timeline_frame;
+    int r_diff = rkey->timeline_frame - scene->r.cfra;
 
     if (l_diff > r_diff) {
       finalkey = lkey;
@@ -905,14 +979,34 @@ static void seq_cache_recycle_linked(Scene *scene, SeqCacheKey *base)
   SeqCacheKey *next = base->link_next;
 
   while (base) {
+    if (!BLI_ghash_haskey(cache->hash, base)) {
+      break; /* Key has already been removed from cache. */
+    }
+
     SeqCacheKey *prev = base->link_prev;
+    if (prev != NULL && prev->link_next != base) {
+      /* Key has been removed and replaced and doesn't belong to this chain anymore. */
+      base->link_prev = NULL;
+      break;
+    }
+
     BLI_ghash_remove(cache->hash, base, seq_cache_keyfree, seq_cache_valfree);
     base = prev;
   }
 
   base = next;
   while (base) {
+    if (!BLI_ghash_haskey(cache->hash, base)) {
+      break; /* Key has already been removed from cache. */
+    }
+
     next = base->link_next;
+    if (next != NULL && next->link_prev != base) {
+      /* Key has been removed and replaced and doesn't belong to this chain anymore. */
+      base->link_next = NULL;
+      break;
+    }
+
     BLI_ghash_remove(cache->hash, base, seq_cache_keyfree, seq_cache_valfree);
     base = next;
   }
@@ -931,7 +1025,6 @@ static SeqCacheKey *seq_cache_get_item_for_removal(Scene *scene)
   GHashIterator gh_iter;
   BLI_ghashIterator_init(&gh_iter, cache->hash);
   int total_count = 0;
-  int cheap_count = 0;
 
   while (!BLI_ghashIterator_done(&gh_iter)) {
     key = BLI_ghashIterator_getKey(&gh_iter);
@@ -952,26 +1045,21 @@ static SeqCacheKey *seq_cache_get_item_for_removal(Scene *scene)
 
     total_count++;
 
-    if (key->cost <= scene->ed->recycle_max_cost) {
-      cheap_count++;
-      if (lkey) {
-        if (seq_cache_frame_index_to_cfra(key->seq, key->nfra) <
-            seq_cache_frame_index_to_cfra(lkey->seq, lkey->nfra)) {
-          lkey = key;
-        }
-      }
-      else {
+    if (lkey) {
+      if (key->timeline_frame < lkey->timeline_frame) {
         lkey = key;
       }
-      if (rkey) {
-        if (seq_cache_frame_index_to_cfra(key->seq, key->nfra) >
-            seq_cache_frame_index_to_cfra(rkey->seq, rkey->nfra)) {
-          rkey = key;
-        }
-      }
-      else {
+    }
+    else {
+      lkey = key;
+    }
+    if (rkey) {
+      if (key->timeline_frame > rkey->timeline_frame) {
         rkey = key;
       }
+    }
+    else {
+      rkey = key;
     }
   }
 
@@ -983,9 +1071,8 @@ static SeqCacheKey *seq_cache_get_item_for_removal(Scene *scene)
 /* Find only "base" keys.
  * Sources(other types) for a frame must be freed all at once.
  */
-bool BKE_sequencer_cache_recycle_item(Scene *scene)
+bool seq_cache_recycle_item(Scene *scene)
 {
-  size_t memory_total = seq_cache_get_mem_total();
   SeqCache *cache = seq_cache_get_from_scene(scene);
   if (!cache) {
     return false;
@@ -993,7 +1080,7 @@ bool BKE_sequencer_cache_recycle_item(Scene *scene)
 
   seq_cache_lock(scene);
 
-  while (cache->memory_used > memory_total) {
+  while (seq_cache_is_full()) {
     SeqCacheKey *finalkey = seq_cache_get_item_for_removal(scene);
 
     if (finalkey) {
@@ -1074,9 +1161,38 @@ static void seq_cache_create(Main *bmain, Scene *scene)
   BLI_mutex_unlock(&cache_create_lock);
 }
 
+static void seq_cache_populate_key(SeqCacheKey *key,
+                                   const SeqRenderData *context,
+                                   Sequence *seq,
+                                   const float timeline_frame,
+                                   const int type)
+{
+  key->cache_owner = seq_cache_get_from_scene(context->scene);
+  key->seq = seq;
+  key->context = *context;
+  key->frame_index = seq_cache_timeline_frame_to_frame_index(seq, timeline_frame, type);
+  key->timeline_frame = timeline_frame;
+  key->type = type;
+  key->link_prev = NULL;
+  key->link_next = NULL;
+  key->is_temp_cache = true;
+  key->task_id = context->task_id;
+}
+
+static SeqCacheKey *seq_cache_allocate_key(SeqCache *cache,
+                                           const SeqRenderData *context,
+                                           Sequence *seq,
+                                           const float timeline_frame,
+                                           const int type)
+{
+  SeqCacheKey *key = BLI_mempool_alloc(cache->keys_pool);
+  seq_cache_populate_key(key, context, seq, timeline_frame, type);
+  return key;
+}
+
 /* ***************************** API ****************************** */
 
-void BKE_sequencer_cache_free_temp_cache(Scene *scene, short id, int cfra)
+void seq_cache_free_temp_cache(Scene *scene, short id, int timeline_frame)
 {
   SeqCache *cache = seq_cache_get_from_scene(scene);
   if (!cache) {
@@ -1091,15 +1207,20 @@ void BKE_sequencer_cache_free_temp_cache(Scene *scene, short id, int cfra)
     SeqCacheKey *key = BLI_ghashIterator_getKey(&gh_iter);
     BLI_ghashIterator_step(&gh_iter);
 
-    if (key->is_temp_cache && key->task_id == id &&
-        seq_cache_frame_index_to_cfra(key->seq, key->nfra) != cfra) {
-      BLI_ghash_remove(cache->hash, key, seq_cache_keyfree, seq_cache_valfree);
+    if (key->is_temp_cache && key->task_id == id) {
+      /* Use frame_index here to avoid freeing raw images if they are used for multiple frames. */
+      float frame_index = seq_cache_timeline_frame_to_frame_index(
+          key->seq, timeline_frame, key->type);
+      if (frame_index != key->frame_index || timeline_frame > key->seq->enddisp ||
+          timeline_frame < key->seq->startdisp) {
+        BLI_ghash_remove(cache->hash, key, seq_cache_keyfree, seq_cache_valfree);
+      }
     }
   }
   seq_cache_unlock(scene);
 }
 
-void BKE_sequencer_cache_destruct(Scene *scene)
+void seq_cache_destruct(Scene *scene)
 {
   SeqCache *cache = seq_cache_get_from_scene(scene);
   if (!cache) {
@@ -1121,15 +1242,15 @@ void BKE_sequencer_cache_destruct(Scene *scene)
   scene->ed->cache = NULL;
 }
 
-void BKE_sequencer_cache_cleanup_all(Main *bmain)
+void seq_cache_cleanup_all(Main *bmain)
 {
   for (Scene *scene = bmain->scenes.first; scene != NULL; scene = scene->id.next) {
-    BKE_sequencer_cache_cleanup(scene);
+    SEQ_cache_cleanup(scene);
   }
 }
-void BKE_sequencer_cache_cleanup(Scene *scene)
+void SEQ_cache_cleanup(Scene *scene)
 {
-  BKE_sequencer_prefetch_stop(scene);
+  SEQ_prefetch_stop(scene);
 
   SeqCache *cache = seq_cache_get_from_scene(scene);
   if (!cache) {
@@ -1150,11 +1271,11 @@ void BKE_sequencer_cache_cleanup(Scene *scene)
   seq_cache_unlock(scene);
 }
 
-void BKE_sequencer_cache_cleanup_sequence(Scene *scene,
-                                          Sequence *seq,
-                                          Sequence *seq_changed,
-                                          int invalidate_types,
-                                          bool force_seq_changed_range)
+void seq_cache_cleanup_sequence(Scene *scene,
+                                Sequence *seq,
+                                Sequence *seq_changed,
+                                int invalidate_types,
+                                bool force_seq_changed_range)
 {
   SeqCache *cache = seq_cache_get_from_scene(scene);
   if (!cache) {
@@ -1190,10 +1311,9 @@ void BKE_sequencer_cache_cleanup_sequence(Scene *scene,
     SeqCacheKey *key = BLI_ghashIterator_getKey(&gh_iter);
     BLI_ghashIterator_step(&gh_iter);
 
-    int key_cfra = seq_cache_frame_index_to_cfra(key->seq, key->nfra);
-
     /* Clean all final and composite in intersection of seq and seq_changed. */
-    if (key->type & invalidate_composite && key_cfra >= range_start && key_cfra <= range_end) {
+    if (key->type & invalidate_composite && key->timeline_frame >= range_start &&
+        key->timeline_frame <= range_end) {
       if (key->link_next || key->link_prev) {
         seq_cache_relink_keys(key->link_next, key->link_prev);
       }
@@ -1201,8 +1321,9 @@ void BKE_sequencer_cache_cleanup_sequence(Scene *scene,
       BLI_ghash_remove(cache->hash, key, seq_cache_keyfree, seq_cache_valfree);
     }
 
-    if (key->type & invalidate_source && key->seq == seq && key_cfra >= seq_changed->startdisp &&
-        key_cfra <= seq_changed->enddisp) {
+    if (key->type & invalidate_source && key->seq == seq &&
+        key->timeline_frame >= seq_changed->startdisp &&
+        key->timeline_frame <= seq_changed->enddisp) {
       if (key->link_next || key->link_prev) {
         seq_cache_relink_keys(key->link_next, key->link_prev);
       }
@@ -1214,8 +1335,10 @@ void BKE_sequencer_cache_cleanup_sequence(Scene *scene,
   seq_cache_unlock(scene);
 }
 
-struct ImBuf *BKE_sequencer_cache_get(
-    const SeqRenderData *context, Sequence *seq, float cfra, int type, bool skip_disk_cache)
+struct ImBuf *seq_cache_get(const SeqRenderData *context,
+                            Sequence *seq,
+                            float timeline_frame,
+                            int type)
 {
 
   if (context->skip_cache || context->is_proxy_render || !seq) {
@@ -1225,9 +1348,9 @@ struct ImBuf *BKE_sequencer_cache_get(
   Scene *scene = context->scene;
 
   if (context->is_prefetch_render) {
-    context = BKE_sequencer_prefetch_get_original_context(context);
+    context = seq_prefetch_get_original_context(context);
     scene = context->scene;
-    seq = BKE_sequencer_prefetch_get_original_sequence(seq, scene);
+    seq = seq_prefetch_get_original_sequence(seq, scene);
   }
 
   if (!seq) {
@@ -1245,12 +1368,8 @@ struct ImBuf *BKE_sequencer_cache_get(
 
   /* Try RAM cache: */
   if (cache && seq) {
-    key.seq = seq;
-    key.context = *context;
-    key.nfra = seq_cache_cfra_to_frame_index(seq, cfra);
-    key.type = type;
-
-    ibuf = seq_cache_get(cache, &key);
+    seq_cache_populate_key(&key, context, seq, timeline_frame, type);
+    ibuf = seq_cache_get_ex(cache, &key);
   }
   seq_cache_unlock(scene);
 
@@ -1259,7 +1378,7 @@ struct ImBuf *BKE_sequencer_cache_get(
   }
 
   /* Try disk cache: */
-  if (!skip_disk_cache && seq_disk_cache_is_enabled(context->bmain)) {
+  if (seq_disk_cache_is_enabled(context->bmain)) {
     if (cache->disk_cache == NULL) {
       seq_disk_cache_create(context->bmain, context->scene);
     }
@@ -1267,41 +1386,38 @@ struct ImBuf *BKE_sequencer_cache_get(
     BLI_mutex_lock(&cache->disk_cache->read_write_mutex);
     ibuf = seq_disk_cache_read_file(cache->disk_cache, &key);
     BLI_mutex_unlock(&cache->disk_cache->read_write_mutex);
-    if (ibuf) {
-      if (key.type == SEQ_CACHE_STORE_FINAL_OUT) {
-        BKE_sequencer_cache_put_if_possible(context, seq, cfra, type, ibuf, 0.0f, true);
-      }
-      else {
-        BKE_sequencer_cache_put(context, seq, cfra, type, ibuf, 0.0f, true);
-      }
+
+    if (ibuf == NULL) {
+      return NULL;
+    }
+
+    /* Store read image in RAM. Only recycle item for final type. */
+    if (key.type != SEQ_CACHE_STORE_FINAL_OUT || seq_cache_recycle_item(scene)) {
+      SeqCacheKey *new_key = seq_cache_allocate_key(cache, context, seq, timeline_frame, type);
+      seq_cache_put_ex(scene, new_key, ibuf);
     }
   }
 
   return ibuf;
 }
 
-bool BKE_sequencer_cache_put_if_possible(const SeqRenderData *context,
-                                         Sequence *seq,
-                                         float cfra,
-                                         int type,
-                                         ImBuf *ibuf,
-                                         float cost,
-                                         bool skip_disk_cache)
+bool seq_cache_put_if_possible(
+    const SeqRenderData *context, Sequence *seq, float timeline_frame, int type, ImBuf *ibuf)
 {
   Scene *scene = context->scene;
 
   if (context->is_prefetch_render) {
-    context = BKE_sequencer_prefetch_get_original_context(context);
+    context = seq_prefetch_get_original_context(context);
     scene = context->scene;
-    seq = BKE_sequencer_prefetch_get_original_sequence(seq, scene);
+    seq = seq_prefetch_get_original_sequence(seq, scene);
   }
 
   if (!seq) {
     return false;
   }
 
-  if (BKE_sequencer_cache_recycle_item(scene)) {
-    BKE_sequencer_cache_put(context, seq, cfra, type, ibuf, cost, skip_disk_cache);
+  if (seq_cache_recycle_item(scene)) {
+    seq_cache_put(context, seq, timeline_frame, type, ibuf);
     return true;
   }
 
@@ -1310,13 +1426,8 @@ bool BKE_sequencer_cache_put_if_possible(const SeqRenderData *context,
   return false;
 }
 
-void BKE_sequencer_cache_put(const SeqRenderData *context,
-                             Sequence *seq,
-                             float cfra,
-                             int type,
-                             ImBuf *i,
-                             float cost,
-                             bool skip_disk_cache)
+void seq_cache_put(
+    const SeqRenderData *context, Sequence *seq, float timeline_frame, int type, ImBuf *i)
 {
   if (i == NULL || context->skip_cache || context->is_proxy_render || !seq) {
     return;
@@ -1325,14 +1436,14 @@ void BKE_sequencer_cache_put(const SeqRenderData *context,
   Scene *scene = context->scene;
 
   if (context->is_prefetch_render) {
-    context = BKE_sequencer_prefetch_get_original_context(context);
+    context = seq_prefetch_get_original_context(context);
     scene = context->scene;
-    seq = BKE_sequencer_prefetch_get_original_sequence(seq, scene);
+    seq = seq_prefetch_get_original_sequence(seq, scene);
     BLI_assert(seq != NULL);
   }
 
   /* Prevent reinserting, it breaks cache key linking. */
-  ImBuf *test = BKE_sequencer_cache_get(context, seq, cfra, type, true);
+  ImBuf *test = seq_cache_get(context, seq, timeline_frame, type);
   if (test) {
     IMB_freeImBuf(test);
     return;
@@ -1343,67 +1454,12 @@ void BKE_sequencer_cache_put(const SeqRenderData *context,
   }
 
   seq_cache_lock(scene);
-
   SeqCache *cache = seq_cache_get_from_scene(scene);
-  int flag;
-
-  if (seq->cache_flag & SEQ_CACHE_OVERRIDE) {
-    flag = seq->cache_flag;
-    /* Final_out is invalid in context of sequence override. */
-    flag -= seq->cache_flag & SEQ_CACHE_STORE_FINAL_OUT;
-    /* If global setting is enabled however, use it. */
-    flag |= scene->ed->cache_flag & SEQ_CACHE_STORE_FINAL_OUT;
-  }
-  else {
-    flag = scene->ed->cache_flag;
-  }
-
-  if (cost > SEQ_CACHE_COST_MAX) {
-    cost = SEQ_CACHE_COST_MAX;
-  }
-
-  SeqCacheKey *key;
-  key = BLI_mempool_alloc(cache->keys_pool);
-  key->cache_owner = cache;
-  key->seq = seq;
-  key->context = *context;
-  key->nfra = seq_cache_cfra_to_frame_index(seq, cfra);
-  key->type = type;
-  key->cost = cost;
-  key->link_prev = NULL;
-  key->link_next = NULL;
-  key->is_temp_cache = true;
-  key->task_id = context->task_id;
-
-  /* Item stored for later use */
-  if (flag & type) {
-    key->is_temp_cache = false;
-    key->link_prev = cache->last_key;
-  }
-
-  SeqCacheKey *temp_last_key = cache->last_key;
-  seq_cache_put(cache, key, i);
-
-  /* Restore pointer to previous item as this one will be freed when stack is rendered. */
-  if (key->is_temp_cache) {
-    cache->last_key = temp_last_key;
-  }
-
-  /* Set last_key's reference to this key so we can look up chain backwards.
-   * Item is already put in cache, so cache->last_key points to current key.
-   */
-  if (flag & type && temp_last_key) {
-    temp_last_key->link_next = cache->last_key;
-  }
-
-  /* Reset linking. */
-  if (key->type == SEQ_CACHE_STORE_FINAL_OUT) {
-    cache->last_key = NULL;
-  }
-
+  SeqCacheKey *key = seq_cache_allocate_key(cache, context, seq, timeline_frame, type);
+  seq_cache_put_ex(scene, key, i);
   seq_cache_unlock(scene);
 
-  if (!key->is_temp_cache && !skip_disk_cache) {
+  if (!key->is_temp_cache) {
     if (seq_disk_cache_is_enabled(context->bmain)) {
       if (cache->disk_cache == NULL) {
         seq_disk_cache_create(context->bmain, context->scene);
@@ -1417,11 +1473,11 @@ void BKE_sequencer_cache_put(const SeqRenderData *context,
   }
 }
 
-void BKE_sequencer_cache_iterate(
+void SEQ_cache_iterate(
     struct Scene *scene,
     void *userdata,
     bool callback_init(void *userdata, size_t item_count),
-    bool callback_iter(void *userdata, struct Sequence *seq, int nfra, int cache_type, float cost))
+    bool callback_iter(void *userdata, struct Sequence *seq, int timeline_frame, int cache_type))
 {
   SeqCache *cache = seq_cache_get_from_scene(scene);
   if (!cache) {
@@ -1438,20 +1494,14 @@ void BKE_sequencer_cache_iterate(
     SeqCacheKey *key = BLI_ghashIterator_getKey(&gh_iter);
     BLI_ghashIterator_step(&gh_iter);
 
-    interrupt = callback_iter(userdata, key->seq, key->nfra, key->type, key->cost);
+    interrupt = callback_iter(userdata, key->seq, key->timeline_frame, key->type);
   }
 
   cache->last_key = NULL;
   seq_cache_unlock(scene);
 }
 
-bool BKE_sequencer_cache_is_full(Scene *scene)
+bool seq_cache_is_full(void)
 {
-  size_t memory_total = seq_cache_get_mem_total();
-  SeqCache *cache = seq_cache_get_from_scene(scene);
-  if (!cache) {
-    return false;
-  }
-
-  return memory_total < cache->memory_used;
+  return seq_cache_get_mem_total() < MEM_get_memory_in_use();
 }

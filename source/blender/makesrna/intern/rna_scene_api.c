@@ -186,7 +186,7 @@ static void rna_Scene_ray_cast(Scene *scene,
 
 static void rna_Scene_sequencer_editing_free(Scene *scene)
 {
-  BKE_sequencer_editing_free(scene, true);
+  SEQ_editing_free(scene, true);
 }
 
 #  ifdef WITH_ALEMBIC
@@ -276,7 +276,7 @@ void RNA_api_scene(StructRNA *srna)
       func, "frame", 0, MINAFRAME, MAXFRAME, "", "Frame number to set", MINAFRAME, MAXFRAME);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   RNA_def_float(
-      func, "subframe", 0.0, 0.0, 1.0, "", "Sub-frame time, between 0.0 and 1.0", 0.0, 1.0);
+      func, "subframe", 0.0, 0.0, 1.0, "", "Subframe time, between 0.0 and 1.0", 0.0, 1.0);
   RNA_def_function_flag(func, FUNC_USE_MAIN);
 
   func = RNA_def_function(srna, "uvedit_aspect", "rna_Scene_uvedit_aspect");
@@ -343,7 +343,7 @@ void RNA_api_scene(StructRNA *srna)
   RNA_def_function_output(func, parm);
 
   /* Sequencer. */
-  func = RNA_def_function(srna, "sequence_editor_create", "BKE_sequencer_editing_ensure");
+  func = RNA_def_function(srna, "sequence_editor_create", "SEQ_editing_ensure");
   RNA_def_function_ui_description(func, "Ensure sequence editor is valid in this scene");
   parm = RNA_def_pointer(
       func, "sequence_editor", "SequenceEditor", "", "New sequence editor data or NULL");
@@ -411,7 +411,7 @@ void RNA_api_scene(StructRNA *srna)
       0.0001f,
       1000.0f);
   RNA_def_boolean(
-      func, "triangulate", 0, "Triangulate", "Export Polygons (Quads & NGons) as Triangles");
+      func, "triangulate", 0, "Triangulate", "Export polygons (quads and n-gons) as triangles");
   RNA_def_enum(func,
                "quad_method",
                rna_enum_modifier_triangulate_quad_method_items,
@@ -420,10 +420,10 @@ void RNA_api_scene(StructRNA *srna)
                "Method for splitting the quads into triangles");
   RNA_def_enum(func,
                "ngon_method",
-               rna_enum_modifier_triangulate_quad_method_items,
+               rna_enum_modifier_triangulate_ngon_method_items,
                0,
-               "Polygon Method",
-               "Method for splitting the polygons into triangles");
+               "N-gon Method",
+               "Method for splitting the n-gons into triangles");
 
   RNA_def_function_flag(func, FUNC_USE_CONTEXT);
 #  endif

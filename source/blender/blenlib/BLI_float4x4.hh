@@ -35,6 +35,23 @@ struct float4x4 {
   {
   }
 
+  /* Assumes an XYZ euler order. */
+  static float4x4 from_loc_eul_scale(const float3 location,
+                                     const float3 rotation,
+                                     const float3 scale)
+  {
+    float4x4 mat;
+    loc_eul_size_to_mat4(mat.values, location, rotation, scale);
+    return mat;
+  }
+
+  static float4x4 identity()
+  {
+    float4x4 mat;
+    unit_m4(mat.values);
+    return mat;
+  }
+
   operator float *()
   {
     return &values[0][0];
@@ -43,6 +60,17 @@ struct float4x4 {
   operator const float *() const
   {
     return &values[0][0];
+  }
+
+  using c_style_float4x4 = float[4][4];
+  c_style_float4x4 &ptr()
+  {
+    return values;
+  }
+
+  const c_style_float4x4 &ptr() const
+  {
+    return values;
   }
 
   friend float4x4 operator*(const float4x4 &a, const float4x4 &b)
@@ -66,6 +94,26 @@ struct float4x4 {
   friend float3 operator*(const float4x4 &m, const float (*v)[3])
   {
     return m * float3(v);
+  }
+
+  float3 translation() const
+  {
+    return float3(values[3]);
+  }
+
+  /* Assumes XYZ rotation order. */
+  float3 to_euler() const
+  {
+    float3 euler;
+    mat4_to_eul(euler, values);
+    return euler;
+  }
+
+  float3 scale() const
+  {
+    float3 scale;
+    mat4_to_size(scale, values);
+    return scale;
   }
 
   float4x4 inverted() const

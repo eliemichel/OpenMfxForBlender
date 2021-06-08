@@ -50,7 +50,7 @@ void ArmatureExporter::add_armature_bones(Object *ob_arm,
   /* write bone nodes */
 
   bArmature *armature = (bArmature *)ob_arm->data;
-  bool is_edited = armature->edbo != NULL;
+  bool is_edited = armature->edbo != nullptr;
 
   if (!is_edited) {
     ED_armature_to_edit(armature);
@@ -197,7 +197,7 @@ void ArmatureExporter::add_bone_node(Bone *bone,
 
     add_bone_transform(ob_arm, bone, node);
 
-    /* Write nodes of childobjects, remove written objects from list */
+    /* Write nodes of child-objects, remove written objects from list. */
     std::vector<Object *>::iterator iter = child_objects.begin();
 
     while (iter != child_objects.end()) {
@@ -219,7 +219,7 @@ void ArmatureExporter::add_bone_node(Bone *bone,
          * single matrix the tweak must be applied
          * to the result. */
         if (export_settings.get_open_sim()) {
-          /* Tweak objects parentinverse to match compatibility. */
+          /* Tweak objects parent-inverse to match compatibility. */
           float temp[4][4];
 
           copy_m4_m4(temp, bone->arm_mat);
@@ -315,7 +315,7 @@ void ArmatureExporter::add_bone_transform(Object *ob_arm, Bone *bone, COLLADASW:
     BCMatrix::sanitize(mat, LIMITTED_PRECISION);
   }
 
-  TransformWriter::add_joint_transform(node, mat, NULL, this->export_settings, has_restmat);
+  TransformWriter::add_joint_transform(node, mat, nullptr, this->export_settings, has_restmat);
 }
 
 std::string ArmatureExporter::get_controller_id(Object *ob_arm, Object *ob)

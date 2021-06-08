@@ -263,7 +263,7 @@ static void build_bvh_spatial(PROCESS *process,
  * BASED AT CODE (but mostly rewritten) :
  * C code from the article
  * "An Implicit Surface Polygonizer"
- * by Jules Bloomenthal, jbloom@beauty.gmu.edu
+ * by Jules Bloomenthal <jbloom@beauty.gmu.edu>
  * in "Graphics Gems IV", Academic Press, 1994
  *
  * Authored by Jules Bloomenthal, Xerox PARC.
@@ -807,22 +807,22 @@ static void makecubetable(void)
       INTLIST *edges;
 
       for (edges = polys->list; edges; edges = edges->next) {
-        if (edges->i == LB || edges->i == LT || edges->i == LN || edges->i == LF) {
+        if (ELEM(edges->i, LB, LT, LN, LF)) {
           faces[i] |= 1 << L;
         }
-        if (edges->i == RB || edges->i == RT || edges->i == RN || edges->i == RF) {
+        if (ELEM(edges->i, RB, RT, RN, RF)) {
           faces[i] |= 1 << R;
         }
-        if (edges->i == LB || edges->i == RB || edges->i == BN || edges->i == BF) {
+        if (ELEM(edges->i, LB, RB, BN, BF)) {
           faces[i] |= 1 << B;
         }
-        if (edges->i == LT || edges->i == RT || edges->i == TN || edges->i == TF) {
+        if (ELEM(edges->i, LT, RT, TN, TF)) {
           faces[i] |= 1 << T;
         }
-        if (edges->i == LN || edges->i == RN || edges->i == BN || edges->i == TN) {
+        if (ELEM(edges->i, LN, RN, BN, TN)) {
           faces[i] |= 1 << N;
         }
-        if (edges->i == LF || edges->i == RF || edges->i == BF || edges->i == TF) {
+        if (ELEM(edges->i, LF, RF, BF, TF)) {
           faces[i] |= 1 << F;
         }
       }
@@ -1199,7 +1199,7 @@ static void init_meta(Depsgraph *depsgraph, PROCESS *process, Scene *scene, Obje
       zero_size = 0;
       ml = NULL;
 
-      /* If this metaball is the original that's used for duplication, only have it it visible when
+      /* If this metaball is the original that's used for duplication, only have it visible when
        * the instancer is visible too. */
       if ((base->flag_legacy & OB_FROMDUPLI) == 0 && ob->parent != NULL &&
           (ob->parent->transflag & parenting_dupli_transflag) != 0 &&

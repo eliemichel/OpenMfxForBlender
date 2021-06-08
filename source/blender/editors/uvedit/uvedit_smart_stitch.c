@@ -129,8 +129,10 @@ typedef struct UvEdge {
   /** general use flag
    * (Used to check if edge is boundary here, and propagates to adjacency elements) */
   uchar flag;
-  /** element that guarantees element->face
-   * has the edge on element->tfindex and element->tfindex+1 is the second uv */
+  /**
+   * Element that guarantees `element.l` has the edge on
+   * `element.loop_of_poly_index` and `element->loop_of_poly_index + 1` is the second UV.
+   */
   UvElement *element;
   /** next uv edge with the same exact vertices as this one.
    * Calculated at startup to save time */
@@ -224,13 +226,13 @@ enum StitchModes {
   STITCH_EDGE,
 };
 
-/* UvElement identification. */
+/** #UvElement identification. */
 typedef struct UvElementID {
   int faceIndex;
   int elementIndex;
 } UvElementID;
 
-/* StitchState initializition. */
+/** #StitchState initialization. */
 typedef struct StitchStateInit {
   int uv_selected_count;
   UvElementID *to_select;
@@ -2050,7 +2052,7 @@ static StitchState *stitch_init(bContext *C,
 
   BLI_ghash_free(edge_hash, NULL, NULL);
 
-  /* refill an edge hash to create edge connnectivity data */
+  /* Refill an edge hash to create edge connectivity data. */
   state->edge_hash = edge_hash = BLI_ghash_new(uv_edge_hash, uv_edge_compare, "stitch_edge_hash");
   for (i = 0; i < total_edges; i++) {
     BLI_ghash_insert(edge_hash, edges + i, edges + i);
@@ -2539,8 +2541,8 @@ static StitchState *stitch_select(bContext *C,
 {
   /* add uv under mouse to processed uv's */
   float co[2];
-  UvNearestHit hit = UV_NEAREST_HIT_INIT;
   ARegion *region = CTX_wm_region(C);
+  UvNearestHit hit = UV_NEAREST_HIT_INIT_MAX(&region->v2d);
 
   UI_view2d_region_to_view(&region->v2d, event->mval[0], event->mval[1], &co[0], &co[1]);
 
@@ -2808,7 +2810,7 @@ void UV_OT_stitch(wmOperatorType *ot)
   RNA_def_boolean(ot->srna,
                   "midpoint_snap",
                   0,
-                  "Snap At Midpoint",
+                  "Snap at Midpoint",
                   "UVs are stitched at midpoint instead of at static island");
   RNA_def_boolean(ot->srna, "clear_seams", 1, "Clear Seams", "Clear seams of stitched edges");
   RNA_def_enum(ot->srna,

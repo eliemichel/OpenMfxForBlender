@@ -37,6 +37,7 @@
 #  endif
 
 #  include "BLI_math_base.h"
+#  include "BLI_threads.h"
 #  include "BLI_utildefines.h"
 
 #  include "BKE_global.h"
@@ -163,6 +164,7 @@ static int write_audio_frame(FFMpegContext *context)
   frame->pts = context->audio_time / av_q2d(c->time_base);
   frame->nb_samples = context->audio_input_samples;
   frame->format = c->sample_fmt;
+  frame->channels = c->channels;
 #      ifdef FFMPEG_HAVE_FRAME_CHANNEL_LAYOUT
   frame->channel_layout = c->channel_layout;
 #      endif
@@ -566,9 +568,6 @@ static AVStream *alloc_video_stream(FFMpegContext *context,
   /* Set up the codec context */
 
   c = st->codec;
-  c->thread_count = 0;
-  c->thread_type = FF_THREAD_FRAME;
-
   c->codec_id = codec_id;
   c->codec_type = AVMEDIA_TYPE_VIDEO;
 
@@ -726,6 +725,20 @@ static AVStream *alloc_video_stream(FFMpegContext *context,
 
   set_ffmpeg_properties(rd, c, "video", &opts);
 
+  if (codec->capabilities & AV_CODEC_CAP_AUTO_THREADS) {
+    c->thread_count = 0;
+  }
+  else {
+    c->thread_count = BLI_system_thread_count();
+  }
+
+  if (codec->capabilities & AV_CODEC_CAP_FRAME_THREADS) {
+    c->thread_type = FF_THREAD_FRAME;
+  }
+  else if (codec->capabilities & AV_CODEC_CAP_SLICE_THREADS) {
+    c->thread_type = FF_THREAD_SLICE;
+  }
+
   if (avcodec_open2(c, codec, &opts) < 0) {
     BLI_strncpy(error, IMB_ffmpeg_last_error(), error_size);
     av_dict_free(&opts);
@@ -780,8 +793,8 @@ static AVStream *alloc_audio_stream(FFMpegContext *context,
   st->id = 1;
 
   c = st->codec;
-  c->thread_count = 0;
-  c->thread_type = FF_THREAD_FRAME;
+  c->thread_count = BLI_system_thread_count();
+  c->thread_type = FF_THREAD_SLICE;
 
   c->codec_id = codec_id;
   c->codec_type = AVMEDIA_TYPE_AUDIO;

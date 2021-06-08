@@ -23,6 +23,7 @@
  * GPU material library parsing and code generation.
  */
 
+#include <stdio.h>
 #include <string.h>
 
 #include "MEM_guardedalloc.h"
@@ -84,6 +85,7 @@ extern char datatoc_gpu_shader_material_noise_glsl[];
 extern char datatoc_gpu_shader_material_normal_glsl[];
 extern char datatoc_gpu_shader_material_normal_map_glsl[];
 extern char datatoc_gpu_shader_material_object_info_glsl[];
+extern char datatoc_gpu_shader_material_output_aov_glsl[];
 extern char datatoc_gpu_shader_material_output_material_glsl[];
 extern char datatoc_gpu_shader_material_output_world_glsl[];
 extern char datatoc_gpu_shader_material_particle_info_glsl[];
@@ -354,6 +356,11 @@ static GPUMaterialLibrary gpu_shader_material_object_info_library = {
     .dependencies = {NULL},
 };
 
+static GPUMaterialLibrary gpu_shader_material_output_aov_library = {
+    .code = datatoc_gpu_shader_material_output_aov_glsl,
+    .dependencies = {NULL},
+};
+
 static GPUMaterialLibrary gpu_shader_material_output_material_library = {
     .code = datatoc_gpu_shader_material_output_material_glsl,
     .dependencies = {NULL},
@@ -619,6 +626,7 @@ static GPUMaterialLibrary *gpu_material_libraries[] = {
     &gpu_shader_material_normal_library,
     &gpu_shader_material_normal_map_library,
     &gpu_shader_material_object_info_library,
+    &gpu_shader_material_output_aov_library,
     &gpu_shader_material_output_material_library,
     &gpu_shader_material_output_world_library,
     &gpu_shader_material_particle_info_library,
@@ -748,6 +756,10 @@ static void gpu_parse_material_library(GHash *hash, GPUMaterialLibrary *library)
 
     /* get parameters */
     while (*code && *code != ')') {
+      if (BLI_str_startswith(code, "const ")) {
+        code = gpu_str_skip_token(code, NULL, 0);
+      }
+
       /* test if it's an input or output */
       qual = FUNCTION_QUAL_IN;
       if (BLI_str_startswith(code, "out ")) {

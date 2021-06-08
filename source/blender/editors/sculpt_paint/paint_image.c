@@ -40,6 +40,7 @@
 #include "IMB_imbuf_types.h"
 
 #include "DNA_brush_types.h"
+#include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
@@ -349,8 +350,8 @@ typedef struct PaintOperation {
 bool paint_use_opacity_masking(Brush *brush)
 {
   return ((brush->flag & BRUSH_AIRBRUSH) || (brush->flag & BRUSH_DRAG_DOT) ||
-                  (brush->flag & BRUSH_ANCHORED) || (brush->imagepaint_tool == PAINT_TOOL_SMEAR) ||
-                  (brush->imagepaint_tool == PAINT_TOOL_SOFTEN) ||
+                  (brush->flag & BRUSH_ANCHORED) ||
+                  (ELEM(brush->imagepaint_tool, PAINT_TOOL_SMEAR, PAINT_TOOL_SOFTEN)) ||
                   (brush->imagepaint_tool == PAINT_TOOL_FILL) ||
                   (brush->flag & BRUSH_USE_GRADIENT) ||
                   (brush->mtex.tex && !ELEM(brush->mtex.brush_map_mode,
@@ -934,7 +935,7 @@ void PAINT_OT_grab_clone(wmOperatorType *ot)
                        -FLT_MAX,
                        FLT_MAX,
                        "Delta",
-                       "Delta offset of clone image in 0.0..1.0 coordinates",
+                       "Delta offset of clone image in 0.0 to 1.0 coordinates",
                        -1.0f,
                        1.0f);
 }

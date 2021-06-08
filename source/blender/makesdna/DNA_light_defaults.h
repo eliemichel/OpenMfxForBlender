@@ -63,9 +63,12 @@
     .contact_bias = 0.03f, \
     .contact_spread = 0.2f, \
     .contact_thickness = 0.2f, \
+    .diff_fac = 1.0f, \
     .spec_fac = 1.0f, \
+    .volume_fac = 1.0f, \
     .att_dist = 40.0f, \
     .sun_angle = DEG2RADF(0.526f), \
+    .area_spread = DEG2RADF(180.0f), \
   }
 
 /** \} */

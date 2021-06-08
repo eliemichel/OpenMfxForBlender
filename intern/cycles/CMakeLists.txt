@@ -14,7 +14,7 @@
 
 # Standalone or with Blender
 if(NOT WITH_BLENDER AND WITH_CYCLES_STANDALONE)
-  set(CYCLES_INSTALL_PATH "")
+  set(CYCLES_INSTALL_PATH ${CMAKE_INSTALL_PREFIX})
 else()
   set(WITH_CYCLES_BLENDER ON)
   # WINDOWS_PYTHON_DEBUG needs to write into the user addons folder since it will
@@ -45,7 +45,7 @@ if(WITH_CYCLES_NATIVE_ONLY)
   )
 
   if(NOT MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+    string(APPEND CMAKE_CXX_FLAGS " -march=native")
     set(CYCLES_KERNEL_FLAGS "-march=native")
   else()
     if(NOT MSVC_NATIVE_ARCH_FLAGS)
@@ -64,7 +64,7 @@ if(WITH_CYCLES_NATIVE_ONLY)
     endif()
     set(CYCLES_KERNEL_FLAGS "${MSVC_NATIVE_ARCH_FLAGS}")
   endif()
-elseif(NOT WITH_CPU_SSE)
+elseif(NOT WITH_CPU_SIMD OR (SUPPORT_NEON_BUILD AND SSE2NEON_FOUND))
   set(CXX_HAS_SSE FALSE)
   set(CXX_HAS_AVX FALSE)
   set(CXX_HAS_AVX2 FALSE)
@@ -101,10 +101,10 @@ elseif(WIN32 AND MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(CYCLES_AVX2_KERNEL_FLAGS "${CYCLES_AVX2_ARCH_FLAGS} ${CYCLES_KERNEL_FLAGS}")
   endif()
 
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CYCLES_KERNEL_FLAGS}")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Ox")
-  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /Ox")
-  set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} /Ox")
+  string(APPEND CMAKE_CXX_FLAGS " ${CYCLES_KERNEL_FLAGS}")
+  string(APPEND CMAKE_CXX_FLAGS_RELEASE " /Ox")
+  string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " /Ox")
+  string(APPEND CMAKE_CXX_FLAGS_MINSIZEREL " /Ox")
 elseif(CMAKE_COMPILER_IS_GNUCC OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
   check_cxx_compiler_flag(-msse CXX_HAS_SSE)
   check_cxx_compiler_flag(-mavx CXX_HAS_AVX)
@@ -113,20 +113,20 @@ elseif(CMAKE_COMPILER_IS_GNUCC OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
   # Assume no signal trapping for better code generation.
   set(CYCLES_KERNEL_FLAGS "-fno-trapping-math")
   # Avoid overhead of setting errno for NaNs.
-  set(CYCLES_KERNEL_FLAGS "${CYCLES_KERNEL_FLAGS} -fno-math-errno")
+  string(APPEND CYCLES_KERNEL_FLAGS " -fno-math-errno")
   # Let compiler optimize 0.0 - x without worrying about signed zeros.
-  set(CYCLES_KERNEL_FLAGS "${CYCLES_KERNEL_FLAGS} -fno-signed-zeros")
+  string(APPEND CYCLES_KERNEL_FLAGS " -fno-signed-zeros")
 
   if(CMAKE_COMPILER_IS_GNUCC)
     # Assume no signal trapping for better code generation.
-    set(CYCLES_KERNEL_FLAGS "${CYCLES_KERNEL_FLAGS} -fno-signaling-nans")
+    string(APPEND CYCLES_KERNEL_FLAGS " -fno-signaling-nans")
     # Assume a fixed rounding mode for better constant folding.
-    set(CYCLES_KERNEL_FLAGS "${CYCLES_KERNEL_FLAGS} -fno-rounding-math")
+    string(APPEND CYCLES_KERNEL_FLAGS " -fno-rounding-math")
   endif()
 
   if(CXX_HAS_SSE)
     if(CMAKE_COMPILER_IS_GNUCC)
-      set(CYCLES_KERNEL_FLAGS "${CYCLES_KERNEL_FLAGS} -mfpmath=sse")
+      string(APPEND CYCLES_KERNEL_FLAGS " -mfpmath=sse")
     endif()
 
     set(CYCLES_SSE2_KERNEL_FLAGS "${CYCLES_KERNEL_FLAGS} -msse -msse2")
@@ -140,7 +140,7 @@ elseif(CMAKE_COMPILER_IS_GNUCC OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
     endif()
   endif()
 
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CYCLES_KERNEL_FLAGS}")
+  string(APPEND CMAKE_CXX_FLAGS " ${CYCLES_KERNEL_FLAGS}")
 elseif(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "Intel")
   check_cxx_compiler_flag(/QxSSE2 CXX_HAS_SSE)
   check_cxx_compiler_flag(/arch:AVX CXX_HAS_AVX)
@@ -379,6 +379,9 @@ endif()
 # Subdirectories
 
 if(WITH_CYCLES_BLENDER)
+  # Not needed to make cycles automated tests pass with -march=native.
+  # However Blender itself needs this flag.
+  remove_cc_flag("-ffp-contract=off")
   add_definitions(-DWITH_BLENDER_GUARDEDALLOC)
   add_subdirectory(blender)
 endif()

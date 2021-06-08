@@ -26,35 +26,59 @@
 extern "C" {
 #endif
 
+/**
+ * Jenkins Lookup3 Hash Functions.
+ * Source: http://burtleburtle.net/bob/c/lookup3.c
+ */
+
+#define rot(x, k) (((x) << (k)) | ((x) >> (32 - (k))))
+#define final(a, b, c) \
+  { \
+    c ^= b; \
+    c -= rot(b, 14); \
+    a ^= c; \
+    a -= rot(c, 11); \
+    b ^= a; \
+    b -= rot(a, 25); \
+    c ^= b; \
+    c -= rot(b, 16); \
+    a ^= c; \
+    a -= rot(c, 4); \
+    b ^= a; \
+    b -= rot(a, 14); \
+    c ^= b; \
+    c -= rot(b, 24); \
+  } \
+  ((void)0)
+
+BLI_INLINE unsigned int BLI_hash_int_3d(unsigned int kx, unsigned int ky, unsigned int kz)
+{
+  unsigned int a, b, c;
+  a = b = c = 0xdeadbeef + (3 << 2) + 13;
+
+  c += kz;
+  b += ky;
+  a += kx;
+  final(a, b, c);
+
+  return c;
+}
+
 BLI_INLINE unsigned int BLI_hash_int_2d(unsigned int kx, unsigned int ky)
 {
-#define rot(x, k) (((x) << (k)) | ((x) >> (32 - (k))))
-
   unsigned int a, b, c;
 
   a = b = c = 0xdeadbeef + (2 << 2) + 13;
   a += kx;
   b += ky;
 
-  c ^= b;
-  c -= rot(b, 14);
-  a ^= c;
-  a -= rot(c, 11);
-  b ^= a;
-  b -= rot(a, 25);
-  c ^= b;
-  c -= rot(b, 16);
-  a ^= c;
-  a -= rot(c, 4);
-  b ^= a;
-  b -= rot(a, 14);
-  c ^= b;
-  c -= rot(b, 24);
+  final(a, b, c);
 
   return c;
-
-#undef rot
 }
+
+#undef final
+#undef rot
 
 BLI_INLINE unsigned int BLI_hash_string(const char *str)
 {
@@ -64,6 +88,16 @@ BLI_INLINE unsigned int BLI_hash_string(const char *str)
     i = i * 37 + c;
   }
   return i;
+}
+
+BLI_INLINE float BLI_hash_int_2d_to_float(uint32_t kx, uint32_t ky)
+{
+  return (float)BLI_hash_int_2d(kx, ky) / (float)0xFFFFFFFFu;
+}
+
+BLI_INLINE float BLI_hash_int_3d_to_float(uint32_t kx, uint32_t ky, uint32_t kz)
+{
+  return (float)BLI_hash_int_3d(kx, ky, kz) / (float)0xFFFFFFFFu;
 }
 
 BLI_INLINE unsigned int BLI_hash_int(unsigned int k)

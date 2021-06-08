@@ -293,55 +293,18 @@ GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
       m_display, RootWindow(m_display, m_visualInfo->screen), m_visualInfo->visual, AllocNone);
 
   /* create the window! */
-  if ((parentWindow == 0) || is_dialog) {
-    m_window = XCreateWindow(m_display,
-                             RootWindow(m_display, m_visualInfo->screen),
-                             left,
-                             top,
-                             width,
-                             height,
-                             0, /* no border. */
-                             m_visualInfo->depth,
-                             InputOutput,
-                             m_visualInfo->visual,
-                             xattributes_valuemask,
-                             &xattributes);
-  }
-  else {
-    Window root_return;
-    int x_return, y_return;
-    unsigned int w_return, h_return, border_w_return, depth_return;
-
-    XGetGeometry(m_display,
-                 parentWindow->m_window,
-                 &root_return,
-                 &x_return,
-                 &y_return,
-                 &w_return,
-                 &h_return,
-                 &border_w_return,
-                 &depth_return);
-
-    left = 0;
-    top = 0;
-    width = w_return;
-    height = h_return;
-
-    m_window = XCreateWindow(m_display,
-                             parentWindow->m_window, /* reparent against embedder */
-                             left,
-                             top,
-                             width,
-                             height,
-                             0, /* no border. */
-                             m_visualInfo->depth,
-                             InputOutput,
-                             m_visualInfo->visual,
-                             xattributes_valuemask,
-                             &xattributes);
-
-    XSelectInput(m_display, parentWindow->m_window, SubstructureNotifyMask);
-  }
+  m_window = XCreateWindow(m_display,
+                           RootWindow(m_display, m_visualInfo->screen),
+                           left,
+                           top,
+                           width,
+                           height,
+                           0, /* no border. */
+                           m_visualInfo->depth,
+                           InputOutput,
+                           m_visualInfo->visual,
+                           xattributes_valuemask,
+                           &xattributes);
 
 #ifdef WITH_XDND
   /* initialize drop target for newly created window */
@@ -1169,7 +1132,7 @@ GHOST_TSuccess GHOST_WindowX11::setOrder(GHOST_TWindowOrder order)
 
     XGetWindowAttributes(m_display, m_window, &attr);
 
-    /* iconized windows give bad match error */
+    /* Minimized windows give bad match error. */
     if (attr.map_state == IsViewable)
       XSetInputFocus(m_display, m_window, RevertToPointerRoot, CurrentTime);
     XFlush(m_display);

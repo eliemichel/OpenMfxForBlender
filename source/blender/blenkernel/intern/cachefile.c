@@ -99,6 +99,7 @@ static void cache_file_blend_write(BlendWriter *writer, ID *id, const void *id_a
     cache_file->handle_readers = NULL;
 
     BLO_write_id_struct(writer, CacheFile, id_address, &cache_file->id);
+    BKE_id_blend_write(writer, &cache_file->id);
 
     if (cache_file->adt) {
       BKE_animdata_blend_write(writer, cache_file->adt);
@@ -135,11 +136,16 @@ IDTypeInfo IDType_ID_CF = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = cache_file_blend_write,
     .blend_read_data = cache_file_blend_read_data,
     .blend_read_lib = NULL,
     .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* TODO: make this per cache file to avoid global locks. */

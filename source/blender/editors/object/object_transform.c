@@ -565,7 +565,7 @@ static void append_sorted_object_parent_hierarchy(Object *root_object,
                                                   Object **sorted_objects,
                                                   int *object_index)
 {
-  if (object->parent != NULL && object->parent != root_object) {
+  if (!ELEM(object->parent, NULL, root_object)) {
     append_sorted_object_parent_hierarchy(
         root_object, object->parent, sorted_objects, object_index);
   }
@@ -1374,7 +1374,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
           if (centermode == ORIGIN_TO_CURSOR) {
             copy_v3_v3(gpcenter, cursor);
           }
-          if ((centermode == ORIGIN_TO_GEOMETRY) || (centermode == ORIGIN_TO_CURSOR)) {
+          if (ELEM(centermode, ORIGIN_TO_GEOMETRY, ORIGIN_TO_CURSOR)) {
             bGPDspoint *pt;
             float imat[3][3], bmat[3][3];
             float offset_global[3];
@@ -1394,7 +1394,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
              * (all layers are considered without evaluating lock attributes) */
             LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
               /* calculate difference matrix */
-              BKE_gpencil_parent_matrix_get(depsgraph, obact, gpl, diff_mat);
+              BKE_gpencil_layer_transform_matrix_get(depsgraph, obact, gpl, diff_mat);
               /* undo matrix */
               invert_m4_m4(inverse_diff_mat, diff_mat);
               LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
@@ -1533,7 +1533,7 @@ void OBJECT_OT_origin_set(wmOperatorType *ot)
        0,
        "Origin to Geometry",
        "Calculate the center of geometry based on the current pivot point (median, otherwise "
-       "bounding-box)"},
+       "bounding box)"},
       {ORIGIN_TO_CURSOR,
        "ORIGIN_CURSOR",
        0,
@@ -1782,12 +1782,7 @@ static int object_transform_axis_target_invoke(bContext *C, wmOperator *op, cons
   vc.v3d->flag2 |= V3D_HIDE_OVERLAYS;
 #endif
 
-  ED_view3d_autodist_init(vc.depsgraph, vc.region, vc.v3d, 0);
-
-  if (vc.rv3d->depths != NULL) {
-    vc.rv3d->depths->damaged = true;
-  }
-  ED_view3d_depth_update(vc.region);
+  ED_view3d_depth_override(vc.depsgraph, vc.region, vc.v3d, NULL, V3D_DEPTH_NO_GPENCIL, true);
 
 #ifdef USE_RENDER_OVERRIDE
   vc.v3d->flag2 = flag2_prev;
@@ -1870,28 +1865,30 @@ static int object_transform_axis_target_modal(bContext *C, wmOperator *op, const
   if (event->type == MOUSEMOVE || is_translate_init) {
     const ViewDepths *depths = xfd->vc.rv3d->depths;
     if (depths && ((uint)event->mval[0] < depths->w) && ((uint)event->mval[1] < depths->h)) {
-      double depth = (double)ED_view3d_depth_read_cached(&xfd->vc, event->mval);
+      float depth_fl = 1.0f;
+      ED_view3d_depth_read_cached(depths, event->mval, 0, &depth_fl);
       float location_world[3];
-      if (depth == 1.0f) {
+      if (depth_fl == 1.0f) {
         if (xfd->prev.is_depth_valid) {
-          depth = (double)xfd->prev.depth;
+          depth_fl = xfd->prev.depth;
         }
       }
 
 #ifdef USE_FAKE_DEPTH_INIT
       /* First time only. */
-      if (depth == 1.0f) {
+      if (depth_fl == 1.0f) {
         if (xfd->prev.is_depth_valid == false) {
           object_transform_axis_target_calc_depth_init(xfd, event->mval);
           if (xfd->prev.is_depth_valid) {
-            depth = (double)xfd->prev.depth;
+            depth_fl = xfd->prev.depth;
           }
         }
       }
 #endif
 
+      double depth = (double)depth_fl;
       if ((depth > depths->depth_range[0]) && (depth < depths->depth_range[1])) {
-        xfd->prev.depth = depth;
+        xfd->prev.depth = depth_fl;
         xfd->prev.is_depth_valid = true;
         if (ED_view3d_depth_unproject(region, event->mval, depth, location_world)) {
           if (is_translate) {

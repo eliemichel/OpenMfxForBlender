@@ -20,6 +20,7 @@
  * \ingroup draw_engine
  */
 
+#include "DNA_collection_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_particle_types.h"
 #include "DNA_view3d_types.h"
@@ -62,6 +63,7 @@ void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata)
   View3DShading *shading = &draw_ctx->v3d->shading;
 
   pd->shdata.wire_step_param = pd->overlay.wireframe_threshold - 254.0f / 255.0f;
+  pd->shdata.wire_opacity = pd->overlay.wireframe_opacity;
 
   bool is_wire_shmode = (shading->type == OB_WIRE);
   bool is_material_shmode = (shading->type > OB_SOLID);
@@ -95,6 +97,7 @@ void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata)
       DRW_shgroup_uniform_block(grp, "globalsBlock", G_draw.block_ubo);
       DRW_shgroup_uniform_texture_ref(grp, "depthTex", depth_tx);
       DRW_shgroup_uniform_float_copy(grp, "wireStepParam", pd->shdata.wire_step_param);
+      DRW_shgroup_uniform_float_copy(grp, "wireOpacity", pd->shdata.wire_opacity);
       DRW_shgroup_uniform_bool_copy(grp, "useColoring", use_coloring);
       DRW_shgroup_uniform_bool_copy(grp, "isTransform", (G.moving & G_TRANSFORM_OBJ) != 0);
       DRW_shgroup_uniform_bool_copy(grp, "isObjectColor", is_object_color);
@@ -139,7 +142,12 @@ static void wireframe_hair_cache_populate(OVERLAY_Data *vedata, Object *ob, Part
   float dupli_mat[4][4];
   if ((dupli_parent != NULL) && (dupli_object != NULL)) {
     if (dupli_object->type & OB_DUPLICOLLECTION) {
-      copy_m4_m4(dupli_mat, dupli_parent->obmat);
+      unit_m4(dupli_mat);
+      Collection *collection = dupli_parent->instance_collection;
+      if (collection != NULL) {
+        sub_v3_v3(dupli_mat[3], collection->instance_offset);
+      }
+      mul_m4_m4m4(dupli_mat, dupli_parent->obmat, dupli_mat);
     }
     else {
       copy_m4_m4(dupli_mat, dupli_object->ob->obmat);
@@ -169,8 +177,23 @@ void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
   const bool all_wires = (ob->dtx & OB_DRAW_ALL_EDGES) != 0;
   const bool is_xray = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
   const bool is_mesh = ob->type == OB_MESH;
-  const bool is_mesh_verts_only = is_mesh && (((Mesh *)ob->data)->totedge == 0 &&
-                                              ((Mesh *)ob->data)->totvert > 0);
+  const bool is_edit_mode = DRW_object_is_in_edit_mode(ob);
+  bool has_edit_mesh_cage = false;
+  bool is_mesh_verts_only = false;
+  if (is_mesh) {
+    /* TODO: Should be its own function. */
+    Mesh *me = ob->data;
+    if (is_edit_mode) {
+      BLI_assert(me->edit_mesh);
+      BMEditMesh *embm = me->edit_mesh;
+      has_edit_mesh_cage = embm->mesh_eval_cage && (embm->mesh_eval_cage != embm->mesh_eval_final);
+      if (embm->mesh_eval_final) {
+        me = embm->mesh_eval_final;
+      }
+    }
+    is_mesh_verts_only = me->totedge == 0 && me->totvert > 0;
+  }
+
   const bool use_wire = !is_mesh_verts_only && ((pd->overlay.flag & V3D_OVERLAY_WIREFRAMES) ||
                                                 (ob->dtx & OB_DRAWWIRE) || (ob->dt == OB_WIRE));
 
@@ -250,17 +273,6 @@ void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
         OVERLAY_extra_loose_points(cb, geom, ob->obmat, color);
       }
       return;
-    }
-  }
-
-  const bool is_edit_mode = DRW_object_is_in_edit_mode(ob);
-  bool has_edit_mesh_cage = false;
-  if (is_mesh && is_edit_mode) {
-    /* TODO: Should be its own function. */
-    Mesh *me = (Mesh *)ob->data;
-    BMEditMesh *embm = me->edit_mesh;
-    if (embm) {
-      has_edit_mesh_cage = embm->mesh_eval_cage && (embm->mesh_eval_cage != embm->mesh_eval_final);
     }
   }
 

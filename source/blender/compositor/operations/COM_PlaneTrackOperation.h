@@ -28,6 +28,8 @@
 #include "BLI_listbase.h"
 #include "BLI_string.h"
 
+namespace blender::compositor {
+
 class PlaneTrackCommon {
  protected:
   MovieClip *m_movieClip;
@@ -64,13 +66,14 @@ class PlaneTrackCommon {
 
 class PlaneTrackMaskOperation : public PlaneDistortMaskOperation, public PlaneTrackCommon {
  public:
-  PlaneTrackMaskOperation() : PlaneDistortMaskOperation(), PlaneTrackCommon()
+  PlaneTrackMaskOperation()
   {
   }
 
-  void initExecution();
+  void initExecution() override;
 
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2])
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override
   {
     PlaneTrackCommon::determineResolution(resolution, preferredResolution);
 
@@ -82,16 +85,19 @@ class PlaneTrackMaskOperation : public PlaneDistortMaskOperation, public PlaneTr
 class PlaneTrackWarpImageOperation : public PlaneDistortWarpImageOperation,
                                      public PlaneTrackCommon {
  public:
-  PlaneTrackWarpImageOperation() : PlaneDistortWarpImageOperation(), PlaneTrackCommon()
+  PlaneTrackWarpImageOperation() : PlaneTrackCommon()
   {
   }
 
-  void initExecution();
+  void initExecution() override;
 
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2])
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override
   {
     PlaneTrackCommon::determineResolution(resolution, preferredResolution);
     unsigned int temp[2];
     NodeOperation::determineResolution(temp, resolution);
   }
 };
+
+}  // namespace blender::compositor

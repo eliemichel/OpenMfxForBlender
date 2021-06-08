@@ -135,10 +135,11 @@ static Mesh *uvprojectModifier_do(UVProjectModifierData *umd,
     return mesh;
   }
 
-  /* make sure there are UV Maps available */
-
+  /* Create a new layer if no UV Maps are available
+   * (e.g. if a preceding modifier could not preserve it). */
   if (!CustomData_has_layer(&mesh->ldata, CD_MLOOPUV)) {
-    return mesh;
+    CustomData_add_layer_named(
+        &mesh->ldata, CD_MLOOPUV, CD_DEFAULT, NULL, mesh->totloop, umd->uvlayer_name);
   }
 
   /* make sure we're using an existing layer */
@@ -330,12 +331,25 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 
   uiItemPointerR(layout, ptr, "uv_layer", &obj_data_ptr, "uv_layers", NULL, ICON_NONE);
 
+  /* Aspect and Scale are only used for camera projectors. */
+  bool has_camera = false;
+  RNA_BEGIN (ptr, projector_ptr, "projectors") {
+    PointerRNA ob_projector = RNA_pointer_get(&projector_ptr, "object");
+    if (!RNA_pointer_is_null(&ob_projector) && RNA_enum_get(&ob_projector, "type") == OB_CAMERA) {
+      has_camera = true;
+      break;
+    }
+  }
+  RNA_END;
+
   sub = uiLayoutColumn(layout, true);
-  uiItemR(sub, ptr, "aspect_x", 0, IFACE_("Aspect X"), ICON_NONE);
+  uiLayoutSetActive(sub, has_camera);
+  uiItemR(sub, ptr, "aspect_x", 0, NULL, ICON_NONE);
   uiItemR(sub, ptr, "aspect_y", 0, IFACE_("Y"), ICON_NONE);
 
   sub = uiLayoutColumn(layout, true);
-  uiItemR(sub, ptr, "scale_x", 0, IFACE_("Scale X"), ICON_NONE);
+  uiLayoutSetActive(sub, has_camera);
+  uiItemR(sub, ptr, "scale_x", 0, NULL, ICON_NONE);
   uiItemR(sub, ptr, "scale_y", 0, IFACE_("Y"), ICON_NONE);
 
   uiItemR(layout, ptr, "projector_count", 0, IFACE_("Projectors"), ICON_NONE);
@@ -370,7 +384,7 @@ ModifierTypeInfo modifierType_UVProject = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,

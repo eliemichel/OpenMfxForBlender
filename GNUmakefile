@@ -26,25 +26,31 @@
 
 define HELP_TEXT
 
-Convenience Targets
+Blender Convenience Targets
    Provided for building Blender, (multiple at once can be used).
 
    * debug:         Build a debug binary.
    * full:          Enable all supported dependencies & options.
    * lite:          Disable non essential features for a smaller binary and faster build.
-   * release        Complete build with all options enabled including CUDA and Optix, matching the releases on blender.org
+   * release:       Complete build with all options enabled including CUDA and Optix, matching the releases on blender.org
    * headless:      Build without an interface (renderfarm or server automation).
    * cycles:        Build Cycles standalone only, without Blender.
    * bpy:           Build as a python module which can be loaded from python directly.
-   * deps:          Build library dependencies (intended only for platform maintainers).
-
    * developer:     Enable faster builds, error checking and tests, recommended for developers.
-   * config:        Run cmake configuration tool to set build options.
    * ninja:         Use ninja build tool for faster builds.
+   * ccache:        Use ccache for faster rebuilds.
 
    Note: passing the argument 'BUILD_DIR=path' when calling make will override the default build dir.
    Note: passing the argument 'BUILD_CMAKE_ARGS=args' lets you add cmake arguments.
 
+Other Convenience Targets
+   Provided for other building operations.
+
+   * config:        Run cmake configuration tool to set build options.
+   * deps:          Build library dependencies (intended only for platform maintainers).
+
+                    The existance of locally build dependancies overrides the pre-built dependencies from subversion.
+                    These must be manually removed from '../lib/' to go back to using the pre-compiled libraries.
 
 Project Files
    Generate project files for development environments.
@@ -84,12 +90,15 @@ Static Source Code Checking
    * check_descriptions:    Check for duplicate/invalid descriptions.
 
 Spell Checkers
+   This runs the spell checker from the developer tools repositor.
 
    * check_spelling_c:      Check for spelling errors (C/C++ only),
    * check_spelling_osl:    Check for spelling errors (OSL only).
    * check_spelling_py:     Check for spelling errors (Python only).
 
-   Note that spell checkers can take a 'CHECK_SPELLING_CACHE' filepath argument,
+   Note: an additional word-list is maintained at: 'source/tools/check_source/check_spelling_c_config.py'
+
+   Note: that spell checkers can take a 'CHECK_SPELLING_CACHE' filepath argument,
    so re-running does not need to re-check unchanged files.
 
    Example:
@@ -119,10 +128,16 @@ Utilities
    * source_archive:
      Create a compressed archive of the source code.
 
-   * update:
-     updates git and all submodules
+   * source_archive_complete:
+     Create a compressed archive of the source code and all the libraries of dependencies.
 
-   * format
+   * update:
+     Updates git and all submodules and svn.
+
+   * update_code:
+     Updates git and all submodules but not svn.
+
+   * format:
      Format source code using clang (uses PATHS if passed in). For example::
 
         make format PATHS="source/blender/blenlib source/blender/blenkernel"
@@ -182,8 +197,13 @@ endif
 ifndef DEPS_INSTALL_DIR
 	DEPS_INSTALL_DIR:=$(shell dirname "$(BLENDER_DIR)")/lib/$(OS_NCASE)
 
-	ifneq ($(OS_NCASE),darwin)
-		# Add processor type to directory name
+	# Add processor type to directory name, except for darwin x86_64
+	# which by convention does not have it.
+	ifeq ($(OS_NCASE),darwin)
+		ifneq ($(CPU),x86_64)
+			DEPS_INSTALL_DIR:=$(DEPS_INSTALL_DIR)_$(CPU)
+		endif
+	else
 		DEPS_INSTALL_DIR:=$(DEPS_INSTALL_DIR)_$(CPU)
 	endif
 endif
@@ -197,7 +217,7 @@ endif
 # in libraries, or python 2 for running make update to get it.
 ifeq ($(OS_NCASE),darwin)
 	ifeq (, $(shell command -v $(PYTHON)))
-		PYTHON:=../lib/darwin/python/bin/python3.7m
+		PYTHON:=$(DEPS_INSTALL_DIR)/python/bin/python3.7m
 		ifeq (, $(shell command -v $(PYTHON)))
 			PYTHON:=python
 		endif
@@ -239,6 +259,10 @@ endif
 
 ifneq "$(findstring developer, $(MAKECMDGOALS))" ""
 	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/blender_developer.cmake" $(CMAKE_CONFIG_ARGS)
+endif
+
+ifneq "$(findstring ccache, $(MAKECMDGOALS))" ""
+	CMAKE_CONFIG_ARGS:=-DWITH_COMPILER_CCACHE=YES $(CMAKE_CONFIG_ARGS)
 endif
 
 # -----------------------------------------------------------------------------
@@ -340,6 +364,7 @@ headless: all
 bpy: all
 developer: all
 ninja: all
+ccache: all
 
 # -----------------------------------------------------------------------------
 # Build dependencies
@@ -455,6 +480,9 @@ check_smatch: .FORCE
 	cd "$(BUILD_DIR)" ; \
 	$(PYTHON) "$(BLENDER_DIR)/build_files/cmake/cmake_static_check_smatch.py"
 
+check_mypy: .FORCE
+	$(PYTHON) "$(BLENDER_DIR)/source/tools/check_source/check_mypy.py"
+
 check_spelling_py: .FORCE
 	cd "$(BUILD_DIR)" ; \
 	PYTHONIOENCODING=utf_8 $(PYTHON) \
@@ -487,7 +515,14 @@ check_descriptions: .FORCE
 #
 
 source_archive: .FORCE
-	./build_files/utils/make_source_archive.sh
+	python3 ./build_files/utils/make_source_archive.py
+
+source_archive_complete: .FORCE
+	cmake -S "$(BLENDER_DIR)/build_files/build_environment" -B"$(BUILD_DIR)/source_archive" \
+		-DCMAKE_BUILD_TYPE_INIT:STRING=$(BUILD_TYPE) -DPACKAGE_USE_UPSTREAM_SOURCES=OFF
+# This assumes CMake is still using a default `PACKAGE_DIR` variable:
+	python3 ./build_files/utils/make_source_archive.py --include-packages "$(BUILD_DIR)/source_archive/packages"
+
 
 INKSCAPE_BIN?="inkscape"
 icons: .FORCE
@@ -503,6 +538,9 @@ icons_geom: .FORCE
 update: .FORCE
 	$(PYTHON) ./build_files/utils/make_update.py
 
+update_code: .FORCE
+	$(PYTHON) ./build_files/utils/make_update.py --no-libraries
+
 format: .FORCE
 	PATH="../lib/${OS_NCASE}_${CPU}/llvm/bin/:../lib/${OS_NCASE}_centos7_${CPU}/llvm/bin/:../lib/${OS_NCASE}/llvm/bin/:$(PATH)" \
 		$(PYTHON) source/tools/utils_maintenance/clang_format_paths.py $(PATHS)
@@ -514,7 +552,7 @@ format: .FORCE
 
 # Simple version of ./doc/python_api/sphinx_doc_gen.sh with no PDF generation.
 doc_py: .FORCE
-	ASAN_OPTIONS=halt_on_error=0 \
+	ASAN_OPTIONS=halt_on_error=0:${ASAN_OPTIONS} \
 	$(BLENDER_BIN) --background -noaudio --factory-startup \
 		--python doc/python_api/sphinx_doc_gen.py
 	sphinx-build -b html -j $(NPROCS) doc/python_api/sphinx-in doc/python_api/sphinx-out

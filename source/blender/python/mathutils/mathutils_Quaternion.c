@@ -95,7 +95,7 @@ static PyObject *Quaternion_to_euler(QuaternionObject *self, PyObject *args)
   }
 
   if (order_str) {
-    order = euler_order_from_string(order_str, "Matrix.to_euler()");
+    order = euler_order_from_string(order_str, "Quaternion.to_euler()");
 
     if (order == -1) {
       return NULL;
@@ -195,7 +195,7 @@ static PyObject *Quaternion_to_swing_twist(QuaternionObject *self, PyObject *axi
   int axis;
 
   if (axis_arg && PyUnicode_Check(axis_arg)) {
-    axis_str = _PyUnicode_AsString(axis_arg);
+    axis_str = PyUnicode_AsUTF8(axis_arg);
   }
 
   if (axis_str && axis_str[0] >= 'X' && axis_str[0] <= 'Z' && axis_str[1] == 0) {

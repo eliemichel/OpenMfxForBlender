@@ -56,6 +56,8 @@ const EnumPropertyItem rna_enum_region_type_items[] = {
 
 #ifdef RNA_RUNTIME
 
+#  include "RNA_access.h"
+
 #  include "BKE_global.h"
 #  include "BKE_screen.h"
 #  include "BKE_workspace.h"
@@ -110,18 +112,6 @@ static bool rna_Screen_fullscreen_get(PointerRNA *ptr)
   return (screen->state == SCREENMAXIMIZED);
 }
 
-/* UI compatible list: should not be needed, but for now we need to keep EMPTY
- * at least in the static version of this enum for python scripts. */
-static const EnumPropertyItem *rna_Area_type_itemf(bContext *UNUSED(C),
-                                                   PointerRNA *UNUSED(ptr),
-                                                   PropertyRNA *UNUSED(prop),
-                                                   bool *r_free)
-{
-  /* +1 to skip SPACE_EMPTY */
-  *r_free = false;
-  return rna_enum_space_type_items + 1;
-}
-
 static int rna_Area_type_get(PointerRNA *ptr)
 {
   ScrArea *area = (ScrArea *)ptr->data;
@@ -140,6 +130,11 @@ static void rna_Area_type_set(PointerRNA *ptr, int value)
   }
 
   ScrArea *area = (ScrArea *)ptr->data;
+  /* Empty areas are locked. */
+  if ((value == SPACE_EMPTY) || (area->spacetype == SPACE_EMPTY)) {
+    return;
+  }
+
   area->butspacetype = value;
 }
 
@@ -186,16 +181,20 @@ static void rna_Area_type_update(bContext *C, PointerRNA *ptr)
 }
 
 static const EnumPropertyItem *rna_Area_ui_type_itemf(bContext *C,
-                                                      PointerRNA *UNUSED(ptr),
+                                                      PointerRNA *ptr,
                                                       PropertyRNA *UNUSED(prop),
                                                       bool *r_free)
 {
   EnumPropertyItem *item = NULL;
   int totitem = 0;
 
-  /* +1 to skip SPACE_EMPTY */
-  for (const EnumPropertyItem *item_from = rna_enum_space_type_items + 1; item_from->identifier;
-       item_from++) {
+  ScrArea *area = (ScrArea *)ptr->data;
+  const EnumPropertyItem *item_from = rna_enum_space_type_items;
+  if (area->spacetype != SPACE_EMPTY) {
+    item_from += 1; /* +1 to skip SPACE_EMPTY */
+  }
+
+  for (; item_from->identifier; item_from++) {
     if (ELEM(item_from->value, SPACE_TOPBAR, SPACE_STATUSBAR)) {
       continue;
     }
@@ -222,6 +221,10 @@ static const EnumPropertyItem *rna_Area_ui_type_itemf(bContext *C,
 static int rna_Area_ui_type_get(PointerRNA *ptr)
 {
   ScrArea *area = ptr->data;
+  /* This is for the Python API which may inspect empty areas. */
+  if (UNLIKELY(area->spacetype == SPACE_EMPTY)) {
+    return SPACE_EMPTY;
+  }
   const int area_type = rna_Area_type_get(ptr);
   const bool area_changing = area->butspacetype != SPACE_EMPTY;
   int value = area_type << 16;
@@ -250,6 +253,10 @@ static void rna_Area_ui_type_set(PointerRNA *ptr, int value)
 {
   ScrArea *area = ptr->data;
   const int space_type = value >> 16;
+  /* Empty areas are locked. */
+  if ((space_type == SPACE_EMPTY) || (area->spacetype == SPACE_EMPTY)) {
+    return;
+  }
   SpaceType *st = BKE_spacetype_from_id(space_type);
 
   rna_Area_type_set(ptr, space_type);
@@ -270,6 +277,27 @@ static void rna_Area_ui_type_update(bContext *C, PointerRNA *ptr)
     st->space_subtype_set(area, area->butspacetype_subtype);
   }
   area->butspacetype_subtype = 0;
+
+  ED_area_tag_refresh(area);
+}
+
+static PointerRNA rna_Region_data_get(PointerRNA *ptr)
+{
+  bScreen *screen = (bScreen *)ptr->owner_id;
+  ARegion *region = ptr->data;
+
+  if (region->regiondata != NULL) {
+    if (region->regiontype == RGN_TYPE_WINDOW) {
+      /* We could make this static, it wont change at run-time. */
+      SpaceType *st = BKE_spacetype_from_id(SPACE_VIEW3D);
+      if (region->type == BKE_regiontype_from_id(st, region->regiontype)) {
+        PointerRNA newptr;
+        RNA_pointer_create(&screen->id, &RNA_RegionView3D, region->regiondata, &newptr);
+        return newptr;
+      }
+    }
+  }
+  return PointerRNA_NULL;
 }
 
 static void rna_View2D_region_to_view(struct View2D *v2d, float x, float y, float result[2])
@@ -357,12 +385,17 @@ static void rna_def_area(BlenderRNA *brna)
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", HEADER_NO_PULLDOWN);
   RNA_def_property_ui_text(prop, "Show Menus", "Show menus in the header");
 
+  /* Note on space type use of #SPACE_EMPTY, this is not visible to the user,
+   * and script authors should be able to assign this value, however the value may be set
+   * and needs to be read back by script authors.
+   *
+   * This happens when an area is full-screen (when #ScrArea.full is set).
+   * in this case reading the empty value is needed, but it should never be set, see: T87187. */
   prop = RNA_def_property(srna, "type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "spacetype");
   RNA_def_property_enum_items(prop, rna_enum_space_type_items);
   RNA_def_property_enum_default(prop, SPACE_VIEW3D);
-  RNA_def_property_enum_funcs(
-      prop, "rna_Area_type_get", "rna_Area_type_set", "rna_Area_type_itemf");
+  RNA_def_property_enum_funcs(prop, "rna_Area_type_get", "rna_Area_type_set", NULL);
   RNA_def_property_ui_text(prop, "Editor Type", "Current editor type for this area");
   RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
@@ -537,6 +570,13 @@ static void rna_def_region(BlenderRNA *brna)
   RNA_def_property_enum_funcs(prop, "rna_region_alignment_get", NULL, NULL);
   RNA_def_property_ui_text(prop, "Alignment", "Alignment of the region within the area");
 
+  prop = RNA_def_property(srna, "data", PROP_POINTER, PROP_NONE);
+  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+  RNA_def_property_ui_text(
+      prop, "Region Data", "Region specific data (the type depends on the region type)");
+  RNA_def_property_struct_type(prop, "AnyType");
+  RNA_def_property_pointer_funcs(prop, "rna_Region_data_get", NULL, NULL, NULL);
+
   RNA_def_function(srna, "tag_redraw", "ED_region_tag_redraw");
 }
 
@@ -586,7 +626,7 @@ static void rna_def_screen(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "show_statusbar", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", SCREEN_COLLAPSE_STATUSBAR);
-  RNA_def_property_ui_text(prop, "Show Status Bar", "Show Status Bar");
+  RNA_def_property_ui_text(prop, "Show Status Bar", "Show status bar");
   RNA_def_property_update(prop, 0, "rna_Screen_bar_update");
 
   func = RNA_def_function(srna, "statusbar_info", "rna_Screen_statusbar_info_get");

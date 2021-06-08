@@ -89,10 +89,10 @@ class Hair : public Geometry {
                                 float4 r_keys[4]) const;
   };
 
-  array<float3> curve_keys;
-  array<float> curve_radius;
-  array<int> curve_first_key;
-  array<int> curve_shader;
+  NODE_SOCKET_API(array<float3>, curve_keys)
+  NODE_SOCKET_API(array<float>, curve_radius)
+  NODE_SOCKET_API(array<int>, curve_first_key)
+  NODE_SOCKET_API(array<int>, curve_shader)
 
   /* BVH */
   size_t curvekey_offset;
@@ -103,7 +103,7 @@ class Hair : public Geometry {
   ~Hair();
 
   /* Geometry */
-  void clear() override;
+  void clear(bool preserve_shaders = false) override;
 
   void resize_curves(int numcurves, int numkeys);
   void reserve_curves(int numcurves, int numkeys);
@@ -145,6 +145,11 @@ class Hair : public Geometry {
 
   /* BVH */
   void pack_curves(Scene *scene, float4 *curve_key_co, float4 *curve_data, size_t curvekey_offset);
+
+  void pack_primitives(PackedBVH *pack,
+                       int object,
+                       uint visibility,
+                       PackFlags pack_flags) override;
 };
 
 CCL_NAMESPACE_END

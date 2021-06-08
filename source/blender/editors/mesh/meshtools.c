@@ -145,7 +145,7 @@ static void join_mesh_single(Depsgraph *depsgraph,
     if (ob_src != ob_dst) {
       float cmat[4][4];
 
-      /* watch this: switch matmul order really goes wrong */
+      /* Watch this: switch matrix multiplication order really goes wrong. */
       mul_m4_m4m4(cmat, imat, ob_src->obmat);
 
       /* transform vertex coordinates into new space */
@@ -407,7 +407,7 @@ int ED_mesh_join_objects_exec(bContext *C, wmOperator *op)
   me = (Mesh *)ob->data;
   key = me->key;
 
-  if (totvert == 0 || totvert == me->totvert) {
+  if (ELEM(totvert, 0, me->totvert)) {
     BKE_report(op->reports, RPT_WARNING, "No mesh data to join");
     return OPERATOR_CANCELLED;
   }
@@ -733,7 +733,7 @@ int ED_mesh_join_objects_exec(bContext *C, wmOperator *op)
     BKE_key_sort(key);
   }
 
-  /* Due to dependnecy cycle some other object might access old derived data. */
+  /* Due to dependency cycle some other object might access old derived data. */
   BKE_object_free_derived_caches(ob);
 
   DEG_relations_tag_update(bmain); /* removed objects, need to rebuild dag */

@@ -293,7 +293,7 @@ static int bpy_bmesh_select_mode_set(BPy_BMesh *self, PyObject *value)
     return -1;
   }
   if (flag == 0) {
-    PyErr_SetString(PyExc_TypeError, "bm.select_mode: cant assignt an empty value");
+    PyErr_SetString(PyExc_TypeError, "bm.select_mode: can't assign an empty value");
     return -1;
   }
 
@@ -1079,7 +1079,12 @@ PyDoc_STRVAR(
     "   :arg cage: Get the mesh as a deformed cage.\n"
     "   :type cage: boolean\n"
     "   :arg face_normals: Calculate face normals.\n"
-    "   :type face_normals: boolean\n");
+    "   :type face_normals: boolean\n"
+    "\n"
+    "   .. deprecated:: 2.93\n"
+    "\n"
+    "      The deform parameter is deprecated, assumed to be True, and will be removed in version "
+    "3.0.\n");
 static PyObject *bpy_bmesh_from_object(BPy_BMesh *self, PyObject *args, PyObject *kw)
 {
   static const char *kwlist[] = {"object", "depsgraph", "deform", "cage", "face_normals", NULL};
@@ -1120,43 +1125,36 @@ static PyObject *bpy_bmesh_from_object(BPy_BMesh *self, PyObject *args, PyObject
     return NULL;
   }
 
+  if (use_deform == false) {
+    PyErr_WarnEx(PyExc_FutureWarning,
+                 "from_object(...): the deform parameter is deprecated, assumed to be True, and "
+                 "will be removed in version 3.0",
+                 1);
+  }
+
   const bool use_render = DEG_get_mode(depsgraph) == DAG_EVAL_RENDER;
   scene_eval = DEG_get_evaluated_scene(depsgraph);
   ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+  bool need_free = false;
 
   /* Write the display mesh into the dummy mesh */
-  if (use_deform) {
-    if (use_render) {
-      if (use_cage) {
-        PyErr_SetString(PyExc_ValueError,
-                        "from_object(...): cage arg is unsupported when dependency graph "
-                        "evaluation mode is RENDER");
-        return NULL;
-      }
-
-      me_eval = mesh_create_eval_final(depsgraph, scene_eval, ob_eval, &data_masks);
-    }
-    else {
-      if (use_cage) {
-        me_eval = mesh_get_eval_deform(depsgraph, scene_eval, ob_eval, &data_masks);
-      }
-      else {
-        me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &data_masks);
-      }
-    }
-  }
-  else {
-    /* !use_deform */
+  if (use_render) {
     if (use_cage) {
       PyErr_SetString(PyExc_ValueError,
-                      "from_object(...): cage arg is unsupported when deform=False");
+                      "from_object(...): cage arg is unsupported when dependency graph "
+                      "evaluation mode is RENDER");
       return NULL;
     }
-    if (use_render) {
-      me_eval = mesh_create_eval_no_deform_render(depsgraph, scene_eval, ob, &data_masks);
+
+    me_eval = BKE_mesh_new_from_object(depsgraph, ob_eval, true, false);
+    need_free = true;
+  }
+  else {
+    if (use_cage) {
+      me_eval = mesh_get_eval_deform(depsgraph, scene_eval, ob_eval, &data_masks);
     }
     else {
-      me_eval = mesh_create_eval_no_deform(depsgraph, scene_eval, ob, &data_masks);
+      me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &data_masks);
     }
   }
 
@@ -1174,6 +1172,10 @@ static PyObject *bpy_bmesh_from_object(BPy_BMesh *self, PyObject *args, PyObject
                      (&(struct BMeshFromMeshParams){
                          .calc_face_normal = use_fnorm,
                      }));
+
+  if (need_free) {
+    BKE_id_free(NULL, me_eval);
+  }
 
   Py_RETURN_NONE;
 }
@@ -3752,37 +3754,31 @@ PyObject *BPyInit_bmesh_types(void)
 
   submodule = PyModule_Create(&BPy_BM_types_module_def);
 
-#define MODULE_TYPE_ADD(s, t) \
-  PyModule_AddObject(s, t.tp_name, (PyObject *)&t); \
-  Py_INCREF((PyObject *)&t)
-
   /* bmesh_py_types.c */
-  MODULE_TYPE_ADD(submodule, BPy_BMesh_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMVert_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMEdge_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMFace_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMLoop_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMElemSeq_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMVertSeq_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMEdgeSeq_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMFaceSeq_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMLoopSeq_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMIter_Type);
+  PyModule_AddType(submodule, &BPy_BMesh_Type);
+  PyModule_AddType(submodule, &BPy_BMVert_Type);
+  PyModule_AddType(submodule, &BPy_BMEdge_Type);
+  PyModule_AddType(submodule, &BPy_BMFace_Type);
+  PyModule_AddType(submodule, &BPy_BMLoop_Type);
+  PyModule_AddType(submodule, &BPy_BMElemSeq_Type);
+  PyModule_AddType(submodule, &BPy_BMVertSeq_Type);
+  PyModule_AddType(submodule, &BPy_BMEdgeSeq_Type);
+  PyModule_AddType(submodule, &BPy_BMFaceSeq_Type);
+  PyModule_AddType(submodule, &BPy_BMLoopSeq_Type);
+  PyModule_AddType(submodule, &BPy_BMIter_Type);
   /* bmesh_py_types_select.c */
-  MODULE_TYPE_ADD(submodule, BPy_BMEditSelSeq_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMEditSelIter_Type);
+  PyModule_AddType(submodule, &BPy_BMEditSelSeq_Type);
+  PyModule_AddType(submodule, &BPy_BMEditSelIter_Type);
   /* bmesh_py_types_customdata.c */
-  MODULE_TYPE_ADD(submodule, BPy_BMLayerAccessVert_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMLayerAccessEdge_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMLayerAccessFace_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMLayerAccessLoop_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMLayerCollection_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMLayerItem_Type);
+  PyModule_AddType(submodule, &BPy_BMLayerAccessVert_Type);
+  PyModule_AddType(submodule, &BPy_BMLayerAccessEdge_Type);
+  PyModule_AddType(submodule, &BPy_BMLayerAccessFace_Type);
+  PyModule_AddType(submodule, &BPy_BMLayerAccessLoop_Type);
+  PyModule_AddType(submodule, &BPy_BMLayerCollection_Type);
+  PyModule_AddType(submodule, &BPy_BMLayerItem_Type);
   /* bmesh_py_types_meshdata.c */
-  MODULE_TYPE_ADD(submodule, BPy_BMLoopUV_Type);
-  MODULE_TYPE_ADD(submodule, BPy_BMDeformVert_Type);
-
-#undef MODULE_TYPE_ADD
+  PyModule_AddType(submodule, &BPy_BMLoopUV_Type);
+  PyModule_AddType(submodule, &BPy_BMDeformVert_Type);
 
   return submodule;
 }
@@ -3988,7 +3984,7 @@ PyObject *BPy_BMElem_CreatePyObject(BMesh *bm, BMHeader *ele)
     case BM_LOOP:
       return BPy_BMLoop_CreatePyObject(bm, (BMLoop *)ele);
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       PyErr_SetString(PyExc_SystemError, "internal error");
       return NULL;
   }

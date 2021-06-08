@@ -115,7 +115,7 @@ static char *rna_ViewLayer_path(PointerRNA *ptr)
   ViewLayer *srl = (ViewLayer *)ptr->data;
   char name_esc[sizeof(srl->name) * 2];
 
-  BLI_strescape(name_esc, srl->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, srl->name, sizeof(name_esc));
   return BLI_sprintfN("view_layers[\"%s\"]", name_esc);
 }
 
@@ -151,6 +151,18 @@ static void rna_ViewLayer_update_render_passes(ID *id)
   Scene *scene = (Scene *)id;
   if (scene->nodetree) {
     ntreeCompositUpdateRLayers(scene->nodetree);
+  }
+
+  RenderEngineType *engine_type = RE_engines_find(scene->r.engine);
+  if (engine_type->update_render_passes) {
+    RenderEngine *engine = RE_engine_create(engine_type);
+    if (engine) {
+      LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
+        BKE_view_layer_verify_aov(engine, scene, view_layer);
+      }
+    }
+    RE_engine_free(engine);
+    engine = NULL;
   }
 }
 
@@ -307,6 +319,15 @@ static void rna_LayerCollection_exclude_update(Main *bmain, Scene *UNUSED(scene)
   BKE_layer_collection_sync(scene, view_layer);
 
   DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
+  if (!exclude) {
+    /* We need to update animation of objects added back to the scene through enabling this view
+     * layer. */
+    FOREACH_OBJECT_BEGIN (view_layer, ob) {
+      DEG_id_tag_update(&ob->id, ID_RECALC_ANIMATION);
+    }
+    FOREACH_OBJECT_END;
+  }
+
   DEG_relations_tag_update(bmain);
   WM_main_add_notifier(NC_SCENE | ND_LAYER_CONTENT, NULL);
   if (exclude) {
@@ -347,7 +368,7 @@ static void rna_def_layer_collection(BlenderRNA *brna)
 
   srna = RNA_def_struct(brna, "LayerCollection", NULL);
   RNA_def_struct_ui_text(srna, "Layer Collection", "Layer collection");
-  RNA_def_struct_ui_icon(srna, ICON_GROUP);
+  RNA_def_struct_ui_icon(srna, ICON_OUTLINER_COLLECTION);
 
   prop = RNA_def_property(srna, "collection", PROP_POINTER, PROP_NONE);
   RNA_def_property_flag(prop, PROP_NEVER_NULL);
@@ -513,7 +534,7 @@ void RNA_def_view_layer(BlenderRNA *brna)
   RNA_def_struct_path_func(srna, "rna_ViewLayer_path");
   RNA_def_struct_idprops_func(srna, "rna_ViewLayer_idprops");
 
-  rna_def_view_layer_common(srna, true);
+  rna_def_view_layer_common(brna, srna, true);
 
   func = RNA_def_function(srna, "update_render_passes", "rna_ViewLayer_update_render_passes");
   RNA_def_function_ui_description(func,

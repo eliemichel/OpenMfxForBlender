@@ -17,6 +17,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8-80 compliant>
+from __future__ import annotations
 
 import bpy
 from bpy.types import Operator
@@ -36,6 +37,7 @@ class ConsoleExec(Operator):
     """Execute the current console line as a python expression"""
     bl_idname = "console.execute"
     bl_label = "Console Execute"
+    bl_options = {'UNDO_GROUPED'}
 
     interactive: BoolProperty(
         options={'SKIP_SAVE'},

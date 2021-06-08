@@ -49,9 +49,7 @@
 #include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (Translation) */
-
-/** \name Transform Translation
+/** \name Transform (Translation)
  * \{ */
 
 static void headerTranslation(TransInfo *t, const float vec[3], char str[UI_MAX_DRAW_STR])
@@ -62,13 +60,18 @@ static void headerTranslation(TransInfo *t, const float vec[3], char str[UI_MAX_
   char autoik[NUM_STR_REP_LEN];
   float dist;
 
+  UnitSettings *unit = NULL;
+  if (!(t->flag & T_2D_EDIT)) {
+    unit = &t->scene->unit;
+  }
+
   if (hasNumInput(&t->num)) {
     outputNumInput(&(t->num), tvec, &t->scene->unit);
     dist = len_v3(t->num.val);
   }
   else {
     float dvec[3];
-    if (!(t->flag & T_2D_EDIT) && t->con.mode & CON_APPLY) {
+    if (t->con.mode & CON_APPLY) {
       int i = 0;
       zero_v3(dvec);
       if (t->con.mode & CON_AXIS0) {
@@ -83,18 +86,22 @@ static void headerTranslation(TransInfo *t, const float vec[3], char str[UI_MAX_
     }
     else {
       copy_v3_v3(dvec, vec);
+    }
+
+    if (t->flag & T_2D_EDIT) {
       applyAspectRatio(t, dvec);
     }
 
-    dist = len_v3(vec);
-    if (!(t->flag & T_2D_EDIT) && t->scene->unit.system) {
+    dist = len_v3(dvec);
+
+    if (unit) {
       for (int i = 0; i < 3; i++) {
         BKE_unit_value_as_string(&tvec[NUM_STR_REP_LEN * i],
                                  NUM_STR_REP_LEN,
-                                 dvec[i] * t->scene->unit.scale_length,
+                                 dvec[i] * unit->scale_length,
                                  4,
                                  B_UNIT_LENGTH,
-                                 &t->scene->unit,
+                                 unit,
                                  true);
       }
     }
@@ -105,14 +112,9 @@ static void headerTranslation(TransInfo *t, const float vec[3], char str[UI_MAX_
     }
   }
 
-  if (!(t->flag & T_2D_EDIT) && t->scene->unit.system) {
-    BKE_unit_value_as_string(distvec,
-                             sizeof(distvec),
-                             dist * t->scene->unit.scale_length,
-                             4,
-                             B_UNIT_LENGTH,
-                             &t->scene->unit,
-                             false);
+  if (unit) {
+    BKE_unit_value_as_string(
+        distvec, sizeof(distvec), dist * unit->scale_length, 4, B_UNIT_LENGTH, unit, false);
   }
   else if (dist > 1e10f || dist < -1e10f) {
     /* prevent string buffer overflow */
@@ -292,7 +294,7 @@ static void applyTranslationValue(TransInfo *t, const float vec[3])
           const float *original_normal;
 
           /* In pose mode, we want to align normals with Y axis of bones... */
-          if (t->flag & T_POSE) {
+          if (t->options & CTX_POSE_BONE) {
             original_normal = td->axismtx[1];
           }
           else {
@@ -375,6 +377,9 @@ static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
     else {
       mul_v3_m3v3(global_dir, t->spacemtx, global_dir);
     }
+    if (t->flag & T_2D_EDIT) {
+      removeAspectRatio(t, global_dir);
+    }
   }
   else {
     copy_v3_v3(global_dir, t->values);
@@ -390,9 +395,9 @@ static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
     }
 
     float incr_dir[3];
-    mul_v3_m3v3(incr_dir, t->spacemtx_inv, global_dir);
-    if (transform_snap_increment(t, incr_dir)) {
-      mul_v3_m3v3(incr_dir, t->spacemtx, incr_dir);
+    copy_v3_v3(incr_dir, global_dir);
+    if (!(activeSnap(t) && validSnap(t)) &&
+        transform_snap_increment_ex(t, (t->con.mode & CON_APPLY) != 0, incr_dir)) {
 
       /* Test for mixed snap with grid. */
       float snap_dist_sq = FLT_MAX;
@@ -405,7 +410,6 @@ static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
     }
   }
 
-  headerTranslation(t, global_dir, str);
   applyTranslationValue(t, global_dir);
 
   /* evil hack - redo translation if clipping needed */
@@ -423,6 +427,7 @@ static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
 
   /* Set the redo value. */
   mul_v3_m3v3(t->values_final, t->spacemtx_inv, global_dir);
+  headerTranslation(t, (t->con.mode & CON_APPLY) ? t->values_final : global_dir, str);
 
   recalcData(t);
   ED_area_status_text(t->area, str);
@@ -465,5 +470,8 @@ void initTranslation(TransInfo *t)
     t->num.unit_type[1] = B_UNIT_NONE;
     t->num.unit_type[2] = B_UNIT_NONE;
   }
+
+  transform_mode_default_modal_orientation_set(
+      t, (t->options & CTX_CAMERA) ? V3D_ORIENT_VIEW : V3D_ORIENT_GLOBAL);
 }
 /** \} */

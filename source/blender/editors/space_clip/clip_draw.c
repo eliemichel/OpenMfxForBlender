@@ -46,6 +46,7 @@
 #include "ED_gpencil.h"
 #include "ED_mask.h"
 #include "ED_screen.h"
+#include "ED_util.h"
 
 #include "BIF_glutil.h"
 
@@ -1207,7 +1208,7 @@ static void draw_plane_marker_image(Scene *scene,
 
       GPUTexture *texture = GPU_texture_create_2d(
           "plane_marker_image", ibuf->x, ibuf->y, 1, GPU_RGBA8, NULL);
-      GPU_texture_update(texture, GPU_DATA_UNSIGNED_BYTE, display_buffer);
+      GPU_texture_update(texture, GPU_DATA_UBYTE, display_buffer);
       GPU_texture_filter_mode(texture, false);
 
       GPU_matrix_push();

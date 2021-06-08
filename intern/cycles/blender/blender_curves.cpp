@@ -67,17 +67,16 @@ static bool ObtainCacheParticleData(
   Transform tfm = get_transform(b_ob->matrix_world());
   Transform itfm = transform_quick_inverse(tfm);
 
-  BL::Object::modifiers_iterator b_mod;
-  for (b_ob->modifiers.begin(b_mod); b_mod != b_ob->modifiers.end(); ++b_mod) {
-    if ((b_mod->type() == b_mod->type_PARTICLE_SYSTEM) &&
-        (background ? b_mod->show_render() : b_mod->show_viewport())) {
-      BL::ParticleSystemModifier psmd((const PointerRNA)b_mod->ptr);
+  for (BL::Modifier &b_mod : b_ob->modifiers) {
+    if ((b_mod.type() == b_mod.type_PARTICLE_SYSTEM) &&
+        (background ? b_mod.show_render() : b_mod.show_viewport())) {
+      BL::ParticleSystemModifier psmd((const PointerRNA)b_mod.ptr);
       BL::ParticleSystem b_psys((const PointerRNA)psmd.particle_system().ptr);
       BL::ParticleSettings b_part((const PointerRNA)b_psys.settings().ptr);
 
       if ((b_part.render_type() == BL::ParticleSettings::render_type_PATH) &&
           (b_part.type() == BL::ParticleSettings::type_HAIR)) {
-        int shader = clamp(b_part.material() - 1, 0, hair->used_shaders.size() - 1);
+        int shader = clamp(b_part.material() - 1, 0, hair->get_used_shaders().size() - 1);
         int display_step = background ? b_part.render_step() : b_part.display_step();
         int totparts = b_psys.particles.length();
         int totchild = background ? b_psys.child_particles.length() :
@@ -122,8 +121,8 @@ static bool ObtainCacheParticleData(
           CData->curve_firstkey.push_back_slow(keyno);
 
           float curve_length = 0.0f;
-          float3 prev_co_world = make_float3(0.0f, 0.0f, 0.0f);
-          float3 prev_co_object = make_float3(0.0f, 0.0f, 0.0f);
+          float3 prev_co_world = zero_float3();
+          float3 prev_co_object = zero_float3();
           for (int step_no = 0; step_no < ren_step; step_no++) {
             float3 co_world = prev_co_world;
             b_psys.co_hair(*b_ob, pa_no, step_no, &co_world.x);
@@ -163,11 +162,10 @@ static bool ObtainCacheParticleUV(Hair *hair,
 
   CData->curve_uv.clear();
 
-  BL::Object::modifiers_iterator b_mod;
-  for (b_ob->modifiers.begin(b_mod); b_mod != b_ob->modifiers.end(); ++b_mod) {
-    if ((b_mod->type() == b_mod->type_PARTICLE_SYSTEM) &&
-        (background ? b_mod->show_render() : b_mod->show_viewport())) {
-      BL::ParticleSystemModifier psmd((const PointerRNA)b_mod->ptr);
+  for (BL::Modifier &b_mod : b_ob->modifiers) {
+    if ((b_mod.type() == b_mod.type_PARTICLE_SYSTEM) &&
+        (background ? b_mod.show_render() : b_mod.show_viewport())) {
+      BL::ParticleSystemModifier psmd((const PointerRNA)b_mod.ptr);
       BL::ParticleSystem b_psys((const PointerRNA)psmd.particle_system().ptr);
       BL::ParticleSettings b_part((const PointerRNA)b_psys.settings().ptr);
 
@@ -199,7 +197,7 @@ static bool ObtainCacheParticleUV(Hair *hair,
           BL::Mesh::uv_layers_iterator l;
           b_mesh->uv_layers.begin(l);
 
-          float2 uv = make_float2(0.0f, 0.0f);
+          float2 uv = zero_float2();
           if (b_mesh->uv_layers.length())
             b_psys.uv_on_emitter(psmd, *b_pa, pa_no, uv_num, &uv.x);
           CData->curve_uv.push_back_slow(uv);
@@ -226,11 +224,10 @@ static bool ObtainCacheParticleVcol(Hair *hair,
 
   CData->curve_vcol.clear();
 
-  BL::Object::modifiers_iterator b_mod;
-  for (b_ob->modifiers.begin(b_mod); b_mod != b_ob->modifiers.end(); ++b_mod) {
-    if ((b_mod->type() == b_mod->type_PARTICLE_SYSTEM) &&
-        (background ? b_mod->show_render() : b_mod->show_viewport())) {
-      BL::ParticleSystemModifier psmd((const PointerRNA)b_mod->ptr);
+  for (BL::Modifier &b_mod : b_ob->modifiers) {
+    if ((b_mod.type() == b_mod.type_PARTICLE_SYSTEM) &&
+        (background ? b_mod.show_render() : b_mod.show_viewport())) {
+      BL::ParticleSystemModifier psmd((const PointerRNA)b_mod.ptr);
       BL::ParticleSystem b_psys((const PointerRNA)psmd.particle_system().ptr);
       BL::ParticleSettings b_part((const PointerRNA)b_psys.settings().ptr);
 
@@ -307,7 +304,7 @@ static void ExportCurveSegments(Scene *scene, Hair *hair, ParticleCurveData *CDa
     VLOG(1) << "Exporting curve segments for mesh " << hair->name;
   }
 
-  hair->reserve_curves(hair->num_curves() + num_curves, hair->curve_keys.size() + num_keys);
+  hair->reserve_curves(hair->num_curves() + num_curves, hair->get_curve_keys().size() + num_keys);
 
   num_keys = 0;
   num_curves = 0;
@@ -350,9 +347,9 @@ static void ExportCurveSegments(Scene *scene, Hair *hair, ParticleCurveData *CDa
   }
 
   /* check allocation */
-  if ((hair->curve_keys.size() != num_keys) || (hair->num_curves() != num_curves)) {
+  if ((hair->get_curve_keys().size() != num_keys) || (hair->num_curves() != num_curves)) {
     VLOG(1) << "Allocation failed, clearing data";
-    hair->clear();
+    hair->clear(true);
   }
 }
 
@@ -402,7 +399,7 @@ static void export_hair_motion_validate_attribute(Hair *hair,
                                                   bool have_motion)
 {
   Attribute *attr_mP = hair->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
-  const int num_keys = hair->curve_keys.size();
+  const int num_keys = hair->get_curve_keys().size();
 
   if (num_motion_keys != num_keys || !have_motion) {
     /* No motion or hair "topology" changed, remove attributes again. */
@@ -423,8 +420,8 @@ static void export_hair_motion_validate_attribute(Hair *hair,
       float4 *mP = attr_mP->data_float4() + step * num_keys;
 
       for (int key = 0; key < num_keys; key++) {
-        mP[key] = float3_to_float4(hair->curve_keys[key]);
-        mP[key].w = hair->curve_radius[key];
+        mP[key] = float3_to_float4(hair->get_curve_keys()[key]);
+        mP[key].w = hair->get_curve_radius()[key];
       }
     }
   }
@@ -447,7 +444,7 @@ static void ExportCurveSegmentsMotion(Hair *hair, ParticleCurveData *CData, int 
   }
 
   /* export motion vectors for curve keys */
-  size_t numkeys = hair->curve_keys.size();
+  size_t numkeys = hair->get_curve_keys().size();
   float4 *mP = attr_mP->data_float4() + motion_step * numkeys;
   bool have_motion = false;
   int i = 0;
@@ -458,24 +455,24 @@ static void ExportCurveSegmentsMotion(Hair *hair, ParticleCurveData *CData, int 
          curve < CData->psys_firstcurve[sys] + CData->psys_curvenum[sys];
          curve++) {
       /* Curve lengths may not match! Curves can be clipped. */
-      int curve_key_end = (num_curves + 1 < (int)hair->curve_first_key.size() ?
-                               hair->curve_first_key[num_curves + 1] :
-                               (int)hair->curve_keys.size());
-      const int num_center_curve_keys = curve_key_end - hair->curve_first_key[num_curves];
+      int curve_key_end = (num_curves + 1 < (int)hair->get_curve_first_key().size() ?
+                               hair->get_curve_first_key()[num_curves + 1] :
+                               (int)hair->get_curve_keys().size());
+      const int num_center_curve_keys = curve_key_end - hair->get_curve_first_key()[num_curves];
       const int is_num_keys_different = CData->curve_keynum[curve] - num_center_curve_keys;
 
       if (!is_num_keys_different) {
         for (int curvekey = CData->curve_firstkey[curve];
              curvekey < CData->curve_firstkey[curve] + CData->curve_keynum[curve];
              curvekey++) {
-          if (i < hair->curve_keys.size()) {
+          if (i < hair->get_curve_keys().size()) {
             mP[i] = CurveSegmentMotionCV(CData, sys, curve, curvekey);
             if (!have_motion) {
               /* unlike mesh coordinates, these tend to be slightly different
                * between frames due to particle transforms into/out of object
                * space, so we use an epsilon to detect actual changes */
-              float4 curve_key = float3_to_float4(hair->curve_keys[i]);
-              curve_key.w = hair->curve_radius[i];
+              float4 curve_key = float3_to_float4(hair->get_curve_keys()[i]);
+              curve_key.w = hair->get_curve_radius()[i];
               if (len_squared(mP[i] - curve_key) > 1e-5f * 1e-5f)
                 have_motion = true;
             }
@@ -510,11 +507,10 @@ static void ExportCurveSegmentsMotion(Hair *hair, ParticleCurveData *CData, int 
 bool BlenderSync::object_has_particle_hair(BL::Object b_ob)
 {
   /* Test if the object has a particle modifier with hair. */
-  BL::Object::modifiers_iterator b_mod;
-  for (b_ob.modifiers.begin(b_mod); b_mod != b_ob.modifiers.end(); ++b_mod) {
-    if ((b_mod->type() == b_mod->type_PARTICLE_SYSTEM) &&
-        (preview ? b_mod->show_viewport() : b_mod->show_render())) {
-      BL::ParticleSystemModifier psmd((const PointerRNA)b_mod->ptr);
+  for (BL::Modifier &b_mod : b_ob.modifiers) {
+    if ((b_mod.type() == b_mod.type_PARTICLE_SYSTEM) &&
+        (preview ? b_mod.show_viewport() : b_mod.show_render())) {
+      BL::ParticleSystemModifier psmd((const PointerRNA)b_mod.ptr);
       BL::ParticleSystem b_psys((const PointerRNA)psmd.particle_system().ptr);
       BL::ParticleSettings b_part((const PointerRNA)b_psys.settings().ptr);
 
@@ -560,7 +556,7 @@ void BlenderSync::sync_particle_hair(
       float3 *generated = attr_generated->data_float3();
 
       for (size_t i = 0; i < hair->num_curves(); i++) {
-        float3 co = hair->curve_keys[hair->get_curve(i).first_key];
+        float3 co = hair->get_curve_keys()[hair->get_curve(i).first_key];
         generated[i] = co * size - loc;
       }
     }
@@ -678,13 +674,11 @@ static void export_hair_curves(Scene *scene, Hair *hair, BL::Hair b_hair)
   /* Export curves and points. */
   vector<float> points_length;
 
-  BL::Hair::curves_iterator b_curve_iter;
-  for (b_hair.curves.begin(b_curve_iter); b_curve_iter != b_hair.curves.end(); ++b_curve_iter) {
-    BL::HairCurve b_curve = *b_curve_iter;
+  for (BL::HairCurve &b_curve : b_hair.curves) {
     const int first_point_index = b_curve.first_point_index();
     const int num_points = b_curve.num_points();
 
-    float3 prev_co = make_float3(0.0f, 0.0f, 0.0f);
+    float3 prev_co = zero_float3();
     float length = 0.0f;
     if (attr_intercept) {
       points_length.clear();
@@ -742,15 +736,13 @@ static void export_hair_curves_motion(Hair *hair, BL::Hair b_hair, int motion_st
   }
 
   /* Export motion keys. */
-  const int num_keys = hair->curve_keys.size();
+  const int num_keys = hair->get_curve_keys().size();
   float4 *mP = attr_mP->data_float4() + motion_step * num_keys;
   bool have_motion = false;
   int num_motion_keys = 0;
   int curve_index = 0;
 
-  BL::Hair::curves_iterator b_curve_iter;
-  for (b_hair.curves.begin(b_curve_iter); b_curve_iter != b_hair.curves.end(); ++b_curve_iter) {
-    BL::HairCurve b_curve = *b_curve_iter;
+  for (BL::HairCurve &b_curve : b_hair.curves) {
     const int first_point_index = b_curve.first_point_index();
     const int num_points = b_curve.num_points();
 
@@ -769,8 +761,8 @@ static void export_hair_curves_motion(Hair *hair, BL::Hair b_hair, int motion_st
           if (!have_motion) {
             /* TODO: use epsilon for comparison? Was needed for particles due to
              * transform, but ideally should not happen anymore. */
-            float4 curve_key = float3_to_float4(hair->curve_keys[i]);
-            curve_key.w = hair->curve_radius[i];
+            float4 curve_key = float3_to_float4(hair->get_curve_keys()[i]);
+            curve_key.w = hair->get_curve_radius()[i];
             have_motion = !(mP[i] == curve_key);
           }
         }
@@ -817,42 +809,51 @@ void BlenderSync::sync_hair(Hair *hair, BL::Object &b_ob, bool motion, int motio
 }
 #endif
 
-void BlenderSync::sync_hair(BL::Depsgraph b_depsgraph,
-                            BL::Object b_ob,
-                            Hair *hair,
-                            const vector<Shader *> &used_shaders)
+void BlenderSync::sync_hair(BL::Depsgraph b_depsgraph, BL::Object b_ob, Hair *hair)
 {
-  /* Compares curve_keys rather than strands in order to handle quick hair
-   * adjustments in dynamic BVH - other methods could probably do this better. */
-  array<float3> oldcurve_keys;
-  array<float> oldcurve_radius;
-  oldcurve_keys.steal_data(hair->curve_keys);
-  oldcurve_radius.steal_data(hair->curve_radius);
+  /* make a copy of the shaders as the caller in the main thread still need them for syncing the
+   * attributes */
+  array<Node *> used_shaders = hair->get_used_shaders();
 
-  hair->clear();
-  hair->used_shaders = used_shaders;
+  Hair new_hair;
+  new_hair.set_used_shaders(used_shaders);
 
   if (view_layer.use_hair) {
     if (b_ob.type() == BL::Object::type_HAIR) {
       /* Hair object. */
-      sync_hair(hair, b_ob, false);
+      sync_hair(&new_hair, b_ob, false);
     }
     else {
       /* Particle hair. */
-      bool need_undeformed = hair->need_attribute(scene, ATTR_STD_GENERATED);
+      bool need_undeformed = new_hair.need_attribute(scene, ATTR_STD_GENERATED);
       BL::Mesh b_mesh = object_to_mesh(
           b_data, b_ob, b_depsgraph, need_undeformed, Mesh::SUBDIVISION_NONE);
 
       if (b_mesh) {
-        sync_particle_hair(hair, b_mesh, b_ob, false);
+        sync_particle_hair(&new_hair, b_mesh, b_ob, false);
         free_object_to_mesh(b_data, b_ob, b_mesh);
       }
     }
   }
 
+  /* update original sockets */
+
+  for (const SocketType &socket : new_hair.type->inputs) {
+    /* Those sockets are updated in sync_object, so do not modify them. */
+    if (socket.name == "use_motion_blur" || socket.name == "motion_steps" ||
+        socket.name == "used_shaders") {
+      continue;
+    }
+    hair->set_value(socket, new_hair, socket);
+  }
+
+  hair->attributes.update(std::move(new_hair.attributes));
+
   /* tag update */
-  const bool rebuild = ((oldcurve_keys != hair->curve_keys) ||
-                        (oldcurve_radius != hair->curve_radius));
+
+  /* Compares curve_keys rather than strands in order to handle quick hair
+   * adjustments in dynamic BVH - other methods could probably do this better. */
+  const bool rebuild = (hair->curve_keys_is_modified() || hair->curve_radius_is_modified());
 
   hair->tag_update(scene, rebuild);
 }

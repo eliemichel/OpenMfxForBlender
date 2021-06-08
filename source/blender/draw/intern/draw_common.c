@@ -161,14 +161,14 @@ void DRW_globals_update(void)
 
   /* Grid */
   UI_GetThemeColorShade4fv(TH_GRID, 10, gb->colorGrid);
-  /* emphasise division lines lighter instead of darker, if background is darker than grid */
+  /* Emphasize division lines lighter instead of darker, if background is darker than grid. */
   UI_GetThemeColorShade4fv(
       TH_GRID,
       (gb->colorGrid[0] + gb->colorGrid[1] + gb->colorGrid[2] + 0.12f >
        gb->colorBackground[0] + gb->colorBackground[1] + gb->colorBackground[2]) ?
           20 :
           -10,
-      gb->colorGridEmphasise);
+      gb->colorGridEmphasis);
   /* Grid Axis */
   UI_GetThemeColorBlendShade4fv(TH_GRID, TH_AXIS_X, 0.5f, -10, gb->colorGridAxisX);
   UI_GetThemeColorBlendShade4fv(TH_GRID, TH_AXIS_Y, 0.5f, -10, gb->colorGridAxisY);
@@ -279,7 +279,7 @@ DRWView *DRW_view_create_with_zoffset(const DRWView *parent_view,
 
   float viewdist = rv3d->dist;
 
-  /* special exception for ortho camera (viewdist isnt used for perspective cameras) */
+  /* special exception for ortho camera (`viewdist` isn't used for perspective cameras). */
   if (rv3d->persp == RV3D_CAMOB && rv3d->is_persp == false) {
     viewdist = 1.0f / max_ff(fabsf(winmat[0][0]), fabsf(winmat[1][1]));
   }
@@ -333,7 +333,7 @@ int DRW_object_wire_theme_get(Object *ob, ViewLayer *view_layer, float **r_color
           theme_id = TH_EMPTY;
           break;
         case OB_LIGHTPROBE:
-          /* TODO add lightprobe color */
+          /* TODO: add light-probe color. */
           theme_id = TH_EMPTY;
           break;
         default:

@@ -23,8 +23,8 @@
 
 #include "intern/node/deg_node_id.h"
 
+#include <cstdio>
 #include <cstring> /* required for STREQ later on. */
-#include <stdio.h>
 
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
@@ -41,8 +41,7 @@
 #include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_time.h"
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 const char *linkedStateAsString(eDepsNode_LinkedState_Type linked_state)
 {
@@ -81,6 +80,7 @@ void IDNode::init(const ID *id, const char *UNUSED(subdata))
   /* Store ID-pointer. */
   id_type = GS(id->name);
   id_orig = (ID *)id;
+  id_orig_session_uuid = id->session_uuid;
   eval_flags = 0;
   previous_eval_flags = 0;
   customdata_masks = DEGCustomDataMeshMasks();
@@ -90,6 +90,7 @@ void IDNode::init(const ID *id, const char *UNUSED(subdata))
   is_collection_fully_expanded = false;
   has_base = false;
   is_user_modified = false;
+  id_cow_recalc_backup = 0;
 
   visible_components_mask = 0;
   previously_visible_components_mask = 0;
@@ -137,7 +138,7 @@ void IDNode::destroy()
   }
 
   /* Free memory used by this CoW ID. */
-  if (id_cow != id_orig && id_cow != nullptr) {
+  if (!ELEM(id_cow, id_orig, nullptr)) {
     deg_free_copy_on_write_datablock(id_cow);
     MEM_freeN(id_cow);
     id_cow = nullptr;
@@ -213,5 +214,4 @@ IDComponentsMask IDNode::get_visible_components_mask() const
   return result;
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

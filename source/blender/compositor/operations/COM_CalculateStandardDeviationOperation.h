@@ -21,6 +21,9 @@
 #include "COM_CalculateMeanOperation.h"
 #include "COM_NodeOperation.h"
 #include "DNA_node_types.h"
+
+namespace blender::compositor {
+
 /**
  * \brief base class of CalculateStandardDeviation,
  * implementing the simple CalculateStandardDeviation.
@@ -31,12 +34,12 @@ class CalculateStandardDeviationOperation : public CalculateMeanOperation {
   float m_standardDeviation;
 
  public:
-  CalculateStandardDeviationOperation();
-
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 
-  void *initializeTileData(rcti *rect);
+  void *initializeTileData(rcti *rect) override;
 };
+
+}  // namespace blender::compositor

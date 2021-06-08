@@ -243,8 +243,11 @@ static void test_endian_zbuf(struct ImBuf *ibuf)
 /* this one is only def-ed once, strangely... */
 #define GSS(x) (((uchar *)(x))[1] << 8 | ((uchar *)(x))[0])
 
-int imb_is_a_iris(const uchar *mem)
+bool imb_is_a_iris(const uchar *mem, size_t size)
 {
+  if (size < 2) {
+    return false;
+  }
   return ((GS(mem) == IMAGIC) || (GSS(mem) == IMAGIC));
 }
 
@@ -267,11 +270,13 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
   ImBuf *ibuf = NULL;
   uchar dirty_flag = 0;
 
-  if (size < HEADER_SIZE) {
+  if (!imb_is_a_iris(mem, size)) {
     return NULL;
   }
 
-  if (!imb_is_a_iris(mem)) {
+  /* Could pe part of the magic check above,
+   * by convention this check only requests the size needed to read it's magic though. */
+  if (size < HEADER_SIZE) {
     return NULL;
   }
 
@@ -286,7 +291,7 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
 
   rle = ISRLE(image.type);
   bpp = BPP(image.type);
-  if (bpp != 1 && bpp != 2) {
+  if (!ELEM(bpp, 1, 2)) {
     fprintf(stderr, "longimagedata: image must have 1 or 2 byte per pix chan\n");
     return NULL;
   }
@@ -807,7 +812,7 @@ fail:
  * Added: zbuf write
  */
 
-static int output_iris(uint *lptr, int xsize, int ysize, int zsize, const char *name, int *zptr)
+static bool output_iris(uint *lptr, int xsize, int ysize, int zsize, const char *name, int *zptr)
 {
   FILE *outf;
   IMAGE *image;
@@ -969,10 +974,9 @@ static int compressrow(uchar *lbuf, uchar *rlebuf, int z, int cnt)
   return optr - (uchar *)rlebuf;
 }
 
-int imb_saveiris(struct ImBuf *ibuf, const char *filepath, int flags)
+bool imb_saveiris(struct ImBuf *ibuf, const char *filepath, int flags)
 {
   short zsize;
-  int ret;
 
   zsize = (ibuf->planes + 7) >> 3;
   if (flags & IB_zbuf && ibuf->zbuf != NULL) {
@@ -982,11 +986,11 @@ int imb_saveiris(struct ImBuf *ibuf, const char *filepath, int flags)
   IMB_convert_rgba_to_abgr(ibuf);
   test_endian_zbuf(ibuf);
 
-  ret = output_iris(ibuf->rect, ibuf->x, ibuf->y, zsize, filepath, ibuf->zbuf);
+  const bool ok = output_iris(ibuf->rect, ibuf->x, ibuf->y, zsize, filepath, ibuf->zbuf);
 
   /* restore! Quite clumsy, 2 times a switch... maybe better a malloc ? */
   IMB_convert_rgba_to_abgr(ibuf);
   test_endian_zbuf(ibuf);
 
-  return ret;
+  return ok;
 }

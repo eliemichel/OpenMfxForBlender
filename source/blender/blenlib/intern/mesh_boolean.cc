@@ -27,10 +27,14 @@
 #  include "BLI_array.hh"
 #  include "BLI_assert.h"
 #  include "BLI_delaunay_2d.h"
+#  include "BLI_double3.hh"
+#  include "BLI_float3.hh"
 #  include "BLI_hash.hh"
+#  include "BLI_kdopbvh.h"
 #  include "BLI_map.hh"
 #  include "BLI_math.h"
 #  include "BLI_math_boolean.hh"
+#  include "BLI_math_geom.h"
 #  include "BLI_math_mpq.hh"
 #  include "BLI_mesh_intersect.hh"
 #  include "BLI_mpq3.hh"
@@ -40,7 +44,11 @@
 #  include "BLI_vector.hh"
 #  include "BLI_vector_set.hh"
 
+#  include "PIL_time.h"
+
 #  include "BLI_mesh_boolean.hh"
+
+// #  define PERFDEBUG
 
 namespace blender::meshintersect {
 
@@ -88,10 +96,7 @@ class Edge {
 
   uint64_t hash() const
   {
-    constexpr uint64_t h1 = 33;
-    uint64_t v0hash = DefaultHash<int>{}(v_[0]->id);
-    uint64_t v1hash = DefaultHash<int>{}(v_[1]->id);
-    return v0hash ^ (v1hash * h1);
+    return get_default_hash_2(v_[0]->id, v_[1]->id);
   }
 };
 
@@ -368,6 +373,11 @@ class PatchesInfo {
   {
     return pp_edge_.lookup_default(std::pair<int, int>(p1, p2), Edge());
   }
+
+  const Map<std::pair<int, int>, Edge> &patch_patch_edge_map()
+  {
+    return pp_edge_;
+  }
 };
 
 static bool apply_bool_op(BoolOpType bool_optype, const Array<int> &winding);
@@ -378,7 +388,7 @@ static bool apply_bool_op(BoolOpType bool_optype, const Array<int> &winding);
  * One cell, the Ambient cell, contains all other cells.
  */
 class Cell {
-  Vector<int> patches_;
+  Set<int> patches_;
   Array<int> winding_;
   int merged_to_{NO_INDEX};
   bool winding_assigned_{false};
@@ -393,17 +403,27 @@ class Cell {
 
   void add_patch(int p)
   {
-    patches_.append(p);
+    patches_.add(p);
+    zero_volume_ = false; /* If it was true before, it no longer is. */
   }
 
-  void add_patch_non_duplicates(int p)
+  const Set<int> &patches() const
   {
-    patches_.append_non_duplicates(p);
+    return patches_;
   }
 
-  Span<int> patches() const
+  /** In a set of 2, which is patch that is not p? */
+  int patch_other(int p) const
   {
-    return Span<int>(patches_);
+    if (patches_.size() != 2) {
+      return NO_INDEX;
+    }
+    for (int pother : patches_) {
+      if (pother != p) {
+        return pother;
+      }
+    }
+    return NO_INDEX;
   }
 
   Span<int> winding() const
@@ -428,7 +448,9 @@ class Cell {
                                         BoolOpType bool_optype)
   {
     std::copy(from_cell.winding().begin(), from_cell.winding().end(), winding_.begin());
-    winding_[shape] += delta;
+    if (shape >= 0) {
+      winding_[shape] += delta;
+    }
     winding_assigned_ = true;
     in_output_volume_ = apply_bool_op(bool_optype, winding_);
   }
@@ -467,12 +489,16 @@ class Cell {
 
 static std::ostream &operator<<(std::ostream &os, const Cell &cell)
 {
-  os << "Cell patches " << cell.patches();
+  os << "Cell patches";
+  for (int p : cell.patches()) {
+    std::cout << " " << p;
+  }
   if (cell.winding().size() > 0) {
     os << " winding=" << cell.winding();
     os << " in_output_volume=" << cell.in_output_volume();
   }
   os << " zv=" << cell.zero_volume();
+  std::cout << "\n";
   return os;
 }
 
@@ -504,8 +530,19 @@ static bool tris_have_same_verts(const IMesh &mesh, int t1, int t2)
 void Cell::check_for_zero_volume(const PatchesInfo &pinfo, const IMesh &mesh)
 {
   if (patches_.size() == 2) {
-    const Patch &p1 = pinfo.patch(patches_[0]);
-    const Patch &p2 = pinfo.patch(patches_[1]);
+    int p1_index = NO_INDEX;
+    int p2_index = NO_INDEX;
+    for (int p : patches_) {
+      if (p1_index == NO_INDEX) {
+        p1_index = p;
+      }
+      else {
+        p2_index = p;
+      }
+    }
+    BLI_assert(p1_index != NO_INDEX && p2_index != NO_INDEX);
+    const Patch &p1 = pinfo.patch(p1_index);
+    const Patch &p2 = pinfo.patch(p2_index);
     if (p1.tot_tri() == 1 && p2.tot_tri() == 1) {
       if (tris_have_same_verts(mesh, p1.tri(0), p2.tri(0))) {
         zero_volume_ = true;
@@ -653,16 +690,15 @@ static void merge_cells(int merge_to, int merge_from, CellsInfo &cinfo, PatchesI
     final_merge_to = merge_to_cell.merged_to();
     merge_to_cell = cinfo.cell(final_merge_to);
   }
-  for (Patch &patch : pinfo) {
+  for (int cell_p : merge_from_cell.patches()) {
+    merge_to_cell.add_patch(cell_p);
+    Patch &patch = pinfo.patch(cell_p);
     if (patch.cell_above == merge_from) {
-      patch.cell_above = final_merge_to;
+      patch.cell_above = merge_to;
     }
     if (patch.cell_below == merge_from) {
-      patch.cell_below = final_merge_to;
+      patch.cell_below = merge_to;
     }
-  }
-  for (int cell_p : merge_from_cell.patches()) {
-    merge_to_cell.add_patch_non_duplicates(cell_p);
   }
   merge_from_cell.set_merged_to(final_merge_to);
 }
@@ -749,7 +785,7 @@ static PatchesInfo find_patches(const IMesh &tm, const TriMeshTopology &tmtopo)
     if (dbg_level > 1) {
       std::cout << "\ntriangle map\n";
       for (int t : tm.face_index_range()) {
-        std::cout << t << ": patch " << pinfo.tri_patch(t) << "\n";
+        std::cout << t << ": " << tm.face(t) << " patch " << pinfo.tri_patch(t) << "\n";
       }
     }
     std::cout << "\npatch-patch incidences\n";
@@ -1108,11 +1144,22 @@ static void find_cells_from_edge(const IMesh &tm,
     }
     else {
       if (*r_follow_cell != *rnext_prev_cell) {
+        int follow_cell_num_patches = cinfo.cell(*r_follow_cell).patches().size();
+        int prev_cell_num_patches = cinfo.cell(*rnext_prev_cell).patches().size();
+        if (follow_cell_num_patches >= prev_cell_num_patches) {
+          if (dbg_level > 0) {
+            std::cout << " merge cell " << *rnext_prev_cell << " into cell " << *r_follow_cell
+                      << "\n";
+          }
+          merge_cells(*r_follow_cell, *rnext_prev_cell, cinfo, pinfo);
+        }
+      }
+      else {
         if (dbg_level > 0) {
-          std::cout << " merge cell " << *rnext_prev_cell << " into cell " << *r_follow_cell
+          std::cout << " merge cell " << *r_follow_cell << " into cell " << *rnext_prev_cell
                     << "\n";
         }
-        merge_cells(*r_follow_cell, *rnext_prev_cell, cinfo, pinfo);
+        merge_cells(*rnext_prev_cell, *r_follow_cell, cinfo, pinfo);
       }
     }
   }
@@ -1131,15 +1178,14 @@ static CellsInfo find_cells(const IMesh &tm, const TriMeshTopology &tmtopo, Patc
   CellsInfo cinfo;
   /* For each unique edge shared between patch pairs, process it. */
   Set<Edge> processed_edges;
-  int np = pinfo.tot_patch();
-  for (int p = 0; p < np; ++p) {
-    for (int q = p + 1; q < np; ++q) {
-      Edge e = pinfo.patch_patch_edge(p, q);
-      if (e.v0() != nullptr) {
-        if (!processed_edges.contains(e)) {
-          processed_edges.add_new(e);
-          find_cells_from_edge(tm, tmtopo, pinfo, cinfo, e);
-        }
+  for (const auto item : pinfo.patch_patch_edge_map().items()) {
+    int p = item.key.first;
+    int q = item.key.second;
+    if (p < q) {
+      const Edge &e = item.value;
+      if (!processed_edges.contains(e)) {
+        processed_edges.add_new(e);
+        find_cells_from_edge(tm, tmtopo, pinfo, cinfo, e);
       }
     }
   }
@@ -1194,6 +1240,7 @@ static Vector<Vector<int>> find_patch_components(const CellsInfo &cinfo, Patches
     return Vector<Vector<int>>();
   }
   int current_component = 0;
+  Array<bool> cell_processed(cinfo.tot_cell(), false);
   Stack<int> stack; /* Patch indices to visit. */
   Vector<Vector<int>> ans;
   for (int pstart : pinfo.index_range()) {
@@ -1210,6 +1257,10 @@ static Vector<Vector<int>> find_patch_components(const CellsInfo &cinfo, Patches
       Patch &patch = pinfo.patch(p);
       BLI_assert(patch.component == current_component);
       for (int c : {patch.cell_above, patch.cell_below}) {
+        if (cell_processed[c]) {
+          continue;
+        }
+        cell_processed[c] = true;
         for (int pn : cinfo.cell(c).patches()) {
           Patch &patch_neighbor = pinfo.patch(pn);
           if (patch_neighbor.component == NO_INDEX) {
@@ -2129,7 +2180,7 @@ static void extract_zero_volume_cell_tris(Vector<Face *> &r_tris,
     while (cell->zero_volume()) {
       /* In zero-volume cells, the cell should have exactly two patches. */
       BLI_assert(cell->patches().size() == 2);
-      int pother = cell->patches()[0] == pwalk ? cell->patches()[1] : cell->patches()[0];
+      int pother = cell->patch_other(pwalk);
       bool flip = pinfo.patch(pother).cell_above == c;
       flipped.append(flip);
       stack.append(pother);
@@ -2147,7 +2198,7 @@ static void extract_zero_volume_cell_tris(Vector<Face *> &r_tris,
     cell = &cinfo.cell(c);
     while (cell->zero_volume()) {
       BLI_assert(cell->patches().size() == 2);
-      int pother = cell->patches()[0] == pwalk ? cell->patches()[1] : cell->patches()[0];
+      int pother = cell->patch_other(pwalk);
       bool flip = pinfo.patch(pother).cell_below == c;
       flipped.append(flip);
       stack.append(pother);
@@ -2280,124 +2331,308 @@ static const char *bool_optype_name(BoolOpType op)
   }
 }
 
-static mpq3 calc_point_inside_tri(const Face &tri)
+static double3 calc_point_inside_tri_db(const Face &tri)
 {
   const Vert *v0 = tri.vert[0];
   const Vert *v1 = tri.vert[1];
   const Vert *v2 = tri.vert[2];
-  mpq3 ans = v0->co_exact / 3 + v1->co_exact / 3 + v2->co_exact / 3;
+  double3 ans = v0->co / 3 + v1->co / 3 + v2->co / 3;
+  return ans;
+}
+class InsideShapeTestData {
+ public:
+  const IMesh &tm;
+  std::function<int(int)> shape_fn;
+  int nshapes;
+  /* A per-shape vector of parity of hits of that shape. */
+  Array<int> hit_parity;
+
+  InsideShapeTestData(const IMesh &tm, std::function<int(int)> shape_fn, int nshapes)
+      : tm(tm), shape_fn(shape_fn), nshapes(nshapes)
+  {
+  }
+};
+
+static void inside_shape_callback(void *userdata,
+                                  int index,
+                                  const BVHTreeRay *ray,
+                                  BVHTreeRayHit *UNUSED(hit))
+{
+  const int dbg_level = 0;
+  if (dbg_level > 0) {
+    std::cout << "inside_shape_callback, index = " << index << "\n";
+  }
+  InsideShapeTestData *data = static_cast<InsideShapeTestData *>(userdata);
+  const Face &tri = *data->tm.face(index);
+  int shape = data->shape_fn(tri.orig);
+  if (shape == -1) {
+    return;
+  }
+  float dist;
+  float fv0[3];
+  float fv1[3];
+  float fv2[3];
+  for (int i = 0; i < 3; ++i) {
+    fv0[i] = float(tri.vert[0]->co[i]);
+    fv1[i] = float(tri.vert[1]->co[i]);
+    fv2[i] = float(tri.vert[2]->co[i]);
+  }
+  if (dbg_level > 0) {
+    std::cout << "  fv0=(" << fv0[0] << "," << fv0[1] << "," << fv0[2] << ")\n";
+    std::cout << "  fv1=(" << fv1[0] << "," << fv1[1] << "," << fv1[2] << ")\n";
+    std::cout << "  fv2=(" << fv2[0] << "," << fv2[1] << "," << fv2[2] << ")\n";
+  }
+  if (isect_ray_tri_epsilon_v3(
+          ray->origin, ray->direction, fv0, fv1, fv2, &dist, nullptr, FLT_EPSILON)) {
+    /* Count parity as +1 if ray is in the same direction as tri's normal,
+     * and -1 if the directions are opposite. */
+    double3 o_db{double(ray->origin[0]), double(ray->origin[1]), double(ray->origin[2])};
+    int parity = orient3d(tri.vert[0]->co, tri.vert[1]->co, tri.vert[2]->co, o_db);
+    if (dbg_level > 0) {
+      std::cout << "origin at " << o_db << ", parity = " << parity << "\n";
+    }
+    data->hit_parity[shape] += parity;
+  }
+}
+
+/**
+ * Test the triangle with index \a t_index to see which shapes it is inside,
+ * and fill in \a in_shape with a confidence value between 0 and 1 that says
+ * how likely we think it is that it is inside.
+ * This is done by casting some rays from just on the positive side of a test
+ * face in various directions and summing the parity of crossing faces of each face.
+ *
+ * \param tree: Contains all the triangles of \a tm and can be used for fast ray-casting.
+ */
+static void test_tri_inside_shapes(const IMesh &tm,
+                                   std::function<int(int)> shape_fn,
+                                   int nshapes,
+                                   int test_t_index,
+                                   BVHTree *tree,
+                                   Array<float> &in_shape)
+{
+  const int dbg_level = 0;
+  if (dbg_level > 0) {
+    std::cout << "test_point_inside_shapes, t_index = " << test_t_index << "\n";
+  }
+  Face &tri_test = *tm.face(test_t_index);
+  int shape = shape_fn(tri_test.orig);
+  if (shape == -1) {
+    in_shape.fill(0.0f);
+    return;
+  }
+  double3 test_point = calc_point_inside_tri_db(tri_test);
+  /* Offset the test point a tiny bit in the tri_test normal direction. */
+  tri_test.populate_plane(false);
+  double3 norm = tri_test.plane->norm.normalized();
+  const double offset_amount = 1e-5;
+  double3 offset_test_point = test_point + offset_amount * norm;
+  if (dbg_level > 0) {
+    std::cout << "test tri is in shape " << shape << "\n";
+    std::cout << "test point = " << test_point << "\n";
+    std::cout << "offset_test_point = " << offset_test_point << "\n";
+  }
+  /* Try six test rays almost along orthogonal axes.
+   * Perturb their directions slightly to make it less likely to hit a seam.
+   * Ray-cast assumes they have unit length, so use r1 near 1 and
+   * ra near 0.5, and rb near .01, but normalized so `sqrt(r1^2 + ra^2 + rb^2) == 1`. */
+  constexpr int num_rays = 6;
+  constexpr float r1 = 0.9987025295199663f;
+  constexpr float ra = 0.04993512647599832f;
+  constexpr float rb = 0.009987025295199663f;
+  const float test_rays[num_rays][3] = {
+      {r1, ra, rb}, {-r1, -ra, -rb}, {rb, r1, ra}, {-rb, -r1, -ra}, {ra, rb, r1}, {-ra, -rb, -r1}};
+  InsideShapeTestData data(tm, shape_fn, nshapes);
+  data.hit_parity = Array<int>(nshapes, 0);
+  Array<int> count_insides(nshapes, 0);
+  const float co[3] = {
+      float(offset_test_point[0]), float(offset_test_point[1]), float(offset_test_point[2])};
+  for (int i = 0; i < num_rays; ++i) {
+    if (dbg_level > 0) {
+      std::cout << "shoot ray " << i << "(" << test_rays[i][0] << "," << test_rays[i][1] << ","
+                << test_rays[i][2] << ")\n";
+    }
+    BLI_bvhtree_ray_cast_all(tree, co, test_rays[i], 0.0f, FLT_MAX, inside_shape_callback, &data);
+    if (dbg_level > 0) {
+      std::cout << "ray " << i << " result:";
+      for (int j = 0; j < nshapes; ++j) {
+        std::cout << " " << data.hit_parity[j];
+      }
+      std::cout << "\n";
+    }
+    for (int j = 0; j < nshapes; ++j) {
+      if (j != shape && data.hit_parity[j] > 0) {
+        ++count_insides[j];
+      }
+    }
+    data.hit_parity.fill(0);
+  }
+  for (int j = 0; j < nshapes; ++j) {
+    if (j == shape) {
+      in_shape[j] = 1.0f; /* Let's say a shape is always inside itself. */
+    }
+    else {
+      in_shape[j] = float(count_insides[j]) / float(num_rays);
+    }
+    if (dbg_level > 0) {
+      std::cout << "shape " << j << " inside = " << in_shape[j] << "\n";
+    }
+  }
+}
+
+/**
+ * Return a BVH Tree that contains all of the triangles of \a tm.
+ * The caller must free it.
+ * (We could possible reuse the BVH tree(s) built in TriOverlaps,
+ * in the mesh intersect function. A future TODO.)
+ */
+static BVHTree *raycast_tree(const IMesh &tm)
+{
+  BVHTree *tree = BLI_bvhtree_new(tm.face_size(), FLT_EPSILON, 4, 6);
+  for (int i : tm.face_index_range()) {
+    const Face *f = tm.face(i);
+    float t_cos[9];
+    for (int j = 0; j < 3; ++j) {
+      const Vert *v = f->vert[j];
+      for (int k = 0; k < 3; ++k) {
+        t_cos[3 * j + k] = float(v->co[k]);
+      }
+    }
+    BLI_bvhtree_insert(tree, i, t_cos, 3);
+  }
+  BLI_bvhtree_balance(tree);
+  return tree;
+}
+
+/**
+ * Should a face with given shape and given winding array be removed for given boolean op?
+ * Also return true in *r_do_flip if it retained by normals need to be flipped.
+ */
+static bool raycast_test_remove(BoolOpType op, Array<int> &winding, int shape, bool *r_do_flip)
+{
+  constexpr int dbg_level = 0;
+  /* Find out the "in the output volume" flag for each of the cases of winding[shape] == 0
+   * and winding[shape] == 1. If the flags are different, this patch should be in the output.
+   * Also, if this is a Difference and the shape isn't the first one, need to flip the normals.
+   */
+  winding[shape] = 0;
+  bool in_output_volume_0 = apply_bool_op(op, winding);
+  winding[shape] = 1;
+  bool in_output_volume_1 = apply_bool_op(op, winding);
+  bool do_remove = in_output_volume_0 == in_output_volume_1;
+  bool do_flip = !do_remove && op == BoolOpType::Difference && shape != 0;
+  if (dbg_level > 0) {
+    std::cout << "winding = ";
+    for (int i = 0; i < winding.size(); ++i) {
+      std::cout << winding[i] << " ";
+    }
+    std::cout << "\niv0=" << in_output_volume_0 << ", iv1=" << in_output_volume_1 << "\n";
+    std::cout << " remove=" << do_remove << ", flip=" << do_flip << "\n";
+  }
+  *r_do_flip = do_flip;
+  return do_remove;
+}
+
+/** Add triangle a flipped version of tri to out_faces. */
+static void raycast_add_flipped(Vector<Face *> &out_faces, Face &tri, IMeshArena *arena)
+{
+
+  Array<const Vert *> flipped_vs = {tri[0], tri[2], tri[1]};
+  Array<int> flipped_e_origs = {tri.edge_orig[2], tri.edge_orig[1], tri.edge_orig[0]};
+  Array<bool> flipped_is_intersect = {
+      tri.is_intersect[2], tri.is_intersect[1], tri.is_intersect[0]};
+  Face *flipped_f = arena->add_face(flipped_vs, tri.orig, flipped_e_origs, flipped_is_intersect);
+  out_faces.append(flipped_f);
+}
+
+/**
+ * Use the RayCast method for deciding if a triangle of the
+ * mesh is supposed to be included or excluded in the boolean result,
+ * and return the mesh that is the boolean result.
+ * The reason this is done on a triangle-by-triangle basis is that
+ * when the input is not PWN, some patches can be both inside and outside
+ * some shapes (e.g., a plane cutting through Suzanne's open eyes).
+ */
+static IMesh raycast_tris_boolean(const IMesh &tm,
+                                  BoolOpType op,
+                                  int nshapes,
+                                  std::function<int(int)> shape_fn,
+                                  IMeshArena *arena)
+{
+  constexpr int dbg_level = 0;
+  if (dbg_level > 0) {
+    std::cout << "RAYCAST_TRIS_BOOLEAN\n";
+  }
+  IMesh ans;
+  BVHTree *tree = raycast_tree(tm);
+  Vector<Face *> out_faces;
+  out_faces.reserve(tm.face_size());
+  Array<float> in_shape(nshapes, 0);
+  Array<int> winding(nshapes, 0);
+  for (int t : tm.face_index_range()) {
+    Face &tri = *tm.face(t);
+    int shape = shape_fn(tri.orig);
+    if (dbg_level > 0) {
+      std::cout << "process triangle " << t << " = " << &tri << "\n";
+      std::cout << "shape = " << shape << "\n";
+    }
+    test_tri_inside_shapes(tm, shape_fn, nshapes, t, tree, in_shape);
+    for (int other_shape = 0; other_shape < nshapes; ++other_shape) {
+      if (other_shape == shape) {
+        continue;
+      }
+      /* The in_shape array has a confidence value for "insideness".
+       * For most operations, even a hint of being inside
+       * gives good results, but when shape is a cutter in a Difference
+       * operation, we want to be pretty sure that the point is inside other_shape.
+       * E.g., T75827.
+       * Also, when the operation is intersection, we also want high confidence.
+       */
+      bool need_high_confidence = (op == BoolOpType::Difference && shape != 0) ||
+                                  op == BoolOpType::Intersect;
+      bool inside = in_shape[other_shape] >= (need_high_confidence ? 0.5f : 0.1f);
+      if (dbg_level > 0) {
+        std::cout << "test point is " << (inside ? "inside" : "outside") << " other_shape "
+                  << other_shape << " val = " << in_shape[other_shape] << "\n";
+      }
+      winding[other_shape] = inside;
+    }
+    bool do_flip;
+    bool do_remove = raycast_test_remove(op, winding, shape, &do_flip);
+    if (!do_remove) {
+      if (!do_flip) {
+        out_faces.append(&tri);
+      }
+      else {
+        raycast_add_flipped(out_faces, tri, arena);
+      }
+    }
+  }
+  BLI_bvhtree_free(tree);
+  ans.set_faces(out_faces);
   return ans;
 }
 
-/**
- * Return the Generalized Winding Number of point \a testp with respect to the
- * volume implied by the faces for which shape_fn returns the value shape.
- * See "Robust Inside-Outside Segmentation using Generalized Winding Numbers"
- * by Jacobson, Kavan, and Sorkine-Hornung.
- * This is like a winding number in that if it is positive, the point
- * is inside the volume. But it is tolerant of not-completely-watertight
- * volumes, still doing a passable job of classifying inside/outside
- * as we intuitively understand that to mean.
- *
- * TOOD: speed up this calculation using the hierarchical algorithm in that paper.
- */
-static double generalized_winding_number(const IMesh &tm,
-                                         std::function<int(int)> shape_fn,
-                                         const double3 &testp,
-                                         int shape)
+/* This is (sometimes much faster) version of raycast boolean
+ * that does it per patch rather than per triangle.
+ * It may fail in cases where raycast_tri_boolean will succeed,
+ * but the latter can be very slow on huge meshes. */
+static IMesh raycast_patches_boolean(const IMesh &tm,
+                                     BoolOpType op,
+                                     int nshapes,
+                                     std::function<int(int)> shape_fn,
+                                     const PatchesInfo &pinfo,
+                                     IMeshArena *arena)
 {
   constexpr int dbg_level = 0;
   if (dbg_level > 0) {
-    std::cout << "GENERALIZED_WINDING_NUMBER testp = " << testp << ", shape = " << shape << "\n";
-  }
-  double gwn = 0;
-  for (int t : tm.face_index_range()) {
-    const Face *f = tm.face(t);
-    const Face &tri = *f;
-    if (shape_fn(tri.orig) == shape) {
-      if (dbg_level > 0) {
-        std::cout << "accumulate for tri t = " << t << " = " << f << "\n";
-      }
-      const Vert *v0 = tri.vert[0];
-      const Vert *v1 = tri.vert[1];
-      const Vert *v2 = tri.vert[2];
-      double3 a = v0->co - testp;
-      double3 b = v1->co - testp;
-      double3 c = v2->co - testp;
-      /* Calculate the solid angle of abc relative to origin.
-       * See "The Solid Angle of a Plane Triangle" by Oosterom and Strackee
-       * for the derivation of the formula. */
-      double alen = a.length();
-      double blen = b.length();
-      double clen = c.length();
-      double3 bxc = double3::cross_high_precision(b, c);
-      double num = double3::dot(a, bxc);
-      double denom = alen * blen * clen + double3::dot(a, b) * clen + double3::dot(a, c) * blen +
-                     double3::dot(b, c) * alen;
-      if (denom == 0.0) {
-        if (dbg_level > 0) {
-          std::cout << "denom == 0, skipping this tri\n";
-        }
-        continue;
-      }
-      double x = atan2(num, denom);
-      double fgwn = 2.0 * x;
-      if (dbg_level > 0) {
-        std::cout << "tri contributes " << fgwn << "\n";
-      }
-      gwn += fgwn;
-    }
-  }
-  gwn = gwn / (M_PI * 4.0);
-  if (dbg_level > 0) {
-    std::cout << "final gwn = " << gwn << "\n";
-  }
-  return gwn;
-}
-
-/**
- * Return true if point \a testp is inside the volume implied by the
- * faces for which the shape_fn returns the value shape.
- * If \a high_confidence is true then we want a higher degree
- * of "insideness" than if it is false.
- */
-static bool point_is_inside_shape(const IMesh &tm,
-                                  std::function<int(int)> shape_fn,
-                                  const double3 &testp,
-                                  int shape,
-                                  bool high_confidence)
-{
-  double gwn = generalized_winding_number(tm, shape_fn, testp, shape);
-  /* Due to floating point error, an outside point should get a value
-   * of zero for gwn, but may have a very slightly positive value instead.
-   * It is not important to get this epsilon very small, because practical
-   * cases of interest will have gwn at least 0.2 if it is not zero. */
-  if (high_confidence) {
-    return (gwn > 0.9);
-  }
-
-  return (gwn > 0.01);
-}
-
-/**
- * Use the Generalized Winding Number method for deciding if a patch of the
- * mesh is supposed to be included or excluded in the boolean result,
- * and return the mesh that is the boolean result.
- */
-static IMesh gwn_boolean(const IMesh &tm,
-                         BoolOpType op,
-                         int nshapes,
-                         std::function<int(int)> shape_fn,
-                         const PatchesInfo &pinfo,
-                         IMeshArena *arena)
-{
-  constexpr int dbg_level = 0;
-  if (dbg_level > 0) {
-    std::cout << "GWN_BOOLEAN\n";
+    std::cout << "RAYCAST_PATCHES_BOOLEAN\n";
   }
   IMesh ans;
+  BVHTree *tree = raycast_tree(tm);
   Vector<Face *> out_faces;
   out_faces.reserve(tm.face_size());
+  Array<float> in_shape(nshapes, 0);
   Array<int> winding(nshapes, 0);
   for (int p : pinfo.index_range()) {
     const Patch &patch = pinfo.patch(p);
@@ -2415,49 +2650,22 @@ static IMesh gwn_boolean(const IMesh &tm,
     if (shape == -1) {
       continue;
     }
-    mpq3 test_point = calc_point_inside_tri(tri_test);
-    double3 test_point_db(test_point[0].get_d(), test_point[1].get_d(), test_point[2].get_d());
-    if (dbg_level > 0) {
-      std::cout << "test point = " << test_point_db << "\n";
-    }
+    test_tri_inside_shapes(tm, shape_fn, nshapes, test_t_index, tree, in_shape);
     for (int other_shape = 0; other_shape < nshapes; ++other_shape) {
       if (other_shape == shape) {
         continue;
       }
-      /* The point_is_inside_shape function has to approximate if the other
-       * shape is not PWN. For most operations, even a hint of being inside
-       * gives good results, but when shape is a cutter in a Difference
-       * operation, we want to be pretty sure that the point is inside other_shape.
-       * E.g., T75827.
-       */
-      bool need_high_confidence = (op == BoolOpType::Difference) && (shape != 0);
-      bool inside = point_is_inside_shape(
-          tm, shape_fn, test_point_db, other_shape, need_high_confidence);
+      bool need_high_confidence = (op == BoolOpType::Difference && shape != 0) ||
+                                  op == BoolOpType::Intersect;
+      bool inside = in_shape[other_shape] >= (need_high_confidence ? 0.5f : 0.1f);
       if (dbg_level > 0) {
         std::cout << "test point is " << (inside ? "inside" : "outside") << " other_shape "
-                  << other_shape << "\n";
+                  << other_shape << " val = " << in_shape[other_shape] << "\n";
       }
       winding[other_shape] = inside;
     }
-    /* Find out the "in the output volume" flag for each of the cases of winding[shape] == 0
-     * and winding[shape] == 1. If the flags are different, this patch should be in the output.
-     * Also, if this is a Difference and the shape isn't the first one, need to flip the normals.
-     */
-    winding[shape] = 0;
-    bool in_output_volume_0 = apply_bool_op(op, winding);
-    winding[shape] = 1;
-    bool in_output_volume_1 = apply_bool_op(op, winding);
-    bool do_remove = in_output_volume_0 == in_output_volume_1;
-    bool do_flip = !do_remove && op == BoolOpType::Difference && shape != 0;
-    if (dbg_level > 0) {
-      std::cout << "winding = ";
-      for (int i = 0; i < nshapes; ++i) {
-        std::cout << winding[i] << " ";
-      }
-      std::cout << "\niv0=" << in_output_volume_0 << ", iv1=" << in_output_volume_1 << "\n";
-      std::cout << "result for patch " << p << ": remove=" << do_remove << ", flip=" << do_flip
-                << "\n";
-    }
+    bool do_flip;
+    bool do_remove = raycast_test_remove(op, winding, shape, &do_flip);
     if (!do_remove) {
       for (int t : patch.tris()) {
         Face *f = tm.face(t);
@@ -2465,155 +2673,16 @@ static IMesh gwn_boolean(const IMesh &tm,
           out_faces.append(f);
         }
         else {
-          Face &tri = *f;
-          /* We need flipped version of f. */
-          Array<const Vert *> flipped_vs = {tri[0], tri[2], tri[1]};
-          Array<int> flipped_e_origs = {tri.edge_orig[2], tri.edge_orig[1], tri.edge_orig[0]};
-          Array<bool> flipped_is_intersect = {
-              tri.is_intersect[2], tri.is_intersect[1], tri.is_intersect[0]};
-          Face *flipped_f = arena->add_face(
-              flipped_vs, f->orig, flipped_e_origs, flipped_is_intersect);
-          out_faces.append(flipped_f);
+          raycast_add_flipped(out_faces, *f, arena);
         }
       }
     }
   }
+  BLI_bvhtree_free(tree);
+
   ans.set_faces(out_faces);
   return ans;
 }
-
-/**
- * Which CDT output edge index is for an edge between output verts
- * v1 and v2 (in either order)?
- * \return -1 if none.
- */
-static int find_cdt_edge(const CDT_result<mpq_class> &cdt_out, int v1, int v2)
-{
-  for (int e : cdt_out.edge.index_range()) {
-    const std::pair<int, int> &edge = cdt_out.edge[e];
-    if ((edge.first == v1 && edge.second == v2) || (edge.first == v2 && edge.second == v1)) {
-      return e;
-    }
-  }
-  return -1;
-}
-
-/**
- * Tessellate face f into triangles and return an array of `const Face *`
- * giving that triangulation.
- * Care is taken so that the original edge index associated with
- * each edge in the output triangles either matches the original edge
- * for the (identical) edge of f, or else is -1. So diagonals added
- * for triangulation can later be identified by having #NO_INDEX for original.
- */
-static Array<Face *> triangulate_poly(Face *f, IMeshArena *arena)
-{
-  int flen = f->size();
-  CDT_input<mpq_class> cdt_in;
-  cdt_in.vert = Array<mpq2>(flen);
-  cdt_in.face = Array<Vector<int>>(1);
-  cdt_in.face[0].reserve(flen);
-  for (int i : f->index_range()) {
-    cdt_in.face[0].append(i);
-  }
-  /* Project poly along dominant axis of normal to get 2d coords. */
-  if (!f->plane_populated()) {
-    f->populate_plane(false);
-  }
-  const double3 &poly_normal = f->plane->norm;
-  int axis = double3::dominant_axis(poly_normal);
-  /* If project down y axis as opposed to x or z, the orientation
-   * of the polygon will be reversed.
-   * Yet another reversal happens if the poly normal in the dominant
-   * direction is opposite that of the positive dominant axis. */
-  bool rev1 = (axis == 1);
-  bool rev2 = poly_normal[axis] < 0;
-  bool rev = rev1 ^ rev2;
-  for (int i = 0; i < flen; ++i) {
-    int ii = rev ? flen - i - 1 : i;
-    mpq2 &p2d = cdt_in.vert[ii];
-    int k = 0;
-    for (int j = 0; j < 3; ++j) {
-      if (j != axis) {
-        p2d[k++] = (*f)[ii]->co_exact[j];
-      }
-    }
-  }
-  CDT_result<mpq_class> cdt_out = delaunay_2d_calc(cdt_in, CDT_INSIDE);
-  int n_tris = cdt_out.face.size();
-  Array<Face *> ans(n_tris);
-  for (int t = 0; t < n_tris; ++t) {
-    int i_v_out[3];
-    const Vert *v[3];
-    int eo[3];
-    for (int i = 0; i < 3; ++i) {
-      i_v_out[i] = cdt_out.face[t][i];
-      v[i] = (*f)[cdt_out.vert_orig[i_v_out[i]][0]];
-    }
-    for (int i = 0; i < 3; ++i) {
-      int e_out = find_cdt_edge(cdt_out, i_v_out[i], i_v_out[(i + 1) % 3]);
-      BLI_assert(e_out != -1);
-      eo[i] = NO_INDEX;
-      for (int orig : cdt_out.edge_orig[e_out]) {
-        if (orig != NO_INDEX) {
-          eo[i] = orig;
-          break;
-        }
-      }
-    }
-    if (rev) {
-      ans[t] = arena->add_face(
-          {v[0], v[2], v[1]}, f->orig, {eo[2], eo[1], eo[0]}, {false, false, false});
-    }
-    else {
-      ans[t] = arena->add_face(
-          {v[0], v[1], v[2]}, f->orig, {eo[0], eo[1], eo[2]}, {false, false, false});
-    }
-  }
-  return ans;
-}
-
-/**
- * Return an #IMesh that is a triangulation of a mesh with general
- * polygonal faces, #IMesh.
- * Added diagonals will be distinguishable by having edge original
- * indices of #NO_INDEX.
- */
-static IMesh triangulate_polymesh(IMesh &imesh, IMeshArena *arena)
-{
-  Vector<Face *> face_tris;
-  constexpr int estimated_tris_per_face = 3;
-  face_tris.reserve(estimated_tris_per_face * imesh.face_size());
-  for (Face *f : imesh.faces()) {
-    /* Tessellate face f, following plan similar to #BM_face_calc_tesselation. */
-    int flen = f->size();
-    if (flen == 3) {
-      face_tris.append(f);
-    }
-    else if (flen == 4) {
-      const Vert *v0 = (*f)[0];
-      const Vert *v1 = (*f)[1];
-      const Vert *v2 = (*f)[2];
-      const Vert *v3 = (*f)[3];
-      int eo_01 = f->edge_orig[0];
-      int eo_12 = f->edge_orig[1];
-      int eo_23 = f->edge_orig[2];
-      int eo_30 = f->edge_orig[3];
-      Face *f0 = arena->add_face({v0, v1, v2}, f->orig, {eo_01, eo_12, -1}, {false, false, false});
-      Face *f1 = arena->add_face({v0, v2, v3}, f->orig, {-1, eo_23, eo_30}, {false, false, false});
-      face_tris.append(f0);
-      face_tris.append(f1);
-    }
-    else {
-      Array<Face *> tris = triangulate_poly(f, arena);
-      for (Face *tri : tris) {
-        face_tris.append(tri);
-      }
-    }
-  }
-  return IMesh(face_tris);
-}
-
 /**
  * If \a tri1 and \a tri2 have a common edge (in opposite orientation),
  * return the indices into \a tri1 and \a tri2 where that common edge starts. Else return (-1,-1).
@@ -2851,7 +2920,7 @@ static bool dissolve_leaves_valid_bmesh(FaceMergeState *fms,
    * saying which faces a vertex touches. */
   for (int a_v_index = 0; ok && a_v_index < alen; ++a_v_index) {
     const Vert *a_v = mf_left.vert[a_v_index];
-    if (a_v != me.v1 && a_v != me.v2) {
+    if (!ELEM(a_v, me.v1, me.v2)) {
       for (int b_v_index = 0; b_v_index < blen; ++b_v_index) {
         const Vert *b_v = mf_right.vert[b_v_index];
         if (a_v == b_v) {
@@ -3061,6 +3130,14 @@ static Vector<Face *> merge_tris_for_face(Vector<int> tris,
   return ans;
 }
 
+static bool approx_in_line(const double3 &a, const double3 &b, const double3 &c)
+{
+  double3 vec1 = b - a;
+  double3 vec2 = c - b;
+  double cos_ang = double3::dot(vec1.normalized(), vec2.normalized());
+  return fabs(cos_ang - 1.0) < 1e-4;
+}
+
 /**
  * Return an array, paralleling imesh_out.vert, saying which vertices can be dissolved.
  * A vertex v can be dissolved if (a) it is not an input vertex; (b) it has valence 2;
@@ -3113,8 +3190,11 @@ static Array<bool> find_dissolve_verts(IMesh &imesh_out, int *r_count_dissolve)
       const std::pair<const Vert *, const Vert *> &nbrs = neighbors[v_out];
       if (nbrs.first != nullptr) {
         BLI_assert(nbrs.second != nullptr);
-        dissolve[v_out] = true;
-        ++count;
+        const Vert *v_v_out = imesh_out.vert(v_out);
+        if (approx_in_line(nbrs.first->co, v_v_out->co, nbrs.second->co)) {
+          dissolve[v_out] = true;
+          ++count;
+        }
       }
     }
   }
@@ -3133,6 +3213,7 @@ static void dissolve_verts(IMesh *imesh, const Array<bool> dissolve, IMeshArena 
 {
   constexpr int inline_face_size = 100;
   Vector<bool, inline_face_size> face_pos_erase;
+  bool any_faces_erased = false;
   for (int f : imesh->face_index_range()) {
     const Face &face = *imesh->face(f);
     face_pos_erase.clear();
@@ -3149,10 +3230,13 @@ static void dissolve_verts(IMesh *imesh, const Array<bool> dissolve, IMeshArena 
       }
     }
     if (num_erase > 0) {
-      imesh->erase_face_positions(f, face_pos_erase, arena);
+      any_faces_erased |= imesh->erase_face_positions(f, face_pos_erase, arena);
     }
   }
   imesh->set_dirty_verts();
+  if (any_faces_erased) {
+    imesh->remove_null_faces();
+  }
 }
 
 /**
@@ -3247,6 +3331,7 @@ IMesh boolean_trimesh(IMesh &tm_in,
                       int nshapes,
                       std::function<int(int)> shape_fn,
                       bool use_self,
+                      bool hole_tolerant,
                       IMeshArena *arena)
 {
   constexpr int dbg_level = 0;
@@ -3262,31 +3347,72 @@ IMesh boolean_trimesh(IMesh &tm_in,
   if (tm_in.face_size() == 0) {
     return IMesh(tm_in);
   }
+#  ifdef PERFDEBUG
+  double start_time = PIL_check_seconds_timer();
+  std::cout << "  boolean_trimesh, timing begins\n";
+#  endif
+
   IMesh tm_si = trimesh_nary_intersect(tm_in, nshapes, shape_fn, use_self, arena);
   if (dbg_level > 1) {
     write_obj_mesh(tm_si, "boolean_tm_si");
     std::cout << "\nboolean_tm_input after intersection:\n" << tm_si;
   }
+#  ifdef PERFDEBUG
+  double intersect_time = PIL_check_seconds_timer();
+  std::cout << "  intersected, time = " << intersect_time - start_time << "\n";
+#  endif
+
   /* It is possible for tm_si to be empty if all the input triangles are bogus/degenerate. */
   if (tm_si.face_size() == 0 || op == BoolOpType::None) {
     return tm_si;
   }
   auto si_shape_fn = [shape_fn, tm_si](int t) { return shape_fn(tm_si.face(t)->orig); };
   TriMeshTopology tm_si_topo(tm_si);
-  PatchesInfo pinfo = find_patches(tm_si, tm_si_topo);
+#  ifdef PERFDEBUG
+  double topo_time = PIL_check_seconds_timer();
+  std::cout << "  topology built, time = " << topo_time - intersect_time << "\n";
+#  endif
+  bool pwn = is_pwn(tm_si, tm_si_topo);
+#  ifdef PERFDEBUG
+  double pwn_time = PIL_check_seconds_timer();
+  std::cout << "  pwn checked, time = " << pwn_time - topo_time << "\n";
+#  endif
   IMesh tm_out;
-  if (!is_pwn(tm_si, tm_si_topo)) {
+  if (!pwn) {
     if (dbg_level > 0) {
-      std::cout << "Input is not PWN, using gwn method\n";
+      std::cout << "Input is not PWN, using raycast method\n";
     }
-    tm_out = gwn_boolean(tm_si, op, nshapes, shape_fn, pinfo, arena);
+    if (hole_tolerant) {
+      tm_out = raycast_tris_boolean(tm_si, op, nshapes, shape_fn, arena);
+    }
+    else {
+      PatchesInfo pinfo = find_patches(tm_si, tm_si_topo);
+      tm_out = raycast_patches_boolean(tm_si, op, nshapes, shape_fn, pinfo, arena);
+    }
+#  ifdef PERFDEBUG
+    double raycast_time = PIL_check_seconds_timer();
+    std::cout << "  raycast_boolean done, time = " << raycast_time - pwn_time << "\n";
+#  endif
   }
   else {
+    PatchesInfo pinfo = find_patches(tm_si, tm_si_topo);
+#  ifdef PERFDEBUG
+    double patch_time = PIL_check_seconds_timer();
+    std::cout << "  patches found, time = " << patch_time - pwn_time << "\n";
+#  endif
     CellsInfo cinfo = find_cells(tm_si, tm_si_topo, pinfo);
     if (dbg_level > 0) {
       std::cout << "Input is PWN\n";
     }
+#  ifdef PERFDEBUG
+    double cell_time = PIL_check_seconds_timer();
+    std::cout << "  cells found, time = " << cell_time - pwn_time << "\n";
+#  endif
     finish_patch_cell_graph(tm_si, cinfo, pinfo, tm_si_topo, arena);
+#  ifdef PERFDEBUG
+    double finish_pc_time = PIL_check_seconds_timer();
+    std::cout << "  finished patch-cell graph, time = " << finish_pc_time - cell_time << "\n";
+#  endif
     bool pc_ok = patch_cell_graph_ok(cinfo, pinfo);
     if (!pc_ok) {
       /* TODO: if bad input can lead to this, diagnose the problem. */
@@ -3295,13 +3421,25 @@ IMesh boolean_trimesh(IMesh &tm_in,
     }
     cinfo.init_windings(nshapes);
     int c_ambient = find_ambient_cell(tm_si, nullptr, tm_si_topo, pinfo, arena);
+#  ifdef PERFDEBUG
+    double amb_time = PIL_check_seconds_timer();
+    std::cout << "  ambient cell found, time = " << amb_time - finish_pc_time << "\n";
+#  endif
     if (c_ambient == NO_INDEX) {
       /* TODO: find a way to propagate this error to user properly. */
       std::cout << "Could not find an ambient cell; input not valid?\n";
       return IMesh(tm_si);
     }
     propagate_windings_and_in_output_volume(pinfo, cinfo, c_ambient, op, nshapes, si_shape_fn);
+#  ifdef PERFDEBUG
+    double propagate_time = PIL_check_seconds_timer();
+    std::cout << "  windings propagated, time = " << propagate_time - amb_time << "\n";
+#  endif
     tm_out = extract_from_in_output_volume_diffs(tm_si, pinfo, cinfo, arena);
+#  ifdef PERFDEBUG
+    double extract_time = PIL_check_seconds_timer();
+    std::cout << "  extracted, time = " << extract_time - propagate_time << "\n";
+#  endif
     if (dbg_level > 0) {
       /* Check if output is PWN. */
       TriMeshTopology tm_out_topo(tm_out);
@@ -3314,6 +3452,10 @@ IMesh boolean_trimesh(IMesh &tm_in,
     write_obj_mesh(tm_out, "boolean_tm_output");
     std::cout << "boolean tm output:\n" << tm_out;
   }
+#  ifdef PERFDEBUG
+  double end_time = PIL_check_seconds_timer();
+  std::cout << "  boolean_trimesh done, total time = " << end_time - start_time << "\n";
+#  endif
   return tm_out;
 }
 
@@ -3341,6 +3483,7 @@ IMesh boolean_mesh(IMesh &imesh,
                    int nshapes,
                    std::function<int(int)> shape_fn,
                    bool use_self,
+                   bool hole_tolerant,
                    IMesh *imesh_triangulated,
                    IMeshArena *arena)
 {
@@ -3359,22 +3502,46 @@ IMesh boolean_mesh(IMesh &imesh,
   }
   IMesh *tm_in = imesh_triangulated;
   IMesh our_triangulation;
+#  ifdef PERFDEBUG
+  double start_time = PIL_check_seconds_timer();
+  std::cout << "boolean_mesh, timing begins\n";
+#  endif
   if (tm_in == nullptr) {
     our_triangulation = triangulate_polymesh(imesh, arena);
     tm_in = &our_triangulation;
   }
+#  ifdef PERFDEBUG
+  double tri_time = PIL_check_seconds_timer();
+  std::cout << "triangulated, time = " << tri_time - start_time << "\n";
+#  endif
   if (dbg_level > 1) {
     write_obj_mesh(*tm_in, "boolean_tm_in");
   }
-  IMesh tm_out = boolean_trimesh(*tm_in, op, nshapes, shape_fn, use_self, arena);
+  IMesh tm_out = boolean_trimesh(*tm_in, op, nshapes, shape_fn, use_self, hole_tolerant, arena);
+#  ifdef PERFDEBUG
+  double bool_tri_time = PIL_check_seconds_timer();
+  std::cout << "boolean_trimesh done, time = " << bool_tri_time - tri_time << "\n";
+#  endif
   if (dbg_level > 1) {
     std::cout << "bool_trimesh_output:\n" << tm_out;
     write_obj_mesh(tm_out, "bool_trimesh_output");
   }
   IMesh ans = polymesh_from_trimesh_with_dissolve(tm_out, imesh, arena);
+#  ifdef PERFDEBUG
+  double dissolve_time = PIL_check_seconds_timer();
+  std::cout << "polymesh from dissolving, time = " << dissolve_time - bool_tri_time << "\n";
+#  endif
   if (dbg_level > 0) {
     std::cout << "boolean_mesh output:\n" << ans;
+    if (dbg_level > 2) {
+      ans.populate_vert();
+      dump_test_spec(ans);
+    }
   }
+#  ifdef PERFDEBUG
+  double end_time = PIL_check_seconds_timer();
+  std::cout << "boolean_mesh done, total time = " << end_time - start_time << "\n";
+#  endif
   return ans;
 }
 

@@ -23,6 +23,9 @@
 
 #pragma once
 
+/* Required for #eIconSizes which can't be forward declared if this file is included in C++. */
+#include "DNA_ID_enums.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -33,8 +36,6 @@ struct PointerRNA;
 struct PreviewImage;
 struct Scene;
 struct bContext;
-
-enum eIconSizes;
 
 typedef struct IconFile {
   struct IconFile *next, *prev;
@@ -76,7 +77,7 @@ bool UI_icon_get_theme_color(int icon_id, unsigned char color[4]);
 void UI_icon_render_id(const struct bContext *C,
                        struct Scene *scene,
                        struct ID *id,
-                       const bool big,
+                       const enum eIconSizes size,
                        const bool use_job);
 int UI_icon_preview_to_render_size(enum eIconSizes size);
 

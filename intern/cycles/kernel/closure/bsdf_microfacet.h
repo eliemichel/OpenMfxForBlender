@@ -125,7 +125,7 @@ ccl_device_inline void microfacet_beckmann_sample_slopes(KernelGlobals *kg,
   }
   *slope_y = fast_ierff(2.0f * randv - 1.0f);
 #else
-  /* Use precomputed table on CPU, it gives better perfomance. */
+  /* Use precomputed table on CPU, it gives better performance. */
   int beckmann_table_offset = kernel_data.tables.beckmann_offset;
 
   *slope_x = lookup_table_read_2D(
@@ -487,11 +487,11 @@ ccl_device float3 bsdf_microfacet_ggx_eval_reflect(const ShaderClosure *sc,
     float3 out = F * G * common;
 
     /* eq. 2 in distribution of visible normals sampling
-     * pm = Dw = G1o * dot(m, I) * D / dot(N, I); */
+     * `pm = Dw = G1o * dot(m, I) * D / dot(N, I);` */
 
     /* eq. 38 - but see also:
      * eq. 17 in http://www.graphics.cornell.edu/~bjw/wardnotes.pdf
-     * pdf = pm * 0.25 / dot(m, I); */
+     * `pdf = pm * 0.25 / dot(m, I);` */
     *pdf = G1o * common;
 
     return out;

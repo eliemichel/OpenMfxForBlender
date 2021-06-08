@@ -23,6 +23,7 @@
 #include "DRW_render.h"
 
 #include "BKE_gpencil.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
@@ -140,7 +141,7 @@ void GPENCIL_engine_init(void *ved)
 
     /* For non active frame, use only lines in multiedit mode. */
     const bool overlays_on = (v3d->flag2 & V3D_HIDE_OVERLAYS) == 0;
-    stl->pd->use_multiedit_lines_only = !overlays_on ||
+    stl->pd->use_multiedit_lines_only = overlays_on &&
                                         (v3d->gp_flag & V3D_GP_SHOW_MULTIEDIT_LINES) != 0;
 
     const bool shmode_xray_support = v3d->shading.type <= OB_SOLID;
@@ -214,6 +215,7 @@ void GPENCIL_cache_init(void *ved)
                                  NULL :
                              false;
     pd->do_onion = show_onion && !hide_overlay && !playing;
+    pd->playing = playing;
     /* Save simplify flags (can change while drawing, so it's better to save). */
     Scene *scene = draw_ctx->scene;
     pd->simplify_fill = GPENCIL_SIMPLIFY_FILL(scene, playing);
@@ -241,6 +243,7 @@ void GPENCIL_cache_init(void *ved)
     pd->simplify_fill = false;
     pd->simplify_fx = false;
     pd->fade_layer_opacity = -1.0f;
+    pd->playing = false;
   }
 
   {
@@ -252,7 +255,7 @@ void GPENCIL_cache_init(void *ved)
     pd->do_fast_drawing = false;
 
     pd->obact = draw_ctx->obact;
-    if (pd->obact && pd->obact->type == OB_GPENCIL) {
+    if (pd->obact && pd->obact->type == OB_GPENCIL && !(pd->draw_depth_only)) {
       /* Check if active object has a temp stroke data. */
       bGPdata *gpd = (bGPdata *)pd->obact->data;
       if (gpd->runtime.sbuffer_used > 0) {
@@ -279,7 +282,7 @@ void GPENCIL_cache_init(void *ved)
                                   });
   }
   else {
-    /* Free uneeded buffers. */
+    /* Free unneeded buffers. */
     GPU_FRAMEBUFFER_FREE_SAFE(fbl->snapshot_fb);
     DRW_TEXTURE_FREE_SAFE(txl->snapshot_depth_tx);
     DRW_TEXTURE_FREE_SAFE(txl->snapshot_color_tx);
@@ -331,7 +334,7 @@ void GPENCIL_cache_init(void *ved)
     pd->dof_params[0] = -focus_dist * pd->dof_params[1];
   }
   else {
-    /* Disable DoF blur scalling. */
+    /* Disable DoF blur scaling. */
     pd->camera = NULL;
   }
 }
@@ -344,7 +347,7 @@ typedef struct gpIterPopulateData {
   GPENCIL_PrivateData *pd;
   GPENCIL_MaterialPool *matpool;
   DRWShadingGroup *grp;
-  /* Last material UBO bound. Used to avoid uneeded buffer binding. */
+  /* Last material UBO bound. Used to avoid unneeded buffer binding. */
   GPUUniformBuf *ubo_mat;
   GPUUniformBuf *ubo_lights;
   /* Last texture bound. */
@@ -383,7 +386,7 @@ static void gpencil_drawcall_flush(gpIterPopulateData *iter)
   iter->vcount = 0;
 }
 
-/* Group drawcalls that are consecutive and with the same type. Reduces GPU driver overhead. */
+/* Group draw-calls that are consecutive and with the same type. Reduces GPU driver overhead. */
 static void gpencil_drawcall_add(
     gpIterPopulateData *iter, struct GPUBatch *geom, bool instancing, int v_first, int v_count)
 {
@@ -397,7 +400,7 @@ static void gpencil_drawcall_add(
 #endif
 
   int last = iter->vfirst + iter->vcount;
-  /* Interupt drawcall grouping if the sequence is not consecutive. */
+  /* Interrupt draw-call grouping if the sequence is not consecutive. */
   if ((geom != iter->geom) || (v_first - last > 3)) {
     gpencil_drawcall_flush(iter);
   }
@@ -485,6 +488,7 @@ static void gpencil_stroke_cache_populate(bGPDlayer *gpl,
 {
   gpIterPopulateData *iter = (gpIterPopulateData *)thunk;
 
+  bGPdata *gpd = iter->ob->data;
   MaterialGPencilStyle *gp_style = BKE_gpencil_material_settings(iter->ob, gps->mat_nr + 1);
 
   const bool is_render = iter->pd->is_render;
@@ -493,12 +497,12 @@ static void gpencil_stroke_cache_populate(bGPDlayer *gpl,
                      (!is_render && ((gps->flag & GP_STROKE_NOFILL) != 0));
   bool show_fill = (gps->tot_triangles > 0) && ((gp_style->flag & GP_MATERIAL_FILL_SHOW) != 0) &&
                    (!iter->pd->simplify_fill) && ((gps->flag & GP_STROKE_NOFILL) == 0);
-
-  bool only_lines = gpl && gpf && gpl->actframe != gpf && iter->pd->use_multiedit_lines_only;
-  bool hide_onion = gpl && gpf && gpf->runtime.onion_id != 0 &&
-                    ((gp_style->flag & GP_MATERIAL_HIDE_ONIONSKIN) != 0);
-
-  if (hide_material || (!show_stroke && !show_fill) || only_lines || hide_onion) {
+  bool only_lines = !GPENCIL_PAINT_MODE(gpd) && gpl && gpf && gpl->actframe != gpf &&
+                    iter->pd->use_multiedit_lines_only;
+  bool is_onion = gpl && gpf && gpf->runtime.onion_id != 0;
+  bool hide_onion = is_onion && ((gp_style->flag & GP_MATERIAL_HIDE_ONIONSKIN) != 0);
+  if ((hide_material) || (!show_stroke && !show_fill) || (only_lines && !is_onion) ||
+      (hide_onion)) {
     return;
   }
 
@@ -617,6 +621,24 @@ void GPENCIL_cache_populate(void *ved, Object *ob)
     /* Special case for rendering onion skin. */
     bGPdata *gpd = (bGPdata *)ob->data;
     bool do_onion = (!pd->is_render) ? pd->do_onion : (gpd->onion_flag & GP_ONION_GHOST_ALWAYS);
+    gpd->runtime.playing = (short)pd->playing;
+
+    /* When render in background the active frame could not be properly set due thread priority,
+     * better set again. This is not required in viewport. */
+    if (txl->render_depth_tx) {
+      const bool time_remap = BKE_gpencil_has_time_modifiers(ob);
+      const DRWContextState *draw_ctx = DRW_context_state_get();
+
+      LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+        /* If there is a time modifier, need remap the time before. */
+        if (time_remap) {
+          gpl->actframe = BKE_gpencil_frame_retime_get(draw_ctx->depsgraph, pd->scene, ob, gpl);
+        }
+        else {
+          gpl->actframe = BKE_gpencil_layer_frame_get(gpl, pd->cfra, GP_GETFRAME_USE_PREV);
+        }
+      }
+    }
 
     BKE_gpencil_visible_stroke_iter(is_final_render ? pd->view_layer : NULL,
                                     ob,
@@ -667,7 +689,7 @@ void GPENCIL_cache_finish(void *ved)
   /* Sort object by decreasing Z to avoid most of alpha ordering issues. */
   gpencil_object_cache_sort(pd);
 
-  /* Create framebuffers only if needed. */
+  /* Create frame-buffers only if needed. */
   if (pd->tobjects.first) {
     eGPUTextureFormat format = pd->use_signed_fb ? GPU_RGBA16F : GPU_R11F_G11F_B10F;
 
@@ -797,7 +819,10 @@ static void gpencil_draw_mask(GPENCIL_Data *vedata, GPENCIL_tObject *ob, GPENCIL
     }
 
     GPENCIL_tLayer *mask_layer = gpencil_layer_cache_get(ob, i);
-    BLI_assert(mask_layer);
+    /* When filtering by viewlayer, the mask could be null and must be ignored. */
+    if (mask_layer == NULL) {
+      continue;
+    }
 
     DRW_draw_pass(mask_layer->geom_ps);
   }
@@ -977,4 +1002,5 @@ DrawEngineType draw_engine_gpencil_type = {
     NULL,
     NULL,
     &GPENCIL_render_to_image,
+    NULL,
 };

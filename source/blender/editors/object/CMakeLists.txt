@@ -31,8 +31,8 @@ set(INC
   ../../makesrna
   ../../modifiers
   ../../python
+  ../../render
   ../../shader_fx
-  ../../render/extern/include
   ../../windowmanager
   ../../../../intern/clog
   ../../../../intern/glew-mx

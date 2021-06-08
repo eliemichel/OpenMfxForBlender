@@ -20,7 +20,7 @@
 
 #pragma once
 
-/* Note that some struct members for colormapping and colorbands are not initialized here. */
+/* Note that some struct members for color-mapping and color-bands are not initialized here. */
 
 /* Struct members on own line. */
 /* clang-format off */
@@ -52,7 +52,7 @@
     .layer_pass = 0, \
   }
 
-/* Deliberately set this range to the half the default frame-range 
+/* Deliberately set this range to the half the default frame-range
  * to have an immediate effect to suggest use-cases. */
 #define _DNA_DEFAULT_BuildGpencilModifierData \
   { \
@@ -138,7 +138,6 @@
     .fading_center = 0.5f, \
     .fading_thickness = 0.5f, \
     .fading_opacity = 0.5f, \
-    .split_angle = DEG2RADF(1.0f), \
   }
 
 #define _DNA_DEFAULT_NoiseGpencilModifierData \
@@ -153,6 +152,7 @@
     .factor_thickness = 0.0f, \
     .factor_uvs = 0.0f, \
     .noise_scale = 0.0f, \
+    .noise_offset = 0.0f, \
     .step = 4, \
     .layer_pass = 0, \
     .seed = 1, \
@@ -281,6 +281,18 @@
     .type = 0, \
     .curve_intensity = NULL, \
     .colorband = NULL, \
+  }
+
+#define _DNA_DEFAULT_LineartGpencilModifierData \
+  { \
+    .edge_types = LRT_EDGE_FLAG_ALL_TYPE, \
+    .thickness = 25, \
+    .opacity = 1.0f, \
+    .flags = LRT_GPENCIL_MATCH_OUTPUT_VGROUP, \
+    .crease_threshold = DEG2RAD(140.0f), \
+    .calculation_flags = LRT_ALLOW_DUPLI_OBJECTS | LRT_ALLOW_CLIPPING_BOUNDARIES, \
+    .angle_splitting_threshold = DEG2RAD(60.0f), \
+    .chaining_image_threshold = 0.001f, \
   }
 
 /* clang-format off */

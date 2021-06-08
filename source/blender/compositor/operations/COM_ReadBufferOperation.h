@@ -22,6 +22,8 @@
 #include "COM_MemoryProxy.h"
 #include "COM_NodeOperation.h"
 
+namespace blender::compositor {
+
 class ReadBufferOperation : public NodeOperation {
  private:
   MemoryProxy *m_memoryProxy;
@@ -35,25 +37,24 @@ class ReadBufferOperation : public NodeOperation {
   {
     this->m_memoryProxy = memoryProxy;
   }
-  MemoryProxy *getMemoryProxy()
+
+  MemoryProxy *getMemoryProxy() const
   {
     return this->m_memoryProxy;
   }
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
 
-  void *initializeTileData(rcti *rect);
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override;
+
+  void *initializeTileData(rcti *rect) override;
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
   void executePixelExtend(float output[4],
                           float x,
                           float y,
                           PixelSampler sampler,
                           MemoryBufferExtend extend_x,
                           MemoryBufferExtend extend_y);
-  void executePixelFiltered(float output[4], float x, float y, float dx[2], float dy[2]);
-  bool isReadBufferOperation() const
-  {
-    return true;
-  }
+  void executePixelFiltered(float output[4], float x, float y, float dx[2], float dy[2]) override;
   void setOffset(unsigned int offset)
   {
     this->m_offset = offset;
@@ -64,11 +65,13 @@ class ReadBufferOperation : public NodeOperation {
   }
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
-  MemoryBuffer *getInputMemoryBuffer(MemoryBuffer **memoryBuffers)
+                                        rcti *output) override;
+  MemoryBuffer *getInputMemoryBuffer(MemoryBuffer **memoryBuffers) override
   {
     return memoryBuffers[this->m_offset];
   }
   void readResolutionFromWriteBuffer();
   void updateMemoryBuffer();
 };
+
+}  // namespace blender::compositor

@@ -21,11 +21,17 @@ class ExecutionGroup;
 #pragma once
 
 #include "BKE_text.h"
+
 #include "COM_ExecutionGroup.h"
 #include "COM_Node.h"
 #include "COM_NodeOperation.h"
+
 #include "DNA_color_types.h"
 #include "DNA_node_types.h"
+
+#include "BLI_vector.hh"
+
+namespace blender::compositor {
 
 /**
  * \page execution Execution model
@@ -60,26 +66,26 @@ class ExecutionGroup;
  * \see NodeOperation base class for all operations in the system
  *
  * \section EM_Step3 Step3: add additional conversions to the operation system
- *   - Data type conversions: the system has 3 data types COM_DT_VALUE, COM_DT_VECTOR,
- * COM_DT_COLOR. The user can connect a Value socket to a color socket. As values are ordered
+ *   - Data type conversions: the system has 3 data types DataType::Value, DataType::Vector,
+ * DataType::Color. The user can connect a Value socket to a color socket. As values are ordered
  * differently than colors a conversion happens.
  *
  *   - Image size conversions: the system can automatically convert when resolutions do not match.
  *     An NodeInput has a resize mode. This can be any of the following settings.
- *     - [@ref InputSocketResizeMode.COM_SC_CENTER]:
+ *     - [@ref InputSocketResizeMode.ResizeMode::Center]:
  *       The center of both images are aligned
- *     - [@ref InputSocketResizeMode.COM_SC_FIT_WIDTH]:
+ *     - [@ref InputSocketResizeMode.ResizeMode::FitWidth]:
  *       The width of both images are aligned
- *     - [@ref InputSocketResizeMode.COM_SC_FIT_HEIGHT]:
+ *     - [@ref InputSocketResizeMode.ResizeMode::FitHeight]:
  *       The height of both images are aligned
- *     - [@ref InputSocketResizeMode.COM_SC_FIT]:
+ *     - [@ref InputSocketResizeMode.ResizeMode::FitAny]:
  *       The width, or the height of both images are aligned to make sure that it fits.
- *     - [@ref InputSocketResizeMode.COM_SC_STRETCH]:
+ *     - [@ref InputSocketResizeMode.ResizeMode::Stretch]:
  *       The width and the height of both images are aligned.
- *     - [@ref InputSocketResizeMode.COM_SC_NO_RESIZE]:
+ *     - [@ref InputSocketResizeMode.ResizeMode::None]:
  *       Bottom left of the images are aligned.
  *
- * \see Converter.convertDataType Datatype conversions
+ * \see COM_convert_data_type Datatype conversions
  * \see Converter.convertResolution Image size conversions
  *
  * \section EM_Step4 Step4: group operations in executions groups
@@ -113,9 +119,6 @@ class ExecutionGroup;
  * \brief the ExecutionSystem contains the whole compositor tree.
  */
 class ExecutionSystem {
- public:
-  typedef std::vector<NodeOperation *> Operations;
-  typedef std::vector<ExecutionGroup *> Groups;
 
  private:
   /**
@@ -126,25 +129,14 @@ class ExecutionSystem {
   /**
    * \brief vector of operations
    */
-  Operations m_operations;
+  Vector<NodeOperation *> m_operations;
 
   /**
    * \brief vector of groups
    */
-  Groups m_groups;
+  Vector<ExecutionGroup *> m_groups;
 
  private:  // methods
-  /**
-   * find all execution group with output nodes
-   */
-  void findOutputExecutionGroup(vector<ExecutionGroup *> *result,
-                                CompositorPriority priority) const;
-
-  /**
-   * find all execution group with output nodes
-   */
-  void findOutputExecutionGroup(vector<ExecutionGroup *> *result) const;
-
  public:
   /**
    * \brief Create a new ExecutionSystem and initialize it with the
@@ -167,7 +159,8 @@ class ExecutionSystem {
    */
   ~ExecutionSystem();
 
-  void set_operations(const Operations &operations, const Groups &groups);
+  void set_operations(const Vector<NodeOperation *> &operations,
+                      const Vector<ExecutionGroup *> &groups);
 
   /**
    * \brief execute this system
@@ -186,7 +179,7 @@ class ExecutionSystem {
   }
 
  private:
-  void executeGroups(CompositorPriority priority);
+  void execute_groups(eCompositorPriority priority);
 
   /* allow the DebugInfo class to look at internals */
   friend class DebugInfo;
@@ -195,3 +188,5 @@ class ExecutionSystem {
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:ExecutionSystem")
 #endif
 };
+
+}  // namespace blender::compositor

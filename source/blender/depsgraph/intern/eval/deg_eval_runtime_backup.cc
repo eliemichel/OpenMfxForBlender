@@ -29,11 +29,11 @@
 
 #include "DRW_engine.h"
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 RuntimeBackup::RuntimeBackup(const Depsgraph *depsgraph)
     : have_backup(false),
+      id_data({nullptr}),
       animation_backup(depsgraph),
       scene_backup(depsgraph),
       sound_backup(depsgraph),
@@ -51,6 +51,8 @@ void RuntimeBackup::init_from_id(ID *id)
     return;
   }
   have_backup = true;
+
+  id_data.py_instance = id->py_instance;
 
   animation_backup.init_from_id(id);
 
@@ -90,6 +92,8 @@ void RuntimeBackup::restore_to_id(ID *id)
     return;
   }
 
+  id->py_instance = id_data.py_instance;
+
   animation_backup.restore_to_id(id);
 
   const ID_Type id_type = GS(id->name);
@@ -117,5 +121,4 @@ void RuntimeBackup::restore_to_id(ID *id)
   }
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

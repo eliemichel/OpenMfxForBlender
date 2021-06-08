@@ -28,6 +28,8 @@
 
 #include "intern/openexr/openexr_multi.h"
 
+namespace blender::compositor {
+
 class OutputOpenExrSingleLayerMultiViewOperation : public OutputSingleLayerOperation {
  private:
  public:
@@ -38,17 +40,19 @@ class OutputOpenExrSingleLayerMultiViewOperation : public OutputSingleLayerOpera
                                              const char *path,
                                              const ColorManagedViewSettings *viewSettings,
                                              const ColorManagedDisplaySettings *displaySettings,
-                                             const char *viewName);
+                                             const char *viewName,
+                                             const bool saveAsRender);
 
   void *get_handle(const char *filename);
-  void deinitExecution();
+  void deinitExecution() override;
 };
 
 /* Writes inputs into OpenEXR multilayer channels. */
 class OutputOpenExrMultiLayerMultiViewOperation : public OutputOpenExrMultiLayerOperation {
  private:
  public:
-  OutputOpenExrMultiLayerMultiViewOperation(const RenderData *rd,
+  OutputOpenExrMultiLayerMultiViewOperation(const Scene *scene,
+                                            const RenderData *rd,
                                             const bNodeTree *tree,
                                             const char *path,
                                             char exr_codec,
@@ -56,7 +60,7 @@ class OutputOpenExrMultiLayerMultiViewOperation : public OutputOpenExrMultiLayer
                                             const char *viewName);
 
   void *get_handle(const char *filename);
-  void deinitExecution();
+  void deinitExecution() override;
 };
 
 class OutputStereoOperation : public OutputSingleLayerOperation {
@@ -73,7 +77,10 @@ class OutputStereoOperation : public OutputSingleLayerOperation {
                         const char *name,
                         const ColorManagedViewSettings *viewSettings,
                         const ColorManagedDisplaySettings *displaySettings,
-                        const char *viewName);
+                        const char *viewName,
+                        const bool saveAsRender);
   void *get_handle(const char *filename);
-  void deinitExecution();
+  void deinitExecution() override;
 };
+
+}  // namespace blender::compositor

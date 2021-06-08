@@ -27,8 +27,10 @@
 #include "BLI_endian_switch.h"
 #include "BLI_fileops.h"
 #include "BLI_ghash.h"
+#include "BLI_math.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
+#include "BLI_threads.h"
 #include "BLI_utildefines.h"
 #ifdef _WIN32
 #  include "BLI_winstuff.h"
@@ -99,25 +101,22 @@ anim_index_builder *IMB_index_builder_create(const char *name)
   return rv;
 }
 
-void IMB_index_builder_add_entry(anim_index_builder *fp,
-                                 int frameno,
-                                 unsigned long long seek_pos,
-                                 unsigned long long seek_pos_dts,
-                                 unsigned long long pts)
+void IMB_index_builder_add_entry(
+    anim_index_builder *fp, int frameno, uint64_t seek_pos, uint64_t seek_pos_dts, uint64_t pts)
 {
   fwrite(&frameno, sizeof(int), 1, fp->fp);
-  fwrite(&seek_pos, sizeof(unsigned long long), 1, fp->fp);
-  fwrite(&seek_pos_dts, sizeof(unsigned long long), 1, fp->fp);
-  fwrite(&pts, sizeof(unsigned long long), 1, fp->fp);
+  fwrite(&seek_pos, sizeof(uint64_t), 1, fp->fp);
+  fwrite(&seek_pos_dts, sizeof(uint64_t), 1, fp->fp);
+  fwrite(&pts, sizeof(uint64_t), 1, fp->fp);
 }
 
 void IMB_index_builder_proc_frame(anim_index_builder *fp,
-                                  unsigned char *buffer,
+                                  uchar *buffer,
                                   int data_size,
                                   int frameno,
-                                  unsigned long long seek_pos,
-                                  unsigned long long seek_pos_dts,
-                                  unsigned long long pts)
+                                  uint64_t seek_pos,
+                                  uint64_t seek_pos_dts,
+                                  uint64_t pts)
 {
   if (fp->proc_frame) {
     anim_index_entry e;
@@ -186,10 +185,10 @@ struct anim_index *IMB_indexer_open(const char *name)
 
   fseek(fp, 0, SEEK_END);
 
-  idx->num_entries = (ftell(fp) - 12) / (sizeof(int) +                /* framepos */
-                                         sizeof(unsigned long long) + /* seek_pos */
-                                         sizeof(unsigned long long) + /* seek_pos_dts */
-                                         sizeof(unsigned long long)   /* pts */
+  idx->num_entries = (ftell(fp) - 12) / (sizeof(int) +      /* framepos */
+                                         sizeof(uint64_t) + /* seek_pos */
+                                         sizeof(uint64_t) + /* seek_pos_dts */
+                                         sizeof(uint64_t)   /* pts */
                                         );
 
   fseek(fp, 12, SEEK_SET);
@@ -197,19 +196,28 @@ struct anim_index *IMB_indexer_open(const char *name)
   idx->entries = MEM_callocN(sizeof(struct anim_index_entry) * idx->num_entries,
                              "anim_index_entries");
 
+  size_t items_read = 0;
   for (i = 0; i < idx->num_entries; i++) {
-    fread(&idx->entries[i].frameno, sizeof(int), 1, fp);
-    fread(&idx->entries[i].seek_pos, sizeof(unsigned long long), 1, fp);
-    fread(&idx->entries[i].seek_pos_dts, sizeof(unsigned long long), 1, fp);
-    fread(&idx->entries[i].pts, sizeof(unsigned long long), 1, fp);
+    items_read += fread(&idx->entries[i].frameno, sizeof(int), 1, fp);
+    items_read += fread(&idx->entries[i].seek_pos, sizeof(uint64_t), 1, fp);
+    items_read += fread(&idx->entries[i].seek_pos_dts, sizeof(uint64_t), 1, fp);
+    items_read += fread(&idx->entries[i].pts, sizeof(uint64_t), 1, fp);
+  }
+
+  if (UNLIKELY(items_read != idx->num_entries * 4)) {
+    perror("error reading animation index file");
+    MEM_freeN(idx->entries);
+    MEM_freeN(idx);
+    fclose(fp);
+    return NULL;
   }
 
   if (((ENDIAN_ORDER == B_ENDIAN) != (header[8] == 'V'))) {
     for (i = 0; i < idx->num_entries; i++) {
       BLI_endian_switch_int32(&idx->entries[i].frameno);
-      BLI_endian_switch_int64((int64_t *)&idx->entries[i].seek_pos);
-      BLI_endian_switch_int64((int64_t *)&idx->entries[i].seek_pos_dts);
-      BLI_endian_switch_int64((int64_t *)&idx->entries[i].pts);
+      BLI_endian_switch_uint64(&idx->entries[i].seek_pos);
+      BLI_endian_switch_uint64(&idx->entries[i].seek_pos_dts);
+      BLI_endian_switch_uint64(&idx->entries[i].pts);
     }
   }
 
@@ -218,7 +226,7 @@ struct anim_index *IMB_indexer_open(const char *name)
   return idx;
 }
 
-unsigned long long IMB_indexer_get_seek_pos(struct anim_index *idx, int frame_index)
+uint64_t IMB_indexer_get_seek_pos(struct anim_index *idx, int frame_index)
 {
   if (frame_index < 0) {
     frame_index = 0;
@@ -229,7 +237,7 @@ unsigned long long IMB_indexer_get_seek_pos(struct anim_index *idx, int frame_in
   return idx->entries[frame_index].seek_pos;
 }
 
-unsigned long long IMB_indexer_get_seek_pos_dts(struct anim_index *idx, int frame_index)
+uint64_t IMB_indexer_get_seek_pos_dts(struct anim_index *idx, int frame_index)
 {
   if (frame_index < 0) {
     frame_index = 0;
@@ -272,7 +280,7 @@ int IMB_indexer_get_frame_index(struct anim_index *idx, int frameno)
   return first;
 }
 
-unsigned long long IMB_indexer_get_pts(struct anim_index *idx, int frame_index)
+uint64_t IMB_indexer_get_pts(struct anim_index *idx, int frame_index)
 {
   if (frame_index < 0) {
     frame_index = 0;
@@ -470,7 +478,6 @@ static struct proxy_output_ctx *alloc_proxy_output_ffmpeg(
   struct proxy_output_ctx *rv = MEM_callocN(sizeof(struct proxy_output_ctx), "alloc_proxy_output");
 
   char fname[FILE_MAX];
-  int ffmpeg_quality;
 
   rv->proxy_size = proxy_size;
   rv->anim = anim;
@@ -490,16 +497,21 @@ static struct proxy_output_ctx *alloc_proxy_output_ffmpeg(
 
   rv->c = rv->st->codec;
   rv->c->codec_type = AVMEDIA_TYPE_VIDEO;
-  rv->c->codec_id = AV_CODEC_ID_MJPEG;
+  rv->c->codec_id = AV_CODEC_ID_H264;
   rv->c->width = width;
   rv->c->height = height;
+  rv->c->gop_size = 10;
+  rv->c->max_b_frames = 0;
+  /* Correct wrong default ffmpeg param which crash x264. */
+  rv->c->qmin = 10;
+  rv->c->qmax = 51;
 
   rv->of->oformat->video_codec = rv->c->codec_id;
   rv->codec = avcodec_find_encoder(rv->c->codec_id);
 
   if (!rv->codec) {
     fprintf(stderr,
-            "No ffmpeg MJPEG encoder available? "
+            "No ffmpeg encoder available? "
             "Proxy not built!\n");
     av_free(rv->of);
     return NULL;
@@ -518,11 +530,31 @@ static struct proxy_output_ctx *alloc_proxy_output_ffmpeg(
   rv->c->time_base.num = 1;
   rv->st->time_base = rv->c->time_base;
 
-  /* there's no  way to set JPEG quality in the same way as in AVI JPEG and image sequence,
-   * but this seems to be giving expected quality result */
-  ffmpeg_quality = (int)(1.0f + 30.0f * (1.0f - (float)quality / 100.0f) + 0.5f);
-  av_opt_set_int(rv->c, "qmin", ffmpeg_quality, 0);
-  av_opt_set_int(rv->c, "qmax", ffmpeg_quality, 0);
+  /* This range matches eFFMpegCrf. Crf_range_min corresponds to lowest quality, crf_range_max to
+   * highest quality. */
+  const int crf_range_min = 32;
+  const int crf_range_max = 17;
+  int crf = round_fl_to_int((quality / 100.0f) * (crf_range_max - crf_range_min) + crf_range_min);
+
+  AVDictionary *codec_opts = NULL;
+  /* High quality preset value. */
+  av_dict_set_int(&codec_opts, "crf", crf, 0);
+  /* Prefer smaller file-size. */
+  av_dict_set(&codec_opts, "preset", "slow", 0);
+
+  if (rv->codec->capabilities & AV_CODEC_CAP_AUTO_THREADS) {
+    rv->c->thread_count = 0;
+  }
+  else {
+    rv->c->thread_count = BLI_system_thread_count();
+  }
+
+  if (rv->codec->capabilities & AV_CODEC_CAP_FRAME_THREADS) {
+    rv->c->thread_type = FF_THREAD_FRAME;
+  }
+  else if (rv->codec->capabilities & AV_CODEC_CAP_SLICE_THREADS) {
+    rv->c->thread_type = FF_THREAD_SLICE;
+  }
 
   if (rv->of->flags & AVFMT_GLOBALHEADER) {
     rv->c->flags |= CODEC_FLAG_GLOBAL_HEADER;
@@ -536,7 +568,7 @@ static struct proxy_output_ctx *alloc_proxy_output_ffmpeg(
     return 0;
   }
 
-  avcodec_open2(rv->c, rv->codec, NULL);
+  avcodec_open2(rv->c, rv->codec, &codec_opts);
 
   rv->orig_height = av_get_cropped_height_from_codec(st->codec);
 
@@ -698,12 +730,12 @@ typedef struct FFmpegIndexBuilderContext {
   IMB_Timecode_Type tcs_in_use;
   IMB_Proxy_Size proxy_sizes_in_use;
 
-  unsigned long long seek_pos;
-  unsigned long long last_seek_pos;
-  unsigned long long seek_pos_dts;
-  unsigned long long seek_pos_pts;
-  unsigned long long last_seek_pos_dts;
-  unsigned long long start_pts;
+  uint64_t seek_pos;
+  uint64_t last_seek_pos;
+  uint64_t seek_pos_dts;
+  uint64_t seek_pos_pts;
+  uint64_t last_seek_pos_dts;
+  uint64_t start_pts;
   double frame_rate;
   double pts_time_base;
   int frameno, frameno_gapless;
@@ -774,6 +806,20 @@ static IndexBuildContext *index_ffmpeg_create_context(struct anim *anim,
 
   context->iCodecCtx->workaround_bugs = 1;
 
+  if (context->iCodec->capabilities & AV_CODEC_CAP_AUTO_THREADS) {
+    context->iCodecCtx->thread_count = 0;
+  }
+  else {
+    context->iCodecCtx->thread_count = BLI_system_thread_count();
+  }
+
+  if (context->iCodec->capabilities & AV_CODEC_CAP_FRAME_THREADS) {
+    context->iCodecCtx->thread_type = FF_THREAD_FRAME;
+  }
+  else if (context->iCodec->capabilities & AV_CODEC_CAP_SLICE_THREADS) {
+    context->iCodecCtx->thread_type = FF_THREAD_SLICE;
+  }
+
   if (avcodec_open2(context->iCodecCtx, context->iCodec, NULL) < 0) {
     avformat_close_input(&context->iFormatCtx);
     MEM_freeN(context);
@@ -838,9 +884,9 @@ static void index_rebuild_ffmpeg_proc_decoded_frame(FFmpegIndexBuilderContext *c
                                                     AVFrame *in_frame)
 {
   int i;
-  unsigned long long s_pos = context->seek_pos;
-  unsigned long long s_dts = context->seek_pos_dts;
-  unsigned long long pts = av_get_pts_from_frame(context->iFormatCtx, in_frame);
+  uint64_t s_pos = context->seek_pos;
+  uint64_t s_dts = context->seek_pos_dts;
+  uint64_t pts = av_get_pts_from_frame(context->iFormatCtx, in_frame);
 
   for (i = 0; i < context->num_proxy_sizes; i++) {
     add_to_proxy_output_ffmpeg(context->proxy_ctx[i], in_frame);
@@ -1218,8 +1264,11 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
 }
 
 void IMB_anim_index_rebuild(struct IndexBuildContext *context,
+                            /* NOLINTNEXTLINE: readability-non-const-parameter. */
                             short *stop,
+                            /* NOLINTNEXTLINE: readability-non-const-parameter. */
                             short *do_update,
+                            /* NOLINTNEXTLINE: readability-non-const-parameter. */
                             float *progress)
 {
   switch (context->anim_type) {

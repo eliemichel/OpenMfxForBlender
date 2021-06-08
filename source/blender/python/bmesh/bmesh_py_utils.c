@@ -86,7 +86,7 @@ static PyObject *bpy_bm_utils_vert_collapse_edge(PyObject *UNUSED(self), PyObjec
 
   bm = py_edge->bm;
 
-  e_new = BM_vert_collapse_edge(bm, py_edge->e, py_vert->v, true, true);
+  e_new = BM_vert_collapse_edge(bm, py_edge->e, py_vert->v, true, true, true);
 
   if (e_new) {
     return BPy_BMEdge_CreatePyObject(bm, e_new);
@@ -109,6 +109,9 @@ PyDoc_STRVAR(bpy_bm_utils_vert_collapse_faces_doc,
              "   :type edge: :class:`bmesh.types.BMEdge`\n"
              "   :arg fac: The factor to use when merging customdata [0 - 1].\n"
              "   :type fac: float\n"
+             "   :arg join_faces: When true the faces around the vertex will be joined otherwise "
+             "collapse the vertex by merging the 2 edges this vertex connects to into one.\n"
+             "   :type join_faces: bool\n"
              "   :return: The resulting edge from the collapse operation.\n"
              "   :rtype: :class:`bmesh.types.BMEdge`\n");
 static PyObject *bpy_bm_utils_vert_collapse_faces(PyObject *UNUSED(self), PyObject *args)
@@ -152,7 +155,7 @@ static PyObject *bpy_bm_utils_vert_collapse_faces(PyObject *UNUSED(self), PyObje
   bm = py_edge->bm;
 
   e_new = BM_vert_collapse_faces(
-      bm, py_edge->e, py_vert->v, clamp_f(fac, 0.0f, 1.0f), true, do_join_faces, true);
+      bm, py_edge->e, py_vert->v, clamp_f(fac, 0.0f, 1.0f), true, do_join_faces, true, true);
 
   if (e_new) {
     return BPy_BMEdge_CreatePyObject(bm, e_new);

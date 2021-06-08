@@ -676,7 +676,7 @@ static char *rna_ShapeKey_path(PointerRNA *ptr)
   ID *id = ptr->owner_id;
   char name_esc[sizeof(kb->name) * 2];
 
-  BLI_strescape(name_esc, kb->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, kb->name, sizeof(name_esc));
 
   if ((id) && (GS(id->name) != ID_KE)) {
     return BLI_sprintfN("shape_keys.key_blocks[\"%s\"]", name_esc);
@@ -697,6 +697,16 @@ static void rna_Key_update_data(Main *bmain, Scene *UNUSED(scene), PointerRNA *p
       WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, ob);
     }
   }
+}
+
+static void rna_ShapeKey_update_minmax(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+  KeyBlock *data = (KeyBlock *)ptr->data;
+  if (IN_RANGE_INCL(data->curval, data->slidermin, data->slidermax)) {
+    return;
+  }
+  CLAMP(data->curval, data->slidermin, data->slidermax);
+  rna_Key_update_data(bmain, scene, ptr);
 }
 
 static KeyBlock *rna_ShapeKeyData_find_keyblock(Key *key, float *point)
@@ -774,7 +784,7 @@ static char *rna_ShapeKeyPoint_path(PointerRNA *ptr)
       index = rna_ShapeKey_curve_find_index(key, index);
     }
 
-    BLI_strescape(name_esc_kb, kb->name, sizeof(name_esc_kb));
+    BLI_str_escape(name_esc_kb, kb->name, sizeof(name_esc_kb));
 
     if (GS(id->name) == ID_KE) {
       return BLI_sprintfN("key_blocks[\"%s\"].data[%d]", name_esc_kb, index);
@@ -955,6 +965,7 @@ static void rna_def_keyblock(BlenderRNA *brna)
   RNA_def_property_float_funcs(
       prop, NULL, "rna_ShapeKey_slider_min_set", "rna_ShapeKey_slider_min_range");
   RNA_def_property_ui_text(prop, "Slider Min", "Minimum for slider");
+  RNA_def_property_update(prop, 0, "rna_ShapeKey_update_minmax");
 
   prop = RNA_def_property(srna, "slider_max", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "slidermax");
@@ -963,6 +974,7 @@ static void rna_def_keyblock(BlenderRNA *brna)
   RNA_def_property_float_funcs(
       prop, NULL, "rna_ShapeKey_slider_max_set", "rna_ShapeKey_slider_max_range");
   RNA_def_property_ui_text(prop, "Slider Max", "Maximum for slider");
+  RNA_def_property_update(prop, 0, "rna_ShapeKey_update_minmax");
 
   prop = RNA_def_property(srna, "data", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, NULL, "data", "totelem");

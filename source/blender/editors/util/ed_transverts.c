@@ -111,7 +111,9 @@ void ED_transverts_update_obedit(TransVertStore *tvs, Object *obedit)
         }
       }
 
-      BKE_nurb_test_2d(nu);
+      if (CU_IS_2D(cu)) {
+        BKE_nurb_project_2d(nu);
+      }
       BKE_nurb_handles_test(nu, true, false); /* test for bezier too */
       nu = nu->next;
     }
@@ -495,8 +497,8 @@ void ED_transverts_create_from_obedit(TransVertStore *tvs, Object *obedit, const
   }
 
   if (!tvs->transverts_tot && tvs->transverts) {
-    /* prevent memory leak. happens for curves/latticies due to */
-    /* difficult condition of adding points to trans data */
+    /* Prevent memory leak. happens for curves/lattices due to
+     * difficult condition of adding points to trans data. */
     MEM_freeN(tvs->transverts);
     tvs->transverts = NULL;
   }

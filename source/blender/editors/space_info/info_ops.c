@@ -24,7 +24,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "DNA_packedFile_types.h"
 #include "DNA_space_types.h"
 #include "DNA_windowmanager_types.h"
 
@@ -51,8 +50,6 @@
 
 #include "UI_interface.h"
 #include "UI_resources.h"
-
-#include "IMB_imbuf_types.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -210,7 +207,7 @@ static const EnumPropertyItem unpack_all_method_items[] = {
      0,
      "Write files to original location (overwrite existing files)",
      ""},
-    {PF_KEEP, "KEEP", 0, "Disable Auto-pack, keep all packed files", ""},
+    {PF_KEEP, "KEEP", 0, "Disable auto-pack, keep all packed files", ""},
     {PF_REMOVE, "REMOVE", 0, "Remove Pack", ""},
     /* {PF_ASK, "ASK", 0, "Ask for each file", ""}, */
     {0, NULL, 0, NULL, NULL},
@@ -364,7 +361,7 @@ void FILE_OT_unpack_item(wmOperatorType *ot)
   RNA_def_enum(
       ot->srna, "method", unpack_item_method_items, PF_USE_LOCAL, "Method", "How to unpack");
   RNA_def_string(
-      ot->srna, "id_name", NULL, BKE_ST_MAXNAME, "ID name", "Name of ID block to unpack");
+      ot->srna, "id_name", NULL, BKE_ST_MAXNAME, "ID Name", "Name of ID block to unpack");
   RNA_def_int(ot->srna,
               "id_type",
               ID_IM,
@@ -516,7 +513,7 @@ void FILE_OT_find_missing_files(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_DIRECTORY,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /********************* report box operator *********************/
@@ -567,15 +564,7 @@ static int update_reports_display_invoke(bContext *C, wmOperator *UNUSED(op), co
   }
 
   /* set target color based on report type */
-  if (report->type & RPT_ERROR_ALL) {
-    UI_GetThemeColorType3fv(TH_INFO_ERROR, SPACE_INFO, target_col);
-  }
-  else if (report->type & RPT_WARNING_ALL) {
-    UI_GetThemeColorType3fv(TH_INFO_WARNING, SPACE_INFO, target_col);
-  }
-  else if (report->type & RPT_INFO_ALL) {
-    UI_GetThemeColorType3fv(TH_INFO_INFO, SPACE_INFO, target_col);
-  }
+  UI_GetThemeColorType3fv(UI_icon_colorid_from_report_type(report->type), SPACE_INFO, target_col);
   target_col[3] = 0.65f;
 
   if (rti->widthfac == 0.0f) {

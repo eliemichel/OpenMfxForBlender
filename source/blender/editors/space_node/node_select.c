@@ -26,7 +26,6 @@
 #include "DNA_node_types.h"
 #include "DNA_windowmanager_types.h"
 
-#include "BLI_alloca.h"
 #include "BLI_lasso_2d.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
@@ -62,14 +61,15 @@
 
 #include "node_intern.h" /* own include */
 
-/* Function to detect if there is a visible view3d that uses workbench in texture mode.
+/**
+ * Function to detect if there is a visible view3d that uses workbench in texture mode.
  * This function is for fixing T76970 for Blender 2.83. The actual fix should add a mechanism in
  * the depsgraph that can be used by the draw engines to check if they need to be redrawn.
  *
  * We don't want to add these risky changes this close before releasing 2.83 without good testing
  * hence this workaround. There are still cases were too many updates happen. For example when you
  * have both a Cycles and workbench with textures viewport.
- * */
+ */
 static bool has_workbench_in_texture_color(const wmWindowManager *wm,
                                            const Scene *scene,
                                            const Object *ob)
@@ -370,6 +370,11 @@ static int node_select_grouped_exec(bContext *C, wmOperator *op)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
   bNode *node_act = nodeGetActive(snode->edittree);
+
+  if (node_act == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
   bNode *node;
   bool changed = false;
   const bool extend = RNA_boolean_get(op->ptr, "extend");
@@ -563,11 +568,19 @@ static int node_mouse_select(bContext *C,
       }
     }
     else if (deselect_all && node == NULL) {
-      /* Deselect in empty space. */
-      for (tnode = snode->edittree->nodes.first; tnode; tnode = tnode->next) {
-        nodeSetSelected(tnode, false);
+      /* Rather than deselecting others, users may want to drag to box-select (drag from empty
+       * space) or tweak-translate an already selected item. If these cases may apply, delay
+       * deselection. */
+      if (wait_to_deselect_others) {
+        ret_value = OPERATOR_RUNNING_MODAL;
       }
-      ret_value = OPERATOR_FINISHED;
+      else {
+        /* Deselect in empty space. */
+        for (tnode = snode->edittree->nodes.first; tnode; tnode = tnode->next) {
+          nodeSetSelected(tnode, false);
+        }
+        ret_value = OPERATOR_FINISHED;
+      }
     }
     else if (node != NULL) {
       /* When clicking on an already selected node, we want to wait to deselect
@@ -729,7 +742,7 @@ void NODE_OT_select_box(wmOperatorType *ot)
                   "tweak",
                   0,
                   "Tweak",
-                  "Only activate when mouse is not over a node - useful for tweak gesture");
+                  "Only activate when mouse is not over a node (useful for tweak gesture)");
 
   WM_operator_properties_gesture_box(ot);
   WM_operator_properties_select_operation_simple(ot);
@@ -905,7 +918,7 @@ void NODE_OT_select_lasso(wmOperatorType *ot)
                   "tweak",
                   0,
                   "Tweak",
-                  "Only activate when mouse is not over a node - useful for tweak gesture");
+                  "Only activate when mouse is not over a node (useful for tweak gesture)");
 
   WM_operator_properties_gesture_lasso(ot);
   WM_operator_properties_select_operation_simple(ot);
@@ -1178,7 +1191,8 @@ static void node_find_create_label(const bNode *node, char *str, int maxlen)
 static void node_find_update_fn(const struct bContext *C,
                                 void *UNUSED(arg),
                                 const char *str,
-                                uiSearchItems *items)
+                                uiSearchItems *items,
+                                const bool UNUSED(is_first))
 {
   SpaceNode *snode = CTX_wm_space_node(C);
 
@@ -1246,7 +1260,8 @@ static uiBlock *node_find_menu(bContext *C, ARegion *region, void *arg_op)
                        0,
                        0,
                        "");
-  UI_but_func_search_set(but, NULL, node_find_update_fn, op->type, NULL, node_find_exec_fn, NULL);
+  UI_but_func_search_set(
+      but, NULL, node_find_update_fn, op->type, false, NULL, node_find_exec_fn, NULL);
   UI_but_flag_enable(but, UI_BUT_ACTIVATE_ON_INIT);
 
   /* fake button, it holds space for search items */
@@ -1281,7 +1296,7 @@ void NODE_OT_find_node(wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "Find Node";
-  ot->description = "Search for named node and allow to select and activate it";
+  ot->description = "Search for a node by name and focus and select it";
   ot->idname = "NODE_OT_find_node";
 
   /* api callbacks */

@@ -35,6 +35,7 @@
 #include "util/util_path.h"
 #include "util/util_string.h"
 #include "util/util_task.h"
+#include "util/util_tbb.h"
 #include "util/util_types.h"
 
 #ifdef WITH_OSL
@@ -147,7 +148,7 @@ void python_thread_state_restore(void **python_thread_state)
 
 static const char *PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce)
 {
-  const char *result = _PyUnicode_AsString(py_str);
+  const char *result = PyUnicode_AsUTF8(py_str);
   if (result) {
     /* 99% of the time this is enough but we better support non unicode
      * chars since blender doesn't limit this.
@@ -288,9 +289,11 @@ static PyObject *render_func(PyObject * /*self*/, PyObject *args)
   RNA_pointer_create(NULL, &RNA_Depsgraph, (ID *)PyLong_AsVoidPtr(pydepsgraph), &depsgraphptr);
   BL::Depsgraph b_depsgraph(depsgraphptr);
 
+  /* Allow Blender to execute other Python scripts, and isolate TBB tasks so we
+   * don't get deadlocks with Blender threads accessing shared data like images. */
   python_thread_state_save(&session->python_thread_state);
 
-  session->render(b_depsgraph);
+  tbb::this_task_arena::isolate([&] { session->render(b_depsgraph); });
 
   python_thread_state_restore(&session->python_thread_state);
 
@@ -327,7 +330,8 @@ static PyObject *bake_func(PyObject * /*self*/, PyObject *args)
 
   python_thread_state_save(&session->python_thread_state);
 
-  session->bake(b_depsgraph, b_object, pass_type, pass_filter, width, height);
+  tbb::this_task_arena::isolate(
+      [&] { session->bake(b_depsgraph, b_object, pass_type, pass_filter, width, height); });
 
   python_thread_state_restore(&session->python_thread_state);
 
@@ -373,7 +377,7 @@ static PyObject *reset_func(PyObject * /*self*/, PyObject *args)
 
   python_thread_state_save(&session->python_thread_state);
 
-  session->reset_session(b_data, b_depsgraph);
+  tbb::this_task_arena::isolate([&] { session->reset_session(b_data, b_depsgraph); });
 
   python_thread_state_restore(&session->python_thread_state);
 
@@ -395,7 +399,7 @@ static PyObject *sync_func(PyObject * /*self*/, PyObject *args)
 
   python_thread_state_save(&session->python_thread_state);
 
-  session->synchronize(b_depsgraph);
+  tbb::this_task_arena::isolate([&] { session->synchronize(b_depsgraph); });
 
   python_thread_state_restore(&session->python_thread_state);
 
@@ -597,22 +601,19 @@ static PyObject *osl_update_node_func(PyObject * /*self*/, PyObject *args)
   bool removed;
 
   do {
-    BL::Node::inputs_iterator b_input;
-    BL::Node::outputs_iterator b_output;
-
     removed = false;
 
-    for (b_node.inputs.begin(b_input); b_input != b_node.inputs.end(); ++b_input) {
-      if (used_sockets.find(b_input->ptr.data) == used_sockets.end()) {
-        b_node.inputs.remove(b_data, *b_input);
+    for (BL::NodeSocket &b_input : b_node.inputs) {
+      if (used_sockets.find(b_input.ptr.data) == used_sockets.end()) {
+        b_node.inputs.remove(b_data, b_input);
         removed = true;
         break;
       }
     }
 
-    for (b_node.outputs.begin(b_output); b_output != b_node.outputs.end(); ++b_output) {
-      if (used_sockets.find(b_output->ptr.data) == used_sockets.end()) {
-        b_node.outputs.remove(b_data, *b_output);
+    for (BL::NodeSocket &b_output : b_node.outputs) {
+      if (used_sockets.find(b_output.ptr.data) == used_sockets.end()) {
+        b_node.outputs.remove(b_data, b_output);
         removed = true;
         break;
       }

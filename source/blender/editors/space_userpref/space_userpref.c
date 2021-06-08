@@ -79,7 +79,7 @@ static SpaceLink *userpref_create(const ScrArea *area, const Scene *UNUSED(scene
   BLI_addtail(&spref->regionbase, region);
   region->regiontype = RGN_TYPE_EXECUTE;
   region->alignment = RGN_ALIGN_BOTTOM | RGN_SPLIT_PREV;
-  region->flag |= RGN_FLAG_DYNAMIC_SIZE;
+  region->flag |= RGN_FLAG_DYNAMIC_SIZE | RGN_FLAG_HIDDEN;
 
   /* main region */
   region = MEM_callocN(sizeof(ARegion), "main region for userpref");
@@ -183,46 +183,20 @@ static void userpref_execute_region_init(wmWindowManager *wm, ARegion *region)
   region->v2d.keepzoom |= V2D_LOCKZOOM_X | V2D_LOCKZOOM_Y;
 }
 
-static void userpref_main_region_listener(wmWindow *UNUSED(win),
-                                          ScrArea *UNUSED(area),
-                                          ARegion *UNUSED(region),
-                                          wmNotifier *UNUSED(wmn),
-                                          const Scene *UNUSED(scene))
+static void userpref_main_region_listener(const wmRegionListenerParams *UNUSED(params))
 {
-  /* context changes */
 }
 
-static void userpref_header_listener(wmWindow *UNUSED(win),
-                                     ScrArea *UNUSED(area),
-                                     ARegion *UNUSED(region),
-                                     wmNotifier *UNUSED(wmn),
-                                     const Scene *UNUSED(scene))
+static void userpref_header_listener(const wmRegionListenerParams *UNUSED(params))
 {
-  /* context changes */
-#if 0
-  switch (wmn->category) {
-    default:
-      break;
-  }
-#endif
 }
 
-static void userpref_navigation_region_listener(wmWindow *UNUSED(win),
-                                                ScrArea *UNUSED(area),
-                                                ARegion *UNUSED(region),
-                                                wmNotifier *UNUSED(wmn),
-                                                const Scene *UNUSED(scene))
+static void userpref_navigation_region_listener(const wmRegionListenerParams *UNUSED(params))
 {
-  /* context changes */
 }
 
-static void userpref_execute_region_listener(wmWindow *UNUSED(win),
-                                             ScrArea *UNUSED(area),
-                                             ARegion *UNUSED(region),
-                                             wmNotifier *UNUSED(wmn),
-                                             const Scene *UNUSED(scene))
+static void userpref_execute_region_listener(const wmRegionListenerParams *UNUSED(params))
 {
-  /* context changes */
 }
 
 /* only called once, from space/spacetypes.c */
@@ -277,6 +251,7 @@ void ED_spacetype_userpref(void)
   /* regions: execution window */
   art = MEM_callocN(sizeof(ARegionType), "spacetype userpref region");
   art->regionid = RGN_TYPE_EXECUTE;
+  art->prefsizey = HEADERY;
   art->init = userpref_execute_region_init;
   art->layout = ED_region_panels_layout;
   art->draw = ED_region_panels_draw;

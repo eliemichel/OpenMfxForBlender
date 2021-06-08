@@ -43,9 +43,7 @@
 #include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (Animation Translation) */
-
-/** \name Transform Animation Translation
+/** \name Transform (Animation Translation)
  * \{ */
 
 static void headerTimeTranslate(TransInfo *t, char str[UI_MAX_DRAW_STR])
@@ -99,7 +97,7 @@ static void applyTimeTranslateValue(TransInfo *t, const float deltax)
       /* It is assumed that td->extra is a pointer to the AnimData,
        * whose active action is where this keyframe comes from.
        * (this is only valid when not in NLA)
-       * (also: masks and gpencil dont have animadata)
+       * (also: masks and gpencil don't have animadata)
        */
       AnimData *adt = (t->spacetype != SPACE_NLA) ? td->extra : NULL;
 

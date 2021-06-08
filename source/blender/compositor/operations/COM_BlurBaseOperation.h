@@ -23,16 +23,16 @@
 
 #define MAX_GAUSSTAB_RADIUS 30000
 
-#ifdef __SSE2__
-#  include <emmintrin.h>
-#endif
+#include "BLI_simd.h"
+
+namespace blender::compositor {
 
 class BlurBaseOperation : public NodeOperation, public QualityStepHelper {
  private:
  protected:
   BlurBaseOperation(DataType data_type);
   float *make_gausstab(float rad, int size);
-#ifdef __SSE2__
+#ifdef BLI_HAVE_SSE2
   __m128 *convert_gausstab_sse(const float *gausstab, int size);
 #endif
   float *make_dist_fac_inverse(float rad, int size, int falloff);
@@ -55,12 +55,12 @@ class BlurBaseOperation : public NodeOperation, public QualityStepHelper {
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   void setData(const NodeBlurData *data);
 
@@ -75,5 +75,8 @@ class BlurBaseOperation : public NodeOperation, public QualityStepHelper {
     this->m_extend_bounds = extend_bounds;
   }
 
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override;
 };
+
+}  // namespace blender::compositor

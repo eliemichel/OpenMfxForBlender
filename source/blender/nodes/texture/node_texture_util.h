@@ -61,7 +61,7 @@
 #include "IMB_imbuf_types.h"
 
 #include "RE_pipeline.h"
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -106,7 +106,9 @@ typedef struct TexDelegate {
   int type;
 } TexDelegate;
 
-bool tex_node_poll_default(struct bNodeType *ntype, struct bNodeTree *ntree);
+bool tex_node_poll_default(struct bNodeType *ntype,
+                           struct bNodeTree *ntree,
+                           const char **r_disabled_hint);
 void tex_node_type_base(
     struct bNodeType *ntype, int type, const char *name, short nclass, short flag);
 

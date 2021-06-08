@@ -27,14 +27,24 @@
 
 #include "node_exec.h"
 
-bool sh_node_poll_default(bNodeType *UNUSED(ntype), bNodeTree *ntree)
+bool sh_node_poll_default(bNodeType *UNUSED(ntype), bNodeTree *ntree, const char **r_disabled_hint)
 {
-  return STREQ(ntree->idname, "ShaderNodeTree");
+  if (!STREQ(ntree->idname, "ShaderNodeTree")) {
+    *r_disabled_hint = "Not a shader node tree";
+    return false;
+  }
+  return true;
 }
 
-static bool sh_fn_poll_default(bNodeType *UNUSED(ntype), bNodeTree *ntree)
+static bool sh_fn_poll_default(bNodeType *UNUSED(ntype),
+                               bNodeTree *ntree,
+                               const char **r_disabled_hint)
 {
-  return STREQ(ntree->idname, "ShaderNodeTree") || STREQ(ntree->idname, "SimulationNodeTree");
+  if (!STREQ(ntree->idname, "ShaderNodeTree") && !STREQ(ntree->idname, "GeometryNodeTree")) {
+    *r_disabled_hint = "Not a shader or geometry node tree";
+    return false;
+  }
+  return true;
 }
 
 void sh_node_type_base(
@@ -257,11 +267,11 @@ void ntreeExecGPUNodes(bNodeTreeExec *exec, GPUMaterial *mat, bNode *output_node
     }
 
     if (do_it) {
-      if (node->typeinfo->gpufunc) {
+      if (node->typeinfo->gpu_fn) {
         node_get_stack(node, stack, nsin, nsout);
         gpu_stack_from_data_list(gpuin, &node->inputs, nsin);
         gpu_stack_from_data_list(gpuout, &node->outputs, nsout);
-        if (node->typeinfo->gpufunc(mat, node, &nodeexec->data, gpuin, gpuout)) {
+        if (node->typeinfo->gpu_fn(mat, node, &nodeexec->data, gpuin, gpuout)) {
           data_from_gpu_stack_list(&node->outputs, nsout, gpuout);
         }
       }

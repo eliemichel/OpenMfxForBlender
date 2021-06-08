@@ -61,7 +61,7 @@
 #include "MOD_ui_common.h"
 #include "MOD_util.h"
 
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 /* Displace */
 
@@ -506,7 +506,7 @@ ModifierTypeInfo modifierType_Displace = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ NULL,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,

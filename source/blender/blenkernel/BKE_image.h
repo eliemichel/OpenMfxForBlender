@@ -325,6 +325,7 @@ int BKE_image_get_tile_from_pos(struct Image *ima,
                                 const float uv[2],
                                 float r_uv[2],
                                 float r_ofs[2]);
+int BKE_image_find_nearest_tile(const struct Image *image, const float co[2]);
 
 void BKE_image_get_size(struct Image *image, struct ImageUser *iuser, int *r_width, int *r_height);
 void BKE_image_get_size_fl(struct Image *image, struct ImageUser *iuser, float r_size[2]);
@@ -382,6 +383,8 @@ struct GPUTexture *BKE_image_get_gpu_tilemap(struct Image *image,
 bool BKE_image_has_gpu_texture_premultiplied_alpha(struct Image *image, struct ImBuf *ibuf);
 void BKE_image_update_gputexture(
     struct Image *ima, struct ImageUser *iuser, int x, int y, int w, int h);
+void BKE_image_update_gputexture_delayed(
+    struct Image *ima, struct ImBuf *ibuf, int x, int y, int w, int h);
 void BKE_image_paint_set_mipmap(struct Main *bmain, bool mipmap);
 
 /* Delayed free of OpenGL buffers by main thread */

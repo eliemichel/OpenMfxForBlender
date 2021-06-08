@@ -74,7 +74,7 @@ vector snap(vector a, vector b)
   return floor(safe_divide(a, b)) * b;
 }
 
-/* Adapted from godotengine math_funcs.h. */
+/* Adapted from GODOT-engine math_funcs.h. */
 float wrap(float value, float max, float min)
 {
   float range = max - min;
@@ -86,6 +86,13 @@ point wrap(point value, point max, point min)
   return point(wrap(value[0], max[0], min[0]),
                wrap(value[1], max[1], min[1]),
                wrap(value[2], max[2], min[2]));
+}
+
+/* Built in OSL faceforward is `(dot(I, Nref) > 0) ? -N : N;` which is different to
+ * GLSL `dot(Nref, I) < 0 ? N : -N` for zero values. */
+point compatible_faceforward(point vec, point incident, point reference)
+{
+  return dot(reference, incident) < 0.0 ? vec : -vec;
 }
 
 matrix euler_to_mat(point euler)

@@ -42,14 +42,11 @@
 #include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_lattice.h"
-#include "BKE_layer.h"
 #include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
-
-#include "MEM_guardedalloc.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -85,6 +82,7 @@ static void deformStroke(GpencilModifierData *md,
                          bGPDframe *UNUSED(gpf),
                          bGPDstroke *gps)
 {
+  bGPdata *gpd = ob->data;
   LatticeGpencilModifierData *mmd = (LatticeGpencilModifierData *)md;
   const int def_nr = BKE_object_defgroup_name_index(ob, mmd->vgname);
 
@@ -121,7 +119,7 @@ static void deformStroke(GpencilModifierData *md,
         (struct LatticeDeformData *)mmd->cache_data, &pt->x, mmd->strength * weight);
   }
   /* Calc geometry data. */
-  BKE_gpencil_stroke_geometry_update(gps);
+  BKE_gpencil_stroke_geometry_update(gpd, gps);
 }
 
 /* FIXME: Ideally we be doing this on a copy of the main depsgraph
@@ -138,36 +136,39 @@ static void bakeModifier(Main *UNUSED(bmain),
   bGPdata *gpd = ob->data;
   int oldframe = (int)DEG_get_ctime(depsgraph);
 
-  if (mmd->object == NULL) {
+  if ((mmd->object == NULL) || (mmd->object->type != OB_LATTICE)) {
     return;
   }
 
   LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
     LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
-      /* apply lattice effects on this frame
-       * NOTE: this assumes that we don't want lattice animation on non-keyframed frames
+      /* Apply lattice effects on this frame
+       * NOTE: this assumes that we don't want lattice animation on non-keyframed frames.
        */
       CFRA = gpf->framenum;
       BKE_scene_graph_update_for_newframe(depsgraph);
 
-      /* recalculate lattice data */
-      BKE_gpencil_lattice_init(ob);
+      /* Recalculate lattice data. */
+      if (mmd->cache_data) {
+        BKE_lattice_deform_data_destroy(mmd->cache_data);
+      }
+      mmd->cache_data = BKE_lattice_deform_data_create(mmd->object, ob);
 
-      /* compute lattice effects on this frame */
+      /* Compute lattice effects on this frame. */
       LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
         deformStroke(md, depsgraph, ob, gpl, gpf, gps);
       }
     }
   }
 
-  /* free lingering data */
+  /* Free lingering data. */
   ldata = (struct LatticeDeformData *)mmd->cache_data;
   if (ldata) {
     BKE_lattice_deform_data_destroy(ldata);
     mmd->cache_data = NULL;
   }
 
-  /* return frame state and DB to original state */
+  /* Return frame state and DB to original state. */
   CFRA = oldframe;
   BKE_scene_graph_update_for_newframe(depsgraph);
 }
@@ -194,7 +195,9 @@ static bool isDisabled(GpencilModifierData *md, int UNUSED(userRenderParams))
   return !mmd->object || mmd->object->type != OB_LATTICE;
 }
 
-static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
+static void updateDepsgraph(GpencilModifierData *md,
+                            const ModifierUpdateDepsgraphContext *ctx,
+                            const int UNUSED(mode))
 {
   LatticeGpencilModifierData *lmd = (LatticeGpencilModifierData *)md;
   if (lmd->object != NULL) {
@@ -264,7 +267,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Lattice = {
     /* structName */ "LatticeGpencilModifierData",
     /* structSize */ sizeof(LatticeGpencilModifierData),
     /* type */ eGpencilModifierTypeType_Gpencil,
-    /* flags */ eGpencilModifierTypeFlag_Single | eGpencilModifierTypeFlag_SupportsEditmode,
+    /* flags */ eGpencilModifierTypeFlag_SupportsEditmode,
 
     /* copyData */ copyData,
 

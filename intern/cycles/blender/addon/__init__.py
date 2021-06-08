@@ -15,6 +15,7 @@
 #
 
 # <pep8 compliant>
+from __future__ import annotations
 
 bl_info = {
     "name": "Cycles Render Engine",
@@ -59,6 +60,7 @@ class CyclesRender(bpy.types.RenderEngine):
     bl_use_exclude_layers = True
     bl_use_save_buffers = True
     bl_use_spherical_stereo = True
+    bl_use_custom_freestyle = True
 
     def __init__(self):
         self.session = None

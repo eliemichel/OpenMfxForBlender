@@ -21,14 +21,15 @@ set(INC
   ../../blenkernel
   ../../blenlib
   ../../blentranslation
+  ../../compositor
   ../../depsgraph
+  ../../draw
   ../../gpu
   ../../imbuf
   ../../makesdna
   ../../makesrna
   ../../nodes
-  ../../render/extern/include
-  ../../compositor
+  ../../render
   ../../windowmanager
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
@@ -39,8 +40,9 @@ set(SRC
   drawnode.c
   node_add.c
   node_buttons.c
-  node_draw.c
+  node_draw.cc
   node_edit.c
+  node_geometry_attribute_search.cc
   node_gizmo.c
   node_group.c
   node_ops.c
@@ -72,5 +74,8 @@ if(WITH_OPENIMAGEDENOISE)
   add_definitions(-DWITH_OPENIMAGEDENOISE)
 endif()
 
+if(WITH_OPENSUBDIV)
+  add_definitions(-DWITH_OPENSUBDIV)
+endif()
 
 blender_add_lib(bf_editor_space_node "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

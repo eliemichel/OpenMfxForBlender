@@ -25,6 +25,10 @@
 
 #include "RNA_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* internal exports only */
 
 struct ARegion;
@@ -38,9 +42,20 @@ struct TreeElement;
 struct TreeStoreElem;
 struct ViewLayer;
 struct bContext;
+struct bContextDataResult;
 struct bPoseChannel;
 struct wmKeyConfig;
 struct wmOperatorType;
+
+typedef struct SpaceOutliner_Runtime {
+  /** Internal C++ object to create and manage the tree for a specific display type (View Layers,
+   *  Scenes, Blender File, etc.). */
+  struct TreeDisplay *tree_display;
+
+  /** Pointers to tree-store elements, grouped by `(id, type, nr)`
+   *  in hash-table for faster searching. */
+  struct GHash *treehash;
+} SpaceOutliner_Runtime;
 
 typedef enum TreeElementInsertType {
   TE_INSERT_BEFORE,
@@ -61,6 +76,14 @@ typedef TreeTraversalAction (*TreeTraversalFunc)(struct TreeElement *te, void *c
 
 typedef struct TreeElement {
   struct TreeElement *next, *prev, *parent;
+
+  /**
+   * Handle to the new C++ object (a derived type of base #AbstractTreeElement) that should replace
+   * #TreeElement. Step by step, data should be moved to it and operations based on the type should
+   * become virtual methods of the class hierarchy.
+   */
+  struct TreeElementType *type;
+
   ListBase subtree;
   int xs, ys;                /* Do selection. */
   TreeStoreElem *store_elem; /* Element in tree store. */
@@ -130,8 +153,7 @@ enum {
   TE_ICONROW = (1 << 1),
   TE_LAZY_CLOSED = (1 << 2),
   TE_FREE_NAME = (1 << 3),
-  TE_DISABLED = (1 << 4),
-  TE_DRAGGING = (1 << 5),
+  TE_DRAGGING = (1 << 4),
   TE_CHILD_NOT_IN_COLLECTION = (1 << 6),
   /* Child elements of the same type in the icon-row are drawn merged as one icon.
    * This flag is set for an element that is part of these merged child icons. */
@@ -171,7 +193,7 @@ typedef enum {
 /* The outliner display modes that support the filter system.
  * Note: keep it synced with space_outliner.py */
 #define SUPPORT_FILTER_OUTLINER(space_outliner_) \
-  (ELEM((space_outliner_)->outlinevis, SO_VIEW_LAYER))
+  (ELEM((space_outliner_)->outlinevis, SO_VIEW_LAYER, SO_OVERRIDES_LIBRARY))
 
 /* Outliner Searching --
  *
@@ -251,6 +273,8 @@ TreeTraversalAction outliner_find_selected_objects(struct TreeElement *te, void 
 
 void draw_outliner(const struct bContext *C);
 
+void outliner_tree_dimensions(struct SpaceOutliner *space_outliner, int *r_width, int *r_height);
+
 TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te);
 
 void outliner_collection_isolate_flag(struct Scene *scene,
@@ -264,19 +288,24 @@ void outliner_collection_isolate_flag(struct Scene *scene,
 int tree_element_id_type_to_index(TreeElement *te);
 
 /* outliner_select.c -------------------------------------------- */
-eOLDrawState tree_element_type_active(struct bContext *C,
-                                      const TreeViewContext *tvc,
-                                      struct SpaceOutliner *space_outliner,
-                                      TreeElement *te,
-                                      TreeStoreElem *tselem,
-                                      const eOLSetState set,
-                                      bool recursive);
-eOLDrawState tree_element_active(struct bContext *C,
-                                 const TreeViewContext *tvc,
-                                 SpaceOutliner *space_outliner,
-                                 TreeElement *te,
-                                 const eOLSetState set,
-                                 const bool handle_all_types);
+void tree_element_type_active_set(struct bContext *C,
+                                  const TreeViewContext *tvc,
+                                  TreeElement *te,
+                                  TreeStoreElem *tselem,
+                                  const eOLSetState set,
+                                  bool recursive);
+eOLDrawState tree_element_type_active_state_get(const struct bContext *C,
+                                                const struct TreeViewContext *tvc,
+                                                const TreeElement *te,
+                                                const TreeStoreElem *tselem);
+void tree_element_activate(struct bContext *C,
+                           const TreeViewContext *tvc,
+                           TreeElement *te,
+                           const eOLSetState set,
+                           const bool handle_all_types);
+eOLDrawState tree_element_active_state_get(const TreeViewContext *tvc,
+                                           const TreeElement *te,
+                                           const TreeStoreElem *tselem);
 
 struct bPoseChannel *outliner_find_parent_bone(TreeElement *te, TreeElement **r_bone_te);
 
@@ -286,6 +315,7 @@ void outliner_item_select(struct bContext *C,
                           const short select_flag);
 
 bool outliner_item_is_co_over_name_icons(const TreeElement *te, float view_co_x);
+bool outliner_item_is_co_over_icon(const TreeElement *te, float view_co_x);
 bool outliner_item_is_co_over_name(const TreeElement *te, float view_co_x);
 bool outliner_item_is_co_within_close_toggle(const TreeElement *te, float view_co_x);
 bool outliner_is_co_within_mode_column(SpaceOutliner *space_outliner, const float view_mval[2]);
@@ -318,8 +348,6 @@ void outliner_do_object_operation(struct bContext *C,
                                   struct SpaceOutliner *space_outliner,
                                   struct ListBase *lb,
                                   outliner_operation_fn operation_fn);
-
-int common_restrict_check(struct bContext *C, struct Object *ob);
 
 int outliner_flag_is_any_test(ListBase *lb, short flag, const int curlevel);
 bool outliner_flag_set(ListBase *lb, short flag, short set);
@@ -361,21 +389,6 @@ void id_remap_fn(struct bContext *C,
                  struct TreeStoreElem *tsep,
                  struct TreeStoreElem *tselem,
                  void *user_data);
-
-void item_object_mode_enter_fn(struct bContext *C,
-                               struct ReportList *reports,
-                               struct Scene *scene,
-                               TreeElement *te,
-                               struct TreeStoreElem *tsep,
-                               struct TreeStoreElem *tselem,
-                               void *user_data);
-void item_object_mode_exit_fn(struct bContext *C,
-                              struct ReportList *reports,
-                              struct Scene *scene,
-                              TreeElement *te,
-                              struct TreeStoreElem *tsep,
-                              struct TreeStoreElem *tselem,
-                              void *user_data);
 
 void outliner_set_coordinates(struct ARegion *region, struct SpaceOutliner *space_outliner);
 
@@ -501,9 +514,10 @@ TreeElement *outliner_find_item_at_y(const SpaceOutliner *space_outliner,
                                      const ListBase *tree,
                                      float view_co_y);
 TreeElement *outliner_find_item_at_x_in_row(const SpaceOutliner *space_outliner,
-                                            const TreeElement *parent_te,
+                                            TreeElement *parent_te,
                                             float view_co_x,
-                                            bool *row_merged);
+                                            bool *r_is_merged_icon,
+                                            bool *r_is_over_icon);
 TreeElement *outliner_find_tse(struct SpaceOutliner *space_outliner, const TreeStoreElem *tse);
 TreeElement *outliner_find_tree_element(ListBase *lb, const TreeStoreElem *store_elem);
 TreeElement *outliner_find_parent_element(ListBase *lb,
@@ -525,10 +539,22 @@ bool outliner_tree_traverse(const SpaceOutliner *space_outliner,
 float outliner_restrict_columns_width(const struct SpaceOutliner *space_outliner);
 TreeElement *outliner_find_element_with_flag(const ListBase *lb, short flag);
 bool outliner_is_element_visible(const TreeElement *te);
-void outliner_scroll_view(struct ARegion *region, int delta_y);
+void outliner_scroll_view(struct SpaceOutliner *space_outliner,
+                          struct ARegion *region,
+                          int delta_y);
 void outliner_tag_redraw_avoid_rebuild_on_open_change(const struct SpaceOutliner *space_outliner,
                                                       struct ARegion *region);
 
 /* outliner_sync.c ---------------------------------------------- */
 
 void outliner_sync_selection(const struct bContext *C, struct SpaceOutliner *space_outliner);
+
+/* outliner_context.c ------------------------------------------- */
+
+int outliner_context(const struct bContext *C,
+                     const char *member,
+                     struct bContextDataResult *result);
+
+#ifdef __cplusplus
+}
+#endif

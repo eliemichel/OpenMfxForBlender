@@ -78,6 +78,7 @@ extern char datatoc_edit_uv_edges_frag_glsl[];
 extern char datatoc_edit_uv_faces_vert_glsl[];
 extern char datatoc_edit_uv_face_dots_vert_glsl[];
 extern char datatoc_edit_uv_stretching_vert_glsl[];
+extern char datatoc_edit_uv_image_vert_glsl[];
 extern char datatoc_edit_uv_tiled_image_borders_vert_glsl[];
 extern char datatoc_extra_frag_glsl[];
 extern char datatoc_extra_vert_glsl[];
@@ -93,6 +94,7 @@ extern char datatoc_facing_vert_glsl[];
 extern char datatoc_grid_frag_glsl[];
 extern char datatoc_grid_vert_glsl[];
 extern char datatoc_image_frag_glsl[];
+extern char datatoc_edit_uv_image_mask_frag_glsl[];
 extern char datatoc_image_vert_glsl[];
 extern char datatoc_motion_path_line_vert_glsl[];
 extern char datatoc_motion_path_line_geom_glsl[];
@@ -183,6 +185,8 @@ typedef struct OVERLAY_Shaders {
   GPUShader *edit_uv_stretching_angle;
   GPUShader *edit_uv_stretching_area;
   GPUShader *edit_uv_tiled_image_borders;
+  GPUShader *edit_uv_stencil_image;
+  GPUShader *edit_uv_mask_image;
   GPUShader *extra;
   GPUShader *extra_select;
   GPUShader *extra_groundline;
@@ -234,9 +238,10 @@ void OVERLAY_shader_library_ensure(void)
 {
   if (e_data.lib == NULL) {
     e_data.lib = DRW_shader_library_create();
-    /* NOTE: Theses needs to be ordered by dependencies. */
+    /* NOTE: These need to be ordered by dependencies. */
     DRW_SHADER_LIB_ADD(e_data.lib, common_globals_lib);
     DRW_SHADER_LIB_ADD(e_data.lib, common_overlay_lib);
+    DRW_SHADER_LIB_ADD(e_data.lib, common_colormanagement_lib);
     DRW_SHADER_LIB_ADD(e_data.lib, common_view_lib);
   }
 }
@@ -1062,6 +1067,30 @@ GPUShader *OVERLAY_shader_grid_image(void)
   return sh_data->grid_image;
 }
 
+GPUShader *OVERLAY_shader_edit_uv_stencil_image(void)
+{
+  OVERLAY_Shaders *sh_data = &e_data.sh_data[0];
+  if (!sh_data->edit_uv_stencil_image) {
+    sh_data->edit_uv_stencil_image = DRW_shader_create_with_shaderlib(
+        datatoc_edit_uv_image_vert_glsl, NULL, datatoc_image_frag_glsl, e_data.lib, NULL);
+  }
+  return sh_data->edit_uv_stencil_image;
+}
+
+GPUShader *OVERLAY_shader_edit_uv_mask_image(void)
+{
+  OVERLAY_Shaders *sh_data = &e_data.sh_data[0];
+  if (!sh_data->edit_uv_mask_image) {
+    sh_data->edit_uv_mask_image = DRW_shader_create_with_shaderlib(
+        datatoc_edit_uv_image_vert_glsl,
+        NULL,
+        datatoc_edit_uv_image_mask_frag_glsl,
+        e_data.lib,
+        NULL);
+  }
+  return sh_data->edit_uv_mask_image;
+}
+
 GPUShader *OVERLAY_shader_image(void)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
@@ -1655,7 +1684,7 @@ GPUShader *OVERLAY_shader_edit_uv_tiled_image_borders_get(void)
   return sh_data->edit_uv_tiled_image_borders;
 }
 
-/* \} */
+/** \} */
 
 static OVERLAY_InstanceFormats g_formats = {NULL};
 

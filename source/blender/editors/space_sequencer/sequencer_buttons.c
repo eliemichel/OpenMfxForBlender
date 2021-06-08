@@ -35,12 +35,8 @@
 #include "BKE_global.h"
 #include "BKE_screen.h"
 
-#include "ED_gpencil.h"
 #include "ED_screen.h"
 #include "ED_sequencer.h"
-
-#include "WM_api.h"
-#include "WM_types.h"
 
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
@@ -118,7 +114,7 @@ void sequencer_buttons_register(ARegionType *art)
   strcpy(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
   pt->poll = metadata_panel_context_poll;
   pt->draw = metadata_panel_context_draw;
-  pt->flag |= PNL_DEFAULT_CLOSED;
+  pt->flag |= PANEL_TYPE_DEFAULT_CLOSED;
   pt->order = 10;
   BLI_addtail(&art->paneltypes, pt);
 }

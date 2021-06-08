@@ -23,12 +23,10 @@
  * \ingroup bke
  */
 
-#include "DNA_ID.h"
-#include "DNA_boid_types.h"
-#include "DNA_dynamicpaint_types.h"
-#include "DNA_object_force_types.h"
-#include "DNA_pointcache_types.h"
-#include <stdio.h> /* for FILE */
+#include "DNA_boid_types.h"       /* for #BoidData */
+#include "DNA_pointcache_types.h" /* for #BPHYS_TOT_DATA */
+
+#include <stdio.h> /* for #FILE */
 
 #ifdef __cplusplus
 extern "C" {
@@ -79,7 +77,10 @@ extern "C" {
 #define PTCACHE_READ_OLD 3
 
 /* Structs */
+struct BlendDataReader;
+struct BlendWriter;
 struct ClothModifierData;
+struct DynamicPaintSurface;
 struct FluidModifierData;
 struct ListBase;
 struct Main;
@@ -322,9 +323,11 @@ int BKE_ptcache_data_size(int data_type);
 int BKE_ptcache_mem_index_find(struct PTCacheMem *pm, unsigned int index);
 
 /* Memory cache read/write helpers. */
-void BKE_ptcache_mem_pointers_init(struct PTCacheMem *pm);
-void BKE_ptcache_mem_pointers_incr(struct PTCacheMem *pm);
-int BKE_ptcache_mem_pointers_seek(int point_index, struct PTCacheMem *pm);
+void BKE_ptcache_mem_pointers_init(struct PTCacheMem *pm, void *cur[BPHYS_TOT_DATA]);
+void BKE_ptcache_mem_pointers_incr(void *cur[BPHYS_TOT_DATA]);
+int BKE_ptcache_mem_pointers_seek(int point_index,
+                                  struct PTCacheMem *pm,
+                                  void *cur[BPHYS_TOT_DATA]);
 
 /* Main cache reading call. */
 int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old);
@@ -373,6 +376,14 @@ void BKE_ptcache_validate(struct PointCache *cache, int framenr);
 
 /* Set correct flags after unsuccessful simulation step */
 void BKE_ptcache_invalidate(struct PointCache *cache);
+
+/********************** .blend File I/O *********************/
+
+void BKE_ptcache_blend_write(struct BlendWriter *writer, struct ListBase *ptcaches);
+void BKE_ptcache_blend_read_data(struct BlendDataReader *reader,
+                                 struct ListBase *ptcaches,
+                                 struct PointCache **ocache,
+                                 int force_disk);
 
 #ifdef __cplusplus
 }

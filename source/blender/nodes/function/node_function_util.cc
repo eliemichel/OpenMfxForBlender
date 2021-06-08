@@ -17,14 +17,22 @@
 #include "node_function_util.hh"
 #include "node_util.h"
 
-bool fn_node_poll_default(bNodeType *UNUSED(ntype), bNodeTree *ntree)
+static bool fn_node_poll_default(bNodeType *UNUSED(ntype),
+                                 bNodeTree *ntree,
+                                 const char **r_disabled_hint)
 {
   /* Function nodes are only supported in simulation node trees so far. */
-  return STREQ(ntree->idname, "SimulationNodeTree");
+  if (!STREQ(ntree->idname, "GeometryNodeTree")) {
+    *r_disabled_hint = "Not a geometry node tree";
+    return false;
+  }
+  return true;
 }
 
 void fn_node_type_base(bNodeType *ntype, int type, const char *name, short nclass, short flag)
 {
   node_type_base(ntype, type, name, nclass, flag);
   ntype->poll = fn_node_poll_default;
+  ntype->update_internal_links = node_update_internal_links_default;
+  ntype->insert_link = node_insert_link_default;
 }

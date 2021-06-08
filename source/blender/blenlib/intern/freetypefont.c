@@ -135,7 +135,6 @@ static VChar *freetypechar_to_vchar(FT_Face face, FT_ULong charcode, VFontData *
       nu->type = CU_BEZIER;
       nu->pntsu = onpoints[j];
       nu->resolu = 8;
-      nu->flag = CU_2D;
       nu->flagu = CU_NURB_CYCLIC;
       nu->bezt = bezt;
 
@@ -307,7 +306,7 @@ static VFontData *objfnt_to_ftvfontdata(PackedFile *pf)
   /* Extract the first 256 character from TTF */
   lcode = charcode = FT_Get_First_Char(face, &glyph_index);
 
-  /* No charmap found from the ttf so we need to figure it out */
+  /* No `charmap` found from the TTF so we need to figure it out. */
   if (glyph_index == 0) {
     FT_CharMap found = NULL;
     FT_CharMap charmap;

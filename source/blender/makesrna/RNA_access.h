@@ -14,6 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+/* Use a define instead of `#pragma once` because of `rna_internal.h` */
 #ifndef __RNA_ACCESS_H__
 #define __RNA_ACCESS_H__
 
@@ -60,6 +61,7 @@ extern StructRNA RNA_AnimData;
 extern StructRNA RNA_AnimViz;
 extern StructRNA RNA_AnimVizMotionPaths;
 extern StructRNA RNA_AnyType;
+extern StructRNA RNA_AOV;
 extern StructRNA RNA_Area;
 extern StructRNA RNA_AreaLight;
 extern StructRNA RNA_Armature;
@@ -69,6 +71,8 @@ extern StructRNA RNA_ArrayGpencilModifier;
 extern StructRNA RNA_ArrayModifier;
 extern StructRNA RNA_Attribute;
 extern StructRNA RNA_AttributeGroup;
+extern StructRNA RNA_AssetMetaData;
+extern StructRNA RNA_AssetTag;
 extern StructRNA RNA_BackgroundImage;
 extern StructRNA RNA_BevelModifier;
 extern StructRNA RNA_BezierSplinePoint;
@@ -87,6 +91,7 @@ extern StructRNA RNA_BoidSettings;
 extern StructRNA RNA_BoidState;
 extern StructRNA RNA_Bone;
 extern StructRNA RNA_BoneGroup;
+extern StructRNA RNA_BoolAttribute;
 extern StructRNA RNA_BoolProperty;
 extern StructRNA RNA_BooleanModifier;
 extern StructRNA RNA_Brush;
@@ -137,6 +142,8 @@ extern StructRNA RNA_CompositorNodeCombYUVA;
 extern StructRNA RNA_CompositorNodeComposite;
 extern StructRNA RNA_CompositorNodeCornerPin;
 extern StructRNA RNA_CompositorNodeCrop;
+extern StructRNA RNA_CompositorNodeCryptomatte;
+extern StructRNA RNA_CompositorNodeCryptomatteV2;
 extern StructRNA RNA_CompositorNodeCurveRGB;
 extern StructRNA RNA_CompositorNodeCurveVec;
 extern StructRNA RNA_CompositorNodeDBlur;
@@ -146,6 +153,7 @@ extern StructRNA RNA_CompositorNodeDilateErode;
 extern StructRNA RNA_CompositorNodeDisplace;
 extern StructRNA RNA_CompositorNodeDistanceMatte;
 extern StructRNA RNA_CompositorNodeDoubleEdgeMask;
+extern StructRNA RNA_CompositorNodeExposure;
 extern StructRNA RNA_CompositorNodeFilter;
 extern StructRNA RNA_CompositorNodeFlip;
 extern StructRNA RNA_CompositorNodeGamma;
@@ -201,6 +209,7 @@ extern StructRNA RNA_CopyRotationConstraint;
 extern StructRNA RNA_CopyScaleConstraint;
 extern StructRNA RNA_CopyTransformsConstraint;
 extern StructRNA RNA_CorrectiveSmoothModifier;
+extern StructRNA RNA_CryptomatteEntry;
 extern StructRNA RNA_Curve;
 extern StructRNA RNA_CurveMap;
 extern StructRNA RNA_CurveMapPoint;
@@ -249,13 +258,16 @@ extern StructRNA RNA_FModifierPython;
 extern StructRNA RNA_FModifierStepped;
 extern StructRNA RNA_FaceMap;
 extern StructRNA RNA_FieldSettings;
+extern StructRNA RNA_FileAssetSelectParams;
 extern StructRNA RNA_FileBrowserFSMenuEntry;
+extern StructRNA RNA_FileSelectEntry;
 extern StructRNA RNA_FileSelectParams;
 extern StructRNA RNA_FloatAttribute;
 extern StructRNA RNA_FloatAttributeValue;
 extern StructRNA RNA_FloatColorAttribute;
 extern StructRNA RNA_FloatColorAttributeValue;
 extern StructRNA RNA_FloatProperty;
+extern StructRNA RNA_Float2Attribute;
 extern StructRNA RNA_FloorConstraint;
 extern StructRNA RNA_FluidDomainSettings;
 extern StructRNA RNA_FluidEffectorSettings;
@@ -444,6 +456,7 @@ extern StructRNA RNA_NormalEditModifier;
 extern StructRNA RNA_Object;
 extern StructRNA RNA_ObjectBase;
 extern StructRNA RNA_ObjectDisplay;
+extern StructRNA RNA_ObjectLineArt;
 extern StructRNA RNA_OceanModifier;
 extern StructRNA RNA_OceanTexData;
 extern StructRNA RNA_OffsetGpencilModifier;
@@ -566,11 +579,9 @@ extern StructRNA RNA_ShrinkwrapModifier;
 extern StructRNA RNA_SimpleDeformModifier;
 extern StructRNA RNA_SimplifyGpencilModifier;
 extern StructRNA RNA_Simulation;
-#ifdef WITH_GEOMETRY_NODES
-extern StructRNA RNA_SimulationModifier;
-#endif
-extern StructRNA RNA_SimulationNode;
-extern StructRNA RNA_SimulationNodeTree;
+extern StructRNA RNA_NodesModifier;
+extern StructRNA RNA_GeometryNode;
+extern StructRNA RNA_GeometryNodeTree;
 extern StructRNA RNA_SkinModifier;
 extern StructRNA RNA_SmoothGpencilModifier;
 extern StructRNA RNA_SmoothModifier;
@@ -594,6 +605,7 @@ extern StructRNA RNA_SpaceOutliner;
 extern StructRNA RNA_SpacePreferences;
 extern StructRNA RNA_SpaceProperties;
 extern StructRNA RNA_SpaceSequenceEditor;
+extern StructRNA RNA_SpaceSpreadsheet;
 extern StructRNA RNA_SpaceTextEditor;
 extern StructRNA RNA_SpaceUVEditor;
 extern StructRNA RNA_SpaceView3D;
@@ -603,6 +615,10 @@ extern StructRNA RNA_Spline;
 extern StructRNA RNA_SplineIKConstraint;
 extern StructRNA RNA_SplinePoint;
 extern StructRNA RNA_SpotLight;
+extern StructRNA RNA_SpreadsheetContext;
+extern StructRNA RNA_SpreadsheetContextObject;
+extern StructRNA RNA_SpreadsheetContextModifier;
+extern StructRNA RNA_SpreadsheetContextNode;
 extern StructRNA RNA_Stereo3dDisplay;
 extern StructRNA RNA_StretchToConstraint;
 extern StructRNA RNA_StringAttribute;
@@ -695,6 +711,7 @@ extern StructRNA RNA_UVProjector;
 extern StructRNA RNA_UVWarpModifier;
 extern StructRNA RNA_UnitSettings;
 extern StructRNA RNA_UnknownType;
+extern StructRNA RNA_UserAssetLibrary;
 extern StructRNA RNA_UserSolidLight;
 extern StructRNA RNA_VertexcolorGpencilModifier;
 extern StructRNA RNA_VectorFont;
@@ -1012,7 +1029,6 @@ int RNA_property_string_default_length(PointerRNA *ptr, PropertyRNA *prop);
 int RNA_property_enum_get(PointerRNA *ptr, PropertyRNA *prop);
 void RNA_property_enum_set(PointerRNA *ptr, PropertyRNA *prop, int value);
 int RNA_property_enum_get_default(PointerRNA *ptr, PropertyRNA *prop);
-void *RNA_property_enum_py_data_get(PropertyRNA *prop);
 int RNA_property_enum_step(
     const struct bContext *C, PointerRNA *ptr, PropertyRNA *prop, int from_value, int step);
 
@@ -1503,11 +1519,21 @@ bool RNA_struct_override_store(struct Main *bmain,
                                PointerRNA *ptr_storage,
                                struct IDOverrideLibrary *override);
 
+typedef enum eRNAOverrideApplyFlag {
+  RNA_OVERRIDE_APPLY_FLAG_NOP = 0,
+  /**
+   * Hack to work around/fix older broken overrides: Do not apply override operations affecting ID
+   * pointers properties, unless the destination original value (the one being overridden) is NULL.
+   */
+  RNA_OVERRIDE_APPLY_FLAG_IGNORE_ID_POINTERS = 1 << 0,
+} eRNAOverrideApplyFlag;
+
 void RNA_struct_override_apply(struct Main *bmain,
                                struct PointerRNA *ptr_dst,
                                struct PointerRNA *ptr_src,
                                struct PointerRNA *ptr_storage,
-                               struct IDOverrideLibrary *override);
+                               struct IDOverrideLibrary *override,
+                               const eRNAOverrideApplyFlag flag);
 
 struct IDOverrideLibraryProperty *RNA_property_override_property_find(struct Main *bmain,
                                                                       PointerRNA *ptr,

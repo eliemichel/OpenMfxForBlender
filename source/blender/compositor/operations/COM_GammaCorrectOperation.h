@@ -20,6 +20,8 @@
 
 #include "COM_NodeOperation.h"
 
+namespace blender::compositor {
+
 class GammaCorrectOperation : public NodeOperation {
  private:
   /**
@@ -31,19 +33,19 @@ class GammaCorrectOperation : public NodeOperation {
   GammaCorrectOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 };
 
 class GammaUncorrectOperation : public NodeOperation {
@@ -57,17 +59,19 @@ class GammaUncorrectOperation : public NodeOperation {
   GammaUncorrectOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 };
+
+}  // namespace blender::compositor

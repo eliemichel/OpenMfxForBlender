@@ -19,7 +19,7 @@
 # <pep8 compliant>
 
 import bpy
-from bpy.types import Menu, Panel
+from bpy.types import Panel
 from bl_ui.utils import PresetPanel
 from .properties_physics_common import (
     effector_weights_ui,
@@ -486,7 +486,8 @@ class PHYSICS_PT_liquid(PhysicButtonsPanel, Panel):
 
         col = flow.column()
         col.prop(domain, "simulation_method", expand=False)
-        col.prop(domain, "flip_ratio", text="FLIP Ratio")
+        if domain.simulation_method == 'FLIP':
+            col.prop(domain, "flip_ratio", text="FLIP Ratio")
         col.prop(domain, "sys_particle_maximum", text="System Maximum")
         col = col.column(align=True)
         col.prop(domain, "particle_radius", text="Particle Radius")
@@ -957,7 +958,7 @@ class PHYSICS_PT_particles(PhysicButtonsPanel, Panel):
         col.separator()
 
         col = flow.column()
-        col.prop(domain, "sndparticle_boundary", text="Particles in Boundary:")
+        col.prop(domain, "sndparticle_boundary", text="Particles in Boundary")
 
         if domain.cache_type == 'MODULAR':
             col.separator()
@@ -1003,6 +1004,46 @@ class PHYSICS_PT_particles(PhysicButtonsPanel, Panel):
                 split.operator("fluid.bake_particles", text="Bake Particles")
             else:
                 split.operator("fluid.free_particles", text="Free Particles")
+
+
+class PHYSICS_PT_viscosity(PhysicButtonsPanel, Panel):
+    bl_label = "Viscosity"
+    bl_parent_id = 'PHYSICS_PT_liquid'
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+
+    @classmethod
+    def poll(cls, context):
+        # Fluid viscosity only enabled for liquids
+        if not PhysicButtonsPanel.poll_liquid_domain(context):
+            return False
+
+        return (context.engine in cls.COMPAT_ENGINES)
+
+    def draw_header(self, context):
+        md = context.fluid.domain_settings
+        domain = context.fluid.domain_settings
+        is_baking_any = domain.is_cache_baking_any
+        has_baked_any = domain.has_cache_baked_any
+        self.layout.enabled = not is_baking_any and not has_baked_any
+        self.layout.prop(md, "use_viscosity", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+
+        domain = context.fluid.domain_settings
+        layout.active = domain.use_viscosity
+
+        is_baking_any = domain.is_cache_baking_any
+        has_baked_any = domain.has_cache_baked_any
+        has_baked_data = domain.has_cache_baked_data
+
+        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
+        flow.enabled = not is_baking_any and not has_baked_any and not has_baked_data
+
+        col = flow.column(align=True)
+        col.prop(domain, "viscosity_value", text="Strength")
 
 
 class PHYSICS_PT_diffusion(PhysicButtonsPanel, Panel):
@@ -1469,6 +1510,7 @@ classes = (
     PHYSICS_PT_noise,
     PHYSICS_PT_fire,
     PHYSICS_PT_liquid,
+    PHYSICS_PT_viscosity,
     PHYSICS_PT_diffusion,
     PHYSICS_PT_particles,
     PHYSICS_PT_mesh,

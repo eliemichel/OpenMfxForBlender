@@ -25,11 +25,9 @@ extern "C" {
 #endif
 
 /* Forward declarations */
-struct GPUBatch;
 struct GPUTexture;
 struct ImBuf;
 struct Image;
-struct rcti;
 
 /* *********** LISTS *********** */
 
@@ -42,6 +40,8 @@ typedef struct IMAGE_PassList {
 typedef struct IMAGE_PrivateData {
   void *lock;
   struct ImBuf *ibuf;
+  struct Image *image;
+  struct DRWView *view;
 
   struct GPUTexture *texture;
   bool owns_texture;

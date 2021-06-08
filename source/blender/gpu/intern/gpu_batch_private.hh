@@ -37,12 +37,12 @@ namespace gpu {
 
 /**
  * Base class which is then specialized for each implementation (GL, VK, ...).
- * NOTE: Extends GPUBatch as we still needs to expose some of the internals to the outside C code.
- **/
+ *
+ * \note Extends #GPUBatch as we still needs to expose some of the internals to the outside C code.
+ */
 class Batch : public GPUBatch {
  public:
-  Batch(){};
-  virtual ~Batch(){};
+  virtual ~Batch() = default;
 
   virtual void draw(int v_first, int v_count, int i_first, int i_count) = 0;
 

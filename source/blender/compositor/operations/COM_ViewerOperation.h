@@ -23,6 +23,8 @@
 #include "COM_NodeOperation.h"
 #include "DNA_image_types.h"
 
+namespace blender::compositor {
+
 class ViewerOperation : public NodeOperation {
  private:
   float *m_outputBuffer;
@@ -32,7 +34,7 @@ class ViewerOperation : public NodeOperation {
   bool m_active;
   float m_centerX;
   float m_centerY;
-  OrderOfChunks m_chunkOrder;
+  ChunkOrdering m_chunkOrder;
   bool m_doDepthBuffer;
   ImBuf *m_ibuf;
   bool m_useAlphaInput;
@@ -48,10 +50,12 @@ class ViewerOperation : public NodeOperation {
 
  public:
   ViewerOperation();
-  void initExecution();
-  void deinitExecution();
-  void executeRegion(rcti *rect, unsigned int tileNumber);
-  bool isOutputOperation(bool /*rendering*/) const
+  void initExecution() override;
+  void deinitExecution() override;
+  void executeRegion(rcti *rect, unsigned int tileNumber) override;
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override;
+  bool isOutputOperation(bool /*rendering*/) const override
   {
     if (G.background) {
       return false;
@@ -66,7 +70,7 @@ class ViewerOperation : public NodeOperation {
   {
     this->m_imageUser = imageUser;
   }
-  bool isActiveViewerOutput() const
+  bool isActiveViewerOutput() const override
   {
     return this->m_active;
   }
@@ -82,7 +86,7 @@ class ViewerOperation : public NodeOperation {
   {
     this->m_centerY = centerY;
   }
-  void setChunkOrder(OrderOfChunks tileOrder)
+  void setChunkOrder(ChunkOrdering tileOrder)
   {
     this->m_chunkOrder = tileOrder;
   }
@@ -94,15 +98,11 @@ class ViewerOperation : public NodeOperation {
   {
     return this->m_centerY;
   }
-  OrderOfChunks getChunkOrder() const
+  ChunkOrdering getChunkOrder() const
   {
     return this->m_chunkOrder;
   }
-  CompositorPriority getRenderPriority() const;
-  bool isViewerOperation() const
-  {
-    return true;
-  }
+  eCompositorPriority getRenderPriority() const override;
   void setUseAlphaInput(bool value)
   {
     this->m_useAlphaInput = value;
@@ -129,3 +129,5 @@ class ViewerOperation : public NodeOperation {
   void updateImage(rcti *rect);
   void initImage();
 };
+
+}  // namespace blender::compositor

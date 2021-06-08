@@ -96,9 +96,7 @@ static void quad_verts_to_barycentric_tri(float tri[3][3],
 #endif
 
 /* -------------------------------------------------------------------- */
-/* Handle Loop Pairs */
-
-/** \name Loop Pairs
+/** \name Handle Loop Pairs
  * \{ */
 
 /**
@@ -328,8 +326,8 @@ static void bm_grid_fill_array(BMesh *bm,
       v = BM_vert_create(bm, co, NULL, BM_CREATE_NOP);
       v_grid[(y * xtot) + x] = v;
 
-      /* interpolate only along one axis, this could be changed
-       * but from user pov gives predictable results since these are selected loop */
+      /* Interpolate only along one axis, this could be changed
+       * but from user POV gives predictable results since these are selected loop. */
       if (use_vert_interp) {
         const float *w = weight_table[XY(x, y)];
 
@@ -588,8 +586,8 @@ static bool bm_edge_test_cb(BMEdge *e, void *bm_v)
 
 static bool bm_edge_test_rail_cb(BMEdge *e, void *UNUSED(bm_v))
 {
-  /* normally operators dont check for hidden state
-   * but alternative would be to pass slot of rail edges */
+  /* Normally operators don't check for hidden state
+   * but alternative would be to pass slot of rail edges. */
   if (BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
     return false;
   }

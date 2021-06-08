@@ -197,17 +197,22 @@ static void FLOAT2RGBE(const fCOLOR fcol, RGBE rgbe)
 
 /* ImBuf read */
 
-int imb_is_a_hdr(const unsigned char *buf)
+bool imb_is_a_hdr(const unsigned char *buf, const size_t size)
 {
-  /* For recognition, Blender only loads first 32 bytes, so use #?RADIANCE id instead */
-  /* update: actually, the 'RADIANCE' part is just an optional program name,
-   * the magic word is really only the '#?' part */
-  // if (strstr((char *)buf, "#?RADIANCE")) return 1;
-  if (strstr((char *)buf, "#?")) {
-    return 1;
+  /* NOTE: `#?RADIANCE` is used by other programs such as `ImageMagik`,
+   * Although there are some files in the wild that only use `#?` (from looking online).
+   * If this is ever a problem we could check for the longer header since this is part of the spec.
+   *
+   * We could check `32-bit_rle_rgbe` or `32-bit_rle_xyze` too since this is part of the format.
+   * Currently this isn't needed.
+   *
+   * See: http://paulbourke.net/dataformats/pic/
+   */
+  const unsigned char magic[2] = {'#', '?'};
+  if (size < sizeof(magic)) {
+    return false;
   }
-  // if (strstr((char *)buf, "32-bit_rle_rgbe")) return 1;
-  return 0;
+  return memcmp(buf, magic, sizeof(magic)) == 0;
 }
 
 struct ImBuf *imb_loadhdr(const unsigned char *mem,
@@ -224,87 +229,89 @@ struct ImBuf *imb_loadhdr(const unsigned char *mem,
   const unsigned char *ptr, *mem_eof = mem + size;
   char oriY[80], oriX[80];
 
-  if (imb_is_a_hdr((void *)mem)) {
-    colorspace_set_default_role(colorspace, IM_MAX_SPACE, COLOR_ROLE_DEFAULT_FLOAT);
-
-    /* find empty line, next line is resolution info */
-    size_t x;
-    for (x = 1; x < size; x++) {
-      if ((mem[x - 1] == '\n') && (mem[x] == '\n')) {
-        found = 1;
-        break;
-      }
-    }
-    if (found && (x < (size + 2))) {
-      if (sscanf((char *)&mem[x + 1],
-                 "%79s %d %79s %d",
-                 (char *)&oriY,
-                 &height,
-                 (char *)&oriX,
-                 &width) != 4) {
-        return NULL;
-      }
-
-      /* find end of this line, data right behind it */
-      ptr = (unsigned char *)strchr((char *)&mem[x + 1], '\n');
-      ptr++;
-
-      if (flags & IB_test) {
-        ibuf = IMB_allocImBuf(width, height, 32, 0);
-      }
-      else {
-        ibuf = IMB_allocImBuf(width, height, 32, (flags & IB_rect) | IB_rectfloat);
-      }
-
-      if (UNLIKELY(ibuf == NULL)) {
-        return NULL;
-      }
-      ibuf->ftype = IMB_FTYPE_RADHDR;
-
-      if (flags & IB_alphamode_detect) {
-        ibuf->flags |= IB_alphamode_premul;
-      }
-
-      if (flags & IB_test) {
-        return ibuf;
-      }
-
-      /* read in and decode the actual data */
-      sline = (RGBE *)MEM_mallocN(sizeof(*sline) * width, __func__);
-      rect_float = ibuf->rect_float;
-
-      for (size_t y = 0; y < height; y++) {
-        ptr = freadcolrs(sline, ptr, width, mem_eof);
-        if (ptr == NULL) {
-          printf(
-              "WARNING! HDR decode error, image may be just truncated, or completely wrong...\n");
-          break;
-        }
-        for (x = 0; x < width; x++) {
-          /* convert to ldr */
-          RGBE2FLOAT(sline[x], fcol);
-          *rect_float++ = fcol[RED];
-          *rect_float++ = fcol[GRN];
-          *rect_float++ = fcol[BLU];
-          *rect_float++ = 1.0f;
-        }
-      }
-      MEM_freeN(sline);
-      if (oriY[0] == '-') {
-        IMB_flipy(ibuf);
-      }
-
-      if (flags & IB_rect) {
-        IMB_rect_from_float(ibuf);
-      }
-
-      return ibuf;
-    }
-    // else printf("Data not found!\n");
+  if (!imb_is_a_hdr(mem, size)) {
+    return NULL;
   }
-  // else printf("Not a valid radiance HDR file!\n");
 
-  return NULL;
+  colorspace_set_default_role(colorspace, IM_MAX_SPACE, COLOR_ROLE_DEFAULT_FLOAT);
+
+  /* find empty line, next line is resolution info */
+  size_t x;
+  for (x = 1; x < size; x++) {
+    if ((mem[x - 1] == '\n') && (mem[x] == '\n')) {
+      found = 1;
+      break;
+    }
+  }
+
+  if ((found && (x < (size + 2))) == 0) {
+    /* Data not found! */
+    return NULL;
+  }
+
+  if (sscanf((const char *)&mem[x + 1],
+             "%79s %d %79s %d",
+             (char *)&oriY,
+             &height,
+             (char *)&oriX,
+             &width) != 4) {
+    return NULL;
+  }
+
+  /* find end of this line, data right behind it */
+  ptr = (const unsigned char *)strchr((const char *)&mem[x + 1], '\n');
+  ptr++;
+
+  if (flags & IB_test) {
+    ibuf = IMB_allocImBuf(width, height, 32, 0);
+  }
+  else {
+    ibuf = IMB_allocImBuf(width, height, 32, (flags & IB_rect) | IB_rectfloat);
+  }
+
+  if (UNLIKELY(ibuf == NULL)) {
+    return NULL;
+  }
+
+  ibuf->ftype = IMB_FTYPE_RADHDR;
+
+  if (flags & IB_alphamode_detect) {
+    ibuf->flags |= IB_alphamode_premul;
+  }
+
+  if (flags & IB_test) {
+    return ibuf;
+  }
+
+  /* read in and decode the actual data */
+  sline = (RGBE *)MEM_mallocN(sizeof(*sline) * width, __func__);
+  rect_float = ibuf->rect_float;
+
+  for (size_t y = 0; y < height; y++) {
+    ptr = freadcolrs(sline, ptr, width, mem_eof);
+    if (ptr == NULL) {
+      printf("WARNING! HDR decode error, image may be just truncated, or completely wrong...\n");
+      break;
+    }
+    for (x = 0; x < width; x++) {
+      /* convert to ldr */
+      RGBE2FLOAT(sline[x], fcol);
+      *rect_float++ = fcol[RED];
+      *rect_float++ = fcol[GRN];
+      *rect_float++ = fcol[BLU];
+      *rect_float++ = 1.0f;
+    }
+  }
+  MEM_freeN(sline);
+  if (oriY[0] == '-') {
+    IMB_flipy(ibuf);
+  }
+
+  if (flags & IB_rect) {
+    IMB_rect_from_float(ibuf);
+  }
+
+  return ibuf;
 }
 
 /* ImBuf write */
@@ -329,9 +336,9 @@ static int fwritecolrs(
       fcol[BLU] = (channels >= 3) ? fpscan[j + 2] : fpscan[j];
     }
     else {
-      fcol[RED] = (float)ibufscan[j] / 255.f;
-      fcol[GRN] = (float)((channels >= 2) ? ibufscan[j + 1] : ibufscan[j]) / 255.f;
-      fcol[BLU] = (float)((channels >= 3) ? ibufscan[j + 2] : ibufscan[j]) / 255.f;
+      fcol[RED] = (float)ibufscan[j] / 255.0f;
+      fcol[GRN] = (float)((channels >= 2) ? ibufscan[j + 1] : ibufscan[j]) / 255.0f;
+      fcol[BLU] = (float)((channels >= 3) ? ibufscan[j + 2] : ibufscan[j]) / 255.0f;
     }
     FLOAT2RGBE(fcol, rgbe);
     COPY_RGBE(rgbe, rgbe_scan[i]);
@@ -409,7 +416,7 @@ static void writeHeader(FILE *file, int width, int height)
   fputc(10, file);
 }
 
-int imb_savehdr(struct ImBuf *ibuf, const char *filepath, int flags)
+bool imb_savehdr(struct ImBuf *ibuf, const char *filepath, int flags)
 {
   FILE *file = BLI_fopen(filepath, "wb");
   float *fp = NULL;

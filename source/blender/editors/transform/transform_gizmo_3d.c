@@ -512,11 +512,11 @@ static void protectflag_to_drawflags(short protectflag, short *drawflags)
 /* for pose mode */
 static void protectflag_to_drawflags_pchan(RegionView3D *rv3d,
                                            const bPoseChannel *pchan,
-                                           short orientation_type)
+                                           short orientation_index)
 {
   /* Protect-flags apply to local space in pose mode, so only let them influence axis
    * visibility if we show the global orientation, otherwise it's confusing. */
-  if (orientation_type == V3D_ORIENT_LOCAL) {
+  if (orientation_index == V3D_ORIENT_LOCAL) {
     protectflag_to_drawflags(pchan->protectflag, &rv3d->twdrawflag);
   }
 }
@@ -532,7 +532,7 @@ static void protectflag_to_drawflags_ebone(RegionView3D *rv3d, const EditBone *e
 /* could move into BLI_math however this is only useful for display/editing purposes */
 static void axis_angle_to_gimbal_axis(float gmat[3][3], const float axis[3], const float angle)
 {
-  /* X/Y are arbitrary axies, most importantly Z is the axis of rotation */
+  /* X/Y are arbitrary axes, most importantly Z is the axis of rotation. */
 
   float cross_vec[3];
   float quat[4];
@@ -565,6 +565,9 @@ static bool test_rotmode_euler(short rotmode)
   return (ELEM(rotmode, ROT_MODE_AXISANGLE, ROT_MODE_QUAT)) ? 0 : 1;
 }
 
+/**
+ * Return false when no gimbal for selection.
+ */
 bool gimbal_axis(Object *ob, float gmat[3][3])
 {
   if (ob->mode & OB_MODE_POSE) {
@@ -650,15 +653,13 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
   Object *ob = OBACT(view_layer);
   bGPdata *gpd = CTX_data_gpencil_data(C);
   const bool is_gp_edit = GPENCIL_ANY_MODE(gpd);
+  const bool is_curve_edit = GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd);
   int a, totsel = 0;
 
   const int pivot_point = scene->toolsettings->transform_pivot_point;
-  const short orientation_type = params->orientation_type ?
-                                     (params->orientation_type - 1) :
-                                     scene->orientation_slots[SCE_ORIENT_DEFAULT].type;
-  const short orientation_index_custom =
-      params->orientation_type ? params->orientation_index_custom :
-                                 scene->orientation_slots[SCE_ORIENT_DEFAULT].index_custom;
+  const short orient_index = params->orientation_index ?
+                                 (params->orientation_index - 1) :
+                                 BKE_scene_orientation_get_index(scene, SCE_ORIENT_DEFAULT);
 
   /* transform widget matrix */
   unit_m4(rv3d->twmat);
@@ -674,7 +675,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
   if (ob) {
     float mat[3][3];
     ED_transform_calc_orientation_from_type_ex(
-        C, mat, scene, rv3d, ob, obedit, orientation_type, orientation_index_custom, pivot_point);
+        C, mat, scene, rv3d, ob, obedit, orient_index, pivot_point);
     copy_m4_m3(rv3d->twmat, mat);
   }
 
@@ -700,7 +701,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
       if (BKE_gpencil_layer_is_editable(gpl) && (gpl->actframe != NULL)) {
 
         /* calculate difference matrix */
-        BKE_gpencil_parent_matrix_get(depsgraph, ob, gpl, diff_mat);
+        BKE_gpencil_layer_transform_matrix_get(depsgraph, ob, gpl, diff_mat);
 
         LISTBASE_FOREACH (bGPDstroke *, gps, &gpl->actframe->strokes) {
           /* skip strokes that are invalid for current view */
@@ -708,16 +709,39 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
             continue;
           }
 
-          /* we're only interested in selected points here... */
-          if (gps->flag & GP_STROKE_SELECT) {
-            bGPDspoint *pt;
-            int i;
+          if (is_curve_edit) {
+            if (gps->editcurve == NULL) {
+              continue;
+            }
 
-            /* Change selection status of all points, then make the stroke match */
-            for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
-              if (pt->flag & GP_SPOINT_SELECT) {
-                calc_tw_center_with_matrix(tbounds, &pt->x, use_mat_local, diff_mat);
-                totsel++;
+            bGPDcurve *gpc = gps->editcurve;
+            if (gpc->flag & GP_CURVE_SELECT) {
+              for (uint32_t i = 0; i < gpc->tot_curve_points; i++) {
+                bGPDcurve_point *gpc_pt = &gpc->curve_points[i];
+                BezTriple *bezt = &gpc_pt->bezt;
+                if (gpc_pt->flag & GP_CURVE_POINT_SELECT) {
+                  for (uint32_t j = 0; j < 3; j++) {
+                    if (BEZT_ISSEL_IDX(bezt, j)) {
+                      calc_tw_center_with_matrix(tbounds, bezt->vec[j], use_mat_local, diff_mat);
+                      totsel++;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          else {
+            /* we're only interested in selected points here... */
+            if (gps->flag & GP_STROKE_SELECT) {
+              bGPDspoint *pt;
+              int i;
+
+              /* Change selection status of all points, then make the stroke match */
+              for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
+                if (pt->flag & GP_SPOINT_SELECT) {
+                  calc_tw_center_with_matrix(tbounds, &pt->x, use_mat_local, diff_mat);
+                  totsel++;
+                }
               }
             }
           }
@@ -949,7 +973,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
           Bone *bone = pchan->bone;
           if (bone && (bone->flag & BONE_TRANSFORM)) {
             calc_tw_center_with_matrix(tbounds, pchan->pose_head, use_mat_local, mat_local);
-            protectflag_to_drawflags_pchan(rv3d, pchan, orientation_type);
+            protectflag_to_drawflags_pchan(rv3d, pchan, orient_index);
           }
         }
         totsel += totsel_iter;
@@ -1036,7 +1060,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
 
       /* Protect-flags apply to world space in object mode, so only let them influence axis
        * visibility if we show the global orientation, otherwise it's confusing. */
-      if (orientation_type == V3D_ORIENT_GLOBAL) {
+      if (orient_index == V3D_ORIENT_GLOBAL) {
         protectflag_to_drawflags(base->object->protectflag, &rv3d->twdrawflag);
       }
       totsel++;
@@ -1271,6 +1295,11 @@ static void gizmo_xform_message_subscribe(wmGizmoGroup *gzgroup,
 void drawDial3d(const TransInfo *t)
 {
   if (t->mode == TFM_ROTATION && t->spacetype == SPACE_VIEW3D) {
+    if (t->options & CTX_PAINT_CURVE) {
+      /* Matrices are in the screen space. Not supported. */
+      return;
+    }
+
     wmGizmo *gz = wm_gizmomap_modal_get(t->region->gizmo_map);
     if (gz == NULL) {
       /* We only draw Dial3d if the operator has been called by a gizmo. */
@@ -1352,7 +1381,7 @@ void drawDial3d(const TransInfo *t)
                                     false,
                                     &(struct Dial3dParams){
                                         .draw_options = ED_GIZMO_DIAL_DRAW_FLAG_ANGLE_VALUE,
-                                        .angle_delta = t->values[0],
+                                        .angle_delta = t->values_final[0],
                                         .angle_increment = increment,
                                     });
 
@@ -1657,18 +1686,15 @@ static void WIDGETGROUP_gizmo_refresh(const bContext *C, wmGizmoGroup *gzgroup)
     }
   }
 
-  const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get_from_flag(
-      scene, ggd->twtype_init);
+  const int orient_index = BKE_scene_orientation_get_index_from_flag(scene, ggd->twtype_init);
 
   /* skip, we don't draw anything anyway */
-  if ((ggd->all_hidden = (ED_transform_calc_gizmo_stats(
-                              C,
-                              &(struct TransformCalcParams){
-                                  .use_only_center = true,
-                                  .orientation_type = orient_slot->type + 1,
-                                  .orientation_index_custom = orient_slot->index_custom,
-                              },
-                              &tbounds) == 0))) {
+  if ((ggd->all_hidden = (ED_transform_calc_gizmo_stats(C,
+                                                        &(struct TransformCalcParams){
+                                                            .use_only_center = true,
+                                                            .orientation_index = orient_index + 1,
+                                                        },
+                                                        &tbounds) == 0))) {
     return;
   }
 
@@ -1833,7 +1859,10 @@ static void WIDGETGROUP_gizmo_invoke_prepare(const bContext *C,
     PropertyRNA *prop_orient_type = RNA_struct_find_property(ptr, "orient_type");
     const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get_from_flag(
         scene, ggd->twtype_init);
-    if (orient_slot == &scene->orientation_slots[SCE_ORIENT_DEFAULT]) {
+    if ((gz == ggd->gizmos[MAN_AXIS_ROT_C]) ||
+        (orient_slot == &scene->orientation_slots[SCE_ORIENT_DEFAULT])) {
+      /* #MAN_AXIS_ROT_C always uses the #V3D_ORIENT_VIEW orientation,
+       * optionally we could set this orientation instead of unset the property. */
       RNA_property_unset(ptr, prop_orient_type);
     }
     else {
@@ -2084,14 +2113,12 @@ static void WIDGETGROUP_xform_cage_refresh(const bContext *C, wmGizmoGroup *gzgr
     gzgroup->use_fallback_keymap = false;
   }
 
-  const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get(scene,
-                                                                               SCE_ORIENT_SCALE);
+  const int orient_index = BKE_scene_orientation_get_index_from_flag(scene, SCE_ORIENT_SCALE);
 
   if ((ED_transform_calc_gizmo_stats(C,
                                      &(struct TransformCalcParams){
                                          .use_local_axis = true,
-                                         .orientation_type = orient_slot->type + 1,
-                                         .orientation_index_custom = orient_slot->index_custom,
+                                         .orientation_index = orient_index + 1,
                                      },
                                      &tbounds) == 0) ||
       equals_v3v3(rv3d->tw_axis_min, rv3d->tw_axis_max)) {
@@ -2300,14 +2327,14 @@ static void WIDGETGROUP_xform_shear_refresh(const bContext *C, wmGizmoGroup *gzg
   /* Needed to test view orientation changes. */
   copy_m3_m4(xgzgroup->prev.viewinv_m3, rv3d->viewinv);
 
-  const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get(scene,
-                                                                               SCE_ORIENT_ROTATE);
+  TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get_from_flag(
+      scene, SCE_ORIENT_ROTATE);
+  const int orient_index = BKE_scene_orientation_slot_get_index(orient_slot);
 
   if (ED_transform_calc_gizmo_stats(C,
                                     &(struct TransformCalcParams){
                                         .use_local_axis = false,
-                                        .orientation_type = orient_slot->type + 1,
-                                        .orientation_index_custom = orient_slot->index_custom,
+                                        .orientation_index = orient_index + 1,
                                     },
                                     &tbounds) == 0) {
     for (int i = 0; i < 3; i++) {

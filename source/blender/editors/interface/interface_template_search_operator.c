@@ -23,11 +23,8 @@
 
 #include <string.h>
 
-#include "DNA_gpencil_modifier_types.h"
-#include "DNA_node_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_shader_fx_types.h"
 #include "DNA_texture_types.h"
 
 #include "BLI_alloca.h"
@@ -62,7 +59,8 @@ static void operator_search_exec_fn(bContext *C, void *UNUSED(arg1), void *arg2)
 static void operator_search_update_fn(const bContext *C,
                                       void *UNUSED(arg),
                                       const char *str,
-                                      uiSearchItems *items)
+                                      uiSearchItems *items,
+                                      const bool UNUSED(is_first))
 {
   GHashIterator iter;
 
@@ -123,6 +121,7 @@ void UI_but_func_operator_search(uiBut *but)
                          operator_search_update_fn,
                          NULL,
                          false,
+                         NULL,
                          operator_search_exec_fn,
                          NULL);
 }

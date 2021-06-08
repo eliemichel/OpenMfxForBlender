@@ -15,6 +15,7 @@
 #
 
 # <pep8 compliant>
+from __future__ import annotations
 
 from bl_operators.presets import AddPresetBase
 from bpy.types import Operator
@@ -40,6 +41,9 @@ class AddPresetIntegrator(AddPresetBase, Operator):
         "cycles.caustics_reflective",
         "cycles.caustics_refractive",
         "cycles.blur_glossy"
+        "cycles.use_fast_gi"
+        "cycles.ao_bounces"
+        "cycles.ao_bounces_render"
     ]
 
     preset_subdir = "cycles/integrator"

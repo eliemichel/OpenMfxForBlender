@@ -26,10 +26,13 @@ extern "C" {
 struct ListBase;
 
 void BKE_appdir_init(void);
+void BKE_appdir_exit(void);
 
 /* note on naming: typical _get() suffix is omitted here,
  * since its the main purpose of the API. */
 const char *BKE_appdir_folder_default(void);
+const char *BKE_appdir_folder_home(void);
+bool BKE_appdir_folder_documents(char *dir);
 bool BKE_appdir_folder_id_ex(const int folder_id,
                              const char *subfolder,
                              char *path,

@@ -20,12 +20,6 @@
 
 # Libraries configuration for Apple.
 
-if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
-  set(MACOSX_DEPLOYMENT_TARGET 11.00)
-else()
-  set(MACOSX_DEPLOYMENT_TARGET 10.13)
-endif()
-
 macro(find_package_wrapper)
 # do nothing, just satisfy the macro
 endmacro()
@@ -56,21 +50,39 @@ list(APPEND ZLIB_LIBRARIES ${BZIP2_LIBRARIES})
 if(WITH_OPENAL)
   find_package(OpenAL)
   if(NOT OPENAL_FOUND)
+    message(WARNING "OpenAL not found, disabling WITH_OPENAL")
     set(WITH_OPENAL OFF)
   endif()
 endif()
 
+if(WITH_JACK)
+  find_library(JACK_FRAMEWORK
+    NAMES jackmp
+  )
+  if(NOT JACK_FRAMEWORK)
+    message(STATUS "JACK not found, disabling WITH_JACK")
+    set(WITH_JACK OFF)
+  else()
+    set(JACK_INCLUDE_DIRS ${JACK_FRAMEWORK}/headers)
+  endif()
+endif()
+
 if(NOT DEFINED LIBDIR)
-  set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/darwin)
-  # Prefer lib directory paths
-  file(GLOB LIB_SUBDIRS ${LIBDIR}/*)
-  set(CMAKE_PREFIX_PATH ${LIB_SUBDIRS})
+  if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64")
+    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/darwin)
+  else()
+    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/darwin_${CMAKE_OSX_ARCHITECTURES})
+  endif()
 else()
   message(STATUS "Using pre-compiled LIBDIR: ${LIBDIR}")
 endif()
 if(NOT EXISTS "${LIBDIR}/")
   message(FATAL_ERROR "Mac OSX requires pre-compiled libs at: '${LIBDIR}'")
 endif()
+
+# Prefer lib directory paths
+file(GLOB LIB_SUBDIRS ${LIBDIR}/*)
+set(CMAKE_PREFIX_PATH ${LIB_SUBDIRS})
 
 # -------------------------------------------------------------------------
 # Find precompiled libraries, and avoid system or user-installed ones.
@@ -86,23 +98,13 @@ endif()
 if(WITH_USD)
   find_package(USD)
   if(NOT USD_FOUND)
+    message(STATUS "USD not found, disabling WITH_USD")
     set(WITH_USD OFF)
   endif()
 endif()
 
 if(WITH_OPENSUBDIV)
   find_package(OpenSubdiv)
-endif()
-
-if(WITH_JACK)
-  find_library(JACK_FRAMEWORK
-    NAMES jackmp
-  )
-  if(NOT JACK_FRAMEWORK)
-    set(WITH_JACK OFF)
-  else()
-    set(JACK_INCLUDE_DIRS ${JACK_FRAMEWORK}/headers)
-  endif()
 endif()
 
 if(WITH_CODEC_SNDFILE)
@@ -126,22 +128,22 @@ if(WITH_CODEC_SNDFILE)
 endif()
 
 if(WITH_PYTHON)
-  # we use precompiled libraries for py 3.7 and up by default
-  set(PYTHON_VERSION 3.7)
+  # we use precompiled libraries for py 3.9 and up by default
+  set(PYTHON_VERSION 3.9)
   if(NOT WITH_PYTHON_MODULE AND NOT WITH_PYTHON_FRAMEWORK)
     # normally cached but not since we include them with blender
-    set(PYTHON_INCLUDE_DIR "${LIBDIR}/python/include/python${PYTHON_VERSION}m")
-    set(PYTHON_EXECUTABLE "${LIBDIR}/python/bin/python${PYTHON_VERSION}m")
-    set(PYTHON_LIBRARY ${LIBDIR}/python/lib/libpython${PYTHON_VERSION}m.a)
+    set(PYTHON_INCLUDE_DIR "${LIBDIR}/python/include/python${PYTHON_VERSION}")
+    set(PYTHON_EXECUTABLE "${LIBDIR}/python/bin/python${PYTHON_VERSION}")
+    set(PYTHON_LIBRARY ${LIBDIR}/python/lib/libpython${PYTHON_VERSION}.a)
     set(PYTHON_LIBPATH "${LIBDIR}/python/lib/python${PYTHON_VERSION}")
     # set(PYTHON_LINKFLAGS "-u _PyMac_Error")  # won't  build with this enabled
   else()
     # module must be compiled against Python framework
     set(_py_framework "/Library/Frameworks/Python.framework/Versions/${PYTHON_VERSION}")
 
-    set(PYTHON_INCLUDE_DIR "${_py_framework}/include/python${PYTHON_VERSION}m")
-    set(PYTHON_EXECUTABLE "${_py_framework}/bin/python${PYTHON_VERSION}m")
-    set(PYTHON_LIBPATH "${_py_framework}/lib/python${PYTHON_VERSION}/config-${PYTHON_VERSION}m")
+    set(PYTHON_INCLUDE_DIR "${_py_framework}/include/python${PYTHON_VERSION}")
+    set(PYTHON_EXECUTABLE "${_py_framework}/bin/python${PYTHON_VERSION}")
+    set(PYTHON_LIBPATH "${_py_framework}/lib/python${PYTHON_VERSION}")
     # set(PYTHON_LIBRARY python${PYTHON_VERSION})
     # set(PYTHON_LINKFLAGS "-u _PyMac_Error -framework Python")  # won't  build with this enabled
 
@@ -194,20 +196,27 @@ if(SYSTEMSTUBS_LIBRARY)
   list(APPEND PLATFORM_LINKLIBS SystemStubs)
 endif()
 
-set(PLATFORM_CFLAGS "${PLATFORM_CFLAGS} -pipe -funsigned-char")
+string(APPEND PLATFORM_CFLAGS " -pipe -funsigned-char -fno-strict-aliasing")
 set(PLATFORM_LINKFLAGS
   "-fexceptions -framework CoreServices -framework Foundation -framework IOKit -framework AppKit -framework Cocoa -framework Carbon -framework AudioUnit -framework AudioToolbox -framework CoreAudio -framework Metal -framework QuartzCore"
 )
 
 list(APPEND PLATFORM_LINKLIBS c++)
 
+if(WITH_OPENIMAGEDENOISE)
+  if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+    # OpenImageDenoise uses BNNS from the Accelerate framework.
+    string(APPEND PLATFORM_LINKFLAGS " -framework Accelerate")
+  endif()
+endif()
+
 if(WITH_JACK)
-  set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -F/Library/Frameworks -weak_framework jackmp")
+  string(APPEND PLATFORM_LINKFLAGS " -F/Library/Frameworks -weak_framework jackmp")
 endif()
 
 if(WITH_PYTHON_MODULE OR WITH_PYTHON_FRAMEWORK)
   # force cmake to link right framework
-  set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /Library/Frameworks/Python.framework/Versions/${PYTHON_VERSION}/Python")
+  string(APPEND PLATFORM_LINKFLAGS " /Library/Frameworks/Python.framework/Versions/${PYTHON_VERSION}/Python")
 endif()
 
 if(WITH_OPENCOLLADA)
@@ -222,7 +231,7 @@ if(WITH_SDL)
   find_package(SDL2)
   set(SDL_INCLUDE_DIR ${SDL2_INCLUDE_DIRS})
   set(SDL_LIBRARY ${SDL2_LIBRARIES})
-  set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -framework ForceFeedback")
+  string(APPEND PLATFORM_LINKFLAGS " -framework ForceFeedback")
 endif()
 
 set(PNG_ROOT ${LIBDIR}/png)
@@ -266,7 +275,15 @@ if(WITH_BOOST)
 endif()
 
 if(WITH_INTERNATIONAL OR WITH_CODEC_FFMPEG)
-  set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -liconv") # boost_locale and ffmpeg needs it !
+  string(APPEND PLATFORM_LINKFLAGS " -liconv") # boost_locale and ffmpeg needs it !
+endif()
+
+if(WITH_PUGIXML)
+  find_package(PugiXML)
+  if(NOT PUGIXML_FOUND)
+    message(WARNING "PugiXML not found, disabling WITH_PUGIXML")
+    set(WITH_PUGIXML OFF)
+  endif()
 endif()
 
 if(WITH_OPENIMAGEIO)
@@ -284,7 +301,12 @@ if(WITH_OPENIMAGEIO)
 endif()
 
 if(WITH_OPENCOLORIO)
-  find_package(OpenColorIO)
+  find_package(OpenColorIO 2.0.0)
+
+  if(NOT OPENCOLORIO_FOUND)
+    set(WITH_OPENCOLORIO OFF)
+    message(STATUS "OpenColorIO not found, disabling WITH_OPENCOLORIO")
+  endif()
 endif()
 
 if(WITH_OPENVDB)
@@ -296,8 +318,11 @@ if(WITH_OPENVDB)
 endif()
 
 if(WITH_NANOVDB)
-  set(NANOVDB ${LIBDIR}/nanovdb)
-  set(NANOVDB_INCLUDE_DIR ${NANOVDB}/include)
+  find_package(NanoVDB)
+endif()
+
+if(WITH_CPU_SIMD AND SUPPORT_NEON_BUILD)
+  find_package(sse2neon)
 endif()
 
 if(WITH_LLVM)
@@ -305,6 +330,13 @@ if(WITH_LLVM)
   if(NOT LLVM_FOUND)
     message(FATAL_ERROR "LLVM not found.")
   endif()
+  if(WITH_CLANG)
+    find_package(Clang)
+    if(NOT CLANG_FOUND)
+       message(FATAL_ERROR "Clang not found.")
+    endif()
+  endif()
+
 endif()
 
 if(WITH_CYCLES_OSL)
@@ -317,27 +349,21 @@ if(WITH_CYCLES_OSL)
   list(APPEND OSL_LIBRARIES ${OSL_LIB_COMP} -force_load ${OSL_LIB_EXEC} ${OSL_LIB_QUERY})
   find_path(OSL_INCLUDE_DIR OSL/oslclosure.h PATHS ${CYCLES_OSL}/include)
   find_program(OSL_COMPILER NAMES oslc PATHS ${CYCLES_OSL}/bin)
-  find_path(OSL_SHADER_DIR NAMES stdosl.h PATHS ${CYCLES_OSL}/shaders)
+  find_path(OSL_SHADER_DIR NAMES stdosl.h PATHS ${CYCLES_OSL}/share/OSL/shaders)
 
   if(OSL_INCLUDE_DIR AND OSL_LIBRARIES AND OSL_COMPILER AND OSL_SHADER_DIR)
     set(OSL_FOUND TRUE)
   else()
-    message(STATUS "OSL not found")
+    message(WARNING "OSL not found, disabling WITH_CYCLES_OSL")
     set(WITH_CYCLES_OSL OFF)
   endif()
-endif()
-
-if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
-  set(WITH_CYCLES_EMBREE OFF)
-  set(WITH_OPENIMAGEDENOISE OFF)
-  set(WITH_CPU_SSE OFF)
 endif()
 
 if(WITH_CYCLES_EMBREE)
   find_package(Embree 3.8.0 REQUIRED)
   # Increase stack size for Embree, only works for executables.
   if(NOT WITH_PYTHON_MODULE)
-    set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
+    string(APPEND PLATFORM_LINKFLAGS " -Wl,-stack_size,0x100000")
   endif()
 
   # Embree static library linking can mix up SSE and AVX symbols, causing
@@ -356,7 +382,7 @@ if(WITH_OPENIMAGEDENOISE)
 
   if(NOT OPENIMAGEDENOISE_FOUND)
     set(WITH_OPENIMAGEDENOISE OFF)
-    message(STATUS "OpenImageDenoise not found")
+    message(STATUS "OpenImageDenoise not found, disabling WITH_OPENIMAGEDENOISE")
   endif()
 endif()
 
@@ -381,10 +407,10 @@ if(WITH_OPENMP)
     set(OPENMP_FOUND ON)
     set(OpenMP_C_FLAGS "-Xclang -fopenmp -I'${LIBDIR}/openmp/include'")
     set(OpenMP_CXX_FLAGS "-Xclang -fopenmp -I'${LIBDIR}/openmp/include'")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L'${LIBDIR}/openmp/lib' -lomp")
+    set(OpenMP_LINKER_FLAGS "-L'${LIBDIR}/openmp/lib' -lomp")
 
     # Copy libomp.dylib to allow executables like datatoc and tests to work.
-    # `@executable_path/../Resources/lib/` is a default dylib search path.
+    # `@executable_path/../Resources/lib/` `LC_ID_DYLIB` is added by the deps builder.
     # For single config generator datatoc, tests etc.
     execute_process(
       COMMAND mkdir -p ${CMAKE_BINARY_DIR}/Resources/lib
@@ -419,6 +445,14 @@ if(WITH_GMP)
   endif()
 endif()
 
+if(WITH_HARU)
+  find_package(Haru)
+  if(NOT HARU_FOUND)
+    message(WARNING "Haru not found, disabling WITH_HARU")
+    set(WITH_HARU OFF)
+  endif()
+endif()
+
 if(EXISTS ${LIBDIR})
   without_system_libs_end()
 endif()
@@ -428,36 +462,50 @@ endif()
 
 set(EXETYPE MACOSX_BUNDLE)
 
-set(CMAKE_C_FLAGS_DEBUG "-fno-strict-aliasing -g")
-set(CMAKE_CXX_FLAGS_DEBUG "-fno-strict-aliasing -g")
+set(CMAKE_C_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
 if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64" OR CMAKE_OSX_ARCHITECTURES MATCHES "i386")
   set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic -msse -msse2 -msse3 -mssse3")
   set(CMAKE_C_FLAGS_RELEASE "-O2 -mdynamic-no-pic  -msse -msse2 -msse3 -mssse3")
   if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -ftree-vectorize  -fvariable-expansion-in-unroller")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -ftree-vectorize  -fvariable-expansion-in-unroller")
+    string(APPEND CMAKE_C_FLAGS_RELEASE " -ftree-vectorize  -fvariable-expansion-in-unroller")
+    string(APPEND CMAKE_CXX_FLAGS_RELEASE " -ftree-vectorize  -fvariable-expansion-in-unroller")
   endif()
 else()
-  set(CMAKE_C_FLAGS_RELEASE "-O2 -mdynamic-no-pic -fno-strict-aliasing")
-  set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic -fno-strict-aliasing")
+  set(CMAKE_C_FLAGS_RELEASE "-O2 -mdynamic-no-pic")
+  set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic")
 endif()
 
 if(${XCODE_VERSION} VERSION_EQUAL 5 OR ${XCODE_VERSION} VERSION_GREATER 5)
   # Xcode 5 is always using CLANG, which has too low template depth of 128 for libmv
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth=1024")
+  string(APPEND CMAKE_CXX_FLAGS " -ftemplate-depth=1024")
 endif()
 
 # Avoid conflicts with Luxrender, and other plug-ins that may use the same
 # libraries as Blender with a different version or build options.
-set(PLATFORM_LINKFLAGS
-  "${PLATFORM_LINKFLAGS} -Xlinker -unexported_symbols_list -Xlinker '${CMAKE_SOURCE_DIR}/source/creator/osx_locals.map'"
+string(APPEND PLATFORM_LINKFLAGS
+  " -Wl,-unexported_symbols_list,'${CMAKE_SOURCE_DIR}/source/creator/osx_locals.map'"
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -stdlib=libc++")
+string(APPEND CMAKE_CXX_FLAGS " -stdlib=libc++")
+string(APPEND PLATFORM_LINKFLAGS " -stdlib=libc++")
 
 # Suppress ranlib "has no symbols" warnings (workaround for T48250)
 set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
 set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
 set(CMAKE_C_ARCHIVE_FINISH   "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
 set(CMAKE_CXX_ARCHIVE_FINISH "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
+
+if(WITH_COMPILER_CCACHE)
+  if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
+    find_program(CCACHE_PROGRAM ccache)
+    if(CCACHE_PROGRAM)
+      # Makefiles and ninja
+      set(CMAKE_C_COMPILER_LAUNCHER   "${CCACHE_PROGRAM}" CACHE STRING "" FORCE)
+      set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}" CACHE STRING "" FORCE)
+    else()
+      message(WARNING "Ccache NOT found, disabling WITH_COMPILER_CCACHE")
+      set(WITH_COMPILER_CCACHE OFF)
+    endif()
+  endif()
+endif()

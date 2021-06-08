@@ -100,7 +100,9 @@ class DenoiseParams {
     neighbor_frames = 2;
     clamp_input = true;
 
-    input_passes = DENOISER_INPUT_RGB_ALBEDO_NORMAL;
+    /* Default to color + albedo only, since normal input does not always have the desired effect
+     * when denoising with OptiX. */
+    input_passes = DENOISER_INPUT_RGB_ALBEDO;
 
     start_sample = 0;
   }
@@ -117,8 +119,7 @@ class AdaptiveSampling {
  public:
   AdaptiveSampling();
 
-  int align_static_samples(int samples) const;
-  int align_dynamic_samples(int offset, int samples) const;
+  int align_samples(int sample, int num_samples) const;
   bool need_filter(int sample) const;
 
   bool use;
@@ -159,6 +160,7 @@ class DeviceTask {
   function<void(RenderTile &)> update_tile_sample;
   function<void(RenderTile &)> release_tile;
   function<bool()> get_cancel;
+  function<bool()> get_tile_stolen;
   function<void(RenderTileNeighbors &, Device *)> map_neighbor_tiles;
   function<void(RenderTileNeighbors &, Device *)> unmap_neighbor_tiles;
 

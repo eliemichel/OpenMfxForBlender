@@ -25,13 +25,10 @@
 #include "BKE_context.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_material.h"
-#include "BKE_object.h"
 #include "BKE_screen.h"
 
-#include "DNA_object_force_types.h"
+#include "DNA_material_types.h"
 #include "DNA_object_types.h"
-#include "DNA_particle_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 
 #include "ED_object.h"
@@ -269,6 +266,11 @@ static void gpencil_modifier_ops_extra_draw(bContext *C, uiLayout *layout, void 
           ICON_DUPLICATE,
           "OBJECT_OT_gpencil_modifier_copy");
 
+  uiItemO(layout,
+          CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy to Selected"),
+          0,
+          "OBJECT_OT_gpencil_modifier_copy_to_selected");
+
   uiItemS(layout);
 
   /* Move to first. */
@@ -365,14 +367,9 @@ PanelType *gpencil_modifier_panel_register(ARegionType *region_type,
                                            GpencilModifierType type,
                                            PanelDrawFn draw)
 {
+  PanelType *panel_type = MEM_callocN(sizeof(PanelType), __func__);
 
-  /* Get the name for the modifier's panel. */
-  char panel_idname[BKE_ST_MAXNAME];
-  BKE_gpencil_modifierType_panel_id(type, panel_idname);
-
-  PanelType *panel_type = MEM_callocN(sizeof(PanelType), panel_idname);
-
-  BLI_strncpy(panel_type->idname, panel_idname, BKE_ST_MAXNAME);
+  BKE_gpencil_modifierType_panel_id(type, panel_type->idname);
   BLI_strncpy(panel_type->label, "", BKE_ST_MAXNAME);
   BLI_strncpy(panel_type->context, "modifier", BKE_ST_MAXNAME);
   BLI_strncpy(panel_type->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA, BKE_ST_MAXNAME);
@@ -383,7 +380,7 @@ PanelType *gpencil_modifier_panel_register(ARegionType *region_type,
 
   /* Give the panel the special flag that says it was built here and corresponds to a
    * modifier rather than a #PanelType. */
-  panel_type->flag = PNL_LAYOUT_HEADER_EXPAND | PNL_DRAW_BOX | PNL_INSTANCED;
+  panel_type->flag = PANEL_TYPE_HEADER_EXPAND | PANEL_TYPE_DRAW_BOX | PANEL_TYPE_INSTANCED;
   panel_type->reorder = gpencil_modifier_reorder;
   panel_type->get_list_data_expand_flag = get_gpencil_modifier_expand_flag;
   panel_type->set_list_data_expand_flag = set_gpencil_modifier_expand_flag;
@@ -406,13 +403,9 @@ PanelType *gpencil_modifier_subpanel_register(ARegionType *region_type,
                                               PanelDrawFn draw,
                                               PanelType *parent)
 {
-  /* Create the subpanel's ID name. */
-  char panel_idname[BKE_ST_MAXNAME];
-  BLI_snprintf(panel_idname, BKE_ST_MAXNAME, "%s_%s", parent->idname, name);
+  PanelType *panel_type = MEM_callocN(sizeof(PanelType), __func__);
 
-  PanelType *panel_type = MEM_callocN(sizeof(PanelType), panel_idname);
-
-  BLI_strncpy(panel_type->idname, panel_idname, BKE_ST_MAXNAME);
+  BLI_snprintf(panel_type->idname, BKE_ST_MAXNAME, "%s_%s", parent->idname, name);
   BLI_strncpy(panel_type->label, label, BKE_ST_MAXNAME);
   BLI_strncpy(panel_type->context, "modifier", BKE_ST_MAXNAME);
   BLI_strncpy(panel_type->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA, BKE_ST_MAXNAME);
@@ -420,7 +413,7 @@ PanelType *gpencil_modifier_subpanel_register(ARegionType *region_type,
   panel_type->draw_header = draw_header;
   panel_type->draw = draw;
   panel_type->poll = gpencil_modifier_ui_poll;
-  panel_type->flag = (PNL_DEFAULT_CLOSED | PNL_DRAW_BOX);
+  panel_type->flag = (PANEL_TYPE_DEFAULT_CLOSED | PANEL_TYPE_DRAW_BOX);
 
   BLI_assert(parent != NULL);
   BLI_strncpy(panel_type->parent_id, parent->idname, BKE_ST_MAXNAME);

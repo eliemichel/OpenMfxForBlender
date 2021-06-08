@@ -143,7 +143,7 @@ void bmesh_disk_vert_replace(BMEdge *e, BMVert *v_dst, BMVert *v_src)
  *
  * The loop cycle keeps track of a faces vertices and edges. It should be noted that the
  * direction of a loop cycle is either CW or CCW depending on the face normal, and is
- * not oriented to the faces editedges.
+ * not oriented to the faces edit-edges.
  *
  * Functions relating to this cycle:
  * - bmesh_cycle_XXX family of functions.
@@ -402,7 +402,7 @@ bool bmesh_radial_validate(int radlen, BMLoop *l)
     if (l_iter->e != l->e) {
       return false;
     }
-    if (l_iter->v != l->e->v1 && l_iter->v != l->e->v2) {
+    if (!ELEM(l_iter->v, l->e->v1, l->e->v2)) {
       return false;
     }
 
@@ -537,7 +537,7 @@ int bmesh_radial_length(const BMLoop *l)
 
   do {
     if (UNLIKELY(!l_iter)) {
-      /* radial cycle is broken (not a circulat loop) */
+      /* Radial cycle is broken (not a circular loop). */
       BMESH_ASSERT(0);
       return 0;
     }

@@ -109,7 +109,7 @@ static GPUPass *gpu_pass_cache_resolve_collision(GPUPass *pass,
                                                  uint32_t hash)
 {
   BLI_spin_lock(&pass_cache_spin);
-  /* Collision, need to strcmp the whole shader. */
+  /* Collision, need to `strcmp` the whole shader. */
   for (; pass && (pass->hash == hash); pass = pass->next) {
     if ((defs != NULL) && (!STREQ(pass->defines, defs))) { /* Pass */
     }
@@ -377,6 +377,19 @@ static int codegen_process_uniforms_functions(GPUMaterial *material,
     BLI_freelistN(&ubo_inputs);
   }
 
+  /* Generate the uniform attribute UBO if necessary. */
+  if (!BLI_listbase_is_empty(&graph->uniform_attrs.list)) {
+    BLI_dynstr_append(ds, "\nstruct UniformAttributes {\n");
+    LISTBASE_FOREACH (GPUUniformAttr *, attr, &graph->uniform_attrs.list) {
+      BLI_dynstr_appendf(ds, "  vec4 attr%d;\n", attr->id);
+    }
+    BLI_dynstr_append(ds, "};\n");
+    BLI_dynstr_appendf(ds, "layout (std140) uniform %s {\n", GPU_ATTRIBUTE_UBO_BLOCK_NAME);
+    BLI_dynstr_append(ds, "  UniformAttributes uniform_attrs[DRW_RESOURCE_CHUNK_LEN];\n");
+    BLI_dynstr_append(ds, "};\n");
+    BLI_dynstr_append(ds, "#define GET_UNIFORM_ATTR(name) (uniform_attrs[resource_id].name)\n");
+  }
+
   BLI_dynstr_append(ds, "\n");
 
   return builtins;
@@ -398,7 +411,7 @@ static void codegen_declare_tmps(DynStr *ds, GPUNodeGraph *graph)
   BLI_dynstr_append(ds, "\n");
 }
 
-static void codegen_call_functions(DynStr *ds, GPUNodeGraph *graph, GPUOutput *finaloutput)
+static void codegen_call_functions(DynStr *ds, GPUNodeGraph *graph)
 {
   LISTBASE_FOREACH (GPUNode *, node, &graph->nodes) {
     BLI_dynstr_appendf(ds, "  %s(", node->name);
@@ -478,7 +491,10 @@ static void codegen_call_functions(DynStr *ds, GPUNodeGraph *graph, GPUOutput *f
         BLI_dynstr_appendf(ds, "cons%d", input->id);
       }
       else if (input->source == GPU_SOURCE_ATTR) {
-        BLI_dynstr_appendf(ds, "var%d", input->attr->id);
+        codegen_convert_datatype(ds, input->attr->gputype, input->type, "var", input->attr->id);
+      }
+      else if (input->source == GPU_SOURCE_UNIFORM_ATTR) {
+        BLI_dynstr_appendf(ds, "GET_UNIFORM_ATTR(attr%d)", input->uniform_attr->id);
       }
 
       BLI_dynstr_append(ds, ", ");
@@ -493,8 +509,11 @@ static void codegen_call_functions(DynStr *ds, GPUNodeGraph *graph, GPUOutput *f
 
     BLI_dynstr_append(ds, ");\n");
   }
+}
 
-  BLI_dynstr_appendf(ds, "\n  return tmp%d;\n", finaloutput->id);
+static void codegen_final_output(DynStr *ds, GPUOutput *finaloutput)
+{
+  BLI_dynstr_appendf(ds, "return tmp%d;\n", finaloutput->id);
 }
 
 static char *code_generate_fragment(GPUMaterial *material,
@@ -577,7 +596,35 @@ static char *code_generate_fragment(GPUMaterial *material,
   }
 
   codegen_declare_tmps(ds, graph);
-  codegen_call_functions(ds, graph, graph->outlink->output);
+  codegen_call_functions(ds, graph);
+
+  BLI_dynstr_append(ds, "  #ifndef VOLUMETRICS\n");
+  BLI_dynstr_append(ds, "  if (renderPassAOV) {\n");
+  BLI_dynstr_append(ds, "    switch (render_pass_aov_hash()) {\n");
+  GSet *aovhashes_added = BLI_gset_int_new(__func__);
+  LISTBASE_FOREACH (GPUNodeGraphOutputLink *, aovlink, &graph->outlink_aovs) {
+    void *aov_key = POINTER_FROM_INT(aovlink->hash);
+    if (BLI_gset_haskey(aovhashes_added, aov_key)) {
+      continue;
+    }
+    BLI_dynstr_appendf(ds, "      case %d: {\n        ", aovlink->hash);
+    codegen_final_output(ds, aovlink->outlink->output);
+    BLI_dynstr_append(ds, "      }\n");
+    BLI_gset_add(aovhashes_added, aov_key);
+  }
+  BLI_gset_free(aovhashes_added, NULL);
+  BLI_dynstr_append(ds, "      default: {\n");
+  BLI_dynstr_append(ds, "        Closure no_aov = CLOSURE_DEFAULT;\n");
+  BLI_dynstr_append(ds, "        no_aov.holdout = 1.0;\n");
+  BLI_dynstr_append(ds, "        return no_aov;\n");
+  BLI_dynstr_append(ds, "      }\n");
+  BLI_dynstr_append(ds, "    }\n");
+  BLI_dynstr_append(ds, "  } else {\n");
+  BLI_dynstr_append(ds, "  #else /* VOLUMETRICS */\n");
+  BLI_dynstr_append(ds, "  {\n");
+  BLI_dynstr_append(ds, "  #endif /* VOLUMETRICS */\n    ");
+  codegen_final_output(ds, graph->outlink->output);
+  BLI_dynstr_append(ds, "  }\n");
 
   BLI_dynstr_append(ds, "}\n");
 
@@ -799,6 +846,7 @@ GPUPass *GPU_generate_pass(GPUMaterial *material,
   /* Prune the unused nodes and extract attributes before compiling so the
    * generated VBOs are ready to accept the future shader. */
   gpu_node_graph_prune_unused(graph);
+  gpu_node_graph_finalize_uniform_attrs(graph);
 
   int builtins = 0;
   LISTBASE_FOREACH (GPUNode *, node, &graph->nodes) {
@@ -914,7 +962,7 @@ static int count_active_texture_sampler(GPUShader *shader, char *source)
       /* Move past "uniform". */
       code += 7;
       /* Skip sampler type suffix. */
-      while (*code != ' ' && *code != '\0') {
+      while (!ELEM(*code, ' ', '\0')) {
         code++;
       }
       /* Skip following spaces. */

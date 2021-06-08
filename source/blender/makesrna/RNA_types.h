@@ -18,6 +18,7 @@
  * \ingroup RNA
  */
 
+/* Use a define instead of `#pragma once` because of `BKE_addon.h`, `ED_object.h` & others. */
 #ifndef __RNA_TYPES_H__
 #define __RNA_TYPES_H__
 
@@ -618,7 +619,7 @@ typedef enum StructFlag {
   /** Indicates that this struct is an ID struct, and to use reference-counting. */
   STRUCT_ID = (1 << 0),
   STRUCT_ID_REFCOUNT = (1 << 1),
-  /** defaults on, clear for user preferences and similar */
+  /** defaults on, indicates when changes in members of a StructRNA should trigger undo steps. */
   STRUCT_UNDO = (1 << 2),
 
   /* internal flags */
@@ -635,6 +636,12 @@ typedef enum StructFlag {
   STRUCT_PUBLIC_NAMESPACE = (1 << 9),
   /** All subtypes are added too. */
   STRUCT_PUBLIC_NAMESPACE_INHERIT = (1 << 10),
+  /**
+   * When the #PointerRNA.owner_id is NULL, this signifies the property should be accessed
+   * without any context (the key-map UI and import/export for example).
+   * So accessing the property should not read from the current context to derive values/limits.
+   */
+  STRUCT_NO_CONTEXT_WITHOUT_OWNER_ID = (1 << 11),
 } StructFlag;
 
 typedef int (*StructValidateFunc)(struct PointerRNA *ptr, void *data, int *have_function);

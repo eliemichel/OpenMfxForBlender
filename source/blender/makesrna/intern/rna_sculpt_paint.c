@@ -821,28 +821,28 @@ static void rna_def_sculpt(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_automasking_topology", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_TOPOLOGY);
   RNA_def_property_ui_text(prop,
-                           "Topology Auto-masking",
+                           "Topology Auto-Masking",
                            "Affect only vertices connected to the active vertex under the brush");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
   prop = RNA_def_property(srna, "use_automasking_face_sets", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_FACE_SETS);
   RNA_def_property_ui_text(prop,
-                           "Face Sets Auto-masking",
+                           "Face Sets Auto-Masking",
                            "Affect only vertices that share Face Sets with the active vertex");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
   prop = RNA_def_property(srna, "use_automasking_boundary_edges", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_BOUNDARY_EDGES);
   RNA_def_property_ui_text(
-      prop, "Mesh Boundary Auto-masking", "Do not affect non manifold boundary edges");
+      prop, "Mesh Boundary Auto-Masking", "Do not affect non manifold boundary edges");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
   prop = RNA_def_property(srna, "use_automasking_boundary_face_sets", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(
       prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_BOUNDARY_FACE_SETS);
   RNA_def_property_ui_text(prop,
-                           "Face Sets Boundary Auto-masking",
+                           "Face Sets Boundary Auto-Masking",
                            "Do not affect vertices that belong to a Face Set boundary");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
@@ -896,7 +896,7 @@ static void rna_def_gp_paint(BlenderRNA *brna)
   RNA_def_struct_path_func(srna, "rna_GpPaint_path");
   RNA_def_struct_ui_text(srna, "Grease Pencil Paint", "");
 
-  /* Use vertex color (main swith). */
+  /* Use vertex color (main switch). */
   prop = RNA_def_property(srna, "color_mode", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "mode");
   RNA_def_property_enum_items(prop, rna_enum_gpencil_paint_mode);

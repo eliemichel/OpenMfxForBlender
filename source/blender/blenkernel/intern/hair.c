@@ -49,8 +49,8 @@
 
 #include "BLO_read_write.h"
 
-static const char *HAIR_ATTR_POSITION = "Position";
-static const char *HAIR_ATTR_RADIUS = "Radius";
+static const char *HAIR_ATTR_POSITION = "position";
+static const char *HAIR_ATTR_RADIUS = "radius";
 
 /* Hair datablock */
 
@@ -190,11 +190,16 @@ IDTypeInfo IDType_ID_HA = {
     .make_local = NULL,
     .foreach_id = hair_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = hair_blend_write,
     .blend_read_data = hair_blend_read_data,
     .blend_read_lib = hair_blend_read_lib,
     .blend_read_expand = hair_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 static void hair_random(Hair *hair)

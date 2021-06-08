@@ -626,7 +626,7 @@ void FONT_OT_text_paste_from_file(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /** \} */
@@ -635,7 +635,10 @@ void FONT_OT_text_paste_from_file(wmOperatorType *ot)
 /** \name Text To Object
  * \{ */
 
-static void txt_add_object(bContext *C, TextLine *firstline, int totline, const float offset[3])
+static void txt_add_object(bContext *C,
+                           const TextLine *firstline,
+                           int totline,
+                           const float offset[3])
 {
   Main *bmain = CTX_data_main(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
@@ -644,11 +647,11 @@ static void txt_add_object(bContext *C, TextLine *firstline, int totline, const 
   Curve *cu;
   Object *obedit;
   Base *base;
-  struct TextLine *tmp;
+  const struct TextLine *tmp;
   int nchars = 0, nbytes = 0;
   char *s;
   int a;
-  const float rot[3] = {0.f, 0.f, 0.f};
+  const float rot[3] = {0.0f, 0.0f, 0.0f};
 
   obedit = BKE_object_add(bmain, view_layer, OB_FONT, NULL);
   base = view_layer->basact;
@@ -709,10 +712,10 @@ static void txt_add_object(bContext *C, TextLine *firstline, int totline, const 
   WM_event_add_notifier(C, NC_OBJECT | NA_ADDED, obedit);
 }
 
-void ED_text_to_object(bContext *C, Text *text, const bool split_lines)
+void ED_text_to_object(bContext *C, const Text *text, const bool split_lines)
 {
   RegionView3D *rv3d = CTX_wm_region_view3d(C);
-  TextLine *line;
+  const TextLine *line;
   float offset[3];
   int linenum = 0;
 
@@ -1692,8 +1695,8 @@ static int insert_text_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
   if (event_val && (ascii || event->utf8_buf[0])) {
     /* handle case like TAB (== 9) */
-    if ((ascii > 31 && ascii < 254 && ascii != 127) || (ascii == 13) || (ascii == 10) ||
-        (ascii == 8) || (event->utf8_buf[0])) {
+    if ((ascii > 31 && ascii < 254 && ascii != 127) || (ELEM(ascii, 13, 10)) || (ascii == 8) ||
+        (event->utf8_buf[0])) {
 
       if (accentcode) {
         if (ef->pos > 0) {
@@ -1773,7 +1776,7 @@ void FONT_OT_text_insert(wmOperatorType *ot)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Textbox Add Operator
+/** \name Text-Box Add Operator
  * \{ */
 
 static int textbox_add_exec(bContext *C, wmOperator *UNUSED(op))
@@ -1799,7 +1802,7 @@ static int textbox_add_exec(bContext *C, wmOperator *UNUSED(op))
 void FONT_OT_textbox_add(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Add Textbox";
+  ot->name = "Add Text Box";
   ot->description = "Add a new text box";
   ot->idname = "FONT_OT_textbox_add";
 
@@ -1814,7 +1817,7 @@ void FONT_OT_textbox_add(wmOperatorType *ot)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Textbox Remove Operator
+/** \name Text-Box Remove Operator
  * \{ */
 
 static int textbox_remove_exec(bContext *C, wmOperator *op)
@@ -1843,8 +1846,8 @@ static int textbox_remove_exec(bContext *C, wmOperator *op)
 void FONT_OT_textbox_remove(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Remove Textbox";
-  ot->description = "Remove the textbox";
+  ot->name = "Remove Text Box";
+  ot->description = "Remove the text box";
   ot->idname = "FONT_OT_textbox_remove";
 
   /* api callbacks */
@@ -2157,7 +2160,7 @@ void FONT_OT_open(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /** \} */

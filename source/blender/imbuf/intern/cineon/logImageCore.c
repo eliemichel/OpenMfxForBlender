@@ -96,15 +96,23 @@ void logImageSetVerbose(int verbosity)
  * IO stuff
  */
 
-int logImageIsDpx(const void *buffer)
+int logImageIsDpx(const void *buffer, const unsigned int size)
 {
-  unsigned int magicNum = *(unsigned int *)buffer;
+  unsigned int magicNum;
+  if (size < sizeof(magicNum)) {
+    return 0;
+  }
+  magicNum = *(unsigned int *)buffer;
   return (magicNum == DPX_FILE_MAGIC || magicNum == swap_uint(DPX_FILE_MAGIC, 1));
 }
 
-int logImageIsCineon(const void *buffer)
+int logImageIsCineon(const void *buffer, const unsigned int size)
 {
-  unsigned int magicNum = *(unsigned int *)buffer;
+  unsigned int magicNum;
+  if (size < sizeof(magicNum)) {
+    return 0;
+  }
+  magicNum = *(unsigned int *)buffer;
   return (magicNum == CINEON_FILE_MAGIC || magicNum == swap_uint(CINEON_FILE_MAGIC, 1));
 }
 
@@ -119,17 +127,17 @@ LogImageFile *logImageOpenFromFile(const char *filename, int cineon)
     return NULL;
   }
 
-  if (fread(&magicNum, sizeof(unsigned int), 1, f) != 1) {
+  if (fread(&magicNum, sizeof(magicNum), 1, f) != 1) {
     fclose(f);
     return NULL;
   }
 
   fclose(f);
 
-  if (logImageIsDpx(&magicNum)) {
+  if (logImageIsDpx(&magicNum, sizeof(magicNum))) {
     return dpxOpen((const unsigned char *)filename, 0, 0);
   }
-  if (logImageIsCineon(&magicNum)) {
+  if (logImageIsCineon(&magicNum, sizeof(magicNum))) {
     return cineonOpen((const unsigned char *)filename, 0, 0);
   }
 
@@ -138,10 +146,10 @@ LogImageFile *logImageOpenFromFile(const char *filename, int cineon)
 
 LogImageFile *logImageOpenFromMemory(const unsigned char *buffer, unsigned int size)
 {
-  if (logImageIsDpx(buffer)) {
+  if (logImageIsDpx(buffer, size)) {
     return dpxOpen(buffer, 1, size);
   }
-  if (logImageIsCineon(buffer)) {
+  if (logImageIsCineon(buffer, size)) {
     return cineonOpen(buffer, 1, size);
   }
 
@@ -215,7 +223,7 @@ size_t getRowLength(size_t width, LogImageElement logElement)
       if (logElement.packing == 0) {
         return ((width * logElement.depth * 10 - 1) / 32 + 1) * 4;
       }
-      else if (logElement.packing == 1 || logElement.packing == 2) {
+      else if (ELEM(logElement.packing, 1, 2)) {
         return ((width * logElement.depth - 1) / 3 + 1) * 4;
       }
       break;
@@ -223,7 +231,7 @@ size_t getRowLength(size_t width, LogImageElement logElement)
       if (logElement.packing == 0) {
         return ((width * logElement.depth * 12 - 1) / 32 + 1) * 4;
       }
-      else if (logElement.packing == 1 || logElement.packing == 2) {
+      else if (ELEM(logElement.packing, 1, 2)) {
         return width * logElement.depth * 2;
       }
       break;
@@ -442,8 +450,7 @@ int logImageGetDataRGBA(LogImageFile *logImage, float *data, int dataIsLinearRGB
 
   for (i = 0; i < logImage->numElements; i++) {
     /* descriptor_Depth and descriptor_Composite are not supported */
-    if (logImage->element[i].descriptor != descriptor_Depth &&
-        logImage->element[i].descriptor != descriptor_Composite) {
+    if (!ELEM(logImage->element[i].descriptor, descriptor_Depth, descriptor_Composite)) {
       /* Allocate memory */
       elementData[i] = imb_alloc_pixels(
           logImage->width, logImage->height, logImage->element[i].depth, sizeof(float), __func__);
@@ -680,7 +687,7 @@ static int logImageElementGetData(LogImageFile *logImage, LogImageElement logEle
       if (logElement.packing == 0) {
         return logImageElementGetData10Packed(logImage, logElement, data);
       }
-      else if (logElement.packing == 1 || logElement.packing == 2) {
+      else if (ELEM(logElement.packing, 1, 2)) {
         return logImageElementGetData10(logImage, logElement, data);
       }
       break;
@@ -689,7 +696,7 @@ static int logImageElementGetData(LogImageFile *logImage, LogImageElement logEle
       if (logElement.packing == 0) {
         return logImageElementGetData12Packed(logImage, logElement, data);
       }
-      else if (logElement.packing == 1 || logElement.packing == 2) {
+      else if (ELEM(logElement.packing, 1, 2)) {
         return logImageElementGetData12(logImage, logElement, data);
       }
       break;

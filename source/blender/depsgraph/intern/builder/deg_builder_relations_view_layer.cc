@@ -25,15 +25,16 @@
 
 #include "intern/builder/deg_builder_relations.h"
 
+#include <cstdio>
+#include <cstdlib>
 #include <cstring> /* required for STREQ later on. */
-#include <stdio.h>
-#include <stdlib.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
+#include "DNA_collection_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
@@ -56,8 +57,7 @@
 
 #include "intern/depsgraph_type.h"
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 void DepsgraphRelationBuilder::build_layer_collections(ListBase *lb)
 {
@@ -154,5 +154,4 @@ void DepsgraphRelationBuilder::build_view_layer(Scene *scene,
   }
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

@@ -31,6 +31,7 @@
 #include "BLI_math.h"
 
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 
 #include "BKE_brush.h"
 #include "BKE_context.h"
@@ -47,12 +48,9 @@
 #include "RNA_define.h"
 
 #include "ED_gpencil.h"
-#include "ED_object.h"
 #include "ED_screen.h"
-#include "ED_view3d.h"
 
 #include "DEG_depsgraph.h"
-#include "DEG_depsgraph_query.h"
 
 #include "gpencil_intern.h"
 
@@ -106,6 +104,7 @@ static bGPDstroke *gpencil_prepare_stroke(bContext *C, wmOperator *op, int totpo
   Main *bmain = CTX_data_main(C);
   ToolSettings *ts = CTX_data_tool_settings(C);
   Object *ob = CTX_data_active_object(C);
+  bGPdata *gpd = ob->data;
   bGPDlayer *gpl = CTX_data_active_gpencil_layer(C);
 
   Scene *scene = CTX_data_scene(C);
@@ -135,6 +134,7 @@ static bGPDstroke *gpencil_prepare_stroke(bContext *C, wmOperator *op, int totpo
   /* stroke */
   bGPDstroke *gps = BKE_gpencil_stroke_new(MAX2(ob->actcol - 1, 0), totpoints, brush->size);
   gps->flag |= GP_STROKE_SELECT;
+  BKE_gpencil_stroke_select_index_set(gpd, gps);
 
   if (cyclic) {
     gps->flag |= GP_STROKE_CYCLIC;
@@ -172,6 +172,9 @@ static void gpencil_get_elements_len(bContext *C, int *totstrokes, int *totpoint
 
 static void gpencil_dissolve_points(bContext *C)
 {
+  Object *ob = CTX_data_active_object(C);
+  bGPdata *gpd = ob->data;
+
   CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
     bGPDframe *gpf = gpl->actframe;
     if (gpf == NULL) {
@@ -179,7 +182,7 @@ static void gpencil_dissolve_points(bContext *C)
     }
 
     LISTBASE_FOREACH_MUTABLE (bGPDstroke *, gps, &gpf->strokes) {
-      gpencil_stroke_delete_tagged_points(gpf, gps, gps->next, GP_SPOINT_TAG, false, 0);
+      BKE_gpencil_stroke_delete_tagged_points(gpd, gpf, gps, gps->next, GP_SPOINT_TAG, false, 0);
     }
   }
   CTX_DATA_END;
@@ -240,6 +243,7 @@ static void gpencil_calc_points_factor(bContext *C,
           }
         }
         gps->flag &= ~GP_STROKE_SELECT;
+        BKE_gpencil_stroke_select_index_reset(gps);
       }
     }
   }
@@ -314,7 +318,7 @@ static int gpencil_insert_to_array(tGPencilPointCache *src_array,
     }
     src_elem = &src_array[idx];
     /* check if all points or only a stroke */
-    if ((gps_filter != NULL) && (gps_filter != src_elem->gps)) {
+    if (!ELEM(gps_filter, NULL, src_elem->gps)) {
       continue;
     }
 
@@ -413,7 +417,7 @@ static int gpencil_analyze_strokes(tGPencilPointCache *src_array,
     BLI_ghash_free(strokes, NULL, NULL);
 
     /* add the stroke to array */
-    if (gps->next != NULL) {
+    if (gps_next != NULL) {
       BLI_ghash_insert(all_strokes, gps_next, gps_next);
       last = gpencil_insert_to_array(src_array, dst_array, totpoints, gps_next, reverse, last);
       /* replace last end */
@@ -519,7 +523,7 @@ static int gpencil_stroke_merge_exec(bContext *C, wmOperator *op)
     gpencil_dissolve_points(C);
   }
 
-  BKE_gpencil_stroke_geometry_update(gps);
+  BKE_gpencil_stroke_geometry_update(gpd, gps);
 
   /* free memory */
   MEM_SAFE_FREE(original_array);

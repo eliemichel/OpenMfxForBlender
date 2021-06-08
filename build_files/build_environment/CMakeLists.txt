@@ -31,6 +31,7 @@
 #
 # MAC OS X USAGE:
 #   Install with homebrew: brew install autoconf automake bison cmake libtool pkg-config yasm
+#   Additional requirements for macOS arm64: brew install flex
 #   Run "make deps" from main Blender directory
 #
 # LINUX USAGE:
@@ -46,6 +47,7 @@ include(ExternalProject)
 include(cmake/check_software.cmake)
 include(cmake/options.cmake)
 include(cmake/versions.cmake)
+include(cmake/download.cmake)
 
 if(ENABLE_MINGW64)
   include(cmake/setup_mingw64.cmake)
@@ -70,9 +72,7 @@ include(cmake/cuew.cmake)
 include(cmake/opensubdiv.cmake)
 include(cmake/sdl.cmake)
 include(cmake/opencollada.cmake)
-include(cmake/opencolorio.cmake)
 include(cmake/llvm.cmake)
-include(cmake/clang.cmake)
 if(APPLE)
   include(cmake/openmp.cmake)
 endif()
@@ -85,38 +85,40 @@ include(cmake/flexbison.cmake)
 include(cmake/osl.cmake)
 include(cmake/tbb.cmake)
 include(cmake/openvdb.cmake)
+include(cmake/nanovdb.cmake)
 include(cmake/python.cmake)
+option(USE_PIP_NUMPY "Install NumPy using pip wheel instead of building from source" OFF)
+if(APPLE AND ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64"))
+  set(USE_PIP_NUMPY ON)
+else()
+  include(cmake/numpy.cmake)
+endif()
 include(cmake/python_site_packages.cmake)
 include(cmake/package_python.cmake)
-include(cmake/numpy.cmake)
 include(cmake/usd.cmake)
 include(cmake/potrace.cmake)
+include(cmake/haru.cmake)
 # Boost needs to be included after python.cmake due to the PYTHON_BINARY variable being needed.
 include(cmake/boost.cmake)
-if(UNIX)
-  # Rely on PugiXML compiled with OpenImageIO
-else()
-  include(cmake/pugixml.cmake)
-endif()
-if((NOT APPLE) OR ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64"))
-  include(cmake/ispc.cmake)
-  include(cmake/openimagedenoise.cmake)
-  include(cmake/embree.cmake)
-endif()
+include(cmake/pugixml.cmake)
+include(cmake/ispc.cmake)
+include(cmake/openimagedenoise.cmake)
+include(cmake/embree.cmake)
 if(NOT APPLE)
   include(cmake/xr_openxr.cmake)
 endif()
 
-if(WITH_WEBP)
-  include(cmake/webp.cmake)
+# OpenColorIO and dependencies.
+include(cmake/expat.cmake)
+include(cmake/yamlcpp.cmake)
+include(cmake/opencolorio.cmake)
+
+if(APPLE AND ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64"))
+  include(cmake/sse2neon.cmake)
 endif()
 
-if(WIN32)
-  # OCIO deps
-  include(cmake/tinyxml.cmake)
-  include(cmake/yamlcpp.cmake)
-  # LCMS is an OCIO dep, but only if you build the apps, leaving it here for convenience
-  # include(cmake/lcms.cmake)
+if(WITH_WEBP)
+  include(cmake/webp.cmake)
 endif()
 
 if(NOT WIN32 OR ENABLE_MINGW64)

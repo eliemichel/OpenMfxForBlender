@@ -63,19 +63,26 @@ class SeparateRGBFunction : public blender::fn::MultiFunction {
  public:
   SeparateRGBFunction()
   {
-    blender::fn::MFSignatureBuilder signature = this->get_builder("Separate RGB");
+    static blender::fn::MFSignature signature = create_signature();
+    this->set_signature(&signature);
+  }
+
+  static blender::fn::MFSignature create_signature()
+  {
+    blender::fn::MFSignatureBuilder signature{"Separate RGB"};
     signature.single_input<blender::Color4f>("Color");
     signature.single_output<float>("R");
     signature.single_output<float>("G");
     signature.single_output<float>("B");
+    return signature.build();
   }
 
   void call(blender::IndexMask mask,
             blender::fn::MFParams params,
             blender::fn::MFContext UNUSED(context)) const override
   {
-    blender::fn::VSpan<blender::Color4f> colors = params.readonly_single_input<blender::Color4f>(
-        0, "Color");
+    const blender::VArray<blender::Color4f> &colors =
+        params.readonly_single_input<blender::Color4f>(0, "Color");
     blender::MutableSpan<float> rs = params.uninitialized_single_output<float>(1, "R");
     blender::MutableSpan<float> gs = params.uninitialized_single_output<float>(2, "G");
     blender::MutableSpan<float> bs = params.uninitialized_single_output<float>(3, "B");
@@ -101,7 +108,7 @@ void register_node_type_sh_seprgb(void)
 
   sh_fn_node_type_base(&ntype, SH_NODE_SEPRGB, "Separate RGB", NODE_CLASS_CONVERTOR, 0);
   node_type_socket_templates(&ntype, sh_node_seprgb_in, sh_node_seprgb_out);
-  node_type_exec(&ntype, NULL, NULL, node_shader_exec_seprgb);
+  node_type_exec(&ntype, nullptr, nullptr, node_shader_exec_seprgb);
   node_type_gpu(&ntype, gpu_shader_seprgb);
   ntype.expand_in_mf_network = sh_node_seprgb_expand_in_mf_network;
 
@@ -159,7 +166,7 @@ void register_node_type_sh_combrgb(void)
 
   sh_fn_node_type_base(&ntype, SH_NODE_COMBRGB, "Combine RGB", NODE_CLASS_CONVERTOR, 0);
   node_type_socket_templates(&ntype, sh_node_combrgb_in, sh_node_combrgb_out);
-  node_type_exec(&ntype, NULL, NULL, node_shader_exec_combrgb);
+  node_type_exec(&ntype, nullptr, nullptr, node_shader_exec_combrgb);
   node_type_gpu(&ntype, gpu_shader_combrgb);
   ntype.expand_in_mf_network = sh_node_combrgb_expand_in_mf_network;
 

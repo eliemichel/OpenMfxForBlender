@@ -52,6 +52,7 @@
 #include "DNA_lattice_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -1063,7 +1064,7 @@ static int sb_detect_face_pointCached(const float face_v1[3],
   GHash *hash;
   GHashIterator *ihash;
   float nv1[3], edge1[3], edge2[3], d_nvect[3], aabbmin[3], aabbmax[3];
-  float facedist, outerfacethickness, tune = 10.f;
+  float facedist, outerfacethickness, tune = 10.0f;
   int a, deflected = 0;
 
   aabbmin[0] = min_fff(face_v1[0], face_v2[0], face_v3[0]);
@@ -1538,7 +1539,8 @@ static void sb_sfesf_threads_run(struct Depsgraph *depsgraph,
    * or even be UI option sb->spawn_cf_threads_nopts */
   int lowsprings = 100;
 
-  ListBase *effectors = BKE_effectors_create(depsgraph, ob, NULL, ob->soft->effector_weights);
+  ListBase *effectors = BKE_effectors_create(
+      depsgraph, ob, NULL, ob->soft->effector_weights, false);
 
   /* figure the number of threads while preventing pretty pointless threading overhead */
   totthread = BKE_scene_num_threads(scene);
@@ -2032,7 +2034,7 @@ static int _softbody_calc_forces_slice_in_a_thread(Scene *scene,
           attached = 0;
           for (b = obp->nofsprings; b > 0; b--) {
             bs = sb->bspring + obp->springs[b - 1];
-            if ((ilast - bb == bs->v2) || (ilast - bb == bs->v1)) {
+            if (ELEM(ilast - bb, bs->v2, bs->v1)) {
               attached = 1;
               continue;
             }
@@ -2299,7 +2301,7 @@ static void softbody_calc_forces(
   }
 
   /* after spring scan because it uses Effoctors too */
-  ListBase *effectors = BKE_effectors_create(depsgraph, ob, NULL, sb->effector_weights);
+  ListBase *effectors = BKE_effectors_create(depsgraph, ob, NULL, sb->effector_weights, false);
 
   if (do_deflector) {
     float defforce[3];
@@ -2797,8 +2799,8 @@ static void reference_to_scratch(Object *ob)
   SoftBody *sb = ob->soft;
   ReferenceVert *rp;
   BodyPoint *bp;
-  float accu_pos[3] = {0.f, 0.f, 0.f};
-  float accu_mass = 0.f;
+  float accu_pos[3] = {0.0f, 0.0f, 0.0f};
+  float accu_mass = 0.0f;
   int a;
 
   sb->scratch->Ref.ivert = MEM_mallocN(sizeof(ReferenceVert) * sb->totpoint, "SB_Reference");
@@ -3179,9 +3181,11 @@ void sbFree(Object *ob)
     return;
   }
 
+  const bool is_orig = (ob->id.tag & LIB_TAG_COPIED_ON_WRITE) == 0;
+
   free_softbody_intern(sb);
 
-  if ((ob->id.tag & LIB_TAG_NO_MAIN) == 0) {
+  if (is_orig) {
     /* Only free shared data on non-CoW copies */
     BKE_ptcache_free_list(&sb->shared->ptcaches);
     sb->shared->pointcache = NULL;
@@ -3321,7 +3325,7 @@ static void softbody_reset(Object *ob, SoftBody *sb, float (*vertexCos)[3], int 
     bp->vec[0] = bp->vec[1] = bp->vec[2] = 0.0f;
 
     /* the bp->prev*'s are for rolling back from a canceled try to propagate in time
-     * adaptive step size algo in a nutshell:
+     * adaptive step size algorithm in a nutshell:
      * 1.  set scheduled time step to new dtime
      * 2.  try to advance the scheduled time step, being optimistic execute it
      * 3.  check for success

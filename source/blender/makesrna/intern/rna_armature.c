@@ -245,7 +245,7 @@ static char *rna_Bone_path(PointerRNA *ptr)
   Bone *bone = (Bone *)ptr->data;
   char name_esc[sizeof(bone->name) * 2];
 
-  BLI_strescape(name_esc, bone->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, bone->name, sizeof(name_esc));
 
   /* special exception for trying to get the path where ID-block is Object
    * - this will be assumed to be from a Pose Bone...
@@ -966,10 +966,11 @@ static void rna_def_bone_common(StructRNA *srna, int editbone)
 
   prop = RNA_def_property(srna, "show_wire", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", BONE_DRAWWIRE);
-  RNA_def_property_ui_text(prop,
-                           "Display Wire",
-                           "Bone is always drawn as Wireframe regardless of viewport draw mode "
-                           "(useful for non-obstructive custom bone shapes)");
+  RNA_def_property_ui_text(
+      prop,
+      "Display Wire",
+      "Bone is always displayed in wireframe regardless of viewport shading mode "
+      "(useful for non-obstructive custom bone shapes)");
   RNA_def_property_update(prop, 0, "rna_Armature_redraw_data");
 
   /* XXX: use_cyclic_offset is deprecated in 2.5. May/may not return */
@@ -1250,7 +1251,7 @@ static void rna_def_edit_bone(BlenderRNA *brna)
   srna = RNA_def_struct(brna, "EditBone", NULL);
   RNA_def_struct_sdna(srna, "EditBone");
   RNA_def_struct_idprops_func(srna, "rna_EditBone_idprops");
-  RNA_def_struct_ui_text(srna, "Edit Bone", "Editmode bone in an Armature data-block");
+  RNA_def_struct_ui_text(srna, "Edit Bone", "Edit mode bone in an armature data-block");
   RNA_def_struct_ui_icon(srna, ICON_BONE_DATA);
 
   RNA_define_verify_sdna(0); /* not in sdna */
@@ -1335,8 +1336,8 @@ static void rna_def_edit_bone(BlenderRNA *brna)
   RNA_def_property_flag(prop, PROP_THICK_WRAP); /* no reference to original data */
   RNA_def_property_ui_text(
       prop,
-      "Editbone Matrix",
-      "Matrix combining loc/rot of the bone (head position, direction and roll), "
+      "Edit Bone Matrix",
+      "Matrix combining location and rotation of the bone (head position, direction and roll), "
       "in armature space (does not include/support bone's length/size)");
   RNA_def_property_float_funcs(prop, "rna_EditBone_matrix_get", "rna_EditBone_matrix_set", NULL);
 
@@ -1535,6 +1536,16 @@ static void rna_def_armature(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Display Axes", "Display bone axes");
   RNA_def_property_update(prop, 0, "rna_Armature_redraw_data");
   RNA_def_property_flag(prop, PROP_LIB_EXCEPTION);
+
+  prop = RNA_def_property(srna, "axes_position", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "axes_position");
+  RNA_def_property_range(prop, 0.0, 1.0);
+  RNA_def_property_ui_range(prop, 0.0, 1.0, 10, 1);
+  RNA_def_property_ui_text(prop,
+                           "Axes Position",
+                           "The position for the axes on the bone. Increasing the value moves it "
+                           "closer to the tip; decreasing moves it closer to the root");
+  RNA_def_property_update(prop, 0, "rna_Armature_redraw_data");
 
   prop = RNA_def_property(srna, "show_names", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", ARM_DRAWNAMES);

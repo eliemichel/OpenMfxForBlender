@@ -161,12 +161,12 @@ def _template_items_tool_select_actions(operator, *, type, value):
 
 
 # This could have a more generic name, for now use for circle select.
-def _template_items_tool_select_actions_simple(operator, *, type, value, properties=[]):
+def _template_items_tool_select_actions_simple(operator, *, type, value, properties=()):
     kmi_args = {"type": type, "value": value}
     return [
         # Don't define 'SET' here, take from the tool options.
         (operator, kmi_args,
-         {"properties": properties}),
+         {"properties": [*properties]}),
         (operator, {**kmi_args, "shift": True},
          {"properties": [*properties, ("mode", 'ADD')]}),
         (operator, {**kmi_args, "ctrl": True},
@@ -447,6 +447,24 @@ def km_property_editor(params):
          {"properties": [("direction", 'PREV'), ], },),
         ("screen.space_context_cycle", {"type": 'WHEELDOWNMOUSE', "value": 'PRESS', "ctrl": True},
          {"properties": [("direction", 'NEXT'), ], },),
+        ("buttons.start_filter", {"type": 'F', "value": 'PRESS', "ctrl": True}, None),
+        ("buttons.clear_filter", {"type": 'ESC', "value": 'PRESS'}, None),
+        # Modifier panels
+        ("object.modifier_set_active", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("object.modifier_remove", {"type": 'BACK_SPACE', "value": 'PRESS'}, {"properties": [("report", True)]}),
+        ("object.modifier_remove", {"type": 'DEL', "value": 'PRESS'}, {"properties": [("report", True)]}),
+        ("object.modifier_copy", {"type": 'D', "value": 'PRESS', "ctrl": True}, None),
+        # Grease pencil modifier panels
+        ("object.gpencil_modifier_remove", {"type": 'BACK_SPACE', "value": 'PRESS'}, {"properties": [("report", True)]}),
+        ("object.gpencil_modifier_remove", {"type": 'DEL', "value": 'PRESS'}, {"properties": [("report", True)]}),
+        ("object.gpencil_modifier_copy", {"type": 'D', "value": 'PRESS', "ctrl": True}, None),
+        # ShaderFX panels
+        ("object.shaderfx_remove", {"type": 'BACK_SPACE', "value": 'PRESS'}, {"properties": [("report", True)]}),
+        ("object.shaderfx_remove", {"type": 'DEL', "value": 'PRESS'}, {"properties": [("report", True)]}),
+        ("objectshaderfx_copy", {"type": 'D', "value": 'PRESS', "ctrl": True}, None),
+        # Constraint panels
+        ("constraint.delete", {"type": 'BACK_SPACE', "value": 'PRESS'}, {"properties": [("report", True)]}),
+        ("constraint.delete", {"type": 'DEL', "value": 'PRESS'}, {"properties": [("report", True)]}),
     ])
 
     return keymap
@@ -476,9 +494,9 @@ def km_outliner(params):
          {"properties": [("extend", True), ("extend_range", True), ("deselect_all", True)]}),
         ("outliner.select_box", {"type": 'EVT_TWEAK_L', "value": 'ANY'}, {"properties": [("tweak", True)]}),
         ("outliner.select_box", {"type": 'EVT_TWEAK_L', "value": 'ANY', "shift": True},
-         {"properties": [("tweak", True), ("mode", "ADD")]}),
+         {"properties": [("tweak", True), ("mode", 'ADD')]}),
         ("outliner.select_box", {"type": 'EVT_TWEAK_L', "value": 'ANY', "ctrl": True},
-         {"properties": [("tweak", True), ("mode", "SUB")]}),
+         {"properties": [("tweak", True), ("mode", 'SUB')]}),
         ("outliner.select_walk", {"type": 'UP_ARROW', "value": 'PRESS', "repeat": True},
          {"properties": [("direction", 'UP')]}),
         ("outliner.select_walk", {"type": 'UP_ARROW', "value": 'PRESS', "shift": True, "repeat": True},
@@ -568,7 +586,7 @@ def km_uv_editor(params):
         ("uv.select", {"type": 'LEFTMOUSE', "value": 'CLICK', "shift": True},
          {"properties": [("extend", True), ("deselect_all", False)]}),
 
-        ("transform.translate", {"type": "EVT_TWEAK_L", "value": 'ANY'}, None),
+        ("transform.translate", {"type": 'EVT_TWEAK_L', "value": 'ANY'}, None),
         ("uv.select_loop", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK', "shift": True},
          {"properties": [("extend", True)]}),
         ("uv.select_loop", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'},
@@ -911,7 +929,7 @@ def km_graph_editor(params):
         ("graph.select_less", {"type": 'DOWN_ARROW', "value": 'PRESS', "repeat": True}, None),
         ("graph.select_linked", {"type": 'RIGHT_BRACKET', "value": 'PRESS'}, None),
         op_menu("GRAPH_MT_delete", {"type": 'BACK_SPACE', "value": 'PRESS'}),
-        op_menu("GRAPH_MT_delete", {"type": 'DEL', "value": 'PRESS'}),
+        ("graph.delete", {"type": 'DEL', "value": 'PRESS'}, {"properties": [("confirm", False)]}),
         *_template_items_context_menu("GRAPH_MT_context_menu", {"type": 'RIGHTMOUSE', "value": 'PRESS'}),
         ("graph.duplicate_move", {"type": 'D', "value": 'PRESS', "ctrl": True}, None),
         ("graph.keyframe_insert", {"type": 'S', "value": 'PRESS'}, None),
@@ -1095,6 +1113,7 @@ def km_node_editor(params):
         ("node.resize", {"type": 'EVT_TWEAK_L', "value": 'ANY'}, None),
         ("node.add_reroute", {"type": params.action_tweak, "value": 'ANY', "shift": True}, None),
         ("node.links_cut", {"type": params.action_tweak, "value": 'ANY', "ctrl": True}, None),
+        ("node.links_mute", {"type": params.action_tweak, "value": 'ANY', "ctrl": True, "alt": True}, None),
         ("node.select_link_viewer", {"type": 'LEFTMOUSE', "value": 'PRESS', "shift": True, "ctrl": True}, None),
         ("node.backimage_fit", {"type": 'A', "value": 'PRESS', "alt": True}, None),
         ("node.backimage_sample", {"type": 'LEFTMOUSE', "value": 'PRESS', "alt": True}, None),
@@ -1291,6 +1310,7 @@ def km_file_browser_main(params):
          {"properties": [("mode", 'ADD')]}),
         ("file.highlight", {"type": 'MOUSEMOVE', "value": 'ANY', "any": True}, None),
         ("file.sort_column_ui_context", {"type": 'LEFTMOUSE', "value": 'PRESS', "any": True}, None),
+        ("file.view_selected", {"type": 'F', "value": 'PRESS'}, None),
     ])
 
     return keymap
@@ -1398,7 +1418,7 @@ def km_dopesheet(params):
         op_menu_pie("DOPESHEET_MT_snap_pie", {"type": 'X', "value": 'PRESS', "shift": True}),
         *_template_items_context_menu("DOPESHEET_MT_context_menu", {"type": 'RIGHTMOUSE', "value": 'PRESS'}),
         op_menu("DOPESHEET_MT_delete", {"type": 'BACK_SPACE', "value": 'PRESS'}),
-        op_menu("DOPESHEET_MT_delete", {"type": 'DEL', "value": 'PRESS'}),
+        ("action.delete", {"type": 'DEL', "value": 'PRESS'}, {"properties": [("confirm", False)]}),
         ("action.duplicate_move", {"type": 'D', "value": 'PRESS', "ctrl": True}, None),
         ("action.keyframe_insert", {"type": 'S', "value": 'PRESS'}, None),
         ("action.copy", {"type": 'C', "value": 'PRESS', "ctrl": True}, None),
@@ -1893,7 +1913,7 @@ def km_console(params):
         ("console.delete", {"type": 'BACK_SPACE', "value": 'PRESS', "repeat": True},
          {"properties": [("type", 'PREVIOUS_CHARACTER')]}),
         ("console.delete", {"type": 'BACK_SPACE', "value": 'PRESS', "shift": True, "repeat": True},
-         {"properties": [("type", 'PREVIOUS_CHARACTER')], "repeat": True}),
+         {"properties": [("type", 'PREVIOUS_CHARACTER')]}),
         ("console.delete", {"type": 'DEL', "value": 'PRESS', "ctrl": True, "repeat": True},
          {"properties": [("type", 'NEXT_WORD')]}),
         ("console.delete", {"type": 'BACK_SPACE', "value": 'PRESS', "ctrl": True, "repeat": True},
@@ -2259,7 +2279,7 @@ def km_grease_pencil(_params):
 
 def _grease_pencil_selection(params):
     return [
-        ("gpencil.select", {"type": 'LEFTMOUSE', "value": 'PRESS', "shift": True},
+        ("gpencil.select", {"type": 'LEFTMOUSE', "value": 'CLICK', "shift": True},
          {"properties": [("extend", True), ("toggle", True)]}),
         # Select all
         ("gpencil.select_all", {"type": 'A', "value": 'PRESS', "ctrl": True}, {"properties": [("action", 'SELECT')]}),
@@ -3314,8 +3334,6 @@ def km_weight_paint(params):
         *_template_paint_radial_control("weight_paint"),
         ("wm.context_toggle", {"type": 'M', "value": 'PRESS'},
          {"properties": [("data_path", 'weight_paint_object.data.use_paint_mask')]}),
-        ("wm.context_toggle", {"type": 'V', "value": 'PRESS'},
-         {"properties": [("data_path", 'weight_paint_object.data.use_paint_mask_vertex')]}),
         ("wm.context_toggle", {"type": 'S', "value": 'PRESS', "shift": True},
          {"properties": [("data_path", 'tool_settings.weight_paint.brush.use_smooth_stroke')]}),
         *_template_items_context_panel("VIEW3D_PT_paint_weight_context_menu", {"type": 'RIGHTMOUSE', "value": 'PRESS'}),
@@ -3376,7 +3394,8 @@ def km_sculpt(params):
          {"properties": [("data_path", 'scene.tool_settings.sculpt.show_mask')]}),
         # Dynamic topology
         ("sculpt.dynamic_topology_toggle", {"type": 'D', "value": 'PRESS', "ctrl": True}, None),
-        ("sculpt.set_detail_size", {"type": 'D', "value": 'PRESS', "shift": True}, None),
+        ("sculpt.dyntopo_detail_size_edit", {"type": 'D', "value": 'PRESS', "shift": True}, None),
+        ("sculpt.set_detail_size", {"type": 'D', "value": 'PRESS', "shift": True, "alt": True}, None),
         # Remesh
         ("object.voxel_remesh", {"type": 'R', "value": 'PRESS', "ctrl": True}, None),
         ("object.quadriflow_remesh", {"type": 'R', "value": 'PRESS', "ctrl": True, "alt": True}, None),
@@ -3829,10 +3848,10 @@ def km_knife_tool_modal_map(_params):
         ("ADD_CUT_CLOSED", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK', "any": True}, None),
         ("ADD_CUT", {"type": 'LEFTMOUSE', "value": 'ANY', "any": True}, None),
         ("NEW_CUT", {"type": 'E', "value": 'PRESS'}, None),
-        ("SNAP_MIDPOINTS_ON", {"type": 'LEFT_CTRL', "value": 'PRESS', "any": False}, None),
-        ("SNAP_MIDPOINTS_OFF", {"type": 'LEFT_CTRL', "value": 'RELEASE', "any": False}, None),
-        ("SNAP_MIDPOINTS_ON", {"type": 'RIGHT_CTRL', "value": 'PRESS', "any": False}, None),
-        ("SNAP_MIDPOINTS_OFF", {"type": 'RIGHT_CTRL', "value": 'RELEASE', "any": False}, None),
+        ("SNAP_MIDPOINTS_ON", {"type": 'LEFT_CTRL', "value": 'PRESS'}, None),
+        ("SNAP_MIDPOINTS_OFF", {"type": 'LEFT_CTRL', "value": 'RELEASE'}, None),
+        ("SNAP_MIDPOINTS_ON", {"type": 'RIGHT_CTRL', "value": 'PRESS'}, None),
+        ("SNAP_MIDPOINTS_OFF", {"type": 'RIGHT_CTRL', "value": 'RELEASE'}, None),
         ("IGNORE_SNAP_ON", {"type": 'LEFT_SHIFT', "value": 'PRESS', "any": True}, None),
         ("IGNORE_SNAP_OFF", {"type": 'LEFT_SHIFT', "value": 'RELEASE', "any": True}, None),
         ("IGNORE_SNAP_ON", {"type": 'RIGHT_SHIFT', "value": 'PRESS', "any": True}, None),
@@ -3942,8 +3961,10 @@ def km_transform_modal_map(_params):
         ("AUTOIK_CHAIN_LEN_UP", {"type": 'WHEELDOWNMOUSE', "value": 'PRESS', "shift": True}, None),
         ("AUTOIK_CHAIN_LEN_DOWN", {"type": 'WHEELUPMOUSE', "value": 'PRESS', "shift": True}, None),
         ("INSERTOFS_TOGGLE_DIR", {"type": 'T', "value": 'PRESS'}, None),
-        ("AUTOCONSTRAIN", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
-        ("AUTOCONSTRAINPLANE", {"type": 'MIDDLEMOUSE', "value": 'PRESS', "shift": True}, None),
+        ("AUTOCONSTRAIN", {"type": 'MIDDLEMOUSE', "value": 'ANY'}, None),
+        ("AUTOCONSTRAINPLANE", {"type": 'MIDDLEMOUSE', "value": 'ANY', "shift": True}, None),
+        ("PRECISION", {"type": 'LEFT_SHIFT', "value": 'ANY', "any": True}, None),
+        ("PRECISION", {"type": 'RIGHT_SHIFT', "value": 'ANY', "any": True}, None),
     ])
 
     return keymap
@@ -3976,6 +3997,19 @@ def km_3d_view_tool_edit_gpencil_select(params):
         "3D View Tool: Edit Gpencil, Tweak",
         {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
         {"items": _template_items_tool_select(params, "gpencil.select", extend="toggle")},
+    )
+
+
+def km_3d_view_tool_interactive_add(params):
+    return (
+        "3D View Tool: Object, Add Primitive",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("view3d.interactive_add", {"type": params.tool_tweak, "value": 'ANY'},
+             {"properties": [("wait_for_input", False)]}),
+            ("view3d.interactive_add", {"type": params.tool_tweak, "value": 'ANY', "ctrl": True},
+             {"properties": [("wait_for_input", False)]}),
+        ]},
     )
 
 
@@ -4117,6 +4151,7 @@ def generate_keymaps_impl(params=None):
         km_3d_view_tool_select(params),
         km_image_editor_tool_uv_select(params),
         km_3d_view_tool_edit_gpencil_select(params),
+        km_3d_view_tool_interactive_add(params),
     ]
 
 

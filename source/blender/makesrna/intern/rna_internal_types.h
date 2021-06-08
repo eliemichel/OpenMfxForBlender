@@ -453,11 +453,10 @@ typedef struct EnumPropertyRNA {
 
   PropEnumGetFunc get;
   PropEnumSetFunc set;
-  PropEnumItemFunc itemf;
+  PropEnumItemFunc item_fn;
 
   PropEnumGetFuncEx get_ex;
   PropEnumSetFuncEx set_ex;
-  void *py_data; /* store py callback here */
 
   const EnumPropertyItem *item;
   int totitem;
@@ -471,7 +470,7 @@ typedef struct PointerPropertyRNA {
 
   PropPointerGetFunc get;
   PropPointerSetFunc set;
-  PropPointerTypeFunc typef;
+  PropPointerTypeFunc type_fn;
   /** unlike operators, 'set' can still run if poll fails, used for filtering display. */
   PropPointerPollFunc poll;
 
@@ -545,6 +544,17 @@ struct StructRNA {
   /* function to register/unregister subclasses */
   StructRegisterFunc reg;
   StructUnregisterFunc unreg;
+  /**
+   * Optionally support reusing Python instances for this type.
+   *
+   * Without this, an operator class created for #wmOperatorType.invoke (for example)
+   * would have a different instance passed to the #wmOperatorType.modal callback.
+   * So any variables assigned to `self` from Python would not be available to other callbacks.
+   *
+   * Being able to access the instance also has the advantage that we can invalidate
+   * the Python instance when the data has been removed, see: #BPY_DECREF_RNA_INVALIDATE
+   * so accessing the variables from Python raises an exception instead of crashing.
+   */
   StructInstanceFunc instance;
 
   /* callback to get id properties */

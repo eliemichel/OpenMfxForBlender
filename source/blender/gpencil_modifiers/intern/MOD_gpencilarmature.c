@@ -30,11 +30,9 @@
 
 #include "BLT_translation.h"
 
-#include "DNA_armature_types.h"
 #include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -60,7 +58,6 @@
 
 #include "MOD_gpencil_modifiertypes.h"
 #include "MOD_gpencil_ui_common.h"
-#include "MOD_gpencil_util.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -125,10 +122,11 @@ static void deformStroke(GpencilModifierData *md,
   if (!mmd->object) {
     return;
   }
+  bGPdata *gpd = ob->data;
 
   gpencil_deform_verts(mmd, ob, gps);
   /* Calc geometry data. */
-  BKE_gpencil_stroke_geometry_update(gps);
+  BKE_gpencil_stroke_geometry_update(gpd, gps);
 }
 
 static void bakeModifier(Main *UNUSED(bmain),
@@ -178,7 +176,9 @@ static bool isDisabled(GpencilModifierData *md, int UNUSED(userRenderParams))
   return !mmd->object || mmd->object->type != OB_ARMATURE;
 }
 
-static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
+static void updateDepsgraph(GpencilModifierData *md,
+                            const ModifierUpdateDepsgraphContext *ctx,
+                            const int UNUSED(mode))
 {
   ArmatureGpencilModifierData *lmd = (ArmatureGpencilModifierData *)md;
   if (lmd->object != NULL) {

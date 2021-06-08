@@ -27,6 +27,7 @@ set(INC
   ../../makesrna
   ../../sequencer
   ../../windowmanager
+  ../../../../intern/clog
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
 )
@@ -34,6 +35,7 @@ set(INC
 
 set(SRC
   outliner_collections.c
+  outliner_context.c
   outliner_dragdrop.c
   outliner_draw.c
   outliner_edit.c
@@ -44,8 +46,44 @@ set(SRC
   outliner_tree.c
   outliner_utils.c
   space_outliner.c
+  tree/common.cc
+  tree/tree_display.cc
+  tree/tree_display_data.cc
+  tree/tree_display_libraries.cc
+  tree/tree_display_orphaned.cc
+  tree/tree_display_override_library.cc
+  tree/tree_display_scenes.cc
+  tree/tree_display_sequencer.cc
+  tree/tree_display_view_layer.cc
+  tree/tree_element.cc
+  tree/tree_element_anim_data.cc
+  tree/tree_element_collection.cc
+  tree/tree_element_driver.cc
+  tree/tree_element_gpencil_layer.cc
+  tree/tree_element_id.cc
+  tree/tree_element_id_library.cc
+  tree/tree_element_id_scene.cc
+  tree/tree_element_nla.cc
+  tree/tree_element_overrides.cc
+  tree/tree_element_scene_objects.cc
+  tree/tree_element_view_layer.cc
 
   outliner_intern.h
+  tree/tree_display.h
+  tree/tree_display.hh
+  tree/tree_element.h
+  tree/tree_element.hh
+  tree/tree_element_anim_data.hh
+  tree/tree_element_collection.hh
+  tree/tree_element_driver.hh
+  tree/tree_element_gpencil_layer.hh
+  tree/tree_element_id.hh
+  tree/tree_element_id_library.hh
+  tree/tree_element_id_scene.hh
+  tree/tree_element_nla.hh
+  tree/tree_element_overrides.hh
+  tree/tree_element_scene_objects.hh
+  tree/tree_element_view_layer.hh
 )
 
 set(LIB

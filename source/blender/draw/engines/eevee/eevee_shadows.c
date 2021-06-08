@@ -53,7 +53,7 @@ void EEVEE_shadows_init(EEVEE_ViewLayerData *sldata)
     sldata->shadow_ubo = GPU_uniformbuf_create_ex(shadow_ubo_size, NULL, "evShadow");
 
     for (int i = 0; i < 2; i++) {
-      sldata->shcasters_buffers[i].bbox = MEM_callocN(
+      sldata->shcasters_buffers[i].bbox = MEM_mallocN(
           sizeof(EEVEE_BoundBox) * SH_CASTER_ALLOC_CHUNK, __func__);
       sldata->shcasters_buffers[i].update = BLI_BITMAP_NEW(SH_CASTER_ALLOC_CHUNK, __func__);
       sldata->shcasters_buffers[i].alloc_count = SH_CASTER_ALLOC_CHUNK;
@@ -133,15 +133,16 @@ void EEVEE_shadows_caster_register(EEVEE_ViewLayerData *sldata, Object *ob)
   int id = frontbuffer->count;
 
   /* Make sure shadow_casters is big enough. */
-  if (id + 1 >= frontbuffer->alloc_count) {
-    frontbuffer->alloc_count += SH_CASTER_ALLOC_CHUNK;
+  if (id >= frontbuffer->alloc_count) {
+    /* Double capacity to prevent exponential slowdown. */
+    frontbuffer->alloc_count *= 2;
     frontbuffer->bbox = MEM_reallocN(frontbuffer->bbox,
                                      sizeof(EEVEE_BoundBox) * frontbuffer->alloc_count);
     BLI_BITMAP_RESIZE(frontbuffer->update, frontbuffer->alloc_count);
   }
 
   if (ob->base_flag & BASE_FROM_DUPLI) {
-    /* Duplis will always refresh the shadowmaps as if they were deleted each frame. */
+    /* Duplis will always refresh the shadow-maps as if they were deleted each frame. */
     /* TODO(fclem): fix this. */
     update = true;
   }
@@ -173,6 +174,7 @@ void EEVEE_shadows_caster_register(EEVEE_ViewLayerData *sldata, Object *ob)
   }
 
   EEVEE_BoundBox *aabb = &frontbuffer->bbox[id];
+  /* Note that `*aabb` has not been initialized yet. */
   add_v3_v3v3(aabb->center, min, max);
   mul_v3_fl(aabb->center, 0.5f);
   sub_v3_v3v3(aabb->halfdim, aabb->center, max);
@@ -259,7 +261,7 @@ void EEVEE_shadows_update(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   BoundSphere *bsphere = linfo->shadow_bounds;
   /* Search for deleted shadow casters or if shcaster WAS in shadow radius. */
   for (int i = 0; i < backbuffer->count; i++) {
-    /* If the shadowcaster has been deleted or updated. */
+    /* If the shadow-caster has been deleted or updated. */
     if (BLI_BITMAP_TEST(backbuffer->update, i)) {
       for (int j = 0; j < linfo->cube_len; j++) {
         if (!BLI_BITMAP_TEST(&linfo->sh_cube_update[0], j)) {
@@ -273,7 +275,7 @@ void EEVEE_shadows_update(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   /* Search for updates in current shadow casters. */
   bbox = frontbuffer->bbox;
   for (int i = 0; i < frontbuffer->count; i++) {
-    /* If the shadowcaster has been updated. */
+    /* If the shadow-caster has been updated. */
     if (BLI_BITMAP_TEST(frontbuffer->update, i)) {
       for (int j = 0; j < linfo->cube_len; j++) {
         if (!BLI_BITMAP_TEST(&linfo->sh_cube_update[0], j)) {
@@ -349,7 +351,6 @@ void EEVEE_shadows_draw(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata, DRWView
 }
 
 /* -------------------------------------------------------------------- */
-
 /** \name Render Passes
  * \{ */
 
@@ -360,11 +361,7 @@ void EEVEE_shadow_output_init(EEVEE_ViewLayerData *sldata,
   EEVEE_FramebufferList *fbl = vedata->fbl;
   EEVEE_TextureList *txl = vedata->txl;
   EEVEE_PassList *psl = vedata->psl;
-  EEVEE_StorageList *stl = vedata->stl;
-  EEVEE_EffectsInfo *effects = stl->effects;
   DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
-
-  const float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
   /* Create FrameBuffer. */
   const eGPUTextureFormat texture_format = GPU_R32F;
@@ -372,12 +369,6 @@ void EEVEE_shadow_output_init(EEVEE_ViewLayerData *sldata,
 
   GPU_framebuffer_ensure_config(&fbl->shadow_accum_fb,
                                 {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(txl->shadow_accum)});
-
-  /* Clear texture. */
-  if (effects->taa_current_sample == 1) {
-    GPU_framebuffer_bind(fbl->shadow_accum_fb);
-    GPU_framebuffer_clear_color(fbl->shadow_accum_fb, clear);
-  }
 
   /* Create Pass and shgroup. */
   DRW_PASS_CREATE(psl->shadow_accum_pass,
@@ -403,9 +394,17 @@ void EEVEE_shadow_output_accumulate(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_D
 {
   EEVEE_FramebufferList *fbl = vedata->fbl;
   EEVEE_PassList *psl = vedata->psl;
+  EEVEE_EffectsInfo *effects = vedata->stl->effects;
 
   if (fbl->shadow_accum_fb != NULL) {
     GPU_framebuffer_bind(fbl->shadow_accum_fb);
+
+    /* Clear texture. */
+    if (effects->taa_current_sample == 1) {
+      const float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+      GPU_framebuffer_clear_color(fbl->shadow_accum_fb, clear);
+    }
+
     DRW_draw_pass(psl->shadow_accum_pass);
 
     /* Restore */
@@ -413,4 +412,4 @@ void EEVEE_shadow_output_accumulate(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_D
   }
 }
 
-/* \} */
+/** \} */

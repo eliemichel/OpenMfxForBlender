@@ -94,7 +94,7 @@ void ABCTransformWriter::do_write(HierarchyContext &context)
     scale_mat[3][3] = args_.export_params->global_scale; /* also scale translation */
     mul_m4_m4m4(parent_relative_matrix, parent_relative_matrix, scale_mat);
     parent_relative_matrix[3][3] /=
-        args_.export_params->global_scale; /* normalise the homogeneous component */
+        args_.export_params->global_scale; /* Normalize the homogeneous component. */
   }
 
   XformSample xform_sample;
@@ -112,7 +112,7 @@ OObject ABCTransformWriter::get_alembic_object() const
 
 bool ABCTransformWriter::check_is_animated(const HierarchyContext &context) const
 {
-  if (context.duplicator != NULL) {
+  if (context.duplicator != nullptr) {
     /* This object is being duplicated, so could be emitted by a particle system and thus
      * influenced by forces. TODO(Sybren): Make this more strict. Probably better to get from the
      * depsgraph whether this object instance has a time source. */

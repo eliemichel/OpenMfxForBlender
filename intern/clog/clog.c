@@ -1,4 +1,4 @@
-﻿/*
+/*
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -38,8 +39,13 @@
 #endif
 
 #if defined(_MSC_VER)
+#  include <Windows.h>
+
+#  include <VersionHelpers.h> /* This needs to be included after Windows.h. */
 #  include <io.h>
-#  include <windows.h>
+#  if !defined(ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+#    define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
+#  endif
 #endif
 
 /* For printing timestamp. */
@@ -75,6 +81,8 @@ typedef struct CLG_IDFilter {
 typedef struct CLogContext {
   /** Single linked list of types.  */
   CLG_LogType *types;
+  /** Single linked list of references.  */
+  CLG_LogRef *refs;
 #ifdef WITH_CLOG_PTHREADS
   pthread_mutex_t types_lock;
 #endif
@@ -228,6 +236,9 @@ enum eCLogColor {
 #define COLOR_LEN (COLOR_RESET + 1)
 
 static const char *clg_color_table[COLOR_LEN] = {NULL};
+#ifdef _WIN32
+static DWORD clg_previous_console_mode = 0;
+#endif
 
 static void clg_color_table_init(bool use_color)
 {
@@ -295,19 +306,27 @@ static enum eCLogColor clg_severity_to_color(enum CLG_Severity severity)
  * - `foo` exact match of `foo`.
  * - `foo.bar` exact match for `foo.bar`
  * - `foo.*` match for `foo` & `foo.bar` & `foo.bar.baz`
+ * - `*bar*` match for `foo.bar` & `baz.bar` & `foo.barbaz`
  * - `*` matches everything.
  */
 static bool clg_ctx_filter_check(CLogContext *ctx, const char *identifier)
 {
-  const int identifier_len = strlen(identifier);
+  const size_t identifier_len = strlen(identifier);
   for (uint i = 0; i < 2; i++) {
     const CLG_IDFilter *flt = ctx->filters[i];
     while (flt != NULL) {
-      const int len = strlen(flt->match);
+      const size_t len = strlen(flt->match);
       if (STREQ(flt->match, "*") || ((len == identifier_len) && (STREQ(identifier, flt->match)))) {
         return (bool)i;
       }
-      if ((len >= 2) && (STREQLEN(".*", &flt->match[len - 2], 2))) {
+      if (flt->match[0] == '*' && flt->match[len - 1] == '*') {
+        char *match = MEM_callocN(sizeof(char) * len - 1, __func__);
+        memcpy(match, flt->match + 1, len - 2);
+        if (strstr(identifier, match) != NULL) {
+          return (bool)i;
+        }
+      }
+      else if ((len >= 2) && (STREQLEN(".*", &flt->match[len - 2], 2))) {
         if (((identifier_len == len - 2) && STREQLEN(identifier, flt->match, len - 2)) ||
             ((identifier_len >= len - 1) && STREQLEN(identifier, flt->match, len - 1))) {
           return (bool)i;
@@ -548,13 +567,22 @@ static void CLG_ctx_output_set(CLogContext *ctx, void *file_handle)
 #if defined(__unix__) || defined(__APPLE__)
   ctx->use_color = isatty(ctx->output);
 #elif defined(WIN32)
-  /* Windows Terminal supports color like the Linux terminals do while the standard console does
-   * not, the way to tell the two apart is to look at the `WT_SESSION` environment variable which
-   * will only be defined for Windows Terminal. */
+  /* As of Windows 10 build 18298 all the standard consoles supports color
+   * like the Linux Terminal do, but it needs to be turned on.
+   * To turn on colors we need to enable virtual terminal processing by passing the flag
+   * ENABLE_VIRTUAL_TERMINAL_PROCESSING into SetConsoleMode.
+   * If the system doesn't support virtual terminal processing it will fail silently and the flag
+   * will not be set. */
 
-  /* #getenv is used here rather than #BLI_getenv since it would be a bad level call
-   * and there are no benefits for using it in this context. */
-  ctx->use_color = isatty(ctx->output) && getenv("WT_SESSION");
+  GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &clg_previous_console_mode);
+
+  ctx->use_color = 0;
+  if (IsWindows10OrGreater() && isatty(ctx->output)) {
+    DWORD mode = clg_previous_console_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    if (SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), mode)) {
+      ctx->use_color = 1;
+    }
+  }
 #endif
 }
 
@@ -638,10 +666,19 @@ static CLogContext *CLG_ctx_init(void)
 
 static void CLG_ctx_free(CLogContext *ctx)
 {
+#if defined(WIN32)
+  SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), clg_previous_console_mode);
+#endif
   while (ctx->types != NULL) {
     CLG_LogType *item = ctx->types;
     ctx->types = item->next;
     MEM_freeN(item);
+  }
+
+  while (ctx->refs != NULL) {
+    CLG_LogRef *item = ctx->refs;
+    ctx->refs = item->next;
+    item->type = NULL;
   }
 
   for (uint i = 0; i < 2; i++) {
@@ -740,6 +777,10 @@ void CLG_logref_init(CLG_LogRef *clg_ref)
   pthread_mutex_lock(&g_ctx->types_lock);
 #endif
   if (clg_ref->type == NULL) {
+    /* Add to the refs list so we can NULL the pointers to 'type' when CLG_exit() is called. */
+    clg_ref->next = g_ctx->refs;
+    g_ctx->refs = clg_ref;
+
     CLG_LogType *clg_ty = clg_ctx_type_find_by_name(g_ctx, clg_ref->identifier);
     if (clg_ty == NULL) {
       clg_ty = clg_ctx_type_register(g_ctx, clg_ref->identifier);

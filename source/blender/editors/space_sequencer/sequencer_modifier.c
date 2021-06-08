@@ -27,13 +27,18 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_context.h"
-#include "BKE_sequencer.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+
+#include "SEQ_iterator.h"
+#include "SEQ_modifier.h"
+#include "SEQ_relations.h"
+#include "SEQ_select.h"
+#include "SEQ_sequencer.h"
 
 /* Own include. */
 #include "sequencer_intern.h"
@@ -43,13 +48,13 @@
 static bool strip_modifier_active_poll(bContext *C)
 {
   Scene *scene = CTX_data_scene(C);
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
 
   if (ed) {
-    Sequence *seq = BKE_sequencer_active_get(scene);
+    Sequence *seq = SEQ_select_active_get(scene);
 
     if (seq) {
-      return BKE_sequence_supports_modifiers(seq);
+      return SEQ_sequence_supports_modifiers(seq);
     }
   }
 
@@ -59,12 +64,12 @@ static bool strip_modifier_active_poll(bContext *C)
 static int strip_modifier_add_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
-  Sequence *seq = BKE_sequencer_active_get(scene);
+  Sequence *seq = SEQ_select_active_get(scene);
   int type = RNA_enum_get(op->ptr, "type");
 
-  BKE_sequence_modifier_new(seq, NULL, type);
+  SEQ_modifier_new(seq, NULL, type);
 
-  BKE_sequence_invalidate_cache_preprocessed(scene, seq);
+  SEQ_relations_invalidate_cache_preprocessed(scene, seq);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -101,21 +106,21 @@ void SEQUENCER_OT_strip_modifier_add(wmOperatorType *ot)
 static int strip_modifier_remove_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
-  Sequence *seq = BKE_sequencer_active_get(scene);
+  Sequence *seq = SEQ_select_active_get(scene);
   char name[MAX_NAME];
   SequenceModifierData *smd;
 
   RNA_string_get(op->ptr, "name", name);
 
-  smd = BKE_sequence_modifier_find_by_name(seq, name);
+  smd = SEQ_modifier_find_by_name(seq, name);
   if (!smd) {
     return OPERATOR_CANCELLED;
   }
 
   BLI_remlink(&seq->modifiers, smd);
-  BKE_sequence_modifier_free(smd);
+  SEQ_modifier_free(smd);
 
-  BKE_sequence_invalidate_cache_preprocessed(scene, seq);
+  SEQ_relations_invalidate_cache_preprocessed(scene, seq);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -152,7 +157,7 @@ enum {
 static int strip_modifier_move_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
-  Sequence *seq = BKE_sequencer_active_get(scene);
+  Sequence *seq = SEQ_select_active_get(scene);
   char name[MAX_NAME];
   int direction;
   SequenceModifierData *smd;
@@ -160,7 +165,7 @@ static int strip_modifier_move_exec(bContext *C, wmOperator *op)
   RNA_string_get(op->ptr, "name", name);
   direction = RNA_enum_get(op->ptr, "direction");
 
-  smd = BKE_sequence_modifier_find_by_name(seq, name);
+  smd = SEQ_modifier_find_by_name(seq, name);
   if (!smd) {
     return OPERATOR_CANCELLED;
   }
@@ -178,7 +183,7 @@ static int strip_modifier_move_exec(bContext *C, wmOperator *op)
     }
   }
 
-  BKE_sequence_invalidate_cache_preprocessed(scene, seq);
+  SEQ_relations_invalidate_cache_preprocessed(scene, seq);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -224,15 +229,14 @@ static int strip_modifier_copy_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
   Editing *ed = scene->ed;
-  Sequence *seq = BKE_sequencer_active_get(scene);
-  Sequence *seq_iter;
+  Sequence *seq = SEQ_select_active_get(scene);
   const int type = RNA_enum_get(op->ptr, "type");
 
   if (!seq || !seq->modifiers.first) {
     return OPERATOR_CANCELLED;
   }
 
-  SEQ_CURRENT_BEGIN (ed, seq_iter) {
+  LISTBASE_FOREACH (Sequence *, seq_iter, SEQ_active_seqbase_get(ed)) {
     if (seq_iter->flag & SELECT) {
       if (seq_iter == seq) {
         continue;
@@ -244,19 +248,18 @@ static int strip_modifier_copy_exec(bContext *C, wmOperator *op)
           while (smd) {
             smd_tmp = smd->next;
             BLI_remlink(&seq_iter->modifiers, smd);
-            BKE_sequence_modifier_free(smd);
+            SEQ_modifier_free(smd);
             smd = smd_tmp;
           }
           BLI_listbase_clear(&seq_iter->modifiers);
         }
       }
 
-      BKE_sequence_modifier_list_copy(seq_iter, seq);
+      SEQ_modifier_list_copy(seq_iter, seq);
     }
   }
-  SEQ_CURRENT_END;
 
-  BKE_sequence_invalidate_cache_preprocessed(scene, seq);
+  SEQ_relations_invalidate_cache_preprocessed(scene, seq);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;

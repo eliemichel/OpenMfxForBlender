@@ -30,10 +30,12 @@ extern "C" {
 struct ARegionType;
 struct BMEditMesh;
 struct BlendDataReader;
+struct BlendLibReader;
 struct BlendWriter;
 struct CustomData_MeshMasks;
 struct DepsNodeHandle;
 struct Depsgraph;
+struct GeometrySet;
 struct ID;
 struct ListBase;
 struct Main;
@@ -242,12 +244,20 @@ typedef struct ModifierTypeInfo {
   struct Mesh *(*modifyMesh)(struct ModifierData *md,
                              const struct ModifierEvalContext *ctx,
                              struct Mesh *mesh);
+
   struct Hair *(*modifyHair)(struct ModifierData *md,
                              const struct ModifierEvalContext *ctx,
                              struct Hair *hair);
-  struct PointCloud *(*modifyPointCloud)(struct ModifierData *md,
-                                         const struct ModifierEvalContext *ctx,
-                                         struct PointCloud *pointcloud);
+
+  /**
+   * The modifier has to change the geometry set in-place. The geometry set can contain zero or
+   * more geometry components. This callback can be used by modifiers that don't work on any
+   * specific type of geometry (e.g. mesh).
+   */
+  void (*modifyGeometrySet)(struct ModifierData *md,
+                            const struct ModifierEvalContext *ctx,
+                            struct GeometrySet *geometry_set);
+
   struct Volume *(*modifyVolume)(struct ModifierData *md,
                                  const struct ModifierEvalContext *ctx,
                                  struct Volume *volume);
@@ -389,13 +399,14 @@ typedef struct ModifierTypeInfo {
 /* Used to find a modifier's panel type. */
 #define MODIFIER_TYPE_PANEL_PREFIX "MOD_PT_"
 
-/* Initialize modifier's global data (type info and some common global storages). */
+/* Initialize modifier's global data (type info and some common global storage). */
 void BKE_modifier_init(void);
 
 const ModifierTypeInfo *BKE_modifier_get_info(ModifierType type);
 
 /* For modifier UI panels. */
 void BKE_modifier_type_panel_id(ModifierType type, char *r_idname);
+void BKE_modifier_panel_expand(struct ModifierData *md);
 
 /* Modifier utility calls, do call through type pointer and return
  * default values if pointer is optional.
@@ -404,6 +415,7 @@ struct ModifierData *BKE_modifier_new(int type);
 
 void BKE_modifier_free_ex(struct ModifierData *md, const int flag);
 void BKE_modifier_free(struct ModifierData *md);
+void BKE_modifier_remove_from_list(struct Object *ob, struct ModifierData *md);
 
 /* Generate new UUID for the given modifier. */
 void BKE_modifier_session_uuid_generate(struct ModifierData *md);
@@ -427,6 +439,8 @@ bool BKE_modifier_is_non_geometrical(ModifierData *md);
 bool BKE_modifier_is_enabled(const struct Scene *scene,
                              struct ModifierData *md,
                              int required_mode);
+bool BKE_modifier_is_nonlocal_in_liboverride(const struct Object *ob,
+                                             const struct ModifierData *md);
 void BKE_modifier_set_error(const struct Object *ob,
                             struct ModifierData *md,
                             const char *format,
@@ -436,10 +450,10 @@ bool BKE_modifier_is_preview(struct ModifierData *md);
 void BKE_modifiers_foreach_ID_link(struct Object *ob, IDWalkFunc walk, void *userData);
 void BKE_modifiers_foreach_tex_link(struct Object *ob, TexWalkFunc walk, void *userData);
 
-struct ModifierData *BKE_modifiers_findby_type(struct Object *ob, ModifierType type);
-struct ModifierData *BKE_modifiers_findby_name(struct Object *ob, const char *name);
+struct ModifierData *BKE_modifiers_findby_type(const struct Object *ob, ModifierType type);
+struct ModifierData *BKE_modifiers_findby_name(const struct Object *ob, const char *name);
 void BKE_modifiers_clear_errors(struct Object *ob);
-int BKE_modifiers_get_cage_index(struct Scene *scene,
+int BKE_modifiers_get_cage_index(const struct Scene *scene,
                                  struct Object *ob,
                                  int *r_lastPossibleCageIndex,
                                  bool is_virtual);
@@ -455,8 +469,8 @@ struct Object *BKE_modifiers_is_deformed_by_lattice(struct Object *ob);
 struct Object *BKE_modifiers_is_deformed_by_curve(struct Object *ob);
 bool BKE_modifiers_uses_multires(struct Object *ob);
 bool BKE_modifiers_uses_armature(struct Object *ob, struct bArmature *arm);
-bool BKE_modifiers_uses_subsurf_facedots(struct Scene *scene, struct Object *ob);
-bool BKE_modifiers_is_correctable_deformed(struct Scene *scene, struct Object *ob);
+bool BKE_modifiers_uses_subsurf_facedots(const struct Scene *scene, struct Object *ob);
+bool BKE_modifiers_is_correctable_deformed(const struct Scene *scene, struct Object *ob);
 void BKE_modifier_free_temporary_data(struct ModifierData *md);
 
 typedef struct CDMaskLink {
@@ -470,14 +484,14 @@ typedef struct CDMaskLink {
  * pointed to by md for correct evaluation, assuming the data indicated by
  * final_datamask is required at the end of the stack.
  */
-struct CDMaskLink *BKE_modifier_calc_data_masks(struct Scene *scene,
+struct CDMaskLink *BKE_modifier_calc_data_masks(const struct Scene *scene,
                                                 struct Object *ob,
                                                 struct ModifierData *md,
                                                 struct CustomData_MeshMasks *final_datamask,
                                                 int required_mode,
                                                 ModifierData *previewmd,
                                                 const struct CustomData_MeshMasks *previewmask);
-struct ModifierData *BKE_modifier_get_last_preview(struct Scene *scene,
+struct ModifierData *BKE_modifier_get_last_preview(const struct Scene *scene,
                                                    struct ModifierData *md,
                                                    int required_mode);
 
@@ -533,6 +547,12 @@ struct Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(struct Object
                                                                    const bool get_cage_mesh);
 
 void BKE_modifier_check_uuids_unique_and_report(const struct Object *object);
+
+void BKE_modifier_blend_write(struct BlendWriter *writer, struct ListBase *modbase);
+void BKE_modifier_blend_read_data(struct BlendDataReader *reader,
+                                  struct ListBase *lb,
+                                  struct Object *ob);
+void BKE_modifier_blend_read_lib(struct BlendLibReader *reader, struct Object *ob);
 
 #ifdef __cplusplus
 }

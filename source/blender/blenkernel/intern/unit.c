@@ -333,7 +333,7 @@ static struct bUnitCollection buPowerCollection = {buPowerDef, 3, 0, UNIT_COLLEC
 /* Temperature */
 static struct bUnitDef buMetricTempDef[] = {
   {"kelvin",  "kelvin",  "K",  NULL, "Kelvin",  "KELVIN",  1.0f, 0.0,    B_UNIT_DEF_NONE}, /* Base unit. */
-  {"celsius", "celsius", "°C", "C",  "Celsius", "CELCIUS", 1.0f, 273.15, B_UNIT_DEF_NONE},
+  {"celsius", "celsius", "°C", "C",  "Celsius", "CELSIUS", 1.0f, 273.15, B_UNIT_DEF_NONE},
   NULL_UNIT,
 };
 static struct bUnitCollection buMetricTempCollection = {buMetricTempDef, 0, 0, UNIT_COLLECTION_LENGTH(buMetricTempDef)};
@@ -802,22 +802,22 @@ static char *find_next_negative(const char *str, const char *remaining_str)
 static char *find_next_op(const char *str, char *remaining_str, int len_max)
 {
   int i;
-  bool scientific_notation = false;
   for (i = 0; i < len_max; i++) {
     if (remaining_str[i] == '\0') {
       return remaining_str + i;
     }
 
     if (ch_is_op(remaining_str[i])) {
-      if (scientific_notation) {
-        scientific_notation = false;
-      }
-
       /* Make sure we don't look backwards before the start of the string. */
       if (remaining_str != str && i != 0) {
+        /* Check for velocity or acceleration (e.g. '/' in 'ft/s' is not an op). */
+        if ((remaining_str[i] == '/') && ELEM(remaining_str[i - 1], 't', 'T', 'm', 'M') &&
+            ELEM(remaining_str[i + 1], 's', 'S')) {
+          continue;
+        }
+
         /* Check for scientific notation. */
-        if (remaining_str[i - 1] == 'e' || remaining_str[i - 1] == 'E') {
-          scientific_notation = true;
+        if (ELEM(remaining_str[i - 1], 'e', 'E')) {
           continue;
         }
 
@@ -1167,8 +1167,7 @@ bool BKE_unit_replace_string(
   /* Replace # with add sign when there is no operator between it and the next number.
    *
    * "1*1# 3*100# * 3"  ->  "1*1+ 3*100  * 3"
-   *
-   * */
+   */
   {
     char *str_found = str;
     const char *ch = str;
@@ -1178,7 +1177,7 @@ bool BKE_unit_replace_string(
 
       /* Any operators after this? */
       for (ch = str_found + 1; *ch != '\0'; ch++) {
-        if (*ch == ' ' || *ch == '\t') {
+        if (ELEM(*ch, ' ', '\t')) {
           continue;
         }
         op_found = (ch_is_op(*ch) || ELEM(*ch, ',', ')'));

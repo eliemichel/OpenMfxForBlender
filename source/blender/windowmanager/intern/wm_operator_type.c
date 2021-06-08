@@ -95,6 +95,7 @@ void WM_operatortype_iter(GHashIterator *ghi)
   BLI_ghashIterator_init(ghi, global_ops_hash);
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Operator Type Append
  * \{ */
 
@@ -251,7 +252,7 @@ void WM_operatortype_props_advanced_end(wmOperatorType *ot)
     return;
   }
 
-  RNA_pointer_create(NULL, ot->srna, NULL, &struct_ptr);
+  WM_operator_properties_create_ptr(&struct_ptr, ot);
 
   RNA_STRUCT_BEGIN (&struct_ptr, prop) {
     counter++;
@@ -324,13 +325,11 @@ static int wm_macro_end(wmOperator *op, int retval)
 /* macro exec only runs exec calls */
 static int wm_macro_exec(bContext *C, wmOperator *op)
 {
-  wmOperator *opm;
   int retval = OPERATOR_FINISHED;
 
   wm_macro_start(op);
 
-  for (opm = op->macro.first; opm; opm = opm->next) {
-
+  LISTBASE_FOREACH (wmOperator *, opm, &op->macro) {
     if (opm->type->exec) {
       retval = opm->type->exec(C, opm);
       OPERATOR_RETVAL_CHECK(retval);
@@ -425,9 +424,8 @@ static int wm_macro_modal(bContext *C, wmOperator *op, const wmEvent *event)
           wm_event_free_handler(&handler->head);
         }
 
-        /* if operator is blocking, grab cursor
-         * This may end up grabbing twice, but we don't care.
-         * */
+        /* If operator is blocking, grab cursor.
+         * This may end up grabbing twice, but we don't care. */
         if (op->opm->type->flag & OPTYPE_BLOCKING) {
           int bounds[4] = {-1, -1, -1, -1};
           int wrap = WM_CURSOR_WRAP_NONE;
@@ -573,9 +571,7 @@ wmOperatorTypeMacro *WM_operatortype_macro_define(wmOperatorType *ot, const char
 
 static void wm_operatortype_free_macro(wmOperatorType *ot)
 {
-  wmOperatorTypeMacro *otmacro;
-
-  for (otmacro = ot->macro.first; otmacro; otmacro = otmacro->next) {
+  LISTBASE_FOREACH (wmOperatorTypeMacro *, otmacro, &ot->macro) {
     if (otmacro->ptr) {
       WM_operator_properties_free(otmacro->ptr);
       MEM_freeN(otmacro->ptr);

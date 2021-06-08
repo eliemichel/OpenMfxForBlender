@@ -174,6 +174,11 @@ struct float3 {
     return len_squared_v3(*this);
   }
 
+  bool is_zero() const
+  {
+    return this->x == 0.0f && this->y == 0.0f && this->z == 0.0f;
+  }
+
   void reflect(const float3 &normal)
   {
     *this = this->reflected(normal);
@@ -184,6 +189,24 @@ struct float3 {
     float3 result;
     reflect_v3_v3v3(result, *this, normal);
     return result;
+  }
+
+  static float3 refract(const float3 &incident, const float3 &normal, const float eta)
+  {
+    float3 result;
+    float k = 1.0f - eta * eta * (1.0f - dot(normal, incident) * dot(normal, incident));
+    if (k < 0.0f) {
+      result = float3(0.0f);
+    }
+    else {
+      result = eta * incident - (eta * dot(normal, incident) + sqrt(k)) * normal;
+    }
+    return result;
+  }
+
+  static float3 faceforward(const float3 &vector, const float3 &incident, const float3 &reference)
+  {
+    return dot(reference, incident) < 0.0f ? vector : -vector;
   }
 
   static float3 safe_divide(const float3 &a, const float3 &b)
@@ -236,7 +259,8 @@ struct float3 {
 
   static float distance_squared(const float3 &a, const float3 &b)
   {
-    return float3::dot(a, b);
+    float3 diff = a - b;
+    return float3::dot(diff, diff);
   }
 
   static float3 interpolate(const float3 &a, const float3 &b, float t)

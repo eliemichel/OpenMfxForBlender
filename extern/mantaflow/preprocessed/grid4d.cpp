@@ -491,9 +491,7 @@ template<class T> Grid4d<T> &Grid4d<T>::safeDivide(const Grid4d<T> &a)
 }
 template<class T> Grid4d<T> &Grid4d<T>::copyFrom(const Grid4d<T> &a, bool copyType)
 {
-  assertMsg(a.mSize.x == mSize.x && a.mSize.y == mSize.y && a.mSize.z == mSize.z &&
-                a.mSize.t == mSize.t,
-            "different Grid4d resolutions " << a.mSize << " vs " << this->mSize);
+  assertMsg(a.mSize == mSize, "different Grid4d resolutions " << a.mSize << " vs " << this->mSize);
   memcpy(mData, a.mData, sizeof(T) * mSize.x * mSize.y * mSize.z * mSize.t);
   if (copyType)
     mType = a.mType;  // copy type marker
@@ -888,7 +886,7 @@ static PyObject *_W_0(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "getComp4d", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       const Grid4d<Vec4> &src = *_args.getPtr<Grid4d<Vec4>>("src", 0, &_lock);
@@ -926,7 +924,7 @@ static PyObject *_W_1(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "setComp4d", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       const Grid4d<Real> &src = *_args.getPtr<Grid4d<Real>>("src", 0, &_lock);
@@ -1170,7 +1168,7 @@ static PyObject *_W_2(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "grid4dMaxDiff", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Grid4d<Real> &g1 = *_args.getPtr<Grid4d<Real>>("g1", 0, &_lock);
@@ -1210,7 +1208,7 @@ static PyObject *_W_3(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "grid4dMaxDiffInt", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Grid4d<int> &g1 = *_args.getPtr<Grid4d<int>>("g1", 0, &_lock);
@@ -1254,7 +1252,7 @@ static PyObject *_W_4(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "grid4dMaxDiffVec3", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Grid4d<Vec3> &g1 = *_args.getPtr<Grid4d<Vec3>>("g1", 0, &_lock);
@@ -1298,7 +1296,7 @@ static PyObject *_W_5(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "grid4dMaxDiffVec4", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Grid4d<Vec4> &g1 = *_args.getPtr<Grid4d<Vec4>>("g1", 0, &_lock);
@@ -1422,7 +1420,7 @@ static PyObject *_W_6(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "setRegion4d", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Grid4d<Real> &dst = *_args.getPtr<Grid4d<Real>>("dst", 0, &_lock);
@@ -1461,7 +1459,7 @@ static PyObject *_W_7(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "setRegion4dVec4", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Grid4d<Vec4> &dst = *_args.getPtr<Grid4d<Vec4>>("dst", 0, &_lock);
@@ -1510,7 +1508,7 @@ static PyObject *_W_8(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "getSliceFrom4d", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Grid4d<Real> &src = *_args.getPtr<Grid4d<Real>>("src", 0, &_lock);
@@ -1537,7 +1535,7 @@ void PbRegister_getSliceFrom4d()
 }
 
 //! slow helper to visualize tests, get a 3d slice of a 4d vec4 grid
-void getSliceFrom4dVec(Grid4d<Vec4> &src, int srct, Grid<Vec3> &dst, Grid<Real> *dstt = NULL)
+void getSliceFrom4dVec(Grid4d<Vec4> &src, int srct, Grid<Vec3> &dst, Grid<Real> *dstt = nullptr)
 {
   const int bnd = 0;
   if (!src.isInBounds(Vec4i(bnd, bnd, bnd, srct)))
@@ -1561,13 +1559,13 @@ static PyObject *_W_9(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "getSliceFrom4dVec", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Grid4d<Vec4> &src = *_args.getPtr<Grid4d<Vec4>>("src", 0, &_lock);
       int srct = _args.get<int>("srct", 1, &_lock);
       Grid<Vec3> &dst = *_args.getPtr<Grid<Vec3>>("dst", 2, &_lock);
-      Grid<Real> *dstt = _args.getPtrOpt<Grid<Real>>("dstt", 3, NULL, &_lock);
+      Grid<Real> *dstt = _args.getPtrOpt<Grid<Real>>("dstt", 3, nullptr, &_lock);
       _retval = getPyNone();
       getSliceFrom4dVec(src, srct, dst, dstt);
       _args.check();
@@ -1716,7 +1714,7 @@ static PyObject *_W_10(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "interpolateGrid4d", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Grid4d<Real> &target = *_args.getPtr<Grid4d<Real>>("target", 0, &_lock);
@@ -1763,7 +1761,7 @@ static PyObject *_W_11(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "interpolateGrid4dVec", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       Grid4d<Vec4> &target = *_args.getPtr<Grid4d<Vec4>>("target", 0, &_lock);

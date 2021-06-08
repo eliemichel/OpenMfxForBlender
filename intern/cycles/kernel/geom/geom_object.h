@@ -214,13 +214,6 @@ ccl_device_inline float3 object_location(KernelGlobals *kg, const ShaderData *sd
 #endif
 }
 
-/* Total surface area of object */
-
-ccl_device_inline float object_surface_area(KernelGlobals *kg, int object)
-{
-  return kernel_tex_fetch(__objects, object).surface_area;
-}
-
 /* Color of the object */
 
 ccl_device_inline float3 object_color(KernelGlobals *kg, int object)
@@ -328,7 +321,7 @@ ccl_device_inline float object_volume_density(KernelGlobals *kg, int object)
     return 1.0f;
   }
 
-  return kernel_tex_fetch(__objects, object).surface_area;
+  return kernel_tex_fetch(__objects, object).volume_density;
 }
 
 ccl_device_inline float object_volume_step_size(KernelGlobals *kg, int object)
@@ -442,7 +435,7 @@ ccl_device_inline float bvh_instance_push(
   return t;
 }
 
-/* Transorm ray to exit static object in BVH */
+/* Transform ray to exit static object in BVH. */
 
 ccl_device_inline float bvh_instance_pop(
     KernelGlobals *kg, int object, const Ray *ray, float3 *P, float3 *dir, float3 *idir, float t)
@@ -504,7 +497,7 @@ ccl_device_inline float bvh_instance_motion_push(KernelGlobals *kg,
   return t;
 }
 
-/* Transorm ray to exit motion blurred object in BVH */
+/* Transform ray to exit motion blurred object in BVH. */
 
 ccl_device_inline float bvh_instance_motion_pop(KernelGlobals *kg,
                                                 int object,

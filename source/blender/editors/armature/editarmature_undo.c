@@ -26,7 +26,9 @@
 #include "CLG_log.h"
 
 #include "DNA_armature_types.h"
+#include "DNA_layer_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_array_utils.h"
 #include "BLI_listbase.h"
@@ -35,6 +37,7 @@
 #include "BKE_context.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
+#include "BKE_object.h"
 #include "BKE_undo_system.h"
 
 #include "DEG_depsgraph.h"
@@ -176,16 +179,18 @@ static bool armature_undosys_step_encode(struct bContext *C, struct Main *bmain,
   return true;
 }
 
-static void armature_undosys_step_decode(
-    struct bContext *C, struct Main *bmain, UndoStep *us_p, int UNUSED(dir), bool UNUSED(is_final))
+static void armature_undosys_step_decode(struct bContext *C,
+                                         struct Main *bmain,
+                                         UndoStep *us_p,
+                                         const eUndoStepDir UNUSED(dir),
+                                         bool UNUSED(is_final))
 {
   ArmatureUndoStep *us = (ArmatureUndoStep *)us_p;
 
-  /* Load all our objects  into edit-mode, clear everything else. */
   ED_undo_object_editmode_restore_helper(
       C, &us->elems[0].obedit_ref.ptr, us->elems_len, sizeof(*us->elems));
 
-  BLI_assert(armature_undosys_poll(C));
+  BLI_assert(BKE_object_is_in_editmode(us->elems[0].obedit_ref.ptr));
 
   for (uint i = 0; i < us->elems_len; i++) {
     ArmatureUndoStep_Elem *elem = &us->elems[i];
@@ -206,7 +211,10 @@ static void armature_undosys_step_decode(
 
   /* The first element is always active */
   ED_undo_object_set_active_or_warn(
-      CTX_data_view_layer(C), us->elems[0].obedit_ref.ptr, us_p->name, &LOG);
+      CTX_data_scene(C), CTX_data_view_layer(C), us->elems[0].obedit_ref.ptr, us_p->name, &LOG);
+
+  /* Check after setting active. */
+  BLI_assert(armature_undosys_poll(C));
 
   bmain->is_memfile_undo_flush_needed = true;
 
@@ -247,7 +255,7 @@ void ED_armature_undosys_type(UndoType *ut)
 
   ut->step_foreach_ID_ref = armature_undosys_foreach_ID_ref;
 
-  ut->use_context = true;
+  ut->flags = UNDOTYPE_FLAG_NEED_CONTEXT_FOR_ENCODE;
 
   ut->step_size = sizeof(ArmatureUndoStep);
 }

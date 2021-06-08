@@ -54,6 +54,7 @@
 #include "DNA_simulation_types.h"
 #include "DNA_space_types.h"
 #include "DNA_speaker_types.h"
+#include "DNA_userdef_types.h"
 #include "DNA_volume_types.h"
 #include "DNA_world_types.h"
 
@@ -132,7 +133,16 @@ static void acf_generic_root_backdrop(bAnimContext *ac,
   UI_draw_roundbox_corner_set((expanded) ? UI_CNR_TOP_LEFT :
                                            (UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT));
   UI_draw_roundbox_3fv_alpha(
-      true, offset, yminc, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 8, color, 1.0f);
+      &(const rctf){
+          .xmin = offset,
+          .xmax = v2d->cur.xmax + EXTRA_SCROLL_PAD,
+          .ymin = yminc,
+          .ymax = ymaxc,
+      },
+      true,
+      8,
+      color,
+      1.0f);
 }
 
 /* get backdrop color for data expanders under top-level Scene/Object */
@@ -170,28 +180,9 @@ static void acf_generic_dataexpand_backdrop(bAnimContext *ac,
 }
 
 /* helper method to test if group colors should be drawn */
-static bool acf_show_channel_colors(bAnimContext *ac)
+static bool acf_show_channel_colors(void)
 {
-  bool showGroupColors = false;
-
-  if (ac->sl) {
-    switch (ac->spacetype) {
-      case SPACE_ACTION: {
-        SpaceAction *saction = (SpaceAction *)ac->sl;
-        showGroupColors = !(saction->flag & SACTION_NODRAWGCOLORS);
-
-        break;
-      }
-      case SPACE_GRAPH: {
-        SpaceGraph *sipo = (SpaceGraph *)ac->sl;
-        showGroupColors = !(sipo->flag & SIPO_NODRAWGCOLORS);
-
-        break;
-      }
-    }
-  }
-
-  return showGroupColors;
+  return (U.animation_flag & USER_ANIM_SHOW_CHANNEL_GROUP_COLORS) != 0;
 }
 
 /* get backdrop color for generic channels */
@@ -200,7 +191,7 @@ static void acf_generic_channel_color(bAnimContext *ac, bAnimListElem *ale, floa
   const bAnimChannelType *acf = ANIM_channel_get_typeinfo(ale);
   bActionGroup *grp = NULL;
   short indent = (acf->get_indent_level) ? acf->get_indent_level(ac, ale) : 0;
-  bool showGroupColors = acf_show_channel_colors(ac);
+  bool showGroupColors = acf_show_channel_colors();
 
   if (ale->type == ANIMTYPE_FCURVE) {
     FCurve *fcu = (FCurve *)ale->data;
@@ -240,7 +231,7 @@ static void acf_gpencil_channel_color(bAnimContext *ac, bAnimListElem *ale, floa
 {
   const bAnimChannelType *acf = ANIM_channel_get_typeinfo(ale);
   short indent = (acf->get_indent_level) ? acf->get_indent_level(ac, ale) : 0;
-  bool showGroupColors = acf_show_channel_colors(ac);
+  bool showGroupColors = acf_show_channel_colors();
 
   if ((showGroupColors) && (ale->type == ANIMTYPE_GPLAYER)) {
     bGPDlayer *gpl = (bGPDlayer *)ale->data;
@@ -439,7 +430,7 @@ static bool acf_generic_dataexpand_setting_valid(bAnimContext *ac,
     case ACHANNEL_SETTING_MUTE:
       return ((ac) && (ac->spacetype == SPACE_NLA));
 
-    /* select is ok for most "ds*" channels (e.g. dsmat) */
+    /* Select is ok for most `ds*` channels (e.g. `dsmat`) */
     case ACHANNEL_SETTING_SELECT:
       return true;
 
@@ -482,7 +473,16 @@ static void acf_summary_backdrop(bAnimContext *ac, bAnimListElem *ale, float ymi
    */
   UI_draw_roundbox_corner_set(UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT);
   UI_draw_roundbox_3fv_alpha(
-      true, 0, yminc - 2, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 8, color, 1.0f);
+      &(const rctf){
+          .xmin = 0,
+          .xmax = v2d->cur.xmax + EXTRA_SCROLL_PAD,
+          .ymin = yminc - 2,
+          .ymax = ymaxc,
+      },
+      true,
+      8,
+      color,
+      1.0f);
 }
 
 /* name for summary entries */
@@ -848,10 +848,10 @@ static bAnimChannelType ACF_OBJECT = {
 /* Group ------------------------------------------- */
 
 /* get backdrop color for group widget */
-static void acf_group_color(bAnimContext *ac, bAnimListElem *ale, float r_color[3])
+static void acf_group_color(bAnimContext *UNUSED(ac), bAnimListElem *ale, float r_color[3])
 {
   bActionGroup *agrp = (bActionGroup *)ale->data;
-  bool showGroupColors = acf_show_channel_colors(ac);
+  bool showGroupColors = acf_show_channel_colors();
 
   if (showGroupColors && agrp->customCol) {
     uchar cp[3];
@@ -893,7 +893,16 @@ static void acf_group_backdrop(bAnimContext *ac, bAnimListElem *ale, float yminc
   /* rounded corners on LHS only - top only when expanded, but bottom too when collapsed */
   UI_draw_roundbox_corner_set(expanded ? UI_CNR_TOP_LEFT : (UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT));
   UI_draw_roundbox_3fv_alpha(
-      true, offset, yminc, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 8, color, 1.0f);
+      &(const rctf){
+          .xmin = offset,
+          .xmax = v2d->cur.xmax + EXTRA_SCROLL_PAD,
+          .ymin = yminc,
+          .ymax = ymaxc,
+      },
+      true,
+      8,
+      color,
+      1.0f);
 }
 
 /* name for group entries */
@@ -910,7 +919,7 @@ static void acf_group_name(bAnimListElem *ale, char *name)
 /* name property for group entries */
 static bool acf_group_name_prop(bAnimListElem *ale, PointerRNA *ptr, PropertyRNA **prop)
 {
-  RNA_pointer_create(ale->id, &RNA_ActionGroup, ale->data, ptr);
+  RNA_pointer_create(ale->fcurve_owner_id, &RNA_ActionGroup, ale->data, ptr);
   *prop = RNA_struct_name_property(ptr->type);
 
   return (*prop != NULL);
@@ -1031,7 +1040,7 @@ static bool acf_fcurve_name_prop(bAnimListElem *ale, PointerRNA *ptr, PropertyRN
    * as our "name" so that user can perform quick fixes
    */
   if (fcu->flag & FCURVE_DISABLED) {
-    RNA_pointer_create(ale->id, &RNA_FCurve, ale->data, ptr);
+    RNA_pointer_create(ale->fcurve_owner_id, &RNA_FCurve, ale->data, ptr);
     *prop = RNA_struct_find_property(ptr, "data_path");
   }
   else {
@@ -1167,7 +1176,16 @@ static void acf_nla_controls_backdrop(bAnimContext *ac,
   /* rounded corners on LHS only - top only when expanded, but bottom too when collapsed */
   UI_draw_roundbox_corner_set(expanded ? UI_CNR_TOP_LEFT : (UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT));
   UI_draw_roundbox_3fv_alpha(
-      true, offset, yminc, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 5, color, 1.0f);
+      &(const rctf){
+          .xmin = offset,
+          .xmax = v2d->cur.xmax + EXTRA_SCROLL_PAD,
+          .ymin = yminc,
+          .ymax = ymaxc,
+      },
+      true,
+      5,
+      color,
+      1.0f);
 }
 
 /* name for nla controls expander entries */
@@ -3954,13 +3972,16 @@ static void acf_nlaaction_backdrop(bAnimContext *ac, bAnimListElem *ale, float y
   /* draw slightly shifted up vertically to look like it has more separation from other channels,
    * but we then need to slightly shorten it so that it doesn't look like it overlaps
    */
-  UI_draw_roundbox_4fv(true,
-                       offset,
-                       yminc + NLACHANNEL_SKIP,
-                       (float)v2d->cur.xmax,
-                       ymaxc + NLACHANNEL_SKIP - 1,
-                       8,
-                       color);
+  UI_draw_roundbox_4fv(
+      &(const rctf){
+          .xmin = offset,
+          .xmax = (float)v2d->cur.xmax,
+          .ymin = yminc + NLACHANNEL_SKIP,
+          .ymax = ymaxc + NLACHANNEL_SKIP - 1,
+      },
+      true,
+      8,
+      color);
 }
 
 /* name for nla action entries */
@@ -3983,7 +4004,7 @@ static void acf_nlaaction_name(bAnimListElem *ale, char *name)
 static bool acf_nlaaction_name_prop(bAnimListElem *ale, PointerRNA *ptr, PropertyRNA **prop)
 {
   if (ale->data) {
-    RNA_pointer_create(ale->id, &RNA_Action, ale->data, ptr);
+    RNA_pointer_create(ale->fcurve_owner_id, &RNA_Action, ale->data, ptr);
     *prop = RNA_struct_name_property(ptr->type);
 
     return (*prop != NULL);
@@ -4140,7 +4161,7 @@ static void ANIM_init_channel_typeinfo_data(void)
 /* Get type info from given channel type */
 const bAnimChannelType *ANIM_channel_get_typeinfo(bAnimListElem *ale)
 {
-  /* santiy checks */
+  /* Sanity checks. */
   if (ale == NULL) {
     return NULL;
   }
@@ -4645,7 +4666,7 @@ static void achannel_setting_flush_widget_cb(bContext *C, void *ale_npoin, void 
     }
 
     /* UI updates */
-    WM_event_add_notifier(C, NC_GPENCIL | ND_DATA, NULL);
+    WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
   }
 
   /* Tag for full animation update, so that the settings will have an effect. */
@@ -4728,7 +4749,7 @@ static void achannel_setting_slider_cb(bContext *C, void *id_poin, void *fcu_poi
   const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(depsgraph,
                                                                                     (float)CFRA);
   NlaKeyframingContext *nla_context = BKE_animsys_get_nla_keyframing_context(
-      &nla_cache, &id_ptr, adt, &anim_eval_context, false);
+      &nla_cache, &id_ptr, adt, &anim_eval_context);
 
   /* get current frame and apply NLA-mapping to it (if applicable) */
   cfra = BKE_nla_tweakedit_remap(adt, (float)CFRA, NLATIME_CONVERT_UNMAP);
@@ -4784,7 +4805,7 @@ static void achannel_setting_slider_shapekey_cb(bContext *C, void *key_poin, voi
   const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(depsgraph,
                                                                                     (float)CFRA);
   NlaKeyframingContext *nla_context = BKE_animsys_get_nla_keyframing_context(
-      &nla_cache, &id_ptr, key->adt, &anim_eval_context, false);
+      &nla_cache, &id_ptr, key->adt, &anim_eval_context);
 
   /* get current frame and apply NLA-mapping to it (if applicable) */
   const float remapped_frame = BKE_nla_tweakedit_remap(
@@ -5371,7 +5392,7 @@ void ANIM_channel_draw_widgets(const bContext *C,
                                 "",
                                 ICON_NONE,
                                 offset,
-                                ymid,
+                                rect->ymin,
                                 SLIDER_WIDTH,
                                 channel_height);
             UI_but_func_set(but, achannel_setting_slider_nla_curve_cb, ale->id, ale->data);
@@ -5429,7 +5450,7 @@ void ANIM_channel_draw_widgets(const bContext *C,
                             "",
                             icon,
                             offset,
-                            ymid,
+                            rect->ymin,
                             ICON_WIDTH,
                             channel_height);
             }
@@ -5455,7 +5476,7 @@ void ANIM_channel_draw_widgets(const bContext *C,
                             "",
                             icon,
                             offset,
-                            ymid,
+                            rect->ymin,
                             ICON_WIDTH,
                             channel_height);
             }
@@ -5475,7 +5496,7 @@ void ANIM_channel_draw_widgets(const bContext *C,
                             "",
                             ICON_NONE,
                             offset,
-                            ymid,
+                            rect->ymin,
                             width,
                             channel_height);
             }
@@ -5501,7 +5522,7 @@ void ANIM_channel_draw_widgets(const bContext *C,
                                 "",
                                 ICON_NONE,
                                 offset,
-                                ymid,
+                                rect->ymin,
                                 SLIDER_WIDTH,
                                 channel_height);
 

@@ -22,7 +22,11 @@
 
 #pragma once
 
-#include "DNA_scene_types.h"
+#include "DNA_ID.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #
 #
@@ -188,3 +192,7 @@ typedef struct WorkSpaceInstanceHook {
 typedef enum eWorkSpaceFlags {
   WORKSPACE_USE_FILTER_BY_ORIGIN = (1 << 1),
 } eWorkSpaceFlags;
+
+#ifdef __cplusplus
+}
+#endif

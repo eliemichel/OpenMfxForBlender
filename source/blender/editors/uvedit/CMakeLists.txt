@@ -35,6 +35,7 @@ set(INC
 set(SRC
   uvedit_buttons.c
   uvedit_draw.c
+  uvedit_islands.c
   uvedit_ops.c
   uvedit_parametrizer.c
   uvedit_path.c

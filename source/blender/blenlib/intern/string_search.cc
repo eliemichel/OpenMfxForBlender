@@ -250,7 +250,7 @@ static int get_shortest_word_index_that_startswith(StringRef query,
                                                    Span<bool> word_is_usable)
 {
   int best_word_size = INT32_MAX;
-  int bset_word_index = -1;
+  int best_word_index = -1;
   for (const int i : words.index_range()) {
     if (!word_is_usable[i]) {
       continue;
@@ -258,11 +258,12 @@ static int get_shortest_word_index_that_startswith(StringRef query,
     StringRef word = words[i];
     if (word.startswith(query)) {
       if (word.size() < best_word_size) {
-        bset_word_index = i;
+        best_word_index = i;
+        best_word_size = word.size();
       }
     }
   }
-  return bset_word_index;
+  return best_word_index;
 }
 
 static int get_word_index_that_fuzzy_matches(StringRef query,
@@ -394,6 +395,7 @@ void extract_normalized_words(StringRef str,
 
 struct SearchItem {
   blender::Span<blender::StringRef> normalized_words;
+  int length;
   void *user_data;
 };
 
@@ -415,8 +417,10 @@ void BLI_string_search_add(StringSearch *search, const char *str, void *user_dat
 {
   using namespace blender;
   Vector<StringRef, 64> words;
-  string_search::extract_normalized_words(str, search->allocator, words);
-  search->items.append({search->allocator.construct_array_copy(words.as_span()), user_data});
+  StringRef str_ref{str};
+  string_search::extract_normalized_words(str_ref, search->allocator, words);
+  search->items.append(
+      {search->allocator.construct_array_copy(words.as_span()), (int)str_ref.size(), user_data});
 }
 
 /**
@@ -428,9 +432,11 @@ int BLI_string_search_query(StringSearch *search, const char *query, void ***r_d
 {
   using namespace blender;
 
+  const StringRef query_str = query;
+
   LinearAllocator<> allocator;
   Vector<StringRef, 64> query_words;
-  string_search::extract_normalized_words(query, allocator, query_words);
+  string_search::extract_normalized_words(query_str, allocator, query_words);
 
   /* Compute score of every result. */
   MultiValueMap<int, int> result_indices_by_score;
@@ -446,13 +452,21 @@ int BLI_string_search_query(StringSearch *search, const char *query, void ***r_d
   for (const int score : result_indices_by_score.keys()) {
     found_scores.append(score);
   }
-  std::sort(found_scores.begin(), found_scores.end(), std::greater<int>());
+  std::sort(found_scores.begin(), found_scores.end(), std::greater<>());
 
   /* Add results to output vector in correct order. First come the results with the best match
    * score. Results with the same score are in the order they have been added to the search. */
   Vector<int> sorted_result_indices;
   for (const int score : found_scores) {
-    Span<int> indices = result_indices_by_score.lookup(score);
+    MutableSpan<int> indices = result_indices_by_score.lookup(score);
+    if (score == found_scores[0] && !query_str.is_empty()) {
+      /* Sort items with best score by length. Shorter items are more likely the ones you are
+       * looking for. This also ensures that exact matches will be at the top, even if the query is
+       * a substring of another item. */
+      std::sort(indices.begin(), indices.end(), [&](int a, int b) {
+        return search->items[a].length < search->items[b].length;
+      });
+    }
     sorted_result_indices.extend(indices);
   }
 

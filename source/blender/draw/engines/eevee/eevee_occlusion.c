@@ -61,8 +61,8 @@ int EEVEE_occlusion_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     const int fs_size[2] = {(int)viewport_size[0], (int)viewport_size[1]};
 
     common_data->ao_dist = scene_eval->eevee.gtao_distance;
-    common_data->ao_factor = scene_eval->eevee.gtao_factor;
-    common_data->ao_quality = 1.0f - scene_eval->eevee.gtao_quality;
+    common_data->ao_factor = max_ff(1e-4f, scene_eval->eevee.gtao_factor);
+    common_data->ao_quality = scene_eval->eevee.gtao_quality;
 
     if (scene_eval->eevee.flag & SCE_EEVEE_GTAO_ENABLED) {
       common_data->ao_settings = 1.0f; /* USE_AO */
@@ -120,19 +120,12 @@ void EEVEE_occlusion_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata
   const eGPUTextureFormat texture_format = (tot_samples > 128) ? GPU_R32F : GPU_R16F;
 
   DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
-  const float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
   /* Should be enough precision for many samples. */
   DRW_texture_ensure_fullscreen_2d(&txl->ao_accum, texture_format, 0);
 
   GPU_framebuffer_ensure_config(&fbl->ao_accum_fb,
                                 {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(txl->ao_accum)});
-
-  /* Clear texture. */
-  if (effects->taa_current_sample == 1) {
-    GPU_framebuffer_bind(fbl->ao_accum_fb);
-    GPU_framebuffer_clear_color(fbl->ao_accum_fb, clear);
-  }
 
   /* Accumulation pass */
   DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ADD;
@@ -157,12 +150,11 @@ void EEVEE_occlusion_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   EEVEE_EffectsInfo *effects = stl->effects;
   DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
 
-  struct GPUBatch *quad = DRW_cache_fullscreen_quad_get();
-
   if ((effects->enabled_effects & EFFECT_GTAO) != 0) {
-    /**  Occlusion algorithm overview
+    /**
+     * Occlusion Algorithm Overview:
      *
-     *  We separate the computation into 2 steps.
+     * We separate the computation into 2 steps.
      *
      * - First we scan the neighborhood pixels to find the maximum horizon angle.
      *   We save this angle in a RG8 array texture.
@@ -176,21 +168,9 @@ void EEVEE_occlusion_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
                                               psl->ao_horizon_search);
     DRW_shgroup_uniform_texture(grp, "utilTex", EEVEE_materials_get_util_tex());
     DRW_shgroup_uniform_texture_ref(grp, "maxzBuffer", &txl->maxzbuffer);
-    DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &effects->ao_src_depth);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
     DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
-    DRW_shgroup_call(grp, quad, NULL);
-
-    DRW_PASS_CREATE(psl->ao_horizon_search_layer, DRW_STATE_WRITE_COLOR);
-    grp = DRW_shgroup_create(EEVEE_shaders_effect_ambient_occlusion_layer_sh_get(),
-                             psl->ao_horizon_search_layer);
-    DRW_shgroup_uniform_texture(grp, "utilTex", EEVEE_materials_get_util_tex());
-    DRW_shgroup_uniform_texture_ref(grp, "maxzBuffer", &txl->maxzbuffer);
-    DRW_shgroup_uniform_texture_ref(grp, "depthBufferLayered", &effects->ao_src_depth);
-    DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
-    DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
-    DRW_shgroup_uniform_int(grp, "layer", &stl->effects->ao_depth_layer, 1);
-    DRW_shgroup_call(grp, quad, NULL);
+    DRW_shgroup_call_procedural_triangles(grp, NULL, 1);
 
     if (G.debug_value == 6) {
       DRW_PASS_CREATE(psl->ao_horizon_debug, DRW_STATE_WRITE_COLOR);
@@ -203,15 +183,12 @@ void EEVEE_occlusion_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
       DRW_shgroup_uniform_texture_ref(grp, "horizonBuffer", &effects->gtao_horizons_renderpass);
       DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
       DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
-      DRW_shgroup_call(grp, quad, NULL);
+      DRW_shgroup_call_procedural_triangles(grp, NULL, 1);
     }
   }
 }
 
-void EEVEE_occlusion_compute(EEVEE_ViewLayerData *UNUSED(sldata),
-                             EEVEE_Data *vedata,
-                             struct GPUTexture *depth_src,
-                             int layer)
+void EEVEE_occlusion_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
 {
   EEVEE_PassList *psl = vedata->psl;
   EEVEE_FramebufferList *fbl = vedata->fbl;
@@ -220,17 +197,10 @@ void EEVEE_occlusion_compute(EEVEE_ViewLayerData *UNUSED(sldata),
 
   if ((effects->enabled_effects & EFFECT_GTAO) != 0) {
     DRW_stats_group_start("GTAO Horizon Scan");
-    effects->ao_src_depth = depth_src;
-    effects->ao_depth_layer = layer;
 
     GPU_framebuffer_bind(fbl->gtao_fb);
 
-    if (layer >= 0) {
-      DRW_draw_pass(psl->ao_horizon_search_layer);
-    }
-    else {
-      DRW_draw_pass(psl->ao_horizon_search);
-    }
+    DRW_draw_pass(psl->ao_horizon_search);
 
     if (GPU_mip_render_workaround() ||
         GPU_type_matches(GPU_DEVICE_INTEL_UHD, GPU_OS_WIN, GPU_DRIVER_ANY)) {
@@ -269,15 +239,23 @@ void EEVEE_occlusion_output_accumulate(EEVEE_ViewLayerData *sldata, EEVEE_Data *
 {
   EEVEE_FramebufferList *fbl = vedata->fbl;
   EEVEE_PassList *psl = vedata->psl;
+  EEVEE_EffectsInfo *effects = vedata->stl->effects;
 
   if (fbl->ao_accum_fb != NULL) {
     DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
 
-    /* Update the min_max/horizon buffers so the refracion materials appear in it. */
+    /* Update the min_max/horizon buffers so the refraction materials appear in it. */
     EEVEE_create_minmax_buffer(vedata, dtxl->depth, -1);
-    EEVEE_occlusion_compute(sldata, vedata, dtxl->depth, -1);
+    EEVEE_occlusion_compute(sldata, vedata);
 
     GPU_framebuffer_bind(fbl->ao_accum_fb);
+
+    /* Clear texture. */
+    if (effects->taa_current_sample == 1) {
+      const float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+      GPU_framebuffer_clear_color(fbl->ao_accum_fb, clear);
+    }
+
     DRW_draw_pass(psl->ao_accum_ps);
 
     /* Restore */

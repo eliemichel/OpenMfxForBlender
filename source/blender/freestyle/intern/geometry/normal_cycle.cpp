@@ -17,7 +17,7 @@
  *   OGF/Graphite: Geometry and Graphics Programming Library + Utilities
  *   Copyright (C) 2000 Bruno Levy
  *   Contact: Bruno Levy
- *      levy@loria.fr
+ *      <levy@loria.fr>
  *      ISA Project
  *      LORIA, INRIA Lorraine,
  *      Campus Scientifique, BP 239
@@ -32,15 +32,9 @@
 #include "normal_cycle.h"
 #include "matrix_util.h"
 
-namespace Freestyle {
-
-namespace OGF {
+namespace Freestyle::OGF {
 
 //_________________________________________________________
-
-NormalCycle::NormalCycle()
-{
-}
 
 void NormalCycle::begin()
 {
@@ -88,6 +82,4 @@ void NormalCycle::end()
 
 //_________________________________________________________
 
-}  // namespace OGF
-
-} /* namespace Freestyle */
+}  // namespace Freestyle::OGF

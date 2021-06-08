@@ -263,11 +263,16 @@ IDTypeInfo IDType_ID_MSK = {
     .make_local = NULL,
     .foreach_id = mask_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = mask_blend_write,
     .blend_read_data = mask_blend_read_data,
     .blend_read_lib = mask_blend_read_lib,
     .blend_read_expand = mask_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 static struct {
@@ -1888,10 +1893,17 @@ static void interp_weights_uv_v2_calc(float r_uv[2],
                                       const float pt_a[2],
                                       const float pt_b[2])
 {
+  const float segment_len = len_v2v2(pt_a, pt_b);
+  if (segment_len == 0.0f) {
+    r_uv[0] = 1.0f;
+    r_uv[1] = 0.0f;
+    return;
+  }
+
   float pt_on_line[2];
   r_uv[0] = closest_to_line_v2(pt_on_line, pt, pt_a, pt_b);
 
-  r_uv[1] = (len_v2v2(pt_on_line, pt) / len_v2v2(pt_a, pt_b)) *
+  r_uv[1] = (len_v2v2(pt_on_line, pt) / segment_len) *
             /* This line only sets the sign. */
             ((line_point_side_v2(pt_a, pt_b, pt) < 0.0f) ? -1.0f : 1.0f);
 }

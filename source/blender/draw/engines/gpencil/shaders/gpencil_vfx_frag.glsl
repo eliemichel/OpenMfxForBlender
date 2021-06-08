@@ -168,7 +168,7 @@ void main()
     vec3 rev = texture(revealBuf, uv).rgb;
     if (threshold.x > -1.0) {
       if (threshold.y > -1.0) {
-        if (all(lessThan(abs(col - threshold), vec3(0.05)))) {
+        if (any(greaterThan(abs(col - threshold), vec3(0.05)))) {
           weight = 0.0;
         }
       }
@@ -274,7 +274,7 @@ uniform bool isFirstPass;
 vec2 compute_uvs(float x)
 {
   vec2 uv = uvcoordsvar.xy;
-  /* Tranform UV (loc, rot, scale) */
+  /* Transform UV (loc, rot, scale) */
   uv = uv.x * uvRotX + uv.y * uvRotY + uvOffset;
   uv += blurDir * x;
   /* Wave deform. */

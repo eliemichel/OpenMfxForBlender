@@ -46,7 +46,7 @@ enum {
 typedef struct LibraryForeachIDData {
   Main *bmain;
   /**
-   * 'Real' ID, the one that might be in bmain, only differs from self_id when the later is a
+   * 'Real' ID, the one that might be in `bmain`, only differs from self_id when the later is a
    * private one.
    */
   ID *owner_id;
@@ -56,11 +56,19 @@ typedef struct LibraryForeachIDData {
    */
   ID *self_id;
 
+  /** Flags controlling the bahaviour of the 'foreach id' looping code. */
   int flag;
+  /** Generic flags to be passed to all callback calls for current processed data. */
   int cb_flag;
+  /** Callback flags that are forbidden for all callback calls for current processed data. */
   int cb_flag_clear;
+
+  /* Function to call for every ID pointers of current processed data, and its opaque user data
+   * pointer. */
   LibraryIDLinkCallback callback;
   void *user_data;
+  /** Store the returned value from the callback, to decide how to continue the processing of ID
+   * pointers for current data. */
   int status;
 
   /* To handle recursion. */
@@ -73,13 +81,25 @@ bool BKE_lib_query_foreachid_process(LibraryForeachIDData *data, ID **id_pp, int
   if (!(data->status & IDWALK_STOP)) {
     const int flag = data->flag;
     ID *old_id = *id_pp;
-    const int callback_return = data->callback(&(struct LibraryIDLinkCallbackData){
-        .user_data = data->user_data,
-        .bmain = data->bmain,
-        .id_owner = data->owner_id,
-        .id_self = data->self_id,
-        .id_pointer = id_pp,
-        .cb_flag = ((cb_flag | data->cb_flag) & ~data->cb_flag_clear)});
+
+    /* Update the callback flags with the ones defined (or forbidden) in `data` by the generic
+     * caller code.  */
+    cb_flag = ((cb_flag | data->cb_flag) & ~data->cb_flag_clear);
+
+    /* Update the callback flags with some extra information regarding overrides: all 'loopback',
+     * 'internal', 'embedded' etc. ID pointers are never overridable. */
+    if (cb_flag & (IDWALK_CB_INTERNAL | IDWALK_CB_EMBEDDED | IDWALK_CB_LOOPBACK |
+                   IDWALK_CB_OVERRIDE_LIBRARY_REFERENCE)) {
+      cb_flag |= IDWALK_CB_OVERRIDE_LIBRARY_NOT_OVERRIDABLE;
+    }
+
+    const int callback_return = data->callback(
+        &(struct LibraryIDLinkCallbackData){.user_data = data->user_data,
+                                            .bmain = data->bmain,
+                                            .id_owner = data->owner_id,
+                                            .id_self = data->self_id,
+                                            .id_pointer = id_pp,
+                                            .cb_flag = cb_flag});
     if (flag & IDWALK_READONLY) {
       BLI_assert(*(id_pp) == old_id);
     }
@@ -132,12 +152,15 @@ void BKE_lib_query_idpropertiesForeachIDLink_callback(IDProperty *id_prop, void 
   BLI_assert(id_prop->type == IDP_ID);
 
   LibraryForeachIDData *data = (LibraryForeachIDData *)user_data;
-  BKE_LIB_FOREACHID_PROCESS_ID(data, id_prop->data.pointer, IDWALK_CB_USER);
+  const int cb_flag = IDWALK_CB_USER | ((id_prop->flag & IDP_FLAG_OVERRIDABLE_LIBRARY) ?
+                                            0 :
+                                            IDWALK_CB_OVERRIDE_LIBRARY_NOT_OVERRIDABLE);
+  BKE_LIB_FOREACHID_PROCESS_ID(data, id_prop->data.pointer, cb_flag);
 }
 
 bool BKE_library_foreach_ID_embedded(LibraryForeachIDData *data, ID **id_pp)
 {
-  /* Needed e.g. for callbacks handling relationships... This call shall be absolutely readonly. */
+  /* Needed e.g. for callbacks handling relationships. This call shall be absolutely read-only. */
   ID *id = *id_pp;
   const int flag = data->flag;
 
@@ -183,8 +206,9 @@ static void library_foreach_ID_link(Main *bmain,
   BLI_assert(inherit_data == NULL || data.bmain == inherit_data->bmain);
 
   if (flag & IDWALK_RECURSE) {
-    /* For now, recursion implies read-only. */
+    /* For now, recursion implies read-only, and no internal pointers. */
     flag |= IDWALK_READONLY;
+    flag &= ~IDWALK_DO_INTERNAL_RUNTIME_POINTERS;
 
     data.ids_handled = BLI_gset_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, __func__);
     BLI_LINKSTACK_INIT(data.ids_todo);
@@ -215,7 +239,7 @@ static void library_foreach_ID_link(Main *bmain,
                                                                                 data.self_id;
 
     /* inherit_data is non-NULL when this function is called for some sub-data ID
-     * (like root nodetree of a material).
+     * (like root node-tree of a material).
      * In that case, we do not want to generate those 'generic flags' from our current sub-data ID
      * (the node tree), but re-use those generated for the 'owner' ID (the material). */
     if (inherit_data == NULL) {
@@ -230,6 +254,7 @@ static void library_foreach_ID_link(Main *bmain,
     }
 
     if (bmain != NULL && bmain->relations != NULL && (flag & IDWALK_READONLY) &&
+        (flag & IDWALK_DO_INTERNAL_RUNTIME_POINTERS) == 0 &&
         (((bmain->relations->flag & MAINIDRELATIONS_INCLUDE_UI) == 0) ==
          ((data.flag & IDWALK_INCLUDE_UI) == 0))) {
       /* Note that this is minor optimization, even in worst cases (like id being an object with
@@ -237,15 +262,23 @@ static void library_foreach_ID_link(Main *bmain,
        * but we might as well use it (Main->relations is always assumed valid,
        * it's responsibility of code creating it to free it,
        * especially if/when it starts modifying Main database). */
-      MainIDRelationsEntry *entry = BLI_ghash_lookup(bmain->relations->id_user_to_used, id);
-      for (; entry != NULL; entry = entry->next) {
-        BKE_lib_query_foreachid_process(&data, entry->id_pointer, entry->usage_flag);
+      MainIDRelationsEntry *entry = BLI_ghash_lookup(bmain->relations->relations_from_pointers,
+                                                     id);
+      for (MainIDRelationsEntryItem *to_id_entry = entry->to_ids; to_id_entry != NULL;
+           to_id_entry = to_id_entry->next) {
+        BKE_lib_query_foreachid_process(
+            &data, to_id_entry->id_pointer.to, to_id_entry->usage_flag);
       }
       continue;
     }
 
     /* Note: ID.lib pointer is purposefully fully ignored here...
      * We may want to add it at some point? */
+
+    if (flag & IDWALK_DO_INTERNAL_RUNTIME_POINTERS) {
+      CALLBACK_INVOKE_ID(id->newid, IDWALK_CB_INTERNAL);
+      CALLBACK_INVOKE_ID(id->orig_id, IDWALK_CB_INTERNAL);
+    }
 
     if (id->override_library != NULL) {
       CALLBACK_INVOKE_ID(id->override_library->reference,
@@ -413,13 +446,14 @@ bool BKE_library_id_can_use_idtype(ID *id_owner, const short id_type_used)
       return ELEM(id_type_used, ID_MA);
     case ID_SIM:
       return ELEM(id_type_used, ID_OB, ID_IM);
+    case ID_WM:
+      return ELEM(id_type_used, ID_SCE, ID_WS);
     case ID_IM:
     case ID_VF:
     case ID_TXT:
     case ID_SO:
     case ID_AR:
     case ID_AC:
-    case ID_WM:
     case ID_PAL:
     case ID_PC:
     case ID_CF:
@@ -436,7 +470,7 @@ bool BKE_library_id_can_use_idtype(ID *id_owner, const short id_type_used)
 typedef struct IDUsersIter {
   ID *id;
 
-  ListBase *lb_array[MAX_LIBARRAY];
+  ListBase *lb_array[INDEX_ID_MAX];
   int lb_idx;
 
   ID *curr_id;
@@ -510,7 +544,7 @@ int BKE_library_ID_use_ID(ID *id_user, ID *id_used)
 static bool library_ID_is_used(Main *bmain, void *idv, const bool check_linked)
 {
   IDUsersIter iter;
-  ListBase *lb_array[MAX_LIBARRAY];
+  ListBase *lb_array[INDEX_ID_MAX];
   ID *id = idv;
   int i = set_listbasepointers(bmain, lb_array);
   bool is_defined = false;
@@ -563,7 +597,7 @@ bool BKE_library_ID_is_indirectly_used(Main *bmain, void *idv)
 void BKE_library_ID_test_usages(Main *bmain, void *idv, bool *is_used_local, bool *is_used_linked)
 {
   IDUsersIter iter;
-  ListBase *lb_array[MAX_LIBARRAY];
+  ListBase *lb_array[INDEX_ID_MAX];
   ID *id = idv;
   int i = set_listbasepointers(bmain, lb_array);
   bool is_defined = false;
@@ -595,6 +629,139 @@ void BKE_library_ID_test_usages(Main *bmain, void *idv, bool *is_used_local, boo
 }
 
 /* ***** IDs usages.checking/tagging. ***** */
+static void lib_query_unused_ids_tag_recurse(Main *bmain,
+                                             const int tag,
+                                             const bool do_local_ids,
+                                             const bool do_linked_ids,
+                                             ID *id,
+                                             int *r_num_tagged)
+{
+  /* We should never deal with embedded, not-in-main IDs here. */
+  BLI_assert((id->flag & LIB_EMBEDDED_DATA) == 0);
+
+  if ((!do_linked_ids && ID_IS_LINKED(id)) || (!do_local_ids && !ID_IS_LINKED(id))) {
+    return;
+  }
+
+  MainIDRelationsEntry *id_relations = BLI_ghash_lookup(bmain->relations->relations_from_pointers,
+                                                        id);
+  if ((id_relations->tags & MAINIDRELATIONS_ENTRY_TAGS_PROCESSED) != 0) {
+    return;
+  }
+  id_relations->tags |= MAINIDRELATIONS_ENTRY_TAGS_PROCESSED;
+
+  if ((id->tag & tag) != 0) {
+    return;
+  }
+
+  if ((id->flag & LIB_FAKEUSER) != 0) {
+    /* This ID is forcefully kept around, and therefore never unused, no need to check it further.
+     */
+    return;
+  }
+
+  if (ELEM(GS(id->name), ID_WM, ID_WS, ID_SCE, ID_SCR, ID_LI)) {
+    /* Some 'root' ID types are never unused (even though they may not have actual users), unless
+     * their actual user-count is set to 0. */
+    return;
+  }
+
+  /* An ID user is 'valid' (i.e. may affect the 'used'/'not used' status of the ID it uses) if it
+   * does not match `ignored_usages`, and does match `required_usages`. */
+  const int ignored_usages = (IDWALK_CB_LOOPBACK | IDWALK_CB_EMBEDDED);
+  const int required_usages = (IDWALK_CB_USER | IDWALK_CB_USER_ONE);
+
+  /* This ID may be tagged as unused if none of its users are 'valid', as defined above.
+   *
+   * First recursively check all its valid users, if all of them can be tagged as
+   * unused, then we can tag this ID as such too. */
+  bool has_valid_from_users = false;
+  for (MainIDRelationsEntryItem *id_from_item = id_relations->from_ids; id_from_item != NULL;
+       id_from_item = id_from_item->next) {
+    if ((id_from_item->usage_flag & ignored_usages) != 0 ||
+        (id_from_item->usage_flag & required_usages) == 0) {
+      continue;
+    }
+
+    ID *id_from = id_from_item->id_pointer.from;
+    if ((id_from->flag & LIB_EMBEDDED_DATA) != 0) {
+      /* Directly 'by-pass' to actual real ID owner. */
+      const IDTypeInfo *type_info_from = BKE_idtype_get_info_from_id(id_from);
+      BLI_assert(type_info_from->owner_get != NULL);
+      id_from = type_info_from->owner_get(bmain, id_from);
+    }
+
+    lib_query_unused_ids_tag_recurse(
+        bmain, tag, do_local_ids, do_linked_ids, id_from, r_num_tagged);
+    if ((id_from->tag & tag) == 0) {
+      has_valid_from_users = true;
+      break;
+    }
+  }
+  if (!has_valid_from_users) {
+    /* This ID has no 'valid' users, tag it as unused. */
+    id->tag |= tag;
+    if (r_num_tagged != NULL) {
+      r_num_tagged[INDEX_ID_NULL]++;
+      r_num_tagged[BKE_idtype_idcode_to_index(GS(id->name))]++;
+    }
+  }
+}
+
+/**
+ * Tag all unused IDs (a.k.a 'orphaned').
+ *
+ * By default only tag IDs with `0` user count.
+ * If `do_tag_recursive` is set, it will check dependencies to detect all IDs that are not actually
+ * used in current file, including 'archipelagos` (i.e. set of IDs referencing each other in
+ * loops, but without any 'external' valid usages.
+ *
+ * Valid usages here are defined as ref-counting usages, which are not towards embedded or
+ * loop-back data.
+ *
+ * \param r_num_tagged If non-NULL, must be a zero-initialized array of #INDEX_ID_MAX integers.
+ *                     Number of tagged-as-unused IDs is then set for each type, and as total in
+ *                     #INDEX_ID_NULL item.
+ */
+void BKE_lib_query_unused_ids_tag(Main *bmain,
+                                  const int tag,
+                                  const bool do_local_ids,
+                                  const bool do_linked_ids,
+                                  const bool do_tag_recursive,
+                                  int *r_num_tagged)
+{
+  /* First loop, to only check for immediately unused IDs (those with 0 user count).
+   * NOTE: It also takes care of clearing given tag for used IDs. */
+  ID *id;
+  FOREACH_MAIN_ID_BEGIN (bmain, id) {
+    if ((!do_linked_ids && ID_IS_LINKED(id)) || (!do_local_ids && !ID_IS_LINKED(id))) {
+      id->tag &= ~tag;
+    }
+    else if (id->us == 0) {
+      id->tag |= tag;
+      if (r_num_tagged != NULL) {
+        r_num_tagged[INDEX_ID_NULL]++;
+        r_num_tagged[BKE_idtype_idcode_to_index(GS(id->name))]++;
+      }
+    }
+    else {
+      id->tag &= ~tag;
+    }
+  }
+  FOREACH_MAIN_ID_END;
+
+  if (!do_tag_recursive) {
+    return;
+  }
+
+  BKE_main_relations_create(bmain, 0);
+  FOREACH_MAIN_ID_BEGIN (bmain, id) {
+    lib_query_unused_ids_tag_recurse(bmain, tag, do_local_ids, do_linked_ids, id, r_num_tagged);
+  }
+  FOREACH_MAIN_ID_END;
+  BKE_main_relations_free(bmain);
+}
+
 static int foreach_libblock_used_linked_data_tag_clear_cb(LibraryIDLinkCallbackData *cb_data)
 {
   ID *self_id = cb_data->id_self;
@@ -668,7 +835,7 @@ void BKE_library_unused_linked_data_set_tag(Main *bmain, const bool do_init_tag)
  */
 void BKE_library_indirectly_used_data_tag_clear(Main *bmain)
 {
-  ListBase *lb_array[MAX_LIBARRAY];
+  ListBase *lb_array[INDEX_ID_MAX];
 
   bool do_loop = true;
   while (do_loop) {
