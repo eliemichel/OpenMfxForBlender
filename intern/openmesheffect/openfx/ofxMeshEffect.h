@@ -4,7 +4,7 @@
 /*
 Software License :
 
-Copyright (c) 2019 - 2020, Elie Michel. All rights reserved.
+Copyright (c) 2019 - 2021, Elie Michel. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -38,7 +38,8 @@ extern "C" {
 #endif
 
 /** @file ofxMeshEffect.h
-Contains the part of the API that relates to mesh processing. This is what is called "Open Mesh Effect". For more details on the basic OFX architecture, see \ref Architecture.
+Contains the part of the API that relates to mesh processing. This is what is called "OpenMfx".
+For more details on the basic OFX architecture, see \ref Architecture.
 */
 
 /** @brief String used to label OFX Mesh Effect Plug-ins
@@ -48,7 +49,7 @@ Contains the part of the API that relates to mesh processing. This is what is ca
  */
 #define kOfxMeshEffectPluginApi "OfxMeshEffectPluginAPI"
 
-/** @brief The current version of the Image Effect API
+/** @brief The current version of the Mesh Effect API
  */
 #define kOfxMeshEffectPluginApiVersion 1
 
@@ -91,17 +92,17 @@ typedef struct OfxMeshStruct *OfxMeshHandle;
 /**
    \defgroup MeshAttrib attachments
 
-Mesh attributes can be attached to either points, vertices, faces or the whole mesh. Mandatory
-attributes include a position for points, a point index for vertices and a vertex count for faces.
+Mesh attributes can be attached to either points, corners, faces or the whole mesh. Mandatory
+attributes include a position for points, a point index for corners and a corner count for faces.
 */
 /*@{*/
 /** @brief Mesh attribute attachment to points
  */
 #define kOfxMeshAttribPoint "OfxMeshAttribPoint"
 
-/** @brief Mesh attribute attachment to vertex
+/** @brief Mesh attribute attachment to corner
  */
-#define kOfxMeshAttribVertex "OfxMeshAttribVertex"
+#define kOfxMeshAttribCorner "OfxMeshAttribCorner"
 
 /** @brief Mesh attribute attachment to faces
  */
@@ -115,15 +116,15 @@ attributes include a position for points, a point index for vertices and a verte
  */
 #define kOfxMeshAttribPointPosition "OfxMeshAttribPointPosition"
 
-/** @brief Name of the vertex attribute for point index
+/** @brief Name of the corner attribute for point index
  */
-#define kOfxMeshAttribVertexPoint "OfxMeshAttribVertexPoint"
+#define kOfxMeshAttribCornerPoint "OfxMeshAttribCornerPoint"
 
-/** @brief Name of the face attribute for vertex count.
+/** @brief Name of the face attribute for corner count.
  * 
- * This is ignored if the mesh's \ref kOfxMeshPropConstantFaceCount property is different from -1.
+ * This is ignored if the mesh's \ref kOfxMeshPropConstantFaceSize property is different from -1.
  */
-#define kOfxMeshAttribFaceCounts "OfxMeshAttribFaceCounts"
+#define kOfxMeshAttribFaceSize "OfxMeshAttribFaceSize"
 
 /** @brief Attribute type unsigned integer 8 bit
  */
@@ -139,14 +140,14 @@ attributes include a position for points, a point index for vertices and a verte
 
 /** @brief Attribute semantic for texture coordinates (sometimes called "UV")
 
-Such attribute is usually attached to vertices (or sometimes to points), has 2 floats or 3 floats
+Such attribute is usually attached to corners (or sometimes to points), has 2 floats or 3 floats
 (when using Udims) and is softly limited to the (0,1) range for each.
  */
 #define kOfxMeshAttribSemanticTextureCoordinate "OfxMeshAttribSemanticTextureCoordinate"
 
 /** @brief Attribute semantic for normal vectors
 
-Such attribute is usually a 3 float unit (i.e. normalized) vector attached to vertices or points,
+Such attribute is usually a 3 float unit (i.e. normalized) vector attached to corners or points,
 but may also be computed for faces. They represent the orthogonal to the local surface and are used
 for instance for shading.
  */
@@ -174,7 +175,8 @@ Weights are simple scalar values (i.e. 1-component floats), often softly limited
 /**
    \defgroup MeshEffectActions Mesh Effect Actions
 
-These are the list of actions passed to a mesh effect plugin's main function. For more details on how to deal with actions, see \ref MeshEffectActions.
+These are the list of actions passed to a mesh effect plugin's main function.
+For more details on how to deal with actions, see \ref MeshEffectActions.
 */
 /*@{*/
 
@@ -359,14 +361,14 @@ This property is the number of points allocated in the mesh object.
  */
 #define kOfxMeshPropPointCount "OfxMeshPropPointCount"
 
-/** @brief The number of vertices in a mesh
+/** @brief The number of corners in a mesh
 
     - Type - integer X 1
     - Property Set - a mesh instance
 
-This property is the number of vertices allocated in the mesh object.
+This property is the number of face corners allocated in the mesh object.
  */
-#define kOfxMeshPropVertexCount "OfxMeshPropVertexCount"
+#define kOfxMeshPropCornerCount "OfxMeshPropCornerCount"
 
 /** @brief The number of faces in a mesh
 
@@ -383,8 +385,8 @@ This property is the number of faces allocated in the mesh object.
     - Property Set - a mesh instance
 
 This property is the number of attributes stored in the mesh object. Attributes can be attached to
-either points, vertices, faces or the whole mesh. There are at least three attributes in a geometry
-namely the point's position, the vertex' point association and the face's vertex count.
+either points, corners, faces or the whole mesh. There are at least three attributes in a geometry
+namely the point's position, the corner's point association and the face's corner count.
  */
 #define kOfxMeshPropAttributeCount "OfxMeshPropAttributeCount"
 
@@ -394,22 +396,22 @@ namely the point's position, the vertex' point association and the face's vertex
     - Property Set - a mesh instance
 
 This property is true by default and must be turned false when the mesh has loose edges, namely edges
-that are not part of any face (a loose edge is a 2-vertices faces). Turning this false when there is
+that are not part of any face (a loose edge is a 2-corners faces). Turning this false when there is
 actually no loose edge must not change any behavior but may affect performances since a host might use
 this information to speed up processing of loose-edge free meshes.
  */
 #define kOfxMeshPropNoLooseEdge "OfxMeshPropNoLooseEdge"
 
-/** @brief Number of vertices per face, or -1.
+/** @brief Number of corners per face, or -1.
 
     - Type - int X 1
     - Property Set - a mesh instance
 
-When all faces have the same number of vertices, this property may be set to this number in place of
+When all faces have the same number of corners, this property may be set to this number in place of
 using the \ref kOfxMeshAttribFaceCounts attribute, thus reducing memory allocation and potentially
-enabling speed-ups on host side. This property is -1 when faces have a varying number of vertices.
+enabling speed-ups on host side. This property is -1 when faces have a varying number of corners.
  */
-#define kOfxMeshPropConstantFaceCount "OfxMeshPropConstantFaceCount"
+#define kOfxMeshPropConstantFaceSize "OfxMeshPropConstantFaceSize"
 
 /** @brief Matrix converting the mesh's local coordinates into world coordinates
 
@@ -450,7 +452,7 @@ Default to false.
     - Property Set - a mesh attribute
 
 This property contains a pointer to memory where attribute data is stored, whose size depend on the
-attribute attachment (point/vertex/face/mesh) and attribute type (int, float, vector, etc.)
+attribute attachment (point/corner/face/mesh) and attribute type (int, float, vector, etc.)
 */
 #define kOfxMeshAttribPropData "OfxMeshAttribPropData"
 
@@ -594,11 +596,11 @@ typedef struct OfxMeshEffectSuiteV1 {
 
   The propertySet will have the same value as would be returned by OfxMeshEffectSuiteV1::inputGetPropertySet
 
-      This return a input handle for the given instance, note that this will \em not be the same as the
-      input handle returned by inputDefine and will be distinct to input handles in any other instance
-      of the plugin.
+  This return a input handle for the given instance, note that this will \em not be the same as the
+  input handle returned by inputDefine and will be distinct to input handles in any other instance
+  of the plugin.
 
-      Not a valid call in any of the describe actions.
+  Not a valid call in any of the describe actions.
 
 \pre
  - create instance action called,
@@ -800,7 +802,7 @@ By default, the attribute data is not owned by the mesh (kOfxMeshAttribPropIsOwn
  - meshHandle was not allocated yet
  - meshHandle was returned by inputGetMesh
  - inputReleaseMesh has not been called yet
- - meshHandle kOfxMeshPropPointCount, kOfxMeshPropVertexCount, kOfxMeshPropFaceCount properties
+ - meshHandle kOfxMeshPropPointCount, kOfxMeshPropCornerCount, kOfxMeshPropFaceCount properties
  must have been set.
 
 \post

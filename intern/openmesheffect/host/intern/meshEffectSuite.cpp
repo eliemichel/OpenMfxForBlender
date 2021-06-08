@@ -26,19 +26,19 @@
 static AttributeAttachment mfxToInternalAttribAttachment(const char *attachment)
 {
   if (0 == strcmp(attachment, kOfxMeshAttribPoint)) {
-    return ATTR_ATTACH_POINT;
+    return AttributeAttachment::Point;
   }
-  else if (0 == strcmp(attachment, kOfxMeshAttribVertex)) {
-    return ATTR_ATTACH_VERTEX;
+  else if (0 == strcmp(attachment, kOfxMeshAttribCorner)) {
+    return AttributeAttachment::Corner;
   }
   else if (0 == strcmp(attachment, kOfxMeshAttribFace)) {
-    return ATTR_ATTACH_FACE;
+    return AttributeAttachment::Face;
   }
   else if (0 == strcmp(attachment, kOfxMeshAttribMesh)) {
-    return ATTR_ATTACH_MESH;
+    return AttributeAttachment::Mesh;
   }
   else {
-    return ATTR_ATTACH_INVALID;
+    return AttributeAttachment::Invalid;
   }
 }
 
@@ -97,7 +97,6 @@ OfxStatus inputGetHandle(OfxMeshEffectHandle meshEffect,
 {
   int i = meshEffect->inputs.find(name);
   if (-1 == i) {
-    *input = NULL;
     return kOfxStatErrUnknown;  // bad name
   }
   *input = meshEffect->inputs.inputs[i];
@@ -137,7 +136,7 @@ OfxStatus inputRequestAttribute(OfxMeshInputHandle input,
   }
 
   AttributeAttachment intAttachment = mfxToInternalAttribAttachment(attachment);
-  if (intAttachment == ATTR_ATTACH_INVALID) {
+  if (intAttachment == AttributeAttachment::Invalid) {
     return kOfxStatErrBadIndex;
   }
 
@@ -163,7 +162,7 @@ OfxStatus inputGetMesh(OfxMeshInputHandle input,
   OfxPropertySetHandle inputMeshProperties = &input->mesh.properties;
   propSetPointer(inputMeshProperties, kOfxMeshPropHostHandle, 0, (void *)input->host);
   propSetInt(inputMeshProperties, kOfxMeshPropPointCount, 0, 0);
-  propSetInt(inputMeshProperties, kOfxMeshPropVertexCount, 0, 0);
+  propSetInt(inputMeshProperties, kOfxMeshPropCornerCount, 0, 0);
   propSetInt(inputMeshProperties, kOfxMeshPropFaceCount, 0, 0);
   propSetInt(inputMeshProperties, kOfxMeshPropAttributeCount, 0, 0);
 
@@ -176,15 +175,15 @@ OfxStatus inputGetMesh(OfxMeshInputHandle input,
                   NULL,
                   NULL);
   attributeDefine(inputMeshHandle,
-                  kOfxMeshAttribVertex,
-                  kOfxMeshAttribVertexPoint,
+                  kOfxMeshAttribCorner,
+                  kOfxMeshAttribCornerPoint,
                   1,
                   kOfxMeshAttribTypeInt,
                   NULL,
                   NULL);
   attributeDefine(inputMeshHandle,
                   kOfxMeshAttribFace,
-                  kOfxMeshAttribFaceCounts,
+                  kOfxMeshAttribFaceSize,
                   1,
                   kOfxMeshAttribTypeInt,
                   NULL,
@@ -233,14 +232,14 @@ OfxStatus inputReleaseMesh(OfxMeshHandle meshHandle)
     propGetPointer(&attribute->properties, kOfxMeshAttribPropData, 0, &data);
     propGetInt(&attribute->properties, kOfxMeshAttribPropIsOwner, 0, &is_owner);
     if (is_owner && NULL != data) {
-      delete static_cast<char*>(data);  // delete on void* is undefined behaviour
+      delete[] static_cast<char*>(data);  // delete on void* is undefined behaviour
     }
     propSetPointer(&attribute->properties, kOfxMeshAttribPropData, 0, NULL);
     propSetInt(&attribute->properties, kOfxMeshAttribPropIsOwner, 0, 0);
   }
 
   propSetInt(&meshHandle->properties, kOfxMeshPropPointCount, 0, 0);
-  propSetInt(&meshHandle->properties, kOfxMeshPropVertexCount, 0, 0);
+  propSetInt(&meshHandle->properties, kOfxMeshPropCornerCount, 0, 0);
   propSetInt(&meshHandle->properties, kOfxMeshPropFaceCount, 0, 0);
 
   return kOfxStatOK;
@@ -273,7 +272,7 @@ OfxStatus attributeDefine(OfxMeshHandle meshHandle,
   }
 
   AttributeAttachment intAttachment = mfxToInternalAttribAttachment(attachment);
-  if (intAttachment == ATTR_ATTACH_INVALID) {
+  if (intAttachment == AttributeAttachment::Invalid) {
     return kOfxStatErrBadIndex;
   }
 
@@ -287,8 +286,7 @@ OfxStatus attributeDefine(OfxMeshHandle meshHandle,
   propSetInt(attributeProperties, kOfxMeshAttribPropIsOwner, 0, 1);
 
   // Keep attribute count up-to-date
-  propSetInt(
-      &meshHandle->properties, kOfxMeshPropAttributeCount, 0, meshHandle->attributes.num_attributes);
+  propSetInt(&meshHandle->properties, kOfxMeshPropAttributeCount, 0, meshHandle->attributes.num_attributes);
 
   if (attributeHandle) {
     *attributeHandle = attributeProperties;
@@ -302,7 +300,7 @@ OfxStatus meshGetAttribute(OfxMeshHandle meshHandle,
                            OfxPropertySetHandle *attributeHandle)
 {
   AttributeAttachment intAttachment = mfxToInternalAttribAttachment(attachment);
-  if (intAttachment == ATTR_ATTACH_INVALID) {
+  if (intAttachment == AttributeAttachment::Invalid) {
     return kOfxStatErrBadIndex;
   }
 
@@ -329,13 +327,13 @@ OfxStatus meshAlloc(OfxMeshHandle meshHandle)
 
   // Get counts
 
-  int elementCount[4];  // point, vertex, face, mesh
+  int elementCount[4];  // point, corner, face, mesh
 
   status = propGetInt(&meshHandle->properties, kOfxMeshPropPointCount, 0, &elementCount[0]);
   if (kOfxStatOK != status) {
     return status;
   }
-  status = propGetInt(&meshHandle->properties, kOfxMeshPropVertexCount, 0, &elementCount[1]);
+  status = propGetInt(&meshHandle->properties, kOfxMeshPropCornerCount, 0, &elementCount[1]);
   if (kOfxStatOK != status) {
     return status;
   }
@@ -388,7 +386,7 @@ OfxStatus meshAlloc(OfxMeshHandle meshHandle)
       return kOfxStatErrBadHandle;
     }
 
-    void *data = new char[byteSize * count * elementCount[attribute->attachment]];
+    void *data = new char[byteSize * count * elementCount[(int)attribute->attachment]];
     if (NULL == data) {
       return kOfxStatErrMemory;
     }

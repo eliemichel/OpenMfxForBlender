@@ -24,13 +24,13 @@
 
 #include "properties.h"
 
-typedef enum AttributeAttachment {
-  ATTR_ATTACH_INVALID = -1,
-  ATTR_ATTACH_POINT,
-  ATTR_ATTACH_VERTEX,
-  ATTR_ATTACH_FACE,
-  ATTR_ATTACH_MESH,
-} AttributeAttachment;
+enum class AttributeAttachment {
+  Invalid = -1,
+  Point,
+  Corner,
+  Face,
+  Mesh,
+};
 
 struct OfxAttributeStruct {
  public:

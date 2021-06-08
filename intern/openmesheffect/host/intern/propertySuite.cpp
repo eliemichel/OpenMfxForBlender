@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 Elie Michel
+ * Copyright 2019-2021 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,6 +52,7 @@ OfxStatus propSetPointer(OfxPropertySetHandle properties,
     return kOfxStatErrBadIndex;
   }
   int i = properties->ensure_property(property);
+  // FIXME: there is an obvious problem here for prop values that are not global strings...
   properties->properties[i]->value[index].as_pointer = value;
   return kOfxStatOK;
 }
@@ -69,7 +70,6 @@ OfxStatus propSetString(OfxPropertySetHandle properties,
     return kOfxStatErrBadIndex;
   }
   int i = properties->ensure_property(property);
-  // FIXME: there is an obvious problem here for prop values that are not global strings...
   properties->properties[i]->value[index].as_const_char = value;
   return kOfxStatOK;
 }

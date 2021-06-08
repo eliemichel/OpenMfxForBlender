@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 Elie Michel
+ * Copyright 2019-2021 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ OfxStatus inputGetHandle(OfxMeshEffectHandle meshEffect,
                          OfxMeshInputHandle *input,
                          OfxPropertySetHandle *propertySet);
 OfxStatus inputGetPropertySet(OfxMeshInputHandle input, OfxPropertySetHandle *propHandle);
-OfxStatus inputRequestAttribute(OfxMeshInputHandle input,
+OfxStatus inputRequireAttribute(OfxMeshInputHandle input,
                                 const char *attachment,
                                 const char *name,
                                 int componentCount,
