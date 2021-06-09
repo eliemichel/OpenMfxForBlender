@@ -45,7 +45,7 @@ OfxStatus inputGetHandle(OfxMeshEffectHandle meshEffect,
                          OfxMeshInputHandle *input,
                          OfxPropertySetHandle *propertySet);
 OfxStatus inputGetPropertySet(OfxMeshInputHandle input, OfxPropertySetHandle *propHandle);
-OfxStatus inputRequireAttribute(OfxMeshInputHandle input,
+OfxStatus inputRequestAttribute(OfxMeshInputHandle input,
                                 const char *attachment,
                                 const char *name,
                                 int componentCount,

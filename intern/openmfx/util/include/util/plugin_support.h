@@ -60,7 +60,7 @@ OfxStatus getAttribute(OfxMeshHandle mesh, const char *attachment, const char *n
 
 // Sugar for getAttribute()
 OfxStatus getPointAttribute(OfxMeshHandle mesh, const char *name, Attribute *attr);
-OfxStatus getVertexAttribute(OfxMeshHandle mesh, const char *name, Attribute *attr);
+OfxStatus getCornerAttribute(OfxMeshHandle mesh, const char *name, Attribute *attr);
 OfxStatus getFaceAttribute(OfxMeshHandle mesh, const char *name, Attribute *attr);
 
 /**

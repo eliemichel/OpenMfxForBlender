@@ -197,7 +197,7 @@ set(SRC
 
 set(INC
   ../../../../intern/clog
-  ../../../../intern/openmesheffect/blender
+  ../../../../intern/openmfx/blender
 
   # Needed for defaults forward declarations.
   ../../blenloader

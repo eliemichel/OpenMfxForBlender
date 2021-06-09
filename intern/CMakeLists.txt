@@ -32,7 +32,7 @@ add_subdirectory(mikktspace)
 add_subdirectory(glew-mx)
 add_subdirectory(eigen)
 add_subdirectory(sky)
-add_subdirectory(openmesheffect)
+add_subdirectory(openmfx)
 
 if(WITH_AUDASPACE)
   add_subdirectory(audaspace)

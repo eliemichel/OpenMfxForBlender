@@ -16,5 +16,34 @@
 #
 # ***** END APACHE 2 LICENSE BLOCK *****
 
-add_library(openmesheffect_openfx INTERFACE)
-target_include_directories(openmesheffect_openfx INTERFACE .)
+set(INC
+  include
+)
+
+set(INC_PRIV
+	include/util
+)
+
+set(SRC
+  intern/ofx_util.c
+  intern/memory_util.c
+  intern/binary_util.c
+  intern/plugin_support.c
+
+  include/util/ofx_util.h
+  include/util/memory_util.h
+  include/util/binary_util.h
+  include/util/path_util.h
+  include/util/plugin_support.h
+)
+
+set(LIB
+  OpenMfx::Core
+)
+
+add_library(Utils "${SRC}")
+target_include_directories(Utils PRIVATE "${INC_PRIV}" PUBLIC "${INC}")
+target_link_libraries(Utils PRIVATE "${LIB}")
+
+set_property(TARGET Utils PROPERTY FOLDER "OpenMfx")
+add_library(OpenMfx::Utils ALIAS Utils)

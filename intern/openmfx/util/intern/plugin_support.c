@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Elie Michel
+ * Copyright 2019-2021 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,9 +60,9 @@ OfxStatus getPointAttribute(OfxMeshHandle mesh, const char *name, Attribute *att
   return getAttribute(mesh, kOfxMeshAttribPoint, name, attr);
 }
 
-OfxStatus getVertexAttribute(OfxMeshHandle mesh, const char *name, Attribute *attr)
+OfxStatus getCornerAttribute(OfxMeshHandle mesh, const char *name, Attribute *attr)
 {
-  return getAttribute(mesh, kOfxMeshAttribVertex, name, attr);
+  return getAttribute(mesh, kOfxMeshAttribCorner, name, attr);
 }
 
 OfxStatus getFaceAttribute(OfxMeshHandle mesh, const char *name, Attribute *attr)

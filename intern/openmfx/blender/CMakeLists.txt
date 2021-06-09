@@ -46,8 +46,8 @@ set(SRC
 )
 
 set(LIB
-  openmesheffect_host
-  openmesheffect_openfx
+  OpenMfx::Host
+  OpenMfx::Core
 )
 
-blender_add_lib(bf_intern_openmesheffect "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+blender_add_lib(bf_intern_openmfx "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

@@ -1,6 +1,6 @@
 # ***** BEGIN APACHE 2 LICENSE BLOCK *****
 #
-# Copyright 2019 Elie Michel
+# Copyright 2019-2021 Elie Michel
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,13 +29,13 @@ macro(MFX_PLUGIN TARGET SRC LIB)
 endmacro()
 
 set(LIB
-  openmesheffect_openfx
-  openmesheffect_util
+  OpenMfx::Core
+  OpenMfx::Utils
 )
 
-MFX_PLUGIN(openmesheffect_sample_plugin mfx_sample_plugin.c "${LIB}")
-MFX_PLUGIN(openmesheffect_test_parameters_plugin mfx_test_parameters_plugin.c "${LIB}")
-MFX_PLUGIN(openmesheffect_identity_plugin mfx_identity_plugin.c "${LIB}")
-MFX_PLUGIN(openmesheffect_mirror_plugin mfx_mirror_plugin.c "${LIB}")
-MFX_PLUGIN(openmesheffect_color_to_uv mfx_color_to_uv.c "${LIB}")
-MFX_PLUGIN(openmesheffect_uv_transform mfx_uv_transform.c "${LIB}")
+MFX_PLUGIN(openmfx_sample_plugin mfx_sample_plugin.c "${LIB}")
+MFX_PLUGIN(openmfx_test_parameters_plugin mfx_test_parameters_plugin.c "${LIB}")
+MFX_PLUGIN(openmfx_identity_plugin mfx_identity_plugin.c "${LIB}")
+MFX_PLUGIN(openmfx_mirror_plugin mfx_mirror_plugin.c "${LIB}")
+MFX_PLUGIN(openmfx_color_to_uv mfx_color_to_uv.c "${LIB}")
+MFX_PLUGIN(openmfx_uv_transform mfx_uv_transform.c "${LIB}")
