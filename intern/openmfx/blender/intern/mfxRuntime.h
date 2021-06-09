@@ -26,18 +26,20 @@
 
 #include "ofxCore.h"
 
+#include "DNA_modifier_types.h"
+
 #include <map>
 #include <string>
 
 /**
- * Structure holding runtime allocated data for OpenMeshEffect plug-in hosting.
- * It ensures communication between Blender's RNA (OpenMeshEffectModifierData)
+ * Structure holding runtime allocated data for OpenMfx plug-in hosting.
+ * It ensures communication between Blender's RNA (OpenMfxModifierData)
  * and the non-GPL mfxHost.
  */
-class OpenMeshEffectRuntime {
+class OpenMfxRuntime {
  public:
-  OpenMeshEffectRuntime();
-  ~OpenMeshEffectRuntime();
+  OpenMfxRuntime();
+  ~OpenMfxRuntime();
 
   /**
    * Set the plugin path, as put return status in is_plugin_valid
@@ -53,12 +55,12 @@ class OpenMeshEffectRuntime {
   /**
    * Set parameter values from Blender's RNA to the Open Mesh Effect host's structure.
    */
-  void get_parameters_from_rna(OpenMeshEffectModifierData *fxmd);
+  void get_parameters_from_rna(OpenMfxModifierData *fxmd);
 
   /**
    * Copy messages returned by the plugin in the RNA
    */
-  void set_message_in_rna(OpenMeshEffectModifierData *fxmd);
+  void set_message_in_rna(OpenMfxModifierData *fxmd);
 
   /**
    * Ensures that the effect descriptor and instances are valid (may fail, and hence return false)
@@ -75,37 +77,37 @@ class OpenMeshEffectRuntime {
    * Cache current value of the parameters. This is used to try to remember these parameters while
    * reloading plugins.
    */
-  void save_rna_parameter_values(OpenMeshEffectModifierData *fxmd);
+  void save_rna_parameter_values(OpenMfxModifierData *fxmd);
 
   /**
    * Restore the cache current value of the parameters, only if parameter names match.
    */
-  void try_restore_rna_parameter_values(OpenMeshEffectModifierData *fxmd);
+  void try_restore_rna_parameter_values(OpenMfxModifierData *fxmd);
 
   /**
    * Actually apply the modifier
    */
-  Mesh *cook(OpenMeshEffectModifierData *fxmd, Mesh *mesh, Object *object);
+  Mesh *cook(OpenMfxModifierData *fxmd, Mesh *mesh, Object *object);
 
   /**
    * Reload the list of effects contaiend in the plugin
    */
-  void reload_effect_info(OpenMeshEffectModifierData *fxmd);
+  void reload_effect_info(OpenMfxModifierData *fxmd);
 
   /**
    * Reload the list of parameters of the current effect
    */
-  void reload_parameters(OpenMeshEffectModifierData *fxmd);
+  void reload_parameters(OpenMfxModifierData *fxmd);
 
   /**
    * Reload the list of extra inputs of the current effect
    */
-  void reload_extra_inputs(OpenMeshEffectModifierData *fxmd);
+  void reload_extra_inputs(OpenMfxModifierData *fxmd);
 
   /**
    * Update input properties (e.g. request_transform) from the current effect descriptor
    */
-  void set_input_prop_in_rna(OpenMeshEffectModifierData *fxmd);
+  void set_input_prop_in_rna(OpenMfxModifierData *fxmd);
 
  public:
   /**

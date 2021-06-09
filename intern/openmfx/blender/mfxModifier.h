@@ -57,34 +57,34 @@ typedef void (*MeshPostFunc)(Mesh*); // post processing applied to new mesh
  * the meta information about effects contained in the bundle.
  * Populate fxmd->num_effects and fxmd->effect_info unless runtime_data->is_plugin_valid if false
  */
-void mfx_Modifier_reload_effect_info(OpenMeshEffectModifierData *fxmd);
+void mfx_Modifier_reload_effect_info(OpenMfxModifierData *fxmd);
 
 /**
  * Called when the "plugin path" field is changed.
  * It completes runtime_set_plugin_path by updating DNA data (fxmd).
  */
-void mfx_Modifier_on_plugin_changed(OpenMeshEffectModifierData *fxmd);
+void mfx_Modifier_on_plugin_changed(OpenMfxModifierData *fxmd);
 
 /**
  * Called when the user switched to another effect within the same plugin bundle.
  */
-void mfx_Modifier_on_effect_changed(OpenMeshEffectModifierData *fxmd);
+void mfx_Modifier_on_effect_changed(OpenMfxModifierData *fxmd);
 
 void mfx_Modifier_free_runtime_data(void *runtime_data);
 
 /**
  * Actually run the modifier, calling the cook action of the plugin
  */
-Mesh *mfx_Modifier_do(OpenMeshEffectModifierData *fxmd, Mesh *mesh, Object *object);
+Mesh *mfx_Modifier_do(OpenMfxModifierData *fxmd, Mesh *mesh, Object *object);
 
 /**
  * Copy parameter_info, effect_info.
  * Must be called *after* blender's modifier_copyData_generic()
  */
-void mfx_Modifier_copydata(OpenMeshEffectModifierData *source,
-                           OpenMeshEffectModifierData *destination);
+void mfx_Modifier_copydata(OpenMfxModifierData *source,
+                           OpenMfxModifierData *destination);
 
-void mfx_Modifier_before_updateDepsgraph(OpenMeshEffectModifierData *fxmd);
+void mfx_Modifier_before_updateDepsgraph(OpenMfxModifierData *fxmd);
 
 #ifdef __cplusplus
 }

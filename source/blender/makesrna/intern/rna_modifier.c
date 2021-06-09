@@ -206,11 +206,11 @@ const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
      ICON_MOD_WIREFRAME,
      "Wireframe",
      "Convert faces into thickened edges"},
-    {eModifierType_OpenMeshEffect,
-     "OPENMESHEFFECT",
+    {eModifierType_OpenMfx,
+     "OPENMFX",
      ICON_MOD_ARRAY,
-     "Open Mesh Effect",
-     "Load external plug-in using the Open Mesh Effect API."},
+     "OpenMfx",
+     "Load external plug-in using the OpenMfx API."},
     {0, "", 0, N_("Deform"), ""},
     {eModifierType_Armature,
      "ARMATURE",
@@ -600,7 +600,7 @@ const EnumPropertyItem rna_enum_axis_flag_xyz_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
-const EnumPropertyItem rna_enum_openmesheffect_effect_items[] = {
+const EnumPropertyItem rna_enum_openmfx_effect_items[] = {
     {-1, "NONE", -1, "", ""},
     {0, NULL, 0, NULL, NULL},
 };
@@ -1615,72 +1615,72 @@ static int rna_MeshSequenceCacheModifier_read_velocity_get(PointerRNA *ptr)
 #  endif
 }
 
-static void rna_OpenMeshEffect_effects_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+static void rna_OpenMfx_effects_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)ptr->data;
   rna_iterator_array_begin(
-      iter, (void *)fxmd->effects, sizeof(OpenMeshEffectEffect), fxmd->num_effects, 0, NULL);
+      iter, (void *)fxmd->effects, sizeof(OpenMfxEffect), fxmd->num_effects, 0, NULL);
 }
 
-static void rna_OpenMeshEffect_parameters_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+static void rna_OpenMfx_parameters_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)ptr->data;
   rna_iterator_array_begin(iter,
                            (void *)fxmd->parameters,
-                           sizeof(OpenMeshEffectParameter),
+                           sizeof(OpenMfxParameter),
                            fxmd->num_parameters,
                            0,
                            NULL);
 }
 
-static int rna_OpenMeshEffect_parameters_length(PointerRNA *ptr)
+static int rna_OpenMfx_parameters_length(PointerRNA *ptr)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)ptr->data;
   return fxmd->num_parameters;
 }
 
-static void rna_OpenMeshEffect_inputs_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
+static void rna_OpenMfx_inputs_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)ptr->data;
   rna_iterator_array_begin(iter,
                            (void *)fxmd->extra_inputs,
-                           sizeof(OpenMeshEffectInput),
+                           sizeof(OpenMfxInput),
                            fxmd->num_extra_inputs,
                            0,
                            NULL);
 }
 
-static int rna_OpenMeshEffect_inputs_length(PointerRNA *ptr)
+static int rna_OpenMfx_inputs_length(PointerRNA *ptr)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)ptr->data;
   return fxmd->num_extra_inputs;
 }
 
-static void rna_OpenMeshEffectModifier_plugin_path_set(PointerRNA *ptr, const char *value)
+static void rna_OpenMfxModifier_plugin_path_set(PointerRNA *ptr, const char *value)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)ptr->data;
   BLI_strncpy(fxmd->plugin_path, value, sizeof(fxmd->plugin_path));
   mfx_Modifier_on_plugin_changed(fxmd);
 }
 
-static void rna_OpenMeshEffectModifier_active_effect_index_set(PointerRNA *ptr, int value)
+static void rna_OpenMfxModifier_active_effect_index_set(PointerRNA *ptr, int value)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)ptr->data;
   fxmd->active_effect_index = value;
   mfx_Modifier_on_effect_changed(fxmd);
 }
 
-static void rna_OpenMeshEffectModifier_active_effect_index_range(PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax) {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
+static void rna_OpenMfxModifier_active_effect_index_range(PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax) {
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)ptr->data;
   *min = *softmin = -1;
   *max = *softmax = fxmd->num_effects - 1;
 }
 
-static const EnumPropertyItem *rna_OpenMeshEffectModifier_effect_enum_item(struct bContext *C,
+static const EnumPropertyItem *rna_OpenMfxModifier_effect_enum_item(struct bContext *C,
                                                                           struct PointerRNA *ptr,
                                                                           struct PropertyRNA *prop,
                                                                           bool *r_free) {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)ptr->data;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)ptr->data;
   EnumPropertyItem *item = NULL, tmp_item = {0};
   int totitem = 0;
 
@@ -1701,20 +1701,20 @@ static const EnumPropertyItem *rna_OpenMeshEffectModifier_effect_enum_item(struc
   return item;
 }
 
-static char *rna_OpenMeshEffectParameter_path(PointerRNA *ptr)
+static char *rna_OpenMfxParameter_path(PointerRNA *ptr)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   Object *ob = (Object *)ptr->owner_id;
 
-  // Locate the OpenMeshEffect modifier that owns this parameter
+  // Locate the OpenMfx modifier that owns this parameter
   // if one knows about a way to prevent this from iterating over all the
   // modifiers attached to the parent object that'd be helpful.
   ModifierData *owner_md = NULL;
   int param_index = 0;
   ModifierData *md = ob->modifiers.first;
   while (NULL != md && NULL == owner_md) {
-    if (eModifierType_OpenMeshEffect == md->type) {
-      OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+    if (eModifierType_OpenMfx == md->type) {
+      OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
       for (int i = 0; i < fxmd->num_parameters; ++i) {
         if ((fxmd->parameters + i) == parm) {
           owner_md = md;
@@ -1742,142 +1742,142 @@ static char *rna_OpenMeshEffectParameter_path(PointerRNA *ptr)
   return BLI_sprintfN("modifiers[\"%s\"].parameters[%d]", mod_name_esc, param_index);
 }
 
-static void rna_OpenMeshEffectParameter_integer_value_get(PointerRNA *ptr, int *value)
+static void rna_OpenMfxParameter_integer_value_get(PointerRNA *ptr, int *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   value[0] = parm->integer_vec_value[0];
 }
 
-static void rna_OpenMeshEffectParameter_integer_value_set(PointerRNA *ptr, const int *value)
+static void rna_OpenMfxParameter_integer_value_set(PointerRNA *ptr, const int *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   parm->integer_vec_value[0] = value[0];
 }
 
-static void rna_OpenMeshEffectParameter_integer_value_range(
+static void rna_OpenMfxParameter_integer_value_range(
     PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   *min = parm->int_min;
   *softmin = parm->int_softmin;
   *max = parm->int_max;
   *softmax = parm->int_softmax;
 }
 
-static void rna_OpenMeshEffectParameter_integer2d_value_get(PointerRNA *ptr, int *value)
+static void rna_OpenMfxParameter_integer2d_value_get(PointerRNA *ptr, int *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   copy_v2_v2_int(value, parm->integer_vec_value);
 }
 
-static void rna_OpenMeshEffectParameter_integer2d_value_set(PointerRNA *ptr, const int *value)
+static void rna_OpenMfxParameter_integer2d_value_set(PointerRNA *ptr, const int *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   copy_v2_v2_int(parm->integer_vec_value, value);
 }
 
-static void rna_OpenMeshEffectParameter_integer3d_value_get(PointerRNA *ptr, int *value)
+static void rna_OpenMfxParameter_integer3d_value_get(PointerRNA *ptr, int *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   copy_v3_v3_int(value, parm->integer_vec_value);
 }
 
-static void rna_OpenMeshEffectParameter_integer3d_value_set(PointerRNA *ptr, const int *value)
+static void rna_OpenMfxParameter_integer3d_value_set(PointerRNA *ptr, const int *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   copy_v3_v3_int(parm->integer_vec_value, value);
 }
 
-static void rna_OpenMeshEffectParameter_float_value_get(PointerRNA *ptr, float *value)
+static void rna_OpenMfxParameter_float_value_get(PointerRNA *ptr, float *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   value[0] = parm->float_vec_value[0];
 }
 
-static void rna_OpenMeshEffectParameter_float_value_set(PointerRNA *ptr, const float *value)
+static void rna_OpenMfxParameter_float_value_set(PointerRNA *ptr, const float *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   parm->float_vec_value[0] = value[0];
 }
 
-static void rna_OpenMeshEffectParameter_float_value_range(
+static void rna_OpenMfxParameter_float_value_range(
     PointerRNA *ptr, float *min, float *max, float *softmin, float *softmax)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   *min = parm->float_min;
   *softmin = parm->float_softmin;
   *max = parm->float_max;
   *softmax = parm->float_softmax;
 }
-static void rna_OpenMeshEffectParameter_float2d_value_get(PointerRNA *ptr, float *value)
+static void rna_OpenMfxParameter_float2d_value_get(PointerRNA *ptr, float *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   copy_v2_v2(value, parm->float_vec_value);
 }
 
-static void rna_OpenMeshEffectParameter_float2d_value_set(PointerRNA *ptr, const float *value)
+static void rna_OpenMfxParameter_float2d_value_set(PointerRNA *ptr, const float *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   copy_v2_v2(parm->float_vec_value, value);
 }
 
-static void rna_OpenMeshEffectParameter_float3d_value_get(PointerRNA *ptr, float *value)
+static void rna_OpenMfxParameter_float3d_value_get(PointerRNA *ptr, float *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   copy_v3_v3(value, parm->float_vec_value);
 }
 
-static void rna_OpenMeshEffectParameter_float3d_value_set(PointerRNA *ptr, const float *value)
+static void rna_OpenMfxParameter_float3d_value_set(PointerRNA *ptr, const float *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   copy_v3_v3(parm->float_vec_value, value);
 }
 
-static void rna_OpenMeshEffectParameter_float4d_value_get(PointerRNA *ptr, float *value)
+static void rna_OpenMfxParameter_float4d_value_get(PointerRNA *ptr, float *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   copy_v4_v4(value, parm->float_vec_value);
 }
 
-static void rna_OpenMeshEffectParameter_float4d_value_set(PointerRNA *ptr, const float *value)
+static void rna_OpenMfxParameter_float4d_value_set(PointerRNA *ptr, const float *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   copy_v4_v4(parm->float_vec_value, value);
 }
 
-static void rna_OpenMeshEffectParameter_boolean_value_get(PointerRNA *ptr, bool *value)
+static void rna_OpenMfxParameter_boolean_value_get(PointerRNA *ptr, bool *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   value[0] = parm->integer_vec_value[0] != 0;
   value[1] = false;
   value[2] = false;
   value[3] = false;
 }
 
-static void rna_OpenMeshEffectParameter_boolean_value_set(PointerRNA *ptr, const bool *value)
+static void rna_OpenMfxParameter_boolean_value_set(PointerRNA *ptr, const bool *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   parm->integer_vec_value[0] = value[0] ? 1 : 0;
   parm->integer_vec_value[1] = false;
   parm->integer_vec_value[2] = false;
   parm->integer_vec_value[3] = false;
 }
 
-static void rna_OpenMeshEffectParameter_string_value_get(PointerRNA *ptr, char *value)
+static void rna_OpenMfxParameter_string_value_get(PointerRNA *ptr, char *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   BLI_strncpy(value, parm->string_value, sizeof(parm->string_value));
 }
 
-static int rna_OpenMeshEffectParameter_string_value_length(PointerRNA *ptr)
+static int rna_OpenMfxParameter_string_value_length(PointerRNA *ptr)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   return strlen(parm->string_value);
 }
 
-static void rna_OpenMeshEffectParameter_string_value_set(PointerRNA *ptr, const char *value)
+static void rna_OpenMfxParameter_string_value_set(PointerRNA *ptr, const char *value)
 {
-  OpenMeshEffectParameter *parm = (OpenMeshEffectParameter *)ptr->data;
+  OpenMfxParameter *parm = (OpenMfxParameter *)ptr->data;
   BLI_strncpy(parm->string_value, value, sizeof(parm->string_value));
 }
 
@@ -7498,14 +7498,14 @@ static void rna_def_modifier_volume_to_mesh(BlenderRNA *brna)
   RNA_define_lib_overridable(false);
 }
 
-static void rna_def_modifier_openmesheffect_effect(BlenderRNA *brna)
+static void rna_def_modifier_openmfx_effect(BlenderRNA *brna)
 {
   StructRNA *srna;
   PropertyRNA *prop;
 
-  srna = RNA_def_struct(brna, "OpenMeshEffectEffect", NULL);
+  srna = RNA_def_struct(brna, "OpenMfxEffect", NULL);
   RNA_def_struct_ui_text(srna,
-                         "OpenMeshEffectEffect",
+                         "OpenMfxEffect",
                          "Information about an effect contained in an OFX plugin bundle");
 
   prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
@@ -7513,15 +7513,15 @@ static void rna_def_modifier_openmesheffect_effect(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
-static void rna_def_modifier_openmesheffect_parameter(BlenderRNA *brna)
+static void rna_def_modifier_openmfx_parameter(BlenderRNA *brna)
 {
   StructRNA *srna;
   PropertyRNA *prop;
 
-  srna = RNA_def_struct(brna, "OpenMeshEffectParameter", NULL);
+  srna = RNA_def_struct(brna, "OpenMfxParameter", NULL);
   RNA_def_struct_ui_text(
-      srna, "OpenMeshEffectParameter", "An exposed parameter of the active effect");
-  RNA_def_struct_path_func(srna, "rna_OpenMeshEffectParameter_path");
+      srna, "OpenMfxParameter", "An exposed parameter of the active effect");
+  RNA_def_struct_path_func(srna, "rna_OpenMfxParameter_path");
 
   prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
   RNA_def_property_ui_text(prop, "Name", "System name of the effect");
@@ -7546,7 +7546,7 @@ static void rna_def_modifier_openmesheffect_parameter(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Integer", "Parameter value as an integer");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
   RNA_def_property_int_funcs(
-      prop, NULL, NULL, "rna_OpenMeshEffectParameter_integer_value_range");
+      prop, NULL, NULL, "rna_OpenMfxParameter_integer_value_range");
 
   prop = RNA_def_property(srna, "integer2d_value", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "integer_vec_value");
@@ -7554,7 +7554,7 @@ static void rna_def_modifier_openmesheffect_parameter(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Integer2D", "Parameter value as a 2D integer array");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
   RNA_def_property_int_funcs(
-      prop, NULL, NULL, "rna_OpenMeshEffectParameter_integer_value_range");
+      prop, NULL, NULL, "rna_OpenMfxParameter_integer_value_range");
 
   prop = RNA_def_property(srna, "integer3d_value", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "integer_vec_value");
@@ -7562,7 +7562,7 @@ static void rna_def_modifier_openmesheffect_parameter(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Integer3D", "Parameter value as a 3D integer array");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
   RNA_def_property_int_funcs(
-      prop, NULL, NULL, "rna_OpenMeshEffectParameter_integer_value_range");
+      prop, NULL, NULL, "rna_OpenMfxParameter_integer_value_range");
 
   prop = RNA_def_property(srna, "float_value", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "float_vec_value");
@@ -7570,7 +7570,7 @@ static void rna_def_modifier_openmesheffect_parameter(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Float", "Parameter value as a float");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
   RNA_def_property_float_funcs(
-      prop, NULL, NULL, "rna_OpenMeshEffectParameter_float_value_range");
+      prop, NULL, NULL, "rna_OpenMfxParameter_float_value_range");
 
   prop = RNA_def_property(srna, "float2d_value", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "float_vec_value");
@@ -7578,7 +7578,7 @@ static void rna_def_modifier_openmesheffect_parameter(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Float2D", "Parameter value as a 2D float array");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
   RNA_def_property_float_funcs(
-      prop, NULL, NULL, "rna_OpenMeshEffectParameter_float_value_range");
+      prop, NULL, NULL, "rna_OpenMfxParameter_float_value_range");
 
   prop = RNA_def_property(srna, "float3d_value", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "float_vec_value");
@@ -7586,7 +7586,7 @@ static void rna_def_modifier_openmesheffect_parameter(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Float3D", "Parameter value as a 3D float array");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
   RNA_def_property_float_funcs(
-      prop, NULL, NULL, "rna_OpenMeshEffectParameter_float_value_range");
+      prop, NULL, NULL, "rna_OpenMfxParameter_float_value_range");
 
   prop = RNA_def_property(srna, "rgb_value", PROP_FLOAT, PROP_COLOR);
   RNA_def_property_float_sdna(prop, NULL, "float_vec_value");
@@ -7595,7 +7595,7 @@ static void rna_def_modifier_openmesheffect_parameter(BlenderRNA *brna)
   RNA_def_property_ui_range(prop, 0.0, 1.0, 0.01, 3);
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
   RNA_def_property_float_funcs(
-      prop, NULL, NULL, "rna_OpenMeshEffectParameter_float_value_range");
+      prop, NULL, NULL, "rna_OpenMfxParameter_float_value_range");
 
   prop = RNA_def_property(srna, "rgba_value", PROP_FLOAT, PROP_COLOR);
   RNA_def_property_float_sdna(prop, NULL, "float_vec_value");
@@ -7604,7 +7604,7 @@ static void rna_def_modifier_openmesheffect_parameter(BlenderRNA *brna)
   RNA_def_property_ui_range(prop, 0.0, 1.0, 0.01, 3);
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
   RNA_def_property_float_funcs(
-      prop, NULL, NULL, "rna_OpenMeshEffectParameter_float_value_range");
+      prop, NULL, NULL, "rna_OpenMfxParameter_float_value_range");
 
   prop = RNA_def_property(srna, "boolean_value", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "integer_vec_value", 0);
@@ -7612,28 +7612,28 @@ static void rna_def_modifier_openmesheffect_parameter(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Boolean", "Parameter value as a boolean");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
   RNA_def_property_boolean_funcs(prop,
-                                 "rna_OpenMeshEffectParameter_boolean_value_get",
-                                 "rna_OpenMeshEffectParameter_boolean_value_set");
+                                 "rna_OpenMfxParameter_boolean_value_get",
+                                 "rna_OpenMfxParameter_boolean_value_set");
 
   prop = RNA_def_property(srna, "string_value", PROP_STRING, PROP_NONE);
   RNA_def_property_string_funcs(prop,
-                                "rna_OpenMeshEffectParameter_string_value_get",
-                                "rna_OpenMeshEffectParameter_string_value_length",
-                                "rna_OpenMeshEffectParameter_string_value_set");
+                                "rna_OpenMfxParameter_string_value_get",
+                                "rna_OpenMfxParameter_string_value_length",
+                                "rna_OpenMfxParameter_string_value_set");
   RNA_def_property_ui_text(prop, "String Value", "");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   RNA_define_lib_overridable(false);
 }
 
-static void rna_def_modifier_openmesheffect_input(BlenderRNA *brna)
+static void rna_def_modifier_openmfx_input(BlenderRNA *brna)
 {
   StructRNA *srna;
   PropertyRNA *prop;
 
-  srna = RNA_def_struct(brna, "OpenMeshEffectInput", NULL);
+  srna = RNA_def_struct(brna, "OpenMfxInput", NULL);
   RNA_def_struct_ui_text(srna,
-                         "OpenMeshEffectInput",
+                         "OpenMfxInput",
                          "Information about an additionnal input of the active effect");
 
   prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
@@ -7662,14 +7662,14 @@ static void rna_def_modifier_openmesheffect_input(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
-static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
+static void rna_def_modifier_openmfx(BlenderRNA *brna)
 {
   StructRNA *srna;
   PropertyRNA *prop;
 
-  srna = RNA_def_struct(brna, "OpenMeshEffectModifier", "Modifier");
-  RNA_def_struct_ui_text(srna, "Open Mesh Effect Modifier", "");
-  RNA_def_struct_sdna(srna, "OpenMeshEffectModifierData");
+  srna = RNA_def_struct(brna, "OpenMfxModifier", "Modifier");
+  RNA_def_struct_ui_text(srna, "OpenMfx Modifier", "");
+  RNA_def_struct_sdna(srna, "OpenMfxModifierData");
   RNA_def_struct_ui_icon(srna, ICON_MOD_ARRAY);
 
   RNA_define_lib_overridable(true);
@@ -7678,30 +7678,30 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
   RNA_def_property_ui_text(prop,
                            "Plugin Path",
                            "Path to the OpenFX Mesh Effect plugin to use (.ofx)");
-  RNA_def_property_string_funcs(prop, NULL, NULL, "rna_OpenMeshEffectModifier_plugin_path_set");
+  RNA_def_property_string_funcs(prop, NULL, NULL, "rna_OpenMfxModifier_plugin_path_set");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "active_effect_index", PROP_INT, PROP_NONE);
   RNA_def_property_ui_text(prop, "Active Effect", "Index of the effect to use within the current OFX plug-in bundle");
   RNA_def_property_int_funcs(prop,
                              NULL,
-                             "rna_OpenMeshEffectModifier_active_effect_index_set",
-                             "rna_OpenMeshEffectModifier_active_effect_index_range");
+                             "rna_OpenMfxModifier_active_effect_index_set",
+                             "rna_OpenMfxModifier_active_effect_index_range");
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   RNA_define_lib_overridable(false);
 
   prop = RNA_def_enum(srna,
                       "effect_enum",
-                      rna_enum_openmesheffect_effect_items,
+                      rna_enum_openmfx_effect_items,
                       -1,
                       "Select an effect",
                       "Effect to use within the current plug-in");
   RNA_def_property_enum_sdna(prop, NULL, "active_effect_index");
   RNA_def_property_enum_funcs(prop,
                               NULL,
-                              "rna_OpenMeshEffectModifier_active_effect_index_set",
-                              "rna_OpenMeshEffectModifier_effect_enum_item");
+                              "rna_OpenMfxModifier_active_effect_index_set",
+                              "rna_OpenMfxModifier_effect_enum_item");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "num_effects", PROP_INT, PROP_NONE);
@@ -7711,9 +7711,9 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "effects", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  RNA_def_property_struct_type(prop, "OpenMeshEffectEffect");
+  RNA_def_property_struct_type(prop, "OpenMfxEffect");
   RNA_def_property_collection_funcs(prop,
-                                    "rna_OpenMeshEffect_effects_begin",
+                                    "rna_OpenMfx_effects_begin",
                                     "rna_iterator_array_next",
                                     "rna_iterator_array_end",
                                     "rna_iterator_array_get",
@@ -7730,13 +7730,13 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "parameters", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  RNA_def_property_struct_type(prop, "OpenMeshEffectParameter");
+  RNA_def_property_struct_type(prop, "OpenMfxParameter");
   RNA_def_property_collection_funcs(prop,
-                                    "rna_OpenMeshEffect_parameters_begin",
+                                    "rna_OpenMfx_parameters_begin",
                                     "rna_iterator_array_next",
                                     "rna_iterator_array_end",
                                     "rna_iterator_array_get",
-                                    "rna_OpenMeshEffect_parameters_length",
+                                    "rna_OpenMfx_parameters_length",
                                     NULL,
                                     NULL,
                                     NULL);
@@ -7750,13 +7750,13 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "extra_inputs", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  RNA_def_property_struct_type(prop, "OpenMeshEffectInput");
+  RNA_def_property_struct_type(prop, "OpenMfxInput");
   RNA_def_property_collection_funcs(prop,
-                                    "rna_OpenMeshEffect_inputs_begin",
+                                    "rna_OpenMfx_inputs_begin",
                                     "rna_iterator_array_next",
                                     "rna_iterator_array_end",
                                     "rna_iterator_array_get",
-                                    "rna_OpenMeshEffect_inputs_length",
+                                    "rna_OpenMfx_inputs_length",
                                     NULL,
                                     NULL,
                                     NULL);
@@ -7767,9 +7767,9 @@ static void rna_def_modifier_openmesheffect(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   // Related structs
-  rna_def_modifier_openmesheffect_effect(brna);
-  rna_def_modifier_openmesheffect_parameter(brna);
-  rna_def_modifier_openmesheffect_input(brna);
+  rna_def_modifier_openmfx_effect(brna);
+  rna_def_modifier_openmfx_parameter(brna);
+  rna_def_modifier_openmfx_input(brna);
 }
 
 void RNA_def_modifier(BlenderRNA *brna)
@@ -7913,7 +7913,7 @@ void RNA_def_modifier(BlenderRNA *brna)
   rna_def_modifier_mesh_to_volume(brna);
   rna_def_modifier_volume_displace(brna);
   rna_def_modifier_volume_to_mesh(brna);
-  rna_def_modifier_openmesheffect(brna);
+  rna_def_modifier_openmfx(brna);
 }
 
 #endif

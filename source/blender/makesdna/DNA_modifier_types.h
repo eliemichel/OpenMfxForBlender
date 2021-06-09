@@ -98,7 +98,7 @@ typedef enum ModifierType {
   eModifierType_MeshToVolume = 58,
   eModifierType_VolumeDisplace = 59,
   eModifierType_VolumeToMesh = 60,
-  eModifierType_OpenMeshEffect = 61,
+  eModifierType_OpenMfx = 61,
   NUM_MODIFIER_TYPES,
 } ModifierType;
 
@@ -2344,27 +2344,27 @@ typedef enum VolumeToMeshFlag {
   VOLUME_TO_MESH_USE_SMOOTH_SHADE = 1 << 0,
 } VolumeToMeshFlag;
 
-/** OpenMeshEffectModifierData->effects */
-typedef struct OpenMeshEffectEffect {
-  /** MOD_OPENMESHEFFECT_MAX_EFFECT_NAME */
+/** OpenMfxModifierData->effects */
+typedef struct OpenMfxEffect {
+  /** MOD_OPENMFX_MAX_EFFECT_NAME */
   char name[256];
-} OpenMeshEffectEffect;
+} OpenMfxEffect;
 
-#define MOD_OPENMESHEFFECT_MAX_EFFECT_NAME 256
+#define MOD_OPENMFX_MAX_EFFECT_NAME 256
 
-/** OpenMeshEffectModifierData->parameters */
-typedef struct OpenMeshEffectParameter {
-  /** MOD_OPENMESHEFFECT_MAX_PARAMETER_NAME */
+/** OpenMfxModifierData->parameters */
+typedef struct OpenMfxParameter {
+  /** MOD_OPENMFX_MAX_PARAMETER_NAME */
   char name[256];
-  /** MOD_OPENMESHEFFECT_MAX_PARAMETER_LABEL */
+  /** MOD_OPENMFX_MAX_PARAMETER_LABEL */
   char label[256];
-  /** OpenMeshEffect parameter type */
+  /** OpenMfx parameter type */
   int type, _pad0;
   /** Used for Double, Double2D, Double3D, RGB, RGBA */
   float float_vec_value[4];
   /** Used for Integer, Integer2D, Integer3D, Boolean, Choice index */
   int integer_vec_value[4];
-  /** MOD_OPENMESHEFFECT_MAX_STRING_VALUE */
+  /** MOD_OPENMFX_MAX_STRING_VALUE */
   char string_value[1024];
   /** Used for Double, Double2D, Double3D, RGB, RGBA */
   float float_min;
@@ -2376,17 +2376,17 @@ typedef struct OpenMeshEffectParameter {
   int int_softmin;
   int int_max;
   int int_softmax;
-} OpenMeshEffectParameter;
+} OpenMfxParameter;
 
-#define MOD_OPENMESHEFFECT_MAX_PARAMETER_NAME 256
-#define MOD_OPENMESHEFFECT_MAX_PARAMETER_LABEL 256
-#define MOD_OPENMESHEFFECT_MAX_STRING_VALUE 1024
+#define MOD_OPENMFX_MAX_PARAMETER_NAME 256
+#define MOD_OPENMFX_MAX_PARAMETER_LABEL 256
+#define MOD_OPENMFX_MAX_STRING_VALUE 1024
 
-/** OpenMeshEffectModifierData->extra_inputs */
-typedef struct OpenMeshEffectInput {
-  /** MOD_OPENMESHEFFECT_MAX_INPUT_NAME */
+/** OpenMfxModifierData->extra_inputs */
+typedef struct OpenMfxInput {
+  /** MOD_OPENMFX_MAX_INPUT_NAME */
   char name[256];
-  /** MOD_OPENMESHEFFECT_MAX_INPUT_LABEL */
+  /** MOD_OPENMFX_MAX_INPUT_LABEL */
   char label[256];
   /** The object connected to this input */
   struct Object *connected_object;
@@ -2395,12 +2395,12 @@ typedef struct OpenMeshEffectInput {
   /** (bool) Whether the input need the object's transform */
   short request_transform;
   char _pad[4];
-} OpenMeshEffectInput;
+} OpenMfxInput;
 
-#define MOD_OPENMESHEFFECT_MAX_INPUT_NAME 256
-#define MOD_OPENMESHEFFECT_MAX_INPUT_LABEL 256
+#define MOD_OPENMFX_MAX_INPUT_NAME 256
+#define MOD_OPENMFX_MAX_INPUT_LABEL 256
 
-typedef struct OpenMeshEffectModifierData {
+typedef struct OpenMfxModifierData {
   ModifierData modifier;
 
   /** 1024 = FILE_MAX. */
@@ -2410,15 +2410,15 @@ typedef struct OpenMeshEffectModifierData {
   /* Runtime. */
   int num_effects, _pad1;
   int num_parameters, num_extra_inputs;
-  OpenMeshEffectEffect *effects;
-  OpenMeshEffectParameter *parameters;
-  OpenMeshEffectInput *extra_inputs;
+  OpenMfxEffect *effects;
+  OpenMfxParameter *parameters;
+  OpenMfxInput *extra_inputs;
 
-  /** MOD_OPENMESHEFFECT_MAX_MESSAGE */
+  /** MOD_OPENMFX_MAX_MESSAGE */
   char message[1024];
-} OpenMeshEffectModifierData;
+} OpenMfxModifierData;
 
-#define MOD_OPENMESHEFFECT_MAX_MESSAGE 1024
+#define MOD_OPENMFX_MAX_MESSAGE 1024
 
 #ifdef __cplusplus
 }

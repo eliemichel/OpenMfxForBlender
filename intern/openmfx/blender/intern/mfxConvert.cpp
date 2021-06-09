@@ -22,7 +22,7 @@
 #include <iostream>
 #include <cstring>
 
-void copy_parameter_value_from_rna(OfxParamHandle param, const OpenMeshEffectParameter *rna)
+void copy_parameter_value_from_rna(OfxParamHandle param, const OpenMfxParameter *rna)
 {
   param->type = static_cast<ParamType>(rna->type);
   switch (rna->type) {
@@ -50,8 +50,8 @@ void copy_parameter_value_from_rna(OfxParamHandle param, const OpenMeshEffectPar
       break;
 
     case PARAM_TYPE_STRING:
-      param->realloc_string(MOD_OPENMESHEFFECT_MAX_STRING_VALUE);
-      strncpy(param->value[0].as_char, rna->string_value, MOD_OPENMESHEFFECT_MAX_STRING_VALUE);
+      param->realloc_string(MOD_OPENMFX_MAX_STRING_VALUE);
+      strncpy(param->value[0].as_char, rna->string_value, MOD_OPENMFX_MAX_STRING_VALUE);
       break;
 
     default:
@@ -62,7 +62,7 @@ void copy_parameter_value_from_rna(OfxParamHandle param, const OpenMeshEffectPar
   }
 }
 
-void copy_parameter_value_to_rna(OpenMeshEffectParameter *rna, const OfxPropertyStruct *prop)
+void copy_parameter_value_to_rna(OpenMfxParameter *rna, const OfxPropertyStruct *prop)
 {
   switch (rna->type) {
     case PARAM_TYPE_INTEGER_3D:
@@ -91,7 +91,7 @@ void copy_parameter_value_to_rna(OpenMeshEffectParameter *rna, const OfxProperty
     case PARAM_TYPE_STRING:
       strncpy(rna->string_value,
               prop->value[0].as_char,
-              MOD_OPENMESHEFFECT_MAX_STRING_VALUE);
+              MOD_OPENMFX_MAX_STRING_VALUE);
       break;
 
     default:
@@ -128,7 +128,7 @@ void copy_parameter_minmax_to_rna(int rna_type,
   }
 }
 
-void copy_parameter_value_to_rna(OpenMeshEffectParameter *rna, const OfxParamHandle param)
+void copy_parameter_value_to_rna(OpenMfxParameter *rna, const OfxParamHandle param)
 {
   rna->type = static_cast<int>(param->type);
   switch (rna->type) {
@@ -156,7 +156,7 @@ void copy_parameter_value_to_rna(OpenMeshEffectParameter *rna, const OfxParamHan
       break;
 
     case PARAM_TYPE_STRING:
-      strncpy(rna->string_value, param->value[0].as_char, MOD_OPENMESHEFFECT_MAX_STRING_VALUE);
+      strncpy(rna->string_value, param->value[0].as_char, MOD_OPENMFX_MAX_STRING_VALUE);
       break;
 
     default:

@@ -26,9 +26,9 @@
 #include "DNA_modifier_types.h"
 
 void copy_parameter_value_from_rna(OfxParamHandle param,
-                                   const OpenMeshEffectParameter *rna);
+                                   const OpenMfxParameter *rna);
 
-void copy_parameter_value_to_rna(OpenMeshEffectParameter *rna,
+void copy_parameter_value_to_rna(OpenMfxParameter *rna,
                                  const OfxPropertyStruct * prop);
 
 void copy_parameter_minmax_to_rna(int rna_type,
@@ -36,5 +36,5 @@ void copy_parameter_minmax_to_rna(int rna_type,
                                   float &float_rna,
                                   const OfxPropertyStruct *prop);
 
-void copy_parameter_value_to_rna(OpenMeshEffectParameter *rna,
+void copy_parameter_value_to_rna(OpenMfxParameter *rna,
                                  const OfxParamHandle param);

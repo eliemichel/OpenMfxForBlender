@@ -31,6 +31,7 @@
 #include "ofxExtras.h"
 
 #include "DNA_mesh_types.h" // Mesh
+#include "DNA_modifier_types.h"
 #include "DNA_meshdata_types.h" // MVert
 
 #include "BKE_mesh.h" // BKE_mesh_new_nomain
@@ -46,7 +47,7 @@
 // ----------------------------------------------------------------------------
 // Public
 
-OpenMeshEffectRuntime::OpenMeshEffectRuntime()
+OpenMfxRuntime::OpenMfxRuntime()
 {
   plugin_path[0] = '\0';
   m_is_plugin_valid = false;
@@ -57,7 +58,7 @@ OpenMeshEffectRuntime::OpenMeshEffectRuntime()
   registry = nullptr;
 }
 
-OpenMeshEffectRuntime::~OpenMeshEffectRuntime()
+OpenMfxRuntime::~OpenMfxRuntime()
 {
   reset_plugin_path();
 
@@ -67,7 +68,7 @@ OpenMeshEffectRuntime::~OpenMeshEffectRuntime()
   }
 }
 
-void OpenMeshEffectRuntime::set_plugin_path(const char *plugin_path)
+void OpenMfxRuntime::set_plugin_path(const char *plugin_path)
 {
   if (0 == strcmp(this->plugin_path, plugin_path)) {
     return;
@@ -90,7 +91,7 @@ void OpenMeshEffectRuntime::set_plugin_path(const char *plugin_path)
   m_is_plugin_valid = this->registry != NULL;
 }
 
-void OpenMeshEffectRuntime::set_effect_index(int effect_index)
+void OpenMfxRuntime::set_effect_index(int effect_index)
 {
   if (this->effect_index == effect_index) {
     return;
@@ -111,7 +112,7 @@ void OpenMeshEffectRuntime::set_effect_index(int effect_index)
   }
 }
 
-void OpenMeshEffectRuntime::get_parameters_from_rna(OpenMeshEffectModifierData *fxmd)
+void OpenMfxRuntime::get_parameters_from_rna(OpenMfxModifierData *fxmd)
 {
   OfxParamHandle *parameters = this->effect_instance->parameters.parameters;
   for (int i = 0 ; i < fxmd->num_parameters ; ++i) {
@@ -119,7 +120,7 @@ void OpenMeshEffectRuntime::get_parameters_from_rna(OpenMeshEffectModifierData *
   }
 }
 
-void OpenMeshEffectRuntime::set_message_in_rna(OpenMeshEffectModifierData *fxmd)
+void OpenMfxRuntime::set_message_in_rna(OpenMfxModifierData *fxmd)
 {
   if (NULL == this->effect_instance) {
     return;
@@ -128,8 +129,8 @@ void OpenMeshEffectRuntime::set_message_in_rna(OpenMeshEffectModifierData *fxmd)
   OfxMessageType type = this->effect_instance->messageType;
 
   if (type != OfxMessageType::Invalid) {
-    BLI_strncpy(fxmd->message, this->effect_instance->message, MOD_OPENMESHEFFECT_MAX_MESSAGE);
-    fxmd->message[MOD_OPENMESHEFFECT_MAX_MESSAGE - 1] = '\0';
+    BLI_strncpy(fxmd->message, this->effect_instance->message, MOD_OPENMFX_MAX_MESSAGE);
+    fxmd->message[MOD_OPENMFX_MAX_MESSAGE - 1] = '\0';
   }
 
   if (type == OfxMessageType::Error || type == OfxMessageType::Fatal) {
@@ -137,7 +138,7 @@ void OpenMeshEffectRuntime::set_message_in_rna(OpenMeshEffectModifierData *fxmd)
   }
 }
 
-bool OpenMeshEffectRuntime::ensure_effect_instance()
+bool OpenMfxRuntime::ensure_effect_instance()
 {
 
   if (false == is_plugin_valid()) {
@@ -177,25 +178,25 @@ bool OpenMeshEffectRuntime::ensure_effect_instance()
   return true;
 }
 
-bool OpenMeshEffectRuntime::is_plugin_valid() const
+bool OpenMfxRuntime::is_plugin_valid() const
 {
   return m_is_plugin_valid;
 }
 
-void OpenMeshEffectRuntime::save_rna_parameter_values(OpenMeshEffectModifierData *fxmd)
+void OpenMfxRuntime::save_rna_parameter_values(OpenMfxModifierData *fxmd)
 {
   m_saved_parameter_values.clear();
   for (int i = 0; i < fxmd->num_parameters; ++i) {
-    OpenMeshEffectParameter* rna = fxmd->parameters + i;
+    OpenMfxParameter* rna = fxmd->parameters + i;
     std::string key = std::string(rna->name);
     copy_parameter_value_from_rna(&m_saved_parameter_values[key], rna);
   }
 }
 
-void OpenMeshEffectRuntime::try_restore_rna_parameter_values(OpenMeshEffectModifierData *fxmd)
+void OpenMfxRuntime::try_restore_rna_parameter_values(OpenMfxModifierData *fxmd)
 {
   for (int i = 0; i < fxmd->num_parameters; ++i) {
-    OpenMeshEffectParameter *rna = fxmd->parameters + i;
+    OpenMfxParameter *rna = fxmd->parameters + i;
     std::string key = std::string(rna->name);
     if (m_saved_parameter_values.count(key)) {
       copy_parameter_value_to_rna(rna, &m_saved_parameter_values[key]);
@@ -203,7 +204,7 @@ void OpenMeshEffectRuntime::try_restore_rna_parameter_values(OpenMeshEffectModif
   }
 }
 
-Mesh *OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd,
+Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
                                   Mesh *mesh,
                                   Object *object)
 {
@@ -290,7 +291,7 @@ Mesh *OpenMeshEffectRuntime::cook(OpenMeshEffectModifierData *fxmd,
   return output_data.blender_mesh;
 }
 
-void OpenMeshEffectRuntime::reload_effect_info(OpenMeshEffectModifierData *fxmd)
+void OpenMfxRuntime::reload_effect_info(OpenMfxModifierData *fxmd)
 {
   // Free previous info
   if (NULL != fxmd->effects) {
@@ -304,8 +305,8 @@ void OpenMeshEffectRuntime::reload_effect_info(OpenMeshEffectModifierData *fxmd)
   }
 
   fxmd->num_effects = this->registry->num_plugins;
-  fxmd->effects = (OpenMeshEffectEffect *)MEM_calloc_arrayN(
-      sizeof(OpenMeshEffectEffect), fxmd->num_effects, "mfx effect info");
+  fxmd->effects = (OpenMfxEffect *)MEM_calloc_arrayN(
+      sizeof(OpenMfxEffect), fxmd->num_effects, "mfx effect info");
 
   for (int i = 0; i < fxmd->num_effects; ++i) {
     // Get asset name
@@ -315,7 +316,7 @@ void OpenMeshEffectRuntime::reload_effect_info(OpenMeshEffectModifierData *fxmd)
   }
 }
 
-void OpenMeshEffectRuntime::reload_parameters(OpenMeshEffectModifierData *fxmd)
+void OpenMfxRuntime::reload_parameters(OpenMfxModifierData *fxmd)
 {
   // Reset parameter DNA
   if (NULL != fxmd->parameters) {
@@ -332,12 +333,12 @@ void OpenMeshEffectRuntime::reload_parameters(OpenMeshEffectModifierData *fxmd)
   OfxParamSetHandle parameters = &this->effect_desc->parameters;
 
   fxmd->num_parameters = parameters->num_parameters;
-  fxmd->parameters = (OpenMeshEffectParameter *)MEM_calloc_arrayN(
-      sizeof(OpenMeshEffectParameter), fxmd->num_parameters, "openmesheffect parameter info");
+  fxmd->parameters = (OpenMfxParameter *)MEM_calloc_arrayN(
+      sizeof(OpenMfxParameter), fxmd->num_parameters, "openmesheffect parameter info");
 
   for (int i = 0; i < fxmd->num_parameters; ++i) {
     const OfxPropertySetStruct & props = parameters->parameters[i]->properties;
-    OpenMeshEffectParameter &rna = fxmd->parameters[i];
+    OpenMfxParameter &rna = fxmd->parameters[i];
 
     int script_name_idx = props.find_property(kOfxParamPropScriptName);
     int label_idx = props.find_property(kOfxPropLabel);
@@ -406,7 +407,7 @@ void OpenMeshEffectRuntime::reload_parameters(OpenMeshEffectModifierData *fxmd)
   try_restore_rna_parameter_values(fxmd);
 }
 
-void OpenMeshEffectRuntime::reload_extra_inputs(OpenMeshEffectModifierData *fxmd)
+void OpenMfxRuntime::reload_extra_inputs(OpenMfxModifierData *fxmd)
 {
   // Reset parameter DNA
   if (NULL != fxmd->extra_inputs) {
@@ -431,17 +432,17 @@ void OpenMeshEffectRuntime::reload_extra_inputs(OpenMeshEffectModifierData *fxmd
     ++fxmd->num_extra_inputs;
   }
 
-  fxmd->extra_inputs = (OpenMeshEffectInput *)MEM_calloc_arrayN(
-      sizeof(OpenMeshEffectInput), fxmd->num_extra_inputs, "openmesheffect extra input info");
+  fxmd->extra_inputs = (OpenMfxInput *)MEM_calloc_arrayN(
+      sizeof(OpenMfxInput), fxmd->num_extra_inputs, "openmesheffect extra input info");
 
-  OpenMeshEffectInput *current_input = fxmd->extra_inputs;
+  OpenMfxInput *current_input = fxmd->extra_inputs;
   for (int i = 0; i < inputs->num_inputs; ++i) {
     if (0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainInput) ||
         0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainOutput)) {
       continue;
     }
     const OfxPropertySetStruct &props = inputs->inputs[i]->properties;
-    OpenMeshEffectInput &rna = *current_input;
+    OpenMfxInput &rna = *current_input;
 
     int label_idx = props.find_property(kOfxPropLabel);
 
@@ -466,21 +467,21 @@ void OpenMeshEffectRuntime::reload_extra_inputs(OpenMeshEffectModifierData *fxmd
 }
 
 
-void OpenMeshEffectRuntime::set_input_prop_in_rna(OpenMeshEffectModifierData *fxmd)
+void OpenMfxRuntime::set_input_prop_in_rna(OpenMfxModifierData *fxmd)
 {
   if (NULL == this->effect_desc) {
     return;
   }
   OfxMeshInputSetStruct *inputs = &this->effect_desc->inputs;
 
-  OpenMeshEffectInput *current_input = fxmd->extra_inputs;
+  OpenMfxInput *current_input = fxmd->extra_inputs;
   for (int i = 0; i < inputs->num_inputs; ++i) {
     if (0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainInput) ||
         0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainOutput)) {
       continue;
     }
     const OfxPropertySetStruct &props = inputs->inputs[i]->properties;
-    OpenMeshEffectInput &rna = *current_input;
+    OpenMfxInput &rna = *current_input;
 
     int request_geometry_idx = props.find_property(kOfxInputPropRequestGeometry);
     rna.request_geometry = props.properties[request_geometry_idx]->value->as_int != 0;
@@ -494,7 +495,7 @@ void OpenMeshEffectRuntime::set_input_prop_in_rna(OpenMeshEffectModifierData *fx
 // ----------------------------------------------------------------------------
 // Private static
 
-void OpenMeshEffectRuntime::normalize_plugin_path(char *path, char *out_path)
+void OpenMfxRuntime::normalize_plugin_path(char *path, char *out_path)
 {
   BLI_strncpy(out_path, path, FILE_MAX);
   const char *base_path =
@@ -508,7 +509,7 @@ void OpenMeshEffectRuntime::normalize_plugin_path(char *path, char *out_path)
 // ----------------------------------------------------------------------------
 // Private
 
-void OpenMeshEffectRuntime::free_effect_instance()
+void OpenMfxRuntime::free_effect_instance()
 {
   if (is_plugin_valid() && -1 != this->effect_index) {
     OfxPlugin *plugin = this->registry->plugins[this->effect_index];
@@ -532,7 +533,7 @@ void OpenMeshEffectRuntime::free_effect_instance()
   }
 }
 
-void OpenMeshEffectRuntime::ensure_host()
+void OpenMfxRuntime::ensure_host()
 {
   if (NULL == this->ofx_host) {
     this->ofx_host = getGlobalHost();
@@ -548,7 +549,7 @@ void OpenMeshEffectRuntime::ensure_host()
   }
 }
 
-void OpenMeshEffectRuntime::reset_plugin_path()
+void OpenMfxRuntime::reset_plugin_path()
 {
   if (is_plugin_valid()) {
     printf("Unloading OFX plugin %s\n", this->plugin_path);

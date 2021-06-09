@@ -25,7 +25,6 @@
 
 #include "BLI_utildefines.h"
 
-#include "DNA_mesh_types.h"
 #include "BKE_context.h"
 #include "BKE_screen.h"
 #include "BKE_modifier.h"
@@ -57,13 +56,13 @@ static Mesh *modifyMesh(ModifierData *md,
                            const ModifierEvalContext *ctx,
                            Mesh *mesh)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
   return mfx_Modifier_do(fxmd, mesh, ctx->object);
 }
 
 static void initData(struct ModifierData *md)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
   fxmd->active_effect_index = -1;
   fxmd->num_effects = 0;
   fxmd->effects = NULL;
@@ -76,8 +75,8 @@ static void initData(struct ModifierData *md)
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
-  OpenMeshEffectModifierData *tfxmd = (OpenMeshEffectModifierData *)target;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
+  OpenMfxModifierData *tfxmd = (OpenMfxModifierData *)target;
 
   // A bit dirty to modify the copy source, but otherwise this would have to be in readfile.c,
   // which I don't want to depend on mfxModifier.h
@@ -93,7 +92,7 @@ static void requiredDataMask(Object *UNUSED(ob),
                              CustomData_MeshMasks *r_cddata_masks)
 {
   /* ask for extra attibutes.
-     maybe there could be a mechanism in OpenMeshEffect to have a plugin explicitely
+     maybe there could be a mechanism in OpenMfx to have a plugin explicitely
      ask for input attributes, so that we can avoid feeding all of them to addons
      that are not using it. */
   r_cddata_masks->lmask |= CD_MLOOPUV;
@@ -103,7 +102,7 @@ static void requiredDataMask(Object *UNUSED(ob),
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   printf("updateDepsgraph\n");
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
   mfx_Modifier_before_updateDepsgraph(fxmd);
 
   bool do_add_own_transform = false; // TODO: if depend on main input's transform turn this true
@@ -115,20 +114,20 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
       DEG_add_object_relation(ctx->node,
                               fxmd->extra_inputs[i].connected_object,
                               DEG_OB_COMP_GEOMETRY,
-                              "OpenMeshEffect Modifier Input Geometry");
+                              "OpenMfx Modifier Input Geometry");
       do_add_own_transform = true;
     }
     if (fxmd->extra_inputs[i].request_transform) {
       DEG_add_object_relation(ctx->node,
                               fxmd->extra_inputs[i].connected_object,
                               DEG_OB_COMP_TRANSFORM,
-                              "OpenMeshEffect Modifier Input Transform");
+                              "OpenMfx Modifier Input Transform");
       do_add_own_transform = true;
     }
   }
 
   if (do_add_own_transform) {
-    DEG_add_modifier_to_transform_relation(ctx->node, "OpenMeshEffect Modifier Self");
+    DEG_add_modifier_to_transform_relation(ctx->node, "OpenMfx Modifier Self");
   }
 }
 
@@ -146,7 +145,7 @@ static bool dependsOnNormals(struct ModifierData *md)
 
 static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
   for (int i = 0; i < fxmd->num_extra_inputs; i++) {
     walk(userData, ob, (ID **)&fxmd->extra_inputs[i].connected_object, IDWALK_CB_NOP);
   }
@@ -162,7 +161,7 @@ static void freeRuntimeData(void *runtime_data)
 
 static void freeData(struct ModifierData *md)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
 
   freeRuntimeData(md->runtime);
   md->runtime = NULL;
@@ -257,12 +256,12 @@ static void panel_draw(const bContext *C, Panel *panel)
 
 static void panelRegister(ARegionType *region_type)
 {
-  PanelType *panel_type = modifier_panel_register(region_type, eModifierType_OpenMeshEffect, panel_draw);
+  PanelType *panel_type = modifier_panel_register(region_type, eModifierType_OpenMfx, panel_draw);
 }
 
 static void blendWrite(BlendWriter *writer, const ModifierData *md)
 {
-  const OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+  const OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
 
   printf("At write, extra inputs are:\n");
   for (int i = 0; i < fxmd->num_extra_inputs; ++i) {
@@ -270,18 +269,18 @@ static void blendWrite(BlendWriter *writer, const ModifierData *md)
   }
 
   BLO_write_struct_array(writer,
-                         OpenMeshEffectParameter,
+                         OpenMfxParameter,
                          fxmd->num_parameters,
                          fxmd->parameters);
   BLO_write_struct_array(writer,
-                         OpenMeshEffectInput,
+                         OpenMfxInput,
                          fxmd->num_extra_inputs,
                          fxmd->extra_inputs);
 }
 
 static void blendRead(BlendDataReader *reader, ModifierData *md)
 {
-  OpenMeshEffectModifierData *fxmd = (OpenMeshEffectModifierData *)md;
+  OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
 
   fxmd->parameters = BLO_read_data_address(reader, &fxmd->parameters);
   fxmd->extra_inputs = BLO_read_data_address(reader, &fxmd->extra_inputs);
@@ -308,11 +307,11 @@ static void blendRead(BlendDataReader *reader, ModifierData *md)
   fxmd->effects = NULL;
 }
 
-ModifierTypeInfo modifierType_OpenMeshEffect = {
-    /* name */ "Open Mesh Effect",
-    /* structName */ "OpenMeshEffectModifierData",
-    /* structSize */ sizeof(OpenMeshEffectModifierData),
-    /* srna */ &RNA_OpenMeshEffectModifier,
+ModifierTypeInfo modifierType_OpenMfx = {
+    /* name */ "OpenMfx",
+    /* structName */ "OpenMfxModifierData",
+    /* structSize */ sizeof(OpenMfxModifierData),
+    /* srna */ &RNA_OpenMfxModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
