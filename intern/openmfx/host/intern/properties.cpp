@@ -145,6 +145,7 @@ bool OfxPropertySetStruct::check_property_context(PropertySetContext context, Pr
     return (
       (0 == strcmp(property, kOfxPropLabel) && type == PROP_TYPE_STRING) ||
       (0 == strcmp(property, kOfxInputPropRequestTransform) && type == PROP_TYPE_INT) ||
+      (0 == strcmp(property, kOfxInputPropRequestGeometry) && type == PROP_TYPE_INT) ||
       false
     );
     case PropertySetContext::Host:
