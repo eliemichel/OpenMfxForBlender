@@ -137,6 +137,11 @@ static OfxStatus mainEntry(const char *action,
     if (0 == strcmp(action, kOfxMeshEffectActionCook)) {
         return cook(&gRuntime, (OfxMeshEffectHandle)handle);
     }
+    if (0 == strcmp(action, kOfxMeshEffectActionIsIdentity)) {
+      const OfxPropertySuiteV1 *propertySuite = gRuntime.propertySuite;
+      propertySuite->propSetString(outArgs, kOfxPropName, 0, kOfxMeshMainInput);
+      return kOfxStatOK;
+    }
     return kOfxStatReplyDefault;
 }
 

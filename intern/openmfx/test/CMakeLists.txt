@@ -32,10 +32,10 @@ if(WITH_GTESTS)
     .
   )
 
-  set(ALL_OPENMESHEFFECT_LIBRARIES
-    openmesheffect_openfx
-    openmesheffect_util
-    openmesheffect_host
+  set(LIB
+    OpenMfx
+    openmfx_host
+    openmfx_util
   )
 
   if (MSVC)
@@ -44,7 +44,7 @@ if(WITH_GTESTS)
     add_definitions(-DFULL_LIBRARY_OUTPUT_PATH="${LIBRARY_OUTPUT_PATH}/")
   endif(MSVC)
 
-  BLENDER_SRC_GTEST("openmesheffect_plugin_load" "${SRC}" "${ALL_OPENMESHEFFECT_LIBRARIES}")
-  target_include_directories(openmesheffect_plugin_load_test PRIVATE ${INC})
-  set_property(TARGET openmesheffect_plugin_load_test PROPERTY FOLDER "openmesheffect")
+  BLENDER_SRC_GTEST("openmfx_plugin_load" "${SRC}" "${LIB}")
+  target_include_directories(openmfx_plugin_load_test PRIVATE ${INC})
+  set_property(TARGET openmfx_plugin_load_test PROPERTY FOLDER "OpenMfx")
 endif()

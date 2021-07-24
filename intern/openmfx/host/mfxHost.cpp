@@ -296,5 +296,5 @@ bool ofxhost_is_identity(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance, 
     *shouldCook = false;
     return true;
   }
-  return true;
+  return false;
 }

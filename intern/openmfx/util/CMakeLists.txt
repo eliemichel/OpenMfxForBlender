@@ -41,9 +41,9 @@ set(LIB
   OpenMfx::Core
 )
 
-add_library(Utils "${SRC}")
-target_include_directories(Utils PRIVATE "${INC_PRIV}" PUBLIC "${INC}")
-target_link_libraries(Utils PRIVATE "${LIB}")
+add_library(openmfx_util "${SRC}")
+target_include_directories(openmfx_util PRIVATE "${INC_PRIV}" PUBLIC "${INC}")
+target_link_libraries(openmfx_util PRIVATE "${LIB}")
 
-set_property(TARGET Utils PROPERTY FOLDER "OpenMfx")
-add_library(OpenMfx::Utils ALIAS Utils)
+set_property(TARGET openmfx_util PROPERTY FOLDER "OpenMfx")
+add_library(OpenMfx::Utils ALIAS openmfx_util)

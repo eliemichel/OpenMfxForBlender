@@ -17,7 +17,7 @@
 # ***** END APACHE 2 LICENSE BLOCK *****
 
 set(INC
-  .
+  ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 set(INC_PRIV
@@ -65,9 +65,9 @@ set(LIB
   OpenMfx::Utils
 )
 
-add_library(Host "${SRC}")
-target_include_directories(Host PRIVATE "${INC_PRIV}" PUBLIC "${INC}")
-target_link_libraries(Host PRIVATE "${LIB_PRIV}"  PUBLIC "${LIB}")
+add_library(openmfx_host "${SRC}")
+target_include_directories(openmfx_host PRIVATE "${INC_PRIV}" PUBLIC "${INC}")
+target_link_libraries(openmfx_host PRIVATE "${LIB_PRIV}"  PUBLIC "${LIB}")
 
-set_property(TARGET Host PROPERTY FOLDER "OpenMfx")
-add_library(OpenMfx::Host ALIAS Host)
+set_property(TARGET openmfx_host PROPERTY FOLDER "OpenMfx")
+add_library(OpenMfx::Host ALIAS openmfx_host)

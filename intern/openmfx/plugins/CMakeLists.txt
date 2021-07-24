@@ -24,7 +24,7 @@ macro(MFX_PLUGIN TARGET SRC LIB)
 	add_library(${TARGET} SHARED ${SRC})
 	target_include_directories(${TARGET} PRIVATE "${INC}")
 	target_link_libraries(${TARGET} PRIVATE "${LIB}")
-	set_property(TARGET ${TARGET} PROPERTY FOLDER "openmesheffect")
+	set_property(TARGET ${TARGET} PROPERTY FOLDER "OpenMfx")
 	set_target_properties(${TARGET} PROPERTIES SUFFIX ".ofx" PREFIX "")
 endmacro()
 
