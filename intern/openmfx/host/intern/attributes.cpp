@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 Elie Michel
+ * Copyright 2019-2021 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,12 @@
  */
 
 #include "attributes.h"
+#include "propertySuite.h"
+#include "ofxMeshEffect.h"
 
 #include <cstring>
+
+using namespace OpenMfx;
 
 // // OfxMeshAttributeStruct
 
@@ -24,96 +28,145 @@ OfxAttributeStruct::OfxAttributeStruct()
     : properties(PropertySetContext::Attrib)
 {}
 
-OfxAttributeStruct::~OfxAttributeStruct()
-{
-  delete[] name;
-}
-
 void OfxAttributeStruct::set_name(const char *name)
 {
-  // deep copy attribute name
-  this->name = new char[strlen(name) + 1];
-  strcpy(this->name, name);
+    m_name = std::string(name);
 }
 
 void OfxAttributeStruct::deep_copy_from(const OfxAttributeStruct &other)
 {
-  // deep string copy
-  this->name = new char[strlen(other.name) + 1];
-  strcpy(this->name, other.name);
-
-  this->attachment = other.attachment;
-  this->properties.deep_copy_from(other.properties);
+  m_name = other.m_name;
+  m_attachment = other.m_attachment;
+  
+  properties.deep_copy_from(other.properties);
 }
 
-// // OfxAttributeSetStruct
-
-OfxAttributeSetStruct::OfxAttributeSetStruct()
+AttributeType OfxAttributeStruct::type()
 {
-  num_attributes = 0;
-  attributes = nullptr;
-}
+    char* stringType;
+    propGetString(&properties, kOfxMeshAttribPropType, 0, &stringType);
 
-OfxAttributeSetStruct::~OfxAttributeSetStruct()
-{
-  for (int i = 0; i < num_attributes; ++i) {
-    delete attributes[i];
-  }
-  num_attributes = 0;
-  if (nullptr != attributes) {
-    delete[] attributes;
-    attributes = nullptr;
-  }
-}
-
-int OfxAttributeSetStruct::find(AttributeAttachment attachment, const char *attribute) const
-{
-  for (int i = 0 ; i < this->num_attributes ; ++i) {
-    if (this->attributes[i]->attachment == attachment
-      && 0 == strcmp(this->attributes[i]->name, attribute)) {
-      return i;
+    if (0 == strcmp(stringType, kOfxMeshAttribTypeUByte)) {
+        return AttributeType::UByte;
     }
-  }
-  return -1;
-}
-
-void OfxAttributeSetStruct::append(int count)
-{
-  int old_num_attributes = this->num_attributes;
-  OfxAttributeStruct **old_attributes = this->attributes;
-  this->num_attributes += count;
-  this->attributes = new OfxAttributeStruct*[num_attributes];
-  for (int i = 0; i < this->num_attributes; ++i) {
-    OfxAttributeStruct *attribute;
-    if (i < old_num_attributes) {
-      attribute = old_attributes[i];
-    } else {
-      attribute = new OfxAttributeStruct();
+    else if (0 == strcmp(stringType, kOfxMeshAttribTypeInt)) {
+        return AttributeType::Int;
     }
-    this->attributes[i] = attribute;
-  }
-  if (NULL != old_attributes) {
-    delete[] old_attributes;
-  }
+    else if (0 == strcmp(stringType, kOfxMeshAttribTypeFloat)) {
+        return AttributeType::Float;
+    }
+    else {
+        return AttributeType::Invalid;
+    }
 }
 
-int OfxAttributeSetStruct::ensure(AttributeAttachment attachment, const char *attribute)
+void OfxAttributeStruct::setIndex(const Index& index)
 {
-  int i = find(attachment, attribute);
-  if (i == -1) {
-    append(1);
-    i = this->num_attributes - 1;
-    this->attributes[i]->attachment = attachment;
-    this->attributes[i]->set_name(attribute);
-  }
-  return i;
+    m_attachment = index.first;
+    m_name = index.second;
 }
 
-void OfxAttributeSetStruct::deep_copy_from(const OfxAttributeSetStruct &other)
+OfxAttributeStruct::Index OfxAttributeStruct::index() const
 {
-  append(other.num_attributes);
-  for (int i = 0 ; i < this->num_attributes ; ++i) {
-    this->attributes[i]->deep_copy_from(*other.attributes[i]);
-  }
+    return std::make_pair(m_attachment, m_name);
 }
 
+AttributeAttachment OfxAttributeStruct::attachmentAsEnum(const char* mfxAttachment)
+{
+    if (0 == strcmp(mfxAttachment, kOfxMeshAttribPoint)) {
+        return AttributeAttachment::Point;
+    }
+    if (0 == strcmp(mfxAttachment, kOfxMeshAttribCorner)) {
+        return AttributeAttachment::Corner;
+    }
+    if (0 == strcmp(mfxAttachment, kOfxMeshAttribFace)) {
+        return AttributeAttachment::Face;
+    }
+    if (0 == strcmp(mfxAttachment, kOfxMeshAttribMesh)) {
+        return AttributeAttachment::Mesh;
+    }
+    printf("Warning: unknown attachment type: %s\n", mfxAttachment);
+    return AttributeAttachment::Invalid;
+}
+
+AttributeType OfxAttributeStruct::typeAsEnum(const char* mfxType)
+{
+    if (0 == strcmp(mfxType, kOfxMeshAttribTypeUByte)) {
+        return AttributeType::UByte;
+    }
+    if (0 == strcmp(mfxType, kOfxMeshAttribTypeInt)) {
+        return AttributeType::Int;
+    }
+    if (0 == strcmp(mfxType, kOfxMeshAttribTypeFloat)) {
+        return AttributeType::Float;
+    }
+    printf("Warning: unknown attribute type: %s\n", mfxType);
+    return AttributeType::Invalid;
+}
+
+int OfxAttributeStruct::byteSizeOf(AttributeType type)
+{
+    switch (type)
+    {
+    case AttributeType::UByte:
+        return sizeof(unsigned char);
+    case AttributeType::Int:
+        return sizeof(int);
+    case AttributeType::Float:
+        return sizeof(float);
+    default:
+        printf("Error: unsupported attribute type: %d\n", type);
+        return 0;
+    }
+}
+
+bool OfxAttributeStruct::copy_data_from(const OfxAttributeStruct& source, int start, int count)
+{
+    AttributeType sourceType = typeAsEnum(source.properties[kOfxMeshAttribPropType].value[0].as_char);
+    AttributeType destinationType = typeAsEnum(properties[kOfxMeshAttribPropType].value[0].as_char);
+
+    int sourceComponentCount = source.properties[kOfxMeshAttribPropComponentCount].value[0].as_int;
+    int destinationComponentCount = properties[kOfxMeshAttribPropComponentCount].value[0].as_int;
+
+    char* sourceData = (char*)source.properties[kOfxMeshAttribPropData].value[0].as_pointer;
+    char* destinationData = (char*)properties[kOfxMeshAttribPropData].value[0].as_pointer;
+
+    int sourceStride = source.properties[kOfxMeshAttribPropStride].value[0].as_int;
+    int destinationStride = properties[kOfxMeshAttribPropStride].value[0].as_int;
+
+    // TODO: use at least OpenMP
+    int componentCount = std::min(sourceComponentCount, destinationComponentCount);
+
+    if (sourceType == destinationType)
+    {
+        size_t componentByteSize = byteSizeOf(sourceType);
+        if (componentByteSize == 0) return false;
+
+        for (int i = 0; i < count; ++i) {
+            const void* src = (void*)&sourceData[(start + i) * sourceStride];
+            void* dst = (void*)&destinationData[(start + i) * destinationStride];
+            memcpy(dst, src, componentCount * componentByteSize);
+        }
+        return true;
+    }
+
+    switch (destinationType) {
+    case AttributeType::Float:
+        switch (sourceType) {
+        case AttributeType::UByte:
+            for (int i = 0; i < count; ++i) {
+                const unsigned char* src = (unsigned char*)&sourceData[(start + i) * sourceStride];
+                float* dst = (float*)&destinationData[(start + i) * destinationStride];
+                for (int k = 0; k < componentCount; ++k)
+                {
+                    dst[k] = (float)src[k] / 255.0f;
+                }
+            }
+            return true;
+            break;
+        }
+        break;
+    }
+    printf("Warning: unsupported input/output type combinason in copyAttribute: %d -> %d\n", sourceType, destinationType);
+    return false;
+}

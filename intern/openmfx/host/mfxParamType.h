@@ -27,7 +27,7 @@
  * efficiency reasons.
  * TODO: Expose to PYTHON
  */
-typedef enum ParamType {
+enum ParamType {
     PARAM_TYPE_UNKNOWN = -1,
     PARAM_TYPE_INTEGER,
     PARAM_TYPE_INTEGER_2D,
@@ -44,6 +44,6 @@ typedef enum ParamType {
     PARAM_TYPE_PUSH_BUTTON,
     PARAM_TYPE_GROUP,
     PARAM_TYPE_PAGE,
-} ParamType;
+};
 
 #endif __MFX_PARAM_TYPE_H__

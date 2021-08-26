@@ -117,6 +117,18 @@ PluginRegistryPoolEntry *PluginRegistryPool::find(const char *filename) const
   return NULL;
 }
 
+PluginRegistryPoolEntry* PluginRegistryPool::find(const PluginRegistry* registry) const
+{
+    PluginRegistryPoolEntry* it = m_first_entry;
+    while (NULL != it) {
+        if (&it->registry() == registry) {
+            return it;
+        }
+        it = it->next();
+    }
+    return NULL;
+}
+
 PluginRegistryPoolEntry *PluginRegistryPool::add(const char *filename)
 {
   // Create and init entry

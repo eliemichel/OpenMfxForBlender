@@ -34,7 +34,12 @@ struct OfxMeshStruct {
   OfxMeshStruct(const OfxMeshStruct &) = delete;
   OfxMeshStruct &operator=(const OfxMeshStruct &) = delete;
 
+  OfxMeshStruct(OfxMeshStruct&&) = default;
+  OfxMeshStruct& operator=(OfxMeshStruct&&) = default;
+
   void deep_copy_from(const OfxMeshStruct &other);
+
+  void free_owned_data();
 
  public:
   OfxPropertySetStruct properties;

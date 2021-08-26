@@ -22,6 +22,7 @@
 #ifndef __MFX_MESHEFFECT_H__
 #define __MFX_MESHEFFECT_H__
 
+#include "ofxCore.h"
 #include "ofxMeshEffect.h"
 #include "ofxExtras.h"
 
@@ -34,7 +35,7 @@
 
 struct OfxMeshEffectStruct {
  public:
-  OfxMeshEffectStruct(OfxHost *host);
+  OfxMeshEffectStruct(OfxHost *host, OfxPlugin* plugin);
   ~OfxMeshEffectStruct();
 
   // Disable copy, we handle it explicitely
@@ -48,6 +49,7 @@ struct OfxMeshEffectStruct {
   OfxPropertySetStruct properties;
   OfxParamSetStruct parameters;
   OfxHost *host; // weak pointer, do not deep copy
+  OfxPlugin* plugin; // weak pointer, do not deep copy
 
   // Only the last persistent message is stored
   OfxMessageType messageType;

@@ -22,7 +22,9 @@
 #ifndef __MFX_PROPERTIES_H__
 #define __MFX_PROPERTIES_H__
 
-#include <stdbool.h>
+#include "Collection.h"
+
+#include <string>
 
 union OfxPropertyValueStruct {
     void *as_pointer;
@@ -34,35 +36,45 @@ union OfxPropertyValueStruct {
 
 struct OfxPropertyStruct {
  public:
-  OfxPropertyStruct();
-  ~OfxPropertyStruct();
+  OfxPropertyStruct() {}
 
   // Disable copy, we handle it explicitely
   OfxPropertyStruct(const OfxPropertyStruct &) = delete;
   OfxPropertyStruct &operator=(const OfxPropertyStruct &) = delete;
 
+  OfxPropertyStruct(OfxPropertyStruct&&) = default;
+  OfxPropertyStruct& operator=(OfxPropertyStruct&&) = default;
 
   void deep_copy_from(const OfxPropertyStruct &other);
 
+  // For Collection
+  using Index = std::string;
+  void setIndex(const Index& index) { m_name = index; }
+  Index index() const { return m_name; }
+
  public:
-  const char *name;
   OfxPropertyValueStruct value[4];
+
+private:
+    std::string m_name;
 };
 
+namespace OpenMfx {
+
 enum PropertyType {
-	PROP_TYPE_POINTER,
-	PROP_TYPE_STRING,
-	PROP_TYPE_DOUBLE,
-	PROP_TYPE_INT,
+  PROP_TYPE_POINTER,
+  PROP_TYPE_STRING,
+  PROP_TYPE_DOUBLE,
+  PROP_TYPE_INT,
 };
 
 // TODO: use kOfxPropType instead
 enum class PropertySetContext {
-  Host, // kOfxTypeMeshEffectHost
-  MeshEffect, // kOfxTypeMeshEffect, kOfxTypeMeshEffectInstance
-  Input, // kOfxTypeMeshEffectInput
-  Mesh, // kOfxTypeMesh
-  Param, // kOfxTypeParameter
+  Host,        // kOfxTypeMeshEffectHost
+  MeshEffect,  // kOfxTypeMeshEffect, kOfxTypeMeshEffectInstance
+  Input,       // kOfxTypeMeshEffectInput
+  Mesh,        // kOfxTypeMesh
+  Param,       // kOfxTypeParameter
   Attrib,
   ActionIdentityIn,
   ActionIdentityOut,
@@ -70,23 +82,16 @@ enum class PropertySetContext {
   // kOfxTypeParameterInstance
 };
 
+}  // namespace OpenMfx
+
 // // OfxPropertySetStruct
 
-struct OfxPropertySetStruct {
+struct OfxPropertySetStruct : OpenMfx::Collection<OfxPropertyStruct> {
+  using PropertySetContext = OpenMfx::PropertySetContext;
+  using PropertyType = OpenMfx::PropertyType;
+
  public:
   OfxPropertySetStruct(PropertySetContext context);
-  ~OfxPropertySetStruct();
-
-  // Disable copy, we handle it explicitely
-  OfxPropertySetStruct(const OfxPropertySetStruct &) = delete;
-  OfxPropertySetStruct &operator=(const OfxPropertySetStruct &) = delete;
-
-  int find_property(const char *property) const;
-  void append_properties(int count);
-  void remove_property(int index);
-  int ensure_property(const char *property);
-
-  void deep_copy_from(const OfxPropertySetStruct &other);
 
  public:
   static bool check_property_context(PropertySetContext context,
@@ -95,8 +100,6 @@ struct OfxPropertySetStruct {
 
  public:
   PropertySetContext context; // TODO: use this rather than generic property set objects
-  int num_properties;
-  OfxPropertyStruct **properties;
 };
 
 #endif // __MFX_PROPERTIES_H__

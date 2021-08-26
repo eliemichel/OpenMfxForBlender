@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2021 Elie Michel
+ * Copyright 2019-2020 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 
 #include "propertySuite.h"
 #include "properties.h"
+
+using namespace OpenMfx;
 
 // // Property Suite Entry Points
 
@@ -44,16 +46,17 @@ OfxStatus propSetPointer(OfxPropertySetHandle properties,
                          int index,
                          void *value)
 {
+    OfxPropertySetStruct& props = *properties;
+
   if (false == OfxPropertySetStruct::check_property_context(
-                   properties->context, PROP_TYPE_POINTER, property)) {
+      props.context, PROP_TYPE_POINTER, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = properties->ensure_property(property);
-  // FIXME: there is an obvious problem here for prop values that are not global strings...
-  properties->properties[i]->value[index].as_pointer = value;
+  int i = props.ensure(property);
+  props[i].value[index].as_pointer = value;
   return kOfxStatOK;
 }
 
@@ -62,15 +65,18 @@ OfxStatus propSetString(OfxPropertySetHandle properties,
                         int index,
                         const char *value)
 {
+    OfxPropertySetStruct& props = *properties;
+
   if (false == OfxPropertySetStruct::check_property_context(
-                   properties->context, PROP_TYPE_STRING, property)) {
+      props.context, PROP_TYPE_STRING, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = properties->ensure_property(property);
-  properties->properties[i]->value[index].as_const_char = value;
+
+  int i = props.ensure(property);
+  props[i].value[index].as_const_char = value;
   return kOfxStatOK;
 }
 
@@ -79,15 +85,17 @@ OfxStatus propSetDouble(OfxPropertySetHandle properties,
                         int index,
                         double value)
 {
+    OfxPropertySetStruct& props = *properties;
   if (false == OfxPropertySetStruct::check_property_context(
-                   properties->context, PROP_TYPE_DOUBLE, property)) {
+                   props.context, PROP_TYPE_DOUBLE, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = properties->ensure_property(property);
-  properties->properties[i]->value[index].as_double = value;
+
+  int i = props.ensure(property);
+  props[i].value[index].as_double = value;
   return kOfxStatOK;
 }
 
@@ -100,8 +108,10 @@ OfxStatus propSetInt(OfxPropertySetHandle properties, const char *property, int 
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = properties->ensure_property(property);
-  properties->properties[i]->value[index].as_int = value;
+
+  OfxPropertySetStruct& props = *properties;
+  int i = props.ensure(property);
+  props[i].value[index].as_int = value;
   return kOfxStatOK;
 }
 
@@ -166,15 +176,16 @@ OfxStatus propGetPointer(OfxPropertySetHandle properties,
                          int index,
                          void **value)
 {
+    OfxPropertySetStruct& props = *properties;
   if (false == OfxPropertySetStruct::check_property_context(
-                   properties->context, PROP_TYPE_POINTER, property)) {
+                   props.context, PROP_TYPE_POINTER, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = properties->ensure_property(property);
-  *value = properties->properties[i]->value[index].as_pointer;
+  int i = props.ensure(property);
+  *value = props[i].value[index].as_pointer;
   return kOfxStatOK;
 }
 
@@ -183,15 +194,16 @@ OfxStatus propGetString(OfxPropertySetHandle properties,
                         int index,
                         char **value)
 {
+    OfxPropertySetStruct& props = *properties;
   if (false == OfxPropertySetStruct::check_property_context(
-                   properties->context, PROP_TYPE_STRING, property)) {
+                   props.context, PROP_TYPE_STRING, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = properties->ensure_property(property);
-  *value = properties->properties[i]->value[index].as_char;
+  int i = props.ensure(property);
+  *value = props[i].value[index].as_char;
   return kOfxStatOK;
 }
 
@@ -200,29 +212,31 @@ OfxStatus propGetDouble(OfxPropertySetHandle properties,
                         int index,
                         double *value)
 {
+    OfxPropertySetStruct& props = *properties;
   if (false == OfxPropertySetStruct::check_property_context(
-                   properties->context, PROP_TYPE_DOUBLE, property)) {
+                   props.context, PROP_TYPE_DOUBLE, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = properties->ensure_property(property);
-  *value = properties->properties[i]->value[index].as_double;
+  int i = props.ensure(property);
+  *value = props[i].value[index].as_double;
   return kOfxStatOK;
 }
 
 OfxStatus propGetInt(OfxPropertySetHandle properties, const char *property, int index, int *value)
 {
+    OfxPropertySetStruct& props = *properties;
   if (false ==
-      OfxPropertySetStruct::check_property_context(properties->context, PROP_TYPE_INT, property)) {
+      OfxPropertySetStruct::check_property_context(props.context, PROP_TYPE_INT, property)) {
     return kOfxStatErrBadHandle;
   }
   if (index < 0 || index >= 4) {
     return kOfxStatErrBadIndex;
   }
-  int i = properties->ensure_property(property);
-  *value = properties->properties[i]->value[index].as_int;
+  int i = props.ensure(property);
+  *value = props[i].value[index].as_int;
   return kOfxStatOK;
 }
 

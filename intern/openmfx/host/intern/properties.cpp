@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2021 Elie Michel
+ * Copyright 2019 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +16,23 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdexcept>
 
 #include "ofxMeshEffect.h" // for kOfxMeshEffectPropContext
 #include "ofxExtras.h" // for kOfxHostPropBeforeMeshReleaseCb
 
-#include "util/memory_util.h"
-
+#include "Allocator.h"
 #include "properties.h"
+
+using namespace OpenMfx;
 
 // OFX PROPERTIES SUITE
 
 // // OfxPropertyStruct
 
-OfxPropertyStruct::OfxPropertyStruct()
-{
-}
-
-OfxPropertyStruct::~OfxPropertyStruct()
-{
-}
-
 void OfxPropertyStruct::deep_copy_from(const OfxPropertyStruct &other)
 {
-  this->name = other.name;  // weak pointer?
+  m_name = other.m_name;  // weak pointer?
   this->value[0] = other.value[0];
   this->value[1] = other.value[1];
   this->value[2] = other.value[2];
@@ -49,88 +43,7 @@ void OfxPropertyStruct::deep_copy_from(const OfxPropertyStruct &other)
 
 OfxPropertySetStruct::OfxPropertySetStruct(PropertySetContext context)
 {
-  num_properties = 0;
-  properties = NULL;
   this->context = context;
-}
-
-OfxPropertySetStruct::~OfxPropertySetStruct()
-{
-  for (int i = 0; i < this->num_properties; ++i) {
-    free_array(this->properties[i]);
-  }
-  this->num_properties = 0;
-  if (NULL != this->properties) {
-    free_array(this->properties);
-    this->properties = NULL;
-  }
-}
-
-int OfxPropertySetStruct::find_property(const char *property) const
-{
-  for (int i = 0 ; i < this->num_properties ; ++i) {
-    if (0 == strcmp(this->properties[i]->name, property)) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-void OfxPropertySetStruct::append_properties(int count)
-{
-  int old_num_properties = this->num_properties;
-  OfxPropertyStruct **old_properties = this->properties;
-  this->num_properties += count;
-  this->properties = (OfxPropertyStruct **)malloc_array(
-      sizeof(OfxPropertyStruct *), this->num_properties, "properties");
-  for (int i = 0; i < this->num_properties; ++i) {
-    this->properties[i] = i < old_num_properties ?
-                                    old_properties[i] :
-                                    (OfxPropertyStruct *)malloc_array(
-                                        sizeof(OfxPropertyStruct), 1, "property");
-  }
-  if (NULL != old_properties) {
-    free_array(old_properties);
-  }
-}
-
-void OfxPropertySetStruct::remove_property(int index)
-{
-  OfxPropertyStruct **old_properties = this->properties;
-  this->num_properties -= 1;
-  this->properties = (OfxPropertyStruct **)malloc_array(
-      sizeof(OfxPropertyStruct *), this->num_properties, "properties");
-  for (int i = 0; i < this->num_properties; ++i) {
-    this->properties[i] = i < index ? old_properties[i] : old_properties[i + 1];
-  }
-  if (NULL != old_properties) {
-    free_array(old_properties[index]);
-    free_array(old_properties);
-  }
-}
-
-int OfxPropertySetStruct::ensure_property(const char *property)
-{
-  int i = find_property(property);
-  if (i == -1) {
-    append_properties(1);
-    i = this->num_properties - 1;
-    this->properties[i]->name = property;
-  }
-  return i;
-}
-
-void OfxPropertySetStruct::deep_copy_from(const OfxPropertySetStruct &other)
-{
-  while (num_properties > 0) {
-    remove_property(0);
-  }
-
-  append_properties(other.num_properties);
-  for (int i = 0 ; i < this->num_properties ; ++i) {
-    this->properties[i]->deep_copy_from(*other.properties[i]);
-  }
-  this->context = other.context;
 }
 
 bool OfxPropertySetStruct::check_property_context(PropertySetContext context, PropertyType type, const char *property)
@@ -144,14 +57,13 @@ bool OfxPropertySetStruct::check_property_context(PropertySetContext context, Pr
     case PropertySetContext::Input:
     return (
       (0 == strcmp(property, kOfxPropLabel) && type == PROP_TYPE_STRING) ||
-      (0 == strcmp(property, kOfxInputPropRequestTransform) && type == PROP_TYPE_INT) ||
-      (0 == strcmp(property, kOfxInputPropRequestGeometry) && type == PROP_TYPE_INT) ||
       false
     );
     case PropertySetContext::Host:
     return (
       (0 == strcmp(property, kOfxHostPropBeforeMeshReleaseCb) && type == PROP_TYPE_POINTER) ||
       (0 == strcmp(property, kOfxHostPropBeforeMeshGetCb) && type == PROP_TYPE_POINTER) ||
+      (0 == strcmp(property, kOfxMeshPropHostHandle) && type == PROP_TYPE_POINTER) ||
       false
     );
     case PropertySetContext::Mesh:
@@ -163,8 +75,8 @@ bool OfxPropertySetStruct::check_property_context(PropertySetContext context, Pr
       (0 == strcmp(property, kOfxMeshPropFaceCount)    && type == PROP_TYPE_INT)     ||
       (0 == strcmp(property, kOfxMeshPropNoLooseEdge)  && type == PROP_TYPE_INT)     ||
       (0 == strcmp(property, kOfxMeshPropConstantFaceSize) && type == PROP_TYPE_INT) ||
-      (0 == strcmp(property, kOfxMeshPropTransformMatrix) && type == PROP_TYPE_POINTER) ||
       (0 == strcmp(property, kOfxMeshPropAttributeCount) && type == PROP_TYPE_INT) ||
+      (0 == strcmp(property, kOfxMeshPropTransformMatrix) && type == PROP_TYPE_POINTER) ||
       false
     );
     case PropertySetContext::Param:

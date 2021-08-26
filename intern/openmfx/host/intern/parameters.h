@@ -78,15 +78,24 @@ struct OfxParamSetStruct {
 
   void deep_copy_from(const OfxParamSetStruct &other);
 
+  int count() const { return num_parameters; }
+  OfxParamStruct& operator[](int i) { return *parameters[i]; }
+
  public:
-  int num_parameters;
-  OfxParamStruct **parameters;
   OfxPropertySetStruct *effect_properties; // weak pointer
+
+private:
+    int num_parameters;
+    OfxParamStruct** parameters;
 };
 
 // // Utils
 
+namespace OpenMfx {
+
 ParamType parse_parameter_type(const char *str);
 size_t parameter_type_dimensions(ParamType type);
+
+}  // namespace OpenMfx
 
 #endif // __MFX_PARAMETERS_H__

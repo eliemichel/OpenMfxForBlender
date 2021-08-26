@@ -16,18 +16,12 @@
 #
 # ***** END APACHE 2 LICENSE BLOCK *****
 
-set(INC
-  ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-set(INC_PRIV
-)
-
 set(SRC
   mfxHost.cpp
   mfxHost.h
   mfxPluginRegistry.h
   mfxPluginRegistryPool.h
+  intern/Allocator.h
   intern/attributes.h
   intern/attributes.cpp
   intern/properties.h
@@ -46,6 +40,9 @@ set(SRC
   intern/mfxPluginRegistryPool.cpp
   intern/PluginRegistryPool.h
   intern/PluginRegistryPool.cpp
+  intern/MfxHost.h
+  intern/MfxHost.cpp
+  intern/Collection.h
 
   intern/parameterSuite.h
   intern/parameterSuite.cpp
@@ -55,19 +52,19 @@ set(SRC
   intern/meshEffectSuite.cpp
   intern/messageSuite.h
   intern/messageSuite.cpp
+
+  util/binary_util.h
+  intern/util/binary_util.c
+  intern/util/ofx_util.h
+  intern/util/ofx_util.c
 )
 
-set(LIB_PRIV
-  OpenMfx::Core
+add_library(openmesheffect_host "${SRC}")
+target_include_directories(openmesheffect_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(openmesheffect_host
+  PUBLIC
+  OpenMeshEffect::Core
 )
 
-set(LIB
-  OpenMfx::Utils
-)
-
-add_library(openmfx_host "${SRC}")
-target_include_directories(openmfx_host PRIVATE "${INC_PRIV}" PUBLIC "${INC}")
-target_link_libraries(openmfx_host PRIVATE "${LIB_PRIV}"  PUBLIC "${LIB}")
-
-set_property(TARGET openmfx_host PROPERTY FOLDER "OpenMfx")
-add_library(OpenMfx::Host ALIAS openmfx_host)
+set_property(TARGET openmesheffect_host PROPERTY FOLDER "OpenMeshEffect")
+add_library(OpenMeshEffect::Host ALIAS openmesheffect_host)

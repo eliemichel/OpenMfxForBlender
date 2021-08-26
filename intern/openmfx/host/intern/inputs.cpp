@@ -15,30 +15,21 @@
  */
 
 #include "inputs.h"
-#include "ofxMeshEffect.h"
 
 #include <cstring>
+
+using namespace OpenMfx;
 
 // // OfxInputStruct
 
 OfxMeshInputStruct::OfxMeshInputStruct()
     : properties(PropertySetContext::Input)
     , host(nullptr)
-{
-  int i;
-  i = properties.ensure_property(kOfxInputPropRequestGeometry);
-  properties.properties[i]->value[0].as_int = 1;
-
-  i = properties.ensure_property(kOfxInputPropRequestTransform);
-  properties.properties[i]->value[0].as_int = 0;
-}
-
-OfxMeshInputStruct::~OfxMeshInputStruct()
 {}
 
 void OfxMeshInputStruct::deep_copy_from(const OfxMeshInputStruct &other)
 {
-  this->name = other.name;  // weak pointer?
+  this->m_name = other.m_name;
   this->properties.deep_copy_from(other.properties);
   this->mesh.deep_copy_from(other.mesh);
   this->host = other.host;  // not deep copied, as this is a weak pointer
@@ -48,71 +39,10 @@ void OfxMeshInputStruct::deep_copy_from(const OfxMeshInputStruct &other)
 
 OfxMeshInputSetStruct::OfxMeshInputSetStruct()
 {
-  num_inputs = 0;
-  inputs = nullptr;
   host = nullptr;
 }
 
-OfxMeshInputSetStruct::~OfxMeshInputSetStruct()
+void OfxMeshInputSetStruct::onNewItem(OfxMeshInputStruct & input)
 {
-  for (int i = 0; i < num_inputs; ++i) {
-    delete inputs[i];
-  }
-  num_inputs = 0;
-  if (nullptr != inputs) {
-    delete[] inputs;
-    inputs = nullptr;
-  }
+  input.host = host;
 }
-
-int OfxMeshInputSetStruct::find(const char *input) const
-{
-  for (int i = 0 ; i < this->num_inputs ; ++i) {
-    if (0 == strcmp(this->inputs[i]->name, input)) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-void OfxMeshInputSetStruct::append(int count)
-{
-  int old_num_input = this->num_inputs;
-  OfxMeshInputStruct **old_inputs = this->inputs;
-  this->num_inputs += count;
-  this->inputs = new OfxMeshInputStruct*[this->num_inputs];
-  for (int i = 0; i < this->num_inputs; ++i) {
-    OfxMeshInputStruct *input;
-    if (i < old_num_input) {
-      input = old_inputs[i];
-    } else {
-      input = new OfxMeshInputStruct();
-      input->host = this->host;
-    }
-    this->inputs[i] = input;
-  }
-  if (NULL != old_inputs) {
-    delete[] old_inputs;
-  }
-}
-
-int OfxMeshInputSetStruct::ensure(const char *input)
-{
-  int i = find(input);
-  if (i == -1) {
-    append(1);
-    i = this->num_inputs - 1;
-    this->inputs[i]->name = input;
-  }
-  return i;
-}
-
-void OfxMeshInputSetStruct::deep_copy_from(const OfxMeshInputSetStruct &other)
-{
-  append(other.num_inputs);
-  for (int i = 0 ; i < this->num_inputs ; ++i) {
-    this->inputs[i]->deep_copy_from(*other.inputs[i]);
-  }
-  this->host = other.host; // not deep copied, as this is a weak pointer
-}
-

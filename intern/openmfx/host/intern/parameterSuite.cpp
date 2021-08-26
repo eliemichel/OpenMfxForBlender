@@ -19,6 +19,8 @@
 
 #include <stdarg.h>
 
+using namespace OpenMfx;
+
 // //Parameter Suite Entry Points
 
 const OfxParameterSuiteV1 gParameterSuiteV1 = {
@@ -51,9 +53,9 @@ OfxStatus paramDefine(OfxParamSetHandle paramSet,
         return kOfxStatErrExists;
     }
     i = paramSet->ensure(name);
-    paramSet->parameters[i]->set_type(parse_parameter_type(paramType));
+    (*paramSet)[i].set_type(parse_parameter_type(paramType));
     if (NULL != propertySet) {
-        *propertySet = &paramSet->parameters[i]->properties;
+        *propertySet = &((*paramSet)[i].properties);
     }
     return kOfxStatOK;
 }
@@ -66,9 +68,9 @@ OfxStatus paramGetHandle(OfxParamSetHandle paramSet,
     if (-1 == i) {
         return kOfxStatErrUnknown; // parameter not found
     }
-    *param = paramSet->parameters[i];
+    *param = &(*paramSet)[i];
     if (NULL != propertySet) {
-        *propertySet = &paramSet->parameters[i]->properties;
+        *propertySet = &(*paramSet)[i].properties;
     }
     return kOfxStatOK;
 }

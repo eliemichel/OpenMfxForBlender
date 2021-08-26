@@ -77,6 +77,7 @@ class PluginRegistryPool {
   PluginRegistryPool &operator=(const PluginRegistryPool &) = delete;
 
   PluginRegistryPoolEntry *find(const char *filename) const;
+  PluginRegistryPoolEntry* find(const PluginRegistry* registry) const;
   PluginRegistryPoolEntry *add(const char *filename);
   void remove(PluginRegistryPoolEntry *entry);
 

@@ -19,10 +19,14 @@
 
 #include "ofxMeshEffect.h"
 
-#include "util/memory_util.h"
-#include "util/path_util.h"
-
+#include "Allocator.h"
 #include "mfxPluginRegistry.h"
+
+#ifdef _WIN32
+#  define PATH_DIR_SEP '\\'
+#else // _WIN32
+#  define PATH_DIR_SEP '/'
+#endif // _WIN32
 
 /**
  * Initialize a plugin registry before anything else.
@@ -47,8 +51,8 @@ static void registry_init_plugins(PluginRegistry *registry) {
   printf("Found %d plugins.\n", n);
 
   if (n > 0) {
-    registry->plugins = (OfxPlugin **)malloc_array(sizeof(OfxPlugin *), n, "mfx plugins");
-    registry->status = (OfxPluginStatus*)malloc_array(sizeof(OfxPluginStatus), n, "mfx plugins status");
+    registry->plugins = Allocator::malloc<OfxPlugin*>(n, "mfx plugins");
+    registry->status = Allocator::malloc<OfxPluginStatus>(n, "mfx plugins status");
   }
 
   // 1. Count number of supported plugins
@@ -80,14 +84,14 @@ static void registry_init_plugins(PluginRegistry *registry) {
   if (registry->num_plugins > 0) {
     OfxPlugin **old_plugins = registry->plugins;
     OfxPluginStatus *old_status = registry->status;
-    registry->plugins = (OfxPlugin**)malloc_array(sizeof(OfxPlugin*), registry->num_plugins, "mfx plugins");
-    registry->status = (OfxPluginStatus*)malloc_array(sizeof(OfxPluginStatus), registry->num_plugins, "mfx plugins status");
+    registry->plugins = Allocator::malloc<OfxPlugin*>(registry->num_plugins, "mfx plugins");
+    registry->status = Allocator::malloc<OfxPluginStatus>(registry->num_plugins, "mfx plugins status");
     for (i = 0 ; i < registry->num_plugins ; ++i) {
       registry->plugins[i] = old_plugins[i];
       registry->status[i] = old_status[i];
     }
-    free_array(old_plugins);
-    free_array(old_status);
+    Allocator::free(old_plugins);
+    Allocator::free(old_status);
   }
 }
 
@@ -124,11 +128,11 @@ bool load_registry(PluginRegistry *registry, const char *ofx_filepath) {
   }
 
   if (NULL != registry->setBundleDirectory) {
-    char *bundle_directory = (char*)malloc_array(sizeof(char), strlen(ofx_filepath) + 1, "bundle directory");
+    char *bundle_directory = Allocator::malloc<char>(strlen(ofx_filepath) + 1, "bundle directory");
     strcpy(bundle_directory, ofx_filepath);
     *strrchr(bundle_directory, PATH_DIR_SEP) = '\0';
     registry->setBundleDirectory(bundle_directory);
-    free_array(bundle_directory);
+    Allocator::free(bundle_directory);
   }
 
   registry_init_plugins(registry);
@@ -139,11 +143,11 @@ bool load_registry(PluginRegistry *registry, const char *ofx_filepath) {
 void free_registry(PluginRegistry *registry) {
   registry->num_plugins = 0;
   if (NULL != registry->plugins) {
-    free_array(registry->plugins);
+    Allocator::free(registry->plugins);
     registry->plugins = NULL;
   }
   if (NULL != registry->status) {
-    free_array(registry->status);
+      Allocator::free(registry->status);
     registry->status = NULL;
   }
   if (NULL != registry->handle) {

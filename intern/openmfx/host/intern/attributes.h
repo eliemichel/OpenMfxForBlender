@@ -23,6 +23,13 @@
 #define __MFX_ATTRIBUTES_H__
 
 #include "properties.h"
+#include "Collection.h"
+
+#include <vector>
+#include <string>
+#include <utility>
+
+namespace OpenMfx {
 
 enum class AttributeAttachment {
   Invalid = -1,
@@ -32,43 +39,62 @@ enum class AttributeAttachment {
   Mesh,
 };
 
-struct OfxAttributeStruct {
- public:
-  OfxAttributeStruct();
-  ~OfxAttributeStruct();
+enum class AttributeType {
+  Invalid = -1,
+  UByte,  // kOfxMeshAttribTypeUByte
+  Int,    // kOfxMeshAttribTypeInt
+  Float,  // kOfxMeshAttribTypeFloat
+};
 
-  // Disable copy, we handle it explicitely
+}  // namespace OpenMfx
+
+struct OfxAttributeStruct {
+  using AttributeType = OpenMfx::AttributeType;
+  using AttributeAttachment = OpenMfx::AttributeAttachment;
+
+  OfxAttributeStruct();
+
   OfxAttributeStruct(const OfxAttributeStruct &) = delete;
   OfxAttributeStruct &operator=(const OfxAttributeStruct &) = delete;
+
+  OfxAttributeStruct(OfxAttributeStruct &&) = default;
+  OfxAttributeStruct &operator=(OfxAttributeStruct &&) = default;
 
   void set_name(const char *name);
 
   void deep_copy_from(const OfxAttributeStruct &other);
 
+  AttributeType type();
+  AttributeAttachment attachment() const
+  {
+    return m_attachment;
+  }
+  const std::string &name() const
+  {
+    return m_name;
+  }
+
+  bool copy_data_from(const OfxAttributeStruct &source, int start, int count);
+
+  // For Collection
+  using Index = std::pair<AttributeAttachment, std::string>;
+  void setIndex(const Index &index);
+  Index index() const;
+
  public:
-  char *name; // points to memory owned by this object
-  AttributeAttachment attachment;
+  static AttributeAttachment attachmentAsEnum(const char *mfxAttachment);
+  static AttributeType typeAsEnum(const char *mfxType);
+  static int byteSizeOf(AttributeType type);
+
+ public:
   OfxPropertySetStruct properties;
+
+ private:
+  std::string m_name;
+  AttributeAttachment m_attachment = AttributeAttachment::Invalid;
 };
 
-struct OfxAttributeSetStruct {
- public:
-  OfxAttributeSetStruct();
-  ~OfxAttributeSetStruct();
-
-  // Disable copy, we handle it explicitely
-  OfxAttributeSetStruct(const OfxAttributeSetStruct &) = delete;
-  OfxAttributeSetStruct &operator=(const OfxAttributeSetStruct &) = delete;
-
-  int find(AttributeAttachment attachment, const char *attribute) const;
-  void append(int count);
-  int ensure(AttributeAttachment attachment, const char *attribute);
-
-  void deep_copy_from(const OfxAttributeSetStruct &other);
-
- public:
-  int num_attributes;
-  OfxAttributeStruct **attributes;
+struct OfxAttributeSetStruct : OpenMfx::Collection<OfxAttributeStruct> {
 };
 
 #endif // __MFX_ATTRIBUTES_H__

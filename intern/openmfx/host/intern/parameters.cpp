@@ -22,6 +22,8 @@
 #include <cstring>
 #include <cstdio>
 
+using namespace OpenMfx;
+
 // OFX PARAMETERS SUITE
 
 // // OfxParamStruct
@@ -167,7 +169,8 @@ void OfxParamSetStruct::deep_copy_from(const OfxParamSetStruct &other)
 
 // // Utils
 
-ParamType parse_parameter_type(const char *str) {
+ParamType OpenMfx::parse_parameter_type(const char *str)
+{
   if (0 == strcmp(str, kOfxParamTypeInteger)) {
     return PARAM_TYPE_INTEGER;
   }
@@ -216,7 +219,8 @@ ParamType parse_parameter_type(const char *str) {
   return PARAM_TYPE_UNKNOWN;
 }
 
-size_t parameter_type_dimensions(ParamType type) {
+size_t OpenMfx::parameter_type_dimensions(ParamType type)
+{
   switch (type) {
   case PARAM_TYPE_INTEGER:
   case PARAM_TYPE_DOUBLE:

@@ -24,47 +24,61 @@
 
 #include "properties.h"
 #include "mesh.h"
+#include "Collection.h"
 
 #include "ofxCore.h"
+
+#include <string>
 
 struct OfxMeshInputStruct {
  public:
   OfxMeshInputStruct();
-  ~OfxMeshInputStruct();
 
   // Disable copy, we handle it explicitely
   OfxMeshInputStruct(const OfxMeshInputStruct &) = delete;
   OfxMeshInputStruct &operator=(const OfxMeshInputStruct &) = delete;
 
+  OfxMeshInputStruct(OfxMeshInputStruct &&) = default;
+  OfxMeshInputStruct &operator=(OfxMeshInputStruct &&) = default;
+
   void deep_copy_from(const OfxMeshInputStruct &other);
 
+  // For Collection
+  using Index = std::string;
+  void setIndex(const Index &index)
+  {
+    m_name = index;
+  }
+  Index index() const
+  {
+    return m_name;
+  }
+
+  const std::string &name() const
+  {
+    return m_name;
+  }
+
  public:
-  const char *name;
   OfxPropertySetStruct properties;
-  OfxAttributeSetStruct requested_attributes; // not technically attributes, e.g. data info are not used
+  OfxAttributeSetStruct
+      requested_attributes;  // not technically attributes, e.g. data info are not used
   OfxMeshStruct mesh;
-  OfxHost *host; // weak pointer, do not deep copy
+  OfxHost *host;  // weak pointer, do not deep copy
+
+ private:
+  std::string m_name;
 };
 
-struct OfxMeshInputSetStruct {
+struct OfxMeshInputSetStruct : OpenMfx::Collection<OfxMeshInputStruct> {
  public:
   OfxMeshInputSetStruct();
-  ~OfxMeshInputSetStruct();
 
-  // Disable copy, we handle it explicitely
-  OfxMeshInputSetStruct(const OfxMeshInputSetStruct &) = delete;
-  OfxMeshInputSetStruct &operator=(const OfxMeshInputSetStruct &) = delete;
-
-  int find(const char *input) const;
-  void append(int count);
-  int ensure(const char *input);
-
-  void deep_copy_from(const OfxMeshInputSetStruct &other);
+ protected:
+  void onNewItem(OfxMeshInputStruct &input) override;
 
  public:
-  int num_inputs;
-  OfxMeshInputStruct **inputs;
-  OfxHost *host; // weak pointer, do not deep copy
+  OfxHost *host;  // weak pointer, do not deep copy
 };
 
 #endif // __MFX_INPUTS_H__

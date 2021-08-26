@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 Elie Michel
+ * Copyright 2019-2021 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,11 @@
 
 #include <cstring>
 #include <cstdio>
+#include <cassert>
+
+using namespace OpenMfx;
+
+#define MFX_ENSURE(op) assert(kOfxStatOK == op)
 
  // CONVERSION UTILS
 
@@ -78,14 +83,14 @@ OfxStatus inputDefine(OfxMeshEffectHandle meshEffect,
 {
   printf("Defining input '%s' on OfxMeshEffectHandle %p\n", name, meshEffect);
   int i = meshEffect->inputs.ensure(name);
-  meshEffect->inputs.inputs[i]->host = meshEffect->host;
+  meshEffect->inputs[i].host = meshEffect->host;
   propSetPointer(
-      &meshEffect->inputs.inputs[i]->mesh.properties, kOfxMeshPropInternalData, 0, NULL);
+      &meshEffect->inputs[i].mesh.properties, kOfxMeshPropInternalData, 0, NULL);
   if (NULL != input) {
-    *input = meshEffect->inputs.inputs[i];
+    *input = &meshEffect->inputs[i];
   }
   if (NULL != propertySet) {
-    *propertySet = &(meshEffect->inputs.inputs[i]->properties);
+    *propertySet = &(meshEffect->inputs[i].properties);
   }
   return kOfxStatOK;
 }
@@ -99,9 +104,9 @@ OfxStatus inputGetHandle(OfxMeshEffectHandle meshEffect,
   if (-1 == i) {
     return kOfxStatErrUnknown;  // bad name
   }
-  *input = meshEffect->inputs.inputs[i];
+  *input = &meshEffect->inputs[i];
   if (NULL != propertySet) {
-    *propertySet = &(meshEffect->inputs.inputs[i]->properties);
+    *propertySet = &(meshEffect->inputs[i].properties);
   }
   return kOfxStatOK;
 }
@@ -140,10 +145,10 @@ OfxStatus inputRequestAttribute(OfxMeshInputHandle input,
     return kOfxStatErrBadIndex;
   }
 
-  int i = input->requested_attributes.ensure(intAttachment, name);
+  int i = input->requested_attributes.ensure({ intAttachment, name });
 
   OfxPropertySetStruct *attributeProperties =
-      &input->requested_attributes.attributes[i]->properties;
+      &input->requested_attributes[i].properties;
   propSetInt(attributeProperties, kOfxMeshAttribPropComponentCount, 0, componentCount);
   propSetString(attributeProperties, kOfxMeshAttribPropType, 0, type);
   propSetString(attributeProperties, kOfxMeshAttribPropSemantic, 0, semantic);
@@ -191,20 +196,20 @@ OfxStatus inputGetMesh(OfxMeshInputHandle input,
 
   // Call internal callback before actually getting data
   OfxHost *host = input->host;
-  BeforeMeshGetCbFunc beforeMeshGetCb;
-  if (NULL != host) {
-    propGetPointer(host->host, kOfxHostPropBeforeMeshGetCb, 0, (void **)&beforeMeshGetCb);
-    if (NULL != beforeMeshGetCb) {
-      OfxStatus status = beforeMeshGetCb(host, inputMeshHandle);
-      if (kOfxStatOK != status) {
-        *meshHandle = NULL;
-        return status;
-      }
+  BeforeMeshGetCbFunc beforeMeshGetCb = nullptr;
+  if (nullptr != host) {
+      MFX_ENSURE(propGetPointer(host->host, kOfxHostPropBeforeMeshGetCb, 0, (void**)&beforeMeshGetCb));
+    if (nullptr != beforeMeshGetCb) {
+        OfxStatus status = beforeMeshGetCb(host, inputMeshHandle);
+        if (kOfxStatOK != status) {
+            *meshHandle = nullptr;
+            return status;
+        }
     }
   }
 
   *meshHandle = inputMeshHandle;
-  if (NULL != propertySet) {
+  if (nullptr != propertySet) {
     *propertySet = inputMeshProperties;
   }
 
@@ -214,8 +219,8 @@ OfxStatus inputGetMesh(OfxMeshInputHandle input,
 OfxStatus inputReleaseMesh(OfxMeshHandle meshHandle)
 {
   // Call internal callback before actually releasing data
-  OfxHost *host;
-  BeforeMeshReleaseCbFunc beforeMeshReleaseCb;
+  OfxHost *host = nullptr;
+  BeforeMeshReleaseCbFunc beforeMeshReleaseCb = nullptr;
   propGetPointer(&meshHandle->properties, kOfxMeshPropHostHandle, 0, (void **)&host);
   if (NULL != host) {
     propGetPointer(host->host, kOfxHostPropBeforeMeshReleaseCb, 0, (void **)&beforeMeshReleaseCb);
@@ -224,19 +229,7 @@ OfxStatus inputReleaseMesh(OfxMeshHandle meshHandle)
     }
   }
 
-  // Free owned attributes
-  void *data;
-  int is_owner;
-  for (int i = 0; i < meshHandle->attributes.num_attributes; ++i) {
-    OfxAttributeStruct *attribute = meshHandle->attributes.attributes[i];
-    propGetPointer(&attribute->properties, kOfxMeshAttribPropData, 0, &data);
-    propGetInt(&attribute->properties, kOfxMeshAttribPropIsOwner, 0, &is_owner);
-    if (is_owner && NULL != data) {
-      delete[] static_cast<char*>(data);  // delete on void* is undefined behaviour
-    }
-    propSetPointer(&attribute->properties, kOfxMeshAttribPropData, 0, NULL);
-    propSetInt(&attribute->properties, kOfxMeshAttribPropIsOwner, 0, 0);
-  }
+  meshHandle->free_owned_data();
 
   propSetInt(&meshHandle->properties, kOfxMeshPropPointCount, 0, 0);
   propSetInt(&meshHandle->properties, kOfxMeshPropCornerCount, 0, 0);
@@ -262,13 +255,12 @@ OfxStatus attributeDefine(OfxMeshHandle meshHandle,
     return kOfxStatErrValue;
   }
 
-  if (NULL != semantic) {
-    if (0 != strcmp(semantic, kOfxMeshAttribSemanticTextureCoordinate) &&
-        0 != strcmp(semantic, kOfxMeshAttribSemanticNormal) &&
-        0 != strcmp(semantic, kOfxMeshAttribSemanticColor) &&
-        0 != strcmp(semantic, kOfxMeshAttribSemanticWeight)) {
-      return kOfxStatErrValue;
-    }
+  if (NULL != semantic &&
+      0 != strcmp(semantic, kOfxMeshAttribSemanticTextureCoordinate) &&
+      0 != strcmp(semantic, kOfxMeshAttribSemanticNormal) &&
+      0 != strcmp(semantic, kOfxMeshAttribSemanticColor) &&
+      0 != strcmp(semantic, kOfxMeshAttribSemanticWeight)) {
+    return kOfxStatErrValue;
   }
 
   AttributeAttachment intAttachment = mfxToInternalAttribAttachment(attachment);
@@ -276,9 +268,9 @@ OfxStatus attributeDefine(OfxMeshHandle meshHandle,
     return kOfxStatErrBadIndex;
   }
 
-  int i = meshHandle->attributes.ensure(intAttachment, name);
+  int i = meshHandle->attributes.ensure({ intAttachment, name });
 
-  OfxPropertySetStruct *attributeProperties = &meshHandle->attributes.attributes[i]->properties;
+  OfxPropertySetStruct *attributeProperties = &meshHandle->attributes[i].properties;
   propSetPointer(attributeProperties, kOfxMeshAttribPropData, 0, NULL);
   propSetInt(attributeProperties, kOfxMeshAttribPropComponentCount, 0, componentCount);
   propSetString(attributeProperties, kOfxMeshAttribPropType, 0, type);
@@ -286,7 +278,7 @@ OfxStatus attributeDefine(OfxMeshHandle meshHandle,
   propSetInt(attributeProperties, kOfxMeshAttribPropIsOwner, 0, 1);
 
   // Keep attribute count up-to-date
-  propSetInt(&meshHandle->properties, kOfxMeshPropAttributeCount, 0, meshHandle->attributes.num_attributes);
+  propSetInt(&meshHandle->properties, kOfxMeshPropAttributeCount, 0, meshHandle->attributes.count());
 
   if (attributeHandle) {
     *attributeHandle = attributeProperties;
@@ -304,13 +296,13 @@ OfxStatus meshGetAttribute(OfxMeshHandle meshHandle,
     return kOfxStatErrBadIndex;
   }
 
-  int i = meshHandle->attributes.find(intAttachment, name);
+  int i = meshHandle->attributes.find({ intAttachment, name });
 
   if (i == -1) {
     return kOfxStatErrBadIndex;
   }
   else {
-    *attributeHandle = &meshHandle->attributes.attributes[i]->properties;
+    *attributeHandle = &meshHandle->attributes[i].properties;
     return kOfxStatOK;
   }
 }
@@ -345,11 +337,11 @@ OfxStatus meshAlloc(OfxMeshHandle meshHandle)
 
   // Allocate memory attributes
 
-  for (int i = 0; i < meshHandle->attributes.num_attributes; ++i) {
-    OfxAttributeStruct *attribute = meshHandle->attributes.attributes[i];
+  for (int i = 0; i < meshHandle->attributes.count(); ++i) {
+    OfxAttributeStruct & attribute = meshHandle->attributes[i];
 
     int is_owner;
-    status = propGetInt(&attribute->properties, kOfxMeshAttribPropIsOwner, 0, &is_owner);
+    status = propGetInt(&attribute.properties, kOfxMeshAttribPropIsOwner, 0, &is_owner);
     if (kOfxStatOK != status) {
       return status;
     }
@@ -361,13 +353,13 @@ OfxStatus meshAlloc(OfxMeshHandle meshHandle)
     }
 
     int count;
-    status = propGetInt(&attribute->properties, kOfxMeshAttribPropComponentCount, 0, &count);
+    status = propGetInt(&attribute.properties, kOfxMeshAttribPropComponentCount, 0, &count);
     if (kOfxStatOK != status) {
       return status;
     }
 
     char *type;
-    status = propGetString(&attribute->properties, kOfxMeshAttribPropType, 0, &type);
+    status = propGetString(&attribute.properties, kOfxMeshAttribPropType, 0, &type);
     if (kOfxStatOK != status) {
       return status;
     }
@@ -386,23 +378,23 @@ OfxStatus meshAlloc(OfxMeshHandle meshHandle)
       return kOfxStatErrBadHandle;
     }
 
-    void *data = new char[byteSize * count * elementCount[(int)attribute->attachment]];
+    void *data = new char[byteSize * count * elementCount[(int)attribute.attachment()]];
     if (NULL == data) {
       return kOfxStatErrMemory;
     }
 
-    status = propSetPointer(&attribute->properties, kOfxMeshAttribPropData, 0, data);
+    status = propSetPointer(&attribute.properties, kOfxMeshAttribPropData, 0, data);
     if (kOfxStatOK != status) {
       return status;
     }
 
     status = propSetInt(
-        &attribute->properties, kOfxMeshAttribPropStride, 0, (int)(byteSize * count));
+        &attribute.properties, kOfxMeshAttribPropStride, 0, (int)(byteSize * count));
     if (kOfxStatOK != status) {
       return status;
     }
 
-    status = propSetInt(&attribute->properties, kOfxMeshAttribPropIsOwner, 0, 1);
+    status = propSetInt(&attribute.properties, kOfxMeshAttribPropIsOwner, 0, 1);
     if (kOfxStatOK != status) {
       return status;
     }

@@ -17,19 +17,20 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "util/memory_util.h"
-
 #include "mesheffect.h"
 #include "propertySuite.h"
+
+using namespace OpenMfx;
 
 // OFX MESH EFFECT SUITE
 
 // // Mesh Effect
 
-OfxMeshEffectStruct::OfxMeshEffectStruct(OfxHost *host)
+OfxMeshEffectStruct::OfxMeshEffectStruct(OfxHost *host, OfxPlugin* plugin)
 	: properties(PropertySetContext::MeshEffect)
 {
   this->host = host;
+  this->plugin = plugin;
   this->inputs.host = host;
   this->parameters.effect_properties = &this->properties;
   this->messageType = OfxMessageType::Invalid;

@@ -39,7 +39,7 @@ extern "C" {
  */
 PluginRegistry *get_registry(const char *ofx_filepath);
 
-void release_registry(const char *ofx_filepath);
+void release_registry(const PluginRegistry *registry);
 
 #ifdef __cplusplus
 }

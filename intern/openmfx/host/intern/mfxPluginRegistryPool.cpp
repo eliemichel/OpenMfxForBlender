@@ -40,20 +40,17 @@ PluginRegistry *get_registry(const char *ofx_filepath)
   return &entry->registry();
 }
 
-void release_registry(const char *ofx_filepath)
+void release_registry(const PluginRegistry*registry)
 {
-  printf("[release_registry] releasing registry for %s\n", ofx_filepath);
   PluginRegistryPool &pluginRegistryPool = PluginRegistryPool::getInstance();
-  PluginRegistryPoolEntry *entry = pluginRegistryPool.find(ofx_filepath);
+  PluginRegistryPoolEntry *entry = pluginRegistryPool.find(registry);
   if (NULL == entry) {
-    printf("ERROR: Trying to release plugin that is not loaded; %s\n", ofx_filepath);
     return;
   }
 
   entry->decrementReferences();
 
   if (false == entry->isReferenced()) {
-    printf("[release_registry] removing registry for %s\n", ofx_filepath);
     pluginRegistryPool.remove(entry);
   }
 }

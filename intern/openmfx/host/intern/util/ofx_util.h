@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 Elie Michel
+ * Copyright 2019 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,34 +14,19 @@
  * limitations under the License.
  */
 
-/** \file
- * \ingroup openmesheffect
- *
- * This is an implementation of an OpenFX host specialized toward the Mesh
- * Effect API (rather than the Image Effect API like most OpenFX host
- * implementations are.)
- */
+#ifndef __MFX_OFX_UTIL_H__
+#define __MFX_OFX_UTIL_H__
 
-#ifndef __MFX_HOST_H__
-#define __MFX_HOST_H__
-
-/**
- * This file defines the public C API for the Open Mesh Effect Host
- */
+#include "ofxCore.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include <stdbool.h>
-#include "ofxCore.h"
-#include "ofxMeshEffect.h"
-
-OfxHost * getGlobalHost(void);
-void releaseGlobalHost(void);
+const char *getOfxStatusName(OfxStatus status);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // __MFX_HOST_H__
+#endif // __MFX_OFX_UTIL_H__

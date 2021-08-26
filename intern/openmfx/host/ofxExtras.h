@@ -21,6 +21,8 @@
 
 // OpenFX Internal Extensions
 
+#include "ofxMeshEffect.h"
+
 /**
  * Implementation specific extensions to OpenFX Mesh Effect API.
  * These MUST NOT be used by plugins, but are here for communication between
@@ -35,7 +37,8 @@
  */
 #define kOfxMeshPropInternalData "OfxMeshPropInternalData"
 /**
- * Pointer to current ofx host
+ * As a member of a mesh effect, pointer to current raw ofx host
+ * As a member of a host, pointer to the C++ MfxHost
  */
 #define kOfxMeshPropHostHandle "OfxMeshPropHostHandle"
 

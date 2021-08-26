@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 Elie Michel
+ * Copyright 2019 - 2021 Elie Michel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,31 +17,26 @@
 /** \file
  * \ingroup openmesheffect
  *
- * This is an implementation of an OpenFX host specialized toward the Mesh
- * Effect API (rather than the Image Effect API like most OpenFX host
- * implementations are.)
  */
 
-#ifndef __MFX_HOST_H__
-#define __MFX_HOST_H__
+#ifndef __MFX_ALLOCATOR_H__
+#define __MFX_ALLOCATOR_H__
 
 /**
- * This file defines the public C API for the Open Mesh Effect Host
+ * Class responsible for memory allocation, to ease future drop in replacement
  */
+class Allocator {
+public:
+	template <typename T>
+	static T* malloc(size_t count, const char *description) {
+		(void*)description; // ignore description in this basic implementation
+		return new T[count];
+	}
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+	template <typename T>
+	static void free(T *pointer) {
+		delete[] pointer;
+	}
+};
 
-#include <stdbool.h>
-#include "ofxCore.h"
-#include "ofxMeshEffect.h"
-
-OfxHost * getGlobalHost(void);
-void releaseGlobalHost(void);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif // __MFX_HOST_H__
+#endif // __MFX_ALLOCATOR_H__

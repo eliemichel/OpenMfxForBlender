@@ -29,6 +29,7 @@ extern "C" {
 #include <stdbool.h>
 
 #include "ofxCore.h"
+#include "ofxExtras.h"
 
 #include "util/binary_util.h"
 

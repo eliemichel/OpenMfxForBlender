@@ -19,8 +19,7 @@
  */
 
 
-#include "util/ofx_util.h"
-#include "util/memory_util.h"
+#include "intern/util/ofx_util.h"
 
 #include "intern/messages.h"
 #include "intern/properties.h"
@@ -43,6 +42,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+
+using namespace OpenMfx;
 
 // OFX SUITES MAIN
 
@@ -122,179 +123,4 @@ void releaseGlobalHost(void) {
     delete gHost;
     gHost = NULL;
   }
-}
-
-bool ofxhost_load_plugin(OfxHost *host, OfxPlugin *plugin) {
-  OfxStatus status;
-
-  plugin->setHost(host);
-
-  status = plugin->mainEntry(kOfxActionLoad, NULL, NULL, NULL);
-  printf("%s action returned status %d (%s)\n", kOfxActionLoad, status, getOfxStateName(status));
-
-  if (kOfxStatReplyDefault == status) {
-    printf("WARNING: The plugin '%s' ignored load action.\n", plugin->pluginIdentifier);
-  }
-  if (kOfxStatFailed == status) {
-    printf("ERROR: The load action failed, no further actions will be passed to the plug-in '%s'.\n", plugin->pluginIdentifier);
-    return false;
-  }
-  if (kOfxStatErrFatal == status) {
-    printf("ERROR: Fatal error while loading the plug-in '%s'.\n", plugin->pluginIdentifier);
-    return false;
-  }
-  return true;
-}
-
-void ofxhost_unload_plugin(OfxPlugin *plugin) {
-  OfxStatus status;
-  
-  status = plugin->mainEntry(kOfxActionUnload, NULL, NULL, NULL);
-  printf("%s action returned status %d (%s)\n", kOfxActionUnload, status, getOfxStateName(status));
-
-  if (kOfxStatReplyDefault == status) {
-    printf("WARNING: The plugin '%s' ignored unload action.\n", plugin->pluginIdentifier);
-  }
-  if (kOfxStatErrFatal == status) {
-    printf("ERROR: Fatal error while unloading the plug-in '%s'.\n", plugin->pluginIdentifier);
-  }
-
-  plugin->setHost(NULL);
-}
-
-bool ofxhost_get_descriptor(OfxHost *host, OfxPlugin *plugin, OfxMeshEffectHandle *effectDescriptor) {
-  OfxStatus status;
-  OfxMeshEffectHandle effectHandle;
-
-  *effectDescriptor = NULL;
-  effectHandle = new OfxMeshEffectStruct(host);
-
-  status = plugin->mainEntry(kOfxActionDescribe, effectHandle, NULL, NULL);
-  printf("%s action returned status %d (%s)\n", kOfxActionDescribe, status, getOfxStateName(status));
-
-  if (kOfxStatErrMissingHostFeature == status) {
-    printf("ERROR: The plugin '%s' lacks some host feature.\n", plugin->pluginIdentifier); // see message
-    return false;
-  }
-  if (kOfxStatErrMemory == status) {
-    printf("ERROR: Not enough memory for plug-in '%s'.\n", plugin->pluginIdentifier);
-    return false;
-  }
-  if (kOfxStatFailed == status) {
-    printf("ERROR: Error while describing plug-in '%s'.\n", plugin->pluginIdentifier); // see message
-    return false;
-  }
-  if (kOfxStatErrFatal == status) {
-    printf("ERROR: Fatal error while describing plug-in '%s'.\n", plugin->pluginIdentifier);
-    return false;
-  }
-
-  *effectDescriptor = effectHandle;
-
-  return true;
-}
-
-void ofxhost_release_descriptor(OfxMeshEffectHandle effectDescriptor) {
-  delete effectDescriptor;
-}
-
-bool ofxhost_create_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectDescriptor, OfxMeshEffectHandle *effectInstance) {
-  OfxStatus status;
-  OfxMeshEffectHandle instance;
-
-  *effectInstance = NULL;
-
-  instance = new OfxMeshEffectStruct(effectDescriptor->host);
-  instance->deep_copy_from(*effectDescriptor);
-
-  status = plugin->mainEntry(kOfxActionCreateInstance, instance, NULL, NULL);
-  printf("%s action returned status %d (%s)\n", kOfxActionCreateInstance, status, getOfxStateName(status));
-
-  if (kOfxStatErrMemory == status) {
-    printf("ERROR: Not enough memory for plug-in '%s'.\n", plugin->pluginIdentifier);
-    return false;
-  }
-  if (kOfxStatFailed == status) {
-    printf("ERROR: Error while creating an instance of plug-in '%s'.\n", plugin->pluginIdentifier); // see message
-    return false;
-  }
-  if (kOfxStatErrFatal == status) {
-    printf("ERROR: Fatal error while creating an instance of plug-in '%s'.\n", plugin->pluginIdentifier);
-    return false;
-  }
-
-  *effectInstance = instance;
-
-  return true;
-}
-
-void ofxhost_destroy_instance(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance) {
-  OfxStatus status;
-
-  status = plugin->mainEntry(kOfxActionDestroyInstance, effectInstance, NULL, NULL);
-  printf("%s action returned status %d (%s)\n", kOfxActionDestroyInstance, status, getOfxStateName(status));
-
-  if (kOfxStatFailed == status) {
-    printf("ERROR: Error while destroying an instance of plug-in '%s'.\n", plugin->pluginIdentifier); // see message
-  }
-  if (kOfxStatErrFatal == status) {
-    printf("ERROR: Fatal error while destroying an instance of plug-in '%s'.\n", plugin->pluginIdentifier);
-  }
-
-  delete effectInstance;
-}
-
-bool ofxhost_cook(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance) {
-  OfxStatus status;
-
-  status = plugin->mainEntry(kOfxMeshEffectActionCook, effectInstance, NULL, NULL);
-  printf("%s action returned status %d (%s)\n", kOfxMeshEffectActionCook, status, getOfxStateName(status));
-
-  if (kOfxStatErrMemory == status) {
-    printf("ERROR: Not enough memory for plug-in '%s'.\n", plugin->pluginIdentifier);
-    return false;
-  }
-  if (kOfxStatFailed == status) {
-    printf("ERROR: Error while cooking an instance of plug-in '%s'.\n", plugin->pluginIdentifier); // see message
-    return false;
-  }
-  if (kOfxStatErrFatal == status) {
-    printf("ERROR: Fatal error while cooking an instance of plug-in '%s'.\n", plugin->pluginIdentifier);
-    return false;
-  }
-  return true;
-}
-
-bool ofxhost_is_identity(OfxPlugin *plugin, OfxMeshEffectHandle effectInstance, bool *shouldCook) {
-  OfxStatus status;
-
-  OfxPropertySetStruct inArgs(PropertySetContext::ActionIdentityIn);
-  OfxPropertySetStruct outArgs(PropertySetContext::ActionIdentityOut);
-
-  propSetInt(&inArgs, kOfxPropTime, 0, 0);
-  propSetString(&outArgs, kOfxPropName, 0, "");
-  propSetInt(&outArgs, kOfxPropTime, 0, 0);
-
-  *shouldCook = true;
-
-  status = plugin->mainEntry(kOfxMeshEffectActionIsIdentity, effectInstance, &inArgs, &outArgs);
-  printf("%s action returned status %d (%s)\n", kOfxMeshEffectActionIsIdentity, status, getOfxStateName(status));
-
-  if (kOfxStatErrMemory == status) {
-    printf("ERROR: Not enough memory for plug-in '%s'.\n", plugin->pluginIdentifier);
-    return false;
-  }
-  if (kOfxStatFailed == status) {
-    printf("ERROR: Error while cooking an instance of plug-in '%s'.\n", plugin->pluginIdentifier); // see message
-    return false;
-  }
-  if (kOfxStatErrFatal == status) {
-    printf("ERROR: Fatal error while cooking an instance of plug-in '%s'.\n", plugin->pluginIdentifier);
-    return false;
-  }
-  if (kOfxStatOK == status) {
-    *shouldCook = false;
-    return true;
-  }
-  return false;
 }
