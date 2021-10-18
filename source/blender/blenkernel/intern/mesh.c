@@ -793,7 +793,7 @@ bool BKE_mesh_has_custom_loop_normals(Mesh *me)
 }
 
 /** Free (or release) any data used by this mesh (does not free the mesh itself). */
-void BKE_mesh_free(Mesh *me)
+void BKE_mesh_free_data(Mesh *me)
 {
   mesh_free_data(&me->id);
 }
@@ -987,7 +987,7 @@ void BKE_mesh_eval_delete(struct Mesh *mesh_eval)
 {
   /* Evaluated mesh may point to edit mesh, but never owns it. */
   mesh_eval->edit_mesh = NULL;
-  BKE_mesh_free(mesh_eval);
+  BKE_mesh_free_data(mesh_eval);
   BKE_libblock_free_data(&mesh_eval->id, false);
   MEM_freeN(mesh_eval);
 }
@@ -2087,6 +2087,14 @@ void BKE_mesh_split_faces(Mesh *mesh, bool free_loop_normals)
 
   SplitFaceNewVert *new_verts = NULL;
   SplitFaceNewEdge *new_edges = NULL;
+
+  /* Ensure we own the layers, we need to do this before split_faces_prepare_new_verts as it will
+   * directly assign new indices to existing edges and loops. */
+  CustomData_duplicate_referenced_layers(&mesh->vdata, mesh->totvert);
+  CustomData_duplicate_referenced_layers(&mesh->edata, mesh->totedge);
+  CustomData_duplicate_referenced_layers(&mesh->ldata, mesh->totloop);
+  /* Update pointers in case we duplicated referenced layers. */
+  BKE_mesh_update_customdata_pointers(mesh, false);
 
   /* Detect loop normal spaces (a.k.a. smooth fans) that will need a new vert. */
   const int num_new_verts = split_faces_prepare_new_verts(

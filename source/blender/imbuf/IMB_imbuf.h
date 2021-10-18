@@ -356,6 +356,11 @@ void IMB_anim_index_rebuild_finish(struct IndexBuildContext *context, short stop
 int IMB_anim_get_duration(struct anim *anim, IMB_Timecode_Type tc);
 
 /**
+ * Return the encoded start offset (in seconds) of the given \a anim.
+ */
+double IMD_anim_get_offset(struct anim *anim);
+
+/**
  * Return the fps contained in movie files (function rval is false,
  * and frs_sec and frs_sec_base untouched if none available!)
  */
@@ -380,8 +385,6 @@ bool IMB_anim_can_produce_frames(const struct anim *anim);
  */
 
 int ismovie(const char *filepath);
-void IMB_anim_set_preseek(struct anim *anim, int preseek);
-int IMB_anim_get_preseek(struct anim *anim);
 int IMB_anim_get_image_width(struct anim *anim);
 int IMB_anim_get_image_height(struct anim *anim);
 

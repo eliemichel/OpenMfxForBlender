@@ -31,6 +31,7 @@
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_editmesh.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_object.h"
@@ -113,7 +114,7 @@ static LinkNode *knifeproject_poly_from_object(const bContext *C,
     BKE_nurbList_free(&nurbslist);
 
     if (me_eval_needs_free) {
-      BKE_mesh_free(me_eval);
+      BKE_id_free(NULL, (ID *)me_eval);
     }
   }
 
@@ -130,9 +131,11 @@ static int knifeproject_exec(bContext *C, wmOperator *op)
   LinkNode *polys = NULL;
 
   CTX_DATA_BEGIN (C, Object *, ob, selected_objects) {
-    if (ob != obedit) {
-      polys = knifeproject_poly_from_object(C, scene, ob, polys);
+    if (BKE_object_is_in_editmode(ob)) {
+      continue;
     }
+    BLI_assert(ob != obedit);
+    polys = knifeproject_poly_from_object(C, scene, ob, polys);
   }
   CTX_DATA_END;
 

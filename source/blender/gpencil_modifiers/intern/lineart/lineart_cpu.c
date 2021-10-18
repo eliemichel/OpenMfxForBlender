@@ -748,10 +748,10 @@ static void lineart_triangle_cull_single(LineartRenderBuffer *rb,
   e = new_e;
 
 #define INCREASE_RL \
-  e_count++; \
   v1_obi = e->v1_obindex; \
   v2_obi = e->v2_obindex; \
   new_e = &((LineartEdge *)e_eln->pointer)[e_count]; \
+  e_count++; \
   e = new_e; \
   e->v1_obindex = v1_obi; \
   e->v2_obindex = v2_obi; \
@@ -1496,7 +1496,7 @@ static void lineart_geometry_object_load(Depsgraph *dg,
 #define LRT_MESH_FINISH \
   BM_mesh_free(bm); \
   if (ob->type != OB_MESH) { \
-    BKE_mesh_free(use_mesh); \
+    BKE_mesh_free_data(use_mesh); \
     MEM_freeN(use_mesh); \
   }
 
@@ -2141,8 +2141,8 @@ static bool lineart_triangle_edge_image_space_occlusion(SpinLock *UNUSED(spl),
       }
     }
     else if (st_r == 0) {
-      INTERSECT_JUST_GREATER(is, order, 0, LCross);
-      if (LRT_ABC(LCross) && is[LCross] > 0) {
+      INTERSECT_JUST_GREATER(is, order, DBL_TRIANGLE_LIM, LCross);
+      if (LRT_ABC(LCross) && is[LCross] > DBL_TRIANGLE_LIM) {
         INTERSECT_JUST_GREATER(is, order, is[LCross], RCross);
       }
       else {
@@ -3655,6 +3655,8 @@ bool MOD_lineart_compute_feature_lines(Depsgraph *depsgraph, LineartGpencilModif
   LineartRenderBuffer *rb;
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
   int intersections_only = 0; /* Not used right now, but preserve for future. */
+
+  BKE_scene_camera_switch_update(scene);
 
   if (!scene->camera) {
     return false;
