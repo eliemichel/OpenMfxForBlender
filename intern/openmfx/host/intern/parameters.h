@@ -80,6 +80,7 @@ struct OfxParamSetStruct {
 
   int count() const { return num_parameters; }
   OfxParamStruct& operator[](int i) { return *parameters[i]; }
+  const OfxParamStruct& operator[](int i) const { return *parameters[i]; }
 
  public:
   OfxPropertySetStruct *effect_properties; // weak pointer

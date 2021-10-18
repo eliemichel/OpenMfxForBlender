@@ -95,6 +95,7 @@ template<typename T, typename Index = T::Index> class Collection {
   {
     return m_items.size();
   }
+
   T &operator[](int i)
   {
     return m_items[i];
@@ -103,6 +104,11 @@ template<typename T, typename Index = T::Index> class Collection {
   T &operator[](const Index &index)
   {
     int i = ensure(index);
+    return m_items[i];
+  }
+
+  const T &operator[](int i) const
+  {
     return m_items[i];
   }
 

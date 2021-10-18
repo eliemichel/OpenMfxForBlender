@@ -2437,6 +2437,7 @@ typedef struct OpenMfxModifierData {
   OpenMfxEffect *effects;
   OpenMfxParameter *parameters;
   OpenMfxInput *extra_inputs;
+  void *_pad2;
 
   /** MOD_OPENMFX_MAX_MESSAGE */
   char message[1024];

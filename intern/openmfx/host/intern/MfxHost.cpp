@@ -14,6 +14,8 @@
 #include <cstdio>
 #include <cstring>
 
+using namespace OpenMfx;
+
 // ----------------------------------------------------
 // Static constructor
 
@@ -254,7 +256,9 @@ bool MfxHost::IsIdentity(OfxMeshEffectHandle effectInstance, bool* isIdentity, c
 
 	case kOfxStatOK:
 		*isIdentity = true;
-		propertySuite->propGetString(&outArgs, kOfxPropName, 0, inputToPassThrough);
+		if (nullptr != inputToPassThrough) {
+			propertySuite->propGetString(&outArgs, kOfxPropName, 0, inputToPassThrough);
+		}
 		return true;
 
 	default:

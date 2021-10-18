@@ -54,17 +54,23 @@ set(SRC
   intern/messageSuite.cpp
 
   util/binary_util.h
+  util/mfx_util.h
   intern/util/binary_util.c
   intern/util/ofx_util.h
   intern/util/ofx_util.c
 )
 
-add_library(openmesheffect_host "${SRC}")
-target_include_directories(openmesheffect_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(openmesheffect_host
-  PUBLIC
-  OpenMeshEffect::Core
+set(LIB_PRIV
+  OpenMfx::Core
 )
 
-set_property(TARGET openmesheffect_host PROPERTY FOLDER "OpenMeshEffect")
-add_library(OpenMeshEffect::Host ALIAS openmesheffect_host)
+set(LIB
+  OpenMfx::Utils
+)
+
+add_library(Host "${SRC}")
+target_include_directories(Host PRIVATE "${INC_PRIV}" PUBLIC "${INC}")
+target_link_libraries(Host PRIVATE "${LIB_PRIV}"  PUBLIC "${LIB}")
+
+set_property(TARGET Host PROPERTY FOLDER "OpenMfx")
+add_library(OpenMfx::Host ALIAS Host)

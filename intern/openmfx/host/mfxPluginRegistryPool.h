@@ -36,6 +36,8 @@ extern "C" {
  * Access the global plugin registry pool. There is one registry per ofx file,
  * and this pool ensures that the same registry is not loaded twice.
  * For each call to get_registry, a call to release_registry must be issued eventually
+ *
+ * TODO: Turn this into a C++ idiomatic version (using e.g. std::map)
  */
 PluginRegistry *get_registry(const char *ofx_filepath);
 

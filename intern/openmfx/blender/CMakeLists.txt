@@ -36,9 +36,9 @@ set(INC_SYS
 
 set(SRC
   mfxModifier.h
+  intern/BlenderMfxHost.h
+  intern/BlenderMfxHost.cpp
   intern/mfxModifier.cpp
-  intern/mfxCallbacks.h
-  intern/mfxCallbacks.cpp
   intern/mfxRuntime.h
   intern/mfxRuntime.cpp
   intern/mfxConvert.h

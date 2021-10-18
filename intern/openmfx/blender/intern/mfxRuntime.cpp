@@ -28,7 +28,9 @@
 #include "mfxPluginRegistryPool.h"
 #include <mfxHost/mesheffect>
 #include <mfxHost/messages>
+#include <mfxHost/MfxHost>
 #include "ofxExtras.h"
+#include "BlenderMfxHost.h"
 
 #include "DNA_mesh_types.h" // Mesh
 #include "DNA_modifier_types.h"
@@ -43,6 +45,7 @@
 #include "BLI_path_util.h"
 
 #include <vector>
+#include <cassert>
 
 // ----------------------------------------------------------------------------
 // Public
@@ -52,7 +55,7 @@ OpenMfxRuntime::OpenMfxRuntime()
   plugin_path[0] = '\0';
   m_is_plugin_valid = false;
   effect_index = 0;
-  ofx_host = nullptr;
+  mfx_host = nullptr;
   effect_desc = nullptr;
   effect_instance = nullptr;
   registry = nullptr;
@@ -61,11 +64,6 @@ OpenMfxRuntime::OpenMfxRuntime()
 OpenMfxRuntime::~OpenMfxRuntime()
 {
   reset_plugin_path();
-
-  if (nullptr != this->ofx_host) {
-    releaseGlobalHost();
-    this->ofx_host = nullptr;
-  }
 }
 
 void OpenMfxRuntime::set_plugin_path(const char *plugin_path)
@@ -114,9 +112,10 @@ void OpenMfxRuntime::set_effect_index(int effect_index)
 
 void OpenMfxRuntime::get_parameters_from_rna(OpenMfxModifierData *fxmd)
 {
-  OfxParamHandle *parameters = this->effect_instance->parameters.parameters;
+  OfxParamSetStruct& parameters = this->effect_instance->parameters;
+  assert(parameters.count() == fxmd->num_parameters);
   for (int i = 0 ; i < fxmd->num_parameters ; ++i) {
-    copy_parameter_value_from_rna(parameters[i], fxmd->parameters + i);
+    copy_parameter_value_from_rna(&parameters[i], fxmd->parameters + i);
   }
 }
 
@@ -154,11 +153,11 @@ bool OpenMfxRuntime::ensure_effect_instance()
 
   OfxPlugin *plugin = this->registry->plugins[this->effect_index];
 
-  if (NULL == this->effect_desc) {
+  if (nullptr == this->effect_desc) {
     // Load plugin if not already loaded
     OfxPluginStatus *pStatus = &this->registry->status[this->effect_index];
     if (OfxPluginStatNotLoaded == *pStatus) {
-      if (ofxhost_load_plugin(this->ofx_host, plugin)) {
+      if (mfx_host->LoadPlugin(plugin)) {
         *pStatus = OfxPluginStatOK;
       }
       else {
@@ -168,11 +167,13 @@ bool OpenMfxRuntime::ensure_effect_instance()
       }
     }
 
-    ofxhost_get_descriptor(this->ofx_host, plugin, &this->effect_desc);
+    if (!mfx_host->GetDescriptor(plugin, this->effect_desc)) {
+      this->effect_desc = nullptr;
+    }
   }
 
   if (NULL == this->effect_instance) {
-    ofxhost_create_instance(plugin, this->effect_desc, &this->effect_instance);
+    mfx_host->CreateInstance(this->effect_desc, this->effect_instance);
   }
 
   return true;
@@ -213,26 +214,21 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
     return NULL;
   }
 
-  OfxHost *ofxHost = this->ofx_host;
-  OfxMeshEffectSuiteV1 *meshEffectSuite = (OfxMeshEffectSuiteV1 *)ofxHost->fetchSuite(
-      ofxHost->host, kOfxMeshEffectSuite, 1);
-  OfxPropertySuiteV1 *propertySuite = (OfxPropertySuiteV1 *)ofxHost->fetchSuite(
-      ofxHost->host, kOfxPropertySuite, 1);
-
   OfxMeshInputHandle input, output;
-  meshEffectSuite->inputGetHandle(this->effect_instance, kOfxMeshMainInput, &input, NULL);
-  meshEffectSuite->inputGetHandle(this->effect_instance, kOfxMeshMainOutput, &output, NULL);
+  mfx_host->meshEffectSuite->inputGetHandle(this->effect_instance, kOfxMeshMainInput, &input, NULL);
+  mfx_host->meshEffectSuite->inputGetHandle(this->effect_instance, kOfxMeshMainOutput, &output, NULL);
 
   // Get parameters
   this->get_parameters_from_rna(fxmd);
 
   // Test if we can skip cooking
-  OfxPlugin *plugin = this->registry->plugins[this->effect_index];
   bool shouldCook = true;
-  ofxhost_is_identity(plugin, this->effect_instance, &shouldCook);
+  char *inputToPassThrough = nullptr;
+  mfx_host->IsIdentity(this->effect_instance, &shouldCook, &inputToPassThrough);
 
   if (false == shouldCook) {
     printf("effect is identity, skipping cooking\n");
+    // TODO: handle cases where 'inputToPassThrough' is not 'MainInput'
     return mesh;
   }
 
@@ -243,7 +239,7 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
     input_data.blender_mesh = mesh;
     input_data.source_mesh = NULL;
     input_data.object = object;
-    propertySuite->propSetPointer(
+    mfx_host->propertySuite->propSetPointer(
         &input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&input_data);
   }
 
@@ -252,7 +248,8 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
   std::vector<MeshInternalData> extra_input_data(fxmd->num_extra_inputs);
   for (int i = 0; i < fxmd->num_extra_inputs; ++i) {
     OfxMeshInputHandle input;
-    meshEffectSuite->inputGetHandle(this->effect_instance, fxmd->extra_inputs[i].name, &input, NULL);
+    mfx_host->meshEffectSuite->inputGetHandle(
+        this->effect_instance, fxmd->extra_inputs[i].name, &input, NULL);
 
     Object *object = fxmd->extra_inputs[i].connected_object;
 
@@ -265,7 +262,8 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
     extra_input_data[i].source_mesh = NULL;
     extra_input_data[i].object = object;
 
-    propertySuite->propSetPointer(&input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&extra_input_data[i]);
+    mfx_host->propertySuite->propSetPointer(
+        &input->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&extra_input_data[i]);
   }
 
   // Set output mesh data binding, used by before/after callbacks
@@ -274,17 +272,15 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
   output_data.blender_mesh = NULL;
   output_data.source_mesh = mesh;
   output_data.object = object;
-  propertySuite->propSetPointer(
+  mfx_host->propertySuite->propSetPointer(
       &output->mesh.properties, kOfxMeshPropInternalData, 0, (void *)&output_data);
 
-  ofxhost_cook(plugin, this->effect_instance);
-
-  // Free mesh on Blender side -> nope, ModifierTypeInfo's doc says a modifier must not free its input
-  /*
-  if (NULL != output_data.blender_mesh && output_data.blender_mesh != output_data.source_mesh) {
-    BKE_mesh_free(output_data.source_mesh);
+  if (!mfx_host->Cook(this->effect_instance)) {
+    return nullptr;
   }
-  */
+
+  // NB: ModifierTypeInfo's doc says a modifier must not free its input
+  // so don't free 'mesh' here
 
   this->set_message_in_rna(fxmd);
 
@@ -330,34 +326,34 @@ void OpenMfxRuntime::reload_parameters(OpenMfxModifierData *fxmd)
     return;
   }
 
-  OfxParamSetHandle parameters = &this->effect_desc->parameters;
+  OfxParamSetStruct& parameters = this->effect_desc->parameters;
 
-  fxmd->num_parameters = parameters->num_parameters;
+  fxmd->num_parameters = parameters.count();
   fxmd->parameters = (OpenMfxParameter *)MEM_calloc_arrayN(
       sizeof(OpenMfxParameter), fxmd->num_parameters, "openmesheffect parameter info");
 
   for (int i = 0; i < fxmd->num_parameters; ++i) {
-    const OfxPropertySetStruct & props = parameters->parameters[i]->properties;
+    const OfxPropertySetStruct & props = parameters[i].properties;
     OpenMfxParameter &rna = fxmd->parameters[i];
 
-    int script_name_idx = props.find_property(kOfxParamPropScriptName);
-    int label_idx = props.find_property(kOfxPropLabel);
+    int script_name_idx = props.find(kOfxParamPropScriptName);
+    int label_idx = props.find(kOfxPropLabel);
 
-    const char *parameter_name = parameters->parameters[i]->name;
+    const char *parameter_name = parameters[i].name;
     const char *system_name = (script_name_idx != -1) ?
-                                  props.properties[script_name_idx]->value->as_const_char :
+                                  props[script_name_idx].value->as_const_char :
                                   parameter_name;
     const char *label_name = (label_idx != -1) ?
-                                  props.properties[label_idx]->value->as_const_char :
+                                  props[label_idx].value->as_const_char :
                                   parameter_name;
 
     strncpy(rna.name, system_name, sizeof(rna.name));
     strncpy(rna.label, label_name, sizeof(rna.label));
-    rna.type = static_cast<int>(parameters->parameters[i]->type);
+    rna.type = static_cast<int>(parameters[i].type);
 
-    int default_idx = props.find_property(kOfxParamPropDefault);
+    int default_idx = props.find(kOfxParamPropDefault);
     if (default_idx > -1) {
-      copy_parameter_value_to_rna(&rna, props.properties[default_idx]);
+      copy_parameter_value_to_rna(&rna, &props[default_idx]);
     }
 
     // Handle boundaries
@@ -371,36 +367,36 @@ void OpenMfxRuntime::reload_parameters(OpenMfxModifierData *fxmd)
     rna.float_max = FLT_MAX;
     rna.float_softmax = FLT_MAX;
 
-    int min_idx = props.find_property(kOfxParamPropMin);
+    int min_idx = props.find(kOfxParamPropMin);
     if (min_idx > -1) {
       copy_parameter_minmax_to_rna(
-          rna.type, rna.int_min, rna.float_min, props.properties[min_idx]);
+          rna.type, rna.int_min, rna.float_min, &props[min_idx]);
     }
 
-    int softmin_idx = props.find_property(kOfxParamPropDisplayMin);
+    int softmin_idx = props.find(kOfxParamPropDisplayMin);
     if (softmin_idx > -1) {
       copy_parameter_minmax_to_rna(
-          rna.type, rna.int_softmin, rna.float_softmin, props.properties[softmin_idx]);
+          rna.type, rna.int_softmin, rna.float_softmin, &props[softmin_idx]);
     }
     else if (min_idx > -1) {
       copy_parameter_minmax_to_rna(
-          rna.type, rna.int_softmin, rna.float_softmin, props.properties[min_idx]);
+          rna.type, rna.int_softmin, rna.float_softmin, &props[min_idx]);
     }
 
-    int max_idx = props.find_property(kOfxParamPropMax);
+    int max_idx = props.find(kOfxParamPropMax);
     if (max_idx > -1) {
       copy_parameter_minmax_to_rna(
-          rna.type, rna.int_max, rna.float_max, props.properties[max_idx]);
+          rna.type, rna.int_max, rna.float_max, &props[max_idx]);
     }
 
-    int softmax_idx = props.find_property(kOfxParamPropDisplayMax);
+    int softmax_idx = props.find(kOfxParamPropDisplayMax);
     if (softmax_idx > -1) {
       copy_parameter_minmax_to_rna(
-          rna.type, rna.int_softmax, rna.float_softmax, props.properties[softmax_idx]);
+          rna.type, rna.int_softmax, rna.float_softmax, &props[softmax_idx]);
     }
     else if (max_idx > -1) {
       copy_parameter_minmax_to_rna(
-          rna.type, rna.int_softmax, rna.float_softmax, props.properties[max_idx]);
+          rna.type, rna.int_softmax, rna.float_softmax, &props[max_idx]);
     }
   }
 
@@ -421,12 +417,12 @@ void OpenMfxRuntime::reload_extra_inputs(OpenMfxModifierData *fxmd)
     return;
   }
 
-  OfxMeshInputSetStruct *inputs = &this->effect_desc->inputs;
+  OfxMeshInputSetStruct& inputs = this->effect_desc->inputs;
 
   fxmd->num_extra_inputs = 0;
-  for (int i = 0; i < inputs->num_inputs; ++i) {
-    if (0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainInput) ||
-        0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainOutput)) {
+  for (int i = 0; i < inputs.count(); ++i) {
+    if (inputs[i].name() == kOfxMeshMainInput ||
+        inputs[i].name() == kOfxMeshMainOutput) {
       continue;
     }
     ++fxmd->num_extra_inputs;
@@ -436,19 +432,19 @@ void OpenMfxRuntime::reload_extra_inputs(OpenMfxModifierData *fxmd)
       sizeof(OpenMfxInput), fxmd->num_extra_inputs, "openmesheffect extra input info");
 
   OpenMfxInput *current_input = fxmd->extra_inputs;
-  for (int i = 0; i < inputs->num_inputs; ++i) {
-    if (0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainInput) ||
-        0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainOutput)) {
+  for (int i = 0; i < inputs.count(); ++i) {
+    if (inputs[i].name() == kOfxMeshMainInput ||
+        inputs[i].name() == kOfxMeshMainOutput) {
       continue;
     }
-    const OfxPropertySetStruct &props = inputs->inputs[i]->properties;
+    const OfxPropertySetStruct &props = inputs[i].properties;
     OpenMfxInput &rna = *current_input;
 
-    int label_idx = props.find_property(kOfxPropLabel);
+    int label_idx = props.find(kOfxPropLabel);
 
-    const char *input_name = inputs->inputs[i]->name;
+    const char *input_name = inputs[i].name().c_str();
     const char *label_name = (label_idx != -1) ?
-                                 props.properties[label_idx]->value->as_const_char :
+                                 props[label_idx].value->as_const_char :
                                  input_name;
 
     strncpy(rna.name, input_name, sizeof(rna.name));
@@ -472,22 +468,22 @@ void OpenMfxRuntime::set_input_prop_in_rna(OpenMfxModifierData *fxmd)
   if (NULL == this->effect_desc) {
     return;
   }
-  OfxMeshInputSetStruct *inputs = &this->effect_desc->inputs;
+  OfxMeshInputSetStruct& inputs = this->effect_desc->inputs;
 
   OpenMfxInput *current_input = fxmd->extra_inputs;
-  for (int i = 0; i < inputs->num_inputs; ++i) {
-    if (0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainInput) ||
-        0 == strcmp(inputs->inputs[i]->name, kOfxMeshMainOutput)) {
+  for (int i = 0; i < inputs.count(); ++i) {
+    if (inputs[i].name() == kOfxMeshMainInput ||
+        inputs[i].name() == kOfxMeshMainOutput) {
       continue;
     }
-    const OfxPropertySetStruct &props = inputs->inputs[i]->properties;
+    const OfxPropertySetStruct &props = inputs[i].properties;
     OpenMfxInput &rna = *current_input;
 
-    int request_geometry_idx = props.find_property(kOfxInputPropRequestGeometry);
-    rna.request_geometry = props.properties[request_geometry_idx]->value->as_int != 0;
+    int request_geometry_idx = props.find(kOfxInputPropRequestGeometry);
+    rna.request_geometry = props[request_geometry_idx].value->as_int != 0;
 
-    int request_transform_idx = props.find_property(kOfxInputPropRequestTransform);
-    rna.request_transform = props.properties[request_transform_idx]->value->as_int != 0;
+    int request_transform_idx = props.find(kOfxInputPropRequestTransform);
+    rna.request_transform = props[request_transform_idx].value->as_int != 0;
     ++current_input;
   }
 }
@@ -516,16 +512,16 @@ void OpenMfxRuntime::free_effect_instance()
     OfxPluginStatus status = this->registry->status[this->effect_index];
 
     if (NULL != this->effect_instance) {
-      ofxhost_destroy_instance(plugin, this->effect_instance);
+      mfx_host->DestroyInstance(this->effect_instance);
       this->effect_instance = NULL;
     }
     if (NULL != this->effect_desc) {
-      ofxhost_release_descriptor(this->effect_desc);
+      mfx_host->ReleaseDescriptor(this->effect_desc);
       this->effect_desc = NULL;
     }
     if (OfxPluginStatOK == status) {
       // TODO: loop over all plugins?
-      ofxhost_unload_plugin(plugin);
+      mfx_host->UnloadPlugin(plugin);
       this->registry->status[this->effect_index] = OfxPluginStatNotLoaded;
     }
 
@@ -535,17 +531,8 @@ void OpenMfxRuntime::free_effect_instance()
 
 void OpenMfxRuntime::ensure_host()
 {
-  if (NULL == this->ofx_host) {
-    this->ofx_host = getGlobalHost();
-
-    // Configure host
-    OfxPropertySuiteV1 *propertySuite = (OfxPropertySuiteV1 *)this->ofx_host->fetchSuite(
-        this->ofx_host->host, kOfxPropertySuite, 1);
-    // Set custom callbacks
-    propertySuite->propSetPointer(
-        this->ofx_host->host, kOfxHostPropBeforeMeshGetCb, 0, (void *)before_mesh_get);
-    propertySuite->propSetPointer(
-        this->ofx_host->host, kOfxHostPropBeforeMeshReleaseCb, 0, (void *)before_mesh_release);
+  if (nullptr == this->mfx_host) {
+    this->mfx_host = &BlenderMfxHost::GetInstance();
   }
 }
 
@@ -557,7 +544,7 @@ void OpenMfxRuntime::reset_plugin_path()
 
     char abs_path[FILE_MAX];
     normalize_plugin_path(this->plugin_path, abs_path);
-    release_registry(abs_path);
+    release_registry(this->registry);
     m_is_plugin_valid = false;
   }
   this->plugin_path[0] = '\0';

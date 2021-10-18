@@ -26,8 +26,11 @@
 #include "ofxParam.h"
 #include "ofxMessage.h"
 
+namespace OpenMfx {
+
 /**
  * C++ extension of core OfxHost
+ * To use this in you own program, it is advised to subclass it and implement BeforeMeshGet() and BeforeMeshRelease()
  */
 class MfxHost {
 public:
@@ -40,6 +43,7 @@ public:
 	MfxHost();
 	~MfxHost();
 
+  // Disable copy (rule of three)
 	MfxHost(const MfxHost&) = delete;
 	MfxHost& operator=(const MfxHost&) = delete;
 
@@ -101,3 +105,4 @@ private:
 	OfxHost m_host;
 };
 
+}  // namespace OpenMfx

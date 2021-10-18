@@ -33,13 +33,6 @@
 extern "C" {
 #endif
 
-#include <stdbool.h>
-#include "ofxCore.h"
-#include "ofxMeshEffect.h"
-
-OfxHost * getGlobalHost(void);
-void releaseGlobalHost(void);
-
 #ifdef __cplusplus
 }
 #endif

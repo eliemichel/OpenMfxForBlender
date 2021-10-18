@@ -31,6 +31,8 @@
 #include <map>
 #include <string>
 
+class BlenderMfxHost;
+
 /**
  * Structure holding runtime allocated data for OpenMfx plug-in hosting.
  * It ensures communication between Blender's RNA (OpenMfxModifierData)
@@ -131,9 +133,9 @@ class OpenMfxRuntime {
   // OFX data handles
   
   /**
-   * Pointer to the OfxHost singleton.
+   * Pointer to the BlenderMfxHost singleton.
    */
-  OfxHost *ofx_host;
+  BlenderMfxHost *mfx_host;
 
   /**
    * Descriptor of the effect, listing its parameters for instance
