@@ -27,6 +27,8 @@
 #include "ofxCore.h"
 #include "ofxMeshEffect.h"
 
+/// NB: This whole file is deprecated. Please use the C++ SDK instead.
+
 typedef struct PluginRuntime {
   OfxHost *host;
   const OfxPropertySuiteV1 *propertySuite;

@@ -34,8 +34,8 @@ if(WITH_GTESTS)
 
   set(LIB
     OpenMfx
-    openmfx_host
-    openmfx_util
+    OpenMfx_Host
+    OpenMfx_Utils
   )
 
   if (MSVC)

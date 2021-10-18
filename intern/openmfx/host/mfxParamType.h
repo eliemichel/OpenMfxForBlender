@@ -24,7 +24,7 @@
 
 /**
  * Enum version of kOfxParamType* constants, used rather than strings for
- * efficiency reasons.
+ * efficiency and static typing.
  * TODO: Expose to PYTHON
  */
 enum ParamType {

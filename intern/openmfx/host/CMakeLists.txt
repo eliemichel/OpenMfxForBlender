@@ -60,6 +60,13 @@ set(SRC
   intern/util/ofx_util.c
 )
 
+set(INC_PRIV
+)
+
+set(INC
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
 set(LIB_PRIV
   OpenMfx::Core
 )
@@ -68,9 +75,9 @@ set(LIB
   OpenMfx::Utils
 )
 
-add_library(Host "${SRC}")
-target_include_directories(Host PRIVATE "${INC_PRIV}" PUBLIC "${INC}")
-target_link_libraries(Host PRIVATE "${LIB_PRIV}"  PUBLIC "${LIB}")
+add_library(OpenMfx_Host "${SRC}")
+target_include_directories(OpenMfx_Host PRIVATE "${INC_PRIV}" PUBLIC "${INC}")
+target_link_libraries(OpenMfx_Host PRIVATE "${LIB_PRIV}"  PUBLIC "${LIB}")
 
-set_property(TARGET Host PROPERTY FOLDER "OpenMfx")
-add_library(OpenMfx::Host ALIAS Host)
+set_property(TARGET OpenMfx_Host PROPERTY FOLDER "OpenMfx")
+add_library(OpenMfx::Host ALIAS OpenMfx_Host)
