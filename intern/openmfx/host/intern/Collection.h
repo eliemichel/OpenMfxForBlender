@@ -136,6 +136,11 @@ template<typename T, typename Index = T::Index> class Collection {
   {
   }
 
+  void clear()
+  {
+    m_items.clear();
+  }
+
  private:
   std::vector<T> m_items;
 };

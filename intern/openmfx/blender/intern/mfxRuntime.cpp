@@ -222,11 +222,11 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
   this->get_parameters_from_rna(fxmd);
 
   // Test if we can skip cooking
-  bool shouldCook = true;
+  bool isIdentity = true;
   char *inputToPassThrough = nullptr;
-  mfx_host->IsIdentity(this->effect_instance, &shouldCook, &inputToPassThrough);
+  mfx_host->IsIdentity(this->effect_instance, &isIdentity, &inputToPassThrough);
 
-  if (false == shouldCook) {
+  if (isIdentity) {
     printf("effect is identity, skipping cooking\n");
     // TODO: handle cases where 'inputToPassThrough' is not 'MainInput'
     return mesh;
