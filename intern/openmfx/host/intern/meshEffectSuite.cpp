@@ -172,6 +172,8 @@ OfxStatus inputGetMesh(OfxMeshInputHandle input,
   propSetInt(inputMeshProperties, kOfxMeshPropAttributeCount, 0, 0);
 
   // Default attributes
+  inputMeshHandle->attributes.clear();
+
   attributeDefine(inputMeshHandle,
                   kOfxMeshAttribPoint,
                   kOfxMeshAttribPointPosition,
