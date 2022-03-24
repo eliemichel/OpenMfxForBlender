@@ -25,7 +25,10 @@ using namespace OpenMfx;
 OfxMeshInputStruct::OfxMeshInputStruct()
     : properties(PropertySetContext::Input)
     , host(nullptr)
-{}
+{
+  properties["OfxInputPropRequestGeometry"].value->as_int = 1;
+  properties["OfxInputPropRequestTransform"].value->as_int = 0;
+}
 
 void OfxMeshInputStruct::deep_copy_from(const OfxMeshInputStruct &other)
 {
