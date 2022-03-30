@@ -89,7 +89,7 @@ class OpenMfxRuntime {
   /**
    * Actually apply the modifier
    */
-  Mesh *cook(OpenMfxModifierData *fxmd, Mesh *mesh, Object *object);
+  Mesh *cook(OpenMfxModifierData *fxmd, const Depsgraph *depsgraph, Mesh *mesh, Object *object);
 
   /**
    * Reload the list of effects contaiend in the plugin

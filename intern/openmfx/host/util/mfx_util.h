@@ -1,8 +1,13 @@
 #pragma once
 
 template <typename T>
-T* attributeAt(char* buffer, int byteStride, int index) {
+inline T* attributeAt(char* buffer, int byteStride, int index) {
 	return reinterpret_cast<T*>(buffer + static_cast<size_t>(index) * static_cast<size_t>(byteStride));
+}
+
+template <typename T>
+inline const T* attributeAt(const char* buffer, int byteStride, int index) {
+	return reinterpret_cast<const T*>(buffer + static_cast<size_t>(index) * static_cast<size_t>(byteStride));
 }
 
 #define MFX_CHECK(call) \

@@ -94,11 +94,14 @@ void mfx_Modifier_free_runtime_data(void * runtime_data)
   
 }
 
-Mesh * mfx_Modifier_do(OpenMfxModifierData *fxmd, Mesh *mesh, Object *object)
+Mesh *mfx_Modifier_do(OpenMfxModifierData *fxmd,
+                      const Depsgraph *depsgraph,
+                      Mesh *mesh,
+                      Object *object)
 {
   
   OpenMfxRuntime *runtime = ensure_runtime(fxmd);
-  Mesh *output_mesh = runtime->cook(fxmd, mesh, object);
+  Mesh *output_mesh = runtime->cook(fxmd, depsgraph, mesh, object);
 
   return output_mesh;
 }

@@ -28,6 +28,7 @@ set(INC
   ../../../source/blender/modifiers
   ../../../source/blender/blenlib
   ../../../source/blender/blenkernel
+  ../../../source/blender/depsgraph
 )
 
 set(INC_SYS
