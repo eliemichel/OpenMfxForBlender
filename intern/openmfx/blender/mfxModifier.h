@@ -48,6 +48,9 @@ extern "C" {
 #  include "MOD_modifiertypes.h"
 #endif
 
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
+
 // Callback types required by mfxHost
 typedef Mesh* (*MeshNewFunc)(int, int, int, int, int); // BKE_mesh_new_nomain
 typedef void (*MeshPostFunc)(Mesh*); // post processing applied to new mesh
@@ -75,7 +78,10 @@ void mfx_Modifier_free_runtime_data(void *runtime_data);
 /**
  * Actually run the modifier, calling the cook action of the plugin
  */
-Mesh *mfx_Modifier_do(OpenMfxModifierData *fxmd, Mesh *mesh, Object *object);
+Mesh *mfx_Modifier_do(OpenMfxModifierData *fxmd,
+                      const Depsgraph *depsgraph,
+                      Mesh *mesh,
+                      Object *object);
 
 /**
  * Copy parameter_info, effect_info.

@@ -44,6 +44,9 @@
 #include "BLI_string.h"
 #include "BLI_path_util.h"
 
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
+
 #include <vector>
 #include <cassert>
 
@@ -206,6 +209,7 @@ void OpenMfxRuntime::try_restore_rna_parameter_values(OpenMfxModifierData *fxmd)
 }
 
 Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
+                           const Depsgraph *depsgraph,
                                   Mesh *mesh,
                                   Object *object)
 {
@@ -253,10 +257,12 @@ Mesh *OpenMfxRuntime::cook(OpenMfxModifierData *fxmd,
 
     Object *object = fxmd->extra_inputs[i].connected_object;
 
-    // TODO: get an evaluated object out of object? Object *object_eval = DEG_get_evaluated_object(depsgraph, object);
-    Mesh *mesh = fxmd->extra_inputs[i].request_geometry && NULL != object
-        ? BKE_modifier_get_evaluated_mesh_from_evaluated_object(object, false)
-        : NULL;
+    // TODO: different behaviour when secodary mesh has a mfx_modifier attached to it
+    Mesh *mesh = NULL;
+    if (object != NULL && fxmd->extra_inputs[i].request_geometry) {
+      Object *object_eval = DEG_get_evaluated_object(depsgraph, object);
+      mesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(object_eval, false);
+    }
     extra_input_data[i].is_input = true;
     extra_input_data[i].blender_mesh = mesh;
     extra_input_data[i].source_mesh = NULL;

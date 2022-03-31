@@ -57,7 +57,7 @@ static Mesh *modifyMesh(ModifierData *md,
                            Mesh *mesh)
 {
   OpenMfxModifierData *fxmd = (OpenMfxModifierData *)md;
-  return mfx_Modifier_do(fxmd, mesh, ctx->object);
+  return mfx_Modifier_do(fxmd, ctx->depsgraph, mesh, ctx->object);
 }
 
 static void initData(struct ModifierData *md)
