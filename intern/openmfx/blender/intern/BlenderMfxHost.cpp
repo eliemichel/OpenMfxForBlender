@@ -152,7 +152,6 @@ OfxStatus BlenderMfxHost::BeforeMeshGet(OfxMeshHandle ofxMesh)
                                      kOfxMeshAttribSemanticColor,
                                      &vcolor_attrib));
       MFX_CHECK(propertySuite->propSetInt(vcolor_attrib, kOfxMeshAttribPropIsOwner, 0, 1));
-      MFX_CHECK(meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribCorner, name, &vcolor_attrib));
     }
     else {
       // we have just loose edges, no data to copy
@@ -248,6 +247,28 @@ OfxStatus BlenderMfxHost::BeforeMeshGet(OfxMeshHandle ofxMesh)
     }
   }
 
+  // Define point Weight attributes
+  int nbWeights = 0;
+  OfxPropertySetHandle pweight_attrib;
+  if (blender_mesh->dvert != NULL) {
+    for (int i = 0; i < ofx_point_count; i++) {
+      nbWeights = max(blender_mesh->dvert[i].totweight, nbWeights);
+    }
+  }
+  
+  for (int k = 0; k < nbWeights; k++){
+    sprintf(name, "pointWeight%d", k);
+    // request new buffer to copy data from existing polys, fill default values for edges
+    MFX_CHECK(meshEffectSuite->attributeDefine(ofxMesh,
+                                               kOfxMeshAttribPoint,
+                                               name,
+                                               1,
+                                               kOfxMeshAttribTypeFloat,
+                                               kOfxMeshAttribSemanticWeight,
+                                               &pweight_attrib));
+    MFX_CHECK(propertySuite->propSetInt(pweight_attrib, kOfxMeshAttribPropIsOwner, 0, 1));  
+  }
+
   // Point position
   OfxPropertySetHandle pos_attrib;
   MFX_CHECK(meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribPoint, kOfxMeshAttribPointPosition, &pos_attrib));
@@ -306,7 +327,6 @@ OfxStatus BlenderMfxHost::BeforeMeshGet(OfxMeshHandle ofxMesh)
       assert(stride == sizeof(int));
     }
        
-
     // Corner point
     int i;
     int *ofx_corner_buffer;
@@ -397,6 +417,7 @@ OfxStatus BlenderMfxHost::BeforeMeshGet(OfxMeshHandle ofxMesh)
 
       if (NULL != uv_data && blender_loop_count > 0) {
         float *ofx_uv_buffer;
+        MFX_CHECK(meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribCorner, name, &uv_attrib));
         MFX_CHECK(propertySuite->propGetPointer(uv_attrib, kOfxMeshAttribPropData, 0, (void **)&ofx_uv_buffer));
         MFX_CHECK(propertySuite->propGetInt(uv_attrib, kOfxMeshAttribPropStride, 0, &stride));
         assert(stride == 2 * sizeof(float));
@@ -414,6 +435,33 @@ OfxStatus BlenderMfxHost::BeforeMeshGet(OfxMeshHandle ofxMesh)
       }
     }
   }  // end loose edge cleanup
+
+  // point Weights are not stored as a contiguous memory, we have to copy memory rather than pointing to existing buffers
+  if (nbWeights > 0) {
+    float ** ofx_weightGroup_buffers = new float *[nbWeights];
+    for (int k = 0; k < nbWeights; ++k) {
+      sprintf(name, "pointWeight%d", k);
+      float *ofx_weightGroup_buffer;
+      int stride;
+      MFX_CHECK(
+          meshEffectSuite->meshGetAttribute(ofxMesh, kOfxMeshAttribPoint, name, &pweight_attrib));
+      MFX_CHECK(propertySuite->propGetPointer(
+          pweight_attrib, kOfxMeshAttribPropData, 0, (void **)&ofx_weightGroup_buffers[k]));
+      MFX_CHECK(propertySuite->propGetInt(pweight_attrib, kOfxMeshAttribPropStride, 0, &stride));
+      assert(stride == sizeof(float));
+    }
+    for (int i = 0; i < ofx_point_count; i++) {
+      const MDeformVert &deformedVert = blender_mesh->dvert[i];
+      for (int w = 0; w < nbWeights; w++) {
+        ofx_weightGroup_buffers[w][i] = 0;
+      }
+      for (int w = 0; w < deformedVert.totweight; w++) {
+        ofx_weightGroup_buffers[deformedVert.dw[w].def_nr][i] = deformedVert.dw[w].weight;
+      }
+    }
+    delete[] ofx_weightGroup_buffers;
+  }
+    
 
   return kOfxStatOK;
 }
