@@ -255,7 +255,6 @@ OfxStatus BlenderMfxHost::BeforeMeshGet(OfxMeshHandle ofxMesh)
       nbWeights = max(blender_mesh->dvert[i].totweight, nbWeights);
     }
   }
-  
   for (int k = 0; k < nbWeights; k++){
     sprintf(name, "pointWeight%d", k);
     // request new buffer to copy data from existing polys, fill default values for edges
@@ -438,7 +437,7 @@ OfxStatus BlenderMfxHost::BeforeMeshGet(OfxMeshHandle ofxMesh)
 
   // point Weights are not stored as a contiguous memory, we have to copy memory rather than pointing to existing buffers
   if (nbWeights > 0) {
-    float ** ofx_weightGroup_buffers = new float *[nbWeights];
+    std::vector<float *> ofx_weightGroup_buffers(nbWeights);
     for (int k = 0; k < nbWeights; ++k) {
       sprintf(name, "pointWeight%d", k);
       float *ofx_weightGroup_buffer;
@@ -459,7 +458,6 @@ OfxStatus BlenderMfxHost::BeforeMeshGet(OfxMeshHandle ofxMesh)
         ofx_weightGroup_buffers[deformedVert.dw[w].def_nr][i] = deformedVert.dw[w].weight;
       }
     }
-    delete[] ofx_weightGroup_buffers;
   }
     
 
